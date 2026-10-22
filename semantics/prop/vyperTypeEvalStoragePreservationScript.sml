@@ -2748,7 +2748,7 @@ QED
 
 Theorem run_ext_call_storage_frame[local]:
   protected_storage_calls_preserve cx /\ contract_storage_well_formed cx st /\
-  run_ext_call cx.txn.target callee calldata value_opt st.accounts
+  run_ext_call cx.txn.target callee calldata value_opt gas st.accounts
     st.tStorage txp = SOME result /\
   st'.accounts = FST (SND (SND result)) /\
   st'.tStorage = FST (SND (SND (SND result))) ==>
@@ -2762,22 +2762,26 @@ QED
 
 Theorem eval_send_storage_preserved[local]:
   contract_storage_well_formed cx st /\ oracle_storage_ok cx st /\
+  protected_storage_calls_preserve cx /\
   eval_send cx has_gas vs st = (res,st') ==>
   contract_storage_well_formed cx st'
 Proof
   Cases_on `vs` >- (simp[eval_send_def, raise_def] >> rw[] >> gvs[]) >>
   Cases_on `t` >- (simp[eval_send_def, raise_def] >> rw[] >> gvs[]) >>
   simp[eval_send_def, bind_def, ignore_bind_def, type_check_def, assert_def,
-       check_def, lift_option_type_def, return_def, raise_def,
+       check_def, lift_option_type_def, lift_option_def, get_accounts_def,
+       get_transient_storage_def, update_accounts_def, update_transient_def,
+       append_logs_def, return_def, raise_def,
        COND_RATOR, vfmTypesTheory.option_CASE_rator,
        vfmTypesTheory.prod_CASE_rator, vfmTypesTheory.sum_CASE_rator] >>
   strip_tac >> gvs[AllCaseEqs()] >>
   gvs[pairTheory.UNCURRY_RATOR, pairTheory.UNCURRY_EQ, combinTheory.C_THM,
       combinTheory.o_THM, AllCaseEqs(), COND_RATOR, bind_def, return_def,
-      raise_def, assert_def, adopt_call_outcome_INR_storage] >>
+      raise_def, assert_def, adopt_call_outcome_INR_storage] >>~-
+  ([`run_ext_call _ _ _ _ _ _ _ _ = SOME _`],
+   irule run_ext_call_storage_frame >> simp[] >> metis_tac[]) >>
   metis_tac[take_call_outcome_storage_suffix,
-            take_adopt_call_outcome_storage_suffix,
-            transfer_value_preserves_contract_storage_well_formed]
+            take_adopt_call_outcome_storage_suffix]
 QED
 
 Resume eval_all_storage_preservation_mutual[Expr_Call_Send]:
@@ -3522,7 +3526,7 @@ Proof
   gvs[pairTheory.UNCURRY_RATOR, pairTheory.UNCURRY_EQ, combinTheory.C_THM,
       combinTheory.o_THM, AllCaseEqs(), COND_RATOR, bind_def, return_def,
       raise_def, adopt_call_outcome_INR_storage] >>~-
-  ([`run_ext_call _ _ _ _ _ _ _ = SOME _`],
+  ([`run_ext_call _ _ _ _ _ _ _ _ = SOME _`],
    irule run_ext_call_storage_frame >> simp[] >> metis_tac[]) >>
   metis_tac[take_call_outcome_storage_suffix,
             take_adopt_call_outcome_storage_suffix]
