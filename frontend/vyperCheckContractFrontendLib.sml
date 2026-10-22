@@ -62,6 +62,26 @@ fun imported_module_path import_tm =
   | _ => raise Fail
       "vyperCheckContractFrontendLib: malformed imported module"
 
+(* Multiple import paths can translate to the same module. Preserve the first
+   occurrence, but never choose between different definitions of one identity. *)
+fun normalize_sources sources = let
+  val (entries, source_ty) = listSyntax.dest_list sources
+  fun unique seen [] = []
+    | unique seen (source::rest) = let
+        val (source_id, _) = pairSyntax.dest_pair source
+      in
+        case List.find (fn (sid, _) => aconv sid source_id) seen of
+          NONE => source :: unique ((source_id, source)::seen) rest
+        | SOME (_, previous) =>
+            if aconv previous source then unique seen rest
+            else raise Fail
+              ("vyperCheckContractFrontendLib: conflicting definitions for source ID " ^
+               term_to_string source_id)
+      end
+in
+  listSyntax.mk_list (unique [] entries, source_ty)
+end
+
 (* Interface translation already removes ellipsis-bodied function stubs. Keep
    an interface source when nominal declarations remain, since their source ID
    is part of the nominal type identity needed by check_contract. Drop only
@@ -69,6 +89,8 @@ fun imported_module_path import_tm =
    Translation preserves import order. *)
 fun remove_interface_sources annotated_ast translated = let
   val (sources, rest) = pairSyntax.dest_pair translated
+  (* Detect conflicts even if filtering would discard an empty interface. *)
+  val _ = normalize_sources sources
   val (source_entries, source_ty) = listSyntax.dest_list sources
   val (imports, _) = listSyntax.dest_list (annotated_ast_imports annotated_ast)
   val (main_source, imported_sources) = case source_entries of
@@ -97,6 +119,7 @@ fun prepare_translated_input
   val () = app (fn (name, tm) => require_closed name tm)
     [("address", address), ("translated sources", sources),
      ("import map", import_map), ("storage layout", storage_layout)]
+  val sources = normalize_sources (eval_closed "translated sources" sources)
   val modules = eval_closed "storage-slot annotation"
     (apply "annotate_sources_slots" [storage_layout, sources])
   val layout_pair = eval_closed "storage layout extraction"

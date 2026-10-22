@@ -161,33 +161,3 @@ Theorem supported_declaration_lookups_first_match:
 Proof
   EVAL_TAC
 QED
-
-Theorem supported_interface_resolution_accept:
-  supported_interface_method supported_test_declarations "remote" =
-    SOME (T, [("n", BaseT (UintT 256))], BaseT BoolT, View) /\
-  supported_external_call_signature supported_test_declarations "remote" [BaseT (UintT 256)] /\
-  ~supported_external_call_signature supported_test_declarations "remote" [BaseT BoolT] /\
-  ~supported_external_call_signature supported_test_declarations "read" [BaseT (UintT 8)] /\
-  ~supported_external_call_signature supported_test_declarations "missing" []
-Proof
-  EVAL_TAC
-QED
-
-Theorem supported_interface_resolution_order_contract:
-  ~supported_external_call_signature
-    [FunctionDecl External View F F "f" [("x", BaseT BoolT)] [] NoneT [];
-     InterfaceDecl "I" [("f", [("x", BaseT BoolT)], NoneT, View)]] "f" [BaseT BoolT] /\
-  supported_external_call_signature
-    [InterfaceDecl "I" [("f", [("x", BaseT BoolT)], NoneT, View)];
-     FunctionDecl External View F F "f" [("x", BaseT BoolT)] [] NoneT []] "f" [BaseT BoolT] /\
-  supported_external_call_signature
-    [InterfaceDecl "Empty" [];
-     FunctionDecl Internal View F F "f" [] [] NoneT [];
-     InterfaceDecl "I" [("f", [("x", BaseT BoolT)], NoneT, View);
-                         ("f", [("x", BaseT AddressT)], NoneT, View)]] "f" [BaseT BoolT] /\
-  ~supported_external_call_signature
-    [InterfaceDecl "First" [("f", [("x", BaseT AddressT)], NoneT, View)];
-     InterfaceDecl "Second" [("f", [("x", BaseT BoolT)], NoneT, View)]] "f" [BaseT BoolT]
-Proof
-  EVAL_TAC
-QED

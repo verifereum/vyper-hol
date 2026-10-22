@@ -350,8 +350,6 @@ val allowed_test_names = [
 val excluded_test_names = [
   (* Raw bytecode blueprint creation remains coordinated with #379. *)
   "test_create_from_blueprint_bad_code_offset",
-  (* Independent semantic mismatch in the currently admitted raw_call tests. *)
-  "test_checkable_raw_call",
 
   (* Tests using shift() builtin which is not yet translated.
      TODO: add shift builtin support *)

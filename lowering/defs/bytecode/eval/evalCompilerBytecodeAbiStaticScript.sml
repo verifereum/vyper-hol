@@ -18,56 +18,6 @@ val () = computeLib.upd_compset
          [reduce_depth_plan_compute, generate_block_insts_plan_compute])
 val () = Globals.max_print_depth := 20
 
-Definition abi_static_n2w_def[nocompute]:
-  abi_static_n2w n : bytes32 = n2w n
-End
-
-Theorem word_of_bytes_be_bytes32_abi_static:
-  (word_of_bytes_be bs : bytes32) =
-    abi_static_n2w
-      (num_of_bytes (be_bytes (dimindex (:256) DIV 8) [] bs))
-Proof
-  PURE_REWRITE_TAC[abi_static_n2w_def] >>
-  irule word_of_bytes_be_eq_num_of_bytes >> EVAL_TAC
-QED
-
-Theorem w2n_abi_static_n2w[compute]:
-  w2n (abi_static_n2w n) = n MOD dimword (:256)
-Proof
-  simp[abi_static_n2w_def]
-QED
-
-Theorem get_byte_set_byte_bytes32_abi_static:
-  get_byte a (set_byte a b (w : bytes32) be) be = b
-Proof
-  simp[byteTheory.get_byte_set_byte]
-QED
-
-Theorem get_byte_set_byte_irrelevant_bytes32_abi_static:
-  w2n (a : bytes32) MOD 32 <> w2n a' MOD 32 ==>
-  get_byte a' (set_byte a b (w : bytes32) be) be = get_byte a' w be
-Proof
-  simp[byteTheory.get_byte_set_byte_irrelevant]
-QED
-
-Theorem word_to_bytes_be_bytes32_genlist_abi_static:
-  word_to_bytes_be (w : bytes32) =
-    GENLIST (λi. get_byte (n2w i) w T) 32
-Proof
-  simp[listTheory.LIST_EQ_REWRITE, byteTheory.word_to_bytes_be_def,
-       byteTheory.word_to_bytes_def, byteTheory.EL_word_to_bytes_aux]
-QED
-
-Theorem word_of_bytes_be_word_to_bytes_be_abi_static:
-  word_of_bytes_be (word_to_bytes_be (w : bytes32)) = w
-Proof
-  simp[byteTheory.word_to_bytes_be_def, byteTheory.word_of_bytes_be_def,
-       byteTheory.word_of_bytes_word_to_bytes]
-QED
-
-val () = computeLib.upd_compset (computeLib.add_thms
-  [word_of_bytes_be_bytes32_abi_static, w2n_abi_static_n2w])
-
 val abi_static_policy_eval = save_thm
   ("abi_static_policy_eval",
    EVAL ``resolve_o1_policy (o1_policy all_capabilities)``)
@@ -256,55 +206,17 @@ val abi_static_max_eom = optionSyntax.dest_some
 val abi_static_final_fn_eval = EVAL
   ``HD (^abi_static_final_unit).cu_context.ctx_functions``
 val abi_static_final_fn = rhs (concl abi_static_final_fn_eval)
-fun abi_static_w2n_eval w = let
-  val bytes_th = SIMP_CONV (srw_ss())
-    [word_to_bytes_be_bytes32_genlist_abi_static,
-     get_byte_set_byte_bytes32_abi_static,
-     get_byte_set_byte_irrelevant_bytes32_abi_static]
-    ``word_to_bytes_be ^w``
-  val roundtrip = INST [``w:bytes32`` |-> w]
-    word_of_bytes_be_word_to_bytes_be_abi_static
-  val step1 = BETA_RULE (AP_TERM ``λx:bytes32. w2n x`` (SYM roundtrip))
-  val step2 = BETA_RULE (AP_TERM
-    ``λbs. w2n (word_of_bytes_be bs : bytes32)`` bytes_th)
-  val decoded = TRANS step1 step2
-  val expose = SIMP_CONV bool_ss
-    [word_of_bytes_be_bytes32_abi_static, w2n_abi_static_n2w]
-    (rhs (concl decoded))
-in
-  TRANS decoded (TRANS expose (EVAL (rhs (concl expose))))
-end
-fun abi_static_normalize_word w = let
-  val w2n_th = abi_static_w2n_eval w
-  val numeral = rhs (concl w2n_th)
-  val normalized = ``n2w ^numeral : bytes32``
-  val normalized_w2n = EVAL ``w2n ^normalized``
-  val same_num = TRANS w2n_th (SYM normalized_w2n)
-in
-  EQ_MP (ISPECL [w,normalized] wordsTheory.w2n_11) same_num
-end
-val abi_static_set_byte_words = List.foldl
-  (fn (tm,ws) => if List.exists (aconv tm) ws then ws else tm::ws) []
-  (find_terms (can (match_term ``set_byte a b w be : bytes32``))
-    abi_static_final_fn)
-val abi_static_word_normalizations =
-  map abi_static_normalize_word abi_static_set_byte_words
-val abi_static_final_fn_normalized_eval =
-  if null abi_static_word_normalizations then REFL abi_static_final_fn
-  else PURE_REWRITE_CONV abi_static_word_normalizations abi_static_final_fn
-val abi_static_final_fn_normalized =
-  rhs (concl abi_static_final_fn_normalized_eval)
 val abi_static_plan_canonical_eval = EVAL
-  ``canonical_param_prefix ^abi_static_final_fn_normalized``
+  ``canonical_param_prefix ^abi_static_final_fn``
 val abi_static_plan_live_eval = save_thm
   ("abi_static_plan_live_eval",
-   EVAL ``liveness_analyze ^abi_static_final_fn_normalized``)
+   EVAL ``liveness_analyze ^abi_static_final_fn``)
 val abi_static_plan_dfg_eval = EVAL
-  ``dfg_build_function ^abi_static_final_fn_normalized``
+  ``dfg_build_function ^abi_static_final_fn``
 val abi_static_plan_cfg_eval = EVAL
-  ``cfg_analyze ^abi_static_final_fn_normalized``
+  ``cfg_analyze ^abi_static_final_fn``
 val abi_static_plan_entry_eval = EVAL
-  ``fn_entry_label ^abi_static_final_fn_normalized``
+  ``fn_entry_label ^abi_static_final_fn``
 val abi_static_plan_entry = optionSyntax.dest_some
   (rhs (concl abi_static_plan_entry_eval))
 val abi_static_plan_initial_state_eval = EVAL
@@ -316,7 +228,7 @@ val abi_static_plan_aux_fuel_step1 = save_thm
    EVAL ``generate_fn_plan_aux_fuel 30
       ^(rhs (concl abi_static_plan_live_eval))
       ^(rhs (concl abi_static_plan_dfg_eval))
-      ^(rhs (concl abi_static_plan_cfg_eval)) ^abi_static_final_fn_normalized
+      ^(rhs (concl abi_static_plan_cfg_eval)) ^abi_static_final_fn
       [^abi_static_plan_entry] [] ^abi_static_plan_initial_state``)
 Theorem abi_static_plan_aux_fuel_step1_computed: T
 Proof
@@ -340,25 +252,20 @@ val abi_static_plan_analyzed_eval = save_thm
         ^(rhs (concl abi_static_plan_live_eval))
         ^(rhs (concl abi_static_plan_dfg_eval))
         ^(rhs (concl abi_static_plan_cfg_eval))
-        ^abi_static_final_fn_normalized ^abi_static_max_eom 0``)
+        ^abi_static_final_fn ^abi_static_max_eom 0``)
 val abi_static_fn_plan_step1 = REWR_CONV
   stackPlanGenTheory.generate_fn_plan_def
-  ``generate_fn_plan ^abi_static_final_fn_normalized ^abi_static_max_eom 0``
+  ``generate_fn_plan ^abi_static_final_fn ^abi_static_max_eom 0``
 val abi_static_fn_plan_step2 = PURE_REWRITE_CONV
   [abi_static_plan_live_eval, abi_static_plan_dfg_eval,
    abi_static_plan_cfg_eval]
   (rhs (concl abi_static_fn_plan_step1))
 val abi_static_fn_plan_step3 = REWR_CONV abi_static_plan_analyzed_eval
   (rhs (concl abi_static_fn_plan_step2))
-val abi_static_normalized_fn_plan_eval =
-  TRANS abi_static_fn_plan_step1
-    (TRANS abi_static_fn_plan_step2 abi_static_fn_plan_step3)
-val abi_static_fn_plan_congruence = BETA_RULE (AP_TERM
-  ``λfn. generate_fn_plan fn ^abi_static_max_eom 0``
-  abi_static_final_fn_normalized_eval)
 val abi_static_fn_plan_eval = save_thm
   ("abi_static_fn_plan_eval",
-   TRANS abi_static_fn_plan_congruence abi_static_normalized_fn_plan_eval)
+   TRANS abi_static_fn_plan_step1
+     (TRANS abi_static_fn_plan_step2 abi_static_fn_plan_step3))
 Theorem abi_static_fn_plan_computed: T
 Proof
   simp[]

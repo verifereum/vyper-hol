@@ -1953,15 +1953,49 @@ Proof
   rpt gen_tac >> simp[builtinBytesTheory.compile_assert_slice_bounds_def] >> rpt (CHANGED_TAC (rpt (irule ci_mono_bind ORELSE irule ci_mono_ignore_bind ORELSE conj_tac ORELSE gen_tac) >> simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return]))
 QED
 
+Theorem ci_mono_compile_bytestring_src[local]:
+  ∀ src_ptr sa. ci_mono sa (SND (compile_bytestring_src src_ptr sa))
+Proof
+  rpt gen_tac >>
+  rewrite_tac[builtinBytesTheory.compile_bytestring_src_def] >> BETA_TAC >>
+  rpt (ho_match_mp_tac ci_mono_bind ORELSE ho_match_mp_tac ci_mono_ignore_bind ORELSE
+       (conj_tac >- simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_alloc_buffer, ci_mono_compile_assert_slice_bounds]) ORELSE
+       gen_tac ORELSE strip_tac ORELSE CASE_TAC) >>
+  simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_alloc_buffer, ci_mono_compile_assert_slice_bounds]
+QED
+
+Theorem ci_mono_compile_slice_data[local]:
+  ∀ src_len src_data start_op len_op out_size sa. ci_mono sa (SND (compile_slice_data src_len src_data start_op len_op out_size sa))
+Proof
+  rpt gen_tac >>
+  rewrite_tac[builtinBytesTheory.compile_slice_data_def] >> BETA_TAC >>
+  rpt (ho_match_mp_tac ci_mono_bind ORELSE ho_match_mp_tac ci_mono_ignore_bind ORELSE
+       (conj_tac >- simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_alloc_buffer, ci_mono_compile_assert_slice_bounds]) ORELSE
+       gen_tac ORELSE strip_tac ORELSE CASE_TAC) >>
+  simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_alloc_buffer, ci_mono_compile_assert_slice_bounds]
+QED
+
+Theorem ci_mono_compile_slice_out_buf[local]:
+  ∀ out_size sa. ci_mono sa (SND (compile_slice_out_buf out_size sa))
+Proof
+  rpt gen_tac >>
+  rewrite_tac[builtinBytesTheory.compile_slice_out_buf_def] >> BETA_TAC >>
+  rpt (ho_match_mp_tac ci_mono_bind ORELSE ho_match_mp_tac ci_mono_ignore_bind ORELSE
+       (conj_tac >- simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_alloc_buffer, ci_mono_compile_assert_slice_bounds]) ORELSE
+       gen_tac ORELSE strip_tac ORELSE CASE_TAC) >>
+  simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_alloc_buffer, ci_mono_compile_assert_slice_bounds]
+QED
+
 Theorem ci_mono_compile_slice_calldata[local]:
   ∀ start_op len_op out_size sa. ci_mono sa (SND (compile_slice_calldata start_op len_op out_size sa))
 Proof
   rpt gen_tac >>
   rewrite_tac[builtinBytesTheory.compile_slice_calldata_def] >> BETA_TAC >>
   rpt (ho_match_mp_tac ci_mono_bind ORELSE ho_match_mp_tac ci_mono_ignore_bind ORELSE
-       (conj_tac >- simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_alloc_buffer, ci_mono_compile_assert_slice_bounds]) ORELSE
-       gen_tac ORELSE strip_tac) >>
-  simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_alloc_buffer, ci_mono_compile_assert_slice_bounds]
+       (conj_tac >- simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_alloc_buffer, ci_mono_compile_assert_slice_bounds, ci_mono_compile_slice_out_buf]) ORELSE
+       gen_tac ORELSE strip_tac ORELSE CASE_TAC ORELSE
+       (Cases_on `av` >> rewrite_tac[pairTheory.UNCURRY_DEF] >> BETA_TAC)) >>
+  simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_alloc_buffer, ci_mono_compile_assert_slice_bounds, ci_mono_compile_slice_out_buf]
 QED
 
 Theorem ci_mono_compile_slice_code[local]:
@@ -1970,19 +2004,20 @@ Proof
   rpt gen_tac >>
   rewrite_tac[builtinBytesTheory.compile_slice_code_def] >> BETA_TAC >>
   rpt (ho_match_mp_tac ci_mono_bind ORELSE ho_match_mp_tac ci_mono_ignore_bind ORELSE
-       (conj_tac >- simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_alloc_buffer, ci_mono_compile_assert_slice_bounds]) ORELSE
-       gen_tac ORELSE strip_tac) >>
-  simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_alloc_buffer, ci_mono_compile_assert_slice_bounds]
+       (conj_tac >- simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_alloc_buffer, ci_mono_compile_assert_slice_bounds, ci_mono_compile_slice_out_buf]) ORELSE
+       gen_tac ORELSE strip_tac ORELSE CASE_TAC ORELSE
+       (Cases_on `av` >> rewrite_tac[pairTheory.UNCURRY_DEF] >> BETA_TAC)) >>
+  simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_alloc_buffer, ci_mono_compile_assert_slice_bounds, ci_mono_compile_slice_out_buf]
 QED
 
 Theorem ci_mono_compile_slice_extcode[local]:
-  ∀ addr_op start_op len_op out_size sa. ci_mono sa (SND (compile_slice_extcode addr_op start_op len_op out_size sa))
+  ∀ addr_op start_op len_op out_buf out_data sa. ci_mono sa (SND (compile_slice_extcode addr_op start_op len_op out_buf out_data sa))
 Proof
   rpt gen_tac >>
   rewrite_tac[builtinBytesTheory.compile_slice_extcode_def] >> BETA_TAC >>
   rpt (ho_match_mp_tac ci_mono_bind ORELSE ho_match_mp_tac ci_mono_ignore_bind ORELSE
        (conj_tac >- simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_alloc_buffer, ci_mono_compile_assert_slice_bounds]) ORELSE
-       gen_tac ORELSE strip_tac) >>
+       gen_tac ORELSE strip_tac ORELSE CASE_TAC) >>
   simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_alloc_buffer, ci_mono_compile_assert_slice_bounds]
 QED
 
@@ -1992,13 +2027,15 @@ Proof
   rpt gen_tac >>
   rewrite_tac[builtinBytesTheory.compile_slice_memory_def] >> BETA_TAC >>
   rpt (ho_match_mp_tac ci_mono_bind ORELSE ho_match_mp_tac ci_mono_ignore_bind ORELSE
-       (conj_tac >- simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_alloc_buffer, ci_mono_compile_assert_slice_bounds]) ORELSE
-       gen_tac ORELSE strip_tac) >>
-  simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_alloc_buffer, ci_mono_compile_assert_slice_bounds]
+       (conj_tac >- simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_alloc_buffer, ci_mono_compile_assert_slice_bounds, ci_mono_compile_bytestring_src, ci_mono_compile_slice_data]) ORELSE
+       gen_tac ORELSE strip_tac ORELSE CASE_TAC ORELSE
+       (Cases_on `av` >> rewrite_tac[pairTheory.UNCURRY_DEF] >> BETA_TAC)) >>
+  simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_alloc_buffer, ci_mono_compile_assert_slice_bounds, ci_mono_compile_bytestring_src, ci_mono_compile_slice_data]
 QED
 
 Theorem ci_mono_compile_uint2str[local]:
-  ∀ val_op n_digits sa. ci_mono sa (SND (compile_uint2str val_op n_digits sa))
+  ∀ val_op n_digits buf_size sa.
+    ci_mono sa (SND (compile_uint2str val_op n_digits buf_size sa))
 Proof
   rpt gen_tac >>
   rewrite_tac[builtinStringsTheory.compile_uint2str_def, LET_THM] >> BETA_TAC >>
@@ -2227,6 +2264,22 @@ Proof
   rpt gen_tac >> once_rewrite_tac[exprLoweringTheory.compile_return_value_decode_def] >> BETA_TAC >> rpt (FIRST [irule ci_mono_bind, irule ci_mono_ignore_bind] >> conj_tac >| [rpt strip_tac >> simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_select], all_tac]) >> simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_select]
 QED
 
+
+(* Reuse ci_mono_typed_memory_family and ci_mono_compile_store_memory above
+   for both aggregate construction and external-call default materialization. *)
+Theorem ci_mono_compile_materialize_vv[local]:
+  ∀cenv ty vv sa. ci_mono sa (SND (compile_materialize_vv cenv ty vv sa))
+Proof
+  rpt gen_tac >> rewrite_tac[compile_materialize_vv_def] >>
+  ho_match_mp_tac ci_mono_bind >> conj_tac
+  >- simp[ci_mono_compile_alloc_buffer] >>
+  rpt strip_tac >>
+  ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_unwrap_value] >>
+  rpt strip_tac >>
+  ho_match_mp_tac ci_mono_ignore_bind >> conj_tac
+  >- simp[ci_mono_compile_store_memory] >>
+  simp[ci_mono_comp_return]
+QED
 
 Theorem ci_mono_compile_abi_encode_child_branches[local]:
   (¬is_dyn ⇒ ∀dst sa.
@@ -2628,11 +2681,12 @@ Proof
 QED
 
 Theorem ci_mono_compile_default_return_path[local]:
-  ∀ buf_op result_op default_op addr_op skip_check min_return_size
-    max_return_size ret_mem_bytes ret_dec_info is_prim_return sa.
-    ci_mono sa (SND (compile_default_return_path buf_op result_op default_op addr_op
-                      skip_check min_return_size max_return_size ret_mem_bytes
-                      ret_dec_info is_prim_return sa))
+  ∀ cenv return_type default_ty buf_op result_op default_op addr_op skip_check
+    min_return_size max_return_size ret_dec_info sa.
+    ci_mono sa (SND (compile_default_return_path cenv return_type default_ty
+                      buf_op result_op default_op addr_op
+                      skip_check min_return_size max_return_size
+                      ret_dec_info sa))
 Proof
   rpt gen_tac >>
   rewrite_tac[exprLoweringTheory.compile_default_return_path_def, LET_THM] >> BETA_TAC >>
@@ -2644,7 +2698,7 @@ Proof
   ho_match_mp_tac ci_mono_ignore_bind >> conj_tac >- simp[ci_mono_emit_inst] >> rpt strip_tac >>
   ho_match_mp_tac ci_mono_ignore_bind >> conj_tac >- simp[ci_mono_new_block] >> rpt strip_tac >>
   ho_match_mp_tac ci_mono_ignore_bind >> conj_tac >-
-    (IF_CASES_TAC >> simp[ci_mono_emit_void]) >> rpt strip_tac >>
+    simp[ci_mono_compile_store_memory] >> rpt strip_tac >>
   ho_match_mp_tac ci_mono_ignore_bind >> conj_tac >-
     (IF_CASES_TAC >> simp[ci_mono_comp_return, ci_mono_compile_extcodesize_check]) >> rpt strip_tac >>
   ho_match_mp_tac ci_mono_ignore_bind >> conj_tac >- simp[ci_mono_emit_inst] >> rpt strip_tac >>
@@ -2774,13 +2828,13 @@ Theorem ci_mono_compile_external_call_kwargs[local]:
     return_abi_size min_return_size ret_mem_bytes
     use_staticcall call_value gas_op
     skip_check has_default default_op
-    is_prim_return
+    return_type default_ty
     args_enc_info ret_dec_info sa.
     ci_mono sa
       (SND (compile_external_call_kwargs cenv addr_op arg_vals arg_types
         args_mem_size args_abi_size method_id_val return_abi_size
         min_return_size ret_mem_bytes use_staticcall call_value gas_op
-        skip_check has_default default_op is_prim_return args_enc_info
+        skip_check has_default default_op return_type default_ty args_enc_info
         ret_dec_info sa))
 Proof
   rpt gen_tac >> simp[compile_external_call_kwargs_def, LET_THM] >> BETA_TAC >> irule ci_mono_bind >> reverse conj_tac >- simp[ci_mono_compile_alloc_buffer] >> rpt strip_tac >> BETA_TAC >>
@@ -2939,6 +2993,7 @@ rpt strip_tac >> first_assum irule)
     Cases_on `args` >> simp[ci_mono_emit_inst] >>
     rpt IF_CASES_TAC >> gvs[] >>
     Cases_on `default_ret` >> gvs[] >>
+    rpt IF_CASES_TAC >> gvs[] >>
     Cases_on `t` >> gvs[] >>
     rpt (CHANGED_TAC (
       (irule ci_mono_trans >>
@@ -2947,6 +3002,8 @@ rpt strip_tac >> first_assum irule)
        irule_at (Pos last) ci_mono_emit_op >> simp[]) ORELSE
       (irule ci_mono_trans >>
        irule_at (Pos last) ci_mono_compile_multi_vvs >> simp[]) ORELSE
+      (irule ci_mono_trans >>
+       irule_at (Pos last) ci_mono_compile_materialize_vv >> simp[]) ORELSE
       (irule ci_mono_trans >>
        irule_at (Pos last) ci_mono_compile_extcall_store_args >> simp[]) ORELSE
       (irule ci_mono_trans >>
