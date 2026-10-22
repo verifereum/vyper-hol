@@ -2229,6 +2229,42 @@ Definition compile_materialize_vv_def:
     od
 End
 
+(* Lower one keyword operand of extcall/staticcall: value= and gas= are
+   uint256 words; default_return_value= is a word of the return type, or,
+   for any other type, a value Python materializes where it is lowered
+   (_parse_external_call_kwargs). Returns the operand and its type. *)
+Definition compile_ext_call_kwarg_def:
+  compile_ext_call_kwarg cfn cenv return_type k e =
+    if k = EKDefault /\ ~is_word_type return_type then
+      do vv <- cfn cenv (expr_type e) e;
+         op <- compile_materialize_vv cenv (expr_type e) vv;
+         comp_return (op, expr_type e)
+      od
+    else
+      do op <- lower_value cfn cenv
+                 (if k = EKDefault then return_type else BaseT (UintT 256)) e;
+         comp_return (op, return_type)
+      od
+End
+
+(* Lower the keyword operands of extcall/staticcall in source order, which is
+   the order Python evaluates them in (_parse_external_call_kwargs). Returns
+   the value= and gas= operands and the default_return_value= operand with
+   its type, for those that are present. *)
+Definition compile_ext_call_kwargs_def:
+  compile_ext_call_kwargs cfn cenv return_type (k::ks) (e::es) =
+    do (op, ty) <- compile_ext_call_kwarg cfn cenv return_type k e;
+       (value_op, gas_op, default_opt) <-
+         compile_ext_call_kwargs cfn cenv return_type ks es;
+       comp_return (if k = EKValue then (SOME op, gas_op, default_opt)
+                    else if k = EKGas then (value_op, SOME op, default_opt)
+                    else (value_op, gas_op, SOME (op, ty)))
+    od ∧
+  compile_ext_call_kwargs cfn cenv return_type _ _ =
+    comp_return ((NONE, NONE, NONE) :
+                 operand option # operand option # (operand # type) option)
+End
+
 (* KNOWN LIMITATION: No safe_cast validation at internal call boundaries.
    The Vyper interpreter applies safe_cast per argument (bind_arguments) and
    per return value (after handle_function). The lowering emits no type checks.
@@ -2273,25 +2309,21 @@ Definition compile_call_def:
          SOME rbuf => (LocatedValue ret_ty (base_ptr rbuf), st4)
        | NONE => (StackValue ret_ty (Lit 0w), st4))) ∧
   compile_call cfn cenv ret_ty ty (ExtCall is_static skip_contract_check
-                                     (func_name, arg_types, return_type))
+                                     (func_name, arg_types, return_type) opts)
               args default_ret st =
     (case args of
        [] => let (_, st') = emit_inst INVALID [] [] st in
              (StackValue ret_ty (Lit 0w), st')
      | (addr_e :: rest_after_addr) =>
        let (addr_op, st1) = lower_value cfn cenv (BaseT AddressT) addr_e st in
-       let (value_e, func_args) =
-         if is_static then (NONE, rest_after_addr)
-         else case rest_after_addr of
-                (val_e :: fa) => (SOME val_e, fa)
-              | _ => (NONE, []) in
+       let func_args = TAKE (LENGTH arg_types) rest_after_addr in
+       let kw_es = DROP (LENGTH arg_types) rest_after_addr in
        (* Python evaluates all positional arguments before call kwargs and
           allocates their memory-layout tuple only after the call buffer. *)
        let (arg_vals, st2) = compile_multi_vvs cfn cenv func_args st1 in
-       let (value_op, st3) =
-         case value_e of
-           SOME val_e => lower_value cfn cenv (BaseT (UintT 256)) val_e st2
-         | NONE => (Lit 0w, st2) in
+       let ((value_opt, gas_opt, default_opt), st3) =
+         compile_ext_call_kwargs cfn cenv return_type opts kw_es st2 in
+       let value_op = (case value_opt of SOME v => v | NONE => Lit 0w) in
        let args_mem_size = SUM (MAP (type_memory_bytes cenv) arg_types) in
        let args_abi_size = abi_size_bound cenv.ce_struct_fields (TupleT arg_types) in
        let args_enc_info = type_to_abi_enc_info cenv.ce_struct_fields cenv (TupleT arg_types) in
@@ -2304,21 +2336,12 @@ Definition compile_call_def:
        let min_return_size = abi_static_size cenv.ce_struct_fields wrapped_return in
        let ret_mem_bytes = type_memory_bytes cenv return_type in
        let method_id_val = cenv.ce_method_id func_name arg_types in
-       (* Python materializes a non-word default where it is lowered
-          (_parse_external_call_kwargs). *)
-       let (has_default, default_op, default_ty, st4) =
-         case default_ret of
-           SOME def_e =>
-             if is_word_type return_type then
-               let (dop, st') = lower_value cfn cenv return_type def_e st3 in
-               (T, dop, return_type, st')
-             else
-               let def_ty = expr_type def_e in
-               let (vv, st') = cfn cenv def_ty def_e st3 in
-               let (dop, st'') = compile_materialize_vv cenv def_ty vv st' in
-               (T, dop, def_ty, st'')
-         | NONE => (F, Lit 0w, return_type, st3) in
-       let (gas_op, st5) = emit_op GAS [] st4 in
+       let (has_default, default_op, default_ty) =
+         (case default_opt of
+            SOME (d, d_ty) => (T, d, d_ty)
+          | NONE => (F, Lit 0w, return_type)) in
+       let (gas_op, st5) =
+         (case gas_opt of SOME g => (g, st3) | NONE => emit_op GAS [] st3) in
        let ret_dec_info = type_to_abi_dec_info cenv.ce_struct_fields cenv wrapped_return in
        let (result_op, st6) =
          compile_external_call_kwargs cenv addr_op arg_vals arg_types
@@ -2329,16 +2352,23 @@ Definition compile_call_def:
                                     args_enc_info ret_dec_info st5 in
        if return_abi_size = 0 then (StackValue ret_ty result_op, st6)
        else (LocatedValue ret_ty (mk_ptr result_op LocMemory), st6)) ∧
-  compile_call cfn cenv ret_ty ty Send args default_ret st =
+  compile_call cfn cenv ret_ty ty (Send has_gas) args default_ret st =
     (case args of
-       [addr_e; val_e] =>
-         let (addr_op, st1) = lower_value cfn cenv (BaseT AddressT) addr_e st in
-         let (val_op, st2) = lower_value cfn cenv (BaseT (UintT 256)) val_e st1 in
-         let gas_op = Lit 0w in
-         let (success, st3) = emit_op CALL [gas_op; addr_op; val_op;
-                                            Lit 0w; Lit 0w; Lit 0w; Lit 0w] st2 in
-         let (_, st4) = emit_void ASSERT [success] st3 in
-         (StackValue ret_ty (Lit 0w), st4)
+       (addr_e :: val_e :: gas_es) =>
+         if LENGTH gas_es = (if has_gas then 1 else 0) then
+           let (addr_op, st1) = lower_value cfn cenv (BaseT AddressT) addr_e st in
+           let (val_op, st2) = lower_value cfn cenv (BaseT (UintT 256)) val_e st1 in
+           (* send(to, value, gas=0): gas defaults to 0, as in Python. *)
+           let (gas_op, st2') =
+             (case gas_es of
+                [gas_e] => lower_value cfn cenv (BaseT (UintT 256)) gas_e st2
+              | _ => (Lit 0w, st2)) in
+           let (success, st3) = emit_op CALL [gas_op; addr_op; val_op;
+                                              Lit 0w; Lit 0w; Lit 0w; Lit 0w] st2' in
+           let (_, st4) = emit_void ASSERT [success] st3 in
+           (StackValue ret_ty (Lit 0w), st4)
+         else let (_, st') = emit_inst INVALID [] [] st in
+              (StackValue ret_ty (Lit 0w), st')
      | _ => let (_, st') = emit_inst INVALID [] [] st in
             (StackValue ret_ty (Lit 0w), st')) ∧
   compile_call cfn cenv ret_ty ty (RawCallTarget rcf) args default_ret st =

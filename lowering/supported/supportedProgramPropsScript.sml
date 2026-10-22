@@ -80,13 +80,13 @@ QED
 Theorem supported_other_effects_in_internal_and_loop:
   supported_function_body expr_test_tops Internal []
     [Expr expr_test_pop;
-     Expr (Call NoneT Send [expr_test_address; expr_test_uint] NONE);
+     Expr (Call NoneT (Send F) [expr_test_address; expr_test_uint] NONE);
      Expr (Call (BaseT (UintT 256))
-       (ExtCall T F ("remote",[BaseT (UintT 256)],BaseT (UintT 256)))
+       (ExtCall T F ("remote",[BaseT (UintT 256)],BaseT (UintT 256)) [])
        [expr_test_address; expr_test_uint] NONE)] /\
   supported_stmt expr_test_tops []
     (program_test_range
-      [Expr expr_test_pop; Expr (Call NoneT Send [expr_test_address; expr_test_uint] NONE)])
+      [Expr expr_test_pop; Expr (Call NoneT (Send F) [expr_test_address; expr_test_uint] NONE)])
 Proof
   EVAL_TAC
 QED
