@@ -6,6 +6,7 @@ Ancestors
   (* property statements and proofs *)
   moduleLoweringProps
   valueEncodingProofs
+  localPtrsProps
   (* compiler + correctness *)
   vyperCompiler
   vyperLoweringCorrect
