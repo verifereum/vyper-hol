@@ -34,6 +34,13 @@
  *                           run_blocks and run_context unchanged
  *   run_blocks_run_from_no_phi — run_blocks_run_from for a block without
  *                           PHIs, which is every block the lowering emits
+ *
+ * In one function:
+ *   frag_exec_in          — frag_exec for one function, so that predicates
+ *                           can mention it; frag_exec_in_all relates the two
+ *   frag_exec_in_conseq, frag_exec_in_refl, frag_exec_in_seq,
+ *   frag_exec_in_run_inst_seq, frag_exec_in_assert_fail — the rules above
+ *   run_from_jump         — a jump enters the target block from its start
  *)
 
 Theory fragExec
@@ -543,3 +550,134 @@ Proof
   rw[run_context_def, run_function_def]
 QED
 
+
+(* ===== The judgment in one function ===== *)
+
+(* frag_exec for one function fn.  A predicate can then mention fn (as
+   state_rel does, to find a local's ALLOCA among fn's instructions). *)
+Definition frag_exec_in_def:
+  frag_exec_in ctx fn (st : compile_state) (st' : compile_state) P Q R <=>
+    fn_has_code st st' fn ==>
+    !s. P s /\ s.vs_current_bb = st.cs_current_bb /\
+        s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+      (?s'. Q s' /\
+            s'.vs_current_bb = st'.cs_current_bb /\
+            s'.vs_inst_idx = LENGTH st'.cs_current_insts /\
+            !fuel r. run_from fuel ctx fn s' = r /\ (!e. r <> Error e) ==>
+                     ?fuel'. run_from fuel' ctx fn s = r) \/
+      (?fuel r. run_from fuel ctx fn s = r /\ exit_result r /\ R r)
+End
+
+Theorem frag_exec_in_all:
+  !ctx st st' P Q R.
+    frag_exec ctx st st' P Q R <=> !fn. frag_exec_in ctx fn st st' P Q R
+Proof
+  rw[frag_exec_def, frag_exec_in_def] >> metis_tac[]
+QED
+
+Theorem frag_exec_in_conseq:
+  !ctx fn st st' P Q R P' Q' R'.
+    frag_exec_in ctx fn st st' P Q R /\
+    (!s. P' s ==> P s) /\ (!s. Q s ==> Q' s) /\ (!r. R r ==> R' r) ==>
+    frag_exec_in ctx fn st st' P' Q' R'
+Proof
+  rpt gen_tac >> strip_tac >> simp[frag_exec_in_def] >> rpt strip_tac >>
+  `P s` by metis_tac[] >>
+  qpat_x_assum `frag_exec_in _ _ _ _ _ _ _`
+    (mp_tac o SIMP_RULE std_ss [frag_exec_in_def]) >>
+  asm_rewrite_tac[] >> disch_then (qspec_then `s` mp_tac) >>
+  asm_rewrite_tac[] >> strip_tac >> metis_tac[]
+QED
+
+Theorem frag_exec_in_refl:
+  !ctx fn st P Q R. (!s. P s ==> Q s) ==> frag_exec_in ctx fn st st P Q R
+Proof
+  rw[frag_exec_in_def] >> disj1_tac >> qexists_tac `s` >> simp[] >>
+  metis_tac[]
+QED
+
+Theorem frag_exec_in_seq:
+  !ctx fn st1 st2 st3 P Q Q2 R.
+    frag_exec_in ctx fn st1 st2 P Q R /\ frag_exec_in ctx fn st2 st3 Q Q2 R /\
+    cs_extends st1 st2 /\ cs_extends st2 st3 ==>
+    frag_exec_in ctx fn st1 st3 P Q2 R
+Proof
+  rpt gen_tac >> strip_tac >> simp[frag_exec_in_def] >> rpt strip_tac >>
+  `fn_has_code st1 st2 fn /\ fn_has_code st2 st3 fn` by
+    metis_tac[fn_has_code_split] >>
+  qpat_x_assum `frag_exec_in ctx fn st1 st2 P Q R`
+    (mp_tac o SIMP_RULE std_ss [frag_exec_in_def]) >>
+  asm_rewrite_tac[] >> disch_then (qspec_then `s` mp_tac) >>
+  asm_rewrite_tac[] >> strip_tac
+  >- (rename1 `Q s2` >>
+      qpat_x_assum `frag_exec_in ctx fn st2 st3 Q Q2 R`
+        (mp_tac o SIMP_RULE std_ss [frag_exec_in_def]) >>
+      asm_rewrite_tac[] >> disch_then (qspec_then `s2` mp_tac) >>
+      asm_rewrite_tac[] >> strip_tac
+      >- (disj1_tac >> rename1 `Q2 s3` >> qexists_tac `s3` >> simp[] >>
+          rpt strip_tac >> metis_tac[])
+      >> disj2_tac >> metis_tac[exit_result_not_error]) >>
+  disj2_tac >> metis_tac[]
+QED
+
+(* frag_exec_run_inst_seq in one function. *)
+Theorem frag_exec_in_run_inst_seq:
+  !ctx fn st st' P Q R.
+    st'.cs_blocks = st.cs_blocks /\ st'.cs_current_bb = st.cs_current_bb /\
+    isPREFIX st.cs_current_insts st'.cs_current_insts /\
+    EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+      (emitted_insts st st') /\
+    (!s. P s ==>
+       (?s'. run_inst_seq (emitted_insts st st') s = OK s' /\
+             Q (s' with vs_inst_idx := LENGTH st'.cs_current_insts)) \/
+       (?a s'. run_inst_seq (emitted_insts st st') s = Abort a s' /\
+               !n. R (Abort a (s' with vs_inst_idx := n)))) ==>
+    frag_exec_in ctx fn st st' P Q R
+Proof
+  rpt strip_tac >>
+  `frag_exec ctx st st' P Q R` by
+    (irule frag_exec_run_inst_seq >> simp[]) >>
+  fs[frag_exec_in_all]
+QED
+
+(* frag_exec_assert_fail in one function. *)
+Theorem frag_exec_in_assert_fail:
+  !ctx fn st op x st' P Q R.
+    emit_void ASSERT [op] st = (x, st') /\
+    (!s. P s ==>
+       eval_operand op s = SOME 0w /\
+       R (Abort Revert_abort (revert_state (set_returndata [] s)))) ==>
+    frag_exec_in ctx fn st st' P Q R
+Proof
+  rpt strip_tac >>
+  `frag_exec ctx st st' P Q R` by
+    (irule frag_exec_assert_fail >> metis_tac[]) >>
+  fs[frag_exec_in_all]
+QED
+
+(* ===== Crossing blocks ===== *)
+
+(* A jump from the current block enters the target block from its first
+   instruction, at the cost of one unit of fuel. *)
+Theorem run_from_jump:
+  !fuel ctx fn s bb inst lbl bb'.
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    get_instruction bb s.vs_inst_idx = SOME inst /\
+    is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE /\
+    step_inst_base inst s = OK (jump_to lbl s) /\ ~s.vs_halted /\
+    lookup_block lbl fn.fn_blocks = SOME bb' /\
+    phi_prefix_length bb'.bb_instructions = 0 ==>
+    run_from (SUC fuel) ctx fn s = run_from fuel ctx fn (jump_to lbl s)
+Proof
+  rpt strip_tac >>
+  `(jump_to lbl s).vs_current_bb = lbl /\ ~(jump_to lbl s).vs_halted /\
+   jump_to lbl s with vs_inst_idx := 0 = jump_to lbl s` by
+    simp[jump_to_def] >>
+  `exec_block (SUC fuel) ctx bb s = OK (jump_to lbl s)` by
+    simp[Once exec_block_def, step_inst_non_invoke] >>
+  `run_blocks (SUC fuel) ctx fn (jump_to lbl s) =
+   run_from fuel ctx fn (jump_to lbl s with vs_inst_idx := 0)` by
+    (irule run_blocks_run_from_no_phi >> simp[]) >>
+  CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [run_from_def])) >>
+  asm_simp_tac std_ss [] >> simp[]
+QED
