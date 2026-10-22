@@ -25,12 +25,22 @@
  *   frag_exec_seq         — sequential composition
  *   frag_exec_conseq, frag_exec_refl — consequence and the empty fragment
  *   frag_exec_run_inst_seq — lift a straight-line run_inst_seq result
+ *
+ * Abort lifting:
+ *   frag_exec_step_abort  — a one-instruction fragment that aborts
+ *   frag_exec_assert_fail — a failing emitted ASSERT aborts
+ *   step_inst_invoke_abort, exec_block_step_abort, run_blocks_run_from,
+ *   run_context_run_blocks — Abort passes through INVOKE, exec_block,
+ *                           run_blocks and run_context unchanged
+ *   run_blocks_run_from_no_phi — run_blocks_run_from for a block without
+ *                           PHIs, which is every block the lowering emits
  *)
 
 Theory fragExec
 Ancestors
   list rich_list compileEnv emitHelper exprLoweringProps
-  venomExecSemantics venomInst venomInstProofs venomState instIdxIndep
+  venomExecSemantics venomExecProofs venomInst venomInstProofs venomState
+  instIdxIndep
 
 (* ===== Definitions ===== *)
 
@@ -413,3 +423,123 @@ Proof
        exec_block_run_inst_seq >> simp[]) >>
   qexists_tac `0` >> simp[run_from_def, exit_result_def]
 QED
+
+(* ===== Abort lifting ===== *)
+
+(* Abort from an instruction is the result of its block. *)
+Theorem exec_block_step_abort:
+  !fuel ctx bb s inst a s'.
+    get_instruction bb s.vs_inst_idx = SOME inst /\
+    step_inst fuel ctx inst s = Abort a s' ==>
+    exec_block fuel ctx bb s = Abort a s'
+Proof
+  rw[Once exec_block_def]
+QED
+
+(* A fragment of one instruction that aborts in every start state. *)
+Theorem frag_exec_step_abort:
+  !ctx st st' inst P Q R.
+    st'.cs_blocks = st.cs_blocks /\ st'.cs_current_bb = st.cs_current_bb /\
+    st'.cs_current_insts = st.cs_current_insts ++ [inst] /\
+    (!s. P s ==>
+       ?fuel a s'. step_inst fuel ctx inst s = Abort a s' /\ R (Abort a s')) ==>
+    frag_exec ctx st st' P Q R
+Proof
+  rw[frag_exec_def] >> disj2_tac >>
+  first_x_assum drule >> strip_tac >>
+  `?bb. lookup_block st.cs_current_bb fn.fn_blocks = SOME bb /\
+        isPREFIX (st.cs_current_insts ++ [inst]) bb.bb_instructions` by
+    (gvs[fn_has_code_def] >> metis_tac[]) >>
+  `get_instruction bb (LENGTH st.cs_current_insts) = SOME inst` by
+    (gvs[IS_PREFIX_APPEND, get_instruction_def] >>
+     PURE_REWRITE_TAC[GSYM APPEND_ASSOC] >> simp[EL_LENGTH_APPEND]) >>
+  `exec_block fuel ctx bb s = Abort a s'` by
+    (irule exec_block_step_abort >> qexists_tac `inst` >> gvs[]) >>
+  qexists_tac `fuel` >>
+  gvs[run_from_def, exit_result_def]
+QED
+
+(* A failing emitted ASSERT aborts with Revert_abort. *)
+Theorem frag_exec_assert_fail:
+  !ctx st op x st' P Q R.
+    emit_void ASSERT [op] st = (x, st') /\
+    (!s. P s ==>
+       eval_operand op s = SOME 0w /\
+       R (Abort Revert_abort (revert_state (set_returndata [] s)))) ==>
+    frag_exec ctx st st' P Q R
+Proof
+  rpt strip_tac >> irule frag_exec_step_abort >>
+  gvs[emit_void_assert_inst] >>
+  `(mk_inst st.cs_next_id ASSERT [op] []).inst_opcode <> INVOKE` by
+    simp[venomInstTheory.mk_inst_def] >>
+  rpt strip_tac >> first_x_assum drule >> strip_tac >>
+  simp[step_inst_non_invoke, assert_false_correct]
+QED
+
+(* Abort from a callee is the result of the INVOKE. *)
+Theorem step_inst_invoke_abort:
+  !fuel ctx inst s name arg_ops callee args cs a s'.
+    inst.inst_opcode = INVOKE /\
+    decode_invoke inst = SOME (name, arg_ops) /\
+    lookup_function name ctx.ctx_functions = SOME callee /\
+    eval_operands arg_ops s = SOME args /\
+    setup_callee callee args s = SOME cs /\
+    run_blocks fuel ctx callee cs = Abort a s' ==>
+    step_inst fuel ctx inst s = Abort a s'
+Proof
+  rw[Once step_inst_def]
+QED
+
+
+(* Entering a block is running it from past its PHIs, so every result of
+   run_from there, Abort included, is the result of run_blocks. *)
+Theorem run_blocks_run_from:
+  !fuel ctx fn s bb s_phi.
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    eval_phis s bb.bb_instructions = OK s_phi ==>
+    run_blocks (SUC fuel) ctx fn s =
+    run_from fuel ctx fn
+      (s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions)
+Proof
+  rpt strip_tac >>
+  `s_phi.vs_current_bb = s.vs_current_bb` by
+    metis_tac[eval_phis_preserves_current_bb] >>
+  simp[Once run_blocks_def, run_from_def] >>
+  Cases_on `exec_block fuel ctx bb
+              (s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions)` >>
+  simp[]
+QED
+
+Theorem eval_phis_no_phi[local]:
+  !l s. phi_prefix_length l = 0 ==> eval_phis s l = OK s
+Proof
+  Cases >> rw[eval_phis_def, phi_prefix_length_def]
+QED
+
+(* The lowering emits no PHIs, so entering one of its blocks is running it
+   from its first instruction. *)
+Theorem run_blocks_run_from_no_phi:
+  !fuel ctx fn s bb.
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    phi_prefix_length bb.bb_instructions = 0 ==>
+    run_blocks (SUC fuel) ctx fn s =
+    run_from fuel ctx fn (s with vs_inst_idx := 0)
+Proof
+  rpt strip_tac >>
+  `eval_phis s bb.bb_instructions = OK s` by simp[eval_phis_no_phi] >>
+  drule_all run_blocks_run_from >> simp[]
+QED
+
+(* The unit's result is the entry function's run_blocks result. *)
+Theorem run_context_run_blocks:
+  !fuel ctx s name fn lbl.
+    ctx.ctx_entry = SOME name /\
+    lookup_function name ctx.ctx_functions = SOME fn /\
+    fn_entry_label fn = SOME lbl ==>
+    run_context fuel ctx s =
+    run_blocks fuel ctx fn
+      (s with <| vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0 |>)
+Proof
+  rw[run_context_def, run_function_def]
+QED
+
