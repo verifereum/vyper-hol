@@ -920,14 +920,17 @@ Definition compile_external_entry_points_def:
 End
 
 (* Regression boundary for internal bodies, including constructor callees:
-   the enabled declaration path emits an ALLOCA rather than a literal slot. *)
+   declaration reserves a pointer; emission at that declaration binds it to
+   an ALLOCA rather than a literal slot. *)
 Theorem internal_declaration_alloca:
   MAP (\inst. inst.inst_opcode)
-    (SND (declare_local (cenv with ce_alloca_locals := T)
-            id (BaseT (UintT 256)) cs)).cs_current_insts =
+    (SND ((do env <- declare_local (cenv with ce_alloca_locals := T)
+                       id (BaseT (UintT 256));
+              emit_local_alloca env id od) cs)).cs_current_insts =
   MAP (\inst. inst.inst_opcode) cs.cs_current_insts ++ [ALLOCA]
 Proof
-  simp[declare_local_def, type_memory_bytes_def, comp_bind_def, comp_ignore_bind_def,
+  simp[declare_local_def, emit_local_alloca_def, type_memory_bytes_def,
+       finite_mapTheory.FLOOKUP_UPDATE, comp_bind_def, comp_ignore_bind_def,
        comp_return_def, fresh_var_def, emitHelperTheory.emit_inst_def, fresh_id_def,
        emit_def, mk_inst_def, listTheory.MAP_APPEND]
 QED
