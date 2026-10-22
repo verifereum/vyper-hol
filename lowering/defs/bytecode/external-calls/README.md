@@ -4,8 +4,12 @@ These sources exercise the lowering of one external call: the 4-byte selector,
 the result buffer, the decode of the returned value, `default_return_value`
 and interface constructors used as call arguments
 ([issue #555](https://github.com/verifereum/vyper-hol/issues/555)).
-`parity-fixtures.txt` selects 13 exact bytecode comparisons; the other sources
+`parity-fixtures.txt` selects 14 exact bytecode comparisons; the other sources
 are controls and related witnesses kept for diagnostic comparison.
+The `m10c_iface_storage_main` witness also checks first-occurrence DFT dependency
+ordering: an interface storage write and a staticcall's calldata preparation
+must retain the pinned compiler's stable scheduling order (issue #574). Its
+focused theory is `evalCompilerDftStorageOrderTheory`.
 The existing 101-fixture corpus is unchanged.
 
 `oracle/` contains independently generated annotated AST/layout JSON and

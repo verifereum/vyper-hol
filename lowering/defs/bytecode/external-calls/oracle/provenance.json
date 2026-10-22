@@ -1,7 +1,7 @@
 {
   "producer": "pinned Python Vyper",
   "vyper_commit": "cd74ce4f57e3771aeeab8f061fa3be45bfe8a29c",
-  "vyper_version": "0.5.0a4+cd74ce4f+commit.cd74ce4f",
+  "vyper_version": "0.5.0a4+commit.cd74ce4f",
   "python_version": "3.11.11",
   "dependencies": {
     "cbor2": "5.9.0",
@@ -38,7 +38,8 @@
     "i03_two_ifaces_same_name.vy": "387370a5b8bcc322d819561c70d832ec1e79a02b2d240dad74742354878b0c55",
     "i09_iface_ret_iface.vy": "16f5a243083430980922184a09bc1b60b2db57d5deccecf69669e0d384f07849",
     "i13_ext_fn_before_iface.vy": "578c38bc00fd07530247b3dfbd0cbe62cae4f198c7318607b009eaacb1bfaa8a",
-    "i15_iface_ret_iface_direct.vy": "98f8bb3386ddda112ed0e4e1e52f45303f659a3e7efaa46fec9f6cac3aaa51f5"
+    "i15_iface_ret_iface_direct.vy": "98f8bb3386ddda112ed0e4e1e52f45303f659a3e7efaa46fec9f6cac3aaa51f5",
+    "m10c_iface_storage_main.vy": "761279f750b7c3c0a94a47d1bd3534e0d958cbc079120f2a7f223e8f47181303"
   },
   "outputs": {
     "c03_iface_address_attr.hex": "4678b266ecd9d96d074fee5c82693f054379036a8972b0c178960b4070f0cbf5",
@@ -66,6 +67,8 @@
     "i13_ext_fn_before_iface.hex": "426782ac2dc649ca1e449c576242cd69fbab053b5293a91f396401a32fa29e2c",
     "i13_ext_fn_before_iface.json": "d0f30225ed01958494eb6fab9b12825d86866a4abc1250f96db5749720d38cad",
     "i15_iface_ret_iface_direct.hex": "d076e9d8b8c7d6312f9586106cac1246c4bc5b8426001c77a81ce76a0a40a882",
-    "i15_iface_ret_iface_direct.json": "e19e0a78e0fa2a3f473bed7fb016a1e1d3e7e11c6f353f3004ca637e30f42924"
+    "i15_iface_ret_iface_direct.json": "e19e0a78e0fa2a3f473bed7fb016a1e1d3e7e11c6f353f3004ca637e30f42924",
+    "m10c_iface_storage_main.hex": "8f2d76fa61fb070a8e0360c57b93bef3b10408fe5b6fa7a686fa0ad9383a57f6",
+    "m10c_iface_storage_main.json": "414c129992498df24a213c9f51488f083edf2e59c35216e043fda8efad6c0aa3"
   }
 }
