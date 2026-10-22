@@ -640,3 +640,63 @@ val nested_map_both_keys_modules =
     : (num option # toplevel list) list``
 val () = check_accepts "nested map read, calls in both keys" false
   nested_map_layouts nested_map_both_keys_modules
+
+(* Constant initializers are folded at check time, as Vyper folds them at
+   compile time: an initializer that fails to evaluate is rejected, and so is
+   a forward reference, which the deployment fold's declaration order cannot
+   evaluate. *)
+val u256 = ``BaseT (UintT 256)``
+fun const_lit n = ``Literal ^u256 (IntL ^(intSyntax.term_of_int (Arbint.fromInt n)))``
+fun const_bop bop a b = ``Builtin ^u256 (Bop ^bop) [^a; ^b]``
+fun const_name id =
+  ``TopLevelName ^u256 (NONE, ^(stringSyntax.fromMLstring id))``
+fun const_decl id e =
+  ``VariableDecl Private (Constant ^e) ^(stringSyntax.fromMLstring id) ^u256 NONE``
+fun check_constants decls =
+  vyperCheckContractLib.check_contract_conv
+    ``check_contract F ^empty_layouts ^zero_address
+        [(NONE, ^(listSyntax.mk_list (decls, ``:toplevel``)))]``
+val max_u256 = ``TypeBuiltin ^u256 MaxValue ^u256 []``
+
+val () = assert_some (check_constants
+  [const_decl "A" (const_lit 1),
+   const_decl "B" (const_bop ``vyperAST$Add`` (const_name "A") (const_lit 2)),
+   const_decl "C" (const_bop ``vyperAST$Sub`` max_u256 (const_name "B"))])
+val () = List.app (assert_none o check_constants)
+  [[const_decl "X" (const_bop ``vyperAST$Div`` (const_lit 1) (const_lit 0))],
+   [const_decl "X" (const_bop ``vyperAST$Sub`` (const_lit 0) (const_lit 1))],
+   [const_decl "X" (const_bop ``vyperAST$Add`` max_u256 (const_lit 1))],
+   [const_decl "B" (const_bop ``vyperAST$Add`` (const_name "A") (const_lit 1)),
+    const_decl "A" (const_lit 1)]]
+
+
+(* Every operation a constant initializer can use evaluates, rather than
+   leaving check_contract stuck. *)
+fun tdecl ty id e =
+  ``VariableDecl Private (Constant ^e) ^(stringSyntax.fromMLstring id) ^ty NONE``
+fun tbop ty bop a b = ``Builtin ^ty (Bop ^bop) [^a; ^b]``
+fun tname ty id = ``TopLevelName ^ty (NONE, ^(stringSyntax.fromMLstring id))``
+val dec = ``BaseT DecimalT``
+val b32 = ``BaseT (BytesT (Fixed 32))``
+fun dlit n =
+  ``Literal ^dec (DecimalL ^(intSyntax.term_of_int (Arbint.fromString n)))``
+fun int_const bop a b = [const_decl "X" (const_bop bop (const_lit a) (const_lit b))]
+fun dec_const bop =
+  [tdecl dec "X" (tbop dec bop (dlit "15000000000") (dlit "20000000000"))]
+val keccak_a =
+  ``Builtin ^b32 Keccak256 [Literal (BaseT (StringT 1)) (StringL "a")]``
+val () = List.app (assert_some o check_constants)
+  [int_const ``vyperAST$Div`` 7 2,
+   int_const ``vyperAST$Mod`` 7 3,
+   int_const ``vyperAST$Exp`` 10 18,
+   int_const ``vyperAST$And`` 6 3,
+   int_const ``vyperAST$Or`` 6 3,
+   int_const ``vyperAST$XOr`` 6 3,
+   int_const ``vyperAST$ShR`` 256 4,
+   [const_decl "X" (const_bop ``vyperAST$Sub``
+      (const_bop ``vyperAST$ShL`` (const_lit 1) (const_lit 160)) (const_lit 1))],
+   dec_const ``vyperAST$Mul``,
+   dec_const ``vyperAST$Div``,
+   [tdecl b32 "K" keccak_a,
+    tdecl ``BaseT BoolT`` "E"
+      ``Builtin (BaseT BoolT) (Bop Eq) [^(tname b32 "K"); ^(tname b32 "K")]``]]

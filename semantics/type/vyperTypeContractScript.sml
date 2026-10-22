@@ -251,6 +251,149 @@ Termination
   res_tac >> simp[]
 End
 
+(* ===== Constant folding ===== *)
+
+(* Vyper folds constant initializers at compile time and rejects a contract
+   whose initializer fails to evaluate, e.g. `1 // 0` or `max_value(uint256) +
+   1`.  The checker mirrors this by running the deployment-time constants fold
+   (evaluate_all_constants) without a context or machine.  constant_value
+   computes what eval_expr returns on a constant initializer: top-level names
+   are read as lookup_global reads them, from the module code in mods and the
+   contract's immutables imms, and builtins are evaluated in
+   constant_context mods, which fixes only the type environment the constant
+   builtins read.  Soundness against eval_expr is proved in
+   prop/vyperTypeConstantFold. *)
+Definition constant_context_def:
+  constant_context mods =
+    empty_evaluation_context with
+      sources := [(empty_evaluation_context.txn.target, mods)]
+End
+
+Definition constant_length_def:
+  constant_length (ArrayV (DynArrayV vs)) = SOME (LENGTH vs) /\
+  constant_length (ArrayV (SArrayV sparse)) = SOME (LENGTH sparse) /\
+  constant_length (ArrayV (TupleV vs)) = SOME (LENGTH vs) /\
+  constant_length (BytesV ls) = SOME (LENGTH ls) /\
+  constant_length (StringV ls) = SOME (LENGTH ls) /\
+  constant_length _ = NONE
+End
+
+Definition constant_value_def:
+  constant_value mods imms (TopLevelName _ (src,id)) =
+    (case ALOOKUP mods src of
+     | NONE => NONE
+     | SOME ts =>
+         if IS_SOME (find_var_decl_by_name id ts) then NONE
+         else OPTION_MAP SND (FLOOKUP (get_source_immutables src imms) id)) /\
+  constant_value mods imms (Literal _ l) = SOME (evaluate_literal l) /\
+  constant_value mods imms (StructLit _ _ kes) =
+    OPTION_MAP (\vs. StructV (ZIP (MAP FST kes, vs)))
+      (constant_values mods imms (MAP SND kes)) /\
+  constant_value mods imms (Subscript _ e1 e2) =
+    (case (constant_value mods imms e1, constant_value mods imms e2) of
+     | (SOME v1, SOME v2) =>
+         (case evaluate_type (type_env_all_modules mods) (expr_type e1) of
+          | NONE => NONE
+          | SOME arr_tv =>
+              case evaluate_subscript (type_env_all_modules mods) arr_tv
+                     (Value v1) v2 of
+              | INL (INL (Value v)) => SOME v
+              | _ => NONE)
+     | _ => NONE) /\
+  constant_value mods imms (Attribute _ e id) =
+    (case constant_value mods imms e of
+     | NONE => NONE
+     | SOME v =>
+         case evaluate_attribute v id of
+         | INL v' => SOME v'
+         | INR _ => NONE) /\
+  constant_value mods imms (Builtin ty bt es) =
+    (if ~constant_builtin bt \/ ~builtin_args_length_ok bt (LENGTH es) then NONE
+     else
+       case constant_values mods imms es of
+       | NONE => NONE
+       | SOME vs =>
+           if bt = Len then
+             (case vs of
+              | [v] => OPTION_MAP (\n. IntV (&n)) (constant_length v)
+              | _ => NONE)
+           else
+             case evaluate_builtin (constant_context mods) empty_accounts
+                    ty bt vs of
+             | INL v => SOME v
+             | INR _ => NONE) /\
+  constant_value mods imms (TypeBuiltin _ tb typ es) =
+    (if ~constant_type_builtin tb \/
+        ~type_builtin_args_length_ok tb (LENGTH es) then NONE
+     else
+       case constant_values mods imms es of
+       | NONE => NONE
+       | SOME vs =>
+           case evaluate_type_builtin (constant_context mods) tb typ vs of
+           | INL v => SOME v
+           | INR _ => NONE) /\
+  constant_value mods imms _ = NONE /\
+  constant_values mods imms [] = SOME [] /\
+  constant_values mods imms (e::es) =
+    (case constant_value mods imms e of
+     | NONE => NONE
+     | SOME v =>
+         case constant_values mods imms es of
+         | NONE => NONE
+         | SOME vs => SOME (v::vs))
+Termination
+  WF_REL_TAC `measure (\x. case x of
+                           | INL (_,_,e) => expr_size e
+                           | INR (_,_,es) => list_size expr_size es)` >>
+  rw[] >>
+  Induct_on `kes` >> rw[] >>
+  PairCases_on `h` >> rw[]
+End
+
+(* The immutables of the contract's address after merging cenv into module
+   src, as merge_constants does on the machine. *)
+Definition merge_constant_imms_def:
+  merge_constant_imms src cenv imms =
+    set_source_immutables src (FUNION cenv (get_source_immutables src imms))
+      imms
+End
+
+(* constants_env and evaluate_all_constants over the contract's immutables. *)
+Definition constants_fold_module_def:
+  constants_fold_module mods imms src [] acc = SOME acc /\
+  constants_fold_module mods imms src
+      (VariableDecl _ (Constant e) id typ _ :: ts) acc =
+    (case evaluate_type (type_env_all_modules mods) typ of
+     | NONE => NONE
+     | SOME tv =>
+         case constant_value mods (merge_constant_imms src acc imms) e of
+         | NONE => NONE
+         | SOME v =>
+             constants_fold_module mods imms src ts (acc |+ (id,(tv,v)))) /\
+  constants_fold_module mods imms src (_ :: ts) acc =
+    constants_fold_module mods imms src ts acc
+End
+
+Definition constants_fold_def:
+  constants_fold mods imms [] = SOME imms /\
+  constants_fold mods imms ((src,ts)::rest) =
+    case constants_fold_module mods imms src ts FEMPTY of
+    | NONE => NONE
+    | SOME cenv =>
+        constants_fold mods (merge_constant_imms src cenv imms) rest
+End
+
+(* Every constant initializer evaluates, folding in the order the deployment
+   fold uses: modules in mods order, declarations in source order, starting
+   from the immutables load_contract installs.  A forward reference between
+   constants is rejected, as that order cannot evaluate it. *)
+Definition contract_constants_ok_def:
+  contract_constants_ok mods <=>
+    case initial_immutables (type_env_all_modules mods) mods of
+    | NONE => F
+    | SOME imms => IS_SOME (constants_fold mods imms mods)
+End
+
 (* Vyper accepts a default argument only from its RUNTIME_CONSTANT class
    (check_modifiability in vyper/semantics/analysis/utils.py, required by
    _parse_args in vyper/semantics/types/function.py).  Folded values arrive as
@@ -402,7 +545,8 @@ Definition check_contract_def:
     let art = build_contract_type_artifact in_deploy mods in
       if contract_namespaces_ok in_deploy mods /\
          contract_call_graph_acyclic mods /\
-         EVERY (check_module in_deploy layouts addr mods art) mods
+         EVERY (check_module in_deploy layouts addr mods art) mods /\
+         contract_constants_ok mods
       then SOME art else NONE
 End
 

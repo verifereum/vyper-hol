@@ -90,6 +90,18 @@ Rules added this way must be trusted kernel theorems. A local extension is
 preferable to changing the shared compset for contract-specific definitions;
 the shared compset should contain only dependencies of the general checker.
 
+## Constant initializers
+
+`check_contract` evaluates every constant initializer, through
+`contract_constants_ok`, in the order deployment does
+(`evaluate_all_constants`): modules in list order, declarations in source
+order. A contract whose initializer fails (division by zero, an out-of-bounds
+result) or reads a constant that has not been folded yet checks to `NONE`.
+The shared compset therefore includes the value operations the constant
+builtins reach: integer, decimal and bitwise arithmetic, and the
+`integer_word` conversions. Hash builtins are not reduced: a `keccak256`
+constant folds to a value containing the unreduced hash term.
+
 ## Compiler frontend API
 
 `vyperCheckContractFrontendLib` accepts the compiler's annotated AST and
