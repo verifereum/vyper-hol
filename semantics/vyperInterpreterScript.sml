@@ -849,8 +849,8 @@ End
    - txParams: transaction parameters (preserves tx.origin, block info)
 
    Returns SOME (success, returnData, accounts', tStorage', emitted_logs),
-   or NONE on a model/domain failure. Failed calls (a failed value transfer,
-   REVERT or another exceptional halt) give success = F, the original
+   or NONE on a model/domain failure. Failed calls (a value the caller can't
+   pay, REVERT or another exceptional halt) give success = F, the original
    accounts and transient storage, and an empty emitted-log list. *)
 Definition run_ext_call_def:
   run_ext_call caller callee calldata value_opt
@@ -871,7 +871,15 @@ Definition run_ext_call_def:
               extract_call_result accounts tStorage outcome
             else NONE
         | NONE => NONE
-    else SOME (F, [], accounts, tStorage, [])
+    else
+      (* The EVM fails the call softly when the caller can't pay; a recipient
+         balance overflow is outside the model. *)
+      case value_opt of
+      | SOME amount =>
+          if (lookup_account caller accounts).balance < amount
+          then SOME (F, [], accounts, tStorage, [])
+          else NONE
+      | NONE => NONE
 End
 
 val () = cv_auto_trans run_ext_call_def;
