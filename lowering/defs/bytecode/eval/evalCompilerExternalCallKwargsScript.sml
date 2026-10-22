@@ -75,3 +75,19 @@ Theorem s02_send_gas_matches_python_oracle:
 Proof
   CONV_TAC (LAND_CONV (K (#evaluation s02_send_gas))) >> EVAL_TAC
 QED
+
+val e19_gas_kw = memoryStoreWitnessLib.evaluate fixture_root "e19_gas_kw"
+Theorem e19_gas_kw_matches_python_oracle:
+  ^(#term e19_gas_kw) =
+    SOME ^(memoryStoreWitnessLib.oracle fixture_root "e19_gas_kw")
+Proof
+  CONV_TAC (LAND_CONV (K (#evaluation e19_gas_kw))) >> EVAL_TAC
+QED
+
+val e29_default_ret_skip = memoryStoreWitnessLib.evaluate fixture_root "e29_default_ret_skip"
+Theorem e29_default_ret_skip_matches_python_oracle:
+  ^(#term e29_default_ret_skip) =
+    SOME ^(memoryStoreWitnessLib.oracle fixture_root "e29_default_ret_skip")
+Proof
+  CONV_TAC (LAND_CONV (K (#evaluation e29_default_ret_skip))) >> EVAL_TAC
+QED

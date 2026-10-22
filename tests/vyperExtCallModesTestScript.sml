@@ -11,7 +11,9 @@ val EXT_CALL_FIXTURE_SIMP =
   [counter_expr_def, counter_state_def, counter_outcome_def,
    counter_request_def, counter_calldata, counter_address, evaluate_def,
    bind_def, ignore_bind_def, return_def, type_check_def, check_def,
-   assert_def, raise_def, lift_option_type_def, lift_sum_runtime_def,
+   assert_def, raise_def, lift_option_type_def, lift_option_def,
+   lift_sum_runtime_def, eval_ext_call_def, ext_call_opts_ok_def,
+   ext_call_kwarg_def, ext_call_precheck_ok_def, ext_call_has_code_def,
    lookup_account_def, empty_accounts_def, empty_account_state_def,
    evaluate_literal_def, dest_AddressV_def, get_Value_def, materialise_def,
    empty_evaluation_context_def, get_tenv_def, get_accounts_def,
@@ -21,7 +23,7 @@ val EXT_CALL_FIXTURE_SIMP =
 
 Theorem activated_NONE_keeps_concrete_code_check:
   eval_expr empty_evaluation_context
-    (Call NoneT (ExtCall T F ("f",[],NoneT))
+    (Call NoneT (ExtCall T F ("f",[],NoneT) [])
       [Literal (BaseT AddressT) (BytesL (REPLICATE 19 0w ++ [9w]))] NONE)
     empty_state =
     (INR (Error (RuntimeError "ExtCall target has no code")),empty_state)
@@ -32,7 +34,7 @@ QED
 Theorem activated_exhaustion_records_request:
   eval_expr empty_evaluation_context counter_expr
     (empty_state with outcomes := SOME []) =
-    (INR (Error (RuntimeError "ExtCall reverted")),
+    (INR (Error (RevertData [])),
      empty_state with <|outcomes := SOME []; requests := [counter_request]|>)
 Proof
   simp EXT_CALL_FIXTURE_SIMP >> CONV_TAC cv_eval
@@ -40,7 +42,7 @@ QED
 
 Theorem activated_NoneT_checks_code_before_take:
   eval_expr empty_evaluation_context
-    (Call NoneT (ExtCall T F ("f",[],NoneT))
+    (Call NoneT (ExtCall T F ("f",[],NoneT) [])
       [Literal (BaseT AddressT) (BytesL (REPLICATE 19 0w ++ [9w]))] NONE)
     counter_state =
     (INR (Error (RuntimeError "ExtCall target has no code")),counter_state)
@@ -50,7 +52,7 @@ QED
 
 Definition sha256_expr_def:
   sha256_expr = Call (BaseT (UintT 256))
-    (ExtCall T F ("f",[],BaseT (UintT 256)))
+    (ExtCall T F ("f",[],BaseT (UintT 256)) [])
     [Literal (BaseT AddressT) (BytesL (REPLICATE 19 0w ++ [2w]))] NONE
 End
 
@@ -67,4 +69,58 @@ Proof
   simp (sha256_expr_def :: sha256_fixture_address :: precompile_result_sha256 ::
         adopt_call_outcome_def :: adopt_outcome_def :: EXT_CALL_FIXTURE_SIMP) >>
   CONV_TAC cv_eval
+QED
+
+(* skip_contract_check: the oracle branch makes a void call to a target
+   without code instead of reverting before it. *)
+Theorem activated_skip_check_makes_call:
+  eval_expr empty_evaluation_context
+    (Call NoneT (ExtCall T T ("f",[],NoneT) [])
+      [Literal (BaseT AddressT) (BytesL (REPLICATE 19 0w ++ [9w]))] NONE)
+    counter_state =
+    (INR (Error (RevertData [])),
+     counter_state with <|outcomes := SOME []; requests := [counter_request]|>)
+Proof
+  simp EXT_CALL_FIXTURE_SIMP >> CONV_TAC cv_eval
+QED
+
+Definition default_expr_def:
+  default_expr skip_check default_e = Call (BaseT (UintT 256))
+    (ExtCall T skip_check ("f",[],BaseT (UintT 256)) [EKDefault])
+    [Literal (BaseT AddressT) (BytesL (REPLICATE 19 0w ++ [9w])); default_e]
+    NONE
+End
+
+Definition empty_return_state_def:
+  empty_return_state = empty_state with outcomes :=
+    SOME [counter_outcome with co_success := T]
+End
+
+(* On empty return data the default is used only if the target has code,
+   unless skip_contract_check. *)
+Theorem activated_default_path_checks_code:
+  FST (eval_expr empty_evaluation_context
+         (default_expr F (Literal (BaseT (UintT 256)) (IntL 7)))
+         empty_return_state) =
+    INR (Error (RuntimeError "ExtCall target has no code")) /\
+  ISL (FST (eval_expr empty_evaluation_context
+              (default_expr T (Literal (BaseT (UintT 256)) (IntL 7)))
+              empty_return_state))
+Proof
+  simp (default_expr_def :: empty_return_state_def :: adopt_call_outcome_def ::
+        adopt_outcome_def :: EXT_CALL_FIXTURE_SIMP) >>
+  CONV_TAC cv_eval
+QED
+
+(* The default is evaluated before the call: a failing default stops the
+   call from being made. *)
+Theorem activated_default_evaluated_before_call:
+  ISR (FST (eval_expr empty_evaluation_context
+              (default_expr F (Name (BaseT (UintT 256)) "missing"))
+              counter_state)) /\
+  (SND (eval_expr empty_evaluation_context
+          (default_expr F (Name (BaseT (UintT 256)) "missing"))
+          counter_state)).requests = []
+Proof
+  simp (default_expr_def :: EXT_CALL_FIXTURE_SIMP) >> CONV_TAC cv_eval
 QED

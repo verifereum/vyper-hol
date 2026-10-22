@@ -1,4 +1,5 @@
-# send with gas=
+# send with a literal gas=
 @external
-def f(t: address, v: uint256, g: uint256):
-    send(t, v, gas=g)
+@payable
+def f(r: address):
+    send(r, msg.value, gas=2300)

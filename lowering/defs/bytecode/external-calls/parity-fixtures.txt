@@ -19,3 +19,5 @@ e44_skip_contract_check
 e45_default_ret_ifexp
 s01_send
 s02_send_gas
+e19_gas_kw
+e29_default_ret_skip
