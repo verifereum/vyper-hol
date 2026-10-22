@@ -46,6 +46,7 @@
     "i09_iface_ret_iface.vy": "16f5a243083430980922184a09bc1b60b2db57d5deccecf69669e0d384f07849",
     "i13_ext_fn_before_iface.vy": "578c38bc00fd07530247b3dfbd0cbe62cae4f198c7318607b009eaacb1bfaa8a",
     "i15_iface_ret_iface_direct.vy": "98f8bb3386ddda112ed0e4e1e52f45303f659a3e7efaa46fec9f6cac3aaa51f5",
+    "m10c_iface_storage_main.vy": "761279f750b7c3c0a94a47d1bd3534e0d958cbc079120f2a7f223e8f47181303",
     "s01_send.vy": "0cda737d9c821a45d3871aaea5c7548edda98413c01c3170906c81806703f3eb",
     "s02_send_gas.vy": "b33634dd8a52425bb51b197f5d525956babccc0fc63cf0df7e0c8308d836d4dd"
   },
@@ -92,6 +93,8 @@
     "i13_ext_fn_before_iface.json": "d0f30225ed01958494eb6fab9b12825d86866a4abc1250f96db5749720d38cad",
     "i15_iface_ret_iface_direct.hex": "d076e9d8b8c7d6312f9586106cac1246c4bc5b8426001c77a81ce76a0a40a882",
     "i15_iface_ret_iface_direct.json": "e19e0a78e0fa2a3f473bed7fb016a1e1d3e7e11c6f353f3004ca637e30f42924",
+    "m10c_iface_storage_main.hex": "8f2d76fa61fb070a8e0360c57b93bef3b10408fe5b6fa7a686fa0ad9383a57f6",
+    "m10c_iface_storage_main.json": "414c129992498df24a213c9f51488f083edf2e59c35216e043fda8efad6c0aa3",
     "s01_send.hex": "53646e2814a7c229fd22376b6e60edb7bcb358573c627448bf6dfc41781082df",
     "s01_send.json": "fc452f4a10f327874e2957a36435ac8c98a52cd9d5beb45c6a0f21d9d2a08ab3",
     "s02_send_gas.hex": "2c603900d963db387cc2d61b87c9be865c78ade2087b49fdd1f3b96bcdbf0a76",
