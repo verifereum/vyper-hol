@@ -355,7 +355,11 @@ val excluded_test_names = [
      TODO: add shift builtin support *)
   "test_uint256_mulmod_complex",
   (* Out-of-gas test - we don't model gas *)
-  "test_ecrecover_oog_handling"
+  "test_ecrecover_oog_handling",
+  (* The exports use the legacy codegen, which evaluates default_return_value
+     after the call; the semantics follows the experimental codegen, which
+     evaluates it before the call (the test expects 7 there, 99 here). *)
+  "test_default_return_value_reads_storage_before_empty_returndata_call"
 ]
 
 fun glob_match pat str =
