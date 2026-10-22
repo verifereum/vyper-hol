@@ -17,6 +17,7 @@
  *   type_memory_size_prim — primitive base types occupy 32 bytes
  *   type_memory_size_flag — FlagTV occupies 32 bytes
  *   mstore_preserves_val_in_memory — compound disjointness (mutual induction)
+ *   val_in_memory_mem_agree — val_in_memory depends only on its footprint
  *   val_in_memory_struct  — struct decomposition
  *   val_in_memory_dynarray — dynarray decomposition
  *   val_in_memory_sarray  — sarray decomposition
@@ -195,6 +196,21 @@ Theorem mstore_preserves_val_in_memory:
     tuple_in_memory vs tvs off
       (mstore off2 w (s with vs_memory := mem)).vs_memory)
 Proof ACCEPT_TAC mstore_preserves_val_in_memory_proof
+QED
+
+(* val_in_memory reads only its footprint [off, off + type_memory_size ty):
+   memories that agree on any window covering it agree on the value. *)
+Theorem val_in_memory_mem_agree:
+  ∀ ty v off len mem mem'.
+    val_in_memory ty v off mem ∧ val_wf ty v ∧
+    type_memory_size ty ≤ len ∧
+    mem_bytes_at off len mem = mem_bytes_at off len mem' ⇒
+    val_in_memory ty v off mem'
+Proof
+  rpt strip_tac >> irule (CONJUNCT1 val_in_memory_mem_agree_proof) >>
+  conj_tac >- simp[] >>
+  qexists_tac `mem` >> simp[] >>
+  drule mem_bytes_at_agree_window >> simp[]
 QED
 
 (* ===== Layer 2: decomposition ===== *)
