@@ -87,11 +87,15 @@ QED
    - fn_has_code st st' func: func holds the fragment's code, so the ALLOCA
      that declares a local is an instruction of func and backs the local
      (local_backed);
-   - fn_inst_ids_distinct func: with alloca_inv, a re-executed ALLOCA (a loop
-     body, a branch) returns a region no other live local holds;
+   - fn_inst_ids_distinct func: with the allocation facts of stmt_state_rel,
+     a re-executed ALLOCA (a loop body, a branch) returns a region no other
+     live local holds;
    - local_ptrs_reserved cenv st: the locals are the pointer locals reserved
      before st, so no temporary overwrites a local's pointer and no store
      goes to a fixed MemLoc offset.
+   stmt_state_rel says nothing of the compiler temporaries, so it holds again
+   where a loop body starts its next iteration with the last one's
+   temporaries still bound.
    Still unstated, like ctx below: every fresh ALLOCA runs with
    vs_alloca_next below 2 ** 256, else its pointer wraps.  S3's
    raw_unit_memory_ok gives that along a run. *)
@@ -106,8 +110,8 @@ Theorem compile_stmt_correct:
     fn_has_code st st' func ∧ fn_inst_ids_distinct func ∧
     local_ptrs_reserved cenv st
     ⇒
-    frag_exec ctx st st' (stmt_state_rel func cenv cx st es)
-      (stmt_state_rel func cenv cx st' es') (λr. F)
+    frag_exec ctx st st' (stmt_state_rel func cenv cx es)
+      (stmt_state_rel func cenv cx es') (λr. F)
 Proof
   cheat
 QED
@@ -120,8 +124,8 @@ Theorem compile_stmts_correct:
     fn_has_code st st' func ∧ fn_inst_ids_distinct func ∧
     local_ptrs_reserved cenv st
     ⇒
-    frag_exec ctx st st' (stmt_state_rel func cenv cx st es)
-      (stmt_state_rel func cenv cx st' es') (λr. F)
+    frag_exec ctx st st' (stmt_state_rel func cenv cx es)
+      (stmt_state_rel func cenv cx es') (λr. F)
 Proof
   cheat
 QED
@@ -143,7 +147,7 @@ QED
 (* --- Expr statement: side-effect expression --- *)
 Theorem compile_expr_stmt_correct:
   ∀ func cenv cx lctx ty e es ss st es'.
-    stmt_state_rel func cenv cx st es ss ∧
+    stmt_state_rel func cenv cx es ss ∧
     eval_stmt cx (Expr e) es = (INL (), es') ∧
     compile_stmt cenv lctx ty (Expr e) st = ((), st') ∧
     fn_has_code st st' func ∧ fn_inst_ids_distinct func ∧
@@ -151,7 +155,7 @@ Theorem compile_expr_stmt_correct:
     ⇒
     ∃ ss'.
       run_inst_seq (emitted_insts st st') ss = OK ss' ∧
-      stmt_state_rel func cenv cx st' es' ss'
+      stmt_state_rel func cenv cx es' ss'
 Proof
   cheat
 QED
@@ -159,7 +163,7 @@ QED
 (* --- AnnAssign: variable declaration with init --- *)
 Theorem compile_annassign_correct:
   ∀ func cenv cx lctx ty id vtyp e es ss st st' es'.
-    stmt_state_rel func cenv cx st es ss ∧
+    stmt_state_rel func cenv cx es ss ∧
     eval_stmt cx (AnnAssign id vtyp e) es = (INL (), es') ∧
     compile_stmt cenv lctx ty (AnnAssign id vtyp e) st = ((), st') ∧
     fn_has_code st st' func ∧ fn_inst_ids_distinct func ∧
@@ -167,7 +171,7 @@ Theorem compile_annassign_correct:
     ⇒
     ∃ ss'.
       run_inst_seq (emitted_insts st st') ss = OK ss' ∧
-      stmt_state_rel func cenv cx st' es' ss'
+      stmt_state_rel func cenv cx es' ss'
 Proof
   cheat
 QED
@@ -187,8 +191,8 @@ Theorem compile_assert_correct_true:
     local_ptrs_reserved cenv st
     ⇒
     ∃ctx.
-      frag_exec ctx st st' (stmt_state_rel func cenv cx st es)
-        (stmt_state_rel func cenv cx st' es') (λr. F)
+      frag_exec ctx st st' (stmt_state_rel func cenv cx es)
+        (stmt_state_rel func cenv cx es') (λr. F)
 Proof
   cheat
 QED
@@ -226,7 +230,7 @@ Theorem compile_assert_bare_correct_false:
     fn_has_code st st' func ∧ fn_inst_ids_distinct func ∧
     local_ptrs_reserved cenv st
     ⇒
-    frag_exec ctx st st' (stmt_state_rel func cenv cx st es) (λss. F)
+    frag_exec ctx st st' (stmt_state_rel func cenv cx es) (λss. F)
       (λr. ∃ss. r = Abort Revert_abort (revert_state (set_returndata [] ss)) ∧
                 state_rel func cenv cx es' ss)
 Proof
@@ -247,7 +251,7 @@ Theorem compile_assert_reason_correct_false:
     local_ptrs_reserved cenv st
     ⇒
     ∃ctx.
-      frag_exec ctx st st' (stmt_state_rel func cenv cx st es) (λss. F)
+      frag_exec ctx st st' (stmt_state_rel func cenv cx es) (λss. F)
         (λr. ∃ss rd.
                r = Abort Revert_abort (revert_state (set_returndata rd ss)) ∧
                state_rel func cenv cx (SND (eval_expr cx reason_e es')) ss)
@@ -318,8 +322,8 @@ Theorem compile_if_correct:
     fn_has_code st st' func ∧ fn_inst_ids_distinct func ∧
     local_ptrs_reserved cenv st
     ⇒
-    frag_exec ctx st st' (stmt_state_rel func cenv cx st es)
-      (stmt_state_rel func cenv cx st' es') (λr. F)
+    frag_exec ctx st st' (stmt_state_rel func cenv cx es)
+      (stmt_state_rel func cenv cx es') (λr. F)
 Proof
   cheat
 QED
@@ -334,8 +338,8 @@ Theorem compile_for_range_correct:
     fn_has_code st st' func ∧ fn_inst_ids_distinct func ∧
     local_ptrs_reserved cenv st
     ⇒
-    frag_exec ctx st st' (stmt_state_rel func cenv cx st es)
-      (stmt_state_rel func cenv cx st' es') (λr. F)
+    frag_exec ctx st st' (stmt_state_rel func cenv cx es)
+      (stmt_state_rel func cenv cx es') (λr. F)
 Proof
   cheat
 QED

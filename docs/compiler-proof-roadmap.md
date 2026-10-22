@@ -607,9 +607,10 @@ checkpoint receipts are historical evidence, not a fresh comparison rerun here.
 1. **State relation.** `state_rel` relates locals through `local_ptrs_rel`
    (#625): a `PtrVar` pointer holds the base of a `vs_allocas` region holding
    `val_in_memory`. Still to add: full accounts and transient-storage
-   equality, a `PtrVar` `__return_pc__`, and default arguments, which
-   `compile_register_kwarg_vars` keeps at `MemLoc` offsets that `state_rel`
-   does not relate.
+   equality, a `PtrVar` `__return_pc__`, and the locals of internal and
+   constructor bodies, which are compiled without `reserve_local_ptrs` and
+   stay at `MemLoc` offsets that `state_rel` does not relate. Default
+   arguments are at `MemLoc` too, but outside the supported subset (D25).
 2. **Expressions.** Restate the expression lemmas over `run_blocks` in
    `unit.cu_context`, INVOKE-aware, and then prove them: name, binop, neg and
    the others needed by the supported subset. Existing local

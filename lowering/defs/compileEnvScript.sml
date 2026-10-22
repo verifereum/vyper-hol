@@ -584,6 +584,13 @@ Definition fresh_vars_wrt_def:
       STRING #"%" (toString n) ∉ FDOM ss.vs_vars
 End
 
+(* x is no compiler variable fresh at st, so the code compiled from st on
+   never assigns it. *)
+Definition not_fresh_at_def:
+  not_fresh_at (st:compile_state) x ⇔
+    ∀n. st.cs_next_var ≤ n ⇒ x ≠ STRING #"%" (toString n)
+End
+
 (* ===== Label-Space Invariants =====
    Track which labels the compiler has allocated (via fresh_label) and
    which labels are currently bound to blocks. Used by module-level
@@ -674,9 +681,9 @@ End
    before st (reserve_local_ptrs, compile_register_positional_args), one per
    local:
    - no variable sits at a fixed MemLoc offset: state_rel does not relate
-     those (the locals of internal bodies, and default arguments, which
-     compile_register_kwarg_vars keeps at MemLoc), and a store to one could
-     hit a live local's region;
+     those (the locals of internal bodies and of the constructor, and
+     default arguments, which compile_register_kwarg_vars keeps at MemLoc),
+     and a store to one could hit a live local's region;
    - no compiler variable fresh at st is a local's pointer, so a temporary of
      the code compiled from st on never overwrites one;
    - distinct locals have distinct pointers, so declaring a local leaves the
@@ -686,7 +693,7 @@ Definition local_ptrs_reserved_def:
     (∀name off sz. FLOOKUP cenv.ce_vars name ≠ SOME (MemLoc off sz)) ∧
     ∀n1 n2 p sz1 sz2.
       FLOOKUP cenv.ce_vars n1 = SOME (PtrVar (Var p) sz1) ⇒
-      (∀k. st.cs_next_var ≤ k ⇒ p ≠ STRING #"%" (toString k)) ∧
+      not_fresh_at st p ∧
       (FLOOKUP cenv.ce_vars n2 = SOME (PtrVar (Var p) sz2) ⇒ n1 = n2)
 End
 

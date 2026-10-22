@@ -4,8 +4,8 @@
  * TOP-LEVEL:
  *   run_inst_seq             — run instruction sequence on Venom state
  *   emitted_insts            — extract new instructions from compile state
- *   stmt_state_rel           — state_rel with the Venom-side facts a fragment
- *                              keeps (fresh variables, alloca_inv)
+ *   stmt_state_rel           — state_rel with the Venom-side allocation
+ *                              facts a fragment keeps
  *   compile_expr_correct     — main expression lowering correctness
  *   compile_literal_vv_correct  — word literal case
  *   compile_name_correct     — variable lookup case
@@ -105,16 +105,22 @@ Definition well_annotated_def:
   well_annotated _ = T
 End
 
-(* state_rel at a point of the code compiled from st, with the Venom-side
-   facts a statement fragment needs and keeps:
-   - fresh_vars_wrt: the compiler variables fresh at st are unbound, so a
-     temporary of the fragment is no live local's pointer;
+(* state_rel in func, the function running, with the Venom-side facts a
+   statement fragment needs and keeps:
    - alloca_inv: the recorded allocations are disjoint and below the
-     frontier, so a re-executed ALLOCA (a loop body, a branch) returns a
-     region no other live local holds. *)
+     frontier;
+   - an allocation recorded for an ALLOCA of func has the size it asks for.
+     A re-executed ALLOCA (a loop body, a branch) returns the recorded base
+     without checking its size, so with alloca_inv this is what makes its
+     region miss every other live local. *)
 Definition stmt_state_rel_def:
-  stmt_state_rel func cenv cx (st:compile_state) vs ss ⇔
-    state_rel func cenv cx vs ss ∧ fresh_vars_wrt st ss ∧ alloca_inv ss
+  stmt_state_rel func cenv cx vs ss ⇔
+    state_rel func cenv cx vs ss ∧ alloca_inv ss ∧
+    ∀inst n base sz.
+      MEM inst (fn_insts func) ∧ inst.inst_opcode = ALLOCA ∧
+      inst.inst_operands = [Lit n] ∧
+      FLOOKUP ss.vs_allocas inst.inst_id = SOME (base, sz) ⇒
+      sz = w2n n
 End
 
 (* The expression lemmas relate states with stmt_state_rel func, where func
@@ -126,7 +132,7 @@ End
    variable, which state_rel does not relate. *)
 Theorem compile_expr_correct:
   ∀ func cenv cx ty e es ss st op st' v es'.
-    stmt_state_rel func cenv cx st es ss ∧
+    stmt_state_rel func cenv cx es ss ∧
     supported_expr e ∧
     well_annotated e ∧
     eval_expr cx e es = (INL (Value v), es') ∧
@@ -137,13 +143,15 @@ Theorem compile_expr_correct:
     ∃ ss'.
       run_inst_seq (emitted_insts st st') ss = OK ss' ∧
       eval_operand op ss' = SOME (val_to_w256 v) ∧
-      stmt_state_rel func cenv cx st' es' ss' ∧
+      stmt_state_rel func cenv cx es' ss' ∧
       same_blocks st st' ∧
       st'.cs_current_insts = st.cs_current_insts ++ emitted_insts st st' ∧
       ¬ss'.vs_halted ∧
       EVERY (λi. ¬is_terminator i.inst_opcode ∧ i.inst_opcode ≠ INVOKE)
         (emitted_insts st st') ∧
-      (∀ op w. eval_operand op ss = SOME w ⇒ eval_operand op ss' = SOME w)
+      (∀x w. not_fresh_at st x ∧ lookup_var x ss = SOME w ⇒
+             lookup_var x ss' = SOME w) ∧
+      (∀x. op = Var x ⇒ not_fresh_at st' x)
 Proof
   cheat
 QED
@@ -370,20 +378,6 @@ Proof
          emitted_insts_def, same_blocks_def, listTheory.DROP_LENGTH_NIL]
 QED
 
-(* --- Name (local variable load) --- *)
-(* v must be a primitive (word-sized) value.  The local is held through its
-   pointer variable (PtrVar), which is what state_rel relates.
-   Uses typed_val_to_w256 (not val_to_w256) to avoid BytesV address heuristic.
-   The type_value tv from the scope correctly distinguishes address from bytesN. *)
-(* NOTE: original statement was FALSE for v = NoneV and for
-   type/value mismatches like entry.type=BaseTV BoolT with v=BytesV [1w]
-   (ruled out by value_has_type). val_in_memory (BaseTV (UintT n)) NoneV
-   offset mem = T (vacuously true) but mload offset ss is unconstrained,
-   while typed_val_to_w256 NoneV = 0w.
-   Fix: added v ≠ NoneV and value_has_type entry.type v.
-   It was also false for a non-word annotation ann: compile_name_vv tags the
-   pointer with ann, and unwrap_value loads only if is_word_type ann, else it
-   returns the pointer; eval_expr ignores ann.  Fix: added is_word_type ann. *)
 (* A well-typed word value held in memory is the word at its base. *)
 Theorem word_val_in_memory_mem_word_at[local]:
   ∀bt v off mem.
@@ -402,6 +396,20 @@ Proof
   gvs[val_in_memory_def, typed_val_to_w256_def]
 QED
 
+(* --- Name (local variable load) --- *)
+(* v must be a primitive (word-sized) value.  The local is held through its
+   pointer variable (PtrVar), which is what state_rel relates.
+   Uses typed_val_to_w256 (not val_to_w256) to avoid BytesV address heuristic.
+   The type_value tv from the scope correctly distinguishes address from bytesN. *)
+(* NOTE: original statement was FALSE for v = NoneV and for
+   type/value mismatches like entry.type=BaseTV BoolT with v=BytesV [1w]
+   (ruled out by value_has_type). val_in_memory (BaseTV (UintT n)) NoneV
+   offset mem = T (vacuously true) but mload offset ss is unconstrained,
+   while typed_val_to_w256 NoneV = 0w.
+   Fix: added v ≠ NoneV and value_has_type entry.type v.
+   It was also false for a non-word annotation ann: compile_name_vv tags the
+   pointer with ann, and unwrap_value loads only if is_word_type ann, else it
+   returns the pointer; eval_expr ignores ann.  Fix: added is_word_type ann. *)
 Theorem compile_name_correct:
   ∀ func cenv cx ty ann id es ss st op st' v es' p size entry.
     state_rel func cenv cx es ss ∧
@@ -454,10 +462,12 @@ QED
 (* NOTE: original statement was FALSE when annotation type has different
    bounds than expr_type e1. Evaluator uses type_to_int_bound ann for
    bounds checking, compiler uses type_bounds(expr_type e1).
-   Fix: added type consistency + fresh_vars_wrt + named annotation. *)
+   Fix: added type consistency + fresh_vars_wrt + named annotation.
+   fresh_vars_wrt is now dropped (see stmt_state_rel): local_ptrs_reserved
+   keeps the temporaries off the locals' pointers. *)
 Theorem compile_binop_correct:
   ∀ func cenv cx ty ann bop e1 e2 es ss st op st' v es'.
-    stmt_state_rel func cenv cx st es ss ∧
+    stmt_state_rel func cenv cx es ss ∧
     (∀u. type_to_int_bound ann = SOME u ⇒
          type_to_int_bound (expr_type e1) = SOME u) ∧
     eval_expr cx (Builtin ann (Bop bop) [e1; e2]) es = (INL (Value v), es') ∧
@@ -468,7 +478,7 @@ Theorem compile_binop_correct:
     ∃ ss'.
       run_inst_seq (emitted_insts st st') ss = OK ss' ∧
       eval_operand op ss' = SOME (val_to_w256 v) ∧
-      stmt_state_rel func cenv cx st' es' ss'
+      stmt_state_rel func cenv cx es' ss'
 Proof
   cheat
 QED
@@ -530,7 +540,7 @@ QED
    restricted ann to signed IntT. *)
 Theorem compile_neg_correct:
   ∀ func cenv cx ty ann e es ss st op st' v es' n.
-    stmt_state_rel func cenv cx st es ss ∧
+    stmt_state_rel func cenv cx es ss ∧
     eval_expr cx (Builtin ann Neg [e]) es = (INL (Value v), es') ∧
     ann = BaseT (IntT n) ∧
     type_to_int_bound ann = type_to_int_bound (expr_type e) ∧
@@ -541,7 +551,7 @@ Theorem compile_neg_correct:
     ∃ ss'.
       run_inst_seq (emitted_insts st st') ss = OK ss' ∧
       eval_operand op ss' = SOME (val_to_w256 v) ∧
-      stmt_state_rel func cenv cx st' es' ss'
+      stmt_state_rel func cenv cx es' ss'
 Proof
   cheat
 QED
