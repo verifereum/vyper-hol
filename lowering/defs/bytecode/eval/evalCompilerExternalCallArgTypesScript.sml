@@ -43,3 +43,11 @@ Theorem e27_arg_dyn_smaller_matches_python_oracle:
 Proof
   CONV_TAC (LAND_CONV (K (#evaluation e27_arg_dyn_smaller))) >> EVAL_TAC
 QED
+
+val e46_arg_storage_str = memoryStoreWitnessLib.evaluate fixture_root "e46_arg_storage_str"
+Theorem e46_arg_storage_str_matches_python_oracle:
+  ^(#term e46_arg_storage_str) =
+    SOME ^(memoryStoreWitnessLib.oracle fixture_root "e46_arg_storage_str")
+Proof
+  CONV_TAC (LAND_CONV (K (#evaluation e46_arg_storage_str))) >> EVAL_TAC
+QED

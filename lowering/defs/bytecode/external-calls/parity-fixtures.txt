@@ -25,3 +25,4 @@ e25_arg_strlit_short
 e36_arg_bytes_literal
 e26_arg_str_smaller
 e27_arg_dyn_smaller
+e46_arg_storage_str
