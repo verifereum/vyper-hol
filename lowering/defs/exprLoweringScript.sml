@@ -47,6 +47,85 @@ Libs
    Type helpers (is_signed_type, is_decimal_type, decimal_divisor,
    type_bits, type_bounds) in compileEnv. *)
 
+(* A map place retains the declaration's value-type tree, which is not
+   representable by an expression type annotation. Locations remain attached
+   to compiled values rather than to this purely structural descriptor. *)
+Datatype:
+  place_ty = MapPT type value_type | ValPT type
+End
+
+Definition value_type_place_def:
+  value_type_place (Type ty) = ValPT ty ∧
+  value_type_place (HashMapT kt vt) = MapPT kt vt
+End
+
+Definition place_type_def:
+  place_type cenv (TopLevelName ty nsid) =
+    (case cenv.ce_hashmap_info (module_var_key nsid) of
+       SOME (tr, kt, vt) => MapPT kt vt
+     | NONE => ValPT ty) ∧
+  place_type cenv (Subscript ty base_e idx) =
+    (case place_type cenv base_e of
+       MapPT kt vt => value_type_place vt
+     | ValPT _ => ValPT ty) ∧
+  place_type cenv e = ValPT (expr_type e)
+End
+
+Theorem place_type_name[simp]:
+  place_type cenv (Name ty id) = ValPT ty
+Proof
+  simp[place_type_def, expr_type_def]
+QED
+
+Theorem place_type_module_map:
+  cenv.ce_hashmap_info (module_var_key nsid) = SOME (tr, kt, vt) ⇒
+  place_type cenv (TopLevelName ty nsid) = MapPT kt vt
+Proof
+  simp[place_type_def]
+QED
+
+Theorem place_type_subscript_map:
+  place_type cenv base_e = MapPT kt vt ⇒
+  place_type cenv (Subscript ty base_e idx) = value_type_place vt
+Proof
+  simp[place_type_def]
+QED
+
+Theorem place_type_subscript_value:
+  place_type cenv base_e = ValPT bt ⇒
+  place_type cenv (Subscript ty base_e idx) = ValPT ty
+Proof
+  simp[place_type_def]
+QED
+
+Theorem place_type_nested_map:
+  cenv.ce_hashmap_info (module_var_key nsid) =
+    SOME (tr, kt, HashMapT kt' (Type vt)) ⇒
+  place_type cenv
+    (Subscript vt (Subscript NoneT (TopLevelName NoneT nsid) k1) k2) =
+    ValPT vt
+Proof
+  simp[place_type_def, value_type_place_def]
+QED
+
+Theorem place_type_map_array:
+  cenv.ce_hashmap_info (module_var_key nsid) =
+    SOME (tr, kt, Type (ArrayT et bound)) ⇒
+  place_type cenv (Subscript NoneT (TopLevelName NoneT nsid) k) =
+    ValPT (ArrayT et bound)
+Proof
+  simp[place_type_def, value_type_place_def]
+QED
+
+Theorem place_type_map_struct:
+  cenv.ce_hashmap_info (module_var_key nsid) =
+    SOME (tr, kt, Type (StructT sid)) ⇒
+  place_type cenv (Subscript NoneT (TopLevelName NoneT nsid) k) =
+    ValPT (StructT sid)
+Proof
+  simp[place_type_def, value_type_place_def]
+QED
+
 (* Bytelike literals and ABI encoding results carry their produced bound,
    independently of the annotated destination bound. *)
 Definition lowered_value_type_def:
@@ -2063,7 +2142,7 @@ Proof
 QED
 
 (* Compile subscript access: array[index], mapping[key], tuple[N].
-   Dispatches on base type. HashMap (mapping) dispatched via ce_is_hashmap.
+   Dispatches on base type. HashMap (mapping) dispatched via ce_hashmap_info.
    Mirrors Python: expr.py _lower_subscript *)
 Definition compile_subscript_def:
   compile_subscript cfn cenv ret_ty ty base_e idx_e =
@@ -2071,7 +2150,7 @@ Definition compile_subscript_def:
                       Name _ id => id
                     | TopLevelName _ nsid => module_var_key nsid
                     | _ => "") in
-    if cenv.ce_is_hashmap var_name then
+    if IS_SOME (cenv.ce_hashmap_info var_name) then
       let base_slot = (case FLOOKUP cenv.ce_vars var_name of
                          SOME (StorageLoc slot) => Lit slot
                        | _ => Lit 0w) in

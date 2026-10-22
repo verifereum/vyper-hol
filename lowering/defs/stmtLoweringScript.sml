@@ -403,7 +403,7 @@ Definition compile_get_target_ptr_def:
         For nested hashmaps (map[k1][k2]):
         - Recursively evaluate base target to get intermediate slot
         - Then keccak256(intermediate_slot || key) for outer subscript *)
-     if cenv.ce_is_hashmap var_name then
+     if IS_SOME (cenv.ce_hashmap_info var_name) then
        do key_op <- lower_value compile_expr cenv (BaseT (UintT 256)) idx_e;
           (* Get base slot: for NameTarget, direct lookup.
              For SubscriptTarget (nested hashmap), recurse to get intermediate slot. *)
