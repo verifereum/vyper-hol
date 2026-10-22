@@ -3367,6 +3367,116 @@ Proof
        ci_mono_compile_attribute_cfn, ci_mono_compile_call, ci_mono_refl]
 QED
 
+Theorem ci_mono_builtin_scalar[local]:
+  (∀ce t e s. ci_mono s (SND (f ce t e s))) ⇒
+  ∀bi. (bi = Neg ∨ bi = Abs ∨ bi = BlockHash ∨ bi = BlobHash ∨
+         bi = Ceil ∨ bi = Floor ∨ (∃n. bi = Uint2Str n) ∨
+         (∃n. bi = CalldataSlice n) ∨ bi = AddMod ∨ bi = MulMod ∨
+         bi = PowMod256 ∨ bi = MethodId) ⇒
+  ci_mono st (SND (compile_builtin_dispatch_body f cenv ret_ty ty bi args st))
+Proof
+  strip_tac >> gen_tac >> Cases_on `bi` >> simp[] >>
+  simp[compile_builtin_dispatch_body_def, LET_THM] >>
+  rpt (irule ci_mono_uncurry >> reverse conj_tac
+       >- simp[ci_mono_lower_value_cfn, ci_mono_compile_keccak256_word]
+       >> rpt gen_tac >> BETA_TAC) >>
+  simp[ci_mono_as_stack_val, ci_mono_as_ptr_val,
+       ci_mono_compile_neg_helper, ci_mono_compile_builtin_abs,
+       ci_mono_compile_blockhash, ci_mono_compile_blobhash,
+       ci_mono_compile_ceil, ci_mono_compile_floor,
+       ci_mono_compile_uint2str, ci_mono_compile_slice_calldata,
+       ci_mono_compile_addmod, ci_mono_compile_mulmod,
+       ci_mono_compile_pow_mod256, ci_mono_emit_op]
+QED
+
+Theorem ci_mono_builtin_branching_scalar[local]:
+  (∀ce t e s. ci_mono s (SND (f ce t e s))) ⇒
+  ∀bi. (bi = Not ∨ bi = Len ∨ (∃d. bi = AsWeiValue d)) ⇒
+  ci_mono st (SND (compile_builtin_dispatch_body f cenv ret_ty ty bi args st))
+Proof
+  strip_tac >> gen_tac >> Cases_on `bi` >> simp[] >>
+  simp[compile_builtin_dispatch_body_def, LET_THM] >>
+  rpt IF_CASES_TAC >>
+  rpt (irule ci_mono_uncurry >> reverse conj_tac
+       >- simp[ci_mono_lower_value_cfn]
+       >> rpt gen_tac >> BETA_TAC) >>
+  rpt IF_CASES_TAC >>
+  simp[ci_mono_as_stack_val, ci_mono_compile_invert, ci_mono_emit_op,
+       ci_mono_compile_builtin_len, ci_mono_compile_builtin_calldatasize,
+       ci_mono_compile_as_wei_value_decimal, ci_mono_compile_as_wei_value_int]
+QED
+
+Theorem ci_mono_builtin_environment[local]:
+  (∀ce t e s. ci_mono s (SND (f ce t e s))) ⇒
+  ∀bi. ((∃i. bi = Env i) ∨ (∃i. bi = Acc i) ∨ bi = CalldataLen) ⇒
+  ci_mono st (SND (compile_builtin_dispatch_body f cenv ret_ty ty bi args st))
+Proof
+  strip_tac >> gen_tac >> Cases_on `bi` >>
+  simp[compile_builtin_dispatch_body_def, LET_THM, ci_mono_as_stack_val,
+       ci_mono_compile_env_var, ci_mono_compile_acc_cfn,
+       ci_mono_compile_builtin_calldatasize]
+QED
+
+Theorem ci_mono_builtin_hash[local]:
+  (∀ce t e s. ci_mono s (SND (f ce t e s))) ⇒
+  ∀bi. (bi = Keccak256 ∨ bi = Sha256) ⇒
+  ci_mono st (SND (compile_builtin_dispatch_body f cenv ret_ty ty bi args st))
+Proof
+  strip_tac >> gen_tac >> Cases_on `bi` >> simp[] >>
+  simp[compile_builtin_dispatch_body_def, LET_THM] >>
+  rpt IF_CASES_TAC >> rpt TOP_CASE_TAC >>
+  rpt (irule ci_mono_uncurry >> reverse conj_tac
+       >- simp[ci_mono_lower_value_cfn]
+       >> rpt gen_tac >> BETA_TAC) >>
+  simp[ci_mono_as_stack_val, ci_mono_compile_keccak256_bytes,
+       ci_mono_compile_keccak256_bytesm, ci_mono_compile_keccak256_word,
+       ci_mono_compile_sha256_bytes, ci_mono_compile_sha256_bytesm,
+       ci_mono_compile_sha256_word]
+QED
+
+Theorem ci_mono_builtin_membership[local]:
+  (∀ce t e s. ci_mono s (SND (f ce t e s))) ⇒
+  ci_mono st (SND
+    (case e of
+       Builtin ann (MakeArray et bnd) elems =>
+         (let (ops, st') = compile_multi_exprs f cenv elems st in
+          if is_in then as_stack_val ret_ty (compile_list_membership_in needle ops st')
+          else as_stack_val ret_ty (compile_list_membership_notin needle ops st'))
+     | _ =>
+         (let (vv, st') = f cenv rhs_ty e st in
+          as_stack_val ret_ty
+            (compile_var_array_membership cenv needle vv rhs_ty is_in st'))))
+Proof
+  strip_tac >> Cases_on `e` >> simp[LET_THM] >> rpt TOP_CASE_TAC >>
+  rpt (irule ci_mono_uncurry >> reverse conj_tac
+       >- simp[ci_mono_compile_multi_exprs]
+       >> rpt gen_tac >> BETA_TAC) >>
+  rpt IF_CASES_TAC >>
+  simp[ci_mono_as_stack_val, ci_mono_compile_list_membership_in,
+       ci_mono_compile_list_membership_notin, ci_mono_compile_var_array_membership]
+QED
+
+Theorem ci_mono_builtin_bop[local]:
+  (∀ce t e s. ci_mono s (SND (f ce t e s))) ⇒
+  ci_mono st (SND (compile_builtin_dispatch_body f cenv ret_ty ty (Bop op) args st))
+Proof
+  strip_tac >> simp[compile_builtin_dispatch_body_def, LET_THM] >>
+  IF_CASES_TAC
+  >- (irule ci_mono_uncurry >> reverse conj_tac
+      >- simp[ci_mono_lower_value_cfn]
+      >> rpt gen_tac >> BETA_TAC >> irule (SRULE [LET_THM] ci_mono_builtin_membership) >> simp[]) >>
+  IF_CASES_TAC >>
+  rpt (irule ci_mono_uncurry >> reverse conj_tac
+       >- simp[ci_mono_lower_value_cfn, ci_mono_compile_bytestring_hash,
+               ci_mono_emit_op]
+       >> rpt gen_tac >> BETA_TAC) >>
+  rpt IF_CASES_TAC >>
+  rpt (irule ci_mono_uncurry >> reverse conj_tac
+       >- simp[ci_mono_emit_op]
+       >> rpt gen_tac >> BETA_TAC) >>
+  simp[ci_mono_as_stack_val, ci_mono_compile_binop, ci_mono_emit_op]
+QED
+
 (* Why it holds: only emit (appends to cs_current_insts) and new_block
    (conses onto cs_blocks) write those two fields (compileEnvScript.sml);
    every other operation threads the state through comp_bind. compile_expr
