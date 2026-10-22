@@ -132,8 +132,10 @@ Definition initial_venom_state_rel_def:
 End
 
 (* Only success compares effects/requests. Runtime failure must abort, except
-   the exact dynamic strict-decoding exemption on Halt. Error (stuck or fuel
-   exhaustion), OK and IntRet are never acceptable results, even if exempt. *)
+   the exact dynamic strict-decoding exemption on Halt. A failed external call
+   (RevertData) must REVERT; as for assertions, the revert data itself is not
+   compared. Error (stuck or fuel exhaustion), OK and IntRet are never
+   acceptable results, even if exempt. *)
 Definition external_call_result_rel_def:
   external_call_result_rel tops ret tx (res, am', rqs) vres <=>
     case (res, vres) of
@@ -145,6 +147,7 @@ Definition external_call_result_rel_def:
         ss.vs_requests = rqs
     | (INR (AssertException s), Abort Revert_abort _) => T
     | (INR (AssertException s), Abort ExHalt_abort _) => (s = "UNREACHABLE")
+    | (INR (Error (RevertData _)), Abort Revert_abort _) => T
     | (INR (Error (RuntimeError m)), Abort _ _) => T
     | (INR (Error e), Halt _) => decode_strictness_exempt tops e
     | _ => F

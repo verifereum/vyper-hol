@@ -121,6 +121,19 @@ Proof
   Cases_on `kind` >> simp[external_call_result_rel_def, decode_strictness_exempt_def]
 QED
 
+(* A failed external call re-raises the callee's revert data: it may only
+   REVERT. *)
+Theorem lowering_revert_data_boundary:
+  external_call_result_rel tops ret tx (INR (Error (RevertData bs)), am, rqs)
+    (Abort Revert_abort ss) /\
+  ~external_call_result_rel tops ret tx (INR (Error (RevertData bs)), am, rqs)
+    (Abort ExHalt_abort ss) /\
+  ~external_call_result_rel tops ret tx (INR (Error (RevertData bs)), am, rqs)
+    (Halt ss)
+Proof
+  simp[external_call_result_rel_def, decode_strictness_exempt_def]
+QED
+
 Theorem lowering_decode_exemption_narrow:
   decode_strictness_exempt tops e ==>
   e = RuntimeError "abi_decode invalid" /\

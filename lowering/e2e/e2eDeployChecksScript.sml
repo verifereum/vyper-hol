@@ -49,7 +49,7 @@ Theorem constructor_call_exclusion:
     [FunctionDecl Deploy Payable F F "__init__" [] [] NoneT
       [If (Literal (BaseT BoolT) (BoolL T))
          [Assert (Literal (BaseT BoolT) (BoolL T))
-           (AssertReason (Call NoneT Send [] NONE))] []]] /\
+           (AssertReason (Call NoneT (Send F) [] NONE))] []]] /\
   ~constructor_call_free
     [FunctionDecl Deploy Payable F F "__init__" [] [] NoneT
       [Return (SOME (Call NoneT (IntCall (NONE,"helper")) [] NONE))]] /\

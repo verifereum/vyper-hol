@@ -1028,6 +1028,165 @@ Proof
   rpt strip_tac >> gvs[]
 QED
 
+(* ===== extcall / staticcall / send after operand evaluation ===== *)
+
+(* The value of the keyword argument of kind kw; opts lists the kinds of
+   the keyword values kw_vals, both in source order. *)
+Definition ext_call_kwarg_def:
+  ext_call_kwarg kw (k::ks) (v::vs) =
+    (if k = kw then SOME v else ext_call_kwarg kw ks vs) ∧
+  ext_call_kwarg kw _ _ = NONE
+End
+
+val () = cv_auto_trans ext_call_kwarg_def;
+
+(* Each keyword argument at most once; staticcall sends no value. *)
+Definition ext_call_opts_ok_def:
+  ext_call_opts_ok is_static opts ⇔
+    ALL_DISTINCT opts ∧ (is_static ⇒ ¬MEM EKValue opts)
+End
+
+val () = cv_auto_trans ext_call_opts_ok_def;
+
+(* extcall/staticcall once all operands are values.  vs is the operand list
+   of ExtCall, evaluated in Vyper's order (expr.py _lower_external_call and
+   _parse_external_call_kwargs): the target, the positional arguments, then
+   the keyword arguments in source order, so default_return_value is
+   evaluated before the call whether or not it is used.
+   Vyper checks EXTCODESIZE before the call when no return data is expected
+   (ext_call_precheck_ok), reverts with the callee's return data when the
+   call fails, and checks EXTCODESIZE again on the default_return_value path,
+   unless skip_contract_check.  The outcome comes from the external-call
+   oracle when st.outcomes is SOME, otherwise from running the callee. *)
+Definition eval_ext_call_def:
+  eval_ext_call cx is_static skip_check (func_name, arg_types, ret_type) opts [] =
+    raise (Error (TypeError "ExtCall operands")) ∧
+  eval_ext_call cx is_static skip_check (func_name, arg_types, ret_type) opts
+                (target_v :: rest) = do
+    type_check (LENGTH rest = LENGTH arg_types + LENGTH opts ∧
+                ext_call_opts_ok is_static opts) "ExtCall operands";
+    target_addr <- lift_option_type (dest_AddressV target_v) "ExtCall target not address";
+    arg_vals <<- TAKE (LENGTH arg_types) rest;
+    kw_vals <<- DROP (LENGTH arg_types) rest;
+    value_opt <- (if is_static then return NONE else
+      case ext_call_kwarg EKValue opts kw_vals of
+      | NONE => return (SOME 0)
+      | SOME v => do
+          n <- lift_option_type (dest_NumV v) "ExtCall value not int";
+          return (SOME n)
+        od);
+    default_opt <<- ext_call_kwarg EKDefault opts kw_vals;
+    tenv <<- get_tenv cx;
+    calldata <- lift_option_type (build_ext_calldata tenv func_name arg_types arg_vals)
+                                 "ExtCall build_calldata";
+    accounts <- get_accounts;
+    check (ext_call_precheck_ok skip_check ret_type target_addr accounts)
+          "ExtCall target has no code";
+    outcomes <- (λst. return st.outcomes st);
+    returnData <- (case outcomes of
+      | SOME _ => do
+          (rq, outcome) <- vyperCallOutcome$take_call_outcome target_addr calldata value_opt;
+          (if call_outcome_success outcome then return ()
+           else raise $ Error $ RevertData $ call_outcome_return_data outcome);
+          vyperCallOutcome$adopt_call_outcome rq outcome;
+          return (call_outcome_return_data outcome)
+        od
+      | NONE => do
+          tStorage <- get_transient_storage;
+          result <- lift_option
+            (run_ext_call cx.txn.target target_addr calldata value_opt
+                          accounts tStorage (vyper_to_tx_params cx.txn))
+            "ExtCall run failed";
+          success <<- FST result; result1 <<- SND result;
+          returnData <<- FST result1; result2 <<- SND result1;
+          accounts' <<- FST result2; result3 <<- SND result2;
+          tStorage' <<- FST result3; emitted_logs <<- SND result3;
+          (if success then return () else raise $ Error $ RevertData returnData);
+          update_accounts (K accounts');
+          update_transient (K tStorage');
+          append_logs emitted_logs;
+          return returnData
+        od);
+    case (if returnData = [] then default_opt else NONE) of
+    | SOME default_v => do
+        accounts' <- get_accounts;
+        check (skip_check ∨ ext_call_has_code target_addr accounts')
+              "ExtCall target has no code";
+        return $ Value default_v
+      od
+    | NONE => do
+        ret_val <- lift_sum_runtime (evaluate_abi_decode_return tenv ret_type returnData);
+        return $ Value ret_val
+      od
+  od
+End
+
+val () = eval_ext_call_def
+  |> SRULE [FUN_EQ_THM, bind_def, ignore_bind_def, LET_RATOR, COND_RATOR,
+            prod_CASE_rator, sum_CASE_rator, option_CASE_rator, UNCURRY,
+            lift_option_def, lift_option_type_def, type_check_def, check_def,
+            assert_def]
+  |> cv_auto_trans;
+
+(* send(to, value[, gas=...]); vs = [to; value] ++ (if has_gas then [gas] else []) *)
+Definition eval_send_def:
+  eval_send cx has_gas (to_v :: amount_v :: gas_vs) = do
+    type_check (LENGTH gas_vs = if has_gas then 1 else 0) "Send args";
+    toAddr <- lift_option_type (dest_AddressV to_v) "Send not AddressV";
+    amount <- lift_option_type (dest_NumV amount_v) "Send not NumV";
+    outcomes <- (λst. return st.outcomes st);
+    case outcomes of
+    | SOME _ => do
+      (rq, outcome) <- vyperCallOutcome$take_call_outcome toAddr [] (SOME amount);
+      check (call_outcome_success outcome) "send failed";
+      vyperCallOutcome$adopt_call_outcome rq outcome;
+      return $ Value $ NoneV
+    od
+    | NONE => do
+      transfer_value cx.txn.target toAddr amount;
+      return $ Value $ NoneV
+    od
+  od ∧
+  eval_send cx has_gas _ = raise (Error (TypeError "Send args"))
+End
+
+val () = eval_send_def
+  |> SRULE [FUN_EQ_THM, bind_def, ignore_bind_def, LET_RATOR, COND_RATOR,
+            prod_CASE_rator, sum_CASE_rator, option_CASE_rator, UNCURRY,
+            lift_option_type_def, type_check_def, check_def, assert_def]
+  |> cv_auto_trans;
+
+Theorem eval_ext_call_preserves_non_accounts:
+  eval_ext_call cx static skip_check sig opts vs st = (res, st') ==>
+  st'.scopes = st.scopes /\ st'.immutables = st.immutables
+Proof
+  PairCases_on `sig` >> Cases_on `vs` >>
+  simp[eval_ext_call_def, bind_def, ignore_bind_def, type_check_def,
+       assert_def, return_def, raise_def, get_accounts_def,
+       get_transient_storage_def, lift_option_def, lift_option_type_def,
+       check_def, lift_sum_runtime_def, update_accounts_def,
+       update_transient_def, append_logs_def,
+       vyperCallOutcomeTheory.take_call_outcome_def,
+       vyperCallOutcomeTheory.adopt_call_outcome_def, LET_THM, UNCURRY,
+       COND_RATOR, option_CASE_rator, prod_CASE_rator, sum_CASE_rator] >>
+  strip_tac >> gvs[AllCaseEqs()]
+QED
+
+Theorem eval_send_preserves_non_accounts:
+  eval_send cx has_gas vs st = (res, st') ==>
+  st'.scopes = st.scopes /\ st'.immutables = st.immutables
+Proof
+  Cases_on `vs` >- simp[eval_send_def, raise_def] >>
+  Cases_on `t` >- simp[eval_send_def, raise_def] >>
+  simp[eval_send_def, bind_def, ignore_bind_def, type_check_def,
+       assert_def, return_def, raise_def, lift_option_type_def, check_def,
+       transfer_value_def, get_accounts_def, update_accounts_def,
+       vyperCallOutcomeTheory.take_call_outcome_def,
+       vyperCallOutcomeTheory.adopt_call_outcome_def, LET_THM, UNCURRY,
+       COND_RATOR, option_CASE_rator, prod_CASE_rator, sum_CASE_rator] >>
+  strip_tac >> gvs[AllCaseEqs()]
+QED
+
 (* Dynamic array bounds check: reads stored length from storage *)
 Definition check_array_bounds_def:
   check_array_bounds cx (ArrayRef is_transient base_slot _ (Dynamic _)) (IntV i) = do
@@ -1324,86 +1483,14 @@ Definition evaluate_def:
     v <- lift_sum $ evaluate_type_builtin cx tb typ vs;
     return $ Value v
   od ∧
-  eval_expr cx (Call _ Send es _) = do
-    type_check (LENGTH es = 2) "Send args";
+  eval_expr cx (Call _ (Send has_gas) es _) = do
+    type_check (LENGTH es = if has_gas then 3 else 2) "Send args";
     vs <- eval_exprs cx es;
-    toAddr <- lift_option_type (dest_AddressV $ EL 0 vs) "Send not AddressV";
-    amount <- lift_option_type (dest_NumV $ EL 1 vs) "Send not NumV";
-    outcomes <- (λst. return st.outcomes st);
-    case outcomes of
-    | SOME _ => do
-      (rq, outcome) <- vyperCallOutcome$take_call_outcome toAddr [] (SOME amount);
-      check (call_outcome_success outcome) "send failed";
-      vyperCallOutcome$adopt_call_outcome rq outcome;
-      return $ Value $ NoneV
-    od
-    | NONE => do
-    transfer_value cx.txn.target toAddr amount;
-    return $ Value $ NoneV
-    od
+    eval_send cx has_gas vs
   od ∧
-  eval_expr cx (Call _ (ExtCall is_static skip_check (func_name, arg_types, ret_type)) es drv) = do
+  eval_expr cx (Call _ (ExtCall is_static skip_check sig opts) es _) = do
     vs <- eval_exprs cx es;
-    type_check (vs ≠ []) "ExtCall no target";
-    target_addr <- lift_option_type (dest_AddressV (HD vs)) "ExtCall target not address";
-    (* Convention: staticcall (T) args = [target; arg1; ...]
-                   extcall (F) args = [target; value; arg1; ...] *)
-    (value_opt, arg_vals) <- if is_static then
-      return (NONE, TL vs)
-    else do
-      type_check (TL vs ≠ []) "ExtCall no value";
-      v <- lift_option_type (dest_NumV (HD (TL vs))) "ExtCall value not int";
-      return (SOME v, TL (TL vs))
-    od;
-    tenv <<- get_tenv cx;
-    calldata <- lift_option_type (build_ext_calldata tenv func_name arg_types arg_vals)
-                                 "ExtCall build_calldata";
-    outcomes <- (λst. return st.outcomes st);
-    case outcomes of
-    | SOME _ => do
-      accounts <- get_accounts;
-      (if ret_type = NoneT then
-        check (¬NULL (lookup_account target_addr accounts).code) "ExtCall target has no code"
-       else return ());
-      (rq, outcome) <- vyperCallOutcome$take_call_outcome target_addr calldata value_opt;
-      check (call_outcome_success outcome) "ExtCall reverted";
-      vyperCallOutcome$adopt_call_outcome rq outcome;
-      if call_outcome_return_data outcome = [] ∧ IS_SOME drv then
-        eval_expr cx (THE drv)
-      else do
-        ret_val <- lift_sum_runtime (evaluate_abi_decode_return tenv ret_type
-          (call_outcome_return_data outcome));
-        return $ Value ret_val
-      od
-    od
-    | NONE => do
-    accounts <- get_accounts;
-    check (ext_call_precheck_ok skip_check ret_type target_addr accounts)
-          "ExtCall target has no code";
-    (* Vyper reverts if target has no code (EXTCODESIZE == 0), see
-         ext_call_precheck_ok for when this check is performed *)
-    tStorage <- get_transient_storage;
-    txParams <<- vyper_to_tx_params cx.txn;
-    caller <<- cx.txn.target;
-    result <- lift_option
-      (run_ext_call caller target_addr calldata value_opt accounts tStorage txParams)
-      "ExtCall run failed";
-    (success, returnData, accounts', tStorage', emitted_logs) <<- result;
-    check success "ExtCall reverted";
-    update_accounts (K accounts');
-    update_transient (K tStorage');
-    append_logs emitted_logs;
-    if returnData = [] ∧ IS_SOME drv then do
-      (* default_return_value path: Vyper checks EXTCODESIZE after the call *)
-      check (skip_check ∨ ext_call_has_code target_addr accounts')
-            "ExtCall target has no code";
-      eval_expr cx (THE drv)
-    od
-    else do
-      ret_val <- lift_sum_runtime (evaluate_abi_decode_return tenv ret_type returnData);
-      return $ Value ret_val
-    od
-    od
+    eval_ext_call cx is_static skip_check sig opts vs
   od ∧
   eval_expr cx (Call _ (IntCall (src_id_opt, fn)) es _) = do
     type_check (¬MEM (src_id_opt, fn) cx.stk) "recursion";
