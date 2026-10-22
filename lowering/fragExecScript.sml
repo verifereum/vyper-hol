@@ -32,6 +32,8 @@
  *   step_inst_invoke_abort, exec_block_step_abort, run_blocks_run_from,
  *   run_context_run_blocks — Abort passes through INVOKE, exec_block,
  *                           run_blocks and run_context unchanged
+ *   run_blocks_run_from_no_phi — run_blocks_run_from for a block without
+ *                           PHIs, which is every block the lowering emits
  *)
 
 Theory fragExec
@@ -424,12 +426,6 @@ QED
 
 (* ===== Abort lifting ===== *)
 
-Theorem EL_LENGTH_SNOC_APPEND[local]:
-  !l x t. LENGTH l < LENGTH (l ++ [x] ++ t) /\ EL (LENGTH l) (l ++ [x] ++ t) = x
-Proof
-  Induct >> simp[]
-QED
-
 (* Abort from an instruction is the result of its block. *)
 Theorem exec_block_step_abort:
   !fuel ctx bb s inst a s'.
@@ -455,7 +451,8 @@ Proof
         isPREFIX (st.cs_current_insts ++ [inst]) bb.bb_instructions` by
     (gvs[fn_has_code_def] >> metis_tac[]) >>
   `get_instruction bb (LENGTH st.cs_current_insts) = SOME inst` by
-    (gvs[IS_PREFIX_APPEND, get_instruction_def, EL_LENGTH_SNOC_APPEND]) >>
+    (gvs[IS_PREFIX_APPEND, get_instruction_def] >>
+     PURE_REWRITE_TAC[GSYM APPEND_ASSOC] >> simp[EL_LENGTH_APPEND]) >>
   `exec_block fuel ctx bb s = Abort a s'` by
     (irule exec_block_step_abort >> qexists_tac `inst` >> gvs[]) >>
   qexists_tac `fuel` >>
@@ -511,6 +508,26 @@ Proof
   Cases_on `exec_block fuel ctx bb
               (s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions)` >>
   simp[]
+QED
+
+Theorem eval_phis_no_phi[local]:
+  !l s. phi_prefix_length l = 0 ==> eval_phis s l = OK s
+Proof
+  Cases >> rw[eval_phis_def, phi_prefix_length_def]
+QED
+
+(* The lowering emits no PHIs, so entering one of its blocks is running it
+   from its first instruction. *)
+Theorem run_blocks_run_from_no_phi:
+  !fuel ctx fn s bb.
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    phi_prefix_length bb.bb_instructions = 0 ==>
+    run_blocks (SUC fuel) ctx fn s =
+    run_from fuel ctx fn (s with vs_inst_idx := 0)
+Proof
+  rpt strip_tac >>
+  `eval_phis s bb.bb_instructions = OK s` by simp[eval_phis_no_phi] >>
+  drule_all run_blocks_run_from >> simp[]
 QED
 
 (* The unit's result is the entry function's run_blocks result. *)
