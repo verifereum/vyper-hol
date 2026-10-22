@@ -23,3 +23,12 @@ Theorem internal_local_shape_contract_obstruction:
 Proof
   EVAL_TAC
 QED
+
+(* With the M0021-authorized obsolete guard removed, local declarations are
+   admitted without weakening the independent internal-call exclusion. *)
+Theorem internal_bool_local_admitted:
+  supported_function_body [] Internal []
+    [AnnAssign "y" (BaseT BoolT) (Literal (BaseT BoolT) (BoolL T))]
+Proof
+  EVAL_TAC
+QED
