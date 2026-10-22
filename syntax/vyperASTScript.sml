@@ -1,6 +1,6 @@
 Theory vyperAST
 Ancestors
-  ASCIInumbers string words vyperMisc[ignore_grammar]
+  ASCIInumbers string words arithmetic sorting vyperMisc[ignore_grammar]
 Libs
   cv_transLib
 
@@ -264,6 +264,14 @@ Datatype:
   | AttributeTarget base_assignment_target identifier
 End
 
+(* A resolved custom-error use retains positional and keyword operands separately.
+   The declaration determines keyword order and the canonical ABI types. *)
+Datatype:
+  custom_error
+  = CustomError nsid (expr list) ((identifier # expr) list)
+End
+
+
 Definition expr_type_def:
   (expr_type (Name ty _) = ty) /\
   (expr_type (TopLevelName ty _) = ty) /\
@@ -300,6 +308,7 @@ Datatype:
   = AssertBare                (* simple assert, no reason *)
   | AssertUnreachable         (* assert UNREACHABLE → INVALID opcode *)
   | AssertReason expr         (* assert with Error(string) reason *)
+  | AssertCustomError custom_error
 End
 
 Datatype:
@@ -307,6 +316,7 @@ Datatype:
   = RaiseBare                 (* bare raise: revert 0,0 *)
   | RaiseUnreachable          (* raise UNREACHABLE → INVALID opcode *)
   | RaiseReason expr          (* raise with Error(string) reason *)
+  | RaiseCustomError custom_error
 End
 
 Datatype:
@@ -368,9 +378,150 @@ Datatype:
   | HashMapDecl variable_visibility bool (* transient? *) identifier type value_type (num option) (* slot *)
   | StructDecl identifier (argument list)
   | EventDecl identifier ((argument # bool) list)  (* bool = indexed *)
+  | ErrorDecl identifier (argument list)
   | FlagDecl identifier (identifier list)
   | InterfaceDecl identifier (interface_func list)
 End
+
+(* Consume keyword arguments in declaration order.  Removing each match makes
+   duplicates, omissions, and unknown names fail instead of being ignored. *)
+Definition take_custom_error_kwarg_def:
+  take_custom_error_kwarg name [] = NONE ∧
+  take_custom_error_kwarg name ((key,e)::rest) =
+    if key = name then SOME (e,rest)
+    else
+      case take_custom_error_kwarg name rest of
+      | NONE => NONE
+      | SOME (found,rest') => SOME (found,(key,e)::rest')
+End
+
+Definition order_custom_error_kwargs_def:
+  order_custom_error_kwargs [] kwargs =
+    (if NULL kwargs then SOME [] else NONE) ∧
+  order_custom_error_kwargs ((name,ty)::params) kwargs =
+    case take_custom_error_kwarg name kwargs of
+    | NONE => NONE
+    | SOME (e,kwargs') =>
+        OPTION_MAP (CONS e) (order_custom_error_kwargs params kwargs')
+End
+
+Definition custom_error_exprs_def:
+  custom_error_exprs (CustomError id positional kwargs) =
+    positional ++ MAP SND kwargs
+End
+
+Theorem take_custom_error_kwarg_perm:
+  take_custom_error_kwarg name kwargs = SOME (e,rest) ⇒
+  PERM (MAP SND kwargs) (e::MAP SND rest)
+Proof
+  qid_spec_tac `rest` >>
+  qid_spec_tac `e` >>
+  qid_spec_tac `name` >>
+  Induct_on `kwargs` >- simp[take_custom_error_kwarg_def] >>
+  Cases_on `h` >>
+  rw[take_custom_error_kwarg_def] >>
+  gvs[AllCaseEqs(), PERM_CONS_IFF] >>
+  irule PERM_TRANS >>
+  qexists_tac `r::e::MAP SND rest'` >>
+  conj_tac
+  >- (qpat_x_assum `∀name e rest. _`
+        (qspecl_then [`name`, `e`, `rest'`] mp_tac) >>
+      simp[]) >>
+  simp[PERM_SWAP_AT_FRONT]
+QED
+
+Theorem order_custom_error_kwargs_perm:
+  order_custom_error_kwargs params kwargs = SOME es ⇒
+  PERM (MAP SND kwargs) es
+Proof
+  qid_spec_tac `es` >>
+  qid_spec_tac `kwargs` >>
+  Induct_on `params`
+  >- (Cases_on `kwargs` >> simp[order_custom_error_kwargs_def]) >>
+  Cases_on `h` >>
+  rw[order_custom_error_kwargs_def] >>
+  gvs[AllCaseEqs()] >>
+  first_x_assum drule >> strip_tac >>
+  drule_all take_custom_error_kwarg_perm >>
+  strip_tac >>
+  irule PERM_TRANS >>
+  qexists_tac `e::MAP SND kwargs'` >>
+  simp[PERM_CONS_IFF]
+QED
+
+Theorem list_size_append_custom:
+  ∀f xs ys. list_size f (xs ++ ys) = list_size f xs + list_size f ys
+Proof
+  Induct_on `xs` >> simp[listTheory.list_size_def]
+QED
+
+
+Theorem list_size_map_snd_le:
+  ∀kwargs : (identifier # expr) list.
+    list_size (λx. expr_size (SND x)) kwargs ≤
+    list_size (pair_size (list_size char_size) expr_size) kwargs
+Proof
+  Induct_on `kwargs` >- simp[] >>
+  Cases_on `h` >> fs[]
+QED
+
+Theorem custom_error_exprs_size[simp]:
+  list_size expr_size (custom_error_exprs err) < custom_error_size err + 2
+Proof
+  Cases_on `err` >>
+  simp[custom_error_exprs_def, list_size_append_custom] >>
+  irule LESS_EQ_LESS_TRANS >>
+  qexists_tac
+    `list_size (pair_size (list_size char_size) expr_size) l0` >>
+  simp[list_size_map_snd_le]
+QED
+Theorem custom_error_exprs_size_with_expr[simp]:
+  list_size expr_size (custom_error_exprs err) <
+    custom_error_size err + (expr_size e + 2)
+Proof
+  irule LESS_LESS_EQ_TRANS >>
+  qexists_tac `custom_error_size err + 2` >>
+  simp[]
+QED
+
+
+
+Definition order_custom_error_args_def:
+  order_custom_error_args params (CustomError id positional kwargs) =
+    if NULL kwargs then
+      if LENGTH positional = LENGTH params then SOME positional else NONE
+    else if NULL positional then order_custom_error_kwargs params kwargs
+    else NONE
+End
+Theorem order_custom_error_args_perm:
+  order_custom_error_args params err = SOME es ⇒
+  PERM (custom_error_exprs err) es
+Proof
+  Cases_on `err` >>
+  Cases_on `l` >>
+  Cases_on `l0`
+  >- simp[order_custom_error_args_def, custom_error_exprs_def]
+  >- (rw[order_custom_error_args_def, custom_error_exprs_def] >>
+      drule order_custom_error_kwargs_perm >> simp[])
+  >- simp[order_custom_error_args_def, custom_error_exprs_def]
+  >- simp[order_custom_error_args_def, custom_error_exprs_def]
+QED
+
+val () = cv_auto_trans take_custom_error_kwarg_def;
+val () = cv_auto_trans custom_error_exprs_def;
+
+val order_custom_error_kwargs_pre_def =
+  cv_auto_trans_pre "order_custom_error_kwargs_pre"
+                    order_custom_error_kwargs_def;
+
+Theorem order_custom_error_kwargs_pre[cv_pre]:
+  ∀params kwargs. order_custom_error_kwargs_pre params kwargs
+Proof
+  ho_match_mp_tac order_custom_error_kwargs_ind >> rw[] >>
+  rw[Once order_custom_error_kwargs_pre_def]
+QED
+
+val () = cv_auto_trans order_custom_error_args_def;
 
 (* some helper functions over the AST datatypes *)
 

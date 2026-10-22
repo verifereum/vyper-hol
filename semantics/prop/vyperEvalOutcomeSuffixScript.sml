@@ -616,6 +616,10 @@ QED
 Resume eval_outcomes_suffix_mutual[eval_stmt_Raise_RaiseReason]:
   simp[Once evaluate_def] >> OUTCOMES_SUFFIX_TAC >> OUTCOMES_FRAME_TAC >> OUTCOMES_FINISH_TAC
 QED
+Resume eval_outcomes_suffix_mutual[eval_stmt_Raise_RaiseCustomError]:
+  Cases_on `err` >> simp[Once evaluate_def] >> rpt CASE_TAC >>
+  OUTCOMES_SUFFIX_TAC >> first_x_assum irule >> simp[]
+QED
 Resume eval_outcomes_suffix_mutual[eval_stmt_Assert_AssertBare]:
   simp[Once evaluate_def] >> OUTCOMES_SUFFIX_TAC >> OUTCOMES_FRAME_TAC >> OUTCOMES_FINISH_TAC
 QED
@@ -624,6 +628,10 @@ Resume eval_outcomes_suffix_mutual[eval_stmt_Assert_AssertUnreachable]:
 QED
 Resume eval_outcomes_suffix_mutual[eval_stmt_Assert_AssertReason]:
   simp[Once evaluate_def] >> OUTCOMES_SUFFIX_TAC >> OUTCOMES_FRAME_TAC >> OUTCOMES_FINISH_TAC
+QED
+Resume eval_outcomes_suffix_mutual[eval_stmt_Assert_AssertCustomError]:
+  Cases_on `err` >> simp[Once evaluate_def] >> rpt CASE_TAC >>
+  OUTCOMES_SUFFIX_TAC >> first_x_assum irule >> metis_tac[]
 QED
 Resume eval_outcomes_suffix_mutual[eval_stmt_Log]:
   simp[Once evaluate_def] >> OUTCOMES_SUFFIX_TAC >> OUTCOMES_FRAME_TAC >> OUTCOMES_FINISH_TAC

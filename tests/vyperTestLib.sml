@@ -164,6 +164,7 @@ val abiMutability : term decoder =
 
 val Function_tm = prim_mk_const{Thy="vyperTestRunner",Name="Function"}
 val Event_tm = prim_mk_const{Thy="vyperTestRunner",Name="Event"}
+val Error_tm = prim_mk_const{Thy="vyperTestRunner",Name="Error"}
 val (abi_function_ty, abi_entry_ty) = dom_rng $ type_of $ Function_tm
 val abi_arg_ty = mk_prod(string_ty, abi_type_ty)
 
@@ -174,6 +175,9 @@ fun mk_Function (n,is,os,m) =
                ("inputs", mk_list(is, abi_arg_ty)),
                ("outputs", mk_list(os, abi_arg_ty)),
                ("mutability", m)]))
+fun mk_Error (name, inputs) =
+  list_mk_comb(Error_tm, [name, mk_list(inputs, abi_arg_ty)])
+
 
 (* Only the pinned JSON-ABI exporter emits function entries without
    stateMutability. Normalize those entries before the canonical decoder;
@@ -220,7 +224,11 @@ val canonicalAbiEntry : term decoder = achoose "abiEntry" [
               field "stateMutability" abiMutability),
     check_field "type" "event" $
     JSONDecode.map (fn s => mk_comb(Event_tm, s)) $
-    field "name" stringtm
+    field "name" stringtm,
+    check_field "type" "error" $
+    JSONDecode.map mk_Error $
+      tuple2 (field "name" stringtm,
+              field "inputs" (array abiArg))
   ]
 
 val abiEntry : term decoder =
@@ -320,11 +328,6 @@ val allowed_test_patterns = [
 
 (* Path exclusions carry reportable reasons and tracking issues. *)
 val excluded_test_file_rules = [
-  (* The clean export contains a top-level ErrorDef, for which
-     frontend/jsonASTLib.sml's json_toplevel decoder has no branch. *)
-  ("vyper-test-exports/functional/codegen/features/test_custom_errors.json",
-   "custom errors",
-   "https://github.com/verifereum/vyper-hol/issues/488")
 ]
 
 val outside_admitted_suites_reason = "outside currently admitted test suites"

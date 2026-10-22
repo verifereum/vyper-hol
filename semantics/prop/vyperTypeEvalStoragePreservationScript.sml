@@ -2,7 +2,8 @@
 
 Theory vyperTypeEvalStoragePreservation
 Ancestors
-  pair vyperCreate vyperInterpreter vyperState vyperStorageBackend vyperStorageLayoutSafety
+  pair vyperAST vyperCreate vyperInterpreter vyperState vyperStorageBackend
+  vyperStorageLayoutSafety
   vyperTypeSystem vyperTypeEnv vyperTypeInvariants vyperTypeValues vyperTypeCallGraph
   vyperEvalMisc vyperStatePreservation vyperScopePreservation
   vyperTypeCallStackSoundness vyperValue
@@ -1268,9 +1269,11 @@ Proof
   TRY(rename1 `Raise RaiseBare` >> suspend "RaiseBare") >>
   TRY(rename1 `Raise RaiseUnreachable` >> suspend "RaiseUnreachable") >>
   TRY(rename1 `Raise (RaiseReason _)` >> suspend "RaiseReason") >>
+  TRY(rename1 `Raise (RaiseCustomError _)` >> suspend "RaiseCustomError") >>
   TRY(rename1 `AssertBare` >> suspend "AssertBare") >>
   TRY(rename1 `AssertUnreachable` >> suspend "AssertUnreachable") >>
   TRY(rename1 `AssertReason` >> suspend "AssertReason") >>
+  TRY(rename1 `Assert _ (AssertCustomError _)` >> suspend "AssertCustomError") >>
   TRY(rename1 `Log` >> suspend "Log") >>
   TRY(rename1 `AnnAssign` >> suspend "AnnAssign") >>
   TRY(rename1 `Append` >> suspend "Append") >>
@@ -1638,6 +1641,83 @@ Resume eval_all_storage_preservation_mutual[RaiseReason]:
     Cases_on `q` >> gvs[return_def, raise_def] >>
     rpt strip_tac >> gvs[]) >>
   rpt strip_tac >> gvs[]
+QED
+
+Resume eval_all_storage_preservation_mutual[RaiseCustomError]:
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum
+    `call_evaluation_safe cx
+       (int_calls_stmt (Raise (RaiseCustomError err)))` mp_tac >>
+  pure_rewrite_tac[int_calls_stmt_def, int_calls_raise_reason_def] >>
+  strip_tac >>
+  qpat_x_assum `type_stmt _ _ _ = _` mp_tac >>
+  simp_tac(srw_ss())[Once type_stmt_def, well_typed_custom_error_def] >>
+  strip_tac >>
+  BasicProvers.VAR_EQ_TAC >>
+  Cases_on `err` >>
+  Cases_on `get_module_code cx (FST p)`
+  >- gvs[Once evaluate_def, bind_def, lift_option_def, return_def, raise_def,
+         runtime_storage_consistent_def] >>
+  rename1 `get_module_code cx (FST p) = SOME tops` >>
+  Cases_on `lookup_custom_error_args_in (SND p) tops`
+  >- gvs[Once evaluate_def, bind_def, lift_option_def, return_def, raise_def,
+         runtime_storage_consistent_def] >>
+  rename1 `lookup_custom_error_args_in (SND p) tops = SOME params` >>
+  Cases_on `order_custom_error_args params (CustomError p l l0)`
+  >- gvs[Once evaluate_def, bind_def, lift_option_def, return_def, raise_def,
+         runtime_storage_consistent_def] >>
+  rename1
+    `order_custom_error_args params
+       (CustomError p positional kwargs) = SOME es` >>
+  (fn g as (asl,_) =>
+     let
+       val ih_tm = valOf (List.find
+         (fn tm => can dest_forall tm andalso
+           String.isSubstring "order_custom_error_args" (term_to_string tm))
+         asl)
+       val ih = Q.SPECL
+         [`p`, `positional`, `kwargs`, `tops`, `params`, `es`]
+         (ASSUME ih_tm)
+     in
+       mp_tac ih g
+     end) >>
+  impl_tac >- gvs[] >>
+  strip_tac >>
+  `PERM (custom_error_exprs (CustomError p positional kwargs)) es` by
+    (drule order_custom_error_args_perm >> simp[]) >>
+  `well_typed_exprs env es` by
+    (drule well_typed_exprs_perm >>
+     disch_then (qspec_then `env` mp_tac) >>
+     simp[custom_error_exprs_def]) >>
+  `call_evaluation_safe cx (int_calls_exprs es)` by
+    (qspecl_then
+       [`cx`, `custom_error_exprs (CustomError p positional kwargs)`, `es`]
+       mp_tac call_evaluation_safe_exprs_perm >>
+     simp[custom_error_exprs_def]) >>
+  Cases_on `eval_exprs cx es st` >>
+  rename1 `eval_exprs cx es st = (args_res,st1)` >>
+  ORACLE_STORAGE_TAC >>
+  (fn g as (asl,_) =>
+     let
+       val ih_tm = valOf (List.find
+         (fn tm => can dest_forall tm andalso
+           String.isSubstring "eval_exprs cx es st" (term_to_string tm) andalso
+           not (String.isSubstring "order_custom_error_args"
+             (term_to_string tm)))
+         asl)
+       val ih = Q.SPECL [`env`, `st`, `args_res`, `st1`] (ASSUME ih_tm)
+     in
+       mp_tac ih g
+     end) >>
+  impl_tac >- gvs[] >>
+  strip_tac >>
+  Cases_on `args_res`
+  >- (
+    Cases_on
+      `build_custom_error_data (get_tenv cx) (SND p) (MAP SND params) x` >>
+    gvs[Once evaluate_def, bind_def, lift_option_def, return_def, raise_def] >>
+    imp_res_tac lift_option_state >> gvs[]) >>
+  gvs[Once evaluate_def, bind_def, lift_option_def, return_def, raise_def]
 QED
 
 Resume eval_all_storage_preservation_mutual[AssertBare]:
@@ -2490,6 +2570,179 @@ Resume eval_all_storage_preservation_mutual[AssertReason]:
     rpt strip_tac >> gvs[]) >>
   rpt strip_tac >> gvs[]
 QED
+
+Resume eval_all_storage_preservation_mutual[AssertCustomError]:
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum
+    `call_evaluation_safe cx
+       (int_calls_stmt (Assert e (AssertCustomError err)))` mp_tac >>
+  pure_rewrite_tac[int_calls_stmt_def, int_calls_assert_reason_def] >>
+  strip_tac >>
+  `call_evaluation_safe cx (int_calls_expr e)` by
+    (irule call_evaluation_safe_append_left >>
+     qexists_tac `int_calls_exprs (custom_error_exprs err)` >> simp[]) >>
+  `call_evaluation_safe cx
+      (int_calls_exprs (custom_error_exprs err))` by
+    (irule call_evaluation_safe_append_right >>
+     qexists_tac `int_calls_expr e` >> simp[]) >>
+  qpat_x_assum `type_stmt _ _ _ = _` mp_tac >>
+  simp_tac(srw_ss())[Once type_stmt_def, well_typed_custom_error_def] >>
+  strip_tac >>
+  BasicProvers.VAR_EQ_TAC >>
+  Cases_on `eval_expr cx e st` >>
+  rename1 `eval_expr cx e st = (expr_res,st1)` >>
+  (fn g as (asl,_) =>
+     let
+       val ih_tm = valOf (List.find
+         (fn tm => can dest_forall tm andalso
+           String.isSubstring "eval_expr cx e st" (term_to_string tm) andalso
+           not (String.isSubstring "eval_exprs" (term_to_string tm)))
+         asl)
+       val ih = Q.SPECL [`env`, `st`, `expr_res`, `st1`] (ASSUME ih_tm)
+     in
+       mp_tac ih g
+     end) >>
+  impl_tac >- simp[] >>
+  strip_tac >>
+  `runtime_consistent env cx st1` by
+    metis_tac[eval_expr_preserves_runtime_consistent,
+              runtime_storage_consistent_runtime] >>
+  `runtime_storage_consistent env cx st1` by
+    metis_tac[runtime_storage_consistent_intro,
+              runtime_storage_consistent_layout] >>
+  `contract_storage_well_formed cx st1` by
+    fs[runtime_storage_consistent_def] >>
+  Cases_on `expr_res`
+  >- (
+    `expr_result_typed env e x` by (
+      irule eval_expr_success_result_typed >> simp[] >>
+      metis_tac[runtime_storage_consistent_runtime]) >>
+    gvs[expr_result_typed_def, expr_runtime_typed_def, evaluate_type_def] >>
+    drule toplevel_value_typed_BoolTV >> strip_tac >>
+    BasicProvers.VAR_EQ_TAC >>
+    reverse (Cases_on `b`) >> rewrite_tac[switch_BoolV_def, return_def]
+    >- (
+      Cases_on `err` >>
+      Cases_on `get_module_code cx (FST p)`
+      >- suspend "AssertMissingModuleDirect" >>
+      rename1 `get_module_code cx (FST p) = SOME tops` >>
+      Cases_on `lookup_custom_error_args_in (SND p) tops`
+      >- suspend "AssertMissingDeclDirect" >>
+      rename1 `lookup_custom_error_args_in (SND p) tops = SOME params` >>
+      Cases_on `order_custom_error_args params (CustomError p l l0)`
+      >- suspend "AssertBadArgsDirect" >>
+      rename1
+        `order_custom_error_args params
+           (CustomError p positional kwargs) = SOME es` >>
+      (fn g as (asl,_) =>
+         let
+           val ih_tm = valOf (List.find
+             (fn tm => can dest_forall tm andalso
+               String.isSubstring "order_custom_error_args"
+                 (term_to_string tm))
+             asl)
+           val ih = Q.SPECL
+             [`st`, `Value (BoolV F)`, `st1`, `p`, `positional`, `kwargs`,
+              `tops`, `params`, `es`]
+             (ASSUME ih_tm)
+         in
+           mp_tac ih g
+         end) >>
+      impl_tac >- suspend "AssertProviderDirect" >>
+      strip_tac >>
+      `PERM (custom_error_exprs
+          (CustomError p positional kwargs)) es` by
+        (drule order_custom_error_args_perm >> simp[]) >>
+      `well_typed_exprs env es` by
+        (drule well_typed_exprs_perm >>
+         disch_then (qspec_then `env` mp_tac) >>
+         simp[custom_error_exprs_def]) >>
+      `call_evaluation_safe cx (int_calls_exprs es)` by
+        (qspecl_then
+           [`cx`, `custom_error_exprs (CustomError p positional kwargs)`,
+            `es`]
+           mp_tac call_evaluation_safe_exprs_perm >>
+         simp[custom_error_exprs_def]) >>
+      Cases_on `eval_exprs cx es st1` >>
+      rename1 `eval_exprs cx es st1 = (args_res,st2)` >>
+      ORACLE_STORAGE_TAC >>
+      (fn g as (asl,_) =>
+         let
+           val ih_tm = valOf (List.find
+             (fn tm => can dest_forall tm andalso
+               String.isSubstring "eval_exprs cx es st" (term_to_string tm)
+               andalso not (String.isSubstring "order_custom_error_args"
+                 (term_to_string tm)))
+             asl)
+           val ih =
+             Q.SPECL [`env`, `st1`, `args_res`, `st2`] (ASSUME ih_tm)
+         in
+           mp_tac ih g
+         end) >>
+      impl_tac >- gvs[] >>
+      strip_tac >>
+      Cases_on `args_res`
+      >- suspend "AssertArgsSuccessDirect" >>
+      suspend "AssertArgsExceptionDirect") >>
+    suspend "AssertConditionTrueDirect") >>
+  suspend "AssertConditionExceptionDirect"
+QED
+
+Resume eval_all_storage_preservation_mutual[AssertMissingModuleDirect]:
+  qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, lift_option_def, switch_BoolV_def,
+       return_def, raise_def] >>
+  rpt strip_tac >> gvs[]
+QED
+
+Resume eval_all_storage_preservation_mutual[AssertMissingDeclDirect]:
+  qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, lift_option_def, switch_BoolV_def,
+       return_def, raise_def] >>
+  rpt strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Resume eval_all_storage_preservation_mutual[AssertBadArgsDirect]:
+  qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, lift_option_def, switch_BoolV_def,
+       return_def, raise_def] >>
+  rpt strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Resume eval_all_storage_preservation_mutual[AssertProviderDirect]:
+  gvs[]
+QED
+
+Resume eval_all_storage_preservation_mutual[AssertArgsSuccessDirect]:
+  qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, switch_BoolV_def, return_def, raise_def,
+       AllCaseEqs()] >>
+  rpt strip_tac >>
+  imp_res_tac lift_option_state >>
+  BasicProvers.VAR_EQ_TAC >> gvs[]
+QED
+
+Resume eval_all_storage_preservation_mutual[AssertArgsExceptionDirect]:
+  qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, lift_option_def, switch_BoolV_def,
+       return_def, raise_def] >>
+  rpt strip_tac >> gvs[]
+QED
+
+Resume eval_all_storage_preservation_mutual[AssertConditionTrueDirect]:
+  qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, lift_option_def, switch_BoolV_def,
+       return_def, raise_def] >>
+  rpt strip_tac >> gvs[]
+QED
+
+Resume eval_all_storage_preservation_mutual[AssertConditionExceptionDirect]:
+  qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, lift_option_def, switch_BoolV_def,
+       return_def, raise_def] >>
+  rpt strip_tac >> gvs[]
+QED
+
 
 Resume eval_all_storage_preservation_mutual[Iterator_Range]:
   rpt gen_tac >> strip_tac >>

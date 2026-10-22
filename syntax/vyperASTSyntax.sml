@@ -22,6 +22,7 @@ val raw_call_flags_ty = asty "raw_call_flags"
 val create_kind_ty = asty "create_kind"
 val type_builtin_ty = asty "type_builtin"
 val expr_ty = asty "expr"
+val custom_error_ty = asty "custom_error"
 val stmt_ty = asty "stmt"
 val assignment_target_ty = asty "assignment_target"
 val base_assignment_target_ty = asty "base_assignment_target"
@@ -325,6 +326,9 @@ fun dest_Call tm =
   let val (ty, ct, es, drv) = dest_Call_tm tm in
     (ty, ct, dest_term_list expr_ty es, dest_term_option expr_ty drv)
   end
+val (CustomError_tm, mk_CustomError_tm, dest_CustomError_tm, is_CustomError) =
+  syntax_fns3 "vyperAST" "CustomError"
+
 
 val (NameTarget_tm, mk_NameTarget_tm, dest_NameTarget_tm, is_NameTarget) =
   syntax_fns1 "vyperAST" "NameTarget"
@@ -423,10 +427,16 @@ val (AssertBare_tm, is_AssertBare) = syntax0 "AssertBare"
 val (AssertUnreachable_tm, is_AssertUnreachable) = syntax0 "AssertUnreachable"
 val (AssertReason_tm, mk_AssertReason_tm, dest_AssertReason_tm, is_AssertReason) =
   syntax_fns1 "vyperAST" "AssertReason"
+val (AssertCustomError_tm, mk_AssertCustomError_tm,
+     dest_AssertCustomError_tm, is_AssertCustomError) =
+  syntax_fns1 "vyperAST" "AssertCustomError"
 val (RaiseBare_tm, is_RaiseBare) = syntax0 "RaiseBare"
 val (RaiseUnreachable_tm, is_RaiseUnreachable) = syntax0 "RaiseUnreachable"
 val (RaiseReason_tm, mk_RaiseReason_tm, dest_RaiseReason_tm, is_RaiseReason) =
   syntax_fns1 "vyperAST" "RaiseReason"
+val (RaiseCustomError_tm, mk_RaiseCustomError_tm,
+     dest_RaiseCustomError_tm, is_RaiseCustomError) =
+  syntax_fns1 "vyperAST" "RaiseCustomError"
 
 fun mk_raw_call_flags {max_outsize, is_delegate, is_static, revert_on_failure} =
   TypeBase.mk_record
@@ -475,6 +485,8 @@ val (VariableDecl_tm, mk_VariableDecl_tm, dest_VariableDecl_tm, is_VariableDecl)
 val (HashMapDecl_tm, mk_HashMapDecl_tm, dest_HashMapDecl_tm, is_HashMapDecl) = syntax6 "HashMapDecl"
 val (StructDecl_tm, mk_StructDecl_tm, dest_StructDecl_tm, is_StructDecl) = syntax_fns2 "vyperAST" "StructDecl"
 val (EventDecl_tm, mk_EventDecl_tm, dest_EventDecl_tm, is_EventDecl) = syntax_fns2 "vyperAST" "EventDecl"
+val (ErrorDecl_tm, mk_ErrorDecl_tm, dest_ErrorDecl_tm, is_ErrorDecl) =
+  syntax_fns2 "vyperAST" "ErrorDecl"
 val (FlagDecl_tm, mk_FlagDecl_tm, dest_FlagDecl_tm, is_FlagDecl) = syntax_fns2 "vyperAST" "FlagDecl"
 val (InterfaceDecl_tm, mk_InterfaceDecl_tm, dest_InterfaceDecl_tm, is_InterfaceDecl) = syntax_fns2 "vyperAST" "InterfaceDecl"
 
@@ -518,11 +530,14 @@ datatype assert_reason_view =
     VAssertBareReason
   | VAssertUnreachableReason
   | VAssertReasonExpr of term
+  | VAssertCustomError of term
 
 fun view_assert_reason tm =
   if is_AssertBare tm then VAssertBareReason
   else if is_AssertUnreachable tm then VAssertUnreachableReason
   else if is_AssertReason tm then VAssertReasonExpr (dest_AssertReason_tm tm)
+  else if is_AssertCustomError tm then
+    VAssertCustomError (dest_AssertCustomError_tm tm)
   else raise ERR "view_assert_reason"
     "not a vyperAST assert_reason constructor"
 
@@ -530,11 +545,14 @@ datatype raise_reason_view =
     VRaiseBareReason
   | VRaiseUnreachableReason
   | VRaiseReasonExpr of term
+  | VRaiseCustomError of term
 
 fun view_raise_reason tm =
   if is_RaiseBare tm then VRaiseBareReason
   else if is_RaiseUnreachable tm then VRaiseUnreachableReason
   else if is_RaiseReason tm then VRaiseReasonExpr (dest_RaiseReason_tm tm)
+  else if is_RaiseCustomError tm then
+    VRaiseCustomError (dest_RaiseCustomError_tm tm)
   else raise ERR "view_raise_reason"
     "not a vyperAST raise_reason constructor"
 
@@ -631,6 +649,7 @@ datatype toplevel_view =
   | VStructDecl of term * term
   | VEventDecl of term * term
   | VFlagDecl of term * term
+  | VErrorDecl of term * term
   | VInterfaceDecl of term * term
 
 fun view_toplevel tm =
@@ -640,6 +659,7 @@ fun view_toplevel tm =
   else if is_StructDecl tm then VStructDecl (dest_StructDecl_tm tm)
   else if is_EventDecl tm then VEventDecl (dest_EventDecl_tm tm)
   else if is_FlagDecl tm then VFlagDecl (dest_FlagDecl_tm tm)
+  else if is_ErrorDecl tm then VErrorDecl (dest_ErrorDecl_tm tm)
   else if is_InterfaceDecl tm then VInterfaceDecl (dest_InterfaceDecl_tm tm)
   else raise ERR "view_toplevel" "not a vyperAST toplevel constructor"
 
