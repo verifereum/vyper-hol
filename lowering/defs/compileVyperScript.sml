@@ -317,7 +317,15 @@ Proof
   gvs[add_immutable_locations_def] >>
   (CASE_TAC ORELSE all_tac) >>
   gvs[add_immutable_locations_def] >>
-  last_x_assum irule >> metis_tac[]
+  TRY (last_x_assum irule >> metis_tac[] >> NO_TAC) >>
+  rename1 `add_immutable_locations sft tops (off + type_mem_bytes sft ty)
+    (vars |+ (module_var_key (NONE, name), ImmutableLoc off))` >>
+  `module_var_key (NONE, name) <> key` by metis_tac[] >>
+  last_x_assum (qspecl_then
+    [`off + type_mem_bytes sft ty`,
+     `vars |+ (module_var_key (NONE, name), ImmutableLoc off)`, `key`] mp_tac) >>
+  (impl_tac >- metis_tac[]) >>
+  simp[finite_mapTheory.FLOOKUP_UPDATE]
 QED
 
 Theorem add_immutable_locations_declaration_lookup:
@@ -330,8 +338,10 @@ Theorem add_immutable_locations_declaration_lookup:
   SOME (ImmutableLoc (off + compute_immutables_len sft prefix))
 Proof
   strip_tac >> simp[add_immutable_locations_append,
-    add_immutable_locations_def, add_immutable_locations_lookup_unchanged,
-    finite_mapTheory.FLOOKUP_UPDATE]
+    add_immutable_locations_def] >>
+  drule add_immutable_locations_lookup_unchanged >>
+  disch_then (fn th => rewrite_tac[th]) >>
+  simp[finite_mapTheory.FLOOKUP_UPDATE]
 QED
 
 Theorem immutable_declaration_interval_bound:
