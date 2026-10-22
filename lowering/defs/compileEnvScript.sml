@@ -590,6 +590,13 @@ Definition fresh_vars_wrt_def:
       STRING #"%" (toString n) ∉ FDOM ss.vs_vars
 End
 
+(* x is no compiler variable fresh at st, so the code compiled from st on
+   never assigns it. *)
+Definition not_fresh_at_def:
+  not_fresh_at (st:compile_state) x ⇔
+    ∀n. st.cs_next_var ≤ n ⇒ x ≠ STRING #"%" (toString n)
+End
+
 (* ===== Label-Space Invariants =====
    Track which labels the compiler has allocated (via fresh_label) and
    which labels are currently bound to blocks. Used by module-level
@@ -647,27 +654,11 @@ Definition well_formed_cenv_def:
        FLOOKUP cenv.ce_vars n = SOME (MemLoc off sz) ⇒ sz > 0 ∧ (sz MOD 32 = 0))
 End
 
-(* Local variables in Vyper scopes match Venom memory.
-   Only handles MemLoc (local memory variables) because:
-   - StorageLoc variables (self.x) are covered by storage_rel
-   - TransientLoc/ImmutableLoc are similar global state
-   - Scopes only contain local (stack-like) variables *)
-Definition vars_rel_def:
-  vars_rel cenv scopes ss =
-    ∀ name entry offset size.
-      lookup_scopes name scopes = SOME entry ∧
-      FLOOKUP cenv.ce_vars name = SOME (MemLoc offset size)
-      ⇒
-      (* entry.type from scope provides correct type for val_in_memory dispatch
-         (e.g., AddressT → right-aligned BytesV encoding). *)
-      val_in_memory entry.type entry.value offset ss.vs_memory
-End
-
 (* ===== Locals held through allocations ===== *)
 (* After its declaration in an external or fallback body a local is
-   PtrVar (Var p) sz: the ALLOCA emitted there binds p to the base of a fresh
-   region (declare_local, compile_alloc_buffer), so the address depends on vs_allocas and
-   vs_alloca_next at run time.  vars_rel only covers MemLoc entries.
+   PtrVar (Var p) sz: the ALLOCA emitted at its declaration binds p to the base
+   of a fresh region (emit_local_alloca, compile_alloc_buffer), so the address
+   depends on vs_allocas and vs_alloca_next at run time, not on a fixed offset.
    Parameters of internal functions are PtrVar (Var p) sz too
    (materialize_internal_params): a stack-passed one is copied into an ALLOCA
    of the callee, a memory-passed one is the PARAM output p pointing into the
@@ -690,6 +681,26 @@ Definition not_local_ptr_def:
     ∀name entry sz.
       lookup_scopes name scopes = SOME entry ⇒
       FLOOKUP cenv.ce_vars name ≠ SOME (PtrVar (Var x) sz)
+End
+
+(* The locals of cenv are held through pointer variables that were handed out
+   before st (declare_local, compile_register_positional_args), one per
+   local:
+   - no variable sits at a fixed MemLoc offset: state_rel does not relate
+     those (the locals of internal bodies and of the constructor, and
+     default arguments, which compile_register_kwarg_vars keeps at MemLoc),
+     and a store to one could hit a live local's region;
+   - no compiler variable fresh at st is a local's pointer, so a temporary of
+     the code compiled from st on never overwrites one;
+   - distinct locals have distinct pointers, so declaring a local leaves the
+     others' pointers alone. *)
+Definition local_ptrs_reserved_def:
+  local_ptrs_reserved cenv (st:compile_state) ⇔
+    (∀name off sz. FLOOKUP cenv.ce_vars name ≠ SOME (MemLoc off sz)) ∧
+    ∀n1 n2 p sz1 sz2.
+      FLOOKUP cenv.ce_vars n1 = SOME (PtrVar (Var p) sz1) ⇒
+      not_fresh_at st p ∧
+      (FLOOKUP cenv.ce_vars n2 = SOME (PtrVar (Var p) sz2) ⇒ n1 = n2)
 End
 
 (* What backs a live local's region [base, base + sz) in the current frame
@@ -944,12 +955,26 @@ Definition call_ctx_rel_def:
      bc.bc_blobbasefee = n2w txn.blob_base_fee)
 End
 
-(* Top-level oracle-mode state relation (PLAN 5.7).
-   Ties together all sub-relations and exactly the current oracle suffix and
-   request prefix. NONE-mode compatibility does not satisfy this relation. *)
+(* Top-level oracle-mode source/Venom state relation for the statement and
+   expression simulation, in func, the function running.  It ties together
+   the sub-relations below and exactly the current oracle suffix and request
+   prefix; NONE-mode compatibility does not satisfy it.
+   - local_ptrs_rel: locals in scope, held in memory through their pointer
+     variables (PtrVar).  MemLoc locals at fixed offsets, which the internal
+     function bodies still use until #545, are not related.
+   - storage_rel, storage_vars_rel: storage, and the slots of storage
+     variables.
+   - transient_rel, transient_vars_rel: transient storage, and the slots of
+     transient variables.
+   - immutables_rel: immutables (vs_immutables in a constructor, the data
+     section at runtime).
+   - logs_rel: emitted logs.
+   - call_ctx_rel: transaction, call and block context.
+   - outcomes and requests: the oracle outcomes still to consume and the
+     requests recorded so far, as in the result relation. *)
 Definition state_rel_def:
-  state_rel cenv cx vs ss =
-    (vars_rel cenv vs.scopes ss ∧
+  state_rel func cenv cx vs ss =
+    (local_ptrs_rel func cenv vs.scopes ss ∧
      storage_rel cx.txn.target vs ss ∧
      storage_vars_rel cenv cx ∧
      transient_rel cx.txn.target vs ss ∧
@@ -1000,26 +1025,26 @@ End
 
 Definition result_rel_def:
   (* Normal completion — no return value *)
-  (result_rel ret_tv cenv cx (INL (), vs') (OK ss') =
-    state_rel cenv cx vs' ss') ∧
+  (result_rel func ret_tv cenv cx (INL (), vs') (OK ss') =
+    state_rel func cenv cx vs' ss') ∧
   (* Internal return: state + return values *)
-  (result_rel ret_tv cenv cx (INR (ReturnException v), vs') (IntRet ir ss') =
-    (state_rel cenv cx vs' ss' ∧
+  (result_rel func ret_tv cenv cx (INR (ReturnException v), vs') (IntRet ir ss') =
+    (state_rel func cenv cx vs' ss' ∧
      intret_vals_match ret_tv v ir.iret_values ∧
      ir.iret_adopt_fmp = NONE)) ∧
   (* External return → Halt with ABI-encoded data *)
-  (result_rel ret_tv cenv cx (INR (ReturnException v), vs') (Halt ss') =
-    state_rel cenv cx vs' ss') ∧
+  (result_rel func ret_tv cenv cx (INR (ReturnException v), vs') (Halt ss') =
+    state_rel func cenv cx vs' ss') ∧
   (* Every reason may REVERT, including an ordinary raise "UNREACHABLE".
      Only the distinguished UNREACHABLE exception may map to ExHalt_abort. *)
-  (result_rel ret_tv cenv cx (INR (AssertException s), vs') (Abort Revert_abort ss') =
+  (result_rel func ret_tv cenv cx (INR (AssertException s), vs') (Abort Revert_abort ss') =
     T) ∧
-  (result_rel ret_tv cenv cx (INR (AssertException s), vs') (Abort ExHalt_abort ss') =
+  (result_rel func ret_tv cenv cx (INR (AssertException s), vs') (Abort ExHalt_abort ss') =
     (s = "UNREACHABLE")) ∧
   (* Error → Abort (any type) *)
-  (result_rel ret_tv cenv cx (INR (Error _), vs') (Abort _ ss') = T) ∧
+  (result_rel func ret_tv cenv cx (INR (Error _), vs') (Abort _ ss') = T) ∧
   (* Everything else: no relation *)
-  (result_rel _ _ _ _ _ = F)
+  (result_rel _ _ _ _ _ _ = F)
 End
 
 (* ===== Type Classification ===== *)

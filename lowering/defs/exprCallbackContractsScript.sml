@@ -57,17 +57,26 @@ Theorem compile_make_tuple_callback_contract:
   ∀es buf off. expr_callbacks_agree f g cenv es ⇒
     compile_make_tuple f cenv es buf off = compile_make_tuple g cenv es buf off
 Proof
-  Induct >> simp[compile_make_tuple_def] >> rpt strip_tac >>
-  fs[] >> simp[lower_value_def]
+  Induct >> simp[compile_make_tuple_def] >> rpt strip_tac >> fs[]
+QED
+
+Theorem compile_make_array_elems_callback_contract:
+  ∀es elem_ty sz lw buf idx. expr_callbacks_agree f g cenv es ⇒
+    compile_make_array_elems f cenv es elem_ty sz lw buf idx =
+    compile_make_array_elems g cenv es elem_ty sz lw buf idx
+Proof
+  Induct >> simp[compile_make_array_elems_def] >> rpt strip_tac >>
+  fs[]
 QED
 
 Theorem compile_make_array_callback_contract:
-  ∀es sz lw (total:num) buf idx. expr_callbacks_agree f g cenv es ⇒
-    compile_make_array f cenv es sz lw total buf idx =
-    compile_make_array g cenv es sz lw total buf idx
+  ∀es elem_ty sz lw buf. expr_callbacks_agree f g cenv es ⇒
+    compile_make_array f cenv es elem_ty sz lw buf =
+    compile_make_array g cenv es elem_ty sz lw buf
 Proof
-  Induct >> simp[compile_make_array_def] >> rpt strip_tac >>
-  fs[] >> simp[lower_value_def]
+  rpt strip_tac >>
+  drule compile_make_array_elems_callback_contract >>
+  strip_tac >> simp[compile_make_array_def]
 QED
 
 Theorem compile_concat_callback_contract:
@@ -90,8 +99,7 @@ Proof
   Induct >- simp[compile_struct_lit_def] >>
   rpt gen_tac >> rename1 `compile_struct_lit f cenv _ (fld::fields) _ _` >>
   Cases_on `fld` >>
-  simp[compile_struct_lit_def] >> rpt strip_tac >>
-  fs[] >> simp[lower_value_def]
+  simp[compile_struct_lit_def] >> rpt strip_tac >> fs[]
 QED
 
 Theorem compile_attribute_callback_contract:
@@ -273,8 +281,8 @@ Proof
 QED
 
 Theorem compile_make_array_list_child_calls:
-  compile_make_array (expr_child_callback (list_size expr_size args) f) cenv args sz lw (alloc_sz:num) buf idx =
-  compile_make_array f cenv args sz lw alloc_sz buf idx
+  compile_make_array (expr_child_callback (list_size expr_size args) f) cenv args elem_ty sz lw buf =
+  compile_make_array f cenv args elem_ty sz lw buf
 Proof
   irule compile_make_array_callback_contract >> irule expr_list_child_callback_agrees
 QED
@@ -420,3 +428,16 @@ Proof
   irule expr_child_callback_agrees >> simp[] >>
   drule_all extcode_child_bound >> simp[]
 QED
+
+(* Issue #560 callback interfaces must remain kernel-closed. *)
+val () = List.app (fn th =>
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
+  in if null axioms andalso null (Thm.hyp th) andalso
+        List.all (fn name => name = "DISK_THM") oracles then ()
+     else raise Fail "admitted memory-construction callback contract"
+  end)
+  [compile_make_tuple_callback_contract,
+   compile_make_array_elems_callback_contract,
+   compile_make_array_callback_contract,
+   compile_struct_lit_callback_contract,
+   compile_make_array_list_child_calls];
