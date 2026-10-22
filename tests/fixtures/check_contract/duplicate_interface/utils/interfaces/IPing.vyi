@@ -1,0 +1,6 @@
+event Ping:
+    x: uint256
+
+@external
+def ping():
+    ...

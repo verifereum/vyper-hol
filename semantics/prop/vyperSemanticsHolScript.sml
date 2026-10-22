@@ -8,3 +8,5 @@ Ancestors
   vyperTypeDeploymentMachine
   vyperTypeSelectedEntry
   vyperTypeEntryDefaults
+  vyperTypeSelectedEntrySoundness
+  vyperTypeDeploymentSoundness

@@ -6,14 +6,17 @@
  * their base allocation (alloca).
  *
  * TOP-LEVEL:
- *   ptr, offset_by,
+ *   ptr, offset_by, bp_normalize,
  *   bp_get_ptrs, bp_handle_inst, bp_process_block,
  *   bp_one_pass, bp_analyze,
  *   bp_ptr_from_op, bp_segment_from_ops,
  *   bp_get_write_location, bp_get_read_location
  *
  * Soundness specifications:
- *   ptr_matches_var, bp_ptr_sound, bp_ptrs_bounded
+ *   ptr_matches_var, bp_ptr_sound, bp_phis_closed, bp_ptrs_bounded
+ *
+ * Completeness specification:
+ *   bp_derives
  *
  * Helper:
  *   phi_operand_vars
@@ -21,6 +24,10 @@
  * Divergences from Python:
  *   - allocation uses inst_id (num) instead of instruction object
  *   - var_to_mem is (string, ptr set) fmap (string keys, not IRVariable)
+ *   - only the PHI result is unioned with its recorded set and normalised
+ *     (_add_possible_ptrs). ALLOCA/ADD/SUB/ASSIGN results already hold at
+ *     most one pointer per allocation, and their pointer sets only grow
+ *     because they are computed from operands whose sets only grow.
  *   - get_write_location / get_read_location take bp_result as explicit arg
  *)
 
@@ -55,6 +62,28 @@ Definition sub_offset_by_def:
     (if n ≤ base then Ptr alloc (SOME (base - n))
      else Ptr alloc NONE) /\
   sub_offset_by (Ptr alloc _) _ = Ptr alloc NONE
+End
+
+(* Base allocation and offset of a pointer *)
+Definition ptr_base_def:
+  ptr_base (Ptr a _) = a
+End
+
+Definition ptr_off_def:
+  ptr_off (Ptr _ off) = off
+End
+
+(* Merge all pointers into one allocation: keep the offset if it is the
+ * same for all of them, otherwise make it unknown.  Allocations stay in
+ * first-seen order, so normalising a normalised set extended by pointers
+ * it already covers gives the same list back.
+ * Matches Python _normalize_ptrs. *)
+Definition bp_normalize_def:
+  bp_normalize (ptrs : ptr list) =
+    MAP (λa. case nub (MAP ptr_off (FILTER (λp. ptr_base p = a) ptrs)) of
+               [off] => Ptr a off
+             | _ => Ptr a NONE)
+        (REVERSE (nub (REVERSE (MAP ptr_base ptrs))))
 End
 
 (* Create a pointer from an alloca instruction *)
@@ -131,8 +160,16 @@ Definition bp_handle_inst_def:
                      result |+ (out, MAP (λp. offset_by p NONE) p_lhs)
                    else result
                | _ => result)
-            (* phi: no-op per-instruction (PHI evaluated at block entry) *)
-          | PHI => result
+            (* phi: union of the pointers of all operands and of the
+             * recorded set, normalised.  The analysis is a dataflow over
+             * the instruction list, so the PHI needs its own transfer even
+             * though eval_phis executes PHIs at block entry. *)
+          | PHI =>
+              let vars = MAP SND (phi_pairs inst.inst_operands) in
+              let all_ptrs = bp_normalize
+                    (original ++ FLAT (MAP (bp_get_ptrs result) vars)) in
+              if all_ptrs = [] then result
+              else result |+ (out, all_ptrs)
             (* assign: propagate pointers from source variable *)
           | ASSIGN =>
               (case inst.inst_operands of
@@ -157,49 +194,28 @@ Definition bp_process_block_def:
     (c1 ∨ c2, r2)
 End
 
-(* ===== Forward-Edge PHI Filtering ===== *)
-
-(* Filter a PHI instruction's operands to only include predecessors
- * from the forward-edge set (already processed in this pass).
- * Non-PHI instructions pass through unchanged.
- *
- * Divergence from Python: Python unions ALL PHI operands including
- * back edges, which causes non-termination on programs with
- * pointer arithmetic in loops (e.g. v = PHI(alloca, ADD(v, 5))).
- * Filtering to forward edges makes the analysis structurally
- * terminating while preserving precision for all Vyper programs
- * (Vyper never generates loop-carried pointer arithmetic). *)
-Definition phi_filter_fwd_def:
-  phi_filter_fwd fwd inst =
-    if inst.inst_opcode = PHI then
-      inst with inst_operands :=
-        FLAT (MAP (λ(l,v). [Label l; Var v])
-                  (FILTER (λ(l,v). MEM l fwd)
-                          (phi_pairs inst.inst_operands)))
-    else inst
-End
-
 (* ===== Fixpoint Iteration ===== *)
 
 (* One pass over all blocks in DFS pre-order.
  * Returns (changed, result).
- * Tracks forward-edge set: labels already processed this pass.
- * PHI operands from back edges (not yet processed) are excluded. *)
+ * A PHI operand that is not yet known on this pass contributes no
+ * pointers; the next pass adds it.  The iteration terminates: each
+ * variable maps to at most one pointer per allocation, a PHI's set only
+ * grows, and an offset can only change from SOME n to NONE. *)
 Definition bp_one_pass_aux_def:
-  bp_one_pass_aux fn result fwd [] = (F, result) ∧
-  bp_one_pass_aux fn result fwd (lbl::lbls) =
+  bp_one_pass_aux fn result [] = (F, result) ∧
+  bp_one_pass_aux fn result (lbl::lbls) =
     case FIND (λbb. bb.bb_label = lbl) fn.fn_blocks of
-      NONE => bp_one_pass_aux fn result (lbl::fwd) lbls
+      NONE => bp_one_pass_aux fn result lbls
     | SOME bb =>
-        let insts = MAP (phi_filter_fwd fwd) bb.bb_instructions in
-        let (c1, r1) = bp_process_block result insts in
-        let (c2, r2) = bp_one_pass_aux fn r1 (lbl::fwd) lbls in
+        let (c1, r1) = bp_process_block result bb.bb_instructions in
+        let (c2, r2) = bp_one_pass_aux fn r1 lbls in
         (c1 ∨ c2, r2)
 End
 
 Definition bp_one_pass_def:
   bp_one_pass fn order result =
-    bp_one_pass_aux fn result [] order
+    bp_one_pass_aux fn result order
 End
 
 (* Top-level analysis: iterate one-pass until fixpoint.
@@ -209,6 +225,55 @@ Definition bp_analyze_def:
     let order = cfg.cfg_dfs_pre in
     let init : bp_result = FEMPTY in
     df_iterate (λr. SND (bp_one_pass fn order r)) init
+End
+
+(* ===== Completeness Specification ===== *)
+
+(* v is derived from allocation a through the instructions satisfying P: an
+ * ALLOCA output, pointer arithmetic with a literal, ADD/SUB with a variable
+ * that has no pointers, a copy, or a PHI operand.  These are the edges
+ * _handle_inst follows; an ADD or SUB of two tracked variables gets no
+ * pointers in Python either, so it derives nothing.  The side condition on
+ * the other operand refers to the analysis result bp. *)
+Inductive bp_derives:
+[~alloca:]
+  (∀bp P inst out.
+     P inst ∧ inst.inst_opcode = ALLOCA ∧ inst_output inst = SOME out ⇒
+     bp_derives bp P out (Allocation inst.inst_id))
+[~add_lit:]
+  (∀bp P inst out x n a.
+     P inst ∧ inst.inst_opcode = ADD ∧ inst_output inst = SOME out ∧
+     (inst.inst_operands = [Var x; Lit n] ∨
+      inst.inst_operands = [Lit n; Var x]) ∧
+     bp_derives bp P x a ⇒ bp_derives bp P out a)
+[~sub_lit:]
+  (∀bp P inst out x n a.
+     P inst ∧ inst.inst_opcode = SUB ∧ inst_output inst = SOME out ∧
+     inst.inst_operands = [Var x; Lit n] ∧
+     bp_derives bp P x a ⇒ bp_derives bp P out a)
+[~add_var:]
+  (∀bp P inst out x y a.
+     P inst ∧ inst.inst_opcode = ADD ∧ inst_output inst = SOME out ∧
+     (inst.inst_operands = [Var x; Var y] ∨
+      inst.inst_operands = [Var y; Var x]) ∧
+     bp_get_ptrs bp y = [] ∧
+     bp_derives bp P x a ⇒ bp_derives bp P out a)
+[~sub_var:]
+  (∀bp P inst out x y a.
+     P inst ∧ inst.inst_opcode = SUB ∧ inst_output inst = SOME out ∧
+     inst.inst_operands = [Var x; Var y] ∧
+     bp_get_ptrs bp y = [] ∧
+     bp_derives bp P x a ⇒ bp_derives bp P out a)
+[~assign:]
+  (∀bp P inst out x a.
+     P inst ∧ inst.inst_opcode = ASSIGN ∧ inst_output inst = SOME out ∧
+     inst.inst_operands = [Var x] ∧
+     bp_derives bp P x a ⇒ bp_derives bp P out a)
+[~phi:]
+  (∀bp P inst out x a.
+     P inst ∧ inst.inst_opcode = PHI ∧ inst_output inst = SOME out ∧
+     MEM x (MAP SND (phi_pairs inst.inst_operands)) ∧
+     bp_derives bp P x a ⇒ bp_derives bp P out a)
 End
 
 (* ===== Memory Location Queries ===== *)
@@ -271,6 +336,22 @@ Definition bp_ptr_sound_def:
   bp_ptr_sound (bp : bp_result) (s : venom_state) ⇔
     ∀v. bp_get_ptrs bp v ≠ [] ∧ IS_SOME (lookup_var v s) ⇒
       ∃p. MEM p (bp_get_ptrs bp v) ∧ ptr_matches_var p v s
+End
+
+(* Every PHI whose result is tracked has tracked operands.  This is a
+   property of the IR (Vyper never merges a memory pointer with a
+   non-pointer).  The other half of what eval_phis needs, that the result
+   covers the operands' pointers, holds once the PHI is stable
+   (bp_handle_inst_phi_stable); with both, eval_phis preserves bp_ptr_sound
+   (bp_phis_closed_eval_phis). *)
+Definition bp_phis_closed_def:
+  bp_phis_closed (bp : bp_result) (fn : ir_function) ⇔
+    ∀bb inst out v.
+      MEM bb fn.fn_blocks ∧ MEM inst bb.bb_instructions ∧
+      inst.inst_opcode = PHI ∧ inst.inst_outputs = [out] ∧
+      bp_get_ptrs bp out ≠ [] ∧
+      MEM v (MAP SND (phi_pairs inst.inst_operands)) ⇒
+      bp_get_ptrs bp v ≠ []
 End
 
 (* Every memory access through an alloca-backed pointer is fully within

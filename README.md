@@ -80,7 +80,7 @@ Properties of the semantics — such as scope preservation and state preservatio
 
 The test infrastructure defines functions for re-running execution traces from the Vyper test suite using the definitional interpreter. The main entry-point is the `run_test` function defined in `vyperTestRunner`. Machinery for decoding exported JSON test files is defined in the `vyperTestLib` library; the generated test scripts are in `tests/generated/`.
 
-The decoding of JSON into our AST type is somewhat ad-hoc, in part because the JSON format is not fully specified. In future work, we might formalise more of the front-end or elaboration process, including parsing and type-checking, so that we can run source code directly. For now, we rely on an external front-end (e.g., as used in Vyper's test export process) and decode its output to construct terms in our formal syntax.
+The decoding of JSON into our AST type is somewhat ad-hoc, in part because the JSON format is not fully specified. In future work, we might formalise more of the front-end or elaboration process, including parsing and type-checking, so that we can run source code directly. For now, we rely on an external front-end (e.g., as used in Vyper's test export process) and decode its output to construct terms in our formal syntax. Compiler-folded `method_id` keyword values are retained when decoding `_abi_encode`, preserving selector-prefixed calldata in source replays.
 
 The pinned `functional/codegen/features/test_custom_errors.json` export is part
 of execution replay.  Its 14 trace-bearing items (28 direct traces) cover bare,

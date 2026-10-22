@@ -30,55 +30,6 @@ Ancestors
 
 (* ===== Fixpoint bridge: edge_transfer ⊆ live_exit ===== *)
 
-(* FOLDL list_union preserves accumulator membership *)
-Theorem foldl_list_union_acc[local]:
-  !l v acc. MEM v acc ==> MEM v (FOLDL list_union acc l)
-Proof
-  Induct_on `l` >> simp[] >> rpt strip_tac >>
-  first_x_assum irule >> simp[list_union_mem]
-QED
-
-(* Element in a component list is in FOLDL list_union *)
-Theorem mem_foldl_list_union[local]:
-  !l v xs acc. MEM xs l /\ MEM v xs ==>
-               MEM v (FOLDL list_union acc l)
-Proof
-  Induct_on `l` >> simp[] >> rpt strip_tac >> gvs[]
-  >- (irule foldl_list_union_acc >> simp[list_union_mem])
-  >- (first_x_assum irule >> metis_tac[])
-QED
-
-(* Membership in df_joined_val for Backward with NONE entry_val *)
-Theorem mem_df_joined_val_backward[local]:
-  !join edge_transfer ctx cfg result lbl succ_lbl v.
-    MEM succ_lbl (cfg_succs_of cfg lbl) /\
-    MEM v (edge_transfer ctx succ_lbl lbl
-             (df_boundary [] result succ_lbl)) ==>
-    MEM v (df_joined_val Backward [] list_union edge_transfer ctx NONE
-             cfg result lbl)
-Proof
-  rpt strip_tac >> simp[df_joined_val_def, LET_THM] >>
-  Cases_on `MAP (\nbr. edge_transfer ctx nbr lbl
-    (df_boundary [] result nbr)) (cfg_succs_of cfg lbl)` >- (
-    fs[listTheory.MAP_EQ_NIL] >> fs[]) >>
-  REWRITE_TAC [listTheory.list_case_def] >>
-  irule mem_foldl_list_union >>
-  qexists_tac `edge_transfer ctx succ_lbl lbl
-    (df_boundary [] result succ_lbl)` >>
-  qpat_x_assum `MAP _ _ = _` (SUBST1_TAC o SYM) >>
-  simp[listTheory.MEM_MAP] >> qexists_tac `succ_lbl` >> simp[]
-QED
-
-val df_at_inter_liveness = let
-  val th0 = INST_TYPE [alpha |-> ``:string list``,
-                       beta |-> ``:basic_block list``] df_at_inter_transfer
-  val th1 = CONV_RULE (SIMP_CONV (srw_ss()) [LET_THM]) th0
-  val th2 = Q.SPECL [`Backward`, `[]`, `list_union`, `liveness_transfer`,
-    `liveness_edge_transfer`, `fn.fn_blocks`, `NONE`, `fn`,
-    `lbl`, `bb`] th1
-  val th3 = GENL [``lbl:string``, ``bb:basic_block``] th2
-  in CONV_RULE (STRIP_QUANT_CONV (REWR_CONV (GSYM AND_IMP_INTRO))) th3
-  end;
 
 Theorem edge_transfer_subset_live_exit[local]:
   !fn pred_lbl pred_bb succ_lbl v.
@@ -94,14 +45,13 @@ Theorem edge_transfer_subset_live_exit[local]:
 Proof
   rpt gen_tac >> simp_tac std_ss [LET_THM] >>
   strip_tac >> strip_tac >>
-  simp[live_vars_at_def, liveness_analyze_def] >>
-  mp_tac (Q.SPEC `fn` liveness_convergence) >>
-  simp[LET_THM, liveness_analyze_def] >> strip_tac >>
-  first_x_assum (mp_tac o MATCH_MP df_at_inter_liveness) >>
-  disch_then (qspecl_then [`pred_lbl`, `pred_bb`] mp_tac) >>
-  simp[] >> strip_tac >>
-  irule mem_df_joined_val_backward >>
-  qexists_tac `succ_lbl` >> fs[liveness_analyze_def]
+  `cfg_reachable_of (cfg_analyze fn) pred_lbl` by
+    (drule cfg_analyze_reachable_sets >>
+     simp[pred_setTheory.EXTENSION] >> metis_tac[]) >>
+  drule_all livenessConvergenceProofsTheory.liveness_recompute_edge_subset >>
+  gvs[liveness_analyze_def, livenessBlockProofsTheory.liveness_instrs_def, live_vars_at_def,
+      livenessLocalProofsTheory.liveness_recompute_boundary_entry,
+      pred_setTheory.SUBSET_DEF] >> metis_tac[]
 QED
 
 (* ===== NOP output liveness helpers ===== *)

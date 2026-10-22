@@ -23,9 +23,8 @@ Libs
    Multi-block loop: extract digits, store right-to-left.
    Returns pointer to [length][string_data] *)
 Definition compile_uint2str_def:
-  compile_uint2str val_op n_digits =
-    let buf_size = n_digits + 64 in
-    do (* Allocate output buffer: n_digits + 32 (length word) + padding *)
+  compile_uint2str val_op n_digits buf_size =
+    do (* Output buffer: new_temporary_value(out_t), buf_size bytes *)
        buf_alloc <- compile_alloc_buffer buf_size;
        buf <- return buf_alloc.buf_operand;
        (* Mutable variables *)

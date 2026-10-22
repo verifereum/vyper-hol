@@ -72,30 +72,6 @@ Definition effective_decorators_def:
     else decs
 End
 
-(* Vyper local declarations are function-scoped and cannot be shadowed. Build
-   their canonical types before translating expression uses in the body. *)
-Definition collect_local_types_def:
-  collect_local_types nominal_index all_import_maps type_ctx [] = [] ∧
-  collect_local_types nominal_index all_import_maps type_ctx
-      (JS_AnnAssign name inferred ann _ :: rest) =
-    (name, canonical_decl_type nominal_index all_import_maps type_ctx inferred ann) ::
-    collect_local_types nominal_index all_import_maps type_ctx rest ∧
-  collect_local_types nominal_index all_import_maps type_ctx
-      (JS_For name inferred ann _ body :: rest) =
-    (name, canonical_decl_type nominal_index all_import_maps type_ctx inferred ann) ::
-    collect_local_types nominal_index all_import_maps type_ctx body ++
-    collect_local_types nominal_index all_import_maps type_ctx rest ∧
-  collect_local_types nominal_index all_import_maps type_ctx
-      (JS_If _ body orelse :: rest) =
-    collect_local_types nominal_index all_import_maps type_ctx body ++
-    collect_local_types nominal_index all_import_maps type_ctx orelse ++
-    collect_local_types nominal_index all_import_maps type_ctx rest ∧
-  collect_local_types nominal_index all_import_maps type_ctx (_ :: rest) =
-    collect_local_types nominal_index all_import_maps type_ctx rest
-Termination
-  WF_REL_TAC `measure (λ(_,_,_,stmts). list_size json_stmt_size stmts)` >> simp[]
-End
-
 Definition translate_toplevel_def:
   (translate_toplevel nominal_index all_import_maps expr_ctx type_ctx nr_default
       (JTL_FunctionDef name decs override_aliases args defaults
@@ -103,9 +79,7 @@ Definition translate_toplevel_def:
     if MEM "abstract" decs then NONE else
     let decs = effective_decorators nr_default decs in
     let args' = translate_args_with_types nominal_index all_import_maps type_ctx args arg_tys in
-    let local_types = args' ++
-      collect_local_types nominal_index all_import_maps type_ctx body in
-    let body_ctx = expr_with_local_types expr_ctx local_types in
+    let body_ctx = expr_with_local_types expr_ctx args' in
     SOME (FunctionDecl
       (translate_visibility decs)
       (translate_mutability decs)
@@ -115,7 +89,7 @@ Definition translate_toplevel_def:
       args'
       (MAP (translate_expr body_ctx) defaults)
       (canonical_decl_type nominal_index all_import_maps type_ctx ret_ty ret_ann)
-      (MAP (translate_stmt body_ctx) body))) /\
+      (translate_stmts nominal_index all_import_maps body_ctx body))) /\
 
   (translate_toplevel nominal_index all_import_maps expr_ctx type_ctx nr_default (JTL_VariableDecl name ty ann_ty is_public is_immutable is_transient const_val) =
     SOME (VariableDecl
