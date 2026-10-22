@@ -4,9 +4,9 @@
  * parameters, the call ends in one of two ways.
  *
  * - Default failure: evaluate_defaults stops at a needed default whose own
- *   eval_expr fails with a runtime error that is not a TypeError, or yields a
- *   storage array reference, and call_external returns a RuntimeError with the
- *   machine unchanged and no requests.
+ *   eval_expr fails with a runtime error that is not a TypeError, and
+ *   call_external returns a RuntimeError with the machine unchanged and no
+ *   requests.
  * - Body run: the needed defaults evaluate to typed values, the arguments bind
  *   to a scope, and call_external is call_external_body from that scope with
  *   pending deletions finalised on success; its result is not a TypeError and
@@ -171,11 +171,8 @@ Theorem checked_selected_entry_no_static_error:
         pre ++ e::post /\
       EVERY (\e'. ?v. FST (eval_expr cx e' (initial_state am [FEMPTY])) =
                         INL (Value v)) pre /\
-      ((?err. FST (eval_expr cx e (initial_state am [FEMPTY])) = INR err /\
-              no_type_error_result (INR err : toplevel_value + exception)) \/
-       (?is_transient slot elem_tv bd.
-          FST (eval_expr cx e (initial_state am [FEMPTY])) =
-            INL (ArrayRef is_transient slot elem_tv bd)))) /\
+      ?err. FST (eval_expr cx e (initial_state am [FEMPTY])) = INR err /\
+            no_type_error_result (INR err : toplevel_value + exception)) /\
    ?msg. call_external orc am tx = (INR (Error (RuntimeError msg)), am, [])) \/
   (?dflt_vs scope.
      evaluate_defaults cx am
@@ -217,7 +214,6 @@ Proof
       qexistsl [`vs`, `scope`] >>
       qpat_x_assum `cx = _` kall_tac >> qpat_x_assum `src = _` kall_tac >>
       fs[finalize_case_FST] >> metis_tac[]) >>
-  (* the two default-failure cases: a runtime error or a storage array *)
   disj1_tac >>
   drule_all call_external_selected_entry_defaults_fail >> strip_tac >>
   (conj_tac >- first_assum ACCEPT_TAC >>
