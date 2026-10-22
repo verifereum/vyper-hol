@@ -30,7 +30,7 @@ Definition supported_pure_expr_def:
   supported_pure_expr tops (Builtin ty blt es) =
     (supported_builtin_form tops ty blt es /\ supported_pure_exprs tops es) /\
   supported_pure_expr tops (TypeBuiltin ty blt target es) =
-    (supported_type_builtin_form ty blt target es /\ supported_pure_exprs tops es) /\
+    (supported_type_builtin_form tops ty blt target es /\ supported_pure_exprs tops es) /\
   supported_pure_expr tops (Pop ty target) = F /\
   supported_pure_expr tops (Call ty target es default) = F /\
   supported_pure_exprs tops [] = T /\
