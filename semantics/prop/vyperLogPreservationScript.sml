@@ -3544,7 +3544,7 @@ Proof
           conj_tac >- asm "explicit_ext" MATCH_ACCEPT_TAC >>
           first_assum MATCH_ACCEPT_TAC) >~
        [`_ ==> !st res st'.
-           eval_expr _ (Call _ (CreateTarget _ _ _) _ _) st = (res,st') ==>
+           eval_expr _ (Call _ (CreateTarget _ _ _ _) _ _) st = (res,st') ==>
            log_extends st st'`] >-
          suspend "CreateTarget" >>
      REST_ATOMIC_DISPATCH_TAC) >>

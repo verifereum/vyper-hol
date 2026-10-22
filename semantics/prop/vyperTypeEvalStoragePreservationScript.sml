@@ -2987,10 +2987,10 @@ Resume eval_all_storage_preservation_mutual[Expr_Call_CreateTarget]:
     strip_tac >>
     `call_evaluation_safe cx (int_calls_exprs es)` by
       (qpat_x_assum `call_evaluation_safe cx
-          (int_calls_expr (Call _ (CreateTarget _ _ _) es _))` mp_tac >>
+          (int_calls_expr (Call _ (CreateTarget _ _ _ _) es _))` mp_tac >>
        simp[int_calls_expr_def]) >>
     qpat_x_assum `well_typed_expr env
-        (Call _ (CreateTarget _ _ _) es _)` mp_tac >>
+        (Call _ (CreateTarget _ _ _ _) es _)` mp_tac >>
     rewrite_tac[Once well_typed_expr_def] >> strip_tac >>
     Cases_on `kind` >| [ALL_TAC, ALL_TAC, (
       rename1 `CreateFromBlueprint raw_args` >>

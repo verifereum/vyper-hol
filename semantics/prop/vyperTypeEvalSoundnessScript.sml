@@ -208,7 +208,7 @@ QED
 
 Theorem create_call_evaluation_safe_args[local]:
   call_evaluation_safe cx
-    (int_calls_expr (Call loc (CreateTarget kind has_salt rof) es extra)) ==>
+    (int_calls_expr (Call loc (CreateTarget kind has_salt rof kw_order) es extra)) ==>
   call_evaluation_safe cx (int_calls_exprs es)
 Proof
   simp[int_calls_expr_def]
@@ -10272,7 +10272,7 @@ Resume eval_all_type_sound_mutual[Expr_Call_CreateTarget]:
   >- (
     strip_tac >>
     drule create_call_evaluation_safe_args >> strip_tac >>
-    qpat_x_assum `well_typed_expr env (Call _ (CreateTarget _ _ _) _ _)` mp_tac >>
+    qpat_x_assum `well_typed_expr env (Call _ (CreateTarget _ _ _ _) _ _)` mp_tac >>
     rewrite_tac[Once well_typed_expr_def] >> strip_tac >>
     Cases_on `kind` >| [ALL_TAC, ALL_TAC, (
       rename1 `CreateFromBlueprint raw_args` >>

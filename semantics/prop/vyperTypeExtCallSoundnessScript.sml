@@ -2461,7 +2461,7 @@ Theorem create_tail_result_sound_simp:
     (!msg. res <> INR (Error (TypeError msg))) /\
     (case res of
      | INL tv => expr_result_typed env
-         (Call (BaseT AddressT) (CreateTarget kind has_salt rof) es NONE) tv
+         (Call (BaseT AddressT) (CreateTarget kind has_salt rof kw_order) es NONE) tv
      | INR _ => T)
 Proof
   rpt gen_tac >> strip_tac >>
@@ -2489,7 +2489,7 @@ Proof
   (* the returned value is either the created address or a zero address *)
   `case res of
      | INL tv => expr_result_typed env
-         (Call (BaseT AddressT) (CreateTarget kind has_salt rof) es NONE) tv
+         (Call (BaseT AddressT) (CreateTarget kind has_salt rof kw_order) es NONE) tv
      | INR _ => T` by (
     gvs[runtime_consistent_def] >>
     qpat_x_assum `eval_create _ _ _ _ _ _ _ _ = _` mp_tac >>

@@ -540,13 +540,13 @@ val builtin_cases = [
        [Name (BaseT (BytesT (Dynamic 32))) "b"]``),
   ("RawCreate", ``Nonpayable``, ``[("b", BaseT (BytesT (Dynamic 100)))]``,
    ``BaseT AddressT``,
-   ``Call (BaseT AddressT) (CreateTarget RawCreate F T)
+   ``Call (BaseT AddressT) (CreateTarget RawCreate F T [])
        [Name (BaseT (BytesT (Dynamic 100))) "b";
         Literal (BaseT (UintT 256)) (IntL 0)] NONE``),
   ("RawCreate salt", ``Nonpayable``,
    ``[("b", BaseT (BytesT (Dynamic 100))); ("s", BaseT (BytesT (Fixed 32)))]``,
    ``BaseT AddressT``,
-   ``Call (BaseT AddressT) (CreateTarget RawCreate T T)
+   ``Call (BaseT AddressT) (CreateTarget RawCreate T T [])
        [Name (BaseT (BytesT (Dynamic 100))) "b";
         Literal (BaseT (UintT 256)) (IntL 0);
         Name (BaseT (BytesT (Fixed 32))) "s"] NONE``),
@@ -554,7 +554,7 @@ val builtin_cases = [
    ``[("b", BaseT (BytesT (Dynamic 100))); ("a", BaseT (UintT 256));
       ("s", BaseT (BytesT (Fixed 32)))]``,
    ``BaseT AddressT``,
-   ``Call (BaseT AddressT) (CreateTarget RawCreate T T)
+   ``Call (BaseT AddressT) (CreateTarget RawCreate T T [])
        [Name (BaseT (BytesT (Dynamic 100))) "b";
         Literal (BaseT (UintT 256)) (IntL 0);
         Name (BaseT (UintT 256)) "a";

@@ -193,7 +193,7 @@ Definition eval_expr_cps_def:
     eval_exprs_cps cx10 es st (RawRevertK k) ∧
   eval_expr_cps cx10 (Call _ SelfDestructTarget es _) st k =
     eval_exprs_cps cx10 es st (SelfDestructK k) ∧
-  eval_expr_cps cx10 (Call ty (CreateTarget kind has_salt rof) es _) st k =
+  eval_expr_cps cx10 (Call ty (CreateTarget kind has_salt rof _) es _) st k =
     (case kind of
        CreateFromBlueprint raw_args =>
          eval_exprs_cps cx10 (TAKE (if has_salt then 4 else 3) es) st

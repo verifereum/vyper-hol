@@ -633,7 +633,7 @@ Definition well_typed_expr_def:
   well_typed_expr env (Call ty SelfDestructTarget args drv) =
     (well_typed_exprs env args /\ drv = NONE /\ ty = NoneT /\ LENGTH args = 1 /\
      HD (MAP expr_type args) = BaseT AddressT) /\
-  well_typed_expr env (Call ty (CreateTarget kind has_salt rof) args drv) =
+  well_typed_expr env (Call ty (CreateTarget kind has_salt rof _) args drv) =
     (well_typed_exprs env args /\ drv = NONE /\ ty = BaseT AddressT /\
      create_arg_types_ok kind has_salt (MAP expr_type args)) /\
 
