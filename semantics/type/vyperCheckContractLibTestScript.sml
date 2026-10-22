@@ -700,3 +700,36 @@ val () = List.app (assert_some o check_constants)
    [tdecl b32 "K" keccak_a,
     tdecl ``BaseT BoolT`` "E"
       ``Builtin (BaseT BoolT) (Bop Eq) [^(tname b32 "K"); ^(tname b32 "K")]``]]
+
+(* The sealed evaluator must resolve and type-check custom errors, not just
+   evaluate contracts that never mention them. Keyword order is declaration
+   order; the argument types deliberately differ. *)
+val custom_error_decl =
+  ``ErrorDecl "Problem" [("a", ^u256); ("b", BaseT BoolT)]``
+val custom_error_flag = ``Literal (BaseT BoolT) (BoolL T)``
+val custom_error_positional =
+  ``CustomError (NONE, "Problem") [^(const_lit 1); ^custom_error_flag] []``
+val custom_error_keywords =
+  ``CustomError (NONE, "Problem") []
+      [("b", ^custom_error_flag); ("a", ^(const_lit 1))]``
+fun check_custom_errors decls body =
+  vyperCheckContractLib.check_contract_conv
+    ``check_contract F ^empty_layouts ^zero_address
+        [(NONE, FunctionDecl External Pure F F "f" [] [] NoneT ^body ::
+           ^(listSyntax.mk_list (decls, ``:toplevel``)))]``
+
+val () = assert_some (check_custom_errors [custom_error_decl]
+  ``[Raise (RaiseCustomError ^custom_error_positional)]``)
+val () = assert_some (check_custom_errors [custom_error_decl]
+  ``[Assert ^custom_error_flag (AssertCustomError ^custom_error_keywords)]``)
+val () = assert_none (check_custom_errors []
+  ``[Raise (RaiseCustomError ^custom_error_positional)]``)
+val () = assert_none (check_custom_errors [custom_error_decl, custom_error_decl]
+  ``[Raise (RaiseCustomError ^custom_error_positional)]``)
+val () = assert_none (check_custom_errors [custom_error_decl]
+  ``[Raise (RaiseCustomError
+      (CustomError (NONE, "Problem") [^custom_error_flag; ^(const_lit 1)] []))]``)
+val () = assert_none (check_custom_errors [custom_error_decl]
+  ``[Assert ^custom_error_flag (AssertCustomError
+      (CustomError (NONE, "Problem") []
+        [("a", ^(const_lit 1)); ("a", ^(const_lit 2))]))]``)
