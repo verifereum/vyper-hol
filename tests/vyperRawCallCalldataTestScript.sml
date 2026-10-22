@@ -261,7 +261,7 @@ Theorem raw_call_calldata_original_input_test:
     (if flags.rcf_revert_on_failure then
        if success then INL (Value (if flags.rcf_max_outsize = 0 then NoneV
          else BytesV (TAKE flags.rcf_max_outsize retdata)))
-       else INR (Error (RuntimeError "raw_call reverted"))
+       else INR (Error (RevertData retdata))
      else INL (Value (if flags.rcf_max_outsize = 0 then BoolV success
        else ArrayV (TupleV [BoolV success;
          BytesV (TAKE flags.rcf_max_outsize retdata)]))),

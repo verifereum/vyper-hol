@@ -876,7 +876,8 @@ Proof
   Cases_on `flags.rcf_max_outsize = 0` >>
   simp[update_accounts_def, update_transient_def, append_logs_def,
        check_def, assert_def, bind_def, ignore_bind_def, return_def, raise_def,
-       no_control_exc_def]
+       no_control_exc_def] >>
+  rpt strip_tac >> gvs[]
 QED
 
 (* ===== Case 20: RawCallTarget ===== *)
