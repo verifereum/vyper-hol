@@ -1114,6 +1114,7 @@ Definition json_expr_int_opt_def:
      case (json_expr_int_opt l, json_expr_int_opt r) of
        (SOME n1, SOME n2) => SOME (n1 - n2)
      | _ => NONE) /\
+  (json_expr_int_opt (JE_Folded _ folded) = json_expr_int_opt folded) /\
   (json_expr_int_opt _ = NONE)
 End
 
