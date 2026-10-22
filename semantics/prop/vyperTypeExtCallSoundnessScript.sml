@@ -112,8 +112,7 @@ Theorem run_ext_call_overflowing_value_transfer_rejected:
   let accounts = update_account caller caller_acct
                    (update_account callee callee_acct empty_accounts) in
     run_ext_call caller callee [] (SOME 1) accounts empty_transient_storage
-      (vyper_to_tx_params empty_call_txn) =
-    SOME (F, [], accounts, empty_transient_storage, [])
+      (vyper_to_tx_params empty_call_txn) = NONE
 Proof
   EVAL_TAC
 QED

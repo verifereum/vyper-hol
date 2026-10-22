@@ -155,7 +155,8 @@ QED
 
 (* A regular CALL (not delegate) fails the same way: an exceptional halt
    returns false with no bytes, a REVERT with revert_on_failure re-raises the
-   callee's bytes, and a value the caller cannot pay fails before entry.
+   callee's bytes, a value the caller cannot pay fails before entry, and an
+   SSTORE under STATICCALL halts.
    Every case rolls the callee back. *)
 Definition regular_flags_def:
   regular_flags outsize revert = delegate_flags outsize revert with rcf_is_delegate := F
@@ -172,6 +173,10 @@ Theorem regular_call_failures_return_false_and_roll_back:
       [2w;0w;0w;0w;0w] 4w [<|logger := 43w; topics := []; data := [99w]|>] /\
     delegate_observe cps T delegate_success_code (regular_flags 0 F) 100
       (INL (Value (BoolV F)))
+      [2w;0w;0w;0w;0w] 4w [<|logger := 43w; topics := []; data := [99w]|>] /\
+    delegate_observe cps F delegate_success_code
+      ((regular_flags 4 F) with rcf_is_static := T) 0
+      (INL (Value (ArrayV (TupleV [BoolV F; BytesV []]))))
       [2w;0w;0w;0w;0w] 4w [<|logger := 43w; topics := []; data := [99w]|>]) [F;T]
 Proof
   simp[EVERY_DEF] >> CONV_TAC cv_eval
