@@ -94,6 +94,7 @@ val checker_defs =
    extract32_result_base_ok_def,
    assignable_type_def,
    valid_conversion_def,
+   event_arg_compatible_def,
    hashmap_key_type_def,
    defaults_env_def,
    extend_local_def,

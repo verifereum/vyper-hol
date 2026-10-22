@@ -353,7 +353,8 @@ Theorem FOLDL_extend_local_args_static:
     (FOLDL (\env (id,ty). extend_local env (id) ty T) base args).toplevel_vtypes = base.toplevel_vtypes /\
     (FOLDL (\env (id,ty). extend_local env (id) ty T) base args).type_defs = base.type_defs /\
     (FOLDL (\env (id,ty). extend_local env (id) ty T) base args).fn_sigs = base.fn_sigs /\
-    (FOLDL (\env (id,ty). extend_local env (id) ty T) base args).flag_members = base.flag_members
+    (FOLDL (\env (id,ty). extend_local env (id) ty T) base args).flag_members = base.flag_members /\
+    (FOLDL (\env (id,ty). extend_local env id ty T) base args).event_fields = base.event_fields
 Proof
   Induct >> simp[] >>
   gen_tac >> PairCases_on `h` >>

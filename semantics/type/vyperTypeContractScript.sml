@@ -26,7 +26,8 @@ Datatype:
     cta_bare_globals             : (nsid |-> type);
     cta_bare_global_assignable   : (nsid |-> type);
     cta_toplevel_vtypes          : (nsid |-> value_type);
-    cta_flag_members    : (nsid |-> string list)
+    cta_flag_members    : (nsid |-> string list);
+    cta_event_fields    : (nsid |-> ((string # type) # bool) list)
   |>
 End
 
@@ -36,7 +37,8 @@ Definition empty_contract_type_artifact_def:
        cta_bare_globals := FEMPTY;
        cta_bare_global_assignable := FEMPTY;
        cta_toplevel_vtypes := FEMPTY;
-       cta_flag_members := FEMPTY |>
+       cta_flag_members := FEMPTY;
+       cta_event_fields := FEMPTY |>
 End
 
 Definition artifact_env_def:
@@ -49,7 +51,8 @@ Definition artifact_env_def:
        toplevel_vtypes := art.cta_toplevel_vtypes;
        type_defs := type_env_all_modules mods;
        fn_sigs := art.cta_fn_sigs;
-       flag_members := art.cta_flag_members |>
+       flag_members := art.cta_flag_members;
+       event_fields := art.cta_event_fields |>
 End
 
 Definition function_entry_env_def:
@@ -102,6 +105,9 @@ Definition add_toplevel_static_maps_def:
     | HashMapDecl _ _ id kt vt _ =>
         art with cta_toplevel_vtypes updated_by
           (flip FUPDATE ((src,id), HashMapT kt vt))
+    | EventDecl id fields =>
+        art with cta_event_fields updated_by
+          (flip FUPDATE ((src,id), fields))
     | FlagDecl fid members =>
         art with cta_flag_members updated_by
           (flip FUPDATE ((src,fid), members))

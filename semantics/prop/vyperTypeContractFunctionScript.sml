@@ -27,6 +27,8 @@ Definition static_maps_transfer_env_def:
     env2.type_defs = env1.type_defs /\
     env2.var_types = env1.var_types /\
     env2.var_assignable = env1.var_assignable /\
+    (!k fields. FLOOKUP env1.event_fields k = SOME fields ==>
+       FLOOKUP env2.event_fields k = SOME fields) /\
     (!k sig. FLOOKUP env1.fn_sigs k = SOME sig ==>
        FLOOKUP env2.fn_sigs k = SOME sig) /\
     (!k ty. FLOOKUP env1.bare_globals k = SOME ty ==>
@@ -202,6 +204,12 @@ Proof
   ho_match_mp_tac type_stmt_ind >>
   rw[type_stmt_def, AllCaseEqs()] >>
   gvs[] >>
+  TRY (rename1 `FLOOKUP env1.event_fields id = SOME fields` >>
+       qexists `env2` >> simp[] >>
+       `FLOOKUP env2.event_fields id = SOME fields` by
+         (gvs[static_maps_transfer_env_def] >> metis_tac[]) >>
+       simp[] >> irule well_typed_exprs_static_maps_transfer_env >>
+       qexists `env1` >> simp[] >> NO_TAC) >>
   TRY (rename1 `well_typed_expr env1 e` >> qexists `env2` >> simp[] >>
        conj_tac >- metis_tac[type_place_expr_no_hash_static_maps_transfer_env] >>
        irule well_typed_expr_static_maps_transfer_env >> simp[]) >>
@@ -310,7 +318,7 @@ Theorem function_entry_env_static_maps_transfer_initial[local]:
        toplevel_vtypes := toplevel_vtypes;
        type_defs := get_tenv (initial_evaluation_context sources layouts tx src);
        fn_sigs := fn_sigs;
-       flag_members := flag_members |>) args ==>
+       flag_members := flag_members; event_fields := art.cta_event_fields |>) args ==>
   static_maps_transfer_env (function_entry_env art mods entry_src args) env_body
 Proof
   rw[static_maps_transfer_env_def]
@@ -321,6 +329,7 @@ Proof
       irule (cj 1 FOLDL_extend_local_args_empty_locals) >> simp[])
   >- (rw[function_entry_env_def, artifact_env_def] >>
       irule (cj 2 FOLDL_extend_local_args_empty_locals) >> simp[])
+  >- gvs[function_entry_env_def, artifact_env_def, FOLDL_extend_local_args_static]
   >- (simp[FOLDL_extend_local_args_static] >> metis_tac[artifact_fn_sigs_lookup_transfer_initial])
   >- (simp[FOLDL_extend_local_args_static] >> metis_tac[artifact_bare_globals_lookup_transfer_initial])
   >- (simp[FOLDL_extend_local_args_static] >> metis_tac[artifact_bare_global_assignable_lookup_transfer_initial])
@@ -385,7 +394,7 @@ Theorem function_entry_env_static_maps_transfer_initial_explicit[local]:
          toplevel_vtypes := toplevel_vtypes;
          type_defs := get_tenv (initial_evaluation_context sources layouts tx src);
          fn_sigs := fn_sigs;
-         flag_members := flag_members |>) args)
+         flag_members := flag_members; event_fields := art.cta_event_fields |>) args)
 Proof
   rw[] >>
   irule function_entry_env_static_maps_transfer_initial >>
@@ -440,7 +449,7 @@ Theorem check_function_body_static_maps_transfer_initial[local]:
         bare_globals := bare_globals; bare_global_assignable := bare_global_assignable;
         toplevel_vtypes := toplevel_vtypes;
         type_defs := get_tenv (initial_evaluation_context sources layouts tx src);
-        fn_sigs := fn_sigs; flag_members := flag_members|>) args) ==>
+        fn_sigs := fn_sigs; flag_members := flag_members; event_fields := art.cta_event_fields|>) args) ==>
   ?env_body ret_tv env_after.
     env_body.current_src = entry_src /\
     env_body.type_defs = get_tenv (initial_evaluation_context sources layouts tx src) /\
@@ -475,21 +484,21 @@ Proof
         bare_globals := bare_globals; bare_global_assignable := bare_global_assignable;
         toplevel_vtypes := toplevel_vtypes;
         type_defs := get_tenv (initial_evaluation_context sources layouts tx src);
-        fn_sigs := fn_sigs; flag_members := flag_members|>) args) ret body = SOME env_after` by
+        fn_sigs := fn_sigs; flag_members := flag_members; event_fields := art.cta_event_fields|>) args) ret body = SOME env_after` by
     (drule type_stmts_static_maps_transfer >>
      disch_then (qspec_then `FOLDL (\env (id,ty). extend_local env id ty T)
       (<|current_src := entry_src; var_types := FEMPTY; var_assignable := FEMPTY;
         bare_globals := bare_globals; bare_global_assignable := bare_global_assignable;
         toplevel_vtypes := toplevel_vtypes;
         type_defs := get_tenv (initial_evaluation_context sources layouts tx src);
-        fn_sigs := fn_sigs; flag_members := flag_members|>) args` mp_tac) >>
+        fn_sigs := fn_sigs; flag_members := flag_members; event_fields := art.cta_event_fields|>) args` mp_tac) >>
      simp[]) >>
   qexistsl [`FOLDL (\env (id,ty). extend_local env id ty T)
       (<|current_src := entry_src; var_types := FEMPTY; var_assignable := FEMPTY;
         bare_globals := bare_globals; bare_global_assignable := bare_global_assignable;
         toplevel_vtypes := toplevel_vtypes;
         type_defs := get_tenv (initial_evaluation_context sources layouts tx src);
-        fn_sigs := fn_sigs; flag_members := flag_members|>) args`, `ret_tv`, `env_after`] >>
+        fn_sigs := fn_sigs; flag_members := flag_members; event_fields := art.cta_event_fields|>) args`, `ret_tv`, `env_after`] >>
   simp[FOLDL_extend_local_args_static, get_tenv_def, initial_evaluation_context_def] >>
   conj_tac >- (irule well_typed_defaults_static_maps_transfer >>
                  qexists `function_entry_env art mods entry_src args` >>
@@ -549,8 +558,8 @@ Proof
          bare_globals := bare_globals; bare_global_assignable := bare_global_assignable;
          toplevel_vtypes := toplevel_vtypes;
          type_defs := get_tenv (initial_evaluation_context sources layouts tx src);
-         fn_sigs := fn_sigs; flag_members := flag_members|>) args)` by
-    (irule function_entry_env_static_maps_transfer_initial_explicit >> simp[]) >>
+         fn_sigs := fn_sigs; flag_members := flag_members; event_fields := art.cta_event_fields|>) args)` by
+    (simp[] >> irule function_entry_env_static_maps_transfer_initial_explicit >> simp[]) >>
   drule_all check_function_body_static_maps_transfer_initial >>
   simp[]
 QED
@@ -627,6 +636,9 @@ Theorem check_contract_functions_well_typed_deploy:
     ((initial_evaluation_context sources layouts tx src) with in_deploy := T)
 Proof
   simp[functions_well_typed_def] >> strip_tac >>
+  `deploy_art.cta_event_fields = runtime_art.cta_event_fields` by
+    (gvs[check_contract_def] >>
+     metis_tac[build_contract_type_artifact_nonsig_mode_irrelevant]) >>
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
   `ALOOKUP mods src_id_opt = SOME ts` by
     gvs[get_module_code_def, initial_evaluation_context_def] >>
@@ -661,7 +673,7 @@ Proof
                   bare_global_assignable := bare_global_assignable;
                   toplevel_vtypes := toplevel_vtypes;
                   type_defs := get_tenv (initial_evaluation_context sources layouts tx src);
-                  fn_sigs := fn_sigs; flag_members := flag_members|>) args)` by
+                  fn_sigs := fn_sigs; flag_members := flag_members; event_fields := deploy_art.cta_event_fields|>) args)` by
             (`!src' id ty. FLOOKUP bare_global_assignable (src',id) = SOME ty ==>
                 ?ts. get_module_code (initial_evaluation_context sources layouts tx src) src' = SOME ts /\
                      is_immutable_decl id ts` by
@@ -671,10 +683,10 @@ Proof
                      FLOOKUP toplevel_vtypes (src',id) = SOME (Type ty) /\
                      is_bare_global_decl id ts /\ find_var_decl_by_name id ts = NONE /\ ty <> NoneT` by
                (drule bare_globals_consistency_deploy_implies_runtime >> simp[]) >>
-             irule function_entry_env_static_maps_transfer_initial_explicit >> simp[]) >>
+             simp[] >> irule function_entry_env_static_maps_transfer_initial_explicit >> simp[]) >>
           irule function_entry_env_static_maps_transfer_deploy >>
           qexistsl [`tx.target`, `layouts`, `runtime_art`, `sources`, `src`, `tx`] >>
-          simp[FOLDL_extend_local_args_static]) >>
+          gvs[FOLDL_extend_local_args_static]) >>
       strip_tac >> qexistsl [`env_body`, `ret_tv`, `env_after`] >>
       gvs[get_tenv_def, initial_evaluation_context_def] >>
       rpt conj_tac >> rpt strip_tac >>
@@ -692,13 +704,13 @@ Proof
              bare_global_assignable := bare_global_assignable;
              toplevel_vtypes := toplevel_vtypes;
              type_defs := type_env_all_modules mods; fn_sigs := fn_sigs;
-             flag_members := flag_members|>`,
+             flag_members := flag_members; event_fields := deploy_art.cta_event_fields|>`,
          `<|current_src := src_id_opt; var_types := FEMPTY;
              var_assignable := FEMPTY; bare_globals := bare_globals;
              bare_global_assignable := bare_global_assignable;
              toplevel_vtypes := toplevel_vtypes;
              type_defs := type_env_all_modules mods; fn_sigs := fn_sigs;
-             flag_members := flag_members|>`] >>
+             flag_members := flag_members; event_fields := deploy_art.cta_event_fields|>`] >>
       simp[get_tenv_def, Once type_stmt_def,
            Once well_typed_expr_def, Once stmt_no_control_escape_def]) >>
   `check_function_body layouts tx.target mods deploy_art src_id_opt fm nr
@@ -731,7 +743,7 @@ Proof
               bare_global_assignable := bare_global_assignable;
               toplevel_vtypes := toplevel_vtypes;
               type_defs := get_tenv (initial_evaluation_context sources layouts tx src);
-              fn_sigs := fn_sigs; flag_members := flag_members|>) args)` by
+              fn_sigs := fn_sigs; flag_members := flag_members; event_fields := deploy_art.cta_event_fields|>) args)` by
         (`!src' id ty. FLOOKUP bare_global_assignable (src',id) = SOME ty ==>
             ?ts. get_module_code (initial_evaluation_context sources layouts tx src) src' = SOME ts /\
                  is_immutable_decl id ts` by
@@ -741,10 +753,10 @@ Proof
                  FLOOKUP toplevel_vtypes (src',id) = SOME (Type ty) /\
                  is_bare_global_decl id ts /\ find_var_decl_by_name id ts = NONE /\ ty <> NoneT` by
            (drule bare_globals_consistency_deploy_implies_runtime >> simp[]) >>
-         irule function_entry_env_static_maps_transfer_initial_explicit >> simp[]) >>
+         simp[] >> irule function_entry_env_static_maps_transfer_initial_explicit >> simp[]) >>
       irule function_entry_env_static_maps_transfer_deploy >>
       qexistsl [`tx.target`, `layouts`, `runtime_art`, `sources`, `src`, `tx`] >>
-      simp[FOLDL_extend_local_args_static]) >>
+      gvs[FOLDL_extend_local_args_static]) >>
   strip_tac >> qexistsl [`env_body`, `ret_tv`, `env_after`] >>
   gvs[get_tenv_def, initial_evaluation_context_def] >>
   rpt conj_tac >> rpt strip_tac >>
@@ -873,8 +885,8 @@ Proof
          bare_global_assignable := art.cta_bare_global_assignable;
          toplevel_vtypes := art.cta_toplevel_vtypes;
          type_defs := get_tenv (initial_evaluation_context am.sources am.layouts tx src);
-         fn_sigs := art.cta_fn_sigs; flag_members := art.cta_flag_members|>) args)` by
-    (irule function_entry_env_static_maps_transfer_initial_explicit >> simp[]) >>
+         fn_sigs := art.cta_fn_sigs; flag_members := art.cta_flag_members; event_fields := art.cta_event_fields|>) args)` by
+    (simp[] >> irule function_entry_env_static_maps_transfer_initial_explicit >> simp[]) >>
   qspecl_then
     [`am.layouts`, `tx.target`, `mods`, `art`, `am.sources`, `tx`,
      `art.cta_fn_sigs`, `art.cta_bare_globals`,

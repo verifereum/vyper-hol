@@ -747,3 +747,61 @@ val () = List.app (fn th =>
    module_event_keys_unique, contract_keys_module_distinct,
    contract_namespaces_ok_event_decl_unique, check_contract_event_decl_unique,
    event_declaration_regressions];
+
+Theorem event_arg_recursive_widening_eval:
+  event_arg_compatible (BaseT (StringT 10)) (BaseT (StringT 5)) /\
+  event_arg_compatible (ArrayT (BaseT (UintT 256)) (Dynamic 5))
+    (ArrayT (BaseT (UintT 256)) (Dynamic 3)) /\
+  event_arg_compatible (ArrayT (BaseT (StringT 5)) (Dynamic 2))
+    (ArrayT (BaseT (StringT 3)) (Dynamic 2)) /\
+  event_arg_compatible (TupleT [BaseT (UintT 256); BaseT (BytesT (Dynamic 5))])
+    (TupleT [BaseT (UintT 256); BaseT (BytesT (Dynamic 3))]) /\
+  event_arg_compatible (ArrayT (ArrayT (BaseT (UintT 256)) (Dynamic 5)) (Fixed 2))
+    (ArrayT (ArrayT (BaseT (UintT 256)) (Dynamic 3)) (Fixed 2)) /\
+  ~event_arg_compatible (BaseT (UintT 256)) (BaseT (UintT 8)) /\
+  ~event_arg_compatible (BaseT (UintT 256)) (BaseT (BytesT (Dynamic 40))) /\
+  ~event_arg_compatible (BaseT (StringT 3)) (BaseT (StringT 5))
+Proof
+  EVAL_TAC
+QED
+
+Theorem log_missing_event_eval:
+  type_stmt (env with event_fields := FEMPTY) ret (Log (NONE,"missing") es) = NONE
+Proof
+  simp[finite_mapTheory.FLOOKUP_UPDATE, type_stmt_def]
+QED
+
+Theorem log_arity_rejected_eval:
+  type_stmt (env with event_fields := FEMPTY |+ ((NONE,"E"),
+    [(("a",BaseT (UintT 256)),F)])) ret (Log (NONE,"E") []) = NONE
+Proof
+  simp[finite_mapTheory.FLOOKUP_UPDATE, type_stmt_def]
+QED
+
+Theorem log_type_mismatch_rejected_eval:
+  type_stmt (env with event_fields := FEMPTY |+ ((NONE,"E"),
+    [(("a",BaseT (UintT 256)),T)])) ret
+    (Log (NONE,"E") [Literal (BaseT (UintT 8)) (IntL 1)]) = NONE
+Proof
+  simp[finite_mapTheory.FLOOKUP_UPDATE, type_stmt_def, vyperASTTheory.expr_type_def, event_arg_compatible_def]
+QED
+
+Theorem log_literal_accepted_eval:
+  type_stmt (env with event_fields := FEMPTY |+ ((NONE,"E"),
+    [(("a",BaseT (UintT 256)),T)])) ret
+    (Log (NONE,"E") [Literal (BaseT (UintT 256)) (IntL 1)]) =
+  SOME (env with event_fields := FEMPTY |+ ((NONE,"E"),
+    [(("a",BaseT (UintT 256)),T)]))
+Proof
+  simp[finite_mapTheory.FLOOKUP_UPDATE, type_stmt_def, vyperASTTheory.expr_type_def, event_arg_compatible_def,
+       well_typed_expr_def, well_typed_literal_def] >> EVAL_TAC
+QED
+
+Theorem log_variable_compatibility_probe:
+  FLOOKUP env.event_fields id = SOME [(("a",fty),idx)] /\
+  FLOOKUP env.var_types "x" = SOME aty ==>
+  (type_stmt env ret (Log id [Name aty "x"]) = SOME env <=>
+   event_arg_compatible fty aty)
+Proof
+  simp[type_stmt_def, well_typed_expr_def, vyperASTTheory.expr_type_def]
+QED
