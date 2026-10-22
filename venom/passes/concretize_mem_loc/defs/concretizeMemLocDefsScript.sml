@@ -840,7 +840,8 @@ Definition context_mem_livesets_def:
     let imports = imported_mems_used ctx fn in
     let sizes = context_alloca_size fn imports in
     mem_liveness_analyze_fuel fuel bpr
-      (\name. MAP FST (callee_mems_used ctx name))
+      (* Metadata preserves allocation order; the analysis consumes ordered sets. *)
+      (\name. incr_ssort alloc_to (MAP FST (callee_mems_used ctx name)))
       (\a. let sz = sizes a in if sz = 0 then NONE else SOME sz)
       ([] : allocation list) cfg fn
 End
