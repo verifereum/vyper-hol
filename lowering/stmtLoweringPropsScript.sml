@@ -151,21 +151,47 @@ QED
 
 (* --- Assert: abort on false, continue on true --- *)
 (* NOTE: Assert creates multiple blocks (fail_block, ok_block) via new_block.
-   Must use frag_exec, not run_inst_seq. *)
+   Must use frag_exec, not run_inst_seq.
+   ctx is existential: nothing yet says ctx holds the compiled internal
+   functions, without which a condition calling one (INVOKE) errors.  The
+   ∀ctx statements in this file have the same gap until such a hypothesis
+   exists. *)
 Theorem compile_assert_correct_true:
-  ∀ cenv cx lctx ty cond_e msg es st st' es' ctx.
+  ∀ cenv cx lctx ty cond_e msg es st st' es'.
     eval_expr cx cond_e es = (INL (Value (BoolV T)), es') ∧
     compile_stmt cenv lctx ty (Assert cond_e msg) st = ((), st')
     ⇒
-    frag_exec ctx st st' (state_rel cenv cx es) (state_rel cenv cx es')
-      (λr. F)
+    ∃ctx.
+      frag_exec ctx st st' (state_rel cenv cx es) (state_rel cenv cx es')
+        (λr. F)
 Proof
   cheat
 QED
 
+(* Partial proof of compile_assert_bare_correct_false against its earlier
+   run_compiled_blocks statement, kept for reference; it stops before the
+   blocks are run:
+
+  rw[compile_stmt_def, comp_bind_def, comp_ignore_bind_def] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  gvs[comp_return_def] >>
+  drule_all compile_expr_correct >> strip_tac >>
+  qspec_then`"assert_ok"`drule fresh_label_props >>
+  qspec_then`"assert_fail"`drule fresh_label_props >>
+  qspec_then`REVERT`drule emit_inst_extends >>
+  qspec_then`JNZ`drule emit_inst_extends >>
+  qspec_then`fail_lbl`drule new_block_props >>
+  qspec_then`ok_lbl`drule new_block_props >>
+  rpt strip_tac >>
+  simp[run_compiled_blocks_def, assemble_function_def, assemble_blocks_def] >>
+  cheat
+*)
+
 (* Assert bare + false condition: revert with empty returndata.
    Only for AssertBare — AssertReason has non-empty Error(string) data,
-   AssertUnreachable uses INVALID (not REVERT). *)
+   AssertUnreachable uses INVALID (not REVERT).
+   The state reverted from is related to es', the source state after the
+   condition. *)
 Theorem compile_assert_bare_correct_false:
   ∀ cenv cx lctx ty cond_e es st st' es' ctx.
     supported_expr cond_e ∧
@@ -175,19 +201,25 @@ Theorem compile_assert_bare_correct_false:
     ⇒
     frag_exec ctx st st'
       (λss. state_rel cenv cx es ss ∧ fresh_vars_wrt st ss) (λss. F)
-      (λr. ∃ss. r = Abort Revert_abort (revert_state (set_returndata [] ss)))
+      (λr. ∃ss. r = Abort Revert_abort (revert_state (set_returndata [] ss)) ∧
+                state_rel cenv cx es' ss)
 Proof
   cheat
 QED
 
-(* Assert with reason + false condition: revert with Error(string) encoded data *)
+(* Assert with reason + false condition: revert with Error(string) encoded data.
+   The state reverted from is related to the source state after the
+   condition and then the reason expression, SND (eval_expr cx reason_e es'):
+   the fail block evaluates the reason before reverting. *)
 Theorem compile_assert_reason_correct_false:
   ∀ cenv cx lctx ty cond_e reason_e es st st' es' ctx.
     eval_expr cx cond_e es = (INL (Value (BoolV F)), es') ∧
     compile_stmt cenv lctx ty (Assert cond_e (AssertReason reason_e)) st = ((), st')
     ⇒
     frag_exec ctx st st' (state_rel cenv cx es) (λss. F)
-      (λr. ∃ss rd. r = Abort Revert_abort (revert_state (set_returndata rd ss)))
+      (λr. ∃ss rd.
+             r = Abort Revert_abort (revert_state (set_returndata rd ss)) ∧
+             state_rel cenv cx (SND (eval_expr cx reason_e es')) ss)
 Proof
   cheat
 QED
