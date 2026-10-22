@@ -471,10 +471,7 @@ Definition compile_abi_decode_to_buf_def:
         cnt <- emit_op load_opc [src_op];
         emit_void MSTORE [dst; cnt];
         let can_bulk_copy =
-          (case elem_info of
-             DecPrimWord clamp =>
-               if elem_is_dyn then F else ¬needs_clamp clamp
-           | _ => F) in
+          (¬elem_is_dyn ∧ ¬dec_info_needs_clamp elem_info) in
         if can_bulk_copy then
           do copy_sz <- emit_op MUL [cnt; Lit (n2w elem_mem_sz)];
              src_data <- emit_op ADD [src_op; Lit 32w];

@@ -69,6 +69,48 @@ val _ = List.app (fn th =>
   [dec_info_needs_clamp_nested_static, dec_info_needs_clamp_nested_uint8,
    type_to_abi_dec_info_flag_256, type_to_abi_dec_info_flag_255];
 
+(* Code-generation probes: fixed uint256 pairs use one contiguous calldata
+   copy; fixed uint8 pairs must retain the validating decode loop. *)
+Theorem decode_static_aggregate_bulk_ir:
+  let st = <| cs_next_var := 0; cs_next_label := 0; cs_next_id := 0;
+              cs_current_bb := "entry"; cs_current_insts := [];
+              cs_blocks := []; cs_data_sections := [] |> in
+  let info = DecDynArray
+    (DecComplex F [(DecPrimWord NoClamp,32,32);
+                   (DecPrimWord NoClamp,32,32)]) 64 64 F 3 in
+  let out = SND (compile_abi_decode_to_buf (Lit 256w) (Lit 4w)
+                   CALLDATALOAD (Lit 0w) info st) in
+  out.cs_blocks = [] /\
+  MAP (\i. i.inst_opcode) out.cs_current_insts =
+    [CALLDATALOAD; GT; ISZERO; ASSERT; CALLDATALOAD; MSTORE;
+     MUL; ADD; ADD; CALLDATACOPY]
+Proof
+  EVAL_TAC
+QED
+
+Theorem decode_clamped_aggregate_loop_ir:
+  let st = <| cs_next_var := 0; cs_next_label := 0; cs_next_id := 0;
+              cs_current_bb := "entry"; cs_current_insts := [];
+              cs_blocks := []; cs_data_sections := [] |> in
+  let info = DecDynArray
+    (DecComplex F [(DecPrimWord (IntClamp 8 F),32,32);
+                   (DecPrimWord (IntClamp 8 F),32,32)]) 64 64 F 3 in
+  let out = SND (compile_abi_decode_to_buf (Lit 256w) (Lit 4w)
+                   CALLDATALOAD (Lit 0w) info st) in
+  out.cs_blocks <> [] /\
+  ~MEM CALLDATACOPY (MAP (\i. i.inst_opcode)
+    (FLAT (MAP (\bb. bb.bb_instructions) out.cs_blocks) ++
+     out.cs_current_insts))
+Proof
+  EVAL_TAC
+QED
+
+val _ = List.app (fn th =>
+  if List.all (fn s => s = "DISK_THM")
+       (fst (Tag.dest_tag (Thm.tag th))) then ()
+  else raise Fail "aggregate decode IR probe has oracle dependencies")
+  [decode_static_aggregate_bulk_ir, decode_clamped_aggregate_loop_ir];
+
 (* ===== Instruction Sequence Execution ===== *)
 
 (* Run a list of instructions sequentially via step_inst_base.
@@ -2620,6 +2662,11 @@ Proof
   simp[ci_mono_comp_return])
   end
 QED
+
+val _ =
+  if List.all (fn s => s = "DISK_THM")
+       (fst (Tag.dest_tag (Thm.tag ci_mono_compile_abi_decode))) then ()
+  else raise Fail "recursive decoder monotonicity has oracle dependencies";
 
 Theorem ci_mono_compile_default_return_path[local]:
   ∀ cenv return_type default_ty buf_op result_op default_op addr_op skip_check
