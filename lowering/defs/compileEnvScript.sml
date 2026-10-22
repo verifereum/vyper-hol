@@ -664,9 +664,9 @@ Definition vars_rel_def:
 End
 
 (* ===== Locals held through allocations ===== *)
-(* After function lowering a local is PtrVar (Var p) sz: the ALLOCA emitted at
-   its declaration binds p to the base of a fresh region (emit_local_alloca,
-   compile_alloc_buffer), so the address depends on vs_allocas and
+(* After its declaration in an external or fallback body a local is
+   PtrVar (Var p) sz: the ALLOCA emitted there binds p to the base of a fresh
+   region (declare_local, compile_alloc_buffer), so the address depends on vs_allocas and
    vs_alloca_next at run time.  vars_rel only covers MemLoc entries.
    Parameters of internal functions are PtrVar (Var p) sz too
    (materialize_internal_params): a stack-passed one is copied into an ALLOCA
