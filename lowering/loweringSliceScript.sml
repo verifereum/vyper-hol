@@ -25,16 +25,9 @@
  *   compile_safe_add_overflow_frag — the Venom side of slice 3
  *
  * Helpers:
- *   state_rel_jump_to, state_rel_push_scope, state_rel_pop_scope,
- *   state_rel_frame, local_ptrs_rel_inst_idx, alloca_inv_fields,
- *   stmt_state_rel_jump_to, stmt_state_rel_inst_idx,
- *   stmt_state_rel_push_scope, stmt_state_rel_pop_scope,
- *   stmt_state_rel_update_var, stmt_state_rel_exec_alloca,
- *   stmt_state_rel_declare_word, local_ptrs_reserved_next_var,
- *   local_ptrs_reserved_fresh, local_ptrs_reserved_not_live,
+ *   stmt_state_rel_exec_alloca, stmt_state_rel_declare_word,
  *   eval_stmt_if_success, eval_stmt_annassign_value, compile_if_parts,
- *   if_branch_to_exit, fn_has_code_start, fn_has_code_mid,
- *   fn_has_code_new_block, lookup_block_fn_insts, w2n_add_overflow,
+ *   compile_if_taken_branch, if_branch_to_exit, compile_annassign_word_parts,
  *   bounded_int_op_add_overflow, word_value_in_memory, word_value_wf
  *)
 
@@ -50,223 +43,6 @@ Ancestors
   venomExecSemantics venomExecProofs venomInst venomInstProofs venomState
 Libs
   monadsyntax
-
-(* ===== stmt_state_rel does not read control state or the scope order ===== *)
-
-Theorem state_rel_jump_to:
-  !func cenv cx es s lbl.
-    state_rel func cenv cx es (jump_to lbl s) <=> state_rel func cenv cx es s
-Proof
-  simp[state_rel_def, local_ptrs_rel_def, local_region_def, local_backed_def,
-       lookup_var_def, storage_rel_def, transient_rel_def, immutables_rel_def,
-       logs_rel_def, call_ctx_rel_def, contract_storage_def,
-       contract_transient_def, jump_to_def]
-QED
-
-Theorem state_rel_push_scope:
-  !func cenv cx es s.
-    state_rel func cenv cx (es with scopes := FEMPTY :: es.scopes) s <=>
-    state_rel func cenv cx es s
-Proof
-  simp[state_rel_def, storage_rel_def, transient_rel_def, immutables_rel_def,
-       logs_rel_def, local_ptrs_rel_push_scope]
-QED
-
-Theorem state_rel_pop_scope:
-  !func cenv cx es s sc rest.
-    state_rel func cenv cx es s /\ es.scopes = sc :: rest /\
-    (!n. n IN FDOM sc ==> lookup_scopes n rest = NONE) ==>
-    state_rel func cenv cx (es with scopes := rest) s
-Proof
-  rpt strip_tac >>
-  fs[state_rel_def, storage_rel_def, transient_rel_def, immutables_rel_def,
-     logs_rel_def] >>
-  irule local_ptrs_rel_pop_scope >> qexists_tac `sc` >> gvs[]
-QED
-
-(* state_rel reads the Venom state only through the locals' memory and
-   the fields below. *)
-Theorem state_rel_frame:
-  !func cenv cx es es' s s'.
-    state_rel func cenv cx es s /\ local_ptrs_rel func cenv es'.scopes s' /\
-    es' = es with scopes := es'.scopes /\
-    s'.vs_accounts = s.vs_accounts /\ s'.vs_transient = s.vs_transient /\
-    s'.vs_call_ctx = s.vs_call_ctx /\ s'.vs_tx_ctx = s.vs_tx_ctx /\
-    s'.vs_block_ctx = s.vs_block_ctx /\ s'.vs_logs = s.vs_logs /\
-    s'.vs_outcomes = s.vs_outcomes /\ s'.vs_requests = s.vs_requests /\
-    s'.vs_immutables = s.vs_immutables /\
-    s'.vs_data_section = s.vs_data_section ==>
-    state_rel func cenv cx es' s'
-Proof
-  rpt strip_tac >>
-  qpat_x_assum `es' = _` SUBST1_TAC >>
-  fs[state_rel_def, storage_rel_def, transient_rel_def, immutables_rel_def,
-     logs_rel_def, call_ctx_rel_def, contract_storage_def,
-     contract_transient_def]
-QED
-
-Theorem local_ptrs_rel_inst_idx:
-  !func cenv sc s n.
-    local_ptrs_rel func cenv sc (s with vs_inst_idx := n) <=>
-    local_ptrs_rel func cenv sc s
-Proof
-  simp[local_ptrs_rel_def, local_region_def, local_backed_def, lookup_var_def]
-QED
-
-Theorem alloca_inv_fields:
-  !s s'.
-    alloca_inv s /\ s'.vs_allocas = s.vs_allocas /\
-    s'.vs_alloca_next = s.vs_alloca_next ==> alloca_inv s'
-Proof
-  rw[alloca_inv_def, allocas_non_overlapping_def, alloca_next_valid_def] >>
-  metis_tac[]
-QED
-
-Theorem stmt_state_rel_jump_to:
-  !func cenv cx es s lbl.
-    stmt_state_rel func cenv cx es (jump_to lbl s) <=>
-    stmt_state_rel func cenv cx es s
-Proof
-  simp[stmt_state_rel_def, state_rel_jump_to, jump_to_def, alloca_inv_def,
-       allocas_non_overlapping_def, alloca_next_valid_def]
-QED
-
-Theorem stmt_state_rel_inst_idx:
-  !func cenv cx es s n.
-    stmt_state_rel func cenv cx es (s with vs_inst_idx := n) <=>
-    stmt_state_rel func cenv cx es s
-Proof
-  simp[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def,
-       local_region_def, local_backed_def, lookup_var_def, storage_rel_def,
-       transient_rel_def, immutables_rel_def, logs_rel_def, call_ctx_rel_def,
-       contract_storage_def, contract_transient_def, alloca_inv_def,
-       allocas_non_overlapping_def, alloca_next_valid_def]
-QED
-
-Theorem stmt_state_rel_push_scope:
-  !func cenv cx es s.
-    stmt_state_rel func cenv cx (es with scopes := FEMPTY :: es.scopes) s <=>
-    stmt_state_rel func cenv cx es s
-Proof
-  simp[stmt_state_rel_def, state_rel_push_scope]
-QED
-
-Theorem stmt_state_rel_pop_scope:
-  !func cenv cx es s sc rest.
-    stmt_state_rel func cenv cx es s /\ es.scopes = sc :: rest /\
-    (!n. n IN FDOM sc ==> lookup_scopes n rest = NONE) ==>
-    stmt_state_rel func cenv cx (es with scopes := rest) s
-Proof
-  rw[stmt_state_rel_def] >> metis_tac[state_rel_pop_scope]
-QED
-
-(* Assigning a variable that is no live local's pointer. *)
-Theorem stmt_state_rel_update_var:
-  !func cenv cx es s x w.
-    stmt_state_rel func cenv cx es s /\ not_local_ptr cenv es.scopes x ==>
-    stmt_state_rel func cenv cx es (update_var x w s)
-Proof
-  rpt strip_tac >> fs[stmt_state_rel_def] >> rpt conj_tac
-  >- (irule state_rel_update_var_local >> simp[])
-  >- (irule alloca_inv_fields >> qexists_tac `s` >> simp[update_var_def]) >>
-  simp[update_var_def] >> metis_tac[]
-QED
-
-(* ===== The locals' pointers are reserved ===== *)
-
-Theorem local_ptrs_reserved_next_var:
-  !cenv st st'.
-    local_ptrs_reserved cenv st /\ st.cs_next_var <= st'.cs_next_var ==>
-    local_ptrs_reserved cenv st'
-Proof
-  rw[local_ptrs_reserved_def, not_fresh_at_def] >>
-  metis_tac[arithmeticTheory.LESS_EQ_TRANS]
-QED
-
-(* A variable the compiler hands out from st on is no local's pointer. *)
-Theorem local_ptrs_reserved_fresh:
-  !cenv st scopes n.
-    local_ptrs_reserved cenv st /\ st.cs_next_var <= n ==>
-    not_local_ptr cenv scopes (STRING #"%" (toString n))
-Proof
-  rw[local_ptrs_reserved_def, not_local_ptr_def, not_fresh_at_def] >>
-  strip_tac >> metis_tac[]
-QED
-
-(* A local's pointer is no other local's, so it is no live local's pointer
-   while the local itself is not live. *)
-Theorem local_ptrs_reserved_not_live:
-  !cenv st scopes id p sz.
-    local_ptrs_reserved cenv st /\
-    FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
-    lookup_scopes id scopes = NONE ==>
-    not_local_ptr cenv scopes p
-Proof
-  rw[local_ptrs_reserved_def, not_local_ptr_def] >> strip_tac >>
-  `name = id` by metis_tac[] >> gvs[]
-QED
-
-(* ===== Code containment for the parts of a fragment ===== *)
-
-(* The start of a fragment is in fn too. *)
-Theorem fn_has_code_start:
-  !st st' fn.
-    cs_extends st st' /\ fn_has_code st st' fn ==>
-    ?bb. lookup_block st.cs_current_bb fn.fn_blocks = SOME bb /\
-         isPREFIX st.cs_current_insts bb.bb_instructions
-Proof
-  rw[cs_extends_def] >> Cases_on `new = []` >> gvs[]
-  >- (fs[fn_has_code_def] >> metis_tac[isPREFIX_TRANS]) >>
-  `emitted_blocks st st' = new` by (irule emitted_blocks_append >> simp[]) >>
-  fs[fn_has_code_def] >>
-  qexists_tac `LAST new` >>
-  metis_tac[rich_listTheory.MEM_LAST_NOT_NIL]
-QED
-
-(* fn contains the code of any part of a fragment it contains. *)
-Theorem fn_has_code_mid:
-  !st0 sa sb st' fn.
-    cs_extends st0 sa /\ cs_extends sa sb /\ cs_extends sb st' /\
-    fn_has_code st0 st' fn ==>
-    fn_has_code sa sb fn
-Proof
-  rpt strip_tac >>
-  `cs_extends st0 sb` by metis_tac[cs_extends_trans] >>
-  `fn_has_code st0 sb fn` by metis_tac[fn_has_code_split] >>
-  metis_tac[fn_has_code_split]
-QED
-
-(* A block finished by new_block is in fn as it was finished. *)
-Theorem fn_has_code_new_block:
-  !sa lbl x sb fn.
-    new_block lbl sa = (x, sb) /\ fn_has_code sa sb fn ==>
-    lookup_block sa.cs_current_bb fn.fn_blocks =
-      SOME <| bb_label := sa.cs_current_bb;
-              bb_instructions := sa.cs_current_insts |>
-Proof
-  rw[new_block_def] >>
-  `emitted_blocks sa (sa with <| cs_blocks :=
-       <| bb_label := sa.cs_current_bb;
-          bb_instructions := sa.cs_current_insts |> :: sa.cs_blocks;
-       cs_current_bb := lbl; cs_current_insts := [] |>) =
-   [<| bb_label := sa.cs_current_bb;
-       bb_instructions := sa.cs_current_insts |>]` by
-    (irule emitted_blocks_append >> simp[]) >>
-  fs[fn_has_code_def] >>
-  first_x_assum (qspec_then `<| bb_label := sa.cs_current_bb;
-                               bb_instructions := sa.cs_current_insts |>`
-                   mp_tac) >> simp[]
-QED
-
-Theorem lookup_block_fn_insts:
-  !lbl fn bb i.
-    lookup_block lbl fn.fn_blocks = SOME bb /\ MEM i bb.bb_instructions ==>
-    MEM i (fn_insts fn)
-Proof
-  rw[fn_insts_def] >> drule lookup_block_MEM >>
-  qspec_tac (`fn.fn_blocks`, `bbs`) >>
-  Induct >> rw[fn_insts_blocks_def] >> metis_tac[]
-QED
 
 (* ===== Expression fragments ===== *)
 
@@ -297,7 +73,11 @@ End
 
 (* ===== Reading a word local ===== *)
 
-(* A value held in one memory word under its plain encoding val_to_w256. *)
+(* A value held in one memory word under its plain encoding val_to_w256:
+   the values mstore_establishes_val_in_memory_prim covers.  BytesV, the
+   value of address and bytesN locals, is left out, as it is there: how it
+   sits in its word depends on the type, so it needs its own memory lemma
+   before the slice can cover those locals. *)
 Definition word_value_def:
   word_value v <=>
     (?b. v = BoolV b) \/ (?n. v = IntV n) \/ (?k. v = FlagV k) \/
@@ -611,6 +391,58 @@ QED
    run.  The right-hand side is a word value at es, and its fragment is
    any expr_frag at es; its type annotation fills one word (32 bytes) of
    the local's region. *)
+(* The compile side of a word-local declaration: the ALLOCA, the right-hand
+   side's fragment, and the MSTORE. *)
+Theorem compile_annassign_word_parts:
+  !cenv lctx ty id vtyp e st st' func p sz.
+    compile_stmt cenv lctx ty (AnnAssign id vtyp e) st = ((), st') /\
+    fn_has_code st st' func /\ local_ptrs_reserved cenv st /\
+    FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
+    is_word_type vtyp /\ ~has_length_word vtyp /\
+    (!sa sb op. lower_value compile_expr cenv (expr_type e) e sa = (op, sb) ==>
+                cs_extends sa sb) ==>
+    ?sa sb vop.
+      emit_inst ALLOCA [Lit (n2w sz)] [p] st = ((), sa) /\
+      lower_value compile_expr cenv (expr_type e) e sa = (vop, sb) /\
+      emit_void MSTORE [Var p; vop] sb = ((), st') /\
+      cs_extends st sa /\ cs_extends sa sb /\ cs_extends sb st' /\
+      fn_has_code sa sb func /\
+      MEM (mk_inst st.cs_next_id ALLOCA [Lit (n2w sz)] [p]) (fn_insts func) /\
+      local_ptrs_reserved cenv sa /\ not_fresh_at sa p
+Proof
+  rpt gen_tac >> strip_tac >>
+  `?st1 st2 st3 src_vv val_op.
+     emit_inst ALLOCA [Lit (n2w sz)] [p] st = ((), st1) /\
+     compile_expr cenv (expr_type e) e st1 = (src_vv, st2) /\
+     unwrap_value cenv src_vv st2 = (val_op, st3) /\
+     emit_void MSTORE [Var p; val_op] st3 = ((), st')` by
+    (qpat_x_assum `compile_stmt _ _ _ _ _ = _` mp_tac >>
+     simp[compile_stmt_def, comp_bind_def, comp_ignore_bind_def,
+          comp_return_def, emit_local_alloca_def, compile_assign_value_def,
+          LET_THM] >>
+     rpt (pairarg_tac >> simp[]) >> strip_tac >>
+     imp_res_tac emit_inst_unit >> metis_tac[]) >>
+  `lower_value compile_expr cenv (expr_type e) e st1 = (val_op, st3)` by
+    simp[lower_value_def, comp_bind_def] >>
+  imp_res_tac emit_inst_unit >> imp_res_tac emit_inst_extends >>
+  `cs_extends st st1 /\ cs_extends st1 st3 /\ cs_extends st3 st'` by
+    metis_tac[cs_appends_emit_helpers, cs_appends_def] >>
+  `fn_has_code st1 st3 func /\ fn_has_code st1 st' func` by
+    metis_tac[fn_has_code_split, cs_extends_trans] >>
+  `MEM (mk_inst st.cs_next_id ALLOCA [Lit (n2w sz)] [p]) (fn_insts func)` by
+    (`?bb. lookup_block st1.cs_current_bb func.fn_blocks = SOME bb /\
+           isPREFIX st1.cs_current_insts bb.bb_instructions` by
+       metis_tac[fn_has_code_start, cs_extends_trans] >>
+     `MEM (mk_inst st.cs_next_id ALLOCA [Lit (n2w sz)] [p])
+        bb.bb_instructions` by gvs[rich_listTheory.IS_PREFIX_APPEND] >>
+     metis_tac[lookup_block_fn_insts]) >>
+  `local_ptrs_reserved cenv st1` by
+    (irule local_ptrs_reserved_next_var >> qexists_tac `st` >> simp[]) >>
+  `not_fresh_at st1 p` by (fs[local_ptrs_reserved_def] >> metis_tac[]) >>
+  qexistsl_tac [`st1`, `st3`, `val_op`] >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
 Theorem compile_annassign_word_frag:
   !ctx func cenv cx lctx ty id vtyp e st st' es es' R p sz.
     compile_stmt cenv lctx ty (AnnAssign id vtyp e) st = ((), st') /\
@@ -644,30 +476,10 @@ Proof
      simp[]) >>
   `not_local_ptr cenv es.scopes p /\ not_local_ptr cenv es1.scopes p` by
     metis_tac[local_ptrs_reserved_not_live] >>
-  qpat_x_assum `compile_stmt _ _ _ _ _ = _` mp_tac >>
-  simp[compile_stmt_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
-       emit_local_alloca_def, compile_assign_value_def, LET_THM] >>
-  rpt (pairarg_tac >> simp[]) >> strip_tac >>
-  rename1 `emit_inst ALLOCA _ _ st = (_, st1)` >>
-  rename1 `compile_expr cenv (expr_type e) e st1 = (src_vv, st2)` >>
-  rename1 `unwrap_value cenv src_vv st2 = (val_op, st3)` >>
-  `lower_value compile_expr cenv (expr_type e) e st1 = (val_op, st3)` by
-    simp[lower_value_def, comp_bind_def] >>
-  imp_res_tac emit_inst_unit >> imp_res_tac emit_inst_extends >>
-  `cs_extends st st1 /\ cs_extends st1 st3 /\ cs_extends st3 st'` by
-    metis_tac[cs_appends_emit_helpers, cs_appends_def] >>
-  `fn_has_code st1 st3 func /\ fn_has_code st1 st' func` by
-    metis_tac[fn_has_code_split, cs_extends_trans] >>
-  `MEM (mk_inst st.cs_next_id ALLOCA [Lit (n2w sz)] [p]) (fn_insts func)` by
-    (`?bb. lookup_block st1.cs_current_bb func.fn_blocks = SOME bb /\
-           isPREFIX st1.cs_current_insts bb.bb_instructions` by
-       metis_tac[fn_has_code_start, cs_extends_trans] >>
-     `MEM (mk_inst st.cs_next_id ALLOCA [Lit (n2w sz)] [p])
-        bb.bb_instructions` by gvs[rich_listTheory.IS_PREFIX_APPEND] >>
-     metis_tac[lookup_block_fn_insts]) >>
-  `local_ptrs_reserved cenv st1` by
-    (irule local_ptrs_reserved_next_var >> qexists_tac `st` >> simp[]) >>
-  `not_fresh_at st1 p` by (fs[local_ptrs_reserved_def] >> metis_tac[]) >>
+  qspecl_then [`cenv`, `lctx`, `ty`, `id`, `vtyp`, `e`, `st`, `st'`, `func`,
+               `p`, `sz`] mp_tac compile_annassign_word_parts >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  disch_then (qx_choosel_then [`st1`, `st3`, `val_op`] strip_assume_tac) >>
   irule frag_exec_pointwise >> gen_tac >> BETA_TAC >> strip_tac >>
   qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es`, `st`, `st1`, `p`, `sz`,
                `s0`, `R`] mp_tac annassign_alloca_frag >>
@@ -845,6 +657,86 @@ QED
    branch bodies are fragments of the form of compile_stmts_correct, and
    a body that runs to its end from a fresh block leaves the block open
    (it does not end in a return), so it falls through to the exit. *)
+(* The compile side of an If: the code the condition selects, from the JNZ
+   after the condition to the JMP into the exit block. *)
+Theorem compile_if_taken_branch:
+  !cx cenv lctx ty c ss1 ss2 st st' b esA es2.
+    compile_stmt cenv lctx ty (If c ss1 ss2) st = ((), st') /\
+    (!sa sb op. lower_value compile_expr cenv (BaseT BoolT) c sa = (op, sb) ==>
+                cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var) /\
+    (!ss sa sb. (ss = ss1 \/ ss = ss2) /\
+                compile_stmts cenv lctx ty ss sa = ((), sb) ==>
+                cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var) /\
+    (!ss sa sb esa esb. (ss = ss1 \/ ss = ss2) /\
+       compile_stmts cenv lctx ty ss sa = ((), sb) /\
+       sa.cs_current_insts = [] /\ eval_stmts cx ss esa = (INL (), esb) ==>
+       ~block_is_terminated sb) /\
+    eval_stmts cx (if b then ss1 else ss2) esA = (INL (), es2) ==>
+    ?cond_op s1 s4 s5 s6 then_lbl else_lbl x5 sa sb sx sd exit_lbl lbl' x.
+      lower_value compile_expr cenv (BaseT BoolT) c st = (cond_op, s1) /\
+      s4.cs_current_bb = s1.cs_current_bb /\
+      s4.cs_current_insts = s1.cs_current_insts /\
+      emit_inst JNZ [cond_op; Label then_lbl; Label else_lbl] [] s4 =
+        ((), s5) /\
+      new_block then_lbl s5 = (x5, s6) /\
+      sa.cs_current_bb = (if b then then_lbl else else_lbl) /\
+      sa.cs_current_insts = [] /\ st.cs_next_var <= sa.cs_next_var /\
+      compile_stmts cenv lctx ty (if b then ss1 else ss2) sa = ((), sb) /\
+      cs_extends sa sb /\
+      emit_inst JMP [Label exit_lbl] [] sb = ((), sx) /\
+      new_block lbl' sx = (x, sd) /\
+      st'.cs_current_bb = exit_lbl /\ st'.cs_current_insts = [] /\
+      !f. fn_has_code st st' f ==>
+          fn_has_code st s1 f /\ fn_has_code s5 s6 f /\
+          fn_has_code sa sd f /\ fn_has_code sa sb f
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule compile_if_parts >> strip_tac >>
+  imp_res_tac new_block_props >> imp_res_tac emit_inst_extends >>
+  `~block_is_terminated (if b then s7 else s10)` by
+    (Cases_on `b` >> gvs[] >> metis_tac[]) >>
+  `?x11. new_block exit_lbl s11 = (x11, st')` by (Cases_on `b` >> fs[]) >>
+  imp_res_tac new_block_props >>
+  `!sa sb. (if block_is_terminated sa then sb = sa
+            else emit_inst JMP [Label exit_lbl] [] sa = ((), sb)) ==>
+           cs_extends sa sb /\ sa.cs_next_var = sb.cs_next_var` by
+    (rw[] >> imp_res_tac emit_inst_extends >>
+     metis_tac[cs_extends_refl, cs_appends_emit_helpers, cs_appends_def]) >>
+  `cs_extends st s1 /\ st.cs_next_var <= s1.cs_next_var /\
+   cs_extends s6 s7 /\ s6.cs_next_var <= s7.cs_next_var /\
+   cs_extends s9 s10 /\ s9.cs_next_var <= s10.cs_next_var` by metis_tac[] >>
+  `cs_extends s4 s5 /\ cs_extends s5 s6 /\ cs_extends s7 s8 /\
+   cs_extends s8 s9 /\ cs_extends s10 s11 /\ cs_extends s11 st' /\
+   s7.cs_next_var = s8.cs_next_var` by
+    metis_tac[cs_appends_emit_helpers, cs_appends_def, cs_extends_new_block] >>
+  (* the branch the condition selects *)
+  `?sa sb sx sd lbl' x.
+     sa.cs_current_bb = (if b then then_lbl else else_lbl) /\
+     sa.cs_current_insts = [] /\ st.cs_next_var <= sa.cs_next_var /\
+     compile_stmts cenv lctx ty (if b then ss1 else ss2) sa = ((), sb) /\
+     emit_inst JMP [Label exit_lbl] [] sb = ((), sx) /\
+     new_block lbl' sx = (x, sd) /\
+     cs_extends s6 sa /\ cs_extends sa sb /\ cs_extends sb sd /\
+     cs_extends sd st'` by
+    (Cases_on `b` >> fs[]
+     >- (qexistsl_tac [`s6`, `s7`, `s8`, `s9`, `else_lbl`, `x8`] >>
+         simp[cs_extends_refl] >>
+         metis_tac[cs_extends_trans, arithmeticTheory.LESS_EQ_TRANS]) >>
+     qexistsl_tac [`s9`, `s10`, `s11`, `st'`, `exit_lbl`, `x11`] >>
+     simp[cs_extends_refl] >>
+     metis_tac[cs_extends_trans, arithmeticTheory.LESS_EQ_TRANS]) >>
+  `cs_extends s1 st' /\ cs_extends st s5 /\ cs_extends s6 st' /\
+   cs_extends st sa /\ cs_extends sa sd` by metis_tac[cs_extends_trans] >>
+  `!f. fn_has_code st st' f ==>
+       fn_has_code st s1 f /\ fn_has_code s5 s6 f /\ fn_has_code sa sd f /\
+       fn_has_code sa sb f` by
+    metis_tac[fn_has_code_split, fn_has_code_mid, cs_extends_refl,
+              cs_extends_trans] >>
+  qexistsl_tac [`cond_op`, `s1`, `s4`, `s5`, `s6`, `then_lbl`, `else_lbl`,
+                `x5`, `sa`, `sb`, `sx`, `sd`, `exit_lbl`, `lbl'`, `x`] >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
 Theorem compile_if_frag:
   !ctx func cenv cx lctx ty c ss1 ss2 st st' es es' R.
     compile_stmt cenv lctx ty (If c ss1 ss2) st = ((), st') /\
@@ -872,49 +764,11 @@ Theorem compile_if_frag:
 Proof
   rpt gen_tac >> strip_tac >>
   drule eval_stmt_if_success >> strip_tac >>
-  drule compile_if_parts >> strip_tac >>
   qabbrev_tac `esA = es1 with scopes := FEMPTY :: es1.scopes` >>
-  imp_res_tac new_block_props >> imp_res_tac emit_inst_extends >>
-  `~block_is_terminated (if b then s7 else s10)` by
-    (Cases_on `b` >> gvs[] >> metis_tac[]) >>
-  `?x11. new_block exit_lbl s11 = (x11, st')` by (Cases_on `b` >> fs[]) >>
-  imp_res_tac new_block_props >>
-  `!sa sb. (if block_is_terminated sa then sb = sa
-            else emit_inst JMP [Label exit_lbl] [] sa = ((), sb)) ==>
-           cs_extends sa sb /\ sa.cs_next_var = sb.cs_next_var` by
-    (rw[] >> imp_res_tac emit_inst_extends >>
-     metis_tac[cs_extends_refl, cs_appends_emit_helpers, cs_appends_def]) >>
-  `cs_extends st s1 /\ st.cs_next_var <= s1.cs_next_var /\
-   cs_extends s6 s7 /\ s6.cs_next_var <= s7.cs_next_var /\
-   cs_extends s9 s10 /\ s9.cs_next_var <= s10.cs_next_var` by metis_tac[] >>
-  `cs_extends s4 s5 /\ cs_extends s5 s6 /\ cs_extends s7 s8 /\
-   cs_extends s8 s9 /\ cs_extends s10 s11 /\ cs_extends s11 st' /\
-   s7.cs_next_var = s8.cs_next_var` by
-    metis_tac[cs_appends_emit_helpers, cs_appends_def, cs_extends_new_block] >>
-  (* the branch the condition selects *)
-  `?sa sb sx sd lbl' x.
-     sa.cs_current_bb = (if b then then_lbl else else_lbl) /\
-     sa.cs_current_insts = [] /\ st.cs_next_var <= sa.cs_next_var /\
-     compile_stmts cenv lctx ty (if b then ss1 else ss2) sa = ((), sb) /\
-     eval_stmts cx (if b then ss1 else ss2) esA = (INL (), es2) /\
-     emit_inst JMP [Label exit_lbl] [] sb = ((), sx) /\
-     new_block lbl' sx = (x, sd) /\
-     cs_extends s6 sa /\ cs_extends sa sb /\ cs_extends sb sd /\
-     cs_extends sd st'` by
-    (Cases_on `b` >> fs[]
-     >- (qexistsl_tac [`s6`, `s7`, `s8`, `s9`, `else_lbl`, `x8`] >>
-         simp[cs_extends_refl] >>
-         metis_tac[cs_extends_trans, arithmeticTheory.LESS_EQ_TRANS]) >>
-     qexistsl_tac [`s9`, `s10`, `s11`, `st'`, `exit_lbl`, `x11`] >>
-     simp[cs_extends_refl] >>
-     metis_tac[cs_extends_trans, arithmeticTheory.LESS_EQ_TRANS]) >>
-  `cs_extends s1 st' /\ cs_extends st s5 /\ cs_extends s6 st' /\
-   cs_extends st sa /\ cs_extends sa sd` by metis_tac[cs_extends_trans] >>
-  `!f. fn_has_code st st' f ==>
-       fn_has_code st s1 f /\ fn_has_code s5 s6 f /\ fn_has_code sa sd f /\
-       fn_has_code sa sb f` by
-    metis_tac[fn_has_code_split, fn_has_code_mid, cs_extends_refl,
-              cs_extends_trans] >>
+  qspecl_then [`cx`, `cenv`, `lctx`, `ty`, `c`, `ss1`, `ss2`, `st`, `st'`,
+               `b`, `esA`, `es2`] mp_tac compile_if_taken_branch >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
+  imp_res_tac emit_inst_extends >>
   `local_ptrs_reserved cenv sa` by
     (irule local_ptrs_reserved_next_var >> qexists_tac `st` >> simp[]) >>
   `frag_exec ctx sa sb (stmt_state_rel func cenv cx esA)
@@ -968,23 +822,6 @@ QED
 
 (* ===== Checked addition that overflows ===== *)
 
-Theorem w2n_add_overflow:
-  !a b : bytes32.
-    dimword (:256) <= w2n a + w2n b ==> w2n (a + b) < w2n a
-Proof
-  rpt strip_tac >>
-  `w2n a < dimword (:256) /\ w2n b < dimword (:256)` by simp[wordsTheory.w2n_lt] >>
-  `w2n (a + b) = (w2n a + w2n b) MOD dimword (:256)` by
-    simp[wordsTheory.word_add_def, wordsTheory.w2n_n2w] >>
-  `(w2n a + w2n b) MOD dimword (:256) =
-   (w2n a + w2n b - dimword (:256)) MOD dimword (:256)` by
-    (irule (GSYM arithmeticTheory.SUB_MOD) >> simp[]) >>
-  `(w2n a + w2n b - dimword (:256)) MOD dimword (:256) =
-   w2n a + w2n b - dimword (:256)` by
-    (irule arithmeticTheory.LESS_MOD >> simp[]) >>
-  simp[]
-QED
-
 (* The source's unsigned 256-bit addition fails exactly when the words
    overflow. *)
 Theorem bounded_int_op_add_overflow:
@@ -1014,73 +851,53 @@ Theorem compile_safe_add_overflow_frag:
     frag_exec ctx st st' P Q R
 Proof
   rpt gen_tac >> strip_tac >>
-  gvs[compile_safe_add_def, comp_bind_def, comp_return_def,
-      comp_ignore_bind_def, LET_THM] >>
-  rpt (pairarg_tac >> gvs[]) >>
-  rename1 `emit_op ADD [x; y] st = (op, st1)` >>
-  rename1 `emit_op LT [op; x] st1 = (lt, st2)` >>
-  rename1 `emit_op ISZERO [lt] st2 = (ok, st3)` >>
-  rename1 `emit_void ASSERT [ok] st3 = ((), st4)` >>
-  imp_res_tac emit_op_extends >> imp_res_tac emit_void_extends >>
-  `emitted_insts st3 st4 = [mk_inst st3.cs_next_id ASSERT [ok] []]` by
-    (qpat_x_assum `emit_void ASSERT _ _ = _` mp_tac >>
-     simp[emit_void_assert_inst] >> strip_tac >> gvs[] >>
-     simp[emitted_insts_def, rich_listTheory.DROP_LENGTH_APPEND]) >>
-  `emitted_insts st st4 =
-   emitted_insts st st1 ++ emitted_insts st1 st2 ++ emitted_insts st2 st3 ++
-   emitted_insts st3 st4 /\
-   st4.cs_current_insts = st.cs_current_insts ++ emitted_insts st st4` by
-    (`emitted_insts st2 st4 = emitted_insts st2 st3 ++ emitted_insts st3 st4`
-       by (irule emitted_insts_append >> simp[]) >>
-     `st4.cs_current_insts = st2.cs_current_insts ++ emitted_insts st2 st4`
-       by simp[] >>
-     `emitted_insts st1 st4 = emitted_insts st1 st2 ++ emitted_insts st2 st4`
-       by (irule emitted_insts_append >> simp[]) >>
-     `st4.cs_current_insts = st1.cs_current_insts ++ emitted_insts st1 st4`
-       by simp[] >>
-     `emitted_insts st st4 = emitted_insts st st1 ++ emitted_insts st1 st4`
-       by (irule emitted_insts_append >> simp[]) >>
-     simp[]) >>
-  `st4.cs_blocks = st.cs_blocks /\ st4.cs_current_bb = st.cs_current_bb` by
-    fs[same_blocks_def] >>
-  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
-     (emitted_insts st st4)` by
-    (imp_res_tac emitted_insts_emit_op >>
-     asm_rewrite_tac[] >>
-     simp[venomInstTheory.mk_inst_def, is_terminator_def]) >>
-  irule frag_exec_run_inst_seq >>
-  asm_rewrite_tac[IS_PREFIX_APPEND3] >>
+  `st'.cs_blocks = st.cs_blocks /\ st'.cs_current_bb = st.cs_current_bb /\
+   isPREFIX st.cs_current_insts st'.cs_current_insts /\
+   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+     (emitted_insts st st')` by
+    (qpat_x_assum `compile_safe_add _ _ _ _ = _` mp_tac >> strip_tac >>
+     gvs[compile_safe_add_def, comp_bind_def, comp_return_def,
+         comp_ignore_bind_def, LET_THM] >>
+     rpt (pairarg_tac >> gvs[]) >>
+     rename1 `emit_op ADD [x; y] st = (op, st1)` >>
+     rename1 `emit_op LT [op; x] st1 = (lt, st2)` >>
+     rename1 `emit_op ISZERO [lt] st2 = (ok, st3)` >>
+     rename1 `emit_void ASSERT [ok] st3 = ((), st4)` >>
+     imp_res_tac emit_op_extends >> imp_res_tac emit_void_extends >>
+     `emitted_insts st3 st4 = [mk_inst st3.cs_next_id ASSERT [ok] []]` by
+       (qpat_x_assum `emit_void ASSERT _ _ = _` mp_tac >>
+        simp[emit_void_assert_inst] >> strip_tac >> gvs[] >>
+        simp[emitted_insts_def, rich_listTheory.DROP_LENGTH_APPEND]) >>
+     `emitted_insts st st4 =
+      emitted_insts st st1 ++ emitted_insts st1 st2 ++ emitted_insts st2 st3 ++
+      emitted_insts st3 st4 /\
+      st4.cs_current_insts = st.cs_current_insts ++ emitted_insts st st4` by
+       (`emitted_insts st2 st4 = emitted_insts st2 st3 ++ emitted_insts st3 st4`
+          by (irule emitted_insts_append >> simp[]) >>
+        `st4.cs_current_insts = st2.cs_current_insts ++ emitted_insts st2 st4`
+          by simp[] >>
+        `emitted_insts st1 st4 = emitted_insts st1 st2 ++ emitted_insts st2 st4`
+          by (irule emitted_insts_append >> simp[]) >>
+        `st4.cs_current_insts = st1.cs_current_insts ++ emitted_insts st1 st4`
+          by simp[] >>
+        `emitted_insts st st4 = emitted_insts st st1 ++ emitted_insts st1 st4`
+          by (irule emitted_insts_append >> simp[]) >>
+        simp[]) >>
+     `st4.cs_blocks = st.cs_blocks /\ st4.cs_current_bb = st.cs_current_bb` by
+       fs[same_blocks_def] >>
+     `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+        (emitted_insts st st4)` by
+       (imp_res_tac emitted_insts_emit_op >>
+        asm_rewrite_tac[] >>
+        simp[venomInstTheory.mk_inst_def, is_terminator_def]) >>
+     asm_rewrite_tac[IS_PREFIX_APPEND3]) >>
+  irule frag_exec_run_inst_seq >> asm_rewrite_tac[] >>
   rpt strip_tac >> disj2_tac >>
   `fresh_vars_wrt st s /\
    ?a b. eval_operand x s = SOME a /\ eval_operand y s = SOME b /\
          dimword (:256) <= w2n a + w2n b` by metis_tac[] >>
-  qspecl_then [`x`, `y`, `a`, `b`, `st`, `op`, `st1`, `s`] mp_tac
-    emit_op_ADD_correct >> simp[] >> strip_tac >>
-  rename1 `run_inst_seq (emitted_insts st st1) s = OK ss1` >>
-  qspecl_then [`op`, `x`, `a + b`, `a`, `st1`, `lt`, `st2`, `ss1`] mp_tac
-    emit_op_LT_correct >> simp[] >> strip_tac >>
-  rename1 `run_inst_seq (emitted_insts st1 st2) ss1 = OK ss2` >>
-  qspecl_then [`lt`, `bool_to_word (w2n (a + b) < w2n a)`, `st2`, `ok`,
-               `st3`, `ss2`] mp_tac emit_op_ISZERO_correct >>
-  simp[] >> strip_tac >>
-  rename1 `run_inst_seq (emitted_insts st2 st3) ss2 = OK ss3` >>
-  `w2n (a + b) < w2n a` by (irule w2n_add_overflow >> simp[]) >>
-  `eval_operand ok ss3 = SOME 0w` by fs[bool_to_word_def] >>
-  `run_inst_seq (emitted_insts st3 st4) ss3 =
-   Abort Revert_abort (revert_state (set_returndata [] ss3))` by
-    simp[run_inst_seq_def, assert_false_correct] >>
-  qexistsl_tac [`Revert_abort`,
-                `revert_state (set_returndata [] ss3)`] >>
-  conj_tac >- (
-    asm_rewrite_tac[GSYM APPEND_ASSOC] >>
-    qpat_x_assum `run_inst_seq (emitted_insts st st1) s = OK ss1`
-      (fn th => rewrite_tac [MATCH_MP run_inst_seq_append th]) >>
-    qpat_x_assum `run_inst_seq (emitted_insts st1 st2) ss1 = OK ss2`
-      (fn th => rewrite_tac [MATCH_MP run_inst_seq_append th]) >>
-    qpat_x_assum `run_inst_seq (emitted_insts st2 st3) ss2 = OK ss3`
-      (fn th => rewrite_tac [MATCH_MP run_inst_seq_append th]) >>
-    simp[run_inst_seq_def, assert_false_correct]) >>
-  simp[]
+  drule_all compile_safe_add_overflow >> strip_tac >>
+  qexistsl_tac [`Revert_abort`, `ss'`] >> simp[]
 QED
 
 (* Slice lemma 3: a checked unsigned 256-bit addition whose source result is

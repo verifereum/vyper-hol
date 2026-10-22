@@ -42,6 +42,12 @@
  *   run_from_jump_result  — every non-Error result after a jump is a result
  *                           before it, PHIs in the target or not
  *   frag_exec_enter       — jumping into the start of a fragment
+ *
+ * Helpers:
+ *   fn_has_code_start, fn_has_code_mid, fn_has_code_new_block — the blocks
+ *                           and instructions a contained fragment puts in
+ *                           the function
+ *   lookup_block_fn_insts — an instruction of a looked-up block is in fn_insts
  *)
 
 Theory fragExec
@@ -268,6 +274,66 @@ Proof
       metis_tac[rich_listTheory.MEM_LAST_NOT_NIL])
   >- metis_tac[] >>
   metis_tac[]
+QED
+
+(* The start of a fragment is in fn too. *)
+Theorem fn_has_code_start:
+  !st st' fn.
+    cs_extends st st' /\ fn_has_code st st' fn ==>
+    ?bb. lookup_block st.cs_current_bb fn.fn_blocks = SOME bb /\
+         isPREFIX st.cs_current_insts bb.bb_instructions
+Proof
+  rw[cs_extends_def] >> Cases_on `new = []` >> gvs[]
+  >- (fs[fn_has_code_def] >> metis_tac[isPREFIX_TRANS]) >>
+  `emitted_blocks st st' = new` by (irule emitted_blocks_append >> simp[]) >>
+  fs[fn_has_code_def] >>
+  qexists_tac `LAST new` >>
+  metis_tac[rich_listTheory.MEM_LAST_NOT_NIL]
+QED
+
+(* fn contains the code of any part of a fragment it contains. *)
+Theorem fn_has_code_mid:
+  !st0 sa sb st' fn.
+    cs_extends st0 sa /\ cs_extends sa sb /\ cs_extends sb st' /\
+    fn_has_code st0 st' fn ==>
+    fn_has_code sa sb fn
+Proof
+  rpt strip_tac >>
+  `cs_extends st0 sb` by metis_tac[cs_extends_trans] >>
+  `fn_has_code st0 sb fn` by metis_tac[fn_has_code_split] >>
+  metis_tac[fn_has_code_split]
+QED
+
+(* A block finished by new_block is in fn as it was finished. *)
+Theorem fn_has_code_new_block:
+  !sa lbl x sb fn.
+    new_block lbl sa = (x, sb) /\ fn_has_code sa sb fn ==>
+    lookup_block sa.cs_current_bb fn.fn_blocks =
+      SOME <| bb_label := sa.cs_current_bb;
+              bb_instructions := sa.cs_current_insts |>
+Proof
+  rw[new_block_def] >>
+  `emitted_blocks sa (sa with <| cs_blocks :=
+       <| bb_label := sa.cs_current_bb;
+          bb_instructions := sa.cs_current_insts |> :: sa.cs_blocks;
+       cs_current_bb := lbl; cs_current_insts := [] |>) =
+   [<| bb_label := sa.cs_current_bb;
+       bb_instructions := sa.cs_current_insts |>]` by
+    (irule emitted_blocks_append >> simp[]) >>
+  fs[fn_has_code_def] >>
+  first_x_assum (qspec_then `<| bb_label := sa.cs_current_bb;
+                               bb_instructions := sa.cs_current_insts |>`
+                   mp_tac) >> simp[]
+QED
+
+Theorem lookup_block_fn_insts:
+  !lbl fn bb i.
+    lookup_block lbl fn.fn_blocks = SOME bb /\ MEM i bb.bb_instructions ==>
+    MEM i (fn_insts fn)
+Proof
+  rw[fn_insts_def] >> drule lookup_block_MEM >>
+  qspec_tac (`fn.fn_blocks`, `bbs`) >>
+  Induct >> rw[fn_insts_blocks_def] >> metis_tac[]
 QED
 
 (* ===== Judgment rules ===== *)

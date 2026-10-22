@@ -12,6 +12,15 @@
  *   compile_binop_correct    — binary operation case
  *
  * Helper:
+ *   state_rel_jump_to, state_rel_push_scope, state_rel_pop_scope,
+ *   state_rel_frame, stmt_state_rel_jump_to, stmt_state_rel_inst_idx,
+ *   stmt_state_rel_push_scope, stmt_state_rel_pop_scope,
+ *   stmt_state_rel_update_var — frames for the state relations
+ *   local_ptrs_reserved_next_var, local_ptrs_reserved_fresh,
+ *   local_ptrs_reserved_not_live — local_ptrs_reserved survives a later
+ *                              cs_next_var, and fresh variables and the
+ *                              pointers of locals out of scope are not
+ *                              live local pointers
  *
  * Mirrors correctness of: exprLoweringScript.sml (compile_expr)
  * Source semantics: vyperInterpreterScript.sml (eval_expr)
@@ -24,7 +33,7 @@ Ancestors
   venomExecSemantics venomState venomInst venomInstProps
   vyperInterpreter vyperContext
   vyperState vyperValueOperation
-  valueEncoding valueEncodingProofs localPtrsProps
+  valueEncoding valueEncodingProofs localPtrsProps venomMemDefs
   vyperAST vyperTyping
 Libs
   pairLib BasicProvers
@@ -321,6 +330,140 @@ Proof
   fs[state_rel_def, update_var_def, storage_rel_def,
      transient_rel_def, immutables_rel_def, logs_rel_def, call_ctx_rel_def,
      contract_storage_def, contract_transient_def]
+QED
+
+Theorem state_rel_jump_to:
+  !func cenv cx es s lbl.
+    state_rel func cenv cx es (jump_to lbl s) <=> state_rel func cenv cx es s
+Proof
+  simp[state_rel_def, local_ptrs_rel_def, local_region_def, local_backed_def,
+       lookup_var_def, storage_rel_def, transient_rel_def, immutables_rel_def,
+       logs_rel_def, call_ctx_rel_def, contract_storage_def,
+       contract_transient_def, jump_to_def]
+QED
+
+Theorem state_rel_push_scope:
+  !func cenv cx es s.
+    state_rel func cenv cx (es with scopes := FEMPTY :: es.scopes) s <=>
+    state_rel func cenv cx es s
+Proof
+  simp[state_rel_def, storage_rel_def, transient_rel_def, immutables_rel_def,
+       logs_rel_def, local_ptrs_rel_push_scope]
+QED
+
+Theorem state_rel_pop_scope:
+  !func cenv cx es s sc rest.
+    state_rel func cenv cx es s /\ es.scopes = sc :: rest /\
+    (!n. n IN FDOM sc ==> lookup_scopes n rest = NONE) ==>
+    state_rel func cenv cx (es with scopes := rest) s
+Proof
+  rpt strip_tac >>
+  fs[state_rel_def, storage_rel_def, transient_rel_def, immutables_rel_def,
+     logs_rel_def] >>
+  irule local_ptrs_rel_pop_scope >> qexists_tac `sc` >> gvs[]
+QED
+
+(* state_rel reads the Venom state only through the locals' memory and
+   the fields below. *)
+Theorem state_rel_frame:
+  !func cenv cx es es' s s'.
+    state_rel func cenv cx es s /\ local_ptrs_rel func cenv es'.scopes s' /\
+    es' = es with scopes := es'.scopes /\
+    s'.vs_accounts = s.vs_accounts /\ s'.vs_transient = s.vs_transient /\
+    s'.vs_call_ctx = s.vs_call_ctx /\ s'.vs_tx_ctx = s.vs_tx_ctx /\
+    s'.vs_block_ctx = s.vs_block_ctx /\ s'.vs_logs = s.vs_logs /\
+    s'.vs_outcomes = s.vs_outcomes /\ s'.vs_requests = s.vs_requests /\
+    s'.vs_immutables = s.vs_immutables /\
+    s'.vs_data_section = s.vs_data_section ==>
+    state_rel func cenv cx es' s'
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `es' = _` SUBST1_TAC >>
+  fs[state_rel_def, storage_rel_def, transient_rel_def, immutables_rel_def,
+     logs_rel_def, call_ctx_rel_def, contract_storage_def,
+     contract_transient_def]
+QED
+
+Theorem stmt_state_rel_jump_to:
+  !func cenv cx es s lbl.
+    stmt_state_rel func cenv cx es (jump_to lbl s) <=>
+    stmt_state_rel func cenv cx es s
+Proof
+  simp[stmt_state_rel_def, state_rel_jump_to, jump_to_def, alloca_inv_def,
+       allocas_non_overlapping_def, alloca_next_valid_def]
+QED
+
+Theorem stmt_state_rel_inst_idx:
+  !func cenv cx es s n.
+    stmt_state_rel func cenv cx es (s with vs_inst_idx := n) <=>
+    stmt_state_rel func cenv cx es s
+Proof
+  simp[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def,
+       local_region_def, local_backed_def, lookup_var_def, storage_rel_def,
+       transient_rel_def, immutables_rel_def, logs_rel_def, call_ctx_rel_def,
+       contract_storage_def, contract_transient_def, alloca_inv_def,
+       allocas_non_overlapping_def, alloca_next_valid_def]
+QED
+
+Theorem stmt_state_rel_push_scope:
+  !func cenv cx es s.
+    stmt_state_rel func cenv cx (es with scopes := FEMPTY :: es.scopes) s <=>
+    stmt_state_rel func cenv cx es s
+Proof
+  simp[stmt_state_rel_def, state_rel_push_scope]
+QED
+
+Theorem stmt_state_rel_pop_scope:
+  !func cenv cx es s sc rest.
+    stmt_state_rel func cenv cx es s /\ es.scopes = sc :: rest /\
+    (!n. n IN FDOM sc ==> lookup_scopes n rest = NONE) ==>
+    stmt_state_rel func cenv cx (es with scopes := rest) s
+Proof
+  rw[stmt_state_rel_def] >> metis_tac[state_rel_pop_scope]
+QED
+
+(* Assigning a variable that is no live local's pointer. *)
+Theorem stmt_state_rel_update_var:
+  !func cenv cx es s x w.
+    stmt_state_rel func cenv cx es s /\ not_local_ptr cenv es.scopes x ==>
+    stmt_state_rel func cenv cx es (update_var x w s)
+Proof
+  rpt strip_tac >> fs[stmt_state_rel_def] >> rpt conj_tac
+  >- (irule state_rel_update_var_local >> simp[])
+  >- (irule alloca_inv_fields >> qexists_tac `s` >> simp[update_var_def]) >>
+  simp[update_var_def] >> metis_tac[]
+QED
+
+Theorem local_ptrs_reserved_next_var:
+  !cenv st st'.
+    local_ptrs_reserved cenv st /\ st.cs_next_var <= st'.cs_next_var ==>
+    local_ptrs_reserved cenv st'
+Proof
+  rw[local_ptrs_reserved_def, not_fresh_at_def] >>
+  metis_tac[arithmeticTheory.LESS_EQ_TRANS]
+QED
+
+(* A variable the compiler hands out from st on is no local's pointer. *)
+Theorem local_ptrs_reserved_fresh:
+  !cenv st scopes n.
+    local_ptrs_reserved cenv st /\ st.cs_next_var <= n ==>
+    not_local_ptr cenv scopes (STRING #"%" (toString n))
+Proof
+  rw[local_ptrs_reserved_def, not_local_ptr_def, not_fresh_at_def] >>
+  strip_tac >> metis_tac[]
+QED
+
+(* A local's pointer is no other local's, so it is no live local's pointer
+   while the local itself is not live. *)
+Theorem local_ptrs_reserved_not_live:
+  !cenv st scopes id p sz.
+    local_ptrs_reserved cenv st /\
+    FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
+    lookup_scopes id scopes = NONE ==>
+    not_local_ptr cenv scopes p
+Proof
+  rw[local_ptrs_reserved_def, not_local_ptr_def] >> strip_tac >>
+  `name = id` by metis_tac[] >> gvs[]
 QED
 
 (* step_inst_base for MLOAD: reads 32 bytes from memory *)
