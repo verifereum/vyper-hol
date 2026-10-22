@@ -59,8 +59,8 @@ Definition run_fragment_blocks_def:
         | Error e => Error e
 End
 
-(* Run a compiled fragment (partial CFG). Like run_compiled_blocks but
-   uses run_fragment_blocks: exits with OK when execution reaches a
+(* Run a compiled fragment (partial CFG) assembled into a function of its
+   own, using run_fragment_blocks: exits with OK when execution reaches a
    label not in the assembled blocks. *)
 Definition run_compiled_fragment_def:
   run_compiled_fragment ctx st st' ss fuel =

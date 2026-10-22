@@ -9,3 +9,4 @@ Ancestors
   vyperTypeSelectedEntry
   vyperTypeEntryDefaults
   vyperTypeSelectedEntrySoundness
+  vyperTypeDeploymentSoundness

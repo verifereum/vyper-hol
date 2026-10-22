@@ -3278,14 +3278,12 @@ Proof
       irule preserves_immutables_dom_trans >> first_assum (irule_at Any) >>
       irule preserves_immutables_dom_eq >> gvs[])
   (* CreateTarget *)
-  >- (qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-      simp[Once evaluate_def, bind_def] >>
-      Cases_on `eval_exprs cx es st` >> Cases_on `q` >> simp[] >>
-      strip_tac >>
-      first_x_assum drule >> strip_tac >>
-      drule eval_create_preserves_scopes_immutables >> strip_tac >>
-      irule preserves_immutables_dom_trans >> first_assum (irule_at Any) >>
-      irule preserves_immutables_dom_eq >> gvs[])
+  >- (Cases_on `kind` >> gvs[] >>
+      gvs[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs()] >>
+      imp_res_tac check_create_blueprint_result_state >> gvs[] >>
+      res_tac >>
+      imp_res_tac eval_create_preserves_scopes_immutables >>
+      metis_tac[preserves_immutables_dom_trans, preserves_immutables_dom_eq])
   >- gvs[evaluate_def, return_def, preserves_immutables_dom_refl]
   >- (drule_all case_eval_exprs_cons_imm_dom >> simp[])
 QED

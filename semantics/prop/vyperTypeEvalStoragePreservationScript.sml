@@ -2,7 +2,7 @@
 
 Theory vyperTypeEvalStoragePreservation
 Ancestors
-  pair vyperCreate vyperInterpreter vyperState vyperStorageBackend vyperStorageLayoutSafety
+  pair vyperAST vyperCreate vyperInterpreter vyperState vyperStorageBackend vyperStorageLayoutSafety
   vyperTypeSystem vyperTypeEnv vyperTypeInvariants vyperTypeValues vyperTypeCallGraph
   vyperEvalMisc vyperStatePreservation vyperScopePreservation
   vyperTypeCallStackSoundness vyperValue
@@ -2969,7 +2969,7 @@ QED
 Theorem eval_create_contract_storage_postulate[local]:
   protected_storage_creates_preserve cx /\
   contract_storage_well_formed cx st /\
-  eval_create cx kind has_salt rof arg_tys vs st = (res,st') ==>
+  eval_create cx kind has_salt rof arg_tys vs blueprint_size st = (res,st') ==>
   contract_storage_well_formed cx st'
 Proof
   strip_tac >>
@@ -2979,11 +2979,13 @@ Proof
   Cases_on `create_arg_ctor_types kind has_salt arg_tys` >-
     gvs[eval_create_def, bind_def, lift_option_type_def, return_def, raise_def] >>
   rename1 `create_arg_ctor_types kind has_salt arg_tys = SOME ctor_tys` >>
-  Cases_on `build_create_code (get_tenv cx) kind ops st.accounts ctor_tys` >>
+  Cases_on `build_create_code (get_tenv cx) kind ops st.accounts ctor_tys blueprint_size` >>
   gvs[eval_create_def, bind_def, ignore_bind_def, lift_option_type_def,
       get_accounts_def, check_def, return_def, raise_def, AllCaseEqs()] >>
-  rename1 `build_create_code (get_tenv cx) kind ops st.accounts ctor_tys =
+  rename1 `build_create_code (get_tenv cx) kind ops st.accounts ctor_tys blueprint_size =
             SOME code_info` >>
+  (* Rejecting oversized initcode cannot alter protected storage. *)
+  Cases_on `code_info.cc_size_ok` >>
   (* COND_RATOR eta-expands the two pre-conditions, so the following gvs splits
      them into (balance, collision) = (T,T), (T,F), (F,T), (F,F) *)
   gvs[eval_create_def, bind_apply, ignore_bind_apply, lift_option_type_def,
@@ -3013,6 +3015,56 @@ Resume eval_all_storage_preservation_mutual[Expr_Call_CreateTarget]:
     qpat_x_assum `well_typed_expr env
         (Call _ (CreateTarget _ _ _) es _)` mp_tac >>
     rewrite_tac[Once well_typed_expr_def] >> strip_tac >>
+    Cases_on `kind` >| [ALL_TAC, ALL_TAC, (
+      rename1 `CreateFromBlueprint raw_args` >>
+      full_simp_tac bool_ss [create_kind_11, create_kind_distinct] >>
+      `well_typed_exprs env (TAKE (if has_salt then 4 else 3) es)` by
+        metis_tac[well_typed_exprs_TAKE] >>
+      `well_typed_exprs env (DROP (if has_salt then 4 else 3) es)` by
+        metis_tac[well_typed_exprs_DROP] >>
+      `call_evaluation_safe cx
+         (int_calls_exprs (TAKE (if has_salt then 4 else 3) es))` by
+        metis_tac[call_evaluation_safe_exprs_TAKE] >>
+      `call_evaluation_safe cx
+         (int_calls_exprs (DROP (if has_salt then 4 else 3) es))` by
+        metis_tac[call_evaluation_safe_exprs_DROP] >>
+      qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+      simp_tac(srw_ss())[Once evaluate_def, bind_def] >>
+      Cases_on `eval_exprs cx (TAKE (if has_salt then 4 else 3) es) st` >>
+      rename1 `eval_exprs cx (TAKE (if has_salt then 4 else 3) es) st =
+                 (prefix_res,prefix_st)` >>
+      first_x_assum drule_all >> strip_tac >>
+      `runtime_consistent env cx prefix_st` by
+        metis_tac[eval_exprs_preserves_runtime_consistent,
+                  runtime_storage_consistent_runtime] >>
+      `runtime_storage_consistent env cx prefix_st` by
+        metis_tac[runtime_storage_consistent_intro,
+                  runtime_storage_consistent_layout] >>
+      Cases_on `prefix_res` >> gvs[]
+      >- (
+        rename1 `eval_exprs cx (TAKE (if has_salt then 4 else 3) es) st =
+                   (INL prefix,prefix_st)` >>
+        Cases_on `check_create_blueprint has_salt prefix prefix_st` >>
+        rename1 `check_create_blueprint has_salt prefix prefix_st =
+                   (gate_res,gate_st)` >>
+        `gate_st = prefix_st` by (
+          qpat_x_assum `check_create_blueprint has_salt prefix prefix_st = _`
+            (mp_tac o Q.AP_TERM `SND`) >> simp[]) >>
+        gvs[] >>
+        rename1 `eval_exprs cx (TAKE (if has_salt then 4 else 3) es) st =
+                   (INL prefix,prefix_st)` >>
+        Cases_on `gate_res` >> gvs[]
+        >- (
+          Cases_on `eval_exprs cx (DROP (if has_salt then 4 else 3) es) prefix_st` >>
+          rename1 `eval_exprs cx (DROP (if has_salt then 4 else 3) es) prefix_st =
+                     (suffix_res,suffix_st)` >>
+          ORACLE_STORAGE_TAC >>
+          first_x_assum drule_all >> strip_tac >>
+          Cases_on `suffix_res` >> gvs[] >> strip_tac >>
+          metis_tac[eval_create_contract_storage_postulate]) >>
+        strip_tac >> gvs[]) >>
+      strip_tac >> gvs[]), ALL_TAC] >>
+    full_simp_tac bool_ss [create_kind_11, create_kind_distinct] >>
     qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
     simp[Once evaluate_def, bind_def] >>
     Cases_on `eval_exprs cx es st` >>
@@ -3024,7 +3076,9 @@ Resume eval_all_storage_preservation_mutual[Expr_Call_CreateTarget]:
        postulate, exactly as external calls use protected_storage_calls_preserve
        above. *)
     metis_tac[eval_create_contract_storage_postulate]) >>
-  rpt strip_tac >> gvs[Once well_typed_expr_def]
+  rpt strip_tac >>
+  qpat_x_assum `type_place_expr env (Call _ _ _ _) = SOME _` mp_tac >>
+  simp[Once well_typed_expr_def]
 QED
 
 Theorem eval_iterator_success_values_typed[local]:
