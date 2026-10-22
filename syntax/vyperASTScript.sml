@@ -266,7 +266,8 @@ Datatype:
   | Pop type base_assignment_target
   | Call type call_target (expr list) (expr option)
       (* expr list: arguments -- see ExtCall above for conventions *)
-      (* expr option: default return value *)
+      (* expr option: NONE except for IntCall; extcall/staticcall pass
+         default_return_value= among the arguments (ext_call_opts) *)
 ; base_assignment_target
   = NameTarget identifier              (* local/scoped variable target *)
   | TopLevelNameTarget nsid            (* top-level binding target *)
