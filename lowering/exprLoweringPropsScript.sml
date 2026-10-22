@@ -22,7 +22,7 @@ Ancestors
   venomExecSemantics venomState venomInst venomInstProps
   vyperInterpreter vyperContext
   vyperState vyperValueOperation
-  valueEncoding valueEncodingProofs
+  valueEncoding valueEncodingProofs localPtrsProps
   vyperAST vyperTyping
 Libs
   pairLib BasicProvers
@@ -104,8 +104,8 @@ Definition well_annotated_def:
 End
 
 Theorem compile_expr_correct:
-  ∀ cenv cx ty e es ss st op st' v es'.
-    state_rel cenv cx es ss ∧
+  ∀ func cenv cx ty e es ss st op st' v es'.
+    state_rel func cenv cx es ss ∧
     fresh_vars_wrt st ss ∧
     supported_expr e ∧
     well_annotated e ∧
@@ -115,7 +115,7 @@ Theorem compile_expr_correct:
     ∃ ss'.
       run_inst_seq (emitted_insts st st') ss = OK ss' ∧
       eval_operand op ss' = SOME (val_to_w256 v) ∧
-      state_rel cenv cx es' ss' ∧
+      state_rel func cenv cx es' ss' ∧
       same_blocks st st' ∧
       st'.cs_current_insts = st.cs_current_insts ++ emitted_insts st st' ∧
       ¬ss'.vs_halted ∧
@@ -279,12 +279,17 @@ Proof
   simp[eval_operand_def]
 QED
 
-(* state_rel is preserved by update_var (only changes vs_vars) *)
+(* update_var keeps state_rel unless it overwrites a live local's pointer:
+   the other conjuncts do not read vs_vars. *)
 Theorem state_rel_update_var_local:
-  !cenv cx es ss name w.
-    state_rel cenv cx es ss ==> state_rel cenv cx es (update_var name w ss)
+  ∀ func cenv cx es ss name w.
+    state_rel func cenv cx es ss ∧ not_local_ptr cenv es.scopes name ⇒
+    state_rel func cenv cx es (update_var name w ss)
 Proof
-  rw[state_rel_def, update_var_def, vars_rel_def, storage_rel_def,
+  rpt strip_tac >>
+  `local_ptrs_rel func cenv es.scopes (update_var name w ss)` by
+    (irule local_ptrs_rel_update_var >> fs[state_rel_def]) >>
+  fs[state_rel_def, update_var_def, storage_rel_def,
      transient_rel_def, immutables_rel_def, logs_rel_def, call_ctx_rel_def,
      contract_storage_def, contract_transient_def]
 QED
@@ -318,8 +323,8 @@ QED
 (* --- Literal --- *)
 (* Covers word-type literals only. Bytestring/string literals allocate buffers. *)
 Theorem compile_literal_vv_correct:
-  ∀ cenv cx ty l es ss st vv st'.
-    state_rel cenv cx es ss ∧
+  ∀ func cenv cx ty l es ss st vv st'.
+    state_rel func cenv cx es ss ∧
     compile_literal_vv ty l st = (vv, st') ∧
     (* Word literals only — dynamic bytes/strings allocate buffers *)
     (* Word literals only — exclude bytestring/string types that allocate buffers *)
@@ -345,8 +350,8 @@ Proof
 QED
 
 (* --- Name (local variable load) --- *)
-(* v must be a primitive (word-sized) value,
-   and offset must fit in a word (offset < dimword(:256)).
+(* v must be a primitive (word-sized) value.  The local is held through its
+   pointer variable (PtrVar), which is what state_rel relates.
    Uses typed_val_to_w256 (not val_to_w256) to avoid BytesV address heuristic.
    The type_value tv from the scope correctly distinguishes address from bytesN. *)
 (* NOTE: original statement was FALSE for v = NoneV and for
@@ -356,12 +361,11 @@ QED
    while typed_val_to_w256 NoneV = 0w.
    Fix: added v ≠ NoneV and value_has_type entry.type v. *)
 Theorem compile_name_correct:
-  ∀ cenv cx ty ann id es ss st op st' v es' offset size entry.
-    state_rel cenv cx es ss ∧
+  ∀ func cenv cx ty ann id es ss st op st' v es' p size entry.
+    state_rel func cenv cx es ss ∧
     eval_expr cx (Name ann id) es = (INL (Value v), es') ∧
     lower_value compile_expr cenv ty (Name ann id) st = (op, st') ∧
-    FLOOKUP cenv.ce_vars id = SOME (MemLoc offset size) ∧
-    offset < dimword (:256) ∧
+    FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) size) ∧
     lookup_scopes id es.scopes = SOME entry ∧
     entry.value = v ∧
     v ≠ NoneV ∧
@@ -385,8 +389,8 @@ QED
    bounds checking, compiler uses type_bounds(expr_type e1).
    Fix: added type consistency + fresh_vars_wrt + named annotation. *)
 Theorem compile_binop_correct:
-  ∀ cenv cx ty ann bop e1 e2 es ss st op st' v es'.
-    state_rel cenv cx es ss ∧
+  ∀ func cenv cx ty ann bop e1 e2 es ss st op st' v es'.
+    state_rel func cenv cx es ss ∧
     fresh_vars_wrt st ss ∧
     (∀u. type_to_int_bound ann = SOME u ⇒
          type_to_int_bound (expr_type e1) = SOME u) ∧
@@ -396,7 +400,7 @@ Theorem compile_binop_correct:
     ∃ ss'.
       run_inst_seq (emitted_insts st st') ss = OK ss' ∧
       eval_operand op ss' = SOME (val_to_w256 v) ∧
-      state_rel cenv cx es' ss'
+      state_rel func cenv cx es' ss'
 Proof
   cheat
 QED
@@ -457,8 +461,8 @@ QED
    Fix: named annotation, added type_to_int_bound constraint, and
    restricted ann to signed IntT. *)
 Theorem compile_neg_correct:
-  ∀ cenv cx ty ann e es ss st op st' v es' n.
-    state_rel cenv cx es ss ∧
+  ∀ func cenv cx ty ann e es ss st op st' v es' n.
+    state_rel func cenv cx es ss ∧
     eval_expr cx (Builtin ann Neg [e]) es = (INL (Value v), es') ∧
     ann = BaseT (IntT n) ∧
     type_to_int_bound ann = type_to_int_bound (expr_type e) ∧
@@ -467,7 +471,7 @@ Theorem compile_neg_correct:
     ∃ ss'.
       run_inst_seq (emitted_insts st st') ss = OK ss' ∧
       eval_operand op ss' = SOME (val_to_w256 v) ∧
-      state_rel cenv cx es' ss'
+      state_rel func cenv cx es' ss'
 Proof
   cheat
 QED

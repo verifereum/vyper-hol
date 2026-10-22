@@ -641,27 +641,11 @@ Definition well_formed_cenv_def:
        FLOOKUP cenv.ce_vars n = SOME (MemLoc off sz) ⇒ sz > 0 ∧ (sz MOD 32 = 0))
 End
 
-(* Local variables in Vyper scopes match Venom memory.
-   Only handles MemLoc (local memory variables) because:
-   - StorageLoc variables (self.x) are covered by storage_rel
-   - TransientLoc/ImmutableLoc are similar global state
-   - Scopes only contain local (stack-like) variables *)
-Definition vars_rel_def:
-  vars_rel cenv scopes ss =
-    ∀ name entry offset size.
-      lookup_scopes name scopes = SOME entry ∧
-      FLOOKUP cenv.ce_vars name = SOME (MemLoc offset size)
-      ⇒
-      (* entry.type from scope provides correct type for val_in_memory dispatch
-         (e.g., AddressT → right-aligned BytesV encoding). *)
-      val_in_memory entry.type entry.value offset ss.vs_memory
-End
-
 (* ===== Locals held through allocations ===== *)
 (* After function lowering a local is PtrVar (Var p) sz: the ALLOCA emitted at
    its declaration binds p to the base of a fresh region (emit_local_alloca,
    compile_alloc_buffer), so the address depends on vs_allocas and
-   vs_alloca_next at run time.  vars_rel only covers MemLoc entries.
+   vs_alloca_next at run time, not on a fixed offset.
    Parameters of internal functions are PtrVar (Var p) sz too
    (materialize_internal_params): a stack-passed one is copied into an ALLOCA
    of the callee, a memory-passed one is the PARAM output p pointing into the
@@ -941,9 +925,24 @@ End
 (* Top-level oracle-mode state relation (PLAN 5.7).
    Ties together all sub-relations and exactly the current oracle suffix and
    request prefix. NONE-mode compatibility does not satisfy this relation. *)
+(* Source/Venom state relation for the statement and expression simulation,
+   in func, the function running.
+   - local_ptrs_rel: locals in scope, held in memory through their pointer
+     variables (PtrVar).  MemLoc locals at fixed offsets, which the internal
+     function bodies still use until #545, are not related.
+   - storage_rel, storage_vars_rel: storage, and the slots of storage
+     variables.
+   - transient_rel, transient_vars_rel: transient storage, and the slots of
+     transient variables.
+   - immutables_rel: immutables (vs_immutables in a constructor, the data
+     section at runtime).
+   - logs_rel: emitted logs.
+   - call_ctx_rel: transaction, call and block context.
+   - outcomes and requests: the oracle outcomes still to consume and the
+     requests recorded so far, as in the result relation. *)
 Definition state_rel_def:
-  state_rel cenv cx vs ss =
-    (vars_rel cenv vs.scopes ss ∧
+  state_rel func cenv cx vs ss =
+    (local_ptrs_rel func cenv vs.scopes ss ∧
      storage_rel cx.txn.target vs ss ∧
      storage_vars_rel cenv cx ∧
      transient_rel cx.txn.target vs ss ∧
@@ -994,26 +993,26 @@ End
 
 Definition result_rel_def:
   (* Normal completion — no return value *)
-  (result_rel ret_tv cenv cx (INL (), vs') (OK ss') =
-    state_rel cenv cx vs' ss') ∧
+  (result_rel func ret_tv cenv cx (INL (), vs') (OK ss') =
+    state_rel func cenv cx vs' ss') ∧
   (* Internal return: state + return values *)
-  (result_rel ret_tv cenv cx (INR (ReturnException v), vs') (IntRet ir ss') =
-    (state_rel cenv cx vs' ss' ∧
+  (result_rel func ret_tv cenv cx (INR (ReturnException v), vs') (IntRet ir ss') =
+    (state_rel func cenv cx vs' ss' ∧
      intret_vals_match ret_tv v ir.iret_values ∧
      ir.iret_adopt_fmp = NONE)) ∧
   (* External return → Halt with ABI-encoded data *)
-  (result_rel ret_tv cenv cx (INR (ReturnException v), vs') (Halt ss') =
-    state_rel cenv cx vs' ss') ∧
+  (result_rel func ret_tv cenv cx (INR (ReturnException v), vs') (Halt ss') =
+    state_rel func cenv cx vs' ss') ∧
   (* Every reason may REVERT, including an ordinary raise "UNREACHABLE".
      Only the distinguished UNREACHABLE exception may map to ExHalt_abort. *)
-  (result_rel ret_tv cenv cx (INR (AssertException s), vs') (Abort Revert_abort ss') =
+  (result_rel func ret_tv cenv cx (INR (AssertException s), vs') (Abort Revert_abort ss') =
     T) ∧
-  (result_rel ret_tv cenv cx (INR (AssertException s), vs') (Abort ExHalt_abort ss') =
+  (result_rel func ret_tv cenv cx (INR (AssertException s), vs') (Abort ExHalt_abort ss') =
     (s = "UNREACHABLE")) ∧
   (* Error → Abort (any type) *)
-  (result_rel ret_tv cenv cx (INR (Error _), vs') (Abort _ ss') = T) ∧
+  (result_rel func ret_tv cenv cx (INR (Error _), vs') (Abort _ ss') = T) ∧
   (* Everything else: no relation *)
-  (result_rel _ _ _ _ _ = F)
+  (result_rel _ _ _ _ _ _ = F)
 End
 
 (* ===== Type Classification ===== *)

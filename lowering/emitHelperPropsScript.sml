@@ -548,14 +548,17 @@ Theorem emitted_insts_seq2 = emitted_insts_append;
 
 (* ===== state_rel preservation ===== *)
 
-(* state_rel doesn't depend on vs_vars — only memory, accounts, contexts, etc.
-   So update_var preserves state_rel unconditionally. *)
+(* update_var keeps state_rel unless it overwrites a live local's pointer:
+   the other conjuncts do not read vs_vars. *)
 Theorem state_rel_update_var:
-  ∀ cenv cx es ss name w.
-    state_rel cenv cx es ss ⇒
-    state_rel cenv cx es (update_var name w ss)
+  ∀ func cenv cx es ss name w.
+    state_rel func cenv cx es ss ∧ not_local_ptr cenv es.scopes name ⇒
+    state_rel func cenv cx es (update_var name w ss)
 Proof
-  rw[state_rel_def, update_var_def, vars_rel_def, storage_rel_def,
+  rpt strip_tac >>
+  `local_ptrs_rel func cenv es.scopes (update_var name w ss)` by
+    (irule local_ptrs_rel_update_var >> fs[state_rel_def]) >>
+  fs[state_rel_def, update_var_def, storage_rel_def,
      transient_rel_def, immutables_rel_def, logs_rel_def, call_ctx_rel_def,
      contract_storage_def, contract_transient_def]
 QED
