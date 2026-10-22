@@ -799,15 +799,34 @@ End
 
 (* NOTE: is_word_type deleted — unified with is_word_type in compileEnv *)
 
-(* Emit the allocation at the lexical declaration point.  Pointer output names
-   were reserved before body lowering so later statements can use them through
-   the immutable compile environment. *)
-Definition emit_local_alloca_def:
-  emit_local_alloca (cenv : compile_env) id =
-    case FLOOKUP cenv.ce_vars id of
-      SOME (PtrVar (Var ptr_name) mem_size) =>
-        emit_inst ALLOCA [Lit (n2w mem_size)] [ptr_name]
-    | _ => return ()
+(* Bring a local or loop variable into scope at its declaration, returning
+   the environment for the rest of its block.  With ce_alloca_locals it gets a
+   fresh ALLOCA of its declared type's size, else the MemLoc slot that
+   build_compile_env reserved for its name.  A name re-declared in a disjoint
+   block thus gets that block's allocation, type and capacity.
+   Mirrors Python: Context.new_variable, scoped by Context.block_scope *)
+Definition declare_local_def:
+  declare_local (cenv : compile_env) id ty =
+    let cenv' =
+      cenv with
+        <| ce_var_type updated_by (id =+ SOME ty);
+           ce_dynarray_capacity updated_by
+             (case ty of ArrayT _ (Dynamic n) => (id =+ n) | _ => I) |> in
+    if cenv.ce_alloca_locals then
+      let mem_size = type_memory_bytes cenv ty in
+      do ptr <- fresh_var;
+         emit_inst ALLOCA [Lit (n2w mem_size)] [ptr];
+         return (cenv' with ce_vars updated_by
+                   (λm. m |+ (id, PtrVar (Var ptr) mem_size)))
+      od
+    else return cenv'
+End
+
+(* The environment after a statement's own declaration, if it makes one.
+   Loop variables are declared by the loop, for its body only. *)
+Definition declare_stmt_local_def:
+  declare_stmt_local cenv (AnnAssign id vtyp _) = declare_local cenv id vtyp ∧
+  declare_stmt_local cenv _ = return cenv
 End
 
 Definition compile_internal_return_from_env_def:
@@ -866,7 +885,7 @@ Definition compile_stmt_def:
     od ∧
 
   (* AnnAssign: variable declaration with initialization.
-     Variable is already in ce_vars (alloca pre-allocated).
+     compile_stmts has already declared the variable (declare_local).
      Dispatches to compile_assign_value for proper complex type handling.
      dst_ty = vtyp (declared type), src_ty = expr_type e (expression type).
      These may differ for subtype assignments (e.g. Bytes[540] → Bytes[704]).
@@ -874,8 +893,7 @@ Definition compile_stmt_def:
   compile_stmt cenv lctx ty (AnnAssign id vtyp e) =
     (let src_ty = lowered_value_type cenv e in
      let empty_value = (has_length_word vtyp ∧ is_empty_value_expr e) in
-     do emit_local_alloca cenv id;
-        src_vv <- compile_expr cenv (expr_type e) e;
+     do src_vv <- compile_expr cenv (expr_type e) e;
         val_op <- (if empty_value then return (Lit 0w)
                    else unwrap_value cenv src_vv);
         src_loc <- return (vv_location src_vv);
@@ -1232,7 +1250,7 @@ Definition compile_stmt_def:
      Mirrors Python: vyper/codegen_venom/stmt.py:_lower_range_loop *)
   compile_stmt cenv lctx ty (For id fty (Range start_e end_e) bound body) =
     (let is_signed = is_signed_type fty in
-     do emit_local_alloca cenv id;
+     do body_cenv <- declare_local cenv id fty;
         start_op <- lower_value compile_expr cenv fty start_e;
         end_op <- lower_value compile_expr cenv fty end_e;
         entry_lbl <- fresh_label "for_entry";
@@ -1265,7 +1283,7 @@ Definition compile_stmt_def:
         emit_inst JNZ [done_op; Label exit_lbl; Label body_lbl] [];
         (* Body: store counter to loop var, execute body *)
         new_block body_lbl;
-        (case FLOOKUP cenv.ce_vars id of
+        (case FLOOKUP body_cenv.ce_vars id of
            SOME (MemLoc offset _) =>
              emit_void MSTORE [Lit (n2w offset); Var counter_var]
          | SOME (PtrVar ptr_op _) =>
@@ -1273,7 +1291,7 @@ Definition compile_stmt_def:
          | _ =>
              (* Unsupported: a range loop variable requires a memory binding. *)
              emit_void INVALID []);
-        compile_stmts cenv (InLoop exit_lbl incr_lbl) ty body;
+        compile_stmts body_cenv (InLoop exit_lbl incr_lbl) ty body;
         (* Only JMP to incr if body didn't terminate (e.g. via break/return) *)
         emit_jmp_if_not_terminated incr_lbl;
         (* Incr: counter = counter + 1 *)
@@ -1309,7 +1327,7 @@ Definition compile_stmt_def:
      let ws = word_scale loc in
      let elem_size = elem_size_in_location cenv loc fty in
      let load_opc = load_opc_for loc in
-     do emit_local_alloca cenv id;
+     do body_cenv <- declare_local cenv id fty;
         arr_vv <- compile_expr cenv (expr_type arr_e) arr_e;
         arr_op <- return (vv_operand arr_vv);
         (* Load array length *)
@@ -1357,7 +1375,7 @@ Definition compile_stmt_def:
                             src_typ=array_typ.value_type) *)
         arr_elem_ty <- return (case expr_type arr_e of
                                   ArrayT et _ => et | _ => fty);
-        (case FLOOKUP cenv.ce_vars id of
+        (case FLOOKUP body_cenv.ce_vars id of
            SOME (MemLoc off _) =>
              compile_iter_elem_copy cenv elem_ptr (Lit (n2w off)) elem_size
                                     loc slot_addr fty arr_elem_ty
@@ -1367,7 +1385,7 @@ Definition compile_stmt_def:
          | _ =>
              (* Unsupported: an iteration variable requires a memory binding. *)
              emit_void INVALID []);
-        compile_stmts cenv (InLoop exit_lbl incr_lbl) ty body;
+        compile_stmts body_cenv (InLoop exit_lbl incr_lbl) ty body;
         (* Only JMP to incr if body didn't terminate *)
         emit_jmp_if_not_terminated incr_lbl;
         (* Incr: index = index + 1 *)
@@ -1396,14 +1414,16 @@ Definition compile_stmt_def:
 
   (* Compile a list of statements.
      Skips dead code after terminating statements (return, raise, break, continue).
+     A declaration's binding lasts for the rest of the list, its block.
      Mirrors Python: vyper/codegen_venom/stmt.py:_lower_body with is_terminated check *)
   compile_stmts cenv lctx ty [] = return () ∧
   compile_stmts cenv lctx ty (s::ss) =
     do cs <- comp_get;
        if block_is_terminated cs then return ()
        else
-         do compile_stmt cenv lctx ty s;
-            compile_stmts cenv lctx ty ss
+         do cenv' <- declare_stmt_local cenv s;
+            compile_stmt cenv' lctx ty s;
+            compile_stmts cenv' lctx ty ss
          od
     od
 Termination

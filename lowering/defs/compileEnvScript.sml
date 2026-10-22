@@ -367,7 +367,13 @@ Datatype:
     (* Raw return: T for @raw_return decorated functions (proxy patterns).
        Bypasses ABI encoding, returns bytes directly.
        Mirrors Python: func_t.do_raw_return *)
-    ce_raw_return : bool
+    ce_raw_return : bool;
+    (* T when each local and loop variable gets a fresh ALLOCA at its
+       declaration (external and fallback bodies); F when it keeps the MemLoc
+       slot build_compile_env reserved for its name (internal functions and
+       the constructor body).
+       Mirrors Python: Context.new_variable -> allocate_buffer -> alloca *)
+    ce_alloca_locals : bool
   |>
 End
 
