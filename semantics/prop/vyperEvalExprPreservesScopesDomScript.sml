@@ -497,22 +497,6 @@ Proof
   imp_res_tac transfer_value_scopes >> gvs[]
 QED
 
-(* CreateTarget *)
-Theorem case_CreateTarget_dom[local]:
-  ∀cx ty kind has_salt rof es v0.
-    (∀st res st'. eval_exprs cx es st = (res,st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes) ⇒
-    ∀st res st'.
-      eval_expr cx (Call ty (CreateTarget kind has_salt rof) es v0) st = (res,st') ⇒
-      MAP FDOM st.scopes = MAP FDOM st'.scopes
-Proof
-  rpt strip_tac >> qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-  simp[Once evaluate_def, bind_def] >>
-  Cases_on `eval_exprs cx es st` >> Cases_on `q` >> simp[] >>
-  strip_tac >>
-  first_x_assum drule >> strip_tac >>
-  drule eval_create_preserves_scopes_immutables >> strip_tac >> gvs[]
-QED
-
 (* Goal 17: ExtCall (exact evaluate_ind shape) *)
 (* ========================================================================
    Helper lemmas for evaluate_ind cases (P8: eval_exprs)
@@ -589,11 +573,21 @@ Proof
     ACCEPT_TAC case_RawLog_dom >-
     ACCEPT_TAC case_RawRevert_dom >-
     ACCEPT_TAC case_SelfDestructTarget_dom >-
-    ACCEPT_TAC case_CreateTarget_dom >-
+    suspend "CreateTarget" >-
     ACCEPT_TAC case_eval_exprs_nil_dom >-
     ACCEPT_TAC case_eval_exprs_cons_dom
   ) >>
   simp[]
+QED
+
+Resume eval_mutual_preserves_scopes_dom[CreateTarget]:
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  Cases_on `kind` >> gvs[] >>
+  gvs[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs()] >>
+  imp_res_tac check_create_blueprint_result_state >> gvs[] >>
+  res_tac >>
+  imp_res_tac eval_create_preserves_scopes_immutables >> gvs[] >>
+  metis_tac[]
 QED
 
 (* Original concrete-only resume retained for TASK032 provenance.
