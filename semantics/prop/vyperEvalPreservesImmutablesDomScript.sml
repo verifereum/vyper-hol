@@ -3266,7 +3266,7 @@ Theorem raw_call_callback_preserves_immutables_dom[local]:
           x <- append_logs emitted_logs;
           if flags.rcf_revert_on_failure then
             do
-              x <- assert success (Error (RuntimeError "raw_call reverted"));
+              x <- if success then return () else raise (Error (RevertData returnData));
               if flags.rcf_max_outsize = 0 then return (Value NoneV)
               else return (Value (BytesV (TAKE flags.rcf_max_outsize returnData)))
             od

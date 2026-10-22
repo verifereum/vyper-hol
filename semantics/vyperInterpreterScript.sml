@@ -830,8 +830,9 @@ val () = cv_auto_trans make_ext_call_state_def;
 
 (* Extract results from verifereum execution.
    On success: return updated accounts/tStorage.
-   On revert: return original accounts/tStorage (changes are discarded).
-   On other exception: return NONE. *)
+   On any other halt: a failed call, as EVM CALL pushes 0; callee effects are
+   discarded and only REVERT exposes its return bytes.
+   Model/domain failures (vfm_abort) and unfinished runs return NONE. *)
 Definition extract_call_result_def:
   extract_call_result orig_accounts orig_tStorage
     (result: unit + vfmExecution$exception option, final_state) =
@@ -844,7 +845,10 @@ Definition extract_call_result_def:
                    final_state.rollback.tStorage, ctxt.logs)
          | INR (SOME Reverted) =>  (* revert - discard callee effects *)
              SOME (F, ctxt.returnData, orig_accounts, orig_tStorage, [])
-         | _ => NONE)  (* other exception or still running *)
+         | INR (SOME ex) =>  (* exceptional halt - no return data *)
+             if vfmExecution$vfm_abort (SOME ex) then NONE
+             else SOME (F, [], orig_accounts, orig_tStorage, [])
+         | _ => NONE)  (* still running *)
     | _ => NONE  (* shouldn't happen for single-context call *)
 End
 
@@ -895,8 +899,10 @@ End
    - tStorage: current transient storage
    - txParams: transaction parameters (preserves tx.origin, block info)
 
-   Returns SOME (success, returnData, accounts', tStorage', emitted_logs)
-   or NONE on error. Reverted calls return an empty emitted-log list. *)
+   Returns SOME (success, returnData, accounts', tStorage', emitted_logs),
+   or NONE on a model/domain failure. Failed calls (a value the caller can't
+   pay, REVERT or another exceptional halt) give success = F, the original
+   accounts and transient storage, and an empty emitted-log list. *)
 Definition run_ext_call_def:
   run_ext_call caller callee calldata value_opt
                accounts tStorage txParams =
@@ -916,7 +922,15 @@ Definition run_ext_call_def:
               extract_call_result accounts tStorage outcome
             else NONE
         | NONE => NONE
-    else NONE
+    else
+      (* The EVM fails the call softly when the caller can't pay; a recipient
+         balance overflow is outside the model. *)
+      case value_opt of
+      | SOME amount =>
+          if (lookup_account caller accounts).balance < amount
+          then SOME (F, [], accounts, tStorage, [])
+          else NONE
+      | NONE => NONE
 End
 
 val () = cv_auto_trans run_ext_call_def;
@@ -945,23 +959,6 @@ End
 
 val () = cv_auto_trans make_delegate_call_state_def;
 
-(* EVM exceptional halts are failed subcalls; model/domain failures remain NONE.
-   Only REVERT exposes its return bytes; all failed calls discard effects. *)
-Definition extract_delegate_call_result_def:
-  extract_delegate_call_result accounts tStorage (result, final_state) =
-    case final_state.contexts of
-    | [(ctxt, _)] =>
-        (case result of
-         | INR (SOME ex) =>
-             if vfmExecution$vfm_abort (SOME ex) then NONE else
-               SOME (F, if ex = vfmExecution$Reverted then ctxt.returnData else [],
-                     accounts, tStorage, [])
-         | _ => extract_call_result accounts tStorage (result, final_state))
-    | _ => NONE
-End
-
-val () = cv_auto_trans extract_delegate_call_result_def;
-
 Definition run_delegate_call_def:
   run_delegate_call cx target_addr calldata accounts tStorage =
     let s0 = make_delegate_call_state cx target_addr calldata accounts tStorage in
@@ -973,7 +970,7 @@ Definition run_delegate_call_def:
     | NONE => NONE
     | SOME result =>
         if ext_call_success_accounts_ok result then
-          extract_delegate_call_result accounts tStorage result
+          extract_call_result accounts tStorage result
         else NONE
 End
 
@@ -1030,7 +1027,8 @@ Definition eval_raw_call_def:
     update_transient (K tStorage');
     append_logs emitted_logs;
     if flags.rcf_revert_on_failure then do
-      check success "raw_call reverted";
+      (* Vyper re-raises the callee's whole returndata (lower_raw_call) *)
+      if success then return () else raise $ Error $ RevertData returnData;
       if flags.rcf_max_outsize = 0 then return $ Value NoneV
       else return $ Value $ BytesV (TAKE flags.rcf_max_outsize returnData)
     od else
