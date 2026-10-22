@@ -604,10 +604,12 @@ boundary samples) is not a kernel stage proof. Future owners must recheck
 changed definitions/conditions, then prove these paths. The unchanged source
 checkpoint receipts are historical evidence, not a fresh comparison rerun here.
 
-1. **State relation.** Define an alloca-aware `vars_rel`: a `PtrVar` pointer
-   maps to a `vs_allocas` region holding `val_in_memory`. It should be part
-   of a `state_rel` with full accounts and transient-storage equality and a
-   `PtrVar` `__return_pc__`.
+1. **State relation.** `state_rel` relates locals through `local_ptrs_rel`
+   (#625): a `PtrVar` pointer holds the base of a `vs_allocas` region holding
+   `val_in_memory`. Still to add: full accounts and transient-storage
+   equality, a `PtrVar` `__return_pc__`, and default arguments, which
+   `compile_register_kwarg_vars` keeps at `MemLoc` offsets that `state_rel`
+   does not relate.
 2. **Expressions.** Restate the expression lemmas over `run_blocks` in
    `unit.cu_context`, INVOKE-aware, and then prove them: name, binop, neg and
    the others needed by the supported subset. Existing local
@@ -621,7 +623,7 @@ checkpoint receipts are historical evidence, not a fresh comparison rerun here.
    - external return: actual `return_bytes` (including singleton wrapping).
 5. **Module:**
    - linear dispatch reaches the entry for the calldata selector;
-   - argument decoding establishes `vars_rel`;
+   - argument decoding establishes `local_ptrs_rel` in `state_rel`;
    - `lower_vyper_runtime_unit_correct`.
 6. **Builtins.** Only the actual whitelist: Send/ExtCall use the complete
    outcome oracle; computed precompiles use pure results. `raw_call` and

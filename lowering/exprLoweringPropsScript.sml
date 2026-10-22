@@ -103,25 +103,32 @@ Definition well_annotated_def:
   well_annotated _ = T
 End
 
+(* The expression lemmas relate states with stmt_state_rel func, where func
+   is the function the code runs in, under the code premises of the
+   statement lemmas (stmtLoweringProps), with fn_has_code, which is defined
+   above this theory, replaced by its single-block consequence: the emitted
+   instructions are func's.  An ALLOCA of the expression (a buffer) then
+   misses every live local, and a Name reads a pointer local, not a MemLoc
+   variable, which state_rel does not relate. *)
 Theorem compile_expr_correct:
   ∀ func cenv cx ty e es ss st op st' v es'.
-    state_rel func cenv cx es ss ∧
-    fresh_vars_wrt st ss ∧
+    stmt_state_rel func cenv cx st es ss ∧
     supported_expr e ∧
     well_annotated e ∧
     eval_expr cx e es = (INL (Value v), es') ∧
-    lower_value compile_expr cenv ty e st = (op, st')
+    lower_value compile_expr cenv ty e st = (op, st') ∧
+    (∀i. MEM i (emitted_insts st st') ⇒ MEM i (fn_insts func)) ∧
+    fn_inst_ids_distinct func ∧ local_ptrs_reserved cenv st
     ⇒
     ∃ ss'.
       run_inst_seq (emitted_insts st st') ss = OK ss' ∧
       eval_operand op ss' = SOME (val_to_w256 v) ∧
-      state_rel func cenv cx es' ss' ∧
+      stmt_state_rel func cenv cx st' es' ss' ∧
       same_blocks st st' ∧
       st'.cs_current_insts = st.cs_current_insts ++ emitted_insts st st' ∧
       ¬ss'.vs_halted ∧
       EVERY (λi. ¬is_terminator i.inst_opcode ∧ i.inst_opcode ≠ INVOKE)
         (emitted_insts st st') ∧
-      fresh_vars_wrt st' ss' ∧
       (∀ op w. eval_operand op ss = SOME w ⇒ eval_operand op ss' = SOME w)
 Proof
   cheat
@@ -359,7 +366,10 @@ QED
    (ruled out by value_has_type). val_in_memory (BaseTV (UintT n)) NoneV
    offset mem = T (vacuously true) but mload offset ss is unconstrained,
    while typed_val_to_w256 NoneV = 0w.
-   Fix: added v ≠ NoneV and value_has_type entry.type v. *)
+   Fix: added v ≠ NoneV and value_has_type entry.type v.
+   It was also false for a non-word annotation ann: compile_name_vv tags the
+   pointer with ann, and unwrap_value loads only if is_word_type ann, else it
+   returns the pointer; eval_expr ignores ann.  Fix: added is_word_type ann. *)
 Theorem compile_name_correct:
   ∀ func cenv cx ty ann id es ss st op st' v es' p size entry.
     state_rel func cenv cx es ss ∧
@@ -370,7 +380,8 @@ Theorem compile_name_correct:
     entry.value = v ∧
     v ≠ NoneV ∧
     value_has_type entry.type v ∧
-    (∃ bt. entry.type = BaseTV bt ∧ is_word_type (BaseT bt))
+    (∃ bt. entry.type = BaseTV bt ∧ is_word_type (BaseT bt)) ∧
+    is_word_type ann
     ⇒
     ∃ ss'.
       run_inst_seq (emitted_insts st st') ss = OK ss' ∧
@@ -390,17 +401,18 @@ QED
    Fix: added type consistency + fresh_vars_wrt + named annotation. *)
 Theorem compile_binop_correct:
   ∀ func cenv cx ty ann bop e1 e2 es ss st op st' v es'.
-    state_rel func cenv cx es ss ∧
-    fresh_vars_wrt st ss ∧
+    stmt_state_rel func cenv cx st es ss ∧
     (∀u. type_to_int_bound ann = SOME u ⇒
          type_to_int_bound (expr_type e1) = SOME u) ∧
     eval_expr cx (Builtin ann (Bop bop) [e1; e2]) es = (INL (Value v), es') ∧
-    lower_value compile_expr cenv ty (Builtin ann (Bop bop) [e1; e2]) st = (op, st')
+    lower_value compile_expr cenv ty (Builtin ann (Bop bop) [e1; e2]) st = (op, st') ∧
+    (∀i. MEM i (emitted_insts st st') ⇒ MEM i (fn_insts func)) ∧
+    fn_inst_ids_distinct func ∧ local_ptrs_reserved cenv st
     ⇒
     ∃ ss'.
       run_inst_seq (emitted_insts st st') ss = OK ss' ∧
       eval_operand op ss' = SOME (val_to_w256 v) ∧
-      state_rel func cenv cx es' ss'
+      stmt_state_rel func cenv cx st' es' ss'
 Proof
   cheat
 QED
@@ -462,16 +474,18 @@ QED
    restricted ann to signed IntT. *)
 Theorem compile_neg_correct:
   ∀ func cenv cx ty ann e es ss st op st' v es' n.
-    state_rel func cenv cx es ss ∧
+    stmt_state_rel func cenv cx st es ss ∧
     eval_expr cx (Builtin ann Neg [e]) es = (INL (Value v), es') ∧
     ann = BaseT (IntT n) ∧
     type_to_int_bound ann = type_to_int_bound (expr_type e) ∧
-    lower_value compile_expr cenv ty (Builtin ann Neg [e]) st = (op, st')
+    lower_value compile_expr cenv ty (Builtin ann Neg [e]) st = (op, st') ∧
+    (∀i. MEM i (emitted_insts st st') ⇒ MEM i (fn_insts func)) ∧
+    fn_inst_ids_distinct func ∧ local_ptrs_reserved cenv st
     ⇒
     ∃ ss'.
       run_inst_seq (emitted_insts st st') ss = OK ss' ∧
       eval_operand op ss' = SOME (val_to_w256 v) ∧
-      state_rel func cenv cx es' ss'
+      stmt_state_rel func cenv cx st' es' ss'
 Proof
   cheat
 QED
