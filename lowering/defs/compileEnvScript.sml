@@ -306,7 +306,7 @@ Datatype:
     (* DynArray metadata: target_name → max capacity *)
     ce_dynarray_capacity : string -> num;
     (* Method ID lookup: func_name → 4-byte keccak selector as num *)
-    ce_method_id : string -> num;
+    ce_method_id : string -> type list -> num;
     (* Flag member index: (flag_type_name, member_name) → positional index *)
     ce_flag_member_id : string -> string -> num;
     (* Number of members in a flag type *)

@@ -771,10 +771,10 @@ End
    Also checks extcodesize if not skip_contract_check.
    Mirrors Python: expr.py _lower_external_call default_return_value path *)
 Definition compile_default_return_path_def:
-  compile_default_return_path buf_op result_op default_op addr_op
+  compile_default_return_path cenv return_type default_ty
+                              buf_op result_op default_op addr_op
                               skip_contract_check min_return_size
-                              max_return_size ret_mem_bytes
-                              ret_dec_info is_prim_return =
+                              max_return_size ret_dec_info =
     do rds <- emit_op RETURNDATASIZE [];
        is_zero <- emit_op ISZERO [rds];
        default_lbl <- fresh_label "extcall_default";
@@ -783,12 +783,10 @@ Definition compile_default_return_path_def:
        emit_inst JNZ [is_zero; Label default_lbl;
                        Label decode_lbl] [];
        (* Default block: store default value to result.
-          Mirrors Python: ctx.store_memory(default_val, result_op, return_t)
-          Prim: MSTORE; Complex: MCOPY. *)
+          Mirrors Python: ctx.store_vyper_value(default_vv, result_op,
+          return_t), a typed store from the default's own type. *)
        new_block default_lbl;
-       (if is_prim_return then emit_void MSTORE [result_op; default_op]
-        else emit_void MCOPY [result_op; default_op;
-                              Lit (n2w ret_mem_bytes)]);
+       compile_store_memory cenv default_op result_op return_type default_ty;
        (* Extcodesize check in default path if not skipped *)
        (if skip_contract_check then return ()
         else compile_extcodesize_check addr_op);
@@ -865,7 +863,7 @@ Definition compile_external_call_kwargs_def:
                                args_mem_size args_abi_size method_id_val return_abi_size
                                min_return_size ret_mem_bytes use_staticcall
                                call_value gas_op skip_check has_default default_op
-                               is_prim_return args_enc_info ret_dec_info =
+                               return_type default_ty args_enc_info ret_dec_info =
     let buf_size = (if args_abi_size > return_abi_size
                     then args_abi_size else return_abi_size) + 32 in
     let call_len = Lit (n2w (4 + args_abi_size)) in
@@ -916,19 +914,22 @@ Definition compile_external_call_kwargs_def:
           od;
           new_block cont_lbl;
           (* Return value handling *)
+          (* Python's new_temporary_value(wrapped_return_t) allocates the
+             memory size of the return type, not its ABI size bound. *)
           if return_abi_size = 0 then
             comp_return (Lit 0w)
           else if has_default then
             do (* Allocate result, use default_return_path *)
-               result_op_alloc <- compile_alloc_buffer return_abi_size;
+               result_op_alloc <- compile_alloc_buffer ret_mem_bytes;
                let result_op = result_op_alloc.buf_operand in
-               compile_default_return_path buf_op result_op default_op addr_op
+               compile_default_return_path cenv return_type default_ty
+                                           buf_op result_op default_op addr_op
                                            skip_check min_return_size return_abi_size
-                                           ret_mem_bytes ret_dec_info is_prim_return
+                                           ret_dec_info
             od
           else
             do (* Simple decode path *)
-               result_op_alloc <- compile_alloc_buffer return_abi_size;
+               result_op_alloc <- compile_alloc_buffer ret_mem_bytes;
                let result_op = result_op_alloc.buf_operand in
                do hi_op <- compile_return_value_decode buf_op min_return_size
                                                         return_abi_size;
@@ -2219,21 +2220,52 @@ Termination
   WF_REL_TAC `measure (λ(cfn,cenv,es,tys,buf,off). LENGTH es)` >> simp[]
 End
 
+(* Copy a lowered value into a fresh temporary of its own type.
+   Mirrors Python: context.py Context.materialize_value
+   (new_temporary_value, then store_vyper_value). *)
+Definition compile_materialize_vv_def:
+  compile_materialize_vv cenv ty vv =
+    do tmp <- compile_alloc_buffer (type_memory_bytes cenv ty);
+       src <- unwrap_value cenv vv;
+       compile_store_memory cenv src tmp.buf_operand ty ty;
+       return tmp.buf_operand
+    od
+End
+
+(* Lower one keyword operand of extcall/staticcall: value= and gas= are
+   uint256 words; default_return_value= is a word of the return type, or,
+   for any other type, a value Python materializes where it is lowered
+   (_parse_external_call_kwargs). Returns the operand and its type. *)
+Definition compile_ext_call_kwarg_def:
+  compile_ext_call_kwarg cfn cenv return_type k e =
+    if k = EKDefault /\ ~is_word_type return_type then
+      do vv <- cfn cenv (expr_type e) e;
+         op <- compile_materialize_vv cenv (expr_type e) vv;
+         comp_return (op, expr_type e)
+      od
+    else
+      do op <- lower_value cfn cenv
+                 (if k = EKDefault then return_type else BaseT (UintT 256)) e;
+         comp_return (op, return_type)
+      od
+End
+
 (* Lower the keyword operands of extcall/staticcall in source order, which is
    the order Python evaluates them in (_parse_external_call_kwargs). Returns
-   the value=, gas= and default_return_value= operands that are present. *)
+   the value= and gas= operands and the default_return_value= operand with
+   its type, for those that are present. *)
 Definition compile_ext_call_kwargs_def:
   compile_ext_call_kwargs cfn cenv return_type (k::ks) (e::es) =
-    do op <- lower_value cfn cenv
-               (if k = EKDefault then return_type else BaseT (UintT 256)) e;
-       (value_op, gas_op, default_op) <-
+    do (op, ty) <- compile_ext_call_kwarg cfn cenv return_type k e;
+       (value_op, gas_op, default_opt) <-
          compile_ext_call_kwargs cfn cenv return_type ks es;
-       comp_return (if k = EKValue then (SOME op, gas_op, default_op)
-                    else if k = EKGas then (value_op, SOME op, default_op)
-                    else (value_op, gas_op, SOME op))
+       comp_return (if k = EKValue then (SOME op, gas_op, default_opt)
+                    else if k = EKGas then (value_op, SOME op, default_opt)
+                    else (value_op, gas_op, SOME (op, ty)))
     od ∧
   compile_ext_call_kwargs cfn cenv return_type _ _ =
-    comp_return ((NONE, NONE, NONE) : operand option # operand option # operand option)
+    comp_return ((NONE, NONE, NONE) :
+                 operand option # operand option # (operand # type) option)
 End
 
 (* KNOWN LIMITATION: No safe_cast validation at internal call boundaries.
@@ -2306,19 +2338,20 @@ Definition compile_call_def:
        let return_abi_size = abi_size_bound cenv.ce_struct_fields wrapped_return in
        let min_return_size = abi_static_size cenv.ce_struct_fields wrapped_return in
        let ret_mem_bytes = type_memory_bytes cenv return_type in
-       let method_id_val = cenv.ce_method_id func_name in
-       let (has_default, default_op) =
-         (case default_opt of SOME d => (T, d) | NONE => (F, Lit 0w)) in
+       let method_id_val = cenv.ce_method_id func_name arg_types in
+       let (has_default, default_op, default_ty) =
+         (case default_opt of
+            SOME (d, d_ty) => (T, d, d_ty)
+          | NONE => (F, Lit 0w, return_type)) in
        let (gas_op, st5) =
          (case gas_opt of SOME g => (g, st3) | NONE => emit_op GAS [] st3) in
        let ret_dec_info = type_to_abi_dec_info cenv.ce_struct_fields cenv wrapped_return in
-       let is_prim_return = is_word_type return_type in
        let (result_op, st6) =
          compile_external_call_kwargs cenv addr_op arg_vals arg_types
                                     args_mem_size args_abi_size method_id_val
                                     return_abi_size min_return_size ret_mem_bytes
                                     is_static value_op gas_op skip_contract_check
-                                    has_default default_op is_prim_return
+                                    has_default default_op return_type default_ty
                                     args_enc_info ret_dec_info st5 in
        if return_abi_size = 0 then (StackValue ret_ty result_op, st6)
        else (LocatedValue ret_ty (mk_ptr result_op LocMemory), st6)) ∧

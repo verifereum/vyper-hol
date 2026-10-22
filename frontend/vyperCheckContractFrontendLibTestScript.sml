@@ -17,6 +17,8 @@ val call_ctx = ``(0, SOME 9, [("lib", 7)], [], [], [], []) :
   (string # type) list # ((num option # string) # type) list #
   (((num option # string) # (num option # string)) list)``;
 val call_arg = ``Literal (BaseT BoolT) (BoolL T)``;
+(* An interface constructor yields its address as a stack value. *)
+val iface_result = ``Builtin (BaseT AddressT) (Acc Address) [^call_arg]``;
 fun call_name id tc = ``JE_Name ^id ^tc (JExplicitSource 1) JT_None``;
 fun call_attr base name tc =
   ``JE_Attribute ^base ^name ^tc NONE NONE JMissingSource JT_None``;
@@ -49,7 +51,7 @@ val _ = check_call_with override_call_ctx ``JExplicitSource 0``
   ``JT_Named NONE "bool"`` ``NONE : expr option``
   (internal_call ``NONE : num option`` ``"compute"``);
 val _ = check_bool_call "interface before builtin"
-  (call_name ``"len"`` ``SOME "interface"``) call_arg;
+  (call_name ``"len"`` ``SOME "interface"``) iface_result;
 val _ = app (fn tc => check_bool_call "builtin with negative interface tag"
   (call_name ``"len"`` tc) ``Builtin (BaseT BoolT) Len [^call_arg]``)
   [``NONE : string option``, ``SOME "interfaces"``];
@@ -57,7 +59,7 @@ val _ = app (fn tc => check_bool_call "non-interface name"
   (call_name ``"unknown"`` tc) (internal_call ``NONE : num option`` ``"unknown"``))
   [``NONE : string option``, ``SOME "interfaces"``, ``SOME "module"``];
 val _ = app (fn shortcut => check_bool_call "interface shortcut before self"
-  (call_attr self_name shortcut ``NONE : string option``) call_arg)
+  (call_attr self_name shortcut ``NONE : string option``) iface_result)
   [``"__at__"``, ``"__interface__"``];
 val _ = check_bool_call "near shortcut name"
   (call_attr self_name ``"__at"`` ``SOME "interface"``)
@@ -88,7 +90,7 @@ val _ = check_bool_call "self call before interface fallback"
   (call_attr self_name ``"foo"`` ``SOME "interface"``)
   (internal_call ``SOME 9`` ``"foo"``);
 val _ = check_bool_call "module interface fallback"
-  (call_attr lib_name ``"Foo"`` ``SOME "interface"``) call_arg;
+  (call_attr lib_name ``"Foo"`` ``SOME "interface"``) iface_result;
 val _ = check_bool_call "module alias fallback"
   (call_attr lib_name ``"foo"`` ``SOME "interfaces"``)
   (internal_call ``SOME 7`` ``"foo"``);

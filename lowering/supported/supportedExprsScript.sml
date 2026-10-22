@@ -61,15 +61,14 @@ Definition supported_effect_expr_def:
       Call ty (IntCall id) args NONE =>
         IS_SOME (supported_function_decl tops id Internal) /\
         supported_pure_exprs tops args
-    (* Operands: target :: positional args ++ value=/gas= in source order;
-       default_return_value= is not supported. *)
+    (* Operands: target :: positional args ++ keyword operands in source
+       order. Every operand is pure, so lowering default_return_value= before
+       the call matches the semantics, which evaluates it there too. *)
     | Call ty (ExtCall is_static skip_check (name, arg_types, ret) opts) args NONE =>
         EVERY supported_word_type arg_types /\
-        supported_external_return_type ret /\
-        ALL_DISTINCT opts /\ ~MEM EKDefault opts /\
-        (is_static ==> ~MEM EKValue opts) /\
+        supported_external_return_type tops ret /\
+        ALL_DISTINCT opts /\ (is_static ==> ~MEM EKValue opts) /\
         LENGTH args = 1 + LENGTH arg_types + LENGTH opts /\
-        supported_external_call_signature tops name arg_types /\
         supported_pure_exprs tops args
     | Call NoneT (Send F) [a; v] NONE =>
         supported_pure_expr tops a /\ supported_pure_expr tops v
@@ -97,11 +96,12 @@ QED
 
 Theorem supported_external_call_contract:
   supported_effect_expr tops
-    (Call ty (ExtCall is_static skip_check (name, arg_types, ret)) args NONE) <=>
+    (Call ty (ExtCall is_static skip_check (name, arg_types, ret) opts) args
+       NONE) <=>
   EVERY supported_word_type arg_types /\
-  supported_external_return_type ret /\
-  LENGTH args = LENGTH arg_types + (if is_static then 1 else 2) /\
-  supported_external_call_signature tops name arg_types /\
+  supported_external_return_type tops ret /\
+  ALL_DISTINCT opts /\ (is_static ==> ~MEM EKValue opts) /\
+  LENGTH args = 1 + LENGTH arg_types + LENGTH opts /\
   supported_pure_exprs tops args
 Proof
   simp[supported_effect_expr_def]
@@ -111,7 +111,8 @@ Theorem supported_call_default_rejected:
   ~supported_expr tops (Call ty target args (SOME default))
 Proof
   Cases_on `target` >>
-  simp[supported_expr_def, supported_effect_expr_def, supported_pure_expr_def]
+  simp[supported_expr_def, supported_effect_expr_def, supported_pure_expr_def] >>
+  BasicProvers.every_case_tac >> simp[]
 QED
 
 Theorem supported_pure_exprs_every:

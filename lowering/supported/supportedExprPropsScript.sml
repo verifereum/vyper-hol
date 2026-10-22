@@ -173,15 +173,28 @@ Theorem supported_external_expression_row:
   ~supported_expr expr_test_tops
     (Call (BaseT (UintT 256)) (ExtCall T F ("remote",[BaseT (UintT 256)],BaseT (UintT 256)) [])
       [expr_test_address; expr_test_uint; expr_test_uint] NONE) /\
-  ~supported_expr expr_test_tops
+  (* The selector comes from the call-site signature: no declaration lookup. *)
+  supported_effect_expr expr_test_tops
     (Call (BaseT (UintT 256)) (ExtCall T F ("remote",[BaseT (IntT 256)],BaseT (UintT 256)) [])
       [expr_test_address; expr_test_int] NONE) /\
-  ~supported_expr expr_test_tops
+  supported_effect_expr expr_test_tops
     (Call (BaseT (UintT 256)) (ExtCall T F ("missing",[BaseT (UintT 256)],BaseT (UintT 256)) [])
       [expr_test_address; expr_test_uint] NONE) /\
+  (* A default_return_value= is an operand like the others: any pure default
+     is admitted, an effectful one is not. *)
+  EVERY (\d. supported_effect_expr expr_test_tops
+    (Call (BaseT (UintT 256)) (ExtCall T F ("remote",[BaseT (UintT 256)],BaseT (UintT 256)) [EKDefault])
+      [expr_test_address; expr_test_uint; d] NONE))
+    [expr_test_uint; Literal (BaseT (UintT 256)) (IntL 7);
+     IfExp (BaseT (UintT 256)) (Literal (BaseT BoolT) (BoolL T))
+       expr_test_uint expr_test_uint] /\
   ~supported_expr expr_test_tops
     (Call (BaseT (UintT 256)) (ExtCall T F ("remote",[BaseT (UintT 256)],BaseT (UintT 256)) [EKDefault])
-      [expr_test_address; expr_test_uint; expr_test_uint] NONE) /\
+      [expr_test_address; expr_test_uint; expr_test_internal] NONE) /\
+  ~supported_expr expr_test_tops
+    (Call (BaseT (UintT 256)) (ExtCall T F ("remote",[BaseT (UintT 256)],BaseT (UintT 256)) [])
+      [expr_test_address; expr_test_uint] (SOME expr_test_uint)) /\
+  (* Keyword operands: each kind at most once, no value= on a staticcall. *)
   supported_effect_expr expr_test_tops
     (Call (BaseT (UintT 256)) (ExtCall F F ("remote",[BaseT (UintT 256)],BaseT (UintT 256)) [EKGas; EKValue])
       [expr_test_address; expr_test_uint; expr_test_uint; expr_test_uint] NONE) /\
@@ -191,12 +204,18 @@ Theorem supported_external_expression_row:
   ~supported_expr expr_test_tops
     (Call (BaseT (UintT 256)) (ExtCall T F ("remote",[BaseT (UintT 256)],BaseT (UintT 256)) [EKValue])
       [expr_test_address; expr_test_uint; expr_test_uint] NONE) /\
+  EVERY (\ret. supported_effect_expr expr_test_tops
+    (Call ret (ExtCall T F ("remote",[BaseT (UintT 256)],ret) [])
+      [expr_test_address; expr_test_uint] NONE))
+    [BaseT (StringT 32); BaseT (BytesT (Dynamic 32));
+     TupleT [BaseT (UintT 256); BaseT (StringT 32)];
+     ArrayT (BaseT (UintT 256)) (Fixed 2); ArrayT (BaseT (UintT 256)) (Dynamic 3);
+     StructT (NONE,"Pair")] /\
   EVERY (\ret. ~supported_expr expr_test_tops
     (Call ret (ExtCall T F ("remote",[BaseT (UintT 256)],ret) [])
       [expr_test_address; expr_test_uint] NONE))
-    [TupleT []; BaseT (StringT 32); BaseT (BytesT (Dynamic 32));
-     TupleT [BaseT (UintT 256); BaseT (StringT 32)];
-     ArrayT (BaseT (UintT 256)) (Fixed 2); BaseT (BytesT (Fixed 20))]
+    [TupleT []; BaseT (BytesT (Fixed 20)); StructT (NONE,"Missing");
+     TupleT [TupleT [BaseT (UintT 256)]]]
 Proof
   EVAL_TAC
 QED
@@ -213,39 +232,24 @@ Proof
   EVAL_TAC
 QED
 
-Theorem supported_external_first_declaration_rule:
-  ~supported_effect_expr
-    [FunctionDecl External View F F "remote" [("u",BaseT (UintT 256))] []
-       (BaseT (UintT 256)) [];
-     InterfaceDecl "I" [("remote",[("u",BaseT (UintT 256))],BaseT (UintT 256),View)]]
+(* No declaration decides admission: the lowering hashes the call-site
+   signature, as the source semantics does. *)
+Theorem supported_external_declaration_independent:
+  EVERY (\tops. supported_effect_expr tops
     (Call (BaseT (UintT 256)) (ExtCall T F ("remote",[BaseT (UintT 256)],BaseT (UintT 256)) [])
-      [expr_test_address; expr_test_uint] NONE) /\
-  supported_effect_expr
-    [InterfaceDecl "I" [("remote",[("u",BaseT (UintT 256))],BaseT (UintT 256),View)];
-     FunctionDecl External View F F "remote" [] [] NoneT []]
-    (Call (BaseT (UintT 256)) (ExtCall T F ("remote",[BaseT (UintT 256)],BaseT (UintT 256)) [])
-      [expr_test_address; expr_test_uint] NONE) /\
-  ~supported_effect_expr
-    [InterfaceDecl "Bad" [("remote",[("i",BaseT (IntT 256))],BaseT (UintT 256),View)];
-     InterfaceDecl "Good" [("remote",[("u",BaseT (UintT 256))],BaseT (UintT 256),View)]]
-    (Call (BaseT (UintT 256)) (ExtCall T F ("remote",[BaseT (UintT 256)],BaseT (UintT 256)) [])
-      [expr_test_address; expr_test_uint] NONE) /\
-  ~supported_effect_expr
-    [InterfaceDecl "I"
-      [("remote",[("i",BaseT (IntT 256))],BaseT (UintT 256),View);
-       ("remote",[("u",BaseT (UintT 256))],BaseT (UintT 256),View)]]
-    (Call (BaseT (UintT 256)) (ExtCall T F ("remote",[BaseT (UintT 256)],BaseT (UintT 256)) [])
-      [expr_test_address; expr_test_uint] NONE) /\
-  supported_effect_expr
-    [FunctionDecl Internal Pure F F "remote" [] [] NoneT [];
-     InterfaceDecl "Other" [("other",[],NoneT,View)];
-     InterfaceDecl "I" [("remote",[("u",BaseT (UintT 256))],BaseT (UintT 256),View)]]
-    (Call (BaseT (UintT 256)) (ExtCall T F ("remote",[BaseT (UintT 256)],BaseT (UintT 256)) [])
-      [expr_test_address; expr_test_uint] NONE)
+      [expr_test_address; expr_test_uint] NONE))
+    [[FunctionDecl External View F F "remote" [("u",BaseT (UintT 256))] []
+        (BaseT (UintT 256)) [];
+      InterfaceDecl "I" [("remote",[("u",BaseT (UintT 256))],BaseT (UintT 256),View)]];
+     [InterfaceDecl "Bad" [("remote",[("i",BaseT (IntT 256))],BaseT (UintT 256),View)];
+      InterfaceDecl "Good" [("remote",[("u",BaseT (UintT 256))],BaseT (UintT 256),View)]];
+     [InterfaceDecl "I"
+       [("remote",[("i",BaseT (IntT 256))],BaseT (UintT 256),View);
+        ("remote",[("u",BaseT (UintT 256))],BaseT (UintT 256),View)]];
+     []]
 Proof
   EVAL_TAC
 QED
-
 (* No effectful child may hide in a P constructor or an E argument. This
    rejects the argument-location and external evaluation-order witnesses. *)
 Theorem supported_effect_nesting_counterexamples:
