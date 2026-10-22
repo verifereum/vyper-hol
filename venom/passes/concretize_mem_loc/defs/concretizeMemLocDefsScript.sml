@@ -1021,7 +1021,11 @@ Definition compute_function_layout_fuel_in_context_def:
         let bpr = bp_analyze_fuel fuel cfg fn in
         let candidate =
           compute_alloc_map_fuel_in_context fuel ctx fn bpr cfg seed reserved in
-        let imported = MAP (\(_,p,s). (p,s)) (imported_mems_used ctx fn) in
+        (* Only (0,0) is neutral for both the physical scan and eom.
+           Keep its identity in metadata/liveness, and retain non-origin
+           empty intervals: their endpoints can affect allocation. *)
+        let imported = FILTER (\(p,s). p <> 0 \/ s <> 0)
+          (MAP (\(_,p,s). (p,s)) (imported_mems_used ctx fn)) in
           case complete_alloc_positions_with_imports items
                  fn.fn_forced_alloc_positions reserved imported fn candidate of
             NONE => NONE

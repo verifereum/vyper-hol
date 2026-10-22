@@ -799,8 +799,9 @@ Theorem compute_function_layout_fuel_in_context_import_bound:
   MEM (a,p,sz) (imported_mems_used ctx fn) ==>
   p + sz <= layout.cl_eom
 Proof
+  Cases_on `p = 0 /\ sz = 0` >- gvs[] >>
   simp[compute_function_layout_fuel_in_context_def, AllCaseEqs()] >> strip_tac >>
   irule mk_concretize_layout_interval_bound >>
-  goal_assum (drule_at Any) >> simp[MEM_MAP] >>
+  goal_assum (drule_at Any) >> simp[MEM_FILTER, MEM_MAP] >>
   disj2_tac >> qexists `(a,p,sz)` >> simp[]
 QED
