@@ -10,8 +10,9 @@
  *   compile_return_some_external_correct  — external return: Halt
  *   compile_return_some_internal_correct  — internal return: IntRet
  *
- * Helper:
- *   run_compiled_blocks    — run multi-block compiled code
+ * The multi-block statements are stated with frag_exec (fragExecTheory):
+ * the compiled fragment runs inside any function containing the code, and
+ * reaches the end of the fragment or exits.
  *
  * Source: vyperInterpreterScript.sml (eval_stmt/eval_stmts)
  * Target: venomExecSemanticsScript.sml (run_block/run_function)
@@ -20,7 +21,7 @@
 
 Theory stmtLoweringProps
 Ancestors
-  list
+  list fragExec
   stmtLowering exprLoweringProps exprLowering emitHelper emitHelperProps
   compileEnv venomExecSemantics venomExecProps venomInst venomState
 
@@ -42,32 +43,6 @@ End
 Definition assemble_function_def:
   assemble_function (st:compile_state) (st':compile_state) =
     mk_raw_function st.cs_current_bb (assemble_blocks st')
-End
-
-(* Run multi-block compiled code.
-   The first block starts at entry_idx (mid-block, after pre-existing
-   instructions). Subsequent blocks start at idx 0 via run_blocks.
-   Used for statements that create multi-block CFGs (If, For, Assert).
-   The ctx parameter supplies the function-call context (for INVOKE). *)
-Definition run_compiled_blocks_def:
-  run_compiled_blocks (ctx:venom_context) (st:compile_state) (st':compile_state)
-                      (ss:venom_state) fuel =
-    let fn = assemble_function st st' in
-    let entry_lbl = st.cs_current_bb in
-    let entry_idx = LENGTH st.cs_current_insts in
-    case lookup_block entry_lbl fn.fn_blocks of
-      NONE => Error "entry block not found"
-    | SOME bb =>
-        case exec_block fuel ctx bb
-               (ss with <| vs_current_bb := entry_lbl;
-                            vs_inst_idx := entry_idx |>) of
-          OK ss' =>
-            if ss'.vs_halted then Halt ss'
-            else run_blocks fuel ctx fn ss'
-        | IntRet vals ss' => IntRet vals ss'
-        | Halt ss' => Halt ss'
-        | Abort a ss' => Abort a ss'
-        | Error e => Error e
 End
 
 (* ===== Main Statement Correctness ===== *)
@@ -107,31 +82,27 @@ QED
 (* ===== Main Statement Correctness ===== *)
 
 (* compile_stmt preserves state_rel: if the Vyper statement
-   evaluates successfully, the compiled Venom code produces
-   a related state. *)
+   evaluates successfully, the compiled Venom code reaches the end of the
+   fragment in a related state. *)
 Theorem compile_stmt_correct:
-  ∀ cenv cx lctx ty s es ss st es' ctx.
-    state_rel cenv cx es ss ∧
+  ∀ cenv cx lctx ty s es st st' es' ctx.
     eval_stmt cx s es = (INL (), es') ∧
     compile_stmt cenv lctx ty s st = ((), st')
     ⇒
-    ∃ ss' fuel.
-      run_compiled_blocks ctx st st' ss fuel = OK ss' ∧
-      state_rel cenv cx es' ss'
+    frag_exec ctx st st' (state_rel cenv cx es) (state_rel cenv cx es')
+      (λr. F)
 Proof
   cheat
 QED
 
 (* compile_stmts preserves state_rel *)
 Theorem compile_stmts_correct:
-  ∀ cenv cx lctx ty stmts es vss st es' ctx.
-    state_rel cenv cx es vss ∧
+  ∀ cenv cx lctx ty stmts es st st' es' ctx.
     eval_stmts cx stmts es = (INL (), es') ∧
     compile_stmts cenv lctx ty stmts st = ((), st')
     ⇒
-    ∃ vss' fuel.
-      run_compiled_blocks ctx st st' vss fuel = OK vss' ∧
-      state_rel cenv cx es' vss'
+    frag_exec ctx st st' (state_rel cenv cx es) (state_rel cenv cx es')
+      (λr. F)
 Proof
   cheat
 QED
@@ -180,16 +151,14 @@ QED
 
 (* --- Assert: abort on false, continue on true --- *)
 (* NOTE: Assert creates multiple blocks (fail_block, ok_block) via new_block.
-   Must use run_compiled_blocks, not run_inst_seq. *)
+   Must use frag_exec, not run_inst_seq. *)
 Theorem compile_assert_correct_true:
-  ∀ cenv cx lctx ty cond_e msg es ss st st' es'.
-    state_rel cenv cx es ss ∧
+  ∀ cenv cx lctx ty cond_e msg es st st' es' ctx.
     eval_expr cx cond_e es = (INL (Value (BoolV T)), es') ∧
     compile_stmt cenv lctx ty (Assert cond_e msg) st = ((), st')
     ⇒
-    ∃ ss' fuel ctx.
-      run_compiled_blocks ctx st st' ss fuel = OK ss' ∧
-      state_rel cenv cx es' ss'
+    frag_exec ctx st st' (state_rel cenv cx es) (state_rel cenv cx es')
+      (λr. F)
 Proof
   cheat
 QED
@@ -198,43 +167,27 @@ QED
    Only for AssertBare — AssertReason has non-empty Error(string) data,
    AssertUnreachable uses INVALID (not REVERT). *)
 Theorem compile_assert_bare_correct_false:
-  ∀ cenv cx lctx ty cond_e es ss st st' es'.
-    state_rel cenv cx es ss ∧
-    fresh_vars_wrt st ss ∧
+  ∀ cenv cx lctx ty cond_e es st st' es' ctx.
     supported_expr cond_e ∧
     well_annotated cond_e ∧
     eval_expr cx cond_e es = (INL (Value (BoolV F)), es') ∧
     compile_stmt cenv lctx ty (Assert cond_e AssertBare) st = ((), st')
     ⇒
-    ∃ fuel ctx.
-      run_compiled_blocks ctx st st' ss fuel =
-        Abort Revert_abort (revert_state (set_returndata [] ss))
+    frag_exec ctx st st'
+      (λss. state_rel cenv cx es ss ∧ fresh_vars_wrt st ss) (λss. F)
+      (λr. ∃ss. r = Abort Revert_abort (revert_state (set_returndata [] ss)))
 Proof
-  rw[compile_stmt_def, comp_bind_def, comp_ignore_bind_def] >>
-  rpt (pairarg_tac >> gvs[]) >>
-  gvs[comp_return_def] >>
-  drule_all compile_expr_correct >> strip_tac >>
-  qspec_then`"assert_ok"`drule fresh_label_props >>
-  qspec_then`"assert_fail"`drule fresh_label_props >>
-  qspec_then`REVERT`drule emit_inst_extends >>
-  qspec_then`JNZ`drule emit_inst_extends >>
-  qspec_then`fail_lbl`drule new_block_props >>
-  qspec_then`ok_lbl`drule new_block_props >>
-  rpt strip_tac >>
-  simp[run_compiled_blocks_def, assemble_function_def, assemble_blocks_def] >>
   cheat
 QED
 
 (* Assert with reason + false condition: revert with Error(string) encoded data *)
 Theorem compile_assert_reason_correct_false:
-  ∀ cenv cx lctx ty cond_e reason_e es ss st st' es'.
-    state_rel cenv cx es ss ∧
+  ∀ cenv cx lctx ty cond_e reason_e es st st' es' ctx.
     eval_expr cx cond_e es = (INL (Value (BoolV F)), es') ∧
     compile_stmt cenv lctx ty (Assert cond_e (AssertReason reason_e)) st = ((), st')
     ⇒
-    ∃ fuel ctx rd.
-      run_compiled_blocks ctx st st' ss fuel =
-        Abort Revert_abort (revert_state (set_returndata rd ss))
+    frag_exec ctx st st' (state_rel cenv cx es) (λss. F)
+      (λr. ∃ss rd. r = Abort Revert_abort (revert_state (set_returndata rd ss)))
 Proof
   cheat
 QED
@@ -296,30 +249,26 @@ QED
 
 (* --- If: multi-block correctness --- *)
 Theorem compile_if_correct:
-  ∀ cenv cx lctx ty cond_e then_body else_body es ss st es' ctx.
-    state_rel cenv cx es ss ∧
+  ∀ cenv cx lctx ty cond_e then_body else_body es st st' es' ctx.
     eval_stmt cx (If cond_e then_body else_body) es = (INL (), es') ∧
     compile_stmt cenv lctx ty (If cond_e then_body else_body) st = ((), st')
     ⇒
-    ∃ ss' fuel.
-      run_compiled_blocks ctx st st' ss fuel = OK ss' ∧
-      state_rel cenv cx es' ss'
+    frag_exec ctx st st' (state_rel cenv cx es) (state_rel cenv cx es')
+      (λr. F)
 Proof
   cheat
 QED
 
 (* --- For range: multi-block loop correctness --- *)
 Theorem compile_for_range_correct:
-  ∀ cenv cx lctx ty id fty start_e end_e bound body es ss st es' ctx.
-    state_rel cenv cx es ss ∧
+  ∀ cenv cx lctx ty id fty start_e end_e bound body es st st' es' ctx.
     eval_stmt cx (For id fty (Range start_e end_e) bound body) es =
       (INL (), es') ∧
     compile_stmt cenv lctx ty (For id fty (Range start_e end_e) bound body) st =
       ((), st')
     ⇒
-    ∃ ss' fuel.
-      run_compiled_blocks ctx st st' ss fuel = OK ss' ∧
-      state_rel cenv cx es' ss'
+    frag_exec ctx st st' (state_rel cenv cx es) (state_rel cenv cx es')
+      (λr. F)
 Proof
   cheat
 QED
