@@ -33,7 +33,7 @@ Definition supported_pure_expr_def:
   supported_pure_expr tops (Builtin ty blt es) =
     (supported_builtin_form tops ty blt es /\ supported_pure_exprs tops es) /\
   supported_pure_expr tops (TypeBuiltin ty blt target es) =
-    (supported_type_builtin_form ty blt target es /\ supported_pure_exprs tops es) /\
+    (supported_type_builtin_form tops ty blt target es /\ supported_pure_exprs tops es) /\
   supported_pure_expr tops (Pop ty target) = F /\
   supported_pure_expr tops (Call ty target es default) = F /\
   supported_pure_exprs tops [] = T /\
@@ -58,30 +58,26 @@ Termination
   Cases >> simp[expr_size_def, basicSizeTheory.pair_size_def]
 End
 
-(* The source semantics evaluates a default_return_value only when the callee
-   returns no data, the lowering evaluates it before the call (until #553's
-   a06-07). Both agree when the default is a literal or a name. *)
-Definition supported_external_default_def:
-  supported_external_default tops NONE = T /\
-  supported_external_default tops (SOME e) =
-    ((case e of Literal _ _ => T | Name _ _ => T | _ => F) /\
-     supported_pure_expr tops e)
-End
-
 Definition supported_effect_expr_def:
   supported_effect_expr tops e <=>
     case e of
       Call ty (IntCall id) args NONE =>
         IS_SOME (supported_function_decl tops id Internal) /\
         supported_pure_exprs tops args
-    | Call ty (ExtCall is_static skip_check (name, arg_types, ret)) args default =>
+    (* Operands: target :: positional args ++ keyword operands in source
+       order. Every operand is pure, so lowering default_return_value= before
+       the call matches the semantics, which evaluates it there too. *)
+    | Call ty (ExtCall is_static skip_check (name, arg_types, ret) opts) args NONE =>
         EVERY supported_word_type arg_types /\
         supported_external_return_type tops ret /\
-        LENGTH args = LENGTH arg_types + (if is_static then 1 else 2) /\
-        supported_pure_exprs tops args /\
-        supported_external_default tops default
-    | Call NoneT Send [a; v] NONE =>
+        ALL_DISTINCT opts /\ (is_static ==> ~MEM EKValue opts) /\
+        LENGTH args = 1 + LENGTH arg_types + LENGTH opts /\
+        supported_pure_exprs tops args
+    | Call NoneT (Send F) [a; v] NONE =>
         supported_pure_expr tops a /\ supported_pure_expr tops v
+    | Call NoneT (Send T) [a; v; g] NONE =>
+        supported_pure_expr tops a /\ supported_pure_expr tops v /\
+        supported_pure_expr tops g
     | Pop ty (TopLevelNameTarget id) =>
         supported_storage_dynamic_array tops id
     | _ => F
@@ -103,26 +99,18 @@ QED
 
 Theorem supported_external_call_contract:
   supported_effect_expr tops
-    (Call ty (ExtCall is_static skip_check (name, arg_types, ret)) args default) <=>
+    (Call ty (ExtCall is_static skip_check (name, arg_types, ret) opts) args
+       NONE) <=>
   EVERY supported_word_type arg_types /\
   supported_external_return_type tops ret /\
-  LENGTH args = LENGTH arg_types + (if is_static then 1 else 2) /\
-  supported_pure_exprs tops args /\
-  supported_external_default tops default
+  ALL_DISTINCT opts /\ (is_static ==> ~MEM EKValue opts) /\
+  LENGTH args = 1 + LENGTH arg_types + LENGTH opts /\
+  supported_pure_exprs tops args
 Proof
   simp[supported_effect_expr_def]
 QED
 
-Theorem supported_external_default_contract:
-  supported_external_default tops (SOME e) <=>
-  ((?ty l. e = Literal ty l) \/ (?ty n. e = Name ty n)) /\
-  supported_pure_expr tops e
-Proof
-  Cases_on `e` >> simp[supported_external_default_def]
-QED
-
 Theorem supported_call_default_rejected:
-  (!is_static skip_check sig. target <> ExtCall is_static skip_check sig) ==>
   ~supported_expr tops (Call ty target args (SOME default))
 Proof
   Cases_on `target` >>

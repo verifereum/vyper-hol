@@ -3797,7 +3797,7 @@ Proof
 QED
 
 Theorem ext_call_args_typed:
-  well_typed_expr env (Call ty (ExtCall stat skip_check fsig) args drv) ==>
+  well_typed_expr env (Call ty (ExtCall stat skip_check fsig opts) args drv) ==>
   well_typed_exprs env args ∧ well_typed_opt env drv
 Proof
   Cases_on `fsig` >> Cases_on `r` >> rw[well_typed_expr_def]

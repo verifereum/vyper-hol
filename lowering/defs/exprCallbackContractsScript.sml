@@ -57,17 +57,26 @@ Theorem compile_make_tuple_callback_contract:
   ∀es buf off. expr_callbacks_agree f g cenv es ⇒
     compile_make_tuple f cenv es buf off = compile_make_tuple g cenv es buf off
 Proof
-  Induct >> simp[compile_make_tuple_def] >> rpt strip_tac >>
-  fs[] >> simp[lower_value_def]
+  Induct >> simp[compile_make_tuple_def] >> rpt strip_tac >> fs[]
+QED
+
+Theorem compile_make_array_elems_callback_contract:
+  ∀es elem_ty sz lw buf idx. expr_callbacks_agree f g cenv es ⇒
+    compile_make_array_elems f cenv es elem_ty sz lw buf idx =
+    compile_make_array_elems g cenv es elem_ty sz lw buf idx
+Proof
+  Induct >> simp[compile_make_array_elems_def] >> rpt strip_tac >>
+  fs[]
 QED
 
 Theorem compile_make_array_callback_contract:
-  ∀es sz lw (total:num) buf idx. expr_callbacks_agree f g cenv es ⇒
-    compile_make_array f cenv es sz lw total buf idx =
-    compile_make_array g cenv es sz lw total buf idx
+  ∀es elem_ty sz lw buf. expr_callbacks_agree f g cenv es ⇒
+    compile_make_array f cenv es elem_ty sz lw buf =
+    compile_make_array g cenv es elem_ty sz lw buf
 Proof
-  Induct >> simp[compile_make_array_def] >> rpt strip_tac >>
-  fs[] >> simp[lower_value_def]
+  rpt strip_tac >>
+  drule compile_make_array_elems_callback_contract >>
+  strip_tac >> simp[compile_make_array_def]
 QED
 
 Theorem compile_concat_callback_contract:
@@ -90,8 +99,7 @@ Proof
   Induct >- simp[compile_struct_lit_def] >>
   rpt gen_tac >> rename1 `compile_struct_lit f cenv _ (fld::fields) _ _` >>
   Cases_on `fld` >>
-  simp[compile_struct_lit_def] >> rpt strip_tac >>
-  fs[] >> simp[lower_value_def]
+  simp[compile_struct_lit_def] >> rpt strip_tac >> fs[]
 QED
 
 Theorem compile_attribute_callback_contract:
@@ -149,14 +157,17 @@ QED
 
 Theorem compile_send_callback_contract:
   expr_callbacks_agree f g cenv args ⇒
-  compile_call f cenv ret_ty ty Send args default_ret st =
-  compile_call g cenv ret_ty ty Send args default_ret st
+  compile_call f cenv ret_ty ty (Send has_gas) args default_ret st =
+  compile_call g cenv ret_ty ty (Send has_gas) args default_ret st
 Proof
   Cases_on `args` >- simp[compile_call_def] >>
   rename1 `addr_e::rest` >> Cases_on `rest` >- simp[compile_call_def] >>
-  rename1 `addr_e::val_e::tail` >> Cases_on `tail` >>
+  rename1 `addr_e::val_e::gas_es` >>
+  Cases_on `LENGTH gas_es = if has_gas then 1 else 0` >>
   simp[compile_call_def] >> strip_tac >> fs[] >>
-  simp[lower_value_def, comp_bind_def]
+  `gas_es = [] \/ ?gas_e. gas_es = [gas_e]` by
+    (Cases_on `gas_es` >> gvs[AllCaseEqs()] >> Cases_on `t` >> gvs[]) >>
+  gvs[lower_value_def, comp_bind_def]
 QED
 
 (* msg.data has no expression callback; only the address and value are children. *)
@@ -172,20 +183,46 @@ Proof
   simp[lower_value_def, comp_bind_def]
 QED
 
+Theorem compile_ext_call_kwargs_callback_contract:
+  ∀ks es. expr_callbacks_agree f g cenv es ⇒
+    compile_ext_call_kwargs f cenv return_type ks es =
+    compile_ext_call_kwargs g cenv return_type ks es
+Proof
+  Induct >> Cases_on `es` >> simp[compile_ext_call_kwargs_def] >>
+  rpt strip_tac >> first_x_assum drule >>
+  gvs[expr_callbacks_agree_def, FUN_EQ_THM, comp_bind_def, lower_value_def]
+QED
+
+Theorem expr_callbacks_agree_take_drop:
+  expr_callbacks_agree f g cenv es ⇒
+  expr_callbacks_agree f g cenv (TAKE n es) ∧
+  expr_callbacks_agree f g cenv (DROP n es)
+Proof
+  rw[expr_callbacks_agree_def] >> first_x_assum irule >>
+  imp_res_tac rich_listTheory.MEM_TAKE >> imp_res_tac rich_listTheory.MEM_DROP_IMP >> simp[]
+QED
+
 Theorem compile_extcall_callback_contract:
   expr_callbacks_agree f g cenv (call_callback_children args default_ret) ⇒
-  compile_call f cenv ret_ty ty (ExtCall static_call skip_check (fn_name,arg_types,return_type))
+  compile_call f cenv ret_ty ty
+    (ExtCall static_call skip_check (fn_name,arg_types,return_type) opts)
     args default_ret st =
-  compile_call g cenv ret_ty ty (ExtCall static_call skip_check (fn_name,arg_types,return_type))
+  compile_call g cenv ret_ty ty
+    (ExtCall static_call skip_check (fn_name,arg_types,return_type) opts)
     args default_ret st
 Proof
   Cases_on `args` >- simp[compile_call_def] >>
-  rename1 `addr_e::rest` >>
-  Cases_on `default_ret` >> Cases_on `static_call` >>
-  simp[call_callback_children_def] >> strip_tac >> fs[] >>
-  Cases_on `rest` >> fs[] >>
-  TRY (drule compile_multi_vvs_callback_contract >> strip_tac) >>
-  simp[compile_call_def, lower_value_def, comp_bind_def, compile_multi_vvs_def]
+  rename1 `addr_e::rest` >> strip_tac >>
+  `expr_callbacks_agree f g cenv [addr_e] ∧ expr_callbacks_agree f g cenv rest` by
+    (Cases_on `default_ret` >> fs[call_callback_children_def]) >>
+  drule_then (qspec_then `LENGTH arg_types` strip_assume_tac)
+    expr_callbacks_agree_take_drop >>
+  qpat_x_assum `expr_callbacks_agree _ _ _ (TAKE _ _)`
+    (assume_tac o MATCH_MP compile_multi_vvs_callback_contract) >>
+  qpat_x_assum `expr_callbacks_agree _ _ _ (DROP _ _)`
+    (assume_tac o MATCH_MP compile_ext_call_kwargs_callback_contract) >>
+  fs[] >> rpt strip_tac >>
+  simp[compile_call_def, lower_value_def, comp_bind_def]
 QED
 
 Theorem compile_call_callback_contract:
@@ -200,7 +237,7 @@ Proof
            fs[call_callback_children_def] >> Cases_on `default_ret` >> fs[],
          irule compile_raw_call_calldata_callback_contract >>
            fs[call_callback_children_def] >> Cases_on `default_ret` >> fs[],
-         rename1 `compile_call f _ _ _ (ExtCall _ _ signature)` >>
+         rename1 `compile_call f _ _ _ (ExtCall _ _ signature _)` >>
            PairCases_on `signature` >>
            irule compile_extcall_callback_contract >> simp[],
          simp[compile_call_def]]
@@ -273,8 +310,8 @@ Proof
 QED
 
 Theorem compile_make_array_list_child_calls:
-  compile_make_array (expr_child_callback (list_size expr_size args) f) cenv args sz lw (alloc_sz:num) buf idx =
-  compile_make_array f cenv args sz lw alloc_sz buf idx
+  compile_make_array (expr_child_callback (list_size expr_size args) f) cenv args elem_ty sz lw buf =
+  compile_make_array f cenv args elem_ty sz lw buf
 Proof
   irule compile_make_array_callback_contract >> irule expr_list_child_callback_agrees
 QED
@@ -420,3 +457,16 @@ Proof
   irule expr_child_callback_agrees >> simp[] >>
   drule_all extcode_child_bound >> simp[]
 QED
+
+(* Issue #560 callback interfaces must remain kernel-closed. *)
+val () = List.app (fn th =>
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
+  in if null axioms andalso null (Thm.hyp th) andalso
+        List.all (fn name => name = "DISK_THM") oracles then ()
+     else raise Fail "admitted memory-construction callback contract"
+  end)
+  [compile_make_tuple_callback_contract,
+   compile_make_array_elems_callback_contract,
+   compile_make_array_callback_contract,
+   compile_struct_lit_callback_contract,
+   compile_make_array_list_child_calls];

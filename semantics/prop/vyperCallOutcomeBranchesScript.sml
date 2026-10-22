@@ -83,41 +83,6 @@ QED
 
 (* ===== ExtCall and Send exact branch rules ===== *)
 
-(* Code is checked before taking, precisely when ret_type = NoneT. Neither
-   balance nor default-return-value evaluation is duplicated here. k gets
-   outcome.co_returnData at the adopted state, including empty return data. *)
-Theorem ExtCall_outcome_continue:
-  take_call_outcome target calldata value_opt st = (res,st1) ==>
-  (do
-    accounts <- get_accounts;
-    (if ret_type = NoneT then
-       check (~NULL (lookup_account target accounts).code) "ExtCall target has no code"
-     else return ());
-    (rq,outcome) <- take_call_outcome target calldata value_opt;
-    check outcome.co_success "ExtCall reverted";
-    adopt_call_outcome rq outcome;
-    k outcome.co_returnData
-  od) st =
-  if ret_type = NoneT /\ NULL (lookup_account target st.accounts).code then
-    (INR (Error (RuntimeError "ExtCall target has no code")),st)
-  else
-    case res of
-      INR exc => (INR exc,st1)
-    | INL (rq,outcome) =>
-        if outcome.co_success then
-          k outcome.co_returnData (SND (adopt_call_outcome rq outcome st1))
-        else (INR (Error (RuntimeError "ExtCall reverted")),st1)
-Proof
-  strip_tac >>
-  simp[bind_def, ignore_bind_def, get_accounts_def, return_def, check_def, assert_def] >>
-  rw[] >> gvs[assert_def, bind_def, ignore_bind_def, return_def] >>
-  Cases_on `res` >> simp[] >>
-  rename1 `take_call_outcome target calldata value_opt st = (INL ro,st1)` >>
-  Cases_on `ro` >>
-  simp[adopt_call_outcome_equation, bind_def, ignore_bind_def, assert_def] >>
-  rw[] >> gvs[]
-QED
-
 Theorem Send_outcome_continue:
   take_call_outcome target [] (SOME amount) st = (res,st1) ==>
   (do
