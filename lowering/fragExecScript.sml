@@ -5,8 +5,9 @@
  * compile states st and st'.  frag_exec says what running that code does
  * inside any function that contains it (the blocks finished between st and
  * st', and the start of st''s current block): from the point
- * where st left off, execution reaches the point where st' leaves off, or
- * stops with Abort, Halt or IntRet.  Unlike running the fragment assembled
+ * where st left off, in a state that has not halted, execution reaches the
+ * point where st' leaves off without halting, or stops with Abort, Halt or
+ * IntRet.  Unlike running the fragment assembled
  * into a function of its own, the judgment composes, because the code after
  * the fragment is whatever the real function holds.
  *
@@ -24,6 +25,7 @@
  *   fn_has_code_split     — containment of a fragment holds for its parts
  *   frag_exec_seq         — sequential composition
  *   frag_exec_conseq, frag_exec_refl — consequence and the empty fragment
+ *   frag_exec_pointwise   — prove a fragment from each start state
  *   frag_exec_run_inst_seq — lift a straight-line run_inst_seq result
  *
  * Abort lifting:
@@ -111,10 +113,11 @@ Definition cs_extends_def:
 End
 
 (* The fragment judgment.  In every function containing the code emitted
-   between st and st', from a state satisfying P at the point where st left
-   off, either
+   between st and st', from a state satisfying P and not halted at the
+   point where st left off, either
    - execution reaches the point where st' leaves off in a state satisfying
-     Q, and every non-Error result from there is a result from the start, or
+     Q and not halted, and every non-Error result from there is a result
+     from the start, or
    - execution stops with an exit result satisfying R. *)
 Definition frag_exec_def:
   frag_exec ctx (st : compile_state) (st' : compile_state) P Q R <=>
@@ -284,6 +287,16 @@ Theorem frag_exec_refl:
   !ctx st P Q R. (!s. P s ==> Q s) ==> frag_exec ctx st st P Q R
 Proof
   rw[frag_exec_def] >> disj1_tac >> qexists_tac `s` >> simp[] >>
+  metis_tac[]
+QED
+
+(* A fragment proved from each start state on its own. *)
+Theorem frag_exec_pointwise:
+  !ctx st st' P Q R.
+    (!s0. P s0 ==> frag_exec ctx st st' (\s. s = s0) Q R) ==>
+    frag_exec ctx st st' P Q R
+Proof
+  rw[frag_exec_def] >> first_x_assum drule >> simp[frag_exec_def] >>
   metis_tac[]
 QED
 
