@@ -2526,7 +2526,12 @@ Definition compile_expr_body_def:
         let (_, st13) = emit_inst ASSIGN [else_op] [result_var] st12 in
         let (_, st14) = emit_inst JMP [Label exit_lbl] [] st13 in
         let (_, st15) = new_block exit_lbl st14 in
-        (StackValue ret_ty (Var result_var), st15))
+        (* A non-word result is the PHI of two memory pointers, so it is a
+           memory pointer value, as in Python's lower_IfExp
+           (vyper/codegen_venom/expr.py): an aggregate ternary assigned to a
+           local is then copied through a temporary like any memory value. *)
+        if is_word_type ret_ty then (StackValue ret_ty (Var result_var), st15)
+        else (LocatedValue ret_ty (mk_ptr (Var result_var) LocMemory), st15))
    | Builtin _ AddMod [Name aty a; Name bty b; Name mty m] =>
        compile_addmod_names cenv ret_ty aty a bty b mty m st
    | Builtin _ MulMod [Name aty a; Name bty b; Name mty m] =>
