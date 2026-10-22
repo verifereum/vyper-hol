@@ -602,11 +602,8 @@ Definition cleanup_height_safe_def:
 End
 
 Definition cleanup_elision_safe_def:
-  cleanup_elision_safe cfg fn bb <=>
-    ~EXISTS (λinst. is_param_opcode inst.inst_opcode)
-       (FLAT (MAP (λb. b.bb_instructions) fn.fn_blocks)) /\
-    MEM bb.bb_label (must_halt_labels cfg fn) /\
-    LENGTH (cleanup_frame_vars fn) + cleanup_max_transient fn ≤ 1024
+  cleanup_elision_safe ch growth cfg fn bb h <=>
+    cleanup_height_safe ch growth cfg fn bb h
 End
 
 (* There is no runtime operation for Python's _DeadStackItem.  Label operands
@@ -648,22 +645,27 @@ Definition clean_stack_plan_def:
               let layout = live_vars_at liveness pred_lbl
                 (LENGTH pred_bb.bb_instructions) in
               let to_pop = FILTER (λv. ¬ MEM v inputs) layout in
-              (* Even a halting block with no live inputs must mark retained
-                 physical slots dead.  Python keeps the slots but replaces
-                 their logical identities before planning REVERT/RETURN. *)
-              if NULL inputs ∧ cleanup_elision_safe cfg fn bb then
-                ([], ps with ps_stack :=
-                  MAP (K dead_stack_marker) ps.ps_stack)
-              else if cleanup_elision_safe cfg fn bb then
-                let physical = FILTER (λop.
-                      IS_SOME (stack_get_depth op ps.ps_stack))
-                      (MAP Var to_pop) in
-                let retained = FILTER (λop.
-                      below_all_live op inputs ps.ps_stack) physical in
-                let to_cleanup = FILTER (λop. ¬MEM op retained) physical in
+              let physical = FILTER (λop.
+                    IS_SOME (stack_get_depth op ps.ps_stack))
+                    (MAP Var to_pop) in
+              let retained = FILTER (λop.
+                    below_all_live op inputs ps.ps_stack) physical in
+              let to_cleanup = FILTER (λop. ¬MEM op retained) physical in
+              let ok = (ps.ps_cleanup_promised ∨
+                cleanup_elision_safe ps.ps_cleanup_height ps.ps_cleanup_growth
+                  cfg fn bb (LENGTH ps.ps_stack - LENGTH to_cleanup)) in
+              let promised = (ps.ps_cleanup_promised ∨ (ok ∧ ¬NULL retained)) in
+              (* A successful elision establishes a path-local promise.  Forget
+                 retained identities, not physical stack slots. *)
+              if NULL inputs ∧ ok then
+                ([], ps with <| ps_stack :=
+                  MAP (K dead_stack_marker) ps.ps_stack;
+                  ps_cleanup_promised := promised |>)
+              else if ok then
                 let (ops, ps') = popmany_plan to_cleanup ps in
-                (ops, ps' with ps_stack :=
-                  mark_dead_stack retained ps'.ps_stack)
+                (ops, ps' with <| ps_stack :=
+                  mark_dead_stack retained ps'.ps_stack;
+                  ps_cleanup_promised := promised |>)
               else popmany_plan (MAP Var to_pop) ps)
     | _ => ([], ps)
 End
@@ -1346,12 +1348,22 @@ End
 
 Definition generate_context_plan_def:
   generate_context_plan ctx =
-    generate_context_plan_with generate_fn_plan ctx
+    let fcg = fcg_analyze ctx in
+    let growth = cleanup_growth_table ctx fcg in
+    generate_context_plan_with
+      (\fn. generate_fn_plan_with_cleanup
+        (cleanup_caller_height (LENGTH ctx.ctx_functions) ctx fcg fn.fn_name)
+        growth fn) ctx
 End
 
 Definition generate_context_plan_fuel_def:
   generate_context_plan_fuel fuel ctx =
-    generate_context_plan_with (generate_fn_plan_fuel fuel) ctx
+    let fcg = fcg_analyze ctx in
+    let growth = cleanup_growth_table ctx fcg in
+    generate_context_plan_with
+      (\fn. generate_fn_plan_with_cleanup_fuel fuel
+        (cleanup_caller_height (LENGTH ctx.ctx_functions) ctx fcg fn.fn_name)
+        growth fn) ctx
 End
 Theorem generate_context_regions_rejects_malformed_spill:
   generate_context_regions

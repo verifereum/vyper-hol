@@ -523,3 +523,11 @@ Theorem venom_asm_rel_cleanup_promised[simp]:
 Proof
   simp[venom_asm_rel_def]
 QED
+
+Theorem venom_asm_rel_stack_cleanup_promised[simp]:
+  venom_asm_rel lo
+    (ps with <| ps_stack := stk; ps_cleanup_promised := promised |>) vs ast =
+  venom_asm_rel lo (ps with ps_stack := stk) vs ast
+Proof
+  simp[venom_asm_rel_def]
+QED
