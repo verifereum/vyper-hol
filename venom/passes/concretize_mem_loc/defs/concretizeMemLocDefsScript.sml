@@ -776,6 +776,63 @@ Definition compute_alloc_map_fuel_def:
       sorted_info pre_allocated
 End
 
+(* Imported static allocations keep their callee positions.  Local candidates
+   stay local: importing these identities into the result map would violate
+   candidate_alloc_keys_valid at the checked completion boundary. *)
+Definition callee_mems_used_def:
+  callee_mems_used ctx name =
+    case lookup_function name ctx.ctx_functions of
+      NONE => []
+    | SOME fn => fn.fn_mems_used
+End
+
+(* A diamond can reach the same allocation through both arms.  Keep its first
+   occurrence, preserving call/instruction order rather than sorting by name. *)
+Definition unique_mems_used_def:
+  unique_mems_used [] = [] /\
+  unique_mems_used ((a,p,s)::rest) =
+    (a,p,s)::unique_mems_used (FILTER (\(b,_,_). b <> a) rest)
+Termination
+  WF_REL_TAC `measure LENGTH` >>
+  simp[arithmeticTheory.LT_SUC_LE, rich_listTheory.LENGTH_FILTER_LEQ]
+End
+
+Definition imported_mems_used_def:
+  imported_mems_used ctx fn =
+    unique_mems_used
+      (FLAT (MAP (\inst.
+        if inst.inst_opcode = INVOKE then
+          case inst.inst_operands of
+            Label name :: _ => callee_mems_used ctx name
+          | _ => []
+        else []) (fn_insts fn)))
+End
+
+Definition context_alloca_size_def:
+  context_alloca_size fn imports a =
+    case FIND (\(b,_,_). b = a) imports of
+      SOME (_,_,sz) => sz
+    | NONE => get_alloca_size fn a
+End
+
+Definition context_mem_livesets_def:
+  context_mem_livesets fuel ctx fn bpr cfg =
+    let imports = imported_mems_used ctx fn in
+    let sizes = context_alloca_size fn imports in
+    mem_liveness_analyze_fuel fuel bpr
+      (\name. MAP FST (callee_mems_used ctx name))
+      (\a. let sz = sizes a in if sz = 0 then NONE else SOME sz)
+      ([] : allocation list) cfg fn
+End
+
+Definition imported_liveset_info_def:
+  imported_liveset_info imports (ls : (allocation, inst_addr list) fmap) =
+    FLAT (MAP (\(a,p,s).
+      case FLOOKUP ls a of
+        NONE => []
+      | SOME live => [(a,live,p,s)]) imports)
+End
+
 (* Convert allocation-keyed result to variable-keyed alloc_map *)
 (* An INVOKE keeps every static allocation of its callee live.  Once a callee
    has been concretized, [fn_eom] is the compact frame occupied by that set;
