@@ -804,7 +804,9 @@ End
    fresh ALLOCA of its declared type's size, else the MemLoc slot that
    build_compile_env reserved for its name.  A name re-declared in a disjoint
    block thus gets that block's allocation, type and capacity.
-   Mirrors Python: Context.new_variable, scoped by Context.block_scope *)
+   Mirrors Python: Context.new_variable, which rebinds the name.  Python keeps
+   an If branch's names after the If; dropping them at the end of the block
+   is the same for well-typed code, which cannot use them there. *)
 Definition declare_local_def:
   declare_local (cenv : compile_env) id ty =
     let cenv' =
@@ -1250,9 +1252,9 @@ Definition compile_stmt_def:
      Mirrors Python: vyper/codegen_venom/stmt.py:_lower_range_loop *)
   compile_stmt cenv lctx ty (For id fty (Range start_e end_e) bound body) =
     (let is_signed = is_signed_type fty in
-     do body_cenv <- declare_local cenv id fty;
-        start_op <- lower_value compile_expr cenv fty start_e;
+     do start_op <- lower_value compile_expr cenv fty start_e;
         end_op <- lower_value compile_expr cenv fty end_e;
+        body_cenv <- declare_local cenv id fty;
         entry_lbl <- fresh_label "for_entry";
         cond_lbl <- fresh_label "for_cond";
         body_lbl <- fresh_label "for_body";
@@ -1327,13 +1329,13 @@ Definition compile_stmt_def:
      let ws = word_scale loc in
      let elem_size = elem_size_in_location cenv loc fty in
      let load_opc = load_opc_for loc in
-     do body_cenv <- declare_local cenv id fty;
-        arr_vv <- compile_expr cenv (expr_type arr_e) arr_e;
+     do arr_vv <- compile_expr cenv (expr_type arr_e) arr_e;
         arr_op <- return (vv_operand arr_vv);
         (* Load array length *)
         len_op <-
           (if is_dynamic then emit_op load_opc [arr_op]
            else return (Lit (n2w bound)));
+        body_cenv <- declare_local cenv id fty;
         (* Bound check for DynArrays: length <= bound *)
         (if is_dynamic ∧ bound > 0 then
            do invalid <- emit_op GT [len_op; Lit (n2w bound)];

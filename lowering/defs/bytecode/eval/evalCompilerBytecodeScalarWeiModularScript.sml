@@ -244,10 +244,7 @@ fun scalar_modular_stage_external_function prefix package current =
     val register_args_pair = rhs (concl register_args_eval)
     val body_cenv = #1 (pairSyntax.dest_pair register_args_pair)
     val state3 = #2 (pairSyntax.dest_pair register_args_pair)
-    val alloca_cenv_eval = save_thm
-      (prefix ^ "_alloca_cenv_eval",
-       EVAL ``^body_cenv with ce_alloca_locals := T``)
-    val body_cenv2 = rhs (concl alloca_cenv_eval)
+    val body_cenv2 = body_cenv
     val state4 = state3
     val ret_ty = optionSyntax.dest_some ret_type
     val (stmt_terms,_) = listSyntax.dest_list body
@@ -325,7 +322,7 @@ fun scalar_modular_stage_external_function prefix package current =
       (prefix ^ "_guarded_body_eval",
        SIMP_CONV pure_ss
         [moduleLoweringTheory.compile_guarded_body_def,
-         alloca_cenv_eval, stmts_eval,
+         stmts_eval,
          block_terminated5_eval,
          compileEnvTheory.comp_bind_def,
          compileEnvTheory.comp_ignore_bind_def,

@@ -223,11 +223,7 @@ val scalar_convert_int_to_decimal_body_cenv =
   #1 (pairSyntax.dest_pair scalar_convert_int_to_decimal_register_args_pair)
 val scalar_convert_int_to_decimal_state5 =
   #2 (pairSyntax.dest_pair scalar_convert_int_to_decimal_register_args_pair)
-val scalar_convert_int_to_decimal_alloca_cenv_eval = save_thm
-  ("scalar_convert_int_to_decimal_alloca_cenv_eval",
-   EVAL ``^scalar_convert_int_to_decimal_body_cenv with ce_alloca_locals := T``)
-val scalar_convert_int_to_decimal_body_cenv2 =
-  rhs (concl scalar_convert_int_to_decimal_alloca_cenv_eval)
+val scalar_convert_int_to_decimal_body_cenv2 = scalar_convert_int_to_decimal_body_cenv
 val scalar_convert_int_to_decimal_state6 = scalar_convert_int_to_decimal_state5
 val scalar_convert_int_to_decimal_ret_ty = optionSyntax.dest_some
   scalar_convert_int_to_decimal_ret_type
@@ -313,7 +309,6 @@ val scalar_convert_int_to_decimal_guarded_body_eval = save_thm
   ("scalar_convert_int_to_decimal_guarded_body_eval",
    SIMP_CONV pure_ss
     [moduleLoweringTheory.compile_guarded_body_def,
-     scalar_convert_int_to_decimal_alloca_cenv_eval,
      scalar_convert_int_to_decimal_stmts_eval,
      scalar_convert_int_to_decimal_block_terminated7_eval,
      compileEnvTheory.comp_bind_def, compileEnvTheory.comp_ignore_bind_def,

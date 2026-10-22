@@ -418,7 +418,11 @@ Definition build_compile_env_def:
     let module_vars = add_module_var_locations tops FEMPTY in
     let (arg_vars, args_end) = allocate_args sft_fn args 0 module_vars in
     let locals = collect_locals body in
-    let (local_vars, locals_end) = allocate_locals sft_fn locals args_end arg_vars in
+    (* External and fallback bodies allocate each local at its declaration
+       (declare_local), so only the others reserve slots here. *)
+    let (local_vars, locals_end) =
+      if is_external then (arg_vars, args_end)
+      else allocate_locals sft_fn locals args_end arg_vars in
     let (ret_buf, ret_pc) =
       if is_external then (NONE, NONE)
       else allocate_internal_special_vars has_return_buf locals_end in
@@ -458,8 +462,7 @@ Definition build_compile_env_def:
        ce_nonreentrant := (F, 0n, use_transient_locks, mut = View);
        (* Default: overridden by package_*_fn from FunctionDecl raw_return field *)
        ce_raw_return := F;
-       (* Set by compile_guarded_body for external and fallback bodies *)
-       ce_alloca_locals := F
+       ce_alloca_locals := is_external
     |> : compile_env
 End
 
@@ -505,8 +508,7 @@ Theorem build_compile_env_external_single_uint_arg_lookup:
 Proof
   rpt strip_tac
   >> simp[build_compile_env_def]
-  >> rpt (pairarg_tac >> gvs[allocate_args_def, allocate_locals_def,
-                             type_mem_bytes_def])
+  >> rpt (pairarg_tac >> gvs[allocate_args_def, type_mem_bytes_def])
   >> EVAL_TAC
 QED
 

@@ -590,9 +590,10 @@ End
 (* ===== Local Variable Materialization ===== *)
 
 (* Collect lexical memory locals in source order, one entry per declaration.
-   build_compile_env uses the list to assign abstract MemLoc regions; external
-   and fallback bodies instead give each declaration its own ALLOCA
-   (declare_local), matching Python Context.new_variable. *)
+   build_compile_env uses the list to assign abstract MemLoc regions in
+   internal functions and the constructor; external and fallback bodies
+   instead give each declaration its own ALLOCA (declare_local), matching
+   Python Context.new_variable. *)
 Definition collect_locals_def:
   collect_locals ([] : stmt list) = ([] : (string # type) list) /\
   collect_locals (AnnAssign id ty _ :: rest) =
@@ -613,7 +614,7 @@ Definition compile_guarded_body_def:
     do (if is_nonreentrant then
           compile_nonreentrant_lock nkey use_transient is_view
         else return ());
-       compile_stmts (cenv with ce_alloca_locals := T) NoLoop
+       compile_stmts cenv NoLoop
          (case ret_type of SOME t => t | NONE => BaseT BoolT) body;
        cs <- comp_get;
        if block_is_terminated cs then return ()
