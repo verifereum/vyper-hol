@@ -2860,6 +2860,45 @@ Proof
   simp[ci_mono_comp_return]
 QED
 
+Theorem ci_mono_ext_call_gas_opt[local]:
+  ∀gas_opt sa s.
+    ci_mono sa s ⇒
+    ci_mono sa
+      (SND (case gas_opt of NONE => emit_op GAS [] s | SOME g => (g, s)))
+Proof
+  Cases >> simp[] >> rpt strip_tac >>
+  irule ci_mono_trans >> irule_at (Pos last) ci_mono_emit_op >> fs[]
+QED
+
+Theorem ci_mono_compile_ext_call_kwarg[local]:
+  ∀cfn cenv rt k e sa.
+    (∀cenv' ty' e' sa'. ci_mono sa' (SND (cfn cenv' ty' e' sa'))) ⇒
+    ci_mono sa (SND (compile_ext_call_kwarg cfn cenv rt k e sa))
+Proof
+  rpt strip_tac >> rewrite_tac[compile_ext_call_kwarg_def] >>
+  IF_CASES_TAC >> ho_match_mp_tac ci_mono_bind >> rpt strip_tac >> BETA_TAC
+  >- fs[]
+  >- (ho_match_mp_tac ci_mono_bind >>
+      simp[ci_mono_compile_materialize_vv, ci_mono_comp_return])
+  >- (irule ci_mono_lower_value_cfn >> fs[]) >>
+  simp[ci_mono_comp_return]
+QED
+
+Theorem ci_mono_compile_ext_call_kwargs[local]:
+  ∀ks es cfn cenv rt sa.
+    (∀cenv' ty' e' sa'. ci_mono sa' (SND (cfn cenv' ty' e' sa'))) ⇒
+    ci_mono sa (SND (compile_ext_call_kwargs cfn cenv rt ks es sa))
+Proof
+  Induct >> Cases_on `es` >> rpt strip_tac >>
+  simp[compile_ext_call_kwargs_def, ci_mono_comp_return] >>
+  ho_match_mp_tac ci_mono_bind >> conj_tac
+  >- (rpt strip_tac >> irule ci_mono_compile_ext_call_kwarg >> fs[]) >>
+  rpt strip_tac >> simp[pairTheory.UNCURRY] >>
+  ho_match_mp_tac ci_mono_bind >> conj_tac
+  >- (rpt strip_tac >> first_x_assum irule >> simp[]) >>
+  simp[pairTheory.UNCURRY, ci_mono_comp_return]
+QED
+
 Theorem ci_mono_compile_extcall_store_values[local]:
   ∀cenv vals buf_op offset sa.
     ci_mono sa
@@ -3076,10 +3115,9 @@ rpt strip_tac >> first_assum irule)
     PairCases_on `p` >> simp[compile_call_def, LET_THM, pairTheory.UNCURRY] >>
     Cases_on `args` >> simp[ci_mono_emit_inst] >>
     rpt IF_CASES_TAC >> gvs[] >>
-    Cases_on `default_ret` >> gvs[] >>
-    rpt IF_CASES_TAC >> gvs[] >>
     Cases_on `t` >> gvs[] >>
     rpt (CHANGED_TAC (
+      (irule ci_mono_ext_call_gas_opt) ORELSE
       (irule ci_mono_trans >>
        irule_at (Pos last) ci_mono_lower_value_cfn >> simp[]) ORELSE
       (irule ci_mono_trans >>
@@ -3087,7 +3125,7 @@ rpt strip_tac >> first_assum irule)
       (irule ci_mono_trans >>
        irule_at (Pos last) ci_mono_compile_multi_vvs >> simp[]) ORELSE
       (irule ci_mono_trans >>
-       irule_at (Pos last) ci_mono_compile_materialize_vv >> simp[]) ORELSE
+       irule_at (Pos last) ci_mono_compile_ext_call_kwargs >> simp[]) ORELSE
       (irule ci_mono_trans >>
        irule_at (Pos last) ci_mono_compile_extcall_store_args >> simp[]) ORELSE
       (irule ci_mono_trans >>
@@ -3110,8 +3148,17 @@ rpt strip_tac >> first_assum irule)
   simp[Once compile_call_def, LET_THM] >>
   Cases_on `args` >> simp[pairTheory.UNCURRY, ci_mono_emit_inst] >>
   Cases_on `t` >> simp[pairTheory.UNCURRY, ci_mono_emit_inst] >>
-  Cases_on `t'` >> simp[pairTheory.UNCURRY, ci_mono_emit_inst] >>
-  irule ci_mono_trans >> irule_at (Pos last) ci_mono_emit_void >> irule ci_mono_trans >> irule_at (Pos last) ci_mono_emit_op >> irule ci_mono_trans >> irule_at (Pos last) ci_mono_lower_value_cfn >> (conj_tac >- simp[]) >> irule ci_mono_lower_value_cfn >> simp[]
+  IF_CASES_TAC >> simp[pairTheory.UNCURRY, ci_mono_emit_inst] >>
+  qpat_x_assum `LENGTH _ = _` mp_tac >>
+  rename1 `LENGTH gas_es = if has_gas then _ else _` >> strip_tac >>
+  `gas_es = [] \/ ?gas_e. gas_es = [gas_e]` by
+    (Cases_on `has_gas` >> gvs[listTheory.LENGTH_EQ_NUM_compute]) >>
+  pop_assum strip_assume_tac >> gvs[] >>
+  irule ci_mono_trans >> irule_at (Pos last) ci_mono_emit_void >> irule ci_mono_trans >> irule_at (Pos last) ci_mono_emit_op >>
+  irule ci_mono_trans >> irule_at (Pos last) ci_mono_lower_value_cfn >> (conj_tac >- simp[]) >>
+  TRY (irule ci_mono_lower_value_cfn >> simp[] >> NO_TAC) >>
+  irule ci_mono_trans >> irule_at (Pos last) ci_mono_lower_value_cfn >> (conj_tac >- simp[]) >>
+  irule ci_mono_lower_value_cfn >> simp[]
 QED
 
 Theorem compile_expr_ci_mono[local]:
