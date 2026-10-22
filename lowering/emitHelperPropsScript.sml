@@ -28,7 +28,7 @@
 
 Theory emitHelperProps
 Ancestors
-  exprLoweringProps emitHelper compileEnv
+  exprLoweringProps emitHelper compileEnv vyperCompiler
   venomExecSemantics venomState venomInst
   instIdxIndep vfmState freshLabelStringProps ASCIInumbers
   list pred_set arithmetic
@@ -2454,7 +2454,7 @@ Theorem compile_state_ok_initial:
     entry_lbl ∉ compiler_labels_future 0
     ⇒ compile_state_ok (initial_compile_state entry_lbl)
 Proof
-  cheat
+  simp[compile_state_ok_def, initial_compile_state_def, bound_labels_def]
 QED
 
 (* emit_op preserves compile_state_ok, bound_labels, and label-space fields
@@ -2468,7 +2468,10 @@ Theorem compile_state_ok_emit_op:
       st'.cs_blocks = st.cs_blocks ∧
       st'.cs_current_bb = st.cs_current_bb
 Proof
-  cheat
+  rpt gen_tac >>
+  simp[emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
+       fresh_id_def, fresh_var_def, emit_def] >>
+  strip_tac >> gvs[compile_state_ok_def, bound_labels_def]
 QED
 
 (* emit_void preserves compile_state_ok, bound_labels, and label-space fields
@@ -2482,7 +2485,10 @@ Theorem compile_state_ok_emit_void:
       st'.cs_blocks = st.cs_blocks ∧
       st'.cs_current_bb = st.cs_current_bb
 Proof
-  cheat
+  rpt gen_tac >>
+  simp[emit_void_def, comp_bind_def, comp_ignore_bind_def, fresh_id_def,
+       emit_def] >>
+  strip_tac >> gvs[compile_state_ok_def, bound_labels_def]
 QED
 
 (* emit_inst preserves compile_state_ok, bound_labels, and label-space fields
@@ -2496,7 +2502,10 @@ Theorem compile_state_ok_emit_inst:
       st'.cs_blocks = st.cs_blocks ∧
       st'.cs_current_bb = st.cs_current_bb
 Proof
-  cheat
+  rpt gen_tac >>
+  simp[emit_inst_def, comp_bind_def, comp_ignore_bind_def, fresh_id_def,
+       emit_def] >>
+  strip_tac >> gvs[compile_state_ok_def, bound_labels_def]
 QED
 
 (* fresh_label: the result is external to the post-state, not the pre-state.
@@ -2533,7 +2542,8 @@ Theorem compile_state_ok_fresh_var:
       bound_labels st' = bound_labels st ∧
       st'.cs_next_label = st.cs_next_label
 Proof
-  cheat
+  rpt gen_tac >> simp[fresh_var_def] >> strip_tac >>
+  gvs[compile_state_ok_def, bound_labels_def]
 QED
 
 Theorem compile_state_ok_fresh_id:
@@ -2543,7 +2553,8 @@ Theorem compile_state_ok_fresh_id:
       bound_labels st' = bound_labels st ∧
       st'.cs_next_label = st.cs_next_label
 Proof
-  cheat
+  rpt gen_tac >> simp[fresh_id_def] >> strip_tac >>
+  gvs[compile_state_ok_def, bound_labels_def]
 QED
 
 (* new_block: seals the current block into cs_blocks and switches to
@@ -2561,7 +2572,8 @@ Theorem compile_state_ok_new_block:
       st'.cs_current_bb = new_lbl ∧
       old = st.cs_current_bb
 Proof
-  cheat
+  rpt gen_tac >> simp[new_block_def] >> strip_tac >>
+  gvs[compile_state_ok_def, label_external_def, bound_labels_def]
 QED
 
 (* Monotonicity: label_external carries through monad extensions whose
@@ -2575,5 +2587,10 @@ Theorem label_external_mono:
     lbl ∉ bound_labels st'
     ⇒ label_external st' lbl
 Proof
-  cheat
+  rw[label_external_def] >>
+  `compiler_labels_future st'.cs_next_label ⊆
+   compiler_labels_future st.cs_next_label`
+    by (simp[compiler_labels_future_def, SUBSET_DEF, PULL_EXISTS] >>
+        rpt strip_tac >> irule_at Any EQ_REFL >> fs[]) >>
+  metis_tac[SUBSET_DEF]
 QED
