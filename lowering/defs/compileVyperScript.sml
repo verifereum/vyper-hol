@@ -296,33 +296,6 @@ Definition collect_module_vars_def:
      | _ => []) ++ collect_module_vars rest
 End
 
-(* ===== Method ID Map ===== *)
-
-Definition build_method_id_map_def:
-  build_method_id_map tenv ([] : toplevel list) = (K 0n : string -> num) ∧
-  build_method_id_map tenv (top :: rest) =
-    let rest_map = build_method_id_map tenv rest in
-    case top of
-      FunctionDecl External _ _ _ fname fargs _ _ _ =>
-        (* Keep selector hashing inside the matching lookup branch.  The map is
-           stored in every compile environment but most functions never query
-           it; eagerly hashing all declarations changes no result and makes
-           logical evaluation repeat the dispatcher's selector work. *)
-        (λs. if s = fname then
-               let abi_types = vyper_to_abi_types tenv (MAP SND fargs) in
-               let sel_bytes = function_selector fname abi_types in
-               w2n (calldata_method_id sel_bytes)
-             else rest_map s)
-    | InterfaceDecl _ methods =>
-        (λs. case ALOOKUP methods s of
-               SOME (fargs, _, _) =>
-                 let abi_types = vyper_to_abi_types tenv (MAP SND fargs) in
-                 let sel_bytes = function_selector s abi_types in
-                 w2n (calldata_method_id sel_bytes)
-             | NONE => rest_map s)
-    | _ => rest_map
-End
-
 (* ===== Internal Function Info ===== *)
 
 Definition build_func_info_def:
@@ -435,7 +408,6 @@ Definition build_compile_env_def:
       else allocate_internal_special_vars has_return_buf locals_end in
     let all_decls = collect_module_vars tops ++ args ++ locals in
     let dynarray_cap = build_dynarray_capacity all_decls in
-    let method_id_map = build_method_id_map tenv tops in
     let func_info = build_func_info sft_fn tops in
     let local_var_type = (λn.
           case ALOOKUP (REVERSE (args ++ locals)) n of
@@ -449,7 +421,8 @@ Definition build_compile_env_def:
        ce_module := NONE;
        ce_struct_fields := sft;
        ce_dynarray_capacity := dynarray_cap;
-       ce_method_id := method_id_map;
+       ce_method_id := (λs tys. w2n (calldata_method_id
+                          (function_selector s (vyper_to_abi_types tenv tys))));
        ce_flag_member_id := flag_member_id;
        ce_flag_n_members := flag_n_members;
        ce_var_type := local_var_type;

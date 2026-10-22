@@ -570,10 +570,13 @@ Definition make_name_target_def:
     else NameTarget id
 End
 
+(* Python lowers I(addr) to a stack value (_lower_interface_constructor), so
+   the address is loaded where the constructor appears. *)
 Definition interface_constructor_result_def:
   interface_constructor_result ty [Literal _ (BytesL bs)] =
     Literal ty (BytesL bs) /\
-  interface_constructor_result _ args = HD args
+  interface_constructor_result _ args =
+    Builtin (BaseT AddressT) (Acc Address) [HD args]
 End
 
 (* Cross-module flag result metadata may omit its declaration source. Recover
@@ -685,7 +688,7 @@ Definition translate_attribute_def:
       TopLevelName (lookup_toplevel_type ctx nsid ty) nsid
     else if attr = "balance" /\ base_type_name = SOME "address" then Builtin (BaseT (UintT 256)) (Acc Balance) [translated_base]
     else if attr = "address" /\ base_type_name = SOME "address" then Builtin (BaseT AddressT) (Acc Address) [translated_base]
-    else if attr = "address" /\ base_typeclass = SOME "interface" then translated_base (* interface.address = interface (identity) *)
+    else if attr = "address" /\ base_typeclass = SOME "interface" then Builtin (BaseT AddressT) (Acc Address) [translated_base]
     else if attr = "is_contract" /\ base_type_name = SOME "address" then Builtin (BaseT BoolT) (Acc IsContract) [translated_base]
     else if attr = "codesize" /\ base_type_name = SOME "address" then Builtin (BaseT (UintT 256)) (Acc Codesize) [translated_base]
     else if attr = "codehash" /\ base_type_name = SOME "address" then Builtin (BaseT (BytesT (Fixed 32))) (Acc Codehash) [translated_base]

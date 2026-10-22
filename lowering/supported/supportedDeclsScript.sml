@@ -1,7 +1,6 @@
 (* PLAN 5.6 declaration whitelist and syntactic resolution.
    TOP-LEVEL: supported_declaration_header(s), supported_variable_decl,
-   supported_hashmap_decl, supported_function_decl, supported_event_fields,
-   supported_interface_method, supported_external_call_signature.
+   supported_hashmap_decl, supported_function_decl, supported_event_fields.
    No definition here checks or admits a function body. TASK_021 must conjoin
    its body checks; TASK_020 consumes the lookups. Typing is separate. *)
 Theory supportedDecls
@@ -88,30 +87,6 @@ Definition supported_event_fields_def:
         if s = name then SOME fields
         else supported_event_fields rest (module_id, name)
     | _ => supported_event_fields rest (module_id, name)
-End
-
-(* Matches build_method_id_map's order: a matching external declaration
-   blocks a later interface. The tag F/T records external/interface origin,
-   so TASK_020 can require an interface rather than merely equal types. *)
-Definition supported_interface_method_def:
-  supported_interface_method ([] : toplevel list) name = NONE /\
-  supported_interface_method (top :: rest) name =
-    case top of
-      FunctionDecl External mut nr rr s args defaults ret body =>
-        if s = name then SOME (F, args, ret, mut)
-        else supported_interface_method rest name
-    | InterfaceDecl s methods =>
-        (case ALOOKUP methods name of
-           SOME (args, ret, mut) => SOME (T, args, ret, mut)
-         | NONE => supported_interface_method rest name)
-    | _ => supported_interface_method rest name
-End
-
-Definition supported_external_call_signature_def:
-  supported_external_call_signature tops name arg_types <=>
-    case supported_interface_method tops name of
-      SOME (T, args, ret, mut) => MAP SND args = arg_types
-    | _ => F
 End
 
 (* ===== Consumer contracts ===== *)

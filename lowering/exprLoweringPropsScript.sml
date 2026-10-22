@@ -2107,6 +2107,72 @@ Proof
   simp[ci_mono_comp_return, ci_mono_emit_op]
 QED
 
+(* ci_mono for the mutually recursive layout-aware memory copy. *)
+Theorem ci_mono_compile_store_memory_typed[local]:
+  (∀cenv dst dst_ty src src_ty sa.
+     ci_mono sa
+       (SND (compile_store_memory_typed cenv dst dst_ty src src_ty sa))) ∧
+  (∀cenv dst src dst_tys src_tys dst_off src_off sa.
+     ci_mono sa
+       (SND (compile_typed_copy_fields cenv dst src dst_tys src_tys
+               dst_off src_off sa))) ∧
+  (∀cenv dst dst_elem_ty src src_elem_ty n sa.
+     ci_mono sa
+       (SND (compile_copy_sarray_typed cenv dst dst_elem_ty src src_elem_ty
+               n sa))) ∧
+  (∀cenv dst dst_elem_ty dst_capacity src src_elem_ty sa.
+     ci_mono sa
+       (SND (compile_copy_dynarray_typed cenv dst dst_elem_ty dst_capacity
+               src src_elem_ty sa))) ∧
+  (∀cenv dst src dst_fields src_fields dst_off src_off sa.
+     ci_mono sa
+       (SND (compile_struct_typed_copy cenv dst src dst_fields src_fields
+               dst_off src_off sa)))
+Proof
+  ho_match_mp_tac contextTheory.compile_store_memory_typed_ind >>
+  rpt conj_tac >> rpt strip_tac >>
+  once_rewrite_tac[contextTheory.compile_store_memory_typed_def] >>
+  simp_tac pure_ss [LET_THM] >> BETA_TAC >>
+  rpt (FIRST [
+    CHANGED_TAC (simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_emit_inst,
+      ci_mono_fresh_label, ci_mono_fresh_var, ci_mono_new_block,
+      ci_mono_comp_return, ci_mono_compile_copy_memory,
+      ci_mono_compile_copy_memory_dynamic, ci_mono_compile_store_bytestring,
+      ci_mono_compile_with_byte_offset]),
+    gen_tac,
+    ho_match_mp_tac ci_mono_bind >> conj_tac,
+    ho_match_mp_tac ci_mono_ignore_bind >> conj_tac,
+    IF_CASES_TAC,
+    TOP_CASE_TAC,
+    first_assum (fn ih =>
+      (irule (SRULE [] ih) >> fs[] >> NO_TAC) ORELSE
+      (* the struct IH may differ from the goal by commuted offsets *)
+      metis_tac[SRULE [] ih, arithmeticTheory.ADD_COMM])])
+QED
+
+Theorem ci_mono_compile_store_memory[local]:
+  ∀cenv src dst dst_ty src_ty sa.
+    ci_mono sa (SND (compile_store_memory cenv src dst dst_ty src_ty sa))
+Proof
+  rw[contextTheory.compile_store_memory_def] >>
+  simp[ci_mono_emit_void, ci_mono_compile_store_bytestring,
+       ci_mono_compile_copy_memory, cj 1 ci_mono_compile_store_memory_typed]
+QED
+
+Theorem ci_mono_compile_materialize_vv[local]:
+  ∀cenv ty vv sa. ci_mono sa (SND (compile_materialize_vv cenv ty vv sa))
+Proof
+  rpt gen_tac >> rewrite_tac[compile_materialize_vv_def] >>
+  ho_match_mp_tac ci_mono_bind >> conj_tac
+  >- simp[ci_mono_compile_alloc_buffer] >>
+  rpt strip_tac >>
+  ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_unwrap_value] >>
+  rpt strip_tac >>
+  ho_match_mp_tac ci_mono_ignore_bind >> conj_tac
+  >- simp[ci_mono_compile_store_memory] >>
+  simp[ci_mono_comp_return]
+QED
+
 Theorem ci_mono_compile_abi_encode_child_branches[local]:
   (¬is_dyn ⇒ ∀dst sa.
      ci_mono sa (SND (compile_abi_encode_to_buf dst child_ptr child_info sa))) ⇒
@@ -2507,11 +2573,12 @@ Proof
 QED
 
 Theorem ci_mono_compile_default_return_path[local]:
-  ∀ buf_op result_op default_op addr_op skip_check min_return_size
-    max_return_size ret_mem_bytes ret_dec_info is_prim_return sa.
-    ci_mono sa (SND (compile_default_return_path buf_op result_op default_op addr_op
-                      skip_check min_return_size max_return_size ret_mem_bytes
-                      ret_dec_info is_prim_return sa))
+  ∀ cenv return_type default_ty buf_op result_op default_op addr_op skip_check
+    min_return_size max_return_size ret_dec_info sa.
+    ci_mono sa (SND (compile_default_return_path cenv return_type default_ty
+                      buf_op result_op default_op addr_op
+                      skip_check min_return_size max_return_size
+                      ret_dec_info sa))
 Proof
   rpt gen_tac >>
   rewrite_tac[exprLoweringTheory.compile_default_return_path_def, LET_THM] >> BETA_TAC >>
@@ -2523,7 +2590,7 @@ Proof
   ho_match_mp_tac ci_mono_ignore_bind >> conj_tac >- simp[ci_mono_emit_inst] >> rpt strip_tac >>
   ho_match_mp_tac ci_mono_ignore_bind >> conj_tac >- simp[ci_mono_new_block] >> rpt strip_tac >>
   ho_match_mp_tac ci_mono_ignore_bind >> conj_tac >-
-    (IF_CASES_TAC >> simp[ci_mono_emit_void]) >> rpt strip_tac >>
+    simp[ci_mono_compile_store_memory] >> rpt strip_tac >>
   ho_match_mp_tac ci_mono_ignore_bind >> conj_tac >-
     (IF_CASES_TAC >> simp[ci_mono_comp_return, ci_mono_compile_extcodesize_check]) >> rpt strip_tac >>
   ho_match_mp_tac ci_mono_ignore_bind >> conj_tac >- simp[ci_mono_emit_inst] >> rpt strip_tac >>
@@ -2653,13 +2720,13 @@ Theorem ci_mono_compile_external_call_kwargs[local]:
     return_abi_size min_return_size ret_mem_bytes
     use_staticcall call_value gas_op
     skip_check has_default default_op
-    is_prim_return
+    return_type default_ty
     args_enc_info ret_dec_info sa.
     ci_mono sa
       (SND (compile_external_call_kwargs cenv addr_op arg_vals arg_types
         args_mem_size args_abi_size method_id_val return_abi_size
         min_return_size ret_mem_bytes use_staticcall call_value gas_op
-        skip_check has_default default_op is_prim_return args_enc_info
+        skip_check has_default default_op return_type default_ty args_enc_info
         ret_dec_info sa))
 Proof
   rpt gen_tac >> simp[compile_external_call_kwargs_def, LET_THM] >> BETA_TAC >> irule ci_mono_bind >> reverse conj_tac >- simp[ci_mono_compile_alloc_buffer] >> rpt strip_tac >> BETA_TAC >>
@@ -2818,6 +2885,7 @@ rpt strip_tac >> first_assum irule)
     Cases_on `args` >> simp[ci_mono_emit_inst] >>
     rpt IF_CASES_TAC >> gvs[] >>
     Cases_on `default_ret` >> gvs[] >>
+    rpt IF_CASES_TAC >> gvs[] >>
     Cases_on `t` >> gvs[] >>
     rpt (CHANGED_TAC (
       (irule ci_mono_trans >>
@@ -2826,6 +2894,8 @@ rpt strip_tac >> first_assum irule)
        irule_at (Pos last) ci_mono_emit_op >> simp[]) ORELSE
       (irule ci_mono_trans >>
        irule_at (Pos last) ci_mono_compile_multi_vvs >> simp[]) ORELSE
+      (irule ci_mono_trans >>
+       irule_at (Pos last) ci_mono_compile_materialize_vv >> simp[]) ORELSE
       (irule ci_mono_trans >>
        irule_at (Pos last) ci_mono_compile_extcall_store_args >> simp[]) ORELSE
       (irule ci_mono_trans >>
