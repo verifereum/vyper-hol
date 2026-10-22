@@ -2739,18 +2739,45 @@ Proof
   metis_tac[transfer_value_storage_frame]
 QED
 
+Theorem adopt_call_outcome_INR_storage[local]:
+  (adopt_call_outcome rq co s = (INR e,s')) <=> F
+Proof
+  rw[vyperCallOutcomeTheory.adopt_call_outcome_def] >> pairarg_tac >>
+  gvs[return_def]
+QED
+
+Theorem run_ext_call_storage_frame[local]:
+  protected_storage_calls_preserve cx /\ contract_storage_well_formed cx st /\
+  run_ext_call cx.txn.target callee calldata value_opt st.accounts
+    st.tStorage txp = SOME result /\
+  st'.accounts = FST (SND (SND result)) /\
+  st'.tStorage = FST (SND (SND (SND result))) ==>
+  contract_storage_well_formed cx st'
+Proof
+  PairCases_on `result` >> rpt strip_tac >> gvs[] >>
+  drule_all protected_storage_calls_preserve_run_ext_call >> strip_tac >>
+  irule contract_storage_well_formed_accounts_transient_frame >>
+  first_x_assum (irule_at Any) >> gvs[]
+QED
+
 Theorem eval_send_storage_preserved[local]:
   contract_storage_well_formed cx st /\ oracle_storage_ok cx st /\
   eval_send cx has_gas vs st = (res,st') ==>
   contract_storage_well_formed cx st'
 Proof
-  Cases_on `vs` >- simp[eval_send_def, raise_def] >>
-  Cases_on `t` >- simp[eval_send_def, raise_def] >>
+  Cases_on `vs` >- (simp[eval_send_def, raise_def] >> rw[] >> gvs[]) >>
+  Cases_on `t` >- (simp[eval_send_def, raise_def] >> rw[] >> gvs[]) >>
   simp[eval_send_def, bind_def, ignore_bind_def, type_check_def, assert_def,
        check_def, lift_option_type_def, return_def, raise_def,
-       COND_RATOR, option_CASE_rator, prod_CASE_rator, sum_CASE_rator] >>
+       COND_RATOR, vfmTypesTheory.option_CASE_rator,
+       vfmTypesTheory.prod_CASE_rator, vfmTypesTheory.sum_CASE_rator] >>
   strip_tac >> gvs[AllCaseEqs()] >>
-  goalStack.print_tac "PROBE_SSEND" >> cheat
+  gvs[pairTheory.UNCURRY_RATOR, pairTheory.UNCURRY_EQ, combinTheory.C_THM,
+      combinTheory.o_THM, AllCaseEqs(), COND_RATOR, bind_def, return_def,
+      raise_def, assert_def, adopt_call_outcome_INR_storage] >>
+  metis_tac[take_call_outcome_storage_suffix,
+            take_adopt_call_outcome_storage_suffix,
+            transfer_value_preserves_contract_storage_well_formed]
 QED
 
 Resume eval_all_storage_preservation_mutual[Expr_Call_Send]:
@@ -3429,15 +3456,22 @@ Theorem eval_ext_call_storage_preserved[local]:
   contract_storage_well_formed cx st'
 Proof
   PairCases_on `sig` >>
-  Cases_on `vs` >- simp[eval_ext_call_def, raise_def] >>
+  Cases_on `vs` >- (simp[eval_ext_call_def, raise_def] >> rw[] >> gvs[]) >>
   simp[eval_ext_call_def, bind_def, ignore_bind_def, type_check_def,
        assert_def, check_def, lift_option_type_def, lift_option_def,
        lift_sum_runtime_def, get_accounts_def, get_transient_storage_def,
        update_accounts_def, update_transient_def, append_logs_def,
        return_def, raise_def,
-       COND_RATOR, option_CASE_rator, prod_CASE_rator, sum_CASE_rator] >>
+       COND_RATOR, vfmTypesTheory.option_CASE_rator,
+       vfmTypesTheory.prod_CASE_rator, vfmTypesTheory.sum_CASE_rator] >>
   strip_tac >> gvs[AllCaseEqs()] >>
-  goalStack.print_tac "PROBE_SEXT" >> cheat
+  gvs[pairTheory.UNCURRY_RATOR, pairTheory.UNCURRY_EQ, combinTheory.C_THM,
+      combinTheory.o_THM, AllCaseEqs(), COND_RATOR, bind_def, return_def,
+      raise_def, adopt_call_outcome_INR_storage] >>~-
+  ([`run_ext_call _ _ _ _ _ _ _ = SOME _`],
+   irule run_ext_call_storage_frame >> simp[] >> metis_tac[]) >>
+  metis_tac[take_call_outcome_storage_suffix,
+            take_adopt_call_outcome_storage_suffix]
 QED
 
 Resume eval_all_storage_preservation_mutual[Expr_Call_ExtCall]:
