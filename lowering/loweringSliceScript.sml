@@ -384,13 +384,6 @@ Proof
   simp[run_inst_seq_def, stmt_state_rel_inst_idx]
 QED
 
-(* Slice lemma 1, the declaration: x: T = e for a word type T held through
-   a pointer local.  The ALLOCA may run for the first time or again (in a
-   loop); the frontier bound in the precondition is what keeps a fresh
-   ALLOCA's base from wrapping, which S3's raw_unit_memory_ok gives along a
-   run.  The right-hand side is a word value at es, and its fragment is
-   any expr_frag at es; its type annotation fills one word (32 bytes) of
-   the local's region. *)
 (* The compile side of a word-local declaration: the ALLOCA, the right-hand
    side's fragment, and the MSTORE. *)
 Theorem compile_annassign_word_parts:
@@ -443,6 +436,13 @@ Proof
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
+(* Slice lemma 1, the declaration: x: T = e for a word type T held through
+   a pointer local.  The ALLOCA may run for the first time or again (in a
+   loop); the frontier bound in the precondition is what keeps a fresh
+   ALLOCA's base from wrapping, which S3's raw_unit_memory_ok gives along a
+   run.  The right-hand side is a word value at es, and its fragment is
+   any expr_frag at es; its type annotation fills one word (32 bytes) of
+   the local's region. *)
 Theorem compile_annassign_word_frag:
   !ctx func cenv cx lctx ty id vtyp e st st' es es' R p sz.
     compile_stmt cenv lctx ty (AnnAssign id vtyp e) st = ((), st') /\
@@ -653,10 +653,6 @@ Proof
   disj2_tac >> metis_tac[exit_result_not_error]
 QED
 
-(* Slice lemma 2: an if/else.  The condition is any expr_frag at es; the
-   branch bodies are fragments of the form of compile_stmts_correct, and
-   a body that runs to its end from a fresh block leaves the block open
-   (it does not end in a return), so it falls through to the exit. *)
 (* The compile side of an If: the code the condition selects, from the JNZ
    after the condition to the JMP into the exit block. *)
 Theorem compile_if_taken_branch:
@@ -737,6 +733,10 @@ Proof
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
+(* Slice lemma 2: an if/else.  The condition is any expr_frag at es; the
+   branch bodies are fragments of the form of compile_stmts_correct, and
+   a body that runs to its end from a fresh block leaves the block open
+   (it does not end in a return), so it falls through to the exit. *)
 Theorem compile_if_frag:
   !ctx func cenv cx lctx ty c ss1 ss2 st st' es es' R.
     compile_stmt cenv lctx ty (If c ss1 ss2) st = ((), st') /\
@@ -851,46 +851,7 @@ Theorem compile_safe_add_overflow_frag:
     frag_exec ctx st st' P Q R
 Proof
   rpt gen_tac >> strip_tac >>
-  `st'.cs_blocks = st.cs_blocks /\ st'.cs_current_bb = st.cs_current_bb /\
-   isPREFIX st.cs_current_insts st'.cs_current_insts /\
-   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
-     (emitted_insts st st')` by
-    (qpat_x_assum `compile_safe_add _ _ _ _ = _` mp_tac >> strip_tac >>
-     gvs[compile_safe_add_def, comp_bind_def, comp_return_def,
-         comp_ignore_bind_def, LET_THM] >>
-     rpt (pairarg_tac >> gvs[]) >>
-     rename1 `emit_op ADD [x; y] st = (op, st1)` >>
-     rename1 `emit_op LT [op; x] st1 = (lt, st2)` >>
-     rename1 `emit_op ISZERO [lt] st2 = (ok, st3)` >>
-     rename1 `emit_void ASSERT [ok] st3 = ((), st4)` >>
-     imp_res_tac emit_op_extends >> imp_res_tac emit_void_extends >>
-     `emitted_insts st3 st4 = [mk_inst st3.cs_next_id ASSERT [ok] []]` by
-       (qpat_x_assum `emit_void ASSERT _ _ = _` mp_tac >>
-        simp[emit_void_assert_inst] >> strip_tac >> gvs[] >>
-        simp[emitted_insts_def, rich_listTheory.DROP_LENGTH_APPEND]) >>
-     `emitted_insts st st4 =
-      emitted_insts st st1 ++ emitted_insts st1 st2 ++ emitted_insts st2 st3 ++
-      emitted_insts st3 st4 /\
-      st4.cs_current_insts = st.cs_current_insts ++ emitted_insts st st4` by
-       (`emitted_insts st2 st4 = emitted_insts st2 st3 ++ emitted_insts st3 st4`
-          by (irule emitted_insts_append >> simp[]) >>
-        `st4.cs_current_insts = st2.cs_current_insts ++ emitted_insts st2 st4`
-          by simp[] >>
-        `emitted_insts st1 st4 = emitted_insts st1 st2 ++ emitted_insts st2 st4`
-          by (irule emitted_insts_append >> simp[]) >>
-        `st4.cs_current_insts = st1.cs_current_insts ++ emitted_insts st1 st4`
-          by simp[] >>
-        `emitted_insts st st4 = emitted_insts st st1 ++ emitted_insts st1 st4`
-          by (irule emitted_insts_append >> simp[]) >>
-        simp[]) >>
-     `st4.cs_blocks = st.cs_blocks /\ st4.cs_current_bb = st.cs_current_bb` by
-       fs[same_blocks_def] >>
-     `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
-        (emitted_insts st st4)` by
-       (imp_res_tac emitted_insts_emit_op >>
-        asm_rewrite_tac[] >>
-        simp[venomInstTheory.mk_inst_def, is_terminator_def]) >>
-     asm_rewrite_tac[IS_PREFIX_APPEND3]) >>
+  drule_all compile_safe_add_unsigned_256_shape >> strip_tac >>
   irule frag_exec_run_inst_seq >> asm_rewrite_tac[] >>
   rpt strip_tac >> disj2_tac >>
   `fresh_vars_wrt st s /\
