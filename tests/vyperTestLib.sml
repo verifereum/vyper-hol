@@ -348,8 +348,7 @@ val allowed_test_names = [
 
 (* Tests excluded by name - require architectural changes *)
 val excluded_test_names = [
-  (* Raw bytecode blueprint creation remains coordinated with #379. *)
-  "test_create_from_blueprint_bad_code_offset",
+
 
   (* Tests using shift() builtin which is not yet translated.
      TODO: add shift builtin support *)
