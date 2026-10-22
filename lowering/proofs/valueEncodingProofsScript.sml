@@ -806,6 +806,147 @@ Proof
       conj_tac >> first_x_assum irule >> simp[type_memory_size_def])
 QED
 
+(* ===== Layer 2: memory agreement on a footprint ===== *)
+
+(* Byte i of a mem_bytes_at window: the memory byte, or zero past the end. *)
+Theorem EL_mem_bytes_at:
+  ∀ off len mem i.
+    i < len ⇒
+    EL i (mem_bytes_at off len mem) =
+    if off + i < LENGTH mem then EL (off + i) mem else 0w
+Proof
+  rpt strip_tac >> simp[mem_bytes_at_def, EL_TAKE] >>
+  Cases_on `off + i < LENGTH mem`
+  >- simp[EL_APPEND1, EL_DROP] >>
+  simp[EL_APPEND2, EL_REPLICATE]
+QED
+
+(* Two memories that agree on a window agree on every sub-window, and on
+   every word inside it. *)
+Theorem mem_bytes_at_agree_window:
+  ∀ off len mem mem'.
+    mem_bytes_at off len mem = mem_bytes_at off len mem' ⇒
+    (∀ off2 len2.
+       off ≤ off2 ∧ off2 + len2 ≤ off + len ⇒
+       mem_bytes_at off2 len2 mem' = mem_bytes_at off2 len2 mem) ∧
+    (∀ off2.
+       off ≤ off2 ∧ off2 + 32 ≤ off + len ⇒
+       mem_word_at off2 mem' = mem_word_at off2 mem)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `∀ off2 len2.
+     off ≤ off2 ∧ off2 + len2 ≤ off + len ⇒
+     mem_bytes_at off2 len2 mem' = mem_bytes_at off2 len2 mem` by
+    (rpt strip_tac >> irule LIST_EQ >>
+     simp[LENGTH_mem_bytes_at_proof] >> rpt strip_tac >>
+     rename1 `i < len2` >>
+     `off2 + i - off < len` by simp[] >>
+     qpat_x_assum `mem_bytes_at _ _ _ = _`
+       (mp_tac o AP_TERM ``EL (off2 + i - off) : word8 list -> word8``) >>
+     simp[EL_mem_bytes_at]) >>
+  simp[] >> rpt strip_tac >>
+  `mem_bytes_at off2 32 mem' = mem_bytes_at off2 32 mem` by simp[] >>
+  fs[mem_word_at_def, mem_bytes_at_def]
+QED
+
+(* val_in_memory reads only the bytes of its footprint
+   [off, off + type_memory_size ty): memories agreeing there agree on it. *)
+Theorem val_in_memory_mem_agree_proof:
+  (∀ ty v off mem mem'.
+    val_in_memory ty v off mem ∧ val_wf ty v ∧
+    mem_bytes_at off (type_memory_size ty) mem =
+    mem_bytes_at off (type_memory_size ty) mem' ⇒
+    val_in_memory ty v off mem') ∧
+  (∀ fields field_tvs off mem mem'.
+    fields_in_memory fields field_tvs off mem ∧
+    fields_val_wf fields field_tvs ∧
+    mem_bytes_at off (type_memory_size_fields field_tvs) mem =
+    mem_bytes_at off (type_memory_size_fields field_tvs) mem' ⇒
+    fields_in_memory fields field_tvs off mem') ∧
+  (∀ vs off tv mem mem'.
+    elems_in_memory vs off tv mem ∧ elems_val_wf vs tv ∧
+    mem_bytes_at off (LENGTH vs * type_memory_size tv) mem =
+    mem_bytes_at off (LENGTH vs * type_memory_size tv) mem' ⇒
+    elems_in_memory vs off tv mem') ∧
+  (∀ (kvs : (num # value) list) base_off tv mem mem'.
+    kvs_in_memory kvs base_off tv mem ∧
+    (∀ k v. MEM (k,v) kvs ⇒
+      val_wf tv v ∧
+      mem_bytes_at (base_off + k * type_memory_size tv)
+        (type_memory_size tv) mem =
+      mem_bytes_at (base_off + k * type_memory_size tv)
+        (type_memory_size tv) mem') ⇒
+    kvs_in_memory kvs base_off tv mem') ∧
+  (∀ vs tvs off mem mem'.
+    tuple_in_memory vs tvs off mem ∧ tuple_val_wf vs tvs ∧
+    mem_bytes_at off (type_memory_size_list tvs) mem =
+    mem_bytes_at off (type_memory_size_list tvs) mem' ⇒
+    tuple_in_memory vs tvs off mem')
+Proof
+  ho_match_mp_tac val_in_memory_ind >> rpt conj_tac >>
+  rpt gen_tac >> rpt strip_tac >>
+  TRY (fs[val_in_memory_def] >> NO_TAC) >>
+  TRY (first_assum (strip_assume_tac o MATCH_MP mem_bytes_at_agree_window))
+  (* 1-4: primitives *)
+  >~ [`BoolV`] >- gvs[val_in_memory_def, val_wf_def]
+  >~ [`IntV`] >- gvs[val_in_memory_def, val_wf_def]
+  >~ [`FlagV`] >- gvs[val_in_memory_def, val_wf_def]
+  >~ [`DecimalV`] >- gvs[val_in_memory_def, val_wf_def]
+  >~ [`BytesV`]
+  >- (Cases_on `ty` >>
+      gvs[val_in_memory_def, val_wf_def, type_memory_size_def] >>
+      TRY (rename1 `BaseTV bt` >> Cases_on `bt` >>
+           gvs[val_in_memory_def, val_wf_def, type_memory_size_def] >>
+           TRY (rename1 `BytesT bnd` >> Cases_on `bnd` >>
+                gvs[val_in_memory_def, val_wf_def, type_memory_size_def])))
+  >~ [`StringV`] >- gvs[val_in_memory_def, val_wf_def]
+  >~ [`StructV`]
+  >- (Cases_on `ty` >> gvs[val_in_memory_def, val_wf_def] >>
+      first_x_assum irule >> gvs[type_memory_size_def])
+  >~ [`DynArrayV`]
+  >- (Cases_on `ty` >> gvs[val_in_memory_def, val_wf_def] >>
+      Cases_on `b` >> gvs[val_in_memory_def, val_wf_def, type_memory_size_def] >>
+      `LENGTH vs * type_memory_size t ≤ n * type_memory_size t` by
+        simp[arithmeticTheory.LE_MULT_RCANCEL] >>
+      first_x_assum irule >> simp[])
+  >~ [`SArrayV`]
+  >- (Cases_on `ty` >> gvs[val_in_memory_def, val_wf_def] >>
+      Cases_on `b` >> gvs[val_in_memory_def, val_wf_def, type_memory_size_def] >>
+      first_x_assum irule >> simp[] >> rpt gen_tac >> strip_tac >>
+      drule_all kvs_val_wf_mem >> drule_all kvs_val_wf_bound >>
+      rpt strip_tac >> simp[] >>
+      `type_memory_size t + k * type_memory_size t ≤
+       n * type_memory_size t` by
+        (`SUC k ≤ n` by simp[] >>
+         drule arithmeticTheory.LESS_MONO_MULT >>
+         disch_then (qspec_then `type_memory_size t` mp_tac) >>
+         REWRITE_TAC[arithmeticTheory.MULT] >> strip_tac >>
+         ONCE_REWRITE_TAC[arithmeticTheory.ADD_COMM] >>
+         first_x_assum ACCEPT_TAC) >>
+      qpat_x_assum `∀off2 len2. _ ⇒ mem_bytes_at off2 len2 mem' = _`
+        (qspecl_then [`off + k * type_memory_size t`, `type_memory_size t`]
+           mp_tac) >>
+      impl_tac >- simp[] >>
+      simp[])
+  >~ [`TupleV`]
+  >- (Cases_on `ty` >> gvs[val_in_memory_def, val_wf_def] >>
+      first_x_assum irule >> gvs[type_memory_size_def])
+  >~ [`fields_in_memory ((_,_)::_)`]
+  >- (Cases_on `field_tvs` >> TRY (Cases_on `h`) >>
+      gvs[val_in_memory_def, val_wf_def, LET_THM, type_memory_size_def] >>
+      conj_tac >> first_x_assum irule >> simp[])
+  >~ [`elems_in_memory (_::_)`]
+  >- (gvs[val_in_memory_def, val_wf_def, arithmeticTheory.MULT_CLAUSES] >>
+      conj_tac >> first_x_assum irule >> simp[])
+  >~ [`kvs_in_memory ((_,_)::_)`]
+  >- (fs[val_in_memory_def] >> rpt conj_tac >>
+      first_x_assum irule >> metis_tac[])
+  >~ [`tuple_in_memory (_::_)`]
+  >- (Cases_on `tvs` >>
+      gvs[val_in_memory_def, val_wf_def, LET_THM, type_memory_size_def] >>
+      conj_tac >> first_x_assum irule >> simp[])
+QED
+
 (* ===== Layer 2: val_in_memory decomposition lemmas ===== *)
 
 (* These are essentially the definition clauses restated as rewrite-friendly
