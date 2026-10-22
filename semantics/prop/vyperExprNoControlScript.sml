@@ -506,13 +506,21 @@ val mono = [bind_def, ignore_bind_def, return_def, raise_def,
             update_accounts_def, update_transient_def];
 
 Theorem eval_create_no_control[local]:
-  eval_create cx kind has_salt rof arg_tys vs st = (INR ex, st') ==>
+  eval_create cx kind has_salt rof arg_tys vs blueprint_size st = (INR ex, st') ==>
   no_control_exc ex
 Proof
   strip_tac >> drule eval_create_exception_is_error >> simp[no_control_exc_def]
 QED
 
-val helpers = [eval_create_no_control,
+Theorem check_create_blueprint_no_control[local]:
+  check_create_blueprint has_salt vs st = (INR ex, st') ==>
+  no_control_exc ex
+Proof
+  strip_tac >> drule check_create_blueprint_exception_is_error >>
+  simp[no_control_exc_def]
+QED
+
+val helpers = [eval_create_no_control, check_create_blueprint_no_control,
                check_no_control, type_check_no_control,
                lift_option_no_control, lift_option_type_no_control,
                lift_sum_no_control, lift_sum_runtime_no_control,
@@ -965,7 +973,15 @@ Proof
   conj_tac >- (rpt strip_tac >> drule_all raw_call_no_control >> simp[]) >>
   conj_tac >- (rpt strip_tac >> drule_all raw_call_calldata_no_control >> simp[]) >>
   conj_tac >- unfold_tac >>
+  conj_tac >- unfold_tac >>
+  conj_tac >- unfold_tac >>
+  conj_tac >- suspend "CreateTarget" >>
   rpt conj_tac >> unfold_tac
+QED
+
+Resume eval_expr_no_control_with_bt[CreateTarget]:
+  rpt gen_tac >> strip_tac >>
+  Cases_on `kind` >> gvs[] >> unfold_tac
 QED
 
 Resume eval_expr_no_control_with_bt[Send]:
