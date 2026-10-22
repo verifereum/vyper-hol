@@ -2031,10 +2031,16 @@ Proof
 QED
 
 Theorem ci_mono_compile_getelemptr_abi[local]:
-  ∀ src_op is_dyn abi_offset load_opc sa.
-    ci_mono sa (SND (compile_getelemptr_abi src_op is_dyn abi_offset load_opc sa))
+  ∀ src_op is_dyn abi_offset load_opc hi_op sa.
+    ci_mono sa (SND (compile_getelemptr_abi src_op is_dyn abi_offset load_opc hi_op sa))
 Proof
-  rpt gen_tac >> simp[abiEncoderTheory.compile_getelemptr_abi_def] >> BETA_TAC >> rpt IF_CASES_TAC >> gvs[] >> rpt ((irule ci_mono_ignore_bind ORELSE irule ci_mono_bind) >> simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return] >> rpt strip_tac) >> TRY (IF_CASES_TAC >> gvs[] >> rpt ((irule ci_mono_ignore_bind ORELSE irule ci_mono_bind) >> simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return] >> rpt strip_tac)) >> simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return]
+  rpt gen_tac >> Cases_on `hi_op = Lit 0w` >> Cases_on `is_dyn` >>
+  simp[abiEncoderTheory.compile_getelemptr_abi_def] >> BETA_TAC >>
+  rpt IF_CASES_TAC >> gvs[] >>
+  rpt ((irule ci_mono_ignore_bind ORELSE irule ci_mono_bind) >>
+       simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return] >>
+       rpt strip_tac) >>
+  simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return]
 QED
 
 Theorem ci_mono_compile_abi_decode_dyn_elem_ptr[local]:
@@ -2043,16 +2049,11 @@ Theorem ci_mono_compile_abi_decode_dyn_elem_ptr[local]:
 Proof
   rpt gen_tac >>
   rewrite_tac[abiEncoderTheory.compile_abi_decode_dyn_elem_ptr_def] >> BETA_TAC >>
-  ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_emit_op] >> rpt strip_tac >>
-  ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_emit_op] >> rpt strip_tac >>
-  ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_emit_op] >> rpt strip_tac >>
-  ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_emit_op] >> rpt strip_tac >>
-  ho_match_mp_tac ci_mono_ignore_bind >> conj_tac >- simp[ci_mono_emit_void] >> rpt strip_tac >>
-  ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_emit_op] >> rpt strip_tac >>
-  ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_emit_op] >> rpt strip_tac >>
-  ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_emit_op] >> rpt strip_tac >>
-  ho_match_mp_tac ci_mono_ignore_bind >> conj_tac >- simp[ci_mono_emit_void] >> rpt strip_tac >>
-  simp[ci_mono_comp_return]
+  Cases_on `hi_op = Lit 0w` >> simp[] >>
+  rpt ((irule ci_mono_ignore_bind ORELSE irule ci_mono_bind) >>
+       simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return] >>
+       rpt strip_tac) >>
+  simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return]
 QED
 
 Theorem ci_mono_compile_create_tuple_in_memory[local]:
@@ -2132,7 +2133,15 @@ Proof
   ho_match_mp_tac contextTheory.compile_store_memory_typed_ind >>
   rpt conj_tac >> rpt strip_tac >>
   once_rewrite_tac[contextTheory.compile_store_memory_typed_def] >>
-  simp_tac pure_ss [LET_THM] >> BETA_TAC >>
+  simp_tac pure_ss [LET_THM] >> BETA_TAC
+  >- (rpt IF_CASES_TAC >>
+      gvs[ci_mono_emit_void, ci_mono_compile_store_bytestring] >>
+      TRY (ho_match_mp_tac ci_mono_bind >>
+           simp[ci_mono_emit_op, ci_mono_emit_void] >> NO_TAC) >>
+      Cases_on `dst_ty` >> Cases_on `src_ty` >>
+      gvs[ci_mono_compile_copy_memory] >>
+      rpt TOP_CASE_TAC >> gvs[ci_mono_compile_copy_memory] >>
+      first_assum (irule o SRULE [])) >>
   rpt (FIRST [
     CHANGED_TAC (simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_emit_inst,
       ci_mono_fresh_label, ci_mono_fresh_var, ci_mono_new_block,
@@ -2145,9 +2154,7 @@ Proof
     IF_CASES_TAC,
     TOP_CASE_TAC,
     first_assum (fn ih =>
-      (irule (SRULE [] ih) >> fs[] >> NO_TAC) ORELSE
-      (* the struct IH may differ from the goal by commuted offsets *)
-      metis_tac[SRULE [] ih, arithmeticTheory.ADD_COMM])])
+      irule (SRULE [arithmeticTheory.ADD_COMM] ih) >> fs[] >> NO_TAC)])
 QED
 
 Theorem ci_mono_compile_store_memory[local]:
