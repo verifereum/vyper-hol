@@ -212,6 +212,16 @@ Definition kwarg_bool_def:
 End
 
 
+(* ABI Boolean keywords distinguish absence from an invalid present value. *)
+Definition kwarg_bool_opt_def:
+  kwarg_bool_opt key (kwargs : (identifier # expr) list) default =
+    case ALOOKUP kwargs key of
+      NONE => SOME default
+    | SOME (Literal _ (BoolL b)) => SOME b
+    | _ => NONE
+End
+
+
 (* Extract numeric kwarg: pattern match IntL *)
 Definition kwarg_num_def:
   kwarg_num key (kwargs : (identifier # expr) list) (default : num) =
@@ -235,9 +245,10 @@ End
 Definition kwarg_method_id_def:
   kwarg_method_id key (kwargs : (identifier # expr) list) =
     case ALOOKUP kwargs key of
-      SOME (Literal _ (BytesL bs)) =>
-        if LENGTH bs = 4 then SOME bs else NONE
-    | _ => NONE
+      NONE => NONE
+    | SOME (Literal _ (BytesL bs)) =>
+        if LENGTH bs = 4 then SOME bs else SOME []
+    | _ => SOME []
 End
 
 
@@ -341,14 +352,18 @@ Definition make_builtin_call_def:
       (case ret_ty of JT_String n => Builtin ty (Uint2Str n) args
                     | _ => Builtin ty (Uint2Str 0) args)
     else if name = "abi_decode" ∨ name = "_abi_decode" then
-      let unwrap = kwarg_bool "unwrap_tuple" kwargs T in
-      (case args of (arg::_) => TypeBuiltin ty (AbiDecode unwrap) ty [arg]
-                  | _ => TypeBuiltin ty (AbiDecode unwrap) ty [])
+      (case kwarg_bool_opt "unwrap_tuple" kwargs T of
+         NONE => TypeBuiltin ty (AbiDecode T) ty []
+       | SOME unwrap =>
+           (case args of (arg::_) => TypeBuiltin ty (AbiDecode unwrap) ty [arg]
+                       | _ => TypeBuiltin ty (AbiDecode unwrap) ty []))
     else if name = "abi_encode" ∨ name = "_abi_encode" then
-      let ensure = kwarg_bool "ensure_tuple" kwargs T in
-      let method_id = kwarg_method_id "method_id" kwargs in
-      let arg_types = TupleT (MAP expr_type args) in
-      TypeBuiltin ty (AbiEncode ensure method_id) arg_types args
+      (case kwarg_bool_opt "ensure_tuple" kwargs T of
+         NONE => TypeBuiltin ty (AbiEncode T NONE) (TupleT []) []
+       | SOME ensure =>
+           let method_id = kwarg_method_id "method_id" kwargs in
+           let arg_types = TupleT (MAP expr_type args) in
+           TypeBuiltin ty (AbiEncode ensure method_id) arg_types args)
     else if name = "extract32" then
       TypeBuiltin ty Extract32 ty args
     else if name = "method_id" then

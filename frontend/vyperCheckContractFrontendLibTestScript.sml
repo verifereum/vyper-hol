@@ -559,3 +559,104 @@ val () = app (fn th =>
   else raise Fail "fold boundary probe depends on an oracle")
   [nested_folded_integer_probe, folded_translation_boundary,
    folded_literal_kinds_probe, folded_range_bounds_probe];
+
+
+(* ABI keyword extraction must not turn malformed present values into defaults. *)
+Theorem abi_keyword_extractors_eval:
+  kwarg_bool_opt "k" [] T = SOME T /\
+  kwarg_bool_opt "k" [("k", Literal (BaseT BoolT) (BoolL F))] T = SOME F /\
+  kwarg_bool_opt "k" [("k", Name (BaseT BoolT) "b")] T = NONE /\
+  kwarg_bool_opt "k" [("k", Literal (BaseT (UintT 256)) (IntL 1))] T = NONE /\
+  kwarg_method_id "k" [] = NONE /\
+  kwarg_method_id "k"
+    [("k", Literal (BaseT (BytesT (Fixed 4))) (BytesL [1w;2w;3w;4w]))] =
+      SOME [1w;2w;3w;4w] /\
+  kwarg_method_id "k"
+    [("k", Literal (BaseT (BytesT (Fixed 3))) (BytesL [1w;2w;3w]))] = SOME [] /\
+  kwarg_method_id "k" [("k", Name (BaseT (BytesT (Fixed 4))) "m")] = SOME [] /\
+  kwarg_method_id "k" [("k", Literal (BaseT BoolT) (BoolL T))] = SOME []
+Proof
+  EVAL_TAC
+QED
+
+(* The same well-formed zero-argument function surrounds each translated call.
+   Valid controls ensure a rejection is due to the keyword, not the wrapper. *)
+Definition abi_keyword_contract_def:
+  abi_keyword_contract result_ty body =
+    [(NONE, [FunctionDecl External Pure F F "f" [] [] result_ty
+      [Return (SOME body)]])]
+End
+
+Definition abi_keyword_encode_def:
+  abi_keyword_encode kwargs =
+    make_builtin_call (BaseT (BytesT (Dynamic 36))) "abi_encode"
+      [Literal (BaseT (UintT 256)) (IntL 1)] kwargs (JT_Bytes 36)
+End
+
+Definition abi_keyword_decode_def:
+  abi_keyword_decode kwargs =
+    make_builtin_call (BaseT (UintT 256)) "abi_decode"
+      [Literal (BaseT (BytesT (Dynamic 32))) (BytesL (REPLICATE 32 0w))]
+      kwargs (JT_Integer 256 F)
+End
+
+Theorem abi_keyword_encode_valid_control:
+  IS_SOME (check_contract F [] (0w : address)
+    (abi_keyword_contract (BaseT (BytesT (Dynamic 36)))
+      (abi_keyword_encode [("ensure_tuple", Literal (BaseT BoolT) (BoolL F));
+        ("method_id", Literal (BaseT (BytesT (Fixed 4)))
+          (BytesL [1w;2w;3w;4w]))])))
+Proof
+  simp[abi_keyword_contract_def, abi_keyword_encode_def, make_builtin_call_def,
+       kwarg_bool_opt_def, kwarg_method_id_def, expr_type_def] >>
+  CONV_TAC (RAND_CONV vyperCheckContractLib.check_contract_conv) >> simp[]
+QED
+
+Theorem abi_keyword_decode_valid_control:
+  IS_SOME (check_contract F [] (0w : address)
+    (abi_keyword_contract (BaseT (UintT 256))
+      (abi_keyword_decode [("unwrap_tuple", Literal (BaseT BoolT) (BoolL T))])))
+Proof
+  simp[abi_keyword_contract_def, abi_keyword_decode_def, make_builtin_call_def,
+       kwarg_bool_opt_def] >>
+  CONV_TAC (RAND_CONV vyperCheckContractLib.check_contract_conv) >> simp[]
+QED
+
+Theorem abi_keyword_invalid_method_id_rejected:
+  check_contract F [] (0w : address)
+    (abi_keyword_contract (BaseT (BytesT (Dynamic 36)))
+      (abi_keyword_encode [("ensure_tuple", Literal (BaseT BoolT) (BoolL F));
+        ("method_id", Literal (BaseT BoolT) (BoolL T))])) = NONE
+Proof
+  simp[abi_keyword_contract_def, abi_keyword_encode_def, make_builtin_call_def,
+       kwarg_bool_opt_def, kwarg_method_id_def, expr_type_def] >>
+  CONV_TAC (LHS_CONV vyperCheckContractLib.check_contract_conv) >> simp[]
+QED
+
+Theorem abi_keyword_invalid_ensure_tuple_rejected:
+  check_contract F [] (0w : address)
+    (abi_keyword_contract (BaseT (BytesT (Dynamic 36)))
+      (abi_keyword_encode [("ensure_tuple", Literal (BaseT (UintT 256)) (IntL 1))])) = NONE
+Proof
+  simp[abi_keyword_contract_def, abi_keyword_encode_def, make_builtin_call_def,
+       kwarg_bool_opt_def] >>
+  CONV_TAC (LHS_CONV vyperCheckContractLib.check_contract_conv) >> simp[]
+QED
+
+Theorem abi_keyword_invalid_unwrap_tuple_rejected:
+  check_contract F [] (0w : address)
+    (abi_keyword_contract (BaseT (UintT 256))
+      (abi_keyword_decode [("unwrap_tuple", Literal (BaseT (UintT 256)) (IntL 1))])) = NONE
+Proof
+  simp[abi_keyword_contract_def, abi_keyword_decode_def, make_builtin_call_def,
+       kwarg_bool_opt_def] >>
+  CONV_TAC (LHS_CONV vyperCheckContractLib.check_contract_conv) >> simp[]
+QED
+
+val () = app (fn th =>
+  if null (List.filter (fn name => name <> "DISK_THM")
+    (#1 (Tag.dest_tag (Thm.tag th)))) then ()
+  else raise Fail "ABI keyword test depends on an oracle")
+  [abi_keyword_extractors_eval, abi_keyword_encode_valid_control,
+   abi_keyword_decode_valid_control, abi_keyword_invalid_method_id_rejected,
+   abi_keyword_invalid_ensure_tuple_rejected, abi_keyword_invalid_unwrap_tuple_rejected];
