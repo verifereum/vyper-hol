@@ -851,6 +851,20 @@ QED
 
 (* val_in_memory reads only the bytes of its footprint
    [off, off + type_memory_size ty): memories agreeing there agree on it. *)
+(* Slot k of an n-slot array lies inside the array's window. *)
+Theorem mem_bytes_at_agree_slot[local]:
+  ∀ off n t k mem mem'.
+    k < n ∧ mem_bytes_at off (n * t) mem = mem_bytes_at off (n * t) mem' ⇒
+    mem_bytes_at (off + k * t) t mem' = mem_bytes_at (off + k * t) t mem
+Proof
+  rpt strip_tac >> drule mem_bytes_at_agree_window >> strip_tac >>
+  first_x_assum irule >>
+  `SUC k ≤ n` by simp[] >>
+  drule arithmeticTheory.LESS_MONO_MULT >>
+  disch_then (qspec_then `t` mp_tac) >>
+  REWRITE_TAC[arithmeticTheory.MULT] >> DECIDE_TAC
+QED
+
 Theorem val_in_memory_mem_agree_proof:
   (∀ ty v off mem mem'.
     val_in_memory ty v off mem ∧ val_wf ty v ∧
@@ -887,11 +901,8 @@ Proof
   rpt gen_tac >> rpt strip_tac >>
   TRY (fs[val_in_memory_def] >> NO_TAC) >>
   TRY (first_assum (strip_assume_tac o MATCH_MP mem_bytes_at_agree_window))
-  (* 1-4: primitives *)
-  >~ [`BoolV`] >- gvs[val_in_memory_def, val_wf_def]
-  >~ [`IntV`] >- gvs[val_in_memory_def, val_wf_def]
-  >~ [`FlagV`] >- gvs[val_in_memory_def, val_wf_def]
-  >~ [`DecimalV`] >- gvs[val_in_memory_def, val_wf_def]
+  (* primitives and strings *)
+  >> TRY (gvs[val_in_memory_def, val_wf_def] >> NO_TAC)
   >~ [`BytesV`]
   >- (Cases_on `ty` >>
       gvs[val_in_memory_def, val_wf_def, type_memory_size_def] >>
@@ -899,7 +910,6 @@ Proof
            gvs[val_in_memory_def, val_wf_def, type_memory_size_def] >>
            TRY (rename1 `BytesT bnd` >> Cases_on `bnd` >>
                 gvs[val_in_memory_def, val_wf_def, type_memory_size_def])))
-  >~ [`StringV`] >- gvs[val_in_memory_def, val_wf_def]
   >~ [`StructV`]
   >- (Cases_on `ty` >> gvs[val_in_memory_def, val_wf_def] >>
       first_x_assum irule >> gvs[type_memory_size_def])
@@ -915,19 +925,9 @@ Proof
       first_x_assum irule >> simp[] >> rpt gen_tac >> strip_tac >>
       drule_all kvs_val_wf_mem >> drule_all kvs_val_wf_bound >>
       rpt strip_tac >> simp[] >>
-      `type_memory_size t + k * type_memory_size t ≤
-       n * type_memory_size t` by
-        (`SUC k ≤ n` by simp[] >>
-         drule arithmeticTheory.LESS_MONO_MULT >>
-         disch_then (qspec_then `type_memory_size t` mp_tac) >>
-         REWRITE_TAC[arithmeticTheory.MULT] >> strip_tac >>
-         ONCE_REWRITE_TAC[arithmeticTheory.ADD_COMM] >>
-         first_x_assum ACCEPT_TAC) >>
-      qpat_x_assum `∀off2 len2. _ ⇒ mem_bytes_at off2 len2 mem' = _`
-        (qspecl_then [`off + k * type_memory_size t`, `type_memory_size t`]
-           mp_tac) >>
-      impl_tac >- simp[] >>
-      simp[])
+      qspecl_then [`off`, `n`, `type_memory_size t`, `k`, `mem`, `mem'`]
+        mp_tac mem_bytes_at_agree_slot >>
+      impl_tac >- fs[] >> simp[])
   >~ [`TupleV`]
   >- (Cases_on `ty` >> gvs[val_in_memory_def, val_wf_def] >>
       first_x_assum irule >> gvs[type_memory_size_def])

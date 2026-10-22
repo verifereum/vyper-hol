@@ -331,8 +331,11 @@ Proof
 QED
 
 (* A range starting at or above the frontier misses every live local: the
-   consumer's route for writes into DALLOCA/FMP buffers once it knows they
-   lie above vs_alloca_next. *)
+   consumer's route for writes into DALLOCA/FMP buffers.  It needs
+   vs_alloca_next ≤ off at each such write, and the frontier only grows (each
+   internal call allocates its frame afresh, also inside loops), so this
+   takes an invariant that keeps the frontier below the DALLOCA area at every
+   step, not a fact about the entry state. *)
 Theorem local_ptrs_rel_above_frontier:
   ∀func cenv scopes ss name lo sz off len.
     local_ptrs_rel func cenv scopes ss ∧
@@ -344,12 +347,53 @@ Proof
   first_x_assum drule_all >> strip_tac >> gvs[]
 QED
 
-(* Writing a local: the scopes change only at name, the memory keeps the
-   bytes of the other live locals' regions, and the new entry is held in
-   name's region, disjoint from the other live locals.  Covers a declaration
-   (name not live before), an assignment, an augmented assignment and a
-   partial write such as x[i] = e (name live, old value overwritten). *)
-Theorem local_ptrs_rel_write_local:
+(* The disjointness half of local_ptrs_rel_write_local. *)
+Theorem write_local_disjoint[local]:
+  ∀cenv scopes scopes' ss ss' name sz w.
+    (∀n1 n2 b1 sz1 b2 sz2.
+       n1 ≠ n2 ∧ local_region cenv scopes ss n1 b1 sz1 ∧
+       local_region cenv scopes ss n2 b2 sz2 ⇒
+       regions_disjoint b1 sz1 b2 sz2) ∧
+    (∀n b sz'. n ≠ name ⇒
+       (local_region cenv scopes' ss' n b sz' ⇔
+        local_region cenv scopes ss n b sz')) ∧
+    (∀b sz'. local_region cenv scopes' ss' name b sz' ⇒ b = w2n w ∧ sz' = sz) ∧
+    (∀n b sz'. n ≠ name ∧ local_region cenv scopes ss n b sz' ⇒
+               regions_disjoint (w2n w) sz b sz') ⇒
+    ∀n1 n2 b1 sz1 b2 sz2.
+      n1 ≠ n2 ∧ local_region cenv scopes' ss' n1 b1 sz1 ∧
+      local_region cenv scopes' ss' n2 b2 sz2 ⇒
+      regions_disjoint b1 sz1 b2 sz2
+Proof
+  rpt gen_tac >> strip_tac >> rpt strip_tac >>
+  Cases_on `n1 = name` >> Cases_on `n2 = name` >> fs[]
+  >- (`local_region cenv scopes ss n2 b2 sz2` by
+        (qpat_x_assum `local_region cenv scopes' ss' n2 b2 sz2` mp_tac >> simp[]) >>
+      qpat_assum `∀b sz'. local_region cenv scopes' ss' name b sz' ⇒ Q b sz'`
+        (fn th => drule th) >> strip_tac >> fs[] >>
+      qpat_x_assum `∀n b sz'. P n b sz' ⇒ regions_disjoint (w2n w) sz b sz'`
+        irule >>
+      qexists_tac `n2` >> simp[])
+  >- (`local_region cenv scopes ss n1 b1 sz1` by
+        (qpat_x_assum `local_region cenv scopes' ss' n1 b1 sz1` mp_tac >> simp[]) >>
+      qpat_assum `∀b sz'. local_region cenv scopes' ss' name b sz' ⇒ Q b sz'`
+        (fn th => drule th) >> strip_tac >> fs[] >>
+      `regions_disjoint (w2n w) sz b1 sz1` by
+        (qpat_x_assum `∀n b sz'. P n b sz' ⇒ regions_disjoint (w2n w) sz b sz'`
+           irule >>
+         qexists_tac `n1` >> simp[]) >>
+      fs[regions_disjoint_def] >> DECIDE_TAC) >>
+  `local_region cenv scopes ss n1 b1 sz1 ∧ local_region cenv scopes ss n2 b2 sz2` by
+    (conj_tac
+     >- (qpat_x_assum `local_region cenv scopes' ss' n1 b1 sz1` mp_tac >> simp[]) >>
+     qpat_x_assum `local_region cenv scopes' ss' n2 b2 sz2` mp_tac >> simp[]) >>
+  qpat_x_assum `∀n1 n2 b1 sz1 b2 sz2. P n1 n2 b1 sz1 b2 sz2 ⇒
+                  regions_disjoint b1 sz1 b2 sz2` irule >>
+  qexistsl_tac [`n1`, `n2`] >> simp[]
+QED
+
+(* write_local with the variables and allocations unchanged. *)
+Theorem write_local_same_frame[local]:
   ∀func cenv scopes scopes' ss ss' name entry p sz w.
     local_ptrs_rel func cenv scopes ss ∧
     lookup_scopes name scopes' = SOME entry ∧
@@ -396,31 +440,59 @@ Proof
       REWRITE_TAC[local_region_def] >> conj_tac >- first_assum ACCEPT_TAC >>
       qexistsl_tac [`entry'`, `p'`, `w'`] >>
       rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, REFL_TAC]) >>
-  rpt strip_tac >>
-  Cases_on `n1 = name` >> Cases_on `n2 = name` >> fs[]
-  >- (`local_region cenv scopes ss n2 b2 sz2` by
-        (qpat_x_assum `local_region cenv scopes' ss' n2 b2 sz2` mp_tac >> simp[]) >>
-      qpat_assum `∀b sz'. local_region cenv scopes' ss' name b sz' ⇒ Q b sz'`
-        (fn th => drule th) >> strip_tac >> fs[] >>
-      qpat_x_assum `∀n b sz'. P n b sz' ⇒ regions_disjoint (w2n w) sz b sz'`
-        irule >>
-      qexists_tac `n2` >> simp[])
-  >- (`local_region cenv scopes ss n1 b1 sz1` by
-        (qpat_x_assum `local_region cenv scopes' ss' n1 b1 sz1` mp_tac >> simp[]) >>
-      qpat_assum `∀b sz'. local_region cenv scopes' ss' name b sz' ⇒ Q b sz'`
-        (fn th => drule th) >> strip_tac >> fs[] >>
-      `regions_disjoint (w2n w) sz b1 sz1` by
-        (qpat_x_assum `∀n b sz'. P n b sz' ⇒ regions_disjoint (w2n w) sz b sz'`
-           irule >>
-         qexists_tac `n1` >> simp[]) >>
-      fs[regions_disjoint_def] >> DECIDE_TAC) >>
-  `local_region cenv scopes ss n1 b1 sz1 ∧ local_region cenv scopes ss n2 b2 sz2` by
-    (conj_tac
-     >- (qpat_x_assum `local_region cenv scopes' ss' n1 b1 sz1` mp_tac >> simp[]) >>
-     qpat_x_assum `local_region cenv scopes' ss' n2 b2 sz2` mp_tac >> simp[]) >>
-  qpat_x_assum `∀n1 n2 b1 sz1 b2 sz2. P n1 n2 b1 sz1 b2 sz2 ⇒
-                  regions_disjoint b1 sz1 b2 sz2` irule >>
-  qexistsl_tac [`n1`, `n2`] >> simp[]
+  qspecl_then [`cenv`, `scopes`, `scopes'`, `ss`, `ss'`, `name`, `sz`, `w`]
+    mp_tac write_local_disjoint >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  disch_then ACCEPT_TAC
+QED
+
+(* Writing a local: the scopes change only at name, the memory keeps the
+   bytes of the other live locals' regions, and the new entry is held in
+   name's region, disjoint from the other live locals.  Covers a declaration
+   (name not live before), an assignment, an augmented assignment and a
+   partial write such as x[i] = e (name live, old value overwritten). *)
+Theorem local_ptrs_rel_write_local:
+  ∀func cenv scopes scopes' ss ss' name entry p sz w.
+    local_ptrs_rel func cenv scopes ss ∧
+    lookup_scopes name scopes' = SOME entry ∧
+    (∀n. n ≠ name ⇒ lookup_scopes n scopes' = lookup_scopes n scopes) ∧
+    FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) ∧
+    lookup_var p ss = SOME w ∧ local_backed func p ss (w2n w) sz ∧
+    w2n w + sz ≤ ss.vs_alloca_next ∧
+    (∀n b sz'. n ≠ name ∧ local_region cenv scopes ss n b sz' ⇒
+               regions_disjoint (w2n w) sz b sz') ∧
+    (∀n e q sq.
+       lookup_scopes n scopes' = SOME e ∧
+       FLOOKUP cenv.ce_vars n = SOME (PtrVar (Var q) sq) ⇒
+       lookup_var q ss' = lookup_var q ss) ∧
+    (∀aid r. FLOOKUP ss.vs_allocas aid = SOME r ⇒
+             FLOOKUP ss'.vs_allocas aid = SOME r) ∧
+    (∀aid b sb. FLOOKUP ss'.vs_allocas aid = SOME (b, sb) ∧
+                FLOOKUP ss.vs_allocas aid = NONE ⇒
+                ss.vs_alloca_next ≤ b) ∧
+    ss.vs_alloca_next ≤ ss'.vs_alloca_next ∧
+    (∀n b sz'. n ≠ name ∧ local_region cenv scopes ss n b sz' ⇒
+               mem_bytes_at b sz' ss.vs_memory =
+               mem_bytes_at b sz' ss'.vs_memory) ∧
+    type_memory_size entry.type ≤ sz ∧ val_wf entry.type entry.value ∧
+    val_in_memory entry.type entry.value (w2n w) ss'.vs_memory ⇒
+    local_ptrs_rel func cenv scopes' ss'
+Proof
+  rpt gen_tac >> strip_tac >>
+  `local_ptrs_rel func cenv scopes' (ss with vs_memory := ss'.vs_memory)` by
+    (irule write_local_same_frame >>
+     qexistsl_tac [`entry`, `name`, `p`, `scopes`, `ss`, `sz`, `w`] >>
+     rpt conj_tac >>
+     FIRST [first_assum ACCEPT_TAC, simp[] >> NO_TAC,
+            simp[] >> first_assum ACCEPT_TAC]) >>
+  irule local_ptrs_rel_frame >>
+  qexists_tac `ss with vs_memory := ss'.vs_memory` >> rpt conj_tac >>
+  FIRST [first_assum ACCEPT_TAC, simp[] >> NO_TAC,
+         simp[] >> first_assum ACCEPT_TAC,
+         rpt strip_tac >>
+         qpat_x_assum `∀n e q sq. P n e q sq ⇒ lookup_var q ss' = lookup_var q ss`
+           drule_all >>
+         simp[lookup_var_def]]
 QED
 
 (* Declaring a local whose value is already in its region: the scopes change
@@ -443,7 +515,8 @@ Theorem local_ptrs_rel_set_local:
 Proof
   rpt strip_tac >> irule local_ptrs_rel_write_local >>
   qexistsl_tac [`entry`, `name`, `p`, `scopes`, `ss`, `sz`, `w`] >>
-  simp[] >> first_assum ACCEPT_TAC
+  rpt conj_tac >>
+  FIRST [first_assum ACCEPT_TAC, simp[] >> NO_TAC, rpt strip_tac >> fs[]]
 QED
 
 Theorem local_ptrs_rel_push_scope:
