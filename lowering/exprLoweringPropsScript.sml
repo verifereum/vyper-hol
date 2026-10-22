@@ -516,7 +516,10 @@ Theorem assert_false_correct:
     step_inst_base (mk_inst inst_id ASSERT [op] []) ss =
       Abort Revert_abort (revert_state (set_returndata [] ss))
 Proof
-  simp[step_inst_base_def, venomInstTheory.mk_inst_def, comp_return_def, comp_bind_def, comp_ignore_bind_def]
+  rpt strip_tac >>
+  simp[venomInstTheory.mk_inst_def] >>
+  simp[Once step_inst_base_def] >>
+  simp[comp_return_def, comp_bind_def, comp_ignore_bind_def]
 QED
 
 (* emit_void ASSERT: emits one ASSERT instruction *)
@@ -3159,6 +3162,44 @@ rpt strip_tac >> first_assum irule)
   TRY (irule ci_mono_lower_value_cfn >> simp[] >> NO_TAC) >>
   irule ci_mono_trans >> irule_at (Pos last) ci_mono_lower_value_cfn >> (conj_tac >- simp[]) >>
   irule ci_mono_lower_value_cfn >> simp[]
+QED
+
+(* Guarded callbacks preserve monotonicity even on invalid child calls. *)
+Theorem ci_mono_invalid_expr_call[local]:
+  ci_mono st (SND (invalid_expr_call ty st))
+Proof
+  simp[exprCallBoundsTheory.invalid_expr_call_def, LET_THM, pairTheory.UNCURRY,
+       ci_mono_emit_inst]
+QED
+
+Theorem ci_mono_expr_child_callback[local]:
+  (∀ce ty e st. expr_size e < bound ⇒
+    ci_mono st (SND (f ce ty e st))) ⇒
+  (∀ce ty e st.
+    ci_mono st (SND (expr_child_callback bound f ce ty e st)))
+Proof
+  rpt strip_tac >> simp[exprCallBoundsTheory.expr_child_callback_def] >>
+  IF_CASES_TAC >> simp[ci_mono_invalid_expr_call]
+QED
+
+Theorem ci_mono_builtin_child_callback[local]:
+  (∀ce ret_ty ty bi args st. list_size expr_size args < bound ⇒
+    ci_mono st (SND (f ce ret_ty ty bi args st))) ⇒
+  (∀ce ret_ty ty bi args st.
+    ci_mono st (SND (builtin_child_callback bound f ce ret_ty ty bi args st)))
+Proof
+  rpt strip_tac >> simp[exprCallBoundsTheory.builtin_child_callback_def] >>
+  IF_CASES_TAC >> simp[ci_mono_invalid_expr_call]
+QED
+
+Theorem ci_mono_type_child_callback[local]:
+  (∀ce vv_ty ty tb ret_ty args st. list_size expr_size args < bound ⇒
+    ci_mono st (SND (f ce vv_ty ty tb ret_ty args st))) ⇒
+  (∀ce vv_ty ty tb ret_ty args st.
+    ci_mono st (SND (type_child_callback bound f ce vv_ty ty tb ret_ty args st)))
+Proof
+  rpt strip_tac >> simp[exprCallBoundsTheory.type_child_callback_def] >>
+  IF_CASES_TAC >> simp[ci_mono_invalid_expr_call]
 QED
 
 (* Why it holds: only emit (appends to cs_current_insts) and new_block
