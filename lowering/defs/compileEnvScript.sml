@@ -584,6 +584,13 @@ Definition fresh_vars_wrt_def:
       STRING #"%" (toString n) ∉ FDOM ss.vs_vars
 End
 
+(* x is no compiler variable fresh at st, so the code compiled from st on
+   never assigns it. *)
+Definition not_fresh_at_def:
+  not_fresh_at (st:compile_state) x ⇔
+    ∀n. st.cs_next_var ≤ n ⇒ x ≠ STRING #"%" (toString n)
+End
+
 (* ===== Label-Space Invariants =====
    Track which labels the compiler has allocated (via fresh_label) and
    which labels are currently bound to blocks. Used by module-level
@@ -668,6 +675,26 @@ Definition not_local_ptr_def:
     ∀name entry sz.
       lookup_scopes name scopes = SOME entry ⇒
       FLOOKUP cenv.ce_vars name ≠ SOME (PtrVar (Var x) sz)
+End
+
+(* The locals of cenv are held through pointer variables that were handed out
+   before st (reserve_local_ptrs, compile_register_positional_args), one per
+   local:
+   - no variable sits at a fixed MemLoc offset: state_rel does not relate
+     those (the locals of internal bodies and of the constructor, and
+     default arguments, which compile_register_kwarg_vars keeps at MemLoc),
+     and a store to one could hit a live local's region;
+   - no compiler variable fresh at st is a local's pointer, so a temporary of
+     the code compiled from st on never overwrites one;
+   - distinct locals have distinct pointers, so declaring a local leaves the
+     others' pointers alone. *)
+Definition local_ptrs_reserved_def:
+  local_ptrs_reserved cenv (st:compile_state) ⇔
+    (∀name off sz. FLOOKUP cenv.ce_vars name ≠ SOME (MemLoc off sz)) ∧
+    ∀n1 n2 p sz1 sz2.
+      FLOOKUP cenv.ce_vars n1 = SOME (PtrVar (Var p) sz1) ⇒
+      not_fresh_at st p ∧
+      (FLOOKUP cenv.ce_vars n2 = SOME (PtrVar (Var p) sz2) ⇒ n1 = n2)
 End
 
 (* What backs a live local's region [base, base + sz) in the current frame
@@ -1008,11 +1035,10 @@ Definition call_ctx_rel_def:
      bc.bc_blobbasefee = n2w txn.blob_base_fee)
 End
 
-(* Top-level oracle-mode state relation (PLAN 5.7).
-   Ties together all sub-relations and exactly the current oracle suffix and
-   request prefix. NONE-mode compatibility does not satisfy this relation. *)
-(* Source/Venom state relation for the statement and expression simulation,
-   in func, the function running.
+(* Top-level oracle-mode source/Venom state relation for the statement and
+   expression simulation, in func, the function running.  It ties together
+   the sub-relations below and exactly the current oracle suffix and request
+   prefix; NONE-mode compatibility does not satisfy it.
    - local_ptrs_rel: locals in scope, held in memory through their pointer
      variables (PtrVar).  MemLoc locals at fixed offsets, which the internal
      function bodies still use until #545, are not related.
