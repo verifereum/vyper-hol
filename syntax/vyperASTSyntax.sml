@@ -18,6 +18,7 @@ val account_item_ty = asty "account_item"
 val denomination_ty = asty "denomination"
 val builtin_ty = asty "builtin"
 val ext_call_sig_ty = mk_prod (string_ty, mk_prod (mk_list_type type_ty, type_ty))
+val ext_call_kw_ty = asty "ext_call_kw"
 val raw_call_flags_ty = asty "raw_call_flags"
 val create_kind_ty = asty "create_kind"
 val type_builtin_ty = asty "type_builtin"
@@ -240,6 +241,9 @@ val (ECAdd_tm, is_ECAdd) = syntax0 "ECAdd"
 val (ECMul_tm, is_ECMul) = syntax0 "ECMul"
 val (PowMod256_tm, is_PowMod256) = syntax0 "PowMod256"
 
+val (EKValue_tm, is_EKValue) = syntax0 "EKValue"
+val (EKGas_tm, is_EKGas) = syntax0 "EKGas"
+val (EKDefault_tm, is_EKDefault) = syntax0 "EKDefault"
 val (CreateMinimalProxy_tm, is_CreateMinimalProxy) = syntax0 "CreateMinimalProxy"
 val (CreateCopyOf_tm, is_CreateCopyOf) = syntax0 "CreateCopyOf"
 val (CreateFromBlueprint_tm, mk_CreateFromBlueprint_tm, dest_CreateFromBlueprint_tm, is_CreateFromBlueprint) = syntax_fns1 "vyperAST" "CreateFromBlueprint"
@@ -406,8 +410,9 @@ fun dest_AnnAssign tm =
 val (IntCall_tm, mk_IntCall_tm, dest_IntCall_tm, is_IntCall) =
   syntax_fns1 "vyperAST" "IntCall"
 val (ExtCall_tm, mk_ExtCall_tm, dest_ExtCall_tm, is_ExtCall) =
-  syntax_fns3 "vyperAST" "ExtCall"
-val (Send_tm, is_Send) = syntax0 "Send"
+  syntax_fns4 "vyperAST" "ExtCall"
+val (Send_tm, mk_Send_tm, dest_Send_tm, is_Send) =
+  syntax_fns1 "vyperAST" "Send"
 val (RawCallTarget_tm, mk_RawCallTarget_tm, dest_RawCallTarget_tm,
      is_RawCallTarget) = syntax_fns1 "vyperAST" "RawCallTarget"
 val (RawCallCalldataTarget_tm, mk_RawCallCalldataTarget_tm,
@@ -602,8 +607,8 @@ fun view_stmt tm =
 
 datatype call_target_view =
     VIntCall of term
-  | VExtCall of term * term * term
-  | VSend
+  | VExtCall of term * term * term * term
+  | VSend of term
   | VRawCallTarget of term
   | VRawCallCalldataTarget of term
   | VRawLog
@@ -614,7 +619,7 @@ datatype call_target_view =
 fun view_call_target tm =
   if is_IntCall tm then VIntCall (dest_IntCall_tm tm)
   else if is_ExtCall tm then VExtCall (dest_ExtCall_tm tm)
-  else if is_Send tm then VSend
+  else if is_Send tm then VSend (dest_Send_tm tm)
   else if is_RawCallTarget tm then VRawCallTarget (dest_RawCallTarget_tm tm)
   else if is_RawCallCalldataTarget tm then
     VRawCallCalldataTarget (dest_RawCallCalldataTarget_tm tm)

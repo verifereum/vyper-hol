@@ -508,6 +508,14 @@ End
 
 (* ===== Expressions, places, and targets ===== *)
 
+(* Type of an extcall/staticcall keyword operand: value= and gas= are uint256,
+   default_return_value= has the call's return type. *)
+Definition ext_call_kw_type_def:
+  ext_call_kw_type ret_ty EKDefault = ret_ty /\
+  ext_call_kw_type ret_ty EKValue = BaseT (UintT 256) /\
+  ext_call_kw_type ret_ty EKGas = BaseT (UintT 256)
+End
+
 (* Positional type contract for creation builtin operands. *)
 Definition create_arg_types_ok_def:
   create_arg_types_ok CreateMinimalProxy has_salt tys =
@@ -597,15 +605,15 @@ Definition well_typed_expr_def:
        ty = sig.ret_ty /\ LENGTH args <= LENGTH sig.param_types /\
        LENGTH sig.param_types - sig.num_defaults <= LENGTH args /\
        MAP expr_type args = TAKE (LENGTH args) sig.param_types) /\
-  well_typed_expr env (Call ty (ExtCall is_static _ (_, arg_types, ret_ty)) args drv) =
-    (well_typed_exprs env args /\ well_typed_opt env drv /\ well_formed_type env.type_defs ty /\
-     ty = ret_ty /\
-     (if is_static then MAP expr_type args = BaseT AddressT :: arg_types
-      else MAP expr_type args = BaseT AddressT :: BaseT (UintT 256) :: arg_types) /\
-     (!e. drv = SOME e ==> expr_type e = ret_ty)) /\
-  well_typed_expr env (Call ty Send args drv) =
-    (well_typed_exprs env args /\ drv = NONE /\ LENGTH args = 2 /\ ty = NoneT /\
-     HD (MAP expr_type args) = BaseT AddressT /\ EL 1 (MAP expr_type args) = BaseT (UintT 256)) /\
+  well_typed_expr env (Call ty (ExtCall is_static _ (_, arg_types, ret_ty) opts) args drv) =
+    (well_typed_exprs env args /\ drv = NONE /\ well_formed_type env.type_defs ty /\
+     ty = ret_ty /\ ext_call_opts_ok is_static opts /\
+     MAP expr_type args =
+       BaseT AddressT :: arg_types ++ MAP (ext_call_kw_type ret_ty) opts) /\
+  well_typed_expr env (Call ty (Send has_gas) args drv) =
+    (well_typed_exprs env args /\ drv = NONE /\ ty = NoneT /\
+     MAP expr_type args = [BaseT AddressT; BaseT (UintT 256)] ++
+       (if has_gas then [BaseT (UintT 256)] else [])) /\
   well_typed_expr env (Call ty (RawCallTarget flags) args drv) =
     (well_typed_exprs env args /\ drv = NONE /\ ty = raw_call_return_type flags /\
      flags.rcf_max_outsize < dimword(:256) /\

@@ -3,8 +3,11 @@
 These sources exercise the lowering of one external call: the 4-byte selector,
 the result buffer, the decode of the returned value, `default_return_value`
 and interface constructors used as call arguments
-([issue #555](https://github.com/verifereum/vyper-hol/issues/555)).
-`parity-fixtures.txt` selects 14 exact bytecode comparisons; the other sources
+([issue #555](https://github.com/verifereum/vyper-hol/issues/555)), and the
+keyword operands `value=`, `gas=`, `default_return_value=` and
+`skip_contract_check=` of extcall/staticcall, and `send` with and without
+`gas=` ([issue #553](https://github.com/verifereum/vyper-hol/issues/553)).
+`parity-fixtures.txt` selects 24 exact bytecode comparisons; the other sources
 are controls and related witnesses kept for diagnostic comparison.
 The `m10c_iface_storage_main` witness also checks first-occurrence DFT dependency
 ordering: an interface storage write and a staticcall's calldata preparation
