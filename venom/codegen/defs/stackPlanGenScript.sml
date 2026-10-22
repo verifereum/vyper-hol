@@ -1463,3 +1463,15 @@ Theorem cleanup_cfg_diamond_evidence:
 Proof
   strip_tac >> gvs[] >> EVAL_TAC
 QED
+
+Theorem init_cleanup_plan_state_projections[simp]:
+  (init_cleanup_plan_state ch growth spill_base ctr).ps_stack = [] /\
+  (init_cleanup_plan_state ch growth spill_base ctr).ps_spilled = FEMPTY /\
+  (init_cleanup_plan_state ch growth spill_base ctr).ps_alloc = init_spill_alloc spill_base /\
+  (init_cleanup_plan_state ch growth spill_base ctr).ps_label_counter = ctr /\
+  (init_cleanup_plan_state ch growth spill_base ctr).ps_cleanup_height = ch /\
+  (init_cleanup_plan_state ch growth spill_base ctr).ps_cleanup_growth = growth /\
+  ~(init_cleanup_plan_state ch growth spill_base ctr).ps_cleanup_promised
+Proof
+  simp[init_cleanup_plan_state_def, stackPlanTypesTheory.init_plan_state_def]
+QED

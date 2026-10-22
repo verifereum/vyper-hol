@@ -500,3 +500,26 @@ Definition asm_evm_result_rel_def:
         exc ≠ Reverted ∧ asm_evm_rel prog as es
     | _ => F
 End
+
+(* Cleanup analysis is ghost metadata: simulation observes only the physical
+   stack, spilled values and allocator. *)
+Theorem venom_asm_rel_cleanup_height[simp]:
+  venom_asm_rel lo (ps with ps_cleanup_height := ch) vs ast =
+  venom_asm_rel lo ps vs ast
+Proof
+  simp[venom_asm_rel_def]
+QED
+
+Theorem venom_asm_rel_cleanup_growth[simp]:
+  venom_asm_rel lo (ps with ps_cleanup_growth := growth) vs ast =
+  venom_asm_rel lo ps vs ast
+Proof
+  simp[venom_asm_rel_def]
+QED
+
+Theorem venom_asm_rel_cleanup_promised[simp]:
+  venom_asm_rel lo (ps with ps_cleanup_promised := promised) vs ast =
+  venom_asm_rel lo ps vs ast
+Proof
+  simp[venom_asm_rel_def]
+QED
