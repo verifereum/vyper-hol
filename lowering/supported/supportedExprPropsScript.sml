@@ -47,6 +47,13 @@ Theorem supported_pure_expression_rows:
      TopLevelName (BaseT (UintT 256)) (NONE,"scalar");
      TopLevelName (BaseT (IntT 256)) (NONE,"transient");
      IfExp (BaseT (UintT 256)) (Name (BaseT BoolT) "c") expr_test_uint expr_test_uint;
+     IfExp (BaseT (StringT 10)) (Name (BaseT BoolT) "c")
+       (Name (BaseT (StringT 10)) "s") (Name (BaseT (StringT 10)) "t");
+     IfExp (ArrayT (BaseT (UintT 256)) (Fixed 2)) (Name (BaseT BoolT) "c")
+       (Name (ArrayT (BaseT (UintT 256)) (Fixed 2)) "a")
+       (Name (ArrayT (BaseT (UintT 256)) (Fixed 2)) "b");
+     IfExp (StructT (NONE,"Pair")) (Name (BaseT BoolT) "c")
+       (Name (StructT (NONE,"Pair")) "p") (Name (StructT (NONE,"Pair")) "q");
      StructLit (StructT (NONE,"Pair")) (NONE,"Pair")
        [("first",expr_test_uint); ("second",expr_test_int)];
      Builtin (TupleT [BaseT (UintT 256)]) (MakeArray NONE (Fixed 1)) [expr_test_uint];
