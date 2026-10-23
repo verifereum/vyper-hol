@@ -3,7 +3,6 @@ signature vyperTestLib = sig
   val generate_tests : unit -> unit (* main generation function *)
   val write_coverage_report : string -> unit
   val unsupported_source_reason_for : JSON.value list -> string option
-  val generates_scripts : (string * JSON.value) list -> bool
 
   val test_files : unit -> (string * string) list
   val holbuild_extra_deps : string list -> unit
