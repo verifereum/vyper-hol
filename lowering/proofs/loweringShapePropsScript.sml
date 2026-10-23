@@ -2010,6 +2010,157 @@ QED
 
 Finalise compile_type_convert_shape
 
+(* Min/max keep both source operands live through the comparison. *)
+fun shape_builtin_minmax_tac def =
+  strip_tac >> Cases_on `use_unsigned` >> simp[def] >>
+  qmatch_goalsub_abbrev_tac `shape_step internal compiler_label P _ _` >>
+  `shape_stable P` by
+    (simp[Abbr `P`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
+     mp_tac (Q.SPEC `[a;b]:operand list` shape_stable_plain_operands) >> simp[]) >>
+  shape_scalar_emit_bind_tac `P` `cmp` (simp[Abbr `P`]) >>
+  shape_under_tac compile_select_shape `R` >> simp[Abbr `P`];
+
+Theorem compile_builtin_min_shape[local]:
+  shape_stable R ==>
+  shape_step internal compiler_label
+    (\st. R st /\ plain_operand st a /\ plain_operand st b)
+    (compile_builtin_min a b use_unsigned) (\v st. R st /\ plain_operand st v)
+Proof
+  shape_builtin_minmax_tac builtinSimpleTheory.compile_builtin_min_def
+QED
+
+Theorem compile_builtin_max_shape[local]:
+  shape_stable R ==>
+  shape_step internal compiler_label
+    (\st. R st /\ plain_operand st a /\ plain_operand st b)
+    (compile_builtin_max a b use_unsigned) (\v st. R st /\ plain_operand st v)
+Proof
+  shape_builtin_minmax_tac builtinSimpleTheory.compile_builtin_max_def
+QED
+
+Theorem compile_builtin_abs_shape[local]:
+  shape_stable R ==>
+  shape_step internal compiler_label (\st. R st /\ plain_operand st v)
+    (compile_builtin_abs v) (\w st. R st /\ plain_operand st w)
+Proof
+  strip_tac >> simp[builtinSimpleTheory.compile_builtin_abs_def] >>
+  qmatch_goalsub_abbrev_tac `shape_step internal compiler_label P _ _` >>
+  `shape_stable P` by
+    (simp[Abbr `P`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
+     mp_tac (Q.SPEC `[v]:operand list` shape_stable_plain_operands) >> simp[]) >>
+  shape_scalar_emit_bind_tac `P` `neg_v` (simp[Abbr `P`]) >>
+  qmatch_goalsub_abbrev_tac `shape_step internal compiler_label G _ _` >>
+  `shape_stable G` by
+    (simp[Abbr `G`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
+     mp_tac (Q.SPEC `[neg_v]:operand list` shape_stable_plain_operands) >> simp[]) >>
+  shape_scalar_emit_bind_tac `G` `negative_op` (simp[Abbr `G`, Abbr `P`]) >>
+  qmatch_goalsub_abbrev_tac `shape_step internal compiler_label H _ _` >>
+  `shape_stable H` by
+    (simp[Abbr `H`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
+     mp_tac (Q.SPEC `[negative_op]:operand list` shape_stable_plain_operands) >> simp[]) >>
+  shape_scalar_emit_bind_tac `H` `min_op` (simp[Abbr `H`, Abbr `G`, Abbr `P`]) >>
+  shape_scalar_emit_bind_tac `H` `bad` (simp[Abbr `H`]) >>
+  shape_scalar_emit_bind_tac `H` `ok_op` all_tac >>
+  shape_scalar_assert_tac `H` >>
+  shape_under_tac compile_select_shape `R` >> simp[Abbr `H`, Abbr `G`, Abbr `P`]
+QED
+
+(* Decimal rounding differs only in its two fixed arithmetic opcodes. *)
+fun shape_round_decimal_tac def =
+  strip_tac >> simp[def] >>
+  qmatch_goalsub_abbrev_tac `shape_step internal compiler_label P _ _` >>
+  `shape_stable P` by
+    (simp[Abbr `P`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
+     mp_tac (Q.SPEC `[v]:operand list` shape_stable_plain_operands) >> simp[]) >>
+  shape_scalar_emit_bind_tac `P` `sign_op` (simp[Abbr `P`]) >>
+  qmatch_goalsub_abbrev_tac `shape_step internal compiler_label G _ _` >>
+  `shape_stable G` by
+    (simp[Abbr `G`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
+     mp_tac (Q.SPEC `[sign_op]:operand list` shape_stable_plain_operands) >> simp[]) >>
+  shape_scalar_emit_bind_tac `G` `adjusted` (simp[Abbr `G`, Abbr `P`]) >>
+  match_mp_tac shape_step_bind >> qexists_tac `\w st. R st /\ plain_operand st w` >> conj_tac
+  >- (shape_under_tac compile_select_shape `R` >> simp[Abbr `G`, Abbr `P`]) >>
+  gen_tac >> simp[] >> shape_under_tac shape_step_emit_op_plain `R` >> shape_opcode_tac;
+
+Theorem compile_floor_shape[local]:
+  shape_stable R ==>
+  shape_step internal compiler_label (\st. R st /\ plain_operand st v)
+    (compile_floor v divisor) (\w st. R st /\ plain_operand st w)
+Proof
+  shape_round_decimal_tac builtinMiscTheory.compile_floor_def
+QED
+
+Theorem compile_ceil_shape[local]:
+  shape_stable R ==>
+  shape_step internal compiler_label (\st. R st /\ plain_operand st v)
+    (compile_ceil v divisor) (\w st. R st /\ plain_operand st w)
+Proof
+  shape_round_decimal_tac builtinMiscTheory.compile_ceil_def
+QED
+
+Theorem compile_as_wei_value_decimal_shape[local]:
+  shape_stable R ==>
+  shape_step internal compiler_label (\st. R st /\ plain_operand st v)
+    (compile_as_wei_value_decimal v scale divisor) (\w st. R st /\ plain_operand st w)
+Proof
+  strip_tac >> simp[builtinMiscTheory.compile_as_wei_value_decimal_def] >>
+  qmatch_goalsub_abbrev_tac `shape_step internal compiler_label P _ _` >>
+  `shape_stable P` by
+    (simp[Abbr `P`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
+     mp_tac (Q.SPEC `[v]:operand list` shape_stable_plain_operands) >> simp[]) >>
+  shape_scalar_emit_bind_tac `P` `negative_op` (simp[Abbr `P`]) >>
+  shape_scalar_emit_bind_tac `P` `ok_op` all_tac >>
+  shape_scalar_assert_tac `P` >>
+  Cases_on `scale = 1` >> simp[]
+  >- (shape_under_tac shape_step_emit_op_plain `R` >> simp[Abbr `P`] >> shape_opcode_tac) >>
+  shape_scalar_emit_bind_tac `R` `product` (simp[Abbr `P`]) >>
+  shape_under_tac shape_step_emit_op_plain `R` >> shape_opcode_tac
+QED
+
+Theorem compile_pow_mod256_shape[local]:
+  shape_stable R ==>
+  shape_step internal compiler_label
+    (\st. R st /\ plain_operand st a /\ plain_operand st b)
+    (compile_pow_mod256 a b) (\v st. R st /\ plain_operand st v)
+Proof
+  strip_tac >> simp[builtinMathTheory.compile_pow_mod256_def] >>
+  shape_under_tac shape_step_emit_op_plain `R` >> shape_opcode_tac
+QED
+
+Theorem compile_addmod_shape[local]:
+  shape_stable R ==>
+  shape_step internal compiler_label
+    (\st. R st /\ EVERY (plain_operand st) [a;b;c])
+    (compile_addmod a b c) (\v st. R st /\ plain_operand st v)
+Proof
+  strip_tac >> simp[builtinMathTheory.compile_addmod_def] >>
+  qmatch_goalsub_abbrev_tac `shape_step internal compiler_label P _ _` >>
+  `shape_stable P` by
+    (simp[Abbr `P`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
+     mp_tac (Q.SPEC `[a;b;c]:operand list` shape_stable_plain_operands) >> simp[]) >>
+  match_mp_tac shape_step_ignore_bind >> qexists_tac `\u st. P st` >> conj_tac
+  >- (shape_under_tac shape_step_emit_void_plain `P` >> simp[Abbr `P`] >> shape_opcode_tac) >>
+  gen_tac >> simp[] >>
+  shape_under_tac shape_step_emit_op_plain `R` >> simp[Abbr `P`] >> shape_opcode_tac
+QED
+
+Theorem compile_mulmod_shape[local]:
+  shape_stable R ==>
+  shape_step internal compiler_label
+    (\st. R st /\ EVERY (plain_operand st) [a;b;c])
+    (compile_mulmod a b c) (\v st. R st /\ plain_operand st v)
+Proof
+  strip_tac >> simp[builtinMathTheory.compile_mulmod_def] >>
+  qmatch_goalsub_abbrev_tac `shape_step internal compiler_label P _ _` >>
+  `shape_stable P` by
+    (simp[Abbr `P`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
+     mp_tac (Q.SPEC `[a;b;c]:operand list` shape_stable_plain_operands) >> simp[]) >>
+  match_mp_tac shape_step_ignore_bind >> qexists_tac `\u st. P st` >> conj_tac
+  >- (shape_under_tac shape_step_emit_void_plain `P` >> simp[Abbr `P`] >> shape_opcode_tac) >>
+  gen_tac >> simp[] >>
+  shape_under_tac shape_step_emit_op_plain `R` >> simp[Abbr `P`] >> shape_opcode_tac
+QED
+
 (* For alan, by compile_expr_ind; one case per compile_expr_body clause and
    builtin.  The builtin families (abiEncoder, builtin*, context copy loops)
    are plain shape_step facts under plain operands.  Under value_shape_ok no
