@@ -19,7 +19,14 @@ val () = holbuild_extra_outputs ["nested-places/validation.tar.gz"];
 fun checked_command command =
   if OS.Process.isSuccess (OS.Process.system command) then ()
   else raise Fail ("nested places validation command failed: " ^ command);
-val () = checked_command "python3 nested_place_driver.py prepare";
+(* Operator-verified existing environment; no installation is performed. *)
+val validation_python =
+  case OS.Process.getEnv "NESTED_PLACE_PYTHON" of
+    SOME path => path
+  | NONE => "/home/lukasz/.local/share/uv/tools/vyper/bin/python3";
+fun python_command mode = checked_command
+  ("'" ^ validation_python ^ "' nested_place_driver.py " ^ mode);
+val () = python_command "prepare";
 val () = computeLib.upd_compset finite_mapLib.add_finite_map_compset;
 val () = computeLib.upd_compset (computeLib.add_thms
   [alistTheory.fmap_to_alist_FEMPTY, integer_wordTheory.i2w_pos]);
@@ -33,4 +40,4 @@ val validation_status =
 val () = memoryStoreWitnessLib.write "nested-places/actual/driver-status.txt"
   validation_status;
 val () = print validation_status;
-val () = checked_command "python3 nested_place_driver.py archive";
+val () = python_command "archive";
