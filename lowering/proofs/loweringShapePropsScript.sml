@@ -371,6 +371,152 @@ Proof
   simp[shape_step_def, comp_get_def, shape_extends_refl]
 QED
 
+Theorem stmt_shape_emit_op[local]:
+  !internal P opc ops.
+    shape_stable P /\
+    (!st. P st ==> EVERY (label_or_plain st) ops) /\
+    ~MEM opc [GAS; RETPC_PARAM] /\
+    (!st. P st ==> !id outs. lowered_inst_ok internal (mk_inst id opc ops outs)) ==>
+    shape_step internal compiler_label P (emit_op opc ops)
+      (\x st. P st /\ plain_operand st x)
+Proof
+  rpt strip_tac >> rewrite_tac[shape_step_def] >> rpt strip_tac >>
+  `!id outs. lowered_inst_ok internal (mk_inst id opc ops outs)` by metis_tac[] >>
+  `shape_step internal compiler_label
+     (\st. P st /\ EVERY (label_or_plain st) ops) (emit_op opc ops)
+     (\x st. P st /\ plain_operand st x)` by
+    (irule shape_step_emit_op >> simp[]) >>
+  `EVERY (label_or_plain st) ops` by metis_tac[] >>
+  fs[shape_step_def] >> metis_tac[]
+QED
+
+Theorem stmt_shape_emit_inst[local]:
+  !internal P opc ops outs.
+    shape_stable P /\
+    (!st. P st ==> EVERY (label_or_plain st) ops) /\
+    ~MEM opc [GAS; RETPC_PARAM] /\
+    (!st. P st ==> !id. lowered_inst_ok internal (mk_inst id opc ops outs)) ==>
+    shape_step internal compiler_label P (emit_inst opc ops outs)
+      (\x st. P st)
+Proof
+  rpt strip_tac >> rewrite_tac[shape_step_def] >> rpt strip_tac >>
+  `!id. lowered_inst_ok internal (mk_inst id opc ops outs)` by metis_tac[] >>
+  `shape_step internal compiler_label
+     (\st. P st /\ EVERY (label_or_plain st) ops) (emit_inst opc ops outs)
+     (\x st. P st)` by
+    (irule shape_step_emit_inst >> simp[]) >>
+  `EVERY (label_or_plain st) ops` by metis_tac[] >>
+  fs[shape_step_def] >> metis_tac[]
+QED
+
+Theorem stmt_shape_emit_void[local]:
+  !internal P opc ops.
+    shape_stable P /\
+    (!st. P st ==> EVERY (label_or_plain st) ops) /\
+    ~MEM opc [GAS; RETPC_PARAM] /\
+    (!st. P st ==> !id. lowered_inst_ok internal (mk_inst id opc ops [])) ==>
+    shape_step internal compiler_label P (emit_void opc ops)
+      (\x st. P st)
+Proof
+  rpt strip_tac >>
+  `emit_void opc ops = emit_inst opc ops []` by
+    simp[emit_void_def, emit_inst_def] >>
+  asm_rewrite_tac[] >> irule stmt_shape_emit_inst >> metis_tac[]
+QED
+
+Theorem stmt_shape_stable_plain[local]:
+  !op. shape_stable (\st. plain_operand st op)
+Proof
+  gen_tac >> mp_tac (Q.SPEC `[op]` shape_stable_plain_operands) >> simp[]
+QED
+
+val stmt_shape_emit_simp = simp[
+  lowered_inst_ok_def, mk_inst_def, raw_opcode_ok_def, inst_shape_ok_def,
+  jump_labels_ok_def, is_terminator_def, is_read0_opcode_def,
+  label_positions_ok_def, is_param_opcode_def];
+
+Theorem compile_with_byte_offset_shape[local]:
+  !internal base offset.
+    shape_step internal compiler_label (\st. plain_operand st base)
+      (compile_with_byte_offset base offset)
+      (\op st. plain_operand st op)
+Proof
+  map_every qx_gen_tac [`internal`, `base_op`, `off`] >>
+  simp[compile_with_byte_offset_def] >> IF_CASES_TAC
+  >- (irule shape_step_return >> simp[]) >>
+  irule shape_step_conseq >>
+  qexistsl_tac [`compiler_label`, `\st. plain_operand st base_op`,
+               `\op st. plain_operand st base_op /\ plain_operand st op`] >>
+  simp[] >> ho_match_mp_tac stmt_shape_emit_op >>
+  simp[stmt_shape_stable_plain] >> conj_tac
+  >- (simp[label_or_plain_def, plain_operand_def,
+           stackPlanTypesTheory.is_label_operand_def]) >>
+  stmt_shape_emit_simp >>
+  simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def]
+QED
+
+Theorem stmt_shape_frame[local]:
+  !internal A m B R P.
+    shape_step internal compiler_label A m B /\ shape_stable R /\
+    (!st. P st ==> A st /\ R st) ==>
+    shape_step internal compiler_label P m (\x st. B x st /\ R st)
+Proof
+  rpt strip_tac >> drule_all shape_step_frame >>
+  strip_tac >> irule shape_step_conseq >>
+  qexistsl_tac [`compiler_label`, `\st. R st /\ A st`,
+               `\x st. R st /\ B x st`] >> simp[] >> metis_tac[]
+QED
+
+val stmt_plain_emit =
+  qmatch_goalsub_abbrev_tac `shape_step _ _ pre _ _` >>
+  irule shape_step_conseq >>
+  qexistsl_tac [`compiler_label`, `pre`,
+               `\x st. pre st /\ plain_operand st x`] >>
+  simp[] >> ho_match_mp_tac stmt_shape_emit_op >>
+  simp[Abbr `pre`, stmt_shape_stable_plain] >>
+  conj_tac
+  >- simp[label_or_plain_def, plain_operand_def,
+          stackPlanTypesTheory.is_label_operand_def] >>
+  stmt_shape_emit_simp >>
+  simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def];
+
+Theorem compile_bytestring_copy_len_shape[local]:
+  !internal val_op.
+    shape_step internal compiler_label (\st. plain_operand st val_op)
+      (compile_bytestring_copy_len val_op) (\op st. plain_operand st op)
+Proof
+  rpt gen_tac >> simp[compile_bytestring_copy_len_def] >>
+  irule shape_step_bind >> qexists_tac `\op st. plain_operand st op` >>
+  conj_tac
+  >- (gen_tac >> BETA_TAC >> irule shape_step_bind >>
+      qexists_tac `\op st. plain_operand st op` >> conj_tac
+      >- (gen_tac >> BETA_TAC >> irule shape_step_bind >>
+          qexists_tac `\op st. plain_operand st op` >> conj_tac
+          >- (gen_tac >> BETA_TAC >> stmt_plain_emit) >>
+          stmt_plain_emit) >>
+      stmt_plain_emit) >>
+  stmt_plain_emit
+QED
+
+Theorem compile_alloc_buffer_shape[local]:
+  !internal size.
+    shape_step internal compiler_label (\st. T)
+      (compile_alloc_buffer size)
+      (\b st. plain_operand st b.buf_operand)
+Proof
+  map_every qx_gen_tac [`internal`, `nbytes`] >> simp[compile_alloc_buffer_def] >>
+  irule shape_step_bind >> qexists_tac `\op st. plain_operand st op` >>
+  conj_tac
+  >- (gen_tac >> BETA_TAC >> irule shape_step_return >> simp[]) >>
+  mp_tac (Q.SPECL [`internal`, `compiler_label`, `\st. T`, `ALLOCA`,
+    `[Lit (n2w nbytes)]`] shape_step_emit_op) >>
+  simp[shape_stable_def, label_or_plain_def, plain_operand_def,
+       stackPlanTypesTheory.is_label_operand_def, lowered_inst_ok_def,
+       mk_inst_def, raw_opcode_ok_def, inst_shape_ok_def,
+       jump_labels_ok_def, is_terminator_def, is_read0_opcode_def,
+       label_positions_ok_def, is_param_opcode_def]
+QED
+
 (* For alan, by compile_stmt_ind.  internal is IS_SOME ce_return_pc: Return
    emits RET exactly when ce_return_pc is SOME, STOP/RETURN otherwise. *)
 Theorem compile_stmt_shape:
