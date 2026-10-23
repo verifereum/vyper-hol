@@ -1364,8 +1364,277 @@ Proof
   qexists_tac `\u st. R st /\ plain_operand st res` >> conj_tac
   >- (shape_under_tac compile_clamp_shape `\st. R st /\ plain_operand st res` >>
       ho_match_mp_tac shape_stable_conj >> simp[] >>
-      mp_tac (Q.SPEC `[res]` shape_stable_plain_operands) >> simp[]) >>
+      mp_tac (Q.SPEC `[res]:operand list` shape_stable_plain_operands) >> simp[]) >>
   gen_tac >> simp[] >> irule shape_step_return >> simp[]
+QED
+
+(* Scalar arithmetic retains the input operands and the result across checks. *)
+fun shape_safe_add_sub_tac g = (
+  qmatch_goalsub_abbrev_tac `shape_step internal compiler_label P _ _` >>
+  `shape_stable P` by
+    (simp[Abbr `P`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
+     mp_tac (Q.SPEC `[x;y]:operand list` shape_stable_plain_operands) >> simp[]) >>
+  match_mp_tac shape_step_bind >>
+  qexists_tac `\res st. P st /\ plain_operand st res` >> conj_tac
+  >- (shape_under_tac shape_step_emit_op_plain `P` >>
+      simp[Abbr `P`] >> shape_opcode_tac) >>
+  qx_gen_tac `res` >> simp[] >>
+  qmatch_goalsub_abbrev_tac `shape_step internal compiler_label G _ _` >>
+  `shape_stable G` by
+    (simp[Abbr `G`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
+     mp_tac (Q.SPEC `[res]:operand list` shape_stable_plain_operands) >> simp[]) >>
+  Cases_on `type_bits ty < 256` >> simp[]
+  >- (shape_under_tac clamp_and_return_shape `P` >> simp[Abbr `G`, Abbr `P`]) >>
+  Cases_on `is_signed_type ty` >> simp[] >> (
+    match_mp_tac shape_step_bind >>
+    qexists_tac `\v st. G st /\ plain_operand st v` >> conj_tac
+    >- (shape_under_tac shape_step_emit_op_plain `G` >>
+        simp[Abbr `G`, Abbr `P`] >> shape_opcode_tac) >>
+    qx_gen_tac `check_op` >> simp[] >>
+    qmatch_goalsub_abbrev_tac `shape_step internal compiler_label H _ _` >>
+    `shape_stable H` by
+      (simp[Abbr `H`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
+       mp_tac (Q.SPEC `[check_op]:operand list` shape_stable_plain_operands) >> simp[]) >>
+    match_mp_tac shape_step_bind >>
+    qexists_tac `\v st. H st /\ plain_operand st v` >> conj_tac
+    >- (shape_under_tac shape_step_emit_op_plain `H` >>
+        simp[Abbr `H`, Abbr `G`, Abbr `P`] >> shape_opcode_tac) >>
+    gen_tac >> simp[])
+  >~ [`comp_bind (emit_op EQ [a;b]) _`]
+  >- (match_mp_tac shape_step_bind >>
+      qexists_tac `\v st. G st /\ plain_operand st v` >> conj_tac
+      >- (shape_under_tac shape_step_emit_op_plain `G` >>
+          simp[Abbr `H`] >> shape_opcode_tac) >>
+      gen_tac >> simp[] >> match_mp_tac shape_step_ignore_bind >>
+      qexists_tac `\u st. G st` >> conj_tac
+      >- (shape_under_tac shape_step_emit_void_plain `G` >> shape_opcode_tac) >>
+      gen_tac >> simp[] >> irule shape_step_return >> simp[Abbr `G`, Abbr `P`]) >>
+  match_mp_tac shape_step_ignore_bind >> qexists_tac `\u st. G st` >> conj_tac
+  >- (shape_under_tac shape_step_emit_void_plain `G` >> simp[Abbr `H`] >> shape_opcode_tac) >>
+  gen_tac >> simp[] >> irule shape_step_return >> simp[Abbr `G`, Abbr `P`]) g;
+
+Theorem compile_safe_add_shape[local]:
+  shape_stable R ==>
+  shape_step internal compiler_label
+    (\st. R st /\ plain_operand st x /\ plain_operand st y)
+    (compile_safe_add x y ty) (\v st. R st /\ plain_operand st v)
+Proof
+  strip_tac >> simp[compile_safe_add_def] >> shape_safe_add_sub_tac
+QED
+
+Theorem compile_safe_sub_shape[local]:
+  shape_stable R ==>
+  shape_step internal compiler_label
+    (\st. R st /\ plain_operand st x /\ plain_operand st y)
+    (compile_safe_sub x y ty) (\v st. R st /\ plain_operand st v)
+Proof
+  strip_tac >> simp[compile_safe_sub_def] >> shape_safe_add_sub_tac
+QED
+
+(* Fixed straight-line scalar sequences share only monadic plumbing. *)
+fun shape_scalar_emit_bind_tac frame name normalize =
+  match_mp_tac shape_step_bind >>
+  qexists_tac ([QUOTE "\\v st. ("] @ frame @
+               [QUOTE ") st /\\ plain_operand st v"]) >> conj_tac
+  >- (shape_under_tac shape_step_emit_op_plain frame >> normalize >> shape_opcode_tac) >>
+  qx_gen_tac name >> simp[];
+
+fun shape_scalar_assert_tac frame =
+  match_mp_tac shape_step_ignore_bind >> qexists_tac ([QUOTE "\\u st. ("] @ frame @ [QUOTE ") st"]) >> conj_tac
+  >- (shape_under_tac shape_step_emit_void_plain frame >> shape_opcode_tac) >>
+  gen_tac >> simp[];
+
+Theorem compile_safe_mod_shape[local]:
+  shape_stable R ==>
+  shape_step internal compiler_label
+    (\st. R st /\ plain_operand st x /\ plain_operand st y)
+    (compile_safe_mod x y ty) (\v st. R st /\ plain_operand st v)
+Proof
+  strip_tac >> simp[compile_safe_mod_def] >>
+  qmatch_goalsub_abbrev_tac `shape_step internal compiler_label P _ _` >>
+  `shape_stable P` by
+    (simp[Abbr `P`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
+     mp_tac (Q.SPEC `[x;y]:operand list` shape_stable_plain_operands) >> simp[]) >>
+  shape_scalar_emit_bind_tac `P` `yz` (simp[Abbr `P`]) >>
+  shape_scalar_emit_bind_tac `P` `ynz` all_tac >>
+  shape_scalar_assert_tac `P` >>
+  Cases_on `is_signed_type ty` >> simp[] >>
+  shape_under_tac shape_step_emit_op_plain `P` >> simp[Abbr `P`] >> shape_opcode_tac
+QED
+
+Theorem compile_safe_decimal_div_shape[local]:
+  shape_stable R ==>
+  shape_step internal compiler_label
+    (\st. R st /\ plain_operand st x /\ plain_operand st y)
+    (compile_safe_decimal_div x y divisor ty) (\v st. R st /\ plain_operand st v)
+Proof
+  strip_tac >> simp[compile_safe_decimal_div_def] >>
+  qmatch_goalsub_abbrev_tac `shape_step internal compiler_label P _ _` >>
+  `shape_stable P` by
+    (simp[Abbr `P`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
+     mp_tac (Q.SPEC `[x;y]:operand list` shape_stable_plain_operands) >> simp[]) >>
+  match_mp_tac shape_step_bind >>
+  qexists_tac `\v st. P st /\ plain_operand st v` >> conj_tac
+  >- (shape_under_tac shape_step_emit_op_plain `P` >> simp[Abbr `P`] >> shape_opcode_tac) >>
+  qx_gen_tac `scaled` >> simp[] >>
+  qmatch_goalsub_abbrev_tac `shape_step internal compiler_label G _ _` >>
+  `shape_stable G` by
+    (simp[Abbr `G`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
+     mp_tac (Q.SPEC `[scaled]:operand list` shape_stable_plain_operands) >> simp[]) >>
+  match_mp_tac shape_step_bind >>
+  qexists_tac `\v st. G st /\ plain_operand st v` >> conj_tac
+  >- (shape_under_tac shape_step_emit_op_plain `G` >> simp[Abbr `G`, Abbr `P`] >> shape_opcode_tac) >>
+  qx_gen_tac `yz` >> simp[] >>
+  shape_scalar_emit_bind_tac `G` `ynz` all_tac >>
+  shape_scalar_assert_tac `G` >>
+  match_mp_tac shape_step_bind >>
+  qexists_tac `\v st. R st /\ plain_operand st v` >> conj_tac
+  >- (shape_under_tac shape_step_emit_op_plain `G` >> simp[Abbr `G`, Abbr `P`] >> shape_opcode_tac) >>
+  gen_tac >> simp[] >> ho_match_mp_tac clamp_and_return_shape >> simp[]
+QED
+
+Theorem compile_safe_div_shape[local]:
+  shape_stable R ==>
+  shape_step internal compiler_label
+    (\st. R st /\ plain_operand st x /\ plain_operand st y)
+    (compile_safe_div x y ty) (\v st. R st /\ plain_operand st v)
+Proof
+  strip_tac >> simp[compile_safe_div_def] >>
+  qmatch_goalsub_abbrev_tac `shape_step internal compiler_label P _ _` >>
+  `shape_stable P` by
+    (simp[Abbr `P`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
+     mp_tac (Q.SPEC `[x;y]:operand list` shape_stable_plain_operands) >> simp[]) >>
+  shape_scalar_emit_bind_tac `P` `yz` (simp[Abbr `P`]) >>
+  shape_scalar_emit_bind_tac `P` `ynz` all_tac >>
+  shape_scalar_assert_tac `P` >>
+  Cases_on `is_signed_type ty` >> simp[]
+  >- (shape_scalar_emit_bind_tac `P` `res` (simp[Abbr `P`]) >>
+      qmatch_goalsub_abbrev_tac `shape_step internal compiler_label G _ _` >>
+      `shape_stable G` by
+        (simp[Abbr `G`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
+         mp_tac (Q.SPEC `[res]:operand list` shape_stable_plain_operands) >> simp[]) >>
+      Cases_on `type_bits ty = 256` >> simp[]
+      >- (shape_scalar_emit_bind_tac `G` `xmin` (simp[Abbr `G`, Abbr `P`]) >>
+          qmatch_goalsub_abbrev_tac `shape_step internal compiler_label H _ _` >>
+          `shape_stable H` by
+            (simp[Abbr `H`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
+             mp_tac (Q.SPEC `[xmin]:operand list` shape_stable_plain_operands) >> simp[]) >>
+          shape_scalar_emit_bind_tac `H` `ny` (simp[Abbr `H`, Abbr `G`, Abbr `P`]) >>
+          shape_scalar_emit_bind_tac `H` `yn1` all_tac >>
+          shape_scalar_emit_bind_tac `G` `bad` (simp[Abbr `H`]) >>
+          shape_scalar_emit_bind_tac `G` `ok_op` all_tac >>
+          shape_scalar_assert_tac `G` >>
+          irule shape_step_return >> simp[Abbr `G`, Abbr `P`]) >>
+      Cases_on `type_bits ty < 256` >> simp[]
+      >- (shape_under_tac clamp_and_return_shape `P` >> simp[Abbr `G`, Abbr `P`]) >>
+      irule shape_step_return >> simp[Abbr `G`, Abbr `P`]) >>
+  shape_under_tac shape_step_emit_op_plain `P` >> simp[Abbr `P`] >> shape_opcode_tac
+QED
+
+Theorem compile_mul_overflow_check_shape[local]:
+  shape_stable R ==>
+  shape_step internal compiler_label
+    (\st. R st /\ EVERY (plain_operand st) [x;y;res])
+    (compile_mul_overflow_check x y res is_signed bits) (\u st. R st)
+Proof
+  strip_tac >> simp[compile_mul_overflow_check_def] >>
+  qmatch_goalsub_abbrev_tac `shape_step internal compiler_label P _ _` >>
+  `shape_stable P` by
+    (simp[Abbr `P`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
+     mp_tac (Q.SPEC `[x;y;res]:operand list` shape_stable_plain_operands) >> simp[]) >>
+  match_mp_tac shape_step_bind >>
+  qexists_tac `\v st. P st /\ plain_operand st v` >> conj_tac
+  >- (Cases_on `is_signed` >> simp[] >>
+      shape_under_tac shape_step_emit_op_plain `P` >> simp[Abbr `P`] >> shape_opcode_tac) >>
+  qx_gen_tac `div_res` >> simp[] >>
+    shape_scalar_emit_bind_tac `P` `div_ok` (simp[Abbr `P`]) >>
+    qmatch_goalsub_abbrev_tac `shape_step internal compiler_label G _ _` >>
+    `shape_stable G` by
+      (simp[Abbr `G`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
+       mp_tac (Q.SPEC `[div_ok]:operand list` shape_stable_plain_operands) >> simp[]) >>
+    shape_scalar_emit_bind_tac `G` `yz` (simp[Abbr `G`, Abbr `P`]) >>
+    shape_scalar_emit_bind_tac `P` `ok_op` (simp[Abbr `G`]) >>
+    qmatch_goalsub_abbrev_tac `shape_step internal compiler_label H _ _` >>
+    `shape_stable H` by
+      (simp[Abbr `H`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
+       mp_tac (Q.SPEC `[ok_op]:operand list` shape_stable_plain_operands) >> simp[]) >>
+  match_mp_tac shape_step_bind >>
+  qexists_tac `\v st. R st /\ plain_operand st v` >> conj_tac
+  >- (Cases_on `is_signed /\ bits = 256` >> simp[]
+      >- (shape_scalar_emit_bind_tac `H` `xmin` (simp[Abbr `H`, Abbr `P`]) >>
+          qmatch_goalsub_abbrev_tac `shape_step internal compiler_label J _ _` >>
+          `shape_stable J` by
+            (simp[Abbr `J`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
+             mp_tac (Q.SPEC `[xmin]:operand list` shape_stable_plain_operands) >> simp[]) >>
+          shape_scalar_emit_bind_tac `J` `ny` (simp[Abbr `J`, Abbr `H`, Abbr `P`]) >>
+          shape_scalar_emit_bind_tac `J` `yn1` all_tac >>
+          shape_scalar_emit_bind_tac `H` `special` (simp[Abbr `J`]) >>
+          shape_scalar_emit_bind_tac `H` `nspecial` all_tac >>
+          shape_under_tac shape_step_emit_op_plain `H` >>
+          simp[Abbr `H`, Abbr `P`] >> shape_opcode_tac) >>
+      irule shape_step_return >> simp[Abbr `H`, Abbr `P`]) >>
+  gen_tac >> simp[] >> shape_under_tac shape_step_emit_void_plain `R` >> shape_opcode_tac
+QED
+
+Theorem compile_safe_mul_shape[local]:
+  shape_stable R ==>
+  shape_step internal compiler_label
+    (\st. R st /\ plain_operand st x /\ plain_operand st y)
+    (compile_safe_mul x y ty) (\v st. R st /\ plain_operand st v)
+Proof
+  strip_tac >> simp[compile_safe_mul_def] >>
+  qmatch_goalsub_abbrev_tac `shape_step internal compiler_label P _ _` >>
+  `shape_stable P` by
+    (simp[Abbr `P`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
+     mp_tac (Q.SPEC `[x;y]:operand list` shape_stable_plain_operands) >> simp[]) >>
+  shape_scalar_emit_bind_tac `P` `res` (simp[Abbr `P`]) >>
+  qmatch_goalsub_abbrev_tac `shape_step internal compiler_label G _ _` >>
+  `shape_stable G` by
+    (simp[Abbr `G`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
+     mp_tac (Q.SPEC `[res]:operand list` shape_stable_plain_operands) >> simp[]) >>
+  match_mp_tac shape_step_ignore_bind >> qexists_tac `\u st. G st` >> conj_tac
+  >- (Cases_on `128 < type_bits ty` >> simp[]
+      >- (shape_under_tac compile_mul_overflow_check_shape `G` >> simp[Abbr `G`, Abbr `P`]) >>
+      irule shape_step_return >> simp[]) >>
+  gen_tac >> simp[] >> match_mp_tac shape_step_bind >>
+  qexists_tac `\v st. R st /\ plain_operand st v` >> conj_tac
+  >- (Cases_on `is_decimal_type ty` >> simp[]
+      >- (Cases_on `is_signed_type ty` >> simp[] >>
+          shape_under_tac shape_step_emit_op_plain `G` >> simp[Abbr `G`, Abbr `P`] >> shape_opcode_tac) >>
+      irule shape_step_return >> simp[Abbr `G`, Abbr `P`]) >>
+  gen_tac >> simp[] >> Cases_on `type_bits ty < 256 \/ is_decimal_type ty` >> simp[]
+  >- (ho_match_mp_tac clamp_and_return_shape >> simp[]) >>
+  irule shape_step_return >> simp[]
+QED
+
+Theorem wrap_truncate_shape[local]:
+  shape_stable R ==>
+  shape_step internal compiler_label (\st. R st /\ plain_operand st res)
+    (wrap_truncate res ty) (\v st. R st /\ plain_operand st v)
+Proof
+  strip_tac >> simp[wrap_truncate_def] >> Cases_on `type_bits ty < 256` >> simp[]
+  >- (Cases_on `is_signed_type ty` >> simp[] >>
+      shape_under_tac shape_step_emit_op_plain `R` >> shape_opcode_tac) >>
+  irule shape_step_return >> simp[]
+QED
+
+Theorem compile_compare_shape[local]:
+  shape_stable R ==>
+  shape_step internal compiler_label
+    (\st. R st /\ plain_operand st x /\ plain_operand st y)
+    (compile_compare op x y ty) (\v st. R st /\ plain_operand st v)
+Proof
+  strip_tac >> Cases_on `op` >> simp[compile_compare_def] >>
+  TRY (rename1 `shape_step _ _ _ (comp_ignore_bind (emit_inst INVALID [] []) _) _` >>
+       match_mp_tac shape_step_ignore_bind >> qexists_tac `\u st. R st` >> conj_tac
+       >- (shape_under_tac shape_step_emit_inst_guarded `R` >> shape_opcode_tac) >>
+       gen_tac >> simp[] >> irule shape_step_return >>
+       simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def] >> NO_TAC) >>
+  Cases_on `is_uint256 ty` >> simp[] >>
+  TRY (rename1 `shape_step _ _ _ (emit_op _ _) _` >>
+       shape_under_tac shape_step_emit_op_plain `R` >> shape_opcode_tac >> NO_TAC) >>
+  shape_scalar_emit_bind_tac `R` `cmp` all_tac >>
+  shape_under_tac shape_step_emit_op_plain `R` >> shape_opcode_tac
 QED
 
 (* For alan, by compile_expr_ind; one case per compile_expr_body clause and
