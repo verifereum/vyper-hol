@@ -374,12 +374,185 @@ QED
 
 (* supported_expr rejects Env MsgGas and every raw_call form, and accepts
    builtins only at the arity their dispatcher reads. *)
+Theorem supported_builtin_form_shape_root[local]:
+  supported_builtin_form tops ty bi es ==>
+  ~expr_shape_root (Builtin ty bi es)
+Proof
+  Cases_on `bi` >>
+  simp[supportedExprFormsTheory.supported_builtin_form_def,
+       expr_shape_root_def, builtin_arity_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  rpt (BasicProvers.FULL_CASE_TAC >> gvs[])
+QED
+
+Theorem supported_type_builtin_form_shape_root[local]:
+  supported_type_builtin_form tops ty tb target es ==>
+  ~expr_shape_root (TypeBuiltin ty tb target es)
+Proof
+  Cases_on `tb` >>
+  simp[supportedExprFormsTheory.supported_type_builtin_form_def,
+       expr_shape_root_def, type_builtin_arity_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  rpt (BasicProvers.FULL_CASE_TAC >> gvs[])
+QED
+
+Theorem supported_pure_shape[local]:
+  (!tops e. supported_pure_expr tops e ==>
+    ~supported_expr_exists expr_shape_root e) /\
+  (!tops es. supported_pure_exprs tops es ==>
+    ~supported_exprs_exists expr_shape_root es) /\
+  (!tops fields. supported_pure_fields tops fields ==>
+    ~supported_fields_exists expr_shape_root fields)
+Proof
+  ho_match_mp_tac supportedExprsTheory.supported_pure_expr_ind >>
+  rw[supportedExprsTheory.supported_pure_expr_def,
+     supported_expr_exists_def] >>
+  simp[expr_shape_root_def]
+  >- (qmatch_goalsub_rename_tac `supported_expr_exists expr_shape_root storage_base` >>
+      Cases_on `storage_base` >> gvs[supported_expr_exists_def, expr_shape_root_def])
+  >- (qmatch_goalsub_rename_tac `supported_expr_exists expr_shape_root storage_base` >>
+      Cases_on `storage_base` >> gvs[supported_expr_exists_def, expr_shape_root_def])
+  >- (drule supported_builtin_form_shape_root >> simp[expr_shape_root_def])
+  >> drule supported_type_builtin_form_shape_root >> simp[expr_shape_root_def]
+QED
+
+Theorem supported_expr_shape[local]:
+  !tops e. supported_expr tops e ==>
+    ~supported_expr_exists expr_shape_root e
+Proof
+  rw[supportedExprsTheory.supported_expr_def]
+  >- metis_tac[supported_pure_shape] >>
+  qpat_x_assum `supported_effect_expr _ _` mp_tac >>
+  Cases_on `e` >>
+  simp[supportedExprsTheory.supported_effect_expr_def,
+       supported_expr_exists_def, expr_shape_root_def]
+  >- (rename1 `supported_target_exists _ pop_target` >>
+      Cases_on `pop_target` >> simp[supported_expr_exists_def]) >>
+  qmatch_goalsub_rename_tac `supported_opt_exists _ call_default` >>
+  Cases_on `call_default` >> simp[supported_expr_exists_def] >>
+  rename1 `!flags. call_target <> RawCallCalldataTarget flags` >>
+  Cases_on `call_target` >> simp[]
+  >- metis_tac[supported_pure_shape]
+  >- (split_pair_case_tac >> simp[] >> metis_tac[supported_pure_shape]) >>
+  qmatch_goalsub_rename_tac `supported_exprs_exists expr_shape_root send_args` >>
+  namedCases_on `send_args` ["", "a rest"] >> simp[] >>
+  namedCases_on `rest` ["", "v rest2"] >> simp[] >>
+  namedCases_on `rest2` ["", "g rest3"] >> simp[]
+  >- (Cases_on `t` >> simp[supported_expr_exists_def] >>
+      metis_tac[supported_pure_shape]) >>
+  Cases_on `rest3` >> simp[] >>
+  Cases_on `t` >> simp[supported_expr_exists_def] >>
+  metis_tac[supported_pure_shape]
+QED
+
+Theorem supported_assignment_shape[local]:
+  supported_assignment tops bindings target e ==>
+  ~supported_assignment_exists expr_shape_root target /\
+  ~supported_expr_exists expr_shape_root e
+Proof
+  Cases_on `target` >> simp[supportedStmtsTheory.supported_assignment_def] >>
+  rename1 `BaseTarget bt` >> Cases_on `bt` >>
+  simp[supportedStmtsTheory.supported_assignment_def,
+       supported_assignment_exists_def, supported_expr_exists_def]
+  >- (rpt strip_tac >> metis_tac[supported_expr_shape])
+  >- metis_tac[supported_pure_shape]
+  >- (qmatch_goalsub_rename_tac `supported_target_exists expr_shape_root parent` >> Cases_on `parent` >>
+      simp[supported_expr_exists_def] >> metis_tac[supported_pure_shape]) >>
+  qmatch_goalsub_rename_tac `supported_target_exists expr_shape_root parent` >> Cases_on `parent` >>
+  simp[supported_expr_exists_def] >> metis_tac[supported_pure_shape]
+QED
+
+Theorem supported_aug_target_shape[local]:
+  supported_aug_target tops bindings target ==>
+  ~supported_target_exists expr_shape_root target
+Proof
+  Cases_on `target` >>
+  simp[supportedStmtsTheory.supported_aug_target_def, supported_expr_exists_def]
+QED
+
+Theorem supported_append_target_shape[local]:
+  supported_append_target tops target ==>
+  ~supported_target_exists expr_shape_root target
+Proof
+  Cases_on `target` >>
+  simp[supportedStmtsTheory.supported_append_target_def, supported_expr_exists_def]
+QED
+
+Theorem supported_string_reason_shape[local]:
+  supported_string_reason tops e ==>
+  ~supported_expr_exists expr_shape_root e
+Proof
+  Cases_on `e` >>
+  simp[supportedStmtsTheory.supported_string_reason_def,
+       supported_expr_exists_def, expr_shape_root_def] >>
+  metis_tac[supported_pure_shape, supported_expr_exists_def, expr_shape_root_def]
+QED
+
+Theorem supported_assert_reason_shape[local]:
+  supported_assert_reason tops reason ==>
+  ~supported_assert_exists expr_shape_root reason
+Proof
+  Cases_on `reason` >>
+  simp[supportedStmtsTheory.supported_assert_reason_def, supported_assert_exists_def] >>
+  metis_tac[supported_string_reason_shape]
+QED
+
+Theorem supported_raise_reason_shape[local]:
+  supported_raise_reason tops reason ==>
+  ~supported_raise_exists expr_shape_root reason
+Proof
+  Cases_on `reason` >>
+  simp[supportedStmtsTheory.supported_raise_reason_def, supported_raise_exists_def] >>
+  metis_tac[supported_string_reason_shape]
+QED
+
+Theorem supported_log_shape[local]:
+  supported_log tops id es ==> ~supported_exprs_exists expr_shape_root es
+Proof
+  simp[supportedStmtsTheory.supported_log_def] >>
+  metis_tac[supported_pure_shape]
+QED
+
+Theorem supported_iterator_shape[local]:
+  supported_iterator tops ty iter n ==>
+  ~supported_iterator_exists expr_shape_root iter
+Proof
+  Cases_on `iter` >>
+  simp[supportedStmtsTheory.supported_iterator_def, supported_iterator_exists_def]
+  >- (Cases_on `e` >> simp[supported_expr_exists_def, expr_shape_root_def]) >>
+  qmatch_goalsub_rename_tac `supported_expr_exists expr_shape_root start_expr` >>
+  Cases_on `start_expr` >> simp[]
+  >~ [`Literal lit_ty lit`]
+  >- (simp[supported_expr_exists_def, expr_shape_root_def] >>
+      qmatch_goalsub_rename_tac `supported_expr_exists expr_shape_root finish_expr` >>
+      Cases_on `finish_expr` >>
+      simp[supported_expr_exists_def, expr_shape_root_def] >>
+      metis_tac[supported_pure_shape, supported_expr_exists_def, expr_shape_root_def]) >>
+  metis_tac[supported_pure_shape]
+QED
+
+Theorem supported_stmts_shape[local]:
+  (!tops bindings s. supported_stmt tops bindings s ==>
+    ~supported_stmt_expr_exists expr_shape_root s) /\
+  (!tops bindings ss. supported_stmts tops bindings ss ==>
+    ~supported_stmts_expr_exists expr_shape_root ss)
+Proof
+  ho_match_mp_tac supportedStmtsTheory.supported_stmt_ind >>
+  rw[supportedStmtsTheory.supported_stmt_def, supported_stmt_expr_exists_def,
+     supported_expr_exists_def] >>
+  metis_tac[supported_pure_shape, supported_expr_shape,
+    supported_assignment_shape, supported_aug_target_shape,
+    supported_append_target_shape, supported_assert_reason_shape,
+    supported_raise_reason_shape, supported_log_shape, supported_iterator_shape]
+QED
+
 Theorem supported_function_body_shape:
   !tops vis args body.
     supported_function_body tops vis args body ==>
     ~supported_stmts_expr_exists expr_shape_root body
 Proof
-  cheat
+  simp[supported_function_body_def] >>
+  metis_tac[supported_stmts_shape]
 QED
 
 (* build_compile_env maps module variables to storage/transient slots and
