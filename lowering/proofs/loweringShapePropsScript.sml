@@ -296,6 +296,14 @@ Proof
   simp[shape_step_def] >> disch_then drule_all >> simp[]
 QED
 
+Theorem shape_step_pure_pre:
+  !internal LP b P m Q.
+    (b ==> shape_step internal LP P m Q) ==>
+    shape_step internal LP (\st. b /\ P st) m Q
+Proof
+  rw[shape_step_def] >> metis_tac[]
+QED
+
 (* Shared helper of every value consumer; weakly frozen. *)
 Theorem unwrap_value_shape:
   !cenv v internal.
