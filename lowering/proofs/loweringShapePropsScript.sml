@@ -512,18 +512,17 @@ Proof
   metis_tac[]
 QED
 
-Theorem extbodies_plain_frame:
-  !internal LP P m Q live.
-    shape_step internal LP P m Q /\
-    (!st. EVERY (plain_operand st) live ==> P st) ==>
-    shape_step internal LP (\st. EVERY (plain_operand st) live) m
-      (\x st. EVERY (plain_operand st) live /\ Q x st)
+Theorem extbodies_frame:
+  !R internal LP P m Q.
+    shape_step internal LP P m Q /\ shape_stable R /\
+    (!st. R st ==> P st) ==>
+    shape_step internal LP R m (\x st. R st /\ Q x st)
 Proof
   rpt strip_tac >> irule shape_step_conseq >>
-  qexistsl_tac [`LP`, `\st. EVERY (plain_operand st) live /\ P st`,
-    `\x st. EVERY (plain_operand st) live /\ Q x st`] >>
+  qexistsl_tac [`LP`, `\st. R st /\ P st`,
+    `\x st. R st /\ Q x st`] >>
   simp_tac bool_ss [] >> conj_tac >- simp[] >>
-  ho_match_mp_tac shape_step_frame >> simp[shape_stable_plain_operands]
+  ho_match_mp_tac shape_step_frame >> simp[]
 QED
 
 Theorem extbodies_assume:
@@ -668,7 +667,8 @@ Resume compile_abi_decode_shape[cons]:
               `\st. EVERY (plain_operand st) [dst; src; hi]`, `\x st. T`] >>
             simp_tac bool_ss [] >> conj_tac >- simp[] >>
             first_assum irule) >>
-        ho_match_mp_tac extbodies_plain_frame >>
+        ho_match_mp_tac extbodies_frame >>
+  simp_tac bool_ss [shape_stable_plain_operands] >>
         qexists_tac `\st. EVERY (plain_operand st) [edst; elem; hi]` >>
         conj_tac >- (first_assum irule) >> simp[])) >>
   suspend "cons_ptr"
@@ -679,7 +679,8 @@ Resume compile_abi_decode_shape[cons_ptr]:
     `\st. EVERY (plain_operand st) [dst; src; hi]`,
     `\elem st. EVERY (plain_operand st) [dst; src; hi] /\ plain_operand st elem`] >>
   simp_tac bool_ss [] >> conj_tac >- simp[] >>
-  ho_match_mp_tac extbodies_plain_frame >>
+  ho_match_mp_tac extbodies_frame >>
+  simp_tac bool_ss [shape_stable_plain_operands] >>
   qexists_tac `\st. EVERY (plain_operand st) [src]` >>
   conj_tac >- (irule compile_getelemptr_abi_shape) >> simp[]
 QED
@@ -735,7 +736,8 @@ Resume compile_abi_decode_shape[array_choose]:
   qexists_tac `\buf st. EVERY (plain_operand st) [cnt; ok; bad; cnt0; dst; src; hi] /\
                         plain_operand st buf.buf_operand` >>
   conj_tac >- suspend "array_loop" >>
-  ho_match_mp_tac extbodies_plain_frame >> qexists_tac `\st. T` >>
+  ho_match_mp_tac extbodies_frame >>
+  simp_tac bool_ss [shape_stable_plain_operands] >> qexists_tac `\st. T` >>
   simp_tac bool_ss [] >> irule compile_alloc_buffer_shape
 QED
 Resume compile_abi_decode_shape[array_copy]:
@@ -812,7 +814,8 @@ Resume compile_abi_decode_shape[loop_actual]:
         `\st. EVERY (plain_operand st) [esrc; soff; sdata; idx2; dst; src; hi; ip]`,
         `\actual st. EVERY (plain_operand st) [esrc; soff; sdata; idx2; dst; src; hi; ip] /\ plain_operand st actual`] >>
       simp_tac bool_ss [] >> conj_tac >- simp[] >>
-      ho_match_mp_tac extbodies_plain_frame >>
+      ho_match_mp_tac extbodies_frame >>
+  simp_tac bool_ss [shape_stable_plain_operands] >>
       qexists_tac `\st. EVERY (plain_operand st) [esrc; sdata; hi]` >>
       conj_tac >- (irule compile_abi_decode_dyn_elem_ptr_shape) >> simp[]) >>
   irule shape_step_return >> simp[]
@@ -831,7 +834,8 @@ Resume compile_abi_decode_shape[loop_recurse]:
     `case ei of DecPrimWord _ => F | DecBytestring _ => T |
      DecDynArray _ _ _ _ _ => T | DecComplex T _ => T | DecComplex F _ => F` mp_tac) >>
   disch_then assume_tac >>
-  ho_match_mp_tac extbodies_plain_frame >>
+  ho_match_mp_tac extbodies_frame >>
+  simp_tac bool_ss [shape_stable_plain_operands] >>
   qexists_tac `\st. EVERY (plain_operand st) [edst; actual; hi]` >>
   conj_tac >- (first_assum irule >> simp_tac bool_ss []) >> simp[]
 QED
@@ -850,6 +854,16 @@ Finalise compile_abi_decode_shape
 
 (* Each body opens its "fn_" entry block, then compile_guarded_body via
    compile_stmt_shape with ce_return_pc = NONE. *)
+Theorem extbodies_cenv_frame:
+  !internal LP cenv P m Q.
+    shape_step internal LP P m Q ==>
+    shape_step internal LP (\st. cenv_shape_ok st cenv /\ P st) m
+      (\x st. cenv_shape_ok st cenv /\ Q x st)
+Proof
+  rpt strip_tac >> ho_match_mp_tac shape_step_frame >>
+  simp[cenv_shape_ok_stable]
+QED
+
 Theorem compile_external_fn_bodies_shape:
   !fns.
     EVERY external_fn_shape_ok fns ==>
