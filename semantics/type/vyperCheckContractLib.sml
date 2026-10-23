@@ -131,6 +131,7 @@ val checker_defs =
    raw_call_return_type_def,
    ext_call_opts_ok_def,
    ext_call_kw_type_def,
+   arg_type_fits_def,
    create_arg_types_ok_compute,
    optionTheory.option_case_lazily,
    optionTheory.IS_SOME_DEF,
