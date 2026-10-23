@@ -266,6 +266,35 @@ Proof
   rpt gen_tac >> irule shape_step_return >> simp[]
 QED
 
+Theorem lower_value_shape[local]:
+  !cenv ty e internal.
+    ~supported_expr_exists expr_shape_root e ==>
+    shape_step internal compiler_label (\st. cenv_shape_ok st cenv)
+      (lower_value compile_expr cenv ty e)
+      (\op st. plain_operand st op)
+Proof
+  rpt strip_tac >> simp[lower_value_def] >> irule shape_step_bind >>
+  qexists_tac `\v st. cenv_shape_ok st cenv /\ value_shape_ok st v` >>
+  conj_tac
+  >- (gen_tac >> BETA_TAC >> irule unwrap_value_shape) >>
+  drule (cj 1 compile_expr_shape) >>
+  disch_then (qspecl_then [`cenv`, `ty`, `internal`] assume_tac) >>
+  drule shape_step_frame >>
+  disch_then (qspec_then `\st. cenv_shape_ok st cenv` mp_tac) >>
+  simp[cenv_shape_ok_stable]
+QED
+
+Theorem infer_array_location_not_code[local]:
+  !st cenv e. cenv_shape_ok st cenv ==>
+    infer_array_location cenv e <> LocCode
+Proof
+  rpt gen_tac >> strip_tac >> Cases_on `e` >>
+  gvs[infer_array_location_def, cenv_shape_ok_def] >>
+  BasicProvers.TOP_CASE_TAC >> simp[] >>
+  rename1 `FLOOKUP _ _ = SOME loc` >> Cases_on `loc` >>
+  gvs[loc_shape_ok_def] >> metis_tac[loc_shape_ok_def]
+QED
+
 (* For alan, by compile_stmt_ind.  internal is IS_SOME ce_return_pc: Return
    emits RET exactly when ce_return_pc is SOME, STOP/RETURN otherwise. *)
 Theorem compile_stmt_shape:
