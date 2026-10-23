@@ -1196,6 +1196,22 @@ val () = eval_send_def
             lift_option_type_def, type_check_def, check_def, assert_def]
   |> cv_auto_trans;
 
+Theorem ext_call_take_preserves_non_accounts[local]:
+  vyperCallOutcome$take_call_outcome target calldata value_opt st = (res, st') ==>
+  st'.scopes = st.scopes /\ st'.immutables = st.immutables
+Proof
+  strip_tac >> drule vyperCallOutcomeTheory.take_call_outcome_frame >>
+  disch_then (fn th => conj_tac >> simp[Once th])
+QED
+
+Theorem ext_call_adopt_preserves_non_accounts[local]:
+  vyperCallOutcome$adopt_call_outcome rq outcome st = (res, st') ==>
+  st'.scopes = st.scopes /\ st'.immutables = st.immutables
+Proof
+  simp[vyperCallOutcomeTheory.adopt_call_outcome_equation] >>
+  IF_CASES_TAC >> simp[] >> strip_tac >> gvs[]
+QED
+
 (* Original proof preserved while its over-limit step is repaired.
 Proof
   PairCases_on `sig` >> Cases_on `vs` >>
