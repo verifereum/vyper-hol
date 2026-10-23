@@ -44,6 +44,11 @@ val internal_tuple_call_selectors_eval = save_thm
    EVAL ``build_selectors ^internal_tuple_call_type_env
            ^internal_tuple_call_external_sources``)
 val internal_tuple_call_selectors = rhs (concl internal_tuple_call_selectors_eval)
+(* Environment method-id fields are higher-order functions. Reducing a symbolic
+   function_selector under those lambdas expands Keccak without a concrete
+   input. Selectors for this fixture have already been checked above; leave
+   this pure function opaque while evaluating function packages and replay. *)
+val EVAL = RESTR_EVAL_CONV [``function_selector``]
 val internal_tuple_call_external_fns_eval = save_thm
   ("internal_tuple_call_external_fns_eval",
    EVAL
@@ -199,7 +204,7 @@ Theorem internal_tuple_call_region_eval:
    else return NONE) ^internal_tuple_call_state9 =
   (NONE, ^internal_tuple_call_state9)
 Proof
-  EVAL
+  CONV_TAC EVAL
 QED
 val internal_tuple_call_imm_opt = ``NONE : operand option``
 val internal_tuple_call_region_state = internal_tuple_call_state9
@@ -928,7 +933,7 @@ val internal_tuple_call_internal_function_step = QCONV
      internal_tuple_call_cenv1_eval,
      internal_tuple_call_materialize_eval,
      internal_tuple_call_ret_alloc_eval,
-     internal_tuple_call_forced_alloc_eval,
+     internal_tuple_call_region_eval,
      internal_tuple_call_lock_eval,
      internal_tuple_call_body_ret_ty_eval,
      internal_tuple_call_stmts_eval,
@@ -1118,7 +1123,7 @@ val () = computeLib.upd_compset (computeLib.add_thms
    internal_tuple_call_cenv1_eval,
    internal_tuple_call_materialize_eval,
    internal_tuple_call_ret_alloc_eval,
-   internal_tuple_call_forced_alloc_eval,
+   internal_tuple_call_region_eval,
    internal_tuple_call_lock_eval,
    internal_tuple_call_body_ret_ty_eval,
    internal_tuple_call_stmts_clean_eval])
@@ -1139,7 +1144,7 @@ val internal_tuple_call_internal_function_stage_thms =
    internal_tuple_call_cenv1_eval,
    internal_tuple_call_materialize_eval,
    internal_tuple_call_ret_alloc_eval,
-   internal_tuple_call_forced_alloc_eval,
+   internal_tuple_call_region_eval,
    internal_tuple_call_lock_eval,
    internal_tuple_call_body_ret_ty_eval,
    internal_tuple_call_stmts_clean_eval,
@@ -1249,472 +1254,25 @@ val internal_tuple_call_internal_function_clean_raw5 =
 val internal_tuple_call_internal_function_clean_eval4 = save_thm
   ("internal_tuple_call_internal_function_clean_eval4",
    internal_tuple_call_internal_function_clean_raw5)
-val (_, internal_tuple_call_if5_args) =
-  strip_comb (rhs (concl internal_tuple_call_internal_function_clean_eval4))
-val internal_tuple_call_if5_scrut = List.nth (internal_tuple_call_if5_args, 1)
-fun internal_tuple_call_is_compile_stmt tm =
-  same_const (fst (strip_comb tm)) ``compile_stmt``
-  handle HOL_ERR _ => false
-val internal_tuple_call_stmt_exact_term = find_term
-  internal_tuple_call_is_compile_stmt internal_tuple_call_if5_scrut
-val internal_tuple_call_stmt_norm = CONV_RULE
-  (LAND_CONV (SIMP_CONV (srw_ss()) []))
-  internal_tuple_call_stmt_clean_eval
-val internal_tuple_call_internal_function_refine5 = QCONV
-  (PURE_REWRITE_CONV [internal_tuple_call_stmt_norm])
-  (rhs (concl internal_tuple_call_internal_function_clean_eval4))
-val internal_tuple_call_internal_function_refined5 =
-  TRANS internal_tuple_call_internal_function_clean_eval4
-    internal_tuple_call_internal_function_refine5
-val internal_tuple_call_internal_function_clean_raw6 =
-  List.foldl (fn (_, acc) => internal_tuple_call_refine_internal_function acc)
-    internal_tuple_call_internal_function_refined5
-    (List.tabulate (16, fn i => i))
-val internal_tuple_call_internal_function_clean_eval5 = save_thm
-  ("internal_tuple_call_internal_function_clean_eval5",
-   internal_tuple_call_internal_function_clean_raw6)
-val internal_tuple_call_internal_function_clean_pair5 =
-  rhs (concl internal_tuple_call_internal_function_clean_eval5)
-fun internal_tuple_call_is_return_from_env tm =
-  same_const (fst (strip_comb tm)) ``compile_internal_return_from_env``
-  handle HOL_ERR _ => false
-val internal_tuple_call_return_exact_term = find_term
-  internal_tuple_call_is_return_from_env
-  internal_tuple_call_internal_function_clean_pair5
-val (_, internal_tuple_call_return_exact_args) =
-  strip_comb internal_tuple_call_return_exact_term
-val internal_tuple_call_return_exact_cenv =
-  List.nth (internal_tuple_call_return_exact_args, 0)
-val internal_tuple_call_return_from_ptr_env_spec =
-  SPEC_ALL compile_internal_return_from_ptr_env
-val (internal_tuple_call_return_lookup_premise, _) = dest_imp
-  (concl internal_tuple_call_return_from_ptr_env_spec)
-val (internal_tuple_call_return_lookup_lhs, _) = dest_eq
-  internal_tuple_call_return_lookup_premise
-val internal_tuple_call_return_lookup_cenv_var = valOf (List.find
-  (fn tm => fst (dest_var tm) = "cenv")
-  (free_vars internal_tuple_call_return_lookup_lhs))
-val internal_tuple_call_return_exact_lookup_term = subst
-  [internal_tuple_call_return_lookup_cenv_var |->
-     internal_tuple_call_return_exact_cenv]
-  internal_tuple_call_return_lookup_lhs
-val internal_tuple_call_return_exact_lookup_eval = save_thm
-  ("internal_tuple_call_return_exact_lookup_eval",
-   EVAL internal_tuple_call_return_exact_lookup_term)
-val internal_tuple_call_return_from_env_exact_rule = MATCH_MP
-  compile_internal_return_from_ptr_env
-  internal_tuple_call_return_exact_lookup_eval
-val internal_tuple_call_return_from_env_exact_eval = save_thm
-  ("internal_tuple_call_return_from_env_exact_eval",
-   RATOR_CONV
-     (REWR_CONV internal_tuple_call_return_from_env_exact_rule)
-     internal_tuple_call_return_exact_term)
-val internal_tuple_call_internal_function_refine6 =
-  RAND_CONV (RAND_CONV
-    (REWR_CONV internal_tuple_call_return_from_env_exact_eval))
-  internal_tuple_call_internal_function_clean_pair5
-val internal_tuple_call_internal_function_refined6 =
-  TRANS internal_tuple_call_internal_function_clean_eval5
-    internal_tuple_call_internal_function_refine6
-val internal_tuple_call_internal_function_admin6 = REFL
-  (rhs (concl internal_tuple_call_internal_function_refined6))
-val internal_tuple_call_internal_function_clean_eval6 = save_thm
-  ("internal_tuple_call_internal_function_clean_eval6",
-   TRANS internal_tuple_call_internal_function_refined6
-     internal_tuple_call_internal_function_admin6)
-val internal_tuple_call_internal_function_term6 =
-  rhs (concl internal_tuple_call_internal_function_clean_eval6)
-val (_, internal_tuple_call_function_args6) =
-  strip_comb internal_tuple_call_internal_function_term6
-val internal_tuple_call_function_scrut6 =
-  List.nth (internal_tuple_call_function_args6, 1)
-val (_, internal_tuple_call_function_scrut_args6) =
-  strip_comb internal_tuple_call_function_scrut6
-val internal_tuple_call_function_inner_scrut6 =
-  List.nth (internal_tuple_call_function_scrut_args6, 1)
-val (internal_tuple_call_function_inner_head6,
-     internal_tuple_call_function_inner_args6) =
-  strip_comb internal_tuple_call_function_inner_scrut6
-val internal_tuple_call_internal_return_exact_term =
-  internal_tuple_call_function_inner_scrut6
-val internal_tuple_call_fixed_return_spec =
-  SPEC_ALL compile_internal_return_fixed_tuple
-val (internal_tuple_call_fixed_return_premise,
-     internal_tuple_call_fixed_return_conclusion) = dest_imp
-  (concl internal_tuple_call_fixed_return_spec)
-val (internal_tuple_call_fixed_return_lhs, _) = dest_eq
-  internal_tuple_call_fixed_return_conclusion
-val (internal_tuple_call_fixed_return_lhs_head,
-     internal_tuple_call_fixed_return_lhs_args) = strip_comb
-  internal_tuple_call_fixed_return_lhs
-val (internal_tuple_call_fixed_return_exact_head,
-     internal_tuple_call_fixed_return_exact_args) = strip_comb
-  (rator internal_tuple_call_internal_return_exact_term)
-val internal_tuple_call_fixed_return_count_eval = save_thm
-  ("internal_tuple_call_fixed_return_count_eval",
-   EVAL (List.nth (internal_tuple_call_fixed_return_exact_args, 3)))
+(* The relocated region and record-update simplification make the existing
+   staged return lemmas finish the function already. No residual compile_stmt
+   remains to search for or replay a second time. *)
 fun internal_tuple_call_rator_n 0 conv = conv
   | internal_tuple_call_rator_n n conv =
       RATOR_CONV (internal_tuple_call_rator_n (n - 1) conv)
-val internal_tuple_call_internal_return_count_norm =
-  internal_tuple_call_rator_n 5
-    (RAND_CONV (REWR_CONV internal_tuple_call_fixed_return_count_eval))
-    internal_tuple_call_internal_return_exact_term
-val internal_tuple_call_internal_return_normalized_term =
-  rhs (concl internal_tuple_call_internal_return_count_norm)
-val (internal_tuple_call_fixed_return_subst,
-     internal_tuple_call_fixed_return_ty_subst) = match_term
-  internal_tuple_call_fixed_return_lhs
-  (rator internal_tuple_call_internal_return_normalized_term)
-val internal_tuple_call_fixed_return_inst =
-  INST_TYPE internal_tuple_call_fixed_return_ty_subst
-    (INST internal_tuple_call_fixed_return_subst
-      internal_tuple_call_fixed_return_spec)
-val (internal_tuple_call_fixed_return_exact_premise, _) = dest_imp
-  (concl internal_tuple_call_fixed_return_inst)
-val internal_tuple_call_fixed_return_exact_premise_thm = prove
-  (internal_tuple_call_fixed_return_exact_premise, EVAL_TAC)
-val internal_tuple_call_fixed_return_exact_rule = MATCH_MP
-  internal_tuple_call_fixed_return_inst
-  internal_tuple_call_fixed_return_exact_premise_thm
-val internal_tuple_call_internal_return_fixed_step =
-  RATOR_CONV (REWR_CONV internal_tuple_call_fixed_return_exact_rule)
-    internal_tuple_call_internal_return_normalized_term
-val internal_tuple_call_internal_return_fixed_eval = save_thm
-  ("internal_tuple_call_internal_return_fixed_eval",
-   TRANS internal_tuple_call_internal_return_count_norm
-     internal_tuple_call_internal_return_fixed_step)
-val internal_tuple_call_internal_return_bind_step =
-  SIMP_CONV pure_ss
-    [compileEnvTheory.comp_ignore_bind_def,
-     compileEnvTheory.comp_bind_def]
-    (rhs (concl internal_tuple_call_internal_return_fixed_eval))
-val internal_tuple_call_internal_return_bind_eval = save_thm
-  ("internal_tuple_call_internal_return_bind_eval",
-   TRANS internal_tuple_call_internal_return_fixed_eval
-     internal_tuple_call_internal_return_bind_step)
-(* Obsolete field-by-field staging retained for reference after the pinned
-   Python path was corrected to use one fixed-size MCOPY for equal types.
-fun internal_tuple_call_is_typed_copy tm =
-  let val (head,args) = strip_comb tm in
-    same_const head ``compile_typed_copy_fields`` andalso length args = 8
-  end handle HOL_ERR _ => false
-val internal_tuple_call_typed_copy_exact_term = find_term
-  internal_tuple_call_is_typed_copy
-  (rhs (concl internal_tuple_call_internal_return_bind_eval))
-val (_, internal_tuple_call_typed_copy_exact_args) =
-  strip_comb internal_tuple_call_typed_copy_exact_term
-val (_, internal_tuple_call_typed_copy_old_args) =
-  strip_comb (lhs (concl internal_tuple_call_typed_copy_eval))
-val internal_tuple_call_typed_copy_cenv_eq = save_thm
-  ("internal_tuple_call_typed_copy_cenv_eq",
-   prove
-     (mk_eq (List.nth (internal_tuple_call_typed_copy_old_args, 0),
-             List.nth (internal_tuple_call_typed_copy_exact_args, 0)),
-      simp[FUN_EQ_THM]))
-val internal_tuple_call_typed_copy_cenv_conv =
-  internal_tuple_call_rator_n 7
-    (RAND_CONV (REWR_CONV internal_tuple_call_typed_copy_cenv_eq))
-val internal_tuple_call_typed_copy_exact_eval = save_thm
-  ("internal_tuple_call_typed_copy_exact_eval",
-   CONV_RULE (LAND_CONV internal_tuple_call_typed_copy_cenv_conv)
-     internal_tuple_call_typed_copy_eval)
-val internal_tuple_call_internal_return_typed_step =
-  RAND_CONV (REWR_CONV internal_tuple_call_typed_copy_exact_eval)
-    (rhs (concl internal_tuple_call_internal_return_bind_eval))
-val internal_tuple_call_internal_return_typed_eval = save_thm
-  ("internal_tuple_call_internal_return_typed_eval",
-   TRANS internal_tuple_call_internal_return_bind_eval
-     internal_tuple_call_internal_return_typed_step)
-val (internal_tuple_call_internal_return_typed_head,
-     internal_tuple_call_internal_return_typed_args) = strip_comb
-  (rhs (concl internal_tuple_call_internal_return_typed_eval))
-val (internal_tuple_call_typed_copy_rhs_head,
-     internal_tuple_call_typed_copy_rhs_args) = strip_comb
-  (rhs (concl internal_tuple_call_typed_copy_exact_eval))
-fun internal_tuple_call_exact_field_eval name th = save_thm
-  (name, CONV_RULE
-    (LAND_CONV internal_tuple_call_typed_copy_cenv_conv) th)
-val internal_tuple_call_copy_field1_exact_eval =
-  internal_tuple_call_exact_field_eval
-    "internal_tuple_call_copy_field1_exact_eval"
-    internal_tuple_call_copy_field1_eval
-val internal_tuple_call_copy_field2_exact_eval =
-  internal_tuple_call_exact_field_eval
-    "internal_tuple_call_copy_field2_exact_eval"
-    internal_tuple_call_copy_field2_eval
-val internal_tuple_call_copy_field3_exact_eval =
-  internal_tuple_call_exact_field_eval
-    "internal_tuple_call_copy_field3_exact_eval"
-    internal_tuple_call_copy_field3_eval
-val internal_tuple_call_typed_copy_finish_step = SIMP_CONV pure_ss
-  [compileEnvTheory.comp_bind_def,
-   compileEnvTheory.comp_ignore_bind_def,
-   compileEnvTheory.comp_return_def,
-   internal_tuple_call_copy_field1_eval,
-   internal_tuple_call_copy_field2_eval,
-   internal_tuple_call_copy_field3_eval,
-   LET_THM, pairTheory.FST, pairTheory.SND,
-   pairTheory.UNCURRY_DEF, pairTheory.pair_case_def]
-  (rhs (concl internal_tuple_call_typed_copy_exact_eval))
-val internal_tuple_call_typed_copy_finished_eval = save_thm
-  ("internal_tuple_call_typed_copy_finished_eval",
-   TRANS internal_tuple_call_typed_copy_exact_eval
-     internal_tuple_call_typed_copy_finish_step)
-val (_, internal_tuple_call_typed_copy_finished_args) = strip_comb
-  (rhs (concl internal_tuple_call_typed_copy_finished_eval))
-val internal_tuple_call_typed_copy_finished_scrut =
-  List.nth (internal_tuple_call_typed_copy_finished_args, 1)
-val (_, internal_tuple_call_typed_copy_finished_scrut_args) = strip_comb
-  internal_tuple_call_typed_copy_finished_scrut
-val (_, internal_tuple_call_field2_old_args) = strip_comb
-  (lhs (concl internal_tuple_call_copy_field2_eval))
-val internal_tuple_call_field2_dst_off_eq = prove
-  (mk_eq (List.nth (internal_tuple_call_field2_old_args, 5),
-          List.nth (internal_tuple_call_typed_copy_finished_scrut_args, 5)),
-   simp[internal_tuple_call_elem_size1_eval])
-val internal_tuple_call_field2_src_off_eq = prove
-  (mk_eq (List.nth (internal_tuple_call_field2_old_args, 6),
-          List.nth (internal_tuple_call_typed_copy_finished_scrut_args, 6)),
-   simp[internal_tuple_call_elem_size1_eval])
-val internal_tuple_call_copy_field2_finish_step = SIMP_CONV pure_ss
-  [compileEnvTheory.comp_bind_def,
-   compileEnvTheory.comp_ignore_bind_def,
-   compileEnvTheory.comp_return_def,
-   internal_tuple_call_elem_size1_eval,
-   internal_tuple_call_field2_dst_eval,
-   internal_tuple_call_field2_src_eval,
-   internal_tuple_call_field2_load_eval,
-   internal_tuple_call_field2_store_eval,
-   LET_THM, pairTheory.FST, pairTheory.SND,
-   pairTheory.UNCURRY_DEF, pairTheory.pair_case_def]
-  (rhs (concl internal_tuple_call_copy_field2_eval))
-val internal_tuple_call_copy_field2_finished_eval = save_thm
-  ("internal_tuple_call_copy_field2_finished_eval",
-   TRANS internal_tuple_call_copy_field2_eval
-     internal_tuple_call_copy_field2_finish_step)
-val internal_tuple_call_copy_field2_beta_step =
-  RATOR_CONV BETA_CONV
-    (rhs (concl internal_tuple_call_copy_field2_finished_eval))
-val internal_tuple_call_copy_field2_after_beta =
-  TRANS internal_tuple_call_copy_field2_finished_eval
-    internal_tuple_call_copy_field2_beta_step
-val internal_tuple_call_copy_field2_final_step = SIMP_CONV pure_ss
-  [compileEnvTheory.comp_bind_def,
-   compileEnvTheory.comp_ignore_bind_def,
-   compileEnvTheory.comp_return_def,
-   internal_tuple_call_field2_src_eval,
-   internal_tuple_call_field2_load_eval,
-   internal_tuple_call_field2_store_eval,
-   LET_THM, pairTheory.FST, pairTheory.SND,
-   pairTheory.UNCURRY_DEF, pairTheory.pair_case_def]
-  (rhs (concl internal_tuple_call_copy_field2_after_beta))
-val internal_tuple_call_copy_field2_complete_eval = save_thm
-  ("internal_tuple_call_copy_field2_complete_eval",
-   TRANS internal_tuple_call_copy_field2_after_beta
-     internal_tuple_call_copy_field2_final_step)
-val internal_tuple_call_copy_field2_aligned_eval = save_thm
-  ("internal_tuple_call_copy_field2_aligned_eval",
-   PURE_REWRITE_RULE
-     [internal_tuple_call_field2_dst_off_eq,
-      internal_tuple_call_field2_src_off_eq]
-     internal_tuple_call_copy_field2_complete_eval)
-val internal_tuple_call_typed_copy_field2_step =
-  RAND_CONV (REWR_CONV internal_tuple_call_copy_field2_aligned_eval)
-    (rhs (concl internal_tuple_call_typed_copy_finished_eval))
-val internal_tuple_call_typed_copy_field2_eval = save_thm
-  ("internal_tuple_call_typed_copy_field2_eval",
-   TRANS internal_tuple_call_typed_copy_finished_eval
-     internal_tuple_call_typed_copy_field2_step)
-val internal_tuple_call_typed_copy_field2_beta =
-  pairLib.PAIRED_BETA_CONV
-    (rhs (concl internal_tuple_call_typed_copy_field2_eval))
-val internal_tuple_call_typed_copy_after_field2_eval = save_thm
-  ("internal_tuple_call_typed_copy_after_field2_eval",
-   TRANS internal_tuple_call_typed_copy_field2_eval
-     internal_tuple_call_typed_copy_field2_beta)
-val (internal_tuple_call_after_field2_head,
-     internal_tuple_call_after_field2_args) = strip_comb
-  (rhs (concl internal_tuple_call_typed_copy_after_field2_eval))
-val internal_tuple_call_after_field2_scrut =
-  List.nth (internal_tuple_call_after_field2_args, 1)
-val (_, internal_tuple_call_after_field2_scrut_args) = strip_comb
-  internal_tuple_call_after_field2_scrut
-val (_, internal_tuple_call_field3_old_args) = strip_comb
-  (lhs (concl internal_tuple_call_copy_field3_eval))
-val internal_tuple_call_field3_dst_off_eq = prove
-  (mk_eq (List.nth (internal_tuple_call_field3_old_args, 5),
-          List.nth (internal_tuple_call_after_field2_scrut_args, 5)),
-   simp[internal_tuple_call_elem_size1_eval,
-        internal_tuple_call_elem_size2_eval])
-val internal_tuple_call_field3_src_off_eq = prove
-  (mk_eq (List.nth (internal_tuple_call_field3_old_args, 6),
-          List.nth (internal_tuple_call_after_field2_scrut_args, 6)),
-   simp[internal_tuple_call_elem_size1_eval,
-        internal_tuple_call_elem_size2_eval])
-val internal_tuple_call_copy_field3_finish_step = SIMP_CONV pure_ss
-  [compileEnvTheory.comp_bind_def,
-   compileEnvTheory.comp_ignore_bind_def,
-   compileEnvTheory.comp_return_def,
-   internal_tuple_call_elem_size1_eval,
-   internal_tuple_call_elem_size2_eval,
-   internal_tuple_call_field3_dst_eval,
-   internal_tuple_call_field3_src_eval,
-   internal_tuple_call_field3_load_eval,
-   internal_tuple_call_field3_store_eval,
-   LET_THM, pairTheory.FST, pairTheory.SND,
-   pairTheory.UNCURRY_DEF, pairTheory.pair_case_def]
-  (rhs (concl internal_tuple_call_copy_field3_eval))
-val internal_tuple_call_copy_field3_finished_eval =
-  TRANS internal_tuple_call_copy_field3_eval
-    internal_tuple_call_copy_field3_finish_step
-val internal_tuple_call_copy_field3_beta_step =
-  RATOR_CONV BETA_CONV
-    (rhs (concl internal_tuple_call_copy_field3_finished_eval))
-val internal_tuple_call_copy_field3_after_beta =
-  TRANS internal_tuple_call_copy_field3_finished_eval
-    internal_tuple_call_copy_field3_beta_step
-val internal_tuple_call_copy_field3_final_step = SIMP_CONV pure_ss
-  [compileEnvTheory.comp_bind_def,
-   compileEnvTheory.comp_ignore_bind_def,
-   compileEnvTheory.comp_return_def,
-   internal_tuple_call_field3_src_eval,
-   internal_tuple_call_field3_load_eval,
-   internal_tuple_call_field3_store_eval,
-   LET_THM, pairTheory.FST, pairTheory.SND,
-   pairTheory.UNCURRY_DEF, pairTheory.pair_case_def]
-  (rhs (concl internal_tuple_call_copy_field3_after_beta))
-val internal_tuple_call_copy_field3_complete_eval = save_thm
-  ("internal_tuple_call_copy_field3_complete_eval",
-   TRANS internal_tuple_call_copy_field3_after_beta
-     internal_tuple_call_copy_field3_final_step)
-val internal_tuple_call_copy_field3_aligned_eval = save_thm
-  ("internal_tuple_call_copy_field3_aligned_eval",
-   PURE_REWRITE_RULE
-     [internal_tuple_call_field3_dst_off_eq,
-      internal_tuple_call_field3_src_off_eq]
-     internal_tuple_call_copy_field3_complete_eval)
-val internal_tuple_call_typed_copy_field3_step =
-  RAND_CONV (REWR_CONV internal_tuple_call_copy_field3_aligned_eval)
-    (rhs (concl internal_tuple_call_typed_copy_after_field2_eval))
-val internal_tuple_call_typed_copy_field3_eval = save_thm
-  ("internal_tuple_call_typed_copy_field3_eval",
-   TRANS internal_tuple_call_typed_copy_after_field2_eval
-     internal_tuple_call_typed_copy_field3_step)
-val internal_tuple_call_typed_copy_field3_beta =
-  pairLib.PAIRED_BETA_CONV
-    (rhs (concl internal_tuple_call_typed_copy_field3_eval))
-val internal_tuple_call_typed_copy_after_field3_eval = save_thm
-  ("internal_tuple_call_typed_copy_after_field3_eval",
-   TRANS internal_tuple_call_typed_copy_field3_eval
-     internal_tuple_call_typed_copy_field3_beta)
-val (internal_tuple_call_after_field3_head,
-     internal_tuple_call_after_field3_args) = strip_comb
-  (rhs (concl internal_tuple_call_typed_copy_after_field3_eval))
-val internal_tuple_call_typed_copy_nil_eval = save_thm
-  ("internal_tuple_call_typed_copy_nil_eval",
-   EVAL (rhs (concl internal_tuple_call_typed_copy_after_field3_eval)))
-val internal_tuple_call_typed_copy_complete_eval = save_thm
-  ("internal_tuple_call_typed_copy_complete_eval",
-   TRANS internal_tuple_call_typed_copy_after_field3_eval
-     internal_tuple_call_typed_copy_nil_eval)
-val internal_tuple_call_internal_return_copy_step =
-  RAND_CONV (REWR_CONV internal_tuple_call_typed_copy_complete_eval)
-    (rhs (concl internal_tuple_call_internal_return_bind_eval))
-val internal_tuple_call_internal_return_copy_eval =
-  TRANS internal_tuple_call_internal_return_bind_eval
-    internal_tuple_call_internal_return_copy_step
-val internal_tuple_call_internal_return_copy_beta =
-  SIMP_CONV pure_ss
-    [LET_THM, pairTheory.FST, pairTheory.SND,
-     pairTheory.UNCURRY_DEF, pairTheory.pair_case_def]
-    (rhs (concl internal_tuple_call_internal_return_copy_eval))
-val internal_tuple_call_internal_return_after_copy_eval = save_thm
-  ("internal_tuple_call_internal_return_after_copy_eval",
-   TRANS internal_tuple_call_internal_return_copy_eval
-     internal_tuple_call_internal_return_copy_beta)
-val (internal_tuple_call_after_copy_head,
-     internal_tuple_call_after_copy_args) = strip_comb
-  (rhs (concl internal_tuple_call_internal_return_after_copy_eval))
-val internal_tuple_call_internal_return_ret_step =
-  REWR_CONV internal_tuple_call_ret_eval
-    (rhs (concl internal_tuple_call_internal_return_after_copy_eval))
-val internal_tuple_call_internal_return_complete_eval = save_thm
-  ("internal_tuple_call_internal_return_complete_eval",
-   TRANS internal_tuple_call_internal_return_after_copy_eval
-     internal_tuple_call_internal_return_ret_step)
-*)
-
-val internal_tuple_call_internal_return_branch_step =
-  SIMP_CONV pure_ss [REFL_CLAUSE, COND_CLAUSES]
-    (rhs (concl internal_tuple_call_internal_return_bind_eval))
-val internal_tuple_call_internal_return_branch_eval =
-  TRANS internal_tuple_call_internal_return_bind_eval
-    internal_tuple_call_internal_return_branch_step
-val internal_tuple_call_fixed_copy_exact_term = find_term
-  (can (match_term ``compile_copy_memory dst src (n:num) st``))
-  (rhs (concl internal_tuple_call_internal_return_branch_eval))
-val internal_tuple_call_fixed_copy_exact_eval = save_thm
-  ("internal_tuple_call_fixed_copy_exact_eval",
-   EVAL internal_tuple_call_fixed_copy_exact_term)
-val internal_tuple_call_internal_return_copy_step =
-  RAND_CONV (REWR_CONV internal_tuple_call_fixed_copy_exact_eval)
-    (rhs (concl internal_tuple_call_internal_return_branch_eval))
-val internal_tuple_call_internal_return_copy_eval =
-  TRANS internal_tuple_call_internal_return_branch_eval
-    internal_tuple_call_internal_return_copy_step
-val internal_tuple_call_internal_return_finish_eval =
-  EVAL (rhs (concl internal_tuple_call_internal_return_copy_eval))
-val internal_tuple_call_internal_return_complete_eval = save_thm
-  ("internal_tuple_call_internal_return_complete_eval",
-   TRANS internal_tuple_call_internal_return_copy_eval
-     internal_tuple_call_internal_return_finish_eval)
-
-val internal_tuple_call_return_from_env_complete_eval = save_thm
-  ("internal_tuple_call_return_from_env_complete_eval",
-   TRANS internal_tuple_call_return_from_env_exact_eval
-     internal_tuple_call_internal_return_complete_eval)
-val internal_tuple_call_internal_function_return_step =
-  RAND_CONV (RAND_CONV
-    (REWR_CONV internal_tuple_call_return_from_env_complete_eval))
-  internal_tuple_call_internal_function_clean_pair5
-val internal_tuple_call_internal_function_after_return =
-  TRANS internal_tuple_call_internal_function_clean_eval5
-    internal_tuple_call_internal_function_return_step
-val internal_tuple_call_internal_function_inner_beta =
-  RAND_CONV pairLib.PAIRED_BETA_CONV
-    (rhs (concl internal_tuple_call_internal_function_after_return))
-val internal_tuple_call_internal_function_after_inner_beta =
-  TRANS internal_tuple_call_internal_function_after_return
-    internal_tuple_call_internal_function_inner_beta
-val internal_tuple_call_internal_function_outer_beta =
-  pairLib.PAIRED_BETA_CONV
-    (rhs (concl internal_tuple_call_internal_function_after_inner_beta))
-val internal_tuple_call_internal_function_after_outer_beta = save_thm
-  ("internal_tuple_call_internal_function_after_outer_beta",
-   TRANS internal_tuple_call_internal_function_after_inner_beta
-     internal_tuple_call_internal_function_outer_beta)
-val (internal_tuple_call_after_outer_head,
-     internal_tuple_call_after_outer_args) = strip_comb
-  (rhs (concl internal_tuple_call_internal_function_after_outer_beta))
-val internal_tuple_call_after_outer_scrut =
-  List.nth (internal_tuple_call_after_outer_args, 1)
-val internal_tuple_call_after_outer_scrut_eval = save_thm
-  ("internal_tuple_call_after_outer_scrut_eval",
-   EVAL internal_tuple_call_after_outer_scrut)
-val internal_tuple_call_internal_function_terminated_step =
-  RAND_CONV (REWR_CONV internal_tuple_call_after_outer_scrut_eval)
-    (rhs (concl internal_tuple_call_internal_function_after_outer_beta))
-val internal_tuple_call_internal_function_after_terminated =
-  TRANS internal_tuple_call_internal_function_after_outer_beta
-    internal_tuple_call_internal_function_terminated_step
-val internal_tuple_call_internal_function_final_beta =
-  pairLib.PAIRED_BETA_CONV
-    (rhs (concl internal_tuple_call_internal_function_after_terminated))
-val internal_tuple_call_internal_function_complete_eval = save_thm
-  ("internal_tuple_call_internal_function_complete_eval",
-   TRANS internal_tuple_call_internal_function_after_terminated
-     internal_tuple_call_internal_function_final_beta)
+val internal_tuple_call_completed_result =
+  rhs (concl internal_tuple_call_internal_function_clean_eval4)
+Theorem internal_tuple_call_internal_function_complete_eval:
+  compile_internal_function ^internal_tuple_call_cenv
+    ^internal_tuple_call_params ^internal_tuple_call_has_ret_buf
+    ^internal_tuple_call_is_nr ^internal_tuple_call_nkey
+    ^internal_tuple_call_use_trans ^internal_tuple_call_is_view
+    ^internal_tuple_call_is_ctor ^internal_tuple_call_imm_len
+    ^internal_tuple_call_body ^internal_tuple_call_ret_type
+    ^internal_tuple_call_state6 = ^internal_tuple_call_completed_result
+Proof
+  ACCEPT_TAC internal_tuple_call_internal_function_clean_eval4
+QED
 val internal_tuple_call_internal_function_final_pair =
   rhs (concl internal_tuple_call_internal_function_complete_eval)
 val internal_tuple_call_state20_complete =
