@@ -4381,6 +4381,49 @@ fun term_op_agree (g as (asl, _)) = (
   strip_tac
 ) g;
 
+Theorem jump_continuation_remap[local]:
+  alloca_remap_rel fn roots remap s1 s2 ==>
+  lift_result (alloca_remap_rel fn roots remap)
+    (alloca_remap_rel fn roots remap) (alloca_remap_rel fn roots remap)
+    (if (jump_to lab s1).vs_halted then Halt (jump_to lab s1)
+     else OK (jump_to lab s1))
+    (if (jump_to lab s2).vs_halted then Halt (jump_to lab s2)
+     else OK (jump_to lab s2))
+Proof
+  strip_tac >>
+  `alloca_remap_rel fn roots remap (jump_to lab s1) (jump_to lab s2)` by
+    (irule alloca_remap_rel_jump_to >> simp[]) >>
+  drule alloca_remap_rel_scalars >> strip_tac >>
+  Cases_on `(jump_to lab s1).vs_halted` >> gvs[lift_result_def]
+QED
+
+Theorem jnz_continuation_remap[local]:
+  alloca_remap_rel fn roots remap s1 s2 /\
+  inst.inst_opcode = JNZ /\
+  (!op. MEM op inst.inst_operands ==> eval_operand op s1 = eval_operand op s2) ==>
+  lift_result (alloca_remap_rel fn roots remap)
+    (alloca_remap_rel fn roots remap) (alloca_remap_rel fn roots remap)
+    (case step_inst_base inst s1 of
+       OK s => if s.vs_halted then Halt s else OK s
+     | Halt s => Halt s | Abort a s => Abort a s
+     | IntRet vs s => IntRet vs s | Error e => Error e)
+    (case step_inst_base inst s2 of
+       OK s => if s.vs_halted then Halt s else OK s
+     | Halt s => Halt s | Abort a s => Abort a s
+     | IntRet vs s => IntRet vs s | Error e => Error e)
+Proof
+  strip_tac >> step_term_rw >>
+  Cases_on `inst.inst_operands` >> simp[lift_result_def] >>
+  Cases_on `t` >> simp[lift_result_def] >>
+  Cases_on `h'` >> simp[lift_result_def] >>
+  Cases_on `t'` >> simp[lift_result_def] >>
+  Cases_on `h'` >> simp[lift_result_def] >>
+  Cases_on `t` >> simp[lift_result_def] >>
+  `eval_operand h s1 = eval_operand h s2` by (first_x_assum irule >> simp[]) >>
+  Cases_on `eval_operand h s2` >> gvs[lift_result_def] >>
+  Cases_on `x = 0w` >> simp[jump_continuation_remap]
+QED
+
 (* Common tactic for jump-producing terminators *)
 val jump_term_tac =
   qpat_x_assum `alloca_remap_rel _ _ _ _ _` mp_tac >>
@@ -4539,10 +4582,11 @@ Proof
         (irule return_operands_remap >> simp[] >>
          MAP_EVERY qexists_tac [`bb`,`fn`,`remap`,`roots`] >> simp[]) >>
       step_term_rw >> BasicProvers.every_case_tac >> gvs[lift_result_def])
-  (* Remaining eight cases retain their original proofs. *)
+  >~ [`inst.inst_opcode = JNZ`]
+  >- (term_op_agree >> irule jnz_continuation_remap >> simp[])
+  (* Remaining cases retain their original proofs. *)
   >> step_term_rw >> fs[] >> simp[lift_result_def]
   (* JMP *)       >- jump_term_tac
-  (* JNZ *)       >- (term_op_agree >> jump_term_tac)
   (* DJMP *)      >- (term_op_agree >> jump_term_tac)
   (* RET: all operands non-pv, so eval_operands agrees *)
   >- (`eval_operands inst.inst_operands s1 =
@@ -4804,9 +4848,9 @@ Proof
   >- (gvs[eval_operand_def])
   >- (qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
       Cases_on `inst.inst_opcode` >>
-      gvs[is_pointer_preserving_op_def, is_alloca_op_def,
-          step_inst_base_def, exec_pure2_def, AllCaseEqs(),
-          eval_operand_def] >>
+      gvs[is_pointer_preserving_op_def, is_alloca_op_def] >>
+      step_ordinary_rw >>
+      simp[exec_pure2_def, AllCaseEqs(), eval_operand_def] >>
       strip_tac >> gvs[eval_operand_def, AllCaseEqs()])
 QED
 Theorem pp_single_output[local]:
