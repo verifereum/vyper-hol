@@ -95,6 +95,7 @@ Datatype:
     vs_call_ctx : call_context;      (* Call context *)
     vs_tx_ctx : tx_context;          (* Transaction context *)
     vs_block_ctx : block_context;    (* Block context *)
+    vs_toDelete : address list;      (* Pending deletion snapshot from oracle *)
     vs_logs : event list;            (* Log/event accumulator *)
     vs_outcomes : extCallOracle$call_outcome list; (* Remaining external-call outcomes *)
     vs_requests : extCallOracle$call_request list; (* External-call request accumulator *)
@@ -162,6 +163,7 @@ Definition init_venom_state_def:
     vs_call_ctx := empty_call_context;
     vs_tx_ctx := empty_tx_context;
     vs_block_ctx := empty_block_context;
+    vs_toDelete := [];
     vs_logs := [];
     vs_outcomes := [];
     vs_requests := [];

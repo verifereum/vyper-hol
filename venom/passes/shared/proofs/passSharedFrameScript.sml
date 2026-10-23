@@ -1492,7 +1492,9 @@ Proof
   strip_tac >>
   drule_all ok_ok_frame_fields >> strip_tac >>
   `inst1.inst_opcode <> CALL /\ inst1.inst_opcode <> STATICCALL /\
-   inst2.inst_opcode <> CALL /\ inst2.inst_opcode <> STATICCALL` by
+   inst1.inst_opcode <> CREATE /\ inst1.inst_opcode <> CREATE2 /\
+   inst2.inst_opcode <> CALL /\ inst2.inst_opcode <> STATICCALL /\
+   inst2.inst_opcode <> CREATE /\ inst2.inst_opcode <> CREATE2` by
     (rpt conj_tac >> strip_tac >> gvs[is_ext_call_op_def]) >>
   imp_res_tac step_inst_base_oracle >>
   (* Close commute_equiv — all needed equalities are in assumptions.

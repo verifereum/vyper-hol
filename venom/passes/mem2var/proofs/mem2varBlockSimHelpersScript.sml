@@ -1051,7 +1051,8 @@ Proof
       step_inst_base_preserves_stable_frame_metadata) >> simp[]) >>
   `v1.vs_initial_fmp = v2.vs_initial_fmp /\
    v1.vs_return_pc_token = v2.vs_return_pc_token` by metis_tac[] >>
-  `inst.inst_opcode <> CALL /\ inst.inst_opcode <> STATICCALL` by
+  `inst.inst_opcode <> CALL /\ inst.inst_opcode <> STATICCALL /\
+   inst.inst_opcode <> CREATE /\ inst.inst_opcode <> CREATE2` by
     (rpt conj_tac >> strip_tac >> gvs[is_ext_call_op_def]) >>
   imp_res_tac step_inst_base_oracle >>
   imp_res_tac step_inst_preserves_alloca_state >>
@@ -1244,6 +1245,7 @@ Theorem mstore_preserves:
     (mstore off v s).vs_call_ctx = s.vs_call_ctx /\
     (mstore off v s).vs_tx_ctx = s.vs_tx_ctx /\
     (mstore off v s).vs_block_ctx = s.vs_block_ctx /\
+    (mstore off v s).vs_toDelete = s.vs_toDelete /\
     (mstore off v s).vs_logs = s.vs_logs /\
     (mstore off v s).vs_immutables = s.vs_immutables /\
     (mstore off v s).vs_data_section = s.vs_data_section /\
@@ -1278,6 +1280,7 @@ Theorem wmwe_preserves:
     (write_memory_with_expansion off bytes s).vs_call_ctx = s.vs_call_ctx /\
     (write_memory_with_expansion off bytes s).vs_tx_ctx = s.vs_tx_ctx /\
     (write_memory_with_expansion off bytes s).vs_block_ctx = s.vs_block_ctx /\
+    (write_memory_with_expansion off bytes s).vs_toDelete = s.vs_toDelete /\
     (write_memory_with_expansion off bytes s).vs_logs = s.vs_logs /\
     (write_memory_with_expansion off bytes s).vs_immutables = s.vs_immutables /\
     (write_memory_with_expansion off bytes s).vs_data_section = s.vs_data_section /\
@@ -1312,6 +1315,7 @@ Theorem mstore8_preserves:
     (mstore8 off v s).vs_call_ctx = s.vs_call_ctx /\
     (mstore8 off v s).vs_tx_ctx = s.vs_tx_ctx /\
     (mstore8 off v s).vs_block_ctx = s.vs_block_ctx /\
+    (mstore8 off v s).vs_toDelete = s.vs_toDelete /\
     (mstore8 off v s).vs_logs = s.vs_logs /\
     (mstore8 off v s).vs_immutables = s.vs_immutables /\
     (mstore8 off v s).vs_data_section = s.vs_data_section /\
@@ -1543,6 +1547,7 @@ Theorem update_var_preserves:
     (update_var x v s).vs_call_ctx = s.vs_call_ctx /\
     (update_var x v s).vs_tx_ctx = s.vs_tx_ctx /\
     (update_var x v s).vs_block_ctx = s.vs_block_ctx /\
+    (update_var x v s).vs_toDelete = s.vs_toDelete /\
     (update_var x v s).vs_logs = s.vs_logs /\
     (update_var x v s).vs_immutables = s.vs_immutables /\
     (update_var x v s).vs_data_section = s.vs_data_section /\
@@ -2771,11 +2776,13 @@ QED
 
 (* Used by consuming calls after range-safe memory/adoption transport. *)
 Theorem m2v_inv_noix_call_lists:
+  !dels rqs os fn s1 s2.
   m2v_inv_noix fn s1 s2 ==>
   m2v_inv_noix fn
-    (s1 with <| vs_outcomes := os; vs_requests := rqs |>)
-    (s2 with <| vs_outcomes := os; vs_requests := rqs |>)
+    (s1 with <| vs_outcomes := os; vs_requests := rqs; vs_toDelete := dels |>)
+    (s2 with <| vs_outcomes := os; vs_requests := rqs; vs_toDelete := dels |>)
 Proof
+  rpt gen_tac >>
   simp[m2v_inv_noix_def, lookup_var_def, mem_byte_def, mload_def,
        in_promoted_region_def, allocas_non_overlapping_def] >>
   strip_tac >> gvs[] >> rpt conj_tac >> first_assum ACCEPT_TAC
@@ -2791,7 +2798,7 @@ Proof
   rpt strip_tac >>
   `s1.vs_outcomes = s2.vs_outcomes /\ s1.vs_requests = s2.vs_requests /\
    s1.vs_accounts = s2.vs_accounts /\ s1.vs_transient = s2.vs_transient /\
-   s1.vs_logs = s2.vs_logs` by gvs[m2v_inv_noix_def] >>
+   s1.vs_logs = s2.vs_logs /\ s1.vs_toDelete = s2.vs_toDelete` by gvs[m2v_inv_noix_def] >>
   qabbrev_tac `bytes = TAKE rs (FST (take_outcome rq s2.vs_outcomes)).co_returnData` >>
   qabbrev_tac `rd = (FST (take_outcome rq s2.vs_outcomes)).co_returnData` >>
   qabbrev_tac `ac = FST (adopt_outcome rq (FST (take_outcome rq s2.vs_outcomes))
@@ -2810,7 +2817,9 @@ Proof
     (irule m2v_inv_noix_ext_update >> simp[Abbr`bytes`, LENGTH_TAKE_EQ] >>
      rpt strip_tac >> first_x_assum irule >> simp[]) >>
   drule m2v_inv_noix_call_lists >>
-  disch_then (qspecl_then [`record_request rq s2.vs_requests`,
+  disch_then (qspecl_then [`adopt_outcome_deletions rq
+                            (FST (take_outcome rq s2.vs_outcomes)) s2.vs_toDelete`,
+                          `record_request rq s2.vs_requests`,
                           `SND (take_outcome rq s2.vs_outcomes)`] mp_tac) >>
   simp[Abbr`bytes`, Abbr`rd`, Abbr`ac`, Abbr`ts`, Abbr`lgs`]
 QED
@@ -2914,22 +2923,23 @@ Triviality exec_create_m2v_inv:
        m2v_inv_noix fn v1 v2
 Proof
   strip_tac >>
-  `s1.vs_call_ctx = s2.vs_call_ctx /\ s1.vs_accounts = s2.vs_accounts`
-    by gvs[m2v_inv_noix_def] >>
   `read_memory (w2n offset) (w2n sz) s1 =
    read_memory (w2n offset) (w2n sz) s2` by
     metis_tac[read_memory_m2v_inv] >>
-  gvs[exec_create_def, LET_THM] >>
-  `make_venom_create_state s1 = make_venom_create_state s2` by
-    metis_tac[make_venom_create_state_m2v_inv] >>
-  gvs[] >>
-  qpat_x_assum `_ = OK v1` mp_tac >> simp[AllCaseEqs()] >>
-  strip_tac >> gvs[] >>
-  (* retOff=0, retSz=0 so range condition is vacuous *)
-  `!addr. 0 <= addr /\ addr < 0 + 0 ==> ~in_promoted_region fn s1 addr`
-    by simp[] >>
-  drule_all extract_venom_result_m2v_inv >> strip_tac >> gvs[] >>
-  simp[AllCaseEqs()] >>
+  `venom_create_request s1 value offset sz salt_opt =
+   venom_create_request s2 value offset sz salt_opt` by
+    fs[venom_create_request_def, m2v_inv_noix_def] >>
+  `m2v_inv_noix fn
+    (SND (consume_create_outcome (venom_create_request s1 value offset sz salt_opt) s1))
+    (SND (consume_create_outcome (venom_create_request s2 value offset sz salt_opt) s2))` by
+    (fs[m2v_inv_noix_def] >>
+     simp[m2v_inv_noix_def, lookup_var_def, mem_byte_def, mload_def,
+          in_promoted_region_def, allocas_non_overlapping_def] >>
+     gvs[lookup_var_def, mem_byte_def, mload_def,
+         in_promoted_region_def, allocas_non_overlapping_def] >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `s1.vs_outcomes = s2.vs_outcomes` by fs[m2v_inv_noix_def] >>
+  gvs[exec_create_def, AllCaseEqs()] >>
   irule m2v_inv_noix_update_var >> simp[]
 QED
 
@@ -5346,7 +5356,7 @@ Triviality exec_create_nao:
 Proof
   simp[exec_create_def, LET_THM, AllCaseEqs()] >>
   rpt strip_tac >> gvs[update_var_def] >>
-  metis_tac[extract_venom_result_nao]
+  qexists_tac `0` >> simp[]
 QED
 
 (* Same-D variants: when two states agree on all fields that affect the
@@ -5418,7 +5428,7 @@ Proof
   simp[exec_create_def, LET_THM, AllCaseEqs(),
        make_venom_create_state_def] >>
   rpt strip_tac >> gvs[update_var_def] >>
-  metis_tac[extract_venom_result_same_D]
+  qexists_tac `0` >> simp[]
 QED
 
 (* For ext_call ops with FIND=NONE and same callee input: nao preserved.

@@ -37,6 +37,7 @@ Definition consume_call_outcome_def:
          vs_accounts := accounts;
          vs_transient := ts;
          vs_logs := logs;
+         vs_toDelete := adopt_outcome_deletions rq outcome s.vs_toDelete;
          vs_returndata := outcome.co_returnData;
          vs_memory := (write_memory_with_expansion retOff
            (TAKE retSize outcome.co_returnData) s).vs_memory |>)
@@ -59,10 +60,60 @@ Theorem consume_call_outcome_eq[simp]:
        vs_logs := SND (SND (adopt_outcome rq
          (FST (take_outcome rq s.vs_outcomes))
          (s.vs_accounts, s.vs_transient, s.vs_logs)));
+       vs_toDelete := adopt_outcome_deletions rq
+         (FST (take_outcome rq s.vs_outcomes)) s.vs_toDelete;
        vs_returndata := (FST (take_outcome rq s.vs_outcomes)).co_returnData;
        vs_memory := (write_memory_with_expansion ro
          (TAKE rs (FST (take_outcome rq s.vs_outcomes)).co_returnData) s).vs_memory |>)
 Proof
   simp[consume_call_outcome_def] >> pairarg_tac >> simp[] >>
+  pairarg_tac >> simp[]
+QED
+
+(* CREATE has no return-memory buffer.  Its input is a private initcode
+ * snapshot and its result is the oracle's address, not a success flag. *)
+Definition venom_create_request_def:
+  venom_create_request s (value:bytes32) (offset:bytes32) (sz:bytes32) salt_opt =
+    <| cr_kind := (case salt_opt of NONE => CreateCall | SOME salt => Create2Call salt);
+       cr_gas := NONE;
+       cr_data_len := LENGTH (read_memory (w2n offset) (w2n sz) s);
+       cr_target := 0w; cr_value := w2n value;
+       cr_data := read_memory (w2n offset) (w2n sz) s;
+       cr_static := F; cr_accounts := s.vs_accounts;
+       cr_tStorage := s.vs_transient |>
+End
+
+Definition consume_create_outcome_def:
+  consume_create_outcome rq s =
+    let (outcome, rest) = take_outcome rq s.vs_outcomes;
+        (accounts, ts, logs) = adopt_outcome rq outcome
+          (s.vs_accounts, s.vs_transient, s.vs_logs);
+        result : bytes32 = if outcome.co_success then w2w outcome.co_created else 0w
+    in (result, s with <|
+         vs_outcomes := rest;
+         vs_requests := record_request rq s.vs_requests;
+         vs_accounts := accounts; vs_transient := ts; vs_logs := logs;
+         vs_toDelete := adopt_outcome_deletions rq outcome s.vs_toDelete;
+         vs_returndata := outcome.co_returnData |>)
+End
+
+Theorem consume_create_outcome_eq[simp]:
+  consume_create_outcome rq s =
+    (if (FST (take_outcome rq s.vs_outcomes)).co_success
+     then w2w (FST (take_outcome rq s.vs_outcomes)).co_created else 0w,
+     s with <|
+       vs_outcomes := SND (take_outcome rq s.vs_outcomes);
+       vs_requests := record_request rq s.vs_requests;
+       vs_accounts := FST (adopt_outcome rq (FST (take_outcome rq s.vs_outcomes))
+         (s.vs_accounts, s.vs_transient, s.vs_logs));
+       vs_transient := FST (SND (adopt_outcome rq (FST (take_outcome rq s.vs_outcomes))
+         (s.vs_accounts, s.vs_transient, s.vs_logs)));
+       vs_logs := SND (SND (adopt_outcome rq (FST (take_outcome rq s.vs_outcomes))
+         (s.vs_accounts, s.vs_transient, s.vs_logs)));
+       vs_toDelete := adopt_outcome_deletions rq
+         (FST (take_outcome rq s.vs_outcomes)) s.vs_toDelete;
+       vs_returndata := (FST (take_outcome rq s.vs_outcomes)).co_returnData |>)
+Proof
+  simp[consume_create_outcome_def] >> pairarg_tac >> simp[] >>
   pairarg_tac >> simp[]
 QED

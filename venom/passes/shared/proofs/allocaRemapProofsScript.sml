@@ -50,8 +50,10 @@ val _ = augment_srw_ss [rewrites [is_immutable_op_def]];
 Theorem remap_step_oracle:
   alloca_remap_rel fn roots remap s1 s2 /\
   inst.inst_opcode <> CALL /\ inst.inst_opcode <> STATICCALL /\
+  inst.inst_opcode <> CREATE /\ inst.inst_opcode <> CREATE2 /\
   step_inst_base inst s1 = OK v1 /\ step_inst_base inst s2 = OK v2 ==>
-  v1.vs_outcomes = v2.vs_outcomes /\ v1.vs_requests = v2.vs_requests
+  v1.vs_outcomes = v2.vs_outcomes /\ v1.vs_requests = v2.vs_requests /\
+  v1.vs_toDelete = v2.vs_toDelete
 Proof
   rw[alloca_remap_rel_def] >>
   imp_res_tac step_inst_base_oracle >> gvs[]
@@ -1545,7 +1547,8 @@ Proof
   disch_then (qspecl_then [`inst`, `s1`, `s2`, `v1`, `v2`] mp_tac) >>
   (impl_tac >- gvs[]) >> strip_tac >>
   (* Step 8: Reconstruct alloca_remap_rel *)
-  `inst.inst_opcode <> CALL /\ inst.inst_opcode <> STATICCALL` by
+  `inst.inst_opcode <> CALL /\ inst.inst_opcode <> STATICCALL /\
+   inst.inst_opcode <> CREATE /\ inst.inst_opcode <> CREATE2` by
     (rpt conj_tac >> strip_tac >> gvs[is_ext_call_op_def]) >>
   drule_all remap_step_oracle >> strip_tac >>
   irule remap_rel_from_equiv >>
@@ -1620,7 +1623,7 @@ Proof
   rpt conj_tac >>
   rpt strip_tac >>
   simp[lookup_var_def, FLOOKUP_UPDATE] >>
-  Cases_on `out = v` >> gvs[] >>
+  Cases_on `out = v` >> fs[] >>
   TRY (res_tac >> gvs[lookup_var_def] >> NO_TAC) >>
   TRY (DISJ1_TAC >> simp[lookup_var_def] >> NO_TAC) >>
   DISJ2_TAC >>
@@ -2587,6 +2590,13 @@ val write_bounds_tac : tactic =
        (mp_tac o Q.SPECL [`aid`,`new_off`,`asz`] o
         REWRITE_RULE[allocas_in_memory_def]) >> simp[]));
 
+Theorem step_memory_load[local]:
+  inst.inst_opcode = MLOAD \/ inst.inst_opcode = ILOAD ==>
+  step_inst_base inst s = exec_read1 (\addr s. mload (w2n addr) s) inst s
+Proof
+  strip_tac >> simp[step_inst_base_def]
+QED
+
 Theorem remap_preserved_mem_ops[local]:
   !fn roots remap inst s1 s2 v1 bb.
     alloca_remap_rel fn roots remap s1 s2 /\
@@ -2615,8 +2625,9 @@ Theorem remap_preserved_mem_ops[local]:
 Proof
   rpt strip_tac >>
   Cases_on `inst.inst_opcode` >>
-  gvs[is_alloca_op_def, is_terminator_def, is_ext_call_op_def,
-      is_immutable_op_def, mem_write_ops_def, mem_read_ops_def] >>
+  qpat_assum `inst.inst_opcode = _` (fn eq =>
+    RULE_ASSUM_TAC (REWRITE_RULE [mem_write_ops_def, mem_read_ops_def, eq, opcode_case_def,
+      is_alloca_op_def, is_terminator_def, is_ext_call_op_def, is_immutable_op_def])) >>
   rpt strip_tac >> gvs[AllCaseEqs()]
   (* Use >~ pattern matching to bind labels to correct opcodes *)
   >~ [`MLOAD`] >- suspend "mload"
@@ -2632,7 +2643,7 @@ Proof
   >~ [`LOG`] >- suspend "log"
   (* MCOPY produces 2 goals: write (dst pv) and read (src pv) *)
   >- suspend "mcopy_wr"
-  >- suspend "mcopy_rd"
+  >> suspend "mcopy_rd"
 QED
 
 (* --- MSTORE: write 32 bytes at pv address --- *)
@@ -2691,7 +2702,9 @@ QED
 (* --- MLOAD --- *)
 Resume remap_preserved_mem_ops[mload]:
   markerLib.RESUME_TAC >>
-  fs[step_inst_base_def, exec_read1_def, AllCaseEqs()] >>
+  `inst.inst_opcode = MLOAD \/ inst.inst_opcode = ILOAD` by simp[] >>
+  fs[step_memory_load] >>
+  fs[exec_read1_def, AllCaseEqs()] >>
   fs[eval_operand_def, lookup_var_def] >>
   rename1 `FLOOKUP s1.vs_vars v = SOME addr` >>
   mem_op_preamble >>
@@ -3274,6 +3287,17 @@ Proof
   rpt (CASE_TAC >> simp[]) >> strip_tac >> gvs[update_var_def]
 QED
 
+(* Select an already-proved opcode equation before simplifying its operands. *)
+val remap_opcode_rewrites = map (fn th =>
+  (th |> concl |> strip_forall |> snd |> dest_imp |> fst |> rhs, th))
+  (CONJUNCTS step_inst_base_opcode_eqs);
+fun remap_opcode_rewrite eq =
+  let val (_, th) = valOf (List.find
+    (fn (key, _) => aconv key (rhs (concl eq))) remap_opcode_rewrites)
+  in PURE_ONCE_REWRITE_TAC [MATCH_MP th eq] end;
+val remap_opcode_tac =
+  qpat_assum `inst.inst_opcode = _` remap_opcode_rewrite;
+
 Theorem immutable_op_immutables_agree[local]:
   !inst s1 s2 v1 v2.
     is_immutable_op inst.inst_opcode /\
@@ -3287,7 +3311,7 @@ Proof
   rpt strip_tac >>
   Cases_on `inst.inst_opcode` >> gvs[is_immutable_op_def] >>
   ntac 2 (qpat_x_assum `step_inst_base _ _ = OK _` mp_tac) >>
-  simp[step_inst_base_def, exec_read1_def] >>
+  remap_opcode_tac >> simp[exec_read1_def] >>
   rpt (CASE_TAC >> simp[]) >> rpt strip_tac >>
   gvs[update_var_def, istore_def]
 QED
@@ -3443,7 +3467,8 @@ Proof
     immutable_op_output_vars_agree) >>
   impl_tac >- simp[] >> strip_tac >>
   (* 10. Reconstruct alloca_remap_rel *)
-  `inst.inst_opcode <> CALL /\ inst.inst_opcode <> STATICCALL` by
+  `inst.inst_opcode <> CALL /\ inst.inst_opcode <> STATICCALL /\
+   inst.inst_opcode <> CREATE /\ inst.inst_opcode <> CREATE2` by
     (rpt conj_tac >> strip_tac >> gvs[is_ext_call_op_def]) >>
   drule_all remap_step_oracle >> strip_tac >>
   irule remap_rel_from_equiv >> gvs[] >> rpt conj_tac
@@ -3994,7 +4019,8 @@ Resume step_inst_base_error_transfer[ISTORE]:
   error_inline_tac
 QED
 Resume step_inst_base_error_transfer[LOG]:
-  error_inline_tac
+  gvs[AllCaseEqs()] >>
+  first_assum drule >> simp[] >> metis_tac[optionTheory.option_nchotomy]
 QED
 Resume step_inst_base_error_transfer[MCOPY]:
   error_inline_tac

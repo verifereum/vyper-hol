@@ -638,6 +638,7 @@ val ext_call_frame_result = BETA_RULE (prove (
 
 val ext_call_frame_projection_rewrites = let
   val defs = [exec_ext_call_def, venomCallOracleDefsTheory.consume_call_outcome_eq,
+    venomCallOracleDefsTheory.consume_create_outcome_eq,
     exec_delegatecall_def, exec_create_def, extract_venom_result_def,
     step_inst_base_def]
   fun case_type tm = let val (_, arg, _) = TypeBase.dest_case tm
@@ -687,6 +688,7 @@ fun ext_call_frame_cases_tac ss =
 val ext_call_frame_helper_rewrites = let
   val ss = ext_call_frame_projection_ss ++ rewrites
     [exec_ext_call_def, venomCallOracleDefsTheory.consume_call_outcome_eq,
+    venomCallOracleDefsTheory.consume_create_outcome_eq,
      exec_delegatecall_def, exec_create_def, extract_venom_result_def]
   val tests =
     [``case exec_ext_call inst s gas addr value ao az ro rz static of
