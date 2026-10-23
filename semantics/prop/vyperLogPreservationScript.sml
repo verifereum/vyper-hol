@@ -3,7 +3,7 @@ Theory vyperLogPreservation
 Ancestors
   pair option sum vyperMisc vyperCall vyperStatePreservation vyperCallFrame vyperCallOutcomeFrame
   vyperState[ignore_grammar] vyperInterpreter[ignore_grammar] vyperCallOutcome[ignore_grammar]
-  vyperCreate
+  vyperCreate vyperTypeExternalDefaults
 
 (* Keep existing free statement-list variables when importing oracle grammar. *)
 val _ = hide "body";
@@ -3750,62 +3750,49 @@ Proof
   metis_tac[release_nonreentrant_lock_logs]
 QED
 
+Theorem eval_external_defaults_log_extends[local]:
+  eval_external_defaults cx es st = (res,st') ==> log_extends st st'
+Proof
+  simp[vyperInterpreterTheory.eval_external_defaults_run] >>
+  Cases_on `eval_exprs cx es (st with scopes := [FEMPTY])` >>
+  simp[] >> strip_tac >> gvs[] >>
+  drule eval_exprs_log_extends >> simp[log_extends_def]
+QED
+
 Theorem call_body_pipeline_log_extends[local]:
-  (do lock_action; send_call_value mut cx; eval_stmts cx body od) st =
-    (res,st') ==>
+  (do lock_action; eval_stmts cx body od) st = (res,st') ==>
   (!s0 r s1. lock_action s0 = (r,s1) ==> s1.logs = s0.logs) ==>
   log_extends st st'
 Proof
   rpt strip_tac >>
-  qpat_x_assum `(do lock_action; send_call_value _ _; eval_stmts _ _ od) _ = _`
-    mp_tac >>
-  simp[vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
-       AllCaseEqs()] >>
+  qpat_x_assum `(do lock_action; eval_stmts _ _ od) _ = _` mp_tac >>
+  simp[vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[] >>
-  imp_res_tac send_call_value_logs >>
   imp_res_tac eval_stmts_log_extends >>
   metis_tac[log_extends_eq_logs, log_extends_trans]
 QED
+
 Theorem call_external_function_success_log_extends:
   call_external_function orc am cx nr mut ts all_mods args dflts vals body ret =
     (INL v,am',rqs) ==>
   machine_log_extends am am'
 Proof
-  rpt strip_tac >>
-  qpat_x_assum `call_external_function _ _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
-  simp[Once vyperInterpreterTheory.call_external_function_def,
-       AllCaseEqs()] >>
-  rpt strip_tac >>
-  Cases_on `(do
-               if nr then
-                 case cx.nonreentrant_slot of
-                   NONE => raise (Error (TypeError "nonreentrant slot missing"))
-                 | SOME slot =>
-                     acquire_nonreentrant_lock cx.txn.target slot
-                       (mut = View \/ mut = Pure)
-               else return ();
-               send_call_value mut cx;
-               eval_stmts cx body
-             od) (initial_state am_c [env] with <|outcomes := orc; requests := []|>)` >>
-  Cases_on `q` >> gvs[AllCaseEqs()] >>
-  Cases_on `(if nr /\ mut <> View /\ mut <> Pure then
-               case cx.nonreentrant_slot of
-                 NONE => return ()
-               | SOME slot =>
-                   release_nonreentrant_lock cx.txn.target slot
-             else return ()) r` >>
-  Cases_on `q` >> gvs[AllCaseEqs()] >>
-  TRY (Cases_on `y` >> gvs[AllCaseEqs()]) >>
-  TRY (Cases_on `evaluate_type (type_env_all_modules all_mods) ret` >>
-       gvs[AllCaseEqs()]) >>
-  TRY (Cases_on `safe_cast x v'` >> gvs[AllCaseEqs()]) >>
+  strip_tac >> drule call_external_function_success_phases >> strip_tac >>
   drule call_body_pipeline_log_extends >>
-  (impl_tac >-
-     (rpt strip_tac >> imp_res_tac entry_lock_action_logs)) >>
+  (impl_tac >- (rpt strip_tac >> imp_res_tac entry_lock_action_logs)) >>
   strip_tac >>
+  drule eval_external_defaults_log_extends >> strip_tac >>
+  imp_res_tac send_call_value_logs >>
   imp_res_tac external_unlock_action_logs >>
-  imp_res_tac evaluate_all_constants_logs >>
-  gvs[machine_log_extends_def, log_extends_def]
+  `am_c.logs = am.logs` by
+    (Cases_on `cx.in_deploy` >> gvs[] >>
+     imp_res_tac evaluate_all_constants_logs >> gvs[]) >>
+  gvs[machine_log_extends_def, log_extends_def,
+      vyperInterpreterTheory.initial_state_def,
+      vyperInterpreterTheory.abstract_machine_from_state_def] >>
+  drule external_unlock_action_logs >> strip_tac >>
+  qpat_x_assum `call_external_function _ _ _ _ _ _ _ _ _ _ _ _ = _` kall_tac >>
+  gvs[] >> metis_tac[rich_listTheory.IS_PREFIX_TRANS]
 QED
 
 Theorem call_external_success_log_extends:

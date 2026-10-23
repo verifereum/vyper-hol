@@ -15,7 +15,7 @@ Ancestors
   vyperTypeInvariants vyperTypeBindArguments vyperTypeInitialState
   vyperTypeEntryReadiness vyperTypeContract vyperTypeContractContext
   vyperTypeContractFunction vyperTypeContractGetter
-  vyperTypeContractSoundness vyperExprNoControl
+  vyperTypeContractSoundness vyperTypeExternalDefaults vyperExprNoControl
   vyperStatePreservation vyperScopePreservation
 Libs
   wordsLib
@@ -326,27 +326,14 @@ Proof
   strip_tac >>
   qpat_x_assum `call_external_function _ _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   simp[Once call_external_function_def] >>
-  gvs[AllCaseEqs()] >> strip_tac >>
-  Cases_on `do
-    (if nr then
-       case cx.nonreentrant_slot of
-         NONE => raise (Error (TypeError "nonreentrant slot missing"))
-       | SOME slot => acquire_nonreentrant_lock cx.txn.target slot
-                        (mut = View \/ mut = Pure)
-     else return ());
-    send_call_value mut cx;
-    eval_stmts cx body
-  od (initial_state am [env] with <|outcomes := orc; requests := []|>)` >>
-  Cases_on `q` >> gvs[AllCaseEqs()] >>
-  Cases_on `(if nr /\ mut <> View /\ mut <> Pure then
-               case cx.nonreentrant_slot of
-                 NONE => return ()
-               | SOME slot => release_nonreentrant_lock cx.txn.target slot
-             else return ()) r` >>
-  Cases_on `q` >> gvs[AllCaseEqs()] >>
-  TRY (Cases_on `y` >> gvs[AllCaseEqs()]) >>
-  TRY (Cases_on `evaluate_type (type_env_all_modules mods) ret` >> gvs[]) >>
-  TRY (Cases_on `safe_cast x v` >> gvs[])
+  IF_CASES_TAC >- simp[] >>
+  simp_tac (srw_ss()) [] >>
+  qmatch_goalsub_abbrev_tac `entry (initial_state am [FEMPTY] with <|outcomes := orc; requests := []|>)` >>
+  Cases_on `entry (initial_state am [FEMPTY] with <|outcomes := orc; requests := []|>)` >>
+  Cases_on `q` >> simp_tac (srw_ss()) []
+  >- (rpt (BasicProvers.TOP_CASE_TAC >> simp_tac (srw_ss()) []) >> metis_tac[]) >>
+  Cases_on `y` >> simp_tac (srw_ss()) [] >>
+  rpt (BasicProvers.TOP_CASE_TAC >> simp_tac (srw_ss()) []) >> metis_tac[]
 QED
 
 Theorem call_external_function_initial_failure_rolls_back:
@@ -385,69 +372,65 @@ Theorem call_external_function_selected_explicit_success_machine_well_typed[loca
   MEM (FunctionDecl External mut nr raw tx.function_name args dflts ret body) ts /\
   cx = initial_evaluation_context am.sources am.layouts tx src /\
   LENGTH vals <= LENGTH args /\ LENGTH args - LENGTH vals <= LENGTH dflts /\
-  evaluate_defaults cx am
-    (DROP (LENGTH dflts - (LENGTH args - LENGTH vals)) dflts) = SOME dflt_vs /\
-  bind_arguments (type_env_all_modules mods) args (vals ++ dflt_vs) = SOME scope /\
   call_external_function orc am cx nr mut ts mods args dflts vals body ret =
     (INL v,am',rqs) ==>
   machine_well_typed am'
 Proof
-  rpt strip_tac >>
-  qabbrev_tac `call_run =
-    do
-      (if nr then
-         case cx.nonreentrant_slot of
-           NONE => raise (Error (TypeError "nonreentrant slot missing"))
-         | SOME slot => acquire_nonreentrant_lock cx.txn.target slot
-                          (mut = View \/ mut = Pure)
-       else return ());
-      send_call_value mut cx;
-      eval_stmts cx body
-    od (initial_state am [scope] with <|outcomes := orc; requests := []|>)` >>
+  strip_tac >>
+  `ALOOKUP am.sources tx.target = SOME mods` by
+    gvs[checked_contract_runtime_ready_def] >>
+  `context_well_typed cx` by
+    gvs[call_tx_well_typed_def, context_well_typed_def,
+        initial_evaluation_context_def] >>
+  `state_well_typed (initial_state am [FEMPTY] with <|outcomes := orc; requests := []|>) /\
+   accounts_well_typed (initial_state am [FEMPTY] with <|outcomes := orc; requests := []|>).accounts` by
+    gvs[initial_state_def, state_well_typed_def, machine_well_typed_def, scope_well_typed_def] >>
+  `immutables_ready art.cta_bare_globals art.cta_toplevel_vtypes cx
+    (initial_state am [FEMPTY] with <|outcomes := orc; requests := []|>).immutables` by
+    (simp_tac (srw_ss()) [initial_state_def] >>
+     metis_tac[checked_contract_runtime_ready_def,
+               immutables_ready_initial_evaluation_context_source]) >>
   qpat_x_assum `call_external_function _ _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
-  simp[Once call_external_function_def] >>
-  gvs[AllCaseEqs(), initial_evaluation_context_def] >> strip_tac >>
-  qabbrev_tac `call_res = FST call_run` >>
-  PairCases_on `call_run` >> Cases_on `call_run0` >>
-  gvs[AllCaseEqs()] >>
-  Cases_on `(if nr /\ mut <> View /\ mut <> Pure then
-               case lookup_nonreentrant_slot am.layouts tx.target of
-                 NONE => return ()
-               | SOME slot => release_nonreentrant_lock tx.target slot
-             else return ()) call_run1` >>
-  Cases_on `q` >> gvs[] >>
-  TRY (Cases_on `y` >> gvs[]) >> TRY (Cases_on `y'` >> gvs[]) >>
-  `initial_evaluation_context am.sources am.layouts tx src =
-   initial_evaluation_context am.sources am.layouts tx src` by simp[] >>
-  `state_well_typed call_run1 /\
-   accounts_well_typed call_run1.accounts` by (
-    irule checked_explicit_call_run_success_components >>
-    qexistsl [`am`, `args`, `art`, `body`,
-              `initial_evaluation_context am.sources am.layouts tx src`,
-              `dflts`, `mods`, `mut`, `nr`, `orc`,
-              `raw`, `call_res`, `ret`, `[]`, `scope`, `src`, `ts`, `tx`,
-              `vals ++ dflt_vs`] >>
-    gvs[Abbr`call_res`, initial_evaluation_context_def, initial_state_def]) >>
-  gvs[Abbr`call_res`] >>
-  `(if nr /\ ~(mut = View \/ mut = Pure) then
-      case (initial_evaluation_context am.sources am.layouts tx src).nonreentrant_slot of
-        NONE => return ()
-      | SOME slot => release_nonreentrant_lock tx.target slot
-    else return ()) call_run1 = (INL (),r)` by
-    gvs[initial_evaluation_context_def] >>
-  `r.scopes = call_run1.scopes /\
-   r.immutables = call_run1.immutables /\
-   r.accounts = call_run1.accounts` by (
-    Cases_on `nr` >> gvs[return_def] >>
-    Cases_on `mut = View` >> gvs[return_def] >>
-    Cases_on `mut = Pure` >> gvs[return_def] >>
-    Cases_on `lookup_nonreentrant_slot am.layouts tx.target` >>
-    gvs[return_def] >>
-    metis_tac[release_nonreentrant_lock_machine_components]) >>
-  Cases_on `evaluate_type (type_env_all_modules mods) ret` >> gvs[] >>
-  Cases_on `safe_cast x v'` >> gvs[] >>
-  gvs[machine_well_typed_def, abstract_machine_from_state_def,
-      state_well_typed_def, AllCaseEqs()]
+  simp_tac bool_ss [call_external_function_def, LET_THM] >>
+  `cx.in_deploy = F` by simp[initial_evaluation_context_def] >>
+  qpat_assum `cx.in_deploy = F` (fn th => pure_rewrite_tac [th, COND_CLAUSES]) >>
+  IF_CASES_TAC >- gvs[] >>
+  simp_tac (srw_ss()) [] >>
+  qmatch_goalsub_abbrev_tac `entry (initial_state am [FEMPTY] with <|outcomes := orc; requests := []|>)` >>
+  strip_tac >> drule external_call_result_success_cases >> strip_tac >>
+  `state_well_typed st_body /\ accounts_well_typed st_body.accounts` by
+    (qpat_x_assum `entry _ = _` mp_tac >>
+     simp_tac bool_ss [Abbr `entry`] >> strip_tac >>
+     drule_all checked_external_entry_sound >> simp[]) >>
+  gvs[] >> irule release_action_success_machine_well_typed >>
+  qexistsl [`initial_evaluation_context am.sources am.layouts tx src`,
+            `mut = View \/ mut = Pure`, `nr`, `st_body`] >> simp[]
+QED
+
+Theorem checked_getter_initial_body_components:
+  eval_stmts (initial_evaluation_context am.sources am.layouts tx src) body
+    (initial_state am [scope] with <|outcomes := orc; requests := rqs|>) = (res,st') ==>
+  check_contract F am.layouts tx.target mods = SOME art /\
+  checked_contract_runtime_ready art mods am tx /\ machine_well_typed am /\
+  ALOOKUP mods src = SOME ts /\ MEM decl ts /\
+  is_public_getter_decl tx.function_name decl /\
+  external_getter_tuple src decl = SOME (mut,nr,args,(dflts : expr list),ret,body) /\
+  bind_arguments (type_env_all_modules mods) args vals = SOME scope ==>
+  state_well_typed st' /\ accounts_well_typed st'.accounts
+Proof
+  rpt strip_tac >>
+  `scope_well_typed scope` by
+    metis_tac[bind_arguments_scope_well_typed_from_success] >>
+  `state_well_typed (initial_state am [scope] with <|outcomes := orc; requests := rqs|>) /\
+   accounts_well_typed (initial_state am [scope] with <|outcomes := orc; requests := rqs|>).accounts` by
+    gvs[initial_state_def, state_well_typed_def, machine_well_typed_def] >>
+  gvs[initial_state_def] >>
+  drule_all (Q.INST
+    [`cx` |-> `initial_evaluation_context am.sources am.layouts tx src`,
+     `st` |-> `initial_state am [scope] with <|outcomes := orc; requests := rqs|>`]
+    (SPEC_ALL checked_public_getter_body_preserves_machine_components)
+    |> SIMP_RULE (srw_ss()) [initial_state_def] |> GEN_ALL) >>
+  simp[]
 QED
 
 Theorem call_external_function_selected_getter_success_machine_well_typed[local]:
@@ -458,9 +441,7 @@ Theorem call_external_function_selected_getter_success_machine_well_typed[local]
   external_getter_tuple src decl = SOME (mut,nr,args,dflts,ret,body) /\
   cx = initial_evaluation_context am.sources am.layouts tx src /\
   LENGTH vals <= LENGTH args /\ LENGTH args - LENGTH vals <= LENGTH dflts /\
-  evaluate_defaults cx am
-    (DROP (LENGTH dflts - (LENGTH args - LENGTH vals)) dflts) = SOME dflt_vs /\
-  bind_arguments (type_env_all_modules mods) args (vals ++ dflt_vs) = SOME scope /\
+  bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
   call_external_function orc am cx nr mut ts mods args dflts vals body ret =
     (INL v,am',rqs) ==>
   machine_well_typed am'
@@ -481,42 +462,22 @@ Proof
      Cases_on `vis` >> gvs[is_public_getter_decl_def] >>
      drule_all hashmap_public_getter_tuple_shape >> metis_tac[]) >>
   gvs[] >>
-  qabbrev_tac `getter_run =
-    do send_call_value View
-         (initial_evaluation_context am.sources am.layouts tx src);
-       eval_stmts (initial_evaluation_context am.sources am.layouts tx src)
-         [Return (SOME exp)]
-    od (initial_state am [scope] with <|outcomes := orc; requests := []|>)` >>
   qpat_x_assum `call_external_function _ _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
-  simp[Once call_external_function_def] >>
-  gvs[AllCaseEqs(), initial_evaluation_context_def] >> strip_tac >>
-  gvs[bind_def, ignore_bind_def, return_def] >>
-  qabbrev_tac `getter_res = FST getter_run` >>
-  PairCases_on `getter_run` >> Cases_on `getter_run0` >>
-  gvs[AllCaseEqs()] >> TRY (Cases_on `y` >> gvs[]) >>
-  `state_well_typed getter_run1 /\
-   accounts_well_typed getter_run1.accounts` by (
-    gvs[initial_state_def] >>
-    funpow 6 drule_then drule (SRULE [initial_state_def]
-      (Q.INST [`rqs` |-> `[]`]
-        checked_getter_send_eval_success_components)) >>
-    simp[Abbr`getter_res`, initial_evaluation_context_def] >>
-    strip_tac >>
-    first_x_assum irule >>
-    qexists `orc` >>
-    qexistsl
-      [`FST
-         (do send_call_value View
-               (initial_evaluation_context am.sources am.layouts tx src);
-             eval_stmts
-               (initial_evaluation_context am.sources am.layouts tx src)
-               [Return (SOME exp)]
-          od (initial_state am [scope] with <|outcomes := orc; requests := []|>))`,
-       `scope`, `vals ++ dflt_vs`] >>
-    simp[bind_def, ignore_bind_def, initial_evaluation_context_def, initial_state_def]) >>
-  Cases_on `evaluate_type (type_env_all_modules mods) ret` >> gvs[] >>
-  Cases_on `safe_cast x v'` >> gvs[] >>
-  gvs[machine_well_typed_def, abstract_machine_from_state_def,
+  simp_tac bool_ss [call_external_function_def, LET_THM] >>
+  simp[initial_evaluation_context_def] >>
+  Cases_on `tx.value = 0` >>
+  simp[send_call_value_def, bind_def, ignore_bind_def, return_def,
+       check_def, assert_def, raise_def, set_scopes_def, initial_state_def] >>
+  strip_tac >>
+  qpat_x_assum `(\(res,am_out,rqs). _) _ = _` mp_tac >>
+  CONV_TAC (DEPTH_CONV PairRules.PBETA_CONV) >>
+  simp[AllCaseEqs()] >> strip_tac >>
+  rename1 `eval_stmts _ _ _ = (res, st_body)` >>
+  `state_well_typed st_body /\ accounts_well_typed st_body.accounts` by
+    (drule (SRULE [initial_evaluation_context_def, initial_state_def]
+       checked_getter_initial_body_components) >>
+     strip_tac >> first_x_assum drule_all >> simp[]) >>
+  gvs[return_def, machine_well_typed_def, abstract_machine_from_state_def,
       state_well_typed_def]
 QED
 
@@ -567,40 +528,35 @@ Proof
       external_getter_tuple (find_function_module am tx.target tx.function_name) decl =
         SOME (mut,nr,args,dflts,ret,body'))` by
     (irule lookup_exported_function_checked_cases_current >> simp[] >> metis_tac[]) >>
-  `?dflt_vs scope.
-     evaluate_defaults
-       (initial_evaluation_context am.sources am.layouts tx
-         (find_function_module am tx.target tx.function_name)) am
-       (DROP (LENGTH dflts - (LENGTH args - LENGTH tx.args)) dflts) =
-       SOME dflt_vs /\
-     bind_arguments (type_env_all_modules all_mods) args
-       (tx.args ++ dflt_vs) = SOME scope` by (
-    qpat_x_assum `call_external_function _ _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
-    simp[Once call_external_function_def] >>
-    gvs[AllCaseEqs()] >> metis_tac[]) >>
-  gvs[] >>
   irule finalize_pending_deletions_machine_well_typed >>
-  (FIRST
-      [qpat_x_assum `MEM (FunctionDecl External _ _ _ _ _ _ _ _) _` mp_tac >>
-       strip_tac >>
-       irule call_external_function_selected_explicit_success_machine_well_typed >>
-       qexistsl [`am`, `args`, `art`, `body'`,
-                 `initial_evaluation_context am.sources am.layouts tx
-                    (find_function_module am tx.target tx.function_name)`,
-                 `dflt_vs`, `dflts`, `all_mods`, `mut`, `nr`, `orc`, `raw`, `ret`, `rqs`, `scope`,
-                 `find_function_module am tx.target tx.function_name`, `ts`, `tx`,
-                 `v`, `tx.args`],
-       qpat_x_assum `is_public_getter_decl _ _` mp_tac >> strip_tac >>
-       irule call_external_function_selected_getter_success_machine_well_typed >>
-       qexistsl [`am`, `args`, `art`, `body'`,
-                 `initial_evaluation_context am.sources am.layouts tx
-                    (find_function_module am tx.target tx.function_name)`,
-                 `decl`, `dflt_vs`, `dflts`, `all_mods`, `mut`, `nr`, `orc`, `ret`, `rqs`, `scope`,
-                 `find_function_module am tx.target tx.function_name`, `ts`, `tx`,
-                 `v`, `tx.args`]] >>
-    gvs[get_module_code_def, initial_evaluation_context_def,
-        checked_call_inputs_ready_def, checked_defaults_ready_def,
-        checked_contract_runtime_ready_def])
+  `ALOOKUP all_mods (find_function_module am tx.target tx.function_name) = SOME ts` by
+    gvs[get_module_code_def, initial_evaluation_context_def] >>
+  `checked_contract_runtime_ready art all_mods am tx` by
+    gvs[checked_contract_runtime_ready_def] >>
+  `LENGTH tx.args <= LENGTH args /\ LENGTH args - LENGTH tx.args <= LENGTH dflts` by
+    gvs[checked_call_inputs_ready_def, checked_defaults_ready_def] >>
+  TRY (qpat_assum `MEM (FunctionDecl External _ _ _ _ _ _ _ _) _` (fn _ => all_tac) >>
+     drule_at (Pat `call_external_function`)
+       call_external_function_selected_explicit_success_machine_well_typed >>
+     simp[] >> disch_then (fn th => metis_tac[th]) >> NO_TAC) >>
+  (`nr = F /\ mut = View /\ dflts = []` by
+       (Cases_on `decl` >> gvs[is_public_getter_decl_def, external_getter_tuple_def]
+        >- (rename1 `is_public_getter_decl _ (VariableDecl vis storage id ty init)` >>
+            Cases_on `vis` >> gvs[is_public_getter_decl_def] >>
+            Cases_on `storage` >> gvs[] >> Cases_on `is_ArrayT ty` >> gvs[] >>
+            FIRST [drule_all array_public_getter_tuple_shape >> metis_tac[],
+                   gvs[external_getter_tuple_def]]) >>
+        rename1 `is_public_getter_decl _ (HashMapDecl vis transient id kt vt init)` >>
+        Cases_on `vis` >> gvs[is_public_getter_decl_def] >>
+        drule_all hashmap_public_getter_tuple_shape >> metis_tac[]) >>
+      gvs[] >>
+      `?scope. bind_arguments (type_env_all_modules all_mods) args tx.args = SOME scope` by
+        (drule call_external_function_success_phases >>
+         simp[eval_external_defaults_nil] >> metis_tac[]) >>
+      drule_at (Pat `call_external_function`)
+        call_external_function_selected_getter_success_machine_well_typed >>
+      simp[] >>
+      disch_then (fn th => metis_tac[th]))
 QED
 
 Theorem checked_call_external_preserves_machine_well_typed:
@@ -615,3 +571,10 @@ Proof
   >- metis_tac[checked_call_external_success_preserves_machine_well_typed] >>
   metis_tac[checked_call_external_failure_preserves_machine_well_typed]
 QED
+
+(* Machine preservation must not inherit admitted prerequisites. *)
+val () = List.app (fn (_, th) =>
+  if List.null (List.filter (fn s => s <> "DISK_THM")
+      (#1 (Tag.dest_tag (Thm.tag th)))) then ()
+  else raise Fail "external call machine preservation has oracle dependencies")
+  (DB.thms "vyperTypeExternalCallMachine");

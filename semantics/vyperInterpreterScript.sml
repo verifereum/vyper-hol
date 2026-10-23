@@ -1885,18 +1885,6 @@ Proof
   strip_tac >> gvs[]
 QED
 
-(* Temporary proof compatibility interface for consumers not yet migrated to
-   eval_external_defaults.  Operational external calls do not use this helper. *)
-Definition evaluate_defaults_def:
-  evaluate_defaults cx am [] = SOME [] /\
-  evaluate_defaults cx am (e::es) =
-    (case FST $ eval_expr cx e (initial_state am [FEMPTY]) of
-     | INL (Value v) =>
-         (case evaluate_defaults cx am es of
-          | SOME vs => SOME (v :: vs)
-          | NONE => NONE)
-     | _ => NONE)
-End
 
 Definition call_external_function_def:
   call_external_function orc am cx nr mut ts all_mods args dflts vals body ret =
