@@ -6691,6 +6691,58 @@ QED
 
 Finalise compile_expr_body_shape
 
+Theorem compile_expr_shape_pointwise[local]:
+  (!ce ty e st. !internal v st'.
+    ~supported_expr_exists expr_shape_root e /\
+    compile_expr ce ty e st = (v,st') /\ cenv_shape_ok st ce /\ shape_state st ==>
+    shape_extends internal compiler_label st st' /\ shape_state st' /\ value_shape_ok st' v) /\
+  (!ce rt ty bi args st. !internal v st'.
+    bi <> Env MsgGas /\ builtin_arity bi <= LENGTH args /\
+    ~supported_exprs_exists expr_shape_root args /\
+    compile_builtin_dispatch ce rt ty bi args st = (v,st') /\ cenv_shape_ok st ce /\ shape_state st ==>
+    shape_extends internal compiler_label st st' /\ shape_state st' /\ value_shape_ok st' v) /\
+  (!ce vt ty tb rt args st. !internal v st'.
+    type_builtin_arity tb <= LENGTH args /\ ~supported_exprs_exists expr_shape_root args /\
+    compile_type_builtin_dispatch ce vt ty tb rt args st = (v,st') /\ cenv_shape_ok st ce /\ shape_state st ==>
+    shape_extends internal compiler_label st st' /\ shape_state st' /\ value_shape_ok st' v)
+Proof
+  ho_match_mp_tac compile_expr_ind >> rpt conj_tac >> rpt gen_tac >> strip_tac
+  >- (rpt gen_tac >> strip_tac >> mp_tac (Q.INST [
+        `cfn` |-> `expr_child_callback (expr_size e) compile_expr`,
+        `bfn` |-> `builtin_child_callback (expr_size e) compile_builtin_dispatch`,
+        `tfn` |-> `type_child_callback (expr_size e) compile_type_builtin_dispatch`,
+        `cenv` |-> `ce`] compile_expr_body_shape) >>
+      impl_tac
+      >- (rpt conj_tac
+          >- (rpt strip_tac >> irule expr_child_callback_shape >> fs[shape_step_def] >> metis_tac[])
+          >- (rpt strip_tac >> irule builtin_child_callback_shape >> fs[shape_step_def] >> metis_tac[])
+          >- (rpt strip_tac >> irule type_child_callback_shape >> fs[shape_step_def] >> metis_tac[]) >>
+          simp[]) >>
+      simp[shape_step_def] >> disch_then irule >>
+      qpat_x_assum `compile_expr ce ty e st = _` mp_tac >>
+      simp[Once compile_expr_raw_def] >> CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[])
+  >- (rpt gen_tac >> strip_tac >>
+      mp_tac (Q.INST [`cfn` |-> `expr_child_callback (list_size expr_size args) compile_expr`,
+                     `cenv` |-> `ce`, `ret_ty` |-> `rt`] compile_builtin_dispatch_body_shape) >>
+      impl_tac
+      >- (conj_tac
+          >- (rpt strip_tac >> irule expr_child_callback_shape >> fs[shape_step_def] >> metis_tac[]) >>
+          simp[]) >>
+      simp[shape_step_def] >> disch_then irule >>
+      qpat_x_assum `compile_builtin_dispatch ce rt ty bi args st = _` mp_tac >>
+      simp[Once compile_expr_raw_def] >> CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[]) >>
+  rpt gen_tac >> strip_tac >>
+  mp_tac (Q.INST [`cfn` |-> `expr_child_callback (list_size expr_size args) compile_expr`,
+                 `cenv` |-> `ce`, `vv_ty` |-> `vt`, `ret_ty` |-> `rt`] compile_type_builtin_dispatch_body_shape) >>
+  impl_tac
+  >- (conj_tac
+      >- (rpt strip_tac >> irule expr_child_callback_shape >> fs[shape_step_def] >> metis_tac[]) >>
+      simp[]) >>
+  simp[shape_step_def] >> disch_then irule >>
+  qpat_x_assum `compile_type_builtin_dispatch ce vt ty tb rt args st = _` mp_tac >>
+  simp[Once compile_expr_raw_def] >> CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[]
+QED
+
 Theorem compile_expr_shape:
   (!cenv ty e internal.
      ~supported_expr_exists expr_shape_root e ==>
@@ -6709,7 +6761,8 @@ Theorem compile_expr_shape:
        (compile_type_builtin_dispatch cenv vv_ty ty tb ret_ty args)
        (\v st. value_shape_ok st v))
 Proof
-  cheat
+  mp_tac compile_expr_shape_pointwise >>
+  simp[shape_step_def] >> metis_tac[]
 QED
 
 (* Shared helper of every value consumer; weakly frozen. *)
