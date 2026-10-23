@@ -4,6 +4,7 @@
  * TOP-LEVEL:
  *   compile_safe_add_correct — add with overflow check
  *   compile_safe_add_overflow — an overflowing unsigned 256-bit add reverts
+ *   compile_safe_add_unsigned_256_shape — its code stays in the block
  *   compile_safe_sub_correct — sub with underflow check
  *   compile_safe_mul_correct — mul with overflow check (includes int256 MIN_INT)
  *   compile_safe_div_correct — div with division-by-zero check
@@ -1596,72 +1597,6 @@ Proof
   >> suspend "unsigned_256"
 QED
 
-(* The abort counterpart of compile_safe_add_in_range for unsigned 256-bit
-   operands: when the words' sum overflows, the ASSERT fails. *)
-Theorem compile_safe_add_overflow:
-  ∀ x y ty ss st op st' a b.
-    compile_safe_add x y ty st = (op, st') ∧
-    eval_operand x ss = SOME a ∧
-    eval_operand y ss = SOME b ∧
-    fresh_vars_wrt st ss ∧
-    type_bits ty = 256 ∧ ¬is_signed_type ty ∧
-    dimword (:256) ≤ w2n a + w2n b
-    ⇒
-    ∃ ss'. run_inst_seq (emitted_insts st st') ss = Abort Revert_abort ss'
-Proof
-  rpt gen_tac >> strip_tac >>
-  gvs[compile_safe_add_def, comp_bind_def, comp_return_def,
-      comp_ignore_bind_def, LET_THM] >>
-  rpt (pairarg_tac >> gvs[]) >>
-  rename1 `emit_op ADD [x; y] st = (op, st1)` >>
-  rename1 `emit_op LT [op; x] st1 = (lt, st2)` >>
-  rename1 `emit_op ISZERO [lt] st2 = (ok, st3)` >>
-  rename1 `emit_void ASSERT [ok] st3 = ((), st4)` >>
-  imp_res_tac emit_op_extends >> imp_res_tac emit_void_extends >>
-  `emitted_insts st3 st4 = [mk_inst st3.cs_next_id ASSERT [ok] []]` by
-    (qpat_x_assum `emit_void ASSERT _ _ = _` mp_tac >>
-     simp[emit_void_assert_inst] >> strip_tac >> gvs[] >>
-     simp[emitted_insts_def, rich_listTheory.DROP_LENGTH_APPEND]) >>
-  `emitted_insts st st4 =
-   emitted_insts st st1 ++ emitted_insts st1 st2 ++ emitted_insts st2 st3 ++
-   emitted_insts st3 st4` by
-    (`emitted_insts st2 st4 = emitted_insts st2 st3 ++ emitted_insts st3 st4`
-       by (irule emitted_insts_append >> simp[]) >>
-     `st4.cs_current_insts = st2.cs_current_insts ++ emitted_insts st2 st4`
-       by simp[] >>
-     `emitted_insts st1 st4 = emitted_insts st1 st2 ++ emitted_insts st2 st4`
-       by (irule emitted_insts_append >> simp[]) >>
-     `st4.cs_current_insts = st1.cs_current_insts ++ emitted_insts st1 st4`
-       by simp[] >>
-     `emitted_insts st st4 = emitted_insts st st1 ++ emitted_insts st1 st4`
-       by (irule emitted_insts_append >> simp[]) >>
-     simp[]) >>
-  qspecl_then [`x`, `y`, `a`, `b`, `st`, `op`, `st1`, `ss`] mp_tac
-    emit_op_ADD_correct >> simp[] >> strip_tac >>
-  rename1 `run_inst_seq (emitted_insts st st1) ss = OK ss1` >>
-  qspecl_then [`op`, `x`, `a + b`, `a`, `st1`, `lt`, `st2`, `ss1`] mp_tac
-    emit_op_LT_correct >> simp[] >> strip_tac >>
-  rename1 `run_inst_seq (emitted_insts st1 st2) ss1 = OK ss2` >>
-  qspecl_then [`lt`, `bool_to_word (w2n (a + b) < w2n a)`, `st2`, `ok`,
-               `st3`, `ss2`] mp_tac emit_op_ISZERO_correct >>
-  simp[] >> strip_tac >>
-  rename1 `run_inst_seq (emitted_insts st2 st3) ss2 = OK ss3` >>
-  `w2n (a + b) < w2n a` by (irule w2n_add_overflow >> fs[]) >>
-  `eval_operand ok ss3 = SOME 0w` by fs[bool_to_word_def] >>
-  `run_inst_seq (emitted_insts st3 st4) ss3 =
-   Abort Revert_abort (revert_state (set_returndata [] ss3))` by
-    simp[run_inst_seq_def, assert_false_correct] >>
-  qexists_tac `revert_state (set_returndata [] ss3)` >>
-  asm_rewrite_tac[GSYM listTheory.APPEND_ASSOC] >>
-  qpat_x_assum `run_inst_seq (emitted_insts st st1) ss = OK ss1`
-    (fn th => rewrite_tac [MATCH_MP run_inst_seq_append th]) >>
-  qpat_x_assum `run_inst_seq (emitted_insts st1 st2) ss1 = OK ss2`
-    (fn th => rewrite_tac [MATCH_MP run_inst_seq_append th]) >>
-  qpat_x_assum `run_inst_seq (emitted_insts st2 st3) ss2 = OK ss3`
-    (fn th => rewrite_tac [MATCH_MP run_inst_seq_append th]) >>
-  simp[run_inst_seq_def, assert_false_correct]
-QED
-
 Resume compile_safe_add_in_range[lt256]:
   `type_bits ty ≤ 256` by simp[] >>
   `math_val ty (a + b) = math_val ty a + math_val ty b` by (
@@ -1750,6 +1685,83 @@ Resume compile_safe_add_in_range[unsigned_256]:
 QED
 
 Finalise compile_safe_add_in_range
+
+(* An overflowing unsigned 256-bit add reverts: the abort counterpart of
+   compile_safe_add_in_range. *)
+Theorem compile_safe_add_overflow:
+  ∀ x y ty ss st op st' a b.
+    compile_safe_add x y ty st = (op, st') ∧
+    eval_operand x ss = SOME a ∧
+    eval_operand y ss = SOME b ∧
+    fresh_vars_wrt st ss ∧
+    type_bits ty = 256 ∧ ¬is_signed_type ty ∧
+    dimword (:256) ≤ w2n a + w2n b
+    ⇒
+    ∃ ss'. run_inst_seq (emitted_insts st st') ss = Abort Revert_abort ss'
+Proof
+  rpt gen_tac >> strip_tac >>
+  `w2n (a + b) < w2n a` by (irule w2n_add_overflow >> fs[]) >>
+  gvs[compile_safe_add_def, comp_bind_def, comp_return_def,
+      comp_ignore_bind_def, LET_THM] >>
+  pairarg_tac >> gvs[] >>
+  drule_all emit_op_ADD_correct >> strip_tac >>
+  rpt (pairarg_tac >> gvs[]) >>
+  chain_step emit_op_LT_correct >>
+  chain_step emit_op_ISZERO_correct >>
+  forward_all_evals >> imp_res_tac emit_void_extends >>
+  drule_all_then strip_assume_tac assert_chain
+  >- gvs[bool_to_word_def] >>
+  metis_tac[]
+QED
+
+(* The code of an unsigned 256-bit safe add stays in the current block and
+   emits no INVOKE or terminator. *)
+Theorem compile_safe_add_unsigned_256_shape:
+  ∀ x y ty st op st'.
+    compile_safe_add x y ty st = (op, st') ∧
+    type_bits ty = 256 ∧ ¬is_signed_type ty ⇒
+    st'.cs_blocks = st.cs_blocks ∧ st'.cs_current_bb = st.cs_current_bb ∧
+    isPREFIX st.cs_current_insts st'.cs_current_insts ∧
+    EVERY (λi. i.inst_opcode ≠ INVOKE ∧ ¬is_terminator i.inst_opcode)
+      (emitted_insts st st')
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[compile_safe_add_def, comp_bind_def, comp_return_def,
+      comp_ignore_bind_def, LET_THM] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  rename1 `emit_op ADD [x; y] st = (op, st1)` >>
+  rename1 `emit_op LT [op; x] st1 = (lt, st2)` >>
+  rename1 `emit_op ISZERO [lt] st2 = (ok, st3)` >>
+  rename1 `emit_void ASSERT [ok] st3 = ((), st4)` >>
+  imp_res_tac emit_op_extends >> imp_res_tac emit_void_extends >>
+  `emitted_insts st3 st4 = [mk_inst st3.cs_next_id ASSERT [ok] []]` by
+    (qpat_x_assum `emit_void ASSERT _ _ = _` mp_tac >>
+     simp[emit_void_assert_inst] >> strip_tac >> gvs[] >>
+     simp[emitted_insts_def, rich_listTheory.DROP_LENGTH_APPEND]) >>
+  `emitted_insts st st4 =
+   emitted_insts st st1 ++ emitted_insts st1 st2 ++ emitted_insts st2 st3 ++
+   emitted_insts st3 st4 /\
+   st4.cs_current_insts = st.cs_current_insts ++ emitted_insts st st4` by
+    (`emitted_insts st2 st4 = emitted_insts st2 st3 ++ emitted_insts st3 st4`
+       by (irule emitted_insts_append >> simp[]) >>
+     `st4.cs_current_insts = st2.cs_current_insts ++ emitted_insts st2 st4`
+       by simp[] >>
+     `emitted_insts st1 st4 = emitted_insts st1 st2 ++ emitted_insts st2 st4`
+       by (irule emitted_insts_append >> simp[]) >>
+     `st4.cs_current_insts = st1.cs_current_insts ++ emitted_insts st1 st4`
+       by simp[] >>
+     `emitted_insts st st4 = emitted_insts st st1 ++ emitted_insts st1 st4`
+       by (irule emitted_insts_append >> simp[]) >>
+     simp[]) >>
+  `st4.cs_blocks = st.cs_blocks /\ st4.cs_current_bb = st.cs_current_bb` by
+    fs[same_blocks_def] >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+     (emitted_insts st st4)` by
+    (imp_res_tac emitted_insts_emit_op >>
+     asm_rewrite_tac[] >>
+     simp[venomInstTheory.mk_inst_def, is_terminator_def]) >>
+  asm_rewrite_tac[rich_listTheory.IS_PREFIX_APPEND3]
+QED
 
 (* ===== Safe Subtraction ===== *)
 
