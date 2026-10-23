@@ -3,8 +3,7 @@ Theory vyperAssignmentOrderAudit
 Ancestors
   vyperSmallStep vyperTypeEvalSoundness vyperTypeEvalStoragePreservation
   vyperStorageRegionWrite vyperStoragePlaceProvenance vyperPlaceStoragePreservation
-  evalCompilerAssignmentEffects
-  evalInterpreterAssignmentOrder evalAssignmentOrderSupported evalAssignmentOrderFrontend
+  evalAssignmentOrder
 
 fun check_closed (thy,name) =
   let
@@ -13,8 +12,7 @@ fun check_closed (thy,name) =
   in
     if null (Thm.hyp th) andalso null axioms andalso
        List.all (fn oracle => oracle = "DISK_THM") oracles then
-      print ("ASSIGNMENT ORDER AUDIT " ^ thy ^ "." ^ name ^
-             " Hyp=0 axioms=[] admissions=[]\n")
+      ()
     else raise Fail ("assignment-order proof is not closed: " ^ thy ^ "." ^ name)
   end;
 
@@ -28,7 +26,5 @@ val () = List.app check_closed
    ("vyperStoragePlaceProvenance","eval_target_place_region"),
    ("vyperPlaceStoragePreservation","write_place_preserves_contract_storage")];
 
-val () = List.app (fn thy =>
-  List.app (fn (name,_) => check_closed (thy,name)) (DB.thms thy))
-  ["evalAssignmentOrderFrontend","evalCompilerAssignmentEffects",
-   "evalInterpreterAssignmentOrder","evalAssignmentOrderSupported"];
+val () = List.app (fn (name,_) => check_closed ("evalAssignmentOrder",name))
+  (DB.thms "evalAssignmentOrder");
