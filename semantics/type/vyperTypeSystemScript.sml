@@ -516,6 +516,25 @@ Definition ext_call_kw_type_def:
   ext_call_kw_type ret_ty EKGas = BaseT (UintT 256)
 End
 
+(* An external-call argument of type t fits a parameter declared as u, as in
+   Vyper's compare_type (validate_expected_type in fetch_call_return): a
+   bytestring or dynamic array may have a smaller bound, elementwise, and
+   every other type must match exactly. *)
+Definition arg_type_fits_def:
+  (arg_type_fits (BaseT (StringT n)) (BaseT (StringT m)) <=> n <= m) /\
+  (arg_type_fits (BaseT (BytesT (Dynamic n))) (BaseT (BytesT (Dynamic m))) <=>
+     n <= m) /\
+  (arg_type_fits (ArrayT t (Dynamic n)) (ArrayT u (Dynamic m)) <=>
+     n <= m /\ arg_type_fits t u) /\
+  (arg_type_fits (ArrayT t (Fixed n)) (ArrayT u (Fixed m)) <=>
+     n = m /\ arg_type_fits t u) /\
+  (arg_type_fits (TupleT ts) (TupleT us) <=> arg_types_fit ts us) /\
+  (arg_type_fits t u <=> t = u) /\
+  (arg_types_fit [] [] <=> T) /\
+  (arg_types_fit (t::ts) (u::us) <=> arg_type_fits t u /\ arg_types_fit ts us) /\
+  (arg_types_fit _ _ <=> F)
+End
+
 (* Positional type contract for creation builtin operands. *)
 Definition create_arg_types_ok_def:
   create_arg_types_ok CreateMinimalProxy has_salt tys =
@@ -608,8 +627,14 @@ Definition well_typed_expr_def:
   well_typed_expr env (Call ty (ExtCall is_static _ (_, arg_types, ret_ty) opts) args drv) =
     (well_typed_exprs env args /\ drv = NONE /\ well_formed_type env.type_defs ty /\
      ty = ret_ty /\ ext_call_opts_ok is_static opts /\
-     MAP expr_type args =
-       BaseT AddressT :: arg_types ++ MAP (ext_call_kw_type ret_ty) opts) /\
+     LENGTH args = 1 + LENGTH arg_types + LENGTH opts /\
+     expr_type (HD args) = BaseT AddressT /\
+     (* positional arguments may be narrower than the declared types *)
+     EVERY (well_formed_type env.type_defs) arg_types /\
+     arg_types_fit (MAP expr_type (TAKE (LENGTH arg_types) (TL args)))
+       arg_types /\
+     MAP expr_type (DROP (1 + LENGTH arg_types) args) =
+       MAP (ext_call_kw_type ret_ty) opts) /\
   well_typed_expr env (Call ty (Send has_gas) args drv) =
     (well_typed_exprs env args /\ drv = NONE /\ ty = NoneT /\
      MAP expr_type args = [BaseT AddressT; BaseT (UintT 256)] ++
