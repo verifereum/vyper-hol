@@ -1,0 +1,8 @@
+memoryStoreWitnessLib built
+evalCompilerSubsetAbiExternalTheory built
+foldedValueParityTheory built
+holbuild: warning: checkpoint budget: checkpoint_gb_before=5.2 checkpoint_gb_after=5.0 checkpoint_max_gb=5.0 checkpoint_bytes_before=5539800189 checkpoint_bytes_after=5323298819 checkpoint_max_bytes=5368709120 evicted=1 checkpoint_limit_gb=5
+evalCompilerBytecodeAbiExternalStaticTheory built
+evalCompilerBytecodeAbiExternalArraysTheory built
+holbuild: warning: checkpoint budget: checkpoint_gb_before=5.0 checkpoint_gb_after=4.8 checkpoint_max_gb=5.0 checkpoint_bytes_before=5392607230 checkpoint_bytes_after=5149367517 checkpoint_max_bytes=5368709120 evicted=1 checkpoint_limit_gb=5
+holbuild finished in 275.786s

@@ -1,0 +1,2 @@
+[FunctionDecl External Pure F F "f" [] [] (BaseT (IntT 256))
+   [Return (SOME (Literal (BaseT (IntT 256)) (IntL 5)))]]

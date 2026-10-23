@@ -1,0 +1,325 @@
+LOAD compileVyperTheory
+LOAD supportedProgramTheory
+LOAD concretizeMemLocDefsTheory
+LOAD codegenReadyComputeTheory
+LOAD byteTheory
+LOAD optionTheory
+LOAD vyperCheckContractFrontendLib
+LOAD jsonASTLib
+LOAD finite_mapLib
+LOAD wordsLib
+LOAD Timeout
+WITNESS pow_folded_exp FRONTEND=ACCEPT
+WITNESS pow_folded_exp CHECK_RUNTIME=ACCEPT
+WITNESS pow_folded_exp CHECK_DEPLOY=ACCEPT
+WITNESS pow_folded_exp SUPPORTED=T
+WITNESS pow_folded_exp CHECKED_EVAL=true
+WITNESS pow_folded_exp COMPILE=SOME
+WITNESS pow_folded_exp DEPLOY_EQUAL=false
+WITNESS pow_folded_exp RUNTIME_EQUAL=false
+WITNESS pow_negfold_base FRONTEND=ACCEPT
+WITNESS pow_negfold_base CHECK_RUNTIME=ACCEPT
+WITNESS pow_negfold_base CHECK_DEPLOY=ACCEPT
+WITNESS pow_negfold_base SUPPORTED=T
+WITNESS pow_negfold_base CHECKED_EVAL=true
+WITNESS pow_negfold_base COMPILE=SOME
+WITNESS pow_negfold_base DEPLOY_EQUAL=false
+WITNESS pow_negfold_base RUNTIME_EQUAL=false
+WITNESS fold_add FRONTEND=ACCEPT
+WITNESS fold_add CHECK_RUNTIME=ACCEPT
+WITNESS fold_add CHECK_DEPLOY=ACCEPT
+WITNESS fold_add SUPPORTED=T
+WITNESS fold_add CHECKED_EVAL=true
+WITNESS fold_add COMPILE=SOME
+WITNESS fold_add DEPLOY_EQUAL=false
+WITNESS fold_add RUNTIME_EQUAL=false
+WITNESS fold_pow_lit FRONTEND=ACCEPT
+WITNESS fold_pow_lit CHECK_RUNTIME=ACCEPT
+WITNESS fold_pow_lit CHECK_DEPLOY=ACCEPT
+WITNESS fold_pow_lit SUPPORTED=T
+WITNESS fold_pow_lit CHECKED_EVAL=true
+WITNESS fold_pow_lit COMPILE=SOME
+WITNESS fold_pow_lit DEPLOY_EQUAL=false
+WITNESS fold_pow_lit RUNTIME_EQUAL=false
+WITNESS fold_cmp FRONTEND=ACCEPT
+WITNESS fold_cmp CHECK_RUNTIME=ACCEPT
+WITNESS fold_cmp CHECK_DEPLOY=ACCEPT
+WITNESS fold_cmp SUPPORTED=T
+WITNESS fold_cmp CHECKED_EVAL=true
+WITNESS fold_cmp COMPILE=SOME
+WITNESS fold_cmp DEPLOY_EQUAL=false
+WITNESS fold_cmp RUNTIME_EQUAL=false
+WITNESS fold_not FRONTEND=ACCEPT
+WITNESS fold_not CHECK_RUNTIME=ACCEPT
+WITNESS fold_not CHECK_DEPLOY=ACCEPT
+WITNESS fold_not SUPPORTED=T
+WITNESS fold_not CHECKED_EVAL=true
+WITNESS fold_not COMPILE=SOME
+WITNESS fold_not DEPLOY_EQUAL=false
+WITNESS fold_not RUNTIME_EQUAL=false
+WITNESS fold_shift FRONTEND=ACCEPT
+WITNESS fold_shift CHECK_RUNTIME=ACCEPT
+WITNESS fold_shift CHECK_DEPLOY=ACCEPT
+WITNESS fold_shift SUPPORTED=T
+WITNESS fold_shift CHECKED_EVAL=true
+WITNESS fold_shift COMPILE=SOME
+WITNESS fold_shift DEPLOY_EQUAL=false
+WITNESS fold_shift RUNTIME_EQUAL=false
+WITNESS fold_minmax FRONTEND=ACCEPT
+WITNESS fold_minmax CHECK_RUNTIME=ACCEPT
+WITNESS fold_minmax CHECK_DEPLOY=ACCEPT
+WITNESS fold_minmax SUPPORTED=T
+WITNESS fold_minmax CHECKED_EVAL=true
+WITNESS fold_minmax COMPILE=SOME
+WITNESS fold_minmax DEPLOY_EQUAL=false
+WITNESS fold_minmax RUNTIME_EQUAL=false
+WITNESS fold_powmod FRONTEND=ACCEPT
+WITNESS fold_powmod CHECK_RUNTIME=ACCEPT
+WITNESS fold_powmod CHECK_DEPLOY=ACCEPT
+WITNESS fold_powmod SUPPORTED=T
+WITNESS fold_powmod CHECKED_EVAL=true
+WITNESS fold_powmod COMPILE=SOME
+WITNESS fold_powmod DEPLOY_EQUAL=false
+WITNESS fold_powmod RUNTIME_EQUAL=false
+WITNESS fold_addmod FRONTEND=ACCEPT
+WITNESS fold_addmod CHECK_RUNTIME=ACCEPT
+WITNESS fold_addmod CHECK_DEPLOY=ACCEPT
+WITNESS fold_addmod SUPPORTED=T
+WITNESS fold_addmod CHECKED_EVAL=true
+WITNESS fold_addmod COMPILE=SOME
+WITNESS fold_addmod DEPLOY_EQUAL=false
+WITNESS fold_addmod RUNTIME_EQUAL=false
+WITNESS fold_abs FRONTEND=ACCEPT
+WITNESS fold_abs CHECK_RUNTIME=ACCEPT
+WITNESS fold_abs CHECK_DEPLOY=ACCEPT
+WITNESS fold_abs SUPPORTED=T
+WITNESS fold_abs CHECKED_EVAL=true
+WITNESS fold_abs COMPILE=SOME
+WITNESS fold_abs DEPLOY_EQUAL=false
+WITNESS fold_abs RUNTIME_EQUAL=false
+WITNESS keccak_literal FRONTEND=ACCEPT
+WITNESS keccak_literal CHECK_RUNTIME=ACCEPT
+WITNESS keccak_literal CHECK_DEPLOY=ACCEPT
+WITNESS keccak_literal SUPPORTED=T
+WITNESS keccak_literal CHECKED_EVAL=true
+WITNESS keccak_literal COMPILE=SOME
+WITNESS keccak_literal DEPLOY_EQUAL=false
+WITNESS keccak_literal RUNTIME_EQUAL=false
+WITNESS len_string_lit FRONTEND=ACCEPT
+WITNESS len_string_lit CHECK_RUNTIME=ACCEPT
+WITNESS len_string_lit CHECK_DEPLOY=ACCEPT
+WITNESS len_string_lit SUPPORTED=T
+WITNESS len_string_lit CHECKED_EVAL=true
+WITNESS len_string_lit COMPILE=SOME
+WITNESS len_string_lit DEPLOY_EQUAL=false
+WITNESS len_string_lit RUNTIME_EQUAL=false
+WITNESS method_id_b4 FRONTEND=ACCEPT
+WITNESS method_id_b4 CHECK_RUNTIME=ACCEPT
+WITNESS method_id_b4 CHECK_DEPLOY=ACCEPT
+WITNESS method_id_b4 SUPPORTED=T
+WITNESS method_id_b4 CHECKED_EVAL=true
+WITNESS method_id_b4 COMPILE=SOME
+WITNESS method_id_b4 DEPLOY_EQUAL=false
+WITNESS method_id_b4 RUNTIME_EQUAL=false
+WITNESS method_id_bytes FRONTEND=ACCEPT
+WITNESS method_id_bytes CHECK_RUNTIME=ACCEPT
+WITNESS method_id_bytes CHECK_DEPLOY=ACCEPT
+WITNESS method_id_bytes SUPPORTED=T
+WITNESS method_id_bytes CHECKED_EVAL=true
+WITNESS method_id_bytes COMPILE=SOME
+WITNESS method_id_bytes DEPLOY_EQUAL=false
+WITNESS method_id_bytes RUNTIME_EQUAL=false
+WITNESS method_id_const FRONTEND=ACCEPT
+WITNESS method_id_const CHECK_RUNTIME=ACCEPT
+WITNESS method_id_const CHECK_DEPLOY=ACCEPT
+WITNESS method_id_const SUPPORTED=F
+WITNESS method_id_const CHECKED_EVAL=true
+WITNESS method_id_const COMPILE=SOME
+WITNESS method_id_const DEPLOY_EQUAL=false
+WITNESS method_id_const RUNTIME_EQUAL=false
+WITNESS method_id_storage FRONTEND=ACCEPT
+WITNESS method_id_storage CHECK_RUNTIME=ACCEPT
+WITNESS method_id_storage CHECK_DEPLOY=ACCEPT
+WITNESS method_id_storage SUPPORTED=F
+WITNESS method_id_storage CHECKED_EVAL=true
+WITNESS method_id_storage COMPILE=SOME
+WITNESS method_id_storage DEPLOY_EQUAL=false
+WITNESS method_id_storage RUNTIME_EQUAL=false
+WITNESS enc_mid_const FRONTEND=ACCEPT
+WITNESS enc_mid_const CHECK_RUNTIME=ACCEPT
+WITNESS enc_mid_const CHECK_DEPLOY=ACCEPT
+WITNESS enc_mid_const SUPPORTED=F
+WITNESS enc_mid_const CHECKED_EVAL=true
+WITNESS enc_mid_const COMPILE=SOME
+WITNESS enc_mid_const DEPLOY_EQUAL=false
+WITNESS enc_mid_const RUNTIME_EQUAL=false
+WITNESS enc_mid_methodid_call FRONTEND=ACCEPT
+WITNESS enc_mid_methodid_call CHECK_RUNTIME=ACCEPT
+WITNESS enc_mid_methodid_call CHECK_DEPLOY=ACCEPT
+WITNESS enc_mid_methodid_call SUPPORTED=F
+WITNESS enc_mid_methodid_call CHECKED_EVAL=true
+WITNESS enc_mid_methodid_call COMPILE=SOME
+WITNESS enc_mid_methodid_call DEPLOY_EQUAL=false
+WITNESS enc_mid_methodid_call RUNTIME_EQUAL=false
+WITNESS enc_mid_bytes4lit FRONTEND=ACCEPT
+WITNESS enc_mid_bytes4lit CHECK_RUNTIME=ACCEPT
+WITNESS enc_mid_bytes4lit CHECK_DEPLOY=ACCEPT
+WITNESS enc_mid_bytes4lit SUPPORTED=T
+WITNESS enc_mid_bytes4lit CHECKED_EVAL=true
+WITNESS enc_mid_bytes4lit COMPILE=SOME
+WITNESS enc_mid_bytes4lit DEPLOY_EQUAL=false
+WITNESS enc_mid_bytes4lit RUNTIME_EQUAL=false
+WITNESS enc_ensF_string_mid FRONTEND=ACCEPT
+WITNESS enc_ensF_string_mid CHECK_RUNTIME=ACCEPT
+WITNESS enc_ensF_string_mid CHECK_DEPLOY=ACCEPT
+WITNESS enc_ensF_string_mid SUPPORTED=F
+WITNESS enc_ensF_string_mid CHECKED_EVAL=true
+WITNESS enc_ensF_string_mid COMPILE=SOME
+WITNESS enc_ensF_string_mid DEPLOY_EQUAL=false
+WITNESS enc_ensF_string_mid RUNTIME_EQUAL=false
+WITNESS enc_ensF_uint_mid FRONTEND=ACCEPT
+WITNESS enc_ensF_uint_mid CHECK_RUNTIME=ACCEPT
+WITNESS enc_ensF_uint_mid CHECK_DEPLOY=ACCEPT
+WITNESS enc_ensF_uint_mid SUPPORTED=F
+WITNESS enc_ensF_uint_mid CHECKED_EVAL=true
+WITNESS enc_ensF_uint_mid COMPILE=SOME
+WITNESS enc_ensF_uint_mid DEPLOY_EQUAL=false
+WITNESS enc_ensF_uint_mid RUNTIME_EQUAL=false
+WITNESS enc_ensure_const FRONTEND=ACCEPT
+WITNESS enc_ensure_const CHECK_RUNTIME=ACCEPT
+WITNESS enc_ensure_const CHECK_DEPLOY=ACCEPT
+WITNESS enc_ensure_const SUPPORTED=F
+WITNESS enc_ensure_const CHECKED_EVAL=true
+WITNESS enc_ensure_const COMPILE=SOME
+WITNESS enc_ensure_const DEPLOY_EQUAL=false
+WITNESS enc_ensure_const RUNTIME_EQUAL=false
+WITNESS dec_unwrap_const FRONTEND=ACCEPT
+WITNESS dec_unwrap_const CHECK_RUNTIME=ACCEPT
+WITNESS dec_unwrap_const CHECK_DEPLOY=ACCEPT
+WITNESS dec_unwrap_const SUPPORTED=F
+WITNESS dec_unwrap_const CHECKED_EVAL=true
+WITNESS dec_unwrap_const COMPILE=SOME
+WITNESS dec_unwrap_const DEPLOY_EQUAL=false
+WITNESS dec_unwrap_const RUNTIME_EQUAL=false
+WITNESS ctl03_abi_method_id FRONTEND=ACCEPT
+WITNESS ctl03_abi_method_id CHECK_RUNTIME=ACCEPT
+WITNESS ctl03_abi_method_id CHECK_DEPLOY=ACCEPT
+WITNESS ctl03_abi_method_id SUPPORTED=F
+WITNESS ctl03_abi_method_id CHECKED_EVAL=true
+WITNESS ctl03_abi_method_id COMPILE=SOME
+WITNESS ctl03_abi_method_id DEPLOY_EQUAL=false
+WITNESS ctl03_abi_method_id RUNTIME_EQUAL=false
+WITNESS enc_ensT_uint_mid FRONTEND=ACCEPT
+WITNESS enc_ensT_uint_mid CHECK_RUNTIME=ACCEPT
+WITNESS enc_ensT_uint_mid CHECK_DEPLOY=ACCEPT
+WITNESS enc_ensT_uint_mid SUPPORTED=F
+WITNESS enc_ensT_uint_mid CHECKED_EVAL=true
+WITNESS enc_ensT_uint_mid COMPILE=SOME
+WITNESS enc_ensT_uint_mid DEPLOY_EQUAL=false
+WITNESS enc_ensT_uint_mid RUNTIME_EQUAL=false
+WITNESS neg_lit FRONTEND=ACCEPT
+WITNESS neg_lit CHECK_RUNTIME=ACCEPT
+WITNESS neg_lit CHECK_DEPLOY=ACCEPT
+WITNESS neg_lit SUPPORTED=T
+WITNESS neg_lit CHECKED_EVAL=true
+WITNESS neg_lit COMPILE=SOME
+WITNESS neg_lit DEPLOY_EQUAL=false
+WITNESS neg_lit RUNTIME_EQUAL=false
+WITNESS pow_neglit_base FRONTEND=ACCEPT
+WITNESS pow_neglit_base CHECK_RUNTIME=ACCEPT
+WITNESS pow_neglit_base CHECK_DEPLOY=ACCEPT
+WITNESS pow_neglit_base SUPPORTED=T
+WITNESS pow_neglit_base CHECKED_EVAL=true
+WITNESS pow_neglit_base COMPILE=SOME
+WITNESS pow_neglit_base DEPLOY_EQUAL=false
+WITNESS pow_neglit_base RUNTIME_EQUAL=false
+WITNESS lt_mixed_lit FRONTEND=ACCEPT
+WITNESS lt_mixed_lit CHECK_RUNTIME=ACCEPT
+WITNESS lt_mixed_lit CHECK_DEPLOY=ACCEPT
+WITNESS lt_mixed_lit SUPPORTED=T
+WITNESS lt_mixed_lit CHECKED_EVAL=true
+WITNESS lt_mixed_lit COMPILE=SOME
+WITNESS lt_mixed_lit DEPLOY_EQUAL=false
+WITNESS lt_mixed_lit RUNTIME_EQUAL=false
+WITNESS boolop_and3 FRONTEND=ACCEPT
+WITNESS boolop_and3 CHECK_RUNTIME=ACCEPT
+WITNESS boolop_and3 CHECK_DEPLOY=ACCEPT
+WITNESS boolop_and3 SUPPORTED=T
+WITNESS boolop_and3 CHECKED_EVAL=true
+WITNESS boolop_and3 COMPILE=SOME
+WITNESS boolop_and3 DEPLOY_EQUAL=false
+WITNESS boolop_and3 RUNTIME_EQUAL=false
+WITNESS i12_immut_with_storage FRONTEND=ACCEPT
+WITNESS i12_immut_with_storage CHECK_RUNTIME=ACCEPT
+WITNESS i12_immut_with_storage CHECK_DEPLOY=ACCEPT
+WITNESS i12_immut_with_storage SUPPORTED=F
+WITNESS i12_immut_with_storage CHECKED_EVAL=true
+WITNESS i12_immut_with_storage COMPILE=NONE
+WITNESS p29_imm_multi FRONTEND=ACCEPT
+WITNESS p29_imm_multi CHECK_RUNTIME=ACCEPT
+WITNESS p29_imm_multi CHECK_DEPLOY=ACCEPT
+WITNESS p29_imm_multi SUPPORTED=F
+WITNESS p29_imm_multi CHECKED_EVAL=true
+WITNESS p29_imm_multi COMPILE=NONE
+WITNESS c16_const_string_in_expr FRONTEND=ACCEPT
+WITNESS c16_const_string_in_expr CHECK_RUNTIME=ACCEPT
+WITNESS c16_const_string_in_expr CHECK_DEPLOY=ACCEPT
+WITNESS c16_const_string_in_expr SUPPORTED=F
+WITNESS c16_const_string_in_expr CHECKED_EVAL=true
+WITNESS c16_const_string_in_expr COMPILE=SOME
+WITNESS c16_const_string_in_expr DEPLOY_EQUAL=false
+WITNESS c16_const_string_in_expr RUNTIME_EQUAL=false
+WITNESS c27_const_binop_fold FRONTEND=ACCEPT
+WITNESS c27_const_binop_fold CHECK_RUNTIME=ACCEPT
+WITNESS c27_const_binop_fold CHECK_DEPLOY=ACCEPT
+WITNESS c27_const_binop_fold SUPPORTED=F
+WITNESS c27_const_binop_fold CHECKED_EVAL=true
+WITNESS c27_const_binop_fold COMPILE=SOME
+WITNESS c27_const_binop_fold DEPLOY_EQUAL=false
+WITNESS c27_const_binop_fold RUNTIME_EQUAL=false
+WITNESS rc09_abi_encode_data FRONTEND=ACCEPT
+WITNESS rc09_abi_encode_data CHECK_RUNTIME=ACCEPT
+WITNESS rc09_abi_encode_data CHECK_DEPLOY=ACCEPT
+WITNESS rc09_abi_encode_data SUPPORTED=F
+WITNESS rc09_abi_encode_data CHECKED_EVAL=true
+WITNESS rc09_abi_encode_data COMPILE=SOME
+WITNESS rc09_abi_encode_data DEPLOY_EQUAL=false
+WITNESS rc09_abi_encode_data RUNTIME_EQUAL=false
+WITNESS rr03_abi FRONTEND=ACCEPT
+WITNESS rr03_abi CHECK_RUNTIME=ACCEPT
+WITNESS rr03_abi CHECK_DEPLOY=ACCEPT
+WITNESS rr03_abi SUPPORTED=F
+WITNESS rr03_abi CHECKED_EVAL=true
+WITNESS rr03_abi COMPILE=SOME
+WITNESS rr03_abi DEPLOY_EQUAL=false
+WITNESS rr03_abi RUNTIME_EQUAL=false
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%31">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%30">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%35">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%34">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%33">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%32">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%31">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%30">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%35">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%34">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%33">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%32">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%37">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%36">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%31">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%30">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%33">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%32">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%31">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%30">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%35">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%34">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%31">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%30">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%33">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%32">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%31">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%30">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%35">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%34">>

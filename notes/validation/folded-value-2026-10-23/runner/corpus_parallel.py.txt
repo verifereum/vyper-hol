@@ -1,0 +1,45 @@
+from pathlib import Path
+import json, os, re, signal, subprocess, time
+root=Path.cwd()
+out=root/'.agent-files/folded-value-validation/corpus'
+old_driver=156851
+child=594640
+# The sequential driver is paused; let its active proof finish unchanged.
+while True:
+    stat=Path(f'/proc/{child}/stat').read_text().rsplit(')',1)[1].split()
+    if stat[0]=='Z':break
+    time.sleep(2)
+raw_status=int(stat[49])
+elapsed=float(Path('/proc/uptime').read_text().split()[0])-int(stat[19])/os.sysconf('SC_CLK_TCK')
+rows=json.loads((out/'results.json').read_text())
+rows['evalCompilerBytecodeStateTheory']={'argv':['holbuild','--maxheap','12000','build','--force=theory','--tactic-timeout','600','evalCompilerBytecodeStateTheory'],'exit':raw_status >> 8,'raw_wait_status':raw_status,'exit_evidence':f'completed child {child} /proc/stat before reaping paused validation driver','seconds':round(elapsed,3)}
+(out/'results.json').write_text(json.dumps(rows,indent=2)+'\n')
+assert Path(f'/proc/{old_driver}/cmdline').read_bytes().replace(b'\0',b' ').decode().strip()=='python3 -I .agent-files/folded-value-validation/corpus.py'
+os.kill(old_driver,signal.SIGKILL)
+wrapper=(root/'lowering/defs/bytecode/python-o1-bytecode-fixtures').read_text()
+targets=[t for t in dict.fromkeys(re.findall(r'\bevalCompilerBytecode\w*Theory\b',wrapper)) if t not in rows]
+targets.insert(0,'foldedValueParityTheory')
+for index in range(0,len(targets),3):
+    batch=targets[index:index+3]
+    command=['holbuild','--maxheap','12000','-j3','build','--force=theory','--tactic-timeout','600',*batch]
+    logpath=out/f'batch-{index//3:02}.log'
+    start=time.time()
+    with logpath.open('w') as log:result=subprocess.run(command,stdout=log,stderr=subprocess.STDOUT)
+    text=logpath.read_text()
+    for target in batch:
+        built=bool(re.search(r'^'+re.escape(target)+r' built$',text,re.M))
+        rows[target]={'argv':command,'exit':0 if result.returncode==0 or built else result.returncode,'batch_exit':result.returncode,'built_message_observed':built,'log':logpath.name,'seconds':round(time.time()-start,3)}
+        print(target,json.dumps(rows[target]),flush=True)
+    (out/'results.json').write_text(json.dumps(rows,indent=2)+'\n')
+    if result.returncode:
+        # A failed batch may stop before building all roots; resolve each
+        # unconfirmed outcome with an individual run rather than inventing it.
+        for target in batch:
+            if rows[target]['exit']==0:continue
+            retry=['holbuild','--maxheap','12000','build','--force=theory','--tactic-timeout','600',target]
+            with (out/(target+'.retry.log')).open('w') as log:checked=subprocess.run(retry,stdout=log,stderr=subprocess.STDOUT)
+            rows[target]['individual_argv']=retry
+            rows[target]['individual_exit']=checked.returncode
+            rows[target]['exit']=checked.returncode
+            (out/'results.json').write_text(json.dumps(rows,indent=2)+'\n')
+print('ALL REQUESTED TARGETS ATTEMPTED',flush=True)

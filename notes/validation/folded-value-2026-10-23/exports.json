@@ -1,0 +1,258 @@
+{
+  "pow_folded_exp": {
+    "source_sha256": "f800588986eb18049381807601edbc0bb323f76beaec19c1a59a4b83a0d271a7",
+    "python_ast_exit": 0,
+    "ast_sha256": "a25725c3addd47ae8766b2396cd71db74060f16a62a0b85448ef40fa106400e3",
+    "python_bytecode_exit": 0,
+    "oracle_sha256": "522742374a35527778057313a7a9c3afd5545cd4542cd1e0d240e904e793ed00"
+  },
+  "pow_negfold_base": {
+    "source_sha256": "567a3efd4c16ca2162ce6907fbb7239ef9ac231cbf759af8a9e9dacf3f8a738c",
+    "python_ast_exit": 0,
+    "ast_sha256": "ab25443d20d4970173317cf66eeb75b1deeca1bd18d3660988c2bd3ffe229493",
+    "python_bytecode_exit": 0,
+    "oracle_sha256": "a152399a2d6c25779725b25686076b118d64649b94a94dc2a1cf7bb4dfaf6922"
+  },
+  "fold_add": {
+    "source_sha256": "d0ac9d885637f67f22e5777e716825cab2ea94bdb45d2210a1a6c836e290890c",
+    "python_ast_exit": 0,
+    "ast_sha256": "b2164bc6a4df2d477cdce246ec8e73a815387cc14a565ca4911c2b70f3883d91",
+    "python_bytecode_exit": 0,
+    "oracle_sha256": "d3f1a994fff5b1d82c193f7b17289a18508e1f65c5dd9674d2519ae9dee6d207"
+  },
+  "fold_pow_lit": {
+    "source_sha256": "21da2f67b8e8a768f6fc0e475d0f67f477decdf5e4719f840b3e57d472fd0ee4",
+    "python_ast_exit": 0,
+    "ast_sha256": "5a08e2bc664e6032fd5c6f26850375a0fba3cf47dbd76d3c5f9b05ee49cc58d9",
+    "python_bytecode_exit": 0,
+    "oracle_sha256": "91314512efbff86cd813510268589bb87adf65cfb0fb8d6687f1f40f6803b39c"
+  },
+  "fold_cmp": {
+    "source_sha256": "caff7a1e7c291733e9dbb192122fba014c54a9250b6d42a9c4ff689933a6c6be",
+    "python_ast_exit": 0,
+    "ast_sha256": "7fa36014423d56e2de3a83f46bca3a2bd4d87a03057d62a6f67c211fb33b8881",
+    "python_bytecode_exit": 0,
+    "oracle_sha256": "a07bca66347abd050a234e52066d9a0f25c4586e5dfe52b5739548ac99ade4aa"
+  },
+  "fold_not": {
+    "source_sha256": "57dd48a1cf017d483fedbbc17f5c26f15bc465cb76fcfd12580c2dde0fb69b64",
+    "python_ast_exit": 0,
+    "ast_sha256": "03c5892d1dce8d7675c3864a665c4ad825583848022be649e2188ced5708f180",
+    "python_bytecode_exit": 0,
+    "oracle_sha256": "8523f67fa6ca949b57e30ff033a97c3e2eb69d37ce1f7f14ba27a9d1880092b3"
+  },
+  "fold_shift": {
+    "source_sha256": "a8fd940722db6b55cbf4c9497e90e8fac36b24b4513839951333ca678e7dbeff",
+    "python_ast_exit": 0,
+    "ast_sha256": "46079573a76d7d677dc163ba862608eb210407ea618ff92355acfab35269f336",
+    "python_bytecode_exit": 0,
+    "oracle_sha256": "9762caaf74c39963f9761a96d1dd7cfc600c31379ff78c56ccd45f7bda0729af"
+  },
+  "fold_minmax": {
+    "source_sha256": "91b02c814c8700a55c11ec7f4b28a348a258f73a0b8c34e1d9df193c4555d680",
+    "python_ast_exit": 0,
+    "ast_sha256": "49d36543939abceea01579fd0a2d41f8f705795a964713618d41442a51b732af",
+    "python_bytecode_exit": 0,
+    "oracle_sha256": "d3f1a994fff5b1d82c193f7b17289a18508e1f65c5dd9674d2519ae9dee6d207"
+  },
+  "fold_powmod": {
+    "source_sha256": "028d64777c8ce814f4c0b767b013de184849cee6cc042f6631315ce05deafb04",
+    "python_ast_exit": 0,
+    "ast_sha256": "124ca69542ca76fd7dcf79a88cebd07b0640c2fc4c403026e41742e3bd8e81e2",
+    "python_bytecode_exit": 0,
+    "oracle_sha256": "43f0b212ae16a22ec2a9eea8dc1b21a8ac9e5dc489debb6dac1cd3503c1eda5d"
+  },
+  "fold_addmod": {
+    "source_sha256": "8cc2d81484f5d5d53821b0697f5a66cb0d9b3d3803a8fa83565a8dd8c3890819",
+    "python_ast_exit": 0,
+    "ast_sha256": "7086e386a33649f92f2705ea0ce20f3687f010269ba10acf366be62b9082233c",
+    "python_bytecode_exit": 0,
+    "oracle_sha256": "55b91e7bceca7ba2a5a8bbee1d5963dab033a216ba7bb0562cf34978990d57a5"
+  },
+  "fold_abs": {
+    "source_sha256": "af289cce6ca586a130c0fb413b382f774c9dedb19a845df21f6983954ad681f9",
+    "python_ast_exit": 0,
+    "ast_sha256": "b9bc32aa562d048a8b0a0c44e7a3d18dbad16c12ad4bfffad2c64da07dd44475",
+    "python_bytecode_exit": 0,
+    "oracle_sha256": "cdcaa2b8c18610d13ba89d4c9e486ff17626e5215168d8faa60eab9a2300e5d4"
+  },
+  "keccak_literal": {
+    "source_sha256": "45f7d2cbdb834ce71ac8813b948c3274c1ab80a0f7654fad58057984f023e4f8",
+    "python_ast_exit": 0,
+    "ast_sha256": "8f4abddea0545661a9fff3d1c13ca959a2cd5edda69b99066da1e6a98272e187",
+    "python_bytecode_exit": 0,
+    "oracle_sha256": "748ed3eaca3a7efc2cb5962d5098c2ad44f77ae0693283b60889c24800b18fa9"
+  },
+  "len_string_lit": {
+    "source_sha256": "4932d24a905495e1bd8ea5c40622b0a5fbbc596383ff84f54adcf64864d337ee",
+    "python_ast_exit": 0,
+    "ast_sha256": "735e2e47de60bc0f175674a61a1c06f7a351deff4ecd327bc1115768ed5cd909",
+    "python_bytecode_exit": 0,
+    "oracle_sha256": "55b91e7bceca7ba2a5a8bbee1d5963dab033a216ba7bb0562cf34978990d57a5"
+  },
+  "method_id_b4": {
+    "source_sha256": "933e4aa269a51bc04d2b21eb2d34a23f8f204beac52e63f15abc5b4df8fe0dd0",
+    "python_ast_exit": 0,
+    "ast_sha256": "20c666c3aea56360e11442bd3caaa122ec5ce74c0726fdf2371ccb47b7cd0026",
+    "python_bytecode_exit": 0,
+    "oracle_sha256": "7f76444fa3a5cbb7ecc0364045abb11798b4150d6cab5314df0f3c773d9ead78"
+  },
+  "method_id_bytes": {
+    "source_sha256": "4cf6820787737ffa647b3ff405bfce88bd425530bca4a9cfc95dcc7826faeea5",
+    "python_ast_exit": 0,
+    "ast_sha256": "2f6c94179a84e2823e961ff5f81d995fbcd7253ce55503522f2f8fe0b5bff9e3",
+    "python_bytecode_exit": 0,
+    "oracle_sha256": "76378b182b68d39ddf7c23e09c7b13a44968a72b6eaa816dc4c6dbda703232f6"
+  },
+  "method_id_const": {
+    "source_sha256": "80340557c6a4f6a697661ef40257429f05c149be8e67e52f98d7872b22b1b2ce",
+    "python_ast_exit": 0,
+    "ast_sha256": "933b869ba4484a7a4f446acc6fb8ceeb751a8b710607497aeaf14ea8d384306e",
+    "python_bytecode_exit": 0,
+    "oracle_sha256": "93687f2791b495caa39c804d01483c0154188c5756ba9d577a6719f445d97a51"
+  },
+  "method_id_storage": {
+    "source_sha256": "be19f3d7e81c50c13781d0cf7130686778b79ef64178e6b97259dd736d38f9d4",
+    "python_ast_exit": 0,
+    "ast_sha256": "5741fc863bae01b55e1161240d3d8de085b9920f225bee9a8c369cfe076106f9",
+    "python_bytecode_exit": 0,
+    "oracle_sha256": "a044c235f3b685af7a42fac53ee0b76c98987aeee9e7a83af96cf553d4836cfd"
+  },
+  "method_id_var": {
+    "source_sha256": "c302ef35a63a60d50d3052a02be40f2ad4556f7dc6b2ee6ba8b37d0a72260854",
+    "python_ast_exit": 1
+  },
+  "enc_mid_const": {
+    "source_sha256": "8946d6c45cb7755a2702113123bf52a9101dc6093e4788991b161f5620acd516",
+    "python_ast_exit": 0,
+    "ast_sha256": "efc90af73a9dc522a6cbedfaafe5fcce200ab5eca0ba4d3b4c36de4ed6627179",
+    "python_bytecode_exit": 0,
+    "oracle_sha256": "ff8b48aed59867247167a201f07d66b7cb97b8d65e6235386b8ddf260cf83683"
+  },
+  "enc_mid_methodid_call": {
+    "source_sha256": "9fbb5f3ef26acb9f37f7e4a105ea22fbabeee32ede127e2a208196c3a80f23db",
+    "python_ast_exit": 0,
+    "ast_sha256": "e386660394d4658b1b1baeb977ac35ff48f8dc7d72c08fed302a8a140fc46b56",
+    "python_bytecode_exit": 0,
+    "oracle_sha256": "ea1430c1ab0093dc7946a52fab159d78d953c67301d245697d962cc2361e3bb9"
+  },
+  "enc_mid_bytes4lit": {
+    "source_sha256": "904088141d8c65be2bf47c62e75222bca5aa62478dc62362474b9d3d008fbf5e",
+    "python_ast_exit": 0,
+    "ast_sha256": "ab75a0bd43f469ad193c035692eb2be7616a00ac01377e4447f9118eb563f315",
+    "python_bytecode_exit": 0,
+    "oracle_sha256": "86e65c09b17671abca87b3b923eed02e26cdfdc80923907c4d1df76928e66e06"
+  },
+  "enc_ensF_string_mid": {
+    "source_sha256": "28f75335d48bc3ce58731c485034a1106332f1413b8b6091266a99bb06219ced",
+    "python_ast_exit": 0,
+    "ast_sha256": "e8c45f5cdc579f58129de86446f8ae3626521e2b90948b40991e1c146165ac6f",
+    "python_bytecode_exit": 0,
+    "oracle_sha256": "4b9f50b41fa79676c25b51cab3c898d95f359a4d44c662b11c7fe8f435993347"
+  },
+  "enc_ensF_uint_mid": {
+    "source_sha256": "da13b9361da7312b057513b747784f1beedb036963cf8e47c8b82f7bf67704d7",
+    "python_ast_exit": 0,
+    "ast_sha256": "535f890669796618a7179ef46a77ed0cd4c47d5edde7bf2ab490778e050af337",
+    "python_bytecode_exit": 0,
+    "oracle_sha256": "ff8b48aed59867247167a201f07d66b7cb97b8d65e6235386b8ddf260cf83683"
+  },
+  "enc_ensure_const": {
+    "source_sha256": "229268cdcb5230c8eb2d2da3d214c1d1ff3577cb55bb7e3e3a06c1a91d0ad1b7",
+    "python_ast_exit": 0,
+    "ast_sha256": "5da85da8604040dd80669200c942a969b975f12e47403295bb06bd1e384f6cab",
+    "python_bytecode_exit": 0,
+    "oracle_sha256": "ff8b48aed59867247167a201f07d66b7cb97b8d65e6235386b8ddf260cf83683"
+  },
+  "dec_unwrap_const": {
+    "source_sha256": "70185e3edf0157f35230daed8c99cbb23769b49f23e488cf10fd9538e8bf2d14",
+    "python_ast_exit": 0,
+    "ast_sha256": "c837ca538085ed567802b7aca5de632ba0c66fed93fd3b93d6876f361ffa8533",
+    "python_bytecode_exit": 0,
+    "oracle_sha256": "aea13b0e328d05d3d4f80ec3dae412abd427dd4e987b3eecee1e5460020c8ecd"
+  },
+  "ctl03_abi_method_id": {
+    "source_sha256": "dbfdede49032c1cd990acdf0315b3ed1655ce346d4d839a151cbfb44c9fd8967",
+    "python_ast_exit": 0,
+    "ast_sha256": "25110c34a7e4344d5c8c2326888f20876ce973ce0f8668d16d3c516d8e132ce0",
+    "python_bytecode_exit": 0,
+    "oracle_sha256": "7a3a40f2fd74df04f3067f1b0731c7cf7ae8ba68ba3560ce469c7dc185106e3b"
+  },
+  "enc_ensT_uint_mid": {
+    "source_sha256": "92bed6ef1eae5508781ea4c4b1a9f8b552d5358336d0c0b1a887ad690755414c",
+    "python_ast_exit": 0,
+    "ast_sha256": "b840dee3769144f079be8f9bf8029bf823ee2888c7468d53bb9624488d64ff0a",
+    "python_bytecode_exit": 0,
+    "oracle_sha256": "95f5adf6ac88356deb3526533fef96b7246899fb0e152ba9b2aeeb07dec78cd0"
+  },
+  "neg_lit": {
+    "source_sha256": "cabe157b7f1d8fb4442eb57f4cc6a7f287e0f480fe7534d75ad2ad5fe273f248",
+    "python_ast_exit": 0,
+    "ast_sha256": "5a35b4b96b2becaa3f1e68ee7c4d3d526f67fc9534204c7c59bf5ae0633824d1",
+    "python_bytecode_exit": 0,
+    "oracle_sha256": "7efdff0b22d54e438a20f7da85ed60ef3c3c46f91e3a3d55d45a7e50f7a7c83b"
+  },
+  "pow_neglit_base": {
+    "source_sha256": "f549b35f183472f0495fcb35540374f2640a0cbf59299450926fc0c6a7b8eff0",
+    "python_ast_exit": 0,
+    "ast_sha256": "a6cfeb88a3143abb95a85d5104cc9fdeaacecd49a2d73ef76835ed5d0d36ef26",
+    "python_bytecode_exit": 0,
+    "oracle_sha256": "a152399a2d6c25779725b25686076b118d64649b94a94dc2a1cf7bb4dfaf6922"
+  },
+  "lt_mixed_lit": {
+    "source_sha256": "6df2ddf23148f8c649445f05b1d038c2b3619e81fc7379fea123d4ce12234399",
+    "python_ast_exit": 0,
+    "ast_sha256": "3ff44dda3157d5ede28b0163d2afd2418200c8ef9c1e2adf030aa8044d8e3fd9",
+    "python_bytecode_exit": 0,
+    "oracle_sha256": "ef65d67e6760645614ee68d07d30ba3a93ed28f3663226e616201175314f9247"
+  },
+  "boolop_and3": {
+    "source_sha256": "23382e14d46ecd71a9eb8baf548bd1d95c6d88f9907c3945a91feb010f1188d4",
+    "python_ast_exit": 0,
+    "ast_sha256": "c4d23cfdebc385251eb964ba3a60eff9dfe06b97da6be107fa65cb2c66c34d56",
+    "python_bytecode_exit": 0,
+    "oracle_sha256": "a8e487f3345c0014b3002db12f82c7f52278e99d3fcb5a87e59a5291806146e3"
+  },
+  "i12_immut_with_storage": {
+    "source_sha256": "8ddb9cc6b9b3332b9e7ac6399a69933836453ad0009e6e3fb5682202fc319ddb",
+    "python_ast_exit": 0,
+    "ast_sha256": "953ac53d9acac471bc552a2b4a500dc153bd1f525555693d2e9a1ee04795c976",
+    "python_bytecode_exit": 0,
+    "oracle_sha256": "499996d58c5a8cf17937906d5b4b0f1355e04f212fd6e1b4d6104168f47fe693"
+  },
+  "p29_imm_multi": {
+    "source_sha256": "273128825d1398bfcfd2291a23de473f41be5e1854a16e2c30216289b84ae418",
+    "python_ast_exit": 0,
+    "ast_sha256": "5c3dcc72daf700a3efdd9075bc777f90048381435ca16d0e66d2530f392bf4ab",
+    "python_bytecode_exit": 0,
+    "oracle_sha256": "853df9a713410b9aefdec42b4de3d7ef139b54bee15affeb1e0f29ca71de831f"
+  },
+  "c16_const_string_in_expr": {
+    "source_sha256": "a7f26567b7b849acfb38f56862d510ae2e83e8174e6d940b4d4c1540b6c57529",
+    "python_ast_exit": 0,
+    "ast_sha256": "b1495e4e6555d88cbcb6ba25a990dc74b33e397d002455163ba2e885a89e0efe",
+    "python_bytecode_exit": 0,
+    "oracle_sha256": "e251a16952883c74f7b56a8d2f4ad4c50e6d8c07021c46212a8e90038ccd1ff2"
+  },
+  "c27_const_binop_fold": {
+    "source_sha256": "3e11f98e4b97e6990c64dc080de9592ee9ec06d1b39a3eb1c20ed202b73b92f1",
+    "python_ast_exit": 0,
+    "ast_sha256": "d3b966712debfede3a1d4025c44fc5850e3d2a6e147fad58fd96b104d616822e",
+    "python_bytecode_exit": 0,
+    "oracle_sha256": "78018a4399b3cde262fcae323bae8e601bf972ce17a24742660c738a45d6d211"
+  },
+  "rc09_abi_encode_data": {
+    "source_sha256": "e356ac466773485a2ca6dc08d433c6819a7350c2d5b6f9a6a8349e3a10a748b0",
+    "python_ast_exit": 0,
+    "ast_sha256": "edda0a8332a3a3a1a4569ce6a3597af4633a13cfb31bfd145d7205e9b43c3432",
+    "python_bytecode_exit": 0,
+    "oracle_sha256": "39d4ab46d26a755f9f0a15223e6f8793e53fd0163d55d3e7f20d7ca8e945983f"
+  },
+  "rr03_abi": {
+    "source_sha256": "a010436d3d2116452e9cb568307488cb34bb09555b38a82922227fe1382e5d3a",
+    "python_ast_exit": 0,
+    "ast_sha256": "1082997092124842dbad71f83d2a15592e17b36b454cd2f24d24219ee2566597",
+    "python_bytecode_exit": 0,
+    "oracle_sha256": "9518c69893fdb346ec17c5b46fceb0ee39eb545c723694733ab15904d41526f1"
+  }
+}

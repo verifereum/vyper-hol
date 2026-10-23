@@ -1,0 +1,16 @@
+evalCompilerSubsetAbiEventsTheory built
+evalCompilerSubsetAbiInternalCallsTheory built
+holbuild: warning: checkpoint budget: checkpoint_gb_before=5.2 checkpoint_gb_after=4.6 checkpoint_max_gb=5.0 checkpoint_bytes_before=5604478854 checkpoint_bytes_after=4984462815 checkpoint_max_bytes=5368709120 evicted=2 checkpoint_limit_gb=5
+evalCompilerBytecodeAbiEventsLoweringTheory built
+evalCompilerBytecodeAbiEventsPrePipelineTheory built
+holbuild: warning: checkpoint budget: checkpoint_gb_before=5.1 checkpoint_gb_after=4.6 checkpoint_max_gb=5.0 checkpoint_bytes_before=5446723162 checkpoint_bytes_after=4890161347 checkpoint_max_bytes=5368709120 evicted=1 checkpoint_limit_gb=5
+evalCompilerBytecodeAbiExternalDynamicPipelineTheory built
+evalCompilerBytecodeAbiExternalDynamicTheory built
+holbuild: warning: checkpoint budget: checkpoint_gb_before=5.1 checkpoint_gb_after=4.9 checkpoint_max_gb=5.0 checkpoint_bytes_before=5460496803 checkpoint_bytes_after=5260122700 checkpoint_max_bytes=5368709120 evicted=1 checkpoint_limit_gb=5
+evalCompilerBytecodeAbiEventsWalkPipelineTheory built
+evalCompilerBytecodeAbiEventsCodegenReadyTheory built
+holbuild: warning: checkpoint budget: checkpoint_gb_before=6.3 checkpoint_gb_after=4.3 checkpoint_max_gb=5.0 checkpoint_bytes_before=6718352924 checkpoint_bytes_after=4657262245 checkpoint_max_bytes=5368709120 evicted=3 checkpoint_limit_gb=5
+evalCompilerBytecodeAbiEventsPipelineTheory built
+holbuild: hol run failed while building theory script
+instrumented log: /home/lukasz/work/vyper-hol/worktrees/issue-543/.holbuild/logs/current/vyper-hol/evalCompilerBytecodeAbiInternalTupleLoweringTheory/instrumented-failure.log
+

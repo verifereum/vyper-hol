@@ -1,0 +1,4 @@
+evalCompilerSubsetStateTheory built
+holbuild: warning: checkpoint budget: checkpoint_gb_before=5.1 checkpoint_gb_after=4.4 checkpoint_max_gb=5.0 checkpoint_bytes_before=5430878592 checkpoint_bytes_after=4693280216 checkpoint_max_bytes=5368709120 evicted=1 checkpoint_limit_gb=5
+evalCompilerBytecodeStateTheory built
+holbuild finished in 252.965s

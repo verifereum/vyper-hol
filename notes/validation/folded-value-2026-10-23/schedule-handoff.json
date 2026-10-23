@@ -1,0 +1,18 @@
+{
+  "driver": 1543353,
+  "child": 2040590,
+  "argv": [
+    "holbuild",
+    "--maxheap",
+    "12000",
+    "-j3",
+    "build",
+    "--force=theory",
+    "--tactic-timeout",
+    "600",
+    "evalCompilerBytecodeAbiDynamicTheory",
+    "evalCompilerBytecodeFunctionModesTheory",
+    "evalCompilerBytecodeAssertRaiseTheory"
+  ],
+  "log": "/home/lukasz/work/vyper-hol/worktrees/issue-543/.agent-files/folded-value-validation/corpus/bounded-01.log"
+}

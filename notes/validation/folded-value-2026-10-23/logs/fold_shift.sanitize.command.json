@@ -1,0 +1,14 @@
+{
+  "argv": [
+    "/home/lukasz/work/vyper-hol/worktrees/issue-543/.agent-files/folded-value-validation/venv/bin/python",
+    "-I",
+    "/home/lukasz/work/vyper-hol/worktrees/issue-543/tests/sanitize_check_contract_json.py",
+    "/home/lukasz/work/vyper-hol/worktrees/issue-543/.agent-files/folded-value-validation/ast/fold_shift.jsonl",
+    "/home/lukasz/work/vyper-hol/worktrees/issue-543/.agent-files/folded-value-validation/ast/fold_shift.json",
+    "--replace",
+    "/home/lukasz/work/vyper-hol/worktrees/issue-543/.agent-files/folded-value-validation=folded-value-validation",
+    "--replace",
+    "/home/lukasz/work/vyper-hol/worktrees/issue-543=."
+  ],
+  "exit": 0
+}

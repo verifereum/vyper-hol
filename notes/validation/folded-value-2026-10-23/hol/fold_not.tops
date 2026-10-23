@@ -1,0 +1,7 @@
+[FunctionDecl External Nonpayable F F "f" [("x",BaseT BoolT)] []
+   (BaseT BoolT)
+   [Return
+      (SOME
+         (IfExp (BaseT BoolT) (Name (BaseT BoolT) "x")
+            (Literal (BaseT BoolT) (BoolL F))
+            (Literal (BaseT BoolT) (BoolL F))))]]

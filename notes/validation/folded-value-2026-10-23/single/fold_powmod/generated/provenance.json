@@ -1,0 +1,36 @@
+{
+  "dependencies": {
+    "cbor2": "5.9.0",
+    "immutables": "0.21",
+    "lark": "1.1.9",
+    "packaging": "26.3",
+    "pycryptodome": "3.23.0",
+    "wheel": "0.48.0"
+  },
+  "fixtures": {
+    "fold_powmod": {
+      "deploy_sha256": "92f8343dc2446d753fcc7a703073ad3d733d0f46cfebc66ad43706d685a07f90",
+      "runtime_sha256": "5a5872335c78fd0b60d3afaf5948b37c84f29d0fab6838dabd5e50a8811d2f18",
+      "source": "python-o1-no-asm-opt-sources/fold_powmod.vy",
+      "source_sha256": "028d64777c8ce814f4c0b767b013de184849cee6cc042f6631315ce05deafb04"
+    }
+  },
+  "producer": "pinned Python Vyper",
+  "python_version": "3.11.11",
+  "schema_version": 2,
+  "settings": {
+    "bytecode_metadata": false,
+    "evm_version": "prague",
+    "experimental_codegen": true,
+    "final_assembly_optimization": false,
+    "optimization_level": "NONE",
+    "outputs": [
+      "bytecode",
+      "bytecode_runtime"
+    ],
+    "venom_ir_pipeline": "O1"
+  },
+  "uv_version": "0.10.11",
+  "vyper_commit": "cd74ce4f57e3771aeeab8f061fa3be45bfe8a29c",
+  "vyper_version": "0.5.0a4+cd74ce4f"
+}

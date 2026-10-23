@@ -1,0 +1,2 @@
+evalCompilerBytecodeTheory {'argv': ['holbuild', '--maxheap', '12000', 'build', '--force=theory', '--tactic-timeout', '600', 'evalCompilerBytecodeTheory'], 'exit': 0, 'seconds': 241.093}
+evalCompilerBytecodeControlTheory {'argv': ['holbuild', '--maxheap', '12000', 'build', '--force=theory', '--tactic-timeout', '600', 'evalCompilerBytecodeControlTheory'], 'exit': 0, 'seconds': 334.079}

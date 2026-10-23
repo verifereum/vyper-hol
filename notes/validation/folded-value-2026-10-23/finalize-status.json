@@ -1,0 +1,22 @@
+[
+  {
+    "step": "prep-build",
+    "argv": [
+      "holbuild",
+      "build",
+      "foldedValueValidationPrepTheory"
+    ],
+    "exit": 0
+  },
+  {
+    "step": "theorem-audit",
+    "argv": [
+      "holbuild",
+      "--maxheap",
+      "12000",
+      "run",
+      ".folded_value_audit.sml"
+    ],
+    "exit": 0
+  }
+]

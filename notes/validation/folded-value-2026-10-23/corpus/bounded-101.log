@@ -1,0 +1,21 @@
+evalCompilerSubsetBuiltinsTheory built
+evalCompilerBytecodeRaiseBareTheory built
+evalCompilerBytecodeBuiltinsEnvCoreTheory built
+evalCompilerBytecodeBuiltinsEnvBlockTheory built
+evalCompilerBytecodeBuiltinsAccountHashTheory built
+evalCompilerBytecodeScalarLiteralsBytesPipelineTheory built
+evalCompilerBytecodeScalarLiteralsBytesTheory built
+evalCompilerBytecodeBuiltinsEcTheory built
+resuming evalCompilerBytecodeScalarArithmeticTheory
+  from: theorem-context checkpoint after scalar_arith_decimal_sub_matches_python_oracle
+  continuing at: /home/lukasz/work/vyper-hol/worktrees/issue-543/./lowering/defs/bytecode/eval/evalCompilerBytecodeScalarArithmeticScript.sml:91:4
+evalCompilerBytecodeScalarLiteralsTheory built
+resuming evalCompilerBytecodeScalarConvertIntToDecimalTheory
+  from: theorem-context checkpoint after scalar_convert_int_to_decimal_policy_computed
+  continuing at: /home/lukasz/work/vyper-hol/worktrees/issue-543/./lowering/defs/bytecode/eval/evalCompilerBytecodeScalarConvertIntToDecimalScript.sml:63:4
+evalCompilerBytecodeScalarWidthsTheory built
+evalCompilerBytecodeScalarArithmeticTheory built
+evalCompilerBytecodeScalarConvertBytes32ToDecimalTheory built
+holbuild: hol run failed while building theory script
+instrumented log: /home/lukasz/work/vyper-hol/worktrees/issue-543/.holbuild/logs/current/vyper-hol/evalCompilerBytecodeScalarConvertIntToDecimalTheory/instrumented-failure.log
+

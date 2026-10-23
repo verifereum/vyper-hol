@@ -1,0 +1,7 @@
+[FunctionDecl External Pure F F "f" [("a",BaseT (StringT 40))] []
+   (BaseT (BytesT (Dynamic 132)))
+   [Return
+      (SOME
+         (TypeBuiltin (BaseT (BytesT (Dynamic 132)))
+            (AbiEncode F (SOME [222w; 173w; 190w; 239w]))
+            (TupleT [BaseT (StringT 40)]) [Name (BaseT (StringT 40)) "a"]))]]
