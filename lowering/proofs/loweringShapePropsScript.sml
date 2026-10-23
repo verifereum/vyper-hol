@@ -2929,6 +2929,96 @@ Proof
                `\u st. T`] >> simp[compile_revert_with_reason_shape]
 QED
 
+Theorem stmt_log_emit_shape[local]:
+  !internal ops.
+    shape_step internal compiler_label (\st. EVERY (plain_operand st) ops)
+      (emit_inst LOG ops []) (\u st. T)
+Proof
+  rpt gen_tac >> stmt_drop (ho_match_mp_tac stmt_shape_emit_inst >>
+    simp[shape_stable_plain_operands] >> conj_tac
+    >- (simp[EVERY_MEM, label_or_plain_def] >> metis_tac[]) >>
+    stmt_shape_emit_simp >>
+    simp[EVERY_MEM, plain_operand_def] >>
+    rpt strip_tac >> res_tac >> gvs[stackPlanTypesTheory.is_label_operand_def])
+QED
+
+Theorem compile_log_shape[local]:
+  !event_id args cenv lctx ty internal.
+    ~supported_exprs_exists expr_shape_root args ==>
+    shape_step internal compiler_label (\st. cenv_shape_ok st cenv)
+      (compile_stmt cenv lctx ty (Log event_id args)) (\u st. T)
+Proof
+  rpt strip_tac >> simp[Once compile_stmt_def] >>
+  Cases_on `cenv.ce_event_info (nsid_to_string event_id)`
+  >- (simp[] >> stmt_drop (ho_match_mp_tac stmt_shape_emit_inst >>
+       simp[cenv_shape_ok_stable] >> stmt_shape_emit_simp)) >>
+  rename1 `SOME event_info` >> PairCases_on `event_info` >>
+  simp[stmt_return_bind] >>
+  stmt_bind `\ops st. EVERY (\p. plain_operand st (FST p)) ops` `ops`
+    (irule compile_log_eval_all_shape >> simp[]) >>
+  qmatch_goalsub_abbrev_tac `compile_log_topic_ops topics` >>
+  qmatch_goalsub_abbrev_tac `NULL data_ops` >>
+  irule shape_step_conseq >>
+  qexistsl_tac [`compiler_label`,
+    `\st. EVERY (\p. plain_operand st (FST p)) topics /\
+          EVERY (\p. plain_operand st (FST p)) data_ops`, `\u st. T`] >>
+  simp [] >>
+  conj_tac >- (simp[Abbr `topics`, Abbr `data_ops`] >>
+                metis_tac[split_log_ops_plain]) >>
+  stmt_bind `\topic_ops st. EVERY (plain_operand st) topic_ops /\
+      EVERY (\p. plain_operand st (FST p)) data_ops` `topic_ops`
+    (ho_match_mp_tac stmt_shape_frame >>
+     qexists_tac `\st. EVERY (\p. plain_operand st (FST p)) topics` >>
+     simp[stmt_stable_fst_operands, compile_log_topic_ops_shape]) >>
+  IF_CASES_TAC
+  >- (irule shape_step_conseq >>
+      qexistsl_tac [`compiler_label`,
+        `\st. EVERY (plain_operand st)
+          (Lit (n2w (SUC (LENGTH topic_ops))) ::
+             (REVERSE topic_ops ++ [Lit (n2w event_info0)] ++ [Lit 0w; Lit 0w]))`,
+         `\u st. T`] >>
+      simp[stmt_log_emit_shape, EVERY_REVERSE, plain_operand_def,
+           stackPlanTypesTheory.is_label_operand_def]) >>
+  suspend "data"
+QED
+
+Resume compile_log_shape[data]:
+  stmt_bind `\buf st. plain_operand st buf.buf_operand /\
+    (EVERY (plain_operand st) topic_ops /\
+     EVERY (\p. plain_operand st (FST p)) data_ops)` `buf`
+    (ho_match_mp_tac stmt_shape_frame >> qexists_tac `\st. T` >>
+     simp[shape_stable_conj, shape_stable_plain_operands, stmt_stable_fst_operands,
+          compile_alloc_buffer_shape]) >>
+  stmt_sequence `\u st. T /\ (EVERY (plain_operand st) topic_ops /\
+                                 plain_operand st buf.buf_operand)`
+    (ho_match_mp_tac stmt_shape_frame >>
+     qexists_tac `\st. EVERY (\p. plain_operand st (FST p)) data_ops /\
+                       plain_operand st buf.buf_operand` >>
+     simp[shape_stable_conj, shape_stable_plain_operands, stmt_shape_stable_plain,
+          compile_log_store_data_shape]) >>
+  stmt_bind `\abi st. plain_operand st abi.buf_operand /\
+    (EVERY (plain_operand st) topic_ops /\ plain_operand st buf.buf_operand)` `abi`
+    (ho_match_mp_tac stmt_shape_frame >> qexists_tac `\st. T` >>
+     simp[shape_stable_conj, shape_stable_plain_operands, stmt_shape_stable_plain,
+          compile_alloc_buffer_shape]) >>
+  stmt_bind `\len st. plain_operand st len /\
+    (EVERY (plain_operand st) topic_ops /\ plain_operand st abi.buf_operand)` `len`
+    (ho_match_mp_tac stmt_shape_frame >>
+     qexists_tac `\st. plain_operand st abi.buf_operand /\ plain_operand st buf.buf_operand` >>
+     simp[shape_stable_conj, shape_stable_plain_operands, stmt_shape_stable_plain,
+          cj 2 compile_abi_encode_shape]) >>
+  irule shape_step_conseq >>
+  qexistsl_tac [`compiler_label`,
+    `\st. EVERY (plain_operand st)
+      (Lit (n2w (SUC (LENGTH topic_ops))) ::
+       (REVERSE topic_ops ++ [Lit (n2w event_info0)] ++ [len; abi.buf_operand]))`,
+    `\u st. T`] >>
+  simp[stmt_log_emit_shape, EVERY_REVERSE, plain_operand_def,
+       stackPlanTypesTheory.is_label_operand_def]
+QED
+
+Finalise compile_log_shape
+
 Theorem compile_stmt_shape:
   (!cenv lctx ty s.
      ~supported_stmt_expr_exists expr_shape_root s ==>
