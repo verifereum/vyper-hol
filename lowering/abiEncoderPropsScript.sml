@@ -23,7 +23,7 @@ Ancestors
   abiEncoder compileEnv
   venomExecSemantics venomState venomInst venomMemProps
   valueEncoding valueEncodingProps
-  vyperABI vyperTyping contractABI
+  vyperABI vyperTyping contractABI fragExec
 Libs
   dep_rewrite wordsLib
 
@@ -705,38 +705,98 @@ Resume compile_abi_encode_to_buf_correct[prim]:
 QED
 
 Resume compile_abi_encode_to_buf_correct[bytestring]:
+  (* False as stated: dst and src may overlap.  The MSTORE that zeroes the
+     last data word runs before MCOPY reads the source, so with dst = src = 0
+     and a Bytes[1] value [5], the data byte at 32 is zeroed before it is
+     copied. *)
   cheat
 QED
 
 Resume compile_abi_encode_to_buf_correct[copy]:
+  (* False as stated: cenv's struct field sizes are not tied to tenv, so a
+     static struct with cenv.ce_struct_fields = FEMPTY compiles to AbiCopy 0
+     and copies nothing.  For the compile environment the compiler builds,
+     build_compile_env_type_memory_bytes (structFieldsProps) gives the size;
+     the copy itself is a single MCOPY. *)
   cheat
 QED
 
 Resume compile_abi_encode_to_buf_correct[dynarray]:
+  (* False as stated: single_block_enc_info accepts AbiDynArray with static
+     elements, but compile_abi_encode_dyn_static_loop opens three new blocks
+     for its loop, so same_blocks fails, e.g. for DynArray[uint256, 3]
+     holding []. *)
   cheat
 QED
 
 Resume compile_abi_encode_to_buf_correct[complex_nil]:
+  (* True; not yet proved. *)
   cheat
 QED
 
 Resume compile_abi_encode_to_buf_correct[complex_cons]:
+  (* False as stated, and not provable from its induction hypothesis: in a
+     single-block encoding only the has-dynamic-part branch is reachable, but
+     the child hypothesis covers only static (~is_dyn) children, and the
+     dynamic-offset ALLOCA cell is unconstrained, so the memory frame
+     conjunct can fail. *)
   cheat
 QED
 
 Resume compile_abi_encode_to_buf_correct[elems_nil]:
+  (* True; not yet proved. *)
   cheat
 QED
 
 Resume compile_abi_encode_to_buf_correct[elems_cons]:
+  (* False as stated: nothing ties an element's value to vyper_to_abi or
+     its encoded size to abi_sz, so an element can be claimed at a size its
+     encoding does not have. *)
   cheat
 QED
 
 Resume compile_abi_encode_to_buf_correct[dyn_loop]:
+  (* True; not yet proved. *)
   cheat
 QED
 
 Finalise compile_abi_encode_to_buf_correct
+
+(* ===== Static copy ===== *)
+
+(* An ABI-static value is laid out in memory exactly as its ABI encoding, so
+   AbiCopy encodes it with one MCOPY.  Venom's mcopy reads the whole source
+   before writing, so the source and destination may overlap; the
+   destination may lie past the end of memory, which then grows.
+   mem_size < dimword (:256) is not implied by evaluate_type, which bounds
+   the slot size, not the memory size. *)
+Theorem compile_abi_encode_copy_frag:
+  ∀ctx dst src mem_size st op st' s0 dst_w src_w tenv ty tv v av R.
+    compile_abi_encode_to_buf dst src (AbiCopy mem_size) st = (op, st') ∧
+    evaluate_type tenv ty = SOME tv ∧
+    ¬is_dynamic (vyper_to_abi_type tenv ty) ∧
+    mem_size = type_memory_size tv ∧
+    mem_size < dimword (:256) ∧
+    value_has_type tv v ∧
+    vyper_to_abi tenv ty v = SOME av ∧
+    eval_operand dst s0 = SOME dst_w ∧
+    eval_operand src s0 = SOME src_w ∧
+    val_in_memory tv v (w2n src_w) s0.vs_memory
+    ⇒
+    frag_exec ctx st st' (λs. s = s0)
+      (λs. eval_operand op s = SOME (n2w mem_size) ∧
+           mem_bytes_at (w2n dst_w) mem_size s.vs_memory =
+             enc (vyper_to_abi_type tenv ty) av ∧
+           (∀x w. not_fresh_at st x ∧ lookup_var x s0 = SOME w ⇒
+                  lookup_var x s = SOME w) ∧
+           s.vs_allocas = s0.vs_allocas ∧
+           (∀a. a < LENGTH s0.vs_memory ∧
+                (a < w2n dst_w ∨ w2n dst_w + mem_size ≤ a) ⇒
+                EL a s.vs_memory = EL a s0.vs_memory) ∧
+           LENGTH s0.vs_memory ≤ LENGTH s.vs_memory) R
+Proof
+  cheat
+QED
 
 (* ===== Element Pointer ===== *)
 
