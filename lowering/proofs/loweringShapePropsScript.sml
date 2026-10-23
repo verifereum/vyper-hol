@@ -374,6 +374,28 @@ QED
 
 (* supported_expr rejects Env MsgGas and every raw_call form, and accepts
    builtins only at the arity their dispatcher reads. *)
+Theorem supported_builtin_form_shape_root[local]:
+  supported_builtin_form tops ty bi es ==>
+  ~expr_shape_root (Builtin ty bi es)
+Proof
+  Cases_on `bi` >>
+  simp[supportedExprFormsTheory.supported_builtin_form_def,
+       expr_shape_root_def, builtin_arity_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  rpt (BasicProvers.FULL_CASE_TAC >> gvs[])
+QED
+
+Theorem supported_type_builtin_form_shape_root[local]:
+  supported_type_builtin_form tops ty tb target es ==>
+  ~expr_shape_root (TypeBuiltin ty tb target es)
+Proof
+  Cases_on `tb` >>
+  simp[supportedExprFormsTheory.supported_type_builtin_form_def,
+       expr_shape_root_def, type_builtin_arity_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  rpt (BasicProvers.FULL_CASE_TAC >> gvs[])
+QED
+
 Theorem supported_function_body_shape:
   !tops vis args body.
     supported_function_body tops vis args body ==>
@@ -618,7 +640,8 @@ Proof
   simp[o1_source_unit_ok_def, unit_shape_ok_def, entry_fn_first_def,
        mk_venom_context_def, internal_termination_ok_def,
        mk_raw_function_fields] >>
-  rpt strip_tac >> gvs[] >> res_tac >> fs[EVERY_MEM]
+  rpt strip_tac >> gvs[] >>
+  rpt (BasicProvers.FULL_CASE_TAC >> gvs[]) >> res_tac >> fs[EVERY_MEM]
 QED
 
 (* package_internal_blocks splits the stream exactly at the segments. *)
