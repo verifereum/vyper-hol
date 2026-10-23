@@ -706,7 +706,11 @@ fun d_json_expr () : term decoder = achoose "expr" [
         check_ast_type "Int" $
           JSONDecode.map (fn (v, ty) => mk_JE_Int(v, ty)) $
           tuple2 (field "value" inttm,
-                  orElse(field "type" json_type, succeed JT_None_tm))
+                  orElse(field "type" json_type, succeed JT_None_tm)),
+        check_ast_type "List" $
+          JSONDecode.map (fn (es, ty) => mk_JE_List(es, ty)) $
+          tuple2 (field "elements" (array (delay d_json_expr)),
+                  field "type" json_type)
       ])),
 
   (* Attribute - extract result typeclass, base_type_name, base_typeclass, source_id, and type *)
