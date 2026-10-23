@@ -346,6 +346,39 @@ Proof
   cheat
 QED
 
+Theorem shape_state_initial_compile_state[local]:
+  !lbl. shape_state (initial_compile_state lbl)
+Proof
+  simp[initial_compile_state_def, shape_state_def, opaque_insts_ok_def,
+       state_insts_def, all_blocks_def]
+QED
+
+Theorem runtime_entry_blocks_shape[local]:
+  !st. shape_extends F jump_label_ok (initial_compile_state "__entry") st ==>
+    all_blocks st <> [] /\
+    (HD (all_blocks st)).bb_label = "__entry" /\
+    EVERY jump_label_ok (TL (MAP (\bb. bb.bb_label) (all_blocks st))) /\
+    EVERY (\bb. EVERY (lowered_inst_ok F) bb.bb_instructions) (all_blocks st)
+Proof
+  gen_tac >> strip_tac >>
+  `state_insts (initial_compile_state "__entry") = [] /\
+   MAP (\bb. bb.bb_label) (all_blocks (initial_compile_state "__entry")) =
+     ["__entry"]`
+    by simp[initial_compile_state_def, state_insts_def, all_blocks_def] >>
+  qpat_x_assum `shape_extends _ _ _ _` mp_tac >>
+  rewrite_tac[shape_extends_def] >> strip_tac >>
+  drule state_insts_cs_extends >>
+  drule block_labels_cs_extends >>
+  asm_rewrite_tac [] >> rpt strip_tac >>
+  qpat_x_assum `MAP _ (all_blocks (initial_compile_state _)) = _` kall_tac >>
+  qpat_x_assum `state_insts (initial_compile_state _) = _` kall_tac >>
+  fs[state_insts_def, EVERY_FLAT, EVERY_MAP] >>
+  Cases_on `all_blocks st` >> gvs[] >>
+  qpat_x_assum `EVERY (lowered_inst_ok F) _` mp_tac >>
+  qpat_x_assum `_ ++ _ = added_insts _ _` (fn th => rewrite_tac[GSYM th]) >>
+  simp[EVERY_FLAT, EVERY_MAP]
+QED
+
 (* The runtime block stream: entry code (dispatch, external bodies,
    fallback) followed by one segment per internal function. *)
 Theorem compile_generate_runtime_shape:
