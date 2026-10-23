@@ -379,6 +379,80 @@ Proof
   simp[EVERY_FLAT, EVERY_MAP]
 QED
 
+Theorem runtime_fallback_shape[local]:
+  !fallback_fn. fallback_shape_ok fallback_fn ==>
+    shape_step F jump_label_ok (\st. T)
+      (case fallback_fn of
+         NONE => emit_inst REVERT [Lit 0w; Lit 0w] []
+       | SOME (fb_cenv, fb_pay, fb_nr, fb_key, fb_trans, fb_view, fb_body, fb_ty) =>
+           compile_fallback_body fb_cenv fb_pay fb_nr fb_key fb_trans fb_view fb_body fb_ty)
+      (\x st. T)
+Proof
+  Cases >> simp[]
+  >- (strip_tac >> irule shape_step_conseq >>
+      qexistsl_tac [`jump_label_ok`,
+        `\st. T /\ EVERY (label_or_plain st) [Lit 0w; Lit 0w]`,
+        `\x st. T`] >>
+      conj_tac >- simp[] >>
+      conj_tac
+      >- simp[label_or_plain_def, plain_operand_def,
+              stackPlanTypesTheory.is_label_operand_def] >>
+      conj_tac >- simp[] >>
+      ho_match_mp_tac shape_step_emit_inst >>
+      simp[shape_stable_def, lowered_inst_ok_def, mk_inst_def,
+           raw_opcode_ok_def, inst_shape_ok_def, jump_labels_ok_def,
+           is_param_opcode_def, is_read0_opcode_def, label_positions_ok_def,
+           is_terminator_def, stackPlanTypesTheory.is_label_operand_def]) >>
+  PairCases_on `x` >> strip_tac >>
+  drule compile_fallback_body_shape >> strip_tac >>
+  irule shape_step_conseq >>
+  qexistsl_tac [`compiler_label`, `\st. T`, `\x st. T`] >>
+  simp[jump_label_ok_def]
+QED
+
+Theorem runtime_entry_prefix_shape[local]:
+  !selectors external_fns fallback_fn.
+    EVERY (\(sel, lbl, z). isPREFIX "fn_" lbl) selectors /\
+    EVERY external_fn_shape_ok external_fns /\ fallback_shape_ok fallback_fn ==>
+    shape_step F jump_label_ok (\st. T)
+      (do fallback_lbl <- fresh_label "fallback";
+          compile_selector_dispatch_linear
+            (MAP (\(sel, lbl, z). (sel, lbl)) selectors) fallback_lbl;
+          compile_external_fn_bodies external_fns;
+          new_block fallback_lbl;
+          (case fallback_fn of
+             NONE => emit_inst REVERT [Lit 0w; Lit 0w] []
+           | SOME (fb_cenv, fb_pay, fb_nr, fb_key, fb_trans, fb_view, fb_body, fb_ty) =>
+               compile_fallback_body fb_cenv fb_pay fb_nr fb_key fb_trans fb_view fb_body fb_ty)
+       od) (\x st. T)
+Proof
+  rpt gen_tac >> strip_tac >>
+  irule shape_step_bind >>
+  qexists_tac `\l st. T /\ compiler_label l` >>
+  reverse conj_tac
+  >- (ho_match_mp_tac shape_step_fresh_label >> simp[shape_stable_def]) >>
+  gen_tac >> BETA_TAC >>
+  Cases_on `compiler_label x`
+  >- (irule shape_step_conseq >>
+      qexistsl_tac [`jump_label_ok`, `\st. T`, `\x st. T`] >>
+      simp[] >>
+      irule shape_step_ignore_bind >> qexists_tac `\x st. T` >>
+      reverse conj_tac
+      >- (irule compile_selector_dispatch_linear_shape >>
+          simp[jump_label_ok_def, EVERY_MAP] >>
+          fs[EVERY_MEM, pairTheory.FORALL_PROD, jump_label_ok_def] >>
+          metis_tac[]) >>
+      gen_tac >> BETA_TAC >>
+      irule shape_step_ignore_bind >> qexists_tac `\x st. T` >>
+      reverse conj_tac >- (irule compile_external_fn_bodies_shape >> simp[]) >>
+      gen_tac >> BETA_TAC >>
+      irule shape_step_ignore_bind >> qexists_tac `\x st. T` >>
+      reverse conj_tac
+      >- (ho_match_mp_tac shape_step_new_block >> simp[shape_stable_def, jump_label_ok_def]) >>
+      gen_tac >> BETA_TAC >> irule runtime_fallback_shape >> simp[]) >>
+  simp[shape_step_def]
+QED
+
 (* The runtime block stream: entry code (dispatch, external bodies,
    fallback) followed by one segment per internal function. *)
 Theorem compile_generate_runtime_shape:
