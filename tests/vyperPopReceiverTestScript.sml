@@ -46,6 +46,24 @@ Definition nested_pop_result_def:
   nested_pop_result = eval_stmts nested_pop_context ^roundtrip_body empty_state
 End
 
+val nested_pop_result_pre_def = nested_pop_result_def
+  |> SRULE [eval_stmts_eq_cont_cps]
+  |> cv_auto_trans_pre "nested_pop_result_pre";
+
+Theorem nested_pop_result_pre[cv_pre]:
+  nested_pop_result_pre
+Proof
+  rw[nested_pop_result_pre_def]
+  >> rw[cont_pre_IS_SOME_cont]
+  >> qmatch_goalsub_abbrev_tac `eval_stmts_cps cx ss st k`
+  >> qspecl_then [`cx`,`ss`,`st`,`k`] mp_tac $ cj 2 eval_cps_eq
+  >> rw[]
+  >> CASE_TAC
+  >> CASE_TAC
+  >> rw[Abbr `k`, cont_def]
+  >> rw[Once WhileTheory.OWHILE_THM]
+QED
+
 (* Temporary preparation: retain the previous proof while the bounded
    CPS/CV proof is developed under the default tactic limit.
 Proof
