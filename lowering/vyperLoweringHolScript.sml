@@ -8,6 +8,7 @@ Ancestors
   loweringSlice
   valueEncodingProofs
   localPtrsProps
+  structFieldsProps
   (* compiler + correctness *)
   vyperCompiler
   vyperLoweringCorrect
