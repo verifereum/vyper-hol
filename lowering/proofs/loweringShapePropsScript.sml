@@ -697,6 +697,166 @@ Proof
 QED
 
 
+Theorem wrap_truncate_shape[local]:
+  !internal res ty.
+    shape_step internal compiler_label (\st. plain_operand st res)
+      (wrap_truncate res ty) (\x st. plain_operand st x)
+Proof
+  rpt gen_tac >> simp[wrap_truncate_def] >> IF_CASES_TAC
+  >- (IF_CASES_TAC >> stmt_plain_emit) >>
+  irule shape_step_return >> simp[]
+QED
+
+Theorem compile_compare_shape[local]:
+  !internal op x y ty.
+    shape_step internal compiler_label
+      (\st. plain_operand st x /\ plain_operand st y)
+      (compile_compare op x y ty) (\z st. plain_operand st z)
+Proof
+  rpt gen_tac >> Cases_on `op` >> simp[compile_compare_def] >>
+  TRY (IF_CASES_TAC) >> FIRST [
+    stmt_plain_emit >> NO_TAC,
+    (irule shape_step_bind >> qexists_tac `\x st. plain_operand st x` >>
+     conj_tac
+     >- (gen_tac >> BETA_TAC >> stmt_plain_emit) >> stmt_plain_emit) >> NO_TAC,
+    (irule shape_step_ignore_bind >>
+     qexists_tac `\u st. plain_operand st x /\ plain_operand st y` >>
+     conj_tac
+     >- (gen_tac >> BETA_TAC >> irule shape_step_return >>
+         simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def]) >>
+     ho_match_mp_tac stmt_shape_emit_inst >>
+     simp[shape_stable_conj, stmt_shape_stable_plain, label_or_plain_def] >>
+     stmt_shape_emit_simp)]
+QED
+
+Theorem compile_select_shape[local]:
+  !internal cond_op then_op else_op.
+    shape_step internal compiler_label
+      (\st. plain_operand st cond_op /\ plain_operand st then_op /\
+            plain_operand st else_op)
+      (compile_select cond_op then_op else_op) (\z st. plain_operand st z)
+Proof
+  rpt gen_tac >> simp[builtinSimpleTheory.compile_select_def] >> irule shape_step_bind >>
+  qexists_tac `\diff st. plain_operand st diff /\
+                         (plain_operand st cond_op /\ plain_operand st else_op)` >>
+  conj_tac
+  >- (qx_gen_tac `diff` >> BETA_TAC >> irule shape_step_bind >>
+      qexists_tac `\scaled st. plain_operand st scaled /\ plain_operand st else_op` >>
+      conj_tac
+      >- (gen_tac >> BETA_TAC >> stmt_plain_emit) >>
+      ho_match_mp_tac stmt_shape_frame >>
+      qexists_tac `\st. plain_operand st cond_op /\ plain_operand st diff` >>
+      simp[stmt_shape_stable_plain] >> stmt_plain_emit) >>
+  ho_match_mp_tac stmt_shape_frame >>
+  qexists_tac `\st. plain_operand st then_op /\ plain_operand st else_op` >>
+  simp[stmt_shape_stable_plain, shape_stable_conj] >> stmt_plain_emit
+QED
+
+val stmt_plain_void_drop =
+  qmatch_goalsub_abbrev_tac `shape_step _ _ pre _ _` >>
+  irule shape_step_conseq >>
+  qexistsl_tac [`compiler_label`, `pre`, `\x st. pre st`] >>
+  simp[Abbr `pre`] >> stmt_plain_void;
+fun stmt_frame_emit input =
+  ho_match_mp_tac stmt_shape_frame >> qexists_tac input >>
+  simp[stmt_shape_stable_plain, shape_stable_conj] >> stmt_plain_emit;
+
+Theorem compile_clamp_shape[local]:
+  !internal val_op ty.
+    shape_step internal compiler_label (\st. plain_operand st val_op)
+      (compile_clamp val_op ty) (\x st. T)
+Proof
+  rpt gen_tac >> simp[compile_clamp_def] >> pairarg_tac >> simp[] >>
+  IF_CASES_TAC
+  >- (irule shape_step_bind >>
+      qexists_tac `\a st. plain_operand st a /\ plain_operand st val_op` >>
+      conj_tac
+      >- (qx_gen_tac `slt_lo` >> BETA_TAC >> irule shape_step_bind >>
+          qexists_tac `\a st. plain_operand st a /\ plain_operand st val_op` >>
+          conj_tac
+          >- (qx_gen_tac `ge_lo` >> BETA_TAC >> irule shape_step_bind >>
+              qexists_tac `\a st. plain_operand st a /\ plain_operand st ge_lo` >>
+              conj_tac
+              >- (qx_gen_tac `sgt_hi` >> BETA_TAC >> irule shape_step_bind >>
+                  qexists_tac `\a st. plain_operand st a /\ plain_operand st ge_lo` >>
+                  conj_tac
+                  >- (gen_tac >> BETA_TAC >> irule shape_step_bind >>
+                      qexists_tac `\a st. plain_operand st a` >> conj_tac
+                      >- (gen_tac >> BETA_TAC >> stmt_plain_void_drop) >>
+                      stmt_plain_emit) >>
+                  stmt_frame_emit `\st. plain_operand st sgt_hi`) >>
+              stmt_frame_emit `\st. plain_operand st val_op`) >>
+          stmt_frame_emit `\st. plain_operand st slt_lo`) >>
+      stmt_frame_emit `\st. plain_operand st val_op`) >>
+  irule shape_step_bind >> qexists_tac `\a st. plain_operand st a` >> conj_tac
+  >- (gen_tac >> BETA_TAC >> irule shape_step_bind >>
+      qexists_tac `\a st. plain_operand st a` >> conj_tac
+      >- (gen_tac >> BETA_TAC >> stmt_plain_void_drop) >> stmt_plain_emit) >>
+  stmt_plain_emit
+QED
+
+Theorem clamp_and_return_shape[local]:
+  !internal res ty.
+    shape_step internal compiler_label (\st. plain_operand st res)
+      (clamp_and_return res ty) (\x st. plain_operand st x)
+Proof
+  rpt gen_tac >> simp[clamp_and_return_def] >> irule shape_step_ignore_bind >>
+  qexists_tac `\x st. T /\ plain_operand st res` >> conj_tac
+  >- (gen_tac >> BETA_TAC >> irule shape_step_return >> simp[]) >>
+  ho_match_mp_tac stmt_shape_frame >> qexists_tac `\st. plain_operand st res` >>
+  simp[compile_clamp_shape, stmt_shape_stable_plain]
+QED
+
+Theorem stmt_nonzero_then_shape[local]:
+  !internal P y m Q.
+    shape_stable P /\ (!st. P st ==> plain_operand st y) /\
+    shape_step internal compiler_label P m Q ==>
+    shape_step internal compiler_label P
+      (do z <- emit_op ISZERO [y];
+          nz <- emit_op ISZERO [z];
+          emit_void ASSERT [nz]; m od) Q
+Proof
+  rpt strip_tac >> irule shape_step_bind >>
+  qexists_tac `\z st. plain_operand st z /\ P st` >> conj_tac
+  >- (qx_gen_tac `zero_op` >> BETA_TAC >> irule shape_step_bind >>
+      qexists_tac `\z st. plain_operand st z /\ P st` >> conj_tac
+      >- (gen_tac >> BETA_TAC >> irule shape_step_ignore_bind >>
+          qexists_tac `\u st. P st` >> conj_tac
+          >- (gen_tac >> BETA_TAC >> simp[ETA_THM]) >>
+          stmt_plain_void_drop) >>
+      stmt_frame_emit `\st. plain_operand st zero_op`) >>
+  stmt_frame_emit `\st. plain_operand st y`
+QED
+
+Theorem compile_safe_mod_shape[local]:
+  !internal x y ty.
+    shape_step internal compiler_label
+      (\st. plain_operand st x /\ plain_operand st y)
+      (compile_safe_mod x y ty) (\z st. plain_operand st z)
+Proof
+  rpt gen_tac >> simp[compile_safe_mod_def] >>
+  ho_match_mp_tac stmt_nonzero_then_shape >>
+  simp[shape_stable_conj, stmt_shape_stable_plain] >>
+  IF_CASES_TAC >> stmt_plain_emit
+QED
+
+Theorem compile_safe_decimal_div_shape[local]:
+  !internal x y divisor ty.
+    shape_step internal compiler_label
+      (\st. plain_operand st x /\ plain_operand st y)
+      (compile_safe_decimal_div x y divisor ty) (\z st. plain_operand st z)
+Proof
+  rpt gen_tac >> simp[compile_safe_decimal_div_def] >> irule shape_step_bind >>
+  qexists_tac `\z st. plain_operand st z /\ plain_operand st y` >> conj_tac
+  >- (qx_gen_tac `scaled` >> BETA_TAC >>
+      ho_match_mp_tac stmt_nonzero_then_shape >>
+      simp[shape_stable_conj, stmt_shape_stable_plain] >>
+      irule shape_step_bind >> qexists_tac `\z st. plain_operand st z` >> conj_tac
+      >- (gen_tac >> BETA_TAC >> irule clamp_and_return_shape) >>
+      stmt_plain_emit) >>
+  stmt_frame_emit `\st. plain_operand st x`
+QED
+
 (* For alan, by compile_stmt_ind.  internal is IS_SOME ce_return_pc: Return
    emits RET exactly when ce_return_pc is SOME, STOP/RETURN otherwise. *)
 Theorem compile_stmt_shape:
