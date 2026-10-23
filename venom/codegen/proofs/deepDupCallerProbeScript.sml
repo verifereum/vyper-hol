@@ -40,3 +40,22 @@ Proof
        fcpLib.INDEX_CONV ``dimindex(:256)``] >>
   rpt strip_tac >> gvs[is_var_operand_def] >> CONV_TAC EVAL
 QED
+
+(* A restored live first variable can grow the stack by two, not just one.
+   The resulting second deep DUP spills two copies of the restored variable. *)
+Theorem bump_restored_live_growth_probe:
+  let ps = (init_plan_state 0) with <|
+        ps_stack := [Var "deep"; Var "a"; Var "b"; Var "c";
+                     Var "d"; Var "e"; Var "f"; Var "g";
+                     Var "h"; Var "i"; Var "j"; Var "k";
+                     Var "l"; Var "m"; Var "n"; Var "o"];
+        ps_spilled := FEMPTY |+ (Var "z", 0);
+        ps_alloc := (init_spill_alloc 0) with sa_next_offset := 32 |>;
+      first = SND (emit_one_input BUMP ["deep"; "z"] (Var "z") ps)
+  in
+    LENGTH first.ps_stack = LENGTH ps.ps_stack + 2 /\
+    stack_get_depth (Var "deep") first.ps_stack = SOME 17 /\
+    top_n 2 first.ps_stack = [Var "z"; Var "z"]
+Proof
+  CONV_TAC EVAL
+QED
