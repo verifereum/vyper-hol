@@ -18,7 +18,8 @@
  *   venom_env_rel, initial_venom_state_rel -- PLAN 5.7 entry boundary
  *   external_call_result_rel, source_unit_execution_correct -- oracle boundary
  *   compile_state_ok_initial -- label-space invariant of the initial compile state
- *   external_return_word_result_rel, external_return_none_result_rel,
+ *   external_return_word_result_rel, external_return_prim_result_rel,
+ *   external_return_none_result_rel,
  *   external_fallthrough_result_rel -- S1 halt bridge (#640) for the
  *     return sequences loweringHalt covers
  *   lower_vyper_runtime_unit_correct -- S1 (planned admission, Milestone 6)
@@ -205,6 +206,44 @@ Proof
   impl_tac >- asm_rewrite_tac[] >> strip_tac >>
   qspecl_then [`ctx`, `op`, `ei`, `msz`, `nr`, `nkey`, `ut`, `iv`, `st`,
                `x`, `st'`, `val_to_w256 v0`] mp_tac
+    compile_external_return_word_frag >>
+  simp[] >> disch_then irule >> simp[] >> rpt strip_tac >>
+  qspecl_then [`func`, `cenv`, `cx`, `es`, `s`, `ss`, `tops`, `tx`, `srcs`,
+               `exps`, `layouts`] mp_tac external_halt_success >>
+  impl_tac >- simp[] >>
+  strip_tac >> gvs[external_call_result_rel_def]
+QED
+
+(* Returning a value of any word type (is_word_type: also address and
+   bytesN), held as the word typed_val_to_w256 gives, as
+   compile_name_correct gives it.  external_return_word_result_rel is the
+   case of the word values, where typed_val_to_w256 is val_to_w256. *)
+Theorem external_return_prim_result_rel:
+  !ctx op ei msz nr nkey ut iv st x st' func cenv cx es tenv ret tv v0 v
+     tops tx srcs exps layouts Q.
+    compile_external_return (SOME op) T F ei msz nr nkey ut iv st =
+      (x, st') /\
+    (nr ==> iv) /\ (!y. op = Var y ==> not_fresh_at st y) /\
+    evaluate_type tenv ret = SOME tv /\ safe_cast tv v0 = SOME v /\
+    is_word_type ret ==>
+    frag_exec ctx st st'
+      (\s. state_rel func cenv cx es s /\
+           eval_operand op s = SOME (typed_val_to_w256 tv v0) /\
+           s.vs_accounts =
+             process_deletions es.pending_deletions es.accounts /\
+           s.vs_transient = es.tStorage)
+      Q
+      (external_call_result_rel tops ret tx
+         (INL v, finalize_pending_deletions
+                   (abstract_machine_from_state srcs exps layouts es),
+          es.requests))
+Proof
+  rpt strip_tac >>
+  qspecl_then [`tops`, `tenv`, `ret`, `tv`, `v0`, `v`] mp_tac
+    return_bytes_prim_value >>
+  impl_tac >- asm_rewrite_tac[] >> strip_tac >>
+  qspecl_then [`ctx`, `op`, `ei`, `msz`, `nr`, `nkey`, `ut`, `iv`, `st`,
+               `x`, `st'`, `typed_val_to_w256 tv v0`] mp_tac
     compile_external_return_word_frag >>
   simp[] >> disch_then irule >> simp[] >> rpt strip_tac >>
   qspecl_then [`func`, `cenv`, `cx`, `es`, `s`, `ss`, `tops`, `tx`, `srcs`,

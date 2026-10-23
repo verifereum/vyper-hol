@@ -2,7 +2,8 @@
  * The halt half of S1 (#640): the return sequences of an external function
  * end in a Halt whose return data and effects are the success case of
  * external_call_result_rel (stated with it, in vyperLoweringCorrect, as
- * external_return_word_result_rel, external_return_none_result_rel and
+ * external_return_word_result_rel, external_return_prim_result_rel,
+ * external_return_none_result_rel and
  * external_fallthrough_result_rel).  The fragment lemmas are stated with
  * frag_exec (fragExec), like the statement lemmas of stmtLoweringProps and
  * loweringSlice.
@@ -11,6 +12,9 @@
  *   return_bytes_word_value — the canonical return bytes of a word value
  *                             (bool, integer, decimal, flag) are its
  *                             32-byte big-endian encoding
+ *   return_bytes_prim_value — the same for every word type the lowering
+ *                             returns with one MSTORE (also address and
+ *                             bytesN), the word given by typed_val_to_w256
  *   compile_external_return_word_frag — returning a primitive word value
  *                             halts with that word as return data
  *   compile_return_none_external_frag — a return without a value halts
@@ -38,12 +42,12 @@ Ancestors
   list rich_list finite_map
   fragExec loweringSlice
   stmtLowering moduleLowering context emitHelper emitHelperProps compileEnv
-  valueEncoding valueEncodingProps
+  valueEncoding valueEncodingProps venomMemProps
   e2eDefs vyperABI contractABI vyperInterpreter vyperState vyperValue
   vyperValueOperation vfmExecution
   venomExecSemantics venomInst venomInstProofs venomState
 Libs
-  monadsyntax
+  monadsyntax dep_rewrite wordsLib
 
 (* ===== Venom steps ===== *)
 
@@ -87,6 +91,39 @@ Proof
   >- (Cases_on `bv` >>
       simp[return_bytes_def, enc_def, REV_DEF, val_to_w256_def]) >>
   simp[return_bytes_def, enc_def, REV_DEF, val_to_w256_def] >>
+  rename1 `within_int_bound _ i` >> gvs[within_int_bound_def] >>
+  `~(i < 0)` by intLib.COOPER_TAC >>
+  simp[integer_wordTheory.i2w_def]
+QED
+
+(* The same for every word type the lowering returns with one MSTORE
+   (is_word_type: also address and bytesN), with the word the lowering
+   holds given by typed_val_to_w256, as compile_name_correct gives it: an
+   address is the 20 bytes right-aligned (the ABI's uint160), a bytesN
+   value its N bytes left-aligned (the ABI's bytesN, right-padded with
+   zeros), as the compiler's BytesM_T literals are. *)
+Theorem return_bytes_prim_value:
+  !tops tenv ret tv v0 v.
+    evaluate_type tenv ret = SOME tv /\ safe_cast tv v0 = SOME v /\
+    is_word_type ret ==>
+    v = v0 /\
+    return_bytes tops ret v (word_to_bytes (typed_val_to_w256 tv v0) T)
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `ret` >> gvs[is_word_type_def, evaluate_type_def, AllCaseEqs()] >>
+  Cases_on `v0` >> gvs[safe_cast_def, AllCaseEqs()] >>
+  simp[return_bytes_def, enc_def, REV_DEF, typed_val_to_w256_def,
+       val_to_w256_def]
+  >~ [`PAD_LEFT`]
+  >- (simp[GSYM wordsTheory.w2w_def] >>
+      DEP_REWRITE_TAC[w2w_word_of_bytes_be_pad_left] >>
+      simp[] >> EVAL_TAC)
+  >~ [`PAD_RIGHT`]
+  >- (simp[listTheory.PAD_RIGHT, GSYM rich_listTheory.REPLICATE_GENLIST,
+           TAKE_LENGTH_TOO_LONG, byteTheory.word_of_bytes_be_def] >>
+      irule word_bytes_roundtrip_256 >> simp[])
+  >~ [`n2w (if _ then _ else _)`]
+  >- (Cases_on `b` >> simp[]) >>
   rename1 `within_int_bound _ i` >> gvs[within_int_bound_def] >>
   `~(i < 0)` by intLib.COOPER_TAC >>
   simp[integer_wordTheory.i2w_def]
