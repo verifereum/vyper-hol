@@ -285,6 +285,130 @@ QED
 
 (* ===== Module lowering ===== *)
 
+Theorem shape_step_emit_op_under:
+  !internal LP P opc ops.
+    shape_stable P /\ ~MEM opc [GAS; RETPC_PARAM] /\
+    (!id outs. lowered_inst_ok internal (mk_inst id opc ops outs)) /\
+    (!st. P st ==> EVERY (label_or_plain st) ops) ==>
+    shape_step internal LP P (emit_op opc ops)
+      (\x st. P st /\ plain_operand st x)
+Proof
+  rpt strip_tac >> irule shape_step_conseq >>
+  qexistsl_tac [`LP`, `\st. P st /\ EVERY (label_or_plain st) ops`,
+               `\x st. P st /\ plain_operand st x`] >>
+  simp[] >> irule shape_step_emit_op >> simp[]
+QED
+
+Theorem shape_step_emit_inst_under:
+  !internal LP P opc ops outs.
+    shape_stable P /\ ~MEM opc [GAS; RETPC_PARAM] /\
+    (!id. lowered_inst_ok internal (mk_inst id opc ops outs)) /\
+    (!st. P st ==> EVERY (label_or_plain st) ops) ==>
+    shape_step internal LP P (emit_inst opc ops outs) (\x st. P st)
+Proof
+  rpt strip_tac >> irule shape_step_conseq >>
+  qexistsl_tac [`LP`, `\st. P st /\ EVERY (label_or_plain st) ops`,
+               `\x st. P st`] >>
+  simp[] >> irule shape_step_emit_inst >> simp[]
+QED
+
+Theorem shape_step_pre_fact:
+  !internal LP P m Q b.
+    (!st. P st ==> b) /\
+    (b ==> shape_step internal LP P m Q) ==>
+    shape_step internal LP P m Q
+Proof
+  rw[shape_step_def] >> metis_tac[]
+QED
+
+Theorem compile_selector_checks_shape:
+  !selectors method_id.
+    EVERY (\(sel,lbl). jump_label_ok lbl) selectors ==>
+    shape_step F jump_label_ok (\st. plain_operand st method_id)
+      (compile_selector_checks method_id selectors) (\x st. T)
+Proof
+  Induct_on `selectors`
+  >- (simp[compile_selector_checks_def] >> rpt gen_tac >>
+      irule shape_step_return >> simp[]) >>
+  gen_tac >> PairCases_on `h` >> simp[Once compile_selector_checks_def] >>
+  rpt strip_tac >> irule shape_step_pre_fact >>
+  qexists_tac `~is_label_operand method_id` >>
+  conj_tac >- simp[plain_operand_def] >> strip_tac >>
+  irule shape_step_bind >>
+  qexists_tac `\x st. plain_operand st method_id /\ plain_operand st x` >>
+  reverse conj_tac
+  >- (ho_match_mp_tac shape_step_emit_op_under >>
+      conj_tac
+      >- (qspec_then `[method_id]` mp_tac shape_stable_plain_operands >> simp[]) >>
+      simp[lowered_inst_ok_def, raw_opcode_ok_def,
+           inst_shape_ok_def, label_positions_ok_def, is_read0_opcode_def,
+           mk_inst_def, is_terminator_def, is_param_opcode_def,
+           jump_labels_ok_def, label_or_plain_def, plain_operand_def,
+           stackPlanTypesTheory.is_label_operand_def]) >>
+  gen_tac >> BETA_TAC >>
+  irule shape_step_bind >>
+  qexists_tac `\l st. (plain_operand st method_id /\ plain_operand st x) /\ compiler_label l` >>
+  reverse conj_tac
+  >- (ho_match_mp_tac shape_step_fresh_label >>
+      rw[shape_stable_def] >> metis_tac[plain_operand_mono]) >>
+  qx_gen_tac `ml` >> BETA_TAC >>
+  irule shape_step_bind >>
+  qexists_tac `\l st. ((plain_operand st method_id /\ plain_operand st x) /\ compiler_label ml) /\ compiler_label l` >>
+  reverse conj_tac
+  >- (ho_match_mp_tac shape_step_fresh_label >>
+      rw[shape_stable_def] >> metis_tac[plain_operand_mono]) >>
+  qx_gen_tac `nl` >> BETA_TAC >> suspend "branches"
+QED
+
+Resume compile_selector_checks_shape[branches]:
+  irule shape_step_pre_fact >>
+  qexists_tac `~is_label_operand x /\ compiler_label ml /\ compiler_label nl` >>
+  conj_tac >- simp[plain_operand_def] >> strip_tac >>
+  irule shape_step_ignore_bind >>
+  qexists_tac `\u st. ((plain_operand st method_id /\ plain_operand st x) /\ compiler_label ml) /\ compiler_label nl` >>
+  reverse conj_tac
+  >- (ho_match_mp_tac shape_step_emit_inst_under >>
+      conj_tac >- (rw[shape_stable_def] >> metis_tac[plain_operand_mono]) >>
+      simp[lowered_inst_ok_def, raw_opcode_ok_def, inst_shape_ok_def,
+           label_positions_ok_def, is_read0_opcode_def, mk_inst_def,
+           is_terminator_def, is_param_opcode_def, jump_labels_ok_def,
+           jump_label_ok_def, label_or_plain_def,
+           stackPlanTypesTheory.is_label_operand_def] >>
+      rpt strip_tac >> gvs[] >>
+      metis_tac[stackPlanTypesTheory.is_label_operand_def]) >>
+  gen_tac >> BETA_TAC >>
+  irule shape_step_conseq >>
+  qexistsl_tac [`jump_label_ok`, `\st. plain_operand st method_id`, `\u st. T`] >>
+  simp[] >> suspend "blocks"
+QED
+
+Resume compile_selector_checks_shape[blocks]:
+  irule shape_step_ignore_bind >>
+  qexists_tac `\u st. plain_operand st method_id` >> reverse conj_tac
+  >- (ho_match_mp_tac shape_step_new_block >>
+      simp[jump_label_ok_def] >>
+      qspec_then `[method_id]` mp_tac shape_stable_plain_operands >> simp[]) >>
+  gen_tac >> BETA_TAC >>
+  irule shape_step_ignore_bind >>
+  qexists_tac `\u st. plain_operand st method_id` >> reverse conj_tac
+  >- (ho_match_mp_tac shape_step_emit_inst_under >>
+      conj_tac
+      >- (qspec_then `[method_id]` mp_tac shape_stable_plain_operands >> simp[]) >>
+      simp[lowered_inst_ok_def, raw_opcode_ok_def, inst_shape_ok_def,
+           label_positions_ok_def, is_read0_opcode_def, mk_inst_def,
+           is_terminator_def, is_param_opcode_def, jump_labels_ok_def,
+           label_or_plain_def, stackPlanTypesTheory.is_label_operand_def]) >>
+  gen_tac >> BETA_TAC >>
+  irule shape_step_ignore_bind >>
+  qexists_tac `\u st. plain_operand st method_id` >> reverse conj_tac
+  >- (ho_match_mp_tac shape_step_new_block >>
+      simp[jump_label_ok_def] >>
+      qspec_then `[method_id]` mp_tac shape_stable_plain_operands >> simp[]) >>
+  simp[]
+QED
+
+Finalise compile_selector_checks_shape
+
 (* Straight-line code, fresh labels and JMPs to the selector labels. *)
 Theorem compile_selector_dispatch_linear_shape:
   !selectors fallback_lbl.
@@ -293,8 +417,126 @@ Theorem compile_selector_dispatch_linear_shape:
     shape_step F jump_label_ok (\st. T)
       (compile_selector_dispatch_linear selectors fallback_lbl) (\x st. T)
 Proof
-  cheat
+  rpt strip_tac >> simp[compile_selector_dispatch_linear_def] >>
+  irule shape_step_bind >>
+  qexists_tac `\x st. T /\ plain_operand st x` >> reverse conj_tac
+  >- (ho_match_mp_tac shape_step_emit_op_under >>
+      simp[shape_stable_def, lowered_inst_ok_def, raw_opcode_ok_def,
+           inst_shape_ok_def, label_positions_ok_def, is_read0_opcode_def,
+           mk_inst_def, is_terminator_def, is_param_opcode_def,
+           jump_labels_ok_def]) >>
+  qx_gen_tac `cds` >> BETA_TAC >>
+  irule shape_step_pre_fact >> qexists_tac `~is_label_operand cds` >>
+  conj_tac >- simp[plain_operand_def] >> strip_tac >>
+  irule shape_step_bind >>
+  qexists_tac `\x st. (T /\ plain_operand st cds) /\ plain_operand st x` >>
+  reverse conj_tac
+  >- (ho_match_mp_tac shape_step_emit_op_under >>
+      conj_tac
+      >- (qspec_then `[cds]` mp_tac shape_stable_plain_operands >> simp[]) >>
+      simp[lowered_inst_ok_def, raw_opcode_ok_def, inst_shape_ok_def,
+           label_positions_ok_def, is_read0_opcode_def, mk_inst_def,
+           is_terminator_def, is_param_opcode_def, jump_labels_ok_def,
+           label_or_plain_def, plain_operand_def,
+           stackPlanTypesTheory.is_label_operand_def]) >>
+  qx_gen_tac `has_sel` >> BETA_TAC >>
+  irule shape_step_conseq >>
+  qexistsl_tac [`jump_label_ok`, `\st. plain_operand st has_sel`, `\u st. T`] >>
+  simp[] >> suspend "iszero"
 QED
+
+Resume compile_selector_dispatch_linear_shape[iszero]:
+  irule shape_step_pre_fact >> qexists_tac `~is_label_operand has_sel` >>
+  conj_tac >- simp[plain_operand_def] >> strip_tac >>
+  irule shape_step_bind >>
+  qexists_tac `\x st. plain_operand st has_sel /\ plain_operand st x` >>
+  reverse conj_tac
+  >- (ho_match_mp_tac shape_step_emit_op_under >>
+      conj_tac
+      >- (qspec_then `[has_sel]` mp_tac shape_stable_plain_operands >> simp[]) >>
+      simp[lowered_inst_ok_def, raw_opcode_ok_def, inst_shape_ok_def,
+           label_positions_ok_def, is_read0_opcode_def, mk_inst_def,
+           is_terminator_def, is_param_opcode_def, jump_labels_ok_def,
+           label_or_plain_def]) >>
+  qx_gen_tac `cond` >> BETA_TAC >>
+  irule shape_step_conseq >>
+  qexistsl_tac [`jump_label_ok`, `\st. plain_operand st cond`, `\u st. T`] >>
+  simp[] >>
+  irule shape_step_bind >>
+  qexists_tac `\l st. plain_operand st cond /\ compiler_label l` >>
+  reverse conj_tac
+  >- (ho_match_mp_tac shape_step_fresh_label >>
+      qspec_then `[cond]` mp_tac shape_stable_plain_operands >> simp[]) >>
+  qx_gen_tac `dispatch` >> BETA_TAC >> suspend "jump"
+QED
+
+Resume compile_selector_dispatch_linear_shape[jump]:
+  irule shape_step_pre_fact >>
+  qexists_tac `~is_label_operand cond /\ compiler_label dispatch` >>
+  conj_tac >- simp[plain_operand_def] >> strip_tac >>
+  irule shape_step_ignore_bind >>
+  qexists_tac `\u st. plain_operand st cond /\ compiler_label dispatch` >>
+  reverse conj_tac
+  >- (ho_match_mp_tac shape_step_emit_inst_under >>
+      conj_tac >- (rw[shape_stable_def] >> metis_tac[plain_operand_mono]) >>
+      simp[lowered_inst_ok_def, raw_opcode_ok_def, inst_shape_ok_def,
+           label_positions_ok_def, is_read0_opcode_def, mk_inst_def,
+           is_terminator_def, is_param_opcode_def, jump_labels_ok_def,
+           label_or_plain_def, stackPlanTypesTheory.is_label_operand_def] >>
+      rpt strip_tac >> gvs[jump_label_ok_def] >>
+      metis_tac[stackPlanTypesTheory.is_label_operand_def]) >>
+  gen_tac >> BETA_TAC >>
+  irule shape_step_ignore_bind >>
+  qexists_tac `\u st. plain_operand st cond /\ compiler_label dispatch` >>
+  reverse conj_tac
+  >- (ho_match_mp_tac shape_step_new_block >>
+      simp[jump_label_ok_def] >> rw[shape_stable_def] >>
+      metis_tac[plain_operand_mono]) >>
+  gen_tac >> BETA_TAC >>
+  irule shape_step_conseq >>
+  qexistsl_tac [`jump_label_ok`, `\st. T`, `\u st. T`] >>
+  simp[] >> suspend "load"
+QED
+
+Resume compile_selector_dispatch_linear_shape[load]:
+  irule shape_step_bind >>
+  qexists_tac `\x st. T /\ plain_operand st x` >> reverse conj_tac
+  >- (ho_match_mp_tac shape_step_emit_op_under >>
+      simp[shape_stable_def, lowered_inst_ok_def, raw_opcode_ok_def,
+           inst_shape_ok_def, label_positions_ok_def, is_read0_opcode_def,
+           mk_inst_def, is_terminator_def, is_param_opcode_def,
+           jump_labels_ok_def, label_or_plain_def, plain_operand_def,
+           stackPlanTypesTheory.is_label_operand_def]) >>
+  qx_gen_tac `raw` >> BETA_TAC >>
+  irule shape_step_pre_fact >> qexists_tac `~is_label_operand raw` >>
+  conj_tac >- simp[plain_operand_def] >> strip_tac >>
+  irule shape_step_bind >>
+  qexists_tac `\x st. (T /\ plain_operand st raw) /\ plain_operand st x` >>
+  reverse conj_tac
+  >- (ho_match_mp_tac shape_step_emit_op_under >>
+      conj_tac
+      >- (qspec_then `[raw]` mp_tac shape_stable_plain_operands >> simp[]) >>
+      simp[lowered_inst_ok_def, raw_opcode_ok_def, inst_shape_ok_def,
+           label_positions_ok_def, is_read0_opcode_def, mk_inst_def,
+           is_terminator_def, is_param_opcode_def, jump_labels_ok_def,
+           label_or_plain_def, plain_operand_def,
+           stackPlanTypesTheory.is_label_operand_def]) >>
+  qx_gen_tac `method_id` >> BETA_TAC >>
+  irule shape_step_conseq >>
+  qexistsl_tac [`jump_label_ok`, `\st. plain_operand st method_id`, `\u st. T`] >>
+  simp[] >>
+  irule shape_step_ignore_bind >> qexists_tac `\u st. T` >>
+  reverse conj_tac >- simp[compile_selector_checks_shape] >>
+  gen_tac >> BETA_TAC >>
+  ho_match_mp_tac shape_step_emit_inst_under >>
+  simp[shape_stable_def, lowered_inst_ok_def, raw_opcode_ok_def,
+       inst_shape_ok_def, label_positions_ok_def, is_read0_opcode_def,
+       mk_inst_def, is_terminator_def, is_param_opcode_def,
+       jump_labels_ok_def, label_or_plain_def,
+       stackPlanTypesTheory.is_label_operand_def]
+QED
+
+Finalise compile_selector_dispatch_linear_shape
 
 (* Each body opens its "fn_" entry block, then compile_guarded_body via
    compile_stmt_shape with ce_return_pc = NONE. *)
