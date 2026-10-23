@@ -196,6 +196,117 @@ QED
 
 (* ===== Expression and statement lowering ===== *)
 
+Theorem shape_step_uncurry[local]:
+  shape_step internal LP P m Q /\
+  (!x. shape_step internal LP (Q x) (k x) R) ==>
+  shape_step internal LP P (\st. UNCURRY k (m st)) R
+Proof
+  strip_tac >>
+  ` (\st. UNCURRY k (m st)) = comp_bind m k` by
+    (simp[FUN_EQ_THM, comp_bind_def] >> gen_tac >>
+     Cases_on `m st` >> simp[]) >>
+  pop_assum SUBST1_TAC >> match_mp_tac shape_step_bind >>
+  qexists_tac `Q` >> simp[]
+QED
+
+Theorem invalid_expr_call_shape[local]:
+  shape_step internal compiler_label (\st. T) (invalid_expr_call ty)
+    (\v st. value_shape_ok st v)
+Proof
+  `invalid_expr_call ty = comp_ignore_bind (emit_inst INVALID [] [])
+      (comp_return (StackValue ty (Lit 0w)))` by
+    (simp[FUN_EQ_THM, exprCallBoundsTheory.invalid_expr_call_def, comp_ignore_bind_def,
+          comp_bind_def, comp_return_def] >> gen_tac >>
+     Cases_on `emit_inst INVALID [] [] st` >> simp[]) >>
+  pop_assum SUBST1_TAC >>
+  match_mp_tac shape_step_ignore_bind >> qexists_tac `\x st. T` >>
+  conj_tac
+  >- (mp_tac (Q.SPECL [`internal`, `compiler_label`, `\st. T`,
+                       `INVALID`, `[]`, `[]`] shape_step_emit_inst) >>
+      simp[shape_stable_def, lowered_inst_ok_def, mk_inst_def,
+           raw_opcode_ok_def, inst_shape_ok_def, label_positions_ok_def,
+           jump_labels_ok_def,
+           is_terminator_def, is_param_opcode_def]) >>
+  gen_tac >> irule shape_step_return >>
+  simp[value_shape_ok_def, plain_operand_def, stackPlanTypesTheory.is_label_operand_def]
+QED
+
+Theorem expr_child_callback_shape[local]:
+  (!ce t e internal.
+     expr_size e < bound /\ ~supported_expr_exists expr_shape_root e ==>
+     shape_step internal compiler_label (\st. cenv_shape_ok st ce)
+       (f ce t e) (\v st. value_shape_ok st v)) ==>
+  !ce t e internal.
+    ~supported_expr_exists expr_shape_root e ==>
+    shape_step internal compiler_label (\st. cenv_shape_ok st ce)
+      (expr_child_callback bound f ce t e) (\v st. value_shape_ok st v)
+Proof
+  rpt strip_tac >>
+  `expr_child_callback bound f ce t e =
+     if expr_size e < bound then f ce t e
+     else invalid_expr_call (expr_type e)` by
+    (Cases_on `expr_size e < bound` >>
+     simp[FUN_EQ_THM, exprCallBoundsTheory.expr_child_callback_def]) >>
+  pop_assum SUBST1_TAC >> Cases_on `expr_size e < bound` >> simp[] >>
+  match_mp_tac shape_step_conseq >>
+  qexistsl [`compiler_label`, `\st. T`, `\v st. value_shape_ok st v`] >>
+  simp[invalid_expr_call_shape]
+QED
+
+Theorem builtin_child_callback_shape[local]:
+  (!ce rt t bi args internal.
+     list_size expr_size args < bound /\ bi <> Env MsgGas /\
+     builtin_arity bi <= LENGTH args /\
+     ~supported_exprs_exists expr_shape_root args ==>
+     shape_step internal compiler_label (\st. cenv_shape_ok st ce)
+       (f ce rt t bi args) (\v st. value_shape_ok st v)) ==>
+  !ce rt t bi args internal.
+    bi <> Env MsgGas /\ builtin_arity bi <= LENGTH args /\
+    ~supported_exprs_exists expr_shape_root args ==>
+    shape_step internal compiler_label (\st. cenv_shape_ok st ce)
+      (builtin_child_callback bound f ce rt t bi args)
+      (\v st. value_shape_ok st v)
+Proof
+  rpt strip_tac >>
+  `builtin_child_callback bound f ce rt t bi args =
+     if list_size expr_size args < bound then f ce rt t bi args
+     else invalid_expr_call rt` by
+    (Cases_on `list_size expr_size args < bound` >>
+     simp[FUN_EQ_THM, exprCallBoundsTheory.builtin_child_callback_def]) >>
+  pop_assum SUBST1_TAC >>
+  Cases_on `list_size expr_size args < bound` >> simp[] >>
+  match_mp_tac shape_step_conseq >>
+  qexistsl [`compiler_label`, `\st. T`, `\v st. value_shape_ok st v`] >>
+  simp[invalid_expr_call_shape]
+QED
+
+Theorem type_child_callback_shape[local]:
+  (!ce vt t tb rt args internal.
+     list_size expr_size args < bound /\
+     type_builtin_arity tb <= LENGTH args /\
+     ~supported_exprs_exists expr_shape_root args ==>
+     shape_step internal compiler_label (\st. cenv_shape_ok st ce)
+       (f ce vt t tb rt args) (\v st. value_shape_ok st v)) ==>
+  !ce vt t tb rt args internal.
+    type_builtin_arity tb <= LENGTH args /\
+    ~supported_exprs_exists expr_shape_root args ==>
+    shape_step internal compiler_label (\st. cenv_shape_ok st ce)
+      (type_child_callback bound f ce vt t tb rt args)
+      (\v st. value_shape_ok st v)
+Proof
+  rpt strip_tac >>
+  `type_child_callback bound f ce vt t tb rt args =
+     if list_size expr_size args < bound then f ce vt t tb rt args
+     else invalid_expr_call vt` by
+    (Cases_on `list_size expr_size args < bound` >>
+     simp[FUN_EQ_THM, exprCallBoundsTheory.type_child_callback_def]) >>
+  pop_assum SUBST1_TAC >>
+  Cases_on `list_size expr_size args < bound` >> simp[] >>
+  match_mp_tac shape_step_conseq >>
+  qexistsl [`compiler_label`, `\st. T`, `\v st. value_shape_ok st v`] >>
+  simp[invalid_expr_call_shape]
+QED
+
 (* For alan, by compile_expr_ind; one case per compile_expr_body clause and
    builtin.  The builtin families (abiEncoder, builtin*, context copy loops)
    are plain shape_step facts under plain operands.  Under value_shape_ok no
