@@ -307,6 +307,70 @@ Proof
   cheat
 QED
 
+(* Ordinary emissions may establish instruction validity from their input. *)
+Theorem shape_step_emit_op_pre:
+  !internal LP P opc ops.
+    ~MEM opc [GAS; RETPC_PARAM] /\
+    (!st. P st ==> EVERY (label_or_plain st) ops /\
+      (!id outs. lowered_inst_ok internal (mk_inst id opc ops outs))) ==>
+    shape_step internal LP P (emit_op opc ops)
+      (\x st. plain_operand st x)
+Proof
+  rpt strip_tac >> Cases_on `?st. P st`
+  >- (pop_assum strip_assume_tac >>
+      irule shape_step_conseq >>
+      qexistsl_tac [`LP`, `\st. T /\ EVERY (label_or_plain st) ops`,
+                    `\x st. T /\ plain_operand st x`] >>
+      conj_tac >- simp[] >> conj_tac >- metis_tac[] >>
+      conj_tac >- simp[] >>
+      irule (BETA_RULE (Q.SPECL [`internal`, `LP`, `\st. T`]
+        shape_step_emit_op)) >> simp[shape_stable_def] >> metis_tac[]) >>
+  gvs[shape_step_def]
+QED
+
+Theorem shape_step_emit_void_pre:
+  !internal LP P opc ops.
+    ~MEM opc [GAS; RETPC_PARAM] /\
+    (!st. P st ==> EVERY (label_or_plain st) ops /\
+      (!id. lowered_inst_ok internal (mk_inst id opc ops []))) ==>
+    shape_step internal LP P (emit_void opc ops) (\x st. T)
+Proof
+  rpt strip_tac >> Cases_on `?st. P st`
+  >- (pop_assum strip_assume_tac >>
+      irule shape_step_conseq >>
+      qexistsl_tac [`LP`, `\st. T /\ EVERY (label_or_plain st) ops`,
+                    `\x st. T`] >>
+      conj_tac >- simp[] >> conj_tac >- metis_tac[] >>
+      conj_tac >- simp[] >>
+      irule (BETA_RULE (Q.SPECL [`internal`, `LP`, `\st. T`]
+        shape_step_emit_void)) >> simp[shape_stable_def] >> metis_tac[]) >>
+  gvs[shape_step_def]
+QED
+
+Theorem compile_nonreentrant_unlock_shape:
+  !internal LP nkey use_trans is_view.
+    shape_step internal LP (\st. T)
+      (compile_nonreentrant_unlock nkey use_trans is_view) (\x st. T)
+Proof
+  rpt gen_tac >>
+  Cases_on `is_view` >> Cases_on `use_trans` >>
+  simp[compile_nonreentrant_unlock_def, shape_step_return] >>
+  (qmatch_goalsub_abbrev_tac `emit_void opc ops` >>
+  irule shape_step_conseq >>
+  qexistsl_tac [`LP`, `\st. T /\ EVERY (label_or_plain st) ops`,
+    `\x st. T`] >>
+  conj_tac >- simp[] >>
+  conj_tac >- simp[Abbr `ops`, label_or_plain_def, plain_operand_def,
+                   stackPlanTypesTheory.is_label_operand_def] >>
+  conj_tac >- simp[] >>
+  irule (BETA_RULE (Q.SPECL [`internal`, `LP`, `\st. T`] shape_step_emit_void)) >>
+  simp[Abbr `opc`, Abbr `ops`, shape_stable_def,
+       lowered_inst_ok_def, raw_opcode_ok_def, inst_shape_ok_def,
+       label_positions_ok_def, is_read0_opcode_def, jump_labels_ok_def,
+       is_terminator_def, is_param_opcode_def, mk_inst_def,
+       stackPlanTypesTheory.is_label_operand_def])
+QED
+
 Theorem compile_fallback_body_shape:
   !cenv is_payable is_nr nkey use_trans is_view body ret_type.
     fallback_shape_ok
