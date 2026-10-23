@@ -3836,6 +3836,63 @@ Resume compile_return_some_shape[external]:
 QED
 Finalise compile_return_some_shape
 
+Theorem compile_range_bound_checks_shape[local]:
+  !internal start_op end_op rounds_op bound signed.
+    shape_step internal compiler_label
+      (\st. plain_operand st start_op /\ plain_operand st end_op /\
+            plain_operand st rounds_op)
+      (compile_range_bound_checks start_op end_op rounds_op bound signed)
+      (\u st. T)
+Proof
+  rpt gen_tac >> simp[compile_range_bound_checks_def] >>
+  stmt_bind `\v st. plain_operand st v /\ plain_operand st rounds_op` `bad_order`
+    (IF_CASES_TAC >> stmt_frame_emit
+      `\st. plain_operand st start_op /\ plain_operand st end_op`) >>
+  stmt_bind `\v st. plain_operand st v /\ plain_operand st rounds_op` `good_order`
+    (stmt_frame_emit `\st. plain_operand st bad_order`) >>
+  stmt_sequence `\u st. plain_operand st good_order /\ plain_operand st rounds_op`
+    stmt_plain_void >>
+  stmt_bind `\v st. plain_operand st v` `bad_rounds` stmt_plain_emit >>
+  stmt_bind `\v st. plain_operand st v` `good_rounds` stmt_plain_emit >>
+  stmt_plain_void_drop
+QED
+
+Theorem compile_iter_elem_copy_shape[local]:
+  !internal cenv src dst size loc slots target_ty elem_ty.
+    loc <> LocCode ==>
+    shape_step internal compiler_label
+      (\st. plain_operand st src /\ plain_operand st dst)
+      (compile_iter_elem_copy cenv src dst size loc slots target_ty elem_ty)
+      (\u st. T)
+Proof
+  rpt strip_tac >> simp[compile_iter_elem_copy_def] >>
+  Cases_on `slots` >> simp[]
+  >- (IF_CASES_TAC
+      >- (Cases_on `loc` >> gvs[] >>
+          stmt_bind `\v st. plain_operand st v /\ plain_operand st dst` `value_op`
+            (stmt_frame_emit `\st. plain_operand st src`) >> stmt_plain_void_drop) >>
+      stmt_sequence `\u st. T` (irule compile_slot_to_memory_shape >> simp[]) >>
+      irule shape_step_return >> simp[]) >>
+  IF_CASES_TAC
+  >- (IF_CASES_TAC
+      >- (Cases_on `loc` >> gvs[] >>
+          stmt_bind `\v st. plain_operand st v /\ plain_operand st dst` `value_op`
+            (stmt_frame_emit `\st. plain_operand st src`) >> stmt_plain_void_drop) >>
+      Cases_on `loc` >> gvs[] >>
+      FIRST [stmt_plain_void_drop >> NO_TAC,
+        (irule shape_step_conseq >>
+         qexistsl_tac [`compiler_label`,
+           `\st. plain_operand st dst /\ plain_operand st src`, `\u st. T`] >>
+         simp[compile_copy_memory_shape])]) >>
+  IF_CASES_TAC
+  >- (stmt_bind `\v st. plain_operand st v /\ plain_operand st dst` `value_op`
+        (stmt_frame_emit `\st. plain_operand st src`) >> stmt_plain_void_drop) >>
+  irule shape_step_conseq >>
+  qexistsl_tac [`compiler_label`,
+    `\st. plain_operand st dst /\ plain_operand st src`, `\u st. T`] >>
+  simp[compile_store_memory_shape]
+QED
+
 Theorem compile_stmt_shape:
   (!cenv lctx ty s.
      ~supported_stmt_expr_exists expr_shape_root s ==>
