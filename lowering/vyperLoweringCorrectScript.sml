@@ -18,6 +18,8 @@
  *   venom_env_rel, initial_venom_state_rel -- PLAN 5.7 entry boundary
  *   external_call_result_rel, source_unit_execution_correct -- oracle boundary
  *   compile_state_ok_initial -- label-space invariant of the initial compile state
+ *   external_return_word_result_rel, external_stop_result_rel -- S1 halt
+ *     bridge (#640) for the return sequences loweringHalt covers
  *   lower_vyper_runtime_unit_correct -- S1 (planned admission, Milestone 6)
  *   lower_vyper_runtime_unit_source_unit_ok -- S2 (Milestone 5)
  *   lower_vyper_runtime_unit_memory_ok -- S3 (Milestone 5)
@@ -46,6 +48,7 @@ Ancestors
   venomState
   compileEnv e2eDefs supportedProgram compileVyper
   unitTransformDefs unitShapeDefs
+  fragExec loweringHalt
 
 (* TASK056 RETIRED SOURCE ARCHIVE: old NONE-mode helpers, replaced by the
    exact oracle-mode boundary below. Original text retained without bridges.
@@ -160,6 +163,81 @@ Definition source_unit_execution_correct_def:
              (call_external (SOME vs.vs_outcomes) am tx)
              (run_context fuel unit.cu_context vs)
 End
+
+(* ===== S1 halt bridge (#640) ===== *)
+
+(* An external function's return sequence, run from stmt_state_rel at the
+   return with every address's accounts and transient storage as in the
+   source, halts in the success case of external_call_result_rel.  The
+   source result is the one call_external_function builds when the body
+   returns v0 and no lock is released: v0 cast to the return type, the
+   machine of the final state es with its pending deletions processed, and
+   es's requests.  The statement simulation (#637) brings the run to the
+   return, the entry bridge (#639) runs up to the body, and S1 (#642)
+   composes them. *)
+Theorem external_return_word_result_rel:
+  !ctx op ei msz nr nkey ut iv st x st' func cenv cx es tenv ret tv v0 v
+     tops tx srcs exps layouts Q.
+    compile_external_return (SOME op) T F ei msz nr nkey ut iv st =
+      (x, st') /\
+    (nr ==> iv) /\ (!y. op = Var y ==> not_fresh_at st y) /\
+    evaluate_type tenv ret = SOME tv /\ safe_cast tv v0 = SOME v /\
+    word_value v0 ==>
+    frag_exec ctx st st'
+      (\s. stmt_state_rel func cenv cx es s /\
+           eval_operand op s = SOME (val_to_w256 v0) /\
+           s.vs_accounts =
+             process_deletions es.pending_deletions es.accounts /\
+           s.vs_transient = es.tStorage)
+      Q
+      (external_call_result_rel tops ret tx
+         (INL v, finalize_pending_deletions
+                   (abstract_machine_from_state srcs exps layouts es),
+          es.requests))
+Proof
+  rpt strip_tac >>
+  qspecl_then [`tops`, `tenv`, `ret`, `tv`, `v0`, `v`] mp_tac
+    return_bytes_word_value >>
+  impl_tac >- asm_rewrite_tac[] >> strip_tac >>
+  drule compile_external_return_word_frag >> disch_then irule >>
+  qexists_tac `val_to_w256 v0` >> rpt conj_tac >>
+  TRY (first_assum ACCEPT_TAC >> NO_TAC) >- simp[] >>
+  rpt strip_tac >> fs[] >>
+  qspecl_then [`func`, `cenv`, `cx`, `es`, `s`, `ss`, `tops`, `tx`, `srcs`,
+               `exps`, `layouts`] mp_tac external_halt_success >>
+  impl_tac >- fs[stmt_state_rel_def] >>
+  strip_tac >> fs[external_call_result_rel_def]
+QED
+
+(* The same for a return without a value (STOP), whose canonical return
+   bytes are empty. *)
+Theorem external_stop_result_rel:
+  !ctx pw rr ei msz nr nkey ut iv st x st' func cenv cx es tops tx srcs exps
+     layouts Q.
+    compile_external_return NONE pw rr ei msz nr nkey ut iv st = (x, st') /\
+    (nr ==> iv) ==>
+    frag_exec ctx st st'
+      (\s. stmt_state_rel func cenv cx es s /\
+           s.vs_accounts =
+             process_deletions es.pending_deletions es.accounts /\
+           s.vs_transient = es.tStorage)
+      Q
+      (external_call_result_rel tops NoneT tx
+         (INL NoneV, finalize_pending_deletions
+                       (abstract_machine_from_state srcs exps layouts es),
+          es.requests))
+Proof
+  rpt strip_tac >>
+  drule compile_external_return_stop_frag >> disch_then irule >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
+  rpt strip_tac >> fs[] >>
+  qspecl_then [`func`, `cenv`, `cx`, `es`, `s`,
+               `halt_state (s with vs_returndata := [])`, `tops`, `tx`,
+               `srcs`, `exps`, `layouts`] mp_tac external_halt_success >>
+  impl_tac >- fs[stmt_state_rel_def, halt_state_def] >>
+  strip_tac >>
+  fs[external_call_result_rel_def, return_bytes_def, halt_state_def]
+QED
 
 (* ===== Label-space invariant at the start of lowering ===== *)
 
