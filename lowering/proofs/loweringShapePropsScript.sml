@@ -285,6 +285,33 @@ QED
 
 (* ===== Module lowering ===== *)
 
+Theorem shape_step_emit_op_under:
+  !internal LP P opc ops.
+    shape_stable P /\ ~MEM opc [GAS; RETPC_PARAM] /\
+    (!id outs. lowered_inst_ok internal (mk_inst id opc ops outs)) /\
+    (!st. P st ==> EVERY (label_or_plain st) ops) ==>
+    shape_step internal LP P (emit_op opc ops)
+      (\x st. P st /\ plain_operand st x)
+Proof
+  rpt strip_tac >> irule shape_step_conseq >>
+  qexistsl_tac [`LP`, `\st. P st /\ EVERY (label_or_plain st) ops`,
+               `\x st. P st /\ plain_operand st x`] >>
+  simp[] >> irule shape_step_emit_op >> simp[]
+QED
+
+Theorem shape_step_emit_inst_under:
+  !internal LP P opc ops outs.
+    shape_stable P /\ ~MEM opc [GAS; RETPC_PARAM] /\
+    (!id. lowered_inst_ok internal (mk_inst id opc ops outs)) /\
+    (!st. P st ==> EVERY (label_or_plain st) ops) ==>
+    shape_step internal LP P (emit_inst opc ops outs) (\x st. P st)
+Proof
+  rpt strip_tac >> irule shape_step_conseq >>
+  qexistsl_tac [`LP`, `\st. P st /\ EVERY (label_or_plain st) ops`,
+               `\x st. P st`] >>
+  simp[] >> irule shape_step_emit_inst >> simp[]
+QED
+
 (* Straight-line code, fresh labels and JMPs to the selector labels. *)
 Theorem compile_selector_dispatch_linear_shape:
   !selectors fallback_lbl.
