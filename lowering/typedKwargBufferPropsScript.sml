@@ -164,9 +164,8 @@ Proof
   qexists_tac `w` >> simp[arithmeticTheory.ADD_COMM]
 QED
 
-(* This is an interface diagnostic, not a counterexample to the whole
-   compiler theorem: Lit 0w is not treated as an unbounded sentinel by the
-   dynamic-element pointer helper. Recursive simulation needs this resolved. *)
+(* Regression for the former zero-bound diagnostic: the compile-time
+   sentinel now omits checks, as pinned Python's NONE branch does. *)
 Definition kwarg_dyn_pointer_input_def:
   kwarg_dyn_pointer_input =
     (init_venom_state "entry") with vs_call_ctx :=
@@ -179,7 +178,89 @@ Theorem kwarg_dyn_pointer_zero_bound_probe:
     (SND (compile_abi_decode_dyn_elem_ptr CALLDATALOAD (Lit 100w)
       (Lit 100w) (Lit 0w) 32 kwarg_probe_state)).cs_current_insts
     kwarg_dyn_pointer_input of
-      Abort Revert_abort ss => T | _ => F)
+      OK ss => eval_operand
+        (FST (compile_abi_decode_dyn_elem_ptr CALLDATALOAD (Lit 100w)
+          (Lit 100w) (Lit 0w) 32 kwarg_probe_state)) ss = SOME 132w
+    | _ => F)
+Proof
+  EVAL_TAC
+QED
+
+(* Local straight-line regressions: absence is syntactic, never a test of
+   the runtime value of a variable bound. *)
+Definition dyn_pointer_probe_code_def:
+  dyn_pointer_probe_code opc base hi =
+    compile_abi_decode_dyn_elem_ptr opc (Lit 100w) base hi 32 kwarg_probe_state
+End
+
+Theorem dyn_pointer_unbounded_shape:
+  MAP (\i. i.inst_opcode)
+    (SND (dyn_pointer_probe_code CALLDATALOAD (Lit 100w) (Lit 0w))).cs_current_insts =
+  [CALLDATALOAD; ADD]
+Proof
+  EVAL_TAC
+QED
+
+Theorem dyn_pointer_bounded_shape:
+  MAP (\i. i.inst_opcode)
+    (SND (dyn_pointer_probe_code CALLDATALOAD (Lit 100w) (Var "hi"))).cs_current_insts =
+  [CALLDATALOAD; ADD; LT; ISZERO; ASSERT; ADD; GT; ISZERO; ASSERT]
+Proof
+  EVAL_TAC
+QED
+
+Theorem dyn_pointer_bounded_success:
+  case run_inst_seq
+    (SND (dyn_pointer_probe_code CALLDATALOAD (Lit 100w) (Lit 164w))).cs_current_insts
+    kwarg_dyn_pointer_input of
+      OK ss => eval_operand
+        (FST (dyn_pointer_probe_code CALLDATALOAD (Lit 100w) (Lit 164w))) ss = SOME 132w
+    | _ => F
+Proof
+  EVAL_TAC
+QED
+
+Theorem dyn_pointer_bounded_end_reject:
+  case run_inst_seq
+    (SND (dyn_pointer_probe_code CALLDATALOAD (Lit 100w) (Lit 163w))).cs_current_insts
+    kwarg_dyn_pointer_input of
+      Abort Revert_abort ss => T | _ => F
+Proof
+  EVAL_TAC
+QED
+
+Theorem dyn_pointer_variable_zero_reject:
+  case run_inst_seq
+    (SND (dyn_pointer_probe_code CALLDATALOAD (Lit 100w) (Var "hi"))).cs_current_insts
+    (update_var "hi" 0w kwarg_dyn_pointer_input) of
+      Abort Revert_abort ss => T | _ => F
+Proof
+  EVAL_TAC
+QED
+
+Definition dyn_pointer_wrap_input_def:
+  dyn_pointer_wrap_input =
+    (init_venom_state "entry") with vs_call_ctx :=
+      (empty_call_context with cc_calldata :=
+        (REPLICATE 100 0w ++ word_to_bytes (-1w:bytes32) T))
+End
+
+Theorem dyn_pointer_bounded_wrap_reject:
+  case run_inst_seq
+    (SND (dyn_pointer_probe_code CALLDATALOAD (Lit 1w) (Lit 164w))).cs_current_insts
+    dyn_pointer_wrap_input of
+      Abort Revert_abort ss => T | _ => F
+Proof
+  EVAL_TAC
+QED
+
+Theorem dyn_pointer_unbounded_wrap_success:
+  case run_inst_seq
+    (SND (dyn_pointer_probe_code CALLDATALOAD (Lit 1w) (Lit 0w))).cs_current_insts
+    dyn_pointer_wrap_input of
+      OK ss => eval_operand
+        (FST (dyn_pointer_probe_code CALLDATALOAD (Lit 1w) (Lit 0w))) ss = SOME 0w
+    | _ => F
 Proof
   EVAL_TAC
 QED

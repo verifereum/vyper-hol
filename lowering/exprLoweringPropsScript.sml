@@ -2041,17 +2041,23 @@ Theorem ci_mono_compile_abi_decode_dyn_elem_ptr[local]:
   ∀ load_opc elem_src src_data hi_op elem_abi_sz sa.
     ci_mono sa (SND (compile_abi_decode_dyn_elem_ptr load_opc elem_src src_data hi_op elem_abi_sz sa))
 Proof
-  rpt gen_tac >>
-  rewrite_tac[abiEncoderTheory.compile_abi_decode_dyn_elem_ptr_def] >> BETA_TAC >>
+  rpt gen_tac >> Cases_on `hi_op = Lit 0w`
+  >- (gvs[abiEncoderTheory.compile_abi_decode_dyn_elem_ptr_def] >>
+      ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_emit_op] >> rpt strip_tac >>
+      ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_emit_op] >> rpt strip_tac >>
+      simp[ci_mono_refl, comp_ignore_bind_def, comp_bind_def, comp_return_def]) >>
+  asm_rewrite_tac[abiEncoderTheory.compile_abi_decode_dyn_elem_ptr_def,
+    comp_ignore_bind_def] >> BETA_TAC >>
+  simp_tac bool_ss [comp_bind_assoc] >> BETA_TAC >>
   ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_emit_op] >> rpt strip_tac >>
   ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_emit_op] >> rpt strip_tac >>
   ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_emit_op] >> rpt strip_tac >>
   ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_emit_op] >> rpt strip_tac >>
-  ho_match_mp_tac ci_mono_ignore_bind >> conj_tac >- simp[ci_mono_emit_void] >> rpt strip_tac >>
+  ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_emit_void] >> rpt strip_tac >>
   ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_emit_op] >> rpt strip_tac >>
   ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_emit_op] >> rpt strip_tac >>
   ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_emit_op] >> rpt strip_tac >>
-  ho_match_mp_tac ci_mono_ignore_bind >> conj_tac >- simp[ci_mono_emit_void] >> rpt strip_tac >>
+  ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_emit_void] >> rpt strip_tac >>
   simp[ci_mono_comp_return]
 QED
 
@@ -2130,7 +2136,21 @@ Theorem ci_mono_compile_store_memory_typed[local]:
                dst_off src_off sa)))
 Proof
   ho_match_mp_tac contextTheory.compile_store_memory_typed_ind >>
-  rpt conj_tac >> rpt strip_tac >>
+  rpt conj_tac >> rpt strip_tac
+  >- (once_rewrite_tac[contextTheory.compile_store_memory_typed_def] >>
+      Cases_on `is_word_type dst_ty`
+      >- (simp[] >> ho_match_mp_tac ci_mono_bind >>
+          simp[ci_mono_emit_op, ci_mono_emit_void]) >>
+      Cases_on `is_bytestring_type dst_ty /\ is_bytestring_type src_ty`
+      >- simp[ci_mono_compile_store_bytestring] >>
+      Cases_on `acyclic_struct_metadata cenv.ce_struct_fields`
+      >- (Cases_on `dst_ty` >> Cases_on `src_ty` >>
+          gvs[ci_mono_compile_copy_memory] >>
+          TRY (first_x_assum irule >> simp[] >> NO_TAC) >>
+          TOP_CASE_TAC >> TOP_CASE_TAC >>
+          gvs[ci_mono_compile_copy_memory] >>
+          first_x_assum irule >> simp[]) >>
+      simp[ci_mono_emit_void]) >>
   once_rewrite_tac[contextTheory.compile_store_memory_typed_def] >>
   simp_tac pure_ss [LET_THM] >> BETA_TAC >>
   rpt (FIRST [
@@ -2146,9 +2166,16 @@ Proof
     TOP_CASE_TAC,
     first_assum (fn ih =>
       (irule (SRULE [] ih) >> fs[] >> NO_TAC) ORELSE
-      (* the struct IH may differ from the goal by commuted offsets *)
-      metis_tac[SRULE [] ih, arithmeticTheory.ADD_COMM])])
+      (* Match offsets modulo addition without first-order search through
+         every unrelated induction hypothesis. *)
+      (irule (SRULE [arithmeticTheory.ADD_COMM] ih) >> simp[] >> NO_TAC))])
 QED
+
+val _ = List.app (fn th =>
+  if List.all (fn s => s = "DISK_THM") (#1 (Tag.dest_tag (Thm.tag th)))
+     andalso null (#2 (Tag.dest_tag (Thm.tag th))) then ()
+  else raise Fail "oracle in dynamic-pointer build prerequisites")
+  [ci_mono_compile_abi_decode_dyn_elem_ptr, ci_mono_compile_store_memory_typed];
 
 Theorem ci_mono_compile_store_memory[local]:
   ∀cenv src dst dst_ty src_ty sa.
