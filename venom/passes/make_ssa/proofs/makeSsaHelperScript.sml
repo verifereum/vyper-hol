@@ -135,7 +135,7 @@ Theorem rename_blocks_children_preserves_labels[local]:
       (SND (rename_children ctrs stacks bbs succ_map children)) =
     MAP (\bb. bb.bb_label) bbs)
 Proof
-  HO_MATCH_MP_TAC makeSsaDefsTheory.dom_tree_induction >>
+  HO_MATCH_MP_TAC makeSsaDefsTheory.dom_tree_list_induction >>
   rpt conj_tac
   >- (
     rpt strip_tac >>
@@ -5565,7 +5565,7 @@ Theorem rename_preserves_other_phi_refines[local]:
     lookup_block lbl (SND (rename_children ctrs stacks bbs succ_map children)) = SOME bb' ==>
     phi_refines bb bb')
 Proof
-  ho_match_mp_tac dom_tree_induction >> rpt conj_tac
+  ho_match_mp_tac dom_tree_list_induction >> rpt conj_tac
   >- (rpt strip_tac >>
       irule rename_blocks_DNode_phi_refines >> metis_tac[])
   >- (simp[rename_blocks_def] >> rpt strip_tac >> gvs[phi_refines_refl])
@@ -5978,7 +5978,7 @@ Theorem rename_blocks_outputs_agree[local]:
       (SND (rename_children ctrs stacks bbs1 succ_map children))
       (SND (rename_children ctrs stacks bbs2 succ_map children)))
 Proof
-  ho_match_mp_tac dom_tree_induction >> rpt conj_tac >| [
+  ho_match_mp_tac dom_tree_list_induction >> rpt conj_tac >| [
     suspend "dnode",
     suspend "nil",
     suspend "cons"
@@ -6116,7 +6116,7 @@ Theorem block_rename_states_outputs_agree[local]:
     children_rename_states ctrs stacks bbs1 succ_map children =
     children_rename_states ctrs stacks bbs2 succ_map children)
 Proof
-  ho_match_mp_tac dom_tree_induction >> rpt conj_tac >| [
+  ho_match_mp_tac dom_tree_list_induction >> rpt conj_tac >| [
     suspend "dnode",
     suspend "nil",
     suspend "cons"
@@ -6282,7 +6282,7 @@ Triviality rename_blocks_preserves_outside[local]:
                (EL j bb'.bb_instructions).inst_outputs =
                (EL j bb.bb_instructions).inst_outputs))
 Proof
-  ho_match_mp_tac dom_tree_induction >> rpt conj_tac >| [
+  ho_match_mp_tac dom_tree_list_induction >> rpt conj_tac >| [
     suspend "dnode",
     suspend "nil",
     suspend "cons"
@@ -6358,7 +6358,7 @@ Triviality block_rename_states_keys:
     MAP FST (children_rename_states ctrs stacks bbs succ_map children) =
     FLAT (MAP dom_tree_labels children))
 Proof
-  ho_match_mp_tac dom_tree_induction >> rpt conj_tac >| [
+  ho_match_mp_tac dom_tree_list_induction >> rpt conj_tac >| [
     suspend "dnode",
     suspend "nil",
     suspend "cons"
@@ -6460,7 +6460,7 @@ Triviality rename_blocks_body_match:
                SND (rename_block_insts rs_entry bb_orig.bb_instructions))
             bb')
 Proof
-  ho_match_mp_tac dom_tree_induction >> rpt conj_tac >| [
+  ho_match_mp_tac dom_tree_list_induction >> rpt conj_tac >| [
     suspend "dnode",
     suspend "nil",
     suspend "cons"

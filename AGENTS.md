@@ -4,7 +4,7 @@
 
 Prefer using dedicated tools instead of bash operation:
 - **Read tool** for ALL file reading (not `cat`, `head`, `tail`, `less`)
-- **Grep tool** for searching file contents (not `grep`, `rg`, or `Search` with paths)
+- Prefer a dedicated search tool when available; otherwise use `rg`, `grep`, or `git grep`, keeping searches scoped and output bounded.
 - **Write/Edit tools** for file modifications (not `echo`, `sed`, `awk`)
 - **`holbuild`** for HOL operations/builds and proof feedback when authorized. The old HOL4 MCP tools (`hol_send`, `hol_file_init`, `hol_state_at`, MCP `holmake`, etc.) are deprecated and should not be used.
 
