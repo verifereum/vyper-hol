@@ -272,48 +272,6 @@ fun first_some [] = NONE
   | first_some (NONE::xs) = first_some xs
   | first_some (SOME x::_) = SOME x
 
-(* Delegate raw_call is independent of msg.data (#327): both recursive and
-   CPS execution reject it. Classify the exported AST, not source spacing.
-   #39 tracks the remaining chain-interaction builtin semantics. *)
-fun has_delegate_raw_call json = let
-  fun field_value key fields =
-    case List.find (fn (name,_) => name = key) fields of
-      SOME (_,value) => SOME value
-    | NONE => NONE
-  fun string_field key value fields =
-    case field_value key fields of
-      SOME (JSON.STRING actual) => actual = value
-    | _ => false
-  fun delegate_keyword (JSON.OBJECT fields) =
-        string_field "ast_type" "keyword" fields andalso
-        string_field "arg" "is_delegate_call" fields andalso
-        (case field_value "value" fields of
-           SOME (JSON.OBJECT value_fields) =>
-             (case field_value "value" value_fields of
-                SOME (JSON.BOOL true) => true
-              | _ => false)
-         | _ => false)
-    | delegate_keyword _ = false
-  fun walk (JSON.OBJECT fields) =
-        (string_field "ast_type" "Call" fields andalso
-         (case field_value "func" fields of
-            SOME (JSON.OBJECT func_fields) =>
-              string_field "ast_type" "Name" func_fields andalso
-              string_field "id" "raw_call" func_fields
-          | _ => false) andalso
-         (case field_value "keywords" fields of
-            SOME (JSON.ARRAY keywords) => List.exists delegate_keyword keywords
-          | _ => false)) orelse
-        List.exists (fn (_,value) => walk value) fields
-    | walk (JSON.ARRAY values) = List.exists walk values
-    | walk _ = false
-in
-  walk json
-end
-
-val delegate_raw_call_reason =
-  "unsupported feature: delegate raw_call; issue=https://github.com/verifereum/vyper-hol/issues/39"
-
 fun unsupported_source_reason_for jsons =
   case List.concat (List.map source_codes_json jsons) of
     [] => SOME "missing source_code"
@@ -325,9 +283,7 @@ fun unsupported_source_reason_for jsons =
            if List.exists (String.isSubstring pat) srcs
            then SOME ("unsupported source pattern: " ^ pat)
            else NONE)
-         unsupported_patterns @
-         [if List.exists has_delegate_raw_call jsons
-          then SOME delegate_raw_call_reason else NONE])
+         unsupported_patterns)
 
 fun unsupported_source_reason j = unsupported_source_reason_for [j]
 
@@ -392,16 +348,17 @@ val allowed_test_names = [
 
 (* Tests excluded by name - require architectural changes *)
 val excluded_test_names = [
-  (* Raw bytecode blueprint creation remains coordinated with #379. *)
-  "test_create_from_blueprint_bad_code_offset",
-  (* Independent semantic mismatch in the currently admitted raw_call tests. *)
-  "test_checkable_raw_call",
+
 
   (* Tests using shift() builtin which is not yet translated.
      TODO: add shift builtin support *)
   "test_uint256_mulmod_complex",
   (* Out-of-gas test - we don't model gas *)
-  "test_ecrecover_oog_handling"
+  "test_ecrecover_oog_handling",
+  (* The exports use the legacy codegen, which evaluates default_return_value
+     after the call; the semantics follows the experimental codegen, which
+     evaluates it before the call (the test expects 7 there, 99 here). *)
+  "test_default_return_value_reads_storage_before_empty_returndata_call"
 ]
 
 fun glob_match pat str =

@@ -1,6 +1,6 @@
 Theory vyperImmutableMetadataFrame
 Ancestors
-  list option pair finite_map alist vyperState vyperInterpreter
+  list option pair finite_map alist vyperAST vyperState vyperInterpreter
   vyperCallOutcomeFrame vyperPlaceFrames vyperStatePreservation
   vyperImmutablesPreservation vyperCreate
 
@@ -368,10 +368,21 @@ Proof
 QED
 
 Theorem metadata_frame_create[local]:
-  state_rel_frame immutable_metadata_frame (eval_create cx kind salt rof tys vs)
+  state_rel_frame immutable_metadata_frame (eval_create cx kind salt rof tys vs blueprint_size)
 Proof
-  simp_tac bool_ss [eval_create_def, create_soft_failure_def, LET_THM] >>
-  METADATA_FRAME_TAC
+  simp[state_rel_frame_result] >>
+  metis_tac[eval_create_preserves_scopes_immutables, immutable_metadata_frame_eq]
+QED
+
+Theorem metadata_frame_call_helpers[local]:
+  state_rel_frame immutable_metadata_frame (eval_send cx has_gas vs) /\
+  state_rel_frame immutable_metadata_frame (eval_ext_call cx static skip_check sig opts vs) /\
+  state_rel_frame immutable_metadata_frame (check_create_blueprint has_salt vs)
+Proof
+  simp[state_rel_frame_result] >> rpt conj_tac >> rpt strip_tac >>
+  irule immutable_metadata_frame_eq >>
+  metis_tac[eval_send_preserves_non_accounts, eval_ext_call_preserves_non_accounts,
+            check_create_blueprint_result_state]
 QED
 
 Theorem metadata_frame_raw_call[local]:
@@ -391,6 +402,7 @@ val METADATA_EVAL_STEP = FIRST [
   MATCH_ACCEPT_TAC (cj 1 metadata_frame_assignment),
   MATCH_ACCEPT_TAC (cj 2 metadata_frame_assignment),
   MATCH_ACCEPT_TAC metadata_frame_create,
+  FIRST (map MATCH_ACCEPT_TAC (CONJUNCTS metadata_frame_call_helpers)),
   MATCH_ACCEPT_TAC metadata_frame_raw_call,
   CONV_TAC (RAND_CONV (REWR_CONV switch_BoolV_def)),
   CHANGED_TAC (CONV_TAC (RAND_CONV (DEPTH_CONV BETA_CONV))),
@@ -418,6 +430,11 @@ Proof
     end) >> asm_simp_tac bool_ss [] >>
   simp_tac bool_ss [Once evaluate_def] >>
   RULE_ASSUM_TAC (REWRITE_RULE [GSYM state_rel_frame_result]) >>
+  TRY (rename1 `CreateTarget kind has_salt rof` >>
+       Cases_on `kind` >> Cases_on `has_salt` >>
+       simp_tac bool_ss [COND_CLAUSES] >>
+       RULE_ASSUM_TAC (SIMP_RULE bool_ss
+         [create_kind_11, create_kind_distinct, COND_CLAUSES])) >>
   rpt METADATA_EVAL_STEP >> suspend "IntCallFrames"
 QED
 

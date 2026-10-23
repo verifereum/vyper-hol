@@ -46,12 +46,6 @@ bounds are not excluded by this whitelist; typing and allocation are separate.
 - `supported_function_decl tops id visibility`: option of
   `(mutability,nonreentrant,raw_return,args,defaults,return_type,body)`.
 - `supported_event_fields tops id`: option of declared `(argument,indexed)` list.
-- `supported_interface_method tops name`: option of
-  `(from_interface,args,return_type,mutability)`. Follows the first matching
-  External function or interface method, just like `build_method_id_map`.
-- `supported_external_call_signature tops name arg_types`: requires interface
-  origin and exact argument types; a preceding matching External declaration
-  blocks it. Other external-call restrictions remain TASK_020's responsibility.
 
 These are **raw syntactic lookups**, not admission predicates: inspect their
 results and combine them with the declaration/type checks. All namespace-bearing
@@ -133,8 +127,8 @@ cheat delta is zero.
   declarations, reject modules, and distinguish aggregate places from values.
   Storage-field **reads** require the first field; TASK_021 can use the exported
   field list for arbitrary-field writes.
-- `supported_external_return_type`: W or a nonempty tuple of W; no NoneT,
-  dynamic returns, nested tuples, or arrays.
+- `supported_external_return_type tops ty`: any `supported_value_type tops ty`
+  (W, strings/bytes, tuples of scalars, arrays of W, word structs); no NoneT.
 
 ### `supportedExprsTheory`
 
@@ -144,13 +138,19 @@ cheat delta is zero.
   Subscript/Attribute are specially checked places, not standalone P values.
 - `supported_effect_expr tops e` (E): only root IntCall, ExtCall, Send, or Pop.
   All call arguments, including external target/value, must be P. Internal
-  lookup requires Internal/NONE. ExtCall requires exact count, W arguments,
-  static W/tuple-W return, no default, and TASK_019's **first-by-name interface**
-  signature rule (parameter types only, exactly as PLAN §5.6 specifies).
+  lookup requires Internal/NONE. ExtCall requires exact count, W arguments and
+  a supported value return. No declaration is consulted: the selector is
+  hashed from the call-site signature, as the source semantics does
+  ([#555](https://github.com/verifereum/vyper-hol/issues/555)).
+  Keyword operands (`value=`, `gas=`, `default_return_value=`) follow the
+  positional arguments in source order, each kind at most once, and no
+  `value=` on a staticcall. They are pure like every other operand, and both
+  the lowering and the semantics evaluate them before the call.
 - `supported_expr tops e`: P or E, for later statement expression positions.
   No statement or whole-program placeholder is provided.
 - Symbolic contracts: pure Call/Pop rejection, external-call inversion,
-  default-return rejection, and list/field EVERY equivalences.
+  rejection of every call with a `default` field, and
+  list/field EVERY equivalences.
 
 ### `supportedExprTraverseTheory`
 
@@ -186,10 +186,10 @@ Proof paths: `lowering/supported/supportedExprFormPropsScript.sml` (F below)
 | Empty, MaxValue, MinValue, Epsilon, Extract32 exclusion | F `supported_type_builtin_coverage` |
 | Every admitted conversion family; out-of-list, width, bytes20, N>=135 exclusions | F `supported_conversion_whitelist_coverage`, `supported_conversion_exclusion_coverage` |
 | ABI encode/decode exact flags, method-id size, tuple depth/length, arity | F `supported_abi_forms_coverage` |
-| Len, hashes, Concat, Slice, Uint2Str, typed/dynamic MakeArray, Ceil, Floor, MethodId; wrong arities | F `supported_builtin_exclusion_coverage` |
+| Uint2Str (unsigned argument), CalldataSlice; Len, hashes, Concat, Slice, typed/dynamic MakeArray, Ceil, Floor, MethodId and wrong arities excluded | F `supported_builtin_exclusion_coverage` |
 | IntCall, Send, storage dynamic Pop; namespace/visibility/base exclusions | X `supported_internal_send_pop_rows` |
-| ExtCall counts, defaults, NoneT/dynamic/nonword returns, nonword args | X `supported_external_expression_row`, `supported_external_nonword_arguments_rejected` |
-| First matching External/interface/duplicate interface entry blocks later matches | X `supported_external_first_declaration_rule` |
+| ExtCall counts, keyword operands, pure vs effectful defaults, value/NoneT returns, nonword args | X `supported_external_expression_row`, `supported_external_nonword_arguments_rejected` |
+| ExtCall admission does not depend on declarations of the same name | X `supported_external_declaration_independent` |
 | F22/ordering: nested effects in P, internal args, external target/value/args | X `supported_effect_nesting_counterexamples` |
 | RawCallTarget, RawLog, RawRevert, SelfDestructTarget, every CreateTarget kind | X `supported_raw_call_forms_excluded` |
 | Internal-call/effect occurrence through every recursive container | X `supported_occurrence_traversal_coverage` |

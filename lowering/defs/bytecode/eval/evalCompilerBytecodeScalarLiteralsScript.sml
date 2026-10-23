@@ -19,16 +19,6 @@ QED
 
 val () = computeLib.upd_compset (computeLib.add_thms [i2w_neg_num])
 
-Theorem word_of_bytes_be_bytes32:
-  (word_of_bytes_be bs : bytes32) =
-    n2w (num_of_bytes (be_bytes (dimindex (:256) DIV 8) [] bs))
-Proof
-  irule word_of_bytes_be_eq_num_of_bytes >> EVAL_TAC
-QED
-
-val () = computeLib.upd_compset
-  (computeLib.add_thms [word_of_bytes_be_bytes32])
-
 Theorem scalar_literals_bool_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities)
     scalar_literals_bool_program =

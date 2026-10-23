@@ -5,13 +5,18 @@ Ancestors
   moduleLowering
   (* property statements and proofs *)
   moduleLoweringProps
+  loweringSlice
   valueEncodingProofs
+  localPtrsProps
   (* compiler + correctness *)
   vyperCompiler
   vyperLoweringCorrect
   configuredE2ECorrectness
   evalCompilerMemoryStores
+  evalCompilerExternalCalls
   evalCompilerNameCollisions
   evalCompilerAssignmentEffects
   evalInterpreterAssignmentOrder
   evalAssignmentOrderSupported
+  evalCompilerSliceBuffers
+  evalCompilerPhiPointers

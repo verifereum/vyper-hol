@@ -18,6 +18,7 @@ t08_tuple_assign_ret_type_mismatch
 r07_assert_storage_string_reason
 p06_local_append_struct
 p15_local_append_bytes
+p16_return_tuple_bytes_widen
 p64_string_annassign_call
 e70_noData_live_mem2
 dec_from_memory2
@@ -27,3 +28,14 @@ long_bytes_literal
 t11_tuple_onew_decode_mem
 storage_one_word_array
 enc_in_assign
+tup_nested_ret
+st_nested_lit
+arr_dyn_lit_word
+b20_dynarr_lit
+empty_string_ret
+empty_dynarr_local
+arr_local_elem_assign
+st_empty_ret
+c10_assign_empty_struct
+c11_annassign_empty_fixed_array
+c05_assign_empty_builtin_string

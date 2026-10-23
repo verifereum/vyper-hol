@@ -251,6 +251,209 @@ Termination
   res_tac >> simp[]
 End
 
+(* ===== Constant folding ===== *)
+
+(* Vyper folds constant initializers at compile time and rejects a contract
+   whose initializer fails to evaluate, e.g. `1 // 0` or `max_value(uint256) +
+   1`.  The checker mirrors this by running the deployment-time constants fold
+   (evaluate_all_constants) without a context or machine.  constant_value
+   computes what eval_expr returns on a constant initializer: top-level names
+   are read as lookup_global reads them, from the module code in mods and the
+   contract's immutables imms, and builtins are evaluated in
+   constant_context mods, which fixes only the type environment the constant
+   builtins read.  Soundness against eval_expr is proved in
+   prop/vyperTypeConstantFold. *)
+Definition constant_context_def:
+  constant_context mods =
+    empty_evaluation_context with
+      sources := [(empty_evaluation_context.txn.target, mods)]
+End
+
+Definition constant_length_def:
+  constant_length (ArrayV (DynArrayV vs)) = SOME (LENGTH vs) /\
+  constant_length (ArrayV (SArrayV sparse)) = SOME (LENGTH sparse) /\
+  constant_length (ArrayV (TupleV vs)) = SOME (LENGTH vs) /\
+  constant_length (BytesV ls) = SOME (LENGTH ls) /\
+  constant_length (StringV ls) = SOME (LENGTH ls) /\
+  constant_length _ = NONE
+End
+
+Definition constant_value_def:
+  constant_value mods imms (TopLevelName _ (src,id)) =
+    (case ALOOKUP mods src of
+     | NONE => NONE
+     | SOME ts =>
+         if IS_SOME (find_var_decl_by_name id ts) then NONE
+         else OPTION_MAP SND (FLOOKUP (get_source_immutables src imms) id)) /\
+  constant_value mods imms (Literal _ l) = SOME (evaluate_literal l) /\
+  constant_value mods imms (StructLit _ _ kes) =
+    OPTION_MAP (\vs. StructV (ZIP (MAP FST kes, vs)))
+      (constant_values mods imms (MAP SND kes)) /\
+  constant_value mods imms (Subscript _ e1 e2) =
+    (case (constant_value mods imms e1, constant_value mods imms e2) of
+     | (SOME v1, SOME v2) =>
+         (case evaluate_type (type_env_all_modules mods) (expr_type e1) of
+          | NONE => NONE
+          | SOME arr_tv =>
+              case evaluate_subscript (type_env_all_modules mods) arr_tv
+                     (Value v1) v2 of
+              | INL (INL (Value v)) => SOME v
+              | _ => NONE)
+     | _ => NONE) /\
+  constant_value mods imms (Attribute _ e id) =
+    (case constant_value mods imms e of
+     | NONE => NONE
+     | SOME v =>
+         case evaluate_attribute v id of
+         | INL v' => SOME v'
+         | INR _ => NONE) /\
+  constant_value mods imms (Builtin ty bt es) =
+    (if ~constant_builtin bt \/ ~builtin_args_length_ok bt (LENGTH es) then NONE
+     else
+       case constant_values mods imms es of
+       | NONE => NONE
+       | SOME vs =>
+           if bt = Len then
+             (case vs of
+              | [v] => OPTION_MAP (\n. IntV (&n)) (constant_length v)
+              | _ => NONE)
+           else
+             case evaluate_builtin (constant_context mods) empty_accounts
+                    ty bt vs of
+             | INL v => SOME v
+             | INR _ => NONE) /\
+  constant_value mods imms (TypeBuiltin _ tb typ es) =
+    (if ~constant_type_builtin tb \/
+        ~type_builtin_args_length_ok tb (LENGTH es) then NONE
+     else
+       case constant_values mods imms es of
+       | NONE => NONE
+       | SOME vs =>
+           case evaluate_type_builtin (constant_context mods) tb typ vs of
+           | INL v => SOME v
+           | INR _ => NONE) /\
+  constant_value mods imms _ = NONE /\
+  constant_values mods imms [] = SOME [] /\
+  constant_values mods imms (e::es) =
+    (case constant_value mods imms e of
+     | NONE => NONE
+     | SOME v =>
+         case constant_values mods imms es of
+         | NONE => NONE
+         | SOME vs => SOME (v::vs))
+Termination
+  WF_REL_TAC `measure (\x. case x of
+                           | INL (_,_,e) => expr_size e
+                           | INR (_,_,es) => list_size expr_size es)` >>
+  rw[] >>
+  Induct_on `kes` >> rw[] >>
+  PairCases_on `h` >> rw[]
+End
+
+(* The immutables of the contract's address after merging cenv into module
+   src, as merge_constants does on the machine. *)
+Definition merge_constant_imms_def:
+  merge_constant_imms src cenv imms =
+    set_source_immutables src (FUNION cenv (get_source_immutables src imms))
+      imms
+End
+
+(* constants_env and evaluate_all_constants over the contract's immutables. *)
+Definition constants_fold_module_def:
+  constants_fold_module mods imms src [] acc = SOME acc /\
+  constants_fold_module mods imms src
+      (VariableDecl _ (Constant e) id typ _ :: ts) acc =
+    (case evaluate_type (type_env_all_modules mods) typ of
+     | NONE => NONE
+     | SOME tv =>
+         case constant_value mods (merge_constant_imms src acc imms) e of
+         | NONE => NONE
+         | SOME v =>
+             constants_fold_module mods imms src ts (acc |+ (id,(tv,v)))) /\
+  constants_fold_module mods imms src (_ :: ts) acc =
+    constants_fold_module mods imms src ts acc
+End
+
+Definition constants_fold_def:
+  constants_fold mods imms [] = SOME imms /\
+  constants_fold mods imms ((src,ts)::rest) =
+    case constants_fold_module mods imms src ts FEMPTY of
+    | NONE => NONE
+    | SOME cenv =>
+        constants_fold mods (merge_constant_imms src cenv imms) rest
+End
+
+(* Every constant initializer evaluates, folding in the order the deployment
+   fold uses: modules in mods order, declarations in source order, starting
+   from the immutables load_contract installs.  A forward reference between
+   constants is rejected, as that order cannot evaluate it. *)
+Definition contract_constants_ok_def:
+  contract_constants_ok mods <=>
+    case initial_immutables (type_env_all_modules mods) mods of
+    | NONE => F
+    | SOME imms => IS_SOME (constants_fold mods imms mods)
+End
+
+(* Vyper accepts a default argument only from its RUNTIME_CONSTANT class
+   (check_modifiability in vyper/semantics/analysis/utils.py, required by
+   _parse_args in vyper/semantics/types/function.py).  Folded values arrive as
+   literals.  It admits operators (BinOp/Compare/UnaryOp, and BoolOp, which the
+   frontend turns into an IfExp with a literal branch), tuple, list and struct
+   literals, environment reads other than `self`, account reads of such an
+   address, constants, immutables and their subscripts and fields, and
+   empty(T).  Storage, transient and HashMap reads, flag members, ternaries and
+   all other calls are excluded; for example `self.x`, `self.balance`,
+   `len(msg.data)`, `max(block.number, 3)` and
+   `block.number if msg.value > 0 else 2` are rejected by Vyper and here. *)
+Definition declared_immutable_def:
+  declared_immutable mods src id <=>
+    ?tls vis ty init.
+      MEM (src,tls) mods /\
+      MEM (VariableDecl vis Immutable id ty init) tls
+End
+
+Definition runtime_constant_builtin_def:
+  runtime_constant_builtin Not = T /\
+  runtime_constant_builtin Neg = T /\
+  runtime_constant_builtin (MakeArray _ _) = T /\
+  runtime_constant_builtin (Bop op) =
+    (constant_binop op /\ op <> Min /\ op <> Max) /\
+  runtime_constant_builtin (Env item) = (item <> SelfAddr) /\
+  runtime_constant_builtin (Acc item) = (item <> Code) /\
+  runtime_constant_builtin _ = F
+End
+
+Definition bool_literal_expr_def:
+  bool_literal_expr (Literal _ (BoolL _)) = T /\
+  bool_literal_expr _ = F
+End
+
+Definition runtime_constant_expr_def:
+  runtime_constant_expr mods (TopLevelName _ (src,id)) =
+    (declared_constant mods src id \/ declared_immutable mods src id) /\
+  runtime_constant_expr mods (Literal _ _) = T /\
+  runtime_constant_expr mods (StructLit _ _ kes) =
+    EVERY (runtime_constant_expr mods) (MAP SND kes) /\
+  runtime_constant_expr mods (Subscript _ e1 e2) =
+    (runtime_constant_expr mods e1 /\ runtime_constant_expr mods e2) /\
+  runtime_constant_expr mods (Attribute _ e _) = runtime_constant_expr mods e /\
+  runtime_constant_expr mods (IfExp _ c a b) =
+    ((bool_literal_expr a \/ bool_literal_expr b) /\
+     runtime_constant_expr mods c /\ runtime_constant_expr mods a /\
+     runtime_constant_expr mods b) /\
+  runtime_constant_expr mods (Builtin _ bt es) =
+    (runtime_constant_builtin bt /\ EVERY (runtime_constant_expr mods) es) /\
+  runtime_constant_expr mods (TypeBuiltin _ tb _ es) =
+    (constant_type_builtin tb /\ EVERY (runtime_constant_expr mods) es) /\
+  runtime_constant_expr mods _ = F
+Termination
+  WF_REL_TAC `measure (\(_,e). expr_size e)` >>
+  rw[] >>
+  Induct_on `kes` >> rw[] >>
+  PairCases_on `h` >> rw[] >>
+  res_tac >> simp[]
+End
+
 Definition lookup_var_slot_in_layouts_def:
   lookup_var_slot_in_layouts layouts addr is_transient src var_name =
     case ALOOKUP layouts addr of
@@ -296,8 +499,10 @@ Definition check_toplevel_decl_def:
           params_ok tenv args /\ well_formed_type tenv ret) funcs
     | EventDecl id fields =>
         EVERY (\((_,ty),indexed). assignable_type tenv ty) fields
-    | FunctionDecl _ _ _ _ _ args dflts ret _ =>
-        params_ok tenv args /\ well_formed_type tenv ret
+    | FunctionDecl vis _ _ _ _ args dflts ret _ =>
+        params_ok tenv args /\ well_formed_type tenv ret /\
+        (* Vyper: "Constructor may not use default arguments" *)
+        (vis = Deploy ==> dflts = [])
 End
 
 (* ===== Callable-body checks ===== *)
@@ -313,6 +518,7 @@ Definition check_function_body_def:
       (ret = NoneT \/ stmts_no_fallthrough body) /\
       stmts_no_control_escape body /\
       well_typed_exprs (defaults_env env) dflts /\
+      EVERY (runtime_constant_expr mods) dflts /\
       MAP expr_type dflts = MAP SND (DROP (LENGTH args - LENGTH dflts) args)
 End
 
@@ -341,7 +547,8 @@ Definition check_contract_def:
     let art = build_contract_type_artifact in_deploy mods in
       if contract_namespaces_ok in_deploy mods /\
          contract_call_graph_acyclic mods /\
-         EVERY (check_module in_deploy layouts addr mods art) mods
+         EVERY (check_module in_deploy layouts addr mods art) mods /\
+         contract_constants_ok mods
       then SOME art else NONE
 End
 

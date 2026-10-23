@@ -1,5 +1,4 @@
-(* Focused LOCAL checks of actual contracts and expanded pure-state equality.
-   No evaluator switch, new semantics, parity leaf, or generated-suite root. *)
+(* Focused checks of call frames and expanded pure-state equality. *)
 Theory vyperCallFrameTest
 Ancestors
   list option pair sum finite_map
@@ -27,9 +26,9 @@ Theorem extcall_code_failure_precedes_take:
     k outcome.co_returnData
   od) st = (INR (Error (RuntimeError "ExtCall target has no code")),st)
 Proof
-  strip_tac >> Cases_on `take_call_outcome target calldata value_opt st` >>
-  drule ExtCall_outcome_continue >>
-  disch_then (qspecl_then [`NoneT`,`k`] mp_tac) >> simp[]
+  strip_tac >>
+  simp[bind_def, ignore_bind_def, get_accounts_def, return_def,
+       check_def, assert_def, raise_def]
 QED
 
 Theorem send_failure_keeps_taken_state:

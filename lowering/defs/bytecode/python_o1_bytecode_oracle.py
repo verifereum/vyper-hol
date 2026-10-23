@@ -6,7 +6,6 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import os
 import platform
 from importlib.metadata import version
 from pathlib import Path
@@ -124,7 +123,7 @@ def main() -> None:
             f"deploy={deploy}\nruntime={runtime}\n"
         )
         fixtures[source.stem] = {
-            "source": Path(os.path.relpath(source, args.output.parent)).as_posix(),
+            "source": source.relative_to(args.sources.parent).as_posix(),
             "source_sha256": hashlib.sha256(source_bytes).hexdigest(),
             "deploy_sha256": hashlib.sha256(bytes.fromhex(deploy)).hexdigest(),
             "runtime_sha256": hashlib.sha256(bytes.fromhex(runtime)).hexdigest(),

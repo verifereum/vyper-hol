@@ -5,7 +5,7 @@ Ancestors
   vyperValueOperation vyperState vyperInterpreter vyperSmallStep
   vyperTypeSystem vyperTypeContract
 Libs
-  vyperCheckContractFrontendLib
+  vyperCheckContractFrontendLib cv_transLib
 
 fun holbuild_extra_deps (_ : string list) = ()
 val () = holbuild_extra_deps ["fixtures/check_contract/raw_call_calldata.json"];
@@ -60,18 +60,29 @@ val () = app (fn expected =>
 val runtime_json = "{\"ast_type\":\"BinOp\",\"left\":{\"ast_type\":\"Int\",\"value\":2},\"op\":{\"ast_type\":\"Add\"},\"right\":{\"ast_type\":\"Int\",\"value\":2},\"folded_value\":{\"ast_type\":\"Int\",\"value\":4}}";
 val data_json = "{\"ast_type\":\"Attribute\",\"value\":{\"ast_type\":\"Name\",\"id\":\"msg\"},\"attr\":\"data\"}";
 val bool_json = "{\"ast_type\":\"NameConstant\",\"value\":true,\"folded_value\":{\"ast_type\":\"NameConstant\",\"value\":false}}";
-fun decode_call source = let
+fun decode_named_call name source = let
   val ast = JSONDecode.decodeString jsonASTLib.annotated_ast
     ("{\"ast\":{\"body\":[{\"ast_type\":\"FunctionDef\",\"name\":\"test\",\"decorator_list\":[]," ^
      "\"args\":{\"ast_type\":\"arguments\",\"args\":[]},\"func_type\":{\"argument_types\":[],\"return_type\":null}," ^
      "\"body\":[{\"ast_type\":\"Expr\",\"value\":" ^ source ^ "}]}]}}")
   val call_tm = prim_mk_const {Thy = "jsonAST", Name = "JE_Call"}
+  val name_tm = prim_mk_const {Thy = "jsonAST", Name = "JE_Name"}
+  fun wanted tm = let
+    val (head, args) = strip_comb tm
+  in
+    if aconv head call_tm andalso length args = 5 then let
+      val (func_head, func_args) = strip_comb (hd args)
+    in
+      aconv func_head name_tm andalso length func_args = 4 andalso
+      stringSyntax.fromHOLstring (hd func_args) = name
+    end else false
+  end
 in
-  case find_terms (fn tm => let val (head, args) = strip_comb tm in
-    aconv head call_tm andalso length args = 5 end) ast of
+  case find_terms wanted ast of
     [call] => call
-  | _ => raise Fail "decoder regression did not contain one call"
+  | _ => raise Fail ("decoder regression did not contain one " ^ name ^ " call")
 end;
+fun decode_call source = decode_named_call "raw_call" source;
 fun decode_raw_call data extra = decode_call
   ("{\"ast_type\":\"Call\",\"func\":{\"ast_type\":\"Name\",\"id\":\"raw_call\"},\"args\":[" ^
    runtime_json ^ "," ^ data ^ extra ^ "],\"keywords\":[" ^
@@ -98,6 +109,44 @@ val () = app (fn (actual, expected) =>
    (decode_raw_call data_json ("," ^ runtime_json),
     expected_decoded ``[^runtime_e; ^source_data_e; ^runtime_e]`` plain_kwargs)];
 
+(* A method_id kwarg is a compiler-folded constant. Losing that folded value
+   silently drops the selector from _abi_encode and turns valid calls into
+   failed calls. This is the focused frontend boundary from
+   test_checkable_raw_call. *)
+val method_id_json =
+  "{\"ast_type\":\"Call\",\"func\":{\"ast_type\":\"Name\",\"id\":\"method_id\"}," ^
+  "\"args\":[{\"ast_type\":\"Str\",\"value\":\"fail1(bool)\"," ^
+  "\"type\":{\"generic\":\"string\"}}],\"keywords\":[]," ^
+  "\"type\":{\"name\":\"Bytes\",\"typeclass\":\"bytes\",\"length\":4}," ^
+  "\"folded_value\":{\"ast_type\":\"Bytes\",\"value\":\"0x282b554a\"," ^
+  "\"type\":{\"name\":\"Bytes\",\"typeclass\":\"bytes\",\"length\":4}}}";
+val abi_encode_json =
+  "{\"ast_type\":\"Call\",\"func\":{\"ast_type\":\"Name\",\"id\":\"_abi_encode\"}," ^
+  "\"args\":[{\"ast_type\":\"Name\",\"id\":\"should_raise\"," ^
+  "\"type\":{\"name\":\"bool\",\"typeclass\":\"primitive\"}}]," ^
+  "\"keywords\":[{\"arg\":\"method_id\",\"value\":" ^ method_id_json ^ "}]," ^
+  "\"type\":{\"name\":\"Bytes\",\"typeclass\":\"bytes\",\"length\":36}}";
+val decoded_abi_encode =
+  decode_named_call "_abi_encode" abi_encode_json;
+val translated_abi_encode = rhs (concl (EVAL
+  ``translate_expr (0,NONE,[],[],[],[],[]) ^decoded_abi_encode``));
+val expected_abi_encode =
+  ``TypeBuiltin (BaseT (BytesT (Dynamic 36)))
+      (AbiEncode T (SOME [40w; 43w; 85w; 74w]))
+      (TupleT [BaseT BoolT]) [Name (BaseT BoolT) "should_raise"]``;
+val () =
+  if aconv translated_abi_encode expected_abi_encode then ()
+  else raise Fail "_abi_encode lost the compiler-folded method_id";
+
+Theorem checkable_raw_call_false_calldata:
+  evaluate_type_builtin empty_evaluation_context
+    (AbiEncode T (SOME [40w; 43w; 85w; 74w]))
+    (TupleT [BaseT BoolT]) [BoolV F] =
+  INL (BytesV ([40w; 43w; 85w; 74w] ++ REPLICATE 32 0w))
+Proof
+  CONV_TAC cv_eval
+QED
+
 fun check_raw_call args flags =
   vyperCheckContractLib.check_contract_conv
     (vyperCheckContractLib.mk_check_contract
@@ -116,9 +165,19 @@ val () = app (fn args =>
   else raise Fail "malformed calldata raw_call accepted")
   [``[] : expr list``, ``[^addr_e]``, ``[^addr_e; ^zero_e; ^zero_e]``,
    ``[^zero_e; ^zero_e]``, ``[^addr_e; Literal (BaseT BoolT) (BoolL T)]``];
-val () = if optionSyntax.is_none (rhs (concl (check_raw_call
-    ``[^addr_e; ^zero_e]`` ``^flags with rcf_is_delegate := T``))) then ()
-  else raise Fail "delegate calldata raw_call accepted";
+val () = app (fn valid_flags =>
+  if optionSyntax.is_some (rhs (concl (check_raw_call
+    ``[^addr_e; ^zero_e]`` valid_flags))) then ()
+  else raise Fail "valid delegate/static calldata raw_call rejected")
+  [``^flags with rcf_is_delegate := T``, ``^flags with rcf_is_static := T``];
+val one_e = ``Literal (BaseT (UintT 256)) (IntL 1)``;
+val () = app (fn (amount, invalid_flags) =>
+  if optionSyntax.is_none (rhs (concl (check_raw_call
+    ``[^addr_e; ^amount]`` invalid_flags))) then ()
+  else raise Fail "invalid calldata raw_call flags/value accepted")
+  [(zero_e, ``^flags with <|rcf_is_delegate := T; rcf_is_static := T|>``),
+   (one_e, ``^flags with rcf_is_delegate := T``),
+   (one_e, ``^flags with rcf_is_static := T``)];
 
 (* Arbitrary side effects: target runs first, value sees its resulting state;
    execution receives the original transaction input without stripping a selector
@@ -191,19 +250,18 @@ Proof
        assert_def, raise_def]
 QED
 
-(* All existing output/revert/static variants use the same original bytes. *)
+(* All output/revert/static/delegate variants use the same original bytes. *)
 Theorem raw_call_calldata_original_input_test:
-  ~flags.rcf_is_delegate /\
+  ~(flags.rcf_is_delegate /\ flags.rcf_is_static) /\
+  ((flags.rcf_is_delegate \/ flags.rcf_is_static) ==> amount = 0) /\
   cx.txn.calldata = [1w; 2w; 3w; 4w; 10w; 11w; 99w] /\
-  run_ext_call cx.txn.target to cx.txn.calldata
-    (if flags.rcf_is_static then NONE else SOME amount)
-    st.accounts st.tStorage (vyper_to_tx_params cx.txn) =
+  run_raw_call cx flags to cx.txn.calldata amount st.accounts st.tStorage =
       SOME (success, retdata, accounts', transient', logs') ==>
   eval_raw_call cx flags to cx.txn.calldata amount st =
     (if flags.rcf_revert_on_failure then
        if success then INL (Value (if flags.rcf_max_outsize = 0 then NoneV
          else BytesV (TAKE flags.rcf_max_outsize retdata)))
-       else INR (Error (RuntimeError "raw_call reverted"))
+       else INR (Error (RevertData retdata))
      else INL (Value (if flags.rcf_max_outsize = 0 then BoolV success
        else ArrayV (TupleV [BoolV success;
          BytesV (TAKE flags.rcf_max_outsize retdata)]))),

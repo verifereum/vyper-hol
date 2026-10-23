@@ -1505,7 +1505,7 @@ QED
 
 Theorem scope_pop_effect_log_create[simp]:
   scope_pop_effect (push_log log) /\
-  scope_pop_effect (eval_create cx kind has_salt rof tys vs)
+  scope_pop_effect (eval_create cx kind has_salt rof tys vs code_size)
 Proof
   conj_tac >> irule scope_pop_effect_identity >> rpt strip_tac >>
   FIRST (map (fn th => drule th >> simp[])
@@ -1543,14 +1543,6 @@ Theorem eval_raw_revert_scope_effect[local]:
 Proof
   strip_tac >> rewrite_tac[Once evaluate_def, ignore_bind_def] >>
   ho_match_mp_tac scope_pop_effect_bind >> conj_tac >- simp[] >> gen_tac >>
-  ho_match_mp_tac scope_pop_effect_bind >> simp[]
-QED
-
-Theorem eval_create_scope_effect[local]:
-  scope_pop_effect (eval_exprs cx es) ==>
-  scope_pop_effect (eval_expr cx (Call ty (CreateTarget kind has_salt rof) es drv))
-Proof
-  strip_tac >> rewrite_tac[Once evaluate_def] >>
   ho_match_mp_tac scope_pop_effect_bind >> simp[]
 QED
 
@@ -1605,25 +1597,28 @@ Proof
   gen_tac >> IF_CASES_TAC >> simp[]
 QED
 
+Theorem scope_pop_effect_call_helpers[simp]:
+  scope_pop_effect (eval_send cx has_gas vs) /\
+  scope_pop_effect (eval_ext_call cx static skip_check sig opts vs) /\
+  scope_pop_effect (check_create_blueprint has_salt vs)
+Proof
+  rpt conj_tac >> irule scope_pop_effect_identity >> rpt strip_tac >>
+  FIRST (map (fn th => drule th >> simp[])
+    [eval_send_preserves_non_accounts, eval_ext_call_preserves_non_accounts,
+     vyperCreateTheory.check_create_blueprint_result_state])
+QED
+
 Theorem eval_send_scope_effect[local]:
-  (!st x middle. type_check (LENGTH es = 2) "Send args" st = (INL x,middle) ==>
+  (!st x middle.
+    type_check (LENGTH es = if has_gas then 3 else 2) "Send args" st = (INL x,middle) ==>
     scope_pop_effect (eval_exprs cx es)) ==>
-  scope_pop_effect (eval_expr cx (Call ty Send es drv))
+  scope_pop_effect (eval_expr cx (Call ty (Send has_gas) es drv))
 Proof
   strip_tac >> rewrite_tac[Once evaluate_def, ignore_bind_def] >>
   ho_match_mp_tac scope_pop_effect_bind_guarded >> conj_tac >- simp[] >>
   rpt gen_tac >> strip_tac >>
   ho_match_mp_tac scope_pop_effect_bind >> conj_tac
-  >- (first_x_assum irule >> goal_assum (drule_at Any)) >>
-  gen_tac >> ho_match_mp_tac scope_pop_effect_bind >> conj_tac >- simp[] >>
-  gen_tac >> ho_match_mp_tac scope_pop_effect_bind >> conj_tac >- simp[] >>
-  gen_tac >> ho_match_mp_tac scope_pop_effect_bind >> conj_tac >- simp[] >>
-  qx_gen_tac `outcomes` >> Cases_on `outcomes` >> simp[]
-  >- (ho_match_mp_tac scope_pop_effect_bind >> simp[]) >>
-  ho_match_mp_tac scope_pop_effect_bind >> conj_tac >- simp[] >>
-  qx_gen_tac `pair` >> PairCases_on `pair` >> simp[] >>
-  ho_match_mp_tac scope_pop_effect_bind >> conj_tac >- simp[] >>
-  gen_tac >> ho_match_mp_tac scope_pop_effect_bind >> simp[]
+  >- (first_x_assum irule >> goal_assum (drule_at Any)) >> simp[]
 QED
 
 (* Consume a guarded recursive IH only at an isolated effect leaf.  Facts are
@@ -1647,6 +1642,12 @@ fun POP_EFFECT_GUARD_TAC (asl,w) =
   in
     FIRST (map close facts) (asl,w)
   end;
+
+val POP_EFFECT_BIND_STEP = FIRST [
+  POP_EFFECT_GUARD_TAC,
+  (simp[] >> NO_TAC),
+  ho_match_mp_tac scope_pop_effect_bind_guarded >> conj_tac,
+  gen_tac, strip_tac];
 
 
 Theorem finally_conditional_lock_scopes:
@@ -1697,59 +1698,26 @@ Proof
      eval_subscript_base_place_scope_effect, eval_subscript_scope_effect,
      eval_builtin_scope_effect, eval_typebuiltin_scope_effect,
      eval_raw_call_scope_effect, eval_raw_calldata_scope_effect,
-     eval_raw_revert_scope_effect, eval_create_scope_effect,
+      eval_raw_revert_scope_effect,
      eval_selfdestruct_scope_effect, eval_raw_log_scope_effect, eval_send_scope_effect])) >>
   TRY (rewrite_tac[Once evaluate_def] >>
        match_mp_tac (GEN_ALL scope_pop_effect_value_wrap) >>
        first_assum ACCEPT_TAC >> NO_TAC)
-  >- suspend "ExtCall"
-  >> suspend "IntCall"
+   >> TRY (rename1 `scope_pop_effect (eval_expr _ (Call _ (ExtCall _ _ _ _) _ _))` >>
+           suspend "ExtCall")
+   >> TRY (rename1 `scope_pop_effect (eval_expr _ (Call _ (CreateTarget kind has_salt rof) _ _))` >>
+           suspend "Create")
+   >> suspend "IntCall"
 QED
 
 Resume eval_mutual_scope_pop_effect[ExtCall]:
-  rewrite_tac[Once evaluate_def, ignore_bind_def] >>
-      ho_match_mp_tac scope_pop_effect_bind_guarded >> conj_tac
-      >- first_assum ACCEPT_TAC >>
-      rpt gen_tac >> strip_tac >>
-      ho_match_mp_tac scope_pop_effect_bind_guarded >> conj_tac >- simp[] >>
-      rpt gen_tac >> strip_tac >>
-      ho_match_mp_tac scope_pop_effect_bind_guarded >> conj_tac >- simp[] >>
-      rpt gen_tac >> strip_tac >>
-      ho_match_mp_tac scope_pop_effect_bind_guarded >> conj_tac
-      >- (IF_CASES_TAC >> simp[] >>
-          ho_match_mp_tac scope_pop_effect_bind >> conj_tac >- simp[] >>
-          gen_tac >> ho_match_mp_tac scope_pop_effect_bind >> simp[]) >>
-      gen_tac >> qx_gen_tac `pair` >> rpt gen_tac >> strip_tac >>
-      PairCases_on `pair` >> simp[LET_THM] >>
-      ho_match_mp_tac scope_pop_effect_bind_guarded >> conj_tac >- simp[] >>
-      rpt gen_tac >> strip_tac >>
-      ho_match_mp_tac scope_pop_effect_bind_guarded >> conj_tac >- simp[] >>
-      gen_tac >> qx_gen_tac `outcomes` >> rpt gen_tac >> strip_tac >>
-      Cases_on `outcomes` >> pure_rewrite_tac[optionTheory.option_CLAUSES]
-      >- (ntac 3 (ho_match_mp_tac scope_pop_effect_bind_guarded >>
-                  conj_tac >- simp[] >> rpt gen_tac >> strip_tac) >>
-          ho_match_mp_tac scope_pop_effect_bind_guarded >> conj_tac >- simp[] >>
-          gen_tac >> qx_gen_tac `result` >> rpt gen_tac >> strip_tac >>
-          PairCases_on `result` >> CONV_TAC (DEPTH_CONV pairLib.PAIRED_BETA_CONV) >>
-          ntac 4 (ho_match_mp_tac scope_pop_effect_bind_guarded >>
-                  conj_tac >- simp[] >> rpt gen_tac >> strip_tac) >>
-          IF_CASES_TAC
-          >- (ho_match_mp_tac scope_pop_effect_bind_guarded >> conj_tac >- simp[] >>
-              rpt gen_tac >> strip_tac >> POP_EFFECT_GUARD_TAC) >>
-          ho_match_mp_tac scope_pop_effect_bind >> simp[]) >>
-      BETA_TAC >>
-      ho_match_mp_tac scope_pop_effect_bind_guarded >> conj_tac >- simp[] >>
-      rpt gen_tac >> strip_tac >>
-      ho_match_mp_tac scope_pop_effect_bind_guarded >> conj_tac
-      >- (IF_CASES_TAC >> simp[]) >>
-      rpt gen_tac >> strip_tac >>
-      ho_match_mp_tac scope_pop_effect_bind_guarded >> conj_tac >- simp[] >>
-      gen_tac >> qx_gen_tac `pair` >> rpt gen_tac >> strip_tac >>
-      PairCases_on `pair` >> CONV_TAC (DEPTH_CONV pairLib.PAIRED_BETA_CONV) >>
-      ntac 2 (ho_match_mp_tac scope_pop_effect_bind_guarded >>
-              conj_tac >- simp[] >> rpt gen_tac >> strip_tac) >>
-      IF_CASES_TAC >- POP_EFFECT_GUARD_TAC >>
-      ho_match_mp_tac scope_pop_effect_bind >> simp[]
+  rewrite_tac[Once evaluate_def] >>
+  ho_match_mp_tac scope_pop_effect_bind >> simp[]
+QED
+
+Resume eval_mutual_scope_pop_effect[Create]:
+  Cases_on `kind` >> gvs[] >> simp_tac (srw_ss()) [Once evaluate_def] >>
+  rpt POP_EFFECT_BIND_STEP
 QED
 
 Resume eval_mutual_scope_pop_effect[IntCall]:

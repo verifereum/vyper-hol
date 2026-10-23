@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Generate, probe and execute the memory-store differential witnesses."""
+"""Generate, probe and execute the differential witnesses of one corpus.
+
+A corpus is a sibling directory (`memory-stores`, `external-calls`) with
+`sources/`, `oracle/` and `parity-fixtures.txt`.
+"""
 
 from __future__ import annotations
 
@@ -29,13 +33,12 @@ def first_difference(left: bytes, right: bytes) -> int | None:
     return min(len(left), len(right)) if len(left) != len(right) else None
 
 
-def prepare(repo: Path, output: Path, *, check: bool) -> None:
+def prepare(repo: Path, corpus: Path, output: Path, *, check: bool) -> None:
     """Export independent pinned-Vyper AST, layout and bytecode inputs."""
     pin = (repo / "VYPER_PIN").read_text().strip()
     compiler = run(["vyper", "--version"]).strip()
     if not compiler.endswith("commit." + pin[:8]):
         raise ValueError(f"Vyper {compiler} does not match VYPER_PIN {pin}")
-    corpus = Path(__file__).with_name("memory-stores")
     output.mkdir(parents=True, exist_ok=True)
     for source in sorted((corpus / "sources").glob("*.vy")):
         stem = source.stem
@@ -94,7 +97,8 @@ def prepare(repo: Path, output: Path, *, check: bool) -> None:
             raise ValueError("independent oracle provenance changed")
 
 
-def probe(repo: Path, fixtures: Path, output: Path, selected: list[str]) -> None:
+def probe(repo: Path, corpus: Path, fixtures: Path, output: Path,
+          selected: list[str]) -> None:
     """Evaluate stock checker/compiler libraries and retain every outcome."""
     if output.resolve() == fixtures.resolve():
         raise ValueError("probe output must differ from the oracle fixture directory")
@@ -102,8 +106,7 @@ def probe(repo: Path, fixtures: Path, output: Path, selected: list[str]) -> None
     if not selected:
         available = {path.stem for path in fixtures.glob("*.json")
                      if path.name != "provenance.json"}
-        parity = names(Path(__file__).with_name("memory-stores") /
-                       "parity-fixtures.txt")
+        parity = names(corpus / "parity-fixtures.txt")
         selected = [stem for stem in parity if stem in available]
         selected += sorted(available - set(selected))
     for stem in selected:
@@ -140,8 +143,7 @@ def probe(repo: Path, fixtures: Path, output: Path, selected: list[str]) -> None
         'open HolKernel Parse boolLib bossLib;\n'
         'val _ = computeLib.upd_compset finite_mapLib.add_finite_map_compset;\n'
         'val _ = computeLib.upd_compset (computeLib.add_thms\n'
-        ' [alistTheory.fmap_to_alist_FEMPTY, integer_wordTheory.i2w_pos,\n'
-        '  byteTheory.set_byte_bit_field_insert]);\n' +
+        ' [alistTheory.fmap_to_alist_FEMPTY, integer_wordTheory.i2w_pos]);\n' +
         (helper / "evalCompilerBytecodeLib.sml").read_text() + ";\n" +
         (helper / "memoryStoreWitnessLib.sml").read_text() + ";\n" +
         'fun bounded name =\n'
@@ -223,19 +225,25 @@ def execute(fixtures: Path, hol_output: Path) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("mode", choices=["prepare", "probe", "execute"])
+    parser.add_argument("--corpus", default="memory-stores",
+                        help="corpus directory next to this script")
     parser.add_argument("--repo", type=Path, default=Path.cwd())
     parser.add_argument("--fixtures", type=Path, required=True)
     parser.add_argument("--output", type=Path)
     parser.add_argument("--check", action="store_true")
     parser.add_argument("--only", action="append", default=[])
     args = parser.parse_args()
+    corpus = Path(__file__).with_name(args.corpus)
+    if Path(args.corpus).name != args.corpus or not (corpus / "sources").is_dir():
+        parser.error(f"unknown corpus: {args.corpus}")
     if args.mode == "prepare":
-        prepare(args.repo.resolve(), args.fixtures.resolve(), check=args.check)
+        prepare(args.repo.resolve(), corpus, args.fixtures.resolve(),
+                check=args.check)
     elif args.output is None:
         parser.error("--output is required for probe and execute")
     elif args.mode == "probe":
-        probe(args.repo.resolve(), args.fixtures.resolve(), args.output.resolve(),
-              args.only)
+        probe(args.repo.resolve(), corpus, args.fixtures.resolve(),
+              args.output.resolve(), args.only)
     else:
         execute(args.fixtures.resolve(), args.output.resolve())
 
