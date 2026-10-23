@@ -1774,7 +1774,7 @@ QED
 (* len for dynarray: reads stored length *)
 Theorem compile_builtin_len_correct:
   ∀ is_ctor ptr_op loc ss st op st' addr.
-    compile_builtin_len is_ctor ptr_op loc st = (op, st') ∧
+    compile_builtin_len is_ctor NONE ptr_op loc st = (op, st') ∧
     eval_operand ptr_op ss = SOME addr
     ⇒
     ∃ ss'.
@@ -1784,8 +1784,8 @@ Proof
   rpt strip_tac >>
   gvs[compile_builtin_len_def] >>
   Cases_on `loc` >>
-  gvs[compile_ptr_load_def, ptr_load_val_def] >>
-  TRY (Cases_on `is_ctor` >> gvs[compile_ptr_load_def, ptr_load_val_def]) >>
+  gvs[compile_ptr_load_def, compile_imm_load_word_def, ptr_load_val_def] >>
+  TRY (Cases_on `is_ctor` >> gvs[compile_ptr_load_def, compile_imm_load_word_def, ptr_load_val_def]) >>
   imp_res_tac emitted_insts_emit_op >> gvs[] >>
   qmatch_goalsub_abbrev_tac `eval_operand (Var out) _ = SOME val` >>
   qexists_tac `update_var out val ss` >>

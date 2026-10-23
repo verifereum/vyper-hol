@@ -358,6 +358,7 @@ Datatype:
     (* Constructor context: T during __init__ (deploy), F at runtime.
        Affects immutable access: ctor uses ILOAD, runtime uses DLOAD. *)
     ce_is_ctor : bool;
+    ce_imm_alloca : operand option;
     (* Internal function calling convention info:
        func_label → (returns_count, return_buf_size, pass_via_stack : bool list)
        pass_via_stack: per-arg T=stack, F=memory. Order matches func_t.arguments.

@@ -111,37 +111,41 @@ End
 
 (* ===== Load/Store by Location ===== *)
 
-(* Emit a load instruction based on location.
-   is_ctor: T in constructor context — LocCode uses ILOAD (staging area).
-            F in runtime context — LocCode uses DLOAD (deployed bytecode).
-   Mirrors Python: context.py ptr_load + unwrap() is_ctor dispatch. *)
-Definition compile_ptr_load_def:
-  compile_ptr_load is_ctor LocMemory op = emit_op MLOAD [op] ∧
-  compile_ptr_load is_ctor LocStorage op = emit_op SLOAD [op] ∧
-  compile_ptr_load is_ctor LocTransient op = emit_op TLOAD [op] ∧
-  compile_ptr_load is_ctor LocCalldata op = emit_op CALLDATALOAD [op] ∧
-  compile_ptr_load is_ctor LocCode op =
-    if is_ctor then emit_op ILOAD [op]
-    else emit_op DLOAD [op]
+(* Constructor immutable addresses are offsets relative to the staged base.
+   Runtime immutable addresses index the installed data section. *)
+Definition compile_imm_load_word_def:
+  compile_imm_load_word is_ctor imm off =
+    if is_ctor then
+      (case imm of
+         SOME region_base => do addr <- emit_op ADD [off; region_base];
+                         emit_op ILOAD [addr] od
+       | NONE => emit_op ILOAD [off])
+    else emit_op DLOAD [off]
 End
 
-(* Emit a store instruction based on location.
-   is_ctor: T in constructor context — LocCode uses ISTORE (staging area).
-            F in runtime context — LocCode store is invalid (read-only).
-   Mirrors Python: context.py ptr_store + is_ctor dispatch. *)
+Definition compile_imm_store_word_def:
+  compile_imm_store_word imm off v =
+    case imm of
+      SOME region_base => do addr <- emit_op ADD [region_base; off];
+                      emit_void ISTORE [addr; v] od
+    | NONE => emit_void ISTORE [off; v]
+End
+
+Definition compile_ptr_load_def:
+  compile_ptr_load is_ctor imm LocMemory op = emit_op MLOAD [op] /\
+  compile_ptr_load is_ctor imm LocStorage op = emit_op SLOAD [op] /\
+  compile_ptr_load is_ctor imm LocTransient op = emit_op TLOAD [op] /\
+  compile_ptr_load is_ctor imm LocCalldata op = emit_op CALLDATALOAD [op] /\
+  compile_ptr_load is_ctor imm LocCode op = compile_imm_load_word is_ctor imm op
+End
+
 Definition compile_ptr_store_def:
-  compile_ptr_store is_ctor LocMemory dst val =
-    emit_void MSTORE [dst; val] ∧
-  compile_ptr_store is_ctor LocStorage dst val =
-    emit_void SSTORE [dst; val] ∧
-  compile_ptr_store is_ctor LocTransient dst val =
-    emit_void TSTORE [dst; val] ∧
-  compile_ptr_store is_ctor LocCode dst val =
-    (if is_ctor then emit_void ISTORE [dst; val]
-     else emit_void INVALID []) ∧  (* runtime: code is read-only *)
-  (* Python raises CompilerPanic("cannot store to: CALLDATA").
-     Emit INVALID instead of silent no-op. Unreachable for well-typed programs. *)
-  compile_ptr_store is_ctor LocCalldata _ _ = emit_void INVALID []
+  compile_ptr_store is_ctor imm LocMemory dst val = emit_void MSTORE [dst; val] /\
+  compile_ptr_store is_ctor imm LocStorage dst val = emit_void SSTORE [dst; val] /\
+  compile_ptr_store is_ctor imm LocTransient dst val = emit_void TSTORE [dst; val] /\
+  compile_ptr_store is_ctor imm LocCode dst val =
+    (if is_ctor then compile_imm_store_word imm dst val else emit_void INVALID []) /\
+  compile_ptr_store is_ctor imm LocCalldata _ _ = emit_void INVALID []
 End
 
 (* ===== Memory Copy ===== *)
@@ -184,7 +188,7 @@ Definition compile_word_copy_loop_def:
         emit_op ADD [src_op; scaled]
       od);
       (* Load from source *)
-      val_loaded <- compile_ptr_load is_ctor load_loc src_off;
+      val_loaded <- compile_ptr_load is_ctor NONE load_loc src_off;
       (* Compute dest offset *)
       dst_off <- (if dst_scale = 1 then
         emit_op ADD [dst_op; Var counter_var]
@@ -193,7 +197,7 @@ Definition compile_word_copy_loop_def:
         emit_op ADD [dst_op; scaled]
       od);
       (* Store to dest *)
-      compile_ptr_store is_ctor store_loc dst_off val_loaded;
+      compile_ptr_store is_ctor NONE store_loc dst_off val_loaded;
       (* Increment counter *)
       new_ctr <- emit_op ADD [Var counter_var; Lit 1w];
       emit_inst ASSIGN [new_ctr] [counter_var];
@@ -290,6 +294,31 @@ Theorem compile_alloc_buffer_with_id_result:
          ["%" ++ toString st.cs_next_var]]
 Proof
   simp[compile_alloc_buffer_with_id_def, fresh_id_def, fresh_var_def,
+       emit_def, comp_bind_def, comp_ignore_bind_def, comp_return_def]
+QED
+
+(* A globally reserved immutable region needs no allocator placement metadata. *)
+Definition compile_fixed_region_with_id_def:
+  compile_fixed_region_with_id size =
+    do id <- fresh_id;
+       out <- fresh_var;
+       emit (mk_inst id ASSIGN [Lit 0w] [out]);
+       return (id, <| buf_operand := Var out; buf_size := size |>)
+    od
+End
+
+Theorem compile_fixed_region_with_id_result:
+  !size st id buf st'.
+  compile_fixed_region_with_id size st = ((id, buf), st') ==>
+  id = st.cs_next_id /\
+  buf.buf_operand = Var ("%" ++ toString st.cs_next_var) /\
+  buf.buf_size = size /\
+  st'.cs_next_id = st.cs_next_id + 1 /\
+  st'.cs_next_var = st.cs_next_var + 1 /\
+  st'.cs_current_insts = st.cs_current_insts ++
+    [mk_inst st.cs_next_id ASSIGN [Lit 0w] ["%" ++ toString st.cs_next_var]]
+Proof
+  simp[compile_fixed_region_with_id_def, fresh_id_def, fresh_var_def,
        emit_def, comp_bind_def, comp_ignore_bind_def, comp_return_def]
 QED
 
@@ -463,8 +492,8 @@ End
 (* Load bytestring length from first slot at pointer.
    is_ctor needed for LocCode: ctor uses ILOAD, runtime uses DLOAD. *)
 Definition compile_bytestring_length_def:
-  compile_bytestring_length is_ctor ptr_op loc =
-    compile_ptr_load is_ctor loc ptr_op
+  compile_bytestring_length is_ctor imm ptr_op loc =
+    compile_ptr_load is_ctor imm loc ptr_op
 End
 
 (* Ensure bytestring is in memory. If from storage/transient/code,

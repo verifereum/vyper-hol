@@ -821,7 +821,7 @@ Definition unwrap_value_def:
   unwrap_value cenv (StackValue ty op) = return op ∧
   unwrap_value cenv (LocatedValue ty p) =
     if is_word_type ty then
-      compile_ptr_load cenv.ce_is_ctor p.ptr_location p.ptr_operand
+      compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca p.ptr_location p.ptr_operand
     else
       (case p.ptr_location of
          LocMemory => return p.ptr_operand
@@ -2708,7 +2708,7 @@ Definition compile_builtin_dispatch_body_def:
             let v = vv_operand vv in
             let loc = (case vv_location vv of
                          SOME l => l | NONE => LocMemory) in
-            as_stack_val ret_ty (compile_builtin_len cenv.ce_is_ctor v loc st1))
+            as_stack_val ret_ty (compile_builtin_len cenv.ce_is_ctor cenv.ce_imm_alloca v loc st1))
      | BlockHash =>
          (let e1 = HD args in
           let (v, st1) = lower_value compile_expr cenv ty e1 st in

@@ -693,6 +693,14 @@ Definition compile_internal_function_def:
           Match VenomBuilder.retpc_param by naming it with the dedicated
           opcode while retaining HOL's explicit physical index. *)
        return_pc <- emit_op RETPC_PARAM [Lit (n2w next_idx)];
+       (* Keep physical entry pseudos a prefix, then establish the base before
+          any parameter allocation or store. *)
+       imm_opt <-
+         (if is_ctor_context /\ immutables_len > 0 then
+            do alloc_result <- compile_fixed_region_with_id immutables_len;
+               return (SOME (SND alloc_result).buf_operand)
+            od
+          else return NONE);
        (* Return-buffer and return-PC parameters are already stack operands;
           Python records them directly instead of round-tripping through the
           abstract memory slots used while constructing the compile env. *)
@@ -718,22 +726,12 @@ Definition compile_internal_function_def:
               od
             else return ()
         | NONE => return ());
-       (* Reserve immutables only after the canonical parameter prefix. *)
-       forced_alloc_id <-
-         (if is_ctor_context ∧ immutables_len > 0 then
-            let touch_offset = if immutables_len > 32 then immutables_len - 32
-                               else 0 in
-            do alloc_result <- compile_alloc_buffer_with_id immutables_len;
-               emit_op MLOAD [Lit (n2w touch_offset)];
-               return (SOME (FST alloc_result))
-            od
-          else return NONE);
        (* Nonreentrant lock *)
        (if is_nonreentrant then
           compile_nonreentrant_lock nkey use_transient is_view
         else return ());
        (* Compile body *)
-       compile_stmts cenv2 NoLoop
+       compile_stmts (cenv2 with ce_imm_alloca := imm_opt) NoLoop
          (case ret_type of SOME t => t | NONE => BaseT BoolT) body;
        cs <- comp_get;
        (if block_is_terminated cs then return ()
@@ -745,7 +743,7 @@ Definition compile_internal_function_def:
                 NONE => emit_inst RET [return_pc] []
               | SOME _ => emit_inst INVALID [] [])
           od);
-       return forced_alloc_id
+       return (NONE : num option)
     od
 End
 
@@ -864,21 +862,18 @@ Definition compile_generate_deploy_def:
          entry_cs <- comp_get;
          imm_result <-
            (if immutables_len > 0 then
-              let touch_offset = if immutables_len > 32
-                                 then immutables_len - 32
-                                 else 0 in
-              do alloc_result <- compile_alloc_buffer_with_id immutables_len;
+              do alloc_result <- compile_fixed_region_with_id immutables_len;
                  imm_op <- return (SND alloc_result).buf_operand;
-                 emit_op MLOAD [Lit (n2w touch_offset)];
-                 return (imm_op,
-                         [(entry_cs.cs_current_bb, FST alloc_result, 0)])
+                 return (imm_op, [])
               od
             else return (Lit 0w, []));
          imm_alloca <- return (FST imm_result);
          entry_forced <- return (SND imm_result);
          (* Register constructor args from DATA section. *)
          cenv' <- compile_register_constructor_args
-           cenv constructor_args 0 data_size;
+           (cenv with ce_imm_alloca :=
+             (if immutables_len > 0 then SOME imm_alloca else NONE))
+           constructor_args 0 data_size;
          (* Nonreentrant lock *)
          (if is_nonreentrant then
             compile_nonreentrant_lock nkey use_transient F

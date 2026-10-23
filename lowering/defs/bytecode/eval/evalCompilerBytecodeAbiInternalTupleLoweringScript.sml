@@ -191,6 +191,18 @@ val internal_tuple_call_retpc =
   #1 (pairSyntax.dest_pair internal_tuple_call_retpc_pair)
 val internal_tuple_call_state9 =
   #2 (pairSyntax.dest_pair internal_tuple_call_retpc_pair)
+Theorem internal_tuple_call_region_eval:
+  (if ^internal_tuple_call_is_ctor /\ ^internal_tuple_call_imm_len > 0 then
+     do alloc_result <- compile_fixed_region_with_id ^internal_tuple_call_imm_len;
+        return (SOME (SND alloc_result).buf_operand)
+     od
+   else return NONE) ^internal_tuple_call_state9 =
+  (NONE, ^internal_tuple_call_state9)
+Proof
+  EVAL
+QED
+val internal_tuple_call_imm_opt = ``NONE : operand option``
+val internal_tuple_call_region_state = internal_tuple_call_state9
 val internal_tuple_call_cenv1_eval = save_thm
   ("internal_tuple_call_cenv1_eval",
    EVAL
@@ -206,7 +218,7 @@ val internal_tuple_call_cenv1 = rhs (concl internal_tuple_call_cenv1_eval)
 val internal_tuple_call_materialize_eval = save_thm
   ("internal_tuple_call_materialize_eval",
    EVAL ``materialize_internal_params ^internal_tuple_call_cenv1
-           ^internal_tuple_call_captured_params ^internal_tuple_call_state9``)
+           ^internal_tuple_call_captured_params ^internal_tuple_call_region_state``)
 val internal_tuple_call_materialize_pair =
   rhs (concl internal_tuple_call_materialize_eval)
 val internal_tuple_call_cenv2 =
@@ -229,25 +241,9 @@ val internal_tuple_call_ret_alloc_pair =
   rhs (concl internal_tuple_call_ret_alloc_eval)
 val internal_tuple_call_state11 =
   #2 (pairSyntax.dest_pair internal_tuple_call_ret_alloc_pair)
-val internal_tuple_call_forced_alloc_eval = save_thm
-  ("internal_tuple_call_forced_alloc_eval",
-   EVAL
-     ``(if ^internal_tuple_call_is_ctor ∧ ^internal_tuple_call_imm_len > 0 then
-          let touch_offset = if ^internal_tuple_call_imm_len > 32 then
-                               ^internal_tuple_call_imm_len - 32
-                             else 0 in
-          do alloc_result <-
-               compile_alloc_buffer_with_id ^internal_tuple_call_imm_len;
-             emit_op MLOAD [Lit (n2w touch_offset)];
-             return (SOME (FST alloc_result))
-          od
-        else return NONE) ^internal_tuple_call_state11``)
-val internal_tuple_call_forced_alloc_pair =
-  rhs (concl internal_tuple_call_forced_alloc_eval)
-val internal_tuple_call_forced_id =
-  #1 (pairSyntax.dest_pair internal_tuple_call_forced_alloc_pair)
-val internal_tuple_call_state12 =
-  #2 (pairSyntax.dest_pair internal_tuple_call_forced_alloc_pair)
+(* Region emission is replayed immediately after the entry pseudos above. *)
+val internal_tuple_call_forced_id = ``NONE : num option``
+val internal_tuple_call_state12 = internal_tuple_call_state11
 val internal_tuple_call_lock_eval = save_thm
   ("internal_tuple_call_lock_eval",
    EVAL

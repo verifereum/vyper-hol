@@ -577,10 +577,10 @@ Definition compile_assign_value_def:
                   od)
         od
     | LocCode =>
-        if is_prim_word then emit_void ISTORE [dst_op; val_op]
+        if is_prim_word then compile_imm_store_word cenv.ce_imm_alloca dst_op val_op
         else if mem_size ≤ 32 then
           do loaded <- emit_op MLOAD [val_op];
-             emit_void ISTORE [dst_op; loaded]
+             compile_imm_store_word cenv.ce_imm_alloca dst_op loaded
           od
         else
           do compile_word_copy_loop val_op dst_op
@@ -616,18 +616,18 @@ End
    Dispatches store opcode based on location.
    Mirrors Python: ctx.ptr_store dispatching by location. *)
 Definition compile_store_at_loc_def:
-  compile_store_at_loc dst_op val_op NONE =
+  compile_store_at_loc imm dst_op val_op NONE =
     emit_void MSTORE [dst_op; val_op] ∧
-  compile_store_at_loc dst_op val_op (SOME LocMemory) =
+  compile_store_at_loc imm dst_op val_op (SOME LocMemory) =
     emit_void MSTORE [dst_op; val_op] ∧
-  compile_store_at_loc dst_op val_op (SOME LocStorage) =
+  compile_store_at_loc imm dst_op val_op (SOME LocStorage) =
     emit_void SSTORE [dst_op; val_op] ∧
-  compile_store_at_loc dst_op val_op (SOME LocTransient) =
+  compile_store_at_loc imm dst_op val_op (SOME LocTransient) =
     emit_void TSTORE [dst_op; val_op] ∧
-  compile_store_at_loc dst_op val_op (SOME LocCode) =
+  compile_store_at_loc imm dst_op val_op (SOME LocCode) =
     (* Code location: use ISTORE for immutables in constructor context *)
-    emit_void ISTORE [dst_op; val_op] ∧
-  compile_store_at_loc dst_op val_op (SOME LocCalldata) =
+    compile_imm_store_word imm dst_op val_op ∧
+  compile_store_at_loc imm dst_op val_op (SOME LocCalldata) =
     (* Calldata is read-only — emit INVALID *)
     emit_void INVALID []
 End
@@ -662,7 +662,7 @@ Definition compile_tuple_store_all_def:
             SOME ((ems + 31) DIV 32, ems)
         | _ => NONE);
        (if src_is_word then
-          if dst_is_word then compile_store_at_loc dst_op val_op loc_opt
+          if dst_is_word then compile_store_at_loc cenv.ce_imm_alloca dst_op val_op loc_opt
           else emit_void INVALID []
         else
           compile_assign_value cenv dst_op dst_loc val_op is_prim
@@ -918,7 +918,7 @@ Definition compile_stmt_def:
   compile_stmt cenv lctx ty (Assign (BaseTarget bt) e) =
     (if has_length_word (expr_type e) ∧ is_empty_value_expr e then
        do tgt_result <- compile_get_target_ptr cenv bt;
-          compile_store_at_loc (FST tgt_result) (Lit 0w) (FST (SND tgt_result))
+          compile_store_at_loc cenv.ce_imm_alloca (FST tgt_result) (Lit 0w) (FST (SND tgt_result))
        od
      else
      let src_ty = lowered_value_type cenv e in

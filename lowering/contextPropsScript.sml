@@ -43,7 +43,7 @@ Ancestors
    apply emit_op_MLOAD_correct (already in emitHelperProps). *)
 Theorem compile_ptr_load_memory_correct:
   ∀ is_ctor op st ret_op st' ss addr.
-    compile_ptr_load is_ctor LocMemory op st = (ret_op, st') ∧
+    compile_ptr_load is_ctor imm LocMemory op st = (ret_op, st') ∧
     eval_operand op ss = SOME addr ∧
     fresh_vars_wrt st ss
     ⇒
@@ -72,7 +72,7 @@ QED
    sload reads from vs_accounts, update_var writes vs_vars → independent. *)
 Theorem compile_ptr_load_storage_correct:
   ∀ is_ctor op st ret_op st' ss slot.
-    compile_ptr_load is_ctor LocStorage op st = (ret_op, st') ∧
+    compile_ptr_load is_ctor imm LocStorage op st = (ret_op, st') ∧
     eval_operand op ss = SOME slot ∧
     fresh_vars_wrt st ss
     ⇒
@@ -97,7 +97,7 @@ QED
    Proof: unfold → emit_void MSTORE, apply emit_void_MSTORE_correct. *)
 Theorem compile_ptr_store_memory_correct:
   ∀ is_ctor op_addr op_val st st' ss addr val.
-    compile_ptr_store is_ctor LocMemory op_addr op_val st = ((), st') ∧
+    compile_ptr_store is_ctor imm LocMemory op_addr op_val st = ((), st') ∧
     eval_operand op_addr ss = SOME addr ∧
     eval_operand op_val ss = SOME val ∧
     fresh_vars_wrt st ss
@@ -121,7 +121,7 @@ QED
    for SSTORE (analogous to step_MSTORE). *)
 Theorem compile_ptr_store_storage_correct:
   ∀ is_ctor op_addr op_val st st' ss addr val.
-    compile_ptr_store is_ctor LocStorage op_addr op_val st = ((), st') ∧
+    compile_ptr_store is_ctor imm LocStorage op_addr op_val st = ((), st') ∧
     eval_operand op_addr ss = SOME addr ∧
     eval_operand op_val ss = SOME val ∧
     fresh_vars_wrt st ss
@@ -621,7 +621,7 @@ QED
    shows only vs_accounts changes. *)
 Theorem compile_ptr_store_storage_preserves_memory:
   ∀ ss st st' op_addr op_val is_ctor addr val.
-    compile_ptr_store is_ctor LocStorage op_addr op_val st = ((), st') ∧
+    compile_ptr_store is_ctor imm LocStorage op_addr op_val st = ((), st') ∧
     eval_operand op_addr ss = SOME addr ∧
     eval_operand op_val ss = SOME val
     ⇒
@@ -635,4 +635,32 @@ Proof
   `step_inst_base (mk_inst st.cs_next_id SSTORE [op_addr; op_val] []) ss =
      OK (sstore addr val ss)` by simp[step_SSTORE] >>
   gvs[]
+QED
+
+(* The fixed region is exactly an ASSIGN of zero, with a size annotation only
+   in the returned buffer.  Reuse the emission semantics boundary. *)
+Theorem compile_fixed_region_as_assign:
+  !size st id buf st'.
+  compile_fixed_region_with_id size st = ((id, buf), st') ==>
+  emit_op ASSIGN [Lit 0w] st = (buf.buf_operand, st')
+Proof
+  simp[compile_fixed_region_with_id_def, emitHelperTheory.emit_op_def, fresh_id_def,
+       fresh_var_def, emit_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def]
+QED
+
+Theorem compile_fixed_region_zero_correct:
+  !size st id buf st' ss.
+  compile_fixed_region_with_id size st = ((id, buf), st') /\
+  fresh_vars_wrt st ss ==>
+  ?ss'. run_inst_seq (emitted_insts st st') ss = OK ss' /\
+        eval_operand buf.buf_operand ss' = SOME 0w /\
+        same_blocks st st' /\ fresh_vars_wrt st' ss' /\
+        (!op w. eval_operand op ss = SOME w ==> eval_operand op ss' = SOME w) /\
+        ss'.vs_memory = ss.vs_memory
+Proof
+  rpt strip_tac >> drule compile_fixed_region_as_assign >> strip_tac >>
+  drule (Q.SPECL [`ASSIGN`, `\x:bytes32. x`] emit_op_pure1_correct) >>
+  simp[eval_operand_def, step_inst_base_def, venomInstTheory.mk_inst_def] >>
+  disch_then drule >> strip_tac >> goal_assum drule >> simp[]
 QED

@@ -546,22 +546,25 @@ QED
 (* compile_ptr_load: all cases are emit_op *)
 Theorem compile_ptr_load_prefix:
   !is_ctor loc op st v st'.
-    compile_ptr_load is_ctor loc op st = (v, st') ==>
+    compile_ptr_load is_ctor imm loc op st = (v, st') ==>
     isPREFIX st.cs_current_insts st'.cs_current_insts
 Proof
-  Cases_on `loc` >>
-  simp[contextTheory.compile_ptr_load_def] >>
-  rw[] >> imp_res_tac emit_op_prefix
+  Cases_on `loc` >> Cases_on `imm` >> Cases_on `is_ctor` >>
+  simp[contextTheory.compile_ptr_load_def, contextTheory.compile_imm_load_word_def,
+       emit_op_def, fresh_id_def, fresh_var_def, emit_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def,
+       rich_listTheory.IS_PREFIX_APPEND]
 QED
 
 Theorem compile_ptr_load_same_blocks:
   !is_ctor loc op st v st'.
-    compile_ptr_load is_ctor loc op st = (v, st') ==>
+    compile_ptr_load is_ctor imm loc op st = (v, st') ==>
     same_blocks st st'
 Proof
-  Cases_on `loc` >>
-  simp[contextTheory.compile_ptr_load_def] >>
-  rw[] >> imp_res_tac emit_op_same_blocks
+  Cases_on `loc` >> Cases_on `imm` >> Cases_on `is_ctor` >>
+  simp[contextTheory.compile_ptr_load_def, contextTheory.compile_imm_load_word_def,
+       emit_op_def, fresh_id_def, fresh_var_def, emit_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def, same_blocks_def]
 QED
 
 (* new_block: always breaks same_blocks *)
@@ -819,11 +822,14 @@ QED
 
 (* ci_mono for compile_ptr_load (used by unwrap_value) *)
 Theorem ci_mono_compile_ptr_load[local]:
-  ∀ is_ctor loc op sa. ci_mono sa (SND (compile_ptr_load is_ctor loc op sa))
+  ∀ is_ctor loc op sa. ci_mono sa (SND (compile_ptr_load is_ctor imm loc op sa))
 Proof
-  rpt gen_tac >> Cases_on `loc` >>
-  simp[contextTheory.compile_ptr_load_def] >>
-  rw[] >> simp[ci_mono_emit_op]
+  rpt gen_tac >> Cases_on `loc` >> Cases_on `imm` >> Cases_on `is_ctor` >>
+  simp[contextTheory.compile_ptr_load_def, contextTheory.compile_imm_load_word_def,
+       emit_op_def, fresh_id_def, fresh_var_def, emit_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def, ci_mono_def,
+       rich_listTheory.IS_PREFIX_APPEND3] >>
+  metis_tac[rich_listTheory.IS_PREFIX_APPEND, rich_listTheory.IS_PREFIX_TRANS]
 QED
 
 (* ===== blocks_len toolkit for ci_mono proofs ===== *)
@@ -867,22 +873,24 @@ QED
 
 Theorem blocks_pres_compile_ptr_load[local]:
   ∀ ic loc op sa.
-    LENGTH (SND (compile_ptr_load ic loc op sa)).cs_blocks =
+    LENGTH (SND (compile_ptr_load ic imm loc op sa)).cs_blocks =
     LENGTH sa.cs_blocks
 Proof
-  rpt gen_tac >> Cases_on `loc` >>
-  rw[contextTheory.compile_ptr_load_def] >>
-  rw[blocks_pres_emit_op]
+  rpt gen_tac >> Cases_on `loc` >> Cases_on `imm` >> Cases_on `ic` >>
+  simp[contextTheory.compile_ptr_load_def, contextTheory.compile_imm_load_word_def,
+       emit_op_def, fresh_id_def, fresh_var_def, emit_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def]
 QED
 
 Theorem blocks_pres_compile_ptr_store[local]:
   ∀ ic loc op v sa.
-    LENGTH (SND (compile_ptr_store ic loc op v sa)).cs_blocks =
+    LENGTH (SND (compile_ptr_store ic imm loc op v sa)).cs_blocks =
     LENGTH sa.cs_blocks
 Proof
-  rpt gen_tac >> Cases_on `loc` >>
-  rw[contextTheory.compile_ptr_store_def] >>
-  rw[blocks_pres_emit_void]
+  rpt gen_tac >> Cases_on `loc` >> Cases_on `imm` >> Cases_on `ic` >>
+  simp[contextTheory.compile_ptr_store_def, contextTheory.compile_imm_store_word_def,
+       emit_op_def, emit_void_def, fresh_id_def, fresh_var_def, emit_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def]
 QED
 
 Theorem blocks_grow_new_block[local]:
@@ -1604,7 +1612,7 @@ Proof
 QED
 
 Theorem ci_mono_compile_builtin_len[local]:
-  ∀ ic v loc sa. ci_mono sa (SND (compile_builtin_len ic v loc sa))
+  ∀ ic v loc sa. ci_mono sa (SND (compile_builtin_len ic imm v loc sa))
 Proof
   simp[builtinSimpleTheory.compile_builtin_len_def, ci_mono_compile_ptr_load]
 QED

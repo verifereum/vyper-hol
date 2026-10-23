@@ -527,6 +527,7 @@ Definition build_compile_env_def:
        ce_max_return_size := 0;
        (* Default: overridden by package_internal_fn for ctor context *)
        ce_is_ctor := (vis = Deploy);
+       ce_imm_alloca := NONE;
        ce_func_info := func_info;
        ce_nonreentrant := (F, 0n, use_transient_locks, mut = View);
        (* Default: overridden by package_*_fn from FunctionDecl raw_return field *)
