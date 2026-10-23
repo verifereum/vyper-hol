@@ -1078,6 +1078,49 @@ Proof
   cheat
 QED
 
+Theorem shape_state_new_block:
+  !name st old s.
+    new_block name st = (old,s) /\ shape_state st ==> shape_state s
+Proof
+  simp[new_block_def] >> rpt strip_tac >> gvs[] >>
+  gvs[shape_state_def, state_insts_def, all_blocks_def, not_fresh_at_def] >>
+  metis_tac[]
+QED
+
+Theorem internal_segment_new_block:
+  !st old s name t has_ret_buf rc.
+    new_block name st = (old,s) /\
+    shape_extends T compiler_label s t ==>
+    ?seg. all_blocks t = all_blocks st ++ seg /\
+          internal_segment_ok (name,has_ret_buf,rc) seg
+Proof
+  rpt gen_tac >> strip_tac >>
+  `all_blocks s = all_blocks st ++
+     [<| bb_label := name; bb_instructions := [] |>]`
+    by gvs[new_block_def, all_blocks_def] >>
+  `state_insts s = state_insts st` by gvs[state_insts_def] >>
+  fs[shape_extends_def, fragExecTheory.cs_extends_def] >>
+  qexists_tac `REVERSE new ++
+    [<| bb_label := t.cs_current_bb;
+        bb_instructions := t.cs_current_insts |>]` >>
+  `all_blocks t = all_blocks st ++ (REVERSE new ++
+    [<| bb_label := t.cs_current_bb;
+        bb_instructions := t.cs_current_insts |>])`
+    by gvs[new_block_def, all_blocks_def] >>
+  simp[] >>
+  gvs[internal_segment_ok_def, added_insts_def, added_labels_def,
+      state_insts_def, DROP_APPEND, EVERY_FLAT, EVERY_MAP] >>
+  Cases_on `new = []` >>
+  gvs[new_block_def, arithmeticTheory.ADD_COMM] >>
+  `0 < LENGTH new` by (Cases_on `new` >> gvs[]) >>
+  `1 - LENGTH new = 0` by simp[] >>
+  Cases_on `REVERSE new` >> gvs[] >>
+  qmatch_asmsub_abbrev_tac `DROP k t.cs_current_insts` >>
+  `k = 0` by (simp[Abbr `k`] >> decide_tac) >>
+  gvs[DROP_1] >>
+  metis_tac[HD_REVERSE, HD]
+QED
+
 (* From compile_internal_function_shape: new_block fn_lbl starts each
    segment, and the next one ends it. *)
 Theorem compile_internal_fn_bodies_shape:
@@ -1088,7 +1131,33 @@ Theorem compile_internal_fn_bodies_shape:
     ?segs. all_blocks st' = all_blocks st ++ FLAT segs /\
            LIST_REL internal_segment_ok (internal_fn_descriptors fns) segs
 Proof
-  cheat
+  Induct_on `fns`
+  >- (simp[compile_internal_fn_bodies_def, comp_return_def] >>
+      rpt strip_tac >> gvs[] >> qexists_tac `[]` >>
+      simp[internal_fn_descriptors_def]) >>
+  qx_gen_tac `h` >> PairCases_on `h` >>
+  simp[Once compile_internal_fn_bodies_def, internal_fn_shape_ok_def] >>
+  rpt gen_tac >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `comp_ignore_bind (new_block name) m st` >>
+  Cases_on `new_block name st` >>
+  fs[comp_ignore_bind_def, comp_bind_def] >>
+  rename1 `new_block name st = (old,s)` >>
+  drule_all shape_state_new_block >> strip_tac >>
+  fs[Abbr `m`, comp_bind_def] >>
+  pairarg_tac >> fs[] >>
+  drule_all compile_internal_function_shape >>
+  rewrite_tac[shape_step_def] >>
+  disch_then drule >> simp[] >> strip_tac >>
+  pairarg_tac >> gvs[comp_return_def] >>
+  first_x_assum drule >> simp[] >> strip_tac >>
+  rename1 `cenv_static_ok cenv` >>
+  rename1 `compile_internal_function cenv params has_ret_buf` >>
+  drule_all internal_segment_new_block >>
+  disch_then (qspecl_then [`has_ret_buf`, `cenv.ce_returns_count`]
+    strip_assume_tac) >>
+  qexists_tac `seg :: segs` >>
+  simp[internal_fn_descriptors_def, APPEND_ASSOC]
+
 QED
 
 (* The runtime block stream: entry code (dispatch, external bodies,
