@@ -296,6 +296,47 @@ Proof
   cheat
 QED
 
+Theorem compile_alloc_buffer_shape:
+  !size. shape_step F compiler_label (\st. T)
+    (compile_alloc_buffer size) (\buf st. plain_operand st buf.buf_operand)
+Proof
+  qx_gen_tac `sz` >> simp[compile_alloc_buffer_def] >>
+  irule shape_step_bind >>
+  qexists_tac `\op st. T /\ plain_operand st op` >>
+  conj_tac
+  >- (gen_tac >> BETA_TAC >> irule shape_step_return >> simp[]) >>
+  mp_tac (Q.SPECL [`F`, `compiler_label`, `\st. T`, `ALLOCA`,
+    `[Lit (n2w sz)]`] shape_step_emit_op) >>
+  simp[shape_stable_def, label_or_plain_def, plain_operand_def,
+       stackPlanTypesTheory.is_label_operand_def, lowered_inst_ok_def,
+       mk_inst_def, raw_opcode_ok_def, inst_shape_ok_def,
+       jump_labels_ok_def, is_terminator_def, is_param_opcode_def,
+       is_read0_opcode_def, label_positions_ok_def]
+QED
+
+Theorem cenv_decode_operand_plain:
+  !st cenv name loc dst.
+    cenv_shape_ok st cenv /\ FLOOKUP cenv.ce_vars name = SOME loc /\
+    var_location_decode_operand loc = SOME dst ==> plain_operand st dst
+Proof
+  rpt strip_tac >>
+  `loc_shape_ok st loc` by metis_tac[cenv_shape_ok_def] >>
+  Cases_on `loc` >>
+  gvs[var_location_decode_operand_def, loc_shape_ok_def, plain_operand_def,
+      stackPlanTypesTheory.is_label_operand_def]
+QED
+
+Theorem cenv_shape_ok_ptr_update:
+  !st cenv name op size.
+    cenv_shape_ok st cenv /\ plain_operand st op ==>
+    cenv_shape_ok st (cenv with ce_vars := cenv.ce_vars |+ (name, PtrVar op size))
+Proof
+  rpt strip_tac >>
+  gvs[cenv_shape_ok_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  rpt strip_tac >> Cases_on `name = n` >> gvs[loc_shape_ok_def] >>
+  metis_tac[]
+QED
+
 (* Each body opens its "fn_" entry block, then compile_guarded_body via
    compile_stmt_shape with ce_return_pc = NONE. *)
 Theorem compile_external_fn_bodies_shape:
