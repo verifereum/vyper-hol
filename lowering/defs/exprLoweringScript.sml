@@ -555,31 +555,44 @@ End
 (* x in [a, b, c] = (x==a) or (x==b) or (x==c)
    x not in [a, b, c] = (x!=a) and (x!=b) and (x!=c)
    Mirrors Python: expr.py _lower_list_literal_membership *)
-(* Combine membership comparisons: fold OR for "in", fold AND-ISZERO for "not in" *)
+(* Emit every equality before combining results, matching Vyper's order. *)
+Definition emit_membership_eqs_def:
+  emit_membership_eqs needle [] = return [] /\
+  emit_membership_eqs needle (elem::rest) =
+    do c <- emit_op EQ [needle; elem];
+       cs <- emit_membership_eqs needle rest;
+       return (c::cs)
+    od
+End
+
+Definition fold_membership_or_def:
+  fold_membership_or acc [] = return acc /\
+  fold_membership_or acc (c::cs) =
+    do r <- emit_op OR [acc; c]; fold_membership_or r cs od
+End
+
+Definition fold_membership_and_def:
+  fold_membership_and acc [] = return acc /\
+  fold_membership_and acc (c::cs) =
+    do z <- emit_op ISZERO [c];
+       r <- emit_op AND [acc; z];
+       fold_membership_and r cs
+    od
+End
+
 Definition compile_list_membership_in_def:
-  compile_list_membership_in needle [] =
-    return (Lit 0w) ∧
-  compile_list_membership_in needle [elem] =
-    emit_op EQ [needle; elem] ∧
-  compile_list_membership_in needle (elem::rest) =
-    do eq_res <- emit_op EQ [needle; elem];
-       rest_res <- compile_list_membership_in needle rest;
-       emit_op OR [eq_res; rest_res]
+  compile_list_membership_in needle elems =
+    do cs <- emit_membership_eqs needle elems;
+       case cs of [] => return (Lit 0w)
+                | c::rest => fold_membership_or c rest
     od
 End
 
 Definition compile_list_membership_notin_def:
-  compile_list_membership_notin needle [] =
-    return (Lit 1w) ∧
-  compile_list_membership_notin needle [elem] =
-    do eq_res <- emit_op EQ [needle; elem];
-       emit_op ISZERO [eq_res]
-    od ∧
-  compile_list_membership_notin needle (elem::rest) =
-    do eq_res <- emit_op EQ [needle; elem];
-       neq_res <- emit_op ISZERO [eq_res];
-       rest_res <- compile_list_membership_notin needle rest;
-       emit_op AND [neq_res; rest_res]
+  compile_list_membership_notin needle elems =
+    do cs <- emit_membership_eqs needle elems;
+       case cs of [] => return (Lit 1w)
+       | c::rest => do z <- emit_op ISZERO [c]; fold_membership_and z rest od
     od
 End
 

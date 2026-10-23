@@ -1620,28 +1620,86 @@ Proof
   simp[ci_mono_emit_op]
 QED
 
-Theorem ci_mono_compile_list_membership_in[local]:
-  ∀ needle ops sa. ci_mono sa (SND (compile_list_membership_in needle ops sa))
+Theorem ci_mono_emit_membership_eqs[local]:
+  !ops needle sa. ci_mono sa (SND (emit_membership_eqs needle ops sa))
 Proof
-  recInduct exprLoweringTheory.compile_list_membership_in_ind >>
-  rpt strip_tac >>
-  simp[exprLoweringTheory.compile_list_membership_in_def, ci_mono_comp_return, ci_mono_emit_op] >>
+  Induct >> rpt gen_tac >>
+  simp[exprLoweringTheory.emit_membership_eqs_def, ci_mono_comp_return] >>
   ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_emit_op] >>
-  rpt strip_tac >>
-  ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[] >>
-  rpt strip_tac >> simp[ci_mono_emit_op]
+  rpt strip_tac >> ho_match_mp_tac ci_mono_bind >>
+  conj_tac >- simp[] >> simp[ci_mono_comp_return]
+QED
+
+Theorem ci_mono_fold_membership_or[local]:
+  !ops acc sa. ci_mono sa (SND (fold_membership_or acc ops sa))
+Proof
+  Induct >> rpt gen_tac >>
+  simp[exprLoweringTheory.fold_membership_or_def, ci_mono_comp_return] >>
+  ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_emit_op] >>
+  simp[]
+QED
+
+Theorem ci_mono_fold_membership_and[local]:
+  !ops acc sa. ci_mono sa (SND (fold_membership_and acc ops sa))
+Proof
+  Induct >> rpt gen_tac >>
+  simp[exprLoweringTheory.fold_membership_and_def, ci_mono_comp_return] >>
+  ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_emit_op] >>
+  rpt strip_tac >> ho_match_mp_tac ci_mono_bind >>
+  conj_tac >- simp[ci_mono_emit_op] >> simp[]
+QED
+
+Theorem ci_mono_compile_list_membership_in[local]:
+  !needle ops sa. ci_mono sa (SND (compile_list_membership_in needle ops sa))
+Proof
+  rpt gen_tac >> rewrite_tac[exprLoweringTheory.compile_list_membership_in_def] >>
+  ho_match_mp_tac ci_mono_bind >>
+  conj_tac >- simp[ci_mono_emit_membership_eqs] >>
+  Cases >> simp[ci_mono_comp_return, ci_mono_fold_membership_or]
 QED
 
 Theorem ci_mono_compile_list_membership_notin[local]:
-  ∀ needle ops sa. ci_mono sa (SND (compile_list_membership_notin needle ops sa))
+  !needle ops sa. ci_mono sa (SND (compile_list_membership_notin needle ops sa))
 Proof
-  recInduct exprLoweringTheory.compile_list_membership_notin_ind >>
-  rpt strip_tac >>
-  simp[exprLoweringTheory.compile_list_membership_notin_def, ci_mono_comp_return] >>
-  rpt (ho_match_mp_tac ci_mono_bind ORELSE
-       (conj_tac >- simp[ci_mono_emit_op]) ORELSE
-       gen_tac ORELSE strip_tac) >>
-  simp[ci_mono_emit_op]
+  rpt gen_tac >> rewrite_tac[exprLoweringTheory.compile_list_membership_notin_def] >>
+  ho_match_mp_tac ci_mono_bind >>
+  conj_tac >- simp[ci_mono_emit_membership_eqs] >>
+  Cases >> simp[ci_mono_comp_return] >> gen_tac >>
+  ho_match_mp_tac ci_mono_bind >>
+  conj_tac >- simp[ci_mono_emit_op] >> simp[ci_mono_fold_membership_and]
+QED
+
+(* Structural traces: these check emission order, not bytecode parity. *)
+Theorem list_membership_small_traces:
+  (!n st. compile_list_membership_in n [] st = (Lit 0w, st)) /\
+  (!n st. compile_list_membership_notin n [] st = (Lit 1w, st)) /\
+  (!n a st. MAP (\i. i.inst_opcode)
+    (SND (compile_list_membership_in n [a] st)).cs_current_insts =
+    MAP (\i. i.inst_opcode) st.cs_current_insts ++ [EQ]) /\
+  (!n a st. MAP (\i. i.inst_opcode)
+    (SND (compile_list_membership_notin n [a] st)).cs_current_insts =
+    MAP (\i. i.inst_opcode) st.cs_current_insts ++ [EQ; ISZERO]) /\
+  (!n a b st. MAP (\i. i.inst_opcode)
+    (SND (compile_list_membership_in n [a; b] st)).cs_current_insts =
+    MAP (\i. i.inst_opcode) st.cs_current_insts ++ [EQ; EQ; OR]) /\
+  (!n a b st. MAP (\i. i.inst_opcode)
+    (SND (compile_list_membership_notin n [a; b] st)).cs_current_insts =
+    MAP (\i. i.inst_opcode) st.cs_current_insts ++ [EQ; EQ; ISZERO; ISZERO; AND]) /\
+  (!n a b c st. MAP (\i. i.inst_opcode)
+    (SND (compile_list_membership_in n [a; b; c] st)).cs_current_insts =
+    MAP (\i. i.inst_opcode) st.cs_current_insts ++ [EQ; EQ; EQ; OR; OR]) /\
+  (!n a b c st. MAP (\i. i.inst_opcode)
+    (SND (compile_list_membership_notin n [a; b; c] st)).cs_current_insts =
+    MAP (\i. i.inst_opcode) st.cs_current_insts ++
+    [EQ; EQ; EQ; ISZERO; ISZERO; AND; ISZERO; AND])
+Proof
+  simp[exprLoweringTheory.compile_list_membership_in_def,
+       exprLoweringTheory.compile_list_membership_notin_def,
+       exprLoweringTheory.emit_membership_eqs_def,
+       exprLoweringTheory.fold_membership_or_def,
+       exprLoweringTheory.fold_membership_and_def,
+       emit_op_def, comp_bind_def, comp_return_def, comp_ignore_bind_def,
+       fresh_id_def, fresh_var_def, emit_def, venomInstTheory.mk_inst_def]
 QED
 
 Theorem ci_mono_compile_array_membership_loop[local]:
@@ -2130,9 +2188,23 @@ Theorem ci_mono_compile_store_memory_typed[local]:
                dst_off src_off sa)))
 Proof
   ho_match_mp_tac contextTheory.compile_store_memory_typed_ind >>
+  conj_tac
+  >- (rpt strip_tac >>
+      once_rewrite_tac[contextTheory.compile_store_memory_typed_def] >>
+      rpt IF_CASES_TAC >> gvs[]
+      >- (ho_match_mp_tac ci_mono_bind >>
+          simp[ci_mono_emit_op, ci_mono_emit_void])
+      >- simp[ci_mono_compile_store_bytestring]
+      >- simp[ci_mono_emit_void] >>
+      Cases_on `dst_ty` >> Cases_on `src_ty` >> gvs[] >>
+      rpt (TOP_CASE_TAC >> gvs[]) >>
+      simp[ci_mono_compile_copy_memory, ci_mono_emit_void,
+           ci_mono_compile_store_bytestring] >>
+      first_assum (fn ih => irule ih >> simp[])) >>
   rpt conj_tac >> rpt strip_tac >>
   once_rewrite_tac[contextTheory.compile_store_memory_typed_def] >>
   simp_tac pure_ss [LET_THM] >> BETA_TAC >>
+  rpt IF_CASES_TAC >> gvs[] >>
   rpt (FIRST [
     CHANGED_TAC (simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_emit_inst,
       ci_mono_fresh_label, ci_mono_fresh_var, ci_mono_new_block,
@@ -2145,9 +2217,8 @@ Proof
     IF_CASES_TAC,
     TOP_CASE_TAC,
     first_assum (fn ih =>
-      (irule (SRULE [] ih) >> fs[] >> NO_TAC) ORELSE
-      (* the struct IH may differ from the goal by commuted offsets *)
-      metis_tac[SRULE [] ih, arithmeticTheory.ADD_COMM])])
+      irule (SRULE [] ih) >> simp[arithmeticTheory.ADD_COMM] >> NO_TAC)]) >>
+  gvs[] >> metis_tac[arithmeticTheory.ADD_COMM]
 QED
 
 Theorem ci_mono_compile_store_memory[local]:
@@ -3171,3 +3242,18 @@ Proof
     by (irule ci_mono_same_blocks_isPREFIX >> simp[]) >>
   gvs[GSYM prefix_drop_equiv, emitted_insts_def]
 QED
+
+(* Kernel-closure audit for the membership-order change and build prerequisite. *)
+val () = List.app (fn (name, th) =>
+  let val (oracles, _) = Tag.dest_tag (Thm.tag th) in
+    if List.all (fn s => s = "DISK_THM") oracles then
+      print ("Kernel-closed: " ^ name ^ "\n")
+    else raise Fail ("Unexpected oracle dependency: " ^ name)
+  end)
+  [("ci_mono_emit_membership_eqs", ci_mono_emit_membership_eqs),
+   ("ci_mono_fold_membership_or", ci_mono_fold_membership_or),
+   ("ci_mono_fold_membership_and", ci_mono_fold_membership_and),
+   ("ci_mono_compile_list_membership_in", ci_mono_compile_list_membership_in),
+   ("ci_mono_compile_list_membership_notin", ci_mono_compile_list_membership_notin),
+   ("list_membership_small_traces", list_membership_small_traces),
+   ("ci_mono_compile_store_memory_typed", ci_mono_compile_store_memory_typed)];
