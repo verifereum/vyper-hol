@@ -321,6 +321,94 @@ Proof
   rw[shape_step_def] >> metis_tac[]
 QED
 
+Theorem compile_selector_checks_shape:
+  !selectors method_id.
+    EVERY (\(sel,lbl). jump_label_ok lbl) selectors ==>
+    shape_step F jump_label_ok (\st. plain_operand st method_id)
+      (compile_selector_checks method_id selectors) (\x st. T)
+Proof
+  Induct_on `selectors`
+  >- (simp[compile_selector_checks_def] >> rpt gen_tac >>
+      irule shape_step_return >> simp[]) >>
+  gen_tac >> PairCases_on `h` >> simp[Once compile_selector_checks_def] >>
+  rpt strip_tac >> irule shape_step_pre_fact >>
+  qexists_tac `~is_label_operand method_id` >>
+  conj_tac >- simp[plain_operand_def] >> strip_tac >>
+  irule shape_step_bind >>
+  qexists_tac `\x st. plain_operand st method_id /\ plain_operand st x` >>
+  reverse conj_tac
+  >- (ho_match_mp_tac shape_step_emit_op_under >>
+      conj_tac
+      >- (qspec_then `[method_id]` mp_tac shape_stable_plain_operands >> simp[]) >>
+      simp[lowered_inst_ok_def, raw_opcode_ok_def,
+           inst_shape_ok_def, label_positions_ok_def, is_read0_opcode_def,
+           mk_inst_def, is_terminator_def, is_param_opcode_def,
+           jump_labels_ok_def, label_or_plain_def, plain_operand_def,
+           stackPlanTypesTheory.is_label_operand_def]) >>
+  gen_tac >> BETA_TAC >>
+  irule shape_step_bind >>
+  qexists_tac `\l st. (plain_operand st method_id /\ plain_operand st x) /\ compiler_label l` >>
+  reverse conj_tac
+  >- (ho_match_mp_tac shape_step_fresh_label >>
+      rw[shape_stable_def] >> metis_tac[plain_operand_mono]) >>
+  qx_gen_tac `ml` >> BETA_TAC >>
+  irule shape_step_bind >>
+  qexists_tac `\l st. ((plain_operand st method_id /\ plain_operand st x) /\ compiler_label ml) /\ compiler_label l` >>
+  reverse conj_tac
+  >- (ho_match_mp_tac shape_step_fresh_label >>
+      rw[shape_stable_def] >> metis_tac[plain_operand_mono]) >>
+  qx_gen_tac `nl` >> BETA_TAC >> suspend "branches"
+QED
+
+Resume compile_selector_checks_shape[branches]:
+  irule shape_step_pre_fact >>
+  qexists_tac `~is_label_operand x /\ compiler_label ml /\ compiler_label nl` >>
+  conj_tac >- simp[plain_operand_def] >> strip_tac >>
+  irule shape_step_ignore_bind >>
+  qexists_tac `\u st. ((plain_operand st method_id /\ plain_operand st x) /\ compiler_label ml) /\ compiler_label nl` >>
+  reverse conj_tac
+  >- (ho_match_mp_tac shape_step_emit_inst_under >>
+      conj_tac >- (rw[shape_stable_def] >> metis_tac[plain_operand_mono]) >>
+      simp[lowered_inst_ok_def, raw_opcode_ok_def, inst_shape_ok_def,
+           label_positions_ok_def, is_read0_opcode_def, mk_inst_def,
+           is_terminator_def, is_param_opcode_def, jump_labels_ok_def,
+           jump_label_ok_def, label_or_plain_def,
+           stackPlanTypesTheory.is_label_operand_def] >>
+      rpt strip_tac >> gvs[] >>
+      metis_tac[stackPlanTypesTheory.is_label_operand_def]) >>
+  gen_tac >> BETA_TAC >>
+  irule shape_step_conseq >>
+  qexistsl_tac [`jump_label_ok`, `\st. plain_operand st method_id`, `\u st. T`] >>
+  simp[] >> suspend "blocks"
+QED
+
+Resume compile_selector_checks_shape[blocks]:
+  irule shape_step_ignore_bind >>
+  qexists_tac `\u st. plain_operand st method_id` >> reverse conj_tac
+  >- (ho_match_mp_tac shape_step_new_block >>
+      simp[jump_label_ok_def] >>
+      qspec_then `[method_id]` mp_tac shape_stable_plain_operands >> simp[]) >>
+  gen_tac >> BETA_TAC >>
+  irule shape_step_ignore_bind >>
+  qexists_tac `\u st. plain_operand st method_id` >> reverse conj_tac
+  >- (ho_match_mp_tac shape_step_emit_inst_under >>
+      conj_tac
+      >- (qspec_then `[method_id]` mp_tac shape_stable_plain_operands >> simp[]) >>
+      simp[lowered_inst_ok_def, raw_opcode_ok_def, inst_shape_ok_def,
+           label_positions_ok_def, is_read0_opcode_def, mk_inst_def,
+           is_terminator_def, is_param_opcode_def, jump_labels_ok_def,
+           label_or_plain_def, stackPlanTypesTheory.is_label_operand_def]) >>
+  gen_tac >> BETA_TAC >>
+  irule shape_step_ignore_bind >>
+  qexists_tac `\u st. plain_operand st method_id` >> reverse conj_tac
+  >- (ho_match_mp_tac shape_step_new_block >>
+      simp[jump_label_ok_def] >>
+      qspec_then `[method_id]` mp_tac shape_stable_plain_operands >> simp[]) >>
+  simp[]
+QED
+
+Finalise compile_selector_checks_shape
+
 (* Straight-line code, fresh labels and JMPs to the selector labels. *)
 Theorem compile_selector_dispatch_linear_shape:
   !selectors fallback_lbl.
