@@ -7,7 +7,7 @@
 Theory valueEncodingProofs
 Ancestors
   list rich_list venomMemProofs
-  valueEncoding vyperStorage venomState
+  valueEncoding vyperStorage venomState venomExecSemantics
 Libs
   blastLib intLib
 
@@ -1010,4 +1010,82 @@ Theorem val_in_memory_address_proof:
      typed_val_to_w256 (BaseTV AddressT) (BytesV bs))
 Proof
   simp[val_in_memory_def]
+QED
+
+(* Snapshot writes expose content and preserve disjoint padded windows. *)
+Theorem write_memory_mem_bytes_at_same:
+  !dst bs s.
+    mem_bytes_at dst (LENGTH bs)
+      (write_memory_with_expansion dst bs s).vs_memory = bs
+Proof
+  rpt gen_tac >>
+  simp[write_memory_with_expansion_def, LET_THM] >>
+  Cases_on `0 < dst + LENGTH bs - LENGTH s.vs_memory` >> simp[] >>
+  simp[mem_bytes_at_def, DROP_APPEND, LENGTH_TAKE_EQ,
+       TAKE_APPEND1, TAKE_LENGTH_ID_rwt, DROP_EQ_NIL, DROP_TAKE]
+QED
+
+Theorem write_memory_mem_bytes_at_disjoint:
+  !p k dst bs s.
+    (p + k <= dst \/ dst + LENGTH bs <= p) ==>
+    mem_bytes_at p k (write_memory_with_expansion dst bs s).vs_memory =
+    mem_bytes_at p k s.vs_memory
+Proof
+  rpt gen_tac >> disch_tac >>
+  simp[write_memory_with_expansion_def, LET_THM] >>
+  Cases_on `0 < dst + LENGTH bs - LENGTH s.vs_memory` >> simp[]
+  >- (qmatch_goalsub_abbrev_tac `TAKE dst exp` >>
+      `dst + LENGTH bs <= LENGTH exp` by simp[Abbr `exp`] >>
+      `mem_bytes_at p k (TAKE dst exp ++ bs ++
+        DROP (dst + LENGTH bs) exp) = mem_bytes_at p k exp` by
+        (simp[mem_bytes_at_def] >> irule take_drop_splice_disjoint >> simp[]) >>
+      simp[Abbr `exp`, mem_bytes_at_append_zero]) >>
+  `dst + LENGTH bs <= LENGTH s.vs_memory` by simp[] >>
+  simp[mem_bytes_at_def] >> irule take_drop_splice_disjoint >> simp[]
+QED
+
+Theorem mcopy_mem_bytes_at_same:
+  !dst src n s.
+    mem_bytes_at dst n (mcopy dst src n s).vs_memory =
+    mem_bytes_at src n s.vs_memory
+Proof
+  rpt gen_tac >>
+  simp[mcopy_def, GSYM mem_bytes_at_def] >>
+  metis_tac[write_memory_mem_bytes_at_same, LENGTH_mem_bytes_at_proof]
+QED
+
+Theorem mcopy_mem_bytes_at_disjoint:
+  !p k dst src n s.
+    (p + k <= dst \/ dst + n <= p) ==>
+    mem_bytes_at p k (mcopy dst src n s).vs_memory =
+    mem_bytes_at p k s.vs_memory
+Proof
+  rpt strip_tac >> simp[mcopy_def] >>
+  irule write_memory_mem_bytes_at_disjoint >> simp[LENGTH_TAKE_EQ]
+QED
+
+Theorem mem_bytes_at_translated_window:
+  !a b n m m' i k.
+    mem_bytes_at a n m = mem_bytes_at b n m' /\ i + k <= n ==>
+    mem_bytes_at (a+i) k m = mem_bytes_at (b+i) k m'
+Proof
+  rpt strip_tac >> irule LIST_EQ >>
+  simp[LENGTH_mem_bytes_at_proof] >> rpt strip_tac >>
+  rename1 `j < k` >>
+  `i+j < n` by decide_tac >>
+  qpat_x_assum `mem_bytes_at _ _ _ = _`
+    (mp_tac o AP_TERM ``EL (i+j) : word8 list -> word8``) >>
+  asm_simp_tac (srw_ss()) [EL_mem_bytes_at, GSYM arithmeticTheory.ADD_ASSOC]
+QED
+
+(* Interface probes: zero-size expansion, padded input, overlapping snapshot. *)
+Theorem mcopy_window_edge_probes[local]:
+  mem_bytes_at 7 0 (mcopy 7 19 0 (s with vs_memory := [])).vs_memory = [] /\
+  mem_bytes_at 5 3 (mcopy 5 19 3 (s with vs_memory := [])).vs_memory =
+    [0w; 0w; 0w] /\
+  mem_bytes_at 1 3
+    (mcopy 1 0 3 (s with vs_memory := [1w; 2w; 3w; 4w])).vs_memory =
+    [1w; 2w; 3w]
+Proof
+  simp[mcopy_mem_bytes_at_same, mem_bytes_at_def] >> EVAL_TAC
 QED
