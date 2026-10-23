@@ -261,3 +261,54 @@ Theorem val_in_memory_address:
      typed_val_to_w256 (BaseTV AddressT) (BytesV bs))
 Proof ACCEPT_TAC val_in_memory_address_proof
 QED
+
+(* Snapshot MCOPY and translated padded-memory windows. *)
+Theorem write_memory_mem_bytes_at_same:
+  !dst bs s.
+    mem_bytes_at dst (LENGTH bs)
+      (write_memory_with_expansion dst bs s).vs_memory = bs
+Proof
+  ACCEPT_TAC valueEncodingProofsTheory.write_memory_mem_bytes_at_same
+QED
+
+Theorem write_memory_mem_bytes_at_disjoint:
+  !p k dst bs s.
+    (p + k <= dst \/ dst + LENGTH bs <= p) ==>
+    mem_bytes_at p k (write_memory_with_expansion dst bs s).vs_memory =
+    mem_bytes_at p k s.vs_memory
+Proof
+  ACCEPT_TAC valueEncodingProofsTheory.write_memory_mem_bytes_at_disjoint
+QED
+
+Theorem mcopy_mem_bytes_at_same:
+  !dst src n s.
+    mem_bytes_at dst n (mcopy dst src n s).vs_memory =
+    mem_bytes_at src n s.vs_memory
+Proof
+  ACCEPT_TAC valueEncodingProofsTheory.mcopy_mem_bytes_at_same
+QED
+
+Theorem mcopy_mem_bytes_at_disjoint:
+  !p k dst src n s.
+    (p + k <= dst \/ dst + n <= p) ==>
+    mem_bytes_at p k (mcopy dst src n s).vs_memory =
+    mem_bytes_at p k s.vs_memory
+Proof
+  ACCEPT_TAC valueEncodingProofsTheory.mcopy_mem_bytes_at_disjoint
+QED
+
+Theorem mem_bytes_at_translated_window:
+  !a b n m m' i k.
+    mem_bytes_at a n m = mem_bytes_at b n m' /\ i + k <= n ==>
+    mem_bytes_at (a+i) k m = mem_bytes_at (b+i) k m'
+Proof
+  ACCEPT_TAC valueEncodingProofsTheory.mem_bytes_at_translated_window
+QED
+
+val _ = List.app (fn name =>
+  if null (List.filter (fn x => x <> "DISK_THM")
+    (#1 (Tag.dest_tag (Thm.tag (DB.fetch "valueEncodingProps" name)))))
+  then () else raise Fail ("oracle in " ^ name))
+  ["write_memory_mem_bytes_at_same", "write_memory_mem_bytes_at_disjoint",
+   "mcopy_mem_bytes_at_same", "mcopy_mem_bytes_at_disjoint",
+   "mem_bytes_at_translated_window", "mstore_mem_bytes_at_disjoint"];
