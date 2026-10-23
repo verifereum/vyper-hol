@@ -39,13 +39,6 @@ Definition runtime_place_writable_def:
   runtime_place_writable cx st (StoragePlace tr slot tv) = T
 End
 
-Theorem runtime_place_writable_assignable:
-  runtime_place_writable cx st p ==> runtime_place_assignable st p
-Proof
-  Cases_on `p` >> simp[runtime_place_writable_def, runtime_place_assignable_def] >>
-  metis_tac[]
-QED
-
 Theorem array_replace_path_no_type_error:
   value_has_type (ArrayTV etv bd) (ArrayV arr) /\ well_formed_type_value etv /\
   (!child err. value_has_type etv child ==>
@@ -165,20 +158,6 @@ Proof
   simp[scope_entry_component_equality]
 QED
 
-Theorem replace_memory_entry_no_type_error_helper:
-  value_has_type entry.type entry.value /\ well_formed_type_value entry.type /\
-  (path = [] \/ leaf_type entry.type path <> NoneTV) ==>
-  replace_memory_entry entry path v <> INR (TypeError msg)
-Proof
-  Cases_on `path = []`
-  >- gvs[replace_memory_entry_def, evaluate_subscripts_def, assign_subscripts_def] >>
-  simp[] >> strip_tac >>
-  `assign_subscripts entry.type entry.value path (Replace v) <> INR (TypeError msg)` by
-    (irule assign_subscripts_no_type_error_from_leaf >>
-     simp[assign_subscripts_replace_leaf_no_type_error]) >>
-  rw[replace_memory_entry_def, AllCaseEqs()] >> gvs[]
-QED
-
 Theorem replace_memory_entry_no_type_error:
   value_has_type entry.type entry.value /\ well_formed_type_value entry.type /\
   mutable_place_path entry.type path ==>
@@ -207,13 +186,6 @@ Proof
   gvs[write_place_def, bind_def, get_scopes_def, lift_option_type_def,
       type_check_def, assert_def, ignore_bind_def, lift_sum_def, set_scopes_def,
       return_def, raise_def, no_type_error_result_def]
-QED
-
-Theorem immutable_metadata_frame_sym:
-  vyperImmutableMetadataFrame$immutable_metadata_frame st st' ==>
-  vyperImmutableMetadataFrame$immutable_metadata_frame st' st
-Proof
-  rw[immutable_metadata_frame_def] >> metis_tac[]
 QED
 
 Theorem immutable_metadata_frame_type_lookup:

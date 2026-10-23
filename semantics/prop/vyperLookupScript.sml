@@ -1122,19 +1122,3 @@ Theorem lookup_name_empty_scopes:
 Proof
   simp[lookup_name_typed_to_lookup_name, lookup_name_typed_empty_scopes]
 QED
-
-Theorem assign_target_name_pop_state:
-  find_containing_scope n st.scopes = SOME (pre,env,entry,rest) /\
-  entry.assignable /\
-  assign_subscripts entry.type entry.value (REVERSE sbs) PopOp = INL a' /\
-  evaluate_subscripts entry.type entry.value (REVERSE sbs) = INL old /\
-  popped_value old = INL p ==>
-  SND (assign_target cx (BaseTargetV (ScopedVar n) sbs) PopOp st) =
-    st with scopes := pre ++ (env |+ (n, entry with
-      <|value := a'; popped := record_pop entry.type entry.value (REVERSE sbs) p entry.popped|>))::rest
-Proof
-  strip_tac >>
-  simp[Once assign_target_def, bind_def, get_scopes_def, return_def,
-       lift_option_def, lift_option_type_def, lift_sum_def, assign_result_def,
-       ignore_bind_def, set_scopes_def, type_check_def, assert_def]
-QED

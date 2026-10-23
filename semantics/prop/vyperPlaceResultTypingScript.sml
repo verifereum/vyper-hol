@@ -59,18 +59,6 @@ Proof
   first_x_assum irule >> metis_tac[]
 QED
 
-Theorem assign_subscripts_success_path_type:
-  !path tv a ao a'.
-    value_has_type tv a /\ well_formed_type_value tv /\
-    assign_subscripts tv a path ao = INL a' ==>
-    ?ptv. subscripts_type tv path = SOME ptv
-Proof
-  rpt strip_tac >> drule assign_subscripts_success_read >> strip_tac >>
-  drule_at (Pat `evaluate_subscripts _ _ _ = _`)
-    evaluate_subscripts_declared_type_exists >>
-  simp[] >> metis_tac[]
-QED
-
 (* A resolved place carries metadata, not a promise of current bounds. *)
 Definition place_result_typed_def:
   place_result_typed env cx st pv vt <=>
@@ -102,16 +90,6 @@ Proof
   simp[place_result_typed_def]
 QED
 
-Theorem place_result_read_success_type:
-  place_state_well_typed st /\
-  place_result_typed env cx st (PlaceR p) (Type ty) /\
-  read_place cx p st = (INL v,st') ==>
-  ?tv. evaluate_type env.type_defs ty = SOME tv /\ value_has_type tv v
-Proof
-  simp[place_result_typed_place] >>
-  metis_tac[read_place_success_type]
-QED
-
 (* Ordinary expressions retain their syntax-sensitive result contract too. *)
 Definition ordinary_place_result_typed_def:
   ordinary_place_result_typed env cx st e pv <=>
@@ -127,38 +105,7 @@ Proof
 QED
 
 (* Fresh resolved memory paths read without consulting arbitrary old history. *)
-Theorem fresh_memory_place_read:
-  lookup_scopes id st.scopes = SOME entry /\
-  evaluate_subscripts entry.type entry.value path = INL v ==>
-  read_place cx (MemoryPlace id path) st = (INL v,st)
-Proof
-  simp[read_place_def, get_scopes_def, bind_def, lift_option_type_def,
-    read_memory_path_def, lift_sum_def, return_def]
-QED
-
-Theorem fresh_memory_place_read_type:
-  state_well_typed st /\ lookup_scopes id st.scopes = SOME entry /\
-  subscripts_type entry.type path = SOME tv /\
-  evaluate_subscripts entry.type entry.value path = INL v ==>
-  value_has_type tv v
-Proof
-  rpt strip_tac >> irule evaluate_subscripts_type >>
-  goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
-  metis_tac[state_well_typed_def, lookup_scopes_well_typed_value_has_type,
-    lookup_scopes_well_typed_type]
-QED
-
 (* A direct probe of why metadata typing alone is not delayed-read validity. *)
-Theorem empty_memory_path_has_no_value[local]:
-  read_memory_path
-    <|assignable := T; type := ArrayTV (BaseTV (UintT 256)) (Dynamic 3);
-      value := ArrayV (DynArrayV []); popped := []|>
-    [ValueSubscript (IntV 0)] <>
-    INL (IntV 5)
-Proof
-  EVAL_TAC
-QED
-
 Theorem delayed_pop_value_probe[local]:
   read_memory_path
     <|assignable := T; type := ArrayTV (BaseTV (UintT 256)) (Dynamic 3);
@@ -181,31 +128,7 @@ Proof
 QED
 
 
-Theorem scope_value_typing_does_not_type_history[local]:
-  let entry = <|assignable := T;
-        type := ArrayTV (BaseTV (UintT 256)) (Dynamic 3);
-        value := ArrayV (DynArrayV []);
-        popped := [([ValueSubscript (IntV 0)],BoolV T)]|>
-  in scope_well_typed (FEMPTY |+ ("d",entry)) /\
-     ~scope_history_typed (FEMPTY |+ ("d",entry))
-Proof
-  simp[scope_well_typed_def, scope_history_typed_def, FLOOKUP_UPDATE,
-    popped_history_typed_def] >> EVAL_TAC >>
-  simp[wordsTheory.dimword_def, value_has_type_def, well_formed_type_value_def]
-QED
-
 (* A metadata frame intentionally makes no bounds claim. *)
-Theorem runtime_memory_place_type_frame:
-  runtime_place_typed cx st (MemoryPlace id path) tv /\
-  (!a. OPTION_MAP (\e. e.type) (lookup_scopes a st.scopes) =
-        OPTION_MAP (\e. e.type) (lookup_scopes a st'.scopes)) ==>
-  runtime_place_typed cx st' (MemoryPlace id path) tv
-Proof
-  simp[runtime_place_typed_memory] >> rpt strip_tac >>
-  first_x_assum (qspec_then `id` mp_tac) >>
-  Cases_on `lookup_scopes id st'.scopes` >> simp[] >> metis_tac[]
-QED
-
 (* Only the prefix created in a live-place region is trusted. *)
 Definition memory_path_covered_def:
   memory_path_covered tv current fresh path <=>
@@ -266,34 +189,10 @@ Proof
   rename1 `ArrayV arr` >> Cases_on `arr` >> simp[]
 QED
 
-Theorem covered_paths_add:
-  memory_history_region entry fresh old paths /\
-  evaluate_subscripts entry.type entry.value path = INL v ==>
-  memory_history_region entry fresh old (path::paths)
-Proof
-  simp[memory_history_region_def, memory_path_covered_def]
-QED
-
 (* Proof-only alias: all declared paths, including tuple indices. *)
 Definition memory_eval_path_def:
   memory_eval_path tv path <=> ?ptv. subscripts_type tv path = SOME ptv
 End
-
-Theorem memory_eval_path_tuple_index:
-  memory_eval_path (TupleTV tvs) [ValueSubscript (IntV i)] <=>
-    0 <= i /\ Num i < LENGTH tvs
-Proof
-  Cases_on `0 <= i /\ Num i < LENGTH tvs` >>
-  simp[memory_eval_path_def, subscripts_type_def, subscript_type_def]
-QED
-
-Theorem memory_eval_path_array_struct:
-  0 <= i /\ Num i < bound_length bd ==>
-  memory_eval_path (ArrayTV (StructTV [(field_id,tv)]) bd)
-    [ValueSubscript (IntV i); AttrSubscript field_id]
-Proof
-  simp[memory_eval_path_def, subscripts_type_def, subscript_type_def]
-QED
 
 Theorem tuple_literal_subscript_source_probe:
   subscript_type_ok (TupleT [BaseT BoolT])
@@ -545,33 +444,6 @@ Proof
   drule_all read_popped_success_extend >> simp[]
 QED
 
-Theorem covered_read_scope_frame:
-  memory_history_region entry fresh old paths /\
-  lookup_scopes id st.scopes = SOME entry /\
-  st'.scopes = st.scopes /\ value_has_type entry.type entry.value /\
-  well_formed_type_value entry.type /\ MEM path paths /\
-  subscripts_type entry.type path = SOME tv ==>
-  ?v. read_place cx (MemoryPlace id path) st' = (INL v,st') /\
-      value_has_type tv v
-Proof
-  rpt strip_tac >> drule_all covered_memory_read >> strip_tac >>
-  qexists_tac `v` >> simp[read_place_def, get_scopes_def, bind_def,
-    lift_option_type_def, lift_sum_def, return_def]
-QED
-
-Theorem record_pop_fresh_prefix_typed:
-  popped_history_typed tv fresh /\
-  subscripts_type tv path = SOME (ArrayTV etv (Dynamic n)) /\
-  well_formed_type_value etv /\
-  value_has_type (ArrayTV etv (Dynamic n)) arr /\
-  evaluate_subscripts tv current path = INL arr /\ popped_value arr = INL p ==>
-  popped_history_typed tv (record_pop tv current path p fresh) /\
-  record_pop tv current path p (fresh ++ old) =
-    record_pop tv current path p fresh ++ old
-Proof
-  metis_tac[record_pop_history_typed_at_path, record_pop_prefix_split]
-QED
-
 (* Real nested PopOp updates; the old history suffix is completely arbitrary. *)
 Theorem nested_pop_region_probe[local]:
   let tv = ArrayTV (ArrayTV (BaseTV (UintT 256)) (Dynamic 3)) (Dynamic 3);
@@ -598,17 +470,6 @@ Proof
     wordsTheory.dimword_def]
 QED
 
-Theorem pop_function_restores_live_region:
-  memory_history_region entry fresh old paths /\
-  lookup_scopes id prev = SOME entry /\
-  pop_function prev st = (res,st') ==>
-  lookup_scopes id st'.scopes = SOME entry /\
-  memory_history_region entry fresh old paths
-Proof
-  simp[pop_function_def, set_scopes_def, return_def] >>
-  rpt strip_tac >> gvs[]
-QED
-
 Theorem unrelated_pop_region_probe[local]:
   let tv = ArrayTV (ArrayTV (BaseTV (UintT 256)) (Dynamic 3)) (Dynamic 3);
       before = ArrayV (DynArrayV [ArrayV (DynArrayV [IntV 1]);
@@ -632,39 +493,12 @@ Proof
 QED
 
 (* Typechecks the actual twelve predicate slots without changing soundness. *)
-Theorem evaluator_scc_alignment_probe[local]:
-  (!cx s st res st'. eval_stmt cx s st = (res,st') ==> res = res /\ st' = st') /\
-  (!cx ss st res st'. eval_stmts cx ss st = (res,st') ==> res = res /\ st' = st') /\
-  (!cx it st res st'. eval_iterator cx it st = (res,st') ==> res = res /\ st' = st') /\
-  (!cx bt st res st'. eval_base_target cx bt st = (res,st') ==> res = res /\ st' = st') /\
-  (!cx ty id body vs st res st'. eval_for cx ty id body vs st = (res,st') ==> res = res /\ st' = st') /\
-  (!cx e st res st'. eval_expr cx e st = (res,st') ==> res = res /\ st' = st') /\
-  (!cx es st res st'. eval_exprs cx es st = (res,st') ==> res = res /\ st' = st') /\
-  (!cx e st res st'. eval_place cx e st = (res,st') ==> res = res /\ st' = st') /\
-  (!cx bt st res st'. eval_base_place cx bt st = (res,st') ==> res = res /\ st' = st') /\
-  (!cx bt st res st'. eval_target_place cx bt st = (res,st') ==> res = res /\ st' = st') /\
-  (!cx g v st res st'. assign_tuple_targets cx g v st = (res,st') ==> res = res /\ st' = st') /\
-  (!cx gs vs st res st'. assign_tuple_target_list cx gs vs st = (res,st') ==> res = res /\ st' = st')
-Proof
-  ho_match_mp_tac evaluate_ind >> simp[]
-QED
-
 Theorem read_popped_new_snapshot:
   subscripts_type tv prefix = SOME ptv /\ IS_PREFIX path prefix /\
   evaluate_subscripts ptv p (DROP (LENGTH prefix) path) = INL v ==>
   read_popped tv path ((prefix,p)::history) = SOME v
 Proof
   simp[read_popped_def]
-QED
-
-Theorem root_pop_retained_element:
-  0 <= i /\ Num i < LENGTH xs /\
-  evaluate_subscripts etv (EL (Num i) xs) path = INL v ==>
-  evaluate_subscripts (ArrayTV etv (Dynamic n)) (ArrayV (DynArrayV xs))
-    (ValueSubscript (IntV i)::path) = INL v
-Proof
-  simp[evaluate_subscripts_def, vyperValueOperationTheory.array_index_def,
-    oEL_THM]
 QED
 
 Theorem root_pop_removed_element:
@@ -703,14 +537,6 @@ Proof
   `i = &(LENGTH xs)` by intLib.ARITH_TAC >> gvs[EL_SNOC] >>
   qexists_tac `v` >> irule root_pop_removed_element >> simp[] >>
   gvs[SNOC_APPEND, EL_APPEND_EQN]
-QED
-
-Theorem read_popped_singleton_rebase:
-  subscript_type tv sb = SOME etv ==>
-  read_popped tv (sb::path) [(sb::prefix,p)] =
-  read_popped etv path [(prefix,p)]
-Proof
-  simp[read_popped_def, subscripts_type_def]
 QED
 
 Theorem record_pop_rebase:
@@ -1035,16 +861,6 @@ Proof
   simp[entry_pop_trace_valid_def, EVERY_APPEND]
 QED
 
-Theorem entry_pop_trace_append:
-  !xs entry ys final.
-  entry_pop_trace entry (xs ++ ys) final <=>
-  ?middle. entry_pop_trace entry xs middle /\ entry_pop_trace middle ys final
-Proof
-  Induct >- simp[entry_pop_trace_def] >>
-  gen_tac >> PairCases_on `h` >> rpt gen_tac >>
-  simp[entry_pop_trace_def] >> metis_tac[]
-QED
-
 Theorem entry_pop_step_region:
   entry_pop_step entry popPath entry' /\
   entry_pop_event_valid (entry,popPath) /\
@@ -1070,13 +886,6 @@ Proof
   drule_all entry_pop_step_region >> strip_tac >>
   first_x_assum irule >> simp[entry_pop_trace_valid_def] >>
   goal_assum (drule_at Any) >> goal_assum (drule_at Any)
-QED
-
-Theorem entry_pop_trace_two_steps:
-  entry_pop_step entry path1 middle /\ entry_pop_step middle path2 final ==>
-  entry_pop_trace entry [(entry,path1);(middle,path2)] final
-Proof
-  simp[entry_pop_trace_def] >> metis_tac[]
 QED
 
 Theorem entry_pop_step_metadata:
@@ -1133,15 +942,6 @@ Proof
   Induct >> simp[scope_pop_trace_def] >> metis_tac[]
 QED
 
-Theorem entry_events_append:
-  !xs id ys. entry_events id (xs ++ ys) =
-    entry_events id xs ++ entry_events id ys
-Proof
-  Induct >- simp[entry_events_def] >>
-  gen_tac >> PairCases_on `h` >> simp[entry_events_def] >>
-  rpt gen_tac >> Cases_on `h0 = id` >> simp[]
-QED
-
 Theorem scope_pop_step_lookup:
   scope_pop_step sc (id,(source,path)) sc' ==>
   lookup_scopes id sc = SOME source /\
@@ -1183,20 +983,6 @@ Proof
   first_x_assum irule >> metis_tac[]
 QED
 
-Theorem scope_pop_trace_absent:
-  !events sc final id.
-    scope_pop_trace sc events final /\ lookup_scopes id sc = NONE ==>
-    lookup_scopes id final = NONE /\ entry_events id events = []
-Proof
-  Induct >- simp[scope_pop_trace_def, entry_events_def] >>
-  gen_tac >> PairCases_on `h` >> rpt gen_tac >>
-  pure_rewrite_tac[scope_pop_trace_def] >> disch_then strip_assume_tac >>
-  Cases_on `h0 = id`
-  >- (gvs[] >> drule scope_pop_step_lookup >> simp[]) >>
-  drule_all scope_pop_step_lookup_other >> strip_tac >>
-  first_x_assum drule >> simp[entry_events_def]
-QED
-
 Theorem scope_pop_trace_region:
   scope_pop_trace sc events final /\ lookup_scopes id sc = SOME entry /\
   entry_pop_trace_valid (entry_events id events) /\
@@ -1206,19 +992,6 @@ Theorem scope_pop_trace_region:
 Proof
   rpt strip_tac >> drule_all scope_pop_trace_lookup >> strip_tac >>
   drule_all entry_pop_trace_region >> strip_tac >> metis_tac[]
-QED
-
-Theorem scope_pop_trace_one_step:
-  scope_pop_step sc ev final ==> scope_pop_trace sc [ev] final
-Proof
-  simp[scope_pop_trace_def]
-QED
-
-Theorem scope_pop_trace_two_steps:
-  scope_pop_step sc ev1 middle /\ scope_pop_step middle ev2 final ==>
-  scope_pop_trace sc [ev1;ev2] final
-Proof
-  simp[scope_pop_trace_def] >> metis_tac[]
 QED
 
 Theorem assign_scoped_pop_scope_trace_events:
@@ -1374,30 +1147,11 @@ Proof
   simp[lift_option_type_def, return_def, raise_def]
 QED
 
-Theorem scope_pop_effect_ignore_bind:
-  scope_pop_effect f /\ scope_pop_effect g ==>
-  scope_pop_effect (ignore_bind f g)
-Proof
-  strip_tac >> rewrite_tac[ignore_bind_def] >>
-  irule scope_pop_effect_bind >> simp[]
-QED
-
 Theorem scope_pop_effect_cond:
   scope_pop_effect (if b then f else g) <=>
     if b then scope_pop_effect f else scope_pop_effect g
 Proof
   Cases_on `b` >> simp[]
-QED
-
-Theorem scope_pop_effect_saved_scopes:
-  scope_pop_effect
-    (bind get_scopes (\prev. finally (f prev) (set_scopes prev)))
-Proof
-  irule scope_pop_effect_identity >>
-  simp[bind_def, get_scopes_def, return_def, finally_def,
-       ignore_bind_def, set_scopes_def, raise_def] >>
-  rpt strip_tac >>
-  rpt (BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def])
 QED
 
 Theorem scope_pop_effect_primitives[simp]:
@@ -1437,17 +1191,6 @@ Proof
   gvs[AllCaseEqs()] >> metis_tac[scope_pop_trace_append]
 QED
 
-Theorem scope_pop_effect_saved_cleanup:
-  (!prev st res st'. cleanup prev st = (res,st') ==> st'.scopes = prev) ==>
-  scope_pop_effect
-    (bind get_scopes (\prev. finally (f prev) (cleanup prev)))
-Proof
-  simp[scope_pop_effect_def, bind_def, get_scopes_def, finally_def,
-       ignore_bind_def, return_def, raise_def] >> rpt strip_tac >>
-  rpt (BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def]) >>
-  qexists_tac `[]` >> simp[scope_pop_trace_def] >> metis_tac[]
-QED
-
 Theorem eval_name_target_scope_effect[local]:
   scope_pop_effect (eval_base_target cx (NameTarget id))
 Proof
@@ -1457,27 +1200,6 @@ Proof
   irule scope_pop_effect_bind >> simp[]
 QED
 
-
-Theorem scope_pop_effect_saved_function:
-  (!st res st'. release st = (res,st') ==> st'.scopes = st.scopes) ==>
-  scope_pop_effect (bind get_scopes
-    (\prev. finally (f prev) (ignore_bind (pop_function prev) release)))
-Proof
-  strip_tac >> ho_match_mp_tac scope_pop_effect_saved_cleanup >>
-  simp[pop_function_def, ignore_bind_def, bind_def, set_scopes_def, return_def] >>
-  rpt strip_tac >> first_x_assum drule >> simp[]
-QED
-
-Theorem conditional_lock_release_scopes:
-  (if nr /\ ~is_view then
-      case slot of NONE => return ()
-      | SOME s => release_nonreentrant_lock addr s
-   else return ()) st = (res,st') ==> st'.scopes = st.scopes
-Proof
-  Cases_on `nr /\ ~is_view` >> simp[return_def] >>
-  Cases_on `slot` >> simp[return_def] >>
-  metis_tac[release_nonreentrant_lock_scopes]
-QED
 
 Theorem eval_toplevel_target_scope_effect[local]:
   scope_pop_effect (eval_base_target cx (TopLevelNameTarget (src,id)))
@@ -1601,16 +1323,6 @@ Theorem scope_pop_effect_saved_region:
 Proof
   strip_tac >> irule scope_pop_effect_identity >>
   simp[bind_def, get_scopes_def, return_def] >> metis_tac[]
-QED
-
-Theorem finally_scope_restore:
-  (!st res st'. cleanup st = (res,st') ==> st'.scopes = prev) ==>
-  finally f cleanup st = (res,st') ==> st'.scopes = prev
-Proof
-  simp[finally_def, ignore_bind_def, bind_def, raise_def] >>
-  rpt strip_tac >>
-  rpt (BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def]) >>
-  metis_tac[]
 QED
 
 Theorem eval_exprs_cons_scope_effect[local]:
@@ -1936,13 +1648,6 @@ fun POP_EFFECT_GUARD_TAC (asl,w) =
     FIRST (map close facts) (asl,w)
   end;
 
-Theorem pop_effect_guard_probe[local]:
-  (!st x middle. f st = (INL x,middle) ==> scope_pop_effect (g x)) /\
-  f st0 = (INL v,st1) ==> scope_pop_effect (g v)
-Proof
-  strip_tac >> POP_EFFECT_GUARD_TAC
-QED
-
 
 Theorem finally_conditional_lock_scopes:
   finally f (do pop_function prev;
@@ -2075,53 +1780,6 @@ QED
 
 Finalise eval_mutual_scope_pop_effect
 
-Theorem eval_base_target_scope_pop_effect:
-  scope_pop_effect (eval_base_target cx bt)
-Proof
-  metis_tac[eval_mutual_scope_pop_effect]
-QED
-
-Theorem eval_expr_scope_pop_effect:
-  scope_pop_effect (eval_expr cx e)
-Proof
-  metis_tac[eval_mutual_scope_pop_effect]
-QED
-
-Theorem eval_exprs_scope_pop_effect:
-  scope_pop_effect (eval_exprs cx es)
-Proof
-  metis_tac[eval_mutual_scope_pop_effect]
-QED
-
-Theorem eval_place_scope_pop_effect:
-  scope_pop_effect (eval_place cx e)
-Proof
-  metis_tac[eval_mutual_scope_pop_effect]
-QED
-
-Theorem eval_base_place_scope_pop_effect:
-  scope_pop_effect (eval_base_place cx bt)
-Proof
-  metis_tac[eval_mutual_scope_pop_effect]
-QED
-
-Theorem eval_target_place_scope_pop_effect:
-  scope_pop_effect (eval_target_place cx bt)
-Proof
-  metis_tac[eval_mutual_scope_pop_effect]
-QED
-
-Theorem scope_pop_effect_entry_trace:
-  scope_pop_effect f /\ f st = (res,st') /\
-  lookup_scopes id st.scopes = SOME entry ==>
-  ?events entry'. lookup_scopes id st'.scopes = SOME entry' /\
-    entry_pop_trace entry events entry'
-Proof
-  simp[scope_pop_effect_def] >> rpt strip_tac >>
-  first_x_assum drule >> strip_tac >>
-  drule_all scope_pop_trace_lookup >> metis_tac[]
-QED
-
 Theorem entry_events_valid:
   !events id. EVERY (\ev. entry_pop_event_valid (SND ev)) events ==>
     entry_pop_trace_valid (entry_events id events)
@@ -2146,16 +1804,6 @@ Proof
   drule_all scope_pop_trace_region >> simp[]
 QED
 
-
-Theorem scope_pop_effect_absent:
-  scope_pop_effect f /\ f st = (res,st') /\
-  lookup_scopes id st.scopes = NONE ==>
-  lookup_scopes id st'.scopes = NONE
-Proof
-  simp[scope_pop_effect_def] >> rpt strip_tac >>
-  first_x_assum drule >> strip_tac >>
-  drule_all scope_pop_trace_absent >> simp[]
-QED
 
 Theorem typed_scope_trace_memory_read:
   scope_pop_trace st.scopes events st'.scopes /\
@@ -2191,35 +1839,6 @@ Theorem typed_scope_trace_append:
   EVERY (\ev. entry_pop_event_valid (SND ev)) (xs ++ ys)
 Proof
   metis_tac[scope_pop_trace_append, EVERY_APPEND]
-QED
-
-Theorem assign_scoped_pop_typed_trace:
-  (!entry. lookup_scopes id st.scopes = SOME entry ==>
-    entry_pop_event_valid (entry,REVERSE subs)) /\
-  assign_target cx (BaseTargetV (ScopedVar id) subs) PopOp st = (res,st') ==>
-  ?events. scope_pop_trace st.scopes events st'.scopes /\
-    EVERY (\ev. entry_pop_event_valid (SND ev)) events
-Proof
-  strip_tac >>
-  qpat_x_assum `assign_target _ _ _ _ = _` mp_tac >>
-  simp[Once assign_target_def, bind_def, get_scopes_def, lift_option_def] >>
-  Cases_on `find_containing_scope id st.scopes` >>
-  simp[return_def, raise_def] >- (strip_tac >> gvs[] >>
-    qexists_tac `[]` >> simp[scope_pop_trace_def]) >>
-  PairCases_on `x` >>
-  `entry_pop_event_valid (x2,REVERSE subs)` by
-    metis_tac[vyperLookupTheory.find_containing_scope_lookup] >>
-  Cases_on `assign_subscripts x2.type x2.value (REVERSE subs) PopOp` >>
-  Cases_on `evaluate_subscripts x2.type x2.value (REVERSE subs)` >>
-  simp[type_check_def, assert_def, bind_def, ignore_bind_def,
-       lift_sum_def, assign_result_def, return_def, raise_def,
-       set_scopes_def, AllCaseEqs()] >>
-  rpt strip_tac >> gvs[AllCaseEqs(), return_def, raise_def] >>
-  rpt (BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def]) >>
-  TRY (qexists_tac `[]` >> simp[scope_pop_trace_def] >> NO_TAC) >>
-  qexists_tac `[(id,(x2,REVERSE subs))]` >>
-  simp[scope_pop_trace_def, scope_pop_step_def, entry_pop_step_def] >>
-  metis_tac[]
 QED
 
 

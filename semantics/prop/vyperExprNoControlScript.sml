@@ -1347,12 +1347,6 @@ Proof
   metis_tac[tuple_store_no_control]
 QED
 
-Theorem assign_tuple_target_list_no_control:
-  assign_tuple_target_list cx gs vs st = (INR exc,st') ==> no_control_exc exc
-Proof
-  metis_tac[tuple_store_no_control]
-QED
-
 (* Place/control integration audit. *)
 val () = List.app (fn (name,th) =>
   let val (oracles,_) = Tag.dest_tag (Thm.tag th)

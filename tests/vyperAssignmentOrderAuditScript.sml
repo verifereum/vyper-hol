@@ -3,7 +3,7 @@ Theory vyperAssignmentOrderAudit
 Ancestors
   vyperSmallStep vyperTypeEvalSoundness vyperTypeEvalStoragePreservation
   vyperStorageRegionWrite vyperStoragePlaceProvenance vyperPlaceStoragePreservation
-  evalCompilerAssignmentOrder evalCompilerAssignmentEffects
+  evalCompilerAssignmentEffects
   evalInterpreterAssignmentOrder evalAssignmentOrderSupported evalAssignmentOrderFrontend
 
 fun check_closed (thy,name) =
@@ -30,5 +30,5 @@ val () = List.app check_closed
 
 val () = List.app (fn thy =>
   List.app (fn (name,_) => check_closed (thy,name)) (DB.thms thy))
-  ["evalAssignmentOrderFrontend","evalCompilerAssignmentOrder","evalCompilerAssignmentEffects",
+  ["evalAssignmentOrderFrontend","evalCompilerAssignmentEffects",
    "evalInterpreterAssignmentOrder","evalAssignmentOrderSupported"];

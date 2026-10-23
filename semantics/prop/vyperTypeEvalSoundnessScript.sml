@@ -1878,14 +1878,6 @@ Definition typed_scope_spec_def:
       (case res of INL x => Q x st' | INR _ => T)
 End
 
-Theorem typed_scope_spec_run[local]:
-  typed_scope_spec P f Q /\ P st /\ f st = (res,st') ==>
-  typed_scope_transition st st' /\
-  (case res of INL x => Q x st' | INR _ => T)
-Proof
-  simp[typed_scope_spec_def] >> metis_tac[]
-QED
-
 Theorem typed_scope_spec_frame[local]:
   (!st res st'. P st /\ f st = (res,st') ==>
     st'.scopes = st.scopes /\
@@ -1908,13 +1900,6 @@ Proof
   Cases_on `first_res` >> gvs[bind_def] >>
   first_x_assum drule_all >> strip_tac >>
   metis_tac[typed_scope_transition_trans]
-QED
-
-Theorem typed_scope_spec_trace_run[local]:
-  typed_scope_spec P f (\x st. T) /\ P st /\ f st = (res,st') ==>
-  typed_scope_transition st st'
-Proof
-  metis_tac[typed_scope_spec_run]
 QED
 
 Theorem typed_scope_spec_scopes[local]:
@@ -2010,18 +1995,6 @@ Proof
   simp[target_path_type_def, target_path_step_type_def,
        evaluate_type_def, subscripts_type_def, subscript_type_def,
        type_slot_size_def]
-QED
-
-Theorem assign_scoped_pop_typed_transition[local]:
-  assign_target cx (BaseTargetV (ScopedVar id) subs) PopOp st = (res,st') /\
-  (!entry. lookup_scopes id st.scopes = SOME entry ==>
-    entry_pop_event_valid (entry,REVERSE subs)) ==>
-  typed_scope_transition st st'
-Proof
-  rpt strip_tac >> drule assign_scoped_pop_scope_trace_events >> strip_tac >>
-  simp[typed_scope_transition_def] >> qexists_tac `events` >> simp[] >>
-  gvs[] >> drule find_containing_scope_lookup >> strip_tac >>
-  first_x_assum drule >> simp[]
 QED
 
 Theorem assign_pop_typed_transition[local]:
@@ -2218,21 +2191,6 @@ Proof
       gvs[runtime_place_typed_def]) >>
   gvs[extend_place_def, bind_def, ignore_bind_def, return_def, AllCaseEqs(),
       extend_memory_place_def, live_memory_result_def]
-QED
-
-Theorem transported_live_place_extend[local]:
-  state_well_typed t /\ typed_scope_transition s t /\ vyperImmutableMetadataFrame$immutable_metadata_frame s t /\
-  runtime_place_typed cx s p tv /\ live_memory_result s (PlaceR p) /\
-  subscript_type tv sb = SOME etv /\
-  extend_place cx input_tv (PlaceR p) sb t = (INL pv,u) ==>
-  live_memory_result u pv
-Proof
-  rpt strip_tac >>
-  `runtime_place_typed cx t p tv` by metis_tac[runtime_place_typed_transport] >>
-  `live_memory_result t (PlaceR p)` by
-    (Cases_on `p` >> TRY (simp[live_memory_result_def] >> NO_TAC) >>
-     irule live_memory_result_transport >> goal_assum (drule_at Any) >> simp[]) >>
-  drule_all extend_live_place_success >> simp[]
 QED
 
 Theorem extend_value_result_live[local]:
@@ -2642,29 +2600,6 @@ fun extcall_close_guard_conv tm =
     (BINDER_CONV extcall_close_guard_conv THENC
      HO_REWR_CONV extcall_guard_exists) tm
   else ALL_CONV tm;
-
-(* All-result trace boundary for either ExtCall return continuation.
-   Only the evaluator-owned default can change the caller's scopes. *)
-Theorem extcall_return_tail_trace[local]:
-  (use_default /\ cb ==> !r t. default st = (r,t) ==>
-      typed_scope_transition st t) /\
-  (if use_default then
-     do check cb "ExtCall target has no code"; default od
-   else do
-     v <- lift_sum_runtime decoded;
-     return (Value v)
-   od) st = (res,st') ==>
-  typed_scope_transition st st'
-Proof
-  Cases_on `use_default` >> simp[]
-  >- (Cases_on `cb` >>
-      simp[ignore_bind_def, bind_def, check_def, assert_def,
-           return_def, raise_def] >> rpt strip_tac >> gvs[] >>
-      metis_tac[typed_scope_transition_refl]) >>
-  Cases_on `decoded` >>
-  simp[lift_sum_runtime_def, bind_def, return_def, raise_def] >>
-  rpt strip_tac >> gvs[] >> simp[typed_scope_transition_refl]
-QED
 
 Theorem eval_scc_type_sound_mutual:
   (!cx s. !env ret_ty env' st res st'.
@@ -13291,15 +13226,6 @@ Proof
   Cases_on `res` >> simp[no_type_error_result_def]
   >- (drule_all read_live_place_success_type >> simp[]) >>
   drule_all read_place_typed_error >> simp[]
-QED
-
-Theorem assign_base_no_control[local]:
-  eval_stmt cx (Assign (BaseTarget bt) e) st = (INR exn,st') ==>
-  no_control_exc exn
-Proof
-  simp[Once evaluate_def, bind_def, AllCaseEqs()] >> rpt strip_tac >>
-  metis_tac[eval_place_no_control, eval_target_place_no_control,
-            read_place_or_value_no_control, write_place_no_control]
 QED
 
 Theorem typed_target_place_write_sound[local]:

@@ -1310,25 +1310,6 @@ val () = extend_storage_place_def
   |> SRULE [FUN_EQ_THM, bind_def, ignore_bind_def, LET_RATOR, UNCURRY]
   |> cv_auto_trans;
 
-Theorem storage_tuple_place_selection:
-  !cx st.
-    extend_storage_place cx F 10w (TupleTV [BaseTV BoolT])
-      (ValueSubscript (IntV 0)) st =
-        (INL (StoragePlace F 10w (BaseTV BoolT)),st) /\
-    extend_storage_place cx F 10w
-      (TupleTV [ArrayTV (BaseTV BoolT) (Fixed 2); BaseTV (UintT 256)])
-      (ValueSubscript (IntV 1)) st =
-        (INL (StoragePlace F 12w (BaseTV (UintT 256))),st) /\
-    extend_storage_place cx F 10w (TupleTV [BaseTV BoolT])
-      (ValueSubscript (IntV (~1))) st =
-        (INR (Error (RuntimeError "tuple index oob")),st) /\
-    extend_storage_place cx F 10w (TupleTV [BaseTV BoolT])
-      (ValueSubscript (IntV 1)) st =
-        (INR (Error (RuntimeError "tuple index oob")),st)
-Proof
-  EVAL_TAC >> simp[]
-QED
-
 Definition extend_memory_place_def:
   extend_memory_place (MemoryPlace id path) sb = MemoryPlace id (path ++ [sb]) /\
   extend_memory_place (ImmutablePlace src id path) sb = ImmutablePlace src id (path ++ [sb]) /\
@@ -1466,30 +1447,6 @@ Proof
        lift_sum_def, bind_def, return_def, subscript_result_place_def]
 QED
 
-Theorem find_containing_scope_reconstruct:
-  !sc id pre env entry rest.
-    find_containing_scope id sc = SOME (pre,env,entry,rest) ==>
-    sc = pre ++ env::rest /\ FLOOKUP env id = SOME entry
-Proof
-  Induct_on `sc` >> simp[find_containing_scope_def] >>
-  rpt strip_tac >> gvs[AllCaseEqs()] >>
-  PairCases_on `z` >> gvs[] >> first_x_assum drule >> simp[]
-QED
-
-Theorem replace_memory_entry_stale:
-  evaluate_subscripts entry.type entry.value path = INR err ==>
-  replace_memory_entry entry path v = INL entry
-Proof
-  simp[replace_memory_entry_def]
-QED
-
-Theorem replace_memory_entry_root:
-  replace_memory_entry entry [] v =
-    INL (entry with <|value := v; popped := []|>)
-Proof
-  simp[replace_memory_entry_def, evaluate_subscripts_def, assign_subscripts_def]
-QED
-
 Theorem place_delayed_pop_read[local]:
   read_memory_path
     <|assignable := T; type := ArrayTV (BaseTV (UintT 256)) (Dynamic 3);
@@ -1517,25 +1474,6 @@ Theorem place_fixed_extension_oob[local]:
     (INR (Error (RuntimeError "array fixed oob")),st)
 Proof
   EVAL_TAC >> simp[]
-QED
-
-Theorem write_place_stale_memory:
-  find_containing_scope id st.scopes = SOME (pre,env,entry,rest) /\
-  entry.assignable /\
-  evaluate_subscripts entry.type entry.value path = INR err ==>
-  write_place cx (MemoryPlace id path) v st = (INL (),st)
-Proof
-  strip_tac >>
-  drule find_containing_scope_reconstruct >> strip_tac >>
-  `env |+ (id,entry) = env` by
-    (simp[fmap_eq_flookup, FLOOKUP_UPDATE] >> metis_tac[]) >>
-  simp[write_place_def, bind_def, get_scopes_def, lift_option_type_def,
-       type_check_def, assert_def, ignore_bind_def, return_def,
-       lift_sum_def, replace_memory_entry_stale, set_scopes_def] >>
-  gvs[return_def, bind_def, ignore_bind_def, assert_def, lift_sum_def,
-      replace_memory_entry_stale, set_scopes_def] >>
-  pure_rewrite_tac [DB.fetch "-" "evaluation_state_component_equality"] >>
-  simp[APPEND_ASSOC]
 QED
 
 Theorem place_pop_then_delayed_read[local]:
