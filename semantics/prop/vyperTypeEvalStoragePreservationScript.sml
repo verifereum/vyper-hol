@@ -2943,13 +2943,33 @@ Proof
        simp[evaluation_state_accfupds])]
 QED
 
+Theorem create_oracle_result_storage_suffix[local]:
+  contract_storage_well_formed cx st /\ oracle_storage_ok cx st /\
+  create_oracle_result salt value code rof st = (res,st') ==>
+  contract_storage_well_formed cx st' /\ oracle_storage_ok cx st' /\
+  outcome_suffix st.outcomes st'.outcomes
+Proof
+  Cases_on `salt` >> rpt strip_tac >>
+  gvs[create_oracle_result_def, AllCaseEqs()] >>
+  TRY (drule_all take_create_outcome_storage_suffix >> simp[] >> NO_TAC) >>
+  drule_all take_create_outcome_storage_payload >> strip_tac >>
+  drule_all take_create_outcome_storage_suffix >> strip_tac >>
+  drule take_create_outcome_success >> strip_tac >>
+  gvs[adopt_create_outcome_equation] >>
+  FIRST [
+    irule contract_storage_well_formed_backends_frame >>
+    qexists_tac `st with <|accounts := outcome.co_accounts; tStorage := outcome.co_tStorage|>` >>
+    simp[] >> NO_TAC,
+    irule oracle_storage_ok_suffix >> qexists_tac `st` >> simp[]]
+QED
+
 Theorem eval_create_contract_storage_postulate[local]:
   protected_storage_creates_preserve cx /\
-  contract_storage_well_formed cx st /\
+  contract_storage_well_formed cx st /\ oracle_storage_ok cx st /\
   eval_create cx kind has_salt rof arg_tys vs blueprint_size st = (res,st') ==>
   contract_storage_well_formed cx st'
 Proof
-  strip_tac >>
+  strip_tac >> Cases_on `st.outcomes` >- (
   Cases_on `dest_create_args kind has_salt vs` >-
     gvs[eval_create_def, bind_def, lift_option_type_def, return_def, raise_def] >>
   rename1 `dest_create_args kind has_salt vs = SOME ops` >>
@@ -2977,7 +2997,11 @@ Proof
    (* address collision: only the sender nonce is bumped *)
    (drule_all create_collision_contract_storage >> metis_tac[]),
    (* the EVM-backed tail *)
-   (drule_all create_evm_tail_contract_storage >> metis_tac[])]
+   (drule_all create_evm_tail_contract_storage >> metis_tac[])]) >>
+  gvs[eval_create_def, bind_def, ignore_bind_def, lift_option_type_def,
+      get_accounts_def, check_def, assert_def, return_def, raise_def,
+      vyperMiscTheory.option_CASE_rator, AllCaseEqs()] >>
+  drule_all create_oracle_result_storage_suffix >> simp[]
 QED
 
 Resume eval_all_storage_preservation_mutual[Expr_Call_CreateTarget]:
@@ -3038,6 +3062,7 @@ Resume eval_all_storage_preservation_mutual[Expr_Call_CreateTarget]:
           ORACLE_STORAGE_TAC >>
           first_x_assum drule_all >> strip_tac >>
           Cases_on `suffix_res` >> gvs[] >> strip_tac >>
+          ORACLE_STORAGE_TAC >>
           metis_tac[eval_create_contract_storage_postulate]) >>
         strip_tac >> gvs[]) >>
       strip_tac >> gvs[]), ALL_TAC] >>
@@ -3048,6 +3073,7 @@ Resume eval_all_storage_preservation_mutual[Expr_Call_CreateTarget]:
     rename1 `eval_exprs cx es st = (args_res,args_st)` >>
     first_x_assum drule_all >> strip_tac >>
     Cases_on `args_res` >> gvs[] >> strip_tac >>
+    ORACLE_STORAGE_TAC >>
     (* A constructor runs arbitrary EVM code, so it may write the protected
        target's own storage.  This is discharged by the adapter-boundary
        postulate, exactly as external calls use protected_storage_calls_preserve
@@ -4594,3 +4620,10 @@ Theorem eval_exprs_preserves_contract_storage_well_formed:
 Proof
   metis_tac[cj 9 eval_all_storage_preservation_mutual]
 QED
+
+(* No storage-preservation result may rely on an admitted boundary. *)
+val () = List.app (fn (name,th) =>
+  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
+  in if List.all (fn s => s = "DISK_THM") oracles andalso null axioms
+     then () else raise Fail ("Incomplete storage preservation: " ^ name)
+  end) (DB.thms "vyperTypeEvalStoragePreservation");
