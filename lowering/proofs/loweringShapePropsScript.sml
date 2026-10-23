@@ -222,6 +222,53 @@ Proof
   cheat
 QED
 
+Theorem compile_ptr_load_shape:
+  !loc is_ctor op internal.
+    loc <> LocCode ==>
+    shape_step internal compiler_label (\st. plain_operand st op)
+      (compile_ptr_load is_ctor loc op) (\x st. plain_operand st x)
+Proof
+    rpt strip_tac >> Cases_on `is_label_operand op`
+  >- simp[shape_step_def, plain_operand_def] >>
+  Cases_on `loc` >> gvs[compile_ptr_load_def] >>
+  (irule shape_step_conseq >>
+  qexistsl [`compiler_label`, `\st. T /\ EVERY (label_or_plain st) [op]`,
+            `\x st. T /\ plain_operand st x`] >>
+  conj_tac >- simp[] >>
+  conj_tac >- simp[label_or_plain_def] >>
+  conj_tac >- simp[] >>
+  match_mp_tac (BETA_RULE (Q.SPECL [`internal`, `compiler_label`, `\st. T`]
+    shape_step_emit_op)) >>
+  simp[shape_stable_def, lowered_inst_ok_def, raw_opcode_ok_def,
+       inst_shape_ok_def, jump_labels_ok_def, mk_inst_def,
+       is_read0_opcode_def, label_positions_ok_def, is_terminator_def,
+       is_param_opcode_def])
+QED
+
+Theorem compile_alloc_buffer_shape:
+  !nbytes internal.
+    shape_step internal compiler_label (\st. T)
+      (compile_alloc_buffer nbytes) (\buf st. plain_operand st buf.buf_operand)
+Proof
+  rpt gen_tac >> simp[compile_alloc_buffer_def] >>
+  irule shape_step_bind >> qexists_tac `\op st. plain_operand st op` >>
+  conj_tac
+  >- (gen_tac >> BETA_TAC >> irule shape_step_return >> simp[]) >>
+  irule shape_step_conseq >>
+  qexistsl [`compiler_label`,
+            `\st. T /\ EVERY (label_or_plain st) [Lit (n2w nbytes)]`,
+            `\x st. T /\ plain_operand st x`] >>
+  conj_tac >- simp[] >>
+  conj_tac >- simp[label_or_plain_def, plain_operand_def, stackPlanTypesTheory.is_label_operand_def] >>
+  conj_tac >- simp[] >>
+  match_mp_tac (BETA_RULE (Q.SPECL [`internal`, `compiler_label`, `\st. T`]
+    shape_step_emit_op)) >>
+  simp[shape_stable_def, lowered_inst_ok_def, raw_opcode_ok_def,
+       inst_shape_ok_def, jump_labels_ok_def, mk_inst_def,
+       is_read0_opcode_def, label_positions_ok_def, is_terminator_def,
+       is_param_opcode_def, stackPlanTypesTheory.is_label_operand_def]
+QED
+
 (* Shared helper of every value consumer; weakly frozen. *)
 Theorem unwrap_value_shape:
   !cenv v internal.
