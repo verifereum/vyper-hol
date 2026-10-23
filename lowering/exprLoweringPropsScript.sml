@@ -27,6 +27,17 @@ Ancestors
 Libs
   pairLib BasicProvers
 
+(* The shared semantic predicate preserves the former ExtCall wrap test. *)
+Theorem needs_external_call_wrap_extcall:
+  (if needs_external_call_wrap ty then TupleT [ty] else ty) =
+  (case ty of
+     TupleT ts => if LENGTH ts > 1 then ty else TupleT [ty]
+   | _ => TupleT [ty])
+Proof
+  Cases_on `ty` >> simp[vyperABITheory.needs_external_call_wrap_def] >>
+  IF_CASES_TAC >> simp[] >> gvs[]
+QED
+
 (* Recursive clamp-classification boundary probes. *)
 Theorem dec_info_needs_clamp_nested_static:
   ~dec_info_needs_clamp

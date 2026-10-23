@@ -504,9 +504,18 @@ QED
 
 
 Definition external_return_needs_wrap_def:
-  external_return_needs_wrap (TupleT (_::_::_)) = F /\
-  external_return_needs_wrap _ = T
+  external_return_needs_wrap ret_type = needs_external_call_wrap ret_type
 End
+
+Theorem external_return_needs_wrap_cases:
+  external_return_needs_wrap ty =
+    (case ty of TupleT (_::_::_) => F | _ => T)
+Proof
+  Cases_on `ty` >>
+  simp[external_return_needs_wrap_def, vyperABITheory.needs_external_call_wrap_def] >>
+  rename1 `LENGTH ts` >> Cases_on `ts` >> simp[] >>
+  rename1 `LENGTH rest` >> Cases_on `rest` >> simp[]
+QED
 
 Definition update_cenv_ret_abi_def:
   update_cenv_ret_abi cenv ret_type =

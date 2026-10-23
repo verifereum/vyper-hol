@@ -2311,11 +2311,9 @@ Definition compile_call_def:
        let args_mem_size = SUM (MAP (type_memory_bytes cenv) arg_types) in
        let args_abi_size = abi_size_bound cenv.ce_struct_fields (TupleT arg_types) in
        let args_enc_info = type_to_abi_enc_info cenv.ce_struct_fields cenv (TupleT arg_types) in
-       let wrapped_return = (case return_type of
-                               TupleT ts =>
-                                 if LENGTH ts > 1 then return_type
-                                 else TupleT [return_type]
-                             | _ => TupleT [return_type]) in
+       let wrapped_return =
+         (if needs_external_call_wrap return_type then TupleT [return_type]
+          else return_type) in
        let return_abi_size = abi_size_bound cenv.ce_struct_fields wrapped_return in
        let min_return_size = abi_static_size cenv.ce_struct_fields wrapped_return in
        let ret_mem_bytes = type_memory_bytes cenv return_type in
@@ -2934,14 +2932,16 @@ Definition compile_type_builtin_dispatch_body_def:
           let (_, st3) = compile_store_abi_tuple cenv tup 0 (ZIP (vs, arg_tys)) st2 in
           as_ptr_val vv_ty LocMemory
             (lower_abi_encode ensure method_id_word tup enc_info maxlen st3))
-     | AbiDecode _ =>
+     | AbiDecode unwrap =>
          (let e1 = HD args in
           let (data_vv, st1) = compile_expr cenv (expr_type e1) e1 st in
           let (data_op, st2) = unwrap_value cenv data_vv st1 in
-          let dec_info = type_to_abi_dec_info cenv.ce_struct_fields cenv ret_ty in
-          let abi_min = abi_static_size cenv.ce_struct_fields ret_ty in
-          let abi_max = abi_size_bound cenv.ce_struct_fields ret_ty in
-          let out_size = type_memory_bytes cenv ret_ty in
+          let wty = if unwrap /\ needs_external_call_wrap ret_ty then
+                      TupleT [ret_ty] else ret_ty in
+          let dec_info = type_to_abi_dec_info cenv.ce_struct_fields cenv wty in
+          let abi_min = abi_static_size cenv.ce_struct_fields wty in
+          let abi_max = abi_size_bound cenv.ce_struct_fields wty in
+          let out_size = type_memory_bytes cenv wty in
           as_ptr_val vv_ty LocMemory (lower_abi_decode data_op dec_info abi_min abi_max out_size st2)))
 End
 
