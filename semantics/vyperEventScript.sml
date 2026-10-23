@@ -203,3 +203,18 @@ Definition encode_raw_event_values_def:
   encode_raw_event_values logger topic_vals data =
     encode_raw_event logger (MAP event_value_to_word topic_vals) data
 End
+
+(* Fixed bytes are left-aligned; address values are right-aligned even though
+   both are represented by BytesV. *)
+Theorem encode_event_topic_bytes20:
+  encode_event_topic (BaseT (BytesT (Fixed 20)))
+    (BytesV (1w :: REPLICATE 19 0w)) = SOME (1w << 248)
+Proof
+  EVAL_TAC >> wordsLib.WORD_DECIDE_TAC
+QED
+
+Theorem encode_event_topic_address:
+  encode_event_topic (BaseT AddressT) (AddressV 1w) = SOME 1w
+Proof
+  EVAL_TAC >> wordsLib.WORD_DECIDE_TAC
+QED
