@@ -1668,7 +1668,7 @@ QED
 
 (* Structural decomposition of do_swap for dist > 16.
    Extracts spill_ops, restore_ops, and final state. *)
-Theorem do_swap_big_decompose[local]:
+Theorem do_swap_big_decompose:
   !dist ps.
     dist > 16 /\ dist < LENGTH ps.ps_stack ==>
     let items = top_n (dist + 1) ps.ps_stack;

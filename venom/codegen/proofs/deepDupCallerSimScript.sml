@@ -135,3 +135,36 @@ Proof
       EL_APPEND_EQN] >>
   simp[stack_get_depth_def, REVERSE_SNOC, stack_find_def, EL_LENGTH_SNOC]
 QED
+
+Theorem do_dup_two_growth_apply_inclusion:
+  !dist ps ops target lo.
+    do_dup dist ps = (ops,target) /\ dist < LENGTH ps.ps_stack /\
+    dist <= 17 /\
+    (dist = 17 ==> ?xs x. ps.ps_stack = xs ++ [x;x]) /\
+    spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+    prefix_spill_wf initial_fmp lo ops ps ==>
+    (apply_prefix_ops initial_fmp lo ops ps).ps_stack = target.ps_stack /\
+    (!key off. FLOOKUP (apply_prefix_ops initial_fmp lo ops ps).ps_spilled key = SOME off ==>
+       FLOOKUP target.ps_spilled key = SOME off)
+Proof
+  rpt gen_tac >> strip_tac >> Cases_on `dist = 17`
+  >- (gvs[] >>
+      `17 < LENGTH ps.ps_stack` by simp[] >>
+      drule_all do_dup17_duplicate_top_not_wf >>
+      disch_then (qspecl_then [`initial_fmp`, `lo`, `[]`] mp_tac) >> simp[]) >>
+  Cases_on `dist = 16`
+  >- (gvs[] >> Cases_on `alloc_spill_slot ps.ps_alloc` >>
+      drule_all do_dup16_decompose >> strip_tac >> gvs[] >>
+      `!op. FLOOKUP ps.ps_spilled op <> SOME q` by
+        (fs[mixedPrefixSimTheory.prefix_spill_wf_def, mixedPrefixSimTheory.spill_op_wf_def] >>
+         rpt strip_tac >> first_x_assum drule >> simp[]) >>
+      qspecl_then [`ps`, `q`, `lo`] mp_tac singleton_dup_apply >>
+      simp[LET_THM] >> strip_tac >>
+      simp[finite_mapTheory.DOMSUB_FLOOKUP_THM] >>
+      rpt strip_tac >> Cases_on `key = stack_peek 0 ps.ps_stack` >> gvs[]) >>
+  `dist <= 15` by decide_tac >>
+  gvs[do_dup_def, LET_THM, mixedPrefixSimTheory.apply_prefix_ops_def,
+      mixedPrefixSimTheory.apply_prefix_op_def,
+      strongPrefixSimTheory.apply_simple_op_def, stack_dup_def,
+      stack_push_def, stack_peek_def]
+QED
