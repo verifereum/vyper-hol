@@ -172,7 +172,7 @@ QED
 
 Theorem supported_builtin_exclusion_coverage:
   EVERY (\blt. ~supported_builtin_form [] (BaseT (UintT 256)) blt [expr_test_uint])
-    [Len; Keccak256; Sha256; Concat 32; Slice 32; Uint2Str 78; Ceil; Floor; MethodId;
+    [Len; Keccak256; Sha256; Concat 32; Slice 32; Ceil; Floor; MethodId;
      MakeArray NONE (Dynamic 1)] /\
   ~supported_builtin_form [] (TupleT []) (MakeArray NONE (Fixed 0)) [] /\
   supported_builtin_form [] (TupleT [BaseT (UintT 256)])
