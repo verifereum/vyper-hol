@@ -1,5 +1,5 @@
 Theory abiWrappedDecodeProps
-Ancestors vyperABIValid vyperContext vyperTypeABI contractABI
+Ancestors vyperABIValid vyperContext vyperTypeABI contractABI vyperABI list
 Libs wordsLib
 
 (* Exact Vyper-value roundtrip is not a valid general prerequisite: fixed
@@ -13,3 +13,39 @@ Theorem fixed_array_decode_normalizes_sparse_defaults:
 Proof
   EVAL_TAC >> simp[vyperValueTheory.enumerate_static_array_def]
 QED
+
+(* A source decoder boundary, independent of canonical encoding. *)
+Theorem evaluate_abi_decode_normalized:
+  vyper_valid_enc env ty bs /\
+  abi_to_vyper env ty (dec (vyper_to_abi_type env ty) bs) = SOME nv ==>
+  evaluate_abi_decode env ty bs = INL nv
+Proof
+  simp[evaluate_abi_decode_def, decode_abi_value_def]
+QED
+
+(* All codec and size-window obligations are deliberately explicit. *)
+Theorem evaluate_abi_decode_canonical_normalized:
+  has_type (vyper_to_abi_type env ty) av /\
+  LENGTH (enc (vyper_to_abi_type env ty) av) < dimword (:256) /\
+  static_length (vyper_to_abi_type env ty) <=
+    LENGTH (enc (vyper_to_abi_type env ty) av) /\
+  LENGTH (enc (vyper_to_abi_type env ty) av) <= vyper_abi_size_bound env ty /\
+  abi_to_vyper env ty av = SOME nv ==>
+  evaluate_abi_decode env ty (enc (vyper_to_abi_type env ty) av) = INL nv
+Proof
+  strip_tac >>
+  `dec (vyper_to_abi_type env ty) (enc (vyper_to_abi_type env ty) av) = av` by
+    (drule_all (cj 1 dec_enc) >>
+     disch_then (qspec_then `[]` mp_tac) >> simp[]) >>
+  irule evaluate_abi_decode_normalized >>
+  simp[vyper_valid_enc_def, vyper_strict_enc_def] >>
+  metis_tac[enc_valid, APPEND_NIL]
+QED
+
+val () = List.app (fn (n,th) =>
+  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
+    if null (Thm.hyp th) andalso null axioms andalso
+       List.all (fn s => s = "DISK_THM") oracles then
+      print ("ABI_WRAPPED_DECODE_KERNEL_CLOSED " ^ n ^ "\n")
+    else raise Fail ("ABI wrapped decode not kernel closed: " ^ n)
+  end) (DB.thms "abiWrappedDecodeProps");
