@@ -697,8 +697,6 @@ QED
 
 Definition assign_operation_runtime_typed_def:
   (assign_operation_runtime_typed env ty (Replace v) <=> value_runtime_typed env ty v) /\
-  (assign_operation_runtime_typed env ty (Update target_ty bop v) <=>
-     target_ty = ty /\ ?rhs_ty. value_runtime_typed env rhs_ty v /\ well_typed_binop ty bop ty rhs_ty) /\
   (assign_operation_runtime_typed env ty (AppendOp v) <=>
      ?elem_tv elem_ty n. evaluate_type env.type_defs elem_ty = SOME elem_tv /\
        ty = ArrayT elem_ty (Dynamic n) /\ value_has_type elem_tv v) /\

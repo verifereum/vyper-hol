@@ -233,7 +233,7 @@ Theorem eval_target_assignable_base:
     env_consistent env cx st ==>
     assign_target_assignable (BaseTargetV (ScopedVar s) sbs) st
 Proof
-  Cases >> gvs[Once evaluate_def, well_typed_atarget_def] >>
+  Cases >> gvs[Once eval_legacy_targets_def, well_typed_atarget_def] >>
   rpt strip_tac >>
   qpat_x_assum `do _ od _ = _` mp_tac >>
   simp[bind_def, UNCURRY, AllCaseEqs(), return_def, raise_def] >>
@@ -250,7 +250,7 @@ Theorem eval_target_assignable:
     assign_target_assignable tgt st
 Proof
   completeInduct_on `assignment_target_size g` >> rpt strip_tac >>
-  Cases_on `g` >> gvs[Once evaluate_def, well_typed_atarget_def]
+  Cases_on `g` >> gvs[Once eval_legacy_targets_def, well_typed_atarget_def]
   >- (qpat_x_assum `do _ od _ = _` mp_tac >>
       simp[bind_def, UNCURRY, AllCaseEqs(), return_def, raise_def] >>
       rpt strip_tac >> gvs[] >> Cases_on `x` >> gvs[] >>
@@ -263,7 +263,7 @@ Proof
   qpat_x_assum `LIST_REL _ _ _` mp_tac >>
   qpat_x_assum `eval_targets _ _ _ = _` mp_tac >>
   qid_spec_tac `tys` >> qid_spec_tac `gvs` >> qid_spec_tac `st1` >> qid_spec_tac `st0` >>
-  Induct_on `l` >> gvs[Once evaluate_def, return_def] >>
+  Induct_on `l` >> gvs[Once eval_legacy_targets_def, return_def] >>
   rpt strip_tac >> Cases_on `tys` >> gvs[] >>
   gvs[bind_apply, AllCaseEqs(), return_def, raise_def] >>
   rpt strip_tac >> gvs[] >>
@@ -308,24 +308,6 @@ Theorem assign_targets_no_type_error:
 Proof
   rpt strip_tac >>
   imp_res_tac (cj 2 assign_target_sound_mutual) >> gvs[]
-QED
-Theorem assign_target_update_no_type_error:
-  !cx gv st res st' env tgt ty bop rhs_ty v.
-    assign_target cx gv (Update ty bop v) st = (res, st') ==>
-    runtime_consistent env cx st ==>
-    target_runtime_typed env cx st tgt ty gv ==>
-    assignable_type env.type_defs ty ==>
-    well_typed_binop ty bop ty rhs_ty ==>
-    value_runtime_typed env rhs_ty v ==>
-    assign_operation_matches_target_shape gv (Update ty bop v) ==>
-    assign_target_assignable_context cx gv st ==>
-    no_type_error_result res
-Proof
-  rpt strip_tac >>
-  `assign_operation_runtime_typed env ty (Update ty bop v)` by (
-    simp[assign_operation_runtime_typed_def] >>
-    qexists_tac `rhs_ty` >> simp[]) >>
-  imp_res_tac (cj 1 assign_target_sound_mutual) >> gvs[]
 QED
 
 Theorem assign_target_append_no_type_error:

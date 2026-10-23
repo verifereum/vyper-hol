@@ -167,7 +167,7 @@ Theorem eval_stmt_annassign_value:
       materialise cx tv es1 = (INL v, es2) /\
       lookup_scopes id es2.scopes = NONE /\ es2.scopes = sc :: rest /\
       es' = es2 with scopes :=
-              (sc |+ (id, <| assignable := T; type := tyv; value := v |>))
+              (sc |+ (id, <| assignable := T; type := tyv; value := v; popped := [] |>))
               :: rest
 Proof
   rpt gen_tac >>
@@ -186,9 +186,7 @@ Proof
   simp[raise_def, return_def] >> strip_tac >>
   qpat_x_assum `(case es2.scopes of [] => _ | _ => _) _ = _` mp_tac >>
   Cases_on `es2.scopes` >> simp[raise_def, set_scopes_def, return_def] >>
-  strip_tac >> gvs[] >>
-  qexistsl_tac [`tv`, `es1`, `v`, `es2`, `h`, `t`] >>
-  simp[evaluation_state_component_equality]
+  strip_tac >> gvs[]
 QED
 
 (* An ALLOCA of func whose output is no live local's pointer, run fresh or
@@ -257,12 +255,12 @@ Theorem stmt_state_rel_declare_word:
     32 <= sz /\ word_value v /\ type_memory_size tyv = 32 ==>
     stmt_state_rel func cenv cx
       (es with scopes :=
-         (sc |+ (id, <| assignable := T; type := tyv; value := v |>)) :: rest)
+         (sc |+ (id, <| assignable := T; type := tyv; value := v; popped := [] |>)) :: rest)
       (mstore (w2n w) (val_to_w256 v) s)
 Proof
   rpt strip_tac >>
   qabbrev_tac `s' = mstore (w2n w) (val_to_w256 v) s` >>
-  qabbrev_tac `entry = <| assignable := T; type := tyv; value := v |>` >>
+  qabbrev_tac `entry = <| assignable := T; type := tyv; value := v; popped := [] |>` >>
   qabbrev_tac `scs' = (sc |+ (id, entry)) :: rest` >>
   `s'.vs_vars = s.vs_vars /\ s'.vs_allocas = s.vs_allocas /\
    s'.vs_alloca_next = s.vs_alloca_next /\

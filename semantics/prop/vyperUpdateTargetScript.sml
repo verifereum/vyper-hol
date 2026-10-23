@@ -22,17 +22,6 @@ Proof
   simp[]
 QED
 
-Theorem update_target_name_update:
-  ∀cx st n ty bop v2 v entry.
-    evaluate_binop (case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0)
-                   entry.type bop entry.value v2 = INL v ∧
-    lookup_name_typed st n = SOME entry ∧ var_assignable st n ⇒
-    update_target cx st (BaseTargetV (ScopedVar n) []) (Update ty bop v2) =
-    update_name st n v
-Proof
-  rw[update_target_def] >>
-  imp_res_tac assign_target_name_update >> simp[]
-QED
 
 Theorem valid_target_name_implies_var_in_scope:
   ∀cx st n ao. valid_target cx st (BaseTargetV (ScopedVar n) []) ao ⇒ var_assignable st n
@@ -48,20 +37,10 @@ Proof
   imp_res_tac assign_target_name_replace >> simp[]
 QED
 
-Theorem valid_target_name_update:
-  ∀cx st n ty bop v2 v entry.
-    lookup_name_typed st n = SOME entry ∧ var_assignable st n ∧
-    evaluate_binop (case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0)
-                   entry.type bop entry.value v2 = INL v ⇒
-    valid_target cx st (BaseTargetV (ScopedVar n) []) (Update ty bop v2)
-Proof
-  rw[valid_target_def] >>
-  drule_all assign_target_name_update >> strip_tac >> simp[]
-QED
 
 Theorem update_target_name_subscripts:
   ∀cx st n sbs ao entry a'.
-    lookup_name_typed st n = SOME entry ∧ entry.assignable ∧
+    lookup_name_typed st n = SOME entry ∧ entry.assignable ∧ ao <> PopOp ∧
     assign_subscripts entry.type entry.value (REVERSE sbs) ao = INL a' ⇒
     update_target cx st (BaseTargetV (ScopedVar n) sbs) ao = update_name st n a'
 Proof
@@ -175,27 +154,6 @@ Proof
   simp[update_target_name_replace, lookup_after_update]
 QED
 
-Theorem name_lookup_after_update_target_update:
-  ∀cx st n ty bop av v2 v entry.
-    lookup_name_typed st n = SOME entry ∧
-    lookup_name_target cx st n = SOME av ∧
-    var_assignable st n ∧
-    evaluate_binop (case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0)
-                   entry.type bop entry.value v2 = INL v ⇒
-    lookup_name (update_target cx st av (Update ty bop v2)) n = SOME v
-Proof
-  rpt strip_tac >>
-  gvs[lookup_name_target_def, lookup_base_target_def] >>
-  qpat_x_assum `_ = SOME _` mp_tac >>
-  simp[Once evaluate_def, bind_def, get_scopes_def, return_def,
-       check_def, type_check_def, assert_def, ignore_bind_def, raise_def] >>
-  Cases_on `IS_SOME (lookup_scopes n st.scopes)` >>
-  gvs[return_def, raise_def] >> strip_tac >> gvs[] >>
-  simp[update_target_def] >>
-  `assign_target cx (BaseTargetV (ScopedVar n) []) (Update ty bop v2) st =
-   (INL NONE, update_name st n v)` by (drule assign_target_name_update >> simp[]) >>
-  simp[lookup_after_update]
-QED
 
 Theorem update_target_var_in_scope:
   ∀cx st av ao n.

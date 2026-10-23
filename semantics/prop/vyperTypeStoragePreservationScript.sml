@@ -748,38 +748,6 @@ Proof
   metis_tac[]
 QED
 
-Theorem assign_target_ArrayRef_update_transition_cases:
-  lookup_global cx src id st =
-    (INL (ArrayRef b root_slot root_elem_tv root_bd),st) /\
-  get_module_code cx src = SOME code /\
-  resolve_array_element cx b root_slot (ArrayTV root_elem_tv root_bd)
-    (REVERSE sbs) st = (INL (slot,final_tv,remaining),st) /\
-  assign_target cx (BaseTargetV (TopLevelVar src id) sbs)
-    (Update upd_ty bop nv) st = (res,st') ==>
-  st' = st \/
-  ?current_v new_v.
-    read_storage_slot cx b slot final_tv st = (INL current_v,st) /\
-    assign_subscripts final_tv current_v remaining (Update upd_ty bop nv) =
-      INL new_v /\
-    write_storage_slot cx b slot final_tv new_v st = (INL (),st')
-Proof
-  rpt strip_tac >>
-  Cases_on `final_tv` >> gvs[] >>
-  qpat_x_assum `assign_target _ _ _ _ = _` mp_tac >>
-  simp[Once assign_target_def, bind_def, ignore_bind_def, return_def, raise_def,
-       lift_option_def, lift_option_type_def, AllCaseEqs()] >>
-  rpt (CASE_TAC >> gvs[return_def, raise_def, bind_def, AllCaseEqs()]) >>
-  rpt strip_tac >> gvs[] >>
-  imp_res_tac vyperStatePreservationTheory.resolve_array_element_state >> gvs[] >>
-  imp_res_tac vyperStatePreservationTheory.read_storage_slot_state >> gvs[] >>
-  imp_res_tac vyperStatePreservationTheory.lift_sum_state >> gvs[] >>
-  imp_res_tac assign_result_preserves_state >> gvs[] >>
-  imp_res_tac write_storage_slot_error_state >> gvs[] >>
-  qpat_x_assum `lift_sum _ _ = (INL _,_)` mp_tac >>
-  simp[lift_sum_def, return_def, raise_def, AllCaseEqs()] >>
-  CASE_TAC >> simp[return_def, raise_def] >> strip_tac >> gvs[] >>
-  metis_tac[]
-QED
 
 
 
@@ -868,7 +836,6 @@ Proof
   rpt strip_tac >>
   Cases_on `op`
   >- metis_tac[assign_target_ArrayRef_replace_transition_cases]
-  >- metis_tac[assign_target_ArrayRef_update_transition_cases]
   >- metis_tac[assign_target_ArrayRef_append_ordinary_transition_cases]
   >> metis_tac[assign_target_ArrayRef_pop_ordinary_transition_cases]
 QED
@@ -928,10 +895,6 @@ Proof
   `evaluate_type env.type_defs ty = SOME (leaf_type final_tv remaining)` by
     metis_tac[] >>
   Cases_on `op`
-  >- (drule assign_target_ArrayRef_ordinary_preserves_contract_storage_well_formed >>
-      disch_then drule >> disch_then drule >> disch_then drule >>
-      disch_then drule >> disch_then drule >>
-      disch_then (qspecl_then [`st'`, `res`] irule) >> simp[])
   >- (drule assign_target_ArrayRef_ordinary_preserves_contract_storage_well_formed >>
       disch_then drule >> disch_then drule >> disch_then drule >>
       disch_then drule >> disch_then drule >>

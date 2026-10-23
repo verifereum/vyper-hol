@@ -1581,6 +1581,100 @@ Proof
   disch_then (qspec_then `result4` mp_tac) >> simp[]
 QED
 
+Theorem ext_call_effects_concrete_result[local]:
+  runtime_consistent env cx st /\ st.outcomes = NONE /\
+  eval_ext_call_effects cx target calldata value_opt gas st.accounts st = (res,st') ==>
+  runtime_consistent env cx st' /\ no_type_error_result res
+Proof
+  strip_tac >>
+  Cases_on `run_ext_call cx.txn.target target calldata value_opt gas st.accounts
+    st.tStorage (vyper_to_tx_params cx.txn)`
+  >- gvs[eval_ext_call_effects_def, bind_def, ignore_bind_def,
+         get_transient_storage_def, lift_option_def, return_def, raise_def,
+         no_type_error_result_def] >>
+  rename1 `run_ext_call _ _ _ _ _ _ _ _ = SOME result` >>
+  PairCases_on `result` >>
+  rename1 `run_ext_call _ _ _ _ _ _ _ _ = SOME (success,data,accounts_out,transient_out,logs)` >>
+  Cases_on `success` >>
+  gvs[eval_ext_call_effects_def, bind_def, ignore_bind_def,
+      get_transient_storage_def, lift_option_def, return_def, raise_def,
+      update_accounts_def, update_transient_def, append_logs_def,
+      no_type_error_result_def] >>
+  drule_all run_ext_call_update_runtime_consistent >> simp[]
+QED
+
+Theorem ext_call_effects_oracle_result[local]:
+  runtime_consistent env cx st /\ st.outcomes = SOME os /\
+  eval_ext_call_effects cx target calldata value_opt gas st.accounts st = (res,st') ==>
+  runtime_consistent env cx st' /\ no_type_error_result res
+Proof
+  strip_tac >> Cases_on `take_call_outcome target calldata value_opt st` >>
+  rename1 `take_call_outcome target calldata value_opt st = (taken,mid)` >>
+  `runtime_consistent env cx mid` by
+    (drule_all take_call_outcome_runtime_consistent >> simp[]) >>
+  Cases_on `taken`
+  >- (rename1 `take_call_outcome _ _ _ _ = (INL call_pair,mid)` >>
+      PairCases_on `call_pair` >>
+      rename1 `take_call_outcome _ _ _ _ = (INL (rq,outcome),mid)` >>
+      Cases_on `outcome.co_success`
+      >- (Cases_on `adopt_call_outcome rq outcome mid` >>
+          rename1 `adopt_call_outcome rq outcome mid = (adopted,final)` >>
+          Cases_on `adopted` >>
+          gvs[adopt_call_outcome_INR, oneTheory.one, eval_ext_call_effects_def,
+              bind_def, ignore_bind_def, return_def, raise_def,
+              no_type_error_result_def] >>
+          drule_all take_adopt_call_outcome_runtime_consistent >> simp[]) >>
+      gvs[eval_ext_call_effects_def, bind_def, ignore_bind_def,
+          return_def, raise_def, no_type_error_result_def]) >>
+  drule vyperCallOutcomeTheory.take_call_outcome_error >> strip_tac >>
+  gvs[eval_ext_call_effects_def, bind_def, ignore_bind_def,
+      return_def, raise_def, no_type_error_result_def]
+QED
+
+Theorem eval_ext_call_effects_result_sound[local]:
+  runtime_consistent env cx st /\
+  eval_ext_call_effects cx target calldata value_opt gas st.accounts st = (res,st') ==>
+  runtime_consistent env cx st' /\ no_type_error_result res
+Proof
+  strip_tac >> Cases_on `st.outcomes` >>
+  FIRST [drule_all ext_call_effects_concrete_result >> simp[],
+         drule_all ext_call_effects_oracle_result >> simp[]]
+QED
+
+Theorem ext_call_checks[local]:
+  check T msg = return () /\ check F msg = raise (Error (RuntimeError msg)) /\
+  type_check T msg = return () /\ type_check F msg = raise (Error (TypeError msg))
+Proof
+  simp[FUN_EQ_THM, check_def, type_check_def, assert_def, return_def, raise_def]
+QED
+
+Theorem ext_call_return_result_sound[local]:
+  evaluate_type env.type_defs ret_type = SOME ret_tv /\
+  (!v. default_opt = SOME v ==> value_has_type ret_tv v) /\
+  (case (if data = [] then default_opt else NONE) of
+   | SOME default_v => do
+       accounts <- get_accounts;
+       check (skip_check \/ ext_call_has_code target accounts) "ExtCall target has no code";
+       return (Value default_v)
+     od
+   | NONE => do
+       v <- lift_sum_runtime (evaluate_abi_decode_return env.type_defs ret_type data);
+       return (Value v)
+     od) st = (res,st') ==>
+  st' = st /\ no_type_error_result res /\
+  case res of
+  | INL tv => expr_result_typed env (Call ret_type (ExtCall stat skc fsig opts) es drv) tv
+  | INR ex => T
+Proof
+  strip_tac >> Cases_on `data = []` >> Cases_on `default_opt` >>
+  gvs[bind_def, ignore_bind_def, get_accounts_def, check_def, assert_def,
+      lift_sum_runtime_def, return_def, raise_def, COND_RATOR,
+      option_CASE_rator, sum_CASE_rator, prod_CASE_rator, AllCaseEqs()] >>
+  imp_res_tac evaluate_abi_decode_return_well_typed >>
+  imp_res_tac extcall_value_result_typed >>
+  gvs[no_type_error_result_def]
+QED
+
 Theorem eval_ext_call_result_sound:
   runtime_consistent env cx st /\
   exprs_runtime_typed env es vs /\
@@ -1601,6 +1695,8 @@ Theorem eval_ext_call_result_sound:
   | INR _ => T
 Proof
   strip_tac >>
+  `state_well_typed st /\ env_consistent env cx st /\ accounts_well_typed st.accounts`
+    by fs[runtime_consistent_def] >>
   drule_all ext_call_operands_fit_typed >> strip_tac >> gvs[] >>
   `get_tenv cx = env.type_defs` by metis_tac[runtime_consistent_get_tenv] >>
   drule_all build_ext_calldata_typed >>
@@ -1614,25 +1710,23 @@ Proof
        value_has_type ret_tv v` by (
     rpt strip_tac >> drule_all ext_call_kwarg_typed >>
     simp[ext_call_kw_type_def] >> strip_tac >> gvs[]) >>
+  Cases_on `static` >>
+  Cases_on `ext_call_kwarg EKValue opts (DROP (LENGTH arg_types) rest)` >> gvs[] >>
+  Cases_on `ext_call_precheck_ok skip_check ret_type target_addr st.accounts` >>
   qpat_x_assum `eval_ext_call _ _ _ _ _ _ _ = _` mp_tac >>
-  simp[eval_ext_call_def, bind_def, ignore_bind_def, type_check_def,
-       assert_def, check_def, lift_option_type_def, lift_option_def,
-       lift_sum_runtime_def, get_accounts_def, get_transient_storage_def,
-       update_accounts_def, update_transient_def, append_logs_def,
-       return_def, raise_def,
-       COND_RATOR, option_CASE_rator, prod_CASE_rator, sum_CASE_rator] >>
-  strip_tac >> gvs[AllCaseEqs()] >>
-  gvs[pairTheory.UNCURRY_RATOR, pairTheory.UNCURRY_EQ, combinTheory.C_THM,
-      combinTheory.o_THM, AllCaseEqs(), COND_RATOR, bind_def, return_def,
-      raise_def, adopt_call_outcome_INR] >>
-  TRY (qpat_x_assum `take_call_outcome _ _ _ _ = (INR _,_)` (fn th =>
-         assume_tac th >> assume_tac (MATCH_MP vyperCallOutcomeTheory.take_call_outcome_error th))) >>
-  TRY (drule_all take_adopt_call_outcome_runtime_consistent >> strip_tac) >>
-  TRY (drule_all take_call_outcome_runtime_consistent >> strip_tac) >>
-  TRY (drule_all run_ext_call_update_runtime_consistent >> strip_tac) >>
-  imp_res_tac extcall_value_result_typed >>
-  imp_res_tac extcall_decode_return_INL_typed >>
-  gvs[runtime_consistent_def, no_type_error_result_def]
+  simp[eval_ext_call_def, bind_apply, ignore_bind_apply, ext_call_checks,
+       lift_option_type_def, return_def, raise_def, get_accounts_def,
+       no_type_error_result_def] >> strip_tac >> gvs[] >>
+  qmatch_asmsub_abbrev_tac
+    `eval_ext_call_effects cx target_addr calldata value_opt gas st.accounts st` >>
+  Cases_on `eval_ext_call_effects cx target_addr calldata value_opt gas st.accounts st` >>
+  rename1 `eval_ext_call_effects _ _ _ _ _ _ _ = (call_res,call_st)` >>
+  drule_all eval_ext_call_effects_result_sound >> strip_tac >>
+  qpat_assum `runtime_consistent env cx call_st`
+    (strip_assume_tac o REWRITE_RULE [runtime_consistent_def]) >>
+  Cases_on `call_res` >>
+  gvs[bind_apply, ignore_bind_apply, return_def, raise_def, no_type_error_result_def] >>
+  drule_all ext_call_return_result_sound >> strip_tac >> gvs[no_type_error_result_def]
 QED
 
 Theorem send_gas_args_runtime_typed_dest:

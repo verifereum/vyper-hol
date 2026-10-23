@@ -505,13 +505,13 @@ Proof
   >- (`r = BaseT (UintT 256)` by metis_tac[] >> gvs[evaluate_type_def] >>
       Cases_on `h` >> gvs[vyperValueOperationTheory.safe_cast_def] >>
       qexists_tac `i` >>
-      qexists_tac `<|assignable := T; type := BaseTV (UintT 256); value := IntV i|>` >>
+      qexists_tac `<|assignable := T; type := BaseTV (UintT 256); value := IntV i; popped := []|>` >>
       rewrite_tac[FLOOKUP_UPDATE] >> simp[]) >>
   Cases_on `q = id`
   >- (`r = BaseT (UintT 256)` by metis_tac[] >> gvs[evaluate_type_def] >>
       Cases_on `h` >> gvs[vyperValueOperationTheory.safe_cast_def] >>
       qexists_tac `i` >>
-      qexists_tac `<|assignable := T; type := BaseTV (UintT 256); value := IntV i|>` >>
+      qexists_tac `<|assignable := T; type := BaseTV (UintT 256); value := IntV i; popped := []|>` >>
       asm_rewrite_tac[FLOOKUP_UPDATE] >> simp[]) >>
   first_x_assum (qspecl_then [`tenv`, `t`, `x''`, `id`] mp_tac) >>
   impl_tac

@@ -12,7 +12,7 @@ val EXT_CALL_FIXTURE_SIMP =
    counter_request_def, counter_calldata, counter_address, evaluate_def,
    bind_def, ignore_bind_def, return_def, type_check_def, check_def,
    assert_def, raise_def, lift_option_type_def, lift_option_def,
-   lift_sum_runtime_def, eval_ext_call_def, ext_call_opts_ok_def,
+   lift_sum_runtime_def, eval_ext_call_def, eval_ext_call_effects_def, ext_call_opts_ok_def,
    ext_call_kwarg_def, ext_call_precheck_ok_def, ext_call_has_code_def,
    lookup_account_def, empty_accounts_def, empty_account_state_def,
    evaluate_literal_def, dest_AddressV_def, get_Value_def, materialise_def,

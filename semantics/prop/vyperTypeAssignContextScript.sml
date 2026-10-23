@@ -287,13 +287,6 @@ Proof
 QED
 
 (* C2.2: exact assignment-operation bridge lemmas for statement assignment call sites. *)
-Theorem stmt_assign_operation_runtime_typed_Update_from_value_runtime_typed_binop:
-  !env ty bop rhs_ty v.
-    value_runtime_typed env rhs_ty v /\ well_typed_binop ty bop ty rhs_ty ==>
-    assign_operation_runtime_typed env ty (Update ty bop v)
-Proof
-  rw[assign_operation_runtime_typed_def] >> metis_tac[]
-QED
 
 Theorem stmt_assign_operation_runtime_typed_Append_from_value_has_type:
   !env elem_ty n elem_tv v.
@@ -335,12 +328,6 @@ Proof
   rw[assign_operation_matches_target_shape_def]
 QED
 
-Theorem stmt_assign_operation_matches_target_shape_Update_BaseTargetV:
-  !loc sbs ty bop v.
-    assign_operation_matches_target_shape (BaseTargetV loc sbs) (Update ty bop v)
-Proof
-  rw[assign_operation_matches_target_shape_def]
-QED
 
 Theorem stmt_assign_operation_matches_target_shape_Append_BaseTargetV:
   !loc sbs v.

@@ -15,5 +15,6 @@ Ancestors
   evalCompilerMemoryStores
   evalCompilerExternalCalls
   evalCompilerNameCollisions
+  evalAssignmentOrder
   evalCompilerSliceBuffers
   evalCompilerPhiPointers

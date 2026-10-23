@@ -43,7 +43,7 @@ Definition update_name_def:
   update_name st id v =
     case find_containing_scope id st.scopes of
     | SOME (pre, env, entry, rest) =>
-        st with scopes := (pre ++ (env |+ (id, entry with value := v))::rest)
+        st with scopes := (pre ++ (env |+ (id, entry with <|value := v; popped := []|>))::rest)
     | NONE =>
         case st.scopes of
         | [] => st with scopes := [FEMPTY |+ (id, <| assignable := ARB; type := ARB; value := v |>)]
@@ -540,30 +540,10 @@ Proof
        assign_result_def,type_check_def,assert_def]
 QED
 
-Theorem assign_target_name_update:
-  ∀cx st n ty bop v v'.
-    lookup_name_typed st n = SOME entry ∧ var_assignable st n ∧
-    evaluate_binop (case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0)
-                   entry.type bop entry.value v' = INL new_v ⇒
-    assign_target cx (BaseTargetV (ScopedVar n) []) (Update ty bop v') st =
-    (INL NONE, update_name st n new_v)
-Proof
-  rw[var_assignable_def] >>
-  gvs[lookup_name_typed_def] >>
-  `IS_SOME (find_containing_scope n st.scopes)`
-    by (irule lookup_scopes_find_containing >> simp[]) >>
-  Cases_on `find_containing_scope n st.scopes` >- gvs[] >>
-  PairCases_on `x` >> gvs[] >>
-  drule find_containing_scope_lookup >> strip_tac >> gvs[] >>
-  simp[Once assign_target_def, bind_def, get_scopes_def, return_def,
-       lift_option_def, lift_option_type_def, lift_sum_def, assign_subscripts_def,
-       ignore_bind_def, set_scopes_def, update_name_def,
-       assign_result_def, type_check_def, assert_def]
-QED
 
 Theorem assign_target_name_subscripts_state:
   ∀cx st n sbs ao entry a'.
-    lookup_name_typed st n = SOME entry ∧ entry.assignable ∧
+    lookup_name_typed st n = SOME entry ∧ entry.assignable ∧ ao <> PopOp ∧
     assign_subscripts entry.type entry.value (REVERSE sbs) ao = INL a' ⇒
     SND (assign_target cx (BaseTargetV (ScopedVar n) sbs) ao st) =
       update_name st n a'
@@ -579,8 +559,7 @@ Proof
        lift_option_def, lift_option_type_def, lift_sum_def, assign_result_def,
        ignore_bind_def, set_scopes_def, update_name_def,
        type_check_def, assert_def] >>
-  Cases_on `ao` >> simp[assign_result_def, return_def, bind_def, lift_sum_def] >>
-  rpt (CASE_TAC >> gvs[return_def, raise_def])
+  Cases_on `ao` >> gvs[assign_result_def, return_def, bind_def, lift_sum_def]
 QED
 
 Theorem assign_subscripts_PopOp_assign_result:
@@ -638,7 +617,7 @@ Theorem lookup_name_typed_after_update_some:
   ∀st n entry v.
     lookup_name_typed st n = SOME entry ⇒
     lookup_name_typed (update_name st n v) n =
-      SOME (entry with value := v)
+      SOME (entry with <|value := v; popped := []|>)
 Proof
   rw[lookup_name_typed_def, update_name_def] >>
   `IS_SOME (find_containing_scope n st.scopes)`
@@ -852,7 +831,7 @@ Theorem lookup_name_typed_update_in_tl_scopes:
     lookup_in_current_scope st n = NONE ∧
     lookup_name_typed (tl_scopes st) n = SOME entry ⇒
     lookup_name_typed (tl_scopes (update_name st n v)) n =
-      SOME (entry with value := v)
+      SOME (entry with <|value := v; popped := []|>)
 Proof
   rpt strip_tac >>
   `var_in_scope (tl_scopes st) n` by
@@ -861,7 +840,7 @@ Proof
    (update_name (tl_scopes st) n v).scopes`
     by metis_tac[update_name_in_tl_scopes] >>
   `lookup_name_typed (update_name (tl_scopes st) n v) n =
-     SOME (entry with value := v)` by
+     SOME (entry with <|value := v; popped := []|>)` by
     (irule lookup_name_typed_after_update_some >> simp[]) >>
   gvs[lookup_name_typed_def]
 QED

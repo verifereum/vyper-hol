@@ -942,7 +942,8 @@ Definition compile_stmt_def:
      od) ∧
 
   (* Assign: store to target (memory, storage, transient, code).
-     LHS target evaluated before RHS expr (matches interpreter eval order).
+     Evaluate RHS to a value/location, then the target pointer, then unwrap
+     the RHS (so an lvalue-shaped RHS is read after target side effects).
      dst_ty from compile_get_target_ptr (target's declared type),
      src_ty from expr_type e (expression's type). These may differ
      for subtype assignments (e.g., DynArray[Bytes[540]] → DynArray[Bytes[704]]).
@@ -954,13 +955,13 @@ Definition compile_stmt_def:
        od
      else
      let src_ty = lowered_value_type cenv e in
-     do tgt_result <- compile_get_target_ptr cenv bt;
+     do src_vv <- compile_expr cenv (expr_type e) e;
+        tgt_result <- compile_get_target_ptr cenv bt;
         dst_op <- return (FST tgt_result);
         dst_loc_opt <- return (FST (SND tgt_result));
         dst_ty_opt <- return (SND (SND tgt_result));
-        vlwl_result <- lower_value_with_loc compile_expr cenv (expr_type e) e;
-        val_op <- return (FST vlwl_result);
-        src_loc <- return (SND vlwl_result);
+        val_op <- unwrap_value cenv src_vv;
+        src_loc <- return (vv_location src_vv);
         (* dst_ty: target's declared type. Falls back to src_ty if unknown. *)
         dst_ty <- return (case dst_ty_opt of SOME t => t | NONE => src_ty);
         is_prim <- return (is_word_type dst_ty);
