@@ -1,0 +1,36 @@
+{
+  "dependencies": {
+    "cbor2": "5.9.0",
+    "immutables": "0.21",
+    "lark": "1.1.9",
+    "packaging": "26.3",
+    "pycryptodome": "3.23.0",
+    "wheel": "0.48.0"
+  },
+  "fixtures": {
+    "fold_shift": {
+      "deploy_sha256": "da04c9b449386d2fb80bc6b499da54b94a0af8296af413d7f114e4c1a2c86223",
+      "runtime_sha256": "c4dad2d4c0aadda8e1c561d845e710af9b3f6b62f42dcf9423dc217ecebff3cb",
+      "source": "python-o1-no-asm-opt-sources/fold_shift.vy",
+      "source_sha256": "a8fd940722db6b55cbf4c9497e90e8fac36b24b4513839951333ca678e7dbeff"
+    }
+  },
+  "producer": "pinned Python Vyper",
+  "python_version": "3.11.11",
+  "schema_version": 2,
+  "settings": {
+    "bytecode_metadata": false,
+    "evm_version": "prague",
+    "experimental_codegen": true,
+    "final_assembly_optimization": false,
+    "optimization_level": "NONE",
+    "outputs": [
+      "bytecode",
+      "bytecode_runtime"
+    ],
+    "venom_ir_pipeline": "O1"
+  },
+  "uv_version": "0.10.11",
+  "vyper_commit": "cd74ce4f57e3771aeeab8f061fa3be45bfe8a29c",
+  "vyper_version": "0.5.0a4+cd74ce4f"
+}

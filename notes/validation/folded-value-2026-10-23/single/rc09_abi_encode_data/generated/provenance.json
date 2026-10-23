@@ -1,0 +1,36 @@
+{
+  "dependencies": {
+    "cbor2": "5.9.0",
+    "immutables": "0.21",
+    "lark": "1.1.9",
+    "packaging": "26.3",
+    "pycryptodome": "3.23.0",
+    "wheel": "0.48.0"
+  },
+  "fixtures": {
+    "rc09_abi_encode_data": {
+      "deploy_sha256": "130c7f9cdc7edb4c59a82ea6ef751bc88f65f4366baa495c7545b856327c32f3",
+      "runtime_sha256": "8a7afe8c877a77a624f279ea58cb4ef017dba936a10535c97b02ef2c44aa6aff",
+      "source": "python-o1-no-asm-opt-sources/rc09_abi_encode_data.vy",
+      "source_sha256": "e356ac466773485a2ca6dc08d433c6819a7350c2d5b6f9a6a8349e3a10a748b0"
+    }
+  },
+  "producer": "pinned Python Vyper",
+  "python_version": "3.11.11",
+  "schema_version": 2,
+  "settings": {
+    "bytecode_metadata": false,
+    "evm_version": "prague",
+    "experimental_codegen": true,
+    "final_assembly_optimization": false,
+    "optimization_level": "NONE",
+    "outputs": [
+      "bytecode",
+      "bytecode_runtime"
+    ],
+    "venom_ir_pipeline": "O1"
+  },
+  "uv_version": "0.10.11",
+  "vyper_commit": "cd74ce4f57e3771aeeab8f061fa3be45bfe8a29c",
+  "vyper_version": "0.5.0a4+cd74ce4f"
+}

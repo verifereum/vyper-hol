@@ -1,0 +1,17 @@
+{
+  "index_tree": "b3307983c95890be84a66c13a1129a69e6be12a2",
+  "export_directory": "/home/lukasz/work/vyper-hol/worktrees/issue-543/.agent-files/folded-value-validation/export-validation/snapshot-hdrn3ak1/repo",
+  "cache_directory": "/home/lukasz/work/vyper-hol/worktrees/issue-543/.agent-files/folded-value-validation/export-validation/snapshot-hdrn3ak1/cache",
+  "argv": [
+    "holbuild",
+    "--cache-dir",
+    "/home/lukasz/work/vyper-hol/worktrees/issue-543/.agent-files/folded-value-validation/export-validation/snapshot-hdrn3ak1/cache",
+    "build",
+    "--dry-run",
+    "foldedValueValidationPrepTheory",
+    "foldedValueParityTheory"
+  ],
+  "exit": 0,
+  "check": "Exact Git index source export; dependency planning, not a substitute for proof evaluation",
+  "archive_sha256": "0b8d7120bd1d0b807fce6e2a95e837cef4e31c55d607e2d79fe7c7dc18e46419"
+}

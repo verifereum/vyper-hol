@@ -1,0 +1,7 @@
+[FunctionDecl External Nonpayable F F "f" [("y",BaseT (IntT 256))] []
+   (BaseT (IntT 256))
+   [Return
+      (SOME
+         (Builtin (BaseT (IntT 256)) (Bop Exp)
+            [Literal (BaseT (IntT 256)) (IntL (-2));
+             Name (BaseT (IntT 256)) "y"]))]]

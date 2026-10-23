@@ -1,0 +1,13 @@
+resuming evalCompilerBytecodeScalarOperatorsTheory
+  from: theorem-context checkpoint after scalar_compare_eq_matches_python_oracle
+  continuing at: /home/lukasz/work/vyper-hol/worktrees/issue-543/./lowering/defs/bytecode/eval/evalCompilerBytecodeScalarOperatorsScript.sml:35:4
+evalCompilerBytecodeRaiseReasonTheory built
+resuming evalCompilerBytecodeScalarTypeBuiltinsTheory
+  from: theorem-context checkpoint after scalar_convert_bytes_fixed_matches_python_oracle
+  continuing at: /home/lukasz/work/vyper-hol/worktrees/issue-543/./lowering/defs/bytecode/eval/evalCompilerBytecodeScalarTypeBuiltinsScript.sml:102:4
+evalCompilerBytecodeLoopsTheory built
+evalCompilerBytecodeScalarTypeBuiltinsTheory built
+evalCompilerBytecodeScalarOperatorsTheory built
+holbuild: hol run failed while building theory script
+instrumented log: /home/lukasz/work/vyper-hol/worktrees/issue-543/.holbuild/logs/current/vyper-hol/evalCompilerBytecodeScalarWeiModularTheory/instrumented-failure.log
+

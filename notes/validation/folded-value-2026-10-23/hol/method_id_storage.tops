@@ -1,0 +1,4 @@
+[VariableDecl Private Storage "m" (BaseT (BytesT (Fixed 4))) (SOME 0);
+ FunctionDecl External Nonpayable F F "f" [] [] NoneT
+   [Assign (BaseTarget (TopLevelNameTarget (NONE,"m")))
+      (Literal (BaseT (BytesT (Fixed 4))) (BytesL [194w; 152w; 85w; 120w]))]]

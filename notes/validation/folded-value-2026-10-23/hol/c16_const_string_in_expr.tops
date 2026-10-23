@@ -1,0 +1,5 @@
+[VariableDecl Private
+   (Constant (Literal (BaseT (StringT 5)) (StringL "abc"))) "S"
+   (BaseT (StringT 5)) NONE;
+ FunctionDecl External Nonpayable F F "f" [] [] (BaseT (UintT 256))
+   [Return (SOME (Literal (BaseT (UintT 256)) (IntL 3)))]]

@@ -1,0 +1,34 @@
+Cannot find file foldedValueValidationPrepTheory.ui
+error in load foldedValueValidationPrepTheory : Fail "Cannot find file foldedValueValidationPrepTheory.ui"
+Uncaught exception at poly/poly-init2.ML:49: Fail "Cannot find file foldedValueValidationPrepTheory.ui"
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%31">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%30">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%35">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%34">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%33">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%32">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%31">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%30">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%35">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%34">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%33">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%32">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%37">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%36">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%31">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%30">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%33">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%32">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%31">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%30">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%35">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%34">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%31">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%30">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%33">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%32">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%31">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%30">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%35">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%34">>
+holbuild: hol run failed

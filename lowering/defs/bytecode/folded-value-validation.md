@@ -1,13 +1,26 @@
-# Folded-value validation: local preparation, external results pending
+# Folded-value validation: independent execution results
 
 ## Status and scope
 
-No independent Python compilation, differential verdict, corpus rerun or EVM
-execution is recorded by this preparation. **All 37 external verdicts are
-NOT_RUN**, including the four required overflow executions. No expected bytecode
-has been synthesized from HOL. The seven new parity sources are prepared, not
-yet integrated as checked Python-oracle fixtures. Completion requires C1.4.2
-(independent execution/artifacts) and C1.4.3 (current HOL artifact consumption).
+The independent run on 2026-10-23 used the clean pinned checkout at `~/vyper`:
+**30 witnesses MATCH**, four have bytecode mismatches, two immutable witnesses
+return HOL `NONE`, and `method_id_var` has the expected actual Python rejection.
+All 36 accepted ASTs pass both HOL checker modes. All four overflow executions
+revert on py-evm 0.12.1b1 PragueVM. The seven required new fixtures are integrated
+in `eval/foldedValueParityScript.sml`, whose checked parity theory builds.
+
+The complete rows, hashes, commands, logs, runtime observations and current
+full-corpus rerun status are in
+[`notes/validation/folded-value-2026-10-23/REPORT.md`](../../../notes/validation/folded-value-2026-10-23/REPORT.md).
+Independent AST/layout and deploy/runtime bytes are in `folded-value-oracle/`.
+Expected bytecode was generated only by pinned Python Vyper.
+
+The two selector/ensure-tuple mismatches retain the #551 dependency: the current
+`lower_abi_encode` accepts but does not use `ensure_tuple`. The other mismatches
+are `rc09_abi_encode_data` (#554/#551) and `rr03_abi` (#567/#551); the `NONE`
+results are `i12_immut_with_storage` and `p29_imm_multi` (#563). These are observed
+validation failures, not passing or unexecuted cases. No dependency-owned
+compiler fix or whitelist relaxation is included here.
 
 Paths below are repository-relative. `folded-value-witnesses.txt` is the complete
 37-stem inventory; each stem has a `.vy` file in `folded-value-sources/`.
@@ -58,7 +71,7 @@ translates as that literal, including MethodId when its metadata is supplied.
 Real MethodId metadata and selector survival for these exact sources still need
 the external AST round trip below.
 
-## External preparation and commands (not run here)
+## External reproduction procedure
 
 Run from the repository root with a command runner. Preserve stdout, stderr,
 exit statuses and file hashes. First reproduce the existing corpus using the
