@@ -333,6 +333,49 @@ Proof
   cheat
 QED
 
+Theorem shape_state_new_block:
+  !name st old s.
+    new_block name st = (old,s) /\ shape_state st ==> shape_state s
+Proof
+  simp[new_block_def] >> rpt strip_tac >> gvs[] >>
+  gvs[shape_state_def, state_insts_def, all_blocks_def, not_fresh_at_def] >>
+  metis_tac[]
+QED
+
+Theorem internal_segment_new_block:
+  !st old s name t has_ret_buf rc.
+    new_block name st = (old,s) /\
+    shape_extends T compiler_label s t ==>
+    ?seg. all_blocks t = all_blocks st ++ seg /\
+          internal_segment_ok (name,has_ret_buf,rc) seg
+Proof
+  rpt gen_tac >> strip_tac >>
+  `all_blocks s = all_blocks st ++
+     [<| bb_label := name; bb_instructions := [] |>]`
+    by gvs[new_block_def, all_blocks_def] >>
+  `state_insts s = state_insts st` by gvs[state_insts_def] >>
+  fs[shape_extends_def, fragExecTheory.cs_extends_def] >>
+  qexists_tac `REVERSE new ++
+    [<| bb_label := t.cs_current_bb;
+        bb_instructions := t.cs_current_insts |>]` >>
+  `all_blocks t = all_blocks st ++ (REVERSE new ++
+    [<| bb_label := t.cs_current_bb;
+        bb_instructions := t.cs_current_insts |>])`
+    by gvs[new_block_def, all_blocks_def] >>
+  simp[] >>
+  gvs[internal_segment_ok_def, added_insts_def, added_labels_def,
+      state_insts_def, DROP_APPEND, EVERY_FLAT, EVERY_MAP] >>
+  Cases_on `new = []` >>
+  gvs[new_block_def, arithmeticTheory.ADD_COMM] >>
+  `0 < LENGTH new` by (Cases_on `new` >> gvs[]) >>
+  `1 - LENGTH new = 0` by simp[] >>
+  Cases_on `REVERSE new` >> gvs[] >>
+  qmatch_asmsub_abbrev_tac `DROP k t.cs_current_insts` >>
+  `k = 0` by (simp[Abbr `k`] >> decide_tac) >>
+  gvs[DROP_1] >>
+  metis_tac[HD_REVERSE, HD]
+QED
+
 (* From compile_internal_function_shape: new_block fn_lbl starts each
    segment, and the next one ends it. *)
 Theorem compile_internal_fn_bodies_shape:
