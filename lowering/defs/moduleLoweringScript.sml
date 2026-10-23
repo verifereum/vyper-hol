@@ -457,14 +457,15 @@ End
 
 (* ===== Kwargs Handling ===== *)
 
-(* Create alloca for each kwarg, shared between entry points. *)
+(* One descriptor (name, pointer, type, default) is shared by allocation,
+   entry initialization and common-body registration. The size is derived
+   from the type in the same compile environment, never from an SSA operand. *)
 Definition compile_create_kwarg_allocas_def:
-  compile_create_kwarg_allocas [] = return [] ∧
-  compile_create_kwarg_allocas ((name, mem_size)::rest) =
-    do ptr_op_alloc <- compile_alloc_buffer mem_size;
-       ptr_op <- return ptr_op_alloc.buf_operand;
-       rest_vars <- compile_create_kwarg_allocas rest;
-       return ((name, ptr_op) :: rest_vars)
+  compile_create_kwarg_allocas cenv [] = return [] ∧
+  compile_create_kwarg_allocas cenv ((name, ty, default_e)::rest) =
+    do buf <- compile_alloc_buffer (type_memory_bytes cenv ty);
+       rest_vars <- compile_create_kwarg_allocas cenv rest;
+       return ((name, buf.buf_operand, ty, default_e) :: rest_vars)
     od
 End
 
@@ -474,35 +475,20 @@ Definition compile_init_kwargs_def:
   compile_init_kwargs cenv ((name, alloca_ptr, kwarg_type, default_e)::rest)
                       calldata_offset kwargs_from_calldata hi_op =
     if kwargs_from_calldata > 0 then
-      let is_prim = is_word_type kwarg_type in
-      if is_prim then
-        let dec_info = type_to_abi_dec_info cenv.ce_struct_fields cenv kwarg_type in
-        let clamp_info = (case dec_info of DecPrimWord c => c | _ => NoClamp) in
-        do val_op <- emit_op CALLDATALOAD [Lit (n2w calldata_offset)];
-           compile_abi_clamp_basetype val_op clamp_info;
-           emit_void MSTORE [alloca_ptr; val_op];
-           compile_init_kwargs cenv rest (calldata_offset + 32)
-                               (kwargs_from_calldata - 1) hi_op
-        od
-      else if is_abi_dynamic cenv.ce_struct_fields kwarg_type then
-        let dec_info = type_to_abi_dec_info cenv.ce_struct_fields cenv kwarg_type in
-        let abi_sz = abi_embedded_static_size cenv.ce_struct_fields kwarg_type in
-        do offset_val <- emit_op CALLDATALOAD [Lit (n2w calldata_offset)];
-           actual_src <- emit_op ADD [Lit 4w; offset_val];
-           compile_abi_decode_to_buf alloca_ptr actual_src
-             CALLDATALOAD hi_op dec_info;
-           compile_init_kwargs cenv rest (calldata_offset + abi_sz)
-                               (kwargs_from_calldata - 1) hi_op
-        od
-      else
-        let dec_info = type_to_abi_dec_info cenv.ce_struct_fields cenv kwarg_type in
-        let src = Lit (n2w (4 + calldata_offset)) in
-        let abi_sz = abi_embedded_static_size cenv.ce_struct_fields kwarg_type in
-        do compile_abi_decode_to_buf alloca_ptr src
-             CALLDATALOAD hi_op dec_info;
-           compile_init_kwargs cenv rest (calldata_offset + abi_sz)
-                               (kwargs_from_calldata - 1) hi_op
-        od
+      (* calldata_offset is an absolute head position (including selector).
+         Only dynamic head words contain an offset relative to byte 4.
+         Immutable calldata uses the pinned decoder's unbounded sentinel. *)
+      let dec_info = type_to_abi_dec_info cenv.ce_struct_fields cenv kwarg_type in
+      let abi_sz = abi_embedded_static_size cenv.ce_struct_fields kwarg_type in
+      do src <- (if is_abi_dynamic cenv.ce_struct_fields kwarg_type then
+                   do relative <- emit_op CALLDATALOAD [Lit (n2w calldata_offset)];
+                      emit_op ADD [Lit 4w; relative]
+                   od
+                 else return (Lit (n2w calldata_offset)));
+         compile_abi_decode_to_buf alloca_ptr src CALLDATALOAD (Lit 0w) dec_info;
+         compile_init_kwargs cenv rest (calldata_offset + abi_sz)
+                             (kwargs_from_calldata - 1) hi_op
+      od
     else
       do default_val <- lower_value compile_expr cenv kwarg_type default_e;
          (if is_word_type kwarg_type then
@@ -521,9 +507,8 @@ End
 Definition compile_entry_point_kwargs_def:
   compile_entry_point_kwargs cenv kwarg_vars calldata_offset
                              kwargs_from_calldata common_label =
-    do hi_op <- emit_op CALLDATASIZE [];
-       compile_init_kwargs cenv kwarg_vars calldata_offset
-                            kwargs_from_calldata hi_op;
+    do compile_init_kwargs cenv kwarg_vars calldata_offset
+                            kwargs_from_calldata (Lit 0w);
        emit_inst JMP [Label common_label] []
     od
 End
@@ -531,9 +516,10 @@ End
 (* Register pre-allocated kwarg allocas as variables. Pure function. *)
 Definition compile_register_kwarg_vars_def:
   compile_register_kwarg_vars (cenv : compile_env) [] = cenv ∧
-  compile_register_kwarg_vars cenv ((name, alloca_offset, mem_size)::rest) =
+  compile_register_kwarg_vars cenv ((name, kw_ptr, ty, default_e)::rest) =
     compile_register_kwarg_vars
-      (cenv with ce_vars := cenv.ce_vars |+ (name, MemLoc alloca_offset mem_size)) rest
+      (cenv with ce_vars := cenv.ce_vars |+
+        (name, PtrVar kw_ptr (type_memory_bytes cenv ty))) rest
 End
 
 (* ===== Calldata / Data-Section Arg Wrappers ===== *)
@@ -924,9 +910,8 @@ Definition compile_external_entry_points_def:
     cenv kwarg_vars calldata_offset common_label =
     do new_block fn_label;
        compile_entry_checks min_cds is_payable;
-       hi_op <- emit_op CALLDATASIZE [];
        compile_init_kwargs cenv kwarg_vars calldata_offset
-                            kwargs_from_calldata hi_op;
+                            kwargs_from_calldata (Lit 0w);
        emit_inst JMP [Label common_label] [];
        compile_external_entry_points rest cenv kwarg_vars calldata_offset
                                       common_label
