@@ -795,8 +795,56 @@ Theorem compile_abi_encode_copy_frag:
                 EL a s.vs_memory = EL a s0.vs_memory) ∧
            LENGTH s0.vs_memory ≤ LENGTH s.vs_memory) R
 Proof
-  cheat
+  rpt strip_tac >>
+  gvs[Once compile_abi_encode_child_def, comp_bind_def,
+      comp_ignore_bind_def, comp_return_def, AllCaseEqs()] >>
+  pairarg_tac >> gvs[] >>
+  drule emit_void_extends >> strip_tac >>
+  irule frag_exec_run_inst_seq >>
+  simp[same_blocks_def] >>
+  reverse conj_tac
+  >- (drule emitted_insts_emit_void >> strip_tac >>
+      gvs[same_blocks_def, mk_inst_def, is_terminator_def]) >>
+  disj1_tac >>
+  qexists_tac `mcopy (w2n dst_w) (w2n src_w) (type_memory_size tv) s0` >>
+  conj_tac
+  >- (drule emit_void_MCOPY_run >> simp[eval_operand_def]) >>
+  simp[eval_operand_def, lookup_var_def] >>
+  simp[GSYM lookup_var_def, mcopy_memory_nondecreasing] >>
+  conj_tac
+  >- (rewrite_tac[mem_bytes_at_def, mcopy_padded_read] >>
+      rewrite_tac[GSYM mem_bytes_at_def] >>
+      irule val_in_memory_static_abi >> goal_assum drule >>
+      simp[] >> qexists_tac `v` >> simp[]) >>
+  rpt strip_tac >> irule mcopy_byte_frame >> simp[]
 QED
+
+(* Certify the frozen fragment and its added memory/ABI boundaries without
+   accepting admissions or extra kernel hypotheses. Unrelated open encoder and
+   decoder obligations below are deliberately outside this acceptance gate. *)
+val () = List.app (fn th =>
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
+  in
+    if null (Thm.hyp th) andalso null axioms andalso
+       List.all (fn s => s = "DISK_THM") oracles then ()
+    else raise Fail "AbiCopy fragment dependency is admitted or not closed"
+  end)
+  ([compile_abi_encode_copy_frag, emit_void_MCOPY_run,
+   write_memory_with_expansion_byte_frame, mcopy_padded_read,
+   mcopy_byte_frame, mcopy_memory_nondecreasing, lookup_var_mcopy,
+   mcopy_vs_allocas, valueEncodingPropsTheory.val_in_memory_static_abi,
+   valueEncodingProofsTheory.val_in_memory_static_abi,
+   valueEncodingProofsTheory.val_in_memory_static_abi_mutual] @
+  map (DB.fetch "valueEncodingProofs")
+   ["mem_bytes_at_split_padded", "mem_bytes_at_word",
+    "val_in_memory_base_abi", "val_in_memory_flag_abi",
+    "kvs_in_memory_lookup", "val_in_memory_sarray_select",
+    "sparse_has_type_lookup", "value_has_type_sarray_select",
+    "mem_bytes_at_flat_windows", "mem_bytes_at_flat_lengths",
+    "enc_tuple_static_acc", "enc_static_tuple", "enc_static_array",
+    "fields_in_memory_tuple", "type_memory_size_list_sum",
+    "type_memory_size_fields_sum", "any_dynamic_every_static",
+    "vyper_to_abi_types_length"]);
 
 (* ===== Element Pointer ===== *)
 
