@@ -142,12 +142,14 @@ cheat delta is zero.
   a supported value return. No declaration is consulted: the selector is
   hashed from the call-site signature, as the source semantics does
   ([#555](https://github.com/verifereum/vyper-hol/issues/555)).
-  `supported_external_default tops d` admits no default, or a literal or name
-  default (pure, so its eager lowering and the semantics' lazy evaluation agree).
+  Keyword operands (`value=`, `gas=`, `default_return_value=`) follow the
+  positional arguments in source order, each kind at most once, and no
+  `value=` on a staticcall. They are pure like every other operand, and both
+  the lowering and the semantics evaluate them before the call.
 - `supported_expr tops e`: P or E, for later statement expression positions.
   No statement or whole-program placeholder is provided.
 - Symbolic contracts: pure Call/Pop rejection, external-call inversion,
-  external default inversion, default rejection for non-external calls, and
+  rejection of every call with a `default` field, and
   list/field EVERY equivalences.
 
 ### `supportedExprTraverseTheory`
@@ -184,9 +186,9 @@ Proof paths: `lowering/supported/supportedExprFormPropsScript.sml` (F below)
 | Empty, MaxValue, MinValue, Epsilon, Extract32 exclusion | F `supported_type_builtin_coverage` |
 | Every admitted conversion family; out-of-list, width, bytes20, N>=135 exclusions | F `supported_conversion_whitelist_coverage`, `supported_conversion_exclusion_coverage` |
 | ABI encode/decode exact flags, method-id size, tuple depth/length, arity | F `supported_abi_forms_coverage` |
-| Len, hashes, Concat, Slice, Uint2Str, typed/dynamic MakeArray, Ceil, Floor, MethodId; wrong arities | F `supported_builtin_exclusion_coverage` |
+| Uint2Str (unsigned argument), CalldataSlice; Len, hashes, Concat, Slice, typed/dynamic MakeArray, Ceil, Floor, MethodId and wrong arities excluded | F `supported_builtin_exclusion_coverage` |
 | IntCall, Send, storage dynamic Pop; namespace/visibility/base exclusions | X `supported_internal_send_pop_rows` |
-| ExtCall counts, literal/name vs other defaults, value/NoneT returns, nonword args | X `supported_external_expression_row`, `supported_external_nonword_arguments_rejected` |
+| ExtCall counts, keyword operands, pure vs effectful defaults, value/NoneT returns, nonword args | X `supported_external_expression_row`, `supported_external_nonword_arguments_rejected` |
 | ExtCall admission does not depend on declarations of the same name | X `supported_external_declaration_independent` |
 | F22/ordering: nested effects in P, internal args, external target/value/args | X `supported_effect_nesting_counterexamples` |
 | RawCallTarget, RawLog, RawRevert, SelfDestructTarget, every CreateTarget kind | X `supported_raw_call_forms_excluded` |

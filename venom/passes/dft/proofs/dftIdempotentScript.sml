@@ -483,8 +483,8 @@ Proof
   (* Use raw_deps_map_f to rewrite inner_et2 = MAP f inner_et1 *)
   imp_res_tac raw_deps_map_f >>
   pop_assum (qspec_then `i1` (fn th => REWRITE_TAC[th])) >>
-  (* Now: nub(MAP f inner) = MAP f (nub inner) via nub_MAP_INJ *)
-  irule nub_MAP_INJ >>
+  (* Injective mapping preserves first-occurrence dependency order. *)
+  irule nub_first_MAP_INJ >>
   first_assum (irule o MATCH_MP (DB.fetch "pred_set" "INJ_SUBSET_UNIV"))
 QED
 
