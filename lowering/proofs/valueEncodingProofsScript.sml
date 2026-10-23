@@ -1031,6 +1031,73 @@ QED
 
 (* Two memories that agree on a window agree on every sub-window, and on
    every word inside it. *)
+Theorem type_memory_size_list_sum:
+  !tvs. type_memory_size_list tvs = SUM (MAP type_memory_size tvs)
+Proof
+  Induct >> simp[type_memory_size_def]
+QED
+
+Theorem type_memory_size_fields_sum:
+  !fts. type_memory_size_fields fts = SUM (MAP (type_memory_size o SND) fts)
+Proof
+  Induct >> simp[type_memory_size_def] >> Cases_on `h` >>
+  simp[type_memory_size_def]
+QED
+
+Theorem any_dynamic_every_static:
+  !ats. ~any_dynamic ats <=> EVERY is_static ats
+Proof
+  Induct >> simp[is_dynamic_def]
+QED
+
+Theorem vyper_to_abi_types_length:
+  !env ts. LENGTH (vyper_to_abi_types env ts) = LENGTH ts
+Proof
+  gen_tac >> Induct >> simp[vyper_to_abi_type_def]
+QED
+
+(* TEMPORARILY ISOLATED: unfinished mutual bridge retained verbatim while
+   its list boundary lemmas are validated (C1.4.1). Restored by C1.4.3.
+Theorem val_in_memory_static_abi_mutual:
+  (!env ty. !tv v av off mem.
+    evaluate_type env ty = SOME tv /\
+    ~is_dynamic (vyper_to_abi_type env ty) /\ value_has_type tv v /\
+    vyper_to_abi env ty v = SOME av /\ val_in_memory tv v off mem ==>
+    mem_bytes_at off (type_memory_size tv) mem =
+    enc (vyper_to_abi_type env ty) av) /\
+  (!env ts. !tvs vs avs off mem.
+    OPT_MMAP (evaluate_type env) ts = SOME tvs /\
+    EVERY is_static (vyper_to_abi_types env ts) /\
+    values_have_types tvs vs /\ vyper_to_abi_list env ts vs = SOME avs /\
+    tuple_in_memory vs tvs off mem ==>
+    mem_bytes_at off (SUM (MAP type_memory_size tvs)) mem =
+    FLAT (MAP2 enc (vyper_to_abi_types env ts) avs))
+Proof
+  ho_match_mp_tac vyper_to_abi_type_ind >> rpt conj_tac
+  >- (rpt strip_tac >> irule val_in_memory_base_abi >> metis_tac[])
+  >- suspend "tuple"
+  >- (rpt strip_tac >>
+      qpat_x_assum `is_static (vyper_to_abi_type _ (ArrayT _ _))` mp_tac >>
+      simp[Once vyper_to_abi_type_def])
+  >- suspend "array"
+  >- suspend "struct"
+  >- suspend "flag"
+  >- suspend "none"
+  >- suspend "nil"
+  >> suspend "cons"
+QED
+
+Resume val_in_memory_static_abi_mutual[tuple]:
+  rpt strip_tac >> Cases_on `v` >>
+  gvs[evaluate_type_def, vyper_to_abi_type_def, vyper_to_abi_def,
+      AllCaseEqs()] >>
+  Cases_on `a` >>
+  gvs[value_has_type_def, vyper_to_abi_def, val_in_memory_def,
+      evaluate_types_OPT_MMAP, AllCaseEqs(), type_memory_size_def] >>
+  FAIL_TAC "tuple child interface"
+QED
+*)
+
 Theorem mem_bytes_at_agree_window:
   ∀ off len mem mem'.
     mem_bytes_at off len mem = mem_bytes_at off len mem' ⇒
