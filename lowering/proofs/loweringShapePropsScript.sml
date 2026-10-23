@@ -1043,6 +1043,7 @@ QED
 
 Finalise compile_selector_dispatch_linear_shape
 
+(* Ordinary emissions may establish instruction validity from their input. *)
 Theorem shape_step_emit_op_pre:
   !internal LP P opc ops.
     ~MEM opc [GAS; RETPC_PARAM] /\
@@ -2003,8 +2004,6 @@ Resume compile_external_fn_bodies_shape[checks]:
 QED
 Finalise compile_external_fn_bodies_shape
 
-(* Ordinary emissions may establish instruction validity from their input. *)
-
 Theorem compile_guarded_body_shape:
   !cenv is_nr nkey use_trans is_view body ret_type.
     cenv_static_ok cenv /\ cenv.ce_return_pc = NONE /\
@@ -2137,7 +2136,7 @@ Proof
   Cases_on `name = n` >> gvs[loc_shape_ok_def] >> metis_tac[]
 QED
 
-Theorem materialize_internal_params_shape[local]:
+Theorem materialize_internal_params_shape:
   !captured cenv.
     shape_step T compiler_label
       (\st. cenv_shape_ok st cenv /\
@@ -2235,7 +2234,7 @@ Resume materialize_internal_params_shape[store_rule]:
      qpat_x_assum `plain_operand st h2` mp_tac >> simp[plain_operand_def]) >>
   first_x_assum drule_all >> simp[]
 QED
-Finalise materialize_internal_params_shape
+Finalise materialize_internal_params_shape[local]
 
 Theorem compile_alloc_buffer_shape_triv[local]:
   !size. shape_step T compiler_label (\st. T)
@@ -2277,8 +2276,8 @@ Proof
   simp[shape_step_def] >> metis_tac[]
 QED
 
-(* Bounded opcode checks shared by the straight-line lock stages. *)
-val intfn_lock_simps =
+(* Side conditions of the single emissions in internal-function code. *)
+val intfn_emit_simps =
   [shape_stable_def, label_or_plain_def, plain_operand_def,
    stackPlanTypesTheory.is_label_operand_def, lowered_inst_ok_def,
    mk_inst_def, raw_opcode_ok_def, inst_shape_ok_def, jump_labels_ok_def,
@@ -2327,12 +2326,12 @@ Proof
   gen_tac >> BETA_TAC >> Cases_on `ret_type` >> simp[]
   >- (mp_tac (Q.SPECL [`compiler_label`, `\st. T`, `[]`, `pc`]
         shape_step_emit_inst_ret) >>
-      Cases_on `pc` >> simp intfn_lock_simps >>
+      Cases_on `pc` >> simp intfn_emit_simps >>
       rewrite_tac[shape_step_def, retpc_operand_def] >>
       simp[] >> metis_tac[]) >>
   mp_tac (Q.SPECL [`T`, `compiler_label`, `\st. T`, `INVALID`, `[]`, `[]`]
     shape_step_emit_inst) >>
-  simp intfn_lock_simps >> rewrite_tac[shape_step_def] >> metis_tac[]
+  simp intfn_emit_simps >> rewrite_tac[shape_step_def] >> metis_tac[]
 QED
 
 Theorem internal_body_finish_shape[local]:
@@ -2379,7 +2378,7 @@ Proof
   simp[FUN_EQ_THM, comp_bind_def, comp_return_def]
 QED
 
-Theorem internal_alloc_body_suffix_shape[local]:
+Theorem internal_alloc_body_suffix_shape:
   !cenv cenv2 pc ret_type is_ctor imm_len is_nr nkey use_trans is_view ss.
     IS_SOME cenv2.ce_return_pc /\
     ~supported_stmts_expr_exists expr_shape_root ss ==>
@@ -2453,7 +2452,7 @@ Resume internal_alloc_body_suffix_shape[prefix]:
           mp_tac (Q.SPECL [`T`, `compiler_label`, `\st. T`, `MLOAD`,
             `[Lit (n2w (if imm_len > 32 then imm_len - 32 else 0))]`]
             shape_step_emit_op) >>
-          simp intfn_lock_simps >> rewrite_tac[shape_step_def] >> metis_tac[]) >>
+          simp intfn_emit_simps >> rewrite_tac[shape_step_def] >> metis_tac[]) >>
       irule shape_step_return >> simp[]) >>
   gen_tac >> BETA_TAC >> irule shape_step_ignore_bind >>
   qexists_tac `\u st. T` >> conj_tac
@@ -2462,7 +2461,7 @@ Resume internal_alloc_body_suffix_shape[prefix]:
   >- (irule compile_nonreentrant_lock_shape) >>
   irule shape_step_return >> simp[]
 QED
-Finalise internal_alloc_body_suffix_shape
+Finalise internal_alloc_body_suffix_shape[local]
 
 (* The PARAM/RETPC_PARAM prologue, then the body via compile_stmt_shape with
    ce_return_pc = SOME (PtrVar return_pc 0), so internal = T. *)
@@ -2487,7 +2486,7 @@ Proof
       qexists_tac `\op st. plain_operand st op` >> conj_tac
       >- (gen_tac >> BETA_TAC >> irule shape_step_return >> simp[]) >>
       mp_tac (Q.SPECL [`T`, `compiler_label`, `\st. T`, `PARAM`, `[Lit 0w]`]
-        shape_step_emit_op) >> simp intfn_lock_simps) >>
+        shape_step_emit_op) >> simp intfn_emit_simps) >>
   qx_gen_tac `rb` >> BETA_TAC >>
   irule shape_step_bind >> qexists_tac
     `\r st. (case rb of NONE => T | SOME op => plain_operand st op) /\
