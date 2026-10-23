@@ -13,6 +13,7 @@ Ancestors
   vyperRuntimeAccounts vyperCallFrame
   vyperTypeExtCallCore[ignore_grammar] vyperTypeCallOutcome[ignore_grammar]
   vyperEncodeDecode vyperArith vyperTypeSystem vyperTypeInvariants vyperTypeValues
+  vyperTypeArgFits
   vyperTypeEnv vyperTypeEnvExtension vyperTypeEnvPreservation vyperTypeScopePop
   vyperTypeABI vyperTypeBindArguments vyperTypeExprResult
   vyperTypeBuiltins vyperTypeExprSoundness vyperTypeAssignSoundness
@@ -1495,6 +1496,30 @@ Proof
   fs[listTheory.LENGTH_MAP] >> metis_tac[]
 QED
 
+(* The positional arguments may be narrower than the declared types; their
+   values then also have the declared types. *)
+Theorem ext_call_operands_fit_typed:
+  exprs_runtime_typed env es vs /\
+  MAP expr_type es =
+    BaseT AddressT :: call_types ++ MAP (ext_call_kw_type ret_type) opts /\
+  arg_types_fit call_types arg_types /\
+  EVERY (well_formed_type env.type_defs) arg_types ==>
+  ?target_v rest target_addr arg_tvs kw_tvs.
+    vs = target_v :: rest /\ dest_AddressV target_v = SOME target_addr /\
+    LENGTH rest = LENGTH arg_types + LENGTH opts /\
+    LIST_REL (\ty tv. evaluate_type env.type_defs ty = SOME tv) arg_types arg_tvs /\
+    values_have_types arg_tvs (TAKE (LENGTH arg_types) rest) /\
+    LIST_REL (\ty tv. evaluate_type env.type_defs ty = SOME tv)
+      (MAP (ext_call_kw_type ret_type) opts) kw_tvs /\
+    LIST_REL value_has_type kw_tvs (DROP (LENGTH arg_types) rest)
+Proof
+  strip_tac >> drule_all ext_call_operands_typed >> strip_tac >>
+  imp_res_tac arg_types_fit_LENGTH >>
+  drule well_formed_types_evaluate >> strip_tac >>
+  gvs[] >> qexists_tac `tvs` >> simp[] >>
+  metis_tac[arg_type_fits_value_has_type]
+QED
+
 (* A keyword argument has the type its kind gives it. *)
 Theorem ext_call_kwarg_typed:
   !opts kvs kw_tvs k v.
@@ -1560,7 +1585,9 @@ Theorem eval_ext_call_result_sound:
   runtime_consistent env cx st /\
   exprs_runtime_typed env es vs /\
   MAP expr_type es =
-    BaseT AddressT :: arg_types ++ MAP (ext_call_kw_type ret_type) opts /\
+    BaseT AddressT :: call_types ++ MAP (ext_call_kw_type ret_type) opts /\
+  arg_types_fit call_types arg_types /\
+  EVERY (well_formed_type env.type_defs) arg_types /\
   ext_call_opts_ok static opts /\
   evaluate_type env.type_defs ret_type = SOME ret_tv /\
   eval_ext_call cx static skip_check (func_name,arg_types,ret_type) opts vs st =
@@ -1574,7 +1601,7 @@ Theorem eval_ext_call_result_sound:
   | INR _ => T
 Proof
   strip_tac >>
-  drule_all ext_call_operands_typed >> strip_tac >> gvs[] >>
+  drule_all ext_call_operands_fit_typed >> strip_tac >> gvs[] >>
   `get_tenv cx = env.type_defs` by metis_tac[runtime_consistent_get_tenv] >>
   drule_all build_ext_calldata_typed >>
   disch_then (qspec_then `func_name` strip_assume_tac) >>
