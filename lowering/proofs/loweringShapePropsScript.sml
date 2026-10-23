@@ -3174,6 +3174,88 @@ QED
 
 Finalise compile_dynarray_to_storage_shape
 
+Theorem compile_assign_value_shape[local]:
+  !internal cenv dst dst_loc src prim src_loc dst_ty src_ty da_info mem_size.
+    dst_loc <> LocCode ==>
+    shape_step internal compiler_label
+      (\st. plain_operand st dst /\ plain_operand st src)
+      (compile_assign_value cenv dst dst_loc src prim src_loc dst_ty src_ty da_info mem_size)
+      (\u st. T)
+Proof
+  rpt strip_tac >> Cases_on `dst_loc` >> gvs[] >> simp[Once compile_assign_value_def]
+  >- suspend "memory"
+  >- suspend "storage"
+  >- suspend "transient"
+  >> (stmt_sequence `\u st. plain_operand st dst /\ plain_operand st src`
+        (ho_match_mp_tac stmt_shape_emit_inst >>
+         simp[shape_stable_conj, stmt_shape_stable_plain] >> stmt_shape_emit_simp) >>
+      irule shape_step_return >> simp[])
+QED
+
+Resume compile_assign_value_shape[memory]:
+  IF_CASES_TAC >- stmt_plain_void_drop >>
+  IF_CASES_TAC
+  >- (simp[stmt_return_bind] >>
+      stmt_bind `\buf st. plain_operand st buf.buf_operand /\
+        (plain_operand st dst /\ plain_operand st src)` `buf`
+        (ho_match_mp_tac stmt_shape_frame >> qexists_tac `\st. T` >>
+         simp[shape_stable_conj, stmt_shape_stable_plain, compile_alloc_buffer_shape]) >>
+      stmt_sequence `\u st. T /\
+        (plain_operand st buf.buf_operand /\ plain_operand st dst)`
+        (ho_match_mp_tac stmt_shape_frame >>
+         qexists_tac `\st. plain_operand st buf.buf_operand /\ plain_operand st src` >>
+         simp[shape_stable_conj, stmt_shape_stable_plain, compile_copy_memory_shape]) >>
+      irule shape_step_conseq >>
+      qexistsl_tac [`compiler_label`,
+        `\st. plain_operand st dst /\ plain_operand st buf.buf_operand`, `\u st. T`] >>
+      simp[compile_store_memory_shape]) >>
+  irule shape_step_conseq >>
+  qexistsl_tac [`compiler_label`, `\st. plain_operand st dst /\ plain_operand st src`,
+               `\u st. T`] >> simp[compile_store_memory_shape]
+QED
+
+val stmt_assign_storage =
+  stmt_bind `\value_op st. plain_operand st value_op /\ plain_operand st dst` `value_op`
+    (IF_CASES_TAC
+     >- (stmt_bind `\buf st. plain_operand st buf.buf_operand /\
+            (plain_operand st dst /\ plain_operand st src)` `buf`
+           (ho_match_mp_tac stmt_shape_frame >> qexists_tac `\st. T` >>
+            simp[shape_stable_conj, stmt_shape_stable_plain, compile_alloc_buffer_shape]) >>
+         stmt_sequence `\u st. T /\
+            (plain_operand st buf.buf_operand /\ plain_operand st dst)`
+           (ho_match_mp_tac stmt_shape_frame >>
+            qexists_tac `\st. plain_operand st buf.buf_operand /\ plain_operand st src` >>
+            simp[shape_stable_conj, stmt_shape_stable_plain, cj 1 compile_typed_copy_shape]) >>
+         irule shape_step_return >> simp[]) >>
+     irule shape_step_return >> simp[]) >>
+  IF_CASES_TAC >- stmt_plain_void_drop >>
+  Cases_on `da_info`
+  >- (simp[] >> IF_CASES_TAC
+      >- (stmt_bind `\loaded st. plain_operand st loaded /\ plain_operand st dst` `loaded`
+            (stmt_frame_emit `\st. plain_operand st value_op`) >>
+          stmt_plain_void_drop) >>
+      stmt_sequence `\u st. T`
+        (irule shape_step_conseq >>
+         qexistsl_tac [`compiler_label`,
+           `\st. plain_operand st value_op /\ plain_operand st dst`, `\u st. T`] >>
+         simp[compile_memory_to_storage_shape, compile_memory_to_transient_shape]) >>
+      irule shape_step_return >> simp[]) >>
+  rename1 `SOME pair_info` >> PairCases_on `pair_info` >> simp[] >>
+  irule shape_step_conseq >>
+  qexistsl_tac [`compiler_label`,
+    `\st. plain_operand st value_op /\ plain_operand st dst`, `\u st. T`] >>
+  simp[compile_dynarray_to_storage_shape];
+
+Resume compile_assign_value_shape[storage]:
+  stmt_assign_storage
+QED
+
+Resume compile_assign_value_shape[transient]:
+  stmt_assign_storage
+QED
+
+Finalise compile_assign_value_shape
+
 Theorem compile_stmt_shape:
   (!cenv lctx ty s.
      ~supported_stmt_expr_exists expr_shape_root s ==>
