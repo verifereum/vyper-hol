@@ -1236,45 +1236,24 @@ Theorem ci_mono_compile_subscript_cfn[local]:
 Proof
   rpt gen_tac >> strip_tac >>
   rewrite_tac[compile_subscript_def] >> BETA_TAC >>
-  PURE_REWRITE_TAC[LET_THM] >> BETA_TAC >>
-  IF_CASES_TAC >-
-  (* hashmap case *)
-  (irule ci_mono_bind >> conj_tac >-
-   (rpt strip_tac >> BETA_TAC >>
-    irule ci_mono_bind >> conj_tac >-
-    (rpt strip_tac >> BETA_TAC >>
-     irule ci_mono_bind >> conj_tac >-
-     (rpt strip_tac >> simp[ci_mono_comp_return]) >>
-     simp[ci_mono_compile_mapping_subscript]) >>
-    IF_CASES_TAC >>
-    simp[ci_mono_compile_keccak256_key, ci_mono_comp_return]) >>
-   irule ci_mono_lower_value_cfn >> metis_tac[]) >>
-  (* non-hashmap: case on ce_var_type *)
-  qmatch_asmsub_abbrev_tac`¬_(cbe)` >>
-  BasicProvers.TOP_CASE_TAC >> gvs[] >- (
-    irule ci_mono_bind >> gvs[] >> rpt strip_tac >>
-    irule ci_mono_bind >> gvs[ci_mono_comp_return] >> rpt strip_tac >>
-    irule ci_mono_bind >> gvs[] >> rpt gen_tac >>
-    reverse conj_tac >- (
-      rpt gen_tac >>
-      irule ci_mono_lower_value_cfn >>
-      rpt strip_tac >> first_x_assum irule) >>
-    rpt gen_tac >>
-    irule ci_mono_bind >> gvs[ci_mono_compile_array_subscript] >> rpt gen_tac >>
-    simp[ci_mono_comp_return] ) >>
-  BasicProvers.CASE_TAC >> gvs[] >>
-  irule ci_mono_bind >> gvs[] >> rpt strip_tac >>
-  irule ci_mono_bind >> gvs[ci_mono_comp_return] >> rpt strip_tac >>
-  irule ci_mono_bind >> gvs[] >> rpt strip_tac >>
-  TRY (
-    rpt gen_tac >>
-    irule ci_mono_lower_value_cfn >>
-    rpt strip_tac >> first_x_assum irule) >>
-  TRY (
-    irule ci_mono_bind >>
-    gvs[ci_mono_compile_array_subscript] >>
-    rpt gen_tac ) >>
-  simp[ci_mono_comp_return, ci_mono_compile_tuple_subscript]
+  irule ci_mono_bind >> conj_tac
+  >- (rpt gen_tac >> simp[LET_THM] >>
+      Cases_on `place_type cenv base_e` >> simp[]
+      >- (irule ci_mono_bind >> conj_tac
+          >- (rpt gen_tac >> BETA_TAC >> irule ci_mono_bind >> conj_tac
+              >- (rpt gen_tac >> BETA_TAC >> irule ci_mono_bind >>
+                  simp[ci_mono_comp_return, ci_mono_compile_mapping_subscript]) >>
+              IF_CASES_TAC >>
+              simp[ci_mono_compile_keccak256_key, ci_mono_comp_return]) >>
+          irule ci_mono_lower_value_cfn >> metis_tac[]) >>
+      Cases_on `t` >> simp[LET_THM] >>
+      rpt (CHANGED_TAC (
+        rpt gen_tac >>
+        (irule ci_mono_bind >> conj_tac) >>
+        simp[ci_mono_comp_return, ci_mono_compile_tuple_subscript,
+             ci_mono_compile_array_subscript] >>
+        TRY (irule ci_mono_lower_value_cfn >> metis_tac[])))) >>
+  metis_tac[]
 QED
 
 Theorem ci_mono_compile_acc_cfn[local]:
@@ -2130,24 +2109,38 @@ Theorem ci_mono_compile_store_memory_typed[local]:
                dst_off src_off sa)))
 Proof
   ho_match_mp_tac contextTheory.compile_store_memory_typed_ind >>
-  rpt conj_tac >> rpt strip_tac >>
+  rpt conj_tac >> rpt strip_tac
+  >~ [`compile_store_memory_typed cenv dst dst_ty src src_ty sa`]
+  >- (once_rewrite_tac[contextTheory.compile_store_memory_typed_def] >>
+      simp_tac pure_ss [LET_THM] >> BETA_TAC >>
+      rpt IF_CASES_TAC >> gvs[] >>
+      TRY (rpt (irule ci_mono_bind ORELSE irule ci_mono_ignore_bind ORELSE
+                (conj_tac >- simp[ci_mono_emit_op, ci_mono_emit_void]) ORELSE gen_tac) >>
+           simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_compile_store_bytestring] >> NO_TAC) >>
+      Cases_on `dst_ty` >> Cases_on `src_ty` >> gvs[ci_mono_compile_copy_memory] >>
+      TRY (first_assum (fn th => irule th >> simp[] >> NO_TAC)) >>
+      Cases_on `b` >> Cases_on `b'` >> gvs[ci_mono_compile_copy_memory]) >>
   once_rewrite_tac[contextTheory.compile_store_memory_typed_def] >>
   simp_tac pure_ss [LET_THM] >> BETA_TAC >>
+  simp[ci_mono_comp_return]
+  >~ [`ALOOKUP src_fields name`]
+  >- (Cases_on `ALOOKUP src_fields name` >> gvs[] >>
+      TRY (PairCases_on `x` >> gvs[]) >>
+      rpt (FIRST [
+        (first_assum (fn th => irule th >> simp[] >> NO_TAC)),
+        CHANGED_TAC (simp[ci_mono_compile_with_byte_offset, ci_mono_comp_return]),
+        (irule ci_mono_bind >> conj_tac),
+        (irule ci_mono_ignore_bind >> conj_tac), gen_tac, CHANGED_TAC BETA_TAC])) >>
+  rpt (IF_CASES_TAC >> gvs[ci_mono_compile_copy_memory]) >>
+  gvs[] >>
   rpt (FIRST [
+    (first_assum (fn th => irule th >> simp[] >> NO_TAC)),
     CHANGED_TAC (simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_emit_inst,
-      ci_mono_fresh_label, ci_mono_fresh_var, ci_mono_new_block,
-      ci_mono_comp_return, ci_mono_compile_copy_memory,
-      ci_mono_compile_copy_memory_dynamic, ci_mono_compile_store_bytestring,
-      ci_mono_compile_with_byte_offset]),
-    gen_tac,
-    ho_match_mp_tac ci_mono_bind >> conj_tac,
-    ho_match_mp_tac ci_mono_ignore_bind >> conj_tac,
-    IF_CASES_TAC,
-    TOP_CASE_TAC,
-    first_assum (fn ih =>
-      (irule (SRULE [] ih) >> fs[] >> NO_TAC) ORELSE
-      (* the struct IH may differ from the goal by commuted offsets *)
-      metis_tac[SRULE [] ih, arithmeticTheory.ADD_COMM])])
+      ci_mono_fresh_label, ci_mono_fresh_var, ci_mono_new_block, ci_mono_comp_return,
+      ci_mono_compile_with_byte_offset, ci_mono_compile_copy_memory_dynamic]),
+    (IF_CASES_TAC >> gvs[]),
+    (irule ci_mono_bind >> conj_tac),
+    (irule ci_mono_ignore_bind >> conj_tac), gen_tac, CHANGED_TAC BETA_TAC])
 QED
 
 Theorem ci_mono_compile_store_memory[local]:

@@ -2146,74 +2146,56 @@ QED
    Mirrors Python: expr.py _lower_subscript *)
 Definition compile_subscript_def:
   compile_subscript cfn cenv ret_ty ty base_e idx_e =
-    let var_name = (case base_e of
-                      Name _ id => id
-                    | TopLevelName _ nsid => module_var_key nsid
-                    | _ => "") in
-    if IS_SOME (cenv.ce_hashmap_info var_name) then
-      let base_slot = (case FLOOKUP cenv.ce_vars var_name of
-                         SOME (StorageLoc slot) => Lit slot
-                       | _ => Lit 0w) in
-      let idx_ty = expr_type idx_e in
-      do key_op <- lower_value cfn cenv idx_ty idx_e;
-         hashed_key <- (if is_bytestring_type idx_ty
-                        then compile_keccak256_key key_op F
-                        else return key_op);
-         slot <- compile_mapping_subscript base_slot hashed_key;
-         return (LocatedValue ret_ty (mk_ptr slot LocStorage))
-      od
-    else
-    let base_type = cenv.ce_var_type var_name in
-    case base_type of
-      SOME (TupleT tys) =>
-        let idx = literal_int_index idx_e in
-        do base_vv <- cfn cenv ty base_e;
-           base_op <- return (vv_operand base_vv);
-           base_loc <- return (case vv_location base_vv of
-                                 SOME l => l | NONE => LocMemory);
-           p <- compile_tuple_subscript base_op
-                  (SUM (TAKE idx (MAP (elem_size_in_location cenv base_loc) tys)));
-           return (LocatedValue ret_ty (mk_ptr p base_loc))
-        od
-    | SOME (StructT nsid) =>
-        let idx = literal_int_index idx_e in
-        let fld_info = get_struct_fields cenv.ce_struct_fields (nsid_to_string nsid) in
-        do base_vv <- cfn cenv ty base_e;
-           base_op <- return (vv_operand base_vv);
-           base_loc <- return (case vv_location base_vv of
-                                 SOME l => l | NONE => LocMemory);
-           p <- compile_tuple_subscript base_op
-                  (SUM (TAKE idx
-                    (MAP (λ(name, fty, sz). if is_slot_addressed base_loc
-                                           then (sz + 31) DIV 32 else sz)
-                         fld_info)));
-           return (LocatedValue ret_ty (mk_ptr p base_loc))
-        od
-    | _ =>
-      let loc = infer_array_location cenv base_e in
-      let is_dynamic = infer_array_is_dynamic cenv base_e in
-      let elem_ty = (case base_type of
-                       SOME (ArrayT t _) => t
-                     | _ => BaseT (UintT 256)) in
-      let static_count = (case base_type of
-                            SOME (ArrayT _ (Fixed n)) => n
-                          | _ => 0) in
-      let ws = word_scale loc in
-      let elem_size = elem_size_in_location cenv loc elem_ty in
-      let load_opc = (case loc of
-                        LocStorage => SLOAD
-                      | LocTransient => TLOAD
-                      | LocCalldata => CALLDATALOAD
-                      | _ => MLOAD) in
-      let is_signed_idx = is_signed_type (expr_type idx_e) in
-      do base_vv <- cfn cenv ty base_e;
-         base_op <- return (vv_operand base_vv);
-         idx_op <- lower_value cfn cenv ty idx_e;
-         elem_ptr <-
-           compile_array_subscript base_op idx_op is_dynamic static_count
-                                        ws elem_size is_signed_idx load_opc;
-         return (LocatedValue ret_ty (mk_ptr elem_ptr loc))
-      od
+    do base_vv <- cfn cenv ty base_e;
+       let base_op = vv_operand base_vv in
+       let loc = (case vv_location base_vv of
+                     SOME l => l | NONE => LocMemory) in
+       case place_type cenv base_e of
+         MapPT kt vt =>
+           do key_op <- lower_value cfn cenv (expr_type idx_e) idx_e;
+              hashed_key <- (if is_bytestring_type kt
+                             then compile_keccak256_key key_op F
+                             else return key_op);
+              slot <- compile_mapping_subscript base_op hashed_key;
+              return (LocatedValue ret_ty (mk_ptr slot loc))
+           od
+       | ValPT (TupleT tys) =>
+           let idx = literal_int_index idx_e in
+           do p <- compile_tuple_subscript base_op
+                     (SUM (TAKE idx (MAP (elem_size_in_location cenv loc) tys)));
+              return (LocatedValue ret_ty (mk_ptr p loc))
+           od
+       | ValPT (StructT nsid) =>
+           let idx = literal_int_index idx_e in
+           let fld_info = get_struct_fields cenv.ce_struct_fields (nsid_to_string nsid) in
+           do p <- compile_tuple_subscript base_op
+                     (SUM (TAKE idx
+                       (MAP (λ(name, fty, sz). if is_slot_addressed loc
+                                              then (sz + 31) DIV 32 else sz)
+                            fld_info)));
+              return (LocatedValue ret_ty (mk_ptr p loc))
+           od
+       | ValPT base_type =>
+           let is_dynamic = (case base_type of ArrayT _ (Fixed _) => F | _ => T) in
+           let elem_ty = (case base_type of
+                            ArrayT t _ => t | _ => BaseT (UintT 256)) in
+           let static_count = (case base_type of
+                                 ArrayT _ (Fixed n) => n | _ => 0) in
+           let ws = word_scale loc in
+           let elem_size = elem_size_in_location cenv loc elem_ty in
+           let load_opc = (case loc of
+                             LocStorage => SLOAD
+                           | LocTransient => TLOAD
+                           | LocCalldata => CALLDATALOAD
+                           | _ => MLOAD) in
+           let is_signed_idx = is_signed_type (expr_type idx_e) in
+           do idx_op <- lower_value cfn cenv ty idx_e;
+              elem_ptr <-
+                compile_array_subscript base_op idx_op is_dynamic static_count
+                                         ws elem_size is_signed_idx load_opc;
+              return (LocatedValue ret_ty (mk_ptr elem_ptr loc))
+           od
+    od
 End
 
 (* Compile attribute access. Returns VyperValue with correct location.
