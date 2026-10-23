@@ -604,7 +604,7 @@ End
    Mirrors Python: expr.py _lower_array_membership *)
 Definition compile_array_membership_loop_def:
   compile_array_membership_loop needle arr_op len_op
-      elem_size offset_base load_opc is_in =
+      elem_size offset_base load_opc bound_opt is_in =
     do (* Pre-allocate result variable *)
        result_var <- fresh_var;
        (* Create blocks *)
@@ -621,6 +621,14 @@ Definition compile_array_membership_loop_def:
        idx_var <- fresh_var;
        emit_inst ASSIGN [Lit 0w] [idx_var];
        emit_inst ASSIGN [Lit 0w] [result_var];
+       (* DynArray bounds check belongs in the initialized entry block. *)
+       (case bound_opt of
+          SOME cap =>
+            do inv <- emit_op GT [len_op; Lit (n2w cap)];
+               valid <- emit_op ISZERO [inv];
+               emit_inst ASSERT [valid] []
+            od
+        | NONE => return ());
        emit_inst JMP [Label cond_lbl] [];
        (* Cond: check idx == length *)
        new_block cond_lbl;
@@ -678,18 +686,9 @@ Definition compile_var_array_membership_def:
                     (case rhs_ty of
                        ArrayT _ (Fixed n) => return (Lit (n2w n))
                      | _ => return (Lit 0w)));
-       (* DynArray bounds check: assert length <= capacity *)
-       (if is_dyn then
-          case rhs_ty of
-            ArrayT _ (Dynamic cap) =>
-              do inv <- emit_op GT [len_op; Lit (n2w cap)];
-                 valid <- emit_op ISZERO [inv];
-                 emit_inst ASSERT [valid] []
-              od
-          | _ => return ()
-        else return ());
        compile_array_membership_loop needle arr_op len_op
-         elem_sz offset_base load_opc is_in
+         elem_sz offset_base load_opc
+         (case rhs_ty of ArrayT _ (Dynamic cap) => SOME cap | _ => NONE) is_in
     od
 End
 

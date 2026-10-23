@@ -1702,16 +1702,35 @@ Proof
        fresh_id_def, fresh_var_def, emit_def, venomInstTheory.mk_inst_def]
 QED
 
-Theorem ci_mono_compile_array_membership_loop[local]:
-  ∀ needle arr_op len_op elem_size offset_base load_opc is_in sa.
-    ci_mono sa (SND (compile_array_membership_loop needle arr_op len_op elem_size offset_base load_opc is_in sa))
+(* Concrete structural regression probes, separate from bytecode parity. *)
+Theorem array_membership_entry_traces:
+  let st = <| cs_next_var := 0; cs_next_label := 0; cs_next_id := 0;
+              cs_current_bb := "start"; cs_current_insts := [];
+              cs_blocks := []; cs_data_sections := [] |> in
+  let run = \bound. SND (compile_array_membership_loop
+      (Lit 7w) (Lit 128w) (Lit 3w) 32 32 MLOAD bound T st) in
+    MAP (\i. i.inst_opcode) (EL 4 (run NONE).cs_blocks).bb_instructions =
+      [ASSIGN; ASSIGN; JMP] /\
+    MAP (\i. i.inst_opcode) (EL 4 (run (SOME 4)).cs_blocks).bb_instructions =
+      [ASSIGN; ASSIGN; GT; ISZERO; ASSERT; JMP] /\
+    MAP (\i. i.inst_opcode) (EL 5 (run (SOME 4)).cs_blocks).bb_instructions =
+      [JMP]
 Proof
-  rpt gen_tac >>
+  EVAL_TAC
+QED
+
+Theorem ci_mono_compile_array_membership_loop[local]:
+  ∀ needle arr_op len_op elem_size offset_base load_opc bound_opt is_in sa.
+    ci_mono sa (SND (compile_array_membership_loop needle arr_op len_op elem_size offset_base load_opc bound_opt is_in sa))
+Proof
+  rpt gen_tac >> Cases_on `bound_opt` >>
   rewrite_tac[exprLoweringTheory.compile_array_membership_loop_def, LET_THM] >> BETA_TAC >>
+  pure_rewrite_tac[optionTheory.option_case_def] >>
   rpt (ho_match_mp_tac ci_mono_bind ORELSE ho_match_mp_tac ci_mono_ignore_bind ORELSE
-       (conj_tac >- simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_emit_inst,
+       conj_tac ORELSE
+       (CHANGED_TAC (simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_emit_inst,
                           ci_mono_fresh_var, ci_mono_fresh_label, ci_mono_new_block,
-                          ci_mono_comp_return]) ORELSE
+                          ci_mono_comp_return])) ORELSE
        IF_CASES_TAC ORELSE gen_tac ORELSE strip_tac) >>
   simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_emit_inst,
        ci_mono_fresh_var, ci_mono_fresh_label, ci_mono_new_block,
@@ -1723,8 +1742,25 @@ Theorem ci_mono_compile_var_array_membership[local]:
 Proof
   rpt gen_tac >>
   simp[exprLoweringTheory.compile_var_array_membership_def, LET_THM] >>
-  ho_match_mp_tac ci_mono_bind >> conj_tac >- (rpt strip_tac >> IF_CASES_TAC >> simp[] >- simp[ci_mono_emit_op] >> Cases_on `rhs_ty` >> simp[ci_mono_comp_return] >> rename1 `ArrayT _ sz` >> Cases_on `sz` >> simp[ci_mono_comp_return]) >> rpt strip_tac >> ho_match_mp_tac ci_mono_ignore_bind >> conj_tac >- (rpt strip_tac >> IF_CASES_TAC >> simp[] >- (Cases_on `rhs_ty` >> simp[ci_mono_comp_return] >> rename1 `ArrayT _ sz` >> Cases_on `sz` >> simp[ci_mono_comp_return] >> ho_match_mp_tac ci_mono_bind >> conj_tac >- (rpt strip_tac >> simp[ci_mono_emit_op]) >> rpt strip_tac >> ho_match_mp_tac ci_mono_bind >> conj_tac >- (rpt strip_tac >> simp[ci_mono_emit_op]) >> rpt strip_tac >> simp[ci_mono_emit_inst]) >> simp[ci_mono_comp_return]) >> rpt strip_tac >> simp[ci_mono_compile_array_membership_loop]
+  ho_match_mp_tac ci_mono_bind >>
+  conj_tac >-
+    (rpt strip_tac >> IF_CASES_TAC >> simp[]
+     >- simp[ci_mono_emit_op] >>
+     Cases_on `rhs_ty` >> simp[ci_mono_comp_return] >>
+     rename1 `ArrayT _ sz` >> Cases_on `sz` >>
+     simp[ci_mono_comp_return]) >>
+  rpt strip_tac >> simp[ci_mono_compile_array_membership_loop]
 QED
+
+val _ = app (fn (name, th) =>
+  let val (oracles, _) = Tag.dest_tag (Thm.tag th)
+  in if List.all (fn s => s = "DISK_THM") oracles
+     then print ("Membership proof oracle check: " ^ name ^ " clean\n")
+     else raise Fail ("Membership proof has oracle: " ^ name)
+  end)
+  [("entry traces", array_membership_entry_traces),
+   ("loop monotonicity", ci_mono_compile_array_membership_loop),
+   ("caller monotonicity", ci_mono_compile_var_array_membership)];
 
 Theorem ci_mono_compile_keccak256_bytes[local]:
   ∀ ptr_op sa. ci_mono sa (SND (compile_keccak256_bytes ptr_op sa))
