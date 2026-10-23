@@ -3,9 +3,9 @@
  * end in a Halt whose return data and effects are the success case of
  * external_call_result_rel (stated with it, in vyperLoweringCorrect, as
  * external_return_word_result_rel, external_return_static_result_rel,
- * external_return_none_result_rel and external_fallthrough_result_rel).  The fragment lemmas are stated with
- * frag_exec (fragExec), like the statement lemmas of stmtLoweringProps and
- * loweringSlice.
+ * external_return_none_result_rel and external_fallthrough_result_rel).
+ * The fragment lemmas are stated with frag_exec (fragExec), like the
+ * statement lemmas of stmtLoweringProps and loweringSlice.
  *
  * Main lemmas:
  *   return_bytes_word_value — the canonical return bytes of a word value
@@ -387,8 +387,8 @@ Proof
     simp[Abbr `s2'`, Abbr `s1'`, mcopy_def, write_memory_with_expansion_def] >>
   `mem_bytes_at (w2n a) m s2'.vs_memory = mem_bytes_at (w2n p) m s.vs_memory`
     by simp[Abbr `s2'`, Abbr `s1'`, mem_bytes_at_def, mcopy_padded_read] >>
-  qabbrev_tac
-    `ss = halt_state (set_returndata (mem_bytes_at (w2n p) m s.vs_memory) s2')` >>
+  qabbrev_tac `ss = halt_state
+                     (set_returndata (mem_bytes_at (w2n p) m s.vs_memory) s2')` >>
   `step_inst_base (mk_inst (id + 2) RETURN [Var buf; Lit (n2w m)] []) s2' =
    Halt ss` by
     (qspecl_then [`Var buf`, `Lit (n2w m)`, `a`, `n2w m`, `id + 2`, `s2'`]
