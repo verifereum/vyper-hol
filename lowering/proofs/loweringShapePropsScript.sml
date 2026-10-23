@@ -400,6 +400,54 @@ Proof
   end
 QED
 
+Theorem compile_guarded_body_shape:
+  !cenv is_nr nkey use_trans is_view body ret_type.
+    cenv_static_ok cenv /\ cenv.ce_return_pc = NONE /\
+    ~supported_stmts_expr_exists expr_shape_root body ==>
+    shape_step F compiler_label (\st. T)
+      (compile_guarded_body cenv is_nr nkey use_trans is_view body ret_type)
+      (\x st. T)
+Proof
+  rpt strip_tac >> rename1 `~supported_stmts_expr_exists _ ss` >>
+  simp[compile_guarded_body_def] >>
+  irule shape_step_ignore_bind >> qexists_tac `\x st. T` >>
+  reverse conj_tac
+  >- (Cases_on `is_nr` >>
+      simp[compile_nonreentrant_lock_shape, shape_step_return]) >>
+  gen_tac >> BETA_TAC >>
+  irule shape_step_ignore_bind >> qexists_tac `\x st. T` >>
+  reverse conj_tac
+  >- (qmatch_goalsub_abbrev_tac `compile_stmts cenv NoLoop ty ss` >>
+      irule shape_step_conseq >>
+      qexistsl_tac [`compiler_label`,
+        `\st. cenv_shape_ok st cenv /\ loop_ctx_shape_ok NoLoop`,
+        `\x st. T`] >>
+      conj_tac >- simp[] >>
+      conj_tac >- simp[loop_ctx_shape_ok_def, cenv_static_ok_shape_ok] >>
+      conj_tac >- simp[] >>
+      mp_tac (Q.SPECL [`cenv`, `NoLoop`, `ty`, `ss`]
+        (cj 2 compile_stmt_shape)) >> simp[]) >>
+  gen_tac >> BETA_TAC >> irule shape_step_bind >>
+  qexists_tac `\x st. x = st /\ T` >> reverse conj_tac
+  >- (irule (BETA_RULE (Q.SPECL [`F`, `compiler_label`, `\st. T`]
+        shape_step_comp_get))) >>
+  gen_tac >> BETA_TAC >> IF_CASES_TAC
+  >- (irule shape_step_return >> simp[]) >>
+  irule shape_step_ignore_bind >> qexists_tac `\x st. T` >>
+  reverse conj_tac
+  >- (irule shape_step_conseq >>
+      qexistsl_tac [`compiler_label`, `\st. T`, `\x st. T`] >>
+      simp[] >> Cases_on `is_nr` >>
+      simp[compile_nonreentrant_unlock_shape, shape_step_return]) >>
+  gen_tac >> BETA_TAC >> Cases_on `ret_type` >> simp[] >>
+  (pure_rewrite_tac[emit_inst_def, GSYM emit_void_def] >>
+   irule shape_step_emit_void_pre >>
+   simp[lowered_inst_ok_def, raw_opcode_ok_def,
+        inst_shape_ok_def, label_positions_ok_def, is_read0_opcode_def,
+        jump_labels_ok_def, is_terminator_def, is_param_opcode_def,
+        mk_inst_def])
+QED
+
 Theorem compile_fallback_body_shape:
   !cenv is_payable is_nr nkey use_trans is_view body ret_type.
     fallback_shape_ok
