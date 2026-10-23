@@ -1140,14 +1140,69 @@ Resume compile_guarded_body_shape[epilogue]:
 QED
 Finalise compile_guarded_body_shape
 
+Theorem compile_external_function_body_shape:
+  !cenv args nr nkey transient view body ret_type.
+    cenv_static_ok cenv /\ cenv.ce_return_pc = NONE /\
+    ~supported_stmts_expr_exists expr_shape_root body ==>
+    shape_step F compiler_label (\st. T)
+      (compile_external_function_body cenv args nr nkey transient view body ret_type)
+      (\x st. T)
+Proof
+  rpt strip_tac >> pure_rewrite_tac[compile_external_function_body_def] >>
+  irule shape_step_bind >>
+  qexists_tac `\ce st. cenv_shape_ok st ce /\ ce.ce_return_pc = cenv.ce_return_pc` >>
+  conj_tac
+  >- (qx_gen_tac `ce` >> BETA_TAC >>
+      irule shape_step_conseq >>
+      qexistsl_tac [`compiler_label`,
+        `\st. cenv_shape_ok st ce /\ ce.ce_return_pc = NONE`, `\u st. T`] >>
+      conj_tac >- simp[] >> conj_tac >- simp[] >> conj_tac >- simp[] >>
+      ho_match_mp_tac extbodies_assume >> strip_tac >>
+      irule compile_guarded_body_shape >> simp[]) >>
+  irule shape_step_conseq >>
+  qexistsl_tac [`compiler_label`, `\st. cenv_shape_ok st cenv`,
+    `\ce st. cenv_shape_ok st ce /\ ce.ce_return_pc = cenv.ce_return_pc`] >>
+  conj_tac >- simp[] >> conj_tac
+  >- (BETA_TAC >> rpt strip_tac >> irule cenv_static_ok_shape_ok >> simp[]) >>
+  conj_tac >- simp[] >> irule compile_register_positional_args_shape
+QED
+
 Theorem compile_external_fn_bodies_shape:
   !fns.
     EVERY external_fn_shape_ok fns ==>
     shape_step F jump_label_ok (\st. T) (compile_external_fn_bodies fns)
       (\x st. T)
 Proof
-  cheat
+  Induct >> simp_tac std_ss [listTheory.EVERY_DEF]
+  >- (pure_rewrite_tac[compile_external_fn_bodies_def] >>
+      irule shape_step_return >> simp[]) >>
+  qx_gen_tac `h` >> PairCases_on `h` >>
+  pure_rewrite_tac[external_fn_shape_ok_def] >> strip_tac >>
+  pure_rewrite_tac[compile_external_fn_bodies_def] >>
+  irule shape_step_ignore_bind >> qexists_tac `\u st. T` >> conj_tac
+  >- (gen_tac >> BETA_TAC >>
+      irule shape_step_ignore_bind >> qexists_tac `\u st. T` >> conj_tac
+      >- (gen_tac >> BETA_TAC >>
+          irule shape_step_ignore_bind >> qexists_tac `\u st. T` >> conj_tac
+          >- (gen_tac >> BETA_TAC >> first_x_assum irule >> simp[]) >>
+          suspend "body") >>
+      suspend "checks") >>
+  ho_match_mp_tac shape_step_new_block >>
+  simp[shape_stable_def, jump_label_ok_def]
 QED
+Resume compile_external_fn_bodies_shape[body]:
+  irule shape_step_conseq >>
+  qexistsl_tac [`compiler_label`, `\st. T`, `\u st. T`] >>
+  conj_tac >- simp[] >> conj_tac >- simp[] >> conj_tac >- simp[jump_label_ok_def] >>
+  irule compile_external_function_body_shape >> simp[]
+QED
+Resume compile_external_fn_bodies_shape[checks]:
+  irule shape_step_conseq >>
+  qexistsl_tac [`compiler_label`, `\st. T`, `\u st. T`] >>
+  conj_tac >- simp[] >> conj_tac >- simp[] >> conj_tac >- simp[jump_label_ok_def] >>
+  irule compile_entry_checks_shape
+QED
+Finalise compile_external_fn_bodies_shape
 
 Theorem compile_fallback_body_shape:
   !cenv is_payable is_nr nkey use_trans is_view body ret_type.
