@@ -70,17 +70,18 @@ Proof
   CONV_TAC cv_eval
 QED
 
-(* Temporary preparation: retain the previous proof while the bounded
-   CPS/CV proof is developed under the default tactic limit.
+Theorem nested_pop_hashmap_slot_exists[local,cv_pre]:
+  compute_hashmap_slot 0w [BaseT (UintT 256)]
+    [ValueSubscript (IntV 7)] <> NONE
 Proof
   CONV_TAC cv_eval
 QED
-*)
+
 Theorem hashmap_pop_writes_remaining_array:
   FST (read_storage_slot nested_pop_context F
     (THE (compute_hashmap_slot 0w [BaseT (UintT 256)] [ValueSubscript (IntV 7)]))
     (ArrayTV (BaseTV (UintT 256)) (Dynamic 4)) (SND nested_pop_result)) =
   INL (ArrayV (DynArrayV [IntV 11]))
 Proof
-  cheat
+  CONV_TAC cv_eval
 QED
