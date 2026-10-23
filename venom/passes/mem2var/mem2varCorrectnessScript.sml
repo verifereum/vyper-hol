@@ -14,62 +14,6 @@ Libs
 
 val _ = augment_srw_ss [mem2varFrameLib.frame_ss];
 
-(* eval_phis/run_block ignore the entry state's vs_inst_idx: PHIs read operands
-   and run_block overwrites vs_inst_idx with phi_prefix_length before exec_block. *)
-Triviality eval_one_phi_inst_idx:
-  !inst s n.
-    eval_one_phi (s with vs_inst_idx := n) inst = eval_one_phi s inst
-Proof
-  simp[eval_one_phi_def, eval_op_inst_idx]
-QED
-
-Triviality eval_phis_inst_idx:
-  !insts s n.
-    eval_phis (s with vs_inst_idx := n) insts =
-    exec_result_map (\s'. s' with vs_inst_idx := n) (eval_phis s insts)
-Proof
-  Induct >> simp[eval_phis_def, exec_result_map_def, eval_one_phi_inst_idx] >>
-  rpt gen_tac >> Cases_on `h.inst_opcode = PHI` >> simp[] >>
-  Cases_on `eval_one_phi s h` >> gvs[eval_one_phi_inst_idx]
-  >- simp[exec_result_map_def] >>
-  Q.SPEC_THEN `x` STRIP_ASSUME_TAC pairTheory.pair_CASES >>
-  Cases_on `eval_phis s insts` >>
-  gvs[exec_result_map_def, update_var_def]
-QED
-
-Triviality run_block_inst_idx_irrel:
-  !fuel ctx bb s.
-    run_block fuel ctx bb s =
-    run_block fuel ctx bb (s with vs_inst_idx := 0)
-Proof
-  ONCE_REWRITE_TAC[run_block_def] >>
-  simp[eval_phis_inst_idx] >>
-  Cases_on `eval_phis s bb.bb_instructions` >>
-  simp[exec_result_map_def]
-QED
-
-(* run_blocks ignores vs_inst_idx: it resets before each block *)
-Theorem run_blocks_inst_idx_irrel[local]:
-  !fuel ctx fn s.
-    run_blocks fuel ctx fn s =
-    run_blocks fuel ctx fn (s with vs_inst_idx := 0)
-Proof
-  Induct_on `fuel` >> rpt gen_tac
-  >- (simp[run_blocks_def]) >>
-  CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV[run_blocks_unfold])) >>
-  CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV[run_blocks_unfold])) >>
-  Cases_on `lookup_block s.vs_current_bb fn.fn_blocks`
-  >- (simp_tac (srw_ss()) [] >>
-      qpat_x_assum `lookup_block s.vs_current_bb fn.fn_blocks = NONE`
-        (fn th => REWRITE_TAC [th]) >>
-      simp_tac std_ss []) >>
-  simp_tac (srw_ss()) [] >>
-  qpat_x_assum `lookup_block s.vs_current_bb fn.fn_blocks = SOME x`
-    (fn th => REWRITE_TAC [th]) >>
-  PURE_ONCE_REWRITE_TAC [GSYM run_block_inst_idx_irrel] >>
-  simp_tac (srw_ss()) []
-QED
-
 (* lift_result weakening: R1 ==> R2 everywhere *)
 Theorem lift_result_weaken[local]:
   !R1 R2 r1 r2.
