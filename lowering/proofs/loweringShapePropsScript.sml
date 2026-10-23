@@ -718,7 +718,21 @@ Theorem unwrap_value_shape:
       (\st. cenv_shape_ok st cenv /\ value_shape_ok st v)
       (unwrap_value cenv v) (\op st. plain_operand st op)
 Proof
-  cheat
+  rpt gen_tac >> Cases_on `v` >> simp[unwrap_value_def]
+  >- (irule shape_step_return >> simp[value_shape_ok_def]) >>
+  rename1 `LocatedValue ty p` >>
+  Cases_on `p.ptr_location = LocCode`
+  >- simp[shape_step_def, value_shape_ok_def] >>
+  irule shape_step_conseq >>
+  qexistsl [`compiler_label`, `\st. plain_operand st p.ptr_operand`,
+            `\op st. plain_operand st op`] >>
+  conj_tac >- simp[] >> conj_tac >- simp[value_shape_ok_def] >>
+  conj_tac >- simp[] >>
+  Cases_on `is_word_type ty` >> simp[]
+  >- (irule compile_ptr_load_shape >> simp[]) >>
+  Cases_on `p.ptr_location` >> simp[]
+  >- (irule shape_step_return >> simp[]) >>
+  irule compile_ensure_in_memory_shape >> simp[]
 QED
 
 (* The cenv a statement body runs under: one more plain PtrVar local. *)
