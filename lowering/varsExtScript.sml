@@ -44,7 +44,8 @@
  *                               fresh_vars_wrt lemmas state it
  *
  * Helpers: SUBMAP_FUPDATE_both, eval_operand_vars_ext,
- *   eval_operands_vars_ext, exec_pure1_vars_ext, exec_pure2_vars_ext,
+ *   eval_operands_vars_ext, vars_ext_with, update_var_vars_ext,
+ *   exec_pure1_vars_ext, exec_pure2_vars_ext,
  *   exec_pure3_vars_ext, exec_read0_vars_ext, exec_read1_vars_ext,
  *   exec_write2_vars_ext
  *)
@@ -109,9 +110,33 @@ val ext_simps =
    read_memory_def, halt_state_def, revert_state_def,
    set_returndata_def, LET_THM];
 
+(* Split on the result from the smaller state (the left one) only: casing
+   both sides multiplies the goals. *)
 val ext_tac =
-  asm_simp_tac (srw_ss()) ext_simps >>
-  rpt (CASE_TAC >> asm_simp_tac (srw_ss()) ext_simps);
+  qmatch_goalsub_abbrev_tac `vars_ext_result r _` >>
+  qpat_x_assum `Abbrev (r = _)`
+    (assume_tac o GSYM o REWRITE_RULE [markerTheory.Abbrev_def]) >>
+  Cases_on `r` >> gvs[vars_ext_result_def, AllCaseEqs()] >>
+  asm_simp_tac (srw_ss()) ext_simps;
+
+Theorem vars_ext_with:
+  !t V. t.vs_vars SUBMAP V ==> vars_ext t (t with vs_vars := V)
+Proof
+  rw[vars_ext_def]
+QED
+
+Theorem update_var_vars_ext:
+  !out w s V.
+    s.vs_vars SUBMAP V ==>
+    vars_ext (update_var out w s) (update_var out w (s with vs_vars := V))
+Proof
+  rw[vars_ext_def, update_var_def, SUBMAP_FUPDATE_both]
+QED
+
+(* The exec_* helpers: split on the result from the smaller state, read off
+   its operands, and rerun from the larger one.  Going through the two
+   lemmas above keeps simp off the venom_state record. *)
+val exec_simps = [eval_operand_vars_ext, update_var_vars_ext, vars_ext_with];
 
 Theorem exec_pure1_vars_ext:
   !f inst s V.
@@ -119,7 +144,9 @@ Theorem exec_pure1_vars_ext:
     vars_ext_result (exec_pure1 f inst s)
       (exec_pure1 f inst (s with vs_vars := V))
 Proof
-  rw[exec_pure1_def] >> ext_tac
+  rpt strip_tac >> Cases_on `exec_pure1 f inst s` >>
+  gvs[vars_ext_result_def, exec_pure1_def, AllCaseEqs()] >>
+  simp exec_simps
 QED
 
 Theorem exec_pure2_vars_ext:
@@ -128,7 +155,9 @@ Theorem exec_pure2_vars_ext:
     vars_ext_result (exec_pure2 f inst s)
       (exec_pure2 f inst (s with vs_vars := V))
 Proof
-  rw[exec_pure2_def] >> ext_tac
+  rpt strip_tac >> Cases_on `exec_pure2 f inst s` >>
+  gvs[vars_ext_result_def, exec_pure2_def, AllCaseEqs()] >>
+  simp exec_simps
 QED
 
 Theorem exec_pure3_vars_ext:
@@ -137,7 +166,9 @@ Theorem exec_pure3_vars_ext:
     vars_ext_result (exec_pure3 f inst s)
       (exec_pure3 f inst (s with vs_vars := V))
 Proof
-  rw[exec_pure3_def] >> ext_tac
+  rpt strip_tac >> Cases_on `exec_pure3 f inst s` >>
+  gvs[vars_ext_result_def, exec_pure3_def, AllCaseEqs()] >>
+  simp exec_simps
 QED
 
 Theorem exec_read0_vars_ext:
@@ -146,7 +177,9 @@ Theorem exec_read0_vars_ext:
     vars_ext_result (exec_read0 f inst s)
       (exec_read0 f inst (s with vs_vars := V))
 Proof
-  rw[exec_read0_def] >> ext_tac
+  rpt strip_tac >> Cases_on `exec_read0 f inst s` >>
+  gvs[vars_ext_result_def, exec_read0_def, AllCaseEqs()] >>
+  simp exec_simps
 QED
 
 Theorem exec_read1_vars_ext:
@@ -155,7 +188,9 @@ Theorem exec_read1_vars_ext:
     vars_ext_result (exec_read1 f inst s)
       (exec_read1 f inst (s with vs_vars := V))
 Proof
-  rw[exec_read1_def] >> ext_tac
+  rpt strip_tac >> Cases_on `exec_read1 f inst s` >>
+  gvs[vars_ext_result_def, exec_read1_def, AllCaseEqs()] >>
+  simp exec_simps
 QED
 
 Theorem exec_write2_vars_ext:
@@ -166,7 +201,9 @@ Theorem exec_write2_vars_ext:
     vars_ext_result (exec_write2 f inst s)
       (exec_write2 f inst (s with vs_vars := V))
 Proof
-  rw[exec_write2_def] >> ext_tac
+  rpt strip_tac >> Cases_on `exec_write2 f inst s` >>
+  gvs[vars_ext_result_def, exec_write2_def, AllCaseEqs()] >>
+  simp exec_simps
 QED
 
 Theorem step_inst_base_vars_ext:
@@ -192,7 +229,24 @@ Proof
         irule exec_read1_vars_ext >> asm_simp_tac (srw_ss()) ext_simps)
   >>~- ([`vars_ext_result (exec_write2 _ _ _) _`],
         irule exec_write2_vars_ext >> asm_simp_tac (srw_ss()) ext_simps) >>
-  simp[exec_alloca_def] >> ext_tac
+  simp[exec_alloca_def]
+  (* one step per opcode: together they run past the step limit *)
+  >>~- ([`inst.inst_opcode = MCOPY`], ext_tac)
+  >>~- ([`inst.inst_opcode = CALLDATACOPY`], ext_tac)
+  >>~- ([`inst.inst_opcode = RETURNDATACOPY`], ext_tac)
+  >>~- ([`inst.inst_opcode = CODECOPY`], ext_tac)
+  >>~- ([`inst.inst_opcode = EXTCODECOPY`], ext_tac)
+  >>~- ([`inst.inst_opcode = DLOADBYTES`], ext_tac)
+  >>~- ([`inst.inst_opcode = SHA3`], ext_tac)
+  >>~- ([`inst.inst_opcode = ISTORE`], ext_tac)
+  >>~- ([`inst.inst_opcode = LOG`], ext_tac)
+  >>~- ([`inst.inst_opcode = ALLOCA`], ext_tac)
+  >>~- ([`inst.inst_opcode = DALLOCA`], ext_tac)
+  >>~- ([`inst.inst_opcode = BUMP`], ext_tac)
+  >>~- ([`inst.inst_opcode = ASSERT`], ext_tac)
+  >>~- ([`inst.inst_opcode = PARAM`], ext_tac)
+  >>~- ([`inst.inst_opcode = FMP_PARAM`], ext_tac) >>
+  ext_tac
 QED
 
 Theorem step_inst_base_vars_ext_state:
