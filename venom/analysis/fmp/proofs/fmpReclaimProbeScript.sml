@@ -5,14 +5,13 @@
  *)
 Theory fmpReclaimProbe
 Ancestors
-  fmpReclaimDefs
+  fmpReclaimDefs rich_list
 
 Definition reclaim_probe_pop_def:
   reclaim_probe_pop eligible veto (stack:string list) =
     if veto then (NONE,stack) else
-    let popped = TAKEWHILE eligible stack in
-    (if popped = [] then NONE else SOME (LAST popped),
-     DROPWHILE eligible stack)
+    let (popped,retained) = SPLITP (\v. ~eligible v) stack in
+    (if popped = [] then NONE else SOME (LAST popped), retained)
 End
 
 Definition reclaim_probe_point_def:
@@ -122,3 +121,74 @@ Theorem reclaim_probe_join:
 Proof
   EVAL_TAC
 QED
+
+(* Checked evidence that the old capture/escape approximation is not the
+ * Python interface: an ordinary address-only MLOAD already counts as escape;
+ * CALL input-buffer addresses pin allocations under the old whitelist. *)
+Theorem reclaim_probe_old_capture_approximation:
+  fmp_capture_escaped
+    (fn with fn_blocks := [<| bb_label := "entry";
+      bb_instructions := [mk_inst 0 MLOAD [Var "cap"] ["value"]] |>]) "cap"
+Proof
+  EVAL_TAC
+QED
+
+Theorem reclaim_probe_old_call_pinning:
+  fmp_inst_has_unsafe_derived_use ["ptr"]
+    (mk_inst 0 CALL
+      [Lit 100w; Lit 1w; Lit 0w; Var "ptr"; Lit 32w; Lit 0w; Lit 0w]
+      ["ok"])
+Proof
+  EVAL_TAC
+QED
+
+(* Dataflow indices are pre-instruction boundaries, including the endpoint.
+ * The transfer callback receives the instruction, but NOT this index. *)
+Theorem reclaim_probe_forward_index:
+  df_at NONE
+    <| ds_inst := SND (df_fold_forward (\inst st. SOME inst.inst_id)
+         "entry" [mk_inst 7 GETFMP [] ["cap"]; mk_inst 9 JMP [] []]
+         0 NONE FEMPTY);
+       ds_boundary := FEMPTY |> "entry" 0 = NONE /\
+  df_at NONE
+    <| ds_inst := SND (df_fold_forward (\inst st. SOME inst.inst_id)
+         "entry" [mk_inst 7 GETFMP [] ["cap"]; mk_inst 9 JMP [] []]
+         0 NONE FEMPTY);
+       ds_boundary := FEMPTY |> "entry" 1 = SOME 7 /\
+  df_at NONE
+    <| ds_inst := SND (df_fold_forward (\inst st. SOME inst.inst_id)
+         "entry" [mk_inst 7 GETFMP [] ["cap"]; mk_inst 9 JMP [] []]
+         0 NONE FEMPTY);
+       ds_boundary := FEMPTY |> "entry" 2 = SOME 9
+Proof
+  EVAL_TAC
+QED
+
+(* A back-edge derivation listed before its source needs re-iteration. *)
+Theorem reclaim_probe_loop_capture_derivation:
+  let fn' = fn with fn_blocks := [<| bb_label := "loop";
+    bb_instructions :=
+      [mk_inst 0 ASSIGN [Var "back"] ["head"];
+       mk_inst 1 ADD [Var "cap"; Lit 32w] ["back"]] |>] in
+  MEM "head" (fmp_derived_vars fn' "cap") /\
+  reclaim_probe_pop (K T)
+    (EXISTS (\v. MEM v ["head"]) (fmp_derived_vars fn' "cap"))
+    ["new";"old"] = (NONE,["new";"old"])
+Proof
+  EVAL_TAC
+QED
+
+(* Escape is occurrence-sensitive, not membership-sensitive: one address
+ * occurrence cannot excuse a second occurrence storing the pointer value. *)
+Theorem reclaim_probe_escape_occurrences:
+  FILTER ($= "ptr") ["ptr";"ptr"] <> FILTER ($= "ptr") ["ptr"] /\
+  LENGTH (FILTER ($= "ptr") ["ptr";"ptr"]) >
+    LENGTH (FILTER ($= "ptr") ["ptr"])
+Proof
+  EVAL_TAC
+QED
+
+val _ = List.app (fn (name,th) =>
+  if List.all (fn s => s = "DISK_THM") (#1 (Tag.dest_tag (Thm.tag th))) then ()
+  else raise Fail ("unexpected oracle dependency in " ^ name))
+  (DB.thms "fmpReclaimProbe");
