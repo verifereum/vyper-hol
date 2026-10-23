@@ -104,7 +104,15 @@ default lowering root without an opt-in parity rollup.
 Post-merge/order normal builds proved all 15 internal-frame and all nine
 name-collision fixtures, including the four newly added equalities. The interpreter,
 allocator, completion, transition and dispatcher dependencies also built locally.
-A final focused `--skip-checkpoints --skip-proof-steps` check has not yet run.
+A fresh focused CLI check passed for 27 targets (26 core/proof/witness/codegen
+compatibility targets and a finite 27-program control probe), using `-j4`,
+`--skip-checkpoints --skip-proof-steps --no-cache --force=theory` at the unchanged
+tactic budget. It exited 0 in 2165.979 seconds. The 27 controls produced 21 MATCH,
+four bytecode residuals and two NONE results; together with 13 other permanent
+cases, this is 34/40 MATCH. No new regression was observed. Baseline admissions
+remain in three `genBlockSim` theorems and `codegen_correct`; this work neither
+introduces nor discharges those existing admissions. See [VALIDATION.md](VALIDATION.md)
+for runtime frame sizes, residual diagnosis and behavioral provenance.
 
 ## Whitelist and statement changes
 
@@ -121,8 +129,12 @@ those exclusions.
 * p39/p40 `foo(5)` were run through py-evm 0.12.1b1: both Python and HOL return 5;
   storage slot 0 is respectively 6 and 11. Permanent post-order byte equality also
   holds.
-* A per-function pinned-vs-HOL eom comparison is not yet reported.
-* Exact sources for p106, e01, e02, p107 and p108 are not included in this fixture
+* Per-function runtime eom comparison covers 39 functions in 15 programs: 37
+  equal, with only p58's internal and entry frames differing (see VALIDATION.md).
+* Exact p108 source from public #546 was checked separately: its three runtime
+  frames agree, and the 230-byte runtimes differ only in function placement and
+  relocated jump destinations (#546); it is not counted as MATCH or in 34/40.
+* Exact sources for p106, e01, e02 and p107 are not included in this fixture
   manifest; no permanent pinned equality for those names is claimed. The historical
   existing-MATCH controls p15, p16, p22, p27, p28, p29, p35, p37, p38, p59, p72,
   p75, p77, p78, p79, p81, p83, p84 and p91 likewise have not been rechecked here.
@@ -130,10 +142,12 @@ those exclusions.
   p43b's extra Boolean-chain jump blocks (#556), and rc23/rc27/rc28's unimplemented
   `RawCallTarget` lowering (#554). rc23/rc27 fail the initial unit-wf guard;
   rc28 can compile to INVALID. These are not successful frame-layout regressions.
-* p58 has an SSA-vs-memory concat-offset source difference (#566); an exclusive
-  residual attribution after the ordering change has not yet been established.
-  A fresh p05 control result is also pending. Historical issue classifications do
-  not establish current byte equality.
+* p58 remains PARITY after the ordering repair. Pin-side pre-allocation IR has
+  four 64-byte allocations, including the memory-resident concat offset; HOL has
+  three and carries the offset in SSA (#566). This also changes the frame sizes.
+  Equality of allocation ordering on these different input IRs is not claimed.
+* p05's fresh control result is MATCH. Historical issue classifications do not
+  establish current byte equality.
 * p02/p47 now have permanent MATCH proofs, rather than residuals attributed to
   the closed #549.
 * Validation is focused: neither a full-project build nor
