@@ -179,45 +179,11 @@ End
    simulation (#637) brings the run to the return, the entry bridge (#639)
    runs up to the body, and S1 (#642) composes them. *)
 
-(* Returning a primitive word. *)
-Theorem external_return_word_result_rel:
-  !ctx op ei msz nr nkey ut iv st x st' func cenv cx es tenv ret tv v0 v
-     tops tx srcs exps layouts Q.
-    compile_external_return (SOME op) T F ei msz nr nkey ut iv st =
-      (x, st') /\
-    (nr ==> iv) /\ (!y. op = Var y ==> not_fresh_at st y) /\
-    evaluate_type tenv ret = SOME tv /\ safe_cast tv v0 = SOME v /\
-    word_value v0 ==>
-    frag_exec ctx st st'
-      (\s. state_rel func cenv cx es s /\
-           eval_operand op s = SOME (val_to_w256 v0) /\
-           s.vs_accounts =
-             process_deletions es.pending_deletions es.accounts /\
-           s.vs_transient = es.tStorage)
-      Q
-      (external_call_result_rel tops ret tx
-         (INL v, finalize_pending_deletions
-                   (abstract_machine_from_state srcs exps layouts es),
-          es.requests))
-Proof
-  rpt strip_tac >>
-  qspecl_then [`tops`, `tenv`, `ret`, `tv`, `v0`, `v`] mp_tac
-    return_bytes_word_value >>
-  impl_tac >- asm_rewrite_tac[] >> strip_tac >>
-  qspecl_then [`ctx`, `op`, `ei`, `msz`, `nr`, `nkey`, `ut`, `iv`, `st`,
-               `x`, `st'`, `val_to_w256 v0`] mp_tac
-    compile_external_return_word_frag >>
-  simp[] >> disch_then irule >> simp[] >> rpt strip_tac >>
-  qspecl_then [`func`, `cenv`, `cx`, `es`, `s`, `ss`, `tops`, `tx`, `srcs`,
-               `exps`, `layouts`] mp_tac external_halt_success >>
-  impl_tac >- simp[] >>
-  strip_tac >> gvs[external_call_result_rel_def]
-QED
-
-(* Returning a value of any word type (is_word_type: also address and
-   bytesN), held as the word typed_val_to_w256 gives, as
-   compile_name_correct gives it.  external_return_word_result_rel is the
-   case of the word values, where typed_val_to_w256 is val_to_w256. *)
+(* Returning a value of a word type (is_word_type: bool, integers,
+   decimal, flag, address, bytesN).  The operand holds the value's word at
+   the return type tv, typed_val_to_w256 tv v0; compile_name_correct gives
+   a local's word at its own type, which agrees with this one when the two
+   types do. *)
 Theorem external_return_prim_result_rel:
   !ctx op ei msz nr nkey ut iv st x st' func cenv cx es tenv ret tv v0 v
      tops tx srcs exps layouts Q.
@@ -250,6 +216,37 @@ Proof
                `exps`, `layouts`] mp_tac external_halt_success >>
   impl_tac >- simp[] >>
   strip_tac >> gvs[external_call_result_rel_def]
+QED
+
+(* Its case for the values word_value covers, whose word is val_to_w256. *)
+Theorem external_return_word_result_rel:
+  !ctx op ei msz nr nkey ut iv st x st' func cenv cx es tenv ret tv v0 v
+     tops tx srcs exps layouts Q.
+    compile_external_return (SOME op) T F ei msz nr nkey ut iv st =
+      (x, st') /\
+    (nr ==> iv) /\ (!y. op = Var y ==> not_fresh_at st y) /\
+    evaluate_type tenv ret = SOME tv /\ safe_cast tv v0 = SOME v /\
+    word_value v0 ==>
+    frag_exec ctx st st'
+      (\s. state_rel func cenv cx es s /\
+           eval_operand op s = SOME (val_to_w256 v0) /\
+           s.vs_accounts =
+             process_deletions es.pending_deletions es.accounts /\
+           s.vs_transient = es.tStorage)
+      Q
+      (external_call_result_rel tops ret tx
+         (INL v, finalize_pending_deletions
+                   (abstract_machine_from_state srcs exps layouts es),
+          es.requests))
+Proof
+  rpt strip_tac >>
+  drule_all word_value_prim >> strip_tac >>
+  qpat_x_assum `typed_val_to_w256 _ _ = _` (REWRITE_TAC o single o GSYM) >>
+  qspecl_then [`ctx`, `op`, `ei`, `msz`, `nr`, `nkey`, `ut`, `iv`, `st`,
+               `x`, `st'`, `func`, `cenv`, `cx`, `es`, `tenv`, `ret`, `tv`,
+               `v0`, `v`, `tops`, `tx`, `srcs`, `exps`, `layouts`, `Q`]
+    mp_tac external_return_prim_result_rel >>
+  simp[]
 QED
 
 (* A return without a value. *)
