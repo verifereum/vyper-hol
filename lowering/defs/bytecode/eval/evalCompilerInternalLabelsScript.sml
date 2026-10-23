@@ -8,6 +8,7 @@
               p90_int_name_fn_prefix_unused_matches_python_oracle,
               p89_int_name_entry_matches_python_oracle,
               nm_int_entry_matches_python_oracle,
+              nm_int_deploy_matches_python_oracle,
               p70_int_name_reachable_matches_python_oracle,
               p71_int_name_return_label_matches_python_oracle,
               p69_int_name_code_end_supported, p87_int_name_revert_supported. *)
@@ -80,6 +81,17 @@ Theorem nm_int_entry_matches_python_oracle:
     SOME ^(memoryStoreWitnessLib.oracle fixture_root "nm_int_entry")
 Proof
   CONV_TAC (LAND_CONV (K (#evaluation nm_int_entry))) >> EVAL_TAC
+QED
+
+(* a05-07: an internal function named __deploy, called from the constructor,
+   does not share the deploy unit's entry label; its deploy-context label
+   ends in _deploy. *)
+val nm_int_deploy = memoryStoreWitnessLib.evaluate fixture_root "nm_int_deploy"
+Theorem nm_int_deploy_matches_python_oracle:
+  ^(#term nm_int_deploy) =
+    SOME ^(memoryStoreWitnessLib.oracle fixture_root "nm_int_deploy")
+Proof
+  CONV_TAC (LAND_CONV (K (#evaluation nm_int_deploy))) >> EVAL_TAC
 QED
 
 (* a05-07: a reachable_ prefix, once excluded by the whitelist, compiles as
