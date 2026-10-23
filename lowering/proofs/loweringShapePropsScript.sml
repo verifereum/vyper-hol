@@ -381,8 +381,9 @@ Proof
   Cases_on `bi` >>
   simp[supportedExprFormsTheory.supported_builtin_form_def,
        expr_shape_root_def, builtin_arity_def, AllCaseEqs()] >>
-  rpt strip_tac >> gvs[] >>
-  rpt (BasicProvers.FULL_CASE_TAC >> gvs[])
+  rpt strip_tac >>
+  gvs[wordsTheory.NUMERAL_LESS_THM, listTheory.LENGTH_EQ_NUM_compute] >>
+  Cases_on `es` >> gvs[]
 QED
 
 Theorem supported_type_builtin_form_shape_root[local]:
@@ -392,8 +393,9 @@ Proof
   Cases_on `tb` >>
   simp[supportedExprFormsTheory.supported_type_builtin_form_def,
        expr_shape_root_def, type_builtin_arity_def, AllCaseEqs()] >>
-  rpt strip_tac >> gvs[] >>
-  rpt (BasicProvers.FULL_CASE_TAC >> gvs[])
+  rpt strip_tac >>
+  gvs[wordsTheory.NUMERAL_LESS_THM, listTheory.LENGTH_EQ_NUM_compute] >>
+  Cases_on `es` >> gvs[]
 QED
 
 Theorem supported_pure_shape[local]:
@@ -555,6 +557,122 @@ Proof
   metis_tac[supported_stmts_shape]
 QED
 
+Theorem add_module_var_locations_static:
+  !tops vars.
+    (!n loc. FLOOKUP vars n = SOME loc ==> static_loc loc) ==>
+    !n loc. FLOOKUP (add_module_var_locations tops vars) n = SOME loc ==>
+      static_loc loc
+Proof
+  Induct_on `tops` >- simp[add_module_var_locations_def] >>
+  rpt gen_tac >> strip_tac >>
+  simp[Once add_module_var_locations_def] >>
+  first_x_assum match_mp_tac >>
+  Cases_on `h` >> simp[] >>
+  rpt (CASE_TAC >> simp[]) >>
+  rpt strip_tac >> gvs[finite_mapTheory.FLOOKUP_UPDATE, AllCaseEqs(), static_loc_def] >>
+  metis_tac[]
+QED
+
+Theorem allocate_args_static:
+  !sft args off vars.
+    (!n loc. FLOOKUP vars n = SOME loc ==> static_loc loc) ==>
+    !n loc. FLOOKUP (FST (allocate_args sft args off vars)) n = SOME loc ==>
+      static_loc loc
+Proof
+  gen_tac >> Induct >> simp[allocate_args_def] >>
+  Cases_on `h` >> rpt gen_tac >> strip_tac >>
+  simp[allocate_args_def] >> first_x_assum match_mp_tac >>
+  rpt strip_tac >>
+  gvs[finite_mapTheory.FLOOKUP_UPDATE, AllCaseEqs(), static_loc_def] >>
+  metis_tac[]
+QED
+
+Theorem allocate_locals_static:
+  !sft locals off vars.
+    (!n loc. FLOOKUP vars n = SOME loc ==> static_loc loc) ==>
+    !n loc. FLOOKUP (FST (allocate_locals sft locals off vars)) n = SOME loc ==>
+      static_loc loc
+Proof
+  gen_tac >> Induct >> simp[allocate_locals_def] >>
+  Cases_on `h` >> rpt gen_tac >> strip_tac >>
+  simp[Once allocate_locals_def] >>
+  rpt (CASE_TAC >> simp[]) >> first_x_assum match_mp_tac >>
+  rpt strip_tac >>
+  gvs[finite_mapTheory.FLOOKUP_UPDATE, AllCaseEqs(), static_loc_def] >>
+  metis_tac[]
+QED
+
+Theorem build_compile_env_static:
+  !tops vis mut fname args ret body use_trans.
+    cenv_static_ok
+      (build_compile_env tops vis mut fname args ret body use_trans)
+Proof
+  rpt gen_tac >> simp[build_compile_env_def] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  `!n loc. FLOOKUP (add_module_var_locations tops FEMPTY) n = SOME loc ==>
+     static_loc loc` by
+    (match_mp_tac add_module_var_locations_static >> simp[]) >>
+  drule allocate_args_static >>
+  disch_then (qspecl_then
+    [`get_struct_fields (make_struct_fields_map tops)`, `args`, `0`] mp_tac) >>
+  gvs[] >> strip_tac >>
+  Cases_on `vis = External` >>
+  gvs[allocate_internal_special_vars_def, AllCaseEqs(), cenv_static_ok_def] >>
+  drule allocate_locals_static >>
+  metis_tac[pairTheory.FST]
+QED
+
+Theorem classify_functions_external_source:
+  !tops mut nr rr fname args defaults ret body.
+    MEM (mut,nr,rr,fname,args,defaults,ret,body)
+      (FST (classify_functions tops)) ==>
+    MEM (FunctionDecl External mut nr rr fname args defaults ret body) tops
+Proof
+  Induct_on `tops` >- simp[classify_functions_def] >>
+  rpt gen_tac >>
+  simp[classify_functions_def, Once listTheory.FOLDR] >>
+  qmatch_goalsub_abbrev_tac `classify_function h acc` >>
+  PairCases_on `acc` >> fs[classify_functions_def] >>
+  Cases_on `h` >> simp[classify_function_def] >>
+  rpt CASE_TAC >> gvs[] >>
+  metis_tac[classify_functions_def]
+QED
+
+Theorem MEM_classify_internal:
+  !tops mut nr rr name args dflts ret body.
+    MEM (mut,nr,rr,name,args,dflts,ret,body)
+      (FST (SND (classify_functions tops))) <=>
+    MEM (FunctionDecl Internal mut nr rr name args dflts ret body) tops
+Proof
+  Induct >> simp[classify_functions_def] >>
+  gen_tac >> fs[classify_functions_def] >>
+  qmatch_goalsub_abbrev_tac `classify_function h acc` >>
+  PairCases_on `acc` >> Cases_on `h` >>
+  gvs[classify_function_def] >>
+  rename1 `case vis of External => _ | Internal => _ | Deploy => _` >>
+  Cases_on `vis` >>
+  simp[classify_function_def] >>
+  IF_CASES_TAC >> simp[]
+QED
+
+Theorem classify_functions_fallback_mem:
+  !tops mut nr rr fname args defaults ret body.
+    FST (SND (SND (classify_functions tops))) =
+      SOME (mut,nr,rr,fname,args,defaults,ret,body) ==>
+    MEM (FunctionDecl External mut nr rr fname args defaults ret body) tops
+Proof
+  Induct_on `tops` >- simp[classify_functions_def] >>
+  rpt gen_tac >>
+  simp[classify_functions_def] >>
+  qmatch_goalsub_abbrev_tac `classify_function h acc` >>
+  PairCases_on `acc` >>
+  Cases_on `h` >> simp[classify_function_def] >>
+  rpt (CASE_TAC >> simp[]) >>
+  strip_tac >> gvs[] >>
+  gvs[classify_functions_def] >>
+  metis_tac[]
+QED
+
 (* build_compile_env maps module variables to storage/transient slots and
    arguments and locals to MemLoc; external functions have no return PC. *)
 Theorem package_external_fn_shape_ok:
@@ -564,7 +682,16 @@ Theorem package_external_fn_shape_ok:
       (set_external_package_target target
          (package_external_fn tops use_trans nkey_map src))
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >> PairCases_on `src` >>
+  drule classify_functions_external_source >> strip_tac >>
+  drule_all supported_program_function >> strip_tac >>
+  drule supported_function_body_shape >> strip_tac >>
+  simp[package_external_fn_def, set_external_package_target_def,
+       external_fn_shape_ok_def] >>
+  rpt CASE_TAC >>
+  fs[update_cenv_ret_abi_def, update_cenv_nonreentrant_def,
+     cenv_static_ok_def, build_compile_env_external_no_return_pc] >>
+  metis_tac[build_compile_env_static, cenv_static_ok_def]
 QED
 
 Theorem package_internal_fn_shape_ok:
@@ -575,7 +702,15 @@ Theorem package_internal_fn_shape_ok:
       (set_internal_package_target target
          (package_internal_fn tops use_trans nkey_map F 0 src))
 Proof
-  cheat
+  rpt gen_tac >> PairCases_on `src` >> strip_tac >>
+  drule (iffLR MEM_classify_internal) >> strip_tac >>
+  drule_all supported_program_function >>
+  strip_tac >> drule supported_function_body_shape >> strip_tac >>
+  simp[package_internal_fn_def, set_internal_package_target_def,
+       update_cenv_nonreentrant_def, internal_fn_shape_ok_def,
+       cenv_static_ok_def] >>
+  pure_rewrite_tac[GSYM cenv_static_ok_def] >>
+  irule build_compile_env_static
 QED
 
 Theorem package_fallback_fn_shape_ok:
@@ -586,7 +721,18 @@ Theorem package_fallback_fn_shape_ok:
          (package_fallback_fn tops use_trans nkey_map
             (FST (SND (SND (classify_functions tops))))))
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  Cases_on `FST (SND (SND (classify_functions tops)))`
+  >- simp[package_fallback_fn_def, set_fallback_package_target_def,
+          fallback_shape_ok_def] >>
+  rename1 `_ = SOME src` >> PairCases_on `src` >>
+  drule classify_functions_fallback_mem >> strip_tac >>
+  drule_all supported_program_function >>
+  disch_then (assume_tac o MATCH_MP supported_function_body_shape) >>
+  simp[package_fallback_fn_def, set_fallback_package_target_def,
+       fallback_shape_ok_def, build_compile_env_external_no_return_pc] >>
+  simp[cenv_static_ok_def] >>
+  metis_tac[build_compile_env_static, cenv_static_ok_def]
 QED
 
 (* ===== Labels ===== *)
@@ -897,23 +1043,6 @@ QED
    premise, and the internal names are a sublist of
    supported_function_names tops, which supported_declaration_names makes
    ALL_DISTINCT. *)
-Theorem MEM_classify_internal:
-  !tops mut nr rr name args dflts ret body.
-    MEM (mut,nr,rr,name,args,dflts,ret,body)
-      (FST (SND (classify_functions tops))) <=>
-    MEM (FunctionDecl Internal mut nr rr name args dflts ret body) tops
-Proof
-  Induct >> simp[classify_functions_def] >>
-  gen_tac >> fs[classify_functions_def] >>
-  qmatch_goalsub_abbrev_tac `classify_function h acc` >>
-  PairCases_on `acc` >> Cases_on `h` >>
-  gvs[classify_function_def] >>
-  rename1 `case vis of External => _ | Internal => _ | Deploy => _` >>
-  Cases_on `vis` >>
-  simp[classify_function_def] >>
-  IF_CASES_TAC >> simp[]
-QED
-
 Theorem MEM_supported_function_names:
   !tops name. MEM name (supported_function_names tops) <=>
     ?vis mut nr rr args dflts ret body.
