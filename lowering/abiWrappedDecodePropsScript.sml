@@ -42,6 +42,50 @@ Proof
   metis_tac[enc_valid, APPEND_NIL]
 QED
 
+(* Singleton conversion does not require codec or typing premises. *)
+Theorem abi_to_vyper_singleton_tuple:
+  abi_to_vyper env (TupleT [ty]) (ListV [av]) =
+    OPTION_MAP (\v. ArrayV (TupleV [v])) (abi_to_vyper env ty av)
+Proof
+  Cases_on `abi_to_vyper env ty av` >> simp[abi_to_vyper_def]
+QED
+
+(* These interfaces apply to arbitrary buffers, including noncanonical ones. *)
+Theorem evaluate_type_builtin_abi_decode_wrapped_success:
+  unwrap /\ needs_external_call_wrap ty /\
+  evaluate_abi_decode (get_tenv cx) (TupleT [ty]) bs =
+    INL (ArrayV (TupleV [v])) ==>
+  evaluate_type_builtin cx (AbiDecode unwrap) ty [BytesV bs] = INL v
+Proof
+  strip_tac >> simp[evaluate_type_builtin_def]
+QED
+
+Theorem evaluate_type_builtin_abi_decode_unwrapped_success:
+  ~(unwrap /\ needs_external_call_wrap ty) /\
+  evaluate_abi_decode (get_tenv cx) ty bs = INL v ==>
+  evaluate_type_builtin cx (AbiDecode unwrap) ty [BytesV bs] = INL v
+Proof
+  strip_tac >> simp[evaluate_type_builtin_def]
+QED
+
+Theorem evaluate_type_builtin_abi_decode_wrapped_error:
+  unwrap /\ needs_external_call_wrap ty /\
+  evaluate_abi_decode (get_tenv cx) (TupleT [ty]) bs = INR err ==>
+  evaluate_type_builtin cx (AbiDecode unwrap) ty [BytesV bs] =
+    INR (RuntimeError err)
+Proof
+  strip_tac >> simp[evaluate_type_builtin_def]
+QED
+
+Theorem evaluate_type_builtin_abi_decode_unwrapped_error:
+  ~(unwrap /\ needs_external_call_wrap ty) /\
+  evaluate_abi_decode (get_tenv cx) ty bs = INR err ==>
+  evaluate_type_builtin cx (AbiDecode unwrap) ty [BytesV bs] =
+    INR (RuntimeError err)
+Proof
+  strip_tac >> simp[evaluate_type_builtin_def]
+QED
+
 val () = List.app (fn (n,th) =>
   let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
     if null (Thm.hyp th) andalso null axioms andalso
