@@ -10,6 +10,7 @@
 Theory fmpReclaimDefs
 Ancestors
   fmpAnalysisDefs
+  fmpAliasDefs
   livenessDefs
   cfgDefs
   dominatorDefs
@@ -57,11 +58,6 @@ Definition fmp_reclaim_option_join_def:
   fmp_reclaim_option_join x NONE = x /\
   fmp_reclaim_option_join (SOME x) (SOME y) =
     SOME (fmp_reclaim_join x y)
-End
-
-Definition fmp_single_output_def:
-  fmp_single_output (inst:instruction) =
-    case inst.inst_outputs of [v] => SOME v | _ => NONE
 End
 
 Definition fmp_getfmp_outputs_def:
@@ -159,16 +155,6 @@ Definition fmp_definition_dominates_def:
     (def_lbl = FST p /\ def_i < SND p) \/
     (def_lbl <> FST p /\
      dominates (dom_analyze (cfg_analyze fn) fn) def_lbl (FST p))
-End
-
-Definition fmp_transparent_opcode_def:
-  fmp_transparent_opcode op <=>
-    op = ASSIGN \/ op = ADD \/ op = SUB \/ op = PHI
-End
-
-Definition fmp_inst_uses_any_def:
-  fmp_inst_uses_any vars inst <=>
-    EXISTS (\v. MEM v (inst_uses inst)) vars
 End
 
 Definition fmp_derived_step_def:
