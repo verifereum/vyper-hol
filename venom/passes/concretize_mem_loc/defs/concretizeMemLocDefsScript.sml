@@ -823,7 +823,7 @@ End
    by the allocator's fixed reservations. No arbitrary set enumeration is used. *)
 Definition ml_complete_order_def:
   ml_complete_order raw localkeys (ls : (allocation, inst_addr list) fmap) =
-    nub (FILTER (\a. MEM a localkeys /\ IS_SOME (FLOOKUP ls a))
+    nub_first (FILTER (\a. MEM a localkeys /\ IS_SOME (FLOOKUP ls a))
       (raw ++ localkeys))
 End
 

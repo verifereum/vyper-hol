@@ -5,6 +5,15 @@ Ancestors
   concretizeMemLocDefs staticLayoutDefs list finite_map
 
 (* Ordering is a separate interface from the canonical liveset map. *)
+Theorem ml_complete_order_priority_witness:
+  ml_complete_order [Allocation 2; Allocation 1; Allocation 2]
+    [Allocation 1; Allocation 2; Allocation 3]
+    (FEMPTY |+ (Allocation 1,[]) |+ (Allocation 2,[]) |+ (Allocation 3,[])) =
+  [Allocation 2; Allocation 1; Allocation 3]
+Proof
+  EVAL_TAC
+QED
+
 Theorem ml_complete_order_distinct:
   !raw localkeys ls. ALL_DISTINCT (ml_complete_order raw localkeys ls)
 Proof
