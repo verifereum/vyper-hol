@@ -1,7 +1,8 @@
 (* Source oracle boundary, deliberately below vyperInterpreter.
- * TOP-LEVEL: call_outcome_request, take_call_outcome, adopt_call_outcome.
- * The evaluator owns the successful nonstatic account check; the oracle has
- * no typing premise. Adoption is raw: its actual client first takes/checks.
+ * TOP-LEVEL: call_outcome_request, create_outcome_request,
+ * take_call_outcome, take_create_outcome, adopt_call_outcome.
+ * Taking validates adopted accounts; CREATE validates failures too, since
+ * they retain nonce changes. Adoption is raw: clients first take/check.
  * No live evaluator clause is changed by this theory.
  *)
 Theory vyperCallOutcome
@@ -315,3 +316,237 @@ Theorem observed_success_replaces_pending_regression:
 Proof
   strip_tac >> simp[adopt_call_outcome_observed_deletions]
 QED
+
+(* CREATE uses the ordinary outcome stream, never computed precompiles.
+   Its account guard also covers failure: the creator nonce is retained. *)
+Definition create_outcome_request_def:
+  create_outcome_request kind value initcode st =
+    <| cr_kind := kind; cr_gas := NONE; cr_data_len := LENGTH initcode;
+       cr_target := 0w; cr_value := value; cr_data := initcode;
+       cr_static := F; cr_accounts := st.accounts;
+       cr_tStorage := st.tStorage |>
+End
+val () = cv_auto_trans create_outcome_request_def;
+
+Definition take_create_outcome_def:
+  take_create_outcome kind value initcode st =
+    case st.outcomes of
+      NONE => (INR (Error (RuntimeError "take_create_outcome")), st)
+    | SOME os =>
+      let rq = create_outcome_request kind value initcode st in
+      let (outcome, rest) = take_outcome rq os in
+      let st' = st with <|outcomes := SOME rest;
+                         requests := record_request rq st.requests|> in
+      if ~accounts_runtime_well_typed outcome.co_accounts
+      then (INR (Error (RuntimeError "create outcome accounts")), st')
+      else (INL (rq, outcome), st')
+End
+val () = take_create_outcome_def |> SRULE [pairTheory.pair_CASE_def] |> cv_auto_trans;
+
+Theorem create_outcome_request_not_computed[simp]:
+  ~computed_precompile (create_outcome_request kind value initcode st)
+Proof
+  simp[computed_precompile_addresses, create_outcome_request_def] >>
+  wordsLib.WORD_DECIDE_TAC
+QED
+
+Theorem take_create_outcome_NONE:
+  st.outcomes = NONE ==>
+  take_create_outcome kind value initcode st =
+    (INR (Error (RuntimeError "take_create_outcome")), st)
+Proof
+  simp[take_create_outcome_def]
+QED
+
+Theorem take_create_outcome_SOME:
+  st.outcomes = SOME os /\
+  rq = create_outcome_request kind value initcode st /\
+  take_outcome rq os = (outcome,rest) ==>
+  take_create_outcome kind value initcode st =
+    (if ~accounts_runtime_well_typed outcome.co_accounts
+     then INR (Error (RuntimeError "create outcome accounts"))
+     else INL (rq,outcome),
+     st with <|outcomes := SOME rest; requests := st.requests ++ [rq]|>)
+Proof
+  rpt strip_tac >> gvs[take_create_outcome_def, record_request_def] >>
+  rw[] >> gvs[]
+QED
+
+Theorem take_create_outcome_ordinary:
+  st.outcomes = SOME (outcome::rest) /\
+  rq = create_outcome_request kind value initcode st ==>
+  take_create_outcome kind value initcode st =
+    (if ~accounts_runtime_well_typed outcome.co_accounts
+     then INR (Error (RuntimeError "create outcome accounts"))
+     else INL (rq,outcome),
+     st with <|outcomes := SOME rest; requests := st.requests ++ [rq]|>)
+Proof
+  rpt strip_tac >> gvs[take_create_outcome_def, take_outcome_def, record_request_def] >>
+  rw[] >> gvs[]
+QED
+
+Theorem take_create_outcome_exhausted:
+  st.outcomes = SOME [] /\
+  rq = create_outcome_request kind value initcode st ==>
+  take_create_outcome kind value initcode st =
+    (if ~accounts_runtime_well_typed st.accounts
+     then INR (Error (RuntimeError "create outcome accounts"))
+     else INL (rq,failed_outcome rq),
+     st with <|outcomes := SOME []; requests := st.requests ++ [rq]|>)
+Proof
+  rpt strip_tac >>
+  `take_outcome rq [] = (failed_outcome rq,[])` by
+    simp[take_outcome_def] >>
+  drule_all take_create_outcome_SOME >>
+  simp[failed_outcome_def, create_outcome_request_def]
+QED
+
+Theorem take_create_outcome_guard_rejected:
+  st.outcomes = SOME os /\
+  rq = create_outcome_request kind value initcode st /\
+  take_outcome rq os = (outcome,rest) /\
+  ~accounts_runtime_well_typed outcome.co_accounts ==>
+  take_create_outcome kind value initcode st =
+    (INR (Error (RuntimeError "create outcome accounts")),
+     st with <|outcomes := SOME rest; requests := st.requests ++ [rq]|>)
+Proof
+  rpt strip_tac >> drule_all take_create_outcome_SOME >> simp[]
+QED
+
+Theorem take_create_outcome_frame:
+  take_create_outcome kind value initcode st = (res,st') ==>
+  st' = st with <|outcomes := st'.outcomes; requests := st'.requests|>
+Proof
+  Cases_on `st.outcomes` >> simp[take_create_outcome_def] >>
+  pairarg_tac >> rw[] >> gvs[]
+QED
+
+Theorem take_create_outcome_error:
+  take_create_outcome kind value initcode st = (INR exc,st') ==>
+  exc = Error (RuntimeError "take_create_outcome") \/
+  exc = Error (RuntimeError "create outcome accounts")
+Proof
+  Cases_on `st.outcomes` >> simp[take_create_outcome_def] >>
+  pairarg_tac >> rw[] >> gvs[]
+QED
+
+Theorem take_create_outcome_no_type_error_control:
+  FST (take_create_outcome kind value initcode st) <> INR (Error (TypeError msg)) /\
+  FST (take_create_outcome kind value initcode st) <> INR (AssertException msg) /\
+  FST (take_create_outcome kind value initcode st) <> INR BreakException /\
+  FST (take_create_outcome kind value initcode st) <> INR ContinueException /\
+  FST (take_create_outcome kind value initcode st) <> INR (ReturnException v)
+Proof
+  Cases_on `take_create_outcome kind value initcode st` >>
+  rename1 `take_create_outcome kind value initcode st = (res,st')` >>
+  Cases_on `res` >> simp[] >> drule take_create_outcome_error >> rw[]
+QED
+
+Theorem take_create_outcome_success:
+  take_create_outcome kind value initcode st = (INL (rq,outcome),st') ==>
+  ?os rest.
+    st.outcomes = SOME os /\
+    rq = create_outcome_request kind value initcode st /\
+    take_outcome rq os = (outcome,rest) /\
+    st' = st with <|outcomes := SOME rest; requests := st.requests ++ [rq]|> /\
+    accounts_runtime_well_typed outcome.co_accounts
+Proof
+  Cases_on `st.outcomes` >> simp[take_create_outcome_def, record_request_def] >>
+  pairarg_tac >> rw[] >> gvs[]
+QED
+
+Theorem take_create_outcome_suffix:
+  take_create_outcome kind value initcode st = (res,st') /\
+  st.outcomes = SOME os ==>
+  ?rest prefix. st'.outcomes = SOME rest /\ os = prefix ++ rest /\
+    LENGTH prefix <= 1 /\
+    st'.requests = st.requests ++ [create_outcome_request kind value initcode st]
+Proof
+  rpt strip_tac >> gvs[take_create_outcome_def] >> pairarg_tac >>
+  gvs[AllCaseEqs(), take_outcome_def, record_request_def] >>
+  TRY (qexists_tac `[]` >> simp[] >> NO_TAC) >>
+  rename1 `os = head::tail` >> qexists_tac `[head]` >> simp[]
+QED
+
+Theorem adopt_create_outcome_equation:
+  kind <> MessageCall ==>
+  adopt_call_outcome (create_outcome_request kind value initcode st0) outcome st =
+    (INL (), st with <|accounts := outcome.co_accounts;
+                      tStorage := outcome.co_tStorage;
+                      logs := if outcome.co_success then st.logs ++ outcome.co_logs else st.logs;
+                      pending_deletions := if outcome.co_success then outcome.co_toDelete
+                                           else st.pending_deletions|>)
+Proof
+  rw[adopt_call_outcome_equation, create_outcome_request_def] >>
+  gvs[evaluation_state_component_equality]
+QED
+
+Theorem take_adopt_create_outcome_typed:
+  kind <> MessageCall /\
+  take_create_outcome kind value initcode st = (INL (rq,outcome),st') /\
+  adopt_call_outcome rq outcome st' = (INL (),st'') ==>
+  accounts_runtime_well_typed st''.accounts
+Proof
+  rpt strip_tac >> drule take_create_outcome_success >> strip_tac >>
+  Cases_on `outcome.co_success` >> Cases_on `kind = MessageCall` >>
+  gvs[adopt_call_outcome_equation, create_outcome_request_def]
+QED
+
+Theorem take_create_outcome_preserves_scopes_immutables:
+  take_create_outcome kind value initcode st = (res,st') ==>
+  st'.scopes = st.scopes /\ st'.immutables = st.immutables
+Proof
+  strip_tac >> drule take_create_outcome_frame >>
+  disch_then SUBST1_TAC >> simp[]
+QED
+
+Theorem take_create_outcome_preserves_world:
+  take_create_outcome kind value initcode st = (res,st') ==>
+  st'.accounts = st.accounts /\ st'.tStorage = st.tStorage /\
+  st'.logs = st.logs /\ st'.pending_deletions = st.pending_deletions
+Proof
+  strip_tac >> drule take_create_outcome_frame >>
+  disch_then SUBST1_TAC >> simp[]
+QED
+
+Theorem adopt_create_outcome_preserves_scopes_immutables:
+  adopt_call_outcome (create_outcome_request kind value initcode st0) outcome st = (res,st') ==>
+  st'.scopes = st.scopes /\ st'.immutables = st.immutables /\
+  st'.outcomes = st.outcomes /\ st'.requests = st.requests
+Proof
+  strip_tac >> drule adopt_call_outcome_frame >> strip_tac >>
+  qpat_x_assum `st' = _` SUBST1_TAC >> simp[]
+QED
+
+Theorem adopt_create_outcome_logs:
+  (SND (adopt_call_outcome (create_outcome_request kind value initcode st0)
+           outcome st)).logs =
+  st.logs ++ (if outcome.co_success then outcome.co_logs else [])
+Proof
+  rw[adopt_call_outcome_equation, create_outcome_request_def]
+QED
+
+Theorem adopt_create_outcome_deletions:
+  (SND (adopt_call_outcome (create_outcome_request kind value initcode st0)
+           outcome st)).pending_deletions =
+  if outcome.co_success then outcome.co_toDelete else st.pending_deletions
+Proof
+  rw[adopt_call_outcome_equation, create_outcome_request_def]
+QED
+
+Theorem adopt_create_outcome_accounts:
+  kind <> MessageCall ==>
+  (SND (adopt_call_outcome (create_outcome_request kind value initcode st0)
+           outcome st)).accounts = outcome.co_accounts /\
+  (SND (adopt_call_outcome (create_outcome_request kind value initcode st0)
+           outcome st)).tStorage = outcome.co_tStorage
+Proof
+  simp[adopt_create_outcome_equation]
+QED
+
+(* Kernel audit of this boundary, including its strict prerequisites. *)
+val () = List.app (fn (name,th) =>
+  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
+  in if List.all (fn s => s = "DISK_THM") oracles andalso null axioms
+     then () else raise Fail ("Incomplete oracle boundary: " ^ name)
+  end) (DB.thms "vyperCallOutcome");
