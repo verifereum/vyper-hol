@@ -3981,6 +3981,172 @@ Resume compile_if_shape[else_body]:
 QED
 Finalise compile_if_shape
 
+fun stmt_label post name =
+  stmt_bind post name
+    (ho_match_mp_tac shape_step_fresh_label >> simp[SF ETA_ss]) >>
+  (reverse (Cases_on (`compiler_label ` @ name)) >- simp[shape_step_def]) >> simp[];
+
+Theorem compile_for_range_shape[local]:
+  !cenv lctx ty id fty start_e end_e bound body.
+    ~supported_expr_exists expr_shape_root start_e /\
+    ~supported_expr_exists expr_shape_root end_e /\
+    (!env lc. shape_step (IS_SOME env.ce_return_pc) compiler_label
+      (\st. cenv_shape_ok st env /\ loop_ctx_shape_ok lc)
+      (compile_stmts env lc ty body) (\u st. T)) ==>
+    shape_step (IS_SOME cenv.ce_return_pc) compiler_label
+      (\st. cenv_shape_ok st cenv /\ loop_ctx_shape_ok lctx)
+      (compile_stmt cenv lctx ty (For id fty (Range start_e end_e) bound body))
+      (\u st. T)
+Proof
+  rpt strip_tac >> simp[Once compile_stmt_def] >>
+  stmt_bind `\v st. plain_operand st v /\ cenv_shape_ok st cenv` `start_op`
+    (ho_match_mp_tac stmt_shape_frame >> qexists_tac `\st. cenv_shape_ok st cenv` >>
+     simp[cenv_shape_ok_stable] >> irule lower_value_shape >> simp[]) >>
+  stmt_bind `\v st. plain_operand st v /\ (plain_operand st start_op /\ cenv_shape_ok st cenv)` `end_op`
+    (ho_match_mp_tac stmt_shape_frame >> qexists_tac `\st. cenv_shape_ok st cenv` >>
+     simp[cenv_shape_ok_stable, stmt_shape_stable_plain, shape_stable_conj] >>
+     irule lower_value_shape >> simp[]) >>
+  stmt_bind `\env st. (cenv_shape_ok st env /\ env.ce_return_pc = cenv.ce_return_pc) /\
+      (plain_operand st end_op /\ plain_operand st start_op)` `body_cenv`
+    (ho_match_mp_tac stmt_shape_frame >> qexists_tac `\st. cenv_shape_ok st cenv` >>
+     simp[cenv_shape_ok_stable, stmt_shape_stable_plain, shape_stable_conj, declare_local_shape]) >>
+  Cases_on `body_cenv.ce_return_pc = cenv.ce_return_pc`
+  >- suspend "labels" >> simp[shape_step_def]
+QED
+Resume compile_for_range_shape[labels]:
+  simp[] >>
+  qabbrev_tac `live = \st. cenv_shape_ok st body_cenv /\
+    plain_operand st end_op /\ plain_operand st start_op` >>
+  `shape_stable live` by
+    simp[Abbr `live`, cenv_shape_ok_stable, stmt_shape_stable_plain, shape_stable_conj] >>
+  stmt_sequence `\u st. live st`
+    (irule shape_step_conseq >>
+     qexistsl_tac [`compiler_label`,
+       `\st. (plain_operand st end_op /\ plain_operand st start_op) /\ cenv_shape_ok st body_cenv`,
+       `\u st. (plain_operand st end_op /\ plain_operand st start_op) /\ cenv_shape_ok st body_cenv`] >>
+     simp[Abbr `live`] >> ho_match_mp_tac shape_step_frame >>
+     simp[stmt_shape_stable_plain, shape_stable_conj, emit_local_alloca_shape]) >>
+  map_every (stmt_label `\l st. live st /\ compiler_label l`)
+    [`entry_lbl`, `cond_lbl`, `body_lbl`, `incr_lbl`, `exit_lbl`] >>
+  stmt_sequence `\u st. live st`
+    (ho_match_mp_tac stmt_shape_jmp >> simp[SF ETA_ss]) >>
+  stmt_sequence `\u st. live st`
+    (ho_match_mp_tac stmt_shape_new_block >> simp[SF ETA_ss]) >>
+  stmt_bind `\n st. live st /\ plain_operand st (Var n)` `counter_var`
+    (ho_match_mp_tac shape_step_fresh_var >> simp[SF ETA_ss]) >>
+  suspend "counter"
+QED
+Resume compile_for_range_shape[counter]:
+  qabbrev_tac `ctr_live = \st. live st /\ plain_operand st (Var counter_var)` >>
+  `shape_stable ctr_live` by
+    simp[Abbr `ctr_live`, shape_stable_conj, stmt_shape_stable_plain] >>
+  stmt_sequence `\u st. ctr_live st`
+    (ho_match_mp_tac stmt_shape_emit_inst >>
+     simp[Abbr `ctr_live`, Abbr `live`, shape_stable_conj,
+       cenv_shape_ok_stable, stmt_shape_stable_plain, label_or_plain_def] >>
+     stmt_shape_emit_simp >>
+     simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def]) >>
+  stmt_bind `\r st. plain_operand st r /\ ctr_live st` `rounds` (suspend "rounds") >>
+  stmt_sequence `\u st. plain_operand st rounds /\ ctr_live st` (suspend "checks") >>
+  stmt_bind `\v st. plain_operand st v /\ ctr_live st` `end_val`
+    (ho_match_mp_tac stmt_shape_frame >>
+     qexists_tac `\st. plain_operand st start_op /\ plain_operand st rounds` >>
+     simp[Abbr `ctr_live`, Abbr `live`, shape_stable_conj,
+          cenv_shape_ok_stable, stmt_shape_stable_plain] >> stmt_plain_emit) >>
+  stmt_sequence `\u st. plain_operand st end_val /\ ctr_live st`
+    (ho_match_mp_tac stmt_shape_jmp >> simp[shape_stable_conj, stmt_shape_stable_plain]) >>
+  stmt_sequence `\u st. plain_operand st end_val /\ ctr_live st`
+    (ho_match_mp_tac stmt_shape_new_block >> simp[shape_stable_conj, stmt_shape_stable_plain]) >>
+  stmt_bind `\v st. plain_operand st v /\ ctr_live st` `done_op`
+    (ho_match_mp_tac stmt_shape_frame >>
+     qexists_tac `\st. plain_operand st (Var counter_var) /\ plain_operand st end_val` >>
+     simp[Abbr `ctr_live`, shape_stable_conj, stmt_shape_stable_plain] >> stmt_plain_emit) >>
+  stmt_sequence `\u st. plain_operand st done_op /\ ctr_live st`
+    (ho_match_mp_tac stmt_shape_jnz >> simp[shape_stable_conj, stmt_shape_stable_plain]) >>
+  stmt_sequence `\u st. plain_operand st done_op /\ ctr_live st`
+    (ho_match_mp_tac stmt_shape_new_block >> simp[shape_stable_conj, stmt_shape_stable_plain]) >>
+  suspend "body"
+QED
+Resume compile_for_range_shape[rounds]:
+  Cases_on `start_op` >> Cases_on `end_op` >> simp[] >>
+  TRY (irule shape_step_return >>
+    simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def] >> NO_TAC) >>
+  qmatch_goalsub_abbrev_tac `emit_op SUB ops` >>
+  ho_match_mp_tac stmt_shape_frame >>
+  qexists_tac `\st. EVERY (plain_operand st) ops` >>
+  simp[Abbr `ops`, Abbr `ctr_live`, Abbr `live`, shape_stable_conj,
+       cenv_shape_ok_stable, stmt_shape_stable_plain] >> stmt_plain_emit
+QED
+Resume compile_for_range_shape[checks]:
+  irule shape_step_conseq >>
+  qexistsl_tac [`compiler_label`,
+    `\st. (plain_operand st rounds /\ ctr_live st) /\ (plain_operand st rounds /\ ctr_live st)`,
+    `\u st. (plain_operand st rounds /\ ctr_live st) /\ T`] >>
+  rpt conj_tac >> TRY (simp[] >> NO_TAC) >>
+  ho_match_mp_tac shape_step_frame >>
+  simp[shape_stable_conj, stmt_shape_stable_plain] >>
+  Cases_on `start_op` >> Cases_on `end_op` >> simp[] >>
+  TRY (irule shape_step_return >> simp[] >> NO_TAC) >>
+  qmatch_goalsub_abbrev_tac `compile_range_bound_checks a b rounds` >>
+  irule shape_step_conseq >>
+  qexistsl_tac [`compiler_label`,
+    `\st. plain_operand st a /\ plain_operand st b /\ plain_operand st rounds`,
+    `\u st. T`] >>
+  simp[compile_range_bound_checks_shape, Abbr `ctr_live`, Abbr `live`]
+QED
+Resume compile_for_range_shape[body]:
+  stmt_sequence `\u st. ctr_live st` (suspend "store") >>
+  stmt_sequence `\u st. plain_operand st (Var counter_var)` (suspend "recursive") >>
+  stmt_sequence `\u st. plain_operand st (Var counter_var)`
+    (irule shape_step_conseq >>
+     qexistsl_tac [`compiler_label`, `\st. plain_operand st (Var counter_var) /\ T`,
+       `\u st. plain_operand st (Var counter_var) /\ T`] >>
+     rpt conj_tac >> TRY (simp[] >> NO_TAC) >>
+     ho_match_mp_tac shape_step_frame >> simp[stmt_shape_stable_plain] >>
+     irule emit_jmp_if_not_terminated_shape >> simp[jump_label_ok_def]) >>
+  stmt_sequence `\u st. plain_operand st (Var counter_var)`
+    (ho_match_mp_tac stmt_shape_new_block >> simp[stmt_shape_stable_plain]) >>
+  stmt_bind `\v st. plain_operand st v /\ plain_operand st (Var counter_var)` `new_counter`
+    (ho_match_mp_tac stmt_shape_frame >>
+     qexists_tac `\st. plain_operand st (Var counter_var)` >>
+     simp[stmt_shape_stable_plain] >> stmt_plain_emit) >>
+  stmt_sequence `\u st. plain_operand st new_counter /\ plain_operand st (Var counter_var)`
+    (ho_match_mp_tac stmt_shape_emit_inst >> simp[shape_stable_conj,
+       stmt_shape_stable_plain, label_or_plain_def] >> stmt_shape_emit_simp >>
+     simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def]) >>
+  stmt_sequence `\u st. plain_operand st new_counter /\ plain_operand st (Var counter_var)`
+    (ho_match_mp_tac stmt_shape_jmp >> simp[shape_stable_conj, stmt_shape_stable_plain]) >>
+  stmt_sequence `\u st. plain_operand st new_counter /\ plain_operand st (Var counter_var)`
+    (ho_match_mp_tac stmt_shape_new_block >> simp[shape_stable_conj, stmt_shape_stable_plain]) >>
+  irule shape_step_return >> simp[]
+QED
+Resume compile_for_range_shape[store]:
+  irule shape_step_conseq >>
+  qexistsl_tac [`compiler_label`, `ctr_live`, `\u st. ctr_live st`] >>
+  simp[] >>
+  Cases_on `FLOOKUP body_cenv.ce_vars id` >> simp[] >>
+  TRY (ho_match_mp_tac stmt_shape_emit_void >> simp[SF ETA_ss] >>
+       stmt_shape_emit_simp >> NO_TAC) >>
+  rename1 `SOME loc` >> Cases_on `loc` >> simp[] >>
+  ho_match_mp_tac stmt_shape_emit_void >> simp[SF ETA_ss] >>
+  simp[Abbr `ctr_live`, Abbr `live`, label_or_plain_def] >>
+  stmt_shape_emit_simp >>
+  simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def] >>
+  rpt strip_tac >> drule_all cenv_shape_ok_lookup >>
+  simp[loc_shape_ok_def, plain_operand_def]
+QED
+Resume compile_for_range_shape[recursive]:
+  irule shape_step_conseq >>
+  qexistsl_tac [`compiler_label`,
+    `\st. plain_operand st (Var counter_var) /\
+      (cenv_shape_ok st body_cenv /\ loop_ctx_shape_ok (InLoop exit_lbl incr_lbl))`,
+    `\u st. plain_operand st (Var counter_var) /\ T`] >>
+  rpt conj_tac >> TRY (simp[Abbr `ctr_live`, Abbr `live`, loop_ctx_shape_ok_def, jump_label_ok_def] >> NO_TAC) >>
+  ho_match_mp_tac shape_step_frame >> simp[stmt_shape_stable_plain] >>
+  first_x_assum (qspecl_then [`body_cenv`, `InLoop exit_lbl incr_lbl`] mp_tac) >> simp[]
+QED
+Finalise compile_for_range_shape
+
 Theorem compile_stmt_shape:
   (!cenv lctx ty s.
      ~supported_stmt_expr_exists expr_shape_root s ==>
