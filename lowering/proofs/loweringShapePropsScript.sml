@@ -25,7 +25,7 @@
 Theory loweringShapeProps
 Ancestors
   list rich_list loweringShapeDefs compileEnv context emitHelper
-  exprLowering stmtLowering moduleLowering vyperCompiler compileVyper
+  exprLowering stmtLowering moduleLowering vyperCompiler compileVyper abiEncoder
   supportedProgram supportedNames supportedStmtTraverse supportedExprTraverse
   unitShapeDefs venomInst vyperAST
 
@@ -1676,6 +1676,154 @@ QED
 
 (* For alan, by compile_stmt_ind.  internal is IS_SOME ce_return_pc: Return
    emits RET exactly when ce_return_pc is SOME, STOP/RETURN otherwise. *)
+Theorem compile_abi_encode_static_shape[local]:
+  !internal dst src.
+    shape_step internal compiler_label
+      (\st. plain_operand st dst /\ plain_operand st src)
+      (compile_abi_encode_static dst src) (\v st. plain_operand st v)
+Proof
+  rpt gen_tac >> simp[compile_abi_encode_static_def] >>
+  irule shape_step_bind >>
+  qexists_tac `\v st. plain_operand st v /\ plain_operand st dst` >> conj_tac
+  >- (gen_tac >> BETA_TAC >>
+      stmt_sequence `\u st. T` stmt_plain_void_drop >>
+      irule shape_step_return >> simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def]) >>
+  stmt_frame_emit `\st. plain_operand st src`
+QED
+
+Theorem compile_abi_encode_static_info_shape[local]:
+  !internal dst src info.
+    shape_step internal compiler_label
+      (\st. plain_operand st dst /\ plain_operand st src)
+      (compile_abi_encode_static_info dst src info) (\v st. plain_operand st v)
+Proof
+  rpt gen_tac >> Cases_on `info` >> simp[compile_abi_encode_static_info_def]
+  >- irule compile_abi_encode_static_shape
+  >- (irule shape_step_return >> simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def])
+  >- (stmt_sequence `\u st. T` stmt_plain_void_drop >>
+      irule shape_step_return >> simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def])
+  >> irule shape_step_return >> simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def]
+QED
+
+Theorem compile_abi_encode_dyn_static_loop_shape[local]:
+  !internal dst src info asz msz len_op.
+    shape_step internal compiler_label
+      (\st. plain_operand st dst /\ plain_operand st src /\ plain_operand st len_op)
+      (compile_abi_encode_dyn_static_loop dst src info asz msz len_op)
+      (\v st. plain_operand st v)
+Proof
+  rpt gen_tac >> simp[compile_abi_encode_dyn_static_loop_def] >>
+  irule shape_step_bind >>
+  qexists_tac `\b st. plain_operand st b.buf_operand /\
+    (plain_operand st dst /\ plain_operand st src /\ plain_operand st len_op)` >>
+  conj_tac >- suspend "allocated" >>
+  ho_match_mp_tac stmt_shape_frame >> qexists_tac `\st. T` >>
+  simp[compile_alloc_buffer_shape, shape_stable_conj, stmt_shape_stable_plain]
+QED
+Resume compile_abi_encode_dyn_static_loop_shape[allocated]:
+  qx_gen_tac `buf` >> BETA_TAC >> simp[] >>
+  qabbrev_tac `enc_live = \st. plain_operand st buf.buf_operand /\
+    (plain_operand st dst /\ plain_operand st src /\ plain_operand st len_op)` >>
+  stmt_sequence `\u st. enc_live st`
+    (simp[Abbr `enc_live`] >> stmt_plain_void) >>
+  irule shape_step_bind >> qexists_tac `\l st. enc_live st /\ compiler_label l` >> conj_tac
+  >- (qx_gen_tac `hdr` >> BETA_TAC >> reverse (Cases_on `compiler_label hdr`)
+      >- simp[shape_step_def] >> simp[] >>
+      irule shape_step_bind >> qexists_tac `\l st. enc_live st /\ compiler_label l` >> conj_tac
+      >- (qx_gen_tac `body_lbl` >> BETA_TAC >> reverse (Cases_on `compiler_label body_lbl`)
+          >- simp[shape_step_def] >> simp[] >>
+          irule shape_step_bind >> qexists_tac `\l st. enc_live st /\ compiler_label l` >> conj_tac
+          >- (qx_gen_tac `exit` >> BETA_TAC >> reverse (Cases_on `compiler_label exit`)
+              >- simp[shape_step_def] >> simp[] >> suspend "header") >>
+          ho_match_mp_tac shape_step_fresh_label >>
+          simp[Abbr `enc_live`, shape_stable_conj, stmt_shape_stable_plain]) >>
+      ho_match_mp_tac shape_step_fresh_label >>
+      simp[Abbr `enc_live`, shape_stable_conj, stmt_shape_stable_plain]) >>
+  ho_match_mp_tac shape_step_fresh_label >>
+  simp[Abbr `enc_live`, shape_stable_conj, stmt_shape_stable_plain]
+QED
+Resume compile_abi_encode_dyn_static_loop_shape[header]:
+  stmt_sequence `\u st. enc_live st`
+    (ho_match_mp_tac stmt_shape_jmp >> simp[Abbr `enc_live`, shape_stable_conj, stmt_shape_stable_plain]) >>
+  stmt_sequence `\u st. enc_live st`
+    (ho_match_mp_tac stmt_shape_new_block >> simp[Abbr `enc_live`, shape_stable_conj, stmt_shape_stable_plain]) >>
+  irule shape_step_bind >> qexists_tac `\v st. plain_operand st v /\ enc_live st` >> conj_tac
+  >- (qx_gen_tac `index` >> BETA_TAC >>
+      irule shape_step_bind >> qexists_tac `\v st. plain_operand st v /\ enc_live st` >> conj_tac
+      >- (qx_gen_tac `cmp` >> BETA_TAC >>
+          irule shape_step_bind >> qexists_tac `\v st. plain_operand st v /\ enc_live st` >> conj_tac
+          >- (qx_gen_tac `done_op` >> BETA_TAC >>
+              stmt_sequence `\u st. enc_live st`
+                (stmt_drop (ho_match_mp_tac stmt_shape_jnz >>
+                 simp[Abbr `enc_live`, shape_stable_conj, stmt_shape_stable_plain])) >>
+              stmt_sequence `\u st. enc_live st`
+                (ho_match_mp_tac stmt_shape_new_block >>
+                 simp[Abbr `enc_live`, shape_stable_conj, stmt_shape_stable_plain]) >>
+              suspend "body") >>
+          simp[Abbr `enc_live`] >> stmt_frame_emit `\st. plain_operand st cmp`) >>
+      simp[Abbr `enc_live`] >> stmt_frame_emit `\st. plain_operand st index /\ plain_operand st len_op`) >>
+  simp[Abbr `enc_live`] >> stmt_frame_emit `\st. plain_operand st buf.buf_operand`
+QED
+Resume compile_abi_encode_dyn_static_loop_shape[body]:
+  simp[Abbr `enc_live`] >>
+  irule shape_step_bind >>
+  qexists_tac `\v st. plain_operand st v /\ (plain_operand st src /\ plain_operand st dst /\ plain_operand st buf.buf_operand)` >> conj_tac
+  >- (qx_gen_tac `idx` >> BETA_TAC >>
+      irule shape_step_bind >>
+      qexists_tac `\v st. plain_operand st v /\ (plain_operand st idx /\ plain_operand st src /\ plain_operand st dst /\ plain_operand st buf.buf_operand)` >> conj_tac
+      >- (qx_gen_tac `src_data` >> BETA_TAC >>
+          irule shape_step_bind >>
+          qexists_tac `\v st. plain_operand st v /\ (plain_operand st src_data /\ plain_operand st idx /\ plain_operand st src /\ plain_operand st dst /\ plain_operand st buf.buf_operand)` >> conj_tac
+          >- (qx_gen_tac `src_off` >> BETA_TAC >>
+              irule shape_step_bind >>
+              qexists_tac `\v st. plain_operand st v /\ (plain_operand st idx /\ plain_operand st src /\ plain_operand st dst /\ plain_operand st buf.buf_operand)` >> conj_tac
+              >- suspend "destination" >>
+              stmt_frame_emit `\st. plain_operand st src_data /\ plain_operand st src_off`) >>
+          stmt_frame_emit `\st. plain_operand st idx`) >>
+      stmt_frame_emit `\st. plain_operand st src`) >>
+  stmt_frame_emit `\st. plain_operand st buf.buf_operand`
+QED
+Resume compile_abi_encode_dyn_static_loop_shape[destination]:
+  qx_gen_tac `child_src` >> BETA_TAC >>
+  irule shape_step_bind >>
+  qexists_tac `\v st. plain_operand st v /\ (plain_operand st child_src /\ plain_operand st idx /\ plain_operand st src /\ plain_operand st buf.buf_operand)` >> conj_tac
+  >- (qx_gen_tac `dst_data` >> BETA_TAC >>
+      irule shape_step_bind >>
+      qexists_tac `\v st. plain_operand st v /\ (plain_operand st dst_data /\ plain_operand st child_src /\ plain_operand st idx /\ plain_operand st src /\ plain_operand st buf.buf_operand)` >> conj_tac
+      >- (qx_gen_tac `dst_off` >> BETA_TAC >>
+          irule shape_step_bind >>
+          qexists_tac `\v st. plain_operand st v /\ (plain_operand st child_src /\ plain_operand st idx /\ plain_operand st src /\ plain_operand st buf.buf_operand)` >> conj_tac
+          >- suspend "encode" >>
+          stmt_frame_emit `\st. plain_operand st dst_data /\ plain_operand st dst_off`) >>
+      stmt_frame_emit `\st. plain_operand st idx`) >>
+  stmt_frame_emit `\st. plain_operand st dst`
+QED
+Resume compile_abi_encode_dyn_static_loop_shape[encode]:
+  qx_gen_tac `child_dst` >> BETA_TAC >>
+  stmt_sequence `\v st. plain_operand st v /\ (plain_operand st idx /\ plain_operand st src /\ plain_operand st buf.buf_operand)`
+    (ho_match_mp_tac stmt_shape_frame >>
+     qexists_tac `\st. plain_operand st child_dst /\ plain_operand st child_src` >>
+     simp[compile_abi_encode_static_info_shape, shape_stable_conj, stmt_shape_stable_plain]) >>
+  irule shape_step_bind >>
+  qexists_tac `\v st. plain_operand st v /\ (plain_operand st src /\ plain_operand st buf.buf_operand)` >> conj_tac
+  >- (gen_tac >> BETA_TAC >>
+      stmt_sequence `\u st. plain_operand st src` stmt_plain_void_drop >>
+      suspend "exit") >>
+  stmt_frame_emit `\st. plain_operand st idx`
+QED
+Resume compile_abi_encode_dyn_static_loop_shape[exit]:
+  stmt_sequence `\u st. plain_operand st src`
+    (ho_match_mp_tac stmt_shape_jmp >> simp[stmt_shape_stable_plain]) >>
+  stmt_sequence `\u st. plain_operand st src`
+    (ho_match_mp_tac stmt_shape_new_block >> simp[stmt_shape_stable_plain]) >>
+  irule shape_step_bind >> qexists_tac `\v st. plain_operand st v` >> conj_tac
+  >- (gen_tac >> BETA_TAC >>
+      irule shape_step_bind >> qexists_tac `\v st. plain_operand st v` >> conj_tac
+      >- (gen_tac >> BETA_TAC >> stmt_plain_emit) >> stmt_plain_emit) >>
+  stmt_plain_emit
+QED
+Finalise compile_abi_encode_dyn_static_loop_shape
+
 Theorem compile_stmt_shape:
   (!cenv lctx ty s.
      ~supported_stmt_expr_exists expr_shape_root s ==>
