@@ -79,7 +79,7 @@ after the allocation-order repair. The `.hex` file SHA256 values in
 (p40). Reproduce the pinned-byte behavior check from the repository root:
 
 ```text
-python lowering/defs/bytecode/internal-frames/check_behavior.py Vyper lowering/defs/bytecode/internal-frames/oracle
+uv run --with py-evm==0.12.1b1 --with eth-abi==6.0.0 python lowering/defs/bytecode/internal-frames/check_behavior.py Vyper lowering/defs/bytecode/internal-frames/oracle
 ```
 
 The same script accepts a directory of independently exported HOL `.hex` files;
