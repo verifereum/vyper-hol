@@ -2044,6 +2044,18 @@ Termination
   WF_REL_TAC `measure (LENGTH o (FST o SND o SND))`
 End
 
+(* Stage evaluated arguments in the contiguous ABI tuple memory layout.
+   Keep ADD even at offset zero, matching Vyper's tuple construction. *)
+Definition compile_store_abi_tuple_def:
+  compile_store_abi_tuple cenv buf off [] = return () ∧
+  compile_store_abi_tuple cenv buf off ((v,ty)::rest) =
+    do dst <- emit_op ADD [buf; Lit (n2w off)];
+       (if is_word_type ty then emit_void MSTORE [dst; v]
+        else compile_copy_memory dst v (type_memory_bytes cenv ty));
+       compile_store_abi_tuple cenv buf (off + type_memory_bytes cenv ty) rest
+    od
+End
+
 (* Helper: the list callback only compiles members of its input list. *)
 Theorem compile_multi_exprs_callback_cong:
   ∀es. (∀e. MEM e es ⇒ f cenv (expr_type e) e = g cenv (expr_type e) e) ⇒
@@ -2890,12 +2902,13 @@ Definition compile_type_builtin_dispatch_body_def:
           let clamp = mk_extract32_clamp ret_ty in
           as_stack_val vv_ty (compile_clamp_extract32 raw clamp st3))
      | AbiEncode ensure method_id =>
-         (let e1 = HD args in
+         (let method_id_word = OPTION_MAP bytes_method_id_word method_id in
+          if LENGTH args = 1 ∧ ¬ensure then
+          let e1 = HD args in
           let src_ty = expr_type e1 in
-          let enc_ty = if ensure then TupleT [src_ty] else src_ty in
+          let enc_ty = src_ty in
           let enc_info = type_to_abi_enc_info cenv.ce_struct_fields cenv enc_ty in
           let maxlen = abi_size_bound cenv.ce_struct_fields enc_ty in
-          let method_id_word = OPTION_MAP bytes_method_id_word method_id in
           if is_word_type src_ty then
             (* Prim word: stage to temp memory for encoder *)
             let (v, st1) = lower_value compile_expr cenv src_ty e1 st in
@@ -2908,7 +2921,19 @@ Definition compile_type_builtin_dispatch_body_def:
             let (src_vv, st1) = compile_expr cenv src_ty e1 st in
             let (src_op, st2) = unwrap_value cenv src_vv st1 in
             as_ptr_val vv_ty LocMemory
-              (lower_abi_encode ensure method_id_word src_op enc_info maxlen st2))
+              (lower_abi_encode ensure method_id_word src_op enc_info maxlen st2)
+          else
+          let arg_tys = MAP expr_type args in
+          let enc_ty = TupleT arg_tys in
+          let enc_info = type_to_abi_enc_info cenv.ce_struct_fields cenv enc_ty in
+          let maxlen = abi_size_bound cenv.ce_struct_fields enc_ty in
+          let (vs, st1) = compile_multi_exprs compile_expr cenv args st in
+          let (tup_alloc, st2) =
+                compile_alloc_buffer (type_memory_bytes cenv enc_ty) st1 in
+          let tup = tup_alloc.buf_operand in
+          let (_, st3) = compile_store_abi_tuple cenv tup 0 (ZIP (vs, arg_tys)) st2 in
+          as_ptr_val vv_ty LocMemory
+            (lower_abi_encode ensure method_id_word tup enc_info maxlen st3))
      | AbiDecode _ =>
          (let e1 = HD args in
           let (data_vv, st1) = compile_expr cenv (expr_type e1) e1 st in

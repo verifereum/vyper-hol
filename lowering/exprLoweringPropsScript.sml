@@ -1258,6 +1258,18 @@ val ci_mono_base_thms =
    ci_mono_compile_store_bytestring,
    ci_mono_refl];
 
+Theorem compile_multi_exprs_length:
+  ∀es cfn cenv sa.
+    LENGTH (FST (compile_multi_exprs cfn cenv es sa)) = LENGTH es
+Proof
+  Induct >> simp[compile_multi_exprs_def, comp_return_def,
+                comp_bind_def, LET_THM] >>
+  rpt gen_tac >>
+  Cases_on `lower_value cfn cenv (expr_type h) h sa` >> simp[] >>
+  Cases_on `compile_multi_exprs cfn cenv es r` >>
+  first_x_assum (qspecl_then [`cfn`, `cenv`, `r`] mp_tac) >> simp[]
+QED
+
 Theorem ci_mono_compile_multi_exprs[local]:
   ∀ cfn cenv es sa.
     (∀ cenv' ty' e' sa'. ci_mono sa' (SND (cfn cenv' ty' e' sa'))) ⇒
@@ -2140,22 +2152,6 @@ Proof
   simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return]
 QED
 
-Theorem ci_mono_compile_create_tuple_in_memory[local]:
-  ∀ buf_op elems offset sa.
-    ci_mono sa (SND (compile_create_tuple_in_memory buf_op elems offset sa))
-Proof
-  ho_match_mp_tac builtinAbiTheory.compile_create_tuple_in_memory_ind >>
-  rpt strip_tac
-  >- simp[builtinAbiTheory.compile_create_tuple_in_memory_def, ci_mono_comp_return]
-  >> rewrite_tac[builtinAbiTheory.compile_create_tuple_in_memory_def] >> BETA_TAC >>
-  ho_match_mp_tac ci_mono_bind >> conj_tac
-  >- (IF_CASES_TAC >> simp[ci_mono_comp_return, ci_mono_emit_op])
-  >> rpt strip_tac >>
-  ho_match_mp_tac ci_mono_ignore_bind >> conj_tac
-  >- (IF_CASES_TAC >> simp[ci_mono_emit_void])
-  >> rpt strip_tac >> first_x_assum irule
-QED
-
 Theorem ci_mono_compile_extcodesize_check[local]:
   ∀ addr_op sa. ci_mono sa (SND (compile_extcodesize_check addr_op sa))
 Proof
@@ -2175,6 +2171,20 @@ Proof
   rpt gen_tac >> Cases_on `sz` >>
   rewrite_tac[contextTheory.compile_copy_memory_def] >>
   simp[ci_mono_comp_return, ci_mono_emit_void]
+QED
+
+Theorem ci_mono_compile_store_abi_tuple[local]:
+  ∀cenv buf off elems sa.
+    ci_mono sa (SND (compile_store_abi_tuple cenv buf off elems sa))
+Proof
+  ho_match_mp_tac compile_store_abi_tuple_ind >> rpt strip_tac
+  >- simp[compile_store_abi_tuple_def, ci_mono_comp_return]
+  >> rewrite_tac[compile_store_abi_tuple_def] >> BETA_TAC >>
+  ho_match_mp_tac ci_mono_bind >> conj_tac
+  >- simp[ci_mono_emit_op]
+  >> rpt strip_tac >> irule ci_mono_ignore_bind >> conj_tac
+  >- (IF_CASES_TAC >> simp[ci_mono_emit_void, ci_mono_compile_copy_memory])
+  >> rpt strip_tac >> first_x_assum irule
 QED
 
 Theorem ci_mono_compile_copy_memory_dynamic[local]:
@@ -3263,3 +3273,4 @@ Proof
     by (irule ci_mono_same_blocks_isPREFIX >> simp[]) >>
   gvs[GSYM prefix_drop_equiv, emitted_insts_def]
 QED
+
