@@ -3893,6 +3893,94 @@ Proof
   simp[compile_store_memory_shape]
 QED
 
+Theorem compile_if_shape[local]:
+  !cenv lctx ty cond_e then_body else_body.
+    ~supported_expr_exists expr_shape_root cond_e /\
+    shape_step (IS_SOME cenv.ce_return_pc) compiler_label
+      (\st. cenv_shape_ok st cenv /\ loop_ctx_shape_ok lctx)
+      (compile_stmts cenv lctx ty then_body) (\u st. T) /\
+    shape_step (IS_SOME cenv.ce_return_pc) compiler_label
+      (\st. cenv_shape_ok st cenv /\ loop_ctx_shape_ok lctx)
+      (compile_stmts cenv lctx ty else_body) (\u st. T) ==>
+    shape_step (IS_SOME cenv.ce_return_pc) compiler_label
+      (\st. cenv_shape_ok st cenv /\ loop_ctx_shape_ok lctx)
+      (compile_stmt cenv lctx ty (If cond_e then_body else_body)) (\u st. T)
+Proof
+  rpt strip_tac >> simp[Once compile_stmt_def] >>
+  qabbrev_tac `env_live = \st. cenv_shape_ok st cenv /\ loop_ctx_shape_ok lctx` >>
+  `shape_stable env_live` by
+    simp[Abbr `env_live`, cenv_shape_ok_stable, stmt_shape_stable_const, shape_stable_conj] >>
+  stmt_bind `\v st. plain_operand st v /\ env_live st` `cond_op`
+    (ho_match_mp_tac stmt_shape_frame >> qexists_tac `\st. cenv_shape_ok st cenv` >>
+     simp[Abbr `env_live`, cenv_shape_ok_stable, stmt_shape_stable_const, shape_stable_conj] >>
+     irule lower_value_shape >> simp[]) >>
+  irule shape_step_bind >>
+  qexists_tac `\l st. (plain_operand st cond_op /\ env_live st) /\ compiler_label l` >>
+  conj_tac
+  >- (qx_gen_tac `then_lbl` >> BETA_TAC >> reverse (Cases_on `compiler_label then_lbl`)
+      >- simp[shape_step_def] >> simp[] >>
+      irule shape_step_bind >>
+      qexists_tac `\l st. (plain_operand st cond_op /\ env_live st) /\ compiler_label l` >>
+      conj_tac
+      >- (qx_gen_tac `else_lbl` >> BETA_TAC >> reverse (Cases_on `compiler_label else_lbl`)
+          >- simp[shape_step_def] >> simp[] >>
+          irule shape_step_bind >>
+          qexists_tac `\l st. (plain_operand st cond_op /\ env_live st) /\ compiler_label l` >>
+          conj_tac
+          >- (qx_gen_tac `exit_lbl` >> BETA_TAC >> reverse (Cases_on `compiler_label exit_lbl`)
+              >- simp[shape_step_def] >> simp[] >> suspend "branches") >>
+          ho_match_mp_tac shape_step_fresh_label >> simp[shape_stable_conj, stmt_shape_stable_plain]) >>
+      ho_match_mp_tac shape_step_fresh_label >> simp[shape_stable_conj, stmt_shape_stable_plain]) >>
+  ho_match_mp_tac shape_step_fresh_label >> simp[shape_stable_conj, stmt_shape_stable_plain]
+QED
+Resume compile_if_shape[branches]:
+  stmt_sequence `\u st. plain_operand st cond_op /\ env_live st`
+    (ho_match_mp_tac stmt_shape_jnz >> simp[shape_stable_conj, stmt_shape_stable_plain]) >>
+  stmt_sequence `\u st. plain_operand st cond_op /\ env_live st`
+    (ho_match_mp_tac stmt_shape_new_block >> simp[shape_stable_conj, stmt_shape_stable_plain]) >>
+  stmt_sequence `\u st. env_live st` (suspend "then_body") >>
+  stmt_bind `\cs st. env_live st` `cs_then`
+    (irule shape_step_conseq >>
+     qexistsl_tac [`compiler_label`, `env_live`, `\cs st. cs = st /\ env_live st`] >>
+     simp[shape_step_comp_get]) >>
+  simp[stmt_return_bind] >>
+  stmt_sequence `\u st. env_live st` (suspend "jump") >>
+  stmt_sequence `\u st. env_live st`
+    (ho_match_mp_tac stmt_shape_new_block >> simp[SF ETA_ss]) >>
+  stmt_sequence `\u st. T` (suspend "else_body") >>
+  stmt_bind `\cs st. T` `cs_else`
+    (irule shape_step_conseq >>
+     qexistsl_tac [`compiler_label`, `\st. T`, `\cs st. cs = st /\ T`] >>
+     simp[shape_step_comp_get]) >>
+  simp[stmt_return_bind] >>
+  stmt_sequence `\u st. T`
+    (irule emit_jmp_if_not_terminated_shape >> simp[jump_label_ok_def]) >>
+  IF_CASES_TAC
+  >- (stmt_sequence `\u st. T`
+        (ho_match_mp_tac stmt_shape_new_block >> simp[stmt_shape_stable_const]) >>
+      irule shape_step_return >> simp[]) >>
+  irule shape_step_return >> simp[]
+QED
+Resume compile_if_shape[then_body]:
+  irule shape_step_conseq >>
+  qexistsl_tac [`compiler_label`, `\st. env_live st /\ env_live st`,
+    `\u st. env_live st /\ T`] >>
+  rpt conj_tac >> TRY (simp[] >> NO_TAC) >>
+  ho_match_mp_tac shape_step_frame >> simp[]
+QED
+Resume compile_if_shape[jump]:
+  irule shape_step_conseq >>
+  qexistsl_tac [`compiler_label`, `\st. env_live st /\ T`,
+    `\u st. env_live st /\ T`] >>
+  rpt conj_tac >> TRY (simp[] >> NO_TAC) >>
+  ho_match_mp_tac shape_step_frame >> simp[] >>
+  irule emit_jmp_if_not_terminated_shape >> simp[jump_label_ok_def]
+QED
+Resume compile_if_shape[else_body]:
+  simp[SF ETA_ss]
+QED
+Finalise compile_if_shape
+
 Theorem compile_stmt_shape:
   (!cenv lctx ty s.
      ~supported_stmt_expr_exists expr_shape_root s ==>
