@@ -122,6 +122,35 @@ Proof
   EVAL_TAC
 QED
 
+(* Historical approximations retained locally as investigation evidence, not
+ * exported as production reclaim interfaces. *)
+Definition fmp_capture_escaped_def:
+  fmp_capture_escaped fn cap <=>
+    EXISTS (\inst. MEM cap (inst_uses inst)) (fn_insts fn)
+End
+Definition fmp_direct_memory_use_def:
+  fmp_direct_memory_use inst base <=>
+    (MEM inst.inst_opcode [MLOAD; MSTORE; MSTORE8; SHA3] /\
+      TAKE 1 inst.inst_operands = [Var base]) \/
+    (inst.inst_opcode = MCOPY /\ MEM (Var base) (TAKE 2 inst.inst_operands))
+End
+Definition fmp_inst_has_unsafe_derived_use_def:
+  fmp_inst_has_unsafe_derived_use vars inst <=>
+    EXISTS (\v. MEM v (inst_uses inst) /\ ~fmp_direct_memory_use inst v /\
+      ~fmp_transparent_opcode inst.inst_opcode) vars
+End
+Definition fmp_derived_step_def:
+  fmp_derived_step [] vars = vars /\
+  fmp_derived_step (inst::rest) vars =
+    fmp_derived_step rest
+      (if fmp_transparent_opcode inst.inst_opcode /\ fmp_inst_uses_any vars inst
+       then list_union inst.inst_outputs vars else vars)
+End
+Definition fmp_derived_vars_def:
+  fmp_derived_vars fn base =
+    FUNPOW (fmp_derived_step (fn_insts fn)) (LENGTH (fn_insts fn)) [base]
+End
+
 (* Checked evidence that the old capture/escape approximation is not the
  * Python interface: an ordinary address-only MLOAD already counts as escape;
  * CALL input-buffer addresses pin allocations under the old whitelist. *)
