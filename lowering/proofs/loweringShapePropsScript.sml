@@ -857,6 +857,322 @@ Proof
   stmt_frame_emit `\st. plain_operand st x`
 QED
 
+Theorem compile_safe_div_shape[local]:
+  !internal x y ty.
+    shape_step internal compiler_label
+      (\st. plain_operand st x /\ plain_operand st y)
+      (compile_safe_div x y ty) (\z st. plain_operand st z)
+Proof
+  rpt gen_tac >> simp[compile_safe_div_def] >>
+  ho_match_mp_tac stmt_nonzero_then_shape >>
+  simp[shape_stable_conj, stmt_shape_stable_plain] >>
+  reverse IF_CASES_TAC >- stmt_plain_emit >>
+  irule shape_step_bind >>
+  qexists_tac `\res st. plain_operand st res /\
+                           (plain_operand st x /\ plain_operand st y)` >>
+  conj_tac
+  >- (qx_gen_tac `res` >> BETA_TAC >> IF_CASES_TAC
+      >- (irule shape_step_bind >>
+          qexists_tac `\a st. plain_operand st a /\
+                             (plain_operand st y /\ plain_operand st res)` >>
+          conj_tac
+          >- (qx_gen_tac `x_min` >> BETA_TAC >> irule shape_step_bind >>
+              qexists_tac `\a st. plain_operand st a /\
+                                 (plain_operand st x_min /\ plain_operand st res)` >>
+              conj_tac
+              >- (qx_gen_tac `ny` >> BETA_TAC >> irule shape_step_bind >>
+                  qexists_tac `\a st. plain_operand st a /\
+                                     (plain_operand st x_min /\ plain_operand st res)` >>
+                  conj_tac
+                  >- (qx_gen_tac `y_neg1` >> BETA_TAC >> irule shape_step_bind >>
+                      qexists_tac `\a st. plain_operand st a /\ plain_operand st res` >>
+                      conj_tac
+                      >- (qx_gen_tac `bad` >> BETA_TAC >> irule shape_step_bind >>
+                          qexists_tac `\a st. plain_operand st a /\ plain_operand st res` >>
+                          conj_tac
+                          >- (gen_tac >> BETA_TAC >> irule shape_step_ignore_bind >>
+                              qexists_tac `\u st. plain_operand st res` >> conj_tac
+                              >- (gen_tac >> BETA_TAC >> irule shape_step_return >> simp[]) >>
+                              stmt_plain_void_drop) >>
+                          stmt_frame_emit `\st. plain_operand st bad`) >>
+                      stmt_frame_emit `\st. plain_operand st x_min /\ plain_operand st y_neg1`) >>
+                  stmt_frame_emit `\st. plain_operand st ny`) >>
+              stmt_frame_emit `\st. plain_operand st y`) >>
+          stmt_frame_emit `\st. plain_operand st x`) >>
+      IF_CASES_TAC
+      >- (irule shape_step_conseq >>
+          qexistsl_tac [`compiler_label`, `\st. plain_operand st res`, `\z st. plain_operand st z`] >>
+          simp[clamp_and_return_shape]) >>
+      irule shape_step_return >> simp[]) >>
+  stmt_frame_emit `\st. plain_operand st x /\ plain_operand st y`
+QED
+
+Theorem compile_safe_add_sub_shape[local]:
+  (!internal x y ty.
+    shape_step internal compiler_label
+      (\st. plain_operand st x /\ plain_operand st y)
+      (compile_safe_add x y ty) (\z st. plain_operand st z)) /\
+  (!internal x y ty.
+    shape_step internal compiler_label
+      (\st. plain_operand st x /\ plain_operand st y)
+      (compile_safe_sub x y ty) (\z st. plain_operand st z))
+Proof
+  conj_tac >> (rpt gen_tac >>
+  simp[compile_safe_add_def, compile_safe_sub_def] >> irule shape_step_bind >>
+  qexists_tac `\res st. plain_operand st res /\
+                         (plain_operand st x /\ plain_operand st y)` >> conj_tac
+  >- (qx_gen_tac `res` >> BETA_TAC >> IF_CASES_TAC
+      >- (irule shape_step_conseq >>
+          qexistsl_tac [`compiler_label`, `\st. plain_operand st res`, `\z st. plain_operand st z`] >>
+          simp[clamp_and_return_shape]) >>
+      IF_CASES_TAC
+      >- (irule shape_step_bind >>
+          qexists_tac `\a st. plain_operand st a /\
+                             (plain_operand st res /\ plain_operand st x)` >> conj_tac
+          >- (qx_gen_tac `neg_op` >> BETA_TAC >> irule shape_step_bind >>
+              qexists_tac `\a st. plain_operand st a /\
+                                 (plain_operand st neg_op /\ plain_operand st res)` >> conj_tac
+              >- (qx_gen_tac `cmp` >> BETA_TAC >> irule shape_step_bind >>
+                  qexists_tac `\a st. plain_operand st a /\ plain_operand st res` >> conj_tac
+                  >- (gen_tac >> BETA_TAC >> irule shape_step_ignore_bind >>
+                      qexists_tac `\u st. plain_operand st res` >> conj_tac
+                      >- (gen_tac >> BETA_TAC >> irule shape_step_return >> simp[]) >>
+                      stmt_plain_void_drop) >>
+                  stmt_frame_emit `\st. plain_operand st neg_op /\ plain_operand st cmp`) >>
+              stmt_frame_emit `\st. plain_operand st res /\ plain_operand st x`) >>
+          stmt_frame_emit `\st. plain_operand st y`) >>
+      irule shape_step_bind >>
+      qexists_tac `\a st. plain_operand st a /\ plain_operand st res` >> conj_tac
+      >- (qx_gen_tac `cmp` >> BETA_TAC >> irule shape_step_bind >>
+          qexists_tac `\a st. plain_operand st a /\ plain_operand st res` >> conj_tac
+          >- (gen_tac >> BETA_TAC >> irule shape_step_ignore_bind >>
+              qexists_tac `\u st. plain_operand st res` >> conj_tac
+              >- (gen_tac >> BETA_TAC >> irule shape_step_return >> simp[]) >>
+              stmt_plain_void_drop) >>
+          stmt_frame_emit `\st. plain_operand st cmp`) >>
+      stmt_frame_emit `\st. plain_operand st res /\ plain_operand st x`) >>
+  stmt_frame_emit `\st. plain_operand st x /\ plain_operand st y`)
+QED
+
+Theorem stmt_checked_then_shape[local]:
+  !internal P check m Q.
+    shape_stable P /\
+    shape_step internal compiler_label P check (\z st. plain_operand st z) /\
+    shape_step internal compiler_label P m Q ==>
+    shape_step internal compiler_label P
+      (do ok <- check; emit_void ASSERT [ok]; m od) Q
+Proof
+  rpt strip_tac >> irule shape_step_bind >>
+  qexists_tac `\z st. plain_operand st z /\ P st` >> conj_tac
+  >- (gen_tac >> BETA_TAC >> irule shape_step_ignore_bind >>
+      qexists_tac `\u st. P st` >> conj_tac
+      >- (gen_tac >> BETA_TAC >> simp[ETA_THM]) >> stmt_plain_void_drop) >>
+  ho_match_mp_tac stmt_shape_frame >> qexists_tac `P` >> simp[]
+QED
+
+Theorem compile_safe_pow_shape[local]:
+  !internal x y ty base_literal exp_literal.
+    shape_step internal compiler_label
+      (\st. plain_operand st x /\ plain_operand st y)
+      (compile_safe_pow x y ty base_literal exp_literal)
+      (\z st. plain_operand st z)
+Proof
+  rpt gen_tac >> simp[compile_safe_pow_def] >>
+  Cases_on `base_literal`
+  >- (Cases_on `exp_literal` >> simp[]
+      >- (irule shape_step_bind >>
+          qexists_tac `\z st. plain_operand st z` >> conj_tac
+          >- (gen_tac >> BETA_TAC >>
+              rewrite_tac[GSYM clamp_and_return_def] >> irule clamp_and_return_shape) >> stmt_plain_emit) >>
+      IF_CASES_TAC
+      >- (irule shape_step_ignore_bind >>
+          qexists_tac `\u st. plain_operand st x /\ plain_operand st y` >> conj_tac
+          >- (gen_tac >> BETA_TAC >> stmt_plain_emit) >> stmt_plain_void_drop) >>
+      IF_CASES_TAC
+      >- suspend "signed_exponent" >>
+      suspend "upper_bound") >>
+  simp[] >> IF_CASES_TAC
+  >- suspend "small_base" >>
+  suspend "upper_bound"
+QED
+
+Resume compile_safe_pow_shape[signed_exponent]:
+  irule shape_step_bind >>
+  qexists_tac `\a st. plain_operand st a /\ (plain_operand st x /\ plain_operand st y)` >>
+  conj_tac
+  >- (qx_gen_tac `below` >> BETA_TAC >> irule shape_step_bind >>
+      qexists_tac `\a st. plain_operand st a /\ (plain_operand st x /\ plain_operand st y)` >>
+      conj_tac
+      >- (qx_gen_tac `ge` >> BETA_TAC >> irule shape_step_bind >>
+          qexists_tac `\a st. plain_operand st a /\
+                             (plain_operand st ge /\ (plain_operand st x /\ plain_operand st y))` >>
+          conj_tac
+          >- (qx_gen_tac `above` >> BETA_TAC >> irule shape_step_bind >>
+              qexists_tac `\a st. plain_operand st a /\
+                                 (plain_operand st ge /\ (plain_operand st x /\ plain_operand st y))` >>
+              conj_tac
+              >- (qx_gen_tac `le` >> BETA_TAC >> irule shape_step_bind >>
+                  qexists_tac `\a st. plain_operand st a /\
+                                     (plain_operand st x /\ plain_operand st y)` >>
+                  conj_tac
+                  >- (gen_tac >> BETA_TAC >> irule shape_step_ignore_bind >>
+                      qexists_tac `\u st. plain_operand st x /\ plain_operand st y` >> conj_tac
+                      >- (gen_tac >> BETA_TAC >> stmt_plain_emit) >> stmt_plain_void_drop) >>
+                  stmt_frame_emit `\st. plain_operand st ge /\ plain_operand st le`) >>
+              stmt_frame_emit `\st. plain_operand st above`) >>
+          stmt_frame_emit `\st. plain_operand st x`) >>
+      stmt_frame_emit `\st. plain_operand st below`) >>
+  stmt_frame_emit `\st. plain_operand st x`
+QED
+Resume compile_safe_pow_shape[upper_bound]:
+  markerLib.RESUME_TAC >> (irule shape_step_bind >>
+  qexists_tac `\a st. plain_operand st a /\ (plain_operand st x /\ plain_operand st y)` >>
+  conj_tac
+  >- (qx_gen_tac `above` >> BETA_TAC >> irule shape_step_bind >>
+      qexists_tac `\a st. plain_operand st a /\ (plain_operand st x /\ plain_operand st y)` >>
+      conj_tac
+      >- (gen_tac >> BETA_TAC >> irule shape_step_ignore_bind >>
+          qexists_tac `\u st. plain_operand st x /\ plain_operand st y` >> conj_tac
+          >- (gen_tac >> BETA_TAC >> stmt_plain_emit) >> stmt_plain_void_drop) >>
+      stmt_frame_emit `\st. plain_operand st above`) >>
+  ho_match_mp_tac stmt_shape_frame >>
+  qmatch_goalsub_abbrev_tac `emit_op GT [bound_op; _]` >>
+  qexists_tac `\st. plain_operand st bound_op` >>
+  simp[stmt_shape_stable_plain, shape_stable_conj, Abbr `bound_op`] >> stmt_plain_emit)
+QED
+Resume compile_safe_pow_shape[small_base]:
+  ho_match_mp_tac stmt_checked_then_shape >>
+  simp[shape_stable_conj, stmt_shape_stable_plain] >> reverse conj_tac
+  >- stmt_plain_emit >> IF_CASES_TAC
+  >- (irule shape_step_bind >> qexists_tac `\a st. plain_operand st a` >> conj_tac
+      >- (gen_tac >> BETA_TAC >> stmt_plain_emit) >> stmt_plain_emit) >>
+  irule shape_step_return >>
+  simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def]
+QED
+Finalise compile_safe_pow_shape
+
+Theorem compile_mul_overflow_check_shape[local]:
+  !internal x y res signed bits.
+    shape_step internal compiler_label
+      (\st. plain_operand st x /\ plain_operand st y /\ plain_operand st res)
+      (compile_mul_overflow_check x y res signed bits) (\u st. T)
+Proof
+  rpt gen_tac >> simp[compile_mul_overflow_check_def] >>
+  irule shape_step_bind >>
+  qexists_tac `\a st. plain_operand st a /\ (plain_operand st x /\ plain_operand st y)` >>
+  conj_tac
+  >- (qx_gen_tac `div_res` >> BETA_TAC >> irule shape_step_bind >>
+      qexists_tac `\a st. plain_operand st a /\ (plain_operand st x /\ plain_operand st y)` >>
+      conj_tac
+      >- (qx_gen_tac `div_ok` >> BETA_TAC >> irule shape_step_bind >>
+          qexists_tac `\a st. plain_operand st a /\
+                             (plain_operand st div_ok /\ (plain_operand st x /\ plain_operand st y))` >>
+          conj_tac
+          >- (qx_gen_tac `y_zero` >> BETA_TAC >> irule shape_step_bind >>
+              qexists_tac `\a st. plain_operand st a /\ (plain_operand st x /\ plain_operand st y)` >>
+              conj_tac
+              >- (qx_gen_tac `ok_op` >> BETA_TAC >> irule shape_step_bind >>
+                  qexists_tac `\a st. plain_operand st a` >> conj_tac
+                  >- (gen_tac >> BETA_TAC >> stmt_plain_void_drop) >>
+                  IF_CASES_TAC >- suspend "special" >> irule shape_step_return >> simp[]) >>
+              stmt_frame_emit `\st. plain_operand st div_ok /\ plain_operand st y_zero`) >>
+          stmt_frame_emit `\st. plain_operand st y`) >>
+      stmt_frame_emit `\st. plain_operand st div_res /\ plain_operand st x`) >>
+  IF_CASES_TAC >> stmt_frame_emit `\st. plain_operand st res /\ plain_operand st y`
+QED
+Resume compile_mul_overflow_check_shape[special]:
+  irule shape_step_bind >>
+  qexists_tac `\a st. plain_operand st a /\ (plain_operand st y /\ plain_operand st ok_op)` >>
+  conj_tac
+  >- (qx_gen_tac `x_min` >> BETA_TAC >> irule shape_step_bind >>
+      qexists_tac `\a st. plain_operand st a /\ (plain_operand st x_min /\ plain_operand st ok_op)` >>
+      conj_tac
+      >- (qx_gen_tac `ny` >> BETA_TAC >> irule shape_step_bind >>
+          qexists_tac `\a st. plain_operand st a /\ (plain_operand st x_min /\ plain_operand st ok_op)` >>
+          conj_tac
+          >- (qx_gen_tac `y_neg1` >> BETA_TAC >> irule shape_step_bind >>
+              qexists_tac `\a st. plain_operand st a /\ plain_operand st ok_op` >> conj_tac
+              >- (qx_gen_tac `special` >> BETA_TAC >> irule shape_step_bind >>
+                  qexists_tac `\a st. plain_operand st a /\ plain_operand st ok_op` >> conj_tac
+                  >- (gen_tac >> BETA_TAC >> stmt_plain_emit) >>
+                  stmt_frame_emit `\st. plain_operand st special`) >>
+              stmt_frame_emit `\st. plain_operand st x_min /\ plain_operand st y_neg1`) >>
+          stmt_frame_emit `\st. plain_operand st ny`) >>
+      stmt_frame_emit `\st. plain_operand st y`) >>
+  stmt_frame_emit `\st. plain_operand st x`
+QED
+Finalise compile_mul_overflow_check_shape
+
+Theorem compile_safe_mul_shape[local]:
+  !internal x y ty.
+    shape_step internal compiler_label
+      (\st. plain_operand st x /\ plain_operand st y)
+      (compile_safe_mul x y ty) (\z st. plain_operand st z)
+Proof
+  rpt gen_tac >> simp[compile_safe_mul_def] >> irule shape_step_bind >>
+  qexists_tac `\res st. plain_operand st res /\
+                         (plain_operand st x /\ plain_operand st y)` >> conj_tac
+  >- (qx_gen_tac `res` >> BETA_TAC >> irule shape_step_ignore_bind >>
+      qexists_tac `\u st. plain_operand st res` >> conj_tac
+      >- (gen_tac >> BETA_TAC >> irule shape_step_bind >>
+          qexists_tac `\z st. plain_operand st z` >> conj_tac
+          >- (qx_gen_tac `res1` >> BETA_TAC >> IF_CASES_TAC
+              >- irule clamp_and_return_shape >> irule shape_step_return >> simp[]) >>
+          IF_CASES_TAC
+          >- (IF_CASES_TAC >> stmt_plain_emit) >> irule shape_step_return >> simp[]) >>
+      IF_CASES_TAC
+      >- (irule shape_step_conseq >>
+          qexistsl_tac [`compiler_label`,
+            `\st. plain_operand st res /\ (plain_operand st x /\ plain_operand st y)`,
+            `\u st. T /\ plain_operand st res`] >> reverse (rpt conj_tac)
+          >- (ho_match_mp_tac stmt_shape_frame >>
+              qexists_tac `\st. plain_operand st x /\ plain_operand st y /\ plain_operand st res` >>
+              simp[compile_mul_overflow_check_shape, stmt_shape_stable_plain]) >> simp[]) >>
+      irule shape_step_return >> simp[]) >>
+  stmt_frame_emit `\st. plain_operand st x /\ plain_operand st y`
+QED
+
+Theorem compile_binop_shape[local]:
+  !internal op x y ty base_literal exp_literal.
+    shape_step internal compiler_label
+      (\st. plain_operand st x /\ plain_operand st y)
+      (compile_binop op x y ty base_literal exp_literal)
+      (\z st. plain_operand st z)
+Proof
+  rpt gen_tac >> Cases_on `op` >>
+  (simp[compile_binop_def, compile_safe_add_sub_shape, compile_safe_mul_shape,
+        compile_safe_div_shape, compile_safe_decimal_div_shape,
+        compile_safe_mod_shape, compile_safe_pow_shape, compile_compare_shape] >>
+   FIRST [
+     stmt_plain_emit >> NO_TAC,
+     (rename1 `shape_step _ _ _ (if is_decimal_type ty then _ else _) _` >>
+      IF_CASES_TAC >> simp[compile_safe_div_shape, compile_safe_decimal_div_shape]) >> NO_TAC,
+     (rename1 `emit_op SAR [y; x]` >> IF_CASES_TAC >> stmt_plain_emit) >> NO_TAC,
+     (rename1 `wrap_truncate` >>
+      irule shape_step_bind >> qexists_tac `\a st. plain_operand st a` >> conj_tac
+      >- (gen_tac >> BETA_TAC >> irule wrap_truncate_shape) >>
+      TRY (IF_CASES_TAC) >> stmt_plain_emit) >> NO_TAC,
+     (rename1 `compile_select` >> irule shape_step_bind >>
+      qexists_tac `\a st. plain_operand st a /\ (plain_operand st x /\ plain_operand st y)` >>
+      conj_tac
+      >- (gen_tac >> BETA_TAC >> irule compile_select_shape) >>
+      IF_CASES_TAC >> stmt_frame_emit `\st. plain_operand st x /\ plain_operand st y`) >> NO_TAC,
+     (rename1 `emit_op ISZERO` >>
+      irule shape_step_bind >> qexists_tac `\a st. plain_operand st a` >> conj_tac
+      >- (gen_tac >> BETA_TAC >>
+          FIRST [stmt_plain_emit >> NO_TAC,
+            irule shape_step_bind >> qexists_tac `\a st. plain_operand st a` >> conj_tac
+            >- (gen_tac >> BETA_TAC >> stmt_plain_emit) >> stmt_plain_emit]) >>
+      stmt_plain_emit) >> NO_TAC,
+     (irule shape_step_ignore_bind >>
+      qexists_tac `\u st. plain_operand st x /\ plain_operand st y` >> conj_tac
+      >- (gen_tac >> BETA_TAC >> irule shape_step_return >>
+          simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def]) >>
+      ho_match_mp_tac stmt_shape_emit_inst >>
+      simp[shape_stable_conj, stmt_shape_stable_plain, label_or_plain_def] >>
+      stmt_shape_emit_simp)])
+QED
+
 (* For alan, by compile_stmt_ind.  internal is IS_SOME ce_return_pc: Return
    emits RET exactly when ce_return_pc is SOME, STOP/RETURN otherwise. *)
 Theorem compile_stmt_shape:
