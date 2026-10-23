@@ -2382,6 +2382,185 @@ Resume compile_dynarray_append_shape[store_element]:
 QED
 Finalise compile_dynarray_append_shape
 
+Theorem compile_target_base_shape[local]:
+  !bt cenv st. cenv_shape_ok st cenv ==>
+    plain_operand st (compile_target_base cenv bt)
+Proof
+  Induct >> simp[compile_target_base_def] >> rpt strip_tac >>
+  BasicProvers.TOP_CASE_TAC >> simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def] >>
+  rename1 `FLOOKUP _ _ = SOME vloc` >>
+  `loc_shape_ok st vloc` by metis_tac[cenv_shape_ok_lookup] >>
+  Cases_on `vloc` >> gvs[loc_shape_ok_def, plain_operand_def,
+    stackPlanTypesTheory.is_label_operand_def]
+QED
+
+Theorem stmt_return_bind[local]:
+  comp_bind (comp_return x) f = f x
+Proof
+  simp[comp_bind_def, comp_return_def, FUN_EQ_THM]
+QED
+
+Theorem compile_get_target_ptr_shape[local]:
+  !bt cenv internal.
+    ~supported_target_exists expr_shape_root bt ==>
+    shape_step internal compiler_label (\st. cenv_shape_ok st cenv)
+      (compile_get_target_ptr cenv bt)
+      (\r st. plain_operand st (FST r) /\ FST (SND r) <> SOME LocCode)
+Proof
+  Induct >> rpt gen_tac >> simp[supported_expr_exists_def, Once compile_get_target_ptr_def]
+  >- suspend "name"
+  >- suspend "toplevel"
+  >- suspend "subscript"
+  >> suspend "attribute"
+QED
+
+Resume compile_get_target_ptr_shape[name]:
+  BasicProvers.TOP_CASE_TAC
+  >- (irule shape_step_return >> simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def]) >>
+  rename1 `FLOOKUP _ _ = SOME vloc` >> Cases_on `vloc` >> simp[] >>
+  irule shape_step_return >> BETA_TAC >> rpt strip_tac >>
+  drule_all cenv_shape_ok_lookup >>
+  gvs[loc_shape_ok_def, plain_operand_def, stackPlanTypesTheory.is_label_operand_def]
+QED
+Resume compile_get_target_ptr_shape[toplevel]:
+  BasicProvers.TOP_CASE_TAC
+  >- (irule shape_step_return >> simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def]) >>
+  rename1 `FLOOKUP _ _ = SOME vloc` >> Cases_on `vloc` >> simp[] >>
+  irule shape_step_return >> BETA_TAC >> rpt strip_tac >>
+  drule_all cenv_shape_ok_lookup >>
+  gvs[loc_shape_ok_def, plain_operand_def, stackPlanTypesTheory.is_label_operand_def]
+QED
+Resume compile_get_target_ptr_shape[subscript]:
+  strip_tac >> IF_CASES_TAC
+  >- suspend "mapping" >>
+  irule shape_step_bind >>
+  qexists_tac `\r st. (plain_operand st (FST r) /\ FST (SND r) <> SOME LocCode) /\
+                     cenv_shape_ok st cenv` >>
+  conj_tac
+  >- (qx_gen_tac `r` >> BETA_TAC >> simp[stmt_return_bind] >>
+      suspend "array") >>
+  ho_match_mp_tac stmt_shape_frame >> qexists_tac `\st. cenv_shape_ok st cenv` >>
+  simp[cenv_shape_ok_stable] >> first_x_assum irule >> simp[]
+QED
+Resume compile_get_target_ptr_shape[attribute]:
+  strip_tac >> irule shape_step_bind >>
+  qexists_tac `\r st. plain_operand st (FST r) /\ FST (SND r) <> SOME LocCode` >>
+  conj_tac
+  >- (qx_gen_tac `r` >> BETA_TAC >> simp[stmt_return_bind] >>
+      qmatch_goalsub_abbrev_tac `emit_op ADD [FST r; Lit field_off]` >>
+      irule shape_step_bind >>
+      qexists_tac `\p st. plain_operand st p /\ FST (SND r) <> SOME LocCode` >>
+      conj_tac
+      >- (gen_tac >> BETA_TAC >> irule shape_step_return >> simp[]) >>
+      ho_match_mp_tac stmt_shape_frame >>
+      qexists_tac `\st. plain_operand st (FST r)` >>
+      simp[stmt_shape_stable_const] >> stmt_plain_emit) >>
+  first_x_assum irule >> simp[]
+QED
+Resume compile_get_target_ptr_shape[mapping]:
+  irule shape_step_bind >>
+  qexists_tac `\key st. plain_operand st key /\ cenv_shape_ok st cenv` >>
+  conj_tac
+  >- (qx_gen_tac `key` >> BETA_TAC >> irule shape_step_bind >>
+      qexists_tac `\base st. plain_operand st base /\ plain_operand st key` >>
+      conj_tac
+      >- (qx_gen_tac `mapping_base_op` >> BETA_TAC >> irule shape_step_bind >>
+          qexists_tac `\slot st. plain_operand st slot` >> conj_tac
+          >- (gen_tac >> BETA_TAC >> irule shape_step_return >> simp[]) >>
+          irule compile_mapping_subscript_shape) >>
+      ho_match_mp_tac stmt_shape_frame >>
+      qexists_tac `\st. cenv_shape_ok st cenv` >>
+      simp[stmt_shape_stable_plain] >> Cases_on `bt` >> simp[]
+      >- (irule shape_step_return >> BETA_TAC >> rpt strip_tac >>
+          BasicProvers.TOP_CASE_TAC >> simp[plain_operand_def,
+            stackPlanTypesTheory.is_label_operand_def] >>
+          rename1 `FLOOKUP _ _ = SOME vloc` >> Cases_on `vloc` >>
+          simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def]) >>
+      (irule shape_step_bind >>
+       qexists_tac `\r st. plain_operand st (FST r) /\ FST (SND r) <> SOME LocCode` >>
+       conj_tac
+       >- (gen_tac >> BETA_TAC >> irule shape_step_return >> simp[]) >>
+       first_x_assum irule >> simp[])) >>
+  ho_match_mp_tac stmt_shape_frame >>
+  qexists_tac `\st. cenv_shape_ok st cenv` >>
+  simp[cenv_shape_ok_stable] >> irule lower_value_shape >> simp[]
+QED
+Resume compile_get_target_ptr_shape[array]:
+  reverse (Cases_on `FST (SND r) <> SOME LocCode`)
+  >- simp[shape_step_def] >> simp[] >>
+  qmatch_goalsub_abbrev_tac `compile_array_subscript _ _ dyn_flag arr_count arr_ws arr_elem_size idx_signed arr_load` >>
+  irule shape_step_bind >>
+  qexists_tac `\idx st. plain_operand st idx /\ plain_operand st (FST r)` >>
+  conj_tac
+  >- (qx_gen_tac `idx` >> BETA_TAC >> irule shape_step_bind >>
+      qexists_tac `\p st. plain_operand st p` >> conj_tac
+      >- (gen_tac >> BETA_TAC >> irule shape_step_return >> simp[]) >>
+      irule shape_step_conseq >>
+      qexistsl_tac [`compiler_label`,
+        `\st. plain_operand st (FST r) /\ plain_operand st idx`,
+        `\p st. plain_operand st p`] >> simp[] >>
+      Cases_on `FST (SND r)` >> gvs[Abbr `arr_load`]
+      >- (irule (SRULE[load_opc_for_def]
+            (Q.INST [`loc` |-> `LocMemory`] (SPEC_ALL compile_array_subscript_shape)))) >>
+      rename1 `array_loc <> LocCode` >>
+      Cases_on `array_loc` >> gvs[] >>
+      FIRST [irule (SRULE[load_opc_for_def] (Q.INST [`loc` |-> `LocMemory`] (SPEC_ALL compile_array_subscript_shape))),
+             irule (SRULE[load_opc_for_def] (Q.INST [`loc` |-> `LocStorage`] (SPEC_ALL compile_array_subscript_shape))),
+             irule (SRULE[load_opc_for_def] (Q.INST [`loc` |-> `LocTransient`] (SPEC_ALL compile_array_subscript_shape)))]) >>
+  ho_match_mp_tac stmt_shape_frame >> qexists_tac `\st. cenv_shape_ok st cenv` >>
+  simp[stmt_shape_stable_plain] >> irule lower_value_shape >> simp[]
+QED
+Finalise compile_get_target_ptr_shape
+
+Theorem compile_store_at_loc_shape[local]:
+  !internal dst val_op loc_opt.
+    loc_opt <> SOME LocCode ==>
+    shape_step internal compiler_label
+      (\st. plain_operand st dst /\ plain_operand st val_op)
+      (compile_store_at_loc dst val_op loc_opt) (\u st. T)
+Proof
+  rpt strip_tac >> Cases_on `loc_opt` >> simp[compile_store_at_loc_def]
+  >- stmt_plain_void_drop >>
+  rename1 `SOME store_loc <> SOME LocCode` >>
+  Cases_on `store_loc` >> gvs[compile_store_at_loc_def] >> stmt_plain_void_drop
+QED
+
+Theorem compile_load_memory_shape[local]:
+  !internal ptr_op is_prim.
+    shape_step internal compiler_label (\st. plain_operand st ptr_op)
+      (compile_load_memory ptr_op is_prim) (\op st. plain_operand st op)
+Proof
+  rpt gen_tac >> simp[compile_load_memory_def] >> IF_CASES_TAC
+  >- stmt_plain_emit >> irule shape_step_return >> simp[]
+QED
+
+Theorem compile_tuple_load_all_shape[local]:
+  !tys cenv src_op off internal.
+    shape_step internal compiler_label (\st. plain_operand st src_op)
+      (compile_tuple_load_all cenv src_op tys off)
+      (\ops st. EVERY (plain_operand st) ops)
+Proof
+  Induct >- (simp[compile_tuple_load_all_def] >> rpt gen_tac >>
+             irule shape_step_return >> simp[]) >>
+  rpt gen_tac >> simp[compile_tuple_load_all_def] >> irule shape_step_bind >>
+  qexists_tac `\p st. plain_operand st p /\ plain_operand st src_op` >>
+  conj_tac
+  >- (qx_gen_tac `src_elem` >> BETA_TAC >> irule shape_step_bind >>
+      qexists_tac `\op st. plain_operand st op /\ plain_operand st src_op` >>
+      conj_tac
+      >- (qx_gen_tac `elem_op` >> BETA_TAC >> irule shape_step_bind >>
+          qexists_tac `\ops st. EVERY (plain_operand st) ops /\ plain_operand st elem_op` >>
+          conj_tac
+          >- (gen_tac >> BETA_TAC >> irule shape_step_return >> simp[]) >>
+          ho_match_mp_tac stmt_shape_frame >>
+          qexists_tac `\st. plain_operand st src_op` >>
+          simp[stmt_shape_stable_plain] >> first_x_assum irule) >>
+      ho_match_mp_tac stmt_shape_frame >>
+      qexists_tac `\st. plain_operand st src_elem` >>
+      simp[stmt_shape_stable_plain] >> irule compile_load_memory_shape) >>
+  stmt_frame_emit `\st. plain_operand st src_op`
+QED
+
 Theorem compile_stmt_shape:
   (!cenv lctx ty s.
      ~supported_stmt_expr_exists expr_shape_root s ==>
