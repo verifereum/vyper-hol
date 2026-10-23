@@ -2117,6 +2117,62 @@ Proof
   shape_under_tac shape_step_emit_op_plain `R` >> shape_opcode_tac
 QED
 
+Theorem compile_as_wei_value_int_shape[local]:
+  shape_stable R ==>
+  shape_step internal compiler_label (\st. R st /\ plain_operand st v)
+    (compile_as_wei_value_int v scale signed) (\w st. R st /\ plain_operand st w)
+Proof
+  strip_tac >> simp[builtinMiscTheory.compile_as_wei_value_int_def] >>
+  Cases_on `scale = 1` >> simp[]
+  >- (irule shape_step_return >> simp[]) >>
+  qmatch_goalsub_abbrev_tac `shape_step internal compiler_label P _ _` >>
+  `shape_stable P` by
+    (simp[Abbr `P`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
+     mp_tac (Q.SPEC `[v]:operand list` shape_stable_plain_operands) >> simp[]) >>
+  shape_scalar_emit_bind_tac `P` `product` (simp[Abbr `P`]) >>
+  qmatch_goalsub_abbrev_tac `shape_step internal compiler_label G _ _` >>
+  `shape_stable G` by
+    (simp[Abbr `G`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
+     mp_tac (Q.SPEC `[product]:operand list` shape_stable_plain_operands) >> simp[]) >>
+  shape_scalar_emit_bind_tac `G` `quotient` (simp[Abbr `G`, Abbr `P`]) >>
+  shape_scalar_emit_bind_tac `G` `safe_op` all_tac >>
+  qmatch_goalsub_abbrev_tac `shape_step internal compiler_label H _ _` >>
+  `shape_stable H` by
+    (simp[Abbr `H`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
+     mp_tac (Q.SPEC `[safe_op]:operand list` shape_stable_plain_operands) >> simp[]) >>
+  shape_scalar_emit_bind_tac `H` `zero_op` (simp[Abbr `H`, Abbr `G`, Abbr `P`]) >>
+  shape_scalar_emit_bind_tac `G` `ok_op` (simp[Abbr `H`]) >>
+  match_mp_tac shape_step_bind >> qexists_tac `\w st. G st /\ plain_operand st w` >> conj_tac
+  >- (Cases_on `signed` >> simp[]
+      >- (qmatch_goalsub_abbrev_tac `shape_step internal compiler_label J _ _` >>
+          `shape_stable J` by
+            (simp[Abbr `J`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
+             mp_tac (Q.SPEC `[ok_op]:operand list` shape_stable_plain_operands) >> simp[]) >>
+          shape_scalar_emit_bind_tac `J` `negative_op` (simp[Abbr `J`, Abbr `G`, Abbr `P`]) >>
+          shape_scalar_emit_bind_tac `J` `not_negative` all_tac >>
+          shape_under_tac shape_step_emit_op_plain `G` >> simp[Abbr `J`] >> shape_opcode_tac) >>
+      irule shape_step_return >> simp[]) >>
+  gen_tac >> simp[] >> shape_scalar_assert_tac `G` >>
+  irule shape_step_return >> simp[Abbr `G`, Abbr `P`]
+QED
+
+Theorem compile_clamp_extract32_shape[local]:
+  shape_stable R ==>
+  shape_step internal compiler_label (\st. R st /\ plain_operand st v)
+    (compile_clamp_extract32 v clamp) (\w st. R st /\ plain_operand st w)
+Proof
+  strip_tac >> Cases_on `clamp` >> simp[builtinBytesTheory.compile_clamp_extract32_def]
+  >- (irule shape_step_return >> simp[]) >>
+  qmatch_goalsub_abbrev_tac `shape_step internal compiler_label P _ _` >>
+  `shape_stable P` by
+    (simp[Abbr `P`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
+     mp_tac (Q.SPEC `[v]:operand list` shape_stable_plain_operands) >> simp[]) >>
+  shape_scalar_emit_bind_tac `P` `bound_op` (simp[Abbr `P`]) >>
+  shape_scalar_emit_bind_tac `P` `ok_op` (simp[Abbr `P`]) >>
+  shape_scalar_assert_tac `P` >>
+  irule shape_step_return >> simp[Abbr `P`]
+QED
+
 Theorem compile_pow_mod256_shape[local]:
   shape_stable R ==>
   shape_step internal compiler_label
