@@ -1,0 +1,248 @@
+{
+  "bytecode_dir": "lowering/defs/bytecode/assignment-order/hol-output",
+  "evm": "py-evm",
+  "fork": "Prague",
+  "results": [
+    {
+      "calldata": "13d1aa2e00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000007",
+      "error": null,
+      "expected_return_data": "",
+      "expected_reverted": false,
+      "expected_storage": {
+        "0": 8
+      },
+      "initial_storage": {},
+      "name": "c08_storage_arr_assign_computed_rhs",
+      "passed": true,
+      "return_data": "",
+      "reverted": false,
+      "runtime_sha256": "50d5784e65ceb644d601ecf0661ce496a4d6c2f0cfc0d6f83987d3551969ae0a",
+      "storage": {
+        "0": 8
+      }
+    },
+    {
+      "calldata": "13d1aa2e00000000000000000000000000000000000000000000000000000000000000040000000000000000000000000000000000000000000000000000000000000009",
+      "error": null,
+      "expected_return_data": "",
+      "expected_reverted": false,
+      "expected_storage": {
+        "2588077117166263351284689902931333654327841381007133193817924669990258558652": 18
+      },
+      "initial_storage": {},
+      "name": "c09_storage_map_assign_computed_rhs",
+      "passed": true,
+      "return_data": "",
+      "reverted": false,
+      "runtime_sha256": "0125bf999c1dba853a46276f735cd630e116131265630afb79a0949dd015209c",
+      "storage": {
+        "2588077117166263351284689902931333654327841381007133193817924669990258558652": 18
+      }
+    },
+    {
+      "calldata": "b3de648b0000000000000000000000000000000000000000000000000000000000000003",
+      "error": null,
+      "expected_return_data": "",
+      "expected_reverted": false,
+      "expected_storage": {
+        "1": 11,
+        "3": 1
+      },
+      "initial_storage": {
+        "1": 8,
+        "3": 1
+      },
+      "name": "g6_write_order_side",
+      "passed": true,
+      "return_data": "",
+      "reverted": false,
+      "runtime_sha256": "07a89e9f97f64b104a4980897695942d5050900498f90b3e365e5ec3ffa407a1",
+      "storage": {
+        "1": 11,
+        "3": 1
+      }
+    },
+    {
+      "calldata": "26121ff0",
+      "error": null,
+      "expected_return_data": "",
+      "expected_reverted": false,
+      "expected_storage": {
+        "0": 2,
+        "92458281274488595289803937127152923398167637295201432141969818930235769911599": 0,
+        "105409183525425523237923285454331214386340807945685310246717412709691342439136": 1
+      },
+      "initial_storage": {},
+      "name": "x04_assign_sideeffect_order",
+      "passed": true,
+      "return_data": "",
+      "reverted": false,
+      "runtime_sha256": "6f300377102a2bac49f8ff56803fc225b0e08cfc20d0c412fcdd1ed208fc7abb",
+      "storage": {
+        "0": 2,
+        "92458281274488595289803937127152923398167637295201432141969818930235769911599": 0,
+        "105409183525425523237923285454331214386340807945685310246717412709691342439136": 1
+      }
+    },
+    {
+      "calldata": "26121ff0",
+      "error": null,
+      "expected_return_data": "",
+      "expected_reverted": false,
+      "expected_storage": {
+        "0": 1
+      },
+      "initial_storage": {},
+      "name": "g19_aug_rhs_modifies_target",
+      "passed": true,
+      "return_data": "",
+      "reverted": false,
+      "runtime_sha256": "dfa44e3fec3c68b8974992c83f5d9ae7951f15bef4fea8e667e53802ddfd0d58",
+      "storage": {
+        "0": 1
+      }
+    },
+    {
+      "calldata": "b3de648b0000000000000000000000000000000000000000000000000000000000000005",
+      "error": "Revert",
+      "expected_return_data": "",
+      "expected_reverted": true,
+      "expected_storage": {},
+      "initial_storage": {},
+      "name": "x03_assign_elem_from_pop",
+      "passed": true,
+      "return_data": "",
+      "reverted": true,
+      "runtime_sha256": "45e75c54e4202c6fa43934c36287ba28fd68fe9223ae139a72e8853d11286bbd",
+      "storage": {}
+    },
+    {
+      "calldata": "724658c100000000000000000000000022222222222222222222222222222222222222220000000000000000000000000000000000000000000000000000000000000003",
+      "error": null,
+      "expected_return_data": "",
+      "expected_reverted": false,
+      "expected_storage": {
+        "24465873643947496235832446106509767096567058095563226156125564318740882468607": 7
+      },
+      "initial_storage": {},
+      "name": "s11_storage_map_assign_extcall_rhs",
+      "passed": true,
+      "return_data": "",
+      "reverted": false,
+      "runtime_sha256": "f7ae5b947ee0df976aebb629bfae27d344789d1144c77a5a8d17b55e01d40054",
+      "storage": {
+        "24465873643947496235832446106509767096567058095563226156125564318740882468607": 7
+      }
+    },
+    {
+      "calldata": "26121ff0",
+      "error": null,
+      "expected_return_data": "",
+      "expected_reverted": false,
+      "expected_storage": {
+        "0": 1,
+        "92458281274488595289803937127152923398167637295201432141969818930235769911599": 1
+      },
+      "initial_storage": {},
+      "name": "assign_delayed_storage_read",
+      "passed": true,
+      "return_data": "",
+      "reverted": false,
+      "runtime_sha256": "8fd19e380a416861f2a590bb8b6c44d0b4040da9ffd3c1f350e8a3b3ec97cf26",
+      "storage": {
+        "0": 1,
+        "92458281274488595289803937127152923398167637295201432141969818930235769911599": 1
+      }
+    },
+    {
+      "calldata": "26121ff0",
+      "error": null,
+      "expected_return_data": "0000000000000000000000000000000000000000000000000000000000000005",
+      "expected_reverted": false,
+      "expected_storage": {
+        "2588077117166263351284689902931333654327841381007133193817924669990258558652": 5
+      },
+      "initial_storage": {},
+      "name": "assign_delayed_popped_read",
+      "passed": true,
+      "return_data": "0000000000000000000000000000000000000000000000000000000000000005",
+      "reverted": false,
+      "runtime_sha256": "c54a80c2c65bbcfd90e6766d8444557055a07551db5161177f87b57c3b44c03c",
+      "storage": {
+        "2588077117166263351284689902931333654327841381007133193817924669990258558652": 5
+      }
+    },
+    {
+      "calldata": "26121ff0",
+      "error": "Revert",
+      "expected_return_data": "",
+      "expected_reverted": false,
+      "expected_storage": {
+        "24465873643947496235832446106509767096567058095563226156125564318740882468607": 1,
+        "24465873643947496235832446106509767096567058095563226156125564318740882468608": 1
+      },
+      "initial_storage": {},
+      "name": "assign_nested_popped_read",
+      "passed": false,
+      "return_data": "",
+      "reverted": true,
+      "runtime_sha256": "e22f567362c142d4a6c712b0eb016cb8cb2af8a2e62a008d42a13c4261405132",
+      "storage": {
+        "24465873643947496235832446106509767096567058095563226156125564318740882468607": 0,
+        "24465873643947496235832446106509767096567058095563226156125564318740882468608": 0
+      }
+    },
+    {
+      "calldata": "26121ff0",
+      "error": null,
+      "expected_return_data": "",
+      "expected_reverted": false,
+      "expected_storage": {
+        "0": 0,
+        "1": 10
+      },
+      "initial_storage": {
+        "0": 1,
+        "1": 5
+      },
+      "name": "aug_storage_shrink",
+      "passed": true,
+      "return_data": "",
+      "reverted": false,
+      "runtime_sha256": "32aab328024cfb0492bb70e1419e1acb83114204910137e4a9b086d6bbc11220",
+      "storage": {
+        "0": 0,
+        "1": 10
+      }
+    },
+    {
+      "calldata": "26121ff0",
+      "error": null,
+      "expected_return_data": "0000000000000000000000000000000000000000000000000000000000000000",
+      "expected_reverted": false,
+      "expected_storage": {},
+      "initial_storage": {},
+      "name": "aug_memory_shrink",
+      "passed": true,
+      "return_data": "0000000000000000000000000000000000000000000000000000000000000000",
+      "reverted": false,
+      "runtime_sha256": "3045c29788affa08bcd5578f6d9476861421168cb882b2a8a8289c4a4026a02f",
+      "storage": {}
+    },
+    {
+      "calldata": "26121ff0",
+      "error": null,
+      "expected_return_data": "0000000000000000000000000000000000000000000000000000000000000007",
+      "expected_reverted": false,
+      "expected_storage": {},
+      "initial_storage": {},
+      "name": "aug_memory_shrink_append",
+      "passed": true,
+      "return_data": "0000000000000000000000000000000000000000000000000000000000000007",
+      "reverted": false,
+      "runtime_sha256": "71c689052746e789c5177f106f59451bfdbf5afacea1660bb4cdd9337d658c11",
+      "storage": {}
+    }
+  ],
+  "version": "0.12.1b1"
+}

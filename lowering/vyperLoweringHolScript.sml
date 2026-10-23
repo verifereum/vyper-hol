@@ -12,3 +12,7 @@ Ancestors
   configuredE2ECorrectness
   evalCompilerMemoryStores
   evalCompilerNameCollisions
+  evalCompilerAssignmentOrder
+  evalCompilerAssignmentEffects
+  evalInterpreterAssignmentOrder
+  evalAssignmentOrderSupported

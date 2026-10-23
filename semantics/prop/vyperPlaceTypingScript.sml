@@ -141,6 +141,12 @@ Proof
       irule subscript_type_well_formed >>
       qexistsl_tac [`AttrSubscript s`,`StructTV fields`] >>
       simp[subscript_type_def]) >>
+  all_tac >~ [`well_formed_type_value (TupleTV tvs)`]
+  >- (gvs[bind_def, ignore_bind_def, check_def, assert_def,
+          lift_option_type_def, return_def, raise_def, oEL_THM] >>
+      irule subscript_type_well_formed >>
+      qexistsl_tac [`ValueSubscript (IntV i)`, `TupleTV tvs`] >>
+      simp[subscript_type_def]) >>
   Cases_on `b` >>
   gvs[resolve_array_element_def, bind_def, ignore_bind_def, check_def,
       assert_def, return_def, raise_def, get_storage_backend_def,

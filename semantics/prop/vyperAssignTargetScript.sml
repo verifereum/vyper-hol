@@ -167,8 +167,7 @@ Proof
     gvs[]) >-
   (* TupleTargetV with TupleV - use helper lemma *)
   MATCH_ACCEPT_TAC assign_target_tuple_preserves_immutables_dom >-
-  (* Other TupleTargetV cases - all vacuously true (raise) - 13 cases *)
-  simp[Once assign_target_def, raise_def] >-
+  (* Other TupleTargetV cases - all vacuously true (raise) - 12 cases *)
   simp[Once assign_target_def, raise_def] >-
   simp[Once assign_target_def, raise_def] >-
   simp[Once assign_target_def, raise_def] >-
@@ -342,8 +341,7 @@ Proof
    simp[Once assign_target_def, check_def, type_check_def, AllCaseEqs(), return_def, raise_def] >>
    simp[bind_def, ignore_bind_def, assert_def, AllCaseEqs()] >>
    strip_tac >> gvs[return_def] >> first_x_assum drule >> simp[]) >-
-  (* Other TupleTargetV cases - all raise (13 cases) *)
-  simp[Once assign_target_def, raise_def] >-
+  (* Other TupleTargetV cases - all raise (12 cases) *)
   simp[Once assign_target_def, raise_def] >-
   simp[Once assign_target_def, raise_def] >-
   simp[Once assign_target_def, raise_def] >-
@@ -375,43 +373,6 @@ Proof
   metis_tac[assign_target_preserves_immutables_dom_main]
 QED
 
-Theorem assign_target_toplevel_update:
-  ∀cx st src_id_opt n ty bop v1 v2 v tv.
-    lookup_toplevel_name cx st src_id_opt n = SOME (Value v1) ∧
-    storage_type_of cx src_id_opt n = SOME tv ∧
-    evaluate_binop
-      (case type_to_int_bound ty of NONE => Unsigned 0 | SOME u => u)
-      tv bop v1 v2 = INL v ∧
-    var_in_storage cx src_id_opt n ∧
-    storable_value cx src_id_opt n v ⇒
-    assign_target cx (BaseTargetV (TopLevelVar src_id_opt n) []) (Update ty bop v2) st =
-    (INL NONE, update_toplevel_name cx st src_id_opt n v)
-Proof
-  rw[var_in_storage_def] >>
-  gvs[lookup_toplevel_name_def, AllCaseEqs()] >>
-  `st' = st` by metis_tac[lookup_global_state] >> gvs[] >>
-  `tv' = tv` by gvs[storage_type_of_def, storage_var_info_def] >> gvs[] >>
-  `value_has_type tv v` by
-    (gvs[storable_value_def] >> first_x_assum drule >> simp[]) >>
-  `IS_SOME (encode_value tv v)` by
-    metis_tac[CONJUNCT1 vyperTypingTheory.value_has_type_equiv] >>
-  Cases_on `encode_value tv v` >> gvs[] >>
-  `∃storage. get_storage_backend cx b st = (INL storage, st)` by
-    metis_tac[get_storage_backend_INL] >>
-  simp[Once assign_target_def, bind_def, return_def, LET_THM,
-       listTheory.REVERSE_DEF, lift_option_type_def, optionTheory.OPTION_BIND_def,
-       assign_subscripts_def, lift_sum_def,
-       ignore_bind_def, assign_result_def] >>
-  gvs[AllCaseEqs()] >>
-  `ISL (FST (set_global cx src_id_opt n v st))` by (
-    simp[Once set_global_def, bind_def, return_def, LET_THM,
-         lift_option_type_def, write_storage_slot_def, lift_option_def] >>
-    Cases_on `b` >>
-    gvs[set_storage_backend_def, bind_def, return_def,
-        update_transient_def, get_accounts_def, update_accounts_def, LET_THM]) >>
-  Cases_on `set_global cx src_id_opt n v st` >>
-  Cases_on `q` >> gvs[update_toplevel_name_def]
-QED
 
 Theorem assign_target_toplevel_replace:
   ∀cx st src_id_opt n v v0.
@@ -489,52 +450,6 @@ Proof
        hashmap_write_def, hashmap_slot_for_def]
 QED
 
-(* Depth-1: assign_target for leaf HashMap with Update *)
-Theorem assign_target_leaf_update:
-  ∀cx st src_id_opt n kv v v_old v_new ty bop code is_transient kt t id offset tv.
-    get_module_code cx src_id_opt = SOME code ∧
-    find_var_decl_by_name n code = SOME (HashMapVarDecl is_transient kt (Type t), id) ∧
-    lookup_var_slot_from_layout cx is_transient src_id_opt id = SOME offset ∧
-    offset < dimword(:256) ∧
-    evaluate_type (get_tenv cx) t = SOME tv ∧
-    well_formed_type_value tv ∧
-    lookup_hashmap cx st src_id_opt n kv = SOME v_old ∧
-    evaluate_binop
-      (case type_to_int_bound ty of NONE => Unsigned 0 | SOME u => u)
-      tv bop v_old v = INL v_new ∧
-    hashmap_ref_storable cx (THE (lookup_toplevel_name cx st src_id_opt n)) v_new ⇒
-    assign_target cx (BaseTargetV (TopLevelVar src_id_opt n) [ValueSubscript kv]) (Update ty bop v) st =
-    (INL NONE, update_hashmap cx st src_id_opt n kv v_new)
-Proof
-  rpt strip_tac >>
-  `lookup_global cx src_id_opt n st =
-   (INL (HashMapRef is_transient (n2w offset) kt (Type t)), st)` by
-    (simp[Once lookup_global_def, bind_def, return_def, LET_THM,
-          lift_option_type_def, raise_def]) >>
-  `lookup_toplevel_name cx st src_id_opt n =
-   SOME (HashMapRef is_transient (n2w offset) kt (Type t))` by
-    (simp[lookup_toplevel_name_def]) >>
-  gvs[lookup_hashmap_def, read_hashmap_def, hashmap_read_def] >>
-  strip_assume_tac (SPEC_ALL encode_hashmap_key_ValueSubscript) >>
-  `value_has_type tv v_new` by gvs[hashmap_ref_storable_def] >>
-  `∃writes. encode_value tv v_new = SOME writes` by
-    (`∃s'. hashmap_write (get_storage cx st is_transient) (n2w offset)
-           kt tv kv v_new = SOME s'` by (irule hashmap_write_some >> simp[]) >>
-     gvs[hashmap_write_def, AllCaseEqs()]) >>
-  `compute_hashmap_slot (n2w offset) [kt] [ValueSubscript kv] =
-   SOME (hashmap_slot_for (n2w offset) kt kv)` by
-    (drule compute_hashmap_slot_single >>
-     simp[hashmap_slot_for_def]) >>
-  simp[Once assign_target_def, bind_def, return_def, LET_THM,
-       lift_option_type_def, raise_def,
-       split_hashmap_subscripts_type, lift_sum_def,
-       assign_subscripts_def, assign_result_def,
-       read_storage_slot_eq, write_storage_slot_eq] >>
-  simp[Once ignore_bind_def, bind_def, return_def,
-       write_storage_slot_eq,
-       update_hashmap_def, write_hashmap_def,
-       hashmap_write_def, hashmap_slot_for_def]
-QED
 
 (* General bridge: assign_target for HashMap with Replace *)
 Theorem assign_target_hashmap_replace:
@@ -568,56 +483,6 @@ Proof
   gvs[read_hashmap_def, hashmap_read_def] >>
   gvs[hashmap_ref_storable_def] >>
   rename1 `value_has_type tv_leaf v` >>
-  imp_res_tac hashmap_write_some >>
-  gvs[hashmap_write_def, AllCaseEqs()] >>
-  `∃rsb_h rsb_t. REVERSE sbs = rsb_h :: rsb_t` by
-    (Cases_on `REVERSE sbs` >> gvs[subscripts_to_values_def]) >>
-  simp[Once assign_target_def, bind_def, return_def, LET_THM,
-       lift_option_type_def, raise_def] >>
-  gvs[listTheory.TAKE_LENGTH_ID] >>
-  simp[assign_subscripts_def, assign_result_def, return_def,
-       read_storage_slot_eq, bind_def] >>
-  simp[lift_sum_def, Once ignore_bind_def, bind_def, return_def,
-       write_storage_slot_eq,
-       write_hashmap_def, hashmap_write_def, hashmap_slot_for_def]
-QED
-
-(* General bridge: assign_target for HashMap with Update *)
-Theorem assign_target_hashmap_update:
-  ∀cx st src_id_opt n sbs href0 keys href_leaf last_kv v v_old v_new ty bop.
-    (∀st. lookup_toplevel_name cx st src_id_opt n = SOME href0) ∧
-    subscripts_to_values (REVERSE sbs) = SOME (keys ++ [last_kv]) ∧
-    hashmap_index_chain href0 keys = SOME href_leaf ∧
-    is_leaf_hashmap_ref cx href_leaf ∧
-    read_hashmap cx st href_leaf last_kv = SOME v_old ∧
-    hashmap_ref_value_tv cx href_leaf = SOME tv_leaf ∧
-    evaluate_binop
-      (case type_to_int_bound ty of NONE => Unsigned 0 | SOME u => u)
-      tv_leaf bop v_old v = INL v_new ∧
-    hashmap_ref_storable cx href_leaf v_new ⇒
-    ∃r. assign_target cx
-      (BaseTargetV (TopLevelVar src_id_opt n) sbs) (Update ty bop v) st =
-    (INL r, write_hashmap cx st href_leaf last_kv v_new)
-Proof
-  rw[] >>
-  first_assum (strip_assume_tac o Q.SPEC `st`) >>
-  imp_res_tac lookup_toplevel_name_lookup_global >>
-  imp_res_tac lookup_global_get_module_code >>
-  Cases_on `href0` >| [
-    Cases_on `keys` >> gvs[hashmap_index_chain_def, hashmap_index_def,
-                            is_leaf_hashmap_ref_def],
-    all_tac,
-    Cases_on `keys` >> gvs[hashmap_index_chain_def, hashmap_index_def,
-                            is_leaf_hashmap_ref_def]
-  ] >>
-  rename1 `HashMapRef is_t base_slot kt vt` >>
-  drule_at (Pos last) hashmap_chain_split_compute >>
-  disch_then (qspecl_then [`vt`, `is_t`, `base_slot`, `kt`, `cx`,
-    `href_leaf`] mp_tac) >>
-  simp[] >> strip_tac >> gvs[] >>
-  gvs[read_hashmap_def, hashmap_read_def, hashmap_ref_value_tv_def] >>
-  gvs[hashmap_ref_storable_def] >>
-  rename1 `value_has_type tv_leaf v_new` >>
   imp_res_tac hashmap_write_some >>
   gvs[hashmap_write_def, AllCaseEqs()] >>
   `∃rsb_h rsb_t. REVERSE sbs = rsb_h :: rsb_t` by

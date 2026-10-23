@@ -72,7 +72,7 @@ Proof
 QED
 
 
-Theorem array_index_element_end_bound[local]:
+Theorem array_index_element_end_bound:
   i < n ==> i * sz + sz <= n * sz
 Proof
   strip_tac >>
@@ -402,7 +402,7 @@ Proof
        simp[] >> strip_tac >> decide_tac])
 QED
 
-Theorem contained_array_child_disjoint_sibling[local]:
+Theorem contained_array_child_disjoint_sibling:
   0 < sz /\ (i < j \/ j < i) /\
   off + (i * sz + sz) <= dimword(:256) /\
   off + (j * sz + sz) <= dimword(:256) /\
@@ -448,7 +448,7 @@ Proof
   decide_tac
 QED
 
-Theorem contained_dynamic_child_disjoint_header[local]:
+Theorem contained_dynamic_child_disjoint_header:
   0 < sz /\ off + 1 <= leaf /\
   leaf + leaf_sz <= dimword(:256) /\ off + 1 <= dimword(:256) ==>
   ranges_disjoint leaf leaf_sz off 1
@@ -492,7 +492,7 @@ Proof
   gvs[ranges_disjoint_def, wordsTheory.n2w_11]
 QED
 
-Theorem typed_write_storage_slot_preserves_disjoint_read_slot[local]:
+Theorem typed_write_storage_slot_preserves_disjoint_read_slot:
   value_has_type tv v ==>
   write_storage_slot cx b slot tv v st = (INL (), st') ==>
   ranges_disjoint (w2n slot) (type_slot_size tv) off 1 ==>
@@ -508,7 +508,7 @@ Proof
   metis_tac[CONJUNCT1 vyperEncodeDecodeTheory.encode_writes_bounded]
 QED
 
-Theorem typed_write_storage_slot_preserves_disjoint_num_region[local]:
+Theorem typed_write_storage_slot_preserves_disjoint_num_region:
   slots_in_range (get_storage cx st b2) off2 tv2 ==>
   value_has_type tv1 v ==>
   write_storage_slot cx b1 slot1 tv1 v st = (INL (), st') ==>
@@ -577,7 +577,7 @@ Proof
   simp[]
 QED
 
-Theorem fixed_array_typed_leaf_write_reconstruct[local]:
+Theorem fixed_array_typed_leaf_write_reconstruct:
   slots_in_range (get_storage cx st b) off (ArrayTV tv (Fixed n)) /\
   i < n /\
   0 < type_slot_size tv /\
@@ -631,7 +631,7 @@ Proof
   qexists `i` >> simp[]
 QED
 
-Theorem dynamic_array_typed_leaf_write_reconstruct[local]:
+Theorem dynamic_array_typed_leaf_write_reconstruct:
   slots_in_range (get_storage cx st b) off (ArrayTV tv (Dynamic max)) /\
   i < w2n (read_slot (get_storage cx st b) off) /\
   0 < type_slot_size tv /\
@@ -2335,10 +2335,10 @@ QED
 (* Contract-level framing for one concrete typed write contained in an
    ordinary declared root.  The caller supplies reconstruction of that root;
    layout separation frames every distinct semantic declaration. *)
-Theorem contained_ordinary_write_preserves_contract_storage_well_formed:
+Theorem contained_write_preserves_contract_storage_well_formed:
   contract_storage_well_formed cx st /\
   storage_layout_safe cx /\
-  declared_storage_region cx mid n [] = SOME (b,root_slot,tv) /\
+  declared_storage_region cx mid n root_keys = SOME (b,root_slot,tv) /\
   value_has_type wr_tv wr_v /\
   write_storage_slot cx b wr_slot wr_tv wr_v st = (INL (),st') /\
   w2n root_slot <= w2n wr_slot /\
@@ -2354,7 +2354,7 @@ Proof
      slots_in_range storage (w2n slot') tv'` by
     (rpt gen_tac >> strip_tac >>
      gvs[vyperStorageBackendTheory.get_storage_backend_eq] >>
-     Cases_on `(mid,n,[]) = (mid',n',subs')`
+     Cases_on `(mid,n,root_keys) = (mid',n',subs')`
      >- (gvs[]) >>
      `slots_in_range (get_storage cx st b') (w2n slot') tv'` by
        (qpat_x_assum `contract_storage_well_formed cx st` mp_tac >>
@@ -2372,7 +2372,7 @@ Proof
            qpat_x_assum
              `!mid1 n1 subs1 mid2 n2 subs2 bb slot1 tv1 slot2 tv2. _`
              (qspecl_then
-                [`mid`, `n`, `[]`, `mid'`, `n'`, `subs'`, `b`,
+                [`mid`, `n`, `root_keys`, `mid'`, `n'`, `subs'`, `b`,
                  `root_slot`, `tv`, `slot'`, `tv'`] mp_tac) >>
            (impl_tac >- simp[]) >>
            strip_tac >- gvs[] >> simp[]) >>
@@ -2404,6 +2404,21 @@ Proof
       irule (CONJUNCT1 zero_slot_size_slots_in_range) >> simp[]) >>
   metis_tac[]
 QED
+Theorem contained_ordinary_write_preserves_contract_storage_well_formed:
+  contract_storage_well_formed cx st /\
+  storage_layout_safe cx /\
+  declared_storage_region cx mid n [] = SOME (b,root_slot,tv) /\
+  value_has_type wr_tv wr_v /\
+  write_storage_slot cx b wr_slot wr_tv wr_v st = (INL (),st') /\
+  w2n root_slot <= w2n wr_slot /\
+  w2n wr_slot + type_slot_size wr_tv <=
+    w2n root_slot + type_slot_size tv /\
+  slots_in_range (get_storage cx st' b) (w2n root_slot) tv ==>
+  contract_storage_well_formed cx st'
+Proof
+  metis_tac[contained_write_preserves_contract_storage_well_formed]
+QED
+
 (* Sequential form for append/pop final endpoints.  The intermediate selected
    root fact is explicit because a failed second write may expose st1. *)
 Theorem resolve_array_element_dynamic_pop_header_write_preserves_contract_storage_well_formed:

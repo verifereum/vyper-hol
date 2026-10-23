@@ -7,7 +7,7 @@ Ancestors
   vyperMisc vyperNsidFmap vyperValue vyperValueOperation vyperStorage vyperContext vyperState
   vyperEvent vyperEvmBoundary vyperCreate vyperRuntimeAccounts
 Libs
-  cv_transLib wordsLib monadsyntax
+  cv_transLib wordsLib intLib monadsyntax
 
 (* Import only the two outcome selectors used here, without EVM/crypto
    grammar shadowing source operations in existing proof consumers. *)
@@ -1075,19 +1075,26 @@ Definition evaluate_def:
     assign_target cx (BaseTargetV loc sbs) (AppendOp v);
     return ()
   od ∧
-  eval_stmt cx (Assign g e) = do
-    gv <- eval_target cx g;
+  eval_stmt cx (Assign (BaseTarget t) e) = do
+    pv <- eval_place cx e;
+    p <- eval_target_place cx t;
+    v <- read_place_or_value cx pv;
+    write_place cx p v
+  od ∧
+  eval_stmt cx (Assign (TupleTarget gs) e) = do
     tv <- eval_expr cx e;
     v <- materialise cx tv;
-    assign_target cx gv (Replace v);
-    return ()
+    assign_tuple_targets cx (TupleTarget gs) v
   od ∧
   eval_stmt cx (AugAssign ty t bop e) = do
-    (loc, sbs) <- eval_base_target cx t;
+    p <- eval_target_place cx t;
+    cur <- read_place cx p;
+    ptv <- place_type_value cx p;
     tv <- eval_expr cx e;
     v <- get_Value tv;
-    assign_target cx (BaseTargetV loc sbs) (Update ty bop v);
-    return ()
+    u <<- (case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0);
+    res <- lift_sum (evaluate_binop u ptv bop cur v);
+    write_place cx p res
   od ∧
   eval_stmt cx (If e ss1 ss2) = do
     tv <- eval_expr cx e;
@@ -1128,20 +1135,6 @@ Definition evaluate_def:
     rl <- lift_sum $ get_range_limits v1 v2;
     n1 <<- FST rl; n2 <<- SND rl;
     return $ GENLIST (λn. IntV (n1 + &n)) n2
-  od ∧
-  eval_target cx (BaseTarget t) = do
-    (loc, sbs) <- eval_base_target cx t;
-    return $ BaseTargetV loc sbs
-  od ∧
-  eval_target cx (TupleTarget gs) = do
-    gvs <- eval_targets cx gs;
-    return $ TupleTargetV gvs
-  od ∧
-  eval_targets cx [] = return [] ∧
-  eval_targets cx (g::gs) = do
-    gv <- eval_target cx g;
-    gvs <- eval_targets cx gs;
-    return $ gv::gvs
   od ∧
   eval_base_target cx (NameTarget id) = do
     sc <- get_scopes;
@@ -1433,25 +1426,80 @@ Definition evaluate_def:
     v <- materialise cx tv;
     vs <- eval_exprs cx es;
     return $ v::vs
-  od
+  od ∧
+  eval_place cx (Name ty id) = do
+    sc <- get_scopes;
+    type_check (IS_SOME (lookup_scopes id sc)) "Name not in scope";
+    return (PlaceR (MemoryPlace id []))
+  od ∧
+  eval_place cx (TopLevelName ty (src,id)) = lookup_global_place cx src id ∧
+  eval_place cx (Subscript ty e1 e2) = do
+    pv <- eval_place cx e1;
+    tv <- eval_expr cx e2;
+    v <- get_Value tv;
+    ptv <- lift_option_type (evaluate_type (get_tenv cx) (expr_type e1))
+             "Subscript array type";
+    extend_place cx ptv pv (ValueSubscript v)
+  od ∧
+  eval_place cx (Attribute ty e id) = do
+    pv <- eval_place cx e;
+    ptv <- lift_option_type (evaluate_type (get_tenv cx) (expr_type e))
+             "Attribute base type";
+    extend_place cx ptv pv (AttrSubscript id)
+  od ∧
+  eval_place cx e = do
+    tv <- eval_expr cx e;
+    return (ValueR tv)
+  od ∧
+  eval_base_place cx (NameTarget id) = do
+    sc <- get_scopes;
+    type_check (IS_SOME (lookup_scopes id sc)) "NameTarget not in scope";
+    return (PlaceR (MemoryPlace id []))
+  od ∧
+  eval_base_place cx (TopLevelNameTarget (src,id)) = lookup_global_place cx src id ∧
+  eval_base_place cx (AttributeTarget t id) = do
+    pv <- eval_base_place cx t;
+    extend_target_place cx pv (AttrSubscript id)
+  od ∧
+  eval_base_place cx (SubscriptTarget t e) = do
+    pv <- eval_base_place cx t;
+    tv <- eval_expr cx e;
+    v <- get_Value tv;
+    extend_target_place cx pv (ValueSubscript v)
+  od ∧
+  eval_target_place cx t = do
+    pv <- eval_base_place cx t;
+    get_place pv
+  od ∧
+  assign_tuple_targets cx (BaseTarget t) v = do
+    p <- eval_target_place cx t;
+    write_place cx p v
+  od ∧
+  assign_tuple_targets cx (TupleTarget gs) v =
+    (case v of
+     | ArrayV (TupleV vs) => assign_tuple_target_list cx gs vs
+     | _ => raise (Error (TypeError "TupleTarget value"))) ∧
+  assign_tuple_target_list cx [] [] = return () ∧
+  assign_tuple_target_list cx (g::gs) (v::vs) = do
+    assign_tuple_targets cx g v;
+    assign_tuple_target_list cx gs vs
+  od ∧
+  assign_tuple_target_list cx gs vs = raise (Error (TypeError "TupleTarget length"))
 Termination
-  qexists_tac ‘measure (λx. case x of
-  | INR (INR (INR (INR (INR (INR (INR (INR (cx, es))))))))
-    => exprs_bound (remcode cx) es
-  | INR (INR (INR (INR (INR (INR (INR (INL (cx, e))))))))
-    => expr_bound (remcode cx) e
-  | INR (INR (INR (INR (INR (INR (INL (cx, tyv, nm, body, vs)))))))
-    => 1 + LENGTH vs + (LENGTH vs) * (stmts_bound (remcode cx) body)
-  | INR (INR (INR (INR (INR (INL (cx, t))))))
-    => base_target_bound (remcode cx) t
-  | INR (INR (INR (INR (INL (cx, gs)))))
-    => targets_bound (remcode cx) gs
-  | INR (INR (INR (INL (cx, g))))
-    => target_bound (remcode cx) g
-  | INR (INR (INL (cx, it)))
-    => iterator_bound (remcode cx) it
-  | INR (INL (cx, ss)) => stmts_bound (remcode cx) ss
-  | INL (cx, s) => stmt_bound (remcode cx) s)’
+  qexists_tac `measure (λx. case x of
+    INL (cx,s) => 4 * stmt_bound (remcode cx) s
+  | INR (INL (cx,ss)) => 4 * stmts_bound (remcode cx) ss
+  | INR (INR (INL (cx,it))) => 4 * iterator_bound (remcode cx) it
+  | INR (INR (INR (INL (cx,t)))) => 4 * base_target_bound (remcode cx) t
+  | INR (INR (INR (INR (INL (cx,tyv,nm,body,vs))))) =>
+      4 * (1 + LENGTH vs + LENGTH vs * stmts_bound (remcode cx) body)
+  | INR (INR (INR (INR (INR (INL (cx,e)))))) => 4 * expr_bound (remcode cx) e
+  | INR (INR (INR (INR (INR (INR (INL (cx,es))))))) => 4 * exprs_bound (remcode cx) es
+  | INR (INR (INR (INR (INR (INR (INR (INL (cx,e)))))))) => 4 * expr_bound (remcode cx) e + 1
+  | INR (INR (INR (INR (INR (INR (INR (INR (INL (cx,t))))))))) => 4 * base_target_bound (remcode cx) t
+  | INR (INR (INR (INR (INR (INR (INR (INR (INR (INL (cx,t)))))))))) => 4 * base_target_bound (remcode cx) t + 1
+  | INR (INR (INR (INR (INR (INR (INR (INR (INR (INR (INL (cx,g,v))))))))))) => 4 * target_bound (remcode cx) g + 2
+  | INR (INR (INR (INR (INR (INR (INR (INR (INR (INR (INR (cx,gs,vs))))))))))) => 4 * targets_bound (remcode cx) gs + 2)`
   \\ conj_tac >- simp[prim_recTheory.WF_measure]
   \\ rpt conj_tac
   \\ simp[prim_recTheory.measure_def, relationTheory.inv_image_def]
@@ -1503,6 +1551,133 @@ Termination
     \\ simp[LAMBDA_PROD])
   ])
 End
+
+Definition eval_legacy_targets_def:
+  eval_target cx (BaseTarget t) = do
+    (loc, sbs) <- eval_base_target cx t;
+    return $ BaseTargetV loc sbs
+  od /\
+  eval_target cx (TupleTarget gs) = do
+    gvs <- eval_targets cx gs;
+    return $ TupleTargetV gvs
+  od /\
+  eval_targets cx [] = return [] /\
+  eval_targets cx (g::gs) = do
+    gv <- eval_target cx g;
+    gvs <- eval_targets cx gs;
+    return $ gv::gvs
+  od
+Termination
+  WF_REL_TAC `measure (sum_CASE
+    (λ(cx,g). assignment_target_size g)
+    (λ(cx,gs). list_size assignment_target_size gs))` >> simp[]
+End
+
+(* Small checked memory programs exercise the place evaluator independently of
+   contract deployment. The surrounding machine state is deliberately arbitrary. *)
+Definition place_probe_state_def:
+  place_probe_state st = st with scopes :=
+    [FEMPTY |+ ("d", <|assignable := T;
+       type := ArrayTV (BaseTV (UintT 256)) (Dynamic 3);
+       value := ArrayV (DynArrayV [IntV 5]); popped := []|>)
+     |+ ("i", <|assignable := T; type := BaseTV (UintT 256);
+                 value := IntV 0; popped := []|>)
+     |+ ("a", <|assignable := T;
+       type := ArrayTV (BaseTV (UintT 256)) (Dynamic 6);
+       value := ArrayV (DynArrayV (REPLICATE 6 (IntV 0))); popped := []|>)]
+End
+
+Theorem eval_place_literal_probe[local]:
+  eval_place cx (Literal (BaseT (UintT 256)) (IntL 7)) st =
+    (INL (ValueR (Value (IntV 7))), st)
+Proof
+  simp[evaluate_def, evaluate_literal_def, return_def, bind_def]
+QED
+
+Theorem assign_pop_bounds_probe[local]:
+  FST (eval_stmt cx
+    (Assign (BaseTarget (SubscriptTarget (NameTarget "d")
+       (Literal (BaseT (UintT 256)) (IntL 0))))
+       (Pop (BaseT (UintT 256)) (NameTarget "d")))
+    (place_probe_state st)) =
+    INR (Error (RuntimeError "evaluate_subscripts array_index"))
+Proof
+  EVAL_TAC >> simp[]
+QED
+
+Theorem augassign_pop_stale_probe[local]:
+  case eval_stmt cx
+    (AugAssign (BaseT (UintT 256))
+      (SubscriptTarget (NameTarget "d")
+        (Literal (BaseT (UintT 256)) (IntL 0))) Add
+      (Pop (BaseT (UintT 256)) (NameTarget "d")))
+    (place_probe_state st) of
+    (INL (),st') => lookup_scopes_val "d" st'.scopes =
+                      SOME (ArrayV (DynArrayV []))
+  | _ => F
+Proof
+  EVAL_TAC >> simp[integerTheory.INT_LE_REFL] >> EVAL_TAC
+QED
+
+Theorem assign_delayed_pop_read_probe[local]:
+  case eval_stmt cx
+    (Assign (BaseTarget (SubscriptTarget (NameTarget "a")
+       (Pop (BaseT (UintT 256)) (NameTarget "d"))))
+      (Subscript (BaseT (UintT 256))
+        (Name (ArrayT (BaseT (UintT 256)) (Dynamic 3)) "d")
+        (Literal (BaseT (UintT 256)) (IntL 0))))
+    (place_probe_state st) of
+    (INL (),st') => lookup_scopes_val "a" st'.scopes =
+      SOME (ArrayV (DynArrayV [IntV 0; IntV 0; IntV 0; IntV 0; IntV 0; IntV 5]))
+  | _ => F
+Proof
+  EVAL_TAC
+QED
+
+Theorem nested_tuple_order_probe[local]:
+  case assign_tuple_targets cx
+    (TupleTarget [TupleTarget [BaseTarget (NameTarget "i")];
+      BaseTarget (SubscriptTarget (NameTarget "a")
+        (Name (BaseT (UintT 256)) "i"))])
+    (ArrayV (TupleV [ArrayV (TupleV [IntV 5]); IntV 9]))
+    (place_probe_state st) of
+    (INL (),st') => lookup_scopes_val "a" st'.scopes =
+      SOME (ArrayV (DynArrayV [IntV 0; IntV 0; IntV 0; IntV 0; IntV 0; IntV 9]))
+  | _ => F
+Proof
+  EVAL_TAC
+QED
+
+Theorem eager_nested_bounds_probe[local]:
+  SND (eval_place cx
+    (Subscript (BaseT (UintT 256))
+      (Subscript (BaseT (UintT 256))
+        (Name (ArrayT (BaseT (UintT 256)) (Dynamic 3)) "d")
+        (Literal (BaseT (UintT 256)) (IntL 9)))
+      (Pop (BaseT (UintT 256)) (NameTarget "d")))
+    (place_probe_state st)) = place_probe_state st
+Proof
+  EVAL_TAC
+QED
+
+Theorem eval_target_place_nested_mapping_probe[local]:
+  lookup_global_place cx NONE "m" st =
+    (INL (ValueR (HashMapRef F slot (BaseT (UintT 256))
+      (HashMapT (BaseT (UintT 256)) (Type (BaseT (UintT 256)))))), st) ==>
+  eval_target_place cx
+    (SubscriptTarget
+      (SubscriptTarget (TopLevelNameTarget (NONE,"m"))
+        (Literal (BaseT (UintT 256)) (IntL 1)))
+      (Literal (BaseT (UintT 256)) (IntL 2))) st =
+    (INL (StoragePlace F
+      (hashmap_slot (hashmap_slot slot (encode_hashmap_key (BaseT (UintT 256)) (IntV 1)))
+        (encode_hashmap_key (BaseT (UintT 256)) (IntV 2))) (BaseTV (UintT 256))), st)
+Proof
+  strip_tac >> simp[evaluate_def, bind_def, return_def, evaluate_literal_def,
+    get_Value_def, extend_target_place_nested_mapping,
+    extend_target_place_def, extend_place_def, evaluate_subscript_def,
+    lift_sum_def, subscript_result_place_def, evaluate_type_def, get_place_def]
+QED
 
 Theorem eval_exprs_length:
   ∀es cx st vs rt.
@@ -1929,3 +2104,10 @@ Definition load_contract_def:
           | (_, am', rqs) => INL (finalize_pending_deletions
                                     (am' with sources updated_by CONS (addr, mods)), rqs)
 End
+
+(* Keep the evaluator and the checked place-order probes kernel-closed. *)
+val () = List.app (fn (_,th) =>
+  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
+  in if List.all (fn s => s = "DISK_THM") oracles andalso null axioms
+     then () else raise Fail "interpreter has admitted dependencies"
+  end) (DB.thms "vyperInterpreter");

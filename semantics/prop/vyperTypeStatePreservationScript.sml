@@ -515,22 +515,6 @@ Proof
   rw[assign_operation_runtime_typed_def] >> gvs[evaluate_type_def]
 QED
 
-Theorem assign_operation_leaf_type_update:
-  evaluate_type env.type_defs ty = SOME leaf_tv /\
-  assign_operation_runtime_typed env ty (Update upd_ty bop nv) /\
-  value_has_type leaf_tv la /\
-  assign_subscripts leaf_tv la [] (Update upd_ty bop nv) = INL lv ==>
-  value_has_type leaf_tv lv
-Proof
-  rw[assign_operation_runtime_typed_def, value_runtime_typed_def] >> gvs[] >>
-  gvs[Once assign_subscripts_def, LET_THM] >>
-  irule well_typed_binop_success_type >>
-  qexists_tac `bop` >> qexists_tac `ty` >> qexists_tac `rhs_ty` >>
-  qexists_tac `env.type_defs` >> qexists_tac `leaf_tv` >> qexists_tac `tv` >>
-  qexists_tac `ty` >> qexists_tac `case type_to_int_bound ty of NONE => Unsigned 0 | SOME u => u` >>
-  qexists_tac `la` >> qexists_tac `nv` >>
-  simp[]
-QED
 
 Theorem assign_operation_leaf_replace:
   place_leaf_typed env vt sbs ty final_tv /\
@@ -548,15 +532,6 @@ Proof
   metis_tac[assign_operation_leaf_type_append, place_leaf_typed_evaluate_type]
 QED
 
-Theorem assign_operation_leaf_update:
-  place_leaf_typed env vt sbs ty final_tv /\
-  assign_operation_runtime_typed env ty (Update upd_ty bop nv) /\
-  value_has_type final_tv la /\
-  assign_subscripts final_tv la [] (Update upd_ty bop nv) = INL lv ==>
-  value_has_type final_tv lv
-Proof
-  metis_tac[assign_operation_leaf_type_update, place_leaf_typed_evaluate_type]
-QED
 
 Theorem location_runtime_typed_well_formed_vtype:
   runtime_consistent env cx st /\
@@ -1169,7 +1144,6 @@ Resume assign_target_preserves_state_well_typed_mutual[ScopedVar]:
     conj_asm1_tac >- (
       drule_then irule evaluate_type_well_formed_type_value  ) >>
     goal_assum $ drule_at Any >>
-    conj_tac >- metis_tac[assign_operation_leaf_type_update] >>
     conj_tac >- metis_tac[assign_operation_leaf_type_append] >>
     conj_tac >- metis_tac[assign_operation_leaf_type_replace] >>
     gvs[runtime_consistent_def] >>
@@ -1284,7 +1258,6 @@ Resume assign_target_preserves_state_well_typed_mutual[ImmutableVar]:
     simp[] >>
     impl_tac >- (
       conj_tac >- metis_tac[assign_operation_leaf_type_replace] >>
-      conj_tac >- metis_tac[assign_operation_leaf_type_update] >>
       metis_tac[assign_operation_leaf_type_append]) >>
     simp[]) >>
   imp_res_tac assign_result_preserves_state >> gvs[] >>
@@ -1682,8 +1655,7 @@ Proof
   simp[] >>
   impl_tac >- (
     rpt strip_tac >> gvs[]
-    >- metis_tac[assign_operation_leaf_type_replace]
-    >- metis_tac[assign_operation_leaf_type_update] >>
+    >- metis_tac[assign_operation_leaf_type_replace] >>
     metis_tac[assign_operation_leaf_type_append]) >>
   simp[]
 QED
@@ -1896,18 +1868,6 @@ Proof
   metis_tac[well_typed_binop_no_type_error]
 QED
 
-Theorem assign_subscripts_update_leaf_no_type_error:
-  well_typed_binop lhs_ty bop lhs_ty rhs_ty /\
-  evaluate_type tenv lhs_ty = SOME lhs_tv /\
-  evaluate_type tenv rhs_ty = SOME rhs_tv /\
-  value_has_type lhs_tv lhs /\
-  value_has_type rhs_tv rhs ==>
-  assign_subscripts lhs_tv lhs [] (Update lhs_ty bop rhs) <>
-    INR (TypeError msg)
-Proof
-  simp[Once assign_subscripts_def, LET_THM] >>
-  metis_tac[well_typed_update_binop_no_type_error]
-QED
 
 Theorem struct_has_type_alookup_none:
   !l al id. struct_has_type l al /\ ALOOKUP al id = NONE ==> ALOOKUP l id = NONE
@@ -1938,9 +1898,6 @@ Proof
   rpt strip_tac >>
   Cases_on `op` >- (
     gvs[assign_operation_runtime_typed_def, value_runtime_typed_def, Once assign_subscripts_def]) >- (
-    rename1 `Update upd_ty bop rhs` >>
-    gvs[assign_operation_runtime_typed_def, value_runtime_typed_def] >>
-    drule_all assign_subscripts_update_leaf_no_type_error >> simp[]) >- (
     rename1 `AppendOp v` >>
     gvs[assign_operation_runtime_typed_def, evaluate_type_def] >>
     drule_all assign_subscripts_append_leaf_no_type_error >> simp[]) >>
@@ -2996,7 +2953,7 @@ Theorem assign_target_ArrayRef_ordinary_ntr[local]:
   (* Unified ordinary-branch boundary lemma for assign_target TopLevelVar ArrayRef.
      Handles the _ wildcard in the evaluator's case(ao,final_tv) pair-match.
      The Dynamic exclusion premise eliminates the AppendOp/PopOp+Dynamic pair-arms;
-     for Replace/Update it is trivially satisfied since those ops go through _ anyway. *)
+     for Replace it is trivially satisfied since that operation goes through _ anyway. *)
   lookup_global cx src_id_opt id st =
     (INL (ArrayRef is_transient (n2w slot) elem_tv bd), st) ==>
   get_module_code cx src_id_opt = SOME code ==>
@@ -3063,38 +3020,6 @@ Proof
   metis_tac[array_ref_ordinary_branch_no_type_error]
 QED
 
-Theorem assign_target_ArrayRef_Update_ordinary_ntr[local]:
-  (* Same as Replace variant but for Update. assign_operation_distinct eliminates
-     PopOp/AppendOp pair-arms, so _ wildcard handles all final_tv. *)
-  lookup_global cx src_id_opt id st =
-    (INL (ArrayRef is_transient (n2w slot) elem_tv bd), st) ==>
-  get_module_code cx src_id_opt = SOME code ==>
-  resolve_array_element cx is_transient (n2w slot) (ArrayTV elem_tv bd) (REVERSE sbs) st =
-    (INL (elem_slot, final_tv, remaining), st_res) ==>
-  well_formed_type_value final_tv ==>
-  evaluate_type env.type_defs ty = SOME (leaf_type final_tv remaining) ==>
-  leaf_type final_tv remaining <> NoneTV ==>
-  assign_operation_runtime_typed env ty (Update upd_ty bop nv) ==>
-  assign_target cx (BaseTargetV (TopLevelVar src_id_opt id) sbs) (Update upd_ty bop nv) st = (res, st') ==>
-  no_type_error_result res
-Proof
-  all_tac >>
-  rpt strip_tac >>
-  qpat_x_assum `assign_target _ _ _ _ = (_,_)` mp_tac >>
-  simp[Once assign_target_def, bind_def, ignore_bind_def, return_def, raise_def,
-       lift_option_def, lift_option_type_def, lift_sum_def, type_check_def,
-       assert_def, check_def, option_CASE_rator,
-       sum_CASE_rator, pairTheory.PAIR,
-       toplevel_value_CASE_rator, LET_THM,
-       assign_operation_distinct, assign_operation_11,
-       type_value_CASE_rator, bound_CASE_rator, prod_CASE_rator,
-       AllCaseEqs()] >>
-  rpt strip_tac >> gvs[] >>
-  TRY (metis_tac[array_ref_ordinary_branch_success]) >>
-  TRY (metis_tac[array_ref_ordinary_branch_write_error]) >>
-  TRY (metis_tac[array_ref_ordinary_branch_assign_error]) >>
-  metis_tac[array_ref_ordinary_branch_no_type_error]
-QED
 
 Theorem assign_target_TopLevelVar_ArrayRef_resolve_error_no_type_error[local]:
   (* When resolve_array_element returns INR in the ArrayRef branch,
@@ -3162,20 +3087,6 @@ Proof
       by metis_tac[resolve_array_element_leaf_type_sc] >>
     `leaf_type x1 x2 <> NoneTV` by metis_tac[resolve_array_element_leaf_type_sc] >>
     metis_tac[assign_target_ArrayRef_Replace_ordinary_ntr]
-   ) >>
-   (* INR: resolve_array_element error *)
-   metis_tac[assign_target_TopLevelVar_ArrayRef_resolve_error_no_type_error]
-  ) >-
-  (* Update t b v *)
-  (Cases_on `resolve_array_element cx is_transient (n2w slot) (ArrayTV elem_tv bd) (REVERSE sbs) st` >>
-   Cases_on `q` >-
-   (* INL: resolve succeeds *)
-   (PairCases_on `x` >> gvs[] >>
-    `well_formed_type_value x1` by metis_tac[resolve_array_element_well_formed_sc] >>
-    `evaluate_type env.type_defs ty = SOME (leaf_type x1 x2)`
-      by metis_tac[resolve_array_element_leaf_type_sc] >>
-    `leaf_type x1 x2 <> NoneTV` by metis_tac[resolve_array_element_leaf_type_sc] >>
-    metis_tac[assign_target_ArrayRef_Update_ordinary_ntr]
    ) >>
    (* INR: resolve_array_element error *)
    metis_tac[assign_target_TopLevelVar_ArrayRef_resolve_error_no_type_error]

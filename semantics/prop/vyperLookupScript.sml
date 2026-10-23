@@ -540,26 +540,6 @@ Proof
        assign_result_def,type_check_def,assert_def]
 QED
 
-Theorem assign_target_name_update:
-  ∀cx st n ty bop v v'.
-    lookup_name_typed st n = SOME entry ∧ var_assignable st n ∧
-    evaluate_binop (case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0)
-                   entry.type bop entry.value v' = INL new_v ⇒
-    assign_target cx (BaseTargetV (ScopedVar n) []) (Update ty bop v') st =
-    (INL NONE, update_name st n new_v)
-Proof
-  rw[var_assignable_def] >>
-  gvs[lookup_name_typed_def] >>
-  `IS_SOME (find_containing_scope n st.scopes)`
-    by (irule lookup_scopes_find_containing >> simp[]) >>
-  Cases_on `find_containing_scope n st.scopes` >- gvs[] >>
-  PairCases_on `x` >> gvs[] >>
-  drule find_containing_scope_lookup >> strip_tac >> gvs[] >>
-  simp[Once assign_target_def, bind_def, get_scopes_def, return_def,
-       lift_option_def, lift_option_type_def, lift_sum_def, assign_subscripts_def,
-       ignore_bind_def, set_scopes_def, update_name_def,
-       assign_result_def, type_check_def, assert_def]
-QED
 
 Theorem assign_target_name_subscripts_state:
   ∀cx st n sbs ao entry a'.

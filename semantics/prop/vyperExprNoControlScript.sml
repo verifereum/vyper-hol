@@ -477,25 +477,7 @@ Proof
              >> gvs[get_storage_backend_def, bind_def,
                     get_transient_storage_def, get_accounts_def, return_def]
           end)))
-  >- assign_target_no_control_tac
-  >- assign_target_no_control_tac
-  >- assign_target_no_control_tac
-  >- assign_target_no_control_tac
-  >- assign_target_no_control_tac
-  >- assign_target_no_control_tac
-  >- assign_target_no_control_tac
-  >- assign_target_no_control_tac
-  >- assign_target_no_control_tac
-  >- assign_target_no_control_tac
-  >- assign_target_no_control_tac
-  >- assign_target_no_control_tac
-  >- assign_target_no_control_tac
-  >- assign_target_no_control_tac
-  >- assign_target_no_control_tac
-  >- assign_target_no_control_tac
-  >- assign_target_no_control_tac
-  >- assign_target_no_control_tac
-  >- assign_target_no_control_tac
+  >> assign_target_no_control_tac
 QED
 (* ===== Shared tactic definitions ===== *)
 
@@ -913,8 +895,10 @@ QED
 (* ===== Main theorem ===== *)
 
 val eval_expr_bt_ind = evaluate_ind
-  |> Q.SPECL [`\cx s. T`, `\cx ss. T`, `\cx e. T`, `\cx t. T`,
-              `\cx ts. T`, `P_bt`, `\cx it n ty rng. T`]
+  |> Q.SPECL [`\cx s. T`, `\cx ss. T`, `\cx it. T`, `P_bt`,
+              `\cx ty nm body vs. T`, `P_expr`, `P_exprs`,
+              `\cx e. T`, `\cx t. T`, `\cx t. T`,
+              `\cx g v. T`, `\cx gs vs. T`]
   |> SIMP_RULE std_ss [];
 
 Theorem eval_expr_no_control_with_bt:
@@ -1212,3 +1196,166 @@ Theorem eval_expr_no_control:
 Proof
   metis_tac[eval_expr_no_control_with_bt]
 QED
+
+(* Place operations expose exception boundaries independently of state frames. *)
+Theorem read_place_no_control:
+  read_place cx p st = (INR exc,st') ==> no_control_exc exc
+Proof
+  Cases_on `p` >> simp[read_place_def, bind_def, get_scopes_def,
+    return_def, AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+  metis_tac[read_storage_slot_no_control, get_immutables_no_control,
+    lift_option_type_no_control, lift_sum_no_control]
+QED
+
+Theorem read_place_or_value_no_control:
+  read_place_or_value cx pv st = (INR exc,st') ==> no_control_exc exc
+Proof
+  Cases_on `pv` >> simp[read_place_or_value_def] >>
+  metis_tac[read_place_no_control, materialise_no_control]
+QED
+
+Theorem place_type_value_no_control:
+  place_type_value cx p st = (INR exc,st') ==> no_control_exc exc
+Proof
+  Cases_on `p` >> simp[place_type_value_def, bind_def, get_scopes_def,
+    return_def, AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+  metis_tac[get_immutables_no_control, lift_option_type_no_control]
+QED
+
+Theorem write_place_no_control:
+  write_place cx p v st = (INR exc,st') ==> no_control_exc exc
+Proof
+  Cases_on `p` >> simp[write_place_def, bind_def, ignore_bind_def,
+    get_scopes_def, set_scopes_def, return_def, prod_CASE_rator, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  gvs[bind_def, ignore_bind_def, set_scopes_def, return_def, AllCaseEqs()] >>
+  metis_tac[write_storage_slot_no_control, get_immutables_no_control,
+    set_immutable_no_control, lift_option_type_no_control,
+    type_check_no_control, lift_sum_no_control]
+QED
+
+Theorem extend_storage_place_no_control:
+  extend_storage_place cx tr slot tv sb st = (INR exc,st') ==> no_control_exc exc
+Proof
+  Cases_on `tv` >> Cases_on `sb` >>
+  simp[extend_storage_place_def, bind_def, return_def, raise_def,
+    no_control_exc_def, AllCaseEqs()] >>
+  TRY (rename1 `ValueSubscript v` >> Cases_on `v` >>
+    gvs[extend_storage_place_def, bind_def, return_def, raise_def,
+      ignore_bind_def, check_def, assert_def, lift_option_type_def,
+      vyperMiscTheory.option_CASE_rator,
+      no_control_exc_def, AllCaseEqs()]) >>
+  rpt strip_tac >> gvs[] >> rpt (pairarg_tac >> gvs[return_def]) >>
+  metis_tac[lift_option_type_no_control, resolve_array_element_no_control,
+    no_control_exc_def]
+QED
+
+Theorem extend_place_no_control:
+  extend_place cx tv pv sb st = (INR exc,st') ==> no_control_exc exc
+Proof
+  Cases_on `pv` >>
+  TRY (rename1 `PlaceR p` >> Cases_on `p`) >>
+  TRY (rename1 `ValueR v` >> Cases_on `v`) >> Cases_on `sb` >>
+  simp[extend_place_def, bind_def, ignore_bind_def, return_def,
+    AllCaseEqs()] >> rpt strip_tac >> gvs[raise_def] >>
+  TRY (simp[no_control_exc_def] >> NO_TAC) >>
+  metis_tac[extend_storage_place_no_control, place_type_value_no_control,
+    read_place_no_control, get_Value_no_control, lift_sum_no_control]
+QED
+
+Theorem extend_target_place_no_control:
+  extend_target_place cx pv sb st = (INR exc,st') ==> no_control_exc exc
+Proof
+  Cases_on `pv` >> TRY (rename1 `ValueR v` >> Cases_on `v`) >>
+  simp[extend_target_place_def, raise_def, no_control_exc_def] >>
+  metis_tac[extend_place_no_control, no_control_exc_def]
+QED
+
+Theorem get_place_no_control:
+  get_place pv st = (INR exc,st') ==> no_control_exc exc
+Proof
+  Cases_on `pv` >> simp[get_place_def, return_def, raise_def, no_control_exc_def]
+QED
+
+Theorem lookup_global_place_no_control:
+  lookup_global_place cx src id st = (INR exc,st') ==> no_control_exc exc
+Proof
+  simp[lookup_global_place_def, bind_def, return_def, raise_def,
+    option_CASE_rator, prod_CASE_rator, var_decl_info_CASE_rator,
+    AllCaseEqs()] >> rpt strip_tac >> gvs[AllCaseEqs(), bind_def,
+    raise_def, return_def] >>
+  TRY (simp[no_control_exc_def] >> NO_TAC) >>
+  metis_tac[lift_option_type_no_control, get_immutables_no_control]
+QED
+
+Theorem eval_place_no_control:
+  !e cx st exc st'. eval_place cx e st = (INR exc,st') ==> no_control_exc exc
+Proof
+  Induct_on `e` >> rpt gen_tac >>
+  TRY (rename1 `TopLevelName ty root` >> PairCases_on `root`) >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def, get_scopes_def,
+    return_def, AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+  metis_tac[eval_expr_no_control, type_check_no_control,
+    lookup_global_place_no_control, get_Value_no_control,
+    lift_option_type_no_control, extend_place_no_control]
+QED
+
+Theorem eval_base_place_no_control:
+  !t cx st exc st'. eval_base_place cx t st = (INR exc,st') ==> no_control_exc exc
+Proof
+  Induct_on `t` >> rpt gen_tac >>
+  TRY (rename1 `TopLevelNameTarget root` >> PairCases_on `root`) >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def, get_scopes_def, return_def,
+    AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+  metis_tac[eval_expr_no_control, type_check_no_control,
+    lookup_global_place_no_control, get_Value_no_control,
+    extend_target_place_no_control]
+QED
+
+Theorem eval_target_place_no_control:
+  eval_target_place cx t st = (INR exc,st') ==> no_control_exc exc
+Proof
+  simp[Once evaluate_def, bind_def, AllCaseEqs()] >> rpt strip_tac >>
+  metis_tac[eval_base_place_no_control, get_place_no_control]
+QED
+
+val tuple_no_control_ind = evaluate_ind
+  |> Q.SPECL [`\cx s. T`, `\cx ss. T`, `\cx it. T`, `\cx t. T`,
+              `\cx ty nm body vs. T`, `\cx e. T`, `\cx es. T`,
+              `\cx e. T`, `\cx t. T`, `\cx t. T`]
+  |> SIMP_RULE std_ss [];
+
+Theorem tuple_store_no_control[local]:
+  (!cx g v st exc st'. assign_tuple_targets cx g v st = (INR exc,st') ==>
+    no_control_exc exc) /\
+  (!cx gs vs st exc st'. assign_tuple_target_list cx gs vs st = (INR exc,st') ==>
+    no_control_exc exc)
+Proof
+  ho_match_mp_tac tuple_no_control_ind >> rpt conj_tac >> rpt gen_tac >>
+  rpt strip_tac >> qpat_x_assum `_ = (INR exc,st')` mp_tac >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def,
+    vyperValueTheory.value_CASE_rator, vyperValueTheory.array_value_CASE_rator,
+    return_def, raise_def, AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+  TRY (simp[no_control_exc_def] >> NO_TAC) >>
+  metis_tac[eval_target_place_no_control, write_place_no_control]
+QED
+
+Theorem assign_tuple_targets_no_control:
+  assign_tuple_targets cx g v st = (INR exc,st') ==> no_control_exc exc
+Proof
+  metis_tac[tuple_store_no_control]
+QED
+
+Theorem assign_tuple_target_list_no_control:
+  assign_tuple_target_list cx gs vs st = (INR exc,st') ==> no_control_exc exc
+Proof
+  metis_tac[tuple_store_no_control]
+QED
+
+(* Place/control integration audit. *)
+val () = List.app (fn (name,th) =>
+  let val (oracles,_) = Tag.dest_tag (Thm.tag th)
+  in if List.all (fn s => s = "DISK_THM") oracles then ()
+     else raise Fail ("No-control oracle debt: " ^ name)
+  end) (DB.thms "vyperExprNoControl");

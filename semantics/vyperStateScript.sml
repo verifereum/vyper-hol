@@ -771,11 +771,32 @@ End
 
 val () = cv_auto_trans evaluate_subscript_def;
 
+(* Type paths are independent of the current dynamic lengths. *)
+Definition subscript_type_def:
+  subscript_type (ArrayTV tv bd) (ValueSubscript (IntV i)) =
+    (if 0 <= i /\ Num i < bound_length bd then SOME tv else NONE) /\
+  subscript_type (TupleTV tvs) (ValueSubscript (IntV i)) =
+    (if 0 <= i /\ Num i < LENGTH tvs then SOME (EL (Num i) tvs) else NONE) /\
+  subscript_type (StructTV fields) (AttrSubscript id) = ALOOKUP fields id /\
+  subscript_type _ _ = NONE
+End
+
+val subscript_type_pre_def = cv_auto_trans_pre "subscript_type_pre" subscript_type_def;
+
+Theorem subscript_type_pre[cv_pre]:
+  !tv sb. subscript_type_pre tv sb
+Proof
+  Cases_on `tv` >> Cases_on `sb` >> simp[subscript_type_pre_def] >>
+  rpt strip_tac >> gvs[]
+QED
+
 Definition evaluate_subscripts_def:
   evaluate_subscripts tv a [] = INL a ∧
   evaluate_subscripts tv a ((ValueSubscript (IntV i))::is) =
   (case a of ArrayV av =>
-   (let elem_tv = (case tv of ArrayTV t _ => t | _ => NoneTV) in
+   (let elem_tv = (case tv of ArrayTV t _ => t | _ =>
+      (case subscript_type tv (ValueSubscript (IntV i)) of
+         SOME t => t | NONE => NoneTV)) in
     case array_index tv av i of SOME v =>
     (case evaluate_subscripts elem_tv v is of INL vj => INL vj
      | INR err => INR err)
@@ -838,7 +859,6 @@ QED
 Datatype:
   assign_operation
   = Replace value
-  | Update type binop value
   | AppendOp value
   | PopOp
 End
@@ -851,14 +871,13 @@ Definition assign_subscripts_def:
   (* TODO(semantic-limitation): replacement currently trusts callers/type
      checks to provide a value castable to the target type. *)
   assign_subscripts tv a [] (Replace v) = INL v ∧
-  assign_subscripts tv a [] (Update ty bop v) =
-    (let u = case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0 in
-       evaluate_binop u tv bop a v) ∧
   assign_subscripts tv a [] (AppendOp v) = append_element tv a v ∧
   assign_subscripts tv a [] PopOp = pop_element a ∧
   assign_subscripts tv a ((ValueSubscript (IntV i))::is) ao =
   (case a of ArrayV av =>
-   (let elem_tv = (case tv of ArrayTV t _ => t | _ => NoneTV) in
+   (let elem_tv = (case tv of ArrayTV t _ => t | _ =>
+      (case subscript_type tv (ValueSubscript (IntV i)) of
+         SOME t => t | NONE => NoneTV)) in
     case array_index tv av i of SOME v =>
     (case assign_subscripts elem_tv v is ao of INL vj =>
        array_set_index tv av i vj
@@ -1090,25 +1109,6 @@ Proof
   \\ ASM_SIMP_TAC subscript_pre_ss []
 QED
 
-(* Type paths are independent of the current dynamic lengths. *)
-Definition subscript_type_def:
-  subscript_type (ArrayTV tv bd) (ValueSubscript (IntV i)) =
-    (if 0 <= i /\ Num i < bound_length bd then SOME tv else NONE) /\
-  subscript_type (TupleTV tvs) (ValueSubscript (IntV i)) =
-    (if 0 <= i /\ Num i < LENGTH tvs then SOME (EL (Num i) tvs) else NONE) /\
-  subscript_type (StructTV fields) (AttrSubscript id) = ALOOKUP fields id /\
-  subscript_type _ _ = NONE
-End
-
-val subscript_type_pre_def = cv_auto_trans_pre "subscript_type_pre" subscript_type_def;
-
-Theorem subscript_type_pre[cv_pre]:
-  !tv sb. subscript_type_pre tv sb
-Proof
-  Cases_on `tv` >> Cases_on `sb` >> simp[subscript_type_pre_def] >>
-  rpt strip_tac >> gvs[]
-QED
-
 Definition subscripts_type_def:
   subscripts_type tv [] = SOME tv /\
   subscripts_type tv (sb::path) =
@@ -1118,6 +1118,26 @@ Definition subscripts_type_def:
 End
 
 val () = cv_auto_trans subscripts_type_def;
+
+(* Classify the first unavailable step of a current traversal. Only a
+   nonnegative, declared-in-bounds dynamic element beyond the live length
+   can have disappeared through pop. Sparse fixed defaults and all other
+   failures are not historical locations. *)
+Definition missing_dynamic_element_def:
+  missing_dynamic_element tv a [] = F /\
+  missing_dynamic_element tv a (sb::rest) =
+    (case (subscript_type tv sb, evaluate_subscripts tv a [sb]) of
+     | (SOME etv, INL v) => missing_dynamic_element etv v rest
+     | (SOME etv, INR err) =>
+         (case (tv,a,sb) of
+          | (ArrayTV _ (Dynamic n), ArrayV (DynArrayV vs),
+             ValueSubscript (IntV i)) =>
+                0 <= i /\ Num i < n /\ LENGTH vs <= Num i
+          | _ => F)
+     | _ => F)
+End
+
+val () = cv_auto_trans missing_dynamic_element_def;
 
 (* Search newest first. A matching popped ancestor may itself lack a later
    suffix, in which case an older, deeper snapshot still supplies that slot. *)
@@ -1130,7 +1150,9 @@ Definition read_popped_def:
       | SOME ptv =>
           (case evaluate_subscripts ptv v (DROP (LENGTH prefix) path) of
            | INL w => SOME w
-           | INR err => read_popped tv path history)
+           | INR err =>
+               if missing_dynamic_element ptv v (DROP (LENGTH prefix) path)
+               then read_popped tv path history else NONE)
     else read_popped tv path history
 End
 
@@ -1148,9 +1170,11 @@ Definition read_memory_path_def:
     case evaluate_subscripts entry.type entry.value path of
     | INL v => INL v
     | INR err =>
-        (case read_popped entry.type path entry.popped of
-         | SOME v => INL v
-         | NONE => INR err)
+        if missing_dynamic_element entry.type entry.value path then
+          (case read_popped entry.type path entry.popped of
+           | SOME v => INL v
+           | NONE => INR err)
+        else INR err
 End
 
 val () = cv_auto_trans read_memory_path_def;
@@ -1246,6 +1270,22 @@ End
 
 val () = cv_auto_trans struct_field_slot_def;
 
+(* Slot offset follows encode_tuple/decode_tuple's left-to-right layout. *)
+Definition tuple_prefix_slot_size_def:
+  tuple_prefix_slot_size 0 tvs = 0 /\
+  tuple_prefix_slot_size (SUC n) [] = 0 /\
+  tuple_prefix_slot_size (SUC n) (tv::tvs) =
+    type_slot_size tv + tuple_prefix_slot_size n tvs
+End
+
+val () = cv_auto_trans tuple_prefix_slot_size_def;
+
+Theorem tuple_prefix_slot_size_sum:
+  !n tvs. tuple_prefix_slot_size n tvs = SUM (MAP type_slot_size (TAKE n tvs))
+Proof
+  Induct >> Cases_on `tvs` >> simp[tuple_prefix_slot_size_def]
+QED
+
 Definition extend_storage_place_def:
   extend_storage_place cx tr slot (StructTV fields) (AttrSubscript id) = do
     (off,tv) <- lift_option_type (struct_field_slot fields id) "place struct field";
@@ -1256,13 +1296,38 @@ Definition extend_storage_place_def:
                        [ValueSubscript (IntV i)];
     return (StoragePlace tr slot' tv)
   od /\
+  extend_storage_place cx tr slot (TupleTV tvs) (ValueSubscript (IntV i)) = do
+    check (0 <= i /\ Num i < LENGTH tvs) "tuple index oob";
+    tv <- lift_option_type (oEL (Num i) tvs) "tuple component type";
+    return (StoragePlace tr
+      (slot + n2w (tuple_prefix_slot_size (Num i) tvs)) tv)
+  od /\
   extend_storage_place cx tr slot tv sb =
     raise (Error (TypeError "extend_storage_place"))
 End
 
 val () = extend_storage_place_def
-  |> SRULE [FUN_EQ_THM, bind_def, LET_RATOR, UNCURRY]
+  |> SRULE [FUN_EQ_THM, bind_def, ignore_bind_def, LET_RATOR, UNCURRY]
   |> cv_auto_trans;
+
+Theorem storage_tuple_place_selection:
+  !cx st.
+    extend_storage_place cx F 10w (TupleTV [BaseTV BoolT])
+      (ValueSubscript (IntV 0)) st =
+        (INL (StoragePlace F 10w (BaseTV BoolT)),st) /\
+    extend_storage_place cx F 10w
+      (TupleTV [ArrayTV (BaseTV BoolT) (Fixed 2); BaseTV (UintT 256)])
+      (ValueSubscript (IntV 1)) st =
+        (INL (StoragePlace F 12w (BaseTV (UintT 256))),st) /\
+    extend_storage_place cx F 10w (TupleTV [BaseTV BoolT])
+      (ValueSubscript (IntV (~1))) st =
+        (INR (Error (RuntimeError "tuple index oob")),st) /\
+    extend_storage_place cx F 10w (TupleTV [BaseTV BoolT])
+      (ValueSubscript (IntV 1)) st =
+        (INR (Error (RuntimeError "tuple index oob")),st)
+Proof
+  EVAL_TAC >> simp[]
+QED
 
 Definition extend_memory_place_def:
   extend_memory_place (MemoryPlace id path) sb = MemoryPlace id (path ++ [sb]) /\

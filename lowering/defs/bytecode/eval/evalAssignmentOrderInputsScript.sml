@@ -1,5 +1,6 @@
-(* Prepared hand-written inputs, NOT independently validated parity fixtures.
- * Source/AST/layout correspondence remains pending; see assignment-order-pending.md.
+(* Prepared hand-written inputs. evalCompilerAssignmentOrder proves the
+ * c08/c09/g6 source correspondence and independent bytecode parity.
+ * Behavioral regressions use evalAssignmentOrderFrontend's source-derived terms.
  *)
 Theory evalAssignmentOrderInputs
 Ancestors evalCompiler

@@ -289,7 +289,10 @@ local
   val p6 = ``\(cx:evaluation_context) (tyv:type_value) (nm:string) (body:stmt list) (vs:value list). T``
   val p7 = ``\cx e. !st res st'. eval_expr cx e st = (res, st') ==> pure_expr e ==> st = st'``
   val p8 = ``\cx es. !st res st'. eval_exprs cx es st = (res, st') ==> EVERY pure_expr es ==> st = st'``
-  val spec_ind = SPECL [p0, p1, p2, p3, p4, p5, p6, p7, p8] evaluate_ind
+  val pp = ``\(cx:evaluation_context) (e:expr). T``
+  val pg = ``\(cx:evaluation_context) (g:assignment_target) (v:value). T``
+  val pgs = ``\(cx:evaluation_context) (gs:assignment_target list) (vs:value list). T``
+  val spec_ind = SPECL [p0, p1, p2, p5, p6, p7, p8, pp, p5, p5, pg, pgs] evaluate_ind
   val spec_ind_beta = CONV_RULE (DEPTH_CONV BETA_CONV) spec_ind
 in
   val expr_state_ind_principle = save_thm("expr_state_ind_principle", spec_ind_beta)
