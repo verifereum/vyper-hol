@@ -677,6 +677,91 @@ Proof
   simp[FUN_EQ_THM, comp_bind_def, comp_return_def]
 QED
 
+Theorem internal_alloc_body_suffix_shape[local]:
+  !cenv cenv2 pc ret_type is_ctor imm_len is_nr nkey use_trans is_view ss.
+    IS_SOME cenv2.ce_return_pc /\
+    ~supported_stmts_expr_exists expr_shape_root ss ==>
+    shape_step T compiler_label
+      (\st. retpc_operand st pc /\ cenv_shape_ok st cenv2)
+      (do forced_alloc_id <-
+            (do (case ret_type of
+                   SOME ret_ty =>
+                     if cenv.ce_returns_count > 0 then
+                       do compile_alloc_buffer (type_memory_bytes cenv ret_ty);
+                          return () od
+                     else return ()
+                 | NONE => return ());
+                forced <-
+                  (if is_ctor /\ imm_len > 0 then
+                     do alloc_result <- compile_alloc_buffer_with_id imm_len;
+                        emit_op MLOAD
+                          [Lit (n2w (if imm_len > 32 then imm_len - 32 else 0))];
+                        return (SOME (FST alloc_result)) od
+                   else return NONE);
+                (if is_nr then compile_nonreentrant_lock nkey use_trans is_view
+                 else return ());
+                return forced od);
+          (do compile_stmts cenv2 NoLoop
+                (case ret_type of SOME t => t | NONE => BaseT BoolT) ss;
+              cs <- comp_get;
+              if block_is_terminated cs then return ()
+              else do (if is_nr then
+                         compile_nonreentrant_unlock nkey use_trans is_view
+                       else return ());
+                      (case ret_type of NONE => emit_inst RET [pc] []
+                       | SOME _ => emit_inst INVALID [] []) od od);
+          return forced_alloc_id od) (\x st. T)
+Proof
+  rpt gen_tac >> strip_tac >>
+  qmatch_goalsub_abbrev_tac `comp_bind prefix _` >>
+  `shape_step T compiler_label (\st. T) prefix (\x st. T)` by
+    (unabbrev_all_tac >> suspend "prefix") >>
+  drule shape_step_frame >>
+  disch_then (qspec_then
+    `\st. retpc_operand st pc /\ cenv_shape_ok st cenv2` mp_tac) >>
+  impl_tac
+  >- (ho_match_mp_tac shape_stable_conj >>
+      simp[cenv_shape_ok_stable, shape_stable_def] >>
+      metis_tac[retpc_operand_mono]) >>
+  simp[] >> strip_tac >> irule shape_step_bind >>
+  qexists_tac `\x st. retpc_operand st pc /\ cenv_shape_ok st cenv2` >>
+  reverse conj_tac >- (first_assum MATCH_ACCEPT_TAC) >>
+  gen_tac >> BETA_TAC >> irule shape_step_ignore_bind >>
+  qexists_tac `\u st. T` >> conj_tac
+  >- (gen_tac >> BETA_TAC >> irule shape_step_return >> simp[]) >>
+  irule internal_body_finish_shape >> simp[]
+QED
+Resume internal_alloc_body_suffix_shape[prefix]:
+  irule shape_step_ignore_bind >> qexists_tac `\u st. T` >> reverse conj_tac
+  >- (Cases_on `ret_type` >> simp[]
+      >- (irule shape_step_return >> simp[]) >>
+      Cases_on `cenv.ce_returns_count > 0` >> simp[]
+      >- (irule shape_step_ignore_bind >> qexists_tac `\u st. T` >> conj_tac
+          >- (gen_tac >> BETA_TAC >> irule shape_step_return >> simp[]) >>
+          irule compile_alloc_buffer_shape) >>
+      irule shape_step_return >> simp[]) >>
+  gen_tac >> BETA_TAC >> irule shape_step_bind >>
+  qexists_tac `\id st. T` >> reverse conj_tac
+  >- (Cases_on `is_ctor /\ imm_len > 0` >> simp[]
+      >- (irule shape_step_bind >> qexists_tac `\r st. T` >> reverse conj_tac
+          >- (irule compile_alloc_buffer_with_id_shape) >>
+          gen_tac >> BETA_TAC >> irule shape_step_ignore_bind >>
+          qexists_tac `\u st. T` >> conj_tac
+          >- (gen_tac >> BETA_TAC >> irule shape_step_return >> simp[]) >>
+          mp_tac (Q.SPECL [`T`, `compiler_label`, `\st. T`, `MLOAD`,
+            `[Lit (n2w (if imm_len > 32 then imm_len - 32 else 0))]`]
+            shape_step_emit_op) >>
+          simp intfn_lock_simps >> rewrite_tac[shape_step_def] >> metis_tac[]) >>
+      irule shape_step_return >> simp[]) >>
+  gen_tac >> BETA_TAC >> irule shape_step_ignore_bind >>
+  qexists_tac `\u st. T` >> conj_tac
+  >- (gen_tac >> BETA_TAC >> irule shape_step_return >> simp[]) >>
+  Cases_on `is_nr` >> simp[]
+  >- (irule compile_nonreentrant_lock_shape) >>
+  irule shape_step_return >> simp[]
+QED
+Finalise internal_alloc_body_suffix_shape
+
 (* Verified optional-PARAM prefix; integration resumes in C1.4.3.
   rpt gen_tac >> strip_tac >>
   rename1 `~supported_stmts_expr_exists expr_shape_root ss` >>
