@@ -2932,7 +2932,7 @@ Proof
   simp[comp_bind_def, comp_return_def, FUN_EQ_THM]
 QED
 
-Theorem compile_get_target_ptr_shape[local]:
+Theorem compile_get_target_ptr_shape:
   !bt cenv internal.
     ~supported_target_exists expr_shape_root bt ==>
     shape_step internal compiler_label (\st. cenv_shape_ok st cenv)
@@ -3042,7 +3042,7 @@ Resume compile_get_target_ptr_shape[array]:
   ho_match_mp_tac stmt_shape_frame >> qexists_tac `\st. cenv_shape_ok st cenv` >>
   simp[stmt_shape_stable_plain] >> irule lower_value_shape >> simp[]
 QED
-Finalise compile_get_target_ptr_shape
+Finalise compile_get_target_ptr_shape[local]
 
 Theorem compile_store_at_loc_shape[local]:
   !internal dst val_op loc_opt.
@@ -3232,7 +3232,7 @@ fun stmt_bind post name first_step =
   irule shape_step_bind >> qexists_tac post >>
   reverse conj_tac >- first_step >> qx_gen_tac name >> BETA_TAC;
 
-Theorem compile_revert_with_reason_shape[local]:
+Theorem compile_revert_with_reason_shape:
   !internal cenv msg_vv msg_type msg_mem_size.
     shape_step internal compiler_label
       (\st. cenv_shape_ok st cenv /\ value_shape_ok st msg_vv)
@@ -3371,7 +3371,7 @@ Resume compile_revert_with_reason_shape[finish_encoding]:
     stmt_shape_emit_simp >> simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def] >>
     rpt strip_tac >> gvs[stackPlanTypesTheory.is_label_operand_def])
 QED
-Finalise compile_revert_with_reason_shape
+Finalise compile_revert_with_reason_shape[local]
 
 Theorem compile_raise_shape[local]:
   !reason cenv lctx ty internal.
@@ -3474,7 +3474,7 @@ Proof
     rpt strip_tac >> res_tac >> gvs[stackPlanTypesTheory.is_label_operand_def])
 QED
 
-Theorem compile_log_shape[local]:
+Theorem compile_log_shape:
   !event_id args cenv lctx ty internal.
     ~supported_exprs_exists expr_shape_root args ==>
     shape_step internal compiler_label (\st. cenv_shape_ok st cenv)
@@ -3549,9 +3549,9 @@ Resume compile_log_shape[data]:
        stackPlanTypesTheory.is_label_operand_def]
 QED
 
-Finalise compile_log_shape
+Finalise compile_log_shape[local]
 
-Theorem compile_dynarray_to_storage_shape[local]:
+Theorem compile_dynarray_to_storage_shape:
   !internal src dst ew ems transient.
     shape_step internal compiler_label
       (\st. plain_operand st src /\ plain_operand st dst)
@@ -3704,9 +3704,9 @@ Resume compile_dynarray_to_storage_shape[tail]:
   stmt_dyn_storage_tail
 QED
 
-Finalise compile_dynarray_to_storage_shape
+Finalise compile_dynarray_to_storage_shape[local]
 
-Theorem compile_assign_value_shape[local]:
+Theorem compile_assign_value_shape:
   !internal cenv dst dst_loc src prim src_loc dst_ty src_ty da_info mem_size.
     dst_loc <> LocCode ==>
     shape_step internal compiler_label
@@ -3786,9 +3786,9 @@ Resume compile_assign_value_shape[transient]:
   stmt_assign_storage
 QED
 
-Finalise compile_assign_value_shape
+Finalise compile_assign_value_shape[local]
 
-Theorem compile_tuple_store_all_shape[local]:
+Theorem compile_tuple_store_all_shape:
   !tys targets vals cenv internal.
     EVERY (\t. case t of BaseTarget bt => ~supported_target_exists expr_shape_root bt
                        | _ => T) targets ==>
@@ -3834,7 +3834,7 @@ Resume compile_tuple_store_all_shape[base]:
   simp[] >> first_x_assum irule >> simp[]
 QED
 
-Finalise compile_tuple_store_all_shape
+Finalise compile_tuple_store_all_shape[local]
 
 Theorem compile_tuple_unpack_shape[local]:
   !cenv ty may_stage targets src internal.
@@ -3930,7 +3930,7 @@ Proof
   simp[compile_tuple_unpack_shape]
 QED
 
-Theorem compile_annassign_shape[local]:
+Theorem compile_annassign_shape:
   !e cenv lctx ty id vtyp internal.
     ~supported_expr_exists expr_shape_root e ==>
     shape_step internal compiler_label (\st. cenv_shape_ok st cenv)
@@ -3977,7 +3977,7 @@ Resume compile_annassign_shape[stores]:
   gvs[Abbr `dst`, plain_operand_def, stackPlanTypesTheory.is_label_operand_def] >>
   drule_all cenv_shape_ok_lookup >> simp[loc_shape_ok_def, plain_operand_def])
 QED
-Finalise compile_annassign_shape
+Finalise compile_annassign_shape[local]
 
 Theorem compile_augassign_shape[local]:
   !bt e cenv lctx ty target_ty bop internal.
@@ -4014,7 +4014,7 @@ Proof
    stmt_plain_void_drop)
 QED
 
-Theorem compile_append_shape[local]:
+Theorem compile_append_shape:
   !bt e cenv lctx ty internal.
     ~supported_expr_exists expr_shape_root e ==>
     shape_step internal compiler_label (\st. cenv_shape_ok st cenv)
@@ -4062,7 +4062,7 @@ Resume compile_append_shape[store]:
   simp[cenv_shape_ok_stable, stmt_shape_stable_plain, shape_stable_conj,
        compile_store_memory_shape]
 QED
-Finalise compile_append_shape
+Finalise compile_append_shape[local]
 
 Theorem compile_load_tuple_elements_shape[local]:
   !tys cenv base offset internal.
@@ -4109,7 +4109,7 @@ Proof
   simp[shape_step_def] >> disch_then drule >> gvs[]
 QED
 
-Theorem compile_internal_return_shape[local]:
+Theorem compile_internal_return_shape:
   !cenv ret_val pc count ret_ty src_ty elem_types buf.
     shape_step T compiler_label
       (\st. (retpc_operand st pc \/ plain_operand st pc) /\
@@ -4167,7 +4167,7 @@ Resume compile_internal_return_shape[copy]:
   ho_match_mp_tac shape_step_frame >>
   simp[stmt_shape_stable_retpc, compile_store_memory_shape]
 QED
-Finalise compile_internal_return_shape
+Finalise compile_internal_return_shape[local]
 
 val stmt_plain_inst_drop = stmt_drop
   (ho_match_mp_tac stmt_shape_emit_inst >>
@@ -4176,7 +4176,7 @@ val stmt_plain_inst_drop = stmt_drop
    simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def] >>
    metis_tac[stackPlanTypesTheory.is_label_operand_def]);
 
-Theorem compile_external_return_shape[local]:
+Theorem compile_external_return_shape:
   !ret_val prim raw info max_size nr nkey trans view.
     shape_step F compiler_label
       (\st. case ret_val of NONE => T | SOME v => plain_operand st v)
@@ -4225,9 +4225,9 @@ Resume compile_external_return_shape[return]:
      simp[stmt_shape_stable_plain, cj 2 compile_abi_encode_shape]) >>
   stmt_plain_inst_drop
 QED
-Finalise compile_external_return_shape
+Finalise compile_external_return_shape[local]
 
-Theorem compile_internal_return_from_env_shape[local]:
+Theorem compile_internal_return_from_env_shape:
   !cenv ty src_ty value_op pc.
     shape_step T compiler_label
       (\st. cenv_shape_ok st cenv /\ plain_operand st value_op /\
@@ -4250,7 +4250,9 @@ QED
 Resume compile_internal_return_from_env_shape[buffer]:
   Cases_on `cenv.ce_return_buf` >> simp[]
   >- (irule shape_step_return >> simp[]) >>
-  rename1 `SOME loc` >> Cases_on `loc` >> simp[] >>
+  rename1 `SOME loc` >>
+  namedCases_on `loc` ["off sz", "slot", "slot", "imm", "ret_op sz"] >>
+  simp[] >>
   TRY (irule shape_step_return >> simp[] >> NO_TAC) >>
   suspend "buffer_cases"
 QED
@@ -4259,16 +4261,16 @@ Resume compile_internal_return_from_env_shape[buffer_cases]:
   >- (stmt_bind `\b st. plain_operand st b /\
         (plain_operand st value_op /\ (retpc_operand st pc \/ plain_operand st pc))` `b`
         (ho_match_mp_tac stmt_shape_frame >>
-         qexists_tac `\st. plain_operand st (Lit (n2w n))` >>
+         qexists_tac `\st. plain_operand st (Lit (n2w off))` >>
          simp[stmt_shape_stable_plain, stmt_shape_stable_retpc, shape_stable_conj] >>
          conj_tac >- stmt_plain_emit >>
          simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def]) >> irule shape_step_return >> simp[]) >>
   irule shape_step_return >> simp[] >> rpt strip_tac >>
   gvs[cenv_shape_ok_def, loc_shape_ok_def]
 QED
-Finalise compile_internal_return_from_env_shape
+Finalise compile_internal_return_from_env_shape[local]
 
-Theorem compile_return_none_shape[local]:
+Theorem compile_return_none_shape:
   !cenv lctx ty.
     shape_step (IS_SOME cenv.ce_return_pc) compiler_label
       (\st. cenv_shape_ok st cenv /\ loop_ctx_shape_ok lctx)
@@ -4283,7 +4285,9 @@ Proof
              qexistsl_tac [`compiler_label`, `\st. T`, `\u st. T`] >>
              simp[compile_nonreentrant_unlock_shape]) >>
          irule shape_step_return >> simp[]) >> stmt_plain_inst_drop) >>
-  rename1 `SOME loc` >> Cases_on `loc` >> simp[] >>
+  rename1 `SOME loc` >>
+  namedCases_on `loc` ["off sz", "slot", "slot", "imm", "ret_op sz"] >>
+  simp[] >>
   TRY (simp[shape_step_def, cenv_shape_ok_def] >> NO_TAC) >>
   suspend "internal"
 QED
@@ -4291,7 +4295,7 @@ Resume compile_return_none_shape[internal]:
   markerLib.RESUME_TAC
   >- (stmt_bind `\rpc st. plain_operand st rpc` `rpc`
         (irule shape_step_conseq >>
-         qexistsl_tac [`compiler_label`, `\st. plain_operand st (Lit (n2w n))`,
+         qexistsl_tac [`compiler_label`, `\st. plain_operand st (Lit (n2w off))`,
            `\rpc st. plain_operand st rpc`] >>
          rpt conj_tac >> TRY (simp[plain_operand_def,
            stackPlanTypesTheory.is_label_operand_def] >> NO_TAC) >> stmt_plain_emit) >>
@@ -4301,13 +4305,14 @@ Resume compile_return_none_shape[internal]:
         `\u st. T`] >> simp[SRULE [] (Q.SPEC `[]` stmt_ret_shape)]) >>
   irule shape_step_conseq >>
   qexistsl_tac [`compiler_label`,
-    `\st. EVERY (plain_operand st) [] /\ (retpc_operand st o' \/ plain_operand st o')`,
+    `\st. EVERY (plain_operand st) [] /\
+       (retpc_operand st ret_op \/ plain_operand st ret_op)`,
     `\u st. T`] >> simp[SRULE [] (Q.SPEC `[]` stmt_ret_shape)] >>
   rpt strip_tac >> gvs[cenv_shape_ok_def]
 QED
-Finalise compile_return_none_shape
+Finalise compile_return_none_shape[local]
 
-Theorem compile_return_some_shape[local]:
+Theorem compile_return_some_shape:
   !cenv lctx ty e.
     ~supported_expr_exists expr_shape_root e ==>
     shape_step (IS_SOME cenv.ce_return_pc) compiler_label
@@ -4320,7 +4325,9 @@ Proof
      simp[cenv_shape_ok_stable] >> irule lower_value_shape >> simp[]) >>
   Cases_on `cenv.ce_return_pc` >> simp[]
   >- suspend "external" >>
-  rename1 `SOME loc` >> Cases_on `loc` >> simp[] >>
+  rename1 `SOME loc` >>
+  namedCases_on `loc` ["off sz", "slot", "slot", "imm", "ret_op sz"] >>
+  simp[] >>
   TRY (simp[shape_step_def, cenv_shape_ok_def] >> NO_TAC) >>
   suspend "internal"
 QED
@@ -4329,7 +4336,7 @@ Resume compile_return_some_shape[internal]:
   >- (stmt_bind `\rpc st. plain_operand st rpc /\
          (plain_operand st value_op /\ cenv_shape_ok st cenv)` `rpc`
         (ho_match_mp_tac stmt_shape_frame >>
-         qexists_tac `\st. plain_operand st (Lit (n2w n))` >>
+         qexists_tac `\st. plain_operand st (Lit (n2w off))` >>
          simp[shape_stable_conj, stmt_shape_stable_plain, cenv_shape_ok_stable] >>
          conj_tac >- stmt_plain_emit >>
          simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def]) >>
@@ -4341,7 +4348,7 @@ Resume compile_return_some_shape[internal]:
   irule shape_step_conseq >>
   qexistsl_tac [`compiler_label`,
     `\st. cenv_shape_ok st cenv /\ plain_operand st value_op /\
-      (retpc_operand st o' \/ plain_operand st o')`, `\u st. T`] >>
+      (retpc_operand st ret_op \/ plain_operand st ret_op)`, `\u st. T`] >>
   simp[compile_internal_return_from_env_shape] >> rpt strip_tac >>
   gvs[cenv_shape_ok_def]
 QED
@@ -4366,7 +4373,7 @@ Resume compile_return_some_shape[external]:
   irule (SRULE [] (Q.INST [`ret_val` |-> `SOME ret_op`]
     (SPEC_ALL compile_external_return_shape)))
 QED
-Finalise compile_return_some_shape
+Finalise compile_return_some_shape[local]
 
 Theorem compile_range_bound_checks_shape[local]:
   !internal start_op end_op rounds_op bound signed.
@@ -4425,7 +4432,7 @@ Proof
   simp[compile_store_memory_shape]
 QED
 
-Theorem compile_if_shape[local]:
+Theorem compile_if_shape:
   !cenv lctx ty cond_e then_body else_body.
     ~supported_expr_exists expr_shape_root cond_e /\
     shape_step (IS_SOME cenv.ce_return_pc) compiler_label
@@ -4511,14 +4518,14 @@ QED
 Resume compile_if_shape[else_body]:
   simp[SF ETA_ss]
 QED
-Finalise compile_if_shape
+Finalise compile_if_shape[local]
 
 fun stmt_label post name =
   stmt_bind post name
     (ho_match_mp_tac shape_step_fresh_label >> simp[SF ETA_ss]) >>
   (reverse (Cases_on (`compiler_label ` @ name)) >- simp[shape_step_def]) >> simp[];
 
-Theorem compile_for_range_shape[local]:
+Theorem compile_for_range_shape:
   !cenv lctx ty id fty start_e end_e bound body.
     ~supported_expr_exists expr_shape_root start_e /\
     ~supported_expr_exists expr_shape_root end_e /\
@@ -4677,9 +4684,9 @@ Resume compile_for_range_shape[recursive]:
   ho_match_mp_tac shape_step_frame >> simp[stmt_shape_stable_plain] >>
   first_x_assum (qspecl_then [`body_cenv`, `exit_lbl`, `incr_lbl`] mp_tac) >> simp[]
 QED
-Finalise compile_for_range_shape
+Finalise compile_for_range_shape[local]
 
-Theorem compile_for_array_shape[local]:
+Theorem compile_for_array_shape:
   !cenv lctx ty id fty arr_e bound body.
     ~supported_expr_exists expr_shape_root arr_e /\
     (!env exit_lbl incr_lbl. shape_step (IS_SOME env.ce_return_pc) compiler_label
@@ -4854,7 +4861,7 @@ Resume compile_for_array_shape[recursive]:
   ho_match_mp_tac shape_step_frame >> simp[stmt_shape_stable_plain] >>
   first_x_assum (qspecl_then [`body_cenv`, `exit_lbl`, `incr_lbl`] mp_tac) >> simp[]
 QED
-Finalise compile_for_array_shape
+Finalise compile_for_array_shape[local]
 
 (* By compile_stmt_ind.  internal is IS_SOME ce_return_pc: Return
    emits RET exactly when ce_return_pc is SOME, STOP/RETURN otherwise. *)
