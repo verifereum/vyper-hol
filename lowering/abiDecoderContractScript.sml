@@ -112,6 +112,8 @@ Theorem abi_decode_word_sequence:
     val_in_memory (BaseTV (UintT 256))
       (IntV (&w2n (abi_decode_load opc p s))) d s'.vs_memory /\
     abi_decode_frame d 32 s s' /\
+    fresh_vars_wrt st' s' /\
+    (!op w. eval_operand op s = SOME w ==> eval_operand op s' = SOME w) /\
     same_blocks st st' /\
     st'.cs_current_insts = st.cs_current_insts ++ emitted_insts st st' /\
     EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
