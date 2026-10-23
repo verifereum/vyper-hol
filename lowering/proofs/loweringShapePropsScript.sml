@@ -295,6 +295,82 @@ Proof
   gvs[loc_shape_ok_def] >> metis_tac[loc_shape_ok_def]
 QED
 
+Theorem value_shape_ok_operand[local]:
+  !st vv. value_shape_ok st vv ==> plain_operand st (vv_operand vv)
+Proof
+  Cases_on `vv` >> simp[value_shape_ok_def, vv_operand_def]
+QED
+
+Theorem cenv_shape_ok_lookup[local]:
+  !st cenv n loc. cenv_shape_ok st cenv /\
+    FLOOKUP cenv.ce_vars n = SOME loc ==> loc_shape_ok st loc
+Proof
+  rw[cenv_shape_ok_def] >> metis_tac[]
+QED
+
+Theorem lower_value_with_loc_shape[local]:
+  !cenv ty e internal.
+    ~supported_expr_exists expr_shape_root e ==>
+    shape_step internal compiler_label (\st. cenv_shape_ok st cenv)
+      (lower_value_with_loc compile_expr cenv ty e)
+      (\r st. plain_operand st (FST r))
+Proof
+  rpt strip_tac >> simp[lower_value_with_loc_def] >>
+  irule shape_step_bind >>
+  qexists_tac `\v st. cenv_shape_ok st cenv /\ value_shape_ok st v` >>
+  conj_tac
+  >- (gen_tac >> BETA_TAC >> irule shape_step_bind >>
+      qexists_tac `\op st. plain_operand st op` >> conj_tac
+      >- (gen_tac >> BETA_TAC >> irule shape_step_return >> simp[]) >>
+      irule unwrap_value_shape) >>
+  drule (cj 1 compile_expr_shape) >>
+  disch_then (qspecl_then [`cenv`, `ty`, `internal`] assume_tac) >>
+  drule shape_step_frame >>
+  disch_then (qspec_then `\st. cenv_shape_ok st cenv` mp_tac) >>
+  simp[cenv_shape_ok_stable]
+QED
+
+Theorem emit_local_alloca_shape[local]:
+  !internal cenv id.
+    shape_step internal compiler_label (\st. cenv_shape_ok st cenv)
+      (emit_local_alloca cenv id) (\x st. cenv_shape_ok st cenv)
+Proof
+  rpt gen_tac >> simp[emit_local_alloca_def] >>
+  Cases_on `FLOOKUP cenv.ce_vars id` >> simp[]
+  >- (irule shape_step_return >> simp[]) >>
+  rename1 `SOME loc` >> Cases_on `loc` >> simp[] >>
+  TRY (irule shape_step_return >> simp[] >> NO_TAC) >>
+  rename1 `PtrVar op sz` >> Cases_on `op` >> simp[] >>
+  TRY (irule shape_step_return >> simp[] >> NO_TAC) >>
+  mp_tac (Q.SPECL [`internal`, `compiler_label`, `\st. cenv_shape_ok st cenv`,
+    `ALLOCA`, `[Lit (n2w sz)]`, `[s]`] shape_step_emit_inst) >>
+  simp[cenv_shape_ok_stable, label_or_plain_def, plain_operand_def,
+       stackPlanTypesTheory.is_label_operand_def, lowered_inst_ok_def, mk_inst_def,
+       raw_opcode_ok_def, inst_shape_ok_def, jump_labels_ok_def,
+       is_terminator_def, is_read0_opcode_def, label_positions_ok_def,
+       is_param_opcode_def]
+QED
+
+Theorem emit_jmp_if_not_terminated_shape[local]:
+  !internal lbl. jump_label_ok lbl ==>
+    shape_step internal compiler_label (\st. T)
+      (emit_jmp_if_not_terminated lbl) (\x st. T)
+Proof
+  rpt strip_tac >> simp[emit_jmp_if_not_terminated_def] >>
+  irule shape_step_bind >> qexists_tac `\cs st. T` >>
+  conj_tac
+  >- (gen_tac >> BETA_TAC >> IF_CASES_TAC
+      >- (irule shape_step_return >> simp[]) >>
+      mp_tac (Q.SPECL [`internal`, `compiler_label`, `\st. T`,
+        `JMP`, `[Label lbl]`, `[]`] shape_step_emit_inst) >>
+      simp[shape_stable_def, label_or_plain_def,
+           stackPlanTypesTheory.is_label_operand_def, lowered_inst_ok_def,
+           mk_inst_def, raw_opcode_ok_def, inst_shape_ok_def,
+           jump_labels_ok_def, is_terminator_def, is_read0_opcode_def,
+           label_positions_ok_def, is_param_opcode_def]) >>
+  simp[shape_step_def, comp_get_def, shape_extends_refl]
+QED
+
 (* For alan, by compile_stmt_ind.  internal is IS_SOME ce_return_pc: Return
    emits RET exactly when ce_return_pc is SOME, STOP/RETURN otherwise. *)
 Theorem compile_stmt_shape:
