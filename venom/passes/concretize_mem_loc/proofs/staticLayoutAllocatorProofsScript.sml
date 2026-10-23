@@ -4,6 +4,43 @@ Theory staticLayoutAllocatorProofs
 Ancestors
   concretizeMemLocDefs staticLayoutDefs list finite_map
 
+(* Ordering is a separate interface from the canonical liveset map. *)
+Theorem ml_complete_order_distinct:
+  !raw localkeys ls. ALL_DISTINCT (ml_complete_order raw localkeys ls)
+Proof
+  simp[ml_complete_order_def]
+QED
+
+Theorem ml_complete_order_mem:
+  !raw localkeys ls a.
+    MEM a (ml_complete_order raw localkeys ls) <=>
+    MEM a localkeys /\ IS_SOME (FLOOKUP ls a)
+Proof
+  simp[ml_complete_order_def, MEM_FILTER] >> metis_tac[]
+QED
+
+Theorem alloc_liveset_items_ordered_lookup:
+  !raw fn ls a live.
+    MEM (a,live) (alloc_liveset_items_ordered raw fn ls) ==>
+    FLOOKUP ls a = SOME live
+Proof
+  rw[alloc_liveset_items_ordered_def, MEM_MAP, ml_complete_order_mem] >>
+  qmatch_asmsub_abbrev_tac `IS_SOME entry` >>
+  Cases_on `entry` >> gvs[]
+QED
+
+Theorem alloc_liveset_items_ordered_coverage:
+  !raw fn ls a live.
+    MEM a (MAP (\inst. Allocation inst.inst_id)
+      (FILTER (\inst. is_alloca_op inst.inst_opcode) (fn_insts fn))) /\
+    FLOOKUP ls a = SOME live ==>
+    MEM (a,live) (alloc_liveset_items_ordered raw fn ls)
+Proof
+  rpt strip_tac >>
+  simp[alloc_liveset_items_ordered_def, MEM_MAP, ml_complete_order_mem] >>
+  qpat_x_assum `MEM a (MAP _ _)` mp_tac >> simp[MEM_MAP]
+QED
+
 Definition reserved_positions_sorted_def:
   reserved_positions_sorted [] = T /\
   reserved_positions_sorted (((pos : num),size)::rs) =

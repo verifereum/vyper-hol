@@ -739,10 +739,103 @@ Definition compute_alloc_map_def:
       sorted_info pre_allocated
 End
 
-(* Python populates the liveset dictionary during its backward liveness walk.
-   Its stable size sort therefore breaks equal-size ties in reverse physical
-   instruction order, not ALLOCA source order.  Preserve that observable order
-   before applying the same stable sort below. *)
+(* Order sidecar for memory liveness. Unlike the canonical sorted sets, these
+   lists model OrderedSet insertion: union appends unseen keys; deletion keeps
+   survivor order. Pointer may-sets use canonical order; singleton resolutions
+   (the ordinary lowering case) have no pointer-order ambiguity. *)
+Definition ml_ordered_union_def:
+  ml_ordered_union xs ys =
+    FOLDL (\acc x. if MEM x acc then acc else acc ++ [x]) xs ys
+End
+
+Definition ml_ordered_inst_def:
+  ml_ordered_inst bpr mems sizes lbl idx inst live la keys =
+    let ws = find_base_allocas_opt bpr (inst_write_op inst) in
+    let rs = find_base_allocas_opt bpr (inst_read_op inst) in
+    let l1 = ml_ordered_union live rs in
+    let l2 = if inst.inst_opcode = INVOKE then
+      (case inst.inst_operands of Label name :: _ =>
+        FOLDL (\s op. ml_ordered_union s (find_base_allocas bpr op))
+          (ml_ordered_union l1 (mems name)) inst.inst_operands
+       | _ => l1) else l1 in
+    let la' = la |+ ((lbl,idx),l2) in
+    let keys' = ml_ordered_union keys [(lbl,idx)] in
+    let l3 = case (inst_write_size inst,ws) of
+      (SOME sz,[a]) => if sizes a = SOME sz then FILTER (\b. b <> a) l2 else l2
+      | _ => l2 in
+    (ml_ordered_union l3 (FILTER (\a. MEM a rs) ws),la',keys')
+End
+
+Definition ml_ordered_insts_def:
+  ml_ordered_insts bpr mems sizes lbl live la keys [] = (live,la,keys) /\
+  ml_ordered_insts bpr mems sizes lbl live la keys ((idx,inst)::rest) =
+    let (l,a,k) = ml_ordered_insts bpr mems sizes lbl live la keys rest in
+      ml_ordered_inst bpr mems sizes lbl idx inst l a k
+End
+
+Definition ml_ordered_block_def:
+  ml_ordered_block bpr mems sizes cfg la keys bb =
+    let succs = cfg_succs_of cfg bb.bb_label in
+    (* defaultdict reads insert even when the initial value is empty. *)
+    let keys1 = ml_ordered_union keys (MAP (\l. (l,0)) succs) in
+    let live = FOLDL ml_ordered_union [] (MAP (\l. ml_lookup la (l,0)) succs) in
+    let keys2 = ml_ordered_union keys1 [(bb.bb_label,0)] in
+    let (_,la',keys') = ml_ordered_insts bpr mems sizes bb.bb_label live la keys2
+      (MAPi (\i inst. (i,inst)) bb.bb_instructions) in
+    (la',keys')
+End
+
+Definition ml_ordered_pass_def:
+  ml_ordered_pass bpr mems sizes cfg blocks [] la keys = (la,keys) /\
+  ml_ordered_pass bpr mems sizes cfg blocks (lbl::rest) la keys =
+    case lookup_block lbl blocks of
+      NONE => ml_ordered_pass bpr mems sizes cfg blocks rest la keys
+    | SOME bb => let (la',keys') = ml_ordered_block bpr mems sizes cfg la keys bb in
+      ml_ordered_pass bpr mems sizes cfg blocks rest la' keys'
+End
+
+(* Stop on canonical membership convergence, just as dictionary equality in
+   Python ignores OrderedSet value order. Never use temporal allocation-key
+   occurrence during fixpoint iteration as final allocation priority. *)
+Definition ml_ordered_iter_def:
+  ml_ordered_iter 0 bpr mems sizes pallocas cfg fn la us ola keys = (us,ola,keys) /\
+  ml_ordered_iter (SUC fuel) bpr mems sizes pallocas cfg fn la us ola keys =
+    let (changed,la',us') = ml_one_pass bpr
+      (\n. incr_ssort alloc_to (mems n)) sizes pallocas cfg fn la us in
+    let (ola',keys') = ml_ordered_pass bpr mems sizes cfg fn.fn_blocks cfg.cfg_dfs_post ola keys in
+    if changed then ml_ordered_iter fuel bpr mems sizes pallocas cfg fn la' us' ola' keys'
+    else (us',ola',keys')
+End
+
+Definition ml_ordered_keys_def:
+  ml_ordered_keys fuel bpr mems sizes pallocas cfg fn =
+    let (us,ola,keys) = ml_ordered_iter fuel bpr mems sizes pallocas cfg fn
+      FEMPTY FEMPTY FEMPTY [] in
+    let ks = FOLDL (\acc addr.
+      ml_ordered_union acc
+        (FILTER (\a. MEM a (ml_lookup us addr)) (ml_lookup ola addr))) [] keys in
+    FOLDL (\acc inst. ml_ordered_union acc
+      (find_base_allocas_opt bpr (inst_write_op inst))) ks (fn_insts fn)
+End
+
+(* The sidecar supplies priority, not membership. Complete missing local keys
+   deterministically in instruction order; imported keys are handled separately
+   by the allocator's fixed reservations. No arbitrary set enumeration is used. *)
+Definition ml_complete_order_def:
+  ml_complete_order raw localkeys (ls : (allocation, inst_addr list) fmap) =
+    nub (FILTER (\a. MEM a localkeys /\ IS_SOME (FLOOKUP ls a))
+      (raw ++ localkeys))
+End
+
+Definition alloc_liveset_items_ordered_def:
+  alloc_liveset_items_ordered raw fn ls =
+    let localkeys = MAP (\inst. Allocation inst.inst_id)
+      (FILTER (\inst. is_alloca_op inst.inst_opcode) (fn_insts fn)) in
+    MAP (\a. (a,THE (FLOOKUP ls a))) (ml_complete_order raw localkeys ls)
+End
+
+(* Allocation priority follows final ordered liveat values in dictionary-key
+   insertion order. Canonical liveset membership remains authoritative. *)
 Definition alloc_liveset_items_def:
   alloc_liveset_items fn ls =
     MAP THE (FILTER IS_SOME
@@ -781,7 +874,8 @@ Definition compute_alloc_map_fuel_def:
                             if sz = 0 then NONE else SOME sz in
     let ls = mem_liveness_analyze_fuel fuel bpr mems_used alloca_sz_opt
                live_pallocas cfg fn in
-    let items = alloc_liveset_items fn ls in
+    let raw = ml_ordered_keys fuel bpr mems_used alloca_sz_opt live_pallocas cfg fn in
+    let items = alloc_liveset_items_ordered raw fn ls in
     let pre_allocated_dom = FDOM pre_allocated in
     let already = FILTER (\(alloc, _). alloc IN pre_allocated_dom) items in
     let to_alloc = FILTER (\(alloc, _). alloc NOTIN pre_allocated_dom) items in
@@ -864,7 +958,11 @@ Definition compute_alloc_map_fuel_in_context_def:
     let alloca_sz = get_alloca_size fn in
     let imports = imported_mems_used ctx fn in
     let ls = context_mem_livesets fuel ctx fn bpr cfg in
-    let items = alloc_liveset_items fn ls in
+    let raw = ml_ordered_keys fuel bpr
+      (\name. MAP FST (callee_mems_used ctx name))
+      (\a. let sz = context_alloca_size fn imports a in
+             if sz = 0 then NONE else SOME sz) [] cfg fn in
+    let items = alloc_liveset_items_ordered raw fn ls in
     let pre_allocated_dom = FDOM pre_allocated in
     let already = FILTER (\(alloc, _). alloc IN pre_allocated_dom) items in
     let to_alloc = FILTER (\(alloc, _). alloc NOTIN pre_allocated_dom) items in
