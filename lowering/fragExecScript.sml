@@ -28,9 +28,16 @@
  *   frag_exec_pointwise   — prove a fragment from each start state
  *   frag_exec_run_inst_seq — lift a straight-line run_inst_seq result
  *
- * Abort lifting:
+ * Steps inside a block:
+ *   run_from_step         — a straight-line step moves run_from on
+ *   run_from_halt         — a halting step is the result of run_from
+ *   fn_has_code_same_block — the instructions a fragment appends to the
+ *                           current block are in the function
+ *
+ * Abort and halt lifting:
  *   frag_exec_step_abort  — a one-instruction fragment that aborts
  *   frag_exec_assert_fail — a failing emitted ASSERT aborts
+ *   stop_frag             — a STOP ends the run with empty return data
  *   step_inst_invoke_abort, exec_block_step_abort, run_blocks_run_from,
  *   run_context_run_blocks — Abort passes through INVOKE, exec_block,
  *                           run_blocks and run_context unchanged
@@ -524,6 +531,50 @@ Proof
   qexists_tac `0` >> simp[run_from_def, exit_result_def]
 QED
 
+(* ===== Steps inside a block ===== *)
+
+(* A straight-line instruction steps run_from to the next index. *)
+Theorem run_from_step:
+  !fuel ctx fn s bb inst s1.
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    get_instruction bb s.vs_inst_idx = SOME inst /\
+    inst.inst_opcode <> INVOKE /\ ~is_terminator inst.inst_opcode /\
+    step_inst_base inst s = OK s1 ==>
+    run_from fuel ctx fn s =
+    run_from fuel ctx fn (s1 with vs_inst_idx := SUC s.vs_inst_idx)
+Proof
+  rpt strip_tac >>
+  `s1.vs_current_bb = s.vs_current_bb /\ s1.vs_inst_idx = s.vs_inst_idx` by
+    metis_tac[step_preserves_control_flow, step_inst_non_invoke] >>
+  simp[run_from_def, Once exec_block_def, step_inst_non_invoke]
+QED
+
+(* A step that halts is the result of the run. *)
+Theorem run_from_halt:
+  !fuel ctx fn s bb inst s'.
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    get_instruction bb s.vs_inst_idx = SOME inst /\
+    inst.inst_opcode <> INVOKE /\ step_inst_base inst s = Halt s' ==>
+    run_from fuel ctx fn s = Halt s'
+Proof
+  rw[run_from_def, Once exec_block_def, step_inst_non_invoke]
+QED
+
+(* The instructions a fragment appends to the current block are in fn. *)
+Theorem fn_has_code_same_block:
+  !st st' fn new.
+    fn_has_code st st' fn /\ st'.cs_current_bb = st.cs_current_bb /\
+    st'.cs_current_insts = st.cs_current_insts ++ new ==>
+    ?bb. lookup_block st.cs_current_bb fn.fn_blocks = SOME bb /\
+         !i. i < LENGTH new ==>
+             get_instruction bb (LENGTH st.cs_current_insts + i) =
+             SOME (EL i new)
+Proof
+  rw[fn_has_code_def] >> qexists_tac `bb` >> rw[] >>
+  gvs[IS_PREFIX_APPEND, get_instruction_def] >>
+  PURE_REWRITE_TAC[GSYM APPEND_ASSOC] >> simp[EL_APPEND2, EL_APPEND1]
+QED
+
 (* ===== Abort lifting ===== *)
 
 (* Abort from an instruction is the result of its block. *)
@@ -547,12 +598,9 @@ Theorem frag_exec_step_abort:
 Proof
   rw[frag_exec_def] >> disj2_tac >>
   first_x_assum drule >> strip_tac >>
-  `?bb. lookup_block st.cs_current_bb fn.fn_blocks = SOME bb /\
-        isPREFIX (st.cs_current_insts ++ [inst]) bb.bb_instructions` by
-    (gvs[fn_has_code_def] >> metis_tac[]) >>
+  drule_all fn_has_code_same_block >> strip_tac >>
   `get_instruction bb (LENGTH st.cs_current_insts) = SOME inst` by
-    (gvs[IS_PREFIX_APPEND, get_instruction_def] >>
-     PURE_REWRITE_TAC[GSYM APPEND_ASSOC] >> simp[EL_LENGTH_APPEND]) >>
+    (qpat_x_assum `!i. _` (qspec_then `0` mp_tac) >> simp[]) >>
   `exec_block fuel ctx bb s = Abort a s'` by
     (irule exec_block_step_abort >> qexists_tac `inst` >> gvs[]) >>
   qexists_tac `fuel` >>
@@ -574,6 +622,29 @@ Proof
     simp[venomInstTheory.mk_inst_def] >>
   rpt strip_tac >> first_x_assum drule >> strip_tac >>
   simp[step_inst_non_invoke, assert_false_correct]
+QED
+
+(* A STOP ends the run, with empty return data. *)
+Theorem stop_frag:
+  !ctx st st' id P Q R.
+    st'.cs_current_bb = st.cs_current_bb /\
+    st'.cs_current_insts = st.cs_current_insts ++ [mk_inst id STOP [] []] /\
+    (!s. P s ==> R (Halt (halt_state (s with vs_returndata := [])))) ==>
+    frag_exec ctx st st' P Q R
+Proof
+  rw[frag_exec_def] >> disj2_tac >>
+  drule_all fn_has_code_same_block >> strip_tac >>
+  `get_instruction bb (LENGTH st.cs_current_insts) =
+   SOME (mk_inst id STOP [] [])` by
+    (qpat_x_assum `!i. _` (qspec_then `0` mp_tac) >> simp[]) >>
+  `(mk_inst id STOP [] []).inst_opcode = STOP` by simp[mk_inst_def] >>
+  `step_inst_base (mk_inst id STOP [] []) s =
+   Halt (halt_state (s with vs_returndata := []))` by
+    (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >> simp[mk_inst_def]) >>
+  `run_from 0 ctx fn s = Halt (halt_state (s with vs_returndata := []))` by
+    (irule run_from_halt >>
+     qexistsl_tac [`bb`, `mk_inst id STOP [] []`] >> simp[]) >>
+  qexists_tac `0` >> simp[exit_result_def]
 QED
 
 (* Abort from a callee is the result of the INVOKE. *)
