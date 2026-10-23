@@ -8,8 +8,9 @@
  * unit.
  *
  * TOP-LEVEL:
- *   expr_shape_root            — the two source forms whose lowering breaks
- *                                the shape (msg.gas, raw_call(msg.data))
+ *   expr_shape_root            — the source forms whose lowering breaks the
+ *                                shape (msg.gas, raw_call(msg.data)) and
+ *                                builtins with too few arguments
  *   cenv_shape_ok, cenv_static_ok, value_shape_ok, loop_ctx_shape_ok
  *   external_fn_shape_ok, fallback_shape_ok, internal_fn_shape_ok
  *   internal_segment_ok        — one internal function's blocks
@@ -196,7 +197,7 @@ QED
 
 (* ===== Expression and statement lowering ===== *)
 
-(* For alan, by compile_expr_ind; one case per compile_expr_body clause and
+(* By compile_expr_ind; one case per compile_expr_body clause and
    builtin.  The builtin families (abiEncoder, builtin*, context copy loops)
    are plain shape_step facts under plain operands.  Under value_shape_ok no
    value is in LocCode, so DLOAD/DLOADBYTES are unreachable; GAS is emitted
@@ -222,7 +223,7 @@ Proof
   cheat
 QED
 
-(* Shared helper of every value consumer; weakly frozen. *)
+(* Shared helper of every value consumer. *)
 Theorem unwrap_value_shape:
   !cenv v internal.
     shape_step internal compiler_label
@@ -232,7 +233,8 @@ Proof
   cheat
 QED
 
-(* The cenv a statement body runs under: one more plain PtrVar local. *)
+(* The cenv a statement body runs under: one more plain PtrVar local when
+   ce_alloca_locals is set, the same locals otherwise. *)
 Theorem declare_local_shape:
   !internal cenv id ty.
     shape_step internal compiler_label (\st. cenv_shape_ok st cenv)
@@ -266,7 +268,7 @@ Proof
   rpt gen_tac >> irule shape_step_return >> simp[]
 QED
 
-(* For alan, by compile_stmt_ind.  internal is IS_SOME ce_return_pc: Return
+(* By compile_stmt_ind.  internal is IS_SOME ce_return_pc: Return
    emits RET exactly when ce_return_pc is SOME, STOP/RETURN otherwise. *)
 Theorem compile_stmt_shape:
   (!cenv lctx ty s.
@@ -719,7 +721,7 @@ Proof
   PairCases >> fs[build_selectors_def, compute_selector_def, IS_PREFIX_APPEND]
 QED
 
-(* For alan, by induction on tops through classify_function: each internal
+(* By induction on tops through classify_function: each internal
    tuple comes from a FunctionDecl Internal in tops, so its name meets the
    premise, and the internal names are a sublist of
    supported_function_names tops, which supported_declaration_names makes
@@ -743,7 +745,8 @@ QED
 (* S2 with the internal-name premise.  Without it S2 is false: an internal
    function named "fn_foo" next to an external "foo" makes both entry
    labels "fn_foo", so the internal function's blocks include external code
-   ending in STOP. *)
+   ending in STOP (lower_vyper_runtime_unit_label_clash in
+   s2LabelClashWitness). *)
 Theorem lower_vyper_runtime_unit_source_unit_ok_names:
   !tops rpolicy unit.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
