@@ -547,3 +547,59 @@ Theorem w2w_word_of_bytes_be_pad_left:
 Proof
   metis_tac[venomMemProofsTheory.w2w_word_of_bytes_be_pad_left_proof]
 QED
+
+(* Padded observations and frames for unrestricted memory copies. *)
+Theorem write_memory_with_expansion_byte_frame:
+  !d bytes s a.
+    a < LENGTH s.vs_memory /\ (a < d \/ d + LENGTH bytes <= a) ==>
+    EL a (write_memory_with_expansion d bytes s).vs_memory = EL a s.vs_memory
+Proof
+  rpt strip_tac >>
+  qspecl_then [`a`, `1`, `d`, `bytes`, `s`] mp_tac
+    write_memory_with_expansion_disjoint_read >>
+  simp[] >> disch_then (mp_tac o AP_TERM ``HD : word8 list -> word8``) >>
+  simp[HD_TAKE, HD_DROP, LENGTH_write_memory_with_expansion]
+QED
+
+Theorem mcopy_padded_read:
+  !dst src n s.
+    TAKE n (DROP dst (mcopy dst src n s).vs_memory ++ REPLICATE n 0w) =
+    TAKE n (DROP src s.vs_memory ++ REPLICATE n 0w)
+Proof
+  rpt gen_tac >> simp[mcopy_def] >>
+  qmatch_goalsub_abbrev_tac `write_memory_with_expansion dst data s` >>
+  `LENGTH data = n` by
+    simp[Abbr `data`, LENGTH_TAKE_EQ, LENGTH_DROP] >>
+  `n <= LENGTH (DROP dst (write_memory_with_expansion dst data s).vs_memory)` by
+    simp[LENGTH_DROP, LENGTH_write_memory_with_expansion, arithmeticTheory.MAX_DEF] >>
+  simp[TAKE_APPEND1] >>
+  metis_tac[write_memory_with_expansion_read_self]
+QED
+
+Theorem mcopy_byte_frame:
+  !dst src n s a.
+    a < LENGTH s.vs_memory /\ (a < dst \/ dst+n <= a) ==>
+    EL a (mcopy dst src n s).vs_memory = EL a s.vs_memory
+Proof
+  rpt strip_tac >> simp[mcopy_def] >>
+  irule write_memory_with_expansion_byte_frame >>
+  simp[LENGTH_TAKE_EQ, LENGTH_DROP]
+QED
+
+Theorem mcopy_memory_nondecreasing:
+  !dst src n s. LENGTH s.vs_memory <= LENGTH (mcopy dst src n s).vs_memory
+Proof
+  simp[mcopy_def, write_memory_with_expansion_nondecreasing]
+QED
+
+Theorem lookup_var_mcopy[simp]:
+  !x dst src n s. lookup_var x (mcopy dst src n s) = lookup_var x s
+Proof
+  simp[mcopy_def]
+QED
+
+Theorem mcopy_vs_allocas[simp]:
+  !dst src n s. (mcopy dst src n s).vs_allocas = s.vs_allocas
+Proof
+  simp[mcopy_def]
+QED
