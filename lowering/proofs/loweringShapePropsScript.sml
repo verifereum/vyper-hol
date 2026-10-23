@@ -4552,22 +4552,64 @@ Proof
   qx_gen_tac `gas_op` >> simp[] >>
   match_mp_tac shape_step_bind >>
   qexists_tac `\v st. B st /\ plain_operand st v` >> conj_tac
-  >- (irule shape_step_conseq >> qexists_tac `compiler_label` >>
-      qexists_tac `\st. (~is_label_operand gas_op /\ ~is_label_operand data_ptr /\
-                          ~is_label_operand length_op /\ ~is_label_operand buf.buf_operand) /\
-                         B st /\ gas_operand st gas_op` >>
-      qexists_tac `\v st. B st /\ plain_operand st v` >> conj_tac
-      >- simp[] >>
-      conj_tac
-      >- (simp[Abbr `B`, Abbr `D`, Abbr `L`, Abbr `P`, gas_operand_def,
-               plain_operand_def] >> rpt strip_tac >>
-          gvs[stackPlanTypesTheory.is_label_operand_def]) >>
-      simp[] >>
-      ho_match_mp_tac shape_step_assume_pure >> strip_tac >>
-      shape_under_tac shape_step_emit_op_call `B` >>
-      qexists_tac `compiler_label` >> simp[Abbr `B`, Abbr `D`, Abbr `L`, Abbr `P`] >> shape_opcode_tac) >>
+  >- (shape_under_tac shape_step_emit_op_call_guarded `B` >>
+      simp[Abbr `B`, Abbr `D`, Abbr `L`, Abbr `P`] >>
+      shape_opcode_tac >> rpt strip_tac >>
+      gvs[gas_operand_def, stackPlanTypesTheory.is_label_operand_def]) >>
   qx_gen_tac `success` >> simp[] >> shape_scalar_assert_tac `B` >>
   shape_under_tac shape_step_emit_op_plain `R` >> simp[Abbr `B`, Abbr `D`, Abbr `L`, Abbr `P`] >> shape_opcode_tac
+QED
+
+Theorem compile_sha256_bytesm_shape[local]:
+  shape_stable R ==>
+  shape_step internal compiler_label (\st. R st /\ plain_operand st val_op)
+    (compile_sha256_bytesm val_op m) (\v st. R st /\ plain_operand st v)
+Proof
+  strip_tac >> simp[builtinHashingTheory.compile_sha256_bytesm_def] >>
+  qmatch_goalsub_abbrev_tac `shape_step internal compiler_label P _ _` >>
+  `shape_stable P` by
+    (simp[Abbr `P`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
+     mp_tac (Q.SPEC `[val_op]` shape_stable_plain_operands) >> simp[]) >>
+  match_mp_tac shape_step_bind >>
+  qexists_tac `\b st. P st /\ plain_operand st b.buf_operand` >> conj_tac
+  >- (shape_under_tac compile_alloc_buffer_shape `P`) >>
+  qx_gen_tac `in_buf` >>
+  CONV_TAC (LAND_CONV (REWR_CONV (GSYM ETA_AX))) >>
+  simp[Once comp_bind_def, comp_return_def] >> CONV_TAC (DEPTH_CONV ETA_CONV) >>
+  qmatch_goalsub_abbrev_tac `shape_step internal compiler_label InputFrame _ _` >>
+  `shape_stable InputFrame` by
+    (simp[Abbr `InputFrame`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
+     mp_tac (Q.SPEC `[in_buf.buf_operand]` shape_stable_plain_operands) >> simp[]) >>
+  match_mp_tac shape_step_ignore_bind >> qexists_tac `\u st. InputFrame st` >> conj_tac
+  >- (shape_under_tac shape_step_emit_void_plain `InputFrame` >> simp[Abbr `InputFrame`, Abbr `P`] >> shape_opcode_tac) >>
+  gen_tac >> simp[] >> match_mp_tac shape_step_bind >>
+  qexists_tac `\b st. InputFrame st /\ plain_operand st b.buf_operand` >> conj_tac
+  >- (shape_under_tac compile_alloc_buffer_shape `InputFrame`) >>
+  qx_gen_tac `out_buf` >>
+  CONV_TAC (LAND_CONV (REWR_CONV (GSYM ETA_AX))) >>
+  simp[Once comp_bind_def, comp_return_def] >> CONV_TAC (DEPTH_CONV ETA_CONV) >>
+  qmatch_goalsub_abbrev_tac `shape_step internal compiler_label B _ _` >>
+  `shape_stable B` by
+    (simp[Abbr `B`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
+     mp_tac (Q.SPEC `[out_buf.buf_operand]` shape_stable_plain_operands) >> simp[]) >>
+  match_mp_tac shape_step_bind >> qexists_tac `\g st. B st /\ gas_operand st g` >> conj_tac
+  >- (irule shape_step_emit_op_gas >> simp[]) >>
+  qx_gen_tac `gas_op` >> simp[] >> match_mp_tac shape_step_bind >>
+  qexists_tac `\v st. B st /\ plain_operand st v` >> conj_tac
+  >- (shape_under_tac shape_step_emit_op_call_guarded `B` >> simp[Abbr `B`, Abbr `InputFrame`, Abbr `P`] >>
+      shape_opcode_tac >> rpt strip_tac >> gvs[gas_operand_def, stackPlanTypesTheory.is_label_operand_def]) >>
+  qx_gen_tac `success` >> simp[] >> shape_scalar_assert_tac `B` >>
+  shape_under_tac shape_step_emit_op_plain `R` >> simp[Abbr `B`, Abbr `InputFrame`, Abbr `P`] >> shape_opcode_tac
+QED
+
+Theorem compile_sha256_word_shape[local]:
+  shape_stable R ==>
+  shape_step internal compiler_label (\st. R st /\ plain_operand st val_op)
+    (compile_sha256_word val_op) (\v st. R st /\ plain_operand st v)
+Proof
+  simp[builtinHashingTheory.compile_sha256_word_def,
+       GSYM builtinHashingTheory.compile_sha256_bytesm_def,
+       compile_sha256_bytesm_shape]
 QED
 
 Theorem compile_expr_shape:
