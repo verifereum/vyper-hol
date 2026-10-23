@@ -2,6 +2,7 @@ Theory vyperMembershipSemanticsTest
 Ancestors
   vyperAST vyperContext vyperState vyperInterpreter vyperSmallStep
   vyperValueOperation vyperValue vyperTypeContract vyperEvalPureExpr vyperLookup
+  vyperTypeSystem compileEnv
 
 (* The symbolic scope assumption fixes x=0 without requiring a whole contract. *)
 Theorem literal_membership_eval_test:
@@ -132,4 +133,68 @@ Proof
   simp[eval_pure_expr_def, builtin_args_length_ok_def, materialise_def,
        bind_def, return_def, evaluate_literal_def, expr_type_def] >>
   EVAL_TAC
+QED
+
+(* The checker/lowering interface lives on the lowering side: the type system
+   does not depend on compileEnv. *)
+Theorem membership_element_word_boundary:
+  !ty. is_prim_word_type ty = is_word_type ty
+Proof
+  Cases >> simp[is_prim_word_type_def, is_word_type_def] >>
+  rename1 `BaseT bt` >> Cases_on `bt` >>
+  simp[is_prim_word_type_def, is_word_type_def] >>
+  rename1 `BytesT bd` >> Cases_on `bd` >>
+  simp[is_prim_word_type_def, is_word_type_def]
+QED
+
+Theorem membership_checker_lowering_boundary:
+  (bop = In \/ bop = NotIn) /\
+  well_typed_binop ty bop needle_ty (ArrayT elem_ty bd) ==>
+  needle_ty = elem_ty /\ is_word_type elem_ty
+Proof
+  metis_tac[well_typed_membership_array_element,
+            membership_element_word_boundary]
+QED
+
+(* Symbolic bounds cover both literal/static and variable/dynamic arrays.
+   Fixed bytes wider than 32 are not primitive words either. *)
+Theorem membership_checker_reject_aggregate_test:
+  !neg bd n fields inner ibd name m.
+  let bop = if neg then NotIn else In in
+  ~well_typed_binop (BaseT BoolT) bop (BaseT (StringT n))
+      (ArrayT (BaseT (StringT n)) bd) /\
+  ~well_typed_binop (BaseT BoolT) bop (BaseT (BytesT (Dynamic n)))
+      (ArrayT (BaseT (BytesT (Dynamic n))) bd) /\
+  ~well_typed_binop (BaseT BoolT) bop (StructT name)
+      (ArrayT (StructT name) bd) /\
+  ~well_typed_binop (BaseT BoolT) bop (TupleT fields)
+      (ArrayT (TupleT fields) bd) /\
+  ~well_typed_binop (BaseT BoolT) bop (ArrayT inner ibd)
+      (ArrayT (ArrayT inner ibd) bd) /\
+  (32 < m ==> ~well_typed_binop (BaseT BoolT) bop
+      (BaseT (BytesT (Fixed m))) (ArrayT (BaseT (BytesT (Fixed m))) bd))
+Proof
+  Cases >> simp[well_typed_binop_def, is_prim_word_type_def]
+QED
+
+Theorem membership_checker_accept_words_test:
+  !neg bd k fid m.
+  let bop = if neg then NotIn else In in
+  well_typed_binop (BaseT BoolT) bop (BaseT (UintT k))
+      (ArrayT (BaseT (UintT k)) bd) /\
+  well_typed_binop (BaseT BoolT) bop (BaseT (IntT k))
+      (ArrayT (BaseT (IntT k)) bd) /\
+  well_typed_binop (BaseT BoolT) bop (BaseT BoolT)
+      (ArrayT (BaseT BoolT) bd) /\
+  well_typed_binop (BaseT BoolT) bop (BaseT AddressT)
+      (ArrayT (BaseT AddressT) bd) /\
+  well_typed_binop (BaseT BoolT) bop (BaseT DecimalT)
+      (ArrayT (BaseT DecimalT) bd) /\
+  well_typed_binop (BaseT BoolT) bop (FlagT fid)
+      (ArrayT (FlagT fid) bd) /\
+  well_typed_binop (BaseT BoolT) bop (FlagT fid) (FlagT fid) /\
+  (m <= 32 ==> well_typed_binop (BaseT BoolT) bop
+      (BaseT (BytesT (Fixed m))) (ArrayT (BaseT (BytesT (Fixed m))) bd))
+Proof
+  Cases >> simp[well_typed_binop_def, is_prim_word_type_def]
 QED
