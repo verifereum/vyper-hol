@@ -2308,6 +2308,129 @@ Proof
   shape_keccak_staged_tac builtinHashingTheory.compile_keccak256_bytesm_def
 QED
 
+(* ABI validators preserve the value whose canonical form they check. *)
+val shape_abi_scalar_clamp_tac =
+  qmatch_goalsub_abbrev_tac `shape_step internal compiler_label P _ _` >>
+  `shape_stable P` by
+    (simp[Abbr `P`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
+     mp_tac (Q.SPEC `[v]:operand list` shape_stable_plain_operands) >> simp[]) >>
+  shape_scalar_emit_bind_tac `P` `canonical_op` (simp[Abbr `P`]) >>
+  shape_scalar_emit_bind_tac `P` `ok_op` (simp[Abbr `P`]) >>
+  shape_under_tac shape_step_emit_void_plain `P` >> shape_opcode_tac;
+
+Theorem compile_abi_int_clamp_shape[local]:
+  shape_stable R ==>
+  shape_step internal compiler_label (\st. R st /\ plain_operand st v)
+    (compile_abi_int_clamp v bits signed) (\u st. R st /\ plain_operand st v)
+Proof
+  strip_tac >> Cases_on `signed` >> simp[abiEncoderTheory.compile_abi_int_clamp_def] >>
+  shape_abi_scalar_clamp_tac
+QED
+
+Theorem compile_abi_bytes_clamp_shape[local]:
+  shape_stable R ==>
+  shape_step internal compiler_label (\st. R st /\ plain_operand st v)
+    (compile_abi_bytes_clamp v m) (\u st. R st /\ plain_operand st v)
+Proof
+  strip_tac >> simp[abiEncoderTheory.compile_abi_bytes_clamp_def] >>
+  shape_abi_scalar_clamp_tac
+QED
+
+Theorem compile_abi_clamp_basetype_shape[local]:
+  shape_stable R ==>
+  shape_step internal compiler_label (\st. R st /\ plain_operand st v)
+    (compile_abi_clamp_basetype v clamp) (\u st. R st /\ plain_operand st v)
+Proof
+  strip_tac >> Cases_on `clamp` >>
+  simp[abiEncoderTheory.compile_abi_clamp_basetype_def,
+       compile_abi_int_clamp_shape, compile_abi_bytes_clamp_shape]
+  >- (irule shape_step_return >> simp[]) >>
+  shape_abi_scalar_clamp_tac
+QED
+
+Theorem compile_get_element_ptr_shape[local]:
+  shape_stable R ==>
+  shape_step internal compiler_label (\st. R st /\ plain_operand st v)
+    (compile_get_element_ptr v offset) (\w st. R st /\ plain_operand st w)
+Proof
+  strip_tac >> simp[abiEncoderTheory.compile_get_element_ptr_def] >>
+  shape_under_tac shape_step_emit_op_plain `R` >> shape_opcode_tac
+QED
+
+Theorem compile_abi_zero_pad_shape[local]:
+  shape_stable R ==>
+  shape_step internal compiler_label
+    (\st. R st /\ EVERY (plain_operand st) [bytez;len_op;count_op])
+    (compile_abi_zero_pad bytez len_op count_op) (\u st. R st)
+Proof
+  strip_tac >> simp[abiEncoderTheory.compile_abi_zero_pad_def] >>
+  qmatch_goalsub_abbrev_tac `shape_step internal compiler_label P _ _` >>
+  `shape_stable P` by
+    (simp[Abbr `P`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
+     mp_tac (Q.SPEC `[bytez;len_op;count_op]:operand list` shape_stable_plain_operands) >> simp[]) >>
+  shape_scalar_emit_bind_tac `P` `data_end` (simp[Abbr `P`]) >>
+  shape_scalar_emit_bind_tac `P` `pad_op` (simp[Abbr `P`]) >>
+  qmatch_goalsub_abbrev_tac `shape_step internal compiler_label G _ _` >>
+  `shape_stable G` by
+    (simp[Abbr `G`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
+     mp_tac (Q.SPEC `[pad_op]:operand list` shape_stable_plain_operands) >> simp[]) >>
+  shape_scalar_emit_bind_tac `G` `cds` all_tac >>
+  shape_under_tac shape_step_emit_void_plain `R` >> simp[Abbr `G`, Abbr `P`] >> shape_opcode_tac
+QED
+
+Theorem compile_get_dynarray_elem_ptr_shape[local]:
+  shape_stable R ==>
+  shape_step internal compiler_label
+    (\st. R st /\ plain_operand st parent_op /\ plain_operand st idx_op)
+    (compile_get_dynarray_elem_ptr parent_op idx_op elem_sz)
+    (\v st. R st /\ plain_operand st v)
+Proof
+  strip_tac >> simp[abiEncoderTheory.compile_get_dynarray_elem_ptr_def] >>
+  qmatch_goalsub_abbrev_tac `shape_step internal compiler_label P _ _` >>
+  `shape_stable P` by
+    (simp[Abbr `P`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
+     mp_tac (Q.SPEC `[parent_op;idx_op]:operand list` shape_stable_plain_operands) >> simp[]) >>
+  shape_scalar_emit_bind_tac `P` `data_op` (simp[Abbr `P`]) >>
+  qmatch_goalsub_abbrev_tac `shape_step internal compiler_label G _ _` >>
+  `shape_stable G` by
+    (simp[Abbr `G`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
+     mp_tac (Q.SPEC `[data_op]:operand list` shape_stable_plain_operands) >> simp[]) >>
+  shape_scalar_emit_bind_tac `G` `offset_op` (simp[Abbr `G`, Abbr `P`]) >>
+  shape_under_tac shape_step_emit_op_plain `R` >> simp[Abbr `G`, Abbr `P`] >> shape_opcode_tac
+QED
+
+Theorem compile_abi_encode_static_shape[local]:
+  shape_stable R ==>
+  shape_step internal compiler_label
+    (\st. R st /\ plain_operand st dst /\ plain_operand st src)
+    (compile_abi_encode_static dst src) (\v st. R st /\ plain_operand st v)
+Proof
+  strip_tac >> simp[abiEncoderTheory.compile_abi_encode_static_def] >>
+  qmatch_goalsub_abbrev_tac `shape_step internal compiler_label P _ _` >>
+  `shape_stable P` by
+    (simp[Abbr `P`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
+     mp_tac (Q.SPEC `[dst;src]:operand list` shape_stable_plain_operands) >> simp[]) >>
+  shape_scalar_emit_bind_tac `P` `val_op` (simp[Abbr `P`]) >>
+  match_mp_tac shape_step_ignore_bind >> qexists_tac `\u st. R st` >> conj_tac
+  >- (shape_under_tac shape_step_emit_void_plain `R` >> simp[Abbr `P`] >> shape_opcode_tac) >>
+  gen_tac >> simp[] >> irule shape_step_return >> shape_opcode_tac
+QED
+
+Theorem compile_abi_encode_static_info_shape[local]:
+  shape_stable R ==>
+  shape_step internal compiler_label
+    (\st. R st /\ plain_operand st dst /\ plain_operand st src)
+    (compile_abi_encode_static_info dst src info) (\v st. R st /\ plain_operand st v)
+Proof
+  strip_tac >> Cases_on `info` >>
+  simp[abiEncoderTheory.compile_abi_encode_static_info_def, compile_abi_encode_static_shape] >>
+  TRY (rename1 `shape_step _ _ _ (comp_return _) _` >>
+       irule shape_step_return >> shape_opcode_tac >> NO_TAC) >>
+  match_mp_tac shape_step_ignore_bind >> qexists_tac `\u st. R st` >> conj_tac
+  >- (shape_under_tac shape_step_emit_void_plain `R` >> shape_opcode_tac) >>
+  gen_tac >> simp[] >> irule shape_step_return >> shape_opcode_tac
+QED
+
 Theorem compile_pow_mod256_shape[local]:
   shape_stable R ==>
   shape_step internal compiler_label
