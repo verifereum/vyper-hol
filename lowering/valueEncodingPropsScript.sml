@@ -312,3 +312,70 @@ val _ = List.app (fn name =>
   ["write_memory_mem_bytes_at_same", "write_memory_mem_bytes_at_disjoint",
    "mcopy_mem_bytes_at_same", "mcopy_mem_bytes_at_disjoint",
    "mem_bytes_at_translated_window", "mstore_mem_bytes_at_disjoint"];
+
+(* Equal padded windows relocate any well-formed memory representation. *)
+Theorem val_in_memory_relocate:
+  !tv v src mem dst mem' n.
+    val_in_memory tv v src mem /\ val_wf tv v /\
+    type_memory_size tv <= n /\
+    mem_bytes_at src n mem = mem_bytes_at dst n mem' ==>
+    val_in_memory tv v dst mem'
+Proof
+  rpt strip_tac >>
+  irule (CONJUNCT1 val_in_memory_relocate_proof) >>
+  simp[] >> qexistsl_tac [`src`, `mem`] >> simp[] >>
+  qspecl_then [`src`, `dst`, `n`, `mem`, `mem'`, `0`,
+                `type_memory_size tv`] mp_tac mem_bytes_at_translated_window >>
+  simp[]
+QED
+
+Theorem mcopy_establishes_val_in_memory:
+  !tv v src dst n s.
+    val_in_memory tv v src s.vs_memory /\ val_wf tv v /\
+    type_memory_size tv <= n ==>
+    val_in_memory tv v dst (mcopy dst src n s).vs_memory
+Proof
+  rpt strip_tac >> irule val_in_memory_relocate >> simp[] >>
+  qexistsl_tac [`s.vs_memory`, `n`, `src`] >>
+  simp[mcopy_mem_bytes_at_same]
+QED
+
+Theorem mcopy_preserves_val_in_memory:
+  !tv v p dst src n s.
+    val_in_memory tv v p s.vs_memory /\ val_wf tv v /\
+    (p + type_memory_size tv <= dst \/ dst + n <= p) ==>
+    val_in_memory tv v p (mcopy dst src n s).vs_memory
+Proof
+  rpt strip_tac >> irule val_in_memory_mem_agree >> simp[] >>
+  qexistsl_tac [`type_memory_size tv`, `s.vs_memory`] >>
+  simp[mcopy_mem_bytes_at_disjoint]
+QED
+
+(* Interface probes: padded source, nested tuple, both typed byte-word cases,
+   and an empty string; the snapshot copy may overlap its source. *)
+Theorem mcopy_nested_tuple_probe[local]:
+  val_in_memory
+    (TupleTV [BaseTV (BytesT (Fixed 1)); BaseTV AddressT;
+              TupleTV [BaseTV (StringT 0)]])
+    (ArrayV (TupleV [BytesV [0w]; BytesV [];
+                    ArrayV (TupleV [StringV ""])]))
+    7 (mcopy 7 0 96 (s with vs_memory := [])).vs_memory
+Proof
+  irule mcopy_establishes_val_in_memory >>
+  simp[val_wf_def, type_memory_size_def] >>
+  EVAL_TAC >> simp[]
+QED
+
+Theorem mcopy_zero_size_layout_probe[local]:
+  val_in_memory (TupleTV []) (ArrayV (TupleV [])) dst
+    (mcopy dst src 0 s).vs_memory
+Proof
+  simp[val_in_memory_def]
+QED
+
+val _ = List.app (fn name =>
+  if null (List.filter (fn x => x <> "DISK_THM")
+    (#1 (Tag.dest_tag (Thm.tag (DB.fetch "valueEncodingProps" name)))))
+  then () else raise Fail ("oracle in " ^ name))
+  ["val_in_memory_relocate", "mcopy_establishes_val_in_memory",
+   "mcopy_preserves_val_in_memory"];
