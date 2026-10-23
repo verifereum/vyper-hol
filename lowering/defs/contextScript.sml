@@ -1023,3 +1023,56 @@ Definition compile_load_immutable_ctor_def:
            od
         od
 End
+
+(* Exact instruction boundaries for immutable word accesses. *)
+Theorem compile_imm_load_word_ctor_result:
+  !region_base off st out st'.
+  compile_imm_load_word T (SOME region_base) off st = (out, st') ==>
+  out = Var ("%" ++ toString (st.cs_next_var + 1)) /\
+  st'.cs_next_id = st.cs_next_id + 2 /\
+  st'.cs_next_var = st.cs_next_var + 2 /\
+  st'.cs_current_insts = st.cs_current_insts ++
+    [mk_inst st.cs_next_id ADD [off; region_base]
+       ["%" ++ toString st.cs_next_var];
+     mk_inst (st.cs_next_id + 1) ILOAD
+       [Var ("%" ++ toString st.cs_next_var)]
+       ["%" ++ toString (st.cs_next_var + 1)]]
+Proof
+  simp[compile_imm_load_word_def, emit_op_def, fresh_id_def, fresh_var_def,
+       emit_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
+       APPEND_ASSOC]
+QED
+
+Theorem compile_imm_store_word_result:
+  !region_base off value st st'.
+  compile_imm_store_word (SOME region_base) off value st = ((), st') ==>
+  st'.cs_next_id = st.cs_next_id + 2 /\
+  st'.cs_next_var = st.cs_next_var + 1 /\
+  st'.cs_current_insts = st.cs_current_insts ++
+    [mk_inst st.cs_next_id ADD [region_base; off]
+       ["%" ++ toString st.cs_next_var];
+     mk_inst (st.cs_next_id + 1) ISTORE
+       [Var ("%" ++ toString st.cs_next_var); value] []]
+Proof
+  simp[compile_imm_store_word_def, emit_op_def, emit_void_def,
+       fresh_id_def, fresh_var_def, emit_def, comp_bind_def,
+       comp_ignore_bind_def, comp_return_def, APPEND_ASSOC]
+QED
+
+Theorem compile_imm_load_word_runtime:
+  !imm off. compile_imm_load_word F imm off = emit_op DLOAD [off]
+Proof
+  simp[compile_imm_load_word_def]
+QED
+
+Theorem compile_imm_load_word_no_base:
+  !off. compile_imm_load_word T NONE off = emit_op ILOAD [off]
+Proof
+  simp[compile_imm_load_word_def]
+QED
+
+Theorem compile_imm_store_word_no_base:
+  !off value. compile_imm_store_word NONE off value = emit_void ISTORE [off; value]
+Proof
+  simp[compile_imm_store_word_def]
+QED
