@@ -86,3 +86,18 @@ Theorem p92_int_revert_branch_matches_python_oracle:
 Proof
   CONV_TAC (LAND_CONV (K (#evaluation p92))) >> EVAL_TAC
 QED
+
+(* Ordered liveness allocation ties: internal String local and call-result len. *)
+val p02 = memoryStoreWitnessLib.evaluate fixture_root "p02_int_local_string"
+Theorem p02_int_local_string_matches_python_oracle:
+  ^(#term p02) = SOME ^(memoryStoreWitnessLib.oracle fixture_root "p02_int_local_string")
+Proof
+  CONV_TAC (LAND_CONV (K (#evaluation p02))) >> EVAL_TAC
+QED
+
+val p47 = memoryStoreWitnessLib.evaluate fixture_root "p47_len_of_string_call"
+Theorem p47_len_of_string_call_matches_python_oracle:
+  ^(#term p47) = SOME ^(memoryStoreWitnessLib.oracle fixture_root "p47_len_of_string_call")
+Proof
+  CONV_TAC (LAND_CONV (K (#evaluation p47))) >> EVAL_TAC
+QED

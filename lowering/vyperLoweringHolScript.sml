@@ -15,3 +15,8 @@ Ancestors
   evalCompilerExternalCalls
   evalCompilerNameCollisions
   evalCompilerSliceBuffers
+  evalCompilerInternalFrames
+  (* focused internal-frame allocation, cleanup and whitelist regressions *)
+  calleeMemoryWitness
+  cleanupPromiseWitness
+  internalFrameWhitelistDiagnostic

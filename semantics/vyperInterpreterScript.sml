@@ -1196,20 +1196,41 @@ val () = eval_send_def
             lift_option_type_def, type_check_def, check_def, assert_def]
   |> cv_auto_trans;
 
+(* Frame preservation composes without expanding external-call continuations. *)
+Theorem external_frame_bind[local]:
+  (!s r t. f s = (r,t) ==> t.scopes = s.scopes /\ t.immutables = s.immutables) /\
+  (!x s r t. g x s = (r,t) ==> t.scopes = s.scopes /\ t.immutables = s.immutables) ==>
+  monad_bind f g s = (r,t) ==>
+    t.scopes = s.scopes /\ t.immutables = s.immutables
+Proof
+  rpt strip_tac >> Cases_on `f s` >> Cases_on `q` >>
+  gvs[bind_def] >> metis_tac[]
+QED
+
 Theorem eval_ext_call_preserves_non_accounts:
   eval_ext_call cx static skip_check sig opts vs st = (res, st') ==>
   st'.scopes = st.scopes /\ st'.immutables = st.immutables
 Proof
-  PairCases_on `sig` >> Cases_on `vs` >>
-  simp[eval_ext_call_def, bind_def, ignore_bind_def, type_check_def,
-       assert_def, return_def, raise_def, get_accounts_def,
-       get_transient_storage_def, lift_option_def, lift_option_type_def,
-       check_def, lift_sum_runtime_def, update_accounts_def,
-       update_transient_def, append_logs_def,
-       vyperCallOutcomeTheory.take_call_outcome_def,
-       vyperCallOutcomeTheory.adopt_call_outcome_def, LET_THM, UNCURRY,
-       COND_RATOR, option_CASE_rator, prod_CASE_rator, sum_CASE_rator] >>
-  strip_tac >> gvs[AllCaseEqs()]
+  PairCases_on `sig` >> Cases_on `vs`
+  >- simp[eval_ext_call_def, raise_def] >>
+  rewrite_tac[eval_ext_call_def, ignore_bind_def] >>
+  map_every qid_spec_tac [`st'`, `res`, `st`] >>
+  rpt gen_tac >> ho_match_mp_tac external_frame_bind >> conj_tac
+  >- (simp[type_check_def, assert_def, return_def, raise_def] >>
+      rpt strip_tac >> gvs[AllCaseEqs()]) >>
+  gen_tac >>
+  rpt (FIRST [
+    ho_match_mp_tac external_frame_bind >> conj_tac,
+    CHANGED_TAC (simp[LET_THM, UNCURRY, type_check_def, assert_def,
+      return_def, raise_def, lift_option_type_def, lift_option_def,
+      lift_sum_runtime_def, check_def, get_accounts_def,
+      get_transient_storage_def, update_accounts_def, update_transient_def,
+      append_logs_def, vyperCallOutcomeTheory.take_call_outcome_def,
+      vyperCallOutcomeTheory.adopt_call_outcome_def]),
+    gen_tac,
+    COND_CASES_TAC,
+    CASE_TAC]) >> rpt strip_tac >> gvs[]
+
 QED
 
 Theorem eval_send_preserves_non_accounts:
