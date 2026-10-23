@@ -8,6 +8,7 @@ Ancestors
   loweringSlice
   valueEncodingProofs
   localPtrsProps
+  loweringShapeDefs
   (* compiler + correctness *)
   vyperCompiler
   vyperLoweringCorrect
