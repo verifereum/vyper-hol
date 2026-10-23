@@ -196,6 +196,61 @@ QED
 
 (* ===== Expression and statement lowering ===== *)
 
+Theorem expr_shape_list_member[local]:
+  ~supported_exprs_exists p es /\ MEM e es ==>
+  ~supported_expr_exists p e
+Proof
+  simp[supported_exprs_exists_every, EXISTS_MEM] >> metis_tac[]
+QED
+
+Theorem expr_shape_list_el[local]:
+  ~supported_exprs_exists p es /\ n < LENGTH es ==>
+  ~supported_expr_exists p (EL n es)
+Proof
+  strip_tac >> irule expr_shape_list_member >>
+  qexists_tac `es` >> simp[EL_MEM]
+QED
+
+Theorem expr_shape_list_hd[local]:
+  ~supported_exprs_exists p es /\ 0 < LENGTH es ==>
+  ~supported_expr_exists p (HD es)
+Proof
+  Cases_on `es` >> simp[supported_expr_exists_def]
+QED
+
+Theorem expr_shape_field_member[local]:
+  ~supported_fields_exists p fields /\ MEM (name,e) fields ==>
+  ~supported_expr_exists p e
+Proof
+  simp[supported_fields_exists_every, EXISTS_MEM] >> metis_tac[pairTheory.SND]
+QED
+
+Theorem expr_shape_builtin[local]:
+  ~supported_expr_exists expr_shape_root (Builtin ann bi es) <=>
+  bi <> Env MsgGas /\ builtin_arity bi <= LENGTH es /\
+  ~supported_exprs_exists expr_shape_root es
+Proof
+  simp[supported_expr_exists_def, expr_shape_root_def, arithmeticTheory.NOT_LESS, CONJ_ASSOC]
+QED
+
+Theorem expr_shape_type_builtin[local]:
+  ~supported_expr_exists expr_shape_root (TypeBuiltin ann tb target es) <=>
+  type_builtin_arity tb <= LENGTH es /\
+  ~supported_exprs_exists expr_shape_root es
+Proof
+  simp[supported_expr_exists_def, expr_shape_root_def, arithmeticTheory.NOT_LESS]
+QED
+
+Theorem expr_shape_extcode_addr[local]:
+  ~supported_expr_exists p e /\ is_extcode e ==>
+  ~supported_expr_exists p (extcode_addr_expr e)
+Proof
+  qid_spec_tac `e` >> recInduct is_extcode_ind >>
+  simp[is_extcode_def, extcode_addr_expr_def, supported_expr_exists_def] >>
+  rpt strip_tac >>
+  rpt (BasicProvers.FULL_CASE_TAC >> gvs[])
+QED
+
 Theorem shape_step_uncurry[local]:
   shape_step internal LP P m Q /\
   (!x. shape_step internal LP (Q x) (k x) R) ==>
