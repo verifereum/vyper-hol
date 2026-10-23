@@ -794,12 +794,12 @@ Proof
       (* one goal per side of the disjoint-store disjunction *)
       (conj_tac
       >- (first_x_assum irule >>
-          rpt conj_tac >> rpt strip_tac >>
-          TRY (metis_tac[kvs_val_wf_mem] >> NO_TAC) >>
-          drule_all kvs_val_wf_bound >> strip_tac >>
-          drule slot_end_le >>
-          disch_then (qspec_then `type_memory_size t` mp_tac) >>
-          DECIDE_TAC) >>
+          rpt conj_tac >> rpt strip_tac
+          >- (drule_all kvs_val_wf_bound >> strip_tac >>
+              drule slot_end_le >>
+              disch_then (qspec_then `type_memory_size t` mp_tac) >>
+              DECIDE_TAC) >>
+          metis_tac[kvs_val_wf_mem]) >>
       rpt strip_tac >>
       qpat_x_assum `∀i. _ ⇒ ∀x y. _` (qspec_then `i` mp_tac) >>
       simp[] >> disch_then irule >>
