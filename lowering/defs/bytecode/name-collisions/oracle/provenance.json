@@ -1,0 +1,51 @@
+{
+  "producer": "pinned Python Vyper",
+  "vyper_commit": "cd74ce4f57e3771aeeab8f061fa3be45bfe8a29c",
+  "vyper_version": "0.5.0a4+commit.cd74ce4f",
+  "python_version": "3.12.3",
+  "dependencies": {
+    "cbor2": "5.9.0",
+    "immutables": "0.21",
+    "lark": "1.3.1",
+    "packaging": "26.3",
+    "pycryptodome": "3.24.1",
+    "wheel": "0.48.0"
+  },
+  "settings": {
+    "experimental_codegen": true,
+    "optimization_level": "NONE",
+    "evm_version": "prague",
+    "bytecode_metadata": false
+  },
+  "sources": {
+    "ctl_local_internal.vy": "eaa64cec9ca00dde63a7989f32fca60d8a9bb2873f1d42feacf0178c824d5fa1",
+    "nm_arg_return_pc.vy": "46e9dcab3334d2a1de94a543ad504da00e991829ef6584abb2244570238c63fd",
+    "nm_arg_storage.vy": "4d562e04854b9e9c447fb39080aa9673c1ae344fadada79829b03673a2b43559",
+    "nm_ext_arg_return_pc.vy": "004d58933096c9794cd8b67c56978b8cb3b1106b02c4bb02132861810562a8f0",
+    "nm_local_return_buf.vy": "2f14364dfa89f97cab605b3c10acb086ea4ce956bdb27b8d026b9a985dbc81d7",
+    "nm_local_storage_types.vy": "85d05da85a3b8c846fa7097e531ffc29d7919b0726fa6cd5a52bde8190e1e4d1",
+    "nm_redeclared_local.vy": "f0761b92fecc4bbc8882aad464e016ab8ce44177c995cdf68794d65403bbdc51",
+    "nm_redeclared_loop_var.vy": "344418a8b87a490826cd8129fa1d54122e67f3d0e2d8ff34f8d141f4a259de27",
+    "nm_transient_local.vy": "485cbb8deacb5c07d3e116885c3df41a1a42327d13d5d2b31458af915a420f5f"
+  },
+  "outputs": {
+    "ctl_local_internal.hex": "9492e2ab36f74dad658759ba63220a86780996a074485dfb68c547b62d5dd886",
+    "ctl_local_internal.json": "b7133fc245656a71a2101b37db5ebfd5c162afb6233718983023c8d8ec603927",
+    "nm_arg_return_pc.hex": "ee316912a4d9051d5643dbd3203597a223abad9d459612cbffe2ddf0afd60172",
+    "nm_arg_return_pc.json": "b6079b8124914ddf4f2ac3c6e018252dcf798b3c4a9dce33474e551eeace85cf",
+    "nm_arg_storage.hex": "f20712f026874b73b43922fd2c171edabec2346b47abc208bfa2e1793d7a3da1",
+    "nm_arg_storage.json": "d941964e8261d76b54eb21aa4e98c5e0fe309c3168abc17e9933c45e3153fce6",
+    "nm_ext_arg_return_pc.hex": "29480e9d97ffe0dfaf4886f8ad572f73fa6857494a4c9b98308fd4cc5a7049b2",
+    "nm_ext_arg_return_pc.json": "602f60937be41e1b7b862440f1edcb1f42c3cb094e28f7fc1800eee0e5a8a39f",
+    "nm_local_return_buf.hex": "9492e2ab36f74dad658759ba63220a86780996a074485dfb68c547b62d5dd886",
+    "nm_local_return_buf.json": "1fffd8237c82000a7ab8d8cb6c1da5c717beb801441522792089224d9513ef62",
+    "nm_local_storage_types.hex": "20311e345410dd004af9f16350b9081f89f2a6a1fdcb88f5bb5f611fe19b32ac",
+    "nm_local_storage_types.json": "827cda6a56b132c7cd8ec8cbfff386ab4ab15846b341be9fd9c2567bb7850f0c",
+    "nm_redeclared_local.hex": "ffc6556eb9dd84cea6e76222b5546fb4c956531f8cdd888d560747c992ef769a",
+    "nm_redeclared_local.json": "b67e222905f62b1f5eddb601d97cc3749369ced776e43e6eab71bec9b3177035",
+    "nm_redeclared_loop_var.hex": "b913b094ccbb56d245db02bbbf4417933cd99ecb971493fe9a1c8dbb9255379e",
+    "nm_redeclared_loop_var.json": "9b88d22ef676e9a34dbccc3e1c001de12a007b2e20aa2afaf014c3cddde0a1c7",
+    "nm_transient_local.hex": "a4af978d4a5453df58195a7e4e1360e1ceeb442ae7d72bc35cd6f107db5f2f6b",
+    "nm_transient_local.json": "340fe1ab06861cb5f020cb93075501d34222e9ea153d8b339cca517ef6153d35"
+  }
+}
