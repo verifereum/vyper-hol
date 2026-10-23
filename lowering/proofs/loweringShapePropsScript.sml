@@ -25,7 +25,7 @@
 Theory loweringShapeProps
 Ancestors
   list rich_list loweringShapeDefs compileEnv context emitHelper
-  exprLowering stmtLowering moduleLowering vyperCompiler compileVyper
+  exprLowering stmtLowering moduleLowering vyperCompiler compileVyper abiEncoder
   supportedProgram supportedNames supportedStmtTraverse supportedExprTraverse
   unitShapeDefs venomInst vyperAST
 
@@ -294,6 +294,183 @@ Theorem compile_selector_dispatch_linear_shape:
       (compile_selector_dispatch_linear selectors fallback_lbl) (\x st. T)
 Proof
   cheat
+QED
+
+Theorem extbodies_emit_plain:
+  !internal LP live opc ops.
+    ~MEM opc [GAS; RETPC_PARAM] /\
+    (!st id outs. EVERY (plain_operand st) live ==>
+       lowered_inst_ok internal (mk_inst id opc ops outs)) /\
+    (!st. EVERY (plain_operand st) live ==> EVERY (plain_operand st) ops) ==>
+    shape_step internal LP (\st. EVERY (plain_operand st) live)
+      (emit_op opc ops) (\x st. EVERY (plain_operand st) (x::live))
+Proof
+  rpt strip_tac >>
+  Cases_on `?st. EVERY (plain_operand st) live`
+  >- (pop_assum (qx_choose_then `s` assume_tac) >>
+      qpat_assum `!st id outs. _` (drule_then assume_tac) >>
+      irule shape_step_conseq >>
+  qexistsl_tac [`LP`, `\st. EVERY (plain_operand st) live /\
+                         EVERY (label_or_plain st) ops`,
+               `\x st. EVERY (plain_operand st) live /\ plain_operand st x`] >>
+  simp[] >> reverse conj_tac
+  >- (ho_match_mp_tac shape_step_emit_op >> simp[shape_stable_plain_operands]) >>
+  rpt strip_tac >> first_x_assum drule >>
+  simp[EVERY_MEM, label_or_plain_def] >> metis_tac[]) >>
+  rw[shape_step_def] >> metis_tac[]
+QED
+
+Theorem extbodies_emit_void_plain:
+  !internal LP live opc ops.
+    ~MEM opc [GAS; RETPC_PARAM] /\
+    (!st id. EVERY (plain_operand st) live ==>
+       lowered_inst_ok internal (mk_inst id opc ops [])) /\
+    (!st. EVERY (plain_operand st) live ==> EVERY (plain_operand st) ops) ==>
+    shape_step internal LP (\st. EVERY (plain_operand st) live)
+      (emit_void opc ops) (\x st. EVERY (plain_operand st) live)
+Proof
+  rpt strip_tac >>
+  Cases_on `?st. EVERY (plain_operand st) live`
+  >- (pop_assum (qx_choose_then `s` assume_tac) >>
+      qpat_assum `!st id. _` (drule_then assume_tac) >>
+      irule shape_step_conseq >>
+  qexistsl_tac [`LP`, `\st. EVERY (plain_operand st) live /\
+                         EVERY (label_or_plain st) ops`,
+               `\x st. EVERY (plain_operand st) live`] >>
+  simp[] >> reverse conj_tac
+  >- (ho_match_mp_tac shape_step_emit_void >> simp[shape_stable_plain_operands]) >>
+  rpt strip_tac >> first_x_assum drule >>
+  simp[EVERY_MEM, label_or_plain_def] >> metis_tac[]) >>
+  rw[shape_step_def] >> metis_tac[]
+QED
+
+val extbodies_opcode_tac =
+  simp[lowered_inst_ok_def, mk_inst_def, raw_opcode_ok_def, inst_shape_ok_def,
+       jump_labels_ok_def, is_terminator_def, is_param_opcode_def,
+       is_read0_opcode_def, label_positions_ok_def,
+       plain_operand_def, stackPlanTypesTheory.is_label_operand_def];
+
+(* The three clamp forms have the same emit/emit/assert proof skeleton. *)
+val extbodies_clamp_tac =
+  irule shape_step_bind >>
+  qexists_tac `\x st. EVERY (plain_operand st) [x; v]` >> conj_tac
+  >- (qx_gen_tac `x` >> BETA_TAC >> irule shape_step_bind >>
+      qexists_tac `\y st. EVERY (plain_operand st) [y; x; v]` >> conj_tac
+      >- (qx_gen_tac `y` >> BETA_TAC >> irule shape_step_conseq >>
+          qexistsl_tac [`compiler_label`,
+            `\st. EVERY (plain_operand st) [y; x; v]`,
+            `\u st. EVERY (plain_operand st) [y; x; v]`] >>
+          simp_tac bool_ss [] >> ho_match_mp_tac extbodies_emit_void_plain >>
+          extbodies_opcode_tac) >>
+      ho_match_mp_tac extbodies_emit_plain >> extbodies_opcode_tac) >>
+  ho_match_mp_tac extbodies_emit_plain >> extbodies_opcode_tac;
+
+Theorem compile_abi_bytes_clamp_shape:
+  !v m. shape_step F compiler_label (\st. EVERY (plain_operand st) [v])
+    (compile_abi_bytes_clamp v m) (\x st. T)
+Proof
+  rpt gen_tac >> pure_rewrite_tac[compile_abi_bytes_clamp_def, LET_THM] >>
+  BETA_TAC >> extbodies_clamp_tac
+QED
+
+Theorem compile_abi_int_clamp_shape:
+  !v bits signed. shape_step F compiler_label (\st. EVERY (plain_operand st) [v])
+    (compile_abi_int_clamp v bits signed) (\x st. T)
+Proof
+  rpt gen_tac >> Cases_on `signed` >>
+  pure_rewrite_tac[compile_abi_int_clamp_def, LET_THM, COND_CLAUSES] >>
+  BETA_TAC >> extbodies_clamp_tac
+QED
+
+Theorem compile_abi_clamp_basetype_shape:
+  !v clamp. shape_step F compiler_label (\st. EVERY (plain_operand st) [v])
+    (compile_abi_clamp_basetype v clamp) (\x st. T)
+Proof
+  gen_tac >> Cases >>
+  pure_rewrite_tac[compile_abi_clamp_basetype_def]
+  >- (irule shape_step_return >> simp[])
+  >- (irule compile_abi_int_clamp_shape)
+  >- (irule compile_abi_bytes_clamp_shape) >>
+  extbodies_clamp_tac
+QED
+
+(* Deterministic composition of an ordinary emit with its continuation. *)
+fun extbodies_emit_bind post name cont =
+  irule shape_step_bind >> qexists_tac post >> conj_tac
+  >- (qx_gen_tac name >> BETA_TAC >> cont) >>
+  ho_match_mp_tac extbodies_emit_plain >> extbodies_opcode_tac;
+
+fun extbodies_void_bind post cont =
+  irule shape_step_ignore_bind >> qexists_tac post >> conj_tac
+  >- (gen_tac >> BETA_TAC >> cont) >>
+  ho_match_mp_tac extbodies_emit_void_plain >> extbodies_opcode_tac;
+
+Theorem compile_getelemptr_abi_shape:
+  !src dynamic off.
+    shape_step F compiler_label (\st. EVERY (plain_operand st) [src])
+      (compile_getelemptr_abi src dynamic off CALLDATALOAD)
+      (\ptr st. plain_operand st ptr)
+Proof
+  rpt gen_tac >> pure_rewrite_tac[compile_getelemptr_abi_def] >>
+  extbodies_emit_bind `\head st. EVERY (plain_operand st) [head; src]` `head`
+    (Cases_on `dynamic` >> pure_rewrite_tac[COND_CLAUSES, NOT_CLAUSES]
+     >- extbodies_emit_bind `\offv st. EVERY (plain_operand st) [offv; head; src]` `offv`
+       (extbodies_emit_bind `\ptrv st. EVERY (plain_operand st) [ptrv; offv; head; src]` `ptrv`
+         (extbodies_emit_bind `\bad st. EVERY (plain_operand st) [bad; ptrv; offv; head; src]` `bad`
+           (extbodies_emit_bind `\ok st. EVERY (plain_operand st) [ok; bad; ptrv; offv; head; src]` `ok`
+             (extbodies_void_bind `\u st. EVERY (plain_operand st) [ok; bad; ptrv; offv; head; src]`
+               (irule shape_step_return >> simp[]))))) >>
+     irule shape_step_return >> simp[])
+QED
+
+Theorem compile_abi_decode_dyn_elem_ptr_shape:
+  !elem src hi sz.
+    shape_step F compiler_label (\st. EVERY (plain_operand st) [elem; src; hi])
+      (compile_abi_decode_dyn_elem_ptr CALLDATALOAD elem src hi sz)
+      (\ptr st. plain_operand st ptr)
+Proof
+  rpt gen_tac >> pure_rewrite_tac[compile_abi_decode_dyn_elem_ptr_def] >>
+  extbodies_emit_bind `\offv st. EVERY (plain_operand st) [offv; elem; src; hi]` `offv`
+   (extbodies_emit_bind `\ptrv st. EVERY (plain_operand st) [ptrv; offv; elem; src; hi]` `ptrv`
+    (extbodies_emit_bind `\bad st. EVERY (plain_operand st) [bad; ptrv; offv; elem; src; hi]` `bad`
+     (extbodies_emit_bind `\ok st. EVERY (plain_operand st) [ok; bad; ptrv; offv; elem; src; hi]` `ok`
+      (extbodies_void_bind `\u st. EVERY (plain_operand st) [ok; bad; ptrv; offv; elem; src; hi]`
+       (extbodies_emit_bind `\eend st. EVERY (plain_operand st) [eend; ok; bad; ptrv; offv; elem; src; hi]` `eend`
+        (extbodies_emit_bind `\oob st. EVERY (plain_operand st) [oob; eend; ok; bad; ptrv; offv; elem; src; hi]` `oob`
+         (extbodies_emit_bind `\ok2 st. EVERY (plain_operand st) [ok2; oob; eend; ok; bad; ptrv; offv; elem; src; hi]` `ok2`
+          (extbodies_void_bind `\u st. EVERY (plain_operand st) [ok2; oob; eend; ok; bad; ptrv; offv; elem; src; hi]`
+           (irule shape_step_return >> simp[])))))))))
+QED
+
+Theorem compile_abi_decode_static_shape:
+  !src dst clamp.
+    shape_step F compiler_label (\st. EVERY (plain_operand st) [src; dst])
+      (compile_abi_decode_static src dst CALLDATALOAD
+        (\v. compile_abi_clamp_basetype v clamp)) (\x st. T)
+Proof
+  rpt gen_tac >> pure_rewrite_tac[compile_abi_decode_static_def] >>
+  irule shape_step_bind >>
+  qexists_tac `\v st. EVERY (plain_operand st) [v; src; dst]` >> conj_tac
+  >- (qx_gen_tac `v` >> BETA_TAC >> irule shape_step_ignore_bind >>
+      qexists_tac `\u st. EVERY (plain_operand st) [v; src; dst] /\ T` >>
+      conj_tac
+      >- (gen_tac >> BETA_TAC >> irule shape_step_conseq >>
+          qexistsl_tac [`compiler_label`,
+            `\st. EVERY (plain_operand st) [v; src; dst]`,
+            `\u st. EVERY (plain_operand st) [v; src; dst]`] >>
+          simp_tac bool_ss [] >> ho_match_mp_tac extbodies_emit_void_plain >>
+          extbodies_opcode_tac) >>
+      irule shape_step_conseq >>
+      qexistsl_tac [`compiler_label`,
+        `\st. EVERY (plain_operand st) [v; src; dst] /\
+               EVERY (plain_operand st) [v]`,
+        `\u st. EVERY (plain_operand st) [v; src; dst] /\ T`] >>
+      simp_tac bool_ss [] >> conj_tac >- simp[] >>
+      mp_tac (Q.SPECL [`v`, `clamp`] compile_abi_clamp_basetype_shape) >>
+      strip_tac >> drule shape_step_frame >>
+      disch_then (qspec_then `\st. EVERY (plain_operand st) [v; src; dst]` mp_tac) >>
+      simp[shape_stable_plain_operands]) >>
+  ho_match_mp_tac extbodies_emit_plain >> extbodies_opcode_tac
 QED
 
 Theorem compile_alloc_buffer_shape:
