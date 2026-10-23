@@ -654,7 +654,7 @@ Theorem build_selectors_fn_labels:
   !tenv fs. EVERY (\(sel, lbl, z). isPREFIX "fn_" lbl) (build_selectors tenv fs)
 Proof
   gen_tac >> Induct >> simp[build_selectors_def] >>
-  PairCases >> simp[build_selectors_def, compute_selector_def, IS_PREFIX_APPEND]
+  PairCases >> fs[build_selectors_def, compute_selector_def, IS_PREFIX_APPEND]
 QED
 
 (* For alan, by induction on tops through classify_function: each internal
@@ -676,4 +676,51 @@ Theorem supported_internal_descriptors_ok:
                   (FST (SND (classify_functions tops)))))
 Proof
   cheat
+QED
+
+(* S2 with the internal-name premise.  Without it S2 is false: an internal
+   function named "fn_foo" next to an external "foo" makes both entry
+   labels "fn_foo", so the internal function's blocks include external code
+   ending in STOP. *)
+Theorem lower_vyper_runtime_unit_source_unit_ok_names:
+  !tops rpolicy unit.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    supported_program tops /\
+    (!mut nr rr name args dflts ret body.
+       MEM (FunctionDecl Internal mut nr rr name args dflts ret body) tops ==>
+       internal_name_ok name) ==>
+    o1_source_unit_ok unit
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `lower_vyper_runtime_unit _ _ = _` mp_tac >>
+  simp[lower_vyper_runtime_unit_def] >>
+  Cases_on `classify_functions tops` >> PairCases_on `r` >>
+  rename1 `classify_functions tops = (exts, ints, fb, ctor)` >>
+  simp[] >> strip_tac >>
+  qspec_then `tops` mp_tac supported_internal_descriptors_ok >>
+  impl_tac >- (conj_tac >> first_assum ACCEPT_TAC) >>
+  ASM_REWRITE_TAC [pairTheory.FST, pairTheory.SND] >> strip_tac >>
+  `EVERY (\(sel, lbl, z). isPREFIX "fn_" lbl)
+     (build_selectors (type_env tops) exts)`
+    by REWRITE_TAC [build_selectors_fn_labels] >>
+  `!x. MEM x exts ==>
+       external_fn_shape_ok
+         (set_external_package_target rpolicy.rpol_target
+            (package_external_fn tops F (assign_nkeys tops 0) x))`
+    by (rpt strip_tac >> irule package_external_fn_shape_ok >> gs[]) >>
+  `!x. MEM x ints ==>
+       internal_fn_shape_ok
+         (set_internal_package_target rpolicy.rpol_target
+            (package_internal_fn tops F (assign_nkeys tops 0) F 0 x))`
+    by (rpt strip_tac >> irule package_internal_fn_shape_ok >> gs[]) >>
+  `fallback_shape_ok
+     (set_fallback_package_target rpolicy.rpol_target
+        (package_fallback_fn tops F (assign_nkeys tops 0) fb))`
+    by (qspecl_then [`tops`, `F`, `assign_nkeys tops 0`,
+                     `rpolicy.rpol_target`] mp_tac package_fallback_fn_shape_ok >>
+        gs[]) >>
+  drule run_lowering_source_unit_ok >> disch_then match_mp_tac >>
+  gs[GSYM MAP_MAP_o, internal_fn_descriptors_set_internal_package_target,
+     internal_fn_descriptors_MAP_package_internal_fn, EVERY_MAP, EVERY_MEM] >>
+  fs[MEM_MAP, PULL_EXISTS]
 QED

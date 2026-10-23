@@ -7,6 +7,7 @@ Ancestors
   moduleLoweringProps
   valueEncodingProofs
   localPtrsProps
+  loweringShapeProps
   (* compiler + correctness *)
   vyperCompiler
   vyperLoweringCorrect
