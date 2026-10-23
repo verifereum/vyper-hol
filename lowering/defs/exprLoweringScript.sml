@@ -126,6 +126,29 @@ Proof
   simp[place_type_def, value_type_place_def]
 QED
 
+(* Only the map table influences structural place resolution. Local-variable
+   allocation and local type updates cannot turn a local into a module map. *)
+Theorem place_type_env_cong:
+  !e cenv cenv'. cenv.ce_hashmap_info = cenv'.ce_hashmap_info ==>
+    place_type cenv e = place_type cenv' e
+Proof
+  Induct >> simp[place_type_def] >> metis_tac[]
+QED
+
+Theorem place_type_local_updates[simp]:
+  place_type (cenv with <| ce_vars := vars; ce_var_type := tys |>) e =
+  place_type cenv e
+Proof
+  irule place_type_env_cong >> simp[]
+QED
+
+Theorem place_type_module_value:
+  cenv.ce_hashmap_info (module_var_key nsid) = NONE ==>
+  place_type cenv (TopLevelName ty nsid) = ValPT ty
+Proof
+  simp[place_type_def]
+QED
+
 (* Bytelike literals and ABI encoding results carry their produced bound,
    independently of the annotated destination bound. *)
 Definition lowered_value_type_def:

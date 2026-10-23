@@ -149,6 +149,37 @@ Proof
   simp[build_hashmap_info_def]
 QED
 
+(* The leftmost declaration wins, including when declarations are appended. *)
+Theorem build_hashmap_info_append:
+  !xs ys n. build_hashmap_info (xs ++ ys) n =
+    case build_hashmap_info xs n of
+      NONE => build_hashmap_info ys n
+    | SOME info => SOME info
+Proof
+  Induct >> simp[build_hashmap_info_def] >>
+  Cases_on `h` >> simp[build_hashmap_info_def] >>
+  rpt gen_tac >> IF_CASES_TAC >> simp[]
+QED
+
+Theorem build_hashmap_info_some:
+  !tops n tr kt vt.
+    build_hashmap_info tops n = SOME (tr, kt, vt) ==>
+    ?pre post vis name slot.
+      tops = pre ++ HashMapDecl vis tr name kt vt slot :: post /\
+      n = module_var_key (NONE, name) /\
+      build_hashmap_info pre n = NONE
+Proof
+  Induct >> simp[build_hashmap_info_def] >>
+  Cases_on `h` >> simp[build_hashmap_info_def] >> rpt gen_tac
+  >> TRY (IF_CASES_TAC >> gvs[])
+  >> rpt strip_tac
+  >> TRY (qexists `[]` >> simp[build_hashmap_info_def] >> NO_TAC)
+  >> first_x_assum drule >> strip_tac
+  >> qmatch_goalsub_abbrev_tac `head::tops`
+  >> qexists `head::pre` >> simp[Abbr `head`, build_hashmap_info_def]
+  >> metis_tac[]
+QED
+
 (* ===== Event Info ===== *)
 
 (* event_hash is shared with the source semantics in vyperEventTheory.
