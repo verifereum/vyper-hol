@@ -41,6 +41,8 @@ Ancestors
   venomInst venomState venomInstProps passSharedTransfer
   allocaRemapSSA stateEquiv passSharedField passSharedFrame opcodeClass
   list rich_list byte arithmetic finite_map alist words pred_set
+Libs
+  stepInstBaseLib
 
 (* Make is_immutable_op reduce automatically in simp/gvs/fs *)
 val _ = augment_srw_ss [rewrites [is_immutable_op_def]];
@@ -3879,30 +3881,19 @@ Proof
   simp[]
 QED
 
-(* Pre-compute step_inst_base per opcode at ML level to avoid
-   large opcode-case expansion in each proof branch. *)
-fun step_base_for opc_tm = let
-  val inst_var = mk_var("inst", ``:instruction``)
-  val s_var = mk_var("s", ``:venom_state``)
-  val lhs_tm = list_mk_comb(``step_inst_base``, [inst_var, s_var])
-  val opc_eq = ASSUME (mk_eq(mk_comb(``instruction_inst_opcode``, inst_var),
-                              opc_tm))
-  val th = REWRITE_CONV [step_inst_base_def] lhs_tm
-  val th2 = CONV_RULE (RHS_CONV
-    (REWRITE_CONV [opc_eq, TypeBase.case_def_of ``:opcode``])) th
-in DISCH (concl opc_eq) th2 end;
-
-val step_all_thms = map step_base_for (TypeBase.constructors_of ``:opcode``);
-val step_ordinary_rw : tactic = fn (asl,g) => let
+(* step_inst_base per opcode, to avoid the opcode-case expansion in each
+   proof branch. *)
+fun assumed_step_base asl = let
   fun is_opc_eq a =
     let val (l,r) = dest_eq a
     in l ~~ ``(inst:instruction).inst_opcode`` andalso is_const r
     end handle HOL_ERR _ => false
   val opc_eq = first is_opc_eq asl
-  val th = first (fn th => rhs (fst (dest_imp (concl th))) ~~ rhs opc_eq)
-                 step_all_thms
-  val th' = MP th (ASSUME opc_eq)
-in (RULE_ASSUM_TAC (REWRITE_RULE [th']) >> PURE_REWRITE_TAC [th']) (asl,g) end;
+in MP (SPEC_ALL (opcode_clause (rhs opc_eq))) (ASSUME opc_eq) end;
+
+val step_ordinary_rw : tactic = fn (asl,g) => let
+  val th = assumed_step_base asl
+in (RULE_ASSUM_TAC (REWRITE_RULE [th]) >> PURE_REWRITE_TAC [th]) (asl,g) end;
 
 val error_inline_tac : tactic =
   rpt (BasicProvers.FULL_CASE_TAC >> gvs[] >>
@@ -4306,24 +4297,10 @@ Proof
   simp[]
 QED
 
-(* Reuse the per-opcode equations from the error-transfer boundary. *)
-val step_base_thms = map step_base_for
-  [``JMP``, ``JNZ``, ``DJMP``, ``RET``, ``RETURN``, ``REVERT``,
-   ``STOP``, ``SINK``, ``SELFDESTRUCT``, ``INVALID``, ``RETFMP``, ``DRET``];
-
 (* Tactic: given inst.inst_opcode = OPC in assumptions, rewrite
-   step_inst_base inst _ using the pre-computed per-opcode theorem. *)
-val step_term_rw : tactic = fn (asl, g) => let
-  fun is_opc_eq a =
-    let val (l,r) = dest_eq a
-    in l ~~ ``(inst:instruction).inst_opcode`` andalso is_const r
-    end handle HOL_ERR _ => false
-  val opc_eq = first is_opc_eq asl
-  val opc = rhs opc_eq
-  val th = first (fn th => rhs (fst (dest_imp (concl th))) ~~ opc)
-                 step_base_thms
-  val th' = MP th (ASSUME opc_eq)
-in PURE_REWRITE_TAC [th'] (asl, g) end;
+   step_inst_base inst _ using that opcode's clause. *)
+val step_term_rw : tactic = fn (asl, g) =>
+  PURE_REWRITE_TAC [assumed_step_base asl] (asl, g);
 
 (* Standalone: complete non-INVOKE terminator enumeration. *)
 val is_terminator_cases = prove(
