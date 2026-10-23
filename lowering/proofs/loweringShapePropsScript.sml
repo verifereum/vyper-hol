@@ -1040,11 +1040,6 @@ Proof
   PairCases >> fs[build_selectors_def, compute_selector_def, IS_PREFIX_APPEND]
 QED
 
-(* By induction on tops through classify_function: each internal
-   tuple comes from a FunctionDecl Internal in tops, so its name meets the
-   premise, and the internal names are a sublist of
-   supported_function_names tops, which supported_declaration_names makes
-   ALL_DISTINCT. *)
 Theorem MEM_supported_function_names:
   !tops name. MEM name (supported_function_names tops) <=>
     ?vis mut nr rr args dflts ret body.
@@ -1086,6 +1081,10 @@ Proof
   metis_tac[MEM_supported_function_names]
 QED
 
+(* Each internal tuple of classify_functions comes from a FunctionDecl
+   Internal in tops, so its name meets the premise, and the internal names
+   are a sublist of supported_function_names tops, which
+   supported_declaration_names makes ALL_DISTINCT. *)
 Theorem supported_internal_descriptors_ok:
   !tops.
     supported_program tops /\
