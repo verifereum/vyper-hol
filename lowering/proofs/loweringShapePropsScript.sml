@@ -396,6 +396,55 @@ Proof
   rpt (BasicProvers.FULL_CASE_TAC >> gvs[])
 QED
 
+Theorem supported_pure_shape[local]:
+  (!tops e. supported_pure_expr tops e ==>
+    ~supported_expr_exists expr_shape_root e) /\
+  (!tops es. supported_pure_exprs tops es ==>
+    ~supported_exprs_exists expr_shape_root es) /\
+  (!tops fields. supported_pure_fields tops fields ==>
+    ~supported_fields_exists expr_shape_root fields)
+Proof
+  ho_match_mp_tac supportedExprsTheory.supported_pure_expr_ind >>
+  rw[supportedExprsTheory.supported_pure_expr_def,
+     supported_expr_exists_def] >>
+  simp[expr_shape_root_def]
+  >- (qmatch_goalsub_rename_tac `supported_expr_exists expr_shape_root storage_base` >>
+      Cases_on `storage_base` >> gvs[supported_expr_exists_def, expr_shape_root_def])
+  >- (qmatch_goalsub_rename_tac `supported_expr_exists expr_shape_root storage_base` >>
+      Cases_on `storage_base` >> gvs[supported_expr_exists_def, expr_shape_root_def])
+  >- (drule supported_builtin_form_shape_root >> simp[expr_shape_root_def])
+  >> drule supported_type_builtin_form_shape_root >> simp[expr_shape_root_def]
+QED
+
+Theorem supported_expr_shape[local]:
+  !tops e. supported_expr tops e ==>
+    ~supported_expr_exists expr_shape_root e
+Proof
+  rw[supportedExprsTheory.supported_expr_def]
+  >- metis_tac[supported_pure_shape] >>
+  qpat_x_assum `supported_effect_expr _ _` mp_tac >>
+  Cases_on `e` >>
+  simp[supportedExprsTheory.supported_effect_expr_def,
+       supported_expr_exists_def, expr_shape_root_def]
+  >- (rename1 `supported_target_exists _ pop_target` >>
+      Cases_on `pop_target` >> simp[supported_expr_exists_def]) >>
+  qmatch_goalsub_rename_tac `supported_opt_exists _ call_default` >>
+  Cases_on `call_default` >> simp[supported_expr_exists_def] >>
+  rename1 `!flags. call_target <> RawCallCalldataTarget flags` >>
+  Cases_on `call_target` >> simp[]
+  >- metis_tac[supported_pure_shape]
+  >- (split_pair_case_tac >> simp[] >> metis_tac[supported_pure_shape]) >>
+  qmatch_goalsub_rename_tac `supported_exprs_exists expr_shape_root send_args` >>
+  namedCases_on `send_args` ["", "a rest"] >> simp[] >>
+  namedCases_on `rest` ["", "v rest2"] >> simp[] >>
+  namedCases_on `rest2` ["", "g rest3"] >> simp[]
+  >- (Cases_on `t` >> simp[supported_expr_exists_def] >>
+      metis_tac[supported_pure_shape]) >>
+  Cases_on `rest3` >> simp[] >>
+  Cases_on `t` >> simp[supported_expr_exists_def] >>
+  metis_tac[supported_pure_shape]
+QED
+
 Theorem supported_function_body_shape:
   !tops vis args body.
     supported_function_body tops vis args body ==>
