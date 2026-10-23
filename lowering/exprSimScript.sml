@@ -9,7 +9,7 @@
  * Abort as result_rel allows.
  *
  * TOP-LEVEL:
- *   expr_exit, expr_res_ok, expr_post, expr_sim
+ *   expr_exit, expr_res_ok, expr_val_rel, expr_post, expr_sim
  *   expr_sim_values        — expr_sim of an expression whose results are
  *                            values, from its fragment reaching expr_post
  *   expr_sim_expr_frag     — expr_sim gives loweringSlice's expr_frag
@@ -21,19 +21,29 @@
  *   compile_env_sim        — environment reads (msg.sender, block.number,
  *                            ...), all but block.prevhash
  *
- * Helpers: expr_exit_INL, eval_expr_env, lower_value_env
+ * Helpers: expr_exit_INL, typed_val_to_w256_word_value, eval_expr_env,
+ *   lower_value_env
  *
- * Values are related by val_to_w256, as in expr_frag and
- * compile_expr_correct.  For address and bytesN values that is the length
- * heuristic of val_to_w256: right for addresses (the env reads of
- * msg.sender, self, block.coinbase and tx.origin go through it), wrong for
- * bytes20.
+ * Values are related by expr_val_rel, by the expression's type: a word
+ * type's value as the operand in the typed encoding typed_val_to_w256, any
+ * other type's value in memory at the operand, as val_in_memory has it.
+ * expr_post keeps the memory of the allocations made before the
+ * fragment's start, but its own and the live locals'.  So two operands
+ * lowered in turn compose where the first one's value sits in a buffer it
+ * allocated: that allocation's id is below the second's start counter and
+ * it holds no local, so the second's expr_post keeps its bytes, and
+ * val_in_memory with them (a lemma that val_in_memory reads only the
+ * value's bytes is still to be proved).  expr_val_rel does not say where
+ * the bytes are; an operator's proof takes that from the operand's
+ * lowering.  A first operand that points into a local stays related
+ * through stmt_state_rel, as long as the source leaves that local alone
+ * in between.  expr_frag, which relates values by val_to_w256, follows
+ * for a word type whose typed encoding is val_to_w256
+ * (expr_sim_expr_frag).
  *
  * Not covered by the leaves here:
- *   - bytes and string literals: a bytesN literal is lowered to
- *     typed_val_to_w256, which val_to_w256 matches except for bytes20, and
- *     a dynamic bytes or string literal to a memory buffer, which
- *     val_to_w256 does not describe;
+ *   - bytes and string literals: a bytesN literal is a Lit of its typed
+ *     encoding, a dynamic bytes or string literal a memory buffer;
  *   - locals other than word_value ones (address, bytesN, memory-backed);
  *   - block.prevhash: evaluate_block_hash raises a RuntimeError when the
  *     block number is 0 or the hash list is too short, while Venom's
@@ -52,7 +62,7 @@ Ancestors
   fragExec varsExt loweringSlice localPtrsProps venomMemDefs
   exprLowering emitHelper emitHelperProps exprLoweringProps compileEnv
   vyperInterpreter vyperState vyperValueOperation vyperContext
-  valueEncoding valueEncodingProofs
+  valueEncoding valueEncodingProofs vyperTypeSystem
   venomExecSemantics venomInst venomState
 
 (* ===== The judgment ===== *)
@@ -87,18 +97,46 @@ Definition expr_res_ok_def:
     (?str. res = INR (AssertException str))
 End
 
-(* Where the fragment of an expression that started in s0 at compile state
-   sa ends when the source gives v and es': related at es', the operand op
-   holding v, the variables handed out before sa and the allocations of s0
-   kept. *)
+(* The value v of an expression of type t held by operand op in s: a word
+   type's value as the operand, in the typed word encoding of t (the one
+   the lowering uses for address and bytesN), any other type's value in
+   memory at the operand's address, as val_in_memory lays it out.  The
+   lowering makes the same split: unwrap_value loads a word type and hands
+   out the pointer of any other.  Nothing is said where t does not
+   evaluate. *)
+Definition expr_val_rel_def:
+  expr_val_rel cx t v op s <=>
+    ?w. eval_operand op s = SOME w /\
+        !tv. evaluate_type (get_tenv cx) t = SOME tv ==>
+             if is_word_type t then w = typed_val_to_w256 tv v
+             else val_in_memory tv v (w2n w) s.vs_memory
+End
+
+(* Where the fragment of e that started in s0, related at es, at compile
+   state sa ends when the source gives v and es': related at es', the
+   operand op holding v, the variables handed out before sa and the
+   allocations of s0 kept, and the memory of the allocations of s0 kept,
+   but for two kinds:
+   - those of e's own ALLOCAs (instruction id sa.cs_next_id or above): an
+     ALLOCA run again, in a loop body, returns its earlier buffer, which e
+     then writes again;
+   - those holding a live local: e can write a local (x.pop()), and
+     stmt_state_rel at es' says what the locals hold.
+   The rest are the buffers of the expressions lowered before e, so a
+   value an earlier operand left in memory survives e's fragment. *)
 Definition expr_post_def:
-  expr_post func cenv cx sa s0 es' v op s <=>
+  expr_post func cenv cx e es sa s0 es' v op s <=>
     stmt_state_rel func cenv cx es' s /\
-    eval_operand op s = SOME (val_to_w256 v) /\
+    expr_val_rel cx (expr_type e) v op s /\
     (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
            lookup_var x s = SOME w) /\
     (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
-             FLOOKUP s.vs_allocas aid = SOME b)
+             FLOOKUP s.vs_allocas aid = SOME b) /\
+    (!aid off sz.
+       FLOOKUP s0.vs_allocas aid = SOME (off, sz) /\ aid < sa.cs_next_id /\
+       (!n b sz'. local_region cenv es.scopes s0 n b sz' ==>
+                  off + sz <= b \/ b + sz' <= off) ==>
+       mem_bytes_at off sz s.vs_memory = mem_bytes_at off sz s0.vs_memory)
 End
 
 (* The fragment of e lowered as a value of type ty, run from a state
@@ -116,20 +154,29 @@ Definition expr_sim_def:
       local_ptrs_reserved cenv sa ==>
       frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel func cenv cx es s)
         (\s. ?v. res = INL (Value v) /\
-                 expr_post func cenv cx sa s0 es' v op s)
+                 expr_post func cenv cx e es sa s0 es' v op s)
         (expr_exit res)
 End
 
+(* expr_sim gives expr_frag where the expression's type is a word type
+   whose typed encoding is val_to_w256, the encoding expr_frag uses. *)
 Theorem expr_sim_expr_frag:
-  !ctx func cenv cx ty e es R.
-    expr_sim ctx func cenv cx ty e es ==> expr_frag ctx func cenv cx ty e es R
+  !ctx func cenv cx ty e es R tv.
+    expr_sim ctx func cenv cx ty e es /\ is_word_type (expr_type e) /\
+    evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+    (!v. typed_val_to_w256 tv v = val_to_w256 v) ==>
+    expr_frag ctx func cenv cx ty e es R
 Proof
   rw[expr_sim_def, expr_frag_def] >>
   first_x_assum (qspecl_then [`sa`, `sb`, `op`, `INL (Value v)`, `es'`, `s0`]
                    mp_tac) >>
   impl_tac >- simp[expr_res_ok_def] >>
   strip_tac >> irule frag_exec_conseq >>
-  first_x_assum (irule_at Any) >> simp[expr_post_def]
+  first_x_assum (irule_at Any) >>
+  simp[expr_post_def, expr_val_rel_def] >> rpt strip_tac >>
+  qpat_x_assum `!tv. evaluate_type _ _ = SOME tv ==> _`
+    (qspec_then `tv` mp_tac) >>
+  gvs[]
 QED
 
 (* An expression whose results the judgment speaks of are all values: its
@@ -144,7 +191,7 @@ Theorem expr_sim_values:
        fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
        local_ptrs_reserved cenv sa ==>
        frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel func cenv cx es s)
-         (expr_post func cenv cx sa s0 es' v op) (\r. F)) ==>
+         (expr_post func cenv cx e es sa s0 es' v op) (\r. F)) ==>
     expr_sim ctx func cenv cx ty e es
 Proof
   rpt gen_tac >> strip_tac >> simp[expr_sim_def] >> rpt strip_tac >>
@@ -212,6 +259,13 @@ QED
 
 (* ===== Leaves ===== *)
 
+Theorem typed_val_to_w256_word_value:
+  !tv v. word_value v ==> typed_val_to_w256 tv v = val_to_w256 v
+Proof
+  rw[word_value_def] >> Cases_on `tv` >> simp[typed_val_to_w256_def] >>
+  rename1 `BaseTV bt` >> Cases_on `bt` >> simp[typed_val_to_w256_def]
+QED
+
 (* A word local held through its pointer (loweringSlice's
    compile_name_word_frag). *)
 Theorem compile_name_word_sim:
@@ -232,19 +286,25 @@ Proof
   impl_tac
   >- (simp[is_terminator_def] >> strip_tac >>
       drule_all step_name_word >> simp[]) >>
-  strip_tac >> first_x_assum (irule_at Any) >> simp[expr_post_def]
+  strip_tac >> first_x_assum (irule_at Any) >> rpt strip_tac >>
+  gvs[expr_post_def, expr_val_rel_def, vyperASTTheory.expr_type_def,
+      typed_val_to_w256_word_value]
 QED
 
 val literal_word_tac =
   gvs[lower_value_def, compile_expr_def, comp_bind_def, comp_return_def,
       compile_literal_vv_def, unwrap_value_def, evaluate_literal_def] >>
   irule frag_exec_refl >>
-  simp[expr_post_def, eval_operand_def, val_to_w256_def];
+  simp[expr_post_def, expr_val_rel_def, vyperASTTheory.expr_type_def,
+       eval_operand_def, typed_val_to_w256_word_value, word_value_def] >>
+  simp[val_to_w256_def];
 
-(* A bool, integer or decimal literal: a Lit, no code. *)
+(* A bool, integer or decimal literal annotated with a word type: a Lit,
+   no code. *)
 Theorem compile_literal_word_sim:
   !ctx func cenv cx ty ann l es.
-    (?b. l = BoolL b) \/ (?i. l = IntL i) \/ (?i. l = DecimalL i) ==>
+    is_word_type ann /\
+    ((?b. l = BoolL b) \/ (?i. l = IntL i) \/ (?i. l = DecimalL i)) ==>
     expr_sim ctx func cenv cx ty (Literal ann l) es
 Proof
   rw[expr_sim_def] >> gvs[Once evaluate_def, return_def]
@@ -282,12 +342,13 @@ Proof
   simp[as_stack_val_def, unwrap_value_def, comp_return_def]
 QED
 
-(* An environment read (msg.sender, block.timestamp, ...), but
-   block.prevhash, for which expr_sim does not hold (see the header).
-   msg.gas holds vacuously: the source raises a TypeError for it. *)
+(* An environment read (msg.sender, block.timestamp, ...) annotated with
+   its type, but block.prevhash, for which expr_sim does not hold (see the
+   header).  msg.gas holds vacuously: the source raises a TypeError for
+   it. *)
 Theorem compile_env_sim:
   !ctx func cenv cx ty ann item es.
-    item <> PrevHash ==>
+    item <> PrevHash /\ ann = env_item_type item ==>
     expr_sim ctx func cenv cx ty (Builtin ann (Env item) []) es
 Proof
   rpt strip_tac >> irule expr_sim_values >>
@@ -297,6 +358,14 @@ Proof
   `expr_res_ok (INL (Value v) : toplevel_value + exception)` by
     simp[expr_res_ok_def] >>
   drule_all eval_expr_env >> strip_tac >> gvs[] >>
+  `is_word_type (env_item_type item) /\
+   !tv. evaluate_type (get_tenv cx) (env_item_type item) = SOME tv ==>
+        typed_val_to_w256 tv v = val_to_w256 v` by
+    (Cases_on `item` >>
+     gvs[evaluate_builtin_def, env_item_type_def, is_word_type_def,
+         vyperValueTheory.evaluate_type_def, typed_val_to_w256_def,
+         val_to_w256_def] >>
+     simp_tac (srw_ss() ++ wordsLib.SIZES_ss) []) >>
   drule lower_value_env >> strip_tac >>
   irule frag_exec_conseq >>
   qexistsl_tac [`\s. s = s0 /\ stmt_state_rel func cenv cx es s`,
@@ -305,9 +374,10 @@ Proof
                      (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
                             lookup_var x s = SOME w) /\
                      (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
-                              FLOOKUP s.vs_allocas aid = SOME b)`,
+                              FLOOKUP s.vs_allocas aid = SOME b) /\
+                     s.vs_memory = s0.vs_memory`,
                 `\r. F`] >>
-  simp[expr_post_def] >>
+  simp[expr_post_def, expr_val_rel_def, vyperASTTheory.expr_type_def] >>
   Cases_on `item` >>
   gvs[compile_env_var_def, evaluate_builtin_def] >>
   drule emit_op_frag >> disch_then irule >>

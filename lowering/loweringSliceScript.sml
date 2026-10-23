@@ -102,7 +102,7 @@ Proof
 QED
 
 (* One instruction that computes w from the state and writes it to a fresh
-   variable. *)
+   variable, and changes nothing else. *)
 Theorem emit_op_frag:
   !ctx func cenv cx es opc args sa op sb s0 w R.
     emit_op opc args sa = (op, sb) /\ local_ptrs_reserved cenv sa /\
@@ -115,7 +115,8 @@ Theorem emit_op_frag:
            (!x w'. not_fresh_at sa x /\ lookup_var x s0 = SOME w' ==>
                    lookup_var x s = SOME w') /\
            (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
-                    FLOOKUP s.vs_allocas aid = SOME b)) R
+                    FLOOKUP s.vs_allocas aid = SOME b) /\
+           s.vs_memory = s0.vs_memory) R
 Proof
   rpt strip_tac >>
   imp_res_tac emitted_insts_emit_op >> imp_res_tac emit_op_extends >>
@@ -203,9 +204,14 @@ Proof
   drule_then (qspecl_then [`cx`, `ann`] assume_tac) eval_name_word >>
   simp[expr_frag_def] >> rpt gen_tac >> strip_tac >> gvs[] >>
   drule_all lower_value_name_word >> strip_tac >>
-  drule emit_op_frag >> disch_then irule >>
-  simp[is_terminator_def] >> strip_tac >>
-  drule_all step_name_word >> simp[]
+  irule frag_exec_conseq >>
+  drule emit_op_frag >>
+  disch_then (qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es`, `s0`,
+                           `val_to_w256 entry.value`, `R`] mp_tac) >>
+  impl_tac
+  >- (simp[is_terminator_def] >> strip_tac >>
+      drule_all step_name_word >> simp[]) >>
+  strip_tac >> first_x_assum (irule_at Any) >> simp[]
 QED
 
 (* ===== Declaring a word local ===== *)
