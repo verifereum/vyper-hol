@@ -17,6 +17,7 @@
  *   emitted_insts_emit_void         — what emit_void produces
  *   emitted_insts_chain             — composing emitted_insts through do-blocks
  *   fresh_label_output_inj          — fresh_label_output is injective
+ *   compiler_labels_future_antimono — future label space shrinks with the counter
  *   compile_state_ok_*              — label-space invariant through monad ops
  *   fresh_label_produces_external    — fresh_label returns an external label
  *   label_external_mono             — external labels survive extension
@@ -2437,15 +2438,12 @@ Proof
   strip_tac >> qexistsl_tac [`suffix`, `n`] >> simp[]
 QED
 
-(* Initial compile_state is well-formed for any entry label that is not
-   itself a compiler-generated label (with any counter). The entry label
-   in practice is user/frontend-provided (e.g. "global"). *)
-Theorem compile_state_ok_initial:
-  ∀ entry_lbl.
-    entry_lbl ∉ compiler_labels_future 0
-    ⇒ compile_state_ok (initial_compile_state entry_lbl)
+(* The future fresh_label co-domain shrinks as the counter grows. *)
+Theorem compiler_labels_future_antimono:
+  m ≤ n ⇒ compiler_labels_future n ⊆ compiler_labels_future m
 Proof
-  cheat
+  simp[compiler_labels_future_def, SUBSET_DEF, PULL_EXISTS] >>
+  metis_tac[LESS_EQ_TRANS]
 QED
 
 (* emit_op preserves compile_state_ok, bound_labels, and label-space fields
@@ -2459,7 +2457,10 @@ Theorem compile_state_ok_emit_op:
       st'.cs_blocks = st.cs_blocks ∧
       st'.cs_current_bb = st.cs_current_bb
 Proof
-  cheat
+  rpt gen_tac >>
+  simp[emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
+       fresh_id_def, fresh_var_def, emit_def] >>
+  strip_tac >> gvs[compile_state_ok_def, bound_labels_def]
 QED
 
 (* emit_void preserves compile_state_ok, bound_labels, and label-space fields
@@ -2473,7 +2474,10 @@ Theorem compile_state_ok_emit_void:
       st'.cs_blocks = st.cs_blocks ∧
       st'.cs_current_bb = st.cs_current_bb
 Proof
-  cheat
+  rpt gen_tac >>
+  simp[emit_void_def, comp_bind_def, comp_ignore_bind_def, fresh_id_def,
+       emit_def] >>
+  strip_tac >> gvs[compile_state_ok_def, bound_labels_def]
 QED
 
 (* emit_inst preserves compile_state_ok, bound_labels, and label-space fields
@@ -2487,7 +2491,10 @@ Theorem compile_state_ok_emit_inst:
       st'.cs_blocks = st.cs_blocks ∧
       st'.cs_current_bb = st.cs_current_bb
 Proof
-  cheat
+  rpt gen_tac >>
+  simp[emit_inst_def, comp_bind_def, comp_ignore_bind_def, fresh_id_def,
+       emit_def] >>
+  strip_tac >> gvs[compile_state_ok_def, bound_labels_def]
 QED
 
 (* fresh_label: the result is external to the post-state, not the pre-state.
@@ -2524,7 +2531,8 @@ Theorem compile_state_ok_fresh_var:
       bound_labels st' = bound_labels st ∧
       st'.cs_next_label = st.cs_next_label
 Proof
-  cheat
+  rpt gen_tac >> simp[fresh_var_def] >> strip_tac >>
+  gvs[compile_state_ok_def, bound_labels_def]
 QED
 
 Theorem compile_state_ok_fresh_id:
@@ -2534,7 +2542,8 @@ Theorem compile_state_ok_fresh_id:
       bound_labels st' = bound_labels st ∧
       st'.cs_next_label = st.cs_next_label
 Proof
-  cheat
+  rpt gen_tac >> simp[fresh_id_def] >> strip_tac >>
+  gvs[compile_state_ok_def, bound_labels_def]
 QED
 
 (* new_block: seals the current block into cs_blocks and switches to
@@ -2552,7 +2561,8 @@ Theorem compile_state_ok_new_block:
       st'.cs_current_bb = new_lbl ∧
       old = st.cs_current_bb
 Proof
-  cheat
+  rpt gen_tac >> simp[new_block_def] >> strip_tac >>
+  gvs[compile_state_ok_def, label_external_def, bound_labels_def]
 QED
 
 (* Monotonicity: label_external carries through monad extensions whose
@@ -2566,5 +2576,6 @@ Theorem label_external_mono:
     lbl ∉ bound_labels st'
     ⇒ label_external st' lbl
 Proof
-  cheat
+  rw[label_external_def] >>
+  metis_tac[compiler_labels_future_antimono, SUBSET_DEF]
 QED
