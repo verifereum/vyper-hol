@@ -1022,6 +1022,124 @@ Resume compile_register_positional_args_shape[registered]:
 QED
 Finalise compile_register_positional_args_shape
 
+fun extbodies_void_end live =
+  irule shape_step_conseq >>
+  qexistsl_tac [`compiler_label`, `\st. EVERY (plain_operand st) ` @ live,
+    `\u st. EVERY (plain_operand st) ` @ live] >>
+  conj_tac >- simp[] >> conj_tac >- simp[] >> conj_tac >- simp[] >>
+  ho_match_mp_tac extbodies_emit_void_plain >> extbodies_opcode_tac;
+
+val extbodies_from_true_tac =
+  irule shape_step_conseq >>
+  qexistsl_tac [`compiler_label`, `\st. EVERY (plain_operand st) []`, `\u st. T`] >>
+  conj_tac >- simp[] >> conj_tac >- simp[] >> conj_tac >- simp[];
+
+Theorem compile_entry_checks_shape:
+  !min_cds payable. shape_step F compiler_label (\st. T)
+    (compile_entry_checks min_cds payable) (\x st. T)
+Proof
+  rpt gen_tac >> pure_rewrite_tac[compile_entry_checks_def] >>
+  irule shape_step_ignore_bind >> qexists_tac `\u st. T` >> conj_tac
+  >- (gen_tac >> BETA_TAC >> Cases_on `min_cds > 4` >>
+      pure_asm_rewrite_tac[COND_CLAUSES]
+      >- (extbodies_from_true_tac >>
+          extbodies_emit_bind `\cds st. EVERY (plain_operand st) [cds]` `cds`
+            (extbodies_emit_bind `\enough st. EVERY (plain_operand st) [enough; cds]` `enough`
+              (extbodies_emit_bind `\ok st. EVERY (plain_operand st) [ok; enough; cds]` `ok`
+                (extbodies_void_end `[ok; enough; cds]`)))) >>
+      irule shape_step_return >> simp[]) >>
+  Cases_on `payable` >> pure_rewrite_tac[NOT_CLAUSES, COND_CLAUSES]
+  >- (irule shape_step_return >> simp[]) >>
+  extbodies_from_true_tac >>
+  extbodies_emit_bind `\cv st. EVERY (plain_operand st) [cv]` `cv`
+    (extbodies_emit_bind `\nv st. EVERY (plain_operand st) [nv; cv]` `nv`
+      (extbodies_void_end `[nv; cv]`))
+QED
+
+Theorem compile_nonreentrant_unlock_shape:
+  !nkey transient view. shape_step F compiler_label (\st. T)
+    (compile_nonreentrant_unlock nkey transient view) (\x st. T)
+Proof
+  rpt gen_tac >> Cases_on `view` >> pure_rewrite_tac[compile_nonreentrant_unlock_def, COND_CLAUSES]
+  >- (irule shape_step_return >> simp[]) >>
+  Cases_on `transient` >> pure_rewrite_tac[COND_CLAUSES] >> extbodies_void_end `[]`
+QED
+
+Theorem compile_nonreentrant_lock_shape:
+  !nkey transient view. shape_step F compiler_label (\st. T)
+    (compile_nonreentrant_lock nkey transient view) (\x st. T)
+Proof
+  rpt gen_tac >> Cases_on `transient` >>
+  pure_rewrite_tac[compile_nonreentrant_lock_def, COND_CLAUSES] >>
+  extbodies_from_true_tac >>
+  extbodies_emit_bind `\cur st. EVERY (plain_operand st) [cur]` `cur`
+    (extbodies_emit_bind `\locked st. EVERY (plain_operand st) [locked; cur]` `locked`
+      (extbodies_emit_bind `\nl st. EVERY (plain_operand st) [nl; locked; cur]` `nl`
+        (extbodies_void_bind `\u st. EVERY (plain_operand st) [nl; locked; cur]`
+          (Cases_on `view` >> pure_rewrite_tac[COND_CLAUSES]
+           >- (irule shape_step_return >> simp[]) >>
+           extbodies_void_end `[nl; locked; cur]`))))
+QED
+
+Theorem compile_guarded_body_shape:
+  !cenv nr nkey transient view body ret_type.
+    cenv.ce_return_pc = NONE /\
+    ~supported_stmts_expr_exists expr_shape_root body ==>
+    shape_step F compiler_label (\st. cenv_shape_ok st cenv)
+      (compile_guarded_body cenv nr nkey transient view body ret_type) (\x st. T)
+Proof
+  rpt strip_tac >> pure_rewrite_tac[compile_guarded_body_def] >>
+  irule shape_step_ignore_bind >> qexists_tac `\u st. cenv_shape_ok st cenv /\ T` >>
+  conj_tac >- suspend "statements" >>
+  irule shape_step_conseq >>
+  qexistsl_tac [`compiler_label`, `\st. cenv_shape_ok st cenv /\ T`,
+    `\u st. cenv_shape_ok st cenv /\ T`] >>
+  conj_tac >- simp[] >> conj_tac >- simp[] >> conj_tac >- simp[] >>
+  ho_match_mp_tac extbodies_cenv_frame >> Cases_on `nr` >> pure_rewrite_tac[COND_CLAUSES]
+  >- (irule compile_nonreentrant_lock_shape) >> irule shape_step_return >> simp[]
+QED
+Resume compile_guarded_body_shape[statements]:
+  gen_tac >> BETA_TAC >>
+  irule shape_step_ignore_bind >> qexists_tac `\u st. T` >>
+  conj_tac >- suspend "termination" >>
+  rename1 `~supported_stmts_expr_exists expr_shape_root body_stmts` >>
+  mp_tac (Q.SPECL [`cenv`, `NoLoop`,
+    `case ret_type of SOME t => t | NONE => BaseT BoolT`, `body_stmts`] (cj 2 compile_stmt_shape)) >>
+  simp[loop_ctx_shape_ok_def] >>
+  disch_then (fn th => irule shape_step_conseq >>
+    qexistsl_tac [`compiler_label`, `\st. cenv_shape_ok st cenv`, `\u st. T`] >>
+    simp_tac bool_ss [] >> ACCEPT_TAC th)
+QED
+Resume compile_guarded_body_shape[termination]:
+  gen_tac >> BETA_TAC >> irule shape_step_bind >>
+  qexists_tac `\cs st. cs = st /\ T` >> conj_tac
+  >- (qx_gen_tac `cs` >> BETA_TAC >> Cases_on `block_is_terminated cs` >>
+      pure_asm_rewrite_tac[COND_CLAUSES]
+      >- (irule shape_step_return >> simp[]) >>
+      suspend "epilogue") >>
+  qspec_then `\st. T` mp_tac (Q.SPECL [`F`, `compiler_label`] shape_step_comp_get) >>
+  simp[]
+QED
+Resume compile_guarded_body_shape[epilogue]:
+  irule shape_step_ignore_bind >> qexists_tac `\u st. T` >> conj_tac
+  >- (let
+        fun terminal opc =
+          pure_rewrite_tac[optionTheory.option_case_def, extbodies_emit_inst_void] >>
+          mp_tac (Q.SPECL [`F`, `compiler_label`, `\st. T`, opc, `[]`]
+            shape_step_emit_void) >> simp[] >> disch_then irule >>
+          extbodies_opcode_tac >> simp[shape_stable_def]
+      in
+        gen_tac >> BETA_TAC >> Cases_on `ret_type`
+        >- terminal `STOP` >> terminal `INVALID`
+      end) >>
+  irule shape_step_conseq >>
+  qexistsl_tac [`compiler_label`, `\st. T`, `\u st. T`] >>
+  conj_tac >- simp[] >> conj_tac >- simp[] >> conj_tac >- simp[] >>
+  Cases_on `nr` >> pure_rewrite_tac[COND_CLAUSES]
+  >- (irule compile_nonreentrant_unlock_shape) >> irule shape_step_return >> simp[]
+QED
+Finalise compile_guarded_body_shape
+
 Theorem compile_external_fn_bodies_shape:
   !fns.
     EVERY external_fn_shape_ok fns ==>
