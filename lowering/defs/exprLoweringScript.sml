@@ -2392,8 +2392,13 @@ Definition compile_call_def:
      | _ => let (_, st') = emit_inst INVALID [] [] st in
             (StackValue ret_ty (Lit 0w), st')) ∧
   compile_call cfn cenv ret_ty ty RawRevert args default_ret st =
-    (let (_, st') = emit_inst INVALID [] [] st in
-     (StackValue ret_ty (Lit 0w), st')) ∧
+    (case args of
+       [data_e] =>
+         let (data, st1) = lower_value cfn cenv (expr_type data_e) data_e st in
+         let (_, st2) = compile_raw_revert data st1 in
+         (StackValue ret_ty (Lit 0w), st2)
+     | _ => let (_, st') = emit_inst INVALID [] [] st in
+            (StackValue ret_ty (Lit 0w), st')) ∧
   compile_call cfn cenv ret_ty ty SelfDestructTarget args default_ret st =
     (let (_, st') = emit_inst INVALID [] [] st in
      (StackValue ret_ty (Lit 0w), st')) ∧

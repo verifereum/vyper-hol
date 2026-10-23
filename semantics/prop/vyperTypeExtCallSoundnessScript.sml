@@ -2543,21 +2543,29 @@ qpat_x_assum
 QED
 
 Theorem raw_revert_tail_sound:
-  !env cx vs st.
-    runtime_consistent env cx st /\ LENGTH vs = 1 ==>
+  !env cx es vs st bd.
+    runtime_consistent env cx st /\ exprs_runtime_typed env es vs /\
+    LENGTH es = 1 /\ HD (MAP expr_type es) = BaseT (BytesT bd) ==>
     runtime_consistent env cx
       (SND ((do
                type_check (LENGTH vs = 1) "raw_revert args";
-               raise (Error (RuntimeError "raw_revert"))
+               data <- lift_option_type (dest_BytesV (EL 0 vs)) "raw_revert data";
+               raise (Error (RevertData data))
              od) st)) /\
     (!s. FST ((do
                  type_check (LENGTH vs = 1) "raw_revert args";
-                 raise (Error (RuntimeError "raw_revert"))
+                 data <- lift_option_type (dest_BytesV (EL 0 vs)) "raw_revert data";
+               raise (Error (RevertData data))
                od) st) <> INR (Error (TypeError s)))
 Proof
-  rw[bind_def, ignore_bind_def, type_check_def, check_def, assert_def,
-     raise_def, return_def] >>
-  gvs[runtime_consistent_def]
+  rpt gen_tac >> strip_tac >>
+  `LENGTH vs = 1 /\ ?data. dest_BytesV (HD vs) = SOME data` by
+    (gvs[exprs_runtime_typed_def] >>
+     Cases_on `es` >> gvs[evaluate_type_def] >>
+     Cases_on `bd` >> gvs[] >>
+     metis_tac[value_has_type_Bytes_dest]) >>
+  gvs[bind_def, ignore_bind_def, type_check_def, check_def, assert_def,
+      lift_option_type_def, raise_def, return_def]
 QED
 
 Theorem raw_log_tail_sound:

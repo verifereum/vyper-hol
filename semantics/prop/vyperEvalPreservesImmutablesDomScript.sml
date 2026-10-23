@@ -664,7 +664,7 @@ Proof
   qpat_x_assum `try _ _ _ = _` mp_tac >>
   simp[try_def, bind_def, AllCaseEqs(), return_def, raise_def,
        handle_function_def] >>
-  rpt strip_tac >> gvs[preserves_immutables_dom_refl, preserves_immutables_dom_eq] >>
+  rpt strip_tac >> fs[preserves_immutables_dom_refl, preserves_immutables_dom_eq] >>
   qpat_assum `∀st0 res0 st1. eval_stmts _ _ st0 = (res0,st1) ⇒ _`
     drule >> gvs[preserves_immutables_dom_eq] >>
   BasicProvers.EVERY_CASE_TAC >>
@@ -3437,7 +3437,7 @@ Proof
   >- (qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
       simp[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(), return_def, raise_def,
            check_def, type_check_def, assert_def] >>
-      rpt strip_tac >> gvs[] >>
+      rpt strip_tac >> imp_res_tac lift_option_type_state >> gvs[] >>
       first_x_assum drule >> gvs[])
   (* SelfDestructTarget *)
   >- (qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>

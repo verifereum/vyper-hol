@@ -2130,7 +2130,7 @@ Proof
     gvs[Once evaluate_def, bind_apply, ignore_bind_apply, AllCaseEqs(),
          return_def, raise_def] >>
     imp_res_tac type_check_state >>
-    imp_res_tac check_state >> gvs[] >>
+    imp_res_tac check_state >> imp_res_tac lift_option_type_state >> gvs[] >>
     first_x_assum drule >> rw[] >>
     gvs[preserves_tv_def]) >>
   (* SelfDestructTarget *)

@@ -10231,10 +10231,12 @@ Resume eval_all_type_sound_mutual[Expr_Call_RawRevert]:
       `LENGTH vs = 1` by
         (gvs[exprs_runtime_typed_def] >>
          metis_tac[listTheory.LIST_REL_LENGTH]) >>
-      qspecl_then [`env`, `cx`, `vs`, `args_st`] mp_tac raw_revert_tail_sound >>
+      drule_at (Pos (el 2)) raw_revert_tail_sound >>
+      disch_then (qspecl_then [`cx`, `args_st`] mp_tac) >>
       simp[type_check_def, bind_def, ignore_bind_def, assert_def, raise_def,
            return_def, no_type_error_result_def, runtime_consistent_def] >>
-      strip_tac >> gvs[]) >>
+      Cases_on `dest_BytesV (HD vs)` >>
+      gvs[lift_option_type_def, raise_def, return_def] >> strip_tac >> gvs[]) >>
     strip_tac >> gvs[]) >>
   rpt strip_tac >> gvs[Once well_typed_expr_def]
 QED

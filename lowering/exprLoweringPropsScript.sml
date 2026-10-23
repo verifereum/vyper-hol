@@ -2870,6 +2870,21 @@ val ci_mono_invalid_call_tac =
     REWRITE_TAC [pairTheory.SND] >> irule ci_mono_emit_inst
   end;
 
+Theorem ci_mono_compile_raw_revert[local]:
+  (!cenv' ty' e' sa'. ci_mono sa' (SND (cfn cenv' ty' e' sa'))) ==>
+  ci_mono sa (SND (compile_call cfn cenv ret_ty ty RawRevert args default_ret sa))
+Proof
+  strip_tac >>
+  simp[compile_call_def, LET_THM, pairTheory.UNCURRY] >>
+  Cases_on `args` >> simp[ci_mono_emit_inst] >>
+  Cases_on `t` >> simp[ci_mono_emit_inst, compile_raw_revert_def, comp_bind_def,
+                        LET_THM, pairTheory.UNCURRY] >>
+  irule ci_mono_trans >> irule_at (Pos last) ci_mono_emit_inst >>
+  irule ci_mono_trans >> irule_at (Pos last) ci_mono_emit_op >>
+  irule ci_mono_trans >> irule_at (Pos last) ci_mono_emit_op >>
+  irule ci_mono_lower_value_cfn >> simp[]
+QED
+
 Theorem ci_mono_compile_call[local]:
   ∀ cfn cenv ret_ty ty target args default_ret sa.
     (∀ cenv' ty' e' sa'. ci_mono sa' (SND (cfn cenv' ty' e' sa'))) ⇒
@@ -2878,7 +2893,8 @@ Proof
   rpt gen_tac >> strip_tac >> Cases_on `target` >>
   TRY (ci_mono_invalid_call_tac >> NO_TAC) >>
   TRY (irule ci_mono_compile_raw_call_calldata >> simp[] >> NO_TAC) >>
-  TRY (irule ci_mono_compile_raw_log >> simp[] >> NO_TAC)
+  TRY (irule ci_mono_compile_raw_log >> simp[] >> NO_TAC) >>
+  TRY (irule ci_mono_compile_raw_revert >> simp[] >> NO_TAC)
   >- ( (* IntCall *)
     simp[compile_call_def, LET_THM, pairTheory.UNCURRY] >>
 rpt IF_CASES_TAC >> gvs[] >>

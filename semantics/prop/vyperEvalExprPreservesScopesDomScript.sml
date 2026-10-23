@@ -478,7 +478,8 @@ Theorem case_RawRevert_dom[local]:
 Proof
   rpt strip_tac >>
   gvs[evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(), return_def, raise_def,
-      check_def, type_check_def, assert_def]
+      check_def, type_check_def, assert_def, lift_option_type_def] >>
+  Cases_on `dest_BytesV (HD vs)` >> gvs[return_def, raise_def]
 QED
 
 (* SelfDestructTarget *)

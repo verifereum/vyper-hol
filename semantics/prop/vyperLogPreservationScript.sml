@@ -2998,7 +2998,8 @@ Proof
        vyperStateTheory.ignore_bind_def, vyperStateTheory.raise_def,
        AllCaseEqs()] >>
   rpt strip_tac >> gvs[] >>
-  imp_res_tac type_check_state >> imp_res_tac raise_state >> gvs[] >>
+  imp_res_tac type_check_state >> imp_res_tac raise_state >>
+  imp_res_tac lift_option_type_state >> gvs[] >>
   first_x_assum drule >> simp[]
 QED
 

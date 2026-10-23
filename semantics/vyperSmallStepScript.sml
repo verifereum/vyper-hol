@@ -808,7 +808,8 @@ Definition apply_vals_def:
   apply_vals cx vs st (RawRevertK k) =
     (case do
       type_check (LENGTH vs = 1) "raw_revert args";
-      raise $ Error $ RuntimeError "raw_revert"
+      data <- lift_option_type (dest_BytesV (EL 0 vs)) "raw_revert data";
+      raise (Error (RevertData data))
     od st
     of (INR ex, st) => AK cx (ApplyExc ex) st k
      | (INL tv, st) => AK cx (ApplyTv tv) st k) ∧
