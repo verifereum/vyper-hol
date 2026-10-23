@@ -361,12 +361,7 @@ Theorem val_in_memory_flag_enc:
     ⇒
     mem_bytes_at off 32 mem = enc (Uint 256) (NumV k)
 Proof
-  rw[val_in_memory_def, enc_def, enc_number_def,
-     mem_word_at_def, mem_bytes_at_def, val_to_w256_def] >>
-  qpat_x_assum`_ = n2w _`(SUBST_ALL_TAC o SYM) >>
-  irule EQ_SYM >>
-  irule word_bytes_roundtrip >>
-  simp[dividesTheory.divides_def]
+  metis_tac[valueEncodingProofsTheory.val_in_memory_flag_abi]
 QED
 
 (* Memory length fits in a word — needed so w2n/n2w round-trips *)
@@ -756,8 +751,7 @@ Resume compile_abi_encode_to_buf_correct[elems_cons]:
 QED
 
 Resume compile_abi_encode_to_buf_correct[dyn_loop]:
-  (* True; not yet proved. *)
-  cheat
+  simp[]
 QED
 
 Finalise compile_abi_encode_to_buf_correct

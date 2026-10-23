@@ -930,19 +930,6 @@ Proof
   rpt gen_tac >> Cases_on `q = i` >> simp[] >> metis_tac[]
 QED
 
-Theorem val_in_memory_sarray_select:
-  !tv n kvs off mem i.
-    val_in_memory (ArrayTV tv (Fixed n)) (ArrayV (SArrayV kvs)) off mem /\
-    i < n ==>
-    val_in_memory tv
-      (case ALOOKUP kvs i of NONE => default_value tv | SOME v => v)
-      (off + i * type_memory_size tv) mem
-Proof
-  rpt strip_tac >> gvs[val_in_memory_def] >>
-  Cases_on `ALOOKUP kvs i` >> simp[] >>
-  metis_tac[kvs_in_memory_lookup]
-QED
-
 Theorem sparse_has_type_lookup:
   !kvs tv n i v.
     sparse_has_type tv n kvs /\ ALOOKUP kvs i = SOME v ==>
@@ -951,50 +938,6 @@ Proof
   Induct >> simp[value_has_type_def] >>
   Cases_on `h` >> simp[value_has_type_def] >>
   rpt gen_tac >> Cases_on `q = i` >> simp[] >> metis_tac[]
-QED
-
-Theorem value_has_type_sarray_select:
-  !tv n kvs i.
-    value_has_type (ArrayTV tv (Fixed n)) (ArrayV (SArrayV kvs)) /\
-    well_formed_type_value tv /\ i < n ==>
-    value_has_type tv
-      (case ALOOKUP kvs i of NONE => default_value tv | SOME v => v)
-Proof
-  rpt strip_tac >> gvs[value_has_type_def] >>
-  Cases_on `ALOOKUP kvs i` >> simp[] >>
-  metis_tac[default_value_well_typed, sparse_has_type_lookup]
-QED
-
-Theorem mem_bytes_at_flat_windows:
-  !n off k mem.
-    FLAT (GENLIST (\i. mem_bytes_at (off + i*k) k mem) n) =
-    mem_bytes_at off (n*k) mem
-Proof
-  Induct >- simp[mem_bytes_at_def] >> rpt gen_tac >>
-  `SUC n * k = n*k + k` by simp[arithmeticTheory.MULT_CLAUSES] >>
-  asm_rewrite_tac[GENLIST, FLAT_SNOC, mem_bytes_at_split_padded] >> simp[]
-QED
-
-Theorem mem_bytes_at_flat_lengths:
-  !lens off mem.
-    FLAT (GENLIST
-      (\i. mem_bytes_at (off + SUM (TAKE i lens)) (EL i lens) mem)
-      (LENGTH lens)) = mem_bytes_at off (SUM lens) mem
-Proof
-  ho_match_mp_tac SNOC_INDUCT >> conj_tac
-  >- simp[mem_bytes_at_def] >>
-  rpt strip_tac >>
-  simp[LENGTH_SNOC, GENLIST, FLAT_SNOC, SUM_SNOC, EL_LENGTH_SNOC,
-       SNOC_APPEND, TAKE_APPEND1] >>
-  `GENLIST (\i. mem_bytes_at (off + SUM (TAKE i (lens ++ [x])))
-              (EL i (lens ++ [x])) mem) (LENGTH lens) =
-   GENLIST (\i. mem_bytes_at (off + SUM (TAKE i lens))
-              (EL i lens) mem) (LENGTH lens)` by
-    (irule GENLIST_CONG >> simp[TAKE_APPEND1, EL_APPEND1]) >>
-  pop_assum SUBST1_TAC >>
-  simp[EL_APPEND2] >>
-  first_x_assum (qspec_then `off` (qspec_then `mem` SUBST1_TAC)) >>
-  pure_rewrite_tac[GSYM mem_bytes_at_split_padded] >> simp[]
 QED
 
 Theorem enc_tuple_static_acc:
@@ -1010,28 +953,6 @@ Proof
       APPEND_ASSOC]
 QED
 
-Theorem enc_static_tuple:
-  !ts vs.
-    EVERY is_static ts /\ LENGTH ts = LENGTH vs ==>
-    enc (Tuple ts) (ListV vs) = FLAT (MAP2 enc ts vs)
-Proof
-  rpt strip_tac >> simp[Once enc_def] >>
-  simp[enc_tuple_static_acc]
-QED
-
-Theorem enc_static_array:
-  !t n vs.
-    is_static t /\ LENGTH vs = n ==>
-    enc (Array (SOME n) t) (ListV vs) = FLAT (MAP (enc t) vs)
-Proof
-  rpt strip_tac >> simp[Once enc_def] >>
-  simp[enc_tuple_static_acc, EVERY_REPLICATE] >>
-  qpat_x_assum `LENGTH vs = n` (SUBST_ALL_TAC o SYM) >>
-  AP_TERM_TAC >> Induct_on `vs` >> simp[]
-QED
-
-(* Two memories that agree on a window agree on every sub-window, and on
-   every word inside it. *)
 Theorem fields_in_memory_tuple:
   !fields fts off mem.
     fields_in_memory fields fts off mem <=>
@@ -1196,6 +1117,8 @@ Proof
   metis_tac[val_in_memory_static_abi_mutual]
 QED
 
+(* Two memories that agree on a window agree on every sub-window, and on
+   every word inside it. *)
 Theorem mem_bytes_at_agree_window:
   ∀ off len mem mem'.
     mem_bytes_at off len mem = mem_bytes_at off len mem' ⇒
