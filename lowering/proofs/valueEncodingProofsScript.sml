@@ -1031,6 +1031,16 @@ QED
 
 (* Two memories that agree on a window agree on every sub-window, and on
    every word inside it. *)
+Theorem fields_in_memory_tuple:
+  !fields fts off mem.
+    fields_in_memory fields fts off mem <=>
+    tuple_in_memory (MAP SND fields) (MAP SND fts) off mem
+Proof
+  Induct >> simp[val_in_memory_def] >>
+  Cases_on `h` >> Cases_on `fts` >> simp[val_in_memory_def] >>
+  Cases_on `h` >> simp[val_in_memory_def]
+QED
+
 Theorem type_memory_size_list_sum:
   !tvs. type_memory_size_list tvs = SUM (MAP type_memory_size tvs)
 Proof
