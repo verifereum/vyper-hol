@@ -762,22 +762,6 @@ Resume internal_alloc_body_suffix_shape[prefix]:
 QED
 Finalise internal_alloc_body_suffix_shape
 
-(* Verified optional-PARAM prefix; integration resumes in C1.4.3.
-  rpt gen_tac >> strip_tac >>
-  rename1 `~supported_stmts_expr_exists expr_shape_root ss` >>
-  simp[Once compile_internal_function_def] >>
-  irule shape_step_bind >>
-  qexists_tac `\rb st. case rb of NONE => T | SOME op => plain_operand st op` >>
-  reverse conj_tac
-  >- (reverse (Cases_on `has_ret_buf`) >> simp[]
-      >- (irule shape_step_return >> simp[]) >>
-      irule shape_step_bind >>
-      qexists_tac `\op st. plain_operand st op` >> conj_tac
-      >- (gen_tac >> BETA_TAC >> irule shape_step_return >> simp[]) >>
-      mp_tac (Q.SPECL [`T`, `compiler_label`, `\st. T`, `PARAM`, `[Lit 0w]`]
-        shape_step_emit_op) >> simp intfn_lock_simps) >>
-  FAIL_TAC "prologue"
-*)
 (* The PARAM/RETPC_PARAM prologue, then the body via compile_stmt_shape with
    ce_return_pc = SOME (PtrVar return_pc 0), so internal = T. *)
 Theorem compile_internal_function_shape:
@@ -789,8 +773,71 @@ Theorem compile_internal_function_shape:
       (compile_internal_function cenv params has_ret_buf is_nr nkey
          use_trans is_view is_ctor imm_len body ret_type) (\x st. T)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  rename1 `~supported_stmts_expr_exists expr_shape_root ss` >>
+  simp[Once compile_internal_function_def, internal_comp_bind_return] >>
+  irule shape_step_bind >>
+  qexists_tac `\rb st. case rb of NONE => T | SOME op => plain_operand st op` >>
+  reverse conj_tac
+  >- (reverse (Cases_on `has_ret_buf`) >> simp[]
+      >- (irule shape_step_return >> simp[]) >>
+      irule shape_step_bind >>
+      qexists_tac `\op st. plain_operand st op` >> conj_tac
+      >- (gen_tac >> BETA_TAC >> irule shape_step_return >> simp[]) >>
+      mp_tac (Q.SPECL [`T`, `compiler_label`, `\st. T`, `PARAM`, `[Lit 0w]`]
+        shape_step_emit_op) >> simp intfn_lock_simps) >>
+  qx_gen_tac `rb` >> BETA_TAC >>
+  irule shape_step_bind >> qexists_tac
+    `\r st. (case rb of NONE => T | SOME op => plain_operand st op) /\
+       EVERY (\(name,is_stack,op). plain_operand st op) (FST r)` >>
+  reverse conj_tac
+  >- (qspecl_then [`params`, `if has_ret_buf then 1 else 0`] assume_tac
+        compile_internal_param_decls_shape >>
+      drule shape_step_frame >> disch_then (qspec_then
+        `\st. case rb of NONE => T | SOME op => plain_operand st op` mp_tac) >>
+      simp[] >> impl_tac
+      >- (Cases_on `rb` >> simp[shape_stable_def] >>
+          metis_tac[plain_operand_mono]) >> simp[]) >>
+  qx_gen_tac `r` >> BETA_TAC >>
+  irule shape_step_bind >> qexists_tac
+    `\pc st. ((case rb of NONE => T | SOME op => plain_operand st op) /\
+       EVERY (\(name,is_stack,op). plain_operand st op) (FST r)) /\
+       retpc_operand st pc` >> reverse conj_tac
+  >- (ho_match_mp_tac shape_step_emit_op_retpc >>
+      ho_match_mp_tac shape_stable_conj >> conj_tac
+      >- (Cases_on `rb` >> simp[shape_stable_def] >>
+          metis_tac[plain_operand_mono]) >>
+      simp[shape_stable_def, EVERY_MEM, pairTheory.FORALL_PROD] >>
+      metis_tac[plain_operand_mono]) >>
+  qx_gen_tac `pc` >> BETA_TAC >>
+  qmatch_goalsub_abbrev_tac `materialize_internal_params cenv1 _` >>
+  irule shape_step_bind >> qexists_tac
+    `\cenv2 st. retpc_operand st pc /\ cenv_shape_ok st cenv2 /\
+       cenv2.ce_return_pc = SOME (PtrVar pc 0)` >> reverse conj_tac
+  >- suspend "materialize"
+  >> qx_gen_tac `cenv2` >> BETA_TAC >> suspend "suffix"
 QED
+Resume compile_internal_function_shape[materialize]:
+  qspecl_then [`FST r`, `cenv1`] assume_tac materialize_internal_params_shape >>
+  drule shape_step_frame >>
+  disch_then (qspec_then `\st. retpc_operand st pc` mp_tac) >>
+  impl_tac
+  >- (simp[shape_stable_def] >> metis_tac[retpc_operand_mono]) >>
+  strip_tac >> irule shape_step_conseq >>
+  goal_assum (drule_at Any) >> simp[] >> conj_tac
+  >- simp[Abbr `cenv1`] >>
+  rpt strip_tac >> simp[] >>
+  mp_tac (Q.SPECL [`cenv`, `rb`, `pc`, `st`] internal_cenv_install_shape) >>
+  simp[Abbr `cenv1`]
+QED
+Resume compile_internal_function_shape[suffix]:
+  Cases_on `cenv2.ce_return_pc = SOME (PtrVar pc 0)`
+  >- (simp[comp_ignore_bind_def] >> irule shape_step_conseq >>
+      irule_at Any (SRULE [comp_ignore_bind_def, comp_bind_assoc,
+        internal_comp_bind_return] internal_alloc_body_suffix_shape) >> simp[]) >>
+  simp[shape_step_def]
+QED
+Finalise compile_internal_function_shape
 
 (* From compile_internal_function_shape: new_block fn_lbl starts each
    segment, and the next one ends it. *)
