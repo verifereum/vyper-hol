@@ -4973,6 +4973,131 @@ Proof
   rpt strip_tac >> rpt (IF_CASES_TAC >> simp[])
 QED
 
+Theorem shape_step_emit_multi_op_guarded[local]:
+  shape_stable R /\ ~MEM opc [GAS; RETPC_PARAM] /\
+  (!st id outs. R st /\ EVERY (label_or_plain st) ops ==>
+     lowered_inst_ok internal (mk_inst id opc ops outs)) ==>
+  shape_step internal compiler_label
+    (\st. R st /\ EVERY (label_or_plain st) ops) (emit_multi_op opc ops n)
+    (\xs st. R st /\ EVERY (plain_operand st) xs)
+Proof
+  rpt gen_tac >> strip_tac >> simp[shape_step_def] >> rpt gen_tac >> strip_tac >>
+  mp_tac (Q.SPEC `internal` shape_step_emit_multi_op) >>
+  disch_then (qspecl_then [`compiler_label`, `R`, `opc`, `ops`, `n`] mp_tac) >>
+  (impl_tac >- (simp[] >> metis_tac[])) >>
+  simp[shape_step_def] >> disch_then drule_all >> simp[]
+QED
+
+Theorem compile_call_int_shape[local]:
+  (!ce t child. ~supported_expr_exists expr_shape_root child ==>
+     shape_step internal compiler_label (\st. cenv_shape_ok st ce)
+       (cfn ce t child) (\v st. value_shape_ok st v)) /\
+  ~supported_exprs_exists expr_shape_root args ==>
+  shape_step internal compiler_label (\st. cenv_shape_ok st cenv)
+    (compile_call cfn cenv ret_ty ty (IntCall func_id) args default_ret)
+    (\v st. value_shape_ok st v)
+Proof
+  strip_tac >>
+  qabbrev_tac `info = cenv.ce_func_info (nsid_to_string func_id)` >>
+  PairCases_on `info` >>
+  CONV_TAC (LAND_CONV (REWR_CONV (GSYM ETA_AX))) >>
+  qpat_x_assum `Abbrev _` (assume_tac o GSYM o REWRITE_RULE [markerTheory.Abbrev_def]) >>
+  simp[compile_call_def] >>
+  CONV_TAC (DEPTH_CONV ETA_CONV) >>
+  irule shape_step_uncurry >> qexists_tac `\vs st. EVERY (value_shape_ok st) vs` >> reverse conj_tac
+  >- (shape_under_tac compile_multi_vvs_shape `\st. T` >> simp[shape_stable_def]) >>
+  qx_gen_tac `vals` >> simp[] >>
+  Cases_on `info0 > 0` >> simp[]
+  >- suspend "stack_returns" >>
+  Cases_on `info1 > 0` >> simp[]
+  >- suspend "buffer_return" >> suspend "void_return"
+QED
+Resume compile_call_int_shape[stack_returns]:
+  simp[Once pairTheory.UNCURRY_RAND, combinTheory.o_DEF] >>
+  irule shape_step_uncurry >>
+  qexists_tac `\b st. EVERY (value_shape_ok st) vals /\ plain_operand st b.buf_operand` >>
+  reverse conj_tac
+  >- (shape_under_tac compile_alloc_buffer_shape `\st. EVERY (value_shape_ok st) vals` >>
+      simp[shape_stable_def, EVERY_MEM] >> rpt strip_tac >>
+      mp_tac (Q.SPEC `e` value_shape_ok_stable) >> simp[shape_stable_def] >>
+      disch_then (qspecl_then [`internal'`, `LP`, `st`, `st'`] mp_tac) >> simp[]) >>
+  qx_gen_tac `rbuf` >> simp[] >>
+  irule shape_step_uncurry >>
+  qexists_tac `\vs st. plain_operand st rbuf.buf_operand /\ EVERY (plain_operand st) vs` >>
+  reverse conj_tac
+  >- (shape_under_tac compile_stage_intcall_args_shape `\st. plain_operand st rbuf.buf_operand` >>
+      simp[] >> mp_tac (Q.SPEC `[rbuf.buf_operand]` shape_stable_plain_operands) >> simp[]) >>
+  qx_gen_tac `invoke_args` >> simp[] >>
+  irule shape_step_uncurry >>
+  qexists_tac `\vs st. plain_operand st rbuf.buf_operand /\ EVERY (plain_operand st) vs` >>
+  reverse conj_tac
+  >- (shape_under_tac shape_step_emit_multi_op_guarded
+        `\st. plain_operand st rbuf.buf_operand /\ EVERY (plain_operand st) invoke_args` >>
+      conj_tac
+      >- (mp_tac (Q.SPEC `rbuf.buf_operand::invoke_args` shape_stable_plain_operands) >> simp[]) >>
+      conj_tac
+      >- (shape_opcode_tac >> rpt strip_tac >> gvs[EVERY_MEM] >>
+          metis_tac[plain_operand_def, label_or_plain_def]) >>
+      simp[EVERY_MEM, label_or_plain_def, stackPlanTypesTheory.is_label_operand_def] >>
+      metis_tac[]) >>
+  qx_gen_tac `results` >> simp[] >>
+  irule shape_step_uncurry >> qexists_tac `\u st. plain_operand st rbuf.buf_operand` >> conj_tac
+  >- (gen_tac >> simp[shape_step_def, shape_extends_refl,
+      value_shape_ok_def, loc_shape_ok_def, base_ptr_def]) >>
+  shape_under_tac store_multi_results_shape `\st. plain_operand st rbuf.buf_operand` >>
+  mp_tac (Q.SPEC `[rbuf.buf_operand]` shape_stable_plain_operands) >> simp[]
+QED
+Resume compile_call_int_shape[buffer_return]:
+  simp[Once pairTheory.UNCURRY_RAND, combinTheory.o_DEF] >>
+  irule shape_step_uncurry >>
+  qexists_tac `\b st. EVERY (value_shape_ok st) vals /\ plain_operand st b.buf_operand` >>
+  reverse conj_tac
+  >- (shape_under_tac compile_alloc_buffer_shape `\st. EVERY (value_shape_ok st) vals` >>
+      simp[shape_stable_def, EVERY_MEM] >> rpt strip_tac >>
+      mp_tac (Q.SPEC `e` value_shape_ok_stable) >> simp[shape_stable_def] >>
+      disch_then (qspecl_then [`internal'`, `LP`, `st`, `st'`] mp_tac) >> simp[]) >>
+  qx_gen_tac `rbuf` >> simp[] >> irule shape_step_uncurry >>
+  qexists_tac `\vs st. plain_operand st rbuf.buf_operand /\ EVERY (plain_operand st) vs` >>
+  reverse conj_tac
+  >- (shape_under_tac compile_stage_intcall_args_shape `\st. plain_operand st rbuf.buf_operand` >>
+      mp_tac (Q.SPEC `[rbuf.buf_operand]` shape_stable_plain_operands) >> simp[]) >>
+  qx_gen_tac `invoke_args` >> simp[] >> irule shape_step_uncurry >>
+  qexists_tac `\u st. plain_operand st rbuf.buf_operand` >> conj_tac
+  >- (gen_tac >> simp[shape_step_def, shape_extends_refl,
+                     value_shape_ok_def, loc_shape_ok_def, base_ptr_def]) >>
+  `emit_void INVOKE (Label (nsid_to_string func_id)::rbuf.buf_operand::invoke_args) =
+   emit_inst INVOKE (Label (nsid_to_string func_id)::rbuf.buf_operand::invoke_args) []` by
+    simp[FUN_EQ_THM, emit_void_eq, emit_inst_eq] >>
+  pop_assum SUBST1_TAC >>
+  shape_under_tac shape_step_emit_inst_guarded
+    `\st. plain_operand st rbuf.buf_operand /\ EVERY (plain_operand st) invoke_args` >>
+  conj_tac
+  >- (mp_tac (Q.SPEC `rbuf.buf_operand::invoke_args` shape_stable_plain_operands) >> simp[]) >>
+  conj_tac
+  >- (shape_opcode_tac >> rpt strip_tac >> gvs[EVERY_MEM] >>
+      metis_tac[plain_operand_def, label_or_plain_def]) >>
+  simp[EVERY_MEM, label_or_plain_def, stackPlanTypesTheory.is_label_operand_def] >> metis_tac[]
+QED
+Resume compile_call_int_shape[void_return]:
+  irule shape_step_uncurry >> qexists_tac `\vs st. EVERY (plain_operand st) vs` >>
+  reverse conj_tac
+  >- (shape_under_tac compile_stage_intcall_args_shape `\st. T` >> simp[shape_stable_def]) >>
+  qx_gen_tac `invoke_args` >> simp[] >> irule shape_step_uncurry >>
+  qexists_tac `\u st. T` >> conj_tac
+  >- (gen_tac >> simp[shape_step_def, shape_extends_refl, value_shape_ok_def,
+                     plain_operand_def, stackPlanTypesTheory.is_label_operand_def]) >>
+  `emit_void INVOKE (Label (nsid_to_string func_id)::invoke_args) =
+   emit_inst INVOKE (Label (nsid_to_string func_id)::invoke_args) []` by
+    simp[FUN_EQ_THM, emit_void_eq, emit_inst_eq] >>
+  pop_assum SUBST1_TAC >>
+  shape_under_tac shape_step_emit_inst_guarded `\st. EVERY (plain_operand st) invoke_args` >>
+  simp[shape_stable_plain_operands] >> conj_tac
+  >- (shape_opcode_tac >> rpt strip_tac >> gvs[EVERY_MEM] >>
+      metis_tac[plain_operand_def, label_or_plain_def]) >>
+  simp[EVERY_MEM, label_or_plain_def, stackPlanTypesTheory.is_label_operand_def] >> metis_tac[]
+QED
+Finalise compile_call_int_shape
+
 (* The invalid and CALL/ASSERT tails are shared by the Send argument cases. *)
 val shape_send_invalid_tac =
   CONV_TAC (LAND_CONV (REWR_CONV (GSYM ETA_AX))) >>
