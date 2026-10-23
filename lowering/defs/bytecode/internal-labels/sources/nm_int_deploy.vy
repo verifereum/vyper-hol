@@ -1,4 +1,6 @@
-# internal function named __deploy (deploy unit entry label), called from the constructor
+# internal function named __deploy (deploy unit entry label), called from the
+# constructor and from an external function, so it gets a _deploy label in
+# the deploy unit and a _runtime one in the runtime unit
 x: uint256
 
 @internal
@@ -11,4 +13,4 @@ def __init__():
 
 @external
 def get() -> uint256:
-    return self.x
+    return self.__deploy(self.x)

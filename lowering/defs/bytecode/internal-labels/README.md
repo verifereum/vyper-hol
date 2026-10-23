@@ -19,7 +19,7 @@ default lowering rollup.
 | `p90_int_name_fn_prefix_unused` | `fn_foo`, called from `bar`, next to external `foo` | `compile_vyper = NONE` |
 | `p89_int_name_entry` | `__entry` | `compile_vyper = NONE` |
 | `nm_int_entry` | `__entry`, no arguments | `compile_vyper = NONE` |
-| `nm_int_deploy` | `__deploy`, called from `__init__` (deploy-context label) | not checked |
+| `nm_int_deploy` | `__deploy`, called from `__init__` and `get` (labelled in both units) | not checked |
 | `p70_int_name_reachable` | `reachable_f` | outside the whitelist; matched |
 | `p71_int_name_return_label` | `return_label_f` | outside the whitelist; matched |
 

@@ -508,6 +508,37 @@ Proof
   >> rpt (pairarg_tac >> gvs[])
 QED
 
+Theorem build_compile_env_ce_func_param_types:
+  !tops vis mut func_name args ret_type (body : stmt list) use_trans.
+    (build_compile_env tops vis mut func_name args ret_type body use_trans).
+      ce_func_param_types =
+    build_func_param_types tops
+Proof
+  rpt strip_tac
+  >> simp[build_compile_env_def]
+  >> rpt (pairarg_tac >> gvs[])
+QED
+
+(* The call site's parameter types for fname are those of the first
+   non-external declaration named fname, so its label agrees with the one
+   package_internal_fn gives that declaration. *)
+Theorem build_func_param_types_first_decl:
+  !pre post vis fm nr rr fname fargs dflts ret body.
+    vis <> External /\
+    EVERY (\top. !v fm' nr' rr' args' dflts' ret' body'.
+             top = FunctionDecl v fm' nr' rr' fname args' dflts' ret' body' ==>
+             v = External) pre ==>
+    build_func_param_types
+      (pre ++ FunctionDecl vis fm nr rr fname fargs dflts ret body :: post)
+      fname = MAP SND fargs
+Proof
+  Induct
+  >- simp[build_func_param_types_def]
+  >> rpt gen_tac >> strip_tac
+  >> Cases_on `h` >> gvs[build_func_param_types_def]
+  >> rw[] >> gvs[]
+QED
+
 Theorem build_compile_env_external_single_uint_arg_lookup:
   !tops mut func_name arg_name ret_type (body : stmt list) use_trans.
     add_module_var_locations tops FEMPTY = FEMPTY /\

@@ -11,7 +11,9 @@
               nm_int_deploy_matches_python_oracle,
               p70_int_name_reachable_matches_python_oracle,
               p71_int_name_return_label_matches_python_oracle,
-              p69_int_name_code_end_supported, p87_int_name_revert_supported. *)
+              p69_int_name_code_end_supported, p87_int_name_revert_supported,
+              p70_int_name_reachable_supported,
+              p71_int_name_return_label_supported. *)
 Theory evalCompilerInternalLabels
 Ancestors compileVyper supportedProgram concretizeMemLocDefs codegenReadyCompute alist byte integer_word option
 Libs memoryStoreWitnessLib vyperCheckContractFrontendLib jsonASTLib evalCompilerBytecodeLib finite_mapLib computeLib wordsLib
@@ -83,9 +85,10 @@ Proof
   CONV_TAC (LAND_CONV (K (#evaluation nm_int_entry))) >> EVAL_TAC
 QED
 
-(* a05-07: an internal function named __deploy, called from the constructor,
-   does not share the deploy unit's entry label; its deploy-context label
-   ends in _deploy. *)
+(* a05-07: an internal function named __deploy, called from the constructor
+   and from an external function, does not share the deploy unit's entry
+   label; it is labelled ..._deploy in the deploy unit and ..._runtime in the
+   runtime unit. *)
 val nm_int_deploy = memoryStoreWitnessLib.evaluate fixture_root "nm_int_deploy"
 Theorem nm_int_deploy_matches_python_oracle:
   ^(#term nm_int_deploy) =
@@ -126,6 +129,22 @@ QED
 Theorem p87_int_name_revert_supported:
   supported_program
     ^(memoryStoreWitnessLib.program fixture_root "p87_int_name_revert")
+Proof
+  EVAL_TAC
+QED
+
+(* The whitelist no longer excludes the reachable_ and return_label_
+   prefixes. *)
+Theorem p70_int_name_reachable_supported:
+  supported_program
+    ^(memoryStoreWitnessLib.program fixture_root "p70_int_name_reachable")
+Proof
+  EVAL_TAC
+QED
+
+Theorem p71_int_name_return_label_supported:
+  supported_program
+    ^(memoryStoreWitnessLib.program fixture_root "p71_int_name_return_label")
 Proof
   EVAL_TAC
 QED
