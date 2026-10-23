@@ -5245,6 +5245,102 @@ Resume compile_external_call_kwargs_shape[return_value]:
 QED
 Finalise compile_external_call_kwargs_shape
 
+val shape_external_result_tac =
+  irule shape_step_uncurry >> qexists_tac `\v st. plain_operand st v` >> reverse conj_tac
+  >- (shape_under_tac compile_external_call_kwargs_shape `\st. T` >> simp[shape_stable_def] >>
+      `!ts vs st. EVERY (value_shape_ok st) vs ==>
+         EVERY (value_shape_ok st) (MAP2 ext_call_arg_value ts vs)` by
+        (Induct >> namedCases_on `vs` ["", "vv tail"] >> simp[MAP2_DEF] >> rpt gen_tac >> strip_tac >>
+         Cases_on `vv` >> gvs[ext_call_arg_value_def, value_shape_ok_def]) >>
+      Cases_on `options0` >>
+      simp[Abbr `KwFrame`, Abbr `ValuesFrame`, Abbr `AddrFrame`,
+           plain_operand_def, stackPlanTypesTheory.is_label_operand_def] >>
+      rpt strip_tac >> first_x_assum irule >> simp[]) >>
+  gen_tac >> Cases_on `abi_size_bound cenv.ce_struct_fields wrapped_return = 0` >>
+  simp[shape_step_def, shape_extends_refl, value_shape_ok_def,
+       mk_ptr_def, loc_shape_ok_def];
+
+val shape_external_gas_tac =
+  qmatch_goalsub_abbrev_tac `shape_step internal compiler_label KwFrame _ _` >>
+  `shape_stable KwFrame` by
+    (simp[Abbr `KwFrame`] >>
+     qpat_assum `shape_stable ValuesFrame` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     Cases_on `options0` >> Cases_on `options1` >> simp[shape_stable_def] >>
+     metis_tac[plain_operand_mono]) >>
+  Cases_on `options1` >> simp[]
+  >- (irule shape_step_uncurry >>
+      qexists_tac `\g st. KwFrame st /\ gas_operand st g` >> reverse conj_tac
+      >- (shape_under_tac shape_step_emit_op_gas `KwFrame` >> qexists_tac `compiler_label` >> simp[]) >>
+      qx_gen_tac `gas_op` >> simp[] >> shape_external_result_tac) >>
+  rename1 `SOME gas_op` >> shape_external_result_tac;
+
+Theorem compile_call_ext_shape[local]:
+  (!ce t child. ~supported_expr_exists expr_shape_root child ==>
+     shape_step internal compiler_label (\st. cenv_shape_ok st ce)
+       (cfn ce t child) (\v st. value_shape_ok st v)) /\
+  ~supported_exprs_exists expr_shape_root args ==>
+  shape_step internal compiler_label (\st. cenv_shape_ok st cenv)
+    (compile_call cfn cenv ret_ty ty
+      (ExtCall static_flag skip_check (func_name,arg_types,return_type) opts) args default_ret)
+    (\v st. value_shape_ok st v)
+Proof
+  strip_tac >> namedCases_on `args` ["", "addr_e rest"]
+  >- (CONV_TAC (LAND_CONV (REWR_CONV (GSYM ETA_AX))) >>
+      simp[compile_call_def] >> CONV_TAC (DEPTH_CONV ETA_CONV) >>
+      irule shape_step_uncurry >> qexists_tac `\u st. T` >> reverse conj_tac
+      >- (shape_under_tac shape_step_emit_inst_guarded `\st. T` >>
+          simp[shape_stable_def] >> shape_opcode_tac) >>
+      gen_tac >> simp[shape_step_def, shape_extends_refl, value_shape_ok_def,
+                       plain_operand_def, stackPlanTypesTheory.is_label_operand_def]) >>
+  gvs[supported_exprs_exists_every] >>
+  CONV_TAC (LAND_CONV (REWR_CONV (GSYM ETA_AX))) >>
+  simp[compile_call_def] >> CONV_TAC (DEPTH_CONV ETA_CONV) >>
+  irule shape_step_uncurry >>
+  qexists_tac `\v st. cenv_shape_ok st cenv /\ plain_operand st v` >> reverse conj_tac
+  >- (irule shape_step_conseq >> irule_at Any lower_value_shape >>
+      qexists_tac `\st. cenv_shape_ok st cenv` >> simp[cenv_shape_ok_stable]) >>
+  qx_gen_tac `addr_op` >> simp[] >>
+  qmatch_goalsub_abbrev_tac `ext_call_arg_types cenv arg_types pos_args` >>
+  qmatch_goalsub_abbrev_tac `MAP2 ext_call_arg_value call_types` >>
+  qmatch_goalsub_abbrev_tac `abi_size_bound cenv.ce_struct_fields wrapped_return` >>
+  qabbrev_tac `AddrFrame = \st. cenv_shape_ok st cenv /\ plain_operand st addr_op` >>
+  `shape_stable AddrFrame` by
+    (simp[Abbr `AddrFrame`] >> ho_match_mp_tac shape_stable_conj >> simp[cenv_shape_ok_stable] >>
+     mp_tac (Q.SPEC `[addr_op]` shape_stable_plain_operands) >> simp[]) >>
+  irule shape_step_uncurry >>
+  qexists_tac `\vs st. AddrFrame st /\ EVERY (value_shape_ok st) vs` >> reverse conj_tac
+  >- (shape_under_tac compile_multi_vvs_shape `AddrFrame` >> simp[Abbr `AddrFrame`, Abbr `pos_args`, supported_exprs_exists_every] >>
+      irule rich_listTheory.EVERY_TAKE >> simp[]) >>
+  qx_gen_tac `vals` >> simp[] >>
+  qabbrev_tac `ValuesFrame = \st. AddrFrame st /\ EVERY (value_shape_ok st) vals` >>
+  `shape_stable ValuesFrame` by
+    (simp[Abbr `ValuesFrame`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
+     simp[shape_stable_def, EVERY_MEM] >> rpt strip_tac >>
+     mp_tac (Q.SPEC `e` value_shape_ok_stable) >> simp[shape_stable_def] >>
+     disch_then (qspecl_then [`internal'`, `LP`, `st`, `st'`] mp_tac) >> simp[]) >>
+  irule shape_step_uncurry >>
+  qexists_tac `\vs st. ValuesFrame st /\
+       EVERY (plain_operand st)
+         ((case FST vs of NONE => [] | SOME v => [v]) ++
+          (case FST (SND vs) of NONE => [] | SOME v => [v]) ++
+          (case SND (SND vs) of NONE => [] | SOME v => [FST v]))` >> reverse conj_tac
+  >- (drule compile_ext_call_kwargs_shape >> disch_then (fn th => shape_under_tac th `ValuesFrame`) >>
+      simp[Abbr `ValuesFrame`, Abbr `AddrFrame`, supported_exprs_exists_every] >>
+      irule rich_listTheory.EVERY_DROP >> simp[]) >>
+  qx_gen_tac `options` >> PairCases_on `options` >> simp[] >>
+  Cases_on `options2` >> simp[]
+  >- suspend "no_default" >>
+  PairCases_on `x` >> simp[] >> suspend "default"
+QED
+Resume compile_call_ext_shape[no_default]:
+  shape_external_gas_tac
+QED
+Resume compile_call_ext_shape[default]:
+  shape_external_gas_tac
+QED
+Finalise compile_call_ext_shape
+
 Theorem shape_step_emit_multi_op_guarded[local]:
   shape_stable R /\ ~MEM opc [GAS; RETPC_PARAM] /\
   (!st id outs. R st /\ EVERY (label_or_plain st) ops ==>
