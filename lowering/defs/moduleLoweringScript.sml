@@ -917,3 +917,104 @@ Definition compile_external_entry_points_def:
                                       common_label
     od
 End
+
+(* Grouped linear dispatch leaves the legacy package/API unchanged. *)
+Datatype:
+  external_common = <|
+    ec_env : compile_env;
+    ec_pos_args : (string # bool # bool # num # abi_dec_info) list;
+    ec_common_label : string;
+    ec_nonreentrant : bool;
+    ec_nkey : num;
+    ec_transient : bool;
+    ec_view : bool;
+    ec_payable : bool;
+    ec_body : stmt list;
+    ec_return : type option
+  |>
+End
+
+Datatype:
+  external_group =
+    ExternalSingle (num # string # bool)
+      (string # compile_env #
+       (string # bool # bool # num # abi_dec_info) list # num #
+       bool # bool # num # bool # bool # stmt list # type option)
+  | ExternalDefaults external_common
+      ((num # string # num # num) list)
+      ((string # type # expr) list) num
+End
+
+Datatype:
+  external_job =
+    ExternalLegacyJob
+      (string # compile_env #
+       (string # bool # bool # num # abi_dec_info) list # num #
+       bool # bool # num # bool # bool # stmt list # type option)
+  | ExternalCommonJob external_common ((string # operand # type # expr) list)
+End
+
+(* Entries are already in ABI-prefix order. The match label belongs to the
+   entry, while next-comparison labels use the compiler's fresh supply. *)
+Definition compile_group_entries_def:
+  compile_group_entries method_id [] common kwvars head_offset = return () /\
+  compile_group_entries method_id ((sel,lbl,min_cds,k)::rest)
+                        common kwvars head_offset =
+    do matched <- emit_op EQ [method_id; Lit (n2w sel)];
+       next_lbl <- fresh_label "next";
+       emit_inst JNZ [matched; Label lbl; Label next_lbl] [];
+       new_block lbl;
+       compile_entry_checks min_cds common.ec_payable;
+       compile_entry_point_kwargs common.ec_env kwvars head_offset k
+                                  common.ec_common_label;
+       new_block next_lbl;
+       compile_group_entries method_id rest common kwvars head_offset
+    od
+End
+
+Definition compile_external_groups_def:
+  compile_external_groups method_id [] = return [] /\
+  compile_external_groups method_id (ExternalSingle (sel,lbl,tz) package::rest) =
+    do compile_selector_checks method_id [(sel,lbl)];
+       jobs <- compile_external_groups method_id rest;
+       return (ExternalLegacyJob package::jobs)
+    od /\
+  compile_external_groups method_id
+      (ExternalDefaults common entries specs head_offset::rest) =
+    do kwvars <- compile_create_kwarg_allocas common.ec_env specs;
+       compile_group_entries method_id entries common kwvars head_offset;
+       jobs <- compile_external_groups method_id rest;
+       return (ExternalCommonJob common kwvars::jobs)
+    od
+End
+
+Definition compile_group_dispatch_linear_def:
+  compile_group_dispatch_linear groups fallback_lbl =
+    do cds <- emit_op CALLDATASIZE [];
+       short <- emit_op LT [cds; Lit 4w];
+       has_sel <- emit_op ISZERO [short];
+       dispatch_lbl <- fresh_label "dispatch";
+       emit_inst JNZ [has_sel; Label dispatch_lbl; Label fallback_lbl] [];
+       new_block dispatch_lbl;
+       raw <- emit_op CALLDATALOAD [Lit 0w];
+       method_id <- emit_op SHR [Lit 224w; raw];
+       jobs <- compile_external_groups method_id groups;
+       emit_inst JMP [Label fallback_lbl] [];
+       return jobs
+    od
+End
+
+Definition compile_external_jobs_def:
+  compile_external_jobs [] = return () /\
+  compile_external_jobs (ExternalLegacyJob package::rest) =
+    do compile_external_fn_bodies [package];
+       compile_external_jobs rest
+    od /\
+  compile_external_jobs (ExternalCommonJob common kwvars::rest) =
+    do new_block common.ec_common_label;
+       compile_common_function_body common.ec_env common.ec_pos_args kwvars
+         common.ec_nonreentrant common.ec_nkey common.ec_transient
+         common.ec_view common.ec_body common.ec_return;
+       compile_external_jobs rest
+    od
+End
