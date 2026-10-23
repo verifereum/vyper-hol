@@ -531,12 +531,28 @@ Proof
   metis_tac[supported_pure_shape]
 QED
 
+Theorem supported_stmts_shape[local]:
+  (!tops bindings s. supported_stmt tops bindings s ==>
+    ~supported_stmt_expr_exists expr_shape_root s) /\
+  (!tops bindings ss. supported_stmts tops bindings ss ==>
+    ~supported_stmts_expr_exists expr_shape_root ss)
+Proof
+  ho_match_mp_tac supportedStmtsTheory.supported_stmt_ind >>
+  rw[supportedStmtsTheory.supported_stmt_def, supported_stmt_expr_exists_def,
+     supported_expr_exists_def] >>
+  metis_tac[supported_pure_shape, supported_expr_shape,
+    supported_assignment_shape, supported_aug_target_shape,
+    supported_append_target_shape, supported_assert_reason_shape,
+    supported_raise_reason_shape, supported_log_shape, supported_iterator_shape]
+QED
+
 Theorem supported_function_body_shape:
   !tops vis args body.
     supported_function_body tops vis args body ==>
     ~supported_stmts_expr_exists expr_shape_root body
 Proof
-  cheat
+  simp[supported_function_body_def] >>
+  metis_tac[supported_stmts_shape]
 QED
 
 (* build_compile_env maps module variables to storage/transient slots and
@@ -775,8 +791,7 @@ Proof
   simp[o1_source_unit_ok_def, unit_shape_ok_def, entry_fn_first_def,
        mk_venom_context_def, internal_termination_ok_def,
        mk_raw_function_fields] >>
-  rpt strip_tac >> gvs[] >>
-  rpt (BasicProvers.FULL_CASE_TAC >> gvs[]) >> res_tac >> fs[EVERY_MEM]
+  rpt strip_tac >> gvs[] >> res_tac >> fs[EVERY_MEM]
 QED
 
 (* package_internal_blocks splits the stream exactly at the segments. *)
