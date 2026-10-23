@@ -31,12 +31,37 @@ Ancestors
 
 (* ===== Side conditions ===== *)
 
+(* How many arguments the builtin dispatchers read by position (HD, EL n).
+   Fewer leaves HD [] for compile_expr, an unspecified expression. *)
+Definition builtin_arity_def:
+  builtin_arity bi =
+    case bi of
+      Bop _ => 2:num | AddMod => 3 | MulMod => 3 | Slice _ => 3
+    | ECRecover => 4 | PowMod256 => 2 | ECAdd => 2 | ECMul => 2
+    | Len => 1 | CalldataSlice _ => 1 | Not => 1 | Neg => 1 | Abs => 1
+    | Keccak256 => 1 | Sha256 => 1 | AsWeiValue _ => 1 | Uint2Str _ => 1
+    | Ceil => 1 | Floor => 1 | BlockHash => 1 | BlobHash => 1 | Acc _ => 1
+    | MethodId => 1
+    | _ => 0
+End
+
+Definition type_builtin_arity_def:
+  type_builtin_arity tb =
+    case tb of
+      Convert => 1:num | Extract32 => 2 | AbiEncode _ _ => 1
+    | AbiDecode _ => 1 | _ => 0
+End
+
 (* msg.gas returns a GAS output as an ordinary value; raw_call(t, msg.data)
-   lowers to DALLOCA (and DELEGATECALL with is_delegate_call). *)
+   lowers to DALLOCA (and DELEGATECALL with is_delegate_call); a builtin
+   with too few arguments compiles HD []. *)
 Definition expr_shape_root_def:
   expr_shape_root e <=>
     (?ty es. e = Builtin ty (Env MsgGas) es) \/
-    (?ty flags es d. e = Call ty (RawCallCalldataTarget flags) es d)
+    (?ty flags es d. e = Call ty (RawCallCalldataTarget flags) es d) \/
+    (?ty bi es. e = Builtin ty bi es /\ LENGTH es < builtin_arity bi) \/
+    (?ty tb target es. e = TypeBuiltin ty tb target es /\
+                       LENGTH es < type_builtin_arity tb)
 End
 
 (* No ImmutableLoc: its LocCode reads lower to DLOAD. *)
@@ -182,11 +207,13 @@ Theorem compile_expr_shape:
      shape_step internal compiler_label (\st. cenv_shape_ok st cenv)
        (compile_expr cenv ty e) (\v st. value_shape_ok st v)) /\
   (!cenv ret_ty ty bi args internal.
-     bi <> Env MsgGas /\ ~supported_exprs_exists expr_shape_root args ==>
+     bi <> Env MsgGas /\ builtin_arity bi <= LENGTH args /\
+     ~supported_exprs_exists expr_shape_root args ==>
      shape_step internal compiler_label (\st. cenv_shape_ok st cenv)
        (compile_builtin_dispatch cenv ret_ty ty bi args)
        (\v st. value_shape_ok st v)) /\
   (!cenv vv_ty ty tb ret_ty args internal.
+     type_builtin_arity tb <= LENGTH args /\
      ~supported_exprs_exists expr_shape_root args ==>
      shape_step internal compiler_label (\st. cenv_shape_ok st cenv)
        (compile_type_builtin_dispatch cenv vv_ty ty tb ret_ty args)
@@ -203,6 +230,40 @@ Theorem unwrap_value_shape:
       (unwrap_value cenv v) (\op st. plain_operand st op)
 Proof
   cheat
+QED
+
+(* The cenv a statement body runs under: one more plain PtrVar local. *)
+Theorem declare_local_shape:
+  !internal cenv id ty.
+    shape_step internal compiler_label (\st. cenv_shape_ok st cenv)
+      (declare_local cenv id ty)
+      (\cenv' st. cenv_shape_ok st cenv' /\
+                  cenv'.ce_return_pc = cenv.ce_return_pc)
+Proof
+  rpt gen_tac >> simp[declare_local_def] >> IF_CASES_TAC
+  >- (irule shape_step_bind >>
+      qexists_tac `\x st'. cenv_shape_ok st' cenv /\ plain_operand st' (Var x)` >>
+      reverse conj_tac
+      >- (mp_tac (Q.SPECL [`internal`, `compiler_label`,
+            `\st. cenv_shape_ok st cenv`] shape_step_fresh_var) >>
+          simp[cenv_shape_ok_stable]) >>
+      gen_tac >> BETA_TAC >> irule shape_step_return >>
+      rw[cenv_shape_ok_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+      gvs[cenv_shape_ok_def, loc_shape_ok_def] >>
+      Cases_on `id = n` >> gvs[loc_shape_ok_def] >> metis_tac[]) >>
+  irule shape_step_return >> rw[cenv_shape_ok_def] >> gvs[cenv_shape_ok_def] >>
+  res_tac
+QED
+
+Theorem declare_stmt_local_shape:
+  !internal cenv s.
+    shape_step internal compiler_label (\st. cenv_shape_ok st cenv)
+      (declare_stmt_local cenv s)
+      (\cenv' st. cenv_shape_ok st cenv' /\
+                  cenv'.ce_return_pc = cenv.ce_return_pc)
+Proof
+  Cases_on `s` >> simp[declare_stmt_local_def, declare_local_shape] >>
+  rpt gen_tac >> irule shape_step_return >> simp[]
 QED
 
 (* For alan, by compile_stmt_ind.  internal is IS_SOME ce_return_pc: Return
@@ -311,7 +372,8 @@ QED
 
 (* ===== Source side conditions from supported_program ===== *)
 
-(* supported_expr rejects Env MsgGas and every raw_call form. *)
+(* supported_expr rejects Env MsgGas and every raw_call form, and accepts
+   builtins only at the arity their dispatcher reads. *)
 Theorem supported_function_body_shape:
   !tops vis args body.
     supported_function_body tops vis args body ==>
