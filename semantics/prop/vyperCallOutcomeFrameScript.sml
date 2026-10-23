@@ -103,22 +103,40 @@ QED
 
 Theorem adopt_call_outcome_transport:
   (!s. R s s) /\
-  (!s accounts transient logs.
+  (!s accounts transient logs pending.
     R s (s with <|accounts := accounts; tStorage := transient;
-                  logs := s.logs ++ logs|>)) /\
+                  logs := s.logs ++ logs; pending_deletions := pending|>)) /\
   adopt_call_outcome rq outcome st = (res,st') ==>
   R st st'
 Proof
-  rw[adopt_call_outcome_equation] >> gvs[]
+  rpt strip_tac >>
+  `!a ts ls. R st (st with <|accounts := a; tStorage := ts;
+                             logs := st.logs ++ ls|>)` by
+    (rpt gen_tac >>
+     `st with <|accounts := a; tStorage := ts; logs := st.logs ++ ls;
+                pending_deletions := st.pending_deletions|> =
+      st with <|accounts := a; tStorage := ts; logs := st.logs ++ ls|>`
+       by simp[evaluation_state_component_equality] >>
+     first_x_assum (qspecl_then [`st`,`a`,`ts`,`ls`,`st.pending_deletions`] mp_tac) >>
+     simp[evaluation_state_fupdcanon]) >>
+  gvs[adopt_call_outcome_equation] >> rw[] >> gvs[] >>
+  `st with <|accounts := outcome.co_accounts; tStorage := outcome.co_tStorage;
+             logs := st.logs ++ []; pending_deletions := st.pending_deletions|> =
+   st with <|accounts := outcome.co_accounts; tStorage := outcome.co_tStorage|>`
+    by simp[evaluation_state_component_equality] >>
+  gvs[evaluation_state_fupdcanon] >>
+  first_x_assum (qspecl_then [`st`,`outcome.co_accounts`,
+    `outcome.co_tStorage`,`[]`,`st.pending_deletions`] mp_tac) >>
+  simp[]
 QED
 
 Theorem checked_call_outcome_transport:
   (!s. R s s) /\
   (!s t u. R s t /\ R t u ==> R s u) /\
   (!s os rqs. R s (s with <|outcomes := os; requests := rqs|>)) /\
-  (!s accounts transient logs.
+  (!s accounts transient logs pending.
     R s (s with <|accounts := accounts; tStorage := transient;
-                  logs := s.logs ++ logs|>)) /\
+                  logs := s.logs ++ logs; pending_deletions := pending|>)) /\
   (!bs s res t. k bs s = (res,t) ==> R s t) /\
   (do
     (rq,outcome) <- take_call_outcome target calldata value_opt;
@@ -174,9 +192,9 @@ Theorem ExtCall_outcome_transport:
   (!s. R s s) /\
   (!s t u. R s t /\ R t u ==> R s u) /\
   (!s os rqs. R s (s with <|outcomes := os; requests := rqs|>)) /\
-  (!s accounts transient logs.
+  (!s accounts transient logs pending.
     R s (s with <|accounts := accounts; tStorage := transient;
-                  logs := s.logs ++ logs|>)) /\
+                  logs := s.logs ++ logs; pending_deletions := pending|>)) /\
   (!bs s res t. k bs s = (res,t) ==> R s t) /\
   (do
     accounts <- get_accounts;
@@ -201,9 +219,9 @@ Theorem Send_outcome_transport:
   (!s. R s s) /\
   (!s t u. R s t /\ R t u ==> R s u) /\
   (!s os rqs. R s (s with <|outcomes := os; requests := rqs|>)) /\
-  (!s accounts transient logs.
+  (!s accounts transient logs pending.
     R s (s with <|accounts := accounts; tStorage := transient;
-                  logs := s.logs ++ logs|>)) /\
+                  logs := s.logs ++ logs; pending_deletions := pending|>)) /\
   (do
     (rq,outcome) <- take_call_outcome target [] (SOME amount);
     check outcome.co_success "send failed";
@@ -252,7 +270,7 @@ Theorem take_adopt_call_outcome_effects:
     st2 = st with <|outcomes := SOME rest;
                    requests := record_request rq st.requests;
                    accounts := st2.accounts; tStorage := st2.tStorage;
-                   logs := st2.logs|> /\
+                   logs := st2.logs; pending_deletions := st2.pending_deletions|> /\
     (outcome.co_success /\ ~rq.cr_static ==>
       st2.accounts = outcome.co_accounts /\
       st2.tStorage = outcome.co_tStorage /\
@@ -266,7 +284,8 @@ Proof
   rpt strip_tac >> drule_all checked_call_outcome_success_frame >> strip_tac >>
   drule take_call_outcome_success >> strip_tac >>
   drule_all take_call_outcome_suffix >> strip_tac >>
-  gvs[adopt_call_outcome_equation] >>
+  Cases_on `rq.cr_static` >> Cases_on `outcome.co_success` >>
+  gvs[adopt_call_outcome_equation, call_outcome_request_def] >>
   qexistsl_tac [`rest`,`prefix`] >>
-  IF_CASES_TAC >> gvs[evaluation_state_component_equality]
+  gvs[evaluation_state_component_equality]
 QED

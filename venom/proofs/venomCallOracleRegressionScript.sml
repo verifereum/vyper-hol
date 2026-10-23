@@ -24,7 +24,7 @@ End
 
 Definition call_probe_outcome_def:
   call_probe_outcome =
-    <| co_success := T;
+    <| co_created := 0w; co_toDelete := []; co_success := T;
        co_returnData := [9w];
        co_accounts := ((8w:address) =+
          (empty_account_state with balance := 23)) empty_accounts;

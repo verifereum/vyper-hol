@@ -574,7 +574,9 @@ End
  * Forwarded gas is popped/evaluated by dispatch and deliberately ignored. *)
 Definition asm_call_request_def:
   asm_call_request s (addr:bytes32) (value:bytes32) ao asz is_static =
-    <| cr_target := w2w addr;
+    <| cr_kind := MessageCall; cr_gas := NONE;
+       cr_data_len := LENGTH (TAKE asz (DROP ao (asm_expand_memory (ao + asz) s.as_memory)));
+       cr_target := w2w addr;
        cr_value := w2n value;
        cr_data := TAKE asz (DROP ao (asm_expand_memory (ao + asz) s.as_memory));
        cr_static := (is_static \/ s.as_call_ctx.cc_static);

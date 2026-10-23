@@ -703,7 +703,7 @@ Theorem env_consistent_outcome_updates[local]:
      env_consistent env cx s) /\
   (env_consistent env cx
      (s with <|accounts := accounts; tStorage := transient;
-               logs := s.logs ++ logs|>) <=> env_consistent env cx s)
+               logs := s.logs ++ logs; pending_deletions := pending|>) <=> env_consistent env cx s)
 Proof
   REWRITE_TAC [env_consistent_def, env_scopes_consistent_def,
                env_immutables_consistent_def] >> simp_tac (srw_ss()) []
@@ -736,9 +736,9 @@ Proof
   `!s os rqs. env_consistent env cx s ==>
      env_consistent env cx (s with <|outcomes := os; requests := rqs|>)` by
     simp_tac (srw_ss()) [env_consistent_outcome_updates] >>
-  `!s accounts transient logs. env_consistent env cx s ==>
+  `!s accounts transient logs pending. env_consistent env cx s ==>
      env_consistent env cx (s with <|accounts := accounts; tStorage := transient;
-                                    logs := s.logs ++ logs|>)` by
+                                    logs := s.logs ++ logs; pending_deletions := pending|>)` by
     simp_tac (srw_ss()) [env_consistent_outcome_updates] >>
   drule_all (ExtCall_outcome_transport |> Q.INST
     [`R` |-> `\s t. env_consistent env cx s ==> env_consistent env cx t`]

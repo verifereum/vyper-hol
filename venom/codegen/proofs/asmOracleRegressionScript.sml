@@ -43,6 +43,26 @@ val gas_eval_tac =
        assert_def, inc_pc_or_jump_def, is_call_def, opcode_def,
        static_gas_def, LET_THM, FLOOKUP_UPDATE];
 
+val gas_initial_tac =
+  simp[asm_evm_rel_def, gas_counter_asm_def, gas_counter_evm_def,
+       asm_oracle_initial_def, make_asm_call_state_def,
+       empty_call_context_def, empty_tx_context_def, empty_block_context_def,
+       asm_to_tx_params_def, make_sub_tx_def, make_rollback_def,
+       vfmContextTheory.initial_context_def,
+       vfmContextTheory.initial_msg_params_def,
+       transfer_value_def, vfmContextTheory.empty_return_destination_def,
+       asm_pc_to_offset_def, is_data_inst_def,
+       asm_step_def, asm_step_op_def, asm_step_arith_def,
+       asm_step_compare_def, asm_step_bitwise_def, asm_step_memory_def,
+       asm_step_control_def, asm_step_extcall_def, asm_step_copy_def,
+       asm_step_context_def, asm_gas_def, asm_push_val_def, asm_next_def];
+
+Theorem gas_counter_step_stack[local]:
+  (FST (HD (SND (step gas_counter_evm)).contexts)).stack = [98w]
+Proof
+  gas_initial_tac >> gas_eval_tac
+QED
+
 (* The old step theorem admitted GAS because it fell through to AsmError.
  * With GAS active, its existing pre-relation ignores readings; empty asm
  * readings push 0, whereas the concrete EVM pushes 98, without an exception.
@@ -65,20 +85,15 @@ Proof
   conj_tac >- (
     rw[asm_encoding_wf_def, compute_label_offsets_def,
        asm_inst_size_def] >> EVAL_TAC) >>
-  simp[asm_evm_rel_def, gas_counter_asm_def, gas_counter_evm_def,
-       asm_oracle_initial_def, make_asm_call_state_def,
-       empty_call_context_def, empty_tx_context_def, empty_block_context_def,
-       asm_to_tx_params_def, make_sub_tx_def, make_rollback_def,
-       vfmContextTheory.initial_context_def,
-       vfmContextTheory.initial_msg_params_def,
-       transfer_value_def, vfmContextTheory.empty_return_destination_def,
-       asm_pc_to_offset_def, is_data_inst_def,
-       asm_step_def, asm_step_op_def, asm_step_arith_def,
-       asm_step_compare_def, asm_step_bitwise_def, asm_step_memory_def,
-       asm_step_control_def, asm_step_extcall_def, asm_step_copy_def,
-       asm_step_context_def, asm_gas_def, asm_push_val_def, asm_next_def] >>
-  rpt conj_tac >| [suspend "step_success", suspend "step_stack",
-                   suspend "step_unrelated"]
+  conj_tac >- gas_initial_tac >>
+  conj_tac >- gas_initial_tac >>
+  conj_tac >- gas_initial_tac >>
+  conj_tac >- gas_initial_tac >>
+  conj_tac >- gas_initial_tac >>
+  conj_tac >- gas_initial_tac >>
+  conj_tac >- (gas_initial_tac >> suspend "step_success") >>
+  conj_tac >- (gas_initial_tac >> suspend "step_stack") >>
+  suspend "step_unrelated"
 QED
 
 Resume gas_existing_relation_counterexample[step_success]:
@@ -88,8 +103,12 @@ Resume gas_existing_relation_counterexample[step_stack]:
   gas_eval_tac
 QED
 Resume gas_existing_relation_counterexample[step_unrelated]:
-  gas_eval_tac >>
-  simp[wordsTheory.dimword_def, fcpLib.INDEX_CONV ``dimindex(:256)``]
+  mp_tac gas_counter_step_stack >>
+  Cases_on `(SND (step gas_counter_evm)).contexts` >>
+  simp[asm_evm_rel_def] >>
+  rename1 `h::t` >> PairCases_on `h` >>
+  simp[gas_counter_asm_def, asm_oracle_initial_def, asm_next_def] >>
+  wordsLib.WORD_DECIDE_TAC
 QED
 Finalise gas_existing_relation_counterexample
 

@@ -95,7 +95,8 @@ Proof
   `co.co_success ==> contract_storage_well_formed cx
      (st with <|accounts := co.co_accounts; tStorage := co.co_tStorage|>)` by
     (strip_tac >> gvs[] >> drule_all take_outcome_success_storage_payload >> simp[]) >>
-  gvs[adopt_call_outcome_equation] >> IF_CASES_TAC >> gvs[] >>
+  Cases_on `rq.cr_static` >> Cases_on `co.co_success` >>
+  gvs[adopt_call_outcome_equation, call_outcome_request_def] >>
   FIRST [
     irule contract_storage_well_formed_backends_frame >>
     qexists_tac `st with <|accounts := co.co_accounts; tStorage := co.co_tStorage|>` >>
@@ -113,11 +114,14 @@ Theorem take_adopt_call_outcome_no_adoption_storage:
   contract_storage_well_formed cx st2 /\ outcome_suffix st.outcomes st2.outcomes
 Proof
   rpt gen_tac >> strip_tac >>
-  gvs[adopt_call_outcome_equation] >>
-  imp_res_tac take_call_outcome_outcome_suffix >> simp[] >>
-  drule take_call_outcome_frame >> simp[evaluation_state_component_equality] >>
-  strip_tac >> irule contract_storage_well_formed_backends_frame >>
-  goal_assum (drule_at Any) >> simp[]
+  drule take_call_outcome_outcome_suffix >> strip_tac >>
+  drule take_call_outcome_success >> strip_tac >>
+  `rq.cr_kind = MessageCall` by gvs[call_outcome_request_def] >>
+  `adopt_call_outcome rq co st1 = (INL (),st1)` by
+    (irule adopt_call_outcome_static_failed >> simp[]) >>
+  gvs[] >> drule take_call_outcome_frame >> strip_tac >>
+  irule contract_storage_well_formed_backends_frame >>
+  qexists_tac `st` >> gvs[evaluation_state_component_equality]
 QED
 
 (* Source runtime typing comes from the inherited real take guard; storage

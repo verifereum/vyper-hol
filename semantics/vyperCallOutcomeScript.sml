@@ -12,7 +12,8 @@ Libs cv_transLib
 
 Definition call_outcome_request_def:
   call_outcome_request target calldata value_opt st =
-    <| cr_target := target;
+    <| cr_kind := MessageCall; cr_gas := NONE; cr_data_len := LENGTH calldata;
+       cr_target := target;
        cr_value := (case value_opt of NONE => 0 | SOME v => v);
        cr_data := calldata;
        cr_static := IS_NONE value_opt;
@@ -42,7 +43,9 @@ Definition adopt_call_outcome_def:
     let (accounts, tStorage, logs) =
       adopt_outcome rq outcome (st.accounts, st.tStorage, st.logs) in
     return () (st with <| accounts := accounts; tStorage := tStorage;
-                         logs := logs |>)
+                         logs := logs;
+                         pending_deletions := if computed_precompile rq then st.pending_deletions
+                           else adopt_outcome_deletions rq outcome st.pending_deletions |>)
 End
 val () = adopt_call_outcome_def |> SRULE [pairTheory.pair_CASE_def] |> cv_auto_trans;
 
@@ -55,7 +58,8 @@ Theorem take_call_outcome_plan:
     case st.outcomes of
       NONE => (INR (Error (RuntimeError "take_call_outcome")),st)
     | SOME os =>
-      let rq = <|cr_target := target;
+      let rq = <|cr_kind := MessageCall; cr_gas := NONE; cr_data_len := LENGTH calldata;
+                 cr_target := target;
                  cr_value := (case value_opt of NONE => 0 | SOME v => v);
                  cr_data := calldata; cr_static := IS_NONE value_opt;
                  cr_accounts := st.accounts; cr_tStorage := st.tStorage|> in
@@ -144,27 +148,34 @@ Theorem take_call_outcome_computed_invalid:
 Proof
   rpt strip_tac >>
   gvs[take_call_outcome_def, take_outcome_def, record_request_def,
-      computed_precompile_def, evaluation_state_component_equality]
+      computed_precompile_def, call_outcome_request_def, evaluation_state_component_equality]
 QED
 
 Theorem adopt_call_outcome_equation:
   adopt_call_outcome rq outcome st =
-    (INL (), if outcome.co_success /\ ~rq.cr_static then
-       st with <|accounts := outcome.co_accounts;
-                 tStorage := outcome.co_tStorage;
-                 logs := st.logs ++ outcome.co_logs|>
-     else st)
+    (INL (), if rq.cr_static then st else
+       if outcome.co_success then
+         st with <|accounts := outcome.co_accounts;
+                   tStorage := outcome.co_tStorage;
+                   logs := st.logs ++ outcome.co_logs;
+                   pending_deletions := if computed_precompile rq
+                     then st.pending_deletions else outcome.co_toDelete|>
+       else if rq.cr_kind = MessageCall then st
+       else st with <|accounts := outcome.co_accounts;
+                     tStorage := outcome.co_tStorage|>)
 Proof
-  rw[adopt_call_outcome_def, adopt_outcome_def, return_def]
+  rw[adopt_call_outcome_def, adopt_outcome_def, adopt_outcome_deletions_def, return_def] >>
+  gvs[evaluation_state_component_equality]
 QED
 
 (* ===== Whole-record frame and guarded typing ===== *)
 
 Theorem adopt_call_outcome_static_failed:
-  (rq.cr_static \/ ~outcome.co_success) ==>
+  (rq.cr_static \/ (rq.cr_kind = MessageCall /\ ~outcome.co_success)) ==>
   adopt_call_outcome rq outcome st = (INL (),st)
 Proof
-  rw[adopt_call_outcome_equation] >> gvs[]
+  rw[adopt_call_outcome_equation, adopt_outcome_deletions_def] >>
+  gvs[evaluation_state_component_equality]
 QED
 
 Theorem take_call_outcome_guard_rejected:
@@ -244,9 +255,10 @@ Theorem adopt_call_outcome_frame:
   adopt_call_outcome rq outcome st = (res,st') ==>
   res = INL () /\
   st' = st with <|accounts := st'.accounts; tStorage := st'.tStorage;
-                 logs := st'.logs|>
+                 logs := st'.logs; pending_deletions := st'.pending_deletions|>
 Proof
-  rw[adopt_call_outcome_equation] >> gvs[]
+  rw[adopt_call_outcome_equation, adopt_outcome_deletions_def] >>
+  gvs[evaluation_state_component_equality]
 QED
 
 Theorem take_adopt_call_outcome_typed:
@@ -256,6 +268,50 @@ Theorem take_adopt_call_outcome_typed:
   accounts_runtime_well_typed st''.accounts
 Proof
   rpt strip_tac >> drule take_call_outcome_success >> strip_tac >>
-  gvs[adopt_call_outcome_equation] >>
-  IF_CASES_TAC >> gvs[]
+  Cases_on `rq.cr_static` >> Cases_on `outcome.co_success` >>
+  gvs[adopt_call_outcome_equation, call_outcome_request_def]
+QED
+
+Theorem adopt_call_outcome_computed_deletions:
+  computed_precompile rq ==>
+  (SND (adopt_call_outcome rq outcome st)).pending_deletions = st.pending_deletions
+Proof
+  rw[adopt_call_outcome_equation] >> gvs[]
+QED
+
+Theorem adopt_call_outcome_observed_deletions:
+  ~computed_precompile rq /\ outcome.co_success /\ ~rq.cr_static ==>
+  (SND (adopt_call_outcome rq outcome st)).pending_deletions = outcome.co_toDelete
+Proof
+  rw[adopt_call_outcome_equation] >> gvs[]
+QED
+
+Theorem adopt_call_outcome_static_failed_deletions:
+  rq.cr_static \/ ~outcome.co_success ==>
+  (SND (adopt_call_outcome rq outcome st)).pending_deletions = st.pending_deletions
+Proof
+  rw[adopt_call_outcome_equation] >> gvs[]
+QED
+
+(* Nonempty queues detect synthetic precompile snapshots being mistaken
+   for an observed empty snapshot. No precompile algorithm is unfolded. *)
+Theorem computed_success_keeps_pending_regression:
+  rq.cr_kind = MessageCall /\ rq.cr_value = 0 /\ rq.cr_target = 1w /\ rq.cr_data = [] ==>
+  (SND (adopt_call_outcome rq (FST (take_outcome rq os))
+    (st with pending_deletions := [9w]))).pending_deletions = [9w]
+Proof
+  strip_tac >>
+  `computed_precompile rq` by
+    simp[computed_precompile_def, precompile_result_empty_ecrecover] >>
+  simp[adopt_call_outcome_computed_deletions]
+QED
+
+Theorem observed_success_replaces_pending_regression:
+  ~computed_precompile rq /\ ~rq.cr_static ==>
+  (SND (adopt_call_outcome rq (outcome with <|co_success := T; co_toDelete := []|>)
+    (st with pending_deletions := [9w]))).pending_deletions = [] /\
+  (SND (adopt_call_outcome rq (outcome with <|co_success := T; co_toDelete := [8w]|>)
+    (st with pending_deletions := [9w]))).pending_deletions = [8w]
+Proof
+  strip_tac >> simp[adopt_call_outcome_observed_deletions]
 QED

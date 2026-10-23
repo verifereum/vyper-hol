@@ -2633,9 +2633,9 @@ Proof
             preserves_tv cx s u` by metis_tac[preserves_tv_trans] >>
   `!s os rqs. preserves_tv cx s
       (s with <|outcomes := os; requests := rqs|>)` by simp[preserves_tv_def] >>
-  `!s accounts transient logs. preserves_tv cx s
+  `!s accounts transient logs pending. preserves_tv cx s
       (s with <|accounts := accounts; tStorage := transient;
-                logs := s.logs ++ logs|>)` by simp[preserves_tv_def] >>
+                logs := s.logs ++ logs; pending_deletions := pending|>)` by simp[preserves_tv_def] >>
   `!s. preserves_tv cx s s` by simp[] >>
   drule_all (ExtCall_outcome_transport |> Q.INST
     [`R` |-> `preserves_tv cx`]) >> simp[]

@@ -131,8 +131,8 @@ Theorem oracle_state_observations_pre_cases:
     oracle_state_observations_pre a0 a1 <=>
     !v. v =
       (let v0 = empty_state in
-        vyperState$evaluation_state_CASE v0 (\v1 v2 v3 v4 v5 v6 v7.
-          OracleStateRecord v1 v2 v3 v4 v5 a0 a1)) ==>
+        vyperState$evaluation_state_CASE v0 (\v1 v2 v3 v4 v5 v6 v7 v8.
+          OracleStateRecord v1 v2 v3 v4 v5 v6 a0 a1)) ==>
       cont_pre (eval_expr_cps empty_evaluation_context
         (Call NoneT Send
           [Literal (BaseT AddressT) (BytesL (REPLICATE 20 0w));
@@ -149,8 +149,8 @@ Theorem oracle_state_observations_pre_rules:
   !os rqs.
     (!v. v =
       (let v0 = empty_state in
-        vyperState$evaluation_state_CASE v0 (\v1 v2 v3 v4 v5 v6 v7.
-          OracleStateRecord v1 v2 v3 v4 v5 os rqs)) ==>
+        vyperState$evaluation_state_CASE v0 (\v1 v2 v3 v4 v5 v6 v7 v8.
+          OracleStateRecord v1 v2 v3 v4 v5 v6 os rqs)) ==>
       cont_pre (eval_expr_cps empty_evaluation_context
         (Call NoneT Send
           [Literal (BaseT AddressT) (BytesL (REPLICATE 20 0w));
@@ -167,8 +167,8 @@ Theorem oracle_state_observations_pre_ind:
     (!os rqs.
       (!v. v =
         (let v0 = empty_state in
-          vyperState$evaluation_state_CASE v0 (\v1 v2 v3 v4 v5 v6 v7.
-            OracleStateRecord v1 v2 v3 v4 v5 os rqs)) ==>
+          vyperState$evaluation_state_CASE v0 (\v1 v2 v3 v4 v5 v6 v7 v8.
+            OracleStateRecord v1 v2 v3 v4 v5 v6 os rqs)) ==>
         cont_pre (eval_expr_cps empty_evaluation_context
           (Call NoneT Send
             [Literal (BaseT AddressT) (BytesL (REPLICATE 20 0w));
@@ -186,8 +186,8 @@ Theorem oracle_state_observations_pre_strongind:
     (!os rqs.
       (!v. v =
         (let v0 = empty_state in
-          vyperState$evaluation_state_CASE v0 (\v1 v2 v3 v4 v5 v6 v7.
-            OracleStateRecord v1 v2 v3 v4 v5 os rqs)) ==>
+          vyperState$evaluation_state_CASE v0 (\v1 v2 v3 v4 v5 v6 v7 v8.
+            OracleStateRecord v1 v2 v3 v4 v5 v6 os rqs)) ==>
         cont_pre (eval_expr_cps empty_evaluation_context
           (Call NoneT Send
             [Literal (BaseT AddressT) (BytesL (REPLICATE 20 0w));
@@ -226,9 +226,9 @@ QED
 Theorem oracle_state_some_cv:
   oracle_state_observations (SOME []) [] /\
   oracle_state_observations (SOME [extCallOracle$failed_outcome
-    <|cr_target := 0w; cr_value := 0; cr_data := []; cr_static := F;
+    <|cr_kind := MessageCall; cr_gas := NONE; cr_data_len := 0; cr_target := 0w; cr_value := 0; cr_data := []; cr_static := F;
       cr_accounts := empty_accounts; cr_tStorage := empty_transient_storage|>])
-    [<|cr_target := 0w; cr_value := 0; cr_data := []; cr_static := F;
+    [<|cr_kind := MessageCall; cr_gas := NONE; cr_data_len := 0; cr_target := 0w; cr_value := 0; cr_data := []; cr_static := F;
        cr_accounts := empty_accounts; cr_tStorage := empty_transient_storage|>]
 Proof
   CONV_TAC cv_eval
@@ -239,9 +239,9 @@ QED
 Theorem oracle_state_some_cv:
   ~oracle_state_observations (SOME []) [] /\
   ~oracle_state_observations (SOME [extCallOracle$failed_outcome
-    <|cr_target := 0w; cr_value := 0; cr_data := []; cr_static := F;
+    <|cr_kind := MessageCall; cr_gas := NONE; cr_data_len := 0; cr_target := 0w; cr_value := 0; cr_data := []; cr_static := F;
       cr_accounts := empty_accounts; cr_tStorage := empty_transient_storage|>])
-    [<|cr_target := 0w; cr_value := 0; cr_data := []; cr_static := F;
+    [<|cr_kind := MessageCall; cr_gas := NONE; cr_data_len := 0; cr_target := 0w; cr_value := 0; cr_data := []; cr_static := F;
        cr_accounts := empty_accounts; cr_tStorage := empty_transient_storage|>]
 Proof
   CONV_TAC cv_eval

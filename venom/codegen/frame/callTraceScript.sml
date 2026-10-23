@@ -43,7 +43,9 @@ Definition request_of_def:
   request_of s =
     let c = FST (HD s.contexts);
         valueOffset = if next_opcode c = SOME Call then 1 else 0
-    in <| cr_target := w2w (EL 1 c.stack);
+    in <| cr_kind := MessageCall; cr_gas := NONE;
+          cr_data_len := w2n (EL (3 + valueOffset) c.stack);
+          cr_target := w2w (EL 1 c.stack);
           cr_value := if valueOffset = 1 then w2n (EL 2 c.stack) else 0;
           cr_data := take_pad_0 (w2n (EL (3 + valueOffset) c.stack))
                        (DROP (w2n (EL (2 + valueOffset) c.stack)) c.memory);
@@ -57,7 +59,8 @@ End
 Definition outcome_of_def:
   outcome_of s n =
     let c = FST (HD s.contexts)
-    in <| co_success := (HD c.stack <> 0w);
+    in <| co_created := 0w; co_toDelete := s.rollback.toDelete;
+          co_success := (HD c.stack <> 0w);
           co_returnData := c.returnData;
           co_accounts := s.rollback.accounts;
           co_tStorage := s.rollback.tStorage;

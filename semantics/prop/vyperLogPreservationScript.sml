@@ -1539,9 +1539,9 @@ Theorem log_extends_outcome_rules[local]:
   (!s. log_extends s s) /\
   (!s t u. log_extends s t /\ log_extends t u ==> log_extends s u) /\
   (!s os rqs. log_extends s (s with <|outcomes := os; requests := rqs|>)) /\
-  (!s accounts transient logs. log_extends s
+  (!s accounts transient logs pending. log_extends s
      (s with <|accounts := accounts; tStorage := transient;
-               logs := s.logs ++ logs|>))
+               logs := s.logs ++ logs; pending_deletions := pending|>))
 Proof
   rpt conj_tac
   >- simp[log_extends_refl]

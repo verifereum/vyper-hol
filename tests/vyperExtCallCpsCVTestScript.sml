@@ -36,7 +36,7 @@ val () = cv_auto_trans cpscv_state_def;
 
 Definition cpscv_outcome_def:
   cpscv_outcome success data balance =
-    <|co_success := success; co_returnData := data;
+    <|co_created := 0w; co_toDelete := []; co_success := success; co_returnData := data;
       co_accounts := update_account 11w (empty_account_state with balance := balance) empty_accounts;
       co_tStorage := vfmExecution$update_transient_storage 11w
         (update_storage 1w 8w empty_storage) empty_transient_storage;
@@ -132,10 +132,10 @@ QED
 
 Theorem cpscv_NONE_concrete_code_failure:
   cpscv_observe T 9w (BaseT (UintT 256)) NONE NONE
-    (INR (Error (RuntimeError "ExtCall target has no code")))
+    (INR (Error (RuntimeError "ExtCall reverted")))
     3 4w cpscv_initial_logs cpscv_initial_requests NONE /\
   cpscv_observe F 9w (BaseT (UintT 256)) NONE NONE
-    (INR (Error (RuntimeError "ExtCall target has no code")))
+    (INR (Error (RuntimeError "ExtCall reverted")))
     3 4w cpscv_initial_logs cpscv_initial_requests NONE
 Proof
   CONV_TAC cv_eval

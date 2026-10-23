@@ -11,7 +11,9 @@ Ancestors
 Definition venom_call_request_def:
   venom_call_request s (addr:bytes32) (value:bytes32)
                      (argsOff:bytes32) (argsSize:bytes32) is_static =
-    <| cr_target := w2w addr;
+    <| cr_kind := MessageCall; cr_gas := NONE;
+       cr_data_len := LENGTH (read_memory (w2n argsOff) (w2n argsSize) s);
+       cr_target := w2w addr;
        cr_value := w2n value;
        cr_data := read_memory (w2n argsOff) (w2n argsSize) s;
        cr_static := (is_static \/ s.vs_call_ctx.cc_static);

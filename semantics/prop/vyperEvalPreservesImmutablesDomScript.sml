@@ -1832,9 +1832,9 @@ Proof
   `!s os rqs. preserves_immutables_dom cx s
       (s with <|outcomes := os; requests := rqs|>)` by
     (rpt gen_tac >> irule preserves_immutables_dom_eq >> simp[]) >>
-  `!s accounts transient logs. preserves_immutables_dom cx s
+  `!s accounts transient logs pending. preserves_immutables_dom cx s
       (s with <|accounts := accounts; tStorage := transient;
-                logs := s.logs ++ logs|>)` by
+                logs := s.logs ++ logs; pending_deletions := pending|>)` by
     (rpt gen_tac >> irule preserves_immutables_dom_eq >> simp[]) >>
   `!s. preserves_immutables_dom cx s s` by simp[preserves_immutables_dom_refl] >>
   drule_all (ExtCall_outcome_transport |> Q.INST

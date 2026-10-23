@@ -14,9 +14,15 @@ Libs
 
 (* ===== Requests and outcomes ===== *)
 
-(* Deliberately no forwarded-gas field: the source has no such observation. *)
 Datatype:
-  call_request = <| cr_target : address;
+  call_kind = MessageCall | CreateCall | Create2Call bytes32
+End
+
+Datatype:
+  call_request = <| cr_kind : call_kind;
+                    cr_gas : num option;
+                    cr_data_len : num;
+                    cr_target : address;
                     cr_value : num;
                     cr_data : byte list;
                     cr_static : bool;
@@ -25,7 +31,9 @@ Datatype:
 End
 
 Datatype:
-  call_outcome = <| co_success : bool;
+  call_outcome = <| co_created : address;
+                    co_toDelete : address list;
+                    co_success : bool;
                     co_returnData : byte list;
                     co_accounts : evm_accounts;
                     co_tStorage : transient_storage;
@@ -77,14 +85,15 @@ val () = cv_auto_trans
 
 Definition computed_precompile_def:
   computed_precompile rq <=>
-    rq.cr_value = 0 /\ IS_SOME (precompile_result rq.cr_target rq.cr_data)
+    rq.cr_kind = MessageCall /\ rq.cr_value = 0 /\ IS_SOME (precompile_result rq.cr_target rq.cr_data)
 End
 
 val () = cv_auto_trans computed_precompile_def;
 
 Definition failed_outcome_def:
   failed_outcome rq =
-    <| co_success := F; co_returnData := []; co_accounts := rq.cr_accounts;
+    <| co_created := 0w; co_toDelete := [];
+       co_success := F; co_returnData := []; co_accounts := rq.cr_accounts;
        co_tStorage := rq.cr_tStorage; co_logs := [] |>
 End
 
@@ -112,12 +121,22 @@ val () = cv_auto_trans record_request_def;
 
 Definition adopt_outcome_def:
   adopt_outcome rq outcome (accounts, tStorage, logs) =
-    if outcome.co_success /\ ~rq.cr_static
-    then (outcome.co_accounts, outcome.co_tStorage, logs ++ outcome.co_logs)
-    else (accounts, tStorage, logs)
+    (if ~rq.cr_static /\ (outcome.co_success \/ rq.cr_kind <> MessageCall)
+     then outcome.co_accounts else accounts,
+     if ~rq.cr_static /\ (outcome.co_success \/ rq.cr_kind <> MessageCall)
+     then outcome.co_tStorage else tStorage,
+     if outcome.co_success /\ ~rq.cr_static
+     then logs ++ outcome.co_logs else logs)
 End
 
 val () = cv_auto_trans adopt_outcome_def;
+
+(* Outcomes carry a full pending-deletion snapshot, not a delta. *)
+Definition adopt_outcome_deletions_def:
+  adopt_outcome_deletions rq outcome pending =
+    if outcome.co_success /\ ~rq.cr_static then outcome.co_toDelete else pending
+End
+val () = cv_auto_trans adopt_outcome_deletions_def;
 
 (* Export the remaining outcome selector too, for source/Venom consumers. *)
 val () = cv_trans (DB.fetch "extCallOracle"
@@ -144,7 +163,7 @@ QED
 
 Theorem computed_precompile_addresses:
   computed_precompile rq <=>
-    rq.cr_value = 0 /\
+    rq.cr_kind = MessageCall /\ rq.cr_value = 0 /\
     (rq.cr_target = 1w \/ rq.cr_target = 2w \/
      rq.cr_target = 6w \/ rq.cr_target = 7w)
 Proof
@@ -276,7 +295,7 @@ Proof
 QED
 
 Theorem take_outcome_computed_valid:
-  rq.cr_value = 0 /\ precompile_result rq.cr_target rq.cr_data = SOME (SOME bs) ==>
+  rq.cr_kind = MessageCall /\ rq.cr_value = 0 /\ precompile_result rq.cr_target rq.cr_data = SOME (SOME bs) ==>
   take_outcome rq os =
     (failed_outcome rq with <| co_success := T; co_returnData := bs |>, os) /\
   record_request rq rqs = rqs
@@ -288,7 +307,7 @@ QED
 (* In particular invalid ecrecover is a successful computed call, unlike
  * invalid EC points. Both leave the oracle and request trace untouched. *)
 Theorem take_outcome_empty_ecrecover:
-  rq.cr_value = 0 /\ rq.cr_target = 1w /\ rq.cr_data = [] ==>
+  rq.cr_kind = MessageCall /\ rq.cr_value = 0 /\ rq.cr_target = 1w /\ rq.cr_data = [] ==>
   take_outcome rq os =
     (failed_outcome rq with <| co_success := T; co_returnData := [] |>, os) /\
   record_request rq rqs = rqs
@@ -298,7 +317,7 @@ Proof
 QED
 
 Theorem take_outcome_computed_invalid:
-  rq.cr_value = 0 /\ precompile_result rq.cr_target rq.cr_data = SOME NONE ==>
+  rq.cr_kind = MessageCall /\ rq.cr_value = 0 /\ precompile_result rq.cr_target rq.cr_data = SOME NONE ==>
   take_outcome rq os = (failed_outcome rq, os) /\ record_request rq rqs = rqs
 Proof
   strip_tac >>
@@ -306,7 +325,7 @@ Proof
 QED
 
 Theorem take_outcome_invalid_ec:
-  rq.cr_value = 0 /\ (rq.cr_target = 6w \/ rq.cr_target = 7w) /\
+  rq.cr_kind = MessageCall /\ rq.cr_value = 0 /\ (rq.cr_target = 6w \/ rq.cr_target = 7w) /\
   rq.cr_data = REPLICATE 63 0w ++ [1w] ==>
   take_outcome rq os = (failed_outcome rq, os) /\ record_request rq rqs = rqs
 Proof
@@ -324,7 +343,7 @@ Proof
 QED
 
 Theorem adopt_outcome_failed[simp]:
-  ~outcome.co_success ==>
+  rq.cr_kind = MessageCall /\ ~outcome.co_success ==>
   adopt_outcome rq outcome (accounts, tStorage, logs) = (accounts, tStorage, logs)
 Proof
   simp[adopt_outcome_def]
@@ -364,4 +383,60 @@ Theorem adopt_outcome_computed:
 Proof
   strip_tac >> drule computed_precompile_state >> strip_tac >>
   simp[adopt_outcome_def]
+QED
+
+(* CREATE is never a computed precompile, even at a precompile address. *)
+Theorem computed_precompile_create[simp]:
+  rq.cr_kind <> MessageCall ==> ~computed_precompile rq
+Proof
+  simp[computed_precompile_def]
+QED
+
+Theorem take_outcome_create:
+  rq.cr_kind <> MessageCall ==>
+  take_outcome rq (outcome::rest) = (outcome,rest) /\
+  take_outcome rq [] = (failed_outcome rq,[]) /\
+  record_request rq rqs = rqs ++ [rq]
+Proof
+  simp[take_outcome_def, record_request_def]
+QED
+
+Theorem adopt_outcome_message:
+  rq.cr_kind = MessageCall ==>
+  adopt_outcome rq outcome (accounts,ts,logs) =
+    if outcome.co_success /\ ~rq.cr_static
+    then (outcome.co_accounts,outcome.co_tStorage,logs ++ outcome.co_logs)
+    else (accounts,ts,logs)
+Proof
+  rw[adopt_outcome_def] >> gvs[]
+QED
+
+Theorem adopt_outcome_failed_create:
+  rq.cr_kind <> MessageCall /\ ~rq.cr_static /\ ~outcome.co_success ==>
+  adopt_outcome rq outcome (accounts,ts,logs) =
+    (outcome.co_accounts,outcome.co_tStorage,logs) /\
+  adopt_outcome_deletions rq outcome pending = pending
+Proof
+  simp[adopt_outcome_def, adopt_outcome_deletions_def]
+QED
+
+Theorem adopt_outcome_deletions_success:
+  outcome.co_success /\ ~rq.cr_static ==>
+  adopt_outcome_deletions rq outcome pending = outcome.co_toDelete
+Proof
+  simp[adopt_outcome_deletions_def]
+QED
+
+Theorem adopt_outcome_deletions_static_failed:
+  rq.cr_static \/ ~outcome.co_success ==>
+  adopt_outcome_deletions rq outcome pending = pending
+Proof
+  rw[adopt_outcome_deletions_def]
+QED
+
+Theorem failed_outcome_create_fields[simp]:
+  (failed_outcome rq).co_created = 0w /\
+  (failed_outcome rq).co_toDelete = []
+Proof
+  simp[failed_outcome_def]
 QED
