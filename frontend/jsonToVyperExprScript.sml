@@ -1185,6 +1185,14 @@ End
 
 (* ===== Statement Translation ===== *)
 
+(* Vyper reads the name `UNREACHABLE` as an assert's message or a raise's
+   exception as the unreachable marker, which fails with INVALID rather than
+   reverting (vyper/semantics/analysis/local.py, vyper/codegen/stmt.py). *)
+Definition is_unreachable_def:
+  (is_unreachable (JE_Name name _ _ _) = (name = "UNREACHABLE")) /\
+  (is_unreachable _ = F)
+End
+
 (* Local bindings enter the context after their initializer and stay within
    their block; loop binders are visible only in the loop body. *)
 Definition translate_stmt_def:
@@ -1195,11 +1203,15 @@ Definition translate_stmt_def:
   (translate_stmt nominal_index all_import_maps ctx (JS_Return NONE) = Return NONE) /\
   (translate_stmt nominal_index all_import_maps ctx (JS_Return (SOME e)) = Return (SOME (translate_expr ctx e))) /\
   (translate_stmt nominal_index all_import_maps ctx (JS_Raise NONE) = Raise RaiseBare) /\
-  (translate_stmt nominal_index all_import_maps ctx (JS_Raise (SOME e)) = Raise (RaiseReason (translate_expr ctx e))) /\
+  (translate_stmt nominal_index all_import_maps ctx (JS_Raise (SOME e)) =
+    if is_unreachable e then Raise RaiseUnreachable
+    else Raise (RaiseReason (translate_expr ctx e))) /\
   (translate_stmt nominal_index all_import_maps ctx (JS_Assert test NONE) =
     Assert (translate_expr ctx test) AssertBare) /\
   (translate_stmt nominal_index all_import_maps ctx (JS_Assert test (SOME msg)) =
-    Assert (translate_expr ctx test) (AssertReason (translate_expr ctx msg))) /\
+    Assert (translate_expr ctx test)
+      (if is_unreachable msg then AssertUnreachable
+       else AssertReason (translate_expr ctx msg))) /\
   (translate_stmt nominal_index all_import_maps ctx (JS_Log (alias_opt, src, name) args) =
     let nsid =
       case alias_opt of
