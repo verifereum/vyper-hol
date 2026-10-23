@@ -12,6 +12,7 @@
  *   type_bounds      — (lo, hi) word256 bounds for type
  *   struct_field_offset — byte offset of struct field
  *   nsid_to_string   — namespace ID to lookup string
+ *   internal_fn_label — Venom label of an internal function (Vyper's spelling)
  *   local_ptrs_rel   — live locals held through pointer variables match memory
  *   compile_state_ok — well-formedness: bound labels disjoint from future fresh labels
  *   label_external   — label not bound and not in future fresh-label co-domain
@@ -156,6 +157,76 @@ Definition nsid_to_string_def:
   nsid_to_string (NONE, name) = name ∧
   nsid_to_string (SOME (n:num), name) = (toString n) ++ "." ++ name
 End
+
+(* ===== Internal Function Labels ===== *)
+(* Vyper's str(typ), used only to spell internal function labels.
+   Mirrors Python (vyper/semantics/types/): primitives.py (int/uint, bytesM),
+   bytestrings.py (Bytes[n]/String[n]), subscriptable.py (SArray, DynArray,
+   tuple), user.py (flag, struct). An interface-typed parameter is
+   BaseT AddressT here and prints as address, where Python prints the
+   interface name; labels never reach the bytecode. *)
+Definition vyper_type_str_def:
+  vyper_type_str (BaseT (UintT n)) = "uint" ++ toString n ∧
+  vyper_type_str (BaseT (IntT n)) = "int" ++ toString n ∧
+  vyper_type_str (BaseT BoolT) = "bool" ∧
+  vyper_type_str (BaseT DecimalT) = "decimal" ∧
+  vyper_type_str (BaseT AddressT) = "address" ∧
+  vyper_type_str (BaseT (BytesT (Fixed m))) = "bytes" ++ toString m ∧
+  vyper_type_str (BaseT (BytesT (Dynamic n))) =
+    "Bytes[" ++ toString n ++ "]" ∧
+  vyper_type_str (BaseT (StringT n)) = "String[" ++ toString n ++ "]" ∧
+  vyper_type_str (ArrayT t (Fixed n)) =
+    vyper_type_str t ++ "[" ++ toString n ++ "]" ∧
+  vyper_type_str (ArrayT t (Dynamic n)) =
+    "DynArray[" ++ vyper_type_str t ++ ", " ++ toString n ++ "]" ∧
+  vyper_type_str (TupleT [t]) = "(" ++ vyper_type_str t ++ ",)" ∧
+  vyper_type_str (TupleT ts) = "(" ++ vyper_type_strs ", " ts ++ ")" ∧
+  vyper_type_str (StructT id) = SND id ∧
+  vyper_type_str (FlagT id) = SND id ∧
+  vyper_type_str NoneT = "" ∧
+  vyper_type_strs sep [] = "" ∧
+  vyper_type_strs sep [t] = vyper_type_str t ∧
+  vyper_type_strs sep (t :: ts) =
+    vyper_type_str t ++ sep ++ vyper_type_strs sep ts
+Termination
+  WF_REL_TAC `measure (\x. case x of
+                              INL t => type_size t
+                            | INR (_, ts) => list_size type_size ts)`
+End
+
+(* Venom label of an internal function, from its lookup name (nsid_to_string
+   of its nsid) and declared parameter types, defaulted ones included.
+   The space keeps it apart from every source identifier, external entry
+   label ("fn_" ++ name), unit entry ("__entry"/"__deploy"), codegen label
+   ("revert", "code_end") and fresh label ("@..."). Python's label also has
+   the function id after "internal "; the lookup name is already unique
+   among a unit's internal functions, so it is left out.
+   Mirrors Python: codegen_venom/module.py _generate_internal_function and
+   codegen_venom/expr.py lower_Call (internal calls). *)
+Definition internal_fn_label_def:
+  internal_fn_label (name : string) (arg_tys : type list) (is_ctor : bool) =
+    "internal " ++ name ++ "(" ++ vyper_type_strs "," arg_tys ++ ")" ++
+    (if is_ctor then "_deploy" else "_runtime")
+End
+
+Theorem internal_fn_label_prefix:
+  !name arg_tys is_ctor. isPREFIX "internal " (internal_fn_label name arg_tys is_ctor)
+Proof
+  simp[internal_fn_label_def]
+QED
+
+(* Equal labels name the same function, for names without "(" (source
+   identifiers and nsid_to_string values). *)
+Theorem internal_fn_label_11:
+  !n1 n2 tys1 tys2 c1 c2.
+    ~MEM #"(" n1 /\ ~MEM #"(" n2 /\
+    internal_fn_label n1 tys1 c1 = internal_fn_label n2 tys2 c2 ==>
+    n1 = n2
+Proof
+  simp[internal_fn_label_def] >>
+  Induct >> Cases_on `n2` >> rw[] >> gvs[] >>
+  first_x_assum irule >> metis_tac[]
+QED
 
 (* Key of a module-level variable (storage, transient, HashMap, immutable) in
    the name-keyed compile_env tables. Arguments and locals use their plain
@@ -363,6 +434,10 @@ Datatype:
        pass_via_stack: per-arg T=stack, F=memory. Order matches func_t.arguments.
        Mirrors Python: calling_convention.py pass_via_stack + returns_stack_count *)
     ce_func_info : string -> (num # num # bool list);
+    (* Internal function declared parameter types, defaulted ones included:
+       func_name → arg types. Spells the INVOKE target (internal_fn_label).
+       Mirrors Python: func_t.arguments in expr.py lower_Call *)
+    ce_func_param_types : string -> type list;
     (* Nonreentrant lock info for explicit return statements:
        (is_nonreentrant, nkey, use_transient, is_view).
        Python: stmt.py _lower_external_return calls emit_nonreentrant_unlock.

@@ -2295,8 +2295,10 @@ End
    into the Call AST node before codegen (Python does this). *)
 Definition compile_call_def:
   compile_call cfn cenv ret_ty ty (IntCall func_id) args default_ret st =
-    (let label = nsid_to_string func_id in
-    let (returns_count, return_buf_size, pass_via_stack) = cenv.ce_func_info label in
+    (let name = nsid_to_string func_id in
+    let label = internal_fn_label name (cenv.ce_func_param_types name)
+                  cenv.ce_is_ctor in
+    let (returns_count, return_buf_size, pass_via_stack) = cenv.ce_func_info name in
     let arg_types = MAP expr_type args in
     let (arg_vals, st1) = compile_multi_vvs cfn cenv args st in
     let (return_buf, st2) =
