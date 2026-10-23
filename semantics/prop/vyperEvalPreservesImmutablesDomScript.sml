@@ -1616,7 +1616,13 @@ Theorem case_Builtin_imm_dom[local]:
   ∀cx ty bt es.
     (∀s'' x t.
        type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' =
-       (INL x,t) ∧ bt ≠ Len ⇒
+       (INL x,t) ∧ bt ≠ Len ∧ ¬(bt = Bop In ∨ bt = Bop NotIn) ⇒
+       ∀st res st'.
+         eval_exprs cx es st = (res,st') ⇒
+         preserves_immutables_dom cx st st') ∧
+    (∀s'' x t.
+       type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' =
+       (INL x,t) ∧ bt ≠ Len ∧ (bt = Bop In ∨ bt = Bop NotIn) ⇒
        ∀st res st'.
          eval_exprs cx es st = (res,st') ⇒
          preserves_immutables_dom cx st st') ∧
@@ -1646,13 +1652,15 @@ Proof
        first_x_assum (qspec_then `st` mp_tac) >>
        simp[check_def, type_check_def, assert_def, return_def] >> NO_TAC) >>
   (* bt ≠ Len branch *)
+  Cases_on `bt = Bop In ∨ bt = Bop NotIn` >> gvs[] >>
   `∀st res st'. eval_exprs cx es st = (res,st') ⇒
      preserves_immutables_dom cx st st'` by
     (first_x_assum (qspec_then `st` mp_tac) >>
      simp[check_def, type_check_def, assert_def, return_def]) >>
-  gvs[bind_def, AllCaseEqs(), return_def, raise_def, get_accounts_def] >>
-  Cases_on `evaluate_builtin cx s'³'.accounts ty bt vs` >>
-  gvs[return_def, raise_def]
+  gvs[bind_def, ignore_bind_def, AllCaseEqs(), return_def, raise_def,
+      get_accounts_def, lift_option_type_def, lift_sum_def,
+      type_check_def, check_def, assert_def, option_CASE_rator, sum_CASE_rator] >>
+  first_x_assum drule >> simp[]
 QED
 
 (* ----- Case: eval_expr (TypeBuiltin tb typ es) ----- *)

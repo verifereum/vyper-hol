@@ -1856,6 +1856,7 @@ Proof
         AllCaseEqs(), COND_RATOR, return_def] >>
     imp_res_tac type_check_state >>
     imp_res_tac lift_sum_state >>
+    imp_res_tac lift_option_type_state >>
     imp_res_tac materialise_state >>
     imp_res_tac toplevel_array_length_state >> gvs[] >>
     rpt(first_x_assum drule >> rw[]) >>

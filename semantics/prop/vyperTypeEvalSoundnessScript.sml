@@ -1822,6 +1822,24 @@ Proof
 QED
 
 
+Theorem typed_membership_success[local]:
+  well_typed_builtin_app ty bt [t1;t2] /\
+  (bt = Bop In \/ bt = Bop NotIn) /\
+  evaluate_type tenv t1 = SOME tv1 /\
+  evaluate_type tenv t2 = SOME tv2 /\
+  value_has_type tv1 v1 /\ value_has_type tv2 v2 ==>
+  ty = BaseT BoolT /\
+  ?b. evaluate_membership tv2 (bt = Bop NotIn) v1 v2 = INL (BoolV b)
+Proof
+  strip_tac >>
+  gvs[well_typed_builtin_app_def, well_typed_binop_def] >>
+  gvs[evaluate_type_def, AllCaseEqs()] >>
+  Cases_on `v2` >> gvs[value_has_type_def, evaluate_membership_def] >>
+  Cases_on `v1` >>
+  gvs[value_has_type_def, evaluate_membership_def, evaluate_binop_def,
+      binop_negate_def]
+QED
+
 Theorem eval_all_type_sound_mutual:
   (!cx s. !env ret_ty env' st res st'.
     type_stmt env ret_ty s = SOME env' /\ env_consistent env cx st /\ state_well_typed st /\
@@ -5485,13 +5503,16 @@ Resume eval_all_type_sound_mutual[Expr_Builtin]:
                     Cases_on `es` >> simp[well_typed_builtin_app_def] >>
                     Cases_on `t` >> gvs[well_typed_expr_def])) >>
       strip_tac >> strip_tac >> gvs[]) >>
+  Cases_on `bt = Bop In \/ bt = Bop NotIn`
+  >- suspend "Expr_Membership" >>
+  qpat_assum `~(bt = Bop In \/ bt = Bop NotIn)` (fn th => rewrite_tac[th]) >>
   qpat_assum `bt <> Len` (fn th => rewrite_tac[th]) >>
   qpat_assum `builtin_args_length_ok bt (LENGTH es)` (fn th => rewrite_tac[th]) >>
   simp_tac(srw_ss())[bind_def, ignore_bind_def, return_def, raise_def,
                      type_check_def, assert_def, get_accounts_def, lift_sum_def] >>
   Cases_on `eval_exprs cx es st` >>
   rename1 `eval_exprs cx es st = (args_res,args_st)` >>
-  qpat_x_assum `!s'' x t. _ /\ bt <> Len ==> _`
+  qpat_x_assum `!s'' x t. _ /\ bt <> Len /\ ~(bt = Bop In \/ bt = Bop NotIn) ==> _`
     (qspecl_then [`st`,`()`,`st`] mp_tac) >>
   (impl_tac >- (simp[type_check_def, assert_def] >> metis_tac[])) >> strip_tac >>
   qpat_x_assum `!env st res st'. _`
@@ -5532,6 +5553,32 @@ Resume eval_all_type_sound_mutual[Expr_Builtin]:
       drule_all well_typed_builtin_app_no_type_error >>
       disch_then (qspec_then `msg` mp_tac) >> gvs[]]) >>
   strip_tac >> gvs[eval_exprs_failure_builtin_case, no_type_error_result_def]
+QED
+
+Resume eval_all_type_sound_mutual[Expr_Membership]:
+  qpat_x_assum `!s'' x t. _ /\ bt <> Len /\ (bt = Bop In \/ bt = Bop NotIn) ==> _`
+    (qspecl_then [`st`,`()`,`st`] mp_tac) >>
+  (impl_tac >- simp[type_check_def, assert_def]) >> strip_tac >>
+  rpt (qpat_x_assum `!s'' x t. type_check _ _ _ = _ /\ _ ==> _` kall_tac) >>
+  Cases_on `eval_exprs cx es st` >>
+  rename1 `eval_exprs cx es st = (args_res,args_st)` >>
+  qpat_x_assum `!env st res st'. _`
+    (qspecl_then [`env`,`st`,`args_res`,`args_st`] mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  Cases_on `args_res`
+  >- (rename1 `eval_exprs cx es st = (INL vs,args_st)` >>
+      gvs[exprs_runtime_typed_def] >>
+      gvs[builtin_args_length_ok_def, LENGTH_EQ_NUM_compute] >>
+      drule typed_membership_success >>
+      simp[] >> strip_tac >>
+      first_x_assum drule_all >> strip_tac >>
+      gvs[bind_def, ignore_bind_def, assert_def, return_def, raise_def,
+          lift_option_type_def, lift_sum_def, no_type_error_result_def,
+          expr_result_typed_def, expr_runtime_typed_def, expr_type_def,
+          evaluate_type_def, toplevel_value_typed_Value, value_has_type_def] >>
+      strip_tac >> gvs[toplevel_value_typed_Value, value_has_type_def]) >>
+  gvs[bind_def, ignore_bind_def, assert_def, return_def, raise_def,
+      no_type_error_result_def] >> strip_tac >> gvs[]
 QED
 
 Resume eval_all_type_sound_mutual[Expr_TypeBuiltin]:

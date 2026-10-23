@@ -1305,6 +1305,12 @@ Definition evaluate_def:
       tv <- eval_expr cx (HD es);
       len <- toplevel_array_length cx tv;
       return $ IntV (&len)
+    od else if bt = Bop In ∨ bt = Bop NotIn then do
+      vs <- eval_exprs cx es;
+      type_check (LENGTH vs = 2) "Membership args";
+      tv <- lift_option_type
+        (evaluate_type (get_tenv cx) (expr_type (EL 1 es))) "Membership type";
+      lift_sum $ evaluate_membership tv (bt = Bop NotIn) (EL 0 vs) (EL 1 vs)
     od else do
       vs <- eval_exprs cx es;
       acc <- get_accounts;

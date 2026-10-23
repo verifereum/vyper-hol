@@ -158,11 +158,37 @@ Proof
   imp_res_tac get_Value_state >> res_tac >> gvs[]
 QED
 
+Theorem non_len_builtin_state[local]:
+  bt <> Len /\
+  (!s r s'. eval_exprs cx es s = (r,s') ==> s = s') /\
+  eval_expr cx (Builtin ty bt es) st = (res,st') ==> st = st'
+Proof
+  strip_tac >>
+  qpat_x_assum `eval_expr cx _ st = _` mp_tac >>
+  simp[Once evaluate_def] >>
+  Cases_on `bt = Bop In \/ bt = Bop NotIn` >>
+  simp[bind_def, ignore_bind_def, type_check_def, check_def, assert_def,
+       return_def, raise_def, get_accounts_def, lift_sum_def, lift_option_type_def] >>
+  Cases_on `eval_exprs cx es st` >>
+  Cases_on `q` >>
+  gvs[] >>
+  first_x_assum drule >> strip_tac >> gvs[] >>
+  simp[return_def, raise_def, CaseEq "prod", CaseEq "sum", CaseEq "option"] >>
+  rpt strip_tac >>
+  gvs[option_CASE_rator, sum_CASE_rator, return_def, raise_def,
+      CaseEq "option", CaseEq "sum"]
+QED
+
 Theorem case_Builtin[local]:
   ∀cx ty bt es.
     (∀s'' x t.
        type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' = (INL x, t) ∧
-       bt ≠ Len ⇒
+       bt ≠ Len ∧ ¬(bt = Bop In ∨ bt = Bop NotIn) ⇒
+       ∀st res st'.
+         eval_exprs cx es st = (res, st') ⇒ EVERY pure_expr es ⇒ st = st') ∧
+    (∀s'' x t.
+       type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' = (INL x, t) ∧
+       bt ≠ Len ∧ (bt = Bop In ∨ bt = Bop NotIn) ⇒
        ∀st res st'.
          eval_exprs cx es st = (res, st') ⇒ EVERY pure_expr es ⇒ st = st') ∧
     (∀s'' x t.
@@ -175,17 +201,12 @@ Theorem case_Builtin[local]:
        pure_expr (Builtin ty bt es) ⇒ st = st')
 Proof
   rpt strip_tac >>
-  gvs[evaluate_def] >>
-  gvs[pure_expr_def] >>
-  gvs[bind_def, ignore_bind_def] >>
-  gvs[check_def, type_check_def, assert_def] >>
-  gvs[return_def, raise_def] >>
-  gvs[get_accounts_def, lift_sum_def] >>
-  gvs[AllCaseEqs()] >>
-  Cases_on `bt = Len` >> gvs[bind_def, AllCaseEqs(), return_def, raise_def]
-  (* Len case: eval_expr (HD es) + toplevel_array_length *)
-  (* Len case *)
-  >- (gvs[toplevel_array_length_def, bind_def, AllCaseEqs(),
+  Cases_on `bt = Len`
+  >- (gvs[] >> gvs[evaluate_def, pure_expr_def] >>
+      gvs[bind_def, ignore_bind_def] >>
+      gvs[check_def, type_check_def, assert_def] >>
+      gvs[return_def, raise_def, AllCaseEqs()] >>
+      gvs[toplevel_array_length_def, bind_def, AllCaseEqs(),
           return_def, raise_def, get_accounts_def] >>
       imp_res_tac get_storage_backend_state >> gvs[] >>
       imp_res_tac check_array_bounds_state >> gvs[] >>
@@ -193,13 +214,22 @@ Proof
       imp_res_tac toplevel_array_length_state >>
       `pure_expr (HD es)` by
         (Cases_on `es` >> fs[builtin_args_length_ok_def]) >>
-      first_x_assum drule >> gvs[])
-  (* non-Len case: eval_exprs + evaluate_builtin *)
-  >> TRY (Cases_on `evaluate_builtin cx s''.accounts ty bt vs` >> gvs[return_def, raise_def]) >>
-  first_x_assum drule >> gvs[ETA_THM, sum_CASE_rator, CaseEq"sum",
-    return_def, raise_def, get_accounts_def, builtin_args_length_ok_def,
-    listTheory.LENGTH_EQ_NUM_compute] >>
-  imp_res_tac toplevel_array_length_state >> gvs[]
+      first_x_assum drule >> gvs[]) >>
+  Cases_on `builtin_args_length_ok bt (LENGTH es)`
+  >- (Cases_on `bt = Bop In ∨ bt = Bop NotIn` >>
+      gvs[] >>
+      gvs[type_check_def, check_def, assert_def, return_def] >>
+      qpat_x_assum `pure_expr _` (mp_tac o ONCE_REWRITE_RULE [pure_expr_def]) >>
+      strip_tac >>
+      irule non_len_builtin_state >>
+      goal_assum (drule_at Any) >>
+      gvs[ETA_THM] >> metis_tac[]) >>
+  qpat_x_assum `eval_expr cx _ st = _` mp_tac >>
+  pure_once_rewrite_tac[evaluate_def] >>
+  pure_rewrite_tac[ignore_bind_def, bind_def] >>
+  asm_simp_tac bool_ss [type_check_def, check_def, assert_def, raise_def] >>
+  pure_rewrite_tac[pairTheory.pair_case_thm, sumTheory.sum_case_def] >>
+  simp[]
 QED
 
 Theorem case_Pop[local]:

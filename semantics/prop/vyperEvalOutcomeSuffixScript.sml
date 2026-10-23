@@ -723,7 +723,8 @@ Resume eval_outcomes_suffix_mutual[eval_expr_Attribute]:
   simp[Once evaluate_def] >> OUTCOMES_SUFFIX_TAC >> OUTCOMES_FRAME_TAC >> OUTCOMES_FINISH_TAC
 QED
 Resume eval_outcomes_suffix_mutual[eval_expr_Builtin]:
-  simp[Once evaluate_def] >> OUTCOMES_SUFFIX_TAC >> OUTCOMES_FRAME_TAC >> OUTCOMES_FINISH_TAC
+  simp[Once evaluate_def] >> OUTCOMES_SUFFIX_TAC >> OUTCOMES_FRAME_TAC >>
+  (OUTCOMES_FINISH_TAC ORELSE metis_tac[])
 QED
 Resume eval_outcomes_suffix_mutual[eval_expr_Pop]:
   simp[Once evaluate_def] >> OUTCOMES_SUFFIX_TAC >> OUTCOMES_FRAME_TAC >> OUTCOMES_FINISH_TAC

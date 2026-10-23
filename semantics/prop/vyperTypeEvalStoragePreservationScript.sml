@@ -2692,20 +2692,21 @@ Resume eval_all_storage_preservation_mutual[Expr_Builtin]:
       Cases_on `q` >> gvs[return_def, raise_def] >>
       rpt strip_tac >> gvs[]) >>
     rpt strip_tac >> gvs[]) >>
-  qpat_assum `bt <> Len` (fn th => rewrite_tac[th]) >>
+  Cases_on `bt = Bop In \/ bt = Bop NotIn` >> gvs[] >>
+  qpat_assum `builtin_args_length_ok bt (LENGTH es)` (fn th => rewrite_tac[th]) >>
   qpat_assum `builtin_args_length_ok bt (LENGTH es)` (fn th => rewrite_tac[th]) >>
   simp_tac(srw_ss())[bind_def, ignore_bind_def, return_def, raise_def,
     type_check_def, assert_def, get_accounts_def, lift_sum_def] >>
   Cases_on `eval_exprs cx es st` >>
   rename1 `eval_exprs cx es st = (args_res,args_st)` >>
-  qpat_x_assum `∀s'' x t. _ ∧ bt ≠ Len ⇒ _`
-    (qspecl_then [`st`, `()`, `st`] mp_tac) >>
+  qpat_x_assum `!s'' t. type_check _ _ _ = _ ==> _`
+    (qspecl_then [`st`, `st`] mp_tac) >>
   (impl_tac >- (simp[type_check_def, assert_def] >> metis_tac[])) >>
   strip_tac >> first_x_assum drule_all >> strip_tac >>
-  Cases_on `args_res` >> gvs[bind_def, return_def, raise_def,
-    get_accounts_def, lift_sum_def]
-  >- (Cases_on `evaluate_builtin cx args_st.accounts ty bt x` >>
-      gvs[return_def, raise_def] >> rpt strip_tac >> gvs[]) >>
+  Cases_on `args_res` >>
+  gvs[bind_def, return_def, raise_def, get_accounts_def, lift_sum_def,
+      lift_option_type_def, vyperMiscTheory.option_CASE_rator,
+      vyperMiscTheory.sum_CASE_rator, AllCaseEqs()] >>
   rpt strip_tac >> gvs[]
 QED
 

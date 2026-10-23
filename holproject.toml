@@ -19,7 +19,8 @@ roots = ["vyperHolScript.sml",
          "tests/vyperCalldataSliceTestScript.sml",
          "tests/vyperRawCallCalldataTestScript.sml",
          "tests/vyperDelegateRawCallTestScript.sml",
-         "tests/vyperTupleSubscriptTestScript.sml"]
+         "tests/vyperTupleSubscriptTestScript.sml",
+         "tests/vyperMembershipSemanticsTestScript.sml"]
 
 [dependencies.verifereum]
 git = "https://github.com/verifereum/verifereum.git"

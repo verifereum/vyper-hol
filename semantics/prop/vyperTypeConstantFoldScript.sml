@@ -113,13 +113,17 @@ Proof
         constant_length_toplevel_array_length >>
       simp[Once evaluate_def, bind_def, ignore_bind_def, return_def,
            type_check_def, assert_def, builtin_args_length_ok_def])
-  >~ [`Builtin`]
-  >- (first_x_assum drule_all >> strip_tac >>
+  >>~- ([`Builtin`], first_x_assum drule_all >> strip_tac >>
+      FIRST [
+        qpat_assum `evaluate_membership _ _ _ _ = INL _` kall_tac >>
+        gvs[] >>
+        simp[Once evaluate_def, bind_def, ignore_bind_def, return_def,
+             type_check_def, assert_def, lift_option_type_def, lift_sum_def],
       qspecl_then [`bt`,`cx`,`mods`,`st.accounts`,`ty`,`vs`] mp_tac
         evaluate_builtin_constant_context >>
       simp[] >> strip_tac >>
       simp[Once evaluate_def, bind_def, ignore_bind_def, return_def,
-           type_check_def, assert_def, get_accounts_def, lift_sum_def])
+           type_check_def, assert_def, get_accounts_def, lift_sum_def]])
   >~ [`TypeBuiltin`]
   >- (first_x_assum drule_all >> strip_tac >>
       rename1 `TypeBuiltin _ tb typ es` >>

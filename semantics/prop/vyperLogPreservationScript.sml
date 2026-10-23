@@ -1070,7 +1070,11 @@ QED
 Theorem case_expr_builtin_logs[local]:
   (!s0 x s1.
      type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s0 =
-       (INL x,s1) /\ bt <> Len ==>
+       (INL x,s1) /\ bt <> Len /\ ~(bt = Bop In \/ bt = Bop NotIn) ==>
+     !st res st'. eval_exprs cx es st = (res,st') ==> log_extends st st') /\
+  (!s0 x s1.
+     type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s0 =
+       (INL x,s1) /\ bt <> Len /\ (bt = Bop In \/ bt = Bop NotIn) ==>
      !st res st'. eval_exprs cx es st = (res,st') ==> log_extends st st') /\
   (!s0 x s1.
      type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s0 =
@@ -1096,16 +1100,18 @@ Proof
        first_x_assum (qspec_then `st` mp_tac) >>
        simp[vyperStateTheory.check_def, vyperStateTheory.type_check_def,
             vyperStateTheory.assert_def, vyperStateTheory.return_def] >> NO_TAC)
+  >> Cases_on `bt = Bop In \/ bt = Bop NotIn` >> gvs[]
   >> `!st res st'. eval_exprs cx es st = (res,st') ==>
         log_extends st st'` by
        (first_x_assum (qspec_then `st` mp_tac) >>
         simp[vyperStateTheory.check_def, vyperStateTheory.type_check_def,
              vyperStateTheory.assert_def, vyperStateTheory.return_def])
-  >> gvs[vyperStateTheory.bind_def, vyperStateTheory.return_def,
-         vyperStateTheory.raise_def, vyperStateTheory.get_accounts_def,
-         AllCaseEqs()]
-  >> BasicProvers.FULL_CASE_TAC
-  >> gvs[vyperStateTheory.return_def, vyperStateTheory.raise_def]
+  >> gvs[vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
+         vyperStateTheory.return_def, vyperStateTheory.raise_def,
+         vyperStateTheory.get_accounts_def, vyperStateTheory.lift_option_type_def,
+         vyperStateTheory.type_check_def, vyperStateTheory.check_def,
+         vyperStateTheory.assert_def, vyperStateTheory.lift_sum_def,
+         option_CASE_rator, sum_CASE_rator, AllCaseEqs()]
   >> first_x_assum drule >> simp[]
 QED
 

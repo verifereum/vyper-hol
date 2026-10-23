@@ -321,7 +321,12 @@ Theorem case_Builtin_dom[local]:
   ∀cx ty bt es.
     (∀s'' x t.
        type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' = (INL x,t) ∧
-       bt ≠ Len ⇒
+       bt ≠ Len ∧ ¬(bt = Bop In ∨ bt = Bop NotIn) ⇒
+       ∀st res st'. eval_exprs cx es st = (res,st') ⇒
+         MAP FDOM st.scopes = MAP FDOM st'.scopes) ∧
+    (∀s'' x t.
+       type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' = (INL x,t) ∧
+       bt ≠ Len ∧ (bt = Bop In ∨ bt = Bop NotIn) ⇒
        ∀st res st'. eval_exprs cx es st = (res,st') ⇒
          MAP FDOM st.scopes = MAP FDOM st'.scopes) ∧
     (∀s'' x t.
