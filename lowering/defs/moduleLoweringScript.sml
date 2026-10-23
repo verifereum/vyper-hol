@@ -743,7 +743,7 @@ Definition compile_internal_function_def:
                 NONE => emit_inst RET [return_pc] []
               | SOME _ => emit_inst INVALID [] [])
           od);
-       return (NONE : num option)
+       return ()
     od
 End
 
@@ -782,23 +782,16 @@ End
 
 (* ===== Generate Internal Function Bodies ===== *)
 Definition compile_internal_fn_bodies_def:
-  compile_internal_fn_bodies [] = return ([] : (string # num # num) list) ∧
+  compile_internal_fn_bodies [] = return () ∧
   compile_internal_fn_bodies ((fn_lbl, cenv, params, has_ret_buf,
                                is_nr, nkey, use_trans, is_view,
                                is_ctor, imm_len,
                                body, ret_type) :: rest) =
     do new_block fn_lbl;
-       forced_id <- compile_internal_function cenv params has_ret_buf
+       compile_internal_function cenv params has_ret_buf
          is_nr nkey use_trans is_view
          is_ctor imm_len body ret_type;
-       rest_forced <- compile_internal_fn_bodies rest;
-       return
-         (case forced_id of
-            NONE => rest_forced
-          | SOME id =>
-              (fn_lbl, id,
-               (if has_ret_buf then 1 else 0) + LENGTH params + 1) ::
-              rest_forced)
+       compile_internal_fn_bodies rest
     od
 End
 
@@ -857,18 +850,13 @@ Definition compile_generate_deploy_def:
                emit_void ASSERT [no_val]
             od
           else return ());
-         (* Reserve immutables region at position 0 and capture its owning
-            entry block plus instruction ID for checked packaging. *)
-         entry_cs <- comp_get;
-         imm_result <-
+         (* Establish the base of the globally reserved immutable region. *)
+         imm_alloca <-
            (if immutables_len > 0 then
               do alloc_result <- compile_fixed_region_with_id immutables_len;
-                 imm_op <- return (SND alloc_result).buf_operand;
-                 return (imm_op, [])
+                 return (SND alloc_result).buf_operand
               od
-            else return (Lit 0w, []));
-         imm_alloca <- return (FST imm_result);
-         entry_forced <- return (SND imm_result);
+            else return (Lit 0w));
          (* Register constructor args from DATA section. *)
          cenv' <- compile_register_constructor_args
            (cenv with ce_imm_alloca :=
@@ -890,12 +878,11 @@ Definition compile_generate_deploy_def:
                  imm_alloca
             od);
          (* Internal functions: generated regardless of constructor termination *)
-         internal_forced <- compile_internal_fn_bodies ctor_internal_fns;
-         return (entry_forced ++ internal_forced)
+         compile_internal_fn_bodies ctor_internal_fns
       od
     else
       do compile_simple_deploy runtime_size immutables_len;
-         return ([] : (string # num # num) list)
+         return ()
       od
 End
 

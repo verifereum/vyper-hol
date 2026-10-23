@@ -268,35 +268,6 @@ Proof
        emit_def, comp_bind_def, comp_ignore_bind_def, comp_return_def]
 QED
 
-(* Static allocation boundary.  Unlike compile_alloc_buffer, this exposes the
-   instruction ID as a separate result so fixed-placement metadata is keyed by
-   the emitted ALLOCA, never by its SSA output variable. *)
-Definition compile_alloc_buffer_with_id_def:
-  compile_alloc_buffer_with_id size =
-    do id <- fresh_id;
-       out <- fresh_var;
-       emit (mk_inst id ALLOCA [Lit (n2w size)] [out]);
-       return (id, <| buf_operand := Var out; buf_size := size |>)
-    od
-End
-
-Theorem compile_alloc_buffer_with_id_result:
-  !(size:num) (st:compile_state) (id:num) (buf:buffer) (st':compile_state).
-  compile_alloc_buffer_with_id size st = ((id, buf), st') ==>
-  id = st.cs_next_id /\
-  buf.buf_operand = Var ("%" ++ toString st.cs_next_var) /\
-  buf.buf_size = size /\
-  st'.cs_next_id = st.cs_next_id + 1 /\
-  st'.cs_next_var = st.cs_next_var + 1 /\
-  st'.cs_current_insts =
-    st.cs_current_insts ++
-      [mk_inst st.cs_next_id ALLOCA [Lit (n2w size)]
-         ["%" ++ toString st.cs_next_var]]
-Proof
-  simp[compile_alloc_buffer_with_id_def, fresh_id_def, fresh_var_def,
-       emit_def, comp_bind_def, comp_ignore_bind_def, comp_return_def]
-QED
-
 (* A globally reserved immutable region needs no allocator placement metadata. *)
 Definition compile_fixed_region_with_id_def:
   compile_fixed_region_with_id size =

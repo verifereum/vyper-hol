@@ -247,7 +247,6 @@ val internal_tuple_call_ret_alloc_pair =
 val internal_tuple_call_state11 =
   #2 (pairSyntax.dest_pair internal_tuple_call_ret_alloc_pair)
 (* Region emission is replayed immediately after the entry pseudos above. *)
-val internal_tuple_call_forced_id = ``NONE : num option``
 val internal_tuple_call_state12 = internal_tuple_call_state11
 val internal_tuple_call_lock_eval = save_thm
   ("internal_tuple_call_lock_eval",
