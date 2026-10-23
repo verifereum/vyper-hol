@@ -63,6 +63,27 @@ Definition lowered_value_type_def:
   lowered_value_type cenv e = expr_type e
 End
 
+(* The type Python's lowering gives an external-call argument (v.typ in
+   _lower_external_call). A storage, transient or immutable variable is read
+   at its annotated type, which for a call argument is the declared parameter
+   type (lower_Attribute, lower_Name); any other argument has its own lowered
+   type. *)
+Definition ext_call_arg_types_def:
+  ext_call_arg_types cenv (decl_ty::decl_tys) (e::es) =
+    (case e of
+     | TopLevelName _ _ => decl_ty
+     | _ => lowered_value_type cenv e) ::
+    ext_call_arg_types cenv decl_tys es ∧
+  ext_call_arg_types cenv _ _ = []
+End
+
+(* An argument value read from storage, transient storage or code is copied
+   to memory at its call-site type (VyperValue.from_ptr with v.typ). *)
+Definition ext_call_arg_value_def:
+  ext_call_arg_value ty (LocatedValue _ p) = LocatedValue ty p ∧
+  ext_call_arg_value ty vv = vv
+End
+
 (* ===== Array Location Inference ===== *)
 (* Infer array data location from expression AST + compile_env.
    TopLevelName → look up the module_var_key in ce_vars → StorageLoc/TransientLoc/ImmutableLoc.
@@ -2324,9 +2345,14 @@ Definition compile_call_def:
        let ((value_opt, gas_opt, default_opt), st3) =
          compile_ext_call_kwargs cfn cenv return_type opts kw_es st2 in
        let value_op = (case value_opt of SOME v => v | NONE => Lit 0w) in
-       let args_mem_size = SUM (MAP (type_memory_bytes cenv) arg_types) in
-       let args_abi_size = abi_size_bound cenv.ce_struct_fields (TupleT arg_types) in
-       let args_enc_info = type_to_abi_enc_info cenv.ce_struct_fields cenv (TupleT arg_types) in
+       (* Python lays the argument buffer out with the types of the lowered
+          argument values (_lower_external_call: TupleT(v.typ for v in
+          arg_vals)), not the declared parameter types. The selector is the
+          same under both, since bounds don't appear in it. *)
+       let call_arg_types = ext_call_arg_types cenv arg_types func_args in
+       let args_mem_size = SUM (MAP (type_memory_bytes cenv) call_arg_types) in
+       let args_abi_size = abi_size_bound cenv.ce_struct_fields (TupleT call_arg_types) in
+       let args_enc_info = type_to_abi_enc_info cenv.ce_struct_fields cenv (TupleT call_arg_types) in
        let wrapped_return = (case return_type of
                                TupleT ts =>
                                  if LENGTH ts > 1 then return_type
@@ -2344,7 +2370,9 @@ Definition compile_call_def:
          (case gas_opt of SOME g => (g, st3) | NONE => emit_op GAS [] st3) in
        let ret_dec_info = type_to_abi_dec_info cenv.ce_struct_fields cenv wrapped_return in
        let (result_op, st6) =
-         compile_external_call_kwargs cenv addr_op arg_vals arg_types
+         compile_external_call_kwargs cenv addr_op
+                                    (MAP2 ext_call_arg_value call_arg_types arg_vals)
+                                    call_arg_types
                                     args_mem_size args_abi_size method_id_val
                                     return_abi_size min_return_size ret_mem_bytes
                                     is_static value_op gas_op skip_contract_check

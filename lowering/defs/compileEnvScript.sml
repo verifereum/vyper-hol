@@ -371,7 +371,13 @@ Datatype:
     (* Raw return: T for @raw_return decorated functions (proxy patterns).
        Bypasses ABI encoding, returns bytes directly.
        Mirrors Python: func_t.do_raw_return *)
-    ce_raw_return : bool
+    ce_raw_return : bool;
+    (* T when each local and loop variable gets a fresh ALLOCA at its
+       declaration (external and fallback bodies); F when it keeps the MemLoc
+       slot build_compile_env reserved for its name (internal functions and
+       the constructor body).
+       Mirrors Python: Context.new_variable -> allocate_buffer -> alloca *)
+    ce_alloca_locals : bool
   |>
 End
 
@@ -649,10 +655,10 @@ Definition well_formed_cenv_def:
 End
 
 (* ===== Locals held through allocations ===== *)
-(* After function lowering a local is PtrVar (Var p) sz: the ALLOCA emitted at
-   its declaration binds p to the base of a fresh region (emit_local_alloca,
-   compile_alloc_buffer), so the address depends on vs_allocas and
-   vs_alloca_next at run time, not on a fixed offset.
+(* After its declaration in an external or fallback body a local is
+   PtrVar (Var p) sz: the ALLOCA emitted at its declaration binds p to the base
+   of a fresh region (emit_local_alloca, compile_alloc_buffer), so the address
+   depends on vs_allocas and vs_alloca_next at run time, not on a fixed offset.
    Parameters of internal functions are PtrVar (Var p) sz too
    (materialize_internal_params): a stack-passed one is copied into an ALLOCA
    of the callee, a memory-passed one is the PARAM output p pointing into the
@@ -678,7 +684,7 @@ Definition not_local_ptr_def:
 End
 
 (* The locals of cenv are held through pointer variables that were handed out
-   before st (reserve_local_ptrs, compile_register_positional_args), one per
+   before st (declare_local, compile_register_positional_args), one per
    local:
    - no variable sits at a fixed MemLoc offset: state_rel does not relate
      those (the locals of internal bodies and of the constructor, and

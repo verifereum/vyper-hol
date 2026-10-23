@@ -245,6 +245,22 @@ Definition allocate_args_def:
       (vars |+ (name, MemLoc offset sz))
 End
 
+(* Like allocate_args, but for collect_locals' declarations: a name declared
+   again (in a disjoint block) moves to a new region only when it needs more
+   room, so its final region fits each of its declarations. *)
+Definition allocate_locals_def:
+  allocate_locals sft [] (offset : num) vars = (vars, offset) ∧
+  allocate_locals sft ((name, ty) :: rest) offset vars =
+    let sz = type_mem_bytes sft ty in
+    case FLOOKUP vars name of
+      SOME (MemLoc _ sz') =>
+        if sz ≤ sz' then allocate_locals sft rest offset vars
+        else allocate_locals sft rest (offset + sz)
+               (vars |+ (name, MemLoc offset sz))
+    | _ => allocate_locals sft rest (offset + sz)
+             (vars |+ (name, MemLoc offset sz))
+End
+
 (* Slots of an internal function's return buffer pointer (if it has one) and
    return PC, after its locals. They go to ce_return_buf / ce_return_pc, not
    ce_vars, so they cannot collide with user identifiers. *)
@@ -402,7 +418,11 @@ Definition build_compile_env_def:
     let module_vars = add_module_var_locations tops FEMPTY in
     let (arg_vars, args_end) = allocate_args sft_fn args 0 module_vars in
     let locals = collect_locals body in
-    let (local_vars, locals_end) = allocate_args sft_fn locals args_end arg_vars in
+    (* External and fallback bodies allocate each local at its declaration
+       (declare_local), so only the others reserve slots here. *)
+    let (local_vars, locals_end) =
+      if is_external then (arg_vars, args_end)
+      else allocate_locals sft_fn locals args_end arg_vars in
     let (ret_buf, ret_pc) =
       if is_external then (NONE, NONE)
       else allocate_internal_special_vars has_return_buf locals_end in
@@ -441,7 +461,8 @@ Definition build_compile_env_def:
        ce_func_info := func_info;
        ce_nonreentrant := (F, 0n, use_transient_locks, mut = View);
        (* Default: overridden by package_*_fn from FunctionDecl raw_return field *)
-       ce_raw_return := F
+       ce_raw_return := F;
+       ce_alloca_locals := is_external
     |> : compile_env
 End
 

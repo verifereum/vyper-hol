@@ -124,3 +124,99 @@ Theorem activated_default_evaluated_before_call:
 Proof
   simp (default_expr_def :: EXT_CALL_FIXTURE_SIMP) >> CONV_TAC cv_eval
 QED
+
+(* Direct execution forwards gas=: a recipient that stores to a fresh slot
+   needs more than the 2300-gas stipend a value transfer adds. The recipient
+   is 0x99, since low addresses such as 9 are precompiles. cv_eval runs the
+   shared eval_send/eval_ext_call bodies. *)
+val DIRECT_CALL_SIMP =
+  [evaluate_def, bind_def, ignore_bind_def, return_def, evaluate_literal_def,
+   get_Value_def, materialise_def, empty_evaluation_context_def];
+
+Definition sstore_state_def:
+  sstore_state = empty_state with accounts :=
+    update_account 0x99w
+      (empty_account_state with code := [0x60w; 1w; 0x60w; 0w; 0x55w; 0w])
+      (update_account 0w (empty_account_state with balance := 10)
+         empty_accounts)
+End
+
+Definition gas_kwarg_def:
+  gas_kwarg gas = case gas of
+    | NONE => []
+    | SOME g => [Literal (BaseT (UintT 256)) (IntL g)]
+End
+
+Definition send_gas_expr_def:
+  send_gas_expr gas = Call NoneT (Send (IS_SOME gas))
+    ([Literal (BaseT AddressT) (BytesL (REPLICATE 19 0w ++ [0x99w]));
+      Literal (BaseT (UintT 256)) (IntL 1)] ++ gas_kwarg gas) NONE
+End
+
+Definition extcall_gas_expr_def:
+  extcall_gas_expr gas = Call NoneT
+    (ExtCall F F ("f",[],NoneT) (if IS_SOME gas then [EKGas] else []))
+    (Literal (BaseT AddressT) (BytesL (REPLICATE 19 0w ++ [0x99w])) ::
+     gas_kwarg gas) NONE
+End
+
+(* send forwards no gas by default, so the recipient gets only the stipend. *)
+Theorem direct_send_forwards_gas:
+  FST (eval_expr empty_evaluation_context (send_gas_expr NONE) sstore_state) =
+    INR (Error (RuntimeError "send failed")) /\
+  FST (eval_expr empty_evaluation_context (send_gas_expr (SOME 2300))
+         sstore_state) =
+    INR (Error (RuntimeError "send failed")) /\
+  FST (eval_expr empty_evaluation_context (send_gas_expr (SOME 50000))
+         sstore_state) = INL (Value NoneV)
+Proof
+  simp (send_gas_expr_def :: gas_kwarg_def :: sstore_state_def ::
+        DIRECT_CALL_SIMP) >>
+  CONV_TAC cv_eval
+QED
+
+(* extcall forwards all gas by default, and only gas= with gas=. *)
+Theorem direct_extcall_forwards_gas:
+  FST (eval_expr empty_evaluation_context (extcall_gas_expr NONE)
+         sstore_state) = INL (Value NoneV) /\
+  FST (eval_expr empty_evaluation_context (extcall_gas_expr (SOME 2300))
+         sstore_state) =
+    INR (Error (RevertData [])) /\
+  FST (eval_expr empty_evaluation_context (extcall_gas_expr (SOME 50000))
+         sstore_state) = INL (Value NoneV)
+Proof
+  simp (extcall_gas_expr_def :: gas_kwarg_def :: sstore_state_def ::
+        DIRECT_CALL_SIMP) >>
+  CONV_TAC cv_eval
+QED
+
+(* A recipient that needs 381 gas (LOG0) separates the stipend from the
+   forwarded gas: it runs on the stipend alone, which a zero-value call
+   does not get. A gas= above the model's limit forwards that limit. *)
+Definition log_state_def:
+  log_state = empty_state with accounts :=
+    update_account 0x99w
+      (empty_account_state with code := [0x60w; 0w; 0x60w; 0w; 0xA0w; 0w])
+      (update_account 0w (empty_account_state with balance := 10)
+         empty_accounts)
+End
+
+Definition send_value_expr_def:
+  send_value_expr v = Call NoneT (Send F)
+    [Literal (BaseT AddressT) (BytesL (REPLICATE 19 0w ++ [0x99w]));
+     Literal (BaseT (UintT 256)) (IntL v)] NONE
+End
+
+Theorem direct_call_stipend_and_cap:
+  FST (eval_expr empty_evaluation_context (send_value_expr 1) log_state) =
+    INL (Value NoneV) /\
+  FST (eval_expr empty_evaluation_context (send_value_expr 0) log_state) =
+    INR (Error (RuntimeError "send failed")) /\
+  FST (eval_expr empty_evaluation_context
+         (extcall_gas_expr (SOME (2 ** 256 - 1))) log_state) =
+    INL (Value NoneV)
+Proof
+  simp (send_value_expr_def :: extcall_gas_expr_def :: gas_kwarg_def ::
+        log_state_def :: DIRECT_CALL_SIMP) >>
+  CONV_TAC cv_eval
+QED

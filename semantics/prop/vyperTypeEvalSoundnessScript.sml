@@ -17,7 +17,7 @@ Ancestors
   vyperTypeEnv vyperTypeEnvExtension vyperTypeEnvPreservation vyperTypeScopePop
   vyperTypeABI vyperTypeBindArguments vyperTypeExprResult vyperTypeStmtResult
   vyperTypeCallOutcome[ignore_grammar] vyperCallOutcome[ignore_grammar]
-  vyperTypeExtCallSoundness vyperTypeGlobalLookupSoundness vyperTypeAssignContext vyperTypeBuiltins vyperTypeExprSoundness vyperTypeAssignSoundness
+  vyperTypeArgFits vyperTypeExtCallSoundness vyperTypeGlobalLookupSoundness vyperTypeAssignContext vyperTypeBuiltins vyperTypeExprSoundness vyperTypeAssignSoundness
   vyperAssignTarget vyperExprNoControl vyperScopePreservation vyperEvalPreservesScopes
   vyperEvalMisc vyperStatePreservation vyperAssignPreservesType vyperTypeStatePreservation
   vyperTypeCallGraph vyperTypeCallStackSoundness
@@ -9457,7 +9457,11 @@ Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_result]:
   >- (strip_tac >>
       `runtime_consistent env cx args_st` by simp[runtime_consistent_def] >>
       `MAP expr_type es =
-         BaseT AddressT :: fsig1 ++ MAP (ext_call_kw_type fsig2) opts` by fs[] >>
+         BaseT AddressT :: MAP expr_type (TAKE (LENGTH fsig1) (TL es)) ++
+         MAP (ext_call_kw_type fsig2) opts` by (
+        qspecl_then [`es`, `expr_type`, `LENGTH fsig1`] mp_tac
+          (Q.GENL [`xs`, `f`, `n`] MAP_HD_TAKE_DROP) >>
+        simp[]) >>
       drule_all eval_ext_call_result_sound >> simp[no_type_error_result_def]) >>
   strip_tac >> gvs[]
 QED
