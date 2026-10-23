@@ -4878,6 +4878,74 @@ Resume compile_stage_intcall_args_shape[buffer]:
 QED
 Finalise compile_stage_intcall_args_shape
 
+(* The invalid and CALL/ASSERT tails are shared by the Send argument cases. *)
+val shape_send_invalid_tac =
+  CONV_TAC (LAND_CONV (REWR_CONV (GSYM ETA_AX))) >>
+  simp[compile_call_def] >> CONV_TAC (DEPTH_CONV ETA_CONV) >>
+  irule shape_step_uncurry >> qexists_tac `\u st. cenv_shape_ok st cenv` >> conj_tac
+  >- (gen_tac >> simp[shape_step_def, shape_extends_refl, value_shape_ok_def, plain_operand_def,
+                       stackPlanTypesTheory.is_label_operand_def]) >>
+  shape_under_tac shape_step_emit_inst `\st. cenv_shape_ok st cenv` >> shape_opcode_tac >>
+  qexists_tac `compiler_label` >> simp[cenv_shape_ok_stable];
+
+val shape_send_call_tac =
+  qmatch_goalsub_abbrev_tac `shape_step internal compiler_label CallFrame _ _` >>
+  `shape_stable CallFrame` by
+    (simp[Abbr `CallFrame`] >>
+     ho_match_mp_tac shape_stable_conj >> simp[] >>
+     mp_tac (Q.SPEC `[gas_op]` shape_stable_plain_operands) >> simp[]) >>
+  irule shape_step_uncurry >>
+  qexists_tac `\v st. CallFrame st /\ plain_operand st v` >> conj_tac
+  >- (gen_tac >> simp[] >> irule shape_step_uncurry >>
+      qexists_tac `\u st. T` >> conj_tac
+      >- (gen_tac >> simp[shape_step_def, shape_extends_refl] >> shape_opcode_tac >>
+          simp[value_shape_ok_def] >> shape_opcode_tac) >>
+      shape_under_tac shape_step_emit_void_plain `CallFrame` >> shape_opcode_tac) >>
+  shape_under_tac shape_step_emit_op_plain `CallFrame` >>
+  simp[Abbr `CallFrame`, Abbr `ValFrame`, Abbr `AddrFrame`] >> shape_opcode_tac;
+
+Theorem compile_call_send_shape[local]:
+  (!ce t child. ~supported_expr_exists expr_shape_root child ==>
+     shape_step internal compiler_label (\st. cenv_shape_ok st ce)
+       (cfn ce t child) (\v st. value_shape_ok st v)) /\
+  ~supported_exprs_exists expr_shape_root args ==>
+  shape_step internal compiler_label (\st. cenv_shape_ok st cenv)
+    (compile_call cfn cenv ret_ty ty (Send has_gas) args default_ret)
+    (\v st. value_shape_ok st v)
+Proof
+  strip_tac >> namedCases_on `args` ["", "addr_e tail"]
+  >- shape_send_invalid_tac >> namedCases_on `tail` ["", "val_e gas_es"]
+  >- shape_send_invalid_tac >>
+  reverse (Cases_on `LENGTH gas_es = (if has_gas then 1 else 0)`)
+  >- shape_send_invalid_tac >>
+  gvs[supported_exprs_exists_every] >>
+  CONV_TAC (LAND_CONV (REWR_CONV (GSYM ETA_AX))) >>
+  simp[compile_call_def] >> CONV_TAC (DEPTH_CONV ETA_CONV) >>
+  irule shape_step_uncurry >>
+  qexists_tac `\v st. cenv_shape_ok st cenv /\ plain_operand st v` >> reverse conj_tac
+  >- (irule shape_step_conseq >> irule_at Any lower_value_shape >>
+      qexists_tac `\st. cenv_shape_ok st cenv` >> simp[cenv_shape_ok_stable]) >>
+  qx_gen_tac `addr_op` >> simp[] >>
+  qabbrev_tac `AddrFrame = \st. cenv_shape_ok st cenv /\ plain_operand st addr_op` >>
+  `shape_stable AddrFrame` by
+    (simp[Abbr `AddrFrame`] >> ho_match_mp_tac shape_stable_conj >> simp[cenv_shape_ok_stable] >>
+     mp_tac (Q.SPEC `[addr_op]` shape_stable_plain_operands) >> simp[]) >>
+  irule shape_step_uncurry >>
+  qexists_tac `\v st. AddrFrame st /\ plain_operand st v` >> reverse conj_tac
+  >- (shape_under_tac lower_value_shape `AddrFrame` >> simp[Abbr `AddrFrame`]) >>
+  qx_gen_tac `val_op` >> simp[] >>
+  qabbrev_tac `ValFrame = \st. AddrFrame st /\ plain_operand st val_op` >>
+  `shape_stable ValFrame` by
+    (simp[Abbr `ValFrame`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
+     mp_tac (Q.SPEC `[val_op]` shape_stable_plain_operands) >> simp[]) >>
+  reverse (Cases_on `has_gas`) >> gvs[LENGTH_EQ_1]
+  >- shape_send_call_tac >>
+  irule shape_step_uncurry >>
+  qexists_tac `\v st. ValFrame st /\ plain_operand st v` >> conj_tac
+  >- (qx_gen_tac `gas_op` >> simp[] >> shape_send_call_tac) >>
+  shape_under_tac lower_value_shape `ValFrame` >> simp[Abbr `ValFrame`, Abbr `AddrFrame`]
+QED
+
 Theorem compile_expr_shape:
   (!cenv ty e internal.
      ~supported_expr_exists expr_shape_root e ==>
