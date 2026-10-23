@@ -1695,7 +1695,7 @@ Resume eval_all_storage_preservation_mutual[Log]:
   qpat_x_assum `call_evaluation_safe cx (int_calls_stmt (Log id es))` mp_tac >>
   pure_rewrite_tac[int_calls_stmt_def] >> strip_tac >>
   qpat_x_assum `type_stmt _ _ _ = _` mp_tac >>
-  simp_tac(srw_ss())[Once type_stmt_def] >> strip_tac >>
+  simp_tac(srw_ss())[Once type_stmt_def, AllCaseEqs()] >> strip_tac >>
   BasicProvers.VAR_EQ_TAC >>
   qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
   simp_tac(srw_ss())[Once evaluate_def, bind_def, return_def] >>

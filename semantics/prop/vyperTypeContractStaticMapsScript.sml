@@ -908,7 +908,8 @@ Theorem add_toplevel_static_maps_nonsig_mode_rel[local]:
   art1.cta_bare_globals = art2.cta_bare_globals /\
   art1.cta_bare_global_assignable = art2.cta_bare_global_assignable /\
   art1.cta_toplevel_vtypes = art2.cta_toplevel_vtypes /\
-  art1.cta_flag_members = art2.cta_flag_members ==>
+  art1.cta_flag_members = art2.cta_flag_members /\
+  art1.cta_event_fields = art2.cta_event_fields ==>
   (add_toplevel_static_maps T src tl art1).cta_bare_globals =
     (add_toplevel_static_maps F src tl art2).cta_bare_globals /\
   (add_toplevel_static_maps T src tl art1).cta_bare_global_assignable =
@@ -916,7 +917,9 @@ Theorem add_toplevel_static_maps_nonsig_mode_rel[local]:
   (add_toplevel_static_maps T src tl art1).cta_toplevel_vtypes =
     (add_toplevel_static_maps F src tl art2).cta_toplevel_vtypes /\
   (add_toplevel_static_maps T src tl art1).cta_flag_members =
-    (add_toplevel_static_maps F src tl art2).cta_flag_members
+    (add_toplevel_static_maps F src tl art2).cta_flag_members /\
+  (add_toplevel_static_maps T src tl art1).cta_event_fields =
+    (add_toplevel_static_maps F src tl art2).cta_event_fields
 Proof
   Cases_on `tl` >>
   simp[add_toplevel_static_maps_def, include_fn_sig_def] >>
@@ -928,7 +931,8 @@ Theorem add_module_static_maps_nonsig_mode_rel[local]:
   art1.cta_bare_globals = art2.cta_bare_globals /\
   art1.cta_bare_global_assignable = art2.cta_bare_global_assignable /\
   art1.cta_toplevel_vtypes = art2.cta_toplevel_vtypes /\
-  art1.cta_flag_members = art2.cta_flag_members ==>
+  art1.cta_flag_members = art2.cta_flag_members /\
+  art1.cta_event_fields = art2.cta_event_fields ==>
   (add_module_static_maps T src tls art1).cta_bare_globals =
     (add_module_static_maps F src tls art2).cta_bare_globals /\
   (add_module_static_maps T src tls art1).cta_bare_global_assignable =
@@ -936,7 +940,9 @@ Theorem add_module_static_maps_nonsig_mode_rel[local]:
   (add_module_static_maps T src tls art1).cta_toplevel_vtypes =
     (add_module_static_maps F src tls art2).cta_toplevel_vtypes /\
   (add_module_static_maps T src tls art1).cta_flag_members =
-    (add_module_static_maps F src tls art2).cta_flag_members
+    (add_module_static_maps F src tls art2).cta_flag_members /\
+  (add_module_static_maps T src tls art1).cta_event_fields =
+    (add_module_static_maps F src tls art2).cta_event_fields
 Proof
   qid_spec_tac `art2` >> qid_spec_tac `art1` >>
   Induct_on `tls` >- simp[add_module_static_maps_def] >>
@@ -949,7 +955,8 @@ Theorem add_contract_static_maps_nonsig_mode_rel[local]:
   art1.cta_bare_globals = art2.cta_bare_globals /\
   art1.cta_bare_global_assignable = art2.cta_bare_global_assignable /\
   art1.cta_toplevel_vtypes = art2.cta_toplevel_vtypes /\
-  art1.cta_flag_members = art2.cta_flag_members ==>
+  art1.cta_flag_members = art2.cta_flag_members /\
+  art1.cta_event_fields = art2.cta_event_fields ==>
   (FOLDL (\art (src,tls). add_module_static_maps T src tls art) art1 mods).
       cta_bare_globals =
     (FOLDL (\art (src,tls). add_module_static_maps F src tls art) art2 mods).
@@ -965,7 +972,11 @@ Theorem add_contract_static_maps_nonsig_mode_rel[local]:
   (FOLDL (\art (src,tls). add_module_static_maps T src tls art) art1 mods).
       cta_flag_members =
     (FOLDL (\art (src,tls). add_module_static_maps F src tls art) art2 mods).
-      cta_flag_members
+      cta_flag_members /\
+  (FOLDL (\art (src,tls). add_module_static_maps T src tls art) art1 mods).
+      cta_event_fields =
+    (FOLDL (\art (src,tls). add_module_static_maps F src tls art) art2 mods).
+      cta_event_fields
 Proof
   qid_spec_tac `art2` >> qid_spec_tac `art1` >> Induct_on `mods` >- simp[] >>
   gen_tac >> PairCases_on `h` >> rpt gen_tac >> strip_tac >> simp[] >>
@@ -981,7 +992,9 @@ Theorem build_contract_type_artifact_nonsig_mode_irrelevant:
   (build_contract_type_artifact T mods).cta_toplevel_vtypes =
     (build_contract_type_artifact F mods).cta_toplevel_vtypes /\
   (build_contract_type_artifact T mods).cta_flag_members =
-    (build_contract_type_artifact F mods).cta_flag_members
+    (build_contract_type_artifact F mods).cta_flag_members /\
+  (build_contract_type_artifact T mods).cta_event_fields =
+    (build_contract_type_artifact F mods).cta_event_fields
 Proof
   simp[build_contract_type_artifact_def] >>
   irule add_contract_static_maps_nonsig_mode_rel >> simp[]
@@ -1324,6 +1337,7 @@ Proof
   qpat_x_assum `ALL_DISTINCT (contract_keys (fn_sig_keys_toplevel F) mods)` kall_tac >>
   qpat_x_assum `ALL_DISTINCT (contract_keys toplevel_vtype_keys_toplevel mods)` kall_tac >>
   qpat_x_assum `ALL_DISTINCT (contract_keys flag_member_keys_toplevel mods)` kall_tac >>
+  qpat_x_assum `ALL_DISTINCT (contract_keys event_keys_toplevel mods)` kall_tac >>
   qpat_x_assum `MEM (FlagDecl fid members) ts` mp_tac >>
   qpat_x_assum `ALOOKUP mods src = SOME ts` mp_tac >>
   qpat_x_assum `ALL_DISTINCT (MAP FST mods)` mp_tac >>

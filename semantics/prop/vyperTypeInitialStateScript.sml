@@ -1104,7 +1104,7 @@ Proof
               toplevel_vtypes := FEMPTY;
               type_defs := FEMPTY;
               fn_sigs := FEMPTY;
-              flag_members := FEMPTY |>` >>
+              flag_members := FEMPTY; event_fields := FEMPTY |>` >>
   qexists `<| current_src := NONE;
               var_types := FEMPTY;
               var_assignable := FEMPTY;
@@ -1113,7 +1113,7 @@ Proof
               toplevel_vtypes := FEMPTY;
               type_defs := FEMPTY;
               fn_sigs := FEMPTY;
-              flag_members := FEMPTY |>` >>
+              flag_members := FEMPTY; event_fields := FEMPTY |>` >>
   qexists `initial_state initial_machine_state [FEMPTY]` >>
   simp[type_stmt_def, initial_state_def, initial_machine_state_def,
        empty_evaluation_context_def, empty_call_txn_def, get_tenv_def,

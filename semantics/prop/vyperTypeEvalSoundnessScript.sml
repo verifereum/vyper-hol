@@ -2205,7 +2205,7 @@ Resume eval_all_type_sound_mutual[Log]:
   qpat_x_assum `call_evaluation_safe cx (int_calls_stmt (Log id es))` mp_tac >>
   pure_rewrite_tac[int_calls_stmt_def] >> strip_tac >>
   qhdtm_x_assum `type_stmt` mp_tac >>
-  simp_tac(srw_ss())[type_stmt_def] >> strip_tac >> BasicProvers.VAR_EQ_TAC >>
+  simp_tac(srw_ss())[type_stmt_def, AllCaseEqs()] >> strip_tac >> BasicProvers.VAR_EQ_TAC >>
   qhdtm_x_assum `eval_stmt` mp_tac >>
   simp_tac(srw_ss())[evaluate_def, bind_def, return_def, push_log_def,
        no_type_error_result_def, AllCaseEqs()] >>
@@ -8483,10 +8483,12 @@ Proof
   rewrite_tac[sum_case_def] >> strip_tac >>
   `nr ==> cx.nonreentrant_slot <> NONE` by (
     `get_module_code cx src_id_opt = SOME ts` by
-      metis_tac[lift_option_type_INL_eq] >>
+      (qpat_assum `lift_option_type (get_module_code cx src_id_opt) _ _ = (INL ts,_)`
+         mp_tac >> simp[lift_option_type_INL_eq]) >>
     `lookup_callable_function cx.in_deploy fn ts =
        SOME (fm,nr,args,dflts,ret,fn_body)` by
-      metis_tac[lift_option_type_INL_eq] >>
+      (qpat_assum `lift_option_type (lookup_callable_function cx.in_deploy fn ts) _ _ = _`
+         mp_tac >> simp[lift_option_type_INL_eq]) >>
     drule_all callable_body_typing_from_env_consistent >> simp[]) >>
   qspecl_then [`env`, `cx`, `nr`, `fm = View \/ fm = Pure`,
                `dflt_st`, `INR y`, `lock_st`] mp_tac intcall_lock_attempt_sound_frame >>
@@ -10018,7 +10020,11 @@ Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_nonstatic_success]:
     conj_tac >- first_assum ACCEPT_TAC >>
     conj_tac >- first_assum ACCEPT_TAC >>
     conj_tac >- metis_tac[] >>
-    conj_tac >- (strip_tac >> metis_tac[])>>
+    conj_tac >- (strip_tac >>
+      qpat_x_assum `~(pr1 = [] /\ IS_SOME drv)` mp_tac >>
+      qpat_x_assum `pr1 = []` mp_tac >>
+      qpat_x_assum `IS_SOME drv` mp_tac >>
+      rpt (pop_assum kall_tac) >> rpt strip_tac >> gvs[])>>
     qpat_x_assum `_ = (res,st')` mp_tac >>
     qpat_assum `run_ext_call _ _ _ _ _ _ _ = _` (fn r =>
       qpat_assum `ext_call_precheck_ok _ _ _ _` (fn p =>
