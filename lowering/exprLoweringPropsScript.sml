@@ -994,10 +994,9 @@ Proof
 QED
 
 (* ci_mono for compile_ensure_in_memory:
-   Storage/Transient → blocks grow via compile_word_copy_loop (always)
-   Code → blocks grow when word_count > 0, isPREFIX when word_count = 0
-   Calldata → blocks preserved, isPREFIX via emit chain
-   Memory → trivial via comp_return *)
+   Storage/Transient use a load/store for one slot and a copy loop otherwise.
+   Code uses a straight-line unrolled copy in both contexts.
+   Calldata preserves blocks; Memory is comp_return. *)
 
 (* Shared tactic abbreviation for blocks-grew cases *)
 val blocks_grew_tac =
@@ -1019,10 +1018,46 @@ val isPREFIX_prim_rws =
    fresh_id_def, fresh_var_def, emit_def,
    venomInstTheory.mk_inst_def, pairTheory.UNCURRY, LET_THM];
 
+Theorem ci_mono_compile_lit_byte_offset[local]:
+  !op off sa. ci_mono sa (SND (compile_lit_byte_offset op off sa))
+Proof
+  rpt gen_tac >> simp[contextTheory.compile_lit_byte_offset_def] >>
+  IF_CASES_TAC >> simp[ci_mono_comp_return] >>
+  Cases_on `op` >> simp[ci_mono_comp_return, ci_mono_emit_op]
+QED
+
+Theorem ci_mono_compile_imm_copy_to_memory[local]:
+  !n is_ctor imm src dst off sa.
+    ci_mono sa (SND (compile_imm_copy_to_memory is_ctor imm src dst n off sa))
+Proof
+  Induct >> rpt gen_tac >>
+  simp[contextTheory.compile_imm_copy_to_memory_def, ci_mono_comp_return] >>
+  irule ci_mono_bind >> simp[ci_mono_compile_lit_byte_offset] >>
+  rpt gen_tac >> irule ci_mono_bind >>
+  simp[GSYM contextTheory.compile_ptr_load_def, ci_mono_compile_ptr_load] >>
+  rpt gen_tac >> irule ci_mono_bind >> simp[ci_mono_compile_lit_byte_offset] >>
+  rpt gen_tac >> irule ci_mono_ignore_bind >> simp[ci_mono_emit_void]
+QED
+
+Theorem ci_mono_compile_imm_store_words[local]:
+  !n imm src dst off sa.
+    ci_mono sa (SND (compile_imm_store_words imm src dst n off sa))
+Proof
+  Induct >> rpt gen_tac >>
+  simp[contextTheory.compile_imm_store_words_def, ci_mono_comp_return] >>
+  irule ci_mono_bind >> simp[ci_mono_compile_lit_byte_offset] >>
+  rpt gen_tac >> irule ci_mono_bind >> simp[ci_mono_emit_op] >>
+  rpt gen_tac >> irule ci_mono_bind >> simp[ci_mono_compile_lit_byte_offset] >>
+  rpt gen_tac >> irule ci_mono_ignore_bind >>
+  simp[contextTheory.compile_imm_store_word_def] >>
+  Cases_on `imm` >> simp[ci_mono_emit_void] >>
+  irule ci_mono_bind >> simp[ci_mono_emit_op, ci_mono_emit_void]
+QED
+
 Theorem ci_mono_compile_ensure_in_memory[local]:
   ∀ ptr_op loc mem_bytes word_count is_ctor sa.
     ci_mono sa
-      (SND (compile_ensure_in_memory ptr_op loc mem_bytes word_count is_ctor sa))
+      (SND (compile_ensure_in_memory ptr_op loc mem_bytes word_count is_ctor imm sa))
 Proof
   rpt gen_tac >> Cases_on `loc` >>
   simp[contextTheory.compile_ensure_in_memory_def, LET_THM]
@@ -1041,16 +1076,11 @@ Proof
           simp[rich_listTheory.IS_PREFIX_APPEND3]) >>
       simp[] >> blocks_grew_tac >>
       simp (contextTheory.compile_transient_to_memory_def :: blocks_grew_rws))
-  (* LocCode: case split on word_count *)
-  >- (simp[ci_mono_def, comp_bind_def, comp_ignore_bind_def,
-           comp_return_def, pairTheory.UNCURRY] >>
-      Cases_on `word_count = 0`
-      >- (disj1_tac >>
-          simp (contextTheory.compile_code_to_memory_def :: isPREFIX_prim_rws) >>
-          rewrite_tac[GSYM listTheory.APPEND_ASSOC] >>
-          simp[rich_listTheory.IS_PREFIX_APPEND3])
-      >> disj2_tac >>
-      simp (contextTheory.compile_code_to_memory_def :: blocks_grew_rws))
+  (* LocCode: straight-line, unrolled context-sensitive loads. *)
+  >- (irule ci_mono_bind >> simp[ci_mono_compile_alloc_buffer] >>
+      rpt gen_tac >> simp[LET_THM] >>
+      irule ci_mono_ignore_bind >>
+      simp[ci_mono_compile_imm_copy_to_memory, ci_mono_comp_return])
   (* LocCalldata: compose the monotonicity interfaces of each primitive.
      Avoid unfolding the emit chain into a very large isPREFIX goal. *)
   >> irule ci_mono_bind
@@ -1225,6 +1255,7 @@ QED
 
 Theorem ci_mono_compile_array_subscript[local]:
   ∀ base_op idx_op is_dyn sc ws es is_signed load_opc sa.
+    (!op st. ci_mono st (SND (load_opc op st))) ==>
     ci_mono sa (SND (compile_array_subscript base_op idx_op is_dyn sc ws es is_signed load_opc sa))
 Proof
   rpt gen_tac >>
@@ -1268,7 +1299,7 @@ Proof
       irule ci_mono_lower_value_cfn >>
       rpt strip_tac >> first_x_assum irule) >>
     rpt gen_tac >>
-    irule ci_mono_bind >> gvs[ci_mono_compile_array_subscript] >> rpt gen_tac >>
+    irule ci_mono_bind >> gvs[ci_mono_compile_array_subscript, ci_mono_compile_ptr_load] >> rpt gen_tac >>
     simp[ci_mono_comp_return] ) >>
   BasicProvers.CASE_TAC >> gvs[] >>
   irule ci_mono_bind >> gvs[] >> rpt strip_tac >>
@@ -1280,7 +1311,7 @@ Proof
     rpt strip_tac >> first_x_assum irule) >>
   TRY (
     irule ci_mono_bind >>
-    gvs[ci_mono_compile_array_subscript] >>
+    gvs[ci_mono_compile_array_subscript, ci_mono_compile_ptr_load] >>
     rpt gen_tac ) >>
   simp[ci_mono_comp_return, ci_mono_compile_tuple_subscript]
 QED
@@ -1654,9 +1685,10 @@ QED
 
 Theorem ci_mono_compile_array_membership_loop[local]:
   ∀ needle arr_op len_op elem_size offset_base load_opc is_in sa.
+    (!op st. ci_mono st (SND (load_opc op st))) ==>
     ci_mono sa (SND (compile_array_membership_loop needle arr_op len_op elem_size offset_base load_opc is_in sa))
 Proof
-  rpt gen_tac >>
+  rpt gen_tac >> strip_tac >>
   rewrite_tac[exprLoweringTheory.compile_array_membership_loop_def, LET_THM] >> BETA_TAC >>
   rpt (ho_match_mp_tac ci_mono_bind ORELSE ho_match_mp_tac ci_mono_ignore_bind ORELSE
        (conj_tac >- simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_emit_inst,
@@ -1673,7 +1705,7 @@ Theorem ci_mono_compile_var_array_membership[local]:
 Proof
   rpt gen_tac >>
   simp[exprLoweringTheory.compile_var_array_membership_def, LET_THM] >>
-  ho_match_mp_tac ci_mono_bind >> conj_tac >- (rpt strip_tac >> IF_CASES_TAC >> simp[] >- simp[ci_mono_emit_op] >> Cases_on `rhs_ty` >> simp[ci_mono_comp_return] >> rename1 `ArrayT _ sz` >> Cases_on `sz` >> simp[ci_mono_comp_return]) >> rpt strip_tac >> ho_match_mp_tac ci_mono_ignore_bind >> conj_tac >- (rpt strip_tac >> IF_CASES_TAC >> simp[] >- (Cases_on `rhs_ty` >> simp[ci_mono_comp_return] >> rename1 `ArrayT _ sz` >> Cases_on `sz` >> simp[ci_mono_comp_return] >> ho_match_mp_tac ci_mono_bind >> conj_tac >- (rpt strip_tac >> simp[ci_mono_emit_op]) >> rpt strip_tac >> ho_match_mp_tac ci_mono_bind >> conj_tac >- (rpt strip_tac >> simp[ci_mono_emit_op]) >> rpt strip_tac >> simp[ci_mono_emit_inst]) >> simp[ci_mono_comp_return]) >> rpt strip_tac >> simp[ci_mono_compile_array_membership_loop]
+  ho_match_mp_tac ci_mono_bind >> conj_tac >- (rpt strip_tac >> IF_CASES_TAC >> simp[] >- simp[ci_mono_compile_ptr_load] >> Cases_on `rhs_ty` >> simp[ci_mono_comp_return] >> rename1 `ArrayT _ sz` >> Cases_on `sz` >> simp[ci_mono_comp_return]) >> rpt strip_tac >> ho_match_mp_tac ci_mono_ignore_bind >> conj_tac >- (rpt strip_tac >> IF_CASES_TAC >> simp[] >- (Cases_on `rhs_ty` >> simp[ci_mono_comp_return] >> rename1 `ArrayT _ sz` >> Cases_on `sz` >> simp[ci_mono_comp_return] >> ho_match_mp_tac ci_mono_bind >> conj_tac >- (rpt strip_tac >> simp[ci_mono_emit_op]) >> rpt strip_tac >> ho_match_mp_tac ci_mono_bind >> conj_tac >- (rpt strip_tac >> simp[ci_mono_emit_op]) >> rpt strip_tac >> simp[ci_mono_emit_inst]) >> simp[ci_mono_comp_return]) >> rpt strip_tac >> simp[ci_mono_compile_array_membership_loop, ci_mono_compile_ptr_load]
 QED
 
 Theorem ci_mono_compile_keccak256_bytes[local]:
@@ -2138,25 +2170,95 @@ Theorem ci_mono_compile_store_memory_typed[local]:
                dst_off src_off sa)))
 Proof
   ho_match_mp_tac contextTheory.compile_store_memory_typed_ind >>
-  rpt conj_tac >> rpt strip_tac >>
+  rpt conj_tac
+  >- suspend "store"
+  >- suspend "fields_nil"
+  >- suspend "fields_missing"
+  >- suspend "fields_cons"
+  >- suspend "sarray"
+  >- suspend "dynarray"
+  >- suspend "struct_nil"
+  >> suspend "struct_cons"
+QED
+
+Resume ci_mono_compile_store_memory_typed[store]:
+  rpt strip_tac >>
   once_rewrite_tac[contextTheory.compile_store_memory_typed_def] >>
   simp_tac pure_ss [LET_THM] >> BETA_TAC >>
-  rpt (FIRST [
-    CHANGED_TAC (simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_emit_inst,
-      ci_mono_fresh_label, ci_mono_fresh_var, ci_mono_new_block,
-      ci_mono_comp_return, ci_mono_compile_copy_memory,
-      ci_mono_compile_copy_memory_dynamic, ci_mono_compile_store_bytestring,
-      ci_mono_compile_with_byte_offset]),
-    gen_tac,
-    ho_match_mp_tac ci_mono_bind >> conj_tac,
-    ho_match_mp_tac ci_mono_ignore_bind >> conj_tac,
-    IF_CASES_TAC,
-    TOP_CASE_TAC,
-    first_assum (fn ih =>
-      (irule (SRULE [] ih) >> fs[] >> NO_TAC) ORELSE
-      (* the struct IH may differ from the goal by commuted offsets *)
-      metis_tac[SRULE [] ih, arithmeticTheory.ADD_COMM])])
+  IF_CASES_TAC
+  >- (irule ci_mono_bind >> simp[ci_mono_emit_op, ci_mono_emit_void]) >>
+  simp[] >> IF_CASES_TAC >- simp[ci_mono_compile_store_bytestring] >>
+  simp[] >> IF_CASES_TAC >- simp[ci_mono_emit_void] >>
+  simp[] >>
+  Cases_on `src_ty` >> Cases_on `dst_ty` >>
+  gvs[ci_mono_compile_copy_memory] >>
+  TRY (first_assum (fn ih => irule ih >> simp[] >> NO_TAC)) >>
+  Cases_on `b` >> Cases_on `b'` >> gvs[ci_mono_compile_copy_memory]
 QED
+
+Resume ci_mono_compile_store_memory_typed[fields_nil]:
+  simp[contextTheory.compile_store_memory_typed_def, ci_mono_comp_return]
+QED
+
+Resume ci_mono_compile_store_memory_typed[fields_cons]:
+  rpt strip_tac >>
+  once_rewrite_tac[contextTheory.compile_store_memory_typed_def] >>
+  simp_tac pure_ss [LET_THM] >> BETA_TAC >>
+  gvs[] >> irule ci_mono_bind >> simp[ci_mono_compile_with_byte_offset] >>
+  rpt gen_tac >> irule ci_mono_bind >> simp[ci_mono_compile_with_byte_offset] >>
+  rpt gen_tac >> irule ci_mono_ignore_bind >> simp[]
+QED
+
+Resume ci_mono_compile_store_memory_typed[sarray]:
+  rpt strip_tac >>
+  once_rewrite_tac[contextTheory.compile_store_memory_typed_def] >>
+  simp_tac pure_ss [LET_THM] >> BETA_TAC >>
+  IF_CASES_TAC >- simp[ci_mono_compile_copy_memory] >>
+  gvs[] >>
+  rpt (FIRST [
+    CHANGED_TAC (simp[ci_mono_emit_op, ci_mono_emit_inst,
+      ci_mono_fresh_label, ci_mono_fresh_var, ci_mono_new_block,
+      ci_mono_comp_return]),
+    gen_tac,
+    irule ci_mono_bind >> conj_tac,
+    irule ci_mono_ignore_bind >> conj_tac])
+QED
+
+Resume ci_mono_compile_store_memory_typed[dynarray]:
+  rpt strip_tac >>
+  once_rewrite_tac[contextTheory.compile_store_memory_typed_def] >>
+  simp_tac pure_ss [LET_THM] >> BETA_TAC >>
+  Cases_on `type_memory_bytes cenv dst_elem_ty = type_memory_bytes cenv src_elem_ty /\ dst_elem_ty = src_elem_ty` >> gvs[] >>
+  rpt (FIRST [
+    CHANGED_TAC (simp[ci_mono_emit_op, ci_mono_emit_inst, ci_mono_emit_void,
+      ci_mono_fresh_label, ci_mono_fresh_var, ci_mono_new_block,
+      ci_mono_comp_return, ci_mono_compile_copy_memory_dynamic]),
+    (IF_CASES_TAC >> gvs[]),
+    gen_tac,
+    irule ci_mono_bind >> conj_tac,
+    irule ci_mono_ignore_bind >> conj_tac])
+QED
+
+Resume ci_mono_compile_store_memory_typed[struct_nil]:
+  simp[contextTheory.compile_store_memory_typed_def, ci_mono_comp_return]
+QED
+
+Resume ci_mono_compile_store_memory_typed[struct_cons]:
+  rpt strip_tac >>
+  once_rewrite_tac[contextTheory.compile_store_memory_typed_def] >>
+  simp_tac pure_ss [LET_THM] >> BETA_TAC >>
+  TOP_CASE_TAC >> gvs[] >> TRY (simp[ci_mono_emit_void] >> NO_TAC) >>
+  TRY pairarg_tac >> gvs[] >>
+  irule ci_mono_bind >> simp[ci_mono_compile_with_byte_offset] >>
+  rpt gen_tac >> irule ci_mono_bind >> simp[ci_mono_compile_with_byte_offset] >>
+  rpt gen_tac >> irule ci_mono_ignore_bind >> simp[]
+QED
+
+Resume ci_mono_compile_store_memory_typed[fields_missing]:
+  simp[contextTheory.compile_store_memory_typed_def, ci_mono_comp_return]
+QED
+
+Finalise ci_mono_compile_store_memory_typed
 
 Theorem ci_mono_compile_store_memory[local]:
   ∀cenv src dst dst_ty src_ty sa.
@@ -3179,3 +3281,15 @@ Proof
     by (irule ci_mono_same_blocks_isPREFIX >> simp[]) >>
   gvs[GSYM prefix_drop_equiv, emitted_insts_def]
 QED
+
+(* Admissions elsewhere in this theory are not dependencies of these new
+   immutable helper monotonicity interfaces. *)
+val () = List.app (fn th =>
+  if List.exists (fn tag => tag <> "DISK_THM")
+       (#1 (Tag.dest_tag (Thm.tag th))) then
+    raise Fail "oracle in immutable monotonicity interface"
+  else ())
+  [ci_mono_compile_lit_byte_offset, ci_mono_compile_imm_copy_to_memory,
+   ci_mono_compile_imm_store_words, ci_mono_compile_ensure_in_memory,
+   ci_mono_compile_array_subscript, ci_mono_compile_array_membership_loop,
+   ci_mono_compile_store_memory_typed];

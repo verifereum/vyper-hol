@@ -503,8 +503,39 @@ End
    mem_bytes: memory_bytes_required (allocation size).
    word_count: storage_size_in_words (number of 32-byte slots to copy).
    Mirrors Python: context.py ensure_in_memory *)
+(* Python _with_byte_offset folds literal addresses and omits zero ADDs. *)
+Definition compile_lit_byte_offset_def:
+  compile_lit_byte_offset op off =
+    if off = 0 then return op
+    else case op of
+      Lit w => return (Lit (w + n2w off))
+    | _ => emit_op ADD [op; Lit (n2w off)]
+End
+
+Definition compile_imm_copy_to_memory_def:
+  compile_imm_copy_to_memory is_ctor imm src dst 0 off = return () /\
+  compile_imm_copy_to_memory is_ctor imm src dst (SUC n) off =
+    do src_op <- compile_lit_byte_offset src off;
+       value <- compile_imm_load_word is_ctor imm src_op;
+       dst_op <- compile_lit_byte_offset dst off;
+       emit_void MSTORE [dst_op; value];
+       compile_imm_copy_to_memory is_ctor imm src dst n (off + 32)
+    od
+End
+
+Definition compile_imm_store_words_def:
+  compile_imm_store_words imm src dst 0 off = return () /\
+  compile_imm_store_words imm src dst (SUC n) off =
+    do src_op <- compile_lit_byte_offset src off;
+       value <- emit_op MLOAD [src_op];
+       dst_op <- compile_lit_byte_offset dst off;
+       compile_imm_store_word imm dst_op value;
+       compile_imm_store_words imm src dst n (off + 32)
+    od
+End
+
 Definition compile_ensure_in_memory_def:
-  compile_ensure_in_memory ptr_op loc mem_bytes word_count is_ctor =
+  compile_ensure_in_memory ptr_op loc mem_bytes word_count is_ctor imm =
     case loc of
       LocMemory => return ptr_op
     | LocStorage =>
@@ -532,11 +563,10 @@ Definition compile_ensure_in_memory_def:
            od
         od
     | LocCode =>
-        (* Always DLOAD: code_to_memory reads from code section.
-           Mirrors Python: ensure_bytestring_in_memory → code_to_memory → dload. *)
         do buf_op_alloc <- compile_alloc_buffer mem_bytes;
            let buf_op = buf_op_alloc.buf_operand in
-           do compile_code_to_memory ptr_op buf_op word_count;
+           do compile_imm_copy_to_memory is_ctor imm ptr_op buf_op
+                ((mem_bytes + 31) DIV 32) 0;
               return buf_op
            od
         od
@@ -569,9 +599,8 @@ End
    is_ctor=T because store_immutable only runs in constructor context.
    Mirrors Python: context.py store_immutable *)
 Definition compile_store_immutable_def:
-  compile_store_immutable src_ptr dst_offset num_words =
-    compile_word_copy_loop src_ptr (Lit (n2w dst_offset)) num_words
-      LocMemory LocCode T
+  compile_store_immutable imm src_ptr dst_offset num_words =
+    compile_imm_store_words imm src_ptr (Lit (n2w dst_offset)) num_words 0
 End
 
 (* ===== Dynamic Array to Storage Copy ===== *)
@@ -1076,3 +1105,89 @@ Theorem compile_imm_store_word_no_base:
 Proof
   simp[compile_imm_store_word_def]
 QED
+
+(* A processed prefix composes with the remaining words, preserving all
+   fresh-name and emission state effects, not merely the word count. *)
+Theorem compile_imm_copy_to_memory_prefix:
+  !m n is_ctor imm src dst off.
+    compile_imm_copy_to_memory is_ctor imm src dst (m + n) off =
+    do compile_imm_copy_to_memory is_ctor imm src dst m off;
+       compile_imm_copy_to_memory is_ctor imm src dst n (off + 32 * m)
+    od
+Proof
+  Induct >> rpt gen_tac
+  >- simp[compile_imm_copy_to_memory_def, comp_ignore_bind_def,
+          FUN_EQ_THM, comp_bind_def, comp_return_def] >>
+  pure_rewrite_tac[arithmeticTheory.ADD_CLAUSES,
+                   compile_imm_copy_to_memory_def] >>
+  first_x_assum (qspec_then `n` (fn th => once_rewrite_tac[th])) >>
+  pure_rewrite_tac[comp_ignore_bind_def, comp_bind_assoc] >>
+  ntac 4 (BETA_TAC >> pure_rewrite_tac[comp_bind_assoc]) >> BETA_TAC >>
+  `off + 32 + 32 * m = off + 32 * SUC m` by decide_tac >>
+  asm_rewrite_tac[]
+QED
+
+Theorem compile_imm_store_words_prefix:
+  !m n imm src dst off.
+    compile_imm_store_words imm src dst (m + n) off =
+    do compile_imm_store_words imm src dst m off;
+       compile_imm_store_words imm src dst n (off + 32 * m)
+    od
+Proof
+  Induct >> rpt gen_tac
+  >- simp[compile_imm_store_words_def, comp_ignore_bind_def,
+          FUN_EQ_THM, comp_bind_def, comp_return_def] >>
+  pure_rewrite_tac[arithmeticTheory.ADD_CLAUSES,
+                   compile_imm_store_words_def] >>
+  first_x_assum (qspec_then `n` (fn th => once_rewrite_tac[th])) >>
+  pure_rewrite_tac[comp_ignore_bind_def, comp_bind_assoc] >>
+  ntac 4 (BETA_TAC >> pure_rewrite_tac[comp_bind_assoc]) >> BETA_TAC >>
+  `off + 32 + 32 * m = off + 32 * SUC m` by decide_tac >>
+  asm_rewrite_tac[]
+QED
+
+Theorem compile_imm_copy_zero:
+  !is_ctor imm src dst off st.
+    compile_imm_copy_to_memory is_ctor imm src dst 0 off st = ((), st)
+Proof
+  simp[compile_imm_copy_to_memory_def, comp_return_def]
+QED
+
+Theorem compile_imm_copy_two_opcode_shape:
+  !is_ctor st base.
+    MAP (\i. i.inst_opcode)
+      (SND (compile_imm_copy_to_memory is_ctor (SOME base)
+        (Lit 0w) (Lit 96w) (SUC (SUC 0)) 0 st)).cs_current_insts =
+    MAP (\i. i.inst_opcode) st.cs_current_insts ++
+      (if is_ctor then [ADD; ILOAD; MSTORE; ADD; ILOAD; MSTORE]
+       else [DLOAD; MSTORE; DLOAD; MSTORE])
+Proof
+  Cases >> simp[compile_imm_copy_to_memory_def, compile_lit_byte_offset_def,
+    compile_imm_load_word_def, emit_op_def, emit_void_def,
+    fresh_id_def, fresh_var_def, emit_def, comp_bind_def,
+    comp_ignore_bind_def, comp_return_def, mk_inst_def, APPEND_ASSOC]
+QED
+
+Theorem compile_imm_store_two_opcode_shape:
+  !st base.
+    MAP (\i. i.inst_opcode)
+      (SND (compile_imm_store_words (SOME base)
+        (Lit 96w) (Lit 0w) (SUC (SUC 0)) 0 st)).cs_current_insts =
+    MAP (\i. i.inst_opcode) st.cs_current_insts ++
+      [MLOAD; ADD; ISTORE; MLOAD; ADD; ISTORE]
+Proof
+  simp[compile_imm_store_words_def, compile_lit_byte_offset_def,
+    compile_imm_store_word_def, emit_op_def, emit_void_def,
+    fresh_id_def, fresh_var_def, emit_def, comp_bind_def,
+    comp_ignore_bind_def, comp_return_def, mk_inst_def, APPEND_ASSOC]
+QED
+
+(* These immutable compilation interfaces are kernel-closed. *)
+val () = List.app (fn th =>
+  if List.exists (fn tag => tag <> "DISK_THM")
+       (#1 (Tag.dest_tag (Thm.tag th))) then
+    raise Fail "oracle in immutable compilation interface"
+  else ())
+  [compile_imm_copy_to_memory_prefix, compile_imm_store_words_prefix,
+   compile_imm_copy_zero, compile_imm_copy_two_opcode_shape,
+   compile_imm_store_two_opcode_shape];
