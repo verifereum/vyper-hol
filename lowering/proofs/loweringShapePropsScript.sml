@@ -3990,9 +3990,9 @@ Theorem compile_for_range_shape[local]:
   !cenv lctx ty id fty start_e end_e bound body.
     ~supported_expr_exists expr_shape_root start_e /\
     ~supported_expr_exists expr_shape_root end_e /\
-    (!env lc. shape_step (IS_SOME env.ce_return_pc) compiler_label
-      (\st. cenv_shape_ok st env /\ loop_ctx_shape_ok lc)
-      (compile_stmts env lc ty body) (\u st. T)) ==>
+    (!env exit_lbl incr_lbl. shape_step (IS_SOME env.ce_return_pc) compiler_label
+      (\st. cenv_shape_ok st env /\ loop_ctx_shape_ok (InLoop exit_lbl incr_lbl))
+      (compile_stmts env (InLoop exit_lbl incr_lbl) ty body) (\u st. T)) ==>
     shape_step (IS_SOME cenv.ce_return_pc) compiler_label
       (\st. cenv_shape_ok st cenv /\ loop_ctx_shape_ok lctx)
       (compile_stmt cenv lctx ty (For id fty (Range start_e end_e) bound body))
@@ -4143,16 +4143,16 @@ Resume compile_for_range_shape[recursive]:
     `\u st. plain_operand st (Var counter_var) /\ T`] >>
   rpt conj_tac >> TRY (simp[Abbr `ctr_live`, Abbr `live`, loop_ctx_shape_ok_def, jump_label_ok_def] >> NO_TAC) >>
   ho_match_mp_tac shape_step_frame >> simp[stmt_shape_stable_plain] >>
-  first_x_assum (qspecl_then [`body_cenv`, `InLoop exit_lbl incr_lbl`] mp_tac) >> simp[]
+  first_x_assum (qspecl_then [`body_cenv`, `exit_lbl`, `incr_lbl`] mp_tac) >> simp[]
 QED
 Finalise compile_for_range_shape
 
 Theorem compile_for_array_shape[local]:
   !cenv lctx ty id fty arr_e bound body.
     ~supported_expr_exists expr_shape_root arr_e /\
-    (!env lc. shape_step (IS_SOME env.ce_return_pc) compiler_label
-      (\st. cenv_shape_ok st env /\ loop_ctx_shape_ok lc)
-      (compile_stmts env lc ty body) (\u st. T)) ==>
+    (!env exit_lbl incr_lbl. shape_step (IS_SOME env.ce_return_pc) compiler_label
+      (\st. cenv_shape_ok st env /\ loop_ctx_shape_ok (InLoop exit_lbl incr_lbl))
+      (compile_stmts env (InLoop exit_lbl incr_lbl) ty body) (\u st. T)) ==>
     shape_step (IS_SOME cenv.ce_return_pc) compiler_label
       (\st. cenv_shape_ok st cenv /\ loop_ctx_shape_ok lctx)
       (compile_stmt cenv lctx ty (For id fty (Array arr_e) bound body))
@@ -4320,7 +4320,7 @@ Resume compile_for_array_shape[recursive]:
     `\u st. plain_operand st (Var idx_var) /\ T`] >>
   rpt conj_tac >> TRY (simp[Abbr `idx_live`, Abbr `live`, loop_ctx_shape_ok_def, jump_label_ok_def] >> NO_TAC) >>
   ho_match_mp_tac shape_step_frame >> simp[stmt_shape_stable_plain] >>
-  first_x_assum (qspecl_then [`body_cenv`, `InLoop exit_lbl incr_lbl`] mp_tac) >> simp[]
+  first_x_assum (qspecl_then [`body_cenv`, `exit_lbl`, `incr_lbl`] mp_tac) >> simp[]
 QED
 Finalise compile_for_array_shape
 
@@ -4336,8 +4336,113 @@ Theorem compile_stmt_shape:
        (\st. cenv_shape_ok st cenv /\ loop_ctx_shape_ok lctx)
        (compile_stmts cenv lctx ty ss) (\x st. T))
 Proof
-  cheat
+  ho_match_mp_tac compile_stmt_ind >> rpt conj_tac >> rpt gen_tac >>
+  simp[supported_stmt_expr_exists_def, supported_assignment_exists_def,
+       supported_iterator_exists_def, supported_assert_exists_def,
+       supported_raise_exists_def, supported_expr_exists_def] >>
+  rpt strip_tac >>
+  FIRST [
+    (irule compile_return_none_shape >> NO_TAC),
+    (irule compile_return_some_shape >> simp[] >> NO_TAC),
+    (irule compile_if_shape >> simp[] >> NO_TAC),
+    (rename1 `compile_stmt _ _ _ (For _ _ (Range _ _) _ _)` >> suspend "range"),
+    (rename1 `compile_stmt _ _ _ (For _ _ (Array _) _ _)` >> suspend "array"),
+    (rename1 `compile_stmts _ _ _ (_::_)` >> suspend "cons"),
+    (rename1 `compile_stmts _ _ _ []` >> simp[Once compile_stmt_def] >>
+      irule shape_step_return >> simp[] >> NO_TAC),
+    (rename1 `compile_stmt _ _ _ Pass` >> simp[Once compile_stmt_def] >>
+      irule shape_step_return >> simp[] >> NO_TAC),
+    (rename1 `compile_stmt _ _ _ Break` >> suspend "break"),
+    (rename1 `compile_stmt _ _ _ Continue` >> suspend "continue"),
+    (rename1 `compile_stmt _ _ _ (Expr _)` >> suspend "expr"),
+    (irule shape_step_conseq >>
+     qexistsl_tac [`compiler_label`, `\st. cenv_shape_ok st cenv`, `\u st. T`] >>
+     simp[] >>
+     FIRST [irule compile_raise_shape, irule compile_assert_shape,
+            irule compile_assign_base_shape, irule compile_assign_tuple_shape,
+            irule compile_augassign_shape, irule compile_append_shape,
+            irule compile_log_shape, irule compile_annassign_shape] >>
+     simp[supported_stmt_expr_exists_def, supported_raise_exists_def,
+          supported_assert_exists_def] >>
+     qpat_x_assum `~supported_expr_exists _ _` kall_tac >>
+     pop_assum mp_tac >> Induct_on `targets` >>
+     simp[supported_assignment_exists_def] >>
+     Cases_on `h` >> simp[supported_assignment_exists_def])]
 QED
+Resume compile_stmt_shape[range]:
+  irule compile_for_range_shape >> simp[]
+QED
+Resume compile_stmt_shape[array]:
+  irule compile_for_array_shape >> simp[]
+QED
+Resume compile_stmt_shape[cons]:
+  simp[Once compile_stmt_def] >>
+  stmt_bind `\cs st. cenv_shape_ok st cenv /\ loop_ctx_shape_ok lctx` `cs`
+    (irule shape_step_conseq >>
+     qexistsl_tac [`compiler_label`, `\st. cenv_shape_ok st cenv /\ loop_ctx_shape_ok lctx`,
+       `\cs st. cs = st /\ (cenv_shape_ok st cenv /\ loop_ctx_shape_ok lctx)`] >>
+     simp[shape_step_comp_get]) >>
+  IF_CASES_TAC
+  >- (irule shape_step_return >> simp[]) >>
+  qpat_x_assum `!cs env. _ ==> _ ==> shape_step _ _ _ (compile_stmt _ _ _ _) _`
+    (qspec_then `cs` mp_tac) >> simp[] >> strip_tac >>
+  qpat_x_assum `!cs env. _ ==> _ ==> shape_step _ _ _ (compile_stmts _ _ _ _) _`
+    (qspec_then `cs` mp_tac) >> simp[] >> strip_tac >>
+  stmt_bind `\env st. (cenv_shape_ok st env /\ env.ce_return_pc = cenv.ce_return_pc) /\
+    loop_ctx_shape_ok lctx` `body_cenv`
+    (ho_match_mp_tac stmt_shape_frame >> qexists_tac `\st. cenv_shape_ok st cenv` >>
+     simp[stmt_shape_stable_const, declare_stmt_local_shape]) >>
+  Cases_on `body_cenv.ce_return_pc = cenv.ce_return_pc`
+  >- suspend "cons_body" >> simp[shape_step_def]
+QED
+Resume compile_stmt_shape[cons_body]:
+  qpat_x_assum `!env. shape_step _ _ _ (compile_stmt _ _ _ _) _`
+    (qspec_then `body_cenv` mp_tac) >> simp[] >> strip_tac >>
+  qpat_x_assum `!env. shape_step _ _ _ (compile_stmts _ _ _ _) _`
+    (qspec_then `body_cenv` mp_tac) >> simp[] >> strip_tac >>
+  simp[] >>
+  stmt_sequence `\u st. cenv_shape_ok st body_cenv /\ loop_ctx_shape_ok lctx`
+    (irule shape_step_conseq >>
+     qexistsl_tac [`compiler_label`,
+       `\st. (cenv_shape_ok st body_cenv /\ loop_ctx_shape_ok lctx) /\
+             (cenv_shape_ok st body_cenv /\ loop_ctx_shape_ok lctx)`,
+       `\u st. (cenv_shape_ok st body_cenv /\ loop_ctx_shape_ok lctx) /\ T`] >>
+     rpt conj_tac >> TRY (simp[] >> NO_TAC) >>
+     ho_match_mp_tac shape_step_frame >>
+     simp[cenv_shape_ok_stable, shape_stable_conj, stmt_shape_stable_const]) >>
+  simp[]
+QED
+Resume compile_stmt_shape[break]:
+  markerLib.RESUME_TAC >> simp[Once compile_stmt_def]
+  >- (stmt_sequence `\u st. cenv_shape_ok st cenv /\ loop_ctx_shape_ok NoLoop`
+        (stmt_drop (ho_match_mp_tac stmt_shape_emit_inst >>
+          simp[shape_stable_conj, cenv_shape_ok_stable, stmt_shape_stable_const] >>
+          stmt_shape_emit_simp)) >> irule shape_step_return >> simp[]) >>
+  stmt_drop (ho_match_mp_tac stmt_shape_emit_inst >>
+    simp[shape_stable_conj, cenv_shape_ok_stable, stmt_shape_stable_const,
+         label_or_plain_def] >> stmt_shape_emit_simp >>
+    simp[loop_ctx_shape_ok_def, stackPlanTypesTheory.is_label_operand_def])
+QED
+Resume compile_stmt_shape[continue]:
+  markerLib.RESUME_TAC >> simp[Once compile_stmt_def]
+  >- (stmt_sequence `\u st. cenv_shape_ok st cenv /\ loop_ctx_shape_ok NoLoop`
+        (stmt_drop (ho_match_mp_tac stmt_shape_emit_inst >>
+          simp[shape_stable_conj, cenv_shape_ok_stable, stmt_shape_stable_const] >>
+          stmt_shape_emit_simp)) >> irule shape_step_return >> simp[]) >>
+  stmt_drop (ho_match_mp_tac stmt_shape_emit_inst >>
+    simp[shape_stable_conj, cenv_shape_ok_stable, stmt_shape_stable_const,
+         label_or_plain_def] >> stmt_shape_emit_simp >>
+    simp[loop_ctx_shape_ok_def, stackPlanTypesTheory.is_label_operand_def])
+QED
+Resume compile_stmt_shape[expr]:
+  simp[Once compile_stmt_def] >>
+  stmt_sequence `\v st. value_shape_ok st v`
+    (irule shape_step_conseq >>
+     qexistsl_tac [`compiler_label`, `\st. cenv_shape_ok st cenv`,
+       `\v st. value_shape_ok st v`] >> simp[compile_expr_shape]) >>
+  irule shape_step_return >> simp[]
+QED
+Finalise compile_stmt_shape
 
 (* ===== Module lowering ===== *)
 
