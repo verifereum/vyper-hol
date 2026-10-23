@@ -5,6 +5,7 @@ Ancestors
   moduleLowering
   (* property statements and proofs *)
   moduleLoweringProps
+  loweringSlice
   valueEncodingProofs
   localPtrsProps
   (* compiler + correctness *)
@@ -15,6 +16,7 @@ Ancestors
   evalCompilerExternalCalls
   evalCompilerNameCollisions
   evalCompilerSliceBuffers
+  evalCompilerPhiPointers
   evalCompilerInternalFrames
   (* focused internal-frame allocation, cleanup and whitelist regressions *)
   calleeMemoryWitness
