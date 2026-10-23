@@ -2605,7 +2605,8 @@ Theorem memory_ops_class[local]:
     CODECOPY; DLOADBYTES; EXTCODECOPY; RETURNDATACOPY; SHA3; LOG}
 Proof
   Cases_on `inst.inst_opcode` >>
-  simp[mem_write_ops_def, mem_read_ops_def, is_ext_call_op_def, is_terminator_def]
+  rewrite_tac[mem_write_ops_def, mem_read_ops_def, is_ext_call_op_def,
+              is_terminator_def] >> simp[]
 QED
 
 Theorem remap_preserved_mem_ops[local]:
@@ -2832,7 +2833,7 @@ QED
 (* --- EXTCODECOPY: 4-op write, dst is 2nd operand --- *)
 (* inst.inst_operands = [v2; Var v; v10; sz] — pv addr is 2nd *)
 Resume remap_preserved_mem_ops[extcodecopy]:
-  fs[step_inst_base_def, AllCaseEqs()] >>
+  fs[step_inst_base_opcode_eqs, AllCaseEqs()] >>
   fs[eval_operand_def, lookup_var_def] >>
   mem_op_preamble >>
   `v2 <> Var v` by pv_uniqueness_contra >>
@@ -4016,7 +4017,9 @@ Resume step_inst_base_error_transfer[DLOADBYTES]:
   error_inline_tac
 QED
 Resume step_inst_base_error_transfer[EXTCODECOPY]:
-  error_inline_tac
+  gvs[AllCaseEqs()] >>
+  TRY (first_assum drule >> simp[] >> NO_TAC) >>
+  metis_tac[optionTheory.option_nchotomy]
 QED
 Resume step_inst_base_error_transfer[FMP_PARAM]:
   error_inline_tac
@@ -5177,8 +5180,7 @@ Proof
     simp[step_inst_base_def] >>
     Cases_on `inst.inst_opcode` >> gvs[is_alloca_op_def] >>
     simp[exec_alloca_def] >>
-    rpt (BasicProvers.FULL_CASE_TAC >> gvs[]) >>
-    strip_tac >> gvs[update_var_def, FDOM_FUPDATE])
+    strip_tac >> gvs[AllCaseEqs(), update_var_def, FDOM_FUPDATE])
   >- (
     (* Non-ALLOCA: v.vs_allocas = s1.vs_allocas *)
     `v.vs_allocas = s1.vs_allocas` by metis_tac[step_inst_base_allocas] >>
