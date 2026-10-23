@@ -386,7 +386,33 @@ Theorem compile_internal_fn_bodies_shape:
     ?segs. all_blocks st' = all_blocks st ++ FLAT segs /\
            LIST_REL internal_segment_ok (internal_fn_descriptors fns) segs
 Proof
-  cheat
+  Induct_on `fns`
+  >- (simp[compile_internal_fn_bodies_def, comp_return_def] >>
+      rpt strip_tac >> gvs[] >> qexists_tac `[]` >>
+      simp[internal_fn_descriptors_def]) >>
+  qx_gen_tac `h` >> PairCases_on `h` >>
+  simp[Once compile_internal_fn_bodies_def, internal_fn_shape_ok_def] >>
+  rpt gen_tac >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `comp_ignore_bind (new_block name) m st` >>
+  Cases_on `new_block name st` >>
+  fs[comp_ignore_bind_def, comp_bind_def] >>
+  rename1 `new_block name st = (old,s)` >>
+  drule_all shape_state_new_block >> strip_tac >>
+  fs[Abbr `m`, comp_bind_def] >>
+  pairarg_tac >> fs[] >>
+  drule_all compile_internal_function_shape >>
+  rewrite_tac[shape_step_def] >>
+  disch_then drule >> simp[] >> strip_tac >>
+  pairarg_tac >> gvs[comp_return_def] >>
+  first_x_assum drule >> simp[] >> strip_tac >>
+  rename1 `cenv_static_ok cenv` >>
+  rename1 `compile_internal_function cenv params has_ret_buf` >>
+  drule_all internal_segment_new_block >>
+  disch_then (qspecl_then [`has_ret_buf`, `cenv.ce_returns_count`]
+    strip_assume_tac) >>
+  qexists_tac `seg :: segs` >>
+  simp[internal_fn_descriptors_def, APPEND_ASSOC]
+
 QED
 
 (* The runtime block stream: entry code (dispatch, external bodies,
