@@ -1,0 +1,73 @@
+Theory placeTypingProps
+Ancestors
+  exprLowering compileVyper vyperTypeSystem
+
+(* Agreement projects only map declarations. Annotation typing, struct layout
+   and compiled-value locations remain separate obligations. *)
+Definition place_map_tables_agree_def:
+  place_map_tables_agree cenv env <=>
+    !nsid. OPTION_MAP (\(tr,kt,vt). (kt,vt))
+             (cenv.ce_hashmap_info (module_var_key nsid)) =
+      (case FLOOKUP env.toplevel_vtypes nsid of
+         SOME (HashMapT kt vt) => SOME (kt,vt)
+       | _ => NONE)
+End
+
+Theorem place_map_tables_agree_cong:
+  cenv'.ce_hashmap_info = cenv.ce_hashmap_info /\
+  env'.toplevel_vtypes = env.toplevel_vtypes ==>
+  (place_map_tables_agree cenv' env' <=> place_map_tables_agree cenv env)
+Proof
+  simp[place_map_tables_agree_def]
+QED
+
+Theorem type_place_expr_annotation:
+  !e env ty. type_place_expr env e = SOME (Type ty) ==>
+    expr_type e = ty
+Proof
+  Induct >> simp[Once well_typed_expr_def, vyperASTTheory.expr_type_def] >>
+  rpt strip_tac >> gvs[AllCaseEqs(), vtype_annotation_ok_def] >>
+  PairCases_on `p` >>
+  gvs[Once well_typed_expr_def, AllCaseEqs(), vtype_annotation_ok_def]
+QED
+
+Theorem place_type_checked_place:
+  !e cenv env vt.
+    place_map_tables_agree cenv env /\
+    type_place_expr env e = SOME vt ==>
+    place_type cenv e = value_type_place vt
+Proof
+  Induct >> simp[Once well_typed_expr_def, place_type_def] >>
+  rpt strip_tac >> gvs[AllCaseEqs(), vtype_annotation_ok_def]
+  >- (PairCases_on `p` >>
+      gvs[Once well_typed_expr_def, AllCaseEqs()] >>
+      qpat_x_assum `place_map_tables_agree _ _` mp_tac >>
+      simp[place_map_tables_agree_def] >>
+      disch_then (qspec_then `(p0,p1)` mp_tac) >>
+      Cases_on `vt` >>
+      gvs[vtype_annotation_ok_def, value_type_place_def] >>
+      Cases_on `cenv.ce_hashmap_info (module_var_key (p0,p1))` >>
+      gvs[] >> PairCases_on `x` >> gvs[])
+  >> `place_type cenv e = value_type_place vt'` by metis_tac[]
+  >> Cases_on `vt'`
+  >> gvs[value_type_place_def, subscript_vtype_def, AllCaseEqs()]
+  >> Cases_on `t'`
+  >> gvs[subscript_vtype_def, AllCaseEqs(),
+         vtype_annotation_ok_def, value_type_place_def]
+QED
+
+Theorem place_map_tables_agree_local_updates[simp]:
+  place_map_tables_agree
+    (cenv with <| ce_vars := vars; ce_var_type := tys |>)
+    (extend_local env id ty assignable) <=>
+  place_map_tables_agree cenv env
+Proof
+  irule place_map_tables_agree_cong >> simp[extend_local_def]
+QED
+
+(* Fail the build rather than silently export an admitted bridge. *)
+val _ = List.app (fn (name,th) =>
+  if List.all (fn tag => tag = "DISK_THM")
+       (fst (Tag.dest_tag (Thm.tag th))) then ()
+  else raise Fail ("oracle in place typing bridge: " ^ name))
+  (DB.thms "placeTypingProps");
