@@ -531,6 +531,58 @@ Proof
   simp[shape_step_def] >> metis_tac[]
 QED
 
+(* Bounded opcode checks shared by the straight-line lock stages. *)
+val intfn_lock_simps =
+  [shape_stable_def, label_or_plain_def, plain_operand_def,
+   stackPlanTypesTheory.is_label_operand_def, lowered_inst_ok_def,
+   mk_inst_def, raw_opcode_ok_def, inst_shape_ok_def, jump_labels_ok_def,
+   is_read0_opcode_def, label_positions_ok_def, is_terminator_def];
+
+Theorem compile_nonreentrant_lock_shape[local]:
+  !nkey use_trans is_view. shape_step T compiler_label (\st. T)
+    (compile_nonreentrant_lock nkey use_trans is_view) (\x st. T)
+Proof
+  rpt gen_tac >> simp[compile_nonreentrant_lock_def] >>
+  Cases_on `use_trans` >> simp[] >> (
+  irule shape_step_bind >>
+  qexists_tac `\op st. plain_operand st op` >> reverse conj_tac
+  >- (FIRST [
+        (rename1 `emit_op TLOAD _` >>
+         mp_tac (Q.SPECL [`T`, `compiler_label`, `\st. T`, `TLOAD`,
+           `[Lit (n2w nkey)]`] shape_step_emit_op)),
+        (rename1 `emit_op SLOAD _` >>
+         mp_tac (Q.SPECL [`T`, `compiler_label`, `\st. T`, `SLOAD`,
+           `[Lit (n2w nkey)]`] shape_step_emit_op))] >>
+      simp intfn_lock_simps) >>
+  qx_gen_tac `current` >> BETA_TAC >>
+  irule shape_step_bind >>
+  qexists_tac `\op st. plain_operand st op` >> reverse conj_tac
+  >- (qmatch_goalsub_abbrev_tac `emit_op EQ ops` >>
+      mp_tac (Q.SPECL [`T`, `compiler_label`, `\st. T`, `EQ`, `ops`]
+        shape_step_emit_op) >>
+      simp (Abbr `ops` :: intfn_lock_simps) >>
+      rewrite_tac[shape_step_def] >> metis_tac[]) >>
+  qx_gen_tac `locked` >> BETA_TAC >>
+  irule shape_step_bind >>
+  qexists_tac `\op st. plain_operand st op` >> reverse conj_tac
+  >- (mp_tac (Q.SPECL [`T`, `compiler_label`, `\st. T`, `ISZERO`,
+        `[locked]`] shape_step_emit_op) >>
+      simp intfn_lock_simps >>
+      rewrite_tac[shape_step_def] >> metis_tac[]) >>
+  qx_gen_tac `not_locked` >> BETA_TAC >>
+  irule shape_step_ignore_bind >> qexists_tac `\u st. T` >> conj_tac
+  >- (gen_tac >> BETA_TAC >> Cases_on `is_view` >> simp[]
+      >- (irule shape_step_return >> simp[]) >>
+      qmatch_goalsub_abbrev_tac `emit_void opc ops` >>
+      mp_tac (Q.SPECL [`T`, `compiler_label`, `\st. T`, `opc`, `ops`]
+        shape_step_emit_void) >>
+      simp (Abbr `opc` :: Abbr `ops` :: intfn_lock_simps)) >>
+  mp_tac (Q.SPECL [`T`, `compiler_label`, `\st. T`, `ASSERT`,
+    `[not_locked]`] shape_step_emit_void) >>
+  simp intfn_lock_simps >>
+  rewrite_tac[shape_step_def] >> metis_tac[])
+QED
+
 (* The PARAM/RETPC_PARAM prologue, then the body via compile_stmt_shape with
    ce_return_pc = SOME (PtrVar return_pc 0), so internal = T. *)
 Theorem compile_internal_function_shape:
