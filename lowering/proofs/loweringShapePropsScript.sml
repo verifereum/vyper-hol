@@ -555,6 +555,162 @@ QED
 
 Finalise compile_word_copy_loop_shape
 
+Theorem compile_ensure_in_memory_shape:
+  !loc src_ptr mem_bytes nwords is_ctor internal.
+    loc <> LocCode ==>
+    shape_step internal compiler_label (\st. plain_operand st src_ptr)
+      (compile_ensure_in_memory src_ptr loc mem_bytes nwords is_ctor)
+      (\op st. plain_operand st op)
+Proof
+  rpt gen_tac >> disch_tac >> Cases_on `loc` >>
+  gvs[compile_ensure_in_memory_def]
+  >- (irule shape_step_return >> simp[])
+  >- suspend "slots"
+  >- suspend "slots"
+  >> suspend "calldata"
+QED
+
+Resume compile_ensure_in_memory_shape[slots]:
+  markerLib.RESUME_TAC >>
+  (irule shape_step_bind >>
+   qexists_tac `\b st. plain_operand st src_ptr /\ plain_operand st b.buf_operand` >>
+   conj_tac
+   >- (qx_gen_tac `buf` >> BETA_TAC >> suspend "slot_copy") >>
+   irule shape_step_conseq >>
+   qexistsl [`compiler_label`, `\st. plain_operand st src_ptr /\ T`,
+             `\b st. plain_operand st src_ptr /\ plain_operand st b.buf_operand`] >>
+   conj_tac >- simp[] >> conj_tac >- simp[] >> conj_tac >- simp[] >>
+   ho_match_mp_tac shape_step_frame >>
+   conj_tac >- irule compile_alloc_buffer_shape >>
+   simp[shape_stable_def] >> metis_tac[plain_operand_mono])
+QED
+
+Resume compile_ensure_in_memory_shape[slot_copy]:
+  markerLib.RESUME_TAC >>
+  (irule shape_step_ignore_bind >>
+   qexists_tac `\x st. plain_operand st buf.buf_operand` >>
+   conj_tac >- (gen_tac >> BETA_TAC >> irule shape_step_return >> simp[]) >>
+   Cases_on `nwords = 1` >> simp[]
+   >- (irule shape_step_bind >>
+       qexists_tac `\x st. (plain_operand st src_ptr /\ plain_operand st buf.buf_operand) /\ plain_operand st x` >>
+       conj_tac >- (gen_tac >> BETA_TAC >> suspend "single_store") >>
+       ho_match_mp_tac shape_step_emit_op_under >>
+       conj_tac >- (simp[shape_stable_def] >> metis_tac[plain_operand_mono]) >>
+       simp[lowered_inst_ok_def, raw_opcode_ok_def, inst_shape_ok_def,
+            jump_labels_ok_def, mk_inst_def, is_read0_opcode_def,
+            label_positions_ok_def, is_terminator_def, is_param_opcode_def,
+            label_or_plain_def, plain_operand_def] >> metis_tac[]) >>
+   irule shape_step_ignore_bind >>
+   qexists_tac `\x st. plain_operand st buf.buf_operand` >>
+   conj_tac >- (gen_tac >> BETA_TAC >> irule shape_step_return >> simp[]) >>
+   simp[compile_storage_to_memory_def, compile_transient_to_memory_def] >>
+   suspend "loop_copy")
+QED
+
+Resume compile_ensure_in_memory_shape[single_store]:
+  markerLib.RESUME_TAC >>
+  (pure_rewrite_tac[emit_void_def, GSYM emit_inst_def] >>
+   irule shape_step_conseq >>
+   qexistsl [`compiler_label`,
+     `\st. (plain_operand st src_ptr /\ plain_operand st buf.buf_operand) /\ plain_operand st x`,
+     `\u st. (plain_operand st src_ptr /\ plain_operand st buf.buf_operand) /\ plain_operand st x`] >>
+   conj_tac >- simp[] >> conj_tac >- simp[] >> conj_tac >- simp[] >>
+   ho_match_mp_tac shape_step_emit_inst_under >>
+   conj_tac >- (simp[shape_stable_def] >> metis_tac[plain_operand_mono]) >>
+   simp[lowered_inst_ok_def, raw_opcode_ok_def, inst_shape_ok_def,
+        jump_labels_ok_def, mk_inst_def, is_read0_opcode_def,
+        label_positions_ok_def, is_terminator_def, is_param_opcode_def,
+        label_or_plain_def, plain_operand_def] >> metis_tac[])
+QED
+
+Resume compile_ensure_in_memory_shape[loop_copy]:
+  markerLib.RESUME_TAC >>
+  (irule shape_step_conseq >>
+   qexistsl [`compiler_label`,
+     `\st. plain_operand st buf.buf_operand /\ (plain_operand st src_ptr /\ plain_operand st buf.buf_operand)`,
+     `\u st. plain_operand st buf.buf_operand /\ T`] >>
+   conj_tac >- simp[] >> conj_tac >- simp[] >> conj_tac >- simp[] >>
+   ho_match_mp_tac shape_step_frame >>
+   conj_tac >- (irule compile_word_copy_loop_shape >> simp[]) >>
+   simp[shape_stable_def] >> metis_tac[plain_operand_mono])
+QED
+
+Resume compile_ensure_in_memory_shape[calldata]:
+  irule shape_step_bind >>
+  qexists_tac `\x st. plain_operand st src_ptr /\ plain_operand st x` >>
+  conj_tac
+  >- (qx_gen_tac `len_op` >> BETA_TAC >>
+      irule shape_step_bind >>
+      qexists_tac `\b st. (plain_operand st src_ptr /\ plain_operand st len_op) /\ plain_operand st b.buf_operand` >>
+      conj_tac >- (qx_gen_tac `buf` >> BETA_TAC >> suspend "cd_store") >>
+      irule shape_step_conseq >>
+      qexistsl [`compiler_label`,
+        `\st. (plain_operand st src_ptr /\ plain_operand st len_op) /\ T`,
+        `\b st. (plain_operand st src_ptr /\ plain_operand st len_op) /\ plain_operand st b.buf_operand`] >>
+      conj_tac >- simp[] >> conj_tac >- simp[] >> conj_tac >- simp[] >>
+      ho_match_mp_tac shape_step_frame >>
+      conj_tac >- irule compile_alloc_buffer_shape >>
+      simp[shape_stable_def] >> metis_tac[plain_operand_mono]) >>
+  ho_match_mp_tac shape_step_emit_op_under >>
+  conj_tac >- (simp[shape_stable_def] >> metis_tac[plain_operand_mono]) >>
+  simp[lowered_inst_ok_def, raw_opcode_ok_def, inst_shape_ok_def,
+       jump_labels_ok_def, mk_inst_def, is_read0_opcode_def,
+       label_positions_ok_def, is_terminator_def, is_param_opcode_def,
+       label_or_plain_def, plain_operand_def]
+QED
+
+Resume compile_ensure_in_memory_shape[cd_store]:
+  irule shape_step_ignore_bind >>
+  qexists_tac `\u st. (plain_operand st src_ptr /\ plain_operand st len_op) /\ plain_operand st buf.buf_operand` >>
+  conj_tac >- (gen_tac >> BETA_TAC >> suspend "cd_adds") >>
+  pure_rewrite_tac[emit_void_def, GSYM emit_inst_def] >>
+  ho_match_mp_tac shape_step_emit_inst_under >>
+  conj_tac >- (simp[shape_stable_def] >> metis_tac[plain_operand_mono]) >>
+  simp[lowered_inst_ok_def, raw_opcode_ok_def, inst_shape_ok_def,
+       jump_labels_ok_def, mk_inst_def, is_read0_opcode_def,
+       label_positions_ok_def, is_terminator_def, is_param_opcode_def,
+       label_or_plain_def, plain_operand_def] >> metis_tac[]
+QED
+
+Resume compile_ensure_in_memory_shape[cd_adds]:
+  irule shape_step_bind >>
+  qexists_tac `\x st. ((plain_operand st src_ptr /\ plain_operand st len_op) /\ plain_operand st buf.buf_operand) /\ plain_operand st x` >>
+  conj_tac >- (qx_gen_tac `data_ptr` >> BETA_TAC >> suspend "cd_src") >>
+  ho_match_mp_tac shape_step_emit_op_under >>
+  conj_tac >- (simp[shape_stable_def] >> metis_tac[plain_operand_mono]) >>
+  simp[lowered_inst_ok_def, raw_opcode_ok_def, inst_shape_ok_def,
+       jump_labels_ok_def, mk_inst_def, is_read0_opcode_def,
+       label_positions_ok_def, is_terminator_def, is_param_opcode_def,
+       label_or_plain_def, plain_operand_def, stackPlanTypesTheory.is_label_operand_def] >> metis_tac[]
+QED
+
+Resume compile_ensure_in_memory_shape[cd_src]:
+  irule shape_step_bind >>
+  qexists_tac `\x st. (((plain_operand st src_ptr /\ plain_operand st len_op) /\ plain_operand st buf.buf_operand) /\ plain_operand st data_ptr) /\ plain_operand st x` >>
+  conj_tac >- (qx_gen_tac `src_data` >> BETA_TAC >> suspend "cd_copy") >>
+  ho_match_mp_tac shape_step_emit_op_under >>
+  conj_tac >- (simp[shape_stable_def] >> metis_tac[plain_operand_mono]) >>
+  simp[lowered_inst_ok_def, raw_opcode_ok_def, inst_shape_ok_def,
+       jump_labels_ok_def, mk_inst_def, is_read0_opcode_def,
+       label_positions_ok_def, is_terminator_def, is_param_opcode_def,
+       label_or_plain_def, plain_operand_def, stackPlanTypesTheory.is_label_operand_def] >> metis_tac[]
+QED
+
+Resume compile_ensure_in_memory_shape[cd_copy]:
+  irule shape_step_ignore_bind >>
+  qexists_tac `\u st. (((plain_operand st src_ptr /\ plain_operand st len_op) /\ plain_operand st buf.buf_operand) /\ plain_operand st data_ptr) /\ plain_operand st src_data` >>
+  conj_tac >- (gen_tac >> BETA_TAC >> irule shape_step_return >> simp[]) >>
+  pure_rewrite_tac[emit_void_def, GSYM emit_inst_def] >>
+  ho_match_mp_tac shape_step_emit_inst_under >>
+  conj_tac >- (simp[shape_stable_def] >> metis_tac[plain_operand_mono]) >>
+  simp[lowered_inst_ok_def, raw_opcode_ok_def, inst_shape_ok_def,
+       jump_labels_ok_def, mk_inst_def, is_read0_opcode_def,
+       label_positions_ok_def, is_terminator_def, is_param_opcode_def,
+       label_or_plain_def, plain_operand_def] >> metis_tac[]
+QED
+
+Finalise compile_ensure_in_memory_shape
+
 (* Shared helper of every value consumer; weakly frozen. *)
 Theorem unwrap_value_shape:
   !cenv v internal.
