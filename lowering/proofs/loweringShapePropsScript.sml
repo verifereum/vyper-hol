@@ -269,6 +269,33 @@ Proof
        is_param_opcode_def, stackPlanTypesTheory.is_label_operand_def]
 QED
 
+Theorem shape_step_emit_op_under:
+  !internal LP P opc ops.
+    shape_stable P /\ ~MEM opc [GAS; RETPC_PARAM] /\
+    (!st. P st ==> EVERY (label_or_plain st) ops /\
+      (!id outs. lowered_inst_ok internal (mk_inst id opc ops outs))) ==>
+    shape_step internal LP P (emit_op opc ops)
+      (\x st. P st /\ plain_operand st x)
+Proof
+  rpt gen_tac >> strip_tac >> rw[shape_step_def] >>
+  first_x_assum (drule_then strip_assume_tac) >>
+  drule_all shape_step_emit_op >>
+  simp[shape_step_def] >> disch_then drule_all >> simp[]
+QED
+
+Theorem shape_step_emit_inst_under:
+  !internal LP P opc ops outs.
+    shape_stable P /\ ~MEM opc [GAS; RETPC_PARAM] /\
+    (!st. P st ==> EVERY (label_or_plain st) ops /\
+      (!id. lowered_inst_ok internal (mk_inst id opc ops outs))) ==>
+    shape_step internal LP P (emit_inst opc ops outs) (\x st. P st)
+Proof
+  rpt gen_tac >> strip_tac >> rw[shape_step_def] >>
+  first_x_assum (drule_then strip_assume_tac) >>
+  drule_all shape_step_emit_inst >>
+  simp[shape_step_def] >> disch_then drule_all >> simp[]
+QED
+
 (* Shared helper of every value consumer; weakly frozen. *)
 Theorem unwrap_value_shape:
   !cenv v internal.
