@@ -817,6 +817,26 @@ Proof
     (SPEC_ALL immutable_compile_transfers_execution))) >> simp[]
 QED
 
+(* Runtime immutable loads do not consult the constructor region operand. *)
+Theorem immutable_runtime_copy_region_irrelevant:
+  !n off. compile_imm_copy_to_memory F imm_base src dst n off =
+    compile_imm_copy_to_memory F (SOME (Lit 0w)) src dst n off
+Proof
+  Induct >> simp[compile_imm_copy_to_memory_def, compile_imm_load_word_def]
+QED
+
+Theorem immutable_runtime_copy_execution:
+  compile_imm_copy_to_memory F imm_base src dst n off st = ((),st') /\
+  eval_operand src s = SOME a /\ eval_operand dst s = SOME b /\ fresh_vars_wrt st s ==>
+  ?s'. immutable_execution_frame st s st' s' /\
+    s'.vs_memory = (immutable_transfers F F a b n off s).vs_memory /\
+    s'.vs_immutables = s.vs_immutables
+Proof
+  once_rewrite_tac[immutable_runtime_copy_region_irrelevant] >> strip_tac >>
+  mp_tac (SRULE [] (Q.INST [`ctor` |-> `F`, `region` |-> `Lit 0w`]
+    (SPEC_ALL compile_imm_copy_to_memory_execution))) >> simp[]
+QED
+
 Theorem immutable_compile_memory_snapshot:
   (if store then compile_imm_store_words (SOME region) src dst n off
    else compile_imm_copy_to_memory ctor (SOME region) src dst n off) st = ((),st') /\
@@ -832,12 +852,14 @@ Theorem immutable_compile_memory_snapshot:
 Proof
   strip_tac >> (
   drule_all immutable_compile_transfers_execution >> strip_tac >>
-  qexists_tac `s'` >> simp[] >>
-  irule immutable_memory_transfers_snapshot >> simp[])
+  ` (immutable_transfers store ctor (n2w src_addr) (n2w dst_addr) n off s).vs_memory =
+    (mcopy (dst_addr+off) (src_addr+off) (32*n) s).vs_memory` by
+    (irule immutable_memory_transfers_snapshot >> simp[]) >>
+  qexists_tac `s'` >> asm_rewrite_tac[])
 QED
 
 Theorem immutable_compile_runtime_snapshot:
-  compile_imm_copy_to_memory F (SOME region) src dst n off st = ((),st') /\
+  compile_imm_copy_to_memory F imm_base src dst n off st = ((),st') /\
   eval_operand src s = SOME (n2w src_addr) /\ eval_operand dst s = SOME (n2w dst_addr) /\
   fresh_vars_wrt st s /\ 0 < n /\
   src_addr+off+32*n < dimword (:256) /\ dst_addr+off+32*n < dimword (:256) ==>
@@ -846,7 +868,126 @@ Theorem immutable_compile_runtime_snapshot:
       (TAKE (32*n) (DROP (src_addr+off) s.vs_data_section ++ REPLICATE (32*n) 0w)) s).vs_memory /\
     s'.vs_immutables = s.vs_immutables
 Proof
-  strip_tac >> drule_all compile_imm_copy_to_memory_execution >> strip_tac >>
-  qexists_tac `s'` >> simp[] >>
-  drule_all immutable_runtime_transfers_snapshot >> simp[]
+  strip_tac >>
+  mp_tac (Q.INST [`a` |-> `n2w src_addr`, `b` |-> `n2w dst_addr`]
+    (SPEC_ALL immutable_runtime_copy_execution)) >>
+  simp[] >> strip_tac >>
+  `immutable_transfers F F (n2w src_addr) (n2w dst_addr) n off s =
+   write_memory_with_expansion (dst_addr+off)
+     (TAKE (32*n) (DROP (src_addr+off) s.vs_data_section ++ REPLICATE (32*n) 0w)) s` by
+    (irule immutable_runtime_transfers_snapshot >> simp[]) >>
+  qexists_tac `s'` >> gvs[]
 QED
+
+(* A bulk-write boundary gives both the installed bytes and any protected,
+   initially allocated slice. It is applied below only after execution. *)
+Theorem immutable_snapshot_slices:
+  s'.vs_memory = (write_memory_with_expansion at bs s).vs_memory /\
+  protected + len <= LENGTH s.vs_memory /\
+  (protected + len <= at \/ at + LENGTH bs <= protected) ==>
+  TAKE (LENGTH bs) (DROP at s'.vs_memory) = bs /\
+  TAKE len (DROP protected s'.vs_memory) = TAKE len (DROP protected s.vs_memory)
+Proof
+  strip_tac >> (asm_rewrite_tac[] >>
+  conj_tac >- irule immutable_write_memory_slice >>
+  irule immutable_write_memory_disjoint >> simp[])
+QED
+
+Theorem immutable_compile_memory_slices:
+  (if store then compile_imm_store_words (SOME region) src dst n off
+   else compile_imm_copy_to_memory ctor (SOME region) src dst n off) st = ((),st') /\
+  eval_operand src s = SOME (n2w src_addr) /\ eval_operand dst s = SOME (n2w dst_addr) /\
+  ((store \/ ctor) ==> eval_operand region s = SOME 0w) /\ fresh_vars_wrt st s /\
+  0 < n /\ (store \/ ctor) /\
+  src_addr+off+32*n < dimword (:256) /\ dst_addr+off+32*n < dimword (:256) /\
+  (dst_addr+off+32*n <= src_addr+off \/ src_addr+off+32*n <= dst_addr+off) /\
+  src_addr+off+32*n <= LENGTH s.vs_memory /\
+  protected+len <= LENGTH s.vs_memory /\
+  (protected+len <= dst_addr+off \/ dst_addr+off+32*n <= protected) ==>
+  ?s'. immutable_execution_frame st s st' s' /\
+    TAKE (32*n) (DROP (dst_addr+off) s'.vs_memory) =
+      TAKE (32*n) (DROP (src_addr+off) s.vs_memory) /\
+    TAKE len (DROP protected s'.vs_memory) = TAKE len (DROP protected s.vs_memory) /\
+    s'.vs_immutables = (immutable_transfers store ctor
+      (n2w src_addr) (n2w dst_addr) n off s).vs_immutables
+Proof
+  strip_tac >> (
+  mp_tac (SPEC_ALL immutable_compile_memory_snapshot) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  `LENGTH (TAKE (32*n) (DROP (src_addr+off) s.vs_memory)) = 32*n` by
+    simp[listTheory.LENGTH_TAKE_EQ, listTheory.LENGTH_DROP] >>
+  `s'.vs_memory = (write_memory_with_expansion (dst_addr+off)
+    (TAKE (32*n) (DROP (src_addr+off) s.vs_memory)) s).vs_memory` by
+    gvs[mcopy_def, listTheory.TAKE_APPEND1, listTheory.LENGTH_DROP] >>
+  drule immutable_snapshot_slices >>
+  disch_then (qspecl_then [`protected`,`len`] mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  qexists_tac `s'` >> gvs[])
+QED
+
+Theorem immutable_compile_runtime_slices:
+  compile_imm_copy_to_memory F imm_base src dst n off st = ((),st') /\
+  eval_operand src s = SOME (n2w src_addr) /\ eval_operand dst s = SOME (n2w dst_addr) /\
+  fresh_vars_wrt st s /\ 0 < n /\
+  src_addr+off+32*n < dimword (:256) /\ dst_addr+off+32*n < dimword (:256) /\
+  protected+len <= LENGTH s.vs_memory /\
+  (protected+len <= dst_addr+off \/ dst_addr+off+32*n <= protected) ==>
+  ?s'. immutable_execution_frame st s st' s' /\
+    TAKE (32*n) (DROP (dst_addr+off) s'.vs_memory) =
+      TAKE (32*n) (DROP (src_addr+off) s.vs_data_section ++ REPLICATE (32*n) 0w) /\
+    TAKE len (DROP protected s'.vs_memory) = TAKE len (DROP protected s.vs_memory) /\
+    s'.vs_immutables = s.vs_immutables
+Proof
+  strip_tac >> (
+  drule_all immutable_compile_runtime_snapshot >> strip_tac >>
+  `LENGTH (TAKE (32*n) (DROP (src_addr+off) s.vs_data_section ++ REPLICATE (32*n) 0w)) = 32*n`
+    by simp[listTheory.LENGTH_TAKE_EQ] >>
+  drule immutable_snapshot_slices >>
+  disch_then (qspecl_then [`protected`,`len`] mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  qexists_tac `s'` >> gvs[])
+QED
+
+(* Zero words execute no instructions, including with arbitrary roots/bases. *)
+Theorem immutable_copy_zero_execution:
+  compile_imm_copy_to_memory ctor imm_base src dst 0 off st = ((),st) /\
+  run_inst_seq (emitted_insts st st) s = OK s
+Proof
+  simp[compile_imm_copy_to_memory_def, comp_return_def,
+       emitted_insts_def, run_inst_seq_def]
+QED
+
+Theorem immutable_store_zero_execution:
+  compile_imm_store_words imm_base src dst 0 off st = ((),st) /\
+  run_inst_seq (emitted_insts st st) s = OK s
+Proof
+  simp[compile_imm_store_words_def, comp_return_def,
+       emitted_insts_def, run_inst_seq_def]
+QED
+
+(* Two-word regression covers both real compiler functions, constructor and
+   runtime reads, and the sequential (possibly overlapping) ISTORE map. *)
+Theorem immutable_compile_two_words_execution:
+  (if store then compile_imm_store_words (SOME region) src dst 2 off
+   else compile_imm_copy_to_memory ctor (SOME region) src dst 2 off) st = ((),st') /\
+  eval_operand src s = SOME a /\ eval_operand dst s = SOME b /\
+  ((store \/ ctor) ==> eval_operand region s = SOME 0w) /\ fresh_vars_wrt st s ==>
+  ?s'. immutable_execution_frame st s st' s' /\
+    s'.vs_memory = (immutable_word_transfer store ctor a b (off+32)
+      (immutable_word_transfer store ctor a b off s)).vs_memory /\
+    s'.vs_immutables = (immutable_word_transfer store ctor a b (off+32)
+      (immutable_word_transfer store ctor a b off s)).vs_immutables
+Proof
+  strip_tac >>
+  mp_tac (Q.INST [`n` |-> `2`] (SPEC_ALL immutable_compile_transfers_execution)) >>
+  (impl_tac >- asm_rewrite_tac[]) >>
+  `2 = SUC (SUC 0)` by decide_tac >>
+  pop_assum (fn th => pure_rewrite_tac[th, immutable_transfers_def]) >> simp[]
+QED
+
+(* Reject oracle-bearing dependencies at the strict execution boundary. *)
+val _ = List.app (fn (name,th) =>
+  let val (oracles,_) = Tag.dest_tag (Thm.tag th)
+  in if List.all (fn tag => tag = "DISK_THM") oracles then ()
+     else raise Fail ("Oracle in immutableCopyExecution." ^ name)
+  end) (DB.thms "immutableCopyExecution");
