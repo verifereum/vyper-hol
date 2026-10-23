@@ -270,10 +270,8 @@ Definition compile_abi_encode_child_def:
                 compile_abi_encode_dyn_static_loop dst src elem_info
                   elem_abi_sz elem_mem_sz len_op
               else
-                do dst_data <- emit_op ADD [dst; Lit 32w];
-                   compile_abi_encode_dyn_loop
-                     dst_data src elem_info elem_abi_sz elem_mem_sz len_op
-                od);
+                compile_abi_encode_dyn_loop
+                  dst src elem_info elem_abi_sz elem_mem_sz len_op);
            parent_dyn <- emit_op MLOAD [parent_dyn_ptr];
            new_parent_dyn <- emit_op ADD [parent_dyn; encoded_size];
            emit_void MSTORE [parent_dyn_ptr; new_parent_dyn];
@@ -340,12 +338,13 @@ Definition compile_abi_encode_child_def:
              src_data <- emit_op ADD [src; Lit 32w];
              src_off <- emit_op MUL [i_op2; Lit (n2w elem_mem_sz)];
              child_src <- emit_op ADD [src_data; src_off];
+             dst_data <- emit_op ADD [dst; Lit 32w];
+             head_off <- emit_op MUL [i_op2; Lit (n2w elem_abi_sz)];
+             head_pos <- emit_op ADD [dst_data; head_off];
              dyn_ofst <- emit_op MLOAD [dyn_ptr];
-             child_dst <- emit_op ADD [dst; dyn_ofst];
+             child_dst <- emit_op ADD [dst_data; dyn_ofst];
              child_len <-
                compile_abi_encode_to_buf child_dst child_src elem_info;
-             head_off <- emit_op MUL [i_op2; Lit (n2w elem_abi_sz)];
-             head_pos <- emit_op ADD [dst; head_off];
              emit_void MSTORE [head_pos; dyn_ofst];
              new_dyn <- emit_op ADD [dyn_ofst; child_len];
              emit_void MSTORE [dyn_ptr; new_dyn];
@@ -353,6 +352,7 @@ Definition compile_abi_encode_child_def:
              emit_void MSTORE [i_ptr; new_i];
              emit_inst JMP [Label hdr_lbl] [];
              new_block exit_lbl;
+             emit_op MLOAD [src];
              final_dyn <- emit_op MLOAD [dyn_ptr];
              emit_op ADD [Lit 32w; final_dyn]
           od

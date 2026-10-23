@@ -2449,10 +2449,7 @@ Proof
     conj_tac >- (
       IF_CASES_TAC >> gvs[]
       >- simp[ci_mono_compile_abi_encode_dyn_static_loop]
-      >> rpt strip_tac >>
-         ho_match_mp_tac ci_mono_bind >>
-         conj_tac >- simp[ci_mono_emit_op] >>
-         rpt strip_tac >> first_x_assum irule) >>
+      >> rpt strip_tac >> first_x_assum irule) >>
     rpt strip_tac >>
     rpt (ho_match_mp_tac ci_mono_bind ORELSE
          ho_match_mp_tac ci_mono_ignore_bind ORELSE
@@ -2537,8 +2534,7 @@ Proof
      ho_match_mp_tac ci_mono_bind >> conj_tac >-
        (IF_CASES_TAC >> gvs[]
         >- simp[ci_mono_compile_abi_encode_dyn_static_loop]
-        >> ho_match_mp_tac ci_mono_bind >> conj_tac >- simp base >>
-           rpt strip_tac >> first_x_assum irule) >>
+        >> rpt strip_tac >> first_x_assum irule) >>
      rpt strip_tac >> decomp >> finish)
   end
 QED
