@@ -195,8 +195,11 @@ Proof
   cheat
 QED
 
-(* S2: planned admission, Milestone 5. Proof idea: lowering's checked context
-   and supported function/loop restrictions establish the raw O1 shape. *)
+(* S2: planned admission, Milestone 5.  False as stated: an internal function
+   named "fn_foo" next to an external "foo" shares its entry label
+   (lower_vyper_runtime_unit_label_clash in s2LabelClashWitness).
+   lower_vyper_runtime_unit_source_unit_ok_names in loweringShapeProps proves
+   it under an internal-name premise. *)
 Theorem lower_vyper_runtime_unit_source_unit_ok:
   !tops rpolicy unit.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\ supported_program tops
