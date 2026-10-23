@@ -1,6 +1,6 @@
 Theory createSlotCopyExecution
 Ancestors
-  createCopyExecution createMemoryInterface createSourceCallback
+  createCopyExecution createMemoryInterface createSourceCallback createFrameInterface emitHelperProps fragExec
   exprLoweringProps venomExecSemantics venomMemProps
   compileEnv emitHelper venomInst venomState list rich_list words
 Libs
@@ -416,6 +416,439 @@ Proof
   strip_tac >> qexists_tac `slot_copy_cond_result cs n n s` >>
   simp[slot_copy_cond_frame, slot_copy_condition_invariant] >>
   irule slot_copy_condition_execution >> fs[slot_copy_inv_def]
+QED
+
+Theorem slot_copy_condition_block:
+  i < 2**256 /\ n < 2**256 /\
+  lookup_var (slot_copy_var cs 0) s = SOME (n2w i) /\
+  s.vs_inst_idx = 0 /\ ~s.vs_halted ==>
+  exec_block fuel ctx
+    <|bb_label := slot_copy_cond cs; bb_instructions := slot_copy_cond_insts cs n|> s =
+    OK (slot_copy_cond_result cs n i s)
+Proof
+  strip_tac >>
+  `((n2w i : bytes32) = n2w n) <=> (i=n)` by
+    (pure_rewrite_tac[n2w_11] >> fs[dimword_def]) >>
+  simp[Once exec_block_def, get_instruction_def, slot_copy_cond_insts_def,
+       mk_inst_def, Once step_inst_def, step_inst_base_def, exec_pure2_def,
+       eval_operand_def] >>
+  simp[Once exec_block_def, get_instruction_def, slot_copy_cond_insts_def,
+       mk_inst_def, Once step_inst_def, step_inst_base_def,
+       eval_operand_def, lookup_var_def, update_var_def,
+       finite_mapTheory.FLOOKUP_UPDATE, is_terminator_def,
+       slot_copy_cond_result_def, jump_to_def, bool_to_word_def] >>
+  Cases_on `i=n` >> simp[venomExecSemanticsTheory.bool_to_word_def]
+QED
+
+Theorem slot_copy_seq_jmp_block[local]:
+  run_inst_seq (insts ++ [mk_inst id JMP [Label target] []]) s = OK t /\
+  EVERY (\i. ~is_terminator i.inst_opcode) insts /\
+  EVERY (\i. i.inst_opcode <> INVOKE) insts /\
+  bb.bb_instructions = prefix ++ insts ++ [mk_inst id JMP [Label target] []] /\
+  s.vs_inst_idx = LENGTH prefix /\ ~t.vs_halted ==>
+  exec_block fuel ctx bb s = OK t
+Proof
+  strip_tac >>
+  `?u. run_inst_seq insts s = OK u` by
+    (spose_not_then assume_tac >>
+     drule run_inst_seq_append_err >>
+     disch_then (qspec_then `[mk_inst id JMP [Label target] []]` mp_tac) >>
+     metis_tac[]) >>
+  drule run_inst_seq_append >>
+  disch_then (qspec_then `[mk_inst id JMP [Label target] []]` mp_tac) >>
+  simp[run_inst_seq_def, slot_copy_step_jump] >> strip_tac >> gvs[] >>
+  `~u.vs_halted` by fs[jump_to_def] >>
+  `s with vs_inst_idx := LENGTH prefix = s` by simp[venom_state_component_equality] >>
+  `exec_block fuel ctx bb (s with vs_inst_idx := LENGTH prefix) =
+     OK (jump_to target u)` suffices_by simp[] >>
+  irule exec_block_inst_seq_jmp >>
+  simp[] >> qexistsl_tac [`insts`, `id`] >>
+  simp[get_instruction_def, EL_APPEND_EQN]
+QED
+
+Theorem slot_copy_body_block:
+  (load = SLOAD \/ load = TLOAD) /\
+  slot_copy_external cs src /\ slot_copy_external cs dst /\
+  eval_operand src s = SOME p /\ eval_operand dst s = SOME d /\
+  lookup_var (slot_copy_var cs 0) s = SOME (n2w i) /\
+  s.vs_inst_idx = 0 /\ ~s.vs_halted ==>
+  exec_block fuel ctx
+    <|bb_label := slot_copy_body cs;
+      bb_instructions := slot_copy_body_insts cs src dst load|> s =
+    OK (slot_copy_body_result cs p d load i s)
+Proof
+  disch_then (CONJUNCTS_THEN2 assume_tac strip_assume_tac) >>
+  `run_inst_seq (slot_copy_body_insts cs src dst load) s =
+     OK (slot_copy_body_result cs p d load i s)` by
+    (irule slot_copy_body_execution >> simp[]) >>
+  `~(slot_copy_body_result cs p d load i s).vs_halted` by
+    simp[slot_copy_body_result_def, jump_to_def, update_var_def, mstore_def] >>
+  irule slot_copy_seq_jmp_block >> simp[] >>
+  qexistsl_tac [`cs.cs_next_id + 11`,
+    `TAKE 7 (slot_copy_body_insts cs src dst load)`, `slot_copy_cond cs`] >>
+  simp[slot_copy_body_insts_def, mk_inst_def, is_terminator_def] >>
+  gvs[slot_copy_body_insts_def, mk_inst_def, is_terminator_def]
+QED
+
+Theorem slot_copy_results_fresh:
+  fresh_vars_wrt (slot_copy_final cs src dst n load) s ==>
+  fresh_vars_wrt (slot_copy_final cs src dst n load) (slot_copy_cond_result cs n i s) /\
+  fresh_vars_wrt (slot_copy_final cs src dst n load) (slot_copy_body_result cs p d load i s)
+Proof
+  simp[fresh_vars_wrt_def, slot_copy_final_def, slot_copy_var_def,
+       slot_copy_cond_result_def, slot_copy_body_result_def,
+       update_var_def, jump_to_def, mstore_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  rpt strip_tac >>
+  `!j. j < 7 ==> "%" ++ toString (cs.cs_next_var+j) <> "%" ++ toString n'` by
+    (rpt strip_tac >> drule fresh_var_distinct >> simp[] >> decide_tac) >>
+  simp[] >> first_x_assum irule >> decide_tac
+QED
+
+Theorem slot_copy_results_halted[simp]:
+  (slot_copy_cond_result cs n i s).vs_halted = s.vs_halted /\
+  (slot_copy_body_result cs p d load i s).vs_halted = s.vs_halted
+Proof
+  simp[slot_copy_cond_result_def, slot_copy_body_result_def,
+       update_var_def, jump_to_def, mstore_def]
+QED
+
+Theorem slot_copy_run_condition:
+  fn_has_code cs (slot_copy_final cs src dst n load) fn /\
+  i < 2**256 /\ n < 2**256 /\
+  lookup_var (slot_copy_var cs 0) s = SOME (n2w i) /\
+  s.vs_current_bb = slot_copy_cond cs /\ s.vs_inst_idx = 0 /\ ~s.vs_halted ==>
+  run_blocks (SUC fuel) ctx fn s =
+    run_blocks fuel ctx fn (slot_copy_cond_result cs n i s)
+Proof
+  strip_tac >> drule slot_copy_lookup >> strip_tac >>
+  simp[Once run_blocks_def, slot_copy_cond_insts_def,
+       eval_phis_def, phi_prefix_length_def, mk_inst_def] >>
+  `s with vs_inst_idx := 0 = s` by simp[venom_state_component_equality] >>
+  simp[] >>
+  `exec_block fuel ctx
+    <|bb_label := slot_copy_cond cs; bb_instructions := slot_copy_cond_insts cs n|> s =
+    OK (slot_copy_cond_result cs n i s)` by
+    (irule slot_copy_condition_block >> simp[]) >>
+  fs[slot_copy_cond_insts_def, mk_inst_def]
+QED
+
+Theorem slot_copy_run_body:
+  fn_has_code cs (slot_copy_final cs src dst n load) fn /\
+  (load = SLOAD \/ load = TLOAD) /\
+  slot_copy_external cs src /\ slot_copy_external cs dst /\
+  eval_operand src s = SOME p /\ eval_operand dst s = SOME d /\
+  lookup_var (slot_copy_var cs 0) s = SOME (n2w i) /\
+  s.vs_current_bb = slot_copy_body cs /\ s.vs_inst_idx = 0 /\ ~s.vs_halted ==>
+  run_blocks (SUC fuel) ctx fn s =
+    run_blocks fuel ctx fn (slot_copy_body_result cs p d load i s)
+Proof
+  disch_then (CONJUNCTS_THEN2 assume_tac
+    (CONJUNCTS_THEN2 assume_tac strip_assume_tac)) >>
+  drule slot_copy_lookup >> strip_tac >>
+  simp[Once run_blocks_def, slot_copy_body_insts_def,
+       eval_phis_def, phi_prefix_length_def, mk_inst_def] >>
+  `s with vs_inst_idx := 0 = s` by simp[venom_state_component_equality] >>
+  simp[] >>
+  `exec_block fuel ctx
+    <|bb_label := slot_copy_body cs; bb_instructions := slot_copy_body_insts cs src dst load|> s =
+    OK (slot_copy_body_result cs p d load i s)` by
+    (irule slot_copy_body_block >> simp[]) >>
+  fs[slot_copy_body_insts_def, mk_inst_def]
+QED
+
+Theorem slot_copy_counted_execution:
+  !k i s.
+  n = i+k /\
+  fn_has_code cs (slot_copy_final cs src dst n load) fn /\
+  (load = SLOAD \/ load = TLOAD) /\
+  slot_copy_external cs src /\ slot_copy_external cs dst /\
+  eval_operand src original = SOME p /\ eval_operand dst original = SOME d /\
+  slot_copy_inv cs load original p d n regions i s /\
+  fresh_vars_wrt (slot_copy_final cs src dst n load) s /\
+  s.vs_current_bb = slot_copy_cond cs /\ s.vs_inst_idx = 0 /\ ~s.vs_halted ==>
+  ?t. slot_copy_inv cs load original p d n regions n t /\
+      fresh_vars_wrt (slot_copy_final cs src dst n load) t /\
+      t.vs_current_bb = slot_copy_exit cs /\ t.vs_inst_idx = 0 /\ ~t.vs_halted /\
+      !fuel. run_blocks (2*k+1+fuel) ctx fn s = run_blocks fuel ctx fn t
+Proof
+  Induct
+  >- (rpt gen_tac >> strip_tac >> gvs[] >>
+      qexists_tac `slot_copy_cond_result cs i i s` >>
+      simp[slot_copy_condition_invariant, slot_copy_cond_frame,
+           slot_copy_results_fresh] >>
+      gen_tac >> `fuel+1 = SUC fuel` by decide_tac >>
+      pop_assum SUBST1_TAC >> irule slot_copy_run_condition >> fs[slot_copy_inv_def] >> metis_tac[]) >>
+  rpt gen_tac >>
+  disch_then (CONJUNCTS_THEN2 assume_tac
+    (CONJUNCTS_THEN2 assume_tac
+      (CONJUNCTS_THEN2 assume_tac strip_assume_tac))) >>
+  `i < n /\ i < 2**256 /\ n < 2**256` by
+    (fs[slot_copy_inv_def] >> decide_tac) >>
+  qabbrev_tac `b = slot_copy_cond_result cs n i s` >>
+  qabbrev_tac `u = slot_copy_body_result cs p d load i b` >>
+  `slot_copy_inv cs load original p d n regions i b` by
+    metis_tac[slot_copy_condition_invariant] >>
+  `slot_copy_inv cs load original p d n regions (i+1) u` by
+    metis_tac[slot_copy_body_invariant] >>
+  `fresh_vars_wrt (slot_copy_final cs src dst n load) u /\
+   u.vs_current_bb = slot_copy_cond cs /\ u.vs_inst_idx = 0 /\ ~u.vs_halted` by
+    simp[Abbr `u`, Abbr `b`, slot_copy_results_fresh,
+         slot_copy_body_counter] >>
+  first_x_assum (qspecl_then [`i+1`, `u`] mp_tac) >>
+  impl_tac >- (simp[] >> decide_tac) >>
+  strip_tac >> qexists_tac `t` >> simp[] >> gen_tac >>
+  `run_blocks (2*SUC k+1+fuel) ctx fn s =
+   run_blocks (2*k+2+fuel) ctx fn b` by
+    (simp_tac bool_ss [Abbr `b`] >>
+     `2*SUC k+1+fuel = SUC (2*k+2+fuel)` by decide_tac >>
+     pop_assum SUBST1_TAC >> irule slot_copy_run_condition >> fs[slot_copy_inv_def] >> metis_tac[]) >>
+  `run_blocks (2*k+2+fuel) ctx fn b = run_blocks (2*k+1+fuel) ctx fn u` by
+    (simp_tac bool_ss [Abbr `u`] >>
+     `2*k+2+fuel = SUC (2*k+1+fuel)` by decide_tac >>
+     pop_assum SUBST1_TAC >> irule slot_copy_run_body >>
+     simp[Abbr `b`, slot_copy_cond_frame] >>
+     fs[slot_copy_inv_def] >> metis_tac[]) >>
+  gvs[]
+QED
+
+(* A non-error continuation at an empty compiler cutpoint cannot start with
+   PHI: direct execution rejects PHI, whereas block entry consumes its prefix. *)
+Theorem slot_copy_run_from_entry:
+  s.vs_inst_idx = 0 /\ run_from fuel ctx fn s = r /\ (!e. r <> Error e) ==>
+  run_blocks (SUC fuel) ctx fn s = r
+Proof
+  strip_tac >>
+  Cases_on `lookup_block s.vs_current_bb fn.fn_blocks`
+  >- gvs[run_from_def] >>
+  rename1 `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb` >>
+  `phi_prefix_length bb.bb_instructions = 0` by
+    (Cases_on `bb.bb_instructions` >> simp[phi_prefix_length_def] >>
+     Cases_on `h.inst_opcode = PHI` >> simp[] >>
+     qpat_x_assum `run_from _ _ _ _ = _` mp_tac >>
+     simp[run_from_def, Once exec_block_def, get_instruction_def,
+          Once step_inst_def, step_inst_base_def] >> metis_tac[]) >>
+  drule_all run_blocks_run_from_no_phi >>
+  `s with vs_inst_idx := 0 = s` by simp[venom_state_component_equality] >>
+  simp[]
+QED
+
+Definition slot_copy_initial_def:
+  slot_copy_initial cs s =
+    jump_to (slot_copy_cond cs) (update_var (slot_copy_var cs 0) 0w s)
+End
+
+Theorem slot_copy_initial_block:
+  bb.bb_instructions = cs.cs_current_insts ++ slot_copy_init_insts cs /\
+  s.vs_inst_idx = LENGTH cs.cs_current_insts /\ ~s.vs_halted ==>
+  exec_block fuel ctx bb s = OK (slot_copy_initial cs s)
+Proof
+  strip_tac >> irule slot_copy_seq_jmp_block >>
+  simp[slot_copy_initial_def, update_var_def, jump_to_def] >>
+  qexistsl_tac [`cs.cs_next_id + 1`,
+    `[mk_inst cs.cs_next_id ASSIGN [Lit 0w] [slot_copy_var cs 0]]`,
+    `cs.cs_current_insts`, `slot_copy_cond cs`] >>
+  simp[slot_copy_init_insts_def, mk_inst_def, is_terminator_def,
+       run_inst_seq_def, step_inst_base_def, eval_operand_def,
+       update_var_def, jump_to_def]
+QED
+
+Theorem slot_copy_initial_invariant:
+  n < 2**256 /\ w2n d + 32*n < 2**256 /\
+  create_memory_snapshot regions s /\
+  EVERY (\(off,bs). off + LENGTH bs <= LENGTH s.vs_memory /\
+    (off + LENGTH bs <= w2n d \/ w2n d + 32*n <= off)) regions ==>
+  slot_copy_inv cs load s p d n regions 0 (slot_copy_initial cs s)
+Proof
+  simp[slot_copy_inv_def, slot_copy_initial_def, slot_copy_prefix_def,
+       create_memory_snapshot_def, update_var_def, jump_to_def,
+       lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  rpt strip_tac >>
+  `op <> Var (slot_copy_var cs 0)` by
+    metis_tac[slot_copy_external_def, DECIDE ``0 < 7``] >>
+  Cases_on `op` >> gvs[eval_operand_def, lookup_var_def,
+                      finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
+Theorem slot_copy_initial_fresh:
+  fresh_vars_wrt cs s ==>
+  fresh_vars_wrt (slot_copy_final cs src dst n load) (slot_copy_initial cs s)
+Proof
+  simp[fresh_vars_wrt_def, slot_copy_initial_def, slot_copy_final_def,
+       update_var_def, jump_to_def, finite_mapTheory.FLOOKUP_UPDATE,
+       slot_copy_var_def] >> rpt strip_tac >>
+  `"%" ++ toString cs.cs_next_var <> "%" ++ toString n'` by
+    (irule fresh_var_distinct >> decide_tac) >>
+  simp[] >> first_x_assum irule >> decide_tac
+QED
+
+Definition slot_copy_bytes_def:
+  slot_copy_bytes load original p n =
+    FLAT (GENLIST (\j. word_to_bytes (slot_copy_word load original (p+n2w j)) T) n)
+End
+
+Theorem slot_copy_prefix_bytes:
+  !n. slot_copy_prefix load original p d n s ==>
+      TAKE (32*n) (DROP d s.vs_memory) = slot_copy_bytes load original p n
+Proof
+  Induct >- simp[slot_copy_bytes_def, GENLIST] >> strip_tac >>
+  `slot_copy_prefix load original p d n s` by
+    (fs[slot_copy_prefix_def] >> metis_tac[DECIDE ``j<n ==> j<SUC n``]) >>
+  first_x_assum drule >> strip_tac >>
+  `TAKE 32 (DROP (d+32*n) s.vs_memory) =
+    word_to_bytes (slot_copy_word load original (p+n2w n)) T` by
+    fs[slot_copy_prefix_def] >>
+  qspecl_then [`32*SUC n`, `32*n`, `DROP d s.vs_memory`] mp_tac
+    rich_listTheory.take_drop_partition >>
+  simp[slot_copy_bytes_def, GENLIST, FLAT_SNOC, DROP_DROP_T] >>
+  `32*SUC n - 32*n = 32` by decide_tac >> simp[] >>
+  `32*n+d = d+32*n` by decide_tac >> simp[]
+QED
+
+Theorem slot_copy_bytes_length:
+  LENGTH (slot_copy_bytes load original p n) = 32*n
+Proof
+  Induct_on `n` >> fs[slot_copy_bytes_def, GENLIST, FLAT_SNOC,
+    byteTheory.LENGTH_word_to_bytes] >> decide_tac
+QED
+
+Theorem slot_copy_prefix_snapshot:
+  slot_copy_prefix load original p d n s ==>
+  create_memory_snapshot [(d,slot_copy_bytes load original p n)] s
+Proof
+  strip_tac >>
+  `TAKE (32*n) (DROP d s.vs_memory) = slot_copy_bytes load original p n` by
+    metis_tac[slot_copy_prefix_bytes] >>
+  simp[create_memory_snapshot_def, slot_copy_bytes_length]
+QED
+
+Theorem slot_copy_execution:
+  fn_has_code cs (slot_copy_final cs src dst n load) fn /\
+  (load = SLOAD \/ load = TLOAD) /\
+  fresh_vars_wrt cs s /\
+  slot_copy_external cs src /\ slot_copy_external cs dst /\
+  eval_operand src s = SOME p /\ eval_operand dst s = SOME d /\
+  n < 2**256 /\ w2n d + 32*n < 2**256 /\
+  create_memory_snapshot regions s /\
+  EVERY (\(off,bs). off + LENGTH bs <= LENGTH s.vs_memory /\
+    (off + LENGTH bs <= w2n d \/ w2n d + 32*n <= off)) regions /\
+  s.vs_current_bb = cs.cs_current_bb /\
+  s.vs_inst_idx = LENGTH cs.cs_current_insts /\ ~s.vs_halted ==>
+  ?t. slot_copy_inv cs load s p d n regions n t /\
+      fresh_vars_wrt (slot_copy_final cs src dst n load) t /\
+      t.vs_current_bb = slot_copy_exit cs /\ t.vs_inst_idx = 0 /\ ~t.vs_halted /\
+      !fuel r. run_from fuel ctx fn t = r /\ (!e. r <> Error e) ==>
+               ?fuel'. run_from fuel' ctx fn s = r
+Proof
+  disch_then (CONJUNCTS_THEN2 assume_tac
+    (CONJUNCTS_THEN2 assume_tac strip_assume_tac)) >>
+  qabbrev_tac `u = slot_copy_initial cs s` >>
+  `slot_copy_inv cs load s p d n regions 0 u` by
+    (simp_tac bool_ss [Abbr `u`] >> irule slot_copy_initial_invariant >> simp[]) >>
+  `fresh_vars_wrt (slot_copy_final cs src dst n load) u` by
+    (simp_tac bool_ss [Abbr `u`] >> irule slot_copy_initial_fresh >> simp[]) >>
+  `u.vs_current_bb = slot_copy_cond cs /\ u.vs_inst_idx = 0 /\ ~u.vs_halted` by
+    simp[Abbr `u`, slot_copy_initial_def, jump_to_def, update_var_def] >>
+  `?t. slot_copy_inv cs load s p d n regions n t /\
+      fresh_vars_wrt (slot_copy_final cs src dst n load) t /\
+      t.vs_current_bb = slot_copy_exit cs /\ t.vs_inst_idx = 0 /\ ~t.vs_halted /\
+      !fuel. run_blocks (2*n+1+fuel) ctx fn u = run_blocks fuel ctx fn t` by
+    (irule slot_copy_counted_execution >> simp[]) >>
+  qexists_tac `t` >> ntac 5 (conj_tac >- asm_rewrite_tac[]) >> rpt strip_tac >>
+  `run_blocks (SUC fuel) ctx fn t = r` by
+    (irule slot_copy_run_from_entry >> simp[]) >>
+  `run_blocks (2*n+1+SUC fuel) ctx fn u = r` by metis_tac[] >>
+  qexists_tac `2*n+1+SUC fuel` >>
+  drule slot_copy_lookup >> strip_tac >>
+  `exec_block (2*n+1+SUC fuel) ctx
+    <|bb_label := cs.cs_current_bb;
+      bb_instructions := cs.cs_current_insts ++ slot_copy_init_insts cs|> s = OK u` by
+    (simp_tac bool_ss [Abbr `u`] >> irule slot_copy_initial_block >> simp[]) >>
+  simp[run_from_def] >> gvs[]
+QED
+
+Theorem slot_copy_fresh_operand_external:
+  fresh_vars_wrt cs s /\ eval_operand op s = SOME value ==>
+  slot_copy_external cs op
+Proof
+  strip_tac >> simp[slot_copy_external_def] >> rpt strip_tac >>
+  Cases_on `op` >> gvs[] >> metis_tac[slot_copy_var_not_live]
+QED
+
+Theorem slot_copy_bytes_sources:
+  s.vs_accounts = original.vs_accounts /\
+  s.vs_transient = original.vs_transient /\
+  s.vs_call_ctx = original.vs_call_ctx ==>
+  slot_copy_bytes load s p n = slot_copy_bytes load original p n
+Proof
+  strip_tac >> simp[slot_copy_bytes_def] >> AP_TERM_TAC >>
+  irule GENLIST_CONG >> simp[] >> rpt strip_tac >>
+  AP_THM_TAC >> AP_TERM_TAC >> irule slot_copy_word_sources >> simp[]
+QED
+
+Theorem slot_copy_invariant_post:
+  slot_copy_inv cs load s p d n regions n t /\
+  fresh_vars_wrt cs s /\ create_live live s /\
+  s.vs_accounts = original.vs_accounts /\
+  s.vs_transient = original.vs_transient /\
+  s.vs_call_ctx = original.vs_call_ctx ==>
+  create_live live t /\
+  create_memory_snapshot ((w2n d,slot_copy_bytes load original p n)::regions) t /\
+  t.vs_accounts = original.vs_accounts /\
+  t.vs_transient = original.vs_transient /\
+  t.vs_call_ctx = original.vs_call_ctx
+Proof
+  strip_tac >>
+  `create_memory_snapshot [(w2n d,slot_copy_bytes load s p n)] t` by
+    (irule slot_copy_prefix_snapshot >> fs[slot_copy_inv_def]) >>
+  `slot_copy_bytes load s p n = slot_copy_bytes load original p n` by
+    (irule slot_copy_bytes_sources >> simp[]) >>
+  conj_tac
+  >- (fs[create_live_def, EVERY_MEM] >> rpt strip_tac >> PairCases_on `e` >>
+      first_x_assum drule >> simp[] >> strip_tac >>
+      `slot_copy_external cs e0` by
+        (irule slot_copy_fresh_operand_external >> metis_tac[]) >>
+      fs[slot_copy_inv_def]) >>
+  fs[slot_copy_inv_def, create_memory_snapshot_def]
+QED
+
+Theorem compile_create_slot_to_memory_frag:
+  (loc = LocStorage \/ loc = LocTransient) /\
+  compile_slot_to_memory src dst n loc cs = (result,cs') ==>
+  cs_extends cs cs' /\
+  frag_exec ctx cs cs'
+    (\s. fresh_vars_wrt cs s /\ ~s.vs_halted /\
+         eval_operand src s = SOME p /\ eval_operand dst s = SOME d /\
+         n < 2**256 /\ w2n d + 32*n < 2**256 /\ create_live live s /\
+         s.vs_accounts = original.vs_accounts /\
+         s.vs_transient = original.vs_transient /\
+         s.vs_call_ctx = original.vs_call_ctx /\
+         create_memory_snapshot regions s /\
+         EVERY (\(off,bs). off + LENGTH bs <= LENGTH s.vs_memory /\
+           (off + LENGTH bs <= w2n d \/ w2n d + 32*n <= off)) regions)
+    (\t. fresh_vars_wrt cs' t /\ create_live live t /\
+         create_memory_snapshot
+           ((w2n d,slot_copy_bytes (if loc = LocStorage then SLOAD else TLOAD)
+               original p n)::regions) t /\
+         t.vs_accounts = original.vs_accounts /\
+         t.vs_transient = original.vs_transient /\
+         t.vs_call_ctx = original.vs_call_ctx)
+    (K F)
+Proof
+  disch_then (CONJUNCTS_THEN2 assume_tac assume_tac) >>
+  drule_all compile_slot_to_memory_boundary >> strip_tac >>
+  conj_tac >- simp[] >>
+  simp_tac bool_ss [frag_exec_def] >> rpt strip_tac >>
+  `slot_copy_external cs src /\ slot_copy_external cs dst` by
+    metis_tac[slot_copy_fresh_operand_external] >>
+  `?t. slot_copy_inv cs (if loc = LocStorage then SLOAD else TLOAD)
+          s p d n regions n t /\ fresh_vars_wrt cs' t /\
+       t.vs_current_bb = slot_copy_exit cs /\ t.vs_inst_idx = 0 /\ ~t.vs_halted /\
+       !fuel r. run_from fuel ctx fn t = r /\ (!e. r <> Error e) ==>
+                ?fuel'. run_from fuel' ctx fn s = r` by
+    (pure_asm_rewrite_tac[] >> irule slot_copy_execution >> simp[] >> metis_tac[]) >>
+  disj1_tac >> qexists_tac `t` >> simp[] >>
+  conj_tac >- (irule slot_copy_invariant_post >> metis_tac[]) >>
+  metis_tac[]
 QED
 
 val _ = app (fn (name, th) =>
