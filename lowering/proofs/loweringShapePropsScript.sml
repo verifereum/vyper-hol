@@ -759,6 +759,29 @@ Proof
   simp[source_internal_fn_descriptor_def]
 QED
 
+Theorem classified_internal_names_distinct:
+  !tops envtops. ALL_DISTINCT (supported_function_names tops) ==>
+    ALL_DISTINCT (MAP FST (MAP (source_internal_fn_descriptor envtops)
+      (FST (SND (classify_functions tops)))))
+Proof
+  Induct >> simp[classify_functions_def, supported_function_names_def] >>
+  gen_tac >> fs[classify_functions_def] >>
+  qmatch_goalsub_abbrev_tac `classify_function h acc` >>
+  PairCases_on `acc` >> Cases_on `h` >>
+  gvs[classify_function_def, supported_function_names_def] >>
+  rename1 `case vis of External => _ | Internal => _ | Deploy => _` >>
+  Cases_on `vis` >> simp[]
+  >- (IF_CASES_TAC >> simp[]) >>
+  rpt strip_tac >> simp[] >>
+  gvs[MEM_MAP] >>
+  rename1 `MEM payload acc1` >> PairCases_on `payload` >> gvs[] >>
+  `MEM (payload0,payload1,payload2,payload3,payload4,payload5,payload6,payload7)
+    (FST (SND (classify_functions tops)))` by
+    simp[classify_functions_def] >>
+  drule (iffLR MEM_classify_internal) >>
+  metis_tac[MEM_supported_function_names]
+QED
+
 Theorem supported_internal_descriptors_ok:
   !tops.
     supported_program tops /\
