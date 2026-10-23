@@ -417,8 +417,126 @@ Theorem compile_selector_dispatch_linear_shape:
     shape_step F jump_label_ok (\st. T)
       (compile_selector_dispatch_linear selectors fallback_lbl) (\x st. T)
 Proof
-  cheat
+  rpt strip_tac >> simp[compile_selector_dispatch_linear_def] >>
+  irule shape_step_bind >>
+  qexists_tac `\x st. T /\ plain_operand st x` >> reverse conj_tac
+  >- (ho_match_mp_tac shape_step_emit_op_under >>
+      simp[shape_stable_def, lowered_inst_ok_def, raw_opcode_ok_def,
+           inst_shape_ok_def, label_positions_ok_def, is_read0_opcode_def,
+           mk_inst_def, is_terminator_def, is_param_opcode_def,
+           jump_labels_ok_def]) >>
+  qx_gen_tac `cds` >> BETA_TAC >>
+  irule shape_step_pre_fact >> qexists_tac `~is_label_operand cds` >>
+  conj_tac >- simp[plain_operand_def] >> strip_tac >>
+  irule shape_step_bind >>
+  qexists_tac `\x st. (T /\ plain_operand st cds) /\ plain_operand st x` >>
+  reverse conj_tac
+  >- (ho_match_mp_tac shape_step_emit_op_under >>
+      conj_tac
+      >- (qspec_then `[cds]` mp_tac shape_stable_plain_operands >> simp[]) >>
+      simp[lowered_inst_ok_def, raw_opcode_ok_def, inst_shape_ok_def,
+           label_positions_ok_def, is_read0_opcode_def, mk_inst_def,
+           is_terminator_def, is_param_opcode_def, jump_labels_ok_def,
+           label_or_plain_def, plain_operand_def,
+           stackPlanTypesTheory.is_label_operand_def]) >>
+  qx_gen_tac `has_sel` >> BETA_TAC >>
+  irule shape_step_conseq >>
+  qexistsl_tac [`jump_label_ok`, `\st. plain_operand st has_sel`, `\u st. T`] >>
+  simp[] >> suspend "iszero"
 QED
+
+Resume compile_selector_dispatch_linear_shape[iszero]:
+  irule shape_step_pre_fact >> qexists_tac `~is_label_operand has_sel` >>
+  conj_tac >- simp[plain_operand_def] >> strip_tac >>
+  irule shape_step_bind >>
+  qexists_tac `\x st. plain_operand st has_sel /\ plain_operand st x` >>
+  reverse conj_tac
+  >- (ho_match_mp_tac shape_step_emit_op_under >>
+      conj_tac
+      >- (qspec_then `[has_sel]` mp_tac shape_stable_plain_operands >> simp[]) >>
+      simp[lowered_inst_ok_def, raw_opcode_ok_def, inst_shape_ok_def,
+           label_positions_ok_def, is_read0_opcode_def, mk_inst_def,
+           is_terminator_def, is_param_opcode_def, jump_labels_ok_def,
+           label_or_plain_def]) >>
+  qx_gen_tac `cond` >> BETA_TAC >>
+  irule shape_step_conseq >>
+  qexistsl_tac [`jump_label_ok`, `\st. plain_operand st cond`, `\u st. T`] >>
+  simp[] >>
+  irule shape_step_bind >>
+  qexists_tac `\l st. plain_operand st cond /\ compiler_label l` >>
+  reverse conj_tac
+  >- (ho_match_mp_tac shape_step_fresh_label >>
+      qspec_then `[cond]` mp_tac shape_stable_plain_operands >> simp[]) >>
+  qx_gen_tac `dispatch` >> BETA_TAC >> suspend "jump"
+QED
+
+Resume compile_selector_dispatch_linear_shape[jump]:
+  irule shape_step_pre_fact >>
+  qexists_tac `~is_label_operand cond /\ compiler_label dispatch` >>
+  conj_tac >- simp[plain_operand_def] >> strip_tac >>
+  irule shape_step_ignore_bind >>
+  qexists_tac `\u st. plain_operand st cond /\ compiler_label dispatch` >>
+  reverse conj_tac
+  >- (ho_match_mp_tac shape_step_emit_inst_under >>
+      conj_tac >- (rw[shape_stable_def] >> metis_tac[plain_operand_mono]) >>
+      simp[lowered_inst_ok_def, raw_opcode_ok_def, inst_shape_ok_def,
+           label_positions_ok_def, is_read0_opcode_def, mk_inst_def,
+           is_terminator_def, is_param_opcode_def, jump_labels_ok_def,
+           label_or_plain_def, stackPlanTypesTheory.is_label_operand_def] >>
+      rpt strip_tac >> gvs[jump_label_ok_def] >>
+      metis_tac[stackPlanTypesTheory.is_label_operand_def]) >>
+  gen_tac >> BETA_TAC >>
+  irule shape_step_ignore_bind >>
+  qexists_tac `\u st. plain_operand st cond /\ compiler_label dispatch` >>
+  reverse conj_tac
+  >- (ho_match_mp_tac shape_step_new_block >>
+      simp[jump_label_ok_def] >> rw[shape_stable_def] >>
+      metis_tac[plain_operand_mono]) >>
+  gen_tac >> BETA_TAC >>
+  irule shape_step_conseq >>
+  qexistsl_tac [`jump_label_ok`, `\st. T`, `\u st. T`] >>
+  simp[] >> suspend "load"
+QED
+
+Resume compile_selector_dispatch_linear_shape[load]:
+  irule shape_step_bind >>
+  qexists_tac `\x st. T /\ plain_operand st x` >> reverse conj_tac
+  >- (ho_match_mp_tac shape_step_emit_op_under >>
+      simp[shape_stable_def, lowered_inst_ok_def, raw_opcode_ok_def,
+           inst_shape_ok_def, label_positions_ok_def, is_read0_opcode_def,
+           mk_inst_def, is_terminator_def, is_param_opcode_def,
+           jump_labels_ok_def, label_or_plain_def, plain_operand_def,
+           stackPlanTypesTheory.is_label_operand_def]) >>
+  qx_gen_tac `raw` >> BETA_TAC >>
+  irule shape_step_pre_fact >> qexists_tac `~is_label_operand raw` >>
+  conj_tac >- simp[plain_operand_def] >> strip_tac >>
+  irule shape_step_bind >>
+  qexists_tac `\x st. (T /\ plain_operand st raw) /\ plain_operand st x` >>
+  reverse conj_tac
+  >- (ho_match_mp_tac shape_step_emit_op_under >>
+      conj_tac
+      >- (qspec_then `[raw]` mp_tac shape_stable_plain_operands >> simp[]) >>
+      simp[lowered_inst_ok_def, raw_opcode_ok_def, inst_shape_ok_def,
+           label_positions_ok_def, is_read0_opcode_def, mk_inst_def,
+           is_terminator_def, is_param_opcode_def, jump_labels_ok_def,
+           label_or_plain_def, plain_operand_def,
+           stackPlanTypesTheory.is_label_operand_def]) >>
+  qx_gen_tac `method_id` >> BETA_TAC >>
+  irule shape_step_conseq >>
+  qexistsl_tac [`jump_label_ok`, `\st. plain_operand st method_id`, `\u st. T`] >>
+  simp[] >>
+  irule shape_step_ignore_bind >> qexists_tac `\u st. T` >>
+  reverse conj_tac >- simp[compile_selector_checks_shape] >>
+  gen_tac >> BETA_TAC >>
+  ho_match_mp_tac shape_step_emit_inst_under >>
+  simp[shape_stable_def, lowered_inst_ok_def, raw_opcode_ok_def,
+       inst_shape_ok_def, label_positions_ok_def, is_read0_opcode_def,
+       mk_inst_def, is_terminator_def, is_param_opcode_def,
+       jump_labels_ok_def, label_or_plain_def,
+       stackPlanTypesTheory.is_label_operand_def]
+QED
+
+Finalise compile_selector_dispatch_linear_shape
 
 (* Each body opens its "fn_" entry block, then compile_guarded_body via
    compile_stmt_shape with ce_return_pc = NONE. *)
