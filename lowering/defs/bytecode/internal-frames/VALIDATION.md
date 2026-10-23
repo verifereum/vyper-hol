@@ -7,6 +7,11 @@ byte-for-byte. Instrumented allocation captures called the unmodified original
 allocator and asserted deploy/runtime equality with independent oracle outputs
 for each of the 15 layout cases below. No oracle bytes came from HOL.
 
+The bytecode-control results, runtime eom comparison and P108 relocation check
+were refreshed at `92e08d47` after repairing first-occurrence allocation priority.
+The 40 supplied programs still give 34 MATCH, four differing bytecodes
+(p43b, p57, p58, rc28) and two NONE results (rc23, rc27).
+
 ## Runtime eom comparison
 
 These are runtime functions after the callee-first function passes, not constructor

@@ -21,8 +21,9 @@ in metadata. The former whole-frame `call_frame_at_addr` and
 
 A separate ordered-liveness replay supplies stable equal-livecount allocation
 priority. Canonical finite-map livesets remain authoritative for membership.
-Completion enumerates present local keys once, with deterministic local-instruction
-fallback. The proved interface establishes distinctness, exact local membership,
+Completion keeps the first occurrence of each present local key, preserving replay
+priority when deterministic local-instruction fallback keys are appended. The proved
+interface establishes distinctness, exact local membership,
 canonical lookup consistency and local coverage. This is **not** a general proof
 of equality with Python iteration over arbitrary multi-pointer may-sets.
 
@@ -83,7 +84,10 @@ No old full-parity rollup is needed for focused validation.
 **Concrete expectation changes:** no existing pinned expectation changed. New
 expectations are the 15 internal-frame and two name-collision pinned deploy/runtime
 bytecode pairs above, plus the concrete allocation/cleanup witnesses in the two
-proof-fixture theories. The #652 declaration witness checks declaration *then*
+proof-fixture theories. `ml_complete_order_priority_witness` additionally checks
+first-occurrence priority with duplicate replay keys and a missing-local fallback.
+It fails with last-occurrence deduplication. The #652 declaration witness checks
+declaration *then*
 emission, rather than expecting declaration alone to emit ALLOCA. Existing gas and
 call-activation regression statements are unchanged; only their proofs were repaired.
 
@@ -93,6 +97,7 @@ Build the permanent checked-frontend fixtures without the full parity rollup:
 
 ```text
 holbuild build evalCompilerInternalFramesTheory evalCompilerNameCollisionsTheory
+holbuild build staticLayoutAllocatorProofsTheory evalCompilerMemoryConstructionTheory
 holbuild build cleanupPromiseWitnessTheory calleeMemoryWitnessTheory internalFrameWhitelistDiagnosticTheory
 ```
 
@@ -101,16 +106,21 @@ Python outputs. `vyperLoweringHol` also imports the three focused allocation,
 cleanup and whitelist witness theories directly, so they are reachable from the
 default lowering root without an opt-in parity rollup.
 
-Post-merge/order normal builds proved all 15 internal-frame and all nine
-name-collision fixtures, including the four newly added equalities. The interpreter,
-allocator, completion, transition and dispatcher dependencies also built locally.
-A fresh focused CLI check passed for 27 targets (26 core/proof/witness/codegen
-compatibility targets and a finite 27-program control probe), using `-j4`,
-`--skip-checkpoints --skip-proof-steps --no-cache --force=theory` at the unchanged
-tactic budget. It exited 0 in 2165.979 seconds. The 27 controls produced 21 MATCH,
-four bytecode residuals and two NONE results; together with 13 other permanent
-cases, this is 34/40 MATCH. No new regression was observed. Baseline admissions
-remain in three `genBlockSim` theorems and `codegen_correct`; this work neither
+After the first-occurrence completion repair in `92e08d47`, a fresh seven-target
+CI-mode build rebuilt `concretizeMemLocDefsTheory`, `staticLayoutAllocatorProofsTheory`,
+`staticLayoutCompletionProofsTheory`, `concretizeMemLocTransitionProofsTheory`,
+`evalCompilerMemoryConstructionTheory`, `evalCompilerInternalFramesTheory` and
+`evalCompilerNameCollisionsTheory`. It exited 0 in 1059.648 seconds, saving all 11
+memory-construction, 15 internal-frame and nine name-collision equalities, including
+the previously failing `empty_dynarr_local_matches_python_oracle`.
+
+A second focused build refreshed the finite 27-program control probe and the
+39-function layout comparison; it exited 0 in 1576.884 seconds. Both builds used
+`-j4 --skip-checkpoints --skip-proof-steps --no-cache --force=theory` at the unchanged
+tactic budget. The 27 controls produced 21 MATCH, four bytecode residuals and two
+NONE results; together with 13 other permanent cases, this is 34/40 MATCH. The
+frame-size and P108 relocation results below were rechecked after the repair.
+Baseline admissions remain in three `genBlockSim` theorems and `codegen_correct`; this work neither
 introduces nor discharges those existing admissions. See [VALIDATION.md](VALIDATION.md)
 for runtime frame sizes, residual diagnosis and behavioral provenance.
 
