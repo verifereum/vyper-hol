@@ -101,3 +101,118 @@ Theorem consume_static_call_deletions:
 Proof
   simp[adopt_outcome_deletions_def]
 QED
+
+(* Regressions quantify over the observed snapshots, rather than running any
+   particular constructor.  Both salts use exactly the same consumption path. *)
+Theorem create_oracle_request_regression:
+  let rq = venom_create_request s value offset sz salt in
+    rq.cr_kind = (case salt of NONE => CreateCall | SOME x => Create2Call x) /\
+    rq.cr_data = TAKE (w2n sz)
+      (DROP (w2n offset) s.vs_memory ++ REPLICATE (w2n sz) 0w) /\
+    rq.cr_value = w2n value /\ rq.cr_target = 0w /\
+    rq.cr_static = F /\ rq.cr_gas = NONE /\
+    rq.cr_data_len = LENGTH rq.cr_data
+Proof
+  simp[venom_create_request_fields, venom_create_request_def, read_memory_def]
+QED
+
+Theorem exec_create_success_regression:
+  inst.inst_outputs = [out] /\ s.vs_outcomes = outcome::rest /\
+  outcome.co_success ==>
+  exec_create inst s value offset sz salt =
+    OK (update_var out (w2w outcome.co_created)
+      (s with <| vs_outcomes := rest;
+        vs_requests := s.vs_requests ++
+          [venom_create_request s value offset sz salt];
+        vs_accounts := outcome.co_accounts;
+        vs_transient := outcome.co_tStorage;
+        vs_logs := s.vs_logs ++ outcome.co_logs;
+        vs_toDelete := outcome.co_toDelete;
+        vs_returndata := outcome.co_returnData |>))
+Proof
+  strip_tac >> drule consume_create_head >> disch_then assume_tac >>
+  drule exec_create_single >> disch_then (fn th => pure_rewrite_tac[th]) >>
+  asm_rewrite_tac[]
+QED
+
+Theorem exec_create_failure_regression:
+  inst.inst_outputs = [out] /\ s.vs_outcomes = outcome::rest /\
+  ~outcome.co_success ==>
+  exec_create inst s value offset sz salt =
+    OK (update_var out 0w
+      (s with <| vs_outcomes := rest;
+        vs_requests := s.vs_requests ++
+          [venom_create_request s value offset sz salt];
+        vs_accounts := outcome.co_accounts;
+        vs_transient := outcome.co_tStorage;
+        vs_logs := s.vs_logs;
+        vs_toDelete := s.vs_toDelete;
+        vs_returndata := outcome.co_returnData |>))
+Proof
+  strip_tac >> drule consume_create_head >> disch_then assume_tac >>
+  drule exec_create_single >> disch_then (fn th => pure_rewrite_tac[th]) >>
+  asm_rewrite_tac[]
+QED
+
+(* A pre-entry failure still consumes and adopts the observed nonce/account
+   snapshot.  Empty returndata does not mean an exhausted oracle. *)
+Theorem exec_create_preentry_failure_regression:
+  inst.inst_outputs = [out] /\ s.vs_outcomes = outcome::rest /\
+  ~outcome.co_success /\ outcome.co_returnData = [] ==>
+  exec_create inst s value offset sz salt =
+    OK (update_var out 0w
+      (s with <| vs_outcomes := rest;
+        vs_requests := s.vs_requests ++
+          [venom_create_request s value offset sz salt];
+        vs_accounts := outcome.co_accounts;
+        vs_transient := outcome.co_tStorage;
+        vs_logs := s.vs_logs;
+        vs_toDelete := s.vs_toDelete;
+        vs_returndata := [] |>))
+Proof
+  strip_tac >> drule_all exec_create_failure_regression >> simp[]
+QED
+
+Theorem exec_create_exhausted_regression:
+  inst.inst_outputs = [out] /\ s.vs_outcomes = [] ==>
+  exec_create inst s value offset sz salt =
+    OK (update_var out 0w
+      (s with <| vs_requests := s.vs_requests ++
+          [venom_create_request s value offset sz salt];
+        vs_returndata := [] |>))
+Proof
+  strip_tac >> drule consume_create_empty >> disch_then assume_tac >>
+  drule exec_create_single >> disch_then (fn th => pure_rewrite_tac[th]) >>
+  asm_rewrite_tac[]
+QED
+
+Theorem exec_create_frame_regression:
+  inst.inst_outputs = [out] /\
+  exec_create inst s value offset sz salt = OK t ==>
+    lookup_var out t = SOME
+      (FST (consume_create_outcome
+        (venom_create_request s value offset sz salt) s)) /\
+    t.vs_memory = s.vs_memory /\
+    t.vs_call_ctx = s.vs_call_ctx /\ t.vs_allocas = s.vs_allocas /\
+    t.vs_alloca_next = s.vs_alloca_next /\ t.vs_fmp = s.vs_fmp /\
+    t.vs_immutables = s.vs_immutables /\
+    t.vs_current_bb = s.vs_current_bb /\ t.vs_inst_idx = s.vs_inst_idx /\
+    (!other. other <> out ==> lookup_var other t = lookup_var other s)
+Proof
+  strip_tac >> drule exec_create_single >>
+  disch_then (fn th => fs[th]) >>
+  gvs[update_var_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
+Theorem exec_create_bad_outputs_regression:
+  (inst.inst_outputs = [] \/ inst.inst_outputs = [a;b]) ==>
+  exec_create inst s value offset sz salt = Error "create requires single output"
+Proof
+  strip_tac >> irule exec_create_invalid_outputs >> simp[]
+QED
+
+val _ = app (fn (name, th) =>
+  if null (List.filter (fn s => s <> "DISK_THM")
+             (#1 (Tag.dest_tag (Thm.tag th)))) then ()
+  else raise Fail ("Oracle dependency in " ^ name))
+  (DB.thms "createOracleExecution");
