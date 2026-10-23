@@ -34,7 +34,7 @@
 
 Theory exprLowering
 Ancestors
-  pred_set list exprCallBounds vyperAST
+  pred_set list exprCallBounds vyperAST byte keccak
   emitHelper compileEnv context valueEncoding venomInst vyperValueOperation
   builtinAbi builtinBytes builtinCreate
   builtinHashing builtinMath builtinMisc builtinSimple
@@ -536,6 +536,14 @@ End
    For constant literals: hash is a compile-time literal.
    For variables: runtime SHA3.
    Mirrors Python: expr.py _get_bytestring_hash *)
+Definition bytestring_literal_hash_def:
+  bytestring_literal_hash (Literal _ (StringL s)) =
+    SOME (word_of_bytes_be (Keccak_256_w64 (MAP (n2w o ORD) s)) : bytes32) /\
+  bytestring_literal_hash (Literal _ (BytesL bs)) =
+    SOME (word_of_bytes_be (Keccak_256_w64 bs) : bytes32) /\
+  bytestring_literal_hash _ = NONE
+End
+
 Definition compile_bytestring_hash_def:
 (* Hash a bytestring for comparison or log topics.
    For memory: data at ptr+32, length at MLOAD(ptr).
@@ -2636,11 +2644,18 @@ Definition compile_builtin_dispatch_body_def:
                 as_stack_val ret_ty
                   (compile_var_array_membership cenv needle arr_vv rhs_ty is_in st2)
           else if is_bytestring_type op_ty ∧ (op = Eq ∨ op = NotEq) then
-            (* lower_value handles ensure_in_memory for complex types *)
-            let (m1, st1) = lower_value compile_expr cenv op_ty e1 st in
-            let (m2, st2) = lower_value compile_expr cenv op_ty e2 st1 in
-            let (h1, st3) = compile_bytestring_hash m1 st2 in
-            let (h2, st4) = compile_bytestring_hash m2 st3 in
+            (* Finish hashing the left operand before lowering the right.
+               Literals need neither materialisation nor runtime SHA3. *)
+            let (h1, st2) =
+              (case bytestring_literal_hash e1 of
+                 SOME h => (Lit h, st)
+               | NONE => let (m1, st1) = lower_value compile_expr cenv op_ty e1 st in
+                         compile_bytestring_hash m1 st1) in
+            let (h2, st4) =
+              (case bytestring_literal_hash e2 of
+                 SOME h => (Lit h, st2)
+               | NONE => let (m2, st3) = lower_value compile_expr cenv op_ty e2 st2 in
+                         compile_bytestring_hash m2 st3) in
             if op = Eq then as_stack_val ret_ty (emit_op EQ [h1; h2] st4)
             else
               let (eq_result, st5) = emit_op EQ [h1; h2] st4 in

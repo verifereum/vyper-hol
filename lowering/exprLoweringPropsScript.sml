@@ -1620,6 +1620,48 @@ Proof
   simp[ci_mono_emit_op]
 QED
 
+(* This boundary assumes callback monotonicity; it does not use the
+   admitted whole-compiler monotonicity theorem below. *)
+Theorem ci_mono_bytestring_hash_selection[local]:
+  (!ty e st. ci_mono st (SND (lower_value cfn cenv ty e st))) ==>
+  !ty e st. ci_mono st (SND
+    (case bytestring_literal_hash e of
+       SOME h => (Lit h, st)
+     | NONE => let (p, st1) = lower_value cfn cenv ty e st in
+               compile_bytestring_hash p st1))
+Proof
+  rpt strip_tac >> Cases_on `bytestring_literal_hash e` >>
+  simp[ci_mono_refl] >> pairarg_tac >> gvs[] >>
+  irule ci_mono_trans >>
+  irule_at (Pos last) ci_mono_compile_bytestring_hash >>
+  first_x_assum (qspecl_then [`ty`, `e`, `st`] mp_tac) >> simp[]
+QED
+
+Theorem ci_mono_bytestring_comparison_branch[local]:
+  (!ty e st. ci_mono st (SND (lower_value cfn cenv ty e st))) /\
+  is_bytestring_type (expr_type e1) /\ (op = Eq \/ op = NotEq) ==>
+  ci_mono st (SND
+    (compile_builtin_dispatch_body cfn cenv ret_ty ty (Bop op) [e1;e2] st))
+Proof
+  strip_tac >>
+  simp[exprLoweringTheory.compile_builtin_dispatch_body_def] >>
+  pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
+  `ci_mono st st2` by
+    (drule ci_mono_bytestring_hash_selection >>
+     disch_then (qspecl_then [`expr_type e1`, `e1`, `st`] mp_tac) >> simp[]) >>
+  `ci_mono st2 st4` by
+    (drule ci_mono_bytestring_hash_selection >>
+     disch_then (qspecl_then [`expr_type e1`, `e2`, `st2`] mp_tac) >> simp[]) >>
+  Cases_on `emit_op EQ [h1;h2] st4` >>
+  gvs[ci_mono_as_stack_val] >>
+  `ci_mono st st4` by metis_tac[ci_mono_trans] >>
+  `ci_mono st4 r` by
+    (mp_tac (Q.SPECL [`EQ`, `[h1;h2]`, `st4`] ci_mono_emit_op) >> simp[]) >>
+  TRY (irule ci_mono_trans >>
+       irule_at (Pos last) ci_mono_emit_op) >>
+  metis_tac[ci_mono_trans]
+QED
+
 Theorem ci_mono_emit_membership_eqs[local]:
   !ops needle sa. ci_mono sa (SND (emit_membership_eqs needle ops sa))
 Proof
@@ -3286,7 +3328,9 @@ val () = List.app (fn (name, th) =>
       print ("Kernel-closed: " ^ name ^ "\n")
     else raise Fail ("Unexpected oracle dependency: " ^ name)
   end)
-  [("ci_mono_emit_membership_eqs", ci_mono_emit_membership_eqs),
+  [("ci_mono_bytestring_hash_selection", ci_mono_bytestring_hash_selection),
+   ("ci_mono_bytestring_comparison_branch", ci_mono_bytestring_comparison_branch),
+   ("ci_mono_emit_membership_eqs", ci_mono_emit_membership_eqs),
    ("ci_mono_fold_membership_or", ci_mono_fold_membership_or),
    ("ci_mono_fold_membership_and", ci_mono_fold_membership_and),
    ("ci_mono_compile_list_membership_in", ci_mono_compile_list_membership_in),
