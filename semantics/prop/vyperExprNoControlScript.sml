@@ -603,11 +603,12 @@ Proof
   Cases_on `vs` >- simp[eval_send_def, raise_def, no_control_exc_def] >>
   Cases_on `t` >- simp[eval_send_def, raise_def, no_control_exc_def] >>
   simp[eval_send_def, bind_def, ignore_bind_def, type_check_def, assert_def,
-       return_def, raise_def, lift_option_type_def, check_def,
+       return_def, raise_def, get_accounts_def, get_transient_storage_def,
+       lift_option_def, lift_option_type_def, check_def, update_accounts_def,
+       update_transient_def, append_logs_def,
        take_call_outcome_def, adopt_call_outcome_def, LET_THM, UNCURRY,
        COND_RATOR, option_CASE_rator, prod_CASE_rator, sum_CASE_rator] >>
-  strip_tac >> gvs[AllCaseEqs(), no_control_exc_def] >>
-  drule transfer_value_no_control >> simp[no_control_exc_def]
+  strip_tac >> gvs[AllCaseEqs(), no_control_exc_def]
 QED
 
 (* ===== Case 19: IntCall ===== *)

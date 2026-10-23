@@ -764,12 +764,17 @@ val () = cv_auto_trans get_range_limits_def;
 
 (* Build a transaction record for initial_context via the shared EVM boundary
    helpers in vyperEvmBoundary. *)
-(* Build execution_state for an external call *)
+(* Build execution_state for an external call that forwards gas: as EVM
+   CALL does, the callee also gets the stipend when value is sent.
+   The callee starts with a fresh access set and with the accounts at the
+   call as its original storage, so it pays cold-access and clean-slot
+   prices where the EVM may charge warm or dirty ones. A call with limited
+   gas can therefore fail here where it completes on chain. *)
 Definition make_ext_call_state_def:
-  make_ext_call_state caller callee code calldata value_opt
+  make_ext_call_state caller callee code calldata value_opt gas
                       accounts tStorage txParams =
-    let gas_limit = default_evm_gas_limit in
     let value = (case value_opt of NONE => 0 | SOME v => v) in
+    let gas_limit = gas + (if value = 0 then 0 else call_stipend) in
     let is_static = IS_NONE value_opt in
     let tx = make_evm_tx caller callee value calldata gas_limit in
     let ctxt = initial_context callee code is_static empty_return_destination tx in
@@ -856,8 +861,8 @@ End
    - caller: address of the calling contract (becomes msg.sender)
    - callee: address being called
    - calldata: encoded function call (from build_ext_calldata)
-   - value: ETH to send (becomes msg.value)
-   - is_static: true for staticcall (read-only)
+   - value_opt: ETH to send (becomes msg.value); NONE for staticcall
+   - gas: gas forwarded to the callee (forwarded_gas)
    - accounts: current account states
    - tStorage: current transient storage
    - txParams: transaction parameters (preserves tx.origin, block info)
@@ -867,11 +872,11 @@ End
    pay, REVERT or another exceptional halt) give success = F, the original
    accounts and transient storage, and an empty emitted-log list. *)
 Definition run_ext_call_def:
-  run_ext_call caller callee calldata value_opt
+  run_ext_call caller callee calldata value_opt gas
                accounts tStorage txParams =
     if ext_call_value_transfer_ok caller callee value_opt accounts then
       let code = (lookup_account callee accounts).code in
-      let s0 = make_ext_call_state caller callee code calldata value_opt
+      let s0 = make_ext_call_state caller callee code calldata value_opt gas
                                    accounts tStorage txParams in
       if fIN callee precompile_addresses then
         let outcome = vfmExecution$dispatch_precompiles callee s0 in
@@ -897,6 +902,20 @@ Definition run_ext_call_def:
 End
 
 val () = cv_auto_trans run_ext_call_def;
+
+(* The gas an external call forwards: the value of its gas= operand, capped
+   at the model's gas limit, or the call's default without one (all gas for
+   extcall/staticcall, none for send, as in Vyper's lower_send).  The type
+   checker makes the operand a uint256; any other value forwards the
+   default. *)
+Definition forwarded_gas_def:
+  forwarded_gas default_gas gas_opt =
+    case OPTION_BIND gas_opt dest_NumV of
+    | SOME g => MIN g default_evm_gas_limit
+    | NONE => default_gas
+End
+
+val () = cv_auto_trans forwarded_gas_def;
 
 (* DELEGATECALL loads code from target_addr but retains the current message's
    address, caller and value. In particular there is no entry value transfer. *)
@@ -945,7 +964,7 @@ Definition run_raw_call_def:
       run_delegate_call cx target_addr calldata accounts tStorage
     else run_ext_call cx.txn.target target_addr calldata
       (if flags.rcf_is_static then NONE else SOME amount)
-      accounts tStorage (vyper_to_tx_params cx.txn)
+      default_evm_gas_limit accounts tStorage (vyper_to_tx_params cx.txn)
 End
 
 val () = cv_auto_trans run_raw_call_def;
@@ -1075,6 +1094,7 @@ Definition eval_ext_call_def:
           n <- lift_option_type (dest_NumV v) "ExtCall value not int";
           return (SOME n)
         od);
+    gas_opt <<- ext_call_kwarg EKGas opts kw_vals;
     default_opt <<- ext_call_kwarg EKDefault opts kw_vals;
     tenv <<- get_tenv cx;
     calldata <- lift_option_type (build_ext_calldata tenv func_name arg_types arg_vals)
@@ -1095,6 +1115,7 @@ Definition eval_ext_call_def:
           tStorage <- get_transient_storage;
           result <- lift_option
             (run_ext_call cx.txn.target target_addr calldata value_opt
+                          (forwarded_gas default_evm_gas_limit gas_opt)
                           accounts tStorage (vyper_to_tx_params cx.txn))
             "ExtCall run failed";
           success <<- FST result; result1 <<- SND result;
@@ -1128,12 +1149,17 @@ val () = eval_ext_call_def
             assert_def]
   |> cv_auto_trans;
 
-(* send(to, value[, gas=...]); vs = [to; value] ++ (if has_gas then [gas] else []) *)
+(* send(to, value[, gas=...]); vs = [to; value] ++ (if has_gas then [gas] else []),
+   evaluated in Vyper's order (lower_send).  Without the outcome oracle the
+   recipient's code runs, with the given gas (none without gas=) plus the
+   stipend when value is sent; send fails when that call fails. *)
 Definition eval_send_def:
   eval_send cx has_gas (to_v :: amount_v :: gas_vs) = do
     type_check (LENGTH gas_vs = if has_gas then 1 else 0) "Send args";
     toAddr <- lift_option_type (dest_AddressV to_v) "Send not AddressV";
     amount <- lift_option_type (dest_NumV amount_v) "Send not NumV";
+    (* the gas operand is send's only keyword argument *)
+    gas_opt <<- ext_call_kwarg EKGas [EKGas] gas_vs;
     outcomes <- (λst. return st.outcomes st);
     case outcomes of
     | SOME _ => do
@@ -1143,7 +1169,21 @@ Definition eval_send_def:
       return $ Value $ NoneV
     od
     | NONE => do
-      transfer_value cx.txn.target toAddr amount;
+      accounts <- get_accounts;
+      tStorage <- get_transient_storage;
+      result <- lift_option
+        (run_ext_call cx.txn.target toAddr [] (SOME amount)
+                      (forwarded_gas 0 gas_opt)
+                      accounts tStorage (vyper_to_tx_params cx.txn))
+        "send run failed";
+      success <<- FST result; result1 <<- SND result;
+      result2 <<- SND result1;
+      accounts' <<- FST result2; result3 <<- SND result2;
+      tStorage' <<- FST result3; emitted_logs <<- SND result3;
+      check success "send failed";
+      update_accounts (K accounts');
+      update_transient (K tStorage');
+      append_logs emitted_logs;
       return $ Value $ NoneV
     od
   od ∧
@@ -1180,7 +1220,8 @@ Proof
   Cases_on `t` >- simp[eval_send_def, raise_def] >>
   simp[eval_send_def, bind_def, ignore_bind_def, type_check_def,
        assert_def, return_def, raise_def, lift_option_type_def, check_def,
-       transfer_value_def, get_accounts_def, update_accounts_def,
+       get_accounts_def, update_accounts_def, get_transient_storage_def,
+       lift_option_def, update_transient_def, append_logs_def,
        vyperCallOutcomeTheory.take_call_outcome_def,
        vyperCallOutcomeTheory.adopt_call_outcome_def, LET_THM, UNCURRY,
        COND_RATOR, option_CASE_rator, prod_CASE_rator, sum_CASE_rator] >>
