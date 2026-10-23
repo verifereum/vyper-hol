@@ -1212,26 +1212,55 @@ Proof
   IF_CASES_TAC >> simp[] >> strip_tac >> gvs[]
 QED
 
-(* Original proof preserved while its over-limit step is repaired.
-Proof
-  PairCases_on `sig` >> Cases_on `vs` >>
-  simp[eval_ext_call_def, bind_def, ignore_bind_def, type_check_def,
-       assert_def, return_def, raise_def, get_accounts_def,
-       get_transient_storage_def, lift_option_def, lift_option_type_def,
-       check_def, lift_sum_runtime_def, update_accounts_def,
-       update_transient_def, append_logs_def,
-       vyperCallOutcomeTheory.take_call_outcome_def,
-       vyperCallOutcomeTheory.adopt_call_outcome_def, LET_THM, UNCURRY,
-       COND_RATOR, option_CASE_rator, prod_CASE_rator, sum_CASE_rator] >>
-  strip_tac >> gvs[AllCaseEqs()]
-QED
-*)
 Theorem eval_ext_call_preserves_non_accounts:
   eval_ext_call cx static skip_check sig opts vs st = (res, st') ==>
   st'.scopes = st.scopes /\ st'.immutables = st.immutables
 Proof
-  (* Temporary preparation only; not proof validation. *)
-  cheat
+  PairCases_on `sig` >> Cases_on `vs`
+  >- simp[eval_ext_call_def, raise_def] >>
+  simp[eval_ext_call_def, bind_def, ignore_bind_def, type_check_def,
+       assert_def, return_def, raise_def, get_accounts_def,
+       get_transient_storage_def, lift_option_def, lift_option_type_def,
+       check_def, lift_sum_runtime_def, update_accounts_def,
+       update_transient_def, append_logs_def, LET_THM, UNCURRY,
+       COND_RATOR, option_CASE_rator, prod_CASE_rator, sum_CASE_rator] >>
+  Cases_on `LENGTH t = LENGTH opts + LENGTH sig1 /\ ext_call_opts_ok static opts` >>
+  simp[] >>
+  Cases_on `dest_AddressV h` >> simp[] >>
+  Cases_on `static` >> simp[] >>
+  Cases_on `ext_call_kwarg EKValue opts (DROP (LENGTH sig1) t)` >> simp[] >>
+  Cases_on `dest_NumV (THE (ext_call_kwarg EKValue opts (DROP (LENGTH sig1) t)))` >>
+  gvs[] >> (
+  Cases_on `build_ext_calldata (get_tenv cx) sig0 sig1 (TAKE (LENGTH sig1) t)` >>
+  simp[] >>
+  qmatch_goalsub_abbrev_tac
+    `vyperCallOutcome$take_call_outcome target calldata value_opt st` >>
+  Cases_on `ext_call_precheck_ok skip_check sig2 target st.accounts` >> simp[] >>
+  Cases_on `st.outcomes`
+  >- (simp[] >>
+      qpat_abbrev_tac `run_result = run_ext_call _ _ _ _ _ _ _ _` >>
+      Cases_on `run_result` >> simp[] >>
+      qmatch_goalsub_rename_tac `FST backend_result` >>
+      Cases_on `FST backend_result` >> simp[] >> (strip_tac >> gvs[] >>
+        qmatch_asmsub_abbrev_tac `if returnData = [] then default_opt else NONE` >>
+        Cases_on `if returnData = [] then default_opt else NONE` >>
+        gvs[AllCaseEqs()])) >>
+  simp[] >>
+  Cases_on `vyperCallOutcome$take_call_outcome target calldata value_opt st` >>
+  drule ext_call_take_preserves_non_accounts >> strip_tac >>
+  rename1 `vyperCallOutcome$take_call_outcome target calldata value_opt st = (taken, taken_st)` >>
+  Cases_on `taken` >> simp[]
+  >- (qmatch_goalsub_rename_tac `call_outcome_success (SND taken_pair)` >>
+      Cases_on `call_outcome_success (SND taken_pair)` >> simp[]
+      >- (Cases_on `vyperCallOutcome$adopt_call_outcome (FST taken_pair) (SND taken_pair) taken_st` >>
+          drule ext_call_adopt_preserves_non_accounts >> strip_tac >>
+          rename1 `vyperCallOutcome$adopt_call_outcome _ _ _ = (adopted, adopted_st)` >>
+          Cases_on `adopted` >> simp[] >> (strip_tac >> gvs[] >>
+        qmatch_asmsub_abbrev_tac `if returnData = [] then default_opt else NONE` >>
+        Cases_on `if returnData = [] then default_opt else NONE` >>
+        gvs[AllCaseEqs()])) >>
+      strip_tac >> gvs[]) >>
+  strip_tac >> gvs[])
 QED
 
 Theorem eval_send_preserves_non_accounts:
