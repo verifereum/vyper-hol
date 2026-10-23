@@ -7,7 +7,7 @@
 Theory valueEncodingProofs
 Ancestors
   list rich_list venomMemProofs
-  valueEncoding vyperStorage vyperValue venomState vyperABI vyperTyping contractABI
+  valueEncoding vyperStorage vyperValue venomState vyperABI vyperTyping vyperTypeABI contractABI
 Libs
   blastLib intLib
 
@@ -1066,8 +1066,6 @@ Proof
   gen_tac >> Induct >> simp[vyper_to_abi_type_def]
 QED
 
-(* TEMPORARILY ISOLATED: unfinished mutual bridge retained verbatim while
-   its list boundary lemmas are validated (C1.4.1). Restored by C1.4.3.
 Theorem val_in_memory_static_abi_mutual:
   (!env ty. !tv v av off mem.
     evaluate_type env ty = SOME tv /\
@@ -1104,9 +1102,98 @@ Resume val_in_memory_static_abi_mutual[tuple]:
   Cases_on `a` >>
   gvs[value_has_type_def, vyper_to_abi_def, val_in_memory_def,
       evaluate_types_OPT_MMAP, AllCaseEqs(), type_memory_size_def] >>
-  FAIL_TAC "tuple child interface"
+  drule vyper_to_abi_list_EL >> strip_tac >>
+  gvs[type_memory_size_list_sum, any_dynamic_every_static,
+      vyper_to_abi_types_length, enc_tuple_static_acc] >>
+  first_x_assum irule >> qexists_tac `l` >> simp[]
 QED
-*)
+
+Resume val_in_memory_static_abi_mutual[nil]:
+  simp[vyper_to_abi_def, val_in_memory_def, mem_bytes_at_def]
+QED
+
+Resume val_in_memory_static_abi_mutual[cons]:
+  rpt strip_tac >> Cases_on `vs` >>
+  gvs[OPT_MMAP_def, vyper_to_abi_def, vyper_to_abi_type_def,
+      value_has_type_def, val_in_memory_def, AllCaseEqs()] >>
+  once_rewrite_tac[arithmeticTheory.ADD_COMM] >>
+  rewrite_tac[mem_bytes_at_split_padded] >>
+  BINOP_TAC >> metis_tac[]
+QED
+
+Resume val_in_memory_static_abi_mutual[none]:
+  simp[evaluate_type_def] >> rpt strip_tac >>
+  gvs[value_has_type_def, vyper_to_abi_def, type_memory_size_def,
+      mem_bytes_at_def, enc_def, REV_REVERSE_LEM]
+QED
+
+Resume val_in_memory_static_abi_mutual[flag]:
+  rpt strip_tac >> Cases_on `v` >>
+  gvs[evaluate_type_def, vyper_to_abi_type_def, vyper_to_abi_def,
+      value_has_type_def, AllCaseEqs(), type_memory_size_def] >>
+  drule val_in_memory_flag_abi >> simp[enc_def, enc_number_def]
+QED
+
+Resume val_in_memory_static_abi_mutual[struct]:
+  rpt strip_tac >> Cases_on `v` >>
+  gvs[evaluate_type_def, vyper_to_abi_type_def, vyper_to_abi_def,
+      AllCaseEqs()] >>
+  gvs[evaluate_types_OPT_MMAP, value_has_type_def, val_in_memory_def,
+      fields_in_memory_tuple, type_memory_size_def,
+      type_memory_size_fields_sum, any_dynamic_every_static] >>
+  drule struct_has_type_values_have_types >> strip_tac >>
+  drule vyper_to_abi_list_EL >> strip_tac >>
+  drule OPT_MMAP_LENGTH >> strip_tac >>
+  gvs[MAP_ZIP, GSYM MAP_MAP_o, vyper_to_abi_types_length,
+      enc_tuple_static_acc] >>
+  first_x_assum irule >> qexists_tac `MAP SND l` >> simp[]
+QED
+
+Resume val_in_memory_static_abi_mutual[array]:
+  rpt strip_tac >> Cases_on `v` >>
+  gvs[evaluate_type_def, vyper_to_abi_type_def, vyper_to_abi_def,
+      AllCaseEqs()] >>
+  Cases_on `a` >>
+  gvs[value_has_type_def, vyper_to_abi_def, val_in_memory_def,
+      AllCaseEqs(), type_memory_size_def] >>
+  drule (cj 1 vyper_to_abi_default_value) >> strip_tac >>
+  drule vyperTypeDefaultsTheory.default_value_has_type_thm >> strip_tac >>
+  `!m xs. m <= n /\ vyper_to_abi_sparse env ty tv' m l = SOME xs ==>
+    LENGTH xs = m /\
+    mem_bytes_at off (m * type_memory_size tv') mem =
+      FLAT (MAP (enc (vyper_to_abi_type env ty)) xs)` by
+    (Induct >- simp[vyper_to_abi_def, mem_bytes_at_def] >>
+     simp[Once vyper_to_abi_def] >>
+     rpt gen_tac >> strip_tac >>
+     gvs[AllCaseEqs()] >>
+     rewrite_tac[arithmeticTheory.MULT_CLAUSES] >>
+     rewrite_tac[mem_bytes_at_split_padded] >>
+     simp[] >>
+     first_x_assum irule
+     >- (qexists_tac `default_value tv'` >> simp[] >>
+         first_x_assum irule >> simp[]) >>
+     qexists_tac `v` >> simp[] >> conj_tac
+     >- metis_tac[sparse_has_type_lookup] >>
+     metis_tac[kvs_in_memory_lookup]) >>
+  first_x_assum (qspecl_then [`n`, `avs`] mp_tac) >> simp[] >>
+  strip_tac >> simp[enc_tuple_static_acc, EVERY_REPLICATE] >>
+  AP_TERM_TAC >>
+  qpat_x_assum `LENGTH avs = n` (SUBST_ALL_TAC o SYM) >>
+  POP_ASSUM_LIST (K ALL_TAC) >> Induct_on `avs` >> simp[]
+QED
+
+Finalise val_in_memory_static_abi_mutual
+
+Theorem val_in_memory_static_abi:
+  !env ty tv v av off mem.
+    evaluate_type env ty = SOME tv /\
+    ~is_dynamic (vyper_to_abi_type env ty) /\ value_has_type tv v /\
+    vyper_to_abi env ty v = SOME av /\ val_in_memory tv v off mem ==>
+    mem_bytes_at off (type_memory_size tv) mem =
+    enc (vyper_to_abi_type env ty) av
+Proof
+  metis_tac[val_in_memory_static_abi_mutual]
+QED
 
 Theorem mem_bytes_at_agree_window:
   ∀ off len mem mem'.

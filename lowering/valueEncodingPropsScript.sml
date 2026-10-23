@@ -253,3 +253,15 @@ Theorem val_in_memory_address:
      typed_val_to_w256 (BaseTV AddressT) (BytesV bs))
 Proof ACCEPT_TAC val_in_memory_address_proof
 QED
+
+(* ABI-static typed values have their encoding as their padded memory image. *)
+Theorem val_in_memory_static_abi:
+  !env ty tv v av off mem.
+    evaluate_type env ty = SOME tv /\
+    ~is_dynamic (vyper_to_abi_type env ty) /\ value_has_type tv v /\
+    vyper_to_abi env ty v = SOME av /\ val_in_memory tv v off mem ==>
+    mem_bytes_at off (type_memory_size tv) mem =
+    enc (vyper_to_abi_type env ty) av
+Proof
+  metis_tac[valueEncodingProofsTheory.val_in_memory_static_abi]
+QED
