@@ -583,6 +583,116 @@ Proof
   rewrite_tac[shape_step_def] >> metis_tac[])
 QED
 
+Theorem internal_cenv_install_shape[local]:
+  !cenv rb pc st.
+    cenv_static_ok cenv /\
+    (case rb of NONE => T | SOME op => plain_operand st op) /\
+    retpc_operand st pc ==>
+    cenv_shape_ok st
+      (cenv with <|ce_return_buf :=
+        (case (rb,cenv.ce_return_buf) of
+          (SOME op,SOME (MemLoc off sz)) => SOME (PtrVar op sz)
+        | _ => cenv.ce_return_buf);
+        ce_return_pc := SOME (PtrVar pc 0)|>)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `cenv_shape_ok st cenv` by metis_tac[cenv_static_ok_shape_ok] >>
+  Cases_on `rb` >> gvs[cenv_shape_ok_def] >>
+  Cases_on `cenv.ce_return_buf` >> gvs[]
+  >- (first_assum MATCH_ACCEPT_TAC) >>
+  rename1 `cenv.ce_return_buf = SOME loc` >>
+  `?off sz. loc = MemLoc off sz` by metis_tac[cenv_static_ok_def] >>
+  gvs[cenv_shape_ok_def, loc_shape_ok_def] >> first_assum MATCH_ACCEPT_TAC
+QED
+
+Theorem internal_fallthrough_shape[local]:
+  !pc ret_type is_nr nkey use_trans is_view.
+    shape_step T compiler_label (\st. retpc_operand st pc)
+      (do (if is_nr then compile_nonreentrant_unlock nkey use_trans is_view
+           else return ());
+          (case ret_type of NONE => emit_inst RET [pc] []
+           | SOME _ => emit_inst INVALID [] []) od) (\x st. T)
+Proof
+  rpt gen_tac >> irule shape_step_ignore_bind >>
+  qexists_tac `\u st. retpc_operand st pc` >> reverse conj_tac
+  >- (reverse (Cases_on `is_nr`) >> simp[]
+      >- (irule shape_step_return >> simp[]) >>
+      qspecl_then [`nkey`, `use_trans`, `is_view`] assume_tac
+        compile_nonreentrant_unlock_shape >>
+      drule shape_step_frame >>
+      disch_then (qspec_then `\st. retpc_operand st pc` mp_tac) >>
+      simp[shape_stable_def] >> metis_tac[retpc_operand_mono]) >>
+  gen_tac >> BETA_TAC >> Cases_on `ret_type` >> simp[]
+  >- (mp_tac (Q.SPECL [`compiler_label`, `\st. T`, `[]`, `pc`]
+        shape_step_emit_inst_ret) >>
+      Cases_on `pc` >> simp intfn_lock_simps >>
+      rewrite_tac[shape_step_def, retpc_operand_def] >>
+      simp[] >> metis_tac[]) >>
+  mp_tac (Q.SPECL [`T`, `compiler_label`, `\st. T`, `INVALID`, `[]`, `[]`]
+    shape_step_emit_inst) >>
+  simp intfn_lock_simps >> rewrite_tac[shape_step_def] >> metis_tac[]
+QED
+
+Theorem internal_body_finish_shape[local]:
+  !cenv pc body ret_type is_nr nkey use_trans is_view.
+    IS_SOME cenv.ce_return_pc /\
+    ~supported_stmts_expr_exists expr_shape_root body ==>
+    shape_step T compiler_label
+      (\st. retpc_operand st pc /\ cenv_shape_ok st cenv)
+      (do compile_stmts cenv NoLoop
+            (case ret_type of SOME t => t | NONE => BaseT BoolT) body;
+          cs <- comp_get;
+          if block_is_terminated cs then return ()
+          else do (if is_nr then
+                     compile_nonreentrant_unlock nkey use_trans is_view
+                   else return ());
+                  (case ret_type of NONE => emit_inst RET [pc] []
+                   | SOME _ => emit_inst INVALID [] []) od
+       od) (\x st. T)
+Proof
+  rpt gen_tac >> strip_tac >>
+  rename1 `~supported_stmts_expr_exists expr_shape_root ss` >>
+  irule shape_step_ignore_bind >>
+  qexists_tac `\u st. retpc_operand st pc` >> reverse conj_tac
+  >- (qspecl_then [`cenv`, `NoLoop`,
+        `case ret_type of SOME t => t | NONE => BaseT BoolT`, `ss`]
+        mp_tac (cj 2 compile_stmt_shape) >>
+      simp[loop_ctx_shape_ok_def] >> strip_tac >>
+      drule shape_step_frame >>
+      disch_then (qspec_then `\st. retpc_operand st pc` mp_tac) >>
+      simp[shape_stable_def] >> metis_tac[retpc_operand_mono]) >>
+  gen_tac >> BETA_TAC >> irule shape_step_bind >>
+  qexists_tac `\cs st. retpc_operand st pc` >> conj_tac
+  >- (qx_gen_tac `cs` >> BETA_TAC >> Cases_on `block_is_terminated cs` >> simp[]
+      >- (irule shape_step_return >> simp[]) >>
+      irule internal_fallthrough_shape) >>
+  mp_tac (Q.SPECL [`T`, `compiler_label`, `\st. retpc_operand st pc`]
+    shape_step_comp_get) >>
+  rewrite_tac[shape_step_def] >> metis_tac[]
+QED
+
+Theorem internal_comp_bind_return[local]:
+  comp_bind (comp_return x) f = f x
+Proof
+  simp[FUN_EQ_THM, comp_bind_def, comp_return_def]
+QED
+
+(* Verified optional-PARAM prefix; integration resumes in C1.4.3.
+  rpt gen_tac >> strip_tac >>
+  rename1 `~supported_stmts_expr_exists expr_shape_root ss` >>
+  simp[Once compile_internal_function_def] >>
+  irule shape_step_bind >>
+  qexists_tac `\rb st. case rb of NONE => T | SOME op => plain_operand st op` >>
+  reverse conj_tac
+  >- (reverse (Cases_on `has_ret_buf`) >> simp[]
+      >- (irule shape_step_return >> simp[]) >>
+      irule shape_step_bind >>
+      qexists_tac `\op st. plain_operand st op` >> conj_tac
+      >- (gen_tac >> BETA_TAC >> irule shape_step_return >> simp[]) >>
+      mp_tac (Q.SPECL [`T`, `compiler_label`, `\st. T`, `PARAM`, `[Lit 0w]`]
+        shape_step_emit_op) >> simp intfn_lock_simps) >>
+  FAIL_TAC "prologue"
+*)
 (* The PARAM/RETPC_PARAM prologue, then the body via compile_stmt_shape with
    ce_return_pc = SOME (PtrVar return_pc 0), so internal = T. *)
 Theorem compile_internal_function_shape:
