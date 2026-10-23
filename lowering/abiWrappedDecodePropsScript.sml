@@ -86,6 +86,26 @@ Proof
   strip_tac >> simp[evaluate_type_builtin_def]
 QED
 
+(* Canonical wrapped decoding yields the converted (normalized) member.
+   ABI typing and the source acceptance window remain caller obligations. *)
+Theorem evaluate_type_builtin_abi_decode_wrapped_canonical_normalized:
+  let at = vyper_to_abi_type (get_tenv cx) (TupleT [ty]) in
+  let bs = enc at (ListV [av]) in
+    unwrap /\ needs_external_call_wrap ty /\
+    has_type at (ListV [av]) /\
+    LENGTH bs < dimword (:256) /\
+    static_length at <= LENGTH bs /\
+    LENGTH bs <= vyper_abi_size_bound (get_tenv cx) (TupleT [ty]) /\
+    abi_to_vyper (get_tenv cx) ty av = SOME nv ==>
+    evaluate_type_builtin cx (AbiDecode unwrap) ty [BytesV bs] = INL nv
+Proof
+  pure_rewrite_tac [LET_THM] >> BETA_TAC >> strip_tac >>
+  irule evaluate_type_builtin_abi_decode_wrapped_success >>
+  asm_rewrite_tac [] >>
+  irule evaluate_abi_decode_canonical_normalized >>
+  simp[abi_to_vyper_singleton_tuple]
+QED
+
 val () = List.app (fn (n,th) =>
   let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
     if null (Thm.hyp th) andalso null axioms andalso
