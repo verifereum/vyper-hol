@@ -1173,6 +1173,44 @@ Proof
       stmt_shape_emit_simp)])
 QED
 
+Theorem stmt_shape_jmp[local]:
+  !internal P lbl.
+    shape_stable P /\ (!st. P st ==> compiler_label lbl) ==>
+    shape_step internal compiler_label P (emit_inst JMP [Label lbl] [])
+      (\u st. P st)
+Proof
+  rpt strip_tac >> ho_match_mp_tac stmt_shape_emit_inst >> simp[] >>
+  conj_tac
+  >- simp[label_or_plain_def, stackPlanTypesTheory.is_label_operand_def] >>
+  stmt_shape_emit_simp >> simp[jump_label_ok_def] >> metis_tac[]
+QED
+
+Theorem stmt_shape_jnz[local]:
+  !internal P test yes no.
+    shape_stable P /\
+    (!st. P st ==> plain_operand st test /\ compiler_label yes /\ compiler_label no) ==>
+    shape_step internal compiler_label P
+      (emit_inst JNZ [test; Label yes; Label no] []) (\u st. P st)
+Proof
+  rpt strip_tac >> ho_match_mp_tac stmt_shape_emit_inst >> simp[] >>
+  conj_tac
+  >- (rpt strip_tac >> first_x_assum drule >>
+      simp[label_or_plain_def, stackPlanTypesTheory.is_label_operand_def]) >>
+  stmt_shape_emit_simp >>
+  rpt strip_tac >> first_x_assum drule >>
+  simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def, jump_label_ok_def] >>
+  strip_tac >> gvs[stackPlanTypesTheory.is_label_operand_def]
+QED
+
+Theorem stmt_shape_stable_loop_context[local]:
+  !src dst ctr b.
+    shape_stable (\st. plain_operand st src /\
+      (plain_operand st dst /\ (plain_operand st (Var ctr) /\ b)))
+Proof
+  rpt gen_tac >>
+  simp[shape_stable_conj, stmt_shape_stable_plain, stmt_shape_stable_const]
+QED
+
 (* For alan, by compile_stmt_ind.  internal is IS_SOME ce_return_pc: Return
    emits RET exactly when ce_return_pc is SOME, STOP/RETURN otherwise. *)
 Theorem compile_stmt_shape:
