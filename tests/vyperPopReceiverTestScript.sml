@@ -64,16 +64,10 @@ Proof
   >> rw[Once WhileTheory.OWHILE_THM]
 QED
 
-(* Temporary preparation: retain the previous proof while the bounded
-   CPS/CV proof is developed under the default tactic limit.
-Proof
-  CONV_TAC cv_eval
-QED
-*)
 Theorem hashmap_pop_returns_old_last_element:
   FST nested_pop_result = INR (ReturnException (IntV 23))
 Proof
-  cheat
+  CONV_TAC cv_eval
 QED
 
 (* Temporary preparation: retain the previous proof while the bounded
