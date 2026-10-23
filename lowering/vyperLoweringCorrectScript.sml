@@ -17,6 +17,7 @@
  * TOP-LEVEL:
  *   venom_env_rel, initial_venom_state_rel -- PLAN 5.7 entry boundary
  *   external_call_result_rel, source_unit_execution_correct -- oracle boundary
+ *   compile_state_ok_initial -- label-space invariant of the initial compile state
  *   lower_vyper_runtime_unit_correct -- S1 (planned admission, Milestone 6)
  *   lower_vyper_runtime_unit_source_unit_ok -- S2 (Milestone 5)
  *   lower_vyper_runtime_unit_memory_ok -- S3 (Milestone 5)
@@ -132,8 +133,10 @@ Definition initial_venom_state_rel_def:
 End
 
 (* Only success compares effects/requests. Runtime failure must abort, except
-   the exact dynamic strict-decoding exemption on Halt. Error (stuck or fuel
-   exhaustion), OK and IntRet are never acceptable results, even if exempt. *)
+   the exact dynamic strict-decoding exemption on Halt. A failed external call
+   (RevertData) must REVERT; as for assertions, the revert data itself is not
+   compared. Error (stuck or fuel exhaustion), OK and IntRet are never
+   acceptable results, even if exempt. *)
 Definition external_call_result_rel_def:
   external_call_result_rel tops ret tx (res, am', rqs) vres <=>
     case (res, vres) of
@@ -145,6 +148,7 @@ Definition external_call_result_rel_def:
         ss.vs_requests = rqs
     | (INR (AssertException s), Abort Revert_abort _) => T
     | (INR (AssertException s), Abort ExHalt_abort _) => (s = "UNREACHABLE")
+    | (INR (Error (RevertData _)), Abort Revert_abort _) => T
     | (INR (Error (RuntimeError m)), Abort _ _) => T
     | (INR (Error e), Halt _) => decode_strictness_exempt tops e
     | _ => F
@@ -156,6 +160,19 @@ Definition source_unit_execution_correct_def:
              (call_external (SOME vs.vs_outcomes) am tx)
              (run_context fuel unit.cu_context vs)
 End
+
+(* ===== Label-space invariant at the start of lowering ===== *)
+
+(* Initial compile_state is well-formed for any entry label that is not
+   itself a compiler-generated label (with any counter). The entry label
+   in practice is user/frontend-provided (e.g. "global"). *)
+Theorem compile_state_ok_initial:
+  ∀ entry_lbl.
+    entry_lbl ∉ compiler_labels_future 0
+    ⇒ compile_state_ok (initial_compile_state entry_lbl)
+Proof
+  simp[compile_state_ok_def, initial_compile_state_def, bound_labels_def]
+QED
 
 (* ===== Planned lowering stages (NOT certificates) ===== *)
 

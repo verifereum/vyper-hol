@@ -19,7 +19,7 @@ list and on the main module alone.
 
 The oracle is Vyper `0.5.0a4+cd74ce4f+commit.cd74ce4f`, pinned by `VYPER_PIN`.
 It was built with experimental codegen, no optimization, the Prague EVM version,
-and bytecode metadata disabled. The 13 retained JSON/bytecode fixtures in
+and bytecode metadata disabled. The 23 retained JSON/bytecode fixtures in
 `lowering/defs/bytecode/external-calls/oracle` and their dependency provenance
 reproduce byte for byte with `prepare --corpus external-calls --check`. The
 diagnostic probes used holbuild 0.11.4 with the stock checker and EVAL libraries
@@ -39,7 +39,7 @@ whitelist change, with the probe in `memory_store_witnesses.py`.
 identical. A difference cell shows the HOL/Vyper runtime lengths and the first
 differing runtime byte (zero-based). Whitelist membership (`supported_program`)
 is given as baseline → after. It does not decide whether a source is compiled.
-`P` marks the 13 sources in `parity-fixtures.txt`, which have checked theorems
+`P` marks the sources in `parity-fixtures.txt`, which have checked theorems
 in `evalCompilerExternalCalls`.
 
 | Source | Part | Whitelist | Baseline | After |
@@ -57,7 +57,7 @@ in `evalCompilerExternalCalls`.
 | `e09_ret_tuple_dyn` | control (a06-04) | F → T | MATCH | MATCH (379 B) |
 | `e21_default_ret` P | a06-05 | F → T | 221/221 B, rt@182 | MATCH (221 B) |
 | `e22_static_default` P | a06-05 | F → T | 220/220 B, rt@181 | MATCH (220 B) |
-| `e29_default_ret_skip` | a06-05 | F → T | 228/228 B, rt@197 | MATCH (228 B) |
+| `e29_default_ret_skip` P | a06-05 | F → T | 228/228 B, rt@197 | MATCH (228 B) |
 | `e32_default_effect_extcall` | a06-05 | F → F | 319/319 B, rt@281 | MATCH (319 B) |
 | `e34_default_effect_internal` | a06-05 | F → F | 259/259 B, rt@197 | MATCH (259 B) |
 | `e30_default_ret_tuple` P | a06-09, a06-05 | F → F | 275/283 B, rt@54 | MATCH (283 B) |
@@ -77,15 +77,16 @@ The whitelist widening has three parts:
   admitted, including imported and builtin interfaces.
 - **Any value return.** `supported_external_return_type tops` is now
   `supported_value_type tops`.
-- **Literal or name defaults.** `default_return_value` is admitted when it is a
-  literal or a name.
+- **Literal or name defaults.** `default_return_value` was admitted when it
+  was a literal or a name. Since
+  [#553](https://github.com/verifereum/vyper-hol/issues/553) (a06-07) the
+  default is an ordinary operand: the semantics evaluates it before the call,
+  in source order, as the lowering does, so any pure default is admitted.
 
-Some witnesses stay outside the whitelist. `e30` has a list-literal default,
-and `e32` and `e34` have effectful defaults. These are excluded until the
-source semantics evaluates defaults eagerly
-([#553](https://github.com/verifereum/vyper-hol/issues/553), a06-07). `e38`
-initializes a local array from a list literal, which the statement whitelist
-does not admit.
+The whitelist columns were measured before that change. `e32` and `e34` have
+effectful defaults and stay outside the whitelist, since every external-call
+operand must be pure. `e38` initializes a local array from a list literal,
+which the statement whitelist does not admit.
 
 The multi-module sources import `libp.vy` (`interface IFoo` with
 `foo(uint256) -> uint256: view` and `bar(uint256): nonpayable`) and `ifoo.vyi`
@@ -93,6 +94,26 @@ The multi-module sources import `libp.vy` (`interface IFoo` with
 The versions used here give the same Vyper runtime lengths as the issue's
 probes. The multi-module sources are probe-only: they have no committed
 fixtures, because the witness library compiles single-module exports.
+
+## Keyword operands
+
+These sources cover the keyword operands of an external call and `send`
+(#553); `e19_gas_kw` and `s02_send_gas` are the issue's witnesses. All match
+the pinned Vyper bytecode exactly. Each is in `parity-fixtures.txt`, with a
+checked theorem in `evalCompilerExternalCallKwargs`; `e29_default_ret_skip`
+above also has one there.
+
+| Source | What it covers | After |
+|---|---|---|
+| `e19_gas_kw` | extcall with a literal `gas=50000` | MATCH (196 B) |
+| `e40_extcall_gas` | extcall with `gas=` | MATCH (242 B) |
+| `e41_staticcall_gas` | staticcall with `gas=` | MATCH (239 B) |
+| `e42_extcall_gas_value_order` | `gas=` before `value=`, lowered in source order | MATCH (256 B) |
+| `e43_extcall_all_kwargs` | `value=`, `default_return_value=`, `gas=` | MATCH (304 B) |
+| `e44_skip_contract_check` | void extcall with `skip_contract_check=True`: no `extcodesize` check | MATCH (169 B) |
+| `e45_default_ret_ifexp` | a conditional-expression default | MATCH (291 B) |
+| `s01_send` | `send` without `gas=` | MATCH (118 B) |
+| `s02_send_gas` | `send(r, msg.value, gas=2300)` | MATCH (107 B) |
 
 To reproduce, generate the oracle with the pinned Python environment, then run
 `probe` in the worktree being tested:
