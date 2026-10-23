@@ -174,10 +174,7 @@ End
 
 Definition bump_emit_ops_def:
   bump_emit_ops =
-    [SOPush (Lit 31w); SOEmit "ADD";
-     SOPush (Lit 5w); SOEmit "SHR";
-     SOPush (Lit 5w); SOEmit "SHL";
-     SODup 2; SOEmit "ADD"]
+    [SODup 2; SOEmit "ADD"]
 End
 
 Definition generate_emit_ops_def:

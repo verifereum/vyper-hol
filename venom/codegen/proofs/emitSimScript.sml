@@ -70,7 +70,7 @@ Proof
 QED
 
 (* =========================================================================
-   Rounded BUMP boundary
+   Plain-add BUMP boundary
    ========================================================================= *)
 
 Theorem dimindex_256[local,simp]:
@@ -79,85 +79,6 @@ Proof
   CONV_TAC fcpLib.INDEX_CONV
 QED
 
-Theorem ceil32_div_mul[local]:
-  !n. ceil32 n = ((n + 31) DIV 32) * 32
-Proof
-  gen_tac >>
-  mp_tac (Q.SPEC `32` arithmeticTheory.DIVISION) >>
-  simp[] >> disch_then (qspec_then `n` strip_assume_tac) >>
-  Cases_on `n MOD 32 = 0`
-  >- (`n + 31 = n DIV 32 * 32 + 31` by decide_tac >>
-      simp[venomLayoutTheory.ceil32_def, arithmeticTheory.DIV_MULT]) >>
-  `0 < n MOD 32` by decide_tac >>
-  `n + 31 = (n DIV 32 + 1) * 32 + (n MOD 32 - 1)` by decide_tac >>
-  `n MOD 32 < 32` by (irule arithmeticTheory.MOD_LESS >> simp[]) >>
-  `n MOD 32 - 1 < 32` by decide_tac >>
-  `(n + 31) DIV 32 = n DIV 32 + 1` by
-    (once_rewrite_tac [ASSUME ``n + 31 = (n DIV 32 + 1) * 32 + (n MOD 32 - 1)``] >>
-     irule arithmeticTheory.DIV_MULT >> simp[]) >>
-  rw[venomLayoutTheory.ceil32_def] >>
-  decide_tac
-QED
-
-Theorem bump_round_mod_no_wrap[local]:
-  !n. n <= dimword (:256) - 32 ==>
-      32 * (((n + 31) MOD dimword (:256)) DIV 32) MOD dimword (:256) =
-      ceil32 n MOD dimword (:256)
-Proof
-  rpt strip_tac >>
-  `n + 31 < dimword (:256)` by
-    (gvs[wordsTheory.dimword_def] >> decide_tac) >>
-  simp[arithmeticTheory.LESS_MOD, ceil32_div_mul,
-       arithmeticTheory.MULT_COMM]
-QED
-
-Theorem bump_round_mod_wrap_zero[local]:
-  !n. dimword (:256) - 32 < n /\ n < dimword (:256) ==>
-      32 * (((n + 31) MOD dimword (:256)) DIV 32) MOD dimword (:256) = 0
-Proof
-  rpt strip_tac >>
-  `dimword (:256) <= n + 31` by
-    (gvs[wordsTheory.dimword_def] >> decide_tac) >>
-  `n + 31 - dimword (:256) < 32` by
-    (gvs[wordsTheory.dimword_def] >> decide_tac) >>
-  `n + 31 - dimword (:256) < dimword (:256)` by
-    (gvs[wordsTheory.dimword_def] >> decide_tac) >>
-  `n + 31 = 1 * dimword (:256) + (n + 31 - dimword (:256))` by
-    decide_tac >>
-  `(n + 31) MOD dimword (:256) = n + 31 - dimword (:256)` by
-    (irule arithmeticTheory.MOD_UNIQUE >>
-     qexists `1` >> simp[]) >>
-  simp[arithmeticTheory.LESS_DIV_EQ_ZERO]
-QED
-
-
-Theorem ceil32_wrap_mod_zero[local]:
-  !n. dimword (:256) - 32 < n /\ n < dimword (:256) ==>
-      ceil32 n MOD dimword (:256) = 0
-Proof
-  rpt strip_tac >>
-  `(n + 31) DIV 32 = dimword (:256) DIV 32` by
-    (rw[arithmeticTheory.DIV_EQ_X] >>
-     gvs[wordsTheory.dimword_def] >> decide_tac) >>
-  simp[ceil32_div_mul, wordsTheory.dimword_def]
-QED
-
-Theorem bump_round_word_correct:
-  !sz:bytes32. bump_round_word sz = n2w (ceil32 (w2n sz))
-Proof
-  gen_tac >>
-  PURE_REWRITE_TAC[bump_round_word_def] >>
-  qmatch_goalsub_abbrev_tac `word_lsl q 5` >>
-  `q = n2w (w2n q)` by simp[] >>
-  pop_assum SUBST1_TAC >>
-  simp[wordsTheory.word_lsl_n2w, wordsTheory.w2n_lsr,
-       wordsTheory.word_add_def, Abbr `q`] >>
-  Cases_on `w2n sz <= dimword (:256) - 32`
-  >- metis_tac[bump_round_mod_no_wrap] >>
-  `w2n sz < dimword (:256)` by simp[wordsTheory.w2n_lt] >>
-  `dimword (:256) - 32 < w2n sz` by decide_tac >>
-  metis_tac[bump_round_mod_wrap_zero, ceil32_wrap_mod_zero]
-QED
 
 Theorem word_of_bytes_encode_num_bytes_256[local]:
   !n. n < dimword (:256) ==>
@@ -175,52 +96,23 @@ Theorem bump_emit_ops_asm_trace:
   !initial_fmp lo o2pc prog as sz base_val rest.
     asm_block_at prog as.as_pc (execute_plan initial_fmp bump_emit_ops) /\
     as.as_stack = sz :: base_val :: rest ==>
-    asm_steps lo o2pc prog 8 as =
+    asm_steps lo o2pc prog 2 as =
       AsmOK
-        (as with <| as_stack := base_val + bump_round_word sz :: base_val :: rest;
-                    as_pc := as.as_pc + 8 |>)
+        (as with <| as_stack := base_val + sz :: base_val :: rest;
+                    as_pc := as.as_pc + 2 |>)
 Proof
   rpt strip_tac >>
   fs[bump_emit_ops_def, execute_plan_def, exec_stack_op_def,
-     asm_block_at_cons] >>
-  `31 MOD dimword (:256) = 31` by
-    (irule arithmeticTheory.LESS_MOD >> simp[wordsTheory.dimword_def]) >>
-  `5 MOD dimword (:256) = 5` by
-    (irule arithmeticTheory.LESS_MOD >> simp[wordsTheory.dimword_def]) >>
-  `encode_num_bytes_fuel 32 31 = encode_num_bytes 31 /\
-   encode_num_bytes_fuel 32 5 = encode_num_bytes 5` by
-    simp[asmIRTheory.encode_num_bytes_fuel_eq] >>
-  `8 = SUC 7` by decide_tac >> pop_assum SUBST1_TAC >>
-  simp[Once asm_steps_def, asm_step_def, asm_next_def,
-       word_of_bytes_encode_num_bytes_256] >>
-  `7 = SUC 6` by decide_tac >> pop_assum SUBST1_TAC >>
-  simp[Once asm_steps_def, asm_step_def, asm_step_op_def,
-       asm_step_arith_def, asm_binop_def, asm_next_def] >>
-  `6 = SUC 5` by decide_tac >> pop_assum SUBST1_TAC >>
-  simp[Once asm_steps_def, asm_step_def, asm_next_def,
-       word_of_bytes_encode_num_bytes_256] >>
-  `5 = SUC 4` by decide_tac >> pop_assum SUBST1_TAC >>
-  simp[Once asm_steps_def, asm_step_def, asm_step_op_def,
-       asm_step_arith_def, asm_step_compare_def, asm_step_bitwise_def,
-       asm_binop_def, asm_next_def] >>
-  `4 = SUC 3` by decide_tac >> pop_assum SUBST1_TAC >>
-  simp[Once asm_steps_def, asm_step_def, asm_next_def,
-       word_of_bytes_encode_num_bytes_256] >>
-  `3 = SUC 2` by decide_tac >> pop_assum SUBST1_TAC >>
-  simp[Once asm_steps_def, asm_step_def, asm_step_op_def,
-       asm_step_arith_def, asm_step_compare_def, asm_step_bitwise_def,
-       asm_binop_def, asm_next_def] >>
+     asm_block_at_cons, dup_name_def] >>
   `2 = SUC 1` by decide_tac >> pop_assum SUBST1_TAC >>
   simp[Once asm_steps_def, asm_step_def, asm_step_op_def,
        asm_step_arith_def, asm_step_compare_def, asm_step_bitwise_def,
        asm_step_memory_def, asm_step_control_def, asm_step_extcall_def,
        asm_step_copy_def, asm_step_context_def, asm_dup_def, asm_next_def,
-       dup_table_def, dup_name_def, swap_table_def, log_table_def] >>
+       dup_table_def, swap_table_def, log_table_def] >>
   `1 = SUC 0` by decide_tac >> pop_assum SUBST1_TAC >>
-  simp[Once asm_steps_def, asm_steps_def, asm_step_def, asm_step_op_def,
-       asm_step_arith_def, asm_binop_def, asm_next_def,
-       bump_round_word_def, word_of_bytes_encode_num_bytes_256,
-       wordsTheory.dimword_def, wordsTheory.WORD_ADD_COMM]
+  simp[asm_steps_def, asm_step_def, asm_step_op_def,
+       asm_step_arith_def, asm_binop_def, asm_next_def]
 QED
 
 
@@ -495,20 +387,20 @@ Theorem bump_emit_sim_from_stack:
        case op of Var x => x <> ptr_out /\ x <> next_out | _ => T) /\
     asm_block_at prog as.as_pc (execute_plan initial_fmp bump_emit_ops) ==>
     ?as'.
-      asm_steps lo o2pc prog 8 as = AsmOK as' /\
+      asm_steps lo o2pc prog 2 as = AsmOK as' /\
       venom_asm_rel lo
         (ps with ps_stack :=
            stack_push (Var next_out)
              (stack_push (Var ptr_out) (stack_pop 2 ps.ps_stack)))
-        (update_var next_out (base_val + n2w (ceil32 (w2n sz)))
+        (update_var next_out (base_val + sz)
           (update_var ptr_out base_val vs)) as' /\
-      as'.as_pc = as.as_pc + 8
+      as'.as_pc = as.as_pc + 2
 Proof
   rpt gen_tac >> strip_tac >>
   qexists_tac
     `as with <| as_stack :=
-       base_val + bump_round_word sz :: base_val :: rest;
-       as_pc := as.as_pc + 8 |>` >>
+       base_val + sz :: base_val :: rest;
+       as_pc := as.as_pc + 2 |>` >>
   conj_tac
   >- metis_tac[bump_emit_ops_asm_trace] >>
   conj_tac
@@ -538,7 +430,7 @@ Proof
           mp_tac plan_stack_rel_push >>
          simp[stack_push_def, operand_val_update_var_eq]) >>
       `plan_stack_rel lo
-         (update_var next_out (base_val + n2w (ceil32 (w2n sz)))
+         (update_var next_out (base_val + sz)
            (update_var ptr_out base_val vs))
          (stack_push (Var ptr_out) (stack_pop 2 ps.ps_stack))
          (base_val :: rest)` by
@@ -552,17 +444,17 @@ Proof
              Cases_on `e` >> gvs[] >> res_tac >> gvs[])
          >- first_assum ACCEPT_TAC) >>
       `plan_stack_rel lo
-         (update_var next_out (base_val + n2w (ceil32 (w2n sz)))
+         (update_var next_out (base_val + sz)
            (update_var ptr_out base_val vs))
          (stack_push (Var next_out)
            (stack_push (Var ptr_out) (stack_pop 2 ps.ps_stack)))
-         (base_val + n2w (ceil32 (w2n sz)) :: base_val :: rest)` by
+         (base_val + sz :: base_val :: rest)` by
         (qspecl_then [`lo`,
-          `update_var next_out (base_val + n2w (ceil32 (w2n sz)))
+          `update_var next_out (base_val + sz)
              (update_var ptr_out base_val vs)`,
           `stack_push (Var ptr_out) (stack_pop 2 ps.ps_stack)`,
           `base_val :: rest`, `Var next_out`,
-          `base_val + n2w (ceil32 (w2n sz))`]
+          `base_val + sz`]
           mp_tac plan_stack_rel_push >>
          simp[stack_push_def, operand_val_update_var_eq]) >>
       qpat_x_assum `venom_asm_rel _ _ _ _`
@@ -580,12 +472,12 @@ Proof
                  Cases_on `op` >> gvs[])) >>
          simp[]) >>
       `plan_spill_rel lo
-         (update_var next_out (base_val + n2w (ceil32 (w2n sz)))
+         (update_var next_out (base_val + sz)
            (update_var ptr_out base_val vs))
          ps.ps_spilled as.as_memory` by
         (qspecl_then [`lo`, `update_var ptr_out base_val vs`,
           `ps.ps_spilled`, `as.as_memory`, `next_out`,
-          `base_val + n2w (ceil32 (w2n sz))`]
+          `base_val + sz`]
           mp_tac plan_spill_rel_update_var >>
          impl_tac
          >- (conj_tac
@@ -595,7 +487,7 @@ Proof
                    (qspec_then `op` mp_tac) >>
                  Cases_on `op` >> gvs[])) >>
          simp[]) >>
-      simp[venom_asm_rel_def, bump_round_word_correct] >>
+      simp[venom_asm_rel_def] >>
       conj_tac >- simp[update_var_def] >>
       simp[update_var_def]) >>
   simp[]
@@ -617,14 +509,14 @@ Theorem bump_emit_sim:
        case op of Var x => x <> ptr_out /\ x <> next_out | _ => T) /\
     asm_block_at prog as.as_pc (execute_plan initial_fmp bump_emit_ops) ==>
     ?as'.
-      asm_steps lo o2pc prog 8 as = AsmOK as' /\
+      asm_steps lo o2pc prog 2 as = AsmOK as' /\
       venom_asm_rel lo
         (ps with ps_stack :=
            stack_push (Var next_out)
              (stack_push (Var ptr_out) (stack_pop 2 ps.ps_stack)))
-        (update_var next_out (base_val + n2w (ceil32 (w2n sz)))
+        (update_var next_out (base_val + sz)
           (update_var ptr_out base_val vs)) as' /\
-      as'.as_pc = as.as_pc + 8
+      as'.as_pc = as.as_pc + 2
 Proof
   rpt gen_tac >> strip_tac >>
   `?rest. as.as_stack = sz :: base_val :: rest` by

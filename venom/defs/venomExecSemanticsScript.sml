@@ -679,7 +679,7 @@ Definition step_inst_base_def:
             (case (eval_operand base_op s, eval_operand size_op s) of
               (SOME base_val, SOME sz) =>
                 OK (update_var next_out
-                  (word_add base_val (n2w (ceil32 (w2n sz)) : bytes32))
+                  (word_add base_val sz)
                   (update_var ptr_out base_val s))
             | _ => Error "bump: undefined operand")
         | _ => Error "bump requires two operands and two outputs")

@@ -2131,24 +2131,84 @@ Theorem ci_mono_compile_store_memory_typed[local]:
 Proof
   ho_match_mp_tac contextTheory.compile_store_memory_typed_ind >>
   rpt conj_tac >> rpt strip_tac >>
+  TRY (simp[Once contextTheory.compile_store_memory_typed_def,
+            ci_mono_comp_return] >> NO_TAC)
+  >- suspend "store"
+  >- suspend "fields"
+  >- suspend "sarray"
+  >- suspend "dynarray"
+  >> suspend "struct"
+QED
+
+Resume ci_mono_compile_store_memory_typed[store]:
+  once_rewrite_tac[contextTheory.compile_store_memory_typed_def] >>
+  IF_CASES_TAC
+  >- (irule ci_mono_bind >> simp[ci_mono_emit_op, ci_mono_emit_void]) >>
+  IF_CASES_TAC >- simp[ci_mono_compile_store_bytestring] >>
+  IF_CASES_TAC >- simp[ci_mono_emit_void] >>
+  Cases_on `src_ty` >> Cases_on `dst_ty` >>
+  fs[ci_mono_compile_copy_memory] >>
+  rpt (TOP_CASE_TAC >> fs[ci_mono_compile_copy_memory]) >>
+  first_assum (irule o SRULE []) >> simp[]
+QED
+
+Resume ci_mono_compile_store_memory_typed[fields]:
+  once_rewrite_tac[contextTheory.compile_store_memory_typed_def] >>
+  simp[ci_mono_comp_return] >>
+  ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_compile_with_byte_offset] >>
+  rpt strip_tac >> ho_match_mp_tac ci_mono_bind >>
+  conj_tac >- simp[ci_mono_compile_with_byte_offset] >>
+  rpt strip_tac >> simp_tac pure_ss [LET_THM] >> BETA_TAC >>
+  irule ci_mono_ignore_bind >> conj_tac >> rpt strip_tac >>
+  first_assum irule >> simp[]
+QED
+
+Resume ci_mono_compile_store_memory_typed[sarray]:
   once_rewrite_tac[contextTheory.compile_store_memory_typed_def] >>
   simp_tac pure_ss [LET_THM] >> BETA_TAC >>
-  rpt (FIRST [
-    CHANGED_TAC (simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_emit_inst,
-      ci_mono_fresh_label, ci_mono_fresh_var, ci_mono_new_block,
-      ci_mono_comp_return, ci_mono_compile_copy_memory,
-      ci_mono_compile_copy_memory_dynamic, ci_mono_compile_store_bytestring,
-      ci_mono_compile_with_byte_offset]),
-    gen_tac,
-    ho_match_mp_tac ci_mono_bind >> conj_tac,
-    ho_match_mp_tac ci_mono_ignore_bind >> conj_tac,
-    IF_CASES_TAC,
-    TOP_CASE_TAC,
-    first_assum (fn ih =>
-      (irule (SRULE [] ih) >> fs[] >> NO_TAC) ORELSE
-      (* the struct IH may differ from the goal by commuted offsets *)
-      metis_tac[SRULE [] ih, arithmeticTheory.ADD_COMM])])
+  IF_CASES_TAC >- simp[ci_mono_compile_copy_memory] >>
+  rpt ((ho_match_mp_tac ci_mono_bind ORELSE ho_match_mp_tac ci_mono_ignore_bind) >>
+       (conj_tac >- simp[ci_mono_fresh_label, ci_mono_fresh_var,
+          ci_mono_emit_inst, ci_mono_new_block, ci_mono_emit_op]) >>
+       rpt strip_tac) >>
+  ho_match_mp_tac ci_mono_ignore_bind >> conj_tac
+  >- (rpt strip_tac >> first_assum irule >> simp[] >> gvs[]) >>
+  rpt strip_tac >>
+  rpt ((ho_match_mp_tac ci_mono_bind ORELSE ho_match_mp_tac ci_mono_ignore_bind) >>
+       (conj_tac >- simp[ci_mono_emit_op, ci_mono_emit_inst, ci_mono_new_block]) >>
+       rpt strip_tac) >> simp[ci_mono_comp_return]
 QED
+
+Resume ci_mono_compile_store_memory_typed[dynarray]:
+  once_rewrite_tac[contextTheory.compile_store_memory_typed_def] >>
+  simp_tac pure_ss [LET_THM] >> BETA_TAC >>
+  rpt ((ho_match_mp_tac ci_mono_bind ORELSE ho_match_mp_tac ci_mono_ignore_bind) >>
+       (conj_tac >- simp[ci_mono_emit_op, ci_mono_emit_void]) >> rpt strip_tac) >>
+  IF_CASES_TAC
+  >- (ho_match_mp_tac ci_mono_bind >>
+      simp[ci_mono_emit_op, ci_mono_compile_copy_memory_dynamic]) >>
+  rpt ((ho_match_mp_tac ci_mono_bind ORELSE ho_match_mp_tac ci_mono_ignore_bind) >>
+       (conj_tac >- simp[ci_mono_fresh_label, ci_mono_fresh_var,
+          ci_mono_emit_inst, ci_mono_new_block, ci_mono_emit_op]) >> rpt strip_tac) >>
+  ho_match_mp_tac ci_mono_ignore_bind >> conj_tac
+  >- (rpt strip_tac >> first_assum irule >> simp[] >> gvs[]) >>
+  rpt strip_tac >>
+  rpt ((ho_match_mp_tac ci_mono_bind ORELSE ho_match_mp_tac ci_mono_ignore_bind) >>
+       (conj_tac >- simp[ci_mono_emit_op, ci_mono_emit_inst, ci_mono_new_block]) >>
+       rpt strip_tac) >> simp[ci_mono_comp_return]
+QED
+
+Resume ci_mono_compile_store_memory_typed[struct]:
+  once_rewrite_tac[contextTheory.compile_store_memory_typed_def] >>
+  simp[ci_mono_comp_return] >> pairarg_tac >> fs[] >>
+  ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_compile_with_byte_offset] >>
+  rpt strip_tac >> ho_match_mp_tac ci_mono_bind >>
+  conj_tac >- simp[ci_mono_compile_with_byte_offset] >>
+  rpt strip_tac >> ho_match_mp_tac ci_mono_ignore_bind >>
+  conj_tac >> rpt strip_tac >> first_assum irule >> simp[]
+QED
+
+Finalise ci_mono_compile_store_memory_typed
 
 Theorem ci_mono_compile_store_memory[local]:
   ∀cenv src dst dst_ty src_ty sa.
