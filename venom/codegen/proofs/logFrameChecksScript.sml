@@ -303,6 +303,72 @@ Proof
        context_limit_def]
 QED
 
+Theorem log_probe_depths[simp]:
+  LENGTH log_probe_s0.contexts = 1 /\
+  LENGTH log_probe_s1.contexts = 1 /\
+  LENGTH log_probe_s2.contexts = 1 /\
+  LENGTH log_probe_s3.contexts = 1 /\
+  LENGTH log_probe_s4.contexts = 1 /\
+  LENGTH log_probe_s5.contexts = 1 /\
+  LENGTH log_probe_s6.contexts = 1 /\
+  LENGTH log_probe_s7.contexts = 1 /\
+  LENGTH log_probe_s8.contexts = 1 /\
+  LENGTH log_probe_s9.contexts = 1
+Proof
+  simp[log_probe_states]
+QED
+
+val log_cert_steps = tl (CONJUNCTS log_probe_steps);
+
+Theorem log_probe_run:
+  run_call log_probe_es = SOME (INR NONE, log_probe_s9)
+Proof
+  rewrite_tac[GSYM (cj 1 log_probe_steps), run_call_def] >>
+  ntac 10 (once_rewrite_tac[WhileTheory.OWHILE_THM] >>
+    simp (combinTheory.o_DEF :: log_cert_steps))
+QED
+
+Theorem log_probe_observations:
+  observe 1 log_probe_s0 (INL (),log_probe_s1) obs = obs /\
+  observe 1 log_probe_s1 (INL (),log_probe_s2) obs = obs /\
+  observe 1 log_probe_s2 (INL (),log_probe_s3) obs = obs /\
+  observe 1 log_probe_s3 (INL (),log_probe_s4) obs = obs /\
+  observe 1 log_probe_s4 (INL (),log_probe_s5) obs = obs /\
+  observe 1 log_probe_s5 (INL (),log_probe_s6) obs = obs /\
+  observe 1 log_probe_s6 (INL (),log_probe_s7) obs = obs /\
+  observe 1 log_probe_s7 (INL (),log_probe_s8) obs = obs /\
+  observe 1 log_probe_s8 (INR NONE,log_probe_s9) obs = obs
+Proof
+  simp[observe_def, observable_call_def, log_probe_states,
+       log_probe_at_next_opcode, log_probe_parsed, FLOOKUP_UPDATE]
+QED
+
+Theorem log_probe_frame_obs:
+  frame_obs log_probe_es =
+    <| entries := []; readings := []; pending := NONE |>
+Proof
+  rewrite_tac[GSYM (cj 1 log_probe_steps), frame_obs_def] >>
+  simp log_cert_steps >>
+  ntac 9 (once_rewrite_tac[frame_obs_tr_def] >>
+    simp (log_probe_observations :: log_cert_steps))
+QED
+
+Theorem log_probe_trace:
+  call_trace log_probe_es = [] /\ gas_readings log_probe_es = []
+Proof
+  simp[call_trace_def, full_call_trace_def, gas_readings_def,
+       log_probe_frame_obs]
+QED
+
+Theorem log_probe_frame_outcome:
+  frame_outcome log_probe_es (INR NONE) log_probe_s9 NONE [] [log_probe_event]
+Proof
+  rewrite_tac[GSYM (cj 1 log_probe_steps)] >>
+  simp[frame_outcome_def, log_probe_states, log_probe_at_def,
+       log_probe_es_def, make_asm_call_state_def,
+       vfmContextTheory.initial_context_def]
+QED
+
 
 
 val _ = List.app (fn (name,th) =>
