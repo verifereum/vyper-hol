@@ -2260,14 +2260,6 @@ Proof
   pick_jump_witness_tac >> simp[]
 QED
 
-(* Select the exported DJMP branch by its guard, avoiding full dispatch. *)
-val step_inst_base_djmp_eq = valOf (List.find
-  (fn th => let
-    val (_, body) = strip_forall (concl th)
-    val (guard, _) = dest_imp body
-  in aconv (rhs guard) ``DJMP`` end)
-  (CONJUNCTS venomExecSemanticsTheory.step_inst_base_opcode_eqs));
-
 Theorem step_inst_base_subst_djmp[local]:
   !m inst (st:venom_state).
     inst.inst_opcode = DJMP /\
@@ -2291,7 +2283,7 @@ Proof
   pop_assum SUBST1_TAC >>
   `!op. eval_operand (subst_label_map_op m op) st = eval_operand op st` by (
     rpt strip_tac >> irule eval_operand_subst_label_map >> simp[]) >>
-  simp[step_inst_base_djmp_eq, subst_label_map_op_def,
+  simp[opcode_clause ``DJMP``, subst_label_map_op_def,
        extract_labels_map_subst, is_terminator_def] >>
   Cases_on `inst.inst_operands` >> simp[subst_label_map_op_def] >>
   BasicProvers.every_case_tac >>

@@ -1011,6 +1011,17 @@ fun write_coverage_report output_path = let
     (List.length o #unreferenced_traced_fixtures)
   val malformed = sum (List.length o #malformed)
   val zero_selected = sum (fn report => if #selected report = 0 then 1 else 0)
+
+  (* CI builds only the checked-in scripts and never regenerates them, so a
+     selection rule loosened without regenerating would count a file's tests
+     as selected here while no theory runs them. *)
+  fun has_script name =
+    OS.FileSys.access (OS.Path.concat (generated_dir, name), [])
+  val unscripted = List.mapPartial (fn ((id,path),(_,report)) =>
+    if #selected report > 0 andalso
+       not (has_script (String.concat ["vyperTestDefs_", id, "Script.sml"])
+            andalso has_script (String.concat ["vyperTest_", id, "Script.sml"]))
+    then SOME path else NONE) (ListPair.zip (files, reports))
   val excluded_test_items = excluded_name + excluded_pattern + no_traces +
                             missing_source + blank_source
 
@@ -1111,7 +1122,11 @@ fun write_coverage_report output_path = let
   end
 in
   (write () before TextIO.closeOut output)
-  handle e => (TextIO.closeOut output; raise e)
+  handle e => (TextIO.closeOut output; raise e);
+  if List.null unscripted then ()
+  else raise Fail (String.concat
+    ["selected tests with no scripts in ", generated_dir, " (run ",
+     "vyperTestLib.generate_tests): ", String.concatWith ", " unscripted])
 end
 
 fun make_definitions_for_file (id, json_path) = let
@@ -1153,8 +1168,10 @@ end
    build two empty theories, so it gets no scripts.  The coverage count
    answers cheaply for most files; the rest run the Defs build's own
    decode, so a file is skipped only when that decode succeeds with no
-   tests.  An exception from it means the Defs build would fail, which is
-   where that failure is reported, so the file keeps its scripts. *)
+   tests.  An exception from it, or from decoding the file, means the Defs
+   build would fail, which is where that failure is reported, so the file
+   keeps its scripts.  write_coverage_report fails when a file it counts
+   tests for has no scripts. *)
 fun generates_scripts items =
   #selected (coverage_of_items items) > 0 orelse
   let val report = decode_test_items items
@@ -1163,7 +1180,8 @@ fun generates_scripts items =
   handle _ => true
 
 fun selected_test_files () =
-  List.filter (fn (_, path) => generates_scripts (decodeFile rawObject path))
+  List.filter (fn (_, path) =>
+    generates_scripts (decodeFile rawObject path) handle _ => true)
     (test_files ())
 
 fun write_defn_scripts files = let

@@ -1230,58 +1230,30 @@ val exec_create_output = prove(``
    One lemma per exec_* category, instantiated per opcode by
    prove_output_cat, as prove_cat does for step_sim. *)
 
-val exec_pure1_output = prove(``
+(* Specialises the operand-agreement assumption at indices 0 .. n-1. *)
+fun spec_operands_tac n =
+  qpat_x_assum `!i. _ ==> _` (fn th =>
+    EVERY (List.tabulate (n, fn i =>
+      ASSUME_TAC (SIMP_RULE (srw_ss()) []
+        (SPEC (numSyntax.term_of_int i) th)))));
+
+fun exec_pure_output exec exec_def n = prove(``
   !f inst1 inst2 s1 s2 s1' s2'.
-    exec_pure1 f inst1 s1 = OK s1' /\
-    exec_pure1 f inst2 s2 = OK s2' /\
+    ^exec f inst1 s1 = OK s1' /\
+    ^exec f inst2 s2 = OK s2' /\
     (!i. i < LENGTH inst1.inst_operands ==>
          eval_operand (EL i inst1.inst_operands) s1 =
          eval_operand (EL i inst2.inst_operands) s2) ==>
     !k. k < LENGTH inst1.inst_outputs ==>
         lookup_var (EL k inst1.inst_outputs) s1' =
         lookup_var (EL k inst2.inst_outputs) s2'``,
-  rpt gen_tac >> strip_tac >>
-  qpat_x_assum `!i. _ ==> _`
-    (fn th => ASSUME_TAC (SIMP_RULE (srw_ss()) [] (SPEC ``0n`` th))) >>
-  gvs[exec_pure1_def, AllCaseEqs()] >>
+  rpt gen_tac >> strip_tac >> spec_operands_tac n >>
+  gvs[exec_def, AllCaseEqs()] >>
   simp[lookup_var_def, update_var_def, finite_mapTheory.FLOOKUP_UPDATE]);
 
-val exec_pure2_output = prove(``
-  !f inst1 inst2 s1 s2 s1' s2'.
-    exec_pure2 f inst1 s1 = OK s1' /\
-    exec_pure2 f inst2 s2 = OK s2' /\
-    (!i. i < LENGTH inst1.inst_operands ==>
-         eval_operand (EL i inst1.inst_operands) s1 =
-         eval_operand (EL i inst2.inst_operands) s2) ==>
-    !k. k < LENGTH inst1.inst_outputs ==>
-        lookup_var (EL k inst1.inst_outputs) s1' =
-        lookup_var (EL k inst2.inst_outputs) s2'``,
-  rpt gen_tac >> strip_tac >>
-  qpat_x_assum `!i. _ ==> _`
-    (fn th =>
-      ASSUME_TAC (SIMP_RULE (srw_ss()) [] (SPEC ``0n`` th)) >>
-      ASSUME_TAC (SIMP_RULE (srw_ss()) [] (SPEC ``1n`` th))) >>
-  gvs[exec_pure2_def, AllCaseEqs()] >>
-  simp[lookup_var_def, update_var_def, finite_mapTheory.FLOOKUP_UPDATE]);
-
-val exec_pure3_output = prove(``
-  !f inst1 inst2 s1 s2 s1' s2'.
-    exec_pure3 f inst1 s1 = OK s1' /\
-    exec_pure3 f inst2 s2 = OK s2' /\
-    (!i. i < LENGTH inst1.inst_operands ==>
-         eval_operand (EL i inst1.inst_operands) s1 =
-         eval_operand (EL i inst2.inst_operands) s2) ==>
-    !k. k < LENGTH inst1.inst_outputs ==>
-        lookup_var (EL k inst1.inst_outputs) s1' =
-        lookup_var (EL k inst2.inst_outputs) s2'``,
-  rpt gen_tac >> strip_tac >>
-  qpat_x_assum `!i. _ ==> _`
-    (fn th =>
-      ASSUME_TAC (SIMP_RULE (srw_ss()) [] (SPEC ``0n`` th)) >>
-      ASSUME_TAC (SIMP_RULE (srw_ss()) [] (SPEC ``1n`` th)) >>
-      ASSUME_TAC (SIMP_RULE (srw_ss()) [] (SPEC ``2n`` th))) >>
-  gvs[exec_pure3_def, AllCaseEqs()] >>
-  simp[lookup_var_def, update_var_def, finite_mapTheory.FLOOKUP_UPDATE]);
+val exec_pure1_output = exec_pure_output ``exec_pure1`` exec_pure1_def 1;
+val exec_pure2_output = exec_pure_output ``exec_pure2`` exec_pure2_def 2;
+val exec_pure3_output = exec_pure_output ``exec_pure3`` exec_pure3_def 3;
 
 val exec_read0_output = prove(``
   !f inst1 inst2 s1 s2 s1' s2'.
@@ -1306,9 +1278,7 @@ val exec_read1_output = prove(``
     !k. k < LENGTH inst1.inst_outputs ==>
         lookup_var (EL k inst1.inst_outputs) s1' =
         lookup_var (EL k inst2.inst_outputs) s2'``,
-  rpt gen_tac >> strip_tac >>
-  qpat_x_assum `!i. _ ==> _`
-    (fn th => ASSUME_TAC (SIMP_RULE (srw_ss()) [] (SPEC ``0n`` th))) >>
+  rpt gen_tac >> strip_tac >> spec_operands_tac 1 >>
   gvs[exec_read1_def, AllCaseEqs()] >>
   simp[lookup_var_def, update_var_def, finite_mapTheory.FLOOKUP_UPDATE]);
 

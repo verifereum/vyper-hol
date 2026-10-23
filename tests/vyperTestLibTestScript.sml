@@ -31,6 +31,10 @@ val no_traces = ("traces", JSON.ARRAY []);
 val _ = expect_scripts "no selected test" false
   [("t", JSON.OBJECT [item_type "test", no_deps]),
    ("f", JSON.OBJECT [item_type "fixture", no_traces])];
+val _ = expect_scripts "test excluded by a source pattern" false
+  [("t", JSON.OBJECT [item_type "test", no_deps,
+                      ("source_code", JSON.STRING "return msg.gas"),
+                      ("traces", JSON.ARRAY [JSON.STRING "bad"])])];
 val _ = expect_scripts "malformed item" true
   [("t", JSON.OBJECT [item_type "test", no_deps]), ("m", JSON.OBJECT [])];
 val _ = expect_scripts "unresolved fixture dependency" true

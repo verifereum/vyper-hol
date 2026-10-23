@@ -408,16 +408,6 @@ Proof
   simp[IN_UNION]
 QED
 
-(* Select cached dispatch equations without expanding unrelated opcodes. *)
-val make_ssa_opcode_rewrites = map (fn th => let
-  val (_, body) = strip_forall (concl th)
-  val (guard, _) = dest_imp body
-in (rhs guard, th) end) (CONJUNCTS step_inst_base_opcode_eqs);
-
-fun make_ssa_step_base_for opc =
-  #2 (valOf (List.find (fn (key, _) => aconv key opc)
-    make_ssa_opcode_rewrites));
-
 (* Only expose result constructors: return values, memory slices and DRET's
    packed state are irrelevant to the impossibility of an OK result. *)
 val make_ssa_term_result_ss = pure_ss ++ boolSimps.BOOL_ss ++ rewrites
@@ -427,7 +417,7 @@ val make_ssa_term_ok_jump_tac =
   qpat_x_assum `step_inst_base _ _ = OK _` mp_tac >>
   qpat_assum `inst.inst_opcode = _` (fn eq =>
     PURE_ONCE_REWRITE_TAC
-      [MATCH_MP (make_ssa_step_base_for (rhs (concl eq))) eq]) >>
+      [MATCH_MP (opcode_clause (rhs (concl eq))) eq]) >>
   simp_tac make_ssa_term_result_ss [];
 
 Theorem step_inst_base_DRET_not_OK_local[local]:
@@ -868,7 +858,7 @@ Theorem step_inst_base_lookup_preserved[local]:
 Proof
   rpt strip_tac >>
   `inst.inst_opcode <> INVOKE` by
-    (CCONTR_TAC >> gvs[make_ssa_step_base_for ``INVOKE``]) >>
+    (CCONTR_TAC >> gvs[opcode_clause ``INVOKE``]) >>
   `step_inst 0 ARB inst s = OK s'` by simp[step_inst_non_invoke] >>
   Cases_on `is_terminator inst.inst_opcode`
   >- (drule_all step_terminator_preserves_vars >> simp[]) >>
