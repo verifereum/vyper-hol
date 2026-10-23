@@ -5534,6 +5534,102 @@ Proof
   shape_under_tac lower_value_shape `ValFrame` >> simp[Abbr `ValFrame`, Abbr `AddrFrame`]
 QED
 
+fun shape_raw_effect_tac frame effect =
+  irule shape_step_uncurry >>
+  qexists_tac ([QUOTE "\\u st. ("] @ frame @ [QUOTE ") st"]) >> reverse conj_tac
+  >- effect >> gen_tac >> simp[];
+
+fun shape_raw_label_tac frame name =
+  irule shape_step_uncurry >>
+  qexists_tac ([QUOTE "\\l st. compiler_label l /\\ ("] @ frame @ [QUOTE ") st"]) >> reverse conj_tac
+  >- (shape_under_tac shape_step_fresh_label frame >> qexists_tac `compiler_label` >> simp[]) >>
+  qx_gen_tac name >> simp[] >> ho_match_mp_tac shape_step_assume_pure >> strip_tac;
+
+Theorem compile_ifexp_shape[local]:
+  (!ce t child. ~supported_expr_exists expr_shape_root child ==>
+     shape_step internal compiler_label (\st. cenv_shape_ok st ce)
+       (cfn ce t child) (\v st. value_shape_ok st v)) /\
+  ~supported_expr_exists expr_shape_root cond_e /\
+  ~supported_expr_exists expr_shape_root then_e /\
+  ~supported_expr_exists expr_shape_root else_e ==>
+  shape_step internal compiler_label (\st. cenv_shape_ok st cenv)
+    (compile_expr_body cfn bfn tfn cenv ty (IfExp annot cond_e then_e else_e))
+    (\v st. value_shape_ok st v)
+Proof
+  strip_tac >> CONV_TAC (LAND_CONV (REWR_CONV (GSYM ETA_AX))) >>
+  simp[compile_expr_body_def, expr_type_def] >> CONV_TAC (DEPTH_CONV ETA_CONV) >>
+  irule shape_step_uncurry >>
+  qexists_tac `\v st. cenv_shape_ok st cenv /\ plain_operand st v` >> reverse conj_tac
+  >- (irule shape_step_conseq >> irule_at Any lower_value_shape >>
+      qexists_tac `\st. cenv_shape_ok st cenv` >> simp[cenv_shape_ok_stable]) >>
+  qx_gen_tac `cond_op` >> simp[] >>
+  qabbrev_tac `CondFrame = \st. cenv_shape_ok st cenv /\ plain_operand st cond_op` >>
+  `shape_stable CondFrame` by
+    (simp[Abbr `CondFrame`] >> ho_match_mp_tac shape_stable_conj >> simp[cenv_shape_ok_stable] >>
+     mp_tac (Q.SPEC `[cond_op]` shape_stable_plain_operands) >> simp[]) >>
+  irule shape_step_uncurry >>
+  qexists_tac `\x st. CondFrame st /\ plain_operand st (Var x)` >> reverse conj_tac
+  >- (shape_under_tac shape_step_fresh_var `CondFrame` >> qexists_tac `compiler_label` >> simp[]) >>
+  qx_gen_tac `result_var` >> simp[] >>
+  qabbrev_tac `ResultFrame = \st. CondFrame st /\ plain_operand st (Var result_var)` >>
+  `shape_stable ResultFrame` by
+    (simp[Abbr `ResultFrame`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
+     mp_tac (Q.SPEC `[Var result_var]` shape_stable_plain_operands) >> simp[]) >>
+  shape_raw_label_tac `ResultFrame` `then_lbl` >>
+  shape_raw_label_tac `ResultFrame` `else_lbl` >>
+  shape_raw_label_tac `ResultFrame` `exit_lbl` >>
+  irule shape_step_uncurry >> qexists_tac `\u st. ResultFrame st` >> reverse conj_tac
+  >- (shape_under_tac shape_step_emit_inst_guarded `ResultFrame` >>
+      simp[Abbr `ResultFrame`, Abbr `CondFrame`] >> shape_opcode_tac >>
+      simp[jump_label_ok_def] >> metis_tac[stackPlanTypesTheory.is_label_operand_def]) >>
+  gen_tac >> simp[] >> suspend "branches"
+QED
+
+Resume compile_ifexp_shape[branches]:
+  shape_raw_effect_tac `ResultFrame`
+    (ho_match_mp_tac shape_step_new_block >> simp[SF ETA_ss]) >>
+  irule shape_step_uncurry >>
+  qexists_tac `\v st. ResultFrame st /\ plain_operand st v` >> reverse conj_tac
+  >- (shape_under_tac lower_value_shape `ResultFrame` >>
+      simp[Abbr `ResultFrame`, Abbr `CondFrame`]) >>
+  qx_gen_tac `then_op` >> simp[] >>
+  qabbrev_tac `ThenFrame = \st. ResultFrame st /\ plain_operand st then_op` >>
+  `shape_stable ThenFrame` by
+    (simp[Abbr `ThenFrame`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
+     mp_tac (Q.SPEC `[then_op]` shape_stable_plain_operands) >> simp[]) >>
+  irule shape_step_uncurry >> qexists_tac `\u st. ResultFrame st` >> reverse conj_tac
+  >- (shape_under_tac shape_step_emit_inst_guarded `ThenFrame` >>
+      simp[Abbr `ThenFrame`, Abbr `ResultFrame`, Abbr `CondFrame`] >> shape_opcode_tac) >>
+  gen_tac >> simp[] >>
+  shape_raw_effect_tac `ResultFrame`
+    (shape_under_tac shape_step_emit_inst_guarded `ResultFrame` >>
+     shape_opcode_tac >> simp[jump_label_ok_def]) >>
+  shape_raw_effect_tac `ResultFrame`
+    (ho_match_mp_tac shape_step_new_block >> simp[SF ETA_ss]) >>
+  irule shape_step_uncurry >>
+  qexists_tac `\v st. ResultFrame st /\ plain_operand st v` >> reverse conj_tac
+  >- (shape_under_tac lower_value_shape `ResultFrame` >>
+      simp[Abbr `ResultFrame`, Abbr `CondFrame`]) >>
+  qx_gen_tac `else_op` >> simp[] >>
+  qabbrev_tac `ElseFrame = \st. ResultFrame st /\ plain_operand st else_op` >>
+  `shape_stable ElseFrame` by
+    (simp[Abbr `ElseFrame`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
+     mp_tac (Q.SPEC `[else_op]` shape_stable_plain_operands) >> simp[]) >>
+  shape_raw_effect_tac `ResultFrame`
+    (shape_under_tac shape_step_emit_inst_guarded `ElseFrame` >>
+     simp[Abbr `ElseFrame`, Abbr `ResultFrame`, Abbr `CondFrame`] >> shape_opcode_tac) >>
+  shape_raw_effect_tac `ResultFrame`
+    (shape_under_tac shape_step_emit_inst_guarded `ResultFrame` >>
+     shape_opcode_tac >> simp[jump_label_ok_def]) >>
+  shape_raw_effect_tac `ResultFrame`
+    (ho_match_mp_tac shape_step_new_block >> simp[SF ETA_ss]) >>
+  Cases_on `is_word_type annot` >>
+  simp[shape_step_def, shape_extends_refl, value_shape_ok_def, mk_ptr_def,
+       Abbr `ResultFrame`, loc_shape_ok_def]
+QED
+
+Finalise compile_ifexp_shape
+
 Theorem compile_expr_shape:
   (!cenv ty e internal.
      ~supported_expr_exists expr_shape_root e ==>
