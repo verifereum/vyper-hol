@@ -14,7 +14,7 @@ Ancestors
   arithmetic byte combin integer list option pair rich_list words
   contractABI sptree vfmTypes vfmConstants vfmState vfmContext
   vfmExecution[ignore_grammar] vyperAST vyperABI vyperMisc vyperValue
-  vyperContext vyperState vyperEvmBoundary
+  vyperContext vyperState vyperEvmBoundary extCallOracle[ignore_grammar] vyperCallOutcome[ignore_grammar]
 Libs
   cv_transLib wordsLib monadsyntax
 
@@ -638,6 +638,63 @@ val () = cv_auto_trans run_create_evm_def;
    Source/size ASSERTs always revert, independently of revert_on_failure.
    CREATE failure returns zero when rof = F; constructor REVERT data bubbles
    as RevertData when rof holds. *)
+val () = List.app (fn field => temp_overload_on ("create_" ^ field,
+  prim_mk_const {Thy="extCallOracle", Name="recordtype.call_outcome.seldef.co_" ^ field}))
+  ["success", "created", "returnData"];
+Definition create_oracle_result_def:
+  create_oracle_result salt value initcode rof st =
+    case vyperCallOutcome$take_create_outcome
+      (case salt of NONE => extCallOracle$CreateCall | SOME s => extCallOracle$Create2Call s)
+      value initcode st of
+    | (INR ex, st') => (INR ex, st')
+    | (INL (rq,outcome), st') =>
+        let st'' = SND (vyperCallOutcome$adopt_call_outcome rq outcome st') in
+        if (create_success outcome) then (INL (Value (AddressV (create_created outcome))), st'')
+        else if rof then (INR (Error (RevertData (create_returnData outcome))), st'')
+        else (INL (Value (AddressV 0w)), st'')
+End
+val () = create_oracle_result_def |> SRULE [pairTheory.pair_CASE_def] |> cv_auto_trans;
+
+Theorem create_oracle_result_frame:
+  create_oracle_result salt value code rof st = (res,st') ==>
+  st'.scopes = st.scopes /\ st'.immutables = st.immutables /\
+  isPREFIX st.logs st'.logs
+Proof
+  Cases_on `salt` >> Cases_on `st.outcomes` >>
+  simp[create_oracle_result_def, take_create_outcome_def] >>
+  pairarg_tac >>
+  rw[adopt_call_outcome_equation, create_outcome_request_def, evaluation_state_accfupds] >>
+  gvs[AllCaseEqs(), evaluation_state_accfupds, rich_listTheory.IS_PREFIX_REFL,
+      rich_listTheory.IS_PREFIX_APPEND]
+QED
+
+Theorem create_oracle_result_exception:
+  create_oracle_result salt value code rof st = (INR ex,st') ==>
+  ?err. ex = Error err /\ (!msg. err <> TypeError msg)
+Proof
+  Cases_on `salt` >> Cases_on `st.outcomes` >>
+  simp[create_oracle_result_def, take_create_outcome_def] >>
+  pairarg_tac >> rw[] >>
+  gvs[AllCaseEqs(), vyperValueOperationTheory.error_distinct]
+QED
+
+Theorem create_oracle_result_no_type_error:
+  create_oracle_result salt value code rof st = (res,st') ==>
+  !msg. res <> INR (Error (TypeError msg))
+Proof
+  strip_tac >> rpt strip_tac >> gvs[] >>
+  drule create_oracle_result_exception >> simp[] >> metis_tac[]
+QED
+
+Theorem create_oracle_result_address:
+  create_oracle_result salt value code rof st = (INL tv,st') ==>
+  ?addr. tv = Value (AddressV addr)
+Proof
+  Cases_on `salt` >> Cases_on `st.outcomes` >>
+  simp[create_oracle_result_def, take_create_outcome_def] >>
+  pairarg_tac >> rw[] >> gvs[AllCaseEqs()] >> metis_tac[]
+QED
+
 Definition eval_create_def:
   eval_create cx kind has_salt rof arg_tys vs blueprint_size = do
     ops <- lift_option_type (dest_create_args kind has_salt vs)
@@ -651,6 +708,10 @@ Definition eval_create_def:
     (* copy-of/blueprint ASSERTs are emitted before CREATE and always revert. *)
     check code_info.cc_source_ok "create source has no deployable code";
     check code_info.cc_size_ok "create initcode too large";
+    oracle_mode <- (\st. (INL (IS_SOME st.outcomes), st));
+    if oracle_mode then
+      create_oracle_result ops.co_salt ops.co_value code_info.cc_initcode rof
+    else do
     self_acct <<- lookup_account cx.txn.target accounts;
     new_addr <<- create_address cx.txn.target self_acct.nonce ops.co_salt
       code_info.cc_initcode;
@@ -693,6 +754,7 @@ Definition eval_create_def:
                       else return (Value (AddressV 0w))
           od
       od
+    od
     od
   od
 End
@@ -886,7 +948,7 @@ local
         else create_guard (rator tm)
       end;
 
-  fun create_paths tail finish (asl,w) =
+  fun create_paths tail oracle finish (asl,w) =
     let
       val cv = create_head_conv (map ASSUME asl);
       val tm = lhs (fst (dest_imp w));
@@ -896,11 +958,12 @@ local
     in
       (reduce >>
        (case total create_guard next of
-          SOME guard => ASM_CASES_TAC guard >> create_paths tail finish
+          SOME guard => ASM_CASES_TAC guard >> create_paths tail oracle finish
         | NONE =>
             DISCH_THEN (fn result =>
               if pairSyntax.is_pair next then finish (SOME result)
-              else mp_tac (MATCH_MP tail result) >> finish NONE))) (asl,w)
+              else (FIRST (map (fn lemma => fn g => mp_tac (MATCH_MP lemma result) g)
+                    [tail, oracle]) >> finish NONE)))) (asl,w)
     end;
 
   (* Only substitute the final-state equation in the goal; leave the
@@ -928,18 +991,18 @@ local
          in
            if aconv (concl outcome) F then CONTR_TAC outcome
            else SUBST1_TAC (SYM outcome)
-         end) >> simp_tac error_ss [];
+         end) >> simp_tac error_ss [] >> metis_tac[];
 
 in
-  fun create_result_tac tail finish =
+  fun create_result_tac tail oracle finish =
     qpat_x_assum `eval_create _ _ _ _ _ _ _ _ = _` mp_tac >>
-    create_paths (REWRITE_RULE [GSYM ignore_bind_def] tail) finish;
+    create_paths (REWRITE_RULE [GSYM ignore_bind_def] tail) oracle finish;
   val create_frame_tac =
-    create_result_tac create_tail_preserves_scopes (create_state_finish frame_ss);
+    create_result_tac create_tail_preserves_scopes create_oracle_result_frame (create_state_finish frame_ss);
   val create_logs_tac =
-    create_result_tac create_tail_log_extends (create_state_finish log_ss);
-  fun create_outcome_tac tail = create_result_tac tail create_error_finish;
-  val create_exception_tac = create_outcome_tac create_tail_exception_is_error;
+    create_result_tac create_tail_log_extends create_oracle_result_frame (create_state_finish log_ss);
+  fun create_outcome_tac tail = create_result_tac tail create_oracle_result_no_type_error create_error_finish;
+  val create_exception_tac = create_result_tac create_tail_exception_is_error create_oracle_result_exception create_error_finish;
 end;
 
 (* Constructor events extend, rather than preserve, the log sequence. *)
