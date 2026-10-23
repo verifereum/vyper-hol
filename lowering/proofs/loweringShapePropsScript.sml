@@ -724,6 +724,41 @@ QED
    premise, and the internal names are a sublist of
    supported_function_names tops, which supported_declaration_names makes
    ALL_DISTINCT. *)
+Theorem MEM_classify_internal:
+  !tops mut nr rr name args dflts ret body.
+    MEM (mut,nr,rr,name,args,dflts,ret,body)
+      (FST (SND (classify_functions tops))) <=>
+    MEM (FunctionDecl Internal mut nr rr name args dflts ret body) tops
+Proof
+  Induct >> simp[classify_functions_def] >>
+  gen_tac >> fs[classify_functions_def] >>
+  qmatch_goalsub_abbrev_tac `classify_function h acc` >>
+  PairCases_on `acc` >> Cases_on `h` >>
+  gvs[classify_function_def] >>
+  rename1 `case vis of External => _ | Internal => _ | Deploy => _` >>
+  Cases_on `vis` >>
+  simp[classify_function_def] >>
+  IF_CASES_TAC >> simp[]
+QED
+
+Theorem MEM_supported_function_names:
+  !tops name. MEM name (supported_function_names tops) <=>
+    ?vis mut nr rr args dflts ret body.
+      MEM (FunctionDecl vis mut nr rr name args dflts ret body) tops
+Proof
+  Induct >> simp[supported_function_names_def] >>
+  gen_tac >> Cases_on `h` >>
+  simp[supported_function_names_def] >> metis_tac[]
+QED
+
+Theorem source_internal_fn_descriptor_name[simp]:
+  !tops mut nr rr name args dflts ret body.
+    FST (source_internal_fn_descriptor tops
+      (mut,nr,rr,name,args,dflts,ret,body)) = name
+Proof
+  simp[source_internal_fn_descriptor_def]
+QED
+
 Theorem supported_internal_descriptors_ok:
   !tops.
     supported_program tops /\
