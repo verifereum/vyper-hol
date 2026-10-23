@@ -3713,7 +3713,13 @@ Theorem compile_expr_ci_mono[local]:
   (∀ cenv vv_ty ty tb ret_ty args st.
     ci_mono st (SND (compile_type_builtin_dispatch cenv vv_ty ty tb ret_ty args st)))
 Proof
-  cheat
+  ho_match_mp_tac compile_expr_ind >>
+  rpt conj_tac >> rpt gen_tac >> strip_tac >>
+  simp[Once compile_expr_raw_def] >>
+  simp[ci_mono_compile_expr_body, ci_mono_compile_builtin_dispatch_body,
+       ci_mono_compile_type_builtin_dispatch_body,
+       ci_mono_expr_child_callback, ci_mono_builtin_child_callback,
+       ci_mono_type_child_callback]
 QED
 
 (* Derive: lower_value compile_expr preserves ci_mono *)
