@@ -12,10 +12,17 @@
  *                                  gas_use_ok / retpc_use_ok allow, and never
  *                                  copied
  *   plain_operand                — an operand the lowering may pass anywhere
+ *   label_or_plain               — a plain operand or a label
+ *   compiler_label, jump_label_ok, jump_labels_ok
+ *                                — labels a terminator may jump to: compiler
+ *                                  labels or "fn_" function entries
  *   lowered_inst_ok              — the per-instruction shape; `internal`
  *                                  selects internal-function or entry code
  *   shape_state, shape_extends   — the state invariant and the append step
  *   shape_step                   — Hoare-style judgment on compile actions
+ *   shape_stable                 — a state predicate kept by every append
+ *   gas_operand, retpc_operand   — a variable holding a GAS / RETPC_PARAM
+ *                                  output
  *   shape_step_* rules           — composition and monad primitives
  *   opaque_insts_ok_opaque_use_ok — the invariant gives opaque_use_ok
  *)
