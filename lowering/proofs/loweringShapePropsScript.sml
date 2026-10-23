@@ -319,6 +319,47 @@ Proof
   cheat
 QED
 
+Theorem captured_params_shape_stable[local]:
+  !captured. shape_stable
+    (\st. EVERY (\(name,is_stack,op). plain_operand st op) captured)
+Proof
+  rw[shape_stable_def, EVERY_MEM] >>
+  PairCases_on `e` >> gvs[] >>
+  first_x_assum (qspec_then `(e0,e1,e2)` mp_tac) >> simp[] >>
+  strip_tac >> drule_all plain_operand_mono >> simp[]
+QED
+
+Theorem compile_internal_param_decls_shape[local]:
+  !params idx.
+    shape_step T compiler_label (\st. T)
+      (compile_internal_param_decls params idx)
+      (\r st. EVERY (\(name,is_stack,op). plain_operand st op) (FST r))
+Proof
+  Induct_on `params`
+  >- (gen_tac >> simp[compile_internal_param_decls_def] >>
+      irule shape_step_return >> simp[]) >>
+  gen_tac >> PairCases_on `h` >> gen_tac >>
+  simp[compile_internal_param_decls_def] >>
+  irule shape_step_bind >>
+  qexists_tac `\op st. plain_operand st op` >> reverse conj_tac
+  >- (mp_tac (Q.SPECL [`T`, `compiler_label`, `\st. T`, `PARAM`,
+          `[Lit (n2w idx)]`] shape_step_emit_op) >>
+      simp[shape_stable_def, label_or_plain_def, plain_operand_def,
+           stackPlanTypesTheory.is_label_operand_def, lowered_inst_ok_def, mk_inst_def,
+           raw_opcode_ok_def, inst_shape_ok_def, jump_labels_ok_def,
+           is_read0_opcode_def, label_positions_ok_def, is_terminator_def]) >>
+  gen_tac >> BETA_TAC >> irule shape_step_bind >>
+  qexists_tac `\r st. plain_operand st x /\
+    EVERY (\(name,is_stack,op). plain_operand st op) (FST r)` >>
+  conj_tac
+  >- (gen_tac >> BETA_TAC >> irule shape_step_return >> simp[]) >>
+  first_x_assum (qspec_then `idx + 1` assume_tac) >>
+  drule shape_step_frame >>
+  disch_then (qspec_then `\st. plain_operand st x` mp_tac) >>
+  simp[] >> disch_then irule >>
+  rw[shape_stable_def] >> metis_tac[plain_operand_mono]
+QED
+
 (* The PARAM/RETPC_PARAM prologue, then the body via compile_stmt_shape with
    ce_return_pc = SOME (PtrVar return_pc 0), so internal = T. *)
 Theorem compile_internal_function_shape:
