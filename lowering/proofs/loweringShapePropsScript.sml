@@ -1052,6 +1052,147 @@ Proof
   cheat
 QED
 
+(* Ordinary emissions may establish instruction validity from their input. *)
+Theorem shape_step_emit_op_pre:
+  !internal LP P opc ops.
+    ~MEM opc [GAS; RETPC_PARAM] /\
+    (!st. P st ==> EVERY (label_or_plain st) ops /\
+      (!id outs. lowered_inst_ok internal (mk_inst id opc ops outs))) ==>
+    shape_step internal LP P (emit_op opc ops)
+      (\x st. plain_operand st x)
+Proof
+  rpt strip_tac >> Cases_on `?st. P st`
+  >- (pop_assum strip_assume_tac >>
+      irule shape_step_conseq >>
+      qexistsl_tac [`LP`, `\st. T /\ EVERY (label_or_plain st) ops`,
+                    `\x st. T /\ plain_operand st x`] >>
+      conj_tac >- simp[] >> conj_tac >- metis_tac[] >>
+      conj_tac >- simp[] >>
+      irule (BETA_RULE (Q.SPECL [`internal`, `LP`, `\st. T`]
+        shape_step_emit_op)) >> simp[shape_stable_def] >> metis_tac[]) >>
+  gvs[shape_step_def]
+QED
+
+Theorem shape_step_emit_void_pre:
+  !internal LP P opc ops.
+    ~MEM opc [GAS; RETPC_PARAM] /\
+    (!st. P st ==> EVERY (label_or_plain st) ops /\
+      (!id. lowered_inst_ok internal (mk_inst id opc ops []))) ==>
+    shape_step internal LP P (emit_void opc ops) (\x st. T)
+Proof
+  rpt strip_tac >> Cases_on `?st. P st`
+  >- (pop_assum strip_assume_tac >>
+      irule shape_step_conseq >>
+      qexistsl_tac [`LP`, `\st. T /\ EVERY (label_or_plain st) ops`,
+                    `\x st. T`] >>
+      conj_tac >- simp[] >> conj_tac >- metis_tac[] >>
+      conj_tac >- simp[] >>
+      irule (BETA_RULE (Q.SPECL [`internal`, `LP`, `\st. T`]
+        shape_step_emit_void)) >> simp[shape_stable_def] >> metis_tac[]) >>
+  gvs[shape_step_def]
+QED
+
+Theorem compile_nonreentrant_unlock_shape:
+  !internal LP nkey use_trans is_view.
+    shape_step internal LP (\st. T)
+      (compile_nonreentrant_unlock nkey use_trans is_view) (\x st. T)
+Proof
+  rpt gen_tac >>
+  Cases_on `is_view` >> Cases_on `use_trans` >>
+  simp[compile_nonreentrant_unlock_def, shape_step_return] >>
+  (qmatch_goalsub_abbrev_tac `emit_void opc ops` >>
+  irule shape_step_conseq >>
+  qexistsl_tac [`LP`, `\st. T /\ EVERY (label_or_plain st) ops`,
+    `\x st. T`] >>
+  conj_tac >- simp[] >>
+  conj_tac >- simp[Abbr `ops`, label_or_plain_def, plain_operand_def,
+                   stackPlanTypesTheory.is_label_operand_def] >>
+  conj_tac >- simp[] >>
+  irule (BETA_RULE (Q.SPECL [`internal`, `LP`, `\st. T`] shape_step_emit_void)) >>
+  simp[Abbr `opc`, Abbr `ops`, shape_stable_def,
+       lowered_inst_ok_def, raw_opcode_ok_def, inst_shape_ok_def,
+       label_positions_ok_def, is_read0_opcode_def, jump_labels_ok_def,
+       is_terminator_def, is_param_opcode_def, mk_inst_def,
+       stackPlanTypesTheory.is_label_operand_def])
+QED
+
+Theorem compile_nonreentrant_lock_shape:
+  !internal LP nkey use_trans is_view.
+    shape_step internal LP (\st. T)
+      (compile_nonreentrant_lock nkey use_trans is_view) (\x st. T)
+Proof
+  let
+    val inst_simp = simp[label_or_plain_def, plain_operand_def,
+      lowered_inst_ok_def, raw_opcode_ok_def, inst_shape_ok_def,
+      label_positions_ok_def, is_read0_opcode_def, jump_labels_ok_def,
+      is_terminator_def, is_param_opcode_def, mk_inst_def,
+      stackPlanTypesTheory.is_label_operand_def]
+  in
+    rpt gen_tac >> Cases_on `use_trans` >>
+    simp[compile_nonreentrant_lock_def] >>
+    (ntac 3
+      (irule shape_step_bind >>
+       qexists_tac `\x st. plain_operand st x` >>
+       reverse conj_tac
+       >- (irule shape_step_emit_op_pre >> inst_simp) >>
+       gen_tac >> BETA_TAC) >>
+     irule shape_step_ignore_bind >> qexists_tac `\x st. T` >>
+     reverse conj_tac
+     >- (irule shape_step_emit_void_pre >> inst_simp) >>
+     gen_tac >> BETA_TAC >> Cases_on `is_view` >>
+     simp[shape_step_return] >>
+     irule shape_step_emit_void_pre >> inst_simp)
+  end
+QED
+
+Theorem compile_guarded_body_shape:
+  !cenv is_nr nkey use_trans is_view body ret_type.
+    cenv_static_ok cenv /\ cenv.ce_return_pc = NONE /\
+    ~supported_stmts_expr_exists expr_shape_root body ==>
+    shape_step F compiler_label (\st. T)
+      (compile_guarded_body cenv is_nr nkey use_trans is_view body ret_type)
+      (\x st. T)
+Proof
+  rpt strip_tac >> rename1 `~supported_stmts_expr_exists _ ss` >>
+  simp[compile_guarded_body_def] >>
+  irule shape_step_ignore_bind >> qexists_tac `\x st. T` >>
+  reverse conj_tac
+  >- (Cases_on `is_nr` >>
+      simp[compile_nonreentrant_lock_shape, shape_step_return]) >>
+  gen_tac >> BETA_TAC >>
+  irule shape_step_ignore_bind >> qexists_tac `\x st. T` >>
+  reverse conj_tac
+  >- (qmatch_goalsub_abbrev_tac `compile_stmts cenv NoLoop ty ss` >>
+      irule shape_step_conseq >>
+      qexistsl_tac [`compiler_label`,
+        `\st. cenv_shape_ok st cenv /\ loop_ctx_shape_ok NoLoop`,
+        `\x st. T`] >>
+      conj_tac >- simp[] >>
+      conj_tac >- simp[loop_ctx_shape_ok_def, cenv_static_ok_shape_ok] >>
+      conj_tac >- simp[] >>
+      mp_tac (Q.SPECL [`cenv`, `NoLoop`, `ty`, `ss`]
+        (cj 2 compile_stmt_shape)) >> simp[]) >>
+  gen_tac >> BETA_TAC >> irule shape_step_bind >>
+  qexists_tac `\x st. x = st /\ T` >> reverse conj_tac
+  >- (irule (BETA_RULE (Q.SPECL [`F`, `compiler_label`, `\st. T`]
+        shape_step_comp_get))) >>
+  gen_tac >> BETA_TAC >> IF_CASES_TAC
+  >- (irule shape_step_return >> simp[]) >>
+  irule shape_step_ignore_bind >> qexists_tac `\x st. T` >>
+  reverse conj_tac
+  >- (irule shape_step_conseq >>
+      qexistsl_tac [`compiler_label`, `\st. T`, `\x st. T`] >>
+      simp[] >> Cases_on `is_nr` >>
+      simp[compile_nonreentrant_unlock_shape, shape_step_return]) >>
+  gen_tac >> BETA_TAC >> Cases_on `ret_type` >> simp[] >>
+  (pure_rewrite_tac[emit_inst_def, GSYM emit_void_def] >>
+   irule shape_step_emit_void_pre >>
+   simp[lowered_inst_ok_def, raw_opcode_ok_def,
+        inst_shape_ok_def, label_positions_ok_def, is_read0_opcode_def,
+        jump_labels_ok_def, is_terminator_def, is_param_opcode_def,
+        mk_inst_def])
+QED
+
 Theorem compile_fallback_body_shape:
   !cenv is_payable is_nr nkey use_trans is_view body ret_type.
     fallback_shape_ok
@@ -1061,7 +1202,27 @@ Theorem compile_fallback_body_shape:
       (compile_fallback_body cenv is_payable is_nr nkey use_trans is_view
          body ret_type) (\x st. T)
 Proof
-  cheat
+  let
+    val inst_simp = simp[label_or_plain_def, plain_operand_def,
+      lowered_inst_ok_def, raw_opcode_ok_def, inst_shape_ok_def,
+      label_positions_ok_def, is_read0_opcode_def, jump_labels_ok_def,
+      is_terminator_def, is_param_opcode_def, mk_inst_def,
+      stackPlanTypesTheory.is_label_operand_def]
+  in
+    rpt gen_tac >> simp[fallback_shape_ok_def] >> strip_tac >>
+    simp[compile_fallback_body_def] >>
+    irule shape_step_ignore_bind >> qexists_tac `\x st. T` >>
+    reverse conj_tac
+    >- (Cases_on `is_payable` >> simp[shape_step_return] >>
+        ntac 2
+          (irule shape_step_bind >>
+           qexists_tac `\x st. plain_operand st x` >>
+           reverse conj_tac
+           >- (irule shape_step_emit_op_pre >> inst_simp) >>
+           gen_tac >> BETA_TAC) >>
+        irule shape_step_emit_void_pre >> inst_simp) >>
+    gen_tac >> BETA_TAC >> irule compile_guarded_body_shape >> simp[]
+  end
 QED
 
 (* The PARAM/RETPC_PARAM prologue, then the body via compile_stmt_shape with
