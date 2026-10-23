@@ -2,9 +2,10 @@
  * Running code from a state with extra variables bound (#636)
  *
  * An instruction that steps to OK or aborts from a state also does so from
- * the same state with more variables bound, with the same effects, and the
- * extra bindings it does not overwrite stay.  A sequence of such
- * instructions likewise.
+ * the same state with more variables bound, with the same effects, ending
+ * in a state that again has at least the variables of the first run's
+ * result bound (vars_ext: a SUBMAP of the variables, every other field
+ * equal).  A sequence of such instructions likewise.
  *
  * The lowering's run-level lemmas (emitHelperProps, arithmeticProps, ...)
  * assume fresh_vars_wrt: no compiler variable at or above the compile
@@ -12,25 +13,47 @@
  * the last iteration's temporaries still bound, so stmt_state_rel does not
  * carry it.  drop_fresh removes those temporaries; a lemma applied to the
  * cleaned state then carries over to the actual one through
- * run_inst_seq_vars_ext.
+ * run_inst_seq_vars_ext, and to a fragment through
+ * frag_exec_run_inst_seq_drop_fresh.
+ *
+ * Three kinds of instruction are left out:
+ *   - terminators: they leave the block, and run_inst_seq and
+ *     frag_exec_run_inst_seq cover straight-line code only;
+ *   - INVOKE: step_inst_base does not run it (step_inst runs the callee
+ *     with run_blocks), so a call enters a fragment through its own
+ *     frag_exec lemma, with the callee's run as a hypothesis, not through
+ *     run_inst_seq;
+ *   - the external-call ops (CALL, STATICCALL, DELEGATECALL, CREATE,
+ *     CREATE2): their steps go through the call and create oracles
+ *     (consume_call_outcome, ...), whose frame lemmas over the variables
+ *     are not proved yet; with them the ops can join
+ *     step_inst_base_vars_ext.
  *
  * TOP-LEVEL:
  *   vars_ext, vars_ext_result — a state, and a result, with more variables
  *                               bound
- *   step_inst_base_vars_ext   — one instruction
+ *   step_inst_base_vars_ext, step_inst_base_vars_ext_state — one
+ *                               instruction
  *   run_inst_seq_vars_ext     — a straight-line sequence
  *   drop_fresh                — a state without the variables fresh at a
  *                               compile state
- *   fresh_vars_wrt_drop_fresh, vars_ext_drop_fresh
+ *   fresh_vars_wrt_drop_fresh, vars_ext_drop_fresh, lookup_var_drop_fresh
+ *   frag_exec_run_inst_seq_drop_fresh — a straight-line fragment, given by
+ *                               its run from the state without the
+ *                               temporaries fresh at its start, as the
+ *                               fresh_vars_wrt lemmas state it
  *
  * Helpers: SUBMAP_FUPDATE_both, eval_operand_vars_ext,
- *   eval_operands_vars_ext
+ *   eval_operands_vars_ext, exec_pure1_vars_ext, exec_pure2_vars_ext,
+ *   exec_pure3_vars_ext, exec_read0_vars_ext, exec_read1_vars_ext,
+ *   exec_write2_vars_ext
  *)
 
 Theory varsExt
 Ancestors
-  list finite_map pred_set
+  list rich_list finite_map pred_set
   venomExecSemantics venomState venomInst exprLoweringProps compileEnv
+  fragExec
 
 (* ===== More variables bound ===== *)
 
@@ -87,7 +110,8 @@ val ext_simps =
    set_returndata_def, LET_THM];
 
 val ext_tac =
-  rpt (FIRST [CHANGED_TAC (asm_simp_tac (srw_ss()) ext_simps), CASE_TAC]);
+  asm_simp_tac (srw_ss()) ext_simps >>
+  rpt (CASE_TAC >> asm_simp_tac (srw_ss()) ext_simps);
 
 Theorem exec_pure1_vars_ext:
   !f inst s V.
@@ -155,15 +179,20 @@ Proof
   rpt strip_tac >>
   Cases_on `inst.inst_opcode` >>
   fs[is_terminator_def, is_ext_call_op_def] >>
-  asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >>
-  FIRST [
-    irule exec_pure1_vars_ext >> simp[] >> NO_TAC,
-    irule exec_pure2_vars_ext >> simp[] >> NO_TAC,
-    irule exec_pure3_vars_ext >> simp[] >> NO_TAC,
-    irule exec_read0_vars_ext >> asm_simp_tac (srw_ss()) ext_simps >> NO_TAC,
-    irule exec_read1_vars_ext >> asm_simp_tac (srw_ss()) ext_simps >> NO_TAC,
-    irule exec_write2_vars_ext >> asm_simp_tac (srw_ss()) ext_simps >> NO_TAC,
-    simp[exec_alloca_def] >> ext_tac]
+  asm_simp_tac bool_ss [step_inst_base_opcode_eqs]
+  >>~- ([`vars_ext_result (exec_pure1 _ _ _) _`],
+        irule exec_pure1_vars_ext >> simp[])
+  >>~- ([`vars_ext_result (exec_pure2 _ _ _) _`],
+        irule exec_pure2_vars_ext >> simp[])
+  >>~- ([`vars_ext_result (exec_pure3 _ _ _) _`],
+        irule exec_pure3_vars_ext >> simp[])
+  >>~- ([`vars_ext_result (exec_read0 _ _ _) _`],
+        irule exec_read0_vars_ext >> asm_simp_tac (srw_ss()) ext_simps)
+  >>~- ([`vars_ext_result (exec_read1 _ _ _) _`],
+        irule exec_read1_vars_ext >> asm_simp_tac (srw_ss()) ext_simps)
+  >>~- ([`vars_ext_result (exec_write2 _ _ _) _`],
+        irule exec_write2_vars_ext >> asm_simp_tac (srw_ss()) ext_simps) >>
+  simp[exec_alloca_def] >> ext_tac
 QED
 
 Theorem step_inst_base_vars_ext_state:
@@ -221,4 +250,36 @@ Theorem lookup_var_drop_fresh:
     not_fresh_at st x ==> lookup_var x (drop_fresh st s) = lookup_var x s
 Proof
   rw[lookup_var_def, drop_fresh_def, FLOOKUP_DRESTRICT, IN_DEF]
+QED
+
+(* ===== Straight-line fragments from the cleaned state ===== *)
+
+(* frag_exec_run_inst_seq where the run is known from drop_fresh st s, as
+   the fresh_vars_wrt lemmas give it, and the fragment's end is wanted in
+   any state with more variables bound.  The emitted code is straight-line
+   and has no INVOKE or external call, as run_inst_seq_vars_ext needs (see
+   the header). *)
+Theorem frag_exec_run_inst_seq_drop_fresh:
+  !ctx st st' P Q R.
+    st'.cs_blocks = st.cs_blocks /\ st'.cs_current_bb = st.cs_current_bb /\
+    isPREFIX st.cs_current_insts st'.cs_current_insts /\
+    EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+               ~is_ext_call_op i.inst_opcode) (emitted_insts st st') /\
+    (!s. P s ==>
+       (?t0. run_inst_seq (emitted_insts st st') (drop_fresh st s) = OK t0 /\
+             !t. vars_ext t0 t ==>
+                 Q (t with vs_inst_idx := LENGTH st'.cs_current_insts)) \/
+       (?a t0. run_inst_seq (emitted_insts st st') (drop_fresh st s) =
+                 Abort a t0 /\
+               !t n. vars_ext t0 t ==> R (Abort a (t with vs_inst_idx := n))))
+    ==>
+    frag_exec ctx st st' P Q R
+Proof
+  rpt strip_tac >> irule frag_exec_run_inst_seq >>
+  fs[EVERY_MEM] >> rpt strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  qspecl_then [`emitted_insts st st'`, `drop_fresh st s`, `s`] mp_tac
+    run_inst_seq_vars_ext >>
+  (impl_tac >- simp[vars_ext_drop_fresh, EVERY_MEM]) >>
+  simp[vars_ext_result_def] >> strip_tac >> metis_tac[]
 QED
