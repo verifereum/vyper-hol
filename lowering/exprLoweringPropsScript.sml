@@ -2835,13 +2835,35 @@ Proof
   irule ci_mono_lower_value_cfn >> simp[]
 QED
 
+Theorem ci_mono_compile_raw_log[local]:
+  !cfn cenv ret_ty ty args default_ret sa.
+    (!cenv' ty' e' sa'. ci_mono sa' (SND (cfn cenv' ty' e' sa'))) ==>
+    ci_mono sa (SND (compile_call cfn cenv ret_ty ty RawLog args default_ret sa))
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `args` >- simp[compile_call_def, pairTheory.UNCURRY, ci_mono_emit_inst] >>
+  rename1 `topics_e::rest` >> Cases_on `rest`
+  >- simp[compile_call_def, pairTheory.UNCURRY, ci_mono_emit_inst] >>
+  rename1 `topics_e::data_e::tail` >> Cases_on `tail` >>
+  simp[compile_call_def, LET_THM, pairTheory.UNCURRY, ci_mono_emit_inst] >>
+  IF_CASES_TAC >> simp[] >>
+  irule ci_mono_trans >> irule_at (Pos last) ci_mono_emit_inst >>
+  rpt (CHANGED_TAC (
+    (irule ci_mono_trans >> irule_at (Pos last) ci_mono_emit_void) ORELSE
+    (irule ci_mono_trans >> irule_at (Pos last) ci_mono_emit_op) ORELSE
+    (irule ci_mono_trans >> irule_at (Pos last) ci_mono_lower_value_cfn >>
+      (conj_tac >- simp[])) ORELSE
+    (irule ci_mono_trans >> irule_at (Pos last) ci_mono_compile_alloc_buffer))) >>
+  irule ci_mono_compile_multi_exprs >> simp[]
+QED
+
 (* Cache only the INVALID branches: never normalize the large IntCall /
    ExtCall bodies while speculatively closing these primitive cases. *)
 val ci_mono_invalid_call_tac =
   let
     val invalid_calls = map
       (SIMP_RULE pure_ss [LET_THM, pairTheory.UNCURRY, pairTheory.SND])
-      (map (fn n => cj n compile_call_def) [4, 6, 7, 8, 9])
+      (map (fn n => cj n compile_call_def) [4, 7, 8, 9])
   in
     CONV_TAC
       (RAND_CONV (RAND_CONV (FIRST_CONV (map REWR_CONV invalid_calls)))) >>
@@ -2855,7 +2877,8 @@ Theorem ci_mono_compile_call[local]:
 Proof
   rpt gen_tac >> strip_tac >> Cases_on `target` >>
   TRY (ci_mono_invalid_call_tac >> NO_TAC) >>
-  TRY (irule ci_mono_compile_raw_call_calldata >> simp[] >> NO_TAC)
+  TRY (irule ci_mono_compile_raw_call_calldata >> simp[] >> NO_TAC) >>
+  TRY (irule ci_mono_compile_raw_log >> simp[] >> NO_TAC)
   >- ( (* IntCall *)
     simp[compile_call_def, LET_THM, pairTheory.UNCURRY] >>
 rpt IF_CASES_TAC >> gvs[] >>
@@ -3171,3 +3194,8 @@ Proof
     by (irule ci_mono_same_blocks_isPREFIX >> simp[]) >>
   gvs[GSYM prefix_drop_equiv, emitted_insts_def]
 QED
+
+val _ = List.app (fn th =>
+  if null (List.filter (fn s => s <> "DISK_THM") (fst (Tag.dest_tag (Thm.tag th)))) then ()
+  else raise Fail "RawLog monotonicity oracle dependency")
+  [ci_mono_compile_raw_log, ci_mono_compile_call];
