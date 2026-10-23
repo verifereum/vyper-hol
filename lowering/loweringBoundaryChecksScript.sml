@@ -10,9 +10,9 @@ Ancestors
 (* The strengthened relation requires oracle mode and exact request prefixes.
    Reuse existing frame-preserving update proofs; no per-field API matrix. *)
 Theorem statement_oracle_boundary:
-  state_rel cenv cx es ss ==>
+  state_rel func cenv cx es ss /\ not_local_ptr cenv es.scopes name ==>
   es.outcomes = SOME ss.vs_outcomes /\ es.requests = ss.vs_requests /\
-  state_rel cenv cx es (update_var name w ss)
+  state_rel func cenv cx es (update_var name w ss)
 Proof
   rpt gen_tac >> strip_tac >> conj_tac >- fs[state_rel_def] >>
   conj_tac >- fs[state_rel_def] >>
@@ -20,15 +20,15 @@ Proof
 QED
 
 Theorem statement_rejects_none_oracle:
-  ~state_rel cenv cx (es with outcomes := NONE) ss
+  ~state_rel func cenv cx (es with outcomes := NONE) ss
 Proof
   simp[state_rel_def]
 QED
 
 Theorem statement_assert_boundary:
-  result_rel tv cenv cx (INR (AssertException reason), es)
+  result_rel func tv cenv cx (INR (AssertException reason), es)
     (Abort Revert_abort ss) /\
-  (result_rel tv cenv cx (INR (AssertException reason), es)
+  (result_rel func tv cenv cx (INR (AssertException reason), es)
     (Abort ExHalt_abort ss) <=> reason = "UNREACHABLE")
 Proof
   simp[result_rel_def]

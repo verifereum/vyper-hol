@@ -3,6 +3,7 @@
  *
  * TOP-LEVEL:
  *   compile_safe_add_correct — add with overflow check
+ *   compile_safe_add_overflow — an overflowing unsigned 256-bit add reverts
  *   compile_safe_sub_correct — sub with underflow check
  *   compile_safe_mul_correct — mul with overflow check (includes int256 MIN_INT)
  *   compile_safe_div_correct — div with division-by-zero check
@@ -1454,6 +1455,23 @@ Proof
   simp[wordsTheory.word_mul_def, wordsTheory.w2n_n2w]
 QED
 
+Theorem w2n_add_overflow:
+  !a b : bytes32.
+    dimword (:256) <= w2n a + w2n b ==> w2n (a + b) < w2n a
+Proof
+  rpt strip_tac >>
+  `w2n a < dimword (:256) /\ w2n b < dimword (:256)` by simp[wordsTheory.w2n_lt] >>
+  `w2n (a + b) = (w2n a + w2n b) MOD dimword (:256)` by
+    simp[wordsTheory.word_add_def, wordsTheory.w2n_n2w] >>
+  `(w2n a + w2n b) MOD dimword (:256) =
+   (w2n a + w2n b - dimword (:256)) MOD dimword (:256)` by
+    (irule (GSYM arithmeticTheory.SUB_MOD) >> simp[]) >>
+  `(w2n a + w2n b - dimword (:256)) MOD dimword (:256) =
+   w2n a + w2n b - dimword (:256)` by
+    (irule arithmeticTheory.LESS_MOD >> fs[]) >>
+  fs[]
+QED
+
 (* math_val of word addition equals integer addition when in type range.
    This is the KEY bridge: connects word-level operation to math-level range check.
    Works for ANY type with type_bits ≤ 256. *)
@@ -1576,6 +1594,72 @@ Proof
   >> Cases_on `is_signed_type ty` >> gvs[]
   >- suspend "signed_256"
   >> suspend "unsigned_256"
+QED
+
+(* The abort counterpart of compile_safe_add_in_range for unsigned 256-bit
+   operands: when the words' sum overflows, the ASSERT fails. *)
+Theorem compile_safe_add_overflow:
+  ∀ x y ty ss st op st' a b.
+    compile_safe_add x y ty st = (op, st') ∧
+    eval_operand x ss = SOME a ∧
+    eval_operand y ss = SOME b ∧
+    fresh_vars_wrt st ss ∧
+    type_bits ty = 256 ∧ ¬is_signed_type ty ∧
+    dimword (:256) ≤ w2n a + w2n b
+    ⇒
+    ∃ ss'. run_inst_seq (emitted_insts st st') ss = Abort Revert_abort ss'
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[compile_safe_add_def, comp_bind_def, comp_return_def,
+      comp_ignore_bind_def, LET_THM] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  rename1 `emit_op ADD [x; y] st = (op, st1)` >>
+  rename1 `emit_op LT [op; x] st1 = (lt, st2)` >>
+  rename1 `emit_op ISZERO [lt] st2 = (ok, st3)` >>
+  rename1 `emit_void ASSERT [ok] st3 = ((), st4)` >>
+  imp_res_tac emit_op_extends >> imp_res_tac emit_void_extends >>
+  `emitted_insts st3 st4 = [mk_inst st3.cs_next_id ASSERT [ok] []]` by
+    (qpat_x_assum `emit_void ASSERT _ _ = _` mp_tac >>
+     simp[emit_void_assert_inst] >> strip_tac >> gvs[] >>
+     simp[emitted_insts_def, rich_listTheory.DROP_LENGTH_APPEND]) >>
+  `emitted_insts st st4 =
+   emitted_insts st st1 ++ emitted_insts st1 st2 ++ emitted_insts st2 st3 ++
+   emitted_insts st3 st4` by
+    (`emitted_insts st2 st4 = emitted_insts st2 st3 ++ emitted_insts st3 st4`
+       by (irule emitted_insts_append >> simp[]) >>
+     `st4.cs_current_insts = st2.cs_current_insts ++ emitted_insts st2 st4`
+       by simp[] >>
+     `emitted_insts st1 st4 = emitted_insts st1 st2 ++ emitted_insts st2 st4`
+       by (irule emitted_insts_append >> simp[]) >>
+     `st4.cs_current_insts = st1.cs_current_insts ++ emitted_insts st1 st4`
+       by simp[] >>
+     `emitted_insts st st4 = emitted_insts st st1 ++ emitted_insts st1 st4`
+       by (irule emitted_insts_append >> simp[]) >>
+     simp[]) >>
+  qspecl_then [`x`, `y`, `a`, `b`, `st`, `op`, `st1`, `ss`] mp_tac
+    emit_op_ADD_correct >> simp[] >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts st st1) ss = OK ss1` >>
+  qspecl_then [`op`, `x`, `a + b`, `a`, `st1`, `lt`, `st2`, `ss1`] mp_tac
+    emit_op_LT_correct >> simp[] >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts st1 st2) ss1 = OK ss2` >>
+  qspecl_then [`lt`, `bool_to_word (w2n (a + b) < w2n a)`, `st2`, `ok`,
+               `st3`, `ss2`] mp_tac emit_op_ISZERO_correct >>
+  simp[] >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts st2 st3) ss2 = OK ss3` >>
+  `w2n (a + b) < w2n a` by (irule w2n_add_overflow >> fs[]) >>
+  `eval_operand ok ss3 = SOME 0w` by fs[bool_to_word_def] >>
+  `run_inst_seq (emitted_insts st3 st4) ss3 =
+   Abort Revert_abort (revert_state (set_returndata [] ss3))` by
+    simp[run_inst_seq_def, assert_false_correct] >>
+  qexists_tac `revert_state (set_returndata [] ss3)` >>
+  asm_rewrite_tac[GSYM listTheory.APPEND_ASSOC] >>
+  qpat_x_assum `run_inst_seq (emitted_insts st st1) ss = OK ss1`
+    (fn th => rewrite_tac [MATCH_MP run_inst_seq_append th]) >>
+  qpat_x_assum `run_inst_seq (emitted_insts st1 st2) ss1 = OK ss2`
+    (fn th => rewrite_tac [MATCH_MP run_inst_seq_append th]) >>
+  qpat_x_assum `run_inst_seq (emitted_insts st2 st3) ss2 = OK ss3`
+    (fn th => rewrite_tac [MATCH_MP run_inst_seq_append th]) >>
+  simp[run_inst_seq_def, assert_false_correct]
 QED
 
 Resume compile_safe_add_in_range[lt256]:

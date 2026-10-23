@@ -13,8 +13,11 @@ Definition supported_pure_expr_def:
   supported_pure_expr tops (TopLevelName ty id) =
     supported_storage_scalar tops id ty /\
   supported_pure_expr tops (FlagMember ty id member) = F /\
+  (* A non-word ternary is a PHI of two memory pointers (#561: a14-01,
+     a10-04).  Tuple ternaries have no parity witness. *)
   supported_pure_expr tops (IfExp ty c a b) =
-    (supported_word_type ty /\ supported_pure_expr tops c /\
+    (supported_value_type tops ty /\ ~supported_tuple_type ty /\
+     supported_pure_expr tops c /\
      supported_pure_expr tops a /\ supported_pure_expr tops b) /\
   supported_pure_expr tops (StructLit ty id fields) =
     (supported_main_nsid id /\ supported_value_type tops ty /\
@@ -30,7 +33,7 @@ Definition supported_pure_expr_def:
   supported_pure_expr tops (Builtin ty blt es) =
     (supported_builtin_form tops ty blt es /\ supported_pure_exprs tops es) /\
   supported_pure_expr tops (TypeBuiltin ty blt target es) =
-    (supported_type_builtin_form ty blt target es /\ supported_pure_exprs tops es) /\
+    (supported_type_builtin_form tops ty blt target es /\ supported_pure_exprs tops es) /\
   supported_pure_expr tops (Pop ty target) = F /\
   supported_pure_expr tops (Call ty target es default) = F /\
   supported_pure_exprs tops [] = T /\

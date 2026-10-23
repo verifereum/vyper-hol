@@ -1541,13 +1541,14 @@ Proof
   Cases_on `vs` >- simp[eval_send_def, raise_def, log_extends_refl] >>
   Cases_on `t` >- simp[eval_send_def, raise_def, log_extends_refl] >>
   simp[eval_send_def, bind_def, ignore_bind_def, type_check_def,
-       assert_def, return_def, raise_def, lift_option_type_def, check_def,
+       assert_def, return_def, raise_def, get_accounts_def,
+       get_transient_storage_def, lift_option_def, lift_option_type_def,
+       check_def, update_accounts_def, update_transient_def, append_logs_def,
        vyperCallOutcomeTheory.take_call_outcome_def,
        vyperCallOutcomeTheory.adopt_call_outcome_equation, LET_THM, UNCURRY,
        COND_RATOR, option_CASE_rator, prod_CASE_rator, sum_CASE_rator] >>
   strip_tac >>
-  gvs[AllCaseEqs(), log_extends_def, rich_listTheory.IS_PREFIX_APPEND] >>
-  imp_res_tac transfer_value_logs >> gvs[]
+  gvs[AllCaseEqs(), log_extends_def, rich_listTheory.IS_PREFIX_APPEND]
 QED
 
 Theorem case_expr_send_logs[local]:

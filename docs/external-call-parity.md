@@ -19,7 +19,7 @@ list and on the main module alone.
 
 The oracle is Vyper `0.5.0a4+cd74ce4f+commit.cd74ce4f`, pinned by `VYPER_PIN`.
 It was built with experimental codegen, no optimization, the Prague EVM version,
-and bytecode metadata disabled. The 28 retained JSON/bytecode fixtures in
+and bytecode metadata disabled. The 29 retained JSON/bytecode fixtures in
 `lowering/defs/bytecode/external-calls/oracle` and their dependency provenance
 reproduce byte for byte with `prepare --corpus external-calls --check`. The
 diagnostic probes used holbuild 0.11.4 with the stock checker and EVAL libraries

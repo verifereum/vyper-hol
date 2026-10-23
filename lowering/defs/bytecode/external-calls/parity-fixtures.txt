@@ -11,6 +11,7 @@ e22_static_default
 e30_default_ret_tuple
 e37_default_ret_string
 e38_default_ret_local_array
+m10c_iface_storage_main
 e40_extcall_gas
 e41_staticcall_gas
 e42_extcall_gas_value_order
