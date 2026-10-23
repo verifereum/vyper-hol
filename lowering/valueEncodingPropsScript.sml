@@ -30,9 +30,7 @@
 Theory valueEncodingProps
 Ancestors
   list rich_list
-  valueEncoding valueEncodingProofs
-Libs
-  wordsLib
+  valueEncoding valueEncodingProofs venomMemProps
 
 (* ===== val_to_w256 agrees with encode_base_to_slot ===== *)
 
@@ -114,8 +112,7 @@ Proof
      simp[mem_word_at_def, mem_bytes_at_def, Abbr `M`]) >>
   `word_to_bytes (word_of_bytes T (0w:bytes32) (mem_bytes_at off 32 M)) T =
    mem_bytes_at off 32 M` by
-    (irule venomMemProofsTheory.word_bytes_roundtrip_proof >>
-     simp[mem_bytes_at_def, dividesTheory.divides_def]) >>
+    (irule word_bytes_roundtrip_256 >> simp[mem_bytes_at_def]) >>
   metis_tac[]
 QED
 
