@@ -312,6 +312,15 @@ Proof
   simp[] >> irule shape_step_emit_inst >> simp[]
 QED
 
+Theorem shape_step_pre_fact:
+  !internal LP P m Q b.
+    (!st. P st ==> b) /\
+    (b ==> shape_step internal LP P m Q) ==>
+    shape_step internal LP P m Q
+Proof
+  rw[shape_step_def] >> metis_tac[]
+QED
+
 (* Straight-line code, fresh labels and JMPs to the selector labels. *)
 Theorem compile_selector_dispatch_linear_shape:
   !selectors fallback_lbl.
