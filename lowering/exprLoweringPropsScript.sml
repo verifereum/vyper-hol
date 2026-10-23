@@ -2885,6 +2885,32 @@ Proof
   irule ci_mono_lower_value_cfn >> simp[]
 QED
 
+Theorem compile_selfdestruct_terminated:
+  block_is_terminated (SND (compile_selfdestruct to_op st))
+Proof
+  simp[compile_selfdestruct_def, emit_void_def, comp_bind_def,
+       fresh_id_def, emit_def, LET_THM, pairTheory.UNCURRY,
+       block_is_terminated_def, listTheory.LAST_APPEND_CONS,
+       venomInstTheory.mk_inst_def, venomInstTheory.is_terminator_def] >>
+  Cases_on `st.cs_current_insts` >>
+  simp[listTheory.LAST_CONS_cond, listTheory.LAST_APPEND_CONS,
+       venomInstTheory.is_terminator_def]
+QED
+
+Theorem ci_mono_compile_selfdestruct[local]:
+  (!cenv' ty' e' sa'. ci_mono sa' (SND (cfn cenv' ty' e' sa'))) ==>
+  ci_mono sa (SND (compile_call cfn cenv ret_ty ty SelfDestructTarget args default_ret sa))
+Proof
+  strip_tac >>
+  simp[compile_call_def, LET_THM, pairTheory.UNCURRY] >>
+  Cases_on `args` >> simp[ci_mono_emit_inst] >>
+  Cases_on `t` >>
+  simp[ci_mono_emit_inst, compile_selfdestruct_def, comp_bind_def,
+       LET_THM, pairTheory.UNCURRY] >>
+  irule ci_mono_trans >> irule_at (Pos last) ci_mono_emit_void >>
+  irule ci_mono_lower_value_cfn >> simp[]
+QED
+
 Theorem ci_mono_compile_call[local]:
   ∀ cfn cenv ret_ty ty target args default_ret sa.
     (∀ cenv' ty' e' sa'. ci_mono sa' (SND (cfn cenv' ty' e' sa'))) ⇒
@@ -2894,7 +2920,8 @@ Proof
   TRY (ci_mono_invalid_call_tac >> NO_TAC) >>
   TRY (irule ci_mono_compile_raw_call_calldata >> simp[] >> NO_TAC) >>
   TRY (irule ci_mono_compile_raw_log >> simp[] >> NO_TAC) >>
-  TRY (irule ci_mono_compile_raw_revert >> simp[] >> NO_TAC)
+  TRY (irule ci_mono_compile_raw_revert >> simp[] >> NO_TAC) >>
+  TRY (irule ci_mono_compile_selfdestruct >> simp[] >> NO_TAC)
   >- ( (* IntCall *)
     simp[compile_call_def, LET_THM, pairTheory.UNCURRY] >>
 rpt IF_CASES_TAC >> gvs[] >>

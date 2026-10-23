@@ -2400,8 +2400,13 @@ Definition compile_call_def:
      | _ => let (_, st') = emit_inst INVALID [] [] st in
             (StackValue ret_ty (Lit 0w), st')) ∧
   compile_call cfn cenv ret_ty ty SelfDestructTarget args default_ret st =
-    (let (_, st') = emit_inst INVALID [] [] st in
-     (StackValue ret_ty (Lit 0w), st')) ∧
+    (case args of
+       [to_e] =>
+         let (to_op, st1) = lower_value cfn cenv (BaseT AddressT) to_e st in
+         let (_, st2) = compile_selfdestruct to_op st1 in
+         (StackValue ret_ty (Lit 0w), st2)
+     | _ => let (_, st') = emit_inst INVALID [] [] st in
+            (StackValue ret_ty (Lit 0w), st')) ∧
   compile_call cfn cenv ret_ty ty (CreateTarget ck has_salt rof) args default_ret st =
     (let (_, st') = emit_inst INVALID [] [] st in
      (StackValue ret_ty (Lit 0w), st'))
