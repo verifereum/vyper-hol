@@ -323,12 +323,22 @@ Definition build_func_info_def:
       FunctionDecl vis _ _ _ fname fargs _ ret _ =>
         if vis = External then rest_map
         else
-          let fn_lbl = fname in
           let arg_types = MAP SND fargs in
           let ret_mem = type_mem_bytes sft ret in
           let info = compute_func_info (λn. MAP (FST o SND) (sft n))
                        ret ret_mem arg_types in
-          (λs. if s = fn_lbl then info else rest_map s)
+          (λs. if s = fname then info else rest_map s)
+    | _ => rest_map
+End
+
+Definition build_func_param_types_def:
+  build_func_param_types ([] : toplevel list) = (K [] : string -> type list) ∧
+  build_func_param_types (top :: rest) =
+    let rest_map = build_func_param_types rest in
+    case top of
+      FunctionDecl vis _ _ _ fname fargs _ _ _ =>
+        if vis = External then rest_map
+        else (λs. if s = fname then MAP SND fargs else rest_map s)
     | _ => rest_map
 End
 
@@ -459,6 +469,7 @@ Definition build_compile_env_def:
        (* Default: overridden by package_internal_fn for ctor context *)
        ce_is_ctor := (vis = Deploy);
        ce_func_info := func_info;
+       ce_func_param_types := build_func_param_types tops;
        ce_nonreentrant := (F, 0n, use_transient_locks, mut = View);
        (* Default: overridden by package_*_fn from FunctionDecl raw_return field *)
        ce_raw_return := F;
@@ -643,7 +654,7 @@ End
 Definition package_internal_fn_def:
   package_internal_fn tops use_trans nkey_map is_ctor_context immutables_len
     (mut, nr, rr, fname, fargs, _, ret, body) =
-    let fn_lbl = fname in
+    let fn_lbl = internal_fn_label fname (MAP SND fargs) is_ctor_context in
     let sft = make_struct_fields_map tops in
     let sft_fn = get_struct_fields sft in
     let sft_types = (λname. MAP (FST o SND) (sft_fn name)) in
@@ -672,19 +683,21 @@ Theorem package_internal_fn_call_label:
     FST (package_internal_fn tops use_trans nkey_map is_ctor_context
            immutables_len
            (mut, nr, rr, fname, fargs, dflts, ret, body)) =
-    nsid_to_string (NONE, fname)
+    internal_fn_label (nsid_to_string (NONE, fname)) (MAP SND fargs)
+      is_ctor_context
 Proof
   simp[package_internal_fn_def, nsid_to_string_def]
 QED
 
 Definition source_internal_fn_descriptor_def:
-  source_internal_fn_descriptor tops
+  source_internal_fn_descriptor tops is_ctor_context
     (mut, nr, rr, fname, fargs, dflts, ret, body) =
     let sft_types =
       (\name. MAP (FST o SND)
                     (get_struct_fields (make_struct_fields_map tops) name)) in
     let rc = returns_stack_count sft_types ret in
-    (fname, rc = 0 /\ ret <> NoneT, rc)
+    (internal_fn_label fname (MAP SND fargs) is_ctor_context,
+     rc = 0 /\ ret <> NoneT, rc)
 End
 
 Theorem build_compile_env_returns_count:
@@ -707,7 +720,7 @@ Theorem package_internal_fn_descriptor:
       [package_internal_fn tops use_trans nkey_map is_ctor_context
          immutables_len
          (mut, nr, rr, fname, fargs, dflts, ret, body)] =
-    [source_internal_fn_descriptor tops
+    [source_internal_fn_descriptor tops is_ctor_context
        (mut, nr, rr, fname, fargs, dflts, ret, body)]
 Proof
   simp[internal_fn_descriptors_def, package_internal_fn_def,
@@ -720,7 +733,7 @@ Theorem internal_fn_descriptors_MAP_package_internal_fn:
     internal_fn_descriptors
       (MAP (package_internal_fn tops use_trans nkey_map is_ctor_context
               immutables_len) fs) =
-    MAP (source_internal_fn_descriptor tops) fs
+    MAP (source_internal_fn_descriptor tops is_ctor_context) fs
 Proof
   Induct
   >- simp[internal_fn_descriptors_def]
