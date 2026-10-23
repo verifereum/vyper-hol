@@ -2545,6 +2545,348 @@ Resume compile_abi_encode_dyn_static_loop_shape[body]:
 QED
 Finalise compile_abi_encode_dyn_static_loop_shape
 
+Theorem compile_abi_encode_shape[local]:
+  (!dst child_ptr info is_dyn static_ofst dyn_ptr.
+    !R internal. shape_stable R ==>
+    shape_step internal compiler_label
+      (\st. R st /\ EVERY (plain_operand st) [dst;child_ptr;dyn_ptr])
+      (compile_abi_encode_child dst child_ptr info is_dyn static_ofst dyn_ptr)
+      (\v st. R st /\ plain_operand st v)) /\
+  (!dst src info. !R internal. shape_stable R ==>
+    shape_step internal compiler_label
+      (\st. R st /\ EVERY (plain_operand st) [dst;src])
+      (compile_abi_encode_to_buf dst src info)
+      (\v st. R st /\ plain_operand st v)) /\
+  (!dst src elems src_ofst head_ofst dyn_ptr.
+    !R internal. shape_stable R ==>
+    shape_step internal compiler_label
+      (\st. R st /\ EVERY (plain_operand st) [dst;src;dyn_ptr])
+      (compile_abi_encode_complex_elems dst src elems src_ofst head_ofst dyn_ptr)
+      (\v st. R st /\ plain_operand st v)) /\
+  (!dst src info abi_sz mem_sz len_op.
+    !R internal. shape_stable R ==>
+    shape_step internal compiler_label
+      (\st. R st /\ EVERY (plain_operand st) [dst;src;len_op])
+      (compile_abi_encode_dyn_loop dst src info abi_sz mem_sz len_op)
+      (\v st. R st /\ plain_operand st v))
+Proof
+  ho_match_mp_tac abiEncoderTheory.compile_abi_encode_child_ind >>
+  conj_tac >- suspend "child" >>
+  conj_tac
+  >- (rpt strip_tac >> simp[Once abiEncoderTheory.compile_abi_encode_child_def] >>
+      shape_under_tac compile_abi_encode_static_shape `R`) >>
+  conj_tac >- suspend "bytes" >>
+  conj_tac
+  >- (rpt strip_tac >> simp[Once abiEncoderTheory.compile_abi_encode_child_def] >>
+      match_mp_tac shape_step_ignore_bind >> qexists_tac `\u st. R st` >> conj_tac
+      >- (shape_under_tac shape_step_emit_void_plain `R` >> shape_opcode_tac) >>
+      gen_tac >> simp[] >> irule shape_step_return >> shape_opcode_tac) >>
+  conj_tac >- suspend "array" >>
+  conj_tac
+  >- (rpt strip_tac >> simp[Once abiEncoderTheory.compile_abi_encode_child_def] >>
+      irule shape_step_return >> shape_opcode_tac) >>
+  conj_tac >- suspend "complex" >>
+  conj_tac
+  >- (rpt strip_tac >> simp[Once abiEncoderTheory.compile_abi_encode_child_def] >>
+      irule shape_step_return >> shape_opcode_tac) >>
+  conj_tac >- suspend "elements" >>
+  suspend "dynamic"
+QED
+
+Resume compile_abi_encode_shape[child]:
+  rpt strip_tac >>
+  reverse (Cases_on `is_dyn`) >> gvs[]
+  >- (simp[Once abiEncoderTheory.compile_abi_encode_child_def] >>
+      qmatch_goalsub_abbrev_tac `shape_step internal compiler_label P _ _` >>
+      `shape_stable P` by
+        (simp[Abbr `P`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
+         mp_tac (Q.SPEC `[dst;child_ptr;dyn_ptr]` shape_stable_plain_operands) >> simp[]) >>
+      shape_scalar_emit_bind_tac `P` `static_op` (simp[Abbr `P`]) >>
+      first_assum (fn th => shape_under_tac th `R`) >> simp[Abbr `P`]) >>
+  simp[Once abiEncoderTheory.compile_abi_encode_child_def] >>
+  qmatch_goalsub_abbrev_tac `shape_step internal compiler_label P _ _` >>
+  `shape_stable P` by
+    (simp[Abbr `P`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
+     mp_tac (Q.SPEC `[dst;child_ptr;dyn_ptr]` shape_stable_plain_operands) >> simp[]) >>
+  shape_scalar_emit_bind_tac `P` `static_op` (simp[Abbr `P`]) >>
+  qmatch_goalsub_abbrev_tac `shape_step internal compiler_label StaticFrame _ _` >>
+  `shape_stable StaticFrame` by
+    (simp[Abbr `StaticFrame`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
+     mp_tac (Q.SPEC `[static_op]` shape_stable_plain_operands) >> simp[]) >>
+  shape_scalar_emit_bind_tac `StaticFrame` `dyn_ofst` (simp[Abbr `StaticFrame`, Abbr `P`]) >>
+  qmatch_goalsub_abbrev_tac `shape_step internal compiler_label OffsetFrame _ _` >>
+  `shape_stable OffsetFrame` by
+    (simp[Abbr `OffsetFrame`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
+     mp_tac (Q.SPEC `[dyn_ofst]` shape_stable_plain_operands) >> simp[]) >>
+  shape_scalar_emit_bind_tac `OffsetFrame` `child_dst` (simp[Abbr `OffsetFrame`, Abbr `StaticFrame`, Abbr `P`]) >>
+  match_mp_tac shape_step_bind >>
+  qexists_tac `\v st. OffsetFrame st /\ plain_operand st v` >> conj_tac
+  >- (first_assum (fn th => shape_under_tac th `OffsetFrame`) >>
+      simp[Abbr `OffsetFrame`, Abbr `StaticFrame`, Abbr `P`]) >>
+  qx_gen_tac `child_len` >> simp[] >>
+  qmatch_goalsub_abbrev_tac `shape_step internal compiler_label LenFrame _ _` >>
+  `shape_stable LenFrame` by
+    (simp[Abbr `LenFrame`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
+     mp_tac (Q.SPEC `[child_len]` shape_stable_plain_operands) >> simp[]) >>
+  match_mp_tac shape_step_ignore_bind >> qexists_tac `\u st. LenFrame st` >> conj_tac
+  >- (shape_under_tac shape_step_emit_void_plain `LenFrame` >>
+      simp[Abbr `LenFrame`, Abbr `OffsetFrame`, Abbr `StaticFrame`] >> shape_opcode_tac) >>
+  gen_tac >> simp[] >>
+  shape_scalar_emit_bind_tac `LenFrame` `new_dyn` (simp[Abbr `LenFrame`, Abbr `OffsetFrame`]) >>
+  match_mp_tac shape_step_ignore_bind >> qexists_tac `\u st. LenFrame st` >> conj_tac
+  >- (shape_under_tac shape_step_emit_void_plain `LenFrame` >>
+      simp[Abbr `LenFrame`, Abbr `OffsetFrame`, Abbr `StaticFrame`, Abbr `P`] >> shape_opcode_tac) >>
+  gen_tac >> simp[] >> irule shape_step_return >>
+  simp[Abbr `LenFrame`, Abbr `OffsetFrame`, Abbr `StaticFrame`, Abbr `P`]
+QED
+
+Resume compile_abi_encode_shape[bytes]:
+  rpt strip_tac >> simp[Once abiEncoderTheory.compile_abi_encode_child_def] >>
+  qmatch_goalsub_abbrev_tac `shape_step internal compiler_label P _ _` >>
+  `shape_stable P` by
+    (simp[Abbr `P`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
+     mp_tac (Q.SPEC `[dst;src]` shape_stable_plain_operands) >> simp[]) >>
+  shape_scalar_emit_bind_tac `P` `len_op` (simp[Abbr `P`]) >>
+  qmatch_goalsub_abbrev_tac `shape_step internal compiler_label LenFrame _ _` >>
+  `shape_stable LenFrame` by
+    (simp[Abbr `LenFrame`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
+     mp_tac (Q.SPEC `[len_op]` shape_stable_plain_operands) >> simp[]) >>
+  shape_scalar_emit_bind_tac `LenFrame` `ceil_arg` (simp[Abbr `LenFrame`]) >>
+  shape_scalar_emit_bind_tac `LenFrame` `last_offset` all_tac >>
+  shape_scalar_emit_bind_tac `LenFrame` `last_ptr` (simp[Abbr `LenFrame`, Abbr `P`]) >>
+  shape_scalar_assert_tac `LenFrame` >>
+  shape_scalar_emit_bind_tac `LenFrame` `copy_len` (simp[Abbr `LenFrame`]) >>
+  match_mp_tac shape_step_ignore_bind >> qexists_tac `\u st. LenFrame st` >> conj_tac
+  >- (shape_under_tac shape_step_emit_void_plain `LenFrame` >>
+      simp[Abbr `LenFrame`, Abbr `P`] >> shape_opcode_tac) >>
+  gen_tac >> simp[] >>
+  shape_scalar_emit_bind_tac `R` `ceil_arg2` (simp[Abbr `LenFrame`, Abbr `P`]) >>
+  shape_scalar_emit_bind_tac `R` `rounded_len` all_tac >>
+  shape_under_tac shape_step_emit_op_plain `R` >> shape_opcode_tac
+QED
+Resume compile_abi_encode_shape[array]:
+  rpt strip_tac >> simp[Once abiEncoderTheory.compile_abi_encode_child_def] >>
+  qmatch_goalsub_abbrev_tac `shape_step internal compiler_label P _ _` >>
+  `shape_stable P` by
+    (simp[Abbr `P`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
+     mp_tac (Q.SPEC `[dst;src]` shape_stable_plain_operands) >> simp[]) >>
+  match_mp_tac shape_step_bind >>
+  qexists_tac `\b st. P st /\ plain_operand st b.buf_operand` >> conj_tac
+  >- (ho_match_mp_tac compile_alloc_buffer_shape >> simp[]) >>
+  qx_gen_tac `parent_buf` >> simp[] >>
+  qmatch_goalsub_abbrev_tac `shape_step internal compiler_label ParentFrame _ _` >>
+  `shape_stable ParentFrame` by
+    (simp[Abbr `ParentFrame`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
+     mp_tac (Q.SPEC `[parent_buf.buf_operand]` shape_stable_plain_operands) >> simp[]) >>
+  match_mp_tac shape_step_ignore_bind >> qexists_tac `\u st. ParentFrame st` >> conj_tac
+  >- (shape_under_tac shape_step_emit_void_plain `ParentFrame` >>
+      simp[Abbr `ParentFrame`] >> shape_opcode_tac) >>
+  gen_tac >> simp[] >>
+  shape_scalar_emit_bind_tac `ParentFrame` `len_op` (simp[Abbr `ParentFrame`, Abbr `P`]) >>
+  qmatch_goalsub_abbrev_tac `shape_step internal compiler_label LenFrame _ _` >>
+  `shape_stable LenFrame` by
+    (simp[Abbr `LenFrame`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
+     mp_tac (Q.SPEC `[len_op]` shape_stable_plain_operands) >> simp[]) >>
+  match_mp_tac shape_step_ignore_bind >> qexists_tac `\u st. LenFrame st` >> conj_tac
+  >- (shape_under_tac shape_step_emit_void_plain `LenFrame` >>
+      simp[Abbr `LenFrame`, Abbr `ParentFrame`, Abbr `P`] >> shape_opcode_tac) >>
+  gen_tac >> simp[] >> match_mp_tac shape_step_bind >>
+  qexists_tac `\v st. ParentFrame st /\ plain_operand st v` >> conj_tac
+  >- (Cases_on `elem_is_dyn` >> gvs[]
+      >- (shape_scalar_emit_bind_tac `LenFrame` `dst_data` (simp[Abbr `LenFrame`, Abbr `ParentFrame`, Abbr `P`]) >>
+          first_assum (fn th => shape_under_tac th `ParentFrame`) >>
+          simp[Abbr `LenFrame`, Abbr `ParentFrame`, Abbr `P`]) >>
+      shape_under_tac compile_abi_encode_dyn_static_loop_shape `ParentFrame` >>
+      simp[Abbr `LenFrame`, Abbr `ParentFrame`, Abbr `P`]) >>
+  qx_gen_tac `encoded_size` >> simp[] >>
+  qmatch_goalsub_abbrev_tac `shape_step internal compiler_label SizeFrame _ _` >>
+  `shape_stable SizeFrame` by
+    (simp[Abbr `SizeFrame`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
+     mp_tac (Q.SPEC `[encoded_size]` shape_stable_plain_operands) >> simp[]) >>
+  shape_scalar_emit_bind_tac `SizeFrame` `parent_dyn` (simp[Abbr `SizeFrame`, Abbr `ParentFrame`]) >>
+  shape_scalar_emit_bind_tac `ParentFrame` `new_parent_dyn` (simp[Abbr `SizeFrame`]) >>
+  match_mp_tac shape_step_ignore_bind >> qexists_tac `\u st. ParentFrame st` >> conj_tac
+  >- (shape_under_tac shape_step_emit_void_plain `ParentFrame` >> simp[Abbr `ParentFrame`] >> shape_opcode_tac) >>
+  gen_tac >> simp[] >>
+  shape_under_tac shape_step_emit_op_plain `R` >> simp[Abbr `ParentFrame`, Abbr `P`] >> shape_opcode_tac
+QED
+Resume compile_abi_encode_shape[complex]:
+  rpt strip_tac >>
+  simp[Once abiEncoderTheory.compile_abi_encode_child_def] >>
+  IF_CASES_TAC
+  >- (gnvs[] >>
+      qmatch_goalsub_abbrev_tac `shape_step internal compiler_label P _ _` >>
+      `shape_stable P` by
+        (simp[Abbr `P`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
+         mp_tac (Q.SPEC `[dst;src]` shape_stable_plain_operands) >> simp[]) >>
+      match_mp_tac shape_step_bind >>
+      qexists_tac `\b st. P st /\ plain_operand st b.buf_operand` >> conj_tac
+      >- (ho_match_mp_tac compile_alloc_buffer_shape >> simp[]) >>
+      qx_gen_tac `dyn_buf` >> simp[] >>
+      qmatch_goalsub_abbrev_tac `shape_step internal compiler_label BufFrame _ _` >>
+      `shape_stable BufFrame` by
+        (simp[Abbr `BufFrame`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
+         mp_tac (Q.SPEC `[dyn_buf.buf_operand]` shape_stable_plain_operands) >> simp[]) >>
+      match_mp_tac shape_step_ignore_bind >> qexists_tac `\u st. BufFrame st` >> conj_tac
+      >- (shape_under_tac shape_step_emit_void_plain `BufFrame` >> simp[Abbr `BufFrame`] >> shape_opcode_tac) >>
+      gen_tac >> simp[] >> match_mp_tac shape_step_ignore_bind >>
+      qexists_tac `\u st. BufFrame st` >> conj_tac
+      >- (qpat_x_assum `!b R' i. _` (qspec_then `dyn_buf` assume_tac) >>
+          first_assum (fn th => shape_under_tac th `BufFrame`) >> simp[Abbr `BufFrame`, Abbr `P`]) >>
+      gen_tac >> simp[] >> shape_under_tac shape_step_emit_op_plain `R` >>
+      simp[Abbr `BufFrame`, Abbr `P`] >> shape_opcode_tac) >>
+  gvs[] >> match_mp_tac shape_step_ignore_bind >>
+  qexists_tac `\u st. R st` >> conj_tac
+  >- (first_assum (fn th => shape_under_tac th `R`) >> shape_opcode_tac) >>
+  gen_tac >> simp[] >> irule shape_step_return >> shape_opcode_tac
+QED
+Resume compile_abi_encode_shape[elements]:
+  rpt strip_tac >> simp[Once abiEncoderTheory.compile_abi_encode_child_def] >>
+  qmatch_goalsub_abbrev_tac `shape_step internal compiler_label P _ _` >>
+  `shape_stable P` by
+    (simp[Abbr `P`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
+     mp_tac (Q.SPEC `[dst;src;dyn_ptr]` shape_stable_plain_operands) >> simp[]) >>
+  shape_scalar_emit_bind_tac `P` `elem_src` (simp[Abbr `P`]) >>
+  match_mp_tac shape_step_ignore_bind >> qexists_tac `\u st. P st` >> conj_tac
+  >- (qpat_assum `!cp R' i. _` (fn th => shape_under_tac th `P`) >> simp[Abbr `P`]) >>
+  gen_tac >> simp[] >>
+  qpat_x_assum `!R i. _` (mp_tac o SIMP_RULE (srw_ss()) [arithmeticTheory.ADD_SYM]) >>
+  disch_then (fn th => shape_under_tac th `R`) >> simp[Abbr `P`]
+QED
+Resume compile_abi_encode_shape[dynamic]:
+  rpt strip_tac >> gvs[] >>
+  simp[Once abiEncoderTheory.compile_abi_encode_child_def] >>
+  qmatch_goalsub_abbrev_tac `shape_step internal compiler_label P _ _` >>
+  `shape_stable P` by
+    (simp[Abbr `P`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
+     mp_tac (Q.SPEC `[dst;src;len_op]` shape_stable_plain_operands) >> simp[]) >>
+  match_mp_tac shape_step_bind >>
+  qexists_tac `\b st. P st /\ plain_operand st b.buf_operand` >> conj_tac
+  >- (ho_match_mp_tac compile_alloc_buffer_shape >> simp[]) >>
+  qx_gen_tac `idx_buf` >> simp[] >>
+  qmatch_goalsub_abbrev_tac `shape_step internal compiler_label IdxFrame _ _` >>
+  `shape_stable IdxFrame` by
+    (simp[Abbr `IdxFrame`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
+     mp_tac (Q.SPEC `[idx_buf.buf_operand]` shape_stable_plain_operands) >> simp[]) >>
+  match_mp_tac shape_step_ignore_bind >> qexists_tac `\u st. IdxFrame st` >> conj_tac
+  >- (shape_under_tac shape_step_emit_void_plain `IdxFrame` >> simp[Abbr `IdxFrame`] >> shape_opcode_tac) >>
+  gen_tac >> simp[] >> match_mp_tac shape_step_bind >>
+  qexists_tac `\b st. IdxFrame st /\ plain_operand st b.buf_operand` >> conj_tac
+  >- (ho_match_mp_tac compile_alloc_buffer_shape >> simp[SF ETA_ss]) >>
+  qx_gen_tac `dyn_buf` >> simp[] >>
+  qmatch_goalsub_abbrev_tac `shape_step internal compiler_label C _ _` >>
+  `shape_stable C` by
+    (simp[Abbr `C`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
+     mp_tac (Q.SPEC `[dyn_buf.buf_operand]` shape_stable_plain_operands) >> simp[]) >>
+  shape_scalar_emit_bind_tac `C` `init_dyn` (simp[Abbr `C`, Abbr `IdxFrame`, Abbr `P`]) >>
+  match_mp_tac shape_step_ignore_bind >> qexists_tac `\u st. C st` >> conj_tac
+  >- (shape_under_tac shape_step_emit_void_plain `C` >> simp[Abbr `C`] >> shape_opcode_tac) >>
+  gen_tac >> simp[] >>
+  match_mp_tac shape_step_bind >>
+  qexists_tac `\l st. compiler_label l /\ C st` >> conj_tac
+  >- (shape_under_tac shape_step_fresh_label `C` >>
+      qexists_tac `compiler_label` >> simp[]) >>
+  qx_gen_tac `hdr_lbl` >> simp[] >>
+  ho_match_mp_tac shape_step_assume_pure >> strip_tac >>
+  match_mp_tac shape_step_bind >>
+  qexists_tac `\l st. compiler_label l /\ C st` >> conj_tac
+  >- (shape_under_tac shape_step_fresh_label `C` >>
+      qexists_tac `compiler_label` >> simp[]) >>
+  qx_gen_tac `body_lbl` >> simp[] >>
+  ho_match_mp_tac shape_step_assume_pure >> strip_tac >>
+  match_mp_tac shape_step_bind >>
+  qexists_tac `\l st. compiler_label l /\ C st` >> conj_tac
+  >- (shape_under_tac shape_step_fresh_label `C` >>
+      qexists_tac `compiler_label` >> simp[]) >>
+  qx_gen_tac `exit_lbl` >> simp[] >>
+  ho_match_mp_tac shape_step_assume_pure >> strip_tac >>
+  suspend "dynamic_header"
+QED
+Resume compile_abi_encode_shape[dynamic_header]:
+  match_mp_tac shape_step_ignore_bind >> qexists_tac `\u st. C st` >> conj_tac
+  >- (shape_under_tac shape_step_emit_inst_guarded `C` >>
+      shape_opcode_tac >> simp[jump_label_ok_def]) >>
+  gen_tac >> simp[] >> match_mp_tac shape_step_ignore_bind >>
+  qexists_tac `\u st. C st` >> conj_tac
+  >- (ho_match_mp_tac shape_step_new_block >> simp[SF ETA_ss]) >>
+  gen_tac >> simp[] >>
+  shape_scalar_emit_bind_tac `C` `idx` (simp[Abbr `C`, Abbr `IdxFrame`]) >>
+  shape_scalar_emit_bind_tac `C` `cmp_op` (simp[Abbr `C`, Abbr `IdxFrame`, Abbr `P`]) >>
+  shape_scalar_emit_bind_tac `C` `done_op` all_tac >>
+  match_mp_tac shape_step_ignore_bind >> qexists_tac `\u st. C st` >> conj_tac
+  >- (shape_under_tac shape_step_emit_inst_guarded
+        `\st. C st /\ plain_operand st done_op` >>
+      conj_tac
+      >- (ho_match_mp_tac shape_stable_conj >> simp[] >>
+          mp_tac (Q.SPEC `[done_op]` shape_stable_plain_operands) >> simp[]) >>
+      shape_opcode_tac >> rpt strip_tac >> gvs[jump_label_ok_def] >>
+      gvs[stackPlanTypesTheory.is_label_operand_def]) >>
+  gen_tac >> simp[] >> match_mp_tac shape_step_ignore_bind >>
+  qexists_tac `\u st. C st` >> conj_tac
+  >- (ho_match_mp_tac shape_step_new_block >> simp[SF ETA_ss]) >>
+  gen_tac >> simp[] >> suspend "dynamic_body"
+QED
+
+Resume compile_abi_encode_shape[dynamic_body]:
+  shape_scalar_emit_bind_tac `C` `idx_op` (simp[Abbr `C`, Abbr `IdxFrame`]) >>
+  qmatch_goalsub_abbrev_tac `shape_step internal compiler_label LoopFrame _ _` >>
+  `shape_stable LoopFrame` by
+    (simp[Abbr `LoopFrame`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
+     mp_tac (Q.SPEC `[idx_op]` shape_stable_plain_operands) >> simp[]) >>
+  shape_scalar_emit_bind_tac `LoopFrame` `src_data` (simp[Abbr `LoopFrame`, Abbr `C`, Abbr `IdxFrame`, Abbr `P`]) >>
+  qmatch_goalsub_abbrev_tac `shape_step internal compiler_label SrcFrame _ _` >>
+  `shape_stable SrcFrame` by
+    (simp[Abbr `SrcFrame`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
+     mp_tac (Q.SPEC `[src_data]` shape_stable_plain_operands) >> simp[]) >>
+  shape_scalar_emit_bind_tac `SrcFrame` `src_off` (simp[Abbr `SrcFrame`, Abbr `LoopFrame`]) >>
+  shape_scalar_emit_bind_tac `LoopFrame` `child_src` (simp[Abbr `SrcFrame`]) >>
+  qmatch_goalsub_abbrev_tac `shape_step internal compiler_label ChildFrame _ _` >>
+  `shape_stable ChildFrame` by
+    (simp[Abbr `ChildFrame`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
+     mp_tac (Q.SPEC `[child_src]` shape_stable_plain_operands) >> simp[]) >>
+  shape_scalar_emit_bind_tac `ChildFrame` `dyn_ofst` (simp[Abbr `ChildFrame`, Abbr `LoopFrame`, Abbr `C`]) >>
+  qmatch_goalsub_abbrev_tac `shape_step internal compiler_label OffsetFrame _ _` >>
+  `shape_stable OffsetFrame` by
+    (simp[Abbr `OffsetFrame`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
+     mp_tac (Q.SPEC `[dyn_ofst]` shape_stable_plain_operands) >> simp[]) >>
+  shape_scalar_emit_bind_tac `OffsetFrame` `child_dst` (simp[Abbr `OffsetFrame`, Abbr `ChildFrame`, Abbr `LoopFrame`, Abbr `C`, Abbr `IdxFrame`, Abbr `P`]) >>
+  match_mp_tac shape_step_bind >>
+  qexists_tac `\v st. OffsetFrame st /\ plain_operand st v` >> conj_tac
+  >- (first_assum (fn th => shape_under_tac th `OffsetFrame`) >> simp[Abbr `OffsetFrame`, Abbr `ChildFrame`]) >>
+  qx_gen_tac `child_len` >> simp[] >>
+  suspend "dynamic_finish"
+QED
+
+Resume compile_abi_encode_shape[dynamic_finish]:
+  qmatch_goalsub_abbrev_tac `shape_step internal compiler_label LenFrame _ _` >>
+  `shape_stable LenFrame` by
+    (simp[Abbr `LenFrame`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
+     mp_tac (Q.SPEC `[child_len]` shape_stable_plain_operands) >> simp[]) >>
+  shape_scalar_emit_bind_tac `LenFrame` `head_off` (simp[Abbr `LenFrame`, Abbr `OffsetFrame`, Abbr `ChildFrame`, Abbr `LoopFrame`]) >>
+  shape_scalar_emit_bind_tac `LenFrame` `head_pos` (simp[Abbr `LenFrame`, Abbr `OffsetFrame`, Abbr `ChildFrame`, Abbr `LoopFrame`, Abbr `C`, Abbr `IdxFrame`, Abbr `P`]) >>
+  match_mp_tac shape_step_ignore_bind >> qexists_tac `\u st. LenFrame st` >> conj_tac
+  >- (shape_under_tac shape_step_emit_void_plain `LenFrame` >> simp[Abbr `LenFrame`, Abbr `OffsetFrame`] >> shape_opcode_tac) >>
+  gen_tac >> simp[] >>
+  shape_scalar_emit_bind_tac `LoopFrame` `new_dyn` (simp[Abbr `LenFrame`, Abbr `OffsetFrame`, Abbr `ChildFrame`]) >>
+  match_mp_tac shape_step_ignore_bind >> qexists_tac `\u st. LoopFrame st` >> conj_tac
+  >- (shape_under_tac shape_step_emit_void_plain `LoopFrame` >> simp[Abbr `LoopFrame`, Abbr `C`] >> shape_opcode_tac) >>
+  gen_tac >> simp[] >>
+  shape_scalar_emit_bind_tac `C` `new_idx` (simp[Abbr `LoopFrame`]) >>
+  match_mp_tac shape_step_ignore_bind >> qexists_tac `\u st. C st` >> conj_tac
+  >- (shape_under_tac shape_step_emit_void_plain `C` >> simp[Abbr `C`, Abbr `IdxFrame`] >> shape_opcode_tac) >>
+  gen_tac >> simp[] >> match_mp_tac shape_step_ignore_bind >>
+  qexists_tac `\u st. C st` >> conj_tac
+  >- (shape_under_tac shape_step_emit_inst_guarded `C` >>
+      shape_opcode_tac >> simp[jump_label_ok_def]) >>
+  gen_tac >> simp[] >> match_mp_tac shape_step_ignore_bind >>
+  qexists_tac `\u st. C st` >> conj_tac
+  >- (ho_match_mp_tac shape_step_new_block >> simp[SF ETA_ss]) >>
+  gen_tac >> simp[] >>
+  shape_scalar_emit_bind_tac `R` `final_dyn` (simp[Abbr `C`, Abbr `IdxFrame`, Abbr `P`]) >>
+  shape_under_tac shape_step_emit_op_plain `R` >> shape_opcode_tac
+QED
+Finalise compile_abi_encode_shape
+
 Theorem compile_pow_mod256_shape[local]:
   shape_stable R ==>
   shape_step internal compiler_label
