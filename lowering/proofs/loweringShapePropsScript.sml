@@ -474,7 +474,31 @@ Theorem compile_generate_runtime_shape:
         entry_blocks /\
       LIST_REL internal_segment_ok (internal_fn_descriptors internal_fns) segs
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  drule_all runtime_entry_prefix_shape >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `shape_step F jump_label_ok (\st. T) prefix _` >>
+  `compile_generate_runtime selectors external_fns internal_fns fallback_fn
+     Linear bucket_count fn_metadata_bytes dense_buckets entry_info =
+   comp_ignore_bind prefix
+     (comp_bind (compile_internal_fn_bodies internal_fns) (\x. comp_return ()))`
+    by simp[compile_generate_runtime_def, Abbr `prefix`,
+            comp_ignore_bind_def, comp_bind_assoc] >>
+  qpat_x_assum `compile_generate_runtime _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  asm_rewrite_tac [] >>
+  Cases_on `prefix (initial_compile_state "__entry")` >>
+  rename1 `prefix _ = (prefix_result, entry_st)` >>
+  Cases_on `prefix_result` >>
+  simp[comp_ignore_bind_def, comp_bind_def, comp_return_def] >>
+  pairarg_tac >> simp[] >> strip_tac >>
+  qpat_x_assum `shape_step _ _ _ _ _` mp_tac >>
+  simp[shape_step_def] >>
+  disch_then drule >>
+  simp[shape_state_initial_compile_state] >> strip_tac >>
+  drule runtime_entry_blocks_shape >> strip_tac >>
+  drule_all compile_internal_fn_bodies_shape >> strip_tac >>
+  gvs[] >>
+  rename1 `LIST_REL internal_segment_ok _ runtime_segs` >>
+  qexistsl_tac [`all_blocks entry_st`, `runtime_segs`] >> simp[]
 QED
 
 (* ===== Source side conditions from supported_program ===== *)
