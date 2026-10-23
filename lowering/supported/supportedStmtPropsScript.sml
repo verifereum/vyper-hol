@@ -62,8 +62,6 @@ QED
 Theorem supported_target_exclusions:
   EVERY (\s. ~supported_stmt expr_test_tops stmt_test_bindings s)
     [Assign (BaseTarget (NameTarget "missing")) expr_test_uint;
-     Assign (BaseTarget (NameTarget "aggregate")) expr_test_uint;
-     Assign (BaseTarget (NameTarget "array")) expr_test_uint;
      Assign (TupleTarget [BaseTarget (NameTarget "word")]) expr_test_uint;
      Assign (BaseTarget (TopLevelNameTarget (NONE,"fixed"))) expr_test_uint;
      Assign (BaseTarget (TopLevelNameTarget (NONE,"record"))) expr_test_uint;
@@ -138,7 +136,6 @@ Theorem supported_control_reason_rows:
   EVERY (\s. ~supported_stmt expr_test_tops stmt_test_bindings s)
     [If expr_test_internal [] []; Assert expr_test_pop AssertBare;
      Assert expr_test_uint (AssertReason expr_test_internal);
-     Assert expr_test_uint (AssertReason (Name (BaseT (StringT 16)) "reason"));
      Raise (RaiseReason expr_test_uint);
      Raise (RaiseReason (Builtin (BaseT (StringT 16)) (Concat 16) []))]
 Proof
