@@ -7,7 +7,7 @@
 Theory valueEncodingProofs
 Ancestors
   list rich_list venomMemProofs
-  valueEncoding vyperStorage venomState
+  valueEncoding vyperStorage vyperValue venomState
 Libs
   blastLib intLib
 
@@ -688,6 +688,30 @@ Proof
   metis_tac[]
 QED
 
+(* The default value of a type fits the type's memory footprint. *)
+Theorem val_wf_default_value_proof:
+  (∀tv. val_wf tv (default_value tv)) ∧
+  (∀tvs. tuple_val_wf (MAP default_value tvs) tvs) ∧
+  (∀fields.
+     fields_val_wf (MAP (λ(id,t). (id, default_value t)) fields) fields)
+Proof
+  ho_match_mp_tac type_memory_size_ind >>
+  rw[default_value_def, val_wf_def, type_memory_size_def,
+     default_value_tuple_MAP,
+     default_value_struct_MAP]
+QED
+
+(* Slot i of an n-slot array of t-sized elements ends inside the array. *)
+Theorem slot_end_le[local]:
+  ∀(k:num) n t. k < n ⇒ k * t + t ≤ n * t
+Proof
+  rpt strip_tac >>
+  `SUC k ≤ n` by simp[] >>
+  drule arithmeticTheory.LESS_MONO_MULT >>
+  disch_then (qspec_then `t` mp_tac) >>
+  REWRITE_TAC[arithmeticTheory.MULT] >> DECIDE_TAC
+QED
+
 Theorem mstore_preserves_val_in_memory_proof:
   (∀ ty v off mem off2 (w:bytes32).
     val_in_memory ty v off mem ∧ val_wf ty v ∧
@@ -766,15 +790,22 @@ Proof
       fs[val_wf_def] >>
       Cases_on `ty` >> fs[] >>
       Cases_on `b` >> fs[val_in_memory_def, type_memory_size_def] >>
-      first_x_assum irule >>
-      rpt conj_tac >> rpt strip_tac >>
-      TRY (metis_tac[kvs_val_wf_mem] >> NO_TAC) >>
-      drule_all kvs_val_wf_bound >> strip_tac >>
-      `SUC k * type_memory_size t ≤ n * type_memory_size t`
-        by simp[arithmeticTheory.LE_MULT_RCANCEL] >>
-      `type_memory_size t + k * type_memory_size t =
-       SUC k * type_memory_size t` by simp[arithmeticTheory.MULT] >>
-      DECIDE_TAC)
+      (* one goal per side of the disjoint-store disjunction *)
+      (conj_tac
+      >- (first_x_assum irule >>
+          rpt conj_tac >> rpt strip_tac >>
+          TRY (metis_tac[kvs_val_wf_mem] >> NO_TAC) >>
+          drule_all kvs_val_wf_bound >> strip_tac >>
+          drule slot_end_le >>
+          disch_then (qspec_then `type_memory_size t` mp_tac) >>
+          DECIDE_TAC) >>
+      rpt strip_tac >>
+      qpat_x_assum `∀i. _ ⇒ ∀x y. _` (qspec_then `i` mp_tac) >>
+      simp[] >> disch_then irule >>
+      simp[val_wf_default_value_proof] >>
+      drule slot_end_le >>
+      disch_then (qspec_then `type_memory_size t` mp_tac) >>
+      DECIDE_TAC))
   (* 11: TupleV *)
   >- (rpt gen_tac >> strip_tac >> rpt gen_tac >> rpt strip_tac >>
       fs[val_wf_def] >>
@@ -922,10 +953,18 @@ Proof
   >~ [`SArrayV`]
   >- (Cases_on `ty` >> gvs[val_in_memory_def, val_wf_def] >>
       Cases_on `b` >> gvs[val_in_memory_def, val_wf_def, type_memory_size_def] >>
-      first_x_assum irule >> simp[] >> rpt gen_tac >> strip_tac >>
-      drule_all kvs_val_wf_mem >> drule_all kvs_val_wf_bound >>
-      rpt strip_tac >> simp[] >>
-      qspecl_then [`off`, `n`, `type_memory_size t`, `k`, `mem`, `mem'`]
+      conj_tac
+      >- (first_x_assum irule >> simp[] >> rpt gen_tac >> strip_tac >>
+          drule_all kvs_val_wf_mem >> drule_all kvs_val_wf_bound >>
+          rpt strip_tac >> simp[] >>
+          qspecl_then [`off`, `n`, `type_memory_size t`, `k`, `mem`, `mem'`]
+            mp_tac mem_bytes_at_agree_slot >>
+          impl_tac >- fs[] >> simp[]) >>
+      rpt strip_tac >>
+      qpat_x_assum `∀i. _ ⇒ ∀x. _` (qspec_then `i` mp_tac) >>
+      simp[] >> disch_then irule >>
+      simp[val_wf_default_value_proof] >>
+      qspecl_then [`off`, `n`, `type_memory_size t`, `i`, `mem`, `mem'`]
         mp_tac mem_bytes_at_agree_slot >>
       impl_tac >- fs[] >> simp[])
   >~ [`TupleV`]
@@ -978,7 +1017,10 @@ Theorem val_in_memory_sarray_proof:
   ∀ kvs elem_tv bound offset mem.
     val_in_memory (ArrayTV elem_tv (Fixed bound))
                   (ArrayV (SArrayV kvs)) offset mem ⇔
-    kvs_in_memory kvs offset elem_tv mem
+    kvs_in_memory kvs offset elem_tv mem ∧
+    ∀i. i < bound ∧ ALOOKUP kvs i = NONE ⇒
+        val_in_memory elem_tv (default_value elem_tv)
+          (offset + i * type_memory_size elem_tv) mem
 Proof
   simp[val_in_memory_def]
 QED

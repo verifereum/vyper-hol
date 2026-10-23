@@ -235,7 +235,10 @@ Theorem val_in_memory_sarray:
   ∀ kvs elem_tv bound offset mem.
     val_in_memory (ArrayTV elem_tv (Fixed bound))
                   (ArrayV (SArrayV kvs)) offset mem ⇔
-    kvs_in_memory kvs offset elem_tv mem
+    kvs_in_memory kvs offset elem_tv mem ∧
+    ∀i. i < bound ∧ ALOOKUP kvs i = NONE ⇒
+        val_in_memory elem_tv (default_value elem_tv)
+          (offset + i * type_memory_size elem_tv) mem
 Proof ACCEPT_TAC val_in_memory_sarray_proof
 QED
 
