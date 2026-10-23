@@ -3659,6 +3659,71 @@ Resume compile_struct_lit_shape[store]:
 QED
 Finalise compile_struct_lit_shape
 
+Theorem cenv_lookup_shape[local]:
+  cenv_shape_ok st cenv /\ FLOOKUP cenv.ce_vars name = SOME loc ==>
+  loc_shape_ok st loc
+Proof
+  simp[cenv_shape_ok_def] >> metis_tac[]
+QED
+
+Theorem infer_array_location_shape[local]:
+  cenv_shape_ok st cenv ==> infer_array_location cenv e <> LocCode
+Proof
+  Cases_on `e` >> simp[infer_array_location_def] >> strip_tac >>
+  qmatch_goalsub_abbrev_tac `FLOOKUP cenv.ce_vars var_name` >>
+  Cases_on `FLOOKUP cenv.ce_vars var_name` >> simp[] >>
+  rename1 `FLOOKUP cenv.ce_vars var_name = SOME loc` >>
+  drule_all cenv_lookup_shape >> Cases_on `loc` >> simp[loc_shape_ok_def]
+QED
+
+Theorem compile_target_base_shape[local]:
+  !target. cenv_shape_ok st cenv ==> plain_operand st (compile_target_base cenv target)
+Proof
+  Induct >> simp[compile_target_base_def] >> rpt strip_tac >>
+  qmatch_goalsub_abbrev_tac `FLOOKUP cenv.ce_vars var_name` >>
+  Cases_on `FLOOKUP cenv.ce_vars var_name` >> simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def] >>
+  rename1 `FLOOKUP cenv.ce_vars var_name = SOME loc` >>
+  drule_all cenv_lookup_shape >> Cases_on `loc` >>
+  simp[loc_shape_ok_def, plain_operand_def, stackPlanTypesTheory.is_label_operand_def]
+QED
+
+Theorem compile_tuple_subscript_shape[local]:
+  shape_stable R ==>
+  shape_step internal compiler_label (\st. R st /\ plain_operand st base_op)
+    (compile_tuple_subscript base_op offset) (\v st. R st /\ plain_operand st v)
+Proof
+  strip_tac >> simp[compile_tuple_subscript_def] >>
+  shape_under_tac shape_step_emit_op_plain `R` >> shape_opcode_tac
+QED
+
+Theorem compile_mapping_subscript_shape[local]:
+  shape_stable R ==>
+  shape_step internal compiler_label
+    (\st. R st /\ EVERY (plain_operand st) [base_slot; key_op])
+    (compile_mapping_subscript base_slot key_op) (\v st. R st /\ plain_operand st v)
+Proof
+  strip_tac >> simp[compile_mapping_subscript_def] >>
+  qmatch_goalsub_abbrev_tac `shape_step internal compiler_label P _ _` >>
+  `shape_stable P` by
+    (simp[Abbr `P`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
+     mp_tac (Q.SPEC `[base_slot;key_op]` shape_stable_plain_operands) >> simp[]) >>
+  match_mp_tac shape_step_bind >>
+  qexists_tac `\b st. P st /\ plain_operand st b.buf_operand` >> conj_tac
+  >- (ho_match_mp_tac compile_alloc_buffer_shape >> simp[]) >>
+  qx_gen_tac `scratch` >> simp[] >>
+  qmatch_goalsub_abbrev_tac `shape_step internal compiler_label BufFrame _ _` >>
+  `shape_stable BufFrame` by
+    (simp[Abbr `BufFrame`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
+     mp_tac (Q.SPEC `[scratch.buf_operand]` shape_stable_plain_operands) >> simp[]) >>
+  match_mp_tac shape_step_ignore_bind >> qexists_tac `\u st. BufFrame st` >> conj_tac
+  >- (shape_under_tac shape_step_emit_void_plain `BufFrame` >> simp[Abbr `BufFrame`, Abbr `P`] >> shape_opcode_tac) >>
+  gen_tac >> simp[] >> shape_scalar_emit_bind_tac `BufFrame` `key_ptr` (simp[Abbr `BufFrame`]) >>
+  match_mp_tac shape_step_ignore_bind >> qexists_tac `\u st. BufFrame st` >> conj_tac
+  >- (shape_under_tac shape_step_emit_void_plain `BufFrame` >> simp[Abbr `BufFrame`, Abbr `P`] >> shape_opcode_tac) >>
+  gen_tac >> simp[] >> shape_under_tac shape_step_emit_op_plain `R` >>
+  simp[Abbr `BufFrame`, Abbr `P`] >> shape_opcode_tac
+QED
+
 Theorem compile_expr_shape:
   (!cenv ty e internal.
      ~supported_expr_exists expr_shape_root e ==>
