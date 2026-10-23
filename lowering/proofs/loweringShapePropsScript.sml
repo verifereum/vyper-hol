@@ -795,7 +795,14 @@ Theorem supported_internal_descriptors_ok:
       (MAP FST (MAP (source_internal_fn_descriptor tops)
                   (FST (SND (classify_functions tops)))))
 Proof
-  cheat
+  rpt strip_tac
+  >- (simp[EVERY_MAP, EVERY_MEM] >> rpt strip_tac >>
+      rename1 `MEM payload (FST (SND (classify_functions tops)))` >>
+      PairCases_on `payload` >> gvs[] >>
+      drule (iffLR MEM_classify_internal) >> metis_tac[]) >>
+  irule classified_internal_names_distinct >>
+  drule supported_program_names >>
+  metis_tac[supported_declaration_names_unique]
 QED
 
 (* S2 with the internal-name premise.  Without it S2 is false: an internal
