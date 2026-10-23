@@ -3432,67 +3432,22 @@ Proof
        ci_mono_compile_mulmod, ci_mono_compile_pow_mod256]
 QED
 
-Theorem predicate_list_case[local]:
-  P (case xs of [] => z | a::rest => k a rest) =
-  (case xs of [] => P z | a::rest => P (k a rest))
-Proof
-  Cases_on `xs` >> simp[]
-QED
-
-Theorem predicate_expr_case[local]:
-  P (case e of
-       Literal a l => lit a l
-     | Name a n => name a n
-     | IfExp a c t f => ifexp a c t f
-     | Builtin a b es => builtin a b es
-     | TypeBuiltin a b t es => typebuiltin a b t es
-     | Subscript a b i => subscript a b i
-     | Attribute a b n => attribute a b n
-     | StructLit a n fs => structlit a n fs
-     | FlagMember a n m => flagmember a n m
-     | TopLevelName a n => toplevelname a n
-     | Call a t es d => call a t es d
-     | Pop a t => pop a t) =
-  (case e of
-       Literal a l => P (lit a l)
-     | Name a n => P (name a n)
-     | IfExp a c t f => P (ifexp a c t f)
-     | Builtin a b es => P (builtin a b es)
-     | TypeBuiltin a b t es => P (typebuiltin a b t es)
-     | Subscript a b i => P (subscript a b i)
-     | Attribute a b n => P (attribute a b n)
-     | StructLit a n fs => P (structlit a n fs)
-     | FlagMember a n m => P (flagmember a n m)
-     | TopLevelName a n => P (toplevelname a n)
-     | Call a t es d => P (call a t es d)
-     | Pop a t => P (pop a t))
-Proof
-  Cases_on `e` >> simp[]
-QED
-
-Theorem list_case_constant[local]:
-  list_CASE xs z (\a rest. z) = z
-Proof
-  Cases_on `xs` >> simp[]
-QED
-
-Theorem expr_case_constant[local]:
-  expr_CASE e (\a n. z) (\a n. z) (\a n m. z) (\a c t f. z)
-    (\a l. z) (\a n fs. z) (\a b i. z)
-    (\a b n. z) (\a b es. z) (\a b t es. z) (\a t. z)
-    (\a t es d. z) = z
-Proof
-  Cases_on `e` >> simp[]
-QED
+(* Lift a predicate through list/expr cases and collapse cases whose
+   branches are all equal; both families are generated from the datatypes. *)
+val case_lift_thms =
+  let val tys = [``:'a list``, ``:expr``]
+      fun constant ty = Prim_rec.prove_case_const_thm
+        {case_def = TypeBase.case_def_of ty,
+         nchotomy = TypeBase.nchotomy_of ty}
+  in map TypeBase.case_rand_of tys @ map constant tys end;
 
 Theorem ci_mono_compile_expr_builtin[local]:
   (∀ce rt t bi es s. ci_mono s (SND (g ce rt t bi es s))) ⇒
   ci_mono st (SND (compile_expr_body f g h cenv ty (Builtin ann bi args) st))
 Proof
   strip_tac >> Cases_on `bi` >>
-  simp[compile_expr_body_def, LET_THM, predicate_list_case,
-       predicate_expr_case, list_case_constant, expr_case_constant,
-       ci_mono_compile_named_modular]
+  simp([compile_expr_body_def, LET_THM, ci_mono_compile_named_modular] @
+       case_lift_thms)
 QED
 
 Theorem ci_mono_compile_expr_body[local]:
