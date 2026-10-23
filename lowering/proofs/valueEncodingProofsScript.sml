@@ -852,6 +852,32 @@ Proof
   simp[EL_APPEND2, EL_REPLICATE]
 QED
 
+Theorem mem_bytes_at_split_padded:
+  !off m n mem.
+    mem_bytes_at off (m+n) mem =
+    mem_bytes_at off m mem ++ mem_bytes_at (off+m) n mem
+Proof
+  rpt gen_tac >> irule LIST_EQ >>
+  simp[LENGTH_mem_bytes_at_proof] >> rpt strip_tac >>
+  Cases_on `x < m`
+  >- simp[EL_APPEND1, LENGTH_mem_bytes_at_proof, EL_mem_bytes_at] >>
+  simp[EL_APPEND2, LENGTH_mem_bytes_at_proof, EL_mem_bytes_at]
+QED
+
+Theorem mem_bytes_at_word:
+  !off mem.
+    mem_bytes_at off 32 mem = word_to_bytes (mem_word_at off mem) T
+Proof
+  rpt gen_tac >>
+  qspec_then `mem_bytes_at off 32 mem` mp_tac
+    TAKE_word_to_bytes_be_word_of_bytes_be >>
+  simp[LENGTH_mem_bytes_at_proof, byteTheory.word_to_bytes_be_def,
+       byteTheory.word_of_bytes_be_def, mem_word_at_def,
+       GSYM mem_bytes_at_def, byteTheory.word_to_bytes_def,
+       byteTheory.LENGTH_word_to_bytes_aux, dimindex_256,
+       TAKE_LENGTH_TOO_LONG]
+QED
+
 (* Two memories that agree on a window agree on every sub-window, and on
    every word inside it. *)
 Theorem mem_bytes_at_agree_window:

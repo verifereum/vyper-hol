@@ -120,18 +120,7 @@ Theorem mem_bytes_at_split:
     mem_bytes_at offset (m + n) mem =
       mem_bytes_at offset m mem ++ mem_bytes_at (offset + m) n mem
 Proof
-  rw[mem_bytes_at_def] >>
-  `LENGTH (DROP offset mem) ≥ m + n` by simp[LENGTH_DROP] >>
-  `TAKE (m + n) (DROP offset mem ++ REPLICATE (m + n) 0w) =
-   TAKE (m + n) (DROP offset mem)` by
-    simp[TAKE_APPEND1] >>
-  `TAKE m (DROP offset mem ++ REPLICATE m 0w) =
-   TAKE m (DROP offset mem)` by
-    simp[TAKE_APPEND1] >>
-  `TAKE n (DROP (offset + m) mem ++ REPLICATE n 0w) =
-   TAKE n (DROP (offset + m) mem)` by
-    simp[TAKE_APPEND1, LENGTH_DROP] >>
-  simp[TAKE_SUM, DROP_DROP, TAKE_APPEND]
+  simp[mem_bytes_at_split_padded]
 QED
 
 Theorem mstore_mem_bytes_at_disjoint:
