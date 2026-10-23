@@ -9,7 +9,8 @@
  * Abort as result_rel allows.
  *
  * TOP-LEVEL:
- *   expr_exit, expr_res_ok, expr_val_rel, expr_post, expr_sim
+ *   expr_exit, expr_res_ok, expr_val_rel, expr_val_at, expr_post,
+ *   expr_sim
  *   expr_sim_values        — expr_sim of an expression whose results are
  *                            values, from its fragment reaching expr_post
  *   expr_sim_expr_frag     — expr_sim gives loweringSlice's expr_frag
@@ -27,15 +28,16 @@
  * Values are related by expr_val_rel, by the expression's type: a word
  * type's value as the operand in the typed encoding typed_val_to_w256, any
  * other type's value in memory at the operand, as val_in_memory has it.
- * expr_post keeps the memory of the allocations made before the
- * fragment's start, but its own and the live locals'.  So two operands
- * lowered in turn compose where the first one's value sits in a buffer it
- * allocated: that allocation's id is below the second's start counter and
- * it holds no local, so the second's expr_post keeps its bytes, and
- * val_in_memory with them (a lemma that val_in_memory reads only the
- * value's bytes is still to be proved).  expr_val_rel does not say where
- * the bytes are; an operator's proof takes that from the operand's
- * lowering.  A first operand that points into a local stays related
+ * expr_val_at says where a memory-backed value's bytes are: in one of the
+ * expression's own allocations or in a live local's region.  expr_post
+ * keeps the memory of the allocations made before the fragment's start,
+ * but its own and the live locals'.  So two operands lowered in turn
+ * compose where the first one's value sits in a buffer it allocated: that
+ * allocation's id is below the second's start counter and it holds no
+ * local (alloca_inv, local_backed), so the second's expr_post keeps its
+ * bytes, and val_in_memory with them (a lemma that val_in_memory reads
+ * only the type_memory_size bytes of a val_wf value is still to be
+ * proved).  A first operand that points into a local stays related
  * through stmt_state_rel, as long as the source leaves that local alone
  * in between.  expr_frag, which relates values by val_to_w256, follows
  * for a word type whose typed encoding is val_to_w256
@@ -116,9 +118,32 @@ Definition expr_val_rel_def:
              else val_in_memory tv v (w2n w) s.vs_memory
 End
 
-(* Where the fragment of e that started in s0, related at es, at compile
-   state sa ends when the source gives v and es': related at es', the
-   operand op holding v, the variables handed out before sa and the
+(* Where the value v of an expression of type t, lowered from compile state
+   sa to sb, sits in s when t is not a word type: well formed for its type
+   (val_wf), so val_in_memory reads no more than type_memory_size bytes,
+   and those bytes lie inside
+   - an allocation of one of the expression's own ALLOCAs (instruction id
+     in [sa.cs_next_id, sb.cs_next_id)), or
+   - the region of a live local at es.
+   An operator's proof needs this to keep a first operand's value through
+   the second operand's fragment: an allocation of the first is below the
+   second's start counter, and expr_post keeps such allocations' bytes. *)
+Definition expr_val_at_def:
+  expr_val_at cenv cx t sa sb es v op s <=>
+    !tv. evaluate_type (get_tenv cx) t = SOME tv /\ ~is_word_type t ==>
+      val_wf tv v /\
+      ?w. eval_operand op s = SOME w /\
+          ((?aid b sz. FLOOKUP s.vs_allocas aid = SOME (b, sz) /\
+                       sa.cs_next_id <= aid /\ aid < sb.cs_next_id /\
+                       b <= w2n w /\ w2n w + type_memory_size tv <= b + sz) \/
+           (?n b sz. local_region cenv es.scopes s n b sz /\
+                     b <= w2n w /\ w2n w + type_memory_size tv <= b + sz))
+End
+
+(* Where the fragment of e that started in s0, related at es, lowered from
+   compile state sa to sb, ends when the source gives v and es': related at
+   es', the operand op holding v (and, for a memory-backed value, placed as
+   expr_val_at says), the variables handed out before sa and the
    allocations of s0 kept, and the memory of the allocations of s0 kept,
    but for two kinds:
    - those of e's own ALLOCAs (instruction id sa.cs_next_id or above): an
@@ -129,9 +154,10 @@ End
    The rest are the buffers of the expressions lowered before e, so a
    value an earlier operand left in memory survives e's fragment. *)
 Definition expr_post_def:
-  expr_post func cenv cx e es sa s0 es' v op s <=>
+  expr_post func cenv cx e es sa sb s0 es' v op s <=>
     stmt_state_rel func cenv cx es' s /\
     expr_val_rel cx (expr_type e) v op s /\
+    expr_val_at cenv cx (expr_type e) sa sb es' v op s /\
     (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
            lookup_var x s = SOME w) /\
     (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
@@ -158,7 +184,7 @@ Definition expr_sim_def:
       local_ptrs_reserved cenv sa ==>
       frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel func cenv cx es s)
         (\s. ?v. res = INL (Value v) /\
-                 expr_post func cenv cx e es sa s0 es' v op s)
+                 expr_post func cenv cx e es sa sb s0 es' v op s)
         (expr_exit res)
 End
 
@@ -198,7 +224,7 @@ Theorem expr_sim_values:
        fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
        local_ptrs_reserved cenv sa ==>
        frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel func cenv cx es s)
-         (expr_post func cenv cx e es sa s0 es' v op) (\r. F)) ==>
+         (expr_post func cenv cx e es sa sb s0 es' v op) (\r. F)) ==>
     expr_sim ctx func cenv cx ty e es
 Proof
   rpt gen_tac >> strip_tac >> simp[expr_sim_def] >> rpt strip_tac >>
@@ -294,7 +320,8 @@ Proof
   >- (simp[is_terminator_def] >> strip_tac >>
       drule_all step_name_word >> simp[]) >>
   strip_tac >> first_x_assum (irule_at Any) >> rpt strip_tac >>
-  gvs[expr_post_def, expr_val_rel_def, vyperASTTheory.expr_type_def,
+  gvs[expr_post_def, expr_val_rel_def, expr_val_at_def,
+      vyperASTTheory.expr_type_def,
       typed_val_to_w256_word_value]
 QED
 
@@ -302,7 +329,8 @@ val literal_word_tac =
   gvs[lower_value_def, compile_expr_def, comp_bind_def, comp_return_def,
       compile_literal_vv_def, unwrap_value_def, evaluate_literal_def] >>
   irule frag_exec_refl >>
-  simp[expr_post_def, expr_val_rel_def, vyperASTTheory.expr_type_def,
+  simp[expr_post_def, expr_val_rel_def, expr_val_at_def,
+       vyperASTTheory.expr_type_def,
        eval_operand_def, typed_val_to_w256_word_value, word_value_def] >>
   simp[val_to_w256_def];
 
@@ -384,7 +412,8 @@ Proof
                               FLOOKUP s.vs_allocas aid = SOME b) /\
                      s.vs_memory = s0.vs_memory`,
                 `\r. F`] >>
-  simp[expr_post_def, expr_val_rel_def, vyperASTTheory.expr_type_def] >>
+  simp[expr_post_def, expr_val_rel_def, expr_val_at_def,
+       vyperASTTheory.expr_type_def] >>
   Cases_on `item` >>
   gvs[compile_env_var_def, evaluate_builtin_def] >>
   drule emit_op_frag >> disch_then irule >>
