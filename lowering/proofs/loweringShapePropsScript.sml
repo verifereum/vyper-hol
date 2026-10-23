@@ -457,7 +457,27 @@ Theorem compile_fallback_body_shape:
       (compile_fallback_body cenv is_payable is_nr nkey use_trans is_view
          body ret_type) (\x st. T)
 Proof
-  cheat
+  let
+    val inst_simp = simp[label_or_plain_def, plain_operand_def,
+      lowered_inst_ok_def, raw_opcode_ok_def, inst_shape_ok_def,
+      label_positions_ok_def, is_read0_opcode_def, jump_labels_ok_def,
+      is_terminator_def, is_param_opcode_def, mk_inst_def,
+      stackPlanTypesTheory.is_label_operand_def]
+  in
+    rpt gen_tac >> simp[fallback_shape_ok_def] >> strip_tac >>
+    simp[compile_fallback_body_def] >>
+    irule shape_step_ignore_bind >> qexists_tac `\x st. T` >>
+    reverse conj_tac
+    >- (Cases_on `is_payable` >> simp[shape_step_return] >>
+        ntac 2
+          (irule shape_step_bind >>
+           qexists_tac `\x st. plain_operand st x` >>
+           reverse conj_tac
+           >- (irule shape_step_emit_op_pre >> inst_simp) >>
+           gen_tac >> BETA_TAC) >>
+        irule shape_step_emit_void_pre >> inst_simp) >>
+    gen_tac >> BETA_TAC >> irule compile_guarded_body_shape >> simp[]
+  end
 QED
 
 (* The PARAM/RETPC_PARAM prologue, then the body via compile_stmt_shape with
