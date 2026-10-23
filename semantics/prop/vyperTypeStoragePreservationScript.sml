@@ -69,7 +69,7 @@ QED
 Definition oracle_storage_ok_def:
   oracle_storage_ok cx st <=>
     !os. st.outcomes = SOME os ==>
-      EVERY (\co. co.co_success ==>
+      EVERY (\co.
         contract_storage_well_formed cx
           (st with <|accounts := co.co_accounts; tStorage := co.co_tStorage|>)) os
 End
@@ -99,7 +99,7 @@ QED
 Theorem oracle_storage_ok_payload:
   oracle_storage_ok cx st <=>
     !os. st.outcomes = SOME os ==>
-      EVERY (\co. co.co_success ==>
+      EVERY (\co.
         contract_storage_well_formed cx
           (empty_state with <|accounts := co.co_accounts;
                               tStorage := co.co_tStorage|>)) os

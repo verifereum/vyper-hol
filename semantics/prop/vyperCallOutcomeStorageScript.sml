@@ -141,6 +141,64 @@ Proof
   fs[runtime_storage_consistent_def]
 QED
 
+(* Creation adopts the payload even on failure (the creator nonce survives). *)
+Theorem take_create_outcome_outcome_suffix:
+  take_create_outcome kind value code st = (res,st') ==>
+  outcome_suffix st.outcomes st'.outcomes
+Proof
+  rpt strip_tac >> Cases_on `st.outcomes`
+  >- (gvs[take_create_outcome_NONE] >> simp[]) >>
+  drule_all take_create_outcome_suffix >> strip_tac >>
+  simp[outcome_suffix_def] >> qexists_tac `prefix` >> simp[]
+QED
+
+Theorem take_create_outcome_storage_suffix:
+  contract_storage_well_formed cx st /\ oracle_storage_ok cx st /\
+  take_create_outcome kind value code st = (res,st') ==>
+  contract_storage_well_formed cx st' /\ oracle_storage_ok cx st' /\
+  outcome_suffix st.outcomes st'.outcomes
+Proof
+  rpt strip_tac >> drule take_create_outcome_frame >>
+  simp[evaluation_state_component_equality] >> strip_tac >>
+  imp_res_tac take_create_outcome_outcome_suffix >>
+  imp_res_tac oracle_storage_ok_suffix >> simp[] >>
+  irule contract_storage_well_formed_backends_frame >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem take_create_outcome_storage_payload:
+  contract_storage_well_formed cx st /\ oracle_storage_ok cx st /\
+  take_create_outcome kind value code st = (INL (rq,co),st1) ==>
+  contract_storage_well_formed cx
+    (st with <|accounts := co.co_accounts; tStorage := co.co_tStorage|>)
+Proof
+  rpt strip_tac >> drule take_create_outcome_success >> strip_tac >>
+  Cases_on `os` >>
+  gvs[take_outcome_def, oracle_storage_ok_def] >>
+  gvs[create_outcome_request_def, failed_outcome_def] >>
+  irule contract_storage_well_formed_backends_frame >>
+  qexists_tac `st` >> simp[]
+QED
+
+Theorem take_adopt_create_outcome_storage_suffix:
+  kind <> MessageCall /\
+  contract_storage_well_formed cx st /\ oracle_storage_ok cx st /\
+  take_create_outcome kind value code st = (INL (rq,co),st1) /\
+  adopt_call_outcome rq co st1 = (INL (),st2) ==>
+  contract_storage_well_formed cx st2 /\ oracle_storage_ok cx st2 /\
+  outcome_suffix st.outcomes st2.outcomes
+Proof
+  rpt strip_tac >> drule_all take_create_outcome_storage_suffix >> strip_tac >>
+  drule_all take_create_outcome_storage_payload >> strip_tac >>
+  drule take_create_outcome_success >> strip_tac >>
+  gvs[adopt_create_outcome_equation] >>
+  FIRST [
+    irule contract_storage_well_formed_backends_frame >>
+    qexists_tac `st with <|accounts := co.co_accounts; tStorage := co.co_tStorage|>` >>
+    simp[] >> NO_TAC,
+    irule oracle_storage_ok_suffix >> qexists_tac `st` >> simp[]]
+QED
+
 (* ===== Real consuming continuations ===== *)
 Theorem checked_call_outcome_storage_suffix:
   runtime_storage_consistent env cx st /\ oracle_storage_ok cx st /\
@@ -310,3 +368,10 @@ Proof
       gvs[] >> drule_all take_call_outcome_storage_suffix >> simp[]) >>
   gvs[] >> drule_all take_call_outcome_storage_suffix >> simp[]
 QED
+
+(* These oracle storage interfaces and their prerequisites must be kernel closed. *)
+val () = List.app (fn thy => List.app (fn (name,th) =>
+  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
+  in if List.all (fn s => s = "DISK_THM") oracles andalso null axioms
+     then () else raise Fail ("Incomplete storage boundary: " ^ thy ^ "." ^ name)
+  end) (DB.thms thy)) ["vyperTypeStoragePreservation", "vyperCallOutcomeStorage"];
