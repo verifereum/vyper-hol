@@ -362,6 +362,88 @@ Proof
   simp[invalid_expr_call_shape]
 QED
 
+Theorem shape_step_emit_op_plain[local]:
+  !internal R opc ops.
+  shape_stable R /\ ~MEM opc [GAS; RETPC_PARAM] /\
+  (!st id outs. R st /\ EVERY (plain_operand st) ops ==>
+     lowered_inst_ok internal (mk_inst id opc ops outs)) ==>
+  shape_step internal compiler_label
+    (\st. R st /\ EVERY (plain_operand st) ops) (emit_op opc ops)
+    (\v st. R st /\ plain_operand st v)
+Proof
+  rpt gen_tac >> strip_tac >> simp[shape_step_def] >> rpt gen_tac >> strip_tac >>
+  mp_tac (Q.SPECL [`internal`, `compiler_label`, `R`, `opc`, `ops`]
+                  shape_step_emit_op) >>
+  (impl_tac >- (simp[] >> metis_tac[])) >>
+  simp[shape_step_def] >> disch_then irule >>
+  simp[] >> gvs[EVERY_MEM, label_or_plain_def]
+QED
+
+Theorem shape_step_emit_inst_plain[local]:
+  shape_stable R /\ ~MEM opc [GAS; RETPC_PARAM] /\
+  (!st id. R st /\ EVERY (plain_operand st) ops ==>
+     lowered_inst_ok internal (mk_inst id opc ops outs)) ==>
+  shape_step internal compiler_label
+    (\st. R st /\ EVERY (plain_operand st) ops) (emit_inst opc ops outs)
+    (\v st. R st)
+Proof
+  rpt gen_tac >> strip_tac >> simp[shape_step_def] >> rpt gen_tac >> strip_tac >>
+  mp_tac (Q.SPECL [`internal`, `compiler_label`, `R`, `opc`, `ops`, `outs`]
+                  shape_step_emit_inst) >>
+  (impl_tac >- (simp[] >> metis_tac[])) >>
+  simp[shape_step_def] >> disch_then irule >>
+  simp[] >> gvs[EVERY_MEM, label_or_plain_def]
+QED
+
+Theorem shape_step_emit_void_plain[local]:
+  shape_stable R /\ ~MEM opc [GAS; RETPC_PARAM] /\
+  (!st id. R st /\ EVERY (plain_operand st) ops ==>
+     lowered_inst_ok internal (mk_inst id opc ops [])) ==>
+  shape_step internal compiler_label
+    (\st. R st /\ EVERY (plain_operand st) ops) (emit_void opc ops)
+    (\v st. R st)
+Proof
+  `emit_void opc ops = emit_inst opc ops []` by
+    simp[FUN_EQ_THM, emit_void_eq, emit_inst_eq] >>
+  pop_assum SUBST1_TAC >> strip_tac >>
+  ho_match_mp_tac shape_step_emit_inst_plain >> simp[] >>
+  first_assum ACCEPT_TAC
+QED
+
+Theorem compile_alloc_buffer_shape[local]:
+  shape_stable R ==>
+  shape_step internal compiler_label R (compile_alloc_buffer nbytes)
+    (\buf st. R st /\ plain_operand st buf.buf_operand)
+Proof
+  strip_tac >> simp[compile_alloc_buffer_def] >>
+  match_mp_tac shape_step_bind >>
+  qexists_tac `\op st. R st /\ plain_operand st op` >> conj_tac
+  >- (mp_tac (Q.SPECL [`internal`, `compiler_label`, `R`, `ALLOCA`,
+                        `[Lit (n2w nbytes)]`] shape_step_emit_op) >>
+      simp[SF ETA_ss, lowered_inst_ok_def, mk_inst_def, raw_opcode_ok_def,
+           inst_shape_ok_def, label_positions_ok_def, jump_labels_ok_def,
+           is_read0_opcode_def,
+           is_terminator_def, is_param_opcode_def, label_or_plain_def,
+           plain_operand_def, stackPlanTypesTheory.is_label_operand_def]) >>
+  gen_tac >> simp[] >> irule shape_step_return >> simp[]
+QED
+
+Theorem compile_ptr_load_shape[local]:
+  shape_stable R /\ loc <> LocCode ==>
+  shape_step internal compiler_label (\st. R st /\ plain_operand st op)
+    (compile_ptr_load is_ctor loc op)
+    (\v st. R st /\ plain_operand st v)
+Proof
+  Cases_on `loc` >> simp[compile_ptr_load_def] >> strip_tac >>
+  qmatch_goalsub_abbrev_tac `emit_op opc [op]` >>
+  mp_tac (Q.SPECL [`internal`, `R`, `opc`, `[op]`]
+                  shape_step_emit_op_plain) >>
+  simp[Abbr `opc`, lowered_inst_ok_def, mk_inst_def, raw_opcode_ok_def,
+       inst_shape_ok_def, label_positions_ok_def, jump_labels_ok_def,
+       is_read0_opcode_def, is_terminator_def, is_param_opcode_def,
+       plain_operand_def]
+QED
+
 (* For alan, by compile_expr_ind; one case per compile_expr_body clause and
    builtin.  The builtin families (abiEncoder, builtin*, context copy loops)
    are plain shape_step facts under plain operands.  Under value_shape_ok no
