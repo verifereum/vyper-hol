@@ -34,7 +34,7 @@
 
 Theory exprLowering
 Ancestors
-  pred_set list exprCallBounds vyperAST
+  pred_set list exprCallBounds vyperAST byte keccak
   emitHelper compileEnv context valueEncoding venomInst vyperValueOperation
   builtinAbi builtinBytes builtinCreate
   builtinHashing builtinMath builtinMisc builtinSimple
@@ -536,6 +536,14 @@ End
    For constant literals: hash is a compile-time literal.
    For variables: runtime SHA3.
    Mirrors Python: expr.py _get_bytestring_hash *)
+Definition bytestring_literal_hash_def:
+  bytestring_literal_hash (Literal _ (StringL s)) =
+    SOME (word_of_bytes_be (Keccak_256_w64 (MAP (n2w o ORD) s)) : bytes32) /\
+  bytestring_literal_hash (Literal _ (BytesL bs)) =
+    SOME (word_of_bytes_be (Keccak_256_w64 bs) : bytes32) /\
+  bytestring_literal_hash _ = NONE
+End
+
 Definition compile_bytestring_hash_def:
 (* Hash a bytestring for comparison or log topics.
    For memory: data at ptr+32, length at MLOAD(ptr).
@@ -555,31 +563,44 @@ End
 (* x in [a, b, c] = (x==a) or (x==b) or (x==c)
    x not in [a, b, c] = (x!=a) and (x!=b) and (x!=c)
    Mirrors Python: expr.py _lower_list_literal_membership *)
-(* Combine membership comparisons: fold OR for "in", fold AND-ISZERO for "not in" *)
+(* Emit every equality before combining results, matching Vyper's order. *)
+Definition emit_membership_eqs_def:
+  emit_membership_eqs needle [] = return [] /\
+  emit_membership_eqs needle (elem::rest) =
+    do c <- emit_op EQ [needle; elem];
+       cs <- emit_membership_eqs needle rest;
+       return (c::cs)
+    od
+End
+
+Definition fold_membership_or_def:
+  fold_membership_or acc [] = return acc /\
+  fold_membership_or acc (c::cs) =
+    do r <- emit_op OR [acc; c]; fold_membership_or r cs od
+End
+
+Definition fold_membership_and_def:
+  fold_membership_and acc [] = return acc /\
+  fold_membership_and acc (c::cs) =
+    do z <- emit_op ISZERO [c];
+       r <- emit_op AND [acc; z];
+       fold_membership_and r cs
+    od
+End
+
 Definition compile_list_membership_in_def:
-  compile_list_membership_in needle [] =
-    return (Lit 0w) ∧
-  compile_list_membership_in needle [elem] =
-    emit_op EQ [needle; elem] ∧
-  compile_list_membership_in needle (elem::rest) =
-    do eq_res <- emit_op EQ [needle; elem];
-       rest_res <- compile_list_membership_in needle rest;
-       emit_op OR [eq_res; rest_res]
+  compile_list_membership_in needle elems =
+    do cs <- emit_membership_eqs needle elems;
+       case cs of [] => return (Lit 0w)
+                | c::rest => fold_membership_or c rest
     od
 End
 
 Definition compile_list_membership_notin_def:
-  compile_list_membership_notin needle [] =
-    return (Lit 1w) ∧
-  compile_list_membership_notin needle [elem] =
-    do eq_res <- emit_op EQ [needle; elem];
-       emit_op ISZERO [eq_res]
-    od ∧
-  compile_list_membership_notin needle (elem::rest) =
-    do eq_res <- emit_op EQ [needle; elem];
-       neq_res <- emit_op ISZERO [eq_res];
-       rest_res <- compile_list_membership_notin needle rest;
-       emit_op AND [neq_res; rest_res]
+  compile_list_membership_notin needle elems =
+    do cs <- emit_membership_eqs needle elems;
+       case cs of [] => return (Lit 1w)
+       | c::rest => do z <- emit_op ISZERO [c]; fold_membership_and z rest od
     od
 End
 
@@ -591,7 +612,7 @@ End
    Mirrors Python: expr.py _lower_array_membership *)
 Definition compile_array_membership_loop_def:
   compile_array_membership_loop needle arr_op len_op
-      elem_size offset_base load_opc is_in =
+      elem_size offset_base load_opc bound_opt is_in =
     do (* Pre-allocate result variable *)
        result_var <- fresh_var;
        (* Create blocks *)
@@ -608,6 +629,14 @@ Definition compile_array_membership_loop_def:
        idx_var <- fresh_var;
        emit_inst ASSIGN [Lit 0w] [idx_var];
        emit_inst ASSIGN [Lit 0w] [result_var];
+       (* DynArray bounds check belongs in the initialized entry block. *)
+       (case bound_opt of
+          SOME cap =>
+            do inv <- emit_op GT [len_op; Lit (n2w cap)];
+               valid <- emit_op ISZERO [inv];
+               emit_inst ASSERT [valid] []
+            od
+        | NONE => return ());
        emit_inst JMP [Label cond_lbl] [];
        (* Cond: check idx == length *)
        new_block cond_lbl;
@@ -665,18 +694,9 @@ Definition compile_var_array_membership_def:
                     (case rhs_ty of
                        ArrayT _ (Fixed n) => return (Lit (n2w n))
                      | _ => return (Lit 0w)));
-       (* DynArray bounds check: assert length <= capacity *)
-       (if is_dyn then
-          case rhs_ty of
-            ArrayT _ (Dynamic cap) =>
-              do inv <- emit_op GT [len_op; Lit (n2w cap)];
-                 valid <- emit_op ISZERO [inv];
-                 emit_inst ASSERT [valid] []
-              od
-          | _ => return ()
-        else return ());
        compile_array_membership_loop needle arr_op len_op
-         elem_sz offset_base load_opc is_in
+         elem_sz offset_base load_opc
+         (case rhs_ty of ArrayT _ (Dynamic cap) => SOME cap | _ => NONE) is_in
     od
 End
 
@@ -2624,11 +2644,18 @@ Definition compile_builtin_dispatch_body_def:
                 as_stack_val ret_ty
                   (compile_var_array_membership cenv needle arr_vv rhs_ty is_in st2)
           else if is_bytestring_type op_ty ∧ (op = Eq ∨ op = NotEq) then
-            (* lower_value handles ensure_in_memory for complex types *)
-            let (m1, st1) = lower_value compile_expr cenv op_ty e1 st in
-            let (m2, st2) = lower_value compile_expr cenv op_ty e2 st1 in
-            let (h1, st3) = compile_bytestring_hash m1 st2 in
-            let (h2, st4) = compile_bytestring_hash m2 st3 in
+            (* Finish hashing the left operand before lowering the right.
+               Literals need neither materialisation nor runtime SHA3. *)
+            let (h1, st2) =
+              (case bytestring_literal_hash e1 of
+                 SOME h => (Lit h, st)
+               | NONE => let (m1, st1) = lower_value compile_expr cenv op_ty e1 st in
+                         compile_bytestring_hash m1 st1) in
+            let (h2, st4) =
+              (case bytestring_literal_hash e2 of
+                 SOME h => (Lit h, st2)
+               | NONE => let (m2, st3) = lower_value compile_expr cenv op_ty e2 st2 in
+                         compile_bytestring_hash m2 st3) in
             if op = Eq then as_stack_val ret_ty (emit_op EQ [h1; h2] st4)
             else
               let (eq_result, st5) = emit_op EQ [h1; h2] st4 in

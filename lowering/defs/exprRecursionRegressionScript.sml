@@ -88,7 +88,7 @@ Theorem calldata_len_dispatch:
   compile_builtin_dispatch_body cfn cenv ret_ty ty CalldataLen [] st =
     as_stack_val ret_ty (compile_builtin_calldatasize st)
 Proof
-  simp[compile_builtin_dispatch_body_def]
+  simp[compile_builtin_dispatch_body_def, pairTheory.UNCURRY]
 QED
 
 (* The start is lowered exactly once; the fixed length is not an AST operand. *)
@@ -99,7 +99,7 @@ Theorem calldata_slice_dispatch:
        (compile_slice_calldata start_op (Lit (n2w n))
           (type_memory_bytes cenv ret_ty) st1))
 Proof
-  simp[compile_builtin_dispatch_body_def]
+  simp[compile_builtin_dispatch_body_def, pairTheory.UNCURRY]
 QED
 
 (* Calldata is copied directly, without lowering a fictitious bytes operand. *)
@@ -132,3 +132,61 @@ Definition opaque_callback_probe_def:
 Termination
   WF_REL_TAC `measure (λ(cenv,ty,e,st). expr_size e)` >> simp[]
 End
+
+(* Bytestring comparisons: literal fast path and left-to-right hashing. *)
+Theorem bytestring_string_literal_selection:
+  (case bytestring_literal_hash (Literal ty (StringL s)) of
+     SOME h => (Lit h,st)
+   | NONE => fallback st) =
+  (Lit (word_of_bytes_be (Keccak_256_w64 (MAP (n2w o ORD) s)) : bytes32),st)
+Proof
+  simp[bytestring_literal_hash_def]
+QED
+
+Theorem bytestring_bytes_literal_selection:
+  (case bytestring_literal_hash (Literal ty (BytesL bs)) of
+     SOME h => (Lit h,st)
+   | NONE => fallback st) =
+  (Lit (word_of_bytes_be (Keccak_256_w64 bs) : bytes32),st)
+Proof
+  simp[bytestring_literal_hash_def]
+QED
+
+(* In the mixed case, the runtime left hash is completed before the
+   literal right digest is compared; the right literal is never lowered. *)
+Theorem bytestring_mixed_eq_dispatch:
+  is_bytestring_type (expr_type e) /\ bytestring_literal_hash e = NONE ==>
+  compile_builtin_dispatch_body cfn cenv ret_ty ty (Bop Eq)
+    [e; Literal ann (BytesL bs)] st =
+  (let (p,st1) = lower_value cfn cenv (expr_type e) e st in
+   let (h,st2) = compile_bytestring_hash p st1 in
+   as_stack_val ret_ty
+     (emit_op EQ [h; Lit (word_of_bytes_be (Keccak_256_w64 bs))] st2))
+Proof
+  simp[compile_builtin_dispatch_body_def, bytestring_literal_hash_def,
+       pairTheory.UNCURRY]
+QED
+
+Theorem bytestring_runtime_hash_order:
+  is_bytestring_type (expr_type e1) /\
+  bytestring_literal_hash e1 = NONE /\ bytestring_literal_hash e2 = NONE ==>
+  compile_builtin_dispatch_body cfn cenv ret_ty ty (Bop Eq) [e1;e2] st =
+  (let (p1,st1) = lower_value cfn cenv (expr_type e1) e1 st in
+   let (h1,st2) = compile_bytestring_hash p1 st1 in
+   let (p2,st3) = lower_value cfn cenv (expr_type e1) e2 st2 in
+   let (h2,st4) = compile_bytestring_hash p2 st3 in
+   as_stack_val ret_ty (emit_op EQ [h1;h2] st4))
+Proof
+  simp[compile_builtin_dispatch_body_def, pairTheory.UNCURRY]
+QED
+
+val () = List.app (fn (name, th) =>
+  let val (oracles, _) = Tag.dest_tag (Thm.tag th) in
+    if List.all (fn s => s = "DISK_THM") oracles then
+      print ("Kernel-closed: " ^ name ^ "\n")
+    else raise Fail ("Unexpected oracle dependency: " ^ name)
+  end)
+  [("bytestring_string_literal_selection", bytestring_string_literal_selection),
+   ("bytestring_bytes_literal_selection", bytestring_bytes_literal_selection),
+   ("bytestring_mixed_eq_dispatch", bytestring_mixed_eq_dispatch),
+   ("bytestring_runtime_hash_order", bytestring_runtime_hash_order)];
