@@ -7,7 +7,7 @@
 Theory valueEncodingProofs
 Ancestors
   list rich_list venomMemProofs
-  valueEncoding vyperStorage vyperValue venomState
+  valueEncoding vyperStorage vyperValue venomState vyperABI vyperTyping contractABI
 Libs
   blastLib intLib
 
@@ -876,6 +876,47 @@ Proof
        GSYM mem_bytes_at_def, byteTheory.word_to_bytes_def,
        byteTheory.LENGTH_word_to_bytes_aux, dimindex_256,
        TAKE_LENGTH_TOO_LONG]
+QED
+
+Theorem val_in_memory_base_abi:
+  !env bt tv v av off mem.
+    evaluate_type env (BaseT bt) = SOME tv /\
+    ~is_dynamic (vyper_to_abi_type env (BaseT bt)) /\
+    value_has_type tv v /\ vyper_to_abi env (BaseT bt) v = SOME av /\
+    val_in_memory tv v off mem ==>
+    mem_bytes_at off (type_memory_size tv) mem =
+      enc (vyper_to_abi_type env (BaseT bt)) av
+Proof
+  Cases_on `bt` >> Cases_on `v` >>
+  simp[evaluate_type_def, vyper_to_abi_type_def, vyper_to_abi_def,
+       vyper_to_abi_base_def, is_dynamic_def] >>
+  rpt strip_tac >> gvs[type_memory_size_def, value_has_type_def,
+       val_in_memory_def] >>
+  simp[mem_bytes_at_word] >>
+  gvs[typed_val_to_w256_def, val_to_w256_def, enc_def, enc_number_def]
+  >- (`~(i < 0)` by intLib.COOPER_TAC >> simp[integer_wordTheory.i2w_def]) 
+  >- (Cases_on `b` >> simp[])
+  >- (Cases_on `b` >>
+      gvs[vyper_base_to_abi_type_def, GSYM is_dynamic_def, AllCaseEqs(),
+          value_has_type_def, type_memory_size_def, typed_val_to_w256_def] >>
+      simp[mem_bytes_at_word] >>
+      gvs[typed_val_to_w256_def, enc_def] >>
+      qspec_then `PAD_RIGHT (0w:byte) 32 l` mp_tac
+        TAKE_word_to_bytes_be_word_of_bytes_be >>
+      simp[PAD_RIGHT, REPLICATE_GENLIST, LENGTH_word_to_bytes_256,
+           byteTheory.word_to_bytes_be_def, TAKE_LENGTH_TOO_LONG]) >>
+  simp[GSYM wordsTheory.w2w_def] >> AP_THM_TAC >> AP_TERM_TAC >>
+  dep_rewrite.DEP_REWRITE_TAC[w2w_word_of_bytes_be_pad_left_proof] >>
+  simp[dividesTheory.divides_def]
+QED
+
+Theorem val_in_memory_flag_abi:
+  !m k off mem.
+    val_in_memory (FlagTV m) (FlagV k) off mem ==>
+    mem_bytes_at off 32 mem = enc (Uint 256) (NumV k)
+Proof
+  rpt strip_tac >> simp[mem_bytes_at_word] >>
+  gvs[val_in_memory_def, val_to_w256_def, enc_def, enc_number_def]
 QED
 
 (* Two memories that agree on a window agree on every sub-window, and on
