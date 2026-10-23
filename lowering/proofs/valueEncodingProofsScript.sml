@@ -7,7 +7,8 @@
 Theory valueEncodingProofs
 Ancestors
   list rich_list venomMemProofs
-  valueEncoding vyperStorage vyperValue venomState vyperABI vyperTyping vyperTypeABI contractABI
+  valueEncoding vyperStorage vyperValue venomState
+  vyperABI vyperTyping vyperTypeABI contractABI
 Libs
   blastLib intLib
 
@@ -1184,7 +1185,7 @@ QED
 
 Finalise val_in_memory_static_abi_mutual
 
-Theorem val_in_memory_static_abi:
+Theorem val_in_memory_static_abi_proof:
   !env ty tv v av off mem.
     evaluate_type env ty = SOME tv /\
     ~is_dynamic (vyper_to_abi_type env ty) /\ value_has_type tv v /\

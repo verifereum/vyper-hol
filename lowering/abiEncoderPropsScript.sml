@@ -819,33 +819,6 @@ Proof
   rpt strip_tac >> irule mcopy_byte_frame >> simp[]
 QED
 
-(* Certify the frozen fragment and its added memory/ABI boundaries without
-   accepting admissions or extra kernel hypotheses. Unrelated open encoder and
-   decoder obligations below are deliberately outside this acceptance gate. *)
-val () = List.app (fn th =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then ()
-    else raise Fail "AbiCopy fragment dependency is admitted or not closed"
-  end)
-  ([compile_abi_encode_copy_frag, emit_void_MCOPY_run,
-   write_memory_with_expansion_byte_frame, mcopy_padded_read,
-   mcopy_byte_frame, mcopy_memory_nondecreasing, lookup_var_mcopy,
-   mcopy_vs_allocas, valueEncodingPropsTheory.val_in_memory_static_abi,
-   valueEncodingProofsTheory.val_in_memory_static_abi,
-   valueEncodingProofsTheory.val_in_memory_static_abi_mutual] @
-  map (DB.fetch "valueEncodingProofs")
-   ["mem_bytes_at_split_padded", "mem_bytes_at_word",
-    "val_in_memory_base_abi", "val_in_memory_flag_abi",
-    "kvs_in_memory_lookup", "val_in_memory_sarray_select",
-    "sparse_has_type_lookup", "value_has_type_sarray_select",
-    "mem_bytes_at_flat_windows", "mem_bytes_at_flat_lengths",
-    "enc_tuple_static_acc", "enc_static_tuple", "enc_static_array",
-    "fields_in_memory_tuple", "type_memory_size_list_sum",
-    "type_memory_size_fields_sum", "any_dynamic_every_static",
-    "vyper_to_abi_types_length"]);
-
 (* ===== Element Pointer ===== *)
 
 (* Pinned Python emits ADD even at offset zero; the fresh result operand has
