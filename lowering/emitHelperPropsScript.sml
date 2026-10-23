@@ -557,7 +557,7 @@ Theorem state_rel_update_var:
 Proof
   rw[state_rel_def, update_var_def, vars_rel_def, storage_rel_def,
      transient_rel_def, immutables_rel_def, logs_rel_def, call_ctx_rel_def,
-     contract_storage_def, contract_transient_def]
+     contract_storage_def, contract_transient_def] >> metis_tac[]
 QED
 
 (* ===== Fresh variable invariant ===== *)
