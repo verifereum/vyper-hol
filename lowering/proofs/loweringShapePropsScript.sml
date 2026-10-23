@@ -6509,6 +6509,51 @@ Proof
 QED
 end
 
+Theorem compile_expr_body_addmod_names[local]:
+  compile_expr_body cfn bfn tfn ce ty
+    (Builtin ann AddMod [Name at a; Name bt b; Name mt m]) =
+  compile_addmod_names ce ann at a bt b mt m
+Proof
+  simp[FUN_EQ_THM, compile_expr_body_def, expr_type_def]
+QED
+
+Theorem compile_expr_body_mulmod_names[local]:
+  compile_expr_body cfn bfn tfn ce ty
+    (Builtin ann MulMod [Name at a; Name bt b; Name mt m]) =
+  compile_mulmod_names ce ann at a bt b mt m
+Proof
+  simp[FUN_EQ_THM, compile_expr_body_def, expr_type_def]
+QED
+
+Theorem compile_expr_body_powmod_names[local]:
+  compile_expr_body cfn bfn tfn ce ty
+    (Builtin ann PowMod256 [Name at a; Name bt b]) =
+  compile_powmod256_names ce ann at a bt b
+Proof
+  simp[FUN_EQ_THM, compile_expr_body_def, expr_type_def]
+QED
+
+Theorem compile_expr_body_builtin_default[local]:
+  ~(?at a bt b mt m. bi = AddMod /\ es = [Name at a; Name bt b; Name mt m]) /\
+  ~(?at a bt b mt m. bi = MulMod /\ es = [Name at a; Name bt b; Name mt m]) /\
+  ~(?at a bt b. bi = PowMod256 /\ es = [Name at a; Name bt b]) ==>
+  compile_expr_body cfn bfn tfn ce ty (Builtin ann bi es) = bfn ce ann ty bi es
+Proof
+  strip_tac >> Cases_on `es`
+  >- simp[FUN_EQ_THM, compile_expr_body_def, expr_type_def] >>
+  rename1 `h::rest` >> Cases_on `h`
+  >> TRY (simp[FUN_EQ_THM, compile_expr_body_def, expr_type_def] >> NO_TAC) >>
+  Cases_on `rest`
+  >- simp[FUN_EQ_THM, compile_expr_body_def, expr_type_def] >>
+  rename1 `Name at a :: h :: rest` >> Cases_on `h`
+  >> TRY (simp[FUN_EQ_THM, compile_expr_body_def, expr_type_def] >> NO_TAC) >>
+  Cases_on `rest`
+  >- (Cases_on `bi` >> gvs[FUN_EQ_THM, compile_expr_body_def, expr_type_def]) >>
+  rename1 `Name at a :: Name bt b :: h :: rest` >> Cases_on `h`
+  >> TRY (simp[FUN_EQ_THM, compile_expr_body_def, expr_type_def] >> NO_TAC) >>
+  Cases_on `rest` >> Cases_on `bi` >> gvs[FUN_EQ_THM, compile_expr_body_def, expr_type_def]
+QED
+
 Theorem compile_expr_body_shape[local]:
   (!ce t child. ~supported_expr_exists expr_shape_root child ==>
      shape_step internal compiler_label (\st. cenv_shape_ok st ce)
@@ -6630,15 +6675,18 @@ Resume compile_expr_body_shape[pop]:
   rename1 `Pop ann target` >>
   CONV_TAC (LAND_CONV (REWR_CONV (GSYM ETA_AX))) >>
   simp[compile_expr_body_def, expr_type_def] >> CONV_TAC (DEPTH_CONV ETA_CONV) >>
-  Cases_on `target` >> simp[] >>
-  suspend "pop_cases"
-QED
-Resume compile_expr_body_shape[pop_cases]:
-  markerLib.RESUME_TAC >> shape_pop_case_tac
+  Cases_on `target` >> simp[] >> shape_pop_case_tac
 QED
 
 Resume compile_expr_body_shape[builtin]:
-  FAIL_TAC "body builtin"
+  Cases_on `?at a bt b mt m. bi = AddMod /\ es = [Name at a; Name bt b; Name mt m]`
+  >- (gvs[] >> simp[compile_expr_body_addmod_names, cj 1 compile_mod_names_shape]) >>
+  Cases_on `?at a bt b mt m. bi = MulMod /\ es = [Name at a; Name bt b; Name mt m]`
+  >- (gvs[] >> simp[compile_expr_body_mulmod_names, cj 2 compile_mod_names_shape]) >>
+  Cases_on `?at a bt b. bi = PowMod256 /\ es = [Name at a; Name bt b]`
+  >- (gvs[] >> simp[compile_expr_body_powmod_names, cj 3 compile_mod_names_shape]) >>
+  drule_all compile_expr_body_builtin_default >> disch_then (fn th => rewrite_tac[th]) >>
+  first_x_assum irule >> gvs[expr_shape_builtin]
 QED
 
 Finalise compile_expr_body_shape
