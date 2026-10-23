@@ -3019,6 +3019,161 @@ QED
 
 Finalise compile_log_shape
 
+Theorem compile_dynarray_to_storage_shape[local]:
+  !internal src dst ew ems transient.
+    shape_step internal compiler_label
+      (\st. plain_operand st src /\ plain_operand st dst)
+      (compile_dynarray_to_storage src dst ew ems transient) (\u st. T)
+Proof
+  rpt gen_tac >> simp[Once compile_dynarray_to_storage_def] >>
+  stmt_bind `\len st. plain_operand st len /\
+    (plain_operand st src /\ plain_operand st dst)` `len`
+    (stmt_frame_emit `\st. plain_operand st src /\ plain_operand st dst`) >>
+  stmt_bind `\l st. (plain_operand st len /\
+    (plain_operand st src /\ plain_operand st dst)) /\ compiler_label l` `cond_lbl`
+    (ho_match_mp_tac shape_step_fresh_label >>
+     simp[shape_stable_conj, stmt_shape_stable_plain]) >>
+  reverse (Cases_on `compiler_label cond_lbl`) >- simp[shape_step_def] >> simp[] >>
+  stmt_bind `\l st. (plain_operand st len /\
+    (plain_operand st src /\ plain_operand st dst)) /\ compiler_label l` `body_lbl`
+    (ho_match_mp_tac shape_step_fresh_label >>
+     simp[shape_stable_conj, stmt_shape_stable_plain]) >>
+  reverse (Cases_on `compiler_label body_lbl`) >- simp[shape_step_def] >> simp[] >>
+  stmt_bind `\l st. (plain_operand st len /\
+    (plain_operand st src /\ plain_operand st dst)) /\ compiler_label l` `exit_lbl`
+    (ho_match_mp_tac shape_step_fresh_label >>
+     simp[shape_stable_conj, stmt_shape_stable_plain]) >>
+  reverse (Cases_on `compiler_label exit_lbl`) >- simp[shape_step_def] >> simp[] >>
+  stmt_bind `\ctr st. (plain_operand st len /\
+    (plain_operand st src /\ plain_operand st dst)) /\ plain_operand st (Var ctr)` `ctr`
+    (ho_match_mp_tac shape_step_fresh_var >>
+     simp[shape_stable_conj, stmt_shape_stable_plain]) >>
+  suspend "loop"
+QED
+
+Resume compile_dynarray_to_storage_shape[loop]:
+  qabbrev_tac `live = \st. (plain_operand st len /\ plain_operand st src /\
+                           plain_operand st dst) /\ plain_operand st (Var ctr)` >>
+  stmt_sequence `\u st. live st`
+    (ho_match_mp_tac stmt_shape_emit_inst >>
+     simp[Abbr `live`, shape_stable_conj, stmt_shape_stable_plain, label_or_plain_def] >>
+     stmt_shape_emit_simp >>
+     simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def]) >>
+  stmt_sequence `\u st. live st`
+    (ho_match_mp_tac stmt_shape_jmp >>
+     simp[Abbr `live`, shape_stable_conj, stmt_shape_stable_plain]) >>
+  stmt_sequence `\u st. live st`
+    (ho_match_mp_tac stmt_shape_new_block >>
+     simp[Abbr `live`, shape_stable_conj, stmt_shape_stable_plain]) >>
+  stmt_bind `\lt st. plain_operand st lt /\ live st` `lt`
+    (simp[Abbr `live`] >> stmt_frame_emit
+      `\st. (plain_operand st len /\ plain_operand st src /\ plain_operand st dst) /\
+             plain_operand st (Var ctr)`) >>
+  stmt_bind `\done_op st. plain_operand st done_op /\ live st` `done_op`
+    (ho_match_mp_tac stmt_shape_frame >> qexists_tac `\st. plain_operand st lt` >>
+     simp[Abbr `live`, shape_stable_conj, stmt_shape_stable_plain] >> stmt_plain_emit) >>
+  stmt_sequence `\u st. live st`
+    (stmt_drop (ho_match_mp_tac stmt_shape_jnz >>
+     simp[Abbr `live`, shape_stable_conj, stmt_shape_stable_plain])) >>
+  stmt_sequence `\u st. live st`
+    (ho_match_mp_tac stmt_shape_new_block >>
+     simp[Abbr `live`, shape_stable_conj, stmt_shape_stable_plain]) >>
+  simp[Abbr `live`] >> IF_CASES_TAC
+  >- suspend "single"
+  >> suspend "multi"
+QED
+
+Resume compile_dynarray_to_storage_shape[single]:
+  stmt_bind `\mul st. plain_operand st mul /\ ((plain_operand st len /\
+    plain_operand st src /\ plain_operand st dst) /\ plain_operand st (Var ctr))` `product_op`
+    (stmt_frame_emit `\st. (plain_operand st len /\ plain_operand st src /\
+      plain_operand st dst) /\ plain_operand st (Var ctr)`) >>
+  stmt_bind `\off st. plain_operand st off /\ ((plain_operand st len /\
+    plain_operand st src /\ plain_operand st dst) /\ plain_operand st (Var ctr))` `off`
+    (stmt_frame_emit `\st. plain_operand st product_op`) >>
+  stmt_bind `\source_ptr st. plain_operand st source_ptr /\
+    (plain_operand st len /\ plain_operand st dst /\ plain_operand st (Var ctr))` `source_ptr`
+    (stmt_frame_emit `\st. plain_operand st src /\ plain_operand st off`) >>
+  stmt_bind `\val_op st. plain_operand st val_op /\
+    (plain_operand st len /\ plain_operand st dst /\ plain_operand st (Var ctr))` `val_op`
+    (stmt_frame_emit `\st. plain_operand st source_ptr`) >>
+  stmt_bind `\off st. plain_operand st off /\
+    (plain_operand st val_op /\ plain_operand st len /\ plain_operand st dst /\
+     plain_operand st (Var ctr))` `slot_off`
+    (stmt_frame_emit `\st. plain_operand st val_op /\ plain_operand st len /\
+      plain_operand st dst /\ plain_operand st (Var ctr)`) >>
+  stmt_bind `\ptr st. plain_operand st ptr /\
+    (plain_operand st val_op /\ plain_operand st len /\ plain_operand st dst /\
+     plain_operand st (Var ctr))` `dst_elem`
+    (stmt_frame_emit `\st. plain_operand st dst /\ plain_operand st slot_off`) >>
+  stmt_sequence `\u st. T /\
+    (plain_operand st len /\ plain_operand st dst /\ plain_operand st (Var ctr))`
+    (ho_match_mp_tac stmt_shape_frame >>
+     qexists_tac `\st. plain_operand st dst_elem /\ plain_operand st val_op` >>
+     simp[shape_stable_conj, stmt_shape_stable_plain] >>
+     IF_CASES_TAC >> stmt_plain_void_drop) >>
+  simp[] >> suspend "tail_single"
+QED
+
+Resume compile_dynarray_to_storage_shape[multi]:
+  stmt_bind `\mul st. plain_operand st mul /\ ((plain_operand st len /\
+    plain_operand st src /\ plain_operand st dst) /\ plain_operand st (Var ctr))` `product_op`
+    (stmt_frame_emit `\st. (plain_operand st len /\ plain_operand st src /\
+      plain_operand st dst) /\ plain_operand st (Var ctr)`) >>
+  stmt_bind `\off st. plain_operand st off /\ ((plain_operand st len /\
+    plain_operand st src /\ plain_operand st dst) /\ plain_operand st (Var ctr))` `off`
+    (stmt_frame_emit `\st. plain_operand st product_op`) >>
+  stmt_bind `\source_ptr st. plain_operand st source_ptr /\
+    (plain_operand st len /\ plain_operand st dst /\ plain_operand st (Var ctr))` `source_ptr`
+    (stmt_frame_emit `\st. plain_operand st src /\ plain_operand st off`) >>
+  stmt_bind `\mul st. plain_operand st mul /\
+    (plain_operand st source_ptr /\ plain_operand st len /\ plain_operand st dst /\
+     plain_operand st (Var ctr))` `slot_mul`
+    (stmt_frame_emit `\st. plain_operand st (Var ctr)`) >>
+  stmt_bind `\off st. plain_operand st off /\
+    (plain_operand st source_ptr /\ plain_operand st len /\ plain_operand st dst /\
+     plain_operand st (Var ctr))` `slot_off`
+    (stmt_frame_emit `\st. plain_operand st slot_mul`) >>
+  stmt_bind `\d st. plain_operand st d /\
+    (plain_operand st source_ptr /\ plain_operand st len /\ plain_operand st dst /\
+     plain_operand st (Var ctr))` `dst_elem`
+    (stmt_frame_emit `\st. plain_operand st dst /\ plain_operand st slot_off`) >>
+  stmt_sequence `\u st. T /\
+    (plain_operand st len /\ plain_operand st dst /\ plain_operand st (Var ctr))`
+    (ho_match_mp_tac stmt_shape_frame >>
+     qexists_tac `\st. plain_operand st source_ptr /\ plain_operand st dst_elem` >>
+     simp[shape_stable_conj, stmt_shape_stable_plain, compile_word_copy_loop_shape]) >>
+  simp[] >> suspend "tail"
+QED
+
+val stmt_dyn_storage_tail =
+  stmt_bind `\next st. plain_operand st next /\
+    (plain_operand st len /\ plain_operand st dst /\ plain_operand st (Var ctr))` `next`
+    (stmt_frame_emit `\st. plain_operand st len /\ plain_operand st dst /\
+      plain_operand st (Var ctr)`) >>
+  stmt_sequence `\u st. plain_operand st len /\ plain_operand st dst`
+    (stmt_drop (ho_match_mp_tac stmt_shape_emit_inst >>
+     simp[shape_stable_conj, stmt_shape_stable_plain, label_or_plain_def] >>
+     stmt_shape_emit_simp >>
+     simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def])) >>
+  stmt_sequence `\u st. plain_operand st len /\ plain_operand st dst`
+    (ho_match_mp_tac stmt_shape_jmp >>
+     simp[shape_stable_conj, stmt_shape_stable_plain]) >>
+  stmt_sequence `\u st. plain_operand st len /\ plain_operand st dst`
+    (ho_match_mp_tac stmt_shape_new_block >>
+     simp[shape_stable_conj, stmt_shape_stable_plain]) >>
+  IF_CASES_TAC >> stmt_plain_void_drop;
+
+Resume compile_dynarray_to_storage_shape[tail_single]:
+  stmt_dyn_storage_tail
+QED
+
+Resume compile_dynarray_to_storage_shape[tail]:
+  stmt_dyn_storage_tail
+QED
+
+Finalise compile_dynarray_to_storage_shape
+
 Theorem compile_stmt_shape:
   (!cenv lctx ty s.
      ~supported_stmt_expr_exists expr_shape_root s ==>
