@@ -471,6 +471,66 @@ Resume materialize_internal_params_shape[store_rule]:
 QED
 Finalise materialize_internal_params_shape
 
+Theorem compile_alloc_buffer_shape[local]:
+  !size. shape_step T compiler_label (\st. T)
+    (compile_alloc_buffer size) (\x st. T)
+Proof
+  qx_gen_tac `sz` >> simp[compile_alloc_buffer_def] >> irule shape_step_bind >>
+  qexists_tac `\op st. plain_operand st op` >> conj_tac
+  >- (gen_tac >> BETA_TAC >> irule shape_step_return >> simp[]) >>
+  mp_tac (Q.SPECL [`T`, `compiler_label`, `\st. T`, `ALLOCA`,
+    `[Lit (n2w sz)]`] shape_step_emit_op) >>
+  simp[shape_stable_def, label_or_plain_def, plain_operand_def,
+    stackPlanTypesTheory.is_label_operand_def, lowered_inst_ok_def,
+    mk_inst_def, raw_opcode_ok_def, inst_shape_ok_def, jump_labels_ok_def,
+    is_read0_opcode_def, label_positions_ok_def, is_terminator_def]
+QED
+
+Theorem compile_nonreentrant_unlock_shape[local]:
+  !nkey use_trans is_view. shape_step T compiler_label (\st. T)
+    (compile_nonreentrant_unlock nkey use_trans is_view) (\x st. T)
+Proof
+  rpt gen_tac >> simp[compile_nonreentrant_unlock_def] >>
+  Cases_on `is_view` >> simp[]
+  >- (irule shape_step_return >> simp[]) >>
+  Cases_on `use_trans` >> simp[] >>
+  FIRST [
+    (rename1 `emit_void TSTORE _` >>
+     mp_tac (Q.SPECL [`T`, `compiler_label`, `\st. T`, `TSTORE`,
+      `[Lit (n2w nkey); Lit 0w]`] shape_step_emit_void)),
+    (rename1 `emit_void SSTORE _` >>
+     mp_tac (Q.SPECL [`T`, `compiler_label`, `\st. T`, `SSTORE`,
+      `[Lit (n2w nkey); Lit 3w]`] shape_step_emit_void))] >>
+  simp[shape_stable_def, label_or_plain_def, plain_operand_def,
+    stackPlanTypesTheory.is_label_operand_def, lowered_inst_ok_def,
+    mk_inst_def, raw_opcode_ok_def, inst_shape_ok_def, jump_labels_ok_def,
+    is_read0_opcode_def, label_positions_ok_def, is_terminator_def]
+QED
+
+Theorem compile_alloc_buffer_with_id_shape[local]:
+  !sz. shape_step T compiler_label (\st. T)
+    (compile_alloc_buffer_with_id sz) (\x st. T)
+Proof
+  gen_tac >> simp[compile_alloc_buffer_with_id_def] >>
+  irule shape_step_bind >> qexists_tac `\id st. T` >> reverse conj_tac
+  >- (ho_match_mp_tac shape_step_fresh_id >> simp[shape_stable_def]) >>
+  qx_gen_tac `id` >> BETA_TAC >>
+  irule shape_step_bind >>
+  qexists_tac `\out st. plain_operand st (Var out)` >> reverse conj_tac
+  >- (mp_tac (Q.SPECL [`T`, `compiler_label`, `\st. T`]
+        shape_step_fresh_var) >> simp[shape_stable_def]) >>
+  qx_gen_tac `out` >> BETA_TAC >>
+  irule shape_step_ignore_bind >> qexists_tac `\u st. T` >> conj_tac
+  >- (gen_tac >> BETA_TAC >> irule shape_step_return >> simp[]) >>
+  mp_tac (Q.SPECL [`T`, `compiler_label`, `\st. T`,
+    `mk_inst id ALLOCA [Lit (n2w sz)] [out]`] shape_step_emit) >>
+  simp[shape_stable_def, label_or_plain_def, plain_operand_def,
+    stackPlanTypesTheory.is_label_operand_def, lowered_inst_ok_def,
+    mk_inst_def, raw_opcode_ok_def, inst_shape_ok_def, jump_labels_ok_def,
+    is_read0_opcode_def, label_positions_ok_def, is_terminator_def] >>
+  simp[shape_step_def] >> metis_tac[]
+QED
+
 (* The PARAM/RETPC_PARAM prologue, then the body via compile_stmt_shape with
    ce_return_pc = SOME (PtrVar return_pc 0), so internal = T. *)
 Theorem compile_internal_function_shape:
