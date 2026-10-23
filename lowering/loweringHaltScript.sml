@@ -332,8 +332,9 @@ Proof
   qexists_tac `0` >> asm_rewrite_tac[] >> simp[exit_result_def] >>
   qpat_x_assum `!s ss. P s /\ _ ==> R (Halt ss)`
     (qspecl_then [`s`, `ss`] mp_tac) >>
-  impl_tac >- (simp[Abbr `ss`, halt_state_def, set_returndata_def] >>
-               asm_rewrite_tac[mem_bytes_at_mstore_same]) >>
+  impl_tac >- (qunabbrev_tac `ss` >>
+               simp[halt_state_def, set_returndata_def] >>
+               fs[mem_bytes_at_mstore_same]) >>
   simp[]
 QED
 
