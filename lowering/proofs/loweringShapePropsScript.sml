@@ -473,7 +473,7 @@ val stmt_plain_emit =
   qexistsl_tac [`compiler_label`, `pre`,
                `\x st. pre st /\ plain_operand st x`] >>
   simp[] >> ho_match_mp_tac stmt_shape_emit_op >>
-  simp[Abbr `pre`, stmt_shape_stable_plain] >>
+  simp[Abbr `pre`, stmt_shape_stable_plain, shape_stable_conj] >>
   conj_tac
   >- simp[label_or_plain_def, plain_operand_def,
           stackPlanTypesTheory.is_label_operand_def] >>
@@ -516,6 +516,186 @@ Proof
        jump_labels_ok_def, is_terminator_def, is_read0_opcode_def,
        label_positions_ok_def, is_param_opcode_def]
 QED
+
+Theorem compile_copy_memory_dynamic_shape[local]:
+  !internal dst src len.
+    shape_step internal compiler_label
+      (\st. plain_operand st dst /\ plain_operand st src /\ plain_operand st len)
+      (compile_copy_memory_dynamic dst src len) (\x st. T)
+Proof
+  rpt gen_tac >> simp[compile_copy_memory_dynamic_def] >>
+  irule shape_step_conseq >>
+  qexistsl_tac [`compiler_label`,
+    `\st. plain_operand st dst /\ plain_operand st src /\ plain_operand st len`,
+    `\x st. plain_operand st dst /\ plain_operand st src /\ plain_operand st len`] >>
+  simp[] >> ho_match_mp_tac stmt_shape_emit_void >>
+  simp[shape_stable_conj, stmt_shape_stable_plain] >> conj_tac
+  >- simp[label_or_plain_def, plain_operand_def,
+          stackPlanTypesTheory.is_label_operand_def] >>
+  stmt_shape_emit_simp >>
+  simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def]
+QED
+
+Theorem compile_copy_memory_shape[local]:
+  !internal dst src n.
+    shape_step internal compiler_label
+      (\st. plain_operand st dst /\ plain_operand st src)
+      (compile_copy_memory dst src n) (\x st. T)
+Proof
+  rpt gen_tac >> Cases_on `n` >> simp[compile_copy_memory_def]
+  >- (irule shape_step_return >> simp[]) >>
+  rewrite_tac[GSYM compile_copy_memory_dynamic_def] >>
+  irule shape_step_conseq >>
+  qexistsl_tac [`compiler_label`,
+    `\st. plain_operand st dst /\ plain_operand st src /\
+           plain_operand st (Lit (n2w (SUC n')) )`, `\x st. T`] >>
+  simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def,
+       compile_copy_memory_dynamic_shape]
+QED
+
+Theorem compile_store_bytestring_shape[local]:
+  !internal src dst.
+    shape_step internal compiler_label
+      (\st. plain_operand st src /\ plain_operand st dst)
+      (compile_store_bytestring src dst) (\x st. T)
+Proof
+  rpt gen_tac >> simp[compile_store_bytestring_def] >>
+  irule shape_step_bind >>
+  qexists_tac `\len st. plain_operand st len /\
+                           (plain_operand st src /\ plain_operand st dst)` >>
+  conj_tac
+  >- (gen_tac >> BETA_TAC >>
+      rewrite_tac[GSYM compile_copy_memory_dynamic_def] >>
+      irule shape_step_conseq >>
+      qexistsl_tac [`compiler_label`,
+        `\st. plain_operand st dst /\ plain_operand st src /\ plain_operand st x`,
+        `\x st. T`] >> simp[compile_copy_memory_dynamic_shape]) >>
+  ho_match_mp_tac stmt_shape_frame >>
+  qexists_tac `\st. plain_operand st src` >>
+  simp[compile_bytestring_copy_len_shape, shape_stable_conj, stmt_shape_stable_plain]
+QED
+
+val stmt_plain_void =
+  ho_match_mp_tac stmt_shape_emit_void >>
+  simp[stmt_shape_stable_plain, shape_stable_conj, label_or_plain_def] >>
+  stmt_shape_emit_simp >>
+  simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def];
+
+Theorem compile_store_byte_chunks_shape[local]:
+  !data_ptr bs off internal.
+    shape_step internal compiler_label (\st. plain_operand st data_ptr)
+      (compile_store_byte_chunks data_ptr bs off) (\x st. plain_operand st data_ptr)
+Proof
+  ho_match_mp_tac compile_store_byte_chunks_ind >> rpt strip_tac >>
+  fs[] >> simp[Once compile_store_byte_chunks_def]
+  >- (irule shape_step_return >> simp[]) >>
+  irule shape_step_bind >>
+  qexists_tac `\dst st. plain_operand st data_ptr /\ plain_operand st dst` >>
+  conj_tac
+  >- (qx_gen_tac `dst_op` >> BETA_TAC >> irule shape_step_ignore_bind >>
+      qexists_tac `\x st. plain_operand st data_ptr /\ plain_operand st dst_op` >>
+      conj_tac
+      >- (gen_tac >> BETA_TAC >> irule shape_step_conseq >>
+          qexistsl_tac [`compiler_label`, `\st. plain_operand st data_ptr`,
+                       `\x st. plain_operand st data_ptr`] >> simp[]) >>
+      stmt_plain_void) >>
+  ho_match_mp_tac stmt_shape_emit_op >>
+  simp[stmt_shape_stable_plain] >> conj_tac
+  >- simp[label_or_plain_def, plain_operand_def,
+          stackPlanTypesTheory.is_label_operand_def] >>
+  stmt_shape_emit_simp >>
+  simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def]
+QED
+
+Theorem compile_bytelike_literal_shape[local]:
+  !internal bs max_len.
+    shape_step internal compiler_label (\st. T)
+      (compile_bytelike_literal bs max_len)
+      (\buf st. plain_operand st buf.buf_operand)
+Proof
+  rpt gen_tac >> simp[compile_bytelike_literal_def] >>
+  irule shape_step_bind >>
+  qexists_tac `\buf st. plain_operand st buf.buf_operand` >> conj_tac
+  >- (qx_gen_tac `buf` >> BETA_TAC >> irule shape_step_ignore_bind >>
+      qexists_tac `\x st. plain_operand st buf.buf_operand` >> conj_tac
+      >- (gen_tac >> BETA_TAC >> irule shape_step_ignore_bind >>
+          qexists_tac `\x st. plain_operand st buf.buf_operand` >> conj_tac
+          >- (gen_tac >> BETA_TAC >> irule shape_step_return >> simp[]) >>
+          irule compile_store_byte_chunks_shape) >>
+      stmt_plain_void) >>
+  irule compile_alloc_buffer_shape
+QED
+
+Theorem compile_ptr_load_shape[local]:
+  !internal is_ctor loc op.
+    loc <> LocCode ==>
+    shape_step internal compiler_label (\st. plain_operand st op)
+      (compile_ptr_load is_ctor loc op) (\x st. plain_operand st x)
+Proof
+  rpt gen_tac >> Cases_on `loc` >> simp[compile_ptr_load_def] >>
+  stmt_plain_emit
+QED
+
+Theorem compile_ptr_store_shape[local]:
+  !internal is_ctor loc dst v.
+    shape_step internal compiler_label
+      (\st. plain_operand st dst /\ plain_operand st v)
+      (compile_ptr_store is_ctor loc dst v) (\x st. T)
+Proof
+  rpt gen_tac >> Cases_on `loc` >> simp[compile_ptr_store_def] >>
+  TRY (IF_CASES_TAC) >>
+  irule shape_step_conseq >>
+  qexistsl_tac [`compiler_label`,
+    `\st. plain_operand st dst /\ plain_operand st v`,
+    `\x st. plain_operand st dst /\ plain_operand st v`] >>
+  simp[] >> stmt_plain_void
+QED
+
+Theorem stmt_shape_stable_const[local]:
+  !b. shape_stable (\st. b)
+Proof
+  simp[shape_stable_def]
+QED
+
+Theorem stmt_shape_new_block[local]:
+  !internal P lbl.
+    shape_stable P /\ (!st. P st ==> compiler_label lbl) ==>
+    shape_step internal compiler_label P (new_block lbl) (\x st. P st)
+Proof
+  rpt strip_tac >> rewrite_tac[shape_step_def] >> rpt strip_tac >>
+  `compiler_label lbl` by metis_tac[] >>
+  `shape_step internal compiler_label P (new_block lbl) (\x st. P st)` by
+    (irule shape_step_new_block >> simp[]) >>
+  fs[shape_step_def] >> metis_tac[]
+QED
+
+Theorem stmt_word_offset_shape[local]:
+  !internal base_op ctr scale.
+    shape_step internal compiler_label
+      (\st. plain_operand st base_op /\ plain_operand st (Var ctr))
+      (if scale = 1 then emit_op ADD [base_op; Var ctr]
+       else do scaled <- emit_op MUL [Var ctr; Lit (n2w scale)];
+               emit_op ADD [base_op; scaled] od)
+      (\x st. plain_operand st x)
+Proof
+  rpt gen_tac >> IF_CASES_TAC
+  >- (irule shape_step_conseq >>
+      qexistsl_tac [`compiler_label`,
+        `\st. plain_operand st base_op /\ plain_operand st (Var ctr)`,
+        `\x st. (plain_operand st base_op /\ plain_operand st (Var ctr)) /\
+                 plain_operand st x`] >> simp[] >>
+      ho_match_mp_tac stmt_shape_emit_op >>
+      simp[shape_stable_conj, stmt_shape_stable_plain, label_or_plain_def] >>
+      stmt_shape_emit_simp >>
+      simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def]) >>
+  irule shape_step_bind >>
+  qexists_tac `\x st. plain_operand st x /\ plain_operand st base_op` >> conj_tac
+  >- (gen_tac >> BETA_TAC >> stmt_plain_emit) >>
+  ho_match_mp_tac stmt_shape_frame >>
+  qexists_tac `\st. plain_operand st (Var ctr)` >>
+  simp[stmt_shape_stable_plain] >> stmt_plain_emit
+QED
+
 
 (* For alan, by compile_stmt_ind.  internal is IS_SOME ce_return_pc: Return
    emits RET exactly when ce_return_pc is SOME, STOP/RETURN otherwise. *)
