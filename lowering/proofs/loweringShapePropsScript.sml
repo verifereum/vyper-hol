@@ -247,8 +247,21 @@ Theorem expr_shape_extcode_addr[local]:
 Proof
   qid_spec_tac `e` >> recInduct is_extcode_ind >>
   simp[is_extcode_def, extcode_addr_expr_def, supported_expr_exists_def] >>
-  rpt strip_tac >>
-  rpt (BasicProvers.FULL_CASE_TAC >> gvs[])
+  rpt strip_tac
+  >- (rename1 `~p (Attribute ann addr (STRING #"c" (STRING #"o" (STRING #"d" (STRING #"e" tail)))))` >>
+      Cases_on `tail` >> gvs[]) 
+  >- (rename1 `~p (Attribute ann addr (STRING #"c" (STRING #"o" (STRING #"d" tail))))` >>
+      Cases_on `tail` >> gvs[] >>
+      BasicProvers.FULL_CASE_TAC >> gvs[])
+  >- (rename1 `~p (Attribute ann addr (STRING #"c" (STRING #"o" tail)))` >>
+      Cases_on `tail` >> gvs[] >>
+      BasicProvers.FULL_CASE_TAC >> gvs[] >>
+      BasicProvers.FULL_CASE_TAC >> gvs[]) >>
+  rename1 `~p (Attribute ann addr (STRING #"c" tail))` >>
+  Cases_on `tail` >> gvs[] >>
+  BasicProvers.FULL_CASE_TAC >> gvs[] >>
+  BasicProvers.FULL_CASE_TAC >> gvs[] >>
+  BasicProvers.FULL_CASE_TAC >> gvs[]
 QED
 
 Theorem shape_step_uncurry[local]:
@@ -2171,6 +2184,128 @@ Proof
   shape_scalar_emit_bind_tac `P` `ok_op` (simp[Abbr `P`]) >>
   shape_scalar_assert_tac `P` >>
   irule shape_step_return >> simp[Abbr `P`]
+QED
+
+Theorem compile_builtin_len_shape[local]:
+  shape_stable R /\ loc <> LocCode ==>
+  shape_step internal compiler_label (\st. R st /\ plain_operand st ptr_op)
+    (compile_builtin_len is_ctor ptr_op loc) (\v st. R st /\ plain_operand st v)
+Proof
+  simp[builtinSimpleTheory.compile_builtin_len_def, compile_ptr_load_shape]
+QED
+
+Theorem compile_builtin_calldatasize_shape[local]:
+  shape_stable R ==>
+  shape_step internal compiler_label R compile_builtin_calldatasize
+    (\v st. R st /\ plain_operand st v)
+Proof
+  strip_tac >> simp[builtinSimpleTheory.compile_builtin_calldatasize_def] >>
+  shape_under_tac shape_step_emit_op_plain `R` >> shape_opcode_tac
+QED
+
+Theorem compile_zero_words_shape[local]:
+  !n R base. shape_stable R ==>
+  shape_step internal compiler_label (\st. R st /\ plain_operand st base)
+    (compile_zero_words base n) (\u st. R st /\ plain_operand st base)
+Proof
+  Induct >> qx_gen_tac `R` >> qx_gen_tac `base_op` >> strip_tac >>
+  simp[builtinSimpleTheory.compile_zero_words_def]
+  >- (irule shape_step_return >> simp[]) >>
+  match_mp_tac shape_step_ignore_bind >>
+  qexists_tac `\u st. R st /\ plain_operand st base_op` >> conj_tac
+  >- (first_x_assum irule >> simp[]) >>
+  gen_tac >> simp[] >>
+  qmatch_goalsub_abbrev_tac `shape_step internal compiler_label P _ _` >>
+  `shape_stable P` by
+    (simp[Abbr `P`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
+     mp_tac (Q.SPEC `[base_op]:operand list` shape_stable_plain_operands) >> simp[]) >>
+  shape_scalar_emit_bind_tac `P` `dst` (simp[Abbr `P`]) >>
+  shape_under_tac shape_step_emit_void_plain `P` >> shape_opcode_tac
+QED
+
+Theorem compile_builtin_empty_complex_shape[local]:
+  shape_stable R ==>
+  shape_step internal compiler_label R (compile_builtin_empty_complex nbytes is_bs)
+    (\v st. R st /\ plain_operand st v)
+Proof
+  strip_tac >> simp[builtinSimpleTheory.compile_builtin_empty_complex_def] >>
+  match_mp_tac shape_step_bind >>
+  qexists_tac `\buf st. R st /\ plain_operand st buf.buf_operand` >> conj_tac
+  >- (irule compile_alloc_buffer_shape >> simp[]) >>
+  qx_gen_tac `buf` >> simp[] >>
+  match_mp_tac shape_step_bind >>
+  qexists_tac `\v st. R st /\ plain_operand st v` >> conj_tac
+  >- (irule shape_step_return >> simp[]) >>
+  qx_gen_tac `buf_op` >> simp[] >>
+  qmatch_goalsub_abbrev_tac `shape_step internal compiler_label P _ _` >>
+  `shape_stable P` by
+    (simp[Abbr `P`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
+     mp_tac (Q.SPEC `[buf_op]:operand list` shape_stable_plain_operands) >> simp[]) >>
+  Cases_on `is_bs` >> simp[] >>
+  match_mp_tac shape_step_ignore_bind >> qexists_tac `\u st. P st` >> conj_tac
+  >- (shape_under_tac shape_step_emit_void_plain `P` >> simp[Abbr `P`] >> shape_opcode_tac)
+  >- (gen_tac >> simp[] >> irule shape_step_return >> simp[Abbr `P`])
+  >- (simp[Abbr `P`] >> irule compile_zero_words_shape >> simp[]) >>
+  gen_tac >> simp[] >> irule shape_step_return >> simp[Abbr `P`]
+QED
+
+Theorem compile_keccak256_bytes_shape[local]:
+  shape_stable R ==>
+  shape_step internal compiler_label (\st. R st /\ plain_operand st v)
+    (compile_keccak256_bytes v) (\w st. R st /\ plain_operand st w)
+Proof
+  strip_tac >> simp[builtinHashingTheory.compile_keccak256_bytes_def] >>
+  qmatch_goalsub_abbrev_tac `shape_step internal compiler_label P _ _` >>
+  `shape_stable P` by
+    (simp[Abbr `P`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
+     mp_tac (Q.SPEC `[v]:operand list` shape_stable_plain_operands) >> simp[]) >>
+  shape_scalar_emit_bind_tac `P` `len_op` (simp[Abbr `P`]) >>
+  qmatch_goalsub_abbrev_tac `shape_step internal compiler_label G _ _` >>
+  `shape_stable G` by
+    (simp[Abbr `G`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
+     mp_tac (Q.SPEC `[len_op]:operand list` shape_stable_plain_operands) >> simp[]) >>
+  shape_scalar_emit_bind_tac `G` `data_op` (simp[Abbr `G`, Abbr `P`]) >>
+  shape_under_tac shape_step_emit_op_plain `R` >> simp[Abbr `G`, Abbr `P`] >> shape_opcode_tac
+QED
+
+(* The word/bytesM Keccak routines share the same staging sequence. *)
+fun shape_keccak_staged_tac def =
+  strip_tac >> simp[def] >>
+  qmatch_goalsub_abbrev_tac `shape_step internal compiler_label P _ _` >>
+  `shape_stable P` by
+    (simp[Abbr `P`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
+     mp_tac (Q.SPEC `[v]:operand list` shape_stable_plain_operands) >> simp[]) >>
+  match_mp_tac shape_step_bind >>
+  qexists_tac `\buf st. P st /\ plain_operand st buf.buf_operand` >> conj_tac
+  >- (shape_under_tac compile_alloc_buffer_shape `P`) >>
+  qx_gen_tac `buf` >> simp[] >>
+  match_mp_tac shape_step_bind >>
+  qexists_tac `\w st. P st /\ plain_operand st w` >> conj_tac
+  >- (irule shape_step_return >> simp[]) >>
+  qx_gen_tac `buf_op` >> simp[] >>
+  qmatch_goalsub_abbrev_tac `shape_step internal compiler_label G _ _` >>
+  `shape_stable G` by
+    (simp[Abbr `G`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
+     mp_tac (Q.SPEC `[buf_op]:operand list` shape_stable_plain_operands) >> simp[]) >>
+  match_mp_tac shape_step_ignore_bind >> qexists_tac `\u st. G st` >> conj_tac
+  >- (shape_under_tac shape_step_emit_void_plain `G` >> simp[Abbr `G`, Abbr `P`] >> shape_opcode_tac) >>
+  gen_tac >> simp[] >>
+  shape_under_tac shape_step_emit_op_plain `R` >> simp[Abbr `G`, Abbr `P`] >> shape_opcode_tac;
+
+Theorem compile_keccak256_word_shape[local]:
+  shape_stable R ==>
+  shape_step internal compiler_label (\st. R st /\ plain_operand st v)
+    (compile_keccak256_word v) (\w st. R st /\ plain_operand st w)
+Proof
+  shape_keccak_staged_tac builtinHashingTheory.compile_keccak256_word_def
+QED
+
+Theorem compile_keccak256_bytesm_shape[local]:
+  shape_stable R ==>
+  shape_step internal compiler_label (\st. R st /\ plain_operand st v)
+    (compile_keccak256_bytesm v m) (\w st. R st /\ plain_operand st w)
+Proof
+  shape_keccak_staged_tac builtinHashingTheory.compile_keccak256_bytesm_def
 QED
 
 Theorem compile_pow_mod256_shape[local]:
