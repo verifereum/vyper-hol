@@ -50,6 +50,10 @@
  *     BLOCKHASH is total, so the lowered code does not abort there; and
  *     call_ctx_rel does not relate bc_blockhash to the transaction's block
  *     hashes.  expr_sim is unprovable for it as things stand.
+ * Nor does the memory frame in expr_post follow from stmt_state_rel for an
+ * expression whose lowering writes a DALLOCA buffer (raw_call of msg.data,
+ * the create copy and blueprint lowerings): DALLOCA allocates at vs_fmp,
+ * which stmt_state_rel does not relate to the ALLOCA allocations.
  * compile_env_sim holds for msg.gas only because the source raises a
  * TypeError for it (vyperContext's evaluate_builtin), which expr_sim
  * leaves out, while the lowering emits GAS: the two do not agree on
@@ -159,12 +163,14 @@ Definition expr_sim_def:
 End
 
 (* expr_sim gives expr_frag where the expression's type is a word type
-   whose typed encoding is val_to_w256, the encoding expr_frag uses. *)
+   whose typed encoding agrees, on the values the expression evaluates to,
+   with val_to_w256, the encoding expr_frag uses. *)
 Theorem expr_sim_expr_frag:
   !ctx func cenv cx ty e es R tv.
     expr_sim ctx func cenv cx ty e es /\ is_word_type (expr_type e) /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
-    (!v. typed_val_to_w256 tv v = val_to_w256 v) ==>
+    (!v es'. eval_expr cx e es = (INL (Value v), es') ==>
+             typed_val_to_w256 tv v = val_to_w256 v) ==>
     expr_frag ctx func cenv cx ty e es R
 Proof
   rw[expr_sim_def, expr_frag_def] >>
@@ -176,6 +182,7 @@ Proof
   simp[expr_post_def, expr_val_rel_def] >> rpt strip_tac >>
   qpat_x_assum `!tv. evaluate_type _ _ = SOME tv ==> _`
     (qspec_then `tv` mp_tac) >>
+  qpat_x_assum `!v es'. eval_expr _ _ _ = _ ==> _` drule >>
   gvs[]
 QED
 
