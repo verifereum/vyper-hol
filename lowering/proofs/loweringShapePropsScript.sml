@@ -1658,6 +1658,21 @@ Resume compile_typed_copy_shape[dyn_labels]:
 QED
 Finalise compile_typed_copy_shape
 
+Theorem compile_store_memory_shape:
+  !cenv src dst dst_ty src_ty internal.
+    shape_step internal compiler_label
+      (\st. plain_operand st dst /\ plain_operand st src)
+      (compile_store_memory cenv src dst dst_ty src_ty) (\u st. T)
+Proof
+  rpt gen_tac >> simp[Once compile_store_memory_def] >> IF_CASES_TAC
+  >- stmt_plain_void_drop >>
+  IF_CASES_TAC
+  >- (irule shape_step_conseq >>
+      qexistsl_tac [`compiler_label`, `\st. plain_operand st src /\ plain_operand st dst`, `\u st. T`] >>
+      simp[compile_store_bytestring_shape]) >>
+  IF_CASES_TAC >> simp[compile_typed_copy_shape, compile_copy_memory_shape]
+QED
+
 
 (* For alan, by compile_stmt_ind.  internal is IS_SOME ce_return_pc: Return
    emits RET exactly when ce_return_pc is SOME, STOP/RETURN otherwise. *)
