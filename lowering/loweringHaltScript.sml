@@ -553,6 +553,140 @@ QED
    ALLOCAs has run, and the value lies below the alloca frontier.  The
    frontier stays below 2 ** 256 while they run, and the encoding fits in
    the buffer. *)
+Definition halt_comp_grows_def:
+  halt_comp_grows (m : 'a compiler) <=>
+    !s x t. m s = (x,t) ==>
+      cs_extends s t /\ s.cs_next_id <= t.cs_next_id /\
+      s.cs_next_var <= t.cs_next_var
+End
+
+Theorem halt_comp_grows_return[local]:
+  !x. halt_comp_grows (comp_return x)
+Proof
+  simp[halt_comp_grows_def, comp_return_def, cs_extends_refl]
+QED
+
+Theorem halt_comp_grows_bind[local]:
+  !m f. halt_comp_grows m /\ (!a. halt_comp_grows (f a)) ==>
+    halt_comp_grows (comp_bind m f)
+Proof
+  rw[halt_comp_grows_def, comp_bind_def] >>
+  pairarg_tac >> gvs[] >>
+  metis_tac[cs_extends_trans, arithmeticTheory.LESS_EQ_TRANS]
+QED
+
+Theorem halt_comp_grows_ignore_bind[local]:
+  !m n. halt_comp_grows m /\ halt_comp_grows n ==>
+    halt_comp_grows (comp_ignore_bind m n)
+Proof
+  rpt strip_tac >> rewrite_tac[comp_ignore_bind_def] >>
+  irule halt_comp_grows_bind >> simp[]
+QED
+
+Theorem halt_comp_grows_emit[local]:
+  !i. halt_comp_grows (emit i)
+Proof
+  rw[halt_comp_grows_def] >>
+  drule cs_extends_emit >> strip_tac >>
+  gvs[emit_def]
+QED
+
+Theorem halt_comp_grows_fresh_id[local]:
+  halt_comp_grows fresh_id
+Proof
+  rw[halt_comp_grows_def] >>
+  drule cs_extends_fresh_id >> strip_tac >>
+  gvs[fresh_id_def]
+QED
+
+Theorem halt_comp_grows_fresh_var[local]:
+  halt_comp_grows fresh_var
+Proof
+  rw[halt_comp_grows_def] >>
+  drule cs_extends_fresh_var >> strip_tac >>
+  gvs[fresh_var_def]
+QED
+
+Theorem halt_comp_grows_fresh_label[local]:
+  !sfx. halt_comp_grows (fresh_label sfx)
+Proof
+  rw[halt_comp_grows_def] >>
+  drule cs_extends_fresh_label >> strip_tac >>
+  gvs[fresh_label_def]
+QED
+
+Theorem halt_comp_grows_new_block[local]:
+  !lbl. halt_comp_grows (new_block lbl)
+Proof
+  rw[halt_comp_grows_def] >>
+  drule cs_extends_new_block >> strip_tac >>
+  gvs[new_block_def]
+QED
+
+Theorem halt_comp_grows_emit_op[local]:
+  !opc args. halt_comp_grows (emit_op opc args)
+Proof
+  rw[emit_op_def] >> irule halt_comp_grows_bind >>
+  simp[halt_comp_grows_fresh_id] >> gen_tac >>
+  irule halt_comp_grows_bind >> simp[halt_comp_grows_fresh_var] >>
+  gen_tac >> irule halt_comp_grows_ignore_bind >>
+  simp[halt_comp_grows_emit, halt_comp_grows_return]
+QED
+
+Theorem halt_comp_grows_emit_inst[local]:
+  !opc args outs. halt_comp_grows (emit_inst opc args outs)
+Proof
+  rw[emit_inst_def] >> irule halt_comp_grows_bind >>
+  simp[halt_comp_grows_fresh_id, halt_comp_grows_emit]
+QED
+
+Theorem halt_comp_grows_emit_void[local]:
+  !opc args. halt_comp_grows (emit_void opc args)
+Proof
+  rw[emit_void_def] >> irule halt_comp_grows_bind >>
+  simp[halt_comp_grows_fresh_id, halt_comp_grows_emit]
+QED
+
+Theorem halt_comp_grows_alloc_buffer[local]:
+  !n. halt_comp_grows (compile_alloc_buffer n)
+Proof
+  rw[compile_alloc_buffer_def] >> irule halt_comp_grows_bind >>
+  simp[halt_comp_grows_emit_op, halt_comp_grows_return]
+QED
+
+Theorem halt_comp_grows_static[local]:
+  !dst src. halt_comp_grows (compile_abi_encode_static dst src)
+Proof
+  rw[compile_abi_encode_static_def] >>
+  irule halt_comp_grows_bind >> simp[halt_comp_grows_emit_op] >>
+  gen_tac >> irule halt_comp_grows_ignore_bind >>
+  simp[halt_comp_grows_emit_void, halt_comp_grows_return]
+QED
+
+Theorem halt_comp_grows_static_info[local]:
+  !dst src ei. halt_comp_grows (compile_abi_encode_static_info dst src ei)
+Proof
+  rpt gen_tac >> Cases_on `ei` >> simp[compile_abi_encode_static_info_def,
+    halt_comp_grows_static, halt_comp_grows_return] >>
+  irule halt_comp_grows_ignore_bind >>
+  simp[halt_comp_grows_emit_void, halt_comp_grows_return]
+QED
+
+Theorem halt_comp_grows_dyn_static_loop[local]:
+  !dst src ei asz msz len.
+    halt_comp_grows (compile_abi_encode_dyn_static_loop dst src ei asz msz len)
+Proof
+  rpt gen_tac >> rewrite_tac[compile_abi_encode_dyn_static_loop_def] >>
+  rpt (FIRST [CHANGED_TAC (simp[LET_THM,
+          halt_comp_grows_alloc_buffer, halt_comp_grows_emit_op,
+          halt_comp_grows_emit_void, halt_comp_grows_emit_inst,
+          halt_comp_grows_fresh_label, halt_comp_grows_new_block,
+          halt_comp_grows_static_info]),
+        irule halt_comp_grows_bind >> conj_tac,
+        irule halt_comp_grows_ignore_bind >> conj_tac,
+        gen_tac])
+QED
+
 Theorem frag_ids_count_diff:
   !a b. frag_ids a b = count b.cs_next_id DIFF count a.cs_next_id
 Proof
