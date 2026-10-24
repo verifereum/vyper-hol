@@ -14,7 +14,7 @@ Ancestors
   arithmetic byte combin integer list option pair rich_list words
   contractABI sptree vfmTypes vfmConstants vfmState vfmContext
   vfmExecution[ignore_grammar] vyperAST vyperABI vyperMisc vyperValue
-  vyperContext vyperState vyperEvmBoundary
+  vyperContext vyperState vyperEvmBoundary vyperRuntimeAccounts
 Libs
   cv_transLib wordsLib monadsyntax
 
@@ -505,114 +505,15 @@ End
 val () = cv_auto_trans make_create_state_def;
 val () = cv_auto_trans extract_create_result_def;
 
-(* Account well-typedness gate for the creation outcome, mirroring
-   vyperInterpreter$ext_call_success_accounts_ok.  The quantified form over
-   evm_accounts has a function type the cv translator rejects, so (as there)
-   the gate is routed through the spt encoding via a [cv_rep] registration. *)
-Definition create_account_ok_def:
-  create_account_ok (a : account_state) <=>
-    a.balance < 2 ** 256 /\ LENGTH a.code <= 24576
-End
-
-val () = cv_auto_trans create_account_ok_def;
-
-(* Quantified accounts gate; not cv-translated directly (the quantifier is
-   over a function type) — routed through the spt encoding via a [cv_rep]
-   registration, mirroring vyperInterpreter$accounts_runtime_well_typed. *)
-Definition create_accounts_ok_def:
-  create_accounts_ok (accounts : evm_accounts) <=>
-    !addr. create_account_ok (lookup_account addr accounts)
-End
-
-Definition create_accounts_spt_ok_def:
-  (create_accounts_spt_ok (LN : account_state spt) <=> T) /\
-  (create_accounts_spt_ok (LS a) <=> create_account_ok a) /\
-  (create_accounts_spt_ok (BN l r) <=>
-    create_accounts_spt_ok l /\ create_accounts_spt_ok r) /\
-  (create_accounts_spt_ok (BS l a r) <=>
-    create_accounts_spt_ok l /\ create_account_ok a /\
-    create_accounts_spt_ok r)
-End
-
-val () = cv_auto_trans create_accounts_spt_ok_def;
-
-Theorem create_accounts_spt_ok_lookup:
-  !t k a. wf t /\ create_accounts_spt_ok t /\ lookup k t = SOME a ==>
-          create_account_ok a
-Proof
-  Induct >> rw[create_accounts_spt_ok_def, sptreeTheory.lookup_def,
-               sptreeTheory.wf_def]
-  >> metis_tac[]
-QED
-
-Theorem create_accounts_spt_ok_insert:
-  !k a t. create_accounts_spt_ok t /\ create_account_ok a ==>
-          create_accounts_spt_ok (sptree$insert k a t)
-Proof
-  recInduct sptreeTheory.insert_ind >>
-  rpt conj_tac >> rpt gen_tac >> strip_tac >> strip_tac >>
-  gvs[create_accounts_spt_ok_def] >>
-  Cases_on `k = 0` >-
-    simp[Once sptreeTheory.insert_def, create_accounts_spt_ok_def] >>
-  Cases_on `EVEN k` >-
-    (PURE_ONCE_REWRITE_TAC [sptreeTheory.insert_def] >>
-     gvs[create_accounts_spt_ok_def]) >>
-  PURE_ONCE_REWRITE_TAC [sptreeTheory.insert_def] >>
-  gvs[create_accounts_spt_ok_def]
-QED
-
-Theorem create_account_ok_empty_account_state[simp]:
-  create_account_ok empty_account_state
-Proof
-  simp[create_account_ok_def, empty_account_state_def]
-QED
-
-Theorem create_accounts_spt_ok_build_spt:
-  !accounts. create_accounts_spt_ok
-    (build_spt empty_account_state (dimword (:160)) accounts) <=>
-    create_accounts_ok accounts
-Proof
-  rw[create_accounts_ok_def, EQ_IMP_THM]
-  >- (
-    Cases_on `accounts addr = empty_account_state` >- simp[lookup_account_def] >>
-    `lookup (w2n addr) (build_spt empty_account_state (dimword (:160)) accounts) =
-       SOME (accounts addr)`
-      by (simp[lookup_build_spt] >> qspec_then `addr` mp_tac wordsTheory.w2n_lt >> simp[]) >>
-    simp[lookup_account_def] >>
-    irule create_accounts_spt_ok_lookup >>
-    qexistsl [`w2n addr`, `build_spt empty_account_state (dimword (:160)) accounts`] >>
-    simp[] ) >>
-  qsuff_tac `!n. create_accounts_spt_ok
-                  (build_spt empty_account_state n accounts)` >- simp[] >>
-  Induct >- simp[build_spt_def, create_accounts_spt_ok_def] >>
-  simp[build_spt_def] >> rw[] >>
-  irule create_accounts_spt_ok_insert >> simp[] >>
-  first_x_assum (qspec_then `n2w n` mp_tac) >> simp[lookup_account_def]
-QED
-
-val cv_create_accounts_spt_ok_thm = theorem "cv_create_accounts_spt_ok_thm";
-
-Theorem create_accounts_ok_cv_rep[cv_rep]:
-  cv_rep T
-    (cv_create_accounts_spt_ok (from_evm_accounts accounts))
-    b2c
-    (create_accounts_ok accounts)
-Proof
-  simp[cv_repTheory.cv_rep_def, from_evm_accounts_def,
-       GSYM cv_create_accounts_spt_ok_thm] >>
-  AP_TERM_TAC >>
-  simp[Once (GSYM create_accounts_spt_ok_build_spt)]
-QED
-
-Definition create_accounts_ok_aux_def:
-  create_accounts_ok_aux
+Definition create_accounts_runtime_well_typed_aux_def:
+  create_accounts_runtime_well_typed_aux
     (result : unit + vfmExecution$exception option) accounts =
     case result of
-    | INR NONE => create_accounts_ok accounts
+    | INR NONE => accounts_runtime_well_typed accounts
     | _ => T
 End
 
-val () = cv_auto_trans create_accounts_ok_aux_def;
+val () = cv_auto_trans create_accounts_runtime_well_typed_aux_def;
 
 (* Run initcode with the EVM prelude, retaining the pre-endowment account map
    so failed creation restores everything except the creator nonce bump. *)
@@ -623,7 +524,8 @@ Definition run_create_evm_def:
            (make_create_state sender address initcode value
               post tStorage pending txParams) of
     | SOME outcome =>
-        if create_accounts_ok_aux (FST outcome) (SND outcome).rollback.accounts
+        if create_accounts_runtime_well_typed_aux
+             (FST outcome) (SND outcome).rollback.accounts
         then extract_create_result (create_rollback_accounts sender accounts)
                                  tStorage pending outcome
         else NONE
