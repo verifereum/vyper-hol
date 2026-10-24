@@ -43,22 +43,38 @@
  *     annotated type.  So an expression whose values do not have their
  *     annotated types is lowered to code that does not simulate it.  Type
  *     soundness gives what the case lemmas need of the source values (a word
- *     operand evaluates to a word, a result has its type) and keeps the
- *     invariants for the next operand.
+ *     operand evaluates to a word, a result has its type) and carries
+ *     env_consistent, state_well_typed and accounts_well_typed to the next
+ *     operand; the others are about the context and do not change.  With no
+ *     internal call, call_evaluation_safe is call_evaluation_safe cx [], a
+ *     fact about the call stack.
  *   - The locals clause: every local of the type environment is held
  *     through a pointer variable (PtrVar (Var p)).  This is how the
- *     statement lowering registers parameters and locals; state_rel only
- *     relates the locals that are held so (local_ptrs_rel), and
- *     compile_name_vv emits INVALID for a name it does not find.
+ *     statement lowering registers the parameters and locals of an external
+ *     function without default arguments; state_rel only relates the locals
+ *     that are held so (local_ptrs_rel), and compile_name_vv emits INVALID
+ *     for a name it does not find.  Default arguments, and the locals of
+ *     internal functions and the constructor, are MemLoc
+ *     (compile_register_kwarg_vars, local_ptrs_reserved), so the theorem
+ *     says nothing yet about expressions there.
  *   - int_calls_expr e = []: no internal call.  An internal call lowers to
  *     INVOKE, whose simulation is #638's call step; until that is stated
  *     this theorem excludes them, and #638 replaces this conjunct with its
  *     hypothesis on the callees.
  *
- * Not here yet: the compile environment's metadata (struct fields, flag
- * member ids, dynamic array capacities, method ids) is not related to the
- * source context.  The cases that read it (StructLit, Attribute,
- * FlagMember, Pop, method_id, ...) will need a clause each in expr_sim_inv.
+ * Not here yet:
+ *   - The compile environment's metadata (struct fields, flag member ids,
+ *     dynamic array capacities, method ids) is not related to the source
+ *     context.  The cases that read it (StructLit, Attribute, FlagMember,
+ *     Pop, method_id, ...) will need a clause each in expr_sim_inv, and
+ *     TopLevelName needs every module variable to be in ce_vars.
+ *   - The induction hypothesis speaks of lower_value's fragment, run as
+ *     one piece, and of results that are values.  It does not cover an
+ *     operand whose unwrap_value is emitted after other code (the elements
+ *     of struct and array literals, extcall arguments), an operand read
+ *     before unwrap_value (len, in/not in on arrays), or a storage or
+ *     transient array operand, which evaluates to an ArrayRef.  Those cases
+ *     need a judgment on compile_expr's value beside expr_sim.
  *)
 
 Theory exprSimHyps

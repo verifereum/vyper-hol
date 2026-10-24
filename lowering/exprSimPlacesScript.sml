@@ -20,6 +20,12 @@
  * a subscript of a place reads.  These lemmas' proofs need a place
  * judgment for the base, proved by induction on the place chain with this
  * hypothesis for the indices.
+ *
+ * The lowering also needs fixing first for nested places: compile_attribute
+ * finds the struct only for a Name base (struct_name is "" otherwise, so
+ * self.s.b reads at the wrong offset), and compile_subscript and pop fall
+ * back to a dynamic uint256 array in memory when the base or target is not
+ * a Name.
  *)
 
 Theory exprSimPlaces

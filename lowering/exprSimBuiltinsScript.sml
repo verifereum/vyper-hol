@@ -15,14 +15,28 @@
  *     on names, which compile_expr lowers itself (names_builtin)
  *   4 concat, slice, extract32 (#566), uint2str (#561): compile_concat_sim,
  *     compile_slice_sim, compile_extract32_sim, compile_uint2str_sim
- *   5 blockhash, blobhash: compile_blockhash_sim, compile_blobhash_sim.
- *     compile_blockhash_sim is unprovable as the definitions stand: the
- *     source raises a RuntimeError where BLOCKHASH returns 0 (#671), and
- *     call_ctx_rel does not relate the block hashes
+ *   5 blobhash: compile_blobhash_sim (blockhash, compile_blockhash_sim, is
+ *     #636 Leaves row 5, with block.prevhash)
  *   6 account reads: compile_acc_sim
  *   7 method_id: compile_method_id_sim
  *   8 ecrecover, ecadd, ecmul: compile_ecrecover_sim, compile_ecadd_sim,
  *     compile_ecmul_sim
+ *
+ * Unprovable as the definitions stand, to be fixed in the lowering or in
+ * state_rel before their PRs:
+ *   - compile_blockhash_sim: the source raises a RuntimeError where
+ *     BLOCKHASH returns 0 (#671), and call_ctx_rel does not relate the block
+ *     hashes.
+ *   - compile_calldata_len_sim, compile_calldata_slice_sim,
+ *     compile_blobhash_sim, and compile_acc_sim for balance, codesize,
+ *     codehash and is_contract: call_ctx_rel relates neither calldata nor
+ *     blob hashes, and nothing relates the accounts.
+ *   - compile_acc_sim for .code: the lowering emits INVALID.
+ *   - compile_method_id_sim: the lowering hashes the word holding the
+ *     argument's pointer and returns a word, where the result is a Bytes[4]
+ *     in memory.
+ *   - compile_len_sim: well_typed_builtin_app Len admits fixed arrays and
+ *     bytesN, but the lowering always loads the operand's first word.
  *
  * len, the hashes of a bytestring and slice read their operand's
  * LocatedValue (compile_expr without unwrap_value, or a msg.data/.code

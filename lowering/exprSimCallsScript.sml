@@ -12,11 +12,20 @@
  *     compile_raw_revert_sim, compile_selfdestruct_sim
  *   5 the creates: compile_create_sim
  *
- * compile_raw_call_calldata_sim and compile_create_sim for create_copy_of
- * and create_from_blueprint are unprovable as the definitions stand: their
- * lowerings allocate with DALLOCA, at vs_fmp, which stmt_state_rel does not
- * relate to the ALLOCA allocations, so expr_post's memory frame does not
- * follow (#668, #636 Infrastructure row 2).
+ * Unprovable as the definitions stand:
+ *   - compile_raw_call_sim, compile_raw_log_sim, compile_selfdestruct_sim
+ *     and compile_create_sim: compile_call lowers RawCallTarget, RawLog,
+ *     SelfDestructTarget and CreateTarget to INVALID (builtinCreate's
+ *     compile_create_* are not called yet), where the source can succeed.
+ *   - compile_raw_call_calldata_sim, and the create lowerings once they are
+ *     wired in: they allocate with DALLOCA, at vs_fmp, which
+ *     stmt_state_rel does not relate to the ALLOCA allocations, so
+ *     expr_post's memory frame does not follow (#668, #636 Infrastructure
+ *     row 2).
+ *   - compile_extcall_sim: its positional arguments are lowered with
+ *     compile_multi_vvs and unwrapped only when stored into the call
+ *     buffer, which the induction hypothesis does not describe (see
+ *     exprSimHyps).
  *
  * Internal calls (row 6) have no lemma: expr_sim_pre excludes them
  * (int_calls_expr e = []) until #638 states the INVOKE hypothesis.
