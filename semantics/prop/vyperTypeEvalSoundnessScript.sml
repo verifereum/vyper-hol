@@ -5321,7 +5321,7 @@ Theorem eval_exprs_failure_builtin_case[local]:
   ((case
       case (INR x,st) of
         (INL vs,s'') =>
-          (case evaluate_builtin cx s''.accounts ty bt vs of
+          (case evaluate_builtin cx s''.accounts ty bt (MAP expr_type es) vs of
              INL v => return v
            | INR e => raise (Error e)) s''
       | (INR e,s'') => (INR e,s'')
@@ -5496,11 +5496,11 @@ Resume eval_all_type_sound_mutual[Expr_Builtin]:
       (gvs[LIST_REL_EL_EQN, LIST_EQ_REWRITE, EL_MAP]) >>
     `?ret_tv. evaluate_type (get_tenv cx) ty = SOME ret_tv` by
       (gvs[well_formed_type_def, IS_SOME_EXISTS]) >>
-    Cases_on `evaluate_builtin cx args_st.accounts ty bt vs` >>
-    rename1 `evaluate_builtin cx args_st.accounts ty bt vs = builtin_res` >>
+    Cases_on `evaluate_builtin cx args_st.accounts ty bt (MAP expr_type es) vs` >>
+    rename1 `evaluate_builtin cx args_st.accounts ty bt (MAP expr_type es) vs = builtin_res` >>
     Cases_on `builtin_res` >>
     FIRST [
-      rename1 `evaluate_builtin cx args_st.accounts ty bt vs = INL builtin_v` >>
+      rename1 `evaluate_builtin cx args_st.accounts ty bt (MAP expr_type es) vs = INL builtin_v` >>
       strip_tac >>
       gvs[nested_return_value_case, no_type_error_result_def] >>
       gvs[expr_result_typed_def, expr_runtime_typed_def, expr_type_def,

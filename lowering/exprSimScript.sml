@@ -353,7 +353,7 @@ Theorem eval_expr_env:
     expr_res_ok res /\ item <> PrevHash ==>
     es' = es /\
     ?v. res = INL (Value v) /\
-        evaluate_builtin cx es.accounts ann (Env item) [] = INL v
+        evaluate_builtin cx es.accounts ann (Env item) [] [] = INL v
 Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
