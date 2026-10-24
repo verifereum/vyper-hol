@@ -87,12 +87,12 @@ QED
 Theorem bop_result_compare:
   !cx ann bop ty tv v1 v2 es.
     MEM bop [Lt; Gt; Eq; NotEq; LtE; GtE] /\
-    expr_res_ok (bop_result cx ann bop v1 v2 es) /\
+    expr_res_ok (bop_result cx ann bop tys v1 v2 es) /\
     word_value v1 /\ value_has_type tv v1 /\ value_has_type tv v2 /\
     (is_uint256 ty <=> tv = BaseTV (UintT 256)) /\
     (!m. tv = BaseTV (UintT m) \/ tv = BaseTV (IntT m) \/ tv = FlagTV m ==>
          m <= 256) ==>
-    bop_result cx ann bop v1 v2 es =
+    bop_result cx ann bop tys v1 v2 es =
       INL (Value (BoolV
         (eval_compare bop ty (val_to_w256 v1) (val_to_w256 v2))))
 Proof
@@ -188,7 +188,7 @@ Theorem compile_compare_sim:
     (is_uint256 ty <=> tv = BaseTV (UintT 256)) /\
     (!m. tv = BaseTV (UintT m) \/ tv = BaseTV (IntT m) \/ tv = FlagTV m ==>
          m <= 256) ==>
-    binop_frag ctx func cenv cx bop ty ann bl el v1 v2 es0
+    binop_frag ctx func cenv cx bop ty ann bl el tys v1 v2 es0
 Proof
   rpt gen_tac >> strip_tac >> simp[binop_frag_def] >> rpt gen_tac >>
   strip_tac >>
@@ -243,12 +243,12 @@ QED
 Theorem bop_result_minmax:
   !cx ann mm ty tv v1 v2 es.
     (mm = Min \/ mm = Max) /\
-    expr_res_ok (bop_result cx ann mm v1 v2 es) /\
+    expr_res_ok (bop_result cx ann mm tys v1 v2 es) /\
     word_value v1 /\ value_has_type tv v1 /\ value_has_type tv v2 /\
     (is_uint256 ty <=> tv = BaseTV (UintT 256)) /\
     (!m. tv = BaseTV (UintT m) \/ tv = BaseTV (IntT m) \/ tv = FlagTV m ==>
          m <= 256) ==>
-    ?v. bop_result cx ann mm v1 v2 es = INL (Value v) /\ word_value v /\
+    ?v. bop_result cx ann mm tys v1 v2 es = INL (Value v) /\ word_value v /\
         val_to_w256 v =
           if eval_compare (if mm = Min then Lt else Gt) ty
                (val_to_w256 v1) (val_to_w256 v2)
@@ -306,7 +306,7 @@ Theorem compile_minmax_sim:
     (is_uint256 ty <=> tv = BaseTV (UintT 256)) /\
     (!m. tv = BaseTV (UintT m) \/ tv = BaseTV (IntT m) \/ tv = FlagTV m ==>
          m <= 256) ==>
-    binop_frag ctx func cenv cx mm ty ann bl el v1 v2 es0
+    binop_frag ctx func cenv cx mm ty ann bl el tys v1 v2 es0
 Proof
   rpt gen_tac >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   match_mp_tac binop_frag_straight >> conj_tac

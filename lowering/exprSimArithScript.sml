@@ -184,7 +184,7 @@ Theorem bop_result_unsafe:
       SOME (if is_signed_type ty then Signed b else Unsigned b) /\
     type_bits ty = b /\ 0 < b /\ b <= 256 /\ b MOD 8 = 0 /\
     within_int_bound (if is_signed_type ty then Signed b else Unsigned b) i2 ==>
-    ?v. bop_result cx ann bop v1 v2 es = INL (Value v) /\ word_value v /\
+    ?v. bop_result cx ann bop tys v1 v2 es = INL (Value v) /\ word_value v /\
         val_to_w256 v =
           truncate_to_bits b (is_signed_type ty)
             (unsafe_word_op bop ty (val_to_w256 v1) (val_to_w256 v2))
@@ -279,7 +279,7 @@ Theorem compile_unsafe_sim:
     within_int_bound
       (if is_signed_type ty then Signed (type_bits ty)
        else Unsigned (type_bits ty)) i2 ==>
-    binop_frag ctx func cenv cx bop ty ann bl el v1 v2 es0
+    binop_frag ctx func cenv cx bop ty ann bl el tys v1 v2 es0
 Proof
   rpt gen_tac >> strip_tac >>
   qspecl_then [`cx`, `ann`, `bop`, `ty`, `v1`, `v2`, `es0`, `i1`, `i2`,
@@ -549,7 +549,7 @@ Theorem bop_result_checked:
   !cx ann bop v1 v2 es i1 i2 u.
     MEM bop [Add; Sub; Mul] /\ v1 = IntV i1 /\ v2 = IntV i2 /\
     type_to_int_bound ann = SOME u ==>
-    bop_result cx ann bop v1 v2 es =
+    bop_result cx ann bop tys v1 v2 es =
       let r = if bop = Add then i1 + i2 else if bop = Sub then i1 - i2
               else i1 * i2 in
       if within_int_bound u r then INL (Value (IntV r))
@@ -570,12 +570,12 @@ Theorem compile_checked_sim:
     type_to_int_bound ty = SOME u /\ type_to_int_bound ann = SOME u /\
     0 < type_bits ty /\ type_bits ty <= 256 /\
     within_int_bound u i1 /\ within_int_bound u i2 ==>
-    binop_frag ctx func cenv cx bop ty ann bl el v1 v2 es0
+    binop_frag ctx func cenv cx bop ty ann bl el tys v1 v2 es0
 Proof
   rpt gen_tac >> strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
   qabbrev_tac `rr = if bop = Add then i1 + i2 else if bop = Sub then i1 - i2
                    else i1 * i2` >>
-  `bop_result cx ann bop (IntV i1) (IntV i2) es0 =
+  `bop_result cx ann bop tys (IntV i1) (IntV i2) es0 =
      if within_int_bound u rr then INL (Value (IntV rr))
      else INR (Error (RuntimeError "bounded_int_op bound"))` by
     (qspecl_then [`cx`, `ann`, `bop`, `IntV i1`, `IntV i2`, `es0`, `i1`, `i2`,
@@ -635,10 +635,10 @@ Theorem bop_result_divmod:
     within_int_bound u i1 /\ within_int_bound u i2 ==>
     ((i2 = 0 \/ (bop = Div /\ is_signed_type ty /\
                  i1 = -&(2 ** (type_bits ty − 1)) /\ i2 = -1)) ==>
-     ?m. bop_result cx ann bop v1 v2 es = INR (Error (RuntimeError m))) /\
+     ?m. bop_result cx ann bop tys v1 v2 es = INR (Error (RuntimeError m))) /\
     (~(i2 = 0 \/ (bop = Div /\ is_signed_type ty /\
                   i1 = -&(2 ** (type_bits ty − 1)) /\ i2 = -1)) ==>
-     ?z. bop_result cx ann bop v1 v2 es = INL (Value (IntV z)) /\
+     ?z. bop_result cx ann bop tys v1 v2 es = INL (Value (IntV z)) /\
          (i2w z : bytes32) =
            (if bop = Div then
               (if is_signed_type ty then safe_sdiv else safe_div)
@@ -731,7 +731,7 @@ Theorem compile_divmod_sim:
     type_to_int_bound ty = SOME u /\ type_to_int_bound ann = SOME u /\
     0 < type_bits ty /\ type_bits ty <= 256 /\
     within_int_bound u i1 /\ within_int_bound u i2 ==>
-    binop_frag ctx func cenv cx bop ty ann bl el v1 v2 es0
+    binop_frag ctx func cenv cx bop ty ann bl el tys v1 v2 es0
 Proof
   rpt gen_tac >> strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
   qspecl_then [`ty`, `u`] mp_tac type_to_int_bound_bits >> simp[] >>
@@ -780,19 +780,19 @@ QED
    runtime errors matched), the int168 operator fragment carries over. *)
 Theorem binop_frag_decimal_transfer:
   !ctx func cenv cx bop ann ann' bl el d1 d2 es0.
-    binop_frag ctx func cenv cx bop (BaseT (IntT 168)) ann' bl el
+    binop_frag ctx func cenv cx bop (BaseT (IntT 168)) ann' bl el tys
       (IntV d1) (IntV d2) es0 /\
     (!x y. compile_binop bop x y (BaseT DecimalT) bl el =
            compile_binop bop x y (BaseT (IntT 168)) bl el) /\
-    ((?z. bop_result cx ann' bop (IntV d1) (IntV d2) es0 =
+    ((?z. bop_result cx ann' bop tys (IntV d1) (IntV d2) es0 =
             INL (Value (IntV z)) /\
-          bop_result cx ann bop (DecimalV d1) (DecimalV d2) es0 =
+          bop_result cx ann bop tys (DecimalV d1) (DecimalV d2) es0 =
             INL (Value (DecimalV z))) \/
-     (?m m'. bop_result cx ann' bop (IntV d1) (IntV d2) es0 =
+     (?m m'. bop_result cx ann' bop tys (IntV d1) (IntV d2) es0 =
                INR (Error (RuntimeError m)) /\
-             bop_result cx ann bop (DecimalV d1) (DecimalV d2) es0 =
+             bop_result cx ann bop tys (DecimalV d1) (DecimalV d2) es0 =
                INR (Error (RuntimeError m')))) ==>
-    binop_frag ctx func cenv cx bop (BaseT DecimalT) ann bl el
+    binop_frag ctx func cenv cx bop (BaseT DecimalT) ann bl el tys
       (DecimalV d1) (DecimalV d2) es0
 Proof
   rpt gen_tac >> simp[binop_frag_def] >> strip_tac >> rpt gen_tac >>
@@ -808,7 +808,7 @@ Theorem compile_decimal_add_sub_mod_sim:
   !ctx func cenv cx bop ann bl el d1 d2 es0.
     MEM bop [Add; Sub; Mod] /\
     within_int_bound (Signed 168) d1 /\ within_int_bound (Signed 168) d2 ==>
-    binop_frag ctx func cenv cx bop (BaseT DecimalT) ann bl el
+    binop_frag ctx func cenv cx bop (BaseT DecimalT) ann bl el tys
       (DecimalV d1) (DecimalV d2) es0
 Proof
   rpt strip_tac >> irule binop_frag_decimal_transfer >>
@@ -865,7 +865,7 @@ Theorem compile_decimal_mul_div_sim:
   !ctx func cenv cx bop ann bl el d1 d2 es0.
     MEM bop [Mul; Div] /\
     within_int_bound (Signed 168) d1 /\ within_int_bound (Signed 168) d2 ==>
-    binop_frag ctx func cenv cx bop (BaseT DecimalT) ann bl el
+    binop_frag ctx func cenv cx bop (BaseT DecimalT) ann bl el tys
       (DecimalV d1) (DecimalV d2) es0
 Proof
   rpt strip_tac >> irule binop_frag_straight >> conj_tac
