@@ -19,7 +19,7 @@
  *   external_call_result_rel, source_unit_execution_correct -- oracle boundary
  *   compile_state_ok_initial -- label-space invariant of the initial compile state
  *   external_return_word_result_rel, external_return_prim_result_rel,
- *   external_return_static_result_rel,
+ *   external_return_static_result_rel, external_return_abi_result_rel,
  *   external_return_none_result_rel,
  *   external_fallthrough_result_rel -- S1 halt bridge (#640) for the
  *     return sequences loweringHalt covers, and the _unlock versions of
@@ -489,6 +489,50 @@ Proof
                `exps`, `layouts`] mp_tac external_halt_success >>
   impl_tac >- simp[] >>
   strip_tac >> gvs[external_call_result_rel_def]
+QED
+
+(* A return through the ABI encoder: the operand points at memory holding
+   the value, below the alloca frontier, and ei is a plan for the value's
+   type, wrapped in a singleton tuple when it is dynamic and the ABI wraps
+   it (a static one encodes the same either way), with the buffer size msz
+   at least the type's ABI size bound.  None of the return sequence's
+   ALLOCAs has run, and the frontier stays below 2 ** 256 while they run;
+   nothing in the lowering bounds it (vyper rejects allocations of 2^64
+   bytes or more). *)
+Theorem external_return_abi_result_rel:
+  !ctx op ei msz nr nkey ut iv st x st' func cenv cx es ret tv v0 v
+     tops tx srcs exps layouts Q.
+    compile_external_return (SOME op) F F ei msz nr nkey ut iv st =
+      (x, st') /\
+    (nr ==> iv) /\ (!y. op = Var y ==> not_fresh_at st y) /\
+    evaluate_type (type_env tops) ret = SOME tv /\ safe_cast tv v0 = SOME v /\
+    abi_enc_plan (type_env tops)
+      (if needs_external_call_wrap ret /\
+          is_dynamic (vyper_to_abi_type (type_env tops) ret)
+       then TupleT [ret] else ret) ei /\
+    vyper_abi_size_bound (type_env tops)
+      (if needs_external_call_wrap ret /\
+          is_dynamic (vyper_to_abi_type (type_env tops) ret)
+       then TupleT [ret] else ret) <= msz ==>
+    frag_exec ctx st st'
+      (\s. state_rel func cenv cx es s /\
+           (?p. eval_operand op s = SOME p /\
+                val_in_memory tv v0 (w2n p) s.vs_memory /\
+                w2n p + type_memory_size tv <= s.vs_alloca_next) /\
+           alloca_inv s /\
+           (!i. i IN frag_ids st st' ==> FLOOKUP s.vs_allocas i = NONE) /\
+           s.vs_alloca_next + msz + 32 * (st'.cs_next_id - st.cs_next_id) <
+             dimword (:256) /\
+           s.vs_accounts =
+             process_deletions es.pending_deletions es.accounts /\
+           s.vs_transient = es.tStorage)
+      Q
+      (external_call_result_rel tops ret tx
+         (INL v, finalize_pending_deletions
+                   (abstract_machine_from_state srcs exps layouts es),
+          es.requests))
+Proof
+  cheat
 QED
 
 (* ===== Label-space invariant at the start of lowering ===== *)

@@ -32,6 +32,7 @@
  *   frag_exec_weaken, frag_exec_pre_exit(_c), frag_exec_false_pre
  *                         — forms of frag_exec_conseq
  *   frag_exec_run_inst_seq — lift a straight-line run_inst_seq result
+ *   frag_exec_loop        — a header/body/exit loop runs its body N times
  *
  * Steps inside a block:
  *   run_from_step         — a straight-line step moves run_from on
@@ -886,4 +887,33 @@ Proof
   strip_tac
   >- (disj1_tac >> qexists_tac `s'` >> simp[] >> metis_tac[]) >>
   disj2_tac >> metis_tac[exit_result_not_error]
+QED
+
+(* ===== Loops ===== *)
+
+(* A loop as the lowering emits it: a jump to a header block whose
+   straight-line code ends in JNZ to the exit or to the body, the body
+   fragment, a jump back to the header, and the exit block.  I k holds at
+   the start of the header's k-th run and J k at its JNZ; the condition is
+   nonzero exactly at k = N, so the body runs N times.  Jumps change only
+   the position, so I and J must not depend on it. *)
+Theorem frag_exec_loop:
+  !ctx st0 st1 sth stj st2 stb ste st3 stx hdr body exit cnd
+   x0 x1 x2 x3 x4 x5 I J N R.
+    emit_inst JMP [Label hdr] [] st0 = (x0, st1) /\
+    new_block hdr st1 = (x1, sth) /\
+    emit_inst JNZ [cnd; Label exit; Label body] [] stj = (x2, st2) /\
+    new_block body st2 = (x3, stb) /\
+    emit_inst JMP [Label hdr] [] ste = (x4, st3) /\
+    new_block exit st3 = (x5, stx) /\
+    cs_extends sth stj /\ cs_extends stb ste /\
+    (!k s l. I k s ==> I k (jump_to l s)) /\
+    (!k s l. J k s ==> J k (jump_to l s)) /\
+    (!k. k <= N ==> frag_exec ctx sth stj (I k) (J k) R) /\
+    (!k s. k <= N /\ J k s ==>
+           ?w. eval_operand cnd s = SOME w /\ (w = 0w <=> k < N)) /\
+    (!k. k < N ==> frag_exec ctx stb ste (J k) (I (SUC k)) R) ==>
+    frag_exec ctx st0 stx (I 0) (J N) R
+Proof
+  cheat
 QED
