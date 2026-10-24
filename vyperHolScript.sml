@@ -7,22 +7,13 @@
  *)
 Theory vyperHol
 Ancestors
-  (* foundational policy, compilation-unit, state, and semantics interfaces *)
-  venomPolicyTypes venomCompilerTypes venomCompilerWf unitLabelMap irSupply
-  venomState venomExecSemantics extCallOracle
-  (* syntax, frontend, semantics *)
-  jsonToVyper
-  vyperTestRunner
-  vyperEvent
   (* semantics properties *)
   vyperSemanticsHol
+  (* frontend and test runner *)
+  vyperTestRunner
   (* compiler passes *)
   venomPassesHol
   (* analysis roll-up *)
   venomAnalysisHol
-  (* pipeline + codegen *)
-  venomPipelineCorrect
-  (* lowering + e2e *)
+  (* lowering, pipeline, codegen and e2e *)
   vyperLoweringHol
-  (* codegen *)
-  venomToAsmProps asmToBytecodeProps codegenCorrectness
