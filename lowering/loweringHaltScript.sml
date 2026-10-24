@@ -687,6 +687,56 @@ Proof
         gen_tac])
 QED
 
+Theorem halt_comp_grows_encoder[local]:
+  (!dst cp ei dyn off dp.
+    halt_comp_grows (compile_abi_encode_child dst cp ei dyn off dp)) /\
+  (!dst src ei. halt_comp_grows (compile_abi_encode_to_buf dst src ei)) /\
+  (!dst src eis so ho dp.
+    halt_comp_grows (compile_abi_encode_complex_elems dst src eis so ho dp)) /\
+  (!dst src ei asz msz len.
+    halt_comp_grows (compile_abi_encode_dyn_loop dst src ei asz msz len))
+Proof
+  ho_match_mp_tac compile_abi_encode_child_ind >> rpt conj_tac >>
+  rpt strip_tac >>
+  once_rewrite_tac[compile_abi_encode_child_def] >>
+  rpt (FIRST [CHANGED_TAC (gvs[LET_THM,
+          halt_comp_grows_alloc_buffer, halt_comp_grows_emit_op,
+          halt_comp_grows_emit_void, halt_comp_grows_emit_inst,
+          halt_comp_grows_fresh_label, halt_comp_grows_new_block,
+          halt_comp_grows_static, halt_comp_grows_return,
+          halt_comp_grows_dyn_static_loop]),
+        irule halt_comp_grows_bind >> conj_tac,
+        irule halt_comp_grows_ignore_bind >> conj_tac,
+        gen_tac, IF_CASES_TAC])
+QED
+
+Theorem compile_abi_encode_to_buf_extends:
+  !dst src ei st len st'.
+    compile_abi_encode_to_buf dst src ei st = (len,st') ==>
+    cs_extends st st'
+Proof
+  mp_tac (cj 2 halt_comp_grows_encoder) >>
+  simp[halt_comp_grows_def] >> metis_tac[]
+QED
+
+Theorem compile_abi_encode_to_buf_next_id:
+  !dst src ei st len st'.
+    compile_abi_encode_to_buf dst src ei st = (len,st') ==>
+    st.cs_next_id <= st'.cs_next_id
+Proof
+  mp_tac (cj 2 halt_comp_grows_encoder) >>
+  simp[halt_comp_grows_def] >> metis_tac[]
+QED
+
+Theorem compile_abi_encode_to_buf_next_var:
+  !dst src ei st len st'.
+    compile_abi_encode_to_buf dst src ei st = (len,st') ==>
+    st.cs_next_var <= st'.cs_next_var
+Proof
+  mp_tac (cj 2 halt_comp_grows_encoder) >>
+  simp[halt_comp_grows_def] >> metis_tac[]
+QED
+
 Theorem frag_ids_count_diff:
   !a b. frag_ids a b = count b.cs_next_id DIFF count a.cs_next_id
 Proof
