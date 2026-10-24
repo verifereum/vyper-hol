@@ -134,12 +134,19 @@ structure compilerNativeRuntime = struct
           if cmp (y, x) = LESS then y :: merge (xs, yt) else x :: merge (xt, ys)
       | merge ([], ys) = ys
       | merge (xs, []) = xs
+    fun split (x :: y :: r) (a, b) = split r (x :: a, y :: b)
+      | split [x] (a, b) = (x :: a, b)
+      | split [] ab = ab
     fun go [] = []
       | go [x] = [x]
-      | go l = let val (a, b) = (List.take (l, length l div 2), List.drop (l, length l div 2))
-               in merge (go a, go b) end
+      | go l = let val (a, b) = split l ([], []) in merge (go a, go b) end
   in go l end
-  fun subset_by cmp xs ys = let
+  (* Below this length, pairwise comparison beats sorting. *)
+  val small = 8
+  fun short l = let fun go (_ :: t) n = n < small andalso go t (n + 1) | go [] _ = true
+                in go l 0 end
+  fun subset_by cmp xs ys = if short ys
+    then List.all (fn x => List.exists (fn y => cmp (x, y) = EQUAL) ys) xs else let
     val v = Vector.fromList (msort cmp ys)
     fun mem x = let
       fun bs (lo, hi) = lo < hi andalso (let val m = (lo + hi) div 2 in
@@ -147,12 +154,18 @@ structure compilerNativeRuntime = struct
           EQUAL => true | LESS => bs (lo, m) | GREATER => bs (m + 1, hi) end)
     in bs (0, Vector.length v) end
   in List.all mem xs end
-  fun distinct_by cmp l = let
+  fun distinct_by cmp l = if short l then let
+      fun go (x :: t) = not (List.exists (fn y => cmp (x, y) = EQUAL) t) andalso go t
+        | go [] = true
+    in go l end else let
     fun ok (x :: (rest as y :: _)) = cmp (x, y) <> EQUAL andalso ok rest
       | ok _ = true
   in ok (msort cmp l) end
   (* nub keeps the last occurrence of each element. *)
-  fun nub_by cmp l = let
+  fun nub_by cmp l = if short l then let
+      fun go (x :: t) = if List.exists (fn y => cmp (x, y) = EQUAL) t then go t else x :: go t
+        | go [] = []
+    in go l end else let
     val n = length l
     val tagged = ListPair.zip (l, List.tabulate (n, fn i => i))
     val sorted = msort (fn ((a, i), (b, j)) => case cmp (a, b) of EQUAL => Int.compare (i, j)
