@@ -22,10 +22,6 @@
  *     stmt_state_rel does not relate to the ALLOCA allocations, so
  *     expr_post's memory frame does not follow (#668, #636 Infrastructure
  *     row 2).
- *   - compile_extcall_sim: its positional arguments are lowered with
- *     compile_multi_vvs and unwrapped only when stored into the call
- *     buffer, which the induction hypothesis does not describe (see
- *     exprSimHyps).
  *
  * Internal calls (row 6) have no lemma: expr_sim_pre excludes them
  * (int_calls_expr e = []) until #638 states the INVOKE hypothesis.
@@ -38,7 +34,7 @@ Ancestors
 Theorem compile_extcall_sim:
   !cenv ann is_static skip sig opts args dflt.
     expr_sim_below cenv (expr_size (Call ann (ExtCall is_static skip sig opts) args dflt)) ==>
-    expr_sim_ok cenv (Call ann (ExtCall is_static skip sig opts) args dflt)
+    expr_vv_ok cenv (Call ann (ExtCall is_static skip sig opts) args dflt)
 Proof
   cheat
 QED
@@ -46,7 +42,7 @@ QED
 Theorem compile_send_sim:
   !cenv ann has_gas args dflt.
     expr_sim_below cenv (expr_size (Call ann (Send has_gas) args dflt)) ==>
-    expr_sim_ok cenv (Call ann (Send has_gas) args dflt)
+    expr_vv_ok cenv (Call ann (Send has_gas) args dflt)
 Proof
   cheat
 QED
@@ -54,7 +50,7 @@ QED
 Theorem compile_raw_call_sim:
   !cenv ann flags args dflt.
     expr_sim_below cenv (expr_size (Call ann (RawCallTarget flags) args dflt)) ==>
-    expr_sim_ok cenv (Call ann (RawCallTarget flags) args dflt)
+    expr_vv_ok cenv (Call ann (RawCallTarget flags) args dflt)
 Proof
   cheat
 QED
@@ -62,7 +58,7 @@ QED
 Theorem compile_raw_call_calldata_sim:
   !cenv ann flags args dflt.
     expr_sim_below cenv (expr_size (Call ann (RawCallCalldataTarget flags) args dflt)) ==>
-    expr_sim_ok cenv (Call ann (RawCallCalldataTarget flags) args dflt)
+    expr_vv_ok cenv (Call ann (RawCallCalldataTarget flags) args dflt)
 Proof
   cheat
 QED
@@ -70,7 +66,7 @@ QED
 Theorem compile_raw_log_sim:
   !cenv ann args dflt.
     expr_sim_below cenv (expr_size (Call ann (RawLog) args dflt)) ==>
-    expr_sim_ok cenv (Call ann (RawLog) args dflt)
+    expr_vv_ok cenv (Call ann (RawLog) args dflt)
 Proof
   cheat
 QED
@@ -78,7 +74,7 @@ QED
 Theorem compile_raw_revert_sim:
   !cenv ann args dflt.
     expr_sim_below cenv (expr_size (Call ann (RawRevert) args dflt)) ==>
-    expr_sim_ok cenv (Call ann (RawRevert) args dflt)
+    expr_vv_ok cenv (Call ann (RawRevert) args dflt)
 Proof
   cheat
 QED
@@ -86,7 +82,7 @@ QED
 Theorem compile_selfdestruct_sim:
   !cenv ann args dflt.
     expr_sim_below cenv (expr_size (Call ann (SelfDestructTarget) args dflt)) ==>
-    expr_sim_ok cenv (Call ann (SelfDestructTarget) args dflt)
+    expr_vv_ok cenv (Call ann (SelfDestructTarget) args dflt)
 Proof
   cheat
 QED
@@ -94,7 +90,7 @@ QED
 Theorem compile_create_sim:
   !cenv ann kind has_salt rof args dflt.
     expr_sim_below cenv (expr_size (Call ann (CreateTarget kind has_salt rof) args dflt)) ==>
-    expr_sim_ok cenv (Call ann (CreateTarget kind has_salt rof) args dflt)
+    expr_vv_ok cenv (Call ann (CreateTarget kind has_salt rof) args dflt)
 Proof
   cheat
 QED

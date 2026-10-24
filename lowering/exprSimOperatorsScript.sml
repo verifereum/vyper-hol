@@ -216,10 +216,36 @@ Proof
                     word_value_type (expr_type e2)`
   >- (pop_assum strip_assume_tac >> rpt BasicProvers.VAR_EQ_TAC >>
       `expr_sim_ok cenv e1 /\ expr_sim_ok cenv e2` by
-        metis_tac[expr_sim_below_mem, listTheory.MEM] >>
+        metis_tac[expr_sim_below_mem, listTheory.MEM, expr_ok_def] >>
       irule compile_bop_word_sim >> fs[]) >>
   rw[expr_sim_ok_def] >> irule compile_bop_other_sim >>
   metis_tac[]
+QED
+
+(* A binary operator is lowered to a StackValue. *)
+Theorem compile_bop_stack:
+  !cenv ty ann bop args sa.
+    ?t op sb. compile_expr cenv ty (Builtin ann (Bop bop) args) sa =
+              (StackValue t op, sb)
+Proof
+  rpt gen_tac >>
+  simp[compile_expr_bop, vyperASTTheory.expr_type_def] >>
+  simp[Once compile_expr_def, LET_THM, as_stack_val_pair,
+       pairTheory.UNCURRY] >>
+  rw[] >>
+  Cases_on `HD (TL args)` >>
+  simp[pairTheory.UNCURRY] >>
+  rename1 `Builtin _ bi _` >> Cases_on `bi` >> simp[]
+QED
+
+Theorem compile_bop_ok:
+  !cenv ann bop args.
+    expr_sim_below cenv (list_size expr_size args) ==>
+    expr_ok cenv (Builtin ann (Bop bop) args)
+Proof
+  rpt strip_tac >> irule expr_ok_stack >>
+  simp[compile_bop_case_sim, compile_bop_stack] >>
+  rpt strip_tac >> drule eval_expr_builtin_value >> simp[]
 QED
 
 (* ===== Unary operators ===== *)
@@ -227,7 +253,7 @@ QED
 Theorem compile_not_sim:
   !cenv ann args.
     expr_sim_below cenv (list_size expr_size args) ==>
-    expr_sim_ok cenv (Builtin ann Not args)
+    expr_vv_ok cenv (Builtin ann Not args)
 Proof
   cheat
 QED
@@ -235,7 +261,7 @@ QED
 Theorem compile_neg_sim:
   !cenv ann args.
     expr_sim_below cenv (list_size expr_size args) ==>
-    expr_sim_ok cenv (Builtin ann Neg args)
+    expr_vv_ok cenv (Builtin ann Neg args)
 Proof
   cheat
 QED
@@ -243,7 +269,7 @@ QED
 Theorem compile_abs_sim:
   !cenv ann args.
     expr_sim_below cenv (list_size expr_size args) ==>
-    expr_sim_ok cenv (Builtin ann Abs args)
+    expr_vv_ok cenv (Builtin ann Abs args)
 Proof
   cheat
 QED
@@ -253,7 +279,7 @@ QED
 Theorem compile_ifexp_sim:
   !cenv ann c e1 e2.
     expr_sim_below cenv (expr_size (IfExp ann c e1 e2)) ==>
-    expr_sim_ok cenv (IfExp ann c e1 e2)
+    expr_vv_ok cenv (IfExp ann c e1 e2)
 Proof
   cheat
 QED

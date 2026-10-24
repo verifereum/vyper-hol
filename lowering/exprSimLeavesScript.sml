@@ -45,6 +45,9 @@ Ancestors
   exprSim exprSimHyps exprLowering compileEnv loweringSlice
   vyperAST vyperInterpreter vyperState vyperTypeSystem vyperTypeCallGraph
 
+val expr_sizes = [listTheory.list_size_def, vyperASTTheory.expr_size_def,
+                  basicSizeTheory.option_size_def];
+
 (* ===== Locals ===== *)
 
 Theorem compile_name_other_sim:
@@ -72,6 +75,19 @@ Proof
   irule compile_name_other_sim >> metis_tac[]
 QED
 
+(* A local's value_vv is a pointer to its region. *)
+Theorem compile_name_vv_sim:
+  !cenv ann id. expr_vv_ok cenv (Name ann id)
+Proof
+  cheat
+QED
+
+Theorem compile_name_case_sim:
+  !cenv ann id. expr_ok cenv (Name ann id)
+Proof
+  simp[expr_ok_def, compile_name_sim, compile_name_vv_sim]
+QED
+
 (* ===== Literals ===== *)
 
 Theorem compile_literal_other_sim:
@@ -94,6 +110,29 @@ Proof
   irule compile_literal_other_sim >> metis_tac[]
 QED
 
+(* Bytes and string literals: a word, or a buffer of their own. *)
+Theorem compile_literal_other_vv_sim:
+  !cenv ann l.
+    ((?bs. l = BytesL bs) \/ (?str. l = StringL str)) ==>
+    expr_vv_ok cenv (Literal ann l)
+Proof
+  cheat
+QED
+
+Theorem compile_literal_case_sim:
+  !cenv ann l. expr_ok cenv (Literal ann l)
+Proof
+  rpt gen_tac >>
+  Cases_on `(?bs. l = BytesL bs) \/ (?str. l = StringL str)`
+  >- (irule expr_ok_of_vv >> irule compile_literal_other_vv_sim >> simp[]) >>
+  irule expr_ok_stack >> simp[compile_literal_sim] >> rpt conj_tac
+  >~ [`eval_expr`]
+  >- (rpt strip_tac >> drule eval_expr_literal_value >> simp[]) >>
+  Cases_on `l` >> gvs[] >>
+  TRY (rename1 `BoolL b` >> Cases_on `b`) >>
+  simp[compile_expr_def, compile_literal_vv_def, comp_return_def]
+QED
+
 (* ===== Environment reads ===== *)
 
 Theorem compile_prevhash_sim:
@@ -113,16 +152,43 @@ Proof
   gvs[] >> irule compile_env_sim >> simp[]
 QED
 
+(* An environment read goes to the builtin dispatcher, whatever its
+   arguments (as exprBopLowering's compile_expr_bop). *)
+Theorem compile_expr_env:
+  !cenv ty ann item args st.
+    compile_expr cenv ty (Builtin ann (Env item) args) st =
+    compile_builtin_dispatch cenv ann ty (Env item) args st
+Proof
+  rpt gen_tac >>
+  simp[Once (CONJUNCT1 compile_expr_raw_def), compile_expr_body_def,
+       vyperASTTheory.expr_type_def] >>
+  Cases_on `args` >> simp[] >> Cases_on `h` >> simp expr_sizes >>
+  rpt (BasicProvers.TOP_CASE_TAC >> simp expr_sizes) >>
+  rpt (qpat_x_assum `~(_ < _)` mp_tac) >> Cases_on `o'` >> simp expr_sizes
+QED
+
+Theorem compile_env_case_ok:
+  !cenv ann item args. expr_ok cenv (Builtin ann (Env item) args)
+Proof
+  rpt gen_tac >> irule expr_ok_stack >> simp[compile_env_case_sim] >>
+  rpt conj_tac
+  >~ [`eval_expr`]
+  >- (rpt strip_tac >> drule eval_expr_builtin_value >> simp[]) >>
+  rpt gen_tac >>
+  simp[compile_expr_env] >> simp[Once compile_expr_def] >>
+  metis_tac[as_stack_val_stack]
+QED
+
 (* ===== Top-level names and flag members ===== *)
 
 Theorem compile_toplevel_name_sim:
-  !cenv ann nsid. expr_sim_ok cenv (TopLevelName ann nsid)
+  !cenv ann nsid. expr_vv_ok cenv (TopLevelName ann nsid)
 Proof
   cheat
 QED
 
 Theorem compile_flag_member_sim:
-  !cenv ann nsid mid. expr_sim_ok cenv (FlagMember ann nsid mid)
+  !cenv ann nsid mid. expr_vv_ok cenv (FlagMember ann nsid mid)
 Proof
   cheat
 QED
