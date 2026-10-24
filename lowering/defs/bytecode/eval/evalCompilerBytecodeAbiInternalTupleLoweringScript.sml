@@ -1101,6 +1101,7 @@ val internal_tuple_call_stmts_clean_step1 = RATOR_CONV
       ^internal_tuple_call_state13``
 val internal_tuple_call_stmts_clean_step2 = SIMP_CONV pure_ss
   [internal_tuple_call_stmts_nil_def_clean,
+   stmtLoweringTheory.declare_stmt_local_def,
    compileEnvTheory.comp_get_def,
    compileEnvTheory.comp_bind_def,
    compileEnvTheory.comp_ignore_bind_def,

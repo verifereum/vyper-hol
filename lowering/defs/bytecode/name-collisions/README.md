@@ -1,7 +1,8 @@
 # Name-collision witnesses (#557)
 
 These sources use identifiers that the HOL lowering used to keep in the same
-`compile_env.ce_vars` table as compiler-internal entries or module variables. Each has an exact
+`compile_env.ce_vars` table as compiler-internal entries, module variables or
+another declaration of the same name. Each has an exact
 bytecode comparison in `eval/evalCompilerNameCollisionsScript.sml`, included in
 the default lowering rollup.
 
@@ -12,6 +13,8 @@ the default lowering rollup.
 | `nm_arg_storage` | a04-03 | an external argument `stored` and storage `self.stored` stay distinct |
 | `nm_local_storage_types` | a04-03 | a `uint256` local `x` and a `DynArray` storage `self.x` keep separate locations and types |
 | `nm_transient_local` | a04-03 | a local `t` does not hide transient `self.t` |
+| `nm_redeclared_local` | #644 | a local `a` declared as `Bytes[100]` in one branch and `uint256` in the other gets its own allocation of its own size in each |
+| `nm_redeclared_loop_var` | #644 | a loop variable `i` declared as `uint256` and then `uint8` in sequential loops gets its own allocation in each, emitted after the loop's range bound and iterable are evaluated |
 
 `oracle/` holds the annotated AST/layout JSON and deployment/runtime bytecode
 from the pinned Python Vyper (`VYPER_PIN`), with the same settings as the
