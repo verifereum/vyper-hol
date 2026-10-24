@@ -176,7 +176,7 @@ End
    call_external_function builds: the returned value cast to the return
    type (NoneV when the body returns without a value or falls off its
    end), the machine of the state es' after the lock is released, with its
-   pending deletions processed, and es''s requests.  The statement
+   pending deletions processed, and the requests of es'.  The statement
    simulation (#637) brings the run to the return, the entry bridge (#639)
    runs up to the body, and S1 (#642) composes them.
 
