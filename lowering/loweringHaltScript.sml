@@ -72,7 +72,7 @@ Ancestors
   list rich_list finite_map
   fragExec loweringSlice
   stmtLowering moduleLowering context emitHelper emitHelperProps compileEnv
-  abiEncoder
+  abiEncoder abiEncoderProps
   valueEncoding valueEncodingProps
   e2eDefs vyperABI contractABI vyperInterpreter vyperState vyperValue
   vyperValueOperation vfmExecution
@@ -543,6 +543,40 @@ Proof
         map_every (fn n => mp_tac (Q.SPEC n th)) [`0`, `1`, `2`]) >>
       simp[]) >>
   strip_tac >> qexists_tac `0` >> simp[exit_result_def]
+QED
+
+(* Returning a value through the ABI encoder (any type but a primitive
+   word; for a dynamic one, the plan is that of its wrapping singleton
+   tuple, if it has one): ALLOCA a buffer of msz bytes, encode the value
+   into it, RETURN the encoding.  The buffer and the encoder's scratch
+   cells are fresh allocas, above the value: none of the fragment's
+   ALLOCAs has run, and the value lies below the alloca frontier.  The
+   frontier stays below 2 ** 256 while they run, and the encoding fits in
+   the buffer. *)
+Theorem compile_external_return_abi_frag:
+  !ctx op ei msz nr nkey ut iv st x st' env ty tv v av P Q R.
+    compile_external_return (SOME op) F F ei msz nr nkey ut iv st =
+      (x, st') /\
+    (nr ==> iv) /\ (!y. op = Var y ==> not_fresh_at st y) /\
+    abi_enc_plan env ty ei /\ evaluate_type env ty = SOME tv /\
+    value_has_type tv v /\ vyper_to_abi env ty v = SOME av /\
+    LENGTH (enc (vyper_to_abi_type env ty) av) <= msz /\
+    (!s. P s ==>
+         ?p. eval_operand op s = SOME p /\
+             val_in_memory tv v (w2n p) s.vs_memory /\
+             w2n p + type_memory_size tv <= s.vs_alloca_next /\
+             alloca_inv s /\
+             (!i. i IN frag_ids st st' ==> FLOOKUP s.vs_allocas i = NONE) /\
+             s.vs_alloca_next + msz + 32 * (st'.cs_next_id - st.cs_next_id) <
+               dimword (:256) /\
+             !ss. ss.vs_returndata = enc (vyper_to_abi_type env ty) av /\
+                  ss.vs_accounts = s.vs_accounts /\
+                  ss.vs_transient = s.vs_transient /\
+                  ss.vs_logs = s.vs_logs /\ ss.vs_requests = s.vs_requests ==>
+                  R (Halt ss)) ==>
+    frag_exec ctx st st' P Q R
+Proof
+  cheat
 QED
 
 (* ===== Returns that release the lock ===== *)
