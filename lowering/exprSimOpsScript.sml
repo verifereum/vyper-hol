@@ -17,9 +17,12 @@
  *
  * Not covered: shifts of narrower integers and by negative amounts.  The
  * type system allows both (well_typed_binop ShL/ShR: any integer types),
- * but the lowering emits a bare SHL/SHR/SAR: it neither truncates the
- * result to the narrower type, as the source does (int_mod, signed_int_mod),
+ * but the lowering emits a bare SHL/SHR/SAR: it neither truncates a left
+ * shift to the narrower type, as the source does (int_mod, signed_int_mod),
  * nor fails on a negative amount, as the source does (RuntimeError).
+ * Vyper itself rejects shifts of types other than int256 and uint256.
+ * Also not covered: == and != on address and bytesN.  Their values are
+ * BytesV, which is no word_value, so compile_bop_sim does not apply.
  *
  * Fragment combinators: frag_exec_weaken, frag_exec_pre_exit(_c),
  *   frag_exec_then, frag_exec_seq_pointwise, frag_exec_exit_prefix,
@@ -324,11 +327,11 @@ Theorem compile_bop_sim:
          (if bop = Exp then expr_int_literal e1 else NONE)
          (if bop = Exp then expr_int_literal e2 else NONE) sa = (op, sb) ==>
        cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var) /\
-    (!r1 es1. eval_expr cx e1 es = (r1, es1) ==> expr_res_ok r1) /\
+    (!tv es1. eval_expr cx e1 es = (INL tv, es1) ==> ?v. tv = Value v) /\
     expr_sim ctx func cenv cx (expr_type e1) e1 es /\
     (!v1 es1. eval_expr cx e1 es = (INL (Value v1), es1) ==>
        word_value v1 /\
-       (!r2 es2. eval_expr cx e2 es1 = (r2, es2) ==> expr_res_ok r2) /\
+       (!tv es2. eval_expr cx e2 es1 = (INL tv, es2) ==> ?v. tv = Value v) /\
        expr_sim ctx func cenv cx (expr_type e1) e2 es1 /\
        !v2 es2. eval_expr cx e2 es1 = (INL (Value v2), es2) ==>
          word_value v2 /\
@@ -370,8 +373,8 @@ Proof
       (impl_tac >- gvs[]) >> strip_tac >>
       irule frag_exec_exit_prefix >> qexists_tac `s1` >> simp[])
   >- ((* e1 is no value *)
-      qpat_x_assum `!r1 es1. eval_expr cx e1 es = _ ==> _` drule >>
-      simp[expr_res_ok_def])
+      qpat_x_assum `!tv es1. eval_expr cx e1 es = (INL tv, es1) ==> _` drule >>
+      simp[])
   >- ((* e2 raises *)
       qpat_x_assum `!v1 es1. eval_expr cx e1 es = _ ==> _` drule >>
       strip_tac >>
@@ -397,8 +400,8 @@ Proof
   >- ((* e2 is no value *)
       qpat_x_assum `!v1 es1. eval_expr cx e1 es = _ ==> _` drule >>
       strip_tac >>
-      qpat_x_assum `!r2 es2. eval_expr cx e2 es1 = _ ==> _` drule >>
-      simp[expr_res_ok_def]) >>
+      qpat_x_assum `!tv es2. eval_expr cx e2 es1 = (INL tv, es2) ==> _` drule >>
+      simp[]) >>
   (* both values *)
   qpat_x_assum `!v1 es1. eval_expr cx e1 es = _ ==> _` drule >>
   strip_tac >>
@@ -454,6 +457,25 @@ QED
 
 (* ===== Bitwise operators ===== *)
 
+(* proves bop_result_bitwise for one of the operations *)
+fun bop_bitwise_tac g =
+  (fs[bop_result_def, evaluate_builtin_def] >>
+   Cases_on `v1` >> Cases_on `v2` >>
+   gvs[evaluate_binop_def, expr_res_ok_def, bounded_int_op_def,
+       val_to_w256_def, i2w_int_and, i2w_int_or, i2w_int_xor,
+       word_value_def] >>
+   FIRST [
+     (* flags *)
+     qmatch_goalsub_abbrev_tac `n2w (Num z)` >>
+     `~(z < 0)` by
+       simp[Abbr `z`, int_and_def, int_or_def, int_xor_def, int_bitwise_neg] >>
+     `(n2w (Num z) : bytes32) = i2w z` by simp[i2w_def] >>
+     pop_assum SUBST1_TAC >>
+     simp[Abbr `z`, i2w_int_and, i2w_int_or, i2w_int_xor, i2w_pos],
+     (* booleans *)
+     rpt (IF_CASES_TAC >> gvs[]) >>
+     simp[WORD_AND_CLAUSES, WORD_OR_CLAUSES, WORD_XOR_CLAUSES]]) g;
+
 (* And, Or and XOr on two values give the word operation on their words.
    On integers the source checks the result against the type's bound;
    operands within it keep the result within it, so the check never
@@ -479,22 +501,11 @@ Proof
      within_int_bound u (int_and i1 i2) /\ within_int_bound u (int_or i1 i2) /\
      within_int_bound u (int_xor i1 i2)` by
     simp[int_and_def, int_or_def, int_xor_def, within_int_bound_int_bitwise] >>
-  fs[bop_result_def, evaluate_builtin_def] >>
-  Cases_on `v1` >> Cases_on `v2` >>
-  gvs[evaluate_binop_def, expr_res_ok_def, bounded_int_op_def,
-      val_to_w256_def, i2w_int_and, i2w_int_or, i2w_int_xor,
-      word_value_def] >>
-  FIRST [
-    (* flags *)
-    qmatch_goalsub_abbrev_tac `n2w (Num z)` >>
-    `~(z < 0)` by
-      simp[Abbr `z`, int_and_def, int_or_def, int_xor_def, int_bitwise_neg] >>
-    `(n2w (Num z) : bytes32) = i2w z` by simp[i2w_def] >>
-    pop_assum SUBST1_TAC >>
-    simp[Abbr `z`, i2w_int_and, i2w_int_or, i2w_int_xor, i2w_pos],
-    (* booleans *)
-    rpt (IF_CASES_TAC >> gvs[]) >>
-    simp[WORD_AND_CLAUSES, WORD_OR_CLAUSES, WORD_XOR_CLAUSES]]
+  (* one operation at a time, each unfolding a third of the value pairs *)
+  gvs[]
+  >>~- ([`bop_result _ _ And _ _ _`], bop_bitwise_tac)
+  >>~- ([`bop_result _ _ Or _ _ _`], bop_bitwise_tac) >>
+  bop_bitwise_tac
 QED
 
 (* The lowering emits the word operation, one instruction. *)
@@ -637,16 +648,16 @@ Proof
            eval_operand y ss = SOME (val_to_w256 v2)`,
      `\a. F`, `\r. F`, `s0`] mp_tac frag_exec_straight_fresh >>
   (impl_tac
-   >- (asm_rewrite_tac[] >> BETA_TAC >> rpt conj_tac >> rpt strip_tac >>
-       FIRST [
-         metis_tac[straight_fresh_flag_in] >> NO_TAC,
-         qspecl_then [`x`, `sa`, `ss`] mp_tac eval_operand_drop_fresh >>
-         qspecl_then [`y`, `sa`, `ss`] mp_tac eval_operand_drop_fresh >>
-         asm_simp_tac bool_ss [] >> NO_TAC,
-         qspecl_then [`bop`, `x`, `y`, `ty`, `bl`, `el`, `sa`, `op`, `sb`,
-                      `val_to_w256 v1`, `val_to_w256 v2`, `ss`] mp_tac
-           compile_flag_in_correct >>
-         asm_simp_tac bool_ss [Abbr `c`]])) >>
+   >- (asm_rewrite_tac[] >> BETA_TAC >> rpt conj_tac >> rpt strip_tac
+       >>~- ([`straight_fresh _`], metis_tac[straight_fresh_flag_in])
+       >>~- ([`eval_operand _ (drop_fresh _ _) = _`],
+             qspecl_then [`x`, `sa`, `ss`] mp_tac eval_operand_drop_fresh >>
+             qspecl_then [`y`, `sa`, `ss`] mp_tac eval_operand_drop_fresh >>
+             asm_simp_tac bool_ss []) >>
+       qspecl_then [`bop`, `x`, `y`, `ty`, `bl`, `el`, `sa`, `op`, `sb`,
+                    `val_to_w256 v1`, `val_to_w256 v2`, `ss`] mp_tac
+         compile_flag_in_correct >>
+       asm_simp_tac bool_ss [Abbr `c`])) >>
   disch_then (fn th => match_mp_tac (MATCH_MP frag_exec_weaken th)) >>
   simp[] >> rpt strip_tac >> Cases_on `c` >> gvs[val_to_w256_def, word_value_def]
 QED

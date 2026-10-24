@@ -979,6 +979,12 @@ Proof
   chain_step emit_op_ISZERO_correct >>
   forward_all_evals >>
   `w2n v > w2n hi` by (
+    (* only the bounds matter: drop the run facts before unfolding *)
+    qpat_x_assum `¬in_type_range _ _` mp_tac >>
+    qpat_x_assum `type_bounds _ = _` mp_tac >>
+    qpat_x_assum `¬is_signed_type _` mp_tac >>
+    qpat_x_assum `type_bits _ ≤ 256` mp_tac >>
+    rpt (pop_assum kall_tac) >> rpt strip_tac >>
     gvs[type_bounds_def, in_type_range_def, math_val_def, LET_THM] >>
     `0 < 2 ** type_bits ty ∧ 2 ** type_bits ty ≤ 2 ** 256` by simp[] >>
     `2 ** type_bits ty − 1 < 2 ** 256` by decide_tac >>
@@ -3086,20 +3092,6 @@ val mul_check_close =
   TRY (gvs[] >> NO_TAC) >>
   first_assum (irule_at Any);
 
-val mul_check_special_tac =
-  fs monad_unfold >> rpt (pairarg_tac >> gvs[]) >>
-  fstep emit_op_SDIV_correct `emit_op SDIV _ _ = _` >>
-  ostep emit_op_EQ_correct `emit_op EQ [div_res; x] _ = _` >>
-  ostep emit_op_ISZERO_correct `emit_op ISZERO [y] _ = _` >>
-  ostep emit_op_OR_correct `emit_op OR _ _ = _` >>
-  ostep (elim_lit 2 emit_op_EQ_correct) `emit_op EQ [x; _] _ = _` >>
-  ostep emit_op_NOT_correct `emit_op NOT _ _ = _` >>
-  ostep emit_op_ISZERO_correct `emit_op ISZERO [ny] _ = _` >>
-  ostep emit_op_AND_correct `emit_op AND [x_min; y_neg1] _ = _` >>
-  ostep emit_op_ISZERO_correct `emit_op ISZERO [special] _ = _` >>
-  ostep emit_op_AND_correct `emit_op AND [ok; not_special] _ = _` >>
-  mul_check_close;
-
 fun mul_check_plain_tac opth pat = gvs[comp_return_def] >>
   fstep opth pat >>
   ostep emit_op_EQ_correct `emit_op EQ _ _ = _` >>
@@ -3123,13 +3115,30 @@ Theorem mul_overflow_check_reverts:
     ∃ ss'. run_inst_seq (emitted_insts pre fin) ss_pre = Abort Revert_abort ss'
 Proof
   rpt gen_tac >> strip_tac >>
-    gvs (compile_mul_overflow_check_def :: monad_unfold) >>
-    rpt (pairarg_tac >> gvs[]) >>
-    Cases_on `is_signed ∧ bits = 256` >> gvs[] >>
-  TRY (mul_check_special_tac >> NO_TAC) >>
-    Cases_on `is_signed` >> gvs[]
-    >- mul_check_plain_tac emit_op_SDIV_correct `emit_op SDIV _ _ = _` >>
-    mul_check_plain_tac emit_op_Div_correct `emit_op Div _ _ = _`
+  gvs (compile_mul_overflow_check_def :: monad_unfold) >>
+  rpt (pairarg_tac >> gvs[]) >>
+  Cases_on `is_signed ∧ bits = 256` >> gvs[]
+  (* the int256 goals, whose code has the INT_MIN * -1 check *)
+  >>~- ([`emit_op NOT _`],
+      fs monad_unfold >> rpt (pairarg_tac >> gvs[]) >>
+      fstep emit_op_SDIV_correct `emit_op SDIV _ _ = _` >>
+      ostep emit_op_EQ_correct `emit_op EQ [div_res; x] _ = _` >>
+      ostep emit_op_ISZERO_correct `emit_op ISZERO [y] _ = _` >>
+      ostep emit_op_OR_correct `emit_op OR _ _ = _` >>
+      ostep (elim_lit 2 emit_op_EQ_correct) `emit_op EQ [x; _] _ = _` >>
+      ostep emit_op_NOT_correct `emit_op NOT _ _ = _` >>
+      ostep emit_op_ISZERO_correct `emit_op ISZERO [ny] _ = _` >>
+      ostep emit_op_AND_correct `emit_op AND [x_min; y_neg1] _ = _` >>
+      ostep emit_op_ISZERO_correct `emit_op ISZERO [special] _ = _` >>
+      ostep emit_op_AND_correct `emit_op AND [ok; not_special] _ = _` >>
+      forward_all_evals >>
+      imp_res_tac emit_void_extends >>
+      drule_all_then strip_assume_tac assert_chain >>
+      TRY (gvs[] >> NO_TAC) >>
+      first_assum (irule_at Any)) >>
+  Cases_on `is_signed` >> gvs[]
+  >- mul_check_plain_tac emit_op_SDIV_correct `emit_op SDIV _ _ = _` >>
+  mul_check_plain_tac emit_op_Div_correct `emit_op Div _ _ = _`
 QED
 
 (* An unsigned product that overflows the word fails the division check. *)
@@ -3217,7 +3226,9 @@ Proof
           (`w2i (i2w rr : bytes32) = rr` by
              (irule integer_wordTheory.w2i_i2w >> simp[int_min_256, int_max_256] >>
               fs[integerTheory.INT_ABS] >> rw[] >> fs[] >> intLib.ARITH_TAC) >>
-           metis_tac[integer_wordTheory.word_0_w2i]) >>
+           qpat_x_assum `w2i _ = rr` (fn th => ONCE_REWRITE_TAC [GSYM th]) >>
+           qpat_x_assum `i2w rr = _`
+             (fn th => REWRITE_TAC [th, integer_wordTheory.word_0_w2i])) >>
         gvs[] >> intLib.ARITH_TAC) >>
     (* the quotient is 2 ** 255: then B = -1 and a = INT_MIN *)
     `qq = 57896044618658097711785492504343953926634992332820282019728792003956564819968` by
