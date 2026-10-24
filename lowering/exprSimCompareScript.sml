@@ -71,13 +71,15 @@ Proof
   rename1 `BaseTV bt` >> Cases_on `bt` >> gvs[value_has_type_def] >> rw[]
   >- (`?m. n = &m` by metis_tac[NUM_POSINT_EXISTS] >>
       gvs[i2w_pos, w2n_n2w, dimword_def])
-  >- (`Num n < 2 ** 255` by
-        (irule arithmeticTheory.LESS_LESS_EQ_TRANS >> qexists_tac `2 ** n'` >>
+  >- (rename1 `Num n < 2 ** w` >>
+      `Num n < 2 ** 255` by
+        (irule arithmeticTheory.LESS_LESS_EQ_TRANS >> qexists_tac `2 ** w` >>
          simp[]) >>
       `~(n < 0)` by ARITH_TAC >>
       irule w2i_i2w_within_signed >> qexists_tac `256` >>
       fs[within_int_bound_def])
-  >> irule w2i_i2w_within_signed >> qexists_tac `n'` >> simp[]
+  >> rename1 `within_int_bound (Signed w) n` >>
+  irule w2i_i2w_within_signed >> qexists_tac `w` >> simp[]
 QED
 
 (* The source result of a comparison of two word values of one type is
@@ -123,16 +125,17 @@ Proof
             expr_res_ok_def, binop_negate_def] >>
         Cases_on `tv` >> gvs[value_has_type_def] >>
         `k < 2 ** 256 /\ n < 2 ** 256` by
-          (rename1 `k < 2 ** m` >> `2 ** m <= 2 ** 256` by simp[] >> rw[] >>
+          (rename1 `k < 2 ** m` >> `2 ** m <= 2 ** 256` by simp[] >>
+           conj_tac >>
            irule arithmeticTheory.LESS_LESS_EQ_TRANS >> qexists_tac `2 ** m` >>
-           simp[]) >>
+           asm_rewrite_tac[]) >>
         fs[eval_compare_def, val_to_w256_def, n2w_11, dimword_def,
            arithmeticTheory.LESS_MOD]) >>
   (* booleans *)
   Cases_on `v2` >>
   gvs[bop_result_def, evaluate_builtin_def, evaluate_binop_def,
       expr_res_ok_def, binop_negate_def] >>
-  Cases_on `b` >> Cases_on `b'` >> simp[eval_compare_def, val_to_w256_def]
+  rw[eval_compare_def, val_to_w256_def]
 QED
 
 (* ===== The lowering ===== *)
@@ -305,27 +308,16 @@ Theorem compile_minmax_sim:
          m <= 256) ==>
     binop_frag ctx func cenv cx mm ty ann bl el v1 v2 es0
 Proof
-  rpt gen_tac >> strip_tac >> simp[binop_frag_def] >> rpt gen_tac >>
+  rpt gen_tac >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  match_mp_tac binop_frag_straight >> conj_tac
+  >- (rpt gen_tac >> metis_tac[straight_fresh_minmax]) >>
   strip_tac >>
   qspecl_then [`cx`, `ann`, `mm`, `ty`, `tv`, `v1`, `v2`, `es0`] mp_tac
     bop_result_minmax >>
   (impl_tac >- asm_rewrite_tac[]) >> strip_tac >>
-  qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es0`,
-     `compile_binop mm x y ty bl el`, `sa`, `sb`, `op`, `val_to_w256 v`,
-     `\ss. eval_operand x ss = SOME (val_to_w256 v1) /\
-           eval_operand y ss = SOME (val_to_w256 v2)`,
-     `\a. F`, `\r. F`, `s0`] mp_tac frag_exec_straight_fresh >>
-  (impl_tac
-   >- (asm_rewrite_tac[] >> BETA_TAC >> rpt conj_tac >> rpt strip_tac
-       >>~- ([`straight_fresh _`], metis_tac[straight_fresh_minmax])
-       >>~- ([`eval_operand _ (drop_fresh _ _) = _`],
-             qspecl_then [`x`, `sa`, `ss`] mp_tac eval_operand_drop_fresh >>
-             qspecl_then [`y`, `sa`, `ss`] mp_tac eval_operand_drop_fresh >>
-             asm_simp_tac bool_ss []) >>
-       qspecl_then [`mm`, `x`, `y`, `ty`, `bl`, `el`, `sa`, `op`, `sb`,
-                    `val_to_w256 v1`, `val_to_w256 v2`, `ss`] mp_tac
-         compile_minmax_correct >>
-       asm_simp_tac bool_ss [])) >>
-  disch_then (fn th => match_mp_tac (MATCH_MP frag_exec_weaken th)) >>
-  simp[] >> rpt strip_tac >> qexists_tac `v` >> gvs[]
+  disj1_tac >> qexists_tac `v` >> asm_rewrite_tac[] >> rpt strip_tac >>
+  qspecl_then [`mm`, `x`, `y`, `ty`, `bl`, `el`, `sa`, `op`, `sb`,
+               `val_to_w256 v1`, `val_to_w256 v2`, `ss`] mp_tac
+    compile_minmax_correct >>
+  asm_simp_tac bool_ss []
 QED

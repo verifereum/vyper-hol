@@ -5,7 +5,7 @@
  *   compile_expr_bop   — a binary operator goes to the builtin dispatcher
  *   lower_value_bop    — the operands' fragments, then compile_binop
  *
- * Helpers: lower_value_child_call, as_stack_val_pair
+ * Helpers: compile_expr_body_bop, lower_value_child_call, as_stack_val_pair
  *)
 
 Theory exprBopLowering
@@ -20,6 +20,23 @@ Libs
 val expr_sizes = [listTheory.list_size_def, vyperASTTheory.expr_size_def,
                   basicSizeTheory.option_size_def];
 
+(* The binary-operator case of compile_expr_body, for any callbacks.  The
+   AddMod/MulMod/PowMod256 patterns split on the first three arguments; every
+   branch passes the whole argument list to the builtin callback. *)
+Theorem compile_expr_body_bop:
+  !f g h cenv ty ann bop args st.
+    compile_expr_body f g h cenv ty (Builtin ann (Bop bop) args) st =
+    g cenv (expr_type (Builtin ann (Bop bop) args)) ty (Bop bop) args st
+Proof
+  rpt gen_tac >> simp[compile_expr_body_def] >>
+  Cases_on `args` >> simp[] >> rename1 `Builtin ann (Bop bop) (a1::r1)` >>
+  Cases_on `a1` >> simp[] >> Cases_on `r1` >> simp[] >>
+  rename1 `Builtin ann (Bop bop) (_::a2::r2)` >>
+  Cases_on `a2` >> simp[] >> Cases_on `r2` >> simp[] >>
+  rename1 `Builtin ann (Bop bop) (_::_::a3::r3)` >>
+  Cases_on `a3` >> simp[] >> Cases_on `r3` >> simp[]
+QED
+
 (* A binary operator goes to the builtin dispatcher, whatever its
    operands. *)
 Theorem compile_expr_bop:
@@ -29,14 +46,9 @@ Theorem compile_expr_bop:
       (Bop bop) args st
 Proof
   rpt gen_tac >>
-  simp[Once (CONJUNCT1 compile_expr_raw_def), compile_expr_body_def] >>
-  (* the AddMod/MulMod/PowMod256 patterns split on the arguments; every
-     branch dispatches, the callback's size bound holding *)
-  Cases_on `args` >> simp[] >> Cases_on `h` >> simp expr_sizes >>
-  rpt (BasicProvers.TOP_CASE_TAC >> simp expr_sizes) >>
-  rpt (qpat_x_assum `~(_ < _)` mp_tac) >> Cases_on `o'` >> simp expr_sizes
+  simp[Once (CONJUNCT1 compile_expr_raw_def), compile_expr_body_bop] >>
+  simp expr_sizes
 QED
-
 Theorem lower_value_child_call:
   !n f cenv ty e.
     expr_size e < n ==>

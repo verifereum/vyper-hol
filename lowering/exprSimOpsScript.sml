@@ -9,6 +9,8 @@
  *
  * TOP-LEVEL:
  *   binop_frag             — the operator's fragment
+ *   binop_frag_straight    — binop_frag from the run facts of straight-line
+ *                            code
  *   compile_bop_sim        — the composition
  *   compile_bitwise_sim    — binop_frag for And, Or and XOr
  *   compile_flag_in_sim    — binop_frag for In and NotIn on flags
@@ -20,13 +22,10 @@
  * but the lowering emits a bare SHL/SHR/SAR: it neither truncates a left
  * shift to the narrower type, as the source does (int_mod, signed_int_mod),
  * nor fails on a negative amount, as the source does (RuntimeError).
- * Vyper itself rejects shifts of types other than int256 and uint256.
+ * Vyper itself rejects shifts of integer types other than int256 and
+ * uint256.
  * Also not covered: == and != on address and bytesN.  Their values are
  * BytesV, which is no word_value, so compile_bop_sim does not apply.
- *
- * Fragment combinators: frag_exec_weaken, frag_exec_pre_exit(_c),
- *   frag_exec_then, frag_exec_seq_pointwise, frag_exec_exit_prefix,
- *   frag_exec_false_pre
  *
  * Helpers: eval_expr_bop_cases, eval_operand_frame, expr_val_rel_word,
  *   local_region_frame, expr_post_bop, bop_result_bitwise, flag_and_zero,
@@ -125,78 +124,70 @@ Proof
   simp[return_def, raise_def] >> rw[] >> gvs[]
 QED
 
-(* ===== Composing fragments ===== *)
-
-Theorem frag_exec_false_pre:
-  !ctx st st' Q R. frag_exec ctx st st' (\s. F) Q R
+(* A straight-line operator fragment from its run facts: when the source
+   result is no type error, either it is a value and the emitted code runs
+   to the end with it, or it is a runtime error and the code reverts. *)
+Theorem binop_frag_straight:
+  !ctx func cenv cx bop ty ann bl el v1 v2 es0.
+    (!x y. straight_fresh (compile_binop bop x y ty bl el)) /\
+    (expr_res_ok (bop_result cx ann bop v1 v2 es0) ==>
+     (?v. bop_result cx ann bop v1 v2 es0 = INL (Value v) /\ word_value v /\
+          !x y sa sb op ss.
+            compile_binop bop x y ty bl el sa = (op, sb) /\
+            fresh_vars_wrt sa ss /\
+            eval_operand x ss = SOME (val_to_w256 v1) /\
+            eval_operand y ss = SOME (val_to_w256 v2) ==>
+            ?ss'. run_inst_seq (emitted_insts sa sb) ss = OK ss' /\
+                  eval_operand op ss' = SOME (val_to_w256 v)) \/
+     (?m. bop_result cx ann bop v1 v2 es0 = INR (Error (RuntimeError m)) /\
+          !x y sa sb op ss.
+            compile_binop bop x y ty bl el sa = (op, sb) /\
+            fresh_vars_wrt sa ss /\
+            eval_operand x ss = SOME (val_to_w256 v1) /\
+            eval_operand y ss = SOME (val_to_w256 v2) ==>
+            ?ss'. run_inst_seq (emitted_insts sa sb) ss =
+                    Abort Revert_abort ss')) ==>
+    binop_frag ctx func cenv cx bop ty ann bl el v1 v2 es0
 Proof
-  rw[frag_exec_def]
-QED
-
-(* A fragment that only exits is followed by anything. *)
-Theorem frag_exec_exit_prefix:
-  !ctx st1 st2 st3 P Q R.
-    frag_exec ctx st1 st2 P (\s. F) R /\ cs_extends st1 st2 /\
-    cs_extends st2 st3 ==>
-    frag_exec ctx st1 st3 P Q R
-Proof
-  rpt strip_tac >> irule frag_exec_seq >> qexistsl_tac [`\s. F`, `st2`] >>
-  simp[frag_exec_false_pre]
-QED
-
-(* Sequencing where the second fragment is known from each state the first
-   one ends in. *)
-Theorem frag_exec_seq_pointwise:
-  !ctx st1 st2 st3 P Q1 Q R.
-    frag_exec ctx st1 st2 P Q1 R /\
-    (!t. Q1 t ==> frag_exec ctx st2 st3 (\s. s = t) Q R) /\
-    cs_extends st1 st2 /\ cs_extends st2 st3 ==>
-    frag_exec ctx st1 st3 P Q R
-Proof
-  rpt strip_tac >> irule frag_exec_seq >> qexistsl_tac [`Q1`, `st2`] >>
-  simp[] >> irule frag_exec_pointwise >> simp[]
-QED
-
-(* frag_exec_seq_pointwise with the first fragment first, so that
-   MATCH_MP fixes the middle state and predicate. *)
-Theorem frag_exec_then:
-  !ctx st1 st2 P Q1 R.
-    frag_exec ctx st1 st2 P Q1 R ==>
-    !st3 Q.
-      (!t. Q1 t ==> frag_exec ctx st2 st3 (\s. s = t) Q R) /\
-      cs_extends st1 st2 /\ cs_extends st2 st3 ==>
-      frag_exec ctx st1 st3 P Q R
-Proof
-  metis_tac[frag_exec_seq_pointwise]
-QED
-
-Theorem frag_exec_weaken:
-  !ctx st st' P Q R.
-    frag_exec ctx st st' P Q R ==>
-    !P' Q' R'.
-      (!s. P' s ==> P s) /\ (!s. Q s ==> Q' s) /\ (!r. R r ==> R' r) ==>
-      frag_exec ctx st st' P' Q' R'
-Proof
-  metis_tac[frag_exec_conseq]
-QED
-
-Theorem frag_exec_pre_exit:
-  !ctx st st' P Q R P' R'.
-    frag_exec ctx st st' P Q R /\ (!s. P' s ==> P s) /\
-    (!r. R r ==> R' r) ==>
-    frag_exec ctx st st' P' Q R'
-Proof
-  rpt strip_tac >> irule frag_exec_conseq >>
-  qexistsl_tac [`P`, `Q`, `R`] >> simp[]
-QED
-
-Theorem frag_exec_pre_exit_c:
-  !ctx st st' P Q R.
-    frag_exec ctx st st' P Q R ==>
-    !P' R'. (!s. P' s ==> P s) /\ (!r. R r ==> R' r) ==>
-            frag_exec ctx st st' P' Q R'
-Proof
-  metis_tac[frag_exec_pre_exit]
+  rpt gen_tac >> strip_tac >> simp[binop_frag_def] >> rpt gen_tac >>
+  strip_tac >>
+  qpat_x_assum `expr_res_ok _ ==> _` drule >> strip_tac
+  >- (qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es0`,
+         `compile_binop bop x y ty bl el`, `sa`, `sb`, `op`, `val_to_w256 v`,
+         `\ss. eval_operand x ss = SOME (val_to_w256 v1) /\
+               eval_operand y ss = SOME (val_to_w256 v2)`,
+         `\a. F`, `expr_exit (bop_result cx ann bop v1 v2 es0)`, `s0`]
+        mp_tac frag_exec_straight_fresh >>
+      (impl_tac
+       >- (asm_rewrite_tac[] >> BETA_TAC >> rpt conj_tac >> rpt strip_tac
+           >>~- ([`eval_operand _ (drop_fresh _ _) = _`],
+                 qspecl_then [`x`, `sa`, `ss`] mp_tac eval_operand_drop_fresh >>
+                 qspecl_then [`y`, `sa`, `ss`] mp_tac eval_operand_drop_fresh >>
+                 asm_simp_tac bool_ss []) >>
+           qpat_x_assum `!x y sa sb op ss. _`
+             (qspecl_then [`x`, `y`, `sa`, `sb`, `op`, `ss`] mp_tac) >>
+           asm_rewrite_tac[])) >>
+      disch_then (fn th => match_mp_tac (MATCH_MP frag_exec_weaken th)) >>
+      simp[] >> rpt strip_tac >> gvs[]) >>
+  qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es0`,
+     `compile_binop bop x y ty bl el`, `sa`, `sb`, `op`,
+     `\ss. eval_operand x ss = SOME (val_to_w256 v1) /\
+           eval_operand y ss = SOME (val_to_w256 v2)`,
+     `\a. a = Revert_abort`, `\s. F`,
+     `expr_exit (bop_result cx ann bop v1 v2 es0)`, `s0`]
+    mp_tac frag_exec_straight_fresh_abort >>
+  (impl_tac
+   >- (asm_rewrite_tac[] >> BETA_TAC >> rpt conj_tac >> rpt strip_tac
+       >>~- ([`expr_exit _ _`], gvs[expr_exit_def])
+       >>~- ([`eval_operand _ (drop_fresh _ _) = _`],
+             qspecl_then [`x`, `sa`, `ss`] mp_tac eval_operand_drop_fresh >>
+             qspecl_then [`y`, `sa`, `ss`] mp_tac eval_operand_drop_fresh >>
+             asm_simp_tac bool_ss []) >>
+       qpat_x_assum `!x y sa sb op ss. _`
+         (qspecl_then [`x`, `y`, `sa`, `sb`, `op`, `ss`] mp_tac) >>
+       asm_rewrite_tac[] >> metis_tac[])) >>
+  disch_then (fn th => match_mp_tac (MATCH_MP frag_exec_weaken th)) >>
+  gvs[]
 QED
 
 (* An operand that is a literal or a variable handed out before st keeps
@@ -564,30 +555,32 @@ Theorem compile_flag_in_correct:
 Proof
   rpt gen_tac >> strip_tac >> gvs[compile_binop_def, comp_bind_def] >>
   rpt (pairarg_tac >> gvs[]) >>
-  qspecl_then [`x`, `y`, `a`, `b`, `st`, `inter'`, `cs'`, `ss`] mp_tac
+  rename1 `emit_op AND [x; y] st = (and_op, s_and)` >>
+  qspecl_then [`x`, `y`, `a`, `b`, `st`, `and_op`, `s_and`, `ss`] mp_tac
     emit_op_AND_correct >>
   simp[] >> disch_then (qx_choose_then `s1` strip_assume_tac)
   >- ((* In: AND, ISZERO, ISZERO *)
-      qspecl_then [`inter'`, `a && b`, `cs'`, `z`, `cs''`, `s1`] mp_tac
+      rename1 `emit_op ISZERO [and_op] s_and = (z, s_z)` >>
+      qspecl_then [`and_op`, `a && b`, `s_and`, `z`, `s_z`, `s1`] mp_tac
         emit_op_ISZERO_correct >>
       simp[] >> disch_then (qx_choose_then `s2` strip_assume_tac) >>
-      qspecl_then [`z`, `bool_to_word (a && b = 0w)`, `cs''`, `op`, `st'`,
+      qspecl_then [`z`, `bool_to_word (a && b = 0w)`, `s_z`, `op`, `st'`,
                    `s2`] mp_tac emit_op_ISZERO_correct >>
       simp[] >> disch_then (qx_choose_then `s3` strip_assume_tac) >>
       imp_res_tac emit_op_extends >>
-      `run_inst_seq (emitted_insts st cs'') ss = OK s2 /\
-       cs''.cs_current_insts = st.cs_current_insts ++ emitted_insts st cs''` by
-        (qspecl_then [`st`, `cs'`, `cs''`, `ss`, `s1`] mp_tac
+      `run_inst_seq (emitted_insts st s_z) ss = OK s2 /\
+       s_z.cs_current_insts = st.cs_current_insts ++ emitted_insts st s_z` by
+        (qspecl_then [`st`, `s_and`, `s_z`, `ss`, `s1`] mp_tac
            run_inst_seq_chain >> simp[]) >>
-      qspecl_then [`st`, `cs''`, `st'`, `ss`, `s2`] mp_tac
+      qspecl_then [`st`, `s_z`, `st'`, `ss`, `s2`] mp_tac
         run_inst_seq_chain >> simp[] >>
       strip_tac >> qexists_tac `s3` >> simp[]) >>
   (* NotIn: AND, ISZERO *)
-  qspecl_then [`inter'`, `a && b`, `cs'`, `op`, `st'`, `s1`] mp_tac
+  qspecl_then [`and_op`, `a && b`, `s_and`, `op`, `st'`, `s1`] mp_tac
     emit_op_ISZERO_correct >>
   simp[] >> disch_then (qx_choose_then `s2` strip_assume_tac) >>
   imp_res_tac emit_op_extends >>
-  qspecl_then [`st`, `cs'`, `st'`, `ss`, `s1`] mp_tac run_inst_seq_chain >>
+  qspecl_then [`st`, `s_and`, `st'`, `ss`, `s1`] mp_tac run_inst_seq_chain >>
   simp[] >> strip_tac >> qexists_tac `s2` >> simp[]
 QED
 
@@ -606,12 +599,13 @@ Proof
   rpt gen_tac >> strip_tac >>
   Cases_on `v1` >> gvs[value_has_type_def] >>
   Cases_on `v2` >> gvs[value_has_type_def] >>
+  rename1 `bop_result _ _ _ (FlagV k1) (FlagV k2) _` >>
   gvs[bop_result_def, evaluate_builtin_def, evaluate_binop_def,
       binop_negate_def, val_to_w256_def] >>
-  `n < 2 ** 256 /\ n' < 2 ** 256` by
-    (`2 ** m <= 2 ** 256` by simp[] >> rw[] >>
+  `k1 < 2 ** 256 /\ k2 < 2 ** 256` by
+    (`2 ** m <= 2 ** 256` by simp[] >> conj_tac >>
      irule arithmeticTheory.LESS_LESS_EQ_TRANS >> qexists_tac `2 ** m` >>
-     simp[]) >>
+     asm_rewrite_tac[]) >>
   simp[flag_and_zero]
 QED
 
@@ -634,32 +628,21 @@ Theorem compile_flag_in_sim:
     m <= 256 ==>
     binop_frag ctx func cenv cx bop ty ann bl el v1 v2 es0
 Proof
-  rpt gen_tac >> strip_tac >> simp[binop_frag_def] >> rpt gen_tac >>
-  strip_tac >>
+  rpt gen_tac >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   qspecl_then [`cx`, `ann`, `bop`, `m`, `v1`, `v2`, `es0`] mp_tac
     bop_result_flag_in >>
   (impl_tac >- asm_rewrite_tac[]) >> strip_tac >>
-  qabbrev_tac
-    `c = if bop = In then word_and (val_to_w256 v1) (val_to_w256 v2) <> 0w
-         else word_and (val_to_w256 v1) (val_to_w256 v2) = 0w` >>
-  qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es0`,
-     `compile_binop bop x y ty bl el`, `sa`, `sb`, `op`, `bool_to_word c`,
-     `\ss. eval_operand x ss = SOME (val_to_w256 v1) /\
-           eval_operand y ss = SOME (val_to_w256 v2)`,
-     `\a. F`, `\r. F`, `s0`] mp_tac frag_exec_straight_fresh >>
-  (impl_tac
-   >- (asm_rewrite_tac[] >> BETA_TAC >> rpt conj_tac >> rpt strip_tac
-       >>~- ([`straight_fresh _`], metis_tac[straight_fresh_flag_in])
-       >>~- ([`eval_operand _ (drop_fresh _ _) = _`],
-             qspecl_then [`x`, `sa`, `ss`] mp_tac eval_operand_drop_fresh >>
-             qspecl_then [`y`, `sa`, `ss`] mp_tac eval_operand_drop_fresh >>
-             asm_simp_tac bool_ss []) >>
-       qspecl_then [`bop`, `x`, `y`, `ty`, `bl`, `el`, `sa`, `op`, `sb`,
-                    `val_to_w256 v1`, `val_to_w256 v2`, `ss`] mp_tac
-         compile_flag_in_correct >>
-       asm_simp_tac bool_ss [Abbr `c`])) >>
-  disch_then (fn th => match_mp_tac (MATCH_MP frag_exec_weaken th)) >>
-  simp[] >> rpt strip_tac >> Cases_on `c` >> gvs[val_to_w256_def, word_value_def]
+  match_mp_tac binop_frag_straight >> conj_tac
+  >- (rpt gen_tac >> metis_tac[straight_fresh_flag_in]) >>
+  strip_tac >> disj1_tac >> simp[word_value_def] >> rpt strip_tac >>
+  qspecl_then [`bop`, `x`, `y`, `ty`, `bl`, `el`, `sa`, `op`, `sb`,
+               `val_to_w256 v1`, `val_to_w256 v2`, `ss`] mp_tac
+    compile_flag_in_correct >>
+  asm_simp_tac bool_ss [] >> strip_tac >>
+  qexists_tac `ss'` >> asm_rewrite_tac[] >>
+  Cases_on `if bop = In then val_to_w256 v1 && val_to_w256 v2 <> 0w
+            else val_to_w256 v1 && val_to_w256 v2 = 0w` >>
+  simp[val_to_w256_def, bool_to_word_def]
 QED
 
 (* ===== Shifts ===== *)

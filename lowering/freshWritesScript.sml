@@ -106,13 +106,15 @@ Theorem run_inst_seq_writes_fresh:
     !x. not_fresh_at st x ==> FLOOKUP tt.vs_vars x = FLOOKUP ss.vs_vars x
 Proof
   Induct >- simp[run_inst_seq_def, venom_state_component_equality] >>
-  rpt gen_tac >> simp[writes_fresh_def, run_inst_seq_def] >> strip_tac >>
-  Cases_on `step_inst_base h ss` >> gvs[] >>
+  qx_gen_tac `inst` >> rpt gen_tac >>
+  simp[writes_fresh_def, run_inst_seq_def] >> strip_tac >>
+  Cases_on `step_inst_base inst ss` >> gvs[] >>
+  rename1 `step_inst_base inst ss = OK s1` >>
   drule_all step_fresh_write_op >> strip_tac >>
-  first_x_assum (qspecl_then [`st`, `v`, `tt`] mp_tac) >>
+  first_x_assum (qspecl_then [`st`, `s1`, `tt`] mp_tac) >>
   simp[writes_fresh_def] >> strip_tac >>
   conj_tac
-  >- (qpat_x_assum `v = _` SUBST_ALL_TAC >>
+  >- (qpat_x_assum `s1 = _` SUBST_ALL_TAC >>
       fs[venom_state_component_equality]) >>
   rpt strip_tac >> fs[EVERY_MEM] >> metis_tac[]
 QED
