@@ -24,7 +24,7 @@ Proof
   EVAL_TAC
 QED
 
-(* With the M0021-authorized obsolete guard removed, local declarations are
+(* With the obsolete shape guard removed, local declarations are
    admitted without weakening the independent internal-call exclusion. *)
 Theorem internal_bool_local_admitted:
   supported_function_body [] Internal []
