@@ -292,21 +292,18 @@ Proof
            eval_operand y ss = SOME (val_to_w256 v2)`,
      `\a. F`, `\r. F`, `s0`] mp_tac frag_exec_straight_fresh >>
   (impl_tac
-   >- (asm_rewrite_tac[] >> BETA_TAC >> rpt conj_tac >> rpt strip_tac >>
-       FIRST [
-         metis_tac[straight_fresh_unsafe] >> NO_TAC,
-         qspecl_then [`x`, `sa`, `ss`] mp_tac eval_operand_drop_fresh >>
-         impl_tac >- first_assum ACCEPT_TAC >>
-         asm_simp_tac std_ss [] >> NO_TAC,
-         qspecl_then [`y`, `sa`, `ss`] mp_tac eval_operand_drop_fresh >>
-         impl_tac >- first_assum ACCEPT_TAC >>
-         asm_simp_tac std_ss [] >> NO_TAC,
-         qpat_x_assum `compile_binop _ _ _ _ _ _ _ = _` mp_tac >>
-         simp[compile_binop_unsafe] >> strip_tac >>
-         irule compile_unsafe_binop_correct >>
-         goal_assum (drule_at (Pat `compile_unsafe_binop`)) >>
-         asm_rewrite_tac[] >> rpt strip_tac >>
-         irule step_unsafe_opcode >> asm_rewrite_tac[]])) >>
+   >- (asm_rewrite_tac[] >> BETA_TAC >> rpt conj_tac >> rpt strip_tac
+       >>~- ([`straight_fresh _`], metis_tac[straight_fresh_unsafe])
+       >>~- ([`eval_operand _ (drop_fresh _ _) = _`],
+             qspecl_then [`x`, `sa`, `ss`] mp_tac eval_operand_drop_fresh >>
+             qspecl_then [`y`, `sa`, `ss`] mp_tac eval_operand_drop_fresh >>
+             asm_simp_tac bool_ss []) >>
+       qpat_x_assum `compile_binop _ _ _ _ _ _ _ = _` mp_tac >>
+       simp[compile_binop_unsafe] >> strip_tac >>
+       irule compile_unsafe_binop_correct >>
+       goal_assum (drule_at (Pat `compile_unsafe_binop`)) >>
+       asm_rewrite_tac[] >> rpt strip_tac >>
+       irule step_unsafe_opcode >> asm_rewrite_tac[])) >>
   disch_then (fn th => match_mp_tac (MATCH_MP frag_exec_weaken th)) >>
   simp[] >> rpt strip_tac >> qexists_tac `v` >> gvs[]
 QED
@@ -638,18 +635,15 @@ Proof
      `expr_exit (bop_result cx ann bop v1 v2 es0)`, `s0`]
     mp_tac frag_exec_straight_fresh_abort >>
   (impl_tac
-   >- (asm_rewrite_tac[] >> BETA_TAC >> rpt conj_tac >> rpt strip_tac >>
-       FIRST [
-         qspecl_then [`x`, `sa`, `ss`] mp_tac eval_operand_drop_fresh >>
-         impl_tac >- first_assum ACCEPT_TAC >>
-         asm_simp_tac std_ss [] >> NO_TAC,
-         qspecl_then [`y`, `sa`, `ss`] mp_tac eval_operand_drop_fresh >>
-         impl_tac >- first_assum ACCEPT_TAC >>
-         asm_simp_tac std_ss [] >> NO_TAC,
-         qpat_x_assum `!ss. fresh_vars_wrt sa ss /\ _ ==> _`
-           (qspec_then `ss` mp_tac) >>
-         gvs[val_to_w256_def] >> metis_tac[],
-         simp[expr_exit_def]])) >>
+   >- (asm_rewrite_tac[] >> BETA_TAC >> rpt conj_tac >> rpt strip_tac
+       >>~- ([`expr_exit _ _`], simp[expr_exit_def])
+       >>~- ([`eval_operand _ (drop_fresh _ _) = _`],
+             qspecl_then [`x`, `sa`, `ss`] mp_tac eval_operand_drop_fresh >>
+             qspecl_then [`y`, `sa`, `ss`] mp_tac eval_operand_drop_fresh >>
+             asm_simp_tac bool_ss []) >>
+       qpat_x_assum `!ss. fresh_vars_wrt sa ss /\ _ ==> _`
+         (qspec_then `ss` mp_tac) >>
+       gvs[val_to_w256_def] >> metis_tac[])) >>
   disch_then (fn th => match_mp_tac (MATCH_MP frag_exec_weaken th)) >>
   gvs[]
 QED
@@ -818,18 +812,15 @@ Proof
          `expr_exit (bop_result cx ann bop (IntV i1) (IntV i2) es0)`, `s0`]
         mp_tac frag_exec_straight_fresh_abort >>
       (impl_tac
-       >- (asm_rewrite_tac[] >> BETA_TAC >> rpt conj_tac >> rpt strip_tac >>
-           FIRST [
-             qspecl_then [`x`, `sa`, `ss`] mp_tac eval_operand_drop_fresh >>
-             impl_tac >- first_assum ACCEPT_TAC >>
-             asm_simp_tac std_ss [] >> NO_TAC,
-             qspecl_then [`y`, `sa`, `ss`] mp_tac eval_operand_drop_fresh >>
-             impl_tac >- first_assum ACCEPT_TAC >>
-             asm_simp_tac std_ss [] >> NO_TAC,
-             qpat_x_assum `!ss. fresh_vars_wrt sa ss /\ _ ==> _`
-               (qspec_then `ss` mp_tac) >>
-             gvs[val_to_w256_def] >> metis_tac[],
-             gvs[expr_exit_def]])) >>
+       >- (asm_rewrite_tac[] >> BETA_TAC >> rpt conj_tac >> rpt strip_tac
+           >>~- ([`expr_exit _ _`], gvs[expr_exit_def])
+           >>~- ([`eval_operand _ (drop_fresh _ _) = _`],
+                 qspecl_then [`x`, `sa`, `ss`] mp_tac eval_operand_drop_fresh >>
+                 qspecl_then [`y`, `sa`, `ss`] mp_tac eval_operand_drop_fresh >>
+                 asm_simp_tac bool_ss []) >>
+           qpat_x_assum `!ss. fresh_vars_wrt sa ss /\ _ ==> _`
+             (qspec_then `ss` mp_tac) >>
+           gvs[val_to_w256_def] >> metis_tac[])) >>
       disch_then (fn th => match_mp_tac (MATCH_MP frag_exec_weaken th)) >>
       gvs[]) >>
   (* defined result: the lowering computes the matching safe_* word *)
@@ -977,18 +968,15 @@ Proof
      `expr_exit (bop_result cx ann bop v1 v2 es0)`, `s0`]
     mp_tac frag_exec_straight_fresh_abort >>
   (impl_tac
-   >- (asm_rewrite_tac[] >> BETA_TAC >> rpt conj_tac >> rpt strip_tac >>
-       FIRST [
-         qspecl_then [`x`, `sa`, `ss`] mp_tac eval_operand_drop_fresh >>
-         impl_tac >- first_assum ACCEPT_TAC >>
-         asm_simp_tac std_ss [] >> NO_TAC,
-         qspecl_then [`y`, `sa`, `ss`] mp_tac eval_operand_drop_fresh >>
-         impl_tac >- first_assum ACCEPT_TAC >>
-         asm_simp_tac std_ss [] >> NO_TAC,
-         qpat_x_assum `!x y sa sb op ss. _`
-           (qspecl_then [`x`, `y`, `sa`, `sb`, `op`, `ss`] mp_tac) >>
-         asm_rewrite_tac[] >> metis_tac[],
-         gvs[expr_exit_def]])) >>
+   >- (asm_rewrite_tac[] >> BETA_TAC >> rpt conj_tac >> rpt strip_tac
+       >>~- ([`expr_exit _ _`], gvs[expr_exit_def])
+       >>~- ([`eval_operand _ (drop_fresh _ _) = _`],
+             qspecl_then [`x`, `sa`, `ss`] mp_tac eval_operand_drop_fresh >>
+             qspecl_then [`y`, `sa`, `ss`] mp_tac eval_operand_drop_fresh >>
+             asm_simp_tac bool_ss []) >>
+       qpat_x_assum `!x y sa sb op ss. _`
+         (qspecl_then [`x`, `y`, `sa`, `sb`, `op`, `ss`] mp_tac) >>
+       asm_rewrite_tac[] >> metis_tac[])) >>
   disch_then (fn th => match_mp_tac (MATCH_MP frag_exec_weaken th)) >>
   gvs[]
 QED
