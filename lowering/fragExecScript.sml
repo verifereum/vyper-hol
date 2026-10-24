@@ -889,6 +889,68 @@ Proof
   disj2_tac >> metis_tac[exit_result_not_error]
 QED
 
+(* Fixed-function interface for fragment outcomes. *)
+Definition frag_outcome_def:
+  frag_outcome ctx fn s st Q R <=>
+    (?t. Q t /\ ~t.vs_halted /\
+         t.vs_current_bb = st.cs_current_bb /\
+         t.vs_inst_idx = LENGTH st.cs_current_insts /\
+         !fuel r. run_from fuel ctx fn t = r /\ (!e. r <> Error e) ==>
+                  ?fuel'. run_from fuel' ctx fn s = r) \/
+    (?fuel r. run_from fuel ctx fn s = r /\ exit_result r /\ R r)
+End
+
+Theorem frag_outcome_refl:
+  Q s /\ ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  frag_outcome ctx fn s st Q R
+Proof
+  rw[frag_outcome_def] >> disj1_tac >> qexists_tac `s` >> simp[] >>
+  metis_tac[]
+QED
+
+Theorem frag_outcome_apply:
+  frag_exec ctx sa sb P Q R /\ fn_has_code sa sb fn /\
+  P s /\ ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  frag_outcome ctx fn s sb Q R
+Proof
+  simp[frag_exec_def, frag_outcome_def] >> metis_tac[]
+QED
+
+Theorem frag_outcome_compose:
+  frag_outcome ctx fn s sa P R /\
+  (!t. P t /\ ~t.vs_halted /\ t.vs_current_bb = sa.cs_current_bb /\
+       t.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+       frag_outcome ctx fn t sb Q R) ==>
+  frag_outcome ctx fn s sb Q R
+Proof
+  rw[frag_outcome_def]
+  >- (first_x_assum drule >> simp[] >> strip_tac
+      >- (rename1 `Q endpoint` >> disj1_tac >>
+          qexists_tac `endpoint` >> simp[] >> metis_tac[]) >>
+      disj2_tac >> metis_tac[exit_result_not_error]) >>
+  disj2_tac >> metis_tac[]
+QED
+
+Theorem frag_outcome_jump:
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME inst /\
+  is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE /\
+  step_inst_base inst s = OK (jump_to lbl s) /\ ~s.vs_halted /\
+  frag_outcome ctx fn (jump_to lbl s) sb Q R ==>
+  frag_outcome ctx fn s sb Q R
+Proof
+  rpt strip_tac >>
+  `!fuel r. run_from fuel ctx fn (jump_to lbl s) = r /\
+            (!e. r <> Error e) ==> run_from (SUC fuel) ctx fn s = r` by
+    metis_tac[run_from_jump_result] >>
+  gvs[frag_outcome_def]
+  >- (rename1 `Q endpoint` >> disj1_tac >>
+      qexists_tac `endpoint` >> simp[] >> metis_tac[]) >>
+  disj2_tac >> metis_tac[exit_result_not_error]
+QED
+
 (* ===== Loops ===== *)
 
 (* A loop as the lowering emits it: a jump to a header block whose
