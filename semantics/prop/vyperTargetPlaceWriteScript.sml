@@ -9,7 +9,8 @@ Ancestors
 
 Definition writable_place_result_def:
   writable_place_result cx st (PlaceR p) = runtime_place_writable cx st p /\
-  writable_place_result cx st (ValueR v) = T
+  writable_place_result cx st (Value v) = T /\
+  writable_place_result cx st (HashMapRef tr slot kt vt) = T
 End
 
 Theorem writable_place_result_frame:
@@ -26,11 +27,11 @@ Proof
   drule_all immutable_metadata_frame_lookup >> strip_tac >> metis_tac[]
 QED
 
-Theorem lookup_global_place_writable:
-  lookup_global_place cx src id st = (res,st') ==>
+Theorem lookup_global_writable:
+  lookup_global cx src id st = (res,st') ==>
   (case res of INL pv => writable_place_result cx st' pv | INR _ => T)
 Proof
-  simp[lookup_global_place_def, bind_def, lift_option_type_def,
+  simp[lookup_global_def, bind_def, lift_option_type_def,
        return_def, raise_def, AllCaseEqs()] >> rpt strip_tac >>
   gvs[vyperMiscTheory.option_CASE_rator, vyperMiscTheory.prod_CASE_rator,
       var_decl_info_CASE_rator, bind_def, lift_option_type_def, return_def,
@@ -46,7 +47,10 @@ Theorem mutable_place_path_append:
     mutable_place_path tv (path ++ [sb])
 Proof
   Induct >> simp[subscripts_type_def] >> rpt gen_tac >>
-  Cases_on `h` >> TRY (rename1 `ValueSubscript key` >> Cases_on `key`) >>
+  Cases_on `h`
+  >- (Cases_on `v` >> Cases_on `tv` >>
+      simp[mutable_place_path_def, subscript_type_def, AllCaseEqs()] >>
+      rpt strip_tac >> gvs[] >> first_x_assum irule >> simp[]) >>
   Cases_on `tv` >>
   simp[mutable_place_path_def, subscript_type_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[] >> first_x_assum irule >> simp[]
@@ -82,47 +86,52 @@ Theorem extend_storage_place_writable:
   extend_storage_place cx tr slot tv sb st = (INL p,st') ==>
   runtime_place_writable cx st' p
 Proof
-  Cases_on `tv` >> Cases_on `sb` >>
-  simp[extend_storage_place_def, raise_def] >>
-  TRY (Cases_on `v` >> simp[extend_storage_place_def, raise_def]) >>
-  simp[bind_def, ignore_bind_def, return_def, AllCaseEqs(),
-       lift_option_type_def, check_def, assert_def, raise_def] >>
+  Cases_on `sb`
+  >- (Cases_on `v` >> Cases_on `tv` >>
+      simp[extend_storage_place_def, raise_def,
+           bind_def, ignore_bind_def, return_def, AllCaseEqs(),
+           lift_option_type_def, check_def, assert_def] >>
+      rpt strip_tac >> gvs[runtime_place_writable_def] >>
+      pairarg_tac >> gvs[return_def, runtime_place_writable_def]) >>
+  Cases_on `tv` >>
+  simp[extend_storage_place_def, raise_def,
+       bind_def, ignore_bind_def, return_def, AllCaseEqs(),
+       lift_option_type_def, check_def, assert_def] >>
   rpt strip_tac >> gvs[runtime_place_writable_def] >>
   pairarg_tac >> gvs[return_def, runtime_place_writable_def]
 QED
 
 Theorem extend_mapping_place_writable:
-  extend_target_place cx (ValueR (HashMapRef tr slot kt vt)) sb st = (INL pv,st') ==>
+  extend_place cx (HashMapRef tr slot kt vt) sb st = (INL pv,st') ==>
   writable_place_result cx st' pv
 Proof
-  Cases_on `sb` >>
-  simp[extend_target_place_def, extend_place_def, get_Value_def,
-       bind_def, lift_sum_def, return_def, raise_def,
-       evaluate_subscript_def, AllCaseEqs(), subscript_result_place_def] >>
-  rpt strip_tac >>
-  gvs[vyperMiscTheory.sum_CASE_rator, return_def, raise_def, AllCaseEqs(),
-      subscript_result_place_def, writable_place_result_def, runtime_place_writable_def]
+  Cases_on `sb` >> simp[extend_place_def, raise_def] >>
+  Cases_on `vt` >>
+  simp[extend_place_def, bind_def, lift_option_type_def, return_def,
+       raise_def, AllCaseEqs(), writable_place_result_def,
+       runtime_place_writable_def] >> rpt strip_tac >>
+  gvs[vyperMiscTheory.option_CASE_rator, AllCaseEqs(), return_def, raise_def,
+      writable_place_result_def, runtime_place_writable_def]
 QED
 
-Theorem extend_target_place_writable:
-  writable_place_result cx st pv /\ place_result_typed env cx st pv vt /\
+Theorem extend_place_writable:
+  writable_place_result cx st pv /\ eval_result_typed (env,cx,st) pv vt /\
   target_path_step_type env vt sb out /\
-  extend_target_place cx pv sb st = (INL next,st') ==>
+  extend_place cx pv sb st = (INL next,st') ==>
   writable_place_result cx st' next
 Proof
   Cases_on `pv`
-  >- (Cases_on `vt` >> simp[place_result_typed_def] >> rpt strip_tac >>
+  >- simp[extend_place_def, raise_def]
+  >- (Cases_on `vt` >> simp[eval_result_typed_def] >> rpt strip_tac >>
       `mutable_place_path tv [sb]` by
         (drule_all target_path_step_mutable >> simp[]) >>
       Cases_on `p`
-      >- (gvs[extend_target_place_def, extend_place_def, bind_def,
-              return_def, AllCaseEqs()] >>
+      >- (gvs[extend_place_def, bind_def, return_def, AllCaseEqs()] >>
           drule extend_storage_place_writable >>
           simp[writable_place_result_def]) >>
-      imp_res_tac vyperPlaceFramesTheory.extend_target_place_state >>
-      gvs[extend_target_place_def, extend_place_def, bind_def,
-          ignore_bind_def, return_def, AllCaseEqs(), writable_place_result_def] >>
+      `st' = st` by metis_tac[vyperPlaceFramesTheory.extend_place_state, SND] >>
+      gvs[extend_place_def, bind_def, ignore_bind_def, return_def,
+          lift_sum_def, AllCaseEqs(), writable_place_result_def] >>
       drule_all extend_memory_place_writable >> simp[]) >>
-  Cases_on `t` >> simp[extend_target_place_def, raise_def] >>
-  metis_tac[SRULE[extend_target_place_def] extend_mapping_place_writable]
+  metis_tac[extend_mapping_place_writable]
 QED

@@ -57,23 +57,6 @@ Proof
   Cases_on `id = id'` >> gvs[FLOOKUP_UPDATE]
 QED
 
-Theorem assign_target_immutable_metadata_frame:
-  assign_target cx (BaseTargetV (ImmutableVar src id) path) ao st = (res,st') ==>
-  immutable_metadata_frame st st'
-Proof
-  simp[Once assign_target_def, bind_def, ignore_bind_def, lift_option_type_def,
-       lift_sum_def, vyperMiscTheory.option_CASE_rator,
-       vyperMiscTheory.sum_CASE_rator, return_def, raise_def, AllCaseEqs()] >>
-  rpt strip_tac >>
-  `s'' = st` by metis_tac[vyperStatePreservationTheory.get_immutables_state, SND] >>
-  gvs[] >>
-  PairCases_on `tva` >> gvs[] >>
-  drule_all set_immutable_existing_metadata_frame >> strip_tac >>
-  TRY (rename1 `assign_result _ _ _ _ _ = _` >>
-       drule vyperStatePreservationTheory.assign_result_state >> strip_tac >>
-       gvs[] >> NO_TAC) >> simp[]
-QED
-
 Theorem write_place_immutable_metadata_frame:
   write_place cx (ImmutablePlace src id path) v st = (res,st') ==>
   immutable_metadata_frame st st'
@@ -95,6 +78,48 @@ Proof
   >- metis_tac[write_storage_place_immutables, immutable_metadata_frame_eq]
   >- metis_tac[write_memory_place_immutables, immutable_metadata_frame_eq] >>
   metis_tac[write_place_immutable_metadata_frame]
+QED
+
+Theorem append_place_metadata_frame:
+  !cx p v st res st'.
+    append_place cx p v st = (res,st') ==> immutable_metadata_frame st st'
+Proof
+  rpt gen_tac >> Cases_on `p`
+  >- (strip_tac >> irule immutable_metadata_frame_eq >>
+      metis_tac[vyperScopePreservationTheory.append_storage_place_scopes_immutables]) >>
+  simp[append_place_def, bind_def, lift_sum_def, return_def, raise_def] >>
+  rpt (BasicProvers.FULL_CASE_TAC >>
+       gvs[bind_def, ignore_bind_def, lift_sum_def, return_def, raise_def]) >>
+  rpt strip_tac >>
+  imp_res_tac place_type_value_state >> imp_res_tac read_place_state >>
+  gvs[] >> metis_tac[write_place_metadata_frame, immutable_metadata_frame_refl]
+QED
+
+Theorem pop_place_metadata_frame:
+  !cx p st res st'. pop_place cx p st = (res,st') ==>
+    immutable_metadata_frame st st'
+Proof
+  rpt gen_tac >> Cases_on `p`
+  >- (strip_tac >> irule immutable_metadata_frame_eq >>
+      metis_tac[vyperScopePreservationTheory.pop_storage_place_scopes_immutables])
+  >- (rename1 `MemoryPlace id path` >> strip_tac >>
+      Cases_on `find_containing_scope id st.scopes` >>
+      gvs[pop_place_def, bind_def, get_scopes_def, lift_option_type_def,
+          return_def, raise_def, immutable_metadata_frame_refl] >> PairCases_on `x` >>
+      gvs[bind_def, ignore_bind_def, lift_sum_def, type_check_def, assert_def,
+          check_def, set_scopes_def, return_def, raise_def, AllCaseEqs()] >>
+      fs[GSYM lift_sum_def, GSYM lift_option_type_def] >>
+      imp_res_tac lift_sum_state >> imp_res_tac lift_option_type_state >>
+      gvs[immutable_metadata_frame_refl] >>
+      pairarg_tac >> gvs[bind_def, ignore_bind_def, set_scopes_def, return_def] >>
+      irule immutable_metadata_frame_eq >> simp[]) >>
+  simp[pop_place_def, bind_def, ignore_bind_def, lift_option_type_def,
+       lift_sum_def, vyperMiscTheory.option_CASE_rator,
+       vyperMiscTheory.sum_CASE_rator, return_def, raise_def, AllCaseEqs()] >>
+  rpt strip_tac >>
+  imp_res_tac get_immutables_state >> gvs[] >>
+  PairCases_on `tva` >> gvs[] >>
+  drule_all set_immutable_existing_metadata_frame >> simp[]
 QED
 
 Theorem metadata_frame_locals[local]:
@@ -129,33 +154,31 @@ Proof
 QED
 
 Theorem metadata_frame_reads[local]:
-  state_rel_frame immutable_metadata_frame (get_Value tv) /\
-  state_rel_frame immutable_metadata_frame (materialise cx tv) /\
+  state_rel_frame immutable_metadata_frame (read_result cx tv) /\
+  state_rel_frame immutable_metadata_frame (select_result cx ann tv sb) /\
+  state_rel_frame immutable_metadata_frame (conditional_result cx tv) /\
   state_rel_frame immutable_metadata_frame (lookup_global cx src id) /\
   state_rel_frame immutable_metadata_frame (lookup_flag_mem cx nsid mid) /\
   state_rel_frame immutable_metadata_frame (read_storage_slot cx b slot ty) /\
-  state_rel_frame immutable_metadata_frame (check_array_bounds cx tv v) /\
-  state_rel_frame immutable_metadata_frame (toplevel_array_length cx tv) /\
+  state_rel_frame immutable_metadata_frame (result_array_length cx tv) /\
   state_rel_frame immutable_metadata_frame (lift_sum z) /\
   state_rel_frame immutable_metadata_frame (get_immutables cx src) /\
   state_rel_frame immutable_metadata_frame (get_place pv) /\
-  state_rel_frame immutable_metadata_frame (lookup_global_place cx src id) /\
   state_rel_frame immutable_metadata_frame (read_place cx p) /\
-  state_rel_frame immutable_metadata_frame (read_place_or_value cx pv) /\
+  state_rel_frame immutable_metadata_frame (read_result cx pv) /\
   state_rel_frame immutable_metadata_frame (place_type_value cx p) /\
-  state_rel_frame immutable_metadata_frame (extend_place cx ty pv sb) /\
-  state_rel_frame immutable_metadata_frame (extend_target_place cx pv sb) /\
+  state_rel_frame immutable_metadata_frame (extend_place cx pv sb) /\
   state_rel_frame immutable_metadata_frame (resolve_array_element cx b slot ty subs)
 Proof
   rpt conj_tac >> irule metadata_frame_state >> rpt strip_tac >>
-  FIRST [drule_all get_Value_state, drule_all materialise_state,
+  FIRST [drule_all read_result_state, drule_all select_result_state,
+    drule_all conditional_result_state,
     drule_all lookup_global_state, drule_all lookup_flag_mem_state,
-    drule_all read_storage_slot_state, drule_all check_array_bounds_state,
-    drule_all toplevel_array_length_state, drule_all lift_sum_state,
+    drule_all read_storage_slot_state,
+    drule_all result_array_length_state, drule_all lift_sum_state,
     drule_all get_immutables_state, drule_all get_place_state,
-    drule_all lookup_global_place_state, drule_all read_place_state,
-    drule_all read_place_or_value_state, drule_all place_type_value_state,
-    drule_all extend_place_state, drule_all extend_target_place_state,
+    drule_all read_place_state, drule_all place_type_value_state,
+    drule_all extend_place_state,
     drule_all resolve_array_element_state] >> simp[]
 QED
 
@@ -203,42 +226,18 @@ Proof
   metis_tac[write_storage_slot_immutables, set_global_immutables]
 QED
 
-Theorem metadata_frame_assign_result[local]:
-  state_rel_frame immutable_metadata_frame (assign_result tv op v subs)
-Proof
-  irule metadata_frame_state >> metis_tac[assign_result_state]
-QED
-
 Theorem metadata_frame_write[local]:
   state_rel_frame immutable_metadata_frame (write_place cx p v)
 Proof
   simp[state_rel_frame_result] >> metis_tac[write_place_metadata_frame]
 QED
 
-Theorem assign_target_metadata_frame:
-  (!cx tgt op st res st'. assign_target cx tgt op st = (res,st') ==>
-    immutable_metadata_frame st st') /\
-  (!cx tgts vs st res st'. assign_targets cx tgts vs st = (res,st') ==>
-    immutable_metadata_frame st st')
+Theorem metadata_frame_mutations[local]:
+  state_rel_frame immutable_metadata_frame (append_place cx p v) /\
+  state_rel_frame immutable_metadata_frame (pop_place cx p)
 Proof
-  ho_match_mp_tac assign_target_ind >> rpt conj_tac >> rpt gen_tac
-  >- (strip_tac >> irule immutable_metadata_frame_eq >>
-      gvs[Once assign_target_def, bind_def, ignore_bind_def,
-          get_scopes_def, lift_option_type_def, lift_option_def,
-          type_check_def, assert_def, lift_sum_def, set_scopes_def,
-          return_def, raise_def, AllCaseEqs()] >>
-      rpt ((pairarg_tac ORELSE BasicProvers.FULL_CASE_TAC) >>
-        gvs[bind_def, ignore_bind_def, lift_option_def,
-            type_check_def, assert_def, lift_sum_def, set_scopes_def,
-            return_def, raise_def]) >>
-      imp_res_tac assign_result_state >> gvs[])
-  >- metis_tac[vyperScopePreservationTheory.assign_target_toplevel_scopes_immutables,
-               immutable_metadata_frame_eq]
-  >- metis_tac[assign_target_immutable_metadata_frame] >>
-  simp[Once assign_target_def, bind_def, ignore_bind_def,
-       type_check_def, assert_def, return_def, raise_def, AllCaseEqs()] >> rpt strip_tac >>
-  gvs[immutable_metadata_frame_refl] >>
-  metis_tac[immutable_metadata_frame_trans]
+  simp[state_rel_frame_result] >>
+  metis_tac[append_place_metadata_frame, pop_place_metadata_frame]
 QED
 
 Theorem metadata_frame_try[local]:
@@ -285,7 +284,7 @@ val metadata_frame_net =
   let
     val rules = [metadata_frame_bind, metadata_frame_try, metadata_frame_finally]
     val leaves = metadata_frame_reads :: metadata_frame_primitives ::
-      metadata_frame_storage :: metadata_frame_assign_result :: metadata_frame_write ::
+      metadata_frame_storage :: metadata_frame_mutations :: metadata_frame_write ::
       metadata_frame_handlers :: METADATA_LOCALS :: [METADATA_TAKE]
     val structural = List.foldl (fn (th,net) => Net.insert
       (snd (dest_imp (concl th)), MATCH_MP_TAC th >> conj_tac) net)
@@ -360,13 +359,6 @@ val METADATA_FRAME_STEP = FIRST [
   METADATA_CASE_TAC, METADATA_IH_TAC];
 val METADATA_FRAME_TAC = rpt METADATA_FRAME_STEP;
 
-Theorem metadata_frame_assignment[local]:
-  state_rel_frame immutable_metadata_frame (assign_target cx tgt op) /\
-  state_rel_frame immutable_metadata_frame (assign_targets cx tgts vs)
-Proof
-  simp[state_rel_frame_result] >> metis_tac[assign_target_metadata_frame]
-QED
-
 Theorem metadata_frame_create[local]:
   state_rel_frame immutable_metadata_frame (eval_create cx kind salt rof tys vs blueprint_size)
 Proof
@@ -399,8 +391,6 @@ Proof
 QED
 
 val METADATA_EVAL_STEP = FIRST [
-  MATCH_ACCEPT_TAC (cj 1 metadata_frame_assignment),
-  MATCH_ACCEPT_TAC (cj 2 metadata_frame_assignment),
   MATCH_ACCEPT_TAC metadata_frame_create,
   FIRST (map MATCH_ACCEPT_TAC (CONJUNCTS metadata_frame_call_helpers)),
   MATCH_ACCEPT_TAC metadata_frame_raw_call,
@@ -412,11 +402,9 @@ Theorem eval_metadata_frame_mutual:
   (!cx s st res st'. eval_stmt cx s st = (res,st') ==> immutable_metadata_frame st st') /\
   (!cx ss st res st'. eval_stmts cx ss st = (res,st') ==> immutable_metadata_frame st st') /\
   (!cx it st res st'. eval_iterator cx it st = (res,st') ==> immutable_metadata_frame st st') /\
-  (!cx bt st res st'. eval_base_target cx bt st = (res,st') ==> immutable_metadata_frame st st') /\
   (!cx tyv nm body vs st res st'. eval_for cx tyv nm body vs st = (res,st') ==> immutable_metadata_frame st st') /\
   (!cx e st res st'. eval_expr cx e st = (res,st') ==> immutable_metadata_frame st st') /\
   (!cx es st res st'. eval_exprs cx es st = (res,st') ==> immutable_metadata_frame st st') /\
-  (!cx e st res st'. eval_place cx e st = (res,st') ==> immutable_metadata_frame st st') /\
   (!cx t st res st'. eval_base_place cx t st = (res,st') ==> immutable_metadata_frame st st') /\
   (!cx t st res st'. eval_target_place cx t st = (res,st') ==> immutable_metadata_frame st st') /\
   (!cx g v st res st'. assign_tuple_targets cx g v st = (res,st') ==> immutable_metadata_frame st st') /\

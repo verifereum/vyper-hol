@@ -15,7 +15,7 @@ val EXT_CALL_FIXTURE_SIMP =
    lift_sum_runtime_def, eval_ext_call_def, eval_ext_call_effects_def, ext_call_opts_ok_def,
    ext_call_kwarg_def, ext_call_precheck_ok_def, ext_call_has_code_def,
    lookup_account_def, empty_accounts_def, empty_account_state_def,
-   evaluate_literal_def, dest_AddressV_def, get_Value_def, materialise_def,
+   evaluate_literal_def, dest_AddressV_def, read_result_def,
    empty_evaluation_context_def, get_tenv_def, get_accounts_def,
    take_call_outcome_def, call_outcome_request_def, take_outcome_def,
    record_request_def, computed_precompile_addresses, failed_outcome_def,
@@ -131,7 +131,7 @@ QED
    shared eval_send/eval_ext_call bodies. *)
 val DIRECT_CALL_SIMP =
   [evaluate_def, bind_def, ignore_bind_def, return_def, evaluate_literal_def,
-   get_Value_def, materialise_def, empty_evaluation_context_def];
+   read_result_def, empty_evaluation_context_def];
 
 Definition sstore_state_def:
   sstore_state = empty_state with accounts :=

@@ -718,10 +718,12 @@ val () = handle_loop_exception_def
   |> cv_auto_trans;
 
 Definition switch_BoolV_def:
-  switch_BoolV v f g =
-  if v = Value $ BoolV T then f
-  else if v = Value $ BoolV F then g
-  else raise $ Error (TypeError (if is_Value v then "not BoolV" else "not Value"))
+  switch_BoolV cx res f g = do
+    v <- read_result cx res;
+    if v = BoolV T then f
+    else if v = BoolV F then g
+    else raise (Error (TypeError "not BoolV"))
+  od
 End
 
 Definition exactly_one_option_def:
@@ -742,14 +744,6 @@ Definition is_immutable_decl_def:
 End
 
 val () = cv_auto_trans is_immutable_decl_def;
-
-Definition immutable_target_def:
-  immutable_target (imms: string |-> (type_value # value)) src_id_opt id n =
-  case FLOOKUP imms n of SOME _ => SOME $ ImmutableVar src_id_opt id
-     | _ => NONE
-End
-
-val () = cv_auto_trans immutable_target_def;
 
 Definition get_range_limits_def:
   get_range_limits (IntV n1) (IntV n2) =
@@ -1272,21 +1266,6 @@ Proof
   strip_tac >> gvs[AllCaseEqs()]
 QED
 
-(* Dynamic array bounds check: reads stored length from storage *)
-Definition check_array_bounds_def:
-  check_array_bounds cx (ArrayRef is_transient base_slot _ (Dynamic _)) (IntV i) = do
-    storage <- get_storage_backend cx is_transient;
-    stored_len <<- w2n (lookup_storage base_slot storage);
-    check (0 ≤ i ∧ Num i < stored_len) "subscript dynamic array oob"
-  od ∧
-  check_array_bounds _ _ _ = return ()
-End
-
-val () = check_array_bounds_def
-  |> SRULE [bind_def, FUN_EQ_THM, LET_THM, check_def,
-            toplevel_value_CASE_rator]
-  |> cv_auto_trans;
-
 (* ===== Reentrancy Lock Helpers ===== *)
 (* Vyper's @nonreentrant uses transient storage (EIP-1153 on Cancun+).
    Lock values: 0 = unlocked (final), 1 = locked (temp).
@@ -1344,7 +1323,7 @@ Definition evaluate_def:
   eval_stmt cx (Return NONE) = raise $ ReturnException NoneV ∧
   eval_stmt cx (Return (SOME e)) = do
     tv <- eval_expr cx e;
-    v <- materialise cx tv;
+    v <- read_result cx tv;
     raise $ ReturnException v
   od ∧
   eval_stmt cx (Raise RaiseBare) =
@@ -1353,29 +1332,29 @@ Definition evaluate_def:
     raise $ AssertException "UNREACHABLE" ∧
   eval_stmt cx (Raise (RaiseReason e)) = do
     tv <- eval_expr cx e;
-    v <- get_Value tv;
+    v <- read_result cx tv;
     s <- lift_option_type (dest_StringV v) "not StringV";
     raise $ AssertException s
   od ∧
   eval_stmt cx (Assert e AssertBare) = do
     tv <- eval_expr cx e;
-    switch_BoolV tv
+    switch_BoolV cx tv
       (return ())
       (raise $ AssertException "")
   od ∧
   eval_stmt cx (Assert e AssertUnreachable) = do
     tv <- eval_expr cx e;
-    switch_BoolV tv
+    switch_BoolV cx tv
       (return ())
       (raise $ AssertException "UNREACHABLE")
   od ∧
   eval_stmt cx (Assert e (AssertReason se)) = do
     tv <- eval_expr cx e;
-    switch_BoolV tv
+    switch_BoolV cx tv
       (return ())
       (do
          stv <- eval_expr cx se;
-         sv <- get_Value stv;
+         sv <- read_result cx stv;
          s <- lift_option_type (dest_StringV sv) "not StringV";
          raise $ AssertException s
        od)
@@ -1393,25 +1372,24 @@ Definition evaluate_def:
     tenv <<- get_tenv cx;
     tyv <- lift_option_type (evaluate_type tenv typ) "AnnAssign evaluate_type";
     tv <- eval_expr cx e;
-    v <- materialise cx tv;
+    v <- read_result cx tv;
     new_variable id tyv v
   od ∧
   eval_stmt cx (Append t e) = do
-    (loc, sbs) <- eval_base_target cx t;
+    p <- eval_target_place cx t;
     tv <- eval_expr cx e;
-    v <- materialise cx tv;
-    assign_target cx (BaseTargetV loc sbs) (AppendOp v);
-    return ()
+    v <- read_result cx tv;
+    append_place cx p v
   od ∧
   eval_stmt cx (Assign (BaseTarget t) e) = do
-    pv <- eval_place cx e;
+    pv <- eval_expr cx e;
     p <- eval_target_place cx t;
-    v <- read_place_or_value cx pv;
+    v <- read_result cx pv;
     write_place cx p v
   od ∧
   eval_stmt cx (Assign (TupleTarget gs) e) = do
     tv <- eval_expr cx e;
-    v <- materialise cx tv;
+    v <- read_result cx tv;
     assign_tuple_targets cx (TupleTarget gs) v
   od ∧
   eval_stmt cx (AugAssign ty t bop e) = do
@@ -1419,7 +1397,7 @@ Definition evaluate_def:
     cur <- read_place cx p;
     ptv <- place_type_value cx p;
     tv <- eval_expr cx e;
-    v <- get_Value tv;
+    v <- read_result cx tv;
     u <<- (case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0);
     res <- lift_sum (evaluate_binop u ptv bop cur v);
     write_place cx p res
@@ -1428,7 +1406,7 @@ Definition evaluate_def:
     tv <- eval_expr cx e;
     push_scope;
     finally (
-      switch_BoolV tv
+      switch_BoolV cx tv
         (eval_stmts cx ss1)
         (eval_stmts cx ss2)
     ) pop_scope
@@ -1450,41 +1428,19 @@ Definition evaluate_def:
   od ∧
   eval_iterator cx (Array e) = do
     tv <- eval_expr cx e;
-    v <- materialise cx tv;
+    v <- read_result cx tv;
     arr_tv <- lift_option_type (evaluate_type (get_tenv cx) (expr_type e)) "For array type";
     vs <- lift_option_type (extract_elements arr_tv v) "For not ArrayV";
     return vs
   od ∧
   eval_iterator cx (Range e1 e2) = do
     tv1 <- eval_expr cx e1;
-    v1 <- get_Value tv1;
+    v1 <- read_result cx tv1;
     tv2 <- eval_expr cx e2;
-    v2 <- get_Value tv2;
+    v2 <- read_result cx tv2;
     rl <- lift_sum $ get_range_limits v1 v2;
     n1 <<- FST rl; n2 <<- SND rl;
     return $ GENLIST (λn. IntV (n1 + &n)) n2
-  od ∧
-  eval_base_target cx (NameTarget id) = do
-    sc <- get_scopes;
-    type_check (IS_SOME (lookup_scopes id sc)) "NameTarget not in scope";
-    return $ (ScopedVar id, [])
-  od ∧
-  eval_base_target cx (TopLevelNameTarget (src_id_opt, id)) = do
-    ts <- lift_option_type
-            (get_module_code cx src_id_opt)
-            "TopLevelNameTarget get_module_code";
-    if is_immutable_decl id ts then return $ (ImmutableVar src_id_opt id, [])
-    else return $ (TopLevelVar src_id_opt id, [])
-  od ∧
-  eval_base_target cx (AttributeTarget t id) = do
-    (loc, sbs) <- eval_base_target cx t;
-    return $ (loc, AttrSubscript id :: sbs)
-  od ∧
-  eval_base_target cx (SubscriptTarget t e) = do
-    (loc, sbs) <- eval_base_target cx t;
-    tv <- eval_expr cx e;
-    v <- get_Value tv;
-    return $ (loc, ValueSubscript v :: sbs)
   od ∧
   eval_for cx tyv nm body [] = return () ∧
   eval_for cx tyv nm body (v::vs) = do
@@ -1495,18 +1451,17 @@ Definition evaluate_def:
     if broke then return () else eval_for cx tyv nm body vs
   od ∧
   eval_expr cx (Name _ id) = do
-    env <- get_scopes;
-    v <- lift_option_type (lookup_scopes_val id env) "Name not in scope";
-    return $ Value v
+    sc <- get_scopes;
+    type_check (IS_SOME (lookup_scopes id sc)) "Name not in scope";
+    return (PlaceR (MemoryPlace id []))
   od ∧
   eval_expr cx (TopLevelName _ (src_id_opt, id)) =
     lookup_global cx src_id_opt id ∧
   eval_expr cx (FlagMember _ nsid mid) = lookup_flag_mem cx nsid mid ∧
   eval_expr cx (IfExp _ e1 e2 e3) = do
     tv <- eval_expr cx e1;
-    switch_BoolV tv
-      (eval_expr cx e2)
-      (eval_expr cx e3)
+    res <- switch_BoolV cx tv (eval_expr cx e2) (eval_expr cx e3);
+    conditional_result cx res
   od ∧
   eval_expr cx (Literal _ l) = return $ Value $ evaluate_literal l ∧
   eval_expr cx (StructLit _ (src_id_opt, id) kes) = do
@@ -1518,29 +1473,20 @@ Definition evaluate_def:
     return $ Value $ StructV $ ZIP (ks, vs)
   od ∧
   eval_expr cx (Subscript _ e1 e2) = do
-    tv1 <- eval_expr cx e1;
-    tv2 <- eval_expr cx e2;
-    v2 <- get_Value tv2;
-    tenv <<- get_tenv cx;
-    arr_tv <- lift_option_type (evaluate_type tenv (expr_type e1)) "Subscript array type";
-    check_array_bounds cx tv1 v2;
-    res <- lift_sum $ evaluate_subscript tenv arr_tv tv1 v2;
-    case res of INL v => return v | INR (is_transient, slot, tv) => do
-      v <- read_storage_slot cx is_transient slot tv;
-      return $ Value v
-    od
+    res <- eval_expr cx e1;
+    idx <- eval_expr cx e2;
+    v <- read_result cx idx;
+    select_result cx (expr_type e1) res (ValueSubscript v)
   od ∧
   eval_expr cx (Attribute _ e id) = do
-    tv <- eval_expr cx e;
-    sv <- get_Value tv;
-    v <- lift_sum $ evaluate_attribute sv id;
-    return $ Value $ v
+    res <- eval_expr cx e;
+    select_result cx (expr_type e) res (AttrSubscript id)
   od ∧
   eval_expr cx (Builtin ty bt es) = do
     type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args";
     v <- if bt = Len then do
       tv <- eval_expr cx (HD es);
-      len <- toplevel_array_length cx tv;
+      len <- result_array_length cx tv;
       return $ IntV (&len)
     od else do
       vs <- eval_exprs cx es;
@@ -1550,10 +1496,8 @@ Definition evaluate_def:
     return $ Value v
   od ∧
   eval_expr cx (Pop _ bt) = do
-    (loc, sbs) <- eval_base_target cx bt;
-    popped <- assign_target cx (BaseTargetV loc sbs) PopOp;
-    v <- lift_option_type popped "Pop returned NONE";
-    return $ Value v
+    p <- eval_target_place cx bt;
+    pop_place cx p
   od ∧
   eval_expr cx (TypeBuiltin _ tb typ es) = do
     type_check (type_builtin_args_length_ok tb (LENGTH es)) "TypeBuiltin args";
@@ -1688,49 +1632,25 @@ Definition evaluate_def:
   eval_exprs cx [] = return [] ∧
   eval_exprs cx (e::es) = do
     tv <- eval_expr cx e;
-    v <- materialise cx tv;
+    v <- read_result cx tv;
     vs <- eval_exprs cx es;
     return $ v::vs
-  od ∧
-  eval_place cx (Name ty id) = do
-    sc <- get_scopes;
-    type_check (IS_SOME (lookup_scopes id sc)) "Name not in scope";
-    return (PlaceR (MemoryPlace id []))
-  od ∧
-  eval_place cx (TopLevelName ty (src,id)) = lookup_global_place cx src id ∧
-  eval_place cx (Subscript ty e1 e2) = do
-    pv <- eval_place cx e1;
-    tv <- eval_expr cx e2;
-    v <- get_Value tv;
-    ptv <- lift_option_type (evaluate_type (get_tenv cx) (expr_type e1))
-             "Subscript array type";
-    extend_place cx ptv pv (ValueSubscript v)
-  od ∧
-  eval_place cx (Attribute ty e id) = do
-    pv <- eval_place cx e;
-    ptv <- lift_option_type (evaluate_type (get_tenv cx) (expr_type e))
-             "Attribute base type";
-    extend_place cx ptv pv (AttrSubscript id)
-  od ∧
-  eval_place cx e = do
-    tv <- eval_expr cx e;
-    return (ValueR tv)
   od ∧
   eval_base_place cx (NameTarget id) = do
     sc <- get_scopes;
     type_check (IS_SOME (lookup_scopes id sc)) "NameTarget not in scope";
     return (PlaceR (MemoryPlace id []))
   od ∧
-  eval_base_place cx (TopLevelNameTarget (src,id)) = lookup_global_place cx src id ∧
+  eval_base_place cx (TopLevelNameTarget (src,id)) = lookup_global cx src id ∧
   eval_base_place cx (AttributeTarget t id) = do
     pv <- eval_base_place cx t;
-    extend_target_place cx pv (AttrSubscript id)
+    extend_place cx pv (AttrSubscript id)
   od ∧
   eval_base_place cx (SubscriptTarget t e) = do
     pv <- eval_base_place cx t;
     tv <- eval_expr cx e;
-    v <- get_Value tv;
-    extend_target_place cx pv (ValueSubscript v)
+    v <- read_result cx tv;
+    extend_place cx pv (ValueSubscript v)
   od ∧
   eval_target_place cx t = do
     pv <- eval_base_place cx t;
@@ -1755,16 +1675,14 @@ Termination
     INL (cx,s) => 4 * stmt_bound (remcode cx) s
   | INR (INL (cx,ss)) => 4 * stmts_bound (remcode cx) ss
   | INR (INR (INL (cx,it))) => 4 * iterator_bound (remcode cx) it
-  | INR (INR (INR (INL (cx,t)))) => 4 * base_target_bound (remcode cx) t
-  | INR (INR (INR (INR (INL (cx,tyv,nm,body,vs))))) =>
+  | INR (INR (INR (INL (cx,tyv,nm,body,vs)))) =>
       4 * (1 + LENGTH vs + LENGTH vs * stmts_bound (remcode cx) body)
-  | INR (INR (INR (INR (INR (INL (cx,e)))))) => 4 * expr_bound (remcode cx) e
-  | INR (INR (INR (INR (INR (INR (INL (cx,es))))))) => 4 * exprs_bound (remcode cx) es
-  | INR (INR (INR (INR (INR (INR (INR (INL (cx,e)))))))) => 4 * expr_bound (remcode cx) e + 1
-  | INR (INR (INR (INR (INR (INR (INR (INR (INL (cx,t))))))))) => 4 * base_target_bound (remcode cx) t
-  | INR (INR (INR (INR (INR (INR (INR (INR (INR (INL (cx,t)))))))))) => 4 * base_target_bound (remcode cx) t + 1
-  | INR (INR (INR (INR (INR (INR (INR (INR (INR (INR (INL (cx,g,v))))))))))) => 4 * target_bound (remcode cx) g + 2
-  | INR (INR (INR (INR (INR (INR (INR (INR (INR (INR (INR (cx,gs,vs))))))))))) => 4 * targets_bound (remcode cx) gs + 2)`
+  | INR (INR (INR (INR (INL (cx,e))))) => 4 * expr_bound (remcode cx) e
+  | INR (INR (INR (INR (INR (INL (cx,es)))))) => 4 * exprs_bound (remcode cx) es
+  | INR (INR (INR (INR (INR (INR (INL (cx,t))))))) => 4 * base_target_bound (remcode cx) t
+  | INR (INR (INR (INR (INR (INR (INR (INL (cx,t)))))))) => 4 * base_target_bound (remcode cx) t + 1
+  | INR (INR (INR (INR (INR (INR (INR (INR (INL (cx,g,v))))))))) => 4 * target_bound (remcode cx) g + 2
+  | INR (INR (INR (INR (INR (INR (INR (INR (INR (cx,gs,vs))))))))) => 4 * targets_bound (remcode cx) gs + 2)`
   \\ conj_tac >- simp[prim_recTheory.WF_measure]
   \\ rpt conj_tac
   \\ simp[prim_recTheory.measure_def, relationTheory.inv_image_def]
@@ -1826,27 +1744,6 @@ Termination
   ])
 End
 
-Definition eval_legacy_targets_def:
-  eval_target cx (BaseTarget t) = do
-    (loc, sbs) <- eval_base_target cx t;
-    return $ BaseTargetV loc sbs
-  od /\
-  eval_target cx (TupleTarget gs) = do
-    gvs <- eval_targets cx gs;
-    return $ TupleTargetV gvs
-  od /\
-  eval_targets cx [] = return [] /\
-  eval_targets cx (g::gs) = do
-    gv <- eval_target cx g;
-    gvs <- eval_targets cx gs;
-    return $ gv::gvs
-  od
-Termination
-  WF_REL_TAC `measure (sum_CASE
-    (λ(cx,g). assignment_target_size g)
-    (λ(cx,gs). list_size assignment_target_size gs))` >> simp[]
-End
-
 (* Small checked memory programs exercise the place evaluator independently of
    contract deployment. The surrounding machine state is deliberately arbitrary. *)
 Definition place_probe_state_def:
@@ -1861,9 +1758,9 @@ Definition place_probe_state_def:
        value := ArrayV (DynArrayV (REPLICATE 6 (IntV 0))); popped := []|>)]
 End
 
-Theorem eval_place_literal_probe[local]:
-  eval_place cx (Literal (BaseT (UintT 256)) (IntL 7)) st =
-    (INL (ValueR (Value (IntV 7))), st)
+Theorem eval_expr_literal_probe[local]:
+  eval_expr cx (Literal (BaseT (UintT 256)) (IntL 7)) st =
+    (INL (Value (IntV 7)), st)
 Proof
   simp[evaluate_def, evaluate_literal_def, return_def, bind_def]
 QED
@@ -1923,7 +1820,7 @@ Proof
 QED
 
 Theorem eager_nested_bounds_probe[local]:
-  SND (eval_place cx
+  SND (eval_expr cx
     (Subscript (BaseT (UintT 256))
       (Subscript (BaseT (UintT 256))
         (Name (ArrayT (BaseT (UintT 256)) (Dynamic 3)) "d")
@@ -1935,9 +1832,9 @@ Proof
 QED
 
 Theorem eval_target_place_nested_mapping_probe[local]:
-  lookup_global_place cx NONE "m" st =
-    (INL (ValueR (HashMapRef F slot (BaseT (UintT 256))
-      (HashMapT (BaseT (UintT 256)) (Type (BaseT (UintT 256)))))), st) ==>
+  lookup_global cx NONE "m" st =
+    (INL (HashMapRef F slot (BaseT (UintT 256))
+      (HashMapT (BaseT (UintT 256)) (Type (BaseT (UintT 256))))), st) ==>
   eval_target_place cx
     (SubscriptTarget
       (SubscriptTarget (TopLevelNameTarget (NONE,"m"))
@@ -1948,9 +1845,8 @@ Theorem eval_target_place_nested_mapping_probe[local]:
         (encode_hashmap_key (BaseT (UintT 256)) (IntV 2))) (BaseTV (UintT 256))), st)
 Proof
   strip_tac >> simp[evaluate_def, bind_def, return_def, evaluate_literal_def,
-    get_Value_def, extend_target_place_nested_mapping,
-    extend_target_place_def, extend_place_def, evaluate_subscript_def,
-    lift_sum_def, subscript_result_place_def, evaluate_type_def, get_place_def]
+    read_result_def, extend_place_nested_mapping,
+    extend_place_def, lift_option_type_def, evaluate_type_def, get_place_def]
 QED
 
 Theorem eval_exprs_length:
@@ -2109,9 +2005,9 @@ Definition constants_env_def:
     (case evaluate_type (get_tenv cx) typ of
      | NONE => NONE
      | SOME tv =>
-       case FST $ eval_expr cx e
+       case FST $ (do res <- eval_expr cx e; read_result cx res od)
          (initial_state (merge_constants addr src_id_opt acc am) [FEMPTY]) of
-       | INL (Value v) => constants_env cx am addr src_id_opt ts $
+       | INL v => constants_env cx am addr src_id_opt ts $
                           acc |+ (id, (tv, v))
        | _ => NONE) ∧
   constants_env cx am addr src_id_opt (t::ts) acc =
@@ -2155,8 +2051,8 @@ val () = send_call_value_def
 Definition evaluate_defaults_def:
   evaluate_defaults cx am [] = SOME [] ∧
   evaluate_defaults cx am (e::es) =
-    (case FST $ eval_expr cx e (initial_state am [FEMPTY]) of
-     | INL (Value v) =>
+    (case FST $ (do res <- eval_expr cx e; read_result cx res od) (initial_state am [FEMPTY]) of
+     | INL v =>
          (case evaluate_defaults cx am es of
           | SOME vs => SOME (v :: vs)
           | NONE => NONE)

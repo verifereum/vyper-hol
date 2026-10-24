@@ -15,36 +15,28 @@ Datatype:
   | AttrSubscript identifier
 End
 
-(* since HashMaps and storage arrays can only appear at the top level, they are
-* not mutually recursive with other `value`s, and we have `toplevel_value`: *)
-(* HashMapRef stores a base slot, key type, and value_type for lazy storage access.
-   When subscripted:
-   - If value_type is HashMapT kt vt, returns HashMapRef with new slot and kt
-   - If value_type is Type t, reads from storage at the computed slot
-   ArrayRef stores a base slot, element type_value, and bound for lazy storage
-   access. When subscripted, computes the element slot offset instead of
-   materializing the entire array. *)
-
-Datatype:
-  toplevel_value = Value value
-                 | HashMapRef bool bytes32 type value_type
-                 | ArrayRef bool bytes32 type_value bound
-End
-
-(* Places carry already-resolved addresses. Memory paths are root first. *)
+(* A location is captured once; reading it is a separate operation. *)
 Datatype:
   place = StoragePlace bool bytes32 type_value
         | MemoryPlace identifier (subscript list)
         | ImmutablePlace (num option) identifier (subscript list)
 End
 
+Theorem place_CASE_rator =
+  DatatypeSimps.mk_case_rator_thm_tyinfo
+    (Option.valOf (TypeBase.read {Thy="vyperState",Tyop="place"}));
+
+(* Mappings await a key and cannot be read as values. Immediate aggregate
+   indexing uses the expression's declared type; locations carry their type. *)
 Datatype:
-  place_or_value = PlaceR place | ValueR toplevel_value
+  eval_result = Value value
+              | PlaceR place
+              | HashMapRef bool bytes32 type value_type
 End
 
-Theorem toplevel_value_CASE_rator =
+Theorem eval_result_CASE_rator =
   DatatypeSimps.mk_case_rator_thm_tyinfo
-    (Option.valOf (TypeBase.read {Thy="vyperState",Tyop="toplevel_value"}));
+    (Option.valOf (TypeBase.read {Thy="vyperState",Tyop="eval_result"}));
 
 Definition is_Value_def[simp]:
   (is_Value (Value _) ⇔ T) ∧
@@ -73,7 +65,11 @@ End
 (* Machinery for managing variables (local, top-level, mutable, immutable), and
 * other stateful data during execution (e.g., EVM account states, logs)*)
 
-(* Local identifiers are the keys of runtime scopes. *)
+(* Local identifiers are the keys of runtime scopes. The live value carries
+   dynamic lengths. Popped snapshots retain contents for locations captured
+   before a shrink; new subscripts still check the live length. Reads prefer
+   live contents, then search retained ancestors newest first. Nested pops
+   update those ancestor views and retain their removed child separately. *)
 
 Datatype:
   scope_entry = <|
@@ -470,33 +466,26 @@ Definition lookup_global_def:
     tenv <<- get_tenv cx;
     case find_var_decl_by_name n ts of
     | NONE => do
-        (* Not a storage/hashmap var - check immutables *)
         imms <- get_immutables cx src_id_opt;
         case FLOOKUP imms n of
-        | SOME tvv => return (Value (SND tvv))
+        | SOME tvv => return (PlaceR (ImmutablePlace src_id_opt n []))
         | NONE => raise $ Error (TypeError "lookup_global: var not found")
       od
-    | SOME (StorageVarDecl is_transient typ, id) => do
-        var_slot <- lift_option_type (lookup_var_slot_from_layout cx is_transient src_id_opt id) "lookup_global var_slot";
+    | SOME (StorageVarDecl tr typ, id) => do
+        slot <- lift_option_type (lookup_var_slot_from_layout cx tr src_id_opt id) "lookup_global var_slot";
         tv <- lift_option_type (evaluate_type tenv typ) "lookup_global evaluate_type";
-        case tv of
-        | ArrayTV elem_tv bd => return (ArrayRef is_transient (n2w var_slot) elem_tv bd)
-        | _ => do
-            v <- read_storage_slot cx is_transient (n2w var_slot) tv;
-            return (Value v)
-          od
+        return (PlaceR (StoragePlace tr (n2w slot) tv))
       od
-    | SOME (HashMapVarDecl is_transient kt vt, id) => do
-        var_slot <- lift_option_type (lookup_var_slot_from_layout cx is_transient src_id_opt id) "lookup_global hashmap var_slot";
-        return (HashMapRef is_transient (n2w var_slot) kt vt)
+    | SOME (HashMapVarDecl tr kt vt, id) => do
+        slot <- lift_option_type (lookup_var_slot_from_layout cx tr src_id_opt id) "lookup_global hashmap var_slot";
+        return (HashMapRef tr (n2w slot) kt vt)
       od
   od
 End
 
 val () = lookup_global_def
   |> SRULE [bind_def, FUN_EQ_THM, option_CASE_rator,
-            prod_CASE_rator, var_decl_info_CASE_rator,
-            type_value_CASE_rator, UNCURRY, LET_THM]
+            prod_CASE_rator, var_decl_info_CASE_rator, UNCURRY, LET_THM]
   |> cv_auto_trans;
 
 Definition update_immutable_def:
@@ -691,86 +680,6 @@ val () = set_variable_def
 
 (* assignment to existing locations *)
 
-Definition get_Value_def[simp]:
-  get_Value (Value v) = return v ∧
-  get_Value _ = raise $ Error (TypeError "not Value")
-End
-
-val () = get_Value_def
-  |> SIMP_RULE std_ss [FUN_EQ_THM]
-  |> cv_auto_trans;
-
-Definition materialise_def:
-  materialise cx (ArrayRef is_transient base_slot elem_tv bd) = do
-    v <- read_storage_slot cx is_transient base_slot (ArrayTV elem_tv bd);
-    return v
-  od ∧
-  materialise cx (Value v) = return v ∧
-  materialise _ _ = raise $ Error (TypeError "materialise")
-End
-
-val () = materialise_def
-  |> SRULE [bind_def, FUN_EQ_THM, LET_THM, toplevel_value_CASE_rator]
-  |> cv_auto_trans;
-
-Definition toplevel_array_length_def:
-  toplevel_array_length cx (ArrayRef is_transient base_slot _ (Fixed n)) =
-    return $ (&n : num) ∧
-  toplevel_array_length cx (ArrayRef is_transient base_slot _ (Dynamic _)) = do
-    storage <- get_storage_backend cx is_transient;
-    return $ &(w2n (lookup_storage base_slot storage))
-  od ∧
-  toplevel_array_length cx (Value (ArrayV (DynArrayV vs))) =
-    return $ &(LENGTH vs) ∧
-  toplevel_array_length cx (Value (ArrayV (SArrayV sparse))) =
-    return $ &(LENGTH sparse) ∧
-  toplevel_array_length cx (Value (ArrayV (TupleV vs))) =
-    return $ &(LENGTH vs) ∧
-  toplevel_array_length cx (Value (BytesV ls)) =
-    return $ &(LENGTH ls) ∧
-  toplevel_array_length cx (Value (StringV ls)) =
-    return $ &(LENGTH ls) ∧
-  toplevel_array_length _ _ = raise $ Error (TypeError "toplevel_array_length")
-End
-
-val () = toplevel_array_length_def
-  |> SRULE [bind_def, FUN_EQ_THM, LET_THM, toplevel_value_CASE_rator]
-  |> cv_auto_trans;
-
-Theorem toplevel_array_length_sarrayv[local]:
-  toplevel_array_length cx (Value (ArrayV (SArrayV sparse))) st =
-    (INL (&LENGTH sparse), st)
-Proof
-  simp[toplevel_array_length_def, return_def]
-QED
-
-Definition evaluate_subscript_def:
-  evaluate_subscript tenv tv (Value (ArrayV av)) (IntV i) =
-  (case array_index tv av i
-   of SOME v => INL $ INL $ Value v
-    | _ => INR (RuntimeError "subscript array_index")) ∧
-  evaluate_subscript tenv _ (HashMapRef is_transient slot kt vt) kv =
-  (let new_slot = hashmap_slot slot $ encode_hashmap_key kt kv in
-   case vt
-   of HashMapT kt' vt' => INL $ INL $ HashMapRef is_transient new_slot kt' vt'
-    | Type t =>
-        (case evaluate_type tenv t of
-         | SOME tv => INL $ INR (is_transient, new_slot, tv)
-         | NONE => INR (TypeError "evaluate_subscript evaluate_type"))) ∧
-  evaluate_subscript tenv _ (ArrayRef is_transient base_slot elem_tv bd) (IntV i) =
-  (if 0 ≤ i ∧ Num i < bound_length bd then
-    let elem_offset = (case bd of Fixed _ => 0 | Dynamic _ => 1) in
-    let slot = base_slot + n2w (elem_offset + Num i * type_slot_size elem_tv) in
-    case elem_tv of
-    | ArrayTV inner_tv inner_bd =>
-        INL $ INL $ ArrayRef is_transient slot inner_tv inner_bd
-    | _ => INL $ INR (is_transient, slot, elem_tv)
-   else INR (RuntimeError "subscript array out of bounds")) ∧
-  evaluate_subscript _ _ _ _ = INR (TypeError "evaluate_subscript")
-End
-
-val () = cv_auto_trans evaluate_subscript_def;
-
 (* Type paths are independent of the current dynamic lengths. *)
 Definition subscript_type_def:
   subscript_type (ArrayTV tv bd) (ValueSubscript (IntV i)) =
@@ -907,21 +816,6 @@ Proof
        (Rewrite.add_rewrites pre_constructor_rewrites ihs)))
 QED
 
-Datatype:
-  location
-  = ScopedVar identifier
-  | ImmutableVar (num option) identifier  (* source_id, var_name *)
-  | TopLevelVar (num option) identifier   (* source_id, var_name *)
-End
-
-Datatype:
-  assignment_value
-  = BaseTargetV location (subscript list)
-  | TupleTargetV (assignment_value list)
-End
-
-Type base_target_value = “:location # subscript list”;
-
 (* Walk through nested array subscripts computing the final element slot *)
 Definition resolve_array_element_def:
   resolve_array_element cx is_transient base_slot (ArrayTV elem_tv bd) ((ValueSubscript (IntV idx))::rest) = do
@@ -959,155 +853,17 @@ Proof
        (Rewrite.add_rewrites pre_constructor_rewrites ihs)))
 QED
 
-Definition assign_result_def:
-  assign_result tv PopOp old_val subs = do
-    arr <- lift_sum $ evaluate_subscripts tv old_val subs;
-    p <- lift_sum $ popped_value arr;
-    return $ SOME p
-  od ∧
-  assign_result _ _ _ _ = return NONE
-End
-
-val () = assign_result_def
-  |> SRULE [bind_def, FUN_EQ_THM, LET_THM]
-  |> cv_auto_trans;
-
 (* Record the value left in a popped memory slot. Earlier snapshots remain
    available when a later pop removes an enclosing array. *)
 Definition record_pop_def:
-  record_pop tv old path p history =
-    case evaluate_subscripts tv old path of
-    | INL (ArrayV (DynArrayV vs)) =>
+  record_pop path arr p history =
+    case arr of
+    | ArrayV (DynArrayV vs) =>
         (path ++ [ValueSubscript (IntV &(LENGTH vs - 1))], p)::history
     | _ => history
 End
 
 val () = cv_auto_trans record_pop_def;
-
-Definition assign_target_def:
-  assign_target cx (BaseTargetV (ScopedVar id) is) ao = do
-    sc <- get_scopes;
-    (pre, env, entry, rest) <- lift_option (find_containing_scope id sc) "assign_target lookup";
-    type_check entry.assignable "assign_target not assignable";
-    a' <- lift_sum $ assign_subscripts entry.type entry.value (REVERSE is) ao;
-    result <- assign_result entry.type ao entry.value (REVERSE is);
-    history <<- (case result of
-      SOME p => record_pop entry.type entry.value (REVERSE is) p entry.popped
-    | NONE => []);
-    set_scopes $ pre ++ env |+ (id, entry with <| value := a'; popped := history |>) :: rest;
-    return result
-  od ∧
-  assign_target cx (BaseTargetV (TopLevelVar src_id_opt id) is) ao = do
-    ni <<- id;
-    tv <- lookup_global cx src_id_opt ni;
-    ts <- lift_option_type (get_module_code cx src_id_opt) "assign_target get_module_code";
-    tenv <<- get_tenv cx;
-    case tv of
-    | Value v => do
-        var_tv <- lift_option_type
-          (OPTION_BIND (find_var_decl_by_name ni ts)
-             (λp. case FST p of StorageVarDecl _ typ => evaluate_type tenv typ | _ => NONE))
-          "assign_target TopLevelVar type";
-        v' <- lift_sum $ assign_subscripts var_tv v (REVERSE is) ao;
-        set_global cx src_id_opt ni v';
-        assign_result var_tv ao v (REVERSE is)
-      od
-    | HashMapRef is_transient base_slot kt vt => do
-        (first_sub, rest_subs) <- lift_option_type
-          (case REVERSE is of x::xs => SOME (x, xs) | [] => NONE)
-          "assign_target hashmap needs subscript";
-        (final_type, key_types, remaining_subs) <- lift_option_type
-          (split_hashmap_subscripts vt rest_subs)
-          "assign_target split_hashmap_subscripts";
-        hashmap_subs <<- first_sub :: TAKE (LENGTH rest_subs - LENGTH remaining_subs) rest_subs;
-        all_key_types <<- kt :: key_types;
-        final_slot <- lift_option_type
-          (compute_hashmap_slot base_slot all_key_types hashmap_subs)
-          "assign_target compute_hashmap_slot";
-        final_tv <- lift_option_type (evaluate_type tenv final_type) "assign_target evaluate_type";
-        current_val <- read_storage_slot cx is_transient final_slot final_tv;
-        new_val <- lift_sum $ assign_subscripts final_tv current_val remaining_subs ao;
-        write_storage_slot cx is_transient final_slot final_tv new_val;
-        assign_result final_tv ao current_val remaining_subs
-      od
-    | ArrayRef is_transient base_slot elem_tv bd => do
-        (elem_slot, final_tv, remaining_subs) <-
-          resolve_array_element cx is_transient base_slot (ArrayTV elem_tv bd) (REVERSE is);
-        case (ao, final_tv) of
-        | (PopOp, ArrayTV pop_elem_tv (Dynamic _)) => do
-            storage <- get_storage_backend cx is_transient;
-            stored_len <<- w2n (lookup_storage elem_slot storage);
-            check (stored_len > 0) "pop empty storage array";
-            last_idx <<- stored_len - 1;
-            last_slot <<- elem_slot + n2w (1 + last_idx * type_slot_size pop_elem_tv);
-            popped <- read_storage_slot cx is_transient last_slot pop_elem_tv;
-            write_storage_slot cx is_transient elem_slot (BaseTV (UintT 256))
-              (IntV &last_idx);
-            return $ SOME popped
-          od
-        | (AppendOp v, ArrayTV app_elem_tv (Dynamic n)) => do
-            storage <- get_storage_backend cx is_transient;
-            stored_len <<- w2n (lookup_storage elem_slot storage);
-            check (stored_len < n) "append full storage array";
-            new_slot <<- elem_slot + n2w (1 + stored_len * type_slot_size app_elem_tv);
-            write_storage_slot cx is_transient new_slot app_elem_tv v;
-            write_storage_slot cx is_transient elem_slot (BaseTV (UintT 256))
-              (IntV &(stored_len + 1));
-            return NONE
-          od
-        | _ => do
-            current_val <- read_storage_slot cx is_transient elem_slot final_tv;
-            new_val <- lift_sum $ assign_subscripts final_tv current_val remaining_subs ao;
-            write_storage_slot cx is_transient elem_slot final_tv new_val;
-            assign_result final_tv ao current_val remaining_subs
-          od
-      od
-  od ∧
-  assign_target cx (BaseTargetV (ImmutableVar src_id_opt id) is) ao = do
-    imms <- get_immutables cx src_id_opt;
-    tva <- lift_option_type (FLOOKUP imms id) "assign_target ImmutableVar";
-    a' <- lift_sum $ assign_subscripts (FST tva) (SND tva) (REVERSE is) ao;
-    set_immutable cx src_id_opt id (FST tva) a';
-    assign_result (FST tva) ao (SND tva) (REVERSE is)
-  od ∧
-  assign_target cx (TupleTargetV gvs) (Replace (ArrayV (TupleV vs))) = do
-    type_check (LENGTH gvs = LENGTH vs) "TupleTargetV length";
-    assign_targets cx gvs vs;
-    return NONE
-  od ∧
-  assign_target _ _ _ = raise (Error (TypeError "assign_target")) ∧
-  assign_targets cx [] [] = return () ∧
-  assign_targets cx (gv::gvs) (v::vs) = do
-    assign_target cx gv (Replace v);
-    assign_targets cx gvs vs
-  od ∧
-  assign_targets _ _ _ = raise (Error (TypeError "assign_targets"))
-End
-
-val assign_target_pre_def = assign_target_def
-  |> SRULE [FUN_EQ_THM, bind_def, LET_RATOR, ignore_bind_def,
-            UNCURRY, prod_CASE_rator, option_CASE_rator,
-            toplevel_value_CASE_rator, lift_option_def,
-            type_value_CASE_rator, bound_CASE_rator,
-            assign_operation_CASE_rator]
-  |> cv_auto_trans_pre "assign_target_pre assign_targets_pre";
-
-val target_pre_cleanup_conv = mk_pre_cleanup_conv
-  (Rewrite.add_rewrites pre_constructor_rewrites
-    (List.concat (map (fn ty => #rewrs (TypeBase.simpls_of ty))
-      [``:assignment_value``, ``:location``, ``:assign_operation``])));
-
-Theorem assign_target_pre[cv_pre]:
-  (∀w x y z. assign_target_pre w x y z) ∧
-  (∀w x y z. assign_targets_pre w x y z)
-Proof
-  ho_match_mp_tac assign_target_ind \\ rpt strip_tac
-  \\ CONV_TAC (ONCE_REWRITE_CONV [assign_target_pre_def])
-  \\ CONV_TAC target_pre_cleanup_conv
-  \\ rpt strip_tac
-  \\ first_x_assum irule
-  \\ ASM_SIMP_TAC subscript_pre_ss []
-QED
 
 Definition subscripts_type_def:
   subscripts_type tv [] = SOME tv /\
@@ -1118,6 +874,7 @@ Definition subscripts_type_def:
 End
 
 val () = cv_auto_trans subscripts_type_def;
+
 
 (* Classify the first unavailable step of a current traversal. Only a
    nonnegative, declared-in-bounds dynamic element beyond the live length
@@ -1163,6 +920,41 @@ Theorem read_popped_pre[cv_pre]:
 Proof
   Induct_on `history` >> rpt gen_tac >>
   simp[Once read_popped_pre_def]
+QED
+
+(* Follow the same owner selection as read_popped. A pop removes its child
+   from that owner before recording the child, so retained snapshots created
+   by pops have disjoint live contents. Older missing suffixes remain intact. *)
+Definition replace_popped_def:
+  replace_popped tv path replacement [] = NONE /\
+  replace_popped tv path replacement ((prefix,old)::history) =
+    if IS_PREFIX path prefix then
+      case subscripts_type tv prefix of
+      | NONE => OPTION_MAP (CONS (prefix,old))
+          (replace_popped tv path replacement history)
+      | SOME ptv =>
+          (case evaluate_subscripts ptv old (DROP (LENGTH prefix) path) of
+           | INL _ =>
+               (case assign_subscripts ptv old (DROP (LENGTH prefix) path)
+                       (Replace replacement) of
+                | INL updated => SOME ((prefix,updated)::history)
+                | INR _ => NONE)
+           | INR _ =>
+               if missing_dynamic_element ptv old (DROP (LENGTH prefix) path)
+               then OPTION_MAP (CONS (prefix,old))
+                 (replace_popped tv path replacement history)
+               else NONE)
+    else OPTION_MAP (CONS (prefix,old))
+      (replace_popped tv path replacement history)
+End
+
+val replace_popped_pre_def = cv_auto_trans_pre "replace_popped_pre" replace_popped_def;
+
+Theorem replace_popped_pre[cv_pre]:
+  !tv path replacement history. replace_popped_pre tv path replacement history
+Proof
+  Induct_on `history` >> rpt gen_tac >>
+  simp[Once replace_popped_pre_def]
 QED
 
 Definition read_memory_path_def:
@@ -1252,12 +1044,64 @@ val () = write_place_def
             prod_CASE_rator, option_CASE_rator, sum_CASE_rator, lift_option_def]
   |> cv_auto_trans;
 
-Definition read_place_or_value_def:
-  read_place_or_value cx (PlaceR p) = read_place cx p /\
-  read_place_or_value cx (ValueR tv) = materialise cx tv
+(* Force a captured result at the caller's chosen point in the evaluation. *)
+Definition read_result_def:
+  read_result cx (Value v) = return v /\
+  read_result cx (PlaceR p) = read_place cx p /\
+  read_result cx (HashMapRef _ _ _ _) =
+    raise (Error (TypeError "read_result mapping"))
 End
 
-val () = read_place_or_value_def |> SRULE [FUN_EQ_THM] |> cv_auto_trans;
+val () = read_result_def |> SRULE [FUN_EQ_THM] |> cv_auto_trans;
+
+(* A conditional loads primitive words and copies non-memory aggregates.
+   Memory aggregates, including dynamic bytes and strings, retain their view. *)
+Definition conditional_result_def:
+  conditional_result cx (PlaceR p) = do
+    tv <- place_type_value cx p;
+    if (case p of MemoryPlace _ _ =>
+          (case tv of
+           | ArrayTV _ _ => T | TupleTV _ => T | StructTV _ => T
+           | BaseTV (BytesT (Dynamic _)) => T | BaseTV (StringT _) => T
+           | _ => F)
+        | _ => F)
+    then return (PlaceR p)
+    else do v <- read_place cx p; return (Value v) od
+  od /\
+  conditional_result cx (Value v) = return (Value v) /\
+  conditional_result cx (HashMapRef _ _ _ _) =
+    raise (Error (TypeError "conditional mapping"))
+End
+
+val () = conditional_result_def
+  |> SRULE [FUN_EQ_THM, bind_def, LET_THM, COND_RATOR, place_CASE_rator,
+            type_value_CASE_rator, base_type_CASE_rator, bound_CASE_rator]
+  |> cv_auto_trans;
+
+Definition result_array_length_def:
+  result_array_length cx (PlaceR (StoragePlace tr slot (ArrayTV tv (Fixed n)))) =
+    return n /\
+  result_array_length cx (PlaceR (StoragePlace tr slot (ArrayTV tv (Dynamic n)))) = do
+    storage <- get_storage_backend cx tr;
+    return (w2n (lookup_storage slot storage))
+  od /\
+  result_array_length cx res = do
+    v <- read_result cx res;
+    case v of
+    | ArrayV (DynArrayV vs) => return (LENGTH vs)
+    | ArrayV (SArrayV vs) => return (LENGTH vs)
+    | ArrayV (TupleV vs) => return (LENGTH vs)
+    | BytesV bs => return (LENGTH bs)
+    | StringV bs => return (LENGTH bs)
+    | _ => raise (Error (TypeError "result_array_length"))
+  od
+End
+
+val () = result_array_length_def
+  |> SRULE [FUN_EQ_THM, bind_def, LET_THM, eval_result_CASE_rator,
+            place_CASE_rator, type_value_CASE_rator, bound_CASE_rator,
+            value_CASE_rator, array_value_CASE_rator]
+  |> cv_auto_trans;
 
 (* The offset is the sum of the preceding fields' complete slot sizes. *)
 Definition struct_field_slot_def:
@@ -1318,133 +1162,164 @@ End
 
 val () = cv_auto_trans extend_memory_place_def;
 
-Definition subscript_result_place_def:
-  subscript_result_place (INL tv) = ValueR tv /\
-  subscript_result_place (INR (tr,slot,tv)) = PlaceR (StoragePlace tr slot tv)
-End
+(* Extend a resolved location or mapping root. No invented value type is
+   needed for targets: their metadata determines every step. *)
+Theorem value_type_CASE_rator =
+  DatatypeSimps.mk_case_rator_thm_tyinfo
+    (Option.valOf (TypeBase.read {Thy="vyperAST",Tyop="value_type"}));
 
-val () = cv_auto_trans subscript_result_place_def;
-
-(* tv is the declared type of a value-shaped base; resolved places carry their
-   own declared type, so no dynamic lengths are used to reconstruct that type. *)
 Definition extend_place_def:
-  extend_place cx tv (PlaceR (StoragePlace tr slot ptv)) sb = do
-    p <- extend_storage_place cx tr slot ptv sb;
+  extend_place cx (PlaceR (StoragePlace tr slot tv)) sb = do
+    p <- extend_storage_place cx tr slot tv sb;
     return (PlaceR p)
   od /\
-  extend_place cx tv (PlaceR p) sb = do
-    ptv <- place_type_value cx p;
+  extend_place cx (PlaceR p) sb = do
+    tv <- place_type_value cx p;
     v <- read_place cx p;
-    lift_sum (evaluate_subscripts ptv v [sb]);
+    lift_sum (evaluate_subscripts tv v [sb]);
     return (PlaceR (extend_memory_place p sb))
   od /\
-  extend_place cx tv (ValueR (ArrayRef tr slot etv bd)) sb = do
-    p <- extend_storage_place cx tr slot (ArrayTV etv bd) sb;
-    return (PlaceR p)
-  od /\
-  extend_place cx tv (ValueR vv) (ValueSubscript kv) = do
-    res <- lift_sum (evaluate_subscript (get_tenv cx) tv vv kv);
-    return (subscript_result_place res)
-  od /\
-  extend_place cx tv (ValueR vv) (AttrSubscript id) = do
-    v <- get_Value vv;
-    w <- lift_sum (evaluate_attribute v id);
-    return (ValueR (Value w))
-  od
+  extend_place cx (HashMapRef tr slot kt vt) (ValueSubscript kv) =
+    (let slot' = hashmap_slot slot (encode_hashmap_key kt kv) in
+     case vt of
+     | HashMapT kt' vt' => return (HashMapRef tr slot' kt' vt')
+     | Type ty => do
+         tv <- lift_option_type (evaluate_type (get_tenv cx) ty)
+                 "mapping element type";
+         return (PlaceR (StoragePlace tr slot' tv))
+       od) /\
+  extend_place cx _ _ = raise (Error (TypeError "extend_place"))
 End
 
 val () = extend_place_def
-  |> SRULE [FUN_EQ_THM, bind_def, ignore_bind_def, LET_RATOR]
+  |> SRULE [FUN_EQ_THM, bind_def, ignore_bind_def, LET_RATOR,
+            value_type_CASE_rator]
   |> cv_auto_trans;
 
-(* Resolve global locations without loading storage; mapping roots await a key. *)
-Definition lookup_global_place_def:
-  lookup_global_place cx src_id_opt n = do
-    ts <- lift_option_type (get_module_code cx src_id_opt) "lookup_global get_module_code";
-    tenv <<- get_tenv cx;
-    case find_var_decl_by_name n ts of
-    | NONE => do
-        imms <- get_immutables cx src_id_opt;
-        case FLOOKUP imms n of
-        | SOME tvv => return (PlaceR (ImmutablePlace src_id_opt n []))
-        | NONE => raise $ Error (TypeError "lookup_global: var not found")
-      od
-    | SOME (StorageVarDecl tr typ, id) => do
-        slot <- lift_option_type (lookup_var_slot_from_layout cx tr src_id_opt id) "lookup_global var_slot";
-        tv <- lift_option_type (evaluate_type tenv typ) "lookup_global evaluate_type";
-        return (PlaceR (StoragePlace tr (n2w slot) tv))
-      od
-    | SOME (HashMapVarDecl tr kt vt, id) => do
-        slot <- lift_option_type (lookup_var_slot_from_layout cx tr src_id_opt id) "lookup_global hashmap var_slot";
-        return (ValueR (HashMapRef tr (n2w slot) kt vt))
-      od
-  od
+(* Immediate aggregates have no address; their syntax supplies the type needed
+   to interpret sparse array defaults. Located bases use their own metadata. *)
+Definition select_result_def:
+  select_result cx ty (Value v) sb = do
+    tv <- lift_option_type (evaluate_type (get_tenv cx) ty) "selection base type";
+    w <- lift_sum (evaluate_subscripts tv v [sb]);
+    return (Value w)
+  od /\
+  select_result cx ty res sb = extend_place cx res sb
 End
 
-val () = lookup_global_place_def
-  |> SRULE [bind_def, FUN_EQ_THM, option_CASE_rator,
-            prod_CASE_rator, var_decl_info_CASE_rator, UNCURRY, LET_THM]
-  |> cv_auto_trans;
+val () = select_result_def
+  |> SRULE [FUN_EQ_THM, bind_def, LET_RATOR] |> cv_auto_trans;
 
 Definition get_place_def:
   get_place (PlaceR p) = return p /\
-  get_place (ValueR tv) = raise (Error (TypeError "target is not a place"))
+  get_place _ = raise (Error (TypeError "target is not a place"))
 End
 
 val () = get_place_def |> SRULE [FUN_EQ_THM] |> cv_auto_trans;
 
-Definition extend_target_place_def:
-  extend_target_place cx (PlaceR p) sb =
-    extend_place cx (BaseTV (UintT 256)) (PlaceR p) sb /\
-  extend_target_place cx (ValueR (HashMapRef tr slot kt vt)) sb =
-    extend_place cx (BaseTV (UintT 256)) (ValueR (HashMapRef tr slot kt vt)) sb /\
-  extend_target_place cx pv sb =
-    raise (Error (TypeError "extend_target_place"))
+(* Storage pop changes only the length. Its result is the retained element
+   address, so a subsequent append may overwrite it before the caller reads. *)
+Definition pop_place_def:
+  pop_place cx (StoragePlace tr slot (ArrayTV tv (Dynamic n))) = do
+    storage <- get_storage_backend cx tr;
+    len <<- w2n (lookup_storage slot storage);
+    check (0 < len) "pop empty storage array";
+    write_storage_slot cx tr slot (BaseTV (UintT 256)) (IntV &(len - 1));
+    return (PlaceR (StoragePlace tr (slot + n2w (1 + (len - 1) * type_slot_size tv)) tv))
+  od /\
+  pop_place cx (MemoryPlace id path) = do
+    sc <- get_scopes;
+    (pre,env,entry,rest) <- lift_option_type
+      (find_containing_scope id sc) "pop_place local";
+    type_check entry.assignable "pop_place not assignable";
+    arr <- lift_sum (read_memory_path entry path);
+    vs <- lift_option_type
+      (case arr of ArrayV (DynArrayV vs) => SOME vs | _ => NONE)
+      "pop_place not dynamic array";
+    check (vs <> []) "pop empty memory array";
+    popped <- lift_sum (popped_value arr);
+    shortened <- lift_sum (pop_element arr);
+    (updated,prior_history) <- lift_sum
+      (case evaluate_subscripts entry.type entry.value path of
+       | INL _ =>
+           (case assign_subscripts entry.type entry.value path (Replace shortened) of
+            | INL updated => INL (updated,entry.popped)
+            | INR err => INR err)
+       | INR err =>
+           (case replace_popped entry.type path shortened entry.popped of
+            | SOME history => INL (entry.value,history)
+            | NONE => INR err));
+    history <<- record_pop path arr popped prior_history;
+    set_scopes (pre ++ (env |+ (id,entry with <|value := updated; popped := history|>))::rest);
+    return (PlaceR (MemoryPlace id (path ++ [ValueSubscript (IntV &(LENGTH vs - 1))])))
+  od /\
+  (* The source compiler rejects immutable mutation after initialization. Keep
+     the existing value semantics for this checker-accepted extension. *)
+  pop_place cx (ImmutablePlace src id path) = do
+    imms <- get_immutables cx src;
+    tva <- lift_option_type (FLOOKUP imms id) "pop_place immutable";
+    arr <- lift_sum (evaluate_subscripts (FST tva) (SND tva) path);
+    popped <- lift_sum (popped_value arr);
+    updated <- lift_sum (assign_subscripts (FST tva) (SND tva) path PopOp);
+    set_immutable cx src id (FST tva) updated;
+    return (Value popped)
+  od /\
+  pop_place cx _ = raise (Error (TypeError "pop_place"))
 End
 
-val () = extend_target_place_def |> SRULE [FUN_EQ_THM] |> cv_auto_trans;
+val () = pop_place_def
+  |> SRULE [FUN_EQ_THM, bind_def, ignore_bind_def, LET_RATOR, UNCURRY,
+            prod_CASE_rator, option_CASE_rator, value_CASE_rator,
+            array_value_CASE_rator] |> cv_auto_trans;
 
-Theorem extend_place_hashmap_type_independent:
-  extend_place cx tv1 (ValueR (HashMapRef tr slot kt vt)) (ValueSubscript kv) =
-  extend_place cx tv2 (ValueR (HashMapRef tr slot kt vt)) (ValueSubscript kv)
-Proof
-  simp[extend_place_def, evaluate_subscript_def]
-QED
+Definition append_place_def:
+  append_place cx (StoragePlace tr slot (ArrayTV tv (Dynamic n))) v = do
+    storage <- get_storage_backend cx tr;
+    len <<- w2n (lookup_storage slot storage);
+    check (len < n) "append full storage array";
+    write_storage_slot cx tr (slot + n2w (1 + len * type_slot_size tv)) tv v;
+    write_storage_slot cx tr slot (BaseTV (UintT 256)) (IntV &(len + 1))
+  od /\
+  append_place cx p v = do
+    tv <- place_type_value cx p;
+    old <- read_place cx p;
+    updated <- lift_sum (append_element tv old v);
+    write_place cx p updated
+  od
+End
 
-Theorem get_place_unresolved_hashmap:
-  get_place (ValueR (HashMapRef tr slot kt vt)) =
-    raise (Error (TypeError "target is not a place"))
-Proof
-  simp[get_place_def]
-QED
+val () = append_place_def
+  |> SRULE [FUN_EQ_THM, bind_def, ignore_bind_def, LET_RATOR,
+            place_CASE_rator, type_value_CASE_rator, bound_CASE_rator]
+  |> cv_auto_trans;
 
-Theorem lookup_global_place_mapping:
+Theorem lookup_global_mapping:
   get_module_code cx src = SOME ts /\
   find_var_decl_by_name n ts = SOME (HashMapVarDecl tr kt vt, id) /\
   lookup_var_slot_from_layout cx tr src id = SOME slot ==>
-  lookup_global_place cx src n st =
-    (INL (ValueR (HashMapRef tr (n2w slot) kt vt)), st)
+  lookup_global cx src n st =
+    (INL (HashMapRef tr (n2w slot) kt vt), st)
 Proof
-  simp[lookup_global_place_def, bind_def, lift_option_type_def, return_def]
+  simp[lookup_global_def, bind_def, lift_option_type_def, return_def]
 QED
 
-Theorem extend_target_place_nested_mapping:
-  extend_target_place cx (ValueR (HashMapRef tr slot kt (HashMapT kt' vt')))
+Theorem extend_place_nested_mapping:
+  extend_place cx (HashMapRef tr slot kt (HashMapT kt' vt'))
     (ValueSubscript kv) st =
-  (INL (ValueR (HashMapRef tr (hashmap_slot slot (encode_hashmap_key kt kv)) kt' vt')), st)
+  (INL (HashMapRef tr (hashmap_slot slot (encode_hashmap_key kt kv)) kt' vt'), st)
 Proof
-  simp[extend_target_place_def, extend_place_def, evaluate_subscript_def,
-       lift_sum_def, bind_def, return_def, subscript_result_place_def]
+  simp[extend_place_def,
+       lift_option_type_def, bind_def, return_def]
 QED
 
-Theorem extend_target_place_mapping_leaf:
+Theorem extend_place_mapping_leaf:
   evaluate_type (get_tenv cx) typ = SOME tv ==>
-  extend_target_place cx (ValueR (HashMapRef tr slot kt (Type typ)))
+  extend_place cx (HashMapRef tr slot kt (Type typ))
     (ValueSubscript kv) st =
   (INL (PlaceR (StoragePlace tr (hashmap_slot slot (encode_hashmap_key kt kv)) tv)), st)
 Proof
-  simp[extend_target_place_def, extend_place_def, evaluate_subscript_def,
-       lift_sum_def, bind_def, return_def, subscript_result_place_def]
+  simp[extend_place_def,
+       lift_option_type_def, bind_def, return_def]
 QED
 
 Theorem place_delayed_pop_read[local]:
@@ -1483,7 +1358,7 @@ Theorem place_pop_then_delayed_read[local]:
       value := ArrayV (DynArrayV [IntV 5]); popped := []|>;
       st = empty_state with scopes := [FEMPTY |+ ("d",entry)]
   in FST ((do
-      assign_target cx (BaseTargetV (ScopedVar "d") []) PopOp;
+      pop_place cx (MemoryPlace "d" []);
       read_place cx (MemoryPlace "d" [ValueSubscript (IntV 0)])
     od) st) = INL (IntV 5)
 Proof
@@ -1522,20 +1397,11 @@ Proof
   rpt (BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def])
 QED
 
-Theorem materialise_state_snd:
-  SND (materialise cx tv st) = st
+Theorem read_result_state:
+  read_result cx res st = (r,st') ==> st' = st
 Proof
-  Cases_on `tv` >>
-  simp[materialise_def, bind_def, return_def, raise_def] >>
-  rpt (BasicProvers.FULL_CASE_TAC >> gvs[]) >>
-  metis_tac[read_storage_slot_state_snd, SND]
-QED
-
-Theorem read_place_or_value_state:
-  read_place_or_value cx pv st = (r,st') ==> st' = st
-Proof
-  Cases_on `pv` >> simp[read_place_or_value_def] >>
-  metis_tac[read_place_state, materialise_state_snd, SND]
+  Cases_on `res` >> simp[read_result_def, return_def, raise_def] >>
+  metis_tac[read_place_state]
 QED
 
 Theorem place_nested_pop_sequence[local]:
@@ -1546,8 +1412,8 @@ Theorem place_nested_pop_sequence[local]:
       popped := []|>;
       st = empty_state with scopes := [FEMPTY |+ ("d",entry)]
   in FST ((do
-      assign_target cx (BaseTargetV (ScopedVar "d") [ValueSubscript (IntV 0)]) PopOp;
-      assign_target cx (BaseTargetV (ScopedVar "d") []) PopOp;
+      pop_place cx (MemoryPlace "d" [ValueSubscript (IntV 0)]);
+      pop_place cx (MemoryPlace "d" []);
       a <- read_place cx (MemoryPlace "d" [ValueSubscript (IntV 0)]);
       b <- read_place cx (MemoryPlace "d" [ValueSubscript (IntV 0); ValueSubscript (IntV 0)]);
       c <- read_place cx (MemoryPlace "d" [ValueSubscript (IntV 0); ValueSubscript (IntV 1)]);
@@ -1566,8 +1432,8 @@ Theorem place_repeated_pop_sequence[local]:
       value := ArrayV (DynArrayV [IntV 1; IntV 2]); popped := []|>;
       st = empty_state with scopes := [FEMPTY |+ ("d",entry)]
   in FST ((do
-      assign_target cx (BaseTargetV (ScopedVar "d") []) PopOp;
-      assign_target cx (BaseTargetV (ScopedVar "d") []) PopOp;
+      pop_place cx (MemoryPlace "d" []);
+      pop_place cx (MemoryPlace "d" []);
       a <- read_place cx (MemoryPlace "d" [ValueSubscript (IntV 0)]);
       b <- read_place cx (MemoryPlace "d" [ValueSubscript (IntV 1)]);
       return (a,b)
@@ -1610,10 +1476,10 @@ Theorem place_memory_extension_bounds[local]:
       type := ArrayTV (BaseTV (UintT 256)) (Dynamic 3);
       value := ArrayV (DynArrayV [IntV 5]); popped := []|>;
       st = empty_state with scopes := [FEMPTY |+ ("d",entry)]
-  in extend_place cx (BaseTV (UintT 256)) (PlaceR (MemoryPlace "d" []))
+  in extend_place cx (PlaceR (MemoryPlace "d" []))
        (ValueSubscript (IntV 0)) st =
        (INL (PlaceR (MemoryPlace "d" [ValueSubscript (IntV 0)])),st) /\
-     ISL (FST (extend_place cx (BaseTV (UintT 256)) (PlaceR (MemoryPlace "d" []))
+     ISL (FST (extend_place cx (PlaceR (MemoryPlace "d" []))
        (ValueSubscript (IntV 1)) st)) = F
 Proof
   rpt (CHANGED_TAC (EVAL_TAC >>
@@ -1627,25 +1493,13 @@ Theorem place_struct_fixed_path[local]:
       value := StructV [("a",ArrayV (DynArrayV [IntV 3; IntV 4]))]; popped := []|>;
       st = empty_state with scopes := [FEMPTY |+ ("s",entry)]
   in FST ((do
-      pv <- extend_place cx (ArrayTV (BaseTV (UintT 256)) (Fixed 2))
+      pv <- extend_place cx
         (PlaceR (MemoryPlace "s" [])) (AttrSubscript "a");
-      pv' <- extend_place cx (BaseTV (UintT 256)) pv (ValueSubscript (IntV 1));
-      read_place_or_value cx pv'
+      pv' <- extend_place cx pv (ValueSubscript (IntV 1));
+      read_result cx pv'
     od) st) = INL (IntV 4)
 Proof
   rpt (CHANGED_TAC (EVAL_TAC >>
     simp[lookup_scopes_def, FLOOKUP_UPDATE, FLOOKUP_EMPTY,
          subscript_type_def, return_def]))
 QED
-
-
-(* Audit the new place-root boundary's kernel dependencies. *)
-val () = List.app (fn th =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if List.all (fn s => s = "DISK_THM") oracles andalso null axioms
-     then () else raise Fail "place-root boundary has admitted dependencies"
-  end)
-  [lookup_global_place_def, get_place_def, extend_target_place_def,
-   extend_place_hashmap_type_independent, get_place_unresolved_hashmap,
-   lookup_global_place_mapping, extend_target_place_nested_mapping,
-   extend_target_place_mapping_leaf];

@@ -295,10 +295,9 @@ Definition constant_value_def:
          (case evaluate_type (type_env_all_modules mods) (expr_type e1) of
           | NONE => NONE
           | SOME arr_tv =>
-              case evaluate_subscript (type_env_all_modules mods) arr_tv
-                     (Value v1) v2 of
-              | INL (INL (Value v)) => SOME v
-              | _ => NONE)
+              case evaluate_subscripts arr_tv v1 [ValueSubscript v2] of
+              | INL v => SOME v
+              | INR _ => NONE)
      | _ => NONE) /\
   constant_value mods imms (Attribute _ e id) =
     (case constant_value mods imms e of

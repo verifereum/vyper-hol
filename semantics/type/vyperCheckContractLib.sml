@@ -162,7 +162,7 @@ val checker_defs =
    vyperStateTheory.get_source_immutables_def,
    vyperStateTheory.set_source_immutables_def,
    vyperStateTheory.find_var_decl_by_name_def,
-   vyperStateTheory.evaluate_subscript_def,
+   vyperStateTheory.evaluate_subscripts_def,
    builtin_args_length_ok_def,
    type_builtin_args_length_ok_def,
    evaluate_builtin_def,
@@ -221,7 +221,7 @@ val checker_datatypes =
    ``:vyperAST$bound``, ``:vyperAST$raw_call_flags``, ``:vyperAST$ext_call_kw``,
    ``:string$char``,
    ``:vyperValue$type_value``, ``:vyperValue$value``,
-   ``:vyperValue$array_value``, ``:vyperState$toplevel_value``,
+   ``:vyperValue$array_value``, ``:vyperState$eval_result``,
    ``:vyperState$var_decl_info``, ``:vyperContext$evaluation_context``,
    ``:vyperContext$call_txn``, ``:'a + 'b``,
    ``:'a list``, ``:'a option``, ``:'a # 'b``]

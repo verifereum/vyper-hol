@@ -29,25 +29,21 @@ Datatype:
   | LogK nsid eval_continuation
   | PopK eval_continuation
   | AppendK expr eval_continuation
-  | AppendK1 base_target_value eval_continuation
+  | AppendK1 place eval_continuation
   | AnnAssignK identifier type_value eval_continuation
   | AssignK base_assignment_target eval_continuation
-  | AssignK1 place_or_value eval_continuation
+  | AssignK1 eval_result eval_continuation
   | TupleAssignK (assignment_target list) eval_continuation
   | TupleStoreK value eval_continuation
   | TupleStoresK (assignment_target list) (value list) eval_continuation
   | AugAssignK type binop expr eval_continuation
   | AugAssignK1 type place type_value value binop eval_continuation
-  | PlaceValueK eval_continuation
-  | PlaceSubscriptK type expr eval_continuation
-  | PlaceSubscriptK1 type place_or_value eval_continuation
-  | PlaceAttributeK type identifier eval_continuation
   | BasePlaceSubscriptK expr eval_continuation
-  | BasePlaceSubscriptK1 place_or_value eval_continuation
+  | BasePlaceSubscriptK1 eval_result eval_continuation
   | BasePlaceAttributeK identifier eval_continuation
   | TargetPlaceK eval_continuation
   | IfK (stmt list) (stmt list) eval_continuation
-  | IfK1 toplevel_value (stmt list) (stmt list) eval_continuation
+  | IfK1 eval_result (stmt list) (stmt list) eval_continuation
   | IfK2 eval_continuation
   | ForK identifier type_value num (stmt list) eval_continuation
   | ForK1 type_value identifier (stmt list) (value list) eval_continuation
@@ -56,18 +52,12 @@ Datatype:
   | ArrayK type eval_continuation
   | RangeK1 expr eval_continuation
   | RangeK2 value eval_continuation
-  | BaseTargetK eval_continuation
-  | TupleTargetK eval_continuation
-  | TargetsK (assignment_target list) eval_continuation
-  | TargetsK1 assignment_value eval_continuation
-  | AttributeTargetK identifier eval_continuation
-  | SubscriptTargetK expr eval_continuation
-  | SubscriptTargetK1 base_target_value eval_continuation
   | IfExpK expr expr eval_continuation
+  | ConditionalK eval_continuation
   | StructLitK (identifier list) eval_continuation
   | SubscriptK type expr eval_continuation
-  | SubscriptK1 type toplevel_value eval_continuation
-  | AttributeK identifier eval_continuation
+  | SubscriptK1 type eval_result eval_continuation
+  | AttributeK type identifier eval_continuation
   | BuiltinK type builtin eval_continuation
   | LenK eval_continuation
   | TypeBuiltinK type_builtin type eval_continuation
@@ -94,13 +84,9 @@ Datatype:
   apply_base_continuation
   = Apply
   | ApplyExc exception
-  | ApplyTarget assignment_value
-  | ApplyTargets (assignment_value list)
-  | ApplyBaseTarget base_target_value
-  | ApplyTv toplevel_value
+  | ApplyTv eval_result
   | ApplyVal value
   | ApplyVals (value list)
-  | ApplyPlaceValue place_or_value
   | ApplyPlace place
 End
 
@@ -123,46 +109,41 @@ End
 
 val () = cv_auto_trans no_recursion_def;
 
-Definition eval_base_target_cps_def:
-  eval_base_target_cps cx (NameTarget id) st k =
-    (let r = do
-        sc <- get_scopes;
-        type_check (IS_SOME (lookup_scopes id sc)) "NameTarget not in scope";
-        return $ (ScopedVar id, []) od st in
-     liftk cx ApplyBaseTarget r k) ∧
-  eval_base_target_cps cx (TopLevelNameTarget (src_id_opt, id)) st k =
-    (let r = do
-        ts <- lift_option_type
-                (get_module_code cx src_id_opt)
-                "TopLevelNameTarget get_module_code";
-        if is_immutable_decl id ts then return $ (ImmutableVar src_id_opt id, [])
-        else return $ (TopLevelVar src_id_opt id, []) od st in
-     liftk cx ApplyBaseTarget r k) ∧
-  eval_base_target_cps cx (AttributeTarget t id) st k =
-    eval_base_target_cps cx t st (AttributeTargetK id k) ∧
-  eval_base_target_cps cx (SubscriptTarget t e) st k =
-    eval_base_target_cps cx t st (SubscriptTargetK e k)
-End
-
-val () = eval_base_target_cps_def
-  |> SRULE [bind_def, ignore_bind_def,
-            LET_RATOR, COND_RATOR, lift_option_def, lift_option_type_def, lift_option_type_def,
-            prod_CASE_rator, sum_CASE_rator,
-            option_CASE_rator, liftk1]
-  |> cv_auto_trans;
-
 Triviality list_size_take_bound:
   ∀es n. list_size expr_size (TAKE n es) ≤ list_size expr_size es
 Proof
   Induct >> Cases_on `n` >> simp[]
 QED
 
+Definition eval_base_place_cps_def:
+  eval_base_place_cps cx (NameTarget id) st k =
+    liftk cx ApplyTv (do
+      sc <- get_scopes;
+      type_check (IS_SOME (lookup_scopes id sc)) "NameTarget not in scope";
+      return (PlaceR (MemoryPlace id [])) od st) k /\
+  eval_base_place_cps cx (TopLevelNameTarget (src,id)) st k =
+    liftk cx ApplyTv (lookup_global cx src id st) k /\
+  eval_base_place_cps cx (AttributeTarget t id) st k =
+    eval_base_place_cps cx t st (BasePlaceAttributeK id k) /\
+  eval_base_place_cps cx (SubscriptTarget t e) st k =
+    eval_base_place_cps cx t st (BasePlaceSubscriptK e k)
+End
+val () = eval_base_place_cps_def
+  |> SRULE [liftk1, bind_def, ignore_bind_def, prod_CASE_rator, sum_CASE_rator]
+  |> cv_auto_trans;
+
+Definition eval_target_place_cps_def:
+  eval_target_place_cps cx t st k =
+    eval_base_place_cps cx t st (TargetPlaceK k)
+End
+val () = cv_auto_trans eval_target_place_cps_def;
+
 Definition eval_expr_cps_def:
   eval_expr_cps cx1 (Name _ id) st k =
     liftk cx1 ApplyTv
-      (do env <- get_scopes;
-          v <- lift_option_type (lookup_scopes_val id env) "Name not in scope";
-          return $ Value v od st) k ∧
+      (do sc <- get_scopes;
+          type_check (IS_SOME (lookup_scopes id sc)) "Name not in scope";
+          return (PlaceR (MemoryPlace id [])) od st) k ∧
   eval_expr_cps cx2 (TopLevelName _ (src_id_opt, id)) st k =
     liftk cx2 ApplyTv (lookup_global cx2 src_id_opt id st) k ∧
   eval_expr_cps cx2 (FlagMember _ nsid mid) st k =
@@ -176,14 +157,14 @@ Definition eval_expr_cps_def:
   eval_expr_cps cx6 (Subscript _ e1 e2) st k =
     eval_expr_cps cx6 e1 st (SubscriptK (expr_type e1) e2 k) ∧
   eval_expr_cps cx7 (Attribute _ e id) st k =
-    eval_expr_cps cx7 e st (AttributeK id k) ∧
+    eval_expr_cps cx7 e st (AttributeK (expr_type e) id k) ∧
   eval_expr_cps cx8 (Builtin ty bt es) st k =
     (case type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" st of
        (INR ex, st) => AK cx8 (ApplyExc ex) st k
      | (INL (), st) => if bt = Len then eval_expr_cps cx8 (HD es) st (LenK k)
                        else eval_exprs_cps cx8 es st (BuiltinK ty bt k)) ∧
   eval_expr_cps cx8 (Pop _ bt) st k =
-    eval_base_target_cps cx8 bt st (PopK k) ∧
+    eval_target_place_cps cx8 bt st (PopK k) ∧
   eval_expr_cps cx8 (TypeBuiltin _ tb typ es) st k =
     (case type_check (type_builtin_args_length_ok tb (LENGTH es))
             "TypeBuiltin args" st of
@@ -279,59 +260,6 @@ End
 
 val () = cv_auto_trans eval_iterator_cps_def;
 
-Definition eval_target_cps_def:
-  eval_target_cps cx (BaseTarget t) st k =
-    eval_base_target_cps cx t st (BaseTargetK k) ∧
-  eval_target_cps cx (TupleTarget gs) st k =
-    eval_targets_cps cx gs st (TupleTargetK k) ∧
-  eval_targets_cps cx [] st k = AK cx (ApplyTargets []) st k ∧
-  eval_targets_cps cx (g::gs) st k =
-    eval_target_cps cx g st (TargetsK gs k)
-End
-
-val () = eval_target_cps_def |> cv_auto_trans;
-
-Definition eval_place_cps_def:
-  eval_place_cps cx (Name ty id) st k =
-    liftk cx ApplyPlaceValue (do
-      sc <- get_scopes;
-      type_check (IS_SOME (lookup_scopes id sc)) "Name not in scope";
-      return (PlaceR (MemoryPlace id [])) od st) k /\
-  eval_place_cps cx (TopLevelName ty (src,id)) st k =
-    liftk cx ApplyPlaceValue (lookup_global_place cx src id st) k /\
-  eval_place_cps cx (Subscript ty e1 e2) st k =
-    eval_place_cps cx e1 st (PlaceSubscriptK (expr_type e1) e2 k) /\
-  eval_place_cps cx (Attribute ty e id) st k =
-    eval_place_cps cx e st (PlaceAttributeK (expr_type e) id k) /\
-  eval_place_cps cx e st k = eval_expr_cps cx e st (PlaceValueK k)
-End
-val () = eval_place_cps_def
-  |> SRULE [liftk1, bind_def, ignore_bind_def, prod_CASE_rator, sum_CASE_rator]
-  |> cv_auto_trans;
-
-Definition eval_base_place_cps_def:
-  eval_base_place_cps cx (NameTarget id) st k =
-    liftk cx ApplyPlaceValue (do
-      sc <- get_scopes;
-      type_check (IS_SOME (lookup_scopes id sc)) "NameTarget not in scope";
-      return (PlaceR (MemoryPlace id [])) od st) k /\
-  eval_base_place_cps cx (TopLevelNameTarget (src,id)) st k =
-    liftk cx ApplyPlaceValue (lookup_global_place cx src id st) k /\
-  eval_base_place_cps cx (AttributeTarget t id) st k =
-    eval_base_place_cps cx t st (BasePlaceAttributeK id k) /\
-  eval_base_place_cps cx (SubscriptTarget t e) st k =
-    eval_base_place_cps cx t st (BasePlaceSubscriptK e k)
-End
-val () = eval_base_place_cps_def
-  |> SRULE [liftk1, bind_def, ignore_bind_def, prod_CASE_rator, sum_CASE_rator]
-  |> cv_auto_trans;
-
-Definition eval_target_place_cps_def:
-  eval_target_place_cps cx t st k =
-    eval_base_place_cps cx t st (TargetPlaceK k)
-End
-val () = cv_auto_trans eval_target_place_cps_def;
-
 Definition assign_tuple_targets_cps_def:
   assign_tuple_targets_cps cx (BaseTarget t) v st k =
     eval_target_place_cps cx t st (TupleStoreK v k) /\
@@ -367,9 +295,9 @@ Definition eval_stmt_cps_def:
        NONE => AK cx (ApplyExc (Error (TypeError "AnnAssign evaluate_type"))) st k
      | SOME tyv => eval_expr_cps cx e st (AnnAssignK id tyv k)) ∧
   eval_stmt_cps cx (Append t e) st k =
-    eval_base_target_cps cx t st (AppendK e k) ∧
+    eval_target_place_cps cx t st (AppendK e k) ∧
   eval_stmt_cps cx (Assign (BaseTarget t) e) st k =
-    eval_place_cps cx e st (AssignK t k) ∧
+    eval_expr_cps cx e st (AssignK t k) ∧
   eval_stmt_cps cx (Assign (TupleTarget gs) e) st k =
     eval_expr_cps cx e st (TupleAssignK gs k) ∧
   eval_stmt_cps cx (AugAssign ty t bop e) st k =
@@ -417,12 +345,13 @@ Definition apply_def:
     (case pop_scope st
      of (INR ex, st) => AK cx (ApplyExc ex) st k
       | (INL (), st) => AK cx Apply st k) ∧
-  apply cx st (IfK1 (Value (BoolV b)) ss1 ss2 k) =
-    eval_stmts_cps cx (if b then ss1 else ss2) st (IfK2 k) ∧
-  apply cx st (IfK1 (Value _) ss1 ss2 k) =
-    AK cx (ApplyExc $ Error (TypeError "not BoolV")) st (IfK2 k) ∧
-  apply cx st (IfK1 _ ss1 ss2 k) =
-    AK cx (ApplyExc $ Error (TypeError "not Value")) st (IfK2 k) ∧
+  apply cx st (IfK1 tv ss1 ss2 k) =
+    (case read_result cx tv st of
+       (INR ex,st1) => AK cx (ApplyExc ex) st1 (IfK2 k)
+     | (INL v,st1) =>
+         case v of
+           BoolV b => eval_stmts_cps cx (if b then ss1 else ss2) st1 (IfK2 k)
+         | _ => AK cx (ApplyExc (Error (TypeError "not BoolV"))) st1 (IfK2 k)) ∧
   apply cx st (IntCallK2 prev rtv nr is_view k) =
     liftk (cx with stk updated_by TL) (ApplyTv o Value)
       (do pop_function prev;
@@ -458,10 +387,6 @@ Definition apply_exc_def:
   apply_exc cx ex st (TupleAssignK _ k) = AK cx (ApplyExc ex) st k /\
   apply_exc cx ex st (TupleStoreK _ k) = AK cx (ApplyExc ex) st k /\
   apply_exc cx ex st (TupleStoresK _ _ k) = AK cx (ApplyExc ex) st k /\
-  apply_exc cx ex st (PlaceValueK k) = AK cx (ApplyExc ex) st k /\
-  apply_exc cx ex st (PlaceSubscriptK _ _ k) = AK cx (ApplyExc ex) st k /\
-  apply_exc cx ex st (PlaceSubscriptK1 _ _ k) = AK cx (ApplyExc ex) st k /\
-  apply_exc cx ex st (PlaceAttributeK _ _ k) = AK cx (ApplyExc ex) st k /\
   apply_exc cx ex st (BasePlaceSubscriptK _ k) = AK cx (ApplyExc ex) st k /\
   apply_exc cx ex st (BasePlaceSubscriptK1 _ k) = AK cx (ApplyExc ex) st k /\
   apply_exc cx ex st (BasePlaceAttributeK _ k) = AK cx (ApplyExc ex) st k /\
@@ -484,18 +409,12 @@ Definition apply_exc_def:
   apply_exc cx ex st (ArrayK _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (RangeK1 _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (RangeK2 _ k) = AK cx (ApplyExc ex) st k ∧
-  apply_exc cx ex st (BaseTargetK k) = AK cx (ApplyExc ex) st k ∧
-  apply_exc cx ex st (TupleTargetK k) = AK cx (ApplyExc ex) st k ∧
-  apply_exc cx ex st (TargetsK _ k) = AK cx (ApplyExc ex) st k ∧
-  apply_exc cx ex st (TargetsK1 _ k) = AK cx (ApplyExc ex) st k ∧
-  apply_exc cx ex st (AttributeTargetK _ k) = AK cx (ApplyExc ex) st k ∧
-  apply_exc cx ex st (SubscriptTargetK _ k) = AK cx (ApplyExc ex) st k ∧
-  apply_exc cx ex st (SubscriptTargetK1 _ k) = AK cx (ApplyExc ex) st k ∧
+  apply_exc cx ex st (ConditionalK k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (IfExpK _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (StructLitK _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (SubscriptK _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (SubscriptK1 _ _ k) = AK cx (ApplyExc ex) st k ∧
-  apply_exc cx ex st (AttributeK _ k) = AK cx (ApplyExc ex) st k ∧
+  apply_exc cx ex st (AttributeK _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (PopK k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (BuiltinK _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (LenK k) = AK cx (ApplyExc ex) st k ∧
@@ -538,80 +457,14 @@ val () = apply_exc_def
             COND_RATOR, option_CASE_rator]
   |> cv_auto_trans;
 
-Definition apply_targets_def:
-  apply_targets cx gvs st (TargetsK1 gv k) =
-    AK cx (ApplyTargets (gv::gvs)) st k ∧
-  apply_targets cx gvs st (TupleTargetK k) =
-      AK cx (ApplyTarget (TupleTargetV gvs)) st k ∧
-  apply_targets cx _ st _ =
-    AK cx (ApplyExc $ Error (TypeError "apply_targets k")) st DoneK
-End
-
-val () = cv_auto_trans apply_targets_def;
-
-Definition apply_base_target_def:
-  apply_base_target cx btv st (BaseTargetK k) =
-    AK cx (ApplyTarget (BaseTargetV (FST btv) (SND btv))) st k ∧
-  apply_base_target cx btv st (AttributeTargetK id k) =
-    AK cx (ApplyBaseTarget (FST btv, AttrSubscript id :: SND btv)) st k ∧
-  apply_base_target cx btv st (SubscriptTargetK e k) =
-    eval_expr_cps cx e st (SubscriptTargetK1 btv k) ∧
-
-  apply_base_target cx btv st (AppendK e k) =
-    eval_expr_cps cx e st (AppendK1 btv k) ∧
-  apply_base_target cx btv st (PopK k) =
-    liftk cx ApplyTv (do
-      sbs <<- SND btv;
-      popped <- assign_target cx (BaseTargetV (FST btv) sbs) PopOp;
-      v <- lift_option_type popped "Pop returned NONE";
-      return $ Value v od st) k ∧
-  apply_base_target cx btv st DoneK = AK cx (ApplyBaseTarget btv) st DoneK ∧
-  apply_base_target cx _ st _ =
-    AK cx (ApplyExc $ Error (TypeError "apply_base_target k")) st DoneK
-End
-
-val () = apply_base_target_def
-  |> SRULE [liftk1, prod_CASE_rator, sum_CASE_rator,
-            LET_RATOR, bind_def, ignore_bind_def]
-  |> cv_auto_trans;
-
-Definition apply_target_def:
-
-  apply_target cx gv st (TargetsK gs k) =
-    eval_targets_cps cx gs st (TargetsK1 gv k) ∧
-  apply_target cx gv st _ =
-    AK cx (ApplyExc $ Error (TypeError "apply_target k")) st DoneK
-End
-
-val () = cv_auto_trans apply_target_def;
-
-Definition apply_place_value_def:
-  apply_place_value cx pv st (AssignK t k) =
-    eval_target_place_cps cx t st (AssignK1 pv k) /\
-  apply_place_value cx pv st (PlaceSubscriptK ty e k) =
-    eval_expr_cps cx e st (PlaceSubscriptK1 ty pv k) /\
-  apply_place_value cx pv st (PlaceAttributeK ty id k) =
-    liftk cx ApplyPlaceValue (do
-      ptv <- lift_option_type (evaluate_type (get_tenv cx) ty) "Attribute base type";
-      extend_place cx ptv pv (AttrSubscript id) od st) k /\
-  apply_place_value cx pv st (BasePlaceSubscriptK e k) =
-    eval_expr_cps cx e st (BasePlaceSubscriptK1 pv k) /\
-  apply_place_value cx pv st (BasePlaceAttributeK id k) =
-    liftk cx ApplyPlaceValue (extend_target_place cx pv (AttrSubscript id) st) k /\
-  apply_place_value cx pv st (TargetPlaceK k) =
-    liftk cx ApplyPlace (get_place pv st) k /\
-  apply_place_value cx pv st DoneK = AK cx (ApplyPlaceValue pv) st DoneK /\
-  apply_place_value cx pv st _ =
-    AK cx (ApplyExc (Error (TypeError "apply_place_value k"))) st DoneK
-End
-val () = apply_place_value_def
-  |> SRULE [liftk1, bind_def, ignore_bind_def, prod_CASE_rator, sum_CASE_rator]
-  |> cv_auto_trans;
-
 Definition apply_place_def:
+  apply_place cx p st (AppendK e k) =
+    eval_expr_cps cx e st (AppendK1 p k) /\
+  apply_place cx p st (PopK k) =
+    liftk cx ApplyTv (pop_place cx p st) k /\
   apply_place cx p st (AssignK1 pv k) =
     liftk cx (K Apply) (do
-      v <- read_place_or_value cx pv;
+      v <- read_result cx pv;
       write_place cx p v od st) k /\
   apply_place cx p st (TupleStoreK v k) =
     liftk cx (K Apply) (write_place cx p v st) k /\
@@ -631,16 +484,27 @@ val () = apply_place_def
   |> cv_auto_trans;
 
 Definition apply_tv_def:
-  apply_tv cx tv st (PlaceValueK k) = AK cx (ApplyPlaceValue (ValueR tv)) st k /\
+  apply_tv cx tv st (AssignK t k) =
+    eval_target_place_cps cx t st (AssignK1 tv k) /\
+  apply_tv cx tv st (BasePlaceSubscriptK e k) =
+    eval_expr_cps cx e st (BasePlaceSubscriptK1 tv k) /\
+  apply_tv cx tv st (BasePlaceAttributeK id k) =
+    liftk cx ApplyTv (extend_place cx tv (AttrSubscript id) st) k /\
+  apply_tv cx tv st (TargetPlaceK k) =
+    liftk cx ApplyPlace (get_place tv st) k /\
+  apply_tv cx tv st (ConditionalK k) =
+    liftk cx ApplyTv (conditional_result cx tv st) k /\
+  apply_tv cx tv st (AttributeK ty id k) =
+    liftk cx ApplyTv (select_result cx ty tv (AttrSubscript id) st) k /\
   apply_tv cx tv st (TupleAssignK gs k) =
-    liftk cx ApplyVal (materialise cx tv st) (TupleAssignK gs k) /\
+    liftk cx ApplyVal (read_result cx tv st) (TupleAssignK gs k) /\
   apply_tv cx tv st (SubscriptK arr_typ e k) =
     eval_expr_cps cx e st (SubscriptK1 arr_typ tv k) ∧
   apply_tv cx tv st (IfK ss1 ss2 k) =
     liftk cx (K Apply) (push_scope st) (IfK1 tv ss1 ss2 k) ∧
   apply_tv cx tv st (LenK k) =
     liftk cx ApplyTv (do
-      len <- toplevel_array_length cx tv;
+      len <- result_array_length cx tv;
       return $ Value $ IntV (&len)
     od st) k ∧
   apply_tv cx tv st (ExprK k) =
@@ -648,19 +512,19 @@ Definition apply_tv_def:
        (INR ex, st) => apply_exc cx ex st k
      | (INL (), st) => apply cx st k) ∧
   apply_tv cx tv st (ReturnK k) =
-    liftk cx ApplyVal (materialise cx tv st) (ReturnK k) ∧
+    liftk cx ApplyVal (read_result cx tv st) (ReturnK k) ∧
   apply_tv cx tv st (AnnAssignK id tyv k) =
-    liftk cx ApplyVal (materialise cx tv st) (AnnAssignK id tyv k) ∧
+    liftk cx ApplyVal (read_result cx tv st) (AnnAssignK id tyv k) ∧
   apply_tv cx tv st (AppendK1 btv k) =
-    liftk cx ApplyVal (materialise cx tv st) (AppendK1 btv k) ∧
+    liftk cx ApplyVal (read_result cx tv st) (AppendK1 btv k) ∧
 
   apply_tv cx tv st (ArrayK arr_typ k) =
-    liftk cx ApplyVal (materialise cx tv st) (ArrayK arr_typ k) ∧
+    liftk cx ApplyVal (read_result cx tv st) (ArrayK arr_typ k) ∧
   apply_tv cx tv st (ExprsK es k) =
-    liftk cx ApplyVal (materialise cx tv st) (ExprsK es k) ∧
+    liftk cx ApplyVal (read_result cx tv st) (ExprsK es k) ∧
   apply_tv cx tv st DoneK = AK cx (ApplyTv tv) st DoneK ∧
   apply_tv cx tv st k =
-    liftk cx ApplyVal (get_Value tv st) k
+    liftk cx ApplyVal (read_result cx tv st) k
 End
 
 val () = apply_tv_def
@@ -696,21 +560,11 @@ val () = apply_val_range2_def
   |> cv_auto_trans;
 Definition apply_val_subscript_def:
   apply_val_subscript cx arr_typ tv1 v2 st k =
-    liftk cx ApplyTv (do
-      tenv <<- get_tenv cx;
-      arr_tv <- lift_option_type (evaluate_type tenv arr_typ)
-                  "Subscript array type";
-      check_array_bounds cx tv1 v2;
-      res <- lift_sum (evaluate_subscript tenv arr_tv tv1 v2);
-       case res of INL v => return v | INR (is_transient, slot, tv) => do
-         v <- read_storage_slot cx is_transient slot tv;
-         return $ Value v
-       od
-    od st) k
+    liftk cx ApplyTv
+      (select_result cx arr_typ tv1 (ValueSubscript v2) st) k
 End
 val () = apply_val_subscript_def
-  |> SRULE [liftk1, prod_CASE_rator, sum_CASE_rator, option_CASE_rator,
-            LET_RATOR, lift_option_type_def, lift_sum_def, bind_def, ignore_bind_def]
+  |> SRULE [liftk1, prod_CASE_rator, sum_CASE_rator]
   |> cv_auto_trans;
 Definition apply_val_def:
   apply_val cx v st (ReturnK k) = apply_exc cx (ReturnException v) st k ∧
@@ -731,33 +585,25 @@ Definition apply_val_def:
     liftk cx (K Apply) (new_variable id tyv v st) k ∧
   apply_val cx v st (TupleAssignK gs k) =
     assign_tuple_targets_cps cx (TupleTarget gs) v st k /\
-  apply_val cx v st (PlaceSubscriptK1 ty pv k) =
-    liftk cx ApplyPlaceValue (do
-      ptv <- lift_option_type (evaluate_type (get_tenv cx) ty) "Subscript array type";
-      extend_place cx ptv pv (ValueSubscript v) od st) k /\
   apply_val cx v st (BasePlaceSubscriptK1 pv k) =
-    liftk cx ApplyPlaceValue (extend_target_place cx pv (ValueSubscript v) st) k /\
+    liftk cx ApplyTv (extend_place cx pv (ValueSubscript v) st) k /\
   apply_val cx v st (AugAssignK1 ty p ptv cur bop k) =
     liftk cx (K Apply) (do
       u <<- (case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0);
       res <- lift_sum (evaluate_binop u ptv bop cur v);
       write_place cx p res od st) k ∧
-  apply_val cx v st (AppendK1 (loc, sbs) k) =
-    liftk cx (K Apply) (assign_target cx (BaseTargetV loc sbs) (AppendOp v) st) k ∧
+  apply_val cx v st (AppendK1 p k) =
+    liftk cx (K Apply) (append_place cx p v st) k ∧
   apply_val cx v st (ArrayK arr_typ k) = apply_val_array cx arr_typ v st k ∧
   apply_val cx v st (RangeK1 e k) = eval_expr_cps cx e st (RangeK2 v k) ∧
   apply_val cx v2 st (RangeK2 v1 k) = apply_val_range2 cx v1 v2 st k ∧
-  apply_val cx v st (SubscriptTargetK1 (loc, sbs) k) =
-    AK cx (ApplyBaseTarget (loc, ValueSubscript v :: sbs)) st k ∧
   apply_val cx v st (IfExpK e2 e3 k) =
     (case v of
-       BoolV T => eval_expr_cps cx e2 st k
-     | BoolV F => eval_expr_cps cx e3 st k
+       BoolV T => eval_expr_cps cx e2 st (ConditionalK k)
+     | BoolV F => eval_expr_cps cx e3 st (ConditionalK k)
      | _ => apply_exc cx (Error (TypeError "not BoolV")) st k) ∧
   apply_val cx v2 st (SubscriptK1 arr_typ tv1 k) =
     apply_val_subscript cx arr_typ tv1 v2 st k ∧
-  apply_val cx v st (AttributeK id k) =
-    liftk cx (ApplyTv o Value) (lift_sum (evaluate_attribute v id) st) k ∧
   apply_val cx v st (ExprsK es k) =
     eval_exprs_cps cx es st (ExprsK1 v k) ∧
   apply_val cx v st DoneK = AK cx (ApplyVal v) st DoneK ∧
@@ -950,13 +796,9 @@ Definition stepk_def:
   case ak of
      | Apply => apply cx st k
      | ApplyExc ex => apply_exc cx ex st k
-     | ApplyTarget gv => apply_target cx gv st k
-     | ApplyTargets gvs => apply_targets cx gvs st k
-     | ApplyBaseTarget bv => apply_base_target cx bv st k
      | ApplyTv tv => apply_tv cx tv st k
      | ApplyVal v => apply_val cx v st k
      | ApplyVals vs => apply_vals cx vs st k
-     | ApplyPlaceValue pv => apply_place_value cx pv st k
      | ApplyPlace p => apply_place cx p st k
 End
 
@@ -1014,6 +856,44 @@ QED
 
 
 
+Theorem cont_step[local]:
+  !a. nextk a <> DoneK ==> cont a = cont (stepk a)
+Proof
+  rpt strip_tac >> simp[cont_def, Once OWHILE_THM]
+QED
+
+Theorem cont_apply_exc[local]:
+  cont (apply_exc cx ex st k) = cont (AK cx (ApplyExc ex) st k)
+Proof
+  Cases_on `k = DoneK` >- gvs[apply_exc_def] >>
+  qspec_then `AK cx (ApplyExc ex) st k` mp_tac cont_step >>
+  simp[stepk_def]
+QED
+
+Theorem cont_conditionalk[local]:
+  cont (liftk cx ApplyTv res (ConditionalK k)) =
+  cont (case res of
+      (INL tv,st1) => liftk cx ApplyTv (conditional_result cx tv st1) k
+    | (INR ex,st1) => AK cx (ApplyExc ex) st1 k)
+Proof
+  Cases_on `res` >> Cases_on `q` >> simp[liftk1]
+  >- (qspec_then `AK cx (ApplyTv x) r (ConditionalK k)` mp_tac cont_step >>
+      simp[stepk_def, apply_tv_def, liftk1]) >>
+  qspec_then `AK cx (ApplyExc y) r (ConditionalK k)` mp_tac cont_step >>
+  simp[stepk_def, apply_exc_def]
+QED
+
+Theorem cont_ifk2_finally[local]:
+  cont (liftk cx (K Apply) (m st) (IfK2 k)) =
+  cont (liftk cx (K Apply) (finally m pop_scope st) k)
+Proof
+    Cases_on `m st` >> Cases_on `q` >>
+  gvs[finally_def, ignore_bind_def, bind_def, return_def, raise_def,
+      liftk1, cont_def, Once OWHILE_THM, stepk_def,
+      apply_def, apply_exc_def] >>
+  Cases_on `pop_scope r` >> Cases_on `q` >> gvs[]
+QED
+
 Theorem eval_cps_mutual:
  (∀cx s st k. cont (eval_stmt_cps cx s st k) =
    cont (liftk cx (K Apply) (eval_stmt cx s st) k)) /\
@@ -1021,18 +901,14 @@ Theorem eval_cps_mutual:
    cont (liftk cx (K Apply) (eval_stmts cx ss st) k)) /\
  (∀cx it st k. cont (eval_iterator_cps cx it st k) =
    cont (liftk cx ApplyVals (eval_iterator cx it st) k)) /\
- (∀cx bt st k. cont (eval_base_target_cps cx bt st k) =
-   cont (liftk cx ApplyBaseTarget (eval_base_target cx bt st) k)) /\
  (∀cx tyv nm body vs st k. cont (eval_for_cps cx tyv nm body vs st k) =
    cont (liftk cx (K Apply) (eval_for cx tyv nm body vs st) k)) /\
  (∀cx e st k. cont (eval_expr_cps cx e st k) =
    cont (liftk cx ApplyTv (eval_expr cx e st) k)) /\
  (∀cx es st k. cont (eval_exprs_cps cx es st k) =
    cont (liftk cx ApplyVals (eval_exprs cx es st) k)) /\
- (∀cx e st k. cont (eval_place_cps cx e st k) =
-   cont (liftk cx ApplyPlaceValue (eval_place cx e st) k)) /\
  (∀cx t st k. cont (eval_base_place_cps cx t st k) =
-   cont (liftk cx ApplyPlaceValue (eval_base_place cx t st) k)) /\
+   cont (liftk cx ApplyTv (eval_base_place cx t st) k)) /\
  (∀cx t st k. cont (eval_target_place_cps cx t st k) =
    cont (liftk cx ApplyPlace (eval_target_place cx t st) k)) /\
  (∀cx g v st k. cont (assign_tuple_targets_cps cx g v st k) =
@@ -1069,10 +945,10 @@ Proof
     \\ CASE_TAC \\ rw[cont_def] \\ reverse CASE_TAC
     >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
     \\ rw[Once OWHILE_THM, stepk_def, apply_tv_def, liftk1]
-    \\ reverse (Cases_on `x`) \\ simp[get_Value_def, raise_def, return_def]
+    \\ CASE_TAC \\ reverse CASE_TAC
     >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
     \\ simp[Once OWHILE_THM, stepk_def]
-    \\ Cases_on`v`
+    \\ rename1 `INL v` \\ Cases_on`v`
     \\ simp[dest_StringV_def, lift_option_def, lift_option_type_def, return_def,
             raise_def, apply_val_def, apply_exc_def]
     \\ rw[Once OWHILE_THM, SimpRHS, stepk_def] \\ gvs[]
@@ -1082,13 +958,11 @@ Proof
     \\ CASE_TAC \\ rw[cont_def] \\ reverse CASE_TAC
     >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
     \\ rw[Once OWHILE_THM, stepk_def, apply_tv_def, liftk1]
-    \\ qmatch_goalsub_rename_tac`get_Value tv`
-    \\ reverse $ Cases_on`tv` \\ rw[return_def, raise_def, get_Value_def]
-    >- (rw[switch_BoolV_def, raise_def]
-        \\ rw[Once OWHILE_THM, stepk_def, apply_exc_def])
-    >- (rw[switch_BoolV_def, raise_def]
-        \\ rw[Once OWHILE_THM, stepk_def, apply_exc_def])
-    \\ simp[switch_BoolV_def] \\ rw[return_def, raise_def]
+    \\ simp[switch_BoolV_def, bind_def]
+    \\ CASE_TAC \\ reverse CASE_TAC
+    >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
+    \\ rename1 `INL v`
+    \\ rw[return_def, raise_def]
     >- ( (* BoolV T *)
       rw[Once OWHILE_THM, stepk_def, apply_val_def]
       \\ rw[Once OWHILE_THM, SimpRHS, stepk_def] \\ gvs[]
@@ -1106,13 +980,11 @@ Proof
     \\ CASE_TAC \\ rw[cont_def] \\ reverse CASE_TAC
     >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
     \\ rw[Once OWHILE_THM, stepk_def, apply_tv_def, liftk1]
-    \\ qmatch_goalsub_rename_tac`get_Value tv`
-    \\ reverse $ Cases_on`tv` \\ rw[return_def, raise_def, get_Value_def]
-    >- (rw[switch_BoolV_def, raise_def]
-        \\ rw[Once OWHILE_THM, stepk_def, apply_exc_def])
-    >- (rw[switch_BoolV_def, raise_def]
-        \\ rw[Once OWHILE_THM, stepk_def, apply_exc_def])
-    \\ simp[switch_BoolV_def] \\ rw[return_def, raise_def]
+    \\ simp[switch_BoolV_def, bind_def]
+    \\ CASE_TAC \\ reverse CASE_TAC
+    >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
+    \\ rename1 `INL v`
+    \\ rw[return_def, raise_def]
     >- (
       rw[Once OWHILE_THM, stepk_def, apply_val_def]
       \\ rw[Once OWHILE_THM, SimpRHS, stepk_def] \\ gvs[]
@@ -1130,13 +1002,11 @@ Proof
     \\ CASE_TAC \\ rw[cont_def] \\ reverse CASE_TAC
     >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
     \\ rw[Once OWHILE_THM, stepk_def, apply_tv_def, liftk1]
-    \\ qmatch_goalsub_rename_tac`get_Value tv`
-    \\ reverse $ Cases_on`tv` \\ rw[return_def, raise_def, get_Value_def]
-    >- (rw[switch_BoolV_def, raise_def]
-        \\ rw[Once OWHILE_THM, stepk_def, apply_exc_def])
-    >- (rw[switch_BoolV_def, raise_def]
-        \\ rw[Once OWHILE_THM, stepk_def, apply_exc_def])
-    \\ simp[switch_BoolV_def] \\ rw[return_def, raise_def]
+    \\ simp[switch_BoolV_def, bind_def]
+    \\ CASE_TAC \\ reverse CASE_TAC
+    >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
+    \\ rename1 `INL v`
+    \\ rw[return_def, raise_def]
     >- (
       rw[Once OWHILE_THM, stepk_def, apply_val_def]
       \\ rw[Once OWHILE_THM, SimpRHS, stepk_def] \\ gvs[]
@@ -1148,12 +1018,10 @@ Proof
       \\ CASE_TAC \\ reverse CASE_TAC
       >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
       \\ rw[Once OWHILE_THM, stepk_def, apply_tv_def, liftk1]
-      \\ qmatch_goalsub_rename_tac`get_Value stv`
-      \\ reverse $ Cases_on`stv` \\ rw[get_Value_def, return_def, raise_def]
-      >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
+      \\ CASE_TAC \\ reverse CASE_TAC
       >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
       \\ rw[Once OWHILE_THM, stepk_def]
-      \\ rename1`Value sv`
+      \\ rename1 `INL sv`
       \\ Cases_on`sv`
       \\ simp[dest_StringV_def, lift_option_def, lift_option_type_def,
               return_def, raise_def, apply_val_def, apply_exc_def]
@@ -1175,26 +1043,24 @@ Proof
     \\ Cases_on `eval_expr cx e st` \\ Cases_on `q` \\ gvs[]
     >- (rename1 `eval_expr cx e st = (INL tv,st1)`
         \\ rw[Once OWHILE_THM, stepk_def, apply_tv_def, liftk1]
-        \\ Cases_on `materialise cx tv st1` \\ Cases_on `q` \\ gvs[]
+        \\ Cases_on `read_result cx tv st1` \\ Cases_on `q` \\ gvs[]
         >- rw[Once OWHILE_THM, stepk_def, liftk1, apply_val_def]
         \\ rw[Once OWHILE_THM, stepk_def, apply_exc_def])
     \\ rw[Once OWHILE_THM, stepk_def, apply_exc_def] )
   \\ conj_tac >- ( (* Append t e *)
-    rw[eval_stmt_cps_def, evaluate_def, bind_def, UNCURRY, ignore_bind_def]
+    rpt gen_tac >> strip_tac
+    >> pure_once_rewrite_tac [eval_stmt_cps_def, evaluate_def]
+    >> rw[bind_def]
     \\ CASE_TAC \\ gs[cont_def] \\ reverse CASE_TAC
     >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
-    >> rw[Once OWHILE_THM, stepk_def, apply_base_target_def]
-    \\ qmatch_goalsub_rename_tac`AppendK1 btv`
-    \\ Cases_on`btv`
+    >> rw[Once OWHILE_THM, stepk_def, apply_place_def]
     \\ first_x_assum drule \\ rw[]
     \\ CASE_TAC \\ reverse CASE_TAC
     >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
     >> rw[Once OWHILE_THM, stepk_def, apply_tv_def, liftk1]
     \\ CASE_TAC \\ reverse CASE_TAC
     >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
-    >> rw[Once OWHILE_THM, stepk_def, apply_val_def, liftk1]
-    \\ CASE_TAC \\ reverse CASE_TAC
-    \\ rw[return_def] )
+    >> rw[Once OWHILE_THM, stepk_def, apply_val_def, liftk1] )
   \\ conj_tac >- suspend "AssignPlace"
   \\ conj_tac >- suspend "AssignTuple"
   \\ conj_tac >- suspend "AugAssign"
@@ -1209,38 +1075,13 @@ Proof
     \\ first_x_assum drule \\ rw[]
     \\ first_x_assum drule \\ rw[]
     \\ gvs[switch_BoolV_def]
-    \\ IF_CASES_TAC \\ gvs[]
+    \\ pure_rewrite_tac [GSYM (SRULE [cont_def, liftk1] cont_ifk2_finally)]
+    \\ Cases_on `read_result cx x r''` \\ Cases_on `q`
+    \\ gvs[bind_def, raise_def, liftk1]
     >- (
-      rw[apply_def, finally_def, bind_def, ignore_bind_def]
-      \\ gvs[push_scope_def, return_def]
-      \\ CASE_TAC \\ reverse CASE_TAC
-      >- (
-        rw[Once OWHILE_THM, stepk_def, apply_exc_def]
-        \\ CASE_TAC \\ CASE_TAC \\ rw[raise_def] )
-      \\ rw[Once OWHILE_THM, stepk_def, apply_def]
-      \\ CASE_TAC \\ CASE_TAC )
-    \\ IF_CASES_TAC \\ gvs[]
-    >- (
-      rw[apply_def, finally_def, bind_def, ignore_bind_def]
-      \\ gvs[push_scope_def, return_def]
-      \\ CASE_TAC \\ reverse CASE_TAC
-      >- (
-        rw[Once OWHILE_THM, stepk_def, apply_exc_def]
-        \\ CASE_TAC \\ CASE_TAC \\ rw[raise_def] )
-      \\ rw[Once OWHILE_THM, stepk_def, apply_def]
-      \\ CASE_TAC \\ CASE_TAC )
-    \\ qmatch_goalsub_abbrev_tac`TypeError str`
-    \\ gvs[push_scope_def, return_def]
-    \\ reverse $ Cases_on`x`
-    \\ rw[apply_def, finally_def, raise_def, ignore_bind_def, bind_def]
-    \\ gvs[]
-    >- (
-      rw[pop_scope_def, return_def]
-      \\ rw[Once OWHILE_THM, stepk_def, apply_exc_def]
-      \\ rw[pop_scope_def, return_def] )
-    \\ Cases_on `v` \\ rw[apply_def]
-    \\ rw[Once OWHILE_THM, stepk_def, apply_exc_def]
-    \\ rw[pop_scope_def, return_def] )
+      Cases_on `x'` \\ gvs[raise_def]
+      \\ Cases_on `b` \\ gvs[]
+      \\ first_x_assum irule \\ goal_assum drule ) )
   \\ conj_tac >- ( (* For id typ it n body *)
     rw[eval_stmt_cps_def, evaluate_def, ignore_bind_def, bind_def,
        lift_option_type_def, return_def, raise_def]
@@ -1318,28 +1159,6 @@ Proof
       rw[Once OWHILE_THM, stepk_def, apply_exc_def, SimpRHS]
       \\ gvs[apply_exc_def]
       \\ rw[Once OWHILE_THM, stepk_def, apply_exc_def] ))
-  \\ conj_tac >- rw[eval_base_target_cps_def, evaluate_def, liftk1] (* eval_base_target (NameTarget id) *)
-  \\ conj_tac >- rw[eval_base_target_cps_def, evaluate_def, liftk1] (* eval_base_target (TopLevelNameTarget ...) *)
-  \\ conj_tac >- ( (* eval_base_target (AttributeTarget t id) *)
-    rw[eval_base_target_cps_def, evaluate_def, bind_def, UNCURRY, return_def]
-    \\ CASE_TAC \\ gvs[cont_def] \\ reverse CASE_TAC
-    >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
-    \\ rw[Once OWHILE_THM, stepk_def, apply_base_target_def] )
-  \\ conj_tac >- ( (* eval_base_target (SubscriptTarget t e) *)
-    rw[eval_base_target_cps_def, evaluate_def, bind_def, UNCURRY]
-    \\ CASE_TAC \\ gvs[cont_def] \\ reverse CASE_TAC
-    >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
-    \\ rw[Once OWHILE_THM, stepk_def, apply_base_target_def]
-    \\ qmatch_asmsub_rename_tac`INL p` \\ PairCases_on`p`
-    \\ first_x_assum drule \\ rw[]
-    \\ CASE_TAC \\ reverse CASE_TAC
-    >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
-    \\ rw[Once OWHILE_THM, stepk_def, apply_tv_def, liftk1]
-    \\ CASE_TAC \\ reverse CASE_TAC
-    >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
-    \\ qmatch_asmsub_rename_tac`get_Value tv`
-    \\ Cases_on`tv` \\ gvs[get_Value_def, raise_def, return_def]
-    \\ rw[Once OWHILE_THM, stepk_def, apply_val_def] )
   \\ conj_tac >- rw[eval_for_cps_def, evaluate_def, return_def] (* eval_for [] *)
   \\ conj_tac >- ( (* eval_for (v::vs) *)
     rw[eval_for_cps_def, evaluate_def, ignore_bind_def, bind_def]
@@ -1381,20 +1200,20 @@ Proof
     \\ rw[]
     \\ simp[switch_BoolV_def]
     >> simp[Once OWHILE_THM, stepk_def, apply_tv_def, liftk1]
-    \\ IF_CASES_TAC \\ gvs[return_def]
-    >- rw[Once OWHILE_THM, stepk_def, apply_val_def]
-    \\ IF_CASES_TAC \\ gvs[return_def]
-    >- rw[Once OWHILE_THM, stepk_def, apply_val_def]
-    \\ simp[raise_def]
-    \\ Cases_on`x` \\ gvs[return_def]
+    \\ Cases_on `read_result cx x r` \\ Cases_on `q`
+    \\ gvs[bind_def, raise_def]
     >- (
-      Cases_on`v`
-      \\ rw[Once OWHILE_THM, stepk_def, apply_val_def, apply_exc_def]
-      \\ rw[Once OWHILE_THM, SimpRHS, stepk_def, apply_exc_def]
-      \\ gvs[]
-      \\ rw[Once OWHILE_THM, stepk_def, apply_val_def, apply_exc_def] )
-    \\ gvs[raise_def]
-    \\ rw[Once OWHILE_THM, stepk_def, apply_val_def, apply_exc_def] )
+      Cases_on `x'` \\ gvs[raise_def]
+      \\ simp[Once OWHILE_THM, SimpLHS, stepk_def, apply_val_def]
+      \\ pure_rewrite_tac[GSYM cont_def]
+      \\ simp[cont_apply_exc]
+      \\ Cases_on `b` \\ gvs[]
+      \\ fs[GSYM cont_def, GSYM liftk1]
+      \\ simp[cont_conditionalk]
+      \\ rename1 `eval_expr cx branch r''`
+      \\ Cases_on `eval_expr cx branch r''`
+      \\ Cases_on `q` \\ simp[liftk1])
+    \\ rw[Once OWHILE_THM, stepk_def, apply_exc_def] )
   \\ conj_tac >- rw[eval_expr_cps_def, evaluate_def, return_def] (* eval_expr (Literal l) *)
   \\ conj_tac >- ( (* eval_expr (StructLit ...) *)
     rw[eval_expr_cps_def, evaluate_def, bind_def, return_def]
@@ -1416,20 +1235,12 @@ Proof
     >> rw[Once OWHILE_THM, stepk_def, apply_tv_def, liftk1]
     \\ CASE_TAC \\ reverse CASE_TAC
     >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
-    >> rw[Once OWHILE_THM, stepk_def, apply_val_def, apply_val_subscript_def, liftk1, bind_def]
-    \\ CASE_TAC \\ reverse CASE_TAC
-    \\ rw[return_def]
-    \\ CASE_TAC \\ reverse CASE_TAC)
+    >> rw[Once OWHILE_THM, stepk_def, apply_val_def, apply_val_subscript_def, liftk1, bind_def])
   \\ conj_tac >- ( (* eval_expr (Attribute e id) *)
     rw[eval_expr_cps_def, evaluate_def, bind_def]
     \\ CASE_TAC \\ gvs[cont_def] \\ reverse CASE_TAC
     >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
-    >> rw[Once OWHILE_THM, stepk_def, apply_tv_def, liftk1]
-    \\ CASE_TAC \\ reverse CASE_TAC
-    >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
-    >> rw[Once OWHILE_THM, stepk_def, apply_val_def, liftk1]
-    \\ CASE_TAC \\ reverse CASE_TAC
-    \\ rw[return_def] )
+    >> rw[Once OWHILE_THM, stepk_def, apply_tv_def, liftk1] )
   \\ conj_tac >- ( (* eval_expr (Builtin bt es) *)
     simp[eval_expr_cps_def, evaluate_def, ignore_bind_def, bind_def]
     \\ rpt strip_tac
@@ -1445,10 +1256,12 @@ Proof
           apply_tv_def, bind_def, liftk1]
     >> CASE_TAC \\ CASE_TAC \\ rw[return_def] )
   \\ conj_tac >- ( (* eval_expr (Pop bt) *)
-    rw[eval_expr_cps_def, evaluate_def, ignore_bind_def, bind_def, UNCURRY]
+    rpt gen_tac >> strip_tac
+    >> pure_once_rewrite_tac [eval_expr_cps_def, evaluate_def]
+    >> rw[bind_def]
     \\ CASE_TAC \\ gvs[cont_def] \\ reverse CASE_TAC
     >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
-    >> rw[Once OWHILE_THM, stepk_def, apply_base_target_def, bind_def, liftk1] )
+    >> rw[Once OWHILE_THM, stepk_def, apply_place_def, bind_def, liftk1] )
   \\ conj_tac >- ( (* eval_expr (TypeBuiltin ...) *)
     rw[eval_expr_cps_def, evaluate_def, ignore_bind_def, bind_def]
     \\ CASE_TAC \\ gvs[cont_def] \\ reverse CASE_TAC
@@ -1684,7 +1497,7 @@ Resume eval_cps_mutual[AssignPlace]:
   >> rw[bind_def]
   >> CASE_TAC >> reverse CASE_TAC
   >- rw[cont_def, Once OWHILE_THM, stepk_def, apply_exc_def]
-  >> rw[cont_def, Once OWHILE_THM, stepk_def, apply_place_value_def]
+  >> rw[cont_def, Once OWHILE_THM, stepk_def, apply_tv_def]
   >> gvs[cont_def]
   >> first_x_assum drule >> rw[]
   >> CASE_TAC >> reverse CASE_TAC
@@ -1729,27 +1542,8 @@ Resume eval_cps_mutual[AugAssign]:
   >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
   >> rw[Once OWHILE_THM, stepk_def, apply_val_def, liftk1, bind_def]
 QED
-val PLACE_FALLBACK_CPS_TAC =
-  rpt gen_tac >> strip_tac >>
-  pure_once_rewrite_tac [eval_place_cps_def, evaluate_def] >>
-  rw[bind_def] >> CASE_TAC >> reverse CASE_TAC
-  >- rw[cont_def, Once OWHILE_THM, stepk_def, apply_exc_def]
-  >> rw[cont_def, Once OWHILE_THM, stepk_def, apply_tv_def, return_def];
-
 Resume eval_cps_mutual[Places]:
-  conj_tac >- rw[eval_place_cps_def, evaluate_def, liftk1]
-  >> conj_tac >- rw[eval_place_cps_def, evaluate_def, liftk1]
-  >> conj_tac >- suspend "PlaceSubscript"
-  >> conj_tac >- suspend "PlaceAttribute"
-  >> conj_tac >- PLACE_FALLBACK_CPS_TAC
-  >> conj_tac >- PLACE_FALLBACK_CPS_TAC
-  >> conj_tac >- PLACE_FALLBACK_CPS_TAC
-  >> conj_tac >- PLACE_FALLBACK_CPS_TAC
-  >> conj_tac >- PLACE_FALLBACK_CPS_TAC
-  >> conj_tac >- PLACE_FALLBACK_CPS_TAC
-  >> conj_tac >- PLACE_FALLBACK_CPS_TAC
-  >> conj_tac >- PLACE_FALLBACK_CPS_TAC
-  >> conj_tac >- rw[eval_base_place_cps_def, evaluate_def, liftk1]
+  conj_tac >- rw[eval_base_place_cps_def, evaluate_def, liftk1]
   >> conj_tac >- rw[eval_base_place_cps_def, evaluate_def, liftk1]
   >> conj_tac >- suspend "BasePlaceAttribute"
   >> conj_tac >- suspend "BasePlaceSubscript"
@@ -1761,37 +1555,13 @@ Resume eval_cps_mutual[Places]:
   >> rw[assign_tuple_targets_cps_def, evaluate_def, raise_def]
 QED
 
-Resume eval_cps_mutual[PlaceSubscript]:
-  rpt gen_tac >> strip_tac
-  >> pure_once_rewrite_tac [eval_place_cps_def, evaluate_def]
-  >> rw[bind_def]
-  >> CASE_TAC >> reverse CASE_TAC
-  >- rw[cont_def, Once OWHILE_THM, stepk_def, apply_exc_def]
-  >> rw[cont_def, Once OWHILE_THM, stepk_def, apply_place_value_def]
-  >> gvs[cont_def]
-  >> first_x_assum drule >> rw[]
-  >> CASE_TAC >> reverse CASE_TAC
-  >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
-  >> rw[Once OWHILE_THM, stepk_def, apply_tv_def, liftk1]
-  >> CASE_TAC >> reverse CASE_TAC
-  >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
-  >> rw[Once OWHILE_THM, stepk_def, apply_val_def, liftk1, bind_def]
-QED
-Resume eval_cps_mutual[PlaceAttribute]:
-  rpt gen_tac >> strip_tac
-  >> pure_once_rewrite_tac [eval_place_cps_def, evaluate_def]
-  >> rw[bind_def]
-  >> CASE_TAC >> reverse CASE_TAC
-  >- rw[cont_def, Once OWHILE_THM, stepk_def, apply_exc_def]
-  >> rw[cont_def, Once OWHILE_THM, stepk_def, apply_place_value_def, liftk1, bind_def]
-QED
 Resume eval_cps_mutual[BasePlaceAttribute]:
   rpt gen_tac >> strip_tac
   >> pure_once_rewrite_tac [eval_base_place_cps_def, evaluate_def]
   >> rw[bind_def]
   >> CASE_TAC >> reverse CASE_TAC
   >- rw[cont_def, Once OWHILE_THM, stepk_def, apply_exc_def]
-  >> rw[cont_def, Once OWHILE_THM, stepk_def, apply_place_value_def, liftk1]
+  >> rw[cont_def, Once OWHILE_THM, stepk_def, apply_tv_def, liftk1]
 QED
 Resume eval_cps_mutual[BasePlaceSubscript]:
   rpt gen_tac >> strip_tac
@@ -1799,7 +1569,7 @@ Resume eval_cps_mutual[BasePlaceSubscript]:
   >> rw[bind_def]
   >> CASE_TAC >> reverse CASE_TAC
   >- rw[cont_def, Once OWHILE_THM, stepk_def, apply_exc_def]
-  >> rw[cont_def, Once OWHILE_THM, stepk_def, apply_place_value_def]
+  >> rw[cont_def, Once OWHILE_THM, stepk_def, apply_tv_def]
   >> gvs[cont_def]
   >> first_x_assum drule >> rw[]
   >> CASE_TAC >> reverse CASE_TAC
@@ -1815,7 +1585,7 @@ Resume eval_cps_mutual[TargetPlace]:
   >> rw[bind_def]
   >> CASE_TAC >> reverse CASE_TAC
   >- rw[cont_def, Once OWHILE_THM, stepk_def, apply_exc_def]
-  >> rw[cont_def, Once OWHILE_THM, stepk_def, apply_place_value_def, liftk1]
+  >> rw[cont_def, Once OWHILE_THM, stepk_def, apply_tv_def, liftk1]
 QED
 Resume eval_cps_mutual[TupleStore]:
   rpt gen_tac >> strip_tac
@@ -1843,62 +1613,6 @@ Resume eval_cps_mutual[TupleStoresCons]:
 QED
 Finalise eval_cps_mutual
 
-Theorem legacy_cps_from_members[local]:
-  (!g st k. MEM g gs ==> cont (eval_target_cps cx g st k) =
-    cont (liftk cx ApplyTarget (eval_target cx g st) k)) ==>
-  !st k. cont (eval_targets_cps cx gs st k) =
-    cont (liftk cx ApplyTargets (eval_targets cx gs st) k)
-Proof
-  Induct_on `gs`
-  >- rw[eval_target_cps_def, eval_legacy_targets_def, return_def, liftk1]
-  >> rpt strip_tac
-  >> `!st k. cont (eval_target_cps cx h st k) =
-       cont (liftk cx ApplyTarget (eval_target cx h st) k)` by metis_tac[MEM]
-  >> `!st k. cont (eval_targets_cps cx gs st k) =
-       cont (liftk cx ApplyTargets (eval_targets cx gs st) k)` by metis_tac[MEM]
-  >> rw[eval_target_cps_def, eval_legacy_targets_def, bind_def, return_def, liftk1]
-  >> CASE_TAC >> reverse CASE_TAC
-  >- rw[cont_def, Once OWHILE_THM, stepk_def, apply_exc_def]
-  >> rw[cont_def, Once OWHILE_THM, stepk_def, apply_target_def]
-  >> gvs[cont_def, liftk1]
-  >> CASE_TAC >> reverse CASE_TAC
-  >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
-  >> rw[Once OWHILE_THM, stepk_def, apply_targets_def]
-QED
-
-Theorem cps_target_member_size[local]:
-  MEM g gs ==> assignment_target_size g < assignment_target_size (TupleTarget gs)
-Proof
-  Induct_on `gs` >> simp[] >> rpt strip_tac >> gvs[]
-QED
-
-Theorem eval_legacy_cps_eq[local]:
-  (!cx g st k. cont (eval_target_cps cx g st k) =
-    cont (liftk cx ApplyTarget (eval_target cx g st) k)) /\
-  (!cx gs st k. cont (eval_targets_cps cx gs st k) =
-    cont (liftk cx ApplyTargets (eval_targets cx gs st) k))
-Proof
-  conj_asm1_tac
-  >- (gen_tac >> measureInduct_on `assignment_target_size g`
-      >> Cases_on `g`
-      >- (rw[eval_target_cps_def, eval_legacy_targets_def, bind_def, return_def, UNCURRY]
-          >> rewrite_tac [cj 4 eval_cps_mutual]
-          >> CASE_TAC >> reverse CASE_TAC
-          >- rw[liftk1, cont_def, Once OWHILE_THM, stepk_def, apply_exc_def]
-          >> rw[liftk1, cont_def, Once OWHILE_THM, stepk_def, apply_base_target_def])
-      >> rpt gen_tac
-      >> rename1 `TupleTarget gs`
-      >> `!st k. cont (eval_targets_cps cx gs st k) =
-           cont (liftk cx ApplyTargets (eval_targets cx gs st) k)` by
-           (irule legacy_cps_from_members >> rpt strip_tac >>
-            first_x_assum irule >> metis_tac[cps_target_member_size])
-      >> rw[eval_target_cps_def, eval_legacy_targets_def, bind_def, return_def, liftk1]
-      >> CASE_TAC >> reverse CASE_TAC
-      >- rw[cont_def, Once OWHILE_THM, stepk_def, apply_exc_def]
-      >> rw[cont_def, Once OWHILE_THM, stepk_def, apply_targets_def])
-  >> rpt gen_tac >> irule legacy_cps_from_members >> simp[]
-QED
-
 Theorem eval_cps_eq:
   (!cx s st k. cont (eval_stmt_cps cx s st k) =
     cont ((case eval_stmt cx s st of (INL (),st1) => AK cx Apply st1
@@ -1908,15 +1622,6 @@ Theorem eval_cps_eq:
       | (INR ex,st1) => AK cx (ApplyExc ex) st1) k)) /\
   (!cx it st k. cont (eval_iterator_cps cx it st k) =
     cont ((case eval_iterator cx it st of (INL vs,st1) => AK cx (ApplyVals vs) st1
-      | (INR ex,st1) => AK cx (ApplyExc ex) st1) k)) /\
-  (!cx g st k. cont (eval_target_cps cx g st k) =
-    cont ((case eval_target cx g st of (INL gv,st1) => AK cx (ApplyTarget gv) st1
-      | (INR ex,st1) => AK cx (ApplyExc ex) st1) k)) /\
-  (!cx gs st k. cont (eval_targets_cps cx gs st k) =
-    cont ((case eval_targets cx gs st of (INL gvs,st1) => AK cx (ApplyTargets gvs) st1
-      | (INR ex,st1) => AK cx (ApplyExc ex) st1) k)) /\
-  (!cx bt st k. cont (eval_base_target_cps cx bt st k) =
-    cont ((case eval_base_target cx bt st of (INL bv,st1) => AK cx (ApplyBaseTarget bv) st1
       | (INR ex,st1) => AK cx (ApplyExc ex) st1) k)) /\
   (!cx tyv nm body vs st k. cont (eval_for_cps cx tyv nm body vs st k) =
     cont ((case eval_for cx tyv nm body vs st of (INL (),st1) => AK cx Apply st1
@@ -1928,7 +1633,7 @@ Theorem eval_cps_eq:
     cont ((case eval_exprs cx es st of (INL vs,st1) => AK cx (ApplyVals vs) st1
       | (INR ex,st1) => AK cx (ApplyExc ex) st1) k))
 Proof
-  simp[eval_cps_mutual, eval_legacy_cps_eq, GSYM liftk1, combinTheory.K_DEF]
+  simp[eval_cps_mutual, GSYM liftk1, combinTheory.K_DEF]
 QED
 
 Definition fromk_def[simp]:
@@ -2010,7 +1715,7 @@ Theorem eval_expr_eq_cont_cps:
 Proof
   Cases_on`eval_expr cx e st`
   \\ qmatch_goalsub_rename_tac`res,st1`
-  \\ qspecl_then[`cx`,`e`,`st`,`DoneK`]mp_tac(cj 8 eval_cps_eq)
+  \\ qspecl_then[`cx`,`e`,`st`,`DoneK`]mp_tac(cj 5 eval_cps_eq)
   \\ simp[cont_def] \\ strip_tac
   \\ simp[Once OWHILE_THM]
   \\ IF_CASES_TAC
@@ -2019,7 +1724,7 @@ Proof
 QED
 
 val constants_env_pre_def = constants_env_def
-  |> SRULE [eval_expr_eq_cont_cps]
+  |> SRULE [bind_def, eval_expr_eq_cont_cps]
   |> cv_auto_trans_pre "constants_env_pre";
 
 Theorem constants_env_pre[cv_pre]:
@@ -2028,18 +1733,18 @@ Proof
   ho_match_mp_tac constants_env_ind
   \\ rw[]
   \\ rw[Once constants_env_pre_def]
-  \\ gs[eval_expr_eq_cont_cps]
+  \\ gs[bind_def, eval_expr_eq_cont_cps]
   \\ rw[cont_pre_IS_SOME_cont]
-  \\ qmatch_goalsub_abbrev_tac`eval_expr_cps ec ee es dk`
-  \\ qspecl_then[`ec`,`ee`,`es`,`dk`]mp_tac $ cj 8 eval_cps_eq
+  \\ qmatch_goalsub_rename_tac`eval_expr_cps ec ee es DoneK`
+  \\ qspecl_then[`ec`,`ee`,`es`,`DoneK`]mp_tac $ cj 5 eval_cps_eq
   \\ rw[cont_def]
   \\ CASE_TAC
   \\ CASE_TAC \\ gvs[]
-  \\ rw[Once OWHILE_THM, Abbr`dk`]
+  \\ rw[Once OWHILE_THM]
 QED
 
 val evaluate_defaults_pre_def = evaluate_defaults_def
-  |> SRULE [eval_expr_eq_cont_cps]
+  |> SRULE [bind_def, eval_expr_eq_cont_cps]
   |> cv_auto_trans_pre "evaluate_defaults_pre";
 
 Theorem evaluate_defaults_pre[cv_pre]:
@@ -2048,14 +1753,27 @@ Proof
   ntac 2 gen_tac
   \\ Induct \\ rw[]
   \\ rw[Once evaluate_defaults_pre_def]
-  \\ gs[eval_expr_eq_cont_cps]
+  \\ gs[bind_def, eval_expr_eq_cont_cps]
   \\ rw[cont_pre_IS_SOME_cont]
-  \\ qmatch_goalsub_abbrev_tac`eval_expr_cps ec ee es dk`
-  \\ qspecl_then[`ec`,`ee`,`es`,`dk`]mp_tac $ cj 8 eval_cps_eq
+  \\ qmatch_goalsub_rename_tac`eval_expr_cps ec ee es DoneK`
+  \\ qspecl_then[`ec`,`ee`,`es`,`DoneK`]mp_tac $ cj 5 eval_cps_eq
   \\ rw[cont_def]
   \\ CASE_TAC
   \\ CASE_TAC \\ gvs[]
-  \\ rw[Once OWHILE_THM, Abbr`dk`]
+  \\ rw[Once OWHILE_THM]
+QED
+
+val evaluate_all_constants_pre_def = evaluate_all_constants_def
+  |> cv_auto_trans_pre "evaluate_all_constants_pre";
+
+Theorem evaluate_all_constants_pre[cv_pre]:
+  !cx am addr mods. evaluate_all_constants_pre cx am addr mods
+Proof
+  Induct_on `mods` >> rpt gen_tac
+  >- simp[Once evaluate_all_constants_pre_def] >>
+  PairCases_on `h` >>
+  simp[Once evaluate_all_constants_pre_def, constants_env_pre] >>
+  rpt strip_tac >> simp[]
 QED
 
 val call_external_function_pre_def = call_external_function_def
@@ -2094,7 +1812,7 @@ Theorem cont_pre_eval_expr_cps[cv_pre]:
   cont_pre (eval_expr_cps cx e st DoneK)
 Proof
   rw[cont_pre_IS_SOME_cont]
-  \\ qspecl_then[`cx`,`e`,`st`,`DoneK`]mp_tac $ cj 8 eval_cps_eq
+  \\ qspecl_then[`cx`,`e`,`st`,`DoneK`]mp_tac $ cj 5 eval_cps_eq
   \\ rw[cont_def]
   \\ CASE_TAC \\ CASE_TAC \\ gvs[]
   \\ rw[Once OWHILE_THM]

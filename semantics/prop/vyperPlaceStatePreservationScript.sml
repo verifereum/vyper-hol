@@ -238,8 +238,8 @@ Theorem record_pop_history_typed_at_path:
   subscripts_type tv path = SOME (ArrayTV etv (Dynamic n)) /\
   well_formed_type_value etv /\
   value_has_type (ArrayTV etv (Dynamic n)) arr /\
-  evaluate_subscripts tv old path = INL arr /\ popped_value arr = INL p ==>
-  popped_history_typed tv (record_pop tv old path p history)
+  popped_value arr = INL p ==>
+  popped_history_typed tv (record_pop path arr p history)
 Proof
   strip_tac >>
   `value_has_type etv p` by
@@ -338,7 +338,7 @@ Theorem record_pop_history_typed:
   popped_history_typed tv history /\ value_has_type tv old /\
   well_formed_type_value tv /\ evaluate_subscripts tv old path = INL arr /\
   popped_value arr = INL p ==>
-  popped_history_typed tv (record_pop tv old path p history)
+  popped_history_typed tv (record_pop path arr p history)
 Proof
   strip_tac >>
   `?ptv. subscripts_type tv path = SOME ptv /\
@@ -350,7 +350,8 @@ Proof
   Cases_on `b` >> gvs[value_has_type_def, well_formed_type_value_def] >>
   irule record_pop_history_typed_at_path >>
   goal_assum (drule_at Any) >>
-  simp[value_has_type_def, vyperValueOperationTheory.popped_value_def]
+  simp[value_has_type_def, vyperValueOperationTheory.popped_value_def] >>
+  metis_tac[]
 QED
 
 val () = List.app (fn (name,th) =>

@@ -7,7 +7,7 @@ Ancestors
   vyperRuntimeAccounts vyperPureExpr vyperCallOutcomeTest
   vyperEvalExprPreservesScopesDom vyperEvalPreservesScopes
   vyperEvalPreservesImmutablesDom vyperLogPreservation
-  vyperTypeEnvPreservation vyperEvalPreservesNameTarget
+  vyperTypeEnvPreservation
 Libs monadsyntax
 
 val () = monadsyntax.enable_monad "vyper_evaluation";
