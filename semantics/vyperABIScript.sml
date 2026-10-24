@@ -244,10 +244,106 @@ End
 
 val () = cv_auto_trans vyper_strict_enc_def;
 
-(* strengthen valid_enc  *)
+(* Vyper ignores the unused bytes in the final word of dynamic Bytes/String
+   values.  This otherwise mirrors contractABI$valid_enc, retaining all
+   head, length, scalar, fixed-bytes, array, and tuple checks. *)
+Definition vyper_decode_valid_enc_def:
+  vyper_decode_valid_enc (Tuple ts) bs =
+    (LENGTH ts < dimword (:256) ∧
+     vyper_decode_valid_enc_tuple ts bs bs) ∧
+  vyper_decode_valid_enc (Array (SOME n) t) bs =
+    (let lt = if is_dynamic t then NONE else SOME $ static_length t in
+     n < dimword (:256) ∧
+     vyper_decode_valid_enc_array n lt t bs bs) ∧
+  vyper_decode_valid_enc (Array NONE t) bs =
+    (32 ≤ LENGTH bs ∧
+     let
+       lt = if is_dynamic t then NONE else SOME $ static_length t;
+       dn = dec_number (Uint 256) (TAKE 32 bs)
+     in is_num_value dn ∧ let
+       n = dest_NumV dn;
+       rest = DROP 32 bs
+     in n < dimword (:256) ∧
+        vyper_decode_valid_enc_array n lt t rest rest) ∧
+  vyper_decode_valid_enc (Bytes NONE) bs =
+    (32 ≤ LENGTH bs ∧
+     let
+       dn = dec_number (Uint 256) (TAKE 32 bs);
+       rest = DROP 32 bs
+     in is_num_value dn ∧ dest_NumV dn ≤ LENGTH rest) ∧
+  vyper_decode_valid_enc String bs =
+    (32 ≤ LENGTH bs ∧
+     let
+       dn = dec_number (Uint 256) (TAKE 32 bs);
+       rest = DROP 32 bs
+     in is_num_value dn ∧ dest_NumV dn ≤ LENGTH rest) ∧
+  vyper_decode_valid_enc (Bytes (SOME m)) bs =
+    (valid_bytes_bound (SOME m) ∧
+     m ≤ LENGTH bs ∧
+     EVERY ((=) 0w) (DROP m (TAKE 32 bs))) ∧
+  vyper_decode_valid_enc t bs =
+    (32 ≤ LENGTH bs ∧
+     let v = dec_number t (TAKE 32 bs) in has_type t v) ∧
+  vyper_decode_valid_enc_array 0 _ _ _ _ = T ∧
+  vyper_decode_valid_enc_array (SUC n) NONE t bs hds =
+    (32 ≤ LENGTH hds ∧
+     let dn = dec_number (Uint 256) (TAKE 32 hds)
+     in is_num_value dn ∧ let j = dest_NumV dn
+     in vyper_decode_valid_enc t (DROP j bs) ∧
+        vyper_decode_valid_enc_array n NONE t bs (DROP 32 hds)) ∧
+  vyper_decode_valid_enc_array (SUC n) (SOME l) t bs hds =
+    (l ≤ LENGTH hds ∧
+     vyper_decode_valid_enc t (TAKE l hds) ∧
+     vyper_decode_valid_enc_array n (SOME l) t bs (DROP l hds)) ∧
+  vyper_decode_valid_enc_tuple [] _ _ = T ∧
+  vyper_decode_valid_enc_tuple (t::ts) bs hds =
+    (if is_dynamic t then
+       32 ≤ LENGTH hds ∧
+       let dn = dec_number (Uint 256) (TAKE 32 hds)
+       in is_num_value dn ∧ let j = dest_NumV dn
+       in vyper_decode_valid_enc t (DROP j bs) ∧
+          vyper_decode_valid_enc_tuple ts bs (DROP 32 hds)
+     else let n = static_length t
+     in n ≤ LENGTH hds ∧
+        vyper_decode_valid_enc t (TAKE n hds) ∧
+        vyper_decode_valid_enc_tuple ts bs (DROP n hds))
+Termination
+  WF_REL_TAC ‘inv_image ($< LEX $<) (λx. case x of
+    (INR (INR (ts,_,_))) => (list_size abi_type_size ts, 0)
+  | (INR (INL (n,_,t,_,_))) => (abi_type_size t, n)
+  | (INL (t,_)) => (abi_type_size t, 0))’
+End
+
+val vyper_decode_valid_enc_pre_def = cv_trans_pre_rec
+  "vyper_decode_valid_enc_pre vyper_decode_valid_enc_array_pre vyper_decode_valid_enc_tuple_pre"
+  (PURE_REWRITE_RULE [every_zero_intro] vyper_decode_valid_enc_def) (
+  WF_REL_TAC ‘inv_image ($< LEX $<)
+  (λx. case x of
+         (INR (INR (ts,_,_))) => (cv_size ts, 0)
+       | (INR (INL (n,_,t,_,_))) => (cv_size t, cv$c2n n)
+       | (INL (t,_)) => (cv_size t, 0))’
+  \\ rpt conj_tac
+  \\ Cases_on `cv_v` \\ rw[] \\ gs[cv_lt_Num_0]
+  \\ qmatch_goalsub_rename_tac `cv_snd p`
+  \\ Cases_on `p` \\ gs[]
+);
+
+Theorem vyper_decode_valid_enc_pre[cv_pre]:
+  (∀v bs. vyper_decode_valid_enc_pre v bs) ∧
+  (∀n l t bs hds. vyper_decode_valid_enc_array_pre n l t bs hds) ∧
+  (∀ts bs hds. vyper_decode_valid_enc_tuple_pre ts bs hds)
+Proof
+  ho_match_mp_tac vyper_decode_valid_enc_ind
+  \\ rpt strip_tac
+  \\ rw[Once vyper_decode_valid_enc_pre_def]
+QED
+
+
+(* Preserve Vyper's bounded decode window in addition to ABI shape checks. *)
 Definition vyper_valid_enc_def:
   vyper_valid_enc env t bs ⇔
-    (valid_enc (vyper_to_abi_type env t) bs ∧ vyper_strict_enc env t bs)
+    (vyper_decode_valid_enc (vyper_to_abi_type env t) bs ∧
+     vyper_strict_enc env t bs)
 End
 
 val () = cv_auto_trans vyper_valid_enc_def;

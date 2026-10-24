@@ -1161,10 +1161,14 @@ fun generate_defn_scripts () = let
       "Theory ", thyname, "[no_sig_docs]\nAncestors jsonToVyper\nLibs vyperTestLib\n",
       "val () = holbuild_extra_deps [\"", jsonp_from_generated, "\"];\n",
       "val () = make_definitions_for_file (\"", id, "\", \"", jsonp_from_generated, "\");\n"]
-    val out = TextIO.openOut(fname)
-    val () = TextIO.output(out, contents)
-    val () = TextIO.closeOut out
-  in () end) files
+  in
+    (* Committed definitions may include proof boundaries for JSON/CV caching. *)
+    if OS.FileSys.access(fname, []) then () else let
+      val out = TextIO.openOut(fname)
+      val () = TextIO.output(out, contents)
+      val () = TextIO.closeOut out
+    in () end
+  end) files
 in
   ()
 end
@@ -1174,7 +1178,7 @@ fun generate_test_scripts () = let
   val files = test_files ()
   val gen_dir = generated_dir
   val () = cleanup_generated_scripts files
-  val () = List.app (fn (id, _) => let
+  val () = List.app (fn (id, jsonp) => let
     val thyname = String.concat["vyperTest_", id]
     val defsname = String.concat["vyperTestDefs_", id]
     val fname = OS.Path.concat(gen_dir, String.concat[thyname, "Script.sml"])
