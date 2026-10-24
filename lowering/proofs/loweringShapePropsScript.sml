@@ -14,8 +14,8 @@
  *   cenv_shape_ok, cenv_static_ok, value_shape_ok, loop_ctx_shape_ok
  *   external_fn_shape_ok, fallback_shape_ok, internal_fn_shape_ok
  *   internal_segment_ok        — one internal function's blocks
- *   internal_name_ok           — internal names that cannot collide with
- *                                lowering labels
+ *   internal_label_ok          — internal entry labels ("internal ..."),
+ *                                apart from every other label
  *   compile_expr_shape, compile_stmt_shape, compile_*_shape
  *   compile_generate_runtime_shape — the whole runtime block stream
  *   package_internal_blocks_segments
@@ -144,19 +144,18 @@ End
 (* The blocks of one internal function: its entry label first, then only
    compiler labels; internal-function code throughout. *)
 Definition internal_segment_ok_def:
-  internal_segment_ok (name : string, has_ret_buf : bool, rc : num) seg <=>
-    seg <> [] /\ (HD seg).bb_label = name /\
+  internal_segment_ok (lbl : string, has_ret_buf : bool, rc : num) seg <=>
+    seg <> [] /\ (HD seg).bb_label = lbl /\
     EVERY compiler_label (TL (MAP (\bb. bb.bb_label) seg)) /\
     EVERY (\bb. EVERY (lowered_inst_ok T) bb.bb_instructions) seg
 End
 
-(* Internal entry labels are the raw function names, so a name must avoid
-   the reserved labels and every label the lowering itself makes: "__entry",
-   compiler labels ("@..."), and external entry labels ("fn_" ++ name). *)
-Definition internal_name_ok_def:
-  internal_name_ok name <=>
-    supported_internal_name name /\ name <> "__entry" /\
-    ~isPREFIX "@" name /\ ~isPREFIX "fn_" name
+(* Internal entry labels are internal_fn_label's "internal ..." spelling,
+   so they avoid the reserved labels and every other label the lowering
+   makes: "__entry", compiler labels ("@...") and external entry labels
+   ("fn_" ++ name). *)
+Definition internal_label_ok_def:
+  internal_label_ok lbl <=> isPREFIX "internal " lbl
 End
 
 (* ===== Stability ===== *)
@@ -1690,19 +1689,32 @@ Proof
   rw[compiler_label_def, compiler_labels_future_def, fresh_label_output_def]
 QED
 
+Theorem internal_label_ok_append[local]:
+  !l. internal_label_ok l ==> ?rest. l = "internal " ++ rest
+Proof
+  REWRITE_TAC [internal_label_ok_def, IS_PREFIX_APPEND] >> metis_tac[]
+QED
+
+Theorem internal_label_not_reserved[local]:
+  !l. internal_label_ok l ==> l <> "__entry" /\ ~reserved_label l
+Proof
+  gen_tac >> disch_then (strip_assume_tac o MATCH_MP internal_label_ok_append) >>
+  pop_assum SUBST_ALL_TAC >> simp[reserved_label_def]
+QED
+
 Theorem jump_label_ok_names:
   !l. jump_label_ok l ==>
       l <> "__entry" /\ ~reserved_label l /\
-      !n. internal_name_ok n ==> l <> n
+      !n. internal_label_ok n ==> l <> n
 Proof
   gen_tac >>
   disch_then (strip_assume_tac o REWRITE_RULE [jump_label_ok_def])
   >- (imp_res_tac compiler_label_prefix >> pop_assum SUBST_ALL_TAC >>
-      simp[internal_name_ok_def, reserved_label_def])
+      simp[internal_label_ok_def, reserved_label_def])
   >> qpat_x_assum `isPREFIX _ _`
        (strip_assume_tac o REWRITE_RULE [IS_PREFIX_APPEND]) >>
   pop_assum SUBST_ALL_TAC >>
-  simp[internal_name_ok_def, reserved_label_def]
+  simp[internal_label_ok_def, reserved_label_def]
 QED
 
 (* ===== Successors and instructions of a block list ===== *)
@@ -1784,7 +1796,7 @@ QED
 Theorem internal_fns_ok:
   !descs segs insts fn.
     LIST_REL internal_segment_ok descs segs /\
-    EVERY (\d. internal_name_ok (FST d)) descs /\
+    EVERY (\d. internal_label_ok (FST d)) descs /\
     opaque_insts_ok insts /\
     (!inst. MEM inst (FLAT (MAP (\bb. bb.bb_instructions) (FLAT segs))) ==>
             MEM inst insts) /\
@@ -1796,11 +1808,9 @@ Proof
   rpt gen_tac >> strip_tac >>
   drule_all LIST_REL_MEM_MAP2 >> strip_tac >> gvs[] >>
   PairCases_on `x` >> fs[internal_segment_ok_def] >>
-  `internal_name_ok x0` by (fs[EVERY_MEM] >> res_tac >> fs[]) >>
+  `internal_label_ok x0` by (fs[EVERY_MEM] >> res_tac >> fs[]) >>
   `~jump_label_ok x0` by metis_tac[jump_label_ok_names] >>
-  `~reserved_label x0`
-    by gvs[internal_name_ok_def, supported_internal_name_def,
-           reserved_label_def] >>
+  `~reserved_label x0` by metis_tac[internal_label_not_reserved] >>
   match_mp_tac
     (Q.SPECL [`T`, `mk_internal_function x0 y x1 x2`, `insts`] lowered_fn_ok) >>
   gs[mk_internal_function_metadata] >> rpt conj_tac
@@ -1825,7 +1835,7 @@ Theorem lowered_unit_source_ok:
     EVERY jump_label_ok (TL (MAP (\bb. bb.bb_label) entry)) /\
     EVERY (\bb. EVERY (lowered_inst_ok F) bb.bb_instructions) entry /\
     LIST_REL internal_segment_ok descs segs /\
-    EVERY (\d. internal_name_ok (FST d)) descs /\
+    EVERY (\d. internal_label_ok (FST d)) descs /\
     opaque_insts_ok
       (FLAT (MAP (\bb. bb.bb_instructions) (entry ++ FLAT segs))) ==>
     o1_source_unit_ok
@@ -1920,14 +1930,14 @@ QED
 
 Theorem internal_name_not_entry_label:
   !n entry.
-    internal_name_ok n /\ entry <> [] /\ (HD entry).bb_label = "__entry" /\
+    internal_label_ok n /\ entry <> [] /\ (HD entry).bb_label = "__entry" /\
     EVERY jump_label_ok (TL (MAP (\bb. bb.bb_label) entry)) ==>
     ~compiler_label n /\ ~MEM n (MAP (\bb. bb.bb_label) entry)
 Proof
   rpt gen_tac >> strip_tac >> conj_tac
   >- (strip_tac >> imp_res_tac compiler_label_prefix >>
-      gvs[internal_name_ok_def]) >>
-  `n <> "__entry"` by fs[internal_name_ok_def] >>
+      imp_res_tac internal_label_ok_append >> gvs[]) >>
+  `n <> "__entry"` by metis_tac[internal_label_not_reserved] >>
   Cases_on `entry` >> gvs[EVERY_MEM] >> metis_tac[jump_label_ok_names]
 QED
 
@@ -1941,7 +1951,7 @@ Theorem run_lowering_source_unit_ok:
     EVERY external_fn_shape_ok external_fns /\
     fallback_shape_ok fallback_fn /\
     EVERY internal_fn_shape_ok internal_fns /\
-    EVERY (\d. internal_name_ok (FST d)) (internal_fn_descriptors internal_fns) /\
+    EVERY (\d. internal_label_ok (FST d)) (internal_fn_descriptors internal_fns) /\
     ALL_DISTINCT (MAP FST (internal_fn_descriptors internal_fns)) ==>
     o1_source_unit_ok unit
 Proof
@@ -1995,18 +2005,19 @@ Proof
   simp[supported_function_names_def] >> metis_tac[]
 QED
 
-Theorem source_internal_fn_descriptor_name[simp]:
-  !tops mut nr rr name args dflts ret body.
-    FST (source_internal_fn_descriptor tops
-      (mut,nr,rr,name,args,dflts,ret,body)) = name
+Theorem source_internal_fn_descriptor_label[simp]:
+  !tops is_ctor mut nr rr name args dflts ret body.
+    FST (source_internal_fn_descriptor tops is_ctor
+      (mut,nr,rr,name,args,dflts,ret,body)) =
+    internal_fn_label (build_func_ids 0 tops name) name (MAP SND args) is_ctor
 Proof
   simp[source_internal_fn_descriptor_def]
 QED
 
 Theorem classified_internal_names_distinct:
-  !tops envtops. ALL_DISTINCT (supported_function_names tops) ==>
-    ALL_DISTINCT (MAP FST (MAP (source_internal_fn_descriptor envtops)
-      (FST (SND (classify_functions tops)))))
+  !tops. ALL_DISTINCT (supported_function_names tops) ==>
+    ALL_DISTINCT (MAP (\p. FST (SND (SND (SND p))))
+      (FST (SND (classify_functions tops))))
 Proof
   Induct >> simp[classify_functions_def, supported_function_names_def] >>
   gen_tac >> fs[classify_functions_def] >>
@@ -2026,45 +2037,57 @@ Proof
   metis_tac[MEM_supported_function_names]
 QED
 
+(* Labels are distinct when equal labels mean equal names and the names are
+   distinct. *)
+Theorem ALL_DISTINCT_MAP_name_reflect[local]:
+  !l f. ALL_DISTINCT (MAP (\p. FST (SND (SND (SND p)))) l) /\
+        (!x y. MEM x l /\ MEM y l /\ f x = f y ==>
+               FST (SND (SND (SND x))) = FST (SND (SND (SND y)))) ==>
+        ALL_DISTINCT (MAP f l)
+Proof
+  Induct >> rw[MEM_MAP] >- metis_tac[] >>
+  first_x_assum irule >> metis_tac[]
+QED
+
 (* Each internal tuple of classify_functions comes from a FunctionDecl
-   Internal in tops, so its name meets the premise, and the internal names
-   are a sublist of supported_function_names tops, which
-   supported_declaration_names makes ALL_DISTINCT. *)
+   Internal in tops (MEM_classify_internal), and its label is
+   internal_fn_label of its id and name (internal_fn_label_prefix).  Equal
+   labels have equal ids (internal_fn_label_id_11), hence equal names
+   (build_func_ids_11); the names are a sublist of supported_function_names
+   tops, which supported_declaration_names makes ALL_DISTINCT. *)
 Theorem supported_internal_descriptors_ok:
-  !tops.
-    supported_program tops /\
-    (!mut nr rr name args dflts ret body.
-       MEM (FunctionDecl Internal mut nr rr name args dflts ret body) tops ==>
-       internal_name_ok name) ==>
-    EVERY (\d. internal_name_ok (FST d))
-      (MAP (source_internal_fn_descriptor tops)
+  !tops is_ctor.
+    supported_program tops ==>
+    EVERY (\d. internal_label_ok (FST d))
+      (MAP (source_internal_fn_descriptor tops is_ctor)
          (FST (SND (classify_functions tops)))) /\
     ALL_DISTINCT
-      (MAP FST (MAP (source_internal_fn_descriptor tops)
+      (MAP FST (MAP (source_internal_fn_descriptor tops is_ctor)
                   (FST (SND (classify_functions tops)))))
 Proof
   rpt strip_tac
-  >- (simp[EVERY_MAP, EVERY_MEM] >> rpt strip_tac >>
-      rename1 `MEM payload (FST (SND (classify_functions tops)))` >>
-      PairCases_on `payload` >> gvs[] >>
-      drule (iffLR MEM_classify_internal) >> metis_tac[]) >>
-  irule classified_internal_names_distinct >>
-  drule supported_program_names >>
-  metis_tac[supported_declaration_names_unique]
+  >- (rw[EVERY_MAP, EVERY_MEM, pairTheory.FORALL_PROD] >>
+      REWRITE_TAC [internal_label_ok_def, internal_fn_label_prefix]) >>
+  REWRITE_TAC [MAP_MAP_o] >>
+  irule ALL_DISTINCT_MAP_name_reflect >> rpt conj_tac
+  >~ [`ALL_DISTINCT _`]
+  >- (irule classified_internal_names_distinct >>
+      drule supported_program_names >>
+      metis_tac[supported_declaration_names_unique]) >>
+  simp[pairTheory.FORALL_PROD] >> rpt strip_tac >>
+  imp_res_tac internal_fn_label_id_11 >>
+  imp_res_tac (iffLR MEM_classify_internal) >>
+  metis_tac[build_func_ids_11, function_visibility_distinct]
 QED
 
-(* S2 with the internal-name premise.  Without it S2 is false: an internal
-   function named "fn_foo" next to an external "foo" makes both entry
-   labels "fn_foo", so the internal function's blocks include external code
-   ending in STOP (lower_vyper_runtime_unit_label_clash in
-   s2LabelClashWitness). *)
+(* S2's statement, proved from the generator and source lemmas above.
+   package_internal_blocks splits the block stream at each internal entry
+   label; supported_internal_descriptors_ok keeps those labels apart from
+   each other and from every other label. *)
 Theorem lower_vyper_runtime_unit_source_unit_ok_names:
   !tops rpolicy unit.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-    supported_program tops /\
-    (!mut nr rr name args dflts ret body.
-       MEM (FunctionDecl Internal mut nr rr name args dflts ret body) tops ==>
-       internal_name_ok name) ==>
+    supported_program tops ==>
     o1_source_unit_ok unit
 Proof
   rpt gen_tac >> strip_tac >>
@@ -2073,9 +2096,9 @@ Proof
   Cases_on `classify_functions tops` >> PairCases_on `r` >>
   rename1 `classify_functions tops = (exts, ints, fb, ctor)` >>
   simp[] >> strip_tac >>
-  qspec_then `tops` mp_tac supported_internal_descriptors_ok >>
-  impl_tac >- (conj_tac >> first_assum ACCEPT_TAC) >>
-  ASM_REWRITE_TAC [pairTheory.FST, pairTheory.SND] >> strip_tac >>
+  qspecl_then [`tops`, `F`] mp_tac supported_internal_descriptors_ok >>
+  impl_tac >- first_assum ACCEPT_TAC >>
+  REWRITE_TAC [pairTheory.FST, pairTheory.SND] >> strip_tac >>
   `EVERY (\(sel, lbl, z). isPREFIX "fn_" lbl)
      (build_selectors (type_env tops) exts)`
     by REWRITE_TAC [build_selectors_fn_labels] >>
