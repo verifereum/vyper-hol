@@ -322,8 +322,9 @@ val () = cv_auto_trans evaluate_abi_decode_return_def;
    Using default_value would create intermediate Vyper values that complicate
    the termination measure.
 
-   The theorem vyper_to_abi_default_value proves this is equivalent to
-   vyper_to_abi on default_value, so this is not a separate concept. *)
+   The theorem vyper_to_abi_default_value (in vyperABIRoundtripTheory) proves
+   this is equivalent to vyper_to_abi on default_value, so this is not a
+   separate concept. *)
 Definition default_to_abi_def:
   default_to_abi (BaseTV (UintT _)) = NumV 0 ∧
   default_to_abi (BaseTV (IntT _)) = contractABI$IntV 0 ∧
