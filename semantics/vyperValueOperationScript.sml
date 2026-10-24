@@ -211,6 +211,10 @@ Proof
   rw[wrapped_int_op_pre_def]
 QED
 
+(* u bounds the integer operators; tv is the type value of the second
+   operand, which only In/NotIn read: a static array value is sparse, so
+   membership needs the array's length and element type (evaluate_in_array)
+   to account for the default-valued slots it omits. *)
 Definition evaluate_binop_def:
   evaluate_binop u tv bop v1 v2 =
   case bop
@@ -356,7 +360,7 @@ Definition evaluate_binop_def:
               once available/factored. *)
            INL $ BoolV (int_and (&n1) (&n2) ≠ 0)
            | _ => INR (TypeError "binop"))
-       | ArrayV av => INL $ BoolV $ evaluate_in_array NoneTV v1 av
+       | ArrayV av => INL $ BoolV $ evaluate_in_array tv v1 av
        | _ => INR (TypeError "binop"))
      | Eq => (case v1 of
          IntV i1 => (case v2 of IntV i2 =>
