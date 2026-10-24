@@ -109,7 +109,8 @@ Theorem binop_frag_typed:
     value_has_type tv2 v2 ==>
     binop_frag ctx func cenv cx bop (expr_type e1) ann
       (if bop = Exp then expr_int_literal e1 else NONE)
-      (if bop = Exp then expr_int_literal e2 else NONE) v1 v2 es0
+      (if bop = Exp then expr_int_literal e2 else NONE)
+      [expr_type e1; expr_type e2] v1 v2 es0
 Proof
   cheat
 QED
@@ -164,9 +165,9 @@ Proof
       conj_tac >- gvs[] >>
       conj_tac
       >- (rpt strip_tac >>
-          qspecl_then [`cenv`, `cx`, `env`, `e2`, `es1`, `r2`, `es2`] mp_tac
+          qspecl_then [`cenv`, `cx`, `env`, `e2`, `es1`, `INL tv`, `es2`] mp_tac
             expr_sim_pre_word_result >>
-          impl_tac >- gvs[] >> simp[]) >>
+          impl_tac >- gvs[] >> strip_tac >> gvs[]) >>
       conj_tac
       >- metis_tac[expr_sim_ok_apply] >>
       rpt gen_tac >> strip_tac >>
@@ -178,11 +179,11 @@ Proof
       qspecl_then [`ctx`, `func`, `cenv`, `cx`, `bop`, `ann`, `e1`, `e2`,
                    `v1`, `v2`, `es2`, `tv1`, `tv2`] mp_tac binop_frag_typed >>
       impl_tac >- gvs[] >> simp[])
-  >~ [`expr_res_ok`]
+  >~ [`eval_expr cx e1 es = (INL _, _)`]
   >- (rpt strip_tac >>
-      qspecl_then [`cenv`, `cx`, `env`, `e1`, `es`, `r1`, `es1`] mp_tac
+      qspecl_then [`cenv`, `cx`, `env`, `e1`, `es`, `INL tv`, `es1`] mp_tac
         expr_sim_pre_word_result >>
-      impl_tac >- gvs[] >> simp[])
+      impl_tac >- gvs[] >> strip_tac >> gvs[])
   >~ [`compile_binop`]
   >- (rpt gen_tac >> strip_tac >> drule compile_binop_shape >> simp[])
   >~ [`lower_value`]
