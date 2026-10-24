@@ -182,7 +182,8 @@ Theorem vv_post_of_expr_post:
        else LocatedValue (expr_type e) (mk_ptr (Var rv) LocMemory)) s
 Proof
   rw[expr_post_def, vv_post_def] >>
-  gvs[vv_holds_def, vv_at_def, contextTheory.mk_ptr_def] >>
+  gvs[vv_holds_def, vv_at_def, contextTheory.mk_ptr_def, materialise_def,
+      return_def] >>
   fs[expr_val_rel_def, expr_val_at_def] >> metis_tac[]
 QED
 
