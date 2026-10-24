@@ -770,7 +770,7 @@ Theorem lower_vyper_runtime_unit_source_unit_ok_names:
 Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `lower_vyper_runtime_unit _ _ = _` mp_tac >>
-  simp[lower_vyper_runtime_unit_def] >>
+  simp[lower_vyper_runtime_unit_def, bool_case_eq] >>
   Cases_on `classify_functions tops` >> PairCases_on `r` >>
   rename1 `classify_functions tops = (exts, ints, fb, ctor)` >>
   simp[] >> strip_tac >>

@@ -734,6 +734,47 @@ Definition package_external_fn_def:
      body, if ret = NoneT then NONE else SOME ret)
 End
 
+(* ===== Allocation Limit ===== *)
+
+(* A statement list contains a valued return.  Mirrors where Python lowers
+   one: vyper/codegen_venom/stmt.py:lower_Return. *)
+Definition stmts_return_value_def:
+  stmt_returns_value (Return (SOME _)) = T ∧
+  stmt_returns_value (If _ ss1 ss2) =
+    (stmts_return_value ss1 ∨ stmts_return_value ss2) ∧
+  stmt_returns_value (For _ _ _ _ ss) = stmts_return_value ss ∧
+  stmt_returns_value _ = F ∧
+  stmts_return_value [] = F ∧
+  stmts_return_value (st::sts) = (stmt_returns_value st ∨ stmts_return_value sts)
+End
+
+(* The return buffer of compile_external_return's ABI-encoding branch is
+   below Python's allocation limit, as is the AbiCopy size of an ABI-static
+   return type, which is the same number there.
+   Mirrors Python: vyper/codegen_venom/context.py:Context.allocate_buffer,
+   which raises MemoryAllocationException at 2**64 bytes or more. *)
+Definition return_buffer_ok_def:
+  return_buffer_ok cenv ⇔
+    cenv.ce_max_return_size < 2 ** 64 ∧
+    (case cenv.ce_ret_enc_info of
+       AbiCopy m => m < 2 ** 64
+     | _ => T)
+End
+
+(* Python allocates the return buffer each time it lowers a valued return
+   of an external function that is neither @raw_return nor a word type.
+   Mirrors Python: vyper/codegen_venom/stmt.py:_lower_external_return. *)
+Definition external_return_buffer_ok_def:
+  external_return_buffer_ok
+    (entry_lbl, cenv, pos_args, min_cds, is_payable, nr, nkey, use_trans,
+     is_view, body, ret_opt) ⇔
+    case ret_opt of
+      NONE => T
+    | SOME ret =>
+        ¬cenv.ce_raw_return ∧ ¬is_word_type ret ∧ stmts_return_value body ⇒
+        return_buffer_ok cenv
+End
+
 (* Package an internal function for compilation.
    is_ctor_context: T in deploy context (internal fns called from __init__),
                     F in runtime context.
@@ -1054,9 +1095,24 @@ Definition lower_vyper_runtime_unit_def:
           set_fallback_package_target rpolicy.rpol_target
             (package_fallback_fn tops use_trans nkey_map fb_fn) in
     let entry_info = build_dense_entry_info selectors external_fns in
-    run_lowering selectors external_fns runtime_int_fns fallback_fn
-      rpolicy 0 0 ([] : dense_bucket list) entry_info "__entry"
+    if EVERY external_return_buffer_ok external_fns then
+      run_lowering selectors external_fns runtime_int_fns fallback_fn
+        rpolicy 0 0 ([] : dense_bucket list) entry_info "__entry"
+    else NONE
 End
+
+(* A unit that lowers has every external return buffer below the limit. *)
+Theorem lower_vyper_runtime_unit_return_buffer_ok:
+  ∀tops rpolicy unit exts ints fb ctor x.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit ∧
+    classify_functions tops = (exts, ints, fb, ctor) ∧ MEM x exts ⇒
+    external_return_buffer_ok
+      (set_external_package_target rpolicy.rpol_target
+         (package_external_fn tops F (assign_nkeys tops 0) x))
+Proof
+  rw[lower_vyper_runtime_unit_def, AllCaseEqs()] >>
+  gvs[listTheory.EVERY_MEM, listTheory.MEM_MAP, PULL_EXISTS]
+QED
 
 (* Deploy lowering receives the actual runtime bytes.  Their size and data
    section are both owned by run_deploy_lowering. *)
