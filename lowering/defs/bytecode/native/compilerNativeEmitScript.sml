@@ -740,17 +740,28 @@ fun coercion theta to_generic ty =
     | _ => raise Fail ("no string coercion through " ^ type_to_string ty)
   end;
 (* List functions at char that have a string counterpart in the runtime. *)
-val string_natives = [(("list", "APPEND"), "hn_sAPPEND"), (("list", "LENGTH"), "hn_sLENGTH"),
-  (("list", "FLAT"), "hn_sFLAT")];
+(* Membership-based list functions at string and num elements, which the
+   runtime computes by sorting instead of pairwise comparison. *)
+val instance_natives = [
+  ((("list", "APPEND"), char_ty), "hn_sAPPEND"), ((("list", "LENGTH"), char_ty), "hn_sLENGTH"),
+  ((("list", "FLAT"), char_ty), "hn_sFLAT"),
+  ((("venomFnScheduleRunner", "list_subset"), string_ty), "hn_list_subset_str"),
+  ((("venomFnScheduleRunner", "list_subset"), numSyntax.num), "hn_list_subset_num"),
+  ((("list", "ALL_DISTINCT"), string_ty), "hn_ALL_DISTINCT_str"),
+  ((("list", "ALL_DISTINCT"), numSyntax.num), "hn_ALL_DISTINCT_num"),
+  ((("list", "nub"), string_ty), "hn_nub_str"), ((("list", "nub"), numSyntax.num), "hn_nub_num")];
+val instance_natives_used : string list ref = ref [];
 fun string_const c =
   if is_constructor c orelse is_case_const c then c else let
     val gty = type_of (generic (key c))
     val theta = match_type gty (type_of c)
-  in case (Lib.assoc1 (key c) string_natives, theta) of
-       (SOME (_, f), [{redex, residue}]) =>
-         if residue = char_ty then raw (type_of c) f
-         else raise mk_HOL_ERR "native" "string_const" "not at char"
-     | _ => raise mk_HOL_ERR "native" "string_const" "no string native"
+  in case theta of
+       [{redex, residue}] =>
+         (case List.find (fn ((k, ty), _) => k = key c andalso ty = residue) instance_natives of
+            SOME (_, f) => (instance_natives_used := f :: !instance_natives_used;
+                            raw (type_of c) f)
+          | NONE => raise mk_HOL_ERR "native" "string_const" "no instance native")
+     | _ => raise mk_HOL_ERR "native" "string_const" "no instance native"
   end handle HOL_ERR _ => let
     val gty = type_of (generic (key c))
     val theta = match_type gty (type_of c)
@@ -850,6 +861,8 @@ val fixture_terms = map (fn (p, h) =>
                                                     ^(program_term p)``)))))
   fixtures;
 val () = pr ("normalised\n");
+val () = pr ("instance natives used: " ^
+  String.concatWith " " (Lib.mk_set (!instance_natives_used)) ^ "\n");
 val () = if null (!string_pattern_defs) then ()
          else (pr ("string CONS patterns in: " ^
                    String.concatWith " " (Lib.mk_set (!string_pattern_defs)) ^ "\n");

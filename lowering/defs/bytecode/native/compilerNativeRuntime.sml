@@ -127,6 +127,49 @@ structure compilerNativeRuntime = struct
   fun hn_scase s n f =
     if s = "" then n () else f (String.sub (s, 0)) (String.extract (s, 1, NONE))
   fun hn_sAPPEND s t = s ^ t
+  (* list_subset, ALL_DISTINCT and nub at elements with a total order: the
+     same results as their MEM-based definitions, computed by sorting. *)
+  fun msort cmp l = let
+    fun merge (xs as x :: xt, ys as y :: yt) =
+          if cmp (y, x) = LESS then y :: merge (xs, yt) else x :: merge (xt, ys)
+      | merge ([], ys) = ys
+      | merge (xs, []) = xs
+    fun go [] = []
+      | go [x] = [x]
+      | go l = let val (a, b) = (List.take (l, length l div 2), List.drop (l, length l div 2))
+               in merge (go a, go b) end
+  in go l end
+  fun subset_by cmp xs ys = let
+    val v = Vector.fromList (msort cmp ys)
+    fun mem x = let
+      fun bs (lo, hi) = lo < hi andalso (let val m = (lo + hi) div 2 in
+        case cmp (x, Vector.sub (v, m)) of
+          EQUAL => true | LESS => bs (lo, m) | GREATER => bs (m + 1, hi) end)
+    in bs (0, Vector.length v) end
+  in List.all mem xs end
+  fun distinct_by cmp l = let
+    fun ok (x :: (rest as y :: _)) = cmp (x, y) <> EQUAL andalso ok rest
+      | ok _ = true
+  in ok (msort cmp l) end
+  (* nub keeps the last occurrence of each element. *)
+  fun nub_by cmp l = let
+    val n = length l
+    val tagged = ListPair.zip (l, List.tabulate (n, fn i => i))
+    val sorted = msort (fn ((a, i), (b, j)) => case cmp (a, b) of EQUAL => Int.compare (i, j)
+                                                              | c => c) tagged
+    val keep = Array.array (n, false)
+    fun mark ((_, i) :: (rest as (b, _) :: _)) x =
+          (if cmp (x, b) <> EQUAL then Array.update (keep, i, true) else (); mark rest b)
+      | mark [(_, i)] _ = Array.update (keep, i, true)
+      | mark [] _ = ()
+    val () = case sorted of [] => () | (a, _) :: _ => mark sorted a
+  in List.mapPartial (fn (x, i) => if Array.sub (keep, i) then SOME x else NONE) tagged end
+  fun hn_list_subset_str xs ys = subset_by String.compare xs ys
+  fun hn_list_subset_num xs ys = subset_by IntInf.compare xs ys
+  fun hn_ALL_DISTINCT_str l = distinct_by String.compare l
+  fun hn_ALL_DISTINCT_num l = distinct_by IntInf.compare l
+  fun hn_nub_str l = nub_by String.compare l
+  fun hn_nub_num l = nub_by IntInf.compare l
   fun hn_sLENGTH s = IntInf.fromInt (size s)
   fun hn_sFLAT l = String.concat l
 
