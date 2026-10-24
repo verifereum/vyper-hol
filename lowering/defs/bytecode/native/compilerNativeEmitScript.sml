@@ -214,7 +214,7 @@ val native_names = [
   ("pred_set", ["EMPTY", "INSERT", "DIFF", "DELETE", "COMPL", "UNION", "INTER", "SUBSET"]),
   ("bool", ["IN", "!", "?", "?!", "@"]),
   ("min", ["==>", "@"]),
-  ("list", ["LIST_TO_SET", "SET_TO_LIST"]),
+  ("list", ["LIST_TO_SET", "SET_TO_LIST", "GENLIST", "SNOC"]),
   ("relation", ["RTC"]),
   ("toto", ["apto"]),
   ("fcp", ["dimindex"]),

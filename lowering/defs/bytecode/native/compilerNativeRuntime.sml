@@ -123,6 +123,9 @@ structure compilerNativeRuntime = struct
   fun hn_DELETE s y = fn x => x <> y andalso s x
   fun hn_COMPL s = fn x => not (s x)
   fun hn_LIST_TO_SET l = fn x => List.exists (fn y => y = x) l
+  (* GENLIST's definition builds the list with SNOC, quadratically. *)
+  fun hn_GENLIST f (n : IntInf.int) = List.tabulate (IntInf.toInt n, f o IntInf.fromInt)
+  fun hn_SNOC x l = l @ [x]
   (* EmitML prints x IN LIST_TO_SET l (the MEM overload) as listML.MEM. *)
   structure listML = struct fun MEM x l = List.exists (fn y => y = x) l end
   fun hn_SUBSET _ _ = stuck "SUBSET"
