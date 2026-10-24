@@ -6481,10 +6481,9 @@ Resume compile_call_int_shape[buffer_return]:
   qexists_tac `\u st. plain_operand st rbuf.buf_operand` >> conj_tac
   >- (gen_tac >> simp[shape_step_def, shape_extends_refl,
                      value_shape_ok_def, loc_shape_ok_def, base_ptr_def]) >>
-  `emit_void INVOKE (Label (nsid_to_string func_id)::rbuf.buf_operand::invoke_args) =
-   emit_inst INVOKE (Label (nsid_to_string func_id)::rbuf.buf_operand::invoke_args) []` by
+  `!ops. emit_void INVOKE ops = emit_inst INVOKE ops []` by
     simp[FUN_EQ_THM, emit_void_eq, emit_inst_eq] >>
-  pop_assum SUBST1_TAC >>
+  pop_assum (fn th => REWRITE_TAC [th]) >>
   shape_under_tac shape_step_emit_inst_guarded_framed
     `\st. plain_operand st rbuf.buf_operand /\ EVERY (plain_operand st) invoke_args` >>
   conj_tac
@@ -6502,10 +6501,9 @@ Resume compile_call_int_shape[void_return]:
   qexists_tac `\u st. T` >> conj_tac
   >- (gen_tac >> simp[shape_step_def, shape_extends_refl, value_shape_ok_def,
                      plain_operand_def, stackPlanTypesTheory.is_label_operand_def]) >>
-  `emit_void INVOKE (Label (nsid_to_string func_id)::invoke_args) =
-   emit_inst INVOKE (Label (nsid_to_string func_id)::invoke_args) []` by
+  `!ops. emit_void INVOKE ops = emit_inst INVOKE ops []` by
     simp[FUN_EQ_THM, emit_void_eq, emit_inst_eq] >>
-  pop_assum SUBST1_TAC >>
+  pop_assum (fn th => REWRITE_TAC [th]) >>
   shape_under_tac shape_step_emit_inst_guarded_framed `\st. EVERY (plain_operand st) invoke_args` >>
   simp[shape_stable_plain_operands] >> conj_tac
   >- (shape_opcode_tac >> rpt strip_tac >> gvs[EVERY_MEM] >>
