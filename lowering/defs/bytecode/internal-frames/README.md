@@ -90,6 +90,10 @@ It fails with last-occurrence deduplication. The #652 declaration witness checks
 declaration *then*
 emission, rather than expecting declaration alone to emit ALLOCA. Existing gas and
 call-activation regression statements are unchanged; only their proofs were repaired.
+`supported_internal_context_rejections` now retains its four internal-call cases;
+the four local/loop cases move to `supported_internal_locals_and_loops` with
+positive expectations, matching the removed internal-body shape guard. All eight
+concrete cases remain covered.
 
 ## Reproducing focused checks
 
