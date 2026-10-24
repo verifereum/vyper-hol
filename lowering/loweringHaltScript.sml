@@ -73,6 +73,18 @@ Proof
   simp[update_var_def, lookup_var_def, FLOOKUP_UPDATE]
 QED
 
+(* TSTORE writes its value at its key in the running contract's transient
+   storage. *)
+Theorem step_TSTORE:
+  !op1 op2 v1 v2 id s.
+    eval_operand op1 s = SOME v1 /\ eval_operand op2 s = SOME v2 ==>
+    step_inst_base (mk_inst id TSTORE [op1; op2] []) s = OK (tstore v1 v2 s)
+Proof
+  rpt strip_tac >>
+  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+  simp[mk_inst_def, exec_write2_def]
+QED
+
 (* ===== Return bytes ===== *)
 
 (* The source's return value of a word type (is_word_type: also address
@@ -321,7 +333,288 @@ Proof
   simp[]
 QED
 
+(* ===== Returns that release the lock ===== *)
+
+(* The optional unlock with a transient lock: nothing, or, for a
+   nonreentrant function that is not a view, one TSTORE of 0 at the lock
+   key. *)
+Theorem optional_unlock_code:
+  !nr nkey ut iv st st'.
+    (if nr then compile_nonreentrant_unlock nkey ut iv else comp_return ())
+      st = ((), st') /\
+    (nr /\ ~iv ==> ut) ==>
+    st' =
+      if nr /\ ~iv then
+        st with <| cs_current_insts :=
+                     st.cs_current_insts ++
+                     [mk_inst st.cs_next_id TSTORE [Lit (n2w nkey); Lit 0w] []];
+                   cs_next_id := st.cs_next_id + 1 |>
+      else st
+Proof
+  rpt strip_tac >> Cases_on `nr` >> Cases_on `iv` >>
+  gvs[compile_nonreentrant_unlock_def, comp_return_def, emit_void_def,
+      comp_bind_def, fresh_id_def, emit_def]
+QED
+
+(* Running it: the TSTORE writes 0 at the key in the transient storage of
+   the running contract, and changes nothing else. *)
+Theorem optional_unlock_frag:
+  !ctx nr nkey ut iv st st' P Q R.
+    (if nr then compile_nonreentrant_unlock nkey ut iv else comp_return ())
+      st = ((), st') /\
+    (nr /\ ~iv ==> ut) /\
+    (!s. P s ==>
+         Q ((if nr /\ ~iv then tstore (n2w nkey) 0w s else s) with
+              vs_inst_idx := LENGTH st'.cs_current_insts)) ==>
+    frag_exec ctx st st' P Q R
+Proof
+  rpt strip_tac >> drule_all optional_unlock_code >> strip_tac >>
+  irule frag_exec_run_inst_seq >>
+  Cases_on `nr` >> Cases_on `iv` >>
+  gvs[exprLoweringPropsTheory.emitted_insts_def,
+      exprLoweringPropsTheory.run_inst_seq_def, DROP_LENGTH_APPEND] >>
+  simp[mk_inst_def, is_terminator_def] >> rpt strip_tac >>
+  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+  simp[exec_write2_def, eval_operand_def]
+QED
+
+(* A return without a value, or a fallthrough, in an external function:
+   the optional unlock, then a STOP. *)
+Theorem unlock_stop_frag:
+  !ctx nr nkey ut iv st x st' P Q R.
+    comp_ignore_bind
+      (if nr then compile_nonreentrant_unlock nkey ut iv else comp_return ())
+      (emit_inst STOP [] []) st = (x, st') /\
+    (nr /\ ~iv ==> ut) /\
+    (!s ss. P s /\ ss.vs_returndata = [] /\
+            ss.vs_accounts = s.vs_accounts /\
+            ss.vs_transient =
+              (if nr /\ ~iv then (tstore (n2w nkey) 0w s).vs_transient
+               else s.vs_transient) /\
+            ss.vs_logs = s.vs_logs /\ ss.vs_requests = s.vs_requests ==>
+            R (Halt ss)) ==>
+    frag_exec ctx st st' P Q R
+Proof
+  rpt strip_tac >>
+  Cases_on `(if nr then compile_nonreentrant_unlock nkey ut iv
+             else comp_return ()) st` >>
+  rename1 `_ st = (u, st1)` >> Cases_on `u` >>
+  `st'.cs_blocks = st1.cs_blocks /\ st'.cs_current_bb = st1.cs_current_bb /\
+   st'.cs_current_insts =
+     st1.cs_current_insts ++ [mk_inst st1.cs_next_id STOP [] []]` by
+    (qpat_x_assum `comp_ignore_bind _ _ _ = _` mp_tac >>
+     REWRITE_TAC[comp_ignore_bind_def, comp_bind_def] >>
+     qpat_x_assum `_ st = ((), st1)` (fn th => REWRITE_TAC[th]) >>
+     simp[emit_inst_def, comp_bind_def, fresh_id_def, emit_def] >>
+     rpt strip_tac >> gvs[]) >>
+  drule_all optional_unlock_code >> strip_tac >>
+  `cs_extends st st1` by
+    (qpat_x_assum `st1 = _` SUBST1_TAC >> irule cs_extends_same_block >>
+     rw[]) >>
+  qpat_x_assum `st1 = _` kall_tac >>
+  qspecl_then [`ctx`, `st`, `st1`, `st'`, `P`, `\s1. ?s. P s /\
+                  s1 = (if nr /\ ~iv then tstore (n2w nkey) 0w s else s) with
+                         vs_inst_idx := LENGTH st1.cs_current_insts`, `Q`, `R`] mp_tac
+    frag_exec_seq >>
+  impl_tac >> simp[] >> rpt conj_tac
+  >- (qspecl_then [`ctx`, `nr`, `nkey`, `ut`, `iv`, `st`, `st1`, `P`, `\s1. ?s. P s /\
+                  s1 = (if nr /\ ~iv then tstore (n2w nkey) 0w s else s) with
+                         vs_inst_idx := LENGTH st1.cs_current_insts`,
+                   `R`] mp_tac optional_unlock_frag >>
+      impl_tac >- (simp[] >> metis_tac[]) >> simp[])
+  >- (qspecl_then [`ctx`, `st1`, `st'`, `st1.cs_next_id`, `\s1. ?s. P s /\
+                  s1 = (if nr /\ ~iv then tstore (n2w nkey) 0w s else s) with
+                         vs_inst_idx := LENGTH st1.cs_current_insts`, `Q`, `R`]
+        mp_tac stop_frag >>
+      impl_tac >> simp[] >> simp[PULL_EXISTS] >> rpt strip_tac >>
+      rename1 `P s0` >> first_x_assum irule >>
+      qpat_assum `P s0` (irule_at Any) >>
+      Cases_on `nr` >> Cases_on `iv` >> gvs[halt_state_def, tstore_def])
+  >> irule cs_extends_same_block >> simp[]
+QED
+
+(* The return sequence of compile_external_return is the optional unlock,
+   then the sequence without an unlock. *)
+Theorem compile_external_return_unlock:
+  !rv p rr ei msz nr nkey ut iv st x st'.
+    compile_external_return rv p rr ei msz nr nkey ut iv st = (x, st') ==>
+    ?st1.
+      (if nr then compile_nonreentrant_unlock nkey ut iv else comp_return ())
+        st = ((), st1) /\
+      compile_external_return rv p rr ei msz F nkey ut iv st1 = (x, st')
+Proof
+  rpt strip_tac >>
+  Cases_on `(if nr then compile_nonreentrant_unlock nkey ut iv
+             else comp_return ()) st` >>
+  rename1 `_ st = (u, st1)` >> Cases_on `u` >> qexists_tac `st1` >>
+  qpat_x_assum `compile_external_return _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  REWRITE_TAC[compile_external_return_def, comp_ignore_bind_def,
+              comp_bind_def] >>
+  qpat_x_assum `_ st = ((), st1)` (fn th => REWRITE_TAC[th]) >>
+  simp[comp_return_def]
+QED
+
+(* Returning a primitive word, with the optional unlock first. *)
+Theorem compile_external_return_word_unlock_frag:
+  !ctx op ei msz nr nkey ut iv st x st' w P Q R.
+    compile_external_return (SOME op) T F ei msz nr nkey ut iv st =
+      (x, st') /\
+    (nr /\ ~iv ==> ut) /\ (!y. op = Var y ==> not_fresh_at st y) /\
+    (!s. P s ==> eval_operand op s = SOME w) /\
+    (!s ss. P s /\ ss.vs_returndata = word_to_bytes w T /\
+            ss.vs_accounts = s.vs_accounts /\
+            ss.vs_transient =
+              (if nr /\ ~iv then (tstore (n2w nkey) 0w s).vs_transient
+               else s.vs_transient) /\
+            ss.vs_logs = s.vs_logs /\ ss.vs_requests = s.vs_requests ==>
+            R (Halt ss)) ==>
+    frag_exec ctx st st' P Q R
+Proof
+  rpt strip_tac >>
+  drule compile_external_return_unlock >> strip_tac >>
+  drule_all optional_unlock_code >> strip_tac >>
+  `st1.cs_next_var = st.cs_next_var /\ cs_extends st st1` by
+    (qpat_x_assum `st1 = _` SUBST1_TAC >> rw[] >>
+     irule cs_extends_same_block >> simp[]) >>
+  qpat_x_assum `st1 = _` kall_tac >>
+  `st'.cs_blocks = st1.cs_blocks` by
+    (qpat_x_assum `compile_external_return _ _ _ _ _ F _ _ _ _ = _` mp_tac >>
+     simp[compile_external_return_def, compile_alloc_buffer_def, emit_op_def,
+          emit_void_def, emit_inst_def, comp_bind_def, comp_ignore_bind_def,
+          comp_return_def, fresh_id_def, fresh_var_def, emit_def] >>
+     rpt strip_tac >> gvs[]) >>
+  qspecl_then [`op`, `ei`, `msz`, `F`, `nkey`, `ut`, `iv`, `st1`, `x`, `st'`]
+    mp_tac compile_external_return_word_parts >>
+  simp[] >> strip_tac >>
+  qspecl_then [`ctx`, `st`, `st1`, `st'`, `P`, `\s1. ?s. P s /\
+                  s1 = (if nr /\ ~iv then tstore (n2w nkey) 0w s else s) with
+                         vs_inst_idx := LENGTH st1.cs_current_insts`, `Q`, `R`] mp_tac
+    frag_exec_seq >>
+  impl_tac >> simp[] >> rpt conj_tac
+  >- (qspecl_then [`ctx`, `nr`, `nkey`, `ut`, `iv`, `st`, `st1`, `P`, `\s1. ?s. P s /\
+                  s1 = (if nr /\ ~iv then tstore (n2w nkey) 0w s else s) with
+                         vs_inst_idx := LENGTH st1.cs_current_insts`,
+                   `R`] mp_tac optional_unlock_frag >>
+      impl_tac >- (simp[] >> metis_tac[]) >> simp[])
+  >- (qspecl_then [`ctx`, `op`, `ei`, `msz`, `F`, `nkey`, `ut`, `iv`, `st1`,
+                   `x`, `st'`, `w`, `\s1. ?s. P s /\
+                  s1 = (if nr /\ ~iv then tstore (n2w nkey) 0w s else s) with
+                         vs_inst_idx := LENGTH st1.cs_current_insts`, `Q`, `R`] mp_tac
+        compile_external_return_word_frag >>
+      impl_tac >> simp[] >> simp[PULL_EXISTS] >> rpt conj_tac
+      >- (rpt strip_tac >> gvs[not_fresh_at_def])
+      >- (rpt strip_tac >> rename1 `P s0` >>
+          `eval_operand op s0 = SOME w` by metis_tac[] >>
+          Cases_on `op` >> Cases_on `nr` >> Cases_on `iv` >>
+          gvs[eval_operand_def, lookup_var_def, tstore_def])
+      >> rpt strip_tac >> rename1 `P s0` >> first_x_assum irule >>
+      qpat_assum `P s0` (irule_at Any) >>
+      Cases_on `nr` >> Cases_on `iv` >> gvs[tstore_def])
+  >> irule cs_extends_same_block >> simp[]
+QED
+
+(* A return without a value, in an external function, with the optional
+   unlock first. *)
+Theorem compile_return_none_external_unlock_frag:
+  !ctx cenv lctx ty st x st' nr nkey ut iv P Q R.
+    compile_stmt cenv lctx ty (Return NONE) st = (x, st') /\
+    cenv.ce_return_pc = NONE /\
+    cenv.ce_nonreentrant = (nr, nkey, ut, iv) /\ (nr /\ ~iv ==> ut) /\
+    (!s ss. P s /\ ss.vs_returndata = [] /\
+            ss.vs_accounts = s.vs_accounts /\
+            ss.vs_transient =
+              (if nr /\ ~iv then (tstore (n2w nkey) 0w s).vs_transient
+               else s.vs_transient) /\
+            ss.vs_logs = s.vs_logs /\ ss.vs_requests = s.vs_requests ==>
+            R (Halt ss)) ==>
+    frag_exec ctx st st' P Q R
+Proof
+  rpt strip_tac >>
+  qspecl_then [`ctx`, `nr`, `nkey`, `ut`, `iv`, `st`, `x`, `st'`, `P`, `Q`,
+               `R`] mp_tac unlock_stop_frag >>
+  impl_tac >> simp[] >> rpt conj_tac
+  >- (qpat_x_assum `compile_stmt _ _ _ _ _ = _` mp_tac >>
+      simp[compile_stmt_def])
+  >> first_assum ACCEPT_TAC
+QED
+
+(* Falling off the end of a function without a return type, with the
+   optional unlock first: from the end sb of the body's code, when it does
+   not end its block. *)
+Theorem compile_guarded_body_stop_unlock_frag:
+  !ctx cenv nr nkey ut iv stmts st x st' sa sb P Q R.
+    compile_guarded_body cenv nr nkey ut iv stmts NONE st = (x, st') /\
+    (nr /\ ~iv ==> ut) /\
+    (if nr then compile_nonreentrant_lock nkey ut iv else comp_return ()) st =
+      ((), sa) /\
+    compile_stmts cenv NoLoop (BaseT BoolT) stmts sa = ((), sb) /\
+    ~block_is_terminated sb /\
+    (!s ss. P s /\ ss.vs_returndata = [] /\
+            ss.vs_accounts = s.vs_accounts /\
+            ss.vs_transient =
+              (if nr /\ ~iv then (tstore (n2w nkey) 0w s).vs_transient
+               else s.vs_transient) /\
+            ss.vs_logs = s.vs_logs /\ ss.vs_requests = s.vs_requests ==>
+            R (Halt ss)) ==>
+    frag_exec ctx sb st' P Q R
+Proof
+  rpt strip_tac >>
+  qspecl_then [`ctx`, `nr`, `nkey`, `ut`, `iv`, `sb`, `x`, `st'`, `P`, `Q`,
+               `R`] mp_tac unlock_stop_frag >>
+  impl_tac >> simp[] >> rpt conj_tac
+  >- (qpat_x_assum `compile_guarded_body _ _ _ _ _ _ _ _ = _` mp_tac >>
+      simp[compile_guarded_body_def, comp_bind_def, comp_ignore_bind_def,
+           comp_get_def])
+  >> first_assum ACCEPT_TAC
+QED
+
 (* ===== The effects compared on success ===== *)
+
+(* With state_rel at the return, a Halt that leaves the effects as they
+   were, except for the optional unlock's TSTORE, gives the effects
+   external_call_result_rel compares on success, from the state es' after
+   the source releases the lock at the same key. *)
+Theorem external_halt_success_unlock:
+  !func cenv cx es es' s ss nr nkey iv tops tx srcs exps layouts.
+    state_rel func cenv cx es s /\
+    s.vs_accounts = process_deletions es.pending_deletions es.accounts /\
+    s.vs_transient = es.tStorage /\
+    (if nr /\ ~iv then release_nonreentrant_lock cx.txn.target nkey
+     else vyperState$return ()) es = (INL (), es') /\
+    ss.vs_accounts = s.vs_accounts /\
+    ss.vs_transient =
+      (if nr /\ ~iv then (tstore (n2w nkey) 0w s).vs_transient
+       else s.vs_transient) /\
+    ss.vs_logs = s.vs_logs /\ ss.vs_requests = s.vs_requests ==>
+    ss.vs_accounts =
+      (finalize_pending_deletions
+         (abstract_machine_from_state srcs exps layouts es')).accounts /\
+    ss.vs_transient =
+      (finalize_pending_deletions
+         (abstract_machine_from_state srcs exps layouts es')).tStorage /\
+    logs_correspond (compiled_event_info tops) (type_env tops) tx.target
+      (finalize_pending_deletions
+         (abstract_machine_from_state srcs exps layouts es')).logs
+      ss.vs_logs /\
+    ss.vs_requests = es'.requests
+Proof
+  rpt gen_tac >> strip_tac >>
+  `es' = es with tStorage := ss.vs_transient` by
+    (Cases_on `nr` >> Cases_on `iv` >>
+     gvs[release_nonreentrant_lock_def, vyperStateTheory.bind_def,
+         get_transient_storage_def, update_transient_def,
+         vyperStateTheory.return_def, tstore_def, state_rel_def,
+         call_ctx_rel_def, update_transient_storage_def,
+         lookup_transient_storage_def,
+         evaluation_state_component_equality]) >>
+  `log_entry_equiv cenv cx.txn.target = $= /\
+   log_entry_corresponds (compiled_event_info tops) (type_env tops)
+     tx.target = $=` by
+    simp[FUN_EQ_THM, log_entry_equiv_def,
+         log_entry_corresponds_concrete_event] >>
+  fs[state_rel_def, logs_rel_def, logs_correspond_def, LIST_REL_eq,
+     finalize_pending_deletions_def, abstract_machine_from_state_def]
+QED
 
 (* With state_rel at the return, a Halt that leaves the effects as they
    were gives the effects external_call_result_rel compares on success. *)
@@ -345,11 +638,8 @@ Theorem external_halt_success:
     ss.vs_requests = es.requests
 Proof
   rpt strip_tac >>
-  `log_entry_equiv cenv cx.txn.target = $= /\
-   log_entry_corresponds (compiled_event_info tops) (type_env tops)
-     tx.target = $=` by
-    simp[FUN_EQ_THM, log_entry_equiv_def,
-         log_entry_corresponds_concrete_event] >>
-  fs[state_rel_def, logs_rel_def, logs_correspond_def, LIST_REL_eq,
-     finalize_pending_deletions_def, abstract_machine_from_state_def]
+  qspecl_then [`func`, `cenv`, `cx`, `es`, `es`, `s`, `ss`, `F`, `0`, `F`,
+               `tops`, `tx`, `srcs`, `exps`, `layouts`] mp_tac
+    external_halt_success_unlock >>
+  simp[vyperStateTheory.return_def]
 QED
