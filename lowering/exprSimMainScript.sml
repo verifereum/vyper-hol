@@ -22,8 +22,6 @@ Ancestors
   exprSimAggregates exprSimBuiltins exprSimCalls exprLowering
   vyperAST vyperTypeCallGraph
 
-val _ = print ("\nIND:\n" ^ thm_to_string compile_expr_ind ^ "\n");
-
 val expr_sizes = [listTheory.list_size_def, vyperASTTheory.expr_size_def,
                   basicSizeTheory.option_size_def];
 
@@ -116,13 +114,24 @@ QED
 (* ===== The theorem ===== *)
 
 Theorem compile_expr_sim_mutual:
-  (!cenv ty e st. expr_sim_ok cenv e) /\
-  (!cenv ret_ty ty bi args st. builtin_sim_ok cenv ret_ty bi args) /\
-  (!cenv vv_ty ty tb ret_ty args st.
-     type_builtin_sim_ok cenv vv_ty tb ret_ty args)
+  (!cenv e. expr_sim_ok cenv e) /\
+  (!cenv ann bi args. builtin_sim_ok cenv ann bi args) /\
+  (!cenv ann tb t args. type_builtin_sim_ok cenv ann tb t args)
 Proof
-  ho_match_mp_tac compile_expr_ind >> rpt conj_tac >> rpt gen_tac >>
-  strip_tac >> goalStack.print_tac "PROBE" >> cheat
+  mp_tac (BETA_RULE (Q.SPECL
+    [`\cenv ty e st. expr_sim_ok cenv e`,
+     `\cenv ret_ty ty bi args st. builtin_sim_ok cenv ret_ty bi args`,
+     `\cenv vv_ty ty tb ret_ty args st.
+        type_builtin_sim_ok cenv vv_ty tb ret_ty args`] compile_expr_ind)) >>
+  impl_tac
+  >- (rpt conj_tac >> rpt gen_tac >> strip_tac
+      >- (irule compile_expr_case_sim >> rw[expr_sim_below_def] >>
+          metis_tac[])
+      >- (irule compile_builtin_case_sim >> rw[expr_sim_below_def] >>
+          metis_tac[]) >>
+      irule compile_type_builtin_case_sim >> rw[expr_sim_below_def] >>
+      metis_tac[]) >>
+  rw[]
 QED
 
 Theorem compile_expr_sim:
