@@ -15,10 +15,22 @@
  *   compile_abi_encode_sim, compile_abi_decode_sim — abi_encode (#551),
  *                           abi_decode with its validation aborts, row 4
  *
- * The operands of a struct or array literal (and of a call) are a list:
- * their lemmas get expr_sim_ok of each (expr_sim_below_mem), and composing
- * them needs the operand composition of #636's Infrastructure (a value an
- * earlier operand left in memory survives a later operand's fragment).
+ * compile_struct_lit_sim is false as the lowering stands: the StructLit case
+ * passes the caller's ty, not the literal's StructT, to compile_struct_lit,
+ * which takes the field layout from it.  At any other ty every field gets
+ * 32 bytes, so a struct with a uint256[2] field followed by a uint256 stores
+ * the second field at offset 32, not 64.  The fix is in the lowering (take
+ * the layout from the literal's own name, as Vyper does).
+ *
+ * The elements of a struct or array literal are lowered as
+ * cfn ...; ADD ...; unwrap_value, so the code from the start is not
+ * lower_value's fragment whenever unwrap_value loads, and an element that
+ * is a storage or transient array evaluates to an ArrayRef.  The induction
+ * hypothesis (expr_sim_ok of each element, expr_sim_below_mem) covers
+ * neither: these lemmas need a judgment on compile_expr's value (see
+ * exprSimHyps), and composing the elements needs the operand composition
+ * of #636's Infrastructure (a value an earlier operand left in memory
+ * survives a later operand's fragment).
  *)
 
 Theory exprSimAggregates

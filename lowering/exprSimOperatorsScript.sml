@@ -24,15 +24,20 @@
  *                              ** and pow_mod (#572) and shifts of narrower
  *                              integers, which the type system admits
  *                              (well_typed_binop ShL/ShR) but the lowering
- *                              does not truncate (#572).  Operators rows
+ *                              does not truncate (#572), and shifts by a
+ *                              negative amount, where the source raises
+ *                              and the lowering shifts.  Operators rows
  *                              2-5.
- *   compile_bop_other_sim    — == and != on address, bytesN and bytestrings,
+ *   compile_bop_other_sim    — == and != on address, bytesN and bytestrings
+ *                              (msg.sender == owner lands here),
  *                              in and not in on arrays (#569), Operators
  *                              row 6
  *   compile_not_sim, compile_neg_sim (#572), compile_abs_sim — row 7
- *   compile_ifexp_sim        — row 9, aggregate ternaries per #561
- * The and/or chains (row 8, #556) are Bop And/Or on booleans, inside
- * binop_frag_typed.
+ *   compile_ifexp_sim        — row 9, aggregate ternaries per #561; also
+ *                              row 8, the and/or chains (#556), which the
+ *                              frontend desugars to nested IfExps
+ *                              (translate_boolop).  Bop And/Or are the
+ *                              bitwise & and |.
  *
  * Compile-side facts, cheated (the shape #674's compile_expr_shape
  * proves for the shape judgment):
@@ -40,6 +45,9 @@
  *                              appends, hands out its variables, and
  *                              returns a variable it handed out or a literal
  *   compile_binop_shape      — compile_binop only appends
+ * compile_bop_word_sim rests on these two and on binop_frag_typed.  Both are
+ * for word types only; the compound non-word cases need #674's
+ * compile_expr_shape.
  *)
 
 Theory exprSimOperators
@@ -188,6 +196,7 @@ QED
 
 Theorem compile_bop_other_sim:
   !ctx func cenv cx env ty ann bop args es.
+    expr_sim_below cenv (list_size expr_size args) /\
     expr_sim_pre cenv cx env (Builtin ann (Bop bop) args) es /\
     (!e1 e2. args = [e1; e2] ==>
              ~(word_value_type (expr_type e1) /\

@@ -21,8 +21,13 @@
  * Cheated, for the later #636 PRs:
  *   compile_name_other_sim   — locals of other types: address, bytesN and
  *                              memory-backed (#636 Leaves, row 1)
- *   compile_literal_other_sim — bytesN, bytes and string literals (row 2)
- *   compile_toplevel_name_sim (row 3), compile_flag_member_sim (row 4)
+ *   compile_literal_other_sim — address, bytesN, bytes and string literals
+ *                              (row 2)
+ *   compile_toplevel_name_sim (row 3), compile_flag_member_sim (row 4).
+ *                              compile_toplevel_name_sim needs every
+ *                              module variable in ce_vars (else the
+ *                              lowering emits INVALID), which
+ *                              storage_vars_rel does not give.
  *   compile_prevhash_sim     — block.prevhash (row 5).  Unprovable as the
  *                              definitions stand: the source raises a
  *                              RuntimeError where BLOCKHASH returns 0 (#671),
