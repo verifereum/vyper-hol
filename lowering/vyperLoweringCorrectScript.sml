@@ -482,10 +482,8 @@ Proof
   cheat
 QED
 
-(* S2: planned admission, Milestone 5.  loweringShapeProps proves it as
-   lower_vyper_runtime_unit_source_unit_ok_names for internal function names
-   without "(", which keep internal entry labels distinct
-   (internal_fn_label_11). *)
+(* S2: planned admission, Milestone 5.  loweringShapeProps proves the same
+   statement as lower_vyper_runtime_unit_source_unit_ok_names. *)
 Theorem lower_vyper_runtime_unit_source_unit_ok:
   !tops rpolicy unit.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\ supported_program tops
