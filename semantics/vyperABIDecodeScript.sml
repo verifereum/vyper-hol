@@ -14,7 +14,7 @@ Libs
      vyper_abi_dec_fast / vyper_abi_valid_enc_fast
                            recursive copies with sequential numeric
                            scalar-array fast paths
-     vyper_abi_dec_eq_fast / vyper_abi_valid_enc_eq_fast
+     vyper_abi_dec_fast_eq / vyper_abi_valid_enc_fast_eq
                            unconditional implementation equivalence
 
    Helper (internal):
@@ -321,13 +321,6 @@ Proof
     Once vyper_abi_valid_enc_def]
 QED
 
-Theorem vyper_abi_drop_suffix:
-  ∀b bs a. DROP a (DROP b bs) = DROP (b + a) bs
-Proof
-  Induct_on `b` >> simp[]
-  >> Cases_on `bs` >> simp[ADD_CLAUSES]
-QED
-
 (* Helper: suffix invariant; no validity or in-range assumption needed. *)
 Theorem vyper_abi_dec_array_scalars:
   ∀n t bs boff hoff acc. vyper_abi_scalar t ⇒
@@ -338,7 +331,7 @@ Proof
   >- simp[Once vyper_abi_dec_def, vyper_abi_dec_scalars_def]
   >> drule vyper_abi_scalar_properties >> strip_tac
   >> simp[Once vyper_abi_dec_def, vyper_abi_dec_scalars_def,
-          vyper_abi_drop_suffix, ADD_COMM]
+          DROP_DROP_T, ADD_COMM]
 QED
 
 Theorem vyper_abi_valid_array_scalars:
@@ -350,7 +343,7 @@ Proof
   >- simp[Once vyper_abi_valid_enc_def, vyper_abi_valid_scalars_def]
   >> drule vyper_abi_scalar_properties >> strip_tac
   >> simp[Once vyper_abi_valid_enc_def, vyper_abi_valid_scalars_def,
-          vyper_abi_drop_suffix, LENGTH_DROP, SUB_SUB, ADD_COMM]
+          DROP_DROP_T, LENGTH_DROP, SUB_SUB, ADD_COMM]
   >> Cases_on `hoff + 32 ≤ LENGTH bs` >> fs[] >> decide_tac
 QED
 
@@ -360,7 +353,7 @@ Theorem vyper_abi_dec_scalar_array_eq:
 Proof
   strip_tac >> drule vyper_abi_scalar_properties >> strip_tac
   >> simp[Once vyper_abi_dec_def, vyper_abi_dec_scalar_array_def,
-          vyper_abi_dec_array_scalars, vyper_abi_drop_suffix, ADD_COMM]
+          vyper_abi_dec_array_scalars, DROP_DROP_T, ADD_COMM]
 QED
 
 Theorem vyper_abi_valid_scalar_array_eq:
@@ -370,7 +363,7 @@ Theorem vyper_abi_valid_scalar_array_eq:
 Proof
   strip_tac >> drule vyper_abi_scalar_properties >> strip_tac
   >> simp[Once vyper_abi_valid_enc_def, vyper_abi_valid_scalar_array_def,
-          vyper_abi_valid_array_scalars, vyper_abi_drop_suffix, ADD_COMM]
+          vyper_abi_valid_array_scalars, DROP_DROP_T, ADD_COMM]
 QED
 
 (* ===== Recursive fast paths ===== *)
@@ -584,18 +577,4 @@ Proof
   >> simp[Once vyper_abi_valid_enc_fast_def] >> rw[]
   >> gvs[vyper_abi_valid_static_scalar_array_eq, vyper_abi_valid_scalar_array_eq]
   >> simp[Once vyper_abi_valid_enc_def]
-QED
-
-(* TOP-LEVEL: unconditional equations, including malformed/truncated
-   encodings and wrapped heads. Used before CV translation, not as axioms. *)
-Theorem vyper_abi_dec_eq_fast:
-  ∀ty bs off. vyper_abi_dec ty bs off = vyper_abi_dec_fast ty bs off
-Proof
-  simp[vyper_abi_dec_fast_eq]
-QED
-
-Theorem vyper_abi_valid_enc_eq_fast:
-  ∀ty bs off. vyper_abi_valid_enc ty bs off = vyper_abi_valid_enc_fast ty bs off
-Proof
-  simp[vyper_abi_valid_enc_fast_eq]
 QED

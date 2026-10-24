@@ -2,8 +2,8 @@ Theory vyperLogPreservation
 
 Ancestors
   pair option sum vyperMisc vyperCall vyperStatePreservation vyperCallFrame vyperCallOutcomeFrame
-  vyperState[ignore_grammar] vyperInterpreter[ignore_grammar] vyperCallOutcome[ignore_grammar]
-  vyperCreate
+  vyperState[ignore_grammar] vyperInterpreter[ignore_grammar] vyperCallOutcome[ignore_grammar] vyperCallOutcomeProps[ignore_grammar]
+  vyperCreate vyperCreateFrame
 
 (* Keep existing free statement-list variables when importing oracle grammar. *)
 val _ = hide "body";
@@ -1545,7 +1545,7 @@ Proof
        get_transient_storage_def, lift_option_def, lift_option_type_def,
        check_def, update_accounts_def, update_transient_def, append_logs_def,
        vyperCallOutcomeTheory.take_call_outcome_def,
-       vyperCallOutcomeTheory.adopt_call_outcome_equation, LET_THM, UNCURRY,
+       vyperCallOutcomePropsTheory.adopt_call_outcome_equation, LET_THM, UNCURRY,
        COND_RATOR, option_CASE_rator, prod_CASE_rator, sum_CASE_rator] >>
   strip_tac >>
   gvs[AllCaseEqs(), log_extends_def, rich_listTheory.IS_PREFIX_APPEND]
@@ -2210,7 +2210,7 @@ Proof
        get_transient_storage_def, lift_option_def, lift_option_type_def,
        check_def, lift_sum_runtime_def, update_accounts_def,
        update_transient_def, append_logs_def, vyperCallOutcomeTheory.take_call_outcome_def,
-       vyperCallOutcomeTheory.adopt_call_outcome_equation, LET_THM, UNCURRY,
+       vyperCallOutcomePropsTheory.adopt_call_outcome_equation, LET_THM, UNCURRY,
        COND_RATOR, option_CASE_rator, prod_CASE_rator, sum_CASE_rator] >>
   strip_tac >>
   gvs[AllCaseEqs(), log_extends_def, rich_listTheory.IS_PREFIX_APPEND]
