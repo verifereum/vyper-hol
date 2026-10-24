@@ -194,38 +194,74 @@ Termination
                             | INR (_, ts) => list_size type_size ts)`
 End
 
-(* Venom label of an internal function, from its lookup name (nsid_to_string
-   of its nsid) and declared parameter types, defaulted ones included.
-   The space keeps it apart from every source identifier, external entry
-   label ("fn_" ++ name), unit entry ("__entry"/"__deploy"), codegen label
-   ("revert", "code_end") and fresh label ("@..."). Python's label also has
-   the function id after "internal "; the lookup name is already unique
-   among a unit's internal functions, so it is left out.
+(* Venom label of an internal function, from its function id, its lookup
+   name (nsid_to_string of its nsid) and declared parameter types,
+   defaulted ones included. The space keeps it apart from every source
+   identifier, external entry label ("fn_" ++ name), unit entry
+   ("__entry"/"__deploy"), codegen label ("revert", "code_end") and fresh
+   label ("@..."); the id, a decimal followed by a space, keeps the labels
+   of differently numbered functions apart whatever their names.
    Mirrors Python: codegen_venom/module.py _generate_internal_function and
    codegen_venom/expr.py lower_Call (internal calls). *)
 Definition internal_fn_label_def:
-  internal_fn_label (name : string) (arg_tys : type list) (is_ctor : bool) =
-    "internal " ++ name ++ "(" ++ vyper_type_strs "," arg_tys ++ ")" ++
+  internal_fn_label (fn_id : num) (name : string) (arg_tys : type list)
+                    (is_ctor : bool) =
+    "internal " ++ toString fn_id ++ " " ++ name ++ "(" ++
+    vyper_type_strs "," arg_tys ++ ")" ++
     (if is_ctor then "_deploy" else "_runtime")
 End
 
 Theorem internal_fn_label_prefix:
-  !name arg_tys is_ctor. isPREFIX "internal " (internal_fn_label name arg_tys is_ctor)
+  !fn_id name arg_tys is_ctor.
+    isPREFIX "internal " (internal_fn_label fn_id name arg_tys is_ctor)
 Proof
   simp[internal_fn_label_def]
+QED
+
+Theorem toString_no_space[local]:
+  !n : num. ~MEM #" " (toString n)
+Proof
+  gen_tac >> strip_tac >>
+  qspec_then `n` mp_tac ASCIInumbersTheory.EVERY_isDigit_num_to_dec_string >>
+  REWRITE_TAC [listTheory.EVERY_MEM] >>
+  disch_then drule >> EVAL_TAC
+QED
+
+Theorem APPEND_sep_11[local]:
+  !s1 s2 c r1 r2.
+    ~MEM c s1 /\ ~MEM c s2 /\ s1 ++ ([c] ++ r1) = s2 ++ ([c] ++ r2) ==>
+    s1 = s2
+Proof
+  Induct >> Cases_on `s2` >> rw[] >>
+  first_x_assum irule >> metis_tac[listTheory.APPEND_ASSOC]
+QED
+
+(* Equal labels have equal function ids. *)
+Theorem internal_fn_label_id_11:
+  !i1 i2 n1 n2 tys1 tys2 c1 c2.
+    internal_fn_label i1 n1 tys1 c1 = internal_fn_label i2 n2 tys2 c2 ==>
+    i1 = i2
+Proof
+  rpt gen_tac >>
+  REWRITE_TAC [internal_fn_label_def, GSYM listTheory.APPEND_ASSOC,
+               listTheory.APPEND_11] >>
+  strip_tac >> drule_at Any APPEND_sep_11 >> simp[toString_no_space]
 QED
 
 (* Equal labels name the same function, for names without "(" (source
    identifiers and nsid_to_string values). *)
 Theorem internal_fn_label_11:
-  !n1 n2 tys1 tys2 c1 c2.
+  !i1 i2 n1 n2 tys1 tys2 c1 c2.
     ~MEM #"(" n1 /\ ~MEM #"(" n2 /\
-    internal_fn_label n1 tys1 c1 = internal_fn_label n2 tys2 c2 ==>
+    internal_fn_label i1 n1 tys1 c1 = internal_fn_label i2 n2 tys2 c2 ==>
     n1 = n2
 Proof
-  simp[internal_fn_label_def] >>
-  Induct >> Cases_on `n2` >> rw[] >> gvs[] >>
-  first_x_assum irule >> metis_tac[]
+  rpt gen_tac >> strip_tac >>
+  `i1 = i2` by metis_tac[internal_fn_label_id_11] >>
+  qpat_x_assum `internal_fn_label _ _ _ _ = _` mp_tac >>
+  ASM_REWRITE_TAC [internal_fn_label_def, GSYM listTheory.APPEND_ASSOC,
+               listTheory.APPEND_11] >>
+  strip_tac >> drule_at Any APPEND_sep_11 >> gs[]
 QED
 
 (* Key of a module-level variable (storage, transient, HashMap, immutable) in
@@ -438,6 +474,10 @@ Datatype:
        func_name → arg types. Spells the INVOKE target (internal_fn_label).
        Mirrors Python: func_t.arguments in expr.py lower_Call *)
     ce_func_param_types : string -> type list;
+    (* Internal function ids: func_name → id. Spells the INVOKE target
+       (internal_fn_label).
+       Mirrors Python: func_t._function_id in expr.py lower_Call *)
+    ce_func_ids : string -> num;
     (* Nonreentrant lock info for explicit return statements:
        (is_nonreentrant, nkey, use_transient, is_view).
        Python: stmt.py _lower_external_return calls emit_nonreentrant_unlock.

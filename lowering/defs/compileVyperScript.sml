@@ -356,6 +356,23 @@ Definition build_func_param_types_def:
     | _ => rest_map
 End
 
+(* Function ids for internal labels (internal_fn_label): a function's
+   position among the source's function declarations, counting from n, and
+   the first non-external declaration of a name wins, as in
+   build_func_param_types. Python numbers the functions it compiles in
+   reachability order instead (codegen_venom/module.py IDGenerator); the
+   labels only need ids that differ for different names. *)
+Definition build_func_ids_def:
+  build_func_ids (n : num) ([] : toplevel list) = (K 0 : string -> num) ∧
+  build_func_ids n (top :: rest) =
+    case top of
+      FunctionDecl vis _ _ _ fname _ _ _ _ =>
+        let rest_map = build_func_ids (n + 1) rest in
+        if vis = External then rest_map
+        else (λs. if s = fname then n else rest_map s)
+    | _ => build_func_ids n rest
+End
+
 (* ===== Positional Args for ABI Decoding ===== *)
 
 Definition build_positional_arg_def:
@@ -484,6 +501,7 @@ Definition build_compile_env_def:
        ce_is_ctor := (vis = Deploy);
        ce_func_info := func_info;
        ce_func_param_types := build_func_param_types tops;
+       ce_func_ids := build_func_ids 0 tops;
        ce_nonreentrant := (F, 0n, use_transient_locks, mut = View);
        (* Default: overridden by package_*_fn from FunctionDecl raw_return field *)
        ce_raw_return := F;
@@ -531,6 +549,44 @@ Proof
   rpt strip_tac
   >> simp[build_compile_env_def]
   >> rpt (pairarg_tac >> gvs[])
+QED
+
+Theorem build_compile_env_ce_func_ids:
+  !tops vis mut func_name args ret_type (body : stmt list) use_trans.
+    (build_compile_env tops vis mut func_name args ret_type body use_trans).
+      ce_func_ids =
+    build_func_ids 0 tops
+Proof
+  rpt strip_tac
+  >> simp[build_compile_env_def]
+  >> rpt (pairarg_tac >> gvs[])
+QED
+
+Theorem build_func_ids_ge[local]:
+  !tops n v fm nr rr s args dflts ret body.
+    v <> External /\ MEM (FunctionDecl v fm nr rr s args dflts ret body) tops ==>
+    n <= build_func_ids n tops s
+Proof
+  Induct >> simp[] >> rpt gen_tac >> Cases_on `h` >>
+  simp[build_func_ids_def] >> rw[] >> gvs[] >>
+  first_x_assum drule_all >> simp[] >>
+  disch_then (qspec_then `n + 1` mp_tac) >> rw[] >> simp[]
+QED
+
+(* Different non-external functions get different ids, so their labels
+   differ (internal_fn_label_id_11). *)
+Theorem build_func_ids_11:
+  !tops n v1 fm1 nr1 rr1 s1 args1 dflts1 ret1 body1
+          v2 fm2 nr2 rr2 s2 args2 dflts2 ret2 body2.
+    v1 <> External /\ v2 <> External /\
+    MEM (FunctionDecl v1 fm1 nr1 rr1 s1 args1 dflts1 ret1 body1) tops /\
+    MEM (FunctionDecl v2 fm2 nr2 rr2 s2 args2 dflts2 ret2 body2) tops /\
+    build_func_ids n tops s1 = build_func_ids n tops s2 ==>
+    s1 = s2
+Proof
+  Induct >> simp[] >> rpt gen_tac >> Cases_on `h` >>
+  simp[build_func_ids_def] >> rw[] >> gvs[] >>
+  metis_tac[build_func_ids_ge, DECIDE ``!n:num. ~(n + 1 <= n)``]
 QED
 
 (* The call site's parameter types for fname are those of the first
@@ -699,7 +755,8 @@ End
 Definition package_internal_fn_def:
   package_internal_fn tops use_trans nkey_map is_ctor_context immutables_len
     (mut, nr, rr, fname, fargs, _, ret, body) =
-    let fn_lbl = internal_fn_label fname (MAP SND fargs) is_ctor_context in
+    let fn_lbl = internal_fn_label (build_func_ids 0 tops fname) fname
+                   (MAP SND fargs) is_ctor_context in
     let sft = make_struct_fields_map tops in
     let sft_fn = get_struct_fields sft in
     let sft_types = (λname. MAP (FST o SND) (sft_fn name)) in
@@ -728,8 +785,8 @@ Theorem package_internal_fn_call_label:
     FST (package_internal_fn tops use_trans nkey_map is_ctor_context
            immutables_len
            (mut, nr, rr, fname, fargs, dflts, ret, body)) =
-    internal_fn_label (nsid_to_string (NONE, fname)) (MAP SND fargs)
-      is_ctor_context
+    internal_fn_label (build_func_ids 0 tops (nsid_to_string (NONE, fname)))
+      (nsid_to_string (NONE, fname)) (MAP SND fargs) is_ctor_context
 Proof
   simp[package_internal_fn_def, nsid_to_string_def]
 QED
@@ -741,7 +798,8 @@ Definition source_internal_fn_descriptor_def:
       (\name. MAP (FST o SND)
                     (get_struct_fields (make_struct_fields_map tops) name)) in
     let rc = returns_stack_count sft_types ret in
-    (internal_fn_label fname (MAP SND fargs) is_ctor_context,
+    (internal_fn_label (build_func_ids 0 tops fname) fname (MAP SND fargs)
+       is_ctor_context,
      rc = 0 /\ ret <> NoneT, rc)
 End
 
