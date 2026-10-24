@@ -979,6 +979,61 @@ QED
 
 (* ===== Loops ===== *)
 
+Theorem frag_exec_loop_layout[local]:
+  !st0 st1 sth stj st2 stb ste st3 stx hdr body exit cnd
+   x0 x1 x2 x3 x4 x5 fn.
+  emit_inst JMP [Label hdr] [] st0 = (x0, st1) /\
+  new_block hdr st1 = (x1, sth) /\
+  emit_inst JNZ [cnd; Label exit; Label body] [] stj = (x2, st2) /\
+  new_block body st2 = (x3, stb) /\
+  emit_inst JMP [Label hdr] [] ste = (x4, st3) /\
+  new_block exit st3 = (x5, stx) /\
+  cs_extends sth stj /\ cs_extends stb ste /\ fn_has_code st0 stx fn ==>
+  fn_has_code sth stj fn /\ fn_has_code stb ste fn /\
+  (?bb. lookup_block st0.cs_current_bb fn.fn_blocks = SOME bb /\
+        get_instruction bb (LENGTH st0.cs_current_insts) =
+          SOME (mk_inst st0.cs_next_id JMP [Label hdr] [])) /\
+  (?bb. lookup_block stj.cs_current_bb fn.fn_blocks = SOME bb /\
+        get_instruction bb (LENGTH stj.cs_current_insts) =
+          SOME (mk_inst stj.cs_next_id JNZ [cnd; Label exit; Label body] [])) /\
+  (?bb. lookup_block ste.cs_current_bb fn.fn_blocks = SOME bb /\
+        get_instruction bb (LENGTH ste.cs_current_insts) =
+          SOME (mk_inst ste.cs_next_id JMP [Label hdr] [])) /\
+  sth.cs_current_bb = hdr /\ sth.cs_current_insts = [] /\
+  stb.cs_current_bb = body /\ stb.cs_current_insts = [] /\
+  stx.cs_current_bb = exit /\ stx.cs_current_insts = []
+Proof
+  rpt gen_tac >> strip_tac >>
+  `cs_extends st0 st1 /\ cs_extends stj st2 /\ cs_extends ste st3` by
+    metis_tac[cs_extends_emit_inst] >>
+  `cs_extends st1 sth /\ cs_extends st2 stb /\ cs_extends st3 stx` by
+    metis_tac[cs_extends_new_block] >>
+  `cs_extends st0 sth` by metis_tac[cs_extends_trans] >>
+  `cs_extends st0 stj` by metis_tac[cs_extends_trans] >>
+  `cs_extends st0 stb` by metis_tac[cs_extends_trans] >>
+  `cs_extends st0 ste` by metis_tac[cs_extends_trans] >>
+  `cs_extends ste stx` by metis_tac[cs_extends_trans] >>
+  `cs_extends stb stx` by metis_tac[cs_extends_trans] >>
+  `cs_extends stj stx` by metis_tac[cs_extends_trans] >>
+  `cs_extends sth stx` by metis_tac[cs_extends_trans] >>
+  rpt conj_tac
+  >- (irule fn_has_code_mid >> simp[] >>
+      qexistsl_tac [`stx`, `st0`] >> simp[])
+  >- (irule fn_has_code_mid >> simp[] >>
+      qexistsl_tac [`stx`, `st0`] >> simp[])
+  >- (irule fn_has_code_emit_new_block >>
+      goal_assum (drule_at Any) >> simp[cs_extends_refl] >>
+      metis_tac[cs_extends_refl])
+  >- (irule fn_has_code_emit_new_block >>
+      rename1 `new_block body_lbl st2 = (x3, stb)` >>
+      qexistsl_tac [`body_lbl`, `st2`, `stb`] >>
+      metis_tac[])
+  >- (irule fn_has_code_emit_new_block >>
+      qexistsl_tac [`exit`, `st3`, `stx`] >>
+      metis_tac[cs_extends_refl]) >>
+  gvs[new_block_def]
+QED
+
 (* A loop as the lowering emits it: a jump to a header block whose
    straight-line code ends in JNZ to the exit or to the body, the body
    fragment, a jump back to the header, and the exit block.  I k holds at
