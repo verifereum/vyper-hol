@@ -19,6 +19,7 @@
  *   external_call_result_rel, source_unit_execution_correct -- oracle boundary
  *   compile_state_ok_initial -- label-space invariant of the initial compile state
  *   external_return_word_result_rel, external_return_prim_result_rel,
+ *   external_return_static_result_rel,
  *   external_return_none_result_rel,
  *   external_fallthrough_result_rel -- S1 halt bridge (#640) for the
  *     return sequences loweringHalt covers
@@ -247,6 +248,47 @@ Proof
                `v0`, `v`, `tops`, `tx`, `srcs`, `exps`, `layouts`, `Q`]
     mp_tac external_return_prim_result_rel >>
   simp[]
+QED
+
+(* A return of a static complex value (tuple, struct, fixed array): the
+   operand points at memory holding the value, and the returned AbiCopy
+   size is its memory size.  The size is below dimword, so the size
+   literal of the copy and the RETURN does not wrap; nothing in the
+   lowering bounds it (vyper rejects allocations of 2^64 bytes or more). *)
+Theorem external_return_static_result_rel:
+  !ctx op m msz nr nkey ut iv st x st' func cenv cx es ret tv v0 v
+     tops tx srcs exps layouts Q.
+    compile_external_return (SOME op) F F (AbiCopy m) msz nr nkey ut iv st =
+      (x, st') /\
+    (nr ==> iv) /\ (!y. op = Var y ==> not_fresh_at st y) /\
+    evaluate_type (type_env tops) ret = SOME tv /\ safe_cast tv v0 = SOME v /\
+    ~is_dynamic (vyper_to_abi_type (type_env tops) ret) /\
+    m = type_memory_size tv /\ m < dimword(:256) ==>
+    frag_exec ctx st st'
+      (\s. state_rel func cenv cx es s /\
+           (?p. eval_operand op s = SOME p /\
+                val_in_memory tv v0 (w2n p) s.vs_memory) /\
+           s.vs_accounts =
+             process_deletions es.pending_deletions es.accounts /\
+           s.vs_transient = es.tStorage)
+      Q
+      (external_call_result_rel tops ret tx
+         (INL v, finalize_pending_deletions
+                   (abstract_machine_from_state srcs exps layouts es),
+          es.requests))
+Proof
+  rpt strip_tac >>
+  qspecl_then [`ctx`, `op`, `m`, `msz`, `nr`, `nkey`, `ut`, `iv`, `st`,
+               `x`, `st'`] mp_tac compile_external_return_copy_frag >>
+  simp[] >> disch_then irule >> simp[] >> rpt strip_tac >>
+  qexists_tac `p` >> simp[] >> rpt strip_tac >>
+  qspecl_then [`tops`, `ret`, `tv`, `v0`, `v`, `w2n p`, `s.vs_memory`]
+    mp_tac return_bytes_static_value >>
+  impl_tac >- asm_rewrite_tac[] >> strip_tac >>
+  qspecl_then [`func`, `cenv`, `cx`, `es`, `s`, `ss`, `tops`, `tx`, `srcs`,
+               `exps`, `layouts`] mp_tac external_halt_success >>
+  impl_tac >- simp[] >>
+  strip_tac >> gvs[external_call_result_rel_def]
 QED
 
 (* A return without a value. *)

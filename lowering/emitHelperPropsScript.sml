@@ -1381,6 +1381,19 @@ Proof
   goal_assum drule >> gvs[]
 QED
 
+Theorem emit_void_MCOPY_run:
+  !dst src sz dw sw nw st st' s.
+    emit_void MCOPY [dst; src; sz] st = ((), st') /\
+    eval_operand dst s = SOME dw /\
+    eval_operand src s = SOME sw /\
+    eval_operand sz s = SOME nw ==>
+    run_inst_seq (emitted_insts st st') s =
+      OK (mcopy (w2n dw) (w2n sw) (w2n nw) s)
+Proof
+  rpt strip_tac >> drule emitted_insts_emit_void >> strip_tac >>
+  gvs[] >> simp[run_inst_seq_def, step_inst_base_def]
+QED
+
 Theorem emit_void_MCOPY_correct:
   ∀ op_dst op_src op_sz dst_v src_v sz_v st st' ss.
     emit_void MCOPY [op_dst; op_src; op_sz] st = ((), st') ∧

@@ -9,6 +9,7 @@ Ancestors
   varsExt exprSim
   valueEncodingProofs
   localPtrsProps
+  structFieldsProps
   loweringShapeDefs
   (* compiler + correctness *)
   vyperCompiler
