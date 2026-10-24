@@ -52,8 +52,9 @@
  *   compile_binop_shape      — compile_binop only appends
  * compile_bop_word_sim rests on these two and on binop_frag_typed, and
  * compile_ifexp_word_sim and exprSimConvert's compile_convert_word_sim on
- * lower_value_word_shape.  Both are for word types only; the compound
- * non-word cases need #674's compile_expr_shape.
+ * lower_value_word_shape.  lower_value_word_shape and compile_binop_shape
+ * are for word types only; the compound non-word cases need #674's
+ * compile_expr_shape.
  *)
 
 Theory exprSimOperators
