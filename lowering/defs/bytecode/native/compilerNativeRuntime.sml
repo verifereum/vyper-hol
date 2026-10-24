@@ -212,7 +212,9 @@ structure compilerNativeRuntime = struct
   val hn_FEMPTY = FM []
   fun bindings (FM l) = l
   val mk = FM
-  fun hn_FUPDATE m (k, v) = mk ((k, v) :: List.filter (fn (k', _) => k' <> k) (bindings m))
+  fun hn_FUPDATE m (k, v) = let val l = bindings m in
+    if List.exists (fn (k', _) => k' = k) l
+    then mk ((k, v) :: List.filter (fn (k', _) => k' <> k) l) else mk ((k, v) :: l) end
   fun hn_FLOOKUP m k =
     case List.find (fn (k', _) => k' = k) (bindings m) of
       SOME (_, v) => SOME v
