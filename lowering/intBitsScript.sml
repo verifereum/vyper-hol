@@ -87,12 +87,12 @@ Theorem int_bitwise_neg:
   !f i j. int_bitwise f i j < 0 <=> f (i < 0) (j < 0)
 Proof
   rpt gen_tac >>
-  qspec_then `i` strip_assume_tac int_bit_large >>
-  qspec_then `j` strip_assume_tac int_bit_large >>
-  qspec_then `int_bitwise f i j` strip_assume_tac int_bit_large >>
-  rename1 `!n. N3 <= n ==> (int_bit n (int_bitwise f i j) <=> _)` >>
-  qspecl_then [`N + N' + N3`, `f`, `i`, `j`] mp_tac int_bit_bitwise >>
-  rpt (first_x_assum (qspec_then `N + N' + N3` mp_tac)) >> simp[]
+  qspec_then `i` (qx_choose_then `N1` assume_tac) int_bit_large >>
+  qspec_then `j` (qx_choose_then `N2` assume_tac) int_bit_large >>
+  qspec_then `int_bitwise f i j` (qx_choose_then `N3` assume_tac)
+    int_bit_large >>
+  qspecl_then [`N1 + N2 + N3`, `f`, `i`, `j`] mp_tac int_bit_bitwise >>
+  rpt (first_x_assum (qspec_then `N1 + N2 + N3` mp_tac)) >> simp[]
 QED
 
 (* A bitwise operation that is false on two clear bits keeps its operands'

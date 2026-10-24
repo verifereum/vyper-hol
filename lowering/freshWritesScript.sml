@@ -61,12 +61,14 @@ QED
 
 (* A pure operation that succeeds writes its one output. *)
 Theorem exec_pure_ok_update:
-  !inst s t.
-    ((?f. exec_pure1 f inst s = OK t) \/ (?f. exec_pure2 f inst s = OK t) \/
-     (?f. exec_pure3 f inst s = OK t)) ==>
-    ?out v. inst.inst_outputs = [out] /\ t = update_var out v s
+  (!f inst s t. exec_pure1 f inst s = OK t ==>
+     ?out v. inst.inst_outputs = [out] /\ t = update_var out v s) /\
+  (!f inst s t. exec_pure2 f inst s = OK t ==>
+     ?out v. inst.inst_outputs = [out] /\ t = update_var out v s) /\
+  (!f inst s t. exec_pure3 f inst s = OK t ==>
+     ?out v. inst.inst_outputs = [out] /\ t = update_var out v s)
 Proof
-  rpt gen_tac >> strip_tac >>
+  rpt conj_tac >> rpt gen_tac >> strip_tac >>
   gvs[exec_pure1_def, exec_pure2_def, exec_pure3_def, AllCaseEqs()] >>
   metis_tac[]
 QED
@@ -80,11 +82,16 @@ Theorem step_fresh_write_op:
 Proof
   rpt gen_tac >> simp[fresh_write_op_def] >> strip_tac >>
   qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-  asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >> strip_tac >>
-  TRY (`?out v. inst.inst_outputs = [out] /\ tt = update_var out v ss` by
-         (irule exec_pure_ok_update >> metis_tac[]) >>
-       gvs[update_var_def, FLOOKUP_UPDATE, venom_state_component_equality] >>
-       NO_TAC) >>
+  asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >> strip_tac
+  >>~- ([`exec_pure1 _ _ _ = OK _`],
+        drule (cj 1 exec_pure_ok_update) >> strip_tac >>
+        gvs[update_var_def, FLOOKUP_UPDATE, venom_state_component_equality])
+  >>~- ([`exec_pure2 _ _ _ = OK _`],
+        drule (cj 2 exec_pure_ok_update) >> strip_tac >>
+        gvs[update_var_def, FLOOKUP_UPDATE, venom_state_component_equality])
+  >>~- ([`exec_pure3 _ _ _ = OK _`],
+        drule (cj 3 exec_pure_ok_update) >> strip_tac >>
+        gvs[update_var_def, FLOOKUP_UPDATE, venom_state_component_equality]) >>
   (* the assertions *)
   pop_assum mp_tac >> rpt (CASE_TAC >> simp[]) >> rw[update_var_def] >>
   simp[FLOOKUP_UPDATE, venom_state_component_equality]
@@ -99,13 +106,15 @@ Theorem run_inst_seq_writes_fresh:
     !x. not_fresh_at st x ==> FLOOKUP tt.vs_vars x = FLOOKUP ss.vs_vars x
 Proof
   Induct >- simp[run_inst_seq_def, venom_state_component_equality] >>
-  rpt gen_tac >> simp[writes_fresh_def, run_inst_seq_def] >> strip_tac >>
-  Cases_on `step_inst_base h ss` >> gvs[] >>
+  qx_gen_tac `inst` >> rpt gen_tac >>
+  simp[writes_fresh_def, run_inst_seq_def] >> strip_tac >>
+  Cases_on `step_inst_base inst ss` >> gvs[] >>
+  rename1 `step_inst_base inst ss = OK s1` >>
   drule_all step_fresh_write_op >> strip_tac >>
-  first_x_assum (qspecl_then [`st`, `v`, `tt`] mp_tac) >>
+  first_x_assum (qspecl_then [`st`, `s1`, `tt`] mp_tac) >>
   simp[writes_fresh_def] >> strip_tac >>
   conj_tac
-  >- (qpat_x_assum `v = _` SUBST_ALL_TAC >>
+  >- (qpat_x_assum `s1 = _` SUBST_ALL_TAC >>
       fs[venom_state_component_equality]) >>
   rpt strip_tac >> fs[EVERY_MEM] >> metis_tac[]
 QED

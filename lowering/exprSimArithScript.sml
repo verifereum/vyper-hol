@@ -22,13 +22,13 @@
  * wraps while the source reverts.
  *
  * TOP-LEVEL:
+ *   unsafe_word_op, unsafe_opcode   — the word operation and opcode of a
+ *                                     wrapping operator
  *   compile_unsafe_sim              — binop_frag for the wrapping operators
  *   compile_checked_sim             — binop_frag for Add, Sub, Mul on integers
  *   compile_divmod_sim              — binop_frag for Div, Mod on integers
  *   compile_decimal_add_sub_mod_sim — binop_frag for Add, Sub, Mod on decimals
  *   compile_decimal_mul_div_sim     — binop_frag for Mul, Div on decimals
- *   binop_frag_straight             — binop_frag from the run facts of a
- *                                     straight_fresh operator
  *   binop_frag_decimal_transfer     — a decimal operator from its int168 one
  *   compile_safe_add_run, compile_safe_sub_run, compile_safe_mul_run
  *                                   — the checked integer runs, by the bound
@@ -281,34 +281,20 @@ Theorem compile_unsafe_sim:
        else Unsigned (type_bits ty)) i2 ==>
     binop_frag ctx func cenv cx bop ty ann bl el v1 v2 es0
 Proof
-  rpt gen_tac >> strip_tac >> simp[binop_frag_def] >> rpt gen_tac >>
-  strip_tac >>
+  rpt gen_tac >> strip_tac >>
   qspecl_then [`cx`, `ann`, `bop`, `ty`, `v1`, `v2`, `es0`, `i1`, `i2`,
                `type_bits ty`] mp_tac bop_result_unsafe >>
   (impl_tac >- asm_rewrite_tac[]) >> strip_tac >>
-  qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es0`,
-     `compile_binop bop x y ty bl el`, `sa`, `sb`, `op`, `val_to_w256 v`,
-     `\ss. eval_operand x ss = SOME (val_to_w256 v1) /\
-           eval_operand y ss = SOME (val_to_w256 v2)`,
-     `\a. F`, `\r. F`, `s0`] mp_tac frag_exec_straight_fresh >>
-  (impl_tac
-   >- (asm_rewrite_tac[] >> BETA_TAC >> rpt conj_tac >> rpt strip_tac >>
-       FIRST [
-         metis_tac[straight_fresh_unsafe] >> NO_TAC,
-         qspecl_then [`x`, `sa`, `ss`] mp_tac eval_operand_drop_fresh >>
-         impl_tac >- first_assum ACCEPT_TAC >>
-         asm_simp_tac std_ss [] >> NO_TAC,
-         qspecl_then [`y`, `sa`, `ss`] mp_tac eval_operand_drop_fresh >>
-         impl_tac >- first_assum ACCEPT_TAC >>
-         asm_simp_tac std_ss [] >> NO_TAC,
-         qpat_x_assum `compile_binop _ _ _ _ _ _ _ = _` mp_tac >>
-         simp[compile_binop_unsafe] >> strip_tac >>
-         irule compile_unsafe_binop_correct >>
-         goal_assum (drule_at (Pat `compile_unsafe_binop`)) >>
-         asm_rewrite_tac[] >> rpt strip_tac >>
-         irule step_unsafe_opcode >> asm_rewrite_tac[]])) >>
-  disch_then (fn th => match_mp_tac (MATCH_MP frag_exec_weaken th)) >>
-  simp[] >> rpt strip_tac >> qexists_tac `v` >> gvs[]
+  match_mp_tac binop_frag_straight >> conj_tac
+  >- (rpt gen_tac >> irule straight_fresh_unsafe >> first_assum ACCEPT_TAC) >>
+  strip_tac >> disj1_tac >> qexists_tac `v` >> asm_rewrite_tac[] >>
+  rpt strip_tac >>
+  qpat_x_assum `compile_binop _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[compile_binop_unsafe] >> strip_tac >>
+  irule compile_unsafe_binop_correct >>
+  goal_assum (drule_at (Pat `compile_unsafe_binop`)) >>
+  asm_rewrite_tac[] >> rpt strip_tac >>
+  irule step_unsafe_opcode >> asm_rewrite_tac[]
 QED
 
 (* ===== Checked arithmetic: the source's bounds ===== *)
@@ -586,72 +572,35 @@ Theorem compile_checked_sim:
     within_int_bound u i1 /\ within_int_bound u i2 ==>
     binop_frag ctx func cenv cx bop ty ann bl el v1 v2 es0
 Proof
-  rpt gen_tac >> strip_tac >> simp[binop_frag_def] >> rpt gen_tac >>
-  strip_tac >>
+  rpt gen_tac >> strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
   qabbrev_tac `rr = if bop = Add then i1 + i2 else if bop = Sub then i1 - i2
                    else i1 * i2` >>
-  `bop_result cx ann bop v1 v2 es0 =
+  `bop_result cx ann bop (IntV i1) (IntV i2) es0 =
      if within_int_bound u rr then INL (Value (IntV rr))
      else INR (Error (RuntimeError "bounded_int_op bound"))` by
-    (qspecl_then [`cx`, `ann`, `bop`, `v1`, `v2`, `es0`, `i1`, `i2`, `u`] mp_tac
-       bop_result_checked >> simp[Abbr `rr`]) >>
-  `straight_fresh (compile_binop bop x y ty bl el)` by
-    (fs[] >> simp[compile_binop_def, straight_fresh_checked]) >>
-  `!ss. fresh_vars_wrt sa ss /\ eval_operand x ss = SOME (i2w i1) /\
-        eval_operand y ss = SOME (i2w i2) ==>
-        (within_int_bound u rr ==>
-         ?ss'. run_inst_seq (emitted_insts sa sb) ss = OK ss' /\
-               eval_operand op ss' = SOME (i2w rr)) /\
-        (~within_int_bound u rr ==>
-         ?ss'. run_inst_seq (emitted_insts sa sb) ss = Abort Revert_abort ss')` by
+    (qspecl_then [`cx`, `ann`, `bop`, `IntV i1`, `IntV i2`, `es0`, `i1`, `i2`,
+                  `u`] mp_tac bop_result_checked >> simp[Abbr `rr`]) >>
+  `!x y sa sb op ss.
+     compile_binop bop x y ty bl el sa = (op, sb) /\
+     fresh_vars_wrt sa ss /\ eval_operand x ss = SOME (i2w i1) /\
+     eval_operand y ss = SOME (i2w i2) ==>
+     (within_int_bound u rr ==>
+      ?ss'. run_inst_seq (emitted_insts sa sb) ss = OK ss' /\
+            eval_operand op ss' = SOME (i2w rr)) /\
+     (~within_int_bound u rr ==>
+      ?ss'. run_inst_seq (emitted_insts sa sb) ss = Abort Revert_abort ss')` by
     (rpt gen_tac >> strip_tac >> fs[] >> gvs[compile_binop_def, Abbr `rr`]
      >- (irule compile_safe_add_run >> metis_tac[])
      >- (irule compile_safe_sub_run >> metis_tac[]) >>
      irule compile_safe_mul_run >> metis_tac[]) >>
-  Cases_on `within_int_bound u rr`
-  >- (qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es0`,
-         `compile_binop bop x y ty bl el`, `sa`, `sb`, `op`, `i2w rr`,
-         `\ss. eval_operand x ss = SOME (val_to_w256 v1) /\
-               eval_operand y ss = SOME (val_to_w256 v2)`,
-         `\a. F`, `expr_exit (bop_result cx ann bop v1 v2 es0)`, `s0`]
-        mp_tac frag_exec_straight_fresh >>
-      (impl_tac
-       >- (asm_rewrite_tac[] >> BETA_TAC >> rpt conj_tac >> rpt strip_tac >>
-           FIRST [
-             qspecl_then [`x`, `sa`, `ss`] mp_tac eval_operand_drop_fresh >>
-             impl_tac >- first_assum ACCEPT_TAC >>
-             asm_simp_tac std_ss [] >> NO_TAC,
-             qspecl_then [`y`, `sa`, `ss`] mp_tac eval_operand_drop_fresh >>
-             impl_tac >- first_assum ACCEPT_TAC >>
-             asm_simp_tac std_ss [] >> NO_TAC,
-             qpat_x_assum `!ss. fresh_vars_wrt sa ss /\ _ ==> _`
-               (qspec_then `ss` mp_tac) >>
-             gvs[val_to_w256_def]])) >>
-      disch_then (fn th => match_mp_tac (MATCH_MP frag_exec_weaken th)) >>
-      simp[] >> rpt strip_tac >> qexists_tac `IntV rr` >>
-      gvs[val_to_w256_def, word_value_def]) >>
-  qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es0`,
-     `compile_binop bop x y ty bl el`, `sa`, `sb`, `op`,
-     `\ss. eval_operand x ss = SOME (val_to_w256 v1) /\
-           eval_operand y ss = SOME (val_to_w256 v2)`,
-     `\a. a = Revert_abort`, `\s. F`,
-     `expr_exit (bop_result cx ann bop v1 v2 es0)`, `s0`]
-    mp_tac frag_exec_straight_fresh_abort >>
-  (impl_tac
-   >- (asm_rewrite_tac[] >> BETA_TAC >> rpt conj_tac >> rpt strip_tac >>
-       FIRST [
-         qspecl_then [`x`, `sa`, `ss`] mp_tac eval_operand_drop_fresh >>
-         impl_tac >- first_assum ACCEPT_TAC >>
-         asm_simp_tac std_ss [] >> NO_TAC,
-         qspecl_then [`y`, `sa`, `ss`] mp_tac eval_operand_drop_fresh >>
-         impl_tac >- first_assum ACCEPT_TAC >>
-         asm_simp_tac std_ss [] >> NO_TAC,
-         qpat_x_assum `!ss. fresh_vars_wrt sa ss /\ _ ==> _`
-           (qspec_then `ss` mp_tac) >>
-         gvs[val_to_w256_def] >> metis_tac[],
-         simp[expr_exit_def]])) >>
-  disch_then (fn th => match_mp_tac (MATCH_MP frag_exec_weaken th)) >>
-  gvs[]
+  match_mp_tac binop_frag_straight >> conj_tac
+  >- (rpt gen_tac >> fs[] >> simp[compile_binop_def, straight_fresh_checked]) >>
+  strip_tac >> asm_rewrite_tac[val_to_w256_def] >>
+  Cases_on `within_int_bound u rr` >> asm_rewrite_tac[]
+  >- (disj1_tac >> qexists_tac `IntV rr` >>
+      rewrite_tac[val_to_w256_def, word_value_def] >> metis_tac[]) >>
+  disj2_tac >> qexists_tac `"bounded_int_op bound"` >> rewrite_tac[] >>
+  metis_tac[]
 QED
 
 Theorem srem_in_type_range:
@@ -784,89 +733,44 @@ Theorem compile_divmod_sim:
     within_int_bound u i1 /\ within_int_bound u i2 ==>
     binop_frag ctx func cenv cx bop ty ann bl el v1 v2 es0
 Proof
-  rpt gen_tac >> strip_tac >> simp[binop_frag_def] >> rpt gen_tac >>
-  strip_tac >>
+  rpt gen_tac >> strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
   qspecl_then [`ty`, `u`] mp_tac type_to_int_bound_bits >> simp[] >>
   strip_tac >>
-  `straight_fresh (compile_binop bop x y ty bl el)` by
-    (fs[] >> gvs[compile_binop_def, straight_fresh_checked]) >>
   `math_val ty (i2w i1 : bytes32) = i1 /\ math_val ty (i2w i2 : bytes32) = i2`
     by gvs[math_val_i2w] >>
   `i2 = 0 <=> i2w i2 = (0w : bytes32)` by
     (eq_tac >> strip_tac >- simp[integer_wordTheory.i2w_0] >>
      qspecl_then [`type_bits ty`, `is_signed_type ty`, `i2`] mp_tac
        i2w_eq_0_within >> gvs[]) >>
-  qspecl_then [`cx`, `ann`, `bop`, `ty`, `v1`, `v2`, `es0`, `i1`, `i2`, `u`]
-    mp_tac bop_result_divmod >> impl_tac >- simp[] >>
+  match_mp_tac binop_frag_straight >> conj_tac
+  >- (rpt gen_tac >> fs[] >> gvs[compile_binop_def, straight_fresh_checked]) >>
+  strip_tac >>
+  qspecl_then [`cx`, `ann`, `bop`, `ty`, `IntV i1`, `IntV i2`, `es0`, `i1`,
+               `i2`, `u`] mp_tac bop_result_divmod >> impl_tac >- simp[] >>
   qmatch_goalsub_abbrev_tac `(BAD ==> _) /\ _ ==> _` >>
   Cases_on `BAD` >> simp[] >> strip_tac
   >- ((* zero divisor or signed overflow: the lowering reverts *)
-      `!ss. fresh_vars_wrt sa ss /\ eval_operand x ss = SOME (i2w i1) /\
-            eval_operand y ss = SOME (i2w i2) ==>
-            ?ss'. run_inst_seq (emitted_insts sa sb) ss = Abort Revert_abort ss'`
-        by (rpt strip_tac >> fs[markerTheory.Abbrev_def] >>
-            gvs[compile_binop_def, integer_wordTheory.i2w_0]
-            >- metis_tac[compile_safe_div_by_zero]
-            >- (gvs[math_val_def] >> irule compile_safe_div_overflow >>
-                simp[] >> metis_tac[]) >>
-            metis_tac[compile_safe_mod_by_zero]) >>
-      qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es0`,
-         `compile_binop bop x y ty bl el`, `sa`, `sb`, `op`,
-         `\ss. eval_operand x ss = SOME (val_to_w256 (IntV i1)) /\
-               eval_operand y ss = SOME (val_to_w256 (IntV i2))`,
-         `\a. a = Revert_abort`, `\s. F`,
-         `expr_exit (bop_result cx ann bop (IntV i1) (IntV i2) es0)`, `s0`]
-        mp_tac frag_exec_straight_fresh_abort >>
-      (impl_tac
-       >- (asm_rewrite_tac[] >> BETA_TAC >> rpt conj_tac >> rpt strip_tac >>
-           FIRST [
-             qspecl_then [`x`, `sa`, `ss`] mp_tac eval_operand_drop_fresh >>
-             impl_tac >- first_assum ACCEPT_TAC >>
-             asm_simp_tac std_ss [] >> NO_TAC,
-             qspecl_then [`y`, `sa`, `ss`] mp_tac eval_operand_drop_fresh >>
-             impl_tac >- first_assum ACCEPT_TAC >>
-             asm_simp_tac std_ss [] >> NO_TAC,
-             qpat_x_assum `!ss. fresh_vars_wrt sa ss /\ _ ==> _`
-               (qspec_then `ss` mp_tac) >>
-             gvs[val_to_w256_def] >> metis_tac[],
-             gvs[expr_exit_def]])) >>
-      disch_then (fn th => match_mp_tac (MATCH_MP frag_exec_weaken th)) >>
-      gvs[]) >>
+      disj2_tac >> qexists_tac `m` >> asm_rewrite_tac[val_to_w256_def] >>
+      rpt strip_tac >> fs[markerTheory.Abbrev_def] >>
+      gvs[compile_binop_def, integer_wordTheory.i2w_0]
+      >- metis_tac[compile_safe_div_by_zero]
+      >- (gvs[math_val_def] >> irule compile_safe_div_overflow >>
+          simp[] >> metis_tac[]) >>
+      metis_tac[compile_safe_mod_by_zero]) >>
   (* defined result: the lowering computes the matching safe_* word *)
-  `!ss. fresh_vars_wrt sa ss /\ eval_operand x ss = SOME (i2w i1) /\
-        eval_operand y ss = SOME (i2w i2) ==>
-        ?ss'. run_inst_seq (emitted_insts sa sb) ss = OK ss' /\
-              eval_operand op ss' = SOME (i2w z)` by
-    (rpt strip_tac >> fs[markerTheory.Abbrev_def] >>
-     `in_type_range ty i1` by gvs[in_type_range_within] >>
-     gvs[compile_binop_def]
-     >- (qspecl_then [`x`, `y`, `ty`, `ss`, `sa`, `op`, `sb`, `i2w i1`,
-                      `i2w i2`] mp_tac compile_safe_div_ok >>
-         impl_tac >- (Cases_on `is_signed_type ty` >> gvs[math_val_def]) >>
-         Cases_on `is_signed_type ty` >> simp[]) >>
-     qspecl_then [`x`, `y`, `ty`, `ss`, `sa`, `op`, `sb`, `i2w i1`, `i2w i2`]
-       mp_tac compile_safe_mod_correct >>
-     Cases_on `is_signed_type ty` >> gvs[]) >>
-  qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es0`,
-     `compile_binop bop x y ty bl el`, `sa`, `sb`, `op`, `i2w z`,
-     `\ss. eval_operand x ss = SOME (val_to_w256 (IntV i1)) /\
-           eval_operand y ss = SOME (val_to_w256 (IntV i2))`,
-     `\a. F`, `expr_exit (bop_result cx ann bop (IntV i1) (IntV i2) es0)`, `s0`]
-    mp_tac frag_exec_straight_fresh >>
-  (impl_tac
-   >- (asm_rewrite_tac[] >> BETA_TAC >> rpt conj_tac >> rpt strip_tac >>
-       FIRST [
-         qspecl_then [`x`, `sa`, `ss`] mp_tac eval_operand_drop_fresh >>
-         impl_tac >- first_assum ACCEPT_TAC >>
-         asm_simp_tac std_ss [] >> NO_TAC,
-         qspecl_then [`y`, `sa`, `ss`] mp_tac eval_operand_drop_fresh >>
-         impl_tac >- first_assum ACCEPT_TAC >>
-         asm_simp_tac std_ss [] >> NO_TAC,
-         qpat_x_assum `!ss. fresh_vars_wrt sa ss /\ _ ==> _`
-           (qspec_then `ss` mp_tac) >>
-         gvs[val_to_w256_def]])) >>
-  disch_then (fn th => match_mp_tac (MATCH_MP frag_exec_weaken th)) >>
-  simp[] >> rpt strip_tac >> gvs[val_to_w256_def, word_value_def]
+  disj1_tac >> qexists_tac `IntV z` >>
+  rewrite_tac[val_to_w256_def, word_value_def] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  rpt strip_tac >> fs[markerTheory.Abbrev_def] >>
+  `in_type_range ty i1` by gvs[in_type_range_within] >>
+  gvs[compile_binop_def]
+  >- (qspecl_then [`x`, `y`, `ty`, `ss`, `sa`, `op`, `sb`, `i2w i1`,
+                   `i2w i2`] mp_tac compile_safe_div_ok >>
+      impl_tac >- (Cases_on `is_signed_type ty` >> gvs[math_val_def]) >>
+      Cases_on `is_signed_type ty` >> simp[]) >>
+  qspecl_then [`x`, `y`, `ty`, `ss`, `sa`, `op`, `sb`, `i2w i1`, `i2w i2`]
+    mp_tac compile_safe_mod_correct >>
+  Cases_on `is_signed_type ty` >> gvs[]
 QED
 
 (* ===== Decimal arithmetic ===== *)
@@ -924,75 +828,6 @@ Proof
               [compile_checked_sim, compile_divmod_sim])
 QED
 
-(* A straight-line operator fragment from its run facts: on a value the
-   emitted code runs to the end with the result, on a runtime error it
-   reverts. *)
-Theorem binop_frag_straight:
-  !ctx func cenv cx bop ty ann bl el v1 v2 es0.
-    (!x y. straight_fresh (compile_binop bop x y ty bl el)) /\
-    ((?v. bop_result cx ann bop v1 v2 es0 = INL (Value v) /\ word_value v /\
-          !x y sa sb op ss.
-            compile_binop bop x y ty bl el sa = (op, sb) /\
-            fresh_vars_wrt sa ss /\
-            eval_operand x ss = SOME (val_to_w256 v1) /\
-            eval_operand y ss = SOME (val_to_w256 v2) ==>
-            ?ss'. run_inst_seq (emitted_insts sa sb) ss = OK ss' /\
-                  eval_operand op ss' = SOME (val_to_w256 v)) \/
-     (?m. bop_result cx ann bop v1 v2 es0 = INR (Error (RuntimeError m)) /\
-          !x y sa sb op ss.
-            compile_binop bop x y ty bl el sa = (op, sb) /\
-            fresh_vars_wrt sa ss /\
-            eval_operand x ss = SOME (val_to_w256 v1) /\
-            eval_operand y ss = SOME (val_to_w256 v2) ==>
-            ?ss'. run_inst_seq (emitted_insts sa sb) ss =
-                    Abort Revert_abort ss')) ==>
-    binop_frag ctx func cenv cx bop ty ann bl el v1 v2 es0
-Proof
-  rpt gen_tac >> strip_tac >> simp[binop_frag_def] >> rpt strip_tac
-  >- (qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es0`,
-         `compile_binop bop x y ty bl el`, `sa`, `sb`, `op`, `val_to_w256 v`,
-         `\ss. eval_operand x ss = SOME (val_to_w256 v1) /\
-               eval_operand y ss = SOME (val_to_w256 v2)`,
-         `\a. F`, `expr_exit (bop_result cx ann bop v1 v2 es0)`, `s0`]
-        mp_tac frag_exec_straight_fresh >>
-      (impl_tac
-       >- (asm_rewrite_tac[] >> BETA_TAC >> rpt conj_tac >> rpt strip_tac >>
-           FIRST [
-             qspecl_then [`x`, `sa`, `ss`] mp_tac eval_operand_drop_fresh >>
-             impl_tac >- first_assum ACCEPT_TAC >>
-             asm_simp_tac std_ss [] >> NO_TAC,
-             qspecl_then [`y`, `sa`, `ss`] mp_tac eval_operand_drop_fresh >>
-             impl_tac >- first_assum ACCEPT_TAC >>
-             asm_simp_tac std_ss [] >> NO_TAC,
-             qpat_x_assum `!x y sa sb op ss. _`
-               (qspecl_then [`x`, `y`, `sa`, `sb`, `op`, `ss`] mp_tac) >>
-             asm_rewrite_tac[]])) >>
-      disch_then (fn th => match_mp_tac (MATCH_MP frag_exec_weaken th)) >>
-      simp[] >> rpt strip_tac >> gvs[]) >>
-  qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es0`,
-     `compile_binop bop x y ty bl el`, `sa`, `sb`, `op`,
-     `\ss. eval_operand x ss = SOME (val_to_w256 v1) /\
-           eval_operand y ss = SOME (val_to_w256 v2)`,
-     `\a. a = Revert_abort`, `\s. F`,
-     `expr_exit (bop_result cx ann bop v1 v2 es0)`, `s0`]
-    mp_tac frag_exec_straight_fresh_abort >>
-  (impl_tac
-   >- (asm_rewrite_tac[] >> BETA_TAC >> rpt conj_tac >> rpt strip_tac >>
-       FIRST [
-         qspecl_then [`x`, `sa`, `ss`] mp_tac eval_operand_drop_fresh >>
-         impl_tac >- first_assum ACCEPT_TAC >>
-         asm_simp_tac std_ss [] >> NO_TAC,
-         qspecl_then [`y`, `sa`, `ss`] mp_tac eval_operand_drop_fresh >>
-         impl_tac >- first_assum ACCEPT_TAC >>
-         asm_simp_tac std_ss [] >> NO_TAC,
-         qpat_x_assum `!x y sa sb op ss. _`
-           (qspecl_then [`x`, `y`, `sa`, `sb`, `op`, `ss`] mp_tac) >>
-         asm_rewrite_tac[] >> metis_tac[],
-         gvs[expr_exit_def]])) >>
-  disch_then (fn th => match_mp_tac (MATCH_MP frag_exec_weaken th)) >>
-  gvs[]
-QED
-
 Theorem decimal_sgn_quot:
   !p:int. SGN p * (ABS p / 10000000000) = p quot 10000000000
 Proof
@@ -1037,6 +872,7 @@ Proof
   >- (fs[] >> rpt gen_tac >>
       simp[compile_binop_def, is_decimal_type_def, decimal_divisor_def,
            straight_fresh_checked, straight_fresh_decimal_div]) >>
+  strip_tac >>
   `in_type_range (BaseT DecimalT) d1 /\ in_type_range (BaseT DecimalT) d2` by
     simp[in_type_range_decimal] >>
   `bop = Mul \/ bop = Div` by fs[] >>

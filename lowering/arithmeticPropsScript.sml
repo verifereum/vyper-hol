@@ -4,8 +4,10 @@
  * TOP-LEVEL:
  *   compile_safe_add_correct — add with overflow check
  *   compile_safe_add_overflow — an overflowing unsigned 256-bit add reverts
+ *   compile_safe_add_overflow_signed_256 — likewise a signed one
  *   compile_safe_add_unsigned_256_shape — its code stays in the block
  *   compile_safe_sub_correct — sub with underflow check
+ *   compile_safe_sub_overflow_256 — an overflowing 256-bit sub reverts
  *   compile_safe_mul_correct — mul with overflow check (includes int256 MIN_INT)
  *   compile_safe_div_correct — div with division-by-zero check
  *   compile_safe_mod_correct — mod with division-by-zero check
@@ -16,6 +18,8 @@
  *   compile_safe_add_out_of_range, compile_safe_sub_out_of_range,
  *   compile_safe_mul_overflow — an out-of-range result reverts
  *   compile_safe_div_ok      — div with no zero divisor or INT_MIN / -1
+ *   sdiv_in_type_range       — the signed quotient stays in the type, but
+ *                              for INT_MIN / -1
  *   compile_safe_div_overflow — signed INT_MIN / -1 reverts
  *   compile_safe_decimal_mul_run, compile_safe_decimal_div_run
  *                            — decimal mul and div, both outcomes
@@ -979,6 +983,12 @@ Proof
   chain_step emit_op_ISZERO_correct >>
   forward_all_evals >>
   `w2n v > w2n hi` by (
+    (* only the bounds matter: drop the run facts before unfolding *)
+    qpat_x_assum `¬in_type_range _ _` mp_tac >>
+    qpat_x_assum `type_bounds _ = _` mp_tac >>
+    qpat_x_assum `¬is_signed_type _` mp_tac >>
+    qpat_x_assum `type_bits _ ≤ 256` mp_tac >>
+    rpt (pop_assum kall_tac) >> rpt strip_tac >>
     gvs[type_bounds_def, in_type_range_def, math_val_def, LET_THM] >>
     `0 < 2 ** type_bits ty ∧ 2 ** type_bits ty ≤ 2 ** 256` by simp[] >>
     `2 ** type_bits ty − 1 < 2 ** 256` by decide_tac >>
@@ -3086,20 +3096,6 @@ val mul_check_close =
   TRY (gvs[] >> NO_TAC) >>
   first_assum (irule_at Any);
 
-val mul_check_special_tac =
-  fs monad_unfold >> rpt (pairarg_tac >> gvs[]) >>
-  fstep emit_op_SDIV_correct `emit_op SDIV _ _ = _` >>
-  ostep emit_op_EQ_correct `emit_op EQ [div_res; x] _ = _` >>
-  ostep emit_op_ISZERO_correct `emit_op ISZERO [y] _ = _` >>
-  ostep emit_op_OR_correct `emit_op OR _ _ = _` >>
-  ostep (elim_lit 2 emit_op_EQ_correct) `emit_op EQ [x; _] _ = _` >>
-  ostep emit_op_NOT_correct `emit_op NOT _ _ = _` >>
-  ostep emit_op_ISZERO_correct `emit_op ISZERO [ny] _ = _` >>
-  ostep emit_op_AND_correct `emit_op AND [x_min; y_neg1] _ = _` >>
-  ostep emit_op_ISZERO_correct `emit_op ISZERO [special] _ = _` >>
-  ostep emit_op_AND_correct `emit_op AND [ok; not_special] _ = _` >>
-  mul_check_close;
-
 fun mul_check_plain_tac opth pat = gvs[comp_return_def] >>
   fstep opth pat >>
   ostep emit_op_EQ_correct `emit_op EQ _ _ = _` >>
@@ -3123,13 +3119,30 @@ Theorem mul_overflow_check_reverts:
     ∃ ss'. run_inst_seq (emitted_insts pre fin) ss_pre = Abort Revert_abort ss'
 Proof
   rpt gen_tac >> strip_tac >>
-    gvs (compile_mul_overflow_check_def :: monad_unfold) >>
-    rpt (pairarg_tac >> gvs[]) >>
-    Cases_on `is_signed ∧ bits = 256` >> gvs[] >>
-  TRY (mul_check_special_tac >> NO_TAC) >>
-    Cases_on `is_signed` >> gvs[]
-    >- mul_check_plain_tac emit_op_SDIV_correct `emit_op SDIV _ _ = _` >>
-    mul_check_plain_tac emit_op_Div_correct `emit_op Div _ _ = _`
+  gvs (compile_mul_overflow_check_def :: monad_unfold) >>
+  rpt (pairarg_tac >> gvs[]) >>
+  Cases_on `is_signed ∧ bits = 256` >> gvs[]
+  (* the int256 goals, whose code has the INT_MIN * -1 check *)
+  >>~- ([`emit_op NOT _`],
+      fs monad_unfold >> rpt (pairarg_tac >> gvs[]) >>
+      fstep emit_op_SDIV_correct `emit_op SDIV _ _ = _` >>
+      ostep emit_op_EQ_correct `emit_op EQ [div_res; x] _ = _` >>
+      ostep emit_op_ISZERO_correct `emit_op ISZERO [y] _ = _` >>
+      ostep emit_op_OR_correct `emit_op OR _ _ = _` >>
+      ostep (elim_lit 2 emit_op_EQ_correct) `emit_op EQ [x; _] _ = _` >>
+      ostep emit_op_NOT_correct `emit_op NOT _ _ = _` >>
+      ostep emit_op_ISZERO_correct `emit_op ISZERO [ny] _ = _` >>
+      ostep emit_op_AND_correct `emit_op AND [x_min; y_neg1] _ = _` >>
+      ostep emit_op_ISZERO_correct `emit_op ISZERO [special] _ = _` >>
+      ostep emit_op_AND_correct `emit_op AND [ok; not_special] _ = _` >>
+      forward_all_evals >>
+      imp_res_tac emit_void_extends >>
+      drule_all_then strip_assume_tac assert_chain >>
+      TRY (gvs[] >> NO_TAC) >>
+      first_assum (irule_at Any)) >>
+  Cases_on `is_signed` >> gvs[]
+  >- mul_check_plain_tac emit_op_SDIV_correct `emit_op SDIV _ _ = _` >>
+  mul_check_plain_tac emit_op_Div_correct `emit_op Div _ _ = _`
 QED
 
 (* An unsigned product that overflows the word fails the division check. *)
@@ -3217,7 +3230,9 @@ Proof
           (`w2i (i2w rr : bytes32) = rr` by
              (irule integer_wordTheory.w2i_i2w >> simp[int_min_256, int_max_256] >>
               fs[integerTheory.INT_ABS] >> rw[] >> fs[] >> intLib.ARITH_TAC) >>
-           metis_tac[integer_wordTheory.word_0_w2i]) >>
+           qpat_x_assum `w2i _ = rr` (fn th => ONCE_REWRITE_TAC [GSYM th]) >>
+           qpat_x_assum `i2w rr = _`
+             (fn th => REWRITE_TAC [th, integer_wordTheory.word_0_w2i])) >>
         gvs[] >> intLib.ARITH_TAC) >>
     (* the quotient is 2 ** 255: then B = -1 and a = INT_MIN *)
     `qq = 57896044618658097711785492504343953926634992332820282019728792003956564819968` by
@@ -3466,9 +3481,11 @@ val div256_tac =
       (Cases_on `a = 0x8000000000000000000000000000000000000000000000000000000000000000w` >> fs[]) >>
     imp_res_tac emit_void_extends >>
     rpt (qpat_x_assum `emitted_insts _ _ = _ ++ _` kall_tac) >>
-    qspecl_then [`ok`, `cs'''''''''`, `st'`,
+    rename1 `emit_void ASSERT [ok] s_ok = _` >>
+    rename1 `eval_operand ok m_ok = SOME _` >>
+    qspecl_then [`ok`, `s_ok`, `st'`,
        `bool_to_word (bool_to_word (a = 0x8000000000000000000000000000000000000000000000000000000000000000w) && bool_to_word (¬b = 0w) = 0w)`,
-       `ss'''''''`, `st`, `ss`] mp_tac assert_chain_ok >>
+       `m_ok`, `st`, `ss`] mp_tac assert_chain_ok >>
     impl_tac
     >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
         TRY compose_eval_pres >> TRY solve_same_blocks >> fs[]) >>
@@ -3477,9 +3494,12 @@ val div256_tac =
 
 val sdiv_ok_tac =
   drule_all zero_check_passes >> strip_tac >>
+    rename1 `run_inst_seq (emitted_insts st _) ss = OK m1` >>
     gvs monad_unfold >> pairarg_tac >> gvs[] >>
-    `eval_operand x ss' = SOME a ∧ eval_operand y ss' = SOME b` by metis_tac[] >>
+    rename1 `emit_op SDIV _ _ = (res, s_div)` >>
+    `eval_operand x m1 = SOME a ∧ eval_operand y m1 = SOME b` by metis_tac[] >>
     drule_all emit_op_SDIV_correct >> strip_tac >>
+    rename1 `eval_operand res m2 = SOME (safe_sdiv a b)` >>
     qpat_x_assum `emit_op SDIV _ _ = _`
       (strip_assume_tac o MATCH_MP emit_op_extends) >>
     drule_all run_inst_seq_chain >> strip_tac >>
@@ -3496,7 +3516,7 @@ val sdiv_ok_tac =
     `type_bits ty < 256` by decide_tac >> fs[] >>
     `in_type_range ty (math_val ty (safe_sdiv a b))` by
        (simp[math_val_def] >> irule sdiv_in_type_range >> simp[]) >>
-    qspecl_then [`res`, `ty`, `cs''''`, `op`, `st'`, `st`, `ss`, `ss''`,
+    qspecl_then [`res`, `ty`, `s_div`, `op`, `st'`, `st`, `ss`, `m2`,
                  `safe_sdiv a b`] mp_tac clamp_and_return_ok >>
     simp[];
 
@@ -3545,9 +3565,12 @@ Proof
     gvs (compile_safe_div_def :: monad_unfold) >>
     pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
     drule_all zero_check_passes >> strip_tac >>
+    rename1 `run_inst_seq (emitted_insts st _) ss = OK m1` >>
     gvs monad_unfold >> pairarg_tac >> gvs[] >>
-    `eval_operand x ss' = SOME a ∧ eval_operand y ss' = SOME b` by metis_tac[] >>
+    rename1 `emit_op SDIV _ _ = (res, s_div)` >>
+    `eval_operand x m1 = SOME a ∧ eval_operand y m1 = SOME b` by metis_tac[] >>
     drule_all emit_op_SDIV_correct >> strip_tac >>
+    rename1 `eval_operand res m2 = SOME (safe_sdiv a b)` >>
     qpat_x_assum `emit_op SDIV _ _ = _`
       (strip_assume_tac o MATCH_MP emit_op_extends) >>
     drule_all run_inst_seq_chain >> strip_tac >>
@@ -3577,7 +3600,7 @@ Proof
   `w2i (safe_sdiv a b) = &X` by (simp[safe_sdiv_def, integer_wordTheory.word_quot, integerTheory.INT_QUOT_NEG, integerTheory.INT_QUOT_1] >> irule integer_wordTheory.w2i_i2w_pos >> simp[wordsTheory.INT_MAX_def, wordsTheory.INT_MIN_def, venomMemPropsTheory.dimindex_256] >> irule arithmeticTheory.LESS_EQ_TRANS >> qexists_tac `2 ** 254` >> simp[]) >>
   `¬in_type_range ty (math_val ty (safe_sdiv a b))` by
       (simp[math_val_def, in_type_range_def] >> intLib.ARITH_TAC) >>
-  qspecl_then [`res`, `ty`, `cs''''`, `op`, `st'`, `st`, `ss`, `ss''`,
+  qspecl_then [`res`, `ty`, `s_div`, `op`, `st'`, `st`, `ss`, `m2`,
                  `safe_sdiv a b`] mp_tac clamp_and_return_out_of_range >>
     simp[]
 QED
@@ -3765,9 +3788,15 @@ Proof
   rpt gen_tac >> strip_tac >>
     gvs (compile_safe_decimal_div_def :: monad_unfold) >>
     rpt (pairarg_tac >> gvs[]) >>
+    rename1 `emit_op MUL _ st = (x_scaled, s1)` >>
+    rename1 `emit_op ISZERO [y] s1 = (y_zero, s2)` >>
+    rename1 `emit_op ISZERO [y_zero] s2 = (y_nonzero, s3)` >>
+    rename1 `emit_void ASSERT [y_nonzero] s3 = (_, s4)` >>
+    rename1 `emit_op SDIV _ s4 = (res, s5)` >>
     `eval_operand (Lit (n2w 10000000000)) ss = SOME (n2w 10000000000)`
       by simp[eval_operand_lit] >>
     drule_all emit_op_MUL_correct >> strip_tac >>
+    rename1 `run_inst_seq (emitted_insts st s1) ss = OK m1` >>
     qpat_x_assum `emit_op MUL _ _ = _`
       (strip_assume_tac o MATCH_MP emit_op_extends) >>
     forward_all_evals >>
@@ -3780,44 +3809,47 @@ Proof
     imp_res_tac clamp_and_return_extends >>
     Cases_on `b = 0w` >> asm_simp_tac std_ss []
     >- ((* zero divisor: the ASSERT reverts *)
-        qspecl_then [`y`, `cs'`, `y_zero`, `cs''`, `y_nonzero`, `cs'''`,
-                     `cs''''`, `ss'`] mp_tac zero_check_reverts >>
+        qspecl_then [`y`, `s1`, `y_zero`, `s2`, `y_nonzero`, `s3`,
+                     `s4`, `m1`] mp_tac zero_check_reverts >>
         simp[] >> strip_tac >>
-        `run_inst_seq (emitted_insts st cs'''') ss = Abort Revert_abort ss''` by
-          (qspecl_then [`st`, `cs'`, `cs''''`, `ss`, `ss'`] mp_tac
+        rename1 `Abort Revert_abort m2` >>
+        `run_inst_seq (emitted_insts st s4) ss = Abort Revert_abort m2` by
+          (qspecl_then [`st`, `s1`, `s4`, `ss`, `m1`] mp_tac
              run_inst_seq_chain >> simp[]) >>
-        qspecl_then [`st`, `cs''''`, `st'`, `ss`] mp_tac abort_propagates >>
+        qspecl_then [`st`, `s4`, `st'`, `ss`] mp_tac abort_propagates >>
         (impl_tac
          >- (rpt conj_tac
-             >- (qspecl_then [`st`, `cs'`, `cs''''`, `ss`, `ss'`] mp_tac
+             >- (qspecl_then [`st`, `s1`, `s4`, `ss`, `m1`] mp_tac
                    run_inst_seq_chain >> simp[])
-             >- (qexists_tac `emitted_insts cs'''' cs''''' ++
-                              emitted_insts cs''''' st'` >> simp[]) >>
+             >- (qexists_tac `emitted_insts s4 s5 ++
+                              emitted_insts s5 st'` >> simp[]) >>
              gvs[])) >>
         gvs[]) >>
     (* nonzero divisor: SDIV, then the 168-bit clamp *)
-    qspecl_then [`y`, `cs'`, `y_zero`, `cs''`, `y_nonzero`, `cs'''`,
-                 `cs''''`, `ss'`, `b`] mp_tac zero_check_passes >>
+    qspecl_then [`y`, `s1`, `y_zero`, `s2`, `y_nonzero`, `s3`,
+                 `s4`, `m1`, `b`] mp_tac zero_check_passes >>
     simp[] >> strip_tac >>
-    `run_inst_seq (emitted_insts st cs'''') ss = OK ss'' /\
-     cs''''.cs_current_insts = st.cs_current_insts ++ emitted_insts st cs''''` by
-      (qspecl_then [`st`, `cs'`, `cs''''`, `ss`, `ss'`] mp_tac
+    rename1 `run_inst_seq (emitted_insts s1 s4) m1 = OK m2` >>
+    `run_inst_seq (emitted_insts st s4) ss = OK m2 /\
+     s4.cs_current_insts = st.cs_current_insts ++ emitted_insts st s4` by
+      (qspecl_then [`st`, `s1`, `s4`, `ss`, `m1`] mp_tac
          run_inst_seq_chain >> simp[]) >>
-    `eval_operand x_scaled ss'' = SOME (a * 0x2540BE400w) /\
-     eval_operand y ss'' = SOME b` by simp[] >>
-    qspecl_then [`x_scaled`, `y`, `a * 0x2540BE400w`, `b`, `cs''''`, `res`,
-                 `cs'''''`, `ss''`] mp_tac emit_op_SDIV_correct >>
+    `eval_operand x_scaled m2 = SOME (a * 0x2540BE400w) /\
+     eval_operand y m2 = SOME b` by simp[] >>
+    qspecl_then [`x_scaled`, `y`, `a * 0x2540BE400w`, `b`, `s4`, `res`,
+                 `s5`, `m2`] mp_tac emit_op_SDIV_correct >>
     simp[] >> strip_tac >>
-    `run_inst_seq (emitted_insts st cs''''') ss = OK ss''' /\
-     cs'''''.cs_current_insts = st.cs_current_insts ++ emitted_insts st cs'''''` by
-      (qspecl_then [`st`, `cs''''`, `cs'''''`, `ss`, `ss''`] mp_tac
+    rename1 `run_inst_seq (emitted_insts s4 s5) m2 = OK m3` >>
+    `run_inst_seq (emitted_insts st s5) ss = OK m3 /\
+     s5.cs_current_insts = st.cs_current_insts ++ emitted_insts st s5` by
+      (qspecl_then [`st`, `s4`, `s5`, `ss`, `m2`] mp_tac
          run_inst_seq_chain >> simp[]) >>
     conj_tac >> strip_tac
     >- (irule clamp_and_return_ok >>
-        qexistsl [`cs'''''`, `res`, `ss'''`, `BaseT DecimalT`] >>
+        qexistsl [`s5`, `res`, `m3`, `BaseT DecimalT`] >>
         gvs[type_bits_def, math_val_def, is_signed_type_def]) >>
     irule clamp_and_return_out_of_range >>
-    qexistsl [`cs'''''`, `op`, `res`, `ss'''`, `BaseT DecimalT`,
+    qexistsl [`s5`, `op`, `res`, `m3`, `BaseT DecimalT`,
               `safe_sdiv (a * 0x2540BE400w) b`] >>
     gvs[type_bits_def, math_val_def, is_signed_type_def]
 QED
