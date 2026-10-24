@@ -1060,18 +1060,19 @@ Proof
   simp[supported_function_names_def] >> metis_tac[]
 QED
 
-Theorem source_internal_fn_descriptor_name[simp]:
-  !tops mut nr rr name args dflts ret body.
-    FST (source_internal_fn_descriptor tops
-      (mut,nr,rr,name,args,dflts,ret,body)) = name
+Theorem source_internal_fn_descriptor_label[simp]:
+  !tops is_ctor mut nr rr name args dflts ret body.
+    FST (source_internal_fn_descriptor tops is_ctor
+      (mut,nr,rr,name,args,dflts,ret,body)) =
+    internal_fn_label (build_func_ids 0 tops name) name (MAP SND args) is_ctor
 Proof
   simp[source_internal_fn_descriptor_def]
 QED
 
 Theorem classified_internal_names_distinct:
-  !tops envtops. ALL_DISTINCT (supported_function_names tops) ==>
-    ALL_DISTINCT (MAP FST (MAP (source_internal_fn_descriptor envtops)
-      (FST (SND (classify_functions tops)))))
+  !tops. ALL_DISTINCT (supported_function_names tops) ==>
+    ALL_DISTINCT (MAP (\p. FST (SND (SND (SND p))))
+      (FST (SND (classify_functions tops))))
 Proof
   Induct >> simp[classify_functions_def, supported_function_names_def] >>
   gen_tac >> fs[classify_functions_def] >>
@@ -1091,48 +1092,57 @@ Proof
   metis_tac[MEM_supported_function_names]
 QED
 
-(* By induction on tops through classify_function: each internal tuple
-   comes from a FunctionDecl Internal in tops, and its label is
-   internal_fn_label of its name (internal_fn_label_prefix).  The names are
-   a sublist of supported_function_names tops, which
-   supported_declaration_names makes ALL_DISTINCT, and internal_fn_label_11
-   carries that to the labels for names without "(".  supported_program
-   does not exclude "(" from names; that premise is flagged. *)
+(* Labels are distinct when equal labels mean equal names and the names are
+   distinct. *)
+Theorem ALL_DISTINCT_MAP_name_reflect[local]:
+  !l f. ALL_DISTINCT (MAP (\p. FST (SND (SND (SND p)))) l) /\
+        (!x y. MEM x l /\ MEM y l /\ f x = f y ==>
+               FST (SND (SND (SND x))) = FST (SND (SND (SND y)))) ==>
+        ALL_DISTINCT (MAP f l)
+Proof
+  Induct >> rw[MEM_MAP] >- metis_tac[] >>
+  first_x_assum irule >> metis_tac[]
+QED
+
+(* Each internal tuple of classify_functions comes from a FunctionDecl
+   Internal in tops (MEM_classify_internal), and its label is
+   internal_fn_label of its id and name (internal_fn_label_prefix).  Equal
+   labels have equal ids (internal_fn_label_id_11), hence equal names
+   (build_func_ids_11); the names are a sublist of supported_function_names
+   tops, which supported_declaration_names makes ALL_DISTINCT. *)
 Theorem supported_internal_descriptors_ok:
   !tops is_ctor.
     supported_program tops ==>
     EVERY (\d. internal_label_ok (FST d))
       (MAP (source_internal_fn_descriptor tops is_ctor)
          (FST (SND (classify_functions tops)))) /\
-    ((!mut nr rr name args dflts ret body.
-        MEM (FunctionDecl Internal mut nr rr name args dflts ret body) tops ==>
-        ~MEM #"(" name) ==>
-     ALL_DISTINCT
-       (MAP FST (MAP (source_internal_fn_descriptor tops is_ctor)
-                   (FST (SND (classify_functions tops))))))
+    ALL_DISTINCT
+      (MAP FST (MAP (source_internal_fn_descriptor tops is_ctor)
+                  (FST (SND (classify_functions tops)))))
 Proof
   rpt strip_tac
-  >- (simp[EVERY_MAP, EVERY_MEM] >> rpt strip_tac >>
-      rename1 `MEM payload (FST (SND (classify_functions tops)))` >>
-      PairCases_on `payload` >> gvs[] >>
-      drule (iffLR MEM_classify_internal) >> metis_tac[]) >>
-  irule classified_internal_names_distinct >>
-  drule supported_program_names >>
-  metis_tac[supported_declaration_names_unique]
+  >- (rw[EVERY_MAP, EVERY_MEM, pairTheory.FORALL_PROD] >>
+      REWRITE_TAC [internal_label_ok_def, internal_fn_label_prefix]) >>
+  REWRITE_TAC [MAP_MAP_o] >>
+  irule ALL_DISTINCT_MAP_name_reflect >> rpt conj_tac
+  >~ [`ALL_DISTINCT _`]
+  >- (irule classified_internal_names_distinct >>
+      drule supported_program_names >>
+      metis_tac[supported_declaration_names_unique]) >>
+  simp[pairTheory.FORALL_PROD] >> rpt strip_tac >>
+  imp_res_tac internal_fn_label_id_11 >>
+  imp_res_tac (iffLR MEM_classify_internal) >>
+  metis_tac[build_func_ids_11, function_visibility_distinct]
 QED
 
-(* S2 for internal function names without "(".  package_internal_blocks
-   splits the block stream at each internal entry label, so two internal
-   functions must not share one; internal_fn_label_11 gives that only for
-   names without "(", and supported_program does not exclude them.  Flagged
-   premise: Vyper identifiers never contain "(". *)
+(* S2's statement, proved from the generator and source lemmas above.
+   package_internal_blocks splits the block stream at each internal entry
+   label; supported_internal_descriptors_ok keeps those labels apart from
+   each other and from every other label. *)
 Theorem lower_vyper_runtime_unit_source_unit_ok_names:
   !tops rpolicy unit.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-    supported_program tops /\
-    (!mut nr rr name args dflts ret body.
-       MEM (FunctionDecl Internal mut nr rr name args dflts ret body) tops ==>
-       ~MEM #"(" name) ==>
+    supported_program tops ==>
     o1_source_unit_ok unit
 Proof
   rpt gen_tac >> strip_tac >>
@@ -1143,7 +1153,7 @@ Proof
   simp[] >> strip_tac >>
   qspecl_then [`tops`, `F`] mp_tac supported_internal_descriptors_ok >>
   impl_tac >- first_assum ACCEPT_TAC >>
-  ASM_REWRITE_TAC [pairTheory.FST, pairTheory.SND] >> strip_tac >>
+  REWRITE_TAC [pairTheory.FST, pairTheory.SND] >> strip_tac >>
   `EVERY (\(sel, lbl, z). isPREFIX "fn_" lbl)
      (build_selectors (type_env tops) exts)`
     by REWRITE_TAC [build_selectors_fn_labels] >>
