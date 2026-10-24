@@ -38,11 +38,11 @@
  *   - compile_len_sim: well_typed_builtin_app Len admits fixed arrays and
  *     bytesN, but the lowering always loads the operand's first word.
  *
- * len, the hashes of a bytestring and slice read their operand's
- * LocatedValue (compile_expr without unwrap_value, or a msg.data/.code
- * operand that is never evaluated as a value), which expr_sim does not
- * describe: their proofs need more than the induction hypothesis's
- * expr_sim_ok of the operand (see exprSimPlaces).
+ * len, the hashes of a bytestring and slice read their operand's value_vv
+ * (compile_expr without unwrap_value), which the induction hypothesis's
+ * expr_vv_ok of the operand describes.  A msg.data or .code operand is
+ * never evaluated as a value, so for those the hypothesis says nothing and
+ * the lemmas need a judgment of their own.
  *)
 
 Theory exprSimBuiltins
@@ -54,7 +54,7 @@ Ancestors
 Theorem compile_len_sim:
   !cenv ann args.
     expr_sim_below cenv (list_size expr_size args) ==>
-    expr_sim_ok cenv (Builtin ann Len args)
+    expr_vv_ok cenv (Builtin ann Len args)
 Proof
   cheat
 QED
@@ -62,7 +62,7 @@ QED
 Theorem compile_calldata_len_sim:
   !cenv ann args.
     expr_sim_below cenv (list_size expr_size args) ==>
-    expr_sim_ok cenv (Builtin ann CalldataLen args)
+    expr_vv_ok cenv (Builtin ann CalldataLen args)
 Proof
   cheat
 QED
@@ -70,7 +70,7 @@ QED
 Theorem compile_calldata_slice_sim:
   !cenv ann n args.
     expr_sim_below cenv (list_size expr_size args) ==>
-    expr_sim_ok cenv (Builtin ann (CalldataSlice n) args)
+    expr_vv_ok cenv (Builtin ann (CalldataSlice n) args)
 Proof
   cheat
 QED
@@ -80,7 +80,7 @@ QED
 Theorem compile_keccak256_sim:
   !cenv ann args.
     expr_sim_below cenv (list_size expr_size args) ==>
-    expr_sim_ok cenv (Builtin ann Keccak256 args)
+    expr_vv_ok cenv (Builtin ann Keccak256 args)
 Proof
   cheat
 QED
@@ -88,7 +88,7 @@ QED
 Theorem compile_sha256_sim:
   !cenv ann args.
     expr_sim_below cenv (list_size expr_size args) ==>
-    expr_sim_ok cenv (Builtin ann Sha256 args)
+    expr_vv_ok cenv (Builtin ann Sha256 args)
 Proof
   cheat
 QED
@@ -98,7 +98,7 @@ QED
 Theorem compile_as_wei_value_sim:
   !cenv ann d args.
     expr_sim_below cenv (list_size expr_size args) ==>
-    expr_sim_ok cenv (Builtin ann (AsWeiValue d) args)
+    expr_vv_ok cenv (Builtin ann (AsWeiValue d) args)
 Proof
   cheat
 QED
@@ -106,7 +106,7 @@ QED
 Theorem compile_ceil_sim:
   !cenv ann args.
     expr_sim_below cenv (list_size expr_size args) ==>
-    expr_sim_ok cenv (Builtin ann Ceil args)
+    expr_vv_ok cenv (Builtin ann Ceil args)
 Proof
   cheat
 QED
@@ -114,7 +114,7 @@ QED
 Theorem compile_floor_sim:
   !cenv ann args.
     expr_sim_below cenv (list_size expr_size args) ==>
-    expr_sim_ok cenv (Builtin ann Floor args)
+    expr_vv_ok cenv (Builtin ann Floor args)
 Proof
   cheat
 QED
@@ -123,7 +123,7 @@ Theorem compile_addmod_sim:
   !cenv ann args.
     ~names_builtin AddMod args ==>
     expr_sim_below cenv (list_size expr_size args) ==>
-    expr_sim_ok cenv (Builtin ann AddMod args)
+    expr_vv_ok cenv (Builtin ann AddMod args)
 Proof
   cheat
 QED
@@ -132,7 +132,7 @@ Theorem compile_mulmod_sim:
   !cenv ann args.
     ~names_builtin MulMod args ==>
     expr_sim_below cenv (list_size expr_size args) ==>
-    expr_sim_ok cenv (Builtin ann MulMod args)
+    expr_vv_ok cenv (Builtin ann MulMod args)
 Proof
   cheat
 QED
@@ -141,28 +141,28 @@ Theorem compile_pow_mod256_sim:
   !cenv ann args.
     ~names_builtin PowMod256 args ==>
     expr_sim_below cenv (list_size expr_size args) ==>
-    expr_sim_ok cenv (Builtin ann PowMod256 args)
+    expr_vv_ok cenv (Builtin ann PowMod256 args)
 Proof
   cheat
 QED
 
 Theorem compile_addmod_names_sim:
   !cenv ann aty a bty b mty m.
-    expr_sim_ok cenv (Builtin ann AddMod [Name aty a; Name bty b; Name mty m])
+    expr_vv_ok cenv (Builtin ann AddMod [Name aty a; Name bty b; Name mty m])
 Proof
   cheat
 QED
 
 Theorem compile_mulmod_names_sim:
   !cenv ann aty a bty b mty m.
-    expr_sim_ok cenv (Builtin ann MulMod [Name aty a; Name bty b; Name mty m])
+    expr_vv_ok cenv (Builtin ann MulMod [Name aty a; Name bty b; Name mty m])
 Proof
   cheat
 QED
 
 Theorem compile_powmod256_names_sim:
   !cenv ann aty a bty b.
-    expr_sim_ok cenv (Builtin ann PowMod256 [Name aty a; Name bty b])
+    expr_vv_ok cenv (Builtin ann PowMod256 [Name aty a; Name bty b])
 Proof
   cheat
 QED
@@ -172,7 +172,7 @@ QED
 Theorem compile_concat_sim:
   !cenv ann n args.
     expr_sim_below cenv (list_size expr_size args) ==>
-    expr_sim_ok cenv (Builtin ann (Concat n) args)
+    expr_vv_ok cenv (Builtin ann (Concat n) args)
 Proof
   cheat
 QED
@@ -180,7 +180,7 @@ QED
 Theorem compile_slice_sim:
   !cenv ann n args.
     expr_sim_below cenv (list_size expr_size args) ==>
-    expr_sim_ok cenv (Builtin ann (Slice n) args)
+    expr_vv_ok cenv (Builtin ann (Slice n) args)
 Proof
   cheat
 QED
@@ -188,7 +188,7 @@ QED
 Theorem compile_extract32_sim:
   !cenv ann t args.
     expr_sim_below cenv (list_size expr_size args) ==>
-    expr_sim_ok cenv (TypeBuiltin ann Extract32 t args)
+    expr_vv_ok cenv (TypeBuiltin ann Extract32 t args)
 Proof
   cheat
 QED
@@ -196,7 +196,7 @@ QED
 Theorem compile_uint2str_sim:
   !cenv ann n args.
     expr_sim_below cenv (list_size expr_size args) ==>
-    expr_sim_ok cenv (Builtin ann (Uint2Str n) args)
+    expr_vv_ok cenv (Builtin ann (Uint2Str n) args)
 Proof
   cheat
 QED
@@ -206,7 +206,7 @@ QED
 Theorem compile_blockhash_sim:
   !cenv ann args.
     expr_sim_below cenv (list_size expr_size args) ==>
-    expr_sim_ok cenv (Builtin ann BlockHash args)
+    expr_vv_ok cenv (Builtin ann BlockHash args)
 Proof
   cheat
 QED
@@ -214,7 +214,7 @@ QED
 Theorem compile_blobhash_sim:
   !cenv ann args.
     expr_sim_below cenv (list_size expr_size args) ==>
-    expr_sim_ok cenv (Builtin ann BlobHash args)
+    expr_vv_ok cenv (Builtin ann BlobHash args)
 Proof
   cheat
 QED
@@ -222,7 +222,7 @@ QED
 Theorem compile_acc_sim:
   !cenv ann item args.
     expr_sim_below cenv (list_size expr_size args) ==>
-    expr_sim_ok cenv (Builtin ann (Acc item) args)
+    expr_vv_ok cenv (Builtin ann (Acc item) args)
 Proof
   cheat
 QED
@@ -230,7 +230,7 @@ QED
 Theorem compile_method_id_sim:
   !cenv ann args.
     expr_sim_below cenv (list_size expr_size args) ==>
-    expr_sim_ok cenv (Builtin ann MethodId args)
+    expr_vv_ok cenv (Builtin ann MethodId args)
 Proof
   cheat
 QED
@@ -240,7 +240,7 @@ QED
 Theorem compile_ecrecover_sim:
   !cenv ann args.
     expr_sim_below cenv (list_size expr_size args) ==>
-    expr_sim_ok cenv (Builtin ann ECRecover args)
+    expr_vv_ok cenv (Builtin ann ECRecover args)
 Proof
   cheat
 QED
@@ -248,7 +248,7 @@ QED
 Theorem compile_ecadd_sim:
   !cenv ann args.
     expr_sim_below cenv (list_size expr_size args) ==>
-    expr_sim_ok cenv (Builtin ann ECAdd args)
+    expr_vv_ok cenv (Builtin ann ECAdd args)
 Proof
   cheat
 QED
@@ -256,7 +256,7 @@ QED
 Theorem compile_ecmul_sim:
   !cenv ann args.
     expr_sim_below cenv (list_size expr_size args) ==>
-    expr_sim_ok cenv (Builtin ann ECMul args)
+    expr_vv_ok cenv (Builtin ann ECMul args)
 Proof
   cheat
 QED

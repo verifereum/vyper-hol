@@ -11,15 +11,13 @@
  *   compile_pop_sim       — pop on a dynamic array, with the empty-array
  *                           abort, row 3
  *
- * The induction hypothesis is expr_sim_ok of every smaller expression, so
- * of the index and of the whole base chain.  It does not cover a base
- * that is a storage, transient or hashmap place: such a base evaluates to
- * an ArrayRef or HashMapRef, not a value (expr_res_ok leaves those out),
- * and a hashmap is typed by type_place_expr, not well_typed_expr.  Nor does
- * expr_sim describe compile_expr's LocatedValue before unwrap_value, which
- * a subscript of a place reads.  These lemmas' proofs need a place
- * judgment for the base, proved by induction on the place chain with this
- * hypothesis for the indices.
+ * The induction hypothesis is expr_ok of every smaller expression, so of
+ * the index and of the whole base chain; its expr_vv_ok describes a base's
+ * value_vv, a storage or transient array's ArrayRef included.  It does not
+ * cover a hashmap base: that evaluates to a HashMapRef and is typed by
+ * type_place_expr, not well_typed_expr.  These lemmas' proofs need a place
+ * judgment for hashmap bases, proved by induction on the place chain with
+ * this hypothesis for the indices.
  *
  * The lowering also needs fixing first for nested places: compile_attribute
  * finds the struct only for a Name base (struct_name is "" otherwise, so
@@ -35,7 +33,7 @@ Ancestors
 Theorem compile_subscript_sim:
   !cenv ann base idx.
     expr_sim_below cenv (expr_size (Subscript ann base idx)) ==>
-    expr_sim_ok cenv (Subscript ann base idx)
+    expr_vv_ok cenv (Subscript ann base idx)
 Proof
   cheat
 QED
@@ -43,7 +41,7 @@ QED
 Theorem compile_attribute_sim:
   !cenv ann base fld.
     expr_sim_below cenv (expr_size (Attribute ann base fld)) ==>
-    expr_sim_ok cenv (Attribute ann base fld)
+    expr_vv_ok cenv (Attribute ann base fld)
 Proof
   cheat
 QED
@@ -51,7 +49,7 @@ QED
 Theorem compile_pop_sim:
   !cenv ann tgt.
     expr_sim_below cenv (expr_size (Pop ann tgt)) ==>
-    expr_sim_ok cenv (Pop ann tgt)
+    expr_vv_ok cenv (Pop ann tgt)
 Proof
   cheat
 QED

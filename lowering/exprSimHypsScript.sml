@@ -1,11 +1,15 @@
 (*
  * The hypotheses of the expression simulation theorem (#636)
  *
- * The main theorem (exprSimMain's compile_expr_sim) says expr_sim_ok of
- * every expression: expr_sim holds at every source state where expr_sim_pre
- * holds.  The case lemmas each prove expr_sim_ok of one form of expression
- * from expr_sim_below, expr_sim_ok of every smaller expression, which is the
- * induction hypothesis compile_expr_ind gives.
+ * The main theorems (exprSimMain's compile_expr_sim and
+ * compile_expr_vv_sim) say expr_ok of every expression: expr_sim and
+ * expr_vv_sim (exprSim) hold at every source state where expr_sim_pre
+ * holds.  expr_sim speaks of lower_value's code, expr_vv_sim of
+ * compile_expr's alone and the value_vv it hands out, for a case that
+ * unwraps an operand later or never.  The case lemmas each prove expr_ok,
+ * or expr_vv_ok, from which expr_ok follows (expr_ok_of_vv), of one form of
+ * expression from expr_sim_below, expr_ok of every smaller expression,
+ * which is the induction hypothesis compile_expr_ind gives.
  *
  * TOP-LEVEL:
  *   expr_sim_inv      — the facts about the source state and the context
@@ -15,13 +19,15 @@
  *   expr_sim_pre      — expr_sim_inv, the expression well typed, and no
  *                       internal call in it
  *   expr_sim_ok       — expr_sim wherever expr_sim_pre holds
- *   expr_sim_below    — expr_sim_ok of every expression below a size
- *   builtin_sim_ok, type_builtin_sim_ok — expr_sim_ok of a builtin and a
- *                       type builtin, the dispatchers' induction predicates
+ *   expr_vv_ok        — expr_vv_sim wherever expr_sim_pre holds
+ *   expr_ok           — both: the induction predicate
+ *   expr_sim_below    — expr_ok of every expression below a size
+ *   builtin_sim_ok, type_builtin_sim_ok — expr_ok of a builtin and a type
+ *                       builtin, the dispatchers' induction predicates
  *   names_builtin     — the three builtins on names that compile_expr does
  *                       not hand to compile_builtin_dispatch
- *   compile_expr_builtin_dispatch, compile_expr_type_builtin_dispatch —
- *                       compile_expr of a builtin is its dispatcher's
+ *   compile_expr_type_builtin_dispatch — compile_expr of a type builtin is
+ *                       its dispatcher's
  *   word_value_type   — the types whose values are word_values
  *   expr_sim_pre_eval — type soundness: evaluation keeps expr_sim_inv and
  *                       raises no type error
@@ -32,6 +38,10 @@
  *                       wherever expr_sim_inv holds
  *   well_typed_expr_type_evaluates — a well-typed expression's type
  *                       evaluates
+ *   expr_sim_of_vv_sim — unwrap_value's step: expr_vv_sim gives expr_sim
+ *                       (cheated)
+ *   expr_ok_of_vv, expr_ok_stack — expr_ok from expr_vv_ok, and from
+ *                       expr_sim_ok for a form lowered to a StackValue
  *
  * Why these hypotheses:
  *   - well_typed_expr, env_consistent, state_well_typed,
@@ -67,14 +77,12 @@
  *     dynamic array capacities, method ids) is not related to the source
  *     context.  The cases that read it (StructLit, Attribute, FlagMember,
  *     Pop, method_id, ...) will need a clause each in expr_sim_inv, and
- *     TopLevelName needs every module variable to be in ce_vars.
- *   - The induction hypothesis speaks of lower_value's fragment, run as
- *     one piece, and of results that are values.  It does not cover an
- *     operand whose unwrap_value is emitted after other code (the elements
- *     of struct and array literals, extcall arguments), an operand read
- *     before unwrap_value (len, in/not in on arrays), or a storage or
- *     transient array operand, which evaluates to an ArrayRef.  Those cases
- *     need a judgment on compile_expr's value beside expr_sim.
+ *     TopLevelName needs every module variable to be in ce_vars.  Each is
+ *     to match what Vyper's compiler guarantees.
+ *   - Keeping an operand's value_vv through the code between compile_expr
+ *     and unwrap_value (a later operand's fragment) needs the operand
+ *     composition of #636's Infrastructure: vv_post's memory frame for a
+ *     pointer into memory, unchanged storage for a storage pointer.
  *)
 
 Theory exprSimHyps
@@ -117,8 +125,20 @@ Definition expr_sim_ok_def:
       expr_sim_pre cenv cx env e es ==> expr_sim ctx func cenv cx ty e es
 End
 
+Definition expr_vv_ok_def:
+  expr_vv_ok cenv e <=>
+    !ctx func cx env ty es.
+      expr_sim_pre cenv cx env e es ==> expr_vv_sim ctx func cenv cx ty e es
+End
+
+(* The induction predicate: both judgments, so a case can use whichever an
+   operand's lowering needs. *)
+Definition expr_ok_def:
+  expr_ok cenv e <=> expr_sim_ok cenv e /\ expr_vv_ok cenv e
+End
+
 Definition expr_sim_below_def:
-  expr_sim_below cenv n <=> !e. expr_size e < n ==> expr_sim_ok cenv e
+  expr_sim_below cenv n <=> !e. expr_size e < n ==> expr_ok cenv e
 End
 
 (* AddMod, MulMod and PowMod256 applied to names: compile_expr lowers these
@@ -133,12 +153,12 @@ End
 
 Definition builtin_sim_ok_def:
   builtin_sim_ok cenv ann bi args <=>
-    ~names_builtin bi args ==> expr_sim_ok cenv (Builtin ann bi args)
+    ~names_builtin bi args ==> expr_ok cenv (Builtin ann bi args)
 End
 
 Definition type_builtin_sim_ok_def:
   type_builtin_sim_ok cenv ann tb t args <=>
-    expr_sim_ok cenv (TypeBuiltin ann tb t args)
+    expr_ok cenv (TypeBuiltin ann tb t args)
 End
 
 (* ===== The induction hypothesis ===== *)
@@ -152,7 +172,7 @@ QED
 Theorem expr_sim_below_mem:
   !cenv args e.
     expr_sim_below cenv (list_size expr_size args) /\ MEM e args ==>
-    expr_sim_ok cenv e
+    expr_ok cenv e
 Proof
   rw[expr_sim_below_def] >> first_x_assum irule >>
   irule expr_list_member_bound >> simp[]
@@ -162,20 +182,6 @@ QED
 
 val expr_sizes = [listTheory.list_size_def, vyperASTTheory.expr_size_def,
                   basicSizeTheory.option_size_def];
-
-Theorem compile_expr_builtin_dispatch:
-  !cenv ty ann bi args st.
-    ~names_builtin bi args ==>
-    compile_expr cenv ty (Builtin ann bi args) st =
-    compile_builtin_dispatch cenv ann ty bi args st
-Proof
-  rpt strip_tac >>
-  `list_size expr_size args < expr_size (Builtin ann bi args)` by
-    simp[expr_builtin_dispatch_bound] >>
-  simp[Once (CONJUNCT1 compile_expr_raw_def), compile_expr_body_def,
-       vyperASTTheory.expr_type_def] >>
-  rpt (BasicProvers.TOP_CASE_TAC >> gvs[names_builtin_def])
-QED
 
 Theorem compile_expr_type_builtin_dispatch:
   !cenv ty ann tb t args st.
@@ -318,4 +324,62 @@ Proof
       irule (REWRITE_RULE [well_formed_type_def]
                raw_call_return_type_well_formed) >> simp[]) >>
   gvs[well_typed_expr_def]
+QED
+
+(* ===== From one judgment to the other ===== *)
+
+(* unwrap_value's code, run where compile_expr's code ends, takes vv_post to
+   expr_post: nothing for a StackValue, a load for a word type, a copy into
+   a buffer of the expression's own for an aggregate outside memory.
+   Cheated, for #636's Infrastructure (operand composition).  Unprovable as
+   the definitions stand for a non-word immutable: immutables_rel relates
+   only the 32-byte encodings. *)
+Theorem expr_sim_of_vv_sim:
+  !ctx func cenv cx ty e es.
+    expr_vv_sim ctx func cenv cx ty e es ==> expr_sim ctx func cenv cx ty e es
+Proof
+  cheat
+QED
+
+(* A case lemma that proves expr_vv_ok proves expr_ok. *)
+Theorem expr_ok_of_vv:
+  !cenv e. expr_vv_ok cenv e ==> expr_ok cenv e
+Proof
+  rw[expr_ok_def, expr_sim_ok_def] >>
+  metis_tac[expr_sim_of_vv_sim, expr_vv_ok_def]
+QED
+
+(* A form lowered to a StackValue, with only values as results: expr_ok
+   from expr_sim_ok (exprSim's expr_vv_sim_stack). *)
+Theorem expr_ok_stack:
+  !cenv e.
+    expr_sim_ok cenv e /\
+    (!ty sa. ?t op sb. compile_expr cenv ty e sa = (StackValue t op, sb)) /\
+    (!cx es tv es'. eval_expr cx e es = (INL tv, es') ==> ?v. tv = Value v) ==>
+    expr_ok cenv e
+Proof
+  rw[expr_ok_def, expr_vv_ok_def] >> irule expr_vv_sim_stack >>
+  gvs[expr_sim_ok_def] >> metis_tac[]
+QED
+
+Theorem as_stack_val_stack:
+  !ty p. ?op st. as_stack_val ty p = (StackValue ty op, st)
+Proof
+  Cases_on `p` >> simp[as_stack_val_def]
+QED
+
+Theorem eval_expr_builtin_value:
+  !cx ann bi args es tv es'.
+    eval_expr cx (Builtin ann bi args) es = (INL tv, es') ==> ?v. tv = Value v
+Proof
+  rpt gen_tac >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def, return_def, COND_RATOR] >>
+  rw[] >> gvs[AllCaseEqs()]
+QED
+
+Theorem eval_expr_literal_value:
+  !cx ann l es tv es'.
+    eval_expr cx (Literal ann l) es = (INL tv, es') ==> ?v. tv = Value v
+Proof
+  simp[Once evaluate_def, return_def]
 QED
