@@ -211,10 +211,13 @@ Proof
   rw[wrapped_int_op_pre_def]
 QED
 
-(* u bounds the integer operators; tv is the type value of the second
-   operand, which only In/NotIn read: a static array value is sparse, so
-   membership needs the array's length and element type (evaluate_in_array)
-   to account for the default-valued slots it omits. *)
+(* u bounds the integer operators. tv is read only by In/NotIn, as the type
+   value of the second operand: a static array value is sparse, so membership
+   needs the array's length and element type (evaluate_in_array) to account
+   for the default-valued slots it omits. The interpreter passes that type
+   (evaluate_builtin); augmented assignment (assign_subscripts) passes the
+   target's type instead, which is fine because In/NotIn are not augmented
+   assignment operators. *)
 Definition evaluate_binop_def:
   evaluate_binop u tv bop v1 v2 =
   case bop

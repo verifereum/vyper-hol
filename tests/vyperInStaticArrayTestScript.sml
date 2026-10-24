@@ -89,7 +89,9 @@ Proof
   CONV_TAC cv_eval
 QED
 
-(* The same literal through the CPS machine, as the frontend translates it. *)
+(* The same literal through the CPS machine. Vyper types the literals of
+   `0 in [0, 7]` as int8; uint256 is used here since the default value, which
+   is what the test is about, is IntV 0 either way. *)
 Definition zero_in_literal_expr_def:
   zero_in_literal_expr =
     Builtin (BaseT BoolT) (Bop In)
@@ -115,4 +117,6 @@ QED
 val () = holbuild_extra_deps ["fixtures/exports/in_static_array/test_in_static_array.json"];
 val () = make_definitions_for_file
   ("in_static_array", "fixtures/exports/in_static_array/test_in_static_array.json");
-val () = List.app run_test_on_traces (all_traces "-");
+val traces = all_traces "-";
+val () = if List.null traces then raise Fail "in_static_array: no traces replayed"
+         else List.app run_test_on_traces traces;
