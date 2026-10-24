@@ -59,16 +59,15 @@ or placeholder. A header theorem is not a program/body acceptance theorem.
 
 - `supported_module_names`, `supported_function_names`, `supported_event_names`
   collect only the corresponding top-level names.
-- `supported_internal_name`: excludes `revert`, `code_end`, and the prefixes
-  `return_label_`, `reachable_` (uses forward `isPREFIX`).
 - **`supported_function_bindings tops args locals loops`**: ALL_DISTINCT
   on `MAP FST args ++ locals ++ loops`. Locals may shadow module variables
   (`compile_env` keys those as `"self." ++ name`) and may use the names
   `__return_buf__`/`__return_pc__` (dedicated `ce_return_*` fields). TASK_021 must supply
   **all** AnnAssign and For names across all branches/nesting, as lists rather
   than deduplicated sets. This rejects duplicates within and across each class.
-- `supported_function_header_names tops top`: argument-name checks, internal
-  label restrictions, no-argument `__default__`.
+- `supported_function_header_names tops top`: argument-name checks,
+  no-argument `__default__`. Internal function names are unrestricted: their
+  Venom labels come from `internal_fn_label`, which no other label can equal.
 - `supported_struct_field_names tops top`: no field/module-variable/map collision.
 - `supported_selectors_distinct tops`: uses **the actual compiler**
   `build_selectors (type_env tops) (FST (classify_functions tops))`; excludes
