@@ -6,8 +6,9 @@ a05-07 an internal function's Venom label was its bare source name, so these
 collided with a codegen label (`revert`, `code_end`: miscompiled), an
 external entry label (`"fn_" ++ name`) or the unit entry (`__entry`: both
 `compile_vyper = NONE`). Internal functions are now labelled
-`internal_fn_label` (`internal <name>(<arg types>)_runtime`/`_deploy`, as
-Python Vyper does, minus the function id). Each has an exact bytecode
+`internal_fn_label` (`internal <id> <name>(<arg types>)_runtime`/`_deploy`,
+as Python Vyper does; the id is the function's position in the source rather
+than Python's reachability order). Each has an exact bytecode
 comparison in `eval/evalCompilerInternalLabelsScript.sml`, included in the
 default lowering rollup.
 
