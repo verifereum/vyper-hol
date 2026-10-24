@@ -45,3 +45,25 @@ Definition adopt_call_outcome_def:
                          logs := logs |>)
 End
 val () = adopt_call_outcome_def |> SRULE [pairTheory.pair_CASE_def] |> cv_auto_trans;
+
+(* The evaluator's frame proofs use these two. *)
+
+Theorem take_call_outcome_frame:
+  take_call_outcome target calldata value_opt st = (res, st') ==>
+  st' = st with <|outcomes := st'.outcomes; requests := st'.requests|>
+Proof
+  Cases_on `st.outcomes` >>
+  simp[take_call_outcome_def] >>
+  pairarg_tac >> rw[] >> gvs[]
+QED
+
+Theorem adopt_call_outcome_equation:
+  adopt_call_outcome rq outcome st =
+    (INL (), if outcome.co_success /\ ~rq.cr_static then
+       st with <|accounts := outcome.co_accounts;
+                 tStorage := outcome.co_tStorage;
+                 logs := st.logs ++ outcome.co_logs|>
+     else st)
+Proof
+  rw[adopt_call_outcome_def, adopt_outcome_def, return_def]
+QED

@@ -1,7 +1,6 @@
 (* Equations and frame facts for the call-outcome oracle boundary.
  * TOP-LEVEL: take_call_outcome_success, take_call_outcome_error,
- * take_call_outcome_suffix, adopt_call_outcome_equation,
- * take_adopt_call_outcome_typed.
+ * take_call_outcome_suffix, take_adopt_call_outcome_typed.
  *)
 Theory vyperCallOutcomeProps
 Ancestors
@@ -87,17 +86,6 @@ Proof
       computed_precompile_def, evaluation_state_component_equality]
 QED
 
-Theorem adopt_call_outcome_equation:
-  adopt_call_outcome rq outcome st =
-    (INL (), if outcome.co_success /\ ~rq.cr_static then
-       st with <|accounts := outcome.co_accounts;
-                 tStorage := outcome.co_tStorage;
-                 logs := st.logs ++ outcome.co_logs|>
-     else st)
-Proof
-  rw[adopt_call_outcome_def, adopt_outcome_def, return_def]
-QED
-
 (* ===== Whole-record frame and guarded typing ===== *)
 
 Theorem adopt_call_outcome_static_failed:
@@ -119,15 +107,6 @@ Theorem take_call_outcome_guard_rejected:
                requests := record_request rq st.requests|>)
 Proof
   rpt strip_tac >> drule_all take_call_outcome_SOME >> simp[]
-QED
-
-Theorem take_call_outcome_frame:
-  take_call_outcome target calldata value_opt st = (res, st') ==>
-  st' = st with <|outcomes := st'.outcomes; requests := st'.requests|>
-Proof
-  Cases_on `st.outcomes` >>
-  simp[take_call_outcome_def] >>
-  pairarg_tac >> rw[] >> gvs[]
 QED
 
 Theorem take_call_outcome_error:
