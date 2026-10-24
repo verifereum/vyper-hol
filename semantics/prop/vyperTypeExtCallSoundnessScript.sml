@@ -126,15 +126,6 @@ Proof
   ACCEPT_TAC vyperTypeExtCallCoreTheory.accounts_runtime_well_typed_accounts_well_typed
 QED
 
-(* The creation adapter uses its own (identically shaped) gate, defined in
-   vyperCreate.  Bridge it to the same characterisation. *)
-Theorem create_accounts_runtime_well_typed_accounts_well_typed:
-  !acc. create_accounts_ok acc <=> accounts_well_typed acc
-Proof
-  simp[create_accounts_ok_def, create_account_ok_def,
-       accounts_well_typed_def, account_well_typed_def]
-QED
-
 Theorem ext_call_success_accounts_ok_imp_extract_premise:
   !outcome.
     ext_call_success_accounts_ok outcome ==>
@@ -217,17 +208,18 @@ QED
    prelude create_prelude_accounts, and then the adapter's own result
    extraction. *)
 
-Theorem create_accounts_ok_imp_extract_premise:
+Theorem create_accounts_runtime_well_typed_imp_extract_premise:
   !outcome.
-    create_accounts_ok_aux (FST outcome) (SND outcome).rollback.accounts ==>
+    create_accounts_runtime_well_typed_aux
+      (FST outcome) (SND outcome).rollback.accounts ==>
     (case FST outcome of
      | INR NONE => accounts_well_typed (SND outcome).rollback.accounts
      | _ => T)
 Proof
   Cases >> rename1 `(result, final_state)` >>
   Cases_on `result` >>
-  simp[create_accounts_ok_aux_def,
-       create_accounts_runtime_well_typed_accounts_well_typed] >>
+  simp[create_accounts_runtime_well_typed_aux_def,
+       accounts_runtime_well_typed_accounts_well_typed] >>
   Cases_on `y` >> simp[]
 QED
 
@@ -1124,7 +1116,7 @@ Proof
   gvs[AllCaseEqs()] >>
   qmatch_asmsub_abbrev_tac `extract_create_result _ _ _ outcome = SOME _` >>
   PairCases_on `outcome` >>
-  drule create_accounts_ok_imp_extract_premise >>
+  drule create_accounts_runtime_well_typed_imp_extract_premise >>
   strip_tac >>
   qspecl_then [`create_rollback_accounts sender accounts`, `tStorage`,
                `pending`, `outcome0`, `outcome1`, `code_opt`, `accounts'`,
