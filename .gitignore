@@ -36,3 +36,7 @@ worktrees/
 .DS_Store
 *~
 verifereum-ref
+
+# Generated native bytecode parity runner
+lowering/defs/bytecode/native/compilerNativeML.sml
+lowering/defs/bytecode/native/bytecode_parity_native.exe

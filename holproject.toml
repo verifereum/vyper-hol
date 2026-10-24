@@ -33,6 +33,14 @@ roots = ["vyperHolScript.sml",
          "lowering/supported/supportedStmtTraversePropsScript.sml",
          "lowering/supported/supportedProgramPropsScript.sml"]
 
+[[executable]]
+name = "bytecode_parity_native"
+output = "lowering/defs/bytecode/native/bytecode_parity_native.exe"
+objects = ["compilerNativeParity"]
+
+[actions.compilerNativeParity]
+deps = ["compilerNativeEmitTheory"]
+
 [dependencies.verifereum]
 git = "https://github.com/verifereum/verifereum.git"
 rev = "f5e172ccbf45addef7096feea76428de3ed3dfa8"
