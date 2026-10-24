@@ -925,6 +925,121 @@ Definition enc_pre_def:
     enc_scratch (frag_ids st st') lo top s0
 End
 
+(* ===== Encoding plan boundaries ===== *)
+
+Theorem abi_enc_plans_nil[simp]:
+  abi_enc_plans env [] elems <=> elems = []
+Proof
+  simp[Once abi_enc_plan_cases]
+QED
+
+Theorem abi_enc_plans_cons:
+  abi_enc_plans env (t::ts) elems <=>
+    ?tv ei rest.
+      evaluate_type env t = SOME tv /\ abi_enc_plan env t ei /\
+      abi_enc_plans env ts rest /\
+      elems = (ei,
+        (if is_dynamic (vyper_to_abi_type env t) then 32
+         else static_length (vyper_to_abi_type env t)),
+        type_memory_size tv, is_dynamic (vyper_to_abi_type env t))::rest
+Proof
+  simp[Once abi_enc_plan_cases] >> metis_tac[]
+QED
+
+Theorem abi_enc_plans_memory_sizes:
+  !ts elems tvs.
+    abi_enc_plans env ts elems /\
+    LIST_REL (\t tv. evaluate_type env t = SOME tv) ts tvs ==>
+    MAP (\(_, _, msz, _). msz) elems = MAP type_memory_size tvs
+Proof
+  Induct >> simp[abi_enc_plans_cons, PULL_EXISTS] >>
+  rpt strip_tac >> gvs[] >> first_x_assum irule >>
+  goal_assum drule >> simp[]
+QED
+
+Theorem abi_enc_plan_static:
+  abi_enc_plan env ty ei /\ ~is_dynamic (vyper_to_abi_type env ty) ==>
+  ei = AbiPrimWord \/ ?n. ei = AbiCopy n
+Proof
+  simp[Once abi_enc_plan_cases] >> rpt strip_tac >>
+  gvs[vyper_to_abi_type_def, is_dynamic_def]
+QED
+
+Theorem abi_enc_plans_head_lengths:
+  !ts elems a.
+    abi_enc_plans env ts elems ==>
+    head_lengths (vyper_to_abi_types env ts) a =
+      a + SUM (MAP (\(_, asz, _, _). asz) elems)
+Proof
+  Induct >> simp[abi_enc_plans_cons, head_lengths_def, PULL_EXISTS] >>
+  rpt strip_tac >> gvs[] >>
+  rename1 `abi_enc_plan env t ei` >>
+  first_x_assum drule >> disch_then (qspec_then
+    `a + if is_dynamic (vyper_to_abi_type env t) then 32
+         else static_length (vyper_to_abi_type env t)` SUBST1_TAC) >>
+  decide_tac
+QED
+
+
+Theorem val_in_memory_static_enc_length:
+  evaluate_type env ty = SOME tv /\
+  ~is_dynamic (vyper_to_abi_type env ty) /\ value_has_type tv v /\
+  vyper_to_abi env ty v = SOME av /\ val_in_memory tv v off mem ==>
+  LENGTH (enc (vyper_to_abi_type env ty) av) = type_memory_size tv
+Proof
+  strip_tac >> drule_all val_in_memory_static_abi >>
+  disch_then (mp_tac o AP_TERM ``LENGTH : word8 list -> num``) >>
+  simp[mem_bytes_at_def]
+QED
+
+Theorem enc_tuple_cons_parts:
+  has_types ts vs ==>
+  enc_tuple hl tl (t::ts) (v::vs) [] [] =
+    let tail = if is_dynamic t then enc t v else [];
+        head = if is_dynamic t then enc_number (Uint 256) (NumV (hl + tl))
+               else enc t v;
+        rest = enc_tuple hl (tl + LENGTH tail) ts vs [] [];
+        n = head_lengths ts 0
+    in head ++ TAKE n rest ++ tail ++ DROP n rest
+Proof
+  strip_tac >> simp[Once enc_def] >>
+  simp[Once enc_tuple_append]
+QED
+
+Theorem enc_tuple_nil[simp]:
+  enc_tuple hl tl [] [] [] [] = []
+Proof
+  simp[Once enc_def, REV_REVERSE_LEM]
+QED
+
+Theorem enc_dynarray_parts:
+  has_types (REPLICATE (LENGTH vs) t) vs ==>
+  enc (Array NONE t) (ListV vs) =
+    enc_number (Uint 256) (NumV (LENGTH vs)) ++
+    enc_tuple (head_lengths (REPLICATE (LENGTH vs) t) 0) 0
+      (REPLICATE (LENGTH vs) t) vs [] []
+Proof
+  strip_tac >> simp[Once enc_def] >>
+  simp[Once enc_tuple_append, TAKE_DROP]
+QED
+
+Theorem enc_dynarray_payload:
+  has_types (REPLICATE (LENGTH vs) t) vs ==>
+  DROP 32 (enc (Array NONE t) (ListV vs)) =
+    enc_tuple (head_lengths (REPLICATE (LENGTH vs) t) 0) 0
+      (REPLICATE (LENGTH vs) t) vs [] []
+Proof
+  strip_tac >> drule enc_dynarray_parts >>
+  disch_then SUBST1_TAC >>
+  simp[enc_number_def, DROP_APPEND, byteTheory.LENGTH_word_to_bytes]
+QED
+
+(* The general ABI bound head_lengths_leq_LENGTH_enc_tuple supplies
+   head_lengths ts 0 <= LENGTH (enc_tuple hl tl ts vs [] []) under
+   has_types ts vs (instantiate its hds, tls with [] and n with 0).
+   Together with LENGTH_DROP this gives the exact tail-length subtraction;
+   no encoder-specific duplicate of that bound is needed. *)
+
 (* ===== Recursive ABI encode correctness ===== *)
 
 (* Mutual induction over compile_abi_encode_child / _to_buf /
