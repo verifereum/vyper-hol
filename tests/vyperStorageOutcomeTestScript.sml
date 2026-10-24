@@ -3,7 +3,7 @@
 Theory vyperStorageOutcomeTest
 Ancestors
   list option pair sum words vyperAST vyperState vyperInterpreter
-  extCallOracle vyperCallOutcome vyperCallOutcomeBranches vyperCallOutcomeFrame
+  extCallOracle vyperCallOutcome vyperCallOutcomeProps vyperCallOutcomeBranches vyperCallOutcomeFrame
   vyperEvalOutcomeSuffix vyperCallOutcomeStorage vyperTypeStoragePreservation
   vyperTypeEvalStoragePreservation vyperTypeSoundness vyperTypeSystem
   vyperTypeInvariants vyperCallOutcomeTest
