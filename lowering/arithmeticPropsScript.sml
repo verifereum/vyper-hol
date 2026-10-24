@@ -23,6 +23,9 @@
  *   compile_safe_div_overflow — signed INT_MIN / -1 reverts
  *   compile_safe_decimal_mul_run, compile_safe_decimal_div_run
  *                            — decimal mul and div, both outcomes
+ *   convert_s2u_ok, convert_s2u_abort
+ *                            — compile_type_convert from a signed to an
+ *                              unsigned integer, both outcomes
  *
  * Source: arithmetic.py (safe_add/sub/mul/div/mod/pow)
  * Lowering: exprLoweringScript.sml (compile_safe_*, compile_compare, compile_clamp)
@@ -3852,4 +3855,87 @@ Proof
     qexistsl [`s5`, `op`, `res`, `m3`, `BaseT DecimalT`,
               `safe_sdiv (a * 0x2540BE400w) b`] >>
     gvs[type_bits_def, math_val_def, is_signed_type_def]
+QED
+
+(* ===== Signed-to-unsigned integer conversion ===== *)
+
+(* compile_type_convert's check for a signed source and an unsigned target:
+   the value is not negative and, when the target is narrower, not above its
+   maximum. *)
+Theorem convert_s2u_ok:
+  ∀v in_b out_b w ss st op st'.
+    compile_type_convert v (ConvIntToInt T in_b F out_b) st = (op, st') ∧
+    eval_operand v ss = SOME w ∧ fresh_vars_wrt st ss ∧
+    ¬(w < 0w) ∧
+    (out_b < in_b ⇒ ¬(w2n w > w2n (n2w (2 ** out_b − 1) : bytes32))) ⇒
+    op = v ∧
+    ∃ss'. run_inst_seq (emitted_insts st st') ss = OK ss' ∧
+          ∀p x. eval_operand p ss = SOME x ⇒ eval_operand p ss' = SOME x
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[compile_type_convert_def, comp_bind_def, comp_return_def,
+      comp_ignore_bind_def, LET_THM] >>
+  Cases_on `out_b < in_b` >> gvs[] >>
+  gvs[comp_bind_def, comp_return_def, comp_ignore_bind_def, LET_THM] >>
+  rpt (pairarg_tac >> gvs[])
+  >- (chain_step (elim_lit 2 emit_op_GT_correct) >>
+      chain_step emit_op_ISZERO_correct >>
+      chain_step (elim_lit 2 emit_op_SLT_correct) >>
+      chain_step emit_op_ISZERO_correct >>
+      chain_step emit_op_AND_correct >>
+      forward_all_evals >>
+      `bool_to_word (bool_to_word (w2n w > w2n (n2w (2 ** out_b − 1) : bytes32)) = 0w) &&
+       bool_to_word (bool_to_word (w < 0w) = 0w) ≠ 0w` by gvs[] >>
+      `same_blocks st cs'⁵'` by metis_tac[same_blocks_trans] >>
+      `∀op w. eval_operand op ss = SOME w ⇒ eval_operand op ss'⁵' = SOME w`
+        by compose_eval_pres >>
+      drule_all assert_chain_ok >>
+      disch_then strip_assume_tac >> first_assum (irule_at Any) >> gvs[]) >>
+  chain_step (elim_lit 2 emit_op_SLT_correct) >>
+  chain_step emit_op_ISZERO_correct >>
+  forward_all_evals >>
+  `bool_to_word (bool_to_word (w < 0w) = 0w) ≠ 0w` by gvs[] >>
+  `same_blocks st cs''` by metis_tac[same_blocks_trans] >>
+  `∀op w. eval_operand op ss = SOME w ⇒ eval_operand op ss'' = SOME w`
+    by compose_eval_pres >>
+  drule_all assert_chain_ok >>
+  disch_then strip_assume_tac >> first_assum (irule_at Any) >> gvs[]
+QED
+
+(* The abort counterpart: a negative value, or one above a narrower
+   target's maximum, fails the ASSERT. *)
+Theorem convert_s2u_abort:
+  ∀v in_b out_b w ss st op st'.
+    compile_type_convert v (ConvIntToInt T in_b F out_b) st = (op, st') ∧
+    eval_operand v ss = SOME w ∧ fresh_vars_wrt st ss ∧
+    (w < 0w ∨
+     (out_b < in_b ∧ w2n w > w2n (n2w (2 ** out_b − 1) : bytes32))) ⇒
+    ∃ss'. run_inst_seq (emitted_insts st st') ss = Abort Revert_abort ss'
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[compile_type_convert_def, comp_bind_def, comp_return_def,
+      comp_ignore_bind_def, LET_THM] >>
+  Cases_on `out_b < in_b` >> gvs[] >>
+  gvs[comp_bind_def, comp_return_def, comp_ignore_bind_def, LET_THM] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  FIRST [
+    (* narrowing: GT, ISZERO, SLT, ISZERO, AND, ASSERT *)
+    chain_step (elim_lit 2 emit_op_GT_correct) >>
+    chain_step emit_op_ISZERO_correct >>
+    chain_step (elim_lit 2 emit_op_SLT_correct) >>
+    chain_step emit_op_ISZERO_correct >>
+    chain_step emit_op_AND_correct >>
+    forward_all_evals >>
+    imp_res_tac emit_void_extends >>
+    drule_all_then strip_assume_tac assert_chain >>
+    TRY (gvs[] >> NO_TAC) >>
+    first_assum (irule_at Any),
+    (* widening: SLT, ISZERO, ASSERT *)
+    chain_step (elim_lit 2 emit_op_SLT_correct) >>
+    chain_step emit_op_ISZERO_correct >>
+    forward_all_evals >>
+    imp_res_tac emit_void_extends >>
+    drule_all_then strip_assume_tac assert_chain >>
+    TRY (gvs[] >> NO_TAC) >>
+    first_assum (irule_at Any)]
 QED

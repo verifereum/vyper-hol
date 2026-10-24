@@ -3,15 +3,19 @@
  * and type builtins)
  *
  * The case lemmas of compile_expr_sim (exprSimMain) for struct and array
- * literals and the type builtins but extract32.  All cheated, for the
- * later #636 PRs.
+ * literals and the type builtins but extract32.  Cheated, for the later
+ * #636 PRs, but for the conversions exprSimConvert proves.
  *
  * TOP-LEVEL:
  *   compile_struct_lit_sim, compile_make_array_sim — StructLit, MakeArray
  *                           (lists and tuples), row 1
  *   compile_empty_sim, compile_max_value_sim, compile_min_value_sim,
  *   compile_epsilon_sim   — empty(T), max_value, min_value, epsilon, row 2
- *   compile_convert_sim   — convert (#548), row 3
+ *   compile_convert_sim   — convert, row 3: compile_convert_word_sim
+ *                           (exprSimConvert) between integer types, from
+ *                           bool to an integer and from an integer to
+ *                           bool; compile_convert_other_sim for the rest
+ *                           (#548)
  *   compile_abi_encode_sim, compile_abi_decode_sim — abi_encode (#551),
  *                           abi_decode with its validation aborts, row 4
  *
@@ -33,7 +37,7 @@
 
 Theory exprSimAggregates
 Ancestors
-  list exprSim exprSimHyps vyperAST
+  list exprSim exprSimHyps exprSimConvert vyperAST
 
 Theorem compile_struct_lit_sim:
   !cenv ann nsid fields.
@@ -83,12 +87,27 @@ Proof
   cheat
 QED
 
+(* The conversions exprSimConvert does not cover: those to or from
+   decimal, address, bytesM, bytestrings and flags.  Cheated: for several
+   of them the checker, the lowering and the semantics disagree (#548). *)
+Theorem compile_convert_other_sim:
+  !cenv ann t args.
+    expr_sim_below cenv (list_size expr_size args) /\
+    ~(?e1. args = [e1] /\ int_convert_pair (expr_type e1) t) ==>
+    expr_vv_ok cenv (TypeBuiltin ann Convert t args)
+Proof
+  cheat
+QED
+
 Theorem compile_convert_sim:
   !cenv ann t args.
     expr_sim_below cenv (list_size expr_size args) ==>
     expr_vv_ok cenv (TypeBuiltin ann Convert t args)
 Proof
-  cheat
+  rpt strip_tac >>
+  Cases_on `?e1. args = [e1] /\ int_convert_pair (expr_type e1) t`
+  >- (gvs[] >> irule compile_convert_word_sim >> simp[]) >>
+  irule compile_convert_other_sim >> metis_tac[]
 QED
 
 Theorem compile_abi_encode_sim:
