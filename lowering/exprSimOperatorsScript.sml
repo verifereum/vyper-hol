@@ -36,7 +36,8 @@
  *                              row 6
  *   compile_not_sim, compile_neg_sim (#572), compile_abs_sim — row 7
  *   compile_ifexp_aggregate_sim — row 9 for aggregate ternaries (#561,
- *                              #674); word ternaries are proved
+ *                              #674); word ternaries are proved but for
+ *                              lower_value_word_shape
  *                              (compile_ifexp_word_sim), and so are row 8's
  *                              and/or chains (#556), which the frontend
  *                              desugars to nested IfExps of type bool
@@ -49,9 +50,10 @@
  *                              appends, hands out its variables, and
  *                              returns a variable it handed out or a literal
  *   compile_binop_shape      — compile_binop only appends
- * compile_bop_word_sim rests on these two and on binop_frag_typed.  Both are
- * for word types only; the compound non-word cases need #674's
- * compile_expr_shape.
+ * compile_bop_word_sim rests on these two and on binop_frag_typed, and
+ * compile_ifexp_word_sim and exprSimConvert's compile_convert_word_sim on
+ * lower_value_word_shape.  Both are for word types only; the compound
+ * non-word cases need #674's compile_expr_shape.
  *)
 
 Theory exprSimOperators
@@ -308,9 +310,8 @@ Proof
   Cases_on `x` >> gvs[toplevel_value_typed_def]
 QED
 
-(* A ternary of a word type, the only one supported_pure_expr admits:
-   compile_ifexp_vv_sim (exprSimIfExp), with the operands' shape from
-   lower_value_word_shape. *)
+(* A ternary of a word type: compile_ifexp_vv_sim (exprSimIfExp), with the
+   operands' shape from lower_value_word_shape (cheated). *)
 Theorem compile_ifexp_word_sim:
   !cenv t c a b.
     expr_sim_below cenv (expr_size (IfExp t c a b)) /\ is_word_type t ==>
@@ -344,13 +345,15 @@ Proof
   disch_then irule >> simp[]
 QED
 
-(* A ternary of an aggregate type.  Cheated: compile_ifexp_vv_sim needs the
-   compile-state shape of the branches' lower_value, which for a non-word
-   type is #674's compile_expr_shape.  And as expr_vv_sim stands it is
-   false for a ternary over storage or transient arrays: the source result
-   is an ArrayRef, but the branches' lower_value copies the array into
-   memory and compile_expr hands out a memory pointer, where vv_holds asks
-   for a Value.  supported_pure_expr admits no such ternary (#561, #575). *)
+(* A ternary of an aggregate type, which supported_pure_expr admits for
+   memory arrays, structs and strings (#561).  Cheated: compile_ifexp_vv_sim
+   needs the compile-state shape of the branches' lower_value, which for a
+   non-word type is #674's compile_expr_shape, and that gives neither
+   cs_next_id's growth nor the shape under expr_sim_inv yet.  A ternary over
+   storage or transient arrays has an ArrayRef result and a memory copy,
+   which vv_holds relates through materialise; its branches' results are
+   not expr_res_ok, so it needs their expr_vv_sim and unwrap_value's copy
+   rather than their expr_sim (#575). *)
 Theorem compile_ifexp_aggregate_sim:
   !cenv t c a b.
     expr_sim_below cenv (expr_size (IfExp t c a b)) /\ ~is_word_type t ==>

@@ -20,7 +20,8 @@
  *
  * Covered are the conversions between integers and from bool to an
  * integer, and from an integer to bool, where the lowering and the source
- * agree.  The rest wait on #548: there the checker, the lowering and the
+ * agree.  compile_convert_word_sim takes the argument's compile-state
+ * shape from exprSimOperators' lower_value_word_shape, which is cheated.  The rest wait on #548: there the checker, the lowering and the
  * semantics disagree.
  *
  * Helpers: eval_expr_convert_cases, expr_post_convert,
@@ -32,7 +33,7 @@ Theory exprSimConvert
 Ancestors
   arithmetic list integer words integer_word
   fragExec varsExt exprSim freshWrites exprSimOps exprSimArith
-  exprBopLowering loweringSlice localPtrsProps
+  exprBopLowering loweringSlice
   exprLowering emitHelper emitHelperProps exprLoweringProps arithmeticProps
   compileEnv vyperAST vyperInterpreter vyperState vyperContext vyperValue
   vyperValueOperation vyperArith valueEncoding venomExecSemantics venomInst
@@ -317,24 +318,6 @@ QED
 
 (* ===== Integer to integer ===== *)
 
-Theorem emitted_insts_refl:
-  !st. emitted_insts st st = []
-Proof
-  simp[emitted_insts_def]
-QED
-
-Theorem run_emitted_nil:
-  !st ss. run_inst_seq (emitted_insts st st) ss = OK ss
-Proof
-  simp[emitted_insts_def, run_inst_seq_def]
-QED
-
-Theorem w2i_0w:
-  w2i (0w : bytes32) = 0
-Proof
-  simp[integer_wordTheory.w2i_def]
-QED
-
 Theorem within_int_bound_ineq:
   !b i.
     (within_int_bound (Unsigned b) i <=> 0 <= i /\ i < &(2 ** b)) /\
@@ -408,12 +391,13 @@ Proof
           conj_tac >> strip_tac
           >- (qspecl_then [`v`, `BaseT (IntT out_b)`, `st`, `op`, `st'`, `st`,
                            `ss`, `ss`, `i2w i`] mp_tac clamp_and_return_ok >>
-              simp[run_emitted_nil, type_bits_def, emitted_insts_refl]) >>
+              simp[run_inst_seq_nil, type_bits_def, emitted_insts_refl]) >>
           qspecl_then [`v`, `BaseT (IntT out_b)`, `st`, `op`, `st'`, `st`,
                        `ss`, `ss`, `i2w i`] mp_tac
             clamp_and_return_out_of_range >>
-          simp[run_emitted_nil, type_bits_def, emitted_insts_refl]) >>
-      gvs[compile_type_convert_def, comp_return_def, run_emitted_nil] >>
+          simp[run_inst_seq_nil, type_bits_def, emitted_insts_refl]) >>
+      gvs[compile_type_convert_def, comp_return_def, emitted_insts_refl,
+          run_inst_seq_nil] >>
       gvs[within_int_bound_ineq] >>
       `2 ** (in_b - 1) <= 2 ** (out_b - 1)` by simp[] >>
       intLib.ARITH_TAC)
@@ -421,7 +405,8 @@ Proof
       `w2i (i2w i : bytes32) = i` by
         (irule w2i_i2w_within_signed >> metis_tac[]) >>
       `((i2w i : bytes32) < 0w <=> i < 0)` by
-        asm_simp_tac (srw_ss()) [integer_wordTheory.WORD_LTi, w2i_0w] >>
+        asm_simp_tac (srw_ss()) [integer_wordTheory.WORD_LTi,
+                              integer_wordTheory.word_0_w2i] >>
       `2 ** out_b - 1 < dimword (:256)` by
         (simp[dimword_def] >>
          `2 ** out_b <= 2 ** 256` by simp[] >> decide_tac) >>
@@ -470,10 +455,10 @@ Proof
       conj_tac >> strip_tac
       >- (qspecl_then [`v`, `BaseT (UintT (out_b - 1))`, `st`, `op`, `st'`,
                        `st`, `ss`, `ss`, `i2w i`] mp_tac clamp_and_return_ok >>
-          gvs[run_emitted_nil, type_bits_def, emitted_insts_refl]) >>
+          gvs[run_inst_seq_nil, type_bits_def, emitted_insts_refl]) >>
       qspecl_then [`v`, `BaseT (UintT (out_b - 1))`, `st`, `op`, `st'`, `st`,
                    `ss`, `ss`, `i2w i`] mp_tac clamp_and_return_out_of_range >>
-      gvs[run_emitted_nil, type_bits_def, emitted_insts_refl]) >>
+      gvs[run_inst_seq_nil, type_bits_def, emitted_insts_refl]) >>
   (* unsigned to unsigned *)
   `?n. i = &n /\ n < 2 ** in_b` by
     (gvs[within_int_bound_ineq] >>
@@ -494,11 +479,11 @@ Proof
       conj_tac >> strip_tac
       >- (qspecl_then [`v`, `BaseT (UintT out_b)`, `st`, `op`, `st'`, `st`,
                        `ss`, `ss`, `i2w i`] mp_tac clamp_and_return_ok >>
-          gvs[run_emitted_nil, type_bits_def, emitted_insts_refl]) >>
+          gvs[run_inst_seq_nil, type_bits_def, emitted_insts_refl]) >>
       qspecl_then [`v`, `BaseT (UintT out_b)`, `st`, `op`, `st'`, `st`,
                    `ss`, `ss`, `i2w i`] mp_tac clamp_and_return_out_of_range >>
-      gvs[run_emitted_nil, type_bits_def, emitted_insts_refl]) >>
-  gvs[compile_type_convert_def, comp_return_def, run_emitted_nil,
+      gvs[run_inst_seq_nil, type_bits_def, emitted_insts_refl]) >>
+  gvs[compile_type_convert_def, comp_return_def, run_inst_seq_nil,
       emitted_insts_refl, within_int_bound_ineq] >>
   `2 ** in_b <= 2 ** out_b` by simp[] >> decide_tac
 QED
@@ -588,13 +573,14 @@ Definition int_convert_pair_def:
     dst = BaseT BoolT
 End
 
-val int_tac = TRY (qpat_x_assum `IS_SOME _` mp_tac >> rw[]) >>
+val int_tac =
   Cases_on `v1` >> gvs[vyperTypingTheory.value_has_type_def] >>
+  rename1 `IntV i` >>
   irule compile_convert_int_frag >> simp[] >> qexists_tac `i` >>
   simp[val_to_w256_def, convert_result_def, evaluate_convert_def] >>
-  TRY (simp[within_int_bound_def] >> NO_TAC);
+  simp[within_int_bound_def];
 
-val bool_tac = TRY (qpat_x_assum `IS_SOME _` mp_tac >> rw[]) >>
+val bool_tac =
   Cases_on `v1` >> gvs[vyperTypingTheory.value_has_type_def] >>
   irule compile_convert_int_frag >> simp[] >>
   rename1 `BoolV b` >> qexists_tac `if b then 1 else 0` >>
@@ -602,11 +588,14 @@ val bool_tac = TRY (qpat_x_assum `IS_SOME _` mp_tac >> rw[]) >>
   simp[val_to_w256_def, convert_result_def, evaluate_convert_def,
        within_int_bound_def, integer_wordTheory.i2w_def];
 
-val tobool_tac = Cases_on `v1` >> gvs[vyperTypingTheory.value_has_type_def] >>
+(* sg: whether the source is signed *)
+fun tobool_tac sg =
+  rename1 `value_has_type (BaseTV (_ n)) v1` >>
+  Cases_on `v1` >> gvs[vyperTypingTheory.value_has_type_def] >>
+  rename1 `IntV i` >>
   irule compile_convert_bool_frag >>
   simp[val_to_w256_def, convert_result_def, evaluate_convert_def] >>
-  TRY (qexistsl_tac [`n`, `i`, `T`] >> simp[] >> NO_TAC) >>
-  qexistsl_tac [`n`, `i`, `F`] >> simp[within_int_bound_def];
+  qexistsl_tac [`n`, `i`, sg] >> simp[within_int_bound_def];
 
 (* convert_frag for a covered pair, on a value of the source type. *)
 Theorem convert_frag_word:
@@ -618,8 +607,12 @@ Theorem convert_frag_word:
 Proof
   rpt gen_tac >> simp[int_convert_pair_def] >> strip_tac >>
   gvs[evaluate_type_def, vyperTypingTheory.value_has_type_def,
-      mk_convert_op_def, is_bytestring_type_def, AllCaseEqs()] >>
-  FIRST [int_tac >> NO_TAC, bool_tac >> NO_TAC, tobool_tac >> NO_TAC]
+      mk_convert_op_def, is_bytestring_type_def, AllCaseEqs()]
+  >~ [`ConvToBool`, `BaseTV (UintT _)`] >- tobool_tac `F`
+  >~ [`ConvToBool`] >- tobool_tac `T`
+  >~ [`BaseTV BoolT`] >- bool_tac
+  >~ [`BaseTV BoolT`] >- bool_tac >>
+  int_tac
 QED
 
 Theorem straight_fresh_extends:
