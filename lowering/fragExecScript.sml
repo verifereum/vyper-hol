@@ -1178,5 +1178,26 @@ Theorem frag_exec_loop:
     (!k. k < N ==> frag_exec ctx stb ste (J k) (I (SUC k)) R) ==>
     frag_exec ctx st0 stx (I 0) (J N) R
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  simp[frag_exec_def, GSYM frag_outcome_def] >> rpt strip_tac >>
+  drule_all frag_exec_loop_layout >> strip_tac >>
+  rename1 `!k. k <= N ==> frag_exec ctx sth stj (Inv k) (J k) R` >>
+  `Inv 0 (jump_to hdr s)` by metis_tac[] >>
+  qpat_assum `lookup_block st0.cs_current_bb _ = _`
+    (mp_then Any mp_tac frag_outcome_jmp) >>
+  disch_then drule >> disch_then irule >> simp[] >>
+  `~(jump_to hdr s).vs_halted /\
+   (jump_to hdr s).vs_current_bb = hdr /\
+   (jump_to hdr s).vs_inst_idx = 0 /\ 0 + N = N` by
+    simp[jump_to_def] >>
+  drule_all frag_outcome_loop_header >> simp[SF ETA_ss]
 QED
+
+(* Reject accidental oracle dependencies in the completed loop rule. *)
+val _ =
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag frag_exec_loop)
+  in
+    if null axioms andalso List.all (fn s => s = "DISK_THM") oracles
+    then print "frag_exec_loop: kernel proof audit passed\n"
+    else raise Fail "frag_exec_loop has oracle or axiom dependencies"
+  end;
