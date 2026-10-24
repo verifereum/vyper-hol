@@ -1979,10 +1979,18 @@ Proof
   imp_res_tac write_place_preserves_tv >> imp_res_tac type_check_state >>
   gvs[get_scopes_def, return_def] >>
   rpt (first_x_assum drule_all >> strip_tac >> gvs[]) >>
-  imp_res_tac lift_option_type_state >> gvs[] >>
-  TRY (metis_tac[preserves_tv_trans] >> NO_TAC) >>
-  Cases_on `v` >> gvs[raise_def] >> Cases_on `a` >>
-  gvs[raise_def] >> metis_tac[]
+  imp_res_tac lift_option_type_state >> gvs[]
+  (* Subscript success, read failure, and expression failure. *)
+  >- (irule preserves_tv_trans >> first_assum (irule_at Any) >> simp[])
+  >- (irule preserves_tv_trans >> first_assum (irule_at Any) >> simp[])
+  >- (irule preserves_tv_trans >> first_assum (irule_at Any) >> simp[])
+  (* Single tuple target: evaluate the place, then write. *)
+  >- (irule preserves_tv_trans >> first_assum (irule_at Any) >> simp[])
+  (* Tuple targets require constructor analysis before applying the IH. *)
+  >- (Cases_on `v` >> gvs[raise_def] >> Cases_on `a` >>
+      gvs[raise_def] >> first_x_assum drule >> simp[])
+  (* Target-list head followed by its tail. *)
+  >> irule preserves_tv_trans >> first_assum (irule_at Any) >> simp[]
 QED
 
 Theorem try_handle_function_state[local]:
