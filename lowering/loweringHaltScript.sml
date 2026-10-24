@@ -553,6 +553,54 @@ QED
    ALLOCAs has run, and the value lies below the alloca frontier.  The
    frontier stays below 2 ** 256 while they run, and the encoding fits in
    the buffer. *)
+Theorem frag_ids_count_diff:
+  !a b. frag_ids a b = count b.cs_next_id DIFF count a.cs_next_id
+Proof
+  rw[frag_ids_def, pred_setTheory.EXTENSION] >> decide_tac
+QED
+
+Theorem frag_ids_finite:
+  !a b. FINITE (frag_ids a b)
+Proof
+  simp[frag_ids_count_diff]
+QED
+
+Theorem frag_ids_card:
+  !a b. CARD (frag_ids a b) = b.cs_next_id - a.cs_next_id
+Proof
+  rpt gen_tac >> Cases_on `a.cs_next_id <= b.cs_next_id`
+  >- (`count b.cs_next_id INTER count a.cs_next_id = count a.cs_next_id`
+        by (rw[pred_setTheory.EXTENSION] >> decide_tac) >>
+      simp[frag_ids_count_diff, pred_setTheory.CARD_DIFF_EQN]) >>
+  `frag_ids a b = {}` by
+    (rw[frag_ids_def, pred_setTheory.EXTENSION] >> decide_tac) >> simp[]
+QED
+
+Theorem frag_ids_subset:
+  !a b c d.
+    a.cs_next_id <= b.cs_next_id /\ c.cs_next_id <= d.cs_next_id ==>
+    frag_ids b c SUBSET frag_ids a d
+Proof
+  rw[frag_ids_def, pred_setTheory.SUBSET_DEF] >> decide_tac
+QED
+
+Theorem compile_external_return_abi_parts:
+  !op ei msz nr nkey ut iv st x st'.
+    compile_external_return (SOME op) F F ei msz nr nkey ut iv st =
+      (x, st') /\ (nr ==> iv) ==>
+    ?buf sa len sb.
+      compile_alloc_buffer msz st = (buf, sa) /\
+      compile_abi_encode_to_buf buf.buf_operand op ei sa = (len, sb) /\
+      emit_inst RETURN [buf.buf_operand; len] [] sb = (x, st')
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `compile_external_return _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[compile_external_return_def, optional_unlock_view,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  pairarg_tac >> pairarg_tac >> gvs[] >>
+  pairarg_tac >> gvs[] >> metis_tac[]
+QED
+
 Theorem compile_external_return_abi_frag:
   !ctx op ei msz nr nkey ut iv st x st' env ty tv v av P Q R.
     compile_external_return (SOME op) F F ei msz nr nkey ut iv st =
