@@ -10,7 +10,6 @@ Ancestors
   valueEncodingProofs
   localPtrsProps
   loweringShapeProps
-  s2LabelClashWitness
   (* compiler + correctness *)
   vyperCompiler
   vyperLoweringCorrect

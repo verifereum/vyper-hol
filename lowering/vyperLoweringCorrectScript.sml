@@ -347,11 +347,10 @@ Proof
   cheat
 QED
 
-(* S2: planned admission, Milestone 5.  False as stated: an internal function
-   named "fn_foo" next to an external "foo" shares its entry label
-   (lower_vyper_runtime_unit_label_clash in s2LabelClashWitness).
-   lower_vyper_runtime_unit_source_unit_ok_names in loweringShapeProps proves
-   it under an internal-name premise. *)
+(* S2: planned admission, Milestone 5.  loweringShapeProps proves it as
+   lower_vyper_runtime_unit_source_unit_ok_names for internal function names
+   without "(", which keep internal entry labels distinct
+   (internal_fn_label_11). *)
 Theorem lower_vyper_runtime_unit_source_unit_ok:
   !tops rpolicy unit.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\ supported_program tops
