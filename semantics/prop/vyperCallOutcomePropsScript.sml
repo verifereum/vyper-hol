@@ -159,15 +159,6 @@ Proof
   rename1 `os = head::tail` >> qexists_tac `[head]` >> simp[]
 QED
 
-Theorem adopt_call_outcome_frame:
-  adopt_call_outcome rq outcome st = (res,st') ==>
-  res = INL () /\
-  st' = st with <|accounts := st'.accounts; tStorage := st'.tStorage;
-                 logs := st'.logs|>
-Proof
-  rw[adopt_call_outcome_equation] >> gvs[]
-QED
-
 Theorem take_adopt_call_outcome_typed:
   accounts_runtime_well_typed st.accounts /\
   take_call_outcome target calldata value_opt st = (INL (rq,outcome),st') /\

@@ -46,7 +46,7 @@ Definition adopt_call_outcome_def:
 End
 val () = adopt_call_outcome_def |> SRULE [pairTheory.pair_CASE_def] |> cv_auto_trans;
 
-(* The evaluator's frame proofs use these two. *)
+(* The evaluator's frame proofs use these. *)
 
 Theorem take_call_outcome_frame:
   take_call_outcome target calldata value_opt st = (res, st') ==>
@@ -66,4 +66,13 @@ Theorem adopt_call_outcome_equation:
      else st)
 Proof
   rw[adopt_call_outcome_def, adopt_outcome_def, return_def]
+QED
+
+Theorem adopt_call_outcome_frame:
+  adopt_call_outcome rq outcome st = (res,st') ==>
+  res = INL () /\
+  st' = st with <|accounts := st'.accounts; tStorage := st'.tStorage;
+                 logs := st'.logs|>
+Proof
+  rw[adopt_call_outcome_equation] >> gvs[]
 QED
