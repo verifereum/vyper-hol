@@ -951,6 +951,32 @@ Proof
   disj2_tac >> metis_tac[exit_result_not_error]
 QED
 
+Theorem cs_extends_emit_inst:
+  emit_inst opc ops outs sa = (x, sb) ==> cs_extends sa sb
+Proof
+  metis_tac[cs_appends_def, cs_appends_emit_helpers]
+QED
+
+Theorem fn_has_code_emit_new_block:
+  emit_inst opc ops outs sa = (x, sb) /\
+  new_block lbl sb = (y, sc) /\
+  cs_extends st0 sa /\ cs_extends sc stx /\ fn_has_code st0 stx fn ==>
+  ?bb. lookup_block sa.cs_current_bb fn.fn_blocks = SOME bb /\
+       get_instruction bb (LENGTH sa.cs_current_insts) =
+         SOME (mk_inst sa.cs_next_id opc ops outs)
+Proof
+  rpt strip_tac >>
+  `cs_extends sa sb` by metis_tac[cs_extends_emit_inst] >>
+  `cs_extends sb sc` by metis_tac[cs_extends_new_block] >>
+  `cs_extends st0 sb` by metis_tac[cs_extends_trans] >>
+  `fn_has_code sb sc fn` by metis_tac[fn_has_code_mid] >>
+  drule_all fn_has_code_new_block >>
+  qpat_x_assum `emit_inst _ _ _ _ = _` mp_tac >>
+  simp[emit_inst_def, comp_bind_def, fresh_id_def, emit_def] >>
+  rpt strip_tac >> gvs[] >>
+  simp[get_instruction_def, EL_APPEND_EQN]
+QED
+
 (* ===== Loops ===== *)
 
 (* A loop as the lowering emits it: a jump to a header block whose
