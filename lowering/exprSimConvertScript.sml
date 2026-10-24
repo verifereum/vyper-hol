@@ -20,9 +20,10 @@
  *
  * Covered are the conversions between integers and from bool to an
  * integer, and from an integer to bool, where the lowering and the source
- * agree.  compile_convert_word_sim takes the argument's compile-state
- * shape from exprSimOperators' lower_value_word_shape, which is cheated.  The rest wait on #548: there the checker, the lowering and the
- * semantics disagree.
+ * agree.  The rest wait on #548: there the checker, the lowering and the
+ * semantics disagree.  compile_convert_word_sim takes the argument's
+ * compile-state shape from exprSimOperators' lower_value_word_shape, which
+ * is cheated.
  *
  * Helpers: eval_expr_convert_cases, expr_post_convert,
  * convert_frag_straight, convert_int_clamp, convert_u2s_clamp,
