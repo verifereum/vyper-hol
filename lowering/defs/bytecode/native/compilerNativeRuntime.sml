@@ -115,6 +115,12 @@ structure compilerNativeRuntime = struct
   fun hn_CHR (n : IntInf.int) = if n < 256 then Char.chr (IntInf.toInt n) else stuck "CHR"
   fun hn_ORD c = IntInf.fromInt (Char.ord c)
 
+  (* ---------- strings: HOL's char lists, as ML strings ---------- *)
+  fun hn_scons c s = String.str c ^ s
+  (* list_CASE on a string; the nil branch is a thunk, as a case arm is lazy. *)
+  fun hn_scase s n f =
+    if s = "" then n () else f (String.sub (s, 0)) (String.extract (s, 1, NONE))
+
   (* ---------- sets, represented by their characteristic functions ---------- *)
   fun hn_EMPTY _ = false
   fun hn_INSERT x s = fn y => y = x orelse s y

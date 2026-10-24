@@ -503,9 +503,6 @@ fun num_text n = Arbnum.toString n;
 (* Leading space: EmitML prints h::t without spaces, and ::# would lex as one
    symbolic identifier. *)
 fun char_text c = " #\"" ^ String.toString (String.str c) ^ "\"";
-(* EmitML prints the empty string, including a string list's final [], as "". *)
-fun char_list chars = List.foldr (fn (c, t) => listSyntax.mk_cons (c, t))
-  (raw stringSyntax.string_ty "[]") chars;
 fun concrete_width ty =
   SOME (Arbnum.toInt (fcpSyntax.dest_numeric_type (wordsSyntax.dest_word_type ty)))
   handle HOL_ERR _ => NONE;
@@ -517,12 +514,7 @@ fun lits side tm =
     let val n = num_text (numSyntax.dest_numeral tm) in
       if side = EmitML.LEFT then raw (type_of tm) ("(" ^ n ^ ":IntInf.int)")
       else raw (type_of tm) (hoist "numlit_" ("(" ^ n ^ " : IntInf.int)")) end
-  else if is_string_lit tm then
-    let val s = Literal.relaxed_dest_string_lit tm in
-      if s = "" then raw (type_of tm) "[]"
-      else if side = EmitML.LEFT then
-        char_list (map (raw stringSyntax.char_ty o char_text) (String.explode s))
-      else raw (type_of tm) (hoist "strlit_" ("String.explode " ^ Lib.mlquote s)) end
+  else if is_string_lit tm then tm
   else if is_char_lit tm then raw (type_of tm) (char_text (stringSyntax.fromHOLchar tm))
   else if side = EmitML.RIGHT andalso wordsSyntax.is_n2w tm andalso
           numSyntax.is_numeral (rand tm) andalso isSome (concrete_width (type_of tm)) then
@@ -598,7 +590,7 @@ fun default_text seen ty =
     | ("num", "num") => "(0 : IntInf.int)"
     | ("integer", "int") => "(0 : IntInf.int)"
     | ("string", "char") => "#\"\\000\""
-    | ("list", "list") => "[]"
+    | ("list", "list") => if hd Args = stringSyntax.char_ty then "\"\"" else "[]"
     | ("option", "option") => "NONE"
     | ("pair", "prod") => "(" ^ d (hd Args) ^ ", " ^ d (el 2 Args) ^ ")"
     | ("one", "one") => "()"
@@ -705,17 +697,152 @@ fun record_literals tm =
   end;
 fun record_literals_rhs eq = mk_eq (lhs eq, record_literals (rhs eq));
 
+(* Strings: HOL's string is char list, and here it is an ML string, so string
+   comparisons are not list traversals.  A string literal prints as one.  CONS
+   and a case on a string become hn_scons and hn_scase.  A polymorphic
+   constant whose generic type applies list to a type variable that is
+   instantiated to char works on lists in ML, so its uses at char convert the
+   arguments and result between strings and char lists (explode, implode). *)
+val char_ty = stringSyntax.char_ty;
+val string_ty = stringSyntax.string_ty;
+fun is_string_literal tm = type_of tm = string_ty andalso can Literal.relaxed_dest_string_lit tm;
+fun ml_const_name c = let val k = key c in
+  if is_native k then
+    (if is_result_width k orelse mem k [("words", "n2w"), ("words", "w2w"),
+          ("words", "sw2sw"), ("fcp", "dimindex"), ("words", "dimword")]
+     then raise Fail ("string coercion of width-indexed native " ^ show k)
+     else native_ml_name k)
+  else if is_constructor c then ml_name "K" k
+  else ml_name "c" k end;
+(* Coercions between the instance's ML representation and the generic one:
+   NONE when they agree. *)
+fun is_char_list theta ty = case total listSyntax.dest_list_type ty of
+    SOME a => is_vartype a andalso type_subst theta a = char_ty
+  | NONE => false;
+fun coercion theta to_generic ty =
+  if is_vartype ty then NONE
+  else if is_char_list theta ty then
+    SOME (if to_generic then "String.explode" else "String.implode")
+  else let
+    val {Thy, Tyop, Args} = dest_thy_type ty
+    val cs = map (coercion theta to_generic) Args
+    fun get (SOME s) = s | get NONE = "(fn x => x)"
+  in
+    if List.all (not o isSome) cs then NONE
+    else case ((Thy, Tyop), Args, cs) of
+      (("list", "list"), _, [a]) => SOME ("(List.map " ^ get a ^ ")")
+    | (("option", "option"), _, [a]) => SOME ("(Option.map " ^ get a ^ ")")
+    | (("pair", "prod"), _, [a, b]) =>
+        SOME ("(fn (x, y) => (" ^ get a ^ " x, " ^ get b ^ " y))")
+    | (("min", "fun"), [a, _], [_, b]) =>
+        SOME ("(fn f => fn x => " ^ get b ^ " (f (" ^
+              get (coercion theta (not to_generic) a) ^ " x)))")
+    | _ => raise Fail ("no string coercion through " ^ type_to_string ty)
+  end;
+fun string_const c =
+  if is_constructor c orelse is_case_const c then c else let
+    val gty = type_of (generic (key c))
+    val theta = match_type gty (type_of c)
+  in case coercion theta false gty of
+       NONE => c
+     | SOME f => raw (type_of c) ("(" ^ f ^ " " ^ ml_const_name c ^ ")")
+  end handle HOL_ERR _ => c;
+fun is_string_cons c = is_const c andalso same_const c listSyntax.cons_tm andalso
+  type_of c = (char_ty --> string_ty --> string_ty);
+fun strings tm =
+  if is_string_literal tm then tm
+  else if is_abs tm then let val (v, b) = dest_abs tm in mk_abs (v, strings b) end
+  else if is_comb tm then let
+    val (h, args) = strip_comb tm
+  in
+    if is_string_cons h andalso length args = 2 then
+      list_mk_comb (raw (type_of h) "hn_scons", map strings args)
+    else if is_const h andalso is_case_const h andalso
+            type_of (hd args) = string_ty then let
+      val (s, n, f, extra) = case args of
+          s :: n :: f :: extra => (s, n, f, extra)
+        | _ => raise Fail "string case arity"
+      val u = fresh_var oneSyntax.one_ty
+      val thunk = mk_abs (u, strings n)
+      val rty = type_of n
+    in list_mk_comb (raw (string_ty --> type_of thunk --> type_of f --> rty) "hn_scase",
+                     [strings s, thunk, strings f] @ map strings extra) end
+    else list_mk_comb ((if is_const h then string_const h else strings h), map strings args)
+  end
+  else if is_const tm then string_const tm
+  else tm;
+(* Patterns stay as they are: a string literal or "" is an ML pattern, but
+   CONS at char is not. *)
+fun string_pattern_ok tm =
+  is_string_literal tm orelse is_var tm orelse
+  (let val (h, args) = strip_comb tm in
+     not (is_string_cons h) andalso List.all string_pattern_ok args end);
+(* A clause that takes a string apart in its pattern (TFL completes a pattern
+   like "code" into one clause per character) has no ML pattern.  Such
+   clauses become one final clause that tests them in turn: each test
+   matches its clause's pattern with case expressions and returns SOME of the
+   right-hand side or NONE.  Every clause is a theorem, so whenever several
+   clauses match their right-hand sides agree, and the order of the tests
+   does not matter. *)
+fun has_string_cons tm =
+  not (is_string_literal tm) andalso
+  (let val (h, args) = strip_comb tm in
+     is_string_cons h orelse List.exists has_string_cons args end);
+fun match_pattern (p, x) body = let
+  val none = optionSyntax.mk_none (optionSyntax.dest_option (type_of body))
+in
+  if is_var p then subst [p |-> x] body
+  else if is_lit p then mk_cond (mk_eq (x, p), body, none)
+  else let
+    val (c, ps) = strip_comb p
+    val ty = type_of x
+    fun arm c' = let
+      val c' = Term.inst (match_type (snd (strip_fun (type_of c'))) ty) c'
+      val vs = map fresh_var (fst (strip_fun (type_of c')))
+    in list_mk_abs (vs, if same_const c c'
+                        then List.foldr (fn (pv, b) => match_pattern pv b) body (zip ps vs)
+                        else none) end
+  in boolSyntax.list_mk_icomb (TypeBase.case_const_of ty,
+       x :: map arm (TypeBase.constructors_of ty)) end
+end;
+fun string_patterns eqs = let
+  val (split, plain) = List.partition (List.exists has_string_cons o snd o strip_comb o lhs) eqs
+in
+  if null split then eqs else let
+    val (f, args0) = strip_comb (lhs (hd split))
+    val vs = map (fresh_var o type_of) args0
+    val rty = type_of (rhs (hd split))
+    fun test eq = List.foldr (fn (pv, b) => match_pattern pv b)
+      (optionSyntax.mk_some (rhs eq)) (zip (snd (strip_comb (lhs eq))) vs)
+    val r = fresh_var rty
+    val cascade = List.foldr (fn (eq, rest) =>
+        boolSyntax.list_mk_icomb (TypeBase.case_const_of (optionSyntax.mk_option rty),
+          [test eq, rest, mk_abs (r, r)]))
+      (raw rty ("(hn_nomatch " ^ Lib.mlquote (!eq_owner) ^ ")")) split
+  in plain @ [mk_eq (list_mk_comb (f, vs), cascade)] end
+end;
+val string_pattern_defs : string list ref = ref [];
+fun strings_eq eq = let
+  val (l, r) = dest_eq eq
+  val () = if List.all string_pattern_ok (snd (strip_comb l)) then ()
+           else string_pattern_defs := !eq_owner :: !string_pattern_defs
+in mk_eq (l, strings r) end;
+
 fun normalise eqs =
-  map (literal_eq o parens_rhs o guard_eq_rhs o rename_vars o record_literals_rhs o eta_full o
-       drop_literal_case)
-    (suc_patterns (uniform_arity eqs));
+  map (literal_eq o parens_rhs o guard_eq_rhs o rename_vars o strings_eq o record_literals_rhs o
+       eta_full o drop_literal_case)
+    (string_patterns (suc_patterns (uniform_arity eqs)));
 
 val normal_defs = map (fn (k, eqs) => (eq_owner := show k; (k, normalise eqs))) (rev (!defs));
 val fixture_terms = map (fn (p, h) =>
-    (h, lits EmitML.RIGHT (rename_vars (eta_full ``compile_vyper (K SOME) (o1_policy all_capabilities)
-                                                    ^(program_term p)``))))
+    (h, lits EmitML.RIGHT (rename_vars (strings (eta_full ``compile_vyper (K SOME) (o1_policy all_capabilities)
+                                                    ^(program_term p)``)))))
   fixtures;
 val () = pr ("normalised\n");
+val () = if null (!string_pattern_defs) then ()
+         else (pr ("string CONS patterns in: " ^
+                   String.concatWith " " (Lib.mk_set (!string_pattern_defs)) ^ "\n");
+               raise Fail "string CONS patterns")
 
 (* ---------- types ---------- *)
 val builtin_tyops = [("min", "bool"), ("min", "fun"), ("num", "num"), ("integer", "int"),
@@ -759,7 +886,7 @@ fun ml_ty ty =
     | ("num", "num") => "hn_num"
     | ("integer", "int") => "hn_int"
     | ("string", "char") => "char"
-    | ("list", "list") => app1 "list"
+    | ("list", "list") => if hd Args = stringSyntax.char_ty then "string" else app1 "list"
     | ("option", "option") => app1 "option"
     | ("pair", "prod") => "(" ^ ml_ty (hd Args) ^ " * " ^ ml_ty (el 2 Args) ^ ")"
     | ("one", "one") => "unit"
@@ -850,16 +977,8 @@ val def_index = List.foldl (fn ((i, (k, _)), d) => Redblackmap.insert (d, k, i))
 val def_vec = Vector.fromList normal_defs;
 fun def_deps i = List.mapPartial (fn c => Redblackmap.peek (def_index, key c))
   (List.concat (map (find_terms is_const o rhs) (#2 (Vector.sub (def_vec, i)))));
-(* Strings are char lists here, but EmitML prints the [] pattern it rebuilds
-   for a case on a string as "".  No other "" reaches the output: string
-   literals are hoisted or exploded above. *)
-fun empty_string_as_nil text = let
-  fun go ss = let val (a, b) = Substring.position "\"\"" ss
-              in if Substring.isEmpty b then [a]
-                 else a :: Substring.full "[]" :: go (Substring.triml 2 b) end
-in Substring.concat (go (Substring.full text)) end;
-fun pp_defn tm = empty_string_as_nil (PP.pp_to_string 100 (EmitML.pp_defn_as_ML []) tm);
-fun pp_term tm = empty_string_as_nil (PP.pp_to_string 100 (EmitML.pp_term_as_ML [] EmitML.RIGHT) tm);
+fun pp_defn tm = PP.pp_to_string 100 (EmitML.pp_defn_as_ML []) tm;
+fun pp_term tm = PP.pp_to_string 100 (EmitML.pp_term_as_ML [] EmitML.RIGHT) tm;
 val failed = ref 0;
 fun group_text group = let
   val t0 = Time.now ()
