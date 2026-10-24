@@ -145,8 +145,9 @@ Proof
   CONV_TAC cv_eval
 QED
 
-(* Copy of the abi_dynamic.vy fixture program from the compiler's ABI builtin
-   fixtures, kept here so this checker test does not depend on lowering. *)
+(* Copy of task090_abi_dynamic_program (evalCompilerSubsetAbiBuiltins, the
+   compiler's abi_dynamic.vy fixture), kept here so this checker test does not
+   depend on lowering. Keep the two in sync. *)
 Definition abi_dynamic_program_def:
   abi_dynamic_program =
     [FunctionDecl External Pure F F "encode_dynamic"
