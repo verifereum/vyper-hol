@@ -482,8 +482,10 @@ Proof
   cheat
 QED
 
-(* S2: planned admission, Milestone 5. Proof idea: lowering's checked context
-   and supported function/loop restrictions establish the raw O1 shape. *)
+(* S2: planned admission, Milestone 5.  loweringShapeProps proves it as
+   lower_vyper_runtime_unit_source_unit_ok_names for internal function names
+   without "(", which keep internal entry labels distinct
+   (internal_fn_label_11). *)
 Theorem lower_vyper_runtime_unit_source_unit_ok:
   !tops rpolicy unit.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\ supported_program tops
