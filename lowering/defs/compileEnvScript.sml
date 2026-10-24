@@ -12,6 +12,7 @@
  *   type_bounds      — (lo, hi) word256 bounds for type
  *   struct_field_offset — byte offset of struct field
  *   nsid_to_string   — namespace ID to lookup string
+ *   internal_fn_label — Venom label of an internal function (Vyper's spelling)
  *   local_ptrs_rel   — live locals held through pointer variables match memory
  *   compile_state_ok — well-formedness: bound labels disjoint from future fresh labels
  *   label_external   — label not bound and not in future fresh-label co-domain
@@ -156,6 +157,112 @@ Definition nsid_to_string_def:
   nsid_to_string (NONE, name) = name ∧
   nsid_to_string (SOME (n:num), name) = (toString n) ++ "." ++ name
 End
+
+(* ===== Internal Function Labels ===== *)
+(* Vyper's str(typ), used only to spell internal function labels.
+   Mirrors Python (vyper/semantics/types/): primitives.py (int/uint, bytesM),
+   bytestrings.py (Bytes[n]/String[n]), subscriptable.py (SArray, DynArray,
+   tuple), user.py (flag, struct). An interface-typed parameter is
+   BaseT AddressT here and prints as address, where Python prints the
+   interface name; labels never reach the bytecode. *)
+Definition vyper_type_str_def:
+  vyper_type_str (BaseT (UintT n)) = "uint" ++ toString n ∧
+  vyper_type_str (BaseT (IntT n)) = "int" ++ toString n ∧
+  vyper_type_str (BaseT BoolT) = "bool" ∧
+  vyper_type_str (BaseT DecimalT) = "decimal" ∧
+  vyper_type_str (BaseT AddressT) = "address" ∧
+  vyper_type_str (BaseT (BytesT (Fixed m))) = "bytes" ++ toString m ∧
+  vyper_type_str (BaseT (BytesT (Dynamic n))) =
+    "Bytes[" ++ toString n ++ "]" ∧
+  vyper_type_str (BaseT (StringT n)) = "String[" ++ toString n ++ "]" ∧
+  vyper_type_str (ArrayT t (Fixed n)) =
+    vyper_type_str t ++ "[" ++ toString n ++ "]" ∧
+  vyper_type_str (ArrayT t (Dynamic n)) =
+    "DynArray[" ++ vyper_type_str t ++ ", " ++ toString n ++ "]" ∧
+  vyper_type_str (TupleT [t]) = "(" ++ vyper_type_str t ++ ",)" ∧
+  vyper_type_str (TupleT ts) = "(" ++ vyper_type_strs ", " ts ++ ")" ∧
+  vyper_type_str (StructT id) = SND id ∧
+  vyper_type_str (FlagT id) = SND id ∧
+  vyper_type_str NoneT = "" ∧
+  vyper_type_strs sep [] = "" ∧
+  vyper_type_strs sep [t] = vyper_type_str t ∧
+  vyper_type_strs sep (t :: ts) =
+    vyper_type_str t ++ sep ++ vyper_type_strs sep ts
+Termination
+  WF_REL_TAC `measure (\x. case x of
+                              INL t => type_size t
+                            | INR (_, ts) => list_size type_size ts)`
+End
+
+(* Venom label of an internal function, from its function id, its lookup
+   name (nsid_to_string of its nsid) and declared parameter types,
+   defaulted ones included. The space keeps it apart from every source
+   identifier, external entry label ("fn_" ++ name), unit entry
+   ("__entry"/"__deploy"), codegen label ("revert", "code_end") and fresh
+   label ("@..."); the id, a decimal followed by a space, keeps the labels
+   of differently numbered functions apart whatever their names.
+   Mirrors Python: codegen_venom/module.py _generate_internal_function and
+   codegen_venom/expr.py lower_Call (internal calls). *)
+Definition internal_fn_label_def:
+  internal_fn_label (fn_id : num) (name : string) (arg_tys : type list)
+                    (is_ctor : bool) =
+    "internal " ++ toString fn_id ++ " " ++ name ++ "(" ++
+    vyper_type_strs "," arg_tys ++ ")" ++
+    (if is_ctor then "_deploy" else "_runtime")
+End
+
+Theorem internal_fn_label_prefix:
+  !fn_id name arg_tys is_ctor.
+    isPREFIX "internal " (internal_fn_label fn_id name arg_tys is_ctor)
+Proof
+  simp[internal_fn_label_def]
+QED
+
+Theorem toString_no_space[local]:
+  !n : num. ~MEM #" " (toString n)
+Proof
+  gen_tac >> strip_tac >>
+  qspec_then `n` mp_tac ASCIInumbersTheory.EVERY_isDigit_num_to_dec_string >>
+  REWRITE_TAC [listTheory.EVERY_MEM] >>
+  disch_then drule >> EVAL_TAC
+QED
+
+Theorem APPEND_sep_11[local]:
+  !s1 s2 c r1 r2.
+    ~MEM c s1 /\ ~MEM c s2 /\ s1 ++ ([c] ++ r1) = s2 ++ ([c] ++ r2) ==>
+    s1 = s2
+Proof
+  Induct >> Cases_on `s2` >> rw[] >>
+  first_x_assum irule >> metis_tac[listTheory.APPEND_ASSOC]
+QED
+
+(* Equal labels have equal function ids. *)
+Theorem internal_fn_label_id_11:
+  !i1 i2 n1 n2 tys1 tys2 c1 c2.
+    internal_fn_label i1 n1 tys1 c1 = internal_fn_label i2 n2 tys2 c2 ==>
+    i1 = i2
+Proof
+  rpt gen_tac >>
+  REWRITE_TAC [internal_fn_label_def, GSYM listTheory.APPEND_ASSOC,
+               listTheory.APPEND_11] >>
+  strip_tac >> drule_at Any APPEND_sep_11 >> simp[toString_no_space]
+QED
+
+(* Equal labels name the same function, for names without "(" (source
+   identifiers and nsid_to_string values). *)
+Theorem internal_fn_label_11:
+  !i1 i2 n1 n2 tys1 tys2 c1 c2.
+    ~MEM #"(" n1 /\ ~MEM #"(" n2 /\
+    internal_fn_label i1 n1 tys1 c1 = internal_fn_label i2 n2 tys2 c2 ==>
+    n1 = n2
+Proof
+  rpt gen_tac >> strip_tac >>
+  `i1 = i2` by metis_tac[internal_fn_label_id_11] >>
+  qpat_x_assum `internal_fn_label _ _ _ _ = _` mp_tac >>
+  ASM_REWRITE_TAC [internal_fn_label_def, GSYM listTheory.APPEND_ASSOC,
+               listTheory.APPEND_11] >>
+  strip_tac >> drule_at Any APPEND_sep_11 >> gs[]
+QED
 
 (* Key of a module-level variable (storage, transient, HashMap, immutable) in
    the name-keyed compile_env tables. Arguments and locals use their plain
@@ -363,6 +470,14 @@ Datatype:
        pass_via_stack: per-arg T=stack, F=memory. Order matches func_t.arguments.
        Mirrors Python: calling_convention.py pass_via_stack + returns_stack_count *)
     ce_func_info : string -> (num # num # bool list);
+    (* Internal function declared parameter types, defaulted ones included:
+       func_name → arg types. Spells the INVOKE target (internal_fn_label).
+       Mirrors Python: func_t.arguments in expr.py lower_Call *)
+    ce_func_param_types : string -> type list;
+    (* Internal function ids: func_name → id. Spells the INVOKE target
+       (internal_fn_label).
+       Mirrors Python: func_t._function_id in expr.py lower_Call *)
+    ce_func_ids : string -> num;
     (* Nonreentrant lock info for explicit return statements:
        (is_nonreentrant, nkey, use_transient, is_view).
        Python: stmt.py _lower_external_return calls emit_nonreentrant_unlock.
