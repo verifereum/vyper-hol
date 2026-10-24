@@ -1175,7 +1175,7 @@ fun generate_test_scripts () = let
   val files = test_files ()
   val gen_dir = generated_dir
   val () = cleanup_generated_scripts files
-  val () = List.app (fn (id, jsonp) => let
+  val () = List.app (fn (id, _) => let
     val thyname = String.concat["vyperTest_", id]
     val defsname = String.concat["vyperTestDefs_", id]
     val fname = OS.Path.concat(gen_dir, String.concat[thyname, "Script.sml"])
