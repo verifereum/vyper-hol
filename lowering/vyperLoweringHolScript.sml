@@ -6,8 +6,10 @@ Ancestors
   (* property statements and proofs *)
   moduleLoweringProps
   loweringSlice
+  varsExt exprSim
   valueEncodingProofs
   localPtrsProps
+  loweringShapeDefs
   (* compiler + correctness *)
   vyperCompiler
   vyperLoweringCorrect
@@ -15,6 +17,7 @@ Ancestors
   evalCompilerMemoryStores
   evalCompilerExternalCalls
   evalCompilerNameCollisions
+  evalCompilerInternalLabels
   evalCompilerSliceBuffers
   evalCompilerPhiPointers
   evalCompilerInternalFrames

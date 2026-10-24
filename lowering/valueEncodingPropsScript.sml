@@ -9,6 +9,7 @@
  *
  * Layer 1 (mstore/mem_word_at):
  *   mstore_mem_word_at_same      — mload after mstore at same offset
+ *   mem_bytes_at_mstore_same     — the 32 bytes at the offset of an mstore
  *   mstore_mem_word_at_disjoint  — mload after mstore at disjoint offset
  *   mstore_mem_bytes_at_disjoint — mem_bytes_at after mstore at disjoint offset
  *   mstore_establishes_val_in_memory_prim — mstore with val_to_w256 establishes val_in_memory
@@ -30,6 +31,8 @@ Theory valueEncodingProps
 Ancestors
   list rich_list
   valueEncoding valueEncodingProofs
+Libs
+  wordsLib
 
 (* ===== val_to_w256 agrees with encode_base_to_slot ===== *)
 
@@ -98,6 +101,22 @@ Theorem mstore_mem_word_at_same:
   ∀ off (w:bytes32) s.
     mem_word_at off (mstore off w s).vs_memory = w
 Proof ACCEPT_TAC mstore_mem_word_at_same_proof
+QED
+
+Theorem mem_bytes_at_mstore_same:
+  ∀ off (w:bytes32) s.
+    mem_bytes_at off 32 (mstore off w s).vs_memory = word_to_bytes w T
+Proof
+  rpt gen_tac >>
+  qabbrev_tac `M = (mstore off w s).vs_memory` >>
+  `word_of_bytes T (0w:bytes32) (mem_bytes_at off 32 M) = w` by
+    (qspecl_then [`off`, `w`, `s`] mp_tac mstore_mem_word_at_same >>
+     simp[mem_word_at_def, mem_bytes_at_def, Abbr `M`]) >>
+  `word_to_bytes (word_of_bytes T (0w:bytes32) (mem_bytes_at off 32 M)) T =
+   mem_bytes_at off 32 M` by
+    (irule venomMemProofsTheory.word_bytes_roundtrip_proof >>
+     simp[mem_bytes_at_def, dividesTheory.divides_def]) >>
+  metis_tac[]
 QED
 
 Theorem mstore_mem_word_at_disjoint:

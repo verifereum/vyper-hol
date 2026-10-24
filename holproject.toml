@@ -20,7 +20,17 @@ roots = ["vyperHolScript.sml",
          "tests/vyperRawCallCalldataTestScript.sml",
          "tests/vyperDelegateRawCallTestScript.sml",
          "tests/vyperTupleSubscriptTestScript.sml",
-         "tests/vyperExtCallModesTestScript.sml"]
+         "tests/vyperExtCallModesTestScript.sml",
+         "tests/vyperUnreachableTestScript.sml",
+         "tests/vyperPopReceiverTestScript.sml",
+         "lowering/supported/supportedTypePropsScript.sml",
+         "lowering/supported/supportedNamePropsScript.sml",
+         "lowering/supported/supportedDeclPropsScript.sml",
+         "lowering/supported/supportedExprFormPropsScript.sml",
+         "lowering/supported/supportedExprPropsScript.sml",
+         "lowering/supported/supportedStmtPropsScript.sml",
+         "lowering/supported/supportedStmtTraversePropsScript.sml",
+         "lowering/supported/supportedProgramPropsScript.sml"]
 
 [dependencies.verifereum]
 git = "https://github.com/verifereum/verifereum.git"

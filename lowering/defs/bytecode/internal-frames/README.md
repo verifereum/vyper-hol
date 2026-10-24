@@ -30,8 +30,8 @@ of equality with Python iteration over arbitrary multi-pointer may-sets.
 Cleanup uses caller height, cycle-sensitive regional growth and a path-carried
 promise, including invokes. Compatibility `generate_fn_plan*` interfaces remain;
 context generation uses the cleanup-aware entry points. Simulation contracts are
-unchanged. A post-main-merge interpreter frame-preservation proof was repaired
-compositionally; neither external-call semantics nor its statement changed.
+unchanged. The interpreter uses main's external-call frame-preservation proof
+without changes.
 
 ## New definition inventory
 
@@ -123,6 +123,12 @@ frame-size and P108 relocation results below were rechecked after the repair.
 Baseline admissions remain in three `genBlockSim` theorems and `codegen_correct`; this work neither
 introduces nor discharges those existing admissions. See [VALIDATION.md](VALIDATION.md)
 for runtime frame sizes, residual diagnosis and behavioral provenance.
+
+After merging main `639365c7`, CI-mode checking rebuilt `vyperInterpreterTheory`,
+`evalCompilerMemoryConstructionTheory`, `evalCompilerInternalFramesTheory` and
+`evalCompilerNameCollisionsTheory` with the same cache-disabling flags above and
+`-j2`; it exited 0. All 11 memory-construction, 15 internal-frame and nine
+name-collision oracle equalities were saved on that merged tree.
 
 ## Whitelist and statement changes
 
