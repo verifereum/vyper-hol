@@ -7,6 +7,8 @@ Ancestors
   moduleLoweringProps
   loweringSlice
   varsExt exprSim
+  exprBopLowering
+  exprSimOps exprSimCompare exprSimArith intBits freshWrites
   valueEncodingProofs
   localPtrsProps
   loweringShapeDefs
