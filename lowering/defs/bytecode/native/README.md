@@ -10,7 +10,7 @@ kernel-checked and slow, which is why the rollup is opt-in.
 This directory runs the same check as compiled Standard ML. The equations
 `EVAL` uses for `compile_vyper` are printed by EmitML and compiled. The
 result is trusted rather than kernel-checked. It runs all 101 fixtures in
-about a second, so it can run on every change; the `EVAL` theories remain the
+under half a second, so it can run on every change; the `EVAL` theories remain the
 proof.
 
 ## Files
@@ -23,6 +23,8 @@ proof.
   maps, sets).
 - `compilerNativeParity.sml`: the runner. It compiles each fixture natively
   and compares the bytes with its oracle file.
+- `bytecode_parity_native.mlb`, `compilerNativeMLtonMain.sml`: the MLton
+  build of the runner.
 
 ## Use
 
@@ -36,6 +38,18 @@ cd lowering/defs/bytecode
 
 Each fixture prints `PASS` or `FAIL` with its time. The exit status is
 non-zero unless every selected fixture matches.
+
+The same sources also build with MLton (it needs the GMP headers), after the
+generator has run:
+
+```sh
+mlton -inline 300 -output bytecode_parity_native.mlton bytecode_parity_native.mlb
+```
+
+On an arm64 machine, with all 101 fixtures, this binary ran in 0.37 s
+against 0.42 s for the Poly/ML one. It took 42 s and 1.7 GB to compile;
+Poly/ML takes 6 s. MLton's default inlining gives 0.45 s, and a higher
+threshold gains nothing more.
 
 ## What the generator exports
 
@@ -54,6 +68,16 @@ Standard ML:
   switch the function would be partial in ML.
 - **Patterns.** Patterns on `SUC` become a guard, because natives are
   arbitrary-precision integers.
+- **Strings.** HOL's `string` is `char list`; here it is the ML `string`
+  type, so names compare as strings rather than as lists.
+  - `CONS` and `case` on a string become `hn_scons` and `hn_scase`.
+  - A polymorphic list function used at `char` gets its arguments and result
+    converted with `String.explode`/`String.implode`.
+  - Clauses that take a string apart in their pattern (TFL completes a
+    pattern like `"code"` into one clause per character) have no ML pattern.
+    They become one final clause that tests each in turn with `case`
+    expressions. Every clause is a theorem, so the order of the tests does
+    not matter.
 - **Record literals.** `<| f := v; ... |>` is a chain of updates on `ARB`;
   it becomes a constructor application.
 - **Parentheses.** Nested `case` and `fn` expressions that end a case arm
@@ -86,6 +110,11 @@ The approximations:
   contain maps compares these lists. So two equal maps built in different
   orders compare unequal, where HOL says they are equal.
 - `ARB` is a fixed default value; in HOL it is unspecified.
+- Runtime functions replace these definitions, computing the same result:
+  - `EL`, `LENGTH` and `GENLIST`, with ML lists and ints;
+  - `APPEND`, `LENGTH` and `FLAT` at `char`, with the ML string functions;
+  - `list_subset`, `ALL_DISTINCT` and `nub` at `string` and `num` elements,
+    by sorting instead of pairwise `MEM`.
 - Natives are total where `EVAL` might stop. For example, `hn_fmap_eq`
   decides map equality that `EVAL` may leave unevaluated.
 
