@@ -118,7 +118,7 @@ val scalar_modular_selectors_eval = save_thm
 val scalar_modular_selectors = rhs (concl scalar_modular_selectors_eval)
 val scalar_modular_external_fns_eval = save_thm
   ("scalar_modular_external_fns_eval",
-   EVAL ``MAP (set_external_package_target
+   evalCompilerBytecodeLib.weak_eval ``MAP (set_external_package_target
                  (^scalar_modular_rpolicy).rpol_target o
                package_external_fn ^scalar_modular_tops F
                  ^scalar_modular_nkeys)
@@ -127,7 +127,7 @@ val scalar_modular_external_fns =
   rhs (concl scalar_modular_external_fns_eval)
 val scalar_modular_internal_fns_eval = save_thm
   ("scalar_modular_internal_fns_eval",
-   EVAL ``MAP (set_internal_package_target
+   evalCompilerBytecodeLib.weak_eval ``MAP (set_internal_package_target
                  (^scalar_modular_rpolicy).rpol_target o
                package_internal_fn ^scalar_modular_tops F
                  ^scalar_modular_nkeys F 0)
@@ -136,7 +136,7 @@ val scalar_modular_internal_fns =
   rhs (concl scalar_modular_internal_fns_eval)
 val scalar_modular_fallback_fn_eval = save_thm
   ("scalar_modular_fallback_fn_eval",
-   EVAL ``set_fallback_package_target
+   evalCompilerBytecodeLib.weak_eval ``set_fallback_package_target
       (^scalar_modular_rpolicy).rpol_target
       (package_fallback_fn ^scalar_modular_tops F ^scalar_modular_nkeys
         ^scalar_modular_fallback_source)``)
@@ -240,7 +240,8 @@ fun scalar_modular_stage_external_function prefix package current =
       (rhs (concl entry_checks_eval)))
     val register_args_eval = save_thm
       (prefix ^ "_register_args_eval",
-       EVAL ``compile_register_positional_args ^cenv ^pos_args 4 ^state2``)
+       evalCompilerBytecodeLib.weak_eval
+         ``compile_register_positional_args ^cenv ^pos_args 4 ^state2``)
     val register_args_pair = rhs (concl register_args_eval)
     val body_cenv = #1 (pairSyntax.dest_pair register_args_pair)
     val state3 = #2 (pairSyntax.dest_pair register_args_pair)
@@ -250,7 +251,8 @@ fun scalar_modular_stage_external_function prefix package current =
     val locals = rhs (concl collect_locals_eval)
     val reserve_locals_eval = save_thm
       (prefix ^ "_reserve_locals_eval",
-       EVAL ``reserve_local_ptrs ^body_cenv ^locals ^state3``)
+       evalCompilerBytecodeLib.weak_eval
+         ``reserve_local_ptrs ^body_cenv ^locals ^state3``)
     val reserve_pair = rhs (concl reserve_locals_eval)
     val body_cenv2 = #1 (pairSyntax.dest_pair reserve_pair)
     val state4 = #2 (pairSyntax.dest_pair reserve_pair)

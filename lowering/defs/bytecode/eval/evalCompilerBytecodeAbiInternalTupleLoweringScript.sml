@@ -44,9 +44,12 @@ val internal_tuple_call_selectors_eval = save_thm
    EVAL ``build_selectors ^internal_tuple_call_type_env
            ^internal_tuple_call_external_sources``)
 val internal_tuple_call_selectors = rhs (concl internal_tuple_call_selectors_eval)
+(* Keep function-valued environment fields lazy until compilation applies them.
+   Full normalization of a returned package expands these unused fields. *)
+val weak_eval = evalCompilerBytecodeLib.weak_eval
 val internal_tuple_call_external_fns_eval = save_thm
   ("internal_tuple_call_external_fns_eval",
-   EVAL
+   weak_eval
      ``MAP (set_external_package_target
               (^internal_tuple_call_rpolicy).rpol_target o
             package_external_fn ^internal_tuple_call_tops F
@@ -56,7 +59,7 @@ val internal_tuple_call_external_fns =
   rhs (concl internal_tuple_call_external_fns_eval)
 val internal_tuple_call_internal_fns_eval = save_thm
   ("internal_tuple_call_internal_fns_eval",
-   EVAL
+   weak_eval
      ``MAP (set_internal_package_target
               (^internal_tuple_call_rpolicy).rpol_target o
             package_internal_fn ^internal_tuple_call_tops F
@@ -66,7 +69,7 @@ val internal_tuple_call_internal_fns =
   rhs (concl internal_tuple_call_internal_fns_eval)
 val internal_tuple_call_fallback_fn_eval = save_thm
   ("internal_tuple_call_fallback_fn_eval",
-   EVAL
+   weak_eval
      ``set_fallback_package_target
          (^internal_tuple_call_rpolicy).rpol_target
          (package_fallback_fn ^internal_tuple_call_tops F
@@ -193,7 +196,7 @@ val internal_tuple_call_state9 =
   #2 (pairSyntax.dest_pair internal_tuple_call_retpc_pair)
 val internal_tuple_call_cenv1_eval = save_thm
   ("internal_tuple_call_cenv1_eval",
-   EVAL
+   weak_eval
      ``^internal_tuple_call_cenv with
           <| ce_return_buf :=
                (case (^internal_tuple_call_return_buf,
@@ -205,7 +208,7 @@ val internal_tuple_call_cenv1_eval = save_thm
 val internal_tuple_call_cenv1 = rhs (concl internal_tuple_call_cenv1_eval)
 val internal_tuple_call_materialize_eval = save_thm
   ("internal_tuple_call_materialize_eval",
-   EVAL ``materialize_internal_params ^internal_tuple_call_cenv1
+   weak_eval ``materialize_internal_params ^internal_tuple_call_cenv1
            ^internal_tuple_call_captured_params ^internal_tuple_call_state9``)
 val internal_tuple_call_materialize_pair =
   rhs (concl internal_tuple_call_materialize_eval)
@@ -1182,7 +1185,7 @@ val (_, internal_tuple_call_if_args) =
 val internal_tuple_call_if_scrut = List.nth (internal_tuple_call_if_args, 1)
 val internal_tuple_call_materialize_exact_eval = save_thm
   ("internal_tuple_call_materialize_exact_eval",
-   EVAL internal_tuple_call_if_scrut)
+   weak_eval internal_tuple_call_if_scrut)
 val internal_tuple_call_internal_function_refine = QCONV
   (PURE_REWRITE_CONV [internal_tuple_call_materialize_exact_eval])
   internal_tuple_call_internal_function_partial_pair
