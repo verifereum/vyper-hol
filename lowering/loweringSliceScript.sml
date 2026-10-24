@@ -17,6 +17,8 @@
  *   expr_frag               — an expression's fragment, in the form the
  *                             statement lemmas take it
  *   word_value              — a value held in one word as val_to_w256
+ *   emit_op_frag            — one instruction that writes a word computed
+ *                             from the state to a fresh variable
  *   compile_name_word_frag  — slice 1: reading a word local
  *   compile_annassign_word_frag — slice 1: declaring a word local
  *   compile_if_frag         — slice 2: an if/else
@@ -26,6 +28,7 @@
  *
  * Helpers:
  *   stmt_state_rel_exec_alloca, stmt_state_rel_declare_word,
+ *   eval_name_word, lower_value_name_word, step_name_word,
  *   eval_stmt_if_success, eval_stmt_annassign_value, compile_if_parts,
  *   compile_if_taken_branch, if_branch_to_exit, compile_annassign_word_parts,
  *   bounded_int_op_add_overflow, word_value_in_memory, word_value_wf
@@ -98,6 +101,95 @@ Proof
   rw[word_value_def] >> simp[val_wf_def]
 QED
 
+(* One instruction that computes w from the state and writes it to a fresh
+   variable, and changes nothing else. *)
+Theorem emit_op_frag:
+  !ctx func cenv cx es opc args sa op sb s0 w R.
+    emit_op opc args sa = (op, sb) /\ local_ptrs_reserved cenv sa /\
+    opc <> INVOKE /\ ~is_terminator opc /\
+    (stmt_state_rel func cenv cx es s0 ==>
+     !out. step_inst_base (mk_inst sa.cs_next_id opc args [out]) s0 =
+           OK (update_var out w s0)) ==>
+    frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel func cenv cx es s)
+      (\s. stmt_state_rel func cenv cx es s /\ eval_operand op s = SOME w /\
+           (!x w'. not_fresh_at sa x /\ lookup_var x s0 = SOME w' ==>
+                   lookup_var x s = SOME w') /\
+           (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
+                    FLOOKUP s.vs_allocas aid = SOME b) /\
+           s.vs_memory = s0.vs_memory) R
+Proof
+  rpt strip_tac >>
+  imp_res_tac emitted_insts_emit_op >> imp_res_tac emit_op_extends >>
+  qabbrev_tac `out = STRING #"%" (toString sa.cs_next_var)` >>
+  `!x. not_fresh_at sa x ==> x <> out` by
+    (simp[not_fresh_at_def, Abbr `out`] >>
+     metis_tac[arithmeticTheory.LESS_EQ_REFL]) >>
+  `not_local_ptr cenv es.scopes out` by
+    (qunabbrev_tac `out` >> irule local_ptrs_reserved_fresh >>
+     metis_tac[arithmeticTheory.LESS_EQ_REFL]) >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+     (emitted_insts sa sb)` by simp[venomInstTheory.mk_inst_def] >>
+  irule frag_exec_run_inst_seq >>
+  fs[same_blocks_def, IS_PREFIX_APPEND3] >>
+  rpt strip_tac >> disj1_tac >> gvs[] >>
+  qexists_tac `update_var out w s0` >>
+  asm_simp_tac (srw_ss()) [run_inst_seq_def, stmt_state_rel_inst_idx] >>
+  conj_tac >- (irule stmt_state_rel_update_var >> simp[]) >>
+  simp[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
+  rpt strip_tac >> Cases_on `out = x` >> gvs[lookup_var_def]
+QED
+
+Theorem eval_name_word:
+  !cx ann id es entry.
+    lookup_scopes id es.scopes = SOME entry ==>
+    eval_expr cx (Name ann id) es = (INL (Value entry.value), es)
+Proof
+  rpt strip_tac >>
+  simp[Once evaluate_def, bind_def, get_scopes_def, return_def,
+       lift_option_type_def] >>
+  `lookup_scopes_val id es.scopes = SOME entry.value` by
+    (qpat_x_assum `lookup_scopes _ _ = _` mp_tac >>
+     qspec_tac (`es.scopes`, `scs`) >>
+     Induct >> simp[lookup_scopes_def, lookup_scopes_val_def] >>
+     rpt strip_tac >> Cases_on `FLOOKUP h id` >> gvs[]) >>
+  simp[return_def]
+QED
+
+Theorem lower_value_name_word:
+  !cenv ty ann id p sz sa op sb.
+    FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
+    is_word_type ann /\
+    lower_value compile_expr cenv ty (Name ann id) sa = (op, sb) ==>
+    emit_op MLOAD [Var p] sa = (op, sb)
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `lower_value _ _ _ _ _ = _` mp_tac >>
+  simp[lower_value_def, compile_expr_def, comp_bind_def, compile_name_vv_def,
+       unwrap_value_def, contextTheory.compile_ptr_load_def,
+       contextTheory.mk_ptr_def, comp_return_def,
+       vyperASTTheory.expr_type_def]
+QED
+
+(* The MLOAD of a word local's pointer reads the local's value. *)
+Theorem step_name_word:
+  !func cenv cx es s id p sz entry n out.
+    stmt_state_rel func cenv cx es s /\
+    FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
+    lookup_scopes id es.scopes = SOME entry /\ word_value entry.value ==>
+    step_inst_base (mk_inst n MLOAD [Var p] [out]) s =
+      OK (update_var out (val_to_w256 entry.value) s)
+Proof
+  rpt strip_tac >>
+  `?w. lookup_var p s = SOME w /\
+       val_in_memory entry.type entry.value (w2n w) s.vs_memory` by
+    (fs[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def] >>
+     first_x_assum drule_all >> strip_tac >> metis_tac[]) >>
+  `mload (w2n w) s = val_to_w256 entry.value` by
+    (fs[word_value_def] >> gvs[val_in_memory_prim, mem_word_at_eq_mload]) >>
+  pop_assum (SUBST1_TAC o SYM) >>
+  irule step_MLOAD >> simp[eval_operand_def]
+QED
+
 (* Slice lemma 1, the read: a word local held through its pointer loads
    with one MLOAD of the pointer, and the source reads the same value. *)
 Theorem compile_name_word_frag:
@@ -109,51 +201,17 @@ Theorem compile_name_word_frag:
     expr_frag ctx func cenv cx ty (Name ann id) es R
 Proof
   rpt gen_tac >> strip_tac >>
-  `eval_expr cx (Name ann id) es = (INL (Value entry.value), es)` by
-    (simp[Once evaluate_def, bind_def, get_scopes_def, return_def,
-          lift_option_type_def] >>
-     `lookup_scopes_val id es.scopes = SOME entry.value` by
-       (qpat_x_assum `lookup_scopes _ _ = _` mp_tac >>
-        qspec_tac (`es.scopes`, `scs`) >>
-        Induct >> simp[lookup_scopes_def, lookup_scopes_val_def] >>
-        rpt strip_tac >> Cases_on `FLOOKUP h id` >> gvs[]) >>
-     simp[return_def]) >>
+  drule_then (qspecl_then [`cx`, `ann`] assume_tac) eval_name_word >>
   simp[expr_frag_def] >> rpt gen_tac >> strip_tac >> gvs[] >>
-  qpat_x_assum `lower_value _ _ _ _ _ = _` mp_tac >>
-  simp[lower_value_def, compile_expr_def, comp_bind_def, compile_name_vv_def,
-       unwrap_value_def, contextTheory.compile_ptr_load_def,
-       contextTheory.mk_ptr_def, comp_return_def,
-       vyperASTTheory.expr_type_def] >>
-  strip_tac >>
-  imp_res_tac emitted_insts_emit_op >> imp_res_tac emit_op_extends >>
-  qabbrev_tac `out = STRING #"%" (toString sa.cs_next_var)` >>
-  `!x. not_fresh_at sa x ==> x <> out` by
-    (simp[not_fresh_at_def, Abbr `out`] >> metis_tac[arithmeticTheory.LESS_EQ_REFL]) >>
-  `not_local_ptr cenv es.scopes out` by
-    (qunabbrev_tac `out` >> irule local_ptrs_reserved_fresh >>
-     metis_tac[arithmeticTheory.LESS_EQ_REFL]) >>
-  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
-     (emitted_insts sa sb)` by
-    simp[venomInstTheory.mk_inst_def, is_terminator_def] >>
-  irule frag_exec_run_inst_seq >>
-  fs[same_blocks_def, IS_PREFIX_APPEND3] >>
-  rpt strip_tac >> disj1_tac >> gvs[] >>
-  `?w. lookup_var p s0 = SOME w /\
-       val_in_memory entry.type entry.value (w2n w) s0.vs_memory` by
-    (fs[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def] >>
-     first_x_assum drule_all >> strip_tac >> metis_tac[]) >>
-  `mload (w2n w) s0 = val_to_w256 entry.value` by
-    (fs[word_value_def] >> gvs[val_in_memory_prim, mem_word_at_eq_mload]) >>
-  qabbrev_tac `u = update_var out (mload (w2n w) s0) s0` >>
-  `step_inst_base (mk_inst sa.cs_next_id MLOAD [Var p] [out]) s0 = OK u` by
-    (qunabbrev_tac `u` >> irule step_MLOAD >> simp[eval_operand_def]) >>
-  `stmt_state_rel func cenv cx es u` by
-    (qunabbrev_tac `u` >> irule stmt_state_rel_update_var >> simp[]) >>
-  qexists_tac `u` >>
-  simp[run_inst_seq_def, stmt_state_rel_inst_idx] >>
-  simp[Abbr `u`, eval_operand_def, lookup_var_def, update_var_def,
-       FLOOKUP_UPDATE] >>
-  rpt strip_tac >> Cases_on `out = x` >> gvs[lookup_var_def]
+  drule_all lower_value_name_word >> strip_tac >>
+  irule frag_exec_conseq >>
+  drule emit_op_frag >>
+  disch_then (qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es`, `s0`,
+                           `val_to_w256 entry.value`, `R`] mp_tac) >>
+  impl_tac
+  >- (simp[is_terminator_def] >> strip_tac >>
+      drule_all step_name_word >> simp[]) >>
+  strip_tac >> first_x_assum (irule_at Any) >> simp[]
 QED
 
 (* ===== Declaring a word local ===== *)

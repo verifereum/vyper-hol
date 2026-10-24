@@ -125,6 +125,8 @@ Definition supported_builtin_form_def:
     | (ECMul, [a; b]) => T
     | (MakeArray NONE (Fixed n), args) => supported_value_type tops ty
     | (MakeArray (SOME elem_ty) bnd, args) => supported_value_type tops ty
+    | (Uint2Str n, [a]) => supported_unsigned_type (expr_type a)
+    | (CalldataSlice n, [a]) => T
     | _ => F
 End
 
