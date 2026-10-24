@@ -214,7 +214,7 @@ val native_names = [
   ("pred_set", ["EMPTY", "INSERT", "DIFF", "DELETE", "COMPL", "UNION", "INTER", "SUBSET"]),
   ("bool", ["IN", "!", "?", "?!", "@"]),
   ("min", ["==>", "@"]),
-  ("list", ["LIST_TO_SET", "SET_TO_LIST", "GENLIST", "SNOC"]),
+  ("list", ["LIST_TO_SET", "SET_TO_LIST", "GENLIST", "SNOC", "EL", "LENGTH"]),
   ("relation", ["RTC"]),
   ("toto", ["apto"]),
   ("fcp", ["dimindex"]),
@@ -739,8 +739,19 @@ fun coercion theta to_generic ty =
               get (coercion theta (not to_generic) a) ^ " x)))")
     | _ => raise Fail ("no string coercion through " ^ type_to_string ty)
   end;
+(* List functions at char that have a string counterpart in the runtime. *)
+val string_natives = [(("list", "APPEND"), "hn_sAPPEND"), (("list", "LENGTH"), "hn_sLENGTH"),
+  (("list", "FLAT"), "hn_sFLAT")];
 fun string_const c =
   if is_constructor c orelse is_case_const c then c else let
+    val gty = type_of (generic (key c))
+    val theta = match_type gty (type_of c)
+  in case (Lib.assoc1 (key c) string_natives, theta) of
+       (SOME (_, f), [{redex, residue}]) =>
+         if residue = char_ty then raw (type_of c) f
+         else raise mk_HOL_ERR "native" "string_const" "not at char"
+     | _ => raise mk_HOL_ERR "native" "string_const" "no string native"
+  end handle HOL_ERR _ => let
     val gty = type_of (generic (key c))
     val theta = match_type gty (type_of c)
   in case coercion theta false gty of

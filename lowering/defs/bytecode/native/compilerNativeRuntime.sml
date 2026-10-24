@@ -55,8 +55,11 @@ structure compilerNativeRuntime = struct
 
   (* ---------- words: width and value in [0, 2^width) ---------- *)
   datatype hn_word = W of int * IntInf.int
-  fun pow2 w = IntInf.<< (1, Word.fromInt w)
-  fun hn_n2w w (n : IntInf.int) = W (w, IntInf.mod (n, pow2 w))
+  (* 2^w for the widths in use, computed once each. *)
+  val pow2_table = Vector.tabulate (513, fn w => IntInf.<< (1, Word.fromInt w))
+  fun pow2 w = if w <= 512 then Vector.sub (pow2_table, w) else IntInf.<< (1, Word.fromInt w)
+  fun hn_n2w w (n : IntInf.int) = let val p = pow2 w in
+    W (w, if n >= 0 andalso n < p then n else IntInf.mod (n, p)) end
   fun hn_w2n (W (_, v)) = v
   fun hn_w2w w (W (_, v)) = hn_n2w w v
   fun signed (W (w, v)) = if v >= pow2 (w - 1) then v - pow2 w else v
@@ -66,12 +69,15 @@ structure compilerNativeRuntime = struct
   fun hn_dimindex w () = IntInf.fromInt w
   fun hn_dimword w () = pow2 w
   fun lift2 f (W (w, a)) (W (_, b)) = hn_n2w w (f (a, b))
-  val hn_word_add = lift2 IntInf.+
-  val hn_word_sub = lift2 IntInf.-
+  (* Operands are in [0, 2^w), so these results need at most one correction. *)
+  fun hn_word_add (W (w, a)) (W (_, b)) = let val r = a + b val p = pow2 w in
+    W (w, if r >= p then r - p else r) end
+  fun hn_word_sub (W (w, a)) (W (_, b)) = let val r = a - b in
+    W (w, if r < 0 then r + pow2 w else r) end
   val hn_word_mul = lift2 IntInf.*
-  val hn_word_and = lift2 IntInf.andb
-  val hn_word_or = lift2 IntInf.orb
-  val hn_word_xor = lift2 IntInf.xorb
+  fun hn_word_and (W (w, a)) (W (_, b)) = W (w, IntInf.andb (a, b))
+  fun hn_word_or (W (w, a)) (W (_, b)) = W (w, IntInf.orb (a, b))
+  fun hn_word_xor (W (w, a)) (W (_, b)) = W (w, IntInf.xorb (a, b))
   fun hn_word_2comp (W (w, v)) = hn_n2w w (~v)
   fun hn_word_1comp (W (w, v)) = W (w, pow2 w - 1 - v)
   fun hn_word_lsl (W (w, v)) (n : IntInf.int) =
@@ -120,6 +126,9 @@ structure compilerNativeRuntime = struct
   (* list_CASE on a string; the nil branch is a thunk, as a case arm is lazy. *)
   fun hn_scase s n f =
     if s = "" then n () else f (String.sub (s, 0)) (String.extract (s, 1, NONE))
+  fun hn_sAPPEND s t = s ^ t
+  fun hn_sLENGTH s = IntInf.fromInt (size s)
+  fun hn_sFLAT l = String.concat l
 
   (* ---------- sets, represented by their characteristic functions ---------- *)
   fun hn_EMPTY _ = false
@@ -132,6 +141,9 @@ structure compilerNativeRuntime = struct
   (* GENLIST's definition builds the list with SNOC, quadratically. *)
   fun hn_GENLIST f (n : IntInf.int) = List.tabulate (IntInf.toInt n, f o IntInf.fromInt)
   fun hn_SNOC x l = l @ [x]
+  (* EL of an index past the end is HD [] in HOL, which EVAL leaves stuck. *)
+  fun hn_EL (n : IntInf.int) l = List.nth (l, IntInf.toInt n) handle Subscript => stuck "EL"
+  fun hn_LENGTH l = IntInf.fromInt (List.length l)
   (* EmitML prints x IN LIST_TO_SET l (the MEM overload) as listML.MEM. *)
   structure listML = struct fun MEM x l = List.exists (fn y => y = x) l end
   fun hn_SUBSET _ _ = stuck "SUBSET"
