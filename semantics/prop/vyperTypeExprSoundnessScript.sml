@@ -46,66 +46,66 @@ Proof
 QED
 
 Theorem switch_BoolV_assert_no_type_error:
-  toplevel_value_typed tv (BaseTV BoolT) /\
+  value_result_typed tv (BaseTV BoolT) /\
   (!msg. exn <> Error (TypeError msg)) /\
-  switch_BoolV tv (return ()) (raise exn) st = (res, st') ==>
+  switch_BoolV cx tv (return ()) (raise exn) st = (res, st') ==>
   no_type_error_result res
 Proof
   rw[] >>
-  drule toplevel_value_typed_BoolTV >> strip_tac >>
-  Cases_on `b` >> gvs[switch_BoolV_def, return_def, raise_def, no_type_error_result_def]
+  drule value_result_typed_BoolTV >> strip_tac >>
+  Cases_on `b` >> gvs[read_result_def, bind_def, return_def, switch_BoolV_def, return_def, raise_def, no_type_error_result_def]
 QED
 
 Theorem switch_BoolV_no_type_error:
-  toplevel_value_typed tv (BaseTV BoolT) /\
-  switch_BoolV tv k1 k2 st = (res, st') /\
+  value_result_typed tv (BaseTV BoolT) /\
+  switch_BoolV cx tv k1 k2 st = (res, st') /\
   (!msg. FST (k1 st) <> INR (Error (TypeError msg))) /\
   (!msg. FST (k2 st) <> INR (Error (TypeError msg))) ==>
   no_type_error_result res
 Proof
   rw[] >>
-  drule toplevel_value_typed_BoolTV >> strip_tac >>
-  Cases_on `b` >> gvs[switch_BoolV_def, no_type_error_result_def]
+  drule value_result_typed_BoolTV >> strip_tac >>
+  Cases_on `b` >> gvs[read_result_def, bind_def, return_def, switch_BoolV_def, no_type_error_result_def]
 QED
 
 Theorem switch_BoolV_post:
-  toplevel_value_typed tv (BaseTV BoolT) /\
-  switch_BoolV tv kt kf st = (res, st') /\
+  value_result_typed tv (BaseTV BoolT) /\
+  switch_BoolV cx tv kt kf st = (res, st') /\
   (!res1 st1. kt st = (res1, st1) ==> P res1 st1) /\
   (!res1 st1. kf st = (res1, st1) ==> P res1 st1) ==>
   P res st'
 Proof
   rw[] >>
-  drule toplevel_value_typed_BoolTV >> strip_tac >>
-  Cases_on `b` >> gvs[switch_BoolV_def]
+  drule value_result_typed_BoolTV >> strip_tac >>
+  Cases_on `b` >> gvs[read_result_def, bind_def, return_def, switch_BoolV_def]
 QED
 
-Theorem get_Value_no_type_error:
-  toplevel_value_typed tv tyv /\ tyv <> NoneTV /\ (!t b. tyv <> ArrayTV t b) /\
-  get_Value tv st = (res, st') ==>
+Theorem read_value_result_no_type_error:
+  value_result_typed tv tyv /\ tyv <> NoneTV /\ (!t b. tyv <> ArrayTV t b) /\
+  read_result cx tv st = (res, st') ==>
   no_type_error_result res
 Proof
   rw[] >>
-  drule_all toplevel_value_typed_not_ArrayRef >> strip_tac >>
-  gvs[get_Value_def, return_def, no_type_error_result_def]
+  drule_all value_result_is_value >> strip_tac >>
+  gvs[read_result_def, return_def, no_type_error_result_def]
 QED
 
-Theorem get_Value_String_no_type_error:
-  toplevel_value_typed tv (BaseTV (StringT n)) /\
-  get_Value tv st = (res, st') ==>
+Theorem read_value_result_String_no_type_error:
+  value_result_typed tv (BaseTV (StringT n)) /\
+  read_result cx tv st = (res, st') ==>
   no_type_error_result res
 Proof
   rw[] >>
-  drule toplevel_value_typed_StringTV >> strip_tac >>
-  gvs[get_Value_def, return_def, no_type_error_result_def]
+  drule value_result_typed_StringTV >> strip_tac >>
+  gvs[read_result_def, return_def, no_type_error_result_def]
 QED
 
-Theorem get_Value_String_success:
-  toplevel_value_typed tv (BaseTV (StringT n)) /\
-  get_Value tv st = (INL v, st') ==>
+Theorem read_value_result_String_success:
+  value_result_typed tv (BaseTV (StringT n)) /\
+  read_result cx tv st = (INL v, st') ==>
   ?s. v = StringV s
 Proof
-  rw[] >> drule toplevel_value_typed_StringTV >> strip_tac >> gvs[get_Value_def, return_def]
+  rw[] >> drule value_result_typed_StringTV >> strip_tac >> gvs[read_result_def, return_def]
 QED
 
 Theorem dest_StringV_String_no_type_error:
@@ -136,58 +136,40 @@ Proof
   gvs[get_storage_backend_no_error]
 QED
 
-Theorem materialise_no_type_error:
-  materialise cx tv st = (INR e, st') ==>
-  (!tyv. toplevel_value_typed tv tyv ==> tyv = NoneTV) \/
+Theorem read_result_no_type_error:
+  read_result cx tv st = (INR e, st') ==>
+  (!tyv. value_result_typed tv tyv ==> tyv = NoneTV) \/
   (!m. e <> Error (TypeError m))
 Proof
   Cases_on `tv` >>
-  simp[materialise_def, return_def, raise_def]
-  >- (rw[toplevel_value_typed_def]) >>
-  strip_tac >> gvs[bind_def, AllCaseEqs(), return_def] >>
-  drule read_storage_slot_error >> strip_tac >> gvs[]
+  simp[read_result_def, value_result_typed_def, return_def, raise_def]
 QED
 
-Theorem materialise_Value_no_type_error:
-  materialise cx (Value v) st <> (INR (Error (TypeError m)), st')
+Theorem read_result_Value_no_type_error:
+  read_result cx (Value v) st <> (INR (Error (TypeError m)), st')
 Proof
-  simp[materialise_def, return_def]
+  simp[read_result_def, return_def]
 QED
 
-Theorem materialise_type_error_imp_HashMapRef:
-  materialise cx tv st = (INR (Error (TypeError m)), st') ==>
-  is_HashMapRef tv
-Proof
-  Cases_on `tv` >> gvs[materialise_def, return_def, raise_def, is_HashMapRef_def] >>
-  strip_tac >> gvs[bind_def, AllCaseEqs(), return_def] >>
-  drule read_storage_slot_error >> strip_tac >> gvs[is_HashMapRef_def]
-QED
-
-Theorem materialise_not_HashMapRef_no_type_error:
-  ~is_HashMapRef tv ==> materialise cx tv st <> (INR (Error (TypeError m)), st')
-Proof
-  metis_tac[materialise_type_error_imp_HashMapRef]
-QED
-
-Theorem materialise_typed_non_none_no_type_error:
-  materialise cx tv st = (INR e, st') /\ toplevel_value_typed tv tyv /\ tyv <> NoneTV ==>
+Theorem read_result_typed_non_none_no_type_error:
+  read_result cx tv st = (INR e, st') /\ value_result_typed tv tyv /\ tyv <> NoneTV ==>
   !m. e <> Error (TypeError m)
 Proof
-  metis_tac[materialise_no_type_error]
+  metis_tac[read_result_no_type_error]
 QED
 
 Definition expr_runtime_typed_def:
   expr_runtime_typed env e tvl <=>
     ?tv. evaluate_type env.type_defs (expr_type e) = SOME tv /\
-         toplevel_value_typed tvl tv
+         value_result_typed tvl tv
 End
 
-Theorem materialise_runtime_typed_no_type_error:
+Theorem read_result_runtime_typed_no_type_error:
   expr_runtime_typed env e tv /\ evaluate_type env.type_defs (expr_type e) = SOME tyv /\ tyv <> NoneTV /\
-  materialise cx tv st = (INR err, st') ==>
+  read_result cx tv st = (INR err, st') ==>
   !m. err <> Error (TypeError m)
 Proof
-  rw[expr_runtime_typed_def] >> gvs[] >> metis_tac[materialise_no_type_error]
+  rw[expr_runtime_typed_def] >> gvs[] >> metis_tac[read_result_no_type_error]
 QED
 
 Definition value_runtime_typed_def:
@@ -201,67 +183,10 @@ Definition exprs_runtime_typed_def:
           LIST_REL value_has_type tvs vs
 End
 
-Definition base_target_value_shape_def:
-  base_target_value_shape env (NameTarget id) (ScopedVar id') sbs =
-    (id = id' /\ sbs = []) /\
-  base_target_value_shape env (NameTarget id) _ _ = F /\
-  base_target_value_shape env (TopLevelNameTarget nsid) (ImmutableVar src id) sbs =
-    (nsid = (src,id) /\ sbs = [] /\
-     IS_SOME (FLOOKUP env.bare_global_assignable (src,id))) /\
-  base_target_value_shape env (TopLevelNameTarget nsid) (TopLevelVar src id) sbs =
-    (nsid = (src,id) /\ sbs = [] /\
-     FLOOKUP env.bare_globals (src,id) = NONE) /\
-  base_target_value_shape env (TopLevelNameTarget nsid) _ _ = F /\
-  base_target_value_shape env (AttributeTarget tgt id) loc sbs =
-    (?rest. sbs = AttrSubscript id :: rest /\
-            base_target_value_shape env tgt loc rest) /\
-  base_target_value_shape env (SubscriptTarget tgt e) loc sbs =
-    (well_typed_expr env e /\
-     ?sb rest. sbs = sb :: rest /\ base_target_value_shape env tgt loc rest)
-Termination
-  WF_REL_TAC `measure (\(env, bt, loc, sbs). base_assignment_target_size bt)` >>
-  rw[]
-End
-
-Definition target_value_shape_def:
-  target_value_shape env (BaseTarget bt) (BaseTargetV loc sbs) =
-    base_target_value_shape env bt loc sbs /\
-  target_value_shape env (BaseTarget bt) (TupleTargetV gvs) = F /\
-  target_value_shape env (TupleTarget tgts) (BaseTargetV loc sbs) = F /\
-  target_value_shape env (TupleTarget tgts) (TupleTargetV gvs) =
-    target_values_shape env tgts gvs /\
-  target_values_shape env [] [] = T /\
-  target_values_shape env [] (gv::gvs) = F /\
-  target_values_shape env (tgt::tgts) [] = F /\
-  target_values_shape env (tgt::tgts) (gv::gvs) =
-    (target_value_shape env tgt gv /\ target_values_shape env tgts gvs)
-Termination
-  WF_REL_TAC `measure (\x. case x of
-    | INL (env, tgt, gv) => assignment_target_size tgt
-    | INR (env, tgts, gvs) => list_size assignment_target_size tgts)` >>
-  rw[]
-End
-
 Definition runtime_consistent_def:
   runtime_consistent env cx st <=>
     env_consistent env cx st /\ state_well_typed st /\
     context_well_typed cx /\ accounts_well_typed st.accounts
-End
-
-Definition location_runtime_typed_def:
-  (location_runtime_typed env cx st (ScopedVar id) vt <=>
-    (?entry ty. vt = Type ty /\
-                lookup_scopes id st.scopes = SOME entry /\
-                FLOOKUP env.var_types id = SOME ty /\
-                evaluate_type env.type_defs ty = SOME entry.type)) /\
-  (location_runtime_typed env cx st (ImmutableVar src id) vt <=>
-    (?imms v ty tv. vt = Type ty /\
-                    get_immutables cx src st = (INL imms, st) /\
-                    FLOOKUP imms id = SOME (tv, v) /\
-                    FLOOKUP env.bare_globals (src, id) = SOME ty /\
-                    evaluate_type env.type_defs ty = SOME tv)) /\
-  (location_runtime_typed env cx st (TopLevelVar src_id_opt id) vt <=>
-    FLOOKUP env.toplevel_vtypes (src_id_opt, id) = SOME vt)
 End
 
 Definition target_path_step_type_def:
@@ -664,37 +589,6 @@ Proof
   metis_tac[assignable_type_evaluate_not_NoneTV]
 QED
 
-Definition target_runtime_typed_def:
-  (target_runtime_typed env cx st (BaseTarget bt) ty (BaseTargetV loc sbs) <=>
-    well_typed_atarget env (BaseTarget bt) ty /\
-    target_value_shape env (BaseTarget bt) (BaseTargetV loc sbs) /\
-    ?vt. location_runtime_typed env cx st loc vt /\
-         target_path_type env vt sbs (Type ty)) /\
-  (target_runtime_typed env cx st (BaseTarget bt) ty (TupleTargetV gvs) <=> F) /\
-  (target_runtime_typed env cx st (TupleTarget tgts) ty (BaseTargetV loc sbs) <=> F) /\
-  (target_runtime_typed env cx st (TupleTarget tgts) ty (TupleTargetV gvs) <=>
-    ?tys. ty = TupleT tys /\
-          well_typed_atarget env (TupleTarget tgts) ty /\
-          target_value_shape env (TupleTarget tgts) (TupleTargetV gvs) /\
-          target_values_runtime_typed env cx st tgts tys gvs) /\
-  (target_values_runtime_typed env cx st [] [] [] <=> T) /\
-  (target_values_runtime_typed env cx st (tgt::tgts) (ty::tys) (gv::gvs) <=>
-    target_runtime_typed env cx st tgt ty gv /\
-    target_values_runtime_typed env cx st tgts tys gvs) /\
-  (target_values_runtime_typed env cx st _ _ _ <=> F)
-Termination
-  WF_REL_TAC `measure (\x. case x of
-    | INL (env,cx,st,tgt,ty,gv) => assignment_target_size tgt
-    | INR (env,cx,st,tgts,tys,gvs) => list_size assignment_target_size tgts)` >>
-  rw[]
-End
-
-Theorem target_values_shape_LIST_REL:
-  !env tgts gvs. target_values_shape env tgts gvs <=> LIST_REL (target_value_shape env) tgts gvs
-Proof
-  Induct_on `tgts` >> Cases_on `gvs` >> simp[target_value_shape_def]
-QED
-
 Definition assign_operation_runtime_typed_def:
   (assign_operation_runtime_typed env ty (Replace v) <=> value_runtime_typed env ty v) /\
   (assign_operation_runtime_typed env ty (AppendOp v) <=>
@@ -704,14 +598,3 @@ Definition assign_operation_runtime_typed_def:
      ?elem_tv elem_ty n. evaluate_type env.type_defs elem_ty = SOME elem_tv /\
        ty = ArrayT elem_ty (Dynamic n))
 End
-
-
-
-
-
-Theorem assign_target_TopLevelVar_lookup_global_INR_propagate:
-  lookup_global cx src (id) st = (INR e, st) ==>
-  assign_target cx (BaseTargetV (TopLevelVar src id) is) op st = (INR e, st)
-Proof
-  simp[assign_target_def, bind_def, return_def, LET_THM, pairTheory.PAIR]
-QED

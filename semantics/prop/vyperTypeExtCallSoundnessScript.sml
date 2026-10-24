@@ -17,7 +17,7 @@ Ancestors
   vyperTypeEnv vyperTypeEnvExtension vyperTypeEnvPreservation vyperTypeScopePop
   vyperTypeABI vyperTypeBindArguments vyperTypeExprResult
   vyperTypeBuiltins vyperTypeExprSoundness vyperTypeAssignSoundness
-  vyperAssignTarget vyperExprNoControl vyperScopePreservation vyperEvalPreservesScopes
+  vyperExprNoControl vyperScopePreservation vyperEvalPreservesScopes
   vyperEvalMisc vyperStatePreservation vyperAssignPreservesType vyperTypeStatePreservation
 Libs
   wordsLib markerLib intLib BasicProvers
@@ -658,7 +658,7 @@ Proof
   qpat_x_assum `eval_exprs _ _ _ = _` mp_tac >>
   simp[Once evaluate_def, bind_def, return_def, AllCaseEqs()] >>
   Cases_on `n` >> simp[] >> rpt strip_tac >>
-  gvs[evaluate_def, return_def, materialise_def] >>
+  gvs[evaluate_def, return_def, read_result_def] >>
   first_x_assum drule_all >> simp[]
 QED
 
@@ -694,7 +694,7 @@ Proof
   simp[update_accounts_def, update_transient_def, append_logs_def,
        check_def, assert_def, bind_def, ignore_bind_def, return_def, raise_def] >>
   rpt strip_tac >> gvs[no_type_error_result_def, expr_result_typed_def,
-    expr_runtime_typed_def, toplevel_value_typed_def, value_has_type_def,
+    expr_runtime_typed_def, value_result_typed_def, value_has_type_def,
     raw_call_return_type_def, evaluate_type_def, is_HashMapRef_def] >>
   mp_tac (Q.SPEC `flags.rcf_max_outsize` (GEN_ALL raw_call_bytes_slot_size_bound)) >>
   impl_tac >- simp[] >> TRY strip_tac >>
@@ -884,7 +884,7 @@ Proof
      raise_def, return_def, lift_option_type_def, get_accounts_def,
      no_type_error_result_def,
      expr_result_typed_def, expr_runtime_typed_def,
-     expr_type_def, toplevel_value_typed_def, value_has_type_def,
+     expr_type_def, value_result_typed_def, value_has_type_def,
      evaluate_type_def, is_HashMapRef_def] >>
   qpat_x_assum `(case transfer_value _ _ _ _ of _ => _) = _` mp_tac >>
   Cases_on `transfer_value cx.txn.target target_addr
@@ -894,7 +894,7 @@ Proof
   gvs[bind_def, ignore_bind_def, type_check_def, check_def, assert_def,
       raise_def, return_def, lift_option_type_def, get_accounts_def,
       runtime_consistent_def,
-      toplevel_value_typed_def, value_has_type_def]
+      value_result_typed_def, value_has_type_def]
 QED
 
 (* ===== Shared creation helper soundness ===== *)
@@ -1265,7 +1265,7 @@ Proof
              check_def, assert_def, create_soft_failure_def,
              return_def, raise_def, expr_result_typed_def,
              expr_runtime_typed_def, expr_type_def, evaluate_type_def,
-             toplevel_value_typed_def, value_has_type_def,
+             value_result_typed_def, value_has_type_def,
              is_HashMapRef_def]) >>
     rpt strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
     first_x_assum mp_tac >>
@@ -1301,7 +1301,7 @@ qpat_x_assum
     rpt strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
     gvs[bind_apply, ignore_bind_apply, append_logs_def, return_def,
         raise_def, evaluation_state_accounts_tStorage_acc,
-        evaluation_state_accfupds, toplevel_value_typed_def,
+        evaluation_state_accfupds, value_result_typed_def,
         value_has_type_def, is_HashMapRef_def]) >>
   gvs[runtime_consistent_def]
 QED
@@ -1400,7 +1400,7 @@ Proof
      raise_def, return_def, lift_option_type_def, push_log_def,
      no_type_error_result_def,
      expr_result_typed_def, expr_runtime_typed_def,
-     expr_type_def, toplevel_value_typed_def, value_has_type_def,
+     expr_type_def, value_result_typed_def, value_has_type_def,
      evaluate_type_def, is_HashMapRef_def] >>
   gvs[runtime_consistent_def]
 QED
@@ -1453,7 +1453,7 @@ Proof
      raise_def, return_def,
      lift_option_type_def, push_log_def, no_type_error_result_def,
      expr_result_typed_def, expr_runtime_typed_def,
-     expr_type_def, toplevel_value_typed_def, value_has_type_def,
+     expr_type_def, value_result_typed_def, value_has_type_def,
      evaluate_type_def, is_HashMapRef_def] >>
   fs[type_check_def, bind_def, ignore_bind_def, assert_def, return_def,
      push_log_def] >>
@@ -1542,7 +1542,7 @@ Theorem extcall_value_result_typed[local]:
     expr_result_typed env (Call ret_type (ExtCall stat skc fsig opts) es drv) (Value v)
 Proof
   simp[expr_result_typed_def, expr_runtime_typed_def, expr_type_def,
-       toplevel_value_typed_def, is_HashMapRef_def]
+       value_result_typed_def, is_HashMapRef_def]
 QED
 
 Theorem extcall_decode_return_INL_typed[local]:
@@ -1771,7 +1771,7 @@ Proof
           option_CASE_rator, AllCaseEqs()] >>
       TRY (drule_all run_ext_call_update_runtime_consistent >> strip_tac) >>
       gvs[runtime_consistent_def, no_type_error_result_def, expr_result_typed_def,
-           expr_runtime_typed_def, expr_type_def, toplevel_value_typed_def,
+           expr_runtime_typed_def, expr_type_def, value_result_typed_def,
            value_has_type_def, evaluate_type_def, is_HashMapRef_def]) >>
   drule_all (Send_outcome_type_sound |>
     SRULE [bind_def, ignore_bind_def, return_def]) >> simp[]

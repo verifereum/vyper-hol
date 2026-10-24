@@ -11,23 +11,6 @@ Ancestors
 Libs
   wordsLib
 
-Theorem assign_subscripts_success_read:
-  !path tv a ao a'.
-    assign_subscripts tv a path ao = INL a' ==>
-    ?v. evaluate_subscripts tv a path = INL v
-Proof
-  Induct >> rpt gen_tac
-  >- simp[evaluate_subscripts_def] >>
-  Cases_on `h`
-  >- (Cases_on `v` >> Cases_on `a` >>
-      simp[assign_subscripts_def, evaluate_subscripts_def] >>
-      rpt strip_tac >> gvs[AllCaseEqs()] >>
-      first_x_assum drule >> strip_tac >> simp[]) >>
-  Cases_on `a` >> simp[assign_subscripts_def, evaluate_subscripts_def] >>
-  rpt strip_tac >> gvs[AllCaseEqs()] >>
-  first_x_assum drule >> strip_tac >> simp[]
-QED
-
 Theorem evaluate_subscripts_typed_leaf_path:
   !path tv a v.
     value_has_type tv a /\ well_formed_type_value tv /\
@@ -59,49 +42,31 @@ Proof
   first_x_assum irule >> metis_tac[]
 QED
 
-(* A resolved place carries metadata, not a promise of current bounds. *)
-Definition place_result_typed_def:
-  place_result_typed env cx st pv vt <=>
-    case pv of
-    | PlaceR p =>
-        (case vt of
-         | Type ty => ?tv. evaluate_type env.type_defs ty = SOME tv /\
-                          runtime_place_typed cx st p tv
-         | HashMapT kt value_ty => F)
-    | ValueR v => place_expr_result_typed env v vt
-End
-
-Theorem place_result_typed_place[simp]:
-  place_result_typed env cx st (PlaceR p) (Type ty) <=>
+Theorem eval_result_typed_place[simp]:
+  eval_result_typed (env,cx,st) (PlaceR p) (Type ty) <=>
   ?tv. evaluate_type env.type_defs ty = SOME tv /\ runtime_place_typed cx st p tv
 Proof
-  simp[place_result_typed_def]
+  simp[eval_result_typed_def]
 QED
 
-Theorem place_result_typed_mapping[simp]:
-  ~place_result_typed env cx st (PlaceR p) (HashMapT kt vt)
+Theorem eval_result_typed_place_not_mapping[simp]:
+  ~eval_result_typed (env,cx,st) (PlaceR p) (HashMapT kt vt)
 Proof
-  simp[place_result_typed_def]
+  simp[eval_result_typed_def]
 QED
 
-Theorem place_result_typed_value[simp]:
-  place_result_typed env cx st (ValueR v) vt <=> place_expr_result_typed env v vt
+Theorem eval_result_typed_value[simp]:
+  eval_result_typed (env,cx,st) (Value v) (Type ty) <=>
+  ?tv. evaluate_type env.type_defs ty = SOME tv /\ value_has_type tv v
 Proof
-  simp[place_result_typed_def]
+  simp[eval_result_typed_def]
 QED
 
-(* Ordinary expressions retain their syntax-sensitive result contract too. *)
-Definition ordinary_place_result_typed_def:
-  ordinary_place_result_typed env cx st e pv <=>
-    case pv of
-    | PlaceR p => place_result_typed env cx st pv (Type (expr_type e))
-    | ValueR v => expr_result_typed env e v
-End
-
-Theorem ordinary_place_result_value[simp]:
-  ordinary_place_result_typed env cx st e (ValueR v) <=> expr_result_typed env e v
+Theorem eval_result_typed_mapping[simp]:
+  eval_result_typed (env,cx,st) (HashMapRef tr slot kt vt) (HashMapT kt' vt') <=>
+  kt = kt' /\ vt = vt'
 Proof
-  simp[ordinary_place_result_typed_def]
+  simp[eval_result_typed_def]
 QED
 
 (* Fresh resolved memory paths read without consulting arbitrary old history. *)
@@ -181,12 +146,11 @@ Proof
   simp[] >> metis_tac[read_popped_type]
 QED
 Theorem record_pop_prefix_split:
-  record_pop tv current path p (fresh ++ old) =
-  record_pop tv current path p fresh ++ old
+  record_pop path arr p (fresh ++ old) =
+  record_pop path arr p fresh ++ old
 Proof
-  Cases_on `evaluate_subscripts tv current path` >> simp[record_pop_def] >>
-  rename1 `INL v` >> Cases_on `v` >> simp[] >>
-  rename1 `ArrayV arr` >> Cases_on `arr` >> simp[]
+  Cases_on `arr` >> simp[record_pop_def] >>
+  Cases_on `a` >> simp[]
 QED
 
 (* Proof-only alias: all declared paths, including tuple indices. *)
@@ -205,7 +169,7 @@ Theorem memory_eval_path_tuple_extension_probe:
   lookup_scopes id st.scopes = SOME entry /\
   entry.type = TupleTV [BaseTV BoolT] /\
   entry.value = ArrayV (TupleV [BoolV T]) ==>
-  extend_place cx (TupleTV [BaseTV BoolT]) (PlaceR (MemoryPlace id []))
+  extend_place cx (PlaceR (MemoryPlace id []))
     (ValueSubscript (IntV 0)) st =
     (INL (PlaceR (MemoryPlace id [ValueSubscript (IntV 0)])),st) /\
   memory_eval_path entry.type [ValueSubscript (IntV 0)]
@@ -269,7 +233,7 @@ Theorem tuple_sparse_delayed_read_probe:
   lookup_scopes id st.scopes = SOME entry /\
   entry.type = TupleTV [ArrayTV (BaseTV BoolT) (Fixed 1)] /\
   entry.value = ArrayV (TupleV [ArrayV (SArrayV [])]) /\ entry.popped = [] ==>
-  extend_place cx (ArrayTV (BaseTV BoolT) (Fixed 1))
+  extend_place cx
     (PlaceR (MemoryPlace id [ValueSubscript (IntV 0)]))
     (ValueSubscript (IntV 0)) st =
     (INL (PlaceR (MemoryPlace id
@@ -450,8 +414,8 @@ Theorem nested_pop_region_probe[local]:
       before = ArrayV (DynArrayV [ArrayV (DynArrayV [IntV 1; IntV 2])]);
       middle = ArrayV (DynArrayV [ArrayV (DynArrayV [IntV 1])]);
       child = [ValueSubscript (IntV 0)];
-      fresh1 = record_pop tv before child (IntV 2) [];
-      fresh2 = record_pop tv middle [] (ArrayV (DynArrayV [IntV 1])) fresh1;
+      fresh1 = record_pop child (ArrayV (DynArrayV [IntV 1; IntV 2])) (IntV 2) [];
+      fresh2 = record_pop [] middle (ArrayV (DynArrayV [IntV 1])) fresh1;
       entry = <|assignable := T; type := tv; value := ArrayV (DynArrayV []);
                 popped := fresh2 ++ old|>
   in assign_subscripts tv before child PopOp = INL middle /\
@@ -477,7 +441,7 @@ Theorem unrelated_pop_region_probe[local]:
       after = ArrayV (DynArrayV [ArrayV (DynArrayV [IntV 1]);
                                 ArrayV (DynArrayV [])]);
       child = [ValueSubscript (IntV 1)];
-      fresh = record_pop tv before child (IntV 2) [];
+      fresh = record_pop child (ArrayV (DynArrayV [IntV 2])) (IntV 2) [];
       entry = <|assignable := T; type := tv; value := after;
                 popped := fresh ++ old|>
   in assign_subscripts tv before child PopOp = INL after /\
@@ -505,8 +469,7 @@ Theorem root_pop_removed_element:
   LENGTH xs < n /\ evaluate_subscripts etv p path = INL v ==>
   read_popped (ArrayTV etv (Dynamic n))
     (ValueSubscript (IntV &(LENGTH xs))::path)
-    (record_pop (ArrayTV etv (Dynamic n))
-       (ArrayV (DynArrayV (SNOC p xs))) [] p history) = SOME v
+    (record_pop [] (ArrayV (DynArrayV (SNOC p xs))) p history) = SOME v
 Proof
   simp[record_pop_def, evaluate_subscripts_def, LENGTH_SNOC] >> strip_tac >>
   irule read_popped_new_snapshot >>
@@ -520,8 +483,7 @@ Theorem root_pop_current_survives:
   (?w. evaluate_subscripts (ArrayTV etv (Dynamic n))
          (ArrayV (DynArrayV xs)) path = INL w) \/
   (?w. read_popped (ArrayTV etv (Dynamic n)) path
-         (record_pop (ArrayTV etv (Dynamic n))
-           (ArrayV (DynArrayV (SNOC p xs))) [] p []) = SOME w)
+         (record_pop [] (ArrayV (DynArrayV (SNOC p xs))) p []) = SOME w)
 Proof
   Cases_on `path` >- simp[evaluate_subscripts_def] >>
   rename1 `sb::rest` >> Cases_on `sb` >>
@@ -540,15 +502,11 @@ Proof
 QED
 
 Theorem record_pop_rebase:
-  evaluate_subscripts tv current (sb::popPath) =
-    evaluate_subscripts etv child popPath ==>
-  record_pop tv current (sb::popPath) p [] =
-    MAP (\(path,v). (sb::path,v)) (record_pop etv child popPath p [])
+  record_pop (sb::popPath) arr p [] =
+    MAP (\(path,v). (sb::path,v)) (record_pop popPath arr p [])
 Proof
-  simp[record_pop_def] >> strip_tac >>
-  Cases_on `evaluate_subscripts etv child popPath` >> simp[] >>
-  rename1 `INL arr` >> Cases_on `arr` >> simp[] >>
-  rename1 `ArrayV av` >> Cases_on `av` >> simp[]
+  Cases_on `arr` >> simp[record_pop_def] >>
+  Cases_on `a` >> simp[]
 QED
 
 Theorem dynamic_root_pop_survival:
@@ -558,8 +516,7 @@ Theorem dynamic_root_pop_survival:
   evaluate_subscripts (ArrayTV etv (Dynamic n)) (ArrayV (DynArrayV vs)) path = INL v ==>
   (?w. evaluate_subscripts (ArrayTV etv (Dynamic n)) current' path = INL w) \/
   (?w. read_popped (ArrayTV etv (Dynamic n)) path
-         (record_pop (ArrayTV etv (Dynamic n))
-           (ArrayV (DynArrayV vs)) [] p []) = SOME w)
+         (record_pop [] (ArrayV (DynArrayV vs)) p []) = SOME w)
 Proof
   Cases_on `vs` using SNOC_CASES
   >- simp[assign_subscripts_def, vyperValueOperationTheory.pop_element_def] >>
@@ -650,7 +607,7 @@ Theorem pop_current_path_survival:
   evaluate_subscripts tv current popPath = INL arr /\ popped_value arr = INL p /\
   evaluate_subscripts tv current path = INL v ==>
   (?w. evaluate_subscripts tv current' path = INL w) \/
-  (?w. read_popped tv path (record_pop tv current popPath p []) = SOME w)
+  (?w. read_popped tv path (record_pop popPath arr p []) = SOME w)
 Proof
   Induct >> rpt gen_tac >> strip_tac
   >- (gvs[subscripts_type_def, evaluate_subscripts_def, assign_subscripts_def] >>
@@ -687,15 +644,14 @@ Resume pop_current_path_survival[ArrayStep]:
     (irule evaluate_subscripts_type >>
      qexistsl_tac [`ArrayV av`,`[ValueSubscript (IntV i)]`,`ArrayTV t b`] >>
      simp[subscripts_type_def, evaluate_subscripts_def]) >>
-  `record_pop (ArrayTV t b) (ArrayV av) (ValueSubscript (IntV i)::popPath) p [] =
+  `record_pop (ValueSubscript (IntV i)::popPath) arr p [] =
    MAP (\(prefix,p). (ValueSubscript (IntV i)::prefix,p))
-       (record_pop t child popPath p [])` by
+       (record_pop popPath arr p [])` by
     (irule record_pop_rebase >> simp[evaluate_subscripts_def]) >>
   asm_rewrite_tac[] >> irule array_child_path_survival >>
   goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
   simp[] >> qexists_tac `vj` >> simp[] >>
   rpt strip_tac >> first_x_assum irule >>
-  goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
   metis_tac[subscript_type_well_formed]
 QED
 
@@ -711,14 +667,13 @@ Resume pop_current_path_survival[StructStep]:
     (irule evaluate_subscripts_type >>
      qexistsl_tac [`StructV al`,`[AttrSubscript s]`,`StructTV fields`] >>
      simp[subscripts_type_def, evaluate_subscripts_def]) >>
-  `record_pop (StructTV fields) (StructV al) (AttrSubscript s::popPath) p [] =
+  `record_pop (AttrSubscript s::popPath) arr p [] =
    MAP (\(prefix,p). (AttrSubscript s::prefix,p))
-       (record_pop child_tv child popPath p [])` by
+       (record_pop popPath arr p [])` by
     (irule record_pop_rebase >> simp[evaluate_subscripts_def]) >>
   asm_rewrite_tac[] >> irule struct_child_path_survival >> conj_tac
   >- (qexistsl_tac [`child`,`child_tv`] >> simp[] >>
       rpt strip_tac >> first_x_assum irule >>
-      goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
       metis_tac[subscript_type_well_formed]) >>
   metis_tac[]
 QED
@@ -770,28 +725,273 @@ Theorem record_pop_preserves_covered:
   assign_subscripts tv current popPath PopOp = INL current' /\
   evaluate_subscripts tv current popPath = INL arr /\ popped_value arr = INL p /\
   memory_path_covered tv current fresh path ==>
-  memory_path_covered tv current' (record_pop tv current popPath p fresh) path
+  memory_path_covered tv current' (record_pop popPath arr p fresh) path
 Proof
   simp[memory_path_covered_def] >> strip_tac
   >- (drule_all pop_current_path_survival >> strip_tac
       >- metis_tac[] >>
       disj2_tac >>
-      `record_pop tv current popPath p fresh =
-       record_pop tv current popPath p [] ++ fresh` by
+      `record_pop popPath arr p fresh =
+       record_pop popPath arr p [] ++ fresh` by
         metis_tac[record_pop_prefix_split, APPEND] >>
       metis_tac[read_popped_prefix_noninterference]) >>
   disj2_tac >>
-  `record_pop tv current popPath p fresh =
-   record_pop tv current popPath p [] ++ fresh` by
+  `record_pop popPath arr p fresh =
+   record_pop popPath arr p [] ++ fresh` by
     metis_tac[record_pop_prefix_split, APPEND] >>
   `?ptv. subscripts_type tv path = SOME ptv` by
     metis_tac[read_popped_declared_type_exists] >>
-  `popped_history_typed tv (record_pop tv current popPath p [])` by
+  `popped_history_typed tv (record_pop popPath arr p [])` by
     (irule record_pop_history_typed >>
      goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
      simp[popped_history_typed_def] >> metis_tac[]) >>
   metis_tac[read_popped_older_success]
 QED
+
+Theorem read_popped_prefix_rebase:
+  !prefix tv htv path history.
+    subscripts_type tv prefix = SOME htv ==>
+    read_popped tv (prefix ++ path)
+      (MAP (\(q,v). (prefix ++ q,v)) history) =
+    read_popped htv path history
+Proof
+  Induct
+  >- (simp[subscripts_type_def] >> rpt gen_tac >>
+      AP_TERM_TAC >> Induct_on `history` >>
+      simp[pairTheory.FORALL_PROD]) >>
+  rpt gen_tac >> simp[subscripts_type_def, AllCaseEqs()] >> strip_tac >>
+  gvs[] >>
+  `MAP (\(q,v). (h::(prefix ++ q),v)) history =
+   MAP (\(q,v). (h::q,v)) (MAP (\(q,v). (prefix ++ q,v)) history)` by
+    (simp[MAP_COMPOSE, combinTheory.o_DEF, pairTheory.UNCURRY] >>
+     AP_THM_TAC >> AP_TERM_TAC >>
+     simp[FUN_EQ_THM, pairTheory.FORALL_PROD]) >>
+  asm_rewrite_tac[] >>
+  drule read_popped_rebase >> disch_then (fn th => rewrite_tac[th]) >>
+  first_x_assum irule >> simp[]
+QED
+
+Theorem record_pop_prefix_rebase:
+  !prefix suffix arr p.
+    record_pop (prefix ++ suffix) arr p [] =
+    MAP (\(q,v). (prefix ++ q,v)) (record_pop suffix arr p [])
+Proof
+  rpt gen_tac >> Cases_on `arr` >> simp[record_pop_def] >>
+  Cases_on `a` >> simp[APPEND_ASSOC]
+QED
+
+Theorem selected_snapshot_pop_typed:
+  well_formed_type_value htv /\ value_has_type htv snapshot /\
+  evaluate_subscripts htv snapshot suffix = INL arr /\
+  pop_element arr = INL shortened /\
+  assign_subscripts htv snapshot suffix (Replace shortened) = INL updated ==>
+  value_has_type htv updated
+Proof
+  rpt strip_tac >> drule_all vyperLookupTheory.assign_subscripts_pop_replace >> strip_tac >>
+  irule vyperAssignPreservesTypeTheory.assign_subscripts_preserves_type >>
+  simp[] >> qexistsl_tac [`snapshot`,`PopOp`,`suffix`] >> simp[]
+QED
+
+Theorem selected_snapshot_pop_survival:
+  subscripts_type tv prefix = SOME htv /\
+  well_formed_type_value htv /\ value_has_type htv snapshot /\
+  subscripts_type htv suffix = SOME (ArrayTV etv (Dynamic n)) /\
+  evaluate_subscripts htv snapshot suffix = INL arr /\
+  pop_element arr = INL shortened /\ popped_value arr = INL p /\
+  assign_subscripts htv snapshot suffix (Replace shortened) = INL updated /\
+  evaluate_subscripts htv snapshot path = INL v ==>
+  (?w. evaluate_subscripts htv updated path = INL w) \/
+  (?w. read_popped tv (prefix ++ path)
+    (record_pop (prefix ++ suffix) arr p []) = SOME w)
+Proof
+  rpt strip_tac >> drule_all vyperLookupTheory.assign_subscripts_pop_replace >> strip_tac >>
+  `assign_subscripts htv snapshot suffix PopOp = INL updated` by simp[] >>
+  drule_all pop_current_path_survival >> strip_tac
+  >- metis_tac[] >>
+  disj2_tac >> simp[record_pop_prefix_rebase] >>
+  qpat_assum `subscripts_type tv prefix = SOME htv`
+    (mp_then Any mp_tac read_popped_prefix_rebase) >>
+  disch_then (qspecl_then [`path`,`record_pop suffix arr p []`] mp_tac) >>
+  simp[]
+QED
+
+Theorem read_popped_typed_success_iff:
+  !history tv path ptv.
+  popped_history_typed tv history /\ subscripts_type tv path = SOME ptv ==>
+  ((?w. read_popped tv path history = SOME w) <=>
+   ?prefix snapshot htv w. MEM (prefix,snapshot) history /\
+     IS_PREFIX path prefix /\ subscripts_type tv prefix = SOME htv /\
+     evaluate_subscripts htv snapshot (DROP (LENGTH prefix) path) = INL w)
+Proof
+  Induct >- simp[read_popped_def] >>
+  gen_tac >> PairCases_on `h` >> rpt gen_tac >> strip_tac >>
+  `popped_history_typed tv history` by gvs[popped_history_typed_def] >>
+  `?htv. subscripts_type tv h0 = SOME htv /\
+    well_formed_type_value htv /\ value_has_type htv h1` by
+    gvs[popped_history_typed_def] >>
+  first_x_assum (qspecl_then [`tv`,`path`,`ptv`] mp_tac) >>
+  simp[] >> disch_tac >>
+  Cases_on `IS_PREFIX path h0`
+  >- (Cases_on `evaluate_subscripts htv h1 (DROP (LENGTH h0) path)`
+      >- (gvs[read_popped_def] >> metis_tac[]) >>
+      `missing_dynamic_element htv h1 (DROP (LENGTH h0) path)` by
+        metis_tac[typed_snapshot_failure] >>
+      gvs[read_popped_def] >> dsimp[]) >>
+  gvs[read_popped_def] >> dsimp[]
+QED
+
+Theorem read_popped_typed_append_success:
+  popped_history_typed tv (left ++ right) /\ subscripts_type tv path = SOME ptv ==>
+  ((?w. read_popped tv path (left ++ right) = SOME w) <=>
+    (?w. read_popped tv path left = SOME w) \/
+    (?w. read_popped tv path right = SOME w))
+Proof
+  rpt strip_tac >>
+  `popped_history_typed tv left /\ popped_history_typed tv right` by
+    gvs[popped_history_typed_def, MEM_APPEND] >>
+  simp[read_popped_typed_success_iff, MEM_APPEND] >> metis_tac[]
+QED
+
+Theorem replace_popped_trusted_prefix_transport:
+  !fresh tv old popPath etv n arr shortened p history.
+  popped_history_typed tv fresh /\ well_formed_type_value tv /\
+  subscripts_type tv popPath = SOME (ArrayTV etv (Dynamic n)) /\
+  read_popped tv popPath (fresh ++ old) = SOME arr /\
+  value_has_type (ArrayTV etv (Dynamic n)) arr /\
+  pop_element arr = INL shortened /\ popped_value arr = INL p /\
+  replace_popped tv popPath shortened (fresh ++ old) = SOME history ==>
+  ?fresh' old'. history = fresh' ++ old' /\
+    popped_history_typed tv (record_pop popPath arr p fresh') /\
+    (!path v. read_popped tv path fresh = SOME v ==>
+      ?w. read_popped tv path (record_pop popPath arr p fresh') = SOME w)
+Proof
+  Induct
+  >- (rpt gen_tac >> strip_tac >> qexistsl_tac [`[]`,`history`] >>
+      simp[read_popped_def] >>
+      irule record_pop_history_typed_at_path >>
+      simp[popped_history_typed_def] >>
+      `well_formed_type_value (ArrayTV etv (Dynamic n))` by
+        metis_tac[subscripts_type_well_formed] >>
+      gvs[well_formed_type_value_def]) >>
+  gen_tac >> PairCases_on `h` >> rpt gen_tac >> strip_tac >>
+  `popped_history_typed tv fresh` by gvs[popped_history_typed_def] >>
+  `?htv. subscripts_type tv h0 = SOME htv /\
+    well_formed_type_value htv /\ value_has_type htv h1` by
+    gvs[popped_history_typed_def] >>
+  Cases_on `IS_PREFIX popPath h0`
+  >- (Cases_on `evaluate_subscripts htv h1 (DROP (LENGTH h0) popPath)`
+      >- suspend "Selected"
+      >> (`missing_dynamic_element htv h1 (DROP (LENGTH h0) popPath)` by
+            metis_tac[typed_snapshot_failure] >>
+          suspend "SkippedPrefix")) >>
+  suspend "SkippedPrefix"
+QED
+
+Resume replace_popped_trusted_prefix_transport[SkippedPrefix]:
+  markerLib.RESUME_TAC >> (
+  gvs[Once replace_popped_def, Once read_popped_def, AllCaseEqs()] >>
+  first_x_assum drule_all >> strip_tac >>
+  qexistsl_tac [`(h0,h1)::fresh'`,`old'`] >>
+  simp[] >>
+  `record_pop popPath arr p ((h0,h1)::fresh') =
+    record_pop popPath arr p [] ++ [(h0,h1)] ++ fresh'` by
+    (Cases_on `arr` >> simp[record_pop_def] >>
+     Cases_on `a` >> simp[]) >>
+  `popped_history_typed tv
+      (record_pop popPath arr p ((h0,h1)::fresh'))` by
+    (Cases_on `arr` >> gvs[vyperValueOperationTheory.popped_value_def] >>
+     Cases_on `a` >> gvs[vyperValueOperationTheory.popped_value_def] >>
+     gvs[record_pop_def, popped_history_typed_cons]) >>
+  simp[] >> rpt strip_tac >>
+  `?vt. subscripts_type tv path = SOME vt` by
+    (irule read_popped_declared_type_exists >>
+     goal_assum (drule_at Any) >>
+     simp[popped_history_typed_cons] >> metis_tac[]) >>
+  `popped_history_typed tv ((h0,h1)::fresh)` by
+    simp[popped_history_typed_cons] >>
+  `(?w. read_popped tv path [(h0,h1)] = SOME w) \/
+   (?w. read_popped tv path fresh = SOME w)` by
+    (`popped_history_typed tv ([(h0,h1)] ++ fresh)` by simp[] >>
+     drule_all read_popped_typed_append_success >>
+     simp[] >> metis_tac[])
+  >- (`popped_history_typed tv [(h0,h1)]` by
+        simp[popped_history_typed_cons, popped_history_typed_def] >>
+      `?w. read_popped tv path [(h0,h1)] = SOME w` by metis_tac[] >>
+      `popped_history_typed tv
+        (record_pop popPath arr p [] ++ [(h0,h1)] ++ fresh')` by metis_tac[] >>
+      qspecl_then [`[(h0,h1)]`,`tv`,`path`,`vt`] mp_tac
+        read_popped_typed_success_iff >>
+      simp[] >> strip_tac >>
+      simp[read_popped_typed_success_iff, MEM_APPEND] >> metis_tac[]) >>
+  `?w. read_popped tv path (record_pop popPath arr p fresh') = SOME w` by
+    metis_tac[] >>
+  `record_pop popPath arr p fresh' = record_pop popPath arr p [] ++ fresh'` by
+    (Cases_on `arr` >> simp[record_pop_def] >> Cases_on `a` >> simp[]) >>
+  `popped_history_typed tv
+    (record_pop popPath arr p [] ++ [(h0,h1)] ++ fresh')` by metis_tac[] >>
+  qspecl_then [`record_pop popPath arr p [] ++ fresh'`,`tv`,`path`,`vt`]
+    mp_tac read_popped_typed_success_iff >>
+  simp[] >> strip_tac >>
+  simp[read_popped_typed_success_iff, MEM_APPEND] >> metis_tac[])
+QED
+
+Resume replace_popped_trusted_prefix_transport[Selected]:
+  qpat_x_assum `!tv old popPath etv n arr shortened p history. _` kall_tac >>
+  gvs[Once read_popped_def, Once replace_popped_def, AllCaseEqs()] >>
+  rename1 `assign_subscripts htv h1 (DROP (LENGTH h0) popPath)
+    (Replace shortened) = INL updated` >>
+  qexistsl_tac [`(h0,updated)::fresh`,`old`] >> simp[] >>
+  `value_has_type htv updated` by
+    (irule selected_snapshot_pop_typed >> goal_assum (drule_at Any) >>
+     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  `popped_history_typed tv ((h0,updated)::fresh)` by
+    (simp[popped_history_typed_cons] >> metis_tac[]) >>
+  conj_tac
+  >- (irule record_pop_history_typed_at_path >> simp[] >>
+      `well_formed_type_value (ArrayTV etv (Dynamic n))` by
+        metis_tac[subscripts_type_well_formed] >>
+      gvs[well_formed_type_value_def]) >>
+  `popped_history_typed tv (record_pop popPath arr p ((h0,updated)::fresh))` by
+    (irule record_pop_history_typed_at_path >> simp[] >>
+     `well_formed_type_value (ArrayTV etv (Dynamic n))` by
+       metis_tac[subscripts_type_well_formed] >>
+     gvs[well_formed_type_value_def]) >>
+  rpt strip_tac >>
+  `?vt. subscripts_type tv path = SOME vt` by
+    (irule read_popped_declared_type_exists >> goal_assum (drule_at Any) >>
+     simp[] >> metis_tac[]) >>
+  qspecl_then [`(h0,h1)::fresh`,`tv`,`path`,`vt`] mp_tac
+    read_popped_typed_success_iff >> simp[] >> strip_tac
+  >- (gvs[] >>
+      gvs[rich_listTheory.IS_PREFIX_APPEND, rich_listTheory.DROP_LENGTH_APPEND] >>
+      `subscripts_type htv l = SOME (ArrayTV etv (Dynamic n))` by
+        metis_tac[subscripts_type_append] >>
+      drule_all selected_snapshot_pop_survival >> strip_tac
+      >- (simp[read_popped_typed_success_iff] >>
+          qexistsl_tac [`h0`,`updated`,`htv`,`w'`] >>
+          Cases_on `arr` >> gvs[vyperValueOperationTheory.popped_value_def] >>
+          Cases_on `a` >> gvs[vyperValueOperationTheory.popped_value_def] >>
+          simp[record_pop_def, rich_listTheory.IS_PREFIX_APPEND,
+               rich_listTheory.DROP_LENGTH_APPEND]) >>
+      `popped_history_typed tv (record_pop (h0 ++ l) arr p [])` by
+        (Cases_on `arr` >> simp[record_pop_def] >>
+         Cases_on `a` >> fs[record_pop_def, popped_history_typed_cons,
+                           popped_history_typed_def]) >>
+      qspecl_then [`record_pop (h0 ++ l) arr p []`,`tv`,`h0 ++ l'`,`vt`]
+        mp_tac read_popped_typed_success_iff >> simp[] >> strip_tac >>
+      simp[read_popped_typed_success_iff] >>
+      qexistsl_tac [`prefix`,`snapshot`,`htv'`,`w''`] >>
+      Cases_on `arr` >> gvs[vyperValueOperationTheory.popped_value_def] >>
+      Cases_on `a` >> gvs[vyperValueOperationTheory.popped_value_def] >>
+      gvs[record_pop_def]) >>
+  simp[read_popped_typed_success_iff] >>
+  qexistsl_tac [`prefix`,`snapshot`,`htv'`,`w`] >>
+  Cases_on `arr` >> gvs[vyperValueOperationTheory.popped_value_def] >>
+  Cases_on `a` >> gvs[vyperValueOperationTheory.popped_value_def] >>
+  simp[record_pop_def]
+QED
+
+Finalise replace_popped_trusted_prefix_transport
 
 Theorem memory_history_region_pop:
   memory_history_region entry fresh old paths /\
@@ -802,8 +1002,8 @@ Theorem memory_history_region_pop:
   popped_value arr = INL p ==>
   memory_history_region
     (entry with <|value := current';
-      popped := record_pop entry.type entry.value popPath p entry.popped|>)
-    (record_pop entry.type entry.value popPath p fresh) old paths
+      popped := record_pop popPath arr p entry.popped|>)
+    (record_pop popPath arr p fresh) old paths
 Proof
   simp[memory_history_region_def, EVERY_MEM] >> rpt strip_tac
   >- simp[record_pop_prefix_split]
@@ -817,12 +1017,17 @@ QED
 (* Operational evidence and typing validity are deliberately independent. *)
 Definition entry_pop_step_def:
   entry_pop_step entry popPath entry' <=>
-  ?current' arr p.
-    assign_subscripts entry.type entry.value popPath PopOp = INL current' /\
-    evaluate_subscripts entry.type entry.value popPath = INL arr /\
-    popped_value arr = INL p /\
+  ?arr p shortened current' history.
+    read_memory_path entry popPath = INL arr /\
+    popped_value arr = INL p /\ pop_element arr = INL shortened /\
+    ((?live. evaluate_subscripts entry.type entry.value popPath = INL live /\
+         assign_subscripts entry.type entry.value popPath (Replace shortened) =
+           INL current' /\ history = entry.popped) \/
+     (?err. evaluate_subscripts entry.type entry.value popPath = INR err /\
+         current' = entry.value /\
+         replace_popped entry.type popPath shortened entry.popped = SOME history)) /\
     entry' = entry with <|value := current';
-      popped := record_pop entry.type entry.value popPath p entry.popped|>
+      popped := record_pop popPath arr p history|>
 End
 
 Definition entry_pop_trace_def:
@@ -835,7 +1040,10 @@ End
 Definition entry_pop_event_valid_def:
   entry_pop_event_valid (entry,popPath) <=>
     value_has_type entry.type entry.value /\ well_formed_type_value entry.type /\
-    ?etv n. subscripts_type entry.type popPath = SOME (ArrayTV etv (Dynamic n))
+    ?etv n arr.
+      subscripts_type entry.type popPath = SOME (ArrayTV etv (Dynamic n)) /\
+      read_memory_path entry popPath = INL arr /\
+      value_has_type (ArrayTV etv (Dynamic n)) arr
 End
 
 Definition entry_pop_trace_valid_def:
@@ -865,12 +1073,23 @@ Theorem entry_pop_step_region:
   entry_pop_step entry popPath entry' /\
   entry_pop_event_valid (entry,popPath) /\
   memory_history_region entry fresh old paths ==>
-  ?fresh'. memory_history_region entry' fresh' old paths
+  ?fresh' old'. memory_history_region entry' fresh' old' paths
 Proof
-  simp[entry_pop_step_def, entry_pop_event_valid_def] >> rpt strip_tac >> gvs[] >>
-  qexists_tac `record_pop entry.type entry.value popPath p fresh` >>
-  irule memory_history_region_pop >>
-  goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> simp[] >>
+  simp[entry_pop_step_def, entry_pop_event_valid_def] >> rpt strip_tac >> gvs[]
+  >- (`arr = live` by gvs[read_memory_path_def] >> gvs[] >>
+      `assign_subscripts entry.type entry.value popPath PopOp = INL current'` by
+        (drule_all vyperLookupTheory.assign_subscripts_pop_replace >> simp[]) >>
+      qexistsl_tac [`record_pop popPath arr p fresh`,`old`] >>
+      irule memory_history_region_pop >>
+      goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> simp[] >>
+      metis_tac[]) >>
+  `read_popped entry.type popPath entry.popped = SOME arr` by
+    gvs[read_memory_path_def, AllCaseEqs()] >>
+  gvs[memory_history_region_def] >>
+  drule_all replace_popped_trusted_prefix_transport >> strip_tac >>
+  qexistsl_tac [`record_pop popPath arr p fresh'`,`old'`] >>
+  simp[record_pop_prefix_split] >>
+  gvs[EVERY_MEM, memory_path_covered_def] >>
   metis_tac[]
 QED
 
@@ -878,7 +1097,7 @@ Theorem entry_pop_trace_region:
   !events entry final fresh old paths.
   entry_pop_trace entry events final /\ entry_pop_trace_valid events /\
   memory_history_region entry fresh old paths ==>
-  ?fresh'. memory_history_region final fresh' old paths
+  ?fresh' old'. memory_history_region final fresh' old' paths
 Proof
   Induct >- (simp[entry_pop_trace_def] >> metis_tac[]) >>
   gen_tac >> PairCases_on `h` >> rpt gen_tac >>
@@ -987,71 +1206,65 @@ Theorem scope_pop_trace_region:
   scope_pop_trace sc events final /\ lookup_scopes id sc = SOME entry /\
   entry_pop_trace_valid (entry_events id events) /\
   memory_history_region entry fresh old paths ==>
-  ?entry' fresh'. lookup_scopes id final = SOME entry' /\
-    memory_history_region entry' fresh' old paths
+  ?entry' fresh' old'. lookup_scopes id final = SOME entry' /\
+    memory_history_region entry' fresh' old' paths
 Proof
   rpt strip_tac >> drule_all scope_pop_trace_lookup >> strip_tac >>
   drule_all entry_pop_trace_region >> strip_tac >> metis_tac[]
 QED
 
-Theorem assign_scoped_pop_scope_trace_events:
-  assign_target cx (BaseTargetV (ScopedVar id) subs) PopOp st = (res,st') ==>
+Theorem pop_memory_scope_trace_events:
+  pop_place cx (MemoryPlace id path) st = (res,st') ==>
   ?events. scope_pop_trace st.scopes events st'.scopes /\
     (events = [] \/
      ?pre frame source rest.
        find_containing_scope id st.scopes = SOME (pre,frame,source,rest) /\
-       events = [(id,(source,REVERSE subs))] /\
-       ?updated. assign_subscripts source.type source.value
-                   (REVERSE subs) PopOp = INL updated)
+       events = [(id,(source,path))] /\
+       ?arr. read_memory_path source path = INL arr)
 Proof
-  simp[Once assign_target_def, bind_def, get_scopes_def, lift_option_def] >>
+  Cases_on `st'.scopes = st.scopes`
+  >- (strip_tac >> qexists_tac `[]` >> simp[scope_pop_trace_def]) >>
+  simp[pop_place_def, bind_def, get_scopes_def, lift_option_type_def] >>
   Cases_on `find_containing_scope id st.scopes` >>
   simp[return_def, raise_def] >- (strip_tac >> gvs[] >>
     simp[scope_pop_trace_def]) >>
   PairCases_on `x` >>
-  Cases_on `assign_subscripts x2.type x2.value (REVERSE subs) PopOp` >>
-  Cases_on `evaluate_subscripts x2.type x2.value (REVERSE subs)` >>
-  simp[type_check_def, assert_def, bind_def, ignore_bind_def,
-       lift_sum_def, assign_result_def, return_def, raise_def,
+  simp[type_check_def, assert_def, check_def, bind_def, ignore_bind_def,
+       lift_sum_def, lift_option_type_def, return_def, raise_def,
        set_scopes_def, AllCaseEqs()] >>
-  rpt strip_tac >> gvs[AllCaseEqs(), return_def, raise_def] >>
-  rpt (BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def]) >>
-  TRY (qexists_tac `[]` >> simp[scope_pop_trace_def] >> NO_TAC) >>
-  TRY (qexists_tac `[(id,(x2,REVERSE subs))]`) >>
+  rpt strip_tac >>
+  gvs[vyperMiscTheory.sum_CASE_rator, vyperMiscTheory.option_CASE_rator,
+      AllCaseEqs(), return_def, raise_def, bind_def, set_scopes_def] >>
+  qexists_tac `[(id,(x2,path))]` >>
   simp[scope_pop_trace_def, scope_pop_step_def, entry_pop_step_def] >>
   metis_tac[]
 QED
-Theorem assign_scoped_pop_operational_typed_trace:
+
+Theorem pop_memory_read_typed_trace:
   state_well_typed st /\
-  (!entry updated. lookup_scopes id st.scopes = SOME entry /\
-     assign_subscripts entry.type entry.value (REVERSE subs) PopOp = INL updated ==>
-     ?etv n. leaf_type entry.type (REVERSE subs) = ArrayTV etv (Dynamic n)) /\
-  assign_target cx (BaseTargetV (ScopedVar id) subs) PopOp st = (res,st') ==>
+  (!entry arr. lookup_scopes id st.scopes = SOME entry /\
+     read_memory_path entry path = INL arr ==>
+     ?etv n. subscripts_type entry.type path = SOME (ArrayTV etv (Dynamic n)) /\
+       value_has_type (ArrayTV etv (Dynamic n)) arr) /\
+  pop_place cx (MemoryPlace id path) st = (res,st') ==>
   ?events. scope_pop_trace st.scopes events st'.scopes /\
     EVERY (\ev. entry_pop_event_valid (SND ev)) events
 Proof
-  rpt strip_tac >> drule assign_scoped_pop_scope_trace_events >> strip_tac
+  rpt strip_tac >> drule pop_memory_scope_trace_events >> strip_tac
   >- (qexists_tac `[]` >> gvs[]) >>
   drule vyperLookupTheory.find_containing_scope_lookup >> strip_tac >>
   `value_has_type source.type source.value /\ well_formed_type_value source.type` by
     (irule vyperTypeEnvTheory.scope_well_typed_lookup_scopes >>
      goal_assum drule >> gvs[state_well_typed_def]) >>
-  `?etv n. leaf_type source.type (REVERSE subs) = ArrayTV etv (Dynamic n)` by
-    metis_tac[] >>
-  drule assign_subscripts_success_read >> strip_tac >>
-  `subscripts_type source.type (REVERSE subs) =
-     SOME (ArrayTV etv (Dynamic n))` by
-    (drule_at (Pat `evaluate_subscripts _ _ _ = _`)
-       evaluate_subscripts_typed_leaf_path >> simp[]) >>
-  qexists_tac `[(id,(source,REVERSE subs))]` >>
+  qexists_tac `[(id,(source,path))]` >>
   simp[entry_pop_event_valid_def] >> metis_tac[]
 QED
 
-Theorem assign_scoped_pop_scope_trace:
-  assign_target cx (BaseTargetV (ScopedVar id) subs) PopOp st = (res,st') ==>
+Theorem pop_memory_scope_trace:
+  pop_place cx (MemoryPlace id path) st = (res,st') ==>
   ?events. scope_pop_trace st.scopes events st'.scopes
 Proof
-  metis_tac[assign_scoped_pop_scope_trace_events]
+  metis_tac[pop_memory_scope_trace_events]
 QED
 
 Definition scope_pop_effect_def:
@@ -1081,36 +1294,32 @@ Proof
   irule (iffRL scope_pop_trace_append) >> metis_tac[]
 QED
 
-Theorem assign_nonscoped_pop_scopes:
-  (!id. loc <> ScopedVar id) /\
-  assign_target cx (BaseTargetV loc subs) PopOp st = (res,st') ==>
-  st'.scopes = st.scopes
+Theorem pop_nonmemory_scopes:
+  (!id path. p <> MemoryPlace id path) /\
+  pop_place cx p st = (res,st') ==> st'.scopes = st.scopes
 Proof
-  Cases_on `loc` >> simp[] >> rpt strip_tac >>
-  TRY (metis_tac[assign_target_toplevel_scopes_immutables] >> NO_TAC) >>
-  qpat_x_assum `assign_target _ _ _ _ = _` mp_tac >>
-  simp[Once assign_target_def, bind_def, ignore_bind_def, get_immutables_def,
-       get_address_immutables_def, lift_option_def, lift_option_type_def,
-       lift_sum_def, assign_result_def, return_def, raise_def,
-       type_check_def, assert_def, set_immutable_def, set_address_immutables_def] >>
+  Cases_on `p`
+  >- metis_tac[vyperScopePreservationTheory.pop_storage_place_scopes_immutables]
+  >- simp[] >>
+  simp[pop_place_def, bind_def, ignore_bind_def,
+       get_immutables_def, get_address_immutables_def,
+       get_accounts_def, lift_option_type_def, lift_sum_def,
+       return_def, raise_def] >>
   rpt strip_tac >>
-  rpt (BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def])
+  gvs[vyperMiscTheory.sum_CASE_rator, vyperMiscTheory.option_CASE_rator,
+      AllCaseEqs(), return_def, raise_def] >>
+  metis_tac[set_immutable_scopes]
 QED
 
-Theorem assign_base_pop_scope_effect:
-  scope_pop_effect (assign_target cx (BaseTargetV loc subs) PopOp)
+Theorem pop_place_scope_effect:
+  scope_pop_effect (pop_place cx p)
 Proof
-  Cases_on `loc`
-  >- (simp[scope_pop_effect_def] >> metis_tac[assign_scoped_pop_scope_trace])
-  >> TRY (irule scope_pop_effect_identity >>
-      metis_tac[assign_target_toplevel_scopes_immutables] >> NO_TAC) >>
-  irule scope_pop_effect_identity >>
-  simp[Once assign_target_def, bind_def, ignore_bind_def, get_immutables_def,
-       get_address_immutables_def, lift_option_def, lift_option_type_def,
-       lift_sum_def, assign_result_def, return_def, raise_def,
-       type_check_def, assert_def, set_immutable_def, set_address_immutables_def] >>
-  rpt strip_tac >>
-  rpt (BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def])
+  Cases_on `p`
+  >- (irule scope_pop_effect_identity >> rpt strip_tac >>
+      irule pop_nonmemory_scopes >> goal_assum (drule_at Any) >> simp[])
+  >- (simp[scope_pop_effect_def] >> metis_tac[pop_memory_scope_trace]) >>
+  irule scope_pop_effect_identity >> rpt strip_tac >>
+  irule pop_nonmemory_scopes >> goal_assum (drule_at Any) >> simp[]
 QED
 
 
@@ -1158,13 +1367,12 @@ Theorem scope_pop_effect_primitives[simp]:
   scope_pop_effect (check b msg) /\
   scope_pop_effect (type_check b msg) /\
   scope_pop_effect (lift_sum_runtime sv) /\
-  scope_pop_effect (get_Value tv) /\
+  scope_pop_effect (read_result cx tv) /\
   scope_pop_effect get_scopes /\
   scope_pop_effect get_accounts /\
   scope_pop_effect get_transient_storage /\
   scope_pop_effect (lookup_global cx src id) /\
   scope_pop_effect (read_storage_slot cx transient slot tyv) /\
-  scope_pop_effect (materialise cx tv) /\
   scope_pop_effect (transfer_value sender dest amount) /\
   scope_pop_effect (lookup_flag_mem cx (src,id) mid) /\
   scope_pop_effect (append_logs logs) /\
@@ -1175,9 +1383,9 @@ Proof
   rpt strip_tac >>
   FIRST (map (fn th => drule th >> simp[])
     [check_scopes, type_check_scopes, lift_sum_runtime_scopes,
-     get_Value_scopes, get_scopes_scopes, get_accounts_scopes,
+     read_result_state, get_scopes_scopes, get_accounts_scopes,
      get_transient_storage_scopes, lookup_global_scopes,
-     read_storage_slot_scopes, materialise_scopes, transfer_value_scopes,
+     read_storage_slot_scopes, transfer_value_scopes,
      lookup_flag_mem_scopes, append_logs_scopes, update_accounts_scopes,
      update_transient_scopes])
 QED
@@ -1191,54 +1399,12 @@ Proof
   gvs[AllCaseEqs()] >> metis_tac[scope_pop_trace_append]
 QED
 
-Theorem eval_name_target_scope_effect[local]:
-  scope_pop_effect (eval_base_target cx (NameTarget id))
-Proof
-  rewrite_tac[Once evaluate_def] >>
-  irule scope_pop_effect_bind >> simp[] >> gen_tac >>
-  rewrite_tac[ignore_bind_def] >>
-  irule scope_pop_effect_bind >> simp[]
-QED
-
-
-Theorem eval_toplevel_target_scope_effect[local]:
-  scope_pop_effect (eval_base_target cx (TopLevelNameTarget (src,id)))
-Proof
-  rewrite_tac[Once evaluate_def] >>
-  irule scope_pop_effect_bind >> simp[] >> gen_tac >>
-  simp[scope_pop_effect_cond]
-QED
-
-Theorem eval_attribute_target_scope_effect[local]:
-  scope_pop_effect (eval_base_target cx bt) ==>
-  scope_pop_effect (eval_base_target cx (AttributeTarget bt id))
-Proof
-  strip_tac >> rewrite_tac[Once evaluate_def] >>
-  irule scope_pop_effect_bind >> simp[] >>
-  qx_gen_tac `pair` >> PairCases_on `pair` >> simp[]
-QED
-
-Theorem eval_subscript_target_scope_effect[local]:
-  (!st loc sbs middle. eval_base_target cx bt st = (INL (loc,sbs),middle) ==>
-    scope_pop_effect (eval_expr cx e)) /\
-  scope_pop_effect (eval_base_target cx bt) ==>
-  scope_pop_effect (eval_base_target cx (SubscriptTarget bt e))
-Proof
-  strip_tac >> rewrite_tac[Once evaluate_def] >>
-  irule scope_pop_effect_bind_guarded >> simp[] >>
-  map_every qx_gen_tac [`st`,`pair`,`middle`] >> PairCases_on `pair` >>
-  strip_tac >> simp[] >>
-  irule scope_pop_effect_bind >> simp[] >>
-  reverse conj_tac >- (first_x_assum irule >> goal_assum (drule_at Any)) >>
-  gen_tac >> irule scope_pop_effect_bind >> simp[]
-QED
-
 Theorem eval_name_scope_effect[local]:
   scope_pop_effect (eval_expr cx (Name ty id))
 Proof
   rewrite_tac[Once evaluate_def] >>
   irule scope_pop_effect_bind >> simp[] >> gen_tac >>
-  irule scope_pop_effect_bind >> simp[]
+  rewrite_tac[ignore_bind_def] >> irule scope_pop_effect_bind >> simp[]
 QED
 
 Theorem eval_toplevel_scope_effect[local]:
@@ -1270,20 +1436,48 @@ QED
 
 Theorem scope_pop_effect_switch:
   scope_pop_effect f /\ scope_pop_effect g ==>
-  scope_pop_effect (switch_BoolV tv f g)
+  scope_pop_effect (switch_BoolV cx tv f g)
 Proof
-  simp[switch_BoolV_def, scope_pop_effect_cond] >> rpt strip_tac >> simp[]
+  strip_tac >> rewrite_tac[switch_BoolV_def] >>
+  irule scope_pop_effect_bind >> simp[] >>
+  gen_tac >> simp[scope_pop_effect_cond]
 QED
 
 Theorem eval_pop_scope_effect[local]:
-  scope_pop_effect (eval_base_target cx bt) ==>
+  scope_pop_effect (eval_target_place cx bt) ==>
   scope_pop_effect (eval_expr cx (Pop ty bt))
 Proof
   strip_tac >> rewrite_tac[Once evaluate_def] >>
-  irule scope_pop_effect_bind >> simp[] >>
-  qx_gen_tac `pair` >> PairCases_on `pair` >> simp[] >>
-  irule scope_pop_effect_bind >> simp[assign_base_pop_scope_effect] >>
-  gen_tac >> irule scope_pop_effect_bind >> simp[]
+  irule scope_pop_effect_bind >> simp[pop_place_scope_effect]
+QED
+
+Theorem scope_pop_effect_place_primitives[simp]:
+  scope_pop_effect (lookup_global cx src id) /\
+  scope_pop_effect (get_place pv) /\
+  scope_pop_effect (extend_place cx pv sb) /\
+  scope_pop_effect (read_place cx p) /\
+  scope_pop_effect (place_type_value cx p)
+Proof
+  rpt conj_tac >> irule scope_pop_effect_identity >> rpt strip_tac >>
+  FIRST (map (fn th => drule th >> simp[])
+    [lookup_global_state, get_place_state, extend_place_state, read_place_state, place_type_value_state])
+QED
+
+Theorem scope_pop_effect_selection[simp]:
+  scope_pop_effect (select_result cx ty res sb)
+Proof
+  Cases_on `res` >> simp[select_result_def] >>
+  irule scope_pop_effect_bind >> simp[] >> gen_tac >>
+  irule scope_pop_effect_bind >> simp[]
+QED
+
+Theorem scope_pop_effect_conditional[simp]:
+  scope_pop_effect (conditional_result cx res)
+Proof
+  Cases_on `res` >> simp[conditional_result_def] >>
+  irule scope_pop_effect_bind >> simp[] >> gen_tac >>
+  simp[scope_pop_effect_cond] >> disj2_tac >>
+  irule scope_pop_effect_bind >> simp[]
 QED
 
 Theorem eval_attribute_scope_effect[local]:
@@ -1291,8 +1485,6 @@ Theorem eval_attribute_scope_effect[local]:
   scope_pop_effect (eval_expr cx (Attribute ty e id))
 Proof
   strip_tac >> rewrite_tac[Once evaluate_def] >>
-  irule scope_pop_effect_bind >> simp[] >> gen_tac >>
-  irule scope_pop_effect_bind >> simp[] >> gen_tac >>
   irule scope_pop_effect_bind >> simp[]
 QED
 
@@ -1306,7 +1498,9 @@ Theorem eval_ifexp_scope_effect[local]:
 Proof
   strip_tac >> rewrite_tac[Once evaluate_def] >>
   irule scope_pop_effect_bind_guarded >> simp[] >>
-  rpt gen_tac >> strip_tac >> irule scope_pop_effect_switch >>
+  rpt gen_tac >> strip_tac >>
+  irule scope_pop_effect_bind >> simp[scope_pop_effect_conditional] >>
+  irule scope_pop_effect_switch >>
   conj_tac >> first_x_assum irule >> goal_assum (drule_at Any)
 QED
 
@@ -1328,7 +1522,7 @@ QED
 Theorem eval_exprs_cons_scope_effect[local]:
   (!st tv middle st1 v middle1.
     eval_expr cx e st = (INL tv,middle) /\
-    materialise cx tv st1 = (INL v,middle1) ==>
+    read_result cx tv st1 = (INL v,middle1) ==>
     scope_pop_effect (eval_exprs cx es)) /\
   scope_pop_effect (eval_expr cx e) ==>
   scope_pop_effect (eval_exprs cx (e::es))
@@ -1342,44 +1536,19 @@ Proof
   >- (first_x_assum irule >> metis_tac[]) >> simp[]
 QED
 
-Theorem scope_pop_effect_place_primitives[simp]:
-  scope_pop_effect (lookup_global_place cx src id) /\
-  scope_pop_effect (get_place pv) /\
-  scope_pop_effect (extend_place cx tv pv sb) /\
-  scope_pop_effect (extend_target_place cx pv sb) /\
-  scope_pop_effect (read_place cx p) /\
-  scope_pop_effect (place_type_value cx p)
-Proof
-  rpt conj_tac >> irule scope_pop_effect_identity >> rpt strip_tac >>
-  FIRST (map (fn th => drule th >> simp[])
-    [lookup_global_place_state, get_place_state, extend_place_state,
-     extend_target_place_state, read_place_state, place_type_value_state])
-QED
-
 Theorem eval_name_place_scope_effect[local]:
-  scope_pop_effect (eval_place cx (Name ty id)) /\
   scope_pop_effect (eval_base_place cx (NameTarget id))
 Proof
-  conj_tac >> rewrite_tac[Once evaluate_def] >>
+  rewrite_tac[Once evaluate_def] >>
   ho_match_mp_tac scope_pop_effect_bind >> simp[] >>
   gen_tac >> rewrite_tac[ignore_bind_def] >>
   ho_match_mp_tac scope_pop_effect_bind >> simp[]
 QED
 
 Theorem eval_toplevel_place_scope_effect[local]:
-  scope_pop_effect (eval_place cx (TopLevelName ty (src,id))) /\
   scope_pop_effect (eval_base_place cx (TopLevelNameTarget (src,id)))
 Proof
-  conj_tac >> simp[Once evaluate_def]
-QED
-
-Theorem eval_attribute_place_scope_effect[local]:
-  scope_pop_effect (eval_place cx e) ==>
-  scope_pop_effect (eval_place cx (Attribute ty e id))
-Proof
-  strip_tac >> rewrite_tac[Once evaluate_def] >>
-  ho_match_mp_tac scope_pop_effect_bind >> conj_tac >- simp[] >>
-  gen_tac >> ho_match_mp_tac scope_pop_effect_bind >> simp[]
+  simp[Once evaluate_def]
 QED
 
 Theorem eval_attribute_base_place_scope_effect[local]:
@@ -1398,21 +1567,6 @@ Proof
   ho_match_mp_tac scope_pop_effect_bind >> simp[]
 QED
 
-Theorem eval_subscript_place_scope_effect[local]:
-  (!st pv middle. eval_place cx e1 st = (INL pv,middle) ==>
-    scope_pop_effect (eval_expr cx e2)) /\
-  scope_pop_effect (eval_place cx e1) ==>
-  scope_pop_effect (eval_place cx (Subscript ty e1 e2))
-Proof
-  strip_tac >> rewrite_tac[Once evaluate_def] >>
-  ho_match_mp_tac scope_pop_effect_bind_guarded >> conj_tac >- simp[] >>
-  rpt gen_tac >> strip_tac >>
-  ho_match_mp_tac scope_pop_effect_bind >> conj_tac
-  >- (first_x_assum irule >> goal_assum (drule_at Any)) >>
-  gen_tac >> ho_match_mp_tac scope_pop_effect_bind >> conj_tac >- simp[] >>
-  gen_tac >> ho_match_mp_tac scope_pop_effect_bind >> simp[]
-QED
-
 Theorem eval_subscript_base_place_scope_effect[local]:
   (!st pv middle. eval_base_place cx bt st = (INL pv,middle) ==>
     scope_pop_effect (eval_expr cx e)) /\
@@ -1427,21 +1581,13 @@ Proof
   gen_tac >> ho_match_mp_tac scope_pop_effect_bind >> simp[]
 QED
 
-Theorem scope_pop_effect_value_wrap:
-  scope_pop_effect f ==>
-  scope_pop_effect (bind f (\v. return (ValueR v)))
-Proof
-  strip_tac >> ho_match_mp_tac scope_pop_effect_bind >> simp[]
-QED
-
 Theorem scope_pop_effect_array_primitives[simp]:
-  scope_pop_effect (check_array_bounds cx tv index) /\
-  scope_pop_effect (toplevel_array_length cx tv) /\
+  scope_pop_effect (result_array_length cx tv) /\
   scope_pop_effect (eval_raw_call cx flags target calldata amount)
 Proof
   rpt conj_tac >> irule scope_pop_effect_identity >> rpt strip_tac >>
   FIRST (map (fn th => drule th >> simp[])
-    [check_array_bounds_state, toplevel_array_length_state,
+    [result_array_length_state,
      eval_raw_call_preserves_non_accounts])
 QED
 
@@ -1456,15 +1602,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   ho_match_mp_tac scope_pop_effect_bind >> conj_tac
   >- (first_x_assum irule >> goal_assum (drule_at Any)) >>
-  gen_tac >> ho_match_mp_tac scope_pop_effect_bind >> conj_tac >- simp[] >>
-  gen_tac >> simp[LET_THM] >>
-  ho_match_mp_tac scope_pop_effect_bind >> conj_tac >- simp[] >>
-  gen_tac >> rewrite_tac[ignore_bind_def] >>
-  ho_match_mp_tac scope_pop_effect_bind >> conj_tac >- simp[] >>
-  gen_tac >> ho_match_mp_tac scope_pop_effect_bind >> conj_tac >- simp[] >>
-  qx_gen_tac `result` >> Cases_on `result` >> simp[] >>
-  PairCases_on `y` >> simp[] >>
-  ho_match_mp_tac scope_pop_effect_bind >> simp[]
+  gen_tac >> ho_match_mp_tac scope_pop_effect_bind >> simp[]
 QED
 
 Theorem eval_builtin_scope_effect[local]:
@@ -1670,11 +1808,9 @@ Theorem eval_mutual_scope_pop_effect:
   (!(cx:evaluation_context) (s:stmt). T) /\
   (!(cx:evaluation_context) (ss:stmt list). T) /\
   (!(cx:evaluation_context) (it:iterator). T) /\
-  (!cx bt. scope_pop_effect (eval_base_target cx bt)) /\
   (!(cx:evaluation_context) (tyv:type_value) (nm:string) (body:stmt list) (vs:value list). T) /\
   (!cx e. scope_pop_effect (eval_expr cx e)) /\
   (!cx es. scope_pop_effect (eval_exprs cx es)) /\
-  (!cx e. scope_pop_effect (eval_place cx e)) /\
   (!cx bt. scope_pop_effect (eval_base_place cx bt)) /\
   (!cx bt. scope_pop_effect (eval_target_place cx bt)) /\
   (!(cx:evaluation_context) (g:assignment_target) (v:value). T) /\
@@ -1685,25 +1821,18 @@ Proof
   TRY (FIRST (map (fn th => FIRST
     [MATCH_ACCEPT_TAC (GEN_ALL th),
      match_mp_tac (GEN_ALL th) >> rpt conj_tac >> first_assum ACCEPT_TAC] >> NO_TAC)
-    [eval_name_target_scope_effect, eval_toplevel_target_scope_effect,
-     eval_attribute_target_scope_effect, eval_subscript_target_scope_effect,
-     eval_name_scope_effect, eval_toplevel_scope_effect, eval_flag_scope_effect,
+    [eval_name_scope_effect, eval_toplevel_scope_effect, eval_flag_scope_effect,
      eval_literal_scope_effect, eval_structlit_scope_effect,
      eval_pop_scope_effect, eval_attribute_scope_effect, eval_ifexp_scope_effect,
      eval_exprs_empty_scope_effect, eval_exprs_cons_scope_effect,
-     cj 1 eval_name_place_scope_effect, cj 2 eval_name_place_scope_effect,
-     cj 1 eval_toplevel_place_scope_effect, cj 2 eval_toplevel_place_scope_effect,
-     eval_attribute_place_scope_effect, eval_attribute_base_place_scope_effect,
-     eval_target_place_scope_effect, eval_subscript_place_scope_effect,
+     eval_name_place_scope_effect, eval_toplevel_place_scope_effect,
+     eval_attribute_base_place_scope_effect, eval_target_place_scope_effect,
      eval_subscript_base_place_scope_effect, eval_subscript_scope_effect,
      eval_builtin_scope_effect, eval_typebuiltin_scope_effect,
      eval_raw_call_scope_effect, eval_raw_calldata_scope_effect,
       eval_raw_revert_scope_effect,
      eval_selfdestruct_scope_effect, eval_raw_log_scope_effect, eval_send_scope_effect])) >>
-  TRY (rewrite_tac[Once evaluate_def] >>
-       match_mp_tac (GEN_ALL scope_pop_effect_value_wrap) >>
-       first_assum ACCEPT_TAC >> NO_TAC)
-   >> TRY (rename1 `scope_pop_effect (eval_expr _ (Call _ (ExtCall _ _ _ _) _ _))` >>
+  TRY (rename1 `scope_pop_effect (eval_expr _ (Call _ (ExtCall _ _ _ _) _ _))` >>
            suspend "ExtCall")
    >> TRY (rename1 `scope_pop_effect (eval_expr _ (Call _ (CreateTarget kind has_salt rof) _ _))` >>
            suspend "Create")
@@ -1764,8 +1893,8 @@ Theorem typed_scope_trace_live_region:
   EVERY (\ev. entry_pop_event_valid (SND ev)) events /\
   lookup_scopes id st.scopes = SOME entry /\
   memory_history_region entry fresh old paths ==>
-  ?entry' fresh'. lookup_scopes id st'.scopes = SOME entry' /\
-    memory_history_region entry' fresh' old paths
+  ?entry' fresh' old'. lookup_scopes id st'.scopes = SOME entry' /\
+    memory_history_region entry' fresh' old' paths
 Proof
   rpt strip_tac >>
   drule entry_events_valid >> disch_then (qspec_then `id` assume_tac) >>
@@ -1818,11 +1947,11 @@ val () = List.app (fn (name,th) =>
   end) (DB.thms "vyperPlaceResultTyping");
 
 (* Delayed global roots are typed without loading their contents. *)
-Theorem lookup_global_place_toplevel_ready:
+Theorem lookup_global_toplevel_ready:
   FLOOKUP env.toplevel_vtypes (src,id) = SOME vt /\
   env_consistent env cx st ==>
-  ?pv. lookup_global_place cx src id st = (INL pv,st) /\
-       place_result_typed env cx st pv vt
+  ?pv. lookup_global cx src id st = (INL pv,st) /\
+       eval_result_typed (env,cx,st) pv vt
 Proof
   strip_tac >> Cases_on `vt`
   >- (Cases_on `FLOOKUP env.bare_globals (src,id)`
@@ -1830,7 +1959,7 @@ Proof
           gvs[IS_SOME_EXISTS] >>
           `env.type_defs = get_tenv cx` by
             gvs[env_consistent_def, env_context_consistent_def] >>
-          simp[lookup_global_place_def, bind_def, lift_option_type_def,
+          simp[lookup_global_def, bind_def, lift_option_type_def,
                return_def, runtime_place_typed_storage] >>
           irule evaluate_type_well_formed_type_value >>
           goal_assum drule >>
@@ -1858,13 +1987,13 @@ Proof
          gvs[env_consistent_def, env_context_consistent_def,
              well_formed_vtype_def] >> metis_tac[]) >>
       qexists_tac `PlaceR (ImmutablePlace src id [])` >>
-      simp[lookup_global_place_def, bind_def, lift_option_type_def,
+      simp[lookup_global_def, bind_def, lift_option_type_def,
            return_def, runtime_place_typed_immutable, subscripts_type_def] >>
       metis_tac[]) >>
   drule_all env_consistent_toplevel_hashmap_static >> strip_tac >>
   gvs[IS_SOME_EXISTS] >>
-  simp[lookup_global_place_def, bind_def, lift_option_type_def,
-       return_def, place_expr_result_typed_def] >>
+  simp[lookup_global_def, bind_def, lift_option_type_def,
+       return_def, eval_result_typed_def] >>
   gvs[env_consistent_def, env_context_consistent_def, well_formed_vtype_def] >>
   metis_tac[]
 QED
@@ -1880,25 +2009,25 @@ Proof
     drule >> strip_tac >> simp[]
 QED
 
-Theorem lookup_global_place_target_no_type_error:
+Theorem lookup_global_target_no_type_error:
   type_place_target env (TopLevelNameTarget (src,id)) = SOME vt /\
   env_consistent env cx st /\
-  lookup_global_place cx src id st = (res,st') ==>
+  lookup_global cx src id st = (res,st') ==>
   no_type_error_result res
 Proof
   strip_tac >> drule_all type_place_target_global_lookup >> strip_tac >>
-  drule_all lookup_global_place_toplevel_ready >> strip_tac >>
+  drule_all lookup_global_toplevel_ready >> strip_tac >>
   gvs[no_type_error_result_def]
 QED
 
-Theorem lookup_global_place_target_success_typed:
+Theorem lookup_global_target_success_typed:
   type_place_target env (TopLevelNameTarget (src,id)) = SOME vt /\
   env_consistent env cx st /\
-  lookup_global_place cx src id st = (INL pv,st') ==>
-  place_result_typed env cx st' pv vt
+  lookup_global cx src id st = (INL pv,st') ==>
+  eval_result_typed (env,cx,st') pv vt
 Proof
   strip_tac >> drule_all type_place_target_global_lookup >> strip_tac >>
-  drule_all lookup_global_place_toplevel_ready >> strip_tac >> gvs[]
+  drule_all lookup_global_toplevel_ready >> strip_tac >> gvs[]
 QED
 
 Theorem type_place_expr_global_lookup:
@@ -1909,25 +2038,25 @@ Proof
   rpt strip_tac >> simp[]
 QED
 
-Theorem lookup_global_place_expr_no_type_error:
+Theorem lookup_global_expr_no_type_error:
   type_place_expr env (TopLevelName ann (src,id)) = SOME vt /\
   env_consistent env cx st /\
-  lookup_global_place cx src id st = (res,st') ==>
+  lookup_global cx src id st = (res,st') ==>
   no_type_error_result res
 Proof
   strip_tac >> drule type_place_expr_global_lookup >> strip_tac >>
-  drule_all lookup_global_place_toplevel_ready >> strip_tac >>
+  drule_all lookup_global_toplevel_ready >> strip_tac >>
   gvs[no_type_error_result_def]
 QED
 
-Theorem lookup_global_place_expr_success_typed:
+Theorem lookup_global_expr_success_typed:
   type_place_expr env (TopLevelName ann (src,id)) = SOME vt /\
   env_consistent env cx st /\
-  lookup_global_place cx src id st = (INL pv,st') ==>
-  place_result_typed env cx st' pv vt
+  lookup_global cx src id st = (INL pv,st') ==>
+  eval_result_typed (env,cx,st') pv vt
 Proof
   strip_tac >> drule type_place_expr_global_lookup >> strip_tac >>
-  drule_all lookup_global_place_toplevel_ready >> strip_tac >> gvs[]
+  drule_all lookup_global_toplevel_ready >> strip_tac >> gvs[]
 QED
 
 Theorem well_typed_global_place_type:
@@ -1940,55 +2069,48 @@ Proof
   simp[well_typed_expr_def, vtype_annotation_ok_def]
 QED
 
-Theorem lookup_global_place_ordinary_success_typed:
+Theorem lookup_global_ordinary_success_typed:
   well_typed_expr env (TopLevelName ann (src,id)) /\
   env_consistent env cx st /\
-  lookup_global_place cx src id st = (INL pv,st') ==>
-  ordinary_place_result_typed env cx st' (TopLevelName ann (src,id)) pv
+  lookup_global cx src id st = (INL pv,st') ==>
+  eval_result_typed (env,cx,st') pv (Type ann)
 Proof
   strip_tac >> drule_all well_typed_global_place_type >> strip_tac >>
-  drule_all lookup_global_place_expr_success_typed >> strip_tac >>
-  Cases_on `pv` >>
-  gvs[ordinary_place_result_typed_def, vyperASTTheory.expr_type_def,
-      place_expr_result_typed_def, expr_result_typed_def, expr_runtime_typed_def]
+  drule_all lookup_global_expr_success_typed >> simp[]
 QED
 
 (* Targets can only produce a location or an unresolved mapping, never an
    ordinary expression value.  This operational fact is independent of typing. *)
-Theorem lookup_global_place_result_shape:
-  lookup_global_place cx src id st = (INL pv,st') ==>
+Theorem lookup_global_result_shape:
+  lookup_global cx src id st = (INL pv,st') ==>
   (?p. pv = PlaceR p) \/
-  (?tr slot kt vt. pv = ValueR (HashMapRef tr slot kt vt))
+  (?tr slot kt vt. pv = HashMapRef tr slot kt vt)
 Proof
-  simp[lookup_global_place_def, bind_def, lift_option_type_def,
+  simp[lookup_global_def, bind_def, lift_option_type_def,
        return_def, raise_def, AllCaseEqs()] >>
   rpt strip_tac >>
   gvs[vyperMiscTheory.option_CASE_rator, vyperMiscTheory.prod_CASE_rator, var_decl_info_CASE_rator,
       bind_def, lift_option_type_def, return_def, raise_def, AllCaseEqs()]
 QED
 
-Theorem extend_target_place_result_shape:
-  extend_target_place cx pv sb st = (INL out,st') ==>
+Theorem extend_place_result_shape:
+  extend_place cx pv sb st = (INL out,st') ==>
   (?p. out = PlaceR p) \/
-  (?tr slot kt vt. out = ValueR (HashMapRef tr slot kt vt))
+  (?tr slot kt vt. out = HashMapRef tr slot kt vt)
 Proof
-  Cases_on `pv` >- (
-    Cases_on `p` >> simp[extend_target_place_def, extend_place_def,
-      bind_def, ignore_bind_def, return_def, raise_def, AllCaseEqs()] >>
-    rpt strip_tac >> gvs[]) >>
-  Cases_on `t` >> simp[extend_target_place_def, raise_def] >>
-  Cases_on `sb` >> simp[extend_place_def, get_Value_def, raise_def,
-    bind_def, lift_sum_def, return_def, evaluate_subscript_def,
-    subscript_result_place_def, AllCaseEqs()] >>
+  Cases_on `pv` >> Cases_on `sb` >>
+  simp[oneline extend_place_def, bind_def, ignore_bind_def,
+       lift_option_type_def, return_def, raise_def, AllCaseEqs()] >>
   rpt strip_tac >>
-  gvs[vyperMiscTheory.sum_CASE_rator, return_def, raise_def, AllCaseEqs(),
-      subscript_result_place_def]
+  gvs[bind_def, return_def, raise_def, lift_sum_def,
+      value_type_CASE_rator, place_CASE_rator, vyperMiscTheory.sum_CASE_rator,
+      vyperMiscTheory.option_CASE_rator, AllCaseEqs()]
 QED
 
 Theorem eval_base_place_result_shape:
   !bt st pv st'. eval_base_place cx bt st = (INL pv,st') ==>
   (?p. pv = PlaceR p) \/
-  (?tr slot kt vt. pv = ValueR (HashMapRef tr slot kt vt))
+  (?tr slot kt vt. pv = HashMapRef tr slot kt vt)
 Proof
   Cases >> rpt gen_tac >>
   simp[Once evaluate_def, bind_def, get_scopes_def, lift_option_type_def,
@@ -1999,12 +2121,12 @@ Proof
       return_def, raise_def, AllCaseEqs()] >>
   all_tac >~ [`eval_base_place cx (TopLevelNameTarget pair) st = _`]
   >- (PairCases_on `pair` >> gvs[Once evaluate_def] >>
-      metis_tac[lookup_global_place_result_shape]) >>
-  metis_tac[extend_target_place_result_shape]
+      metis_tac[lookup_global_result_shape]) >>
+  metis_tac[extend_place_result_shape]
 QED
 
 Theorem extend_place_place_success_shape:
-  extend_place cx input_tv (PlaceR p) sb st = (INL out,st') ==>
+  extend_place cx (PlaceR p) sb st = (INL out,st') ==>
   ?q. out = PlaceR q
 Proof
   Cases_on `p` >>
@@ -2026,16 +2148,16 @@ Proof
   simp[subscript_type_def]
 QED
 
-Theorem extend_target_place_attribute_success_typed:
-  place_result_typed env cx st (PlaceR p) (Type ty) /\
+Theorem extend_place_attribute_success_typed:
+  eval_result_typed (env,cx,st) (PlaceR p) (Type ty) /\
   attribute_type env.type_defs ty id = SOME field_ty /\
-  extend_target_place cx (PlaceR p) (AttrSubscript id) st = (INL out,st') ==>
-  place_result_typed env cx st' out (Type field_ty)
+  extend_place cx (PlaceR p) (AttrSubscript id) st = (INL out,st') ==>
+  eval_result_typed (env,cx,st') out (Type field_ty)
 Proof
-  simp[extend_target_place_def, place_result_typed_place] >> rpt strip_tac >>
+  simp[eval_result_typed_place] >> rpt strip_tac >>
   drule_all attribute_type_runtime_step >> strip_tac >>
   drule extend_place_place_success_shape >> strip_tac >> gvs[] >>
-  simp[place_result_typed_place] >>
+  simp[eval_result_typed_place] >>
   drule_all extend_place_typed >> simp[]
 QED
 
@@ -2142,6 +2264,54 @@ Proof
   gvs[return_def] >> drule_all get_immutables_success_typed >> strip_tac >>
   irule evaluate_subscripts_type >> goal_assum (drule_at Any) >>
   goal_assum (drule_at Any) >> simp[] >> goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem read_place_live_typed:
+  state_well_typed st /\ runtime_place_typed cx st p tv /\
+  (case p of
+   | MemoryPlace id path =>
+       ?entry fresh old. lookup_scopes id st.scopes = SOME entry /\
+         memory_eval_path entry.type path /\
+         memory_history_region entry fresh old [path]
+   | _ => T) /\
+  read_place cx p st = (res,st') ==>
+  st' = st /\ no_type_error_result res /\
+  (case res of INL v => value_has_type tv v | INR _ => T)
+Proof
+  rpt strip_tac
+  >- metis_tac[read_place_preserves_state]
+  >- (Cases_on `res` >> simp[no_type_error_result_def] >>
+      metis_tac[read_place_typed_error]) >>
+  Cases_on `res` >> simp[] >> rename1 `INL v` >>
+  Cases_on `p`
+  >- metis_tac[read_nonmemory_place_success_type, place_distinct]
+  >- (gvs[runtime_place_typed_memory] >>
+      `value_has_type entry.type entry.value /\ well_formed_type_value entry.type` by
+        metis_tac[state_well_typed_def, lookup_scopes_well_typed_value_has_type,
+                  lookup_scopes_well_typed_type] >>
+      `?w. read_memory_path entry l = INL w /\ value_has_type tv w` by
+        metis_tac[covered_memory_read, MEM] >>
+      gvs[read_place_def, bind_def, get_scopes_def, lift_option_type_def,
+          lift_sum_def, return_def]) >>
+  metis_tac[read_nonmemory_place_success_type, place_distinct]
+QED
+
+Theorem memory_dynamic_array_authoritative_read:
+  state_well_typed st /\
+  runtime_place_typed cx st (MemoryPlace id path) (ArrayTV etv (Dynamic n)) /\
+  (?source fresh old. lookup_scopes id st.scopes = SOME source /\
+     memory_eval_path source.type path /\
+     memory_history_region source fresh old [path]) /\
+  lookup_scopes id st.scopes = SOME entry /\
+  read_memory_path entry path = INL arr ==>
+  subscripts_type entry.type path = SOME (ArrayTV etv (Dynamic n)) /\
+  value_has_type (ArrayTV etv (Dynamic n)) arr
+Proof
+  simp[runtime_place_typed_memory] >> rpt strip_tac >> gvs[] >>
+  `value_has_type entry.type entry.value /\ well_formed_type_value entry.type` by
+    metis_tac[state_well_typed_def, lookup_scopes_well_typed_value_has_type,
+              lookup_scopes_well_typed_type] >>
+  metis_tac[covered_memory_read, MEM, sumTheory.INL_11]
 QED
 
 Theorem struct_field_slot_exists:

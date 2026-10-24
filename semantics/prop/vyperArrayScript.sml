@@ -466,12 +466,12 @@ Proof
          AllCaseEqs()]
 QED
 
-Theorem evaluate_subscript_array_bounds:
-  ∀tenv tv av i x.
-    evaluate_subscript tenv tv (Value (ArrayV av)) (IntV i) = INL x ∧
+Theorem evaluate_subscripts_array_bounds:
+  ∀tv av i x.
+    evaluate_subscripts tv (ArrayV av) [ValueSubscript (IntV i)] = INL x ∧
     (∀al. av = SArrayV al ⇒ ∃t n. tv = ArrayTV t (Fixed n)) ⇒
     valid_index tv av i
 Proof
-  rw[evaluate_subscript_def, AllCaseEqs()]
+  rw[evaluate_subscripts_def, AllCaseEqs()]
   >> drule_all array_index_bounds >> simp[]
 QED

@@ -3,6 +3,7 @@ Ancestors
   vyperTypeInvariants
   vyperAST vyperMisc vyperContext vyperState vyperInterpreter
   vyperArray vyperBareGlobalName vyperValue vyperValueOperation
+  vyperStatePreservation
 Libs
   intLib
 
@@ -19,19 +20,18 @@ Proof
 QED
 
 Theorem eval_expr_Name_preserves_state:
-  ∀cx n st v st'.
-    eval_expr cx (Name _ n) st = (INL (Value v), st') ==> st' = st
+  ∀cx n st res st'.
+    eval_expr cx (Name ann n) st = (res, st') ==> st' = st
 Proof
   simp[Once evaluate_def, bind_def, get_scopes_def, return_def,
-       lift_option_def, lift_option_type_def] >>
-  rpt strip_tac >>
-  Cases_on `lookup_scopes_val n st.scopes` >>
+       type_check_def, assert_def, ignore_bind_def] >>
+  rpt strip_tac >> Cases_on `IS_SOME (lookup_scopes n st.scopes)` >>
   gvs[return_def, raise_def]
 QED
 
-Theorem eval_base_target_NameTarget_preserves_state:
-  ∀cx n st loc sbs st'.
-    eval_base_target cx (NameTarget n) st = (INL (loc, sbs), st') ==> st' = st
+Theorem eval_base_place_NameTarget_preserves_state:
+  ∀cx n st res st'.
+    eval_base_place cx (NameTarget n) st = (res, st') ==> st' = st
 Proof
   simp[Once evaluate_def, bind_def, get_scopes_def, return_def,
        check_def, type_check_def, assert_def, ignore_bind_def] >>
@@ -40,40 +40,12 @@ Proof
   gvs[return_def, raise_def]
 QED
 
-Theorem eval_base_target_TopLevelNameTarget_preserves_state:
+Theorem eval_base_place_TopLevelNameTarget_preserves_state:
   ∀cx nsid st res st'.
-    eval_base_target cx (TopLevelNameTarget nsid) st = (res, st') ==> st' = st
+    eval_base_place cx (TopLevelNameTarget nsid) st = (res, st') ==> st' = st
 Proof
-  Cases_on `nsid` >>
-  simp[Once evaluate_def, bind_def, return_def, raise_def,
-       lift_option_def, lift_option_type_def, LET_THM] >>
-  rpt strip_tac >>
-  Cases_on `get_module_code cx q` >>
-  gvs[return_def, raise_def] >>
-  Cases_on `is_immutable_decl r x` >>
-  gvs[return_def]
-QED
-
-Theorem eval_base_target_TopLevelNameTarget_immutable:
-  ∀cx st src id ts.
-    get_module_code cx src = SOME ts ∧
-    is_immutable_decl id ts ⇒
-    eval_base_target cx (TopLevelNameTarget (src,id)) st =
-    (INL (ImmutableVar src id, []), st)
-Proof
-  simp[Once evaluate_def, bind_def, lift_option_type_def, return_def]
-QED
-
-Theorem eval_base_target_TopLevelNameTarget_no_type_error:
-  ∀cx st src id res st'.
-    (∃ts. get_module_code cx src = SOME ts) ∧
-    eval_base_target cx (TopLevelNameTarget (src,id)) st = (res, st') ⇒
-    ∀s. res ≠ INR (Error (TypeError s))
-Proof
-  rpt strip_tac >>
-  qpat_x_assum `eval_base_target _ _ _ = _` mp_tac >>
-  simp[Once evaluate_def, bind_def, lift_option_type_def, return_def, raise_def] >>
-  Cases_on `is_immutable_decl id ts` >> simp[return_def]
+  Cases_on `nsid` >> simp[Once evaluate_def] >>
+  metis_tac[lookup_global_state]
 QED
 
 (* ===== Binop Helper Lemmas ===== *)

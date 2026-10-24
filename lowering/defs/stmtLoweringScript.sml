@@ -1329,7 +1329,7 @@ Definition compile_stmt_def:
      load_opc: MLOAD/SLOAD/TLOAD/CALLDATALOAD/DLOADN
      is_slot_addressed: T for storage/transient
      SEMANTIC DIFFERENCE: The Vyper interpreter materializes the entire array
-     to a value list before iterating (eval_iterator → materialise → extract_elements).
+     to a value list before iterating (eval_iterator → read_result → extract_elements).
      The lowering reads elements from source on each iteration. If the loop body
      modifies the source array, the interpreter sees original values but the lowering
      sees modified values. Vyper's type checker forbids mutation of the iterated
