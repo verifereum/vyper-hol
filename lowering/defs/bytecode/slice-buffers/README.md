@@ -14,8 +14,8 @@ rollup). The lowering sizes slice output buffers as Python's
 | `slice_storage_bytes` | control: storage `Bytes` source |
 | `slice_string_lit` | control: `String` source with literal start and length |
 
-These programs are outside `supported_program` (`Slice` and `CalldataSlice`
-are not yet admitted by `supported_builtin_form`); the fixtures pin the
+`supported_builtin_form` admits `CalldataSlice` but not yet `Slice`, so the
+general-slice programs are outside `supported_program`; their fixtures pin the
 lowering ahead of that relaxation.
 
 `oracle/` holds the annotated AST/layout JSON and deployment/runtime bytecode

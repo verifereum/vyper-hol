@@ -244,16 +244,8 @@ fun scalar_modular_stage_external_function prefix package current =
     val register_args_pair = rhs (concl register_args_eval)
     val body_cenv = #1 (pairSyntax.dest_pair register_args_pair)
     val state3 = #2 (pairSyntax.dest_pair register_args_pair)
-    val collect_locals_eval = save_thm
-      (prefix ^ "_collect_locals_eval",
-       EVAL ``collect_locals ^body``)
-    val locals = rhs (concl collect_locals_eval)
-    val reserve_locals_eval = save_thm
-      (prefix ^ "_reserve_locals_eval",
-       EVAL ``reserve_local_ptrs ^body_cenv ^locals ^state3``)
-    val reserve_pair = rhs (concl reserve_locals_eval)
-    val body_cenv2 = #1 (pairSyntax.dest_pair reserve_pair)
-    val state4 = #2 (pairSyntax.dest_pair reserve_pair)
+    val body_cenv2 = body_cenv
+    val state4 = state3
     val ret_ty = optionSyntax.dest_some ret_type
     val (stmt_terms,_) = listSyntax.dest_list body
     val stmt = hd stmt_terms
@@ -316,6 +308,7 @@ fun scalar_modular_stage_external_function prefix package current =
        compileEnvTheory.comp_get_def, compileEnvTheory.comp_return_def,
        block_terminated4_eval, stmt_eval,
        scalar_modular_compile_stmts_nil_def,
+       stmtLoweringTheory.declare_stmt_local_def,
        boolTheory.COND_CLAUSES, LET_THM, pairTheory.FST, pairTheory.SND,
        pairTheory.UNCURRY_DEF, pairTheory.pair_case_def]
       (rhs (concl stmts_step1))
@@ -329,7 +322,7 @@ fun scalar_modular_stage_external_function prefix package current =
       (prefix ^ "_guarded_body_eval",
        SIMP_CONV pure_ss
         [moduleLoweringTheory.compile_guarded_body_def,
-         collect_locals_eval, reserve_locals_eval, stmts_eval,
+         stmts_eval,
          block_terminated5_eval,
          compileEnvTheory.comp_bind_def,
          compileEnvTheory.comp_ignore_bind_def,
