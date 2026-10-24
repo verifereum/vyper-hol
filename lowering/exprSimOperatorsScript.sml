@@ -115,9 +115,9 @@ Theorem expr_sim_pre_bop:
 Proof
   rpt strip_tac
   >- gvs[expr_sim_pre_def, well_typed_expr_def, well_typed_builtin_app_def]
-  >- (irule expr_sim_pre_builtin_arg >> first_assum (irule_at Any) >>
+  >- (drule expr_sim_pre_builtin_arg >> disch_then irule >>
       gvs[expr_sim_pre_def]) >>
-  irule expr_sim_pre_builtin_arg >> first_assum (irule_at Any) >> gvs[]
+  drule expr_sim_pre_builtin_arg >> disch_then irule >> simp[]
 QED
 
 Theorem expr_sim_ok_apply:
@@ -125,7 +125,7 @@ Theorem expr_sim_ok_apply:
     expr_sim_ok cenv e /\ expr_sim_pre cenv cx env e es ==>
     expr_sim ctx func cenv cx ty e es
 Proof
-  rw[expr_sim_ok_def]
+  metis_tac[expr_sim_ok_def]
 QED
 
 Theorem compile_bop_word_sim:
@@ -143,45 +143,47 @@ Proof
    is_word_type (expr_type e2) /\ ~is_ArrayT (expr_type e2) /\
    ~is_bytestring_type (expr_type e2)` by gvs[word_value_type_word] >>
   imp_res_tac well_typed_expr_type_evaluates >>
+  `is_word_type ann` by (drule_all well_typed_binop_word_result >> simp[]) >>
   irule compile_bop_sim >> rpt conj_tac
-  >- gvs[]
-  >- gvs[]
-  >- (drule_all well_typed_binop_word_result >> simp[])
-  >- gvs[]
-  >- gvs[]
-  >- gvs[]
-  >- gvs[]
-  >- (rpt gen_tac >> strip_tac >> drule lower_value_word_shape >> gvs[])
-  >- (rpt gen_tac >> strip_tac >> drule lower_value_word_shape >> gvs[])
-  >- (rpt gen_tac >> strip_tac >> drule compile_binop_shape >> simp[])
+  >~ [`binop_frag`]
+  >- (rpt gen_tac >> strip_tac >>
+      qspecl_then [`cenv`, `cx`, `env`, `e1`, `es`, `INL (Value v1)`, `es1`]
+        mp_tac expr_sim_pre_word_result >>
+      impl_tac >- gvs[] >> strip_tac >>
+      first_x_assum (qspec_then `Value v1` mp_tac) >> simp[] >> strip_tac >>
+      rename1 `value_has_type tv1 v1` >>
+      `expr_sim_pre cenv cx env e2 es1` by (first_assum irule >> simp[]) >>
+      conj_tac >- gvs[] >>
+      conj_tac
+      >- (rpt strip_tac >>
+          qspecl_then [`cenv`, `cx`, `env`, `e2`, `es1`, `r2`, `es2`] mp_tac
+            expr_sim_pre_word_result >>
+          impl_tac >- gvs[] >> simp[]) >>
+      conj_tac
+      >- metis_tac[expr_sim_ok_apply] >>
+      rpt gen_tac >> strip_tac >>
+      qspecl_then [`cenv`, `cx`, `env`, `e2`, `es1`, `INL (Value v2)`, `es2`]
+        mp_tac expr_sim_pre_word_result >>
+      impl_tac >- gvs[] >> strip_tac >>
+      first_x_assum (qspec_then `Value v2` mp_tac) >> simp[] >>
+      strip_tac >> rename1 `value_has_type tv2 v2` >> simp[] >>
+      qspecl_then [`ctx`, `func`, `cenv`, `cx`, `bop`, `ann`, `e1`, `e2`,
+                   `v1`, `v2`, `es2`, `tv1`, `tv2`] mp_tac binop_frag_typed >>
+      impl_tac >- gvs[] >> simp[])
+  >~ [`expr_res_ok`]
   >- (rpt strip_tac >>
       qspecl_then [`cenv`, `cx`, `env`, `e1`, `es`, `r1`, `es1`] mp_tac
         expr_sim_pre_word_result >>
       impl_tac >- gvs[] >> simp[])
-  >- (irule expr_sim_ok_apply >> qexists_tac `env` >> gvs[]) >>
-  rpt gen_tac >> strip_tac >>
-  qspecl_then [`cenv`, `cx`, `env`, `e1`, `es`, `INL (Value v1)`, `es1`]
-    mp_tac expr_sim_pre_word_result >>
-  impl_tac >- gvs[] >> strip_tac >>
-  first_x_assum (qspec_then `Value v1` mp_tac) >> simp[] >> strip_tac >>
-  rename1 `value_has_type tv1 v1` >>
-  `expr_sim_pre cenv cx env e2 es1` by (first_assum irule >> simp[]) >>
-  rpt conj_tac
-  >- simp[]
-  >- (rpt strip_tac >>
-      qspecl_then [`cenv`, `cx`, `env`, `e2`, `es1`, `r2`, `es2`] mp_tac
-        expr_sim_pre_word_result >>
-      impl_tac >- gvs[] >> simp[])
-  >- (irule expr_sim_ok_apply >> qexists_tac `env` >> gvs[]) >>
-  rpt gen_tac >> strip_tac >>
-  qspecl_then [`cenv`, `cx`, `env`, `e2`, `es1`, `INL (Value v2)`, `es2`]
-    mp_tac expr_sim_pre_word_result >>
-  impl_tac >- gvs[] >> strip_tac >>
-  first_x_assum (qspec_then `Value v2` mp_tac) >> simp[] >> strip_tac >>
-  rename1 `value_has_type tv2 v2` >> simp[] >>
-  qspecl_then [`ctx`, `func`, `cenv`, `cx`, `bop`, `ann`, `e1`, `e2`, `v1`,
-               `v2`, `es2`, `tv1`, `tv2`] mp_tac binop_frag_typed >>
-  impl_tac >- gvs[] >> simp[]
+  >~ [`compile_binop`]
+  >- (rpt gen_tac >> strip_tac >> drule compile_binop_shape >> simp[])
+  >~ [`lower_value`]
+  >- (rpt gen_tac >> strip_tac >> drule lower_value_word_shape >> gvs[])
+  >~ [`lower_value`]
+  >- (rpt gen_tac >> strip_tac >> drule lower_value_word_shape >> gvs[])
+  >~ [`expr_sim`]
+  >- metis_tac[expr_sim_ok_apply] >>
+  gvs[]
 QED
 
 Theorem compile_bop_other_sim:
@@ -203,9 +205,10 @@ Proof
   rpt strip_tac >>
   Cases_on `?e1 e2. args = [e1; e2] /\ word_value_type (expr_type e1) /\
                     word_value_type (expr_type e2)`
-  >- (gvs[] >> irule compile_bop_word_sim >> simp[] >>
-      conj_tac >> irule expr_sim_below_mem >> first_assum (irule_at Any) >>
-      simp[]) >>
+  >- (pop_assum strip_assume_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+      `expr_sim_ok cenv e1 /\ expr_sim_ok cenv e2` by
+        metis_tac[expr_sim_below_mem, listTheory.MEM] >>
+      irule compile_bop_word_sim >> fs[]) >>
   rw[expr_sim_ok_def] >> irule compile_bop_other_sim >>
   metis_tac[]
 QED
