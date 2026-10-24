@@ -859,7 +859,7 @@ End
    - to_buf writes E at dst and returns its length;
    - child writes E at dst + static_ofst for a static child; for a
      dynamic one it writes E at dst + d, where d is the dynamic offset in
-     the cell at c, the offset d in the head slot at dst + static_ofst,
+     the cell at c (a scratch cell of the caller, at or above lo), the offset d in the head slot at dst + static_ofst,
      and d + LENGTH E back in the cell;
    - complex_elems writes the element heads from dst + head_offset and the
      tails of the dynamic elements from dst + d, which together are
@@ -897,7 +897,7 @@ Theorem compile_abi_encode_frag:
          eval_operand dyn_ptr s0 = SOME (n2w c) /\
          mem_word_at c s0.vs_memory = n2w d /\
          j NOTIN frag_ids st st' /\
-         FLOOKUP s0.vs_allocas j = SOME (c, 32) /\
+         FLOOKUP s0.vs_allocas j = SOME (c, 32) /\ lo <= c /\
          static_ofst + 32 <= d /\
          enc_pre st st' [dst; child_ptr; dyn_ptr] lo top tv v (w2n src_w)
            [(w2n dst_w + static_ofst, 32);
@@ -948,7 +948,7 @@ Theorem compile_abi_encode_frag:
         eval_operand dyn_ptr s0 = SOME (n2w c) /\
         mem_word_at c s0.vs_memory = n2w d /\
         (?j. j NOTIN frag_ids st st' /\
-             FLOOKUP s0.vs_allocas j = SOME (c, 32)) /\
+             FLOOKUP s0.vs_allocas j = SOME (c, 32)) /\ lo <= c /\
         head_offset + SUM (MAP (\(_, abi_sz, _, _). abi_sz) elems) <= d) /\
      enc_pre st st' [dst; src; dyn_ptr] lo top (TupleTV tvs)
        (ArrayV (TupleV vs)) (w2n src_w + src_offset)
