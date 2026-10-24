@@ -21,7 +21,8 @@
  *   external_return_word_result_rel, external_return_prim_result_rel,
  *   external_return_none_result_rel,
  *   external_fallthrough_result_rel -- S1 halt bridge (#640) for the
- *     return sequences loweringHalt covers
+ *     return sequences loweringHalt covers, and their _unlock versions,
+ *     whose return may release a transient nonreentrant lock
  *   lower_vyper_runtime_unit_correct -- S1 (planned admission, Milestone 6)
  *   lower_vyper_runtime_unit_source_unit_ok -- S2 (Milestone 5)
  *   lower_vyper_runtime_unit_memory_ok -- S3 (Milestone 5)
@@ -415,7 +416,7 @@ Proof
   rpt strip_tac >>
   qspecl_then [`ctx`, `cenv`, `lctx`, `ty`, `st`, `x`, `st'`, `nr`, `nkey`,
                `ut`, `iv`] mp_tac compile_return_none_external_unlock_frag >>
-  simp[] >> disch_then irule >> rpt strip_tac >>
+  simp[] >> disch_then irule >> simp[] >> rpt strip_tac >>
   qspecl_then [`func`, `cenv`, `cx`, `es`, `es'`, `s`, `ss`, `nr`, `nkey`,
                `iv`, `tops`, `tx`, `srcs`, `exps`, `layouts`] mp_tac
     external_halt_success_unlock >>
@@ -448,8 +449,9 @@ Theorem external_fallthrough_unlock_result_rel:
 Proof
   rpt strip_tac >>
   qspecl_then [`ctx`, `cenv`, `nr`, `nkey`, `ut`, `iv`, `stmts`, `st`, `x`,
-               `st'`, `sa`, `sb`] mp_tac compile_guarded_body_stop_unlock_frag >>
-  simp[] >> disch_then irule >> rpt strip_tac >>
+               `st'`, `sa`, `sb`] mp_tac
+    compile_guarded_body_stop_unlock_frag >>
+  simp[] >> disch_then irule >> simp[] >> rpt strip_tac >>
   qspecl_then [`func`, `cenv`, `cx`, `es`, `es'`, `s`, `ss`, `nr`, `nkey`,
                `iv`, `tops`, `tx`, `srcs`, `exps`, `layouts`] mp_tac
     external_halt_success_unlock >>

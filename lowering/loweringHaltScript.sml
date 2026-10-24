@@ -3,8 +3,8 @@
  * end in a Halt whose return data and effects are the success case of
  * external_call_result_rel (stated with it, in vyperLoweringCorrect, as
  * external_return_word_result_rel, external_return_prim_result_rel,
- * external_return_none_result_rel and
- * external_fallthrough_result_rel).  The fragment lemmas are stated with
+ * external_return_none_result_rel, external_fallthrough_result_rel and
+ * their _unlock versions).  The fragment lemmas are stated with
  * frag_exec (fragExec), like the statement lemmas of stmtLoweringProps and
  * loweringSlice.
  *
@@ -23,16 +23,36 @@
  *                             function without a return type
  *   external_halt_success   — the effects compared on success, from
  *                             state_rel at the return
+ *   compile_external_return_word_unlock_frag,
+ *   compile_return_none_external_unlock_frag,
+ *   compile_guarded_body_stop_unlock_frag — the same three, in a function
+ *                             whose return may release a transient
+ *                             nonreentrant lock: one TSTORE of 0 at the
+ *                             lock key before the halt
+ *   external_halt_success_unlock — the effects compared on success, from
+ *                             the source state after the release
  *
  * Helpers:
  *   word_value_prim         — word_value values are of word types
  *   compile_external_return_word_parts — the code of a word return
  *   return_word_run         — running that code
  *   step_alloca_frame       — ALLOCA changes nothing the return reads
+ *   step_TSTORE             — TSTORE writes the running contract's
+ *                             transient storage
  *   optional_unlock_view    — with nr ==> iv the optional unlock is empty
+ *   optional_unlock_code, optional_unlock_frag — the optional unlock's
+ *                             code, and running it
+ *   unlock_stop_frag        — the optional unlock, then STOP
+ *   compile_external_return_unlock — a return sequence is the optional
+ *                             unlock, then the sequence without one
  *
- * Scope: no nonreentrant unlock (none, or a view function, whose return
- * does not unlock).  state_rel relates only the contract's own storage and
+ * Scope: the lemmas without _unlock have no unlock (nr ==> iv: no lock,
+ * or a view function, whose return does not unlock); the _unlock ones
+ * also allow a transient lock (nr /\ ~iv ==> ut), and leave out the
+ * SSTORE lock of pre-Cancun targets.  They are stated over the compiler's
+ * lock key nkey; that it is the source's cx.nonreentrant_slot is not
+ * shown here (the lowering does not use transient locks yet, #564).
+ * state_rel relates only the contract's own storage and
  * transient storage, so the accounts and the transient storage of every
  * address are hypotheses at the return: the success case compares all of
  * them (#625's relation leaves them out; #665 tracks deriving them).
@@ -412,20 +432,26 @@ Proof
     (qpat_x_assum `st1 = _` SUBST1_TAC >> irule cs_extends_same_block >>
      rw[]) >>
   qpat_x_assum `st1 = _` kall_tac >>
-  qspecl_then [`ctx`, `st`, `st1`, `st'`, `P`, `\s1. ?s. P s /\
-                  s1 = (if nr /\ ~iv then tstore (n2w nkey) 0w s else s) with
-                         vs_inst_idx := LENGTH st1.cs_current_insts`, `Q`, `R`] mp_tac
-    frag_exec_seq >>
+  qspecl_then
+    [`ctx`, `st`, `st1`, `st'`, `P`,
+     `\s1. ?s. P s /\
+           s1 = (if nr /\ ~iv then tstore (n2w nkey) 0w s else s) with
+                  vs_inst_idx := LENGTH st1.cs_current_insts`,
+     `Q`, `R`] mp_tac frag_exec_seq >>
   impl_tac >> simp[] >> rpt conj_tac
-  >- (qspecl_then [`ctx`, `nr`, `nkey`, `ut`, `iv`, `st`, `st1`, `P`, `\s1. ?s. P s /\
-                  s1 = (if nr /\ ~iv then tstore (n2w nkey) 0w s else s) with
-                         vs_inst_idx := LENGTH st1.cs_current_insts`,
-                   `R`] mp_tac optional_unlock_frag >>
+  >- (qspecl_then
+      [`ctx`, `nr`, `nkey`, `ut`, `iv`, `st`, `st1`, `P`,
+       `\s1. ?s. P s /\
+             s1 = (if nr /\ ~iv then tstore (n2w nkey) 0w s else s) with
+                    vs_inst_idx := LENGTH st1.cs_current_insts`,
+       `R`] mp_tac optional_unlock_frag >>
       impl_tac >- (simp[] >> metis_tac[]) >> simp[])
-  >- (qspecl_then [`ctx`, `st1`, `st'`, `st1.cs_next_id`, `\s1. ?s. P s /\
-                  s1 = (if nr /\ ~iv then tstore (n2w nkey) 0w s else s) with
-                         vs_inst_idx := LENGTH st1.cs_current_insts`, `Q`, `R`]
-        mp_tac stop_frag >>
+  >- (qspecl_then
+      [`ctx`, `st1`, `st'`, `st1.cs_next_id`,
+       `\s1. ?s. P s /\
+             s1 = (if nr /\ ~iv then tstore (n2w nkey) 0w s else s) with
+                    vs_inst_idx := LENGTH st1.cs_current_insts`,
+       `Q`, `R`] mp_tac stop_frag >>
       impl_tac >> simp[] >> simp[PULL_EXISTS] >> rpt strip_tac >>
       rename1 `P s0` >> first_x_assum irule >>
       qpat_assum `P s0` (irule_at Any) >>
@@ -486,21 +512,27 @@ Proof
   qspecl_then [`op`, `ei`, `msz`, `F`, `nkey`, `ut`, `iv`, `st1`, `x`, `st'`]
     mp_tac compile_external_return_word_parts >>
   simp[] >> strip_tac >>
-  qspecl_then [`ctx`, `st`, `st1`, `st'`, `P`, `\s1. ?s. P s /\
-                  s1 = (if nr /\ ~iv then tstore (n2w nkey) 0w s else s) with
-                         vs_inst_idx := LENGTH st1.cs_current_insts`, `Q`, `R`] mp_tac
-    frag_exec_seq >>
+  qspecl_then
+    [`ctx`, `st`, `st1`, `st'`, `P`,
+     `\s1. ?s. P s /\
+           s1 = (if nr /\ ~iv then tstore (n2w nkey) 0w s else s) with
+                  vs_inst_idx := LENGTH st1.cs_current_insts`,
+     `Q`, `R`] mp_tac frag_exec_seq >>
   impl_tac >> simp[] >> rpt conj_tac
-  >- (qspecl_then [`ctx`, `nr`, `nkey`, `ut`, `iv`, `st`, `st1`, `P`, `\s1. ?s. P s /\
-                  s1 = (if nr /\ ~iv then tstore (n2w nkey) 0w s else s) with
-                         vs_inst_idx := LENGTH st1.cs_current_insts`,
-                   `R`] mp_tac optional_unlock_frag >>
+  >- (qspecl_then
+      [`ctx`, `nr`, `nkey`, `ut`, `iv`, `st`, `st1`, `P`,
+       `\s1. ?s. P s /\
+             s1 = (if nr /\ ~iv then tstore (n2w nkey) 0w s else s) with
+                    vs_inst_idx := LENGTH st1.cs_current_insts`,
+       `R`] mp_tac optional_unlock_frag >>
       impl_tac >- (simp[] >> metis_tac[]) >> simp[])
-  >- (qspecl_then [`ctx`, `op`, `ei`, `msz`, `F`, `nkey`, `ut`, `iv`, `st1`,
-                   `x`, `st'`, `w`, `\s1. ?s. P s /\
-                  s1 = (if nr /\ ~iv then tstore (n2w nkey) 0w s else s) with
-                         vs_inst_idx := LENGTH st1.cs_current_insts`, `Q`, `R`] mp_tac
-        compile_external_return_word_frag >>
+  >- (qspecl_then
+      [`ctx`, `op`, `ei`, `msz`, `F`, `nkey`, `ut`, `iv`, `st1`, `x`, `st'`,
+       `w`,
+       `\s1. ?s. P s /\
+             s1 = (if nr /\ ~iv then tstore (n2w nkey) 0w s else s) with
+                    vs_inst_idx := LENGTH st1.cs_current_insts`,
+       `Q`, `R`] mp_tac compile_external_return_word_frag >>
       impl_tac >> simp[] >> simp[PULL_EXISTS] >> rpt conj_tac
       >- (rpt strip_tac >> gvs[not_fresh_at_def])
       >- (rpt strip_tac >> rename1 `P s0` >>
