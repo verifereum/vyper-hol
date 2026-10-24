@@ -12,6 +12,8 @@ Ancestors
   cfgTransform venomState venomExecSemantics venomInst
   venomWf cfgTransformProofs execEquivProofs stateEquivProofs
   venomInstProps venomExecProps execEquivParamProps
+Libs
+  stepInstBaseLib
 
 (* ================================================================
    Section 1: lookup_block in transformed function
@@ -2109,8 +2111,7 @@ val non_jump_term_tac =
   simp[subst_block_labels_inst_def, is_block_label_opcode_def,
        is_terminator_def, subst_label_map_inst_def,
        parse_dret_shape_subst_label_map] >>
-  simp[Once step_inst_base_def] >>
-  simp[Once step_inst_base_def] >>
+  with_opcode_clause simp >>
   `eval_operands (MAP (subst_label_map_op m) inst.inst_operands) st =
    eval_operands inst.inst_operands st` by (
     irule eval_operands_subst_label_map >> fs[]) >>
@@ -2259,14 +2260,6 @@ Proof
   pick_jump_witness_tac >> simp[]
 QED
 
-(* Select the exported DJMP branch by its guard, avoiding full dispatch. *)
-val step_inst_base_djmp_eq = valOf (List.find
-  (fn th => let
-    val (_, body) = strip_forall (concl th)
-    val (guard, _) = dest_imp body
-  in aconv (rhs guard) ``DJMP`` end)
-  (CONJUNCTS venomExecSemanticsTheory.step_inst_base_opcode_eqs));
-
 Theorem step_inst_base_subst_djmp[local]:
   !m inst (st:venom_state).
     inst.inst_opcode = DJMP /\
@@ -2290,7 +2283,7 @@ Proof
   pop_assum SUBST1_TAC >>
   `!op. eval_operand (subst_label_map_op m op) st = eval_operand op st` by (
     rpt strip_tac >> irule eval_operand_subst_label_map >> simp[]) >>
-  simp[step_inst_base_djmp_eq, subst_label_map_op_def,
+  simp[opcode_clause ``DJMP``, subst_label_map_op_def,
        extract_labels_map_subst, is_terminator_def] >>
   Cases_on `inst.inst_operands` >> simp[subst_label_map_op_def] >>
   BasicProvers.every_case_tac >>
@@ -2362,8 +2355,8 @@ QED
 
 val term_ok_jump_tac =
   qpat_x_assum `step_inst_base _ _ = OK _` mp_tac >>
-  simp[step_inst_base_def, eval_operands_def, eval_operand_def,
-       AllCaseEqs()] >>
+  with_opcode_clause (fn ths =>
+    simp (ths @ [eval_operands_def, eval_operand_def, AllCaseEqs()])) >>
   rpt CASE_TAC >> gvs[] >> TRY pairarg_tac >> gvs[];
 
 Theorem step_inst_base_ok_terminator_jump[local]:
