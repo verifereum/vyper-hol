@@ -28,7 +28,7 @@ These are builtin payload lengths, not external RETURN framing lengths.
 ## Reproducible checker input and exact layout type
 
 Current saved fixture assertions use
-`IS_SOME (check_contract F [] (0w:address) [(NONE, task090_abi_dynamic_program)])`
+`IS_SOME (check_contract F [] (0w:address) [(NONE, abi_dynamic_program)])`
 and the analogous deployment `T`; formerly both returned NONE due to the bound.
 Empty layouts are valid here because this pure fixture declares no storage.
 The exact argument type is
@@ -48,7 +48,7 @@ argument evaluation is not an `eval_args NONE` call.
 - [Evaluator](../../semantics/vyperContextScript.sml): `evaluate_type_builtin`
   AbiEncode branch / `evaluate_abi_encode_bytes`.
 - [Contract checker](../../semantics/type/vyperTypeContractScript.sml): `check_contract`.
-- [Permanent tests](../../semantics/type/vyperCheckContractLibTestScript.sml):
+- [Permanent tests](../../tests/vyperCheckContractLibTestScript.sml):
   `abi_encode_dynamic_exact_bound`, `abi_encode_dynamic_wrapping_bounds`,
   `abi_encode_wrapping_lengths_eval` / `cv`,
   `abi_dynamic_fixture_runtime_checked` / `deployment_checked`.
