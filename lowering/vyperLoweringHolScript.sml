@@ -10,7 +10,7 @@ Ancestors
   valueEncodingProofs
   localPtrsProps
   structFieldsProps
-  loweringShapeDefs
+  loweringShapeProps
   (* compiler + correctness *)
   vyperCompiler
   vyperLoweringCorrect
