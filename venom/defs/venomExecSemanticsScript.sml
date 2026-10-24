@@ -1408,6 +1408,7 @@ Definition merge_callee_state_def:
       vs_logs       := callee.vs_logs;
       vs_outcomes   := callee.vs_outcomes;
       vs_requests   := callee.vs_requests;
+      vs_pending_deletions := callee.vs_pending_deletions;
       vs_immutables := callee.vs_immutables;
       vs_alloca_next := callee.vs_alloca_next
       (* vs_allocas NOT copied — caller keeps its own frame's allocas *)

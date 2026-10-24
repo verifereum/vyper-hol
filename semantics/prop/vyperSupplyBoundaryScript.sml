@@ -98,7 +98,7 @@ Theorem extract_call_result_supply_conditional:
   accounts_supply_bounded accounts /\
   (result = INR NONE ==> accounts_supply_bounded final_state.rollback.accounts) /\
   extract_call_result accounts ts (result,final_state) =
-    SOME (success, data, accounts', ts', logs) ==>
+    SOME (success, data, accounts', ts', logs, deletions) ==>
   accounts_supply_bounded accounts'
 Proof
   simp[extract_call_result_def] >>

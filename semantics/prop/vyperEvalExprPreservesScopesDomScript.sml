@@ -410,7 +410,7 @@ Proof
   qmatch_asmsub_rename_tac `case tailst.outcomes of NONE => _ | SOME _ => _` >>
   Cases_on `tailst.outcomes` >> gvs[]
   >- (gvs[bind_def, return_def, AllCaseEqs()] >>
-      imp_res_tac concrete_send_step_locals >> gvs[] >>
+      imp_res_tac eval_send_preserves_non_accounts >> gvs[] >>
       first_x_assum drule >> simp[]) >>
   imp_res_tac (Send_outcome_preserves_locals |> SRULE [check_def, ignore_bind_def]) >>
   gvs[] >> first_x_assum drule >> simp[]
@@ -495,7 +495,8 @@ Proof
        check_def, type_check_def, assert_def, lift_option_def, lift_option_type_def,
        get_accounts_def, option_CASE_rator] >>
   strip_tac >> gvs[AllCaseEqs(), return_def, raise_def] >>
-  imp_res_tac transfer_value_scopes >> gvs[]
+  gvs[update_accounts_def, update_pending_deletions_def, bind_def,
+      ignore_bind_def, return_def, raise_def, COND_RATOR, AllCaseEqs()]
 QED
 
 (* Goal 17: ExtCall (exact evaluate_ind shape) *)
@@ -721,7 +722,7 @@ val EXT_CALL_DOM_SIMP_TAC =
   gvs[bind_def, ignore_bind_def, return_def, UNCURRY,
       type_check_def, check_def, assert_def, lift_option_type_def,
       get_accounts_def, get_transient_storage_def, update_accounts_def,
-      update_transient_def, append_logs_def, raise_def,
+      update_transient_def, append_logs_def, update_pending_deletions_def, raise_def,
       lift_option_def, lift_sum_runtime_def];
 
 val EXT_CALL_DOM_CASES_TAC =
@@ -857,12 +858,13 @@ Theorem scopes_dom_frame_primitives[local]:
   scopes_dom_frame (update_accounts upd) /\
   scopes_dom_frame (update_transient upd_t) /\
   scopes_dom_frame (append_logs logs) /\
+  scopes_dom_frame (update_pending_deletions deletions_upd) /\
   scopes_dom_frame (adopt_call_outcome rq co)
 Proof
   simp[scopes_dom_frame_def, return_def, raise_def, check_def, type_check_def,
        assert_def, lift_option_def, lift_option_type_def, lift_sum_runtime_def,
        get_accounts_def, get_transient_storage_def, update_accounts_def,
-       update_transient_def, append_logs_def, adopt_call_outcome_equation] >>
+       update_transient_def, append_logs_def, update_pending_deletions_def, adopt_call_outcome_equation] >>
   rpt strip_tac >> rpt CASE_TAC >> simp[return_def, raise_def]
 QED
 
@@ -1015,16 +1017,15 @@ QED
    Uses ≠ form because simp normalizes ¬(A ∨ B) to ¬A ∧ ¬B. *)
 Theorem finally_intcall_handler_scopes[local]:
   ∀f nr mut cx prev s res s'.
-    finally f
-      (bind (set_scopes prev) (λx.
-          if nr ∧ mut ≠ View ∧ mut ≠ Pure then
+    finally_unless_halt (finally f (set_scopes prev))
+      (if nr ∧ mut ≠ View ∧ mut ≠ Pure then
             case cx.nonreentrant_slot of
             | NONE => return ()
             | SOME slot => release_nonreentrant_lock cx.txn.target slot
-          else return ())) s = (res, s') ⇒
+       else return ()) s = (res, s') ⇒
     MAP FDOM s'.scopes = MAP FDOM prev
 Proof
-  rw[finally_def, bind_def, ignore_bind_def,
+  rw[finally_unless_halt_def, finally_def, bind_def, ignore_bind_def,
      set_scopes_def, return_def, raise_def, AllCaseEqs()]
   \\ gvs[]
   \\ Cases_on `cx.nonreentrant_slot` \\ gvs[return_def]

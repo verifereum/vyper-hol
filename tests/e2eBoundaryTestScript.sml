@@ -72,6 +72,15 @@ Proof
   simp[tx_block_fields_rel_def, tx_env_ok_def]
 QED
 
+Theorem boundary_deletion_and_creation:
+  call_state_rel tops code am tx es ==>
+  es.rollback.toDelete = am.pending_deletions /\
+  (tx.created_in_tx <=>
+    account_empty (lookup_account tx.target (SND (LAST es.contexts)).accounts))
+Proof
+  simp[call_state_rel_def] >> metis_tac[]
+QED
+
 Theorem no_genesis_or_unbounded_hash_environment:
   ~tx_env_ok (tx with block_number := 0) /\
   ~tx_env_ok (tx with block_number := 2 ** 255) /\
@@ -111,7 +120,8 @@ Theorem typing_and_storage_contracts:
   (source_typing_ok tops am tx <=>
     ?art. check_contract F am.layouts tx.target [(NONE,tops)] = SOME art /\
           checked_contract_runtime_ready art [(NONE,tops)] am tx /\
-          machine_well_typed am /\ call_tx_well_typed tx) /\
+          machine_well_typed am /\ accounts_supply_bounded am.accounts /\
+          call_tx_well_typed tx) /\
   (source_storage_ok tops am tx <=>
     let cx = initial_evaluation_context am.sources am.layouts tx NONE in
       contract_storage_well_formed cx (initial_state am []) /\
@@ -125,6 +135,7 @@ Theorem outcome_guard_success_only:
   call_outcomes_ok tops am tx [co with co_success := F] /\
   (call_outcomes_ok tops am tx [co with co_success := T] <=>
     accounts_runtime_well_typed co.co_accounts /\
+    accounts_supply_bounded co.co_accounts /\
     contract_storage_well_formed
       (initial_evaluation_context am.sources am.layouts tx NONE)
       (initial_state (am with <|accounts := co.co_accounts;
@@ -279,6 +290,7 @@ Theorem source_exemption_triple:
   ~source_exempt tops (INR (AssertException s),am,rqs) /\
   ~source_exempt tops (INR BreakException,am,rqs) /\
   ~source_exempt tops (INR ContinueException,am,rqs) /\
+  ~source_exempt tops (INR HaltException,am,rqs) /\
   ~source_exempt tops (INR (ReturnException v),am,rqs)
 Proof
   simp[source_exempt_def]
@@ -290,7 +302,21 @@ Theorem success_requires_requests_and_effects:
   (call_result_rel tops ret am tx es r es' <=>
     ?out lgs. frame_outcome es r es' NONE out lgs /\
       return_bytes tops ret v out /\
-      es'.rollback.accounts = am'.accounts /\ es'.rollback.tStorage = am'.tStorage /\
+      process_deletions es'.rollback.toDelete es'.rollback.accounts = am'.accounts /\
+      es'.rollback.tStorage = am'.tStorage /\
+      logs_correspond (compiled_event_info tops) (type_env tops) tx.target am'.logs lgs /\
+      rqs = MAP FST (call_trace es))
+Proof
+  simp[call_result_rel_def]
+QED
+
+Theorem halt_requires_empty_success_and_effects:
+  call_external (SOME (MAP SND (call_trace es))) am tx =
+    (INR HaltException,am',rqs) ==>
+  (call_result_rel tops ret am tx es r es' <=>
+    ?lgs. frame_outcome es r es' NONE [] lgs /\
+      process_deletions es'.rollback.toDelete es'.rollback.accounts = am'.accounts /\
+      es'.rollback.tStorage = am'.tStorage /\
       logs_correspond (compiled_event_info tops) (type_env tops) tx.target am'.logs lgs /\
       rqs = MAP FST (call_trace es))
 Proof

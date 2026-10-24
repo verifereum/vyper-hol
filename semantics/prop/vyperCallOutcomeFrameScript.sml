@@ -69,6 +69,7 @@ Theorem state_rel_frame_locals_primitives:
   state_rel_frame R get_accounts /\ state_rel_frame R get_transient_storage /\
   state_rel_frame R (update_accounts upd) /\
   state_rel_frame R (update_transient upd_t) /\
+  state_rel_frame R (update_pending_deletions deletions_upd) /\
   state_rel_frame R (λs. vyperState$return () (s with logs updated_by logs_upd)) /\
   state_rel_frame R (λs. vyperState$return () (s with logs := s.logs ++ logs)) /\
   state_rel_frame R (adopt_call_outcome rq co)
@@ -77,7 +78,8 @@ Proof
   simp[state_rel_frame_def, return_def, raise_def, check_def, type_check_def,
        assert_def, lift_option_def, lift_option_type_def, lift_sum_runtime_def,
        get_accounts_def, get_transient_storage_def, update_accounts_def,
-       update_transient_def, adopt_call_outcome_equation] >>
+       update_transient_def, update_pending_deletions_def,
+       adopt_call_outcome_equation] >>
   rpt strip_tac >> rpt CASE_TAC >> simp[return_def, raise_def]
 QED
 
@@ -103,9 +105,10 @@ QED
 
 Theorem adopt_call_outcome_transport:
   (!s. R s s) /\
-  (!s accounts transient logs.
+  (!s accounts transient logs deletions.
     R s (s with <|accounts := accounts; tStorage := transient;
-                  logs := s.logs ++ logs|>)) /\
+                  logs := s.logs ++ logs;
+                  pending_deletions := deletions ++ s.pending_deletions|>)) /\
   adopt_call_outcome rq outcome st = (res,st') ==>
   R st st'
 Proof
@@ -116,9 +119,10 @@ Theorem checked_call_outcome_transport:
   (!s. R s s) /\
   (!s t u. R s t /\ R t u ==> R s u) /\
   (!s os rqs. R s (s with <|outcomes := os; requests := rqs|>)) /\
-  (!s accounts transient logs.
+  (!s accounts transient logs deletions.
     R s (s with <|accounts := accounts; tStorage := transient;
-                  logs := s.logs ++ logs|>)) /\
+                  logs := s.logs ++ logs;
+                  pending_deletions := deletions ++ s.pending_deletions|>)) /\
   (!bs s res t. k bs s = (res,t) ==> R s t) /\
   (do
     (rq,outcome) <- take_call_outcome target calldata value_opt;
@@ -174,9 +178,10 @@ Theorem ExtCall_outcome_transport:
   (!s. R s s) /\
   (!s t u. R s t /\ R t u ==> R s u) /\
   (!s os rqs. R s (s with <|outcomes := os; requests := rqs|>)) /\
-  (!s accounts transient logs.
+  (!s accounts transient logs deletions.
     R s (s with <|accounts := accounts; tStorage := transient;
-                  logs := s.logs ++ logs|>)) /\
+                  logs := s.logs ++ logs;
+                  pending_deletions := deletions ++ s.pending_deletions|>)) /\
   (!bs s res t. k bs s = (res,t) ==> R s t) /\
   (do
     accounts <- get_accounts;
@@ -201,9 +206,10 @@ Theorem Send_outcome_transport:
   (!s. R s s) /\
   (!s t u. R s t /\ R t u ==> R s u) /\
   (!s os rqs. R s (s with <|outcomes := os; requests := rqs|>)) /\
-  (!s accounts transient logs.
+  (!s accounts transient logs deletions.
     R s (s with <|accounts := accounts; tStorage := transient;
-                  logs := s.logs ++ logs|>)) /\
+                  logs := s.logs ++ logs;
+                  pending_deletions := deletions ++ s.pending_deletions|>)) /\
   (do
     (rq,outcome) <- take_call_outcome target [] (SOME amount);
     check outcome.co_success "send failed";
@@ -252,15 +258,17 @@ Theorem take_adopt_call_outcome_effects:
     st2 = st with <|outcomes := SOME rest;
                    requests := record_request rq st.requests;
                    accounts := st2.accounts; tStorage := st2.tStorage;
-                   logs := st2.logs|> /\
+                   logs := st2.logs;
+                   pending_deletions := st2.pending_deletions|> /\
     (outcome.co_success /\ ~rq.cr_static ==>
       st2.accounts = outcome.co_accounts /\
       st2.tStorage = outcome.co_tStorage /\
       st2.logs = st.logs ++ outcome.co_logs /\
+      st2.pending_deletions = outcome.co_toDelete ++ st.pending_deletions /\
       accounts_runtime_well_typed st2.accounts) /\
     (rq.cr_static \/ ~outcome.co_success ==>
       st2.accounts = st.accounts /\ st2.tStorage = st.tStorage /\
-      st2.logs = st.logs) /\
+      st2.logs = st.logs /\ st2.pending_deletions = st.pending_deletions) /\
     (computed_precompile rq ==> prefix = [] /\ st2.requests = st.requests)
 Proof
   rpt strip_tac >> drule_all checked_call_outcome_success_frame >> strip_tac >>

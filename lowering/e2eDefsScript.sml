@@ -15,7 +15,8 @@ Ancestors
   frameOutcome callTrace
   vyperABI vyperEvent vyperInterpreter
   vyperTypeContract vyperTypeContractSoundness vyperTypeInitialState
-  vyperStorageLayoutSafety vyperRuntimeAccounts
+  vyperStorageLayoutSafety vyperRuntimeAccounts vyperAccountSupply
+  vyperSupplyBoundary vyperSourceSupplyFields
   supportedProgram compileEnv selectorDispatch
 
 (* ===== Source deployment, typing and storage ===== *)
@@ -43,7 +44,8 @@ Definition source_typing_ok_def:
   source_typing_ok tops am tx <=>
     ?art. check_contract F am.layouts tx.target [(NONE, tops)] = SOME art /\
           checked_contract_runtime_ready art [(NONE, tops)] am tx /\
-          machine_well_typed am /\ call_tx_well_typed tx
+          machine_well_typed am /\ accounts_supply_bounded am.accounts /\
+          call_tx_well_typed tx
 End
 
 Definition source_storage_ok_def:
@@ -58,11 +60,21 @@ Definition call_outcomes_ok_def:
     let cx = initial_evaluation_context am.sources am.layouts tx NONE in
       EVERY (\outcome. outcome.co_success ==>
                  accounts_runtime_well_typed outcome.co_accounts /\
+                  accounts_supply_bounded outcome.co_accounts /\
                  contract_storage_well_formed cx
                    (initial_state (am with <| accounts := outcome.co_accounts;
                                               tStorage := outcome.co_tStorage |>) []))
             os
 End
+
+Theorem source_typing_outcomes_supply:
+  source_typing_ok tops am tx /\ call_outcomes_ok tops am tx os ==>
+  machine_supply am (SOME os)
+Proof
+  rw[source_typing_ok_def, call_outcomes_ok_def, machine_supply_def,
+     supply_safe_outcomes_def, supply_safe_outcome_def, listTheory.EVERY_MEM] >>
+  res_tac
+QED
 
 (* ===== Transaction environment and entry transfer ===== *)
 
@@ -119,6 +131,9 @@ Definition call_state_rel_def:
       ctxt.returnData = [] /\ ctxt.memory = [] /\
       value_transfer_ok tx am.accounts /\
       es.rollback.accounts = accounts_after_transfer tx am.accounts /\
+      es.rollback.toDelete = am.pending_deletions /\
+      (tx.created_in_tx <=>
+        account_empty (lookup_account tx.target (SND (LAST es.contexts)).accounts)) /\
       es.rollback.tStorage = am.tStorage /\ am.logs = [] /\
       ctxt.msgParams.caller = tx.sender /\ ctxt.msgParams.callee = tx.target /\
       ctxt.msgParams.value = tx.value /\
@@ -330,6 +345,25 @@ Proof
   simp[log_entry_corresponds_def]
 QED
 
+Theorem log_entry_equiv_raw_event:
+  log_entry_equiv cenv addr (encode_raw_event_values addr topic_vals bytes) ev <=>
+  ev = <| logger := addr; topics := MAP event_value_to_word topic_vals;
+          data := bytes |>
+Proof
+  simp[log_entry_equiv_def, encode_raw_event_values_def, encode_raw_event_def,
+       EQ_SYM_EQ]
+QED
+
+Theorem log_entry_corresponds_raw_event:
+  log_entry_corresponds event_info tenv addr
+    (encode_raw_event_values addr topic_vals bytes) ev <=>
+  ev = <| logger := addr; topics := MAP event_value_to_word topic_vals;
+          data := bytes |>
+Proof
+  simp[log_entry_corresponds_def, encode_raw_event_values_def, encode_raw_event_def,
+       EQ_SYM_EQ]
+QED
+
 (* Vyper logs correspond to EVM events (ordered, same-length).
    event_info maps event name -> SOME (hash, arg_types, indexed_flags)
    for declared events (from EventDecl with indexed flag). *)
@@ -350,7 +384,15 @@ Definition call_result_rel_def:
         ?out lgs.
           frame_outcome es r es' NONE out lgs /\
           return_bytes tops ret v out /\
-          es'.rollback.accounts = am'.accounts /\
+          process_deletions es'.rollback.toDelete es'.rollback.accounts = am'.accounts /\
+          es'.rollback.tStorage = am'.tStorage /\
+          logs_correspond (compiled_event_info tops) (type_env tops)
+            tx.target am'.logs lgs /\
+          rqs = MAP FST trace
+    | (INR HaltException, am', rqs) =>
+        ?lgs.
+          frame_outcome es r es' NONE [] lgs /\
+          process_deletions es'.rollback.toDelete es'.rollback.accounts = am'.accounts /\
           es'.rollback.tStorage = am'.tStorage /\
           logs_correspond (compiled_event_info tops) (type_env tops)
             tx.target am'.logs lgs /\

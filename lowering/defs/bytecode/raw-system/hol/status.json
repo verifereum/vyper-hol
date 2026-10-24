@@ -1,0 +1,234 @@
+{
+  "rl02_1topic": [
+    "FRONTEND",
+    "ACCEPT/ACCEPT",
+    "SP=F",
+    "COMPILE",
+    "EVALUATED head=SOME",
+    "MATCH"
+  ],
+  "rl03_4topics": [
+    "FRONTEND",
+    "ACCEPT/ACCEPT",
+    "SP=F",
+    "COMPILE",
+    "EVALUATED head=SOME",
+    "MATCH"
+  ],
+  "rl04_2topics_bytes32data": [
+    "FRONTEND",
+    "ACCEPT/ACCEPT",
+    "SP=F",
+    "COMPILE",
+    "EVALUATED head=SOME",
+    "MATCH"
+  ],
+  "rl07_3topics_concat_nolit": [
+    "FRONTEND",
+    "ACCEPT/ACCEPT",
+    "SP=F",
+    "COMPILE",
+    "EVALUATED head=SOME",
+    "PARITY_DEFECT"
+  ],
+  "rr02_dynamic": [
+    "FRONTEND",
+    "ACCEPT/ACCEPT",
+    "SP=F",
+    "COMPILE",
+    "EVALUATED head=SOME",
+    "MATCH"
+  ],
+  "rr03_abi": [
+    "FRONTEND",
+    "ACCEPT/ACCEPT",
+    "SP=F",
+    "COMPILE",
+    "EVALUATED head=SOME",
+    "PARITY_DEFECT"
+  ],
+  "rr05_storage_data": [
+    "FRONTEND",
+    "ACCEPT/ACCEPT",
+    "SP=F",
+    "COMPILE",
+    "EVALUATED head=SOME",
+    "MATCH"
+  ],
+  "sd01": [
+    "FRONTEND",
+    "ACCEPT/ACCEPT",
+    "SP=F",
+    "COMPILE",
+    "EVALUATED head=SOME",
+    "MATCH"
+  ],
+  "sd02_msgsender": [
+    "FRONTEND",
+    "ACCEPT/ACCEPT",
+    "SP=F",
+    "COMPILE",
+    "EVALUATED head=SOME",
+    "MATCH"
+  ],
+  "sd04_if_then_continue": [
+    "FRONTEND",
+    "ACCEPT/ACCEPT",
+    "SP=F",
+    "COMPILE",
+    "EVALUATED head=SOME",
+    "MATCH"
+  ],
+  "rr_arg": [
+    "FRONTEND",
+    "ACCEPT/ACCEPT",
+    "SP=F",
+    "COMPILE",
+    "EVALUATED head=SOME",
+    "MATCH"
+  ],
+  "rr_storage": [
+    "FRONTEND",
+    "ACCEPT/ACCEPT",
+    "SP=F",
+    "COMPILE",
+    "EVALUATED head=SOME",
+    "MATCH"
+  ],
+  "rr_bytes": [
+    "FRONTEND",
+    "ACCEPT/ACCEPT",
+    "SP=F",
+    "COMPILE",
+    "EVALUATED head=SOME",
+    "MATCH"
+  ],
+  "rl01_0topics": [
+    "FRONTEND",
+    "ACCEPT/ACCEPT",
+    "SP=F",
+    "COMPILE",
+    "EVALUATED head=SOME",
+    "MATCH"
+  ],
+  "rl05_3topics_concat": [
+    "FRONTEND",
+    "ACCEPT/ACCEPT",
+    "SP=F",
+    "COMPILE",
+    "EVALUATED head=SOME",
+    "PARITY_DEFECT"
+  ],
+  "rl06_storage_data": [
+    "FRONTEND",
+    "ACCEPT/ACCEPT",
+    "SP=F",
+    "COMPILE",
+    "EVALUATED head=SOME",
+    "MATCH"
+  ],
+  "rl_const_topics": [
+    "FRONTEND",
+    "ACCEPT/ACCEPT",
+    "SP=F",
+    "COMPILE",
+    "EVALUATED head=SOME",
+    "MATCH"
+  ],
+  "rr01_literal": [
+    "FRONTEND",
+    "ACCEPT/ACCEPT",
+    "SP=F",
+    "COMPILE",
+    "EVALUATED head=SOME",
+    "MATCH"
+  ],
+  "rr04_terminus_ret": [
+    "FRONTEND",
+    "ACCEPT/ACCEPT",
+    "SP=F",
+    "COMPILE",
+    "EVALUATED head=SOME",
+    "MATCH"
+  ],
+  "sd03_terminus_ret": [
+    "FRONTEND",
+    "ACCEPT/ACCEPT",
+    "SP=F",
+    "COMPILE",
+    "EVALUATED head=SOME",
+    "MATCH"
+  ],
+  "ctor01_rawlog": [
+    "FRONTEND",
+    "ACCEPT/ACCEPT",
+    "SP=F",
+    "COMPILE",
+    "EVALUATED head=SOME",
+    "PARITY_DEFECT"
+  ],
+  "ctor02_rawlog_nolit": [
+    "FRONTEND",
+    "ACCEPT/ACCEPT",
+    "SP=F",
+    "COMPILE",
+    "EVALUATED head=SOME",
+    "PARITY_DEFECT"
+  ],
+  "rr_local": [
+    "FRONTEND",
+    "ACCEPT/ACCEPT",
+    "SP=F",
+    "COMPILE",
+    "EVALUATED head=SOME",
+    "PARITY_DEFECT"
+  ],
+  "rr_nr": [
+    "FRONTEND",
+    "ACCEPT/ACCEPT",
+    "SP=F",
+    "COMPILE",
+    "EVALUATED head=SOME",
+    "PARITY_DEFECT"
+  ],
+  "rr_default_fn": [
+    "FRONTEND",
+    "ACCEPT/ACCEPT",
+    "SP=F",
+    "COMPILE",
+    "EVALUATED head=SOME",
+    "MATCH"
+  ],
+  "ctl01_concat": [
+    "FRONTEND",
+    "ACCEPT/ACCEPT",
+    "SP=F",
+    "COMPILE",
+    "EVALUATED head=SOME",
+    "PARITY_DEFECT"
+  ],
+  "ctl03_abi_method_id": [
+    "FRONTEND",
+    "ACCEPT/ACCEPT",
+    "SP=F",
+    "COMPILE",
+    "EVALUATED head=SOME",
+    "PARITY_DEFECT"
+  ],
+  "ctl_concat_local": [
+    "FRONTEND",
+    "ACCEPT/ACCEPT",
+    "SP=F",
+    "COMPILE",
+    "EVALUATED head=SOME",
+    "PARITY_DEFECT"
+  ],
+  "xa_bytes_lit_return": [
+    "FRONTEND",
+    "ACCEPT/ACCEPT",
+    "SP=T",
+    "COMPILE",
+    "EVALUATED head=SOME",
+    "MATCH"
+  ]
+}

@@ -1245,6 +1245,7 @@ Theorem mstore_preserves:
     (mstore off v s).vs_tx_ctx = s.vs_tx_ctx /\
     (mstore off v s).vs_block_ctx = s.vs_block_ctx /\
     (mstore off v s).vs_logs = s.vs_logs /\
+    (mstore off v s).vs_pending_deletions = s.vs_pending_deletions /\
     (mstore off v s).vs_immutables = s.vs_immutables /\
     (mstore off v s).vs_data_section = s.vs_data_section /\
     (mstore off v s).vs_labels = s.vs_labels /\
@@ -1279,6 +1280,7 @@ Theorem wmwe_preserves:
     (write_memory_with_expansion off bytes s).vs_tx_ctx = s.vs_tx_ctx /\
     (write_memory_with_expansion off bytes s).vs_block_ctx = s.vs_block_ctx /\
     (write_memory_with_expansion off bytes s).vs_logs = s.vs_logs /\
+    (write_memory_with_expansion off bytes s).vs_pending_deletions = s.vs_pending_deletions /\
     (write_memory_with_expansion off bytes s).vs_immutables = s.vs_immutables /\
     (write_memory_with_expansion off bytes s).vs_data_section = s.vs_data_section /\
     (write_memory_with_expansion off bytes s).vs_labels = s.vs_labels /\
@@ -1313,6 +1315,7 @@ Theorem mstore8_preserves:
     (mstore8 off v s).vs_tx_ctx = s.vs_tx_ctx /\
     (mstore8 off v s).vs_block_ctx = s.vs_block_ctx /\
     (mstore8 off v s).vs_logs = s.vs_logs /\
+    (mstore8 off v s).vs_pending_deletions = s.vs_pending_deletions /\
     (mstore8 off v s).vs_immutables = s.vs_immutables /\
     (mstore8 off v s).vs_data_section = s.vs_data_section /\
     (mstore8 off v s).vs_labels = s.vs_labels /\
@@ -1347,6 +1350,7 @@ Theorem mcopy_preserves:
     (mcopy dst src sz s).vs_tx_ctx = s.vs_tx_ctx /\
     (mcopy dst src sz s).vs_block_ctx = s.vs_block_ctx /\
     (mcopy dst src sz s).vs_logs = s.vs_logs /\
+    (mcopy dst src sz s).vs_pending_deletions = s.vs_pending_deletions /\
     (mcopy dst src sz s).vs_immutables = s.vs_immutables /\
     (mcopy dst src sz s).vs_data_section = s.vs_data_section /\
     (mcopy dst src sz s).vs_labels = s.vs_labels /\
@@ -1544,6 +1548,7 @@ Theorem update_var_preserves:
     (update_var x v s).vs_tx_ctx = s.vs_tx_ctx /\
     (update_var x v s).vs_block_ctx = s.vs_block_ctx /\
     (update_var x v s).vs_logs = s.vs_logs /\
+    (update_var x v s).vs_pending_deletions = s.vs_pending_deletions /\
     (update_var x v s).vs_immutables = s.vs_immutables /\
     (update_var x v s).vs_data_section = s.vs_data_section /\
     (update_var x v s).vs_labels = s.vs_labels /\
@@ -2771,10 +2776,12 @@ QED
 
 (* Used by consuming calls after range-safe memory/adoption transport. *)
 Theorem m2v_inv_noix_call_lists:
-  m2v_inv_noix fn s1 s2 ==>
+  !rqs os pending. m2v_inv_noix fn s1 s2 ==>
   m2v_inv_noix fn
-    (s1 with <| vs_outcomes := os; vs_requests := rqs |>)
-    (s2 with <| vs_outcomes := os; vs_requests := rqs |>)
+    (s1 with <| vs_outcomes := os; vs_requests := rqs;
+               vs_pending_deletions := pending |>)
+    (s2 with <| vs_outcomes := os; vs_requests := rqs;
+               vs_pending_deletions := pending |>)
 Proof
   simp[m2v_inv_noix_def, lookup_var_def, mem_byte_def, mload_def,
        in_promoted_region_def, allocas_non_overlapping_def] >>
@@ -2790,16 +2797,17 @@ Theorem consume_call_outcome_m2v_inv:
 Proof
   rpt strip_tac >>
   `s1.vs_outcomes = s2.vs_outcomes /\ s1.vs_requests = s2.vs_requests /\
+   s1.vs_pending_deletions = s2.vs_pending_deletions /\
    s1.vs_accounts = s2.vs_accounts /\ s1.vs_transient = s2.vs_transient /\
    s1.vs_logs = s2.vs_logs` by gvs[m2v_inv_noix_def] >>
   qabbrev_tac `bytes = TAKE rs (FST (take_outcome rq s2.vs_outcomes)).co_returnData` >>
   qabbrev_tac `rd = (FST (take_outcome rq s2.vs_outcomes)).co_returnData` >>
   qabbrev_tac `ac = FST (adopt_outcome rq (FST (take_outcome rq s2.vs_outcomes))
-                         (s2.vs_accounts,s2.vs_transient,s2.vs_logs))` >>
+                         (s2.vs_accounts,s2.vs_transient,s2.vs_logs,s2.vs_pending_deletions))` >>
   qabbrev_tac `ts = FST (SND (adopt_outcome rq (FST (take_outcome rq s2.vs_outcomes))
-                         (s2.vs_accounts,s2.vs_transient,s2.vs_logs)))` >>
-  qabbrev_tac `lgs = SND (SND (adopt_outcome rq (FST (take_outcome rq s2.vs_outcomes))
-                         (s2.vs_accounts,s2.vs_transient,s2.vs_logs)))` >>
+                         (s2.vs_accounts,s2.vs_transient,s2.vs_logs,s2.vs_pending_deletions)))` >>
+  qabbrev_tac `lgs = FST (SND (SND (adopt_outcome rq (FST (take_outcome rq s2.vs_outcomes))
+                         (s2.vs_accounts,s2.vs_transient,s2.vs_logs,s2.vs_pending_deletions))))` >>
   `m2v_inv_noix fn
     (s1 with <| vs_memory := (write_memory_with_expansion ro bytes s1).vs_memory;
                 vs_transient := ts; vs_returndata := rd;
@@ -2809,9 +2817,20 @@ Proof
                 vs_accounts := ac; vs_logs := lgs |>)` by
     (irule m2v_inv_noix_ext_update >> simp[Abbr`bytes`, LENGTH_TAKE_EQ] >>
      rpt strip_tac >> first_x_assum irule >> simp[]) >>
-  drule m2v_inv_noix_call_lists >>
-  disch_then (qspecl_then [`record_request rq s2.vs_requests`,
-                          `SND (take_outcome rq s2.vs_outcomes)`] mp_tac) >>
+  mp_tac (Q.SPECL [`record_request rq s2.vs_requests`,
+                 `SND (take_outcome rq s2.vs_outcomes)`,
+                 `SND (SND (SND (adopt_outcome rq (FST (take_outcome rq s2.vs_outcomes))
+                   (s2.vs_accounts,s2.vs_transient,s2.vs_logs,s2.vs_pending_deletions))))`]
+    (Q.INST
+      [`s1` |-> `s1 with
+         <|vs_memory := (write_memory_with_expansion ro bytes s1).vs_memory;
+           vs_transient := ts; vs_returndata := rd;
+           vs_accounts := ac; vs_logs := lgs|>`,
+       `s2` |-> `s2 with
+         <|vs_memory := (write_memory_with_expansion ro bytes s2).vs_memory;
+           vs_transient := ts; vs_returndata := rd;
+           vs_accounts := ac; vs_logs := lgs|>`]
+      m2v_inv_noix_call_lists)) >>
   simp[Abbr`bytes`, Abbr`rd`, Abbr`ac`, Abbr`ts`, Abbr`lgs`]
 QED
 

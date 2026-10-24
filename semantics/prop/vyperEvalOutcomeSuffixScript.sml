@@ -74,6 +74,20 @@ Proof
   Cases_on `q` >> simp[ignore_bind_def, bind_def, return_def, raise_def]
 QED
 
+Theorem outcomes_frame_finally_unless_halt[simp]:
+  outcomes_frame f /\ outcomes_frame g ==>
+  outcomes_frame (finally_unless_halt f g)
+Proof
+  simp[outcomes_frame_def] >> rpt strip_tac >>
+  Cases_on `f st` >> rename1 `f st = (result,mid)` >>
+  `mid.outcomes = st.outcomes` by metis_tac[SND] >>
+  `(SND (g mid)).outcomes = mid.outcomes` by metis_tac[] >>
+  Cases_on `result` >> TRY (rename1 `INR error` >> Cases_on `error`) >>
+  simp[finally_unless_halt_def, ignore_bind_def, bind_def, return_def, raise_def] >>
+  Cases_on `g mid` >> rename1 `g mid = (cleanup_result,post)` >>
+  Cases_on `cleanup_result` >> gvs[]
+QED
+
 Theorem outcomes_frame_state_preserving[local]:
   (!st res st'. f st = (res,st') ==> st' = st) ==> outcomes_frame f
 Proof
@@ -127,7 +141,7 @@ Proof
   simp[outcomes_frame_def, check_def, type_check_def, assert_def,
     get_scopes_def, set_scopes_def, push_scope_def, pop_scope_def,
     push_scope_with_var_def, new_variable_def, update_accounts_def,
-    update_transient_def, append_logs_def, push_log_def,
+    update_transient_def, append_logs_def, update_pending_deletions_def, push_log_def,
     get_pending_deletions_def, update_pending_deletions_def,
     get_immutables_def, get_address_immutables_def,
     set_immutable_def, set_address_immutables_def,
@@ -282,6 +296,7 @@ val OUTCOMES_FRAME_TAC =
     MATCH_MP_TAC outcomes_frame_bind_guarded >> conj_tac,
     CHANGED_TAC (rewrite_tac[ignore_bind_def]),
     MATCH_MP_TAC outcomes_frame_finally >> conj_tac,
+    MATCH_MP_TAC outcomes_frame_finally_unless_halt >> conj_tac,
     MATCH_MP_TAC outcomes_frame_try >> conj_tac,
     CHANGED_TAC (simp_tac bool_ss [switch_BoolV_def]),
     gen_tac, strip_tac,
@@ -310,6 +325,12 @@ Proof
   simp_tac bool_ss [eval_raw_call_def, LET_THM] >>
   rpt (FIRST [MATCH_MP_TAC outcomes_frame_cond >> conj_tac,
               ASSIGN_OUTCOMES_FRAME_STEP])
+QED
+
+Theorem outcomes_frame_send[simp]:
+  outcomes_frame (eval_send cx target amount)
+Proof
+  simp[eval_send_def] >> irule outcomes_frame_bind >> simp[]
 QED
 
 (* TASK032: the independent vyperExtCallConsumptionTest witness disproves the
@@ -478,6 +499,21 @@ Proof
   drule_all outcome_suffix_trans >> simp[]
 QED
 
+Theorem outcomes_suffix_finally_unless_halt:
+  outcomes_suffix f /\ outcomes_suffix g ==>
+  outcomes_suffix (finally_unless_halt f g)
+Proof
+  simp[outcomes_suffix_def] >> rpt strip_tac >>
+  Cases_on `f st` >> rename1 `f st = (result,mid)` >>
+  `outcome_suffix st.outcomes mid.outcomes` by metis_tac[SND] >>
+  `outcome_suffix mid.outcomes (SND (g mid)).outcomes` by metis_tac[] >>
+  Cases_on `result` >> TRY (rename1 `INR error` >> Cases_on `error`) >>
+  simp[finally_unless_halt_def, ignore_bind_def, bind_def, return_def, raise_def] >>
+  Cases_on `g mid` >> rename1 `g mid = (cleanup_result,post)` >>
+  Cases_on `cleanup_result` >> gvs[] >>
+  drule_all outcome_suffix_trans >> simp[]
+QED
+
 Theorem outcomes_suffix_take:
   outcomes_suffix (take_call_outcome target calldata value_opt)
 Proof
@@ -507,7 +543,7 @@ val outcomes_suffix_frame_simps =
        outcomes_frame_return, outcomes_frame_raise, outcomes_frame_create,
        outcomes_frame_check_create_blueprint,
        outcomes_frame_assign_result, outcomes_frame_resolve_array,
-       outcomes_frame_adopt, outcomes_frame_raw_call]));
+       outcomes_frame_adopt, outcomes_frame_raw_call, outcomes_frame_send]));
 
 val outcomes_suffix_fact_index =
   List.map (fn th => (outcomes_fact_key (concl (SPEC_ALL th)),th))
@@ -515,7 +551,8 @@ val outcomes_suffix_fact_index =
 
 val outcomes_suffix_net = outcomes_frame_net
   (outcomes_suffix_read :: outcomes_suffix_take :: outcomes_suffix_frame_simps)
-  [outcomes_suffix_bind_guarded, outcomes_suffix_finally, outcomes_suffix_try];
+  [outcomes_suffix_bind_guarded, outcomes_suffix_finally,
+   outcomes_suffix_finally_unless_halt, outcomes_suffix_try];
 
 val OUTCOMES_SUFFIX_STEP = FIRST [
   CONV_TAC (HO_REWR_CONV FORALL_PROD), gen_tac,

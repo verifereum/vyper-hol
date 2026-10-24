@@ -18,7 +18,7 @@ Ancestors
   vyperAST vyperValue vyperTyping vyperState vyperInterpreter vyperContext
   vyperTypeSystem vyperTypeInvariants vyperTypeExprSoundness
   vyperTypeInitialState vyperTypeEvalSoundness vyperTypeExprResult vyperTypeValues
-  vyperTypeBindArguments
+  vyperTypeBindArguments vyperSourceSupplyFields
 
 (* ===== Deployment Constant Readiness ===== *)
 
@@ -165,6 +165,7 @@ Theorem evaluate_defaults_success_values_typed:
   state_well_typed (initial_state am [FEMPTY]) /\
   context_well_typed cx /\
   accounts_well_typed am.accounts /\
+  accounts_supply_bounded am.accounts /\
   functions_well_typed cx /\
   (!e. MEM e es ==> call_evaluation_safe cx (int_calls_expr e)) /\
   evaluate_defaults cx am es = SOME vs ==>
@@ -181,6 +182,7 @@ Proof
   `accounts_well_typed (initial_state am [FEMPTY]).accounts` by
     simp[initial_state_def] >>
   `call_evaluation_safe cx (int_calls_expr h)` by metis_tac[] >>
+  `source_supply (initial_state am [FEMPTY])` by simp[] >>
   drule_all (cj 8 eval_all_type_sound_mutual) >>
   simp[expr_result_typed_def, expr_runtime_typed_def,
        toplevel_value_typed_Value]
@@ -206,6 +208,7 @@ Theorem checked_defaults_ready_values_typed:
   state_well_typed (initial_state am [FEMPTY]) /\
   context_well_typed cx /\
   accounts_well_typed am.accounts /\
+  accounts_supply_bounded am.accounts /\
   functions_well_typed cx /\
   (!e.
     MEM e (DROP (LENGTH dflts - (LENGTH args - LENGTH vals)) dflts) ==>
@@ -294,6 +297,7 @@ Theorem checked_call_inputs_ready_bind_arguments:
   state_well_typed (initial_state am [FEMPTY]) /\
   context_well_typed cx /\
   accounts_well_typed am.accounts /\
+  accounts_supply_bounded am.accounts /\
   functions_well_typed cx /\
   (!e. MEM e (DROP (LENGTH dflts - (LENGTH params - LENGTH vals)) dflts) ==>
        call_evaluation_safe cx (int_calls_expr e)) /\

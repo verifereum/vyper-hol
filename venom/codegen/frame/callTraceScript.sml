@@ -8,7 +8,7 @@
  *)
 Theory callTrace
 Ancestors
-  arithmetic list option pair sum relation finite_map words byte
+  arithmetic list rich_list option pair sum relation finite_map words byte
   extCallOracle vfmTypes vfmState vfmContext vfmExecution
   vfmExecutionProp vfmDecreasesGas
 Libs
@@ -19,11 +19,11 @@ Libs
 Datatype:
   trace_obs = <| entries : (call_request # call_outcome) list;
                  readings : bytes32 list;
-                 pending : (call_request # num) option |>
+                 pending : (call_request # num # num) option |>
 End
 
-(* pending stores our request and our pre-call log count, not a callee's
- * log count. Descendant calls must not overwrite it. *)
+(* Save the caller's log and deletion counts. Descendants must not overwrite
+ * this frame's pending request. Deletions grow by consing, unlike logs. *)
 Definition next_opcode_def:
   next_opcode c =
     if LENGTH c.msgParams.code <= c.pc then SOME Stop
@@ -55,16 +55,24 @@ End
 (* The caller's post-step top stack word is the success flag. Only logs
  * after the saved pre-call count belong to this outcome. *)
 Definition outcome_of_def:
-  outcome_of s n =
+  outcome_of s n m =
     let c = FST (HD s.contexts)
     in <| co_success := (HD c.stack <> 0w);
           co_returnData := c.returnData;
           co_accounts := s.rollback.accounts;
           co_tStorage := s.rollback.tStorage;
-          co_logs := DROP n c.logs |>
+          co_logs := DROP n c.logs;
+          co_toDelete := TAKE (LENGTH s.rollback.toDelete - m) s.rollback.toDelete |>
 End
 
 (* ===== Exact observer table (PLAN section 5.2) ===== *)
+
+Theorem outcome_of_added_deletions:
+  s.rollback.toDelete = added ++ previous ==>
+  (outcome_of s log_count (LENGTH previous)).co_toDelete = added
+Proof
+  simp[outcome_of_def, TAKE_LENGTH_APPEND]
+QED
 
 Definition observe_def:
   observe d s (r, s') obs =
@@ -77,16 +85,18 @@ Definition observe_def:
            else if observable_call c then
              if LENGTH s'.contexts = d then
                obs with entries := obs.entries ++
-                 [(request_of s, outcome_of s' (LENGTH c.logs))]
+                 [(request_of s, outcome_of s' (LENGTH c.logs)
+                    (LENGTH s.rollback.toDelete))]
              else if LENGTH s'.contexts = d + 1 then
-               obs with pending := SOME (request_of s, LENGTH c.logs)
+               obs with pending := SOME
+                 (request_of s, LENGTH c.logs, LENGTH s.rollback.toDelete)
              else obs
            else obs
          else if LENGTH s.contexts > d /\ LENGTH s'.contexts = d then
            case obs.pending of
              NONE => obs
-           | SOME (rq, n) => obs with
-               <| entries := obs.entries ++ [(rq, outcome_of s' n)];
+           | SOME (rq, n, m) => obs with
+               <| entries := obs.entries ++ [(rq, outcome_of s' n m)];
                   pending := NONE |>
          else obs
     else obs

@@ -1484,14 +1484,16 @@ QED
    when g preserves both scopes and immutables *)
 Theorem finally_pop_function_then_facts[local]:
   !f g prev st res st'.
-    finally f (do pop_function prev; g od) st = (res, st') /\
+    finally_unless_halt (finally f (pop_function prev)) g st = (res, st') /\
     (!st0 res0 st0'. g st0 = (res0, st0') ==>
        st0'.scopes = st0.scopes /\ st0'.immutables = st0.immutables) ==>
     st'.scopes = prev /\ st'.immutables = (SND (f st)).immutables
 Proof
-  rpt strip_tac >> gvs[finally_def] >>
-  Cases_on `f st` >> Cases_on `q` >>
-  gvs[ignore_bind_apply, bind_def, ignore_bind_def,
+  rpt strip_tac >>
+  Cases_on `f st` >> rename1 `f st = (outcome, body_post)` >>
+  Cases_on `outcome` >>
+  TRY (rename1 `INR ex` >> Cases_on `ex`) >>
+  gvs[finally_unless_halt_def, finally_def, ignore_bind_apply, bind_def, ignore_bind_def,
       pop_function_def, set_scopes_def, return_def, raise_def] >>
   BasicProvers.EVERY_CASE_TAC >> gvs[return_def, raise_def] >>
   res_tac >> fs[]
@@ -1896,7 +1898,7 @@ Proof
     qmatch_asmsub_rename_tac `case tailst.outcomes of NONE => _ | SOME _ => _` >>
     Cases_on `tailst.outcomes` >> gvs[]
     >- (gvs[bind_apply, ignore_bind_apply, return_def, AllCaseEqs()] >>
-        imp_res_tac concrete_send_step_locals >> gvs[preserves_tv_def]) >>
+        imp_res_tac eval_send_preserves_non_accounts >> gvs[preserves_tv_def]) >>
     imp_res_tac Send_outcome_preserves_locals >> gvs[preserves_tv_def] ) >>
   (* ExtCall: the original concrete-only proof is retained below. *)
   conj_tac >- suspend "ExtCall" >>
@@ -1988,7 +1990,7 @@ Proof
     reverse BasicProvers.TOP_CASE_TAC >- (
       rw[] >> gvs[preserves_tv_def] ) >>
     imp_res_tac append_logs_preserves_tv >>
-    gvs[append_logs_def, return_def] >>
+    gvs[append_logs_def, update_pending_deletions_def, return_def] >>
     *)
     rewrite_tac[GSYM ignore_bind_def] >>
     simp[concrete_extcall_tail_cases] >>
@@ -2005,7 +2007,7 @@ Proof
       (conj_tac >- (irule preserves_tv_eq >> gvs[])) >>
       irule append_logs_preserves_tv >>
       qexists_tac `p4` >> qexists_tac `INL ()` >>
-      simp[append_logs_def, return_def] ) >>
+      simp[append_logs_def, update_pending_deletions_def, return_def] ) >>
     (* default_return_value path: code check after the call *)
     simp[ignore_bind_apply] >>
     BasicProvers.TOP_CASE_TAC >>
@@ -2020,7 +2022,7 @@ Proof
       (conj_tac >- (irule preserves_tv_eq >> gvs[])) >>
       irule append_logs_preserves_tv >>
       qexists_tac `p4` >> qexists_tac `INL ()` >>
-      simp[append_logs_def, return_def] ) >>
+      simp[append_logs_def, update_pending_deletions_def, return_def] ) >>
     strip_tac >> gvs[] >>
     first_x_assum drule_all >>
     rw[] >>
@@ -2142,8 +2144,8 @@ Proof
     imp_res_tac type_check_state >>
     imp_res_tac lift_option_type_state >>
     imp_res_tac get_accounts_state >>
-    imp_res_tac transfer_value_scopes >>
-    imp_res_tac transfer_value_immutables >> gvs[] >>
+    gvs[update_accounts_def, update_pending_deletions_def,
+        bind_def, ignore_bind_def, return_def, raise_def, COND_RATOR, AllCaseEqs()] >>
     first_x_assum drule >> rw[] >>
     gvs[preserves_tv_def]) >>
   (* CreateTarget *)
@@ -2338,9 +2340,9 @@ Theorem intcall_ptv_chain[local]:
   (!st0 (res0:unit + exception) st0'. cleanup st0 = (res0, st0') ==>
      st0'.scopes = st0.scopes /\ st0'.immutables = st0.immutables) /\
   (case
-     finally
-       (try (do eval_stmts cxf body; return NoneV od) handle_function)
-       (do pop_function r_mid.scopes; cleanup od)
+     finally_unless_halt
+       (finally (try (do eval_stmts cxf body; return NoneV od) handle_function)
+         (pop_function r_mid.scopes)) cleanup
        (r_lock with scopes := [env])
    of
      (INL rv, s'') =>
@@ -2352,16 +2354,16 @@ Theorem intcall_ptv_chain[local]:
 Proof
   strip_tac >>
   (* Name the finally result *)
-  `?fres fst. finally
-     (try (do eval_stmts cxf body; return NoneV od) handle_function)
-     (do pop_function r_mid.scopes; cleanup od)
+  `?fres fst. finally_unless_halt
+     (finally (try (do eval_stmts cxf body; return NoneV od) handle_function)
+       (pop_function r_mid.scopes)) cleanup
      (r_lock with scopes := [env]) = (fres, fst)` by
     metis_tac[pairTheory.PAIR] >>
   (* Get facts from finally_pop_function_then_facts *)
   `fst.scopes = r_mid.scopes /\
    fst.immutables = (SND (try (do eval_stmts cxf body; return NoneV od)
      handle_function (r_lock with scopes := [env]))).immutables` by (
-    qpat_x_assum `finally _ _ _ = _`
+    qpat_x_assum `finally_unless_halt _ _ _ = _`
       (mp_tac o MATCH_MP (REWRITE_RULE [GSYM AND_IMP_INTRO]
         finally_pop_function_then_facts)) >>
     impl_tac >- simp[] >>
@@ -2454,10 +2456,6 @@ Resume eval_preserves_tv[IntCall_ptv]:
     imp_res_tac release_nonreentrant_lock_scopes >>
     imp_res_tac release_nonreentrant_lock_immutables >> simp[]
   ) >>
-  conj_tac >- (
-    qpat_x_assum `(case _ of (INL rv,s'') => _ | (INR e,s'') => _) = (res,st')` mp_tac >>
-    simp[finally_def, ignore_bind_def, bind_def, return_def, raise_def]
-  ) >>
   irule preserves_tv_trans >> qexists_tac `r'` >> simp[]
 QED
 
@@ -2474,12 +2472,13 @@ Theorem tv_frame_primitives[local]:
   state_rel_frame (preserves_tv cx) (update_accounts upd) /\
   state_rel_frame (preserves_tv cx) (update_transient upd_t) /\
   state_rel_frame (preserves_tv cx) (append_logs logs) /\
+  state_rel_frame (preserves_tv cx) (update_pending_deletions deletions_upd) /\
   state_rel_frame (preserves_tv cx) (adopt_call_outcome rq co)
 Proof
   simp[state_rel_frame_def, return_def, raise_def, check_def, type_check_def,
        assert_def, lift_option_def, lift_option_type_def, lift_sum_runtime_def,
        get_accounts_def, get_transient_storage_def, update_accounts_def,
-       update_transient_def, append_logs_def, adopt_call_outcome_equation] >>
+       update_transient_def, append_logs_def, update_pending_deletions_def, adopt_call_outcome_equation] >>
   rpt strip_tac >> rpt CASE_TAC >> simp[return_def, raise_def, preserves_tv_def]
 QED
 
@@ -2633,9 +2632,10 @@ Proof
             preserves_tv cx s u` by metis_tac[preserves_tv_trans] >>
   `!s os rqs. preserves_tv cx s
       (s with <|outcomes := os; requests := rqs|>)` by simp[preserves_tv_def] >>
-  `!s accounts transient logs. preserves_tv cx s
+  `!s accounts transient logs deletions. preserves_tv cx s
       (s with <|accounts := accounts; tStorage := transient;
-                logs := s.logs ++ logs|>)` by simp[preserves_tv_def] >>
+                logs := s.logs ++ logs;
+                pending_deletions := deletions ++ s.pending_deletions|>)` by simp[preserves_tv_def] >>
   `!s. preserves_tv cx s s` by simp[] >>
   drule_all (ExtCall_outcome_transport |> Q.INST
     [`R` |-> `preserves_tv cx`]) >> simp[]

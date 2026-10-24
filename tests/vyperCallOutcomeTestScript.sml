@@ -23,7 +23,7 @@ Definition outcome_test_outcome_def:
       co_accounts := update_account 11w (empty_account_state with balance := balance) empty_accounts;
       co_tStorage := update_transient_storage 11w
         (update_storage 1w 8w empty_storage) empty_transient_storage;
-      co_logs := [<|logger := 11w; topics := [1w]; data := [8w]|>]|>
+      co_logs := [<|logger := 11w; topics := [1w]; data := [8w]|>]; co_toDelete := [] |>
 End
 val () = cv_auto_trans outcome_test_outcome_def;
 
@@ -175,7 +175,8 @@ Theorem outcome_success_actual_client:
   rq.cr_accounts = st.accounts /\ rq.cr_tStorage = st.tStorage /\
   st2 = st with <|accounts := st2.accounts; tStorage := st2.tStorage;
                  logs := st2.logs; outcomes := st2.outcomes;
-                 requests := st2.requests|>
+                 requests := st2.requests;
+                 pending_deletions := st2.pending_deletions|>
 Proof
   rpt strip_tac
   >- (drule_all take_adopt_call_outcome_typed >> simp[]) >>

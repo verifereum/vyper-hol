@@ -26,8 +26,8 @@ End
 Definition consume_call_outcome_def:
   consume_call_outcome rq retOff retSize s =
     let (outcome, rest) = take_outcome rq s.vs_outcomes;
-        (accounts, ts, logs) = adopt_outcome rq outcome
-          (s.vs_accounts, s.vs_transient, s.vs_logs);
+        (accounts, ts, logs, pending) = adopt_outcome rq outcome
+          (s.vs_accounts, s.vs_transient, s.vs_logs, s.vs_pending_deletions);
         result : bytes32 = if outcome.co_success then 1w else 0w
     in (result, s with <|
          vs_outcomes := rest;
@@ -35,6 +35,7 @@ Definition consume_call_outcome_def:
          vs_accounts := accounts;
          vs_transient := ts;
          vs_logs := logs;
+          vs_pending_deletions := pending;
          vs_returndata := outcome.co_returnData;
          vs_memory := (write_memory_with_expansion retOff
            (TAKE retSize outcome.co_returnData) s).vs_memory |>)
@@ -50,13 +51,16 @@ Theorem consume_call_outcome_eq[simp]:
        vs_requests := record_request rq s.vs_requests;
        vs_accounts := FST (adopt_outcome rq
          (FST (take_outcome rq s.vs_outcomes))
-         (s.vs_accounts, s.vs_transient, s.vs_logs));
+          (s.vs_accounts, s.vs_transient, s.vs_logs, s.vs_pending_deletions));
        vs_transient := FST (SND (adopt_outcome rq
          (FST (take_outcome rq s.vs_outcomes))
-         (s.vs_accounts, s.vs_transient, s.vs_logs)));
-       vs_logs := SND (SND (adopt_outcome rq
+          (s.vs_accounts, s.vs_transient, s.vs_logs, s.vs_pending_deletions)));
+        vs_logs := FST (SND (SND (adopt_outcome rq
          (FST (take_outcome rq s.vs_outcomes))
-         (s.vs_accounts, s.vs_transient, s.vs_logs)));
+          (s.vs_accounts, s.vs_transient, s.vs_logs, s.vs_pending_deletions))));
+        vs_pending_deletions := SND (SND (SND (adopt_outcome rq
+          (FST (take_outcome rq s.vs_outcomes))
+          (s.vs_accounts, s.vs_transient, s.vs_logs, s.vs_pending_deletions))));
        vs_returndata := (FST (take_outcome rq s.vs_outcomes)).co_returnData;
        vs_memory := (write_memory_with_expansion ro
          (TAKE rs (FST (take_outcome rq s.vs_outcomes)).co_returnData) s).vs_memory |>)

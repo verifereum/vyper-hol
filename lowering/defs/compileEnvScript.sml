@@ -952,7 +952,8 @@ Definition state_rel_def:
      logs_rel cenv cx.txn.target vs ss ∧
      call_ctx_rel cx.txn ss.vs_call_ctx ss.vs_tx_ctx ss.vs_block_ctx ∧
      vs.outcomes = SOME ss.vs_outcomes ∧
-     vs.requests = ss.vs_requests)
+     vs.requests = ss.vs_requests ∧
+     vs.pending_deletions = ss.vs_pending_deletions)
 End
 
 (* ===== Result Relation ===== *)

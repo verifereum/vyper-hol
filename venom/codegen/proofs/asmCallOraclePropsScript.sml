@@ -11,7 +11,7 @@ Theorem asm_consume_call_outcome_eq:
   asm_consume_call_outcome rq ro rs stk s =
     let outcome = FST (take_outcome rq s.as_outcomes);
         adopted = adopt_outcome rq outcome
-          (s.as_accounts, s.as_transient, s.as_logs);
+          (s.as_accounts, s.as_transient, s.as_logs, s.as_pending_deletions);
         bytes = TAKE rs outcome.co_returnData
     in AsmOK (asm_next (s with <|
       as_stack := (if outcome.co_success then 1w else 0w) :: stk;
@@ -19,7 +19,8 @@ Theorem asm_consume_call_outcome_eq:
       as_requests := record_request rq s.as_requests;
       as_accounts := FST adopted;
       as_transient := FST (SND adopted);
-      as_logs := SND (SND adopted);
+      as_logs := FST (SND (SND adopted));
+      as_pending_deletions := SND (SND (SND adopted));
       as_returndata := outcome.co_returnData;
       as_memory := TAKE ro s.as_memory ++ bytes ++
                    DROP (ro + LENGTH bytes) s.as_memory |>))

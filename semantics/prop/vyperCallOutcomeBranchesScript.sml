@@ -140,7 +140,7 @@ Proof
 QED
 
 (* Real request snapshots, not an unconstrained rq: at the continuation entry
-   the residual frame is unchanged outside the five observable/oracle fields.
+   the residual frame is unchanged outside the observable/oracle fields.
    This intentionally does not assert arbitrary adopted storage is preserved. *)
 Theorem checked_call_outcome_success_frame:
   take_call_outcome target calldata value_opt st = (INL (rq,outcome),st1) /\
@@ -148,7 +148,8 @@ Theorem checked_call_outcome_success_frame:
   rq.cr_accounts = st.accounts /\ rq.cr_tStorage = st.tStorage /\
   st2 = st with <|accounts := st2.accounts; tStorage := st2.tStorage;
                  logs := st2.logs; outcomes := st2.outcomes;
-                 requests := st2.requests|>
+                 requests := st2.requests;
+                 pending_deletions := st2.pending_deletions|>
 Proof
   rpt strip_tac >> drule take_call_outcome_success >> strip_tac >>
   gvs[call_outcome_request_def, adopt_call_outcome_equation] >>

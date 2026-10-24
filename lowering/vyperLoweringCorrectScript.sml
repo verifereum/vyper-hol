@@ -128,7 +128,8 @@ Definition initial_venom_state_rel_def:
     tx_env_ok tx /\ venom_env_rel tx vs /\
     vs.vs_vars = FEMPTY /\ ~vs.vs_halted /\ vs.vs_memory = [] /\
     vs.vs_allocas = FEMPTY /\ vs.vs_alloca_next = 0 /\
-    vs.vs_returndata = [] /\ vs.vs_requests = []
+    vs.vs_returndata = [] /\ vs.vs_requests = [] /\
+    vs.vs_pending_deletions = am.pending_deletions
 End
 
 (* Only success compares effects/requests. Runtime failure must abort, except
@@ -139,12 +140,19 @@ Definition external_call_result_rel_def:
     case (res, vres) of
       (INL v, Halt ss) =>
         return_bytes tops ret v ss.vs_returndata /\
-        ss.vs_accounts = am'.accounts /\ ss.vs_transient = am'.tStorage /\
+        process_deletions ss.vs_pending_deletions ss.vs_accounts = am'.accounts /\ ss.vs_transient = am'.tStorage /\
+        logs_correspond (compiled_event_info tops) (type_env tops)
+          tx.target am'.logs ss.vs_logs /\
+        ss.vs_requests = rqs
+    | (INR HaltException, Halt ss) =>
+        ss.vs_returndata = [] /\
+        process_deletions ss.vs_pending_deletions ss.vs_accounts = am'.accounts /\ ss.vs_transient = am'.tStorage /\
         logs_correspond (compiled_event_info tops) (type_env tops)
           tx.target am'.logs ss.vs_logs /\
         ss.vs_requests = rqs
     | (INR (AssertException s), Abort Revert_abort _) => T
     | (INR (AssertException s), Abort ExHalt_abort _) => (s = "UNREACHABLE")
+    | (INR (Error (RevertData bytes)), Abort Revert_abort _) => T
     | (INR (Error (RuntimeError m)), Abort _ _) => T
     | (INR (Error e), Halt _) => decode_strictness_exempt tops e
     | _ => F

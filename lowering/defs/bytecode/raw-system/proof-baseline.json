@@ -1,0 +1,662 @@
+{
+  "baseline_commit": "e1c0b64e18e24933954f0b5c07a7f6cabcd3bf15",
+  "description": "Committed state immediately before the task first C1.1 commit; reconstructed from Git on 2026-10-24.",
+  "method": "SML token candidates outside nested comments and strings; non-dot repository .sml files. This static inventory supplements the kernel tag/hypothesis audit.",
+  "source_files": 1091,
+  "counts": {
+    "cheat": 128,
+    "FAIL_TAC": 2
+  },
+  "entries": [
+    {
+      "file": "lowering/abiEncoderPropsScript.sml",
+      "line": 285,
+      "token": "cheat"
+    },
+    {
+      "file": "lowering/abiEncoderPropsScript.sml",
+      "line": 708,
+      "token": "cheat"
+    },
+    {
+      "file": "lowering/abiEncoderPropsScript.sml",
+      "line": 712,
+      "token": "cheat"
+    },
+    {
+      "file": "lowering/abiEncoderPropsScript.sml",
+      "line": 716,
+      "token": "cheat"
+    },
+    {
+      "file": "lowering/abiEncoderPropsScript.sml",
+      "line": 720,
+      "token": "cheat"
+    },
+    {
+      "file": "lowering/abiEncoderPropsScript.sml",
+      "line": 724,
+      "token": "cheat"
+    },
+    {
+      "file": "lowering/abiEncoderPropsScript.sml",
+      "line": 728,
+      "token": "cheat"
+    },
+    {
+      "file": "lowering/abiEncoderPropsScript.sml",
+      "line": 732,
+      "token": "cheat"
+    },
+    {
+      "file": "lowering/abiEncoderPropsScript.sml",
+      "line": 736,
+      "token": "cheat"
+    },
+    {
+      "file": "lowering/builtinPropsScript.sml",
+      "line": 2013,
+      "token": "cheat"
+    },
+    {
+      "file": "lowering/builtinPropsScript.sml",
+      "line": 2028,
+      "token": "cheat"
+    },
+    {
+      "file": "lowering/builtinPropsScript.sml",
+      "line": 2052,
+      "token": "cheat"
+    },
+    {
+      "file": "lowering/builtinPropsScript.sml",
+      "line": 2275,
+      "token": "cheat"
+    },
+    {
+      "file": "lowering/builtinPropsScript.sml",
+      "line": 2289,
+      "token": "cheat"
+    },
+    {
+      "file": "lowering/builtinTypeConvertPropsScript.sml",
+      "line": 105,
+      "token": "cheat"
+    },
+    {
+      "file": "lowering/e2eCorrectnessScript.sml",
+      "line": 893,
+      "token": "cheat"
+    },
+    {
+      "file": "lowering/emitHelperPropsScript.sml",
+      "line": 2457,
+      "token": "cheat"
+    },
+    {
+      "file": "lowering/emitHelperPropsScript.sml",
+      "line": 2471,
+      "token": "cheat"
+    },
+    {
+      "file": "lowering/emitHelperPropsScript.sml",
+      "line": 2485,
+      "token": "cheat"
+    },
+    {
+      "file": "lowering/emitHelperPropsScript.sml",
+      "line": 2499,
+      "token": "cheat"
+    },
+    {
+      "file": "lowering/emitHelperPropsScript.sml",
+      "line": 2536,
+      "token": "cheat"
+    },
+    {
+      "file": "lowering/emitHelperPropsScript.sml",
+      "line": 2546,
+      "token": "cheat"
+    },
+    {
+      "file": "lowering/emitHelperPropsScript.sml",
+      "line": 2564,
+      "token": "cheat"
+    },
+    {
+      "file": "lowering/emitHelperPropsScript.sml",
+      "line": 2578,
+      "token": "cheat"
+    },
+    {
+      "file": "lowering/exprLoweringPropsScript.sml",
+      "line": 127,
+      "token": "cheat"
+    },
+    {
+      "file": "lowering/exprLoweringPropsScript.sml",
+      "line": 377,
+      "token": "cheat"
+    },
+    {
+      "file": "lowering/exprLoweringPropsScript.sml",
+      "line": 401,
+      "token": "cheat"
+    },
+    {
+      "file": "lowering/exprLoweringPropsScript.sml",
+      "line": 472,
+      "token": "cheat"
+    },
+    {
+      "file": "lowering/exprLoweringPropsScript.sml",
+      "line": 2932,
+      "token": "cheat"
+    },
+    {
+      "file": "lowering/moduleLoweringPropsScript.sml",
+      "line": 148,
+      "token": "cheat"
+    },
+    {
+      "file": "lowering/proofs/loweringMemSafetyProofsScript.sml",
+      "line": 480,
+      "token": "cheat"
+    },
+    {
+      "file": "lowering/stmtLoweringPropsScript.sml",
+      "line": 95,
+      "token": "cheat"
+    },
+    {
+      "file": "lowering/stmtLoweringPropsScript.sml",
+      "line": 107,
+      "token": "cheat"
+    },
+    {
+      "file": "lowering/stmtLoweringPropsScript.sml",
+      "line": 135,
+      "token": "cheat"
+    },
+    {
+      "file": "lowering/stmtLoweringPropsScript.sml",
+      "line": 149,
+      "token": "cheat"
+    },
+    {
+      "file": "lowering/stmtLoweringPropsScript.sml",
+      "line": 168,
+      "token": "cheat"
+    },
+    {
+      "file": "lowering/stmtLoweringPropsScript.sml",
+      "line": 207,
+      "token": "cheat"
+    },
+    {
+      "file": "lowering/stmtLoweringPropsScript.sml",
+      "line": 227,
+      "token": "cheat"
+    },
+    {
+      "file": "lowering/stmtLoweringPropsScript.sml",
+      "line": 239,
+      "token": "cheat"
+    },
+    {
+      "file": "lowering/stmtLoweringPropsScript.sml",
+      "line": 253,
+      "token": "cheat"
+    },
+    {
+      "file": "lowering/stmtLoweringPropsScript.sml",
+      "line": 267,
+      "token": "cheat"
+    },
+    {
+      "file": "lowering/stmtLoweringPropsScript.sml",
+      "line": 282,
+      "token": "cheat"
+    },
+    {
+      "file": "lowering/stmtLoweringPropsScript.sml",
+      "line": 294,
+      "token": "cheat"
+    },
+    {
+      "file": "lowering/stmtLoweringPropsScript.sml",
+      "line": 308,
+      "token": "cheat"
+    },
+    {
+      "file": "lowering/vyperLoweringCorrectScript.sml",
+      "line": 178,
+      "token": "cheat"
+    },
+    {
+      "file": "lowering/vyperLoweringCorrectScript.sml",
+      "line": 188,
+      "token": "cheat"
+    },
+    {
+      "file": "lowering/vyperLoweringCorrectScript.sml",
+      "line": 207,
+      "token": "cheat"
+    },
+    {
+      "file": "semantics/prop/vyperTypeABIScript.sml",
+      "line": 810,
+      "token": "FAIL_TAC"
+    },
+    {
+      "file": "semantics/prop/vyperTypeABIScript.sml",
+      "line": 1344,
+      "token": "FAIL_TAC"
+    },
+    {
+      "file": "venom/codegen/codegenCorrectnessScript.sml",
+      "line": 384,
+      "token": "cheat"
+    },
+    {
+      "file": "venom/codegen/proofs/genBlockSimScript.sml",
+      "line": 1593,
+      "token": "cheat"
+    },
+    {
+      "file": "venom/codegen/proofs/genBlockSimScript.sml",
+      "line": 1703,
+      "token": "cheat"
+    },
+    {
+      "file": "venom/codegen/proofs/genBlockSimScript.sml",
+      "line": 1730,
+      "token": "cheat"
+    },
+    {
+      "file": "venom/codegen/proofs/genBlockSimScript.sml",
+      "line": 5480,
+      "token": "cheat"
+    },
+    {
+      "file": "venom/codegen/proofs/genBlockSimScript.sml",
+      "line": 5484,
+      "token": "cheat"
+    },
+    {
+      "file": "venom/codegen/proofs/genBlockSimScript.sml",
+      "line": 5488,
+      "token": "cheat"
+    },
+    {
+      "file": "venom/codegen/proofs/genBlockSimScript.sml",
+      "line": 5520,
+      "token": "cheat"
+    },
+    {
+      "file": "venom/codegen/proofs/genBlockSimScript.sml",
+      "line": 5526,
+      "token": "cheat"
+    },
+    {
+      "file": "venom/codegen/proofs/genBlockSimScript.sml",
+      "line": 5530,
+      "token": "cheat"
+    },
+    {
+      "file": "venom/codegen/proofs/genBlockSimScript.sml",
+      "line": 5637,
+      "token": "cheat"
+    },
+    {
+      "file": "venom/codegen/proofs/genBlockSimScript.sml",
+      "line": 5642,
+      "token": "cheat"
+    },
+    {
+      "file": "venom/codegen/proofs/genBlockSimScript.sml",
+      "line": 5646,
+      "token": "cheat"
+    },
+    {
+      "file": "venom/codegen/proofs/genBlockSimScript.sml",
+      "line": 5650,
+      "token": "cheat"
+    },
+    {
+      "file": "venom/codegen/proofs/genBlockSimScript.sml",
+      "line": 5695,
+      "token": "cheat"
+    },
+    {
+      "file": "venom/codegen/venomToAsmPropsScript.sml",
+      "line": 123,
+      "token": "cheat"
+    },
+    {
+      "file": "venom/compiler/o1PipelineCorrectScript.sml",
+      "line": 36,
+      "token": "cheat"
+    },
+    {
+      "file": "venom/compiler/o1PipelineCorrectScript.sml",
+      "line": 59,
+      "token": "cheat"
+    },
+    {
+      "file": "venom/compiler/o1PipelineCorrectScript.sml",
+      "line": 75,
+      "token": "cheat"
+    },
+    {
+      "file": "venom/passes/algebraic_opt/algebraicOptCorrectnessScript.sml",
+      "line": 22,
+      "token": "cheat"
+    },
+    {
+      "file": "venom/passes/algebraic_opt/algebraicOptCorrectnessScript.sml",
+      "line": 28,
+      "token": "cheat"
+    },
+    {
+      "file": "venom/passes/algebraic_opt/proofs/algebraicOptProofsScript.sml",
+      "line": 11,
+      "token": "cheat"
+    },
+    {
+      "file": "venom/passes/assert_combiner/assertCombinerCorrectnessScript.sml",
+      "line": 61,
+      "token": "cheat"
+    },
+    {
+      "file": "venom/passes/assert_combiner/assertCombinerCorrectnessScript.sml",
+      "line": 68,
+      "token": "cheat"
+    },
+    {
+      "file": "venom/passes/branch_opt/branchOptCorrectnessScript.sml",
+      "line": 74,
+      "token": "cheat"
+    },
+    {
+      "file": "venom/passes/branch_opt/branchOptCorrectnessScript.sml",
+      "line": 82,
+      "token": "cheat"
+    },
+    {
+      "file": "venom/passes/cfg_normalization/cfgNormCorrectnessScript.sml",
+      "line": 25,
+      "token": "cheat"
+    },
+    {
+      "file": "venom/passes/cfg_normalization/cfgNormCorrectnessScript.sml",
+      "line": 33,
+      "token": "cheat"
+    },
+    {
+      "file": "venom/passes/cfg_normalization/cfgNormCorrectnessScript.sml",
+      "line": 39,
+      "token": "cheat"
+    },
+    {
+      "file": "venom/passes/cfg_normalization/cfgNormCorrectnessScript.sml",
+      "line": 45,
+      "token": "cheat"
+    },
+    {
+      "file": "venom/passes/cse/cseCorrectnessScript.sml",
+      "line": 28,
+      "token": "cheat"
+    },
+    {
+      "file": "venom/passes/cse/cseCorrectnessScript.sml",
+      "line": 34,
+      "token": "cheat"
+    },
+    {
+      "file": "venom/passes/cse/proofs/cseProofsScript.sml",
+      "line": 59,
+      "token": "cheat"
+    },
+    {
+      "file": "venom/passes/dead_store_elim/proofs/deadStoreElimProofsScript.sml",
+      "line": 1110,
+      "token": "cheat"
+    },
+    {
+      "file": "venom/passes/dead_store_elim/proofs/deadStoreElimProofsScript.sml",
+      "line": 1129,
+      "token": "cheat"
+    },
+    {
+      "file": "venom/passes/function_inliner/functionInlinerCorrectnessScript.sml",
+      "line": 28,
+      "token": "cheat"
+    },
+    {
+      "file": "venom/passes/function_inliner/proofs/functionInlinerProofScript.sml",
+      "line": 35,
+      "token": "cheat"
+    },
+    {
+      "file": "venom/passes/internal_return_copy_fwd/proofs/internalReturnCopyFwdProofsScript.sml",
+      "line": 49,
+      "token": "cheat"
+    },
+    {
+      "file": "venom/passes/load_elim/loadElimCorrectnessScript.sml",
+      "line": 30,
+      "token": "cheat"
+    },
+    {
+      "file": "venom/passes/load_elim/loadElimCorrectnessScript.sml",
+      "line": 36,
+      "token": "cheat"
+    },
+    {
+      "file": "venom/passes/load_elim/proofs/loadElimProofsScript.sml",
+      "line": 29,
+      "token": "cheat"
+    },
+    {
+      "file": "venom/passes/load_elim/proofs/loadElimProofsScript.sml",
+      "line": 46,
+      "token": "cheat"
+    },
+    {
+      "file": "venom/passes/lower_dload/lowerDloadCorrectnessScript.sml",
+      "line": 47,
+      "token": "cheat"
+    },
+    {
+      "file": "venom/passes/lower_dload/lowerDloadCorrectnessScript.sml",
+      "line": 56,
+      "token": "cheat"
+    },
+    {
+      "file": "venom/passes/mem2var/mem2varCorrectnessScript.sml",
+      "line": 1229,
+      "token": "cheat"
+    },
+    {
+      "file": "venom/passes/mem2var/mem2varCorrectnessScript.sml",
+      "line": 1237,
+      "token": "cheat"
+    },
+    {
+      "file": "venom/passes/memmerging/proofs/mmWfProofsScript.sml",
+      "line": 2416,
+      "token": "cheat"
+    },
+    {
+      "file": "venom/passes/memory_copy_elision/proofs/memoryCopyElisionProofsScript.sml",
+      "line": 977,
+      "token": "cheat"
+    },
+    {
+      "file": "venom/passes/memory_copy_elision/proofs/memoryCopyElisionProofsScript.sml",
+      "line": 1550,
+      "token": "cheat"
+    },
+    {
+      "file": "venom/passes/memory_copy_elision/proofs/memoryCopyElisionProofsScript.sml",
+      "line": 2048,
+      "token": "cheat"
+    },
+    {
+      "file": "venom/passes/memory_copy_elision/proofs/memoryCopyElisionProofsScript.sml",
+      "line": 2211,
+      "token": "cheat"
+    },
+    {
+      "file": "venom/passes/memory_copy_elision/proofs/memoryCopyElisionProofsScript.sml",
+      "line": 2212,
+      "token": "cheat"
+    },
+    {
+      "file": "venom/passes/memory_copy_elision/proofs/memoryCopyElisionProofsScript.sml",
+      "line": 2243,
+      "token": "cheat"
+    },
+    {
+      "file": "venom/passes/memory_copy_elision/proofs/memoryCopyElisionProofsScript.sml",
+      "line": 2250,
+      "token": "cheat"
+    },
+    {
+      "file": "venom/passes/memory_copy_elision/proofs/memoryCopyElisionProofsScript.sml",
+      "line": 3111,
+      "token": "cheat"
+    },
+    {
+      "file": "venom/passes/memory_copy_elision/proofs/memoryCopyElisionProofsScript.sml",
+      "line": 4076,
+      "token": "cheat"
+    },
+    {
+      "file": "venom/passes/memory_copy_elision/proofs/memoryCopyElisionProofsScript.sml",
+      "line": 4838,
+      "token": "cheat"
+    },
+    {
+      "file": "venom/passes/memory_copy_elision/proofs/memoryCopyElisionProofsScript.sml",
+      "line": 5242,
+      "token": "cheat"
+    },
+    {
+      "file": "venom/passes/memory_copy_elision/proofs/memoryCopyElisionProofsScript.sml",
+      "line": 5629,
+      "token": "cheat"
+    },
+    {
+      "file": "venom/passes/memory_copy_elision/proofs/memoryCopyElisionProofsScript.sml",
+      "line": 5659,
+      "token": "cheat"
+    },
+    {
+      "file": "venom/passes/memory_copy_elision/proofs/memoryCopyElisionProofsScript.sml",
+      "line": 5681,
+      "token": "cheat"
+    },
+    {
+      "file": "venom/passes/memory_copy_elision/proofs/memoryCopyElisionProofsScript.sml",
+      "line": 5973,
+      "token": "cheat"
+    },
+    {
+      "file": "venom/passes/memory_copy_elision/proofs/memoryCopyElisionProofsScript.sml",
+      "line": 5982,
+      "token": "cheat"
+    },
+    {
+      "file": "venom/passes/memory_copy_elision/proofs/memoryCopyElisionProofsScript.sml",
+      "line": 5993,
+      "token": "cheat"
+    },
+    {
+      "file": "venom/passes/readonly_invoke_copy_fwd/proofs/readonlyInvokeCopyFwdProofsScript.sml",
+      "line": 47,
+      "token": "cheat"
+    },
+    {
+      "file": "venom/passes/remove_unused/proofs/removeUnusedStructProofsScript.sml",
+      "line": 98,
+      "token": "cheat"
+    },
+    {
+      "file": "venom/passes/revert_to_assert/rtaCorrectnessScript.sml",
+      "line": 45,
+      "token": "cheat"
+    },
+    {
+      "file": "venom/passes/revert_to_assert/rtaCorrectnessScript.sml",
+      "line": 51,
+      "token": "cheat"
+    },
+    {
+      "file": "venom/passes/shared/proofs/copyFwdEquivScript.sml",
+      "line": 343,
+      "token": "cheat"
+    },
+    {
+      "file": "venom/passes/shared/proofs/copyFwdEquivScript.sml",
+      "line": 370,
+      "token": "cheat"
+    },
+    {
+      "file": "venom/passes/shared/proofs/copyFwdEquivScript.sml",
+      "line": 393,
+      "token": "cheat"
+    },
+    {
+      "file": "venom/passes/shared/proofs/copyFwdEquivScript.sml",
+      "line": 423,
+      "token": "cheat"
+    },
+    {
+      "file": "venom/passes/simplify_cfg/proofs/simplifyCfgProofScript.sml",
+      "line": 28,
+      "token": "cheat"
+    },
+    {
+      "file": "venom/passes/simplify_cfg/simplifyCfgCorrectnessScript.sml",
+      "line": 28,
+      "token": "cheat"
+    },
+    {
+      "file": "venom/passes/simplify_cfg/simplifyCfgCorrectnessScript.sml",
+      "line": 34,
+      "token": "cheat"
+    },
+    {
+      "file": "venom/passes/simplify_cfg/simplifyCfgCorrectnessScript.sml",
+      "line": 40,
+      "token": "cheat"
+    },
+    {
+      "file": "venom/passes/single_use_expansion/singleUseExpansionCorrectnessScript.sml",
+      "line": 44,
+      "token": "cheat"
+    },
+    {
+      "file": "venom/passes/single_use_expansion/singleUseExpansionCorrectnessScript.sml",
+      "line": 52,
+      "token": "cheat"
+    },
+    {
+      "file": "venom/passes/tail_merge/tailMergeCorrectnessScript.sml",
+      "line": 23,
+      "token": "cheat"
+    },
+    {
+      "file": "venom/passes/tail_merge/tailMergeCorrectnessScript.sml",
+      "line": 31,
+      "token": "cheat"
+    },
+    {
+      "file": "venom/passes/tail_merge/tailMergeCorrectnessScript.sml",
+      "line": 37,
+      "token": "cheat"
+    }
+  ]
+}

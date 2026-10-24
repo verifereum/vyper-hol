@@ -54,7 +54,9 @@ Theorem activated_call_vs_nop:
          execution_frame s = execution_frame s /\
          t.vs_outcomes <> s.vs_outcomes /\ t.vs_requests <> s.vs_requests
 Proof
-  simp dispatch_defs >> EVAL_TAC
+  `!s. step_inst_base (mk_inst 1 NOP [] []) s = OK s` by
+    simp[mk_inst_def, step_inst_base_def] >>
+  mp_tac activated_call_not_preservation >> simp[LET_THM]
 QED
 
 Theorem activated_ordinary_success_short_write:
@@ -132,13 +134,32 @@ End
 val computed_defs =
   [probe_computed_def, call_probe_state_def, init_venom_state_def,
    empty_call_context_def, step_inst_base_def, mk_inst_def, eval_operand_def,
-   exec_ext_call_def, venom_call_request_def, read_memory_def, take_outcome_def,
+   exec_ext_call_def, venom_call_request_def, read_memory_def,
+   consume_call_outcome_def, take_outcome_def,
    record_request_def, computed_precompile_def, adopt_outcome_def,
    failed_outcome_def, write_memory_with_expansion_def,
    lookup_var_def, update_var_def, w2w_n2w,
    precompile_result_empty_ecrecover, precompile_result_empty_ec,
    precompile_result_invalid_ec, byteTheory.LENGTH_word_to_bytes,
    finite_mapTheory.FLOOKUP_UPDATE];
+
+Theorem probe_computed_dispatch[local]:
+  step_inst_base (probe_computed target sz) s =
+    OK (update_var "result"
+      (FST (consume_call_outcome
+        (venom_call_request s target 0w 0w sz s.vs_call_ctx.cc_static) 1 0 s))
+      (SND (consume_call_outcome
+        (venom_call_request s target 0w 0w sz s.vs_call_ctx.cc_static) 1 0 s)))
+Proof
+  simp[probe_computed_def, mk_inst_def, step_inst_base_def,
+       eval_operand_def, exec_ext_call_def]
+QED
+
+Theorem call_probe_state_static[local,simp]:
+  ~call_probe_state.vs_call_ctx.cc_static
+Proof
+  simp[call_probe_state_def, init_venom_state_def, empty_call_context_def]
+QED
 
 Theorem activated_computed_ecrecover:
   let s = call_probe_state with <| vs_outcomes := [call_probe_outcome];
@@ -169,7 +190,24 @@ Theorem activated_computed_empty_ec:
      step_inst_base (probe_computed 7w 0w) s =
        OK (update_var "result" 1w (s with vs_returndata := REPLICATE 64 0w))
 Proof
-  simp computed_defs
+  mp_tac consume_computed_empty_ec >>
+  simp[Excl "consume_call_outcome_eq", LET_THM] >> strip_tac >>
+  simp[Excl "consume_call_outcome_eq", probe_computed_dispatch]
+QED
+
+Theorem consume_empty_return_size[local]:
+  consume_call_outcome rq ro ret_size s = (word, t) ==>
+  t.vs_returndata = [] ==>
+  !new_size. consume_call_outcome rq ro new_size s = (word, t)
+Proof
+  rpt strip_tac >>
+  `(FST (take_outcome rq s.vs_outcomes)).co_returnData = []` by
+    (qpat_x_assum `consume_call_outcome _ _ _ _ = _`
+       (mp_tac o AP_TERM ``\p:bytes32 # venom_state. (SND p).vs_returndata``) >>
+     PURE_REWRITE_TAC[consume_call_outcome_eq] >> simp[]) >>
+  `consume_call_outcome rq ro new_size s = consume_call_outcome rq ro ret_size s` by
+    (PURE_REWRITE_TAC[consume_call_outcome_eq] >> simp[]) >>
+  gvs[Excl "consume_call_outcome_eq"]
 QED
 
 Theorem activated_computed_invalid_ec:
@@ -181,7 +219,12 @@ Theorem activated_computed_invalid_ec:
      step_inst_base (probe_computed 7w 64w) s =
        OK (update_var "result" 0w (s with vs_returndata := []))
 Proof
-  simp (computed_defs @ [TAKE_APPEND1, TAKE_APPEND2]) >> EVAL_TAC
+  mp_tac consume_computed_invalid_ec >>
+  simp[Excl "consume_call_outcome_eq", LET_THM] >> strip_tac >>
+  every_assum (fn th => TRY (assume_tac
+    (SRULE[Excl "consume_call_outcome_eq"]
+      (MATCH_MP consume_empty_return_size th)))) >>
+  simp[Excl "consume_call_outcome_eq", probe_computed_dispatch]
 QED
 
 Theorem activated_nonzero_precompile_ordinary:
@@ -243,5 +286,7 @@ Theorem activated_unequal_targets:
              t1.vs_outcomes = t2.vs_outcomes /\
              t1.vs_requests <> t2.vs_requests
 Proof
-  simp dispatch_defs >> EVAL_TAC
+  mp_tac unequal_targets_not_transport >>
+  simp[Excl "consume_call_outcome_eq", LET_THM, probe_call_dispatch,
+       update_var_def]
 QED

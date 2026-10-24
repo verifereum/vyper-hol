@@ -477,16 +477,14 @@ Definition post_default_intcall_tail_def:
           | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view
         else return ());
        cxf <- push_function (src_id_opt,fn) env cx;
-       rv <- finally
-         (try (do eval_stmts cxf ss; return NoneV od) handle_function)
-         (do
-            pop_function prev;
-            if nr ∧ ¬is_view then
+      rv <- finally_unless_halt
+        (finally (try (do eval_stmts cxf ss; return NoneV od) handle_function)
+          (pop_function prev))
+        (if nr ∧ ¬is_view then
               case cx.nonreentrant_slot of
               | NONE => return ()
               | SOME slot => release_nonreentrant_lock cx.txn.target slot
-            else return ()
-          od);
+         else return ());
        crv <- lift_option_type (safe_cast rtv rv) "IntCall cast ret";
        return (Value crv)
      od) sdfl
@@ -506,16 +504,14 @@ Theorem post_default_intcall_tail_unfold[local]:
           | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view
         else return ());
        cxf <- push_function (src_id_opt,fn) env cx;
-       rv <- finally
-         (try (do eval_stmts cxf ss; return NoneV od) handle_function)
-         (do
-            pop_function prev;
-            if nr ∧ ¬is_view then
-              case cx.nonreentrant_slot of
-              | NONE => return ()
-              | SOME slot => release_nonreentrant_lock cx.txn.target slot
-            else return ()
-          od);
+       rv <- finally_unless_halt
+         (finally (try (do eval_stmts cxf ss; return NoneV od) handle_function)
+           (pop_function prev))
+         (if nr ∧ ¬is_view then
+            case cx.nonreentrant_slot of
+            | NONE => return ()
+            | SOME slot => release_nonreentrant_lock cx.txn.target slot
+          else return ());
        crv <- lift_option_type (safe_cast rtv rv) "IntCall cast ret";
        return (Value crv)
      od) sdfl
@@ -640,21 +636,20 @@ Theorem intcall_body_finally_release_imm_dom[local]:
     (∀st0 res0 st1.
        eval_stmts (cx with stk updated_by CONS (src_id_opt,fn)) ss st0 = (res0,st1) ⇒
        preserves_immutables_dom (cx with stk updated_by CONS (src_id_opt,fn)) st0 st1) ∧
-    finally
-      (try (do eval_stmts (cx with stk updated_by CONS (src_id_opt,fn)) ss;
-               return NoneV od) handle_function)
-      (do pop_function prev;
-          if nr ∧ mut ≠ View ∧ mut ≠ Pure then
-            case cx.nonreentrant_slot of
-            | NONE => return ()
-            | SOME slot => release_nonreentrant_lock cx.txn.target slot
-          else return () od)
+    finally_unless_halt
+      (finally (try (do eval_stmts (cx with stk updated_by CONS (src_id_opt,fn)) ss;
+               return NoneV od) handle_function) (pop_function prev))
+      (if nr ∧ mut ≠ View ∧ mut ≠ Pure then
+         case cx.nonreentrant_slot of
+         | NONE => return ()
+         | SOME slot => release_nonreentrant_lock cx.txn.target slot
+       else return ())
       (st with scopes := [env]) = (res,st') ⇒
     preserves_immutables_dom cx st st'
 Proof
   rpt strip_tac >>
-  qpat_x_assum `finally _ _ _ = _` mp_tac >>
-  simp[finally_def, AllCaseEqs(), pop_function_def, set_scopes_def,
+  qpat_x_assum `finally_unless_halt _ _ _ = _` mp_tac >>
+  simp[finally_unless_halt_def, finally_def, AllCaseEqs(), pop_function_def, set_scopes_def,
        return_def, ignore_bind_def, bind_def, raise_def] >>
   rpt strip_tac >> gvs[preserves_immutables_dom_eq, preserves_immutables_dom_refl] >>
   irule preserves_immutables_dom_trans >> qexists_tac `st with scopes := [env]` >>
@@ -687,15 +682,14 @@ Theorem intcall_body_finally_release_imm_dom_use[local]:
     (∀st0 res0 st1.
        eval_stmts (cx with stk updated_by CONS (src_id_opt,fn)) ss st0 = (res0,st1) ⇒
        preserves_immutables_dom (cx with stk updated_by CONS (src_id_opt,fn)) st0 st1) ⇒
-    finally
-      (try (do eval_stmts (cx with stk updated_by CONS (src_id_opt,fn)) ss;
-               return NoneV od) handle_function)
-      (do pop_function prev;
-          if nr ∧ mut ≠ View ∧ mut ≠ Pure then
-            case cx.nonreentrant_slot of
-            | NONE => return ()
-            | SOME slot => release_nonreentrant_lock cx.txn.target slot
-          else return () od)
+    finally_unless_halt
+      (finally (try (do eval_stmts (cx with stk updated_by CONS (src_id_opt,fn)) ss;
+               return NoneV od) handle_function) (pop_function prev))
+      (if nr ∧ mut ≠ View ∧ mut ≠ Pure then
+         case cx.nonreentrant_slot of
+         | NONE => return ()
+         | SOME slot => release_nonreentrant_lock cx.txn.target slot
+       else return ())
       (st with scopes := [env]) = (q,st') ⇒
     preserves_immutables_dom cx st st'
 Proof
@@ -1498,7 +1492,7 @@ Proof
   qmatch_asmsub_rename_tac `case tailst.outcomes of NONE => _ | SOME _ => _` >>
   Cases_on `tailst.outcomes` >> gvs[]
   >- (gvs[bind_def, return_def, AllCaseEqs()] >>
-      imp_res_tac concrete_send_step_locals >> gvs[] >>
+       imp_res_tac eval_send_preserves_non_accounts >> gvs[] >>
       metis_tac[preserves_immutables_dom_trans, preserves_immutables_dom_eq]) >>
   imp_res_tac (Send_outcome_preserves_locals |> SRULE [check_def, ignore_bind_def]) >>
   gvs[] >> metis_tac[preserves_immutables_dom_trans, preserves_immutables_dom_eq]
@@ -1696,7 +1690,7 @@ QED
 (* Helper: inner pipeline after run_ext_call result destructuring *)
 Theorem extcall_inner_pipeline_imm_dom[local]:
   ∀cx drv tenv ret_type skip_check target_addr success returnData accounts'
-     tStorage' emitted_logs s res s'.
+     tStorage' emitted_logs deletions s res s'.
     (success ∧ returnData = [] ∧ IS_SOME drv ∧
      (skip_check ∨ ext_call_has_code target_addr accounts') ⇒
        ∀st res st'. eval_expr cx (THE drv) st = (res,st') ⇒
@@ -1706,6 +1700,7 @@ Theorem extcall_inner_pipeline_imm_dom[local]:
       x <- update_accounts (K accounts');
       x <- update_transient (K tStorage');
       x <- append_logs emitted_logs;
+      x <- update_pending_deletions (APPEND deletions);
       if returnData = [] ∧ IS_SOME drv then do
         x <- check (skip_check ∨ ext_call_has_code target_addr accounts')
                "ExtCall target has no code";
@@ -1723,7 +1718,8 @@ Proof
   (* NONE tail: the named contract isolates the concrete installation. *)
   rewrite_tac[GSYM ignore_bind_def, concrete_extcall_tail] >>
   rw[bind_def, ignore_bind_def, check_def, assert_def, return_def,
-     raise_def, lift_sum_def, lift_sum_runtime_def]
+     raise_def, lift_sum_def, lift_sum_runtime_def,
+     update_pending_deletions_def]
   \\ rpt strip_tac \\ gvs[AllCaseEqs(), preserves_immutables_dom_refl]
   \\ TRY (irule preserves_immutables_dom_eq
           >> Cases_on `evaluate_abi_decode_return tenv ret_type returnData`
@@ -1742,12 +1738,12 @@ QED
 Theorem extcall_pipeline_preserves_imm_dom[local]:
   ∀cx drv func_name arg_types ret_type skip_check target_addr value_opt arg_vals
      caller txParams s res s'.
-    (∀ts calldata accounts tStorage success returnData accounts' tStorage' emitted_logs.
+    (∀ts calldata accounts tStorage success returnData accounts' tStorage' emitted_logs deletions.
        get_self_code cx = SOME ts ⇒
        build_ext_calldata (type_env ts) func_name arg_types arg_vals =
          SOME calldata ⇒
        run_ext_call caller target_addr calldata value_opt accounts tStorage
-         txParams = SOME (success, returnData, accounts', tStorage', emitted_logs) ⇒
+         txParams = SOME (success, returnData, accounts', tStorage', emitted_logs, deletions) ⇒
        success ∧ returnData = [] ∧ IS_SOME drv ∧
        (skip_check ∨ ext_call_has_code target_addr accounts') ⇒
        ∀st res st'. eval_expr cx (THE drv) st = (res,st') ⇒
@@ -1764,12 +1760,13 @@ Theorem extcall_pipeline_preserves_imm_dom[local]:
         lift_option
           (run_ext_call caller target_addr calldata value_opt accounts
              tStorage txParams) "ExtCall run failed";
-      (λ(success,returnData,accounts',tStorage',emitted_logs).
+      (λ(success,returnData,accounts',tStorage',emitted_logs, deletions).
            do
              x <- check success "ExtCall reverted";
              x <- update_accounts (K accounts');
              x <- update_transient (K tStorage');
              x <- append_logs emitted_logs;
+             x <- update_pending_deletions (APPEND deletions);
              if returnData = [] ∧ IS_SOME drv then do
                x <- check (skip_check ∨ ext_call_has_code target_addr accounts')
                       "ExtCall target has no code";
@@ -1806,7 +1803,8 @@ Proof
   \\ rpt strip_tac
   \\ first_x_assum irule \\ simp[]
   \\ qexists_tac `s.accounts` \\ qexists_tac `x''2`
-  \\ qexists_tac `x''4` \\ qexists_tac `s.tStorage` \\ qexists_tac `x''3`
+  \\ qexists_tac `x''5` \\ qexists_tac `x''4`
+  \\ qexists_tac `s.tStorage` \\ qexists_tac `x''3`
   \\ gvs[]
 QED
 
@@ -1832,9 +1830,10 @@ Proof
   `!s os rqs. preserves_immutables_dom cx s
       (s with <|outcomes := os; requests := rqs|>)` by
     (rpt gen_tac >> irule preserves_immutables_dom_eq >> simp[]) >>
-  `!s accounts transient logs. preserves_immutables_dom cx s
+  `!s accounts transient logs deletions. preserves_immutables_dom cx s
       (s with <|accounts := accounts; tStorage := transient;
-                logs := s.logs ++ logs|>)` by
+                logs := s.logs ++ logs;
+                pending_deletions := deletions ++ s.pending_deletions|>)` by
     (rpt gen_tac >> irule preserves_immutables_dom_eq >> simp[]) >>
   `!s. preserves_immutables_dom cx s s` by simp[preserves_immutables_dom_refl] >>
   drule_all (ExtCall_outcome_transport |> Q.INST
@@ -2451,15 +2450,14 @@ Theorem intcall_tail_after_finally_cast_imm_dom[local]:
     (!st res st'.
        eval_stmts (cx with stk updated_by CONS (src_id_opt,fn)) ss st = (res,st') ==>
        preserves_immutables_dom (cx with stk updated_by CONS (src_id_opt,fn)) st st') /\
-    finally
-      (try (do eval_stmts (cx with stk updated_by CONS (src_id_opt,fn)) ss;
-               return NoneV od) handle_function)
-      (do pop_function prev;
-          if nr /\ mut <> View /\ mut <> Pure then
-            case cx.nonreentrant_slot of
-            | NONE => return ()
-            | SOME slot => release_nonreentrant_lock cx.txn.target slot
-          else return () od)
+    finally_unless_halt
+      (finally (try (do eval_stmts (cx with stk updated_by CONS (src_id_opt,fn)) ss;
+               return NoneV od) handle_function) (pop_function prev))
+      (if nr /\ mut <> View /\ mut <> Pure then
+         case cx.nonreentrant_slot of
+         | NONE => return ()
+         | SOME slot => release_nonreentrant_lock cx.txn.target slot
+       else return ())
       (r2 with scopes := [env]) = (q,r') /\
     (case q of
      | INL v =>
@@ -3259,11 +3257,12 @@ QED
 
 Theorem raw_call_callback_preserves_immutables_dom[local]:
   ∀cx flags result st res st'.
-    ((λ(success,returnData,accounts',tStorage',emitted_logs).
+    ((λ(success,returnData,accounts',tStorage',emitted_logs, deletions).
         do
           x <- update_accounts (K accounts');
           x <- update_transient (K tStorage');
           x <- append_logs emitted_logs;
+          update_pending_deletions (APPEND deletions);
           if flags.rcf_revert_on_failure then
             do
               x <- if success then return () else raise (Error (RevertData returnData));
@@ -3281,11 +3280,11 @@ Proof
   rpt strip_tac >>
   PairCases_on `result` >>
   qpat_x_assum `_ = (res,st')` mp_tac >>
-  simp[update_accounts_def, update_transient_def, append_logs_def,
+  simp[update_accounts_def, update_transient_def, append_logs_def, update_pending_deletions_def,
       bind_def, ignore_bind_def, return_def, raise_def, assert_def, check_def, type_check_def,
       AllCaseEqs()] >>
   rpt IF_CASES_TAC >>
-  simp[update_accounts_def, update_transient_def, append_logs_def,
+  simp[update_accounts_def, update_transient_def, append_logs_def, update_pending_deletions_def,
       bind_def, ignore_bind_def, return_def, raise_def, assert_def, check_def, type_check_def,
       AllCaseEqs()] >>
   rpt strip_tac >> gvs[] >>
@@ -3447,7 +3446,9 @@ Proof
       rpt strip_tac >> gvs[AllCaseEqs(), return_def, raise_def] >>
       first_x_assum drule >> strip_tac >>
       TRY (gvs[] >> NO_TAC) >>
-      imp_res_tac transfer_value_immutables >>
+      gvs[update_accounts_def, update_pending_deletions_def,
+          bind_def, ignore_bind_def, return_def, raise_def,
+          COND_RATOR, AllCaseEqs()] >>
       irule preserves_immutables_dom_trans >> first_assum (irule_at Any) >>
       irule preserves_immutables_dom_eq >> gvs[])
   (* CreateTarget *)
@@ -3564,7 +3565,7 @@ Resume immutables_dom_mutual[ExtCall]:
          check_def, type_check_def, raise_def, assert_def]
   \\ strip_tac
   \\ first_x_assum irule
-  \\ (conj_tac >- (qexists_tac `r` >> simp[append_logs_def, return_def]))
+  \\ (conj_tac >- (qexists_tac `r` >> simp[append_logs_def, update_pending_deletions_def, return_def]))
   \\ simp[]
 QED
 
@@ -3585,7 +3586,7 @@ val IMM_DOM_FRAME_TAKE =
 Theorem imm_dom_frame_append_logs[local]:
   state_rel_frame (preserves_immutables_dom cx) (append_logs logs)
 Proof
-  simp[state_rel_frame_def, append_logs_def, return_def] >> gen_tac >>
+  simp[state_rel_frame_def, append_logs_def, update_pending_deletions_def, return_def] >> gen_tac >>
   irule preserves_immutables_dom_eq >> simp[]
 QED
 

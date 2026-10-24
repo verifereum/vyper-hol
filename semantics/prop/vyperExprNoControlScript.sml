@@ -19,7 +19,8 @@ val _ = overload_on ("finally", ``vyperState$finally``);
 
 (* ===== Helper predicate ===== *)
 Definition no_control_exc_def:
-  no_control_exc exc ⇔ (∃str. exc = Error str) ∨ (∃str. exc = AssertException str)
+  no_control_exc exc ⇔ (∃str. exc = Error str) ∨
+    (∃str. exc = AssertException str) ∨ exc = HaltException
 End
 
 (* Useful rewrite set for pushing case expressions through application *)
@@ -85,6 +86,19 @@ Proof
     prod_CASE_rator, sum_CASE_rator, raise_def]
   >> strip_tac >> rpt disch_tac
   >> gvs[AllCaseEqs(), raise_def, return_def] >> res_tac
+QED
+
+Theorem finally_unless_halt_no_control:
+  ∀f g s exc s'.
+  finally_unless_halt f g s = (INR exc, s') ⇒
+  (∀exc0 s0. f s = (INR exc0, s0) ⇒ no_control_exc exc0) ⇒
+  (∀s0 exc0 s0'. g s0 = (INR exc0, s0') ⇒ no_control_exc exc0) ⇒
+  no_control_exc exc
+Proof
+  rpt gen_tac >> simp[finally_unless_halt_def, ignore_bind_def, bind_def,
+    prod_CASE_rator, sum_CASE_rator, raise_def] >>
+  rpt strip_tac >> gvs[AllCaseEqs(), raise_def, return_def, no_control_exc_def] >>
+  res_tac >> gvs[]
 QED
 
 Theorem switch_BoolV_no_control:
@@ -298,7 +312,7 @@ Theorem append_logs_no_control:
   ∀logs s exc s'.
   append_logs logs s = (INR exc, s') ⇒ no_control_exc exc
 Proof
-  simp[append_logs_def, return_def]
+  simp[append_logs_def, update_pending_deletions_def, return_def]
 QED
 
 Theorem write_storage_slot_no_control:
@@ -503,7 +517,8 @@ val mono = [bind_def, ignore_bind_def, return_def, raise_def,
             prod_CASE_rator, sum_CASE_rator, option_CASE_rator,
             COND_RATOR, LET_THM,
             get_scopes_def, get_accounts_def, get_transient_storage_def,
-            update_accounts_def, update_transient_def];
+            update_accounts_def, update_transient_def,
+            update_pending_deletions_def];
 
 Theorem eval_create_no_control[local]:
   eval_create cx kind has_salt rof arg_tys vs blueprint_size st = (INR ex, st') ==>
@@ -777,10 +792,10 @@ Theorem int_call_tail_no_control[local]:
        | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view
      else return ());
     cxf <- push_function (src_id_opt, fn) env cx;
-    rv <- finally
-      (try (do eval_stmts cxf body; return NoneV od) handle_function)
-      (do pop_function prev;
-          if nr ∧ ¬is_view then
+    rv <- finally_unless_halt
+      (finally (try (do eval_stmts cxf body; return NoneV od) handle_function)
+        (pop_function prev))
+      (do if nr ∧ ¬is_view then
             case cx.nonreentrant_slot of
             | NONE => return ()
             | SOME slot => release_nonreentrant_lock cx.txn.target slot
@@ -790,19 +805,25 @@ Theorem int_call_tail_no_control[local]:
     return $ Value crv
   od) s = (INR exc, st') ⇒ no_control_exc exc
 Proof
-  rpt gen_tac >> strip_tac
-  >> rpt (step_tac >- FIRST [
+  rpt gen_tac >> strip_tac >>
+  rpt (step_tac >- FIRST [
     FIRST (map (fn th => imp_res_tac th >> gvs[no_control_exc_def] >> NO_TAC)
       [lift_option_type_no_control, acquire_nonreentrant_lock_no_control]),
     gvs[no_control_exc_def, return_def, raise_def,
         get_scopes_def, push_function_def] >> NO_TAC,
     Cases_on `nr` >> gvs[return_def, raise_def, option_CASE_rator,
-      AllCaseEqs(), no_control_exc_def]
-    >> TRY (imp_res_tac acquire_nonreentrant_lock_no_control
-            >> gvs[no_control_exc_def]) >> NO_TAC,
-    drule finally_no_control >> disch_then irule >> rpt strip_tac
-    >> TRY (imp_res_tac try_handle_function_no_control >> NO_TAC)
-    >> TRY (imp_res_tac int_call_cleanup_no_INR >> NO_TAC)])
+      AllCaseEqs(), no_control_exc_def] >>
+    TRY (imp_res_tac acquire_nonreentrant_lock_no_control >>
+         gvs[no_control_exc_def]) >> NO_TAC,
+    drule finally_unless_halt_no_control >> disch_then irule >>
+    rpt strip_tac >> FIRST [
+      drule finally_no_control >> disch_then irule >> rpt strip_tac >>
+      FIRST [metis_tac[try_handle_function_no_control],
+             gvs[pop_function_def, set_scopes_def, return_def]],
+      gvs[release_nonreentrant_lock_def, get_transient_storage_def,
+          update_transient_def, bind_def, return_def,
+          COND_RATOR, option_CASE_rator, AllCaseEqs()]]]) >>
+  gvs[return_def]
 QED
 
 Theorem int_call_no_control[local]:
@@ -882,7 +903,7 @@ Proof
   PairCases_on `call_result` >>
   Cases_on `flags.rcf_revert_on_failure` >> Cases_on `call_result0` >>
   Cases_on `flags.rcf_max_outsize = 0` >>
-  simp[update_accounts_def, update_transient_def, append_logs_def,
+  simp[update_accounts_def, update_transient_def, append_logs_def, update_pending_deletions_def,
        check_def, assert_def, bind_def, ignore_bind_def, return_def, raise_def,
        no_control_exc_def] >>
   rpt strip_tac >> gvs[]
@@ -984,6 +1005,14 @@ Resume eval_expr_no_control_with_bt[CreateTarget]:
   Cases_on `kind` >> gvs[] >> unfold_tac
 QED
 
+Theorem eval_send_no_control:
+  eval_send cx target amount st = (INR exc,st') ==> no_control_exc exc
+Proof
+  rw[eval_send_def, bind_def, ignore_bind_def, check_def, assert_def,
+     return_def, raise_def] >> gvs[AllCaseEqs()] >>
+  imp_res_tac eval_raw_call_no_control >> gvs[no_control_exc_def]
+QED
+
 Resume eval_expr_no_control_with_bt[Send]:
   rpt strip_tac >> pop_assum mp_tac >>
   PURE_REWRITE_TAC [Once evaluate_def] >> strip_tac >>
@@ -996,7 +1025,7 @@ Resume eval_expr_no_control_with_bt[Send]:
   qmatch_asmsub_rename_tac `case tailst.outcomes of NONE => _ | SOME _ => _` >>
   Cases_on `tailst.outcomes` >> gvs[]
   >- (gvs[bind_def, ignore_bind_def, return_def, AllCaseEqs()] >>
-      drule transfer_value_no_control >> simp[]) >>
+      drule eval_send_no_control >> simp[]) >>
   drule Send_outcome_runtime_error >> rw[no_control_exc_def]
 QED
 
@@ -1044,7 +1073,7 @@ Resume eval_expr_no_control_with_bt[ExtCall]:
   >> qpat_x_assum `∀s'' vs t. _` (fn ih =>
        step_tac >- gvs[update_transient_def, return_def] >> assume_tac ih)
   >> qpat_x_assum `∀s'' vs t. _` (fn ih =>
-       step_tac >- gvs[append_logs_def, return_def] >> assume_tac ih)
+       step_tac >- gvs[append_logs_def, update_pending_deletions_def, return_def] >> assume_tac ih)
   (* Handle the if-tail *)
   (* Original decode dispatch:
   >> qpat_x_assum `(if _ then _ else _) _ = _` mp_tac
@@ -1100,12 +1129,13 @@ Theorem no_control_monad_primitives[local]:
   no_control_monad (update_accounts upd) /\
   no_control_monad (update_transient upd_t) /\
   no_control_monad (append_logs logs) /\
+  no_control_monad (update_pending_deletions deletions_upd) /\
   no_control_monad (adopt_call_outcome rq co)
 Proof
   simp[no_control_monad_def, return_def, raise_def, check_def, type_check_def,
        assert_def, lift_option_def, lift_option_type_def, lift_sum_runtime_def,
        get_accounts_def, get_transient_storage_def, update_accounts_def,
-       update_transient_def, append_logs_def, adopt_call_outcome_equation] >>
+       update_transient_def, append_logs_def, update_pending_deletions_def, adopt_call_outcome_equation] >>
   rpt strip_tac >> rpt CASE_TAC >>
   gvs[option_CASE_rator, sum_CASE_rator, AllCaseEqs(),
       return_def, raise_def, no_control_exc_def]

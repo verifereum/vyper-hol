@@ -30,6 +30,7 @@ Ancestors
   vyperTypeExprSoundness vyperTypeInitialState vyperTypeEntryReadiness
   vyperTypeContract vyperTypeContractSoundness
   vyperTypeSelectedEntry vyperTypeEntryDefaults
+  vyperSourceSupplyFields
 
 val _ = Parse.hide "body";
 
@@ -70,6 +71,9 @@ Definition call_external_body_def:
                of NONE => (INR (Error (TypeError "ext cast ret")), am, st.requests)
                 | SOME v => (INL v, am_ret, st.requests))
             | (INR e, st) => (INR e, am, st.requests))
+       | (INR HaltException, st) =>
+           (INR HaltException, abstract_machine_from_state srcs exps layouts st,
+            st.requests)
        | (INR e, st) => (INR e, am, st.requests)) in
     (res, am_out, rqs)
 End
@@ -107,6 +111,8 @@ Theorem call_external_selected_entry_body[local]:
     case call_external_body orc am cx nr mut (type_env_all_modules mods)
            scope body ret of
       (INL value, am', rqs) => (INL value, finalize_pending_deletions am', rqs)
+     | (INR HaltException, am', rqs) =>
+         (INR HaltException, finalize_pending_deletions am', rqs)
     | failure => failure
 Proof
   strip_tac >>
@@ -143,9 +149,11 @@ Theorem finalize_case_FST[local]:
   FST (case r of
          (INL value, am', rqs) =>
            (INL value, finalize_pending_deletions am', rqs)
+       | (INR HaltException, am', rqs) =>
+           (INR HaltException, finalize_pending_deletions am', rqs)
        | failure => failure) = FST r
 Proof
-  PairCases_on `r` >> Cases_on `r0` >> simp[]
+  PairCases_on `r` >> Cases_on `r0` >> simp[] >> rpt CASE_TAC >> simp[]
 QED
 
 (* The ABI premise is the length fit plus provided_args_typed: bind_arguments
@@ -156,7 +164,7 @@ QED
 Theorem checked_selected_entry_no_static_error:
   check_contract F am.layouts tx.target mods = SOME art /\
   checked_contract_runtime_ready art mods am tx /\
-  machine_well_typed am /\
+  machine_well_typed am /\ machine_supply am orc /\
   call_tx_well_typed tx /\
   selected_entry am tx mods (mut,nr,args,dflts,ret,body) /\
   src = find_function_module am tx.target tx.function_name /\
@@ -186,6 +194,8 @@ Theorem checked_selected_entry_no_static_error:
                scope body ret of
           (INL value, am', rqs) =>
             (INL value, finalize_pending_deletions am', rqs)
+         | (INR HaltException, am', rqs) =>
+             (INR HaltException, finalize_pending_deletions am', rqs)
         | failure => failure) /\
      no_type_error_result
        (FST (call_external_body orc am cx nr mut (type_env_all_modules mods)
@@ -196,10 +206,10 @@ Theorem checked_selected_entry_no_static_error:
        exc <> BreakException /\ exc <> ContinueException)
 Proof
   strip_tac >>
-  `!orc. no_type_error_result (FST (call_external orc am tx)) /\
+  `no_type_error_result (FST (call_external orc am tx)) /\
          !exc. FST (call_external orc am tx) = INR exc ==>
                exc <> BreakException /\ exc <> ContinueException` by
-    (gen_tac >> Cases_on `call_external orc am tx` >>
+    (Cases_on `call_external orc am tx` >>
      rename1 `call_external orc am tx = (res,rest)` >>
      PairCases_on `rest` >> simp[] >>
      conj_tac >- (drule_all checked_call_external_no_type_error >> simp[]) >>
@@ -207,6 +217,7 @@ Proof
      drule_all checked_call_external_no_loop_control >> simp[]) >>
   `lookup_exported_function cx am tx.function_name =
      SOME (mut,nr,args,dflts,ret,body)` by gvs[selected_entry_def] >>
+  `accounts_supply_bounded am.accounts` by fs[machine_supply_def] >>
   drule_all checked_selected_entry_defaults_cases >> strip_tac
   >- (disj2_tac >>
       drule_all checked_selected_entry_bind_arguments >> strip_tac >>

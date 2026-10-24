@@ -23,7 +23,7 @@ Theorem concrete_extcall_tail:
   else (INR (Error (RuntimeError msg)),st)
 Proof
   rw[bind_def, ignore_bind_def, check_def, assert_def,
-     update_accounts_def, update_transient_def, append_logs_def,
+     update_accounts_def, update_transient_def, append_logs_def, update_pending_deletions_def,
      return_def, raise_def]
 QED
 
@@ -61,7 +61,7 @@ Theorem concrete_extcall_tail_cases:
 Proof
   Cases_on `success` >>
   simp[concrete_extcall_tail, check_def, assert_def, return_def,
-       update_accounts_def, update_transient_def, append_logs_def, EQ_SYM_EQ]
+       update_accounts_def, update_transient_def, append_logs_def, update_pending_deletions_def, EQ_SYM_EQ]
 QED
 
 (* Reusable relation transport, keeping default/decode in k. *)
@@ -165,7 +165,7 @@ vyperEvalExprPreservesScopesDom: Send / ExtCall post-run continuation
     \\ imp_res_tac append_logs_scopes
     \\ imp_res_tac lift_option_scopes >> imp_res_tac lift_option_type_scopes
     \\ strip_tac
-    \\ gvs[append_logs_def, return_def, check_def, type_check_def, assert_def]
+    \\ gvs[append_logs_def, update_pending_deletions_def, return_def, check_def, type_check_def, assert_def]
     \\ first_x_assum drule
     \\ first_x_assum drule
     \\ gvs[get_accounts_def, get_transient_storage_def, return_def,
@@ -209,7 +209,7 @@ vyperEvalExprPreservesScopesDom: Send / ExtCall post-run continuation
 vyperEvalPreservesImmutablesDom: Send / extcall_inner_pipeline_imm_dom
   imp_res_tac transfer_value_immutables >> gvs[] >>
   rw[bind_def, ignore_bind_def, check_def, type_check_def, assert_def,
-     update_accounts_def, update_transient_def, append_logs_def, return_def,
+     update_accounts_def, update_transient_def, append_logs_def, update_pending_deletions_def, return_def,
 
 vyperEvalPreservesScopes: Send / mechanical loop_body rename
     imp_res_tac transfer_value_scopes >>

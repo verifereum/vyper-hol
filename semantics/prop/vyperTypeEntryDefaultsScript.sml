@@ -35,7 +35,7 @@ Ancestors
   vyperTypeCallStackSoundness vyperTypeBindArguments
   vyperTypeContractStaticMaps vyperTypeContractContext
   vyperTypeContractFunction vyperTypeContractGetter
-  vyperTypeEntryReadiness vyperTypeContractSoundness
+  vyperTypeEntryReadiness vyperTypeContractSoundness vyperSourceSupplyFields
 
 val _ = Parse.hide "body";
 
@@ -70,6 +70,7 @@ Theorem default_eval_not_value_cases[local]:
   state_well_typed (initial_state am [FEMPTY]) /\
   context_well_typed cx /\
   accounts_well_typed am.accounts /\
+  accounts_supply_bounded am.accounts /\
   functions_well_typed cx /\
   call_evaluation_safe cx (int_calls_expr e) /\
   (!v. FST (eval_expr cx e (initial_state am [FEMPTY])) <> INL (Value v)) ==>
@@ -84,6 +85,7 @@ Proof
     simp[initial_state_def] >>
   Cases_on `eval_expr cx e (initial_state am [FEMPTY])` >>
   rename1 `eval_expr cx e _ = (res1,st1)` >>
+  `source_supply (initial_state am [FEMPTY])` by simp[] >>
   drule_all (cj 8 eval_all_type_sound_mutual) >> strip_tac >>
   Cases_on `res1` >> gvs[] >>
   rename1 `expr_result_typed env e tv` >>
@@ -109,6 +111,7 @@ Theorem evaluate_defaults_typed_cases:
   state_well_typed (initial_state am [FEMPTY]) /\
   context_well_typed cx /\
   accounts_well_typed am.accounts /\
+  accounts_supply_bounded am.accounts /\
   functions_well_typed cx /\
   (!e. MEM e es ==> call_evaluation_safe cx (int_calls_expr e)) ==>
   (?vs.
@@ -494,6 +497,7 @@ Theorem checked_selected_entry_defaults_cases:
   check_contract F am.layouts tx.target mods = SOME art /\
   checked_contract_runtime_ready art mods am tx /\
   machine_well_typed am /\
+  accounts_supply_bounded am.accounts /\
   call_tx_well_typed tx /\
   src = find_function_module am tx.target tx.function_name /\
   cx = initial_evaluation_context am.sources am.layouts tx src /\
@@ -557,6 +561,7 @@ Theorem checked_selected_entry_bind_arguments:
   check_contract F am.layouts tx.target mods = SOME art /\
   checked_contract_runtime_ready art mods am tx /\
   machine_well_typed am /\
+  accounts_supply_bounded am.accounts /\
   call_tx_well_typed tx /\
   src = find_function_module am tx.target tx.function_name /\
   cx = initial_evaluation_context am.sources am.layouts tx src /\
