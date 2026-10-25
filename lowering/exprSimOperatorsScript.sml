@@ -20,10 +20,8 @@
  * Cheated, for the later #636 PRs:
  *   binop_frag_typed         — from exprSimBinopFrag, where it rests on
  *                              cheats for ** and pow_mod and narrow or
- *                              negative shifts (#572), >> of narrow
- *                              integers, and unsafe arithmetic on widths
- *                              that aren't whole bytes.  Operators rows
- *                              2-5.
+ *                              negative shifts (#572), and >> of narrow
+ *                              integers.  Operators rows 2-5.
  *   compile_bop_other_sim    — == and != on address, bytesN and bytestrings
  *                              (msg.sender == owner lands here),
  *                              in and not in on arrays (#569), Operators
@@ -139,6 +137,8 @@ Proof
    is_word_type (expr_type e2) /\ ~is_ArrayT (expr_type e2) /\
    ~is_bytestring_type (expr_type e2)` by gvs[word_value_type_word] >>
   imp_res_tac well_typed_expr_type_evaluates >>
+  `type_bits (expr_type e1) MOD 8 = 0` by
+    (irule byte_widths_expr_type >> gvs[expr_sim_pre_def]) >>
   `is_word_type ann` by (drule_all well_typed_binop_word_result >> simp[]) >>
   irule compile_bop_sim >> rpt conj_tac
   >~ [`binop_frag`]
@@ -272,7 +272,8 @@ Theorem expr_sim_pre_ifexp:
     !es'. expr_sim_inv cenv cx env es' ==>
           expr_sim_pre cenv cx env a es' /\ expr_sim_pre cenv cx env b es'
 Proof
-  rw[expr_sim_pre_def, well_typed_expr_def, int_calls_expr_def] >> gvs[]
+  rw[expr_sim_pre_def, well_typed_expr_def, int_calls_expr_def,
+     byte_widths_expr_def] >> gvs[]
 QED
 
 (* A result of a word type is a value: an ArrayRef is typed by an array

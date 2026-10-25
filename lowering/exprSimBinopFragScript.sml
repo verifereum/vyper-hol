@@ -18,8 +18,10 @@
  *   binop_frag_shr_narrow — >> of an integer narrower than 256 bits, which
  *                           the lowering gets right but compile_shift_sim
  *                           does not cover
- *   binop_frag_unsafe_width — unsafe arithmetic on integer widths that
- *                           aren't whole bytes, which Vyper does not have
+ *
+ * The unsafe operators are covered at integer widths of whole bytes, the
+ * ones Vyper has: binop_frag_typed takes that of the left operand's type,
+ * which exprSimHyps' expr_sim_pre gives (byte_widths_expr).
  *)
 
 Theory exprSimBinopFrag
@@ -270,23 +272,6 @@ Proof
   cheat
 QED
 
-(* The wrapping operators on an integer type whose width is not a whole
-   number of bytes, which evaluate_type admits but Vyper does not have.  For
-   a signed type wrap_truncate sign-extends from a byte boundary, as Python
-   does, so the lowering does not compute the source's result; for an
-   unsigned one its mask is right, but compile_unsafe_sim is for widths of
-   whole bytes only. *)
-Theorem binop_frag_unsafe_width:
-  !ctx func cenv cx bop ann t1 t2 bl el tys v1 v2 es0 tenv tv1 tv2.
-    MEM bop [UnsafeAdd; UnsafeSub; UnsafeMul; UnsafeDiv] /\
-    type_bits t1 MOD 8 <> 0 /\ well_typed_binop ann bop t1 t2 /\
-    evaluate_type tenv t1 = SOME tv1 /\ value_has_type tv1 v1 /\
-    evaluate_type tenv t2 = SOME tv2 /\ value_has_type tv2 v2 ==>
-    binop_frag ctx func cenv cx bop t1 ann bl el tys v1 v2 es0
-Proof
-  cheat
-QED
-
 (* Instantiates a dispatch lemma at the current goal's variables and
    discharges its premises from the assumptions. *)
 fun binop_dispatch_tac th =
@@ -319,15 +304,12 @@ QED
 Theorem binop_frag_unsafe_any:
   !ctx func cenv cx bop ann t1 t2 bl el tys v1 v2 es0 tenv tv1 tv2.
     MEM bop [UnsafeAdd; UnsafeSub; UnsafeMul; UnsafeDiv] /\
-    well_typed_binop ann bop t1 t2 /\
+    well_typed_binop ann bop t1 t2 /\ type_bits t1 MOD 8 = 0 /\
     evaluate_type tenv t1 = SOME tv1 /\ value_has_type tv1 v1 /\
     evaluate_type tenv t2 = SOME tv2 /\ value_has_type tv2 v2 ==>
     binop_frag ctx func cenv cx bop t1 ann bl el tys v1 v2 es0
 Proof
   rpt gen_tac >> strip_tac >>
-  Cases_on `type_bits t1 MOD 8 = 0`
-  >~ [`type_bits t1 MOD 8 <> 0`]
-  >- binop_dispatch_tac binop_frag_unsafe_width >>
   `t1 = ann /\ t2 = ann /\ is_int_type ann` by
     (qpat_x_assum `MEM _ _` mp_tac >> rw[] >> gvs[well_typed_binop_def]) >>
   qpat_x_assum `t1 = ann` SUBST_ALL_TAC >>
@@ -408,7 +390,7 @@ QED
 
 Theorem binop_frag_word_typed:
   !ctx func cenv cx bop ann t1 t2 bl el tys v1 v2 es0 tenv tv1 tv2.
-    well_typed_binop ann bop t1 t2 /\
+    well_typed_binop ann bop t1 t2 /\ type_bits t1 MOD 8 = 0 /\
     word_value_type t1 /\ word_value_type t2 /\
     evaluate_type tenv t1 = SOME tv1 /\ value_has_type tv1 v1 /\
     evaluate_type tenv t2 = SOME tv2 /\ value_has_type tv2 v2 ==>
@@ -431,6 +413,7 @@ QED
 Theorem binop_frag_typed:
   !ctx func cenv cx bop ann e1 e2 v1 v2 es0 tv1 tv2.
     well_typed_binop ann bop (expr_type e1) (expr_type e2) /\
+    type_bits (expr_type e1) MOD 8 = 0 /\
     word_value_type (expr_type e1) /\ word_value_type (expr_type e2) /\
     evaluate_type (get_tenv cx) (expr_type e1) = SOME tv1 /\
     value_has_type tv1 v1 /\

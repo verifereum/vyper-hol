@@ -632,9 +632,10 @@ Theorem expr_sim_pre_convert:
          expr_sim_pre cenv cx env e1 es
 Proof
   rw[expr_sim_pre_def, well_typed_expr_def, int_calls_expr_def,
-     type_builtin_result_ok_def, well_typed_type_builtin_args_def] >>
+     byte_widths_expr_def, type_builtin_result_ok_def,
+     well_typed_type_builtin_args_def] >>
   Cases_on `args` >> gvs[] >> rename1 `h::tl` >> Cases_on `tl` >>
-  gvs[well_typed_expr_def, int_calls_expr_def]
+  gvs[well_typed_expr_def, int_calls_expr_def, byte_widths_expr_def]
 QED
 
 Theorem eval_expr_type_builtin_value:
