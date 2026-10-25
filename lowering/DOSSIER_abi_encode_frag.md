@@ -13,6 +13,7 @@ PLAN: `lowering/PLAN_abi_encode_frag.md`
 | C1.3.2 | proved |  | E0008 |  |
 | C1.3.3 | proved |  | E0009 |  |
 | C1.4 | stuck | risk_mismatch | E0010 | Strategist review: split instruction metadata projection/scratch invariance from memory observations and encoder consumers. Need small generic allocation-state congruence boundary or reusable projection simpset before framed MCOPY/base branches. |
+| C1.4.1 | proved |  | E0014 | Review, commit allocation projection boundary, continue instruction framing. |
 | C1.5.1 | proved |  | E0011 | Review and commit; proceed scheduled frontier. C1.5.2 can use enc_prefix_suc, HP_length, enc_prefix_full without unfolding tuple encoding. |
 | C1.5.2 | proved |  | E0012 | Review, commit, continue scheduled leaf. |
 | C1.5.3 | proved |  | E0013 | Review and commit runtime invariant interface. |
@@ -161,6 +162,27 @@ PLAN: `lowering/PLAN_abi_encode_frag.md`
 
 - `TO_abi_encode_frag-20261024T233520Z_m0265_t001` (use `read_tool_output` for exact output)
 - `TO_abi_encode_frag-20261024T233520Z_m0263_t001` (use `read_tool_output` for exact output)
+
+## C1.4.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0014`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 8 steps, 7 tools, 1 holbuild, 602,992 tok (602,005 in, 987 out, 585,344 cached), 49.5s, $0.1017264
+- next: Review, commit allocation projection boundary, continue instruction framing.
+
+### Attempts / Evidence
+
+- `E0014` (proved, , actual effort: 1 sessions, 1 msgs, 8 steps, 7 tools, 1 holbuild, 602,992 tok (602,005 in, 987 out, 585,344 cached), 49.5s, $0.1017264)
+  - Prove alloca_inv congruence from allocation map/frontier equality, then enc_scratch congruence without memory unfolding. -> Short simp/forward-chain proofs close on abstract states. ()
+  - Prove write_memory and mcopy selector equations, derive scratch preservation with irule enc_scratch_cong. -> All new boundaries build cleanly; consumers never expand memory operations and alloca predicates together. (`TO_abi_encode_frag-20261025T101052Z_m0426_t001`)
+
+### Evidence refs
+
+- `TO_abi_encode_frag-20261025T101052Z_m0426_t001` (use `read_tool_output` for exact output)
 
 ## C1.5.1
 

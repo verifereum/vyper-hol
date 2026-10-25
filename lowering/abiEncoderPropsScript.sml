@@ -1389,6 +1389,62 @@ Proof
   rewrite_tac[venomMemDefsTheory.regions_disjoint_def] >> decide_tac
 QED
 
+Theorem enc_alloca_inv_cong:
+  (t : venom_state).vs_allocas = s.vs_allocas /\
+  t.vs_alloca_next = s.vs_alloca_next ==>
+  (alloca_inv t <=> alloca_inv s)
+Proof
+  simp[venomMemDefsTheory.alloca_inv_def,
+       venomMemDefsTheory.allocas_non_overlapping_def,
+       venomMemDefsTheory.alloca_next_valid_def]
+QED
+
+Theorem enc_scratch_cong:
+  (t : venom_state).vs_allocas = s.vs_allocas /\
+  t.vs_alloca_next = s.vs_alloca_next ==>
+  (enc_scratch ids lo top t <=> enc_scratch ids lo top s)
+Proof
+  strip_tac >> drule_all enc_alloca_inv_cong >>
+  simp[enc_scratch_def]
+QED
+
+Theorem enc_write_memory_allocas[simp]:
+  (write_memory_with_expansion dst bytes s).vs_allocas = s.vs_allocas
+Proof
+  simp[write_memory_with_expansion_def]
+QED
+
+Theorem enc_write_memory_alloca_next[simp]:
+  (write_memory_with_expansion dst bytes s).vs_alloca_next = s.vs_alloca_next
+Proof
+  simp[write_memory_with_expansion_def]
+QED
+
+Theorem enc_mcopy_allocas[simp]:
+  (mcopy dst src len s).vs_allocas = s.vs_allocas
+Proof
+  simp[mcopy_def]
+QED
+
+Theorem enc_mcopy_alloca_next[simp]:
+  (mcopy dst src len s).vs_alloca_next = s.vs_alloca_next
+Proof
+  simp[mcopy_def]
+QED
+
+Theorem enc_scratch_write_memory[simp]:
+  enc_scratch ids lo top (write_memory_with_expansion dst bytes s) =
+  enc_scratch ids lo top s
+Proof
+  irule enc_scratch_cong >> simp[]
+QED
+
+Theorem enc_scratch_mcopy[simp]:
+  enc_scratch ids lo top (mcopy dst src len s) = enc_scratch ids lo top s
+Proof
+  irule enc_scratch_cong >> simp[]
+QED
+
 Theorem enc_scratch_alloca_bound:
   enc_scratch ids lo top s /\
   FLOOKUP s.vs_allocas j = SOME (c, n) ==> c + n <= top
