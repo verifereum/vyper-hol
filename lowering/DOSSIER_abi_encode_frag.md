@@ -15,6 +15,7 @@ PLAN: `lowering/PLAN_abi_encode_frag.md`
 | C1.4 | stuck | risk_mismatch | E0010 | Strategist review: split instruction metadata projection/scratch invariance from memory observations and encoder consumers. Need small generic allocation-state congruence boundary or reusable projection simpset before framed MCOPY/base branches. |
 | C1.4.1 | proved |  | E0014 | Review, commit allocation projection boundary, continue instruction framing. |
 | C1.4.2 | progressed | other | E0017 | Continue AbiBytestring framed operational consumer and exact ABI-byte integration; C1.4.2 remains open. |
+| C1.4.2.1 | proved |  | E0018 | Review and commit fixed-frame instruction boundaries, then begin rounded-length/layout C1.4.2.2. |
 | C1.5.1 | proved |  | E0011 | Review and commit; proceed scheduled frontier. C1.5.2 can use enc_prefix_suc, HP_length, enc_prefix_full without unfolding tuple encoding. |
 | C1.5.2 | proved |  | E0012 | Review, commit, continue scheduled leaf. |
 | C1.5.3 | proved |  | E0013 | Review and commit runtime invariant interface. |
@@ -210,6 +211,29 @@ PLAN: `lowering/PLAN_abi_encode_frag.md`
 ### Evidence refs
 
 - `TO_abi_encode_frag-20261025T101052Z_m0529_t001` (use `read_tool_output` for exact output)
+
+## C1.4.2.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0018`
+- blocker: 
+- actual effort: 1 sessions, 4 msgs, 54 steps, 53 tools, 20 holbuild, 5,445,368 tok (5,438,366 in, 7,002 out, 5,370,368 cached), 2243.7s, $0.7430528
+- next: Review and commit fixed-frame instruction boundaries, then begin rounded-length/layout C1.4.2.2.
+
+### Attempts / Evidence
+
+- `E0018` (proved, , actual effort: 1 sessions, 4 msgs, 54 steps, 53 tools, 20 holbuild, 5,445,368 tok (5,438,366 in, 7,002 out, 5,370,368 cached), 2243.7s, $0.7430528)
+  - Prove fixed-index enc_frame_trans and interval-containing enc_frame_cover_outputs. -> Both boundary lemmas build. Transitivity transports scratch-disjointness backward via preservation of existing allocation entries; cover_outputs handles subinterval writes. (`TO_abi_encode_frag-20261025T101052Z_m0559_t001`)
+  - Provide enc_emit_op_run_frame, enc_emit_mcopy_run_frame and enc_emit_mstore_run_frame using existential successors and an independently indexed ambient frame. -> All build without fresh_vars_wrt or nested assignment witnesses; generic op rule preserves operands old at local st. Memory write rules preserve arbitrary operands and require write interval containment in ambient outs. (`TO_abi_encode_frag-20261025T101052Z_m0586_t001`)
+  - Compile then remove local ADD/AND/MLOAD consumer probe of enc_emit_op_run_frame. -> All three opcode interfaces checked via raw one-step semantics and generic execution boundary; removed redundant probe from permanent source. Final source build clean. (`TO_abi_encode_frag-20261025T101052Z_m0588_t001`, `TO_abi_encode_frag-20261025T101052Z_m0592_t001`)
+
+### Evidence refs
+
+- `TO_abi_encode_frag-20261025T101052Z_m0588_t001` (use `read_tool_output` for exact output)
+- `TO_abi_encode_frag-20261025T101052Z_m0592_t001` (use `read_tool_output` for exact output)
 
 ## C1.5.1
 

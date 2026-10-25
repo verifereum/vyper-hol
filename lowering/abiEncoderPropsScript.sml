@@ -1750,6 +1750,45 @@ Proof
   rpt strip_tac >> metis_tac[]
 QED
 
+Theorem enc_frame_trans:
+  enc_frame st st' lo top outs s0 s1 /\
+  enc_frame st st' lo top outs s1 s2 ==>
+  enc_frame st st' lo top outs s0 s2
+Proof
+  rewrite_tac[enc_frame_def] >> strip_tac >> asm_rewrite_tac[] >>
+  conj_tac >- (rpt strip_tac >> metis_tac[]) >>
+  conj_tac
+  >- (rpt strip_tac >>
+      `mem_bytes_at a 1 s2.vs_memory = mem_bytes_at a 1 s1.vs_memory` by
+        (qpat_x_assum `!a. _ ==> mem_bytes_at _ _ s2.vs_memory = _` irule >>
+         conj_tac >- first_assum ACCEPT_TAC >> first_assum ACCEPT_TAC) >>
+      asm_rewrite_tac[] >>
+      qpat_x_assum `!a. _ ==> mem_bytes_at _ _ s1.vs_memory = _` irule >>
+      simp[] >> rpt strip_tac >>
+      qpat_x_assum `!i b sz. _ /\ _ ==> a < b \/ b + sz <= a` irule >>
+      goal_assum (drule_at Any) >> simp[] >>
+      qpat_x_assum `!i r. FLOOKUP s1.vs_allocas i = SOME r ==> _` irule >>
+      simp[]) >>
+  rpt strip_tac >> metis_tac[]
+QED
+
+Theorem enc_frame_cover_outputs:
+  enc_frame st st' lo top outs s0 s /\
+  (!b n. MEM (b,n) outs ==>
+     ?b' n'. MEM (b',n') larger /\ b' <= b /\ b + n <= b' + n') ==>
+  enc_frame st st' lo top larger s0 s
+Proof
+  rewrite_tac[enc_frame_def] >> strip_tac >> asm_rewrite_tac[] >>
+  rpt strip_tac >> first_x_assum irule >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  rewrite_tac[EVERY_MEM] >> rpt strip_tac >>
+  PairCases_on `e` >> gvs[] >>
+  qpat_x_assum `!b n. MEM (b,n) outs ==> _` drule >> strip_tac >>
+  qpat_x_assum `EVERY _ larger` mp_tac >>
+  rewrite_tac[EVERY_MEM, pairTheory.FORALL_PROD] >>
+  disch_then drule >> simp[] >> decide_tac
+QED
+
 
 (* ===== Recursive ABI encode correctness ===== *)
 
@@ -1905,6 +1944,82 @@ Proof
   Cases_on `op` >> simp[eval_operand_def, lookup_var_update_var,
                            update_var_def, lookup_var_def] >>
   metis_tac[not_fresh_at_def]
+QED
+
+Theorem enc_emit_op_run_frame:
+  emit_op opc args st = (op, st') /\
+  step_inst_base (mk_inst st.cs_next_id opc args
+    [STRING #"%" (toString st.cs_next_var)]) s =
+    OK (update_var (STRING #"%" (toString st.cs_next_var)) w s) /\
+  a.cs_next_var <= st.cs_next_var /\
+  enc_scratch (frag_ids a b) lo top s ==>
+  ?s'. run_inst_seq (emitted_insts st st') s = OK s' /\
+       eval_operand op s' = SOME w /\ same_blocks st st' /\
+       s'.vs_memory = s.vs_memory /\ s'.vs_labels = s.vs_labels /\
+       (!old. (!y. old = Var y ==> not_fresh_at st y) ==>
+          eval_operand old s' = eval_operand old s) /\
+       enc_frame a b lo top outs s s'
+Proof
+  rpt strip_tac >>
+  drule emitted_insts_emit_op >> strip_tac >> gvs[] >>
+  drule emit_op_extends >> strip_tac >>
+  qexists_tac `update_var (STRING #"%" (toString st.cs_next_var)) w s` >>
+  simp[run_inst_seq_def, eval_operand_update_var, same_blocks_def] >>
+  conj_tac >- simp[update_var_def] >>
+  conj_tac
+  >- (rpt strip_tac >> irule enc_eval_operand_update_old >>
+      qexists_tac `st` >> simp[]) >>
+  irule enc_frame_update_var >>
+  simp[not_fresh_at_def, enc_frame_refl] >> decide_tac
+QED
+
+Theorem enc_emit_mcopy_run_frame:
+  emit_void MCOPY [dst; src; sz] st = ((), st') /\
+  eval_operand dst s = SOME dw /\ eval_operand src s = SOME sw /\
+  eval_operand sz s = SOME nw /\
+  enc_scratch (frag_ids a b) lo top s /\
+  (?base len. MEM (base,len) outs /\ base <= w2n dw /\
+     w2n dw + w2n nw <= base + len) ==>
+  ?s'. run_inst_seq (emitted_insts st st') s = OK s' /\
+       s'.vs_memory = (mcopy (w2n dw) (w2n sw) (w2n nw) s).vs_memory /\
+       same_blocks st st' /\ s'.vs_labels = s.vs_labels /\
+       (!op. eval_operand op s' = eval_operand op s) /\
+       enc_frame a b lo top outs s s'
+Proof
+  rpt strip_tac >> drule_all emit_void_MCOPY_run >> strip_tac >>
+  drule emit_void_extends >> strip_tac >>
+  qexists_tac `mcopy (w2n dw) (w2n sw) (w2n nw) s` >>
+  simp[] >> conj_tac >- simp[mcopy_def, write_memory_with_expansion_def] >>
+  conj_tac
+  >- (Cases >> simp[eval_operand_def, lookup_var_def, mcopy_def,
+                    write_memory_with_expansion_def]) >>
+  irule enc_frame_cover_outputs >>
+  qexists_tac `[(w2n dw, w2n nw)]` >>
+  simp[enc_frame_mcopy] >> metis_tac[]
+QED
+
+Theorem enc_emit_mstore_run_frame:
+  emit_void MSTORE [dst; value] st = ((), st') /\
+  eval_operand dst s = SOME dw /\ eval_operand value s = SOME w /\
+  enc_scratch (frag_ids a b) lo top s /\
+  (?base len. MEM (base,len) outs /\ base <= w2n dw /\
+     w2n dw + 32 <= base + len) ==>
+  ?s'. run_inst_seq (emitted_insts st st') s = OK s' /\
+       s'.vs_memory = (mstore (w2n dw) w s).vs_memory /\
+       same_blocks st st' /\ s'.vs_labels = s.vs_labels /\
+       (!op. eval_operand op s' = eval_operand op s) /\
+       enc_frame a b lo top outs s s'
+Proof
+  rpt strip_tac >> drule emitted_insts_emit_void >> strip_tac >>
+  drule emit_void_extends >> strip_tac >>
+  qexists_tac `mstore (w2n dw) w s` >>
+  conj_tac
+  >- simp[run_inst_seq_def, step_inst_base_def, exec_write2_def, mk_inst_def] >>
+  simp[] >> conj_tac
+  >- (Cases >> simp[eval_operand_def, lookup_var_def, mstore_def]) >>
+  irule enc_frame_cover_outputs >>
+  qexists_tac `[(w2n dw, 32)]` >>
+  simp[enc_frame_mstore] >> metis_tac[]
 QED
 
 Theorem compile_abi_encode_prim_frame_frag:

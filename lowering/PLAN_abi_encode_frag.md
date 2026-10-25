@@ -250,31 +250,112 @@ Prove allocation-invariant congruence on abstract states by unfolding allocation
 #### Not to try
 Do not unfold memory implementations inside the scratch transport proof, and do not expand dimword arithmetic just to transport unchanged data.
 
-### C1.4.2: Instruction frames and base encoder consumers
+### C1.4.2: Framed base encoder consumers, including bytestrings
+- Kind: `proof_group`
+- Risk: 2
+- Work priority: 0
+- Work units: 0
+- Rationale: Copy and primitive consumers already build; bytestring is straight-line execution with two memory writes and elementary padded-byte layout.
+- Progress transition: `refinement`
+- Carries progress/evidence from: E0017
+
+#### Progress note
+E0017 remains supporting evidence for the existing copy and primitive consumers; this grouping does not certify any new child. Preserve all previously proved source.
+
+#### Summary
+Copy and primitive operational and ABI consumers are already present and must be preserved. Remaining work is the AbiBytestring branch only. Separate fixed-frame instruction composition, rounding/layout, operational execution, and typed ABI integration. No changes to frozen definitions or theorem.
+
+#### Not to try
+Do not scale prim_run into a ten-level update_var witness. Do not use fresh_vars_wrt-based emit correctness lemmas by assuming freshness absent from enc_pre. Do not split scratch intervals for this allocation-free branch. Do not modify the two out-of-scope cheated theorems.
+
+#### Argument
+Let l be the live byte length and r = 32 * ((l + 31) DIV 32). The compiler zeros the word at dst+r and then copies 32+l bytes from src; the source is disjoint from the complete output region. The copy supplies the length word and live payload, and the zero word supplies exactly the remaining padding through dst+32+r. Arithmetic computes r and returns 32+r. Every instruction preserves allocation metadata, and all writes lie in this output region, so one ambient frame can be carried throughout without partitioning scratch budgets.
+
+#### Definition design
+Do not introduce a second memory or execution semantics. Use run_inst_seq with existential intermediate states and enc_frame indexed by the entire branch. A fixed-index transitivity lemma supplies the frame interface. Instruction lemmas must not require fresh_vars_wrt: enc_pre only protects operands by not_fresh_at, and pre-existing bindings for future variables are permitted. Probe this interface on ADD/AND before composing the branch.
+
+#### Code structure
+Add helpers in lowering/abiEncoderPropsScript.sml next to the existing frame and base-consumer helpers. Preserve compile_abi_encode_copy_abi_frag and compile_abi_encode_prim_abi_frag unchanged. Keep arithmetic/layout independent of compiler expansion; keep instruction unfolding in boundary lemmas, not in the typed consumer. Build abiEncoderPropsTheory after each child.
+
+### C1.4.2.1: Fixed-frame straight-line instruction boundary
+- Kind: `boundary_lemma`
+- Risk: 2
+- Work priority: 0
+- Work units: 5
+- Rationale: Fixed-frame transitivity follows directly from preservation of existing allocations; opcode rules are single-instruction computations.
+- Checkpoint: yes
+
+#### Summary
+Provide fixed-index frame composition and allocation-free instruction execution facts. Preserve operands old at the local compiler state, not every operand in the initial state. Validate ADD and AND with this weaker, task-compatible interface. Include MLOAD, MSTORE and MCOPY boundaries needed by the bytestring branch.
+
+#### Statement
+Core frame lemma: enc_frame a b lo top outs s0 s1 /\ enc_frame a b lo top outs s1 s2 ==> enc_frame a b lo top outs s0 s2. Instruction boundaries return an existential run_inst_seq successor, evaluated result (where present), unchanged labels, and the ambient frame. Parameterize ambient a,b independently of the local emit state; require a.cs_next_var <= local.cs_next_var for fresh result writes. Memory instructions require their written interval to be contained in outs.
+
+#### Approach
+Prove fixed-frame transitivity by unfolding enc_frame once: old scratch allocations persist into the final state, which transports the memory-disjoint premise backwards. Derive local emit execution rules from emitted_insts_emit_op/emit_void and step semantics, using enc_frame_update_var and enc_eval_operand_update_old; provide interval-containment frame weakening where membership-only enc_frame_enlarge_outputs is insufficient. Return existential states so later proofs use strip_tac and sequence composition instead of explicit state expressions.
+
+#### Not to try
+Do not assert preservation of arbitrary operands: newly emitted variables can overwrite old bindings. Do not use compiler-state split enc_frame_compose when both frames already describe the same ambient interval. Keep each opcode proof small; shared pure-op computation belongs in one parameterized boundary, not duplicated ADD/AND proofs.
+
+### C1.4.2.2: Rounded length and prezero-copy byte layout
 - Kind: `boundary_lemma`
 - Risk: 2
 - Work priority: 10
-- Work units: 8
-- Rationale: With scratch transport isolated, frames separate into unchanged metadata/effects, variable preservation and the already checked disjoint-memory observation.
-- Dependencies: C1.4.1
-- Checkpoint: yes
-- Progress transition: `refinement`
-- Carries progress/evidence from: E0010
-
-#### Progress note
-Retains the two checked disjoint-write helpers as source progress, not a certificate for this remaining obligation.
+- Work units: 5
+- Rationale: The rounding identity is a low-five-bit mask fact; layout is interval reasoning on one zero store followed by padded MCOPY.
 
 #### Summary
-Complete all instruction-effect and base-encoder obligations originally owned by C1.4. Start with framed MCOPY using the retained disjoint-memory theorem. Use the metadata boundary in the base cases rather than repeatedly expanding allocation invariants.
+Prove natural/word rounding agreement without overflow. Prove exact bytes produced by the prezero/copy algorithm. Handle l=0 and multiples of 32 explicitly in the argument. Keep these facts independent of compiler state.
 
-#### Description
-This leaf inherits the original C1.4 coverage of instruction operations and its three base encoder cases; no original output is dropped by the split. Retain enc_write_memory_disjoint and enc_mcopy_disjoint, with no duplicate variants. Prove instruction-frame facts needed by the AbiPrimWord, AbiCopy and AbiBytestring consumers, and complete those base encoder fragment cases.
+#### Statement
+For r = 32 * ((l+31) DIV 32), establish l <= r, r < l+32, and, under l+31 < dimword(:256), (n2w(l+31):bytes32) && 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE0w = n2w r. Under regions_disjoint (src,32+l) (dst,32+r), the bytes at dst of length 32+r after mcopy dst src (32+l) (mstore (dst+r) 0w s) equal mem_bytes_at src (32+l) s.vs_memory ++ REPLICATE (r-l) 0w. Also expose preservation of the source read across the prezero store.
 
 #### Approach
-For each memory-only instruction, discharge allocation/scratch conjuncts through C1.4.1 and memory conjuncts through disjoint-observation helpers; prove unchanged variable/effect projections separately. Compose these facts with existing straight-line fragment rules for base encoder cases, keeping consumer proofs free of low-level memory splice and allocation-invariant expansions.
+Use division with remainder by 32 to prove the arithmetic; locate existing word-mask and byte-slice facts before adding duplicates (their exact names are not verified here). For layout, partition output into copied prefix and remaining suffix: suffix starts at dst+32+l, lies inside the zeroed word [dst+r,dst+r+32), and has length r-l. Source disjointness ensures MCOPY reads the original prefix, including when memory expands.
 
 #### Not to try
-Do not restore the failed full-record simplification experiment. Do not use one large search to unpack every frame conjunct, raise tactic timeouts, or weaken frozen preconditions.
+Do not equate raw memory lists after writes; reason with padded mem_bytes_at observations. Do not assume positive l or a nonempty padding suffix. Do not assume MCOPY reads the original source without proving the zero store misses it.
+
+### C1.4.2.3: Operational framed bytestring encoder
+- Kind: `boundary_lemma`
+- Risk: 2
+- Work priority: 20
+- Work units: 5
+- Rationale: With instruction boundaries and rounding established, this is sequential composition of ten allocation-free instructions.
+- Dependencies: C1.4.2.1, C1.4.2.2
+
+#### Summary
+Prove compile_abi_encode_bytes_frame_frag with a natural live length parameter. Return exact observed bytes, returned size, unchanged labels and enc_frame. Use existential intermediate states and a fixed ambient output region. No typing or ABI conversion is unfolded here.
+
+#### Statement
+Given compile_abi_encode_to_buf dst src (AbiBytestring max_len) st = (op,st'), eval_operand dst s0 = SOME dst_w, eval_operand src s0 = SOME src_w, oldness of dst/src at st, mem_word_at (w2n src_w) s0.vs_memory = n2w l, l+31 < dimword(:256), r = 32*((l+31) DIV 32), w2n dst_w+32+r < dimword(:256), regions_disjoint (w2n src_w,32+l) (w2n dst_w,32+r), and enc_scratch (frag_ids st st') lo top s0, conclude frag_exec with bytes equal mem_bytes_at (w2n src_w) (32+l) s0.vs_memory ++ REPLICATE (r-l) 0w, op evaluating to n2w(32+r), unchanged labels, and enc_frame st st' lo top [(w2n dst_w,32+r)] s0 s. R may remain arbitrary.
+
+#### Approach
+Expand the compiler branch once and name its intermediate compile states/operands. Compose existential instruction results using emitted instruction concatenation, keeping operand preservation indexed by local emission order and frames indexed by the complete branch; lift the successful run with frag_exec_run_inst_seq. If needed for the 50-line limit, extract semantic prefix (load/rounded pointer), write pair, and size-suffix run helpers as outputs of this component, rather than suspending a giant raw-state calculation.
+
+#### Not to try
+Do not unfold enc_frame in the ten-instruction consumer. Do not introduce nested update_var witnesses or large manual theorem instantiation lists. The prefix and suffix arithmetic operate on the loaded length, which must remain available across the memory writes.
+
+### C1.4.2.4: Typed exact ABI bytestring consumer
+- Kind: `proof`
+- Risk: 2
+- Work priority: 30
+- Work units: 3
+- Rationale: Typing and value-memory definitions identify length/payload; operational postcondition then matches bytes/string ABI padding.
+- Dependencies: C1.4.2.2, C1.4.2.3
+- Checkpoint: yes
+
+#### Summary
+Provide exact ABI-byte framed consumers for the bytes and string plan constructors. Derive all word bounds and disjointness from enc_pre and typed memory facts. Preserve unchanged labels for downstream composition. Audit retained base consumers and build the target theory.
+
+#### Statement
+Add compile_abi_encode_bytes_abi_frag (or separate bytes and string specializations if their inversion differs): the to_buf conjunct of the frozen target specialized to BaseT(BytesT(Dynamic n)) and BaseT(StringT n), ei = AbiBytestring n, with additional unchanged-label postcondition and arbitrary R. Include any necessary value-memory/ABI inversion helpers as outputs here.
+
+#### Approach
+Invert evaluate_type, value_has_type, vyper_to_abi and val_in_memory for bytes/string to obtain live length, length word and live payload; prove the ABI encoding is that prefix followed by r-l zeros and has length 32+r. enc_pre_bounds supplies output end below dimword via lo/top, hence l+31 and address additions do not wrap; source disjointness restricts to 32+l. Apply the operational consumer through frag_exec_conseq, as for the already proved copy/primitive consumers.
+
+#### Not to try
+Do not assume max_len itself is word-bounded when only live/output sizes are needed. Do not alter frozen plan definitions or the final statement. Do not reprove the completed copy and primitive integrations.
 
 ### C1.5: Concrete array prefix and loop-invariant interfaces
 - Kind: `proof_group`
