@@ -1,6 +1,6 @@
-(* Executable account bounds, shared by concrete calls and oracle helpers.
- * Moved verbatim from vyperInterpreter: no evaluator/type-system dependency.
- * TOP-LEVEL: accounts_runtime_well_typed, its unconditional CV representation.
+(* Executable account bounds, shared by concrete calls and oracle helpers:
+ * accounts_runtime_well_typed and its unconditional CV representation.
+ * Kept free of evaluator and type-system dependencies.
  *)
 Theory vyperRuntimeAccounts
 Ancestors
@@ -103,8 +103,8 @@ Proof
   simp[Once (GSYM accounts_spt_runtime_well_typed_build_spt)]
 QED
 
-(* Compositional representation: the old closed encoding theorem only worked
-   when accounts was a translation argument, not an outcome/state selector. *)
+(* Compositional representation, so translations also apply when accounts is
+   an outcome or state selector rather than a translation argument. *)
 Theorem accounts_runtime_well_typed_cv[cv_rep]:
   b2c (accounts_runtime_well_typed accounts) =
     cv_accounts_spt_runtime_well_typed (from_evm_accounts accounts)
