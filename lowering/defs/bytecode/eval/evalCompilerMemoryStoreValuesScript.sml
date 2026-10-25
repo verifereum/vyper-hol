@@ -105,3 +105,11 @@ Theorem enc_in_assign_matches_python_oracle:
 Proof
   CONV_TAC (LAND_CONV (K (#evaluation enc_in_assign))) >> EVAL_TAC
 QED
+
+val method_id_lit = memoryStoreWitnessLib.evaluate fixture_root "method_id_lit"
+Theorem method_id_lit_matches_python_oracle:
+  ^(#term method_id_lit) =
+    SOME ^(memoryStoreWitnessLib.oracle fixture_root "method_id_lit")
+Proof
+  CONV_TAC (LAND_CONV (K (#evaluation method_id_lit))) >> EVAL_TAC
+QED

@@ -32,9 +32,6 @@
  *     codehash and is_contract: call_ctx_rel relates neither calldata nor
  *     blob hashes, and nothing relates the accounts.
  *   - compile_acc_sim for .code: the lowering emits INVALID.
- *   - compile_method_id_sim: the lowering hashes the word holding the
- *     argument's pointer and returns a word, where the result is a Bytes[4]
- *     in memory.
  *   - compile_len_sim: well_typed_builtin_app Len admits fixed arrays and
  *     bytesN, but the lowering always loads the operand's first word.
  *
