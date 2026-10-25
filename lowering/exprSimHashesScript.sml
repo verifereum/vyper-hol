@@ -1,7 +1,7 @@
 Theory exprSimHashes
 Ancestors
   arithmetic list rich_list words exprSimHyps exprLowering exprLoweringProps
-  compileEnv vyperAST vyperInterpreter vyperContext vyperTypeSystem vyperTypeInvariants
+  compileEnv vyperAST vyperInterpreter vyperContext vyperTypeSystem vyperTypeInvariants vyperTyping
   vyperState vyperValue exprBopLowering valueEncoding valueEncodingProofs byte keccak
   venomExecSemantics venomInst venomState emitHelper builtinHashing
 Libs
@@ -335,4 +335,169 @@ Proof
   simp[expr_sim_pre_def] >> rpt strip_tac >>
   irule expr_sim_inv_immutables_type_support >>
   asm_rewrite_tac[]
+QED
+
+Definition overwrite_bool_immutable_def:
+  overwrite_bool_immutable id b m =
+    if ?old. FLOOKUP m id = SOME (BaseTV BoolT, old) then
+      m |+ (id, (BaseTV BoolT, BoolV b))
+    else m
+End
+
+Theorem overwrite_bool_immutable_lookup:
+  !id b m key.
+    FLOOKUP (overwrite_bool_immutable id b m) key =
+      if key = id /\ (?old. FLOOKUP m id = SOME (BaseTV BoolT, old)) then
+        SOME (BaseTV BoolT, BoolV b)
+      else FLOOKUP m key
+Proof
+  rpt gen_tac >> simp[overwrite_bool_immutable_def] >>
+  Cases_on `?old. FLOOKUP m id = SOME (BaseTV BoolT,old)` >>
+  simp[finite_mapTheory.FLOOKUP_UPDATE] >> metis_tac[]
+QED
+
+Theorem overwrite_bool_immutable_type_support:
+  !id b m key tv.
+    (?v. FLOOKUP (overwrite_bool_immutable id b m) key = SOME (tv,v)) <=>
+    (?v. FLOOKUP m key = SOME (tv,v))
+Proof
+  rpt gen_tac >> simp[overwrite_bool_immutable_lookup] >>
+  IF_CASES_TAC >> gvs[] >> metis_tac[optionTheory.SOME_11, pairTheory.PAIR_EQ]
+QED
+
+Definition overwrite_module_bool_def:
+  overwrite_module_bool src id b mods =
+    MAP (\(s,m). (s, if s = src then overwrite_bool_immutable id b m else m)) mods
+End
+
+Definition overwrite_state_bool_def:
+  overwrite_state_bool src id b imms =
+    MAP (\(addr,mods). (addr, overwrite_module_bool src id b mods)) imms
+End
+
+Theorem overwrite_module_bool_lookup:
+  !mods src id b other.
+    ALOOKUP (overwrite_module_bool src id b mods) other =
+      OPTION_MAP (\m. if other = src then overwrite_bool_immutable id b m else m)
+        (ALOOKUP mods other)
+Proof
+  Induct >> simp[overwrite_module_bool_def] >>
+  rpt gen_tac >> PairCases_on `h` >> gvs[overwrite_module_bool_def,
+    overwrite_state_bool_def] >> IF_CASES_TAC >> simp[overwrite_module_bool_def]
+QED
+
+Theorem overwrite_state_bool_lookup:
+  !imms src id b addr.
+    ALOOKUP (overwrite_state_bool src id b imms) addr =
+      OPTION_MAP (overwrite_module_bool src id b) (ALOOKUP imms addr)
+Proof
+  Induct >> simp[overwrite_state_bool_def] >>
+  rpt gen_tac >> PairCases_on `h` >> gvs[overwrite_module_bool_def,
+    overwrite_state_bool_def] >> IF_CASES_TAC >> simp[overwrite_module_bool_def]
+QED
+
+Theorem observed_immutables_overwrite_bool:
+  !addr other src id b imms.
+    observed_immutables addr other (overwrite_state_bool src id b imms) =
+      if other = src then
+        overwrite_bool_immutable id b (observed_immutables addr other imms)
+      else observed_immutables addr other imms
+Proof
+  rpt gen_tac >>
+  simp[observed_immutables_def, overwrite_state_bool_lookup] >>
+  Cases_on `ALOOKUP imms addr` >> simp[overwrite_bool_immutable_def] >>
+  simp[get_source_immutables_def, overwrite_module_bool_lookup] >>
+  rename1 `ALOOKUP mods other` >> Cases_on `ALOOKUP mods other` >>
+  simp[overwrite_bool_immutable_def] >> Cases_on `other = src` >> gvs[]
+QED
+
+Theorem observed_immutables_overwrite_bool_type_support:
+  !addr other src id b imms key tv.
+    (?v. FLOOKUP (observed_immutables addr other
+       (overwrite_state_bool src id b imms)) key = SOME (tv,v)) <=>
+    (?v. FLOOKUP (observed_immutables addr other imms) key = SOME (tv,v))
+Proof
+  rpt gen_tac >> simp[observed_immutables_overwrite_bool] >>
+  Cases_on `other = src` >> simp[overwrite_bool_immutable_type_support]
+QED
+
+Theorem observed_immutables_overwrite_bool_other:
+  !addr other src id b imms.
+    other <> src ==>
+    observed_immutables addr other (overwrite_state_bool src id b imms) =
+    observed_immutables addr other imms
+Proof
+  simp[observed_immutables_overwrite_bool]
+QED
+
+Theorem observed_immutables_overwrite_bool_value:
+  !addr src id b imms old.
+    FLOOKUP (observed_immutables addr src imms) id = SOME (BaseTV BoolT, old) ==>
+    FLOOKUP (observed_immutables addr src (overwrite_state_bool src id b imms)) id =
+      SOME (BaseTV BoolT, BoolV b)
+Proof
+  simp[observed_immutables_overwrite_bool, overwrite_bool_immutable_lookup] >>
+  metis_tac[]
+QED
+
+Theorem overwrite_bool_immutable_typed:
+  !id b m.
+    (!key tv v. FLOOKUP m key = SOME (tv,v) ==>
+      value_has_type tv v /\ well_formed_type_value tv) ==>
+    !key tv v. FLOOKUP (overwrite_bool_immutable id b m) key = SOME (tv,v) ==>
+      value_has_type tv v /\ well_formed_type_value tv
+Proof
+  rpt gen_tac >> strip_tac >>
+  simp[overwrite_bool_immutable_lookup] >> rpt gen_tac >>
+  IF_CASES_TAC >> rpt strip_tac >>
+  gvs[value_has_type_def, well_formed_type_value_def] >>
+  metis_tac[]
+QED
+
+Theorem overwrite_module_bool_typed:
+  !src id b mods.
+    imms_well_typed mods ==>
+    imms_well_typed (overwrite_module_bool src id b mods)
+Proof
+  rpt gen_tac >> simp[imms_well_typed_def, overwrite_module_bool_lookup] >>
+  strip_tac >> rpt gen_tac >>
+  namedCases_on `ALOOKUP mods src_id_opt` ["", "entries"] >> simp[] >>
+  `!key tv v. FLOOKUP entries key = SOME (tv,v) ==>
+     value_has_type tv v /\ well_formed_type_value tv` by metis_tac[] >>
+  Cases_on `src_id_opt = src` >> simp[] >>
+  metis_tac[overwrite_bool_immutable_typed]
+QED
+
+Theorem overwrite_state_bool_typed:
+  !imms src id b.
+    EVERY (\(addr,mods). imms_well_typed mods) imms ==>
+    EVERY (\(addr,mods). imms_well_typed mods) (overwrite_state_bool src id b imms)
+Proof
+  Induct >> simp[overwrite_state_bool_def] >>
+  rpt gen_tac >> PairCases_on `h` >>
+  gvs[overwrite_state_bool_def] >>
+  metis_tac[overwrite_module_bool_typed]
+QED
+
+Theorem expr_sim_pre_overwrite_bool:
+  !cenv cx env e es src id b.
+    expr_sim_pre cenv cx env e es ==>
+    expr_sim_pre cenv cx env e
+      (es with immutables := overwrite_state_bool src id b es.immutables)
+Proof
+  rpt strip_tac >> irule expr_sim_pre_immutables_type_support >>
+  simp[observed_immutables_overwrite_bool_type_support] >>
+  irule overwrite_state_bool_typed >>
+  gvs[expr_sim_pre_def, expr_sim_inv_def, state_well_typed_def]
+QED
+
+Theorem stmt_state_rel_overwrite_bool:
+  !func cenv cx es ss src id b.
+    src <> cenv.ce_module ==>
+    (stmt_state_rel func cenv cx
+       (es with immutables := overwrite_state_bool src id b es.immutables) ss <=>
+     stmt_state_rel func cenv cx es ss)
+Proof
+  rpt strip_tac >> irule stmt_state_rel_immutables_projection >>
+  simp[observed_immutables_overwrite_bool_other]
 QED
