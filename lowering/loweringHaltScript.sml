@@ -960,6 +960,34 @@ Proof
   simp[Abbr `ss`, halt_state_def, set_returndata_def]
 QED
 
+Theorem emit_return_buffer_frag:
+  !ctx buf len st x st' bytes P Q R.
+    emit_inst RETURN [buf;len] [] st = (x,st') /\
+    (!s. P s ==> ?b.
+      eval_operand buf s = SOME b /\
+      eval_operand len s = SOME (n2w (LENGTH bytes)) /\
+      LENGTH bytes < dimword (:256) /\
+      mem_bytes_at (w2n b) (LENGTH bytes) s.vs_memory = bytes /\
+      (!ss. ss.vs_returndata = bytes /\ ss.vs_accounts = s.vs_accounts /\
+        ss.vs_transient = s.vs_transient /\ ss.vs_logs = s.vs_logs /\
+        ss.vs_requests = s.vs_requests ==> R (Halt ss))) ==>
+    frag_exec ctx st st' P Q R
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `emit_inst _ _ _ _ = _` mp_tac >>
+  simp[emit_inst_def, comp_bind_def, fresh_id_def, emit_def] >>
+  strip_tac >> gvs[] >>
+  simp[frag_exec_def] >> rpt strip_tac >> disj2_tac >>
+  drule fn_has_code_same_block >> simp[] >> strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+   get_instruction bb s.vs_inst_idx =
+     SOME (mk_inst st.cs_next_id RETURN [buf;len] [])` by simp[] >>
+  drule_all (SRULE [] return_buffer_run) >>
+  disch_then (qspecl_then [`0`, `ctx`] mp_tac) >>
+  strip_tac >> qexists_tac `0` >> simp[exit_result_def]
+QED
+
 Theorem compile_external_return_abi_frag:
   !ctx op ei msz nr nkey ut iv st x st' env ty tv v av P Q R.
     compile_external_return (SOME op) F F ei msz nr nkey ut iv st =
