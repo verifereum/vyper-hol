@@ -547,3 +547,19 @@ Theorem w2w_word_of_bytes_be_pad_left:
 Proof
   metis_tac[venomMemProofsTheory.w2w_word_of_bytes_be_pad_left_proof]
 QED
+
+(* A memory copy's destination reads back as its zero-padded source. *)
+Theorem mcopy_padded_read:
+  !dst src n s.
+    TAKE n (DROP dst (mcopy dst src n s).vs_memory ++ REPLICATE n 0w) =
+    TAKE n (DROP src s.vs_memory ++ REPLICATE n 0w)
+Proof
+  rpt gen_tac >> simp[mcopy_def] >>
+  qmatch_goalsub_abbrev_tac `write_memory_with_expansion dst data s` >>
+  `LENGTH data = n` by
+    simp[Abbr `data`, LENGTH_TAKE_EQ, LENGTH_DROP] >>
+  `n <= LENGTH (DROP dst (write_memory_with_expansion dst data s).vs_memory)` by
+    simp[LENGTH_DROP, LENGTH_write_memory_with_expansion, arithmeticTheory.MAX_DEF] >>
+  simp[TAKE_APPEND1] >>
+  metis_tac[write_memory_with_expansion_read_self]
+QED
