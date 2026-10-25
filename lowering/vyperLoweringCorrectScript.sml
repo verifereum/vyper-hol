@@ -19,13 +19,13 @@
  *   external_call_result_rel, source_unit_execution_correct -- oracle boundary
  *   compile_state_ok_initial -- label-space invariant of the initial compile state
  *   external_return_word_result_rel, external_return_prim_result_rel,
- *   external_return_static_result_rel,
+ *   external_return_static_result_rel, external_return_abi_result_rel,
  *   external_return_static_cenv_result_rel,
  *   external_return_none_result_rel,
  *   external_fallthrough_result_rel -- S1 halt bridge (#640) for the
  *     return sequences loweringHalt covers, and the _unlock versions of
- *     all but the static one, whose return may release a transient
- *     nonreentrant lock
+ *     all but the static and ABI ones, whose return may release a
+ *     transient nonreentrant lock
  *   lower_vyper_runtime_unit_correct -- S1 (planned admission, Milestone 6)
  *   lower_vyper_runtime_unit_source_unit_ok -- S2 (Milestone 5)
  *   lower_vyper_runtime_unit_memory_ok -- S3 (Milestone 5)
@@ -531,6 +531,158 @@ Proof
   qpat_x_assum `compile_external_return _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   asm_rewrite_tac[] >> strip_tac >>
   drule external_return_static_result_rel >> disch_then irule >> gvs[]
+QED
+
+Theorem singleton_tuple_memory:
+  !tv v p mem.
+    val_in_memory (TupleTV [tv]) (ArrayV (TupleV [v])) p mem =
+    val_in_memory tv v p mem
+Proof
+  simp[valueEncodingTheory.val_in_memory_def]
+QED
+
+Theorem singleton_tuple_memory_size:
+  !tv. type_memory_size (TupleTV [tv]) = type_memory_size tv
+Proof
+  simp[valueEncodingTheory.type_memory_size_def]
+QED
+
+Theorem return_abi_value_package:
+  !env ret tv v0 v wrap.
+    evaluate_type env ret = SOME tv /\ safe_cast tv v0 = SOME v ==>
+    ?tv' v' av.
+      v' = (if wrap then ArrayV (TupleV [v]) else v) /\
+      evaluate_type env (if wrap then TupleT [ret] else ret) = SOME tv' /\
+      value_has_type tv' v' /\
+      vyper_to_abi env (if wrap then TupleT [ret] else ret) v' = SOME av /\
+      type_memory_size tv' = type_memory_size tv /\
+      (!p mem. val_in_memory tv v0 p mem ==> val_in_memory tv' v' p mem) /\
+      LENGTH (enc (vyper_to_abi_type env (if wrap then TupleT [ret] else ret)) av)
+        <= vyper_abi_size_bound env (if wrap then TupleT [ret] else ret)
+Proof
+  rpt strip_tac >>
+  `v = v0` by metis_tac[safe_cast_some_eq] >>
+  `value_has_type tv v` by metis_tac[vyperTypingTheory.safe_cast_result_well_typed] >>
+  `?av. vyper_to_abi env ret v = SOME av` by
+    metis_tac[vyperTypeABITheory.vyper_to_abi_total] >>
+  Cases_on `wrap`
+  >- (`type_slot_size tv <= dimword (:256)` by
+        metis_tac[vyperTypingTheory.evaluate_type_well_formed,
+                  vyperTypingTheory.well_formed_type_value_slot_size] >>
+      `evaluate_type env (TupleT [ret]) = SOME (TupleTV [tv])` by
+        simp[vyperValueTheory.evaluate_type_def, vyperValueTheory.type_slot_size_def] >>
+      `value_has_type (TupleTV [tv]) (ArrayV (TupleV [v]))` by
+        simp[vyperTypingTheory.value_has_type_def] >>
+      `vyper_to_abi env (TupleT [ret]) (ArrayV (TupleV [v])) = SOME (ListV [av])` by
+        simp[vyperABITheory.vyper_to_abi_def] >>
+      qexistsl_tac [`TupleTV [tv]`, `ArrayV (TupleV [v])`, `ListV [av]`] >>
+      asm_rewrite_tac[singleton_tuple_memory_size, singleton_tuple_memory] >>
+      metis_tac[vyperTypeABITheory.vyper_to_abi_enc_length_bound]) >>
+  qexistsl_tac [`tv`, `v`, `av`] >> simp[] >>
+  metis_tac[vyperTypeABITheory.vyper_to_abi_enc_length_bound]
+QED
+
+Theorem chosen_return_abi_bytes:
+  !tops ret v av.
+    vyper_to_abi (type_env tops)
+      (if needs_external_call_wrap ret /\
+          is_dynamic (vyper_to_abi_type (type_env tops) ret)
+       then TupleT [ret] else ret)
+      (if needs_external_call_wrap ret /\
+          is_dynamic (vyper_to_abi_type (type_env tops) ret)
+       then ArrayV (TupleV [v]) else v) = SOME av ==>
+    return_bytes tops ret v
+      (enc (vyper_to_abi_type (type_env tops)
+        (if needs_external_call_wrap ret /\
+            is_dynamic (vyper_to_abi_type (type_env tops) ret)
+         then TupleT [ret] else ret)) av)
+Proof
+  rpt gen_tac >> Cases_on `ret = NoneT`
+  >- (gvs[vyperABITheory.needs_external_call_wrap_def,
+          vyperABITheory.vyper_to_abi_type_def,
+          contractABITheory.is_dynamic_def] >>
+      Cases_on `v` >>
+      simp[vyperABITheory.vyper_to_abi_def, return_bytes_def,
+           contractABITheory.enc_def, listTheory.REV_DEF]) >>
+  Cases_on `needs_external_call_wrap ret /\
+            is_dynamic (vyper_to_abi_type (type_env tops) ret)`
+  >- (simp[vyperABITheory.vyper_to_abi_def, AllCaseEqs()] >>
+      rpt strip_tac >> gvs[] >>
+      simp[return_bytes_def, vyperABITheory.vyper_to_abi_type_def]) >>
+  simp[] >> strip_tac >>
+  simp[return_bytes_def] >>
+  Cases_on `needs_external_call_wrap ret` >> gvs[] >>
+  simp[contractABITheory.enc_def, listTheory.REV_DEF]
+QED
+
+(* A return through the ABI encoder: the operand points at memory holding
+   the value, below the alloca frontier, and ei is a plan for the value's
+   type, wrapped in a singleton tuple when it is dynamic and the ABI wraps
+   it (a static one encodes the same either way), with the buffer size msz
+   at least the type's ABI size bound.  None of the return sequence's
+   ALLOCAs has run, and the frontier stays below 2 ** 256 while they run;
+   nothing in the lowering bounds it (vyper rejects allocations of 2^64
+   bytes or more).  Not proved yet: that the ei and msz update_cenv_ret_abi
+   builds meet the plan and the bound.  That needs the compile env's
+   sizes and flags (type_memory_bytes, abi_embedded_static_size,
+   is_abi_dynamic, abi_size_bound over ce_struct_fields) to agree with
+   type_memory_size, static_length, is_dynamic and vyper_abi_size_bound. *)
+Theorem external_return_abi_result_rel:
+  !ctx op ei msz nr nkey ut iv st x st' func cenv cx es ret tv v0 v
+     tops tx srcs exps layouts Q.
+    compile_external_return (SOME op) F F ei msz nr nkey ut iv st =
+      (x, st') /\
+    (nr ==> iv) /\ (!y. op = Var y ==> not_fresh_at st y) /\
+    evaluate_type (type_env tops) ret = SOME tv /\ safe_cast tv v0 = SOME v /\
+    abi_enc_plan (type_env tops)
+      (if needs_external_call_wrap ret /\
+          is_dynamic (vyper_to_abi_type (type_env tops) ret)
+       then TupleT [ret] else ret) ei /\
+    vyper_abi_size_bound (type_env tops)
+      (if needs_external_call_wrap ret /\
+          is_dynamic (vyper_to_abi_type (type_env tops) ret)
+       then TupleT [ret] else ret) <= msz ==>
+    frag_exec ctx st st'
+      (\s. state_rel func cenv cx es s /\
+           (?p. eval_operand op s = SOME p /\
+                val_in_memory tv v0 (w2n p) s.vs_memory /\
+                w2n p + type_memory_size tv <= s.vs_alloca_next) /\
+           alloca_inv s /\
+           (!i. i IN frag_ids st st' ==> FLOOKUP s.vs_allocas i = NONE) /\
+           s.vs_alloca_next + msz + 32 * (st'.cs_next_id - st.cs_next_id) <
+             dimword (:256) /\
+           s.vs_accounts =
+             process_deletions es.pending_deletions es.accounts /\
+           s.vs_transient = es.tStorage)
+      Q
+      (external_call_result_rel tops ret tx
+         (INL v, finalize_pending_deletions
+                   (abstract_machine_from_state srcs exps layouts es),
+          es.requests))
+Proof
+  rpt strip_tac >>
+  drule_all return_abi_value_package >>
+  disch_then (qspec_then
+    `needs_external_call_wrap ret /\
+     is_dynamic (vyper_to_abi_type (type_env tops) ret)` strip_assume_tac) >>
+  drule compile_external_return_abi_frag >>
+  disch_then irule >>
+  asm_rewrite_tac[] >>
+  qexistsl_tac [`av`, `type_env tops`, `tv'`,
+    `if needs_external_call_wrap ret /\
+        is_dynamic (vyper_to_abi_type (type_env tops) ret)
+     then TupleT [ret] else ret`, `v'`] >>
+  asm_rewrite_tac[] >> conj_tac
+  >- (rpt strip_tac >> fs[] >>
+      conj_tac >- metis_tac[] >>
+      rpt strip_tac >>
+      `return_bytes tops ret v ss.vs_returndata` by
+        (gvs[] >> drule chosen_return_abi_bytes >> simp[]) >>
+      drule external_halt_success >>
+      disch_then (qspec_then `ss` mp_tac) >>
+      impl_tac >- simp[] >>
+      simp[external_call_result_rel_def] >> metis_tac[]) >>
+  metis_tac[arithmeticTheory.LESS_EQ_TRANS]
 QED
 
 (* ===== Label-space invariant at the start of lowering ===== *)
