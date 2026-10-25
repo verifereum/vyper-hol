@@ -2,7 +2,7 @@
 Theory exprSimWordBuiltins
 Ancestors
   list words integer_word vfmExecution valueEncoding loweringSlice vyperEvalExprPreservesScopesDom
-  exprSim exprSimHyps exprLowering vyperTypeSystem vyperTyping
+  exprSim exprSimHyps exprSimOperators exprLowering vyperTypeSystem vyperTyping
   vyperInterpreter vyperState vyperContext exprBopLowering
   builtinMath builtinMisc builtinSimple arithmeticProps compileEnv exprSimOps freshWrites fragExec varsExt
   exprLoweringProps venomExecSemantics venomState emitHelper emitHelperProps venomInst
@@ -1317,4 +1317,51 @@ Proof
      gvs[fresh_vars_wrt_def, eval_operand_def, lookup_var_def] >>
      first_x_assum (qspec_then `n` mp_tac) >> simp[finite_mapTheory.TO_FLOOKUP]) >>
   drule_all compile_floor_run >> simp[decimal_floor_word]
+QED
+
+(* Adapter from the public induction predicate to list composition. *)
+Theorem typed_word_args_ready:
+  !ctx func cenv cx env ann bt args arg_ty es.
+    expr_sim_pre cenv cx env (Builtin ann bt args) es /\
+    EVERY (\e. word_value_type (expr_type e) /\ expr_sim_ok cenv e) args ==>
+    wb_args_ready ctx func cenv cx arg_ty (expr_sim_inv cenv cx env) args /\
+    wb_args_shape cenv arg_ty args
+Proof
+  rpt strip_tac
+  >- (simp[wb_args_ready_def] >> rpt strip_tac >>
+      `word_value_type (expr_type e) /\ expr_sim_ok cenv e` by
+        (gvs[EVERY_MEM] >> first_x_assum drule >> simp[]) >>
+      `expr_sim_pre cenv cx env e es'` by
+        (drule_all expr_sim_pre_builtin_arg >> simp[]) >>
+      simp[] >> rpt conj_tac
+      >- metis_tac[expr_sim_ok_def]
+      >- metis_tac[word_value_type_word]
+      >- metis_tac[well_typed_expr_type_evaluates]
+      >- (rpt strip_tac >> drule_all expr_sim_pre_word_result >> simp[]) >>
+      rpt strip_tac >> drule_all expr_sim_pre_word_result >>
+      simp[] >> metis_tac[]) >>
+  simp[wb_args_shape_def] >> rpt strip_tac >>
+  drule lower_value_word_shape >>
+  `word_value_type (expr_type e)` by
+    (gvs[EVERY_MEM] >> first_x_assum drule >> simp[]) >>
+  simp[word_value_type_word]
+QED
+
+Theorem word_args_values_typed:
+  !args vs cenv cx env es es'.
+    (!e s. MEM e args /\ expr_sim_inv cenv cx env s ==>
+       expr_sim_pre cenv cx env e s /\ word_value_type (expr_type e)) /\
+    expr_sim_inv cenv cx env es /\ eval_exprs cx args es = (INL vs,es') ==>
+    LIST_REL (\e v. ?tv. evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+                         value_has_type tv v) args vs
+Proof
+  Induct >> rpt gen_tac >> strip_tac
+  >- gvs[eval_exprs_nil] >>
+  drule eval_exprs_cons_cases >> strip_tac >> gvs[] >>
+  `expr_sim_pre cenv cx env h es /\ word_value_type (expr_type h)` by
+    (first_x_assum irule >> simp[]) >>
+  drule_all expr_sim_pre_word_result >> strip_tac >> gvs[] >>
+  Cases_on `rr` >> gvs[] >>
+  first_x_assum irule >> goal_assum (drule_at Any) >>
+  simp[] >> metis_tac[listTheory.MEM]
 QED
