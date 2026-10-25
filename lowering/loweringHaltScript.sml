@@ -988,6 +988,68 @@ Proof
   strip_tac >> qexists_tac `0` >> simp[exit_result_def]
 QED
 
+Theorem enc_pre_inst_idx[simp]:
+  !st st' ops lo top tv v src outs s k.
+    enc_pre st st' ops lo top tv v src outs (s with vs_inst_idx := k) =
+    enc_pre st st' ops lo top tv v src outs s
+Proof
+  simp[enc_pre_def, enc_scratch_def, venomMemDefsTheory.alloca_inv_def,
+       venomMemDefsTheory.allocas_non_overlapping_def,
+       venomMemDefsTheory.alloca_next_valid_def]
+QED
+
+Theorem compile_alloc_buffer_extends:
+  !n st buf st'. compile_alloc_buffer n st = (buf,st') ==>
+    cs_extends st st'
+Proof
+  mp_tac halt_comp_grows_alloc_buffer >>
+  simp[halt_comp_grows_def] >> metis_tac[]
+QED
+
+Theorem emit_inst_metadata:
+  !opc ops outs st x st'. emit_inst opc ops outs st = (x,st') ==>
+    st'.cs_next_id = st.cs_next_id + 1 /\ cs_extends st st'
+Proof
+  rpt gen_tac >>
+  simp[emit_inst_def, comp_bind_def, fresh_id_def, emit_def] >>
+  strip_tac >> gvs[] >> irule cs_extends_same_block >> simp[]
+QED
+
+Theorem compile_alloc_buffer_enc_frag:
+  !ctx msz st buf sa sb sf op s0 p tv v n R.
+    compile_alloc_buffer msz st = (buf,sa) /\
+    sa.cs_next_id <= sb.cs_next_id /\ sb.cs_next_id <= sf.cs_next_id /\
+    (!y. op = Var y ==> not_fresh_at st y) /\
+    eval_operand op s0 = SOME p /\
+    val_in_memory tv v (w2n p) s0.vs_memory /\
+    w2n p + type_memory_size tv <= s0.vs_alloca_next /\ n <= msz /\
+    alloca_inv s0 /\
+    (!i. i IN frag_ids st sf ==> FLOOKUP s0.vs_allocas i = NONE) /\
+    s0.vs_alloca_next + msz + 32 * (sf.cs_next_id - st.cs_next_id) <
+      dimword (:256) ==>
+    frag_exec ctx st sa (\s. s = s0)
+      (\s1. eval_operand buf.buf_operand s1 = SOME (n2w s0.vs_alloca_next) /\
+        eval_operand op s1 = SOME p /\
+        enc_pre sa sb [buf.buf_operand;op] (s0.vs_alloca_next + msz)
+          (s0.vs_alloca_next + msz + 32 * (sf.cs_next_id - st.cs_next_id))
+          tv v (w2n p) [(s0.vs_alloca_next,n)] s1 /\
+        s1.vs_accounts = s0.vs_accounts /\ s1.vs_transient = s0.vs_transient /\
+        s1.vs_logs = s0.vs_logs /\ s1.vs_requests = s0.vs_requests) R
+Proof
+  rpt strip_tac >> drule compile_alloc_buffer_parts >> strip_tac >>
+  irule compile_alloc_buffer_frag >>
+  qexistsl_tac [`buf`, `msz`] >>
+  asm_simp_tac (srw_ss()) [instIdxIndepTheory.eval_op_inst_idx] >>
+  irule step_alloca_enc_pre >> simp[] >>
+  conj_tac >- metis_tac[] >>
+  conj_tac >- metis_tac[] >>
+  conj_tac
+  >- (rpt strip_tac >> first_x_assum irule >>
+      gvs[frag_ids_def] >> decide_tac) >>
+  conj_tac >- (simp[frag_ids_def] >> decide_tac) >>
+  first_x_assum irule >> simp[frag_ids_def] >> decide_tac
+QED
+
 Theorem compile_external_return_abi_frag:
   !ctx op ei msz nr nkey ut iv st x st' env ty tv v av P Q R.
     compile_external_return (SOME op) F F ei msz nr nkey ut iv st =
