@@ -499,6 +499,88 @@ QED
    ALLOCAs has run, and the frontier stays below 2 ** 256 while they run;
    nothing in the lowering bounds it (vyper rejects allocations of 2^64
    bytes or more). *)
+Theorem singleton_tuple_memory:
+  !tv v p mem.
+    val_in_memory (TupleTV [tv]) (ArrayV (TupleV [v])) p mem =
+    val_in_memory tv v p mem
+Proof
+  simp[valueEncodingTheory.val_in_memory_def]
+QED
+
+Theorem singleton_tuple_memory_size:
+  !tv. type_memory_size (TupleTV [tv]) = type_memory_size tv
+Proof
+  simp[valueEncodingTheory.type_memory_size_def]
+QED
+
+Theorem return_abi_value_package:
+  !env ret tv v0 v wrap.
+    evaluate_type env ret = SOME tv /\ safe_cast tv v0 = SOME v ==>
+    ?tv' v' av.
+      v' = (if wrap then ArrayV (TupleV [v]) else v) /\
+      evaluate_type env (if wrap then TupleT [ret] else ret) = SOME tv' /\
+      value_has_type tv' v' /\
+      vyper_to_abi env (if wrap then TupleT [ret] else ret) v' = SOME av /\
+      type_memory_size tv' = type_memory_size tv /\
+      (!p mem. val_in_memory tv v0 p mem ==> val_in_memory tv' v' p mem) /\
+      LENGTH (enc (vyper_to_abi_type env (if wrap then TupleT [ret] else ret)) av)
+        <= vyper_abi_size_bound env (if wrap then TupleT [ret] else ret)
+Proof
+  rpt strip_tac >>
+  `v = v0` by metis_tac[safe_cast_some_eq] >>
+  `value_has_type tv v` by metis_tac[vyperTypingTheory.safe_cast_result_well_typed] >>
+  `?av. vyper_to_abi env ret v = SOME av` by
+    metis_tac[vyperTypeABITheory.vyper_to_abi_total] >>
+  Cases_on `wrap`
+  >- (`type_slot_size tv <= dimword (:256)` by
+        metis_tac[vyperTypingTheory.evaluate_type_well_formed,
+                  vyperTypingTheory.well_formed_type_value_slot_size] >>
+      `evaluate_type env (TupleT [ret]) = SOME (TupleTV [tv])` by
+        simp[vyperValueTheory.evaluate_type_def, vyperValueTheory.type_slot_size_def] >>
+      `value_has_type (TupleTV [tv]) (ArrayV (TupleV [v]))` by
+        simp[vyperTypingTheory.value_has_type_def] >>
+      `vyper_to_abi env (TupleT [ret]) (ArrayV (TupleV [v])) = SOME (ListV [av])` by
+        simp[vyperABITheory.vyper_to_abi_def] >>
+      qexistsl_tac [`TupleTV [tv]`, `ArrayV (TupleV [v])`, `ListV [av]`] >>
+      asm_rewrite_tac[singleton_tuple_memory_size, singleton_tuple_memory] >>
+      metis_tac[vyperTypeABITheory.vyper_to_abi_enc_length_bound]) >>
+  qexistsl_tac [`tv`, `v`, `av`] >> simp[] >>
+  metis_tac[vyperTypeABITheory.vyper_to_abi_enc_length_bound]
+QED
+
+Theorem chosen_return_abi_bytes:
+  !tops ret v av.
+    vyper_to_abi (type_env tops)
+      (if needs_external_call_wrap ret /\
+          is_dynamic (vyper_to_abi_type (type_env tops) ret)
+       then TupleT [ret] else ret)
+      (if needs_external_call_wrap ret /\
+          is_dynamic (vyper_to_abi_type (type_env tops) ret)
+       then ArrayV (TupleV [v]) else v) = SOME av ==>
+    return_bytes tops ret v
+      (enc (vyper_to_abi_type (type_env tops)
+        (if needs_external_call_wrap ret /\
+            is_dynamic (vyper_to_abi_type (type_env tops) ret)
+         then TupleT [ret] else ret)) av)
+Proof
+  rpt gen_tac >> Cases_on `ret = NoneT`
+  >- (gvs[vyperABITheory.needs_external_call_wrap_def,
+          vyperABITheory.vyper_to_abi_type_def,
+          contractABITheory.is_dynamic_def] >>
+      Cases_on `v` >>
+      simp[vyperABITheory.vyper_to_abi_def, return_bytes_def,
+           contractABITheory.enc_def, listTheory.REV_DEF]) >>
+  Cases_on `needs_external_call_wrap ret /\
+            is_dynamic (vyper_to_abi_type (type_env tops) ret)`
+  >- (simp[vyperABITheory.vyper_to_abi_def, AllCaseEqs()] >>
+      rpt strip_tac >> gvs[] >>
+      simp[return_bytes_def, vyperABITheory.vyper_to_abi_type_def]) >>
+  simp[] >> strip_tac >>
+  simp[return_bytes_def] >>
+  Cases_on `needs_external_call_wrap ret` >> gvs[] >>
+  simp[contractABITheory.enc_def, listTheory.REV_DEF]
+QED
+
 Theorem external_return_abi_result_rel:
   !ctx op ei msz nr nkey ut iv st x st' func cenv cx es ret tv v0 v
      tops tx srcs exps layouts Q.
