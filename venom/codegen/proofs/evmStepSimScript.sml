@@ -1162,14 +1162,14 @@ val div32_tac : tactic = fn (asl, g) =>
       (op_mk_set aconv ts) (asl, g)
   end;
 
-(* A write into memory after expansion lands inside the expanded memory,
-   so the buffer write is the list splice the assembly does. *)
 Theorem add_max_sub[local]:
   !a b. a + (MAX a b - a) = MAX a b
 Proof
   rw[MAX_DEF]
 QED
 
+(* A write into memory after expansion lands inside the expanded memory,
+   so the buffer write is the list splice the assembly does. *)
 val mem_write_tac : tactic =
   DEP_REWRITE_TAC[buffer_to_list_write_le] >>
   gvs[dim256, add_max_sub, arithmeticTheory.MAX_LE] >>
@@ -2083,11 +2083,7 @@ Resume asm_evm_step_memory_dispatch[mcopy_dst_before_src]:
        set_current_context_def, is_call_def] >>
   `MAX (w2n h' + w2n h'') (w2n h + w2n h'') =
    w2n h' + w2n h''` by simp[MAX_DEF] >>
-  irule asm_evm_rel_next_stack_memory >> simp[asm_inst_size_def] >>
-  irule buffer_write_extended >>
-  gvs[asm_expand_eq_evm_norm, take_drop_expand_len] >> rpt strip_tac >>
-  irule arithmeticTheory.LESS_EQ_TRANS >>
-  irule_at (Pos last) asm_expand_memory_length >> decide_tac
+  mcopy_write_tac
 QED
 
 Resume asm_evm_step_memory_dispatch[mcopy_src_before_dst]:
@@ -2498,8 +2494,7 @@ Proof
   Cases_on `bs` >> gvs[] >> div32_tac >> decide_tac
 QED
 
-val () = augment_srw_ss [rewrites [buffer_to_list_write_expand,
-                                   vfmTypesTheory.LENGTH_take_pad_0]];
+val () = augment_srw_ss [rewrites [buffer_to_list_write_expand]];
 
 Theorem asm_evm_step_copy_dispatch[local]:
   !prog as es name r.
