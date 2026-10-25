@@ -120,6 +120,11 @@ The upstream JSON does not record per-test execution-backend or metadata
 overrides; the profile records their harness defaults, not a claim that every
 deployment uses them.
 
+The semantics EVM target follows the newest fork supported by `VYPER_PIN`.
+The export plugin rejects an older run target, so a repin adding a newer fork
+requires updating the explicit profile and regenerating exports. Per-test
+compiler overrides remain supported.
+
 The export plugin preserves exact revm runtime bytes. Upstream's `get_code`
 strips all trailing zeros, which loses real STOP/data bytes as well as revm's
 analysis padding. The plugin removes only padding verified against the account's

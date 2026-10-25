@@ -9,7 +9,7 @@
     "tests/semantics-build-constraints.txt": "5ea17fa1520d1732c4efe2d93b0456c095cc417df4bcd7f1953cec37462a2e65",
     "tests/semantics-profile.json": "a25b4fc9444a8107f08436d47c70c81adea2874cb89134fd4ac9e77adbfd0954",
     "tests/semantics-test-constraints.txt": "21849a5ae9b73cf03c7d864d18683c747ac2dd0b0789e62e148240d35a40a6f4",
-    "tools/vyper_test_export_plugin.py": "a653c514e2a3d41511b0d3122f17f7a8dc92de30618a439d743f39908e7438e8",
+    "tools/vyper_test_export_plugin.py": "0c39aecaf73d3d2bbc83611720c342f0988da678520f63fdfcbac853e8599ff3",
     "tools/vyper_test_exports.py": "870ad1f61eeee33b14fd3a86c5bed8a8b1d0900c0eadd67a63a6c6148f20ea75"
   },
   "profile": {

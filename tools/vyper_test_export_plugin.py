@@ -10,6 +10,17 @@ from eth_hash.auto import keccak
 from tests.evm_backends.base_env import BaseEnv
 from tests.evm_backends.revm_env import RevmEnv
 from tests.exports import TestExporter
+from vyper.evm.opcodes import EVM_VERSIONS
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    latest = max(EVM_VERSIONS, key=EVM_VERSIONS.__getitem__)
+    selected = config.getoption("evm_version")
+    if selected != latest:
+        raise pytest.UsageError(
+            f"semantics EVM target {selected!r}, expected latest supported by VYPER_PIN: "
+            f"{latest!r}; update tests/semantics-profile.json and regenerate exports"
+        )
 
 
 def original_code(code: bytes, code_hash: bytes) -> bytes:
