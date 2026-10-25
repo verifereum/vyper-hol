@@ -17,8 +17,10 @@
  *                       invariants, the locals of the type environment
  *                       held through pointer variables, and the flag
  *                       member ids of the compile environment
- *   expr_sim_pre      — expr_sim_inv, the expression well typed, and no
- *                       internal call in it
+ *   expr_sim_pre      — expr_sim_inv, the expression well typed, its
+ *                       integer types of whole bytes, and no internal call
+ *                       in it
+ *   byte_widths_expr  — every node's type has a width of whole bytes
  *   expr_sim_ok       — expr_sim wherever expr_sim_pre holds
  *   expr_vv_ok        — expr_vv_sim wherever expr_sim_pre holds
  *   expr_ok           — both: the induction predicate
@@ -37,6 +39,7 @@
  *                       word_value_type one's values are word_values
  *   expr_sim_pre_builtin_arg — an argument of a builtin meets expr_sim_pre
  *                       wherever expr_sim_inv holds
+ *   byte_widths_expr_type — the expression's own type has whole bytes
  *   well_typed_expr_type_evaluates — a well-typed expression's type
  *                       evaluates
  *   expr_ok_of_vv, expr_ok_stack — expr_ok from expr_vv_ok (by
@@ -78,6 +81,13 @@
  *     a flag of an imported module the clause does not hold of the
  *     environment it builds, and the theorem says nothing about
  *     expressions there.
+ *   - byte_widths_expr e: every integer type in the expression is
+ *     int8..int256 or uint8..uint256 in steps of 8, as Vyper's are
+ *     (IntegerT.signeds and IntegerT.unsigneds, bits = 8 * i for i in
+ *     1..32, vyper/semantics/types/primitives.py).  evaluate_type admits
+ *     any width up to 256; the unsafe operators' lowering wraps by whole
+ *     bytes, as Python's does, so it does not compute the source's result
+ *     at other widths.
  *   - int_calls_expr e = []: no internal call.  An internal call lowers to
  *     INVOKE, whose simulation is #638's call step; until that is stated
  *     this theorem excludes them, and #638 replaces this conjunct with its
@@ -130,9 +140,65 @@ Definition word_value_type_def:
   word_value_type t <=> is_numeric_type t \/ is_bool_type t \/ is_flag_type t
 End
 
+(* Every node of an expression has a type whose width, type_bits, is a
+   whole number of bytes: of the integer types, those Vyper has.  The same
+   recursion as int_calls_expr. *)
+Definition byte_widths_expr_def:
+  byte_widths_expr (Name t _) = (type_bits t MOD 8 = 0) /\
+  byte_widths_expr (TopLevelName t _) = (type_bits t MOD 8 = 0) /\
+  byte_widths_expr (FlagMember t _ _) = (type_bits t MOD 8 = 0) /\
+  byte_widths_expr (IfExp t c x y) =
+    (type_bits t MOD 8 = 0 /\ byte_widths_expr c /\ byte_widths_expr x /\
+     byte_widths_expr y) /\
+  byte_widths_expr (Literal t _) = (type_bits t MOD 8 = 0) /\
+  byte_widths_expr (StructLit t _ kes) =
+    (type_bits t MOD 8 = 0 /\ byte_widths_named_exprs kes) /\
+  byte_widths_expr (Subscript t x y) =
+    (type_bits t MOD 8 = 0 /\ byte_widths_expr x /\ byte_widths_expr y) /\
+  byte_widths_expr (Attribute t x _) =
+    (type_bits t MOD 8 = 0 /\ byte_widths_expr x) /\
+  byte_widths_expr (Builtin t _ es) =
+    (type_bits t MOD 8 = 0 /\ byte_widths_exprs es) /\
+  byte_widths_expr (TypeBuiltin t _ _ es) =
+    (type_bits t MOD 8 = 0 /\ byte_widths_exprs es) /\
+  byte_widths_expr (Pop t tgt) =
+    (type_bits t MOD 8 = 0 /\ byte_widths_target tgt) /\
+  byte_widths_expr (Call t _ es dflt) =
+    (type_bits t MOD 8 = 0 /\ byte_widths_exprs es /\ byte_widths_opt dflt) /\
+
+  byte_widths_target (NameTarget _) = T /\
+  byte_widths_target (TopLevelNameTarget _) = T /\
+  byte_widths_target (SubscriptTarget tgt e) =
+    (byte_widths_target tgt /\ byte_widths_expr e) /\
+  byte_widths_target (AttributeTarget tgt _) = byte_widths_target tgt /\
+
+  byte_widths_exprs [] = T /\
+  byte_widths_exprs (e::es) = (byte_widths_expr e /\ byte_widths_exprs es) /\
+
+  byte_widths_opt NONE = T /\
+  byte_widths_opt (SOME e) = byte_widths_expr e /\
+
+  byte_widths_named_exprs [] = T /\
+  byte_widths_named_exprs ((_,e)::kes) =
+    (byte_widths_expr e /\ byte_widths_named_exprs kes)
+Termination
+  qexists_tac `measure (\(x : expr + base_assignment_target + expr list +
+                                      expr option + (identifier # expr) list).
+    case x of
+    | INL e => expr_size e
+    | INR (INL tgt) => base_assignment_target_size tgt
+    | INR (INR (INL es)) => expr4_size es
+    | INR (INR (INR (INL opt))) => expr3_size opt
+    | INR (INR (INR (INR kes))) => expr1_size kes)` >>
+  conj_tac >- MATCH_ACCEPT_TAC prim_recTheory.WF_measure >>
+  PURE_REWRITE_TAC [prim_recTheory.measure_thm, sumTheory.sum_case_def] >>
+  simp[expr_size_def]
+End
+
 Definition expr_sim_pre_def:
   expr_sim_pre cenv cx env e es <=>
     expr_sim_inv cenv cx env es /\ well_typed_expr env e /\
+    byte_widths_expr e /\
     int_calls_expr e = [] /\ call_evaluation_safe cx (int_calls_expr e)
 End
 
@@ -287,14 +353,27 @@ Proof
   Induct >> rw[well_typed_expr_def, int_calls_expr_def] >> metis_tac[]
 QED
 
+Theorem byte_widths_exprs_mem:
+  !args e. byte_widths_exprs args /\ MEM e args ==> byte_widths_expr e
+Proof
+  Induct >> rw[byte_widths_expr_def] >> gvs[]
+QED
+
+Theorem byte_widths_expr_type:
+  !e. byte_widths_expr e ==> type_bits (expr_type e) MOD 8 = 0
+Proof
+  Cases >> rw[byte_widths_expr_def, expr_type_def]
+QED
+
 Theorem expr_sim_pre_builtin_arg:
   !cenv cx env ann bi args e es es'.
     expr_sim_pre cenv cx env (Builtin ann bi args) es /\ MEM e args /\
     expr_sim_inv cenv cx env es' ==>
     expr_sim_pre cenv cx env e es'
 Proof
-  rw[expr_sim_pre_def, well_typed_expr_def, int_calls_expr_def] >>
-  drule_all well_typed_exprs_mem >> gvs[]
+  rw[expr_sim_pre_def, well_typed_expr_def, int_calls_expr_def,
+     byte_widths_expr_def] >>
+  drule_all well_typed_exprs_mem >> drule_all byte_widths_exprs_mem >> gvs[]
 QED
 
 Theorem env_consistent_var_type_evaluates:
