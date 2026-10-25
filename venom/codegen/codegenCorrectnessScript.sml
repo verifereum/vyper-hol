@@ -76,7 +76,7 @@ Definition msg_ctx_rel_def:
     cc.cc_caller = mp.caller ∧
     cc.cc_address = mp.callee ∧
     cc.cc_callvalue = n2w mp.value ∧
-    cc.cc_calldata = mp.data ∧
+    cc.cc_calldata = buffer_to_list mp.data ∧
     cc.cc_static = mp.static
 End
 
