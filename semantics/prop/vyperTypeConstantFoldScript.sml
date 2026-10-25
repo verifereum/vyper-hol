@@ -30,10 +30,10 @@ QED
 (* Helper: the constant builtins read the context only through get_tenv, and
    never the accounts. *)
 Theorem evaluate_builtin_constant_context:
-  !bt cx mods acc ty vs.
+  !bt cx mods acc ty tys vs.
   constant_builtin bt /\ get_tenv cx = type_env_all_modules mods ==>
-  evaluate_builtin cx acc ty bt vs =
-  evaluate_builtin (constant_context mods) empty_accounts ty bt vs
+  evaluate_builtin cx acc ty bt tys vs =
+  evaluate_builtin (constant_context mods) empty_accounts ty bt tys vs
 Proof
   rpt gen_tac >> Cases_on `bt` >>
   simp[constant_builtin_def, evaluate_builtin_def, get_tenv_constant_context]
@@ -115,7 +115,7 @@ Proof
            type_check_def, assert_def, builtin_args_length_ok_def])
   >~ [`Builtin`]
   >- (first_x_assum drule_all >> strip_tac >>
-      qspecl_then [`bt`,`cx`,`mods`,`st.accounts`,`ty`,`vs`] mp_tac
+      qspecl_then [`bt`,`cx`,`mods`,`st.accounts`,`ty`,`MAP expr_type es`,`vs`] mp_tac
         evaluate_builtin_constant_context >>
       simp[] >> strip_tac >>
       simp[Once evaluate_def, bind_def, ignore_bind_def, return_def,

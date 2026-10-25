@@ -63,6 +63,27 @@ Definition lowered_value_type_def:
   lowered_value_type cenv e = expr_type e
 End
 
+(* The type Python's lowering gives an external-call argument (v.typ in
+   _lower_external_call). A storage, transient or immutable variable is read
+   at its annotated type, which for a call argument is the declared parameter
+   type (lower_Attribute, lower_Name); any other argument has its own lowered
+   type. *)
+Definition ext_call_arg_types_def:
+  ext_call_arg_types cenv (decl_ty::decl_tys) (e::es) =
+    (case e of
+     | TopLevelName _ _ => decl_ty
+     | _ => lowered_value_type cenv e) ::
+    ext_call_arg_types cenv decl_tys es ∧
+  ext_call_arg_types cenv _ _ = []
+End
+
+(* An argument value read from storage, transient storage or code is copied
+   to memory at its call-site type (VyperValue.from_ptr with v.typ). *)
+Definition ext_call_arg_value_def:
+  ext_call_arg_value ty (LocatedValue _ p) = LocatedValue ty p ∧
+  ext_call_arg_value ty vv = vv
+End
+
 (* ===== Array Location Inference ===== *)
 (* Infer array data location from expression AST + compile_env.
    TopLevelName → look up the module_var_key in ce_vars → StorageLoc/TransientLoc/ImmutableLoc.
@@ -1985,46 +2006,44 @@ Definition compile_make_tuple_def:
   compile_make_tuple cfn cenv (e::es) buf_op cur_offset =
     let e_ty = expr_type e in
     let elem_size = type_memory_bytes cenv e_ty in
-    let is_prim = is_word_type e_ty in
-    do v <- lower_value cfn cenv e_ty e;
+    do vv <- cfn cenv e_ty e;
        dst <- emit_op ADD [buf_op; Lit (n2w cur_offset)];
-       (if is_prim then emit_void MSTORE [dst; v]
-        else if is_bytestring_type e_ty then compile_store_bytestring v dst
-        else emit_void MCOPY [dst; v; Lit (n2w elem_size)]);
+       v <- unwrap_value cenv vv;
+       compile_store_memory cenv v dst e_ty e_ty;
        compile_make_tuple cfn cenv es buf_op (cur_offset + elem_size)
     od
 Termination
   WF_REL_TAC `measure (LENGTH o (FST o SND o SND))`
 End
 
-Definition compile_make_array_def:
-  compile_make_array cfn cenv [] elem_size has_length_word alloca_size
-                     buf_op cur_idx =
-    (if has_length_word then
-       do emit_void MSTORE [buf_op; Lit (n2w cur_idx)];
-          return buf_op
-       od
-     else
-       return buf_op) ∧
-  compile_make_array cfn cenv (e::es) elem_size has_length_word alloca_size
-                     buf_op cur_idx =
+Definition compile_make_array_elems_def:
+  compile_make_array_elems cfn cenv [] elem_ty elem_size has_length_word
+                           buf_op cur_idx = return buf_op ∧
+  compile_make_array_elems cfn cenv (e::es) elem_ty elem_size has_length_word
+                           buf_op cur_idx =
     let e_ty = expr_type e in
-    let is_prim = is_word_type e_ty in
     let data_offset = if has_length_word then 32 + cur_idx * elem_size
                       else cur_idx * elem_size in
-    do v <- lower_value cfn cenv e_ty e;
-       (* Python lower_List/lower_Tuple always materializes the element
-          pointer, including the first element's zero displacement. *)
+    do vv <- cfn cenv e_ty e;
+       (* Materialize the destination before unwrapping the child value. *)
        dst <- emit_op ADD [buf_op; Lit (n2w data_offset)];
-       (if is_prim then emit_void MSTORE [dst; v]
-        else if is_bytestring_type e_ty then
-          compile_store_bytestring v dst
-        else emit_void MCOPY [dst; v; Lit (n2w elem_size)]);
-       compile_make_array cfn cenv es elem_size has_length_word alloca_size
-                          buf_op (cur_idx + 1)
+       v <- unwrap_value cenv vv;
+       compile_store_memory cenv v dst elem_ty e_ty;
+       compile_make_array_elems cfn cenv es elem_ty elem_size has_length_word
+                                buf_op (cur_idx + 1)
     od
 Termination
   WF_REL_TAC `measure (LENGTH o (FST o SND o SND))`
+End
+
+Definition compile_make_array_def:
+  compile_make_array cfn cenv es elem_ty elem_size has_length_word buf_op =
+    do (if has_length_word then
+          emit_void MSTORE [buf_op; Lit (n2w (LENGTH es))]
+        else return ());
+       compile_make_array_elems cfn cenv es elem_ty elem_size has_length_word
+                                buf_op 0
+    od
 End
 
 (* Compile list of expressions, unwrapping each to get usable operands.
@@ -2169,17 +2188,16 @@ Definition compile_struct_lit_def:
   compile_struct_lit cfn cenv ty [] buf_op cur_offset = return buf_op ∧
   compile_struct_lit cfn cenv ty ((fname, e)::rest) buf_op cur_offset =
     let e_ty = expr_type e in
-    let is_prim = is_word_type e_ty in
     let struct_name = (case ty of StructT n => nsid_to_string n | _ => "") in
     let fld_info = get_struct_fields cenv.ce_struct_fields struct_name in
     let field_size = (case ALOOKUP fld_info fname of
         SOME (fty, sz) => sz | NONE => 32) in
-    do v <- lower_value cfn cenv e_ty e;
+    let field_ty = (case ALOOKUP fld_info fname of
+        SOME (fty, sz) => fty | NONE => e_ty) in
+    do vv <- cfn cenv e_ty e;
        dst <- emit_op ADD [buf_op; Lit (n2w cur_offset)];
-       (if is_prim then emit_void MSTORE [dst; v]
-        else if is_bytestring_type e_ty then
-          compile_store_bytestring v dst
-        else emit_void MCOPY [dst; v; Lit (n2w field_size)]);
+       v <- unwrap_value cenv vv;
+       compile_store_memory cenv v dst field_ty e_ty;
        compile_struct_lit cfn cenv ty rest buf_op (cur_offset + field_size)
     od
 Termination
@@ -2232,6 +2250,42 @@ Definition compile_materialize_vv_def:
     od
 End
 
+(* Lower one keyword operand of extcall/staticcall: value= and gas= are
+   uint256 words; default_return_value= is a word of the return type, or,
+   for any other type, a value Python materializes where it is lowered
+   (_parse_external_call_kwargs). Returns the operand and its type. *)
+Definition compile_ext_call_kwarg_def:
+  compile_ext_call_kwarg cfn cenv return_type k e =
+    if k = EKDefault /\ ~is_word_type return_type then
+      do vv <- cfn cenv (expr_type e) e;
+         op <- compile_materialize_vv cenv (expr_type e) vv;
+         comp_return (op, expr_type e)
+      od
+    else
+      do op <- lower_value cfn cenv
+                 (if k = EKDefault then return_type else BaseT (UintT 256)) e;
+         comp_return (op, return_type)
+      od
+End
+
+(* Lower the keyword operands of extcall/staticcall in source order, which is
+   the order Python evaluates them in (_parse_external_call_kwargs). Returns
+   the value= and gas= operands and the default_return_value= operand with
+   its type, for those that are present. *)
+Definition compile_ext_call_kwargs_def:
+  compile_ext_call_kwargs cfn cenv return_type (k::ks) (e::es) =
+    do (op, ty) <- compile_ext_call_kwarg cfn cenv return_type k e;
+       (value_op, gas_op, default_opt) <-
+         compile_ext_call_kwargs cfn cenv return_type ks es;
+       comp_return (if k = EKValue then (SOME op, gas_op, default_opt)
+                    else if k = EKGas then (value_op, SOME op, default_opt)
+                    else (value_op, gas_op, SOME (op, ty)))
+    od ∧
+  compile_ext_call_kwargs cfn cenv return_type _ _ =
+    comp_return ((NONE, NONE, NONE) :
+                 operand option # operand option # (operand # type) option)
+End
+
 (* KNOWN LIMITATION: No safe_cast validation at internal call boundaries.
    The Vyper interpreter applies safe_cast per argument (bind_arguments) and
    per return value (after handle_function). The lowering emits no type checks.
@@ -2241,8 +2295,10 @@ End
    into the Call AST node before codegen (Python does this). *)
 Definition compile_call_def:
   compile_call cfn cenv ret_ty ty (IntCall func_id) args default_ret st =
-    (let label = nsid_to_string func_id in
-    let (returns_count, return_buf_size, pass_via_stack) = cenv.ce_func_info label in
+    (let name = nsid_to_string func_id in
+    let label = internal_fn_label name (cenv.ce_func_param_types name)
+                  cenv.ce_is_ctor in
+    let (returns_count, return_buf_size, pass_via_stack) = cenv.ce_func_info name in
     let arg_types = MAP expr_type args in
     let (arg_vals, st1) = compile_multi_vvs cfn cenv args st in
     let (return_buf, st2) =
@@ -2276,28 +2332,29 @@ Definition compile_call_def:
          SOME rbuf => (LocatedValue ret_ty (base_ptr rbuf), st4)
        | NONE => (StackValue ret_ty (Lit 0w), st4))) ∧
   compile_call cfn cenv ret_ty ty (ExtCall is_static skip_contract_check
-                                     (func_name, arg_types, return_type))
+                                     (func_name, arg_types, return_type) opts)
               args default_ret st =
     (case args of
        [] => let (_, st') = emit_inst INVALID [] [] st in
              (StackValue ret_ty (Lit 0w), st')
      | (addr_e :: rest_after_addr) =>
        let (addr_op, st1) = lower_value cfn cenv (BaseT AddressT) addr_e st in
-       let (value_e, func_args) =
-         if is_static then (NONE, rest_after_addr)
-         else case rest_after_addr of
-                (val_e :: fa) => (SOME val_e, fa)
-              | _ => (NONE, []) in
+       let func_args = TAKE (LENGTH arg_types) rest_after_addr in
+       let kw_es = DROP (LENGTH arg_types) rest_after_addr in
        (* Python evaluates all positional arguments before call kwargs and
           allocates their memory-layout tuple only after the call buffer. *)
        let (arg_vals, st2) = compile_multi_vvs cfn cenv func_args st1 in
-       let (value_op, st3) =
-         case value_e of
-           SOME val_e => lower_value cfn cenv (BaseT (UintT 256)) val_e st2
-         | NONE => (Lit 0w, st2) in
-       let args_mem_size = SUM (MAP (type_memory_bytes cenv) arg_types) in
-       let args_abi_size = abi_size_bound cenv.ce_struct_fields (TupleT arg_types) in
-       let args_enc_info = type_to_abi_enc_info cenv.ce_struct_fields cenv (TupleT arg_types) in
+       let ((value_opt, gas_opt, default_opt), st3) =
+         compile_ext_call_kwargs cfn cenv return_type opts kw_es st2 in
+       let value_op = (case value_opt of SOME v => v | NONE => Lit 0w) in
+       (* Python lays the argument buffer out with the types of the lowered
+          argument values (_lower_external_call: TupleT(v.typ for v in
+          arg_vals)), not the declared parameter types. The selector is the
+          same under both, since bounds don't appear in it. *)
+       let call_arg_types = ext_call_arg_types cenv arg_types func_args in
+       let args_mem_size = SUM (MAP (type_memory_bytes cenv) call_arg_types) in
+       let args_abi_size = abi_size_bound cenv.ce_struct_fields (TupleT call_arg_types) in
+       let args_enc_info = type_to_abi_enc_info cenv.ce_struct_fields cenv (TupleT call_arg_types) in
        let wrapped_return = (case return_type of
                                TupleT ts =>
                                  if LENGTH ts > 1 then return_type
@@ -2307,24 +2364,17 @@ Definition compile_call_def:
        let min_return_size = abi_static_size cenv.ce_struct_fields wrapped_return in
        let ret_mem_bytes = type_memory_bytes cenv return_type in
        let method_id_val = cenv.ce_method_id func_name arg_types in
-       (* Python materializes a non-word default where it is lowered
-          (_parse_external_call_kwargs). *)
-       let (has_default, default_op, default_ty, st4) =
-         case default_ret of
-           SOME def_e =>
-             if is_word_type return_type then
-               let (dop, st') = lower_value cfn cenv return_type def_e st3 in
-               (T, dop, return_type, st')
-             else
-               let def_ty = expr_type def_e in
-               let (vv, st') = cfn cenv def_ty def_e st3 in
-               let (dop, st'') = compile_materialize_vv cenv def_ty vv st' in
-               (T, dop, def_ty, st'')
-         | NONE => (F, Lit 0w, return_type, st3) in
-       let (gas_op, st5) = emit_op GAS [] st4 in
+       let (has_default, default_op, default_ty) =
+         (case default_opt of
+            SOME (d, d_ty) => (T, d, d_ty)
+          | NONE => (F, Lit 0w, return_type)) in
+       let (gas_op, st5) =
+         (case gas_opt of SOME g => (g, st3) | NONE => emit_op GAS [] st3) in
        let ret_dec_info = type_to_abi_dec_info cenv.ce_struct_fields cenv wrapped_return in
        let (result_op, st6) =
-         compile_external_call_kwargs cenv addr_op arg_vals arg_types
+         compile_external_call_kwargs cenv addr_op
+                                    (MAP2 ext_call_arg_value call_arg_types arg_vals)
+                                    call_arg_types
                                     args_mem_size args_abi_size method_id_val
                                     return_abi_size min_return_size ret_mem_bytes
                                     is_static value_op gas_op skip_contract_check
@@ -2332,16 +2382,23 @@ Definition compile_call_def:
                                     args_enc_info ret_dec_info st5 in
        if return_abi_size = 0 then (StackValue ret_ty result_op, st6)
        else (LocatedValue ret_ty (mk_ptr result_op LocMemory), st6)) ∧
-  compile_call cfn cenv ret_ty ty Send args default_ret st =
+  compile_call cfn cenv ret_ty ty (Send has_gas) args default_ret st =
     (case args of
-       [addr_e; val_e] =>
-         let (addr_op, st1) = lower_value cfn cenv (BaseT AddressT) addr_e st in
-         let (val_op, st2) = lower_value cfn cenv (BaseT (UintT 256)) val_e st1 in
-         let gas_op = Lit 0w in
-         let (success, st3) = emit_op CALL [gas_op; addr_op; val_op;
-                                            Lit 0w; Lit 0w; Lit 0w; Lit 0w] st2 in
-         let (_, st4) = emit_void ASSERT [success] st3 in
-         (StackValue ret_ty (Lit 0w), st4)
+       (addr_e :: val_e :: gas_es) =>
+         if LENGTH gas_es = (if has_gas then 1 else 0) then
+           let (addr_op, st1) = lower_value cfn cenv (BaseT AddressT) addr_e st in
+           let (val_op, st2) = lower_value cfn cenv (BaseT (UintT 256)) val_e st1 in
+           (* send(to, value, gas=0): gas defaults to 0, as in Python. *)
+           let (gas_op, st2') =
+             (case gas_es of
+                [gas_e] => lower_value cfn cenv (BaseT (UintT 256)) gas_e st2
+              | _ => (Lit 0w, st2)) in
+           let (success, st3) = emit_op CALL [gas_op; addr_op; val_op;
+                                              Lit 0w; Lit 0w; Lit 0w; Lit 0w] st2' in
+           let (_, st4) = emit_void ASSERT [success] st3 in
+           (StackValue ret_ty (Lit 0w), st4)
+         else let (_, st') = emit_inst INVALID [] [] st in
+              (StackValue ret_ty (Lit 0w), st')
      | _ => let (_, st') = emit_inst INVALID [] [] st in
             (StackValue ret_ty (Lit 0w), st')) ∧
   compile_call cfn cenv ret_ty ty (RawCallTarget rcf) args default_ret st =
@@ -2855,8 +2912,8 @@ Definition compile_builtin_dispatch_body_def:
               let (buf_op_alloc, st2) = compile_alloc_buffer total_size st in
               let buf_op = buf_op_alloc.buf_operand in
               as_ptr_val ret_ty LocMemory
-                (compile_make_array compile_expr cenv args elem_sz has_lw
-                   total_size buf_op 0 st2))
+                (compile_make_array compile_expr cenv args elem_ty elem_sz has_lw
+                   buf_op st2))
      (* Chain interaction builtins (raw_call, raw_log, selfdestruct, create)
         are handled via call_target, not builtin - see Call cases *))
 End
@@ -2874,7 +2931,14 @@ Definition compile_type_builtin_dispatch_body_def:
                 (ConvToFlag (cenv.ce_flag_n_members (nsid_to_string flag_nsid))) st1)
           | _ => as_stack_val vv_ty (compile_type_convert v
                    (mk_convert_op src_ty ret_ty) st1))
-     | Empty => (StackValue vv_ty (Lit 0w), st)
+     | Empty =>
+         if is_word_type ret_ty then (StackValue vv_ty (Lit 0w), st)
+         else
+           (let is_bs = (is_bytestring_type ret_ty ∨
+                         (case ret_ty of ArrayT _ (Dynamic _) => T | _ => F)) in
+            let (buf, st1) = compile_builtin_empty_complex
+                               (type_memory_bytes cenv ret_ty) is_bs st in
+            (LocatedValue ret_ty (mk_ptr buf LocMemory), st1))
      | MaxValue =>
          (let (_, hi) = type_bounds ret_ty in (StackValue vv_ty (Lit hi), st))
      | MinValue =>
@@ -2970,3 +3034,135 @@ val _ = save_thm ("compile_builtin_dispatch_component_eq",
 val _ = save_thm ("compile_type_builtin_dispatch_component_eq",
                   compile_type_builtin_dispatch_component_eq);
 
+
+(* Empty construction preserves the value-location boundary. *)
+Theorem compile_empty_word_dispatch:
+  is_word_type ret_ty ==>
+  compile_type_builtin_dispatch_body cfn cenv vv_ty ty Empty ret_ty args st =
+    (StackValue vv_ty (Lit 0w), st)
+Proof
+  simp[compile_type_builtin_dispatch_body_def]
+QED
+
+Theorem compile_empty_memory_dispatch:
+  ~is_word_type ret_ty ==>
+  compile_type_builtin_dispatch_body cfn cenv vv_ty ty Empty ret_ty args st =
+    let (buf, st1) = compile_builtin_empty_complex
+      (type_memory_bytes cenv ret_ty)
+      (is_bytestring_type ret_ty \/
+       (case ret_ty of ArrayT _ (Dynamic _) => T | _ => F)) st in
+    (LocatedValue ret_ty (mk_ptr buf LocMemory), st1)
+Proof
+  simp[compile_type_builtin_dispatch_body_def]
+QED
+
+Theorem compile_make_array_empty_length:
+  MAP (\i. (i.inst_opcode, i.inst_operands))
+    (SND (compile_make_array cfn cenv [] elem_ty stride T buf
+      (st with cs_current_insts := []))).cs_current_insts =
+  [(MSTORE, [buf; Lit 0w])]
+Proof
+  simp[compile_make_array_def, compile_make_array_elems_def,
+       emit_void_def, fresh_id_def, emit_def, comp_bind_def,
+       comp_ignore_bind_def, comp_return_def, mk_inst_def]
+QED
+
+Theorem compile_make_array_word_order:
+  expr_type e = BaseT BoolT ==>
+  MAP (\i. i.inst_opcode)
+    (SND (compile_make_array
+      (\c t x. comp_return (LocatedValue (BaseT BoolT) (mk_ptr src LocMemory)))
+      cenv [e; e] (BaseT BoolT) 32 T buf
+      (st with cs_current_insts := []))).cs_current_insts =
+  [MSTORE; ADD; MLOAD; MSTORE; ADD; MLOAD; MSTORE]
+Proof
+  simp[compile_make_array_def, compile_make_array_elems_def,
+       unwrap_value_def, mk_ptr_def, is_word_type_def, compile_ptr_load_def,
+       compile_store_memory_def, emit_op_def, emit_void_def,
+       fresh_id_def, fresh_var_def, emit_def, comp_bind_def,
+       comp_ignore_bind_def, comp_return_def, mk_inst_def]
+QED
+
+Theorem compile_make_fixed_array_word_order:
+  expr_type e = BaseT BoolT ==>
+  MAP (\i. i.inst_opcode)
+    (SND (compile_make_array
+      (\c t x. comp_return (LocatedValue (BaseT BoolT) (mk_ptr src LocMemory)))
+      cenv [e] (BaseT BoolT) 32 F buf
+      (st with cs_current_insts := []))).cs_current_insts =
+  [ADD; MLOAD; MSTORE]
+Proof
+  simp[compile_make_array_def, compile_make_array_elems_def,
+       unwrap_value_def, mk_ptr_def, is_word_type_def, compile_ptr_load_def,
+       compile_store_memory_def, emit_op_def, emit_void_def,
+       fresh_id_def, fresh_var_def, emit_def, comp_bind_def,
+       comp_ignore_bind_def, comp_return_def, mk_inst_def]
+QED
+
+Theorem compile_make_tuple_word_order:
+  expr_type e = BaseT BoolT ==>
+  MAP (\i. i.inst_opcode)
+    (SND (compile_make_tuple
+      (\c t x. comp_return (LocatedValue (BaseT BoolT) (mk_ptr src LocMemory)))
+      cenv [e] buf 0
+      (st with cs_current_insts := []))).cs_current_insts =
+  [ADD; MLOAD; MSTORE]
+Proof
+  simp[compile_make_tuple_def, unwrap_value_def, mk_ptr_def,
+       is_word_type_def, compile_ptr_load_def, compile_store_memory_def,
+       emit_op_def, emit_void_def, fresh_id_def, fresh_var_def, emit_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def, mk_inst_def]
+QED
+
+Theorem compile_struct_lit_word_order:
+  expr_type e = BaseT BoolT /\
+  ALOOKUP (get_struct_fields cenv.ce_struct_fields
+    (case ty of StructT n => nsid_to_string n | _ => "")) fname =
+    SOME (BaseT BoolT, 32) ==>
+  MAP (\i. i.inst_opcode)
+    (SND (compile_struct_lit
+      (\c t x. comp_return (LocatedValue (BaseT BoolT) (mk_ptr src LocMemory)))
+      cenv ty [(fname,e)] buf 0
+      (st with cs_current_insts := []))).cs_current_insts =
+  [ADD; MLOAD; MSTORE]
+Proof
+  simp[compile_struct_lit_def, unwrap_value_def, mk_ptr_def,
+       is_word_type_def, compile_ptr_load_def, compile_store_memory_def,
+       emit_op_def, emit_void_def, fresh_id_def, fresh_var_def, emit_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def, mk_inst_def]
+QED
+
+Theorem compile_make_array_empty_full_capacity:
+  MAP (\i. (i.inst_opcode, if i.inst_opcode = ALLOCA then i.inst_operands else []))
+    (SND (compile_builtin_dispatch_body cfn cenv
+      (ArrayT (BaseT BoolT) (Dynamic 4))
+      (ArrayT (BaseT BoolT) (Dynamic 4))
+      (MakeArray (SOME (BaseT BoolT)) (Dynamic 4)) []
+      (st with cs_current_insts := []))).cs_current_insts =
+  [(ALLOCA, [Lit 160w]); (MSTORE, [])]
+Proof
+  simp[compile_builtin_dispatch_body_def, compile_make_array_def,
+       compile_make_array_elems_def, type_memory_bytes_def,
+       compile_alloc_buffer_def, as_ptr_val_def,
+       emit_op_def, emit_void_def, fresh_id_def, fresh_var_def, emit_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def, mk_inst_def]
+QED
+
+(* Unequal aggregate types must enter typed copying, not flat MCOPY. *)
+Theorem compile_make_array_typed_tuple_order:
+  expr_type e = TupleT [BaseT BoolT; BaseT BoolT] /\
+  acyclic_struct_metadata cenv.ce_struct_fields ==>
+  MAP (\i. i.inst_opcode)
+    (SND (compile_make_array
+      (\c t x. comp_return (LocatedValue t (mk_ptr src LocMemory)))
+      cenv [e] (TupleT [BaseT BoolT]) 32 F buf
+      (st with cs_current_insts := []))).cs_current_insts =
+  [ADD; MLOAD; MSTORE]
+Proof
+  simp[compile_make_array_def, compile_make_array_elems_def,
+       unwrap_value_def, mk_ptr_def, is_word_type_def, is_bytestring_type_def,
+       compile_store_memory_def, compile_store_memory_typed_def,
+       compile_with_byte_offset_def,
+       emit_op_def, emit_void_def, fresh_id_def, fresh_var_def, emit_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def, mk_inst_def]
+QED

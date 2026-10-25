@@ -12,6 +12,7 @@
  *   type_bounds      — (lo, hi) word256 bounds for type
  *   struct_field_offset — byte offset of struct field
  *   nsid_to_string   — namespace ID to lookup string
+ *   internal_fn_label — Venom label of an internal function (Vyper's spelling)
  *   local_ptrs_rel   — live locals held through pointer variables match memory
  *   compile_state_ok — well-formedness: bound labels disjoint from future fresh labels
  *   label_external   — label not bound and not in future fresh-label co-domain
@@ -156,6 +157,76 @@ Definition nsid_to_string_def:
   nsid_to_string (NONE, name) = name ∧
   nsid_to_string (SOME (n:num), name) = (toString n) ++ "." ++ name
 End
+
+(* ===== Internal Function Labels ===== *)
+(* Vyper's str(typ), used only to spell internal function labels.
+   Mirrors Python (vyper/semantics/types/): primitives.py (int/uint, bytesM),
+   bytestrings.py (Bytes[n]/String[n]), subscriptable.py (SArray, DynArray,
+   tuple), user.py (flag, struct). An interface-typed parameter is
+   BaseT AddressT here and prints as address, where Python prints the
+   interface name; labels never reach the bytecode. *)
+Definition vyper_type_str_def:
+  vyper_type_str (BaseT (UintT n)) = "uint" ++ toString n ∧
+  vyper_type_str (BaseT (IntT n)) = "int" ++ toString n ∧
+  vyper_type_str (BaseT BoolT) = "bool" ∧
+  vyper_type_str (BaseT DecimalT) = "decimal" ∧
+  vyper_type_str (BaseT AddressT) = "address" ∧
+  vyper_type_str (BaseT (BytesT (Fixed m))) = "bytes" ++ toString m ∧
+  vyper_type_str (BaseT (BytesT (Dynamic n))) =
+    "Bytes[" ++ toString n ++ "]" ∧
+  vyper_type_str (BaseT (StringT n)) = "String[" ++ toString n ++ "]" ∧
+  vyper_type_str (ArrayT t (Fixed n)) =
+    vyper_type_str t ++ "[" ++ toString n ++ "]" ∧
+  vyper_type_str (ArrayT t (Dynamic n)) =
+    "DynArray[" ++ vyper_type_str t ++ ", " ++ toString n ++ "]" ∧
+  vyper_type_str (TupleT [t]) = "(" ++ vyper_type_str t ++ ",)" ∧
+  vyper_type_str (TupleT ts) = "(" ++ vyper_type_strs ", " ts ++ ")" ∧
+  vyper_type_str (StructT id) = SND id ∧
+  vyper_type_str (FlagT id) = SND id ∧
+  vyper_type_str NoneT = "" ∧
+  vyper_type_strs sep [] = "" ∧
+  vyper_type_strs sep [t] = vyper_type_str t ∧
+  vyper_type_strs sep (t :: ts) =
+    vyper_type_str t ++ sep ++ vyper_type_strs sep ts
+Termination
+  WF_REL_TAC `measure (\x. case x of
+                              INL t => type_size t
+                            | INR (_, ts) => list_size type_size ts)`
+End
+
+(* Venom label of an internal function, from its lookup name (nsid_to_string
+   of its nsid) and declared parameter types, defaulted ones included.
+   The space keeps it apart from every source identifier, external entry
+   label ("fn_" ++ name), unit entry ("__entry"/"__deploy"), codegen label
+   ("revert", "code_end") and fresh label ("@..."). Python's label also has
+   the function id after "internal "; the lookup name is already unique
+   among a unit's internal functions, so it is left out.
+   Mirrors Python: codegen_venom/module.py _generate_internal_function and
+   codegen_venom/expr.py lower_Call (internal calls). *)
+Definition internal_fn_label_def:
+  internal_fn_label (name : string) (arg_tys : type list) (is_ctor : bool) =
+    "internal " ++ name ++ "(" ++ vyper_type_strs "," arg_tys ++ ")" ++
+    (if is_ctor then "_deploy" else "_runtime")
+End
+
+Theorem internal_fn_label_prefix:
+  !name arg_tys is_ctor. isPREFIX "internal " (internal_fn_label name arg_tys is_ctor)
+Proof
+  simp[internal_fn_label_def]
+QED
+
+(* Equal labels name the same function, for names without "(" (source
+   identifiers and nsid_to_string values). *)
+Theorem internal_fn_label_11:
+  !n1 n2 tys1 tys2 c1 c2.
+    ~MEM #"(" n1 /\ ~MEM #"(" n2 /\
+    internal_fn_label n1 tys1 c1 = internal_fn_label n2 tys2 c2 ==>
+    n1 = n2
+Proof
+  simp[internal_fn_label_def] >>
+  Induct >> Cases_on `n2` >> rw[] >> gvs[] >>
+  first_x_assum irule >> metis_tac[]
+QED
 
 (* Key of a module-level variable (storage, transient, HashMap, immutable) in
    the name-keyed compile_env tables. Arguments and locals use their plain
@@ -363,6 +434,10 @@ Datatype:
        pass_via_stack: per-arg T=stack, F=memory. Order matches func_t.arguments.
        Mirrors Python: calling_convention.py pass_via_stack + returns_stack_count *)
     ce_func_info : string -> (num # num # bool list);
+    (* Internal function declared parameter types, defaulted ones included:
+       func_name → arg types. Spells the INVOKE target (internal_fn_label).
+       Mirrors Python: func_t.arguments in expr.py lower_Call *)
+    ce_func_param_types : string -> type list;
     (* Nonreentrant lock info for explicit return statements:
        (is_nonreentrant, nkey, use_transient, is_view).
        Python: stmt.py _lower_external_return calls emit_nonreentrant_unlock.
@@ -371,7 +446,13 @@ Datatype:
     (* Raw return: T for @raw_return decorated functions (proxy patterns).
        Bypasses ABI encoding, returns bytes directly.
        Mirrors Python: func_t.do_raw_return *)
-    ce_raw_return : bool
+    ce_raw_return : bool;
+    (* T when each local and loop variable gets a fresh ALLOCA at its
+       declaration (external and fallback bodies); F when it keeps the MemLoc
+       slot build_compile_env reserved for its name (internal functions and
+       the constructor body).
+       Mirrors Python: Context.new_variable -> allocate_buffer -> alloca *)
+    ce_alloca_locals : bool
   |>
 End
 
@@ -584,6 +665,13 @@ Definition fresh_vars_wrt_def:
       STRING #"%" (toString n) ∉ FDOM ss.vs_vars
 End
 
+(* x is no compiler variable fresh at st, so the code compiled from st on
+   never assigns it. *)
+Definition not_fresh_at_def:
+  not_fresh_at (st:compile_state) x ⇔
+    ∀n. st.cs_next_var ≤ n ⇒ x ≠ STRING #"%" (toString n)
+End
+
 (* ===== Label-Space Invariants =====
    Track which labels the compiler has allocated (via fresh_label) and
    which labels are currently bound to blocks. Used by module-level
@@ -641,27 +729,11 @@ Definition well_formed_cenv_def:
        FLOOKUP cenv.ce_vars n = SOME (MemLoc off sz) ⇒ sz > 0 ∧ (sz MOD 32 = 0))
 End
 
-(* Local variables in Vyper scopes match Venom memory.
-   Only handles MemLoc (local memory variables) because:
-   - StorageLoc variables (self.x) are covered by storage_rel
-   - TransientLoc/ImmutableLoc are similar global state
-   - Scopes only contain local (stack-like) variables *)
-Definition vars_rel_def:
-  vars_rel cenv scopes ss =
-    ∀ name entry offset size.
-      lookup_scopes name scopes = SOME entry ∧
-      FLOOKUP cenv.ce_vars name = SOME (MemLoc offset size)
-      ⇒
-      (* entry.type from scope provides correct type for val_in_memory dispatch
-         (e.g., AddressT → right-aligned BytesV encoding). *)
-      val_in_memory entry.type entry.value offset ss.vs_memory
-End
-
 (* ===== Locals held through allocations ===== *)
-(* After function lowering a local is PtrVar (Var p) sz: the ALLOCA emitted at
-   its declaration binds p to the base of a fresh region (emit_local_alloca,
-   compile_alloc_buffer), so the address depends on vs_allocas and
-   vs_alloca_next at run time.  vars_rel only covers MemLoc entries.
+(* After its declaration in an external or fallback body a local is
+   PtrVar (Var p) sz: the ALLOCA emitted at its declaration binds p to the base
+   of a fresh region (emit_local_alloca, compile_alloc_buffer), so the address
+   depends on vs_allocas and vs_alloca_next at run time, not on a fixed offset.
    Parameters of internal functions are PtrVar (Var p) sz too
    (materialize_internal_params): a stack-passed one is copied into an ALLOCA
    of the callee, a memory-passed one is the PARAM output p pointing into the
@@ -684,6 +756,26 @@ Definition not_local_ptr_def:
     ∀name entry sz.
       lookup_scopes name scopes = SOME entry ⇒
       FLOOKUP cenv.ce_vars name ≠ SOME (PtrVar (Var x) sz)
+End
+
+(* The locals of cenv are held through pointer variables that were handed out
+   before st (declare_local, compile_register_positional_args), one per
+   local:
+   - no variable sits at a fixed MemLoc offset: state_rel does not relate
+     those (the locals of internal bodies and of the constructor, and
+     default arguments, which compile_register_kwarg_vars keeps at MemLoc),
+     and a store to one could hit a live local's region;
+   - no compiler variable fresh at st is a local's pointer, so a temporary of
+     the code compiled from st on never overwrites one;
+   - distinct locals have distinct pointers, so declaring a local leaves the
+     others' pointers alone. *)
+Definition local_ptrs_reserved_def:
+  local_ptrs_reserved cenv (st:compile_state) ⇔
+    (∀name off sz. FLOOKUP cenv.ce_vars name ≠ SOME (MemLoc off sz)) ∧
+    ∀n1 n2 p sz1 sz2.
+      FLOOKUP cenv.ce_vars n1 = SOME (PtrVar (Var p) sz1) ⇒
+      not_fresh_at st p ∧
+      (FLOOKUP cenv.ce_vars n2 = SOME (PtrVar (Var p) sz2) ⇒ n1 = n2)
 End
 
 (* What backs a live local's region [base, base + sz) in the current frame
@@ -938,12 +1030,26 @@ Definition call_ctx_rel_def:
      bc.bc_blobbasefee = n2w txn.blob_base_fee)
 End
 
-(* Top-level oracle-mode state relation (PLAN 5.7).
-   Ties together all sub-relations and exactly the current oracle suffix and
-   request prefix. NONE-mode compatibility does not satisfy this relation. *)
+(* Top-level oracle-mode source/Venom state relation for the statement and
+   expression simulation, in func, the function running.  It ties together
+   the sub-relations below and exactly the current oracle suffix and request
+   prefix; NONE-mode compatibility does not satisfy it.
+   - local_ptrs_rel: locals in scope, held in memory through their pointer
+     variables (PtrVar).  MemLoc locals at fixed offsets, which the internal
+     function bodies still use until #545, are not related.
+   - storage_rel, storage_vars_rel: storage, and the slots of storage
+     variables.
+   - transient_rel, transient_vars_rel: transient storage, and the slots of
+     transient variables.
+   - immutables_rel: immutables (vs_immutables in a constructor, the data
+     section at runtime).
+   - logs_rel: emitted logs.
+   - call_ctx_rel: transaction, call and block context.
+   - outcomes and requests: the oracle outcomes still to consume and the
+     requests recorded so far, as in the result relation. *)
 Definition state_rel_def:
-  state_rel cenv cx vs ss =
-    (vars_rel cenv vs.scopes ss ∧
+  state_rel func cenv cx vs ss =
+    (local_ptrs_rel func cenv vs.scopes ss ∧
      storage_rel cx.txn.target vs ss ∧
      storage_vars_rel cenv cx ∧
      transient_rel cx.txn.target vs ss ∧
@@ -994,26 +1100,26 @@ End
 
 Definition result_rel_def:
   (* Normal completion — no return value *)
-  (result_rel ret_tv cenv cx (INL (), vs') (OK ss') =
-    state_rel cenv cx vs' ss') ∧
+  (result_rel func ret_tv cenv cx (INL (), vs') (OK ss') =
+    state_rel func cenv cx vs' ss') ∧
   (* Internal return: state + return values *)
-  (result_rel ret_tv cenv cx (INR (ReturnException v), vs') (IntRet ir ss') =
-    (state_rel cenv cx vs' ss' ∧
+  (result_rel func ret_tv cenv cx (INR (ReturnException v), vs') (IntRet ir ss') =
+    (state_rel func cenv cx vs' ss' ∧
      intret_vals_match ret_tv v ir.iret_values ∧
      ir.iret_adopt_fmp = NONE)) ∧
   (* External return → Halt with ABI-encoded data *)
-  (result_rel ret_tv cenv cx (INR (ReturnException v), vs') (Halt ss') =
-    state_rel cenv cx vs' ss') ∧
+  (result_rel func ret_tv cenv cx (INR (ReturnException v), vs') (Halt ss') =
+    state_rel func cenv cx vs' ss') ∧
   (* Every reason may REVERT, including an ordinary raise "UNREACHABLE".
      Only the distinguished UNREACHABLE exception may map to ExHalt_abort. *)
-  (result_rel ret_tv cenv cx (INR (AssertException s), vs') (Abort Revert_abort ss') =
+  (result_rel func ret_tv cenv cx (INR (AssertException s), vs') (Abort Revert_abort ss') =
     T) ∧
-  (result_rel ret_tv cenv cx (INR (AssertException s), vs') (Abort ExHalt_abort ss') =
+  (result_rel func ret_tv cenv cx (INR (AssertException s), vs') (Abort ExHalt_abort ss') =
     (s = "UNREACHABLE")) ∧
   (* Error → Abort (any type) *)
-  (result_rel ret_tv cenv cx (INR (Error _), vs') (Abort _ ss') = T) ∧
+  (result_rel func ret_tv cenv cx (INR (Error _), vs') (Abort _ ss') = T) ∧
   (* Everything else: no relation *)
-  (result_rel _ _ _ _ _ = F)
+  (result_rel _ _ _ _ _ _ = F)
 End
 
 (* ===== Type Classification ===== *)

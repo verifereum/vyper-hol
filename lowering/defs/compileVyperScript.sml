@@ -245,6 +245,22 @@ Definition allocate_args_def:
       (vars |+ (name, MemLoc offset sz))
 End
 
+(* Like allocate_args, but for collect_locals' declarations: a name declared
+   again (in a disjoint block) moves to a new region only when it needs more
+   room, so its final region fits each of its declarations. *)
+Definition allocate_locals_def:
+  allocate_locals sft [] (offset : num) vars = (vars, offset) ∧
+  allocate_locals sft ((name, ty) :: rest) offset vars =
+    let sz = type_mem_bytes sft ty in
+    case FLOOKUP vars name of
+      SOME (MemLoc _ sz') =>
+        if sz ≤ sz' then allocate_locals sft rest offset vars
+        else allocate_locals sft rest (offset + sz)
+               (vars |+ (name, MemLoc offset sz))
+    | _ => allocate_locals sft rest (offset + sz)
+             (vars |+ (name, MemLoc offset sz))
+End
+
 (* Slots of an internal function's return buffer pointer (if it has one) and
    return PC, after its locals. They go to ce_return_buf / ce_return_pc, not
    ce_vars, so they cannot collide with user identifiers. *)
@@ -307,12 +323,22 @@ Definition build_func_info_def:
       FunctionDecl vis _ _ _ fname fargs _ ret _ =>
         if vis = External then rest_map
         else
-          let fn_lbl = fname in
           let arg_types = MAP SND fargs in
           let ret_mem = type_mem_bytes sft ret in
           let info = compute_func_info (λn. MAP (FST o SND) (sft n))
                        ret ret_mem arg_types in
-          (λs. if s = fn_lbl then info else rest_map s)
+          (λs. if s = fname then info else rest_map s)
+    | _ => rest_map
+End
+
+Definition build_func_param_types_def:
+  build_func_param_types ([] : toplevel list) = (K [] : string -> type list) ∧
+  build_func_param_types (top :: rest) =
+    let rest_map = build_func_param_types rest in
+    case top of
+      FunctionDecl vis _ _ _ fname fargs _ _ _ =>
+        if vis = External then rest_map
+        else (λs. if s = fname then MAP SND fargs else rest_map s)
     | _ => rest_map
 End
 
@@ -402,7 +428,11 @@ Definition build_compile_env_def:
     let module_vars = add_module_var_locations tops FEMPTY in
     let (arg_vars, args_end) = allocate_args sft_fn args 0 module_vars in
     let locals = collect_locals body in
-    let (local_vars, locals_end) = allocate_args sft_fn locals args_end arg_vars in
+    (* External and fallback bodies allocate each local at its declaration
+       (declare_local), so only the others reserve slots here. *)
+    let (local_vars, locals_end) =
+      if is_external then (arg_vars, args_end)
+      else allocate_locals sft_fn locals args_end arg_vars in
     let (ret_buf, ret_pc) =
       if is_external then (NONE, NONE)
       else allocate_internal_special_vars has_return_buf locals_end in
@@ -439,9 +469,11 @@ Definition build_compile_env_def:
        (* Default: overridden by package_internal_fn for ctor context *)
        ce_is_ctor := (vis = Deploy);
        ce_func_info := func_info;
+       ce_func_param_types := build_func_param_types tops;
        ce_nonreentrant := (F, 0n, use_transient_locks, mut = View);
        (* Default: overridden by package_*_fn from FunctionDecl raw_return field *)
-       ce_raw_return := F
+       ce_raw_return := F;
+       ce_alloca_locals := is_external
     |> : compile_env
 End
 
@@ -474,6 +506,37 @@ Proof
   rpt strip_tac
   >> simp[build_compile_env_def]
   >> rpt (pairarg_tac >> gvs[])
+QED
+
+Theorem build_compile_env_ce_func_param_types:
+  !tops vis mut func_name args ret_type (body : stmt list) use_trans.
+    (build_compile_env tops vis mut func_name args ret_type body use_trans).
+      ce_func_param_types =
+    build_func_param_types tops
+Proof
+  rpt strip_tac
+  >> simp[build_compile_env_def]
+  >> rpt (pairarg_tac >> gvs[])
+QED
+
+(* The call site's parameter types for fname are those of the first
+   non-external declaration named fname, so its label agrees with the one
+   package_internal_fn gives that declaration. *)
+Theorem build_func_param_types_first_decl:
+  !pre post vis fm nr rr fname fargs dflts ret body.
+    vis <> External /\
+    EVERY (\top. !v fm' nr' rr' args' dflts' ret' body'.
+             top = FunctionDecl v fm' nr' rr' fname args' dflts' ret' body' ==>
+             v = External) pre ==>
+    build_func_param_types
+      (pre ++ FunctionDecl vis fm nr rr fname fargs dflts ret body :: post)
+      fname = MAP SND fargs
+Proof
+  Induct
+  >- simp[build_func_param_types_def]
+  >> rpt gen_tac >> strip_tac
+  >> Cases_on `h` >> gvs[build_func_param_types_def]
+  >> rw[] >> gvs[]
 QED
 
 Theorem build_compile_env_external_single_uint_arg_lookup:
@@ -622,7 +685,7 @@ End
 Definition package_internal_fn_def:
   package_internal_fn tops use_trans nkey_map is_ctor_context immutables_len
     (mut, nr, rr, fname, fargs, _, ret, body) =
-    let fn_lbl = fname in
+    let fn_lbl = internal_fn_label fname (MAP SND fargs) is_ctor_context in
     let sft = make_struct_fields_map tops in
     let sft_fn = get_struct_fields sft in
     let sft_types = (λname. MAP (FST o SND) (sft_fn name)) in
@@ -651,19 +714,21 @@ Theorem package_internal_fn_call_label:
     FST (package_internal_fn tops use_trans nkey_map is_ctor_context
            immutables_len
            (mut, nr, rr, fname, fargs, dflts, ret, body)) =
-    nsid_to_string (NONE, fname)
+    internal_fn_label (nsid_to_string (NONE, fname)) (MAP SND fargs)
+      is_ctor_context
 Proof
   simp[package_internal_fn_def, nsid_to_string_def]
 QED
 
 Definition source_internal_fn_descriptor_def:
-  source_internal_fn_descriptor tops
+  source_internal_fn_descriptor tops is_ctor_context
     (mut, nr, rr, fname, fargs, dflts, ret, body) =
     let sft_types =
       (\name. MAP (FST o SND)
                     (get_struct_fields (make_struct_fields_map tops) name)) in
     let rc = returns_stack_count sft_types ret in
-    (fname, rc = 0 /\ ret <> NoneT, rc)
+    (internal_fn_label fname (MAP SND fargs) is_ctor_context,
+     rc = 0 /\ ret <> NoneT, rc)
 End
 
 Theorem build_compile_env_returns_count:
@@ -686,7 +751,7 @@ Theorem package_internal_fn_descriptor:
       [package_internal_fn tops use_trans nkey_map is_ctor_context
          immutables_len
          (mut, nr, rr, fname, fargs, dflts, ret, body)] =
-    [source_internal_fn_descriptor tops
+    [source_internal_fn_descriptor tops is_ctor_context
        (mut, nr, rr, fname, fargs, dflts, ret, body)]
 Proof
   simp[internal_fn_descriptors_def, package_internal_fn_def,
@@ -699,7 +764,7 @@ Theorem internal_fn_descriptors_MAP_package_internal_fn:
     internal_fn_descriptors
       (MAP (package_internal_fn tops use_trans nkey_map is_ctor_context
               immutables_len) fs) =
-    MAP (source_internal_fn_descriptor tops) fs
+    MAP (source_internal_fn_descriptor tops is_ctor_context) fs
 Proof
   Induct
   >- simp[internal_fn_descriptors_def]
