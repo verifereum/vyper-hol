@@ -6,7 +6,7 @@
  * operands.  compile_word_builtin_sim builds expr_sim of the whole from the
  * operands' expr_sim and word_builtin_frag, the fragment from the operands'
  * values to the source's builtin_result.  It is exprSimOps' compile_bop_sim
- * for any number of operands.
+ * for any number of word operands.
  *
  * TOP-LEVEL:
  *   builtin_result, eval_expr_builtin_cases — the source side
@@ -17,8 +17,21 @@
  *   lower_word_args        — the operands' lowering
  *   wb_args_ready, wb_args_shape — what the composition needs of each
  *                            operand: its expr_sim, and that its lowering
- *                            only appends and hands out a variable
+ *                            only appends and hands out a variable or a
+ *                            literal
  *   compile_word_builtin_sim — the composition
+ *
+ * Helper:
+ *   eval_exprs_cons_cases, wb_args_cons_cases — the source's left-to-right
+ *                            evaluation of the operands
+ *   lower_word_args_sim    — the operands' fragments, run in sequence
+ *   wb_frame, wb_args_post, wb_args_exit — what holds after them
+ *   expr_post_word_builtin — expr_post of the whole from the last
+ *                            operand's and the fragment's facts
+ *
+ * Its operands and result are word_values and its fragment leaves memory
+ * alone, so a bytesN or address operand or result, or a fragment that
+ * writes a buffer, is out of its reach.
  *)
 
 Theory exprSimWordArgs
@@ -112,18 +125,6 @@ Proof
   drule eval_operand_drop_fresh >> simp[]
 QED
 
-Theorem word_operands_frame:
-  !xs vs sa s t.
-    EVERY (\x. (!z. x = Var z ==> not_fresh_at sa z) /\ (!l. x <> Label l)) xs /\
-    LIST_REL (\x v. eval_operand x s = SOME (val_to_w256 v)) xs vs /\
-    (!z w. not_fresh_at sa z /\ lookup_var z s = SOME w ==> lookup_var z t = SOME w) ==>
-    LIST_REL (\x v. eval_operand x t = SOME (val_to_w256 v)) xs vs
-Proof
-  Induct >> Cases_on `vs` >> simp[] >> rpt strip_tac
-  >- (drule_all eval_operand_frame >> simp[]) >>
-  first_x_assum irule >> goal_assum (drule_at Any) >> simp[]
-QED
-
 Theorem word_builtin_frag_success:
   !ctx func cenv cx code res vs es0 v.
     res = INL (Value v) /\ word_value v /\
@@ -162,30 +163,6 @@ Proof
   simp[word_operands_drop_fresh, expr_exit_def] >> rpt strip_tac >>
   first_x_assum irule >>
   goal_assum (drule_at Any) >> qexistsl_tac [`op`, `xs`] >> simp[]
-QED
-
-(* No-code probes also cover Wei's scale-one implementation. *)
-Theorem word_builtin_frag_constant:
-  !ctx func cenv cx vs es v.
-    word_value v ==>
-    word_builtin_frag ctx func cenv cx
-      (\xs. comp_return (Lit (val_to_w256 v))) (INL (Value v)) vs es
-Proof
-  rpt strip_tac >> irule word_builtin_frag_success >>
-  simp[straight_fresh_return, comp_return_def, emitted_insts_refl,
-       run_inst_seq_def, eval_operand_def]
-QED
-
-Theorem word_builtin_frag_operand:
-  !ctx func cenv cx vs es n.
-    n < LENGTH vs /\ word_value (EL n vs) ==>
-    word_builtin_frag ctx func cenv cx
-      (\xs. comp_return (EL n xs)) (INL (Value (EL n vs))) vs es
-Proof
-  rpt strip_tac >> irule word_builtin_frag_success >>
-  simp[straight_fresh_return, comp_return_def, emitted_insts_refl,
-       run_inst_seq_def] >> rpt strip_tac >>
-  gvs[LIST_REL_EL_EQN]
 QED
 
 (* ===== Left-to-right word argument lowering ===== *)
@@ -406,20 +383,6 @@ Definition wb_args_exit_def:
              | INR exc => expr_exit (INR exc : toplevel_value + exception)
 End
 
-Theorem wb_args_eval_success:
-  !args ctx func cenv cx arg_ty I es vs es'.
-    wb_args_ready ctx func cenv cx arg_ty I args /\ I es /\
-    eval_exprs cx args es = (INL vs, es') ==>
-    I es' /\ EVERY word_value vs /\ LENGTH vs = LENGTH args
-Proof
-  Induct >- simp[eval_exprs_nil] >> rpt gen_tac >> strip_tac >>
-  drule_all wb_args_cons_cases >> strip_tac >- gvs[] >>
-  Cases_on `rr` >> gvs[] >>
-  first_x_assum irule >>
-  goal_assum (drule_at Any) >>
-  metis_tac[wb_args_ready_tail]
-QED
-
 (* ===== Argument fragment execution ===== *)
 Definition wb_args_post_def:
   wb_args_post func cenv cx es sa s0 es' xs vs s <=>
@@ -554,6 +517,7 @@ Proof
       drule_all expr_sim_apply >>
       disch_then (qspec_then `s0` mp_tac) >> simp[] >> strip_tac >>
       irule frag_exec_exit_prefix >> goal_assum (drule_at Any) >> simp[]) >>
+  rename1 `eval_exprs cx args es1 = (rr1, _)` >>
   `local_ptrs_reserved cenv s1` by
     metis_tac[local_ptrs_reserved_next_var] >>
   `wb_args_ready ctx func cenv cx arg_ty Inv args` by
@@ -567,7 +531,7 @@ Proof
   qx_gen_tac `t` >> strip_tac >>
   first_x_assum (drule_all_then (qspec_then `t` mp_tac)) >>
   disch_then (mp_then Any irule frag_exec_weaken) >>
-  conj_tac >- (Cases_on `rr'` >> simp[wb_args_exit_def]) >>
+  conj_tac >- (Cases_on `rr1` >> simp[wb_args_exit_def]) >>
   conj_tac >- (rpt strip_tac >> gvs[] >> metis_tac[expr_post_state]) >>
   rpt strip_tac >> gvs[] >>
   irule wb_args_post_cons >> goal_assum (drule_at Any) >> simp[] >>

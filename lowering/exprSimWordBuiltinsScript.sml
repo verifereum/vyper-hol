@@ -15,6 +15,18 @@
  *   compile_modular_word_frag, compile_pow_mod256_word_frag,
  *   compile_as_wei_value_word_frag, compile_floor_word_frag — the fragments
  *
+ * Helper:
+ *   compile_expr_builtin_dispatch, lower_value_floor,
+ *   lower_value_as_wei_value, lower_value_ternary_modular,
+ *   lower_value_pow_mod256 — compile_expr's lowering of the five as
+ *                            lower_word_args and the fragment
+ *   compile_modular_run, compile_pow_mod256_run,
+ *   compile_as_wei_value_int_run — the fragments' runs
+ *   typed_word_args_ready  — wb_args_ready and wb_args_shape from
+ *                            expr_sim_pre and the induction hypothesis
+ *   compile_typed_word_builtin_sim — compile_word_builtin_sim on typed
+ *                            operands
+ *
  * The operands' shape is exprSimOperators' lower_value_word_shape, which
  * is cheated.
  *)
@@ -28,21 +40,9 @@ Ancestors
   exprBopLowering builtinMath builtinMisc builtinSimple arithmeticProps
   compileEnv exprSimOps freshWrites fragExec varsExt exprLoweringProps
   venomExecSemantics venomState emitHelper emitHelperProps venomInst
+  builtinProps
 
-Theorem word_builtin_unary_types:
-  !ty bt ts.
-    (bt = Floor \/ (?d. bt = AsWeiValue d)) ==>
-    well_typed_builtin_app ty bt ts ==>
-    ?t. ts = [t] /\
-      (if bt = Floor then
-         t = BaseT DecimalT /\ ty = BaseT (IntT 256)
-       else is_uint_type t /\ ty = BaseT (UintT 256))
-Proof
-  rpt gen_tac >> strip_tac >> gvs[well_typed_builtin_app_def] >>
-  Cases_on `ts` >> gvs[] >>
-  rename1 `LENGTH rest = 0` >>
-  Cases_on `rest` >> gvs[]
-QED
+(* ===== Operand types and the lowering of the five ===== *)
 
 Theorem word_builtin_modular_types:
   !ty bt ts.
@@ -159,7 +159,7 @@ QED
 Theorem lower_value_name:
   !cenv ty ann id st.
     lower_value compile_expr cenv ty (Name ann id) st =
-    (let (v, s1) = compile_name_vv cenv ann id st in unwrap_value cenv v s1)
+    comp_bind (compile_name_vv cenv ann id) (unwrap_value cenv) st
 Proof
   simp[lower_value_def, comp_bind_def,
        Once (CONJUNCT1 compile_expr_raw_def), compile_expr_body_def,
@@ -180,7 +180,7 @@ Proof
        compile_builtin_dispatch_body_def] >>
   CONV_TAC (DEPTH_CONV ETA_CONV) >>
   simp[lower_value_child_call, vyperASTTheory.expr_size_def, list_size_def,
-       lower_value_name] >>
+       lower_value_name, comp_bind_def] >>
   rpt (pairarg_tac >> gvs[])
 QED
 
@@ -196,7 +196,7 @@ Proof
        compile_builtin_dispatch_body_def] >>
   CONV_TAC (DEPTH_CONV ETA_CONV) >>
   simp[lower_value_child_call, vyperASTTheory.expr_size_def, list_size_def,
-       lower_value_name] >>
+       lower_value_name, comp_bind_def] >>
   rpt (pairarg_tac >> gvs[])
 QED
 
@@ -461,7 +461,7 @@ Proof
   metis_tac[compile_pow_mod256_word_frag]
 QED
 
-(* ===== Unsigned scaling overflow ===== *)
+(* ===== as_wei_value: unsigned scaling overflow ===== *)
 Theorem mul_mod_div_no_overflow:
   !N x m:num. 0 < N /\ x < N /\ 0 < m /\ m < N ==>
     (((x * m MOD N) DIV x = m \/ x = 0) <=> x * m < N)
@@ -514,6 +514,15 @@ Proof
   qspec_then `dimword (:256)` mp_tac mul_mod_div_no_overflow >>
   disch_then (qspecl_then [`w2n a`, `m`] mp_tac) >>
   simp[arithmeticTheory.MULT_COMM, w2n_lt]
+QED
+
+Theorem fresh_vars_wrt_not_fresh_at:
+  !sa ss x w.
+    fresh_vars_wrt sa ss /\ eval_operand x ss = SOME w ==>
+    !z. x = Var z ==> not_fresh_at sa z
+Proof
+  rw[not_fresh_at_def] >>
+  metis_tac[fresh_vars_wrt_eval_operand, arithmeticTheory.GREATER_EQ]
 QED
 
 Theorem eval_operand_update_not_fresh:
@@ -604,20 +613,18 @@ Proof
       rpt strip_tac >>
       gvs[LIST_REL_EL_EQN, val_to_w256_def, i2w_pos] >>
       `!z. x = Var z ==> not_fresh_at sa z` by
-        (rpt strip_tac >> simp[not_fresh_at_def] >> rpt strip_tac >>
-         gvs[fresh_vars_wrt_def, eval_operand_def, lookup_var_def] >>
-         first_x_assum (qspec_then `n` mp_tac) >> simp[finite_mapTheory.TO_FLOOKUP]) >>
+        metis_tac[fresh_vars_wrt_not_fresh_at] >>
       drule_all (SRULE [dimword_def] compile_as_wei_value_int_run) >>
       simp[dimword_def, word_mul_def, w2n_n2w, arithmeticTheory.MULT_COMM]) >>
   irule word_builtin_frag_revert >>
   simp[straight_fresh_as_wei_value_int] >> rpt strip_tac >>
   gvs[LIST_REL_EL_EQN, val_to_w256_def, i2w_pos] >>
   `!z. x = Var z ==> not_fresh_at sa z` by
-    (rpt strip_tac >> simp[not_fresh_at_def] >> rpt strip_tac >>
-     gvs[fresh_vars_wrt_def, eval_operand_def, lookup_var_def] >>
-     first_x_assum (qspec_then `n` mp_tac) >> simp[finite_mapTheory.TO_FLOOKUP]) >>
+    metis_tac[fresh_vars_wrt_not_fresh_at] >>
   drule_all (SRULE [dimword_def] compile_as_wei_value_int_run) >> simp[]
 QED
+
+(* ===== Floor ===== *)
 
 (* Floor by truncation after the negative-input adjustment. *)
 Theorem int_floor_via_quot:
@@ -642,45 +649,6 @@ Proof
   rpt (FIRST [CHANGED_TAC (simp[]), irule straight_fresh_bind >> conj_tac,
               irule straight_fresh_emit_op >> simp[fresh_write_op_def] >> NO_TAC,
               gen_tac])
-QED
-
-Theorem compile_floor_run:
-  !a d sa op sb ss (va:bytes32).
-    compile_floor a d sa = (op,sb) /\
-    eval_operand a ss = SOME va /\
-    (!z. a = Var z ==> not_fresh_at sa z) ==>
-    ?ss'. run_inst_seq (emitted_insts sa sb) ss = OK ss' /\
-      eval_operand op ss' = SOME
-        (safe_sdiv (if w2i va < 0 then va - n2w (d - 1) else va) (n2w d))
-Proof
-  rpt gen_tac >>
-  simp[compile_floor_def, compile_select_def, emit_op_def, emit_inst_def,
-       comp_bind_def, comp_ignore_bind_def, comp_return_def, fresh_id_def, fresh_var_def, emit_def] >>
-  strip_tac >> gvs[] >> simp[emitted_insts_def] >>
-  CONV_TAC (DEPTH_CONV (REWR_CONV (GSYM APPEND_ASSOC))) >>
-  simp[rich_listTheory.DROP_LENGTH_APPEND] >>
-  qspec_then `sa` assume_tac eval_operand_update_not_fresh >>
-  simp[Once run_inst_seq_def] >>
-  simp[Once step_inst_base_def, mk_inst_def, exec_pure2_def, eval_operand_def] >>
-  simp[Once run_inst_seq_def] >>
-  simp[Once step_inst_base_def, mk_inst_def, exec_pure2_def,
-       eval_operand_update_not_fresh, eval_operand_def, lookup_var_update_var] >>
-  simp[Once run_inst_seq_def] >>
-  simp[Once step_inst_base_def, mk_inst_def, exec_pure2_def,
-       eval_operand_update_not_fresh, eval_operand_def, lookup_var_update_var] >>
-  simp[Once run_inst_seq_def] >>
-  simp[Once step_inst_base_def, mk_inst_def, exec_pure2_def,
-       eval_operand_update_not_fresh, eval_operand_def, lookup_var_update_var] >>
-  simp[Once run_inst_seq_def] >>
-  simp[Once step_inst_base_def, mk_inst_def, exec_pure2_def,
-       eval_operand_update_not_fresh, eval_operand_def, lookup_var_update_var] >>
-  simp[Once run_inst_seq_def] >>
-  simp[Once step_inst_base_def, mk_inst_def, exec_pure2_def] >>
-  simp[eval_operand_def, lookup_var_update_var, run_inst_seq_def] >>
-  Cases_on `w2i va < 0` >>
-  simp[WORD_LTi, word_0_w2i, bool_to_word_def, WORD_MULT_CLAUSES,
-       WORD_XOR_CLAUSES, WORD_XOR_ASSOC, WORD_XOR_COMM, lookup_var_update_var] >>
-  simp[GSYM WORD_XOR_ASSOC, WORD_XOR_CLAUSES]
 QED
 
 Theorem word_floor_via_quot:
@@ -730,12 +698,12 @@ Proof
   irule word_builtin_frag_success >>
   simp[straight_fresh_floor, word_value_def] >> rpt strip_tac >>
   gvs[LIST_REL_EL_EQN, val_to_w256_def] >>
-  `!z. x = Var z ==> not_fresh_at sa z` by
-    (rpt strip_tac >> simp[not_fresh_at_def] >> rpt strip_tac >>
-     gvs[fresh_vars_wrt_def, eval_operand_def, lookup_var_def] >>
-     first_x_assum (qspec_then `n` mp_tac) >> simp[finite_mapTheory.TO_FLOOKUP]) >>
-  drule_all compile_floor_run >> simp[decimal_floor_word]
+  drule_all compile_floor_correct >> strip_tac >>
+  qexists_tac `ss'` >> simp[] >>
+  drule decimal_floor_word >> simp[WORD_LTi, word_0_w2i]
 QED
+
+(* ===== Typed composition and the case lemmas ===== *)
 
 (* Adapter from the public induction predicate to list composition. *)
 Theorem typed_word_args_ready:

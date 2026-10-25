@@ -35,17 +35,16 @@
  *   - compile_acc_sim for .code: the lowering emits INVALID.
  *   - compile_len_sim: well_typed_builtin_app Len admits fixed arrays and
  *     bytesN, but the lowering always loads the operand's first word.
- *   - compile_sha256_sim, compile_ecrecover_sim, compile_ecadd_sim,
- *     compile_ecmul_sim: the source computes the precompile's result
- *     itself, while the lowering STATICCALLs the precompile, and Venom's
- *     STATICCALL takes an outcome from the call oracle and records a
- *     request (consume_call_outcome), which state_rel equates with the
- *     source's outcomes and requests.
- *   - compile_keccak256_sim for a Bytes or String operand:
- *     compile_keccak256_bytes hashes from ADD ptr 32, which wraps at
- *     2 ** 256, while val_in_memory reads the bytes at w2n ptr + 32, and
- *     nothing in stmt_state_rel or expr_val_at keeps a memory value below
- *     2 ** 256 (exec_alloca's vs_alloca_next is unbounded).
+ *   - compile_keccak256_sim and compile_sha256_sim for a Bytes or String
+ *     operand: compile_keccak256_bytes and compile_sha256_bytes read the
+ *     bytes from ADD ptr 32, which wraps at 2 ** 256, while val_in_memory
+ *     reads them at w2n ptr + 32, and nothing in stmt_state_rel or
+ *     expr_val_at keeps a memory value below 2 ** 256 (exec_alloca's
+ *     vs_alloca_next is unbounded).
+ *
+ * The STATICCALLs of sha256, ecrecover, ecadd and ecmul go to computed
+ * precompiles: take_outcome answers them with precompile_result and leaves
+ * the outcomes and requests alone (extCallOracle), as the source does.
  *
  * len, the hashes of a bytestring and slice read their operand's value_vv
  * (compile_expr without unwrap_value), which the induction hypothesis's
@@ -108,8 +107,9 @@ QED
    a word_value, IntV):
    - as_wei_value: well_typed_builtin_app admits only unsigned operands, so
      compile_as_wei_value_int with is_signed = F applies.  For x < 2 ** 256
-     and m > 0, MUL's product mod 2 ** 256 divided by x is m exactly when
-     x * m < 2 ** 256 or x = 0, which is evaluate_as_wei_value's bound check;
+     and m > 0, x * m < 2 ** 256 exactly when x = 0 or MUL's product mod
+     2 ** 256 divided by x is m (mul_mod_div_no_overflow), which is
+     evaluate_as_wei_value's bound check;
      an overflow is a RuntimeError at the source and a failed ASSERT below.
      Wei (m = 1) emits no code.
    - floor: the source's i / decimal_scale rounds toward negative infinity;
