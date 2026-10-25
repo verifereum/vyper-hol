@@ -16,8 +16,9 @@
  *                           abi_decode with its validation aborts, row 4
  *
  * The StructLit case takes the field layout from the literal's own struct,
- * whatever the caller's ty (compile_expr_struct_lit_ty), so
- * compile_struct_lit_sim holds at every ty.
+ * whatever the caller's ty (compile_expr_struct_lit_ty).  That layout
+ * comes from ce_struct_fields, so compile_struct_lit_sim still needs
+ * expr_sim_inv's struct-metadata clause (exprSimHyps, "Not here yet").
  *
  * The elements of a struct or array literal are lowered as
  * cfn ...; ADD ...; unwrap_value, and an element that is a storage or
