@@ -140,6 +140,18 @@ Definition initial_venom_state_rel_def:
     vs.vs_returndata = [] /\ vs.vs_requests = []
 End
 
+(* The calldata Venom reads is the transaction's, which the source typing
+   bounds; dispatch and the entry checks need the bound. *)
+Theorem initial_venom_state_calldata_length:
+  source_typing_ok tops am tx /\ initial_venom_state_rel am tx vs ==>
+  LENGTH vs.vs_call_ctx.cc_calldata < dimword (:256)
+Proof
+  rw[source_typing_ok_def,
+     vyperTypeContractSoundnessTheory.call_tx_well_typed_def,
+     initial_venom_state_rel_def, venom_env_rel_def, call_ctx_rel_def] >>
+  simp[wordsTheory.dimword_def]
+QED
+
 (* Only success compares effects/requests. Runtime failure must abort, except
    the exact dynamic strict-decoding exemption on Halt. A failed external call
    (RevertData) must REVERT; as for assertions, the revert data itself is not
