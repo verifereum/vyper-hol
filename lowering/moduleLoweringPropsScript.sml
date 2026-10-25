@@ -380,8 +380,8 @@ Proof
       fresh_vars_wrt s7 u1 /\ (!x. not_fresh_at st x ==> lookup_var x u1 =
       lookup_var x ss) /\ eval_operand mid u1 = SOME m` by (simp[Abbr `u1`,
       control_moves_keep_vars] >> rpt conj_tac >> TRY (fs[update_var_def]
-      >> NO_TAC) >> TRY (metis_tac[vars_pc_only_inst_idx,
-      vars_pc_only_update_var, vars_pc_only_refl] >> NO_TAC)
+      >> NO_TAC) >> TRY (irule vars_pc_only_inst_idx
+      >> irule vars_pc_only_update_var >> irule vars_pc_only_refl >> NO_TAC)
       >> TRY (irule fresh_vars_wrt_advance
       >> qexistsl_tac [`st.cs_next_var`, `st`] >> fs[] >> NO_TAC)
       >> TRY (rw[lookup_var_def, update_var_def, FLOOKUP_UPDATE]
@@ -518,8 +518,8 @@ Proof
       >> TRY (fs[update_var_def] >> NO_TAC)
       >> TRY (simp[eval_operand_def, lookup_var_def, update_var_def,
       FLOOKUP_UPDATE] >> NO_TAC)
-      >> TRY (metis_tac[vars_pc_only_inst_idx, vars_pc_only_update_var,
-      vars_pc_only_refl] >> NO_TAC) >> TRY (irule fresh_vars_wrt_advance
+      >> TRY (irule vars_pc_only_inst_idx
+      >> irule vars_pc_only_update_var >> irule vars_pc_only_refl >> NO_TAC) >> TRY (irule fresh_vars_wrt_advance
       >> qexistsl_tac [`st.cs_next_var`, `st`] >> fs[] >> NO_TAC)
       >> rw[lookup_var_def, update_var_def, FLOOKUP_UPDATE]
       >> fs[not_fresh_at_def])) >>
