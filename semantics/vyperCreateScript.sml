@@ -454,6 +454,7 @@ Definition make_create_state_def:
                       update_account address empty_account_state accounts)]
      ; txParams := txParams
      ; rollback := rollback
+     ; originalAccounts := update_account address empty_account_state accounts
      ; msdomain := Collect empty_domain
     |>
 End
