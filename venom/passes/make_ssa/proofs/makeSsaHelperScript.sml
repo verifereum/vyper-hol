@@ -22,7 +22,7 @@ Ancestors
   execEquivParamDefs execEquivParamProofs
   list rich_list alist finite_map pred_set string arithmetic
 Libs
-  ssaFrameLib
+  ssaFrameLib stepInstBaseLib
 
 val _ = augment_srw_ss [ssaFrameLib.frame_ss];
 
@@ -408,16 +408,6 @@ Proof
   simp[IN_UNION]
 QED
 
-(* Select cached dispatch equations without expanding unrelated opcodes. *)
-val make_ssa_opcode_rewrites = map (fn th => let
-  val (_, body) = strip_forall (concl th)
-  val (guard, _) = dest_imp body
-in (rhs guard, th) end) (CONJUNCTS step_inst_base_opcode_eqs);
-
-fun make_ssa_step_base_for opc =
-  #2 (valOf (List.find (fn (key, _) => aconv key opc)
-    make_ssa_opcode_rewrites));
-
 (* Only expose result constructors: return values, memory slices and DRET's
    packed state are irrelevant to the impossibility of an OK result. *)
 val make_ssa_term_result_ss = pure_ss ++ boolSimps.BOOL_ss ++ rewrites
@@ -427,7 +417,7 @@ val make_ssa_term_ok_jump_tac =
   qpat_x_assum `step_inst_base _ _ = OK _` mp_tac >>
   qpat_assum `inst.inst_opcode = _` (fn eq =>
     PURE_ONCE_REWRITE_TAC
-      [MATCH_MP (make_ssa_step_base_for (rhs (concl eq))) eq]) >>
+      [MATCH_MP (opcode_clause (rhs (concl eq))) eq]) >>
   simp_tac make_ssa_term_result_ss [];
 
 Theorem step_inst_base_DRET_not_OK_local[local]:
@@ -569,9 +559,10 @@ Theorem step_inst_base_outputs_in_fdom[local]:
     !out. MEM out inst.inst_outputs ==> out IN FDOM s'.vs_vars
 Proof
   rpt gen_tac >>
-  ONCE_REWRITE_TAC[step_inst_base_def] >>
   Cases_on `inst.inst_opcode` >>
-  PURE_REWRITE_TAC[venomInstTheory.opcode_case_def] >>
+  qpat_assum `inst.inst_opcode = _` (fn eq =>
+    PURE_ONCE_REWRITE_TAC
+      [MATCH_MP (opcode_clause (rhs (concl eq))) eq]) >>
   gvs[is_terminator_def] >>
   gvs[opcode_has_output_def] >>
   gvs[exec_pure1_def] >>
@@ -868,7 +859,7 @@ Theorem step_inst_base_lookup_preserved[local]:
 Proof
   rpt strip_tac >>
   `inst.inst_opcode <> INVOKE` by
-    (CCONTR_TAC >> gvs[make_ssa_step_base_for ``INVOKE``]) >>
+    (CCONTR_TAC >> gvs[opcode_clause ``INVOKE``]) >>
   `step_inst 0 ARB inst s = OK s'` by simp[step_inst_non_invoke] >>
   Cases_on `is_terminator inst.inst_opcode`
   >- (drule_all step_terminator_preserves_vars >> simp[]) >>
@@ -2916,9 +2907,8 @@ local
   ) (TypeBase.constructors_of ``:opcode``);
 
   val nt_ni_clauses = map (fn op_tm =>
-    SIMP_CONV (srw_ss()) [step_inst_base_def]
-      (mk_comb(mk_comb(``step_inst_base``,
-        ``inst with inst_opcode := ^op_tm``), ``st:venom_state``))
+    STEP_INST_BASE_OPCODE_SIMP_CONV
+      ``step_inst_base (inst with inst_opcode := ^op_tm) st``
   ) nt_ni_ops;
 
   val exec_helper_defs = [

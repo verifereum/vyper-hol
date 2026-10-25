@@ -1,8 +1,8 @@
-(* Focused actual boundary clients, not live oracle activation. *)
+(* Focused typed boundary clients of the current Send/ExtCall helpers. *)
 Theory vyperTypeCallOutcomeTest
 Ancestors
   list option pair sum arithmetic words finite_map
-  vyperAST vyperValue vyperState vyperInterpreter vyperABI vyperTyping
+  vyperMisc vyperAST vyperValue vyperState vyperInterpreter vyperABI vyperTyping
   vyperRuntimeAccounts vyperCallOutcome vyperCallOutcomeBranches
   vyperCallOutcomeFrame vyperTypeCallOutcome vyperTypeExtCallSoundness
   vyperTypeExprSoundness vyperTypeExprResult vyperTypeSystem vyperTypeInvariants
@@ -53,107 +53,82 @@ Proof
   rw[no_control_exc_def]
 QED
 
+(* Typed operands are required by eval_ext_call; functions_well_typed is
+   not: the callee is outside the source function environment. *)
 Theorem ExtCall_decode_type_client:
-  runtime_consistent env cx st /\ functions_well_typed cx /\
+  runtime_consistent env cx st /\
+  exprs_runtime_typed env es vs /\
+  MAP expr_type es =
+    BaseT AddressT :: call_types ++ MAP (ext_call_kw_type ret_type) opts /\
+  arg_types_fit call_types arg_types /\
+  EVERY (well_formed_type env.type_defs) arg_types /\
+  ext_call_opts_ok stat opts /\
   evaluate_type env.type_defs ret_type = SOME ret_tv /\
-  (do
-    accounts <- get_accounts;
-    (if ret_type = NoneT then
-      check (~NULL (lookup_account target accounts).code) "ExtCall target has no code"
-     else return ());
-    (rq,outcome) <- take_call_outcome target data value;
-    check outcome.co_success "ExtCall reverted";
-    adopt_call_outcome rq outcome;
-    v <- lift_sum_runtime (evaluate_abi_decode_return (get_tenv cx) ret_type outcome.co_returnData);
-    return (Value v)
-  od) st = (res,st') ==>
+  eval_ext_call cx stat skc (func_name,arg_types,ret_type) opts vs st = (res,st') ==>
   state_well_typed st' /\ env_consistent env cx st' /\
   accounts_well_typed st'.accounts /\ no_type_error_result res /\
   case res of
-  | INL tv => expr_result_typed env (Call ret_type (ExtCall stat skc fsig) es NONE) tv
+  | INL tv => expr_result_typed env
+      (Call ret_type (ExtCall stat skc (func_name,arg_types,ret_type) opts) es NONE) tv
   | INR _ => T
 Proof
-  rpt gen_tac >> strip_tac >>
-  drule_at Any (ExtCall_outcome_return_type_sound |> Q.INST [`drv` |-> `NONE`]
-    |> SRULE [IS_SOME_DEF, THE_DEF, Once well_typed_expr_def]) >>
-  disch_then (qspecl_then [`stat`,`skc`,`ret_tv`,`fsig`,`es`,`env`] mp_tac) >> simp[]
+  rpt strip_tac >> drule_all eval_ext_call_result_sound >> simp[]
 QED
 
 Theorem ExtCall_decode_no_control:
-  (do
-    accounts <- get_accounts;
-    (if ret_type = NoneT then
-      check (~NULL (lookup_account target accounts).code) "ExtCall target has no code"
-     else return ());
-    (rq,outcome) <- take_call_outcome target data value;
-    check outcome.co_success "ExtCall reverted";
-    adopt_call_outcome rq outcome;
-    v <- lift_sum_runtime (evaluate_abi_decode_return (get_tenv cx) ret_type outcome.co_returnData);
-    return (Value v)
-  od) st = (INR exc,st') ==>
+  eval_ext_call cx stat skc fsig opts vs st = (INR exc,st') ==>
   no_control_exc exc
 Proof
-  rpt strip_tac >>
-  drule_at Any (ExtCall_outcome_return_no_control |> Q.INST [`drv` |-> `NONE`]
-    |> SRULE [IS_SOME_DEF, THE_DEF]) >> simp[]
+  rpt strip_tac >> drule eval_ext_call_no_control >> simp[]
 QED
+
+(* Skip the code guard to isolate the post-adoption decoder. No default is
+   supplied: malformed bytes really run the decoder, even on empty data. *)
+val extcall_boundary_simps =
+  [eval_ext_call_def, ext_call_opts_ok_def, ext_call_kwarg_def,
+   ext_call_precheck_ok_def, bind_def, ignore_bind_def, return_def, raise_def,
+   type_check_def, check_def, assert_def, lift_option_type_def,
+   lift_sum_runtime_def, get_accounts_def];
 
 Theorem ExtCall_decode_errors_are_runtime:
-  (do
-    accounts <- get_accounts;
-    (if ret_type = NoneT then
-      check (~NULL (lookup_account target accounts).code) "ExtCall target has no code"
-     else return ());
-    (rq,outcome) <- take_call_outcome target data value;
-    check outcome.co_success "ExtCall reverted";
-    adopt_call_outcome rq outcome;
-    v <- lift_sum_runtime (evaluate_abi_decode_return (get_tenv cx) ret_type outcome.co_returnData);
-    return (Value v)
-  od) st = (INR exc,st') ==> ?msg. exc = Error (RuntimeError msg)
+  st.outcomes = SOME os /\
+  dest_AddressV target_v = SOME target /\ dest_NumV amount_v = SOME amount /\
+  build_ext_calldata (get_tenv cx) func_name [] [] = SOME data /\
+  take_call_outcome target data (SOME amount) st = (INL (rq,outcome),st1) /\
+  outcome.co_success /\ adopt_call_outcome rq outcome st1 = (INL (),st2) /\
+  evaluate_abi_decode_return (get_tenv cx) ret_type outcome.co_returnData = INR msg ==>
+  eval_ext_call cx F T (func_name,[],ret_type) [EKValue] [target_v;amount_v] st =
+    (INR (Error (RuntimeError msg)),st2)
 Proof
-  strip_tac >> Cases_on `take_call_outcome target data value st` >>
-  rename1 `take_call_outcome target data value st = (answer,mid)` >>
-  drule (ExtCall_outcome_continue |> INST_TYPE [alpha |-> ``:toplevel_value``]) >>
-  disch_then (qspecl_then [`ret_type`,
-    `\bs. do v <- lift_sum_runtime (evaluate_abi_decode_return (get_tenv cx) ret_type bs);
-             return (Value v) od`] mp_tac) >>
-  strip_tac >>
-  Cases_on `ret_type = NoneT /\ NULL (lookup_account target st.accounts).code`
-  >- (gvs[] >> simp[]) >> gvs[] >> Cases_on `answer`
-  >- (rename1 `INL ro` >> Cases_on `ro` >>
-      rename1 `take_call_outcome target data value st = (INL (rq,outcome),mid)` >>
-      Cases_on `outcome.co_success` >> gvs[] >>
-      Cases_on `evaluate_abi_decode_return (get_tenv cx) ret_type outcome.co_returnData` >>
-      gvs[lift_sum_runtime_def, bind_def, return_def, raise_def]) >>
-  gvs[] >> drule take_call_outcome_error >> rw[] >> simp[]
+  rpt strip_tac >> Cases_on `ret_type` >> simp extcall_boundary_simps
 QED
 
-Theorem ExtCall_default_runs_after_adoption:
-  take_call_outcome target data value st = (INL (rq,outcome),st1) /\
-  outcome.co_success /\ outcome.co_returnData = [] /\
-  adopt_call_outcome rq outcome st1 = (INL (),st2) /\
-  ret_type <> NoneT ==>
-  (do
-    accounts <- get_accounts;
-    (if ret_type = NoneT then
-      check (~NULL (lookup_account target accounts).code) "ExtCall target has no code"
-     else return ());
-    (rq,outcome) <- take_call_outcome target data value;
-    check outcome.co_success "ExtCall reverted";
-    adopt_call_outcome rq outcome;
-    if outcome.co_returnData = [] /\ IS_SOME (SOME e) then eval_expr cx e
-    else do
-      v <- lift_sum_runtime (evaluate_abi_decode_return (get_tenv cx) ret_type outcome.co_returnData);
-      return (Value v)
-    od
-  od) st = eval_expr cx e st2
+(* Failure propagates the actual bytes and does not adopt the outcome. *)
+Theorem ExtCall_revert_preserves_payload:
+  st.outcomes = SOME os /\
+  dest_AddressV target_v = SOME target /\ dest_NumV amount_v = SOME amount /\
+  build_ext_calldata (get_tenv cx) func_name [] [] = SOME data /\
+  take_call_outcome target data (SOME amount) st = (INL (rq,outcome),st1) /\
+  ~outcome.co_success ==>
+  eval_ext_call cx F T (func_name,[],ret_type) [EKValue] [target_v;amount_v] st =
+    (INR (Error (RevertData outcome.co_returnData)),st1)
 Proof
-  rpt strip_tac >>
-  drule (ExtCall_outcome_continue |> INST_TYPE [alpha |-> ``:toplevel_value``]) >>
-  disch_then (qspecl_then [`ret_type`,
-    `\bs. if bs = [] then eval_expr cx e
-     else do v <- lift_sum_runtime (evaluate_abi_decode_return (get_tenv cx) ret_type bs);
-             return (Value v) od`] mp_tac) >> simp[]
+  rpt strip_tac >> Cases_on `ret_type` >> simp extcall_boundary_simps
+QED
+
+(* Defaults are already evaluated operands, not expressions to run after
+   adoption. Empty return data selects that captured value at the adopted state. *)
+Theorem ExtCall_default_selected_after_adoption:
+  st.outcomes = SOME os /\
+  dest_AddressV target_v = SOME target /\ dest_NumV amount_v = SOME amount /\
+  build_ext_calldata (get_tenv cx) func_name [] [] = SOME data /\
+  take_call_outcome target data (SOME amount) st = (INL (rq,outcome),st1) /\
+  outcome.co_success /\ outcome.co_returnData = [] /\
+  adopt_call_outcome rq outcome st1 = (INL (),st2) ==>
+  eval_ext_call cx F T (func_name,[],ret_type) [EKValue;EKDefault]
+    [target_v;amount_v;default_v] st = (INL (Value default_v),st2)
+Proof
+  rpt strip_tac >> Cases_on `ret_type` >> simp extcall_boundary_simps
 QED
 
 Theorem source_account_guard_bounds_not_storage:

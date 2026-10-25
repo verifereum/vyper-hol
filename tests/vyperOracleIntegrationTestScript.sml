@@ -19,7 +19,7 @@ Definition integration_program_def:
     [FunctionDecl External Nonpayable F F "calls" [] [] NoneT integration_body;
      FunctionDecl Deploy Payable F F "__init__" [] [] NoneT integration_body;
      FunctionDecl External Nonpayable F F "defaults" [("x",NoneT)]
-       [send_call 9w 0] NoneT [Expr (send_call 10w 7)]]
+       [send_call 0x99w 0] NoneT [Expr (send_call 10w 7)]]
 End
 val () = cv_auto_trans integration_program_def;
 
@@ -93,7 +93,7 @@ Theorem public_call_exhaustion_and_guard_failure_requests:
     (INR (Error (RuntimeError "call outcome accounts"))) 3 2w 4w cpscv_initial_logs
     [(9w,7,[],F,3,2w,4w)] /\
   integration_call_observe F NONE
-    (INR (Error (RuntimeError "transfer_value amount"))) 3 2w 4w cpscv_initial_logs []
+    (INR (Error (RuntimeError "send failed"))) 3 2w 4w cpscv_initial_logs []
 Proof
   CONV_TAC cv_eval
 QED
@@ -137,7 +137,7 @@ Definition integration_defaults_constants_observe_def:
     let (r,am,rqs) = call_external (SOME [send_outcome T [] 17])
       integration_machine (integration_tx "defaults") in
     let mods = [(NONE,
-      [VariableDecl Private (Constant (send_call 9w 0)) "c" NoneT NONE;
+      [VariableDecl Private (Constant (send_call 0x99w 0)) "c" NoneT NONE;
        FunctionDecl Deploy Payable F F "__init__" [] [] NoneT [Expr (send_call 10w 7)]])] in
     let loaded = load_contract (SOME [send_outcome T [] 17])
       integration_machine (integration_tx "__init__") mods [] in
@@ -178,7 +178,7 @@ Theorem RawCall_ignores_source_oracle:
   integration_raw_call_observe 20w (INL (Value NoneV)) (SOME []) /\
   integration_raw_call_observe 20w (INL (Value NoneV))
     (SOME [send_outcome F [] (2 ** 256)]) /\
-  integration_raw_call_observe 9w (INR (Error (RuntimeError "raw_call reverted")))
+  integration_raw_call_observe 9w (INR (Error (RevertData [])))
     (SOME [send_outcome T [] 17])
 Proof
   CONV_TAC cv_eval

@@ -207,16 +207,16 @@ Triviality flip_operands_data_deps_subset[local]:
     MEM dep (inst_data_deps bi order inst)
 Proof
   rw[inst_data_deps_def, LET_THM, MEM_nub, MEM_APPEND,
-     flip_not_terminator] >|
-  [disj1_tac >> irule map_the_filter_some_mono >>
-     qexists_tac `python_stack_operands (flip_operands inst).inst_opcode
-       (flip_operands inst).inst_operands` >>
-     simp[flip_operands_mem_ops],
-   simp[],
-   irule map_the_filter_some_mono >>
-     qexists_tac `python_stack_operands (flip_operands inst).inst_opcode
-       (flip_operands inst).inst_operands` >>
-     simp[flip_operands_mem_ops]]
+     flip_not_terminator]
+  >- simp[]
+  >- (disj2_tac >> irule map_the_filter_some_mono >>
+      qexists_tac `python_stack_operands (flip_operands inst).inst_opcode
+        (flip_operands inst).inst_operands` >>
+      simp[flip_operands_mem_ops]) >>
+  irule map_the_filter_some_mono >>
+  qexists_tac `python_stack_operands (flip_operands inst).inst_opcode
+    (flip_operands inst).inst_operands` >>
+  simp[flip_operands_mem_ops]
 QED
 
 Triviality data_deps_subset_all_deps[local]:
@@ -270,7 +270,7 @@ Triviality producing_inst_in_data_deps[local]:
 Proof
   rw[inst_data_deps_def, LET_THM, MEM_nub, MEM_APPEND, MEM_MAP,
      MEM_FILTER] >>
-  TRY disj1_tac >> qexists_tac `SOME prod` >> simp[] >>
+  TRY disj2_tac >> qexists_tac `SOME prod` >> simp[] >>
   qexists_tac `Var var` >> simp[operand_producer_def]
 QED
 

@@ -16,13 +16,21 @@ val checked_runtime = rhs (concl
   createCtorAliasCompileTestTheory.create_ctor_alias_runtime_def)
 val pinned_hex = memoryStoreWitnessLib.hex_list pinned_runtime
 val checked_hex = memoryStoreWitnessLib.hex_list checked_runtime
-val () = if checked_hex <> pinned_hex then ()
-  else raise Fail "Expected separate HOL and pinned runtimes for alias witness"
+(* The merged compiler now closes this bytecode-parity gap. Keep the
+   aliasing observations for both runtimes and require exact parity as well. *)
+val () = if checked_hex = pinned_hex then ()
+  else raise Fail "Constructor alias runtime differs from pinned Vyper"
 
 Definition ctor_alias_pinned_runtime_def:
   ctor_alias_pinned_runtime = ^pinned_runtime
 End
 val () = cv_auto_trans ctor_alias_pinned_runtime_def;
+
+Theorem ctor_alias_runtime_matches_pinned:
+  create_ctor_alias_runtime = ctor_alias_pinned_runtime
+Proof
+  simp[create_ctor_alias_runtime_def, ctor_alias_pinned_runtime_def]
+QED
 
 Definition ctor_alias_accounts_def:
   ctor_alias_accounts runtime =

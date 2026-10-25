@@ -36,14 +36,14 @@ Definition create_memory_snapshot_def:
 End
 
 Definition create_source_entry_def:
-  create_source_entry cenv cx es cs s <=>
-    state_rel cenv cx es s /\ fresh_vars_wrt cs s
+  create_source_entry func cenv cx es cs s <=>
+    state_rel func cenv cx es s /\ fresh_vars_wrt cs s
 End
 
 Definition create_source_normal_def:
-  create_source_normal cenv cx e es rep op cs s <=>
+  create_source_normal func cenv cx e es rep op cs s <=>
     ?v es'. eval_expr cx e es = (INL (Value v),es') /\
-      state_rel cenv cx es' s /\ create_callback_represents rep v op s /\
+      state_rel func cenv cx es' s /\ create_callback_represents rep v op s /\
       fresh_vars_wrt cs s
 End
 
@@ -69,21 +69,21 @@ Definition create_source_exit_def:
 End
 
 Definition create_source_callback_spec_def:
-  create_source_callback_spec ctx cenv cx e es rep callback live regions <=>
+  create_source_callback_spec ctx func cenv cx e es rep callback live regions <=>
     create_callback_spec ctx callback
-      (create_source_entry cenv cx es)
-      (create_source_normal cenv cx e es rep)
+      (create_source_entry func cenv cx es)
+      (create_source_normal func cenv cx e es rep)
       (create_source_exit cx e es) live (create_memory_snapshot regions)
 End
 
 Theorem create_source_callback_specialization:
-  create_source_callback_spec ctx cenv cx e es rep callback live regions <=>
+  create_source_callback_spec ctx func cenv cx e es rep callback live regions <=>
   !cs op cs'. callback cs = (op,cs') ==>
     cs_extends cs cs' /\
     frag_exec ctx cs cs'
-      (\s. state_rel cenv cx es s /\ fresh_vars_wrt cs s /\
+      (\s. state_rel func cenv cx es s /\ fresh_vars_wrt cs s /\
            create_live live s /\ create_memory_snapshot regions s)
-      (\s. create_source_normal cenv cx e es rep op cs' s /\
+      (\s. create_source_normal func cenv cx e es rep op cs' s /\
            create_live live s /\ create_memory_snapshot regions s)
       (create_source_exit cx e es)
 Proof
@@ -92,10 +92,10 @@ Proof
 QED
 
 Theorem create_source_normal_projection:
-  create_source_normal cenv cx e es rep op cs s /\
+  create_source_normal func cenv cx e es rep op cs s /\
   create_live live s /\ create_memory_snapshot regions s ==>
   ?v es'. eval_expr cx e es = (INL (Value v),es') /\
-    state_rel cenv cx es' s /\ create_callback_represents rep v op s /\
+    state_rel func cenv cx es' s /\ create_callback_represents rep v op s /\
     fresh_vars_wrt cs s /\ create_live live s /\
     create_memory_snapshot regions s
 Proof
@@ -117,7 +117,7 @@ QED
 
 Theorem create_exception_excludes_normal:
   eval_expr cx e es = (INR ex,es') ==>
-  ~create_source_normal cenv cx e es rep op cs s
+  ~create_source_normal func cenv cx e es rep op cs s
 Proof
   simp[create_source_normal_def]
 QED

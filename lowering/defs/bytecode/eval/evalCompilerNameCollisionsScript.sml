@@ -4,7 +4,9 @@
               nm_ext_arg_return_pc_matches_python_oracle,
               nm_arg_storage_matches_python_oracle,
               nm_local_storage_types_matches_python_oracle,
-              nm_transient_local_matches_python_oracle. *)
+              nm_transient_local_matches_python_oracle,
+              nm_redeclared_local_matches_python_oracle,
+              nm_redeclared_loop_var_matches_python_oracle. *)
 Theory evalCompilerNameCollisions
 Ancestors compileVyper supportedProgram concretizeMemLocDefs codegenReadyCompute alist byte integer_word option
 Libs memoryStoreWitnessLib vyperCheckContractFrontendLib jsonASTLib evalCompilerBytecodeLib finite_mapLib computeLib wordsLib
@@ -64,4 +66,26 @@ Theorem nm_transient_local_matches_python_oracle:
     SOME ^(memoryStoreWitnessLib.oracle fixture_root "nm_transient_local")
 Proof
   CONV_TAC (LAND_CONV (K (#evaluation nm_transient_local))) >> EVAL_TAC
+QED
+
+(* #644: a local re-declared with another type in a disjoint block gets its
+   own ALLOCA of its own size in each block (160 bytes for Bytes[100], 32 for
+   uint256), not one shared allocation sized for the last declaration. *)
+val nm_redeclared_local = memoryStoreWitnessLib.evaluate fixture_root "nm_redeclared_local"
+Theorem nm_redeclared_local_matches_python_oracle:
+  ^(#term nm_redeclared_local) =
+    SOME ^(memoryStoreWitnessLib.oracle fixture_root "nm_redeclared_local")
+Proof
+  CONV_TAC (LAND_CONV (K (#evaluation nm_redeclared_local))) >> EVAL_TAC
+QED
+
+(* #644: a loop variable declared again with another type in a later loop gets
+   its own ALLOCA, emitted after the range bound and the iterated array are
+   evaluated, as in Python. *)
+val nm_redeclared_loop_var = memoryStoreWitnessLib.evaluate fixture_root "nm_redeclared_loop_var"
+Theorem nm_redeclared_loop_var_matches_python_oracle:
+  ^(#term nm_redeclared_loop_var) =
+    SOME ^(memoryStoreWitnessLib.oracle fixture_root "nm_redeclared_loop_var")
+Proof
+  CONV_TAC (LAND_CONV (K (#evaluation nm_redeclared_loop_var))) >> EVAL_TAC
 QED

@@ -172,8 +172,7 @@ QED
 
 Theorem supported_builtin_exclusion_coverage:
   EVERY (\blt. ~supported_builtin_form [] (BaseT (UintT 256)) blt [expr_test_uint])
-    [Len; Keccak256; Sha256; Concat 32; Slice 32; Uint2Str 78; Ceil; Floor; MethodId;
-     MakeArray (SOME (BaseT (UintT 256))) (Fixed 1);
+    [Len; Keccak256; Sha256; Concat 32; Slice 32; Ceil; Floor; MethodId;
      MakeArray NONE (Dynamic 1)] /\
   ~supported_builtin_form [] (TupleT []) (MakeArray NONE (Fixed 0)) [] /\
   supported_builtin_form [] (TupleT [BaseT (UintT 256)])
@@ -183,59 +182,78 @@ Theorem supported_builtin_exclusion_coverage:
      Acc Balance; BlockHash; BlobHash; ECRecover; ECAdd; ECMul] /\
   ~supported_builtin_form [] (BaseT (UintT 256)) (Env Sender) [expr_test_uint] /\
   ~supported_builtin_form [] (BaseT (UintT 256)) ECRecover
-    [expr_test_uint; expr_test_uint; expr_test_uint]
+    [expr_test_uint; expr_test_uint; expr_test_uint] /\
+  supported_builtin_form [] (BaseT (StringT 78)) (Uint2Str 78) [expr_test_uint] /\
+  ~supported_builtin_form [] (BaseT (StringT 78)) (Uint2Str 78) [expr_test_int] /\
+  ~supported_builtin_form [] (BaseT (StringT 78)) (Uint2Str 78) [] /\
+  supported_builtin_form [] (BaseT (BytesT (Dynamic 4))) (CalldataSlice 4)
+    [expr_test_uint] /\
+  ~supported_builtin_form [] (BaseT (BytesT (Dynamic 4))) (CalldataSlice 4) []
+Proof
+  EVAL_TAC
+QED
+
+Theorem supported_memory_construction_forms:
+  supported_builtin_form [] (ArrayT (BaseT (UintT 256)) (Dynamic 3))
+    (MakeArray (SOME (BaseT (UintT 256))) (Dynamic 3)) [expr_test_uint] /\
+  supported_builtin_form [] (ArrayT (BaseT (UintT 256)) (Fixed 1))
+    (MakeArray (SOME (BaseT (UintT 256))) (Fixed 1)) [expr_test_uint] /\
+  supported_type_builtin_form [] (BaseT (StringT 10)) Empty (BaseT (StringT 10)) [] /\
+  ~supported_type_builtin_form [] (TupleT [TupleT [BaseT (UintT 8)]]) Empty
+    (TupleT [TupleT [BaseT (UintT 8)]]) [] /\
+  ~supported_type_builtin_form [] (BaseT (UintT 8)) Empty (BaseT (UintT 16)) []
 Proof
   EVAL_TAC
 QED
 
 Theorem supported_type_builtin_coverage:
-  supported_type_builtin_form (BaseT (UintT 8)) Empty (BaseT (UintT 8)) [] /\
-  ~supported_type_builtin_form (TupleT [BaseT (UintT 8)]) Empty
+  supported_type_builtin_form [] (BaseT (UintT 8)) Empty (BaseT (UintT 8)) [] /\
+  supported_type_builtin_form [] (TupleT [BaseT (UintT 8)]) Empty
     (TupleT [BaseT (UintT 8)]) [] /\
-  supported_type_builtin_form (BaseT (IntT 8)) MaxValue (BaseT (IntT 8)) [] /\
-  supported_type_builtin_form (BaseT DecimalT) MinValue (BaseT DecimalT) [] /\
-  supported_type_builtin_form (BaseT DecimalT) Epsilon (BaseT DecimalT) [] /\
-  ~supported_type_builtin_form (BaseT (UintT 256)) Epsilon (BaseT (UintT 256)) [] /\
-  ~supported_type_builtin_form (BaseT BoolT) MaxValue (BaseT BoolT) [] /\
-  ~supported_type_builtin_form (BaseT AddressT) MinValue (BaseT AddressT) [] /\
-  supported_type_builtin_form (BaseT (IntT 8)) Convert (BaseT (IntT 8)) [expr_test_uint] /\
-  ~supported_type_builtin_form (BaseT (IntT 8)) Convert (BaseT (IntT 8)) [] /\
-  ~supported_type_builtin_form (BaseT (IntT 8)) Convert (BaseT (UintT 8)) [expr_test_uint] /\
-  ~supported_type_builtin_form (BaseT (UintT 256)) Extract32 (BaseT (UintT 256))
+  supported_type_builtin_form [] (BaseT (IntT 8)) MaxValue (BaseT (IntT 8)) [] /\
+  supported_type_builtin_form [] (BaseT DecimalT) MinValue (BaseT DecimalT) [] /\
+  supported_type_builtin_form [] (BaseT DecimalT) Epsilon (BaseT DecimalT) [] /\
+  ~supported_type_builtin_form [] (BaseT (UintT 256)) Epsilon (BaseT (UintT 256)) [] /\
+  ~supported_type_builtin_form [] (BaseT BoolT) MaxValue (BaseT BoolT) [] /\
+  ~supported_type_builtin_form [] (BaseT AddressT) MinValue (BaseT AddressT) [] /\
+  supported_type_builtin_form [] (BaseT (IntT 8)) Convert (BaseT (IntT 8)) [expr_test_uint] /\
+  ~supported_type_builtin_form [] (BaseT (IntT 8)) Convert (BaseT (IntT 8)) [] /\
+  ~supported_type_builtin_form [] (BaseT (IntT 8)) Convert (BaseT (UintT 8)) [expr_test_uint] /\
+  ~supported_type_builtin_form [] (BaseT (UintT 256)) Extract32 (BaseT (UintT 256))
     [expr_test_uint; expr_test_uint] /\
-  EVERY (\blt. ~supported_type_builtin_form (BaseT (UintT 8)) blt
+  EVERY (\blt. ~supported_type_builtin_form [] (BaseT (UintT 8)) blt
     (BaseT (UintT 8)) [expr_test_uint]) [Empty; MaxValue; MinValue; Epsilon]
 Proof
   EVAL_TAC
 QED
 
 Theorem supported_abi_forms_coverage:
-  supported_type_builtin_form (BaseT (BytesT (Dynamic 100)))
+  supported_type_builtin_form [] (BaseT (BytesT (Dynamic 100)))
     (AbiEncode F (SOME [0w; 1w; 2w; 3w]))
     (TupleT [TupleT [BaseT (UintT 256)]]) [expr_test_uint] /\
-  ~supported_type_builtin_form (BaseT (BytesT (Dynamic 100)))
+  ~supported_type_builtin_form [] (BaseT (BytesT (Dynamic 100)))
     (AbiEncode F NONE) (TupleT [TupleT [BaseT (UintT 256)]]) [expr_test_uint] /\
-  ~supported_type_builtin_form (BaseT (BytesT (Dynamic 100)))
+  ~supported_type_builtin_form [] (BaseT (BytesT (Dynamic 100)))
     (AbiEncode T (SOME [0w; 1w; 2w; 3w]))
     (TupleT [TupleT [BaseT (UintT 256)]]) [expr_test_uint] /\
-  ~supported_type_builtin_form (BaseT (BytesT (Dynamic 100)))
+  ~supported_type_builtin_form [] (BaseT (BytesT (Dynamic 100)))
     (AbiEncode F (SOME [0w; 1w; 2w]))
     (TupleT [TupleT [BaseT (UintT 256)]]) [expr_test_uint] /\
-  ~supported_type_builtin_form (BaseT (BytesT (Dynamic 100)))
+  ~supported_type_builtin_form [] (BaseT (BytesT (Dynamic 100)))
     (AbiEncode F (SOME [0w; 1w; 2w; 3w]))
     (TupleT [BaseT (UintT 256)]) [expr_test_uint] /\
-  ~supported_type_builtin_form (BaseT (BytesT (Dynamic 100)))
+  ~supported_type_builtin_form [] (BaseT (BytesT (Dynamic 100)))
     (AbiEncode F (SOME [0w; 1w; 2w; 3w]))
     (TupleT [TupleT [BaseT (UintT 256)]; TupleT [BaseT (UintT 256)]])
     [expr_test_uint; expr_test_uint] /\
-  supported_type_builtin_form (TupleT [BaseT (UintT 256); BaseT (StringT 32)])
+  supported_type_builtin_form [] (TupleT [BaseT (UintT 256); BaseT (StringT 32)])
     (AbiDecode F) (TupleT [BaseT (UintT 256); BaseT (StringT 32)]) [expr_test_uint] /\
-  ~supported_type_builtin_form (TupleT [BaseT (UintT 256); BaseT (StringT 32)])
+  ~supported_type_builtin_form [] (TupleT [BaseT (UintT 256); BaseT (StringT 32)])
     (AbiDecode T) (TupleT [BaseT (UintT 256); BaseT (StringT 32)]) [expr_test_uint] /\
-  ~supported_type_builtin_form (TupleT [BaseT (UintT 256)]) (AbiDecode F)
+  ~supported_type_builtin_form [] (TupleT [BaseT (UintT 256)]) (AbiDecode F)
     (TupleT [BaseT (UintT 256)]) [expr_test_uint] /\
-  ~supported_type_builtin_form (TupleT []) (AbiDecode F) (TupleT []) [expr_test_uint] /\
-  ~supported_type_builtin_form (TupleT [TupleT [BaseT (UintT 256)]; BaseT (UintT 256)])
+  ~supported_type_builtin_form [] (TupleT []) (AbiDecode F) (TupleT []) [expr_test_uint] /\
+  ~supported_type_builtin_form [] (TupleT [TupleT [BaseT (UintT 256)]; BaseT (UintT 256)])
     (AbiDecode F) (TupleT [TupleT [BaseT (UintT 256)]; BaseT (UintT 256)]) [expr_test_uint]
 Proof
   EVAL_TAC

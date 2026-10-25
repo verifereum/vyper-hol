@@ -19,13 +19,14 @@ val lit_tm =
   vyperASTSyntax.mk_Literal_tm
     (u256, vyperASTSyntax.mk_IntL_tm
       (intSyntax.term_of_int (Arbint.fromInt 1)));
+val send_tm = vyperASTSyntax.mk_Send_tm boolSyntax.F;
 val call_tm = vyperASTSyntax.mk_Call
-  (u256, vyperASTSyntax.Send_tm, [name_tm, lit_tm], SOME name_tm);
+  (u256, send_tm, [name_tm, lit_tm], SOME name_tm);
 val _ =
   case vyperASTSyntax.dest_Call call_tm of
   | (ty, target, [arg1, arg2], SOME drv) =>
       if same_term ty u256 andalso
-         same_term target vyperASTSyntax.Send_tm andalso
+         same_term target send_tm andalso
          same_term arg1 name_tm andalso
          same_term arg2 lit_tm andalso
          same_term drv name_tm
@@ -174,8 +175,9 @@ val call_target_samples =
        pairSyntax.mk_pair
          (stringSyntax.fromMLstring "f",
           pairSyntax.mk_pair
-            (listSyntax.mk_list ([u256], vyperASTSyntax.type_ty), u256)))
-  , vyperASTSyntax.Send_tm
+            (listSyntax.mk_list ([u256], vyperASTSyntax.type_ty), u256)),
+       listSyntax.mk_list ([vyperASTSyntax.EKGas_tm], vyperASTSyntax.ext_call_kw_ty))
+  , vyperASTSyntax.mk_Send_tm boolSyntax.T
   , vyperASTSyntax.mk_RawCallTarget_tm flags
   , vyperASTSyntax.mk_RawCallCalldataTarget_tm flags
   , vyperASTSyntax.RawLog_tm

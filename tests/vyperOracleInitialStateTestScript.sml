@@ -2,6 +2,7 @@
 Theory vyperOracleInitialStateTest
 Ancestors
   list option vyperState vyperInterpreter vyperTypeInvariants vyperTypeInitialState
+  vyperOracleStateTest
 
 (* The old projections, including storage and immutable tables, are unchanged;
  * both new fields retain exactly the arbitrary supplied values. *)
@@ -58,18 +59,24 @@ Proof
 QED
 *)
 
-(* NONE Send remains concrete; the empty ExtCall fails before take in either mode. *)
+(* NONE Send now executes recipient code, so its inert fixture uses the empty
+   initial machine rather than arbitrary accounts. Scopes and prior oracle
+   bookkeeping remain arbitrary. Empty ExtCall fails before take for any machine. *)
 Theorem oracle_initial_state_inert_modes:
-  let st = initial_state am scs with <|outcomes := orc; requests := rqs|> in
-    (orc = NONE ==>
+  (let st = initial_state initial_machine_state scs with <|outcomes := orc; requests := rqs|> in
+    orc = NONE ==>
       eval_expr empty_evaluation_context
-        (Call NoneT Send
+        (Call NoneT (Send F)
           [Literal (BaseT AddressT) (BytesL (REPLICATE 20 0w));
            Literal (BaseT (UintT 256)) (IntL 0)] NONE) st =
         (INL (Value NoneV), st)) /\
+  (let st = initial_state am scs with <|outcomes := orc; requests := rqs|> in
     eval_expr empty_evaluation_context
-      (Call NoneT (ExtCall T F ("unused", [], NoneT)) [] NONE) st =
-      (INR (Error (TypeError "ExtCall no target")), st)
+      (Call NoneT (ExtCall T F ("unused", [], NoneT) []) [] NONE) st =
+      (INR (Error (TypeError "ExtCall operands")), st))
 Proof
-  Cases_on `orc` >> EVAL_TAC >> simp[bind_def, return_def, transfer_value_def]
+  simp[LET_THM] >> conj_tac
+  >- (strip_tac >> irule oracle_zero_send_inert >>
+      simp[initial_state_def, initial_machine_state_def]) >>
+  simp[oracle_empty_extcall_inert]
 QED
