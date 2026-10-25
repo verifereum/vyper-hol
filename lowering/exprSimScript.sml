@@ -21,6 +21,8 @@
  *   compile_name_word_sim  — a word local
  *   compile_env_sim        — environment reads (msg.sender, block.number,
  *                            ...), all but block.prevhash
+ *   expr_val_rel_mem_agree — a non-word operand's value survives code that
+ *                            keeps its type_memory_size bytes
  *
  * Helpers: expr_exit_INL, typed_val_to_w256_word_value, eval_expr_env,
  *   lower_value_env
@@ -35,13 +37,11 @@
  * compose where the first one's value sits in a buffer it allocated: that
  * allocation's id is below the second's start counter and it holds no
  * local (alloca_inv, local_backed), so the second's expr_post keeps its
- * bytes, and val_in_memory with them (a lemma that val_in_memory reads
- * only the type_memory_size bytes of a val_wf value is still to be
- * proved).  A first operand that points into a local stays related
- * through stmt_state_rel, as long as the source leaves that local alone
- * in between.  expr_frag, which relates values by val_to_w256, follows
- * for a word type whose typed encoding is val_to_w256
- * (expr_sim_expr_frag).
+ * bytes, and val_in_memory with them (expr_val_rel_mem_agree).  A first
+ * operand that points into a local stays related through stmt_state_rel,
+ * as long as the source leaves that local alone in between.  expr_frag,
+ * which relates values by val_to_w256, follows for a word type whose typed
+ * encoding is val_to_w256 (expr_sim_expr_frag).
  *
  * Not covered by the leaves here:
  *   - bytes and string literals: a bytesN literal is a Lit of its typed
@@ -140,6 +140,25 @@ Definition expr_val_at_def:
                      b <= w2n w /\ w2n w + type_memory_size tv <= b + sz))
 End
 
+(* Operand composition: the value of a non-word operand survives code that
+   keeps the operand and the bytes of the value's footprint, the
+   type_memory_size bytes at its address (val_in_memory_mem_agree). *)
+Theorem expr_val_rel_mem_agree:
+  !cx t v op s s' w tv.
+    expr_val_rel cx t v op s /\ ~is_word_type t /\
+    eval_operand op s = SOME w /\ eval_operand op s' = SOME w /\
+    evaluate_type (get_tenv cx) t = SOME tv /\ val_wf tv v /\
+    mem_bytes_at (w2n w) (type_memory_size tv) s.vs_memory =
+      mem_bytes_at (w2n w) (type_memory_size tv) s'.vs_memory ==>
+    expr_val_rel cx t v op s'
+Proof
+  rw[expr_val_rel_def] >> gvs[] >>
+  qspecl_then [`tv`, `v`, `w2n w`, `type_memory_size tv`, `s.vs_memory`,
+               `s'.vs_memory`] mp_tac
+    valueEncodingPropsTheory.val_in_memory_mem_agree >>
+  asm_rewrite_tac[arithmeticTheory.LESS_EQ_REFL]
+QED
+
 (* Where the fragment of e that started in s0, related at es, lowered from
    compile state sa to sb, ends when the source gives v and es': related at
    es', the operand op holding v (and, for a memory-backed value, placed as
@@ -210,13 +229,18 @@ Definition storage_holds_def:
 End
 
 (* w is the data offset of an immutable of the module being lowered, and
-   tv is its value at es; immutables_rel says where the Venom state keeps
-   it. *)
+   tv is its value at es, stored at the type t evaluates to; immutables_rel
+   says where the Venom state keeps it.  The offset fits a word, so the
+   load reads at the offset itself.  No invariant gives that bound yet:
+   immutables_rel at runtime says only byte_offset + 32 <= the data
+   section's length, so a producer of a code pointer needs a compile-env
+   clause bounding ImmutableLoc offsets. *)
 Definition immutable_holds_def:
-  immutable_holds cenv cx tv (w:bytes32) (es:evaluation_state) <=>
+  immutable_holds cenv cx t tv (w:bytes32) (es:evaluation_state) <=>
     ?name off itv v.
       FLOOKUP cenv.ce_vars (module_var_key (cenv.ce_module, name)) =
-        SOME (ImmutableLoc off) /\ w = n2w off /\
+        SOME (ImmutableLoc off) /\ w = n2w off /\ off < dimword (:256) /\
+      evaluate_type (get_tenv cx) t = SOME itv /\
       FLOOKUP (case ALOOKUP es.immutables cx.txn.target of
                  NONE => FEMPTY
                | SOME imms => get_source_immutables cenv.ce_module imms)
@@ -229,27 +253,35 @@ End
    - a StackValue: a value, held by its operand as expr_val_rel says;
    - a pointer into memory: what tv materialises to, laid out at the
      pointer as val_in_memory says (word types too: a word local is a
-     pointer).  For a value that is the value itself; for an ArrayRef it is
+     pointer), and for a word type the word there is its typed encoding,
+     which val_in_memory does not pin for a value not of the type.  For a
+     value that is the value itself; for an ArrayRef it is
      the array read from storage, which is what lower_value copies to
      memory (a ternary over storage arrays hands out such a copy);
    - a pointer into storage or transient storage: the slot holding what tv
      materialises to (an ArrayRef is a result here, not an error);
    - a pointer into code: an immutable.
    A calldata pointer holds nothing yet: no case of compile_expr returns
-   one, and state_rel does not relate the calldata. *)
+   one, and state_rel does not relate the calldata.  A pointer carries the
+   expression's type, which unwrap_value reads to choose between a load
+   and a copy. *)
 Definition vv_holds_def:
   (vv_holds cenv cx t tv (StackValue t' op) es s <=>
      ?v. tv = Value v /\ expr_val_rel cx t v op s) /\
   (vv_holds cenv cx t tv (LocatedValue t' p) es s <=>
+     t' = t /\
      ?w. eval_operand p.ptr_operand s = SOME w /\
          case p.ptr_location of
            LocMemory =>
              ?v. materialise cx tv es = (INL v, es) /\
                  !tvt. evaluate_type (get_tenv cx) t = SOME tvt ==>
-                       val_in_memory tvt v (w2n w) s.vs_memory
+                       val_in_memory tvt v (w2n w) s.vs_memory /\
+                       (is_word_type t ==>
+                        mem_word_at (w2n w) s.vs_memory =
+                          typed_val_to_w256 tvt v)
          | LocStorage => storage_holds cx F t tv w es
          | LocTransient => storage_holds cx T t tv w es
-         | LocCode => immutable_holds cenv cx tv w es
+         | LocCode => immutable_holds cenv cx t tv w es
          | LocCalldata => F)
 End
 

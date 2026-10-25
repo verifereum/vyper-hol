@@ -39,9 +39,8 @@
  *                       wherever expr_sim_inv holds
  *   well_typed_expr_type_evaluates — a well-typed expression's type
  *                       evaluates
- *   expr_sim_of_vv_sim — unwrap_value's step: expr_vv_sim gives expr_sim
- *                       (cheated)
- *   expr_ok_of_vv, expr_ok_stack — expr_ok from expr_vv_ok, and from
+ *   expr_ok_of_vv, expr_ok_stack — expr_ok from expr_vv_ok (by
+ *                       exprSimUnwrap's expr_sim_of_vv_sim), and from
  *                       expr_sim_ok for a form lowered to a StackValue
  *
  * Why these hypotheses:
@@ -106,7 +105,7 @@ Ancestors
   vyperAST vyperInterpreter vyperState vyperTypeSystem vyperTypeCallGraph
   vyperTypeInvariants vyperTypeExprSoundness vyperTypeCallStackSoundness
   vyperTypeExprResult vyperTypeEvalSoundness vyperTypeBuiltins
-  vyperExprNoControl loweringSlice
+  vyperExprNoControl loweringSlice exprSimUnwrap
 Libs
   pairLib
 
@@ -342,21 +341,6 @@ Proof
       irule (REWRITE_RULE [well_formed_type_def]
                raw_call_return_type_well_formed) >> simp[]) >>
   gvs[well_typed_expr_def]
-QED
-
-(* ===== From one judgment to the other ===== *)
-
-(* unwrap_value's code, run where compile_expr's code ends, takes vv_post to
-   expr_post: nothing for a StackValue, a load for a word type, a copy into
-   a buffer of the expression's own for an aggregate outside memory.
-   Cheated, for #636's Infrastructure (operand composition).  Unprovable as
-   the definitions stand for a non-word immutable: immutables_rel relates
-   only the 32-byte encodings. *)
-Theorem expr_sim_of_vv_sim:
-  !ctx func cenv cx ty e es.
-    expr_vv_sim ctx func cenv cx ty e es ==> expr_sim ctx func cenv cx ty e es
-Proof
-  cheat
 QED
 
 (* A case lemma that proves expr_vv_ok proves expr_ok. *)
