@@ -11,6 +11,7 @@ PLAN: `lowering/PLAN_abi_encode_frag.md`
 | C1.3 | progressed | missing_helper | E0006 | Request C1.3 interface refinement: frame alone cannot preserve Label operands; characterize allowed preservation premise without changing frozen definitions. |
 | C1.3.1 | proved |  | E0007 |  |
 | C1.3.2 | proved |  | E0008 |  |
+| C1.3.3 | proved |  | E0009 |  |
 
 ## C1.1
 
@@ -115,3 +116,22 @@ PLAN: `lowering/PLAN_abi_encode_frag.md`
 ### Evidence refs
 
 - `TO_abi_encode_frag-20261024T233520Z_m0217_t001` (use `read_tool_output` for exact output)
+
+## C1.3.3
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0009`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 5 steps, 4 tools, 2 holbuild, 489,509 tok (488,466 in, 1,043 out, 478,464 cached), 34.7s, $0.0782804
+
+### Attempts / Evidence
+
+- `E0009` (proved, , actual effort: 1 sessions, 1 msgs, 5 steps, 4 tools, 2 holbuild, 489,509 tok (488,466 in, 1,043 out, 478,464 cached), 34.7s, $0.0782804)
+  - Output inclusion weakening and adjacent-fragment frame composition with explicit final global scratch. -> Both boundaries build cleanly. Composition uses second-frame allocation persistence to transfer prefix scratch exclusions to final state. (`TO_abi_encode_frag-20261024T233520Z_m0227_t001`)
+
+### Evidence refs
+
+- `TO_abi_encode_frag-20261024T233520Z_m0227_t001` (use `read_tool_output` for exact output)

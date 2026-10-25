@@ -1323,6 +1323,48 @@ Proof
   asm_rewrite_tac[arithmeticTheory.LEFT_ADD_DISTRIB] >> decide_tac
 QED
 
+Theorem enc_frame_enlarge_outputs:
+  enc_frame st st' lo top outs s0 s /\
+  (!r. MEM r outs ==> MEM r larger) ==>
+  enc_frame st st' lo top larger s0 s
+Proof
+  rewrite_tac[enc_frame_def] >> strip_tac >> asm_rewrite_tac[] >>
+  rpt strip_tac >> first_x_assum irule >> simp[] >>
+  qpat_x_assum `EVERY _ larger` mp_tac >>
+  rewrite_tac[EVERY_MEM] >> metis_tac[]
+QED
+
+Theorem enc_frame_compose:
+  st0.cs_next_id <= st1.cs_next_id /\ st1.cs_next_id <= st2.cs_next_id /\
+  (!x. not_fresh_at st0 x ==> not_fresh_at st1 x) /\
+  enc_frame st0 st1 lo top1 outs1 s0 s1 /\
+  enc_frame st1 st2 lo top2 outs2 s1 s2 /\
+  enc_scratch (frag_ids st0 st2) lo top s2 ==>
+  enc_frame st0 st2 lo top (outs1 ++ outs2) s0 s2
+Proof
+  strip_tac >> drule_all frag_ids_split >> strip_tac >>
+  qpat_x_assum `enc_frame st0 _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `enc_frame st1 _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[enc_frame_def, EVERY_APPEND] >> ntac 2 strip_tac >>
+  asm_rewrite_tac[] >> conj_tac
+  >- (rpt strip_tac >> metis_tac[]) >> conj_tac
+  >- (rpt strip_tac >>
+      `mem_bytes_at a 1 s2.vs_memory = mem_bytes_at a 1 s1.vs_memory` by
+        (qpat_x_assum `!a. _ ==> mem_bytes_at _ _ s2.vs_memory = _` irule >>
+         simp[] >> rpt strip_tac >>
+         qpat_x_assum `!i b sz. i IN frag_ids st0 st1 UNION _ /\ _ ==> _`
+           irule >> simp[] >> goal_assum drule >> simp[]) >>
+      asm_rewrite_tac[] >>
+      qpat_x_assum `!a. _ ==> mem_bytes_at _ _ s1.vs_memory = _` irule >>
+      simp[] >> rpt strip_tac >>
+      qpat_x_assum `!i b sz. i IN frag_ids st0 st1 UNION _ /\ _ ==> _`
+        irule >> simp[] >> qexists_tac `i` >> simp[] >>
+      qpat_x_assum `!i r. FLOOKUP s1.vs_allocas i = SOME r ==> _` irule >>
+      simp[]) >>
+  conj_tac >- (rpt strip_tac >> gvs[] >> metis_tac[]) >>
+  rpt strip_tac >> metis_tac[]
+QED
+
 
 (* ===== Recursive ABI encode correctness ===== *)
 
