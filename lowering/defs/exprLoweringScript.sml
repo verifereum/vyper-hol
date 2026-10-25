@@ -2604,13 +2604,16 @@ Definition compile_expr_body_def:
    | Attribute _ base_e fld_name =>
        compile_attribute compile_expr cenv ret_ty ty base_e fld_name st
    | StructLit _ name fields =>
+       (* The field layout comes from the literal's own struct, not the
+          caller's ty.  Mirrors Python: expr.py _lower_struct_constructor
+          (struct_t = func_t.typedef). *)
        (let struct_name = nsid_to_string name in
         let fld_info = get_struct_fields cenv.ce_struct_fields struct_name in
         let total_size = SUM (MAP (SND o SND) fld_info) in
                 let (buf_alloc, st2) = compile_alloc_buffer total_size st in
                 let buf = buf_alloc.buf_operand in
         let (_, st3) =
-          compile_struct_lit compile_expr cenv ty fields buf 0 st2 in
+          compile_struct_lit compile_expr cenv (StructT name) fields buf 0 st2 in
         (LocatedValue ret_ty (base_ptr buf_alloc), st3))
    | FlagMember _ flag_nsid mem_name =>
        (let flag_name = nsid_to_string flag_nsid in
@@ -3130,6 +3133,16 @@ Proof
        is_word_type_def, compile_ptr_load_def, compile_store_memory_def,
        emit_op_def, emit_void_def, fresh_id_def, fresh_var_def, emit_def,
        comp_bind_def, comp_ignore_bind_def, comp_return_def, mk_inst_def]
+QED
+
+(* A struct literal's lowering doesn't depend on the caller's ty. *)
+Theorem compile_expr_struct_lit_ty:
+  !cenv ty ann name fields st.
+    compile_expr cenv ty (StructLit ann name fields) st =
+    compile_expr cenv (StructT name) (StructLit ann name fields) st
+Proof
+  rpt gen_tac >> ONCE_REWRITE_TAC[compile_expr_raw_def] >>
+  simp[compile_expr_body_def]
 QED
 
 Theorem compile_make_array_empty_full_capacity:
