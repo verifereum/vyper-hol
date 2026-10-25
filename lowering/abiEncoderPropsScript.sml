@@ -1040,6 +1040,160 @@ QED
    Together with LENGTH_DROP this gives the exact tail-length subtraction;
    no encoder-specific duplicate of that bound is needed. *)
 
+(* ===== Separated ABI prefixes ===== *)
+
+Definition enc_prefix_tail_def:
+  (enc_prefix_tail [] vs = []) /\
+  (enc_prefix_tail (t::ts) [] = []) /\
+  (enc_prefix_tail (t::ts) (v::vs) =
+    (if is_dynamic t then enc t v else []) ++ enc_prefix_tail ts vs)
+End
+
+Definition enc_prefix_head_def:
+  (enc_prefix_head q [] vs = []) /\
+  (enc_prefix_head q (t::ts) [] = []) /\
+  (enc_prefix_head q (t::ts) (v::vs) =
+    (if is_dynamic t then enc_number (Uint 256) (NumV q) else enc t v) ++
+    enc_prefix_head (q + LENGTH (if is_dynamic t then enc t v else [])) ts vs)
+End
+
+Definition HP_def:
+  HP B ts vs k = enc_prefix_head B (TAKE k ts) (TAKE k vs)
+End
+
+Definition TP_def:
+  TP ts vs k = enc_prefix_tail (TAKE k ts) (TAKE k vs)
+End
+
+Definition DP_def:
+  DP B ts vs k = B + LENGTH (TP ts vs k)
+End
+
+Theorem enc_prefix_zero[simp]:
+  HP B ts vs 0 = [] /\ TP ts vs 0 = [] /\ DP B ts vs 0 = B
+Proof
+  simp[HP_def, TP_def, DP_def, enc_prefix_head_def, enc_prefix_tail_def]
+QED
+
+Theorem enc_prefix_tail_append:
+  !ts vs us ws.
+    LENGTH ts = LENGTH vs ==>
+    enc_prefix_tail (ts ++ us) (vs ++ ws) =
+      enc_prefix_tail ts vs ++ enc_prefix_tail us ws
+Proof
+  Induct_on `ts` >> Cases_on `vs` >>
+  simp[enc_prefix_tail_def, APPEND_ASSOC]
+QED
+
+Theorem enc_prefix_head_append:
+  !ts vs q us ws.
+    LENGTH ts = LENGTH vs ==>
+    enc_prefix_head q (ts ++ us) (vs ++ ws) =
+      enc_prefix_head q ts vs ++
+      enc_prefix_head (q + LENGTH (enc_prefix_tail ts vs)) us ws
+Proof
+  Induct_on `ts` >> Cases_on `vs` >>
+  simp[enc_prefix_head_def, enc_prefix_tail_def, APPEND_ASSOC]
+QED
+
+Theorem enc_prefix_suc:
+  LENGTH ts = LENGTH vs /\ k < LENGTH vs ==>
+  HP B ts vs (SUC k) = HP B ts vs k ++
+    (if is_dynamic (EL k ts) then
+       enc_number (Uint 256) (NumV (DP B ts vs k))
+     else enc (EL k ts) (EL k vs)) /\
+  TP ts vs (SUC k) = TP ts vs k ++
+    (if is_dynamic (EL k ts) then enc (EL k ts) (EL k vs) else []) /\
+  DP B ts vs (SUC k) = DP B ts vs k +
+    LENGTH (if is_dynamic (EL k ts) then enc (EL k ts) (EL k vs) else [])
+Proof
+  strip_tac >>
+  `TAKE (SUC k) ts = TAKE k ts ++ [EL k ts]` by
+    simp[arithmeticTheory.ADD1, TAKE_EL_SNOC, SNOC_APPEND] >>
+  `TAKE (SUC k) vs = TAKE k vs ++ [EL k vs]` by
+    simp[arithmeticTheory.ADD1, TAKE_EL_SNOC, SNOC_APPEND] >>
+  simp[HP_def, TP_def, DP_def, enc_prefix_head_append,
+       enc_prefix_tail_append, enc_prefix_head_def, enc_prefix_tail_def]
+QED
+
+Theorem enc_prefix_head_length:
+  !ts vs q. has_types ts vs ==>
+    LENGTH (enc_prefix_head q ts vs) = head_lengths ts 0
+Proof
+  Induct_on `ts` >> Cases_on `vs` >>
+  simp[enc_prefix_head_def, head_lengths_def] >>
+  rpt strip_tac >> rename1 `has_type ty av` >>
+  simp[SimpRHS, Once head_lengths_add] >>
+  Cases_on `is_dynamic ty`
+  >- simp[] >>
+  drule (cj 1 enc_has_static_length) >> simp[]
+QED
+
+Theorem enc_prefix_assembly:
+  !ts vs hl tl. has_types ts vs ==>
+    enc_prefix_head (hl + tl) ts vs ++ enc_prefix_tail ts vs =
+      enc_tuple hl tl ts vs [] []
+Proof
+  Induct_on `ts` >> Cases_on `vs` >> simp[enc_prefix_head_def,
+    enc_prefix_tail_def, enc_tuple_cons_parts] >>
+  rpt strip_tac >>
+  qpat_x_assum `!vs hl tl. _` (fn th =>
+    simp[GSYM th, enc_prefix_head_length,
+         TAKE_APPEND1, DROP_APPEND, APPEND_ASSOC,
+         TAKE_LENGTH_ID_rwt, DROP_LENGTH_TOO_LONG])
+QED
+
+Theorem HP_length:
+  has_types ts vs ==>
+  LENGTH (HP B ts vs k) = head_lengths (TAKE k ts) 0
+Proof
+  strip_tac >> simp[HP_def] >>
+  irule enc_prefix_head_length >>
+  gvs[has_types_LIST_REL] >> irule LIST_REL_TAKE >> goal_assum drule
+QED
+
+Theorem enc_prefix_full:
+  has_types ts vs ==>
+  HP B ts vs (LENGTH vs) ++ TP ts vs (LENGTH vs) =
+    enc_tuple B 0 ts vs [] []
+Proof
+  strip_tac >>
+  `LENGTH ts = LENGTH vs` by metis_tac[has_types_LIST_REL, LIST_REL_LENGTH] >>
+  simp[HP_def, TP_def, TAKE_LENGTH_ID_rwt] >>
+  metis_tac[enc_prefix_assembly, arithmeticTheory.ADD_0]
+QED
+
+Theorem enc_prefix_tail_static:
+  !ts vs. EVERY (\t. ~is_dynamic t) ts ==> enc_prefix_tail ts vs = []
+Proof
+  Induct_on `ts` >> Cases_on `vs` >> simp[enc_prefix_tail_def]
+QED
+
+Theorem TP_static:
+  ~is_dynamic t ==> TP (REPLICATE N t) vs k = []
+Proof
+  strip_tac >> simp[TP_def] >>
+  irule enc_prefix_tail_static >> simp[EVERY_TAKE]
+QED
+
+Theorem HP_dynamic_length:
+  has_types (REPLICATE N t) vs /\ k <= N /\ N = LENGTH vs /\
+  is_dynamic t ==>
+  LENGTH (HP B (REPLICATE N t) vs k) = 32 * k
+Proof
+  strip_tac >>
+  `TAKE k (REPLICATE N t) = REPLICATE k t` by
+    (gvs[] >> simp[REPLICATE_GENLIST, TAKE_GENLIST] >>
+     AP_TERM_TAC >> simp[arithmeticTheory.MIN_DEF] >> decide_tac) >>
+  drule head_lengths_REPLICATE >>
+  disch_then (qspec_then `0` assume_tac) >>
+  drule HP_length >>
+  disch_then (qspec_then `k` mp_tac) >>
+  disch_then (qspec_then `B` mp_tac) >>
+  qpat_x_assum `TAKE _ _ = _` kall_tac >>
+  simp[] >> decide_tac
+QED
+
 (* ===== Source and region boundaries ===== *)
 
 Theorem enc_pre_bounds:

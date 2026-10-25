@@ -13,6 +13,7 @@ PLAN: `lowering/PLAN_abi_encode_frag.md`
 | C1.3.2 | proved |  | E0008 |  |
 | C1.3.3 | proved |  | E0009 |  |
 | C1.4 | stuck | risk_mismatch | E0010 | Strategist review: split instruction metadata projection/scratch invariance from memory observations and encoder consumers. Need small generic allocation-state congruence boundary or reusable projection simpset before framed MCOPY/base branches. |
+| C1.5.1 | proved |  | E0011 | Review and commit; proceed scheduled frontier. C1.5.2 can use enc_prefix_suc, HP_length, enc_prefix_full without unfolding tuple encoding. |
 
 ## C1.1
 
@@ -158,3 +159,25 @@ PLAN: `lowering/PLAN_abi_encode_frag.md`
 
 - `TO_abi_encode_frag-20261024T233520Z_m0265_t001` (use `read_tool_output` for exact output)
 - `TO_abi_encode_frag-20261024T233520Z_m0263_t001` (use `read_tool_output` for exact output)
+
+## C1.5.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0011`
+- blocker: 
+- actual effort: 1 sessions, 5 msgs, 78 steps, 77 tools, 26 holbuild, 8,230,469 tok (8,222,119 in, 8,350 out, 8,124,672 cached), 618.4s, $1.0908612
+- next: Review and commit; proceed scheduled frontier. C1.5.2 can use enc_prefix_suc, HP_length, enc_prefix_full without unfolding tuple encoding.
+
+### Attempts / Evidence
+
+- `E0011` (proved, , actual effort: 1 sessions, 5 msgs, 78 steps, 77 tools, 26 holbuild, 8,230,469 tok (8,222,119 in, 8,350 out, 8,124,672 cached), 618.4s, $1.0908612)
+  - Define recursive separated heads/tails and HP/TP/DP; prove zero and paired append, then successor via TAKE_EL_SNOC. -> All prefix equations checked; successor uses fixed boundary and cumulative tail length, not prefix head size. (`TO_abi_encode_frag-20261024T233520Z_m0293_t001`)
+  - Prove typed head length using enc_has_static_length and RHS-only head_lengths_add; derive typed tuple assembly using cons-parts and head-length slice simplification. -> enc_prefix_head_length, enc_prefix_assembly, HP_length and enc_prefix_full proved. Assembly appropriately requires has_types as authorized. (`TO_abi_encode_frag-20261024T233520Z_m0320_t001`, `TO_abi_encode_frag-20261024T233520Z_m0355_t001`)
+  - Prove static tails vanish and dynamic homogeneous heads have length 32*k. -> enc_prefix_tail_static, TP_static, HP_dynamic_length proved. Required explicit TAKE/GENLIST arithmetic and removal of redundant TAKE equality before final simplification to avoid rewrite interaction. (`TO_abi_encode_frag-20261024T233520Z_m0355_t001`)
+
+### Evidence refs
+
+- `TO_abi_encode_frag-20261024T233520Z_m0355_t001` (use `read_tool_output` for exact output)

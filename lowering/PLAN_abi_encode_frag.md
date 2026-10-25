@@ -276,26 +276,98 @@ For each memory-only instruction, discharge allocation/scratch conjuncts through
 #### Not to try
 Do not restore the failed full-record simplification experiment. Do not use one large search to unpack every frame conjunct, raise tactic timeouts, or weaken frozen preconditions.
 
-### C1.5: Prefix invariant interface for array loops
+### C1.5: Concrete array prefix and loop-invariant interfaces
+- Kind: `proof_group`
+- Risk: 2
+- Work priority: 5
+- Work units: 0
+- Rationale: Prefix algebra follows the existing enc_tuple_cons_parts equation; runtime interfaces expose explicit preservation premises rather than hiding an unproved body theorem.
+- Progress transition: `refinement`
+
+#### Progress note
+Refines the active, unedited definition probe into three semantic interfaces. No prior proof is claimed or invalidated.
+
+#### Summary
+Represent encoded prefixes as separate head and tail byte lists with a fixed full head boundary. Keep the memory prefix predicate independent of typing and allocation. Parameterize runtime invariants by a stable context K, which later loop integration supplies. Prove initialization, one-element extension, exit assembly, and jump stability before execution integration.
+
+#### Approach
+Build the ABI prefix interface first, then prove memory assembly independently of writes, then package the position-independent runtime invariant. Use separately named short facts so consumers never expand enc_tuple recursion or the full K definition.
+
+#### Not to try
+Do not define the prefix as TAKE of the final encoding: dynamic heads and tails are separated and offsets use the full head boundary. Do not use an enc_tuple on TAKE k with its own head_lengths as boundary. Do not combine source typing, scratch allocation, prefix arithmetic, and instruction execution into one initialization/step proof.
+
+#### Argument
+For N elements the head boundary B is fixed before iteration (N*asz in both homogeneous loops). At iteration k, H contains the heads of the first k values, T their dynamic payloads, and the next dynamic offset is B+LENGTH T. Appending one element adds its static encoding or offset word to H and its dynamic encoding, if any, to T. A static-element loop is the same memory-prefix abstraction with an empty T, payload base equal to full destination plus 32, and no tail cell. Source stability, allocation credit, and protected cells belong to a separate context K and are transported independently. This matches frag_exec_loop's position-independent I and J; header temporaries are not part of the prefix algebra.
+
+#### Definition design
+Define ABI-level functions enc_prefix_tail ts vs and enc_prefix_head q ts vs. Tail recursion: [] for either empty list; on t::ts,v::vs let z=if is_dynamic t then enc t v else []; return z ++ enc_prefix_tail ts vs. Head recursion: [] for either empty list; on t::ts,v::vs use (if is_dynamic t then enc_number (Uint 256) (NumV q) else enc t v) ++ enc_prefix_head (q+LENGTH z) ts vs. Define HP B ts vs k = enc_prefix_head B (TAKE k ts) (TAKE k vs), TP ts vs k analogously, and DP B ts vs k = B+LENGTH(TP ts vs k). Total mismatched-list cases may return []; every semantic theorem requires equal lengths or has_types. Define enc_prefix_mem p B ts vs k s iff mem_bytes_at p (LENGTH(HP B ts vs k)) s.vs_memory = HP B ts vs k and mem_bytes_at (p+B) (LENGTH(TP ts vs k)) s.vs_memory = TP ts vs k. Define enc_array_inv K p B ts vs ip cp k s iff K s /\ k<=LENGTH vs /\ enc_prefix_mem p B ts vs k s /\ mem_word_at ip s.vs_memory=n2w k /\ (case cp of NONE => T | SOME c => mem_word_at c s.vs_memory=n2w(DP B ts vs k)). K is deliberately a predicate argument, not a new record containing the whole theorem environment. Dynamic loop uses cp=SOME c; static loop uses NONE. The intended K includes stable operand evaluations, source val_in_memory, source/output bounds, global enc_frame from the original state, fixed allocated count/tail cell ownership, and protected outer alloca lookups; see child C1.5.3 for the exact composition contract. Never assert K preservation without premises.
+
+#### Code structure
+Add definitions and short pure lemmas immediately after the existing ABI layout lemmas in lowering/abiEncoderPropsScript.sml. Put memory and runtime interface lemmas after those definitions. Keep compiler decomposition and actual frag_exec header/body proofs in their existing owning components. Do not modify frozen definitions, frag_exec_loop, or files under forbidden directories.
+
+### C1.5.1: Pure separated ABI prefix algebra
 - Kind: `definition_probe`
 - Risk: 2
-- Work priority: 50
+- Work priority: 0
 - Work units: 5
-- Rationale: The interface is tested by pure layout and preservation facts before any loop integration; the supplied loop rule fixes exactly which invariance properties are needed.
-- Dependencies: C1.1, C1.2, C1.3
+- Rationale: The proposed recursion is exactly the head/tail decomposition of enc_tuple; append laws are structural list inductions.
 - Checkpoint: yes
 
 #### Summary
-Define compact, data-only loop invariants for static and dynamic element encodings. Establish initialization, prefix extension, and exit projections. Check zero and one iterations and jump invariance explicitly.
+Define separated prefix heads, tails, and dynamic offset. Establish empty, successor, and final assembly laws. Test both static and dynamic homogeneous element cases. No runtime state or frame is involved.
 
 #### Statement
-Outputs: static-prefix invariant for k encoded elements at dst+32 with counter k; dynamic-prefix invariant for k heads at dst and concatenated tails beginning at dst+32*LENGTH vs, with counter k and tail-end offset D_k = 32*LENGTH vs + SUM (MAP encoded_length (TAKE k vs)). Include k<=LENGTH vs, frozen source/operands, protected outer cells, and full-fragment scratch credit. Prove I 0 initialization, jump_to stability, prefix-byte extension, and full-prefix exit consequences.
+Use definitions in C1.5. Required outputs: (1) LENGTH ts=LENGTH vs ==> enc_prefix_head B ts vs ++ enc_prefix_tail ts vs = enc_tuple B 0 ts vs [] []; (2) HP B ts vs 0=[] and TP ts vs 0=[] and DP B ts vs 0=B; (3) under LENGTH ts=LENGTH vs and k<LENGTH vs, with t=EL k ts, v=EL k vs, z=if is_dynamic t then enc t v else [], h=if is_dynamic t then enc_number (Uint 256) (NumV(DP B ts vs k)) else enc t v: HP B ts vs (SUC k)=HP B ts vs k ++ h; TP ts vs (SUC k)=TP ts vs k ++ z; DP B ts vs (SUC k)=DP B ts vs k+LENGTH z; (4) has_types ts vs ==> LENGTH(HP B ts vs k)=head_lengths (TAKE k ts) 0 for k<=LENGTH vs; (5) homogeneous static specialization TP (REPLICATE N t) vs k=[] when ~is_dynamic t; homogeneous dynamic specialization LENGTH(HP B (REPLICATE N t) vs k)=32*k under typing and k<=N=LENGTH vs. Final assembly at k=LENGTH vs must recover enc_tuple B 0 ts vs [] [].
 
 #### Approach
-Define invariants using separate head and tail byte lists obtained from C1.1, not an equality for the final encoding with holes. State extension lemmas assuming a child wrote its exact next head/tail regions and framed everything else; this makes the later body proof a direct application. The static loop addresses dst+32 while compile_abi_encode_dyn_loop's dst already points past the length word.
+First prove the more general assembly law enc_prefix_head q ts vs ++ enc_prefix_tail ts vs = enc_tuple hl tl ts vs [] [] when q=hl+tl, using enc_tuple_cons_parts and typed lists (use has_types rather than mere equal lengths if that existing lemma requires it). Prove paired append laws with equal list lengths; successor laws then use TAKE (SUC k). Prove head length using enc_has_static_length after checking its signature; all enc_tuple assembly laws may carry has_types.
 
 #### Not to try
-Do not equate the current output to enc of TAKE k vs with its own head size: dynamic offsets are relative to the full array head size, not the prefix head size. Do not include vs_current_bb or vs_inst_idx in I/J.
+Do not force an untyped assembly proof through the typed enc_tuple_cons_parts lemma. State assembly under has_types if needed; the task supplies typed ABI values. Do not introduce recursive runtime invariants to prove this pure algebra.
+
+### C1.5.2: Memory-prefix initialization, extension and exit boundaries
+- Kind: `boundary_lemma`
+- Risk: 2
+- Work priority: 10
+- Work units: 3
+- Rationale: These facts only assemble adjacent byte slices; actual store/frame preservation remains explicit in their premises.
+- Dependencies: C1.5.1
+
+#### Summary
+Define enc_prefix_mem without allocation or variable context. Prove its empty case for arbitrary memory. Provide a successor rule from four readable byte-slice facts in the resulting memory. Provide final head/tail assembly for use at loop exit.
+
+#### Statement
+Outputs: enc_prefix_mem p B ts vs 0 s. Successor rule, under has_types ts vs and k<LENGTH vs: if in s' the old head slice at p equals HP B ts vs k, the old tail slice at p+B equals TP ts vs k, the slice at p+LENGTH(HP B ts vs k) of length LENGTH h equals h, and the slice at p+DP B ts vs k of length LENGTH z equals z, then enc_prefix_mem p B ts vs (SUC k) s', where h,z are the C1.5.1 successor expressions. Exit rule: has_types ts vs /\ B=head_lengths ts 0 /\ enc_prefix_mem p B ts vs (LENGTH vs) s ==> mem_bytes_at p (LENGTH(enc_tuple B 0 ts vs [] [])) s.vs_memory=enc_tuple B 0 ts vs [] []. Also export head/tail exit assembly without B=head_lengths ts 0 for consumers that keep regions separate.
+
+#### Approach
+Use the existing mem_bytes_at append/slice interface after locating its actual signatures; if absent, add only the needed adjacent-slice concatenation lemma here. The successor rule deliberately refers solely to s': the body proof must obtain the two preserved old slices from its frame and the two new slices from its child/store postconditions. This avoids claiming preservation of arbitrary memory updates.
+
+#### Not to try
+Do not assume a child frame preserves the old prefix automatically: disjointness from its output and scratch cells must be established by the body integration. Do not put an operational child execution premise in this lemma.
+
+### C1.5.3: Runtime invariant packaging and position stability
+- Kind: `definition_probe`
+- Risk: 2
+- Work priority: 20
+- Work units: 3
+- Rationale: The invariant is a small conjunction parameterized by context. Its transport rules are logical packaging, not an unsupported claim about allocator or instruction behavior.
+- Dependencies: C1.5.2
+- Checkpoint: yes
+
+#### Summary
+Define enc_array_inv using a parameterized stable context K and optional tail cell. Export zero, successor packaging, elimination and jump rules. Specify exactly what later loop integration must put into K and preserve. Header condition facts remain separate from the memory prefix.
+
+#### Description
+At integration, K s is the conjunction of: original source val_in_memory and numeric source/output bounds; evaluations of externally supplied stable operands (dst, src, len_op); enc_frame st_global st_final lo top outs s0 s for the entire loop-containing fragment; fixed allocation lookups SOME(ip,32) and, if dynamic, SOME(c,32) at the allocated loop-cell IDs; and any enclosing protected alloca lookups. The enc_frame conjunct already supplies global enc_scratch, unchanged effects and old-variable preservation: do not duplicate those expansions inside K. Ownership and non-overlap of loop cells are obtained from alloca_inv and their distinct IDs. K does not freeze the contents of the count or tail cell. Protected enclosing cell contents, when required by a caller, must be proved preserved from frame separation, not arbitrarily assumed to survive. The dynamic offset B+LENGTH TP is a natural number; word non-wrap needed by arithmetic instructions is a separate body arithmetic obligation, not a condition hidden in this packaging definition.
+
+#### Statement
+Initialization: K s /\ mem_word_at ip s.vs_memory=0w /\ (case cp of NONE=>T | SOME c=>mem_word_at c s.vs_memory=n2w B) ==> enc_array_inv K p B ts vs ip cp 0 s. Successor packaging: K s' /\ SUC k<=LENGTH vs /\ enc_prefix_mem p B ts vs (SUC k) s' /\ mem_word_at ip s'.vs_memory=n2w(SUC k) /\ (case cp of NONE=>T | SOME c=>mem_word_at c s'.vs_memory=n2w(DP B ts vs (SUC k))) ==> enc_array_inv K p B ts vs ip cp (SUC k) s'. Jump rule: (!s l. K s ==> K(jump_to l s)) /\ enc_array_inv K p B ts vs ip cp k s ==> enc_array_inv K p B ts vs ip cp k (jump_to l s). Export separate elimination lemmas for K, count, prefix and tail-cell value. Define header predicate J k s = enc_array_inv K p B ts vs ip cp k s /\ eval_operand cnd s=SOME(if k<LENGTH vs then 0w else 1w), or use this lambda directly; prove jump stability when operand evaluation is jump-stable and the condition-extraction obligation of frag_exec_loop.
+
+#### Approach
+Prove packaging and elimination by unfolding only enc_array_inv; prove jump stability using unchanged memory and operand evaluation under jump_to. For the concrete later K, expose a general enc_frame jump-preservation lemma here if no such lemma already exists, plus enc_prefix_mem jump-preservation; neither proof should unfold ABI encoding. Keep header instruction correctness out of this subtree.
+
+#### Not to try
+Do not freeze all generated variables: header and body reassign their own SSA names on each iteration. Do not assert enc_pre for the whole original source after every child without deriving it from preserved source bytes. Do not claim K s implies K s' merely from a local child frame; global frame composition and remaining scratch credit are separate integration premises.
 
 ### C1.6: Static-element dynamic-array loop
 - Kind: `proof`
