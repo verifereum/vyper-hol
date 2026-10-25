@@ -136,6 +136,13 @@ exited 0, saving all 11 memory-construction, 15 internal-frame and nine
 name-collision oracle equalities, plus both the positive local/loop and negative
 internal-call whitelist fixtures.
 
+The merged shape proof now specializes its body helper to the environment with
+`ce_alloca_locals` enabled. A local equality establishes that this flag does not
+change `cenv_shape_ok`; all existing theorem statements remain unchanged.
+`loweringShapePropsTheory` rebuilt with the same CI-mode flags and exported
+successfully. Its inherited `compile_expr_shape` and `compile_stmt_shape`
+admissions remain, so this build is not an admission-free shape-correctness proof.
+
 ## Whitelist and statement changes
 
 `supported_function_body` no longer requires `supported_internal_stmts_shape`.
