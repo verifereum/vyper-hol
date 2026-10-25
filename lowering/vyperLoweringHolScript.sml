@@ -12,7 +12,7 @@ Ancestors
   exprSimMain
   valueEncodingProofs
   localPtrsProps
-  loweringShapeDefs
+  loweringShapeProps
   (* compiler + correctness *)
   vyperCompiler
   vyperLoweringCorrect
