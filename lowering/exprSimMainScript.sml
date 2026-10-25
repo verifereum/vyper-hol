@@ -58,9 +58,11 @@ Theorem compile_type_builtin_case_sim:
     expr_sim_below cenv (list_size expr_size args) ==>
     type_builtin_sim_ok cenv ann tb t args
 Proof
-  rw[type_builtin_sim_ok_def] >> Cases_on `tb` >>
-  FIRST (irule compile_bound_builtin_case_sim >> simp[] ::
-         map (fn th => irule expr_ok_of_vv >> irule th >> gvs[])
+  rw[type_builtin_sim_ok_def] >> Cases_on `tb`
+  >~ [`MaxValue`] >- simp[compile_bound_builtin_case_sim]
+  >~ [`MinValue`] >- simp[compile_bound_builtin_case_sim]
+  >~ [`Epsilon`] >- simp[compile_bound_builtin_case_sim] >>
+  FIRST (map (fn th => irule expr_ok_of_vv >> irule th >> gvs[])
     [compile_empty_sim, compile_convert_sim, compile_extract32_sim,
      compile_abi_decode_sim, compile_abi_encode_sim])
 QED
