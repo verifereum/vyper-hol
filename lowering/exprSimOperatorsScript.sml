@@ -13,29 +13,26 @@
  *   expr_sim_pre_bop         — the operands of a well-typed binary operator
  *                              meet expr_sim_pre
  *   compile_not_sim, compile_neg_sim, compile_abs_sim — not, unary -, abs
- *   compile_ifexp_sim        — x if c else y
+ *   compile_ifexp_sim        — x if c else y: compile_ifexp_word_sim for
+ *                              word types, compile_ifexp_aggregate_sim for
+ *                              the rest
  *
  * Cheated, for the later #636 PRs:
- *   binop_frag_typed         — the operator's fragment on typed word
- *                              operands.  #692 proves it for the checked and
- *                              unchecked arithmetic, comparisons, min/max,
- *                              bit operations, flag membership and 256-bit
- *                              shifts (compile_checked_sim, ...); left are
- *                              ** and pow_mod (#572) and shifts of narrower
- *                              integers, which the type system admits
- *                              (well_typed_binop ShL/ShR) but the lowering
- *                              does not truncate (#572), and shifts by a
- *                              negative amount, where the source raises
- *                              and the lowering shifts.  Operators rows
- *                              2-5.
+ *   binop_frag_typed         — from exprSimBinopFrag, where it rests on
+ *                              cheats for ** and pow_mod and narrow or
+ *                              negative shifts (#572), and >> of narrow
+ *                              integers.  Operators rows 2-5.
  *   compile_bop_other_sim    — == and != on address, bytesN and bytestrings
  *                              (msg.sender == owner lands here),
  *                              in and not in on arrays (#569), Operators
  *                              row 6
  *   compile_not_sim, compile_neg_sim (#572), compile_abs_sim — row 7
- *   compile_ifexp_sim        — row 9, aggregate ternaries per #561; also
- *                              row 8, the and/or chains (#556), which the
- *                              frontend desugars to nested IfExps
+ *   compile_ifexp_aggregate_sim — row 9 for aggregate ternaries (#561,
+ *                              #674); word ternaries are proved but for
+ *                              lower_value_word_shape
+ *                              (compile_ifexp_word_sim), and so are row 8's
+ *                              and/or chains (#556), which the frontend
+ *                              desugars to nested IfExps of type bool
  *                              (translate_boolop).  Bop And/Or are the
  *                              bitwise & and |.
  *
@@ -45,18 +42,22 @@
  *                              appends, hands out its variables, and
  *                              returns a variable it handed out or a literal
  *   compile_binop_shape      — compile_binop only appends
- * compile_bop_word_sim rests on these two and on binop_frag_typed.  Both are
- * for word types only; the compound non-word cases need #674's
+ * compile_bop_word_sim rests on these two and on binop_frag_typed, and
+ * compile_ifexp_word_sim and exprSimConvert's compile_convert_word_sim on
+ * lower_value_word_shape.  lower_value_word_shape and compile_binop_shape
+ * are for word types only; the compound non-word cases need #674's
  * compile_expr_shape.
  *)
 
 Theory exprSimOperators
 Ancestors
   list finite_map
-  fragExec exprSim exprSimHyps exprSimOps exprBopLowering loweringSlice
+  fragExec exprSim exprSimHyps exprSimOps exprSimIfExp exprSimBinopFrag
+  exprBopLowering
+  loweringSlice
   exprLowering compileEnv
   vyperAST vyperInterpreter vyperState vyperTypeSystem vyperTypeCallGraph
-  vyperTyping vyperTypeInvariants
+  vyperTyping vyperTypeInvariants vyperTypeExprResult vyperTypeExprSoundness
 
 (* ===== Compile-side facts ===== *)
 
@@ -99,22 +100,6 @@ Proof
   Cases_on `bop` >> gvs[well_typed_binop_def, is_word_type_def]
 QED
 
-Theorem binop_frag_typed:
-  !ctx func cenv cx bop ann e1 e2 v1 v2 es0 tv1 tv2.
-    well_typed_binop ann bop (expr_type e1) (expr_type e2) /\
-    word_value_type (expr_type e1) /\ word_value_type (expr_type e2) /\
-    evaluate_type (get_tenv cx) (expr_type e1) = SOME tv1 /\
-    value_has_type tv1 v1 /\
-    evaluate_type (get_tenv cx) (expr_type e2) = SOME tv2 /\
-    value_has_type tv2 v2 ==>
-    binop_frag ctx func cenv cx bop (expr_type e1) ann
-      (if bop = Exp then expr_int_literal e1 else NONE)
-      (if bop = Exp then expr_int_literal e2 else NONE)
-      [expr_type e1; expr_type e2] v1 v2 es0
-Proof
-  cheat
-QED
-
 Theorem expr_sim_pre_bop:
   !cenv cx env ann bop e1 e2 es.
     expr_sim_pre cenv cx env (Builtin ann (Bop bop) [e1; e2]) es ==>
@@ -152,6 +137,8 @@ Proof
    is_word_type (expr_type e2) /\ ~is_ArrayT (expr_type e2) /\
    ~is_bytestring_type (expr_type e2)` by gvs[word_value_type_word] >>
   imp_res_tac well_typed_expr_type_evaluates >>
+  `type_bits (expr_type e1) MOD 8 = 0` by
+    (irule byte_widths_expr_type >> gvs[expr_sim_pre_def]) >>
   `is_word_type ann` by (drule_all well_typed_binop_word_result >> simp[]) >>
   irule compile_bop_sim >> rpt conj_tac
   >~ [`binop_frag`]
@@ -277,10 +264,89 @@ QED
 
 (* ===== Conditional expression ===== *)
 
+Theorem expr_sim_pre_ifexp:
+  !cenv cx env t c a b es.
+    expr_sim_pre cenv cx env (IfExp t c a b) es ==>
+    expr_type c = BaseT BoolT /\ expr_type a = t /\ expr_type b = t /\
+    expr_sim_pre cenv cx env c es /\
+    !es'. expr_sim_inv cenv cx env es' ==>
+          expr_sim_pre cenv cx env a es' /\ expr_sim_pre cenv cx env b es'
+Proof
+  rw[expr_sim_pre_def, well_typed_expr_def, int_calls_expr_def,
+     byte_widths_expr_def] >> gvs[]
+QED
+
+(* A result of a word type is a value: an ArrayRef is typed by an array
+   type, a HashMapRef by NoneTV. *)
+Theorem word_type_toplevel_value:
+  !t tenv tyv x.
+    is_word_type t /\ evaluate_type tenv t = SOME tyv /\
+    toplevel_value_typed x tyv ==>
+    is_Value x
+Proof
+  Cases >> rw[is_word_type_def] >>
+  TRY (rename1 `BaseT bt` >> Cases_on `bt` >> gvs[is_word_type_def]) >>
+  TRY (rename1 `BytesT bd` >> Cases_on `bd` >> gvs[is_word_type_def]) >>
+  gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs()] >>
+  Cases_on `x` >> gvs[toplevel_value_typed_def]
+QED
+
+(* A ternary of a word type: compile_ifexp_vv_sim (exprSimIfExp), with the
+   operands' shape from lower_value_word_shape (cheated). *)
+Theorem compile_ifexp_word_sim:
+  !cenv t c a b.
+    expr_sim_below cenv (expr_size (IfExp t c a b)) /\ is_word_type t ==>
+    expr_vv_ok cenv (IfExp t c a b)
+Proof
+  rw[expr_vv_ok_def] >> drule expr_sim_pre_ifexp >> strip_tac >>
+  `expr_ok cenv c /\ expr_ok cenv a /\ expr_ok cenv b` by
+    (fs[expr_sim_below_def] >> rpt conj_tac >> first_x_assum irule >>
+     simp[vyperASTTheory.expr_size_def]) >>
+  fs[expr_ok_def] >>
+  simp[expr_vv_sim_def] >> rpt gen_tac >> strip_tac >>
+  `expr_res_ok res` by
+    (qspecl_then [`cenv`, `cx`, `env`, `IfExp t c a b`, `es`, `res`, `es'`]
+       mp_tac expr_sim_pre_res_ok >> simp[] >> disch_then irule >>
+     rpt strip_tac >>
+     drule_all expr_sim_pre_eval >> strip_tac >>
+     first_x_assum drule >>
+     simp[expr_result_typed_def, expr_runtime_typed_def,
+          vyperASTTheory.expr_type_def] >>
+     metis_tac[word_type_toplevel_value]) >>
+  qspecl_then [`ctx`, `func`, `cenv`, `cx`, `ty`, `t`, `c`, `a`, `b`, `es`]
+    mp_tac compile_ifexp_vv_sim >>
+  impl_tac
+  >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
+      >- (rpt gen_tac >> strip_tac >> drule lower_value_word_shape >>
+          gvs[is_word_type_def])
+      >- (rpt gen_tac >> strip_tac >> drule lower_value_word_shape >> gvs[])
+      >- metis_tac[expr_sim_ok_def] >>
+      rpt gen_tac >> strip_tac >> drule_all expr_sim_pre_eval >> strip_tac >>
+      metis_tac[expr_sim_ok_def]) >>
+  disch_then irule >> simp[]
+QED
+
+(* A ternary of an aggregate type, which supported_pure_expr admits for
+   memory arrays, structs and strings (#561).  Cheated: compile_ifexp_vv_sim
+   needs the compile-state shape of the branches' lower_value, which for a
+   non-word type is #674's compile_expr_shape, and that gives neither
+   cs_next_id's growth nor the shape under expr_sim_inv yet.  A ternary over
+   storage or transient arrays has an ArrayRef result and a memory copy,
+   which vv_holds relates through materialise; its branches' results are
+   not expr_res_ok, so it needs their expr_vv_sim and unwrap_value's copy
+   rather than their expr_sim (#575). *)
+Theorem compile_ifexp_aggregate_sim:
+  !cenv t c a b.
+    expr_sim_below cenv (expr_size (IfExp t c a b)) /\ ~is_word_type t ==>
+    expr_vv_ok cenv (IfExp t c a b)
+Proof
+  cheat
+QED
+
 Theorem compile_ifexp_sim:
   !cenv ann c e1 e2.
     expr_sim_below cenv (expr_size (IfExp ann c e1 e2)) ==>
     expr_vv_ok cenv (IfExp ann c e1 e2)
 Proof
-  cheat
+  metis_tac[compile_ifexp_word_sim, compile_ifexp_aggregate_sim]
 QED

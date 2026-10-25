@@ -544,11 +544,11 @@ Definition evaluate_builtin_def:
          | _ => INR (TypeError "builtin"))
     | Floor =>
         (case vs of
-         | [DecimalV i] => INL $ IntV (i / 10000000000)
+         | [DecimalV i] => INL $ IntV (i / decimal_scale)
          | _ => INR (TypeError "builtin"))
     | Ceil =>
         (case vs of
-         | [DecimalV i] => INL $ IntV ((i + 9999999999) / 10000000000)
+         | [DecimalV i] => INL $ IntV ((i + (decimal_scale - 1)) / decimal_scale)
          | _ => INR (TypeError "builtin"))
     | Bop bop =>
         (case vs of
