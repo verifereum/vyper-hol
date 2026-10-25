@@ -262,9 +262,8 @@ End
      materialises to (an ArrayRef is a result here, not an error);
    - a pointer into code: an immutable.
    A calldata pointer holds nothing yet: no case of compile_expr returns
-   one, and state_rel does not relate the calldata.  A pointer carries the
-   expression's type, which unwrap_value reads to choose between a load
-   and a copy. *)
+   one.  A pointer carries the expression's type, which unwrap_value reads
+   to choose between a load and a copy. *)
 Definition vv_holds_def:
   (vv_holds cenv cx t tv (StackValue t' op) es s <=>
      ?v. tv = Value v /\ expr_val_rel cx t v op s) /\
