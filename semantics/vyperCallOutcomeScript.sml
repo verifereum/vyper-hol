@@ -1,8 +1,7 @@
-(* Source oracle boundary, deliberately below vyperInterpreter.
- * TOP-LEVEL: call_outcome_request, take_call_outcome, adopt_call_outcome.
+(* Source oracle boundary, deliberately below vyperInterpreter:
+ * call_outcome_request, take_call_outcome, adopt_call_outcome.
  * The evaluator owns the successful nonstatic account check; the oracle has
- * no typing premise. Adoption is raw: its actual client first takes/checks.
- * No live evaluator clause is changed by this theory.
+ * no typing premise. Adoption is raw: its caller first takes and checks.
  *)
 Theory vyperCallOutcome
 Ancestors
