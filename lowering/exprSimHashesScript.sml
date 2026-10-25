@@ -262,3 +262,22 @@ Proof
   >- (qexists_tac `SOME 0` >> gvs[] >> EVAL_TAC) >>
   qexists_tac `NONE` >> simp[] >> EVAL_TAC
 QED
+
+Definition observed_immutables_def:
+  observed_immutables addr src imms =
+    (case ALOOKUP imms addr of
+       NONE => FEMPTY
+     | SOME mods => get_source_immutables src mods)
+End
+
+Theorem stmt_state_rel_immutables_projection:
+  !func cenv cx es ss imms.
+    observed_immutables cx.txn.target cenv.ce_module imms =
+      observed_immutables cx.txn.target cenv.ce_module es.immutables ==>
+    (stmt_state_rel func cenv cx (es with immutables := imms) ss <=>
+     stmt_state_rel func cenv cx es ss)
+Proof
+  rpt strip_tac >>
+  gvs[observed_immutables_def, stmt_state_rel_def, state_rel_def,
+      storage_rel_def, transient_rel_def, immutables_rel_def, logs_rel_def]
+QED
