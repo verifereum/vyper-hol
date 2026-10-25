@@ -648,3 +648,109 @@ Proof
     metis_tac[uint_value_word_rep, arithmeticTheory.LESS_EQ_REFL] >>
   metis_tac[compile_pow_mod256_word_frag]
 QED
+
+(* ===== Composable expression frames ===== *)
+Definition wb_frame_def:
+  wb_frame cenv es sa s0 s <=>
+    (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
+           lookup_var x s = SOME w) /\
+    (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
+             FLOOKUP s.vs_allocas aid = SOME b) /\
+    (!aid off sz.
+       FLOOKUP s0.vs_allocas aid = SOME (off, sz) /\ aid < sa.cs_next_id /\
+       (!n b sz'. local_region cenv es.scopes s0 n b sz' ==>
+                  off + sz <= b \/ b + sz' <= off) ==>
+       mem_bytes_at off sz s.vs_memory = mem_bytes_at off sz s0.vs_memory)
+End
+
+Theorem wb_frame_refl:
+  !cenv es sa s. wb_frame cenv es sa s s
+Proof
+  simp[wb_frame_def]
+QED
+
+Theorem wb_frame_vars:
+  !cenv es sa s0 s x w.
+    wb_frame cenv es sa s0 s /\ not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
+    lookup_var x s = SOME w
+Proof
+  simp[wb_frame_def]
+QED
+
+Theorem expr_post_frame:
+  !func cenv cx e es sa sb s0 es' v op s.
+    expr_post func cenv cx e es sa sb s0 es' v op s ==>
+    wb_frame cenv es sa s0 s
+Proof
+  simp[expr_post_def, wb_frame_def] >> metis_tac[]
+QED
+
+Theorem expr_post_state:
+  !func cenv cx e es sa sb s0 es' v op s.
+    expr_post func cenv cx e es sa sb s0 es' v op s ==>
+    stmt_state_rel func cenv cx es' s
+Proof
+  simp[expr_post_def]
+QED
+
+Theorem expr_post_word_operand:
+  !func cenv cx e es sa sb s0 es' v op s.
+    expr_post func cenv cx e es sa sb s0 es' v op s /\
+    is_word_type (expr_type e) /\
+    IS_SOME (evaluate_type (get_tenv cx) (expr_type e)) /\ word_value v ==>
+    eval_operand op s = SOME (val_to_w256 v)
+Proof
+  rpt strip_tac >> irule expr_val_rel_word >>
+  gvs[expr_post_def] >> goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem expr_post_word_intro:
+  !func cenv cx e es sa sb s0 es' v op s.
+    stmt_state_rel func cenv cx es' s /\ is_word_type (expr_type e) /\ word_value v /\
+    eval_operand op s = SOME (val_to_w256 v) /\ wb_frame cenv es sa s0 s ==>
+    expr_post func cenv cx e es sa sb s0 es' v op s
+Proof
+  simp[expr_post_def, wb_frame_def, expr_val_rel_def, expr_val_at_def,
+       typed_val_to_w256_word_value] >> metis_tac[]
+QED
+
+Theorem wb_frame_readonly_tail:
+  !cenv es sa s0 t s1 u.
+    wb_frame cenv es sa s0 t /\ sa.cs_next_var <= s1.cs_next_var /\
+    (!z w. not_fresh_at s1 z /\ lookup_var z t = SOME w ==> lookup_var z u = SOME w) /\
+    (!aid b. FLOOKUP t.vs_allocas aid = SOME b ==> FLOOKUP u.vs_allocas aid = SOME b) /\
+    u.vs_memory = t.vs_memory ==>
+    wb_frame cenv es sa s0 u
+Proof
+  simp[wb_frame_def] >> rpt strip_tac >>
+  metis_tac[not_fresh_at_mono]
+QED
+
+Theorem wb_frame_trans:
+  !func cenv cx es s0 sa es1 s1 t u.
+    stmt_state_rel func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+    MAP FDOM es.scopes = MAP FDOM es1.scopes /\
+    sa.cs_next_var <= s1.cs_next_var /\ sa.cs_next_id <= s1.cs_next_id /\
+    wb_frame cenv es sa s0 t /\ wb_frame cenv es1 s1 t u ==>
+    wb_frame cenv es sa s0 u
+Proof
+  rpt gen_tac >> simp[wb_frame_def] >> strip_tac >>
+  conj_tac
+  >- (rpt strip_tac >> metis_tac[not_fresh_at_mono]) >>
+  rpt strip_tac >>
+  qpat_x_assum `!aid off sz. FLOOKUP s0.vs_allocas aid = _ /\ _ ==> _`
+    (qspecl_then [`aid`, `off`, `sz`] mp_tac) >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  disch_then (fn th => rewrite_tac[GSYM th]) >>
+  qpat_x_assum `!aid off sz. FLOOKUP t.vs_allocas aid = _ /\ _ ==> _`
+    (qspecl_then [`aid`, `off`, `sz`] mp_tac) >>
+  disch_then irule >> rpt conj_tac
+  >- (rpt strip_tac >>
+      qpat_x_assum `!n b sz'. local_region _ es.scopes s0 _ _ _ ==> _` irule >>
+      qexists_tac `n` >> irule local_region_frame >>
+      conj_tac >- (qexistsl_tac [`cx`, `func`] >> first_assum ACCEPT_TAC) >>
+      qexistsl_tac [`sa`, `es1.scopes`, `t`] >> simp[]) 
+  >- (irule arithmeticTheory.LESS_LESS_EQ_TRANS >>
+      qexists_tac `sa.cs_next_id` >> simp[]) >>
+  qpat_x_assum `!aid b. FLOOKUP s0.vs_allocas aid = _ ==> _` irule >> simp[]
+QED
