@@ -3,9 +3,9 @@
  * end in a Halt whose return data and effects are the success case of
  * external_call_result_rel (stated with it, in vyperLoweringCorrect, as
  * external_return_word_result_rel, external_return_prim_result_rel,
- * external_return_static_result_rel, external_return_none_result_rel,
- * external_fallthrough_result_rel and the _unlock versions of all but the
- * static one).  The fragment lemmas are stated with
+ * external_return_static_result_rel, external_return_abi_result_rel,
+ * external_return_none_result_rel, external_fallthrough_result_rel and the
+ * _unlock versions of all but the static and ABI ones).  The fragment lemmas are stated with
  * frag_exec (fragExec), like the statement lemmas of stmtLoweringProps and
  * loweringSlice.
  *
@@ -23,6 +23,9 @@
  *   compile_external_return_copy_frag — returning a static complex value
  *                             (tuple, struct, fixed array) halts with its
  *                             bytes in memory as return data
+ *   compile_external_return_abi_frag — returning a value through the ABI
+ *                             encoder halts with its ABI encoding as
+ *                             return data
  *   compile_return_none_external_frag — a return without a value halts
  *                             with empty return data
  *   compile_guarded_body_stop_frag — so does falling off the end of a
@@ -545,14 +548,6 @@ Proof
   strip_tac >> qexists_tac `0` >> simp[exit_result_def]
 QED
 
-(* Returning a value through the ABI encoder (any type but a primitive
-   word; for a dynamic one, the plan is that of its wrapping singleton
-   tuple, if it has one): ALLOCA a buffer of msz bytes, encode the value
-   into it, RETURN the encoding.  The buffer and the encoder's scratch
-   cells are fresh allocas, above the value: none of the fragment's
-   ALLOCAs has run, and the value lies below the alloca frontier.  The
-   frontier stays below 2 ** 256 while they run, and the encoding fits in
-   the buffer. *)
 Definition halt_comp_grows_def:
   halt_comp_grows (m : 'a compiler) <=>
     !s x t. m s = (x,t) ==>
@@ -728,25 +723,10 @@ Proof
   simp[halt_comp_grows_def] >> metis_tac[]
 QED
 
-Theorem compile_abi_encode_to_buf_next_var:
-  !dst src ei st len st'.
-    compile_abi_encode_to_buf dst src ei st = (len,st') ==>
-    st.cs_next_var <= st'.cs_next_var
-Proof
-  mp_tac (cj 2 halt_comp_grows_encoder) >>
-  simp[halt_comp_grows_def] >> metis_tac[]
-QED
-
 Theorem frag_ids_count_diff:
   !a b. frag_ids a b = count b.cs_next_id DIFF count a.cs_next_id
 Proof
   rw[frag_ids_def, pred_setTheory.EXTENSION] >> decide_tac
-QED
-
-Theorem frag_ids_finite:
-  !a b. FINITE (frag_ids a b)
-Proof
-  simp[frag_ids_count_diff]
 QED
 
 Theorem frag_ids_card:
@@ -758,14 +738,6 @@ Proof
       simp[frag_ids_count_diff, pred_setTheory.CARD_DIFF_EQN]) >>
   `frag_ids a b = {}` by
     (rw[frag_ids_def, pred_setTheory.EXTENSION] >> decide_tac) >> simp[]
-QED
-
-Theorem frag_ids_subset:
-  !a b c d.
-    a.cs_next_id <= b.cs_next_id /\ c.cs_next_id <= d.cs_next_id ==>
-    frag_ids b c SUBSET frag_ids a d
-Proof
-  rw[frag_ids_def, pred_setTheory.SUBSET_DEF] >> decide_tac
 QED
 
 Theorem compile_external_return_abi_parts:
@@ -1086,6 +1058,13 @@ Proof
   drule enc_frame_effects >> strip_tac >> simp[]
 QED
 
+(* Returning a value through the ABI encoder with plan ei for its type
+   (the non-word, non-raw path, without a lock release): ALLOCA a buffer
+   of msz bytes, encode the value into it, RETURN the encoding.  The
+   buffer and the encoder's scratch cells are fresh allocas, above the
+   value: none of the fragment's ALLOCAs has run, and the value lies below
+   the alloca frontier.  The frontier stays below 2 ** 256 while they run,
+   and the encoding fits in the buffer. *)
 Theorem compile_external_return_abi_frag:
   !ctx op ei msz nr nkey ut iv st x st' env ty tv v av P Q R.
     compile_external_return (SOME op) F F ei msz nr nkey ut iv st =
@@ -1116,7 +1095,7 @@ Proof
   drule compile_abi_encode_to_buf_next_id >> strip_tac >>
   drule compile_abi_encode_to_buf_extends >> strip_tac >>
   drule emit_inst_metadata >> strip_tac >>
-  irule frag_exec_pointwise >> rpt strip_tac >>
+  irule frag_exec_pointwise >> qx_gen_tac `s0` >> strip_tac >>
   first_x_assum drule >> strip_tac >>
   `sb.cs_next_id <= st'.cs_next_id` by decide_tac >>
   drule_all compile_alloc_buffer_enc_frag >>

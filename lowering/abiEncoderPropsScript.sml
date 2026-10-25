@@ -7,6 +7,8 @@
  *   compile_abi_encode_static_correct — static type writes word to dst
  *   compile_abi_decode_static_correct — static type reads + clamps
  *   compile_abi_encode_to_buf_correct — recursive ABI encode correctness (single-block)
+ *   compile_abi_encode_frag           — recursive ABI encode correctness over frag_exec,
+ *                                       for an encoding plan abi_enc_plan
  *   compile_get_element_ptr_zero       — zero-offset pointer ADD preserves value
  *   compile_get_element_ptr_correct   — get_element_ptr adds offset to parent pointer
  *   val_in_memory_prim_enc            — primitive val_in_memory matches ABI encoding
@@ -747,8 +749,9 @@ Finalise compile_abi_encode_to_buf_correct
    type, and an aggregate's elements are its components, in order (for a
    struct, typed in env \\ nsid, as vyper_to_abi_type does).  AbiComplex
    is for dynamic aggregates only: a static one is an AbiCopy, which is what
-   type_to_abi_enc_info builds and what the static-element loop of a
-   dynamic array handles. *)
+   the static-element loop of a dynamic array handles.  type_to_abi_enc_info
+   builds such plans, except AbiComplex [] for NoneT, which has none (a
+   return of no value doesn't encode). *)
 Inductive abi_enc_plan:
 [~prim:]
   is_word_type ty ==> abi_enc_plan env ty AbiPrimWord
@@ -859,8 +862,9 @@ End
    - to_buf writes E at dst and returns its length;
    - child writes E at dst + static_ofst for a static child; for a
      dynamic one it writes E at dst + d, where d is the dynamic offset in
-     the cell at c (a scratch cell of the caller, at or above lo), the offset d in the head slot at dst + static_ofst,
-     and d + LENGTH E back in the cell;
+     the cell at c (a scratch cell of the caller, at or above lo), and
+     puts d in the head slot at dst + static_ofst and d + LENGTH E back in
+     the cell;
    - complex_elems writes the element heads from dst + head_offset and the
      tails of the dynamic elements from dst + d, which together are
      enc_tuple d 0 of the elements (the heads' offsets count from d), and

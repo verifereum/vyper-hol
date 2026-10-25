@@ -23,8 +23,8 @@
  *   external_return_none_result_rel,
  *   external_fallthrough_result_rel -- S1 halt bridge (#640) for the
  *     return sequences loweringHalt covers, and the _unlock versions of
- *     all but the static one, whose return may release a transient
- *     nonreentrant lock
+ *     all but the static and ABI ones, whose return may release a
+ *     transient nonreentrant lock
  *   lower_vyper_runtime_unit_correct -- S1 (planned admission, Milestone 6)
  *   lower_vyper_runtime_unit_source_unit_ok -- S2 (Milestone 5)
  *   lower_vyper_runtime_unit_memory_ok -- S3 (Milestone 5)
@@ -491,14 +491,6 @@ Proof
   strip_tac >> gvs[external_call_result_rel_def]
 QED
 
-(* A return through the ABI encoder: the operand points at memory holding
-   the value, below the alloca frontier, and ei is a plan for the value's
-   type, wrapped in a singleton tuple when it is dynamic and the ABI wraps
-   it (a static one encodes the same either way), with the buffer size msz
-   at least the type's ABI size bound.  None of the return sequence's
-   ALLOCAs has run, and the frontier stays below 2 ** 256 while they run;
-   nothing in the lowering bounds it (vyper rejects allocations of 2^64
-   bytes or more). *)
 Theorem singleton_tuple_memory:
   !tv v p mem.
     val_in_memory (TupleTV [tv]) (ArrayV (TupleV [v])) p mem =
@@ -581,6 +573,18 @@ Proof
   simp[contractABITheory.enc_def, listTheory.REV_DEF]
 QED
 
+(* A return through the ABI encoder: the operand points at memory holding
+   the value, below the alloca frontier, and ei is a plan for the value's
+   type, wrapped in a singleton tuple when it is dynamic and the ABI wraps
+   it (a static one encodes the same either way), with the buffer size msz
+   at least the type's ABI size bound.  None of the return sequence's
+   ALLOCAs has run, and the frontier stays below 2 ** 256 while they run;
+   nothing in the lowering bounds it (vyper rejects allocations of 2^64
+   bytes or more).  Not proved yet: that the ei and msz update_cenv_ret_abi
+   builds meet the plan and the bound.  That needs the compile env's
+   sizes and flags (type_memory_bytes, abi_embedded_static_size,
+   is_abi_dynamic, abi_size_bound over ce_struct_fields) to agree with
+   type_memory_size, static_length, is_dynamic and vyper_abi_size_bound. *)
 Theorem external_return_abi_result_rel:
   !ctx op ei msz nr nkey ut iv st x st' func cenv cx es ret tv v0 v
      tops tx srcs exps layouts Q.
