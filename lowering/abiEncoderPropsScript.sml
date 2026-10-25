@@ -1847,6 +1847,27 @@ Proof
        venomMemDefsTheory.alloca_next_valid_def]
 QED
 
+Theorem enc_scratch_update_var[simp]:
+  enc_scratch ids lo top (update_var y w s) = enc_scratch ids lo top s
+Proof
+  irule enc_scratch_cong >> simp[update_var_def]
+QED
+
+Theorem enc_frame_update_var:
+  (!x. not_fresh_at st x ==> x <> y) /\
+  enc_frame st st' lo top outs s0 s ==>
+  enc_frame st st' lo top outs s0 (update_var y w s)
+Proof
+  simp[enc_frame_def, lookup_var_update_var, enc_scratch_update_var,
+       update_var_def] >> rpt strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Theorem enc_mstore_update_var:
+  mstore dst v (update_var y w s) = update_var y w (mstore dst v s)
+Proof
+  simp[mstore_def, update_var_def]
+QED
+
 Theorem compile_abi_encode_copy_frame_frag:
   compile_abi_encode_to_buf dst src (AbiCopy mem_size) st = (op, st') /\
   mem_size < dimword (:256) /\
@@ -1875,6 +1896,75 @@ Proof
   simp[eval_operand_def, enc_frame_mcopy] >>
   simp[mcopy_def, write_memory_with_expansion_def]
 QED
+
+Theorem enc_eval_operand_update_old:
+  (!y. op = Var y ==> not_fresh_at st y) /\ st.cs_next_var <= n ==>
+  eval_operand op (update_var (STRING #"%" (toString n)) w s) =
+  eval_operand op s
+Proof
+  Cases_on `op` >> simp[eval_operand_def, lookup_var_update_var,
+                           update_var_def, lookup_var_def] >>
+  metis_tac[not_fresh_at_def]
+QED
+
+Theorem compile_abi_encode_prim_frame_frag:
+  compile_abi_encode_to_buf dst src AbiPrimWord st = (op, st') /\
+  eval_operand dst s0 = SOME dst_w /\ eval_operand src s0 = SOME src_w /\
+  (!y. dst = Var y ==> not_fresh_at st y) /\
+  enc_scratch (frag_ids st st') lo top s0 ==>
+  frag_exec ctx st st' (\s. s = s0)
+    (\s. mem_word_at (w2n dst_w) s.vs_memory = mload (w2n src_w) s0 /\
+         eval_operand op s = SOME 32w /\ s.vs_labels = s0.vs_labels /\
+         enc_frame st st' lo top [(w2n dst_w, 32)] s0 s) R
+Proof
+  rpt strip_tac >>
+  gvs[Once compile_abi_encode_child_def, compile_abi_encode_static_def,
+      comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
+  drule emitted_insts_emit_void >> strip_tac >>
+  drule emitted_insts_emit_op >> strip_tac >> gvs[] >>
+  drule emit_void_extends >> strip_tac >>
+  drule emit_op_extends >> strip_tac >>
+  irule frag_exec_run_inst_seq >> simp[same_blocks_def] >>
+  reverse conj_tac
+  >- (gvs[same_blocks_def] >>
+      qmatch_goalsub_rename_tac `emitted_insts st st2` >>
+      qmatch_asmsub_rename_tac `emitted_insts st1 st2` >>
+      qspecl_then [`st`, `st1`, `st2`] mp_tac emitted_insts_append >>
+      simp[mk_inst_def, is_terminator_def, IS_PREFIX_APPEND, APPEND_ASSOC]) >>
+  disj1_tac >>
+  qexists_tac `mstore (w2n dst_w) (mload (w2n src_w) s0)
+    (update_var (STRING #"%" (toString st.cs_next_var))
+      (mload (w2n src_w) s0) s0)` >>
+  conj_tac >- suspend "prim_run" >>
+  suspend "prim_post"
+QED
+
+Resume compile_abi_encode_prim_frame_frag[prim_run]:
+  qmatch_goalsub_rename_tac `emitted_insts st st2` >>
+  qmatch_asmsub_rename_tac `emitted_insts st1 st2` >>
+  qspecl_then [`st`, `st1`, `st2`] mp_tac emitted_insts_append >>
+  simp[] >> disch_then SUBST1_TAC >> simp[run_inst_seq_def] >>
+  qspec_then `src` mp_tac step_MLOAD >> disch_then drule >>
+  strip_tac >> simp[] >>
+  `eval_operand dst (update_var (STRING #"%" (toString st.cs_next_var))
+     (mload (w2n src_w) s0) s0) = SOME dst_w` by
+    (rewrite_tac[enc_eval_operand_update_old] >>
+     drule enc_eval_operand_update_old >> simp[]) >>
+  drule step_MSTORE >>
+  disch_then (qspec_then `Var (STRING #"%" (toString st.cs_next_var))` mp_tac) >>
+  simp[eval_operand_def, lookup_var_update_var]
+QED
+
+Resume compile_abi_encode_prim_frame_frag[prim_post]:
+  simp[valueEncodingPropsTheory.mstore_mem_word_at_same, eval_operand_def] >>
+  rewrite_tac[enc_mstore_update_var] >>
+  irule enc_frame_update_var >>
+  simp[not_fresh_at_def, enc_frame_mstore]
+QED
+
+Finalise compile_abi_encode_prim_frame_frag
+
 
 Theorem compile_abi_encode_frag:
   (!dst child_ptr ei is_dyn static_ofst dyn_ptr st op st' ctx env ty tv v
