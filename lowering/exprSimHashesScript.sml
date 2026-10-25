@@ -208,3 +208,57 @@ Proof
   rpt strip_tac >> drule_all hash_wrap_compiler_probe >> strip_tac >>
   asm_rewrite_tac[] >> irule hash_wrap_instruction_probe >> asm_rewrite_tac[]
 QED
+
+Theorem hash_wrap_operand_size_probe:
+  list_size expr_size [Name (BaseT (BytesT (Dynamic 1))) ""] = 6
+Proof
+  EVAL_TAC
+QED
+
+Theorem hash_wrap_small_expression_audit:
+  expr_size (Name (BaseT BoolT) "") < 6 /\
+  expr_size (TopLevelName (BaseT BoolT) (NONE, "")) < 6 /\
+  expr_size (Builtin (BaseT BoolT) Len []) < 6
+Proof
+  EVAL_TAC
+QED
+
+Theorem hash_small_toplevel_size:
+  !src. (src = NONE \/ src = SOME 0 \/ src = SOME 1) ==>
+    expr_size (TopLevelName (BaseT BoolT) (src, "")) < 6
+Proof
+  rpt strip_tac >> gvs[expr_size_def, type_size_def, base_type_size_def]
+QED
+
+Theorem hash_toplevel_missing_compile:
+  !cenv ty ann nsid st.
+    FLOOKUP cenv.ce_vars (module_var_key nsid) = NONE ==>
+    compile_expr cenv ty (TopLevelName ann nsid) st =
+      (StackValue ann (Lit 0w), SND (emit_inst INVALID [] [] st))
+Proof
+  rpt strip_tac >>
+  simp[Once (CONJUNCT1 compile_expr_raw_def), compile_expr_body_def,
+       expr_type_def] >> pairarg_tac >> simp[]
+QED
+
+Theorem hash_toplevel_immutable_eval:
+  !cx ann src id es ts imms tv v.
+    get_module_code cx src = SOME ts /\
+    find_var_decl_by_name id ts = NONE /\
+    get_immutables cx src es = (INL imms, es) /\
+    FLOOKUP imms id = SOME (tv, v) ==>
+    eval_expr cx (TopLevelName ann (src, id)) es = (INL (Value v), es)
+Proof
+  rpt strip_tac >> simp[Once evaluate_def, lookup_global_def,
+    bind_def, lift_option_type_def, return_def]
+QED
+
+Theorem hash_small_other_module:
+  !src. ?other.
+    other <> src /\
+    expr_size (TopLevelName (BaseT BoolT) (other, "")) < 6
+Proof
+  gen_tac >> Cases_on `src = NONE`
+  >- (qexists_tac `SOME 0` >> gvs[] >> EVAL_TAC) >>
+  qexists_tac `NONE` >> simp[] >> EVAL_TAC
+QED
