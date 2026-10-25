@@ -785,6 +785,137 @@ Proof
   pairarg_tac >> gvs[] >> metis_tac[]
 QED
 
+Theorem step_alloca_fresh:
+  !id n out s.
+    FLOOKUP s.vs_allocas id = NONE /\ n < dimword (:256) ==>
+    step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s =
+      OK (update_var out (n2w s.vs_alloca_next)
+        (s with <| vs_allocas := s.vs_allocas |+
+                      (id, (s.vs_alloca_next,n));
+                   vs_alloca_next := s.vs_alloca_next + n |>))
+Proof
+  rpt strip_tac >> PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+  simp[mk_inst_def, exec_alloca_def, wordsTheory.w2n_n2w]
+QED
+
+Theorem step_alloca_fresh_inv:
+  !id n out s s1.
+    step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK s1 /\
+    alloca_inv s ==> alloca_inv s1
+Proof
+  rpt strip_tac >> irule alloca_inv_step_inst >>
+  qexistsl_tac [`ARB`, `0`, `mk_inst id ALLOCA [Lit (n2w n)] [out]`, `s`] >>
+  simp[step_inst_non_invoke]
+QED
+
+Theorem enc_scratch_unallocated:
+  !st st' lo top s.
+    alloca_inv s /\ lo <= s.vs_alloca_next /\ top < dimword (:256) /\
+    (!i. i IN frag_ids st st' ==> FLOOKUP s.vs_allocas i = NONE) /\
+    s.vs_alloca_next + 32 * (st'.cs_next_id - st.cs_next_id) <= top ==>
+    enc_scratch (frag_ids st st') lo top s
+Proof
+  rpt strip_tac >>
+  `{i | i IN frag_ids st st' /\ FLOOKUP s.vs_allocas i = NONE} =
+    frag_ids st st'` by
+    (rw[pred_setTheory.EXTENSION] >> metis_tac[]) >>
+  simp[enc_scratch_def, frag_ids_card] >> metis_tac[optionTheory.NOT_SOME_NONE]
+QED
+
+Theorem enc_pre_unallocated:
+  !st st' ops lo top tv v src dst n s.
+    (!y. MEM (Var y) ops ==> not_fresh_at st y) /\
+    val_in_memory tv v src s.vs_memory /\
+    src + type_memory_size tv <= dst /\ dst + n <= lo /\
+    alloca_inv s /\ lo <= s.vs_alloca_next /\ top < dimword (:256) /\
+    (!i. i IN frag_ids st st' ==> FLOOKUP s.vs_allocas i = NONE) /\
+    s.vs_alloca_next + 32 * (st'.cs_next_id - st.cs_next_id) <= top ==>
+    enc_pre st st' ops lo top tv v src [(dst,n)] s
+Proof
+  rpt strip_tac >>
+  `enc_scratch (frag_ids st st') lo top s` by
+    (irule enc_scratch_unallocated >> simp[]) >>
+  simp[enc_pre_def, venomMemDefsTheory.regions_disjoint_def]
+QED
+
+Theorem step_alloca_enc_pre:
+  !id msz out op s p st st' tv v n top.
+    FLOOKUP s.vs_allocas id = NONE /\ id NOTIN frag_ids st st' /\
+    (!y. op = Var y ==> y <> out) /\
+    (!y. MEM (Var y) [Var out;op] ==> not_fresh_at st y) /\
+    eval_operand op s = SOME p /\
+    val_in_memory tv v (w2n p) s.vs_memory /\
+    w2n p + type_memory_size tv <= s.vs_alloca_next /\ n <= msz /\
+    alloca_inv s /\
+    (!i. i IN frag_ids st st' ==> FLOOKUP s.vs_allocas i = NONE) /\
+    s.vs_alloca_next + msz + 32 * (st'.cs_next_id - st.cs_next_id) <= top /\
+    top < dimword (:256) ==>
+    ?s1.
+      step_inst_base (mk_inst id ALLOCA [Lit (n2w msz)] [out]) s = OK s1 /\
+      eval_operand (Var out) s1 = SOME (n2w s.vs_alloca_next) /\
+      eval_operand op s1 = SOME p /\
+      enc_pre st st' [Var out;op] (s.vs_alloca_next + msz) top
+        tv v (w2n p) [(s.vs_alloca_next,n)] s1 /\
+      s1.vs_accounts = s.vs_accounts /\ s1.vs_transient = s.vs_transient /\
+      s1.vs_logs = s.vs_logs /\ s1.vs_requests = s.vs_requests
+Proof
+  rpt strip_tac >>
+  `msz < dimword (:256)` by decide_tac >>
+  drule_all step_alloca_fresh >>
+  disch_then (qspec_then `out` assume_tac) >>
+  qmatch_asmsub_abbrev_tac `OK s1` >> qexists_tac `s1` >>
+  `alloca_inv s1` by (irule step_alloca_fresh_inv >> metis_tac[]) >>
+  simp[Abbr `s1`, eval_operand_def, lookup_var_def, update_var_def,
+       FLOOKUP_UPDATE] >>
+  conj_tac
+  >- (Cases_on `op` >> gvs[eval_operand_def, lookup_var_def,
+        update_var_def, FLOOKUP_UPDATE]) >>
+  irule enc_pre_unallocated >>
+  gvs[update_var_def, FLOOKUP_UPDATE] >> metis_tac[]
+QED
+
+Theorem compile_alloc_buffer_parts:
+  !n st buf st'.
+    compile_alloc_buffer n st = (buf,st') ==>
+    buf.buf_operand = Var (STRING #"%" (toString st.cs_next_var)) /\
+    buf.buf_size = n /\ st'.cs_next_id = st.cs_next_id + 1 /\
+    st'.cs_next_var = st.cs_next_var + 1 /\
+    ~not_fresh_at st (STRING #"%" (toString st.cs_next_var)) /\
+    not_fresh_at st' (STRING #"%" (toString st.cs_next_var)) /\
+    (!y. not_fresh_at st y ==> not_fresh_at st' y)
+Proof
+  rpt gen_tac >>
+  simp[compile_alloc_buffer_def, emit_op_def, comp_bind_def,
+       comp_ignore_bind_def, comp_return_def, fresh_id_def, fresh_var_def,
+       emit_def] >> strip_tac >> gvs[not_fresh_at_def] >>
+  metis_tac[arithmeticTheory.LESS_EQ_REFL, arithmeticTheory.LESS_EQ_TRANS,
+            arithmeticTheory.LESS_EQ_ADD]
+QED
+
+Theorem compile_alloc_buffer_frag:
+  !ctx n st buf st' P Q R.
+    compile_alloc_buffer n st = (buf,st') /\
+    (!s. P s ==> ?s1.
+      step_inst_base
+        (mk_inst st.cs_next_id ALLOCA [Lit (n2w n)]
+          [STRING #"%" (toString st.cs_next_var)]) s = OK s1 /\
+      Q (s1 with vs_inst_idx := LENGTH st'.cs_current_insts)) ==>
+    frag_exec ctx st st' P Q R
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `compile_alloc_buffer _ _ = _` mp_tac >>
+  simp[compile_alloc_buffer_def, emit_op_def, comp_bind_def,
+       comp_ignore_bind_def, comp_return_def, fresh_id_def, fresh_var_def,
+       emit_def] >> strip_tac >> gvs[] >>
+  irule frag_exec_run_inst_seq >>
+  simp[exprLoweringPropsTheory.emitted_insts_def,
+       rich_listTheory.DROP_LENGTH_APPEND, mk_inst_def, is_terminator_def,
+       exprLoweringPropsTheory.run_inst_seq_def] >>
+  rpt strip_tac >> disj1_tac >>
+  first_x_assum drule >> strip_tac >>
+  qexists_tac `s1` >> gvs[mk_inst_def]
+QED
+
 Theorem compile_external_return_abi_frag:
   !ctx op ei msz nr nkey ut iv st x st' env ty tv v av P Q R.
     compile_external_return (SOME op) F F ei msz nr nkey ut iv st =
