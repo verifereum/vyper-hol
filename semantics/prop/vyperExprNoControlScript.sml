@@ -1,7 +1,7 @@
 Theory vyperExprNoControl
 
 Ancestors
-  pair vyperCreate vyperInterpreter vyperAST vyperMisc
+  pair vyperCreate vyperCreateFrame vyperInterpreter vyperAST vyperMisc
   vyperCallFrame vyperCallOutcome vyperCallOutcomeBranches vyperCallOutcomeFrame
   vyperRuntimeAccounts vyperState
 Libs
