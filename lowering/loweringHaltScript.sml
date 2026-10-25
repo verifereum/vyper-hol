@@ -1050,6 +1050,42 @@ Proof
   first_x_assum irule >> simp[frag_ids_def] >> decide_tac
 QED
 
+Theorem compile_abi_encode_return_frag:
+  !ctx name op ei sa len sb x sf env ty tv v av s1 b p lo top Q R.
+    compile_abi_encode_to_buf (Var name) op ei sa = (len,sb) /\
+    emit_inst RETURN [Var name;len] [] sb = (x,sf) /\
+    abi_enc_plan env ty ei /\ evaluate_type env ty = SOME tv /\
+    value_has_type tv v /\ vyper_to_abi env ty v = SOME av /\
+    not_fresh_at sa name /\ eval_operand (Var name) s1 = SOME b /\
+    eval_operand op s1 = SOME p /\
+    enc_pre sa sb [Var name;op] lo top tv v (w2n p)
+      [(w2n b,LENGTH (enc (vyper_to_abi_type env ty) av))] s1 /\
+    LENGTH (enc (vyper_to_abi_type env ty) av) < dimword (:256) /\
+    (!ss. ss.vs_returndata = enc (vyper_to_abi_type env ty) av /\
+      ss.vs_accounts = s1.vs_accounts /\ ss.vs_transient = s1.vs_transient /\
+      ss.vs_logs = s1.vs_logs /\ ss.vs_requests = s1.vs_requests ==>
+      R (Halt ss)) ==>
+    frag_exec ctx sa sf (\s. s = s1) Q R
+Proof
+  rpt strip_tac >>
+  drule_all (cj 2 compile_abi_encode_frag) >>
+  disch_then (qspec_then `ctx` assume_tac) >>
+  drule compile_abi_encode_to_buf_extends >> strip_tac >>
+  drule emit_inst_metadata >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `frag_exec ctx sa sb _ post _` >>
+  irule frag_exec_seq >> qexistsl_tac [`post`, `sb`] >>
+  simp[] >> conj_tac
+  >- (irule frag_exec_conseq >>
+      qexistsl_tac [`\s. s = s1`, `post`, `\r. F`] >> simp[]) >>
+  irule emit_return_buffer_frag >>
+  qexistsl_tac [`Var name`, `enc (vyper_to_abi_type env ty) av`, `len`, `x`] >>
+  simp[Abbr `post`] >> rpt strip_tac >>
+  qexists_tac `b` >>
+  `eval_operand (Var name) s = SOME b` by
+    (irule enc_frame_var >> metis_tac[]) >>
+  drule enc_frame_effects >> strip_tac >> simp[]
+QED
+
 Theorem compile_external_return_abi_frag:
   !ctx op ei msz nr nkey ut iv st x st' env ty tv v av P Q R.
     compile_external_return (SOME op) F F ei msz nr nkey ut iv st =
