@@ -1,0 +1,109 @@
+; Pinned Vyper runtime IR reference.
+; source: external-entries/sources/nr_pragma.vy
+; source_sha256: 24f293fc4b2dd739538a41590a8d002c486ef290a769ea911c650b6b6a683860
+; vyper: 0.5.0a4, commit cd74ce4f57e3771aeeab8f061fa3be45bfe8a29c
+; optimize=NONE (O1 Venom), prague, experimental_codegen=True, metadata=False
+function runtime [fmp_lowered, eom=32] {
+  runtime:  ; OUT=[1_dispatch, runtime_split_2_fallback]
+      %28 = 4
+      %1 = calldatasize
+      %2 = lt %1, %28
+      %3 = iszero %2
+      jnz %3, @1_dispatch, @runtime_split_2_fallback
+    ; (runtime)
+
+
+  1_dispatch:  ; OUT=[3_match_b3de648b, 4_next_check]
+      %29 = 0
+      %4 = calldataload %29
+      %30 = 224
+      %5 = shr %30, %4
+      %32 = %5
+      %31 = 0xb3de648b
+      %6 = eq %31, %32
+      jnz %6, @3_match_b3de648b, @4_next_check
+    ; (runtime)
+
+
+  3_match_b3de648b:  ; OUT=[]
+      %7 = callvalue
+      %8 = iszero %7
+      assert %8
+      %33 = 36
+      %9 = calldatasize
+      %10 = lt %9, %33
+      %11 = iszero %10
+      assert %11
+      %37 = 0
+      %15 = tload %37
+      %38 = 1
+      %16 = eq %38, %15
+      %17 = iszero %16
+      assert %17
+      %34 = 0
+      %35 = 4
+      %13 = add %35, %34
+      %14 = calldataload %13
+      %12 = 0
+      %36 = %12
+      mstore %36, %14
+      %41 = %12
+      %18 = mload %41
+      %42 = 0
+      sstore %42, %18
+      %39 = 1
+      %40 = 0
+      tstore %40, %39
+      %43 = 0
+      %44 = 0
+      tstore %44, %43
+      stop
+    ; 3_match_b3de648b
+    ; (runtime)
+
+
+  4_next_check:  ; OUT=[5_match_e2179b8e, 4_next_check_split_2_fallback]
+      %45 = 0xe2179b8e
+      %46 = %5
+      %19 = eq %46, %45
+      jnz %19, @5_match_e2179b8e, @4_next_check_split_2_fallback
+    ; (runtime)
+
+
+  5_match_e2179b8e:  ; OUT=[]
+      %20 = callvalue
+      %21 = iszero %20
+      assert %21
+      %47 = 0
+      %22 = tload %47
+      %48 = 1
+      %23 = eq %48, %22
+      %24 = iszero %23
+      assert %24
+      %49 = 0
+      %25 = sload %49
+      %26 = 0
+      %50 = %26
+      mstore %50, %25
+      %51 = 32
+      %52 = %26
+      return %52, %51
+    ; (runtime)
+
+
+  2_fallback:  ; OUT=[]
+      %53 = 0
+      %27 = 0
+      revert %27, %53
+    ; (runtime)
+
+
+  runtime_split_2_fallback:  ; OUT=[2_fallback]
+      jmp @2_fallback
+    ; (runtime)
+
+
+  4_next_check_split_2_fallback:  ; OUT=[2_fallback]
+      jmp @2_fallback
+    ; (runtime)
+}  ; close function runtime

@@ -2874,7 +2874,14 @@ Definition compile_type_builtin_dispatch_body_def:
                 (ConvToFlag (cenv.ce_flag_n_members (nsid_to_string flag_nsid))) st1)
           | _ => as_stack_val vv_ty (compile_type_convert v
                    (mk_convert_op src_ty ret_ty) st1))
-     | Empty => (StackValue vv_ty (Lit 0w), st)
+     | Empty =>
+         (if is_word_type ret_ty then (StackValue vv_ty (Lit 0w), st)
+          else
+            let has_length = (is_bytestring_type ret_ty \/
+                  (case ret_ty of ArrayT _ (Dynamic _) => T | _ => F)) in
+            as_ptr_val vv_ty LocMemory
+              (compile_builtin_empty_complex (type_memory_bytes cenv ret_ty)
+                 has_length st))
      | MaxValue =>
          (let (_, hi) = type_bounds ret_ty in (StackValue vv_ty (Lit hi), st))
      | MinValue =>

@@ -72,9 +72,9 @@ QED
 Theorem supported_fallback_header_names_contract:
   supported_function_header_names []
     (FunctionDecl External Payable F F "__default__" [] [] NoneT []) /\
-  ~supported_function_header_names []
+  supported_function_header_names []
     (FunctionDecl External Payable F F "__default__" [("x", BaseT BoolT)] [] NoneT []) /\
-  ~supported_function_header_names []
+  supported_function_header_names []
     (FunctionDecl Internal Pure F F "__default__" [("x", BaseT BoolT)] [] NoneT [])
 Proof
   EVAL_TAC
@@ -106,11 +106,13 @@ Proof
   EVAL_TAC
 QED
 
-Theorem supported_function_name_duplicates_reject:
-  ~supported_declaration_names
+(* Name-domain rejection now belongs to check_contract. The whitelist itself
+   permits internal/external sharing when the checker finds no call cycle. *)
+Theorem supported_function_name_duplicates_defer_to_checker:
+  supported_declaration_names
     [FunctionDecl External View F F "f" [] [] NoneT [];
      FunctionDecl Internal Pure F F "f" [] [] NoneT []] /\
-  ~supported_declaration_names
+  supported_declaration_names
     [FunctionDecl Deploy Payable F F "__init__" [] [] NoneT [];
      FunctionDecl Deploy Payable F F "__init__" [] [] NoneT []]
 Proof
@@ -124,10 +126,10 @@ Proof
   EVAL_TAC
 QED
 
-Theorem supported_declaration_name_checks_reject:
+Theorem supported_declaration_name_checks_contract:
   ~supported_declaration_names
     [FunctionDecl Internal Pure F F "return_label_42" [] [] NoneT []] /\
-  ~supported_declaration_names
+  supported_declaration_names
     [FunctionDecl External Payable F F "__default__" [("x", BaseT BoolT)] [] NoneT []] /\
   ~supported_declaration_names
     [HashMapDecl Private F "m" (BaseT BoolT) (Type (BaseT (UintT 256))) (SOME 0);

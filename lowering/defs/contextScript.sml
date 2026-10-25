@@ -386,6 +386,12 @@ Definition compile_load_immutable_def:
 End
 
 (* ===== Nonreentrant Lock ===== *)
+(* Vyper data_positions.py allocate_global_nonreentrancy_slot reserves the
+   first transient slot for $.nonreentrant_key, shared by all functions. *)
+Definition global_nonreentrant_slot_def:
+  global_nonreentrant_slot = 0n
+End
+
 (* Mirrors Python: context.py emit_nonreentrant_lock/unlock
    is_view: T for view functions — check lock but don't acquire it.
    Python: if func_t.mutability != VIEW: STORE(key, temp_value) *)

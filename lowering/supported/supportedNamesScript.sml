@@ -1,5 +1,5 @@
 (* PLAN 5.6 name whitelist. TOP-LEVEL: supported_declaration_names,
-   supported_function_bindings, supported_selectors_distinct.
+   supported_function_bindings.
    Helpers: supported_module_names, supported_function_names,
    supported_event_names, supported_internal_name,
    supported_function_header_names, supported_struct_field_names.
@@ -8,7 +8,7 @@
 Theory supportedNames
 Ancestors
   supportedDecls supportedTypes compileVyper vyperContext vyperAST
-  list string pair
+  vyperTypeContract list string pair
 
 Definition supported_module_names_def:
   supported_module_names ([] : toplevel list) = [] /\
@@ -54,7 +54,6 @@ Definition supported_function_header_names_def:
     case top of
       FunctionDecl vis mut nr rr name args defaults ret stmts =>
         (vis = Internal ==> supported_internal_name name) /\
-        (name = "__default__" ==> NULL args) /\
         supported_function_bindings tops args [] []
     | _ => T
 End
@@ -75,15 +74,14 @@ Definition supported_selectors_distinct_def:
       (build_selectors (type_env tops) (FST (classify_functions tops))))
 End
 
-(* Only body-independent names. Binding checks with locals/loops still must
-   be applied by TASK_021 in addition to this predicate. *)
+(* External names, selectors and fallback arguments are checked by
+   check_contract, including every ABI prefix and public getter. Binding
+   checks with locals/loops still apply in addition to this predicate. *)
 Definition supported_declaration_names_def:
   supported_declaration_names tops <=>
-    ALL_DISTINCT (supported_function_names tops) /\
     ALL_DISTINCT (supported_event_names tops) /\
     EVERY (supported_function_header_names tops) tops /\
-    EVERY (supported_struct_field_names tops) tops /\
-    supported_selectors_distinct tops
+    EVERY (supported_struct_field_names tops) tops
 End
 
 (* ===== Consumer contracts ===== *)
@@ -96,11 +94,10 @@ Proof
 QED
 
 Theorem supported_fallback_no_arguments:
-  supported_function_header_names tops
-    (FunctionDecl vis mut nr rr "__default__" args defaults ret stmts) ==>
+  function_header_ok External mut nr rr "__default__" args defaults ret ==>
   args = []
 Proof
-  simp[supported_function_header_names_def, NULL_EQ]
+  simp[function_header_ok_def, NULL_EQ]
 QED
 
 Theorem supported_internal_label_contract:
@@ -114,9 +111,7 @@ QED
 
 Theorem supported_declaration_names_unique:
   supported_declaration_names tops ==>
-    ALL_DISTINCT (supported_function_names tops) /\
-    ALL_DISTINCT (supported_event_names tops) /\
-    supported_selectors_distinct tops
+    ALL_DISTINCT (supported_event_names tops)
 Proof
   simp[supported_declaration_names_def]
 QED

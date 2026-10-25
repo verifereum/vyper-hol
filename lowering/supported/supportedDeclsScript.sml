@@ -19,7 +19,7 @@ Definition supported_declaration_header_def:
   supported_declaration_header tops top <=>
     case top of
       FunctionDecl vis mut nr rr name args defaults ret body =>
-        ~nr /\ ~rr /\ NULL defaults /\
+        ~rr /\ (vis = Internal ==> NULL defaults) /\
         EVERY (supported_value_type tops o SND) args /\
         supported_return_type tops ret
     | VariableDecl Private Storage name ty (SOME slot) =>
@@ -94,7 +94,7 @@ End
 Theorem supported_function_header_contract:
   supported_declaration_header tops
     (FunctionDecl vis mut nr rr name args defaults ret body) <=>
-  ~nr /\ ~rr /\ NULL defaults /\
+  ~rr /\ (vis = Internal ==> NULL defaults) /\
   EVERY (supported_value_type tops o SND) args /\
   supported_return_type tops ret
 Proof

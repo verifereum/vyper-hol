@@ -2,10 +2,12 @@
 
 Theory evalCompilerBytecodeAbiInternalTupleLowering
 Ancestors evalCompilerSubsetAbiInternalCalls compileVyper concretizeMemLocDefs alist byte integer_word option typedCopyDomain
-Libs evalCompilerBytecodeLib finite_mapLib computeLib wordsLib pairLib
+Libs evalCompilerBytecodeLib evalCompilerEntryLib finite_mapLib computeLib wordsLib pairLib
 
 fun holbuild_extra_deps (_ : string list) = ()
-val () = holbuild_extra_deps [".."]
+val () = holbuild_extra_deps
+  ["../python-o1-no-asm-opt/internal_tuple_call.hex",
+   "../python-o1-no-asm-opt-sources/internal_tuple_call.vy"]
 val () = computeLib.upd_compset add_finite_map_compset
 val () = computeLib.upd_compset (computeLib.add_thms [fmap_to_alist_FEMPTY])
 val () = computeLib.upd_compset (computeLib.add_thms [i2w_pos])
@@ -21,9 +23,11 @@ val internal_tuple_call_type_env_eval = save_thm
   ("internal_tuple_call_type_env_eval",
    EVAL ``type_env ^internal_tuple_call_tops``)
 val internal_tuple_call_type_env = rhs (concl internal_tuple_call_type_env_eval)
-val internal_tuple_call_nkeys_eval = save_thm
-  ("internal_tuple_call_nkeys_eval",
-   EVAL ``assign_nkeys ^internal_tuple_call_tops 0``)
+Theorem internal_tuple_call_nkeys_eval:
+  (K global_nonreentrant_slot : string -> num) = K 0n
+Proof
+  simp[contextTheory.global_nonreentrant_slot_def]
+QED
 val internal_tuple_call_nkeys = rhs (concl internal_tuple_call_nkeys_eval)
 val internal_tuple_call_classify_eval = save_thm
   ("internal_tuple_call_classify_eval",
@@ -49,7 +53,7 @@ val internal_tuple_call_external_fns_eval = save_thm
    EVAL
      ``MAP (set_external_package_target
               (^internal_tuple_call_rpolicy).rpol_target o
-            package_external_fn ^internal_tuple_call_tops F
+            package_external_fn ^internal_tuple_call_tops T
               ^internal_tuple_call_nkeys)
          ^internal_tuple_call_external_sources``)
 val internal_tuple_call_external_fns =
@@ -59,7 +63,7 @@ val internal_tuple_call_internal_fns_eval = save_thm
    EVAL
      ``MAP (set_internal_package_target
               (^internal_tuple_call_rpolicy).rpol_target o
-            package_internal_fn ^internal_tuple_call_tops F
+            package_internal_fn ^internal_tuple_call_tops T
               ^internal_tuple_call_nkeys F 0)
          ^internal_tuple_call_internal_sources``)
 val internal_tuple_call_internal_fns =
@@ -69,7 +73,7 @@ val internal_tuple_call_fallback_fn_eval = save_thm
    EVAL
      ``set_fallback_package_target
          (^internal_tuple_call_rpolicy).rpol_target
-         (package_fallback_fn ^internal_tuple_call_tops F
+         (package_fallback_fn ^internal_tuple_call_tops T
            ^internal_tuple_call_nkeys ^internal_tuple_call_fallback_source)``)
 val internal_tuple_call_fallback_fn =
   rhs (concl internal_tuple_call_fallback_fn_eval)
@@ -600,6 +604,7 @@ val internal_tuple_call_internal_return_eval = save_thm
 val internal_tuple_call_return_from_env_step1 = QCONV
   (PURE_REWRITE_CONV
     [stmtLoweringTheory.compile_internal_return_from_env_def,
+     stmtLoweringTheory.compile_return_unlock_def,
      compileEnvTheory.comp_bind_def,
      internal_tuple_call_ret_buf_eval,
      internal_tuple_call_elem_types_eval,
@@ -1014,17 +1019,23 @@ val internal_tuple_call_internal_return_clean_eval = save_thm
 Theorem compile_internal_return_from_ptr_env:
   cenv.ce_return_buf = SOME (PtrVar buf_op sz) ⇒
   compile_internal_return_from_env cenv (TupleT tys) src_ty val_op return_pc =
-    compile_internal_return cenv (SOME val_op) return_pc
-      cenv.ce_returns_count (TupleT tys) src_ty tys (SOME buf_op)
+    do compile_return_unlock cenv;
+       compile_internal_return cenv (SOME val_op) return_pc
+         cenv.ce_returns_count (TupleT tys) src_ty tys (SOME buf_op)
+    od
 Proof
   simp[stmtLoweringTheory.compile_internal_return_from_env_def,
+       stmtLoweringTheory.compile_return_unlock_def,
        compileEnvTheory.comp_bind_def,
+       compileEnvTheory.comp_ignore_bind_def,
        compileEnvTheory.comp_return_def,
        FUN_EQ_THM, pairTheory.FORALL_PROD]
 QED
 
 val internal_tuple_call_ret_buf_lookup_eval =
   EVAL ``(^internal_tuple_call_cenv2).ce_return_buf``
+val internal_tuple_call_nonreentrant_lookup_eval =
+  EVAL ``(^internal_tuple_call_cenv2).ce_nonreentrant``
 val internal_tuple_call_return_from_env_clean_step0 = QCONV
   (PURE_REWRITE_CONV [internal_tuple_call_src_ty_eval])
   ``compile_internal_return_from_env ^internal_tuple_call_cenv2
@@ -1034,7 +1045,12 @@ val internal_tuple_call_return_from_env_clean_step0 = QCONV
       ^internal_tuple_call_state14``
 val internal_tuple_call_return_from_env_clean_step1 = SIMP_CONV (srw_ss())
   [compile_internal_return_from_ptr_env,
-   internal_tuple_call_ret_buf_lookup_eval]
+   internal_tuple_call_ret_buf_lookup_eval,
+   internal_tuple_call_nonreentrant_lookup_eval,
+   stmtLoweringTheory.compile_return_unlock_def,
+   compileEnvTheory.comp_ignore_bind_def,
+   compileEnvTheory.comp_bind_def, compileEnvTheory.comp_return_def,
+   LET_THM, pairTheory.UNCURRY_DEF, pairTheory.pair_case_def]
   (rhs (concl internal_tuple_call_return_from_env_clean_step0))
 val internal_tuple_call_return_from_env_clean_step2 = QCONV
   (PURE_REWRITE_CONV [internal_tuple_call_internal_return_clean_eval])
@@ -1305,13 +1321,19 @@ val internal_tuple_call_return_exact_lookup_term = subst
 val internal_tuple_call_return_exact_lookup_eval = save_thm
   ("internal_tuple_call_return_exact_lookup_eval",
    EVAL internal_tuple_call_return_exact_lookup_term)
-val internal_tuple_call_return_from_env_exact_rule = MATCH_MP
-  compile_internal_return_from_ptr_env
-  internal_tuple_call_return_exact_lookup_eval
+val internal_tuple_call_return_exact_nonreentrant_eval =
+  EVAL ``(^internal_tuple_call_return_exact_cenv).ce_nonreentrant``
+val internal_tuple_call_return_from_env_exact_rule = SIMP_RULE (srw_ss())
+  [stmtLoweringTheory.compile_return_unlock_def,
+   internal_tuple_call_return_exact_nonreentrant_eval,
+   compileEnvTheory.comp_ignore_bind_def,
+   compileEnvTheory.comp_bind_def, compileEnvTheory.comp_return_def,
+   FUN_EQ_THM, LET_THM, pairTheory.UNCURRY_DEF, pairTheory.pair_case_def]
+  (MATCH_MP compile_internal_return_from_ptr_env
+    internal_tuple_call_return_exact_lookup_eval)
 val internal_tuple_call_return_from_env_exact_eval = save_thm
   ("internal_tuple_call_return_from_env_exact_eval",
-   RATOR_CONV
-     (REWR_CONV internal_tuple_call_return_from_env_exact_rule)
+   REWR_CONV internal_tuple_call_return_from_env_exact_rule
      internal_tuple_call_return_exact_term)
 val internal_tuple_call_internal_function_refine6 =
   RAND_CONV (RAND_CONV
@@ -1328,19 +1350,11 @@ val internal_tuple_call_internal_function_clean_eval6 = save_thm
      internal_tuple_call_internal_function_admin6)
 val internal_tuple_call_internal_function_term6 =
   rhs (concl internal_tuple_call_internal_function_clean_eval6)
-val (_, internal_tuple_call_function_args6) =
-  strip_comb internal_tuple_call_internal_function_term6
-val internal_tuple_call_function_scrut6 =
-  List.nth (internal_tuple_call_function_args6, 1)
-val (_, internal_tuple_call_function_scrut_args6) =
-  strip_comb internal_tuple_call_function_scrut6
-val internal_tuple_call_function_inner_scrut6 =
-  List.nth (internal_tuple_call_function_scrut_args6, 1)
-val (internal_tuple_call_function_inner_head6,
-     internal_tuple_call_function_inner_args6) =
-  strip_comb internal_tuple_call_function_inner_scrut6
 val internal_tuple_call_internal_return_exact_term =
-  internal_tuple_call_function_inner_scrut6
+  find_term (fn tm => let val (head,args) = strip_comb tm in
+    same_const head ``compile_internal_return`` andalso length args = 9
+  end handle HOL_ERR _ => false)
+    internal_tuple_call_internal_function_term6
 val internal_tuple_call_fixed_return_spec =
   SPEC_ALL compile_internal_return_fixed_tuple
 val (internal_tuple_call_fixed_return_premise,
@@ -1815,6 +1829,9 @@ val internal_tuple_call_lower_runtime_eval = save_thm
   ("internal_tuple_call_lower_runtime_eval",
    SIMP_CONV pure_ss
      [compileVyperTheory.lower_vyper_runtime_unit_def,
+      compileVyperTheory.external_has_defaults_def,
+      listTheory.EXISTS_DEF, listTheory.NULL_DEF, boolTheory.COND_CLAUSES,
+      boolTheory.NOT_CLAUSES, boolTheory.OR_CLAUSES,
       internal_tuple_call_type_env_eval,
       internal_tuple_call_nkeys_eval,
       internal_tuple_call_classify_eval,

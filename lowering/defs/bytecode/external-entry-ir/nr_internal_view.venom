@@ -1,0 +1,79 @@
+; Pinned Vyper runtime IR reference.
+; source: external-entries/sources/nr_internal_view.vy
+; source_sha256: 2d54faf1cb5be41168c1e54098c2710c033602a0b0725a8dd4396e444d6374eb
+; vyper: 0.5.0a4, commit cd74ce4f57e3771aeeab8f061fa3be45bfe8a29c
+; optimize=NONE (O1 Venom), prague, experimental_codegen=True, metadata=False
+function runtime [fmp_lowered, eom=32] {
+  runtime:  ; OUT=[1_dispatch, runtime_split_2_fallback]
+      %15 = 4
+      %1 = calldatasize
+      %2 = lt %1, %15
+      %3 = iszero %2
+      jnz %3, @1_dispatch, @runtime_split_2_fallback
+    ; (runtime)
+
+
+  1_dispatch:  ; OUT=[3_match_26121ff0, 1_dispatch_split_2_fallback]
+      %16 = 0
+      %4 = calldataload %16
+      %17 = 224
+      %5 = shr %17, %4
+      %18 = 0x26121ff0
+      %6 = eq %18, %5
+      jnz %6, @3_match_26121ff0, @1_dispatch_split_2_fallback
+    ; (runtime)
+
+
+  3_match_26121ff0:  ; OUT=[]
+      %7 = callvalue
+      %8 = iszero %7
+      assert %8
+      %10 = invoke @"internal 0 g()_runtime"
+      %9 = 0
+      %20 = %9
+      %19 = 0
+      %11 = add %19, %20
+      mstore %11, %10
+      %21 = %9
+      %12 = mload %21
+      %13 = 0
+      %22 = %13
+      mstore %22, %12
+      %23 = 32
+      %24 = %13
+      return %24, %23
+    ; (runtime)
+
+
+  2_fallback:  ; OUT=[]
+      %25 = 0
+      %14 = 0
+      revert %14, %25
+    ; (runtime)
+
+
+  runtime_split_2_fallback:  ; OUT=[2_fallback]
+      jmp @2_fallback
+    ; (runtime)
+
+
+  1_dispatch_split_2_fallback:  ; OUT=[2_fallback]
+      jmp @2_fallback
+    ; (runtime)
+}  ; close function runtime
+
+
+function "internal 0 g()_runtime" [fmp_lowered, eom=32] {
+  "internal 0 g()_runtime":  ; OUT=[]
+      %1 = retpc_param
+      %2 = 0
+      %7 = 0
+      %3 = tload %7
+      %8 = 1
+      %4 = eq %8, %3
+      %5 = iszero %4
+      assert %5
+      %9 = 0
+      %6 = sload %9
+      ret %1, %6
+}  ; close function "internal 0 g()_runtime"

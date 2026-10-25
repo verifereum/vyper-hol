@@ -7,6 +7,10 @@ Ancestors
   moduleLoweringProps
   valueEncodingProofs
   localPtrsProps
+  externalEntryProps constructorGuardProps
+  nonreentrantEntryEquiv internalReturnLockProps
+  transientLockFrameProps
+  selectorCompilerProps checkedSelectorTableProps
   (* compiler + correctness *)
   vyperCompiler
   vyperLoweringCorrect

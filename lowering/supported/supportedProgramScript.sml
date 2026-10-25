@@ -40,7 +40,8 @@ End
 (* Exact target-type occurrence (not just a dynamic boolean): needed by the
    existential in decode_strictness_exempt. Traverse unsupported expressions,
    targets, iterators and reasons too. Only FUNCTION BODIES, as PLAN 5.5 says;
-   defaults/constants are not bodies and are excluded by supported_program. *)
+   defaults/constants are not bodies. Internal defaults remain excluded until
+   their call-site expansion is implemented (#546). *)
 Definition expr_abi_decode_target_root_def:
   expr_abi_decode_target_root target
     (TypeBuiltin ty (AbiDecode unwrap) decoded es) = (decoded = target) /\

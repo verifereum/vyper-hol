@@ -700,3 +700,36 @@ val () = List.app (assert_some o check_constants)
    [tdecl b32 "K" keccak_a,
     tdecl ``BaseT BoolT`` "E"
       ``Builtin (BaseT BoolT) (Bop Eq) [^(tname b32 "K"); ^(tname b32 "K")]``]]
+
+(* a13-08 p15x: retain the exact p03 uint8 conversion/store and getter, then
+   mutate only the constructor's defaults. Both baseline modes must accept. *)
+val p03_constructor =
+  ``FunctionDecl Deploy Nonpayable F F "__init__"
+      [("a",BaseT (UintT 8))] [] NoneT
+      [Assign (BaseTarget (TopLevelNameTarget (NONE,"x")))
+        (TypeBuiltin (BaseT (UintT 256)) Convert (BaseT (UintT 256))
+          [Name (BaseT (UintT 8)) "a"]) ]``;
+val p03_constructor_modules =
+  ``[(NONE,
+      [VariableDecl Private Storage "x" (BaseT (UintT 256)) (SOME 0);
+       ^p03_constructor;
+       FunctionDecl External Nonpayable F F "get" [] [] (BaseT (UintT 256))
+         [Return (SOME (TopLevelName (BaseT (UintT 256)) (NONE,"x")))]])]
+    : (num option # toplevel list) list``;
+val p03_constructor_layouts =
+  ``[(0w : address,
+      ([((NONE,"x"),0)] : storage_layout, [] : storage_layout))]``;
+val p15x_constructor_modules = let
+  val (head,fields) = strip_comb p03_constructor
+  val changed = List.take (fields,6) @
+    [``[Literal (BaseT (UintT 8)) (IntL 5)]``] @ List.drop (fields,7)
+in subst [p03_constructor |-> list_mk_comb (head,changed)]
+     p03_constructor_modules end;
+val () = List.app (fn in_deploy => let
+  fun check modules = vyperCheckContractLib.check_contract_conv
+    (vyperCheckContractLib.mk_check_contract
+      {in_deploy = in_deploy, layouts = p03_constructor_layouts,
+       address = zero_address, modules = modules})
+in assert_some (check p03_constructor_modules);
+   assert_none (check p15x_constructor_modules)
+end) [false,true];

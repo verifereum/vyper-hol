@@ -1,0 +1,319 @@
+; Pinned Vyper runtime IR reference.
+; source: external-entries/sources/base_dom1.vy
+; source_sha256: 06acf0ec3ee91577797f37c6df055ad4fc3c58ebacbfbd0bc1db4f450f670572
+; vyper: 0.5.0a4, commit cd74ce4f57e3771aeeab8f061fa3be45bfe8a29c
+; optimize=NONE (O1 Venom), prague, experimental_codegen=True, metadata=False
+function runtime [fmp_lowered, eom=224] {
+  runtime:  ; OUT=[1_dispatch, runtime_split_2_fallback]
+      %76 = 4
+      %1 = calldatasize
+      %2 = lt %1, %76
+      %3 = iszero %2
+      jnz %3, @1_dispatch, @runtime_split_2_fallback
+    ; (runtime)
+
+
+  1_dispatch:  ; OUT=[3_match_b3de648b, 4_next_check]
+      %77 = 0
+      %4 = calldataload %77
+      %78 = 224
+      %5 = shr %78, %4
+      %80 = %5
+      %79 = 0xb3de648b
+      %6 = eq %79, %80
+      jnz %6, @3_match_b3de648b, @4_next_check
+    ; (runtime)
+
+
+  3_match_b3de648b:  ; OUT=[]
+      %7 = callvalue
+      %8 = iszero %7
+      assert %8
+      %81 = 36
+      %9 = calldatasize
+      %10 = lt %9, %81
+      %11 = iszero %10
+      assert %11
+      %82 = 0
+      %83 = 4
+      %13 = add %83, %82
+      %14 = calldataload %13
+      %12 = 0
+      %84 = %12
+      mstore %84, %14
+      %85 = %12
+      %15 = mload %85
+      invoke @"internal 0 g(uint256)_runtime", %15
+      stop
+    ; (runtime)
+
+
+  4_next_check:  ; OUT=[5_match_42966c68, 6_next_check]
+      %86 = 0x42966c68
+      %87 = %5
+      %16 = eq %87, %86
+      jnz %16, @5_match_42966c68, @6_next_check
+    ; (runtime)
+
+
+  5_match_42966c68:  ; OUT=[]
+      %17 = callvalue
+      %18 = iszero %17
+      assert %18
+      %88 = 36
+      %19 = calldatasize
+      %20 = lt %19, %88
+      %21 = iszero %20
+      assert %21
+      %89 = 0
+      %90 = 4
+      %23 = add %90, %89
+      %24 = calldataload %23
+      %22 = 0
+      %91 = %22
+      mstore %91, %24
+      %92 = %22
+      %25 = mload %92
+      %26 = 32
+      %94 = %26
+      %93 = 0
+      %27 = add %93, %94
+      mstore %27, %25
+      %95 = 32
+      %96 = %26
+      %28 = 0
+      %97 = %28
+      mcopy %97, %96, %95
+      %98 = 0x47e2689743f14e97f7dcfa5eec10ba1dff02f83b3d1d4b9c07b206cbbda66450
+      %99 = 32
+      %100 = %28
+      log %100, %99, %98, 1
+      stop
+    ; 5_match_42966c68
+    ; (runtime)
+
+
+  6_next_check:  ; OUT=[7_match_6daaba68, 8_next_check]
+      %101 = 0x6daaba68
+      %102 = %5
+      %29 = eq %102, %101
+      jnz %29, @7_match_6daaba68, @8_next_check
+    ; (runtime)
+
+
+  7_match_6daaba68:  ; OUT=[]
+      %30 = callvalue
+      %31 = iszero %30
+      assert %31
+      %103 = 36
+      %32 = calldatasize
+      %33 = lt %32, %103
+      %34 = iszero %33
+      assert %34
+      %104 = 0
+      %105 = 4
+      %36 = add %105, %104
+      %37 = calldataload %36
+      %106 = %37
+      %107 = 128
+      %38 = shl %107, %106
+      %39 = iszero %38
+      assert %39
+      %108 = %37
+      %35 = 0
+      mstore %35, %108
+      %111 = 1
+      %40 = 32
+      %110 = %40
+      %109 = 0
+      %41 = add %109, %110
+      mstore %41, %111
+      %112 = 32
+      %113 = %40
+      %42 = 0
+      %114 = %42
+      mcopy %114, %113, %112
+      %115 = 0xa48a6b249a5084126c3da369fbc9b16827ead8cb5cdc094b717d3f1dcd995e29
+      %116 = 32
+      %117 = %42
+      log %117, %116, %115, 1
+      stop
+    ; 7_match_6daaba68
+    ; (runtime)
+
+
+  8_next_check:  ; OUT=[9_match_a9692047, 10_next_check]
+      %118 = 0xa9692047
+      %119 = %5
+      %43 = eq %119, %118
+      jnz %43, @9_match_a9692047, @10_next_check
+    ; (runtime)
+
+
+  9_match_a9692047:  ; OUT=[]
+      %44 = callvalue
+      %45 = iszero %44
+      assert %45
+      %120 = 36
+      %46 = calldatasize
+      %47 = lt %46, %120
+      %48 = iszero %47
+      assert %48
+      %121 = 0
+      %122 = 4
+      %50 = add %122, %121
+      %51 = calldataload %50
+      %49 = 0
+      %123 = %49
+      mstore %123, %51
+      %124 = %49
+      %52 = mload %124
+      %53 = 0
+      %125 = %53
+      mstore %125, %52
+      %126 = 32
+      %127 = %53
+      return %127, %126
+    ; (runtime)
+
+
+  10_next_check:  ; OUT=[11_match_b4f40c61, 10_next_check_split_2_fallback]
+      %128 = 0xb4f40c61
+      %129 = %5
+      %54 = eq %129, %128
+      jnz %54, @11_match_b4f40c61, @10_next_check_split_2_fallback
+    ; (runtime)
+
+
+  11_match_b4f40c61:  ; OUT=[]
+      %55 = callvalue
+      %56 = iszero %55
+      assert %56
+      %57 = 64
+      %130 = %57
+      invoke @"internal 6 h()_runtime", %130
+      %131 = 32
+      %59 = 0
+      %132 = %59
+      mstore %132, %131
+      %137 = %59
+      %62 = mload %137
+      %134 = %57
+      %133 = 0
+      %60 = add %133, %134
+      %140 = %60
+      %64 = mload %140
+      %145 = 0
+      %142 = %64
+      %141 = 31
+      %65 = add %141, %142
+      %143 = 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe0
+      %66 = and %143, %65
+      %138 = %62
+      %58 = 128
+      %139 = %58
+      %63 = add %139, %138
+      %144 = %63
+      %67 = add %144, %66
+      mstore %67, %145
+      %146 = %64
+      %147 = 32
+      %68 = add %147, %146
+      %148 = %60
+      %149 = %63
+      mcopy %149, %148, %68
+      %154 = %62
+      %136 = %58
+      %135 = 0
+      %61 = add %135, %136
+      mstore %61, %154
+      %151 = %64
+      %150 = 31
+      %69 = add %150, %151
+      %152 = 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe0
+      %70 = and %152, %69
+      %153 = 32
+      %71 = add %153, %70
+      %155 = %62
+      %72 = add %155, %71
+      %156 = %59
+      mstore %156, %72
+      %157 = %59
+      %73 = mload %157
+      %158 = %58
+      return %158, %73
+    ; 11_match_b4f40c61
+    ; (runtime)
+
+
+  2_fallback:  ; OUT=[]
+      %74 = callvalue
+      %75 = iszero %74
+      assert %75
+      stop
+    ; (runtime)
+
+
+  runtime_split_2_fallback:  ; OUT=[2_fallback]
+      jmp @2_fallback
+    ; (runtime)
+
+
+  10_next_check_split_2_fallback:  ; OUT=[2_fallback]
+      jmp @2_fallback
+    ; (runtime)
+}  ; close function runtime
+
+
+function "internal 0 g(uint256)_runtime" [fmp_lowered, eom=32] {
+  "internal 0 g(uint256)_runtime":  ; OUT=[]
+      %1 = param
+      %3 = retpc_param
+      %9 = 0
+      %4 = tload %9
+      %10 = 1
+      %5 = eq %10, %4
+      %6 = iszero %5
+      assert %6
+      %2 = 0
+      %8 = %2
+      mstore %8, %1
+      %13 = %2
+      %7 = mload %13
+      %14 = 0
+      sstore %14, %7
+      %11 = 1
+      %12 = 0
+      tstore %12, %11
+      %15 = 0
+      %16 = 0
+      tstore %16, %15
+      ret %3
+}  ; close function "internal 0 g(uint256)_runtime"
+
+
+function "internal 6 h()_runtime" [fmp_lowered, eom=64] {
+  "internal 6 h()_runtime":  ; OUT=[]
+      %1 = param
+      %2 = retpc_param
+      %9 = 2
+      %3 = 0
+      %10 = %3
+      mstore %10, %9
+      %13 = 0x6162000000000000000000000000000000000000000000000000000000000000
+      %12 = %3
+      %11 = 32
+      %4 = add %11, %12
+      mstore %4, %13
+      %14 = %3
+      %5 = mload %14
+      %15 = 31
+      %6 = add %15, %5
+      %16 = 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe0
+      %7 = and %16, %6
+      %17 = 32
+      %8 = add %17, %7
+      %18 = %3
+      mcopy %1, %18, %8
+      ret %2
+}  ; close function "internal 6 h()_runtime"

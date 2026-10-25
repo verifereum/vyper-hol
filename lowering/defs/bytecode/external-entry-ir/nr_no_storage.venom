@@ -1,0 +1,91 @@
+; Pinned Vyper runtime IR reference.
+; source: external-entries/sources/nr_no_storage.vy
+; source_sha256: f7d2f712eb0b25523f92e3202514b9a2f33ce99a1bf8b0e585b6bbf28d05dbdd
+; vyper: 0.5.0a4, commit cd74ce4f57e3771aeeab8f061fa3be45bfe8a29c
+; optimize=NONE (O1 Venom), prague, experimental_codegen=True, metadata=False
+function runtime [fmp_lowered, eom=32] {
+  runtime:  ; OUT=[1_dispatch, runtime_split_2_fallback]
+      %24 = 4
+      %1 = calldatasize
+      %2 = lt %1, %24
+      %3 = iszero %2
+      jnz %3, @1_dispatch, @runtime_split_2_fallback
+    ; (runtime)
+
+
+  1_dispatch:  ; OUT=[3_match_b3de648b, 1_dispatch_split_2_fallback]
+      %25 = 0
+      %4 = calldataload %25
+      %26 = 224
+      %5 = shr %26, %4
+      %27 = 0xb3de648b
+      %6 = eq %27, %5
+      jnz %6, @3_match_b3de648b, @1_dispatch_split_2_fallback
+    ; (runtime)
+
+
+  3_match_b3de648b:  ; OUT=[]
+      %7 = callvalue
+      %8 = iszero %7
+      assert %8
+      %28 = 36
+      %9 = calldatasize
+      %10 = lt %9, %28
+      %11 = iszero %10
+      assert %11
+      %32 = 0
+      %15 = tload %32
+      %33 = 1
+      %16 = eq %33, %15
+      %17 = iszero %16
+      assert %17
+      %29 = 0
+      %30 = 4
+      %13 = add %30, %29
+      %14 = calldataload %13
+      %12 = 0
+      %31 = %12
+      mstore %31, %14
+      %36 = %12
+      %18 = mload %36
+      %39 = %18
+      %38 = %18
+      %37 = 1
+      %19 = add %37, %38
+      %40 = %19
+      %20 = lt %40, %39
+      %21 = iszero %20
+      assert %21
+      %34 = 1
+      %35 = 0
+      tstore %35, %34
+      %41 = 0
+      %42 = 0
+      tstore %42, %41
+      %43 = %19
+      %22 = 0
+      %44 = %22
+      mstore %44, %43
+      %45 = 32
+      %46 = %22
+      return %46, %45
+    ; 3_match_b3de648b
+    ; (runtime)
+
+
+  2_fallback:  ; OUT=[]
+      %47 = 0
+      %23 = 0
+      revert %23, %47
+    ; (runtime)
+
+
+  runtime_split_2_fallback:  ; OUT=[2_fallback]
+      jmp @2_fallback
+    ; (runtime)
+
+
+  1_dispatch_split_2_fallback:  ; OUT=[2_fallback]
+      jmp @2_fallback
+    ; (runtime)
+}  ; close function runtime

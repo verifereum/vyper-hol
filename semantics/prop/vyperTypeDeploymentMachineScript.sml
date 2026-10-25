@@ -82,7 +82,7 @@ Proof
   first_x_assum drule >> simp[check_module_def, EVERY_MEM] >>
   strip_tac >>
   qpat_x_assum `!e. MEM e ts ==> check_toplevel_decl _ _ _ _ _ _` drule >>
-  simp[check_toplevel_decl_def]
+  simp[check_toplevel_decl_def, function_header_ok_def, NULL_EQ]
 QED
 
 Theorem checked_constructor_body_typing_package:

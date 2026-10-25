@@ -2,10 +2,12 @@
 
 Theory evalCompilerBytecodeScalarConvertDecimal
 Ancestors evalCompilerBytecodeScalarWordEval evalCompilerSubsetScalars compileVyper concretizeMemLocDefs alist byte integer_word option
-Libs evalCompilerBytecodeLib finite_mapLib computeLib wordsLib
+Libs evalCompilerBytecodeLib evalCompilerEntryLib finite_mapLib computeLib wordsLib
 
 fun holbuild_extra_deps (_ : string list) = ()
-val () = holbuild_extra_deps [".."]
+val () = holbuild_extra_deps
+  ["../python-o1-no-asm-opt/scalar_convert_decimal.hex",
+   "../python-o1-no-asm-opt-sources/scalar_convert_decimal.vy"]
 val () = computeLib.upd_compset add_finite_map_compset
 val () = computeLib.upd_compset (computeLib.add_thms [fmap_to_alist_FEMPTY])
 val () = computeLib.upd_compset (computeLib.add_thms [i2w_pos])
@@ -72,8 +74,8 @@ val scalar_convert_decimal_resolved_policy = optionSyntax.dest_some
   (rhs (concl scalar_convert_decimal_policy_eval))
 val scalar_convert_decimal_package_eval = save_thm
   ("scalar_convert_decimal_package_eval",
-   EVAL ``package_external_fn scalar_convert_decimal_program F
-      (assign_nkeys scalar_convert_decimal_program 0)
+   EVAL ``package_external_fn scalar_convert_decimal_program T
+      (K global_nonreentrant_slot : string -> num)
       (let (ext_fns,int_fns,fb,ctor) =
          classify_functions scalar_convert_decimal_program
        in HD ext_fns)``)
@@ -91,9 +93,11 @@ val scalar_convert_decimal_type_env_eval = save_thm
    EVAL ``type_env ^scalar_convert_decimal_tops``)
 val scalar_convert_decimal_type_env =
   rhs (concl scalar_convert_decimal_type_env_eval)
-val scalar_convert_decimal_nkeys_eval = save_thm
-  ("scalar_convert_decimal_nkeys_eval",
-   EVAL ``assign_nkeys ^scalar_convert_decimal_tops 0``)
+Theorem scalar_convert_decimal_nkeys_eval:
+  (K global_nonreentrant_slot : string -> num) = K 0n
+Proof
+  simp[contextTheory.global_nonreentrant_slot_def]
+QED
 val scalar_convert_decimal_nkeys = rhs (concl scalar_convert_decimal_nkeys_eval)
 val scalar_convert_decimal_classify_eval = save_thm
   ("scalar_convert_decimal_classify_eval",
@@ -120,7 +124,7 @@ val scalar_convert_decimal_external_fns_eval = save_thm
   ("scalar_convert_decimal_external_fns_eval",
    EVAL ``MAP (set_external_package_target
                  (^scalar_convert_decimal_resolved_policy).rpol_target o
-               package_external_fn ^scalar_convert_decimal_tops F
+               package_external_fn ^scalar_convert_decimal_tops T
                  ^scalar_convert_decimal_nkeys)
       ^scalar_convert_decimal_external_sources``)
 val scalar_convert_decimal_external_fns =
@@ -129,7 +133,7 @@ val scalar_convert_decimal_internal_fns_eval = save_thm
   ("scalar_convert_decimal_internal_fns_eval",
    EVAL ``MAP (set_internal_package_target
                  (^scalar_convert_decimal_resolved_policy).rpol_target o
-               package_internal_fn ^scalar_convert_decimal_tops F
+               package_internal_fn ^scalar_convert_decimal_tops T
                  ^scalar_convert_decimal_nkeys F 0)
       ^scalar_convert_decimal_internal_sources``)
 val scalar_convert_decimal_internal_fns =
@@ -138,7 +142,7 @@ val scalar_convert_decimal_fallback_fn_eval = save_thm
   ("scalar_convert_decimal_fallback_fn_eval",
    EVAL ``set_fallback_package_target
       (^scalar_convert_decimal_resolved_policy).rpol_target
-      (package_fallback_fn ^scalar_convert_decimal_tops F
+      (package_fallback_fn ^scalar_convert_decimal_tops T
         ^scalar_convert_decimal_nkeys ^scalar_convert_decimal_fallback_source)``)
 val scalar_convert_decimal_fallback_fn =
   rhs (concl scalar_convert_decimal_fallback_fn_eval)
@@ -488,6 +492,9 @@ val scalar_convert_decimal_runtime_unit_eval = save_thm
   ("scalar_convert_decimal_runtime_unit_eval",
    SIMP_CONV pure_ss
     ([compileVyperTheory.lower_vyper_runtime_unit_def,
+      compileVyperTheory.external_has_defaults_def,
+      listTheory.EXISTS_DEF, listTheory.NULL_DEF, boolTheory.COND_CLAUSES,
+      boolTheory.NOT_CLAUSES, boolTheory.OR_CLAUSES,
       scalar_convert_decimal_type_env_eval,
       scalar_convert_decimal_nkeys_eval,
       scalar_convert_decimal_classify_eval,
@@ -810,45 +817,51 @@ val scalar_convert_decimal_context_plan_step1 = SIMP_CONV (srw_ss())
   ``generate_context_plan (^scalar_convert_decimal_unit).cu_context``
 val scalar_convert_decimal_context_plan_step2 =
   EVAL (rhs (concl scalar_convert_decimal_context_plan_step1))
-val scalar_convert_decimal_actual_plan_call = find_term
-  (can (match_term ``generate_fn_plan f spill labels``))
-  (rhs (concl scalar_convert_decimal_context_plan_step2))
-val scalar_convert_decimal_actual_plan_args =
-  #2 (strip_comb scalar_convert_decimal_actual_plan_call)
-val scalar_convert_decimal_actual_fn = hd scalar_convert_decimal_actual_plan_args
-val scalar_convert_decimal_actual_liveness_eval =
-  EVAL ``liveness_analyze ^scalar_convert_decimal_actual_fn``
-val scalar_convert_decimal_actual_dfg_eval =
-  EVAL ``dfg_build_function ^scalar_convert_decimal_actual_fn``
-val scalar_convert_decimal_actual_cfg_eval =
-  EVAL ``cfg_analyze ^scalar_convert_decimal_actual_fn``
-val scalar_convert_decimal_actual_liveness =
-  rhs (concl scalar_convert_decimal_actual_liveness_eval)
-val scalar_convert_decimal_actual_dfg = rhs (concl scalar_convert_decimal_actual_dfg_eval)
-val scalar_convert_decimal_actual_cfg = rhs (concl scalar_convert_decimal_actual_cfg_eval)
-val scalar_convert_decimal_actual_plan_eval = EVAL
-  ``generate_fn_plan_analyzed ^scalar_convert_decimal_actual_liveness
-      ^scalar_convert_decimal_actual_dfg ^scalar_convert_decimal_actual_cfg
-      ^scalar_convert_decimal_actual_fn ^scalar_convert_decimal_max_eom 0``
-val scalar_convert_decimal_actual_generate_step1 =
-  REWR_CONV stackPlanGenTheory.generate_fn_plan_def
-    ``generate_fn_plan ^scalar_convert_decimal_actual_fn
-        ^scalar_convert_decimal_max_eom 0``
-val scalar_convert_decimal_actual_generate_step2 = PURE_REWRITE_CONV
-  [scalar_convert_decimal_actual_liveness_eval,
-   scalar_convert_decimal_actual_dfg_eval,
-   scalar_convert_decimal_actual_cfg_eval]
-  (rhs (concl scalar_convert_decimal_actual_generate_step1))
-val scalar_convert_decimal_actual_generate_step3 =
-  REWR_CONV scalar_convert_decimal_actual_plan_eval
-    (rhs (concl scalar_convert_decimal_actual_generate_step2))
-val scalar_convert_decimal_actual_generate_fn_plan =
-  TRANS scalar_convert_decimal_actual_generate_step1
-    (TRANS scalar_convert_decimal_actual_generate_step2
-      scalar_convert_decimal_actual_generate_step3)
-val scalar_convert_decimal_context_plan_step3 = PURE_REWRITE_CONV
-  [scalar_convert_decimal_actual_generate_fn_plan]
-  (rhs (concl scalar_convert_decimal_context_plan_step2))
+(* A cached concrete plan can finish the context immediately. Only resume
+   the extra normalization pass when a planner call actually remains. *)
+val scalar_convert_decimal_context_plan_step3 = let
+  val residual = rhs (concl scalar_convert_decimal_context_plan_step2)
+in
+  case total (find_term (can (match_term ``generate_fn_plan f spill labels``)))
+      residual of
+    NONE => REFL residual
+  | SOME scalar_convert_decimal_actual_plan_call => let
+      val scalar_convert_decimal_actual_plan_args =
+        #2 (strip_comb scalar_convert_decimal_actual_plan_call)
+      val scalar_convert_decimal_actual_fn = hd scalar_convert_decimal_actual_plan_args
+      val scalar_convert_decimal_actual_liveness_eval =
+        EVAL ``liveness_analyze ^scalar_convert_decimal_actual_fn``
+      val scalar_convert_decimal_actual_dfg_eval =
+        EVAL ``dfg_build_function ^scalar_convert_decimal_actual_fn``
+      val scalar_convert_decimal_actual_cfg_eval =
+        EVAL ``cfg_analyze ^scalar_convert_decimal_actual_fn``
+      val scalar_convert_decimal_actual_liveness =
+        rhs (concl scalar_convert_decimal_actual_liveness_eval)
+      val scalar_convert_decimal_actual_dfg = rhs (concl scalar_convert_decimal_actual_dfg_eval)
+      val scalar_convert_decimal_actual_cfg = rhs (concl scalar_convert_decimal_actual_cfg_eval)
+      val scalar_convert_decimal_actual_plan_eval = EVAL
+        ``generate_fn_plan_analyzed ^scalar_convert_decimal_actual_liveness
+            ^scalar_convert_decimal_actual_dfg ^scalar_convert_decimal_actual_cfg
+            ^scalar_convert_decimal_actual_fn ^scalar_convert_decimal_max_eom 0``
+      val scalar_convert_decimal_actual_generate_step1 =
+        REWR_CONV stackPlanGenTheory.generate_fn_plan_def
+          ``generate_fn_plan ^scalar_convert_decimal_actual_fn
+              ^scalar_convert_decimal_max_eom 0``
+      val scalar_convert_decimal_actual_generate_step2 = PURE_REWRITE_CONV
+        [scalar_convert_decimal_actual_liveness_eval,
+         scalar_convert_decimal_actual_dfg_eval,
+         scalar_convert_decimal_actual_cfg_eval]
+        (rhs (concl scalar_convert_decimal_actual_generate_step1))
+      val scalar_convert_decimal_actual_generate_step3 =
+        REWR_CONV scalar_convert_decimal_actual_plan_eval
+          (rhs (concl scalar_convert_decimal_actual_generate_step2))
+      val scalar_convert_decimal_actual_generate_fn_plan =
+        TRANS scalar_convert_decimal_actual_generate_step1
+          (TRANS scalar_convert_decimal_actual_generate_step2
+            scalar_convert_decimal_actual_generate_step3)
+    in PURE_REWRITE_CONV [scalar_convert_decimal_actual_generate_fn_plan]
+         residual end
+end
 val scalar_convert_decimal_context_plan_eval = save_thm
   ("scalar_convert_decimal_context_plan_eval",
    TRANS scalar_convert_decimal_context_plan_step1
@@ -939,7 +952,7 @@ Proof
        scalar_convert_decimal_runtime_pipeline_def,
        scalar_convert_decimal_deploy_compile_def,
        checked_unit_pipeline_def] >>
-  rpt CASE_TAC >> gvs[]
+  rpt (CASE_TAC >> gvs[])
 QED
 
 val () = evalCompilerBytecodeLib.add_staged_compile_eval

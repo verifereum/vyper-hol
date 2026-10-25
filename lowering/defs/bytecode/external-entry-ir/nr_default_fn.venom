@@ -1,0 +1,41 @@
+; Pinned Vyper runtime IR reference.
+; source: external-entries/sources/nr_default_fn.vy
+; source_sha256: 1c6d5d88a5a1d1d4a0d8bba333d89c2b84dc14ea992e98b1a26d9eaf3caa1d20
+; vyper: 0.5.0a4, commit cd74ce4f57e3771aeeab8f061fa3be45bfe8a29c
+; optimize=NONE (O1 Venom), prague, experimental_codegen=True, metadata=False
+function runtime [fmp_lowered, eom=0] {
+  runtime:  ; OUT=[1_dispatch, runtime_split_2_fallback]
+      %10 = 4
+      %1 = calldatasize
+      %2 = lt %1, %10
+      %3 = iszero %2
+      jnz %3, @1_dispatch, @runtime_split_2_fallback
+
+  1_dispatch:  ; OUT=[2_fallback]
+      %11 = 0
+      %4 = calldataload %11
+      %12 = 224
+      %5 = shr %12, %4
+      jmp @2_fallback
+
+  2_fallback:  ; OUT=[]
+      %13 = 0
+      %6 = tload %13
+      %14 = 1
+      %7 = eq %14, %6
+      %8 = iszero %7
+      assert %8
+      %9 = callvalue
+      %17 = 0
+      sstore %17, %9
+      %15 = 1
+      %16 = 0
+      tstore %16, %15
+      %18 = 0
+      %19 = 0
+      tstore %19, %18
+      stop
+
+  runtime_split_2_fallback:  ; OUT=[2_fallback]
+      jmp @2_fallback
+}  ; close function runtime

@@ -776,50 +776,30 @@ Definition compute_alloc_map_fuel_def:
       sorted_info pre_allocated
 End
 
-(* Convert allocation-keyed result to variable-keyed alloc_map *)
-(* An INVOKE keeps every static allocation of its callee live.  Once a callee
-   has been concretized, [fn_eom] is the compact frame occupied by that set;
-   reserving [0,eom) at an invoke is therefore the executable counterpart of
-   Python's persistent allocator state. *)
-Definition call_frame_at_addr_def:
-  call_frame_at_addr ctx fn (lbl,idx) =
-    case lookup_block lbl fn.fn_blocks of
-      NONE => []
-    | SOME bb =>
-        if idx < LENGTH bb.bb_instructions then
-          let inst = EL idx bb.bb_instructions in
-          if inst.inst_opcode = INVOKE then
-            case inst.inst_operands of
-              Label callee :: _ =>
-                (case lookup_function callee ctx.ctx_functions of
-                   SOME callee_fn =>
-                     (case callee_fn.fn_eom of
-                        SOME eom => if eom = 0 then [] else [((0:num),eom)]
-                      | NONE => [])
-                 | NONE => [])
-            | _ => []
-          else []
-        else []
+(* A concretized callee's frame participates in the same backward liveat and
+   forward used analyses as local allocations. In particular it remains live
+   between two INVOKEs: reserving it only at the call instructions loses that
+   interference. Synthetic identities are above every local instruction ID. *)
+Definition call_frame_allocations_def:
+  call_frame_allocations ctx fn =
+    let fresh = SUC (FOLDL (\n inst. MAX n inst.inst_id) 0 (fn_insts fn)) in
+    MAPi (\i callee. (Allocation (fresh + i), callee.fn_name, THE callee.fn_eom))
+      (FILTER (\callee. case callee.fn_eom of
+                          NONE => F
+                        | SOME eom => eom <> 0) ctx.ctx_functions)
 End
 
-Definition call_frame_reservations_def:
-  call_frame_reservations ctx fn live_insts =
-    FLAT (MAP (call_frame_at_addr ctx fn) live_insts)
+Definition call_frame_mems_used_def:
+  call_frame_mems_used frames name =
+    MAP (\(alloc,_,_). alloc)
+      (FILTER (\(_,callee,_). callee = name) frames)
 End
 
-Definition allocate_with_livesets_in_context_def:
-  allocate_with_livesets_in_context ctx fn global_reserved already [] result =
-    result /\
-  allocate_with_livesets_in_context ctx fn global_reserved already
-    ((alloc, live_insts, sz) :: rest) result =
-    let reserved = global_reserved ++ call_frame_reservations ctx fn live_insts ++
-      MAP (\(_, _, pos, asz). (pos, asz))
-        (FILTER (\(_, other_live, _, _).
-           sinter inst_addr_to other_live live_insts <> []) already) in
-    let (pos, _) = allocate_one reserved sz in
-    allocate_with_livesets_in_context ctx fn global_reserved
-      (already ++ [(alloc, live_insts, pos, sz)])
-      rest (result |+ (alloc, pos))
+Definition call_frame_livesets_def:
+  call_frame_livesets frames ls =
+    MAP (\(alloc,_,size).
+      let live = case FLOOKUP ls alloc of NONE => [] | SOME used => used in
+      (alloc, live, 0n, size)) frames
 End
 
 Definition compute_alloc_map_fuel_in_context_def:
@@ -829,7 +809,8 @@ Definition compute_alloc_map_fuel_in_context_def:
     let alloca_sz = get_alloca_size fn in
     let alloca_sz_opt = \a. let sz = alloca_sz a in
                             if sz = 0 then NONE else SOME sz in
-    let ls = mem_liveness_analyze_fuel fuel bpr (K ([] : allocation list))
+    let frames = call_frame_allocations ctx fn in
+    let ls = mem_liveness_analyze_fuel fuel bpr (call_frame_mems_used frames)
                alloca_sz_opt ([] : allocation list) cfg fn in
     let items = alloc_liveset_items fn ls in
     let pre_allocated_dom = FDOM pre_allocated in
@@ -842,8 +823,8 @@ Definition compute_alloc_map_fuel_in_context_def:
       (alloc, live, pos, alloca_sz alloc)) already in
     let sorted_info = MAP (\(alloc, live).
       (alloc, live, alloca_sz alloc)) sorted in
-    allocate_with_livesets_in_context ctx fn global_reserved already_info
-      sorted_info pre_allocated
+    allocate_with_livesets global_reserved
+      (call_frame_livesets frames ls ++ already_info) sorted_info pre_allocated
 End
 
 Definition alloc_result_to_map_def:
@@ -1061,13 +1042,14 @@ End
 
 Definition fn_needs_liveness_allocation_def:
   fn_needs_liveness_allocation fn =
-    insts_have_multiple_allocas (fn_insts fn)
+    (insts_have_multiple_allocas (fn_insts fn) \/
+     (fn_has_alloca fn /\
+      EXISTS (\inst. inst.inst_opcode = INVOKE) (fn_insts fn)))
 End
 
-(* Liveness can affect placement only when there is more than one allocation.
-   With zero or one ALLOCA, Python's allocation loop has no earlier local
-   interval whose liveset can conflict, so checked first-fit completion computes
-   the same layout without running both dataflow analyses to a fixpoint. *)
+(* A single local allocation may still conflict with a callee's frame when it
+   stays live across INVOKE. Only call-free single-allocation functions can
+   skip the interference analysis in the context-aware allocator below. *)
 Definition compute_function_layout_checked_def:
   compute_function_layout_checked fuel reserved fn =
     if fn_needs_liveness_allocation fn then

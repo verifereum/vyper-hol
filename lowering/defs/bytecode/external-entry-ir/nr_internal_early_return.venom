@@ -1,0 +1,109 @@
+; Pinned Vyper runtime IR reference.
+; source: external-entries/sources/nr_internal_early_return.vy
+; source_sha256: dd8b8b7dbc69dc004482fc2349a0aff9ff71aa9be71783520c7dcbc108386ab8
+; vyper: 0.5.0a4, commit cd74ce4f57e3771aeeab8f061fa3be45bfe8a29c
+; optimize=NONE (O1 Venom), prague, experimental_codegen=True, metadata=False
+function runtime [fmp_lowered, eom=64] {
+  runtime:  ; OUT=[1_dispatch, runtime_split_2_fallback]
+      %18 = 4
+      %1 = calldatasize
+      %2 = lt %1, %18
+      %3 = iszero %2
+      jnz %3, @1_dispatch, @runtime_split_2_fallback
+    ; (runtime)
+
+
+  1_dispatch:  ; OUT=[3_match_b3de648b, 1_dispatch_split_2_fallback]
+      %19 = 0
+      %4 = calldataload %19
+      %20 = 224
+      %5 = shr %20, %4
+      %21 = 0xb3de648b
+      %6 = eq %21, %5
+      jnz %6, @3_match_b3de648b, @1_dispatch_split_2_fallback
+    ; (runtime)
+
+
+  3_match_b3de648b:  ; OUT=[]
+      %7 = callvalue
+      %8 = iszero %7
+      assert %8
+      %22 = 36
+      %9 = calldatasize
+      %10 = lt %9, %22
+      %11 = iszero %10
+      assert %11
+      %23 = 0
+      %24 = 4
+      %13 = add %24, %23
+      %14 = calldataload %13
+      %12 = 32
+      %25 = %12
+      mstore %25, %14
+      %26 = %12
+      %15 = mload %26
+      invoke @"internal 0 g(uint256)_runtime", %15
+      %27 = %12
+      %16 = mload %27
+      invoke @"internal 0 g(uint256)_runtime", %16
+      stop
+    ; (runtime)
+
+
+  2_fallback:  ; OUT=[]
+      %28 = 0
+      %17 = 0
+      revert %17, %28
+    ; (runtime)
+
+
+  runtime_split_2_fallback:  ; OUT=[2_fallback]
+      jmp @2_fallback
+    ; (runtime)
+
+
+  1_dispatch_split_2_fallback:  ; OUT=[2_fallback]
+      jmp @2_fallback
+    ; (runtime)
+}  ; close function runtime
+
+
+function "internal 0 g(uint256)_runtime" [fmp_lowered, eom=32] {
+  "internal 0 g(uint256)_runtime":  ; OUT=[5_then, 7_if_exit]
+      %1 = param
+      %3 = retpc_param
+      %10 = 0
+      %4 = tload %10
+      %11 = 1
+      %5 = eq %11, %4
+      %6 = iszero %5
+      assert %6
+      %12 = 1
+      %13 = 0
+      tstore %13, %12
+      %2 = 0
+      %9 = %2
+      mstore %9, %1
+      %14 = %2
+      %7 = mload %14
+      %15 = 0
+      %8 = lt %15, %7
+      jnz %8, @5_then, @7_if_exit
+
+  5_then:  ; OUT=[]
+      %16 = 0
+      %17 = 0
+      tstore %17, %16
+      %18 = %3
+      ret %18
+
+  7_if_exit:  ; OUT=[]
+      %19 = 1
+      %20 = 0
+      sstore %20, %19
+      %21 = 0
+      %22 = 0
+      tstore %22, %21
+      %23 = %3
+      ret %23
+}  ; close function "internal 0 g(uint256)_runtime"

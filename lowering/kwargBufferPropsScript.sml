@@ -105,7 +105,8 @@ Theorem compile_init_kwargs_partial_probe:
   MAP (\i. (i.inst_opcode, i.inst_operands))
     (SND (compile_init_kwargs ARB kwarg_probe_vars 36 1 (Lit 0w)
           kwarg_probe_state)).cs_current_insts =
-    [(CALLDATALOAD, [Lit 36w]); (MSTORE, [Lit 128w; Var "%0"]);
+    [(ADD, [Lit 4w; Lit 32w]);
+     (CALLDATALOAD, [Var "%0"]); (MSTORE, [Lit 128w; Var "%1"]);
      (MSTORE, [Lit 160w; Lit 9w])]
 Proof
   EVAL_TAC >> simp[]
@@ -115,8 +116,10 @@ Theorem compile_init_kwargs_full_probe:
   MAP (\i. (i.inst_opcode, i.inst_operands))
     (SND (compile_init_kwargs ARB kwarg_probe_vars 36 2 (Lit 0w)
           kwarg_probe_state)).cs_current_insts =
-    [(CALLDATALOAD, [Lit 36w]); (MSTORE, [Lit 128w; Var "%0"]);
-     (CALLDATALOAD, [Lit 68w]); (MSTORE, [Lit 160w; Var "%1"])]
+    [(ADD, [Lit 4w; Lit 32w]);
+     (CALLDATALOAD, [Var "%0"]); (MSTORE, [Lit 128w; Var "%1"]);
+     (ADD, [Lit 4w; Lit 64w]);
+     (CALLDATALOAD, [Var "%2"]); (MSTORE, [Lit 160w; Var "%3"])]
 Proof
   EVAL_TAC >> simp[]
 QED
@@ -127,24 +130,26 @@ Theorem compile_init_kwargs_bytes_probe:
       [("b", Lit 128w, BaseT (BytesT (Dynamic 10)),
         Literal (BaseT (BytesT (Dynamic 10))) (BytesL []))]
       36 1 (Lit 999w) kwarg_probe_state)).cs_current_insts =
-    [(CALLDATALOAD, [Lit 36w]); (ADD, [Lit 4w; Var "%0"]);
-     (CALLDATALOAD, [Var "%1"]); (GT, [Var "%2"; Lit 10w]);
-     (ISZERO, [Var "%3"]); (ASSERT, [Var "%4"]);
-     (CALLDATACOPY, [Lit 128w; Var "%1"; Lit 64w])]
+    [(ADD, [Lit 4w; Lit 32w]);
+     (CALLDATALOAD, [Var "%0"]); (ADD, [Lit 4w; Var "%1"]);
+     (CALLDATALOAD, [Var "%2"]); (GT, [Var "%3"; Lit 10w]);
+     (ISZERO, [Var "%4"]); (ASSERT, [Var "%5"]);
+     (CALLDATACOPY, [Lit 128w; Var "%2"; Lit 64w])]
 Proof
   EVAL_TAC >> simp[]
 QED
 
-(* The static aggregate starts at the absolute head, and the following
-   scalar starts after its 64-byte head. No extra selector adjustment. *)
+(* A static aggregate uses the same materialized selector-base/head offset
+   address as primitive and dynamic supplied keyword arguments. *)
 Theorem compile_init_kwargs_static_probe:
   compile_init_kwargs ARB
     [("b", Lit 128w, ArrayT (BaseT (UintT 256)) (Fixed 2),
        Literal (BaseT (UintT 256)) (IntL 0))]
     36 1 (Lit 999w) kwarg_probe_state =
-  compile_abi_decode_to_buf (Lit 128w) (Lit 36w) CALLDATALOAD (Lit 0w)
-    (DecComplex F [(DecPrimWord NoClamp,32,32); (DecPrimWord NoClamp,32,32)])
-    kwarg_probe_state
+  (do head <- emit_op ADD [Lit 4w; Lit 32w];
+      compile_abi_decode_to_buf (Lit 128w) head CALLDATALOAD (Lit 0w)
+        (DecComplex F [(DecPrimWord NoClamp,32,32); (DecPrimWord NoClamp,32,32)])
+   od) kwarg_probe_state
 Proof
   EVAL_TAC >> simp[]
 QED

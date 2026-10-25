@@ -810,9 +810,21 @@ Definition emit_local_alloca_def:
     | _ => return ()
 End
 
+(* Return expressions have already been evaluated when this action runs.
+   Both internal return forms must release the guard before RET, matching
+   stmt.py _lower_internal_return at VYPER_PIN. *)
+Definition compile_return_unlock_def:
+  compile_return_unlock cenv =
+    let (is_nonreentrant, nkey, use_transient, is_view) = cenv.ce_nonreentrant in
+    if is_nonreentrant then
+      compile_nonreentrant_unlock nkey use_transient is_view
+    else return ()
+End
+
 Definition compile_internal_return_from_env_def:
   compile_internal_return_from_env cenv ty src_ty val_op rpc =
-    do ret_buf <-
+    do compile_return_unlock cenv;
+       ret_buf <-
          (case cenv.ce_return_buf of
             SOME (MemLoc rbuf_off _) =>
               do buf_ptr <- emit_op MLOAD [Lit (n2w rbuf_off)];
@@ -1082,10 +1094,14 @@ Definition compile_stmt_def:
     (case cenv.ce_return_pc of
        SOME (MemLoc rpc_off _) =>
          (* Internal: ret to return_pc *)
-         do rpc <- emit_op MLOAD [Lit (n2w rpc_off)];
+          do compile_return_unlock cenv;
+             rpc <- emit_op MLOAD [Lit (n2w rpc_off)];
             emit_inst RET [rpc] []
          od
-     | SOME (PtrVar rpc _) => emit_inst RET [rpc] []
+      | SOME (PtrVar rpc _) =>
+          do compile_return_unlock cenv;
+             emit_inst RET [rpc] []
+          od
      | _ =>
          (* External: nonreentrant unlock + STOP *)
          let (is_nonreentrant, nkey, use_transient, is_view) =

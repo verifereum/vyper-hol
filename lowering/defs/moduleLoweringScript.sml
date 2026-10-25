@@ -480,11 +480,14 @@ Definition compile_init_kwargs_def:
          Immutable calldata uses the pinned decoder's unbounded sentinel. *)
       let dec_info = type_to_abi_dec_info cenv.ce_struct_fields cenv kwarg_type in
       let abi_sz = abi_embedded_static_size cenv.ce_struct_fields kwarg_type in
-      do src <- (if is_abi_dynamic cenv.ce_struct_fields kwarg_type then
-                   do relative <- emit_op CALLDATALOAD [Lit (n2w calldata_offset)];
+       do (* _getelemptr_abi materializes the selector base plus the static
+             head offset even for a primitive word. Keep that ADD in the IR. *)
+          head <- emit_op ADD [Lit 4w; Lit (n2w (calldata_offset - 4))];
+          src <- (if is_abi_dynamic cenv.ce_struct_fields kwarg_type then
+                    do relative <- emit_op CALLDATALOAD [head];
                       emit_op ADD [Lit 4w; relative]
                    od
-                 else return (Lit (n2w calldata_offset)));
+                  else return head);
          compile_abi_decode_to_buf alloca_ptr src CALLDATALOAD (Lit 0w) dec_info;
          compile_init_kwargs cenv rest (calldata_offset + abi_sz)
                              (kwargs_from_calldata - 1) hi_op
@@ -867,7 +870,8 @@ Definition compile_generate_deploy_def:
            cenv constructor_args 0 data_size;
          (* Nonreentrant lock *)
          (if is_nonreentrant then
-            compile_nonreentrant_lock nkey use_transient F
+             let (_,_,_,is_view) = cenv.ce_nonreentrant in
+             compile_nonreentrant_lock nkey use_transient is_view
           else return ());
          (* Constructor body *)
          compile_stmts cenv' NoLoop (BaseT BoolT) body;
@@ -875,7 +879,8 @@ Definition compile_generate_deploy_def:
          (if block_is_terminated cs then return ()
           else
             do (if is_nonreentrant then
-                  compile_nonreentrant_unlock nkey use_transient F
+                   let (_,_,_,is_view) = cenv.ce_nonreentrant in
+                   compile_nonreentrant_unlock nkey use_transient is_view
                 else return ());
                compile_constructor_epilogue runtime_size immutables_len
                  imm_alloca
@@ -1017,4 +1022,33 @@ Definition compile_external_jobs_def:
          common.ec_view common.ec_body common.ec_return;
        compile_external_jobs rest
     od
+End
+
+(* The grouped path uses exactly the same fallback and internal-body builders
+   as the legacy runtime, but defers the shared bodies past the dispatch. *)
+Definition compile_generate_grouped_runtime_def:
+  compile_generate_grouped_runtime groups internal_fns fallback_fn =
+    do fallback_lbl <- fresh_label "fallback";
+       jobs <- compile_group_dispatch_linear groups fallback_lbl;
+       compile_external_jobs jobs;
+       new_block fallback_lbl;
+       (case fallback_fn of
+          NONE => emit_inst REVERT [Lit 0w; Lit 0w] []
+        | SOME (fb_cenv, fb_payable, fb_nr, fb_nkey, fb_trans, fb_view,
+                fb_body, fb_ret) =>
+            compile_fallback_body fb_cenv fb_payable fb_nr fb_nkey fb_trans
+                                  fb_view fb_body fb_ret);
+       _ <- compile_internal_fn_bodies internal_fns;
+       return ()
+    od
+End
+
+Definition external_group_selectors_def:
+  external_group_selectors (ExternalSingle selector package) = [selector] /\
+  external_group_selectors (ExternalDefaults common entries specs offset) =
+    MAP (\(sel,lbl,min_cds,k). (sel,lbl,sel MOD 256 = 0)) entries
+End
+
+Definition grouped_selectors_def:
+  grouped_selectors groups = FLAT (MAP external_group_selectors groups)
 End
