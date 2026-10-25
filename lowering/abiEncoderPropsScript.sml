@@ -1252,6 +1252,77 @@ Proof
   rewrite_tac[enc_frame_def] >> strip_tac >> first_x_assum irule >> simp[]
 QED
 
+Theorem enc_missing_union_card:
+  FINITE ids /\ FINITE rest /\ DISJOINT ids rest ==>
+  CARD {i | i IN ids UNION rest /\ FLOOKUP s.vs_allocas i = NONE} =
+  CARD {i | i IN ids /\ FLOOKUP s.vs_allocas i = NONE} +
+  CARD {i | i IN rest /\ FLOOKUP s.vs_allocas i = NONE}
+Proof
+  strip_tac >>
+  `{i | i IN ids UNION rest /\ FLOOKUP s.vs_allocas i = NONE} =
+   {i | i IN ids /\ FLOOKUP s.vs_allocas i = NONE} UNION
+   {i | i IN rest /\ FLOOKUP s.vs_allocas i = NONE}` by
+    (simp[pred_setTheory.EXTENSION] >> metis_tac[]) >>
+  pop_assum SUBST1_TAC >> irule pred_setTheory.CARD_UNION_DISJOINT >>
+  simp[pred_setTheory.DISJOINT_DEF, pred_setTheory.EXTENSION] >>
+  gvs[pred_setTheory.DISJOINT_DEF, pred_setTheory.EXTENSION] >>
+  conj_tac
+  >- (irule pred_setTheory.SUBSET_FINITE_I >> qexists_tac `ids` >>
+      simp[pred_setTheory.SUBSET_DEF]) >>
+  irule pred_setTheory.SUBSET_FINITE_I >> qexists_tac `rest` >>
+  simp[pred_setTheory.SUBSET_DEF]
+QED
+
+Theorem enc_scratch_restrict_reserved:
+  FINITE ids /\ FINITE rest /\ DISJOINT ids rest /\
+  enc_scratch (ids UNION rest) lo top s ==>
+  enc_scratch ids lo
+    (top - 32 * CARD {i | i IN rest /\ FLOOKUP s.vs_allocas i = NONE}) s
+Proof
+  strip_tac >> drule_all enc_missing_union_card >>
+  disch_then (qspec_then `s` assume_tac) >>
+  qpat_x_assum `enc_scratch _ _ _ _` mp_tac >>
+  rewrite_tac[enc_scratch_def] >> strip_tac >>
+  asm_rewrite_tac[arithmeticTheory.LEFT_ADD_DISTRIB] >>
+  conj_tac >- decide_tac >> conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      qpat_x_assum `!i b sz. _` (qspecl_then [`i`, `b`, `sz`] mp_tac) >> simp[]) >>
+  qpat_x_assum `_ + 32 * _ <= top` mp_tac >>
+  asm_rewrite_tac[arithmeticTheory.LEFT_ADD_DISTRIB] >> decide_tac
+QED
+
+Theorem enc_scratch_restore_reserved:
+  FINITE ids /\ FINITE rest /\ DISJOINT ids rest /\
+  enc_scratch (ids UNION rest) lo top s0 /\
+  (!i. i IN rest ==> FLOOKUP s.vs_allocas i = FLOOKUP s0.vs_allocas i) /\
+  enc_scratch ids lo
+    (top - 32 * CARD {i | i IN rest /\ FLOOKUP s0.vs_allocas i = NONE}) s ==>
+  enc_scratch (ids UNION rest) lo top s
+Proof
+  strip_tac >> drule_all enc_missing_union_card >>
+  disch_then (fn th => map_every (fn q => qspec_then q assume_tac th) [`s`, `s0`]) >>
+  `{i | i IN rest /\ FLOOKUP s.vs_allocas i = NONE} =
+   {i | i IN rest /\ FLOOKUP s0.vs_allocas i = NONE}` by
+    (simp[pred_setTheory.EXTENSION] >> metis_tac[]) >>
+  qpat_x_assum `enc_scratch (ids UNION rest) _ _ _` mp_tac >>
+  qpat_x_assum `enc_scratch ids _ _ _` mp_tac >>
+  rewrite_tac[enc_scratch_def] >> ntac 2 strip_tac >>
+  asm_rewrite_tac[arithmeticTheory.LEFT_ADD_DISTRIB] >> conj_tac
+  >- (ntac 2 (qpat_x_assum `CARD _ = _` kall_tac) >>
+      rpt gen_tac >> strip_tac >>
+      Cases_on `i IN rest`
+      >- (qpat_x_assum `!i b sz. i IN ids UNION rest /\ _ ==> _`
+            (qspecl_then [`i`, `b`, `sz`] mp_tac) >>
+          qpat_x_assum `!i. i IN rest ==> _`
+            (qspec_then `i` mp_tac) >> simp[]) >>
+      qpat_x_assum `!i b sz. i IN ids /\ _ ==> _`
+        (qspecl_then [`i`, `b`, `sz`] mp_tac) >>
+      qpat_x_assum `i IN ids UNION rest` mp_tac >> simp[]) >>
+  qpat_x_assum `_ + 32 * _ <= top - _` mp_tac >>
+  qpat_x_assum `_.vs_alloca_next + 32 * _ <= top` mp_tac >>
+  asm_rewrite_tac[arithmeticTheory.LEFT_ADD_DISTRIB] >> decide_tac
+QED
+
 
 (* ===== Recursive ABI encode correctness ===== *)
 

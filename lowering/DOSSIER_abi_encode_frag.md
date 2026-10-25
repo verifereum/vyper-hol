@@ -10,6 +10,7 @@ PLAN: `lowering/PLAN_abi_encode_frag.md`
 | C1.2 | proved |  | E0005 |  |
 | C1.3 | progressed | missing_helper | E0006 | Request C1.3 interface refinement: frame alone cannot preserve Label operands; characterize allowed preservation premise without changing frozen definitions. |
 | C1.3.1 | proved |  | E0007 |  |
+| C1.3.2 | proved |  | E0008 |  |
 
 ## C1.1
 
@@ -95,3 +96,22 @@ PLAN: `lowering/PLAN_abi_encode_frag.md`
 ### Evidence refs
 
 - `TO_abi_encode_frag-20261024T233520Z_m0187_t001` (use `read_tool_output` for exact output)
+
+## C1.3.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0008`
+- blocker: 
+- actual effort: 1 sessions, 2 msgs, 25 steps, 24 tools, 11 holbuild, 2,136,338 tok (2,133,224 in, 3,114 out, 2,097,664 cached), 163.1s, $0.3120264
+
+### Attempts / Evidence
+
+- `E0008` (proved, , actual effort: 1 sessions, 2 msgs, 25 steps, 24 tools, 11 holbuild, 2,136,338 tok (2,133,224 in, 3,114 out, 2,097,664 cached), 163.1s, $0.3120264)
+  - Partition missing-id sets, prove card addition, restrict scratch with reserved suffix credit, and restore full scratch from unchanged suffix lookups. -> All three required boundaries build cleanly. Proofs use targeted rewrites; removing irrelevant card equalities avoids simplifier timeout in allocation branch. (`TO_abi_encode_frag-20261024T233520Z_m0217_t001`)
+
+### Evidence refs
+
+- `TO_abi_encode_frag-20261024T233520Z_m0217_t001` (use `read_tool_output` for exact output)
