@@ -8,7 +8,7 @@ Libs
 
 (* ===== Vyper-specific ABI decoding =====
 
-   TOP-LEVEL (API):
+   Main definitions:
      vyper_abi_dec          decode an abi_value at a buffer offset
      vyper_abi_valid_enc    acceptance gate for vyper_abi_dec (Vyper clamps)
      vyper_abi_dec_fast / vyper_abi_valid_enc_fast
@@ -47,7 +47,7 @@ End
 
 val () = cv_auto_trans vyper_abi_head_target_def;
 
-(* TOP-LEVEL: Vyper's ABI decoding.  Mirrors contractABI's dec, threading the
+(* Vyper's ABI decoding.  Mirrors contractABI's dec, threading the
    whole buffer and the offset of the current value instead of suffixes. *)
 Definition vyper_abi_dec_def:
   vyper_abi_dec (Tuple ts) bs off = vyper_abi_dec_tuple ts bs off off [] ∧
@@ -125,7 +125,7 @@ Proof
   \\ ASM_SIMP_TAC abi_pre_ss []
 QED
 
-(* TOP-LEVEL: the acceptance gate for vyper_abi_dec.  Mirrors contractABI's
+(* The acceptance gate for vyper_abi_dec.  Mirrors contractABI's
    valid_enc with the same wrap-around head arithmetic as vyper_abi_dec. *)
 Definition vyper_abi_valid_enc_def:
   vyper_abi_valid_enc (Tuple ts) bs off =
@@ -368,7 +368,7 @@ QED
 
 (* ===== Recursive fast paths ===== *)
 
-(* TOP-LEVEL: the original decoder with every numeric scalar array, static or
+(* The original decoder with every numeric scalar array, static or
    dynamic and at any nesting depth, decoded by advancing a suffix instead of
    repeatedly dropping from the whole buffer.  Everything else, including the
    wrapping head arithmetic against the whole buffer, mirrors vyper_abi_dec. *)
@@ -438,7 +438,7 @@ Proof
   \\ ASM_SIMP_TAC abi_pre_ss []
 QED
 
-(* TOP-LEVEL: the acceptance gate with the same recursive fast paths. *)
+(* The acceptance gate with the same recursive fast paths. *)
 Definition vyper_abi_valid_enc_fast_def:
   vyper_abi_valid_enc_fast (Tuple ts) bs off =
     (LENGTH ts < dimword (:256) ∧
@@ -548,7 +548,7 @@ Proof
   >> simp[Once vyper_abi_valid_enc_def, vyper_abi_valid_array_scalars]
 QED
 
-(* KEY LEMMA: the fast decoder is the original one, unconditionally. *)
+(* The fast decoder is the original one, unconditionally. *)
 Theorem vyper_abi_dec_fast_eq:
   (∀t bs off. vyper_abi_dec_fast t bs off = vyper_abi_dec t bs off) ∧
   (∀n lt t bs boff hoff acc.
