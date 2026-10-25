@@ -736,16 +736,28 @@ End
 
 (* ===== Allocation Limit ===== *)
 
-(* A statement list contains a valued return.  Mirrors where Python lowers
+(* A statement (list) contains a valued return.  Mirrors where Python lowers
    one: vyper/codegen_venom/stmt.py:lower_Return. *)
-Definition stmts_return_value_def:
-  stmt_returns_value (Return (SOME _)) = T ∧
-  stmt_returns_value (If _ ss1 ss2) =
-    (stmts_return_value ss1 ∨ stmts_return_value ss2) ∧
-  stmt_returns_value (For _ _ _ _ ss) = stmts_return_value ss ∧
-  stmt_returns_value _ = F ∧
-  stmts_return_value [] = F ∧
-  stmts_return_value (st::sts) = (stmt_returns_value st ∨ stmts_return_value sts)
+Definition stmt_valued_return_def:
+  stmt_valued_return (Return (SOME _)) = T ∧
+  stmt_valued_return (Return NONE) = F ∧
+  stmt_valued_return (If _ ss1 ss2) =
+    (stmts_valued_return ss1 ∨ stmts_valued_return ss2) ∧
+  stmt_valued_return (For _ _ _ _ ss) = stmts_valued_return ss ∧
+  stmt_valued_return Pass = F ∧
+  stmt_valued_return Continue = F ∧
+  stmt_valued_return Break = F ∧
+  stmt_valued_return (Expr _) = F ∧
+  stmt_valued_return (Assert _ _) = F ∧
+  stmt_valued_return (Log _ _) = F ∧
+  stmt_valued_return (Raise _) = F ∧
+  stmt_valued_return (Assign _ _) = F ∧
+  stmt_valued_return (AugAssign _ _ _ _) = F ∧
+  stmt_valued_return (Append _ _) = F ∧
+  stmt_valued_return (AnnAssign _ _ _) = F ∧
+  stmts_valued_return [] = F ∧
+  stmts_valued_return (st::sts) =
+    (stmt_valued_return st ∨ stmts_valued_return sts)
 End
 
 (* The return buffer of compile_external_return's ABI-encoding branch is
@@ -763,6 +775,8 @@ End
 
 (* Python allocates the return buffer each time it lowers a valued return
    of an external function that is neither @raw_return nor a word type.
+   Python does the same for a valued return in __default__; the fallback
+   isn't checked here, since its compile env keeps no ABI return encoding.
    Mirrors Python: vyper/codegen_venom/stmt.py:_lower_external_return. *)
 Definition external_return_buffer_ok_def:
   external_return_buffer_ok
@@ -771,7 +785,7 @@ Definition external_return_buffer_ok_def:
     case ret_opt of
       NONE => T
     | SOME ret =>
-        ¬cenv.ce_raw_return ∧ ¬is_word_type ret ∧ stmts_return_value body ⇒
+        ¬cenv.ce_raw_return ∧ ¬is_word_type ret ∧ stmts_valued_return body ⇒
         return_buffer_ok cenv
 End
 
