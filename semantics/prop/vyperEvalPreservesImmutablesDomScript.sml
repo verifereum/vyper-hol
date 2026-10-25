@@ -1,6 +1,6 @@
 Theory vyperEvalPreservesImmutablesDom
 Ancestors
-  pair vyperMisc vyperAST vyperValue vyperContext vyperState vyperStorageBackend vyperCreate vyperInterpreter
+  pair vyperMisc vyperAST vyperValue vyperContext vyperState vyperStorageBackend vyperCreate vyperCreateFrame vyperInterpreter
   vyperLookup vyperScopePreservation vyperStatePreservation
   vyperAssignTarget vyperEvalExprPreservesScopesDom
   vyperImmutablesPreservation vyperCallFrame vyperCallOutcomeFrame
@@ -1632,7 +1632,7 @@ Proof
     (first_x_assum (qspec_then `st` mp_tac) >>
      simp[check_def, type_check_def, assert_def, return_def]) >>
   gvs[bind_def, AllCaseEqs(), return_def, raise_def, get_accounts_def] >>
-  Cases_on `evaluate_builtin cx s'³'.accounts ty bt vs` >>
+  Cases_on `evaluate_builtin cx s'³'.accounts ty bt (MAP expr_type es) vs` >>
   gvs[return_def, raise_def]
 QED
 

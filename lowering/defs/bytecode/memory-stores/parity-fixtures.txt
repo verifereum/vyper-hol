@@ -39,3 +39,4 @@ st_empty_ret
 c10_assign_empty_struct
 c11_annassign_empty_fixed_array
 c05_assign_empty_builtin_string
+method_id_lit

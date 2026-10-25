@@ -7,9 +7,12 @@ Ancestors
   moduleLoweringProps
   loweringSlice
   varsExt exprSim
+  exprBopLowering
+  exprSimOps exprSimCompare exprSimArith intBits freshWrites
+  exprSimMain
   valueEncodingProofs
   localPtrsProps
-  loweringShapeDefs
+  loweringShapeProps
   (* compiler + correctness *)
   vyperCompiler
   vyperLoweringCorrect
@@ -25,3 +28,4 @@ Ancestors
   calleeMemoryWitness
   cleanupPromiseWitness
   internalFrameWhitelistDiagnostic
+  evalCompilerAllocationLimit

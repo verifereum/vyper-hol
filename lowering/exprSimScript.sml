@@ -21,6 +21,8 @@
  *   compile_name_word_sim  — a word local
  *   compile_env_sim        — environment reads (msg.sender, block.number,
  *                            ...), all but block.prevhash
+ *   expr_val_rel_mem_agree — a non-word operand's value survives code that
+ *                            keeps its type_memory_size bytes
  *
  * Helpers: expr_exit_INL, typed_val_to_w256_word_value, eval_expr_env,
  *   lower_value_env
@@ -35,13 +37,11 @@
  * compose where the first one's value sits in a buffer it allocated: that
  * allocation's id is below the second's start counter and it holds no
  * local (alloca_inv, local_backed), so the second's expr_post keeps its
- * bytes, and val_in_memory with them (a lemma that val_in_memory reads
- * only the type_memory_size bytes of a val_wf value is still to be
- * proved).  A first operand that points into a local stays related
- * through stmt_state_rel, as long as the source leaves that local alone
- * in between.  expr_frag, which relates values by val_to_w256, follows
- * for a word type whose typed encoding is val_to_w256
- * (expr_sim_expr_frag).
+ * bytes, and val_in_memory with them (expr_val_rel_mem_agree).  A first
+ * operand that points into a local stays related through stmt_state_rel,
+ * as long as the source leaves that local alone in between.  expr_frag,
+ * which relates values by val_to_w256, follows for a word type whose typed
+ * encoding is val_to_w256 (expr_sim_expr_frag).
  *
  * Not covered by the leaves here:
  *   - bytes and string literals: a bytesN literal is a Lit of its typed
@@ -140,6 +140,25 @@ Definition expr_val_at_def:
                      b <= w2n w /\ w2n w + type_memory_size tv <= b + sz))
 End
 
+(* Operand composition: the value of a non-word operand survives code that
+   keeps the operand and the bytes of the value's footprint, the
+   type_memory_size bytes at its address (val_in_memory_mem_agree). *)
+Theorem expr_val_rel_mem_agree:
+  !cx t v op s s' w tv.
+    expr_val_rel cx t v op s /\ ~is_word_type t /\
+    eval_operand op s = SOME w /\ eval_operand op s' = SOME w /\
+    evaluate_type (get_tenv cx) t = SOME tv /\ val_wf tv v /\
+    mem_bytes_at (w2n w) (type_memory_size tv) s.vs_memory =
+      mem_bytes_at (w2n w) (type_memory_size tv) s'.vs_memory ==>
+    expr_val_rel cx t v op s'
+Proof
+  rw[expr_val_rel_def] >> gvs[] >>
+  qspecl_then [`tv`, `v`, `w2n w`, `type_memory_size tv`, `s.vs_memory`,
+               `s'.vs_memory`] mp_tac
+    valueEncodingPropsTheory.val_in_memory_mem_agree >>
+  asm_rewrite_tac[arithmeticTheory.LESS_EQ_REFL]
+QED
+
 (* Where the fragment of e that started in s0, related at es, lowered from
    compile state sa to sb, ends when the source gives v and es': related at
    es', the operand op holding v (and, for a memory-backed value, placed as
@@ -187,6 +206,170 @@ Definition expr_sim_def:
                  expr_post func cenv cx e es sa sb s0 es' v op s)
         (expr_exit res)
 End
+
+(* ===== The judgment on compile_expr's value ===== *)
+
+(* expr_sim speaks of lower_value: compile_expr's code and then
+   unwrap_value's, run as one piece.  A case that lowers an operand with
+   compile_expr and unwraps it later, after code of its own (the elements
+   of a struct or array literal, the arguments of an external call), or
+   never (len, in on an array), needs what compile_expr's value_vv holds
+   when compile_expr's code ends.  expr_vv_sim says that; expr_sim follows
+   from it and unwrap_value's code (exprSimHyps). *)
+
+(* The slot w of storage (transient storage if is_transient) holds, at es,
+   the value the source result tv materialises to: for an ArrayRef, the
+   array read from storage, for a Value, the value.  storage_rel and
+   transient_rel make the Venom storage the same. *)
+Definition storage_holds_def:
+  storage_holds cx is_transient t tv (w:bytes32) es <=>
+    ?tvt v. evaluate_type (get_tenv cx) t = SOME tvt /\
+            read_storage_slot cx is_transient w tvt es = (INL v, es) /\
+            materialise cx tv es = (INL v, es)
+End
+
+(* w is the data offset of an immutable of the module being lowered, and
+   tv is its value at es, stored at the type t evaluates to; immutables_rel
+   says where the Venom state keeps it.  The offset fits a word, so the
+   load reads at the offset itself.  No invariant gives that bound yet:
+   immutables_rel at runtime says only byte_offset + 32 <= the data
+   section's length, so a producer of a code pointer needs a compile-env
+   clause bounding ImmutableLoc offsets. *)
+Definition immutable_holds_def:
+  immutable_holds cenv cx t tv (w:bytes32) (es:evaluation_state) <=>
+    ?name off itv v.
+      FLOOKUP cenv.ce_vars (module_var_key (cenv.ce_module, name)) =
+        SOME (ImmutableLoc off) /\ w = n2w off /\ off < dimword (:256) /\
+      evaluate_type (get_tenv cx) t = SOME itv /\
+      FLOOKUP (case ALOOKUP es.immutables cx.txn.target of
+                 NONE => FEMPTY
+               | SOME imms => get_source_immutables cenv.ce_module imms)
+              name = SOME (itv, v) /\
+      tv = Value v
+End
+
+(* What a value_vv of an expression of type t holds in s, for the source
+   result tv, es being the source state then:
+   - a StackValue: a value, held by its operand as expr_val_rel says;
+   - a pointer into memory: what tv materialises to, laid out at the
+     pointer as val_in_memory says (word types too: a word local is a
+     pointer), and for a word type the word there is its typed encoding,
+     which val_in_memory does not pin for a value not of the type.  For a
+     value that is the value itself; for an ArrayRef it is
+     the array read from storage, which is what lower_value copies to
+     memory (a ternary over storage arrays hands out such a copy);
+   - a pointer into storage or transient storage: the slot holding what tv
+     materialises to (an ArrayRef is a result here, not an error);
+   - a pointer into code: an immutable.
+   A calldata pointer holds nothing yet: no case of compile_expr returns
+   one, and state_rel does not relate the calldata.  A pointer carries the
+   expression's type, which unwrap_value reads to choose between a load
+   and a copy. *)
+Definition vv_holds_def:
+  (vv_holds cenv cx t tv (StackValue t' op) es s <=>
+     ?v. tv = Value v /\ expr_val_rel cx t v op s) /\
+  (vv_holds cenv cx t tv (LocatedValue t' p) es s <=>
+     t' = t /\
+     ?w. eval_operand p.ptr_operand s = SOME w /\
+         case p.ptr_location of
+           LocMemory =>
+             ?v. materialise cx tv es = (INL v, es) /\
+                 !tvt. evaluate_type (get_tenv cx) t = SOME tvt ==>
+                       val_in_memory tvt v (w2n w) s.vs_memory /\
+                       (is_word_type t ==>
+                        mem_word_at (w2n w) s.vs_memory =
+                          typed_val_to_w256 tvt v)
+         | LocStorage => storage_holds cx F t tv w es
+         | LocTransient => storage_holds cx T t tv w es
+         | LocCode => immutable_holds cenv cx t tv w es
+         | LocCalldata => F)
+End
+
+(* Where a value in memory sits, as expr_val_at says for expr_post: for a
+   StackValue, expr_val_at itself; for a pointer into memory, the value's
+   bytes inside one of the expression's own allocations or a live local's
+   region, word types included. *)
+Definition vv_at_def:
+  (vv_at cenv cx t sa sb es tv (StackValue t' op) s <=>
+     !v. tv = Value v ==> expr_val_at cenv cx t sa sb es v op s) /\
+  (vv_at cenv cx t sa sb es tv (LocatedValue t' p) s <=>
+     p.ptr_location = LocMemory ==>
+     !v tvt. materialise cx tv es = (INL v, es) /\
+             evaluate_type (get_tenv cx) t = SOME tvt ==>
+       val_wf tvt v /\
+       ?w. eval_operand p.ptr_operand s = SOME w /\
+           ((?aid b sz. FLOOKUP s.vs_allocas aid = SOME (b, sz) /\
+                        sa.cs_next_id <= aid /\ aid < sb.cs_next_id /\
+                        b <= w2n w /\ w2n w + type_memory_size tvt <= b + sz) \/
+            (?n b sz. local_region cenv es.scopes s n b sz /\
+                      b <= w2n w /\ w2n w + type_memory_size tvt <= b + sz)))
+End
+
+(* expr_post with a value_vv in place of an operand. *)
+Definition vv_post_def:
+  vv_post func cenv cx e es sa sb s0 es' tv vv s <=>
+    stmt_state_rel func cenv cx es' s /\
+    vv_holds cenv cx (expr_type e) tv vv es' s /\
+    vv_at cenv cx (expr_type e) sa sb es' tv vv s /\
+    (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
+           lookup_var x s = SOME w) /\
+    (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
+             FLOOKUP s.vs_allocas aid = SOME b) /\
+    (!aid off sz.
+       FLOOKUP s0.vs_allocas aid = SOME (off, sz) /\ aid < sa.cs_next_id /\
+       (!n b sz'. local_region cenv es.scopes s0 n b sz' ==>
+                  off + sz <= b \/ b + sz' <= off) ==>
+       mem_bytes_at off sz s.vs_memory = mem_bytes_at off sz s0.vs_memory)
+End
+
+(* The source results expr_vv_sim speaks of: expr_sim's, and the storage
+   and transient arrays, which eval_exprs materialises after evaluating
+   them. *)
+Definition expr_vv_res_ok_def:
+  expr_vv_res_ok (res : toplevel_value + exception) <=>
+    expr_res_ok res \/ (?b slot etv bd. res = INL (ArrayRef b slot etv bd))
+End
+
+(* expr_sim with compile_expr in place of lower_value: compile_expr's
+   fragment of e, run from a state related at es, reaches its end with the
+   value_vv holding the source result as vv_post says, or exits as
+   expr_exit allows. *)
+Definition expr_vv_sim_def:
+  expr_vv_sim ctx func cenv cx ty e es <=>
+    !sa sb vv res es' s0.
+      compile_expr cenv ty e sa = (vv, sb) /\
+      eval_expr cx e es = (res, es') /\ expr_vv_res_ok res /\
+      fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+      local_ptrs_reserved cenv sa ==>
+      frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel func cenv cx es s)
+        (\s. ?tv. res = INL tv /\
+                  vv_post func cenv cx e es sa sb s0 es' tv vv s)
+        (expr_exit res)
+End
+
+(* Where compile_expr hands out a StackValue, unwrap_value emits no code, so
+   expr_sim is expr_vv_sim on the results that are values. *)
+Theorem expr_vv_sim_stack:
+  !ctx func cenv cx ty e es.
+    expr_sim ctx func cenv cx ty e es /\
+    (!sa. ?t op sb. compile_expr cenv ty e sa = (StackValue t op, sb)) /\
+    (!tv es'. eval_expr cx e es = (INL tv, es') ==> ?v. tv = Value v) ==>
+    expr_vv_sim ctx func cenv cx ty e es
+Proof
+  rw[expr_vv_sim_def] >>
+  first_x_assum (qspec_then `sa` strip_assume_tac) >> gvs[] >>
+  `lower_value compile_expr cenv ty e sa = (op, sb)` by
+    simp[lower_value_def, comp_bind_def, unwrap_value_def, comp_return_def] >>
+  `expr_res_ok res` by (gvs[expr_vv_res_ok_def] >> res_tac >> gvs[]) >>
+  qpat_x_assum `expr_sim _ _ _ _ _ _ _`
+    (mp_tac o SIMP_RULE std_ss [expr_sim_def]) >>
+  disch_then (qspecl_then [`sa`, `sb`, `op`, `res`, `es'`, `s0`] mp_tac) >>
+  simp[] >> strip_tac >>
+  irule frag_exec_conseq >> first_x_assum (irule_at Any) >>
+  rpt strip_tac >> gvs[expr_post_def, vv_post_def, vv_holds_def, vv_at_def,
+                      materialise_def, return_def] >>
+  first_assum ACCEPT_TAC
+QED
 
 (* expr_sim gives expr_frag where the expression's type is a word type
    whose typed encoding agrees, on the values the expression evaluates to,
@@ -353,7 +536,7 @@ Theorem eval_expr_env:
     expr_res_ok res /\ item <> PrevHash ==>
     es' = es /\
     ?v. res = INL (Value v) /\
-        evaluate_builtin cx es.accounts ann (Env item) [] = INL v
+        evaluate_builtin cx es.accounts ann (Env item) [] [] = INL v
 Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>

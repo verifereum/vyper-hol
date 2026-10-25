@@ -128,11 +128,13 @@ Baseline admissions remain in three `genBlockSim` theorems and `codegen_correct`
 introduces nor discharges those existing admissions. See [VALIDATION.md](VALIDATION.md)
 for runtime frame sizes, residual diagnosis and behavioral provenance.
 
-After merging main `639365c7`, CI-mode checking rebuilt `vyperInterpreterTheory`,
-`evalCompilerMemoryConstructionTheory`, `evalCompilerInternalFramesTheory` and
-`evalCompilerNameCollisionsTheory` with the same cache-disabling flags above and
-`-j2`; it exited 0. All 11 memory-construction, 15 internal-frame and nine
-name-collision oracle equalities were saved on that merged tree.
+After merging main `134650f6`, focused CI-mode checking rebuilt the three oracle
+fixture groups above, `evalCompilerAllocationLimitTheory`, `calleeMemoryWitnessTheory`,
+`cleanupPromiseWitnessTheory`, `internalFrameWhitelistDiagnosticTheory` and
+`supportedProgramPropsTheory` with `-j4` and the same cache-disabling flags. It
+exited 0, saving all 11 memory-construction, 15 internal-frame and nine
+name-collision oracle equalities, plus both the positive local/loop and negative
+internal-call whitelist fixtures.
 
 ## Whitelist and statement changes
 

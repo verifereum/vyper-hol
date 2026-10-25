@@ -342,6 +342,23 @@ Definition build_func_param_types_def:
     | _ => rest_map
 End
 
+(* Function ids for internal labels (internal_fn_label): a function's
+   position among the source's function declarations, counting from n, and
+   the first non-external declaration of a name wins, as in
+   build_func_param_types. Python numbers the functions it compiles in
+   reachability order instead (codegen_venom/module.py IDGenerator); the
+   labels only need ids that differ for different names. *)
+Definition build_func_ids_def:
+  build_func_ids (n : num) ([] : toplevel list) = (K 0 : string -> num) ∧
+  build_func_ids n (top :: rest) =
+    case top of
+      FunctionDecl vis _ _ _ fname _ _ _ _ =>
+        let rest_map = build_func_ids (n + 1) rest in
+        if vis = External then rest_map
+        else (λs. if s = fname then n else rest_map s)
+    | _ => build_func_ids n rest
+End
+
 (* ===== Positional Args for ABI Decoding ===== *)
 
 Definition build_positional_arg_def:
@@ -470,6 +487,7 @@ Definition build_compile_env_def:
        ce_is_ctor := (vis = Deploy);
        ce_func_info := func_info;
        ce_func_param_types := build_func_param_types tops;
+       ce_func_ids := build_func_ids 0 tops;
        ce_nonreentrant := (F, 0n, use_transient_locks, mut = View);
        (* Default: overridden by package_*_fn from FunctionDecl raw_return field *)
        ce_raw_return := F;
@@ -517,6 +535,44 @@ Proof
   rpt strip_tac
   >> simp[build_compile_env_def]
   >> rpt (pairarg_tac >> gvs[])
+QED
+
+Theorem build_compile_env_ce_func_ids:
+  !tops vis mut func_name args ret_type (body : stmt list) use_trans.
+    (build_compile_env tops vis mut func_name args ret_type body use_trans).
+      ce_func_ids =
+    build_func_ids 0 tops
+Proof
+  rpt strip_tac
+  >> simp[build_compile_env_def]
+  >> rpt (pairarg_tac >> gvs[])
+QED
+
+Theorem build_func_ids_ge[local]:
+  !tops n v fm nr rr s args dflts ret body.
+    v <> External /\ MEM (FunctionDecl v fm nr rr s args dflts ret body) tops ==>
+    n <= build_func_ids n tops s
+Proof
+  Induct >> simp[] >> rpt gen_tac >> Cases_on `h` >>
+  simp[build_func_ids_def] >> rw[] >> gvs[] >>
+  first_x_assum drule_all >> simp[] >>
+  disch_then (qspec_then `n + 1` mp_tac) >> rw[] >> simp[]
+QED
+
+(* Different non-external functions get different ids, so their labels
+   differ (internal_fn_label_id_11). *)
+Theorem build_func_ids_11:
+  !tops n v1 fm1 nr1 rr1 s1 args1 dflts1 ret1 body1
+          v2 fm2 nr2 rr2 s2 args2 dflts2 ret2 body2.
+    v1 <> External /\ v2 <> External /\
+    MEM (FunctionDecl v1 fm1 nr1 rr1 s1 args1 dflts1 ret1 body1) tops /\
+    MEM (FunctionDecl v2 fm2 nr2 rr2 s2 args2 dflts2 ret2 body2) tops /\
+    build_func_ids n tops s1 = build_func_ids n tops s2 ==>
+    s1 = s2
+Proof
+  Induct >> simp[] >> rpt gen_tac >> Cases_on `h` >>
+  simp[build_func_ids_def] >> rw[] >> gvs[] >>
+  metis_tac[build_func_ids_ge, DECIDE ``!n:num. ~(n + 1 <= n)``]
 QED
 
 (* The call site's parameter types for fname are those of the first
@@ -678,6 +734,61 @@ Definition package_external_fn_def:
      body, if ret = NoneT then NONE else SOME ret)
 End
 
+(* ===== Allocation Limit ===== *)
+
+(* A statement (list) contains a valued return.  Mirrors where Python lowers
+   one: vyper/codegen_venom/stmt.py:lower_Return. *)
+Definition stmt_valued_return_def:
+  stmt_valued_return (Return (SOME _)) = T ∧
+  stmt_valued_return (Return NONE) = F ∧
+  stmt_valued_return (If _ ss1 ss2) =
+    (stmts_valued_return ss1 ∨ stmts_valued_return ss2) ∧
+  stmt_valued_return (For _ _ _ _ ss) = stmts_valued_return ss ∧
+  stmt_valued_return Pass = F ∧
+  stmt_valued_return Continue = F ∧
+  stmt_valued_return Break = F ∧
+  stmt_valued_return (Expr _) = F ∧
+  stmt_valued_return (Assert _ _) = F ∧
+  stmt_valued_return (Log _ _) = F ∧
+  stmt_valued_return (Raise _) = F ∧
+  stmt_valued_return (Assign _ _) = F ∧
+  stmt_valued_return (AugAssign _ _ _ _) = F ∧
+  stmt_valued_return (Append _ _) = F ∧
+  stmt_valued_return (AnnAssign _ _ _) = F ∧
+  stmts_valued_return [] = F ∧
+  stmts_valued_return (st::sts) =
+    (stmt_valued_return st ∨ stmts_valued_return sts)
+End
+
+(* The return buffer of compile_external_return's ABI-encoding branch is
+   below Python's allocation limit, as is the AbiCopy size of an ABI-static
+   return type, which is the same number there.
+   Mirrors Python: vyper/codegen_venom/context.py:Context.allocate_buffer,
+   which raises MemoryAllocationException at 2**64 bytes or more. *)
+Definition return_buffer_ok_def:
+  return_buffer_ok cenv ⇔
+    cenv.ce_max_return_size < 2 ** 64 ∧
+    (case cenv.ce_ret_enc_info of
+       AbiCopy m => m < 2 ** 64
+     | _ => T)
+End
+
+(* Python allocates the return buffer each time it lowers a valued return
+   of an external function that is neither @raw_return nor a word type.
+   Python does the same for a valued return in __default__; the fallback
+   isn't checked here, since its compile env keeps no ABI return encoding.
+   Mirrors Python: vyper/codegen_venom/stmt.py:_lower_external_return. *)
+Definition external_return_buffer_ok_def:
+  external_return_buffer_ok
+    (entry_lbl, cenv, pos_args, min_cds, is_payable, nr, nkey, use_trans,
+     is_view, body, ret_opt) ⇔
+    case ret_opt of
+      NONE => T
+    | SOME ret =>
+        ¬cenv.ce_raw_return ∧ ¬is_word_type ret ∧ stmts_valued_return body ⇒
+        return_buffer_ok cenv
+End
+
 (* Package an internal function for compilation.
    is_ctor_context: T in deploy context (internal fns called from __init__),
                     F in runtime context.
@@ -685,7 +796,8 @@ End
 Definition package_internal_fn_def:
   package_internal_fn tops use_trans nkey_map is_ctor_context immutables_len
     (mut, nr, rr, fname, fargs, _, ret, body) =
-    let fn_lbl = internal_fn_label fname (MAP SND fargs) is_ctor_context in
+    let fn_lbl = internal_fn_label (build_func_ids 0 tops fname) fname
+                   (MAP SND fargs) is_ctor_context in
     let sft = make_struct_fields_map tops in
     let sft_fn = get_struct_fields sft in
     let sft_types = (λname. MAP (FST o SND) (sft_fn name)) in
@@ -714,8 +826,8 @@ Theorem package_internal_fn_call_label:
     FST (package_internal_fn tops use_trans nkey_map is_ctor_context
            immutables_len
            (mut, nr, rr, fname, fargs, dflts, ret, body)) =
-    internal_fn_label (nsid_to_string (NONE, fname)) (MAP SND fargs)
-      is_ctor_context
+    internal_fn_label (build_func_ids 0 tops (nsid_to_string (NONE, fname)))
+      (nsid_to_string (NONE, fname)) (MAP SND fargs) is_ctor_context
 Proof
   simp[package_internal_fn_def, nsid_to_string_def]
 QED
@@ -727,7 +839,8 @@ Definition source_internal_fn_descriptor_def:
       (\name. MAP (FST o SND)
                     (get_struct_fields (make_struct_fields_map tops) name)) in
     let rc = returns_stack_count sft_types ret in
-    (internal_fn_label fname (MAP SND fargs) is_ctor_context,
+    (internal_fn_label (build_func_ids 0 tops fname) fname (MAP SND fargs)
+       is_ctor_context,
      rc = 0 /\ ret <> NoneT, rc)
 End
 
@@ -996,9 +1109,24 @@ Definition lower_vyper_runtime_unit_def:
           set_fallback_package_target rpolicy.rpol_target
             (package_fallback_fn tops use_trans nkey_map fb_fn) in
     let entry_info = build_dense_entry_info selectors external_fns in
-    run_lowering selectors external_fns runtime_int_fns fallback_fn
-      rpolicy 0 0 ([] : dense_bucket list) entry_info "__entry"
+    if EVERY external_return_buffer_ok external_fns then
+      run_lowering selectors external_fns runtime_int_fns fallback_fn
+        rpolicy 0 0 ([] : dense_bucket list) entry_info "__entry"
+    else NONE
 End
+
+(* A unit that lowers has every external return buffer below the limit. *)
+Theorem lower_vyper_runtime_unit_return_buffer_ok:
+  ∀tops rpolicy unit exts ints fb ctor x.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit ∧
+    classify_functions tops = (exts, ints, fb, ctor) ∧ MEM x exts ⇒
+    external_return_buffer_ok
+      (set_external_package_target rpolicy.rpol_target
+         (package_external_fn tops F (assign_nkeys tops 0) x))
+Proof
+  rw[lower_vyper_runtime_unit_def, AllCaseEqs()] >>
+  gvs[listTheory.EVERY_MEM, listTheory.MEM_MAP, PULL_EXISTS]
+QED
 
 (* Deploy lowering receives the actual runtime bytes.  Their size and data
    section are both owned by run_deploy_lowering. *)
