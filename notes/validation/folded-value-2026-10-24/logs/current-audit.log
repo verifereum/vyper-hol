@@ -1,0 +1,41 @@
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%31">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%30">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%35">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%34">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%33">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%32">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%31">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%30">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%35">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%34">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%33">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%32">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%37">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%36">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%31">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%30">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%33">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%32">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%31">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%30">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%35">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%34">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%31">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%30">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%33">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%32">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%31">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%30">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%35">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%34">>
+PARITY STATEMENT PASS: fold_add
+PARITY STATEMENT PASS: pow_folded_exp
+PARITY STATEMENT PASS: fold_cmp
+PARITY STATEMENT PASS: enc_mid_const
+PARITY STATEMENT PASS: fold_powmod
+PARITY STATEMENT PASS: fold_addmod
+PARITY STATEMENT PASS: fold_abs
+AUDIT PASS: exact seven oracle equalities; closed, non-oracle fixture/frontend/checker/type/supported proofs
+BASELINE LOWERING TAGS: lower_vyper_runtime_unit_correct = DISK_THM,cheat
+BASELINE LOWERING TAGS: lower_vyper_runtime_unit_source_unit_ok = DISK_THM,cheat
+BASELINE LOWERING TAGS: lower_vyper_runtime_unit_memory_ok = DISK_THM,cheat

@@ -22,6 +22,11 @@ roots = ["vyperHolScript.sml",
          "tests/vyperDelegateRawCallTestScript.sml",
          "tests/vyperTupleSubscriptTestScript.sml"]
 
+# Preload the toolchain context before intLib loads hurdUtils. Its legacy
+# module manifest otherwise reaches hurdUtils.sml before this structure exists.
+[actions.supportedExprFormPropsTheory]
+loads = ["hurdUtilsContextTheory"]
+
 [dependencies.verifereum]
 git = "https://github.com/verifereum/verifereum.git"
 rev = "f5e172ccbf45addef7096feea76428de3ed3dfa8"

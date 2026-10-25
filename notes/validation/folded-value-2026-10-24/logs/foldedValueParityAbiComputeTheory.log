@@ -1,0 +1,40 @@
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%31">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%30">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%35">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%34">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%33">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%32">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%31">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%30">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%31">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%30">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%35">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%34">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%33">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%32">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%37">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%36">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%31">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%30">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%33">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%32">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%31">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%30">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%35">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%34">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%33">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%32">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%31">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%30">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%35">>
+<<HOL warning: Type.mk_vartype: non-standard syntax: "%%gen_tyvar%%34">>
+<<HOL message: Created theory "foldedValueParityAbiCompute">>
+Saved theorem _______ "parity_dfs_split"
+Saved theorem _______ "parity_uncurry_compute"
+Saved theorem _______ "parity_operand_equiv_refl"
+Saved theorem _______ "parity_plan_last"
+Saved theorem _______ "parity_plan_next"
+<<HOL warning: Context.snapshot: ambient context read while a proof was running (in foldedValueParityAbiCompute)>>
+Saved theorem _______ "parity_plan_fuel"
+Exporting theory "foldedValueParityAbiCompute" ... done.
+Theory "foldedValueParityAbiCompute" took 2.4s to build

@@ -7,7 +7,12 @@ The independent run on 2026-10-23 used the clean pinned checkout at `~/vyper`:
 return HOL `NONE`, and `method_id_var` has the expected actual Python rejection.
 All 36 accepted ASTs pass both HOL checker modes. All four overflow executions
 revert on py-evm 0.12.1b1 PragueVM. The seven required new fixtures are integrated
-in `eval/foldedValueParityScript.sml`, whose checked parity theory builds.
+in `eval/foldedValueParityScript.sml`. The current split parity theories have
+also passed a forced rebuild with checkpoint/proof-step reuse disabled; source
+identities, exact-statement/tag audits, commands and logs are in
+[`current verification`](../../../notes/validation/folded-value-2026-10-24/REPORT.md).
+That report explicitly records the three pre-existing lowering CHEATs; this is
+not a claim of globally cheat-free lowering correctness.
 
 The complete rows, hashes, commands, logs, runtime observations and current
 full-corpus rerun status are in
@@ -29,9 +34,9 @@ The existing `supported-fixtures.txt`, frozen corpus, oracle outputs and whiteli
 are deliberately unchanged. Comments in TASK were omitted from the copied
 sources; declarations and executable statements are retained.
 
-## Manifest interpretation (each named source still requires execution)
+## Witness inventory (executed results are in the independent report)
 
-| Stems | Role / evidence still required |
+| Stems | Role / required evidence |
 |---|---|
 | pow_folded_exp, pow_negfold_base | Checked literal-pow paths; byte equality and dual-runtime overflow reverts |
 | fold_add, fold_pow_lit, fold_cmp, fold_not, fold_shift, fold_minmax | a10 operator/Call folds |
@@ -68,8 +73,8 @@ residual hand-built MethodId rejection. These are local synthetic input checks,
 not observations of the pinned compiler's ASTs for the new source files.
 Existing translation boundary tests imply that a Call with a folded literal
 translates as that literal, including MethodId when its metadata is supplied.
-Real MethodId metadata and selector survival for these exact sources still need
-the external AST round trip below.
+The independent report now records the external AST round trip for these exact
+sources, including MethodId metadata and selector survival.
 
 ## External reproduction procedure
 
@@ -147,11 +152,13 @@ compiler changes.
 Rerun the complete existing corpus using the wrapper's `--compare-hol` procedure
 or its listed current holbuild targets, recording full results (not only cache
 availability). The wrapper documents the separate opt-in evaluator settings;
-this task's proof-tool interface cannot set those options.
+the CLI supports `--tactic-timeout` for those opt-in runs. The current staged
+seven-fixture proofs also build without changing the default tactic budget.
 
 Finally execute `pow_folded_exp.f(2**90)` and
 `pow_negfold_base.f(256)` on BOTH HOL and Python runtime bytecodes with minievm or
 another named/versioned EVM implementation. Return calldata and runtime hashes,
 execution logs, and all four revert results. Byte equality or a successful HOL
 proof build alone is not a substitute for the requested execution evidence.
-No EVM runner is supplied by this preparation.
+The preparation itself supplied no EVM runner; the independent run subsequently
+used py-evm and retained all four execution receipts.
