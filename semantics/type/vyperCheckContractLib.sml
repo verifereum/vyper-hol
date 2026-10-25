@@ -112,6 +112,7 @@ val checker_defs =
    expr_type_def,
    well_typed_literal_def,
    well_typed_binop_def,
+   is_prim_word_type_def,
    well_typed_builtin_app_def,
    is_int_type_def,
    bound_at_most_def,

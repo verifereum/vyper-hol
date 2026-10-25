@@ -1,0 +1,25 @@
+{
+  "request_id": "G0006",
+  "lane_id": "L0009",
+  "component_uid": "cmp_13aaf40ccf6a4d05",
+  "witnesses": 30,
+  "annotated_ast_layout_inputs": 30,
+  "deploy_runtime_pairs": 27,
+  "real_compiler_rejections": [
+    "in_nested_array",
+    "in_string_list",
+    "in_struct_dynarray"
+  ],
+  "required_fixtures_supplied": [
+    "in_lit_list",
+    "notin_lit_list3",
+    "in_mem_dynarray",
+    "in_storage_dynarray",
+    "eq_string_lit_same",
+    "eq_bytes_storage_both"
+  ],
+  "run_started": false,
+  "hol_comparison_performed": false,
+  "completion_credit": false,
+  "next_work": "All independent C6 compiler inputs are supplied. The lane can run the checked HOL comparisons and wire parity theorems using read_file and holbuild. Existing C2 behavior evidence remains in .agent-files/bytecode-validation. Audit closure and preserve explicit #549/#560 residual labels. No MATCH is claimed by this artifact supply."
+}
