@@ -22,7 +22,7 @@ val () = cv_auto_trans entry_behavior_accounts_def;
 
 Definition entry_behavior_observe_def:
   entry_behavior_observe code calldata amount =
-    case run_ext_call 42w 43w calldata (SOME amount)
+    case run_ext_call 42w 43w calldata (SOME amount) default_evm_gas_limit
       (entry_behavior_accounts code) empty_transient_storage
       (vyper_to_tx_params empty_call_txn) of
       NONE => NONE

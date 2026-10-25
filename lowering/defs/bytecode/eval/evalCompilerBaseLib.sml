@@ -529,6 +529,16 @@ fun base_ready_named name = flow_transform
   (fn tm => let val th = computeLib.EVAL_CONV tm
     in if aconv (rhs (concl th)) boolSyntax.T then th
        else raise Fail ("codegen readiness rejected " ^ name) end)
+(* Internal labels include the declared parameter types and deployment mode.
+   Derive the label with the compiler API, not the old bare source name. *)
+fun base_ready_internal name arg_types is_ctor = let
+  val query = list_mk_comb
+    (prim_mk_const {Thy="compileEnv",Name="internal_fn_label"},
+     [stringSyntax.fromMLstring name, arg_types,
+      if is_ctor then boolSyntax.T else boolSyntax.F])
+  val label = stringSyntax.fromHOLstring
+    (rhs (concl (computeLib.EVAL_CONV query)))
+in base_ready_named label end
 val base_ready_finish = CONV_TAC (LAND_CONV
   (entry_plan_active ["COND"] (RATOR_CONV (RATOR_CONV (RAND_CONV
     (base_boolean_conv computeLib.EVAL_CONV "codegen readiness"))))))

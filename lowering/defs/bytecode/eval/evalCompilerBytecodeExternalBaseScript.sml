@@ -1871,7 +1871,7 @@ Proof
   >> current_function >> plan_admin >> base_guard_check >> plan_admin >> execute >> plan_admin >> base_guard_check >> plan_admin >> pass_effects >> pass_calls >> base_supply_guard "ir_supply_extends" >> plan_admin >> base_guard_check >> plan_admin >> base_supply_guard "ir_supply_covers_fn" >> plan_admin >> base_guard_check >> plan_admin >> base_supply_unit_open >> base_supply_unit_part 0 >> base_supply_unit_part 1 >> base_supply_unit_part 2 >> base_supply_unit_part 3 >> plan_admin >> base_guard_check >> plan_admin >> base_empty_pass_fold >> plan_admin >> base_guard_check >> plan_admin >> entry_stage "replace_unique_function" >> plan_admin >> base_guard_check >> plan_admin >> entry_stage "apply_unit_label_map" >> plan_admin >> base_guard_check >> plan_admin >> entry_guard "unit_labels_wf" >> entry_guard
   "list_subset" >> base_supply_unit_open >> base_supply_unit_part 0 >> base_supply_unit_part 1 >> base_supply_unit_part 2 >> base_unit_input 3 0 >> base_unit_input 3 1 >> base_unit_check 3 >> base_supply_unit_part 3 >> plan_admin >> base_guard_check >> plan_admin >> entry_guard "unit_global_inst_ids_distinct" >> plan_admin >> base_guard_check >> plan_admin >> entry_stage "run_pipeline_stages" >> plan_admin >> base_guard_check >> plan_admin >> entry_guard
   "unit_wf" >> entry_guard "unit_labels_wf" >> entry_guard "context_target_safe" >> entry_guard "concretized_static_layouts_wf" >> entry_guard "fmp_lowered_context_wf" >> entry_stage
-  "fcg_analyze" >> entry_guard "reachable_fcg_acyclic" >> base_ready_open >> base_ready_named "g" >> base_ready_named "h" >> plan_admin >> base_guard_check >> plan_admin >>
+  "fcg_analyze" >> entry_guard "reachable_fcg_acyclic" >> base_ready_open >> base_ready_internal "g" ``[BaseT (UintT 256)]`` false >> base_ready_internal "h" ``[] : type list`` false >> plan_admin >> base_guard_check >> plan_admin >>
   entry_open_codegen_ready >> entry_guard "canonical_param_prefix" >> entry_guard
   "wf_function" >> entry_guard "fn_inst_wf" >> entry_guard "ssa_form" >> entry_open_dominance >> entry_guard "wf_function" >> entry_open_dominance_exec >>
   base_analysis_stage "cfg_analyze" >> simp_tac pure_ss [Once LET_THM] >> base_dom_open >> base_dom_flow_open >> entry_flow_open >> entry_flow_header >>
@@ -1968,7 +1968,12 @@ Proof
   plan_cache_halting >> entry_plan_abbrev "plan_live" 0 >> entry_plan_abbrev "plan_dfg" 1 >>
   entry_plan_abbrev "plan_cfg" 2 >> entry_plan_abbrev "plan_func" 3 >> entry_plan_begin >>
   base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >>
-  base_plan_pair >> base_plan_pair >> base_plan_pair >> plan_control >> plan_admin >> plan_block >> plan_admin >> plan_setup >> plan_inputs >> plan_instruction >> plan_admin >> plan_control >> plan_admin >> plan_block >> plan_admin >> plan_setup >> plan_inputs >> plan_instruction >> plan_admin >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >>
+  base_plan_pair >> base_plan_pair >>
+  (* Time the large instruction's planning phases separately. *)
+  plan_control >> plan_admin >> plan_block >> plan_admin >> plan_setup >>
+  plan_inputs >> plan_instruction >> plan_admin >>
+  plan_control >> plan_admin >> plan_block >> plan_admin >> plan_setup >>
+  plan_inputs >> plan_instruction >> plan_admin >> plan_control >> plan_admin >> plan_block >> plan_admin >> plan_setup >> plan_inputs >> plan_instruction >> plan_admin >> plan_control >> plan_admin >> plan_block >> plan_admin >> plan_setup >> plan_inputs >> plan_instruction >> plan_admin >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >>
   base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >>
   base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >>
   base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >>

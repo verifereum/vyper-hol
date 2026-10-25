@@ -94,7 +94,8 @@ Proof
 QED
 
 (* Compose any proved initialization fragment with the real common-body
-   continuation. R covers initialization exits; result_ok covers body exits. *)
+   continuation, starting in a non-halted state as frag_exec requires.
+   R covers initialization exits; result_ok covers body exits. *)
 Theorem compile_entry_point_kwargs_continuation:
   compile_init_kwargs cenv descriptors offset k (Lit 0w) st = ((),initialized) /\
   compile_entry_point_kwargs cenv descriptors offset k common st = ((),finished) /\
@@ -103,7 +104,7 @@ Theorem compile_entry_point_kwargs_continuation:
   fn_has_code st finished func /\
   lookup_block common func.fn_blocks = SOME common_bb /\
   phi_prefix_length common_bb.bb_instructions = 0 /\
-  P ss /\ ss.vs_current_bb = st.cs_current_bb /\
+  P ss /\ ~ss.vs_halted /\ ss.vs_current_bb = st.cs_current_bb /\
   ss.vs_inst_idx = LENGTH st.cs_current_insts /\
   (!ss1. Q ss1 ==> ~ss1.vs_halted /\
     ?fuel r. run_from fuel ctx func (jump_to common ss1) = r /\

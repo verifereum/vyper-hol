@@ -2,7 +2,8 @@
    The slot is explicit: callers must establish source/compiled slot agreement. *)
 Theory nonreentrantEquiv
 Ancestors
-  transientLockProps emitHelperProps exprLoweringProps context compileEnv
+  transientLockProps transientLockFrameProps
+  emitHelperProps exprLoweringProps context compileEnv
   venomExecSemantics venomState
   vyperInterpreter vyperState vyperContext vyperValue
   vfmExecution vfmState
@@ -39,47 +40,54 @@ Proof
 QED
 
 Theorem state_rel_transient_lookup:
-  state_rel cenv cx vs ss ==>
+  state_rel func cenv cx vs ss ==>
   lookup_storage key (vs.tStorage cx.txn.target) = tload key ss
 Proof
   simp[state_rel_def, transient_rel_def, tload_def]
 QED
 
 Theorem state_rel_transient_update:
-  state_rel cenv cx vs ss ==>
-  state_rel cenv cx
+  state_rel func cenv cx vs ss ==>
+  state_rel func cenv cx
     (vs with tStorage :=
       (cx.txn.target =+ update_storage key value (vs.tStorage cx.txn.target))
         vs.tStorage)
     (tstore key value ss)
 Proof
-  rw[state_rel_def, tstore_def, vars_rel_def, storage_rel_def,
+  rw[state_rel_def, local_ptrs_rel_tstore, storage_rel_def,
      transient_rel_def, immutables_rel_def, logs_rel_def, call_ctx_rel_def,
      contract_storage_def, contract_transient_def] >>
-  gvs[combinTheory.APPLY_UPDATE_THM]
+  gvs[tstore_def, combinTheory.APPLY_UPDATE_THM] >>
+  first_x_assum (drule_all_then strip_assume_tac) >> simp[]
 QED
 
+(* Unlike the transient write, the scratch writes need freshness: state_rel
+   now includes the live local pointer registers. *)
 Theorem state_rel_transient_lock_checked_state:
-  state_rel cenv cx vs ss ==>
-  state_rel cenv cx vs (transient_lock_checked_state st key ss)
+  state_rel func cenv cx vs ss /\ fresh_vars_wrt st ss ==>
+  state_rel func cenv cx vs (transient_lock_checked_state st key ss)
 Proof
   strip_tac >>
-  simp[transient_lock_checked_state_def, state_rel_update_var]
+  `local_ptrs_rel func cenv vs.scopes
+     (transient_lock_checked_state st key ss)` by
+    (irule transient_lock_checked_local_ptrs >> fs[state_rel_def]) >>
+  irule state_rel_frame >> simp[] >> qexistsl_tac [`vs`, `ss`] >>
+  simp[transient_lock_checked_state_def, update_var_def]
 QED
 
 Theorem compile_nonreentrant_lock_source_correct:
-  state_rel cenv cx vs ss /\
+  state_rel func cenv cx vs ss /\ fresh_vars_wrt st ss /\
   compile_nonreentrant_lock key T is_view st = ((),st') /\
   tload (n2w key) ss <> 1w ==>
   ?vs' ss'.
     acquire_nonreentrant_lock cx.txn.target key is_view vs = (INL (),vs') /\
     run_inst_seq (emitted_insts st st') ss = OK ss' /\
-    state_rel cenv cx vs' ss'
+    state_rel func cenv cx vs' ss'
 Proof
   strip_tac >>
   drule_all state_rel_transient_lookup >> strip_tac >>
   drule compile_nonreentrant_lock_transient_code >> strip_tac >>
-  `state_rel cenv cx vs (transient_lock_checked_state st key ss)` by
+  `state_rel func cenv cx vs (transient_lock_checked_state st key ss)` by
     (irule state_rel_transient_lock_checked_state >> simp[]) >>
   Cases_on `is_view` >>
   simp[acquire_nonreentrant_lock_execution, transient_lock_code_execution] >>
@@ -87,7 +95,7 @@ Proof
 QED
 
 Theorem compile_nonreentrant_lock_source_revert:
-  state_rel cenv cx vs ss /\
+  state_rel func cenv cx vs ss /\
   compile_nonreentrant_lock key T is_view st = ((),st') /\
   tload (n2w key) ss = 1w ==>
   acquire_nonreentrant_lock cx.txn.target key is_view vs =
@@ -102,13 +110,13 @@ Proof
 QED
 
 Theorem compile_nonreentrant_unlock_source_correct:
-  state_rel cenv cx vs ss /\
+  state_rel func cenv cx vs ss /\
   compile_nonreentrant_unlock key T is_view st = ((),st') ==>
   ?vs' ss'.
     (if is_view then return () else
        release_nonreentrant_lock cx.txn.target key) vs = (INL (),vs') /\
     run_inst_seq (emitted_insts st st') ss = OK ss' /\
-    state_rel cenv cx vs' ss'
+    state_rel func cenv cx vs' ss'
 Proof
   Cases_on `is_view` >> strip_tac
   >- gvs[compile_nonreentrant_unlock_transient_view, emitted_insts_def,

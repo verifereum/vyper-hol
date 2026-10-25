@@ -1301,7 +1301,7 @@ Proof
                expr_type_def, toplevel_value_typed_def] >>
           metis_tac[vyperTypeBuiltinsTheory.Len_builtin_sound])
       >- (`?vs v. eval_pure_exprs cx (initial_state am [FEMPTY]) es = SOME vs /\
-             evaluate_builtin cx (initial_state am [FEMPTY]).accounts v8 bt vs = INL v /\
+             evaluate_builtin cx (initial_state am [FEMPTY]).accounts v8 bt (MAP expr_type es) vs = INL v /\
              tvl = Value v` by
            (qpat_x_assum `eval_pure_expr _ _ (Builtin _ _ _) = _` mp_tac >>
             simp[Once eval_pure_expr_def] >> gvs[AllCaseEqs()] >>
@@ -2924,6 +2924,20 @@ Proof
     call_body_prefix_preserves_immutables_dom) >> simp[initial_state_def]
 QED
 
+(* Compose the public domain facts rather than importing the evaluator's
+   local mutual-induction theorem. *)
+Theorem entry_eval_preserves_immutables_dom[local]:
+  (eval_exprs cx es st = (res,st') ==> preserves_immutables_dom cx st st') /\
+  (eval_stmts cx body st = (res',st') ==> preserves_immutables_dom cx st st')
+Proof
+  conj_tac >> strip_tac >> rw[preserves_immutables_dom_def] >>
+  FIRST [
+    drule_all eval_exprs_preserves_immutables_addr_dom >> simp[] >> NO_TAC,
+    drule_all eval_exprs_preserves_immutables_dom >> simp[] >> NO_TAC,
+    drule_all eval_stmts_preserves_immutables_addr_dom >> simp[] >> NO_TAC,
+    drule_all eval_stmts_preserves_immutables_dom >> simp[]]
+QED
+
 Theorem actual_entry_prefix_preserves_immutables_dom[local]:
   send_call_value mut cx st0 = (INL (),s1) /\
   eval_external_defaults cx es s1 = (INL dvs,s2) /\
@@ -2940,7 +2954,7 @@ Proof
   simp[eval_external_defaults_run] >>
   Cases_on `eval_exprs cx es (s1 with scopes := [FEMPTY])` >>
   simp[] >> strip_tac >> gvs[] >>
-  drule (cj 9 immutables_dom_mutual) >> strip_tac >>
+  drule (cj 1 entry_eval_preserves_immutables_dom) >> strip_tac >>
   qpat_x_assum `ignore_bind _ _ _ = _` mp_tac >>
   simp_tac bool_ss [ignore_bind_def, bind_def] >>
   Cases_on `(if nr then case cx.nonreentrant_slot of
@@ -2949,7 +2963,7 @@ Proof
      else return ()) (r with scopes := [env])` >>
   drule call_lock_action_preserves_immutables >> strip_tac >>
   Cases_on `q` >> simp[] >> strip_tac >> gvs[]
-  >- (drule (cj 2 immutables_dom_mutual) >> strip_tac >>
+  >- (drule (cj 2 entry_eval_preserves_immutables_dom) >> strip_tac >>
       irule preserves_immutables_dom_trans_local >>
       qexists `r''` >>
       gvs[preserves_immutables_dom_def]) >>

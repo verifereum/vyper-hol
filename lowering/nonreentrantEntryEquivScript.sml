@@ -21,7 +21,7 @@ Theorem nonreentrant_entry_lock_source_correct:
   MEM (FunctionDecl vis mut T rr name args dflts ret stmts) tops /\
   function_header_ok vis mut T rr name args dflts ret /\
   cx.nonreentrant_slot = lookup_nonreentrant_slot am.layouts tx.target /\
-  state_rel cenv cx vs ss /\
+  state_rel func cenv cx vs ss /\ fresh_vars_wrt st ss /\
   compile_nonreentrant_lock global_nonreentrant_slot T (mut = View) st = ((),st') /\
   tload (n2w global_nonreentrant_slot) ss <> 1w ==>
   ?vs' ss'.
@@ -30,7 +30,7 @@ Theorem nonreentrant_entry_lock_source_correct:
      | SOME key => acquire_nonreentrant_lock cx.txn.target key
                      (mut = View \/ mut = Pure)) vs = (INL (),vs') /\
     run_inst_seq (emitted_insts st st') ss = OK ss' /\
-    state_rel cenv cx vs' ss'
+    state_rel func cenv cx vs' ss'
 Proof
   strip_tac >>
   `cx.nonreentrant_slot = SOME global_nonreentrant_slot` by
@@ -44,7 +44,7 @@ Theorem nonreentrant_entry_lock_source_revert:
   MEM (FunctionDecl vis mut T rr name args dflts ret stmts) tops /\
   function_header_ok vis mut T rr name args dflts ret /\
   cx.nonreentrant_slot = lookup_nonreentrant_slot am.layouts tx.target /\
-  state_rel cenv cx vs ss /\
+  state_rel func cenv cx vs ss /\
   compile_nonreentrant_lock global_nonreentrant_slot T (mut = View) st = ((),st') /\
   tload (n2w global_nonreentrant_slot) ss = 1w ==>
   (case cx.nonreentrant_slot of
@@ -67,7 +67,7 @@ Theorem nonreentrant_entry_unlock_source_correct:
   MEM (FunctionDecl vis mut T rr name args dflts ret stmts) tops /\
   function_header_ok vis mut T rr name args dflts ret /\
   cx.nonreentrant_slot = lookup_nonreentrant_slot am.layouts tx.target /\
-  state_rel cenv cx vs ss /\
+  state_rel func cenv cx vs ss /\
   compile_nonreentrant_unlock global_nonreentrant_slot T (mut = View) st = ((),st') ==>
   ?vs' ss'.
     (if ~(mut = View \/ mut = Pure) then
@@ -76,7 +76,7 @@ Theorem nonreentrant_entry_unlock_source_correct:
        | SOME key => release_nonreentrant_lock cx.txn.target key
      else vyperState$return ()) vs = (INL (),vs') /\
     run_inst_seq (emitted_insts st st') ss = OK ss' /\
-    state_rel cenv cx vs' ss'
+    state_rel func cenv cx vs' ss'
 Proof
   strip_tac >>
   `cx.nonreentrant_slot = SOME global_nonreentrant_slot` by
@@ -92,7 +92,7 @@ Theorem checked_nonreentrant_entry_lock:
   source_typing_ok tops am tx /\ layouts_agree tops am tx /\
   MEM (FunctionDecl vis mut T rr name args dflts ret stmts) tops /\
   cx.nonreentrant_slot = lookup_nonreentrant_slot am.layouts tx.target /\
-  state_rel cenv cx vs ss /\ fresh_vars_wrt st ss /\
+  state_rel func cenv cx vs ss /\ fresh_vars_wrt st ss /\
   local_ptrs_rel func cenv scopes ss /\
   compile_nonreentrant_lock global_nonreentrant_slot T (mut = View) st = ((),st') /\
   tload (n2w global_nonreentrant_slot) ss <> 1w ==>
@@ -103,7 +103,7 @@ Theorem checked_nonreentrant_entry_lock:
      | SOME key => acquire_nonreentrant_lock cx.txn.target key
                      (mut = View \/ mut = Pure)) vs = (INL (),vs') /\
     run_inst_seq (emitted_insts st st') ss = OK ss' /\
-    state_rel cenv cx vs' ss' /\ fresh_vars_wrt st' ss' /\
+    state_rel func cenv cx vs' ss' /\ fresh_vars_wrt st' ss' /\
     local_ptrs_rel func cenv scopes ss' /\
     !op value. eval_operand op ss = SOME value ==> eval_operand op ss' = SOME value
 Proof

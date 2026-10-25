@@ -16,6 +16,7 @@ roots = ["vyperHolScript.sml",
          "tests/vyperTestLibTestScript.sml",
          "tests/vyperCalldataLenTestScript.sml",
          "tests/vyperInvertTestScript.sml",
+         "tests/vyperInStaticArrayTestScript.sml",
          "tests/vyperCalldataSliceTestScript.sml",
          "tests/vyperRawCallCalldataTestScript.sml",
          "tests/vyperDelegateRawCallTestScript.sml",
@@ -53,7 +54,18 @@ roots = ["vyperHolScript.sml",
          "lowering/defs/bytecode/eval/evalCompilerBytecodeNonreentrantInternalReturnScript.sml",
          "lowering/defs/bytecode/eval/evalCompilerBytecodeNonreentrantFallbackEarlyReturnScript.sml",
          "lowering/defs/bytecode/eval/evalCompilerBytecodeExternalBaseScript.sml",
-         "venom/passes/concretize_mem_loc/proofs/concretizeCallFrameRegressionScript.sml"]
+         "venom/passes/concretize_mem_loc/proofs/concretizeCallFrameRegressionScript.sml",
+         "tests/vyperExtCallModesTestScript.sml",
+         "tests/vyperUnreachableTestScript.sml",
+         "tests/vyperPopReceiverTestScript.sml",
+         "lowering/supported/supportedTypePropsScript.sml",
+         "lowering/supported/supportedNamePropsScript.sml",
+         "lowering/supported/supportedDeclPropsScript.sml",
+         "lowering/supported/supportedExprFormPropsScript.sml",
+         "lowering/supported/supportedExprPropsScript.sml",
+         "lowering/supported/supportedStmtPropsScript.sml",
+         "lowering/supported/supportedStmtTraversePropsScript.sml",
+         "lowering/supported/supportedProgramPropsScript.sml"]
 
 [dependencies.verifereum]
 git = "https://github.com/verifereum/verifereum.git"

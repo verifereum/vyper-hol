@@ -59,7 +59,7 @@ Theorem grouped_one_shape:
   dispatch_ops (SND (compile_external_groups (Var "mid")
     [probe_group "f" 10] (initial_compile_state "entry"))) =
     [[ALLOCA; EQ; JNZ]; [MSTORE; JMP]; [EQ; JNZ];
-     [CALLDATASIZE; LT; ISZERO; ASSERT; CALLDATALOAD; MSTORE; JMP]; []]
+     [CALLDATASIZE; LT; ISZERO; ASSERT; ADD; CALLDATALOAD; MSTORE; JMP]; []]
 Proof
   EVAL_TAC
 QED

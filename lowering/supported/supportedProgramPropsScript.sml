@@ -3,7 +3,8 @@
 Theory supportedProgramProps
 Ancestors
   supportedProgram supportedStmts supportedStmtTraverse supportedNames
-  supportedExprTraverse supportedExprProps supportedExprFormProps vyperAST list integer
+  supportedExprTraverse supportedExprProps supportedExprFormProps
+  vyperTypeContract vyperAST list integer
 Libs
   intLib
 
@@ -80,13 +81,13 @@ QED
 Theorem supported_other_effects_in_internal_and_loop:
   supported_function_body expr_test_tops Internal []
     [Expr expr_test_pop;
-     Expr (Call NoneT Send [expr_test_address; expr_test_uint] NONE);
+     Expr (Call NoneT (Send F) [expr_test_address; expr_test_uint] NONE);
      Expr (Call (BaseT (UintT 256))
-       (ExtCall T F ("remote",[BaseT (UintT 256)],BaseT (UintT 256)))
+       (ExtCall T F ("remote",[BaseT (UintT 256)],BaseT (UintT 256)) [])
        [expr_test_address; expr_test_uint] NONE)] /\
   supported_stmt expr_test_tops []
     (program_test_range
-      [Expr expr_test_pop; Expr (Call NoneT Send [expr_test_address; expr_test_uint] NONE)])
+      [Expr expr_test_pop; Expr (Call NoneT (Send F) [expr_test_address; expr_test_uint] NONE)])
 Proof
   EVAL_TAC
 QED
@@ -170,13 +171,7 @@ QED
 
 Theorem supported_declaration_exclusions_assembled:
   EVERY (\top. ~supported_program [top])
-    [FunctionDecl Deploy Nonpayable T F "__init__" [] [] NoneT [];
-     FunctionDecl Deploy Nonpayable F T "__init__" [] [] NoneT [];
-     FunctionDecl Deploy Nonpayable F F "__init__" [] [expr_test_uint] NoneT [];
-     FunctionDecl Internal Pure F F "revert" [] [] NoneT [];
-     FunctionDecl Internal Pure F F "return_label_bad" [] [] NoneT [];
-     FunctionDecl Internal Pure F F "code_end" [] [] NoneT [];
-     FunctionDecl Internal Pure F F "reachable_bad" [] [] NoneT [];
+    [FunctionDecl Deploy Nonpayable F T "__init__" [] [] NoneT [];
      VariableDecl Private Immutable "x" (BaseT (UintT 256)) (SOME 0);
      VariableDecl Private (Constant expr_test_uint) "x" (BaseT (UintT 256)) NONE;
      VariableDecl Public Storage "x" (BaseT (UintT 256)) (SOME 0);
@@ -189,16 +184,29 @@ Proof
   EVAL_TAC
 QED
 
+(* Entry/header validity is checked by check_contract, not the whitelist. *)
+Theorem supported_entry_header_context:
+  supported_program [FunctionDecl Deploy Nonpayable T F "__init__" [] [] NoneT []] /\
+  supported_program [FunctionDecl Deploy Nonpayable F F "__init__" [] [expr_test_uint] NoneT []] /\
+  ~function_header_ok Deploy Nonpayable F F "__init__" [] [expr_test_uint] NoneT
+Proof
+  EVAL_TAC
+QED
+
 Theorem supported_fallback_context:
   supported_program [FunctionDecl External Payable F F "__default__" [] [] NoneT [Pass]] /\
-  ~supported_program [FunctionDecl External Payable F F "__default__"
-    [("arg",BaseT (UintT 256))] [] NoneT []]
+  supported_program [FunctionDecl External Payable F F "__default__"
+    [("arg",BaseT (UintT 256))] [] NoneT []] /\
+  ~function_header_ok External Payable F F "__default__"
+    [("arg",BaseT (UintT 256))] [] NoneT
 Proof
   EVAL_TAC
 QED
 
 Theorem supported_name_checks_assembled:
-  ~supported_program [program_test_internal []; program_test_internal []] /\
+  supported_program [program_test_internal []; program_test_internal []] /\
+  ~contract_namespaces_ok F
+    [(NONE,[program_test_internal []; program_test_internal []])] /\
   ~supported_program [EventDecl "E" []; EventDecl "E" []] /\
   ~supported_program
     [VariableDecl Private Storage "field_name" (BaseT (UintT 256)) (SOME 0);

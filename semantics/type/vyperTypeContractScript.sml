@@ -335,7 +335,7 @@ Definition constant_value_def:
               | _ => NONE)
            else
              case evaluate_builtin (constant_context mods) empty_accounts
-                    ty bt vs of
+                    ty bt (MAP expr_type es) vs of
              | INL v => SOME v
              | INR _ => NONE) /\
   constant_value mods imms (TypeBuiltin _ tb typ es) =

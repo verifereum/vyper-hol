@@ -5,12 +5,15 @@ Ancestors
   moduleLowering
   (* property statements and proofs *)
   moduleLoweringProps
+  loweringSlice
+  varsExt exprSim
   valueEncodingProofs
   localPtrsProps
   externalEntryProps constructorGuardProps
   nonreentrantEntryEquiv internalReturnLockProps
   transientLockFrameProps
   selectorCompilerProps checkedSelectorTableProps
+  loweringShapeDefs
   (* compiler + correctness *)
   vyperCompiler
   vyperLoweringCorrect
@@ -18,4 +21,6 @@ Ancestors
   evalCompilerMemoryStores
   evalCompilerExternalCalls
   evalCompilerNameCollisions
+  evalCompilerInternalLabels
   evalCompilerSliceBuffers
+  evalCompilerPhiPointers
