@@ -3873,10 +3873,11 @@ Theorem convert_s2u_ok:
           ∀p x. eval_operand p ss = SOME x ⇒ eval_operand p ss' = SOME x
 Proof
   rpt gen_tac >> strip_tac >>
-  gvs[compile_type_convert_def, comp_bind_def, comp_return_def,
-      comp_ignore_bind_def, LET_THM] >>
-  Cases_on `out_b < in_b` >> gvs[] >>
-  gvs[comp_bind_def, comp_return_def, comp_ignore_bind_def, LET_THM] >>
+  qpat_x_assum `compile_type_convert _ _ _ = _` mp_tac >>
+  Cases_on `out_b < in_b` >>
+  simp[compile_type_convert_def, comp_bind_def, comp_return_def,
+       comp_ignore_bind_def, LET_THM] >>
+  strip_tac >> qabbrev_tac `hi = n2w (2 ** out_b − 1) : bytes32` >>
   rpt (pairarg_tac >> gvs[])
   >- (chain_step (elim_lit 2 emit_op_GT_correct) >>
       chain_step emit_op_ISZERO_correct >>
@@ -3884,19 +3885,23 @@ Proof
       chain_step emit_op_ISZERO_correct >>
       chain_step emit_op_AND_correct >>
       forward_all_evals >>
-      `bool_to_word (bool_to_word (w2n w > w2n (n2w (2 ** out_b − 1) : bytes32)) = 0w) &&
+      rename1 `emit_void ASSERT _ cs = ((), st')` >>
+      rename1 `run_inst_seq (emitted_insts st cs) ss = OK ss1` >>
+      `bool_to_word (bool_to_word (w2n w > w2n hi) = 0w) &&
        bool_to_word (bool_to_word (w < 0w) = 0w) ≠ 0w` by gvs[] >>
-      `same_blocks st cs'⁵'` by metis_tac[same_blocks_trans] >>
-      `∀op w. eval_operand op ss = SOME w ⇒ eval_operand op ss'⁵' = SOME w`
+      `same_blocks st cs` by metis_tac[same_blocks_trans] >>
+      `∀op w. eval_operand op ss = SOME w ⇒ eval_operand op ss1 = SOME w`
         by compose_eval_pres >>
       drule_all assert_chain_ok >>
       disch_then strip_assume_tac >> first_assum (irule_at Any) >> gvs[]) >>
   chain_step (elim_lit 2 emit_op_SLT_correct) >>
   chain_step emit_op_ISZERO_correct >>
   forward_all_evals >>
+  rename1 `emit_void ASSERT _ cs = ((), st')` >>
+  rename1 `run_inst_seq (emitted_insts st cs) ss = OK ss1` >>
   `bool_to_word (bool_to_word (w < 0w) = 0w) ≠ 0w` by gvs[] >>
-  `same_blocks st cs''` by metis_tac[same_blocks_trans] >>
-  `∀op w. eval_operand op ss = SOME w ⇒ eval_operand op ss'' = SOME w`
+  `same_blocks st cs` by metis_tac[same_blocks_trans] >>
+  `∀op w. eval_operand op ss = SOME w ⇒ eval_operand op ss1 = SOME w`
     by compose_eval_pres >>
   drule_all assert_chain_ok >>
   disch_then strip_assume_tac >> first_assum (irule_at Any) >> gvs[]
@@ -3913,29 +3918,31 @@ Theorem convert_s2u_abort:
     ∃ss'. run_inst_seq (emitted_insts st st') ss = Abort Revert_abort ss'
 Proof
   rpt gen_tac >> strip_tac >>
-  gvs[compile_type_convert_def, comp_bind_def, comp_return_def,
-      comp_ignore_bind_def, LET_THM] >>
-  Cases_on `out_b < in_b` >> gvs[] >>
-  gvs[comp_bind_def, comp_return_def, comp_ignore_bind_def, LET_THM] >>
-  rpt (pairarg_tac >> gvs[]) >>
-  FIRST [
-    (* narrowing: GT, ISZERO, SLT, ISZERO, AND, ASSERT *)
-    chain_step (elim_lit 2 emit_op_GT_correct) >>
-    chain_step emit_op_ISZERO_correct >>
-    chain_step (elim_lit 2 emit_op_SLT_correct) >>
-    chain_step emit_op_ISZERO_correct >>
-    chain_step emit_op_AND_correct >>
-    forward_all_evals >>
-    imp_res_tac emit_void_extends >>
-    drule_all_then strip_assume_tac assert_chain >>
-    TRY (gvs[] >> NO_TAC) >>
-    first_assum (irule_at Any),
-    (* widening: SLT, ISZERO, ASSERT *)
-    chain_step (elim_lit 2 emit_op_SLT_correct) >>
-    chain_step emit_op_ISZERO_correct >>
-    forward_all_evals >>
-    imp_res_tac emit_void_extends >>
-    drule_all_then strip_assume_tac assert_chain >>
-    TRY (gvs[] >> NO_TAC) >>
-    first_assum (irule_at Any)]
+  qpat_x_assum `compile_type_convert _ _ _ = _` mp_tac >>
+  Cases_on `out_b < in_b` >>
+  simp[compile_type_convert_def, comp_bind_def, comp_return_def,
+       comp_ignore_bind_def, LET_THM] >>
+  strip_tac >> qabbrev_tac `hi = n2w (2 ** out_b − 1) : bytes32` >>
+  rpt (pairarg_tac >> gvs[])
+  >~ [`¬(out_b < in_b)`]
+  >- ((* widening: SLT, ISZERO, ASSERT *)
+      chain_step (elim_lit 2 emit_op_SLT_correct) >>
+      chain_step emit_op_ISZERO_correct >>
+      forward_all_evals >>
+      imp_res_tac emit_void_extends >>
+      drule_all assert_chain >> strip_tac >- gvs[] >>
+      first_assum (irule_at Any)) >>
+  (* narrowing, one goal per disjunct: GT, ISZERO, SLT, ISZERO, AND, ASSERT *)
+  chain_step (elim_lit 2 emit_op_GT_correct) >>
+  chain_step emit_op_ISZERO_correct >>
+  chain_step (elim_lit 2 emit_op_SLT_correct) >>
+  chain_step emit_op_ISZERO_correct >>
+  chain_step emit_op_AND_correct >>
+  forward_all_evals >>
+  `bool_to_word (bool_to_word (w2n w > w2n hi) = 0w) &&
+   bool_to_word (bool_to_word (w < 0w) = 0w) = 0w` by
+    (Cases_on `w < 0w` >> gvs[]) >>
+  imp_res_tac emit_void_extends >>
+  drule_all assert_chain >> strip_tac >- gvs[] >>
+  first_assum (irule_at Any)
 QED

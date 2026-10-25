@@ -227,8 +227,11 @@ End
 (* What a value_vv of an expression of type t holds in s, for the source
    result tv, es being the source state then:
    - a StackValue: a value, held by its operand as expr_val_rel says;
-   - a pointer into memory: a value, laid out at the pointer as
-     val_in_memory says (word types too: a word local is a pointer);
+   - a pointer into memory: what tv materialises to, laid out at the
+     pointer as val_in_memory says (word types too: a word local is a
+     pointer).  For a value that is the value itself; for an ArrayRef it is
+     the array read from storage, which is what lower_value copies to
+     memory (a ternary over storage arrays hands out such a copy);
    - a pointer into storage or transient storage: the slot holding what tv
      materialises to (an ArrayRef is a result here, not an error);
    - a pointer into code: an immutable.
@@ -241,7 +244,7 @@ Definition vv_holds_def:
      ?w. eval_operand p.ptr_operand s = SOME w /\
          case p.ptr_location of
            LocMemory =>
-             ?v. tv = Value v /\
+             ?v. materialise cx tv es = (INL v, es) /\
                  !tvt. evaluate_type (get_tenv cx) t = SOME tvt ==>
                        val_in_memory tvt v (w2n w) s.vs_memory
          | LocStorage => storage_holds cx F t tv w es
@@ -259,7 +262,8 @@ Definition vv_at_def:
      !v. tv = Value v ==> expr_val_at cenv cx t sa sb es v op s) /\
   (vv_at cenv cx t sa sb es tv (LocatedValue t' p) s <=>
      p.ptr_location = LocMemory ==>
-     !v tvt. tv = Value v /\ evaluate_type (get_tenv cx) t = SOME tvt ==>
+     !v tvt. materialise cx tv es = (INL v, es) /\
+             evaluate_type (get_tenv cx) t = SOME tvt ==>
        val_wf tvt v /\
        ?w. eval_operand p.ptr_operand s = SOME w /\
            ((?aid b sz. FLOOKUP s.vs_allocas aid = SOME (b, sz) /\
@@ -330,7 +334,8 @@ Proof
   disch_then (qspecl_then [`sa`, `sb`, `op`, `res`, `es'`, `s0`] mp_tac) >>
   simp[] >> strip_tac >>
   irule frag_exec_conseq >> first_x_assum (irule_at Any) >>
-  rpt strip_tac >> gvs[expr_post_def, vv_post_def, vv_holds_def, vv_at_def] >>
+  rpt strip_tac >> gvs[expr_post_def, vv_post_def, vv_holds_def, vv_at_def,
+                      materialise_def, return_def] >>
   first_assum ACCEPT_TAC
 QED
 

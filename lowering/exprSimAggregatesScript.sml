@@ -4,7 +4,8 @@
  *
  * The case lemmas of compile_expr_sim (exprSimMain) for struct and array
  * literals and the type builtins but extract32.  Cheated, for the later
- * #636 PRs, but for the conversions exprSimConvert proves.
+ * #636 PRs, but for the conversions exprSimConvert proves (which rest on
+ * the cheated lower_value_word_shape).
  *
  * TOP-LEVEL:
  *   compile_struct_lit_sim, compile_make_array_sim — StructLit, MakeArray
