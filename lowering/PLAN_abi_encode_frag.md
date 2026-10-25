@@ -4,10 +4,10 @@
 
 ### C1: Frozen ABI fragment correctness
 - Kind: `proof_group`
-- Risk: 2
+- Risk: 3
 - Work priority: 10
 - Work units: 0
-- Rationale: The compiler recursion matches the four clauses. The loop rule is supplied by the task, and source/output/scratch separation supplies the preservation invariant needed to apply recursive calls.
+- Rationale: Derived from child component C1.4 risk 3. Instruction/frame component too broad; scratch preservation through memory-only operations needs a projection boundary to avoid timeout from unfolding full state records and alloca invariants.
 - Required for completion: yes
 
 #### Summary
@@ -205,24 +205,76 @@ Use frag_ids_split to reduce whole-interval membership and nonmembership. For me
 Do not attempt to infer the final global budget from the two frames alone. Do not assume prefix scratch cells disappear at the second stage; use the existing-allocation persistence conjunct. Do not add vs_labels equality to the frozen frame: it remains a separate execution invariant.
 
 ### C1.4: Instruction effects and base encoders
-- Kind: `boundary_lemma`
+- Kind: `proof_group`
 - Risk: 2
-- Work priority: 40
-- Work units: 13
-- Rationale: These are straight-line instruction proofs over MLOAD, MSTORE, MCOPY, arithmetic and ALLOCA, following the existing copy-fragment pattern.
-- Dependencies: C1.3
+- Work priority: 50
+- Work units: 0
+- Rationale: The observed timeout comes from mixing memory implementation expansion with allocation invariants. Equality of the two allocation-state projections suffices to transport scratch invariants without memory reasoning.
+- Progress transition: `refinement`
+
+#### Progress note
+E0010 establishes two retained memory-disjointness helpers but does not close the original component. Remaining work is separated at the metadata boundary.
 
 #### Summary
-Lift primitive instruction effects to the scratch/frame interface. Prove the AbiPrimWord, AbiCopy and AbiBytestring cases with the exact output footprint and effect frame. Cover compile_abi_encode_static_info on valid static plans.
-
-#### Statement
-Outputs: frame-aware rules for the emitted arithmetic/load/store/copy and compile_alloc_buffer 32 operations used by the encoder; exact framed fragment contracts for primitive word, static copy, bytestring and static_info encoders under the matching task hypotheses. These contracts must include all enc_frame fields, not merely memory equality and variable preservation.
-
-#### Approach
-Follow compile_abi_encode_copy_frag and frag_exec_run_inst_seq, reusing existing memory and emit lemmas after checking signatures. For bytestring length l, prove the rounded length and last-word zeroing equations first: the MSTORE at dst+ceil32(l) lies inside the total 32+ceil32(l) output, and MCOPY copies exactly 32+l bytes from the separated source. Split l=0 from positive lengths when proving padding; ALLOCA needs separate reused-cell and new-cell branches.
+Retain enc_write_memory_disjoint and enc_mcopy_disjoint. Establish allocation-state congruence before framing instructions. Complete the original instruction-effect and base-encoder outputs using that interface; frozen definitions and statements remain unchanged.
 
 #### Not to try
-The existing copy theorem's EL frame only protects addresses inside the old memory length and does not mention effects; do not silently treat it as enc_frame. Use padded-byte framing to cover memory growth and establish the missing unchanged fields from execution.
+Do not simplify enc_scratch with mcopy_def, write_memory_with_expansion_def and allocation invariant definitions in one call. This expands irrelevant memory records and has already exceeded the tactic limit.
+
+#### Argument
+enc_scratch depends on the state only through vs_allocas and vs_alloca_next, including its alloca_inv conjunct. Memory-only operations preserve those projections. Prove this transport fact once, then combine it with disjoint byte observations to establish frames; base encoders compose the resulting instruction facts.
+
+#### Definition design
+Do not change enc_scratch or enc_frame. Expose scratch congruence under equality of allocation map and frontier. Separate projection equations for memory operations from their byte-observation equations. A consumer should never unfold both write_memory_with_expansion and alloca_inv.
+
+#### Code structure
+Keep the existing two disjoint-write helpers in lowering/abiEncoderPropsScript.sml. Place allocation congruence and projection lemmas before instruction frames, and instruction frames before base encoder proofs. No protected files are edited.
+
+### C1.4.1: Allocation-state congruence and memory-operation projections
+- Kind: `boundary_lemma`
+- Risk: 2
+- Work priority: 0
+- Work units: 3
+- Rationale: The invariant depends only on two projections; unfolding only allocation predicates on abstract states avoids the demonstrated record explosion.
+- Checkpoint: yes
+
+#### Summary
+Prove scratch transport from equality of allocation map and frontier. Prove projection preservation for memory-only operations used by encoder frames. Validate the interface on MCOPY scratch preservation without unfolding memory in the consumer.
+
+#### Statement
+!ids lo top s t. t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next ==> (enc_scratch ids lo top t <=> enc_scratch ids lo top s). Also prove the corresponding projection equalities for write_memory_with_expansion and mcopy, and enc_scratch ids lo top (mcopy dst src len s) <=> enc_scratch ids lo top s.
+
+#### Approach
+Prove allocation-invariant congruence on abstract states by unfolding allocation predicates only, then scratch congruence using it. Separately unfold memory operations only beneath individual record selectors; derive scratch preservation by congruence. Build abiEncoderPropsTheory to test that each boundary stays below the unchanged tactic limit.
+
+#### Not to try
+Do not unfold memory implementations inside the scratch transport proof, and do not expand dimword arithmetic just to transport unchanged data.
+
+### C1.4.2: Instruction frames and base encoder consumers
+- Kind: `boundary_lemma`
+- Risk: 2
+- Work priority: 10
+- Work units: 8
+- Rationale: With scratch transport isolated, frames separate into unchanged metadata/effects, variable preservation and the already checked disjoint-memory observation.
+- Dependencies: C1.4.1
+- Checkpoint: yes
+- Progress transition: `refinement`
+- Carries progress/evidence from: E0010
+
+#### Progress note
+Retains the two checked disjoint-write helpers as source progress, not a certificate for this remaining obligation.
+
+#### Summary
+Complete all instruction-effect and base-encoder obligations originally owned by C1.4. Start with framed MCOPY using the retained disjoint-memory theorem. Use the metadata boundary in the base cases rather than repeatedly expanding allocation invariants.
+
+#### Description
+This leaf inherits the original C1.4 coverage of instruction operations and its three base encoder cases; no original output is dropped by the split. Retain enc_write_memory_disjoint and enc_mcopy_disjoint, with no duplicate variants. Prove instruction-frame facts needed by the AbiPrimWord, AbiCopy and AbiBytestring consumers, and complete those base encoder fragment cases.
+
+#### Approach
+For each memory-only instruction, discharge allocation/scratch conjuncts through C1.4.1 and memory conjuncts through disjoint-observation helpers; prove unchanged variable/effect projections separately. Compose these facts with existing straight-line fragment rules for base encoder cases, keeping consumer proofs free of low-level memory splice and allocation-invariant expansions.
+
+#### Not to try
+Do not restore the failed full-record simplification experiment. Do not use one large search to unpack every frame conjunct, raise tactic timeouts, or weaken frozen preconditions.
 
 ### C1.5: Prefix invariant interface for array loops
 - Kind: `definition_probe`

@@ -1383,6 +1383,40 @@ QED
      moves the cell, if there are dynamic elements, past the tails;
    - dyn_loop writes a dynamic array's encoding after its length word at
      dst and returns the encoding's whole length. *)
+(* Padded observations are stable even when a disjoint write grows memory. *)
+Theorem enc_write_memory_disjoint:
+  !a n d bytes s.
+    a + n <= d \/ d + LENGTH bytes <= a ==>
+    mem_bytes_at a n (write_memory_with_expansion d bytes s).vs_memory =
+    mem_bytes_at a n s.vs_memory
+Proof
+  rpt gen_tac >> disch_tac >>
+  simp[write_memory_with_expansion_def, LET_THM] >>
+  Cases_on `0 < d + LENGTH bytes - LENGTH s.vs_memory` >> simp[]
+  >- (qmatch_goalsub_abbrev_tac `TAKE d expanded` >>
+      `d + LENGTH bytes <= LENGTH expanded` by simp[Abbr `expanded`] >>
+      `mem_bytes_at a n
+        (TAKE d expanded ++ bytes ++ DROP (d + LENGTH bytes) expanded) =
+       mem_bytes_at a n expanded` by
+        (simp[mem_bytes_at_def] >>
+         irule valueEncodingProofsTheory.take_drop_splice_disjoint >> simp[]) >>
+      simp[Abbr `expanded`, valueEncodingProofsTheory.mem_bytes_at_append_zero]) >>
+  `d + LENGTH bytes <= LENGTH s.vs_memory` by simp[] >>
+  simp[mem_bytes_at_def] >>
+  irule valueEncodingProofsTheory.take_drop_splice_disjoint >> simp[]
+QED
+
+Theorem enc_mcopy_disjoint:
+  !a n dst src len s.
+    a + n <= dst \/ dst + len <= a ==>
+    mem_bytes_at a n (mcopy dst src len s).vs_memory =
+    mem_bytes_at a n s.vs_memory
+Proof
+  rpt strip_tac >> simp[mcopy_def] >>
+  irule enc_write_memory_disjoint >>
+  simp[LENGTH_TAKE_EQ, LENGTH_DROP]
+QED
+
 Theorem compile_abi_encode_frag:
   (!dst child_ptr ei is_dyn static_ofst dyn_ptr st op st' ctx env ty tv v
     av s0 dst_w src_w lo top.

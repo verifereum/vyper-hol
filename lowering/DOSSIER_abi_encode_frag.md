@@ -12,6 +12,7 @@ PLAN: `lowering/PLAN_abi_encode_frag.md`
 | C1.3.1 | proved |  | E0007 |  |
 | C1.3.2 | proved |  | E0008 |  |
 | C1.3.3 | proved |  | E0009 |  |
+| C1.4 | stuck | risk_mismatch | E0010 | Strategist review: split instruction metadata projection/scratch invariance from memory observations and encoder consumers. Need small generic allocation-state congruence boundary or reusable projection simpset before framed MCOPY/base branches. |
 
 ## C1.1
 
@@ -135,3 +136,25 @@ PLAN: `lowering/PLAN_abi_encode_frag.md`
 ### Evidence refs
 
 - `TO_abi_encode_frag-20261024T233520Z_m0227_t001` (use `read_tool_output` for exact output)
+
+## C1.4
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch`
+- latest episode: `E0010`
+- blocker: Instruction/frame component too broad; scratch preservation through memory-only operations needs a projection boundary to avoid timeout from unfolding full state records and alloca invariants.
+- actual effort: 1 sessions, 2 msgs, 27 steps, 26 tools, 7 holbuild, 1,675,176 tok (1,672,303 in, 2,873 out, 1,628,416 cached), 178.7s, $0.2793456
+- next: Strategist review: split instruction metadata projection/scratch invariance from memory observations and encoder consumers. Need small generic allocation-state congruence boundary or reusable projection simpset before framed MCOPY/base branches.
+
+### Attempts / Evidence
+
+- `E0010` (stuck, risk_mismatch, actual effort: 1 sessions, 2 msgs, 27 steps, 26 tools, 7 holbuild, 1,675,176 tok (1,672,303 in, 2,873 out, 1,628,416 cached), 178.7s, $0.2793456)
+  - Prove generic padded write disjoint observation from take_drop_splice_disjoint and zero-extension neutrality; specialize to mcopy. -> Both enc_write_memory_disjoint and enc_mcopy_disjoint proved, retained, target clean. (`TO_abi_encode_frag-20261024T233520Z_m0253_t001`, `TO_abi_encode_frag-20261024T233520Z_m0265_t001`)
+  - Frame MCOPY by unfolding enc_frame/enc_scratch and state definitions; then isolate scratch preservation using fs and srw_ss simplification. -> Initial frame goal explodes to record memory implementation; two isolated scratch simplifications time out even with no arithmetic simpset. Removed unproved enc_frame_mcopy experiment. (`TO_abi_encode_frag-20261024T233520Z_m0259_t001`, `TO_abi_encode_frag-20261024T233520Z_m0261_t001`, `TO_abi_encode_frag-20261024T233520Z_m0263_t001`)
+
+### Evidence refs
+
+- `TO_abi_encode_frag-20261024T233520Z_m0265_t001` (use `read_tool_output` for exact output)
+- `TO_abi_encode_frag-20261024T233520Z_m0263_t001` (use `read_tool_output` for exact output)
