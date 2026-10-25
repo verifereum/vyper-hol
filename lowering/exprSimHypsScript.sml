@@ -79,16 +79,22 @@
  *     Venom lowering of a flag member is the literal 2 ** id
  *     (codegen_venom/expr.py).  build_compile_env fills
  *     ce_flag_member_id from the main module's declarations only, so for
- *     a flag of an imported module the clause does not hold of the
- *     environment it builds, and the theorem says nothing about
- *     expressions there.
+ *     a flag of an imported module with two members or more the clause
+ *     does not hold of the environment it builds.  expr_sim_inv is about
+ *     the whole target, so the theorem then says nothing about any
+ *     expression of the contract, not only those that use the flag.
  *   - The flag counts clause: the compile environment's member count of a
  *     flag type is the one the type environment gives it (FlagArgs, the
  *     length of its declaration's member list), which bounds its values.
  *     Vyper's lowering of ~ on a flag XORs with the mask of that many
  *     bits, (1 << len(typ._flag_members)) - 1 (codegen_venom/expr.py
  *     lower_UnaryOp).  build_compile_env fills ce_flag_n_members from the
- *     main module's declarations, as it does ce_flag_member_id.
+ *     main module's declarations only, and gives a flag of an imported
+ *     module 0 members, so the clause does not hold of the environment
+ *     it builds for any contract that imports a module declaring a flag;
+ *     the theorem then says nothing about that contract.  Restricting the
+ *     clause to the main module would not help: ~ on an imported flag
+ *     would then lower to an XOR with 0, not Vyper's mask.
  *   - byte_widths_expr e: every integer type in the expression is
  *     int8..int256 or uint8..uint256 in steps of 8, as Vyper's are
  *     (IntegerT.signeds and IntegerT.unsigneds, bits = 8 * i for i in

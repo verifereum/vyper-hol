@@ -23,9 +23,10 @@
  *                              with the members' mask)
  *   compile_abs_frag         — unop_frag for abs on int256
  *
- * Helpers: eval_expr_unop_cases, expr_post_unop, straight_fresh_cs_extends,
+ * Helpers: eval_expr_unop_cases, expr_post_unop, compile_expr_body_not_abs,
+ *   straight_fresh_cs_extends, straight_fresh_not, straight_fresh_abs,
  *   not_type_cases, flag_not_xor, abs_i2w, int256_abs_bound,
- *   word_of_bytes_be_to_bytes
+ *   word_of_bytes_be_to_bytes, length_word_to_bytes_be
  *)
 
 Theory exprSimUnop
