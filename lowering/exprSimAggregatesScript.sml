@@ -15,12 +15,9 @@
  *   compile_abi_encode_sim, compile_abi_decode_sim — abi_encode (#551),
  *                           abi_decode with its validation aborts, row 4
  *
- * compile_struct_lit_sim is false as the lowering stands: the StructLit case
- * passes the caller's ty, not the literal's StructT, to compile_struct_lit,
- * which takes the field layout from it.  At any other ty every field gets
- * 32 bytes, so a struct with a uint256[2] field followed by a uint256 stores
- * the second field at offset 32, not 64.  The fix is in the lowering (take
- * the layout from the literal's own name, as Vyper does).
+ * The StructLit case takes the field layout from the literal's own struct,
+ * whatever the caller's ty (compile_expr_struct_lit_ty), so
+ * compile_struct_lit_sim holds at every ty.
  *
  * The elements of a struct or array literal are lowered as
  * cfn ...; ADD ...; unwrap_value, and an element that is a storage or
