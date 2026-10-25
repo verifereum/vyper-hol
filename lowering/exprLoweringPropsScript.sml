@@ -2121,18 +2121,26 @@ Proof
   simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_alloc_buffer]
 QED
 
+Theorem ci_mono_compile_method_id_hash[local]:
+  ∀ ty v sa. ci_mono sa (SND (compile_method_id_hash ty v sa))
+Proof
+  ho_match_mp_tac builtinHashingTheory.compile_method_id_hash_ind >>
+  simp[builtinHashingTheory.compile_method_id_hash_def,
+       ci_mono_compile_keccak256_bytes, ci_mono_compile_keccak256_bytesm]
+QED
+
 Theorem ci_mono_compile_method_id_runtime[local]:
-  ∀ ptr_op b sa. ci_mono sa (SND (compile_method_id_runtime ptr_op b sa))
+  ∀ ty v b sa. ci_mono sa (SND (compile_method_id_runtime ty v b sa))
 Proof
   rpt gen_tac >> Cases_on `b` >>
   rewrite_tac[builtinHashingTheory.compile_method_id_runtime_def, COND_CLAUSES] >>
   BETA_TAC >>
   rpt (ho_match_mp_tac ci_mono_bind ORELSE ho_match_mp_tac ci_mono_ignore_bind ORELSE
        (conj_tac >- simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return,
-                         ci_mono_compile_alloc_buffer, ci_mono_compile_keccak256_bytes]) ORELSE
+                         ci_mono_compile_alloc_buffer, ci_mono_compile_method_id_hash]) ORELSE
        gen_tac ORELSE strip_tac) >>
   simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return,
-       ci_mono_compile_alloc_buffer, ci_mono_compile_keccak256_bytes]
+       ci_mono_compile_alloc_buffer, ci_mono_compile_method_id_hash]
 QED
 
 Theorem ci_mono_compile_sha256_bytes[local]:

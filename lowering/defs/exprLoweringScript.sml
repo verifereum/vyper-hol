@@ -2906,11 +2906,12 @@ Definition compile_builtin_dispatch_body_def:
             SOME bs =>
               compile_literal_vv ret_ty (BytesL (TAKE 4 (Keccak_256_w64 bs))) st
           | NONE =>
-              let (ptr, st1) = lower_value compile_expr cenv (expr_type e1) e1 st in
+              let arg_ty = expr_type e1 in
+              let (v, st1) = lower_value compile_expr cenv arg_ty e1 st in
               if ret_ty = BaseT (BytesT (Fixed 4)) then
-                as_stack_val ret_ty (compile_method_id_runtime ptr T st1)
+                as_stack_val ret_ty (compile_method_id_runtime arg_ty v T st1)
               else
-                as_ptr_val ret_ty LocMemory (compile_method_id_runtime ptr F st1))
+                as_ptr_val ret_ty LocMemory (compile_method_id_runtime arg_ty v F st1))
      | MakeArray elem_ty_opt bnd =>
          (case elem_ty_opt of
             NONE =>
