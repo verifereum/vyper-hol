@@ -501,3 +501,58 @@ Proof
   rpt strip_tac >> irule stmt_state_rel_immutables_projection >>
   simp[observed_immutables_overwrite_bool_other]
 QED
+
+Theorem module_var_key_name_injective:
+  !src x y. module_var_key (src,x) = module_var_key (src,y) <=> x = y
+Proof
+  Cases >> simp[module_var_key_def, nsid_to_string_def]
+QED
+
+Theorem module_var_names_finite:
+  !src m. FINITE {name | module_var_key (src,name) IN FDOM m}
+Proof
+  rpt gen_tac >>
+  irule (pred_setTheory.FINITE_INJ |> INST_TYPE [beta |-> ``:string``]) >>
+  qexistsl_tac [`\name. module_var_key (src,name)`, `FDOM m`] >>
+  simp[pred_setTheory.INJ_DEF, module_var_key_name_injective]
+QED
+
+Definition compiler_slot_layout_def:
+  compiler_slot_layout src m transient =
+    MAP (\key. (key, case FLOOKUP m (module_var_key key) of
+                      SOME (StorageLoc w) => if transient then 0 else w2n w
+                    | SOME (TransientLoc w) => if transient then w2n w else 0
+                    | _ => 0))
+      (MAP (\name. (src,name))
+        (SET_TO_LIST {name | module_var_key (src,name) IN FDOM m}))
+End
+
+Theorem compiler_slot_layout_lookup:
+  !src m name w transient.
+    FLOOKUP m (module_var_key (src,name)) =
+      SOME (if transient then TransientLoc w else StorageLoc w) ==>
+    ALOOKUP (compiler_slot_layout src m transient) (src,name) = SOME (w2n w)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `MEM (src,name) (MAP (\n. (src,n))
+      (SET_TO_LIST {n | module_var_key (src,n) IN FDOM m}))` by
+    (simp[MEM_MAP, module_var_names_finite] >>
+     gvs[finite_mapTheory.FLOOKUP_DEF, AllCaseEqs()]) >>
+  Cases_on `transient` >>
+  simp[compiler_slot_layout_def, alistTheory.ALOOKUP_TABULATE]
+QED
+
+Theorem compile_env_layouts_exist:
+  !cenv cx. ?lays.
+    storage_vars_rel cenv (cx with layouts := lays) /\
+    transient_vars_rel cenv (cx with layouts := lays)
+Proof
+  rpt gen_tac >>
+  qexists_tac `[(cx.txn.target,
+    (compiler_slot_layout cenv.ce_module cenv.ce_vars F,
+     compiler_slot_layout cenv.ce_module cenv.ce_vars T))]` >>
+  simp[storage_vars_rel_def, transient_vars_rel_def,
+       lookup_var_slot_from_layout_def] >>
+  conj_tac >> rpt strip_tac >> qexists_tac `w2n slot` >>
+  simp[compiler_slot_layout_lookup]
+QED
