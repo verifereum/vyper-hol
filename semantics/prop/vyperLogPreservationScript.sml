@@ -1546,21 +1546,26 @@ Theorem log_extends_outcome_rules[local]:
 Proof
   rpt conj_tac
   >- simp[log_extends_refl]
-  >- metis_tac[log_extends_trans]
+  >- (rpt strip_tac >> drule_all log_extends_trans >> simp[])
   >- simp[log_extends_def, rich_listTheory.IS_PREFIX_REFL] >>
   simp[log_extends_def, rich_listTheory.IS_PREFIX_APPEND]
 QED
 
-Theorem Send_outcome_log_extends:
-  (do
-    (rq,outcome) <- take_call_outcome target [] (SOME amount);
-    check outcome.co_success "send failed";
-    adopt_call_outcome rq outcome;
-    return (Value NoneV)
-  od) st = (res,st') ==> log_extends st st'
+Theorem eval_send_log_extends:
+  eval_send cx has_gas vs st = (res,st') ==> log_extends st st'
 Proof
-  strip_tac >> strip_assume_tac log_extends_outcome_rules >>
-  drule_all (Send_outcome_transport |> Q.INST [`R` |-> `log_extends`]) >> simp[]
+  Cases_on `vs` >- simp[eval_send_def, raise_def, log_extends_refl] >>
+  Cases_on `t` >- simp[eval_send_def, raise_def, log_extends_refl] >>
+  simp[eval_send_def, bind_def, ignore_bind_def, type_check_def,
+       assert_def, return_def, raise_def, get_accounts_def,
+       get_transient_storage_def, lift_option_def, lift_option_type_def,
+       check_def, update_accounts_def, update_transient_def, append_logs_def,
+       update_pending_deletions_def,
+       vyperCallOutcomeTheory.take_call_outcome_def,
+       vyperCallOutcomeTheory.adopt_call_outcome_equation, LET_THM, UNCURRY,
+       COND_RATOR, option_CASE_rator, prod_CASE_rator, sum_CASE_rator] >>
+  strip_tac >>
+  gvs[AllCaseEqs(), log_extends_def, rich_listTheory.IS_PREFIX_APPEND]
 QED
 
 Theorem eval_raw_call_log_extends:
@@ -1585,6 +1590,8 @@ Proof
   rpt strip_tac >> gvs[log_extends_def, rich_listTheory.IS_PREFIX_APPEND]
 QED
 
+(* Pre-factoring issue-567 concrete send proof retained. The active
+   eval_send_log_extends above covers the final API and both oracle modes.
 Theorem eval_send_log_extends:
   eval_send cx target amount st = (res,st') ==> log_extends st st'
 Proof
@@ -1593,14 +1600,19 @@ Proof
   imp_res_tac eval_raw_call_log_extends >> gvs[]
 QED
 
+*)
+
 Theorem case_expr_send_logs[local]:
-  (!s0 s1. type_check (LENGTH es = 2) "Send args" s0 = (INL (),s1) ==>
+  (!s0 s1. type_check (LENGTH es = if has_gas then 3 else 2) "Send args" s0 =
+             (INL (),s1) ==>
      !st res st'. eval_exprs cx es st = (res,st') ==> log_extends st st') ==>
-  !st res st'. eval_expr cx (Call ty Send es drv) st = (res,st') ==>
+  !st res st'. eval_expr cx (Call ty (Send has_gas) es drv) st = (res,st') ==>
     log_extends st st'
 Proof
   rpt strip_tac >>
+  Cases_on `LENGTH es = if has_gas then 3 else 2` >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+(* Pre-factoring issue-567 send case retained.
   simp[Once vyperInterpreterTheory.evaluate_def, vyperStateTheory.bind_def,
        vyperStateTheory.ignore_bind_def, vyperStateTheory.return_def,
        vyperStateTheory.raise_def, AllCaseEqs()] >>
@@ -1619,6 +1631,16 @@ Proof
       metis_tac[log_extends_trans]) >>
   drule (Send_outcome_log_extends |> SRULE [vyperStateTheory.ignore_bind_def]) >>
   strip_tac >> irule log_extends_trans >> goal_assum drule >> simp[]
+*)
+  simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
+       assert_def, return_def, raise_def, log_extends_refl] >>
+  first_x_assum (qspecl_then [`st`, `st`] mp_tac) >>
+  simp[type_check_def, assert_def, return_def] >> strip_tac >>
+  rpt CASE_TAC >> rpt strip_tac >> gvs[] >>
+  first_x_assum drule >> strip_tac >>
+  TRY (gvs[] >> NO_TAC) >>
+  drule eval_send_log_extends >> strip_tac >>
+  drule_all log_extends_trans >> simp[]
 QED
 
 Theorem case_expr_selfdestruct_logs[local]:
@@ -2262,8 +2284,6 @@ Proof
   gvs[vyperStateTheory.get_scopes_def, vyperStateTheory.return_def]
 QED
 
-
-
 Theorem ext_call_tail_log_extends[local]:
   (do x <- assert success (Error (RuntimeError "ExtCall reverted"));
       x <- update_accounts (K accounts');
@@ -2334,7 +2354,17 @@ Proof
   drule_all (ExtCall_outcome_transport |> Q.INST [`R` |-> `log_extends`]) >> simp[]
 QED
 
-(* Send_outcome_log_extends is proved before its actual Send consumer. *)
+Theorem Send_outcome_log_extends:
+  (do
+    (rq,outcome) <- take_call_outcome target [] (SOME amount);
+    check outcome.co_success "send failed";
+    adopt_call_outcome rq outcome;
+    return (Value NoneV)
+  od) st = (res,st') ==> log_extends st st'
+Proof
+  strip_tac >> strip_assume_tac log_extends_outcome_rules >>
+  drule_all (Send_outcome_transport |> Q.INST [`R` |-> `log_extends`]) >> simp[]
+QED
 
 Theorem ext_call_result_tail_log_extends[local]:
   (!e. drv = SOME e ==>
@@ -2480,7 +2510,7 @@ QED
 
 Theorem run_ext_call_lift_option_state[local]:
   lift_option
-    (run_ext_call caller target calldata value_opt accounts tStorage params)
+    (run_ext_call caller target calldata value_opt gas accounts tStorage params)
     msg st = (res,st') ==>
   st' = st
 Proof
@@ -2500,6 +2530,8 @@ Proof
   metis_tac[]
 QED
 
+(* Legacy positional-value pipeline, retained with its original default gas.
+   The active evaluator uses eval_ext_call and source-ordered keyword options. *)
 Definition ext_call_after_args_with_def:
   ext_call_after_args_with cx isc skc ret_type func_name arg_types vs k =
     do
@@ -2522,8 +2554,9 @@ Definition ext_call_after_args_with_def:
         "ExtCall target has no code";
       tStorage <- get_transient_storage;
       result <- lift_option
-        (run_ext_call cx.txn.target target_addr calldata value_opt accounts
-           tStorage (vyper_to_tx_params cx.txn)) "ExtCall run failed";
+        (run_ext_call cx.txn.target target_addr calldata value_opt
+           default_evm_gas_limit accounts tStorage (vyper_to_tx_params cx.txn))
+        "ExtCall run failed";
       k tenv target_addr result
     od
 End
@@ -2547,8 +2580,8 @@ Theorem ext_call_generated_success_certificate[local]:
     "ExtCall target has no code" s = (INL (),s) /\
   get_transient_storage s = (INL tStorage,s) /\
   lift_option
-    (run_ext_call cx.txn.target target_addr calldata value_opt accounts
-       tStorage (vyper_to_tx_params cx.txn))
+    (run_ext_call cx.txn.target target_addr calldata value_opt
+       default_evm_gas_limit accounts tStorage (vyper_to_tx_params cx.txn))
     "ExtCall run failed" s =
       (INL (T,[],accounts',tStorage',emitted_logs, deletions),s) ==>
   ext_call_after_args_with cx static skc ret_type func_name arg_types vs
@@ -2592,8 +2625,8 @@ Theorem ext_call_generated_success_certificate_elim[local]:
       "ExtCall target has no code" s = (INL (),s) /\
     get_transient_storage s = (INL tStorage,s) /\
     lift_option
-      (run_ext_call cx.txn.target target_addr calldata value_opt accounts
-         tStorage (vyper_to_tx_params cx.txn))
+      (run_ext_call cx.txn.target target_addr calldata value_opt
+         default_evm_gas_limit accounts tStorage (vyper_to_tx_params cx.txn))
       "ExtCall run failed" s =
         (INL (T,[],accounts',tStorage',emitted_logs, deletions),s)
 Proof
@@ -2814,8 +2847,9 @@ Theorem ext_call_after_args_fold[local]:
         "ExtCall target has no code";
       tStorage <- get_transient_storage;
       result <- lift_option
-        (run_ext_call cx.txn.target target_addr calldata value_opt accounts
-           tStorage (vyper_to_tx_params cx.txn)) "ExtCall run failed";
+        (run_ext_call cx.txn.target target_addr calldata value_opt
+           default_evm_gas_limit accounts tStorage (vyper_to_tx_params cx.txn))
+        "ExtCall run failed";
       (\(success,returnData,accounts',tStorage',emitted_logs, deletions).
         do
           check success "ExtCall reverted";
@@ -2861,8 +2895,9 @@ Theorem ext_call_after_args_log_extends[local]:
         "ExtCall target has no code";
       tStorage <- get_transient_storage;
       result <- lift_option
-        (run_ext_call cx.txn.target target_addr calldata value_opt accounts
-           tStorage (vyper_to_tx_params cx.txn)) "ExtCall run failed";
+        (run_ext_call cx.txn.target target_addr calldata value_opt
+           default_evm_gas_limit accounts tStorage (vyper_to_tx_params cx.txn))
+        "ExtCall run failed";
       (\(success,returnData,accounts',tStorage',emitted_logs, deletions).
         do
           check success "ExtCall reverted";
@@ -2925,34 +2960,145 @@ Theorem case_expr_ext_call_logs[local]:
        (INL (tenv,target_addr,(T,[],accounts',tStorage',emitted_logs, deletions)),s1) /\
      (skc \/ ext_call_has_code target_addr accounts') ==>
      !u0 r u1. eval_expr cx e u0 = (r,u1) ==> log_extends u0 u1) ==>
-  !st res st'.
-    eval_expr cx (Call ty (ExtCall static skc (func_name,arg_types,ret_type))
-                         es drv) st = (res,st') ==>
-    log_extends st st'
+*)
+
+(* Compositional proof control for the actual activated call clause. *)
+Definition log_monad_def:
+  log_monad f <=> !s r t. f s = (r,t) ==> log_extends s t
+End
+
+Theorem log_monad_bind_guarded[local]:
+  log_monad f /\
+  (!s v t. f s = (INL v,t) ==> log_monad (g v)) ==>
+  log_monad (vyperState$bind f g)
 Proof
-  rpt strip_tac >>
-  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-  simp[Once vyperInterpreterTheory.evaluate_def,
-       vyperStateTheory.bind_def, vyperStateTheory.return_def,
-       vyperStateTheory.raise_def, AllCaseEqs()] >>
-  rpt strip_tac >> gvs[log_extends_refl] >>
-  qpat_x_assum `!s0 r s1. eval_exprs cx es s0 = (r,s1) ==> _`
-    drule >> strip_tac >>
-  irule log_extends_trans >> goal_assum drule >>
-  qpat_x_assum `(do _ od) _ = _` mp_tac >>
-  pure_rewrite_tac[ext_call_finish_check_fold, ext_call_after_args_fold] >>
-  strip_tac >>
-  `log_extends s''
-     (SND (ext_call_after_args_with cx static skc ret_type func_name arg_types vs
-       (\tenv target_addr result. ext_call_finish cx skc target_addr drv ret_type tenv result) s''))` by
-    (irule ext_call_after_args_finish_guarded_log_extends >>
-     rpt strip_tac >>
-     first_x_assum irule >>
-     metis_tac[]) >>
-  gvs[]
+  simp[log_monad_def, vyperStateTheory.bind_def] >> rpt strip_tac >>
+  Cases_on `f s` >> Cases_on `q` >> gvs[] >>
+  first_x_assum drule_all >> strip_tac >>
+  first_x_assum drule_all >> strip_tac >>
+  drule_all log_extends_trans >> simp[]
 QED
 
-*)
+Theorem log_monad_primitives[local]:
+  log_monad (return v) /\ log_monad (\s. return (g s) s) /\
+  log_monad (raise e) /\
+  log_monad (type_check b msg) /\ log_monad (check b msg) /\
+  log_monad (lift_option opt msg) /\ log_monad (lift_option_type opt msg) /\
+  log_monad (lift_sum_runtime rs) /\ log_monad get_accounts /\
+  log_monad get_transient_storage /\ log_monad (update_accounts upd) /\
+  log_monad (update_transient upd_t) /\ log_monad (append_logs logs) /\
+  log_monad (update_pending_deletions deletions_upd) /\
+  log_monad (adopt_call_outcome rq co)
+Proof
+  simp[log_monad_def, vyperStateTheory.return_def, vyperStateTheory.raise_def,
+       vyperStateTheory.check_def, vyperStateTheory.type_check_def,
+       vyperStateTheory.assert_def, vyperStateTheory.lift_option_def,
+       vyperStateTheory.lift_option_type_def, vyperStateTheory.lift_sum_runtime_def,
+       vyperStateTheory.get_accounts_def, vyperStateTheory.get_transient_storage_def,
+       vyperStateTheory.update_accounts_def, vyperStateTheory.update_transient_def,
+       append_logs_def, update_pending_deletions_def, adopt_call_outcome_equation] >>
+  rpt strip_tac >> rpt CASE_TAC >>
+  gvs[option_CASE_rator, sum_CASE_rator, AllCaseEqs(),
+      vyperStateTheory.return_def, vyperStateTheory.raise_def,
+      log_extends_def, rich_listTheory.IS_PREFIX_APPEND,
+      rich_listTheory.IS_PREFIX_REFL]
+QED
+
+Theorem log_monad_take[local]:
+  log_monad (take_call_outcome target calldata value_opt)
+Proof
+  simp[log_monad_def] >> rpt strip_tac >>
+  drule take_call_outcome_frame >>
+  simp[evaluation_state_component_equality, log_extends_def,
+       rich_listTheory.IS_PREFIX_REFL]
+QED
+
+(* Index primitive leaves once; never traverse their continuations or the
+   large guarded IHs just to recognise a primitive computation. *)
+val EXTCALL_LOG_MONAD_LEAF_TAC =
+  let
+    val structural = Net.insert
+      (concl log_monad_bind_guarded |> dest_imp |> snd,
+       MATCH_MP_TAC log_monad_bind_guarded >> conj_tac) Net.empty
+    val leaves = List.foldl (fn (th,net) =>
+      Net.insert (concl th, MATCH_ACCEPT_TAC th) net) structural
+      (log_monad_take :: CONJUNCTS log_monad_primitives)
+  in
+    fn (asl,w) => FIRST (Net.match w leaves) (asl,w)
+  end;
+
+(* Reduce exposed applications only, not continuation arguments. *)
+val extcall_log_head_conv =
+  let
+    val reduce = FIRST_CONV
+      [BETA_CONV, REWR_CONV pair_case_thm, REWR_CONV UNCURRY]
+    fun head tm = (reduce ORELSEC RATOR_CONV head) tm
+  in head end;
+
+(* Preserve CASE_TAC branch order without its broad datatype rewrite set.
+   Only fresh branch facts, never guarded IHs, become rewrite rules. *)
+fun EXTCALL_LOG_MONAD_CASE_TAC (g as (old,_)) =
+  let
+    fun simplify (asl,w) =
+      let
+        val fresh = List.filter (fn a => not (is_forall a) andalso
+          not (List.exists (aconv a) old)) asl
+        val rules = map ASSUME fresh
+      in
+        simp_tac bool_ss
+          (optionTheory.option_CLAUSES :: pair_case_thm :: UNCURRY :: rules) >>
+        RULE_ASSUM_TAC (fn th =>
+          if is_forall (concl th) then th else REWRITE_RULE rules th) >>
+        MAP_EVERY assume_tac rules
+      end (asl,w)
+  in
+    (BasicProvers.PURE_CASE_TAC >> simplify) g
+  end;
+
+val EXTCALL_LOG_MONAD_STEP_TAC =
+  FIRST [
+    first_assum ACCEPT_TAC,
+    EXTCALL_LOG_MONAD_LEAF_TAC,
+    CONV_TAC (HO_REWR_CONV FORALL_PROD),
+    CONV_TAC (RAND_CONV extcall_log_head_conv),
+    gen_tac, strip_tac, conj_tac,
+    CONV_TAC (RAND_CONV (REWR_CONV vyperStateTheory.ignore_bind_def)),
+    CONV_TAC (RAND_CONV ETA_CONV),
+    CHANGED_TAC (fn (asl,w) =>
+      simp_tac bool_ss (pair_case_thm :: UNCURRY ::
+        List.map ASSUME (List.filter is_eq asl)) (asl,w)),
+    EXTCALL_LOG_MONAD_CASE_TAC];
+
+val EXTCALL_LOG_MONAD_TAC = rpt EXTCALL_LOG_MONAD_STEP_TAC;
+
+Theorem eval_ext_call_log_extends:
+  eval_ext_call cx static skip_check sig opts vs st = (res,st') ==>
+  log_extends st st'
+Proof
+  `log_monad (eval_ext_call cx static skip_check sig opts vs)`
+    suffices_by simp[log_monad_def] >>
+  PairCases_on `sig` >> Cases_on `vs` >>
+  pure_rewrite_tac[eval_ext_call_def, LET_THM] >>
+  NTAC 6 (TRY EXTCALL_LOG_MONAD_STEP_TAC) >>
+  NTAC 6 (TRY EXTCALL_LOG_MONAD_STEP_TAC) >>
+  NTAC 6 (TRY EXTCALL_LOG_MONAD_STEP_TAC) >>
+  EXTCALL_LOG_MONAD_TAC
+QED
+
+Theorem case_expr_ext_call_logs[local]:
+  (!s0 r s1. eval_exprs cx es s0 = (r,s1) ==> log_extends s0 s1) ==>
+  !st res st'.
+    eval_expr cx (Call ty (ExtCall static skip_check sig opts) es drv) st =
+      (res,st') ==> log_extends st st'
+Proof
+  rpt strip_tac >> qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  first_x_assum drule >> strip_tac >>
+  TRY (gvs[] >> NO_TAC) >>
+  drule eval_ext_call_log_extends >> strip_tac >>
+  drule_all log_extends_trans >> simp[]
+QED
 
 Theorem raw_call_tail_log_extends[local]:
   (do x <- update_accounts (K accounts');
@@ -3196,7 +3342,7 @@ in
      lookup_flag_mem_log_extends, case_expr_subscript_logs, case_expr_pop_logs,
      case_expr_builtin_logs, case_expr_if_logs, case_expr_struct_lit_logs,
      case_expr_send_logs, case_expr_selfdestruct_logs,
-     (* case_expr_ext_call_logs: derived after the active induction *)
+     case_expr_ext_call_logs,
      case_expr_raw_call_logs, case_expr_raw_call_calldata_logs,
      case_expr_raw_log_logs, case_expr_raw_revert_logs,
      case_expr_attribute_logs, case_expr_type_builtin_logs,
@@ -3224,29 +3370,7 @@ val REST_ATOMIC_DISPATCH_TAC =
       rpt conj_tac >> first_assum MATCH_ACCEPT_TAC,
       rpt gen_tac >> strip_tac >>
       ho_match_mp_tac case_stmt_append_logs >>
-      rpt conj_tac >> first_assum MATCH_ACCEPT_TAC
-      (* Original concrete-only ExtCall dispatch retained:
-      , rpt gen_tac >> strip_tac >>
-      ho_match_mp_tac case_expr_ext_call_logs >>
-      conj_tac >- first_assum MATCH_ACCEPT_TAC >>
-      rpt gen_tac >> strip_tac >>
-      drule ext_call_generated_success_certificate_tenv >>
-      strip_tac >> gvs[] >>
-      drule ext_call_generated_success_certificate_elim >>
-      strip_tac >>
-      `check T "ExtCall reverted" s1 = (INL (),s1)` by
-        simp[vyperStateTheory.check_def, vyperStateTheory.type_check_def,
-             vyperStateTheory.assert_def, vyperStateTheory.return_def] >>
-      `update_accounts (K accounts') s1 =
-       (INL (),s1 with accounts := accounts')` by
-        simp[vyperStateTheory.update_accounts_def,
-             vyperStateTheory.return_def] >>
-      `update_transient (K tStorage') s1 =
-       (INL (),s1 with tStorage := tStorage')` by
-        simp[vyperStateTheory.update_transient_def,
-             vyperStateTheory.return_def] >>
-      PRED_ASSUM is_guarded_eval_expr_ih
-        (specialize_guard_then 12 MATCH_ACCEPT_TAC) *)] @
+      rpt conj_tac >> first_assum MATCH_ACCEPT_TAC] @
      map APPLY_CASE_HELPER_TAC eval_case_helpers @
      map APPLY_NORMALIZED_CASE_HELPER_TAC eval_case_helpers @
      [simp[Once vyperInterpreterTheory.evaluate_def,
@@ -3254,114 +3378,6 @@ val REST_ATOMIC_DISPATCH_TAC =
            vyperStateTheory.return_def, vyperStateTheory.raise_def,
            log_extends_refl]]) >>
   simp[]
-
-(* Compositional proof control for the actual activated call clause. *)
-Definition log_monad_def:
-  log_monad f <=> !s r t. f s = (r,t) ==> log_extends s t
-End
-
-Theorem log_monad_bind_guarded[local]:
-  log_monad f /\
-  (!s v t. f s = (INL v,t) ==> log_monad (g v)) ==>
-  log_monad (vyperState$bind f g)
-Proof
-  simp[log_monad_def, vyperStateTheory.bind_def] >> rpt strip_tac >>
-  Cases_on `f s` >> Cases_on `q` >> gvs[] >>
-  first_x_assum drule_all >> strip_tac >>
-  first_x_assum drule_all >> strip_tac >>
-  drule_all log_extends_trans >> simp[]
-QED
-
-Theorem log_monad_primitives[local]:
-  log_monad (return v) /\ log_monad (\s. return (g s) s) /\
-  log_monad (type_check b msg) /\ log_monad (check b msg) /\
-  log_monad (lift_option opt msg) /\ log_monad (lift_option_type opt msg) /\
-  log_monad (lift_sum_runtime rs) /\ log_monad get_accounts /\
-  log_monad get_transient_storage /\ log_monad (update_accounts upd) /\
-  log_monad (update_transient upd_t) /\ log_monad (append_logs logs) /\
-  log_monad (update_pending_deletions deletions_upd) /\
-  log_monad (adopt_call_outcome rq co)
-Proof
-  simp[log_monad_def, vyperStateTheory.return_def, vyperStateTheory.raise_def,
-       vyperStateTheory.check_def, vyperStateTheory.type_check_def,
-       vyperStateTheory.assert_def, vyperStateTheory.lift_option_def,
-       vyperStateTheory.lift_option_type_def, vyperStateTheory.lift_sum_runtime_def,
-       vyperStateTheory.get_accounts_def, vyperStateTheory.get_transient_storage_def,
-       vyperStateTheory.update_accounts_def, vyperStateTheory.update_transient_def,
-       append_logs_def, update_pending_deletions_def, adopt_call_outcome_equation] >>
-  rpt strip_tac >> rpt CASE_TAC >>
-  gvs[option_CASE_rator, sum_CASE_rator, AllCaseEqs(),
-      vyperStateTheory.return_def, vyperStateTheory.raise_def,
-      log_extends_def, rich_listTheory.IS_PREFIX_APPEND,
-      rich_listTheory.IS_PREFIX_REFL]
-QED
-
-Theorem log_monad_take[local]:
-  log_monad (take_call_outcome target calldata value_opt)
-Proof
-  simp[log_monad_def] >> rpt strip_tac >>
-  drule take_call_outcome_frame >>
-  simp[evaluation_state_component_equality, log_extends_def,
-       rich_listTheory.IS_PREFIX_REFL]
-QED
-
-(* Index primitive leaves once; never traverse their continuations or the
-   large guarded IHs just to recognise a primitive computation. *)
-val EXTCALL_LOG_MONAD_LEAF_TAC =
-  let
-    val structural = Net.insert
-      (concl log_monad_bind_guarded |> dest_imp |> snd,
-       MATCH_MP_TAC log_monad_bind_guarded >> conj_tac) Net.empty
-    val leaves = List.foldl (fn (th,net) =>
-      Net.insert (concl th, MATCH_ACCEPT_TAC th) net) structural
-      (log_monad_take :: CONJUNCTS log_monad_primitives)
-  in
-    fn (asl,w) => FIRST (Net.match w leaves) (asl,w)
-  end;
-
-(* Reduce exposed applications only, not continuation arguments. *)
-val extcall_log_head_conv =
-  let
-    val reduce = FIRST_CONV
-      [BETA_CONV, REWR_CONV pair_case_thm, REWR_CONV UNCURRY]
-    fun head tm = (reduce ORELSEC RATOR_CONV head) tm
-  in head end;
-
-(* Preserve CASE_TAC branch order without its broad datatype rewrite set.
-   Only fresh branch facts, never guarded IHs, become rewrite rules. *)
-fun EXTCALL_LOG_MONAD_CASE_TAC (g as (old,_)) =
-  let
-    fun simplify (asl,w) =
-      let
-        val fresh = List.filter (fn a => not (is_forall a) andalso
-          not (List.exists (aconv a) old)) asl
-        val rules = map ASSUME fresh
-      in
-        simp_tac bool_ss
-          (optionTheory.option_CLAUSES :: pair_case_thm :: UNCURRY :: rules) >>
-        RULE_ASSUM_TAC (fn th =>
-          if is_forall (concl th) then th else REWRITE_RULE rules th) >>
-        MAP_EVERY assume_tac rules
-      end (asl,w)
-  in
-    (BasicProvers.PURE_CASE_TAC >> simplify) g
-  end;
-
-val EXTCALL_LOG_MONAD_STEP_TAC =
-  FIRST [
-    first_assum ACCEPT_TAC,
-    EXTCALL_LOG_MONAD_LEAF_TAC,
-    CONV_TAC (HO_REWR_CONV FORALL_PROD),
-    CONV_TAC (RAND_CONV extcall_log_head_conv),
-    gen_tac, strip_tac, conj_tac,
-    CONV_TAC (RAND_CONV (REWR_CONV vyperStateTheory.ignore_bind_def)),
-    CONV_TAC (RAND_CONV ETA_CONV),
-    CHANGED_TAC (fn (asl,w) =>
-      simp_tac bool_ss (pair_case_thm :: UNCURRY ::
-        List.map ASSUME (List.filter is_eq asl)) (asl,w)),
-    EXTCALL_LOG_MONAD_CASE_TAC];
-
-val EXTCALL_LOG_MONAD_TAC = rpt EXTCALL_LOG_MONAD_STEP_TAC;
 
 (* Discharge guards in semantic order using matching facts, without
    context-wide simplification or drule_all's search through both oracle IHs. *)
@@ -3427,29 +3443,6 @@ Proof
       vyperInterpreterTheory.evaluate_ind)) >>
   impl_tac >-
     (rpt conj_tac >> TRY (simp[] >> NO_TAC) >~
-       [`_ ==> !st res st'.
-           eval_expr _ (Call _ (ExtCall _ _ _) _ _) st = (res,st') ==>
-           log_extends st st'`] >-
-         (rpt gen_tac >> strip_tac >>
-          simp[GSYM log_monad_def, Once vyperInterpreterTheory.evaluate_def] >>
-          RULE_ASSUM_TAC (REWRITE_RULE [GSYM log_monad_def]) >>
-          NTAC 4 (TRY EXTCALL_LOG_MONAD_STEP_TAC) >>
-          NTAC 4 (TRY EXTCALL_LOG_MONAD_STEP_TAC) >>
-          NTAC 4 (TRY EXTCALL_LOG_MONAD_STEP_TAC) >>
-          NTAC 4 (TRY EXTCALL_LOG_MONAD_STEP_TAC) >>
-          NTAC 4 (TRY EXTCALL_LOG_MONAD_STEP_TAC) >>
-          NTAC 4 (TRY EXTCALL_LOG_MONAD_STEP_TAC) >>
-          NTAC 4 (TRY EXTCALL_LOG_MONAD_STEP_TAC) >>
-          NTAC 4 (TRY EXTCALL_LOG_MONAD_STEP_TAC) >>
-          NTAC 4 (TRY EXTCALL_LOG_MONAD_STEP_TAC) >>
-          NTAC 4 (TRY EXTCALL_LOG_MONAD_STEP_TAC) >>
-          NTAC 4 (TRY EXTCALL_LOG_MONAD_STEP_TAC) >>
-          NTAC 4 (TRY EXTCALL_LOG_MONAD_STEP_TAC) >>
-          NTAC 4 (TRY EXTCALL_LOG_MONAD_STEP_TAC) >>
-          NTAC 4 (TRY EXTCALL_LOG_MONAD_STEP_TAC) >>
-          NTAC 4 (TRY EXTCALL_LOG_MONAD_STEP_TAC) >>
-          NTAC 4 (TRY EXTCALL_LOG_MONAD_STEP_TAC) >>
-          EXTCALL_LOG_MONAD_TAC >> EXTCALL_LOG_IH_TAC) >~
        [`_ ==> !st res st'.
            eval_expr _ (Call _ (IntCall _) _ _) st = (res,st') ==>
            log_extends st st'`] >-
@@ -3622,6 +3615,8 @@ Proof
   metis_tac[eval_mutual_log_extends]
 QED
 
+(* Pre-factoring issue-567 corollary retained; the final constructor has
+   opts and no evaluator-owned default-return continuation.
 Theorem case_expr_ext_call_logs[local]:
   (!s0 r s1. eval_exprs cx es s0 = (r,s1) ==> log_extends s0 s1) /\
   (!s0 vs s1 tenv target_addr accounts' tStorage' emitted_logs deletions e.
@@ -3638,6 +3633,8 @@ Theorem case_expr_ext_call_logs[local]:
 Proof
   rpt strip_tac >> drule eval_expr_log_extends >> simp[]
 QED
+
+*)
 
 Theorem eval_exprs_log_extends:
   !cx es st res st'.

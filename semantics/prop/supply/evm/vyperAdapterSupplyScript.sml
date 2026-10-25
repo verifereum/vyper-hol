@@ -14,7 +14,7 @@ Theorem ext_call_initial_supply:
   accounts_supply_bounded accounts /\
   ext_call_value_transfer_ok caller callee value_opt accounts ==>
   supply_state (2 ** 256)
-    (make_ext_call_state caller callee code calldata value_opt accounts ts txp)
+    (make_ext_call_state caller callee code calldata value_opt gas accounts ts txp)
 Proof
   rw[supply_state_def] >> FIRST [
     simp[make_ext_call_state_def] >> NO_TAC,
@@ -112,7 +112,7 @@ QED
 
 Theorem run_ext_call_supply:
   accounts_supply_bounded accounts /\
-  run_ext_call caller callee calldata value_opt accounts ts txp =
+  run_ext_call caller callee calldata value_opt gas accounts ts txp =
     SOME (success,data,accounts',ts',logs, deletions) ==>
   accounts_supply_bounded accounts'
 Proof
@@ -120,7 +120,7 @@ Proof
   Cases_on `ext_call_value_transfer_ok caller callee value_opt accounts`
   >- (`supply_state (2 ** 256)
          (make_ext_call_state caller callee (lookup_account callee accounts).code
-           calldata value_opt accounts ts txp)` by
+           calldata value_opt gas accounts ts txp)` by
         (irule ext_call_initial_supply >> simp[]) >>
       gvs[run_ext_call_def, AllCaseEqs()] >> FIRST [
         drule_all (SRULE [] run_call_extract_supply) >> simp[],

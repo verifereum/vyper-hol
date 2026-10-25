@@ -327,11 +327,15 @@ Proof
               ASSIGN_OUTCOMES_FRAME_STEP])
 QED
 
+(* Pre-factoring concrete-only send frame retained. The final send API
+   can consume oracle outcomes; outcomes_suffix_send is its valid contract.
 Theorem outcomes_frame_send[simp]:
   outcomes_frame (eval_send cx target amount)
 Proof
   simp[eval_send_def] >> irule outcomes_frame_bind >> simp[]
 QED
+
+*)
 
 (* TASK032: the independent vyperExtCallConsumptionTest witness disproves the
    unconditional evaluator frame. Original statement and proof retained.
@@ -543,27 +547,53 @@ val outcomes_suffix_frame_simps =
        outcomes_frame_return, outcomes_frame_raise, outcomes_frame_create,
        outcomes_frame_check_create_blueprint,
        outcomes_frame_assign_result, outcomes_frame_resolve_array,
-       outcomes_frame_adopt, outcomes_frame_raw_call, outcomes_frame_send]));
+       outcomes_frame_adopt, outcomes_frame_raw_call]));
 
 val outcomes_suffix_fact_index =
   List.map (fn th => (outcomes_fact_key (concl (SPEC_ALL th)),th))
     outcomes_suffix_frame_simps;
 
-val outcomes_suffix_net = outcomes_frame_net
-  (outcomes_suffix_read :: outcomes_suffix_take :: outcomes_suffix_frame_simps)
+(* Share issue-567's structural rules with main's extensible fact net. *)
+val outcomes_suffix_structural_rules =
   [outcomes_suffix_bind_guarded, outcomes_suffix_finally,
    outcomes_suffix_finally_unless_halt, outcomes_suffix_try];
 
-val OUTCOMES_SUFFIX_STEP = FIRST [
-  CONV_TAC (HO_REWR_CONV FORALL_PROD), gen_tac,
-  first_assum ACCEPT_TAC,
-  (fn g as (_,w) => FIRST (Net.match w outcomes_suffix_net) g),
-  CONV_TAC (RAND_CONV (CHANGED_CONV outcomes_head_conv)),
-  CONV_TAC (RAND_CONV (REWR_CONV ignore_bind_def)),
-  CONV_TAC (RAND_CONV (REWR_CONV switch_BoolV_def)),
-  strip_tac, conj_tac, OUTCOMES_CASE_TAC];
+fun outcomes_suffix_step facts =
+  let
+    val net = outcomes_frame_net facts
+      outcomes_suffix_structural_rules
+  in
+    FIRST [
+      CONV_TAC (HO_REWR_CONV FORALL_PROD), gen_tac,
+      first_assum ACCEPT_TAC,
+      (fn g as (_,w) => FIRST (Net.match w net) g),
+      CONV_TAC (RAND_CONV (CHANGED_CONV outcomes_head_conv)),
+      CONV_TAC (RAND_CONV (REWR_CONV ignore_bind_def)),
+      CONV_TAC (RAND_CONV (REWR_CONV switch_BoolV_def)),
+      strip_tac, conj_tac, OUTCOMES_CASE_TAC]
+  end;
 
-val OUTCOMES_SUFFIX_TAC = rpt OUTCOMES_SUFFIX_STEP;
+val outcomes_suffix_base_facts =
+  outcomes_suffix_read :: outcomes_suffix_take :: outcomes_suffix_frame_simps;
+
+Theorem outcomes_suffix_ext_call:
+  outcomes_suffix (eval_ext_call cx static skip_check sig opts vs)
+Proof
+  PairCases_on `sig` >> Cases_on `vs` >>
+  simp_tac bool_ss [eval_ext_call_def, LET_THM] >>
+  rpt (outcomes_suffix_step outcomes_suffix_base_facts)
+QED
+
+Theorem outcomes_suffix_send:
+  outcomes_suffix (eval_send cx has_gas vs)
+Proof
+  Cases_on `vs` >> TRY (Cases_on `t`) >>
+  simp_tac bool_ss [eval_send_def, LET_THM] >>
+  rpt (outcomes_suffix_step outcomes_suffix_base_facts)
+QED
+
+val OUTCOMES_SUFFIX_TAC = rpt (outcomes_suffix_step
+  (outcomes_suffix_ext_call :: outcomes_suffix_send :: outcomes_suffix_base_facts));
 
 (* Give each evaluator equation its own proof fragment and timeout budget. *)
 fun OUTCOMES_SUSPEND_CASE (g as (_,w)) =
@@ -633,7 +663,7 @@ Proof
 QED
 
 Resume eval_outcomes_suffix_mutual[ExtCall]:
-  simp[Once evaluate_def] >> OUTCOMES_SUFFIX_TAC >> OUTCOMES_FINISH_TAC
+  simp[Once evaluate_def] >> OUTCOMES_SUFFIX_TAC >> OUTCOMES_FRAME_TAC >> OUTCOMES_FINISH_TAC
 QED
 
 Resume eval_outcomes_suffix_mutual[eval_stmt_Pass]:

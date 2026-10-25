@@ -1456,39 +1456,25 @@ Proof
   gvs[return_def, raise_def]
 QED
 
-(* ----- Case 41: eval_expr (Call Send es drv) ----- *)
+(* ----- Case 41: eval_expr (Call (Send has_gas) es drv) ----- *)
 Theorem case_Send_imm_dom[local]:
-  ∀cx es drv.
-    (∀s'' x t. type_check (LENGTH es = 2) "Send args" s'' = (INL x,t) ⇒
+  ∀cx has_gas es drv.
+    (∀s'' x t. type_check (LENGTH es = if has_gas then 3 else 2) "Send args" s'' = (INL x,t) ⇒
        ∀st res st'. eval_exprs cx es st = (res,st') ⇒
          preserves_immutables_dom cx st st') ⇒
     ∀st res st'.
-      eval_expr cx (Call _ Send es drv) st = (res, st') ⇒
+      eval_expr cx (Call _ (Send has_gas) es drv) st = (res, st') ⇒
       preserves_immutables_dom cx st st'
 Proof
-  rpt strip_tac >>
-  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-  simp[Once evaluate_def] >>
-  PURE_REWRITE_TAC [ignore_bind_def] >>
-  simp[bind_def, AllCaseEqs(), return_def, raise_def, check_def, type_check_def, assert_def,
-       lift_option_def, lift_option_type_def] >>
-  rpt strip_tac >> gvs[preserves_immutables_dom_refl] >>
-  (* Simplify conditional IH *)
-  RULE_ASSUM_TAC (REWRITE_RULE [check_def, type_check_def, assert_def, return_def]) >>
-  gvs[] >>
-  (* Original concrete-only continuation retained:
-  (* Resolve case expressions on dest_AddressV/dest_NumV *)
-  TRY BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def] >>
-  TRY BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def] >>
-  TRY BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def] >>
-  TRY BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def] >>
-  imp_res_tac concrete_send_step_locals >> gvs[] >>
-  first_x_assum drule >>
-  metis_tac[preserves_immutables_dom_trans, preserves_immutables_dom_eq]
-  *)
-  gvs[GSYM lift_option_type_def] >>
-  imp_res_tac lift_option_type_state >> gvs[] >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >>
+  Cases_on `LENGTH es = if has_gas then 3 else 2` >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
+       assert_def, return_def, raise_def, preserves_immutables_dom_refl] >>
+  first_x_assum (qspecl_then [`st`, `()`, `st`] mp_tac) >>
+  simp[type_check_def, assert_def, return_def] >> strip_tac >>
+  rpt CASE_TAC >> rpt strip_tac >> gvs[] >>
   first_x_assum drule >> strip_tac >> gvs[] >>
+(* Pre-factoring issue-567 proof retained; eval_send now owns both paths.
   qmatch_asmsub_rename_tac `case tailst.outcomes of NONE => _ | SOME _ => _` >>
   Cases_on `tailst.outcomes` >> gvs[]
   >- (gvs[bind_def, return_def, AllCaseEqs()] >>
@@ -1496,6 +1482,10 @@ Proof
       metis_tac[preserves_immutables_dom_trans, preserves_immutables_dom_eq]) >>
   imp_res_tac (Send_outcome_preserves_locals |> SRULE [check_def, ignore_bind_def]) >>
   gvs[] >> metis_tac[preserves_immutables_dom_trans, preserves_immutables_dom_eq]
+*)
+  drule eval_send_preserves_non_accounts >> strip_tac >>
+  irule preserves_immutables_dom_trans >> first_assum (irule_at Any) >>
+  irule preserves_immutables_dom_eq >> gvs[]
 QED
 
 (* ----- Case 45: eval_exprs (e::es) ----- *)
@@ -1645,7 +1635,7 @@ Proof
     (first_x_assum (qspec_then `st` mp_tac) >>
      simp[check_def, type_check_def, assert_def, return_def]) >>
   gvs[bind_def, AllCaseEqs(), return_def, raise_def, get_accounts_def] >>
-  Cases_on `evaluate_builtin cx s'³'.accounts ty bt vs` >>
+  Cases_on `evaluate_builtin cx s'³'.accounts ty bt (MAP expr_type es) vs` >>
   gvs[return_def, raise_def]
 QED
 
@@ -1737,12 +1727,12 @@ QED
 (* Helper: full ExtCall pipeline preserves immutables dom *)
 Theorem extcall_pipeline_preserves_imm_dom[local]:
   ∀cx drv func_name arg_types ret_type skip_check target_addr value_opt arg_vals
-     caller txParams s res s'.
+     caller gas txParams s res s'.
     (∀ts calldata accounts tStorage success returnData accounts' tStorage' emitted_logs deletions.
        get_self_code cx = SOME ts ⇒
        build_ext_calldata (type_env ts) func_name arg_types arg_vals =
          SOME calldata ⇒
-       run_ext_call caller target_addr calldata value_opt accounts tStorage
+       run_ext_call caller target_addr calldata value_opt gas accounts tStorage
          txParams = SOME (success, returnData, accounts', tStorage', emitted_logs, deletions) ⇒
        success ∧ returnData = [] ∧ IS_SOME drv ∧
        (skip_check ∨ ext_call_has_code target_addr accounts') ⇒
@@ -1758,7 +1748,7 @@ Theorem extcall_pipeline_preserves_imm_dom[local]:
       tStorage <- get_transient_storage;
       result <-
         lift_option
-          (run_ext_call caller target_addr calldata value_opt accounts
+          (run_ext_call caller target_addr calldata value_opt gas accounts
              tStorage txParams) "ExtCall run failed";
       (λ(success,returnData,accounts',tStorage',emitted_logs, deletions).
            do
@@ -1793,7 +1783,7 @@ Proof
   \\ simp[return_def, raise_def, preserves_immutables_dom_refl]
   \\ Cases_on `build_ext_calldata (type_env x) func_name arg_types arg_vals`
   \\ simp[return_def, raise_def, preserves_immutables_dom_refl]
-  \\ Cases_on `run_ext_call caller target_addr x' value_opt s.accounts
+  \\ Cases_on `run_ext_call caller target_addr x' value_opt gas s.accounts
                  s.tStorage txParams`
   \\ simp[return_def, raise_def, preserves_immutables_dom_refl]
   \\ PairCases_on `x''` \\ simp[]
@@ -3396,7 +3386,13 @@ Proof
   >- (drule_all case_Pop_imm_dom >> simp[])
   >- (drule_all case_TypeBuiltin_imm_dom >> simp[])
   >- (drule_all case_Send_imm_dom >> simp[])
-  >- suspend "ExtCall"
+  >- (qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def, AllCaseEqs()] >>
+      rpt strip_tac >> gvs[] >> first_x_assum drule >> strip_tac >>
+      TRY (gvs[] >> NO_TAC) >>
+      drule eval_ext_call_preserves_non_accounts >> strip_tac >>
+      irule preserves_immutables_dom_trans >> first_assum (irule_at Any) >>
+      irule preserves_immutables_dom_eq >> gvs[])
   >- (drule_all case_IntCall_imm_dom_from_mutual_ih >> simp[])
   (* ===== Chain interaction builtins (unguarded eval_exprs IH) ===== *)
   (* All 5 cases: eval_exprs first, then pure/state ops that preserve immutables.
@@ -3675,6 +3671,8 @@ val IMM_DOM_FRAME_STEP_TAC = FIRST [
       List.map ASSUME (List.filter is_eq asl)) (asl,w)),
   CASE_TAC];
 
+(* Superseded by the eval_ext_call_preserves_non_accounts case above.
+   Preserve the old guarded evaluator proof without resuming a closed case.
 Resume immutables_dom_mutual[ExtCall]:
   qpat_assum `eval_expr _ _ _ = _` (fn th =>
     let val result = #1 (pairSyntax.dest_pair (rhs (concl th))) in
@@ -3744,7 +3742,7 @@ Resume immutables_dom_mutual[return_path_4]:
 QED
 
 Finalise immutables_dom_mutual
-
+*)
 (* ===== Main theorems ===== *)
 
 Theorem eval_expr_preserves_immutables_addr_dom:

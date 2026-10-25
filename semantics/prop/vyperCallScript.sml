@@ -24,7 +24,7 @@ Definition extcall_call_def:
     case build_ext_calldata (get_tenv cx) func_name arg_types arg_vals of
     | NONE => NONE
     | SOME calldata =>
-    case run_ext_call cx.txn.target target_addr calldata value_opt
+    case run_ext_call cx.txn.target target_addr calldata value_opt default_evm_gas_limit
                       accounts tStorage (vyper_to_tx_params cx.txn) of
     | NONE => NONE
     | SOME (success, returnData, accounts', tStorage', emitted_logs, deletions) =>

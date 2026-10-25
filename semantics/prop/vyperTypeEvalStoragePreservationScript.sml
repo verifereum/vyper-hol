@@ -13,7 +13,7 @@ Ancestors
   vyperCallOutcome[ignore_grammar]
   vyperSourceSupplyDefs vyperSourceSupplyFields vyperEvalSupply
 Libs
-  wordsLib markerLib vyperSourceSupplyLib
+  wordsLib markerLib BasicProvers vyperSourceSupplyLib
 
 (* Storage proofs use the same explicit physical domain as evaluator typing.
    Forward it through actual evaluation equations without changing the
@@ -1959,16 +1959,6 @@ Proof
   qexists_tac `st with <|accounts := call_accounts; tStorage := call_transient|>` >> simp[]
 QED
 
-Theorem eval_send_preserves_contract_storage:
-  protected_storage_calls_preserve cx /\ contract_storage_well_formed cx st /\
-  eval_send cx target amount st = (res,st') ==>
-  contract_storage_well_formed cx st'
-Proof
-  rw[eval_send_def, bind_def, ignore_bind_def, check_def, assert_def,
-     return_def, raise_def] >> gvs[AllCaseEqs()] >>
-  drule_all eval_raw_call_preserves_contract_storage >> simp[]
-QED
-
 Resume eval_all_storage_preservation_mutual[Expr_Call_RawCallTarget]:
   rpt gen_tac >> strip_tac >>
   conj_tac
@@ -2742,7 +2732,7 @@ Resume eval_all_storage_preservation_mutual[Expr_Builtin]:
   strip_tac >> first_x_assum drule_all >> strip_tac >>
   Cases_on `args_res` >> gvs[bind_def, return_def, raise_def,
     get_accounts_def, lift_sum_def]
-  >- (Cases_on `evaluate_builtin cx args_st.accounts ty bt x` >>
+  >- (Cases_on `evaluate_builtin cx args_st.accounts ty bt (MAP expr_type es) x` >>
       gvs[return_def, raise_def] >> rpt strip_tac >> gvs[]) >>
   rpt strip_tac >> gvs[]
 QED
@@ -2777,28 +2767,75 @@ Proof
   metis_tac[transfer_value_storage_frame]
 QED
 
+Theorem adopt_call_outcome_INR_storage[local]:
+  (adopt_call_outcome rq co s = (INR e,s')) <=> F
+Proof
+  rw[vyperCallOutcomeTheory.adopt_call_outcome_def] >> pairarg_tac >>
+  gvs[return_def]
+QED
+
+Theorem run_ext_call_storage_frame[local]:
+  protected_storage_calls_preserve cx /\ contract_storage_well_formed cx st /\
+  run_ext_call cx.txn.target callee calldata value_opt gas st.accounts
+    st.tStorage txp = SOME result /\
+  st'.accounts = FST (SND (SND result)) /\
+  st'.tStorage = FST (SND (SND (SND result))) ==>
+  contract_storage_well_formed cx st'
+Proof
+  PairCases_on `result` >> rpt strip_tac >> gvs[] >>
+  drule_all protected_storage_calls_preserve_run_ext_call >> strip_tac >>
+  irule contract_storage_well_formed_accounts_transient_frame >>
+  first_x_assum (irule_at Any) >> gvs[]
+QED
+
+Theorem eval_send_preserves_contract_storage:
+  contract_storage_well_formed cx st /\ oracle_storage_ok cx st /\
+  protected_storage_calls_preserve cx /\
+  eval_send cx has_gas vs st = (res,st') ==>
+  contract_storage_well_formed cx st'
+Proof
+  Cases_on `vs` >- (simp[eval_send_def, raise_def] >> rw[] >> gvs[]) >>
+  Cases_on `t` >- (simp[eval_send_def, raise_def] >> rw[] >> gvs[]) >>
+  simp[eval_send_def, bind_def, ignore_bind_def, type_check_def, assert_def,
+       check_def, lift_option_type_def, lift_option_def, get_accounts_def,
+       get_transient_storage_def, update_accounts_def, update_transient_def,
+       append_logs_def, update_pending_deletions_def, return_def, raise_def,
+       COND_RATOR, vfmTypesTheory.option_CASE_rator,
+       vfmTypesTheory.prod_CASE_rator, vfmTypesTheory.sum_CASE_rator] >>
+  strip_tac >> gvs[AllCaseEqs()] >>
+  gvs[pairTheory.UNCURRY_RATOR, pairTheory.UNCURRY_EQ, combinTheory.C_THM,
+      combinTheory.o_THM, AllCaseEqs(), COND_RATOR, bind_def, return_def,
+      raise_def, assert_def, adopt_call_outcome_INR_storage] >>~-
+  ([`run_ext_call _ _ _ _ _ _ _ _ = SOME _`],
+   irule run_ext_call_storage_frame >> simp[] >> metis_tac[]) >>
+  metis_tac[take_call_outcome_storage_suffix,
+            take_adopt_call_outcome_storage_suffix]
+QED
+
 Resume eval_all_storage_preservation_mutual[Expr_Call_Send]:
   rpt gen_tac >> strip_tac >>
   conj_tac
   >- (
     strip_tac >>
     `call_evaluation_safe cx (int_calls_exprs es)` by
-      (qpat_x_assum `call_evaluation_safe cx (int_calls_expr (Call _ Send es _))`
+      (qpat_x_assum `call_evaluation_safe cx (int_calls_expr (Call _ (Send _) es _))`
          mp_tac >> simp[int_calls_expr_def]) >>
-    qpat_x_assum `well_typed_expr env (Call _ Send _ _)` mp_tac >>
+    qpat_x_assum `well_typed_expr env (Call _ (Send _) _ _)` mp_tac >>
     rewrite_tac[Once well_typed_expr_def] >> strip_tac >>
+    `LENGTH es = if has_gas then 3 else 2` by
+      (qpat_x_assum `MAP expr_type es = _` (mp_tac o Q.AP_TERM `LENGTH`) >>
+       rw[]) >>
+    qpat_x_assum `!s'' x t. type_check _ _ s'' = (INL x,t) ==> _`
+      (qspecl_then [`st`, `()`, `st`] mp_tac) >>
+    (impl_tac >- simp[type_check_def, assert_def]) >> strip_tac >>
     qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-    simp_tac(srw_ss())[Once evaluate_def, bind_def, ignore_bind_def,
-                         type_check_def, assert_def, return_def, raise_def,
-                         lift_option_type_def] >>
+    simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
+         assert_def, return_def] >>
     Cases_on `eval_exprs cx es st` >>
     rename1 `eval_exprs cx es st = (args_res,args_st)` >>
-    strip_tac >>
-    qpat_x_assum `!s'' x t. type_check (LENGTH es = 2) "Send args" s'' = (INL x,t) ==> _`
-      (qspecl_then [`st`, `()`, `st`] mp_tac) >>
-    (impl_tac >- simp[type_check_def, assert_def]) >>
-    strip_tac >> first_x_assum drule_all >> strip_tac >>
+    first_x_assum drule_all >> strip_tac >>
     Cases_on `args_res` >> gvs[]
+(* Historical Send tail before the evaluated-operands/gas API.
     >- (
       `runtime_consistent env cx args_st` by
         metis_tac[eval_exprs_preserves_runtime_consistent,
@@ -2813,9 +2850,11 @@ Resume eval_all_storage_preservation_mutual[Expr_Call_Send]:
       >- (drule_all eval_send_preserves_contract_storage >> simp[]) >>
       drule_all (Send_outcome_storage_suffix |>
         SRULE [bind_def, ignore_bind_def, return_def]) >> simp[]) >>
+*)
+    >- (ORACLE_STORAGE_TAC >> metis_tac[eval_send_preserves_contract_storage]) >>
     rpt strip_tac >> gvs[]) >>
   rpt strip_tac >>
-  qpat_x_assum `type_place_expr env (Call _ Send _ _) = SOME vt` mp_tac >>
+  qpat_x_assum `type_place_expr env (Call _ (Send _) _ _) = SOME vt` mp_tac >>
   simp[Once well_typed_expr_def]
 QED
 
@@ -3553,9 +3592,72 @@ Proof
        env_immutables_consistent_def, state_well_typed_def]
 QED
 
+(* Close completed paths before splitting another guard. Incomplete paths
+   roll back, keeping the request/adoption equations available. *)
+val EXTCALL_STORAGE_CLOSE = FIRST [
+  (irule run_ext_call_storage_frame >>
+   qpat_assum `run_ext_call _ _ _ _ _ _ _ _ = SOME _` (irule_at Any) >>
+   simp[] >> NO_TAC),
+  (drule_all take_adopt_call_outcome_storage_suffix >> strip_tac >>
+   simp[] >> NO_TAC),
+  (drule_all take_call_outcome_storage_suffix >> strip_tac >>
+   simp[] >> NO_TAC)];
+
+(* Split one semantic guard, then normalize newly exposed monadic operations.
+   Apply separately so each step keeps the standard tactic timeout. *)
+val EXTCALL_STORAGE_STEP = TRY EXTCALL_STORAGE_CLOSE >> TRY FULL_CASE_TAC >>
+  gvs[bind_def, ignore_bind_def, type_check_def, assert_def, check_def,
+      lift_option_type_def, lift_option_def, lift_sum_runtime_def,
+      get_accounts_def, get_transient_storage_def, update_accounts_def,
+      update_transient_def, append_logs_def, update_pending_deletions_def,
+      return_def, raise_def, COND_RATOR,
+      vfmTypesTheory.option_CASE_rator, vfmTypesTheory.prod_CASE_rator,
+      vfmTypesTheory.sum_CASE_rator, pairTheory.UNCURRY_RATOR,
+      pairTheory.UNCURRY_EQ, combinTheory.C_THM, combinTheory.o_THM,
+      adopt_call_outcome_INR_storage];
+
+Theorem eval_ext_call_storage_preserved[local]:
+  contract_storage_well_formed cx st /\ oracle_storage_ok cx st /\
+  protected_storage_calls_preserve cx /\
+  eval_ext_call cx static skip_check sig opts vs st = (res,st') ==>
+  contract_storage_well_formed cx st'
+Proof
+  PairCases_on `sig` >>
+  Cases_on `vs` >- (simp[eval_ext_call_def, raise_def] >> rw[] >> gvs[]) >>
+  Cases_on `static` >> Cases_on `st.outcomes` >>
+  asm_simp_tac (srw_ss())
+      [eval_ext_call_def, bind_def, ignore_bind_def, type_check_def,
+       assert_def, check_def, lift_option_type_def, lift_option_def,
+       lift_sum_runtime_def, get_accounts_def, get_transient_storage_def,
+       update_accounts_def, update_transient_def, append_logs_def,
+       update_pending_deletions_def, return_def, raise_def,
+       COND_RATOR, vfmTypesTheory.option_CASE_rator,
+       vfmTypesTheory.prod_CASE_rator, vfmTypesTheory.sum_CASE_rator] >>
+  strip_tac >>
+  EXTCALL_STORAGE_STEP >> EXTCALL_STORAGE_STEP >>
+  EXTCALL_STORAGE_STEP >> EXTCALL_STORAGE_STEP >>
+  EXTCALL_STORAGE_STEP >> EXTCALL_STORAGE_STEP >>
+  EXTCALL_STORAGE_STEP >> EXTCALL_STORAGE_STEP >>
+  EXTCALL_STORAGE_STEP >> EXTCALL_STORAGE_STEP >>
+  EXTCALL_STORAGE_STEP >> EXTCALL_STORAGE_STEP >>
+  EXTCALL_STORAGE_STEP >> EXTCALL_STORAGE_STEP >>
+  EXTCALL_STORAGE_STEP >> EXTCALL_STORAGE_STEP >>
+  EXTCALL_STORAGE_STEP >> EXTCALL_STORAGE_STEP >>
+  EXTCALL_STORAGE_STEP >> EXTCALL_STORAGE_STEP >>~-
+  ([`st.outcomes = NONE`, `run_ext_call _ _ _ _ _ _ _ _ = SOME _`],
+   irule run_ext_call_storage_frame >>
+   qpat_assum `run_ext_call _ _ _ _ _ _ _ _ = SOME _` (irule_at Any) >>
+   simp[]) >>
+  TRY (drule_all take_adopt_call_outcome_storage_suffix >> strip_tac) >>
+  TRY (drule_all take_call_outcome_storage_suffix >> strip_tac) >>
+  simp[]
+QED
+
 Resume eval_all_storage_preservation_mutual[Expr_Call_ExtCall]:
   rpt gen_tac >> strip_tac >>
   conj_tac
+(* Historical inline ExtCall proof (including issue-567's deletion frame).
+   The helper above now transports that frame through eval_ext_call.
   >- (strip_tac >>
       `call_evaluation_safe cx (int_calls_exprs es)` by (
         qpat_assum `call_evaluation_safe cx
@@ -3995,11 +4097,31 @@ Resume eval_all_storage_preservation_mutual[Expr_Call_ExtCall]:
       rpt strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
       qpat_assum `contract_storage_well_formed cx args_st` ACCEPT_TAC) >>
   (* ExtCall is never a place expression *)
+*)
+  >- (
+    strip_tac >>
+    `call_evaluation_safe cx (int_calls_exprs es)` by (
+      qpat_x_assum `call_evaluation_safe cx
+          (int_calls_expr (Call _ (ExtCall _ _ _ _) es _))`
+        mp_tac >> pure_rewrite_tac[int_calls_expr_def] >> strip_tac >>
+      irule call_evaluation_safe_append_left >>
+      goal_assum (drule_at Any)) >>
+    `well_typed_exprs env es` by metis_tac[ext_call_args_typed] >>
+    qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+    simp[Once evaluate_def, bind_def] >>
+    Cases_on `eval_exprs cx es st` >>
+    rename1 `eval_exprs cx es st = (args_res,args_st)` >>
+    first_x_assum drule_all >> strip_tac >>
+    Cases_on `args_res` >> gvs[]
+    >- (ORACLE_STORAGE_TAC >> metis_tac[eval_ext_call_storage_preserved]) >>
+    rpt strip_tac >> gvs[]) >>
   rpt strip_tac >>
   qpat_x_assum `type_place_expr _ _ = SOME _` mp_tac >>
   simp_tac (srw_ss()) [Once well_typed_expr_def]
 QED
 
+(* Historical inline oracle IH specializations; the active ExtCall helper
+   handles both oracle and concrete execution under the new Interpreter API.
 fun EXTCALL_STORAGE_ORACLE_IH_TAC g =
   POP_ASSUM_LIST (fn ths => MAP_EVERY ASSUME_TAC (List.rev (List.map
     (fn th => if is_forall (concl th) andalso
@@ -4082,6 +4204,7 @@ Resume eval_all_storage_preservation_mutual[Expr_Call_ExtCall_nonstatic_oracle]:
   EXTCALL_STORAGE_ORACLE_RETURN_TAC
 QED
 
+*)
 Theorem lift_option_type_INL_eq_storage[local]:
   lift_option_type opt msg st = (INL v,st') <=> opt = SOME v /\ st' = st
 Proof

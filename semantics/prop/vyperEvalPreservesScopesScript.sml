@@ -1882,12 +1882,15 @@ Proof
     imp_res_tac type_check_state >>
     imp_res_tac lift_sum_state >> gvs[] >>
     first_x_assum drule_all >> rw[]) >>
-  (* Send *)
+  (* Send and ExtCall: operands, then eval_send / eval_ext_call, which
+     preserve scopes and immutables. *)
   conj_tac >- (
     rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
     gvs[Once evaluate_def, bind_apply, ignore_bind_apply, AllCaseEqs(),
-         return_def] >>
+        return_def] >>
     imp_res_tac type_check_state >>
+(* Pre-factoring issue-567 proof retained. The active helper-based proof
+   handles both oracle and concrete execution.
     imp_res_tac lift_option_type_state >>
     (* Original concrete tail:
     imp_res_tac concrete_send_step_locals >> gvs[] >>
@@ -2041,6 +2044,15 @@ Proof
     irule preserves_tv_trans >> qexists_tac `sc` >>
     gvs[preserves_tv_def]) >>
   *)
+*)
+    imp_res_tac eval_send_preserves_non_accounts >> gvs[] >>
+    qpat_x_assum `!s'' t. type_check _ _ _ = _ ==> _` drule >>
+    disch_then drule >> rw[] >> gvs[preserves_tv_def]) >>
+  conj_tac >- (
+    rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+    gvs[Once evaluate_def, bind_apply, AllCaseEqs(), return_def] >>
+    imp_res_tac eval_ext_call_preserves_non_accounts >> gvs[] >>
+    first_x_assum drule >> rw[] >> gvs[preserves_tv_def]) >>
   (* IntCall *)
   conj_tac >- (
     rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
@@ -2571,6 +2583,8 @@ val TV_FRAME_TAC =
       else PURE_REWRITE_RULE substitutions th) normalised
   in MAP_EVERY assume_tac (rev restored) end);
 
+(* Superseded by eval_ext_call_preserves_non_accounts in the main proof;
+   retain the old guarded evaluator proof, not an unresolved suspension.
 Resume eval_preserves_tv[ExtCall]:
   rpt gen_tac >> strip_tac >>
   simp[GSYM state_rel_frame_result, Once evaluate_def] >>
@@ -2609,6 +2623,8 @@ QED
 Resume eval_preserves_tv[return_path_4]:
   TV_FRAME_IH_TAC
 QED
+
+*)
 
 Finalise eval_preserves_tv
 

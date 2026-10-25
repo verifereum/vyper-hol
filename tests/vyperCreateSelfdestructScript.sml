@@ -263,7 +263,10 @@ Theorem blueprint_invalid_source_precedes_constructor_effects:
 Proof
   simp[vyperSmallStepTheory.eval_expr_eq_cont_cps,
        GSYM blueprint_test_run_def, listTheory.EVERY_DEF] >>
-  CONV_TAC cv_eval
+  (* Give each salted/rof combination its own timed conversion. *)
+  conj_tac >| [
+    conj_tac >| [CONV_TAC cv_eval, CONV_TAC cv_eval],
+    conj_tac >| [CONV_TAC cv_eval, CONV_TAC cv_eval]]
 QED
 
 (* An empty source is legal at U-1: the signed wrapped size is one.  During
@@ -326,5 +329,11 @@ Theorem blueprint_size_is_captured_before_constructor_changes_source:
 Proof
   simp[vyperSmallStepTheory.eval_expr_eq_cont_cps,
        GSYM blueprint_test_run_def] >>
-  CONV_TAC cv_eval
+  (* Constructor execution is more expensive here; time its observations
+     independently instead of evaluating the whole conjunction at once. *)
+  rpt conj_tac >| [
+    CONV_TAC cv_eval, CONV_TAC cv_eval, CONV_TAC cv_eval,
+    CONV_TAC cv_eval, CONV_TAC cv_eval, CONV_TAC cv_eval,
+    CONV_TAC cv_eval, CONV_TAC cv_eval, CONV_TAC cv_eval,
+    CONV_TAC cv_eval, CONV_TAC cv_eval]
 QED

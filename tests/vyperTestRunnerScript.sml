@@ -303,7 +303,7 @@ Definition raw_call_evm_def:
   raw_call_evm am ct =
     let value_opt = if ct.static then NONE else SOME ct.value in
     let txParams = vyper_to_tx_params (call_trace_txn ct) in
-    case run_ext_call ct.sender ct.target ct.callData value_opt
+    case run_ext_call ct.sender ct.target ct.callData value_opt default_evm_gas_limit
                       am.accounts am.tStorage txParams of
     | NONE => (INR (Error $ RuntimeError "raw_call_evm"), am)
     | SOME (success, returnData, accounts, tStorage, emitted_logs, deletions) =>

@@ -496,8 +496,11 @@ End
 
 val () = cv_auto_trans evaluate_calldata_slice_def;
 
+(* ty is the result type and tys the arguments' static types, as in
+   well_typed_builtin_app; the binary operators need the second operand's
+   type for membership in a sparse static array (see evaluate_binop). *)
 Definition evaluate_builtin_def:
-  evaluate_builtin cx acc ty bt vs =
+  evaluate_builtin cx acc ty bt tys vs =
     case bt of
     | CalldataLen =>
         (case vs of
@@ -600,7 +603,10 @@ Definition evaluate_builtin_def:
         (case vs of
          | [v1; v2] =>
              (let u = case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0 in
-              let tv = case evaluate_type (get_tenv cx) ty of SOME tv => tv | NONE => NoneTV in
+              let tv = case tys of
+                       | [_; t2] => (case evaluate_type (get_tenv cx) t2 of
+                                     | SOME tv => tv | NONE => NoneTV)
+                       | _ => NoneTV in
                 evaluate_binop u tv bop v1 v2)
          | _ => INR (TypeError "builtin"))
     | Env item =>
@@ -661,7 +667,7 @@ End
 val evaluate_builtin_pre_def = cv_auto_trans_pre "evaluate_builtin_pre" evaluate_builtin_def;
 
 Theorem evaluate_builtin_pre[cv_pre]:
-  evaluate_builtin_pre a b c d e
+  evaluate_builtin_pre a b c d e f
 Proof
   rw[evaluate_builtin_pre_def]
 QED

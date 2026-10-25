@@ -144,7 +144,8 @@ Proof
 QED
 
 (* The actual TASK028 continuation equations isolate the pre-take code check. *)
-(* Promoted from local for the storage/suffix client; equation/proof unchanged. *)
+(* Retained for storage/suffix clients. Prove the legacy checked-tail
+   equation locally: main no longer exports ExtCall_outcome_continue. *)
 Theorem ExtCall_outcome_checked_tail:
   (do
     accounts <- get_accounts;
@@ -165,6 +166,7 @@ Theorem ExtCall_outcome_checked_tail:
     k outcome.co_returnData
   od) st
 Proof
+  (* Original proof via the removed branch equation retained:
   Cases_on `take_call_outcome target calldata value_opt st` >>
   rename1 `take_call_outcome target calldata value_opt st = (answer,mid)` >>
   drule ExtCall_outcome_continue >>
@@ -172,6 +174,11 @@ Proof
   drule checked_call_outcome_continue >>
   disch_then (qspecl_then [`"ExtCall reverted"`,`k`] mp_tac) >>
   rpt strip_tac >> asm_rewrite_tac[]
+  *)
+  Cases_on `ret_type = NoneT` >>
+  Cases_on `NULL (lookup_account target st.accounts).code` >>
+  simp[bind_def, ignore_bind_def, get_accounts_def, check_def, assert_def,
+       return_def, raise_def]
 QED
 
 Theorem ExtCall_outcome_transport:

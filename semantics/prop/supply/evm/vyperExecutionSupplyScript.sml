@@ -101,7 +101,7 @@ Theorem make_ext_call_state_supply:
   account_supply_bound budget accounts /\
   ext_call_value_transfer_ok caller callee value_opt accounts ==>
   execution_supply_bound budget
-    (make_ext_call_state caller callee code calldata value_opt accounts ts txp)
+    (make_ext_call_state caller callee code calldata value_opt gas accounts ts txp)
 Proof
   Cases_on `value_opt` >>
   simp[make_ext_call_state_def, execution_supply_bound_def,

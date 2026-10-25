@@ -17,7 +17,7 @@ Ancestors
   vyperTypeEnv vyperTypeEnvExtension vyperTypeEnvPreservation vyperTypeScopePop
   vyperTypeABI vyperTypeBindArguments vyperTypeExprResult vyperTypeStmtResult
   vyperTypeCallOutcome[ignore_grammar] vyperCallOutcome[ignore_grammar]
-  vyperTypeExtCallSoundness vyperTypeGlobalLookupSoundness vyperTypeAssignContext vyperTypeBuiltins vyperTypeExprSoundness vyperTypeAssignSoundness
+  vyperTypeArgFits vyperTypeExtCallSoundness vyperTypeGlobalLookupSoundness vyperTypeAssignContext vyperTypeBuiltins vyperTypeExprSoundness vyperTypeAssignSoundness
   vyperAssignTarget vyperExprNoControl vyperScopePreservation vyperEvalPreservesScopes
   vyperEvalMisc vyperStatePreservation vyperAssignPreservesType vyperTypeStatePreservation
   vyperTypeCallGraph vyperTypeCallStackSoundness
@@ -250,27 +250,15 @@ QED
 
 Theorem extcall_call_evaluation_safe_args[local]:
   call_evaluation_safe cx
-    (int_calls_expr
-      (Call loc (ExtCall is_static' skip_check (func_name,arg_types,ret_type)) es drv)) ==>
+    (int_calls_expr (Call loc (ExtCall static skip_check sig opts) es drv)) ==>
   call_evaluation_safe cx (int_calls_exprs es)
 Proof
   simp[int_calls_expr_def] >>
   metis_tac[call_evaluation_safe_append_left]
 QED
 
-Theorem extcall_call_evaluation_safe_driver[local]:
-  call_evaluation_safe cx
-    (int_calls_expr
-      (Call loc (ExtCall is_static' skip_check (func_name,arg_types,ret_type)) es
-        (SOME drv))) ==>
-  call_evaluation_safe cx (int_calls_expr drv)
-Proof
-  simp[int_calls_expr_def] >>
-  metis_tac[call_evaluation_safe_append_right]
-QED
-
 Theorem send_call_evaluation_safe_args[local]:
-  call_evaluation_safe cx (int_calls_expr (Call loc Send es extra)) ==>
+  call_evaluation_safe cx (int_calls_expr (Call loc (Send has_gas) es extra)) ==>
   call_evaluation_safe cx (int_calls_exprs es)
 Proof
   simp[int_calls_expr_def]
@@ -469,8 +457,8 @@ Proof
 QED
 
 Theorem type_place_expr_Call_ExtCall_NONE[local]:
-  !env ty is_static func_name arg_types ret_type es drv skip_check.
-    type_place_expr env (Call ty (ExtCall is_static skip_check (func_name,arg_types,ret_type)) es drv) = NONE
+  !env ty static sig opts es drv skip_check.
+    type_place_expr env (Call ty (ExtCall static skip_check sig opts) es drv) = NONE
 Proof
   simp[Once well_typed_expr_def]
 QED
@@ -2082,7 +2070,7 @@ Proof
     rpt gen_tac >> strip_tac >>
     reverse conj_tac >- (
       rpt gen_tac >> strip_tac >>
-      qpat_x_assum `type_place_expr _ (Call _ (ExtCall _ _ _) _ _) = SOME _` mp_tac >>
+      qpat_x_assum `type_place_expr _ (Call _ (ExtCall _ _ _ _) _ _) = SOME _` mp_tac >>
       simp[type_place_expr_Call_ExtCall_NONE]) >>
     suspend "Expr_Call_ExtCall_result")) >>
   TRY(rename1 `Send` >> suspend "Expr_Call_Send") >>
@@ -5444,7 +5432,7 @@ Theorem eval_exprs_failure_builtin_case[local]:
   ((case
       case (INR x,st) of
         (INL vs,s'') =>
-          (case evaluate_builtin cx s''.accounts ty bt vs of
+          (case evaluate_builtin cx s''.accounts ty bt (MAP expr_type es) vs of
              INL v => return v
            | INR e => raise (Error e)) s''
       | (INR e,s'') => (INR e,s'')
@@ -5619,11 +5607,11 @@ Resume eval_all_type_sound_mutual[Expr_Builtin]:
       (gvs[LIST_REL_EL_EQN, LIST_EQ_REWRITE, EL_MAP]) >>
     `?ret_tv. evaluate_type (get_tenv cx) ty = SOME ret_tv` by
       (gvs[well_formed_type_def, IS_SOME_EXISTS]) >>
-    Cases_on `evaluate_builtin cx args_st.accounts ty bt vs` >>
-    rename1 `evaluate_builtin cx args_st.accounts ty bt vs = builtin_res` >>
+    Cases_on `evaluate_builtin cx args_st.accounts ty bt (MAP expr_type es) vs` >>
+    rename1 `evaluate_builtin cx args_st.accounts ty bt (MAP expr_type es) vs = builtin_res` >>
     Cases_on `builtin_res` >>
     FIRST [
-      rename1 `evaluate_builtin cx args_st.accounts ty bt vs = INL builtin_v` >>
+      rename1 `evaluate_builtin cx args_st.accounts ty bt (MAP expr_type es) vs = INL builtin_v` >>
       strip_tac >>
       gvs[nested_return_value_case, no_type_error_result_def] >>
       gvs[expr_result_typed_def, expr_runtime_typed_def, expr_type_def,
@@ -9566,10 +9554,18 @@ QED
 Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_result]:
   rpt gen_tac >> strip_tac >>
   drule extcall_call_evaluation_safe_args >> strip_tac >>
-  qpat_x_assum `well_typed_expr env (Call _ (ExtCall _ _ _) _ _)` mp_tac >>
+  rename1 `Call _ (ExtCall _ _ fsig _) _ _` >> PairCases_on `fsig` >>
+  qpat_x_assum `well_typed_expr env (Call _ (ExtCall _ _ _ _) _ _)` mp_tac >>
   rewrite_tac[Once well_typed_expr_def] >> strip_tac >>
+  `?ret_tv. evaluate_type env.type_defs fsig2 = SOME ret_tv` by
+    fs[well_formed_type_def, optionTheory.IS_SOME_EXISTS] >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp_tac(srw_ss())[Once evaluate_def, bind_def] >>
   Cases_on `eval_exprs cx es st` >>
   rename1 `eval_exprs cx es st = (args_res,args_st)` >>
+(* Historical inline ExtCall induction proof, retained from issue-567.
+   The active continuation below uses eval_ext_call_result_sound, whose frame
+   includes logs and pending deletions as well as accounts/transient storage.
   qpat_x_assum `!env0 st0 res0 st0'.
     well_typed_exprs env0 es /\ _ ==> _` drule_all >> strip_tac >>
   Cases_on `args_res`
@@ -10136,6 +10132,19 @@ Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_nonstatic_success]:
        update_pending_deletions_def, return_def, ignore_bind_def, bind_def,
        get_accounts_def, get_transient_storage_def,
        update_accounts_def, update_transient_def, check_def, assert_def]
+*)
+  first_x_assum drule_all >> strip_tac >>
+  Cases_on `args_res` >> gvs[no_type_error_result_def]
+  >- (strip_tac >>
+      `runtime_consistent env cx args_st` by simp[runtime_consistent_def] >>
+      `MAP expr_type es =
+         BaseT AddressT :: MAP expr_type (TAKE (LENGTH fsig1) (TL es)) ++
+         MAP (ext_call_kw_type fsig2) opts` by (
+        qspecl_then [`es`, `expr_type`, `LENGTH fsig1`] mp_tac
+          (Q.GENL [`xs`, `f`, `n`] MAP_HD_TAKE_DROP) >>
+        simp[]) >>
+      drule_all eval_ext_call_result_sound >> simp[no_type_error_result_def]) >>
+  strip_tac >> gvs[]
 QED
 
 Resume eval_all_type_sound_mutual[Expr_Call_Send]:
@@ -10144,19 +10153,25 @@ Resume eval_all_type_sound_mutual[Expr_Call_Send]:
   >- (
     strip_tac >>
     drule send_call_evaluation_safe_args >> strip_tac >>
-    qpat_x_assum `well_typed_expr env (Call _ Send _ _)` mp_tac >>
+    qpat_x_assum `well_typed_expr env (Call _ (Send _) _ _)` mp_tac >>
     rewrite_tac[Once well_typed_expr_def] >> strip_tac >>
+    `LENGTH es = if has_gas then 3 else 2` by
+      (qpat_x_assum `MAP expr_type es = _` (mp_tac o Q.AP_TERM `LENGTH`) >>
+       rw[]) >>
     qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-    simp_tac(srw_ss())[Once evaluate_def, bind_def, ignore_bind_def,
-                         type_check_def, assert_def, return_def, raise_def,
-                         lift_option_type_def] >>
+    once_rewrite_tac[evaluate_def] >>
+    qpat_assum `LENGTH es = _` (fn th =>
+      simp_tac (srw_ss()) [th, bind_def, ignore_bind_def,
+                          type_check_def, assert_def, return_def]) >>
     Cases_on `eval_exprs cx es st` >>
     rename1 `eval_exprs cx es st = (args_res,args_st)` >>
-    qpat_x_assum `!s'' x t. type_check (LENGTH es = 2) "Send args" s'' = (INL x,t) ==> _` mp_tac >>
-    simp[type_check_def, assert_def] >>
+    qpat_x_assum `!s'' x t. type_check _ "Send args" s'' = (INL x,t) ==> _`
+      mp_tac >>
+    asm_simp_tac (srw_ss()) [type_check_def, assert_def] >>
     disch_then (qspecl_then [`env`, `st`, `args_res`, `args_st`] mp_tac) >>
     simp[] >> strip_tac >>
     Cases_on `args_res` >> gvs[no_type_error_result_def]
+(* Historical Send tail before the evaluated-operands/gas API.
     >- (
       rename1 `exprs_runtime_typed env es vs` >>
       drule_all send_args_runtime_typed_dest >> strip_tac >> gvs[] >>
@@ -10198,9 +10213,15 @@ Resume eval_all_type_sound_mutual[Expr_Call_Send]:
         simp[]) >>
       strip_tac >> gvs[runtime_consistent_def])
     *) >>
+*)
+    >- (strip_tac >>
+        `runtime_consistent env cx args_st` by simp[runtime_consistent_def] >>
+        `MAP expr_type es = [BaseT AddressT; BaseT (UintT 256)] ++
+           (if has_gas then [BaseT (UintT 256)] else [])` by fs[] >>
+        drule_all eval_send_result_sound >> simp[no_type_error_result_def]) >>
     strip_tac >> gvs[]) >>
   rpt strip_tac >>
-  qpat_x_assum `type_place_expr env (Call _ Send _ _) = SOME vt` mp_tac >>
+  qpat_x_assum `type_place_expr _ _ = SOME _` mp_tac >>
   simp[Once well_typed_expr_def]
 QED
 

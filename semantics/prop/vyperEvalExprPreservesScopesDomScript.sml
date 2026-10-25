@@ -385,16 +385,38 @@ QED
 
 (* Goal 16: Send (guarded P8 IH) *)
 Theorem case_Send_dom[local]:
-  ∀cx ty es v0.
+  ∀cx ty has_gas es v0.
     (∀s'' x t.
-       type_check (LENGTH es = 2) "Send args" s'' = (INL x,t) ⇒
+       type_check (LENGTH es = if has_gas then 3 else 2) "Send args" s'' = (INL x,t) ⇒
        ∀st res st'. eval_exprs cx es st = (res,st') ⇒
          MAP FDOM st.scopes = MAP FDOM st'.scopes) ⇒
     ∀st res st'.
-      eval_expr cx (Call ty Send es v0) st = (res,st') ⇒
+      eval_expr cx (Call ty (Send has_gas) es v0) st = (res,st') ⇒
+      MAP FDOM st.scopes = MAP FDOM st'.scopes
+Proof
+  rpt gen_tac >> strip_tac >> rpt gen_tac >>
+  Cases_on `LENGTH es = if has_gas then 3 else 2` >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
+       assert_def, return_def, raise_def] >>
+  first_x_assum (qspecl_then [`st`, `()`, `st`] mp_tac) >>
+  simp[type_check_def, assert_def, return_def] >> strip_tac >>
+  rpt CASE_TAC >> rpt strip_tac >> gvs[] >>
+  first_x_assum drule >> strip_tac >> gvs[] >>
+  drule eval_send_preserves_non_accounts >> strip_tac >> gvs[]
+QED
+
+(* Goal 17: ExtCall (unguarded P8 IH) *)
+Theorem case_ExtCall_dom[local]:
+  ∀cx ty static skip_check sig opts es v0.
+    (∀st res st'. eval_exprs cx es st = (res,st') ⇒
+       MAP FDOM st.scopes = MAP FDOM st'.scopes) ⇒
+    ∀st res st'.
+      eval_expr cx (Call ty (ExtCall static skip_check sig opts) es v0) st = (res,st') ⇒
       MAP FDOM st.scopes = MAP FDOM st'.scopes
 Proof
   rpt strip_tac >> qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+(* Pre-factoring issue-567 proof retained; the helper API below now owns
+   both the concrete and oracle paths.
   simp[evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(), return_def, raise_def,
        check_def, type_check_def, assert_def, lift_option_def, lift_option_type_def] >>
   strip_tac >> gvs[return_def, raise_def, GSYM lift_option_def, GSYM lift_option_type_def] >>
@@ -414,6 +436,10 @@ Proof
       first_x_assum drule >> simp[]) >>
   imp_res_tac (Send_outcome_preserves_locals |> SRULE [check_def, ignore_bind_def]) >>
   gvs[] >> first_x_assum drule >> simp[]
+*)
+  simp[Once evaluate_def, bind_def, AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+  first_x_assum drule >> strip_tac >> gvs[] >>
+  drule eval_ext_call_preserves_non_accounts >> strip_tac >> gvs[]
 QED
 
 (* ===== Chain interaction builtins (unguarded eval_exprs IH) ===== *)
@@ -499,7 +525,6 @@ Proof
       ignore_bind_def, return_def, raise_def, COND_RATOR, AllCaseEqs()]
 QED
 
-(* Goal 17: ExtCall (exact evaluate_ind shape) *)
 (* ========================================================================
    Helper lemmas for evaluate_ind cases (P8: eval_exprs)
    ======================================================================== *)
@@ -568,7 +593,7 @@ Proof
     ACCEPT_TAC case_Pop_dom >-
     ACCEPT_TAC case_TypeBuiltin_dom >-
     ACCEPT_TAC case_Send_dom >-
-    suspend "ExtCall" >-
+    ACCEPT_TAC case_ExtCall_dom >-
     suspend "IntCall" >-
     ACCEPT_TAC case_RawCallTarget_dom >-
     ACCEPT_TAC case_RawCallCalldataTarget_dom >-
@@ -948,6 +973,8 @@ val SCOPES_DOM_FRAME_TAC =
         PURE_REWRITE_RULE substitutions (normalise th)) (asl,w)
     end);
 
+(* Superseded by case_ExtCall_dom via eval_ext_call_preserves_non_accounts.
+   Retain the guarded evaluator proof for provenance.
 Resume eval_mutual_preserves_scopes_dom[ExtCall]:
   rpt gen_tac >> strip_tac >>
   simp[GSYM scopes_dom_frame_result, Once evaluate_def] >>
@@ -986,6 +1013,8 @@ QED
 Resume eval_mutual_preserves_scopes_dom[return_path_4]:
   SCOPES_DOM_IH_TAC
 QED
+
+*)
 
 (* Oracle sibling for the ExtCall resume. Domain equality, not value or
    account/storage preservation; k supplies the inductive continuation fact. *)

@@ -1424,7 +1424,7 @@ Proof
                expr_type_def, toplevel_value_typed_def] >>
           metis_tac[vyperTypeBuiltinsTheory.Len_builtin_sound])
       >- (`?vs v. eval_pure_exprs cx (initial_state am [FEMPTY]) es = SOME vs /\
-             evaluate_builtin cx (initial_state am [FEMPTY]).accounts v8 bt vs = INL v /\
+             evaluate_builtin cx (initial_state am [FEMPTY]).accounts v8 bt (MAP expr_type es) vs = INL v /\
              tvl = Value v` by
            (qpat_x_assum `eval_pure_expr _ _ (Builtin _ _ _) = _` mp_tac >>
             simp[Once eval_pure_expr_def] >> gvs[AllCaseEqs()] >>

@@ -587,174 +587,153 @@ val helper_close = FIRST [
 ];
 
 (* Direct exception closers avoid the context-wide search performed by
-   imp_res_tac, which is expensive in the ExtCall and IntCall cases. *)
-val close_check =
-  qpat_x_assum `check _ _ _ = (INR _, _)`
-    (ACCEPT_TAC o MATCH_MP check_no_control);
+   imp_res_tac, which is expensive in the IntCall case. *)
 val close_type_check =
   qpat_x_assum `type_check _ _ _ = (INR _, _)`
     (ACCEPT_TAC o MATCH_MP type_check_no_control);
-val close_lift_option =
-  qpat_x_assum `lift_option _ _ _ = (INR _, _)`
-    (ACCEPT_TAC o MATCH_MP lift_option_no_control);
 val close_lift_option_type =
   qpat_x_assum `lift_option_type _ _ _ = (INR _, _)`
     (ACCEPT_TAC o MATCH_MP lift_option_type_no_control);
 
-(* Lean step tactics: decompose monadic binds without gvs *)
-val lean_bind_step =
-  qpat_x_assum `bind _ _ _ = (INR _, _)`
-    (strip_assume_tac o MATCH_MP bind_INR);
-val lean_ibind_step =
-  qpat_x_assum `ignore_bind _ _ _ = (INR _, _)`
-    (strip_assume_tac o MATCH_MP ignore_bind_INR);
-val lean_step = FIRST [lean_bind_step, lean_ibind_step];
-val lean_decompose = lean_step >> TRY (RULE_ASSUM_TAC BETA_RULE);
+Definition no_control_monad_def:
+  no_control_monad f <=> !s exc t.
+    f s = (INR exc,t) ==> no_control_exc exc
+End
 
-(* ===== Case 18: ExtCall ===== *)
-
-Theorem ext_call_value_args_no_control[local]:
-  ∀is_static vs s exc s'.
-  (if is_static then return (NONE, TL vs)
-   else do
-     type_check (TL vs ≠ []) "ExtCall no value";
-     v <- lift_option_type (dest_NumV (HD (TL vs))) "ExtCall value not int";
-     return (SOME v, TL (TL vs))
-   od) s = (INR exc, s') ⇒ no_control_exc exc
+Theorem no_control_monad_bind_guarded[local]:
+  no_control_monad f /\
+  (!s v t. f s = (INL v,t) ==> no_control_monad (g v)) ==>
+  no_control_monad (vyperState$bind f g)
 Proof
-  Cases >> rpt gen_tac >> strip_tac >> gvs[return_def]
-  >> step_tac >- close_type_check
-  >> step_tac >- close_lift_option_type
-  >> gvs[return_def]
+  simp[no_control_monad_def] >> rpt strip_tac >>
+  drule bind_no_control >> disch_then irule >> metis_tac[]
 QED
 
-(* Default/decode boundary used by the live concrete ExtCall resume and its
-   oracle sibling. Decode errors are runtime errors; default errors are IH. *)
-Theorem extcall_return_tail_no_control:
-  (bs = [] /\ IS_SOME drv ==>
-    !s exc t. eval_expr cx (THE drv) s = (INR exc,t) ==> no_control_exc exc) /\
-  (if bs = [] /\ IS_SOME drv then eval_expr cx (THE drv)
-   else do
-     v <- lift_sum_runtime (evaluate_abi_decode_return tenv ret_type bs);
-     return (Value v)
-   od) st = (INR exc,st') ==>
+Theorem no_control_monad_primitives[local]:
+  no_control_monad (return v) /\
+  no_control_monad (raise (Error err)) /\
+  no_control_monad (λs. return (g s) s) /\
+  no_control_monad (type_check b msg) /\ no_control_monad (check b msg) /\
+  no_control_monad (lift_option opt msg) /\
+  no_control_monad (lift_option_type opt msg) /\
+  no_control_monad (lift_sum_runtime rs) /\
+  no_control_monad get_accounts /\ no_control_monad get_transient_storage /\
+  no_control_monad (update_accounts upd) /\
+  no_control_monad (update_transient upd_t) /\
+  no_control_monad (append_logs logs) /\
+  no_control_monad (update_pending_deletions deletions_upd) /\
+  no_control_monad (adopt_call_outcome rq co)
+Proof
+  simp[no_control_monad_def, return_def, raise_def, check_def, type_check_def,
+       assert_def, lift_option_def, lift_option_type_def, lift_sum_runtime_def,
+       get_accounts_def, get_transient_storage_def, update_accounts_def,
+       update_transient_def, append_logs_def, update_pending_deletions_def, adopt_call_outcome_equation] >>
+  rpt strip_tac >> rpt CASE_TAC >>
+  gvs[option_CASE_rator, sum_CASE_rator, AllCaseEqs(),
+      return_def, raise_def, no_control_exc_def]
+QED
+
+Theorem no_control_monad_take[local]:
+  no_control_monad (take_call_outcome target calldata value_opt)
+Proof
+  simp[no_control_monad_def] >> rpt strip_tac >>
+  drule take_call_outcome_error >> rw[no_control_exc_def]
+QED
+
+(* Decompose only the goal's monadic spine; keep the large guarded IHs
+   out of rewriting. Match primitive leaves before traversing terms for eta. *)
+val NO_CONTROL_MONAD_LEAF_TAC =
+  let
+    val leaves = List.foldl (fn (th,net) =>
+      Net.insert (concl th, MATCH_ACCEPT_TAC th) net) Net.empty
+      (no_control_monad_take :: CONJUNCTS no_control_monad_primitives)
+  in
+    fn (asl,w) => FIRST (Net.match w leaves) (asl,w)
+  end;
+
+(* Reduce only exposed applications, never their continuation arguments. *)
+val no_control_head_conv =
+  let
+    val reduce = FIRST_CONV
+      [BETA_CONV, REWR_CONV pair_case_thm, REWR_CONV UNCURRY]
+    fun head tm = (reduce ORELSEC RATOR_CONV head) tm
+  in head end;
+
+(* Keep CASE_TAC's branch order, but avoid rebuilding its broad datatype
+   rewrite set. Only fresh branch facts, never guarded IHs, become rewrites. *)
+fun NO_CONTROL_MONAD_CASE_TAC (g as (old,_)) =
+  let
+    fun simplify (asl,w) =
+      let
+        val fresh = List.filter (fn a => not (is_forall a) andalso
+          not (List.exists (aconv a) old)) asl
+        val rules = map ASSUME fresh
+      in
+        simp_tac bool_ss
+          (optionTheory.option_CLAUSES :: pair_case_thm :: UNCURRY :: rules) >>
+        RULE_ASSUM_TAC (REWRITE_RULE rules) >> MAP_EVERY assume_tac rules
+      end (asl,w)
+  in
+    (BasicProvers.PURE_CASE_TAC >> simplify) g
+  end;
+
+val NO_CONTROL_MONAD_TAC =
+  rpt (FIRST [
+    CONV_TAC (HO_REWR_CONV FORALL_PROD),
+    CONV_TAC (RAND_CONV no_control_head_conv),
+    gen_tac, strip_tac, conj_tac,
+    first_assum ACCEPT_TAC,
+    NO_CONTROL_MONAD_LEAF_TAC,
+    MATCH_MP_TAC no_control_monad_bind_guarded >> conj_tac,
+    CONV_TAC (RAND_CONV (REWR_CONV ignore_bind_def)),
+    CONV_TAC (RAND_CONV ETA_CONV),
+    CHANGED_TAC (fn (asl,w) =>
+      simp_tac bool_ss (pair_case_thm :: UNCURRY ::
+        List.map ASSUME (List.filter is_eq asl)) (asl,w)),
+    NO_CONTROL_MONAD_CASE_TAC]);
+
+(* ===== Case 18: ExtCall and Send ===== *)
+
+Theorem eval_ext_call_no_control:
+  eval_ext_call cx static skip_check sig opts vs st = (INR exc, st') ==>
   no_control_exc exc
 Proof
-  Cases_on `bs = [] /\ IS_SOME drv` >> simp[] >> rpt strip_tac
-  >- (first_x_assum drule >> simp[]) >>
-  gvs[bind_def, return_def, AllCaseEqs()] >>
-  drule lift_sum_runtime_no_control >> simp[]
+  (* Original whole-helper expansion retained; exceeded the tactic timeout.
+  PairCases_on `sig` >> Cases_on `vs` >>
+  simp[eval_ext_call_def, bind_def, ignore_bind_def, type_check_def,
+       assert_def, return_def, raise_def, get_accounts_def,
+       get_transient_storage_def, lift_option_def, lift_option_type_def,
+       check_def, lift_sum_runtime_def, update_accounts_def,
+       update_transient_def, append_logs_def, update_pending_deletions_def,
+       take_call_outcome_def,
+       adopt_call_outcome_equation, LET_THM, UNCURRY,
+       COND_RATOR, option_CASE_rator, prod_CASE_rator, sum_CASE_rator] >>
+  strip_tac >> gvs[AllCaseEqs(), no_control_exc_def]
+  *)
+  `no_control_monad (eval_ext_call cx static skip_check sig opts vs)` suffices_by
+    metis_tac[no_control_monad_def] >>
+  PairCases_on `sig` >> Cases_on `vs` >>
+  simp_tac bool_ss [eval_ext_call_def, LET_THM] >> NO_CONTROL_MONAD_TAC
 QED
 
-Theorem checked_call_outcome_no_control:
-  (!bs rq outcome st1 st2 caseSuffix protectTypedAccounts exc t.
-    take_call_outcome target calldata value_opt st = (INL (rq,outcome),st1) /\
-    outcome.co_success /\ adopt_call_outcome rq outcome st1 = (INL (),st2) /\
-    caseSuffix = st2.outcomes /\ protectTypedAccounts /\
-    protectTypedAccounts = (~rq.cr_static ==> accounts_runtime_well_typed st2.accounts) /\
-    bs = outcome.co_returnData /\
-    k bs st2 = (INR exc,t) ==> no_control_exc exc) /\
-  (do
-    (rq,outcome) <- take_call_outcome target calldata value_opt;
-    check outcome.co_success msg;
-    adopt_call_outcome rq outcome;
-    k outcome.co_returnData
-  od) st = (INR exc,st') ==>
-  no_control_exc exc
+Theorem eval_send_no_control:
+  eval_send cx has_gas vs st = (INR exc, st') ==> no_control_exc exc
 Proof
-  simp[checked_call_outcome_cases] >> rpt strip_tac
-  >- (drule take_call_outcome_error >> rw[no_control_exc_def])
-  >- simp[no_control_exc_def] >>
-  drule_all take_adopt_call_outcome_effects >> strip_tac >>
-  `~rq.cr_static ==> accounts_runtime_well_typed st2.accounts` by metis_tac[] >>
-  first_x_assum drule_all >> simp[]
-QED
-
-Theorem ExtCall_outcome_no_control:
-  (!bs rq outcome st1 st2 caseSuffix protectTypedAccounts exc t.
-    take_call_outcome target calldata value_opt st = (INL (rq,outcome),st1) /\
-    outcome.co_success /\ adopt_call_outcome rq outcome st1 = (INL (),st2) /\
-    caseSuffix = st2.outcomes /\ protectTypedAccounts /\
-    protectTypedAccounts = (~rq.cr_static ==> accounts_runtime_well_typed st2.accounts) /\
-    bs = outcome.co_returnData /\
-    k bs st2 = (INR exc,t) ==> no_control_exc exc) /\
-  (do
-    accounts <- get_accounts;
-    (if ret_type = NoneT then
-      check (~NULL (lookup_account target accounts).code) "ExtCall target has no code"
-     else return ());
-    (rq,outcome) <- take_call_outcome target calldata value_opt;
-    check outcome.co_success "ExtCall reverted";
-    adopt_call_outcome rq outcome;
-    k outcome.co_returnData
-  od) st = (INR exc,st') ==>
-  no_control_exc exc
-Proof
-  Cases_on `take_call_outcome target calldata value_opt st` >>
-  rename1 `take_call_outcome target calldata value_opt st = (answer,mid)` >>
-  drule ExtCall_outcome_continue >>
-  disch_then (qspecl_then [`ret_type`,`k`] assume_tac) >>
-  drule checked_call_outcome_continue >>
-  disch_then (qspecl_then [`"ExtCall reverted"`,`k`] assume_tac) >>
-  rpt strip_tac >>
-  Cases_on `ret_type = NoneT /\ NULL (lookup_account target st.accounts).code` >>
-  gvs[] >- simp[no_control_exc_def] >>
-  irule checked_call_outcome_no_control >>
-  qexistsl_tac [`calldata`,`k`,`"ExtCall reverted"`,`st`,`st'`,`target`,`value_opt`] >>
-  simp[] >> first_assum ACCEPT_TAC
-QED
-
-(* Exact SourceExtCall empty-data/default continuation for TASK032/033.
-   No-control IH is only needed for a taken successful outcome with [] data.
-   Unlike type preservation this theorem requires no initial account typing. *)
-Theorem ExtCall_outcome_return_no_control:
-  (!rq outcome st1 st2 caseSuffix protectTypedAccounts exc t.
-    take_call_outcome target calldata value_opt st = (INL (rq,outcome),st1) /\
-    outcome.co_success /\ adopt_call_outcome rq outcome st1 = (INL (),st2) /\
-    caseSuffix = st2.outcomes /\ protectTypedAccounts /\
-    protectTypedAccounts = (~rq.cr_static ==> accounts_runtime_well_typed st2.accounts) /\
-    outcome.co_returnData = [] /\ IS_SOME drv /\
-    eval_expr cx (THE drv) st2 = (INR exc,t) ==> no_control_exc exc) /\
-  (do
-    accounts <- get_accounts;
-    (if ret_type = NoneT then
-      check (~NULL (lookup_account target accounts).code) "ExtCall target has no code"
-     else return ());
-    (rq,outcome) <- take_call_outcome target calldata value_opt;
-    check outcome.co_success "ExtCall reverted";
-    adopt_call_outcome rq outcome;
-    if outcome.co_returnData = [] /\ IS_SOME drv then eval_expr cx (THE drv)
-    else do
-      v <- lift_sum_runtime (evaluate_abi_decode_return (get_tenv cx) ret_type outcome.co_returnData);
-      return (Value v)
-    od
-  od) st = (INR exc,st') ==>
-  no_control_exc exc
-Proof
-  rpt strip_tac >>
-  drule_at Any (ExtCall_outcome_no_control |>
-    INST_TYPE [alpha |-> ``:toplevel_value``] |> Q.INST
-    [`k` |-> `\bs. if bs = [] /\ IS_SOME drv then eval_expr cx (THE drv)
-      else do v <- lift_sum_runtime (evaluate_abi_decode_return (get_tenv cx) ret_type bs);
-              return (Value v) od`] |> BETA_RULE) >>
-  disch_then irule >> rpt gen_tac >> strip_tac >> gvs[] >>
-  Cases_on `outcome.co_returnData = [] /\ IS_SOME drv`
-  >- (gvs[] >> first_x_assum drule_all >> simp[]) >>
-  gvs[bind_def, return_def, AllCaseEqs()] >>
-  drule lift_sum_runtime_no_control >> simp[]
-QED
-
-Theorem Send_outcome_runtime_error:
-  (do
-    (rq,outcome) <- take_call_outcome target [] (SOME amount);
-    check outcome.co_success "send failed";
-    adopt_call_outcome rq outcome;
-    return (Value NoneV)
-  od) st = (INR exc,st') ==>
-  ?msg. exc = Error (RuntimeError msg)
-Proof
-  simp[checked_call_outcome_cases, return_def] >> rpt strip_tac
-  >- (drule take_call_outcome_error >> rw[] >> simp[]) >> simp[]
+  (* Original whole-helper expansion retained; use the shared spine proof.
+  Cases_on `vs` >- simp[eval_send_def, raise_def, no_control_exc_def] >>
+  Cases_on `t` >- simp[eval_send_def, raise_def, no_control_exc_def] >>
+  simp[eval_send_def, bind_def, ignore_bind_def, type_check_def, assert_def,
+       return_def, raise_def, get_accounts_def, get_transient_storage_def,
+       lift_option_def, lift_option_type_def, check_def, update_accounts_def,
+       update_transient_def, append_logs_def, update_pending_deletions_def,
+       take_call_outcome_def, adopt_call_outcome_equation, LET_THM, UNCURRY,
+       COND_RATOR, option_CASE_rator, prod_CASE_rator, sum_CASE_rator] >>
+  strip_tac >> gvs[AllCaseEqs(), no_control_exc_def]
+  *)
+  `no_control_monad (eval_send cx has_gas vs)` suffices_by
+    metis_tac[no_control_monad_def] >>
+  Cases_on `vs` >> TRY (Cases_on `t`) >>
+  simp_tac bool_ss [eval_send_def, LET_THM] >> NO_CONTROL_MONAD_TAC
 QED
 
 (* ===== Case 19: IntCall ===== *)
@@ -985,9 +964,20 @@ Proof
     gvs[bind_def, return_def, AllCaseEqs()] >>
     resolve_tac) >>
   conj_tac >- unfold_tac >>
-  (* Original Send dispatch: conj_tac >- unfold_tac *)
-  conj_tac >- (rename1`Send` >> suspend "Send") >>
-  conj_tac >- (rename1`ExtCall` >> suspend "ExtCall") >>
+  conj_tac >- (
+    rpt strip_tac >> pop_assum mp_tac >>
+    simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
+         assert_def, return_def, raise_def, AllCaseEqs()] >>
+    rpt strip_tac >> gvs[no_control_exc_def] >>
+    imp_res_tac eval_send_no_control >> gvs[no_control_exc_def] >>
+    first_x_assum (qspecl_then [`s`, `s`] mp_tac) >>
+    simp[type_check_def, assert_def, return_def] >>
+    disch_then drule >> simp[]) >>
+  conj_tac >- (
+    rpt strip_tac >> pop_assum mp_tac >>
+    simp[Once evaluate_def, bind_def, AllCaseEqs()] >>
+    rpt strip_tac >> gvs[] >>
+    imp_res_tac eval_ext_call_no_control >> res_tac) >>
   conj_tac >- (rpt gen_tac >> strip_tac >>
     match_mp_tac int_call_no_control >>
     metis_tac[]) >>
@@ -1005,6 +995,8 @@ Resume eval_expr_no_control_with_bt[CreateTarget]:
   Cases_on `kind` >> gvs[] >> unfold_tac
 QED
 
+(* Pre-factoring issue-567 send helper and evaluator resumes retained.
+   Active proofs use eval_send cx has_gas vs / eval_ext_call ... opts vs.
 Theorem eval_send_no_control:
   eval_send cx target amount st = (INR exc,st') ==> no_control_exc exc
 Proof
@@ -1104,102 +1096,9 @@ QED
 
 *)
 
-Definition no_control_monad_def:
-  no_control_monad f <=> !s exc t.
-    f s = (INR exc,t) ==> no_control_exc exc
-End
+*)
 
-Theorem no_control_monad_bind_guarded[local]:
-  no_control_monad f /\
-  (!s v t. f s = (INL v,t) ==> no_control_monad (g v)) ==>
-  no_control_monad (vyperState$bind f g)
-Proof
-  simp[no_control_monad_def] >> rpt strip_tac >>
-  drule bind_no_control >> disch_then irule >> metis_tac[]
-QED
-
-Theorem no_control_monad_primitives[local]:
-  no_control_monad (return v) /\
-  no_control_monad (λs. return (g s) s) /\
-  no_control_monad (type_check b msg) /\ no_control_monad (check b msg) /\
-  no_control_monad (lift_option opt msg) /\
-  no_control_monad (lift_option_type opt msg) /\
-  no_control_monad (lift_sum_runtime rs) /\
-  no_control_monad get_accounts /\ no_control_monad get_transient_storage /\
-  no_control_monad (update_accounts upd) /\
-  no_control_monad (update_transient upd_t) /\
-  no_control_monad (append_logs logs) /\
-  no_control_monad (update_pending_deletions deletions_upd) /\
-  no_control_monad (adopt_call_outcome rq co)
-Proof
-  simp[no_control_monad_def, return_def, raise_def, check_def, type_check_def,
-       assert_def, lift_option_def, lift_option_type_def, lift_sum_runtime_def,
-       get_accounts_def, get_transient_storage_def, update_accounts_def,
-       update_transient_def, append_logs_def, update_pending_deletions_def, adopt_call_outcome_equation] >>
-  rpt strip_tac >> rpt CASE_TAC >>
-  gvs[option_CASE_rator, sum_CASE_rator, AllCaseEqs(),
-      return_def, raise_def, no_control_exc_def]
-QED
-
-Theorem no_control_monad_take[local]:
-  no_control_monad (take_call_outcome target calldata value_opt)
-Proof
-  simp[no_control_monad_def] >> rpt strip_tac >>
-  drule take_call_outcome_error >> rw[no_control_exc_def]
-QED
-
-(* Decompose only the goal's monadic spine; keep the large guarded IHs
-   out of rewriting. Match primitive leaves before traversing terms for eta. *)
-val NO_CONTROL_MONAD_LEAF_TAC =
-  let
-    val leaves = List.foldl (fn (th,net) =>
-      Net.insert (concl th, MATCH_ACCEPT_TAC th) net) Net.empty
-      (no_control_monad_take :: CONJUNCTS no_control_monad_primitives)
-  in
-    fn (asl,w) => FIRST (Net.match w leaves) (asl,w)
-  end;
-
-(* Reduce only exposed applications, never their continuation arguments. *)
-val no_control_head_conv =
-  let
-    val reduce = FIRST_CONV
-      [BETA_CONV, REWR_CONV pair_case_thm, REWR_CONV UNCURRY]
-    fun head tm = (reduce ORELSEC RATOR_CONV head) tm
-  in head end;
-
-(* Keep CASE_TAC's branch order, but avoid rebuilding its broad datatype
-   rewrite set. Only fresh branch facts, never guarded IHs, become rewrites. *)
-fun NO_CONTROL_MONAD_CASE_TAC (g as (old,_)) =
-  let
-    fun simplify (asl,w) =
-      let
-        val fresh = List.filter (fn a => not (is_forall a) andalso
-          not (List.exists (aconv a) old)) asl
-        val rules = map ASSUME fresh
-      in
-        simp_tac bool_ss
-          (optionTheory.option_CLAUSES :: pair_case_thm :: UNCURRY :: rules) >>
-        RULE_ASSUM_TAC (REWRITE_RULE rules) >> MAP_EVERY assume_tac rules
-      end (asl,w)
-  in
-    (BasicProvers.PURE_CASE_TAC >> simplify) g
-  end;
-
-val NO_CONTROL_MONAD_TAC =
-  rpt (FIRST [
-    CONV_TAC (HO_REWR_CONV FORALL_PROD),
-    CONV_TAC (RAND_CONV no_control_head_conv),
-    gen_tac, strip_tac, conj_tac,
-    first_assum ACCEPT_TAC,
-    NO_CONTROL_MONAD_LEAF_TAC,
-    MATCH_MP_TAC no_control_monad_bind_guarded >> conj_tac,
-    CONV_TAC (RAND_CONV (REWR_CONV ignore_bind_def)),
-    CONV_TAC (RAND_CONV ETA_CONV),
-    CHANGED_TAC (fn (asl,w) =>
-      simp_tac bool_ss (pair_case_thm :: UNCURRY ::
-        List.map ASSUME (List.filter is_eq asl)) (asl,w)),
-    NO_CONTROL_MONAD_CASE_TAC]);
-
+(* Superseded by eval_ext_call_no_control in the evaluator induction.
 Resume eval_expr_no_control_with_bt[ExtCall]:
   rpt gen_tac >> strip_tac >>
   simp[GSYM no_control_monad_def, Once evaluate_def] >>
@@ -1247,6 +1146,8 @@ QED
 Resume eval_expr_no_control_with_bt[return_path_4]:
   NO_CONTROL_MONAD_IH_TAC
 QED
+
+*)
 
 Finalise eval_expr_no_control_with_bt
 

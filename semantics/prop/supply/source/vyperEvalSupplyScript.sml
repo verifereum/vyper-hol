@@ -18,7 +18,7 @@ val supply_facts = List.concat (map (CONJUNCTS o SPEC_ALL)
    source_supply_action_set_global, source_supply_assignment,
    source_supply_handlers, source_supply_create_soft_failure,
    source_supply_check_create_blueprint, source_supply_action_raw_call,
-   source_supply_action_send,
+   source_supply_action_ext_call, source_supply_action_send,
    source_supply_action_create, source_supply_action_transfer,
    source_supply_action_read, source_supply_action_take]);
 
@@ -28,23 +28,8 @@ val supply_net = vyperSupplyProofLib.fact_net supply_facts
    source_supply_action_try,
    source_supply_action_accounts_const, source_supply_action_adopt];
 
-(* Account-map and oracle safety goals depend only on atomic success guards.
-   Keep recursive IHs opaque while deriving these local data-flow facts. *)
-fun SUPPLY_BOUND_TAC (goal as (asl,w)) =
-  if not (List.exists (fn tm => same_const (fst (strip_comb w)) tm)
-      [``accounts_supply_bounded``, ``supply_adoption_safe``])
-  then NO_TAC goal
-  else
-    (POP_ASSUM_LIST (K ALL_TAC) >>
-     MAP_EVERY ASSUME_TAC (map ASSUME (List.filter (not o is_forall) asl)) >>
-     imp_res_tac source_supply_get_accounts_result >>
-     imp_res_tac lift_option_success >>
-     imp_res_tac source_supply_take_safe >>
-     gvs[] >>
-     FIRST [drule_all run_ext_call_supply_payload >> simp[], simp[]] >> NO_TAC) goal;
-
 val SUPPLY_STEP = FIRST [
-  first_assum ACCEPT_TAC, SUPPLY_BOUND_TAC,
+  first_assum ACCEPT_TAC,
   MATCH_ACCEPT_TAC source_supply_action_selfdestruct_effect,
   vyperSupplyProofLib.solve supply_net,
   CONV_TAC (HO_REWR_CONV FORALL_PROD), gen_tac,
@@ -84,11 +69,10 @@ Theorem eval_source_supply_mutual:
   (!cx es. source_supply_action (eval_exprs cx es))
 Proof
   ho_match_mp_tac evaluate_ind >> rpt conj_tac >> rpt gen_tac >>
-  TRY strip_tac >> TRY (rename1 `ExtCall` >> suspend "ExtCall") >>
-  SUPPLY_SUSPEND_CASE
+  TRY strip_tac >> SUPPLY_SUSPEND_CASE
 QED
 
-Resume eval_source_supply_mutual[ExtCall]:
+Resume eval_source_supply_mutual[eval_expr_Call_ExtCall]:
   simp[Once evaluate_def] >> rpt SUPPLY_STEP >>
   SUPPLY_FINISH_TAC
 QED

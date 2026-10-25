@@ -18,6 +18,7 @@ val properties = List.concat (map (CONJUNCTS o SPEC_ALL)
    vyperSourceCompoundSupplyTheory.source_supply_handlers,
    vyperSourceCompoundSupplyTheory.source_supply_check_create_blueprint,
    vyperSourceCallSupplyTheory.source_supply_action_raw_call,
+   vyperSourceCallSupplyTheory.source_supply_action_ext_call,
    vyperSourceCallSupplyTheory.source_supply_action_send,
    vyperSourceCreateSupplyTheory.source_supply_action_create,
    vyperSourceTransferSupplyTheory.source_supply_action_transfer,
