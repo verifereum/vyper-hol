@@ -589,9 +589,11 @@ End
 
 (* ===== Local Variable Materialization ===== *)
 
-(* Collect lexical memory locals in source order.  build_compile_env uses the
-   same list to assign abstract MemLoc regions; function lowering turns those
-   regions into ALLOCA operands, matching Python Context.new_variable. *)
+(* Collect lexical memory locals in source order, one entry per declaration.
+   build_compile_env uses the list to assign abstract MemLoc regions in
+   internal functions and the constructor; external and fallback bodies
+   instead give each declaration its own ALLOCA (declare_local), matching
+   Python Context.new_variable. *)
 Definition collect_locals_def:
   collect_locals ([] : stmt list) = ([] : (string # type) list) /\
   collect_locals (AnnAssign id ty _ :: rest) =
@@ -605,32 +607,14 @@ Definition collect_locals_def:
   collect_locals (_ :: rest) = collect_locals rest
 End
 
-(* Reserve output variables up front so the immutable compile environment can
-   refer to local pointers throughout the body.  The ALLOCA instruction itself
-   is emitted at the source declaration/loop, matching Python's sequencing. *)
-Definition reserve_local_ptrs_def:
-  reserve_local_ptrs (cenv : compile_env)
-      ([] : (string # type) list) = return cenv /\
-  reserve_local_ptrs (cenv : compile_env) ((name,ty)::locals) =
-    case FLOOKUP cenv.ce_vars name of
-      SOME (MemLoc _ mem_size) =>
-        do ptr <- fresh_var;
-           reserve_local_ptrs
-             (cenv with ce_vars :=
-                cenv.ce_vars |+ (name,PtrVar (Var ptr) mem_size)) locals
-        od
-    | _ => reserve_local_ptrs cenv locals
-End
-
 (* ===== Guarded Body ===== *)
 Definition compile_guarded_body_def:
   compile_guarded_body cenv is_nonreentrant nkey use_transient
                        is_view body ret_type =
-    do cenv' <- reserve_local_ptrs cenv (collect_locals body);
-       (if is_nonreentrant then
+    do (if is_nonreentrant then
           compile_nonreentrant_lock nkey use_transient is_view
         else return ());
-       compile_stmts cenv' NoLoop
+       compile_stmts cenv NoLoop
          (case ret_type of SOME t => t | NONE => BaseT BoolT) body;
        cs <- comp_get;
        if block_is_terminated cs then return ()

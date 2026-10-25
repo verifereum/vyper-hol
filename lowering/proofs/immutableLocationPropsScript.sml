@@ -16,6 +16,20 @@ Proof
   strip_tac >> first_x_assum drule_all >> simp[FLOOKUP_UPDATE] >> rw[]
 QED
 
+(* Reusing an existing memory region or allocating a larger one cannot
+   introduce an immutable location. *)
+Theorem immutable_allocate_locals_origin:
+  !locals off vars vars' off' key loc.
+  allocate_locals sft locals off vars = (vars',off') /\
+  FLOOKUP vars' key = SOME (ImmutableLoc loc) ==>
+  FLOOKUP vars key = SOME (ImmutableLoc loc)
+Proof
+  Induct >> simp[allocate_locals_def] >> rpt gen_tac >>
+  PairCases_on `h` >> simp[allocate_locals_def] >>
+  rpt CASE_TAC >> strip_tac >> first_x_assum drule_all >>
+  simp[FLOOKUP_UPDATE] >> rw[]
+QED
+
 Theorem immutable_module_vars_origin:
   !tops vars key loc.
   FLOOKUP (add_module_var_locations tops vars) key = SOME (ImmutableLoc loc) ==>
@@ -85,14 +99,17 @@ Theorem immutable_build_compile_env_layout:
 Proof
   rpt gen_tac >> simp[immutable_section_layout_def] >> rpt gen_tac >>
   simp[build_compile_env_def] >> rpt (pairarg_tac >> gvs[]) >> strip_tac >>
-  drule_all immutable_allocate_args_origin >> strip_tac >>
-  qpat_x_assum `allocate_args _ (collect_locals _) _ _ = _` kall_tac >>
-  drule_all immutable_allocate_args_origin >> strip_tac >>
-  drule immutable_locations_origin >> strip_tac
-  >- (drule immutable_module_vars_origin >> simp[FLOOKUP_DEF]) >>
-  gvs[module_var_key_def, nsid_to_string_def] >>
-  qmatch_goalsub_rename_tac `VariableDecl decl_vis Immutable _ decl_ty decl_slot` >>
-  qexistsl [`pre`,`post`,`decl_vis`,`decl_ty`,`decl_slot`] >> simp[]
+  Cases_on `vis = External` >> gvs[] >| [
+    drule_all immutable_allocate_args_origin >> strip_tac,
+    drule_all immutable_allocate_locals_origin >> strip_tac >>
+    qpat_x_assum `allocate_locals _ _ _ _ = _` kall_tac >>
+    drule_all immutable_allocate_args_origin >> strip_tac
+  ] >>
+  (drule immutable_locations_origin >> strip_tac
+   >- (drule immutable_module_vars_origin >> simp[FLOOKUP_DEF]) >>
+   gvs[module_var_key_def, nsid_to_string_def] >>
+   qmatch_goalsub_rename_tac `VariableDecl decl_vis Immutable _ decl_ty decl_slot` >>
+   qexistsl [`pre`,`post`,`decl_vis`,`decl_ty`,`decl_slot`] >> simp[])
 QED
 
 Theorem immutable_function_runtime_relation:
