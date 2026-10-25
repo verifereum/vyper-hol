@@ -1,7 +1,7 @@
 (*
  * High-level semantics for Vyper contract-creation builtins.
  *
- * TOP-LEVEL:
+ * Main definitions:
  *   dest_create_args       — decode evaluated operands by kind/layout
  *   create_arg_ctor_types  — recover constructor-argument types
  *   minimal_proxy_initcode — EIP-1167 initcode (54 bytes)
