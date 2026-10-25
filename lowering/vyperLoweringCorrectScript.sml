@@ -20,6 +20,7 @@
  *   compile_state_ok_initial -- label-space invariant of the initial compile state
  *   external_return_word_result_rel, external_return_prim_result_rel,
  *   external_return_static_result_rel,
+ *   external_return_static_cenv_result_rel,
  *   external_return_none_result_rel,
  *   external_fallthrough_result_rel -- S1 halt bridge (#640) for the
  *     return sequences loweringHalt covers, and the _unlock versions of
@@ -489,6 +490,47 @@ Proof
                `exps`, `layouts`] mp_tac external_halt_success >>
   impl_tac >- simp[] >>
   strip_tac >> gvs[external_call_result_rel_def]
+QED
+
+(* external_return_static_result_rel at a lowered function's compile env,
+   where the return statement passes the env's return encoding and buffer
+   size.  return_buffer_ok bounds the AbiCopy size; a unit that lowers has
+   it for each external function with a valued return
+   (lower_vyper_runtime_unit_return_buffer_ok). *)
+Theorem external_return_static_cenv_result_rel:
+  !ctx op m nr nkey ut iv st x st' func cenv cx es ret tv v0 v
+     tops tx srcs exps layouts Q.
+    compile_external_return (SOME op) F F cenv.ce_ret_enc_info
+      cenv.ce_max_return_size nr nkey ut iv st = (x, st') /\
+    cenv.ce_ret_enc_info = AbiCopy m /\ return_buffer_ok cenv /\
+    (nr ==> iv) /\ (!y. op = Var y ==> not_fresh_at st y) /\
+    evaluate_type (type_env tops) ret = SOME tv /\ safe_cast tv v0 = SOME v /\
+    ~is_dynamic (vyper_to_abi_type (type_env tops) ret) /\
+    m = type_memory_size tv ==>
+    frag_exec ctx st st'
+      (\s. state_rel func cenv cx es s /\
+           (?p. eval_operand op s = SOME p /\
+                val_in_memory tv v0 (w2n p) s.vs_memory) /\
+           s.vs_accounts =
+             process_deletions es.pending_deletions es.accounts /\
+           s.vs_transient = es.tStorage)
+      Q
+      (external_call_result_rel tops ret tx
+         (INL v, finalize_pending_deletions
+                   (abstract_machine_from_state srcs exps layouts es),
+          es.requests))
+Proof
+  rpt strip_tac >>
+  `m < 2 ** 64` by
+    (qpat_x_assum `return_buffer_ok _` mp_tac >>
+     qpat_x_assum `_.ce_ret_enc_info = _`
+       (fn th => simp[return_buffer_ok_def, th])) >>
+  `2 ** 64 < dimword (:256)` by
+    simp[wordsTheory.dimword_def, venomMemPropsTheory.dimindex_256] >>
+  `m < dimword (:256)` by DECIDE_TAC >>
+  qpat_x_assum `compile_external_return _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  asm_rewrite_tac[] >> strip_tac >>
+  drule external_return_static_result_rel >> disch_then irule >> gvs[]
 QED
 
 (* ===== Label-space invariant at the start of lowering ===== *)
