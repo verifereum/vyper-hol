@@ -614,7 +614,29 @@ Theorem external_return_abi_result_rel:
                    (abstract_machine_from_state srcs exps layouts es),
           es.requests))
 Proof
-  cheat
+  rpt strip_tac >>
+  drule_all return_abi_value_package >>
+  disch_then (qspec_then
+    `needs_external_call_wrap ret /\
+     is_dynamic (vyper_to_abi_type (type_env tops) ret)` strip_assume_tac) >>
+  drule compile_external_return_abi_frag >>
+  disch_then irule >>
+  asm_rewrite_tac[] >>
+  qexistsl_tac [`av`, `type_env tops`, `tv'`,
+    `if needs_external_call_wrap ret /\
+        is_dynamic (vyper_to_abi_type (type_env tops) ret)
+     then TupleT [ret] else ret`, `v'`] >>
+  asm_rewrite_tac[] >> conj_tac
+  >- (rpt strip_tac >> fs[] >>
+      conj_tac >- metis_tac[] >>
+      rpt strip_tac >>
+      `return_bytes tops ret v ss.vs_returndata` by
+        (gvs[] >> drule chosen_return_abi_bytes >> simp[]) >>
+      drule external_halt_success >>
+      disch_then (qspec_then `ss` mp_tac) >>
+      impl_tac >- simp[] >>
+      simp[external_call_result_rel_def] >> metis_tac[]) >>
+  metis_tac[arithmeticTheory.LESS_EQ_TRANS]
 QED
 
 (* ===== Label-space invariant at the start of lowering ===== *)
