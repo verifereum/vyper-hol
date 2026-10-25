@@ -26,6 +26,11 @@
  *   frag_exec_seq         — sequential composition
  *   frag_exec_conseq, frag_exec_refl — consequence and the empty fragment
  *   frag_exec_pointwise   — prove a fragment from each start state
+ *   frag_exec_seq_pointwise, frag_exec_then — sequencing, the second
+ *                           fragment known from each state the first ends in
+ *   frag_exec_exit_prefix — a fragment that only exits is followed by anything
+ *   frag_exec_weaken, frag_exec_pre_exit(_c), frag_exec_false_pre
+ *                         — forms of frag_exec_conseq
  *   frag_exec_run_inst_seq — lift a straight-line run_inst_seq result
  *
  * Steps inside a block:
@@ -394,6 +399,80 @@ Proof
           rpt strip_tac >> metis_tac[])
       >> disj2_tac >> metis_tac[exit_result_not_error]) >>
   disj2_tac >> metis_tac[]
+QED
+
+(* ===== Composing fragments ===== *)
+
+Theorem frag_exec_false_pre:
+  !ctx st st' Q R. frag_exec ctx st st' (\s. F) Q R
+Proof
+  rw[frag_exec_def]
+QED
+
+(* A fragment that only exits is followed by anything. *)
+Theorem frag_exec_exit_prefix:
+  !ctx st1 st2 st3 P Q R.
+    frag_exec ctx st1 st2 P (\s. F) R /\ cs_extends st1 st2 /\
+    cs_extends st2 st3 ==>
+    frag_exec ctx st1 st3 P Q R
+Proof
+  rpt strip_tac >> irule frag_exec_seq >> qexistsl_tac [`\s. F`, `st2`] >>
+  simp[frag_exec_false_pre]
+QED
+
+(* Sequencing where the second fragment is known from each state the first
+   one ends in. *)
+Theorem frag_exec_seq_pointwise:
+  !ctx st1 st2 st3 P Q1 Q R.
+    frag_exec ctx st1 st2 P Q1 R /\
+    (!t. Q1 t ==> frag_exec ctx st2 st3 (\s. s = t) Q R) /\
+    cs_extends st1 st2 /\ cs_extends st2 st3 ==>
+    frag_exec ctx st1 st3 P Q R
+Proof
+  rpt strip_tac >> irule frag_exec_seq >> qexistsl_tac [`Q1`, `st2`] >>
+  simp[] >> irule frag_exec_pointwise >> simp[]
+QED
+
+(* frag_exec_seq_pointwise with the first fragment first, so that
+   MATCH_MP fixes the middle state and predicate. *)
+Theorem frag_exec_then:
+  !ctx st1 st2 P Q1 R.
+    frag_exec ctx st1 st2 P Q1 R ==>
+    !st3 Q.
+      (!t. Q1 t ==> frag_exec ctx st2 st3 (\s. s = t) Q R) /\
+      cs_extends st1 st2 /\ cs_extends st2 st3 ==>
+      frag_exec ctx st1 st3 P Q R
+Proof
+  metis_tac[frag_exec_seq_pointwise]
+QED
+
+Theorem frag_exec_weaken:
+  !ctx st st' P Q R.
+    frag_exec ctx st st' P Q R ==>
+    !P' Q' R'.
+      (!s. P' s ==> P s) /\ (!s. Q s ==> Q' s) /\ (!r. R r ==> R' r) ==>
+      frag_exec ctx st st' P' Q' R'
+Proof
+  metis_tac[frag_exec_conseq]
+QED
+
+Theorem frag_exec_pre_exit:
+  !ctx st st' P Q R P' R'.
+    frag_exec ctx st st' P Q R /\ (!s. P' s ==> P s) /\
+    (!r. R r ==> R' r) ==>
+    frag_exec ctx st st' P' Q R'
+Proof
+  rpt strip_tac >> irule frag_exec_conseq >>
+  qexistsl_tac [`P`, `Q`, `R`] >> simp[]
+QED
+
+Theorem frag_exec_pre_exit_c:
+  !ctx st st' P Q R.
+    frag_exec ctx st st' P Q R ==>
+    !P' R'. (!s. P' s ==> P s) /\ (!r. R r ==> R' r) ==>
+            frag_exec ctx st st' P' Q R'
+Proof
+  metis_tac[frag_exec_pre_exit]
 QED
 
 (* ===== Lifting straight-line code ===== *)

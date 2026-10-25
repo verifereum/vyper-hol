@@ -1,14 +1,8 @@
 (* Roll-up theory for all venom analysis infrastructure *)
 Theory venomAnalysisHol
 Ancestors
-  (* shared *)
-  venomWf
-  venomEffects
-  venomInstProps
   (* configured per-function schedule runner and structural guarantees *)
   venomFnScheduleRunnerProps
-  memLocDefs
-  memLocProps
   (* cfg *)
   cfgAnalysis
   (* fcg: public executable + postorder/correctness interface *)

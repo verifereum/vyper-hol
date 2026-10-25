@@ -2,8 +2,8 @@ Theory vyperLogPreservation
 
 Ancestors
   pair option sum vyperMisc vyperCall vyperStatePreservation vyperCallFrame vyperCallOutcomeFrame
-  vyperState[ignore_grammar] vyperInterpreter[ignore_grammar] vyperCallOutcome[ignore_grammar]
-  vyperCreate
+  vyperState[ignore_grammar] vyperInterpreter[ignore_grammar] vyperCallOutcome[ignore_grammar] vyperCallOutcomeProps[ignore_grammar]
+  vyperCreate vyperCreateFrame
 
 (* Keep existing free statement-list variables when importing oracle grammar. *)
 val _ = hide "body";
