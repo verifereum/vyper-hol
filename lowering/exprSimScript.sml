@@ -21,6 +21,8 @@
  *   compile_name_word_sim  — a word local
  *   compile_env_sim        — environment reads (msg.sender, block.number,
  *                            ...), all but block.prevhash
+ *   expr_val_rel_mem_agree — a non-word operand's value survives code that
+ *                            keeps its type_memory_size bytes
  *
  * Helpers: expr_exit_INL, typed_val_to_w256_word_value, eval_expr_env,
  *   lower_value_env
@@ -35,13 +37,11 @@
  * compose where the first one's value sits in a buffer it allocated: that
  * allocation's id is below the second's start counter and it holds no
  * local (alloca_inv, local_backed), so the second's expr_post keeps its
- * bytes, and val_in_memory with them (a lemma that val_in_memory reads
- * only the type_memory_size bytes of a val_wf value is still to be
- * proved).  A first operand that points into a local stays related
- * through stmt_state_rel, as long as the source leaves that local alone
- * in between.  expr_frag, which relates values by val_to_w256, follows
- * for a word type whose typed encoding is val_to_w256
- * (expr_sim_expr_frag).
+ * bytes, and val_in_memory with them (expr_val_rel_mem_agree).  A first
+ * operand that points into a local stays related through stmt_state_rel,
+ * as long as the source leaves that local alone in between.  expr_frag,
+ * which relates values by val_to_w256, follows for a word type whose typed
+ * encoding is val_to_w256 (expr_sim_expr_frag).
  *
  * Not covered by the leaves here:
  *   - bytes and string literals: a bytesN literal is a Lit of its typed
@@ -231,7 +231,10 @@ End
 (* w is the data offset of an immutable of the module being lowered, and
    tv is its value at es, stored at the type t evaluates to; immutables_rel
    says where the Venom state keeps it.  The offset fits a word, so the
-   load reads at the offset itself. *)
+   load reads at the offset itself.  No invariant gives that bound yet:
+   immutables_rel at runtime says only byte_offset + 32 <= the data
+   section's length, so a producer of a code pointer needs a compile-env
+   clause bounding ImmutableLoc offsets. *)
 Definition immutable_holds_def:
   immutable_holds cenv cx t tv (w:bytes32) (es:evaluation_state) <=>
     ?name off itv v.
