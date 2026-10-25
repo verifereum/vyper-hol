@@ -754,3 +754,79 @@ Proof
       qexists_tac `sa.cs_next_id` >> simp[]) >>
   qpat_x_assum `!aid b. FLOOKUP s0.vs_allocas aid = _ ==> _` irule >> simp[]
 QED
+
+(* ===== Invariant-indexed source argument evaluation ===== *)
+Definition wb_args_ready_def:
+  wb_args_ready ctx func cenv cx arg_ty I args <=>
+    !e es. MEM e args /\ I es ==>
+      expr_sim ctx func cenv cx (arg_ty e) e es /\
+      is_word_type (expr_type e) /\
+      IS_SOME (evaluate_type (get_tenv cx) (expr_type e)) /\
+      (!res es'. eval_expr cx e es = (res, es') ==> expr_res_ok res) /\
+      (!tv es'. eval_expr cx e es = (INL tv, es') ==>
+        ?v. tv = Value v /\ word_value v /\ I es')
+End
+
+Theorem wb_args_ready_head:
+  !ctx func cenv cx arg_ty I e args es.
+    wb_args_ready ctx func cenv cx arg_ty I (e::args) /\ I es ==>
+      expr_sim ctx func cenv cx (arg_ty e) e es /\
+      is_word_type (expr_type e) /\
+      IS_SOME (evaluate_type (get_tenv cx) (expr_type e)) /\
+      (!res es'. eval_expr cx e es = (res, es') ==> expr_res_ok res) /\
+      (!tv es'. eval_expr cx e es = (INL tv, es') ==>
+        ?v. tv = Value v /\ word_value v /\ I es')
+Proof
+  simp[wb_args_ready_def] >> metis_tac[]
+QED
+
+Theorem wb_args_ready_tail:
+  !ctx func cenv cx arg_ty I e args.
+    wb_args_ready ctx func cenv cx arg_ty I (e::args) ==>
+    wb_args_ready ctx func cenv cx arg_ty I args
+Proof
+  simp[wb_args_ready_def] >> metis_tac[]
+QED
+
+Theorem eval_exprs_nil:
+  !cx es. eval_exprs cx [] es = (INL [], es)
+Proof
+  simp[Once evaluate_def, return_def]
+QED
+
+Theorem wb_args_cons_cases:
+  !ctx func cenv cx arg_ty I e args es res es'.
+    wb_args_ready ctx func cenv cx arg_ty I (e::args) /\ I es /\
+    eval_exprs cx (e::args) es = (res, es') ==>
+    (?exc. eval_expr cx e es = (INR exc, es') /\ res = INR exc) \/
+    ?v es1 rr. eval_expr cx e es = (INL (Value v), es1) /\
+      word_value v /\ I es1 /\ eval_exprs cx args es1 = (rr, es') /\
+      res = (case rr of INL vs => INL (v::vs) | INR exc => INR exc)
+Proof
+  rpt strip_tac >> drule_all wb_args_ready_head >> strip_tac >>
+  drule eval_exprs_cons_cases >> strip_tac
+  >- metis_tac[]
+  >- (qpat_x_assum `!tv es'. eval_expr _ _ _ = _ ==> _` drule >> metis_tac[]) >>
+  qpat_x_assum `!tv es'. eval_expr _ _ _ = _ ==> _` drule >>
+  strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Definition wb_args_exit_def:
+  wb_args_exit rr =
+    case rr of INL vs => (\r. F)
+             | INR exc => expr_exit (INR exc : toplevel_value + exception)
+End
+
+Theorem wb_args_eval_success:
+  !args ctx func cenv cx arg_ty I es vs es'.
+    wb_args_ready ctx func cenv cx arg_ty I args /\ I es /\
+    eval_exprs cx args es = (INL vs, es') ==>
+    I es' /\ EVERY word_value vs /\ LENGTH vs = LENGTH args
+Proof
+  Induct >- simp[eval_exprs_nil] >> rpt gen_tac >> strip_tac >>
+  drule_all wb_args_cons_cases >> strip_tac >- gvs[] >>
+  Cases_on `rr` >> gvs[] >>
+  first_x_assum irule >>
+  goal_assum (drule_at Any) >>
+  metis_tac[wb_args_ready_tail]
+QED
