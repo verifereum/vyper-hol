@@ -931,3 +931,91 @@ Proof
   drule hash_name_observer_fuel >>
   simp[hash_observer_function_def, mk_raw_function_def]
 QED
+
+Theorem hash_ret_run_from:
+  !fuel ctx fn s bb op id w.
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    get_instruction bb s.vs_inst_idx = SOME (mk_inst id RET [op; Lit 0w] []) /\
+    eval_operand op s = SOME w ==>
+    run_from fuel ctx fn s =
+      IntRet <|iret_values := [w]; iret_adopt_fmp := NONE|> s
+Proof
+  rpt strip_tac >> simp[fragExecTheory.run_from_def] >>
+  pure_once_rewrite_tac[exec_block_def] >>
+  simp[step_inst_non_invoke, mk_inst_def, step_inst_base_def,
+       eval_operands_def, eval_operand_def]
+QED
+
+Theorem hash_frag_ret_observation:
+  !ctx sa sb P Q fn s0 op w id.
+    frag_exec ctx sa sb P Q (expr_exit (INL (Value v))) /\
+    fn_has_code sa sb fn /\ P s0 /\ ~s0.vs_halted /\
+    s0.vs_current_bb = sa.cs_current_bb /\
+    s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
+    (!s. Q s ==> eval_operand op s = SOME w) /\
+    (?bb. lookup_block sb.cs_current_bb fn.fn_blocks = SOME bb /\
+      get_instruction bb (LENGTH sb.cs_current_insts) =
+        SOME (mk_inst id RET [op; Lit 0w] [])) ==>
+    ?fuel s. run_from fuel ctx fn s0 =
+      IntRet <|iret_values := [w]; iret_adopt_fmp := NONE|> s
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `frag_exec _ _ _ _ _ _` mp_tac >>
+  simp[fragExecTheory.frag_exec_def] >>
+  disch_then (qspecl_then [`fn`, `s0`] mp_tac) >> simp[] >>
+  strip_tac >>
+  `eval_operand op s' = SOME w` by metis_tac[] >>
+  `run_from 0 ctx fn s' =
+    IntRet <|iret_values := [w]; iret_adopt_fmp := NONE|> s'` by
+    (irule hash_ret_run_from >> metis_tac[]) >>
+  qpat_x_assum `!fuel. _` (qspec_then `0` mp_tac) >>
+  simp[] >> metis_tac[]
+QED
+
+Theorem hash_bool_source_eval:
+  !other lays b.
+    eval_expr (hash_bool_context other lays)
+      (TopLevelName (BaseT BoolT) (other,""))
+      ((hash_bool_state other b) with outcomes := SOME []) =
+    (INL (Value (BoolV b)),
+      (hash_bool_state other b) with outcomes := SOME [])
+Proof
+  rpt gen_tac >> irule hash_toplevel_immutable_eval >>
+  simp[hash_bool_module_code, find_var_decl_by_name_def,
+       get_immutables_def, get_address_immutables_def, get_source_immutables_def,
+       lift_option_type_def, hash_bool_context_def, hash_bool_state_def,
+       empty_evaluation_context_def, empty_call_txn_def,
+       finite_mapTheory.FLOOKUP_UPDATE, bind_def, return_def]
+QED
+
+Theorem hash_bool_post_operand:
+  !fn cenv cx e es sa sb s0 es' b op s.
+    expr_type e = BaseT BoolT /\
+    expr_post fn cenv cx e es sa sb s0 es' (BoolV b) op s ==>
+    eval_operand op s = SOME (if b then 1w else 0w)
+Proof
+  simp[exprSimTheory.expr_post_def, exprSimTheory.expr_val_rel_def, evaluate_type_def,
+       is_word_type_def, typed_val_to_w256_def, val_to_w256_def] >>
+  rpt strip_tac >> gvs[evaluate_type_def, is_word_type_def,
+    typed_val_to_w256_def, val_to_w256_def]
+QED
+
+Theorem hash_bool_frag_ret_observation:
+  !ctx sa sb fn s0 op e es es' cenv cx b id P.
+    expr_type e = BaseT BoolT /\
+    frag_exec ctx sa sb P
+      (expr_post fn cenv cx e es sa sb s0 es' (BoolV b) op)
+      (expr_exit (INL (Value (BoolV b)))) /\
+    fn_has_code sa sb fn /\ P s0 /\ ~s0.vs_halted /\
+    s0.vs_current_bb = sa.cs_current_bb /\
+    s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
+    (?bb. lookup_block sb.cs_current_bb fn.fn_blocks = SOME bb /\
+      get_instruction bb (LENGTH sb.cs_current_insts) =
+        SOME (mk_inst id RET [op; Lit 0w] [])) ==>
+    ?fuel s. run_from fuel ctx fn s0 =
+      IntRet <|iret_values := [if b then 1w else 0w]; iret_adopt_fmp := NONE|> s
+Proof
+  rpt strip_tac >> irule hash_frag_ret_observation >>
+  goal_assum (drule_at Any) >> simp[] >>
+  metis_tac[hash_bool_post_operand]
+QED
