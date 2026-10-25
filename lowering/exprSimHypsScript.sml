@@ -77,8 +77,10 @@
  *     dynamic array capacities, method ids) is not related to the source
  *     context.  The cases that read it (StructLit, Attribute, FlagMember,
  *     Pop, method_id, ...) will need a clause each in expr_sim_inv, and
- *     TopLevelName needs every module variable to be in ce_vars.  Each is
- *     to match what Vyper's compiler guarantees.
+ *     TopLevelName needs every immutable to be in ce_vars (#563); storage
+ *     and transient variables are there by storage_vars_rel and
+ *     transient_vars_rel.  Each is to match what Vyper's compiler
+ *     guarantees.
  *   - Keeping an operand's value_vv through the code between compile_expr
  *     and unwrap_value (a later operand's fragment) needs the operand
  *     composition of #636's Infrastructure: vv_post's memory frame for a

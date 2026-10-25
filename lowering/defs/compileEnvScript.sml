@@ -936,16 +936,17 @@ End
 (* Per-variable mapping between interpreter layout slots and cenv StorageLoc.
    The interpreter uses lookup_var_slot_from_layout to get a slot number,
    then read_storage_slot/write_storage_slot to access it.
-   The lowering uses FLOOKUP ce_vars (module_var_key (ce_module, name))
-   → StorageLoc slot → SLOAD/SSTORE.
+   The lowering uses FLOOKUP ce_vars (module_var_key nsid), with the
+   reference's own nsid, → StorageLoc slot → SLOAD/SSTORE.
    This relation ensures both reference the same storage slot, both ways:
    - every StorageLoc entry of the current module has the layout's slot;
    - every storage variable or hashmap the source reads through
      lookup_global, in any module, has an entry with that slot, as Python
      takes each reference's slot from its varinfo
-     (vyper/codegen_venom/expr.py lower_Attribute).  For a module other
-     than the main one this holds only vacuously: the compile environment
-     has entries for the main module only.
+     (vyper/codegen_venom/expr.py lower_Attribute).  build_compile_env has
+     entries for the main module only, so this direction holds only when
+     no other module has a variable with a layout slot, as when
+     source_deployment_rel limits the sources to [(NONE, tops)].
 
    cx.layouts : (address, (layout # layout)) alist
      where layout = ((num option # string), bytes32) alist
