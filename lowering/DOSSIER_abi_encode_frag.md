@@ -18,6 +18,7 @@ PLAN: `lowering/PLAN_abi_encode_frag.md`
 | C1.4.2.1 | proved |  | E0018 | Review and commit fixed-frame instruction boundaries, then begin rounded-length/layout C1.4.2.2. |
 | C1.4.2.2 | proved |  | E0020 |  |
 | C1.4.2.3 | proved |  | E0024 | Review and commit operational bytestring boundary, then next planned leaf. |
+| C1.4.2.4 | proved |  | E0025 | Review, commit typed consumer and layout helpers, then next scheduled leaf. |
 | C1.5.1 | proved |  | E0011 | Review and commit; proceed scheduled frontier. C1.5.2 can use enc_prefix_suc, HP_length, enc_prefix_full without unfolding tuple encoding. |
 | C1.5.2 | proved |  | E0012 | Review, commit, continue scheduled leaf. |
 | C1.5.3 | proved |  | E0013 | Review and commit runtime invariant interface. |
@@ -287,6 +288,26 @@ PLAN: `lowering/PLAN_abi_encode_frag.md`
 ### Evidence refs
 
 - `TO_abi_encode_frag-20261025T101052Z_m0854_t001` (use `read_tool_output` for exact output)
+
+## C1.4.2.4
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0025`
+- blocker: 
+- actual effort: 1 sessions, 4 msgs, 58 steps, 57 tools, 16 holbuild, 6,590,456 tok (6,584,580 in, 5,876 out, 6,497,152 cached), 593.6s, $0.8833312
+- next: Review, commit typed consumer and layout helpers, then next scheduled leaf.
+
+### Attempts / Evidence
+
+- `E0025` (proved, , actual effort: 1 sessions, 4 msgs, 58 steps, 57 tools, 16 holbuild, 6,590,456 tok (6,584,580 in, 5,876 out, 6,497,152 cached), 593.6s, $0.8833312)
+  - Prove enc_bytes_memory_layout from padded memory split/word observations, then shared bytes/string typed inversion enc_typed_bytes_layout, and compose operational bytestring consumer under enc_pre. -> compile_abi_encode_bytes_abi_frag covers both BytesT(Dynamic n) and StringT n, includes unchanged labels and arbitrary R. Bounds and disjointness follow from enc_pre and live encoded length. Full abiEncoderPropsTheory build succeeds. (`TO_abi_encode_frag-20261025T101052Z_m0876_t001`, `TO_abi_encode_frag-20261025T101052Z_m0908_t001`, `TO_abi_encode_frag-20261025T101052Z_m0917_t001`)
+
+### Evidence refs
+
+- `TO_abi_encode_frag-20261025T101052Z_m0917_t001` (use `read_tool_output` for exact output)
 
 ## C1.5.1
 

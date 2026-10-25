@@ -2624,6 +2624,95 @@ Proof
 QED
 
 
+Theorem enc_bytes_memory_layout:
+  mem_word_at p mem = n2w (LENGTH bs) /\
+  mem_bytes_at (p+32) (LENGTH bs) mem = bs ==>
+  enc (Bytes NONE) (contractABI$BytesV bs) =
+    mem_bytes_at p (32+LENGTH bs) mem ++
+    REPLICATE (32*((LENGTH bs+31) DIV 32)-LENGTH bs) 0w
+Proof
+  strip_tac >>
+  rewrite_tac[enc_def, valueEncodingProofsTheory.mem_bytes_at_split_padded] >>
+  simp[valueEncodingProofsTheory.mem_bytes_at_word, ceil32_def]
+QED
+
+Theorem enc_typed_bytes_layout:
+  (bt = BytesT (Dynamic n) \/ bt = StringT n) /\
+  evaluate_type env (BaseT bt) = SOME tv /\ value_has_type tv v /\
+  vyper_to_abi env (BaseT bt) v = SOME av /\
+  val_in_memory tv v p mem ==>
+  ?bs. mem_word_at p mem = n2w (LENGTH bs) /\
+       mem_bytes_at (p+32) (LENGTH bs) mem = bs /\
+       32+LENGTH bs <= type_memory_size tv /\
+       enc (vyper_to_abi_type env (BaseT bt)) av =
+         mem_bytes_at p (32+LENGTH bs) mem ++
+         REPLICATE (32*((LENGTH bs+31) DIV 32)-LENGTH bs) 0w /\
+       LENGTH (enc (vyper_to_abi_type env (BaseT bt)) av) =
+         32+32*((LENGTH bs+31) DIV 32)
+Proof
+  strip_tac >> Cases_on `v` >>
+  gvs[vyperValueTheory.evaluate_type_def, value_has_type_def,
+      vyper_to_abi_base_def, vyper_to_abi_type_def,
+      vyper_base_to_abi_type_def, val_in_memory_def] >>
+  qmatch_asmsub_abbrev_tac `mem_bytes_at (p+32) _ mem = bs` >>
+  qexists_tac `bs` >>
+  `LENGTH bs <= n` by simp[Abbr `bs`] >>
+  `LENGTH bs <= 32 * word_size n` by
+    (mp_tac word_size_covers >> strip_tac >> decide_tac) >>
+  `LENGTH bs < dimword (:256)` by (gvs[] >> decide_tac) >>
+  `mem_word_at p mem = n2w (LENGTH bs) /\
+   mem_bytes_at (p+32) (LENGTH bs) mem = bs` by simp[Abbr `bs`] >>
+  drule_all enc_bytes_memory_layout >>
+  simp[enc_def, ceil32_def, type_memory_size_def,
+       vfmConstantsTheory.word_size_def] >>
+  qspec_then `LENGTH bs` mp_tac (GEN_ALL enc_round32_bounds) >>
+  `n2w_o_ORD = ((n2w o ORD) : char -> word8)` by
+    simp[FUN_EQ_THM, vyperMiscTheory.n2w_o_ORD_def] >>
+  gvs[vfmConstantsTheory.word_size_def] >> decide_tac
+QED
+
+Theorem compile_abi_encode_bytes_abi_frag:
+  (bt = BytesT (Dynamic n) \/ bt = StringT n) /\
+  compile_abi_encode_to_buf dst src (AbiBytestring n) st = (op, st') /\
+  evaluate_type env (BaseT bt) = SOME tv /\ value_has_type tv v /\
+  vyper_to_abi env (BaseT bt) v = SOME av /\
+  eval_operand dst s0 = SOME dst_w /\ eval_operand src s0 = SOME src_w /\
+  enc_pre st st' [dst; src] lo top tv v (w2n src_w)
+    [(w2n dst_w, LENGTH (enc (vyper_to_abi_type env (BaseT bt)) av))] s0 ==>
+  frag_exec ctx st st' (\s. s = s0)
+    (\s. mem_bytes_at (w2n dst_w)
+           (LENGTH (enc (vyper_to_abi_type env (BaseT bt)) av)) s.vs_memory =
+           enc (vyper_to_abi_type env (BaseT bt)) av /\
+         eval_operand op s =
+           SOME (n2w (LENGTH (enc (vyper_to_abi_type env (BaseT bt)) av))) /\
+         s.vs_labels = s0.vs_labels /\
+         enc_frame st st' lo top
+           [(w2n dst_w, LENGTH (enc (vyper_to_abi_type env (BaseT bt)) av))] s0 s) R
+Proof
+  rpt gen_tac >> disch_then (CONJUNCTS_THEN2 assume_tac strip_assume_tac) >>
+  `val_in_memory tv v (w2n src_w) s0.vs_memory` by fs[enc_pre_def] >>
+  drule_all enc_typed_bytes_layout >> strip_tac >>
+  qabbrev_tac `r = 32*((LENGTH bs+31) DIV 32)` >>
+  `LENGTH bs <= r` by
+    (qspec_then `LENGTH bs` mp_tac (GEN_ALL enc_round32_bounds) >>
+     simp[Abbr `r`]) >>
+  drule enc_pre_bounds >> strip_tac >>
+  `w2n dst_w + (32+r) <= lo /\
+   regions_disjoint (w2n src_w,type_memory_size tv) (w2n dst_w,32+r) /\
+   (!y. dst = Var y ==> not_fresh_at st y) /\
+   (!y. src = Var y ==> not_fresh_at st y) /\
+   enc_scratch (frag_ids st st') lo top s0` by fs[enc_pre_def] >>
+  `LENGTH bs+31 < dimword (:256) /\
+   w2n dst_w+32+r < dimword (:256)` by decide_tac >>
+  `regions_disjoint (w2n src_w,32+LENGTH bs) (w2n dst_w,32+r)` by
+    (irule regions_disjoint_subregions >> goal_assum (drule_at Any) >> simp[]) >>
+  `r = 32*((LENGTH bs+31) DIV 32)` by simp[Abbr `r`] >>
+  drule_all compile_abi_encode_bytes_frame_frag >>
+  disch_then (qspecl_then [`ctx`, `R`] mp_tac) >> strip_tac >>
+  irule frag_exec_conseq >> goal_assum (drule_at Any) >>
+  pure_asm_rewrite_tac[] >> rewrite_tac[]
+QED
+
 Theorem compile_abi_encode_frag:
   (!dst child_ptr ei is_dyn static_ofst dyn_ptr st op st' ctx env ty tv v
     av s0 dst_w src_w lo top.
