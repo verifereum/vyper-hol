@@ -501,7 +501,7 @@ QED
 
 val mono = [bind_def, ignore_bind_def, return_def, raise_def,
             prod_CASE_rator, sum_CASE_rator, option_CASE_rator,
-            COND_RATOR, LET_THM,
+             COND_RATOR, LET_THM, create_arg_snapshot_def,
             get_scopes_def, get_accounts_def, get_transient_storage_def,
             update_accounts_def, update_transient_def];
 
@@ -981,7 +981,8 @@ QED
 
 Resume eval_expr_no_control_with_bt[CreateTarget]:
   rpt gen_tac >> strip_tac >>
-  Cases_on `kind` >> gvs[] >> unfold_tac
+  Cases_on `kind` >> gvs[] >> unfold_tac >>
+  gvs[create_arg_snapshot_def] >> res_tac
 QED
 
 Resume eval_expr_no_control_with_bt[Send]:

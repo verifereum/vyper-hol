@@ -2,44 +2,14 @@ Theory createMemoryInterface
 Ancestors
   createSourceCallback context contextProps emitHelperProps venomMemProps vyperABIValid
   valueEncoding vyperTyping vyperABI contractABI vyperValueOperation
-  list rich_list words venomExecSemantics
+  list rich_list words venomExecSemantics venomState
 Libs
   wordsLib
 
-(* Checked preparation boundaries. These do not assert a simulation theorem
-   for arbitrary operand callbacks or for the recursive ABI compiler.
-
-   C2.5 interface audit (remaining proof dependencies, not assumptions):
-   - Memory snapshots: dynamic MCOPY is covered below, with exact saved bytes
-     and a disjoint-write frame. Preservation across arbitrary expression
-     callbacks still requires proving create_source_callback_spec for the
-     actual compiler; state_rel alone has no private-region frame.
-   - Storage/transient snapshots: compile_slot_to_memory delegates to
-     compile_word_copy_loop (LocStorage/LocTransient -> LocMemory). That
-     helper introduces cond/body/exit blocks and an ASSIGN counter. Existing
-     blocks_grow/ci_mono lemmas prove emission structure, not execution.
-     Need a frag_exec loop invariant relating loaded slots to typed byte-array
-     length/data layout, with nonwrapping slot and byte offsets.
-   - Constructor tuple: compile_extcall_store_values uses unwrap_value,
-     MSTORE/compile_store_bytestring/MCOPY. No execution boundary establishes
-     tuple_in_memory from located values. It needs element-layout agreement,
-     fresh nonoverlapping destinations, and a frame for saved bytecode.
-   - ABI: compile_abi_encode_to_buf_correct in abiEncoderProps is explicitly
-     restricted to single_block_enc_info, and eight Resume branches use
-     admissions. It cannot justify even all fixed tuple cases kernel-closed,
-     or general dynamic constructor encoding/CFG execution. A new proven
-     recursive boundary must use type_to_abi_enc_info plus
-     sfields_tenv_consistent, val_in_memory, value_has_type, has_type,
-     vyper_to_abi and evaluate_type, and include output bytes/length and frame.
-     Source encoding rejection must be matched, not assumed away.
-   - Bounds: create_ctor_encoding_bound supplies semantic encoded length,
-     not equality with the compiler's chosen abi_size. Allocator alloca_inv
-     only bounds allocations by the natural bump pointer, not by 2**256;
-     source typing alone does not supply that bound. Need a bridge from
-     compiler environment/type metadata and reachable allocator state to
-     capacity and nonwrapping bounds. The checked wrap probe below shows
-     why omitting this bridge is unsound.
-*)
+(* Exact byte snapshots, disjoint-write frames and capacity bounds used by
+   creation preparation. The CFG consumers are in createCopyExecution and
+   createSlotCopyExecution. Callback simulation and recursive ABI execution
+   require their own contracts; state_rel alone does not protect private memory. *)
 Theorem compile_create_copy_dynamic_execution:
   compile_copy_memory_dynamic dst src len cs = ((),cs') /\
   eval_operand dst s = SOME d /\ eval_operand src s = SOME p /\
@@ -53,7 +23,18 @@ Proof
   drule_all emit_void_MCOPY_correct >> simp[]
 QED
 
+(* MCOPY reads a zero-padded source, including an empty value represented
+   beyond the current materialized memory. The destination is materialized. *)
 Theorem create_copy_snapshot:
+  read_memory src n s = bs ==>
+  create_memory_snapshot [(dst,bs)] (mcopy dst src n s)
+Proof
+  strip_tac >>
+  simp[create_memory_snapshot_def, mcopy_def, GSYM read_memory_def,
+       write_memory_with_expansion_read_self]
+QED
+
+Theorem create_copy_snapshot_in_bounds:
   TAKE n (DROP src s.vs_memory) = bs /\ LENGTH bs = n ==>
   create_memory_snapshot [(dst,bs)] (mcopy dst src n s)
 Proof

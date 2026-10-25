@@ -22,7 +22,7 @@ Ancestors
   exprLoweringProps emitHelper emitHelperProps
   abiEncoder compileEnv
   venomExecSemantics venomState venomInst venomMemProps
-  valueEncoding valueEncodingProps
+  valueEncoding valueEncodingProps createAbiValueEncoding
   vyperABI vyperTyping contractABI
 Libs
   dep_rewrite wordsLib
@@ -299,75 +299,10 @@ QED
 
    Precondition off + 32 ≤ LENGTH mem ensures mem_bytes_at returns
    real memory (no zero-padding from REPLICATE). *)
-Theorem val_in_memory_prim_enc:
-  ∀ bt v off mem av.
-    val_in_memory (BaseTV bt) v off mem ∧
-    off + 32 ≤ LENGTH mem ∧
-    is_word_type (BaseT bt) ∧
-    value_has_type (BaseTV bt) v ∧
-    vyper_to_abi_base bt v = SOME av
-    ⇒
-    mem_bytes_at off 32 mem = enc (vyper_base_to_abi_type bt) av
-Proof
-  (* Case split on bt and v. For each case:
-     1. val_in_memory gives mem_word_at off mem = val_to_w256 v
-     2. Unfold mem_word_at: word_of_bytes T 0w (mem_bytes_at off 32 mem) = w
-     3. Apply word_bytes_roundtrip: word_to_bytes w T = mem_bytes_at off 32 mem
-     4. Unfold enc/enc_number: enc at av = word_to_bytes w' T
-     5. Show w = w' by connecting val_to_w256 to the ABI value *)
-  Cases_on `bt` >> Cases_on `v` >>
-  simp[val_in_memory_def, is_word_type_def, vyper_to_abi_base_def,
-       vyper_base_to_abi_type_def, enc_def, enc_number_def,
-       mem_word_at_def, mem_bytes_at_def, val_to_w256_def] >>
-  rw[] >> rw[enc_def] >> gvs[value_has_type_def, TAKE_APPEND] >>
-  gvs[typed_val_to_w256_def] >>
-  full_simp_tac bool_ss [GSYM arithmeticTheory.SUB_EQ_0] >> gvs[] >>
-  TRY (
-    `n2w (Num i): bytes32 = i2w i` by (
-      rw[integer_wordTheory.i2w_def] >>
-      Cases_on`i=0` \\ gvs[] >>
-      `F` suffices_by rw[] >>
-      intLib.COOPER_TAC) >> gvs[]) >>
-  TRY (
-    qpat_x_assum`word_of_bytes _ _ _ = _`(SUBST_ALL_TAC o SYM) >>
-    irule $ GSYM word_bytes_roundtrip >>
-    simp[dividesTheory.divides_def] >> NO_TAC)
-  >- (
-    Cases_on`b` \\ gvs[value_has_type_def, is_word_type_def] >>
-    gvs[PAD_RIGHT, REPLICATE_GENLIST, TAKE_LENGTH_TOO_LONG,
-        byteTheory.word_of_bytes_be_def] >>
-    drule_at Any word_of_bytes_be_inj >>
-    simp[dividesTheory.divides_def] ) >>
-  gvs[GSYM wordsTheory.w2w_def] >>
-  qmatch_goalsub_abbrev_tac`word_to_bytes www` >>
-  qmatch_asmsub_abbrev_tac`word_of_bytes _ _ _ = ww1` >>
-  `www = ww1` by (
-    rw[Abbr`www`] >> gvs[byteTheory.word_of_bytes_be_def] >>
-    drule_at Any word_of_bytes_be_inj >>
-    rw[bitstringTheory.length_pad_left] >>
-    simp[GSYM byteTheory.word_of_bytes_be_def] >>
-    DEP_REWRITE_TAC[w2w_word_of_bytes_be_pad_left] >>
-    simp[dividesTheory.divides_def] ) >>
-  gvs[Abbr`www`] >>
-  irule $ GSYM word_bytes_roundtrip >>
-  rw[dividesTheory.divides_def]
-QED
+Theorem val_in_memory_prim_enc = createAbiValueEncodingTheory.val_in_memory_prim_enc
 
 (* Flag types: same argument as prims but FlagTV instead of BaseTV *)
-Theorem val_in_memory_flag_enc:
-  ∀ m k off mem.
-    val_in_memory (FlagTV m) (FlagV k) off mem ∧
-    off + 32 ≤ LENGTH mem
-    ⇒
-    mem_bytes_at off 32 mem = enc (Uint 256) (NumV k)
-Proof
-  rw[val_in_memory_def, enc_def, enc_number_def,
-     mem_word_at_def, mem_bytes_at_def, val_to_w256_def] >>
-  qpat_x_assum`_ = n2w _`(SUBST_ALL_TAC o SYM) >>
-  irule EQ_SYM >>
-  irule word_bytes_roundtrip >>
-  simp[dividesTheory.divides_def]
-QED
+Theorem val_in_memory_flag_enc = createAbiValueEncodingTheory.val_in_memory_flag_enc
 
 (* Memory length fits in a word — needed so w2n/n2w round-trips *)
 Definition venom_memory_bound_def:

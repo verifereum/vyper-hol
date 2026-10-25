@@ -17,7 +17,7 @@ QED
 
 Theorem raw_create_missing_salt_execution:
   let cs = initial_compile_state "entry" in
-  let compiled = compile_raw_create (Lit 0w) (Lit 0w)
+  let compiled = compile_raw_create_legacy (Lit 0w) (Lit 0w)
                    (SOME (Var "missing_salt")) F NONE cs in
   run_inst_seq (emitted_insts cs (SND compiled))
     (init_venom_state "entry") = Error "undefined operand"
@@ -29,9 +29,9 @@ QED
 Theorem raw_create_contract_counterexample:
   let cs = initial_compile_state "entry" in
   let ss = init_venom_state "entry" in
-  let compiled = compile_raw_create (Lit 0w) (Lit 0w)
+  let compiled = compile_raw_create_legacy (Lit 0w) (Lit 0w)
                    (SOME (Var "missing_salt")) F NONE cs in
-  compile_raw_create (Lit 0w) (Lit 0w)
+  compile_raw_create_legacy (Lit 0w) (Lit 0w)
     (SOME (Var "missing_salt")) F NONE cs =
       (FST compiled, SND compiled) /\
   eval_operand (Lit 0w) ss = SOME 0w /\

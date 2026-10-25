@@ -54,6 +54,14 @@ Proof
   rw[preserves_immutables_dom_def] >> gvs[]
 QED
 
+Theorem preserves_immutables_dom_final_frame[local]:
+  preserves_immutables_dom cx st mid /\
+  st'.immutables = mid.immutables ==>
+  preserves_immutables_dom cx st st'
+Proof
+  metis_tac[preserves_immutables_dom_trans, preserves_immutables_dom_eq]
+QED
+
 (* ===== Trivial monad helpers ===== *)
 
 Theorem get_Value_immutables[local]:
@@ -3452,11 +3460,15 @@ Proof
       irule preserves_immutables_dom_eq >> gvs[])
   (* CreateTarget *)
   >- (Cases_on `kind` >> gvs[] >>
-      gvs[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs()] >>
+       gvs[Once evaluate_def, bind_def, ignore_bind_def,
+           create_arg_snapshot_def, AllCaseEqs()] >>
       imp_res_tac check_create_blueprint_result_state >> gvs[] >>
       res_tac >>
       imp_res_tac eval_create_preserves_scopes_immutables >>
-      metis_tac[preserves_immutables_dom_trans, preserves_immutables_dom_eq])
+       imp_res_tac preserves_immutables_dom_trans >>
+       imp_res_tac preserves_immutables_dom_trans >>
+       FIRST [(fn (asl,w) => FIRST (map (ACCEPT_TAC o ASSUME) asl) (asl,w)),
+              drule_all preserves_immutables_dom_final_frame >> simp[]])
   >- gvs[evaluate_def, return_def, preserves_immutables_dom_refl]
   >- (drule_all case_eval_exprs_cons_imm_dom >> simp[])
 QED

@@ -282,6 +282,52 @@ Proof
   qexists_tac `tvs ++ tvs'` >> metis_tac[LIST_REL_APPEND_suff]
 QED
 
+Theorem list_take_length_partition[local]:
+  !xs n. xs = TAKE n xs ++ DROP (LENGTH (TAKE n xs)) xs
+Proof
+  Induct >> Cases_on `n` >> simp[]
+QED
+
+Theorem create_args_list_partition[local]:
+  !es n. es = TAKE 2 es ++ TAKE n (DROP 2 es) ++
+    DROP (2 + LENGTH (TAKE n (DROP 2 es))) es
+Proof
+  rpt strip_tac >>
+  `DROP 2 es = TAKE n (DROP 2 es) ++
+      DROP (LENGTH (TAKE n (DROP 2 es))) (DROP 2 es)` by
+    metis_tac[list_take_length_partition] >>
+  `DROP (LENGTH (TAKE n (DROP 2 es))) (DROP 2 es) =
+      DROP (2 + LENGTH (TAKE n (DROP 2 es))) es` by
+    simp_tac bool_ss [rich_listTheory.DROP_DROP_T,
+                      arithmeticTheory.ADD_COMM] >>
+  metis_tac[TAKE_DROP, APPEND_ASSOC]
+QED
+
+Theorem create_tail_result_sound_eval[local]:
+  !env cx es vs st res st' kind has_salt rof kw_order blueprint_size.
+    runtime_consistent env cx st /\
+    exprs_runtime_typed env es vs /\
+    create_arg_types_ok kind has_salt (MAP expr_type es) /\
+    eval_create cx kind has_salt rof (MAP expr_type es) vs blueprint_size st =
+      (res,st') ==>
+    state_well_typed st' /\ env_consistent env cx st' /\
+    accounts_well_typed st'.accounts /\ no_type_error_result res /\
+    (case res of
+     | INL tv => expr_result_typed env
+         (Call (BaseT AddressT) (CreateTarget kind has_salt rof kw_order)
+               es NONE) tv
+     | INR _ => T)
+Proof
+  rpt strip_tac >>
+  drule_all create_tail_result_sound_simp >>
+  simp[no_type_error_result_def]
+QED
+
+val exact_assum_tac =
+  fn (asl,w) => case List.find (fn a => aconv a w) asl of
+    SOME a => ACCEPT_TAC (ASSUME a) (asl,w)
+  | NONE => NO_TAC (asl,w)
+
 Theorem get_tenv_stk_irrelevant[local]:
   !cx f. get_tenv (cx with stk updated_by f) = get_tenv cx
 Proof
@@ -470,6 +516,80 @@ Proof
   irule materialise_preserves_value_type >> simp[] >>
   metis_tac[evaluate_type_well_formed_type_value]
 QED
+
+(* A constructor argument may retain a location across later callbacks. Its
+   refreshed value still has the annotated type in a consistent state. *)
+Theorem refresh_create_name_typed[local]:
+  runtime_consistent env cx st /\
+  well_typed_expr env (Name ty id) /\
+  evaluate_type env.type_defs ty = SOME tv /\
+  value_has_type tv v ==>
+  value_has_type tv (refresh_create_arg cx (Name ty id) v st)
+Proof
+  rpt strip_tac >> fs[runtime_consistent_def] >>
+  drule_all well_typed_Name_lookup >> strip_tac >>
+  `lookup_scopes_val id st.scopes = SOME entry.value` by
+    simp[lookup_scopes_val_SOME] >>
+  gvs[refresh_create_arg_def, runtime_consistent_def]
+QED
+
+Theorem refresh_create_global_typed[local]:
+  runtime_consistent env cx st /\ functions_well_typed cx /\
+  well_typed_expr env (TopLevelName ty (src,id)) /\
+  evaluate_type env.type_defs ty = SOME tv /\ value_has_type tv v ==>
+  value_has_type tv (refresh_create_arg cx (TopLevelName ty (src,id)) v st)
+Proof
+  rpt strip_tac >> fs[runtime_consistent_def] >>
+  simp[refresh_create_arg_def] >>
+  rpt (BasicProvers.PURE_TOP_CASE_TAC >> gvs[]) >>
+  imp_res_tac lookup_global_state >> gvs[] >>
+  drule_all lookup_global_TopLevelName_sound >> strip_tac >> gvs[] >>
+  `evaluate_type env.type_defs
+     (expr_type (TopLevelName ty (src,id))) = SOME tv` by
+    simp[expr_type_def] >>
+  drule_all expr_result_typed_materialise_preserves_value_type >>
+  simp[]
+QED
+
+Theorem refresh_create_arg_typed[local]:
+  runtime_consistent env cx st /\ functions_well_typed cx /\
+  well_typed_expr env e /\
+  evaluate_type env.type_defs (expr_type e) = SOME tv /\
+  value_has_type tv v ==>
+  value_has_type tv (refresh_create_arg cx e v st)
+Proof
+  rpt strip_tac >> Cases_on `e` >> fs[expr_type_def] >>
+  FIRST [drule_all refresh_create_name_typed >> simp[],
+         (rename1 `TopLevelName ty name` >> PairCases_on `name` >>
+          drule_all refresh_create_global_typed >> simp[]),
+         simp[refresh_create_arg_def]]
+QED
+
+Theorem refresh_create_args_list_typed[local]:
+  !es tvs vs.
+    runtime_consistent env cx st /\ functions_well_typed cx /\
+    well_typed_exprs env es /\
+    LIST_REL (\e tv. evaluate_type env.type_defs (expr_type e) = SOME tv) es tvs /\
+    LIST_REL value_has_type tvs vs ==>
+    LIST_REL value_has_type tvs (refresh_create_args cx es vs st)
+Proof
+  Induct >> Cases_on `tvs` >> Cases_on `vs` >>
+  simp[refresh_create_args_def, Once well_typed_expr_def] >>
+  rpt strip_tac >>
+  FIRST [drule_all refresh_create_arg_typed >> simp[],
+         qpat_x_assum `!tvs vs. _` (fn th => drule_all th >> simp[])]
+QED
+
+Theorem refresh_create_args_runtime_typed[local]:
+  runtime_consistent env cx st /\ functions_well_typed cx /\
+  well_typed_exprs env es /\ exprs_runtime_typed env es vs ==>
+  exprs_runtime_typed env es (refresh_create_args cx es vs st)
+Proof
+  rpt strip_tac >> fs[exprs_runtime_typed_def] >>
+  qexists_tac `tvs` >> simp[] >>
+  drule_all refresh_create_args_list_typed >> simp[]
+QED
+
 Theorem annassign_new_variable_after_materialise_sound[local]:
   env_consistent env cx st /\ state_well_typed st /\ accounts_well_typed st.accounts /\
   get_tenv cx = env.type_defs /\ evaluate_type env.type_defs typ = SOME tyv /\
@@ -10321,12 +10441,21 @@ Resume eval_all_type_sound_mutual[Expr_Call_CreateTarget]:
             `runtime_consistent env cx suffix_st` by
               simp[runtime_consistent_def] >>
             strip_tac >>
+            `exprs_runtime_typed env (DROP (if has_salt then 4 else 3) es)
+               (refresh_create_args cx
+                 (DROP (if has_salt then 4 else 3) es) suffix suffix_st)` by
+              (irule refresh_create_args_runtime_typed >> simp[]) >>
+            `exprs_runtime_typed env es
+               (prefix ++ refresh_create_args cx
+                 (DROP (if has_salt then 4 else 3) es) suffix suffix_st)` by
+              metis_tac[exprs_runtime_typed_APPEND, TAKE_DROP] >>
+            gvs[create_arg_snapshot_def] >>
             drule_all create_tail_result_sound_simp >>
             simp[no_type_error_result_def]) >>
           strip_tac >> gvs[]) >>
         strip_tac >> gvs[] >>
         metis_tac[check_create_blueprint_no_type_error]) >>
-      strip_tac >> gvs[]), ALL_TAC] >>
+      strip_tac >> gvs[]), suspend "Expr_Call_CreateTarget_RawCreate"] >>
     (full_simp_tac bool_ss [create_kind_11, create_kind_distinct] >>
     qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
     simp_tac(srw_ss())[Once evaluate_def, bind_def, ignore_bind_def,
@@ -10346,6 +10475,180 @@ Resume eval_all_type_sound_mutual[Expr_Call_CreateTarget]:
   rpt strip_tac >>
   qpat_x_assum `type_place_expr env (Call _ _ _ _) = SOME _` mp_tac >>
   simp[Once well_typed_expr_def]
+QED
+
+Resume eval_all_type_sound_mutual[Expr_Call_CreateTarget_RawCreate]:
+  qpat_x_assum `!raw_args s'' prefix t s'³' code_size t'.
+      RawCreate = CreateFromBlueprint raw_args /\ _ ==> _` (K ALL_TAC) >>
+  qpat_x_assum `!raw_args.
+      RawCreate = CreateFromBlueprint raw_args ==> _` (K ALL_TAC) >>
+  qpat_x_assum `RawCreate = CreateCopyOf ==> _` (K ALL_TAC) >>
+  qpat_x_assum `RawCreate = CreateMinimalProxy ==> _` (K ALL_TAC) >>
+  `well_typed_exprs env (TAKE 2 es)` by
+    metis_tac[well_typed_exprs_TAKE] >>
+  `call_evaluation_safe cx (int_calls_exprs (TAKE 2 es))` by
+    metis_tac[call_evaluation_safe_exprs_TAKE] >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp_tac(srw_ss())[Once evaluate_def, bind_def,
+                      create_arg_snapshot_def] >>
+  Cases_on `eval_exprs cx (TAKE 2 es) st` >>
+  rename1 `eval_exprs cx (TAKE 2 es) st = (prefix_res,prefix_st)` >>
+  qpat_x_assum `RawCreate = RawCreate ==>
+      !env st res st'. _`
+    (fn th => drule_all (SIMP_RULE bool_ss [] th) >> strip_tac) >>
+  reverse (Cases_on `prefix_res` >>
+    simp_tac bool_ss [bind_def, sum_case_def, sum_CASE_rator,
+                      prod_CASE_rator, pair_case_thm, LET_THM])
+  >- (strip_tac >>
+      rename1 `(INR failed,prefix_st) = (res,st')` >>
+      qpat_x_assum `(INR failed,prefix_st) = (res,st')`
+        (fn th =>
+          let val parts = REWRITE_RULE [pairTheory.PAIR_EQ] th in
+            SUBST1_TAC (SYM (CONJUNCT1 parts)) >>
+            SUBST1_TAC (SYM (CONJUNCT2 parts))
+          end) >>
+       simp_tac bool_ss [sum_case_def] >>
+       rpt conj_tac >|
+       [qpat_assum `state_well_typed prefix_st` ACCEPT_TAC,
+        qpat_assum `env_consistent env cx prefix_st` ACCEPT_TAC,
+        qpat_assum `accounts_well_typed prefix_st.accounts` ACCEPT_TAC,
+        (qpat_x_assum `no_type_error_result _` mp_tac >>
+         simp_tac bool_ss [no_type_error_result_def, sumTheory.INR_11])]) >>
+  qpat_x_assum `case INL x of
+      INL vs => exprs_runtime_typed env (TAKE 2 es) vs | INR v1 => T`
+    (fn th => assume_tac (SIMP_RULE bool_ss [sum_case_def] th)) >>
+  qabbrev_tac `ctor_es = TAKE (LENGTH es -
+                    ((if has_salt then 1 else 0) + 2)) (DROP 2 es)` >>
+  `well_typed_exprs env ctor_es` by
+    (simp[Abbr`ctor_es`] >>
+     irule well_typed_exprs_TAKE >>
+     irule well_typed_exprs_DROP >> simp[]) >>
+  `call_evaluation_safe cx (int_calls_exprs ctor_es)` by
+    (simp[Abbr`ctor_es`] >>
+     irule call_evaluation_safe_exprs_TAKE >>
+     irule call_evaluation_safe_exprs_DROP >> simp[]) >>
+  `ctor_es = TAKE (LENGTH es - 2 - (if has_salt then 1 else 0))
+      (DROP 2 es)` by
+    (simp[Abbr`ctor_es`] >> decide_tac) >>
+  Cases_on `eval_exprs cx ctor_es prefix_st` >>
+  rename1 `eval_exprs cx ctor_es prefix_st = (ctor_res,ctor_st)` >>
+  qpat_assum `!s'' prefix t es'. _`
+    (fn th => mp_tac (Q.SPECL [`st`,`x`,`prefix_st`,`ctor_es`] th)) >>
+  impl_tac >-
+    (simp_tac bool_ss [] >> rpt conj_tac >>
+      exact_assum_tac) >>
+  strip_tac >>
+  qpat_x_assum `!env st res st'. _`
+    (fn th => mp_tac (Q.SPECL [`env`,`prefix_st`,`ctor_res`,`ctor_st`] th)) >>
+  impl_tac >-
+    (rpt conj_tac >>
+      exact_assum_tac) >>
+  strip_tac >>
+  qpat_assum `ctor_es = TAKE (LENGTH es - 2 -
+      (if has_salt then 1 else 0)) (DROP 2 es)`
+    (fn th => REWRITE_TAC[GSYM th]) >>
+  qpat_assum `eval_exprs cx ctor_es prefix_st = (ctor_res,ctor_st)`
+    (fn th => REWRITE_TAC[th]) >>
+  reverse (Cases_on `ctor_res` >>
+    simp_tac bool_ss [sum_case_def, prod_CASE_rator, pair_case_thm,
+                      LET_THM])
+  >- (strip_tac >>
+      rename1 `(INR failed,ctor_st) = (res,st')` >>
+      qpat_x_assum `(INR failed,ctor_st) = (res,st')`
+        (fn th =>
+          let val parts = REWRITE_RULE [pairTheory.PAIR_EQ] th in
+            SUBST1_TAC (SYM (CONJUNCT1 parts)) >>
+            SUBST1_TAC (SYM (CONJUNCT2 parts))
+          end) >>
+       simp_tac bool_ss [sum_case_def] >>
+       rpt conj_tac >|
+       [qpat_assum `state_well_typed ctor_st` ACCEPT_TAC,
+        qpat_assum `env_consistent env cx ctor_st` ACCEPT_TAC,
+        qpat_assum `accounts_well_typed ctor_st.accounts` ACCEPT_TAC,
+        (qpat_x_assum `no_type_error_result _` mp_tac >>
+         simp_tac bool_ss [no_type_error_result_def, sumTheory.INR_11])]) >>
+  simp_tac bool_ss [create_arg_snapshot_def, pair_case_thm,
+                    sum_case_def, prod_CASE_rator, LET_THM] >>
+  `well_typed_exprs env (DROP (2 + LENGTH ctor_es) es)` by
+    (irule well_typed_exprs_DROP >> simp[]) >>
+  `call_evaluation_safe cx
+      (int_calls_exprs (DROP (2 + LENGTH ctor_es) es))` by
+    (irule call_evaluation_safe_exprs_DROP >> simp[]) >>
+  Cases_on `eval_exprs cx (DROP (2 + LENGTH ctor_es) es) ctor_st` >>
+  rename1 `eval_exprs cx (DROP (2 + LENGTH ctor_es) es) ctor_st =
+      (salt_res,salt_st)` >>
+  qpat_assum `!s'' prefix t ctor_es s'³' ctor t' s'⁴' snapshot t'' ctor_late. _`
+    (fn th => mp_tac (Q.SPECL
+      [`st`,`x`,`prefix_st`,`ctor_es`,`prefix_st`,`x'`,`ctor_st`,
+       `ctor_st`,`ctor_st`,`ctor_st`,
+       `refresh_create_args cx ctor_es x' ctor_st`] th)) >>
+  impl_tac >-
+    (simp_tac bool_ss [create_arg_snapshot_def] >>
+     rpt conj_tac >>
+      exact_assum_tac) >>
+  strip_tac >>
+  qpat_x_assum `!env st res st'. _`
+    (fn th => mp_tac (Q.SPECL [`env`,`ctor_st`,`salt_res`,`salt_st`] th)) >>
+  impl_tac >-
+    (rpt conj_tac >>
+      exact_assum_tac) >>
+  strip_tac >>
+  reverse (Cases_on `salt_res` >>
+    simp_tac bool_ss [sum_case_def, prod_CASE_rator, pair_case_thm,
+                      LET_THM])
+  >- (strip_tac >>
+      rename1 `(INR failed,salt_st) = (res,st')` >>
+      qpat_x_assum `(INR failed,salt_st) = (res,st')`
+        (fn th =>
+          let val parts = REWRITE_RULE [pairTheory.PAIR_EQ] th in
+            SUBST1_TAC (SYM (CONJUNCT1 parts)) >>
+            SUBST1_TAC (SYM (CONJUNCT2 parts))
+          end) >>
+       simp_tac bool_ss [sum_case_def] >>
+       rpt conj_tac >|
+       [qpat_assum `state_well_typed salt_st` ACCEPT_TAC,
+        qpat_assum `env_consistent env cx salt_st` ACCEPT_TAC,
+        qpat_assum `accounts_well_typed salt_st.accounts` ACCEPT_TAC,
+        (qpat_x_assum `no_type_error_result _` mp_tac >>
+         simp_tac bool_ss [no_type_error_result_def, sumTheory.INR_11])]) >>
+  qpat_x_assum `case INL x' of INL vs =>
+      exprs_runtime_typed env ctor_es vs | INR v1 => T`
+    (fn th => assume_tac (SIMP_RULE bool_ss [sum_case_def] th)) >>
+  qpat_x_assum `case INL x'' of INL vs =>
+      exprs_runtime_typed env (DROP (2 + LENGTH ctor_es) es) vs | INR v1 => T`
+    (fn th => assume_tac (SIMP_RULE bool_ss [sum_case_def] th)) >>
+  `runtime_consistent env cx ctor_st` by
+    simp[runtime_consistent_def] >>
+  `exprs_runtime_typed env ctor_es
+      (refresh_create_args cx ctor_es x' ctor_st)` by
+    (irule refresh_create_args_runtime_typed >> simp[]) >>
+  `es = TAKE 2 es ++ ctor_es ++ DROP (2 + LENGTH ctor_es) es` by
+    simp_tac bool_ss [Abbr`ctor_es`, create_args_list_partition] >>
+  `exprs_runtime_typed env
+      (TAKE 2 es ++ ctor_es ++ DROP (2 + LENGTH ctor_es) es)
+      (x ++ refresh_create_args cx ctor_es x' ctor_st ++ x'')` by
+    (irule exprs_runtime_typed_APPEND >> conj_tac >-
+       (irule exprs_runtime_typed_APPEND >> conj_tac >>
+         exact_assum_tac) >>
+      exact_assum_tac) >>
+  `exprs_runtime_typed env es
+      (x ++ refresh_create_args cx ctor_es x' ctor_st ++ x'')` by
+    (qpat_assum `es = TAKE 2 es ++ ctor_es ++
+         DROP (2 + LENGTH ctor_es) es`
+       (fn th => ONCE_REWRITE_TAC[th]) >>
+      exact_assum_tac) >>
+  `runtime_consistent env cx salt_st` by
+    simp[runtime_consistent_def] >>
+  strip_tac >>
+  drule_all create_tail_result_sound_eval >>
+  DISCH_TAC >>
+  qunabbrev_tac `ctor_es` >>
+  qpat_x_assum `ty = BaseT AddressT` (fn th => REWRITE_TAC[th]) >>
+  qpat_x_assum `v26 = NONE` (fn th => REWRITE_TAC[th]) >>
+  qpat_assum `!kw_order. state_well_typed st' /\ _`
+    (fn th => mp_tac (Q.SPEC `v25` th)) >>
+  DISCH_TAC >>
+  exact_assum_tac
 QED
 
 Resume eval_all_type_sound_mutual[Exprs_nil]:

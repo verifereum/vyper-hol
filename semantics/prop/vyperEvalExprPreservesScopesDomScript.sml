@@ -583,11 +583,15 @@ QED
 Resume eval_mutual_preserves_scopes_dom[CreateTarget]:
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
   Cases_on `kind` >> gvs[] >>
-  gvs[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs()] >>
+  gvs[Once evaluate_def, bind_def, ignore_bind_def,
+      create_arg_snapshot_def, AllCaseEqs()] >>
   imp_res_tac check_create_blueprint_result_state >> gvs[] >>
   res_tac >>
   imp_res_tac eval_create_preserves_scopes_immutables >> gvs[] >>
-  metis_tac[]
+  TRY (qpat_x_assum `!st res st'.
+          eval_exprs cx (TAKE _ es) st = (res,st') ==> _`
+        (fn th => drule_all th >> strip_tac)) >>
+  res_tac >> gvs[]
 QED
 
 (* Original concrete-only resume retained for TASK032 provenance.

@@ -156,19 +156,21 @@ Definition fmp_lower_inst_def:
            (case inst.inst_outputs of
               [old] =>
                 (case fresh_ir_var s of (plus31,s1) =>
-                 case fresh_ir_var s1 of (aligned,s2) =>
-                 case fresh_inst_id s2 of (add_id,s3) =>
-                 case fresh_inst_id s3 of (and_id,s4) =>
-                 case fresh_inst_id s4 of (bump_id,s5) =>
+                  case fresh_ir_var s1 of (mask,s2) =>
+                  case fresh_ir_var s2 of (aligned,s3) =>
+                  case fresh_inst_id s3 of (add_id,s4) =>
+                  case fresh_inst_id s4 of (not_id,s5) =>
+                  case fresh_inst_id s5 of (and_id,s6) =>
+                  case fresh_inst_id s6 of (bump_id,s7) =>
                    SOME
-                     ([mk_inst add_id ADD [size_op; Lit 31w] [plus31];
+                      ([mk_inst add_id ADD [Lit 31w; size_op] [plus31];
+                        mk_inst not_id NOT [Lit 31w] [mask];
                        mk_inst and_id AND
-                         [Var plus31;
-                          Lit 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe0w]
+                          [Var plus31; Var mask]
                          [aligned];
                        mk_inst bump_id BUMP
                          [Var runner; Var aligned] [old;runner]],
-                      s5))
+                       s7))
             | _ => NONE)
        | _ => NONE)
     else if inst.inst_opcode = DRET then NONE

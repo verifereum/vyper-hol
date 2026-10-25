@@ -18,7 +18,7 @@
 
 Theory exprLoweringProps
 Ancestors
-  exprLowering emitHelper compileEnv builtinSystem
+  exprLowering emitHelper compileEnv builtinSystem builtinCreate context
   venomExecSemantics venomState venomInst venomInstProps
   vyperInterpreter vyperContext
   vyperState vyperValueOperation
@@ -2835,13 +2835,161 @@ Proof
   irule ci_mono_lower_value_cfn >> simp[]
 QED
 
+(* Monadic creation stages preserve instruction indices just like the other
+   builtin emitters. Keep the callback premise separate from generated code. *)
+val ci_mono_create_tac = fn thms => rpt (FIRST [
+  CHANGED_TAC (simp ([LET_THM, pairTheory.FORALL_PROD,
+    pairTheory.UNCURRY_DEF, ci_mono_emit_op, ci_mono_emit_void,
+    ci_mono_emit_inst, ci_mono_compile_alloc_buffer,
+    ci_mono_fresh_label, ci_mono_new_block, ci_mono_comp_return,
+    ci_mono_lower_value_cfn, ci_mono_compile_multi_vvs,
+    ci_mono_compile_extcall_store_values,
+    cj 2 ci_mono_compile_abi_encode,
+    ci_mono_compile_copy_memory_dynamic,
+    ci_mono_compile_word_copy_loop] @ thms)),
+  gen_tac,
+  ho_match_mp_tac ci_mono_bind >> conj_tac,
+  ho_match_mp_tac ci_mono_ignore_bind >> conj_tac,
+  IF_CASES_TAC,
+  BasicProvers.CASE_TAC]);
+
+Theorem ci_mono_compile_check_create_result[local]:
+  ∀addr rof sa. ci_mono sa (SND (compile_check_create_result addr rof sa))
+Proof
+  rpt gen_tac >> simp[compile_check_create_result_def] >> ci_mono_create_tac []
+QED
+
+Theorem ci_mono_compile_create_dispatch[local]:
+  ∀ptr len value salt rof sa.
+    ci_mono sa (SND (compile_create_dispatch ptr len value salt rof sa))
+Proof
+  rpt gen_tac >> simp[compile_create_dispatch_def] >>
+  ci_mono_create_tac [ci_mono_compile_check_create_result]
+QED
+
+Theorem ci_mono_compile_create_proxy_buf[local]:
+  ∀target sa. ci_mono sa (SND (compile_create_proxy_buf target sa))
+Proof
+  rpt gen_tac >> simp[compile_create_proxy_buf_def] >> ci_mono_create_tac []
+QED
+
+Theorem ci_mono_compile_create_copy[local]:
+  ∀target value salt rof sa.
+    ci_mono sa (SND (compile_create_copy target value salt rof sa))
+Proof
+  rpt gen_tac >> simp[compile_create_copy_def, compile_alloc_dynamic_def] >>
+  ci_mono_create_tac [ci_mono_compile_check_create_result]
+QED
+
+Theorem ci_mono_compile_create_blueprint_check[local]:
+  ∀target offset sa.
+    ci_mono sa (SND (compile_create_blueprint_check target offset sa))
+Proof
+  rpt gen_tac >> simp[compile_create_blueprint_check_def] >> ci_mono_create_tac []
+QED
+
+Theorem ci_mono_compile_create_blueprint_append[local]:
+  ∀target value salt offset size ptr len rof sa.
+    ci_mono sa (SND (compile_create_blueprint_append target value salt offset
+      size ptr len rof sa))
+Proof
+  rpt gen_tac >> simp[compile_create_blueprint_append_def, compile_alloc_dynamic_def] >>
+  ci_mono_create_tac [ci_mono_compile_check_create_result]
+QED
+
+Theorem ci_mono_compile_create_salt[local]:
+  ∀cfn cenv salt sa.
+    (∀ce ty e st. ci_mono st (SND (cfn ce ty e st))) ⇒
+    ci_mono sa (SND (compile_create_salt cfn cenv salt sa))
+Proof
+  rpt gen_tac >> strip_tac >> Cases_on `salt` >>
+  simp[compile_create_salt_def] >> ci_mono_create_tac []
+QED
+
+Theorem ci_mono_compile_create_ctor_tuple[local]:
+  ∀cfn cenv args sa.
+    (∀ce ty e st. ci_mono st (SND (cfn ce ty e st))) ⇒
+    ci_mono sa (SND (compile_create_ctor_tuple cfn cenv args sa))
+Proof
+  rpt gen_tac >> strip_tac >> simp[compile_create_ctor_tuple_def] >>
+  ci_mono_create_tac []
+QED
+
+Theorem ci_mono_compile_create_blueprint_args[local]:
+  ∀cfn cenv raw args sa.
+    (∀ce ty e st. ci_mono st (SND (cfn ce ty e st))) ⇒
+    ci_mono sa (SND (compile_create_blueprint_args cfn cenv raw args sa))
+Proof
+  rpt gen_tac >> strip_tac >> simp[compile_create_blueprint_args_def] >>
+  ci_mono_create_tac [ci_mono_compile_create_ctor_tuple]
+QED
+
+Theorem ci_mono_compile_create_snapshot[local]:
+  ∀cenv vv ty sa. ci_mono sa (SND (compile_create_snapshot cenv vv ty sa))
+Proof
+  rpt gen_tac >> simp[compile_create_snapshot_def, compile_slot_to_memory_def] >>
+  ci_mono_create_tac []
+QED
+
+Theorem ci_mono_compile_raw_create[local]:
+  ∀cfn cenv bytecode value args salt rof sa.
+    (∀ce ty e st. ci_mono st (SND (cfn ce ty e st))) ⇒
+    ci_mono sa (SND (compile_raw_create cfn cenv bytecode value args salt rof sa))
+Proof
+  rpt gen_tac >> strip_tac >> simp[compile_raw_create_def] >>
+  ci_mono_create_tac [ci_mono_compile_create_snapshot,
+    ci_mono_compile_create_ctor_tuple, ci_mono_compile_create_salt,
+    ci_mono_compile_create_dispatch]
+QED
+
+Theorem ci_mono_compile_create_call[local]:
+  ∀cfn cenv ck salted rof args sa.
+    (∀ce ty e st. ci_mono st (SND (cfn ce ty e st))) ⇒
+    ci_mono sa (SND (compile_create_call cfn cenv ck salted rof args sa))
+Proof
+  rpt gen_tac >> strip_tac >> simp[compile_create_call_def] >>
+  ci_mono_create_tac [ci_mono_compile_raw_create, ci_mono_compile_create_proxy_buf,
+    ci_mono_compile_create_dispatch, ci_mono_compile_create_salt,
+    ci_mono_compile_create_copy, ci_mono_compile_create_blueprint_check,
+    ci_mono_compile_create_blueprint_args, ci_mono_compile_create_blueprint_append]
+QED
+
+Theorem ci_mono_compile_create_target_call[local]:
+  ∀cfn cenv ret_ty ty ck salted rof order args default_ret sa.
+    (∀ce ety e st. ci_mono st (SND (cfn ce ety e st))) ⇒
+    ci_mono sa (SND (compile_call cfn cenv ret_ty ty
+      (CreateTarget ck salted rof order) args default_ret sa))
+Proof
+  rpt gen_tac >> strip_tac >>
+  simp[compile_call_def, ci_mono_as_stack_val] >>
+  irule ci_mono_compile_create_call >> simp[]
+QED
+
+Theorem ci_mono_compile_send_call[local]:
+  ∀cfn cenv ret_ty ty args default_ret sa.
+    (∀ce ety e st. ci_mono st (SND (cfn ce ety e st))) ⇒
+    ci_mono sa (SND (compile_call cfn cenv ret_ty ty Send args default_ret sa))
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `args`
+  >- simp[compile_call_def, pairTheory.UNCURRY, ci_mono_emit_inst] >>
+  rename1 `addr::rest` >> Cases_on `rest`
+  >- simp[compile_call_def, pairTheory.UNCURRY, ci_mono_emit_inst] >>
+  rename1 `addr::value::tail` >> Cases_on `tail` >>
+  simp[compile_call_def, LET_THM, pairTheory.UNCURRY, ci_mono_emit_inst] >>
+  irule ci_mono_trans >> irule_at (Pos last) ci_mono_emit_void >>
+  irule ci_mono_trans >> irule_at (Pos last) ci_mono_emit_op >>
+  irule ci_mono_trans >> irule_at (Pos last) ci_mono_lower_value_cfn >>
+  (conj_tac >- simp[]) >> irule ci_mono_lower_value_cfn >> simp[]
+QED
+
 (* Cache only the INVALID branches: never normalize the large IntCall /
    ExtCall bodies while speculatively closing these primitive cases. *)
 val ci_mono_invalid_call_tac =
   let
     val invalid_calls = map
       (SIMP_RULE pure_ss [LET_THM, pairTheory.UNCURRY, pairTheory.SND])
-      (map (fn n => cj n compile_call_def) [4, 6, 7, 8, 9])
+      (map (fn n => cj n compile_call_def) [4, 6, 7, 8])
   in
     CONV_TAC
       (RAND_CONV (RAND_CONV (FIRST_CONV (map REWR_CONV invalid_calls)))) >>
@@ -2855,6 +3003,8 @@ Theorem ci_mono_compile_call[local]:
 Proof
   rpt gen_tac >> strip_tac >> Cases_on `target` >>
   TRY (ci_mono_invalid_call_tac >> NO_TAC) >>
+  TRY (irule ci_mono_compile_create_target_call >> simp[] >> NO_TAC) >>
+  TRY (irule ci_mono_compile_send_call >> simp[] >> NO_TAC) >>
   TRY (irule ci_mono_compile_raw_call_calldata >> simp[] >> NO_TAC)
   >- ( (* IntCall *)
     simp[compile_call_def, LET_THM, pairTheory.UNCURRY] >>
@@ -2881,7 +3031,8 @@ rpt (CHANGED_TAC (
 )) >>
 rpt strip_tac >> first_assum irule)
   >- ( (* ExtCall *)
-    PairCases_on `p` >> simp[compile_call_def, LET_THM, pairTheory.UNCURRY] >>
+    rename1 `ExtCall _ _ signature` >> PairCases_on `signature` >>
+    simp[compile_call_def, LET_THM, pairTheory.UNCURRY] >>
     Cases_on `args` >> simp[ci_mono_emit_inst] >>
     rpt IF_CASES_TAC >> gvs[] >>
     Cases_on `default_ret` >> gvs[] >>
@@ -2914,12 +3065,6 @@ rpt strip_tac >> first_assum irule)
     TRY (first_assum irule >> NO_TAC) >>
     TRY (irule ci_mono_refl >> NO_TAC) >>
     simp[ci_mono_emit_inst, ci_mono_comp_return, ci_mono_refl])
-  >> (* Send *)
-  simp[Once compile_call_def, LET_THM] >>
-  Cases_on `args` >> simp[pairTheory.UNCURRY, ci_mono_emit_inst] >>
-  Cases_on `t` >> simp[pairTheory.UNCURRY, ci_mono_emit_inst] >>
-  Cases_on `t'` >> simp[pairTheory.UNCURRY, ci_mono_emit_inst] >>
-  irule ci_mono_trans >> irule_at (Pos last) ci_mono_emit_void >> irule ci_mono_trans >> irule_at (Pos last) ci_mono_emit_op >> irule ci_mono_trans >> irule_at (Pos last) ci_mono_lower_value_cfn >> (conj_tac >- simp[]) >> irule ci_mono_lower_value_cfn >> simp[]
 QED
 
 Theorem compile_expr_ci_mono[local]:

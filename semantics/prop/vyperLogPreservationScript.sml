@@ -25,6 +25,13 @@ Proof
   simp[log_extends_def] >> metis_tac[rich_listTheory.IS_PREFIX_TRANS]
 QED
 
+Theorem log_extends_final_frame:
+  log_extends st mid /\ isPREFIX mid.logs st'.logs ==>
+  log_extends st st'
+Proof
+  simp[log_extends_def] >> metis_tac[rich_listTheory.IS_PREFIX_TRANS]
+QED
+
 Theorem log_extends_eq_logs:
   st.logs = st'.logs ==> log_extends st st'
 Proof
@@ -3556,11 +3563,14 @@ Resume eval_mutual_log_extends[CreateTarget]:
   Cases_on `kind` >> gvs[] >>
   gvs[Once vyperInterpreterTheory.evaluate_def,
       vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
-      AllCaseEqs()] >>
+       create_arg_snapshot_def, AllCaseEqs()] >>
   imp_res_tac check_create_blueprint_result_state >> gvs[] >>
   res_tac >>
   imp_res_tac eval_create_logs_extend >>
-  metis_tac[log_extends_refl, log_extends_trans, log_extends_def]
+  imp_res_tac log_extends_trans >>
+  imp_res_tac log_extends_trans >>
+  FIRST [(fn (asl,w) => FIRST (map (ACCEPT_TAC o ASSUME) asl) (asl,w)),
+         drule_all log_extends_final_frame >> simp[]]
 QED
 
 Finalise eval_mutual_log_extends

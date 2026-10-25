@@ -2,6 +2,7 @@ Theory createFrameInterface
 Ancestors
   list rich_list fragExec emitHelperProps builtinCreate rawCreateContractProbe
   vyperCompiler venomState venomExecSemantics venomInst compileEnv emitHelper
+  venomMemProps
 
 (* A live operand carries its VALUE, not just its definedness. In particular,
    salts and constructor-tuple pointers belong in this list. *)
@@ -65,9 +66,10 @@ End
 (* A scheduled callback gets its ordinary source simulation in source_pre,
    source_normal and source_exit. It is permitted to exit exceptionally;
    no successful evaluation of the callback/pipeline is assumed. Private
-   snapshots are supplied by saved and must be framed on NORMAL return. *)
+   snapshots are supplied by saved and must be framed on NORMAL return.
+   The result can be an operand or a located VyperValue. *)
 Definition create_callback_spec_def:
-  create_callback_spec ctx (callback : operand compiler)
+  create_callback_spec ctx (callback : 'a compiler)
       source_pre source_normal source_exit live saved <=>
     !cs op cs'. callback cs = (op,cs') ==>
       cs_extends cs cs' /\
@@ -112,10 +114,11 @@ Theorem create_check_probe_fn_normalized:
         <|bb_label := "@create_fail_0";
           bb_instructions :=
             [mk_inst 1 RETURNDATASIZE [] ["%0"];
-             mk_inst 2 RETURNDATACOPY [Lit 0w; Lit 0w; Var "%0"] [];
-             mk_inst 3 REVERT [Lit 0w; Var "%0"] []]|>;
+             mk_inst 2 ALLOCA [Lit 0w] ["%1"];
+             mk_inst 3 RETURNDATACOPY [Var "%1"; Lit 0w; Var "%0"] [];
+             mk_inst 4 REVERT [Var "%1"; Var "%0"] []]|>;
         <|bb_label := "@create_ok_1";
-          bb_instructions := [mk_inst 4 STOP [] []]|>] |>
+          bb_instructions := [mk_inst 5 STOP [] []]|>] |>
 Proof
   EVAL_TAC
 QED
@@ -139,7 +142,7 @@ Theorem create_check_stop_step:
   s.vs_inst_idx = 0 ==>
   exec_block fuel ctx
     <|bb_label := "@create_ok_1";
-      bb_instructions := [mk_inst 4 STOP [] []]|> s = Halt (halt_state (set_returndata [] s))
+      bb_instructions := [mk_inst 5 STOP [] []]|> s = Halt (halt_state (set_returndata [] s))
 Proof
   strip_tac >>
   simp[Once exec_block_def, get_instruction_def, mk_inst_def,
@@ -167,9 +170,32 @@ Definition create_check_revert_bb_def:
     <|bb_label := "@create_fail_0";
       bb_instructions :=
         [mk_inst 1 RETURNDATASIZE [] ["%0"];
-         mk_inst 2 RETURNDATACOPY [Lit 0w; Lit 0w; Var "%0"] [];
-         mk_inst 3 REVERT [Lit 0w; Var "%0"] []]|>
+         mk_inst 2 ALLOCA [Lit 0w] ["%1"];
+         mk_inst 3 RETURNDATACOPY [Var "%1"; Lit 0w; Var "%0"] [];
+         mk_inst 4 REVERT [Var "%1"; Var "%0"] []]|>
 End
+
+Theorem create_revert_read_written[local]:
+  TAKE (LENGTH bytes)
+    (DROP offset (write_memory_with_expansion offset bytes s).vs_memory ++
+     REPLICATE (LENGTH bytes) 0w) = bytes
+Proof
+  `LENGTH bytes <= LENGTH
+      (DROP offset (write_memory_with_expansion offset bytes s).vs_memory)` by
+    (simp[LENGTH_DROP, LENGTH_write_memory_with_expansion,
+          arithmeticTheory.MAX_DEF] >> IF_CASES_TAC >> decide_tac) >>
+  fs[LENGTH_DROP, TAKE_APPEND, write_memory_with_expansion_read_self]
+QED
+
+Theorem create_revert_write_frame[local,simp]:
+  (write_memory_with_expansion off bytes s).vs_vars = s.vs_vars ∧
+  (write_memory_with_expansion off bytes s).vs_current_bb = s.vs_current_bb ∧
+  (write_memory_with_expansion off bytes s).vs_inst_idx = s.vs_inst_idx ∧
+  (write_memory_with_expansion off bytes s).vs_returndata = s.vs_returndata ∧
+  (write_memory_with_expansion off bytes s).vs_halted = s.vs_halted
+Proof
+  simp[write_memory_with_expansion_def]
+QED
 
 Theorem create_check_revert_block:
   s.vs_inst_idx = 0 /\ LENGTH s.vs_returndata < dimword(:256) ==>
@@ -185,11 +211,18 @@ Proof
        update_var_def, eval_operand_def, lookup_var_def,
        step_inst_def, step_inst_base_def, is_terminator_def,
        finite_mapTheory.FLOOKUP_UPDATE] >>
-  simp[write_memory_with_expansion_def] >>
+  Cases_on `FLOOKUP s.vs_allocas 2` >>
+  TRY (rename1 `FLOOKUP s.vs_allocas 2 = SOME allocation` >>
+       PairCases_on `allocation`) >>
+  simp[exec_alloca_def] >>
   simp[Once exec_block_def, get_instruction_def] >>
   simp[step_inst_def, step_inst_base_def, eval_operand_def, lookup_var_def,
-       finite_mapTheory.FLOOKUP_UPDATE] >>
-  simp[revert_state_def, set_returndata_def, TAKE_APPEND]
+       update_var_def, finite_mapTheory.FLOOKUP_UPDATE, is_terminator_def] >>
+  simp[Once exec_block_def, get_instruction_def, mk_inst_def] >>
+  simp[step_inst_def, step_inst_base_def, eval_operand_def, lookup_var_def,
+       update_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  simp[create_revert_read_written, revert_state_def, set_returndata_def,
+       finite_mapTheory.FLOOKUP_UPDATE, is_terminator_def]
 QED
 
 Theorem create_check_failure_traverses_cfg:

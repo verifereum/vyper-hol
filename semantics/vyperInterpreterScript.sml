@@ -1513,9 +1513,23 @@ Definition evaluate_def:
          prefix <- eval_exprs cx (TAKE (if has_salt then 4 else 3) es);
          code_size <- check_create_blueprint has_salt prefix;
          suffix <- eval_exprs cx (DROP (if has_salt then 4 else 3) es);
+          snapshot <- create_arg_snapshot;
          eval_create cx kind has_salt rof (MAP expr_type es)
-           (prefix ++ suffix) (SOME code_size)
+            (prefix ++ refresh_create_args cx
+              (DROP (if has_salt then 4 else 3) es) suffix snapshot)
+            (SOME code_size)
        od
+      | RawCreate => do
+          prefix <- eval_exprs cx (TAKE 2 es);
+          ctor_es <<- TAKE (LENGTH es - 2 - (if has_salt then 1 else 0))
+            (DROP 2 es);
+          ctor <- eval_exprs cx ctor_es;
+          snapshot <- create_arg_snapshot;
+          ctor_late <<- refresh_create_args cx ctor_es ctor snapshot;
+          salt <- eval_exprs cx (DROP (2 + LENGTH ctor_es) es);
+          eval_create cx kind has_salt rof (MAP expr_type es)
+            (prefix ++ ctor_late ++ salt) NONE
+        od
      | _ => do
          vs <- eval_exprs cx es;
          eval_create cx kind has_salt rof (MAP expr_type es) vs NONE
@@ -1550,6 +1564,15 @@ Termination
   \\ simp[prim_recTheory.measure_def, relationTheory.inv_image_def]
   \\ rw[bound_def, MAX_DEF, MULT, IS_SOME_EXISTS] \\ gvs[]
   \\ rpt (FIRST [
+    (* A constructor slice is bounded through its DROP 2 parent. *)
+    (qmatch_goalsub_abbrev_tac `exprs_bound fts (TAKE n (DROP m es))`
+    \\ irule LESS_EQ_LESS_TRANS
+    \\ qexists_tac `exprs_bound fts es`
+    \\ `exprs_bound fts (TAKE n (DROP m es)) ≤ exprs_bound fts es` by
+         (irule LESS_EQ_TRANS
+          \\ qexists_tac `exprs_bound fts (DROP m es)`
+          \\ simp[exprs_bound_TAKE, exprs_bound_DROP])
+    \\ simp[] \\ NO_TAC),
     (* Blueprint operand slices are bounded by the original argument list. *)
     (qmatch_goalsub_abbrev_tac `exprs_bound fts (TAKE n es)`
     \\ irule LESS_EQ_LESS_TRANS

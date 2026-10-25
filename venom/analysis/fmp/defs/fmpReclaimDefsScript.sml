@@ -182,10 +182,43 @@ Definition fmp_derived_step_def:
     fmp_derived_step rest vars'
 End
 
+(* Stop iterating once the derived-variable set has reached a fixed point.
+   The bounded FUNPOW definition below remains the logical interface. *)
+Definition fmp_derived_run_def:
+  fmp_derived_run next_vars 0 vars = vars /\
+  fmp_derived_run next_vars (SUC fuel) vars =
+    let next = next_vars vars in
+    if next = vars then vars else fmp_derived_run next_vars fuel next
+End
+
+Theorem fmp_derived_run_fixed:
+  !fuel vars. next_vars vars = vars ==>
+    FUNPOW next_vars fuel vars = vars
+Proof
+  Induct >> simp[arithmeticTheory.FUNPOW]
+QED
+
+Theorem fmp_derived_run_eq_FUNPOW:
+  !fuel vars. fmp_derived_run next_vars fuel vars =
+    FUNPOW next_vars fuel vars
+Proof
+  Induct >- simp[fmp_derived_run_def,arithmeticTheory.FUNPOW] >>
+  gen_tac >> simp[fmp_derived_run_def,arithmeticTheory.FUNPOW] >>
+  Cases_on `next_vars vars = vars` >> simp[fmp_derived_run_fixed]
+QED
+
 Definition fmp_derived_vars_def:
   fmp_derived_vars fn base =
     FUNPOW (fmp_derived_step (fn_insts fn)) (LENGTH (fn_insts fn)) [base]
 End
+
+Theorem fmp_derived_vars_compute[compute]:
+  fmp_derived_vars fn root_var =
+    fmp_derived_run (fmp_derived_step (fn_insts fn))
+      (LENGTH (fn_insts fn)) [root_var]
+Proof
+  simp[fmp_derived_vars_def,fmp_derived_run_eq_FUNPOW]
+QED
 
 Definition fmp_operand_at_is_def:
   fmp_operand_at_is base n ops <=>

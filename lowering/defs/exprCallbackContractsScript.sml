@@ -3,7 +3,7 @@
    not all possible compiler callback inputs. *)
 Theory exprCallbackContracts
 Ancestors
-  exprLowering exprCallBounds compileEnv context vyperAST list
+  exprLowering exprCallBounds compileEnv context vyperAST list rich_list
 
 Definition expr_callbacks_agree_def:
   expr_callbacks_agree f g cenv es =
@@ -188,6 +188,81 @@ Proof
   simp[compile_call_def, lower_value_def, comp_bind_def, compile_multi_vvs_def]
 QED
 
+Theorem expr_callbacks_agree_front:
+  es <> [] ∧ expr_callbacks_agree f g cenv es ⇒
+  expr_callbacks_agree f g cenv (FRONT es)
+Proof
+  rw[expr_callbacks_agree_def] >>
+  metis_tac[MEM_FRONT_NOT_NIL]
+QED
+
+Theorem compile_create_salt_callback_contract:
+  expr_callbacks_agree f g cenv (case salt of NONE => [] | SOME e => [e]) ⇒
+  compile_create_salt f cenv salt = compile_create_salt g cenv salt
+Proof
+  Cases_on `salt` >> simp[compile_create_salt_def] >>
+  strip_tac >> simp[lower_value_def]
+QED
+
+Theorem compile_create_ctor_tuple_callback_contract:
+  expr_callbacks_agree f g cenv es ⇒
+  compile_create_ctor_tuple f cenv es = compile_create_ctor_tuple g cenv es
+Proof
+  strip_tac >> drule compile_multi_vvs_callback_contract >>
+  simp[compile_create_ctor_tuple_def]
+QED
+
+Theorem compile_create_blueprint_args_callback_contract:
+  expr_callbacks_agree f g cenv es ⇒
+  compile_create_blueprint_args f cenv raw es =
+  compile_create_blueprint_args g cenv raw es
+Proof
+  strip_tac >>
+  `compile_create_ctor_tuple f cenv es = compile_create_ctor_tuple g cenv es` by
+    (irule compile_create_ctor_tuple_callback_contract >> simp[]) >>
+  Cases_on `raw` >> simp[compile_create_blueprint_args_def] >>
+  Cases_on `es` >> fs[] >> rename1 `e::rest` >> Cases_on `rest` >>
+  fs[lower_value_def]
+QED
+
+Theorem compile_raw_create_callback_contract:
+  expr_callbacks_agree f g cenv
+    ([bytecode;value] ++ es ++ (case salt of NONE => [] | SOME e => [e])) ⇒
+  compile_raw_create f cenv bytecode value es salt rof =
+  compile_raw_create g cenv bytecode value es salt rof
+Proof
+  simp[] >> strip_tac >>
+  `compile_create_ctor_tuple f cenv es = compile_create_ctor_tuple g cenv es` by
+    (irule compile_create_ctor_tuple_callback_contract >> simp[]) >>
+  `compile_create_salt f cenv salt = compile_create_salt g cenv salt` by
+    (irule compile_create_salt_callback_contract >> simp[]) >>
+  simp[compile_raw_create_def, lower_value_def]
+QED
+
+Theorem compile_create_call_callback_contract:
+  expr_callbacks_agree f g cenv args ⇒
+  compile_create_call f cenv ck salted rof args =
+  compile_create_call g cenv ck salted rof args
+Proof
+  Cases_on `args` >- simp[compile_create_call_def] >>
+  rename1 `target::tail` >> Cases_on `tail`
+  >- simp[compile_create_call_def] >>
+  rename1 `target::value::rest` >> simp[] >> strip_tac >>
+  Cases_on `salted` >> Cases_on `ck` >>
+  simp[compile_create_call_def] >> TRY IF_CASES_TAC >> simp[] >>
+  TRY (irule compile_raw_create_callback_contract >> simp[] >>
+       TRY (conj_tac >- (irule expr_callbacks_agree_front >> simp[] >>
+                         Cases_on `rest` >> fs[]) >>
+            fs[expr_callbacks_agree_def] >>
+            metis_tac[MEM_LAST_NOT_NIL, LENGTH_NIL])) >>
+  Cases_on `rest` >> fs[compile_create_salt_def, lower_value_def] >>
+  imp_res_tac compile_create_blueprint_args_callback_contract >>
+  fs[] >> rename1 `expr_callbacks_agree f g cenv suffix` >>
+  Cases_on `suffix` >> fs[] >>
+  imp_res_tac compile_create_blueprint_args_callback_contract >>
+  fs[compile_create_salt_def, lower_value_def, comp_bind_def]
+QED
+
 Theorem compile_call_callback_contract:
   expr_callbacks_agree f g cenv (call_callback_children args default_ret) ⇒
   compile_call f cenv ret_ty ty target args default_ret st =
@@ -203,6 +278,9 @@ Proof
          rename1 `compile_call f _ _ _ (ExtCall _ _ signature)` >>
            PairCases_on `signature` >>
            irule compile_extcall_callback_contract >> simp[],
+         simp[compile_call_def] >> AP_TERM_TAC >>
+           AP_THM_TAC >> irule compile_create_call_callback_contract >>
+           fs[call_callback_children_def] >> Cases_on `default_ret` >> fs[],
          simp[compile_call_def]]
 QED
 

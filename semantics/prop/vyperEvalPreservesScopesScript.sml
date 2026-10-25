@@ -1223,6 +1223,14 @@ Proof
   simp[preserves_tv_def]
 QED
 
+Theorem preserves_tv_final_frame:
+  preserves_tv cx st mid /\
+  st'.scopes = mid.scopes /\ st'.immutables = mid.immutables ==>
+  preserves_tv cx st st'
+Proof
+  metis_tac[preserves_tv_trans, preserves_tv_eq]
+QED
+
 Theorem append_logs_preserves_tv:
   ∀cx logs st res st'.
     append_logs logs st = (res,st') ⇒ preserves_tv cx st st'
@@ -2150,11 +2158,15 @@ Proof
   conj_tac >- (
     rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
     Cases_on `kind` >> gvs[] >>
-    gvs[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs()] >>
+    gvs[Once evaluate_def, bind_def, ignore_bind_def,
+        create_arg_snapshot_def, AllCaseEqs()] >>
     imp_res_tac check_create_blueprint_result_state >> gvs[] >>
     res_tac >>
     imp_res_tac eval_create_preserves_scopes_immutables >>
-    metis_tac[preserves_tv_trans, preserves_tv_eq]) >>
+    imp_res_tac preserves_tv_trans >>
+    imp_res_tac preserves_tv_trans >>
+    FIRST [(fn (asl,w) => FIRST (map (ACCEPT_TAC o ASSUME) asl) (asl,w)),
+           drule_all preserves_tv_final_frame >> simp[]]) >>
   (* eval_exprs [] *)
   conj_tac >- rw[evaluate_def, return_def] >>
   (* eval_exprs e::es *)

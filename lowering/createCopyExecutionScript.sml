@@ -16,8 +16,7 @@ Theorem compile_create_dynamic_copy_frag:
          create_memory_snapshot regions s /\
          EVERY (\(off,bs). off + LENGTH bs <= LENGTH s.vs_memory /\
            (off + LENGTH bs <= w2n d \/ w2n d + w2n n <= off)) regions /\
-         TAKE (w2n n) (DROP (w2n p) s.vs_memory) = bytes /\
-         LENGTH bytes = w2n n)
+         read_memory (w2n p) (w2n n) s = bytes)
     (\s. fresh_vars_wrt cs' s /\ create_live live s /\
          create_memory_snapshot ((w2n d,bytes)::regions) s)
     (K F)
@@ -34,6 +33,9 @@ Proof
   gvs[IS_PREFIX_APPEND, mk_inst_def, is_terminator_def] >> rpt strip_tac >>
   drule_all compile_create_copy_dynamic_execution >>
   strip_tac >> qexists_tac `s'` >> simp[] >>
+  `LENGTH bytes = w2n n` by
+    (qpat_x_assum `read_memory _ _ _ = bytes`
+       (mp_tac o Q.AP_TERM `LENGTH`) >> simp[read_memory_def]) >>
   `create_memory_snapshot [(w2n d,bytes)] s'` by
     metis_tac[create_copy_snapshot] >>
   `create_memory_snapshot regions s'` by

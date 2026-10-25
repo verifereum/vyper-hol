@@ -3062,23 +3062,188 @@ Resume eval_all_storage_preservation_mutual[Expr_Call_CreateTarget]:
           ORACLE_STORAGE_TAC >>
           first_x_assum drule_all >> strip_tac >>
           Cases_on `suffix_res` >> gvs[] >> strip_tac >>
+          full_simp_tac bool_ss [create_arg_snapshot_def,
+                                 pairTheory.pair_case_thm,
+                                 sumTheory.sum_case_def] >>
           ORACLE_STORAGE_TAC >>
-          metis_tac[eval_create_contract_storage_postulate]) >>
+          drule_all eval_create_contract_storage_postulate >> simp[]) >>
         strip_tac >> gvs[]) >>
-      strip_tac >> gvs[]), ALL_TAC] >>
+      strip_tac >> gvs[]), (
+      full_simp_tac bool_ss [create_kind_11, create_kind_distinct] >>
+      `well_typed_exprs env (TAKE 2 es)` by
+        metis_tac[well_typed_exprs_TAKE] >>
+      `call_evaluation_safe cx (int_calls_exprs (TAKE 2 es))` by
+        metis_tac[call_evaluation_safe_exprs_TAKE] >>
+      qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+      simp_tac(srw_ss())[Once evaluate_def, bind_def,
+                          create_arg_snapshot_def] >>
+      Cases_on `eval_exprs cx (TAKE 2 es) st` >>
+      rename1 `eval_exprs cx (TAKE 2 es) st = (prefix_res,prefix_st)` >>
+      qpat_assum `!env' st'' res st'³'. _`
+        (fn th => mp_tac (Q.SPECL [`env`,`st`,`prefix_res`,`prefix_st`] th)) >>
+      impl_tac >-
+        (rpt conj_tac >|
+         [qpat_assum `well_typed_exprs env (TAKE 2 es)` ACCEPT_TAC,
+          qpat_assum `runtime_storage_consistent env cx st` ACCEPT_TAC,
+          qpat_assum `call_evaluation_safe cx (int_calls_exprs (TAKE 2 es))`
+            ACCEPT_TAC,
+          qpat_assum `oracle_storage_ok cx st` ACCEPT_TAC,
+          qpat_assum `eval_exprs cx (TAKE 2 es) st =
+              (prefix_res,prefix_st)` ACCEPT_TAC]) >>
+      strip_tac >>
+      `runtime_consistent env cx prefix_st` by
+        metis_tac[eval_exprs_preserves_runtime_consistent,
+                  runtime_storage_consistent_runtime] >>
+      `runtime_storage_consistent env cx prefix_st` by
+        metis_tac[runtime_storage_consistent_intro,
+                  runtime_storage_consistent_layout] >>
+      ORACLE_STORAGE_TAC >>
+      Cases_on `prefix_res` >> gvs[]
+      >- (
+        qabbrev_tac `ctor_es = TAKE (LENGTH es - 2 -
+            (if has_salt then 1 else 0)) (DROP 2 es)` >>
+        `well_typed_exprs env ctor_es` by
+          (simp[Abbr`ctor_es`] >>
+           irule well_typed_exprs_TAKE >>
+           irule well_typed_exprs_DROP >> simp[]) >>
+        `call_evaluation_safe cx (int_calls_exprs ctor_es)` by
+          (simp[Abbr`ctor_es`] >>
+           irule call_evaluation_safe_exprs_TAKE >>
+           irule call_evaluation_safe_exprs_DROP >> simp[]) >>
+        `ctor_es = TAKE (LENGTH es - ((if has_salt then 1 else 0) + 2))
+            (DROP 2 es)` by
+          (simp[Abbr`ctor_es`] >> decide_tac) >>
+        qpat_assum `ctor_es = TAKE (LENGTH es -
+            ((if has_salt then 1 else 0) + 2)) (DROP 2 es)`
+          (fn th => REWRITE_TAC[GSYM th]) >>
+        simp_tac bool_ss [bind_def] >>
+        Cases_on `eval_exprs cx ctor_es prefix_st` >>
+        rename1 `eval_exprs cx ctor_es prefix_st = (ctor_res,ctor_st)` >>
+        qpat_assum `!s'' prefix t.
+            eval_exprs cx (TAKE 2 es) s'' = (INL prefix,t) ==> _`
+          (fn th => mp_tac (Q.SPECL [`st`,`x`,`prefix_st`] th)) >>
+        impl_tac >-
+          (qpat_assum `eval_exprs cx (TAKE 2 es) st =
+              (INL x,prefix_st)` ACCEPT_TAC) >>
+        strip_tac >>
+        qpat_assum `!env' st'' res st'³'. _`
+          (fn th => mp_tac (Q.SPECL
+            [`env`,`prefix_st`,`ctor_res`,`ctor_st`] th)) >>
+        impl_tac >-
+          (qpat_assum `ctor_es = TAKE (LENGTH es -
+              ((if has_salt then 1 else 0) + 2)) (DROP 2 es)`
+             (fn th => REWRITE_TAC[GSYM th]) >>
+           rpt conj_tac >|
+           [qpat_assum `well_typed_exprs env ctor_es` ACCEPT_TAC,
+            qpat_assum `runtime_storage_consistent env cx prefix_st` ACCEPT_TAC,
+            qpat_assum `call_evaluation_safe cx (int_calls_exprs ctor_es)`
+              ACCEPT_TAC,
+            qpat_assum `oracle_storage_ok cx prefix_st` ACCEPT_TAC,
+            qpat_assum `eval_exprs cx ctor_es prefix_st =
+                (ctor_res,ctor_st)` ACCEPT_TAC]) >>
+        strip_tac >>
+        `runtime_consistent env cx ctor_st` by
+          metis_tac[eval_exprs_preserves_runtime_consistent] >>
+        `runtime_storage_consistent env cx ctor_st` by
+          metis_tac[runtime_storage_consistent_intro,
+                    runtime_storage_consistent_layout] >>
+        ORACLE_STORAGE_TAC >>
+        Cases_on `ctor_res` >>
+          simp_tac bool_ss [sumTheory.sum_case_def,
+                             pairTheory.pair_case_thm, LET_THM,
+                             create_arg_snapshot_def, bind_def]
+        >- (
+          `well_typed_exprs env (DROP (2 + LENGTH ctor_es) es)` by
+            (irule well_typed_exprs_DROP >> simp[]) >>
+          `call_evaluation_safe cx
+              (int_calls_exprs (DROP (2 + LENGTH ctor_es) es))` by
+            (irule call_evaluation_safe_exprs_DROP >> simp[]) >>
+          qpat_assum `!s'' prefix t s'³' ctor t' s'⁴' snapshot t''. _`
+            (fn th => mp_tac (Q.SPECL
+              [`st`,`x`,`prefix_st`,`prefix_st`,`x'`,`ctor_st`,
+               `ctor_st`,`ctor_st`,`ctor_st`] th)) >>
+          impl_tac >-
+            (qpat_assum `ctor_es = TAKE (LENGTH es -
+                ((if has_salt then 1 else 0) + 2)) (DROP 2 es)`
+               (fn th => REWRITE_TAC[GSYM th]) >>
+             simp_tac bool_ss [create_arg_snapshot_def] >>
+             conj_tac >|
+             [qpat_assum `eval_exprs cx (TAKE 2 es) st =
+                 (INL x,prefix_st)` ACCEPT_TAC,
+              qpat_assum `eval_exprs cx ctor_es prefix_st =
+                 (INL x',ctor_st)` ACCEPT_TAC]) >>
+          strip_tac >>
+          `DROP (LENGTH ctor_es + 2) es =
+              DROP (2 + LENGTH ctor_es) es` by
+            simp_tac bool_ss [arithmeticTheory.ADD_COMM] >>
+          qpat_assum `DROP (LENGTH ctor_es + 2) es = _`
+            (fn th => REWRITE_TAC[th]) >>
+          Cases_on `eval_exprs cx (DROP (2 + LENGTH ctor_es) es) ctor_st` >>
+          rename1 `eval_exprs cx (DROP (2 + LENGTH ctor_es) es) ctor_st =
+              (salt_res,salt_st)` >>
+          qpat_assum `!env' st'' res st'³'. _`
+            (fn th => mp_tac (Q.SPECL
+              [`env`,`ctor_st`,`salt_res`,`salt_st`] th)) >>
+          impl_tac >-
+            (qpat_assum `ctor_es = TAKE (LENGTH es -
+                ((if has_salt then 1 else 0) + 2)) (DROP 2 es)`
+               (fn th => REWRITE_TAC[GSYM th]) >>
+             qpat_assum `DROP (LENGTH ctor_es + 2) es = _`
+               (fn th => REWRITE_TAC[th]) >>
+             rpt conj_tac >|
+             [qpat_assum `well_typed_exprs env
+                 (DROP (2 + LENGTH ctor_es) es)` ACCEPT_TAC,
+              qpat_assum `runtime_storage_consistent env cx ctor_st`
+                ACCEPT_TAC,
+              qpat_assum `call_evaluation_safe cx
+                  (int_calls_exprs (DROP (2 + LENGTH ctor_es) es))`
+                ACCEPT_TAC,
+              qpat_assum `oracle_storage_ok cx ctor_st` ACCEPT_TAC,
+              qpat_assum `eval_exprs cx (DROP (2 + LENGTH ctor_es) es)
+                  ctor_st = (salt_res,salt_st)` ACCEPT_TAC]) >>
+          strip_tac >>
+          ORACLE_STORAGE_TAC >>
+          Cases_on `salt_res` >>
+            simp_tac bool_ss [sumTheory.sum_case_def,
+                               pairTheory.pair_case_thm]
+          >- (strip_tac >>
+              drule_all eval_create_contract_storage_postulate >> simp[]) >>
+          simp_tac bool_ss [pairTheory.PAIR_EQ] >>
+          strip_tac >>
+          qpat_assum `salt_st = st'`
+            (fn th => REWRITE_TAC[SYM th]) >>
+          qpat_assum `contract_storage_well_formed cx salt_st` ACCEPT_TAC) >>
+        strip_tac >>
+        qpat_x_assum `(INR y,ctor_st) = (res,st')`
+          (fn th => REWRITE_TAC[SYM (CONJUNCT2
+            (REWRITE_RULE [pairTheory.PAIR_EQ] th))]) >>
+        qpat_assum `contract_storage_well_formed cx ctor_st` ACCEPT_TAC) >>
+      strip_tac >>
+      qpat_assum `prefix_st = st'`
+        (fn th => REWRITE_TAC[SYM th]) >>
+      qpat_assum `contract_storage_well_formed cx prefix_st` ACCEPT_TAC)] >>
     full_simp_tac bool_ss [create_kind_11, create_kind_distinct] >>
     qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
     simp[Once evaluate_def, bind_def] >>
     Cases_on `eval_exprs cx es st` >>
     rename1 `eval_exprs cx es st = (args_res,args_st)` >>
-    first_x_assum drule_all >> strip_tac >>
-    Cases_on `args_res` >> gvs[] >> strip_tac >>
+    qpat_assum `!env' st'' res st'³'. _`
+      (fn th => mp_tac (Q.SPECL [`env`,`st`,`args_res`,`args_st`] th)) >>
+    impl_tac >-
+      (rpt conj_tac >|
+       [qpat_assum `well_typed_exprs env es` ACCEPT_TAC,
+        qpat_assum `runtime_storage_consistent env cx st` ACCEPT_TAC,
+        qpat_assum `oracle_storage_ok cx st` ACCEPT_TAC,
+        qpat_assum `eval_exprs cx es st = (args_res,args_st)` ACCEPT_TAC]) >>
+    strip_tac >>
+    Cases_on `args_res` >> gvs[] >> TRY strip_tac >>
     ORACLE_STORAGE_TAC >>
     (* A constructor runs arbitrary EVM code, so it may write the protected
        target's own storage.  This is discharged by the adapter-boundary
        postulate, exactly as external calls use protected_storage_calls_preserve
        above. *)
-    metis_tac[eval_create_contract_storage_postulate]) >>
+    FIRST [drule_all eval_create_contract_storage_postulate >> simp[],
+           gvs[]]) >>
   rpt strip_tac >>
   qpat_x_assum `type_place_expr env (Call _ _ _ _) = SOME _` mp_tac >>
   simp[Once well_typed_expr_def]

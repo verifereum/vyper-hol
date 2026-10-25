@@ -543,8 +543,16 @@ Proof
   OUTCOMES_SUFFIX_TAC >> simp[outcomes_suffix_def]
 QED
 
+Theorem outcomes_suffix_create_arg_snapshot[simp]:
+  outcomes_suffix create_arg_snapshot
+Proof
+  simp[outcomes_suffix_def, create_arg_snapshot_def]
+QED
+
 val OUTCOMES_SUFFIX_TAC =
-  rpt (FIRST [MATCH_ACCEPT_TAC outcomes_suffix_create, OUTCOMES_SUFFIX_STEP]);
+  rpt (FIRST [MATCH_ACCEPT_TAC outcomes_suffix_create,
+              MATCH_ACCEPT_TAC outcomes_suffix_create_arg_snapshot,
+              OUTCOMES_SUFFIX_STEP]);
 
 (* Give each evaluator equation its own proof fragment and timeout budget. *)
 fun OUTCOMES_SUSPEND_CASE (g as (_,w)) =
@@ -591,8 +599,9 @@ fun OUTCOMES_FINISH_GOAL_TAC (g as (asl,w)) =
       let
         val th = PURE_REWRITE_RULE [GSYM AND_IMP_INTRO] (normalise (ASSUME tm));
       in MATCH_ACCEPT_TAC (discharge th) g end;
-  in FIRST [first_assum ACCEPT_TAC,
-       FIRST (map (fn tm => fn g => finish tm g) candidates)] g end;
+   in FIRST [first_assum ACCEPT_TAC,
+        FIRST (map (fn tm => fn g => finish tm g) candidates),
+        FIRST (map (fn tm => drule_all (ASSUME tm) >> simp[]) candidates)] g end;
 
 val OUTCOMES_FINISH_TAC =
   simp_tac bool_ss [pairTheory.FST, pairTheory.SND] >> OUTCOMES_FINISH_GOAL_TAC;
