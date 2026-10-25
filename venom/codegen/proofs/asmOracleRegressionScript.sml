@@ -43,6 +43,27 @@ val gas_eval_tac =
        assert_def, inc_pc_or_jump_def, is_call_def, opcode_def,
        static_gas_def, LET_THM, FLOOKUP_UPDATE];
 
+val gas_evm_unfold =
+  [gas_counter_asm_def, gas_counter_evm_def,
+   asm_oracle_initial_def, make_asm_call_state_def,
+   empty_call_context_def, empty_tx_context_def, empty_block_context_def,
+   asm_to_tx_params_def, make_sub_tx_def, make_rollback_def,
+   vfmContextTheory.initial_context_def,
+   vfmContextTheory.initial_msg_params_def,
+   transfer_value_def, vfmContextTheory.empty_return_destination_def];
+
+(* The concrete GAS step, computed once: the counterexample below uses it
+   twice, and evaluating both copies in one goal ran past the step timeout. *)
+Theorem gas_counter_evm_step[local]:
+  FST (step gas_counter_evm) = INL () /\
+  (FST (HD (SND (step gas_counter_evm)).contexts)).stack = [98w] /\
+  (SND (step gas_counter_evm)).contexts <> []
+Proof
+  conj_tac >- (simp gas_evm_unfold >> gas_eval_tac) >>
+  conj_tac >- (simp gas_evm_unfold >> gas_eval_tac) >>
+  simp gas_evm_unfold >> gas_eval_tac
+QED
+
 (* The old step theorem admitted GAS because it fell through to AsmError.
  * With GAS active, its existing pre-relation ignores readings; empty asm
  * readings push 0, whereas the concrete EVM pushes 98, without an exception.
@@ -65,6 +86,9 @@ Proof
   conj_tac >- (
     rw[asm_encoding_wf_def, compute_label_offsets_def,
        asm_inst_size_def] >> EVAL_TAC) >>
+  REWRITE_TAC[gas_counter_evm_step] >>
+  strip_assume_tac gas_counter_evm_step >>
+  qabbrev_tac `es1 = SND (step gas_counter_evm)` >>
   simp[asm_evm_rel_def, gas_counter_asm_def, gas_counter_evm_def,
        asm_oracle_initial_def, make_asm_call_state_def,
        empty_call_context_def, empty_tx_context_def, empty_block_context_def,
@@ -77,21 +101,10 @@ Proof
        asm_step_compare_def, asm_step_bitwise_def, asm_step_memory_def,
        asm_step_control_def, asm_step_extcall_def, asm_step_copy_def,
        asm_step_context_def, asm_gas_def, asm_push_val_def, asm_next_def] >>
-  rpt conj_tac >| [suspend "step_success", suspend "step_stack",
-                   suspend "step_unrelated"]
-QED
-
-Resume gas_existing_relation_counterexample[step_success]:
-  gas_eval_tac
-QED
-Resume gas_existing_relation_counterexample[step_stack]:
-  gas_eval_tac
-QED
-Resume gas_existing_relation_counterexample[step_unrelated]:
-  gas_eval_tac >>
+  Cases_on `es1.contexts` >> gvs[] >>
+  Cases_on `h` >> gvs[] >>
   simp[wordsTheory.dimword_def, fcpLib.INDEX_CONV ``dimindex(:256)``]
 QED
-Finalise gas_existing_relation_counterexample
 
 (* Exact old successful-step disjunction is false on the retained witness.
  * The old syntactic premises (including no calls) hold for [GAS]. *)
