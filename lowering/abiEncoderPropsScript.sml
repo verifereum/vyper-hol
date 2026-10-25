@@ -23,7 +23,7 @@ Ancestors
   abiEncoder compileEnv
   venomExecSemantics venomState venomInst venomMemProps
   valueEncoding valueEncodingProps
-  vyperABI vyperTyping contractABI
+  vyperABI vyperTyping contractABI fragExec
 Libs
   dep_rewrite wordsLib
 
