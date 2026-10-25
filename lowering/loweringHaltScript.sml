@@ -916,6 +916,50 @@ Proof
   qexists_tac `s1` >> gvs[mk_inst_def]
 QED
 
+Theorem enc_frame_var:
+  !st st' lo top outs s0 s name w.
+    enc_frame st st' lo top outs s0 s /\ not_fresh_at st name /\
+    eval_operand (Var name) s0 = SOME w ==>
+    eval_operand (Var name) s = SOME w
+Proof
+  simp[enc_frame_def, eval_operand_def] >> metis_tac[]
+QED
+
+Theorem enc_frame_effects:
+  !st st' lo top outs s0 s.
+    enc_frame st st' lo top outs s0 s ==>
+    s.vs_accounts = s0.vs_accounts /\ s.vs_transient = s0.vs_transient /\
+    s.vs_logs = s0.vs_logs /\ s.vs_requests = s0.vs_requests
+Proof
+  simp[enc_frame_def]
+QED
+
+Theorem return_buffer_run:
+  !fuel ctx fn s bb id buf len b bytes.
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    get_instruction bb s.vs_inst_idx =
+      SOME (mk_inst id RETURN [buf;len] []) /\
+    eval_operand buf s = SOME b /\
+    eval_operand len s = SOME (n2w (LENGTH bytes)) /\
+    LENGTH bytes < dimword (:256) /\
+    mem_bytes_at (w2n b) (LENGTH bytes) s.vs_memory = bytes ==>
+    ?ss. run_from fuel ctx fn s = Halt ss /\ ss.vs_returndata = bytes /\
+      ss.vs_accounts = s.vs_accounts /\ ss.vs_transient = s.vs_transient /\
+      ss.vs_logs = s.vs_logs /\ ss.vs_requests = s.vs_requests
+Proof
+  rpt strip_tac >>
+  qabbrev_tac `ss = halt_state (set_returndata bytes s)` >>
+  `step_inst_base (mk_inst id RETURN [buf;len] []) s = Halt ss` by
+    (qspecl_then [`buf`, `len`] mp_tac step_RETURN >>
+     disch_then drule >> disch_then drule >>
+     simp[GSYM mem_bytes_at_def, Abbr `ss`]) >>
+  qexists_tac `ss` >> conj_tac
+  >- (irule run_from_halt >>
+      qexistsl_tac [`bb`, `mk_inst id RETURN [buf;len] []`] >>
+      simp[mk_inst_def]) >>
+  simp[Abbr `ss`, halt_state_def, set_returndata_def]
+QED
+
 Theorem compile_external_return_abi_frag:
   !ctx op ei msz nr nkey ut iv st x st' env ty tv v av P Q R.
     compile_external_return (SOME op) F F ei msz nr nkey ut iv st =
