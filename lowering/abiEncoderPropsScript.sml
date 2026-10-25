@@ -2110,6 +2110,77 @@ Proof
   asm_rewrite_tac[] >> irule enc_mstore_zero_subrange >> decide_tac
 QED
 
+Theorem enc_emit_add_const_run_frame:
+  emit_op ADD [Lit (n2w k); arg] st = (op, st1) /\
+  eval_operand arg s = SOME (n2w l) /\
+  a.cs_next_var <= st.cs_next_var /\
+  enc_scratch (frag_ids a b) lo top s ==>
+  ?s1. run_inst_seq (emitted_insts st st1) s = OK s1 /\
+       eval_operand op s1 = SOME (n2w (k+l)) /\
+       same_blocks st st1 /\ s1.vs_memory = s.vs_memory /\
+       s1.vs_labels = s.vs_labels /\
+       (!old. (!y. old = Var y ==> not_fresh_at st y) ==>
+         eval_operand old s1 = eval_operand old s) /\
+       enc_frame a b lo top outs s s1
+Proof
+  strip_tac >> irule enc_emit_op_run_frame >>
+  simp[] >> qexistsl_tac [`[Lit (n2w k); arg]`, `ADD`] >> simp[] >>
+  pure_once_rewrite_tac[GSYM wordsTheory.word_add_n2w] >>
+  irule step_ADD >> simp[eval_operand_lit]
+QED
+
+Theorem enc_emit_and_const_run_frame:
+  emit_op AND [Lit mask; arg] st = (op, st1) /\
+  eval_operand arg s = SOME w /\
+  a.cs_next_var <= st.cs_next_var /\
+  enc_scratch (frag_ids a b) lo top s ==>
+  ?s1. run_inst_seq (emitted_insts st st1) s = OK s1 /\
+       eval_operand op s1 = SOME (mask && w) /\
+       same_blocks st st1 /\ s1.vs_memory = s.vs_memory /\
+       s1.vs_labels = s.vs_labels /\
+       (!old. (!y. old = Var y ==> not_fresh_at st y) ==>
+         eval_operand old s1 = eval_operand old s) /\
+       enc_frame a b lo top outs s s1
+Proof
+  strip_tac >> irule enc_emit_op_run_frame >>
+  simp[] >> qexistsl_tac [`[Lit mask; arg]`, `AND`] >> simp[] >>
+  irule step_AND >> simp[eval_operand_lit]
+QED
+
+Theorem enc_bytes_round_run:
+  emit_op ADD [Lit 31w; len_op] st = (ceil_op, st1) /\
+  emit_op AND
+    [Lit 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE0w;
+     ceil_op] st1 = (round_op, st2) /\
+  eval_operand len_op s = SOME (n2w l) /\ l+31 < dimword (:256) /\
+  a.cs_next_var <= st.cs_next_var /\
+  enc_scratch (frag_ids a b) lo top s ==>
+  ?s2. run_inst_seq (emitted_insts st st2) s = OK s2 /\
+       eval_operand round_op s2 = SOME (n2w (32*((l+31) DIV 32))) /\
+       s2.vs_memory = s.vs_memory /\ s2.vs_labels = s.vs_labels /\
+       enc_frame a b lo top outs s s2
+Proof
+  strip_tac >>
+  drule_all enc_emit_add_const_run_frame >>
+  disch_then (qspec_then `outs` strip_assume_tac) >>
+  rename1 `run_inst_seq (emitted_insts st st1) s = OK s1` >>
+  `enc_scratch (frag_ids a b) lo top s1` by fs[enc_frame_def] >>
+  `a.cs_next_var <= st1.cs_next_var` by
+    (rev_drule emitted_insts_emit_op >> strip_tac >> decide_tac) >>
+  drule_all enc_emit_and_const_run_frame >>
+  disch_then (qspec_then `outs` strip_assume_tac) >>
+  rename1 `run_inst_seq (emitted_insts st1 st2) s1 = OK s2` >>
+  qexists_tac `s2` >>
+  conj_tac
+  >- (drule emit_op_extends >> strip_tac >>
+      rev_drule emit_op_extends >> strip_tac >>
+      drule_all run_inst_seq_chain >> simp[]) >>
+  simp[] >> conj_tac
+  >- (once_rewrite_tac[wordsTheory.WORD_AND_COMM] >>
+      irule enc_round32_word >> simp[]) >>
+  irule enc_frame_trans >> goal_assum (drule_at Any) >> simp[]
+QED
+
 Theorem compile_abi_encode_prim_frame_frag:
   compile_abi_encode_to_buf dst src AbiPrimWord st = (op, st') /\
   eval_operand dst s0 = SOME dst_w /\ eval_operand src s0 = SOME src_w /\

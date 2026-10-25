@@ -17,6 +17,7 @@ PLAN: `lowering/PLAN_abi_encode_frag.md`
 | C1.4.2 | progressed | other | E0017 | Continue AbiBytestring framed operational consumer and exact ABI-byte integration; C1.4.2 remains open. |
 | C1.4.2.1 | proved |  | E0018 | Review and commit fixed-frame instruction boundaries, then begin rounded-length/layout C1.4.2.2. |
 | C1.4.2.2 | proved |  | E0020 |  |
+| C1.4.2.3 | progressed | other | E0022 | Use enc_bytes_round_run for both rounding occurrences. Compose load/round/pointer prefix, write pair, size suffix using run_inst_seq_chain and fixed enc_frame. Carry original operands through enc_frame_preserves_operand with labels. General wrappers are verified; no nested update_var witnesses. |
 | C1.5.1 | proved |  | E0011 | Review and commit; proceed scheduled frontier. C1.5.2 can use enc_prefix_suc, HP_length, enc_prefix_full without unfolding tuple encoding. |
 | C1.5.2 | proved |  | E0012 | Review, commit, continue scheduled leaf. |
 | C1.5.3 | proved |  | E0013 | Review and commit runtime invariant interface. |
@@ -259,6 +260,33 @@ PLAN: `lowering/PLAN_abi_encode_frag.md`
 ### Evidence refs
 
 - `TO_abi_encode_frag-20261025T101052Z_m0659_t001` (use `read_tool_output` for exact output)
+
+## C1.4.2.3
+
+### Current Status
+
+- result: `progressed`
+- diagnosis: `other`
+- latest episode: `E0022`
+- blocker: 
+- actual effort: 1 sessions, 3 msgs, 46 steps, 45 tools, 11 holbuild, 4,214,172 tok (4,206,831 in, 7,341 out, 4,145,280 cached), 498.9s, $0.6110400
+- next: Use enc_bytes_round_run for both rounding occurrences. Compose load/round/pointer prefix, write pair, size suffix using run_inst_seq_chain and fixed enc_frame. Carry original operands through enc_frame_preserves_operand with labels. General wrappers are verified; no nested update_var witnesses.
+
+### Attempts / Evidence
+
+- `E0021` (progressed, other, actual effort: 1 sessions, 2 msgs, 34 steps, 33 tools, 7 holbuild, 3,003,632 tok (2,997,979 in, 5,653 out, 2,952,704 cached), 399.1s, $0.4423504)
+  - Specialize existential instruction frame boundary to constant ADD and constant AND using step_ADD/step_AND, not unfolded instruction semantics. -> enc_emit_add_const_run_frame and enc_emit_and_const_run_frame build. ADD handles arbitrary k and l, preserving memory, labels, local-old operands and ambient frame. No bytestring ten-step composition attempted yet. (`TO_abi_encode_frag-20261025T101052Z_m0694_t001`)
+- `E0022` (progressed, other, actual effort: 1 sessions, 3 msgs, 46 steps, 45 tools, 11 holbuild, 4,214,172 tok (4,206,831 in, 7,341 out, 4,145,280 cached), 498.9s, $0.6110400)
+  - Compose existential constant ADD and AND instruction boundaries into enc_bytes_round_run for the two-instruction rounding sequence. -> Verified run across both emissions, rounded result, memory/labels preservation and ambient frame transitivity. Explicitly specialize residual universal outs after drule_all. emitted_insts_emit_op supplies next-var monotonicity; rev_drule selects first emission rather than AND. (`TO_abi_encode_frag-20261025T101052Z_m0710_t001`)
+
+### Ruled Out
+
+- Do not use rewrite_tac/asm_rewrite_tac with commutativity rules: loops and timeout. Use once_rewrite_tac or simp.
+- drule_all enc_emit_*_run_frame leaves universal outs; specialize with disch_then (qspec_then `outs` strip_assume_tac).
+
+### Evidence refs
+
+- `TO_abi_encode_frag-20261025T101052Z_m0710_t001` (use `read_tool_output` for exact output)
 
 ## C1.5.1
 
