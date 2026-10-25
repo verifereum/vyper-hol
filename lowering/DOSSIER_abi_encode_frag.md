@@ -8,6 +8,8 @@ PLAN: `lowering/PLAN_abi_encode_frag.md`
 |---|---|---|---|---|
 | C1.1 | proved |  | E0002 |  |
 | C1.2 | proved |  | E0005 |  |
+| C1.3 | progressed | missing_helper | E0006 | Request C1.3 interface refinement: frame alone cannot preserve Label operands; characterize allowed preservation premise without changing frozen definitions. |
+| C1.3.1 | proved |  | E0007 |  |
 
 ## C1.1
 
@@ -53,3 +55,43 @@ PLAN: `lowering/PLAN_abi_encode_frag.md`
 ### Evidence refs
 
 - `TO_abi_encode_frag-20261024T233520Z_m0164_t001` (use `read_tool_output` for exact output)
+
+## C1.3
+
+### Current Status
+
+- result: `progressed`
+- diagnosis: `missing_helper`
+- latest episode: `E0006`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 12 steps, 11 tools, 4 holbuild, 808,801 tok (807,581 in, 1,220 out, 789,376 cached), 131.1s, $0.1275476
+- next: Request C1.3 interface refinement: frame alone cannot preserve Label operands; characterize allowed preservation premise without changing frozen definitions.
+
+### Attempts / Evidence
+
+- `E0006` (progressed, missing_helper, actual effort: 1 sessions, 1 msgs, 12 steps, 11 tools, 4 holbuild, 808,801 tok (807,581 in, 1,220 out, 789,376 cached), 131.1s, $0.1275476)
+  - Prove finite/split/disjoint id intervals and frame reflexivity, then test generic operand preservation from enc_frame. -> Five helpers checked. Generic operand preservation is false for Label because eval_operand reads vs_labels, absent from enc_frame. Removed invalid experimental helper; target builds. Need strategist clarification of preservation interface for labels and reserved scratch credit. (`TO_abi_encode_frag-20261024T233520Z_m0180_t001`, `TO_abi_encode_frag-20261024T233520Z_m0182_t001`)
+
+### Evidence refs
+
+- `TO_abi_encode_frag-20261024T233520Z_m0180_t001` (use `read_tool_output` for exact output)
+- `TO_abi_encode_frag-20261024T233520Z_m0182_t001` (use `read_tool_output` for exact output)
+
+## C1.3.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0007`
+- blocker: 
+- actual effort: 1 sessions, 3 steps, 2 tools, 1 holbuild, 223,902 tok (223,543 in, 359 out, 218,240 cached), 14.7s, $0.0360200
+
+### Attempts / Evidence
+
+- `E0007` (proved, , actual effort: 1 sessions, 3 steps, 2 tools, 1 holbuild, 223,902 tok (223,543 in, 359 out, 218,240 cached), 14.7s, $0.0360200)
+  - Case split operands; simplify labels with explicit label equality and transport variable lookups using frame. -> Qualified operand transport theorem builds cleanly. (`TO_abi_encode_frag-20261024T233520Z_m0187_t001`)
+
+### Evidence refs
+
+- `TO_abi_encode_frag-20261024T233520Z_m0187_t001` (use `read_tool_output` for exact output)

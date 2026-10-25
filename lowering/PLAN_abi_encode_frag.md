@@ -96,26 +96,113 @@ Prove the typing bridge by recursion-matching induction on value_has_type_def an
 #### Not to try
 Do not prove val_wf from val_in_memory alone or drop wellformedness from memory agreement: mismatched or oversized values invalidate that route. Do not add evaluate_type unless an actual counterexample to the stronger typing bridge is found; every value_has_type constructor already determines the required layout. Do not prove defaults typed for this bridge: sparse val_wf requires only stored keys and values. Do not unfold enc_frame repeatedly in recursive encoder consumers, duplicate existing extraction lemmas, or add wrapper proofs solely to restate their conclusions. Do not alter any frozen definition, theorem statement, semantics file or encoder definition.
 
-### C1.3: Scratch budget and frame composition interface
-- Kind: `infrastructure_lemma`
+### C1.3: Qualified operand preservation and reserved-credit frame calculus
+- Kind: `proof_group`
 - Risk: 2
 - Work priority: 30
-- Work units: 13
-- Rationale: Finite instruction-id intervals, allocation monotonicity, and bytewise framing permit compositional proofs; repeated allocations retain the same cells.
-- Dependencies: C1.2
+- Work units: 0
+- Rationale: The Label failure is an omitted hypothesis in an auxiliary interface, not a counterexample to the target. Explicit label equality and a reserved-credit split give direct definitional and finite-set proofs.
+- Progress transition: `refinement`
+- Carries progress/evidence from: E0006
+
+#### Progress note
+Retain frag_ids_finite, frag_ids_same, frag_ids_split, frag_ids_disjoint and enc_frame_refl unchanged. E0006 establishes partial progress only; the new leaves require their own proofs.
+
+#### Summary
+Preserve the five checked interval/reflexivity helpers without duplicating them. Operand preservation requires explicit label-map preservation. Scratch splitting reserves the budget of untouched ids rather than discarding it. Frame composition receives restored whole-fragment scratch as an explicit premise.
+
+#### Approach
+Complete the three interface leaves below, then expose them to downstream consumers. Consumers should use the boundary lemmas rather than unfold enc_frame repeatedly.
+
+#### Not to try
+Do not assert arbitrary operand preservation from enc_frame alone. Do not compose local enc_scratch facts at the same top and assume they imply the union budget. Do not weaken target operand quantification to exclude Label.
+
+#### Argument
+The frame controls old variables but not label operands, so arbitrary operand transport combines the frame with equality of vs_labels. For disjoint id sets I and J, the missing allocation count of their union is the sum of their missing counts. Reserving 32 times the missing J count by reducing the local top lets an I-fragment run without consuming J's budget. Since allocation entries at J are unchanged, the same reserved amount restores whole-fragment scratch afterward. Composition of byte frames uses preservation of all previously allocated cells to transfer final scratch exclusion back to intermediate scratch exclusion.
+
+#### Definition design
+Do not change enc_frame, enc_pre or enc_scratch. No new runtime predicate is needed. Use an arithmetic reserve expressed as 32 * CARD {i | i IN J /\ FLOOKUP s0.vs_allocas i = NONE}. Keep label equality as a separate conjunct in internal execution postconditions; it is discharged by actual instruction semantics, never inferred from enc_frame. Whole-fragment scratch is an explicit composition boundary, supplied by reserved-credit restoration.
+
+#### Code structure
+Place all helpers in the existing scratch/frame calculus section of lowering/abiEncoderPropsScript.sml. Keep existing five helpers verbatim. Each proof stays below approximately 50 lines; extract finite-set arithmetic facts locally if needed. No changes in semantics/, venom/, lowering/defs/, or frozen statements.
+
+### C1.3.1: Operand transport with explicit label preservation
+- Kind: `boundary_lemma`
+- Risk: 1
+- Work priority: 10
+- Work units: 1
+- Rationale: Constructor case analysis on operands isolates exactly the missing Label premise.
+
+#### Summary
+Prove an operand transport theorem qualified by label-map equality. The Var case uses the frame and the explicit freshness premise. The Label case uses the added equality, not search.
+
+#### Statement
+enc_frame st st' lo top outs s0 s /\
+s.vs_labels = s0.vs_labels /\
+(!x. op = Var x ==> not_fresh_at st x) /\
+eval_operand op s0 = SOME w
+==> eval_operand op s = SOME w
+
+#### Approach
+Case split op and simplify eval_operand_def. Extract only the variable preservation conjunct of enc_frame for Var; rewrite labels directly for Label. Document the required separate label-equality conjunct for internal consumer postconditions.
+
+#### Not to try
+Do not retry metis on the Label goal without label equality. The frozen frame cannot prove it.
+
+### C1.3.2: Disjoint scratch budget restriction and restoration
+- Kind: `infrastructure_lemma`
+- Risk: 2
+- Work priority: 20
+- Work units: 5
+- Rationale: Missing-id sets partition over disjoint finite sets; unchanged suffix lookups keep the reserve constant, and natural subtraction is justified by the original budget.
 - Checkpoint: yes
 
 #### Summary
-Prove the interval and allocation-credit calculus required for sequencing and loop reuse. Provide source/operand preservation and frame composition through a compact boundary interface. Probe the interface on empty fragments, nested id intervals and already-allocated cells before proceeding.
+Provide a finite-set missing-count partition helper. Restrict union scratch to a prefix with suffix credit subtracted from top. Restore union scratch after a prefix execution that leaves suffix allocation entries unchanged. This works for repeated loop allocations as well as newly allocated cells.
 
 #### Statement
-Outputs: finite frag_ids and interval splitting under ordered cs_next_id; enc_scratch restriction with reserved credit for the complementary interval; scratch restoration after executing a subinterval while preserving outside-id allocas; enc_frame reflexivity, output enlargement by region containment, and sequential composition for adjacent compile intervals; operand and protected-memory preservation consequences of enc_frame; jump_to invariance of all data-only predicates used later.
+Write M K s for {i | i IN K /\ FLOOKUP s.vs_allocas i = NONE} below (notation only; a definition is optional).
+
+1. FINITE I /\ FINITE J /\ DISJOINT I J ==> CARD (M (I UNION J) s) = CARD (M I s) + CARD (M J s).
+
+2. FINITE I /\ FINITE J /\ DISJOINT I J /\ enc_scratch (I UNION J) lo top s ==> enc_scratch I lo (top - 32 * CARD (M J s)) s.
+
+3. FINITE I /\ FINITE J /\ DISJOINT I J /\ enc_scratch (I UNION J) lo top s0 /\ (!i. i IN J ==> FLOOKUP s.vs_allocas i = FLOOKUP s0.vs_allocas i) /\ enc_scratch I lo (top - 32 * CARD (M J s0)) s ==> enc_scratch (I UNION J) lo top s.
 
 #### Approach
-Count missing allocations by partitioning the full id interval, not by counting only actual ALLOCA instructions. Carry the enclosing budget as a reserved-credit invariant through subfragments: a plain restricted enc_scratch fact loses the credit needed for the suffix. Frame composition uses preservation of old allocations to retain previously allocated scratch regions, and lower bounds lo to protect source/output memory from every scratch store.
+Prove the cardinal identity by partitioning M over UNION and proving disjointness of the two subsets. For restriction, obtain reserve <= top from the original budget before subtraction arithmetic. For restoration, J lookups give both equality of missing sets and the required lo/size bounds for allocated J entries; I supplies alloca_inv and frontier bounds.
 
 #### Not to try
-Do not claim that two independent enc_scratch bounds for disjoint intervals imply the bound for their union. Do not assume a scratch id is absent on loop reentry. Avoid repeatedly expanding enc_frame in branch proofs; expose separate preservation and composition lemmas.
+Do not use a constant 32 * CARD J reserve: already allocated cells need no credit. Do not restore union scratch from unchanged frontier or separate same-top scratch facts; these omit the combined missing-id budget.
+
+### C1.3.3: Frame weakening and sequential composition boundary
+- Kind: `boundary_lemma`
+- Risk: 2
+- Work priority: 30
+- Work units: 5
+- Rationale: Each frame conjunct composes directly once monotone freshness, interval inclusion, and final whole-fragment scratch are explicit.
+- Dependencies: C1.3.2
+
+#### Summary
+Prove output-list weakening and sequential frame composition. Composition keeps a single global lo/top and accepts final whole-interval scratch explicitly. Existing allocation persistence is essential to transport byte-exclusion premises to the intermediate state. Reserved-credit restoration supplies the scratch premise in actual consumers.
+
+#### Statement
+Output weakening:
+enc_frame st st' lo top outs s0 s /\ (!r. MEM r outs ==> MEM r larger) ==> enc_frame st st' lo top larger s0 s.
+
+Composition (local tops may differ):
+st0.cs_next_id <= st1.cs_next_id /\ st1.cs_next_id <= st2.cs_next_id /\
+(!x. not_fresh_at st0 x ==> not_fresh_at st1 x) /\
+enc_frame st0 st1 lo top1 outs1 s0 s1 /\
+enc_frame st1 st2 lo top2 outs2 s1 s2 /\
+enc_scratch (frag_ids st0 st2) lo top s2
+==> enc_frame st0 st2 lo top (outs1 ++ outs2) s0 s2.
+
+#### Approach
+Use frag_ids_split to reduce whole-interval membership and nonmembership. For memory composition, exclusion from final prefix scratch implies exclusion from intermediate prefix scratch because the second frame preserves every existing allocation entry. Transport old variables using the explicit freshness-monotonicity premise, compose outside-id equalities and effects, and take final scratch from its premise.
+
+#### Not to try
+Do not attempt to infer the final global budget from the two frames alone. Do not assume prefix scratch cells disappear at the second stage; use the existing-allocation persistence conjunct. Do not add vs_labels equality to the frozen frame: it remains a separate execution invariant.
 
 ### C1.4: Instruction effects and base encoders
 - Kind: `boundary_lemma`

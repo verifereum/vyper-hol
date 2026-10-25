@@ -1203,6 +1203,56 @@ Proof
   rpt strip_tac >> first_x_assum drule_all >> simp[]
 QED
 
+(* ===== Scratch and frame calculus ===== *)
+
+Theorem frag_ids_finite[simp]:
+  FINITE (frag_ids st st')
+Proof
+  irule pred_setTheory.SUBSET_FINITE_I >> qexists_tac `count st'.cs_next_id` >>
+  simp[frag_ids_def, pred_setTheory.SUBSET_DEF]
+QED
+
+Theorem frag_ids_same[simp]:
+  frag_ids st st = {}
+Proof
+  simp[frag_ids_def, pred_setTheory.EXTENSION]
+QED
+
+Theorem frag_ids_split:
+  st0.cs_next_id <= st1.cs_next_id /\
+  st1.cs_next_id <= st2.cs_next_id ==>
+  frag_ids st0 st2 = frag_ids st0 st1 UNION frag_ids st1 st2
+Proof
+  simp[frag_ids_def, pred_setTheory.EXTENSION] >> rpt strip_tac >> decide_tac
+QED
+
+Theorem frag_ids_disjoint:
+  DISJOINT (frag_ids st0 st1) (frag_ids st1 st2)
+Proof
+  simp[frag_ids_def, pred_setTheory.DISJOINT_DEF, pred_setTheory.EXTENSION] >> decide_tac
+QED
+
+Theorem enc_frame_refl:
+  enc_scratch (frag_ids st st') lo top s ==>
+  enc_frame st st' lo top outs s s
+Proof
+  simp[enc_frame_def]
+QED
+
+(* Label equality is an execution invariant separate from enc_frame. *)
+Theorem enc_frame_preserves_operand:
+  enc_frame st st' lo top outs s0 s /\
+  s.vs_labels = s0.vs_labels /\
+  (!x. op = Var x ==> not_fresh_at st x) /\
+  eval_operand op s0 = SOME w ==>
+  eval_operand op s = SOME w
+Proof
+  Cases_on `op` >> simp[eval_operand_def] >> strip_tac >>
+  gvs[] >> qpat_x_assum `enc_frame _ _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[enc_frame_def] >> strip_tac >> first_x_assum irule >> simp[]
+QED
+
+
 (* ===== Recursive ABI encode correctness ===== *)
 
 (* Mutual induction over compile_abi_encode_child / _to_buf /
