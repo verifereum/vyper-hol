@@ -16,7 +16,7 @@ Ancestors
   vyperABI vyperEvent vyperInterpreter
   vyperTypeContract vyperTypeContractSoundness vyperTypeInitialState
   vyperStorageLayoutSafety vyperRuntimeAccounts
-  supportedProgram compileEnv selectorDispatch
+  supportedProgram compileEnv selectorDispatch immutableSectionRel
 
 (* ===== Source deployment, typing and storage ===== *)
 
@@ -105,6 +105,13 @@ End
 
 (* ===== Fresh nonstatic frame: LIVE post-transfer accounts ===== *)
 
+Definition account_immutables_def:
+  account_immutables (am:abstract_machine) addr =
+    case ALOOKUP am.immutables addr of
+      NONE => empty_immutables
+    | SOME imms => imms
+End
+
 Definition call_state_rel_def:
   call_state_rel tops runtime_bc am tx es <=>
     ?ctxt rb rest.
@@ -112,9 +119,10 @@ Definition call_state_rel_def:
       wf_state es /\ (?d. es.msdomain = Collect d) /\
       ctxt.jumpDest = NONE /\ ~ctxt.msgParams.static /\
       (?mr. ctxt.msgParams.outputTo = Memory mr) /\
-      ctxt.msgParams.code = runtime_bc /\
-      ctxt.msgParams.parsed = parse_code 0 FEMPTY runtime_bc /\
-      LENGTH runtime_bc <= 24576 /\
+      installed_code_rel tops runtime_bc (account_immutables am tx.target)
+        ctxt.msgParams.code /\
+      ctxt.msgParams.parsed = parse_code 0 FEMPTY ctxt.msgParams.code /\
+      LENGTH ctxt.msgParams.code <= 24576 /\
       ctxt.pc = 0 /\ ctxt.stack = [] /\ ctxt.logs = [] /\
       ctxt.returnData = [] /\ ctxt.memory = [] /\
       value_transfer_ok tx am.accounts /\

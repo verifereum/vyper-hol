@@ -3,6 +3,7 @@ Ancestors
   immutableMemoryFrame immutableWordExecution moduleLowering
   exprLoweringProps venomInst venomExecSemantics venomState instIdxIndep fragExec
   vyperCompiler
+Libs wordsLib
 
 (* MCOPY runs before CODECOPY in the actual epilogue. Its source is thus
    snapshotted before the runtime bytes are installed in the return buffer. *)
@@ -378,7 +379,8 @@ Theorem immutable_deploy_prefix_opcodes:
 Proof
   simp[] >> strip_tac >> gvs[] >>
   simp[is_terminator_def] >> rpt gen_tac >>
-  once_rewrite_tac[step_inst_base_def] >> simp[] >>
+  once_rewrite_tac[step_inst_base_def] >>
+  qpat_assum `i.inst_opcode = _` (fn th => rewrite_tac[th]) >> simp[] >>
   simp[exec_pure2_def, exec_alloca_def, AllCaseEqs()]
 QED
 
@@ -483,6 +485,9 @@ QED
 (* Checked executions include the fresh bump-allocation path. They test
    empty and two-word suffixes; the general theorems above concern a resolved
    raw allocation entry, not a claim about placement after concretization. *)
+val immutable_deploy_probe_conv = computeLib.CBV_CONV
+  (wordsLib.add_words_compset true (computeLib.copy (computeLib.the_compset())));
+
 Theorem immutable_deploy_two_word_execution_probe:
   let st = initial_compile_state "entry" in
   let st' = SND (compile_constructor_epilogue 2 64 (Lit 0w) st) in
@@ -494,9 +499,7 @@ Theorem immutable_deploy_two_word_execution_probe:
     Halt final => final.vs_returndata = [0xaaw;0xbbw] ++ section /\ final.vs_halted
   | _ => F
 Proof
-  EVAL_TAC >>
-  simp[wordsTheory.word_add_n2w, wordsTheory.w2n_n2w, wordsTheory.dimword_def,
-       fcpLib.INDEX_CONV ``dimindex(:256)``] >> EVAL_TAC
+  CONV_TAC immutable_deploy_probe_conv
 QED
 
 Theorem immutable_deploy_empty_section_execution_probe:
@@ -509,9 +512,7 @@ Theorem immutable_deploy_empty_section_execution_probe:
     Halt final => final.vs_returndata = [0xaaw;0xbbw] /\ final.vs_halted
   | _ => F
 Proof
-  EVAL_TAC >>
-  simp[wordsTheory.word_add_n2w, wordsTheory.w2n_n2w, wordsTheory.dimword_def,
-       fcpLib.INDEX_CONV ``dimindex(:256)``] >> EVAL_TAC
+  CONV_TAC immutable_deploy_probe_conv
 QED
 
 

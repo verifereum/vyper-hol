@@ -43,7 +43,7 @@ Ancestors
   vyperContext
   venomExecSemantics
   venomState
-  compileEnv e2eDefs supportedProgram compileVyper
+  compileEnv e2eDefs supportedProgram compileVyper immutableSectionRel
   unitTransformDefs unitShapeDefs
 
 (* TASK056 RETIRED SOURCE ARCHIVE: old NONE-mode helpers, replaced by the
@@ -121,14 +121,15 @@ Definition venom_env_rel_def:
 End
 
 Definition initial_venom_state_rel_def:
-  initial_venom_state_rel am tx vs <=>
+  initial_venom_state_rel tops am tx vs <=>
     value_transfer_ok tx am.accounts /\
     vs.vs_accounts = accounts_after_transfer tx am.accounts /\
     vs.vs_transient = am.tStorage /\ am.logs = [] /\ vs.vs_logs = [] /\
     tx_env_ok tx /\ venom_env_rel tx vs /\
     vs.vs_vars = FEMPTY /\ ~vs.vs_halted /\ vs.vs_memory = [] /\
     vs.vs_allocas = FEMPTY /\ vs.vs_alloca_next = 0 /\
-    vs.vs_returndata = [] /\ vs.vs_requests = []
+    vs.vs_returndata = [] /\ vs.vs_requests = [] /\
+    immutables_section_rel tops (account_immutables am tx.target) vs.vs_data_section
 End
 
 (* Only success compares effects/requests. Runtime failure must abort, except
@@ -170,7 +171,7 @@ Theorem lower_vyper_runtime_unit_correct:
     source_storage_ok tops am tx /\
     source_deployment_rel tops am tx /\
     valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
-    initial_venom_state_rel am tx vs /\
+    initial_venom_state_rel tops am tx vs /\
     call_outcomes_ok tops am tx vs.vs_outcomes
     ==>
     source_unit_execution_correct tops ret am tx unit vs
@@ -199,7 +200,7 @@ Theorem lower_vyper_runtime_unit_memory_ok:
     source_storage_ok tops am tx /\
     source_deployment_rel tops am tx /\
     valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
-    initial_venom_state_rel am tx vs /\
+    initial_venom_state_rel tops am tx vs /\
     call_outcomes_ok tops am tx vs.vs_outcomes /\
     ~source_exempt tops (call_external (SOME vs.vs_outcomes) am tx)
     ==> raw_unit_memory_ok unit.cu_context vs

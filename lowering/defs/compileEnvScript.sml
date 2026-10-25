@@ -29,7 +29,7 @@
 
 Theory compileEnv
 Ancestors
-  immutableEncoding venomExecSemantics venomInst venomPolicyTypes
+  immutableValue immutableEncoding venomExecSemantics venomInst venomPolicyTypes
   vyperState vyperContext vyperValue vyperABI contractABI
   byte keccak finite_map pred_set
 Libs
@@ -797,7 +797,10 @@ Definition immutables_rel_def:
       byte_offset + type_memory_size tv <=
         LENGTH (if is_ctor then ss.vs_memory else ss.vs_data_section) /\
       val_in_memory tv v byte_offset
-        (if is_ctor then ss.vs_memory else ss.vs_data_section)
+        (if is_ctor then ss.vs_memory else ss.vs_data_section) /\
+      immutable_value_bytes_rel tv v
+        (mem_bytes_at byte_offset (type_memory_size tv)
+          (if is_ctor then ss.vs_memory else ss.vs_data_section))
 End
 
 (* ===== Storage Variables Relation ===== *)

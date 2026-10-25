@@ -36,7 +36,9 @@ Definition supported_assignment_def:
            SOME ty => supported_value_type tops ty
          | NONE => F) /\ supported_expr tops e
     | BaseTarget (TopLevelNameTarget id) =>
-        supported_scalar_target tops id /\ supported_pure_expr tops e
+        (supported_scalar_target tops id \/
+         IS_SOME (supported_immutable_type tops id)) /\
+        supported_pure_expr tops e
     | BaseTarget (SubscriptTarget (TopLevelNameTarget id) key) =>
         supported_subscript_base tops id /\ supported_pure_expr tops key /\
         supported_pure_expr tops e

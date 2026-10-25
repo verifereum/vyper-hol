@@ -7,11 +7,15 @@ Ancestors
   moduleLoweringProps
   valueEncodingProofs
   localPtrsProps
+  immutableStagingBridge
+  immutableCodeLayout
+  immutableLocationProps
   (* compiler + correctness *)
   vyperCompiler
   vyperLoweringCorrect
   configuredE2ECorrectness
   evalCompilerMemoryStores
+  evalCompilerImmutables
   evalCompilerExternalCalls
   evalCompilerNameCollisions
   evalCompilerSliceBuffers

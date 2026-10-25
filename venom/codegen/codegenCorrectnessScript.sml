@@ -331,10 +331,10 @@ Definition initial_ctx_rel_def:
       initial_codegen_state_rel cp vs /\
       wf_state es /\ (?d. es.msdomain = Collect d) /\
       ~ctxt.msgParams.static /\
-      ctxt.msgParams.code = assemble prog /\
-      ctxt.msgParams.parsed = parse_code 0 FEMPTY (assemble prog) /\
-      LENGTH (assemble prog) <= 24576 /\
-      vs.vs_vars = FEMPTY /\ vs.vs_data_section = [] /\
+      ctxt.msgParams.code = assemble prog ++ vs.vs_data_section /\
+      ctxt.msgParams.parsed = parse_code 0 FEMPTY ctxt.msgParams.code /\
+      LENGTH ctxt.msgParams.code <= 24576 /\
+      vs.vs_vars = FEMPTY /\
       (!l. FLOOKUP vs.vs_labels l =
            OPTION_MAP n2w (FLOOKUP (SND (compute_label_offsets prog)) l)) /\
       vs.vs_outcomes = MAP SND (call_trace es) /\ vs.vs_requests = []

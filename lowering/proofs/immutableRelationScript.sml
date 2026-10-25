@@ -1,6 +1,6 @@
 Theory immutableRelation
 Ancestors
-  immutableSection immutableEncodingProofs immutableEncoding compileEnv
+  immutableSection immutableEncodingProofs immutableEncoding immutableValue compileEnv
 
 (* A lookup-to-declaration interface, discharged by location allocation and
    source-name uniqueness. It deliberately does not presume unshadowed keys. *)
@@ -67,7 +67,8 @@ Proof
     (gvs[] >> simp[compileVyperTheory.compute_immutables_len_append]) >>
   `byte_offset + type_memory_size tv <= LENGTH (immutables_section tops imms)` by
     metis_tac[immutable_slice_bound, encode_immutable_value_length] >>
-  metis_tac[immutable_encoding_slice_decodes, immutables_section_length]
+  metis_tac[immutable_encoding_slice_decodes, immutable_value_bytes_slice,
+            immutables_section_length]
 QED
 
 Theorem immutable_relation_same_bytes:
@@ -125,7 +126,8 @@ Theorem immutable_relation_from_slices:
 Proof
   simp[immutables_rel_def] >> rpt strip_tac >>
   first_x_assum drule_all >> strip_tac >> simp[] >>
-  irule immutable_encoding_slice_decodes >> simp[]
+  FIRST [irule immutable_encoding_slice_decodes >> simp[],
+         irule immutable_value_bytes_slice >> simp[]]
 QED
 
 Theorem immutable_constructor_relation:
@@ -198,6 +200,9 @@ Theorem immutable_relation_lookup:
   immutable_value_admissible tv v /\
   off + type_memory_size tv <= LENGTH (if ctor then ss.vs_memory else ss.vs_data_section) /\
   val_in_memory tv v off (if ctor then ss.vs_memory else ss.vs_data_section)
+  /\ immutable_value_bytes_rel tv v
+    (mem_bytes_at off (type_memory_size tv)
+      (if ctor then ss.vs_memory else ss.vs_data_section))
 Proof
   strip_tac >> fs[immutables_rel_def] >> metis_tac[]
 QED

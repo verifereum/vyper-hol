@@ -869,9 +869,10 @@ Theorem e2e_deploy_correctness:
       (frame_resource_starved es r es' \/ precompile_call_starved es \/
        case load_contract NONE am tx [(NONE, tops)] [] of
          INL (am', rqs) =>
-           ?lgs.
-             frame_outcome es r es' NONE runtime_bc lgs /\
-             (lookup_account tx.target es'.rollback.accounts).code = runtime_bc /\
+            ?section lgs.
+              immutables_section_rel tops (account_immutables am' tx.target) section /\
+              frame_outcome es r es' NONE (runtime_bc ++ section) lgs /\
+              (lookup_account tx.target es'.rollback.accounts).code = runtime_bc ++ section /\
              (!a. a <> tx.target ==>
                   lookup_account a es'.rollback.accounts =
                   lookup_account a am'.accounts) /\
