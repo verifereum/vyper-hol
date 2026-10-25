@@ -1,7 +1,7 @@
 Theory exprSimHashes
 Ancestors
   arithmetic list rich_list words exprSimHyps exprLowering exprLoweringProps
-  compileEnv vyperAST vyperInterpreter vyperContext vyperTypeSystem
+  compileEnv vyperAST vyperInterpreter vyperContext vyperTypeSystem vyperTypeInvariants
   vyperState vyperValue exprBopLowering valueEncoding valueEncodingProofs byte keccak
   venomExecSemantics venomInst venomState emitHelper builtinHashing
 Libs
@@ -280,4 +280,59 @@ Proof
   rpt strip_tac >>
   gvs[observed_immutables_def, stmt_state_rel_def, state_rel_def,
       storage_rel_def, transient_rel_def, immutables_rel_def, logs_rel_def]
+QED
+
+Theorem observed_immutables_source_case:
+  !addr src imms.
+    observed_immutables addr src imms =
+      get_source_immutables src
+        (case ALOOKUP imms addr of SOME mods => mods | NONE => [])
+Proof
+  rpt gen_tac >> Cases_on `ALOOKUP imms addr` >>
+  simp[observed_immutables_def, get_source_immutables_def]
+QED
+
+Theorem env_immutables_consistent_type_support:
+  !env cx es imms.
+    (!src id tv.
+      (?v. FLOOKUP (observed_immutables cx.txn.target src imms) id = SOME (tv,v)) <=>
+      (?v. FLOOKUP (observed_immutables cx.txn.target src es.immutables) id = SOME (tv,v))) /\
+    env_immutables_consistent env cx es ==>
+    env_immutables_consistent env cx (es with immutables := imms)
+Proof
+  rpt gen_tac >>
+  simp[env_immutables_consistent_def, GSYM observed_immutables_source_case,
+       optionTheory.IS_SOME_EXISTS, pairTheory.EXISTS_PROD] >>
+  rpt strip_tac >> metis_tac[]
+QED
+
+Theorem expr_sim_inv_immutables_type_support:
+  !cenv cx env es imms.
+    (!src id tv.
+      (?v. FLOOKUP (observed_immutables cx.txn.target src imms) id = SOME (tv,v)) <=>
+      (?v. FLOOKUP (observed_immutables cx.txn.target src es.immutables) id = SOME (tv,v))) /\
+    EVERY (\(addr,mods). imms_well_typed mods) imms /\
+    expr_sim_inv cenv cx env es ==>
+    expr_sim_inv cenv cx env (es with immutables := imms)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `env_immutables_consistent env cx (es with immutables := imms)` by
+    (irule env_immutables_consistent_type_support >>
+     gvs[expr_sim_inv_def, env_consistent_def]) >>
+  gvs[expr_sim_inv_def, env_consistent_def, env_scopes_consistent_def,
+      state_well_typed_def] >> metis_tac[]
+QED
+
+Theorem expr_sim_pre_immutables_type_support:
+  !cenv cx env e es imms.
+    (!src id tv.
+      (?v. FLOOKUP (observed_immutables cx.txn.target src imms) id = SOME (tv,v)) <=>
+      (?v. FLOOKUP (observed_immutables cx.txn.target src es.immutables) id = SOME (tv,v))) /\
+    EVERY (\(addr,mods). imms_well_typed mods) imms /\
+    expr_sim_pre cenv cx env e es ==>
+    expr_sim_pre cenv cx env e (es with immutables := imms)
+Proof
+  simp[expr_sim_pre_def] >> rpt strip_tac >>
+  irule expr_sim_inv_immutables_type_support >>
+  asm_rewrite_tac[]
 QED
