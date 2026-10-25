@@ -984,3 +984,61 @@ Proof
   irule wb_args_post_cons >> goal_assum (drule_at Any) >> simp[] >>
   goal_assum (drule_at Any) >> simp[] >> qexists_tac `e` >> simp[]
 QED
+
+Theorem expr_post_word_builtin:
+  !func cenv cx es sa sm s0 es' xs vs t ann bt args sb v op u.
+    wb_args_post func cenv cx es sa s0 es' xs vs t /\
+    sa.cs_next_var <= sm.cs_next_var /\ is_word_type ann /\ word_value v /\
+    stmt_state_rel func cenv cx es' u /\ eval_operand op u = SOME (val_to_w256 v) /\
+    (!z w. not_fresh_at sm z /\ lookup_var z t = SOME w ==> lookup_var z u = SOME w) /\
+    (!aid b. FLOOKUP t.vs_allocas aid = SOME b ==> FLOOKUP u.vs_allocas aid = SOME b) /\
+    u.vs_memory = t.vs_memory ==>
+    expr_post func cenv cx (Builtin ann bt args) es sa sb s0 es' v op u
+Proof
+  rpt strip_tac >> irule expr_post_word_intro >>
+  simp[vyperASTTheory.expr_type_def] >> irule wb_frame_readonly_tail >>
+  qexistsl_tac [`sm`, `t`] >> gvs[wb_args_post_def]
+QED
+
+Theorem compile_word_builtin_sim:
+  !ctx func cenv cx ty ann bt args arg_ty Inv es code.
+    bt <> Len /\ builtin_args_length_ok bt (LENGTH args) /\ is_word_type ann /\
+    wb_args_ready ctx func cenv cx arg_ty Inv args /\ Inv es /\
+    wb_args_shape cenv arg_ty args /\
+    (!sa sb op. lower_value compile_expr cenv ty (Builtin ann bt args) sa = (op,sb) ==>
+      ?xs sm. lower_word_args cenv arg_ty args sa = (xs,sm) /\ code xs sm = (op,sb)) /\
+    (!xs sm sb op. code xs sm = (op,sb) ==> cs_extends sm sb) /\
+    (!vs es'. eval_exprs cx args es = (INL vs,es') ==>
+      word_builtin_frag ctx func cenv cx code
+        (builtin_result cx es'.accounts ann bt (MAP expr_type args) vs) vs es') ==>
+    expr_sim ctx func cenv cx ty (Builtin ann bt args) es
+Proof
+  rpt gen_tac >> strip_tac >> rewrite_tac[expr_sim_def] >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!sa sb op. _ ==> _` drule >> strip_tac >>
+  drule_all lower_word_args_shape_ready >> strip_tac >>
+  `cs_extends sm sb` by metis_tac[] >>
+  `fn_has_code sa sm func /\ fn_has_code sm sb func` by
+    metis_tac[fn_has_code_mid, cs_extends_refl] >>
+  drule_all eval_expr_builtin_cases >> strip_tac
+  >- (gvs[] >> drule_all lower_word_args_sim >>
+      disch_then (qspec_then `s0` mp_tac) >> simp[wb_args_exit_def] >> strip_tac >>
+      irule frag_exec_exit_prefix >> goal_assum (drule_at Any) >> simp[]) >>
+  `local_ptrs_reserved cenv sm` by metis_tac[local_ptrs_reserved_next_var] >>
+  qpat_x_assum `!vs es'. _ ==> _` drule >> strip_tac >>
+  `EVERY (\x. !z. x = Var z ==> not_fresh_at sm z) xs` by
+    (gvs[EVERY_MEM] >> metis_tac[]) >>
+  drule_all lower_word_args_sim >> disch_then (qspec_then `s0` mp_tac) >>
+  simp[wb_args_exit_def] >> disch_then (mp_then Any irule wb_frag_then) >> simp[] >>
+  qx_gen_tac `t` >> strip_tac >>
+  gvs[] >> qpat_x_assum `word_builtin_frag _ _ _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[word_builtin_frag_def] >> disch_then drule_all >>
+  disch_then (qspec_then `t` mp_tac) >>
+  disch_then (mp_then Any irule frag_exec_weaken) >>
+  simp[] >> conj_tac
+  >- gvs[wb_args_post_def] >>
+  rpt strip_tac >> goal_assum (drule_at Any) >>
+  irule expr_post_word_builtin >> goal_assum (drule_at Any) >>
+  simp[] >> qexists_tac `sm` >> simp[] >>
+  qexistsl_tac [`t`, `vs`, `xs`] >> simp[]
+QED
