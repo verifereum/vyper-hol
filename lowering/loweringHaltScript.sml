@@ -1109,7 +1109,42 @@ Theorem compile_external_return_abi_frag:
                   R (Halt ss)) ==>
     frag_exec ctx st st' P Q R
 Proof
-  cheat
+  rpt strip_tac >>
+  drule_all compile_external_return_abi_parts >> strip_tac >>
+  drule compile_alloc_buffer_parts >> strip_tac >>
+  drule compile_alloc_buffer_extends >> strip_tac >>
+  drule compile_abi_encode_to_buf_next_id >> strip_tac >>
+  drule compile_abi_encode_to_buf_extends >> strip_tac >>
+  drule emit_inst_metadata >> strip_tac >>
+  irule frag_exec_pointwise >> rpt strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  `sb.cs_next_id <= st'.cs_next_id` by decide_tac >>
+  drule_all compile_alloc_buffer_enc_frag >>
+  disch_then (qspecl_then [`ctx`, `R`] mp_tac) >>
+  simp[] >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `frag_exec ctx st sa _ ready R` >>
+  irule frag_exec_seq >> qexistsl_tac [`ready`, `sa`] >>
+  simp[] >> conj_tac
+  >- metis_tac[cs_extends_trans] >>
+  qpat_x_assum `frag_exec ctx st sa _ _ _` kall_tac >>
+  qpat_x_assum `compile_external_return _ _ _ _ _ _ _ _ _ _ = _` kall_tac >>
+  irule frag_exec_pointwise >> simp[Abbr `ready`] >>
+  qx_gen_tac `s1` >> strip_tac >>
+  `s0.vs_alloca_next < dimword (:256) /\
+   LENGTH (enc (vyper_to_abi_type env ty) av) < dimword (:256)` by decide_tac >>
+  `enc_pre sa sb [buf.buf_operand;op] (msz + s0.vs_alloca_next)
+      (msz + (s0.vs_alloca_next + 32 * (sb.cs_next_id + 1 - st.cs_next_id)))
+      tv v (w2n p)
+      [(w2n (n2w s0.vs_alloca_next : 256 word),
+        LENGTH (enc (vyper_to_abi_type env ty) av))] s1` by
+    simp[wordsTheory.w2n_n2w] >>
+  `!ss. ss.vs_returndata = enc (vyper_to_abi_type env ty) av /\
+    ss.vs_accounts = s1.vs_accounts /\ ss.vs_transient = s1.vs_transient /\
+    ss.vs_logs = s1.vs_logs /\ ss.vs_requests = s1.vs_requests ==>
+    R (Halt ss)` by (rpt strip_tac >> first_x_assum irule >> simp[]) >>
+  qpat_x_assum `buf.buf_operand = _` SUBST_ALL_TAC >>
+  drule_all compile_abi_encode_return_frag >>
+  disch_then (qspecl_then [`ctx`, `Q`] ACCEPT_TAC)
 QED
 
 (* ===== Returns that release the lock ===== *)
