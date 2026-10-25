@@ -44,7 +44,7 @@
 
 Theory exprSimBuiltins
 Ancestors
-  list exprSim exprSimHyps vyperAST
+  list exprSim exprSimHyps vyperAST exprSimWordBuiltins
 
 (* ===== Lengths and calldata ===== *)
 
@@ -117,7 +117,7 @@ Theorem compile_as_wei_value_sim:
     expr_sim_below cenv (list_size expr_size args) ==>
     expr_vv_ok cenv (Builtin ann (AsWeiValue d) args)
 Proof
-  cheat
+  rpt strip_tac >> irule word_builtin_below_sim >> simp[]
 QED
 
 Theorem compile_ceil_sim:
@@ -133,7 +133,7 @@ Theorem compile_floor_sim:
     expr_sim_below cenv (list_size expr_size args) ==>
     expr_vv_ok cenv (Builtin ann Floor args)
 Proof
-  cheat
+  rpt strip_tac >> irule word_builtin_below_sim >> simp[]
 QED
 
 Theorem compile_addmod_sim:
@@ -142,7 +142,7 @@ Theorem compile_addmod_sim:
     expr_sim_below cenv (list_size expr_size args) ==>
     expr_vv_ok cenv (Builtin ann AddMod args)
 Proof
-  cheat
+  rpt strip_tac >> irule word_builtin_below_sim >> simp[]
 QED
 
 Theorem compile_mulmod_sim:
@@ -151,7 +151,7 @@ Theorem compile_mulmod_sim:
     expr_sim_below cenv (list_size expr_size args) ==>
     expr_vv_ok cenv (Builtin ann MulMod args)
 Proof
-  cheat
+  rpt strip_tac >> irule word_builtin_below_sim >> simp[]
 QED
 
 Theorem compile_pow_mod256_sim:
@@ -160,28 +160,28 @@ Theorem compile_pow_mod256_sim:
     expr_sim_below cenv (list_size expr_size args) ==>
     expr_vv_ok cenv (Builtin ann PowMod256 args)
 Proof
-  cheat
+  rpt strip_tac >> irule word_builtin_below_sim >> simp[]
 QED
 
 Theorem compile_addmod_names_sim:
   !cenv ann aty a bty b mty m.
     expr_vv_ok cenv (Builtin ann AddMod [Name aty a; Name bty b; Name mty m])
 Proof
-  cheat
+  rpt gen_tac >> irule word_modular_names_sim >> simp[]
 QED
 
 Theorem compile_mulmod_names_sim:
   !cenv ann aty a bty b mty m.
     expr_vv_ok cenv (Builtin ann MulMod [Name aty a; Name bty b; Name mty m])
 Proof
-  cheat
+  rpt gen_tac >> irule word_modular_names_sim >> simp[]
 QED
 
 Theorem compile_powmod256_names_sim:
   !cenv ann aty a bty b.
     expr_vv_ok cenv (Builtin ann PowMod256 [Name aty a; Name bty b])
 Proof
-  cheat
+  rpt gen_tac >> irule word_modular_names_sim >> simp[]
 QED
 
 (* ===== Bytestrings ===== *)

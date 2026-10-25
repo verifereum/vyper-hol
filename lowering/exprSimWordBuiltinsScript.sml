@@ -1365,3 +1365,222 @@ Proof
   first_x_assum irule >> goal_assum (drule_at Any) >>
   simp[] >> metis_tac[listTheory.MEM]
 QED
+
+Theorem typed_builtin_args_values:
+  !cenv cx env ann bt args es vs es'.
+    expr_sim_pre cenv cx env (Builtin ann bt args) es /\
+    EVERY (\e. word_value_type (expr_type e) /\ expr_sim_ok cenv e) args /\
+    eval_exprs cx args es = (INL vs,es') ==>
+    LIST_REL (\e v. ?tv. evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+                         value_has_type tv v) args vs
+Proof
+  rpt strip_tac >> irule word_args_values_typed >> goal_assum (drule_at Any) >>
+  qexistsl_tac [`cenv`, `env`] >> conj_tac
+  >- (rpt gen_tac >> strip_tac >> conj_tac
+      >- (irule expr_sim_pre_builtin_arg >> simp[] >>
+          qexistsl_tac [`ann`, `args`, `bt`, `es`] >> simp[]) >>
+      gvs[EVERY_MEM] >> first_x_assum drule >> simp[]) >>
+  gvs[expr_sim_pre_def]
+QED
+
+Theorem compile_typed_word_builtin_sim:
+  !ctx func cenv cx env ty ann bt args es arg_ty code.
+    expr_sim_pre cenv cx env (Builtin ann bt args) es /\
+    EVERY (\e. word_value_type (expr_type e) /\ expr_sim_ok cenv e) args /\
+    bt <> Len /\ builtin_args_length_ok bt (LENGTH args) /\ is_word_type ann /\
+    (!sa sb op. lower_value compile_expr cenv ty (Builtin ann bt args) sa = (op,sb) ==>
+      ?xs sm. lower_word_args cenv arg_ty args sa = (xs,sm) /\ code xs sm = (op,sb)) /\
+    (!xs. straight_fresh (code xs)) /\
+    (!vs es'. LIST_REL
+       (\e v. ?tv. evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\ value_has_type tv v)
+       args vs ==>
+       word_builtin_frag ctx func cenv cx code
+         (builtin_result cx es'.accounts ann bt (MAP expr_type args) vs) vs es') ==>
+    expr_sim ctx func cenv cx ty (Builtin ann bt args) es
+Proof
+  rpt gen_tac >> strip_tac >> drule_all typed_word_args_ready >>
+  disch_then (qspecl_then [`ctx`, `func`, `arg_ty`] strip_assume_tac) >>
+  irule compile_word_builtin_sim >> simp[] >>
+  qexistsl_tac [`expr_sim_inv cenv cx env`, `arg_ty`, `code`] >> simp[] >>
+  conj_tac >- gvs[expr_sim_pre_def] >> conj_tac
+  >- (rpt strip_tac >> first_x_assum (qspec_then `xs` mp_tac) >>
+      simp[straight_fresh_def] >> disch_then drule >> strip_tac >>
+      simp[cs_extends_def] >> qexists_tac `[]` >> simp[]) >>
+  rpt strip_tac >> first_x_assum irule >>
+  irule typed_builtin_args_values >> goal_assum (drule_at Any) >>
+  qexistsl_tac [`ann`, `bt`, `cenv`, `env`] >> simp[]
+QED
+
+Theorem compile_floor_typed_sim:
+  !cenv ann e.
+    expr_sim_ok cenv e ==> expr_sim_ok cenv (Builtin ann Floor [e])
+Proof
+  rpt gen_tac >> strip_tac >> rewrite_tac[expr_sim_ok_def] >> rpt strip_tac >>
+  `expr_type e = BaseT DecimalT /\ ann = BaseT (IntT 256)` by
+    gvs[expr_sim_pre_def, well_typed_expr_def, well_typed_builtin_app_def] >>
+  irule compile_typed_word_builtin_sim >>
+  simp[is_word_type_def, builtin_args_length_ok_def, word_value_type_def] >>
+  conj_tac >- (qexistsl_tac [`\e. ty`, `(\xs. compile_floor (EL 0 xs) 10000000000)`] >>
+  simp[straight_fresh_floor] >> conj_tac
+  >- (rpt strip_tac >> drule lower_value_floor >> strip_tac >>
+      qexistsl_tac [`[x]`, `s1`] >>
+      simp[lower_word_args_def, comp_bind_def, comp_return_def]) >>
+  rpt strip_tac >>
+  gvs[LIST_REL_CONS1, vyperValueTheory.evaluate_type_def] >>
+  Cases_on `v` >> gvs[value_has_type_def] >>
+  mp_tac compile_floor_word_frag >> simp[] >> disch_then irule >> simp[]) >>
+  qexists_tac `env` >> gvs[]
+QED
+
+Theorem compile_modular_typed_sim:
+  !cenv ann bt a b m.
+    (bt = AddMod \/ bt = MulMod) /\
+    expr_sim_ok cenv a /\ expr_sim_ok cenv b /\ expr_sim_ok cenv m ==>
+    expr_sim_ok cenv (Builtin ann bt [a; b; m])
+Proof
+  rpt gen_tac >> strip_tac >> (rewrite_tac[expr_sim_ok_def] >> rpt strip_tac >>
+  `ann = BaseT (UintT 256) /\ expr_type a = BaseT (UintT 256) /\
+   expr_type b = BaseT (UintT 256) /\ expr_type m = BaseT (UintT 256)` by
+    (gvs[expr_sim_pre_def, well_typed_expr_def] >>
+     gvs[well_typed_builtin_app_def]) >>
+  irule compile_typed_word_builtin_sim >>
+  simp[is_word_type_def, builtin_args_length_ok_def, word_value_type_def] >>
+  conj_tac
+  >- (qexistsl_tac [`\e. ty`, `\xs. (if bt = AddMod then compile_addmod else compile_mulmod)
+                                    (EL 0 xs) (EL 1 xs) (EL 2 xs)`] >>
+      conj_tac
+      >- (rpt strip_tac >> drule_at Any lower_value_ternary_modular >> simp[] >> strip_tac >>
+          qexistsl_tac [`[x;y;z]`, `s3`] >>
+          simp[lower_word_args_def, comp_bind_def, comp_return_def]) >>
+      conj_tac
+      >- (gvs[] >> simp[straight_fresh_compile_modular]) >>
+      rpt strip_tac >> gvs[LIST_REL_CONS1, vyperValueTheory.evaluate_type_def] >>
+      metis_tac[SRULE [] (Q.SPEC `F` compile_modular_typed_frag),
+                SRULE [] (Q.SPEC `T` compile_modular_typed_frag)]) >>
+  qexists_tac `env` >> gvs[])
+QED
+
+Theorem compile_pow_mod256_typed_sim:
+  !cenv ann a b.
+    expr_sim_ok cenv a /\ expr_sim_ok cenv b ==>
+    expr_sim_ok cenv (Builtin ann PowMod256 [a;b])
+Proof
+  rpt gen_tac >> strip_tac >> rewrite_tac[expr_sim_ok_def] >> rpt strip_tac >>
+  `ann = BaseT (UintT 256) /\ expr_type a = BaseT (UintT 256) /\
+   expr_type b = BaseT (UintT 256)` by
+    gvs[expr_sim_pre_def, well_typed_expr_def, well_typed_builtin_app_def] >>
+  irule compile_typed_word_builtin_sim >>
+  simp[is_word_type_def, builtin_args_length_ok_def, word_value_type_def] >>
+  conj_tac
+  >- (qexistsl_tac [`\e. ty`, `\xs. compile_pow_mod256 (EL 0 xs) (EL 1 xs)`] >>
+      simp[straight_fresh_compile_modular] >> conj_tac
+      >- (rpt strip_tac >> drule lower_value_pow_mod256 >> strip_tac >>
+          qexistsl_tac [`[x;y]`, `s2`] >>
+          simp[lower_word_args_def, comp_bind_def, comp_return_def]) >>
+      rpt strip_tac >> gvs[LIST_REL_CONS1, vyperValueTheory.evaluate_type_def] >>
+      mp_tac compile_pow_mod256_typed_frag >> simp[] >> disch_then irule >> simp[]) >>
+  qexists_tac `env` >> gvs[]
+QED
+
+Theorem compile_as_wei_value_typed_sim:
+  !cenv ann d e.
+    expr_sim_ok cenv e ==> expr_sim_ok cenv (Builtin ann (AsWeiValue d) [e])
+Proof
+  rpt gen_tac >> strip_tac >> rewrite_tac[expr_sim_ok_def] >> rpt strip_tac >>
+  `?k. expr_type e = BaseT (UintT k) /\ ann = BaseT (UintT 256)` by
+    gvs[expr_sim_pre_def, well_typed_expr_def, well_typed_builtin_app_def,
+        is_uint_type_def] >>
+  irule compile_typed_word_builtin_sim >>
+  simp[is_word_type_def, builtin_args_length_ok_def, word_value_type_def] >>
+  conj_tac
+  >- (qexistsl_tac [`expr_type`, `\xs. compile_as_wei_value_int (EL 0 xs) (denomination_multiplier d) F`] >>
+      simp[straight_fresh_as_wei_value_int] >> conj_tac
+      >- (rpt strip_tac >> drule_at Any lower_value_as_wei_value >> simp[] >> strip_tac >>
+          qexistsl_tac [`[x]`, `s1`] >>
+          simp[lower_word_args_def, comp_bind_def, comp_return_def]) >>
+      rpt strip_tac >> gvs[LIST_REL_CONS1, vyperValueTheory.evaluate_type_def] >>
+      drule_all uint_value_word_rep >> strip_tac >> gvs[] >>
+      qpat_x_assum `v = IntV _` (fn th => once_rewrite_tac[th]) >>
+      mp_tac compile_as_wei_value_word_frag >> simp[] >> disch_then irule) >>
+  qexists_tac `env` >> gvs[]
+QED
+
+Theorem word_builtin_sim_stack:
+  !ctx func cenv cx ty ann bt args es.
+    expr_sim ctx func cenv cx ty (Builtin ann bt args) es /\
+    (((bt = Floor \/ (?d. bt = AsWeiValue d)) /\ LENGTH args = 1) \/
+     ((bt = AddMod \/ bt = MulMod) /\ LENGTH args = 3) \/
+     (bt = PowMod256 /\ LENGTH args = 2)) ==>
+    expr_vv_sim ctx func cenv cx ty (Builtin ann bt args) es
+Proof
+  rpt gen_tac >> strip_tac >> (irule expr_vv_sim_stack >> simp[] >> conj_tac
+  >- (gen_tac >> Cases_on `compile_expr cenv ty (Builtin ann bt args) sa` >>
+      drule_at Any compile_word_builtin_stack >> simp[] >> metis_tac[]) >>
+  metis_tac[eval_expr_builtin_value])
+QED
+
+Theorem word_builtin_args_vv_sim:
+  !cenv ann bt args.
+    (bt = Floor \/ (?d. bt = AsWeiValue d) \/ bt = AddMod \/ bt = MulMod \/ bt = PowMod256) /\
+    EVERY (expr_sim_ok cenv) args ==>
+    expr_vv_ok cenv (Builtin ann bt args)
+Proof
+  rpt gen_tac >> strip_tac >> (rewrite_tac[expr_vv_ok_def] >> rpt strip_tac >>
+  `well_typed_builtin_app ann bt (MAP expr_type args)` by
+    gvs[expr_sim_pre_def, well_typed_expr_def] >>
+  gvs[well_typed_builtin_app_def] >>
+  gvs[MAP_EQ_CONS, LENGTH_EQ_NUM_compute] >>
+  irule word_builtin_sim_stack >> simp[] >>
+  metis_tac[compile_floor_typed_sim, compile_as_wei_value_typed_sim,
+            compile_modular_typed_sim, compile_pow_mod256_typed_sim, expr_sim_ok_def])
+QED
+
+Theorem word_name_sim_ok:
+  !cenv ann id. word_value_type ann ==> expr_sim_ok cenv (Name ann id)
+Proof
+  rpt strip_tac >> rewrite_tac[expr_sim_ok_def] >> rpt strip_tac >>
+  `well_typed_expr env (Name ann id) /\ env_consistent env cx es /\ state_well_typed es` by
+    gvs[expr_sim_pre_def, expr_sim_inv_def] >>
+  drule_all vyperTypeEnvTheory.well_typed_Name_lookup >> strip_tac >>
+  `word_value entry.value` by
+    (mp_tac word_value_type_typed >>
+     disch_then (qspec_then `ann` mp_tac) >>
+     disch_then (qspec_then `env.type_defs` mp_tac) >>
+     disch_then (qspecl_then [`tv`, `Value entry.value`] mp_tac) >>
+     simp[vyperTypeInvariantsTheory.toplevel_value_typed_def]) >>
+  irule compile_name_word_sim >>
+  gvs[expr_sim_pre_def, expr_sim_inv_def, well_typed_expr_def] >>
+  metis_tac[word_value_type_word]
+QED
+
+Theorem word_builtin_below_sim:
+  !cenv ann bt args.
+    (bt = Floor \/ (?d. bt = AsWeiValue d) \/ bt = AddMod \/ bt = MulMod \/ bt = PowMod256) /\
+    expr_sim_below cenv (list_size expr_size args) ==>
+    expr_vv_ok cenv (Builtin ann bt args)
+Proof
+  rpt gen_tac >> strip_tac >> (irule word_builtin_args_vv_sim >> simp[] >>
+  simp[EVERY_MEM] >> rpt strip_tac >> drule_all expr_sim_below_mem >>
+  simp[expr_ok_def])
+QED
+
+Theorem word_modular_names_sim:
+  !cenv ann bt args.
+    (bt = AddMod \/ bt = MulMod \/ bt = PowMod256) /\
+    EVERY (\e. ?t id. e = Name t id) args ==>
+    expr_vv_ok cenv (Builtin ann bt args)
+Proof
+  rpt gen_tac >> strip_tac >> (rewrite_tac[expr_vv_ok_def] >> rpt strip_tac >>
+  `well_typed_builtin_app ann bt (MAP expr_type args)` by
+    gvs[expr_sim_pre_def, well_typed_expr_def] >>
+  drule_at Any word_builtin_modular_types >> simp[] >> strip_tac >>
+  `EVERY word_value_type (MAP expr_type args)` by
+    gvs[word_value_type_def] >>
+  `EVERY (expr_sim_ok cenv) args` by
+    (gvs[EVERY_MEM, EVERY_MAP] >> rpt strip_tac >>
+     qpat_x_assum `!e. MEM e args ==> ?t id. _` drule >> strip_tac >> gvs[] >>
+     first_x_assum drule >> simp[] >> strip_tac >>
+     irule word_name_sim_ok >> gvs[vyperASTTheory.expr_type_def]) >>
+  irule (SRULE[expr_vv_ok_def] word_builtin_args_vv_sim) >> simp[] >>
+  qexists_tac `env` >> gvs[])
+QED
