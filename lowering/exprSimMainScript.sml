@@ -59,9 +59,9 @@ Theorem compile_type_builtin_case_sim:
     type_builtin_sim_ok cenv ann tb t args
 Proof
   rw[type_builtin_sim_ok_def] >> Cases_on `tb` >>
-  FIRST (map (fn th => irule expr_ok_of_vv >> irule th >> gvs[])
-    [compile_empty_sim, compile_max_value_sim, compile_min_value_sim,
-     compile_epsilon_sim, compile_convert_sim, compile_extract32_sim,
+  FIRST (irule compile_bound_builtin_case_sim >> simp[] ::
+         map (fn th => irule expr_ok_of_vv >> irule th >> gvs[])
+    [compile_empty_sim, compile_convert_sim, compile_extract32_sim,
      compile_abi_decode_sim, compile_abi_encode_sim])
 QED
 
@@ -112,9 +112,10 @@ Proof
       gvs[type_builtin_sim_ok_def])
   >~ [`Call _ _ _ _`] >- (irule compile_call_case_sim >> gvs[])
   >~ [`Name _ _`] >- simp[compile_name_case_sim]
-  >~ [`Literal _ _`] >- simp[compile_literal_case_sim] >>
+  >~ [`Literal _ _`] >- simp[compile_literal_case_sim]
+  >~ [`FlagMember _ _ _`] >- simp[compile_flag_member_case_sim] >>
   FIRST (map (fn th => irule expr_ok_of_vv >> irule th >> gvs[])
-    [compile_toplevel_name_sim, compile_flag_member_sim, compile_ifexp_sim,
+    [compile_toplevel_name_sim, compile_ifexp_sim,
      compile_struct_lit_sim, compile_subscript_sim, compile_attribute_sim,
      compile_pop_sim])
 QED

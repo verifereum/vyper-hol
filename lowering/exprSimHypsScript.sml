@@ -14,8 +14,9 @@
  * TOP-LEVEL:
  *   expr_sim_inv      — the facts about the source state and the context
  *                       that every subexpression keeps: type soundness's
- *                       invariants, and the locals of the type environment
- *                       held through pointer variables
+ *                       invariants, the locals of the type environment
+ *                       held through pointer variables, and the flag
+ *                       member ids of the compile environment
  *   expr_sim_pre      — expr_sim_inv, the expression well typed, and no
  *                       internal call in it
  *   expr_sim_ok       — expr_sim wherever expr_sim_pre holds
@@ -67,16 +68,23 @@
  *     internal functions and the constructor, are MemLoc
  *     (compile_register_kwarg_vars, local_ptrs_reserved), so the theorem
  *     says nothing yet about expressions there.
+ *   - The flag members clause: the compile environment's id of a flag
+ *     member is its index in its flag's declaration, the bit
+ *     lookup_flag_mem sets.  Vyper's compiler guarantees this:
+ *     FlagT.from_FlagDef (vyper/semantics/types/user.py) numbers the
+ *     members in declaration order and rejects a repeated one, and the
+ *     Venom lowering of a flag member is the literal 2 ** id
+ *     (codegen_venom/expr.py).
  *   - int_calls_expr e = []: no internal call.  An internal call lowers to
  *     INVOKE, whose simulation is #638's call step; until that is stated
  *     this theorem excludes them, and #638 replaces this conjunct with its
  *     hypothesis on the callees.
  *
  * Not here yet:
- *   - The compile environment's metadata (struct fields, flag member ids,
+ *   - The rest of the compile environment's metadata (struct fields,
  *     dynamic array capacities, method ids) is not related to the source
- *     context.  The cases that read it (StructLit, Attribute, FlagMember,
- *     Pop, method_id, ...) will need a clause each in expr_sim_inv, and
+ *     context.  The cases that read it (StructLit, Attribute, Pop,
+ *     method_id, ...) will need a clause each in expr_sim_inv, and
  *     TopLevelName needs every module variable to be in ce_vars.  Each is
  *     to match what Vyper's compiler guarantees.
  *   - Keeping an operand's value_vv through the code between compile_expr
@@ -104,7 +112,11 @@ Definition expr_sim_inv_def:
     accounts_well_typed es.accounts /\
     context_well_typed cx /\ functions_well_typed cx /\
     (!id ty. FLOOKUP env.var_types id = SOME ty ==>
-             ?p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz))
+             ?p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz)) /\
+    (!src fid ts ls mid i.
+       get_module_code cx src = SOME ts /\ lookup_flag fid ts = SOME ls /\
+       INDEX_OF mid ls = SOME i ==>
+       cenv.ce_flag_member_id (nsid_to_string (src, fid)) mid = i)
 End
 
 (* The types whose values are word_values (loweringSlice): integers,
