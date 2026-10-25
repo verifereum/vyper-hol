@@ -28,7 +28,7 @@ These are builtin payload lengths, not external RETURN framing lengths.
 ## Reproducible checker input and exact layout type
 
 Current saved fixture assertions use
-`IS_SOME (check_contract F [] (0w:address) [(NONE, abi_dynamic_program)])`
+`IS_SOME (check_contract F [] (0w:address) [(NONE, task090_abi_dynamic_program)])`
 and the analogous deployment `T`; formerly both returned NONE due to the bound.
 Empty layouts are valid here because this pure fixture declares no storage.
 The exact argument type is

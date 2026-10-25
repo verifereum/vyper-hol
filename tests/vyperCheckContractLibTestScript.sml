@@ -1,6 +1,6 @@
 Theory vyperCheckContractLibTest
 Ancestors
-  vyperTypeContract vyperABI vyperContext
+  vyperTypeContract evalCompilerSubsetAbiBuiltins vyperABI vyperContext
   vyperTypeSystem vyperTyping vyperValueOperation
 Libs
   vyperCheckContractLib cv_transLib
@@ -145,56 +145,19 @@ Proof
   CONV_TAC cv_eval
 QED
 
-(* Copy of task090_abi_dynamic_program (evalCompilerSubsetAbiBuiltins, the
-   compiler's abi_dynamic.vy fixture), kept here so this checker test does not
-   depend on lowering. Keep the two in sync. *)
-Definition abi_dynamic_program_def:
-  abi_dynamic_program =
-    [FunctionDecl External Pure F F "encode_dynamic"
-       [("text", BaseT (StringT 16));
-        ("payload", BaseT (BytesT (Dynamic 16)))]
-       ([] : expr list) (BaseT (BytesT (Dynamic 196)))
-       [AnnAssign "value"
-          (TupleT [BaseT (StringT 16); BaseT (BytesT (Dynamic 16))])
-          (Builtin
-             (TupleT [BaseT (StringT 16); BaseT (BytesT (Dynamic 16))])
-             (MakeArray NONE (Fixed 2))
-             [Name (BaseT (StringT 16)) "text";
-              Name (BaseT (BytesT (Dynamic 16))) "payload"]);
-        Return (SOME
-          (TypeBuiltin (BaseT (BytesT (Dynamic 196)))
-             (AbiEncode F (SOME [222w; 173w; 190w; 239w]))
-             (TupleT
-                [TupleT
-                   [BaseT (StringT 16); BaseT (BytesT (Dynamic 16))]])
-             [Name
-                (TupleT [BaseT (StringT 16);
-                         BaseT (BytesT (Dynamic 16))]) "value"]))];
-     FunctionDecl External Pure F F "decode_dynamic"
-       [("data", BaseT (BytesT (Dynamic 192)))]
-       ([] : expr list)
-       (TupleT [BaseT (StringT 16); BaseT (BytesT (Dynamic 16))])
-       [Return (SOME
-          (TypeBuiltin
-             (TupleT [BaseT (StringT 16); BaseT (BytesT (Dynamic 16))])
-             (AbiDecode F)
-             (TupleT [BaseT (StringT 16); BaseT (BytesT (Dynamic 16))])
-             [Name (BaseT (BytesT (Dynamic 192))) "data"]))]]
-End
-
 Theorem abi_dynamic_fixture_runtime_checked:
   IS_SOME (check_contract F [] (0w : address)
-    [(NONE, abi_dynamic_program)])
+    [(NONE, task090_abi_dynamic_program)])
 Proof
-  simp[abi_dynamic_program_def] >>
+  simp[task090_abi_dynamic_program_def] >>
   CONV_TAC (RAND_CONV vyperCheckContractLib.check_contract_conv) >> simp[]
 QED
 
 Theorem abi_dynamic_fixture_deployment_checked:
   IS_SOME (check_contract T [] (0w : address)
-    [(NONE, abi_dynamic_program)])
+    [(NONE, task090_abi_dynamic_program)])
 Proof
-  simp[abi_dynamic_program_def] >>
+  simp[task090_abi_dynamic_program_def] >>
   CONV_TAC (RAND_CONV vyperCheckContractLib.check_contract_conv) >> simp[]
 QED
 
