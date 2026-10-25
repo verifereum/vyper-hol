@@ -92,6 +92,26 @@ QED
 
 (* ===== Arithmetic builtins ===== *)
 
+(* Notes for the word cases below (all StackValue lowerings; the result is
+   a word_value, IntV):
+   - as_wei_value: well_typed_builtin_app admits only unsigned operands, so
+     compile_as_wei_value_int with is_signed = F applies.  For x < 2 ** 256
+     and m > 0, MUL's product mod 2 ** 256 divided by x is m exactly when
+     x * m < 2 ** 256 or x = 0, which is evaluate_as_wei_value's bound check;
+     an overflow is a RuntimeError at the source and a failed ASSERT below.
+     Wei (m = 1) emits no code.
+   - floor: the source's i / decimal_scale rounds toward negative infinity;
+     the lowering subtracts divisor - 1 from a negative operand and then
+     rounds toward zero (SDIV).  Decimal operands are far inside 256 bits.
+   - addmod/mulmod: ASSERT c, then ADDMOD/MULMOD, which are exact
+     (venomExecSemantics addmod_def/mulmod_def); c = 0 is the source's
+     RuntimeError.  pow_mod256: EXP on words is modexp mod 2 ** 256.
+   - the *_names forms: compile_addmod_names and friends lower each name
+     the way lower_value compile_expr lowers Name (compile_name_vv, then
+     unwrap_value), so they are the dispatch form on Name operands.  A
+     well-typed uint256 local holds an IntV, a word_value, so
+     exprSim's compile_name_word_sim applies to each. *)
+
 Theorem compile_as_wei_value_sim:
   !cenv ann d args.
     expr_sim_below cenv (list_size expr_size args) ==>
