@@ -120,6 +120,12 @@ The upstream JSON does not record per-test execution-backend or metadata
 overrides; the profile records their harness defaults, not a claim that every
 deployment uses them.
 
+The export plugin preserves exact revm runtime bytes. Upstream's `get_code`
+strips all trailing zeros, which loses real STOP/data bytes as well as revm's
+analysis padding. The plugin removes only padding verified against the account's
+code hash when recording deployment traces; upstream test-facing calls are
+unchanged. HOL's exact runtime-byte comparison remains enabled.
+
 The compiler bytecode oracle has its own profile in
 `lowering/defs/bytecode/python_o1_bytecode_oracle.py`: Venom/NONE/Prague with
 metadata disabled and decimals enabled by fixture pragmas. These profiles can

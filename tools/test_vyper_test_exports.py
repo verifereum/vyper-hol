@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import json
+import argparse
 import shutil
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from vyper_test_exports import Exports, digest, portable_paths
 
@@ -71,17 +73,53 @@ class ExportProvenanceTests(unittest.TestCase):
             self.exports.check(self.path)
 
     def test_export_paths_are_portable_without_changing_call_outputs(self) -> None:
-        data = {
-            "annotated_ast": {"path": "/checkout/unknown_0.vy"},
-            "sources": {"/checkout/a.vy": {"content": "@external\ndef f(): pass"}},
-            "deps": ["/out/functional/test_f.json/fixture"],
+        trace = {
+            "annotated_ast": {
+                "path": "/checkout/unknown_0.vy",
+                "body": [{"ast_type": "Str", "value": "/checkout/keep-this-literal"}],
+            },
+            "solc_json": {
+                "sources": {"/checkout/a.vy": {"content": "@external\ndef f(): pass"}},
+                "settings": {"outputSelection": {"/checkout/a.vy": ["*"]}},
+            },
+            "python_args": {"kwargs": {"name": "/checkout/keep-this-argument"}},
             "output": "000007",
         }
+        data = {"test": {"deps": ["/out/functional/test_f.json/fixture"], "traces": [trace]}}
         result = portable_paths(data, {"/checkout/": "", "/out/": "vyper-test-exports/"})
-        self.assertEqual(result["annotated_ast"]["path"], "unknown_0.vy")
-        self.assertEqual(result["sources"]["a.vy"], data["sources"]["/checkout/a.vy"])
-        self.assertEqual(result["deps"], ["vyper-test-exports/functional/test_f.json/fixture"])
-        self.assertEqual(result["output"], data["output"])
+        portable = result["test"]["traces"][0]
+        self.assertEqual(portable["annotated_ast"]["path"], "unknown_0.vy")
+        self.assertEqual(portable["annotated_ast"]["body"], trace["annotated_ast"]["body"])
+        self.assertEqual(portable["python_args"], trace["python_args"])
+        self.assertEqual(portable["solc_json"]["sources"]["a.vy"],
+                         trace["solc_json"]["sources"]["/checkout/a.vy"])
+        self.assertEqual(result["test"]["deps"], ["vyper-test-exports/functional/test_f.json/fixture"])
+        self.assertEqual(portable["output"], trace["output"])
+
+    def test_edits_during_export_cannot_stamp_new_generator_identity(self) -> None:
+        output = self.repo / "new-exports"
+        versions = dict(
+            line.split("==")
+            for line in (self.repo / "tests/semantics-test-constraints.txt").read_text().splitlines()
+        )
+        versions["vyper"] = self.exports.profile["vyper_version"]
+        pin = (self.repo / "VYPER_PIN").read_text().strip()
+
+        def run_pytest(*args: object, **kwargs: object) -> None:
+            output.mkdir()
+            shutil.copyfile(self.path, output / self.path.name)
+            script = self.repo / "tools/vyper_test_exports.py"
+            script.write_text(script.read_text() + "\n# edited during export\n")
+
+        args = argparse.Namespace(vyper_repo=self.repo, output=output, fixture=[], test=[])
+        with patch("vyper_test_exports.platform.python_version",
+                   return_value=self.exports.profile["python_version"]), \
+             patch("vyper_test_exports.importlib.metadata.version", side_effect=versions.__getitem__), \
+             patch("vyper_test_exports.subprocess.check_output", side_effect=[pin, ""]), \
+             patch("vyper_test_exports.subprocess.run", side_effect=run_pytest):
+            with self.assertRaisesRegex(ValueError, "generator inputs changed during export"):
+                self.exports.generate(args)
+        self.assertFalse(list(output.glob("*.provenance")))
 
 
 if __name__ == "__main__":

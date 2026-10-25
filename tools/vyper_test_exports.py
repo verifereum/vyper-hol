@@ -21,21 +21,45 @@ def digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def portable_paths(value: Any, prefixes: dict[str, str]) -> Any:
-    """Remove checkout/output roots from exported paths, including object keys."""
-    if isinstance(value, str):
+def portable_paths(exports: dict[str, Any], prefixes: dict[str, str]) -> dict[str, Any]:
+    """Normalize path metadata while preserving source literals and arguments."""
+    def normalize(value: str) -> str:
         for prefix, replacement in prefixes.items():
             if value.startswith(prefix):
                 return replacement + value[len(prefix):]
         return value
-    if isinstance(value, list):
-        return [portable_paths(item, prefixes) for item in value]
-    if isinstance(value, dict):
-        return {
-            portable_paths(key, prefixes): portable_paths(item, prefixes)
-            for key, item in value.items()
-        }
-    return value
+
+    def ast_paths(value: Any) -> Any:
+        if isinstance(value, list):
+            return [ast_paths(item) for item in value]
+        if isinstance(value, dict):
+            return {
+                key: normalize(item)
+                if key in {"path", "resolved_path", "contract_name", "name"}
+                and isinstance(item, str) else ast_paths(item)
+                for key, item in value.items()
+            }
+        return value
+
+    result = {}
+    for name, item in exports.items():
+        portable = dict(item, deps=[normalize(dep) for dep in item["deps"]], traces=[])
+        for trace in item["traces"]:
+            trace = dict(trace)
+            if trace.get("annotated_ast") is not None:
+                trace["annotated_ast"] = ast_paths(trace["annotated_ast"])
+            if trace.get("solc_json") is not None:
+                solc = dict(trace["solc_json"])
+                solc["sources"] = {normalize(key): value for key, value in solc["sources"].items()}
+                settings = dict(solc["settings"])
+                settings["outputSelection"] = {
+                    normalize(key): value for key, value in settings["outputSelection"].items()
+                }
+                solc["settings"] = settings
+                trace["solc_json"] = solc
+            portable["traces"].append(trace)
+        result[name] = portable
+    return result
 
 
 @dataclass(frozen=True)
@@ -52,7 +76,7 @@ class Exports:
             for name in (
                 "VYPER_PIN", "tests/semantics-profile.json",
                 "tests/semantics-test-constraints.txt", "tests/semantics-build-constraints.txt",
-                "tools/vyper_test_exports.py",
+                "tools/vyper_test_exports.py", "tools/vyper_test_export_plugin.py",
                 ".github/actions/setup-vyper-test-exports/action.yml",
             )
         }
@@ -92,6 +116,7 @@ class Exports:
 
     def generate(self, args: argparse.Namespace) -> None:
         profile = self.profile
+        inputs = self.inputs()
         if platform.python_version() != profile["python_version"]:
             raise ValueError(f"Python {platform.python_version()}, expected {profile['python_version']}")
         pin = (self.repo / "VYPER_PIN").read_text().strip()
@@ -134,12 +159,14 @@ class Exports:
                 shutil.copyfile(source, target)
                 selections.append(target.relative_to(args.vyper_repo).as_posix())
             command = [
-                sys.executable, "-m", "pytest", "-s", "-n0", "--export", str(output),
+                sys.executable, "-m", "pytest", "-p", "vyper_test_export_plugin",
+                "-s", "-n0", "--export", str(output),
                 *profile["pytest_args"], "-m", "not fuzzing", *selections,
             ]
             env = dict(os.environ)
             for variable in ("PYTEST_ADDOPTS", "PYTEST_PLUGINS", "PYTHONPATH", "PYTHONHOME"):
                 env.pop(variable, None)
+            env["PYTHONPATH"] = str(self.repo / "tools")
             subprocess.run(command, cwd=args.vyper_repo, env=env, check=True)
         finally:
             if fixture_sources:
@@ -147,6 +174,8 @@ class Exports:
         files = sorted(output.rglob("*.json"))
         if not files:
             raise ValueError(f"no exports produced in {output}")
+        if self.inputs() != inputs:
+            raise ValueError("generator inputs changed during export; regenerate exports")
         for path in files:
             data = portable_paths(json.loads(path.read_text()), {
                 str(output) + "/": "vyper-test-exports/",
@@ -154,7 +183,7 @@ class Exports:
             })
             path.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n")
             provenance = {
-                "schema_version": 1, "inputs": self.inputs(), "profile": profile,
+                "schema_version": 1, "inputs": inputs, "profile": profile,
                 "export_sha256": digest(path), "test_selections": selections,
                 "fixture_sources": fixture_sources, "resolved_settings": self.settings(path),
             }

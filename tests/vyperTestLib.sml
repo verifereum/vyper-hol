@@ -721,6 +721,7 @@ val () = holbuild_extra_deps [
   "../VYPER_PIN", "semantics-profile.json", "semantics-test-constraints.txt",
   "semantics-build-constraints.txt",
   "../tools/vyper_test_exports.py",
+  "../tools/vyper_test_export_plugin.py",
   "../.github/actions/setup-vyper-test-exports/action.yml"
 ];
 
@@ -1117,9 +1118,11 @@ end
 
 fun check_export_provenance json_path = let
   fun find_repo dir =
-    if OS.FileSys.access (OS.Path.concat (dir, "VYPER_PIN"), []) then dir
+    if OS.FileSys.access (OS.Path.concat (dir, "holproject.toml"), []) andalso
+       OS.FileSys.access
+         (OS.Path.concat (dir, "tools/vyper_test_exports.py"), []) then dir
     else let val parent = OS.Path.getParent dir in
-      if parent = dir then raise Fail "cannot find VYPER_PIN for export validation"
+      if parent = dir then raise Fail "cannot find project root for export validation"
       else find_repo parent
     end
   val repo = find_repo (OS.FileSys.getDir ())
