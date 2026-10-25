@@ -26,7 +26,8 @@
  *   compile_name_other_sim   — locals of other types: address, bytesN and
  *                              memory-backed (#636 Leaves, row 1)
  *   compile_literal_memory_sim, compile_literal_other_vv_sim — bytes and
- *                              string literals, memory buffers (row 2)
+ *                              string literals not of a word type, memory
+ *                              buffers (row 2)
  *   compile_toplevel_name_sim (row 3).  It needs every module variable in
  *                              ce_vars (else the lowering emits INVALID),
  *                              which storage_vars_rel does not give.
@@ -159,25 +160,43 @@ Proof
   irule compile_literal_other_sim >> metis_tac[]
 QED
 
-(* Bytes and string literals: a word, or a buffer of their own. *)
+(* Bytes and string literals not of a word type: a buffer of their own.
+   Cheated with compile_literal_memory_sim. *)
 Theorem compile_literal_other_vv_sim:
   !cenv ann l.
-    ((?bs. l = BytesL bs) \/ (?str. l = StringL str)) ==>
+    ((?bs. l = BytesL bs /\ ~is_word_type ann) \/ (?str. l = StringL str)) ==>
     expr_vv_ok cenv (Literal ann l)
 Proof
   cheat
+QED
+
+(* A bytes literal is a word unless it is annotated with a dynamic bytes
+   type. *)
+Theorem compile_literal_bytes_stack:
+  !ty bs st.
+    (!n. ty <> BaseT (BytesT (Dynamic n))) ==>
+    ?op. compile_literal_vv ty (BytesL bs) st = (StackValue ty op, st)
+Proof
+  rw[compile_literal_vv_def, comp_return_def] >>
+  rpt (BasicProvers.TOP_CASE_TAC >> gvs[comp_return_def])
 QED
 
 Theorem compile_literal_case_sim:
   !cenv ann l. expr_ok cenv (Literal ann l)
 Proof
   rpt gen_tac >>
-  Cases_on `(?bs. l = BytesL bs) \/ (?str. l = StringL str)`
+  Cases_on `(?bs. l = BytesL bs /\ ~is_word_type ann) \/ (?str. l = StringL str)`
   >- (irule expr_ok_of_vv >> irule compile_literal_other_vv_sim >> simp[]) >>
   irule expr_ok_stack >> simp[compile_literal_sim] >> rpt conj_tac
   >~ [`eval_expr`]
   >- (rpt strip_tac >> drule eval_expr_literal_value >> simp[]) >>
-  Cases_on `l` >> gvs[] >>
+  Cases_on `l` >> gvs[]
+  >~ [`BytesL bs`]
+  >- (`!n. ann <> BaseT (BytesT (Dynamic n))` by
+        (rpt strip_tac >> gvs[is_word_type_def]) >>
+      simp[compile_expr_def, vyperASTTheory.expr_type_def] >> rpt gen_tac >>
+      drule compile_literal_bytes_stack >>
+      disch_then (qspecl_then [`bs`, `sa`] strip_assume_tac) >> simp[]) >>
   TRY (rename1 `BoolL b` >> Cases_on `b`) >>
   simp[compile_expr_def, compile_literal_vv_def, comp_return_def]
 QED

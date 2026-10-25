@@ -74,7 +74,11 @@
  *     FlagT.from_FlagDef (vyper/semantics/types/user.py) numbers the
  *     members in declaration order and rejects a repeated one, and the
  *     Venom lowering of a flag member is the literal 2 ** id
- *     (codegen_venom/expr.py).
+ *     (codegen_venom/expr.py).  build_compile_env fills
+ *     ce_flag_member_id from the main module's declarations only, so for
+ *     a flag of an imported module the clause does not hold of the
+ *     environment it builds, and the theorem says nothing about
+ *     expressions there.
  *   - int_calls_expr e = []: no internal call.  An internal call lowers to
  *     INVOKE, whose simulation is #638's call step; until that is stated
  *     this theorem excludes them, and #638 replaces this conjunct with its
