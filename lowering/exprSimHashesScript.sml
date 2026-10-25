@@ -757,3 +757,177 @@ Proof
   >- simp[expr_sim_pre_outcomes, hash_bool_source_pre] >>
   irule hash_bool_target_model >> simp[]
 QED
+
+Definition hash_observer_start_def:
+  hash_observer_start sa = sa with
+    <| cs_blocks := []; cs_current_insts := []; cs_next_id := 0 |>
+End
+
+Theorem hash_observer_start_reserved:
+  !cenv sa. local_ptrs_reserved cenv (hash_observer_start sa) <=>
+            local_ptrs_reserved cenv sa
+Proof
+  simp[hash_observer_start_def, local_ptrs_reserved_def, not_fresh_at_def]
+QED
+
+Theorem hash_name_lower_normal:
+  !cenv other sa.
+    lower_value compile_expr cenv (BaseT BoolT)
+      (TopLevelName (BaseT BoolT) (other,"")) sa =
+    case FLOOKUP cenv.ce_vars (module_var_key (other,"")) of
+      SOME (StorageLoc slot) => emit_op SLOAD [Lit slot] sa
+    | SOME (TransientLoc slot) => emit_op TLOAD [Lit slot] sa
+    | SOME (ImmutableLoc off) =>
+        emit_op (if cenv.ce_is_ctor then ILOAD else DLOAD) [Lit (n2w off)] sa
+    | _ => (Lit 0w, SND (emit_inst INVALID [] [] sa))
+Proof
+  rpt gen_tac >> simp[lower_value_def, comp_bind_def, comp_return_def] >>
+  simp[Once compile_expr_component_eq] >>
+  Cases_on `FLOOKUP cenv.ce_vars (module_var_key (other,""))`
+  >- (simp[emit_inst_def, fresh_id_def, emit_def, comp_bind_def,
+            comp_return_def, unwrap_value_def]) >>
+  rename1 `SOME loc` >> Cases_on `loc` >>
+  simp[expr_type_def, unwrap_value_def, contextTheory.mk_ptr_def,
+       is_word_type_def, contextTheory.compile_ptr_load_def,
+       emit_inst_def, fresh_id_def, emit_def, comp_bind_def, comp_return_def] >>
+  Cases_on `cenv.ce_is_ctor` >> simp[]
+QED
+
+Definition hash_observer_function_def:
+  hash_observer_function sd op = mk_raw_function ""
+    [<| bb_label := sd.cs_current_bb;
+        bb_instructions := sd.cs_current_insts ++
+          [mk_inst sd.cs_next_id RET [op; Lit 0w] []] |>]
+End
+
+Theorem hash_name_observer_code:
+  !cenv other sa op sd.
+    lower_value compile_expr cenv (BaseT BoolT)
+      (TopLevelName (BaseT BoolT) (other,"")) (hash_observer_start sa) = (op,sd) ==>
+    fn_has_code (hash_observer_start sa) sd (hash_observer_function sd op) /\
+    fn_inst_ids_distinct (hash_observer_function sd op) /\
+    sd.cs_current_bb = sa.cs_current_bb
+Proof
+  rpt gen_tac >> rewrite_tac[hash_name_lower_normal] >>
+  Cases_on `FLOOKUP cenv.ce_vars (module_var_key (other,""))`
+  >- (simp[emit_inst_def, fresh_id_def, emit_def, comp_bind_def, comp_return_def,
+            hash_observer_start_def] >> strip_tac >> gvs[] >>
+       simp[fragExecTheory.fn_has_code_def, fragExecTheory.emitted_blocks_def, hash_observer_function_def,
+            mk_raw_function_def, lookup_block_def,
+            venomWfTheory.fn_inst_ids_distinct_def, fn_insts_def, mk_inst_def,
+            FIND_def, INDEX_FIND_def]) >>
+  rename1 `SOME loc` >> Cases_on `loc` >>
+  simp[emit_inst_def, emit_op_def, fresh_id_def, fresh_var_def, emit_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def, hash_observer_start_def] >>
+  strip_tac >> gvs[] >>
+  simp[fragExecTheory.fn_has_code_def, fragExecTheory.emitted_blocks_def,
+       hash_observer_function_def, mk_raw_function_def, lookup_block_def,
+       venomWfTheory.fn_inst_ids_distinct_def, fn_insts_def, mk_inst_def,
+       FIND_def, INDEX_FIND_def]
+QED
+
+Theorem hash_ret_exec_fuel_independent:
+  !fuel fuel' ctx bb s op id.
+    get_instruction bb s.vs_inst_idx = SOME (mk_inst id RET [op; Lit 0w] []) ==>
+    exec_block fuel ctx bb s = exec_block fuel' ctx bb s
+Proof
+  rpt strip_tac >>
+  CONV_TAC (BINOP_CONV (REWR_CONV exec_block_def)) >>
+  simp[step_inst_non_invoke, mk_inst_def,
+       step_inst_base_def, eval_operands_def, eval_operand_def] >>
+  Cases_on `eval_operand op s` >> simp[]
+QED
+
+Theorem hash_two_inst_observer_fuel:
+  !inst lbl id op s fuel fuel' ctx.
+    inst.inst_opcode <> INVOKE /\ ~is_terminator inst.inst_opcode /\
+    s.vs_current_bb = lbl /\ s.vs_inst_idx = 0 ==>
+    run_from fuel ctx
+      (mk_raw_function "" [<|bb_label := lbl; bb_instructions :=
+        [inst; mk_inst id RET [op; Lit 0w] []]|>]) s =
+    run_from fuel' ctx
+      (mk_raw_function "" [<|bb_label := lbl; bb_instructions :=
+        [inst; mk_inst id RET [op; Lit 0w] []]|>]) s
+Proof
+  rpt strip_tac >>
+  simp[fragExecTheory.run_from_def, mk_raw_function_def, lookup_block_def,
+       FIND_def, INDEX_FIND_def] >>
+  pure_once_rewrite_tac[exec_block_def] >>
+  simp[get_instruction_def, step_inst_non_invoke] >>
+  Cases_on `step_inst_base inst s` >> simp[] >>
+  pure_once_rewrite_tac[exec_block_def] >>
+  simp[get_instruction_def, step_inst_non_invoke, mk_inst_def,
+       step_inst_base_def, eval_operands_def, eval_operand_def] >>
+  Cases_on `eval_operand op (v with vs_inst_idx := 1)` >> simp[]
+QED
+
+Theorem hash_invalid_observer_fuel:
+  !lbl id id' op s fuel fuel' ctx.
+    s.vs_current_bb = lbl /\ s.vs_inst_idx = 0 ==>
+    run_from fuel ctx
+      (mk_raw_function "" [<|bb_label := lbl; bb_instructions :=
+        [mk_inst id INVALID [] []; mk_inst id' RET [op; Lit 0w] []]|>]) s =
+    run_from fuel' ctx
+      (mk_raw_function "" [<|bb_label := lbl; bb_instructions :=
+        [mk_inst id INVALID [] []; mk_inst id' RET [op; Lit 0w] []]|>]) s
+Proof
+  rpt strip_tac >>
+  simp[fragExecTheory.run_from_def, mk_raw_function_def, lookup_block_def,
+       FIND_def, INDEX_FIND_def] >>
+  pure_once_rewrite_tac[exec_block_def] >>
+  simp[get_instruction_def, step_inst_non_invoke, mk_inst_def, step_inst_base_def]
+QED
+
+Theorem hash_name_observer_fuel:
+  !cenv other sa op sd fuel fuel' ctx.
+    lower_value compile_expr cenv (BaseT BoolT)
+      (TopLevelName (BaseT BoolT) (other,"")) (hash_observer_start sa) = (op,sd) ==>
+    run_from fuel ctx (hash_observer_function sd op)
+      (init_venom_state sa.cs_current_bb) =
+    run_from fuel' ctx (hash_observer_function sd op)
+      (init_venom_state sa.cs_current_bb)
+Proof
+  rpt gen_tac >> rewrite_tac[hash_name_lower_normal] >>
+  Cases_on `FLOOKUP cenv.ce_vars (module_var_key (other,""))`
+  >- (simp[emit_inst_def, fresh_id_def, emit_def, comp_bind_def, comp_return_def,
+            hash_observer_start_def] >> strip_tac >> gvs[] >>
+       simp[hash_observer_function_def] >>
+       irule hash_invalid_observer_fuel >> simp[init_venom_state_def]) >>
+  rename1 `SOME loc` >> Cases_on `loc` >>
+  simp[emit_inst_def, emit_op_def, fresh_id_def, fresh_var_def, emit_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def, hash_observer_start_def] >>
+  strip_tac >> gvs[] >> simp[hash_observer_function_def] >>
+  all_tac
+  >>~- ([`mk_inst 0 INVALID [] []`],
+        irule hash_invalid_observer_fuel >> simp[init_venom_state_def]) >>
+  irule hash_two_inst_observer_fuel >>
+  simp[init_venom_state_def, mk_inst_def, is_terminator_def] >>
+  Cases_on `cenv.ce_is_ctor` >> simp[is_terminator_def]
+QED
+
+Theorem hash_name_observer_exists:
+  !cenv other sa. local_ptrs_reserved cenv sa ==>
+    ?sc sd op fn lbl.
+      lower_value compile_expr cenv (BaseT BoolT)
+        (TopLevelName (BaseT BoolT) (other,"")) sc = (op,sd) /\
+      local_ptrs_reserved cenv sc /\ fn_has_code sc sd fn /\
+      fn_inst_ids_distinct fn /\ sc.cs_current_insts = [] /\
+      sc.cs_current_bb = lbl /\ sd.cs_current_bb = lbl /\
+      fn.fn_blocks = [<|bb_label := lbl; bb_instructions :=
+        sd.cs_current_insts ++ [mk_inst sd.cs_next_id RET [op; Lit 0w] []]|>] /\
+      !fuel fuel' ctx.
+        run_from fuel ctx fn (init_venom_state lbl) =
+        run_from fuel' ctx fn (init_venom_state lbl)
+Proof
+  rpt strip_tac >>
+  Cases_on `lower_value compile_expr cenv (BaseT BoolT)
+    (TopLevelName (BaseT BoolT) (other,"")) (hash_observer_start sa)` >>
+  rename1 `_ = (op,sd)` >>
+  drule hash_name_observer_code >> strip_tac >>
+  qexistsl_tac [`hash_observer_start sa`, `sd`, `op`,
+               `hash_observer_function sd op`, `sa.cs_current_bb`] >>
+  simp[hash_observer_start_reserved, hash_observer_start_def,
+       hash_observer_function_def, mk_raw_function_def] >>
+  drule hash_name_observer_fuel >>
+  simp[hash_observer_function_def, mk_raw_function_def]
+QED
