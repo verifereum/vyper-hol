@@ -1,10 +1,11 @@
 (* Word builtin simulation: typed boundaries and shared fragments. *)
 Theory exprSimWordBuiltins
 Ancestors
-  list exprSim exprSimHyps exprLowering vyperTypeSystem
+  list words integer_word vfmExecution valueEncoding loweringSlice
+  exprSim exprSimHyps exprLowering vyperTypeSystem vyperTyping
   vyperInterpreter vyperState vyperContext exprBopLowering
   builtinMath builtinMisc compileEnv exprSimOps freshWrites fragExec varsExt
-  exprLoweringProps venomExecSemantics venomState
+  exprLoweringProps venomExecSemantics venomState emitHelper emitHelperProps venomInst
 
 Theorem word_builtin_unary_types:
   !ty bt ts.
@@ -435,4 +436,215 @@ Proof
   simp[straight_fresh_return, comp_return_def, emitted_insts_refl,
        run_inst_seq_def] >> rpt strip_tac >>
   gvs[LIST_REL_EL_EQN]
+QED
+
+(* ===== Left-to-right word argument lowering ===== *)
+Definition lower_word_args_def:
+  (lower_word_args cenv arg_ty [] = comp_return []) /\
+  (lower_word_args cenv arg_ty (e::es) =
+     do x <- lower_value compile_expr cenv (arg_ty e) e;
+        xs <- lower_word_args cenv arg_ty es;
+        comp_return (x::xs)
+     od)
+End
+
+Theorem lower_word_args_nil:
+  !cenv arg_ty sa. lower_word_args cenv arg_ty [] sa = ([], sa)
+Proof
+  simp[lower_word_args_def, comp_return_def]
+QED
+
+Theorem lower_word_args_cons:
+  !cenv arg_ty e es sa xs sb.
+    lower_word_args cenv arg_ty (e::es) sa = (xs, sb) <=>
+    ?x s1 ys. lower_value compile_expr cenv (arg_ty e) e sa = (x, s1) /\
+      lower_word_args cenv arg_ty es s1 = (ys, sb) /\ xs = x::ys
+Proof
+  rpt gen_tac >> simp[lower_word_args_def, comp_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> simp[] >> metis_tac[]
+QED
+
+Theorem lower_word_args_shape:
+  !args cenv arg_ty.
+    (!e sa sb x. MEM e args /\
+       lower_value compile_expr cenv (arg_ty e) e sa = (x, sb) ==>
+       cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
+       sa.cs_next_id <= sb.cs_next_id /\
+       (!z. x = Var z ==> not_fresh_at sb z) /\ (!l. x <> Label l)) ==>
+    !sa sb xs. lower_word_args cenv arg_ty args sa = (xs, sb) ==>
+      cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
+      sa.cs_next_id <= sb.cs_next_id /\ LENGTH xs = LENGTH args /\
+      EVERY (\x. (!z. x = Var z ==> not_fresh_at sb z) /\
+                 (!l. x <> Label l)) xs
+Proof
+  Induct >> simp[lower_word_args_nil, cs_extends_refl] >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >>
+  simp[lower_word_args_cons] >> strip_tac >> gvs[] >>
+  first_assum (drule_at Any) >> simp[] >> strip_tac >>
+  first_x_assum (qspecl_then [`cenv`, `arg_ty`] mp_tac) >>
+  impl_tac >- metis_tac[] >>
+  disch_then drule >> strip_tac >>
+  simp[] >> metis_tac[cs_extends_trans, arithmeticTheory.LESS_EQ_TRANS,
+                     not_fresh_at_mono]
+QED
+
+(* ===== Modular word fragments ===== *)
+Theorem straight_fresh_compile_modular:
+  !a b c.
+    straight_fresh (compile_addmod a b c) /\
+    straight_fresh (compile_mulmod a b c) /\
+    straight_fresh (compile_pow_mod256 a b)
+Proof
+  rpt gen_tac >>
+  simp[compile_addmod_def, compile_mulmod_def, compile_pow_mod256_def] >>
+  rpt conj_tac >>
+  rpt (FIRST [irule straight_fresh_ignore_bind >> conj_tac,
+              irule straight_fresh_emit_op >> simp[fresh_write_op_def] >> NO_TAC,
+              irule straight_fresh_emit_void >> simp[fresh_write_op_def] >> NO_TAC])
+QED
+
+Theorem compile_modular_run:
+  !is_mul a b c sa op sb ss va vb vc.
+    (if is_mul then compile_mulmod else compile_addmod) a b c sa = (op, sb) /\
+    eval_operand a ss = SOME va /\ eval_operand b ss = SOME vb /\
+    eval_operand c ss = SOME vc ==>
+    (vc <> 0w ==>
+      ?ss'. run_inst_seq (emitted_insts sa sb) ss = OK ss' /\
+        eval_operand op ss' = SOME ((if is_mul then mulmod else addmod) va vb vc)) /\
+    (vc = 0w ==>
+      ?ss'. run_inst_seq (emitted_insts sa sb) ss = Abort Revert_abort ss')
+Proof
+  Cases_on `is_mul` >> rpt gen_tac >>
+  simp[compile_mulmod_def, compile_addmod_def, emit_op_def, emit_void_def,
+       emit_inst_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
+       fresh_id_def, fresh_var_def, emit_def] >>
+  strip_tac >> gvs[] >>
+  simp[emitted_insts_def] >>
+  CONV_TAC (DEPTH_CONV (REWR_CONV (GSYM APPEND_ASSOC))) >>
+  simp[rich_listTheory.DROP_LENGTH_APPEND] >>
+  simp[Once run_inst_seq_def] >>
+  simp[Once step_inst_base_def, mk_inst_def] >>
+  conj_tac >> strip_tac >> simp[] >>
+  simp[Once run_inst_seq_def] >>
+  simp[Once step_inst_base_def, mk_inst_def, exec_pure3_def] >>
+  simp[run_inst_seq_def, eval_operand_update_var]
+QED
+
+Theorem compile_pow_mod256_run:
+  !a b sa op sb ss va vb.
+    compile_pow_mod256 a b sa = (op, sb) /\
+    eval_operand a ss = SOME va /\ eval_operand b ss = SOME vb ==>
+    ?ss'. run_inst_seq (emitted_insts sa sb) ss = OK ss' /\
+      eval_operand op ss' = SOME (word_exp va vb)
+Proof
+  rpt gen_tac >>
+  simp[compile_pow_mod256_def, emit_op_def, emit_inst_def, comp_bind_def,
+       comp_ignore_bind_def, comp_return_def, fresh_id_def, fresh_var_def, emit_def] >>
+  strip_tac >> gvs[] >>
+  simp[emitted_insts_def, rich_listTheory.DROP_LENGTH_APPEND] >>
+  simp[Once run_inst_seq_def] >>
+  simp[Once step_inst_base_def, mk_inst_def, exec_pure2_def] >>
+  simp[run_inst_seq_def, eval_operand_update_var]
+QED
+
+Theorem word_exp_modexp:
+  !a b : bytes32.
+    word_exp a b = n2w (modexp (w2n a) (w2n b) (dimword (:256)) 1)
+Proof
+  simp[word_exp_def, modexp_exp]
+QED
+
+Theorem compile_modular_word_frag:
+  !is_mul ctx func cenv cx es ann ts (a:bytes32) (b:bytes32) (c:bytes32).
+    word_builtin_frag ctx func cenv cx
+      (\xs. (if is_mul then compile_mulmod else compile_addmod)
+               (EL 0 xs) (EL 1 xs) (EL 2 xs))
+      (builtin_result cx es.accounts ann (if is_mul then MulMod else AddMod) ts
+         [IntV (&w2n a); IntV (&w2n b); IntV (&w2n c)])
+      [IntV (&w2n a); IntV (&w2n b); IntV (&w2n c)] es
+Proof
+  rpt gen_tac >> Cases_on `is_mul` >>
+  simp[builtin_result_def, evaluate_builtin_def] >>
+  Cases_on `c = 0w` >> gvs[]
+  >- (irule word_builtin_frag_revert >>
+      simp[straight_fresh_compile_modular] >> rpt strip_tac >>
+      gvs[LIST_REL_EL_EQN, val_to_w256_def, i2w_pos] >>
+      drule_all (SRULE [] (Q.SPEC `T` compile_modular_run)) >> simp[])
+  >- (irule word_builtin_frag_success >>
+      simp[straight_fresh_compile_modular, word_value_def] >> rpt strip_tac >>
+      gvs[LIST_REL_EL_EQN, val_to_w256_def, i2w_pos] >>
+      drule_all (SRULE [] (Q.SPEC `T` compile_modular_run)) >>
+      simp[mulmod_def])
+  >- (irule word_builtin_frag_revert >>
+      simp[straight_fresh_compile_modular] >> rpt strip_tac >>
+      gvs[LIST_REL_EL_EQN, val_to_w256_def, i2w_pos] >>
+      drule_all (SRULE [] (Q.SPEC `F` compile_modular_run)) >> simp[]) >>
+  irule word_builtin_frag_success >>
+  simp[straight_fresh_compile_modular, word_value_def] >> rpt strip_tac >>
+  gvs[LIST_REL_EL_EQN, val_to_w256_def, i2w_pos] >>
+  drule_all (SRULE [] (Q.SPEC `F` compile_modular_run)) >>
+  simp[addmod_def]
+QED
+
+Theorem compile_pow_mod256_word_frag:
+  !ctx func cenv cx es ann ts (a:bytes32) (b:bytes32).
+    word_builtin_frag ctx func cenv cx
+      (\xs. compile_pow_mod256 (EL 0 xs) (EL 1 xs))
+      (builtin_result cx es.accounts ann PowMod256 ts
+         [IntV (&w2n a); IntV (&w2n b)])
+      [IntV (&w2n a); IntV (&w2n b)] es
+Proof
+  rpt gen_tac >> simp[builtin_result_def, evaluate_builtin_def] >>
+  irule word_builtin_frag_success >>
+  simp[straight_fresh_compile_modular, word_value_def] >> rpt strip_tac >>
+  gvs[LIST_REL_EL_EQN, val_to_w256_def, i2w_pos] >>
+  drule_all compile_pow_mod256_run >>
+  simp[word_exp_modexp, dimword_def]
+QED
+
+Theorem uint_value_word_rep:
+  !bits v. value_has_type (BaseTV (UintT bits)) v /\ bits <= 256 ==>
+    v = IntV (&w2n (val_to_w256 v))
+Proof
+  rpt gen_tac >> Cases_on `v` >> simp[value_has_type_def] >>
+  rpt strip_tac >>
+  `Num i < 2 ** 256` by
+    (irule arithmeticTheory.LESS_LESS_EQ_TRANS >> qexists_tac `2 ** bits` >> simp[]) >>
+  `i = &Num i` by simp[] >>
+  qpat_x_assum `i = &Num i` (fn th => once_rewrite_tac[th]) >>
+  simp[val_to_w256_def, i2w_pos, w2n_n2w, dimword_def] >> gvs[]
+QED
+
+Theorem compile_modular_typed_frag:
+  !is_mul ctx func cenv cx es ann ts v1 v2 v3.
+    value_has_type (BaseTV (UintT 256)) v1 /\
+    value_has_type (BaseTV (UintT 256)) v2 /\
+    value_has_type (BaseTV (UintT 256)) v3 ==>
+    word_builtin_frag ctx func cenv cx
+      (\xs. (if is_mul then compile_mulmod else compile_addmod)
+               (EL 0 xs) (EL 1 xs) (EL 2 xs))
+      (builtin_result cx es.accounts ann (if is_mul then MulMod else AddMod) ts
+         [v1; v2; v3]) [v1; v2; v3] es
+Proof
+  rpt strip_tac >>
+  `v1 = IntV (&w2n (val_to_w256 v1)) /\
+   v2 = IntV (&w2n (val_to_w256 v2)) /\
+   v3 = IntV (&w2n (val_to_w256 v3))` by
+    metis_tac[uint_value_word_rep, arithmeticTheory.LESS_EQ_REFL] >>
+  metis_tac[compile_modular_word_frag]
+QED
+
+Theorem compile_pow_mod256_typed_frag:
+  !ctx func cenv cx es ann ts v1 v2.
+    value_has_type (BaseTV (UintT 256)) v1 /\
+    value_has_type (BaseTV (UintT 256)) v2 ==>
+    word_builtin_frag ctx func cenv cx
+      (\xs. compile_pow_mod256 (EL 0 xs) (EL 1 xs))
+      (builtin_result cx es.accounts ann PowMod256 ts [v1; v2]) [v1; v2] es
+Proof
+  rpt strip_tac >>
+  `v1 = IntV (&w2n (val_to_w256 v1)) /\
+   v2 = IntV (&w2n (val_to_w256 v2))` by
+    metis_tac[uint_value_word_rep, arithmeticTheory.LESS_EQ_REFL] >>
+  metis_tac[compile_pow_mod256_word_frag]
 QED
