@@ -23,3 +23,4 @@ Ancestors
   evalCompilerInternalLabels
   evalCompilerSliceBuffers
   evalCompilerPhiPointers
+  evalCompilerAllocationLimit
