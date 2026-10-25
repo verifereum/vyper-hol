@@ -2444,6 +2444,13 @@ Definition is_msg_data_def:
   is_msg_data _ = F
 End
 
+(* The bytes of a literal method_id signature, which Vyper folds. *)
+Definition method_id_literal_def:
+  method_id_literal (Literal _ (StringL s)) = SOME (MAP (n2w o ORD) s) ∧
+  method_id_literal (Literal _ (BytesL bs)) = SOME bs ∧
+  method_id_literal _ = NONE
+End
+
 Definition is_self_code_def:
   is_self_code (Attribute _ (Name _ "self") "code") = T ∧
   is_self_code _ = F
@@ -2894,10 +2901,20 @@ Definition compile_builtin_dispatch_body_def:
           else
             as_stack_val ret_ty (compile_as_wei_value_int v multiplier (is_signed_type arg_ty) st1))
      | MethodId =>
+         (* A literal signature lowers to the literal Vyper folds it to:
+            Bytes[4] by default, bytes4 for output_type=bytes4
+            (vyper/builtins/functions.py MethodID._try_fold). *)
          (let e1 = HD args in
-          let (v, st1) = lower_value compile_expr cenv ty e1 st in
-          let (hash_op, st2) = compile_keccak256_word v st1 in
-          as_stack_val ret_ty (emit_op SHR [Lit 224w; hash_op] st2))
+          case method_id_literal e1 of
+            SOME bs =>
+              compile_literal_vv ret_ty (BytesL (TAKE 4 (Keccak_256_w64 bs))) st
+          | NONE =>
+              let arg_ty = expr_type e1 in
+              let (v, st1) = lower_value compile_expr cenv arg_ty e1 st in
+              if ret_ty = BaseT (BytesT (Fixed 4)) then
+                as_stack_val ret_ty (compile_method_id_runtime arg_ty v T st1)
+              else
+                as_ptr_val ret_ty LocMemory (compile_method_id_runtime arg_ty v F st1))
      | MakeArray elem_ty_opt bnd =>
          (case elem_ty_opt of
             NONE =>
