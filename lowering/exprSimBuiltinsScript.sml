@@ -74,6 +74,22 @@ QED
 
 (* ===== Hashes ===== *)
 
+(* Notes for keccak256: well_typed_builtin_app Keccak256 admits a Bytes[n],
+   String[n] or bytesN operand and has type bytes32.  The lowering splits
+   the same way (compile_builtin_dispatch_body_def):
+   - Bytes[n]/String[n] (is_bytestring_type): the operand's lowered value
+     points to its buffer, which val_in_memory lays out as the length word
+     and then the bytes (a string's characters as n2w o ORD bytes, the
+     bytes the source hashes); compile_keccak256_bytes loads the length and
+     hashes from the pointer + 32.
+   - bytesN: the operand is the word of its bytes padded on the right
+     (typed_val_to_w256), compile_keccak256_bytesm stores it in a fresh
+     32-byte ALLOCA buffer and hashes the first N bytes, which are the
+     value's N bytes.
+   The result is the 32-byte hash, as SHA3's word_of_bytes T 0w and as the
+   typed encoding of the source's BytesV at bytes32.  Neither path writes
+   memory outside its own fresh buffer, so expr_post's frame holds. *)
+
 Theorem compile_keccak256_sim:
   !cenv ann args.
     expr_sim_below cenv (list_size expr_size args) ==>
