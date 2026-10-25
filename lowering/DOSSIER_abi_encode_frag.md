@@ -15,6 +15,7 @@ PLAN: `lowering/PLAN_abi_encode_frag.md`
 | C1.4 | stuck | risk_mismatch | E0010 | Strategist review: split instruction metadata projection/scratch invariance from memory observations and encoder consumers. Need small generic allocation-state congruence boundary or reusable projection simpset before framed MCOPY/base branches. |
 | C1.5.1 | proved |  | E0011 | Review and commit; proceed scheduled frontier. C1.5.2 can use enc_prefix_suc, HP_length, enc_prefix_full without unfolding tuple encoding. |
 | C1.5.2 | proved |  | E0012 | Review, commit, continue scheduled leaf. |
+| C1.5.3 | proved |  | E0013 | Review and commit runtime invariant interface. |
 
 ## C1.1
 
@@ -202,3 +203,24 @@ PLAN: `lowering/PLAN_abi_encode_frag.md`
 ### Evidence refs
 
 - `TO_abi_encode_frag-20261024T233520Z_m0371_t001` (use `read_tool_output` for exact output)
+
+## C1.5.3
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0013`
+- blocker: 
+- actual effort: 1 sessions, 2 msgs, 30 steps, 29 tools, 6 holbuild, 1,881,821 tok (1,879,226 in, 2,595 out, 1,834,112 cached), 229.9s, $0.2995892
+- next: Review and commit runtime invariant interface.
+
+### Attempts / Evidence
+
+- `E0013` (proved, , actual effort: 1 sessions, 2 msgs, 30 steps, 29 tools, 6 holbuild, 1,881,821 tok (1,879,226 in, 2,595 out, 1,834,112 cached), 229.9s, $0.2995892)
+  - Define enc_array_inv with predicate inv_ctx and optional tail_cell; prove zero, successor packaging and separate elimination facts by simplification. -> All packaging facts build; renamed K and cp to avoid existing HOL constant clashes. ()
+  - Prove memory-prefix, operand and frame jump stability, then enc_array_header jump stability and condition extraction. -> Build clean. Header uses explicit stable-context premise and never assumes frame transport from a child. (`TO_abi_encode_frag-20261025T101052Z_m0413_t001`)
+
+### Evidence refs
+
+- `TO_abi_encode_frag-20261025T101052Z_m0413_t001` (use `read_tool_output` for exact output)

@@ -1255,6 +1255,120 @@ Proof
   metis_tac[enc_prefix_mem_exit_parts]
 QED
 
+(* K carries the global source, operand and frame facts; cell contents
+   remain in the invariant rather than being frozen by K. *)
+Definition enc_array_inv_def:
+  enc_array_inv inv_ctx p B ts vs ip tail_cell k (s : venom_state) <=>
+    inv_ctx s /\ k <= LENGTH vs /\ enc_prefix_mem p B ts vs k s /\
+    mem_word_at ip s.vs_memory = n2w k /\
+    (case tail_cell of NONE => T
+     | SOME c => mem_word_at c s.vs_memory = n2w (DP B ts vs k))
+End
+
+Theorem enc_array_inv_zero:
+  inv_ctx s /\ mem_word_at ip s.vs_memory = 0w /\
+  (case tail_cell of NONE => T
+   | SOME c => mem_word_at c s.vs_memory = n2w B) ==>
+  enc_array_inv inv_ctx p B ts vs ip tail_cell 0 s
+Proof
+  Cases_on `tail_cell` >> simp[enc_array_inv_def, DP_def]
+QED
+
+Theorem enc_array_inv_suc:
+  inv_ctx s /\ SUC k <= LENGTH vs /\
+  enc_prefix_mem p B ts vs (SUC k) s /\
+  mem_word_at ip s.vs_memory = n2w (SUC k) /\
+  (case tail_cell of NONE => T
+   | SOME c => mem_word_at c s.vs_memory = n2w (DP B ts vs (SUC k))) ==>
+  enc_array_inv inv_ctx p B ts vs ip tail_cell (SUC k) s
+Proof
+  simp[enc_array_inv_def]
+QED
+
+Theorem enc_array_inv_context:
+  enc_array_inv inv_ctx p B ts vs ip tail_cell k s ==> inv_ctx s
+Proof
+  simp[enc_array_inv_def]
+QED
+
+Theorem enc_array_inv_bound:
+  enc_array_inv inv_ctx p B ts vs ip tail_cell k s ==> k <= LENGTH vs
+Proof
+  simp[enc_array_inv_def]
+QED
+
+Theorem enc_array_inv_prefix:
+  enc_array_inv inv_ctx p B ts vs ip tail_cell k s ==> enc_prefix_mem p B ts vs k s
+Proof
+  simp[enc_array_inv_def]
+QED
+
+Theorem enc_array_inv_count:
+  enc_array_inv inv_ctx p B ts vs ip tail_cell k s ==>
+  mem_word_at ip s.vs_memory = n2w k
+Proof
+  simp[enc_array_inv_def]
+QED
+
+Theorem enc_array_inv_tail:
+  enc_array_inv inv_ctx p B ts vs ip (SOME c) k s ==>
+  mem_word_at c s.vs_memory = n2w (DP B ts vs k)
+Proof
+  simp[enc_array_inv_def]
+QED
+
+Theorem enc_prefix_mem_jump[simp]:
+  enc_prefix_mem p B ts vs k (jump_to l s) = enc_prefix_mem p B ts vs k s
+Proof
+  simp[enc_prefix_mem_def, jump_to_def]
+QED
+
+Theorem enc_array_inv_jump:
+  (!s l. inv_ctx s ==> inv_ctx (jump_to l s)) /\
+  enc_array_inv inv_ctx p B ts vs ip tail_cell k s ==>
+  enc_array_inv inv_ctx p B ts vs ip tail_cell k (jump_to l s)
+Proof
+  Cases_on `tail_cell` >> simp[enc_array_inv_def, jump_to_def]
+QED
+
+Theorem enc_eval_operand_jump[simp]:
+  eval_operand op (jump_to l s) = eval_operand op s
+Proof
+  Cases_on `op` >> simp[eval_operand_def, lookup_var_def, jump_to_def]
+QED
+
+Theorem enc_frame_jump[simp]:
+  enc_frame st st' lo top outs s0 (jump_to l s) =
+  enc_frame st st' lo top outs s0 s
+Proof
+  simp[enc_frame_def, enc_scratch_def, jump_to_def, lookup_var_def,
+       venomMemDefsTheory.alloca_inv_def,
+       venomMemDefsTheory.allocas_non_overlapping_def,
+       venomMemDefsTheory.alloca_next_valid_def]
+QED
+
+Definition enc_array_header_def:
+  enc_array_header inv_ctx p B ts vs ip tail_cell cnd k s <=>
+    enc_array_inv inv_ctx p B ts vs ip tail_cell k s /\
+    eval_operand cnd s = SOME (if k < LENGTH vs then 0w else 1w)
+End
+
+Theorem enc_array_header_jump:
+  (!s l. inv_ctx s ==> inv_ctx (jump_to l s)) /\
+  enc_array_header inv_ctx p B ts vs ip tail_cell cnd k s ==>
+  enc_array_header inv_ctx p B ts vs ip tail_cell cnd k (jump_to l s)
+Proof
+  simp[enc_array_header_def] >> metis_tac[enc_array_inv_jump]
+QED
+
+Theorem enc_array_header_condition:
+  enc_array_header inv_ctx p B ts vs ip tail_cell cnd k s ==>
+  ?w. eval_operand cnd s = SOME w /\ (w = 0w <=> k < LENGTH vs)
+Proof
+  simp[enc_array_header_def] >> strip_tac >>
+  Cases_on `k < LENGTH vs` >> gvs[]
+QED
+
 (* ===== Source and region boundaries ===== *)
 
 Theorem enc_pre_bounds:
