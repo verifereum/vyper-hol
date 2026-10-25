@@ -3,7 +3,8 @@ Theory exprSimWordBuiltins
 Ancestors
   list exprSim exprSimHyps exprLowering vyperTypeSystem
   vyperInterpreter vyperState vyperContext exprBopLowering
-  builtinMath builtinMisc compileEnv
+  builtinMath builtinMisc compileEnv exprSimOps freshWrites fragExec varsExt
+  exprLoweringProps venomExecSemantics venomState
 
 Theorem word_builtin_unary_types:
   !ty bt ts.
@@ -326,4 +327,112 @@ Proof
        compile_expr_unary_builtin, compile_ternary_modular_dispatch,
        compile_binary_modular_dispatch] >>
   drule_at Any compile_word_builtin_dispatch_stack >> simp[]
+QED
+
+(* ===== A list-indexed word fragment interface ===== *)
+Definition word_builtin_frag_def:
+  word_builtin_frag ctx func cenv cx code res vs es0 <=>
+    !sa sb xs op s0.
+      code xs sa = (op, sb) /\ expr_res_ok res /\
+      EVERY (\x. !z. x = Var z ==> not_fresh_at sa z) xs /\
+      fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+      local_ptrs_reserved cenv sa ==>
+      frag_exec ctx sa sb
+        (\s. s = s0 /\ stmt_state_rel func cenv cx es0 s /\
+             LIST_REL (\x v. eval_operand x s = SOME (val_to_w256 v)) xs vs)
+        (\s. ?v. res = INL (Value v) /\ word_value v /\
+                 stmt_state_rel func cenv cx es0 s /\
+                 eval_operand op s = SOME (val_to_w256 v) /\
+                 (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==>
+                        lookup_var z s = SOME w) /\
+                 (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
+                          FLOOKUP s.vs_allocas aid = SOME b) /\
+                 s.vs_memory = s0.vs_memory)
+        (expr_exit res)
+End
+
+Theorem word_operands_drop_fresh:
+  !xs vs sa ss.
+    EVERY (\x. !z. x = Var z ==> not_fresh_at sa z) xs ==>
+    (LIST_REL (\x v. eval_operand x (drop_fresh sa ss) = SOME (val_to_w256 v)) xs vs <=>
+     LIST_REL (\x v. eval_operand x ss = SOME (val_to_w256 v)) xs vs)
+Proof
+  Induct >> Cases_on `vs` >> simp[] >> rpt strip_tac >>
+  drule eval_operand_drop_fresh >> simp[]
+QED
+
+Theorem word_operands_frame:
+  !xs vs sa s t.
+    EVERY (\x. (!z. x = Var z ==> not_fresh_at sa z) /\ (!l. x <> Label l)) xs /\
+    LIST_REL (\x v. eval_operand x s = SOME (val_to_w256 v)) xs vs /\
+    (!z w. not_fresh_at sa z /\ lookup_var z s = SOME w ==> lookup_var z t = SOME w) ==>
+    LIST_REL (\x v. eval_operand x t = SOME (val_to_w256 v)) xs vs
+Proof
+  Induct >> Cases_on `vs` >> simp[] >> rpt strip_tac
+  >- (drule_all eval_operand_frame >> simp[]) >>
+  first_x_assum irule >> goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem word_builtin_frag_success:
+  !ctx func cenv cx code res vs es0 v.
+    res = INL (Value v) /\ word_value v /\
+    (!xs. straight_fresh (code xs)) /\
+    (!xs sa sb op ss.
+       code xs sa = (op, sb) /\ fresh_vars_wrt sa ss /\
+       LIST_REL (\x v. eval_operand x ss = SOME (val_to_w256 v)) xs vs ==>
+       ?ss'. run_inst_seq (emitted_insts sa sb) ss = OK ss' /\
+             eval_operand op ss' = SOME (val_to_w256 v)) ==>
+    word_builtin_frag ctx func cenv cx code res vs es0
+Proof
+  rpt gen_tac >> strip_tac >>
+  simp[word_builtin_frag_def] >> rpt gen_tac >> strip_tac >>
+  ho_match_mp_tac frag_exec_straight_fresh >>
+  qexistsl_tac [`code xs`, `\a. F`] >>
+  simp[word_operands_drop_fresh] >> rpt strip_tac >>
+  first_x_assum irule >>
+  goal_assum (drule_at Any) >> qexists_tac `xs` >> simp[]
+QED
+
+Theorem word_builtin_frag_revert:
+  !ctx func cenv cx code res vs es0 msg.
+    res = INR (Error (RuntimeError msg)) /\
+    (!xs. straight_fresh (code xs)) /\
+    (!xs sa sb op ss.
+       code xs sa = (op, sb) /\ fresh_vars_wrt sa ss /\
+       LIST_REL (\x v. eval_operand x ss = SOME (val_to_w256 v)) xs vs ==>
+       ?ss'. run_inst_seq (emitted_insts sa sb) ss = Abort Revert_abort ss') ==>
+    word_builtin_frag ctx func cenv cx code res vs es0
+Proof
+  rpt gen_tac >> strip_tac >>
+  simp[word_builtin_frag_def] >> rpt gen_tac >> strip_tac >>
+  ho_match_mp_tac
+    (INST_TYPE [``:'a`` |-> ``:operand``] frag_exec_straight_fresh_abort) >>
+  qexistsl_tac [`code xs`, `op`, `\a. a = Revert_abort`] >>
+  simp[word_operands_drop_fresh, expr_exit_def] >> rpt strip_tac >>
+  first_x_assum irule >>
+  goal_assum (drule_at Any) >> qexistsl_tac [`op`, `xs`] >> simp[]
+QED
+
+(* No-code probes also cover Wei's scale-one implementation. *)
+Theorem word_builtin_frag_constant:
+  !ctx func cenv cx vs es v.
+    word_value v ==>
+    word_builtin_frag ctx func cenv cx
+      (\xs. comp_return (Lit (val_to_w256 v))) (INL (Value v)) vs es
+Proof
+  rpt strip_tac >> irule word_builtin_frag_success >>
+  simp[straight_fresh_return, comp_return_def, emitted_insts_refl,
+       run_inst_seq_def, eval_operand_def]
+QED
+
+Theorem word_builtin_frag_operand:
+  !ctx func cenv cx vs es n.
+    n < LENGTH vs /\ word_value (EL n vs) ==>
+    word_builtin_frag ctx func cenv cx
+      (\xs. comp_return (EL n xs)) (INL (Value (EL n vs))) vs es
+Proof
+  rpt strip_tac >> irule word_builtin_frag_success >>
+  simp[straight_fresh_return, comp_return_def, emitted_insts_refl,
+       run_inst_seq_def] >> rpt strip_tac >>
+  gvs[LIST_REL_EL_EQN]
 QED
