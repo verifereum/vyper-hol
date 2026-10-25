@@ -30,7 +30,8 @@
  *   lower_vyper_runtime_unit_memory_ok -- S3 (Milestone 5)
  *
  * TASK056: obsolete NONE-mode relation retained as inactive source provenance.
- * STATUS: S1-S3 are statements, NOT proved correctness certificates.
+ * STATUS: S2 is proved; S1 and S3 are statements, NOT proved correctness
+ *   certificates.
  * Before major proof repair, check lowering definitions against the chosen
  * upstream compiler target; see docs/compiler-definition-parity.md.
  *)
@@ -53,7 +54,7 @@ Ancestors
   venomState
   compileEnv e2eDefs supportedProgram compileVyper
   unitTransformDefs unitShapeDefs
-  fragExec loweringHalt
+  fragExec loweringHalt loweringShapeProps
 
 (* TASK056 RETIRED SOURCE ARCHIVE: old NONE-mode helpers, replaced by the
    exact oracle-mode boundary below. Original text retained without bridges.
@@ -525,14 +526,14 @@ Proof
   cheat
 QED
 
-(* S2: planned admission, Milestone 5.  loweringShapeProps proves the same
-   statement as lower_vyper_runtime_unit_source_unit_ok_names. *)
+(* S2, Milestone 5: proved in loweringShapeProps as
+   lower_vyper_runtime_unit_source_unit_ok_names. *)
 Theorem lower_vyper_runtime_unit_source_unit_ok:
   !tops rpolicy unit.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\ supported_program tops
     ==> o1_source_unit_ok unit
 Proof
-  cheat
+  ACCEPT_TAC lower_vyper_runtime_unit_source_unit_ok_names
 QED
 
 (* S3: planned admission, Milestone 5. Proof idea: allocation-budget and
