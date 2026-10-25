@@ -1194,6 +1194,67 @@ Proof
   simp[] >> decide_tac
 QED
 
+Definition enc_prefix_mem_def:
+  enc_prefix_mem p B ts vs k (s : venom_state) <=>
+    mem_bytes_at p (LENGTH (HP B ts vs k)) s.vs_memory = HP B ts vs k /\
+    mem_bytes_at (p + B) (LENGTH (TP ts vs k)) s.vs_memory = TP ts vs k
+End
+
+Theorem enc_prefix_mem_zero[simp]:
+  enc_prefix_mem p B ts vs 0 s
+Proof
+  simp[enc_prefix_mem_def, mem_bytes_at_def]
+QED
+
+Theorem enc_prefix_mem_suc:
+  has_types ts vs /\ k < LENGTH vs /\
+  h = (if is_dynamic (EL k ts) then
+         enc_number (Uint 256) (NumV (DP B ts vs k))
+       else enc (EL k ts) (EL k vs)) /\
+  z = (if is_dynamic (EL k ts) then enc (EL k ts) (EL k vs) else []) /\
+  mem_bytes_at p (LENGTH (HP B ts vs k)) s.vs_memory = HP B ts vs k /\
+  mem_bytes_at (p+B) (LENGTH (TP ts vs k)) s.vs_memory = TP ts vs k /\
+  mem_bytes_at (p+LENGTH (HP B ts vs k)) (LENGTH h) s.vs_memory = h /\
+  mem_bytes_at (p+DP B ts vs k) (LENGTH z) s.vs_memory = z ==>
+  enc_prefix_mem p B ts vs (SUC k) s
+Proof
+  rpt strip_tac >>
+  `LENGTH ts = LENGTH vs` by metis_tac[has_types_LIST_REL, LIST_REL_LENGTH] >>
+  drule_all enc_prefix_suc >> disch_then (qspec_then `B` strip_assume_tac) >>
+  pure_rewrite_tac[enc_prefix_mem_def] >>
+  pure_asm_rewrite_tac[] >>
+  pure_rewrite_tac[LENGTH_APPEND, valueEncodingProofsTheory.mem_bytes_at_split_padded] >>
+  gvs[DP_def]
+QED
+
+Theorem enc_prefix_mem_exit_parts:
+  has_types ts vs /\ enc_prefix_mem p B ts vs (LENGTH vs) s ==>
+  mem_bytes_at p (head_lengths ts 0) s.vs_memory ++
+    mem_bytes_at (p+B) (LENGTH (TP ts vs (LENGTH vs))) s.vs_memory =
+    enc_tuple B 0 ts vs [] []
+Proof
+  strip_tac >>
+  `LENGTH ts = LENGTH vs` by metis_tac[has_types_LIST_REL, LIST_REL_LENGTH] >>
+  drule enc_prefix_full >> disch_then (qspec_then `B` mp_tac) >>
+  drule HP_length >> disch_then (qspecl_then [`LENGTH vs`, `B`] mp_tac) >>
+  simp[TAKE_LENGTH_ID_rwt] >> rpt strip_tac >>
+  gvs[enc_prefix_mem_def]
+QED
+
+Theorem enc_prefix_mem_exit:
+  has_types ts vs /\ B = head_lengths ts 0 /\
+  enc_prefix_mem p B ts vs (LENGTH vs) s ==>
+  mem_bytes_at p (LENGTH (enc_tuple B 0 ts vs [] [])) s.vs_memory =
+    enc_tuple B 0 ts vs [] []
+Proof
+  strip_tac >> drule_all enc_prefix_mem_exit_parts >>
+  disch_then (mp_tac o AP_TERM ``LENGTH : word8 list -> num``) >>
+  pure_rewrite_tac[LENGTH_APPEND, LENGTH_mem_bytes_at] >>
+  disch_then (SUBST1_TAC o SYM) >>
+  pure_rewrite_tac[valueEncodingProofsTheory.mem_bytes_at_split_padded] >>
+  metis_tac[enc_prefix_mem_exit_parts]
+QED
+
 (* ===== Source and region boundaries ===== *)
 
 Theorem enc_pre_bounds:

@@ -14,6 +14,7 @@ PLAN: `lowering/PLAN_abi_encode_frag.md`
 | C1.3.3 | proved |  | E0009 |  |
 | C1.4 | stuck | risk_mismatch | E0010 | Strategist review: split instruction metadata projection/scratch invariance from memory observations and encoder consumers. Need small generic allocation-state congruence boundary or reusable projection simpset before framed MCOPY/base branches. |
 | C1.5.1 | proved |  | E0011 | Review and commit; proceed scheduled frontier. C1.5.2 can use enc_prefix_suc, HP_length, enc_prefix_full without unfolding tuple encoding. |
+| C1.5.2 | proved |  | E0012 | Review, commit, continue scheduled leaf. |
 
 ## C1.1
 
@@ -181,3 +182,23 @@ PLAN: `lowering/PLAN_abi_encode_frag.md`
 ### Evidence refs
 
 - `TO_abi_encode_frag-20261024T233520Z_m0355_t001` (use `read_tool_output` for exact output)
+
+## C1.5.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0012`
+- blocker: 
+- actual effort: 1 sessions, 11 steps, 10 tools, 4 holbuild, 1,452,290 tok (1,450,206 in, 2,084 out, 1,433,344 cached), 77.7s, $0.1978984
+- next: Review, commit, continue scheduled leaf.
+
+### Attempts / Evidence
+
+- `E0012` (proved, , actual effort: 1 sessions, 11 steps, 10 tools, 4 holbuild, 1,452,290 tok (1,450,206 in, 2,084 out, 1,433,344 cached), 77.7s, $0.1978984)
+  - Define enc_prefix_mem and prove zero, successor from four final-state byte slices, separated exit assembly and contiguous exit when B=head_lengths. -> All required memory-prefix interfaces proved. Use pure rewrites for LENGTH_APPEND and padded split before arithmetic simplification, preserving head-before-tail order; otherwise simp commutes sum operands and splits the wrong slice first. (`TO_abi_encode_frag-20261024T233520Z_m0371_t001`)
+
+### Evidence refs
+
+- `TO_abi_encode_frag-20261024T233520Z_m0371_t001` (use `read_tool_output` for exact output)
