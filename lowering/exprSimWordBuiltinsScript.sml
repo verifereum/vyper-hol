@@ -4,7 +4,7 @@ Ancestors
   list words integer_word vfmExecution valueEncoding loweringSlice vyperEvalExprPreservesScopesDom
   exprSim exprSimHyps exprLowering vyperTypeSystem vyperTyping
   vyperInterpreter vyperState vyperContext exprBopLowering
-  builtinMath builtinMisc compileEnv exprSimOps freshWrites fragExec varsExt
+  builtinMath builtinMisc builtinSimple arithmeticProps compileEnv exprSimOps freshWrites fragExec varsExt
   exprLoweringProps venomExecSemantics venomState emitHelper emitHelperProps venomInst
 
 Theorem word_builtin_unary_types:
@@ -1199,4 +1199,122 @@ Proof
      gvs[fresh_vars_wrt_def, eval_operand_def, lookup_var_def] >>
      first_x_assum (qspec_then `n` mp_tac) >> simp[finite_mapTheory.TO_FLOOKUP]) >>
   drule_all (SRULE [dimword_def] compile_as_wei_value_int_run) >> simp[]
+QED
+
+(* Floor by truncation after the negative-input adjustment. *)
+Theorem int_floor_via_quot:
+  !x d:int. 0 < d ==>
+    (if x < 0 then x - (d - 1) else x) quot d = x / d
+Proof
+  rpt strip_tac >>
+  `d <> 0` by intLib.ARITH_TAC >>
+  drule integerTheory.INT_DIVISION >> disch_then (qspec_then `x` strip_assume_tac) >>
+  Cases_on `x < 0` >> simp[] >>
+  irule integerTheory.INT_QUOT_UNIQUE
+  >- (qexists_tac `x % d - (d - 1)` >>
+      simp[integerTheory.INT_ABS] >> intLib.ARITH_TAC) >>
+  Cases_on `x = 0` >- (qexists_tac `0` >> simp[integerTheory.INT_DIV_0, integerTheory.INT_ABS] >> intLib.ARITH_TAC) >>
+  qexists_tac `x % d` >> simp[integerTheory.INT_ABS] >> intLib.ARITH_TAC
+QED
+
+Theorem straight_fresh_floor:
+  !x d. straight_fresh (compile_floor x d)
+Proof
+  rpt gen_tac >> simp[compile_floor_def, compile_select_def] >>
+  rpt (FIRST [CHANGED_TAC (simp[]), irule straight_fresh_bind >> conj_tac,
+              irule straight_fresh_emit_op >> simp[fresh_write_op_def] >> NO_TAC,
+              gen_tac])
+QED
+
+Theorem compile_floor_run:
+  !a d sa op sb ss (va:bytes32).
+    compile_floor a d sa = (op,sb) /\
+    eval_operand a ss = SOME va /\
+    (!z. a = Var z ==> not_fresh_at sa z) ==>
+    ?ss'. run_inst_seq (emitted_insts sa sb) ss = OK ss' /\
+      eval_operand op ss' = SOME
+        (safe_sdiv (if w2i va < 0 then va - n2w (d - 1) else va) (n2w d))
+Proof
+  rpt gen_tac >>
+  simp[compile_floor_def, compile_select_def, emit_op_def, emit_inst_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def, fresh_id_def, fresh_var_def, emit_def] >>
+  strip_tac >> gvs[] >> simp[emitted_insts_def] >>
+  CONV_TAC (DEPTH_CONV (REWR_CONV (GSYM APPEND_ASSOC))) >>
+  simp[rich_listTheory.DROP_LENGTH_APPEND] >>
+  qspec_then `sa` assume_tac eval_operand_update_not_fresh >>
+  simp[Once run_inst_seq_def] >>
+  simp[Once step_inst_base_def, mk_inst_def, exec_pure2_def, eval_operand_def] >>
+  simp[Once run_inst_seq_def] >>
+  simp[Once step_inst_base_def, mk_inst_def, exec_pure2_def,
+       eval_operand_update_not_fresh, eval_operand_def, lookup_var_update_var] >>
+  simp[Once run_inst_seq_def] >>
+  simp[Once step_inst_base_def, mk_inst_def, exec_pure2_def,
+       eval_operand_update_not_fresh, eval_operand_def, lookup_var_update_var] >>
+  simp[Once run_inst_seq_def] >>
+  simp[Once step_inst_base_def, mk_inst_def, exec_pure2_def,
+       eval_operand_update_not_fresh, eval_operand_def, lookup_var_update_var] >>
+  simp[Once run_inst_seq_def] >>
+  simp[Once step_inst_base_def, mk_inst_def, exec_pure2_def,
+       eval_operand_update_not_fresh, eval_operand_def, lookup_var_update_var] >>
+  simp[Once run_inst_seq_def] >>
+  simp[Once step_inst_base_def, mk_inst_def, exec_pure2_def] >>
+  simp[eval_operand_def, lookup_var_update_var, run_inst_seq_def] >>
+  Cases_on `w2i va < 0` >>
+  simp[WORD_LTi, word_0_w2i, bool_to_word_def, WORD_MULT_CLAUSES,
+       WORD_XOR_CLAUSES, WORD_XOR_ASSOC, WORD_XOR_COMM, lookup_var_update_var] >>
+  simp[GSYM WORD_XOR_ASSOC, WORD_XOR_CLAUSES]
+QED
+
+Theorem word_floor_via_quot:
+  !i d. 0 < d /\ &(d) < (2:int) ** 255 /\
+    -((2:int) ** 255) <= i - &(d - 1) /\ i < (2:int) ** 255 ==>
+    safe_sdiv
+      (if w2i (i2w i : bytes32) < 0 then i2w i - n2w (d - 1) else i2w i)
+      (n2w d) = i2w (i / &d)
+Proof
+  rpt strip_tac >>
+  gvs[] >>
+  `0 <= &(d - 1):int` by simp[] >>
+  `w2i (i2w i : bytes32) = i /\
+   w2i (i2w (i - &(d - 1)) : bytes32) = i - &(d - 1) /\
+   w2i (i2w (&d) : bytes32) = &d` by
+    (rpt conj_tac >> irule w2i_i2w >>
+     simp[integer_wordTheory.INT_MIN_def, integer_wordTheory.INT_MAX_def,
+          wordsTheory.INT_MIN_def, dimword_def] >>
+     intLib.ARITH_TAC) >>
+  `n2w d <> (0w:bytes32)` by
+    simp[n2w_11, dimword_def] >>
+  Cases_on `i < 0` >>
+  simp[safe_sdiv_def, GSYM i2w_pos, word_i2w_sub, word_quot] >>
+  qspec_then `i` (qspec_then `&d` mp_tac) int_floor_via_quot >>
+  simp[integerTheory.INT_SUB]
+QED
+
+Theorem decimal_floor_word:
+  !i. within_int_bound (Signed 168) i ==>
+    safe_sdiv
+      (if w2i (i2w i : bytes32) < 0 then
+         i2w i - n2w (10000000000 - 1) else i2w i)
+      (n2w 10000000000) = i2w (i / 10000000000)
+Proof
+  rpt strip_tac >> irule word_floor_via_quot >>
+  gvs[vyperValueTheory.within_int_bound_def] >> intLib.ARITH_TAC
+QED
+
+Theorem compile_floor_word_frag:
+  !ctx func cenv cx es ann ts i.
+    within_int_bound (Signed 168) i ==>
+    word_builtin_frag ctx func cenv cx
+      (\xs. compile_floor (EL 0 xs) 10000000000)
+      (builtin_result cx es.accounts ann Floor ts [DecimalV i]) [DecimalV i] es
+Proof
+  rpt strip_tac >> simp[builtin_result_def, evaluate_builtin_def] >>
+  irule word_builtin_frag_success >>
+  simp[straight_fresh_floor, word_value_def] >> rpt strip_tac >>
+  gvs[LIST_REL_EL_EQN, val_to_w256_def] >>
+  `!z. x = Var z ==> not_fresh_at sa z` by
+    (rpt strip_tac >> simp[not_fresh_at_def] >> rpt strip_tac >>
+     gvs[fresh_vars_wrt_def, eval_operand_def, lookup_var_def] >>
+     first_x_assum (qspec_then `n` mp_tac) >> simp[finite_mapTheory.TO_FLOOKUP]) >>
+  drule_all compile_floor_run >> simp[decimal_floor_word]
 QED
