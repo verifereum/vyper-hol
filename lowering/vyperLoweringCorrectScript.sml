@@ -521,13 +521,16 @@ Theorem external_return_static_cenv_result_rel:
           es.requests))
 Proof
   rpt strip_tac >>
-  `m < 2 ** 64` by gvs[return_buffer_ok_def] >>
-  `dimword (:256) = 2 ** 256` by EVAL_TAC >>
+  `m < 2 ** 64` by
+    (qpat_x_assum `return_buffer_ok _` mp_tac >>
+     qpat_x_assum `_.ce_ret_enc_info = _`
+       (fn th => simp[return_buffer_ok_def, th])) >>
+  `2 ** 64 < dimword (:256)` by
+    simp[wordsTheory.dimword_def, venomMemPropsTheory.dimindex_256] >>
   `m < dimword (:256)` by DECIDE_TAC >>
   qpat_x_assum `compile_external_return _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   asm_rewrite_tac[] >> strip_tac >>
-  drule external_return_static_result_rel >> disch_then irule >>
-  rpt conj_tac >> first_assum ACCEPT_TAC
+  drule external_return_static_result_rel >> disch_then irule >> gvs[]
 QED
 
 (* ===== Label-space invariant at the start of lowering ===== *)
