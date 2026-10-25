@@ -1,7 +1,7 @@
 (* Word builtin simulation: typed boundaries and shared fragments. *)
 Theory exprSimWordBuiltins
 Ancestors
-  list words integer_word vfmExecution valueEncoding loweringSlice
+  list words integer_word vfmExecution valueEncoding loweringSlice vyperEvalExprPreservesScopesDom
   exprSim exprSimHyps exprLowering vyperTypeSystem vyperTyping
   vyperInterpreter vyperState vyperContext exprBopLowering
   builtinMath builtinMisc compileEnv exprSimOps freshWrites fragExec varsExt
@@ -829,4 +829,158 @@ Proof
   first_x_assum irule >>
   goal_assum (drule_at Any) >>
   metis_tac[wb_args_ready_tail]
+QED
+
+(* ===== Argument fragment execution ===== *)
+Definition wb_args_post_def:
+  wb_args_post func cenv cx es sa s0 es' xs vs s <=>
+    stmt_state_rel func cenv cx es' s /\
+    LIST_REL (\x v. eval_operand x s = SOME (val_to_w256 v)) xs vs /\
+    wb_frame cenv es sa s0 s
+End
+
+Definition wb_args_shape_def:
+  wb_args_shape cenv arg_ty args <=>
+    !e sa sb x. MEM e args /\
+      lower_value compile_expr cenv (arg_ty e) e sa = (x, sb) ==>
+      cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
+      sa.cs_next_id <= sb.cs_next_id /\
+      (!z. x = Var z ==> not_fresh_at sb z) /\ (!l. x <> Label l)
+End
+
+Theorem wb_args_shape_tail:
+  !cenv arg_ty e args.
+    wb_args_shape cenv arg_ty (e::args) ==> wb_args_shape cenv arg_ty args
+Proof
+  simp[wb_args_shape_def] >> metis_tac[]
+QED
+
+Theorem lower_word_args_shape_ready:
+  !cenv arg_ty args sa xs sb.
+    wb_args_shape cenv arg_ty args /\
+    lower_word_args cenv arg_ty args sa = (xs, sb) ==>
+    cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
+    sa.cs_next_id <= sb.cs_next_id /\ LENGTH xs = LENGTH args /\
+    EVERY (\x. (!z. x = Var z ==> not_fresh_at sb z) /\ (!l. x <> Label l)) xs
+Proof
+  rpt gen_tac >> simp[wb_args_shape_def] >> strip_tac >>
+  drule lower_word_args_shape >> disch_then drule >> simp[]
+QED
+
+Theorem expr_sim_apply:
+  !ctx func cenv cx ty e es sa sb op res es' s0.
+    expr_sim ctx func cenv cx ty e es /\
+    lower_value compile_expr cenv ty e sa = (op, sb) /\
+    eval_expr cx e es = (res, es') /\ expr_res_ok res /\
+    fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa ==>
+    frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel func cenv cx es s)
+      (\s. ?v. res = INL (Value v) /\
+        expr_post func cenv cx e es sa sb s0 es' v op s)
+      (expr_exit res)
+Proof
+  simp[expr_sim_def]
+QED
+
+Theorem lower_word_args_nil_sim:
+  !ctx func cenv cx es sa s0.
+    frag_exec ctx sa sa (\s. s = s0 /\ stmt_state_rel func cenv cx es s)
+      (\s. wb_args_post func cenv cx es sa s0 es [] [] s)
+      (wb_args_exit (INL []))
+Proof
+  rpt gen_tac >> irule frag_exec_refl >>
+  simp[wb_args_post_def, wb_frame_refl] >> metis_tac[]
+QED
+
+Theorem wb_args_post_cons:
+  !func cenv cx e es sa s1 s0 es1 v x t es' xs vs u.
+    expr_post func cenv cx e es sa s1 s0 es1 v x t /\
+    wb_args_post func cenv cx es1 s1 t es' xs vs u /\
+    stmt_state_rel func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+    MAP FDOM es.scopes = MAP FDOM es1.scopes /\
+    sa.cs_next_var <= s1.cs_next_var /\ sa.cs_next_id <= s1.cs_next_id /\
+    is_word_type (expr_type e) /\
+    IS_SOME (evaluate_type (get_tenv cx) (expr_type e)) /\ word_value v /\
+    (!z. x = Var z ==> not_fresh_at s1 z) /\ (!l. x <> Label l) ==>
+    wb_args_post func cenv cx es sa s0 es' (x::xs) (v::vs) u
+Proof
+  rpt strip_tac >>
+  `eval_operand x t = SOME (val_to_w256 v)` by
+    (drule_all expr_post_word_operand >> simp[]) >>
+  `wb_frame cenv es sa s0 t` by metis_tac[expr_post_frame] >>
+  gvs[wb_args_post_def] >> conj_tac
+  >- (irule eval_operand_frame >> goal_assum (drule_at Any) >>
+      simp[] >> metis_tac[wb_frame_vars]) >>
+  irule wb_frame_trans >> simp[] >> conj_tac
+  >- (qexistsl_tac [`cx`, `func`] >> simp[]) >>
+  qexistsl_tac [`es1`, `s1`, `t`] >> simp[]
+QED
+
+Theorem wb_frag_then:
+  !ctx sa s1 P Q1.
+    frag_exec ctx sa s1 P Q1 (\r. F) ==>
+    !sb Q R. (!t. Q1 t ==> frag_exec ctx s1 sb (\s. s = t) Q R) /\
+      cs_extends sa s1 /\ cs_extends s1 sb ==>
+      frag_exec ctx sa sb P Q R
+Proof
+  rpt strip_tac >> irule frag_exec_seq_pointwise >>
+  qexistsl_tac [`Q1`, `s1`] >> simp[] >>
+  irule frag_exec_pre_exit >> goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem lower_word_args_sim:
+  !args ctx func cenv cx arg_ty I es sa xs sb rr es' s0.
+    wb_args_ready ctx func cenv cx arg_ty I args /\ I es /\
+    wb_args_shape cenv arg_ty args /\
+    lower_word_args cenv arg_ty args sa = (xs,sb) /\
+    eval_exprs cx args es = (rr,es') /\
+    fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa ==>
+    frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel func cenv cx es s)
+      (\s. ?vs. rr = INL vs /\ wb_args_post func cenv cx es sa s0 es' xs vs s)
+      (wb_args_exit rr)
+Proof
+  Induct
+  >- (simp[lower_word_args_nil, eval_exprs_nil] >> rpt strip_tac >>
+      irule lower_word_args_nil_sim) >>
+  rpt gen_tac >> strip_tac >>
+  rename1 `wb_args_ready ctx func cenv cx arg_ty Inv (e::args)` >>
+  reverse (Cases_on `stmt_state_rel func cenv cx es s0`)
+  >- (`(\s. s = s0 /\ stmt_state_rel func cenv cx es s) = (\s. F)` by
+        (simp[FUN_EQ_THM] >> metis_tac[]) >>
+      simp[] >> irule frag_exec_false_pre) >>
+  `wb_args_shape cenv arg_ty args` by metis_tac[wb_args_shape_tail] >>
+  gvs[lower_word_args_cons] >>
+  `cs_extends sa s1 /\ sa.cs_next_var <= s1.cs_next_var /\
+   sa.cs_next_id <= s1.cs_next_id /\
+   (!z. x = Var z ==> not_fresh_at s1 z) /\ (!l. x <> Label l)` by
+    (qpat_x_assum `wb_args_shape _ _ (_::_)` mp_tac >>
+     rewrite_tac[wb_args_shape_def] >>
+     disch_then (qspec_then `e` mp_tac) >> simp[] >>
+     disch_then drule >> simp[]) >>
+  drule_all lower_word_args_shape_ready >> strip_tac >>
+  `fn_has_code sa s1 func /\ fn_has_code s1 sb func` by
+    metis_tac[fn_has_code_mid, cs_extends_refl] >>
+  drule_all wb_args_ready_head >> strip_tac >>
+  drule_all wb_args_cons_cases >> strip_tac
+  >- (gvs[wb_args_exit_def] >>
+      drule_all expr_sim_apply >>
+      disch_then (qspec_then `s0` mp_tac) >> simp[] >> strip_tac >>
+      irule frag_exec_exit_prefix >> goal_assum (drule_at Any) >> simp[]) >>
+  `local_ptrs_reserved cenv s1` by
+    metis_tac[local_ptrs_reserved_next_var] >>
+  `wb_args_ready ctx func cenv cx arg_ty Inv args` by
+    metis_tac[wb_args_ready_tail] >>
+  `MAP FDOM es.scopes = MAP FDOM es1.scopes` by
+    metis_tac[eval_expr_preserves_scopes_dom] >>
+  `expr_exit (INL (Value v)) = (\r. F)` by simp[FUN_EQ_THM] >>
+  `expr_res_ok (INL (Value v))` by simp[expr_res_ok_def] >>
+  drule_all expr_sim_apply >> disch_then (qspec_then `s0` mp_tac) >>
+  simp[expr_exit_def] >> disch_then (mp_then Any irule wb_frag_then) >> simp[] >>
+  qx_gen_tac `t` >> strip_tac >>
+  first_x_assum (drule_all_then (qspec_then `t` mp_tac)) >>
+  disch_then (mp_then Any irule frag_exec_weaken) >>
+  conj_tac >- (Cases_on `rr'` >> simp[wb_args_exit_def]) >>
+  conj_tac >- (rpt strip_tac >> gvs[] >> metis_tac[expr_post_state]) >>
+  rpt strip_tac >> gvs[] >>
+  irule wb_args_post_cons >> goal_assum (drule_at Any) >> simp[] >>
+  goal_assum (drule_at Any) >> simp[] >> qexists_tac `e` >> simp[]
 QED
