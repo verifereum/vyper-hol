@@ -33,10 +33,11 @@ val residual_programs = listSyntax.mk_list
 val residual_outputs = listSyntax.mk_list
   (map membershipParityLib.oracle residuals, ``:word8 list # word8 list``)
 
+(* Historical #549/#560 residuals now match after the merged memory changes. *)
 Theorem externally_owned_residual_observations:
   MAP (\(tops,bytes).
     compile_vyper (K SOME) (o1_policy all_capabilities) tops = SOME bytes)
-    (ZIP (^residual_programs,^residual_outputs)) = [T;F;F]
+    (ZIP (^residual_programs,^residual_outputs)) = [T;T;T]
 Proof
   EVAL_TAC
 QED

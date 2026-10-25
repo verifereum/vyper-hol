@@ -100,7 +100,7 @@ Definition eval_pure_expr_def:
                      | INR _ => NONE))
              else NONE
            else
-             case evaluate_builtin cx st.accounts ty bt vs of
+             case evaluate_builtin cx st.accounts ty bt (MAP expr_type es) vs of
              | INL v => SOME (Value v)
              | INR _ => NONE)
         | NONE => NONE)

@@ -35,12 +35,24 @@ Proof
   rpt CASE_TAC >> simp[]
 QED
 
+Theorem closed_integer_expr_type:
+  !e. closed_integer e ==> ?bt. expr_type e = BaseT bt
+Proof
+  ho_match_mp_tac closed_integer_ind >>
+  rw[closed_integer_def, expr_type_def]
+QED
+
+(* The membership operators read the second operand's type through
+   evaluate_type, which only consults the type environment for named types;
+   a closed integer operand has a base type, so the result is the same in
+   every context. *)
 Theorem closed_integer_context_independent:
   !e. closed_integer e ==>
     !cx st cx' st'. eval_pure_expr cx st e = eval_pure_expr cx' st' e
 Proof
   ho_match_mp_tac closed_integer_ind >>
   rw[closed_integer_def] >>
+  imp_res_tac closed_integer_expr_type >>
   simp[eval_pure_expr_def, builtin_args_length_ok_def] >>
   fs[] >>
   imp_res_tac closed_integer_type_context_independent >>

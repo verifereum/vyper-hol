@@ -69,12 +69,12 @@ independent compiler output, with HOL checker acceptance in both modes.
 | Required six fixtures | `in_lit_list`, `notin_lit_list3`, `in_mem_dynarray`, `in_storage_dynarray`, `eq_string_lit_same`, `eq_bytes_storage_both` | MATCH; six individual `*_matches_python` theorems in `vyperMembershipParityTest` |
 | Additional task controls | `eq_string_storage_lhs_mem`, `eq_string_var`, `in_bytes4_list`, `in_calldata_sarray`, `in_dynarray_arg`, `in_flag`, `in_lit_list2`, `in_lit_zero`, `in_mem_sarray`, `in_sarray_zero`, `in_storage_sarray`, `list_in_lit`, `ne_bytes_lit_same`, `ne_bytes_var`, `notin_flag`, `notin_lit_list`, `notin_mem_sarray`, `notin_storage_dynarray` | MATCH; `task_controls_match_python` |
 | Externally owned #549 witness | `eq_string_storage` | MATCH in this checkout; first component of `externally_owned_residual_observations` is T. The task's historical residual is not reproduced here; C6 makes no #549 implementation change. |
-| Externally owned #560 witnesses | `in_empty_list`, `in_sarray_default` | PARITY_DEFECT, not MATCH; second and third observation components are F. `residual_compilation_succeeds` separately verifies HOL compilation is SOME, not NONE. |
+| Historical externally owned #560 witnesses | `in_empty_list`, `in_sarray_default` | MATCH after the merged memory changes; second and third observation components are T. `residual_compilation_succeeds` separately verifies HOL compilation is SOME, not NONE. |
 | Non-word membership | `in_string_list`, `in_struct_dynarray`, `in_nested_array` | NOT_IN_DOMAIN: pinned Python codegen rejection retained in compiler stdout/stderr; HOL `nonword_witnesses_rejected_runtime` and `nonword_witnesses_rejected_deploy` establish checker result NONE. |
 
-Thus there are 25 exact MATCH witnesses, two #560 residuals, and three
-NOT_IN_DOMAIN witnesses. The additional `@pure` list and capacity-five DynArray
-variants are explicitly included, not inferred from similar examples.
+Thus there are 27 exact MATCH witnesses, no reproduced #549/#560 residuals,
+and three NOT_IN_DOMAIN witnesses. The additional `@pure` list and capacity-five
+DynArray variants are explicitly included, not inferred from similar examples.
 
 ## Source semantics and element-domain evidence
 
@@ -135,10 +135,30 @@ The full default build completed 864 actions (159 built, 705 restored).
 The membership build completed 506 actions (126 built, 380 restored).
 The parity, matrix and final audit theories executed afresh; matching cached
 dependencies remained subject to the kernel-tag audits described above.
-The six parity statements and all matrix statements are unchanged.
+In those exports, the six parity statements and all matrix statements were
+unchanged. The merged-branch revalidation below supersedes their historical
+`[T;F;F]` residual expectation.
 
 All 212 fixture files matched the independent originals in both exported trees
 and in the two isolated comparison stages. All 211 manifest entries verified,
 as did the pinned revision, 30 source hashes and 54 deployment/runtime bytecode
 hashes and lengths. The original artifact-supply report and expected bytecode
 were preserved unchanged.
+
+## Merged-branch revalidation
+
+The six permanent parity fixtures and `task_controls_match_python` (all 18
+additional controls) passed unchanged on the merged branch. The historical
+`externally_owned_residual_observations` expectation `[T;F;F]` reduced to false.
+Changing only that expected vector to `[T;T;T]` then passed kernel `EVAL_TAC`:
+
+```
+holbuild -j2 --maxheap=20000 build --tactic-timeout 30 \
+  vyperMembershipMatrixTestTheory
+```
+
+The recheck exited zero. Both runtime/deploy non-word rejection theorems,
+the matrix's oracle-tag audit, and `residual_compilation_succeeds` also passed,
+with no CHEAT warnings. All three historical residuals now match the unchanged
+independent fixture bytes. This revalidation covers the parity and matrix
+targets, not a new source-export experiment.

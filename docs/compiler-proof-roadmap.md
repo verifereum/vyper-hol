@@ -209,8 +209,8 @@ planned. Source owners below are durable; private PLAN line numbers are not.
 | D4 | Compute value-zero precompiles1/2/6/7, not oracle pure builtins | `precompile_result`, `take_outcome`, trace filter/starvation; helper purity is proved, EVM purity bridge is deferred. | 2.1 |
 | D5 | One evaluator NONE/SOME, not duplicate evaluator or unchecked accounts | Source `evaluation_state.outcomes/requests`, `take_call_outcome` account guard; full triples at call/deploy entry, two-argument initializer retained. Existing storage/type proof guards remain conditional; no universal storage validator. | 6 / 7 |
 | D6 | SOME send requests a real call outcome, not pure transfer | Source Send uses empty-data nonstatic request and requires success; NONE retains concrete transfer behavior. | 6 |
-| D7 | Restrict ExtCall syntax, not reorder source evaluation | `supportedExprs`/`supportedExprForms`: effect-free operands, word arguments/returns, exact interface/count, no defaults; SOME code check follows return-kind policy. `NoneT` ExtCall is **not admitted**, despite a general helper branch. | 6 |
-| D8 | Runtime failure requires Abort/failing frame, not anything/fuel0 | `external_call_result_rel` rejects Error/OK/IntRet and requires terminating run; `call_result_rel` failure clause. TypeError is excluded by typing, not treated as source success. | 6 |
+| D7 | Restrict ExtCall syntax, not reorder source evaluation | `supportedExprs`/`supportedExprForms`: effect-free operands, word arguments/returns, exact interface/count, distinct `value=`/`gas=`/`default_return_value=` operands evaluated in source order (#553); SOME code check follows return-kind policy and `skip_contract_check`. `NoneT` ExtCall is **not admitted**, despite a general helper branch. | 6 |
+| D8 | Runtime failure requires Abort/failing frame, not anything/fuel0 | `external_call_result_rel` rejects OK/IntRet and other Errors, relates a failed external call's `RevertData` to a Revert abort, and requires terminating run; `call_result_rel` failure clause. TypeError is excluded by typing, not treated as source success. | 6 |
 | D9 | Dynamic strict-decode exemption, not weakened source padding check | `decode_strictness_exempt`, `occurs_abi_decode_target` inspect function bodies. Exact message also admits matching return rejection in such a program; not arbitrary ReturnReject. | 6 |
 | D10 | Typing separate from plain-EVAL syntax | `source_typing_ok` contains checker/readiness/machine/tx; `supported_program` depends on tops alone. Partial readiness producers are not the whole premise. | 7 |
 | D11 | Whitelist, not open-ended exclusions | `supportedProgram` combines headers/names/body predicates; 101 named fixture membership proofs. No universal membership/compile-success witness. | 6 / 7 |
@@ -585,8 +585,8 @@ unit simulation by themselves.
 | For range / `get_range_limits` | `compile_range_bound_checks`/loop path | Correct literal bounds/endpoints D13; endpoints once, runtime check iff not both literal. |
 | For fixed memory array | Fixed-array iteration | Bound equals array length and safe element buffer access. |
 | Internal Call / evaluator call path | INVOKE/callee lowering | Empty setup_callee fixed D14; effect-free arguments; no internal locals/nested internal calls/loop-body internal calls. Interprocedural unit-context proof, not single-function `run_blocks` shortcut. |
-| External Call in SOME mode | CALL/STATICCALL + return decode/re-raise | Effect-free target/value/args, exact interface/types/count, word/word-tuple return, no default; same requests/payload/decode. `NoneT` external return was not compared/admitted. Exhaustion is failed call, not stuck. |
-| Send in SOME mode | CALL gas0 + ASSERT | Empty-data request, effects adopted on success; source failure matched by Abort. NONE remains concrete transfer. |
+| External Call in SOME mode | CALL/STATICCALL + return decode/re-raise | Effect-free target/args/kwargs, exact interface/types/count, word/word-tuple return; kwargs and default evaluated in source order before the call; same requests/payload/decode. `NoneT` external return was not compared/admitted. Exhaustion is failed call, not stuck. |
+| Send in SOME mode | CALL (gas operand or 0) + ASSERT | Empty-data request, effects adopted on success; source failure matched by Abort. NONE remains concrete transfer. |
 | Log / concrete event encoder | Topic/data encode + LOG | Declared matching fields, supported indexed kinds; ordered concrete EVM events, not old symbolic log model. |
 | Assert/Raise | REVERT/string payload or UNREACHABLE INVALID | Ordinary assertion requires Revert; UNREACHABLE allows ExHalt/failing frame. No revert bytes/reason equality. |
 
@@ -604,10 +604,13 @@ boundary samples) is not a kernel stage proof. Future owners must recheck
 changed definitions/conditions, then prove these paths. The unchanged source
 checkpoint receipts are historical evidence, not a fresh comparison rerun here.
 
-1. **State relation.** Define an alloca-aware `vars_rel`: a `PtrVar` pointer
-   maps to a `vs_allocas` region holding `val_in_memory`. It should be part
-   of a `state_rel` with full accounts and transient-storage equality and a
-   `PtrVar` `__return_pc__`.
+1. **State relation.** `state_rel` relates locals through `local_ptrs_rel`
+   (#625): a `PtrVar` pointer holds the base of a `vs_allocas` region holding
+   `val_in_memory`. Still to add: full accounts and transient-storage
+   equality, a `PtrVar` `__return_pc__`, and the locals of internal and
+   constructor bodies, which are compiled without `reserve_local_ptrs` and
+   stay at `MemLoc` offsets that `state_rel` does not relate. Default
+   arguments are at `MemLoc` too, but outside the supported subset (D25).
 2. **Expressions.** Restate the expression lemmas over `run_blocks` in
    `unit.cu_context`, INVOKE-aware, and then prove them: name, binop, neg and
    the others needed by the supported subset. Existing local
@@ -621,7 +624,7 @@ checkpoint receipts are historical evidence, not a fresh comparison rerun here.
    - external return: actual `return_bytes` (including singleton wrapping).
 5. **Module:**
    - linear dispatch reaches the entry for the calldata selector;
-   - argument decoding establishes `vars_rel`;
+   - argument decoding establishes `local_ptrs_rel` in `state_rel`;
    - `lower_vyper_runtime_unit_correct`.
 6. **Builtins.** Only the actual whitelist: Send/ExtCall use the complete
    outcome oracle; computed precompiles use pure results. `raw_call` and

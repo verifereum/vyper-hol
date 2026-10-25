@@ -57,12 +57,12 @@ Datatype:
   | SubscriptK type expr eval_continuation
   | SubscriptK1 type toplevel_value eval_continuation
   | AttributeK identifier eval_continuation
-  | BuiltinK type builtin eval_continuation
+  | BuiltinK type builtin (type list) eval_continuation
   | MembershipK type bool eval_continuation
   | LenK eval_continuation
   | TypeBuiltinK type_builtin type eval_continuation
-  | CallSendK eval_continuation
-  | ExtCallK bool bool identifier (type list) type (expr option) eval_continuation
+  | CallSendK bool eval_continuation
+  | ExtCallK bool bool ext_call_sig ext_call_opts eval_continuation
   (* Chain interaction builtin continuations *)
   | RawCallK type raw_call_flags eval_continuation
   | RawCallCalldataK raw_call_flags eval_continuation
@@ -172,7 +172,7 @@ Definition eval_expr_cps_def:
                        else if bt = Bop In ∨ bt = Bop NotIn then
                          eval_exprs_cps cx8 es st
                            (MembershipK (expr_type (EL 1 es)) (bt = Bop NotIn) k)
-                       else eval_exprs_cps cx8 es st (BuiltinK ty bt k)) ∧
+                       else eval_exprs_cps cx8 es st (BuiltinK ty bt (MAP expr_type es) k)) ∧
   eval_expr_cps cx8 (Pop _ bt) st k =
     eval_base_target_cps cx8 bt st (PopK k) ∧
   eval_expr_cps cx8 (TypeBuiltin _ tb typ es) st k =
@@ -180,12 +180,12 @@ Definition eval_expr_cps_def:
             "TypeBuiltin args" st of
         (INR ex, st) => AK cx8 (ApplyExc ex) st k
       | (INL tv, st) => eval_exprs_cps cx8 es st (TypeBuiltinK tb typ k)) ∧
-  eval_expr_cps cx9 (Call _ Send es _) st k =
-    (case type_check (LENGTH es = 2) "Send args" st of
+  eval_expr_cps cx9 (Call _ (Send has_gas) es _) st k =
+    (case type_check (LENGTH es = if has_gas then 3 else 2) "Send args" st of
        (INR ex, st) => AK cx9 (ApplyExc ex) st k
-     | (INL (), st) => eval_exprs_cps cx9 es st (CallSendK k)) ∧
-  eval_expr_cps cx10 (Call _ (ExtCall is_static skip_check (func_name, arg_types, ret_type)) es drv) st k =
-    eval_exprs_cps cx10 es st (ExtCallK is_static skip_check func_name arg_types ret_type drv k) ∧
+     | (INL (), st) => eval_exprs_cps cx9 es st (CallSendK has_gas k)) ∧
+  eval_expr_cps cx10 (Call _ (ExtCall is_static skip_check sig opts) es _) st k =
+    eval_exprs_cps cx10 es st (ExtCallK is_static skip_check sig opts k) ∧
   (* Chain interaction builtins *)
   eval_expr_cps cx10 (Call ty (RawCallTarget flags) es _) st k =
     eval_exprs_cps cx10 es st (RawCallK ty flags k) ∧
@@ -417,12 +417,12 @@ Definition apply_exc_def:
   apply_exc cx ex st (SubscriptK1 _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (AttributeK _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (PopK k) = AK cx (ApplyExc ex) st k ∧
-  apply_exc cx ex st (BuiltinK _ _ k) = AK cx (ApplyExc ex) st k ∧
+  apply_exc cx ex st (BuiltinK _ _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (MembershipK _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (LenK k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (TypeBuiltinK _ _ k) = AK cx (ApplyExc ex) st k ∧
-  apply_exc cx ex st (CallSendK k) = AK cx (ApplyExc ex) st k ∧
-  apply_exc cx ex st (ExtCallK _ _ _ _ _ _ k) = AK cx (ApplyExc ex) st k ∧
+  apply_exc cx ex st (CallSendK _ k) = AK cx (ApplyExc ex) st k ∧
+  apply_exc cx ex st (ExtCallK _ _ _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (RawCallK _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (RawCallCalldataK _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (RawLogK k) = AK cx (ApplyExc ex) st k ∧
@@ -655,10 +655,10 @@ Definition apply_vals_def:
       v <- lift_sum $ evaluate_membership tv neg (EL 0 vs) (EL 1 vs);
       return $ Value v
     od st) k ∧
-  apply_vals cx vs st (BuiltinK ty bt k) =
+  apply_vals cx vs st (BuiltinK ty bt tys k) =
     liftk cx ApplyTv (do
       acc <- get_accounts;
-      v <- lift_sum $ evaluate_builtin cx acc ty bt vs;
+      v <- lift_sum $ evaluate_builtin cx acc ty bt tys vs;
       return $ Value v
     od st) k ∧
   apply_vals cx vs st (TypeBuiltinK tb typ k) =
@@ -673,89 +673,10 @@ Definition apply_vals_def:
         "Log encode event";
       push_log event
     od st) k ∧
-  apply_vals cx vs st (CallSendK k) =
-    liftk cx ApplyTv (do
-      type_check (LENGTH vs = 2) "CallSendK nargs";
-      toAddr <- lift_option_type (dest_AddressV $ EL 0 vs) "Send not AddressV";
-      amount <- lift_option_type (dest_NumV $ EL 1 vs) "Send not NumV";
-      outcomes <- (λst. return st.outcomes st);
-      case outcomes of
-      | SOME _ => do
-        (rq, outcome) <- vyperCallOutcome$take_call_outcome toAddr [] (SOME amount);
-        check (call_outcome_success outcome) "send failed";
-        vyperCallOutcome$adopt_call_outcome rq outcome;
-        return $ Value NoneV
-      od
-      | NONE => do
-      transfer_value cx.txn.target toAddr amount;
-      return $ Value NoneV
-      od
-    od st) k ∧
-  apply_vals cx vs st (ExtCallK is_static skip_check func_name arg_types ret_type drv k) =
-    (case do
-      type_check (vs ≠ []) "ExtCall no target";
-      target_addr <- lift_option_type (dest_AddressV (HD vs)) "ExtCall target not address";
-      (* Convention: staticcall (T) args = [target; arg1; ...]
-                     extcall (F) args = [target; value; arg1; ...] *)
-      (value_opt, arg_vals) <- if is_static then
-        return (NONE, TL vs)
-      else do
-        type_check (TL vs ≠ []) "ExtCall no value";
-        v <- lift_option_type (dest_NumV (HD (TL vs))) "ExtCall value not int";
-        return (SOME v, TL (TL vs))
-      od;
-      tenv <<- get_tenv cx;
-      calldata <- lift_option_type (build_ext_calldata tenv func_name arg_types arg_vals)
-                                   "ExtCall build_calldata";
-      outcomes <- (λst. return st.outcomes st);
-      case outcomes of
-      | SOME _ => do
-        accounts <- get_accounts;
-        (if ret_type = NoneT then
-          check (¬NULL (lookup_account target_addr accounts).code) "ExtCall target has no code"
-         else return ());
-        (rq, outcome) <- vyperCallOutcome$take_call_outcome target_addr calldata value_opt;
-        check (call_outcome_success outcome) "ExtCall reverted";
-        vyperCallOutcome$adopt_call_outcome rq outcome;
-        if call_outcome_return_data outcome = [] ∧ IS_SOME drv then
-          return (INL (THE drv))
-        else do
-          ret_val <- lift_sum_runtime (evaluate_abi_decode_return tenv ret_type
-            (call_outcome_return_data outcome));
-          return (INR (Value ret_val))
-        od
-      od
-      | NONE => do
-      accounts <- get_accounts;
-      (* Vyper reverts if target has no code (EXTCODESIZE == 0), see
-         ext_call_precheck_ok for when this check is performed *)
-      check (ext_call_precheck_ok skip_check ret_type target_addr accounts)
-            "ExtCall target has no code";
-      tStorage <- get_transient_storage;
-      txParams <<- vyper_to_tx_params cx.txn;
-      caller <<- cx.txn.target;
-      result <- lift_option
-        (run_ext_call caller target_addr calldata value_opt accounts tStorage txParams)
-        "ExtCall run failed";
-      (success, returnData, accounts', tStorage', emitted_logs) <<- result;
-      check success "ExtCall reverted";
-      update_accounts (K accounts');
-      update_transient (K tStorage');
-      append_logs emitted_logs;
-      if returnData = [] ∧ IS_SOME drv then do
-        check (skip_check ∨ ext_call_has_code target_addr accounts')
-              "ExtCall target has no code";
-        return (INL (THE drv))
-      od
-      else do
-        ret_val <- lift_sum_runtime (evaluate_abi_decode_return tenv ret_type returnData);
-        return (INR (Value ret_val))
-      od
-      od
-    od st
-    of (INR ex, st) => AK cx (ApplyExc ex) st k
-     | (INL (INL e), st) => eval_expr_cps cx e st k
-     | (INL (INR tv), st) => AK cx (ApplyTv tv) st k) ∧
+  apply_vals cx vs st (CallSendK has_gas k) =
+    liftk cx ApplyTv (eval_send cx has_gas vs st) k ∧
+  apply_vals cx vs st (ExtCallK is_static skip_check sig opts k) =
+    liftk cx ApplyTv (eval_ext_call cx is_static skip_check sig opts vs st) k ∧
   apply_vals cx vs st (IntCallK all_tenv src_fn args dflts ret body nr mut k) =
     (case do
       prev <- get_scopes;
@@ -1502,94 +1423,24 @@ Proof
     \\ CASE_TAC \\ gvs[cont_def] \\ reverse CASE_TAC
     >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
     >> rw[Once OWHILE_THM, stepk_def, apply_vals_def, bind_def, liftk1] )
-  \\ conj_tac >- ( (* eval_expr (Call Send es _) *)
+  \\ conj_tac >- ( (* eval_expr (Call (Send has_gas) es _) *)
     rw[eval_expr_cps_def, evaluate_def, ignore_bind_def, bind_def]
     \\ CASE_TAC \\ gvs[cont_def] \\ reverse CASE_TAC
     \\ gvs[] \\ first_x_assum drule \\ rw[]
-    \\ CASE_TAC \\ reverse CASE_TAC
+    \\ CASE_TAC \\ gvs[cont_def] \\ reverse CASE_TAC
     >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
-    >> rw[Once OWHILE_THM, stepk_def, apply_vals_def,
-          bind_def, ignore_bind_def, liftk1]
-    \\ qmatch_goalsub_abbrev_tac`type_check b c d`
-    \\ `type_check b c d = (INL (), d)`
-    by (
-      rw[check_def, type_check_def, assert_def, Abbr`b`]
-      \\ drule eval_exprs_length
-      \\ gvs[check_def, type_check_def, assert_def] )
-    \\ rw[] )
-  \\ conj_tac >- suspend "ExtCall"
-  (* TASK032: original concrete-only CPS proof retained. The two actual
-     modes require separate generated default guards.
-  \\ conj_tac >- ( (* ExtCall *)
-    rw[eval_expr_cps_def, evaluate_def, bind_def]
-    >> CASE_TAC \\ gvs[cont_def] \\ reverse CASE_TAC
-    >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
-    \\ simp[Once OWHILE_THM, stepk_def, apply_vals_def, liftk1]
-    \\ qmatch_goalsub_abbrev_tac`pair_CASE cc1`
-    \\ qmatch_goalsub_abbrev_tac`lhs = _`
-    \\ qmatch_goalsub_abbrev_tac`pair_CASE cc2`
-    \\ qunabbrev_tac`lhs`
-    >> qmatch_asmsub_abbrev_tac`ignore_bind tc1 _`
-    >> Cases_on`tc1 r`
-    >> reverse(Cases_on`q`)
-    >- ( simp[Abbr`cc1`,Abbr`cc2`,ignore_bind_def,bind_def] )
-    >> first_x_assum drule
-    >> gvs[Abbr`tc1`]
-    >> disch_then drule
-    >> gvs[ignore_bind_def,bind_def]
-    >> qmatch_asmsub_abbrev_tac`pair_CASE lot`
-    >> Cases_on`lot` >> reverse(Cases_on`q`)
-    >- ( simp[Abbr`cc1`,Abbr`cc2`,ignore_bind_def,bind_def] )
-    >> gvs[]
-    >> disch_then drule
-    >> qmatch_asmsub_abbrev_tac`pair_CASE lot`
-    >> Cases_on`lot` >> reverse(Cases_on`q`)
-    >- ( simp[Abbr`cc1`,Abbr`cc2`,ignore_bind_def,bind_def] )
-    >> gvs[]
-    >> PairCases_on`x''`
-    >> disch_then drule
-    >> gvs[ignore_bind_def, bind_def]
-    >> ntac 4 (
-      qmatch_asmsub_abbrev_tac`pair_CASE lot`
-      >> Cases_on`lot` >> reverse(Cases_on`q`)
-      >- ( simp[Abbr`cc1`,Abbr`cc2`,ignore_bind_def,bind_def] )
-      >> gvs[]
-      >> disch_then drule )
-    >> qmatch_asmsub_abbrev_tac`pair_CASE lot`
-    >> Cases_on`lot` >> reverse(Cases_on`q`)
-    >- ( simp[Abbr`cc1`,Abbr`cc2`,ignore_bind_def,bind_def] )
-    >> gvs[]
-    >> qmatch_asmsub_rename_tac`_ = (INL pp,_)`
-    >> PairCases_on`pp`
-    >> reverse(Cases_on`pp1=[]`)
-    >- (
-      disch_then kall_tac >>
-      simp[Abbr`cc1`,Abbr`cc2`,bind_def] >>
-      ntac 5 CASE_TAC >> simp[] >>
-      Cases_on`q` >> simp[] >>
-      Cases_on`q'` >> simp[] >>
-      Cases_on`q''` >> simp[] >>
-      Cases_on`q'''` >> simp[] >>
-      Cases_on`q''''` >> simp[return_def])
-    >> gvs[bind_def] >> disch_then drule
-    >> ntac 4 (
-      qmatch_asmsub_abbrev_tac`pair_CASE lot`
-      >> Cases_on`lot` >> reverse(Cases_on`q`)
-      >- ( simp[Abbr`cc1`,Abbr`cc2`,ignore_bind_def,bind_def] )
-      >> gvs[]
-      >> disch_then drule )
-    >> simp[Abbr`cc1`,Abbr`cc2`]
-    >> IF_CASES_TAC >> gvs[bind_def,return_def]
-    (* default_return_value path: code check after the call *)
-    >> TRY (
-      qmatch_goalsub_abbrev_tac`check cb "ExtCall target has no code" cs`
-      >> Cases_on`check cb "ExtCall target has no code" cs`
-      >> Cases_on`q` >> simp[]
-      >> qmatch_asmsub_rename_tac`check cb _ cs = (INL uu, _)`
-      >> Cases_on`uu`
-      >> disch_then drule >> simp[] >> NO_TAC)
-    >> CASE_TAC >> CASE_TAC >> simp[] )
-  *)
+    >> rw[Once OWHILE_THM, stepk_def, apply_vals_def, bind_def, liftk1]
+    >> gvs[apply_exc_def] )
+  (* Both evaluators delegate to eval_ext_call after evaluating all operands,
+     including keyword defaults.  No recursive default-expression IH remains;
+     this shared-helper proof covers oracle and direct execution alike. *)
+  \\ conj_tac >- ( (* eval_expr (Call (ExtCall ...) es _) *)
+    rw[eval_expr_cps_def, evaluate_def, ignore_bind_def, bind_def]
+    \\ gvs[prod_CASE_rator, sum_CASE_rator, cont_def]
+    \\ CASE_TAC \\ gvs[] \\ CASE_TAC \\ gvs[]
+    \\ rw[Once OWHILE_THM, nextk_def, stepk_def,
+          apply_exc_def, apply_vals_def, ignore_bind_def, bind_def]
+    \\ simp[liftk1] \\ CASE_TAC \\ CASE_TAC \\ simp[])
   \\ conj_tac >- ( (* IntCall *)
     rw[eval_expr_cps_def, evaluate_def, ignore_bind_def, bind_def,
        no_recursion_def]
@@ -1795,150 +1646,6 @@ Proof
   \\ gvs[apply_vals_def]
   \\ rw[Once OWHILE_THM, stepk_def]
 QED
-
-(* The induction supplies a default-expression guard for each oracle mode.
-   Drop the unreachable mode before simplifying or matching those guards. *)
-fun DROP_EXT_CALL_IH_TAC c =
-  first_x_assum (fn th =>
-    if can (find_term (fn tm => is_const tm andalso same_const tm c))
-           (concl th) then ALL_TAC else NO_TAC);
-
-val EXT_CALL_CPS_PREP_TAC =
-  FIRST
-    [qpat_x_assum `st_args.outcomes = NONE` (fn th =>
-       DROP_EXT_CALL_IH_TAC ``vyperCallOutcome$take_call_outcome`` >>
-       assume_tac th),
-     qpat_x_assum `st_args.outcomes = SOME _` (fn th =>
-       DROP_EXT_CALL_IH_TAC ``run_ext_call`` >> assume_tac th)] >>
-  gvs[bind_def, ignore_bind_def, return_def, UNCURRY,
-    type_check_def, check_def, assert_def, lift_option_type_def,
-    get_accounts_def, get_transient_storage_def, update_accounts_def,
-    update_transient_def, append_logs_def, raise_def];
-
-(* One branch/progress step at a time: keep each simplification and IH
-   specialization independently visible to holbuild's tactic budget. *)
-val EXT_CALL_CPS_CASES_TAC =
-  TRY (FIRST [first_assum MATCH_ACCEPT_TAC,
-    (* Collapse a failed operand before rewriting the guarded IH/dead call body. *)
-    CHANGED_TAC (simp_tac (srw_ss()) [raise_def]),
-    CHANGED_TAC (gvs[bind_def, ignore_bind_def, return_def, UNCURRY,
-      type_check_def, check_def, assert_def, lift_option_type_def,
-      get_accounts_def, get_transient_storage_def, update_accounts_def,
-      update_transient_def, append_logs_def, raise_def]),
-    first_x_assum (fn th =>
-      if is_imp (snd (strip_forall (concl th))) then
-        drule_at Any th >> simp[] >> strip_tac
-      else NO_TAC),
-    CASE_TAC]);
-
-val EXT_CALL_CPS_FINISH_TAC =
-  TRY (rename1 `lift_option (run_ext_call _ _ _ _ _ _ _) _ _ = (INL call_result,_)` >>
-    PairCases_on `call_result` >> gvs[]) >>
-  TRY (rename1 `vyperCallOutcome$take_call_outcome _ _ _ _ = (INL call_pair,_)` >>
-    PairCases_on `call_pair` >> gvs[]) >>
-  rpt (FIRST [CHANGED_TAC (gvs[]),
-    first_x_assum (fn th =>
-      if is_imp (snd (strip_forall (concl th))) then
-        drule_at Any th >> simp[] >> strip_tac
-      else NO_TAC)]);
-
-Resume eval_cps_eq[ExtCall]:
-  rpt strip_tac >>
-  rename1 `ExtCall stat skip_check (func_name, arg_types, ret_type)` >>
-  rw[eval_expr_cps_def, evaluate_def, bind_def] >>
-  CASE_TAC >> gvs[cont_def] >> reverse CASE_TAC
-  >- rw[Once OWHILE_THM, stepk_def, apply_exc_def] >>
-  simp[Once OWHILE_THM, stepk_def, apply_vals_def, liftk1] >>
-  rename1 `eval_exprs cx es st = (INL vs,st_args)` >>
-  qpat_x_assum `!st k. OWHILE _ _ (eval_exprs_cps _ _ _ _) = _` kall_tac >>
-  Cases_on `stat` >> Cases_on `st_args.outcomes` >>
-  Cases_on `ret_type = NoneT` >|
-  [suspend "static_none_noneT", suspend "static_none_value",
-   suspend "static_some_noneT", suspend "static_some_value",
-   suspend "nonstatic_none_noneT", suspend "nonstatic_none_value",
-   suspend "nonstatic_some_noneT", suspend "nonstatic_some_value"]
-QED
-
-Resume eval_cps_eq[static_none_noneT]:
-  EXT_CALL_CPS_PREP_TAC >>
-  EXT_CALL_CPS_CASES_TAC >> EXT_CALL_CPS_CASES_TAC >>
-  EXT_CALL_CPS_CASES_TAC >> EXT_CALL_CPS_CASES_TAC >>
-  EXT_CALL_CPS_CASES_TAC >> EXT_CALL_CPS_CASES_TAC >>
-  EXT_CALL_CPS_CASES_TAC >> EXT_CALL_CPS_CASES_TAC >>
-  EXT_CALL_CPS_CASES_TAC >> EXT_CALL_CPS_CASES_TAC >>
-  EXT_CALL_CPS_CASES_TAC >> EXT_CALL_CPS_CASES_TAC >>
-  EXT_CALL_CPS_CASES_TAC >> EXT_CALL_CPS_CASES_TAC >>
-  EXT_CALL_CPS_CASES_TAC >> EXT_CALL_CPS_CASES_TAC >>
-  EXT_CALL_CPS_CASES_TAC >> EXT_CALL_CPS_CASES_TAC >>
-  EXT_CALL_CPS_CASES_TAC >> EXT_CALL_CPS_CASES_TAC >>
-  EXT_CALL_CPS_CASES_TAC >> EXT_CALL_CPS_CASES_TAC >>
-  EXT_CALL_CPS_CASES_TAC >> EXT_CALL_CPS_CASES_TAC >>
-  EXT_CALL_CPS_FINISH_TAC
-QED
-Resume eval_cps_eq[static_none_value]:
-  EXT_CALL_CPS_PREP_TAC >>
-  ntac 4 EXT_CALL_CPS_CASES_TAC >> ntac 4 EXT_CALL_CPS_CASES_TAC >>
-  ntac 4 EXT_CALL_CPS_CASES_TAC >> ntac 4 EXT_CALL_CPS_CASES_TAC >>
-  ntac 4 EXT_CALL_CPS_CASES_TAC >> ntac 4 EXT_CALL_CPS_CASES_TAC >>
-  EXT_CALL_CPS_FINISH_TAC
-QED
-Resume eval_cps_eq[static_some_noneT]:
-  EXT_CALL_CPS_PREP_TAC >>
-  ntac 4 EXT_CALL_CPS_CASES_TAC >> ntac 4 EXT_CALL_CPS_CASES_TAC >>
-  ntac 4 EXT_CALL_CPS_CASES_TAC >> ntac 4 EXT_CALL_CPS_CASES_TAC >>
-  ntac 4 EXT_CALL_CPS_CASES_TAC >> ntac 4 EXT_CALL_CPS_CASES_TAC >>
-  EXT_CALL_CPS_FINISH_TAC
-QED
-Resume eval_cps_eq[static_some_value]:
-  EXT_CALL_CPS_PREP_TAC >>
-  ntac 4 EXT_CALL_CPS_CASES_TAC >> ntac 4 EXT_CALL_CPS_CASES_TAC >>
-  ntac 4 EXT_CALL_CPS_CASES_TAC >> ntac 4 EXT_CALL_CPS_CASES_TAC >>
-  ntac 4 EXT_CALL_CPS_CASES_TAC >> ntac 4 EXT_CALL_CPS_CASES_TAC >>
-  EXT_CALL_CPS_FINISH_TAC
-QED
-(* A failed value conversion already determines the whole call.  Reduce
-   the exception/case spine in the goal before the general progress tactic
-   rewrites the guarded default-expression IH and the dead call bodies. *)
-val EXT_CALL_CPS_VALUE_CASES_TAC =
-  FIRST [CHANGED_TAC (simp_tac std_ss [raise_def]), EXT_CALL_CPS_CASES_TAC];
-
-Resume eval_cps_eq[nonstatic_none_noneT]:
-  EXT_CALL_CPS_PREP_TAC >>
-  ntac 2 EXT_CALL_CPS_VALUE_CASES_TAC >> ntac 2 EXT_CALL_CPS_VALUE_CASES_TAC >>
-  ntac 2 EXT_CALL_CPS_VALUE_CASES_TAC >> ntac 2 EXT_CALL_CPS_VALUE_CASES_TAC >>
-  ntac 2 EXT_CALL_CPS_VALUE_CASES_TAC >> ntac 2 EXT_CALL_CPS_VALUE_CASES_TAC >>
-  ntac 2 EXT_CALL_CPS_VALUE_CASES_TAC >> ntac 2 EXT_CALL_CPS_VALUE_CASES_TAC >>
-  ntac 2 EXT_CALL_CPS_VALUE_CASES_TAC >> ntac 2 EXT_CALL_CPS_VALUE_CASES_TAC >>
-  ntac 2 EXT_CALL_CPS_VALUE_CASES_TAC >> ntac 2 EXT_CALL_CPS_VALUE_CASES_TAC >>
-  EXT_CALL_CPS_FINISH_TAC
-QED
-Resume eval_cps_eq[nonstatic_none_value]:
-  EXT_CALL_CPS_PREP_TAC >>
-  ntac 2 EXT_CALL_CPS_CASES_TAC >> ntac 2 EXT_CALL_CPS_CASES_TAC >>
-  ntac 2 EXT_CALL_CPS_CASES_TAC >> ntac 2 EXT_CALL_CPS_CASES_TAC >>
-  ntac 2 EXT_CALL_CPS_CASES_TAC >> ntac 2 EXT_CALL_CPS_CASES_TAC >>
-  ntac 2 EXT_CALL_CPS_CASES_TAC >> ntac 2 EXT_CALL_CPS_CASES_TAC >>
-  ntac 2 EXT_CALL_CPS_CASES_TAC >> ntac 2 EXT_CALL_CPS_CASES_TAC >>
-  ntac 2 EXT_CALL_CPS_CASES_TAC >> ntac 2 EXT_CALL_CPS_CASES_TAC >>
-  EXT_CALL_CPS_FINISH_TAC
-QED
-Resume eval_cps_eq[nonstatic_some_noneT]:
-  EXT_CALL_CPS_PREP_TAC >>
-  ntac 4 EXT_CALL_CPS_CASES_TAC >> ntac 4 EXT_CALL_CPS_CASES_TAC >>
-  ntac 4 EXT_CALL_CPS_CASES_TAC >> ntac 4 EXT_CALL_CPS_CASES_TAC >>
-  ntac 4 EXT_CALL_CPS_CASES_TAC >> ntac 4 EXT_CALL_CPS_CASES_TAC >>
-  EXT_CALL_CPS_FINISH_TAC
-QED
-Resume eval_cps_eq[nonstatic_some_value]:
-  EXT_CALL_CPS_PREP_TAC >>
-  ntac 4 EXT_CALL_CPS_CASES_TAC >> ntac 4 EXT_CALL_CPS_CASES_TAC >>
-  ntac 4 EXT_CALL_CPS_CASES_TAC >> ntac 4 EXT_CALL_CPS_CASES_TAC >>
-  ntac 4 EXT_CALL_CPS_CASES_TAC >> ntac 4 EXT_CALL_CPS_CASES_TAC >>
-  EXT_CALL_CPS_FINISH_TAC
-QED
-
-Finalise eval_cps_eq
-
 Definition fromk_def[simp]:
   fromk x =
     case x of

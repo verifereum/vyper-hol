@@ -1131,7 +1131,11 @@ Proof
   >- acct_frame_finish_tac
   >- acct_frame_finish_tac
   >- acct_frame_finish_tac
-  >- acct_frame_finish_tac
+  >- (qpat_x_assum `step_inst_base inst s = _` mp_tac >>
+      step_inst_base_opcode_tac >> rpt strip_tac >>
+      fs[exec_pure2_def, extract_venom_result_def] >>
+      fs[eval_operand_acct_stor, eval_operands_acct_stor] >>
+      gvs[AllCaseEqs()])
   >- acct_frame_finish_tac
   >- acct_frame_finish_tac
   >- acct_frame_finish_tac
