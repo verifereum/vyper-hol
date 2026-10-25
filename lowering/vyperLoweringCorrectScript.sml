@@ -19,9 +19,12 @@
  *   external_call_result_rel, source_unit_execution_correct -- oracle boundary
  *   compile_state_ok_initial -- label-space invariant of the initial compile state
  *   external_return_word_result_rel, external_return_prim_result_rel,
+ *   external_return_static_result_rel,
  *   external_return_none_result_rel,
  *   external_fallthrough_result_rel -- S1 halt bridge (#640) for the
- *     return sequences loweringHalt covers
+ *     return sequences loweringHalt covers, and the _unlock versions of
+ *     all but the static one, whose return may release a transient
+ *     nonreentrant lock
  *   lower_vyper_runtime_unit_correct -- S1 (planned admission, Milestone 6)
  *   lower_vyper_runtime_unit_source_unit_ok -- S2 (Milestone 5)
  *   lower_vyper_runtime_unit_memory_ok -- S3 (Milestone 5)
@@ -173,18 +176,164 @@ End
    return with every address's accounts and transient storage as in the
    source (#665 tracks deriving those from the relation), halt in the
    success case of external_call_result_rel.  The source result is the one
-   call_external_function builds when no lock is released: the returned
-   value cast to the return type (NoneV when the body returns without a
-   value or falls off its end), the machine of the final state es with its
-   pending deletions processed, and es's requests.  The statement
+   call_external_function builds: the returned value cast to the return
+   type (NoneV when the body returns without a value or falls off its
+   end), the machine of the state es' after the lock is released, with its
+   pending deletions processed, and the requests of es'.  The statement
    simulation (#637) brings the run to the return, the entry bridge (#639)
-   runs up to the body, and S1 (#642) composes them. *)
+   runs up to the body, and S1 (#642) composes them.
+
+   The _unlock theorems allow a return that releases a transient
+   nonreentrant lock (nr /\ ~iv ==> ut).  es' is es after the source
+   releases the lock at the compiler's key nkey, as call_external_function
+   does at cx.nonreentrant_slot.  S1 links nkey to cx.nonreentrant_slot,
+   and the compiler's iv to the source's is_view; the lowering does not
+   use transient locks yet (#564).  The theorems without _unlock are their
+   case with no release (nr ==> iv), where es' = es. *)
 
 (* Returning a value of a word type (is_word_type: bool, integers,
    decimal, flag, address, bytesN).  The operand holds the value's word at
    the return type tv, typed_val_to_w256 tv v0; compile_name_correct gives
    a local's word at its own type, which agrees with this one when the two
    types do. *)
+Theorem external_return_prim_unlock_result_rel:
+  !ctx op ei msz nr nkey ut iv st x st' func cenv cx es es' tenv ret tv v0 v
+     tops tx srcs exps layouts Q.
+    compile_external_return (SOME op) T F ei msz nr nkey ut iv st =
+      (x, st') /\
+    (nr /\ ~iv ==> ut) /\ (!y. op = Var y ==> not_fresh_at st y) /\
+    (if nr /\ ~iv then release_nonreentrant_lock cx.txn.target nkey
+     else vyperState$return ()) es = (INL (), es') /\
+    evaluate_type tenv ret = SOME tv /\ safe_cast tv v0 = SOME v /\
+    is_word_type ret ==>
+    frag_exec ctx st st'
+      (\s. state_rel func cenv cx es s /\
+           eval_operand op s = SOME (typed_val_to_w256 tv v0) /\
+           s.vs_accounts =
+             process_deletions es.pending_deletions es.accounts /\
+           s.vs_transient = es.tStorage)
+      Q
+      (external_call_result_rel tops ret tx
+         (INL v, finalize_pending_deletions
+                   (abstract_machine_from_state srcs exps layouts es'),
+          es'.requests))
+Proof
+  rpt strip_tac >>
+  qspecl_then [`tops`, `tenv`, `ret`, `tv`, `v0`, `v`] mp_tac
+    return_bytes_prim_value >>
+  impl_tac >- asm_rewrite_tac[] >> strip_tac >>
+  qspecl_then [`ctx`, `op`, `ei`, `msz`, `nr`, `nkey`, `ut`, `iv`, `st`,
+               `x`, `st'`, `typed_val_to_w256 tv v0`] mp_tac
+    compile_external_return_word_unlock_frag >>
+  simp[] >> disch_then irule >> simp[] >> rpt strip_tac >>
+  qspecl_then [`func`, `cenv`, `cx`, `es`, `es'`, `s`, `ss`, `nr`, `nkey`,
+               `iv`, `tops`, `tx`, `srcs`, `exps`, `layouts`] mp_tac
+    external_halt_success_unlock >>
+  impl_tac >- simp[] >>
+  strip_tac >> gvs[external_call_result_rel_def]
+QED
+
+(* Its case for the values word_value covers, whose word is val_to_w256. *)
+Theorem external_return_word_unlock_result_rel:
+  !ctx op ei msz nr nkey ut iv st x st' func cenv cx es es' tenv ret tv v0 v
+     tops tx srcs exps layouts Q.
+    compile_external_return (SOME op) T F ei msz nr nkey ut iv st =
+      (x, st') /\
+    (nr /\ ~iv ==> ut) /\ (!y. op = Var y ==> not_fresh_at st y) /\
+    (if nr /\ ~iv then release_nonreentrant_lock cx.txn.target nkey
+     else vyperState$return ()) es = (INL (), es') /\
+    evaluate_type tenv ret = SOME tv /\ safe_cast tv v0 = SOME v /\
+    word_value v0 ==>
+    frag_exec ctx st st'
+      (\s. state_rel func cenv cx es s /\
+           eval_operand op s = SOME (val_to_w256 v0) /\
+           s.vs_accounts =
+             process_deletions es.pending_deletions es.accounts /\
+           s.vs_transient = es.tStorage)
+      Q
+      (external_call_result_rel tops ret tx
+         (INL v, finalize_pending_deletions
+                   (abstract_machine_from_state srcs exps layouts es'),
+          es'.requests))
+Proof
+  rpt strip_tac >>
+  drule_all word_value_prim >> strip_tac >>
+  qpat_x_assum `typed_val_to_w256 _ _ = _` (REWRITE_TAC o single o GSYM) >>
+  qspecl_then [`ctx`, `op`, `ei`, `msz`, `nr`, `nkey`, `ut`, `iv`, `st`,
+               `x`, `st'`, `func`, `cenv`, `cx`, `es`, `es'`, `tenv`, `ret`,
+               `tv`, `v0`, `v`, `tops`, `tx`, `srcs`, `exps`, `layouts`, `Q`]
+    mp_tac external_return_prim_unlock_result_rel >>
+  simp[]
+QED
+
+(* A return without a value. *)
+Theorem external_return_none_unlock_result_rel:
+  !ctx cenv lctx ty st x st' nr nkey ut iv func cx es es' tops tx srcs exps
+     layouts Q.
+    compile_stmt cenv lctx ty (Return NONE) st = (x, st') /\
+    cenv.ce_return_pc = NONE /\
+    cenv.ce_nonreentrant = (nr, nkey, ut, iv) /\ (nr /\ ~iv ==> ut) /\
+    (if nr /\ ~iv then release_nonreentrant_lock cx.txn.target nkey
+     else vyperState$return ()) es = (INL (), es') ==>
+    frag_exec ctx st st'
+      (\s. state_rel func cenv cx es s /\
+           s.vs_accounts =
+             process_deletions es.pending_deletions es.accounts /\
+           s.vs_transient = es.tStorage)
+      Q
+      (external_call_result_rel tops NoneT tx
+         (INL NoneV, finalize_pending_deletions
+                       (abstract_machine_from_state srcs exps layouts es'),
+          es'.requests))
+Proof
+  rpt strip_tac >>
+  qspecl_then [`ctx`, `cenv`, `lctx`, `ty`, `st`, `x`, `st'`, `nr`, `nkey`,
+               `ut`, `iv`] mp_tac compile_return_none_external_unlock_frag >>
+  simp[] >> disch_then irule >> simp[] >> rpt strip_tac >>
+  qspecl_then [`func`, `cenv`, `cx`, `es`, `es'`, `s`, `ss`, `nr`, `nkey`,
+               `iv`, `tops`, `tx`, `srcs`, `exps`, `layouts`] mp_tac
+    external_halt_success_unlock >>
+  impl_tac >- simp[] >>
+  strip_tac >> gvs[external_call_result_rel_def, return_bytes_def]
+QED
+
+(* Falling off the end of a function without a return type: from the end
+   sb of the body's code, when it does not end its block. *)
+Theorem external_fallthrough_unlock_result_rel:
+  !ctx cenv nr nkey ut iv stmts st x st' sa sb func cx es es' tops tx srcs
+     exps layouts Q.
+    compile_guarded_body cenv nr nkey ut iv stmts NONE st = (x, st') /\
+    (nr /\ ~iv ==> ut) /\
+    (if nr then compile_nonreentrant_lock nkey ut iv else comp_return ()) st =
+      ((), sa) /\
+    compile_stmts cenv NoLoop (BaseT BoolT) stmts sa = ((), sb) /\
+    ~block_is_terminated sb /\
+    (if nr /\ ~iv then release_nonreentrant_lock cx.txn.target nkey
+     else vyperState$return ()) es = (INL (), es') ==>
+    frag_exec ctx sb st'
+      (\s. state_rel func cenv cx es s /\
+           s.vs_accounts =
+             process_deletions es.pending_deletions es.accounts /\
+           s.vs_transient = es.tStorage)
+      Q
+      (external_call_result_rel tops NoneT tx
+         (INL NoneV, finalize_pending_deletions
+                       (abstract_machine_from_state srcs exps layouts es'),
+          es'.requests))
+Proof
+  rpt strip_tac >>
+  qspecl_then [`ctx`, `cenv`, `nr`, `nkey`, `ut`, `iv`, `stmts`, `st`, `x`,
+               `st'`, `sa`, `sb`] mp_tac
+    compile_guarded_body_stop_unlock_frag >>
+  simp[] >> disch_then irule >> simp[] >> rpt strip_tac >>
+  qspecl_then [`func`, `cenv`, `cx`, `es`, `es'`, `s`, `ss`, `nr`, `nkey`,
+               `iv`, `tops`, `tx`, `srcs`, `exps`, `layouts`] mp_tac
+    external_halt_success_unlock >>
+  impl_tac >- simp[] >>
+  strip_tac >> gvs[external_call_result_rel_def, return_bytes_def]
+QED
+
+(* The same four with no release (nr ==> iv). *)
 Theorem external_return_prim_result_rel:
   !ctx op ei msz nr nkey ut iv st x st' func cenv cx es tenv ret tv v0 v
      tops tx srcs exps layouts Q.
@@ -206,20 +355,15 @@ Theorem external_return_prim_result_rel:
           es.requests))
 Proof
   rpt strip_tac >>
-  qspecl_then [`tops`, `tenv`, `ret`, `tv`, `v0`, `v`] mp_tac
-    return_bytes_prim_value >>
-  impl_tac >- asm_rewrite_tac[] >> strip_tac >>
   qspecl_then [`ctx`, `op`, `ei`, `msz`, `nr`, `nkey`, `ut`, `iv`, `st`,
-               `x`, `st'`, `typed_val_to_w256 tv v0`] mp_tac
-    compile_external_return_word_frag >>
-  simp[] >> disch_then irule >> simp[] >> rpt strip_tac >>
-  qspecl_then [`func`, `cenv`, `cx`, `es`, `s`, `ss`, `tops`, `tx`, `srcs`,
-               `exps`, `layouts`] mp_tac external_halt_success >>
-  impl_tac >- simp[] >>
-  strip_tac >> gvs[external_call_result_rel_def]
+               `x`, `st'`, `func`, `cenv`, `cx`, `es`, `es`, `tenv`, `ret`,
+               `tv`, `v0`, `v`, `tops`, `tx`, `srcs`, `exps`, `layouts`, `Q`]
+    mp_tac external_return_prim_unlock_result_rel >>
+  impl_tac
+  >- (Cases_on `nr` >> Cases_on `iv` >> gvs[vyperStateTheory.return_def]) >>
+  simp[]
 QED
 
-(* Its case for the values word_value covers, whose word is val_to_w256. *)
 Theorem external_return_word_result_rel:
   !ctx op ei msz nr nkey ut iv st x st' func cenv cx es tenv ret tv v0 v
      tops tx srcs exps layouts Q.
@@ -241,16 +385,15 @@ Theorem external_return_word_result_rel:
           es.requests))
 Proof
   rpt strip_tac >>
-  drule_all word_value_prim >> strip_tac >>
-  qpat_x_assum `typed_val_to_w256 _ _ = _` (REWRITE_TAC o single o GSYM) >>
   qspecl_then [`ctx`, `op`, `ei`, `msz`, `nr`, `nkey`, `ut`, `iv`, `st`,
-               `x`, `st'`, `func`, `cenv`, `cx`, `es`, `tenv`, `ret`, `tv`,
-               `v0`, `v`, `tops`, `tx`, `srcs`, `exps`, `layouts`, `Q`]
-    mp_tac external_return_prim_result_rel >>
+               `x`, `st'`, `func`, `cenv`, `cx`, `es`, `es`, `tenv`, `ret`,
+               `tv`, `v0`, `v`, `tops`, `tx`, `srcs`, `exps`, `layouts`, `Q`]
+    mp_tac external_return_word_unlock_result_rel >>
+  impl_tac
+  >- (Cases_on `nr` >> Cases_on `iv` >> gvs[vyperStateTheory.return_def]) >>
   simp[]
 QED
 
-(* A return without a value. *)
 Theorem external_return_none_result_rel:
   !ctx cenv lctx ty st x st' nr nkey ut iv func cx es tops tx srcs exps
      layouts Q.
@@ -270,18 +413,14 @@ Theorem external_return_none_result_rel:
 Proof
   rpt strip_tac >>
   qspecl_then [`ctx`, `cenv`, `lctx`, `ty`, `st`, `x`, `st'`, `nr`, `nkey`,
-               `ut`, `iv`] mp_tac compile_return_none_external_frag >>
-  simp[] >> disch_then irule >> simp[] >> rpt strip_tac >>
-  qspecl_then [`func`, `cenv`, `cx`, `es`, `s`,
-               `halt_state (s with vs_returndata := [])`, `tops`, `tx`,
-               `srcs`, `exps`, `layouts`] mp_tac external_halt_success >>
-  impl_tac >- simp[halt_state_def] >>
-  strip_tac >>
-  gvs[halt_state_def, external_call_result_rel_def, return_bytes_def]
+               `ut`, `iv`, `func`, `cx`, `es`, `es`, `tops`, `tx`, `srcs`,
+               `exps`, `layouts`, `Q`]
+    mp_tac external_return_none_unlock_result_rel >>
+  impl_tac
+  >- (Cases_on `nr` >> Cases_on `iv` >> gvs[vyperStateTheory.return_def]) >>
+  simp[]
 QED
 
-(* Falling off the end of a function without a return type: from the end
-   sb of the body's code, when it does not end its block. *)
 Theorem external_fallthrough_result_rel:
   !ctx cenv nr nkey ut iv stmts st x st' sa sb func cx es tops tx srcs exps
      layouts Q.
@@ -304,14 +443,53 @@ Theorem external_fallthrough_result_rel:
 Proof
   rpt strip_tac >>
   qspecl_then [`ctx`, `cenv`, `nr`, `nkey`, `ut`, `iv`, `stmts`, `st`, `x`,
-               `st'`, `sa`, `sb`] mp_tac compile_guarded_body_stop_frag >>
+               `st'`, `sa`, `sb`, `func`, `cx`, `es`, `es`, `tops`, `tx`,
+               `srcs`, `exps`, `layouts`, `Q`]
+    mp_tac external_fallthrough_unlock_result_rel >>
+  impl_tac
+  >- (Cases_on `nr` >> Cases_on `iv` >> gvs[vyperStateTheory.return_def]) >>
+  simp[]
+QED
+
+(* A return of a static complex value (tuple, struct, fixed array): the
+   operand points at memory holding the value, and the returned AbiCopy
+   size is its memory size.  The size is below dimword, so the size
+   literal of the copy and the RETURN does not wrap; nothing in the
+   lowering bounds it (vyper rejects allocations of 2^64 bytes or more). *)
+Theorem external_return_static_result_rel:
+  !ctx op m msz nr nkey ut iv st x st' func cenv cx es ret tv v0 v
+     tops tx srcs exps layouts Q.
+    compile_external_return (SOME op) F F (AbiCopy m) msz nr nkey ut iv st =
+      (x, st') /\
+    (nr ==> iv) /\ (!y. op = Var y ==> not_fresh_at st y) /\
+    evaluate_type (type_env tops) ret = SOME tv /\ safe_cast tv v0 = SOME v /\
+    ~is_dynamic (vyper_to_abi_type (type_env tops) ret) /\
+    m = type_memory_size tv /\ m < dimword(:256) ==>
+    frag_exec ctx st st'
+      (\s. state_rel func cenv cx es s /\
+           (?p. eval_operand op s = SOME p /\
+                val_in_memory tv v0 (w2n p) s.vs_memory) /\
+           s.vs_accounts =
+             process_deletions es.pending_deletions es.accounts /\
+           s.vs_transient = es.tStorage)
+      Q
+      (external_call_result_rel tops ret tx
+         (INL v, finalize_pending_deletions
+                   (abstract_machine_from_state srcs exps layouts es),
+          es.requests))
+Proof
+  rpt strip_tac >>
+  qspecl_then [`ctx`, `op`, `m`, `msz`, `nr`, `nkey`, `ut`, `iv`, `st`,
+               `x`, `st'`] mp_tac compile_external_return_copy_frag >>
   simp[] >> disch_then irule >> simp[] >> rpt strip_tac >>
-  qspecl_then [`func`, `cenv`, `cx`, `es`, `s`,
-               `halt_state (s with vs_returndata := [])`, `tops`, `tx`,
-               `srcs`, `exps`, `layouts`] mp_tac external_halt_success >>
-  impl_tac >- simp[halt_state_def] >>
-  strip_tac >>
-  gvs[halt_state_def, external_call_result_rel_def, return_bytes_def]
+  qexists_tac `p` >> simp[] >> rpt strip_tac >>
+  qspecl_then [`tops`, `ret`, `tv`, `v0`, `v`, `w2n p`, `s.vs_memory`]
+    mp_tac return_bytes_static_value >>
+  impl_tac >- asm_rewrite_tac[] >> strip_tac >>
+  qspecl_then [`func`, `cenv`, `cx`, `es`, `s`, `ss`, `tops`, `tx`, `srcs`,
+               `exps`, `layouts`] mp_tac external_halt_success >>
+  impl_tac >- simp[] >>
+  strip_tac >> gvs[external_call_result_rel_def]
 QED
 
 (* ===== Label-space invariant at the start of lowering ===== *)
