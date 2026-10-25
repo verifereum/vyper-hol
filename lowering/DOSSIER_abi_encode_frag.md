@@ -16,6 +16,7 @@ PLAN: `lowering/PLAN_abi_encode_frag.md`
 | C1.4.1 | proved |  | E0014 | Review, commit allocation projection boundary, continue instruction framing. |
 | C1.4.2 | progressed | other | E0017 | Continue AbiBytestring framed operational consumer and exact ABI-byte integration; C1.4.2 remains open. |
 | C1.4.2.1 | proved |  | E0018 | Review and commit fixed-frame instruction boundaries, then begin rounded-length/layout C1.4.2.2. |
+| C1.4.2.2 | proved |  | E0020 |  |
 | C1.5.1 | proved |  | E0011 | Review and commit; proceed scheduled frontier. C1.5.2 can use enc_prefix_suc, HP_length, enc_prefix_full without unfolding tuple encoding. |
 | C1.5.2 | proved |  | E0012 | Review, commit, continue scheduled leaf. |
 | C1.5.3 | proved |  | E0013 | Review and commit runtime invariant interface. |
@@ -234,6 +235,30 @@ PLAN: `lowering/PLAN_abi_encode_frag.md`
 
 - `TO_abi_encode_frag-20261025T101052Z_m0588_t001` (use `read_tool_output` for exact output)
 - `TO_abi_encode_frag-20261025T101052Z_m0592_t001` (use `read_tool_output` for exact output)
+
+## C1.4.2.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0020`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 25 steps, 24 tools, 6 holbuild, 1,608,135 tok (1,606,022 in, 2,113 out, 1,567,360 cached), 206.0s, $0.2551900
+
+### Attempts / Evidence
+
+- `E0019` (progressed, other, actual effort: 1 sessions, 3 msgs, 33 steps, 32 tools, 8 holbuild, 4,244,185 tok (4,240,410 in, 3,775 out, 4,101,248 cached), 387.8s, $0.7261988)
+  - Prove rounded natural bounds and word-mask agreement through alignmentTheory.align_bitwise_and/align_w2n. -> enc_round32_bounds and enc_round32_word verified. DIVISION needs explicit separate MOD bound retained before simp. (`TO_abi_encode_frag-20261025T101052Z_m0612_t001`)
+  - Prove general padded mem_bytes_at subrange boundary via LIST_EQ/EL_TAKE/EL_DROP. -> enc_mem_bytes_subrange verified using explicit index bounds and asm_simp_tac bool_ss to avoid boss simp arithmetic timeout. (`TO_abi_encode_frag-20261025T101052Z_m0626_t001`)
+  - Add zero-MSTORE subrange and prezero source-disjointness helpers. -> Unverified tail: build currently stops at static error in enc_mstore_zero_subrange, undeclared TAKE_REPLICATE and MIN_DEF. Must search correct list theorem names/qualified arithmetic theorem. enc_prezero_source follows in source but has not been checked. Full prezero/MCOPY layout remains to write. (`TO_abi_encode_frag-20261025T101052Z_m0628_t001`)
+- `E0020` (proved, , actual effort: 1 sessions, 1 msgs, 25 steps, 24 tools, 6 holbuild, 1,608,135 tok (1,606,022 in, 2,113 out, 1,567,360 cached), 206.0s, $0.2551900)
+  - Repair zero-store subrange with LIST_EQ/EL_REPLICATE and qualify venomMemDefsTheory.regions_disjoint_def in source preservation. -> Both boundary lemmas build. (`TO_abi_encode_frag-20261025T101052Z_m0645_t001`)
+  - Split padded output into copied prefix and zero suffix, apply mcopy_padded_read, enc_mcopy_disjoint and enc_mstore_zero_subrange. -> enc_prezero_copy_layout proved for arbitrary l<=r<=l+32 including zero and empty padding; use LAND_CONV to avoid splitting RHS prefix. (`TO_abi_encode_frag-20261025T101052Z_m0659_t001`)
+
+### Evidence refs
+
+- `TO_abi_encode_frag-20261025T101052Z_m0659_t001` (use `read_tool_output` for exact output)
 
 ## C1.5.1
 

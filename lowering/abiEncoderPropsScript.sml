@@ -2022,6 +2022,94 @@ Proof
   simp[enc_frame_mstore] >> metis_tac[]
 QED
 
+Theorem enc_round32_bounds:
+  l <= 32 * ((l + 31) DIV 32) /\
+  32 * ((l + 31) DIV 32) < l + 32
+Proof
+  `(l + 31) MOD 32 < 32` by simp[] >>
+  qspec_then `32` mp_tac arithmeticTheory.DIVISION >> simp[] >>
+  disch_then (qspec_then `l + 31` mp_tac) >> decide_tac
+QED
+
+Theorem enc_round32_word:
+  l + 31 < dimword (:256) ==>
+  (n2w (l + 31) : bytes32) &&
+    0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE0w =
+  n2w (32 * ((l + 31) DIV 32))
+Proof
+  strip_tac >>
+  `0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE0w : bytes32 =
+     UINT_MAXw << 5` by EVAL_TAC >>
+  asm_rewrite_tac[GSYM alignmentTheory.align_bitwise_and] >>
+  simp[alignmentTheory.align_w2n, arithmeticTheory.MULT_COMM]
+QED
+
+Theorem enc_mem_bytes_subrange:
+  start + n <= len ==>
+  mem_bytes_at (off + start) n mem =
+    TAKE n (DROP start (mem_bytes_at off len mem))
+Proof
+  strip_tac >> irule LIST_EQ >> simp[LENGTH_TAKE_EQ] >>
+  rpt strip_tac >>
+  `x + start < len` by decide_tac >>
+  simp[EL_TAKE, EL_DROP] >>
+  `start + x < len` by decide_tac >>
+  asm_simp_tac bool_ss [valueEncodingProofsTheory.EL_mem_bytes_at,
+                       arithmeticTheory.ADD_ASSOC]
+QED
+
+Theorem enc_mstore_zero_subrange:
+  start + n <= 32 ==>
+  mem_bytes_at (off + start) n (mstore off 0w s).vs_memory =
+    REPLICATE n 0w
+Proof
+  strip_tac >>
+  `word_to_bytes (0w:bytes32) T = REPLICATE 32 0w` by EVAL_TAC >>
+  drule enc_mem_bytes_subrange >>
+  disch_then (qspecl_then [`off`, `(mstore off 0w s).vs_memory`] mp_tac) >>
+  simp[mem_bytes_at_mstore_same, DROP_REPLICATE] >>
+  disch_then SUBST1_TAC >> irule LIST_EQ >>
+  simp[LENGTH_TAKE_EQ, EL_TAKE, EL_REPLICATE]
+QED
+
+Theorem enc_prezero_source:
+  l <= r /\ r <= l + 32 /\
+  regions_disjoint (src,32+l) (dst,32+r) ==>
+  mem_bytes_at src (32+l) (mstore (dst+r) 0w s).vs_memory =
+    mem_bytes_at src (32+l) s.vs_memory
+Proof
+  strip_tac >> irule mstore_mem_bytes_at_disjoint >>
+  fs[venomMemDefsTheory.regions_disjoint_def] >> decide_tac
+QED
+
+Theorem enc_prezero_copy_layout:
+  l <= r /\ r <= l + 32 /\
+  regions_disjoint (src,32+l) (dst,32+r) ==>
+  mem_bytes_at dst (32+r)
+    (mcopy dst src (32+l) (mstore (dst+r) 0w s)).vs_memory =
+  mem_bytes_at src (32+l) s.vs_memory ++ REPLICATE (r-l) 0w
+Proof
+  strip_tac >>
+  `32+r = (32+l) + (r-l)` by decide_tac >>
+  once_asm_rewrite_tac[] >>
+  CONV_TAC (LAND_CONV (REWR_CONV
+    valueEncodingProofsTheory.mem_bytes_at_split_padded)) >>
+  `mem_bytes_at dst (32+l)
+     (mcopy dst src (32+l) (mstore (dst+r) 0w s)).vs_memory =
+   mem_bytes_at src (32+l) s.vs_memory` by
+    (rewrite_tac[mem_bytes_at_def, mcopy_padded_read] >>
+     rewrite_tac[GSYM mem_bytes_at_def] >>
+     irule enc_prezero_source >> simp[]) >>
+  asm_rewrite_tac[] >> AP_TERM_TAC >>
+  `mem_bytes_at (dst+(32+l)) (r-l)
+     (mcopy dst src (32+l) (mstore (dst+r) 0w s)).vs_memory =
+   mem_bytes_at (dst+(32+l)) (r-l) (mstore (dst+r) 0w s).vs_memory` by
+    (irule enc_mcopy_disjoint >> simp[]) >>
+  asm_rewrite_tac[] >>
+  `dst + (32+l) = (dst+r) + (32+l-r)` by decide_tac >>
+  asm_rewrite_tac[] >> irule enc_mstore_zero_subrange >> decide_tac
+QED
+
 Theorem compile_abi_encode_prim_frame_frag:
   compile_abi_encode_to_buf dst src AbiPrimWord st = (op, st') /\
   eval_operand dst s0 = SOME dst_w /\ eval_operand src s0 = SOME src_w /\
