@@ -183,6 +183,15 @@ Proof
   simp[lower_value_def, comp_bind_def]
 QED
 
+Theorem compile_ext_call_kwarg_callback_contract:
+  (∀ty st. f cenv ty e st = g cenv ty e st) ⇒
+  compile_ext_call_kwarg f cenv return_type k e =
+  compile_ext_call_kwarg g cenv return_type k e
+Proof
+  strip_tac >> `∀ty. f cenv ty e = g cenv ty e` by simp[FUN_EQ_THM] >>
+  simp[compile_ext_call_kwarg_def, lower_value_def]
+QED
+
 Theorem compile_ext_call_kwargs_callback_contract:
   ∀ks es. expr_callbacks_agree f g cenv es ⇒
     compile_ext_call_kwargs f cenv return_type ks es =
@@ -190,7 +199,8 @@ Theorem compile_ext_call_kwargs_callback_contract:
 Proof
   Induct >> Cases_on `es` >> simp[compile_ext_call_kwargs_def] >>
   rpt strip_tac >> first_x_assum drule >>
-  gvs[expr_callbacks_agree_def, FUN_EQ_THM, comp_bind_def, lower_value_def]
+  gvs[expr_callbacks_agree_def, FUN_EQ_THM, comp_bind_def, lower_value_def] >>
+  drule_then assume_tac compile_ext_call_kwarg_callback_contract >> gvs[]
 QED
 
 Theorem expr_callbacks_agree_take_drop:
