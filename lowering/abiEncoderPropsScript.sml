@@ -1040,6 +1040,169 @@ QED
    Together with LENGTH_DROP this gives the exact tail-length subtraction;
    no encoder-specific duplicate of that bound is needed. *)
 
+(* ===== Source and region boundaries ===== *)
+
+Theorem enc_pre_bounds:
+  enc_pre st st' ops lo top tv v src outs s ==>
+  src + type_memory_size tv <= lo /\ lo <= top /\
+  top < dimword (:256)
+Proof
+  rewrite_tac[enc_pre_def, enc_scratch_def] >> strip_tac >>
+  rpt conj_tac >> decide_tac
+QED
+
+Theorem regions_disjoint_subregions:
+  regions_disjoint (a, n) (b, m) /\
+  a <= a' /\ a' + n' <= a + n /\
+  b <= b' /\ b' + m' <= b + m ==>
+  regions_disjoint (a', n') (b', m')
+Proof
+  rewrite_tac[venomMemDefsTheory.regions_disjoint_def] >> decide_tac
+QED
+
+Theorem enc_scratch_alloca_bound:
+  enc_scratch ids lo top s /\
+  FLOOKUP s.vs_allocas j = SOME (c, n) ==> c + n <= top
+Proof
+  rewrite_tac[enc_scratch_def, venomMemDefsTheory.alloca_inv_def,
+              venomMemDefsTheory.alloca_next_valid_def] >>
+  rpt strip_tac >> first_x_assum drule >> decide_tac
+QED
+
+Theorem enc_scratch_outside_disjoint:
+  enc_scratch ids lo top s /\ j NOTIN ids /\ i IN ids /\
+  FLOOKUP s.vs_allocas j = SOME (c, n) /\
+  FLOOKUP s.vs_allocas i = SOME (b, m) ==>
+  regions_disjoint (c, n) (b, m)
+Proof
+  rewrite_tac[enc_scratch_def, venomMemDefsTheory.alloca_inv_def,
+       venomMemDefsTheory.allocas_non_overlapping_def,
+       venomMemDefsTheory.regions_disjoint_def] >> rpt strip_tac >>
+  `j <> i` by metis_tac[] >> metis_tac[]
+QED
+
+Theorem tuple_in_memory_append:
+  !vs tvs off ws tws.
+    LENGTH vs = LENGTH tvs ==>
+    (tuple_in_memory (vs ++ ws) (tvs ++ tws) off mem <=>
+     tuple_in_memory vs tvs off mem /\
+     tuple_in_memory ws tws (off + SUM (MAP type_memory_size tvs)) mem)
+Proof
+  Induct >> Cases_on `tvs` >> simp[val_in_memory_def] >>
+  rpt strip_tac >> simp[CONJ_ASSOC]
+QED
+
+Theorem elems_in_memory_EL:
+  !vs off k.
+    elems_in_memory vs off tv mem /\ k < LENGTH vs ==>
+    val_in_memory tv (EL k vs) (off + k * type_memory_size tv) mem
+Proof
+  Induct >> simp[val_in_memory_def] >>
+  rpt gen_tac >> Cases_on `k` >>
+  simp[val_in_memory_def, arithmeticTheory.MULT_CLAUSES] >>
+  rpt strip_tac >> rename1 `k' < LENGTH vs` >>
+  first_x_assum drule >>
+  disch_then (qspec_then `k'` mp_tac) >> simp[]
+QED
+
+Theorem mem_bytes_at_pointwise:
+  (!a. off <= a /\ a < off + n ==>
+       mem_bytes_at a 1 mem = mem_bytes_at a 1 mem') ==>
+  mem_bytes_at off n mem = mem_bytes_at off n mem'
+Proof
+  strip_tac >> irule LIST_EQ >> simp[] >> rpt strip_tac >>
+  rename1 `k < n` >>
+  first_x_assum (qspec_then `off + k` mp_tac) >> simp[] >>
+  disch_then (mp_tac o AP_TERM ``EL 0 : word8 list -> word8``) >>
+  simp[valueEncodingProofsTheory.EL_mem_bytes_at]
+QED
+
+Theorem word_size_covers[local]:
+  n <= 32 * word_size n
+Proof
+  simp[vfmConstantsTheory.word_size_def] >>
+  qspec_then `32` mp_tac arithmeticTheory.DIVISION >>
+  rewrite_tac[EVAL ``0 < 32``] >>
+  disch_then (qspec_then `n + 31` strip_assume_tac) >> decide_tac
+QED
+
+Theorem value_has_type_val_wf_mutual[local]:
+  (!tv v. value_has_type tv v ==> val_wf tv v) /\
+  (!tvs vs. values_have_types tvs vs ==> tuple_val_wf vs tvs) /\
+  (!tv n kvs. sparse_has_type tv n kvs ==> kvs_val_wf kvs tv n) /\
+  (!tv vs. all_have_type tv vs ==> elems_val_wf vs tv) /\
+  (!fts fields. struct_has_type fts fields ==> fields_val_wf fields fts)
+Proof
+  ho_match_mp_tac value_has_type_ind >>
+  simp[value_has_type_def, val_wf_def, type_memory_size_def] >>
+  rpt strip_tac >> rename1 `word_size cap` >>
+  qspec_then `cap` mp_tac (GEN_ALL word_size_covers) >> decide_tac
+QED
+
+Theorem value_has_type_val_wf:
+  !tv v. value_has_type tv v ==> val_wf tv v
+Proof
+  metis_tac[value_has_type_val_wf_mutual]
+QED
+
+Theorem val_in_memory_pointwise:
+  val_in_memory tv v off mem /\ val_wf tv v /\
+  (!a. off <= a /\ a < off + type_memory_size tv ==>
+       mem_bytes_at a 1 mem = mem_bytes_at a 1 mem') ==>
+  val_in_memory tv v off mem'
+Proof
+  strip_tac >> irule val_in_memory_mem_agree >>
+  goal_assum drule >> simp[] >>
+  qexists_tac `type_memory_size tv` >> simp[] >>
+  qexists_tac `mem` >> simp[] >>
+  irule mem_bytes_at_pointwise >> simp[]
+QED
+
+Theorem typed_val_in_memory_pointwise:
+  value_has_type tv v /\ val_in_memory tv v src mem /\
+  (!a. src <= a /\ a < src + type_memory_size tv ==>
+       mem_bytes_at a 1 mem = mem_bytes_at a 1 mem') ==>
+  val_in_memory tv v src mem'
+Proof
+  strip_tac >> drule value_has_type_val_wf >> strip_tac >>
+  irule val_in_memory_pointwise >> goal_assum drule >> simp[] >>
+  qexists_tac `mem` >> simp[]
+QED
+
+Theorem enc_frame_preserves_source:
+  enc_frame st st' lo top outs s0 s /\
+  value_has_type tv v /\ val_in_memory tv v src s0.vs_memory /\
+  src + type_memory_size tv <= lo /\
+  EVERY (regions_disjoint (src, type_memory_size tv)) outs ==>
+  val_in_memory tv v src s.vs_memory
+Proof
+  strip_tac >> irule typed_val_in_memory_pointwise >>
+  goal_assum drule >> simp[] >>
+  qexists_tac `s0.vs_memory` >> simp[] >> rpt strip_tac >>
+  qpat_x_assum `enc_frame _ _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[enc_frame_def, enc_scratch_def] >> strip_tac >>
+  sym_tac >> first_x_assum irule >> reverse conj_tac
+  >- (qpat_x_assum `EVERY _ outs` mp_tac >>
+      rewrite_tac[EVERY_MEM] >> strip_tac >> rpt strip_tac >>
+      rename1 `MEM p outs` >> Cases_on `p` >>
+      first_x_assum drule >>
+      rewrite_tac[venomMemDefsTheory.regions_disjoint_def] >>
+      simp[] >> decide_tac) >>
+  rpt strip_tac >> first_x_assum drule_all >> decide_tac
+QED
+
+Theorem tuple_in_memory_EL:
+  !vs tvs off k.
+    LENGTH vs = LENGTH tvs /\ tuple_in_memory vs tvs off mem /\
+    k < LENGTH vs ==>
+    val_in_memory (EL k tvs) (EL k vs)
+      (off + SUM (MAP type_memory_size (TAKE k tvs))) mem
+Proof
+  Induct >> Cases_on `tvs` >> simp[val_in_memory_def] >>
+  rpt gen_tac >> Cases_on `k` >> simp[] >>
+  rpt strip_tac >> first_x_assum drule_all >> simp[]
+QED
+
 (* ===== Recursive ABI encode correctness ===== *)
 
 (* Mutual induction over compile_abi_encode_child / _to_buf /

@@ -65,25 +65,36 @@ Use compile_abi_encode_child_ind, generalizing all semantic parameters before in
 #### Not to try
 A passing build with a cheat in a newly introduced helper does not meet completion. If the induction shape differs from expectations, improve the branch-helper interface rather than introducing long manual MATCH_MP/CONJ plumbing.
 
-### C1.2: Source subvalues and bounded region arithmetic
+### C1.2: Typed source footprints, subvalue extraction and region preservation
 - Kind: `boundary_lemma`
 - Risk: 2
 - Work priority: 20
 - Work units: 8
-- Rationale: The required bounds follow from enc_pre, enc_scratch and alloca_inv; subvalue extraction follows the memory layout definition.
-- Dependencies: C1.1
+- Rationale: value_has_type_def rules out mismatched primitive types and supplies exactly the lengths, key bounds and recursive hypotheses required by val_wf_def. All aggregate auxiliary predicates align recursively. Bytes/string cases require only ceiling-to-word arithmetic. Existing checked memory boundaries handle preservation once this bridge is supplied.
+- Progress transition: `refinement`
+- Carries progress/evidence from: E0003
+
+#### Progress note
+Retain the nine checked boundary helpers from E0003 unchanged. That episode reports partial progress, not a completed obligation; no continuity certification is requested. Complete the missing typing bridge and frame/source preservation in this same leaf.
 
 #### Summary
-Make enc_pre usable at recursive calls without unfolding value layout in consumers. Extract tuple suffixes, individual aggregate members and array elements. Derive no-wrap bounds and output/source/scratch separation.
+Retain enc_pre_bounds, regions_disjoint_subregions, enc_scratch_alloca_bound/outside_disjoint, tuple_in_memory_append/EL, elems_in_memory_EL, mem_bytes_at_pointwise and val_in_memory_pointwise. Prove value_has_type implies val_wf without an evaluate_type premise. Package typed source preservation across an enc_frame so consumers do not unfold the frame. Reuse existing static-array and struct extraction lemmas rather than duplicate them. Check the abiEncoderPropsTheory build and leave the frozen theorem and definitions unchanged.
+
+#### Description
+Exact extraction scope remaining: the already proved tuple_in_memory_EL and elems_in_memory_EL supply indexed tuple/homogeneous elements. Use val_in_memory_dynarray to enter the element region at src+32; use val_in_memory_sarray together with kvs_in_memory_lookup for present keys and the existing default clause for absent keys; use fields_in_memory_tuple to expose struct fields as a tuple. These existing facts are the extraction interface and need no new wrappers unless a consumer demonstrably needs a missing semantic conclusion. Region containment uses regions_disjoint_subregions and type_memory_size_def; do not invent a general source extraction framework. Put the typing bridge, its local mutual helper/arithmetic fact, and the two preservation boundaries near the current Source and region boundaries section in lowering/abiEncoderPropsScript.sml. Each proof must remain short under the task limit; split the local arithmetic or recursive interface lemmas rather than expanding large tactic chains.
 
 #### Statement
-Outputs: source subvalue and suffix lemmas for tuples, structs, fixed arrays and dynamic arrays; preservation of val_in_memory when all padded byte observations in the source extent are unchanged; enc_pre bounds implying src + type_memory_size tv <= lo <= top < dimword (:256); child-output region containment and disjointness lemmas; from an outside-id alloca (c,32), alloca_inv and enc_scratch derive c+32 <= top and its disjointness from fragment-owned scratch cells.
+New required outputs:
+1. `!tv v. value_has_type tv v ==> val_wf tv v`.
+2. A typed pointwise corollary: `value_has_type tv v /\ val_in_memory tv v src mem /\ (!a. src <= a /\ a < src + type_memory_size tv ==> mem_bytes_at a 1 mem = mem_bytes_at a 1 mem') ==> val_in_memory tv v src mem'`.
+3. A frame boundary: `enc_frame st st' lo top outs s0 s /\ value_has_type tv v /\ val_in_memory tv v src s0.vs_memory /\ src + type_memory_size tv <= lo /\ EVERY (regions_disjoint (src,type_memory_size tv)) outs ==> val_in_memory tv v src s.vs_memory`.
+For output 1 use a local simultaneous strengthening with `values_have_types tvs vs ==> tuple_val_wf vs tvs`, `sparse_has_type tv n kvs ==> kvs_val_wf kvs tv n`, `all_have_type tv vs ==> elems_val_wf vs tv`, and `struct_has_type ftypes fields ==> fields_val_wf fields ftypes`. Add the local arithmetic fact `n <= 32 * word_size n` if no equivalent exported lemma is found.
 
 #### Approach
-Unfold val_in_memory only in these boundary lemmas, with structural list induction where necessary. Use the whole source extent to bound all source-pointer additions, and whole output extents plus C1.1 length decompositions to bound destination additions. Treat zero-size regions explicitly: regions_disjoint admits them, so do not extract strict bounds or nonempty-byte facts from empty intervals.
+Prove the typing bridge by recursion-matching induction on value_has_type_def and its four mutual auxiliary predicates; simplify val_wf_def and type_memory_size_def in each matching branch. For bytes and strings use word_size n = (n+31) DIV 32 and quotient/remainder arithmetic to prove the ceiling bound, then combine with LENGTH <= n; sparse typing supplies both k<n and typed stored values, and defaults require no new premise because kvs_val_wf checks stored entries only. Derive typed pointwise preservation from the existing val_in_memory_pointwise; for frame preservation establish one-byte agreement using output disjointness and the final enc_scratch lower bound on every fragment-owned cell, then apply that corollary (reverse equality orientation as needed).
 
 #### Not to try
-Do not require output regions pairwise disjoint in general enc_pre. For dynamic head/tail regions derive the needed ordering from static_ofst+32<=d or head_offset+head_size<=d at the use site.
+Do not prove val_wf from val_in_memory alone or drop wellformedness from memory agreement: mismatched or oversized values invalidate that route. Do not add evaluate_type unless an actual counterexample to the stronger typing bridge is found; every value_has_type constructor already determines the required layout. Do not prove defaults typed for this bridge: sparse val_wf requires only stored keys and values. Do not unfold enc_frame repeatedly in recursive encoder consumers, duplicate existing extraction lemmas, or add wrapper proofs solely to restate their conclusions. Do not alter any frozen definition, theorem statement, semantics file or encoder definition.
 
 ### C1.3: Scratch budget and frame composition interface
 - Kind: `infrastructure_lemma`
