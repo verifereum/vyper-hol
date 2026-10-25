@@ -1042,3 +1042,161 @@ Proof
   simp[] >> qexists_tac `sm` >> simp[] >>
   qexistsl_tac [`t`, `vs`, `xs`] >> simp[]
 QED
+
+(* ===== Unsigned scaling overflow ===== *)
+Theorem mul_mod_div_no_overflow:
+  !N x m:num. 0 < N /\ x < N /\ 0 < m /\ m < N ==>
+    (((x * m MOD N) DIV x = m \/ x = 0) <=> x * m < N)
+Proof
+  rpt strip_tac >> Cases_on `x = 0` >- simp[] >>
+  `0 < x` by decide_tac >>
+  Cases_on `x * m < N`
+  >- simp[arithmeticTheory.LESS_MOD, arithmeticTheory.MULT_COMM,
+          arithmeticTheory.MULT_DIV] >>
+  `x * m MOD N < N` by simp[] >>
+  `x * m MOD N < m * x` by
+    (simp[arithmeticTheory.MULT_COMM] >> decide_tac) >>
+  `x * m MOD N DIV x < m` by
+    simp[arithmeticTheory.DIV_LT_X] >> simp[]
+QED
+
+Theorem denomination_multiplier_bounds:
+  !d. 0 < denomination_multiplier d /\ denomination_multiplier d < 2 ** 256
+Proof
+  Cases >> EVAL_TAC
+QED
+
+Theorem straight_fresh_as_wei_value_int:
+  !x m. straight_fresh (compile_as_wei_value_int x m F)
+Proof
+  rpt gen_tac >> simp[compile_as_wei_value_int_def] >>
+  Cases_on `m = 1` >> simp[straight_fresh_return] >>
+  rpt (FIRST [CHANGED_TAC (simp[]), irule straight_fresh_bind >> conj_tac,
+              irule straight_fresh_ignore_bind >> conj_tac,
+              irule straight_fresh_emit_op >> simp[fresh_write_op_def] >> NO_TAC,
+              irule straight_fresh_emit_void >> simp[fresh_write_op_def] >> NO_TAC,
+              irule straight_fresh_return >> NO_TAC,
+              gen_tac])
+QED
+
+Theorem word_mul_div_no_overflow:
+  !(a:bytes32) m. 0 < m /\ m < dimword (:256) ==>
+    (((a * n2w m) // a = n2w m \/ a = 0w) <=> w2n a * m < dimword (:256))
+Proof
+  rpt strip_tac >>
+  `m < 2 ** 256` by gvs[dimword_def] >>
+  Cases_on `a = 0w` >- simp[] >>
+  `0 < w2n a` by metis_tac[w2n_eq_0, arithmeticTheory.NOT_ZERO_LT_ZERO] >>
+  `m * w2n a MOD dimword (:256) DIV w2n a < dimword (:256)` by
+    (irule arithmeticTheory.LESS_EQ_LESS_TRANS >>
+     qexists_tac `m * w2n a MOD dimword (:256)` >>
+     simp[arithmeticTheory.DIV_LESS_EQ]) >>
+  once_rewrite_tac[GSYM w2n_11] >>
+  simp[word_mul_def, word_div_def, w2n_n2w] >>
+  qspec_then `dimword (:256)` mp_tac mul_mod_div_no_overflow >>
+  disch_then (qspecl_then [`w2n a`, `m`] mp_tac) >>
+  simp[arithmeticTheory.MULT_COMM, w2n_lt]
+QED
+
+Theorem eval_operand_update_not_fresh:
+  !sa a ss n w. (!z. a = Var z ==> not_fresh_at sa z) /\ sa.cs_next_var <= n ==>
+    eval_operand a (update_var (STRING #"%" (toString n)) w ss) = eval_operand a ss
+Proof
+  gen_tac >> Cases >> simp[eval_operand_def, lookup_var_update_var] >>
+  rpt strip_tac >> gvs[not_fresh_at_def] >> metis_tac[]
+QED
+
+Theorem compile_as_wei_value_int_run:
+  !a m sa op sb ss (va:bytes32).
+    compile_as_wei_value_int a m F sa = (op,sb) /\
+    eval_operand a ss = SOME va /\
+    (!z. a = Var z ==> not_fresh_at sa z) /\
+    0 < m /\ m < dimword (:256) ==>
+    (w2n va * m < dimword (:256) ==>
+      ?ss'. run_inst_seq (emitted_insts sa sb) ss = OK ss' /\
+        eval_operand op ss' = SOME (va * n2w m)) /\
+    (~(w2n va * m < dimword (:256)) ==>
+      ?ss'. run_inst_seq (emitted_insts sa sb) ss = Abort Revert_abort ss')
+Proof
+  rpt gen_tac >> Cases_on `m = 1`
+  >- (simp[compile_as_wei_value_int_def, comp_return_def] >>
+      rpt strip_tac >> gvs[] >> gvs[emitted_insts_def, run_inst_seq_def, WORD_MULT_CLAUSES, w2n_lt]) >>
+  simp[compile_as_wei_value_int_def, emit_op_def, emit_void_def,
+       emit_inst_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
+       fresh_id_def, fresh_var_def, emit_def] >>
+  strip_tac >> gvs[] >> simp[emitted_insts_def] >>
+  CONV_TAC (DEPTH_CONV (REWR_CONV (GSYM APPEND_ASSOC))) >>
+  simp[rich_listTheory.DROP_LENGTH_APPEND] >>
+  qspec_then `sa` assume_tac eval_operand_update_not_fresh >>
+  `((safe_div (va * n2w m) va = n2w m) \/ va = 0w) <=>
+    m * w2n va < dimword (:256)` by
+    (qspec_then `va` (qspec_then `m` mp_tac) word_mul_div_no_overflow >>
+     Cases_on `va = 0w` >> simp[safe_div_def, arithmeticTheory.MULT_COMM]) >>
+  conj_tac >> strip_tac >>
+  simp[Once run_inst_seq_def] >>
+  simp[Once step_inst_base_def, mk_inst_def, exec_pure2_def, eval_operand_def] >>
+  simp[Once run_inst_seq_def] >>
+  simp[Once step_inst_base_def, mk_inst_def, exec_pure2_def,
+       eval_operand_update_var, eval_operand_update_not_fresh] >>
+  simp[Once run_inst_seq_def] >>
+  simp[Once step_inst_base_def, mk_inst_def, exec_pure2_def,
+       eval_operand_update_var, eval_operand_def, lookup_var_update_var] >>
+  simp[Once run_inst_seq_def] >>
+  simp[Once step_inst_base_def, mk_inst_def, exec_pure1_def] >>
+  simp[] >>
+  simp[Once run_inst_seq_def] >>
+  simp[Once step_inst_base_def, mk_inst_def, exec_pure2_def,
+       eval_operand_def, lookup_var_update_var] >>
+  simp[Once run_inst_seq_def] >>
+  simp[Once step_inst_base_def, mk_inst_def, eval_operand_def,
+       lookup_var_update_var] >>
+  Cases_on `va = 0w` >>
+  Cases_on `safe_div (va * n2w m) va = n2w m` >>
+  gvs[bool_to_word_def, WORD_OR_CLAUSES, run_inst_seq_def, lookup_var_update_var]
+QED
+
+Theorem evaluate_as_wei_value_uint:
+  !d n. 0 <= n ==>
+    evaluate_as_wei_value d (IntV n) =
+      if n * &(denomination_multiplier d) < &(2 ** 256) then
+        INL (IntV (n * &(denomination_multiplier d)))
+      else INR (RuntimeError "ewv bound")
+Proof
+  rpt strip_tac >> `n = &(Num n)` by simp[] >>
+  pop_assum SUBST1_TAC >> Cases_on `d` >>
+  simp[vyperValueOperationTheory.evaluate_as_wei_value_def,
+       denomination_multiplier_def, vyperValueTheory.within_int_bound_def,
+       integerTheory.INT_MUL, integerTheory.NUM_OF_INT]
+QED
+
+Theorem compile_as_wei_value_word_frag:
+  !ctx func cenv cx es ann ts d (a:bytes32).
+    word_builtin_frag ctx func cenv cx
+      (\xs. compile_as_wei_value_int (EL 0 xs) (denomination_multiplier d) F)
+      (builtin_result cx es.accounts ann (AsWeiValue d) ts [IntV (&w2n a)])
+      [IntV (&w2n a)] es
+Proof
+  rpt gen_tac >>
+  qspec_then `d` strip_assume_tac denomination_multiplier_bounds >>
+  simp[builtin_result_def, evaluate_builtin_def, evaluate_as_wei_value_uint] >>
+  Cases_on `w2n a * denomination_multiplier d < dimword (:256)` >>
+  gvs[dimword_def] 
+  >- (irule word_builtin_frag_success >>
+      simp[straight_fresh_as_wei_value_int, word_value_def] >>
+      rpt strip_tac >>
+      gvs[LIST_REL_EL_EQN, val_to_w256_def, i2w_pos] >>
+      `!z. x = Var z ==> not_fresh_at sa z` by
+        (rpt strip_tac >> simp[not_fresh_at_def] >> rpt strip_tac >>
+         gvs[fresh_vars_wrt_def, eval_operand_def, lookup_var_def] >>
+         first_x_assum (qspec_then `n` mp_tac) >> simp[finite_mapTheory.TO_FLOOKUP]) >>
+      drule_all (SRULE [dimword_def] compile_as_wei_value_int_run) >>
+      simp[dimword_def, word_mul_def, w2n_n2w, arithmeticTheory.MULT_COMM]) >>
+  irule word_builtin_frag_revert >>
+  simp[straight_fresh_as_wei_value_int] >> rpt strip_tac >>
+  gvs[LIST_REL_EL_EQN, val_to_w256_def, i2w_pos] >>
+  `!z. x = Var z ==> not_fresh_at sa z` by
+    (rpt strip_tac >> simp[not_fresh_at_def] >> rpt strip_tac >>
+     gvs[fresh_vars_wrt_def, eval_operand_def, lookup_var_def] >>
+     first_x_assum (qspec_then `n` mp_tac) >> simp[finite_mapTheory.TO_FLOOKUP]) >>
+  drule_all (SRULE [dimword_def] compile_as_wei_value_int_run) >> simp[]
+QED
