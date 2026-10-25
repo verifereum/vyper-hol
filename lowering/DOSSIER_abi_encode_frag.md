@@ -14,6 +14,7 @@ PLAN: `lowering/PLAN_abi_encode_frag.md`
 | C1.3.3 | proved |  | E0009 |  |
 | C1.4 | stuck | risk_mismatch | E0010 | Strategist review: split instruction metadata projection/scratch invariance from memory observations and encoder consumers. Need small generic allocation-state congruence boundary or reusable projection simpset before framed MCOPY/base branches. |
 | C1.4.1 | proved |  | E0014 | Review, commit allocation projection boundary, continue instruction framing. |
+| C1.4.2 | progressed | other | E0015 | Continue C1.4.2 with old-variable update frames and AbiPrimWord/AbiBytestring framed consumers. New copy helper is operational; integrate val_in_memory_static_abi later for exact ABI bytes. |
 | C1.5.1 | proved |  | E0011 | Review and commit; proceed scheduled frontier. C1.5.2 can use enc_prefix_suc, HP_length, enc_prefix_full without unfolding tuple encoding. |
 | C1.5.2 | proved |  | E0012 | Review, commit, continue scheduled leaf. |
 | C1.5.3 | proved |  | E0013 | Review and commit runtime invariant interface. |
@@ -183,6 +184,27 @@ PLAN: `lowering/PLAN_abi_encode_frag.md`
 ### Evidence refs
 
 - `TO_abi_encode_frag-20261025T101052Z_m0426_t001` (use `read_tool_output` for exact output)
+
+## C1.4.2
+
+### Current Status
+
+- result: `progressed`
+- diagnosis: `other`
+- latest episode: `E0015`
+- blocker: 
+- actual effort: 1 sessions, 2 msgs, 33 steps, 32 tools, 9 holbuild, 2,932,018 tok (2,928,548 in, 3,470 out, 2,886,016 cached), 199.3s, $0.4083656
+- next: Continue C1.4.2 with old-variable update frames and AbiPrimWord/AbiBytestring framed consumers. New copy helper is operational; integrate val_in_memory_static_abi later for exact ABI bytes.
+
+### Attempts / Evidence
+
+- `E0015` (progressed, other, actual effort: 1 sessions, 2 msgs, 33 steps, 32 tools, 9 holbuild, 2,932,018 tok (2,928,548 in, 3,470 out, 2,886,016 cached), 199.3s, $0.4083656)
+  - Prove enc_frame_write_memory and enc_frame_mcopy by simplifying allocation metadata first, then applying disjoint-byte boundaries. -> Both frame proofs build, with metadata and byte reasoning separated. ()
+  - Add enc_frame_mstore via existing mstore_eq_wmwe; add instruction-index frame stability; prove compile_abi_encode_copy_frame_frag with exact MCOPY byte effect, labels, result length and frame. -> Clean build. The run_inst_seq lifting adds vs_inst_idx, so byte-effect equality rather than full-state equality is the sound postcondition. Copy length needs mem_size < dimword; this follows from frozen enc_pre source bound at integration. (`TO_abi_encode_frag-20261025T101052Z_m0460_t001`)
+
+### Evidence refs
+
+- `TO_abi_encode_frag-20261025T101052Z_m0460_t001` (use `read_tool_output` for exact output)
 
 ## C1.5.1
 

@@ -1802,6 +1802,80 @@ Proof
   simp[LENGTH_TAKE_EQ, LENGTH_DROP]
 QED
 
+Theorem enc_frame_write_memory:
+  enc_scratch (frag_ids st st') lo top s ==>
+  enc_frame st st' lo top [(dst, LENGTH bytes)] s
+    (write_memory_with_expansion dst bytes s)
+Proof
+  strip_tac >> rewrite_tac[enc_frame_def] >>
+  simp[enc_scratch_write_memory] >>
+  conj_tac
+  >- (rpt strip_tac >> irule enc_write_memory_disjoint >> gvs[]) >>
+  simp[write_memory_with_expansion_def]
+QED
+
+Theorem enc_frame_mcopy:
+  enc_scratch (frag_ids st st') lo top s ==>
+  enc_frame st st' lo top [(dst, len)] s (mcopy dst src len s)
+Proof
+  strip_tac >> rewrite_tac[enc_frame_def] >>
+  simp[enc_scratch_mcopy] >>
+  conj_tac
+  >- (rpt strip_tac >> irule enc_mcopy_disjoint >> gvs[]) >>
+  simp[mcopy_def, write_memory_with_expansion_def]
+QED
+
+Theorem enc_frame_mstore:
+  enc_scratch (frag_ids st st') lo top s ==>
+  enc_frame st st' lo top [(dst, 32)] s (mstore dst w s)
+Proof
+  strip_tac >>
+  `32 = LENGTH (word_to_bytes (w : bytes32) T)` by
+    simp[byteTheory.LENGTH_word_to_bytes] >>
+  once_asm_rewrite_tac[] >>
+  rewrite_tac[valueEncodingProofsTheory.mstore_eq_wmwe] >>
+  irule enc_frame_write_memory >> simp[]
+QED
+
+Theorem enc_frame_inst_idx[simp]:
+  enc_frame st st' lo top outs s0 (s with vs_inst_idx := idx) =
+  enc_frame st st' lo top outs s0 s
+Proof
+  simp[enc_frame_def, enc_scratch_def, lookup_var_def,
+       venomMemDefsTheory.alloca_inv_def,
+       venomMemDefsTheory.allocas_non_overlapping_def,
+       venomMemDefsTheory.alloca_next_valid_def]
+QED
+
+Theorem compile_abi_encode_copy_frame_frag:
+  compile_abi_encode_to_buf dst src (AbiCopy mem_size) st = (op, st') /\
+  mem_size < dimword (:256) /\
+  eval_operand dst s0 = SOME dst_w /\ 
+  eval_operand src s0 = SOME src_w /\
+  enc_scratch (frag_ids st st') lo top s0 ==>
+  frag_exec ctx st st' (\s. s = s0)
+    (\s. s.vs_memory = (mcopy (w2n dst_w) (w2n src_w) mem_size s0).vs_memory /\
+         s.vs_labels = s0.vs_labels /\
+         eval_operand op s = SOME (n2w mem_size) /\
+         enc_frame st st' lo top [(w2n dst_w, mem_size)] s0 s) R
+Proof
+  rpt strip_tac >>
+  gvs[Once compile_abi_encode_child_def, comp_bind_def,
+      comp_ignore_bind_def, comp_return_def, AllCaseEqs()] >>
+  pairarg_tac >> gvs[] >>
+  drule emit_void_extends >> strip_tac >>
+  irule frag_exec_run_inst_seq >> simp[same_blocks_def] >>
+  reverse conj_tac
+  >- (drule emitted_insts_emit_void >> strip_tac >>
+      gvs[same_blocks_def, mk_inst_def, is_terminator_def]) >>
+  disj1_tac >>
+  qexists_tac `mcopy (w2n dst_w) (w2n src_w) mem_size s0` >>
+  conj_tac
+  >- (drule emit_void_MCOPY_run >> simp[eval_operand_def]) >>
+  simp[eval_operand_def, enc_frame_mcopy] >>
+  simp[mcopy_def, write_memory_with_expansion_def]
+QED
+
 Theorem compile_abi_encode_frag:
   (!dst child_ptr ei is_dyn static_ofst dyn_ptr st op st' ctx env ty tv v
     av s0 dst_w src_w lo top.
