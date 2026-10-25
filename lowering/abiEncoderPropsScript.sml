@@ -1965,6 +1965,77 @@ QED
 
 Finalise compile_abi_encode_prim_frame_frag
 
+Theorem compile_abi_encode_copy_abi_frag:
+  compile_abi_encode_to_buf dst src (AbiCopy (type_memory_size tv)) st =
+    (op, st') /\
+  evaluate_type env ty = SOME tv /\
+  ~is_dynamic (vyper_to_abi_type env ty) /\ value_has_type tv v /\
+  vyper_to_abi env ty v = SOME av /\
+  eval_operand dst s0 = SOME dst_w /\ eval_operand src s0 = SOME src_w /\
+  enc_pre st st' [dst; src] lo top tv v (w2n src_w)
+    [(w2n dst_w, LENGTH (enc (vyper_to_abi_type env ty) av))] s0 ==>
+  frag_exec ctx st st' (\s. s = s0)
+    (\s. mem_bytes_at (w2n dst_w)
+           (LENGTH (enc (vyper_to_abi_type env ty) av)) s.vs_memory =
+           enc (vyper_to_abi_type env ty) av /\
+         eval_operand op s =
+           SOME (n2w (LENGTH (enc (vyper_to_abi_type env ty) av))) /\
+         s.vs_labels = s0.vs_labels /\
+         enc_frame st st' lo top
+           [(w2n dst_w, LENGTH (enc (vyper_to_abi_type env ty) av))] s0 s) R
+Proof
+  rpt strip_tac >>
+  `val_in_memory tv v (w2n src_w) s0.vs_memory` by fs[enc_pre_def] >>
+  `LENGTH (enc (vyper_to_abi_type env ty) av) = type_memory_size tv` by
+    (irule val_in_memory_static_enc_length >> metis_tac[]) >>
+  `type_memory_size tv < dimword (:256)` by
+    (drule enc_pre_bounds >> strip_tac >> decide_tac) >>
+  `enc_scratch (frag_ids st st') lo top s0` by fs[enc_pre_def] >>
+  drule_all compile_abi_encode_copy_frame_frag >>
+  disch_then (qspecl_then [`ctx`, `R`] mp_tac) >>
+  strip_tac >> irule frag_exec_conseq >> goal_assum (drule_at Any) >> simp[] >>
+  rpt strip_tac >> simp[] >>
+  rewrite_tac[mem_bytes_at_def, mcopy_padded_read] >>
+  rewrite_tac[GSYM mem_bytes_at_def] >>
+  irule val_in_memory_static_abi >> metis_tac[]
+QED
+
+Theorem compile_abi_encode_prim_abi_frag:
+  compile_abi_encode_to_buf dst src AbiPrimWord st = (op, st') /\
+  evaluate_type env ty = SOME tv /\
+  ~is_dynamic (vyper_to_abi_type env ty) /\ type_memory_size tv = 32 /\
+  value_has_type tv v /\ vyper_to_abi env ty v = SOME av /\
+  eval_operand dst s0 = SOME dst_w /\ eval_operand src s0 = SOME src_w /\
+  enc_pre st st' [dst; src] lo top tv v (w2n src_w)
+    [(w2n dst_w, LENGTH (enc (vyper_to_abi_type env ty) av))] s0 ==>
+  frag_exec ctx st st' (\s. s = s0)
+    (\s. mem_bytes_at (w2n dst_w)
+           (LENGTH (enc (vyper_to_abi_type env ty) av)) s.vs_memory =
+           enc (vyper_to_abi_type env ty) av /\
+         eval_operand op s =
+           SOME (n2w (LENGTH (enc (vyper_to_abi_type env ty) av))) /\
+         s.vs_labels = s0.vs_labels /\
+         enc_frame st st' lo top
+           [(w2n dst_w, LENGTH (enc (vyper_to_abi_type env ty) av))] s0 s) R
+Proof
+  rpt strip_tac >>
+  `val_in_memory tv v (w2n src_w) s0.vs_memory` by fs[enc_pre_def] >>
+  `LENGTH (enc (vyper_to_abi_type env ty) av) = 32` by
+    (drule_all val_in_memory_static_enc_length >> simp[]) >>
+  `mem_bytes_at (w2n src_w) 32 s0.vs_memory =
+     enc (vyper_to_abi_type env ty) av` by
+    (drule_all val_in_memory_static_abi >> simp[]) >>
+  `enc_scratch (frag_ids st st') lo top s0` by fs[enc_pre_def] >>
+  `!y. dst = Var y ==> not_fresh_at st y` by fs[enc_pre_def] >>
+  drule_all compile_abi_encode_prim_frame_frag >>
+  disch_then (qspecl_then [`ctx`, `R`] mp_tac) >> strip_tac >>
+  irule frag_exec_conseq >> goal_assum (drule_at Any) >> simp[] >>
+  rpt strip_tac >> simp[] >>
+  `mload (w2n dst_w) s = mload (w2n src_w) s0` by
+    fs[GSYM mem_word_at_eq_mload] >>
+  drule mload_eq_mem_bytes_at_eq >> simp[]
+QED
+
 
 Theorem compile_abi_encode_frag:
   (!dst child_ptr ei is_dyn static_ofst dyn_ptr st op st' ctx env ty tv v
