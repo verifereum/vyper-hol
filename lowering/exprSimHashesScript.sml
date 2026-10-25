@@ -556,3 +556,204 @@ Proof
   conj_tac >> rpt strip_tac >> qexists_tac `w2n slot` >>
   simp[compiler_slot_layout_lookup]
 QED
+
+Definition hash_bool_context_def:
+  hash_bool_context other lays = empty_evaluation_context with
+    <| stk := [(NONE,"")]; sources := [(empty_call_txn.target,
+         [(other,[VariableDecl Private Immutable "" (BaseT BoolT) NONE])])];
+       layouts := lays |>
+End
+
+Definition hash_bool_env_def:
+  hash_bool_env other =
+    <| current_src := NONE; var_types := FEMPTY; var_assignable := FEMPTY;
+       bare_globals := FEMPTY |+ ((other,""),BaseT BoolT);
+       bare_global_assignable := FEMPTY |+ ((other,""),BaseT BoolT);
+       toplevel_vtypes := FEMPTY |+ ((other,""),Type (BaseT BoolT));
+       type_defs := FEMPTY; fn_sigs := FEMPTY; flag_members := FEMPTY |>
+End
+
+Definition hash_bool_state_def:
+  hash_bool_state other b = empty_state with
+    <| scopes := [FEMPTY];
+       immutables := [(empty_call_txn.target,
+         [(other,FEMPTY |+ ("",(BaseTV BoolT,BoolV b)))])] |>
+End
+
+Theorem hash_bool_module_code:
+  !other lays src.
+    get_module_code (hash_bool_context other lays) src =
+      if src = other then SOME [VariableDecl Private Immutable "" (BaseT BoolT) NONE]
+      else NONE
+Proof
+  simp[hash_bool_context_def, empty_evaluation_context_def, get_module_code_def,
+       EQ_SYM_EQ]
+QED
+
+Theorem hash_bool_expr_typed:
+  !other. well_typed_expr (hash_bool_env other)
+    (TopLevelName (BaseT BoolT) (other,""))
+Proof
+  simp[hash_bool_env_def, well_typed_expr_def, well_formed_type_def,
+       finite_mapTheory.FLOOKUP_UPDATE, evaluate_type_def]
+QED
+
+Theorem hash_bool_tenv:
+  !other lays. get_tenv (hash_bool_context other lays) = FEMPTY
+Proof
+  rpt gen_tac >> EVAL_TAC >> simp[]
+QED
+
+Theorem hash_bool_env_context:
+  !other lays.
+    env_context_consistent (hash_bool_env other) (hash_bool_context other lays)
+Proof
+  rpt gen_tac >>
+  simp[env_context_consistent_def, hash_bool_env_def, hash_bool_tenv,
+       hash_bool_context_def, empty_evaluation_context_def, current_module_def,
+       fn_sigs_consistent_def, fn_sigs_declared_complete_def,
+       toplevel_vtypes_complete_def, bare_globals_complete_def,
+       bare_global_assignable_complete_def, flag_members_complete_def,
+       get_module_code_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  simp[lookup_flag_def, is_bare_global_decl_def, find_var_decl_by_name_def,
+       is_immutable_decl_def, well_formed_vtype_def, well_formed_type_def,
+       evaluate_type_def]
+QED
+
+Theorem hash_bool_env_scopes:
+  !other lays b.
+    env_scopes_consistent (hash_bool_env other) (hash_bool_context other lays)
+      (hash_bool_state other b)
+Proof
+  simp[env_scopes_consistent_def, hash_bool_env_def, hash_bool_state_def,
+       lookup_scopes_def]
+QED
+
+Theorem hash_bool_env_immutables:
+  !other lays b.
+    env_immutables_consistent (hash_bool_env other) (hash_bool_context other lays)
+      (hash_bool_state other b)
+Proof
+  simp[env_immutables_consistent_def, hash_bool_env_def, hash_bool_state_def,
+       hash_bool_context_def, empty_evaluation_context_def, hash_bool_tenv,
+       get_source_immutables_def, get_module_code_def,
+       finite_mapTheory.FLOOKUP_UPDATE, find_var_decl_by_name_def,
+       evaluate_type_def]
+QED
+
+Theorem hash_bool_state_typed:
+  !other b. state_well_typed (hash_bool_state other b)
+Proof
+  simp[state_well_typed_def, hash_bool_state_def, scope_well_typed_def,
+       imms_well_typed_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  rpt strip_tac >> gvs[value_has_type_def, well_formed_type_value_def]
+QED
+
+Theorem hash_bool_context_typed:
+  !other lays. context_well_typed (hash_bool_context other lays)
+Proof
+  rpt gen_tac >> EVAL_TAC
+QED
+
+Theorem hash_bool_no_callable:
+  !other lays src ts fn.
+    get_module_code (hash_bool_context other lays) src = SOME ts ==>
+    lookup_callable_function (hash_bool_context other lays).in_deploy fn ts = NONE
+Proof
+  simp[hash_bool_module_code] >> rpt strip_tac >>
+  gvs[AllCaseEqs(), hash_bool_context_def, empty_evaluation_context_def,
+      lookup_callable_function_def, lookup_function_def] >> EVAL_TAC
+QED
+
+Theorem hash_bool_functions_typed:
+  !other lays. functions_well_typed (hash_bool_context other lays)
+Proof
+  rpt gen_tac >> simp[functions_well_typed_def] >>
+  rpt gen_tac >> disch_tac >> rpt gen_tac >> strip_tac >>
+  drule hash_bool_no_callable >> disch_then (qspec_then `fn` mp_tac) >> simp[]
+QED
+
+Theorem hash_bool_call_safe:
+  !other lays. call_evaluation_safe (hash_bool_context other lays) []
+Proof
+  rpt gen_tac >>
+  simp[vyperTypeCallStackSoundnessTheory.call_evaluation_safe_def] >>
+  qexists_tac `[]` >>
+  `functions_follow_call_graph [] (hash_bool_context other lays)` suffices_by
+    (simp[vyperTypeCallStackSoundnessTheory.call_stack_follows_def,
+          vyperTypeCallGraphSoundnessTheory.call_edge_rel_def,
+          hash_bool_context_def, empty_evaluation_context_def,
+          relationTheory.TC_DEF, relationTheory.irreflexive_def] >>
+     strip_tac >> gen_tac >> qexists_tac `\x y. F` >> simp[]) >>
+  simp[vyperTypeCallStackSoundnessTheory.functions_follow_call_graph_def] >>
+  rpt strip_tac >> drule hash_bool_no_callable >>
+  disch_then (qspec_then `fn` mp_tac) >> simp[]
+QED
+
+Theorem hash_bool_source_pre:
+  !cenv other lays b.
+    expr_sim_pre cenv (hash_bool_context other lays) (hash_bool_env other)
+      (TopLevelName (BaseT BoolT) (other,"")) (hash_bool_state other b)
+Proof
+  rpt gen_tac >>
+  simp[expr_sim_pre_def, expr_sim_inv_def, hash_bool_expr_typed,
+       hash_bool_state_typed, hash_bool_context_typed, hash_bool_functions_typed,
+       hash_bool_call_safe, vyperTypeCallGraphTheory.int_calls_expr_def] >>
+  simp[env_consistent_def, hash_bool_env_context, hash_bool_env_scopes,
+       hash_bool_env_immutables, hash_bool_env_def, hash_bool_state_def,
+       empty_state_def, accounts_well_typed_def] >>
+  conj_tac >- (gen_tac >> EVAL_TAC) >>
+  simp[hash_bool_module_code] >> rpt strip_tac >>
+  gvs[AllCaseEqs(), lookup_flag_def]
+QED
+
+Theorem expr_sim_pre_outcomes:
+  !cenv cx env e es outs.
+    expr_sim_pre cenv cx env e (es with outcomes := outs) <=>
+    expr_sim_pre cenv cx env e es
+Proof
+  simp[expr_sim_pre_def, expr_sim_inv_def, env_consistent_def,
+       env_scopes_consistent_def, env_immutables_consistent_def,
+       state_well_typed_def]
+QED
+
+Theorem hash_bool_target_model:
+  !cenv other func lbl lays.
+    other <> cenv.ce_module /\
+    storage_vars_rel cenv (hash_bool_context other lays) /\
+    transient_vars_rel cenv (hash_bool_context other lays) ==>
+    !b. stmt_state_rel func cenv (hash_bool_context other lays)
+      ((hash_bool_state other b) with outcomes := SOME []) (init_venom_state lbl)
+Proof
+  rpt strip_tac >>
+  simp[stmt_state_rel_def, state_rel_def] >>
+  simp[local_ptrs_rel_def, local_region_def, hash_bool_state_def,
+       lookup_scopes_def, storage_rel_def, transient_rel_def,
+       immutables_rel_def, hash_bool_context_def, empty_evaluation_context_def,
+       get_source_immutables_def, logs_rel_def, call_ctx_rel_def,
+       init_venom_state_def, empty_state_def] >>
+  simp[contract_storage_def, contract_transient_def, venomMemDefsTheory.alloca_inv_def,
+       empty_call_context_def, empty_tx_context_def, empty_block_context_def,
+       empty_call_txn_def, venomMemDefsTheory.allocas_non_overlapping_def,
+       venomMemDefsTheory.alloca_next_valid_def]
+QED
+
+Theorem hash_bool_shared_model:
+  !cenv other. other <> cenv.ce_module ==>
+    ?lays. !b func lbl.
+      expr_sim_pre cenv (hash_bool_context other lays) (hash_bool_env other)
+        (TopLevelName (BaseT BoolT) (other,""))
+        ((hash_bool_state other b) with outcomes := SOME []) /\
+      stmt_state_rel func cenv (hash_bool_context other lays)
+        ((hash_bool_state other b) with outcomes := SOME []) (init_venom_state lbl)
+Proof
+  rpt strip_tac >>
+  qspecl_then [`cenv`, `hash_bool_context other []`] strip_assume_tac
+    compile_env_layouts_exist >>
+  `storage_vars_rel cenv (hash_bool_context other lays) /\
+   transient_vars_rel cenv (hash_bool_context other lays)` by
+    gvs[hash_bool_context_def] >>
+  qexists_tac `lays` >> rpt gen_tac >> conj_tac
+  >- simp[expr_sim_pre_outcomes, hash_bool_source_pre] >>
+  irule hash_bool_target_model >> simp[]
+QED
