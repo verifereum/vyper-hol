@@ -96,9 +96,9 @@ QED
    stmt_state_rel says nothing of the compiler temporaries, so it holds again
    where a loop body starts its next iteration with the last one's
    temporaries still bound.
-   Still unstated, like ctx below: every fresh ALLOCA runs with
-   vs_alloca_next below 2 ** 256, else its pointer wraps.  S3's
-   raw_unit_memory_ok gives that along a run. *)
+   A fresh ALLOCA runs with vs_alloca_next below 2 ** 256, so its pointer
+   does not wrap: stmt_state_rel's alloca_room bounds the frontier plus
+   every allocation func can still make (stmt_state_rel_exec_alloca). *)
 
 (* compile_stmt preserves state_rel: if the Vyper statement
    evaluates successfully, the compiled Venom code reaches the end of the

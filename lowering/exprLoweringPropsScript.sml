@@ -114,6 +114,29 @@ Definition well_annotated_def:
   well_annotated _ = T
 End
 
+(* The sizes func's frame can still allocate: those of its ALLOCAs whose ids
+   have no allocation yet.  Every ALLOCA the lowering emits has a literal
+   size; any other counts as the whole address space. *)
+Definition pending_alloca_size_def:
+  pending_alloca_size (func:ir_function) (ss:venom_state) =
+    SUM (MAP (\inst. case inst.inst_operands of
+                       [Lit n] => w2n n
+                     | _ => dimword (:256))
+             (FILTER (\inst. inst.inst_opcode = ALLOCA /\
+                             inst.inst_id NOTIN FDOM ss.vs_allocas)
+                (fn_insts func)))
+End
+
+(* Room in func's frame: the frontier plus every allocation func can still
+   make stays below 2 ** 256, so no ALLOCA of func hands out a wrapped
+   pointer.  A fresh ALLOCA of func moves its size from the pending sizes to
+   the frontier; a step that leaves the allocations alone keeps it.  An
+   INVOKE does not: the callee's allocations move the frontier too (#638). *)
+Definition alloca_room_def:
+  alloca_room func (ss:venom_state) <=>
+    ss.vs_alloca_next + pending_alloca_size func ss < dimword (:256)
+End
+
 (* state_rel in func, the function running, with the Venom-side facts a
    statement fragment needs and keeps:
    - alloca_inv: the recorded allocations are disjoint and below the
@@ -121,16 +144,75 @@ End
    - an allocation recorded for an ALLOCA of func has the size it asks for.
      A re-executed ALLOCA (a loop body, a branch) returns the recorded base
      without checking its size, so with alloca_inv this is what makes its
-     region miss every other live local. *)
+     region miss every other live local;
+   - alloca_room: func's allocations still to come fit below 2 ** 256, so
+     the frontier stays below 2 ** 256 and a declaration's ALLOCA hands out
+     its base unwrapped, after other declarations and inside bodies. *)
 Definition stmt_state_rel_def:
   stmt_state_rel func cenv cx vs ss ⇔
-    state_rel func cenv cx vs ss ∧ alloca_inv ss ∧
+    state_rel func cenv cx vs ss ∧ alloca_inv ss ∧ alloca_room func ss ∧
     ∀inst n base sz.
       MEM inst (fn_insts func) ∧ inst.inst_opcode = ALLOCA ∧
       inst.inst_operands = [Lit n] ∧
       FLOOKUP ss.vs_allocas inst.inst_id = SOME (base, sz) ⇒
       sz = w2n n
 End
+
+Theorem alloca_room_fields:
+  !func ss ss'.
+    alloca_room func ss /\
+    ss'.vs_allocas = ss.vs_allocas /\ ss'.vs_alloca_next = ss.vs_alloca_next ==>
+    alloca_room func ss'
+Proof
+  rw[alloca_room_def, pending_alloca_size_def] >> gvs[]
+QED
+
+Theorem alloca_room_next_lt:
+  !func ss. alloca_room func ss ==> ss.vs_alloca_next < dimword (:256)
+Proof
+  rw[alloca_room_def] >> decide_tac
+QED
+
+Theorem SUM_MAP_FILTER_mono[local]:
+  !(f:'a -> num) P P' l.
+    (!y. P' y ==> P y) ==>
+    SUM (MAP f (FILTER P' l)) <= SUM (MAP f (FILTER P l))
+Proof
+  rpt gen_tac >> strip_tac >> Induct_on `l` >> rw[] >> gvs[] >> res_tac
+QED
+
+Theorem SUM_MAP_FILTER_drop[local]:
+  !(f:'a -> num) P P' x l.
+    MEM x l /\ P x /\ ~P' x /\ (!y. P' y ==> P y) ==>
+    SUM (MAP f (FILTER P' l)) + f x <= SUM (MAP f (FILTER P l))
+Proof
+  rpt gen_tac >> strip_tac >> rpt (pop_assum mp_tac) >>
+  Induct_on `l` >> rw[] >> gvs[] >> metis_tac[SUM_MAP_FILTER_mono]
+QED
+
+(* A fresh ALLOCA of func fits below 2 ** 256 and keeps the room. *)
+Theorem alloca_room_fresh:
+  !func ss inst n.
+    alloca_room func ss /\ MEM inst (fn_insts func) /\
+    inst.inst_opcode = ALLOCA /\ inst.inst_operands = [Lit n] /\
+    inst.inst_id NOTIN FDOM ss.vs_allocas ==>
+    ss.vs_alloca_next + w2n n < dimword (:256) /\
+    alloca_room func
+      (ss with <| vs_allocas :=
+                    ss.vs_allocas |+ (inst.inst_id, (ss.vs_alloca_next, w2n n));
+                  vs_alloca_next := ss.vs_alloca_next + w2n n |>)
+Proof
+  rpt gen_tac >> strip_tac >>
+  qspecl_then
+    [`\i:instruction. case i.inst_operands of
+                        [Lit n] => w2n n | _ => dimword (:256)`,
+     `\i. i.inst_opcode = ALLOCA /\ i.inst_id NOTIN FDOM ss.vs_allocas`,
+     `\i. i.inst_opcode = ALLOCA /\
+          i.inst_id NOTIN (inst.inst_id INSERT FDOM ss.vs_allocas)`,
+     `inst`, `fn_insts func`] mp_tac SUM_MAP_FILTER_drop >>
+  impl_tac >- simp[] >>
+  fs[alloca_room_def, pending_alloca_size_def]
+QED
 
 (* The expression lemmas relate states with stmt_state_rel func, where func
    is the function the code runs in, under the code premises of the
@@ -390,7 +472,8 @@ Theorem stmt_state_rel_jump_to:
     stmt_state_rel func cenv cx es s
 Proof
   simp[stmt_state_rel_def, state_rel_jump_to, jump_to_def, alloca_inv_def,
-       allocas_non_overlapping_def, alloca_next_valid_def]
+       allocas_non_overlapping_def, alloca_next_valid_def, alloca_room_def,
+       pending_alloca_size_def]
 QED
 
 Theorem stmt_state_rel_inst_idx:
@@ -402,7 +485,8 @@ Proof
        local_region_def, local_backed_def, lookup_var_def, storage_rel_def,
        transient_rel_def, immutables_rel_def, logs_rel_def, call_ctx_rel_def,
        contract_storage_def, contract_transient_def, alloca_inv_def,
-       allocas_non_overlapping_def, alloca_next_valid_def]
+       allocas_non_overlapping_def, alloca_next_valid_def, alloca_room_def,
+       pending_alloca_size_def]
 QED
 
 Theorem stmt_state_rel_push_scope:
@@ -430,7 +514,8 @@ Theorem stmt_state_rel_update_var:
 Proof
   rpt strip_tac >> fs[stmt_state_rel_def] >> rpt conj_tac
   >- (irule state_rel_update_var_local >> simp[])
-  >- (irule alloca_inv_fields >> qexists_tac `s` >> simp[update_var_def]) >>
+  >- (irule alloca_inv_fields >> qexists_tac `s` >> simp[update_var_def])
+  >- (irule alloca_room_fields >> qexists_tac `s` >> simp[update_var_def]) >>
   simp[update_var_def] >> metis_tac[]
 QED
 
