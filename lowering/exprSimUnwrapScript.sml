@@ -13,17 +13,16 @@
  *   unwrap_value_sim   — unwrap_value's code takes vv_post to expr_post,
  *                        one lemma per form of value_vv:
  *                        expr_post_of_vv_post_stack,
- *                        expr_post_of_vv_post_memory,
- *                        unwrap_memory_word_sim (MLOAD),
+ *                        unwrap_memory_sim (expr_post_of_vv_post_memory,
+ *                        and unwrap_memory_word_sim's MLOAD),
  *                        unwrap_runtime_immutable_word_sim (DLOAD),
  *                        vv_post_calldata (no calldata pointers)
  *
- * Helpers: compile_ensure_in_memory_extends, unwrap_value_extends,
+ * Helpers: compile_expr_extends (exprLoweringProps' compile_expr_grows),
+ *   compile_ensure_in_memory_extends, unwrap_value_extends,
  *   expr_post_of_vv_post_load, step_DLOAD, immutable_holds_dload
  *
  * Cheated, each with its reason at the lemma:
- *   compile_expr_extends — compile_expr appends to the compile state and
- *                        hands out names from its start counters on
  *   unwrap_storage_word_sim — a word load from storage (false as stated)
  *   unwrap_ctor_immutable_word_sim — a word immutable in the constructor
  *                        (the lowering differs from Python)
@@ -41,16 +40,15 @@ Libs
 (* ===== The compile side ===== *)
 
 (* compile_expr only appends to the compile state, and hands out variables
-   and instruction ids from its start counters on.  Cheated: it needs an
-   induction over compile_expr's cases of its own, as exprLoweringProps'
-   ci_mono_lower_value_compile_expr has for the weaker ci_mono. *)
+   and instruction ids from its start counters on. *)
 Theorem compile_expr_extends:
   !cenv ty e sa vv sm.
     compile_expr cenv ty e sa = (vv, sm) ==>
     cs_extends sa sm /\ sa.cs_next_var <= sm.cs_next_var /\
     sa.cs_next_id <= sm.cs_next_id
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  drule (cj 1 exprLoweringPropsTheory.compile_expr_grows) >> simp[]
 QED
 
 Theorem compile_ensure_in_memory_appends[local]:
@@ -271,6 +269,25 @@ Proof
   gvs[]
 QED
 
+(* A pointer into memory: an MLOAD for a word, the pointer itself for an
+   aggregate. *)
+Theorem unwrap_memory_sim:
+  !ctx func cenv cx e es sa sm sb s0 es' v t p op R.
+    unwrap_value cenv (LocatedValue t p) sm = (op, sb) /\
+    p.ptr_location = LocMemory /\
+    local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var ==>
+    frag_exec ctx sm sb
+      (\s. vv_post func cenv cx e es sa sm s0 es' (Value v)
+             (LocatedValue t p) s)
+      (\s. expr_post func cenv cx e es sa sb s0 es' v op s) R
+Proof
+  rpt strip_tac >> Cases_on `is_word_type t`
+  >- (irule unwrap_memory_word_sim >>
+      gvs[unwrap_value_def, contextTheory.compile_ptr_load_def]) >>
+  gvs[unwrap_value_def, comp_return_def] >> irule frag_exec_refl >>
+  rw[] >> metis_tac[expr_post_of_vv_post_memory]
+QED
+
 (* A word in storage or transient storage: an SLOAD or TLOAD.  Cheated:
    storage_holds relates the slot through decode_base_from_slot, which
    truncates, so a slot holding a word outside the type's range (0x1FF for a
@@ -377,11 +394,7 @@ Proof
       irule unwrap_runtime_immutable_word_sim >>
       gvs[unwrap_value_def, contextTheory.compile_ptr_load_def]) >>
   `p.ptr_location = LocMemory` by (Cases_on `p.ptr_location` >> gvs[]) >>
-  Cases_on `is_word_type t`
-  >- (irule unwrap_memory_word_sim >>
-      gvs[unwrap_value_def, contextTheory.compile_ptr_load_def]) >>
-  gvs[unwrap_value_def, comp_return_def] >> irule frag_exec_refl >>
-  rw[] >> metis_tac[expr_post_of_vv_post_memory]
+  irule unwrap_memory_sim >> simp[]
 QED
 
 (* unwrap_value's step: expr_vv_sim gives expr_sim.  compile_expr's
