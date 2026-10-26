@@ -10,6 +10,14 @@ inputs:
     description: 'Exact key of a snapshot an earlier job of this run saved; empty restores the latest compatible snapshot'
     required: false
     default: ''
+  toolchain-snapshot-key:
+    description: 'Exact key of a HOL toolchain an earlier job of this run saved; restored instead of any project snapshot'
+    required: false
+    default: ''
+  lookup-only:
+    description: 'true checks for a compatible project snapshot without restoring it'
+    required: false
+    default: 'false'
 
 outputs:
   toolchain-key:
@@ -21,6 +29,9 @@ outputs:
   stage-prefix:
     description: 'Key prefix of the snapshots a job hands to later jobs of the same run'
     value: ${{ steps.cache-key.outputs.stage-prefix }}
+  project-snapshot-key:
+    description: 'Key of the compatible project snapshot found; empty on a miss'
+    value: ${{ steps.cache-holbuild-project.outputs.cache-matched-key }}
 
 runs:
   using: 'composite'
@@ -78,26 +89,35 @@ runs:
         key: ${{ inputs.snapshot-key }}
         fail-on-cache-miss: true
 
+    - name: Restore HOL toolchain from this run
+      if: ${{ inputs.snapshot-key == '' && inputs.toolchain-snapshot-key != '' }}
+      uses: actions/cache/restore@v6
+      with:
+        path: ~/.cache/holbuild
+        key: ${{ inputs.toolchain-snapshot-key }}
+        fail-on-cache-miss: true
+
     - name: Restore latest compatible project snapshot
       id: cache-holbuild-project
-      if: ${{ inputs.snapshot-key == '' }}
+      if: ${{ inputs.snapshot-key == '' && inputs.toolchain-snapshot-key == '' }}
       uses: actions/cache/restore@v6
       with:
         path: ~/.cache/holbuild
         key: ${{ steps.cache-key.outputs.build-prefix }}-${{ github.sha }}
         restore-keys: |
           ${{ steps.cache-key.outputs.build-prefix }}-
+        lookup-only: ${{ inputs.lookup-only }}
 
     - name: Restore holbuild toolchain cache on project snapshot miss
       id: cache-holbuild-toolchain
-      if: ${{ inputs.snapshot-key == '' && steps.cache-holbuild-project.outputs.cache-matched-key == '' }}
+      if: ${{ inputs.snapshot-key == '' && inputs.toolchain-snapshot-key == '' && steps.cache-holbuild-project.outputs.cache-matched-key == '' }}
       uses: actions/cache/restore@v6
       with:
         path: ~/.cache/holbuild
         key: ${{ steps.cache-key.outputs.toolchain-key }}
 
     - name: Report restored holbuild cache
-      if: ${{ inputs.snapshot-key == '' }}
+      if: ${{ inputs.snapshot-key == '' && inputs.toolchain-snapshot-key == '' }}
       shell: bash
       env:
         PROJECT_CACHE_KEY: ${{ steps.cache-holbuild-project.outputs.cache-matched-key }}
