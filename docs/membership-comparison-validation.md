@@ -16,12 +16,10 @@ These are intentionally not added to the inexpensive default test roots.
 
 The durable fixture bundle is `tests/fixtures/membership/`. `sources/` contains
 all 30 Vyper programs, `inputs/` their sanitized annotated AST/layout JSON, and
-`compiler/` independent Python compiler stdout/stderr and 27 deploy/runtime hex
-pairs. The three other programs fail real code generation. The six requested
+`compiler/` 27 independent Python compiler deploy/runtime hex pairs and the
+three code-generation rejection diagnostics. The six requested
 sources are retained here with the other task witnesses, rather than changing
 the unrelated frozen 101-fixture corpus or its generator manifest.
-`importMembershipFixturesLib` is a byte-for-byte import utility for the operator's
-G0006 artifacts, not a HOL bytecode generator.
 
 `compiler-provenance.json`, `compiler-source-audit.json` and
 `artifact-sha256.json` retain compiler/input/output provenance. The independent
@@ -32,10 +30,11 @@ NONE (O1 Venom pipeline), final assembly optimization disabled, Prague, no
 bytecode metadata. The clean pinned checkout's installed Python sources were
 hash-compared, excluding only generated `version.py` as documented by the audit.
 The bundle's `report.json` records **artifact supply**, not HOL validation results.
-The original `generate.py` is retained unchanged so every entry in the supplied
-hash manifest is present; it is historical provenance and is never run by the
-tests. The bundle contains 212 files, with 211 entries in the manifest (which
-does not hash itself).
+The compact bundle contains 94 files, with 93 entries in the manifest (which
+does not hash itself). Redundant raw compiler stdout, empty stderr, the historical
+generator and the unused import utility have been removed. All 93 hashed files
+are byte-identical to the original supply; the manifest retains their original
+hashes. Compiler provenance records the original commands, settings and exit codes.
 
 Both comparison scripts declare `fixtures/membership` through
 `holbuild_extra_deps`, following the repository's existing marker-function
@@ -70,7 +69,7 @@ independent compiler output, with HOL checker acceptance in both modes.
 | Additional task controls | `eq_string_storage_lhs_mem`, `eq_string_var`, `in_bytes4_list`, `in_calldata_sarray`, `in_dynarray_arg`, `in_flag`, `in_lit_list2`, `in_lit_zero`, `in_mem_sarray`, `in_sarray_zero`, `in_storage_sarray`, `list_in_lit`, `ne_bytes_lit_same`, `ne_bytes_var`, `notin_flag`, `notin_lit_list`, `notin_mem_sarray`, `notin_storage_dynarray` | MATCH; `task_controls_match_python` |
 | Externally owned #549 witness | `eq_string_storage` | MATCH in this checkout; first component of `externally_owned_residual_observations` is T. The task's historical residual is not reproduced here; C6 makes no #549 implementation change. |
 | Historical externally owned #560 witnesses | `in_empty_list`, `in_sarray_default` | MATCH after the merged memory changes; second and third observation components are T. `residual_compilation_succeeds` separately verifies HOL compilation is SOME, not NONE. |
-| Non-word membership | `in_string_list`, `in_struct_dynarray`, `in_nested_array` | NOT_IN_DOMAIN: pinned Python codegen rejection retained in compiler stdout/stderr; HOL `nonword_witnesses_rejected_runtime` and `nonword_witnesses_rejected_deploy` establish checker result NONE. |
+| Non-word membership | `in_string_list`, `in_struct_dynarray`, `in_nested_array` | NOT_IN_DOMAIN: pinned Python codegen rejection retained in compiler stderr; HOL `nonword_witnesses_rejected_runtime` and `nonword_witnesses_rejected_deploy` establish checker result NONE. |
 
 Thus there are 27 exact MATCH witnesses, no reproduced #549/#560 residuals,
 and three NOT_IN_DOMAIN witnesses. The additional `@pure` list and capacity-five
@@ -139,11 +138,11 @@ In those exports, the six parity statements and all matrix statements were
 unchanged. The merged-branch revalidation below supersedes their historical
 `[T;F;F]` residual expectation.
 
-All 212 fixture files matched the independent originals in both exported trees
-and in the two isolated comparison stages. All 211 manifest entries verified,
-as did the pinned revision, 30 source hashes and 54 deployment/runtime bytecode
-hashes and lengths. The original artifact-supply report and expected bytecode
-were preserved unchanged.
+Before the fixture trim, all 212 files matched the independent originals in both
+exported trees and in the two isolated comparison stages. All 211 manifest entries
+verified, as did the pinned revision, 30 source hashes and 54 deployment/runtime
+bytecode hashes and lengths. The original artifact-supply report and expected
+bytecode were preserved unchanged.
 
 ## Merged-branch revalidation
 
@@ -162,3 +161,11 @@ the matrix's oracle-tag audit, and `residual_compilation_succeeds` also passed,
 with no CHEAT warnings. All three historical residuals now match the unchanged
 independent fixture bytes. This revalidation covers the parity and matrix
 targets, not a new source-export experiment.
+
+## Compact-bundle revalidation (2026-10-26)
+
+The scoped build command above passed after the fixture trim, including both
+`vyperMembershipAuditTestTheory` and `membershipCheckerIntegrityTheory`.
+The six parity fixtures and full matrix passed unchanged. All 30 source/input
+pairs, 54 expected bytecode hashes and lengths, and three rejection diagnostics
+were retained. All 93 manifest entries match their original hashes.
