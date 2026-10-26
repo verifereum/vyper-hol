@@ -1222,8 +1222,8 @@ fun generate_test_scripts () = let
       val fname = OS.Path.concat(gen_dir, String.concat[thyname, "Script.sml"])
       val contents = String.concat [
         "Theory ", thyname, "[no_sig_docs]\nAncestors ", defsname,
-        "\nLibs vyperTestRunnerLib\nval () = List.app ",
-        "run_test_on_traces $ ", traces, ";\n"]
+        "\nLibs vyperTestRunnerLib\nval () = ",
+        "run_tests_on_traces $ ", traces, ";\n"]
       val out = TextIO.openOut(fname)
       val () = TextIO.output(out, contents)
       val () = TextIO.closeOut out
