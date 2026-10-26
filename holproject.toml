@@ -7,6 +7,8 @@ version = "0.2.3"
 
 [build]
 roots = ["vyperHolScript.sml",
+         "venom/codegen/proofs/contextReachabilityChecksScript.sml",
+         "venom/compiler/unitTransformChecksScript.sml",
          "tests/vyperCheckContractLibTestScript.sml",
          "tests/vyperStringScopeTestScript.sml",
          "frontend/vyperCheckContractFrontendLibTestScript.sml",

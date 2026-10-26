@@ -2,7 +2,7 @@
    These are finite interface regressions, not a general reachability proof. *)
 Theory contextReachabilityChecks
 Ancestors
-  contextCodegenRelProps contextCodegenRel venomExecSemantics venomInst
+  contextReachability contextCodegenRelProps contextCodegenRel venomExecSemantics venomInst
   venomState list finite_map words integer_word
 Libs wordsLib
 
@@ -242,4 +242,63 @@ Proof
   strip_tac >>
   mp_tac invoke_return_visited_states >> strip_tac >>
   metis_tac[reachability_closed_next]
+QED
+
+(* Exercise the least relation with the existing concrete execution witnesses. *)
+Theorem raw_reachable_initialized_entry:
+  raw_inst_reachable check_start check_ctx check_fn check_assign check_start
+Proof
+  irule raw_inst_reachable_entry >>
+  mp_tac initialized_entry_visited_state >>
+  simp[check_ctx_def, mk_venom_context_def, lookup_function_def, FIND_thm,
+       check_fn_def, mk_raw_function_def, fn_entry_label_def, entry_block_def]
+QED
+
+Theorem raw_reachable_next_and_block:
+  raw_inst_reachable check_start check_ctx check_fn check_jump check_next /\
+  raw_inst_reachable check_start check_ctx check_fn check_stop check_post_phi
+Proof
+  `raw_inst_reachable check_start check_ctx check_fn check_jump check_next` by
+    (irule closed_assign_postincrement >>
+     simp[raw_inst_reachable_closed, raw_reachable_initialized_entry]) >>
+  simp[] >> irule closed_jump_post_phi >> simp[raw_inst_reachable_closed]
+QED
+
+Theorem raw_reachable_call_entry:
+  raw_inst_reachable check_caller_state check_call_ctx check_caller check_invoke
+    (check_caller_state with vs_prev_bb := NONE)
+Proof
+  irule raw_inst_reachable_entry >>
+  simp[check_call_ctx_def, mk_venom_context_def, lookup_function_def, FIND_thm,
+       fn_entry_label_def, entry_block_def, active_inst_def, check_caller_def,
+       check_callee_def, mk_raw_function_def,
+       MEM, LEFT_AND_OVER_OR, RIGHT_AND_OVER_OR, EXISTS_OR_THM] >>
+  EVAL_TAC >> simp[] >> EVAL_TAC >> simp[]
+QED
+
+Theorem raw_reachable_callee_and_return:
+  raw_inst_reachable check_caller_state check_call_ctx check_callee check_ret
+    check_callee_state /\
+  raw_inst_reachable check_caller_state check_call_ctx check_caller check_stop
+    (check_returned with <| vs_prev_bb := NONE; vs_inst_idx := 1 |>)
+Proof
+  conj_tac
+  >- (irule raw_inst_reachable_callee >>
+      simp[PULL_EXISTS] >>
+      qexistsl_tac [`[0w]`, `check_caller`, `check_callee_state`, `check_invoke`,
+        `"callee"`, `[Lit 0w]`, `check_caller_state with vs_prev_bb := NONE`] >>
+      simp[raw_reachable_call_entry, active_inst_def, check_caller_def,
+           check_callee_def, mk_raw_function_def, MEM,
+           LEFT_AND_OVER_OR, RIGHT_AND_OVER_OR, EXISTS_OR_THM] >>
+      EVAL_TAC >> simp[] >> EVAL_TAC >> simp[])
+  >> `raw_inst_reachable check_caller_state check_call_ctx check_caller check_stop
+        ((check_returned with vs_prev_bb := NONE) with vs_inst_idx :=
+          SUC (check_caller_state with vs_prev_bb := NONE).vs_inst_idx)`
+       suffices_by simp[check_caller_state_def, init_venom_state_def] >>
+  irule raw_inst_reachable_next >>
+  simp[PULL_EXISTS] >>
+  qexistsl_tac [`1`, `check_invoke`] >>
+  simp[raw_reachable_call_entry, active_inst_def, check_caller_def,
+       mk_raw_function_def, MEM, LEFT_AND_OVER_OR, RIGHT_AND_OVER_OR,
+       EXISTS_OR_THM] >> EVAL_TAC
 QED
