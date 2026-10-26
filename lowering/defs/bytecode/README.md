@@ -106,6 +106,25 @@ those denominations. Their HOL definitions remain unchanged. See the linked
 coverage document for the complete constructor census and precise distinction
 between fixture inputs and lowering-arm execution.
 
+## External-entry regressions
+
+The external-entry regression corpus in `external-entries/` retains its source,
+sanitized AST and exact bytecode oracle. With the pinned Vyper installed, check
+these artifacts and the runtime IR with:
+
+```sh
+python external-entries/generate.py --check
+python external-entry-ir/generate.py --check
+```
+
+Run these commands from this directory. Runtime IR is stored as SHA-256 hashes
+of the complete exports in `external-entry-ir/sha256.json`. To inspect the full
+IR, regenerate it without adding it to the repository:
+
+```sh
+python external-entry-ir/generate.py --output-dir /tmp/vyper-external-entry-ir
+```
+
 ## Fixture format
 
 Each `.hex` file contains canonical lowercase, even-length hexadecimal:

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Emit or check pinned runtime IR for the external-entry witness corpus."""
+"""Check pinned runtime-IR hashes, or regenerate the full IR for inspection."""
 
 import argparse
 import hashlib
@@ -43,14 +43,23 @@ def main():
     group = parser.add_mutually_exclusive_group()
     group.add_argument("--emit-json", action="store_true")
     group.add_argument("--check", action="store_true")
+    group.add_argument("--output-dir", type=Path,
+                       help="write the full runtime IR to this directory")
     args = parser.parse_args()
     here, files = artifacts()
     if args.emit_json:
         print(json.dumps(files))
         return
-    stale = {p.name for p in here.glob("*.venom")} - files.keys()
+    if args.output_dir:
+        args.output_dir.mkdir(parents=True, exist_ok=True)
+        for name, text in files.items():
+            (args.output_dir / name).write_text(text)
+        print(f"Generated {len(files)} pinned runtime-IR fixtures in {args.output_dir}")
+        return
+    expected = json.loads((here / "sha256.json").read_text())
+    stale = expected.keys() - files.keys()
     changed = [name for name, text in files.items()
-               if not (here / name).is_file() or (here / name).read_text() != text]
+               if expected.get(name) != hashlib.sha256(text.encode()).hexdigest()]
     if stale or changed:
         raise SystemExit("Runtime IR fixtures differ: " + ", ".join(sorted(stale | set(changed))))
     print(f"Checked {len(files)} pinned runtime-IR fixtures")
