@@ -200,6 +200,49 @@ Proof
   qexistsl [`s1`, `w`] >> gvs[]
 QED
 
+Theorem annassign_word_store_run:
+  !ctx func cenv cx es s id p sz w inst v tyv sc rest a op st st'.
+    emit_void MSTORE [Var p; op] st = ((), st') /\
+    fn_has_code st st' func /\ ~s.vs_halted /\
+    s.vs_current_bb = st.cs_current_bb /\
+    s.vs_inst_idx = LENGTH st.cs_current_insts /\
+    eval_operand op s = SOME (val_to_w256 v) /\
+    stmt_state_rel func cenv cx es s /\ fn_inst_ids_distinct func /\
+    es.scopes = sc :: rest /\ lookup_scopes id es.scopes = NONE /\
+    FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
+    not_local_ptr cenv es.scopes p /\ lookup_var p s = SOME w /\
+    MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+    inst.inst_outputs = [p] /\
+    FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n w, sz) /\
+    32 <= sz /\ word_value v /\ type_memory_size tyv = 32 ==>
+    ?t. stmt_state_rel func cenv cx
+          (es with scopes :=
+             (sc |+ (id, <|assignable := a; type := tyv; value := v|>)) :: rest) t /\
+        ~t.vs_halted /\ t.vs_current_bb = st'.cs_current_bb /\
+        t.vs_inst_idx = LENGTH st'.cs_current_insts /\
+        (!x. lookup_var x t = lookup_var x s) /\
+        (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+                     FLOOKUP t.vs_allocas aid = SOME entry) /\
+        !fuel r. run_from fuel ctx func t = r /\ (!e. r <> Error e) ==>
+                 ?fuel'. run_from fuel' ctx func s = r
+Proof
+  rpt strip_tac >>
+  qmatch_goalsub_abbrev_tac `stmt_state_rel func cenv cx es'` >>
+  `stmt_state_rel func cenv cx es' (mstore (w2n w) (val_to_w256 v) s)` by
+    (simp[Abbr `es'`] >> irule stmt_state_rel_declare_word >> simp[] >>
+     qexists_tac `inst` >> gvs[]) >>
+  `frag_exec ctx st st' (\t. t = s)
+     (\t. stmt_state_rel func cenv cx es' t /\
+          (!x. lookup_var x t = lookup_var x s) /\
+          (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+                       FLOOKUP t.vs_allocas aid = SOME entry)) (\r. F)` by
+    (irule (SRULE [] (Q.INST [`keep` |-> `\x. T`]
+       (SPEC_ALL annassign_mstore_framed_frag))) >>
+     simp[] >> metis_tac[]) >>
+  drule frag_exec_no_exit_run >> disch_then drule >>
+  disch_then (qspec_then `s` mp_tac) >> simp[] >> metis_tac[]
+QED
+
 Theorem eval_annassign_word_error:
   !cx id typ e es ex es' lctx.
     eval_stmt cx (AnnAssign id typ e) es = (INR ex, es') /\
