@@ -71,6 +71,18 @@ Proof
   strip_tac >> res_tac
 QED
 
+(* The arguments' scope binds exactly the parameter names. *)
+Theorem bind_arguments_fdom:
+  ∀tenv args vs env.
+    bind_arguments tenv args vs = SOME env ⇒ FDOM env = set (MAP FST args)
+Proof
+  Induct_on `args` >> simp[bind_arguments_def] >>
+  Cases_on `vs` >> simp[bind_arguments_def] >>
+  rpt gen_tac >> PairCases_on `h'` >>
+  simp[bind_arguments_def, AllCaseEqs(), PULL_EXISTS] >>
+  rpt strip_tac >> res_tac >> simp[]
+QED
+
 (* ===== Log Lifecycle Boundaries (issue #439) ===== *)
 
 Theorem push_log_logs[simp]:

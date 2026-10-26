@@ -189,9 +189,11 @@ Theorem compile_ext_call_kwargs_callback_contract:
     compile_ext_call_kwargs f cenv return_type ks es =
     compile_ext_call_kwargs g cenv return_type ks es
 Proof
-  Induct >> Cases_on `es` >> simp[compile_ext_call_kwargs_def] >>
-  rpt strip_tac >> fs[] >>
-  simp[compile_ext_call_kwarg_def, lower_value_def]
+  Induct >> Cases_on `es` >>
+  simp[compile_ext_call_kwargs_def, compile_ext_call_kwarg_def] >>
+  rpt strip_tac >> first_x_assum drule >>
+  gvs[expr_callbacks_agree_def, FUN_EQ_THM, COND_RATOR, comp_bind_def,
+      lower_value_def]
 QED
 
 Theorem expr_callbacks_agree_take_drop:

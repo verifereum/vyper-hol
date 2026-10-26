@@ -1,6 +1,6 @@
 Theory vyperSupplyBoundary
 Ancestors
-  vyperAccountSupply vyperCallOutcome vyperCreate extCallOracle vfmState
+  vyperAccountSupply vyperCallOutcome vyperCallOutcomeProps vyperCreate extCallOracle vfmState
   vfmExecution pred_set arithmetic vyperInterpreter
 
 (* Proof-only contracts. Neither predicate changes runtime acceptance. *)

@@ -5,7 +5,7 @@
  *)
 Theory vyperCallOutcomeBranches
 Ancestors
-  list option pair sum vyperAST vyperValue vyperState vyperCallOutcome
+  list option pair sum vyperAST vyperValue vyperState vyperCallOutcome vyperCallOutcomeProps
   vyperRuntimeAccounts extCallOracle vfmState
 Libs monadsyntax
 

@@ -4,7 +4,7 @@
 Theory vyperSourceOracleSupply
 Ancestors
   list pair vyperSourceSupplyDefs vyperAccountSupply vyperSupplyBoundary
-  vyperCallOutcome extCallOracle vyperState
+  vyperCallOutcome vyperCallOutcomeProps extCallOracle vyperState
 Libs
   monadsyntax
 

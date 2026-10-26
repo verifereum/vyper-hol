@@ -51,8 +51,8 @@ val () = cv_auto_trans deletion_outcome_def;
 Definition deletion_oracle_observation_def:
   deletion_oracle_observation success static =
     let e = if static then
-      Call NoneT (ExtCall T T ("f",[],NoneT)) [system_address 31w] NONE
-    else Call NoneT Send
+      Call NoneT (ExtCall T T ("f",[],NoneT) []) [system_address 31w] NONE
+    else Call NoneT (Send F)
       [system_address 31w; Literal (BaseT (UintT 256)) (IntL 0)] NONE in
     let st = empty_state with
       <|accounts := update_account 31w
@@ -103,7 +103,7 @@ Definition deletion_direct_call_def:
         [system_address 42w;
          Literal (BaseT (BytesT (Dynamic 0))) (BytesL []);
          Literal (BaseT (UintT 256)) (IntL 0)] NONE
-    else Call NoneT (ExtCall F T ("f",[],NoneT))
+    else Call NoneT (ExtCall F T ("f",[],NoneT) [EKValue])
       [system_address 42w; Literal (BaseT (UintT 256)) (IntL 0)] NONE
 End
 val () = cv_auto_trans deletion_direct_call_def;
@@ -140,10 +140,13 @@ Proof
   CONV_TAC cv_eval
 QED
 
+(* Explicit gas is needed to run the recipient's CREATE: gas-less send
+   forwards zero gas when the transferred value is zero. *)
 Definition deletion_send_observation_def:
   deletion_send_observation reverts =
-    let e = Call NoneT Send
-      [system_address 42w; Literal (BaseT (UintT 256)) (IntL 0)] NONE in
+    let e = Call NoneT (Send T)
+      [system_address 42w; Literal (BaseT (UintT 256)) (IntL 0);
+       Literal (BaseT (UintT 256)) (IntL (&default_evm_gas_limit))] NONE in
     let r = system_expr_run (system_context F) e (deletion_direct_state reverts) in
     let st = SND r in
     let child = vfmContext$address_for_create 42w 1 in

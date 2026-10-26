@@ -164,7 +164,8 @@ End
 (* Keep the logical runner on the original ABI semantics. Only its CV
    implementation uses the unconditionally proved-equivalent fast paths. *)
 val () = compute_vyper_args_def
-  |> REWRITE_RULE [vyper_abi_dec_eq_fast, vyper_abi_valid_enc_eq_fast]
+  |> REWRITE_RULE [GSYM (CONJUNCT1 vyper_abi_dec_fast_eq),
+                  GSYM (CONJUNCT1 vyper_abi_valid_enc_fast_eq)]
   |> cv_auto_trans;
 
 Definition increment_account_nonce_def:
