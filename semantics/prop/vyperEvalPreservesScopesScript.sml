@@ -2,7 +2,7 @@ Theory vyperEvalPreservesScopes
 Ancestors
   pair vyperCallFrame vyperCallOutcomeFrame vyperCallOutcome[ignore_grammar]
   vyperTypeInvariants
-  vyperState vyperCreate vyperInterpreter vyperLookup
+  vyperState vyperCreate vyperCreateFrame vyperInterpreter vyperLookup
   vyperEvalExprPreservesScopesDom vyperScopePreservation
   vyperMisc vyperImmutablesPreservation vyperStatePreservation vyperPlaceFrames
 

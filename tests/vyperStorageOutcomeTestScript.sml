@@ -3,7 +3,7 @@
 Theory vyperStorageOutcomeTest
 Ancestors
   list option pair sum words vyperAST vyperState vyperInterpreter
-  extCallOracle vyperCallOutcome vyperCallOutcomeBranches vyperCallOutcomeFrame
+  extCallOracle vyperCallOutcome vyperCallOutcomeProps vyperCallOutcomeBranches vyperCallOutcomeFrame
   vyperEvalOutcomeSuffix vyperCallOutcomeStorage vyperTypeStoragePreservation
   vyperTypeEvalStoragePreservation vyperTypeSoundness vyperTypeSystem
   vyperTypeInvariants vyperCallOutcomeTest
@@ -122,7 +122,8 @@ QED
 Theorem updated_statement_storage_consumer:
   type_stmt env ret_ty s = SOME env' /\ runtime_storage_consistent env cx st /\
   functions_well_typed cx /\ call_evaluation_safe cx (int_calls_stmt s) /\
-  protected_storage_calls_preserve cx /\ oracle_storage_ok cx st /\
+  protected_storage_calls_preserve cx /\ protected_storage_creates_preserve cx /\
+  oracle_storage_ok cx st /\
   eval_stmt cx s st = (res,st') ==>
   contract_storage_well_formed cx st' /\ no_type_error_result res /\
   oracle_storage_ok cx st' /\ outcome_suffix st.outcomes st'.outcomes

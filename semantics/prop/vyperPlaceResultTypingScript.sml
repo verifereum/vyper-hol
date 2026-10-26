@@ -7,7 +7,7 @@ Ancestors
   vyperTypeValues vyperTypeSystem vyperTypeExprSoundness
   vyperCallOutcomeFrame vyperCallOutcome[ignore_grammar]
   vyperTypeCallStackSoundness vyperTypeCallGraph vyperTypeCallGraphSoundness
-  vyperTypeStmtResult
+  vyperTypeStmtResult vyperCreateFrame
 Libs
   wordsLib
 
@@ -1509,7 +1509,7 @@ Theorem scope_pop_effect_log_create[simp]:
 Proof
   conj_tac >> irule scope_pop_effect_identity >> rpt strip_tac >>
   FIRST (map (fn th => drule th >> simp[])
-    [push_log_scopes, vyperCreateTheory.eval_create_preserves_scopes_immutables])
+    [push_log_scopes, vyperCreateFrameTheory.eval_create_preserves_scopes_immutables])
 QED
 
 Theorem eval_raw_call_scope_effect[local]:
@@ -1605,7 +1605,7 @@ Proof
   rpt conj_tac >> irule scope_pop_effect_identity >> rpt strip_tac >>
   FIRST (map (fn th => drule th >> simp[])
     [eval_send_preserves_non_accounts, eval_ext_call_preserves_non_accounts,
-     vyperCreateTheory.check_create_blueprint_result_state])
+     vyperCreateFrameTheory.check_create_blueprint_result_state])
 QED
 
 Theorem eval_send_scope_effect[local]:

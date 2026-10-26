@@ -12,7 +12,7 @@ Theory vyperTypeEvalSoundness
 Ancestors
   list rich_list pred_set prim_rec arithmetic finite_map option pair sum
   vyperAST vyperValue vyperValueOperation vyperMisc vyperABI
-  vyperCreate vyperInterpreter vyperState vyperContext vyperStorage vyperTyping vyperLookup
+  vyperCreate vyperCreateFrame vyperInterpreter vyperState vyperContext vyperStorage vyperTyping vyperLookup
   vyperImmutableMetadataFrame[ignore_grammar]
   vyperEncodeDecode vyperArith vyperTypeSystem vyperTypeInvariants vyperTypeValues
   vyperTypeEnv vyperTypeEnvExtension vyperTypeEnvPreservation vyperTypeScopePop
@@ -5965,7 +5965,7 @@ Theorem eval_exprs_failure_builtin_case[local]:
   ((case
       case (INR x,st) of
         (INL vs,s'') =>
-          (case evaluate_builtin cx s''.accounts ty bt vs of
+          (case evaluate_builtin cx s''.accounts ty bt (MAP expr_type es) vs of
              INL v => return v
            | INR e => raise (Error e)) s''
       | (INR e,s'') => (INR e,s'')
@@ -6140,11 +6140,11 @@ Resume eval_scc_type_sound_mutual[Expr_Builtin]:
       (gvs[LIST_REL_EL_EQN, LIST_EQ_REWRITE, EL_MAP]) >>
     `?ret_tv. evaluate_type (get_tenv cx) ty = SOME ret_tv` by
       (gvs[well_formed_type_def, IS_SOME_EXISTS]) >>
-    Cases_on `evaluate_builtin cx args_st.accounts ty bt vs` >>
-    rename1 `evaluate_builtin cx args_st.accounts ty bt vs = builtin_res` >>
+    Cases_on `evaluate_builtin cx args_st.accounts ty bt (MAP expr_type es) vs` >>
+    rename1 `evaluate_builtin cx args_st.accounts ty bt (MAP expr_type es) vs = builtin_res` >>
     Cases_on `builtin_res` >>
     FIRST [
-      rename1 `evaluate_builtin cx args_st.accounts ty bt vs = INL builtin_v` >>
+      rename1 `evaluate_builtin cx args_st.accounts ty bt (MAP expr_type es) vs = INL builtin_v` >>
       strip_tac >>
       gvs[nested_return_value_case, no_type_error_result_def] >>
       gvs[expr_result_typed_def, expr_runtime_typed_def, expr_type_def,
@@ -10511,7 +10511,7 @@ fun trace_result_tac label g = let val suspend = trace_result_tac in
   gvs[int_calls_expr_def] >>
   qpat_x_assum `!env st res st'. _ ==> typed_scope_transition _ _` drule_all >>
   strip_tac >>
-  imp_res_tac vyperCreateTheory.eval_create_preserves_scopes_immutables >>
+  imp_res_tac vyperCreateFrameTheory.eval_create_preserves_scopes_immutables >>
   rpt (first_x_assum (fn th => if is_forall (concl th) then kall_tac th else NO_TAC)) >>
   metis_tac[typed_scope_transition_trans, typed_scope_transition_scopes]
 )
@@ -11336,7 +11336,7 @@ Resume eval_scc_type_sound_mutual[TraceRoot24]:
   simp[NoAsms, Once evaluate_def, bind_def, AllCaseEqs()] >> strip_tac >>
   qpat_x_assum `!env st res st'. _ ==> typed_scope_transition _ _` drule_all >>
   strip_tac >>
-  imp_res_tac vyperCreateTheory.eval_create_preserves_scopes_immutables >>
+  imp_res_tac vyperCreateFrameTheory.eval_create_preserves_scopes_immutables >>
   rpt (first_x_assum (fn th => if is_forall (concl th) then kall_tac th else NO_TAC)) >>
   metis_tac[typed_scope_transition_trans, typed_scope_transition_scopes]
 QED

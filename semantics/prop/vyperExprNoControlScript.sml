@@ -1,8 +1,8 @@
 Theory vyperExprNoControl
 
 Ancestors
-  pair vyperCreate vyperInterpreter vyperAST vyperMisc
-  vyperCallFrame vyperCallOutcome vyperCallOutcomeBranches vyperCallOutcomeFrame
+  pair vyperCreate vyperCreateFrame vyperInterpreter vyperAST vyperMisc
+  vyperCallFrame vyperCallOutcome vyperCallOutcomeProps vyperCallOutcomeBranches vyperCallOutcomeFrame
   vyperRuntimeAccounts vyperState
 Libs
   pairLib monadsyntax

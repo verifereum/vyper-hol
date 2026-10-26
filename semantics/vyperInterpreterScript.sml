@@ -1545,7 +1545,7 @@ Definition evaluate_def:
     od else do
       vs <- eval_exprs cx es;
       acc <- get_accounts;
-      lift_sum $ evaluate_builtin cx acc ty bt vs
+      lift_sum $ evaluate_builtin cx acc ty bt (MAP expr_type es) vs
     od;
     return $ Value v
   od ∧

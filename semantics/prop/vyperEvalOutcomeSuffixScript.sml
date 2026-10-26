@@ -4,7 +4,7 @@ Theory vyperEvalOutcomeSuffix
 Ancestors
   list pair option vyperMisc vyperState vyperInterpreter vyperCreate
   vyperStatePreservation vyperCallFrame vyperStorageBackend vyperCallOutcome
-  vyperPlaceFrames
+  vyperCallOutcomeProps vyperPlaceFrames
 Libs monadsyntax pairLib
 
 Definition outcomes_frame_def:

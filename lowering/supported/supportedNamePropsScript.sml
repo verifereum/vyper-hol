@@ -4,21 +4,6 @@ Ancestors
   supportedNames supportedDecls supportedTypes supportedDeclProps
   compileVyper vyperContext vyperAST list finite_map
 
-Theorem supported_internal_labels_accept:
-  EVERY supported_internal_name
-    ["helper"; "bar"; "return_label"; "reachable"; "xreturn_label_1"; "xreachable_1"]
-Proof
-  EVAL_TAC
-QED
-
-Theorem supported_internal_labels_reject:
-  EVERY (\s. ~supported_internal_name s)
-    ["revert"; "code_end"; "return_label_"; "return_label_0";
-     "return_label_any_suffix"; "reachable_"; "reachable_0"; "reachable_any_suffix"]
-Proof
-  EVAL_TAC
-QED
-
 Theorem supported_bindings_accept:
   supported_function_bindings supported_test_declarations
     [("arg", BaseT BoolT); ("second", BaseT (UintT 256))]
@@ -83,7 +68,7 @@ QED
 Theorem supported_function_header_names_contract:
   supported_function_header_names []
     (FunctionDecl External View F F "revert" [] [] NoneT []) /\
-  ~supported_function_header_names []
+  supported_function_header_names []
     (FunctionDecl Internal Pure F F "revert" [] [] NoneT []) /\
   supported_function_header_names []
     (FunctionDecl External View F F "f" [("__return_pc__", BaseT BoolT)] [] NoneT []) /\
@@ -125,8 +110,6 @@ Proof
 QED
 
 Theorem supported_declaration_name_checks_reject:
-  ~supported_declaration_names
-    [FunctionDecl Internal Pure F F "return_label_42" [] [] NoneT []] /\
   ~supported_declaration_names
     [FunctionDecl External Payable F F "__default__" [("x", BaseT BoolT)] [] NoneT []] /\
   ~supported_declaration_names

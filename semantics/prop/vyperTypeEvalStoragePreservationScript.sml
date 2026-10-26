@@ -1336,7 +1336,7 @@ Proof
   qmatch_assum_rename_tac `evaluate_binop _ ptv bop cur right = INL result` >>
   `value_has_type ptv result` by
     (irule well_typed_binop_success_type >>
-     qexistsl_tac [`bop`,`ty`,`expr_type e`,`env.type_defs`,`ptv`,`rhs_tv`,`ty`,
+     qexistsl_tac [`bop`,`ty`,`expr_type e`,`env.type_defs`,`ptv`,`ptv`,`rhs_tv`,`ty`,
        `case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0`,
        `cur`,`right`] >> simp[]) >>
   drule_all write_place_preserves_contract_storage >> simp[]
@@ -2904,7 +2904,7 @@ Resume eval_scc_storage_preservation_mutual[Expr_Builtin]:
   strip_tac >> first_x_assum drule_all >> strip_tac >>
   Cases_on `args_res` >> gvs[bind_def, return_def, raise_def,
     get_accounts_def, lift_sum_def]
-  >- (Cases_on `evaluate_builtin cx args_st.accounts ty bt x` >>
+  >- (Cases_on `evaluate_builtin cx args_st.accounts ty bt (MAP expr_type es) x` >>
       gvs[return_def, raise_def] >> rpt strip_tac >> gvs[]) >>
   rpt strip_tac >> gvs[]
 QED

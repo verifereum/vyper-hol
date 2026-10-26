@@ -3,7 +3,7 @@ Theory vyperTypeCallOutcomeTest
 Ancestors
   list option pair sum arithmetic words finite_map
   vyperAST vyperValue vyperState vyperInterpreter vyperABI vyperTyping
-  vyperRuntimeAccounts vyperCallOutcome vyperCallOutcomeBranches
+  vyperRuntimeAccounts vyperCallOutcome vyperCallOutcomeProps vyperCallOutcomeBranches
   vyperCallOutcomeFrame vyperTypeCallOutcome vyperTypeExtCallSoundness
   vyperTypeExprSoundness vyperTypeExprResult vyperTypeSystem vyperTypeInvariants
   vyperExprNoControl vyperCallOutcomeTest
@@ -54,7 +54,7 @@ Proof
   rename1 `take_call_outcome target [] (SOME amount) st = (taken,mid)` >>
   drule Send_outcome_continue >> strip_tac >> gvs[] >>
   Cases_on `taken` >> gvs[AllCaseEqs(), no_control_exc_def] >>
-  drule vyperCallOutcomeTheory.take_call_outcome_error >>
+  drule vyperCallOutcomePropsTheory.take_call_outcome_error >>
   rw[no_control_exc_def]
 QED
 
