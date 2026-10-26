@@ -11492,7 +11492,7 @@ Proof
      [<| bb_label := name; bb_instructions := [] |>]`
     by gvs[new_block_def, all_blocks_def] >>
   `state_insts s = state_insts st` by gvs[state_insts_def] >>
-  fs[shape_extends_def, fragExecTheory.cs_extends_def] >>
+  fs[shape_extends_def, compileEnvTheory.cs_extends_def] >>
   qexists_tac `REVERSE new ++
     [<| bb_label := t.cs_current_bb;
         bb_instructions := t.cs_current_insts |>]` >>

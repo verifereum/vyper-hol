@@ -18,12 +18,11 @@
  *                        unwrap_runtime_immutable_word_sim (DLOAD),
  *                        vv_post_calldata (no calldata pointers)
  *
- * Helpers: compile_ensure_in_memory_extends, unwrap_value_extends,
+ * Helpers: compile_expr_extends (exprLoweringProps' compile_expr_grows),
+ *   compile_ensure_in_memory_extends, unwrap_value_extends,
  *   expr_post_of_vv_post_load, step_DLOAD, immutable_holds_dload
  *
  * Cheated, each with its reason at the lemma:
- *   compile_expr_extends — compile_expr appends to the compile state and
- *                        hands out names from its start counters on
  *   unwrap_storage_word_sim — a word load from storage (false as stated)
  *   unwrap_ctor_immutable_word_sim — a word immutable in the constructor
  *                        (the lowering differs from Python)
@@ -41,16 +40,15 @@ Libs
 (* ===== The compile side ===== *)
 
 (* compile_expr only appends to the compile state, and hands out variables
-   and instruction ids from its start counters on.  Cheated: it needs an
-   induction over compile_expr's cases of its own, as exprLoweringProps'
-   ci_mono_lower_value_compile_expr has for the weaker ci_mono. *)
+   and instruction ids from its start counters on. *)
 Theorem compile_expr_extends:
   !cenv ty e sa vv sm.
     compile_expr cenv ty e sa = (vv, sm) ==>
     cs_extends sa sm /\ sa.cs_next_var <= sm.cs_next_var /\
     sa.cs_next_id <= sm.cs_next_id
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  drule (cj 1 exprLoweringPropsTheory.compile_expr_grows) >> simp[]
 QED
 
 Theorem compile_ensure_in_memory_appends[local]:

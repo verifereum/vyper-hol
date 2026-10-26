@@ -22,8 +22,7 @@
  * integer, and from an integer to bool, where the lowering and the source
  * agree.  The rest wait on #548: there the checker, the lowering and the
  * semantics disagree.  compile_convert_word_sim takes the argument's
- * compile-state shape from exprSimOperators' lower_value_word_shape, which
- * is cheated.
+ * compile-state shape from exprSimOperators' lower_value_word_shape.
  *
  * Helpers: eval_expr_convert_cases, expr_post_convert,
  * convert_frag_straight, convert_int_clamp, convert_u2s_clamp,
@@ -690,7 +689,8 @@ Proof
   >- simp[compile_convert_stack]
   >- metis_tac[eval_expr_type_builtin_value] >>
   irule compile_convert_frag_sim >> rpt conj_tac
-  >- (rpt gen_tac >> strip_tac >> drule lower_value_word_shape >> simp[])
+  >- (rpt gen_tac >> strip_tac >>
+      drule expr_sim_pre_lower_value_word_shape >> disch_then drule >> simp[])
   >- (rpt gen_tac >> strip_tac >>
       qspecl_then [`compile_type_convert x (mk_convert_op (expr_type e1) ann)`,
                    `sa`, `op`, `sb`] mp_tac straight_fresh_extends >>
