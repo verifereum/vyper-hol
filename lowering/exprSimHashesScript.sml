@@ -1019,3 +1019,58 @@ Proof
   goal_assum (drule_at Any) >> simp[] >>
   metis_tac[hash_bool_post_operand]
 QED
+
+Theorem hash_bool_sim_observation:
+  !cenv other lays b fn lbl sc sd op ctx.
+    expr_sim_ok cenv (TopLevelName (BaseT BoolT) (other,"")) /\
+    expr_sim_pre cenv (hash_bool_context other lays) (hash_bool_env other)
+      (TopLevelName (BaseT BoolT) (other,""))
+      ((hash_bool_state other b) with outcomes := SOME []) /\
+    stmt_state_rel fn cenv (hash_bool_context other lays)
+      ((hash_bool_state other b) with outcomes := SOME []) (init_venom_state lbl) /\
+    lower_value compile_expr cenv (BaseT BoolT)
+      (TopLevelName (BaseT BoolT) (other,"")) sc = (op,sd) /\
+    local_ptrs_reserved cenv sc /\ fn_has_code sc sd fn /\
+    fn_inst_ids_distinct fn /\ sc.cs_current_insts = [] /\
+    sc.cs_current_bb = lbl /\ sd.cs_current_bb = lbl /\
+    fn.fn_blocks = [<|bb_label := lbl; bb_instructions :=
+      sd.cs_current_insts ++ [mk_inst sd.cs_next_id RET [op; Lit 0w] []]|>] ==>
+    ?fuel s. run_from fuel ctx fn (init_venom_state lbl) =
+      IntRet <|iret_values := [if b then 1w else 0w]; iret_adopt_fmp := NONE|> s
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `expr_sim_ok _ _` mp_tac >>
+  simp[expr_sim_ok_def] >> disch_then drule >>
+  disch_then (qspecl_then [`ctx`, `fn`, `BaseT BoolT`] mp_tac) >>
+  simp[exprSimTheory.expr_sim_def] >>
+  disch_then (qspecl_then [`sc`, `sd`, `op`, `INL (Value (BoolV b))`,
+    `(hash_bool_state other b) with outcomes := SOME []`,
+    `init_venom_state lbl`] mp_tac) >>
+  simp[hash_bool_source_eval, exprSimTheory.expr_res_ok_def] >> strip_tac >>
+  irule hash_frag_ret_observation >>
+  (conj_tac >- simp[init_venom_state_def]) >>
+  goal_assum (drule_at (Pat `frag_exec _ _ _ _ _ _`)) >>
+  simp[expr_type_def, init_venom_state_def, lookup_block_def,
+       FIND_def, INDEX_FIND_def, get_instruction_def, EL_APPEND_EQN] >>
+  metis_tac[hash_bool_post_operand, expr_type_def]
+QED
+
+Theorem hash_bool_name_not_sim:
+  !cenv other sa.
+    other <> cenv.ce_module /\ local_ptrs_reserved cenv sa ==>
+    ~expr_sim_ok cenv (TopLevelName (BaseT BoolT) (other,""))
+Proof
+  rpt strip_tac >> drule hash_bool_shared_model >> strip_tac >>
+  drule hash_name_observer_exists >>
+  disch_then (qspec_then `other` strip_assume_tac) >>
+  `!b. ?fuel s. run_from fuel ARB fn (init_venom_state lbl) =
+    IntRet <|iret_values := [if b then 1w else 0w]; iret_adopt_fmp := NONE|> s` by
+    (gen_tac >> irule hash_bool_sim_observation >> simp[] >>
+     goal_assum (drule_at (Pat `lower_value _ _ _ _ _ = _`)) >>
+     simp[] >> metis_tac[]) >>
+  pop_assum (fn th => assume_tac (Q.SPEC `F` th) >> mp_tac (Q.SPEC `T` th)) >>
+  simp[] >> strip_tac >>
+  gvs[] >> rpt strip_tac >>
+  qpat_x_assum `!fuel fuel' ctx. _`
+    (qspecl_then [`fuel`, `fuel'`, `ARB`] mp_tac) >> gvs[]
+QED
