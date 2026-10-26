@@ -13,10 +13,11 @@
               ctl_ret_string_phi_matches_python_oracle. *)
 Theory evalCompilerPhiPointers
 Ancestors compileVyper supportedProgram concretizeMemLocDefs codegenReadyCompute alist byte integer_word option
-Libs memoryStoreWitnessLib vyperCheckContractFrontendLib jsonASTLib evalCompilerBytecodeLib finite_mapLib computeLib wordsLib
+Libs memoryStoreWitnessLib vyperCheckContractFrontendLib jsonASTLib evalCompilerBytecodeLib finite_mapLib computeLib wordsLib supportedEvalLib
 
 fun holbuild_extra_deps (_ : string list) = ()
 val () = holbuild_extra_deps ["../phi-pointers"]
+val () = supportedEvalLib.configure ()
 val () = computeLib.upd_compset add_finite_map_compset
 val () = computeLib.upd_compset (computeLib.add_thms
   [fmap_to_alist_FEMPTY, i2w_pos])

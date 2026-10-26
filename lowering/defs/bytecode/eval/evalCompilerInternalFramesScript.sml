@@ -2,10 +2,11 @@
    Captures use VYPER_PIN with python_o1_bytecode_oracle.py settings. *)
 Theory evalCompilerInternalFrames
 Ancestors evalCompilerInternalFramesDiamond evalCompilerInternalFramesExtCall alist byte integer_word option
-Libs memoryStoreWitnessLib finite_mapLib computeLib wordsLib
+Libs memoryStoreWitnessLib finite_mapLib computeLib wordsLib supportedEvalLib
 
 fun holbuild_extra_deps (_ : string list) = ()
 val () = holbuild_extra_deps ["../internal-frames"]
+val () = supportedEvalLib.configure ()
 val () = computeLib.upd_compset add_finite_map_compset
 val () = computeLib.upd_compset (computeLib.add_thms [fmap_to_alist_FEMPTY, integer_wordTheory.i2w_pos])
 val fixture_root = "../internal-frames/oracle"
