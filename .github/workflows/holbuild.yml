@@ -3,6 +3,9 @@ name: holbuild
 on:
   workflow_dispatch:
   pull_request:
+    # Draft PRs run no jobs. ready_for_review starts CI when a draft is marked
+    # ready; converted_to_draft cancels the run of a PR turned back into a draft.
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
   merge_group:
   push:
     branches: [main]
@@ -20,6 +23,7 @@ env:
 
 jobs:
   build:
+    if: github.event.pull_request.draft != true
     runs-on: ubuntu-latest
     # The cache login is an environment secret that only trusted main runs can read.
     environment: ${{ ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'merge_group' && github.event.merge_group.base_ref == 'refs/heads/main')) && 'bazel-cache' || '' }}
@@ -151,6 +155,7 @@ jobs:
           retention-days: 90
 
   python-o1-oracle:
+    if: github.event.pull_request.draft != true
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -171,6 +176,7 @@ jobs:
             --vyper-repo vyper-src
 
   export-vyper-tests:
+    if: github.event.pull_request.draft != true
     runs-on: ubuntu-latest
     outputs:
       export-cache-key: ${{ steps.exports.outputs.export-cache-key }}
@@ -182,6 +188,7 @@ jobs:
         id: exports
 
   vyper-tests:
+    if: github.event.pull_request.draft != true
     needs: [build, export-vyper-tests]
     runs-on: ubuntu-latest
     # The cache login is an environment secret that only trusted main runs can read.
@@ -274,7 +281,7 @@ jobs:
           fi
 
   holbuild-success:
-    if: always()
+    if: always() && github.event.pull_request.draft != true
     runs-on: ubuntu-latest
     needs: [build, python-o1-oracle, export-vyper-tests, vyper-tests]
     steps:
