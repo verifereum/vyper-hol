@@ -24,6 +24,37 @@ Libs
 
 (* ===== A word-local declaration ===== *)
 
+Theorem stmt_state_rel_declare_local_entry:
+  !func cenv cx es ss id ty st c st1.
+    declare_local cenv id ty st = (c, st1) /\ cenv.ce_alloca_locals /\
+    lookup_scopes id es.scopes = NONE /\
+    (!l. FLOOKUP cenv.ce_vars id = SOME l ==> ?p sz. l = PtrVar p sz) /\
+    stmt_state_rel func cenv cx es ss ==>
+    stmt_state_rel func c cx es ss
+Proof
+  rpt strip_tac >> drule_all declare_local_ptr >> strip_tac >>
+  irule stmt_state_rel_cenv_cong >> qexists `cenv` >> simp[] >>
+  rpt conj_tac
+  >- (rpt strip_tac >> Cases_on `n = id` >> gvs[])
+  >- (rpt strip_tac >> Cases_on `n = id` >> gvs[] >> metis_tac[])
+  >- (rpt strip_tac >> Cases_on `n = id` >> gvs[] >> metis_tac[]) >>
+  qpat_x_assum `c with <| ce_vars := _; ce_var_type := _;
+                         ce_dynarray_capacity := _ |> = cenv` mp_tac >>
+  simp[compileEnvTheory.compile_env_component_equality]
+QED
+
+Theorem cenv_top_ext_declare_local:
+  !cenv id ty st c st1 sc rest.
+    declare_local cenv id ty st = (c, st1) /\ cenv.ce_alloca_locals /\
+    lookup_scopes id rest = NONE /\
+    (!l. FLOOKUP cenv.ce_vars id = SOME l ==> ?p sz. l = PtrVar p sz) ==>
+    cenv_top_ext cenv c (sc :: rest)
+Proof
+  rpt strip_tac >> drule_all declare_local_ptr >> strip_tac >>
+  simp[cenv_top_ext_def] >> rpt strip_tac >>
+  `n = id` by metis_tac[] >> gvs[]
+QED
+
 (* x: T = e for a word type T, for every outcome: the right-hand side's
    errors exit, and on a value the local is declared and stored
    (compile_annassign_word_frag).  The right-hand side's judgment is at the
