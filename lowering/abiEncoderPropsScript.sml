@@ -4546,6 +4546,92 @@ Proof
 
 QED
 
+Theorem enc_static_info_extends:
+  compile_abi_encode_static_info dst src ei a = (op,b) ==> cs_extends a b
+Proof
+  strip_tac >> drule enc_static_info_same_block >>
+  simp[same_blocks_def] >> strip_tac >>
+  irule cs_extends_same_block >> simp[rich_listTheory.IS_PREFIX_APPEND]
+QED
+
+Theorem enc_static_body_chain:
+  emit_op MLOAD [count_ptr] sb = (i,s1) /\
+  emit_op ADD [src; Lit 32w] s1 = (sd,s2) /\
+  emit_op MUL [i; Lit (n2w msz)] s2 = (so,s3) /\
+  emit_op ADD [sd;so] s3 = (child_src,s4) /\
+  emit_op ADD [dst; Lit 32w] s4 = (dd,s5) /\
+  emit_op MUL [i; Lit (n2w asz)] s5 = (dof,s6) /\
+  emit_op ADD [dd;dof] s6 = (child_dst,s7) /\
+  compile_abi_encode_static_info child_dst child_src ei s7 = (ignored,s8) /\
+  emit_op ADD [i;Lit 1w] s8 = (next,s9) /\
+  emit_void MSTORE [count_ptr;next] s9 = ((),se) /\
+  (!x. MEM (Var x) [count_ptr;src;dst] ==> not_fresh_at sb x) ==>
+  cs_extends sb s7 /\ cs_extends s7 s8 /\ cs_extends s8 se /\
+  cs_extends s7 se /\ frag_ids s7 s8 SUBSET frag_ids sb se /\
+  sb.cs_next_var <= s7.cs_next_var /\ sb.cs_next_var <= s8.cs_next_var /\
+  (!x. not_fresh_at sb x ==> not_fresh_at s7 x) /\
+  (!x. MEM (Var x) [child_dst;child_src;count_ptr;i] ==> not_fresh_at s7 x) /\
+  (!x. count_ptr = Var x ==> not_fresh_at s8 x)
+Proof
+  strip_tac >>
+  imp_res_tac (cj 3 emitted_insts_emit_op) >>
+  imp_res_tac (cj 4 emitted_insts_emit_op) >>
+  imp_res_tac (cj 2 emitted_insts_emit_void) >>
+  imp_res_tac enc_static_info_frontiers >>
+  imp_res_tac enc_emit_op_old_result >>
+  imp_res_tac (SRULE [cs_appends_def] (cj 2 cs_appends_emit_helpers)) >>
+  imp_res_tac (SRULE [cs_appends_def] (cj 3 cs_appends_emit_helpers)) >>
+  drule enc_static_info_extends >> strip_tac >>
+  rpt (qpat_x_assum `emit_op _ _ _ = _` kall_tac) >>
+  qpat_x_assum `emit_void _ _ _ = _` kall_tac >>
+  qpat_x_assum `compile_abi_encode_static_info _ _ _ _ = _` kall_tac >>
+  `cs_extends sb s4` by
+    (irule cs_extends_trans >> qexists_tac `s2` >> metis_tac[cs_extends_trans]) >>
+  `cs_extends sb s7` by
+    (irule cs_extends_trans >> qexists_tac `s4` >> simp[] >>
+     irule cs_extends_trans >> qexists_tac `s5` >> metis_tac[cs_extends_trans]) >>
+  `cs_extends s8 se /\ cs_extends s7 se` by metis_tac[cs_extends_trans] >>
+  simp[] >> conj_tac
+  >- (simp[frag_ids_def, pred_setTheory.SUBSET_DEF] >> rpt strip_tac >> decide_tac) >>
+  `sb.cs_next_var <= s7.cs_next_var /\ sb.cs_next_var <= s8.cs_next_var /\
+   s4.cs_next_var <= s7.cs_next_var /\ s1.cs_next_var <= s7.cs_next_var` by decide_tac >>
+  simp[] >> conj_tac >- (simp[not_fresh_at_def] >> decide_tac) >>
+  simp[MEM] >> rpt strip_tac >>
+  fs[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]
+QED
+
+Theorem enc_static_loop_body_phases:
+  enc_static_loop_body dst src ei asz msz count_ptr sb = ((),se) /\
+  (!x. MEM (Var x) [count_ptr;src;dst] ==> not_fresh_at sb x) ==>
+  ?i src_data src_off child_src dst_data dst_off child_dst ignored next
+    s1 s2 s3 s4 s5 s6 s7 s8 s9.
+    emit_op MLOAD [count_ptr] sb = (i,s1) /\
+    emit_op ADD [src; Lit 32w] s1 = (src_data,s2) /\
+    emit_op MUL [i; Lit (n2w msz)] s2 = (src_off,s3) /\
+    emit_op ADD [src_data;src_off] s3 = (child_src,s4) /\
+    emit_op ADD [dst; Lit 32w] s4 = (dst_data,s5) /\
+    emit_op MUL [i; Lit (n2w asz)] s5 = (dst_off,s6) /\
+    emit_op ADD [dst_data;dst_off] s6 = (child_dst,s7) /\
+    compile_abi_encode_static_info child_dst child_src ei s7 = (ignored,s8) /\
+    emit_op ADD [i;Lit 1w] s8 = (next,s9) /\
+    emit_void MSTORE [count_ptr;next] s9 = ((),se) /\
+    same_blocks sb se /\
+    se.cs_current_insts = sb.cs_current_insts ++ emitted_insts sb se /\
+    emitted_insts sb se =
+      emitted_insts sb s1 ++ emitted_insts s1 s4 ++
+      emitted_insts s4 s7 ++ emitted_insts s7 s8 ++ emitted_insts s8 se /\
+    cs_extends sb s7 /\ cs_extends s7 s8 /\ cs_extends s8 se /\
+    cs_extends s7 se /\ frag_ids s7 s8 SUBSET frag_ids sb se /\
+    sb.cs_next_var <= s7.cs_next_var /\ sb.cs_next_var <= s8.cs_next_var /\
+    (!x. not_fresh_at sb x ==> not_fresh_at s7 x) /\
+    (!x. MEM (Var x) [child_dst;child_src;count_ptr;i] ==> not_fresh_at s7 x) /\
+    (!x. count_ptr = Var x ==> not_fresh_at s8 x)
+Proof
+  strip_tac >> drule enc_static_loop_body_code >> strip_tac >>
+  drule_all enc_static_body_chain >> strip_tac >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
+
 Theorem compile_abi_encode_frag:
   (!dst child_ptr ei is_dyn static_ofst dyn_ptr st op st' ctx env ty tv v
     av s0 dst_w src_w lo top.
