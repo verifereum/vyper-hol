@@ -5801,6 +5801,41 @@ Resume enc_static_loop_complete_frag_layout[exit]:
 QED
 Finalise enc_static_loop_complete_frag_layout
 
+Theorem enc_elems_in_memory_take:
+  !vs k p. elems_in_memory vs p tv mem ==>
+    elems_in_memory (TAKE k vs) p tv mem
+Proof
+  Induct >> Cases_on `k` >> simp[val_in_memory_def] >>
+  rpt strip_tac >> first_x_assum irule >> simp[]
+QED
+
+Theorem enc_dynarray_memory_take:
+  val_in_memory (ArrayTV tv (Dynamic n)) (ArrayV (DynArrayV vs)) a mem /\
+  k <= LENGTH vs /\ (n2w k : bytes32) = n2w (LENGTH vs) ==>
+  val_in_memory (ArrayTV tv (Dynamic n))
+    (ArrayV (DynArrayV (TAKE k vs))) a mem
+Proof
+  simp[val_in_memory_def, LENGTH_TAKE] >>
+  rpt strip_tac >> irule enc_elems_in_memory_take >> simp[]
+QED
+
+Theorem enc_dynarray_type_take:
+  value_has_type (ArrayTV tv (Dynamic n)) (ArrayV (DynArrayV vs)) ==>
+  value_has_type (ArrayTV tv (Dynamic n)) (ArrayV (DynArrayV (TAKE k vs)))
+Proof
+  simp[value_has_type_def, all_have_type_EVERY] >>
+  rpt strip_tac >> simp[EVERY_TAKE, LENGTH_TAKE_EQ]
+QED
+
+Theorem enc_dynarray_memory_mod_take:
+  val_in_memory (ArrayTV tv (Dynamic n)) (ArrayV (DynArrayV vs)) a mem ==>
+  val_in_memory (ArrayTV tv (Dynamic n))
+    (ArrayV (DynArrayV (TAKE (LENGTH vs MOD dimword (:256)) vs))) a mem
+Proof
+  strip_tac >> irule enc_dynarray_memory_take >>
+  simp[wordsTheory.WORD_EQ, arithmeticTheory.MOD_LESS_EQ]
+QED
+
 Theorem compile_abi_encode_frag:
   (!dst child_ptr ei is_dyn static_ofst dyn_ptr st op st' ctx env ty tv v
     av s0 dst_w src_w lo top.
