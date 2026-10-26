@@ -13,8 +13,13 @@
  *     calldata window to the destination when every clamp accepts its word
  *     (dec_ok) and reverts otherwise
  *
- * Helpers: dec_straight, dec_frame, dec_run, static_dec, dec_ok and their
- *   lemmas.
+ * Also used by entryDecodeStaticProps: static_dec (the static decode
+ *   infos), dec_ok (every clamp accepts), dec_frame (what the decode
+ *   changes), dec_run (copy or revert), dec_straight (straight-line
+ *   code) and their lemmas, and decode_static_buf_run (the induction
+ *   behind compile_abi_decode_static_buf_frag).
+ *
+ * Helpers: the memory-window lemmas.
  *
  * The decode of a static value from calldata (hi_op = Lit 0w, the bound
  * pinned Vyper omits for calldata) runs straight-line code: a word is
@@ -27,13 +32,12 @@
 Theory abiDecodeStaticProps
 Ancestors
   arithmetic list rich_list words finite_map
-  entryDecodeProps moduleLoweringProps abiEncoderProps
+  entryDecodeProps moduleLoweringProps
   abiEncoder compileEnv emitHelper emitHelperProps exprLoweringProps
   valueEncoding valueEncodingProps valueEncodingProofs fragExec
-  venomExecSemantics venomState venomInst
-  vyperValue vyperTyping
+  venomState venomInst
 Libs
-  wordsLib dep_rewrite
+  wordsLib
 
 (* ===== Straight-line fragments ===== *)
 
@@ -100,22 +104,6 @@ Proof
   simp[dec_straight_def]
 QED
 
-(* ===== Running emitted code ===== *)
-
-Theorem run_extend_abort:
-  !st st1 st2 s a t.
-    inst_extends st st1 /\ inst_extends st1 st2 /\
-    run_inst_seq (emitted_insts st st1) s = Abort a t ==>
-    run_inst_seq (emitted_insts st st2) s = Abort a t
-Proof
-  rw[inst_extends_def] >>
-  `emitted_insts st st2 = emitted_insts st st1 ++ emitted_insts st1 st2` by
-    (irule exprLoweringPropsTheory.emitted_insts_append >> simp[]) >>
-  simp[] >>
-  DEP_REWRITE_TAC[exprLoweringPropsTheory.run_inst_seq_append_err] >>
-  simp[]
-QED
-
 (* ===== Static word decode ===== *)
 
 (* compile_abi_decode_static with the basetype clamp: the load gives w (any
@@ -168,7 +156,7 @@ Proof
            (strip_assume_tac o MATCH_MP emitted_insts_emit_op) >>
          simp[]) >>
       simp[] >> irule decode_mstore_frame >> simp[]) >>
-  qexists_tac `t` >> irule run_extend_abort >> metis_tac[]
+  qexists_tac `t` >> irule run_inst_seq_abort_extends >> metis_tac[]
 QED
 
 Theorem dec_straight_decode_static:
@@ -225,9 +213,7 @@ Proof
   drule_all compile_abi_decode_static_run >> simp[] >> strip_tac >>
   qexists_tac `t` >> simp[] >>
   `t.vs_memory = (mstore (w2n p) (typed_val_to_w256 tv v) s).vs_memory` by
-    (qpat_x_assum `vars_pc_only _ t`
-       (mp_tac o Q.AP_TERM `venom_state_vs_memory` o
-        REWRITE_RULE [vars_pc_only_def]) >> simp[]) >>
+    metis_tac[vars_pc_only_memory] >>
   drule_all val_in_memory_word >>
   disch_then (qspecl_then [`w2n p`, `t.vs_memory`] SUBST1_TAC) >>
   pop_assum SUBST1_TAC >> rewrite_tac[mstore_mem_word_at_same]
@@ -319,9 +305,7 @@ Proof
          gvs[fresh_vars_wrt_def, lookup_var_def, FLOOKUP_DEF] >>
          metis_tac[GREATER_EQ]) >>
       metis_tac[]) >>
-  qpat_x_assum `vars_pc_only _ _`
-    (mp_tac o Q.AP_TERM `venom_state_vs_labels` o
-     REWRITE_RULE [vars_pc_only_def]) >> simp[]
+  drule vars_pc_only_fields >> simp[]
 QED
 
 Theorem dec_frame_inst_idx:
@@ -339,10 +323,7 @@ Theorem dec_frame_of_vars:
     dec_frame st q n s t
 Proof
   rw[dec_frame_def] >>
-  `t.vs_memory = s.vs_memory` by
-    (qpat_x_assum `vars_pc_only _ _`
-       (mp_tac o Q.AP_TERM `venom_state_vs_memory` o
-        REWRITE_RULE [vars_pc_only_def]) >> simp[]) >>
+  `t.vs_memory = s.vs_memory` by metis_tac[vars_pc_only_memory] >>
   simp[]
 QED
 
@@ -436,14 +417,11 @@ Proof
   Cases_on `abi_clamp_ok c w` >> simp[] >> strip_tac >>
   qexists_tac `t` >> simp[] >>
   `t.vs_memory = (mstore (w2n p) w s).vs_memory` by
-    (qpat_x_assum `vars_pc_only _ t`
-       (mp_tac o Q.AP_TERM `venom_state_vs_memory` o
-        REWRITE_RULE [vars_pc_only_def]) >> simp[]) >>
-  simp[dec_frame_def] >> rpt conj_tac >>
-  TRY (qpat_x_assum `vars_pc_only _ t` mp_tac >>
-       once_rewrite_tac[mstore_with_memory] >> simp[] >> NO_TAC) >>
-  TRY (rpt strip_tac >> irule mem_bytes_at_mstore_outside >> simp[] >>
-       NO_TAC) >>
+    metis_tac[vars_pc_only_memory] >>
+  simp[dec_frame_def] >> rpt conj_tac
+  >- (qpat_x_assum `vars_pc_only _ t` mp_tac >>
+      once_rewrite_tac[mstore_with_memory] >> simp[])
+  >- (rpt strip_tac >> irule mem_bytes_at_mstore_outside >> simp[]) >>
   simp[mem_bytes_at_mstore_same, mem_bytes_at_word, Abbr `w`]
 QED
 
@@ -624,9 +602,11 @@ Theorem decode_elems_cons_run:
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all decode_elems_cons_phases >> strip_tac >>
+  `w2n p + k + m < dimword (:256) /\ w2n a + k + m < dimword (:256)` by
+    decide_tac >>
   qspecl_then [`ei`, `m`, `es`, `st1`, `ed`, `st2`, `st3`, `src`, `dst`, `k`,
                `st`, `s`, `p`, `a`] mp_tac decode_elem_step >>
-  impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> decide_tac) >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
   strip_tac >>
   `dec_straight st3 st'` by metis_tac[static_dec_straight] >>
   simp[dec_ok_def] >>
@@ -655,7 +635,7 @@ Proof
       `k + w2n p + m = k + (m + w2n p) /\ k + w2n a + m = k + (m + w2n a)` by
         decide_tac >>
       asm_rewrite_tac[]) >>
-  qexists_tac `t` >> irule run_extend_abort >> metis_tac[]
+  qexists_tac `t` >> irule run_inst_seq_abort_extends >> metis_tac[]
 QED
 
 Theorem decode_static_buf_run:
@@ -695,7 +675,7 @@ Proof
   rename1 `static_dec ei m` >> rename1 `static_decs elems n` >>
   qspecl_then [`ei`, `m`, `elems`, `n`, `dst`, `src`, `k`, `st`, `st'`, `s`,
                `p`, `a`] mp_tac decode_elems_cons_run >>
-  impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> decide_tac) >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
   simp[]
 QED
 

@@ -17,16 +17,21 @@
  *     compile_decode_args (tuples, structs, static arrays): the argument
  *     ends in memory at its ALLOCA (val_in_memory)
  *   type_to_abi_dec_info_word_plan — a word type's decode info is a plan
+ *   type_to_abi_dec_info_word_tuple_plan,
+ *   type_to_abi_dec_info_word_sarray_plan — so is that of a tuple of word
+ *     types and of a static array of a word type (abi_dec_plan is not
+ *     vacuous for the infos the compiler builds)
  *
  * Helpers: dec_value, decs_value, sparse_val and their lemmas.
  *
- * Not here: that type_to_abi_dec_info builds plans for static complex
- * types, and that the decoder's head offsets (abi_embedded_static_size)
- * match the ABI's for them.  Both need the compile env's struct metadata
- * and sizes (ce_struct_fields, type_memory_bytes,
- * abi_embedded_static_size) to agree with the type environment, as the
- * encoder's plans do (abi_enc_plan).  For a word type the plan follows
- * from word_arg_clamp_ok (type_to_abi_dec_info_word_plan).
+ * Not here: that type_to_abi_dec_info builds plans for every static
+ * complex type (structs, nested aggregates), and that the decoder's head
+ * offsets (abi_embedded_static_size) match the ABI's for them.  Both
+ * need the compile env's struct metadata and sizes (ce_struct_fields,
+ * type_memory_bytes, abi_embedded_static_size) to agree with the type
+ * environment, as the encoder's plans do (abi_enc_plan).  For a word
+ * type the plan follows from word_arg_clamp_ok
+ * (type_to_abi_dec_info_word_plan).
  *)
 Theory entryDecodeStaticProps
 Ancestors
@@ -34,15 +39,11 @@ Ancestors
   abiDecodeStaticProps entryDecodeProps entryDispatchProps moduleLoweringProps
   valueEncodingProofs valueEncodingProps valueEncoding
   vyperABI vyperABIRoundtrip vyperTyping vyperTypeDefaults vyperTypeABI
-  vyperValue
-  contractABI vfmTypes
-  abiEncoder compileEnv exprLowering moduleLowering selectorDispatch
-  emitHelper emitHelperProps exprLoweringProps fragExec
-  venomExecSemantics venomState venomInst
+  vyperValue vfmTypes
+  compileEnv exprLowering moduleLowering selectorDispatch
+  emitHelperProps fragExec venomState
 Libs
-  wordsLib dep_rewrite
-
-val dimindex_256 = fcpLib.INDEX_CONV ``dimindex(:256)``;
+  wordsLib
 
 (* ===== Decode plans ===== *)
 
@@ -137,11 +138,13 @@ Theorem word_type_memory_size:
     is_word_type ty /\ evaluate_type env ty = SOME tv ==>
     type_memory_size tv = 32
 Proof
-  Cases_on `ty` >> simp[is_word_type_def] >>
-  TRY (rename1 `BaseT bt` >> Cases_on `bt` >> simp[is_word_type_def] >>
-       TRY (rename1 `BytesT bd` >> Cases_on `bd` >> simp[is_word_type_def])) >>
-  simp[evaluate_type_def, AllCaseEqs()] >> rw[] >>
-  simp[type_memory_size_def]
+  Cases_on `ty` >> simp[is_word_type_def]
+  >~ [`FlagT`] >- simp[evaluate_type_def, AllCaseEqs(), PULL_EXISTS,
+                       type_memory_size_def] >>
+  rename1 `BaseT bt` >> Cases_on `bt` >>
+  simp[is_word_type_def, evaluate_type_def, type_memory_size_def] >>
+  rename1 `BytesT bd` >> Cases_on `bd` >>
+  simp[is_word_type_def, evaluate_type_def, type_memory_size_def]
 QED
 
 Theorem mem_bytes_at_word_eq:
@@ -173,8 +176,105 @@ Proof
   rpt strip_tac >> drule_all vyper_to_abi_word_enc >> strip_tac >>
   drule_all word_type_memory_size >> strip_tac >>
   simp[dec_value_def, dec_ok_def, static_dec_prim, mem_bytes_at_word_eq,
-       dimindex_256] >>
+       venomMemPropsTheory.dimindex_256] >>
   metis_tac[val_in_memory_word]
+QED
+
+(* ===== Plans of word aggregates ===== *)
+
+Theorem word_type_dec_sizes:
+  !sfields cenv ty.
+    is_word_type ty ==>
+    ~is_abi_dynamic sfields ty /\ abi_embedded_static_size sfields ty = 32 /\
+    type_memory_bytes cenv ty = 32
+Proof
+  rpt gen_tac >> Cases_on `ty` >>
+  simp[is_word_type_def, is_abi_dynamic_def, type_memory_bytes_def,
+       abi_embedded_static_size_word] >>
+  rename1 `BaseT bt` >> Cases_on `bt` >>
+  simp[is_word_type_def, is_abi_dynamic_def, type_memory_bytes_def,
+       abi_embedded_static_size_word] >>
+  rename1 `BytesT bd` >> Cases_on `bd` >>
+  simp[is_word_type_def, is_abi_dynamic_def, type_memory_bytes_def,
+       abi_embedded_static_size_word]
+QED
+
+Theorem type_to_abi_dec_info_word_plans:
+  !tenv sfields cenv ts.
+    EVERY (\t. is_word_type t /\ IS_SOME (evaluate_type tenv t) /\
+               !m. t = BaseT (IntT m) ==> m MOD 8 = 0) ts /\
+    (!nsid m. FLOOKUP tenv nsid = SOME (FlagArgs m) ==>
+              cenv.ce_flag_n_members (nsid_to_string nsid) = m) ==>
+    abi_dec_plans tenv ts
+      (MAP (\t. (type_to_abi_dec_info sfields cenv t,
+                 abi_embedded_static_size cenv.ce_struct_fields t,
+                 type_memory_bytes cenv t)) ts)
+Proof
+  rpt gen_tac >> Induct_on `ts` >> simp[abi_dec_plan_nil] >>
+  rpt strip_tac >> rename1 `is_word_type h` >>
+  `?tv. evaluate_type tenv h = SOME tv` by
+    (Cases_on `evaluate_type tenv h` >> fs[]) >>
+  drule_all word_type_memory_size >> strip_tac >>
+  qspecl_then [`cenv.ce_struct_fields`, `cenv`, `h`] mp_tac
+    word_type_dec_sizes >>
+  simp[] >> strip_tac >>
+  `abi_dec_plans tenv (h::ts)
+     ((type_to_abi_dec_info sfields cenv h, type_memory_size tv,
+       type_memory_size tv) ::
+      MAP (\t. (type_to_abi_dec_info sfields cenv t,
+                abi_embedded_static_size cenv.ce_struct_fields t,
+                type_memory_bytes cenv t)) ts)` suffices_by simp[] >>
+  irule abi_dec_plan_cons >> rpt conj_tac
+  >- first_assum ACCEPT_TAC
+  >- (irule type_to_abi_dec_info_word_plan >> rpt conj_tac >>
+      first_assum ACCEPT_TAC) >>
+  first_x_assum irule >> simp[]
+QED
+
+(* Non-vacuity: the decode info type_to_abi_dec_info builds for a tuple of
+   word types is a plan. *)
+Theorem type_to_abi_dec_info_word_tuple_plan:
+  !tenv sfields cenv ts.
+    EVERY (\t. is_word_type t /\ IS_SOME (evaluate_type tenv t) /\
+               !m. t = BaseT (IntT m) ==> m MOD 8 = 0) ts /\
+    (!nsid m. FLOOKUP tenv nsid = SOME (FlagArgs m) ==>
+              cenv.ce_flag_n_members (nsid_to_string nsid) = m) ==>
+    abi_dec_plan tenv (TupleT ts)
+      (type_to_abi_dec_info sfields cenv (TupleT ts))
+Proof
+  rpt strip_tac >>
+  `~EXISTS (is_abi_dynamic cenv.ce_struct_fields) ts` by
+    (fs[EVERY_MEM, EXISTS_MEM] >> metis_tac[word_type_dec_sizes]) >>
+  simp[Once type_to_abi_dec_info_def] >> irule abi_dec_plan_tuple >>
+  irule type_to_abi_dec_info_word_plans >> simp[]
+QED
+
+(* Non-vacuity: so is the decode info of a static array of a word type. *)
+Theorem type_to_abi_dec_info_word_sarray_plan:
+  !tenv sfields cenv t n.
+    is_word_type t /\ IS_SOME (evaluate_type tenv t) /\
+    (!m. t = BaseT (IntT m) ==> m MOD 8 = 0) /\
+    (!nsid m. FLOOKUP tenv nsid = SOME (FlagArgs m) ==>
+              cenv.ce_flag_n_members (nsid_to_string nsid) = m) ==>
+    abi_dec_plan tenv (ArrayT t (Fixed n))
+      (type_to_abi_dec_info sfields cenv (ArrayT t (Fixed n)))
+Proof
+  rpt strip_tac >>
+  `?tv. evaluate_type tenv t = SOME tv` by
+    (Cases_on `evaluate_type tenv t` >> fs[]) >>
+  drule_all word_type_memory_size >> strip_tac >>
+  qspecl_then [`cenv.ce_struct_fields`, `cenv`, `t`] mp_tac
+    word_type_dec_sizes >>
+  simp[Once type_to_abi_dec_info_def, GSYM REPLICATE_GENLIST] >>
+  strip_tac >>
+  `abi_dec_plan tenv (ArrayT t (Fixed n))
+     (DecComplex F (REPLICATE n (type_to_abi_dec_info sfields cenv t,
+                                 type_memory_size tv, type_memory_size tv)))`
+    suffices_by simp[] >>
+  irule abi_dec_plan_sarray >> conj_tac
+  >- first_assum ACCEPT_TAC >>
+  irule type_to_abi_dec_info_word_plan >> rpt conj_tac >>
+  first_assum ACCEPT_TAC
 QED
 
 (* ===== Tuples, structs and static arrays ===== *)
@@ -271,13 +371,6 @@ Proof
   metis_tac[sparse_has_type_lookup]
 QED
 
-Theorem sparse_has_type_mem:
-  !kvs tv n k v. sparse_has_type tv n kvs /\ MEM (k, v) kvs ==> k < n
-Proof
-  Induct >> simp[value_has_type_def] >> Cases >>
-  simp[value_has_type_def] >> metis_tac[]
-QED
-
 Theorem sorted_alookup_mem:
   !kvs k (v : value).
     SORTED $< (MAP FST kvs) /\ MEM (k, v) kvs ==> ALOOKUP kvs k = SOME v
@@ -359,7 +452,8 @@ Proof
      simp[]) >>
   simp[val_in_memory_def] >> conj_tac
   >- (irule kvs_in_memory_intro >> rpt strip_tac >>
-      drule_all sparse_has_type_mem >> strip_tac >>
+      drule sparse_has_type_all_less >>
+      simp[EVERY_MEM, pairTheory.FORALL_PROD] >> disch_then drule >> strip_tac >>
       `ALOOKUP sparse k = SOME v` by metis_tac[sorted_alookup_mem] >>
       first_x_assum drule >> simp[sparse_val_def]) >>
   rpt strip_tac >> first_x_assum drule >> simp[sparse_val_def]
@@ -443,8 +537,8 @@ Finalise abi_dec_plan_value
 
 (* ===== Decoding a static value ===== *)
 
-(* KEY LEMMA: calldata holding a static value's encoding at a decodes to
-   the value in memory at p, without reverting. *)
+(* Calldata holding a static value's encoding at a decodes to the value in
+   memory at p, without reverting. *)
 Theorem compile_abi_decode_static_buf_correct:
   !env ty tv v av info dst src st st' ctx s0 p a.
     abi_dec_plan env ty info /\ evaluate_type env ty = SOME tv /\
@@ -492,10 +586,7 @@ Proof
   simp[] >>
   qabbrev_tac `ats = vyper_to_abi_types tenv tys` >>
   `LENGTH ats = LENGTH tys /\ EL i ats = vyper_to_abi_type tenv (EL i tys)` by
-    (qunabbrev_tac `ats` >> qpat_x_assum `i < _` mp_tac >>
-     rpt (pop_assum kall_tac) >> qid_spec_tac `i` >> qid_spec_tac `tys` >>
-     Induct >> simp[vyper_to_abi_type_def, vyper_to_abi_types_length] >>
-     rpt strip_tac >> Cases_on `i` >> gvs[vyper_to_abi_type_def]) >>
+    metis_tac[vyper_to_abi_types_EL] >>
   qabbrev_tac `e = enc (Tuple ats) (ListV abi_vals)` >>
   qabbrev_tac `k = SUM (MAP2 abi_head_size (TAKE i ats) (TAKE i abi_vals))` >>
   qabbrev_tac `ei = enc (vyper_to_abi_type tenv (EL i tys)) (EL i abi_vals)` >>
@@ -547,10 +638,11 @@ Proof
   pop_assum SUBST1_TAC >> irule step_ADD >> simp[eval_operand_def]
 QED
 
-(* A static argument whose encoding sits at its head offset off in the
-   calldata decodes without reverting, leaving the value in memory at
-   the destination.  calldata_encodes_static_arg gives the calldata
-   premise for calldata that encodes the call. *)
+(* A static argument whose encoding sits at off in the calldata decodes
+   without reverting, leaving the value in memory at the destination.
+   For calldata that encodes the call, calldata_encodes_static_arg gives
+   the encoding at the ABI head offset; that it is the decoder's off is
+   the head-offset agreement this file leaves out (see the header). *)
 Theorem compile_decode_static_arg_correct:
   !cenv name abi_size info off hi st st' ctx loc dst s0 p tenv ty tv v av.
     compile_decode_args cenv [(name, F, F, abi_size, info)] off
