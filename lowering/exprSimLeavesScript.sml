@@ -25,9 +25,9 @@
  * Cheated, for the later #636 PRs:
  *   compile_name_other_sim   — locals of other types: address, bytesN and
  *                              memory-backed (#636 Leaves, row 1)
- *   compile_literal_memory_sim, compile_literal_other_vv_sim — bytes and
- *                              string literals not of a word type, memory
- *                              buffers (row 2)
+ *   compile_literal_other_vv_sim — bytes and string literals not of a
+ *                              word type, memory buffers (row 2);
+ *                              compile_literal_memory_sim follows from it
  *   compile_toplevel_name_sim (row 3).  It takes the ce_vars entry of a
  *                              storage or transient variable from
  *                              storage_vars_rel and transient_vars_rel;
@@ -123,15 +123,57 @@ Proof
   literal_bytes_word_tac
 QED
 
-(* Bytes and string literals, memory buffers of their own.  Cheated, for
-   #636's Infrastructure: compile_literal_other_vv_sim's buffer, unwrapped
-   by expr_sim_of_vv_sim. *)
+(* Bytes and string literals not of a word type: a buffer of their own.
+   compile_bytelike_literal allocates 32 + 32 * word_size (LENGTH bytes)
+   bytes with an ALLOCA, stores the length at the base and the bytes,
+   padded to whole words, in 32-byte chunks after it, and hands out the
+   base as a pointer into memory.
+
+   Why it holds (for the prover to use or ignore):
+   - expr_sim_pre's alloc_limits_expr bounds the buffer below 2 ** 64, so
+     the ALLOCA's literal size does not wrap; stmt_state_rel's alloca_room
+     keeps base + size below 2 ** 256 (stmt_state_rel_exec_alloca), so the
+     ADDs of the chunk addresses do not wrap either.  The ALLOCA may run
+     fresh or again (a loop body): stmt_state_rel's last conjunct says a
+     recorded allocation of it has the size it asks for.
+   - The ALLOCA's output is a fresh variable, no live local's pointer
+     (local_ptrs_reserved), so its allocation misses every live local
+     (local_ptrs_rel_alloca_disjoint) and the MSTOREs keep local_ptrs_rel
+     (local_ptrs_rel_mstore) and so stmt_state_rel (state_rel_frame,
+     alloca_inv_fields, alloca_room_fields).
+   - The allocation's id is sa.cs_next_id, one of the expression's own, as
+     vv_at asks; alloca_inv's disjointness keeps the memory of every other
+     allocation, which vv_post's frame asks for those below sa.cs_next_id.
+   - The value is BytesV bs at BaseTV (BytesT (Dynamic n)) or StringV str
+     at BaseTV (StringT n) (well_typed_literal: LENGTH <= n), whose
+     val_footprint is exactly the buffer's size; val_wf holds since
+     type_memory_size is 32 + 32 * word_size n.
+   - es' = es: a literal's evaluation leaves the state alone. *)
+Theorem compile_literal_other_vv_sim:
+  !cenv ann l.
+    ((?bs. l = BytesL bs /\ ~is_word_type ann) \/ (?str. l = StringL str)) ==>
+    expr_vv_ok cenv (Literal ann l)
+Proof
+  cheat
+QED
+
+(* Bytes and string literals, memory buffers of their own:
+   compile_literal_other_vv_sim's buffer, which unwrap_value hands out as it
+   is (expr_sim_of_vv_sim). *)
 Theorem compile_literal_memory_sim:
   !ctx func cenv cx env ty ann l es.
     expr_sim_pre cenv cx env (Literal ann l) es /\ ~is_word_type ann ==>
     expr_sim ctx func cenv cx ty (Literal ann l) es
 Proof
-  cheat
+  rpt strip_tac >> irule exprSimUnwrapTheory.expr_sim_of_vv_sim >>
+  `(?bs. l = BytesL bs /\ ~is_word_type ann) \/ (?str. l = StringL str)` by
+    (gvs[expr_sim_pre_def, well_typed_expr_def] >> Cases_on `l` >> gvs[] >>
+     Cases_on `ann` >> gvs[well_typed_literal_def] >>
+     rename1 `BaseT bt` >> Cases_on `bt` >>
+     gvs[well_typed_literal_def, is_word_type_def]) >>
+  `expr_vv_ok cenv (Literal ann l)` by
+    (irule compile_literal_other_vv_sim >> gvs[]) >>
+  gvs[expr_vv_ok_def] >> metis_tac[]
 QED
 
 Theorem compile_literal_other_sim:
@@ -161,15 +203,6 @@ Proof
   irule compile_literal_other_sim >> metis_tac[]
 QED
 
-(* Bytes and string literals not of a word type: a buffer of their own.
-   Cheated with compile_literal_memory_sim. *)
-Theorem compile_literal_other_vv_sim:
-  !cenv ann l.
-    ((?bs. l = BytesL bs /\ ~is_word_type ann) \/ (?str. l = StringL str)) ==>
-    expr_vv_ok cenv (Literal ann l)
-Proof
-  cheat
-QED
 
 (* A bytes literal is a word unless it is annotated with a dynamic bytes
    type. *)
