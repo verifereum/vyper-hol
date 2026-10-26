@@ -16,7 +16,9 @@
  *                              compile_literal_other_sim: address and bytesN
  *                              literals by compile_literal_bytes_word_sim,
  *                              bytes and string literals by
- *                              compile_literal_memory_sim
+ *                              compile_literal_memory_sim, from
+ *                              compile_literal_other_vv_sim
+ *                              (exprSimLiteralBuffer)
  *   compile_env_case_sim     — an environment read: by compile_env_sim
  *                              (exprSim), block.prevhash by
  *                              compile_prevhash_sim
@@ -34,15 +36,6 @@
  *
  * Unprovable as the definitions stand, to be fixed in the lowering, in
  * state_rel or in the judgment before their PRs:
- *   compile_literal_memory_sim, compile_literal_other_vv_sim — bytes and
- *                              string literals not of a word type, memory
- *                              buffers (row 2).  The buffer is an ALLOCA,
- *                              and nothing in expr_sim keeps
- *                              vs_alloca_next below 2 ** 256, so its
- *                              pointer may wrap (n2w of the frontier) and
- *                              the chunks' ADD ptr off with it; they wait
- *                              for S3's alloca frontier, as the hashes do
- *                              (exprSimBuiltins).
  *   compile_toplevel_storage_undecodable_sim — a storage or transient
  *                              variable whose slot does not decode (row 3):
  *                              the source raises a RuntimeError where the
@@ -71,7 +64,7 @@ Ancestors
   compileEnv loweringSlice
   vyperAST vyperInterpreter vyperState vyperTypeSystem vyperTypeCallGraph
   vyperTypeInvariants vyperTypeEnv vyperTyping vyperTypeGlobalLookupSoundness
-  vyperValueOperation valueEncoding fragExec venomState
+  vyperValueOperation valueEncoding fragExec venomState exprSimLiteralBuffer
 
 val expr_sizes = [listTheory.list_size_def, vyperASTTheory.expr_size_def,
                   basicSizeTheory.option_size_def];
@@ -172,7 +165,8 @@ Proof
        vyperASTTheory.expr_type_def, eval_operand_def] >>
   rpt conj_tac
   >- metis_tac[val_in_memory_word_type]
-  >- (qexistsl_tac [`id`, `w2n w`, `sz`] >> simp[local_region_def]) >>
+  >- (qexistsl_tac [`id`, `w2n w`, `sz`] >> simp[local_region_def] >>
+      drule val_footprint_le >> decide_tac) >>
   rpt strip_tac >> gvs[]
 QED
 
@@ -242,15 +236,36 @@ Proof
   literal_bytes_word_tac
 QED
 
-(* Bytes and string literals, memory buffers of their own: by
-   compile_literal_other_vv_sim and expr_sim_of_vv_sim once that is
-   proved.  Cheated with it. *)
 Theorem compile_literal_memory_sim:
   !ctx func cenv cx env ty ann l es.
     expr_sim_pre cenv cx env (Literal ann l) es /\ ~is_word_type ann ==>
     expr_sim ctx func cenv cx ty (Literal ann l) es
 Proof
-  cheat
+  rpt strip_tac >> irule exprSimUnwrapTheory.expr_sim_of_vv_sim_buffer >>
+  `(?bs. l = BytesL bs /\ ~is_word_type ann) \/ (?str. l = StringL str)` by
+    (gvs[expr_sim_pre_def, well_typed_expr_def] >> Cases_on `l` >> gvs[] >>
+     Cases_on `ann` >> gvs[well_typed_literal_def] >>
+     rename1 `BaseT bt` >> Cases_on `bt` >>
+     gvs[well_typed_literal_def, is_word_type_def]) >>
+  `expr_vv_ok cenv (Literal ann l)` by
+    (irule compile_literal_other_vv_sim >> gvs[]) >>
+  `expr_vv_sim ctx func cenv cx ty (Literal ann l) es` by
+    (gvs[expr_vv_ok_def] >> metis_tac[]) >>
+  simp[Once evaluate_def, return_def, evaluate_literal_def] >>
+  gvs[expr_sim_pre_def, well_typed_expr_def] >>
+  Cases_on `ann` >> gvs[well_typed_literal_def] >>
+  rename1 `BaseT bt` >> Cases_on `bt` >>
+  gvs[well_typed_literal_def, is_word_type_def] >>
+  rpt gen_tac >>
+  simp[compile_expr_def, compile_literal_vv_def, vyperASTTheory.expr_type_def,
+       is_word_type_def, comp_bind_def, comp_return_def] >>
+  CONV_TAC (DEPTH_CONV pairLib.GEN_BETA_CONV) >>
+  simp[contextTheory.base_ptr_def, is_word_type_def] >>
+  rename1 `BaseT (BytesT bd)` >> Cases_on `bd` >>
+  gvs[well_formed_type_def, vyperValueTheory.evaluate_type_def,
+      is_word_type_def, comp_bind_def, comp_return_def] >>
+  CONV_TAC (DEPTH_CONV pairLib.GEN_BETA_CONV) >>
+  simp[contextTheory.base_ptr_def, is_word_type_def]
 QED
 
 Theorem compile_literal_other_sim:
@@ -280,19 +295,6 @@ Proof
   irule compile_literal_other_sim >> metis_tac[]
 QED
 
-(* Bytes and string literals not of a word type: a buffer of their own,
-   ALLOCA, the length word, then the bytes in 32-byte chunks at ADD ptr off.
-   Cheated: nothing in expr_sim keeps vs_alloca_next below 2 ** 256, so the
-   ALLOCA's pointer may wrap and the stores land outside its allocation (the
-   allocation then is no witness for vv_at, and the stores may hit a live
-   local).  It waits for S3's alloca frontier (see the header). *)
-Theorem compile_literal_other_vv_sim:
-  !cenv ann l.
-    ((?bs. l = BytesL bs /\ ~is_word_type ann) \/ (?str. l = StringL str)) ==>
-    expr_vv_ok cenv (Literal ann l)
-Proof
-  cheat
-QED
 
 (* A bytes literal is a word unless it is annotated with a dynamic bytes
    type. *)
@@ -310,7 +312,8 @@ Theorem compile_literal_case_sim:
 Proof
   rpt gen_tac >>
   Cases_on `(?bs. l = BytesL bs /\ ~is_word_type ann) \/ (?str. l = StringL str)`
-  >- (irule expr_ok_of_vv >> irule compile_literal_other_vv_sim >> simp[]) >>
+  >- (simp[expr_ok_def, compile_literal_sim] >>
+      irule compile_literal_other_vv_sim >> simp[]) >>
   irule expr_ok_stack >> simp[compile_literal_sim] >> rpt conj_tac
   >~ [`eval_expr`]
   >- (rpt strip_tac >> drule eval_expr_literal_value >> simp[]) >>
@@ -356,9 +359,19 @@ Proof
   rpt gen_tac >>
   simp[Once (CONJUNCT1 compile_expr_raw_def), compile_expr_body_def,
        vyperASTTheory.expr_type_def] >>
-  Cases_on `args` >> simp[] >> Cases_on `h` >> simp expr_sizes >>
-  rpt (BasicProvers.TOP_CASE_TAC >> simp expr_sizes) >>
-  rpt (qpat_x_assum `~(_ < _)` mp_tac) >> Cases_on `o'` >> simp expr_sizes
+  namedCases_on `args` ["", "arg rest"] >> simp[] >>
+  Cases_on `arg` >> simp expr_sizes
+  >~ [`_ = compile_builtin_dispatch _ _ _ _ (Name _ _ :: suffix) _`]
+  >- (namedCases_on `suffix` ["", "arg2 tail2"] >> simp expr_sizes >>
+      Cases_on `arg2` >> simp expr_sizes
+      >~ [`_ = compile_builtin_dispatch _ _ _ _ (Name _ _ :: Name _ _ :: suffix2) _`]
+      >- (namedCases_on `suffix2` ["", "arg3 tail3"] >> simp expr_sizes >>
+          Cases_on `arg3` >> simp expr_sizes
+          >~ [`_ = compile_builtin_dispatch _ _ _ _ (Name _ _ :: Name _ _ :: Name _ _ :: suffix3) _`]
+          >- (Cases_on `suffix3` >> simp expr_sizes) >>
+          rename1 `Call _ _ _ opt` >> Cases_on `opt` >> simp expr_sizes) >>
+      rename1 `Call _ _ _ opt` >> Cases_on `opt` >> simp expr_sizes) >>
+  rename1 `Call _ _ _ opt` >> Cases_on `opt` >> simp expr_sizes
 QED
 
 Theorem compile_env_case_ok:
