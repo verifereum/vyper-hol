@@ -9,9 +9,9 @@ Theory vyperTypeExtCallSoundness
 Ancestors
   list rich_list pred_set prim_rec arithmetic finite_map option pair sum
   vyperAST vyperValue vyperValueOperation vyperMisc vyperABI
-  vyperCreate vyperInterpreter vyperState vyperContext vyperStorage vyperTyping
+  vyperCreate vyperCreateFrame vyperInterpreter vyperState vyperContext vyperStorage vyperTyping
   vyperRuntimeAccounts vyperCallFrame
-  vyperTypeExtCallCore[ignore_grammar] vyperTypeCallOutcome[ignore_grammar]
+  vyperTypeExtCallCore[ignore_grammar] vyperTypeCallOutcome[ignore_grammar] vyperCallOutcomeProps[ignore_grammar]
   vyperEncodeDecode vyperArith vyperTypeSystem vyperTypeInvariants vyperTypeValues
   vyperTypeArgFits
   vyperTypeEnv vyperTypeEnvExtension vyperTypeEnvPreservation vyperTypeScopePop
@@ -1657,7 +1657,7 @@ Proof
       combinTheory.o_THM, AllCaseEqs(), COND_RATOR, bind_def, return_def,
       raise_def, adopt_call_outcome_INR] >>
   TRY (qpat_x_assum `take_call_outcome _ _ _ _ = (INR _,_)` (fn th =>
-         assume_tac th >> assume_tac (MATCH_MP vyperCallOutcomeTheory.take_call_outcome_error th))) >>
+         assume_tac th >> assume_tac (MATCH_MP vyperCallOutcomePropsTheory.take_call_outcome_error th))) >>
   TRY (drule_all take_adopt_call_outcome_runtime_consistent >> strip_tac) >>
   TRY (drule_all take_call_outcome_runtime_consistent >> strip_tac) >>
   TRY (drule_all run_ext_call_update_runtime_consistent >> strip_tac) >>

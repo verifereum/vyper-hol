@@ -4,7 +4,7 @@
 Theory createAbiTupleValueEncoding
 Ancestors
   createAbiValueEncoding valueEncoding valueEncodingProps compileEnv
-  vyperABI vyperValue vyperTyping vyperTypeABI exprLowering contractABI
+  vyperABI vyperABIRoundtrip vyperValue vyperTyping vyperTypeABI exprLowering contractABI
   list rich_list option
 
 Theorem create_abi_word_metadata:

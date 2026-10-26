@@ -1196,71 +1196,63 @@ val () = eval_send_def
             lift_option_type_def, type_check_def, check_def, assert_def]
   |> cv_auto_trans;
 
-Theorem ext_call_take_preserves_non_accounts[local]:
-  vyperCallOutcome$take_call_outcome target calldata value_opt st = (res, st') ==>
-  st'.scopes = st.scopes /\ st'.immutables = st.immutables
+Theorem take_call_outcome_non_accounts[local]:
+  (SND (vyperCallOutcome$take_call_outcome target calldata value_opt st)).scopes = st.scopes /\
+  (SND (vyperCallOutcome$take_call_outcome target calldata value_opt st)).immutables = st.immutables
 Proof
-  strip_tac >> drule vyperCallOutcomeTheory.take_call_outcome_frame >>
-  disch_then (fn th => conj_tac >> simp[Once th])
+  Cases_on `vyperCallOutcome$take_call_outcome target calldata value_opt st` >>
+  simp[] >> drule vyperCallOutcomeTheory.take_call_outcome_frame >>
+  disch_then (fn th => once_rewrite_tac[th]) >> simp[]
 QED
 
-Theorem ext_call_adopt_preserves_non_accounts[local]:
-  vyperCallOutcome$adopt_call_outcome rq outcome st = (res, st') ==>
-  st'.scopes = st.scopes /\ st'.immutables = st.immutables
+Theorem adopt_call_outcome_non_accounts[local]:
+  (SND (vyperCallOutcome$adopt_call_outcome rq outcome st)).scopes = st.scopes /\
+  (SND (vyperCallOutcome$adopt_call_outcome rq outcome st)).immutables = st.immutables
 Proof
-  simp[vyperCallOutcomeTheory.adopt_call_outcome_equation] >>
-  rpt IF_CASES_TAC >> simp[] >> strip_tac >> gvs[]
+  Cases_on `vyperCallOutcome$adopt_call_outcome rq outcome st` >>
+  simp[] >> drule vyperCallOutcomeTheory.adopt_call_outcome_frame >>
+  strip_tac >> pop_assum (fn th => once_rewrite_tac[th]) >> simp[]
 QED
 
-Theorem eval_ext_call_preserves_non_accounts:
-  eval_ext_call cx static skip_check sig opts vs st = (res, st') ==>
-  st'.scopes = st.scopes /\ st'.immutables = st.immutables
+(* Keep the result type independent of the case scrutinee's type variables. *)
+val ext_frame_projection_rewrites = let
+  val shapes = [``:'a option``, ``:'a + 'b``, ``:'a # 'b``]
+  val tests = [``SND : 'result # evaluation_state -> evaluation_state``,
+               ``\s:evaluation_state. s.scopes``,
+               ``\s:evaluation_state. s.immutables``]
+  fun project test ty = BETA_RULE (ISPEC test (TypeBase.case_rand_of ty))
+  fun constant ty = Prim_rec.prove_case_const_thm
+    {case_def = TypeBase.case_def_of ty,
+     nchotomy = TypeBase.nchotomy_of ty}
+in List.concat (map (fn test => map (project test) shapes @
+     [BETA_RULE (PART_MATCH (rator o lhs) COND_RAND test)]) tests) @
+   map constant shapes end;
+
+Theorem eval_ext_call_non_accounts[local]:
+  (SND (eval_ext_call cx static skip_check sig opts vs st)).scopes = st.scopes /\
+  (SND (eval_ext_call cx static skip_check sig opts vs st)).immutables = st.immutables
 Proof
-  PairCases_on `sig` >> Cases_on `vs`
-  >- simp[eval_ext_call_def, raise_def] >>
+  PairCases_on `sig` >> Cases_on `vs` >>
   simp[eval_ext_call_def, bind_def, ignore_bind_def, type_check_def,
        assert_def, return_def, raise_def, get_accounts_def,
        get_transient_storage_def, lift_option_def, lift_option_type_def,
        check_def, lift_sum_runtime_def, update_accounts_def,
        update_transient_def, append_logs_def, LET_THM, UNCURRY,
        COND_RATOR, option_CASE_rator, prod_CASE_rator, sum_CASE_rator] >>
-  Cases_on `LENGTH t = LENGTH opts + LENGTH sig1 /\ ext_call_opts_ok static opts` >>
-  simp[] >>
-  Cases_on `dest_AddressV h` >> simp[] >>
-  Cases_on `static` >> simp[] >>
-  Cases_on `ext_call_kwarg EKValue opts (DROP (LENGTH sig1) t)` >> simp[] >>
-  Cases_on `dest_NumV (THE (ext_call_kwarg EKValue opts (DROP (LENGTH sig1) t)))` >>
-  gvs[] >> (
-  Cases_on `build_ext_calldata (get_tenv cx) sig0 sig1 (TAKE (LENGTH sig1) t)` >>
-  simp[] >>
-  qmatch_goalsub_abbrev_tac
-    `vyperCallOutcome$take_call_outcome target calldata value_opt st` >>
-  Cases_on `ext_call_precheck_ok skip_check sig2 target st.accounts` >> simp[] >>
-  Cases_on `st.outcomes`
-  >- (simp[] >>
-      qpat_abbrev_tac `run_result = run_ext_call _ _ _ _ _ _ _ _` >>
-      Cases_on `run_result` >> simp[] >>
-      qmatch_goalsub_rename_tac `FST backend_result` >>
-      Cases_on `FST backend_result` >> simp[] >> (strip_tac >> gvs[] >>
-        qmatch_asmsub_abbrev_tac `if returnData = [] then default_opt else NONE` >>
-        Cases_on `if returnData = [] then default_opt else NONE` >>
-        gvs[AllCaseEqs()])) >>
-  simp[] >>
-  Cases_on `vyperCallOutcome$take_call_outcome target calldata value_opt st` >>
-  drule ext_call_take_preserves_non_accounts >> strip_tac >>
-  rename1 `vyperCallOutcome$take_call_outcome target calldata value_opt st = (taken, taken_st)` >>
-  Cases_on `taken` >> simp[]
-  >- (qmatch_goalsub_rename_tac `call_outcome_success (SND taken_pair)` >>
-      Cases_on `call_outcome_success (SND taken_pair)` >> simp[]
-      >- (Cases_on `vyperCallOutcome$adopt_call_outcome (FST taken_pair) (SND taken_pair) taken_st` >>
-          drule ext_call_adopt_preserves_non_accounts >> strip_tac >>
-          rename1 `vyperCallOutcome$adopt_call_outcome _ _ _ = (adopted, adopted_st)` >>
-          Cases_on `adopted` >> simp[] >> (strip_tac >> gvs[] >>
-        qmatch_asmsub_abbrev_tac `if returnData = [] then default_opt else NONE` >>
-        Cases_on `if returnData = [] then default_opt else NONE` >>
-        gvs[AllCaseEqs()])) >>
-      strip_tac >> gvs[]) >>
-  strip_tac >> gvs[])
+  simp ext_frame_projection_rewrites >>
+  simp_tac (pure_ss ++ boolSimps.BOOL_ss)
+    ([pairTheory.pair_CASE_def, pairTheory.FST, pairTheory.SND,
+      evaluation_state_accfupds, combinTheory.K_THM,
+      take_call_outcome_non_accounts, adopt_call_outcome_non_accounts] @
+     ext_frame_projection_rewrites)
+QED
+
+Theorem eval_ext_call_preserves_non_accounts:
+  eval_ext_call cx static skip_check sig opts vs st = (res, st') ==>
+  st'.scopes = st.scopes /\ st'.immutables = st.immutables
+Proof
+  strip_tac >>
+  mp_tac eval_ext_call_non_accounts >> asm_rewrite_tac[] >> simp[]
 QED
 
 Theorem eval_send_preserves_non_accounts:

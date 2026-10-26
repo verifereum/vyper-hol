@@ -2121,6 +2121,28 @@ Proof
   simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_alloc_buffer]
 QED
 
+Theorem ci_mono_compile_method_id_hash[local]:
+  ∀ ty v sa. ci_mono sa (SND (compile_method_id_hash ty v sa))
+Proof
+  ho_match_mp_tac builtinHashingTheory.compile_method_id_hash_ind >>
+  simp[builtinHashingTheory.compile_method_id_hash_def,
+       ci_mono_compile_keccak256_bytes, ci_mono_compile_keccak256_bytesm]
+QED
+
+Theorem ci_mono_compile_method_id_runtime[local]:
+  ∀ ty v b sa. ci_mono sa (SND (compile_method_id_runtime ty v b sa))
+Proof
+  rpt gen_tac >> Cases_on `b` >>
+  rewrite_tac[builtinHashingTheory.compile_method_id_runtime_def, COND_CLAUSES] >>
+  BETA_TAC >>
+  rpt (ho_match_mp_tac ci_mono_bind ORELSE ho_match_mp_tac ci_mono_ignore_bind ORELSE
+       (conj_tac >- simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return,
+                         ci_mono_compile_alloc_buffer, ci_mono_compile_method_id_hash]) ORELSE
+       gen_tac ORELSE strip_tac) >>
+  simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return,
+       ci_mono_compile_alloc_buffer, ci_mono_compile_method_id_hash]
+QED
+
 Theorem ci_mono_compile_sha256_bytes[local]:
   ∀ ptr_op sa. ci_mono sa (SND (compile_sha256_bytes ptr_op sa))
 Proof
@@ -3621,7 +3643,7 @@ Theorem ci_mono_builtin_scalar[local]:
   ∀bi. (bi = Neg ∨ bi = Abs ∨ bi = BlockHash ∨ bi = BlobHash ∨
          bi = Ceil ∨ bi = Floor ∨ (∃n. bi = Uint2Str n) ∨
          (∃n. bi = CalldataSlice n) ∨ bi = AddMod ∨ bi = MulMod ∨
-         bi = PowMod256 ∨ bi = MethodId) ⇒
+         bi = PowMod256) ⇒
   ci_mono st (SND (compile_builtin_dispatch_body f cenv ret_ty ty bi args st))
 Proof
   strip_tac >> gen_tac >> Cases_on `bi` >> simp[] >>
@@ -3636,6 +3658,16 @@ Proof
        ci_mono_compile_uint2str, ci_mono_compile_slice_calldata,
        ci_mono_compile_addmod, ci_mono_compile_mulmod,
        ci_mono_compile_pow_mod256, ci_mono_emit_op]
+QED
+
+Theorem ci_mono_builtin_method_id[local]:
+  (∀ce t e s. ci_mono s (SND (f ce t e s))) ⇒
+  ci_mono st (SND (compile_builtin_dispatch_body f cenv ret_ty ty MethodId args st))
+Proof
+  strip_tac >> Cases_on `method_id_literal (HD args)` >>
+  simp[compile_builtin_dispatch_body_def, LET_THM, ci_mono_compile_literal_vv] >>
+  irule ci_mono_uncurry >> reverse conj_tac >- simp[ci_mono_lower_value_cfn] >>
+  rw[ci_mono_as_stack_val, ci_mono_as_ptr_val, ci_mono_compile_method_id_runtime]
 QED
 
 Theorem ci_mono_builtin_branching_scalar[local]:
@@ -3932,7 +3964,8 @@ Theorem ci_mono_compile_builtin_dispatch_body[local]:
   ci_mono st (SND (compile_builtin_dispatch_body f cenv ret_ty ty bi args st))
 Proof
   strip_tac >> Cases_on `bi` >>
-  simp[ci_mono_builtin_scalar, ci_mono_builtin_branching_scalar,
+  simp[ci_mono_builtin_scalar, ci_mono_builtin_method_id,
+       ci_mono_builtin_branching_scalar,
        ci_mono_builtin_environment, ci_mono_builtin_hash, ci_mono_builtin_bop,
        ci_mono_builtin_ec, ci_mono_builtin_concat, ci_mono_builtin_makearray,
        ci_mono_builtin_slice]

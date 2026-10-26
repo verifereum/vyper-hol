@@ -3,7 +3,7 @@ Theory vyperTypeCallOutcomeTest
 Ancestors
   list option pair sum arithmetic words finite_map
   vyperMisc vyperAST vyperValue vyperState vyperInterpreter vyperABI vyperTyping
-  vyperRuntimeAccounts vyperCallOutcome vyperCallOutcomeBranches
+  vyperRuntimeAccounts vyperCallOutcome vyperCallOutcomeProps vyperCallOutcomeBranches
   vyperCallOutcomeFrame vyperTypeCallOutcome vyperTypeExtCallSoundness
   vyperTypeExprSoundness vyperTypeExprResult vyperTypeSystem vyperTypeInvariants
   vyperExprNoControl vyperCallOutcomeTest

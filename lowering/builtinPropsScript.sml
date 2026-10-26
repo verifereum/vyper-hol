@@ -332,7 +332,7 @@ End
 (* Generic unsafe binop correctness: given opcode opc whose exec_pure2
    implements word operation f, compile_unsafe_binop opc x y bits is_signed
    emits instructions that compute truncate_to_bits bits is_signed (f a b). *)
-Theorem compile_unsafe_binop_correct[local]:
+Theorem compile_unsafe_binop_correct:
   ∀ opc f x y bits is_signed ss st op st' a b.
     compile_unsafe_binop opc x y bits is_signed st = (op, st') ∧
     eval_operand x ss = SOME a ∧
@@ -956,7 +956,7 @@ QED
 (* compile_select: branchless ternary via XOR/MUL/XOR.
    When cond = bool_to_word b:
      b=T → result = then_val, b=F → result = else_val *)
-Theorem compile_select_correct[local]:
+Theorem compile_select_correct:
   ∀ cond_op then_op else_op cv tv ev b ss st op st'.
     compile_select cond_op then_op else_op st = (op, st') ∧
     eval_operand cond_op ss = SOME cv ∧
