@@ -10161,6 +10161,63 @@ Proof
        mk_inst_def, is_terminator_def]
 QED
 
+Theorem enc_current_insts_append_trans:
+  b.cs_current_insts = a.cs_current_insts ++ emitted_insts a b /\
+  c.cs_current_insts = b.cs_current_insts ++ emitted_insts b c ==>
+  c.cs_current_insts = a.cs_current_insts ++ emitted_insts a c
+Proof
+  strip_tac >> drule_all emitted_insts_append >>
+  disch_then (fn th => rewrite_tac[th]) >>
+  asm_rewrite_tac[APPEND_ASSOC]
+QED
+
+Theorem enc_dyn_loop_body_code:
+  enc_dyn_loop_body dst src ei asz msz count_ptr dyn_ptr sb = ((),se) ==>
+  ?i sd so child_src off child_dst child_len head_off head_pos new_dyn new_i
+    a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13.
+    emit_op MLOAD [count_ptr] sb = (i,a1) /\
+    emit_op ADD [src;Lit 32w] a1 = (sd,a2) /\
+    emit_op MUL [i;Lit (n2w msz)] a2 = (so,a3) /\
+    emit_op ADD [sd;so] a3 = (child_src,a4) /\
+    emit_op MLOAD [dyn_ptr] a4 = (off,a5) /\
+    emit_op ADD [dst;off] a5 = (child_dst,a6) /\
+    compile_abi_encode_to_buf child_dst child_src ei a6 = (child_len,a7) /\
+    emit_op MUL [i;Lit (n2w asz)] a7 = (head_off,a8) /\
+    emit_op ADD [dst;head_off] a8 = (head_pos,a9) /\
+    emit_void MSTORE [head_pos;off] a9 = ((),a10) /\
+    emit_op ADD [off;child_len] a10 = (new_dyn,a11) /\
+    emit_void MSTORE [dyn_ptr;new_dyn] a11 = ((),a12) /\
+    emit_op ADD [i;Lit 1w] a12 = (new_i,a13) /\
+    emit_void MSTORE [count_ptr;new_i] a13 = ((),se)
+Proof
+  simp[enc_dyn_loop_body_def, comp_bind_def, comp_ignore_bind_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  rpt (goal_assum (drule_at Any))
+QED
+
+Theorem enc_dyn_body_prefix_code:
+  emit_op MLOAD [count_ptr] a0 = (i,a1) /\
+  emit_op ADD [src;Lit 32w] a1 = (sd,a2) /\
+  emit_op MUL [i;Lit (n2w msz)] a2 = (so,a3) /\
+  emit_op ADD [sd;so] a3 = (child_src,a4) /\
+  emit_op MLOAD [dyn_ptr] a4 = (off,a5) /\
+  emit_op ADD [dst;off] a5 = (child_dst,a6) ==>
+  emitted_insts a0 a6 = emitted_insts a0 a4 ++ emitted_insts a4 a6 /\
+  a4.cs_current_insts = a0.cs_current_insts ++ emitted_insts a0 a4 /\
+  a6.cs_current_insts = a4.cs_current_insts ++ emitted_insts a4 a6
+Proof
+  strip_tac >> imp_res_tac enc_emit_op_append >>
+  `a2.cs_current_insts = a0.cs_current_insts ++ emitted_insts a0 a2` by
+    (irule enc_current_insts_append_trans >> qexists_tac `a1` >> simp[]) >>
+  `a3.cs_current_insts = a0.cs_current_insts ++ emitted_insts a0 a3` by
+    (irule enc_current_insts_append_trans >> qexists_tac `a2` >> simp[]) >>
+  `a4.cs_current_insts = a0.cs_current_insts ++ emitted_insts a0 a4` by
+    (irule enc_current_insts_append_trans >> qexists_tac `a3` >> simp[]) >>
+  `a6.cs_current_insts = a4.cs_current_insts ++ emitted_insts a4 a6` by
+    (irule enc_current_insts_append_trans >> qexists_tac `a5` >> simp[]) >>
+  simp[] >> irule emitted_insts_append >> simp[]
+QED
+
 Theorem enc_dyn_source_run:
   emit_op MLOAD [count_ptr] a0 = (i,a1) /\
   emit_op ADD [src;Lit 32w] a1 = (sd,a2) /\
