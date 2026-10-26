@@ -5,6 +5,7 @@ Ancestors
   moduleLowering
   (* property statements and proofs *)
   moduleLoweringProps entryDispatchProps entryDecodeProps
+  abiDecodeStaticProps entryDecodeStaticProps
   loweringSlice
   varsExt exprSim
   exprBopLowering
@@ -13,6 +14,7 @@ Ancestors
   valueEncodingProofs
   localPtrsProps
   loweringShapeProps
+  intCallStep intCallLookup
   structFieldsProps
   (* compiler + correctness *)
   vyperCompiler
