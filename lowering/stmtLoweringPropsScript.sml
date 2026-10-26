@@ -12,7 +12,10 @@
  *
  * The multi-block statements are stated with frag_exec (fragExecTheory):
  * the compiled fragment runs inside any function containing the code, and
- * reaches the end of the fragment or exits.
+ * reaches the end of the fragment or exits.  compile_stmt_correct and
+ * compile_stmts_correct are cheated and cover success only; the statement
+ * judgment for every outcome is stmt_frag (stmtSim and the theories after
+ * it).
  *
  * Source: vyperInterpreterScript.sml (eval_stmt/eval_stmts)
  * Target: venomExecSemanticsScript.sml (run_block/run_function)
