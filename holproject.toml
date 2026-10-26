@@ -37,3 +37,4 @@ roots = ["vyperHolScript.sml",
 [dependencies.verifereum]
 git = "https://github.com/verifereum/verifereum.git"
 rev = "f5e172ccbf45addef7096feea76428de3ed3dfa8"
+# probe: manifest change without a snapshot miss (reverted in the next commit)
