@@ -10,11 +10,13 @@ on:
   schedule:
     - cron: '0 3 * * 6'
   pull_request:
-    # Only PRs into main run CI; a PR stacked on another branch runs once it is
-    # retargeted to main (edited with a base change).
+    # Only ready PRs into main from branches of this repository run jobs:
+    # pushing a branch here needs write access, and those runs get the cache
+    # login. Fork and draft PRs run nothing; the merge queue tests them. A PR
+    # stacked on another branch runs once it is retargeted to main (edited with
+    # a base change). ready_for_review starts CI when a draft is marked ready;
+    # converted_to_draft cancels the run of a PR turned back into a draft.
     branches: [main]
-    # Draft PRs run no jobs. ready_for_review starts CI when a draft is marked
-    # ready; converted_to_draft cancels the run of a PR turned back into a draft.
     types: [opened, synchronize, reopened, ready_for_review, converted_to_draft, edited]
   merge_group:
   push:
@@ -42,9 +44,12 @@ jobs:
     # A skipped job passes a required check; a no-op edit's skipped run must not
     # report under the required name over the PR's real result.
     name: ${{ (github.event.action == 'edited' && !github.event.changes.base) && 'build (no-op edit)' || 'build' }}
-    if: github.event.pull_request.draft != true && (github.event.action != 'edited' || github.event.changes.base)
+    if: (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository)) && (github.event.action != 'edited' || github.event.changes.base)
     runs-on: ubuntu-latest
     timeout-minutes: 240
+    # The cache login is a secret of the bazel-cache environment, which main,
+    # merge-queue and pull request refs may deploy to.
+    environment: ${{ ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'merge_group' && github.event.merge_group.base_ref == 'refs/heads/main') || github.event_name == 'pull_request') && 'bazel-cache' || '' }}
     outputs:
       holbuild-cache-key: ${{ steps.cache-key.outputs.snapshot-key }}
     steps:
@@ -103,7 +108,7 @@ jobs:
   compiler:
     # Builds what the witnesses load besides each other, once for all
     # witness groups.
-    if: github.event.pull_request.draft != true && (github.event.action != 'edited' || github.event.changes.base)
+    if: (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository)) && (github.event.action != 'edited' || github.event.changes.base)
     runs-on: ubuntu-latest
     timeout-minutes: 240
     outputs:
@@ -145,7 +150,7 @@ jobs:
           key: ${{ steps.cache-key.outputs.snapshot-key }}
 
   witnesses:
-    if: github.event.pull_request.draft != true && (github.event.action != 'edited' || github.event.changes.base)
+    if: (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository)) && (github.event.action != 'edited' || github.event.changes.base)
     needs: compiler
     runs-on: ubuntu-latest
     timeout-minutes: 90
@@ -204,7 +209,7 @@ jobs:
   build-rollup:
     # Adds the witness groups to build's snapshot, builds the witness rollup
     # and exports the HBX of the whole project.
-    if: github.event.pull_request.draft != true && (github.event.action != 'edited' || github.event.changes.base)
+    if: (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository)) && (github.event.action != 'edited' || github.event.changes.base)
     needs: [build, witnesses]
     runs-on: ubuntu-latest
     timeout-minutes: 240
@@ -299,7 +304,7 @@ jobs:
     # Builds only what the test groups load besides their own theories, so they
     # start long before build finishes.
     needs: tested
-    if: ${{ !cancelled() && needs.tested.outputs.merge-group-passed != 'true' && github.event.pull_request.draft != true && (github.event.action != 'edited' || github.event.changes.base) }}
+    if: ${{ !cancelled() && needs.tested.outputs.merge-group-passed != 'true' && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository)) && (github.event.action != 'edited' || github.event.changes.base) }}
     runs-on: ubuntu-latest
     timeout-minutes: 240
     outputs:
@@ -342,7 +347,7 @@ jobs:
 
   python-o1-oracle:
     needs: tested
-    if: ${{ !cancelled() && needs.tested.outputs.merge-group-passed != 'true' && github.event.pull_request.draft != true && (github.event.action != 'edited' || github.event.changes.base) }}
+    if: ${{ !cancelled() && needs.tested.outputs.merge-group-passed != 'true' && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository)) && (github.event.action != 'edited' || github.event.changes.base) }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -364,7 +369,7 @@ jobs:
 
   export-vyper-tests:
     needs: tested
-    if: ${{ !cancelled() && needs.tested.outputs.merge-group-passed != 'true' && github.event.pull_request.draft != true && (github.event.action != 'edited' || github.event.changes.base) }}
+    if: ${{ !cancelled() && needs.tested.outputs.merge-group-passed != 'true' && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository)) && (github.event.action != 'edited' || github.event.changes.base) }}
     runs-on: ubuntu-latest
     outputs:
       export-cache-key: ${{ steps.exports.outputs.export-cache-key }}
@@ -380,10 +385,13 @@ jobs:
   vyper-tests:
     # tested, skipped on other events than push, would skip this job through
     # the implicit success(); the result checks stand in for it.
-    if: ${{ !cancelled() && needs.test-deps.result == 'success' && needs.export-vyper-tests.result == 'success' && github.event.pull_request.draft != true && (github.event.action != 'edited' || github.event.changes.base) }}
+    if: ${{ !cancelled() && needs.test-deps.result == 'success' && needs.export-vyper-tests.result == 'success' && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository)) && (github.event.action != 'edited' || github.event.changes.base) }}
     needs: [test-deps, export-vyper-tests]
     runs-on: ubuntu-latest
     timeout-minutes: 90
+    # The cache login is a secret of the bazel-cache environment, which main,
+    # merge-queue and pull request refs may deploy to.
+    environment: ${{ ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'merge_group' && github.event.merge_group.base_ref == 'refs/heads/main') || github.event_name == 'pull_request') && 'bazel-cache' || '' }}
     strategy:
       fail-fast: false
       matrix:
@@ -439,7 +447,7 @@ jobs:
   holbuild-success:
     # Renamed on a no-op edit, as build is.
     name: ${{ (github.event.action == 'edited' && !github.event.changes.base) && 'holbuild-success (no-op edit)' || 'holbuild-success' }}
-    if: always() && github.event.pull_request.draft != true && (github.event.action != 'edited' || github.event.changes.base)
+    if: always() && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository)) && (github.event.action != 'edited' || github.event.changes.base)
     runs-on: ubuntu-latest
     needs: [build, compiler, witnesses, build-rollup, tested, test-deps, python-o1-oracle, export-vyper-tests, vyper-tests]
     steps:
