@@ -111,6 +111,9 @@ jobs:
     if: (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository)) && (github.event.action != 'edited' || github.event.changes.base)
     runs-on: ubuntu-latest
     timeout-minutes: 240
+    # The cache login is a secret of the bazel-cache environment, which main,
+    # merge-queue and pull request refs may deploy to.
+    environment: ${{ ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'merge_group' && github.event.merge_group.base_ref == 'refs/heads/main') || github.event_name == 'pull_request') && 'bazel-cache' || '' }}
     outputs:
       holbuild-cache-key: ${{ steps.cache-key.outputs.snapshot-key }}
     steps:
@@ -154,6 +157,9 @@ jobs:
     needs: compiler
     runs-on: ubuntu-latest
     timeout-minutes: 90
+    # The cache login is a secret of the bazel-cache environment, which main,
+    # merge-queue and pull request refs may deploy to.
+    environment: ${{ ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'merge_group' && github.event.merge_group.base_ref == 'refs/heads/main') || github.event_name == 'pull_request') && 'bazel-cache' || '' }}
     strategy:
       fail-fast: false
       matrix:
@@ -213,6 +219,9 @@ jobs:
     needs: [build, witnesses]
     runs-on: ubuntu-latest
     timeout-minutes: 240
+    # The cache login is a secret of the bazel-cache environment, which main,
+    # merge-queue and pull request refs may deploy to.
+    environment: ${{ ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'merge_group' && github.event.merge_group.base_ref == 'refs/heads/main') || github.event_name == 'pull_request') && 'bazel-cache' || '' }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -307,6 +316,9 @@ jobs:
     if: ${{ !cancelled() && needs.tested.outputs.merge-group-passed != 'true' && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository)) && (github.event.action != 'edited' || github.event.changes.base) }}
     runs-on: ubuntu-latest
     timeout-minutes: 240
+    # The cache login is a secret of the bazel-cache environment, which main,
+    # merge-queue and pull request refs may deploy to.
+    environment: ${{ ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'merge_group' && github.event.merge_group.base_ref == 'refs/heads/main') || github.event_name == 'pull_request') && 'bazel-cache' || '' }}
     outputs:
       holbuild-cache-key: ${{ steps.cache-key.outputs.snapshot-key }}
     steps:
