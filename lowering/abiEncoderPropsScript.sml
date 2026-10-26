@@ -2030,6 +2030,78 @@ Proof
   rpt strip_tac >> Cases_on `inst.inst_id = j` >> gvs[]
 QED
 
+Theorem enc_compile_alloc_buffer_run:
+  compile_alloc_buffer 32 st = (buf, st') /\
+  FINITE ids /\ st.cs_next_id IN ids /\ enc_scratch ids lo top s ==>
+  ?b t. run_inst_seq (emitted_insts st st') s = OK t /\
+    same_blocks st st' /\ lo <= b /\ b + 32 <= top /\
+    eval_operand buf.buf_operand t = SOME (n2w b) /\
+    FLOOKUP t.vs_allocas st.cs_next_id = SOME (b,32) /\
+    enc_scratch ids lo top t /\
+    t.vs_memory = s.vs_memory /\ t.vs_labels = s.vs_labels /\
+    t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+    t.vs_logs = s.vs_logs /\ t.vs_requests = s.vs_requests /\
+    (!j. j <> st.cs_next_id ==> FLOOKUP t.vs_allocas j = FLOOKUP s.vs_allocas j) /\
+    (!j r. FLOOKUP s.vs_allocas j = SOME r ==> FLOOKUP t.vs_allocas j = SOME r) /\
+    (!x. not_fresh_at st x ==> lookup_var x t = lookup_var x s)
+Proof
+  rpt strip_tac >>
+  gvs[contextTheory.compile_alloc_buffer_def, comp_bind_def, comp_return_def,
+      AllCaseEqs()] >>
+  pairarg_tac >> gvs[] >>
+  drule emitted_insts_emit_op >> strip_tac >>
+  drule emit_op_same_blocks >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `emitted_insts st st' = [inst]` >>
+  `inst.inst_id = st.cs_next_id /\
+   inst.inst_outputs = [STRING #"%" (toString st.cs_next_var)]` by
+    simp[Abbr `inst`, mk_inst_def] >>
+  `inst.inst_id IN ids` by simp[] >>
+  drule_all enc_exec_alloca_scratch >> strip_tac >>
+  drule_all enc_exec_alloca_preserves >> strip_tac >>
+  qexistsl_tac [`b`, `t`] >>
+  simp[run_inst_seq_def, eval_operand_def] >>
+  conj_tac
+  >- (qpat_x_assum `exec_alloca _ _ _ = OK t` mp_tac >>
+      simp[Abbr `inst`, step_inst_base_def, mk_inst_def]) >>
+  conj_tac >- metis_tac[] >>
+  rpt strip_tac >> first_x_assum irule >>
+  fs[not_fresh_at_def]
+QED
+
+Theorem enc_compile_alloc_buffer_frag:
+  compile_alloc_buffer 32 st = (buf, st') /\
+  st.cs_next_id IN frag_ids a z /\ a.cs_next_var <= st.cs_next_var /\
+  enc_scratch (frag_ids a z) lo top s0 ==>
+  frag_exec ctx st st' (\s. s = s0)
+    (\s. ?b. lo <= b /\ b + 32 <= top /\
+       eval_operand buf.buf_operand s = SOME (n2w b) /\
+       FLOOKUP s.vs_allocas st.cs_next_id = SOME (b,32) /\
+       s.vs_memory = s0.vs_memory /\ s.vs_labels = s0.vs_labels /\
+       enc_frame a z lo top outs s0 s) R
+Proof
+  rpt strip_tac >>
+  `FINITE (frag_ids a z)` by simp[] >>
+  drule_all enc_compile_alloc_buffer_run >> strip_tac >>
+  irule frag_exec_run_inst_seq >> simp[same_blocks_def] >>
+  reverse conj_tac
+  >- (qpat_x_assum `compile_alloc_buffer _ _ = _` mp_tac >>
+      simp[contextTheory.compile_alloc_buffer_def, comp_bind_def,
+           comp_return_def] >>
+      pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+      drule emitted_insts_emit_op >> strip_tac >>
+      drule emit_op_extends >> strip_tac >>
+      gvs[same_blocks_def, mk_inst_def, is_terminator_def]) >>
+  conj_tac
+  >- (Cases_on `buf.buf_operand` >>
+      gvs[eval_operand_def, lookup_var_def]) >>
+  simp[enc_frame_def] >> conj_tac
+  >- (rpt strip_tac >>
+      `not_fresh_at st x` by
+        (fs[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_LESS_EQ_TRANS]) >>
+      metis_tac[]) >>
+  rpt strip_tac >> first_x_assum irule >> metis_tac[]
+QED
+
 Theorem enc_frame_update_var:
   (!x. not_fresh_at st x ==> x <> y) /\
   enc_frame st st' lo top outs s0 s ==>
