@@ -1,0 +1,9 @@
+ctl_local_internal
+nm_arg_return_pc
+nm_arg_storage
+nm_ext_arg_return_pc
+nm_local_return_buf
+nm_local_storage_types
+nm_redeclared_local
+nm_redeclared_loop_var
+nm_transient_local
