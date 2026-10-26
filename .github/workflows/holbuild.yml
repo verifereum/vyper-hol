@@ -20,6 +20,7 @@ env:
 
 jobs:
   build:
+    if: github.event.pull_request.draft != true
     runs-on: ubuntu-latest
     timeout-minutes: 240
     outputs:
@@ -150,6 +151,7 @@ jobs:
           retention-days: 90
 
   python-o1-oracle:
+    if: github.event.pull_request.draft != true
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -170,6 +172,7 @@ jobs:
             --vyper-repo vyper-src
 
   export-vyper-tests:
+    if: github.event.pull_request.draft != true
     runs-on: ubuntu-latest
     outputs:
       export-cache-key: ${{ steps.exports.outputs.export-cache-key }}
@@ -181,6 +184,7 @@ jobs:
         id: exports
 
   vyper-tests:
+    if: github.event.pull_request.draft != true
     needs: [build, export-vyper-tests]
     runs-on: ubuntu-latest
     timeout-minutes: 90
@@ -272,7 +276,7 @@ jobs:
           fi
 
   holbuild-success:
-    if: always()
+    if: always() && github.event.pull_request.draft != true
     runs-on: ubuntu-latest
     needs: [build, python-o1-oracle, export-vyper-tests, vyper-tests]
     steps:
