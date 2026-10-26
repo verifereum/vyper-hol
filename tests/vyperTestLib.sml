@@ -354,11 +354,7 @@ val excluded_test_names = [
      TODO: add shift builtin support *)
   "test_uint256_mulmod_complex",
   (* Out-of-gas test - we don't model gas *)
-  "test_ecrecover_oog_handling",
-  (* The exports use the legacy codegen, which evaluates default_return_value
-     after the call; the semantics follows the experimental codegen, which
-     evaluates it before the call (the test expects 7 there, 99 here). *)
-  "test_default_return_value_reads_storage_before_empty_returndata_call"
+  "test_ecrecover_oog_handling"
 ]
 
 fun glob_match pat str =
@@ -720,6 +716,14 @@ end
 
 fun holbuild_extra_deps (_ : string list) = ()
 fun holbuild_extra_outputs (_ : string list) = ()
+
+val () = holbuild_extra_deps [
+  "../VYPER_PIN", "semantics-profile.json", "semantics-test-constraints.txt",
+  "semantics-build-constraints.txt",
+  "../tools/vyper_test_exports.py",
+  "../tools/vyper_test_export_plugin.py",
+  "../.github/actions/setup-vyper-test-exports/action.yml"
+];
 
 fun print_file_coverage json_path report = let
   val tests = #selected report
@@ -1112,7 +1116,26 @@ in
   handle e => (TextIO.closeOut output; raise e)
 end
 
+fun check_export_provenance json_path = let
+  fun find_repo dir =
+    if OS.FileSys.access (OS.Path.concat (dir, "holproject.toml"), []) andalso
+       OS.FileSys.access
+         (OS.Path.concat (dir, "tools/vyper_test_exports.py"), []) then dir
+    else let val parent = OS.Path.getParent dir in
+      if parent = dir then raise Fail "cannot find project root for export validation"
+      else find_repo parent
+    end
+  val repo = find_repo (OS.FileSys.getDir ())
+  val script = OS.Path.concat (repo, "tools/vyper_test_exports.py")
+  val command = String.concat ["python3 ", Systeml.protect script,
+                              " check ", Systeml.protect json_path]
+in
+  if OS.Process.isSuccess (OS.Process.system command) then ()
+  else raise Fail ("invalid export provenance: " ^ json_path)
+end
+
 fun make_definitions_for_file (id, json_path) = let
+  val () = check_export_provenance json_path
   val report = read_test_json json_path
   val tests = #selected report
   val decode_fails = #failures report
@@ -1159,7 +1182,8 @@ fun generate_defn_scripts () = let
     val jsonp_from_generated = OS.Path.concat("..", jsonp)
     val contents = String.concat [
       "Theory ", thyname, "[no_sig_docs]\nAncestors jsonToVyper\nLibs vyperTestLib\n",
-      "val () = holbuild_extra_deps [\"", jsonp_from_generated, "\"];\n",
+      "val () = holbuild_extra_deps [\"", jsonp_from_generated,
+      "\", \"", jsonp_from_generated, ".provenance\"];\n",
       "val () = make_definitions_for_file (\"", id, "\", \"", jsonp_from_generated, "\");\n"]
     val out = TextIO.openOut(fname)
     val () = TextIO.output(out, contents)
