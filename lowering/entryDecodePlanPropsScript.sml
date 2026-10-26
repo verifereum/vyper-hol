@@ -22,11 +22,14 @@
  *     calldata that encodes the call decodes to the source value at its
  *     ALLOCA
  *   compile_decode_word_arg_calldata — the same for a word argument
- *   make_struct_fields_map_dec_cenv_agrees — dec_cenv_agrees holds of the
- *     env the compiler builds, given the flag counts
+ *   make_struct_fields_map_dec_cenv_agrees — dec_cenv_agrees holds of an
+ *     env with the compiler's struct map, given the flag counts
+ *   package_external_fn_dec_cenv_agrees — package_external_fn's positional
+ *     arguments are build_positional_args at an env where dec_cenv_agrees
+ *     holds
  *
  * Helpers: static_length_memory_size, vyper_to_abi_static_enc_length,
- *   abi_dec_plans_map, abi_head_size_embedded.
+ *   abi_dec_plans_map, abi_head_size_embedded, build_flag_info_n_members.
  *)
 Theory entryDecodePlanProps
 Ancestors
@@ -373,6 +376,50 @@ Proof
   strip_tac >> simp[] >> irule abi_dec_plan_struct >> simp[]
 QED
 
+(* The TupleT case of type_to_abi_dec_info_plan, given each component's
+   plan (the induction hypothesis). *)
+Theorem type_to_abi_dec_info_plan_tuple[local]:
+  (!ty. MEM ty tys ==>
+     assignable_type tenv ty ==>
+     !(sf : (string, (string # type # num) list) fmap) cenv tenv0 tv.
+       tenv SUBMAP tenv0 /\ dec_cenv_agrees cenv tenv0 /\
+       sfields_tenv_consistent sf tenv /\
+       evaluate_type tenv ty = SOME tv /\ int_byte_widths tv /\
+       ~is_dynamic (vyper_to_abi_type tenv ty) ==>
+       abi_dec_plan tenv ty (type_to_abi_dec_info sf cenv ty)) /\
+  assignable_type tenv (TupleT tys) /\
+  tenv SUBMAP tenv0 /\ dec_cenv_agrees cenv tenv0 /\
+  sfields_tenv_consistent (sf : (string, (string # type # num) list) fmap)
+    tenv /\
+  evaluate_type tenv (TupleT tys) = SOME tv /\ int_byte_widths tv /\
+  ~is_dynamic (vyper_to_abi_type tenv (TupleT tys)) ==>
+  abi_dec_plan tenv (TupleT tys) (type_to_abi_dec_info sf cenv (TupleT tys))
+Proof
+  strip_tac >>
+  gvs[assignable_type_def, evaluate_type_def, AllCaseEqs(),
+      evaluate_types_OPT_MMAP, int_byte_widths_def,
+      any_dynamic_every_static] >>
+  simp[Once type_to_abi_dec_info_def] >>
+  qspecl_then [`tenv`, `tenv0`, `cenv`, `type_to_abi_dec_info sf cenv`,
+               `tys`] mp_tac abi_dec_plans_map >>
+  impl_tac
+  >- (conj_tac >- simp[] >> conj_tac >- simp[] >>
+      gen_tac >> strip_tac >>
+      drule_all OPT_MMAP_MEM >> strip_tac >>
+      rename1 `evaluate_type tenv t = SOME etv` >>
+      `int_byte_widths etv` by metis_tac[EVERY_MEM] >>
+      `is_static (vyper_to_abi_type tenv t)` by
+        (qpat_x_assum `EVERY is_static _` mp_tac >>
+         simp[vyper_to_abi_types_MAP, EVERY_MEM, MEM_MAP, PULL_EXISTS] >>
+         disch_then irule >> simp[]) >>
+      `assignable_type tenv t` by metis_tac[EVERY_MEM] >>
+      simp[] >>
+      qpat_x_assum `!ty. MEM ty tys ==> _` (qspec_then `t` mp_tac) >>
+      simp[] >> disch_then irule >> simp[] >>
+      qexists_tac `tenv0` >> simp[]) >>
+  strip_tac >> simp[] >> irule abi_dec_plan_tuple >> simp[]
+QED
+
 (* type_to_abi_dec_info builds a plan for a static assignable type.  sf is
    the struct map the recursion has narrowed to tenv's structs; sizes and
    flags come from the whole compile env, which agrees with tenv0. *)
@@ -407,28 +454,7 @@ Proof
       qexists_tac `tenv0` >> simp[])
   >~ [`TupleT tys`]
   >- (rpt (gen_tac ORELSE disch_then strip_assume_tac) >>
-      gvs[assignable_type_def, evaluate_type_def, AllCaseEqs(),
-          evaluate_types_OPT_MMAP, int_byte_widths_def,
-          any_dynamic_every_static] >>
-      simp[Once type_to_abi_dec_info_def] >>
-      qspecl_then [`tenv`, `tenv0`, `cenv`, `type_to_abi_dec_info sf cenv`,
-                   `tys`] mp_tac abi_dec_plans_map >>
-      impl_tac
-      >- (conj_tac >- simp[] >> conj_tac >- simp[] >>
-          gen_tac >> strip_tac >>
-          drule_all OPT_MMAP_MEM >> strip_tac >>
-          rename1 `evaluate_type tenv t = SOME etv` >>
-          `int_byte_widths etv` by metis_tac[EVERY_MEM] >>
-          `is_static (vyper_to_abi_type tenv t)` by
-            (qpat_x_assum `EVERY is_static _` mp_tac >>
-             simp[vyper_to_abi_types_MAP, EVERY_MEM, MEM_MAP, PULL_EXISTS] >>
-             disch_then irule >> simp[]) >>
-          `assignable_type tenv t` by metis_tac[EVERY_MEM] >>
-          simp[] >>
-          qpat_x_assum `!ty. MEM ty tys ==> _` (qspec_then `t` mp_tac) >>
-          simp[] >> disch_then irule >> simp[] >>
-          qexists_tac `tenv0` >> simp[]) >>
-      strip_tac >> simp[] >> irule abi_dec_plan_tuple >> simp[])
+      drule_all type_to_abi_dec_info_plan_tuple >> simp[])
   >~ [`ArrayT elem bd`]
   >- (rpt (gen_tac ORELSE disch_then strip_assume_tac) >>
       gvs[assignable_type_def, evaluate_type_def, AllCaseEqs()] >>
@@ -668,19 +694,58 @@ Proof
   simp[dec_cenv_agrees_def]
 QED
 
+(* build_flag_info's member counts are type_env's, for distinct keys. *)
+Theorem build_flag_info_other[local]:
+  !tops fmid fnm id.
+    ~MEM (NONE, id)
+       (FLAT (MAP (type_def_keys_toplevel (NONE:num option)) tops)) ==>
+    SND (build_flag_info tops fmid fnm) id = fnm id
+Proof
+  Induct >> simp[build_flag_info_def] >> Cases >>
+  rw[build_flag_info_def, vyperTypeContractTheory.type_def_keys_toplevel_def]
+QED
+
+Theorem build_flag_info_n_members[local]:
+  !tops fmid fnm nsid m.
+    ALL_DISTINCT (FLAT (MAP (type_def_keys_toplevel (NONE:num option)) tops)) /\
+    FLOOKUP (type_env_for_module NONE tops) nsid = SOME (FlagArgs m) ==>
+    SND (build_flag_info tops fmid fnm) (nsid_to_string nsid) = m
+Proof
+  Induct >> simp[vyperContextTheory.type_env_for_module_def] >> Cases >>
+  simp[vyperContextTheory.type_env_for_module_def, build_flag_info_def,
+       vyperTypeContractTheory.type_def_keys_toplevel_def, FLOOKUP_UPDATE,
+       ALL_DISTINCT_APPEND] >>
+  rw[] >> gvs[nsid_to_string_def, build_flag_info_other] >>
+  first_x_assum irule >> simp[]
+QED
+
+Theorem build_compile_env_ce_flag_n_members[local]:
+  !tops vis mut func_name args ret_type (body : stmt list) use_trans.
+    (build_compile_env tops vis mut func_name args ret_type body use_trans).
+      ce_flag_n_members = SND (build_flag_info tops (K (K 0)) (K 0))
+Proof
+  rpt strip_tac >> simp[build_compile_env_def] >>
+  rpt (pairarg_tac >> gvs[])
+QED
+
 (* package_external_fn decodes its positional arguments with the decode
-   infos of build_positional_args at an env with the compiler's struct
-   map. *)
-Theorem package_external_fn_positional_args:
+   infos of build_positional_args, at an env that agrees with the
+   contract's type environment. *)
+Theorem package_external_fn_dec_cenv_agrees:
   !tops use_trans nkey_map mut nr rr fname fargs dflts ret body
    lbl cenv pos_args rest.
+    ALL_DISTINCT (FLAT (MAP (type_def_keys_toplevel (NONE:num option)) tops)) /\
     package_external_fn tops use_trans nkey_map
       (mut, nr, rr, fname, fargs, dflts, ret, body) =
       (lbl, cenv, pos_args, rest) ==>
     pos_args = build_positional_args cenv fargs /\
-    cenv.ce_struct_fields = make_struct_fields_map tops
+    dec_cenv_agrees cenv (type_env tops)
 Proof
-  simp[package_external_fn_def] >>
+  rpt gen_tac >> strip_tac >>
+  gvs[package_external_fn_def] >>
+  irule make_struct_fields_map_dec_cenv_agrees >>
   rw[update_cenv_nonreentrant_def, update_cenv_ret_abi_def,
-     build_compile_env_ce_struct_fields]
+     build_compile_env_ce_struct_fields, build_compile_env_ce_flag_n_members] >>
+  gvs[vyperContextTheory.type_env_def] >>
+  irule build_flag_info_n_members >> simp[]
 QED
