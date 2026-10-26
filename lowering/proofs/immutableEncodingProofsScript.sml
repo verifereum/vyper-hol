@@ -1,6 +1,6 @@
 Theory immutableEncodingProofs
 Ancestors
-  immutableEncoding valueEncoding
+  immutableEncoding valueEncoding vyperValue
 
 Theorem immutable_fit_exact:
   LENGTH bs = n ==> immutable_fit n bs = bs
@@ -208,6 +208,94 @@ Proof
   metis_tac[immutable_slot_context]
 QED
 
+(* Zero-filled capacity represents the default, including recursively absent
+   fixed-array elements.  No admissibility restriction is needed here. *)
+Theorem immutable_word_of_zero_bytes:
+  !n be (a:'a word). word_of_bytes be a (REPLICATE n (0w:word8)) = 0w
+Proof
+  Induct >>
+  simp[byteTheory.word_of_bytes_def, rich_listTheory.REPLICATE,
+       byteTheory.set_byte_def, byteTheory.word_slice_alt_zero,
+       wordsTheory.w2w_0, wordsTheory.WORD_OR_CLAUSES,
+       wordsTheory.ZERO_SHIFT]
+QED
+
+Theorem immutable_zero_word_context:
+  32 <= n ==>
+  mem_word_at (LENGTH pre) (pre ++ REPLICATE n 0w ++ post) = 0w
+Proof
+  strip_tac >>
+  simp[mem_word_at_def, listTheory.DROP_APPEND, listTheory.TAKE_APPEND1,
+       rich_listTheory.REPLICATE_GENLIST, listTheory.TAKE_GENLIST] >>
+  simp[GSYM rich_listTheory.REPLICATE_GENLIST, immutable_word_of_zero_bytes]
+QED
+
+Theorem immutable_zero_slot_context:
+  (!pre post. val_in_memory tv v (LENGTH pre)
+     (pre ++ REPLICATE (type_memory_size tv) 0w ++ post)) /\ i < n ==>
+  val_in_memory tv v (LENGTH pre + i * type_memory_size tv)
+    (pre ++ REPLICATE (n * type_memory_size tv) 0w ++ post)
+Proof
+  strip_tac >>
+  `i * type_memory_size tv + type_memory_size tv <= n * type_memory_size tv` by
+    (`SUC i <= n` by simp[] >>
+     qpat_x_assum `SUC i <= n`
+       (mp_tac o MATCH_MP arithmeticTheory.LESS_MONO_MULT) >>
+     disch_then (qspec_then `type_memory_size tv` mp_tac) >>
+     REWRITE_TAC[arithmeticTheory.MULT] >> decide_tac) >>
+  `REPLICATE (n * type_memory_size tv) (0w:word8) =
+   REPLICATE (i * type_memory_size tv) 0w ++
+   REPLICATE (type_memory_size tv) 0w ++
+   REPLICATE (n * type_memory_size tv -
+     (i * type_memory_size tv + type_memory_size tv)) 0w` by
+    (simp[rich_listTheory.REPLICATE_APPEND] >> AP_THM_TAC >>
+     AP_TERM_TAC >> decide_tac) >>
+  pop_assum SUBST1_TAC >>
+  first_x_assum (qspecl_then
+    [`pre ++ REPLICATE (i * type_memory_size tv) 0w`,
+     `REPLICATE (n * type_memory_size tv -
+       (i * type_memory_size tv + type_memory_size tv)) 0w ++ post`] mp_tac) >>
+  simp[listTheory.APPEND_ASSOC]
+QED
+
+Theorem immutable_default_zero_decodes_mutual:
+  (!tv pre post. val_in_memory tv (default_value tv) (LENGTH pre)
+    (pre ++ REPLICATE (type_memory_size tv) 0w ++ post)) /\
+  (!tvs pre post. tuple_in_memory (MAP default_value tvs) tvs (LENGTH pre)
+    (pre ++ REPLICATE (type_memory_size_list tvs) 0w ++ post)) /\
+  (!fts pre post.
+    fields_in_memory (MAP (\(id,t). (id, default_value t)) fts) fts (LENGTH pre)
+      (pre ++ REPLICATE (type_memory_size_fields fts) 0w ++ post))
+Proof
+  ho_match_mp_tac type_memory_size_ind >>
+  rw[default_value_def, default_value_tuple_MAP, default_value_struct_MAP,
+     type_memory_size_def, val_in_memory_def, val_to_w256_def,
+     immutable_zero_word_context, mem_bytes_at_def,
+     integer_wordTheory.i2w_0]
+  >- (simp[typed_val_to_w256_def, byteTheory.word_of_bytes_be_def,
+           listTheory.PAD_RIGHT, GSYM rich_listTheory.REPLICATE_GENLIST,
+           rich_listTheory.REPLICATE_APPEND, immutable_word_of_zero_bytes])
+  >- (simp[typed_val_to_w256_def, byteTheory.word_to_bytes_def,
+           fcpLib.INDEX_CONV ``dimindex(:160)``] >> EVAL_TAC >>
+      simp[wordsTheory.ZERO_SHIFT, wordsTheory.w2w_0,
+           wordsTheory.word_0_n2w])
+  >- (irule immutable_zero_slot_context >> simp[])
+  >> ONCE_REWRITE_TAC[GSYM rich_listTheory.REPLICATE_APPEND] >>
+  metis_tac[listTheory.APPEND_ASSOC, listTheory.LENGTH_APPEND,
+            rich_listTheory.LENGTH_REPLICATE]
+QED
+
+Theorem immutable_default_slot_decodes:
+  EVERY (\bs. LENGTH bs = type_memory_size tv) bss /\
+  i < LENGTH bss /\ EL i bss = REPLICATE (type_memory_size tv) 0w ==>
+  val_in_memory tv (default_value tv) (LENGTH pre + i * type_memory_size tv)
+    (pre ++ FLAT bss ++ post)
+Proof
+  strip_tac >> drule_all immutable_flat_slot >> strip_tac >>
+  metis_tac[immutable_default_zero_decodes_mutual,
+            listTheory.APPEND_ASSOC, listTheory.LENGTH_APPEND]
+QED
+
 Theorem immutable_encoding_decodes_mutual:
   (!tv v. immutable_value_admissible tv v ==>
     !pre post. val_in_memory tv v (LENGTH pre)
@@ -272,6 +360,7 @@ Resume immutable_encoding_decodes_mutual[arrays]:
        val_in_memory_def, type_memory_size_def] >>
   rpt strip_tac
   >- suspend "sparse"
+  >- suspend "sparse_default"
   >- (pure_rewrite_tac[ETA_THM] >> simp[immutable_dynamic_padding] >>
       simp[mem_word_at_def, listTheory.DROP_APPEND, listTheory.TAKE_APPEND1,
            listTheory.TAKE_LENGTH_ID_rwt])
@@ -291,6 +380,17 @@ Resume immutable_encoding_decodes_mutual[sparse]:
     (gvs[listTheory.EVERY_MEM] >> first_x_assum drule >> simp[]) >>
   `ALOOKUP l i = SOME v` by metis_tac[alistTheory.ALOOKUP_ALL_DISTINCT_MEM] >>
   simp[Abbr `bss`, listTheory.EL_GENLIST] >> metis_tac[]
+QED
+
+Resume immutable_encoding_decodes_mutual[sparse_default]:
+  qmatch_goalsub_abbrev_tac `FLAT bss` >>
+  `EVERY (\bs. LENGTH bs = type_memory_size tv) bss` by
+    (simp[Abbr `bss`, listTheory.EVERY_GENLIST] >> qx_gen_tac `j` >>
+     Cases_on `ALOOKUP l j` >> simp[]) >>
+  `LENGTH (FLAT bss) = n * type_memory_size tv` by
+    (drule immutable_flat_uniform_length >> simp[Abbr `bss`]) >>
+  simp[immutable_fit_exact] >> irule immutable_default_slot_decodes >>
+  simp[Abbr `bss`, listTheory.EL_GENLIST]
 QED
 
 Resume immutable_encoding_decodes_mutual[dynamic_elems]:

@@ -4,7 +4,7 @@
  *)
 Theory vyperTypeCallOutcome
 Ancestors
-  pair sum list option vyperState vyperCallOutcome vyperCallOutcomeBranches
+  pair sum list option vyperState vyperCallOutcome vyperCallOutcomeProps vyperCallOutcomeBranches
   vyperCallOutcomeFrame vyperRuntimeAccounts vyperTypeExtCallCore
   vyperTypeValues vyperTypeInvariants vyperTypeExprResult vyperTypeExprSoundness vyperTypeEnv vyperTypeSystem
   vyperInterpreter vyperAST vyperValue vyperTyping

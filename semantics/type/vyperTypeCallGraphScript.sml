@@ -1,7 +1,7 @@
 (*
  * Executable internal-call graph analysis for checked Vyper contracts.
  *
- * TOP-LEVEL:
+ * Main definitions:
  * - int_calls_expr / int_calls_stmt: syntactic internal-call extraction
  * - contract_call_edges: whole-contract call graph
  * - contract_call_graph_acyclic: bounded executable cycle check
