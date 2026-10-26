@@ -43,6 +43,91 @@ Proof
   simp[compileEnvTheory.compile_env_component_equality]
 QED
 
+Theorem exec_alloca_frames:
+  !inst s n s1 p.
+    inst.inst_outputs = [p] /\ exec_alloca inst s n = OK s1 ==>
+    (!x. x <> p ==> lookup_var x s1 = lookup_var x s) /\
+    (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+                 FLOOKUP s1.vs_allocas aid = SOME entry)
+Proof
+  rpt gen_tac >> simp[exec_alloca_def] >>
+  Cases_on `FLOOKUP s.vs_allocas inst.inst_id`
+  >- (rw[AllCaseEqs(), update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
+      gvs[FLOOKUP_UPDATE] >> Cases_on `inst.inst_id = aid` >> gvs[]) >>
+  rename1 `FLOOKUP s.vs_allocas inst.inst_id = SOME entry` >>
+  PairCases_on `entry` >>
+  rw[AllCaseEqs(), update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
+  gvs[FLOOKUP_UPDATE]
+QED
+
+Theorem annassign_alloca_framed_frag:
+  !ctx func cenv cx es st st1 p sz s0 R.
+    emit_inst ALLOCA [Lit (n2w sz)] [p] st = ((), st1) /\
+    stmt_state_rel func cenv cx es s0 /\ fn_inst_ids_distinct func /\
+    MEM (mk_inst st.cs_next_id ALLOCA [Lit (n2w sz)] [p]) (fn_insts func) /\
+    not_local_ptr cenv es.scopes p /\ sz < dimword (:256) ==>
+    ?s1 w. lookup_var p s1 = SOME w /\
+      FLOOKUP s1.vs_allocas st.cs_next_id = SOME (w2n w, sz) /\
+      (!x. x <> p ==> lookup_var x s1 = lookup_var x s0) /\
+      (!aid entry. FLOOKUP s0.vs_allocas aid = SOME entry ==>
+                   FLOOKUP s1.vs_allocas aid = SOME entry) /\
+      frag_exec ctx st st1 (\s. s = s0)
+        (\s. s = s1 /\ stmt_state_rel func cenv cx es s) R
+Proof
+  rpt strip_tac >> imp_res_tac emit_inst_extends >>
+  qabbrev_tac `A = mk_inst st.cs_next_id ALLOCA [Lit (n2w sz)] [p]` >>
+  `A.inst_opcode = ALLOCA /\ A.inst_operands = [Lit (n2w sz)] /\
+   A.inst_outputs = [p] /\ A.inst_id = st.cs_next_id` by
+    simp[Abbr `A`, venomInstTheory.mk_inst_def] >>
+  `?s1. exec_alloca A s0 (n2w sz : bytes32) = OK s1` by
+    (Cases_on `FLOOKUP s0.vs_allocas st.cs_next_id`
+     >- simp[exec_alloca_def] >>
+     rename1 `FLOOKUP s0.vs_allocas st.cs_next_id = SOME entry` >>
+     PairCases_on `entry` >> simp[exec_alloca_def]) >>
+  drule_all stmt_state_rel_exec_alloca >> strip_tac >>
+  drule_all exec_alloca_frames >> strip_tac >>
+  qexistsl [`s1 with vs_inst_idx := LENGTH st1.cs_current_insts`, `w`] >>
+  gvs[lookup_var_def, wordsTheory.w2n_n2w, arithmeticTheory.LESS_MOD] >>
+  irule frag_exec_run_inst_seq >>
+  gvs[venomInstTheory.mk_inst_def] >>
+  simp[emitted_insts_def, rich_listTheory.DROP_LENGTH_APPEND,
+       IS_PREFIX_APPEND3, run_inst_seq_def, stmt_state_rel_inst_idx,
+       is_terminator_def, step_inst_base_def, Abbr `A`,
+       venomInstTheory.mk_inst_def]
+QED
+
+Theorem annassign_mstore_framed_frag:
+  !w v p val_op ctx func cenv cx es' st st' Pre R keep s0.
+    emit_void MSTORE [Var p; val_op] st = ((), st') /\
+    (!s. Pre s ==>
+      lookup_var p s = SOME w /\
+      eval_operand val_op s = SOME (val_to_w256 v) /\
+      stmt_state_rel func cenv cx es' (mstore (w2n w) (val_to_w256 v) s) /\
+      (!x. keep x ==> lookup_var x s = lookup_var x s0) /\
+      (!aid entry. FLOOKUP s0.vs_allocas aid = SOME entry ==>
+                   FLOOKUP s.vs_allocas aid = SOME entry)) ==>
+    frag_exec ctx st st' Pre
+      (\s. stmt_state_rel func cenv cx es' s /\
+           (!x. keep x ==> lookup_var x s = lookup_var x s0) /\
+           (!aid entry. FLOOKUP s0.vs_allocas aid = SOME entry ==>
+                        FLOOKUP s.vs_allocas aid = SOME entry)) R
+Proof
+  rpt strip_tac >>
+  imp_res_tac emitted_insts_emit_void >> imp_res_tac emit_void_extends >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+     (emitted_insts st st')` by
+    simp[venomInstTheory.mk_inst_def, is_terminator_def] >>
+  irule frag_exec_run_inst_seq >>
+  fs[same_blocks_def, IS_PREFIX_APPEND3] >>
+  rpt strip_tac >> disj1_tac >> first_x_assum drule >> strip_tac >>
+  `step_inst_base (mk_inst st.cs_next_id MSTORE [Var p; val_op] []) s =
+     OK (mstore (w2n w) (val_to_w256 v) s)` by
+    (irule step_MSTORE >> simp[eval_operand_def]) >>
+  simp[run_inst_seq_def, stmt_state_rel_inst_idx,
+       mstore_def, lookup_var_def, LET_THM] >>
+  gvs[lookup_var_def, mstore_def, LET_THM]
+QED
+
 Theorem cenv_top_ext_declare_local:
   !cenv id ty st c st1 sc rest.
     declare_local cenv id ty st = (c, st1) /\ cenv.ce_alloca_locals /\
