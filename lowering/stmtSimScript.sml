@@ -152,6 +152,16 @@ Definition cenv_top_ext_def:
         ?sc rest. scopes = sc :: rest /\ lookup_scopes n rest = NONE
 End
 
+(* The return PC of an internal function's frame (ce_return_pc, the
+   variable RETPC_PARAM binds at the function's entry) is defined, and the
+   code from sa on never assigns it.  RET reads it; an external function
+   has none. *)
+Definition ret_pc_ok_def:
+  ret_pc_ok cenv sa s <=>
+    !x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
+           not_fresh_at sa x /\ ?w. lookup_var x s = SOME w
+End
+
 (* The code m (a statement with its declaration, or a statement list),
    compiled in cenv from sa to sb under the code premises of the statement
    lemmas, run in func from a state related at es where the source's
@@ -167,8 +177,8 @@ Definition stmt_frag_def:
     !sa sb s0 cenv'.
       m sa = (cenv', sb) /\ fn_has_code sa sb func /\
       fn_inst_ids_distinct func /\
-      local_ptrs_reserved cenv sa /\ ~block_is_terminated sa /\
-      stmt_res_ok lctx res /\
+      local_ptrs_reserved cenv sa /\ ret_pc_ok cenv sa s0 /\
+      ~block_is_terminated sa /\ stmt_res_ok lctx res /\
       stmt_state_rel func cenv cx es s0 /\ ~s0.vs_halted /\
       s0.vs_current_bb = sa.cs_current_bb /\
       s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
@@ -186,6 +196,37 @@ Definition stmt_frag_def:
       (?fuel r. run_from fuel ctx func s0 = r /\ exit_result r /\
                 stmt_exit RetQ es' res r)
 End
+
+(* The return PC stays defined and unassigned as the code goes on, where
+   the variables handed out before it keep their values. *)
+Theorem ret_pc_ok_frame:
+  !cenv cenv' sa sb s s'.
+    ret_pc_ok cenv sa s /\ cenv'.ce_return_pc = cenv.ce_return_pc /\
+    sa.cs_next_var <= sb.cs_next_var /\
+    (!x w. not_fresh_at sa x /\ lookup_var x s = SOME w ==>
+           lookup_var x s' = SOME w) ==>
+    ret_pc_ok cenv' sb s'
+Proof
+  rw[ret_pc_ok_def] >> qpat_x_assum `!x sz. _` drule >> strip_tac
+  >- (fs[not_fresh_at_def] >> rpt strip_tac >>
+      qpat_x_assum `!n. sa.cs_next_var <= n ==> _` (qspec_then `n` mp_tac) >>
+      simp[]) >>
+  rename1 `lookup_var x s = SOME w` >> qexists_tac `w` >>
+  qpat_x_assum `!x w. _ ==> _` irule >> simp[]
+QED
+
+Theorem ret_pc_ok_jump_to:
+  !cenv sa l s. ret_pc_ok cenv sa (jump_to l s) <=> ret_pc_ok cenv sa s
+Proof
+  simp[ret_pc_ok_def, lookup_var_def, jump_to_def]
+QED
+
+Theorem cenv_top_ext_return_pc:
+  !cenv c sc. cenv_top_ext cenv c sc ==> c.ce_return_pc = cenv.ce_return_pc
+Proof
+  rw[cenv_top_ext_def] >>
+  qpat_x_assum `_ = cenv` (SUBST1_TAC o SYM) >> simp[]
+QED
 
 Theorem cenv_top_ext_refl:
   !cenv scopes. cenv_top_ext cenv cenv scopes
@@ -505,6 +546,11 @@ Proof
     qpat_x_assum `stmt_lands _ _ _ _`
       (strip_assume_tac o SIMP_RULE (srw_ss()) [stmt_lands_def]) >>
     rename1 `stmt_state_rel func c cx es1 s1` >>
+    `ret_pc_ok c sm s1` by
+      (qspecl_then [`cenv`, `c`, `sa`, `sm`, `s0`, `s1`] mp_tac
+         ret_pc_ok_frame >>
+       impl_tac >- (fs[] >> drule cenv_top_ext_return_pc >> simp[]) >>
+       simp[]) >>
     qpat_x_assum `!c'. _ ==> stmt_frag _ _ _ _ _ _ _ _ _ _`
       (qspec_then `c` mp_tac) >>
     simp[stmt_frag_def] >>
@@ -809,8 +855,8 @@ Theorem if_branch_frag:
       esA res es2 /\
     compile_stmts cenv lctx ty ss sa = ((), sb) /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-    local_ptrs_reserved cenv sa /\ sa.cs_current_insts = [] /\
-    stmt_res_ok lctx res /\
+    local_ptrs_reserved cenv sa /\ ret_pc_ok cenv sa s0 /\
+    sa.cs_current_insts = [] /\ stmt_res_ok lctx res /\
     stmt_state_rel func cenv cx esA s0 /\ ~s0.vs_halted /\
     s0.vs_current_bb = sa.cs_current_bb /\ s0.vs_inst_idx = 0 /\
     es2.scopes = sc :: rest /\
@@ -976,6 +1022,14 @@ Proof
   impl_tac >- fs[expr_res_ok_def] >>
   strip_tac >> fs[] >>
   rename1 `stmt_state_rel func cenv cx es1 sv` >>
+  `!st l. sa.cs_next_var <= st.cs_next_var ==>
+          ret_pc_ok cenv st (jump_to l sv)` by
+    (rpt strip_tac >> REWRITE_TAC [ret_pc_ok_jump_to] >>
+     qspecl_then [`cenv`, `cenv`, `sa`, `st`, `s0`, `sv`] mp_tac
+       ret_pc_ok_frame >>
+     impl_tac >- fs[] >> simp[]) >>
+  `sa.cs_next_var <= s6.cs_next_var /\ sa.cs_next_var <= s9.cs_next_var` by
+    decide_tac >>
   Cases_on `b` >> fs[]
   >- (
     qspecl_then [`ctx`, `func`, `cx`, `lctx`, `RetQ`, `cenv`, `ty`, `ss1`,
@@ -2011,7 +2065,7 @@ Theorem for_iteration:
     dv <> p /\ dv <> cv /\ dv <> ev /\ nv <> cv /\ nv <> ev /\ nv <> p /\
     cv <> ev /\ cv <> p /\ ev <> p /\
     not_fresh_at sb0 cv /\ not_fresh_at sb0 ev /\ not_fresh_at sb0 p /\
-    st.cs_next_var <= sb0.cs_next_var /\
+    st.cs_next_var <= sb0.cs_next_var /\ ret_pc_ok cenv st cc /\
     (!x. not_fresh_at st x ==> x <> dv /\ x <> cv /\ x <> nv) /\
     32 <= sz /\ type_memory_size tyv = 32 /\
     (* the iteration *)
@@ -2068,6 +2122,19 @@ Proof
                `cond_lbl`, `exit_lbl`, `body_lbl`, `j1`, `j2`, `j3`, `bbb`]
     mp_tac for_body_entry >>
   impl_tac >- fs[] >> strip_tac >>
+  `ret_pc_ok bc sb0 s2` by
+    (qspecl_then [`cenv`, `bc`, `st`, `sb0`, `cc`, `s2`] mp_tac
+       ret_pc_ok_frame >>
+     impl_tac
+     >- (rpt conj_tac
+         >- first_assum ACCEPT_TAC
+         >- (qpat_assum `_ = cenv` (fn th => ONCE_REWRITE_TAC [SYM th]) >>
+             simp[])
+         >- first_assum ACCEPT_TAC >>
+         rpt strip_tac >>
+         qpat_x_assum `!x. not_fresh_at st x ==> _` drule >> strip_tac >>
+         qpat_x_assum `!x. x <> dv ==> lookup_var x s2 = _` drule >> simp[]) >>
+     simp[]) >>
   qpat_x_assum `stmt_frag _ _ _ _ _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [stmt_frag_def]) >>
   disch_then (qspecl_then [`sb0`, `sb1`, `s2`,
@@ -2195,7 +2262,7 @@ Theorem for_loop:
     dv <> p /\ dv <> cv /\ dv <> ev /\ nv <> cv /\ nv <> ev /\ nv <> p /\
     cv <> ev /\ cv <> p /\ ev <> p /\
     not_fresh_at sb0 cv /\ not_fresh_at sb0 ev /\ not_fresh_at sb0 p /\
-    st.cs_next_var <= sb0.cs_next_var /\
+    st.cs_next_var <= sb0.cs_next_var /\ ret_pc_ok cenv st cc /\
     (!x. not_fresh_at st x ==> x <> dv /\ x <> cv /\ x <> nv) /\
     32 <= sz /\ type_memory_size tyv = 32 /\
     (* the body, at the iteration states over a source state where P holds *)
@@ -2316,6 +2383,10 @@ Proof
      impl_tac
      >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >> gvs[]) >>
      simp[]) >>
+  `ret_pc_ok cenv st cc'` by
+    (qspecl_then [`cenv`, `cenv`, `st`, `st`, `cc`, `cc'`] mp_tac
+       ret_pc_ok_frame >>
+     impl_tac >- fs[] >> simp[]) >>
   qpat_x_assum `!P ctx func. _`
     (qspecl_then [`P`, `ctx`, `func`, `cenv`, `bc`, `cx`, `lctx`, `RetQ`, `ty`,
                   `stmts`, `id`, `tyv`, `p`, `sz`, `ainst`, `cv`, `ev`, `dv`,
@@ -2528,6 +2599,10 @@ Proof
      simp[Abbr `cc`, lookup_var_def, jump_to_def, update_var_def,
           FLOOKUP_UPDATE] >>
      fs[GSYM lookup_var_def] >> metis_tac[]) >>
+  `ret_pc_ok cenv sa cc` by
+    (qspecl_then [`cenv`, `cenv`, `sa`, `sa`, `s0`, `cc`] mp_tac
+       ret_pc_ok_frame >>
+     impl_tac >- fs[] >> simp[]) >>
   `!fuel rr. run_from fuel ctx func cc = rr /\ (!e. rr <> Error e) ==>
              ?fuel'. run_from fuel' ctx func s0 = rr` by
     (simp[Abbr `cc`] >> metis_tac[]) >>
