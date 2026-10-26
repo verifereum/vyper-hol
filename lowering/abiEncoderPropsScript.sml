@@ -8791,9 +8791,12 @@ Resume enc_elems_cons_correct_labels[cons_child_slices]:
   `enc_pre a b [dst;elem_src;dyn_ptr] lo top tv v (src_offset + w2n src_w)
     [(head_offset + w2n dst_w,hs);(d + w2n dst_w,delta)] s1` by
     (simp[enc_pre_def, Excl "enc_def"] >>
-     qpat_assum `enc_pre st st' _ _ _ _ _ _ _ s0` mp_tac >>
-     simp[NoAsms, enc_pre_def, Excl "enc_def"] >> strip_tac >>
-     fs[venomMemDefsTheory.regions_disjoint_def, Excl "enc_def"] >> decide_tac) >>
+     qpat_x_assum `enc_pre st st' _ _ _ _ _ _ _ s0` mp_tac >>
+     qpat_x_assum `type_memory_size tv <= type_memory_size (TupleTV (tv::tvs))` mp_tac >>
+     qpat_x_assum `LENGTH whole = _` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     simp[enc_pre_def, venomMemDefsTheory.regions_disjoint_def,
+          Excl "enc_def"] >> decide_tac) >>
   suspend "cons_child_call"
 QED
 
@@ -9830,6 +9833,183 @@ Proof
   qpat_assum `enc_frame a b _ _ _ s u`
     (irule_at (Pat `enc_frame _ _ _ _ _ _ _`)) >>
   qexists_tac `j` >> simp[]
+QED
+
+Theorem enc_pre_subsource_current:
+  enc_pre st z ops lo top tv v p outs s /\
+  val_in_memory tv' v' p' s.vs_memory /\
+  p <= p' /\ p' + type_memory_size tv' <= p + type_memory_size tv /\
+  (!q m. MEM (q,m) newouts ==>
+    ?b n. MEM (b,n) outs /\ b <= q /\ q+m <= b+n) /\
+  frag_ids a b SUBSET frag_ids st z /\
+  (!x. MEM (Var x) newops ==> not_fresh_at a x) ==>
+  enc_pre a b newops lo top tv' v' p' newouts s
+Proof
+  strip_tac >> rewrite_tac[enc_pre_def] >> rpt conj_tac
+  >- simp[]
+  >- simp[]
+  >- (fs[enc_pre_def] >> decide_tac)
+  >- (rewrite_tac[EVERY_MEM] >> Cases >> strip_tac >>
+      rename1 `MEM (q,m) newouts` >>
+      qpat_x_assum `!q m. MEM (q,m) newouts ==> _` drule >> strip_tac >>
+      qpat_x_assum `enc_pre _ _ _ _ _ _ _ _ _ _` mp_tac >>
+      simp[enc_pre_def, EVERY_MEM] >> strip_tac >>
+      first_x_assum drule >> simp[] >> strip_tac >>
+      drule_all enc_subregions_disjoint >> simp[]) >>
+  irule enc_scratch_subset >> goal_assum (drule_at Any) >> fs[enc_pre_def]
+QED
+
+Theorem enc_dyn_loop_ctx_child_pre:
+  enc_dyn_loop_ctx st z ops lo top (ArrayTV tv (Dynamic n))
+    (ArrayV (DynArrayV vs)) src outs s0 count_ptr ip dyn_ptr j c s /\
+  value_has_type (ArrayTV tv (Dynamic n)) (ArrayV (DynArrayV vs)) /\
+  k < LENGTH vs /\
+  (!q m. MEM (q,m) child_outs ==>
+    ?b n. MEM (b,n) outs /\ b <= q /\ q+m <= b+n) /\
+  frag_ids a b SUBSET frag_ids st z /\
+  (!x. MEM (Var x) child_ops ==> not_fresh_at a x) ==>
+  enc_pre a b child_ops lo top tv (EL k vs)
+    (src + 32 + k * type_memory_size tv) child_outs s
+Proof
+  strip_tac >>
+  `val_in_memory tv (EL k vs) (src + 32 + k * type_memory_size tv)
+      s.vs_memory` by
+    (drule enc_dyn_loop_ctx_source >> strip_tac >>
+     drule_all enc_dynarray_source_element >> simp[]) >>
+  `src + 32 + k * type_memory_size tv + type_memory_size tv <=
+      src + type_memory_size (ArrayTV tv (Dynamic n))` by
+    (fs[value_has_type_def, type_memory_size_def] >>
+     `SUC k <= n` by decide_tac >>
+     `SUC k * type_memory_size tv <= n * type_memory_size tv` by
+       simp[arithmeticTheory.LE_MULT_RCANCEL] >>
+     qpat_x_assum `SUC k * _ <= _` mp_tac >>
+     pure_rewrite_tac[arithmeticTheory.MULT_CLAUSES] >> decide_tac) >>
+  fs[enc_dyn_loop_ctx_def, enc_loop_ctx_def] >>
+  irule enc_pre_subsource_current >> simp[] >>
+  goal_assum (drule_at (Pat `enc_pre _ _ _ _ _ _ _ _ _ _`)) >> simp[]
+QED
+
+Theorem enc_dynamic_array_prefix_head_bound:
+  enc_layout (REPLICATE (LENGTH avs) t) avs /\ is_dynamic t ==>
+  LENGTH (enc_head_upto (32 * LENGTH avs)
+    (REPLICATE (LENGTH avs) t) avs k) <= 32 * LENGTH avs
+Proof
+  strip_tac >> Cases_on `k <= LENGTH avs`
+  >- (drule_all (SRULE [] (Q.INST [`N` |-> `LENGTH vs`]
+        enc_head_upto_dynamic_length_layout)) >>
+      disch_then (qspec_then `32 * LENGTH avs` mp_tac) >>
+      simp[arithmeticTheory.LE_MULT_LCANCEL]) >>
+  drule enc_head_upto_length_layout >>
+  disch_then (qspecl_then [`k`,`32 * LENGTH avs`] mp_tac) >>
+  simp[TAKE_LENGTH_TOO_LONG, enc_dynamic_head_lengths]
+QED
+
+Theorem enc_prefix_mem_preserve_tail_write:
+  enc_prefix_mem p B ts avs k s /\
+  enc_frame a b lo top [(p + enc_offset_upto B ts avs k,n)] s u /\
+  LENGTH (enc_head_upto B ts avs k) <= B /\
+  p + enc_offset_upto B ts avs k <= lo ==>
+  enc_prefix_mem p B ts avs k u
+Proof
+  rewrite_tac[enc_prefix_mem_def] >> strip_tac >>
+  `mem_bytes_at p (LENGTH (enc_head_upto B ts avs k)) u.vs_memory =
+      mem_bytes_at p (LENGTH (enc_head_upto B ts avs k)) s.vs_memory` by
+    (irule enc_frame_preserves_bytes_allow_empty >>
+     goal_assum (drule_at (Pat `enc_frame _ _ _ _ _ _ _`)) >>
+     simp[enc_offset_upto_def, venomMemDefsTheory.regions_disjoint_def] >>
+     fs[enc_offset_upto_def] >> decide_tac) >>
+  `mem_bytes_at (p+B) (LENGTH (enc_tail_upto ts avs k)) u.vs_memory =
+      mem_bytes_at (p+B) (LENGTH (enc_tail_upto ts avs k)) s.vs_memory` by
+    (irule enc_frame_preserves_bytes_allow_empty >>
+     goal_assum (drule_at (Pat `enc_frame _ _ _ _ _ _ _`)) >>
+     simp[enc_offset_upto_def, venomMemDefsTheory.regions_disjoint_def] >>
+     fs[enc_offset_upto_def]) >>
+  simp[]
+QED
+
+Theorem enc_dyn_loop_ctx_restore:
+  enc_dyn_loop_ctx st z ops lo top tv v src outs s0
+    count_ptr ip dyn_ptr j c s /\ value_has_type tv v /\
+  enc_frame st z lo top outs s u /\ u.vs_labels = s.vs_labels /\
+  enc_frame a b lo local_top child_outs s u /\
+  (!x. count_ptr = Var x ==> not_fresh_at a x) /\
+  (!x. dyn_ptr = Var x ==> not_fresh_at a x) /\
+  st.cs_next_id NOTIN frag_ids a b /\ j NOTIN frag_ids a b /\
+  EVERY (\(p,n). p+n <= lo) child_outs ==>
+  enc_dyn_loop_ctx st z ops lo top tv v src outs s0
+    count_ptr ip dyn_ptr j c u /\
+  mem_word_at ip u.vs_memory = mem_word_at ip s.vs_memory /\
+  mem_word_at c u.vs_memory = mem_word_at c s.vs_memory
+Proof
+  strip_tac >>
+  `eval_operand count_ptr s = SOME (n2w ip) /\
+   eval_operand dyn_ptr s = SOME (n2w c)` by
+    fs[enc_dyn_loop_ctx_def, enc_loop_ctx_def] >>
+  `eval_operand count_ptr u = SOME (n2w ip)` by
+    (irule enc_frame_preserves_operand >>
+     qpat_assum `enc_frame a b lo local_top child_outs s u`
+       (irule_at (Pat `enc_frame _ _ _ _ _ _ _`)) >> simp[]) >>
+  `eval_operand dyn_ptr u = SOME (n2w c)` by
+    (irule enc_frame_preserves_operand >>
+     qpat_assum `enc_frame a b lo local_top child_outs s u`
+       (irule_at (Pat `enc_frame _ _ _ _ _ _ _`)) >> simp[]) >>
+  conj_tac >- (irule enc_dyn_loop_ctx_step >> simp[] >>
+               qexists_tac `s` >> simp[]) >>
+  drule_all enc_dyn_loop_ctx_preserves_cells >> simp[]
+QED
+
+Theorem enc_dyn_loop_ctx_buffer_call:
+  enc_dyn_loop_ctx st z ops lo top tv v src_addr outs s0
+    count_ptr ip dyn_ptr j c s /\ value_has_type tv v /\
+  enc_prefix_mem p B ts avs k s /\
+  LENGTH (enc_head_upto B ts avs k) <= B /\
+  w2n dst_w = p + enc_offset_upto B ts avs k /\
+  enc_buf_correct_labels dst child_src ei /\
+  compile_abi_encode_to_buf dst child_src ei a = (op,b) /\
+  abi_enc_plan env ty ei /\ evaluate_type env ty = SOME child_tv /\
+  value_has_type child_tv child_v /\ vyper_to_abi env ty child_v = SOME av /\
+  eval_operand dst s = SOME dst_w /\ eval_operand child_src s = SOME src_w /\
+  enc_pre a b [dst;child_src] lo top child_tv child_v (w2n src_w)
+    [(w2n dst_w,LENGTH (enc (vyper_to_abi_type env ty) av))] s /\
+  frag_ids a b SUBSET frag_ids st z /\
+  (!x. not_fresh_at st x ==> not_fresh_at a x) /\
+  (?q m. MEM (q,m) outs /\ q <= w2n dst_w /\
+    w2n dst_w + LENGTH (enc (vyper_to_abi_type env ty) av) <= q+m) /\
+  (!x. count_ptr = Var x ==> not_fresh_at a x) /\
+  (!x. dyn_ptr = Var x ==> not_fresh_at a x) /\
+  st.cs_next_id NOTIN frag_ids a b /\ j NOTIN frag_ids a b ==>
+  frag_exec ctx a b (\u. u = s)
+    (\u. mem_bytes_at (w2n dst_w)
+           (LENGTH (enc (vyper_to_abi_type env ty) av)) u.vs_memory =
+           enc (vyper_to_abi_type env ty) av /\
+         eval_operand op u = SOME (n2w (LENGTH (enc (vyper_to_abi_type env ty) av))) /\
+         enc_dyn_loop_ctx st z ops lo top tv v src_addr outs s0
+           count_ptr ip dyn_ptr j c u /\
+         enc_prefix_mem p B ts avs k u /\
+         mem_word_at ip u.vs_memory = mem_word_at ip s.vs_memory /\
+         mem_word_at c u.vs_memory = mem_word_at c s.vs_memory)
+    (\r. F)
+Proof
+  strip_tac >>
+  `enc_scratch (frag_ids st z) lo top s` by
+    fs[enc_dyn_loop_ctx_def, enc_loop_ctx_def, enc_pre_def] >>
+  `w2n dst_w + LENGTH (enc (vyper_to_abi_type env ty) av) <= lo` by
+    fs[enc_pre_def] >>
+  drule_all (SRULE [PULL_EXISTS] enc_buf_correct_labels_enclosing_local_frag) >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  irule frag_exec_conseq >> goal_assum (drule_at Any) >> simp[] >>
+  rpt gen_tac >> strip_tac >>
+  rename1 `eval_operand op u = SOME _` >>
+  `enc_dyn_loop_ctx st z ops lo top tv v src_addr outs s0
+      count_ptr ip dyn_ptr j c u /\
+   mem_word_at ip u.vs_memory = mem_word_at ip s.vs_memory /\
+   mem_word_at c u.vs_memory = mem_word_at c s.vs_memory` by
+    (irule enc_dyn_loop_ctx_restore >>
+     goal_assum (drule_at (Pat `enc_frame _ _ _ _ _ _ _`)) >> simp[] >>
+     goal_assum (drule_at (Pat `enc_frame _ _ _ _ _ _ _`)) >> simp[]) >>
+  simp[] >> irule enc_prefix_mem_preserve_tail_write >> simp[] >>
+  goal_assum (drule_at (Pat `enc_prefix_mem _ _ _ _ _ _`)) >> simp[] >>
+  goal_assum (drule_at (Pat `enc_frame _ _ _ _ _ _ _`)) >> simp[]
 QED
 
 Theorem compile_abi_encode_frag:
