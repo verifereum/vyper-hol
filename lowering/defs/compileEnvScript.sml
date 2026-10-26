@@ -14,6 +14,8 @@
  *   nsid_to_string   — namespace ID to lookup string
  *   internal_fn_label — Venom label of an internal function (Vyper's spelling)
  *   local_ptrs_rel   — live locals held through pointer variables match memory
+ *   accounts_rel     — every address's accounts and transient storage match,
+ *                      no pending deletions
  *   compile_state_ok — well-formedness: bound labels disjoint from future fresh labels
  *   label_external   — label not bound and not in future fresh-label co-domain
  *
@@ -891,6 +893,21 @@ Definition transient_rel_def:
     (vs.tStorage addr = contract_transient ss)
 End
 
+(* The accounts and the transient storage of every address are identical,
+   and the source has no pending deletions.  Other addresses' accounts and
+   transient storage change during a body only through the call oracle,
+   whose outcome both sides adopt the same way (adopt_outcome).  Pending
+   deletions come only from create runs, which the supported subset leaves
+   out; a transaction starts with none, as call_external empties them on
+   success.  Venom has no pending deletions, so the success case of the
+   external result relation, which compares the accounts after the source
+   processes its deletions, needs them empty. *)
+Definition accounts_rel_def:
+  accounts_rel vs ss ⇔
+    vs.accounts = ss.vs_accounts ∧ vs.tStorage = ss.vs_transient ∧
+    vs.pending_deletions = []
+End
+
 (* ===== Immutables Relation ===== *)
 (* Interpreter immutables ↔ Venom code/data section.
    During constructor: interpreter writes to st.immutables, Venom uses ISTORE/ILOAD.
@@ -1111,6 +1128,10 @@ End
      variables.
    - transient_rel, transient_vars_rel: transient storage, and the slots of
      transient variables.
+   - accounts_rel: the accounts and transient storage of every address, and
+     no pending deletions, which the success case of the external result
+     relation compares (storage_rel and transient_rel are its case for the
+     running contract).
    - immutables_rel: immutables (vs_immutables in a constructor, the data
      section at runtime).
    - logs_rel: emitted logs.
@@ -1124,6 +1145,7 @@ Definition state_rel_def:
      storage_vars_rel cenv cx ∧
      transient_rel cx.txn.target vs ss ∧
      transient_vars_rel cenv cx ∧
+     accounts_rel vs ss ∧
      immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor vs ss ∧
      logs_rel cenv cx.txn.target vs ss ∧
      call_ctx_rel cx.txn ss.vs_call_ctx ss.vs_tx_ctx ss.vs_block_ctx ∧
