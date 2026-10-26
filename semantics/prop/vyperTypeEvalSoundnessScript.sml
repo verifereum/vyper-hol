@@ -10543,7 +10543,7 @@ Resume eval_scc_type_sound_mutual[AugAssign_value_write]:
     (case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0) ptv bop cur right <>
     INR (TypeError msg)` by
     (irule well_typed_binop_no_type_error >>
-     qexistsl_tac [`ty`,`expr_type e`,`env.type_defs`,`ptv`,`rhs_tv`,`ty`] >> simp[]) >>
+     qexistsl_tac [`ptv`,`ty`,`expr_type e`,`env.type_defs`,`ptv`,`rhs_tv`,`ty`] >> simp[]) >>
   qpat_x_assum `_ = (res,st')` mp_tac >>
   simp_tac (srw_ss()) [bind_def, lift_sum_def] >>
   Cases_on `evaluate_binop
@@ -10552,7 +10552,7 @@ Resume eval_scc_type_sound_mutual[AugAssign_value_write]:
   >- (qmatch_assum_rename_tac `evaluate_binop _ ptv bop cur right = INL result` >>
       `value_has_type ptv result` by
         (irule well_typed_binop_success_type >>
-         qexistsl_tac [`bop`,`ty`,`expr_type e`,`env.type_defs`,`ptv`,`rhs_tv`,`ty`,
+         qexistsl_tac [`bop`,`ty`,`expr_type e`,`env.type_defs`,`ptv`,`ptv`,`rhs_tv`,`ty`,
            `case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0`,
            `cur`,`right`] >> simp[]) >>
       drule_all write_place_sound >> strip_tac >> gvs[runtime_consistent_def] >>
