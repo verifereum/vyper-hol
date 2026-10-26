@@ -965,6 +965,28 @@ Proof
   gvs[vyper_to_abi_type_def, is_dynamic_def]
 QED
 
+Theorem abi_enc_plan_prim_size:
+  abi_enc_plan env ty AbiPrimWord /\ evaluate_type env ty = SOME tv ==>
+  type_memory_size tv = 32
+Proof
+  simp[Once abi_enc_plan_cases] >> strip_tac >>
+  Cases_on `ty` >>
+  gvs[is_word_type_def, vyperValueTheory.evaluate_type_def,
+      type_memory_size_def, AllCaseEqs()] >>
+  rename1 `is_word_type (BaseT bt)` >> Cases_on `bt` >>
+  gvs[is_word_type_def, vyperValueTheory.evaluate_type_def,
+      type_memory_size_def, AllCaseEqs()]
+QED
+
+Theorem compile_abi_encode_static_info_plan:
+  abi_enc_plan env ty ei /\ ~is_dynamic (vyper_to_abi_type env ty) ==>
+  compile_abi_encode_static_info dst src ei =
+    compile_abi_encode_to_buf dst src ei
+Proof
+  strip_tac >> drule_all abi_enc_plan_static >> strip_tac >>
+  gvs[compile_abi_encode_static_info_def, Once compile_abi_encode_child_def]
+QED
+
 Theorem abi_enc_plans_head_lengths:
   !ts elems a.
     abi_enc_plans env ts elems ==>
@@ -2623,6 +2645,37 @@ Proof
   drule mload_eq_mem_bytes_at_eq >> simp[]
 QED
 
+
+Theorem compile_abi_encode_static_info_abi_frag:
+  compile_abi_encode_static_info dst src ei st = (op, st') /\
+  abi_enc_plan env ty ei /\ ~is_dynamic (vyper_to_abi_type env ty) /\
+  evaluate_type env ty = SOME tv /\ value_has_type tv v /\
+  vyper_to_abi env ty v = SOME av /\
+  eval_operand dst s0 = SOME dst_w /\ eval_operand src s0 = SOME src_w /\
+  enc_pre st st' [dst; src] lo top tv v (w2n src_w)
+    [(w2n dst_w, LENGTH (enc (vyper_to_abi_type env ty) av))] s0 ==>
+  frag_exec ctx st st' (\s. s = s0)
+    (\s. mem_bytes_at (w2n dst_w)
+           (LENGTH (enc (vyper_to_abi_type env ty) av)) s.vs_memory =
+           enc (vyper_to_abi_type env ty) av /\
+         eval_operand op s =
+           SOME (n2w (LENGTH (enc (vyper_to_abi_type env ty) av))) /\
+         s.vs_labels = s0.vs_labels /\
+         enc_frame st st' lo top
+           [(w2n dst_w, LENGTH (enc (vyper_to_abi_type env ty) av))] s0 s) R
+Proof
+  rpt strip_tac >>
+  drule_all compile_abi_encode_static_info_plan >> strip_tac >>
+  drule_all abi_enc_plan_static >> strip_tac >> gvs[]
+  >- (drule_all abi_enc_plan_prim_size >> strip_tac >>
+      drule_all compile_abi_encode_prim_abi_frag >>
+      disch_then (qspecl_then [`ctx`, `R`] accept_tac)) >>
+  `n = type_memory_size tv` by
+    (qpat_x_assum `abi_enc_plan env ty (AbiCopy n)` mp_tac >>
+     simp[Once abi_enc_plan_cases] >> metis_tac[]) >>
+  gvs[] >> irule compile_abi_encode_copy_abi_frag >>
+  goal_assum drule >> simp[]
+QED
 
 Theorem enc_bytes_memory_layout:
   mem_word_at p mem = n2w (LENGTH bs) /\
