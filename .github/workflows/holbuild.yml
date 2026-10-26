@@ -17,11 +17,12 @@ permissions:
 env:
   HBX_BASENAME: vyper-hol
   HBX_ARTEFACT_NAME: vyper-hol-hbx-${{ github.sha }}
-  HOLBUILD_CACHE_TRACE: '1'
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    # The cache login is an environment secret that only trusted main runs can read.
+    environment: ${{ ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'merge_group' && github.event.merge_group.base_ref == 'refs/heads/main')) && 'bazel-cache' || '' }}
     outputs:
       holbuild-cache-key: ${{ steps.cache-key.outputs.snapshot-key }}
     steps:
@@ -95,20 +96,10 @@ jobs:
           echo "toolchain cache hit: ${TOOLCHAIN_CACHE_HIT:-false}"
           echo "toolchain cache key: ${TOOLCHAIN_CACHE_KEY:-<none>}"
 
-      - name: Configure trusted remote cache
-        if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'merge_group' && github.event.merge_group.base_ref == 'refs/heads/main')
-        env:
-          REMOTE_CACHE_CURL_CONFIG: ${{ secrets.HOLBUILD_REMOTE_CACHE_CURL_CONFIG }}
-        run: |
-          if [ -z "$REMOTE_CACHE_CURL_CONFIG" ]; then
-            echo '::warning::HOLBUILD_REMOTE_CACHE_CURL_CONFIG is unset; using snapshot/local cache only'
-            exit 0
-          fi
-          config="$RUNNER_TEMP/holbuild-remote-cache.curl"
-          install -m 600 /dev/null "$config"
-          printf '%s\n' "$REMOTE_CACHE_CURL_CONFIG" > "$config"
-          echo "HOLBUILD_REMOTE_CACHE_CURL_CONFIG=$config" >> "$GITHUB_ENV"
-          echo 'HOLBUILD_REMOTE_CACHE_URL=https://bazel-cache.dev.sequent.inc' >> "$GITHUB_ENV"
+      - name: Configure remote cache
+        uses: ./.github/actions/setup-remote-cache
+        with:
+          curl-config: ${{ secrets.HOLBUILD_REMOTE_CACHE_CURL_CONFIG }}
 
       - name: Build schema-2 HOL toolchain
         run: holbuild buildhol
@@ -159,10 +150,6 @@ jobs:
           if-no-files-found: error
           retention-days: 90
 
-      - name: Remove remote cache credentials
-        if: always()
-        run: rm -f "$RUNNER_TEMP/holbuild-remote-cache.curl"
-
   python-o1-oracle:
     runs-on: ubuntu-latest
     steps:
@@ -197,6 +184,8 @@ jobs:
   vyper-tests:
     needs: [build, export-vyper-tests]
     runs-on: ubuntu-latest
+    # The cache login is an environment secret that only trusted main runs can read.
+    environment: ${{ ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'merge_group' && github.event.merge_group.base_ref == 'refs/heads/main')) && 'bazel-cache' || '' }}
     strategy:
       fail-fast: false
       matrix:
@@ -243,20 +232,10 @@ jobs:
           key: ${{ needs.export-vyper-tests.outputs.export-cache-key }}
           fail-on-cache-miss: true
 
-      - name: Configure trusted remote cache
-        if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'merge_group' && github.event.merge_group.base_ref == 'refs/heads/main')
-        env:
-          REMOTE_CACHE_CURL_CONFIG: ${{ secrets.HOLBUILD_REMOTE_CACHE_CURL_CONFIG }}
-        run: |
-          if [ -z "$REMOTE_CACHE_CURL_CONFIG" ]; then
-            echo '::warning::HOLBUILD_REMOTE_CACHE_CURL_CONFIG is unset; using snapshot/local cache only'
-            exit 0
-          fi
-          config="$RUNNER_TEMP/holbuild-remote-cache.curl"
-          install -m 600 /dev/null "$config"
-          printf '%s\n' "$REMOTE_CACHE_CURL_CONFIG" > "$config"
-          echo "HOLBUILD_REMOTE_CACHE_CURL_CONFIG=$config" >> "$GITHUB_ENV"
-          echo 'HOLBUILD_REMOTE_CACHE_URL=https://bazel-cache.dev.sequent.inc' >> "$GITHUB_ENV"
+      - name: Configure remote cache
+        uses: ./.github/actions/setup-remote-cache
+        with:
+          curl-config: ${{ secrets.HOLBUILD_REMOTE_CACHE_CURL_CONFIG }}
 
       - name: Build Vyper test coverage baseline
         if: matrix.group == 0
@@ -293,10 +272,6 @@ jobs:
             find .holbuild/checkpoints \( -name '*.save' -o -name '*.save.ok' \) 2>/dev/null | head -50 >&2
             exit 1
           fi
-
-      - name: Remove remote cache credentials
-        if: always()
-        run: rm -f "$RUNNER_TEMP/holbuild-remote-cache.curl"
 
   holbuild-success:
     if: always()
