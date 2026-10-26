@@ -4887,14 +4887,14 @@ Theorem bump_emit_sim_sem_stack[local]:
        case op of Var x => x <> ptr_out /\ x <> next_out | _ => T) /\
     asm_block_at prog as.as_pc (execute_plan initial_fmp bump_emit_ops) ==>
     ?as'.
-      asm_steps lo o2pc prog 8 as = AsmOK as' /\
+      asm_steps lo o2pc prog 2 as = AsmOK as' /\
       venom_asm_rel lo
         (psB with ps_stack :=
            stack_push (Var next_out)
              (stack_push (Var ptr_out) (stack_pop 2 psB.ps_stack)))
-        (update_var next_out (base_val + n2w (ceil32 (w2n sz)))
+        (update_var next_out (base_val + sz)
           (update_var ptr_out base_val vs)) as' /\
-      as'.as_pc = as.as_pc + 8
+      as'.as_pc = as.as_pc + 2
 Proof
   rpt strip_tac >>
   `venom_asm_rel lo psB vs as` by
@@ -4964,8 +4964,7 @@ Resume gen_inst_ok_sim[bump]:
   `2 <= LENGTH ps1.ps_stack` by first_assum ACCEPT_TAC >>
   `prefix_spill_wf initial_fmp lo (input_ops ++ reorder_ops) ps` by
     (qspecl_then [`input_ops ++ reorder_ops`,
-       `[SOPush (Lit 31w); SOEmit "ADD"; SOPush (Lit 5w); SOEmit "SHR";
-         SOPush (Lit 5w); SOEmit "SHL"; SODup 2; SOEmit "ADD"] ++
+       `[SODup 2; SOEmit "ADD"] ++
         pop_ops ++ opt_ops`, `lo`, `ps`] mp_tac
        prefix_spill_wf_front_prefix >>
      simp[APPEND_ASSOC]) >>
@@ -5075,11 +5074,11 @@ Resume gen_inst_ok_sim[bump]:
     (rpt conj_tac >>
      FIRST [first_assum ACCEPT_TAC, simp[plan_stack_sem_eq_def]])) >>
   strip_tac >>
-  `LENGTH (execute_plan initial_fmp bump_emit_ops) = 8` by
+  `LENGTH (execute_plan initial_fmp bump_emit_ops) = 2` by
     simp[bump_emit_ops_def, execute_plan_def, exec_stack_op_def] >>
   `as''.as_pc =
      as'.as_pc + LENGTH (execute_plan initial_fmp bump_emit_ops)` by
-    (qpat_assum `as''.as_pc = as'.as_pc + 8` mp_tac >>
+    (qpat_assum `as''.as_pc = as'.as_pc + 2` mp_tac >>
      ASM_REWRITE_TAC[]) >>
   `asm_block_at prog as''.as_pc
      (execute_plan initial_fmp pop_ops)` by
@@ -5091,56 +5090,44 @@ Resume gen_inst_ok_sim[bump]:
   `?npop as8.
      asm_steps lo o2pc prog npop as'' = AsmOK as8 /\
      venom_asm_rel lo ps8
-       (update_var h'³' (x + n2w (ceil32 (w2n x')))
+       (update_var h'³' (x + x')
          (update_var h'' x vs)) as8 /\
      as8.as_pc = as''.as_pc + LENGTH (execute_plan initial_fmp pop_ops)` by
-    (Cases_on `is_halting`
-     >- (qpat_x_assum `(if ~T then _ else _) = (pop_ops,ps8)` mp_tac >>
-         simp[] >> strip_tac >> gvs[] >>
-         qexistsl [`0`, `as''`] >>
-         conj_tac >- simp[asm_steps_def] >>
-         conj_tac >- first_assum ACCEPT_TAC >>
-         simp[execute_plan_def])
-     >> qspecl_then
-          [`~MEM h'' next_liveness`, `~MEM h'³' next_liveness`,
-           `Var h''`, `Var h'³'`, `stack_pop 2 ps4.ps_stack`,
-           `ps4 with ps_stack :=
-              stack_push (Var h'³')
-                (stack_push (Var h'') (stack_pop 2 ps4.ps_stack))`,
-           `pop_ops`, `ps8`, `lo`, `o2pc`, `prog`,
-           `update_var h'³' (x + n2w (ceil32 (w2n x')))
-              (update_var h'' x vs)`, `as''`]
-          mp_tac popmany_plan_top_two_sim >>
-        (impl_tac >-
-          ((conj_tac >- simp[stack_push_def]) >>
-           (conj_tac >- simp[]) >>
-           (conj_tac >-
-             (qpat_x_assum `(if ~F then _ else _) = (pop_ops,ps8)` mp_tac >>
-              Cases_on `MEM h'' next_liveness` >>
-              Cases_on `MEM h'³' next_liveness` >> simp[])) >>
-           (conj_tac >- first_assum ACCEPT_TAC) >>
-           first_assum ACCEPT_TAC)) >>
-        simp[]) >>
-  `generated_plan_state_wf base' ps8` by
-    (Cases_on `is_halting`
-     >- (qpat_x_assum `(if ~T then _ else _) = (pop_ops,ps8)` mp_tac >>
-         simp[] >> strip_tac >> gvs[] >>
-         first_assum ACCEPT_TAC)
-     >> qspecl_then
-          [`base'`, `~MEM h'' next_liveness`, `~MEM h'³' next_liveness`,
-           `Var h''`, `Var h'³'`, `stack_pop 2 ps4.ps_stack`,
-           `ps4 with ps_stack :=
-              stack_push (Var h'³')
-                (stack_push (Var h'') (stack_pop 2 ps4.ps_stack))`,
-           `pop_ops`, `ps8`] mp_tac popmany_plan_top_two_generated_wf >>
-        (impl_tac >-
-          ((conj_tac >- first_assum ACCEPT_TAC) >>
-           (conj_tac >- simp[stack_push_def]) >>
-           (conj_tac >- simp[]) >>
-           (qpat_x_assum `(if ~F then _ else _) = (pop_ops,ps8)` mp_tac >>
+    (qspecl_then
+        [`~MEM h'' next_liveness`, `~MEM h'³' next_liveness`,
+         `Var h''`, `Var h'³'`, `stack_pop 2 ps4.ps_stack`,
+         `ps4 with ps_stack :=
+            stack_push (Var h'³')
+              (stack_push (Var h'') (stack_pop 2 ps4.ps_stack))`,
+         `pop_ops`, `ps8`, `lo`, `o2pc`, `prog`,
+         `update_var h'³' (x + x') (update_var h'' x vs)`, `as''`]
+        mp_tac popmany_plan_top_two_sim >>
+      (impl_tac >-
+        ((conj_tac >- simp[stack_push_def]) >>
+         (conj_tac >- simp[]) >>
+         (conj_tac >-
+           (qpat_x_assum `popmany_plan _ _ = (pop_ops,ps8)` mp_tac >>
             Cases_on `MEM h'' next_liveness` >>
-            Cases_on `MEM h'³' next_liveness` >> simp[]))) >>
-        simp[]) >>
+            Cases_on `MEM h'³' next_liveness` >> simp[])) >>
+         (conj_tac >- first_assum ACCEPT_TAC) >>
+         first_assum ACCEPT_TAC)) >>
+      simp[]) >>
+  `generated_plan_state_wf base' ps8` by
+    (qspecl_then
+       [`base'`, `~MEM h'' next_liveness`, `~MEM h'³' next_liveness`,
+        `Var h''`, `Var h'³'`, `stack_pop 2 ps4.ps_stack`,
+        `ps4 with ps_stack :=
+           stack_push (Var h'³')
+             (stack_push (Var h'') (stack_pop 2 ps4.ps_stack))`,
+        `pop_ops`, `ps8`] mp_tac popmany_plan_top_two_generated_wf >>
+     (impl_tac >-
+       ((conj_tac >- first_assum ACCEPT_TAC) >>
+        (conj_tac >- simp[stack_push_def]) >>
+        (conj_tac >- simp[]) >>
+        (qpat_x_assum `popmany_plan _ _ = (pop_ops,ps8)` mp_tac >>
+         Cases_on `MEM h'' next_liveness` >>
+         Cases_on `MEM h'³' next_liveness` >> simp[]))) >>
+     simp[]) >>
   `asm_block_at prog as8.as_pc (execute_plan initial_fmp opt_ops)` by
     (qpat_x_assum `asm_block_at prog _
        (execute_plan initial_fmp opt_ops)` mp_tac >>
@@ -5156,11 +5143,11 @@ Resume gen_inst_ok_sim[bump]:
       >- (qpat_x_assum `(if _ = [] then _ else _) = ([],ps9)` mp_tac >>
           ASM_REWRITE_TAC[] >> strip_tac >> gvs[] >>
           `venom_asm_rel lo (release_dead_spills next_liveness ps8)
-             (update_var h'³' (x + n2w (ceil32 (w2n x')))
+             (update_var h'³' (x + x')
                (update_var h'' x vs)) as8` by
             (irule venom_asm_rel_release_dead_spills >> ASM_REWRITE_TAC[]) >>
           qexistsl [`LENGTH (execute_plan initial_fmp (input_ops ++ reorder_ops)) +
-                     (8 + npop)`, `as8`] >>
+                     (2 + npop)`, `as8`] >>
           gvs[asm_steps_add, execute_plan_append, LENGTH_APPEND] >>
           simp[execute_plan_def, exec_stack_op_def] >> decide_tac) >>
       qpat_x_assum `(if _ = [] then _ else _) = ([],ps9)` mp_tac >>
@@ -5174,11 +5161,11 @@ Resume gen_inst_ok_sim[bump]:
         (qpat_assum `asm_block_at prog _ (execute_plan initial_fmp [])` mp_tac >>
          ASM_REWRITE_TAC[])) >> strip_tac >>
       `venom_asm_rel lo (release_dead_spills next_liveness ps9)
-         (update_var h'³' (x + n2w (ceil32 (w2n x')))
+         (update_var h'³' (x + x')
            (update_var h'' x vs)) st'` by
         (irule venom_asm_rel_release_dead_spills >> ASM_REWRITE_TAC[]) >>
       qexistsl [`LENGTH (execute_plan initial_fmp (input_ops ++ reorder_ops)) +
-                 (8 + (npop + LENGTH (execute_plan initial_fmp ([]:stack_op list))))`,
+                 (2 + (npop + LENGTH (execute_plan initial_fmp ([]:stack_op list))))`,
                  `st'`] >>
       gvs[asm_steps_add, execute_plan_append, LENGTH_APPEND] >>
       simp[execute_plan_def, exec_stack_op_def] >> decide_tac) >>
@@ -5200,11 +5187,11 @@ Resume gen_inst_ok_sim[bump]:
     (qpat_assum `asm_block_at prog _ (execute_plan initial_fmp (h'⁴'::t))`
        mp_tac >> ASM_REWRITE_TAC[])) >> strip_tac >>
   `venom_asm_rel lo (release_dead_spills next_liveness ps9)
-     (update_var h'³' (x + n2w (ceil32 (w2n x')))
+     (update_var h'³' (x + x')
        (update_var h'' x vs)) st'` by
     (irule venom_asm_rel_release_dead_spills >> ASM_REWRITE_TAC[]) >>
   qexistsl [`LENGTH (execute_plan initial_fmp (input_ops ++ reorder_ops)) +
-             (8 + (npop + LENGTH (execute_plan initial_fmp (h'⁴'::t))))`,
+             (2 + (npop + LENGTH (execute_plan initial_fmp (h'⁴'::t))))`,
              `st'`] >>
   gvs[asm_steps_add, execute_plan_append, LENGTH_APPEND] >>
   simp[execute_plan_def, exec_stack_op_def] >> decide_tac
