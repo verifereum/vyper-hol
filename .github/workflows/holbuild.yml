@@ -21,8 +21,7 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
-    # The cache login is an environment secret that only trusted main runs can read.
-    environment: ${{ ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'merge_group' && github.event.merge_group.base_ref == 'refs/heads/main')) && 'bazel-cache' || '' }}
+    timeout-minutes: 240
     outputs:
       holbuild-cache-key: ${{ steps.cache-key.outputs.snapshot-key }}
     steps:
@@ -184,8 +183,7 @@ jobs:
   vyper-tests:
     needs: [build, export-vyper-tests]
     runs-on: ubuntu-latest
-    # The cache login is an environment secret that only trusted main runs can read.
-    environment: ${{ ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'merge_group' && github.event.merge_group.base_ref == 'refs/heads/main')) && 'bazel-cache' || '' }}
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
