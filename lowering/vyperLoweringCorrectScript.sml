@@ -807,10 +807,7 @@ Theorem external_return_abi_cenv_result_rel:
            alloca_inv s /\
            (!i. i IN frag_ids st st' ==> FLOOKUP s.vs_allocas i = NONE) /\
            s.vs_alloca_next + cenv.ce_max_return_size +
-             32 * (st'.cs_next_id - st.cs_next_id) < dimword (:256) /\
-           s.vs_accounts =
-             process_deletions es.pending_deletions es.accounts /\
-           s.vs_transient = es.tStorage)
+             32 * (st'.cs_next_id - st.cs_next_id) < dimword (:256))
       Q
       (external_call_result_rel tops ret tx
          (INL v, finalize_pending_deletions
