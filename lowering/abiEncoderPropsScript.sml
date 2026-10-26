@@ -4891,6 +4891,82 @@ Resume enc_static_loop_iter_frag[bodies]:
 QED
 Finalise enc_static_loop_iter_frag
 
+Theorem enc_static_type_memory_size_mutual:
+  (!env ty. !tv. evaluate_type env ty = SOME tv /\
+    ~is_dynamic (vyper_to_abi_type env ty) ==>
+    static_length (vyper_to_abi_type env ty) = type_memory_size tv) /\
+  (!env ts. !tvs. OPT_MMAP (evaluate_type env) ts = SOME tvs /\
+    EVERY is_static (vyper_to_abi_types env ts) ==>
+    SUM (MAP static_length (vyper_to_abi_types env ts)) =
+    SUM (MAP type_memory_size tvs))
+Proof
+  ho_match_mp_tac vyper_to_abi_type_ind >> rpt conj_tac
+  >- suspend "base"
+  >- suspend "tuple"
+  >- (simp[vyper_to_abi_type_def])
+  >- suspend "array"
+  >- suspend "struct"
+  >- suspend "flag"
+  >- suspend "none"
+  >- suspend "nil"
+  >> suspend "cons"
+QED
+Resume enc_static_type_memory_size_mutual[base]:
+  gen_tac >> Cases >>
+  simp[vyper_to_abi_type_def, vyper_base_to_abi_type_def,
+       vyperValueTheory.evaluate_type_def, type_memory_size_def,
+       is_dynamic_def, static_length_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[type_memory_size_def]
+QED
+Resume enc_static_type_memory_size_mutual[tuple]:
+  rpt strip_tac >>
+  gvs[vyperValueTheory.evaluate_type_def, vyperValueTheory.evaluate_types_OPT_MMAP,
+      vyper_to_abi_type_def, AllCaseEqs(), type_memory_size_def,
+      valueEncodingProofsTheory.type_memory_size_list_sum,
+      valueEncodingProofsTheory.any_dynamic_every_static, static_length_Tuple_SUM] >>
+  first_x_assum irule >> simp[]
+QED
+Resume enc_static_type_memory_size_mutual[array]:
+  rpt strip_tac >>
+  gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs(), type_memory_size_def,
+      is_dynamic_def, static_length_def] >> metis_tac[]
+QED
+Resume enc_static_type_memory_size_mutual[struct]:
+  rpt strip_tac >>
+  gvs[vyperValueTheory.evaluate_type_def, vyper_to_abi_type_def,
+      AllCaseEqs(), vyperValueTheory.evaluate_types_OPT_MMAP,
+      type_memory_size_def,
+      valueEncodingProofsTheory.type_memory_size_fields_sum,
+      valueEncodingProofsTheory.any_dynamic_every_static,
+      static_length_Tuple_SUM] >>
+  drule vyperTypeABITheory.OPT_MMAP_LENGTH >> strip_tac >>
+  gvs[MAP_ZIP, GSYM MAP_MAP_o]
+QED
+Resume enc_static_type_memory_size_mutual[flag]:
+  simp[vyperValueTheory.evaluate_type_def, AllCaseEqs(),
+       type_memory_size_def, static_length_def] >>
+  rpt strip_tac >> gvs[type_memory_size_def]
+QED
+Resume enc_static_type_memory_size_mutual[none]:
+  simp[vyperValueTheory.evaluate_type_def, type_memory_size_def,
+       static_length_def]
+QED
+Resume enc_static_type_memory_size_mutual[nil]:
+  simp[OPT_MMAP_def]
+QED
+Resume enc_static_type_memory_size_mutual[cons]:
+  simp[OPT_MMAP_def, AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+  metis_tac[]
+QED
+Finalise enc_static_type_memory_size_mutual
+
+Theorem enc_static_type_memory_size:
+  evaluate_type env ty = SOME tv /\ ~is_dynamic (vyper_to_abi_type env ty) ==>
+  static_length (vyper_to_abi_type env ty) = type_memory_size tv
+Proof
+  metis_tac[enc_static_type_memory_size_mutual]
+QED
+
 Theorem enc_static_loop_complete_frag:
   enc_static_loop_init st = ((count_ptr,hdr,body_lbl,exit_lbl),si) /\
   enc_static_loop_header count_ptr len_op sh = (cnd,sj) /\
