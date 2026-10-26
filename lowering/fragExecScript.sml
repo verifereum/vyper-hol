@@ -20,6 +20,8 @@
  *   cs_extends            — a compile state only appended to another
  *   frag_exec             — the fragment judgment
  *   cs_appends            — a compile action only appends
+ *   cs_mono               — a compile action only appends and hands out
+ *                           variables forward
  *   cs_extends_*, cs_appends_* — the compile-monad primitives only append
  *   emitted_blocks_append — the new blocks of cs_extends are emitted_blocks
  *   fn_has_code_split     — containment of a fragment holds for its parts
@@ -214,6 +216,14 @@ QED
 Definition cs_appends_def:
   cs_appends (m : 'a compiler) <=>
     !st x st'. m st = (x, st') ==> cs_extends st st'
+End
+
+(* A compile action that only appends code and hands out variables
+   forward. *)
+Definition cs_mono_def:
+  cs_mono (m : 'a compiler) <=>
+    !sa x sb. m sa = (x, sb) ==>
+              cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var
 End
 
 Theorem cs_appends_bind:

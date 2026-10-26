@@ -5,7 +5,9 @@
  *   run_inst_seq             — run instruction sequence on Venom state
  *   emitted_insts            — extract new instructions from compile state
  *   stmt_state_rel           — state_rel with the Venom-side allocation
- *                              facts a fragment keeps
+ *                              facts a fragment keeps, and alloca_room
+ *   alloca_room, pending_alloca_size — the frontier plus the sizes of the
+ *                              ALLOCAs not yet run stays below 2 ** 256
  *   compile_expr_correct     — main expression lowering correctness
  *   compile_literal_vv_correct  — word literal case
  *   compile_name_correct     — variable lookup case
@@ -16,6 +18,9 @@
  *   state_rel_frame, stmt_state_rel_jump_to, stmt_state_rel_inst_idx,
  *   stmt_state_rel_push_scope, stmt_state_rel_pop_scope,
  *   stmt_state_rel_update_var — frames for the state relations
+ *   local_ptrs_rel_cenv_cong, state_rel_cenv_cong,
+ *   stmt_state_rel_cenv_cong — the relations at another compile
+ *                              environment that agrees on what they read
  *   local_ptrs_reserved_next_var, local_ptrs_reserved_fresh,
  *   local_ptrs_reserved_not_live — local_ptrs_reserved survives a later
  *                              cs_next_var, and fresh variables and the
@@ -504,6 +509,78 @@ Theorem stmt_state_rel_pop_scope:
     stmt_state_rel func cenv cx (es with scopes := rest) s
 Proof
   rw[stmt_state_rel_def] >> metis_tac[state_rel_pop_scope]
+QED
+
+Theorem local_ptrs_rel_cenv_cong:
+  !func cenv cenv' scopes ss.
+    local_ptrs_rel func cenv' scopes ss /\
+    (!n e. lookup_scopes n scopes = SOME e ==>
+           FLOOKUP cenv.ce_vars n = FLOOKUP cenv'.ce_vars n) ==>
+    local_ptrs_rel func cenv scopes ss
+Proof
+  rw[local_ptrs_rel_def, local_region_def] >> metis_tac[]
+QED
+
+(* state_rel reads cenv through the locals in scope and its other
+   (storage, transient, immutable) bindings. *)
+Theorem state_rel_cenv_cong:
+  !func cenv cenv' cx vs ss.
+    state_rel func cenv' cx vs ss /\
+    (!n e. lookup_scopes n vs.scopes = SOME e ==>
+           FLOOKUP cenv.ce_vars n = FLOOKUP cenv'.ce_vars n) /\
+    (!n l. FLOOKUP cenv.ce_vars n = SOME l /\ (!p sz. l <> PtrVar p sz) ==>
+           FLOOKUP cenv'.ce_vars n = SOME l) /\
+    (!n l. FLOOKUP cenv'.ce_vars n = SOME l /\ (!p sz. l <> PtrVar p sz) ==>
+           FLOOKUP cenv.ce_vars n = SOME l) /\
+    cenv'.ce_module = cenv.ce_module /\ cenv'.ce_is_ctor = cenv.ce_is_ctor ==>
+    state_rel func cenv cx vs ss
+Proof
+  rw[state_rel_def]
+  >- metis_tac[local_ptrs_rel_cenv_cong]
+  >- (simp[storage_vars_rel_def] >> conj_tac >> rpt strip_tac
+      >- (`FLOOKUP cenv'.ce_vars (module_var_key (cenv.ce_module,name)) =
+           SOME (StorageLoc slot)` by
+            (qpat_x_assum `!n l. FLOOKUP cenv.ce_vars n = SOME l /\ _ ==> _`
+               irule >> simp[]) >>
+          qpat_x_assum `storage_vars_rel cenv' cx` mp_tac >>
+          simp[storage_vars_rel_def] >> metis_tac[]) >>
+      qpat_x_assum `!n l. FLOOKUP cenv'.ce_vars n = SOME l /\ _ ==> _` irule >>
+      simp[] >> qpat_x_assum `storage_vars_rel cenv' cx` mp_tac >>
+      simp[storage_vars_rel_def] >> metis_tac[])
+  >- (simp[transient_vars_rel_def] >> conj_tac >> rpt strip_tac
+      >- (`FLOOKUP cenv'.ce_vars (module_var_key (cenv.ce_module,name)) =
+           SOME (TransientLoc slot)` by
+            (qpat_x_assum `!n l. FLOOKUP cenv.ce_vars n = SOME l /\ _ ==> _`
+               irule >> simp[]) >>
+          qpat_x_assum `transient_vars_rel cenv' cx` mp_tac >>
+          simp[transient_vars_rel_def] >> metis_tac[]) >>
+      qpat_x_assum `!n l. FLOOKUP cenv'.ce_vars n = SOME l /\ _ ==> _` irule >>
+      simp[] >> qpat_x_assum `transient_vars_rel cenv' cx` mp_tac >>
+      simp[transient_vars_rel_def] >> metis_tac[])
+  >- (fs[immutables_rel_def, LET_THM] >> Cases_on `cenv.ce_is_ctor` >>
+      gvs[] >> rpt strip_tac >>
+      `FLOOKUP cenv'.ce_vars (module_var_key (cenv.ce_module,name)) =
+       SOME (ImmutableLoc byte_offset)` by (first_x_assum irule >> simp[]) >>
+      metis_tac[]) >>
+  fs[logs_rel_def, listTheory.LIST_REL_EL_EQN, log_entry_equiv_def]
+QED
+
+(* stmt_state_rel reads the compile environment through the locals in
+   scope and its other bindings. *)
+Theorem stmt_state_rel_cenv_cong:
+  !func cenv cenv' cx es ss.
+    stmt_state_rel func cenv' cx es ss /\
+    (!n e. lookup_scopes n es.scopes = SOME e ==>
+           FLOOKUP cenv.ce_vars n = FLOOKUP cenv'.ce_vars n) /\
+    (!n l. FLOOKUP cenv.ce_vars n = SOME l /\ (!p sz. l <> PtrVar p sz) ==>
+           FLOOKUP cenv'.ce_vars n = SOME l) /\
+    (!n l. FLOOKUP cenv'.ce_vars n = SOME l /\ (!p sz. l <> PtrVar p sz) ==>
+           FLOOKUP cenv.ce_vars n = SOME l) /\
+    cenv'.ce_module = cenv.ce_module /\ cenv'.ce_is_ctor = cenv.ce_is_ctor ==>
+    stmt_state_rel func cenv cx es ss
+Proof
+  rw[stmt_state_rel_def] >- (irule state_rel_cenv_cong >> metis_tac[]) >>
+  res_tac
 QED
 
 (* Assigning a variable that is no live local's pointer. *)
