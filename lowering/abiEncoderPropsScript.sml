@@ -3444,6 +3444,62 @@ Proof
   decide_tac
 QED
 
+Theorem enc_loop_ctx_readonly:
+  enc_loop_ctx st z ops lo top tv v src outs s0 count_ptr ip s /\
+  enc_frame st z lo top outs s t /\ t.vs_memory = s.vs_memory /\
+  t.vs_labels = s.vs_labels /\
+  eval_operand count_ptr t = eval_operand count_ptr s ==>
+  enc_loop_ctx st z ops lo top tv v src outs s0 count_ptr ip t
+Proof
+  strip_tac >> fs[enc_loop_ctx_def] >>
+  `enc_scratch (frag_ids st z) lo top t` by fs[enc_frame_def] >>
+  `FLOOKUP t.vs_allocas st.cs_next_id = SOME (ip,32)` by
+    (qpat_x_assum `enc_frame _ _ _ _ _ s t` mp_tac >>
+     rewrite_tac[enc_frame_def] >> strip_tac >> first_x_assum irule >> simp[]) >>
+  simp[enc_loop_ctx_def] >> conj_tac
+  >- fs[enc_pre_def] >> metis_tac[enc_frame_trans]
+QED
+
+Theorem enc_array_inv_readonly:
+  enc_array_inv inv_ctx p B ts vs ip tail_cell k s /\
+  inv_ctx t /\ t.vs_memory = s.vs_memory ==>
+  enc_array_inv inv_ctx p B ts vs ip tail_cell k t
+Proof
+  Cases_on `tail_cell` >> simp[enc_array_inv_def, enc_prefix_mem_def]
+QED
+
+Theorem enc_static_loop_header_code:
+  enc_static_loop_header count_ptr len_op sh = (done_op,sj) ==>
+  ?i cmp sa sb.
+    emit_op MLOAD [count_ptr] sh = (i,sa) /\
+    emit_op LT [i;len_op] sa = (cmp,sb) /\
+    emit_op ISZERO [cmp] sb = (done_op,sj) /\
+    emitted_insts sh sj =
+      emitted_insts sh sa ++ emitted_insts sa sb ++ emitted_insts sb sj /\
+    same_blocks sh sj /\
+    sj.cs_current_insts = sh.cs_current_insts ++ emitted_insts sh sj /\
+    EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+      (emitted_insts sh sj) /\
+    sa.cs_next_var = sh.cs_next_var + 1 /\
+    sb.cs_next_var = sh.cs_next_var + 2 /\
+    (!x. i = Var x ==> not_fresh_at sa x) /\
+    (!x. cmp = Var x ==> not_fresh_at sb x)
+Proof
+  simp[enc_static_loop_header_def, comp_bind_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  rename1 `emit_op MLOAD [count_ptr] sh = (i,sa)` >>
+  rename1 `emit_op LT [i;len_op] sa = (cmp,sb)` >>
+  imp_res_tac emitted_insts_emit_op >>
+  imp_res_tac emit_op_same_blocks >>
+  `emitted_insts sh sb = emitted_insts sh sa ++ emitted_insts sa sb` by
+    (irule emitted_insts_append >> simp[]) >>
+  `emitted_insts sh sj = emitted_insts sh sb ++ emitted_insts sb sj` by
+    (irule emitted_insts_append >> simp[]) >>
+  pure_asm_rewrite_tac[GSYM APPEND_ASSOC] >>
+  gvs[same_blocks_def, mk_inst_def, is_terminator_def,
+      not_fresh_at_def, ASCIInumbersTheory.toString_11]
+QED
+
 Theorem compile_abi_encode_frag:
   (!dst child_ptr ei is_dyn static_ofst dyn_ptr st op st' ctx env ty tv v
     av s0 dst_w src_w lo top.
