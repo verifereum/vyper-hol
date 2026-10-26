@@ -106,16 +106,6 @@ QED
 Resume gas_existing_relation_counterexample[step_success]:
   gas_eval_tac
 QED
-(* Original whole-relation evaluation retained; the stack projection above
-   establishes nonrelation without evaluating every repeated state field.
-Resume gas_existing_relation_counterexample[step_stack]:
-  gas_eval_tac
-QED
-Resume gas_existing_relation_counterexample[step_unrelated]:
-  gas_eval_tac >>
-  simp[wordsTheory.dimword_def, fcpLib.INDEX_CONV ``dimindex(:256)``]
-QED
-*)
 Finalise gas_existing_relation_counterexample
 
 (* Exact old successful-step disjunction is false on the retained witness.

@@ -1474,15 +1474,6 @@ Proof
   simp[type_check_def, assert_def, return_def] >> strip_tac >>
   rpt CASE_TAC >> rpt strip_tac >> gvs[] >>
   first_x_assum drule >> strip_tac >> gvs[] >>
-(* Pre-factoring issue-567 proof retained; eval_send now owns both paths.
-  qmatch_asmsub_rename_tac `case tailst.outcomes of NONE => _ | SOME _ => _` >>
-  Cases_on `tailst.outcomes` >> gvs[]
-  >- (gvs[bind_def, return_def, AllCaseEqs()] >>
-       imp_res_tac eval_send_preserves_non_accounts >> gvs[] >>
-      metis_tac[preserves_immutables_dom_trans, preserves_immutables_dom_eq]) >>
-  imp_res_tac (Send_outcome_preserves_locals |> SRULE [check_def, ignore_bind_def]) >>
-  gvs[] >> metis_tac[preserves_immutables_dom_trans, preserves_immutables_dom_eq]
-*)
   drule eval_send_preserves_non_accounts >> strip_tac >>
   irule preserves_immutables_dom_trans >> first_assum (irule_at Any) >>
   irule preserves_immutables_dom_eq >> gvs[]
@@ -3458,114 +3449,6 @@ Proof
   >- (drule_all case_eval_exprs_cons_imm_dom >> simp[])
 QED
 
-(* TASK032: original concrete-only ExtCall resume retained.
-Resume immutables_dom_mutual[ExtCall]:
-  rpt strip_tac
-  \\ qpat_x_assum `eval_expr _ _ _ = _` mp_tac
-  \\ simp[Once evaluate_def, bind_def, LET_THM]
-  \\ Cases_on `eval_exprs cx es st` \\ Cases_on `q`
-  \\ simp[return_def, raise_def, preserves_immutables_dom_refl]
-  \\ strip_tac
-  \\ irule preserves_immutables_dom_trans \\ qexists_tac `r`
-  \\ conj_tac >- (last_x_assum match_mp_tac \\ simp[])
-  \\ qpat_x_assum `do _ od _ = _` mp_tac
-  \\ last_x_assum drule \\ strip_tac
-  \\ rewrite_tac[bind_def, ignore_bind_def]
-  \\ BasicProvers.TOP_CASE_TAC
-  \\ drule type_check_same_state \\ strip_tac
-  \\ reverse BasicProvers.TOP_CASE_TAC
-  >- (rw[] \\ rw[preserves_immutables_dom_refl])
-  \\ BasicProvers.TOP_CASE_TAC
-  \\ FIRST [drule lift_option_type_same_state, drule lift_option_same_state] \\ strip_tac
-  \\ reverse BasicProvers.TOP_CASE_TAC
-  >- (
-    last_x_assum(qspec_then`ARB`kall_tac)
-    \\ rw[] \\ gvs[preserves_immutables_dom_refl] )
-  \\ rewrite_tac[bind_def, ignore_bind_def]
-  \\ BasicProvers.TOP_CASE_TAC
-  \\ qmatch_asmsub_rename_tac`_ s1 = (_, s2)`
-  \\ sg `s1 = s2`
-  >- (
-    last_x_assum(qspec_then`ARB`kall_tac)
-    \\ gvs[CaseEq"bool", return_def, COND_RATOR, bind_def]
-    \\ gvs[CaseEq"sum"]
-    \\ gvs[CaseEq"prod"]
-    \\ Cases_on `v` \\ gvs[]
-    \\ TRY BasicProvers.FULL_CASE_TAC \\ gvs[]
-    \\ TRY BasicProvers.FULL_CASE_TAC \\ gvs[]
-    \\ TRY BasicProvers.TOP_CASE_TAC \\ gvs[]
-    \\ TRY BasicProvers.TOP_CASE_TAC \\ gvs[]
-    \\ TRY BasicProvers.TOP_CASE_TAC \\ gvs[]
-    \\ TRY BasicProvers.TOP_CASE_TAC \\ gvs[]
-    \\ imp_res_tac type_check_same_state
-    \\ imp_res_tac lift_option_same_state
-    \\ imp_res_tac lift_option_type_same_state
-    \\ gvs[] )
-  \\ reverse BasicProvers.TOP_CASE_TAC
-  >- rw[preserves_immutables_dom_refl]
-  >> qmatch_asmsub_rename_tac`_ = (INL p,_)`
-  \\ PairCases_on`p`
-  \\ asm_simp_tac std_ss []
-  \\ rewrite_tac[bind_def]
-  \\ BasicProvers.TOP_CASE_TAC
-  \\ drule lift_option_type_same_state
-  \\ strip_tac
-  \\ reverse BasicProvers.TOP_CASE_TAC
-  >- (
-    last_x_assum(qspec_then`ARB`kall_tac)
-    \\ rw[] \\ gvs[preserves_immutables_dom_refl] )
-  \\ rewrite_tac[bind_def]
-  \\ BasicProvers.TOP_CASE_TAC
-  \\ qmatch_asmsub_rename_tac`_ s2 = (_, s3)`
-  \\ sg `s2 = s3`
-  >- (
-    last_x_assum(qspec_then`ARB`kall_tac)
-    \\ gvs[get_accounts_def, return_def] )
-  \\ reverse BasicProvers.TOP_CASE_TAC
-  >- rw[preserves_immutables_dom_refl]
-  \\ rewrite_tac[bind_def]
-  \\ BasicProvers.TOP_CASE_TAC
-  \\ imp_res_tac check_state
-  \\ rpt BasicProvers.VAR_EQ_TAC
-  \\ reverse BasicProvers.TOP_CASE_TAC
-  >- ( rw[] \\ rw[preserves_immutables_dom_refl] )
-  \\ BasicProvers.TOP_CASE_TAC
-  \\ qmatch_asmsub_rename_tac`_ s3 = (_, s4)`
-  \\ sg `s3 = s4`
-  >- (
-    last_x_assum(qspec_then`ARB`kall_tac)
-    \\ gvs[get_transient_storage_def, return_def] )
-  \\ reverse BasicProvers.TOP_CASE_TAC
-  >- rw[preserves_immutables_dom_refl]
-  \\ rewrite_tac[bind_def]
-  \\ BasicProvers.TOP_CASE_TAC
-  \\ drule lift_option_same_state
-  \\ strip_tac
-  \\ reverse BasicProvers.TOP_CASE_TAC
-  >- (
-    last_x_assum(qspec_then`ARB`kall_tac)
-    \\ rw[] \\ gvs[preserves_immutables_dom_refl] )
-  >> qmatch_goalsub_rename_tac`_ p _ = _`
-  >> PairCases_on`p`
-  \\ asm_simp_tac std_ss []
-  \\ last_x_assum drule \\ strip_tac
-  \\ strip_tac
-  \\ irule extcall_inner_pipeline_imm_dom
-  \\ first_assum (irule_at Any)
-  \\ rpt strip_tac
-  \\ first_x_assum $ drule_then drule
-  \\ gvs[ignore_bind_def]
-  \\ disch_then $ funpow 5 drule_then drule
-  \\ gvs[bind_def, CaseEq"prod", CaseEq"sum"]
-  \\ gvs[update_accounts_def, update_transient_def, return_def,
-         check_def, type_check_def, raise_def, assert_def]
-  \\ strip_tac
-  \\ first_x_assum irule
-  \\ (conj_tac >- (qexists_tac `r` >> simp[append_logs_def, update_pending_deletions_def, return_def]))
-  \\ simp[]
-QED
-
-*)
 
 Theorem imm_dom_locals[local]:
   !s t. t.scopes = s.scopes /\ t.immutables = s.immutables ==>
@@ -3671,78 +3554,6 @@ val IMM_DOM_FRAME_STEP_TAC = FIRST [
       List.map ASSUME (List.filter is_eq asl)) (asl,w)),
   CASE_TAC];
 
-(* Superseded by the eval_ext_call_preserves_non_accounts case above.
-   Preserve the old guarded evaluator proof without resuming a closed case.
-Resume immutables_dom_mutual[ExtCall]:
-  qpat_assum `eval_expr _ _ _ = _` (fn th =>
-    let val result = #1 (pairSyntax.dest_pair (rhs (concl th))) in
-      irule (INST_TYPE [alpha |-> type_of result] imm_dom_frame_at) >>
-      exists_tac (rator (lhs (concl th))) >> exists_tac result
-    end) >>
-  simp[Once evaluate_def] >>
-  RULE_ASSUM_TAC (REWRITE_RULE [GSYM state_rel_frame_result]) >>
-  NTAC 4 (TRY IMM_DOM_FRAME_STEP_TAC) >>
-  NTAC 4 (TRY IMM_DOM_FRAME_STEP_TAC) >>
-  NTAC 4 (TRY IMM_DOM_FRAME_STEP_TAC) >>
-  NTAC 4 (TRY IMM_DOM_FRAME_STEP_TAC) >>
-  NTAC 4 (TRY IMM_DOM_FRAME_STEP_TAC) >>
-  NTAC 4 (TRY IMM_DOM_FRAME_STEP_TAC) >>
-  NTAC 4 (TRY IMM_DOM_FRAME_STEP_TAC) >>
-  NTAC 4 (TRY IMM_DOM_FRAME_STEP_TAC) >>
-  NTAC 4 (TRY IMM_DOM_FRAME_STEP_TAC) >>
-  NTAC 4 (TRY IMM_DOM_FRAME_STEP_TAC) >>
-  NTAC 4 (TRY IMM_DOM_FRAME_STEP_TAC) >>
-  NTAC 4 (TRY IMM_DOM_FRAME_STEP_TAC) >>
-  NTAC 4 (TRY IMM_DOM_FRAME_STEP_TAC) >>
-  NTAC 4 (TRY IMM_DOM_FRAME_STEP_TAC) >>
-  NTAC 4 (TRY IMM_DOM_FRAME_STEP_TAC) >>
-  NTAC 4 (TRY IMM_DOM_FRAME_STEP_TAC) >>
-  IMM_DOM_FRAME_TAC >|
-  [suspend "return_path_1", suspend "return_path_2",
-   suspend "return_path_3", suspend "return_path_4"]
-QED
-
-(* Normalise tuple projections and branch substitutions once, then match
-   guards in semantic order. Tuple reconstruction guards close by reflexivity;
-   no context-wide drule search is needed at each monadic step. *)
-fun IMM_DOM_FRAME_IH_TAC (asl,w) =
-  let
-    val normalise = SIMP_RULE bool_ss
-      [oneTheory.one, ignore_bind_def, FST, SND, pair_case_thm, UNCURRY]
-    val raw_facts = List.concat (map (CONJUNCTS o normalise o ASSUME) asl)
-    val substitutions = List.filter (fn th =>
-      is_eq (concl th) andalso
-      (is_var (lhs (concl th)) orelse is_var (rhs (concl th)))) raw_facts
-    val facts = map (SIMP_RULE bool_ss substitutions) raw_facts
-    fun discharge th =
-      if is_imp (snd (strip_forall (concl th))) then
-        discharge (tryfind (MATCH_MP th) facts handle HOL_ERR _ =>
-          let val guard = fst (dest_imp (snd (strip_forall (concl th)))) in
-            MATCH_MP th (REFL (rhs guard))
-          end)
-      else th
-    fun close ih g =
-      ACCEPT_TAC (discharge
-        (PURE_REWRITE_RULE [GSYM AND_IMP_INTRO] ih)) g
-  in
-    FIRST (map close facts) (asl,w)
-  end;
-
-Resume immutables_dom_mutual[return_path_1]:
-  IMM_DOM_FRAME_IH_TAC
-QED
-Resume immutables_dom_mutual[return_path_2]:
-  IMM_DOM_FRAME_IH_TAC
-QED
-Resume immutables_dom_mutual[return_path_3]:
-  IMM_DOM_FRAME_IH_TAC
-QED
-Resume immutables_dom_mutual[return_path_4]:
-  IMM_DOM_FRAME_IH_TAC
-QED
-
-Finalise immutables_dom_mutual
-*)
 (* ===== Main theorems ===== *)
 
 Theorem eval_expr_preserves_immutables_addr_dom:

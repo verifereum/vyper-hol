@@ -327,15 +327,6 @@ Proof
               ASSIGN_OUTCOMES_FRAME_STEP])
 QED
 
-(* Pre-factoring concrete-only send frame retained. The final send API
-   can consume oracle outcomes; outcomes_suffix_send is its valid contract.
-Theorem outcomes_frame_send[simp]:
-  outcomes_frame (eval_send cx target amount)
-Proof
-  simp[eval_send_def] >> irule outcomes_frame_bind >> simp[]
-QED
-
-*)
 
 (* TASK032: the independent vyperExtCallConsumptionTest witness disproves the
    unconditional evaluator frame. Original statement and proof retained.

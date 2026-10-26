@@ -36,3 +36,6 @@ worktrees/
 .DS_Store
 *~
 verifereum-ref
+
+# Generated raw-system bytecode and per-run validation output
+lowering/defs/bytecode/raw-system/hol/

@@ -698,18 +698,6 @@ Theorem eval_ext_call_no_control:
   eval_ext_call cx static skip_check sig opts vs st = (INR exc, st') ==>
   no_control_exc exc
 Proof
-  (* Original whole-helper expansion retained; exceeded the tactic timeout.
-  PairCases_on `sig` >> Cases_on `vs` >>
-  simp[eval_ext_call_def, bind_def, ignore_bind_def, type_check_def,
-       assert_def, return_def, raise_def, get_accounts_def,
-       get_transient_storage_def, lift_option_def, lift_option_type_def,
-       check_def, lift_sum_runtime_def, update_accounts_def,
-       update_transient_def, append_logs_def, update_pending_deletions_def,
-       take_call_outcome_def,
-       adopt_call_outcome_equation, LET_THM, UNCURRY,
-       COND_RATOR, option_CASE_rator, prod_CASE_rator, sum_CASE_rator] >>
-  strip_tac >> gvs[AllCaseEqs(), no_control_exc_def]
-  *)
   `no_control_monad (eval_ext_call cx static skip_check sig opts vs)` suffices_by
     metis_tac[no_control_monad_def] >>
   PairCases_on `sig` >> Cases_on `vs` >>
@@ -719,17 +707,6 @@ QED
 Theorem eval_send_no_control:
   eval_send cx has_gas vs st = (INR exc, st') ==> no_control_exc exc
 Proof
-  (* Original whole-helper expansion retained; use the shared spine proof.
-  Cases_on `vs` >- simp[eval_send_def, raise_def, no_control_exc_def] >>
-  Cases_on `t` >- simp[eval_send_def, raise_def, no_control_exc_def] >>
-  simp[eval_send_def, bind_def, ignore_bind_def, type_check_def, assert_def,
-       return_def, raise_def, get_accounts_def, get_transient_storage_def,
-       lift_option_def, lift_option_type_def, check_def, update_accounts_def,
-       update_transient_def, append_logs_def, update_pending_deletions_def,
-       take_call_outcome_def, adopt_call_outcome_equation, LET_THM, UNCURRY,
-       COND_RATOR, option_CASE_rator, prod_CASE_rator, sum_CASE_rator] >>
-  strip_tac >> gvs[AllCaseEqs(), no_control_exc_def]
-  *)
   `no_control_monad (eval_send cx has_gas vs)` suffices_by
     metis_tac[no_control_monad_def] >>
   Cases_on `vs` >> TRY (Cases_on `t`) >>
@@ -995,159 +972,7 @@ Resume eval_expr_no_control_with_bt[CreateTarget]:
   Cases_on `kind` >> gvs[] >> unfold_tac
 QED
 
-(* Pre-factoring issue-567 send helper and evaluator resumes retained.
-   Active proofs use eval_send cx has_gas vs / eval_ext_call ... opts vs.
-Theorem eval_send_no_control:
-  eval_send cx target amount st = (INR exc,st') ==> no_control_exc exc
-Proof
-  rw[eval_send_def, bind_def, ignore_bind_def, check_def, assert_def,
-     return_def, raise_def] >> gvs[AllCaseEqs()] >>
-  imp_res_tac eval_raw_call_no_control >> gvs[no_control_exc_def]
-QED
 
-Resume eval_expr_no_control_with_bt[Send]:
-  rpt strip_tac >> pop_assum mp_tac >>
-  PURE_REWRITE_TAC [Once evaluate_def] >> strip_tac >>
-  step_tac >- close_type_check >>
-  step_tac >- (res_tac >> gvs[no_control_exc_def]) >>
-  step_tac >- close_lift_option_type >>
-  step_tac >- close_lift_option_type >>
-  qpat_x_assum `bind _ _ _ = _` mp_tac >>
-  simp[Once bind_def, return_def] >> strip_tac >>
-  qmatch_asmsub_rename_tac `case tailst.outcomes of NONE => _ | SOME _ => _` >>
-  Cases_on `tailst.outcomes` >> gvs[]
-  >- (gvs[bind_def, ignore_bind_def, return_def, AllCaseEqs()] >>
-      drule eval_send_no_control >> simp[]) >>
-  drule Send_outcome_runtime_error >> rw[no_control_exc_def]
-QED
-
-(* TASK032: original concrete-only ExtCall proof retained.
-Resume eval_expr_no_control_with_bt[ExtCall]:
-  rpt strip_tac >> pop_assum mp_tac
-  >> PURE_REWRITE_TAC[Once evaluate_def] >> strip_tac
-  (* Step 1: decompose eval_exprs bind *)
-  >> lean_decompose
-  >- (qpat_x_assum `∀s exc st'. eval_exprs cx es s = (INR exc,st') ⇒ no_control_exc exc`
-        (qspecl_then [`s`, `exc`, `st'`] mp_tac) >> simp[])
-  (* Remove the eval_exprs IH, then keep the large default-return IH out of
-     each simplifier call.  Splitting the monadic decomposition into small
-     fragments also keeps every tactic below holbuild's per-tactic timeout. *)
-  >> qpat_x_assum `∀s exc st'. eval_exprs _ _ s = _ ⇒ _` kall_tac
-  >> qpat_x_assum `∀s'' vs t. _` (fn ih =>
-       step_tac >- close_type_check >> assume_tac ih)
-  >> qpat_x_assum `∀s'' vs t. _` (fn ih =>
-       step_tac >- close_lift_option_type >> assume_tac ih)
-  >> qpat_x_assum `∀s'' vs t. _` (fn ih =>
-       step_tac >- (
-         qpat_x_assum `(if _ then _ else _) _ = (INR _, _)`
-           (ACCEPT_TAC o MATCH_MP ext_call_value_args_no_control)) >>
-       assume_tac ih)
-  >> qpat_x_assum `∀s'' vs t. _` (fn ih =>
-       RULE_ASSUM_TAC (SIMP_RULE std_ss [pairTheory.ELIM_UNCURRY]) >>
-       assume_tac ih)
-  >> qpat_x_assum `∀s'' vs t. _` (fn ih =>
-       step_tac >- close_lift_option_type >> assume_tac ih)
-  >> qpat_x_assum `∀s'' vs t. _` (fn ih =>
-       step_tac >- gvs[get_accounts_def, return_def] >> assume_tac ih)
-  >> qpat_x_assum `∀s'' vs t. _` (fn ih =>
-       step_tac >- close_check >> assume_tac ih)
-  >> qpat_x_assum `∀s'' vs t. _` (fn ih =>
-       step_tac >- gvs[get_transient_storage_def, return_def] >> assume_tac ih)
-  >> qpat_x_assum `∀s'' vs t. _` (fn ih =>
-       step_tac >- close_lift_option >> assume_tac ih)
-  >> qpat_x_assum `∀s'' vs t. _` (fn ih =>
-       RULE_ASSUM_TAC (SIMP_RULE std_ss [pairTheory.ELIM_UNCURRY]) >>
-       assume_tac ih)
-  >> qpat_x_assum `∀s'' vs t. _` (fn ih =>
-       step_tac >- close_check >> assume_tac ih)
-  >> qpat_x_assum `∀s'' vs t. _` (fn ih =>
-       step_tac >- gvs[update_accounts_def, return_def] >> assume_tac ih)
-  >> qpat_x_assum `∀s'' vs t. _` (fn ih =>
-       step_tac >- gvs[update_transient_def, return_def] >> assume_tac ih)
-  >> qpat_x_assum `∀s'' vs t. _` (fn ih =>
-       step_tac >- gvs[append_logs_def, update_pending_deletions_def, return_def] >> assume_tac ih)
-  (* Handle the if-tail *)
-  (* Original decode dispatch:
-  >> qpat_x_assum `(if _ then _ else _) _ = _` mp_tac
-  >> simp[COND_RATOR] >> strip_tac
-  >> pop_assum mp_tac
-  >> simp[return_def, bind_def, AllCaseEqs()]
-  >> reverse strip_tac
-  >- (imp_res_tac lift_sum_runtime_no_control)
-  *)
-  >> drule_at Any extcall_return_tail_no_control
-  >> disch_then irule >> strip_tac >> rpt gen_tac >> strip_tac
-  (* Instantiate IH via chained drule *)
-  >> qpat_x_assum `∀s'' vs t. _`
-       (mp_tac o REWRITE_RULE [GSYM AND_IMP_INTRO])
-  >> disch_then drule  (* eval_exprs *)
-  >> disch_then drule  (* check (vs ≠ []) *)
-  >> disch_then drule  (* lift_option_type (dest_AddressV) *)
-  (* Split pairs for drule matching *)
-  >> qpat_x_assum `(if _ then _ else _) _ = (INL v'', _)` mp_tac
-  >> Cases_on `v''` >> strip_tac
-  >> qpat_x_assum `lift_option (run_ext_call _ _ _ _ _ _ _) _ _ = (INL v'⁶', _)` mp_tac
-  >> Cases_on `v'⁶'` >> Cases_on `r` >> Cases_on `r'` >> Cases_on `r` >> strip_tac
-  >> gvs[]
-  >> PairCases_on `r''` >> gvs[]
-  >> rpt (disch_then drule)
-  >> strip_tac >> last_x_assum irule >> metis_tac[]
-QED
-
-*)
-
-*)
-
-(* Superseded by eval_ext_call_no_control in the evaluator induction.
-Resume eval_expr_no_control_with_bt[ExtCall]:
-  rpt gen_tac >> strip_tac >>
-  simp[GSYM no_control_monad_def, Once evaluate_def] >>
-  RULE_ASSUM_TAC (REWRITE_RULE [GSYM no_control_monad_def]) >>
-  NO_CONTROL_MONAD_TAC >|
-  [suspend "return_path_1", suspend "return_path_2",
-   suspend "return_path_3", suspend "return_path_4"]
-QED
-
-(* Discharge guards in semantic order using only matching assumptions.
-   Do not simplify the whole context (including both large guarded IHs), or
-   run drule's context-wide resolution search at every monadic step. *)
-fun NO_CONTROL_MONAD_IH_TAC (asl,w) =
-  let
-    val normalise = SIMP_RULE bool_ss
-      [oneTheory.one, ignore_bind_def, FST, SND, pair_case_thm, UNCURRY]
-    val raw_facts = List.concat (map (CONJUNCTS o normalise o ASSUME) asl)
-    val substitutions = List.filter (fn th =>
-      is_eq (concl th) andalso
-      (is_var (lhs (concl th)) orelse is_var (rhs (concl th)))) raw_facts
-    val facts = map (SIMP_RULE bool_ss substitutions) raw_facts
-    fun discharge th =
-      if is_imp (snd (strip_forall (concl th))) then
-        discharge (tryfind (MATCH_MP th) facts handle HOL_ERR _ =>
-          let val guard = fst (dest_imp (snd (strip_forall (concl th)))) in
-            MATCH_MP th (REFL (rhs guard))
-          end)
-      else th
-    fun close ih g =
-      ACCEPT_TAC (discharge
-        (PURE_REWRITE_RULE [GSYM AND_IMP_INTRO] ih)) g
-  in
-    FIRST (map close facts) (asl,w)
-  end;
-
-Resume eval_expr_no_control_with_bt[return_path_1]:
-  NO_CONTROL_MONAD_IH_TAC
-QED
-Resume eval_expr_no_control_with_bt[return_path_2]:
-  NO_CONTROL_MONAD_IH_TAC
-QED
-Resume eval_expr_no_control_with_bt[return_path_3]:
-  NO_CONTROL_MONAD_IH_TAC
-QED
-Resume eval_expr_no_control_with_bt[return_path_4]:
-  NO_CONTROL_MONAD_IH_TAC
-QED
-
-*)
 
 Finalise eval_expr_no_control_with_bt
 

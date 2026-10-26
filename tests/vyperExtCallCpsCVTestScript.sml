@@ -189,59 +189,6 @@ Proof
   CONV_TAC cv_eval
 QED
 
-(* HISTORICAL ONLY - INACTIVE: pre-keyword ExtCall evaluated defaults lazily.
-   Preserve the obsolete theorem statements and proofs for the proof audit;
-   the active eager-default regressions follow this block.
-
-Theorem cpscv_empty_return_runs_lazy_default:
-  cpscv_observe T 9w (BaseT (UintT 256))
-    (SOME (Literal (BaseT (UintT 256)) (IntL 77)))
-    (SOME [cpscv_outcome T [] 17; cpscv_tail]) (INL (Value (IntV 77)))
-    3 4w cpscv_initial_logs (cpscv_requests T) cpscv_tail_snapshot /\
-  cpscv_observe F 9w (BaseT (UintT 256))
-    (SOME (Literal (BaseT (UintT 256)) (IntL 77)))
-    (SOME [cpscv_outcome T [] 17; cpscv_tail]) (INL (Value (IntV 77)))
-    17 8w cpscv_adopted_logs (cpscv_requests F) cpscv_tail_snapshot
-Proof
-  CONV_TAC cv_eval
-QED
-
-(* A failing default expression must not run when return data is present. *)
-Theorem cpscv_nonempty_return_skips_default:
-  cpscv_observe T 9w (BaseT (UintT 256)) (SOME (Name (BaseT (UintT 256)) "missing"))
-    (SOME [cpscv_outcome T (REPLICATE 31 0w ++ [42w]) 17; cpscv_tail])
-    (INL (Value (IntV 42)))
-    3 4w cpscv_initial_logs (cpscv_requests T) cpscv_tail_snapshot
-Proof
-  CONV_TAC cv_eval
-QED
-
-(* Default expressions read the state after adoption, not the incoming state. *)
-Theorem cpscv_default_observes_adopted_state:
-  cpscv_observe T 9w (BaseT (UintT 256))
-    (SOME (Builtin (BaseT (UintT 256)) (Acc Balance)
-      [Literal (BaseT AddressT) (BytesL (REPLICATE 19 0w ++ [11w]))]))
-    (SOME [cpscv_outcome T [] 17; cpscv_tail]) (INL (Value (IntV 3)))
-    3 4w cpscv_initial_logs (cpscv_requests T) cpscv_tail_snapshot /\
-  cpscv_observe F 9w (BaseT (UintT 256))
-    (SOME (Builtin (BaseT (UintT 256)) (Acc Balance)
-      [Literal (BaseT AddressT) (BytesL (REPLICATE 19 0w ++ [11w]))]))
-    (SOME [cpscv_outcome T [] 17; cpscv_tail]) (INL (Value (IntV 17)))
-    17 8w cpscv_adopted_logs (cpscv_requests F) cpscv_tail_snapshot
-Proof
-  CONV_TAC cv_eval
-QED
-
-Theorem cpscv_failed_call_skips_default:
-  cpscv_observe T 9w (BaseT (UintT 256)) (SOME (Name (BaseT (UintT 256)) "missing"))
-    (SOME [cpscv_outcome F [] 17; cpscv_tail])
-    (INR (Error (RuntimeError "ExtCall reverted")))
-    3 4w cpscv_initial_logs (cpscv_requests T) cpscv_tail_snapshot
-Proof
-  CONV_TAC cv_eval
-QED
-
-*)
 
 (* The entire input outcome queue is unchanged when an operand fails. *)
 Definition cpscv_head_snapshot_def:

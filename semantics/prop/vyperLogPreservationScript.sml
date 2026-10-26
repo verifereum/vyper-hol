@@ -1590,17 +1590,6 @@ Proof
   rpt strip_tac >> gvs[log_extends_def, rich_listTheory.IS_PREFIX_APPEND]
 QED
 
-(* Pre-factoring issue-567 concrete send proof retained. The active
-   eval_send_log_extends above covers the final API and both oracle modes.
-Theorem eval_send_log_extends:
-  eval_send cx target amount st = (res,st') ==> log_extends st st'
-Proof
-  rw[eval_send_def, bind_def, ignore_bind_def, check_def, assert_def,
-     return_def, raise_def] >> gvs[AllCaseEqs()] >>
-  imp_res_tac eval_raw_call_log_extends >> gvs[]
-QED
-
-*)
 
 Theorem case_expr_send_logs[local]:
   (!s0 s1. type_check (LENGTH es = if has_gas then 3 else 2) "Send args" s0 =
@@ -1612,26 +1601,6 @@ Proof
   rpt strip_tac >>
   Cases_on `LENGTH es = if has_gas then 3 else 2` >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-(* Pre-factoring issue-567 send case retained.
-  simp[Once vyperInterpreterTheory.evaluate_def, vyperStateTheory.bind_def,
-       vyperStateTheory.ignore_bind_def, vyperStateTheory.return_def,
-       vyperStateTheory.raise_def, AllCaseEqs()] >>
-  rpt strip_tac >> gvs[log_extends_refl] >>
-  imp_res_tac type_check_guard_specialize >>
-  imp_res_tac type_check_state >> imp_res_tac lift_option_type_state >>
-  (* Original concrete tail:
-  imp_res_tac concrete_send_step_locals >> gvs[] >>
-  metis_tac[log_extends_trans, log_extends_eq_logs]
-  *)
-  gvs[log_extends_refl] >>
-  qmatch_asmsub_rename_tac `case tailst.outcomes of NONE => _ | SOME _ => _` >>
-  Cases_on `tailst.outcomes` >> gvs[]
-  >- (gvs[vyperStateTheory.bind_def, vyperStateTheory.return_def, AllCaseEqs()] >>
-      imp_res_tac eval_send_log_extends >>
-      metis_tac[log_extends_trans]) >>
-  drule (Send_outcome_log_extends |> SRULE [vyperStateTheory.ignore_bind_def]) >>
-  strip_tac >> irule log_extends_trans >> goal_assum drule >> simp[]
-*)
   simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
        assert_def, return_def, raise_def, log_extends_refl] >>
   first_x_assum (qspecl_then [`st`, `st`] mp_tac) >>
@@ -2797,16 +2766,6 @@ Proof
   rpt strip_tac >>
   PairCases_on `result` >>
   Cases_on `result0` >> Cases_on `drv` >>
-  (* Original concrete installation simplification retained:
-  simp[ext_call_finish_def, vyperStateTheory.bind_def,
-       vyperStateTheory.ignore_bind_def,
-       vyperStateTheory.update_accounts_def,
-       vyperStateTheory.update_transient_def,
-       vyperStateTheory.append_logs_def, update_pending_deletions_def,
-       vyperStateTheory.check_def, vyperStateTheory.type_check_def,
-       vyperStateTheory.assert_def, vyperStateTheory.return_def,
-       vyperStateTheory.raise_def, AllCaseEqs()] >>
-  *)
   rewrite_tac[ext_call_finish_def, GSYM vyperStateTheory.check_def,
               GSYM vyperStateTheory.ignore_bind_def] >>
   simp[concrete_extcall_tail, vyperStateTheory.return_def,
@@ -2948,19 +2907,6 @@ Proof
        vyperStateTheory.assert_def, vyperStateTheory.return_def]
 QED
 
-(* Original concrete-only proof retained. The same true statement is derived
-   below from the completed actual evaluator induction.
-Theorem case_expr_ext_call_logs[local]:
-  (!s0 r s1. eval_exprs cx es s0 = (r,s1) ==> log_extends s0 s1) /\
-  (!s0 vs s1 tenv target_addr accounts' tStorage' emitted_logs deletions e.
-     eval_exprs cx es s0 = (INL vs,s1) /\
-     drv = SOME e /\
-     ext_call_after_args_with cx static skc ret_type func_name arg_types vs
-       (\tenv target_addr result. return (tenv,target_addr,result)) s1 =
-       (INL (tenv,target_addr,(T,[],accounts',tStorage',emitted_logs, deletions)),s1) /\
-     (skc \/ ext_call_has_code target_addr accounts') ==>
-     !u0 r u1. eval_expr cx e u0 = (r,u1) ==> log_extends u0 u1) ==>
-*)
 
 (* Compositional proof control for the actual activated call clause. *)
 Definition log_monad_def:
@@ -3615,26 +3561,6 @@ Proof
   metis_tac[eval_mutual_log_extends]
 QED
 
-(* Pre-factoring issue-567 corollary retained; the final constructor has
-   opts and no evaluator-owned default-return continuation.
-Theorem case_expr_ext_call_logs[local]:
-  (!s0 r s1. eval_exprs cx es s0 = (r,s1) ==> log_extends s0 s1) /\
-  (!s0 vs s1 tenv target_addr accounts' tStorage' emitted_logs deletions e.
-     eval_exprs cx es s0 = (INL vs,s1) /\
-     drv = SOME e /\
-     ext_call_after_args_with cx static skip_check ret_type func_name arg_types vs
-       (\tenv target_addr result. return (tenv,target_addr,result)) s1 =
-       (INL (tenv,target_addr,(T,[],accounts',tStorage',emitted_logs, deletions)),s1) ==>
-     !u0 r u1. eval_expr cx e u0 = (r,u1) ==> log_extends u0 u1) ==>
-  !st res st'.
-    eval_expr cx (Call ty (ExtCall static skip_check (func_name,arg_types,ret_type))
-                         es drv) st = (res,st') ==>
-    log_extends st st'
-Proof
-  rpt strip_tac >> drule eval_expr_log_extends >> simp[]
-QED
-
-*)
 
 Theorem eval_exprs_log_extends:
   !cx es st res st'.

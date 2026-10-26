@@ -62,26 +62,6 @@ Proof
 QED
 *)
 
-(* Historical transfer-only NONE Send statement/proof. The current Send
-   executes recipient code even for zero value, so arbitrary am.accounts
-   need not be inert. Keep the original text and replace it below by the
-   complete concrete result, without restricting am, scs, or prior requests.
-(* NONE Send remains concrete; the empty ExtCall fails before take in either mode. *)
-Theorem oracle_initial_state_inert_modes:
-  let st = initial_state am scs with <|outcomes := orc; requests := rqs|> in
-    (orc = NONE ==>
-      eval_expr empty_evaluation_context
-        (Call NoneT Send
-          [Literal (BaseT AddressT) (BytesL (REPLICATE 20 0w));
-           Literal (BaseT (UintT 256)) (IntL 0)] NONE) st =
-        (INL (Value NoneV), st)) /\
-    eval_expr empty_evaluation_context
-      (Call NoneT (ExtCall T F ("unused", [], NoneT)) [] NONE) st =
-      (INR (Error (TypeError "ExtCall no target")), st)
-Proof
-  Cases_on `orc` >> EVAL_TAC >> simp[bind_def, return_def, transfer_value_def]
-QED
-*)
 
 Theorem oracle_initial_state_zero_address:
   dest_AddressV (BytesV (REPLICATE 20 0w)) = SOME 0w

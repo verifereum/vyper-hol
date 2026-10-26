@@ -22,11 +22,7 @@
     "ordinary_return_control": {
       "xa_bytes_lit_return": "MATCH"
     },
-    "report": "hol/summary.txt",
-    "status_log": "hol/status.json",
-    "run_metadata": "hol/run.json",
-    "raw_probe_log": "hol/probe.log",
-    "actual_hol_bytecode": "hol/*.hex",
+    "generated_outputs": "HOL bytecode, probe logs and per-run reports are generated locally and are not versioned.",
     "independent_oracle": "oracle/provenance.json",
     "residual_classification": [
       {
@@ -99,8 +95,7 @@
   },
   "proof_integrity": {
     "status": "PASS",
-    "baseline": "proof-baseline.json",
-    "current": "proof-integrity.json",
+    "baseline_commit": "e1c0b64e18e24933954f0b5c07a7f6cabcd3bf15",
     "new_admissions": 0,
     "new_axiom_or_oracle_constructor_tokens": 0,
     "notes": "The 128 pre-existing cheat tokens and 2 FAIL_TAC tokens remain baseline Notes. Existing admitted compiler stages are not certified by this task audit."

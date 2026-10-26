@@ -166,15 +166,6 @@ Theorem ExtCall_outcome_checked_tail:
     k outcome.co_returnData
   od) st
 Proof
-  (* Original proof via the removed branch equation retained:
-  Cases_on `take_call_outcome target calldata value_opt st` >>
-  rename1 `take_call_outcome target calldata value_opt st = (answer,mid)` >>
-  drule ExtCall_outcome_continue >>
-  disch_then (qspecl_then [`ret_type`,`k`] mp_tac) >>
-  drule checked_call_outcome_continue >>
-  disch_then (qspecl_then [`"ExtCall reverted"`,`k`] mp_tac) >>
-  rpt strip_tac >> asm_rewrite_tac[]
-  *)
   Cases_on `ret_type = NoneT` >>
   Cases_on `NULL (lookup_account target st.accounts).code` >>
   simp[bind_def, ignore_bind_def, get_accounts_def, check_def, assert_def,
