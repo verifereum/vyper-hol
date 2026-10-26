@@ -3983,6 +3983,129 @@ Proof
   simp[LIST_REL_EL_EQN, EL_REPLICATE] >> metis_tac[]
 QED
 
+Theorem enc_frame_preserves_bytes:
+  enc_frame st z lo top outs s t /\ p + n <= lo /\
+  EVERY (regions_disjoint (p,n)) outs ==>
+  mem_bytes_at p n t.vs_memory = mem_bytes_at p n s.vs_memory
+Proof
+  strip_tac >> irule mem_bytes_at_pointwise >> rpt strip_tac >>
+  qpat_x_assum `enc_frame _ _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[enc_frame_def, enc_scratch_def] >> strip_tac >>
+  first_x_assum irule >> conj_tac
+  >- (rpt strip_tac >> first_x_assum drule_all >> decide_tac) >>
+  qpat_x_assum `EVERY _ outs` mp_tac >>
+  rewrite_tac[EVERY_MEM] >> strip_tac >> rpt strip_tac >>
+  rename1 `MEM out outs` >> Cases_on `out` >>
+  first_x_assum drule >>
+  simp[venomMemDefsTheory.regions_disjoint_def] >> decide_tac
+QED
+
+Theorem enc_static_slot_prefix:
+  has_types ts avs /\ EVERY (\t. ~is_dynamic t) ts /\
+  k < LENGTH avs /\ enc_prefix_mem p B ts avs k s /\
+  enc_frame a b lo top
+    [(p + LENGTH (enc_head_upto B ts avs k),
+      LENGTH (enc (EL k ts) (EL k avs)))] s t /\
+  p + LENGTH (enc_head_upto B ts avs k) <= lo /\
+  mem_bytes_at (p + LENGTH (enc_head_upto B ts avs k))
+    (LENGTH (enc (EL k ts) (EL k avs))) t.vs_memory =
+      enc (EL k ts) (EL k avs) ==>
+  enc_prefix_mem p B ts avs (SUC k) t
+Proof
+  strip_tac >>
+  `LENGTH ts = LENGTH avs` by metis_tac[has_types_LIST_REL, LIST_REL_LENGTH] >>
+  `~is_dynamic (EL k ts)` by fs[EVERY_EL] >>
+  `enc_tail_upto ts avs k = []` by
+    (simp[enc_tail_upto_def] >> irule enc_prefix_tail_static >>
+     simp[EVERY_TAKE]) >>
+  `mem_bytes_at p (LENGTH (enc_head_upto B ts avs k)) t.vs_memory =
+     enc_head_upto B ts avs k` by
+    (drule enc_frame_preserves_bytes >>
+     disch_then (qspecl_then [`p`, `LENGTH (enc_head_upto B ts avs k)`] mp_tac) >>
+     simp[venomMemDefsTheory.regions_disjoint_def] >>
+     fs[enc_prefix_mem_def]) >>
+  irule enc_prefix_mem_suc >> simp[] >>
+  fs[mem_bytes_at_def]
+QED
+
+Theorem enc_static_counter_run:
+  emit_op ADD [index;Lit 1w] a = (next,b) /\
+  emit_void MSTORE [count_ptr;next] b = ((),c) /\
+  eval_operand index s = SOME (n2w k) /\
+  eval_operand count_ptr s = SOME (n2w ip) /\
+  (!x. count_ptr = Var x ==> not_fresh_at a x) /\
+  st.cs_next_var <= a.cs_next_var /\
+  enc_scratch (frag_ids st z) lo top s /\
+  j IN frag_ids st z /\ FLOOKUP s.vs_allocas j = SOME (ip,32) ==>
+  ?u. run_inst_seq (emitted_insts a b ++ emitted_insts b c) s = OK u /\
+      mem_word_at ip u.vs_memory = n2w (SUC k) /\
+      u.vs_labels = s.vs_labels /\
+      (!p n. p + n <= lo ==>
+        mem_bytes_at p n u.vs_memory = mem_bytes_at p n s.vs_memory) /\
+      enc_frame st z lo top outs s u
+Proof
+  strip_tac >>
+  `step_inst_base (mk_inst a.cs_next_id ADD [index;Lit 1w]
+      [STRING #"%" (toString a.cs_next_var)]) s =
+    OK (update_var (STRING #"%" (toString a.cs_next_var)) (n2w (SUC k)) s)` by
+    (rewrite_tac[arithmeticTheory.ADD1, GSYM wordsTheory.word_add_n2w] >>
+     irule step_ADD >> simp[eval_operand_lit]) >>
+  drule_all enc_emit_op_run_frame >>
+  disch_then (qspec_then `outs` strip_assume_tac) >>
+  `eval_operand count_ptr s' = SOME (n2w ip)` by metis_tac[] >>
+  `enc_scratch (frag_ids st z) lo top s' /\
+   FLOOKUP s'.vs_allocas j = SOME (ip,32)` by fs[enc_frame_def] >>
+  `ip < dimword (:256)` by
+    (drule_all enc_scratch_alloca_bound >> strip_tac >>
+     qpat_x_assum `enc_scratch _ _ _ s` mp_tac >>
+     pure_rewrite_tac[enc_scratch_def] >> strip_tac >> decide_tac) >>
+  `enc_frame st z lo top outs s' (mstore ip (n2w (SUC k)) s')` by
+    (irule enc_frame_mstore_scratch >> metis_tac[]) >>
+  qexists_tac `mstore ip (n2w (SUC k)) s'` >> conj_tac
+  >- (irule enc_run_inst_seq_compose >> goal_assum (drule_at Any) >>
+      drule emitted_insts_emit_void >> strip_tac >>
+      simp[run_inst_seq_def, step_inst_base_def, mk_inst_def,
+           exec_write2_def]) >>
+  rewrite_tac[valueEncodingPropsTheory.mstore_mem_word_at_same] >>
+  conj_tac >- simp[mstore_def] >> conj_tac
+  >- (rpt strip_tac >>
+      `lo <= ip` by
+        (qpat_x_assum `enc_scratch _ _ _ s` mp_tac >>
+         pure_rewrite_tac[enc_scratch_def] >> strip_tac >> metis_tac[]) >>
+      `mem_bytes_at p n (mstore ip (n2w (SUC k)) s').vs_memory =
+       mem_bytes_at p n s'.vs_memory` suffices_by simp[] >>
+      irule mstore_mem_bytes_at_disjoint >>
+      simp[venomMemDefsTheory.regions_disjoint_def] >> decide_tac) >>
+  irule enc_frame_trans >> qexists_tac `s'` >> simp[]
+QED
+
+Theorem enc_static_slot_counter_inv:
+  has_types ts avs /\ EVERY (\t. ~is_dynamic t) ts /\
+  k < LENGTH avs /\ enc_prefix_mem p B ts avs k s /\
+  enc_frame a b lo top
+    [(p + LENGTH (enc_head_upto B ts avs k),
+      LENGTH (enc (EL k ts) (EL k avs)))] s t /\
+  p + LENGTH (enc_head_upto B ts avs k) <= lo /\
+  mem_bytes_at (p + LENGTH (enc_head_upto B ts avs k))
+    (LENGTH (enc (EL k ts) (EL k avs))) t.vs_memory =
+      enc (EL k ts) (EL k avs) /\
+  p + LENGTH (enc_head_upto B ts avs (SUC k)) <= lo /\
+  (!q n. q + n <= lo ==>
+    mem_bytes_at q n u.vs_memory = mem_bytes_at q n t.vs_memory) /\
+  mem_word_at ip u.vs_memory = n2w (SUC k) /\ inv_ctx u ==>
+  enc_array_inv inv_ctx p B ts avs ip NONE (SUC k) u
+Proof
+  strip_tac >>
+  `enc_prefix_mem p B ts avs (SUC k) t` by
+    (irule enc_static_slot_prefix >> metis_tac[]) >>
+  `enc_tail_upto ts avs (SUC k) = []` by
+    (simp[enc_tail_upto_def] >> irule enc_prefix_tail_static >>
+     simp[EVERY_TAKE]) >>
+  irule enc_array_inv_suc >> simp[] >>
+  fs[enc_prefix_mem_def] >>
+  simp[mem_bytes_at_def]
+QED
+
 Theorem compile_abi_encode_frag:
   (!dst child_ptr ei is_dyn static_ofst dyn_ptr st op st' ctx env ty tv v
     av s0 dst_w src_w lo top.
