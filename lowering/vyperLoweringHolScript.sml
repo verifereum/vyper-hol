@@ -13,8 +13,10 @@ Ancestors
   valueEncodingProofs
   localPtrsProps
   loweringShapeProps
+  structFieldsProps
   (* compiler + correctness *)
   vyperCompiler
+  allocaBudgetChecks
   vyperLoweringCorrect
   configuredE2ECorrectness
   evalCompilerMemoryStores
