@@ -3795,6 +3795,194 @@ Proof
   gvs[same_blocks_def, APPEND_ASSOC] >> metis_tac[]
 QED
 
+Theorem enc_abi_list_index:
+  !ts vs avs. vyper_to_abi_list env ts vs = SOME avs ==>
+  LENGTH vs = LENGTH ts /\ LENGTH avs = LENGTH ts /\
+  (!k. k < LENGTH ts ==>
+    vyper_to_abi env (EL k ts) (EL k vs) = SOME (EL k avs))
+Proof
+  Induct_on `ts` >> Cases_on `vs` >>
+  simp[Once vyper_to_abi_def] >> rpt strip_tac >>
+  gvs[AllCaseEqs()] >>
+  first_x_assum drule >> strip_tac >> gvs[] >>
+  Cases_on `k` >> gvs[]
+QED
+
+Theorem enc_old_operand_mono:
+  !a b op. a.cs_next_var <= b.cs_next_var /\
+  (!x. op = Var x ==> not_fresh_at a x) ==>
+  (!x. op = Var x ==> not_fresh_at b x)
+Proof
+  simp[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]
+QED
+
+Theorem enc_emit_op_old_result:
+  emit_op opc args a = (op,b) ==>
+  (!x. op = Var x ==> not_fresh_at b x)
+Proof
+  strip_tac >> drule emitted_insts_emit_op >>
+  simp[not_fresh_at_def, ASCIInumbersTheory.toString_11]
+QED
+
+Theorem enc_static_loop_setup_run:
+  emit_op MLOAD [count_ptr] a0 = (i,a1) /\
+  emit_op ADD [src;Lit 32w] a1 = (sd,a2) /\
+  emit_op MUL [i;Lit (n2w msz)] a2 = (so,a3) /\
+  emit_op ADD [sd;so] a3 = (child_src,a4) /\
+  emit_op ADD [dst;Lit 32w] a4 = (dd,a5) /\
+  emit_op MUL [i;Lit (n2w asz)] a5 = (dof,a6) /\
+  emit_op ADD [dd;dof] a6 = (child_dst,a7) /\
+  (!x. MEM (Var x) [count_ptr;src;dst] ==> not_fresh_at a0 x) /\
+  eval_operand count_ptr s = SOME (n2w ip) /\
+  eval_operand src s = SOME (n2w src_n) /\
+  eval_operand dst s = SOME (n2w dst_n) /\
+  mem_word_at ip s.vs_memory = n2w k /\ ip < dimword (:256) ==>
+  ?t. run_inst_seq (emitted_insts a0 a7) s = OK t /\
+    eval_operand i t = SOME (n2w k) /\
+    eval_operand child_src t = SOME (n2w (src_n + 32 + k * msz)) /\
+    eval_operand child_dst t = SOME (n2w (dst_n + 32 + k * asz)) /\
+    (!old. (!x. old = Var x ==> not_fresh_at a0 x) ==>
+      eval_operand old t = eval_operand old s) /\
+    t.vs_memory = s.vs_memory /\ t.vs_labels = s.vs_labels /\
+    t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
+    t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+    t.vs_logs = s.vs_logs /\ t.vs_requests = s.vs_requests
+Proof
+  strip_tac >>
+  `a1.cs_next_var = a0.cs_next_var + 1 /\
+   a4.cs_next_var = a0.cs_next_var + 4` by
+    (imp_res_tac (cj 4 emitted_insts_emit_op) >> decide_tac) >>
+  `(!x. i = Var x ==> not_fresh_at a1 x) /\
+   (!x. child_src = Var x ==> not_fresh_at a4 x)` by
+    metis_tac[enc_emit_op_old_result] >>
+  `a1.cs_current_insts = a0.cs_current_insts ++ emitted_insts a0 a1 /\
+   a4.cs_current_insts = a1.cs_current_insts ++ emitted_insts a1 a4 /\
+   a7.cs_current_insts = a4.cs_current_insts ++ emitted_insts a4 a7` by
+    (imp_res_tac (cj 7 enc_indexed_address_code) >>
+     metis_tac[enc_emit_op_append]) >>
+  `step_inst_base (mk_inst a0.cs_next_id MLOAD [count_ptr]
+    [STRING #"%" (toString a0.cs_next_var)]) s =
+    OK (update_var (STRING #"%" (toString a0.cs_next_var)) (n2w k) s)` by
+    (qpat_assum `eval_operand count_ptr s = _` (mp_tac o MATCH_MP step_MLOAD) >>
+     simp[GSYM mem_word_at_eq_mload]) >>
+  drule_all enc_emit_op_readonly_run >>
+  disch_then (qx_choose_then `s1` strip_assume_tac) >>
+  `eval_operand src s1 = SOME (n2w src_n) /\
+   eval_operand dst s1 = SOME (n2w dst_n)` by (fs[] >> metis_tac[]) >>
+  `!x. MEM (Var x) [src;i] ==> not_fresh_at a1 x` by
+    (fs[] >> metis_tac[enc_old_operand_mono, arithmeticTheory.LESS_EQ_ADD]) >>
+  drule_all enc_indexed_address_run >>
+  disch_then (qx_choose_then `s2` strip_assume_tac) >>
+  `eval_operand dst s2 = SOME (n2w dst_n) /\
+   eval_operand i s2 = SOME (n2w k)` by
+    (fs[] >> metis_tac[enc_old_operand_mono, arithmeticTheory.LESS_EQ_ADD]) >>
+  `!x. dst = Var x ==> not_fresh_at a4 x` by
+    (match_mp_tac enc_old_operand_mono >> qexists_tac `a0` >> simp[] >> fs[] >> metis_tac[]) >>
+  `!x. i = Var x ==> not_fresh_at a4 x` by
+    (match_mp_tac enc_old_operand_mono >> qexists_tac `a1` >> simp[]) >>
+  `!x. MEM (Var x) [dst;i] ==> not_fresh_at a4 x` by (fs[] >> metis_tac[]) >>
+  qpat_x_assum `step_inst_base _ s = _` kall_tac >>
+  qpat_x_assum `emit_op MLOAD _ _ = _` kall_tac >>
+  qpat_x_assum `emit_op ADD [src;_] _ = _` kall_tac >>
+  qpat_x_assum `emit_op MUL [i;Lit (n2w msz)] _ = _` kall_tac >>
+  qpat_x_assum `emit_op ADD [sd;so] _ = _` kall_tac >>
+  drule_all enc_indexed_address_run >>
+  disch_then (qx_choose_then `s3` strip_assume_tac) >>
+  `emitted_insts a0 a4 = emitted_insts a0 a1 ++ emitted_insts a1 a4` by
+    (irule emitted_insts_append >> simp[]) >>
+  `emitted_insts a0 a7 = emitted_insts a0 a4 ++ emitted_insts a4 a7` by
+    (irule emitted_insts_append >> simp[]) >>
+  qexists_tac `s3` >> simp[GSYM wordsTheory.word_add_n2w,
+    GSYM wordsTheory.word_mul_n2w] >> conj_tac
+  >- (irule enc_run_inst_seq_compose >> qexists_tac `s2` >> simp[] >>
+      irule enc_run_inst_seq_compose >> qexists_tac `s1` >> simp[]) >>
+  rpt strip_tac >>
+  `(!x. old = Var x ==> not_fresh_at a1 x) /\
+   (!x. old = Var x ==> not_fresh_at a4 x)` by
+    (conj_tac >> match_mp_tac enc_old_operand_mono >>
+     qexists_tac `a0` >> simp[]) >> metis_tac[]
+QED
+
+Theorem enc_frame_readonly:
+  (!old. (!x. old = Var x ==> not_fresh_at st x) ==>
+    eval_operand old t = eval_operand old s) /\
+  t.vs_memory = s.vs_memory /\ t.vs_labels = s.vs_labels /\
+  t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
+  t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+  t.vs_logs = s.vs_logs /\ t.vs_requests = s.vs_requests /\
+  enc_scratch (frag_ids st z) lo top s ==>
+  enc_frame st z lo top outs s t
+Proof
+  strip_tac >> drule_all enc_scratch_cong >> strip_tac >>
+  simp[enc_frame_def] >> rpt strip_tac >>
+  qpat_x_assum `!old. _` (qspec_then `Var x` mp_tac) >>
+  simp[eval_operand_def]
+QED
+
+Theorem enc_scratch_subset:
+  FINITE ids /\ sub SUBSET ids /\ enc_scratch ids lo top s ==>
+  enc_scratch sub lo top s
+Proof
+  strip_tac >>
+  `FINITE {i | i IN ids /\ FLOOKUP s.vs_allocas i = NONE}` by
+    (irule pred_setTheory.SUBSET_FINITE_I >> qexists_tac `ids` >>
+     simp[pred_setTheory.SUBSET_DEF]) >>
+  `CARD {i | i IN sub /\ FLOOKUP s.vs_allocas i = NONE} <=
+   CARD {i | i IN ids /\ FLOOKUP s.vs_allocas i = NONE}` by
+    (irule pred_setTheory.CARD_SUBSET >> simp[] >>
+     gvs[pred_setTheory.SUBSET_DEF]) >>
+  qpat_x_assum `enc_scratch ids _ _ _` mp_tac >>
+  rewrite_tac[enc_scratch_def] >> strip_tac >>
+  simp[enc_scratch_def] >> rpt strip_tac >>
+  metis_tac[pred_setTheory.SUBSET_DEF]
+QED
+
+Theorem enc_static_loop_element_pre:
+  enc_loop_ctx st z ops lo top (ArrayTV tv (Dynamic n))
+    (ArrayV (DynArrayV vs)) src_n outs s0 count_ptr ip s /\
+  value_has_type (ArrayTV tv (Dynamic n)) (ArrayV (DynArrayV vs)) /\
+  k < LENGTH vs /\ MEM (dst_n,32 + LENGTH vs * type_memory_size tv) outs /\
+  frag_ids a b SUBSET frag_ids st z /\
+  (!x. MEM (Var x) [child_dst;child_src] ==> not_fresh_at a x) /\
+  evaluate_type env ty = SOME tv /\ ~is_dynamic (vyper_to_abi_type env ty) /\
+  LIST_REL (\v av. vyper_to_abi env ty v = SOME av) vs avs ==>
+  value_has_type tv (EL k vs) /\
+  vyper_to_abi env ty (EL k vs) = SOME (EL k avs) /\
+  enc_pre a b [child_dst;child_src] lo top tv (EL k vs)
+    (src_n + 32 + k * type_memory_size tv)
+    [(dst_n + 32 + k * type_memory_size tv,
+      LENGTH (enc (vyper_to_abi_type env ty) (EL k avs)))] s
+Proof
+  strip_tac >>
+  drule_all enc_loop_ctx_dynarray_source >> strip_tac >>
+  drule_all enc_loop_ctx_dynarray_bounds >> strip_tac >>
+  drule_all enc_loop_ctx_array_slot >> strip_tac >>
+  `vyper_to_abi env ty (EL k vs) = SOME (EL k avs)` by
+    (fs[LIST_REL_EL_EQN]) >>
+  `LENGTH (enc (vyper_to_abi_type env ty) (EL k avs)) = type_memory_size tv` by
+    (irule val_in_memory_static_enc_length >> metis_tac[]) >>
+  `enc_scratch (frag_ids st z) lo top s` by fs[enc_loop_ctx_def, enc_pre_def] >>
+  `enc_scratch (frag_ids a b) lo top s` by
+    (irule enc_scratch_subset >> qexists_tac `frag_ids st z` >> simp[]) >>
+  `SUC k <= n` by (fs[value_has_type_def]) >>
+  `SUC k * type_memory_size tv <= n * type_memory_size tv` by
+    simp[arithmeticTheory.LE_MULT_RCANCEL] >>
+  qpat_x_assum `SUC k * _ <= _` mp_tac >>
+  pure_rewrite_tac[arithmeticTheory.MULT_CLAUSES] >> strip_tac >>
+  simp[enc_pre_def] >>
+  irule regions_disjoint_subregions >>
+  goal_assum (drule_at Any) >>
+  simp[type_memory_size_def] >> decide_tac
+QED
+
+Theorem enc_abi_replicate_list:
+  vyper_to_abi_list env (REPLICATE (LENGTH vs) ty) vs = SOME avs ==>
+  LIST_REL (\v av. vyper_to_abi env ty v = SOME av) vs avs
+Proof
+  strip_tac >> drule enc_abi_list_index >>
+  simp[LIST_REL_EL_EQN, EL_REPLICATE] >> metis_tac[]
+QED
+
 Theorem compile_abi_encode_frag:
   (!dst child_ptr ei is_dyn static_ofst dyn_ptr st op st' ctx env ty tv v
     av s0 dst_w src_w lo top.
