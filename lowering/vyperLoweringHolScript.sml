@@ -12,10 +12,11 @@ Ancestors
   exprSimMain
   valueEncodingProofs
   localPtrsProps
-  structFieldsProps
   loweringShapeProps
+  structFieldsProps
   (* compiler + correctness *)
   vyperCompiler
+  allocaBudgetChecks
   vyperLoweringCorrect
   configuredE2ECorrectness
   evalCompilerMemoryStores

@@ -59,7 +59,9 @@ End
    environment.  Vyper resolves type declarations in any order
    (ModuleAnalyzer._visit_nodes_looping), so a field may name a struct
    declared later; sizing it against only the earlier declarations would
-   give that field size 0. *)
+   give that field size 0.  Like the rest of the compiler (ce_module = NONE),
+   this covers the main module only: a field whose type doesn't evaluate in
+   its type_env, such as an imported flag, gets size 0. *)
 Definition field_mem_bytes_def:
   field_mem_bytes tenv ty =
     case evaluate_type tenv ty of
