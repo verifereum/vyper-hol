@@ -1014,7 +1014,30 @@ Theorem compile_raise_reason_lit_frag:
          (Raise (RaiseReason (Literal (BaseT (StringT ml)) (StringL str)))))
       es res es'
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >> simp[stmt_frag_def] >> rpt gen_tac >>
+  strip_tac >> disj2_tac >>
+  qpat_x_assum `stmt_env _ _ _ _ _ = _` mp_tac >>
+  simp[stmt_env_def, declare_stmt_local_def, compile_stmt_def,
+       compile_reason_message_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def, vyperASTTheory.expr_type_def] >>
+  Cases_on `compile_bytelike_literal (MAP (n2w o ORD) str) ml sa` >>
+  rename1 `compile_bytelike_literal _ _ sa = (buf, sm)` >>
+  Cases_on `compile_revert_with_reason cenv
+    (LocatedValue (BaseT (StringT (LENGTH str))) (base_ptr buf))
+    (BaseT (StringT ml)) (type_memory_bytes cenv (BaseT (StringT ml))) sm` >>
+  rename1 `compile_revert_with_reason _ _ _ _ sm = (u, sf)` >>
+  Cases_on `u` >> simp[] >> strip_tac >> gvs[] >>
+  `frag_exec ctx sa sb (\s. T) (\s. F) (stmt_exit RetQ es' res)` by
+    (irule (INST_TYPE [alpha |-> ``:type``] compile_bytelike_revert_frag) >> conj_tac
+     >- (qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+         simp[Once evaluate_def, raise_def] >>
+         simp[Once evaluate_def, evaluate_literal_def, bind_def, return_def,
+              get_Value_def, lift_option_type_def, dest_StringV_def,
+              raise_def] >> strip_tac >> gvs[stmt_exit_def, expr_exit_def]) >>
+     goal_assum (drule_at Any) >>
+     qexistsl [`MAP (n2w o ORD) str`, `ml`] >>
+     simp[is_word_type_def]) >>
+  fs[frag_exec_def]
 QED
 
 Theorem compile_assert_reason_lit_frag:
