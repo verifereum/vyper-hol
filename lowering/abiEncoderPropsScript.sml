@@ -4028,7 +4028,7 @@ Proof
   fs[mem_bytes_at_def]
 QED
 
-Theorem enc_static_counter_run:
+Theorem enc_static_counter_run_preserve:
   emit_op ADD [index;Lit 1w] a = (next,b) /\
   emit_void MSTORE [count_ptr;next] b = ((),c) /\
   eval_operand index s = SOME (n2w k) /\
@@ -4042,7 +4042,8 @@ Theorem enc_static_counter_run:
       u.vs_labels = s.vs_labels /\
       (!p n. p + n <= lo ==>
         mem_bytes_at p n u.vs_memory = mem_bytes_at p n s.vs_memory) /\
-      enc_frame st z lo top outs s u
+      enc_frame st z lo top outs s u /\
+      eval_operand count_ptr u = SOME (n2w ip)
 Proof
   strip_tac >>
   `step_inst_base (mk_inst a.cs_next_id ADD [index;Lit 1w]
@@ -4076,7 +4077,30 @@ Proof
        mem_bytes_at p n s'.vs_memory` suffices_by simp[] >>
       irule mstore_mem_bytes_at_disjoint >>
       simp[venomMemDefsTheory.regions_disjoint_def] >> decide_tac) >>
-  irule enc_frame_trans >> qexists_tac `s'` >> simp[]
+  conj_tac
+  >- (irule enc_frame_trans >> qexists_tac `s'` >> simp[]) >>
+  Cases_on `count_ptr` >> fs[eval_operand_def, mstore_def, lookup_var_def]
+QED
+
+Theorem enc_static_counter_run:
+  emit_op ADD [index;Lit 1w] a = (next,b) /\
+  emit_void MSTORE [count_ptr;next] b = ((),c) /\
+  eval_operand index s = SOME (n2w k) /\
+  eval_operand count_ptr s = SOME (n2w ip) /\
+  (!x. count_ptr = Var x ==> not_fresh_at a x) /\
+  st.cs_next_var <= a.cs_next_var /\
+  enc_scratch (frag_ids st z) lo top s /\
+  j IN frag_ids st z /\ FLOOKUP s.vs_allocas j = SOME (ip,32) ==>
+  ?u. run_inst_seq (emitted_insts a b ++ emitted_insts b c) s = OK u /\
+      mem_word_at ip u.vs_memory = n2w (SUC k) /\
+      u.vs_labels = s.vs_labels /\
+      (!p n. p + n <= lo ==>
+        mem_bytes_at p n u.vs_memory = mem_bytes_at p n s.vs_memory) /\
+      enc_frame st z lo top outs s u
+Proof
+  strip_tac >> drule_all enc_static_counter_run_preserve >>
+  disch_then (qspec_then `outs` strip_assume_tac) >>
+  goal_assum (drule_at Any) >> simp[]
 QED
 
 Theorem enc_static_slot_counter_inv:
@@ -4172,6 +4196,43 @@ Proof
   irule enc_frame_lift >> metis_tac[]
 QED
 
+Theorem compile_abi_encode_static_info_enclosing_local_frag:
+  compile_abi_encode_static_info dst src ei a = (op,b) /\
+  abi_enc_plan env ty ei /\ ~is_dynamic (vyper_to_abi_type env ty) /\
+  evaluate_type env ty = SOME tv /\ value_has_type tv v /\
+  vyper_to_abi env ty v = SOME av /\
+  eval_operand dst s0 = SOME dst_w /\ eval_operand src s0 = SOME src_w /\
+  enc_pre a b [dst;src] lo top tv v (w2n src_w)
+    [(w2n dst_w,LENGTH (enc (vyper_to_abi_type env ty) av))] s0 /\
+  frag_ids a b SUBSET frag_ids st z /\
+  enc_scratch (frag_ids st z) lo top s0 /\
+  (!x. not_fresh_at st x ==> not_fresh_at a x) /\
+  (?p n. MEM (p,n) outs /\ p <= w2n dst_w /\
+    w2n dst_w + LENGTH (enc (vyper_to_abi_type env ty) av) <= p+n) ==>
+  frag_exec ctx a b (\s. s = s0)
+    (\s. mem_bytes_at (w2n dst_w)
+           (LENGTH (enc (vyper_to_abi_type env ty) av)) s.vs_memory =
+           enc (vyper_to_abi_type env ty) av /\
+         eval_operand op s =
+           SOME (n2w (LENGTH (enc (vyper_to_abi_type env ty) av))) /\
+         s.vs_labels = s0.vs_labels /\
+         enc_frame st z lo top outs s0 s /\
+         (?local_top. enc_frame a b lo local_top
+           [(w2n dst_w,LENGTH (enc (vyper_to_abi_type env ty) av))] s0 s)) R
+Proof
+  rpt strip_tac >>
+  drule_all enc_pre_reserve_enclosing >> strip_tac >>
+  drule_all compile_abi_encode_static_info_abi_frag >>
+  disch_then (qspecl_then [`ctx`, `R`] mp_tac) >> strip_tac >>
+  irule frag_exec_conseq >> goal_assum (drule_at Any) >> simp[] >>
+  rpt strip_tac
+  >- (irule enc_frame_restore_enclosing >> simp[] >>
+      qexistsl_tac [`a`, `b`,
+        `[(w2n dst_w,LENGTH (enc (vyper_to_abi_type env ty) av))]`] >>
+      simp[] >> qexistsl_tac [`p`, `n`] >> simp[]) >>
+  goal_assum (drule_at Any)
+QED
+
 Theorem compile_abi_encode_static_info_enclosing_frag:
   compile_abi_encode_static_info dst src ei a = (op,b) /\
   abi_enc_plan env ty ei /\ ~is_dynamic (vyper_to_abi_type env ty) /\
@@ -4203,6 +4264,26 @@ Proof
   qexistsl_tac [`a`, `b`,
     `[(w2n dst_w,LENGTH (enc (vyper_to_abi_type env ty) av))]`] >>
   simp[] >> qexistsl_tac [`p`, `n`] >> simp[]
+QED
+
+Theorem enc_loop_ctx_frame_step:
+  enc_loop_ctx st z ops lo top tv v src outs s0 count_ptr ip s /\
+  value_has_type tv v /\ enc_frame st z lo top outs s t /\
+  t.vs_labels = s.vs_labels /\
+  eval_operand count_ptr t = SOME (n2w ip) ==>
+  enc_loop_ctx st z ops lo top tv v src outs s0 count_ptr ip t
+Proof
+  strip_tac >>
+  `enc_pre st z ops lo top tv v src outs s /\
+   enc_frame st z lo top outs s0 s /\
+   s.vs_labels = s0.vs_labels /\
+   FLOOKUP s.vs_allocas st.cs_next_id = SOME (ip,32) /\ lo <= ip` by
+    fs[enc_loop_ctx_def] >>
+  `enc_pre st z ops lo top tv v src outs t` by
+    (irule enc_pre_transport >> metis_tac[]) >>
+  simp[enc_loop_ctx_def] >> conj_tac
+  >- (irule enc_frame_trans >> qexists_tac `s` >> simp[]) >>
+  fs[enc_frame_def] >> metis_tac[]
 QED
 
 Theorem compile_abi_encode_frag:
