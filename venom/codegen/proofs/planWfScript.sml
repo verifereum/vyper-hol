@@ -425,6 +425,42 @@ QED
 
 (* ----- do_dup: wf + len ----- *)
 
+Theorem prefix_wf_append_iff[local]:
+  !xs ys lo n.
+    prefix_wf lo n (xs ++ ys) <=>
+    prefix_wf lo n xs /\ prefix_wf lo (prefix_end_len lo n xs) ys
+Proof
+  Induct >> simp[prefix_wf_def, prefix_end_len_def] >>
+  rpt gen_tac >> pairarg_tac >> simp[] >> metis_tac[]
+QED
+
+Theorem flat_map_singleton[local]:
+  !f xs. FLAT (MAP (\x. [f x]) xs) = MAP f xs
+Proof
+  Induct_on `xs` >> simp[]
+QED
+
+Theorem prefix_wf_indexed_restores[local]:
+  !idxs f lo n.
+    prefix_wf lo n (MAP (\i. SORestore (f i)) idxs) /\
+    prefix_end_len lo n (MAP (\i. SORestore (f i)) idxs) = n + LENGTH idxs
+Proof
+  Induct >> simp[] >> rpt gen_tac >>
+  simp[prefix_wf_def, prefix_end_len_def, stack_op_wf_def]
+QED
+
+Theorem prefix_wf_indexed_restore_swaps[local]:
+  !idxs f lo n.
+    0 < n ==>
+    prefix_wf lo n (FLAT (MAP (\i. [SORestore (f i); SOSwap 1]) idxs)) /\
+    prefix_end_len lo n (FLAT (MAP (\i. [SORestore (f i); SOSwap 1]) idxs)) =
+      n + LENGTH idxs
+Proof
+  Induct >> simp[] >> rpt gen_tac >> strip_tac >>
+  first_x_assum (qspecl_then [`f`, `lo`, `n + 1`] mp_tac) >>
+  simp[prefix_wf_def, prefix_end_len_def, stack_op_wf_def]
+QED
+
 Theorem do_dup_wf_len:
   !dist ps lo.
     dist < LENGTH ps.ps_stack ==>
@@ -438,10 +474,8 @@ Proof
     simp[do_dup_def, stack_dup_length] >>
     simp[prefix_wf_def, prefix_end_len_def, stack_op_wf_def]
   ) >>
-  (* Deep case: dist > 15. Same pattern as do_swap deep:
-     spill all dist+1 items, restore dist+2 items (dup adds 1). *)
   simp[do_dup_def] >>
-  qabbrev_tac `items = top_n (dist + 1) ps.ps_stack` >>
+  qabbrev_tac `items = REVERSE (top_n (dist - 15) ps.ps_stack)` >>
   qabbrev_tac `fres = FOLDL
     (\(ops,offs,al) (item:operand).
       (\(off,al'). (ops ++ [SOSpill off], SNOC off offs, al'))
@@ -451,17 +485,17 @@ Proof
     (qpat_x_assum `Abbrev ((fres0,_,_) = _)`
        (strip_assume_tac o GSYM o REWRITE_RULE [markerTheory.Abbrev_def]) >>
      drule (SIMP_RULE bool_ss [LET_THM] spill_foldl_form_nil) >> simp[]) >>
-  `LENGTH items = dist + 1` by
-    (fs[Abbr `items`, top_n_def, LENGTH_TAKE_EQ]) >>
+  `LENGTH items = dist - 15` by
+    (simp[Abbr `items`, top_n_def, LENGTH_TAKE] >> decide_tac) >>
+  `LENGTH fres1 <= LENGTH ps.ps_stack` by decide_tac >>
+  drule_then (qspec_then `lo` strip_assume_tac) prefix_wf_spills >>
   gvs[] >>
-  (* Restore ops already in MAP form; apply spill_restore_indexed_wf *)
-  qabbrev_tac `all_idxs =
-    REVERSE (GENLIST I (dist + 1) ++ [0])` >>
-  qspecl_then [`fres1`, `all_idxs`, `lo`, `LENGTH ps.ps_stack`]
-    mp_tac spill_restore_indexed_wf >>
-  impl_tac >- simp[] >>
-  simp[Abbr `all_idxs`, LENGTH_APPEND, LENGTH_REVERSE,
-       LENGTH_GENLIST, LENGTH_TAKE_EQ]
+  Cases_on `dist <= 31` >>
+  simp[prefix_wf_append_iff, prefix_end_len_append, MAP_APPEND,
+       flat_map_singleton, prefix_wf_indexed_restores,
+       prefix_wf_indexed_restore_swaps,
+       prefix_wf_def, prefix_end_len_def, stack_op_wf_def,
+       stack_dup_def, MAP_MAP_o, combinTheory.o_DEF]
 QED
 
 (* ----- Composition helper ----- *)
