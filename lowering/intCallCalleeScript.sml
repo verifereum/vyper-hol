@@ -8,8 +8,9 @@
  * stack-passed argument, the PARAM itself for a memory-passed one), and
  * the temporary return-value ALLOCA Python allocates.  Run from the state
  * setup_callee gives the INVOKE's callee, it establishes the statement
- * relation for the scope push_function builds from the arguments, at the
- * point the body's code starts.
+ * relation for the scope push_function builds from the arguments, where
+ * the prologue leaves off: before the immutables reservation of a
+ * constructor callee, the nonreentrant lock and the body.
  *
  * TOP-LEVEL:
  *   compile_internal_prologue   — the prologue as one compile action
@@ -19,14 +20,20 @@
  *                                 the scope the callee's body starts in
  *   internal_stack_size         — the bytes the stack-passed arguments'
  *                                 ALLOCAs take
+ *   compile_internal_prologue_entry — from setup_callee, the prologue
+ *                                 reaches its end in stmt_state_rel, with
+ *                                 the return PC and buffer bound
  *   compile_internal_prologue_code — the prologue's code is one open
  *                                 block with no terminator or INVOKE, and
  *                                 its compile env holds every argument
  *                                 through a pointer handed out before the
  *                                 body (local_ptrs_reserved)
- *   compile_internal_prologue_entry — from setup_callee, the prologue
- *                                 reaches the body's start in
- *                                 stmt_state_rel, with the return PC bound
+ *
+ * Helpers:
+ *   local_ptrs_rel_bind_ptr     — binding a name in scope to a region
+ *                                 holding its value keeps local_ptrs_rel
+ *   mat_pending, mat_inv, mat_frame — the materialization induction's
+ *                                 invariants (proof-internal)
  *
  * No alloca_room: under INVOKE's semantics the callee inherits the
  * caller's allocation frontier (setup_callee keeps vs_alloca_next), so
@@ -38,7 +45,7 @@
 
 Theory intCallCallee
 Ancestors
-  list rich_list finite_map indexedLists
+  list rich_list finite_map
   fragExec localPtrsProps exprLoweringProps loweringHalt
   moduleLowering stmtLowering exprLowering emitHelper context compileEnv
   valueEncoding valueEncodingProps venomMemDefs
@@ -186,7 +193,7 @@ End
 
 (* ===== The prologue's code ===== *)
 
-Theorem compile_internal_param_decls_shape:
+Theorem compile_internal_param_decls_shape[local]:
   !ps idx st r st'.
     compile_internal_param_decls ps idx st = (r, st') ==>
     SND r = idx + LENGTH ps /\
@@ -219,7 +226,7 @@ Proof
 QED
 
 (* Running the PARAMs binds each output to its argument. *)
-Theorem run_inst_seq_params:
+Theorem run_inst_seq_params[local]:
   !n id idx nv s.
     idx + n <= LENGTH s.vs_params /\ LENGTH s.vs_params < dimword (:256) ==>
     ?s'.
@@ -274,7 +281,7 @@ Proof
   simp[lookup_var_def, update_var_def, FLOOKUP_UPDATE]
 QED
 
-Theorem materialize_internal_params_shape:
+Theorem materialize_internal_params_shape[local]:
   !caps cenv st cenv' st'.
     materialize_internal_params cenv caps st = (cenv', st') ==>
     st'.cs_blocks = st.cs_blocks /\ st'.cs_current_bb = st.cs_current_bb /\
@@ -309,7 +316,7 @@ Proof
   rpt strip_tac >> gvs[FLOOKUP_UPDATE]
 QED
 
-Theorem materialize_internal_params_reserved:
+Theorem materialize_internal_params_reserved[local]:
  !caps cenv st cenv' st'.
  materialize_internal_params cenv caps st = (cenv',st') /\
  ALL_DISTINCT (MAP FST caps) /\
@@ -962,7 +969,7 @@ Proof
   simp[] >> qexists_tac `a` >> qexistsl_tac [`s`, `st`] >> simp[Abbr `s1`]
 QED
 
-Theorem materialize_run_compact[local]:
+Theorem materialize_run_compact:
   !caps cenv st cenv' st' func env s f0 mr.
     materialize_internal_params cenv caps st = (cenv',st') /\
     (!i. MEM i (DROP (LENGTH st.cs_current_insts) st'.cs_current_insts) ==>
@@ -1040,78 +1047,7 @@ Resume materialize_run_compact[stack]:
   simp[internal_stack_size_def] >> irule mat_frame_trans >>
   qexistsl_tac [`mid`, `t`] >> simp[not_fresh_at_def]
 QED
-Finalise materialize_run_compact
-
-(* Running the code materialize_internal_params emits for caps binds each
-   parameter's name to a pointer at its value: a stack-passed one's in a
-   fresh ALLOCA region at the frontier, a memory-passed one's at its
-   argument buffer mr, below the frontier f0 at entry. *)
-Theorem materialize_internal_params_run:
-  !caps cenv st cenv' st' func env s f0 mr.
-    materialize_internal_params cenv caps st = (cenv', st') /\
-    (!i. MEM i (DROP (LENGTH st.cs_current_insts) st'.cs_current_insts) ==>
-         MEM i (fn_insts func)) /\
-    fn_inst_ids_distinct func /\
-    ALL_DISTINCT (MAP FST caps) /\
-    EVERY (\c. ?p a off sz entry.
-         SND (SND c) = Var p /\ not_fresh_at st p /\ lookup_var p s = SOME a /\
-         FLOOKUP cenv.ce_vars (FST c) = SOME (MemLoc off sz) /\
-         FLOOKUP env (FST c) = SOME entry /\
-         type_memory_size entry.type <= sz /\
-         val_wf entry.type entry.value /\
-         if FST (SND c) then
-           32 <= sz /\
-           !b m. mem_word_at b m = a ==>
-                 val_in_memory entry.type entry.value b m
-         else
-           mr (FST c) = SOME (w2n a, sz) /\ w2n a + sz <= f0 /\
-           val_in_memory entry.type entry.value (w2n a) s.vs_memory) caps /\
-    (!n1 n2 b1 sz1 b2 sz2.
-       n1 <> n2 /\ mr n1 = SOME (b1, sz1) /\ mr n2 = SOME (b2, sz2) ==>
-       regions_disjoint b1 sz1 b2 sz2) /\
-    local_ptrs_rel func cenv [env] s /\ alloca_inv s /\
-    (!inst n base sz.
-       MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
-       inst.inst_operands = [Lit n] /\
-       FLOOKUP s.vs_allocas inst.inst_id = SOME (base, sz) ==> sz = w2n n) /\
-    fresh_vars_wrt st s /\
-    (!aid. aid IN FDOM s.vs_allocas ==> aid < st.cs_next_id) /\
-    (!aid b sz. FLOOKUP s.vs_allocas aid = SOME (b, sz) ==> f0 <= b) /\
-    f0 <= s.vs_alloca_next /\
-    (!n b sz. local_region cenv [env] s n b sz ==>
-              f0 <= b \/ mr n = SOME (b, sz)) /\
-    s.vs_alloca_next +
-      internal_stack_size cenv (MAP (\c. (FST c, FST (SND c))) caps)
-      < dimword (:256) ==>
-    ?s'.
-      run_inst_seq (DROP (LENGTH st.cs_current_insts) st'.cs_current_insts) s =
-        OK s' /\
-      local_ptrs_rel func cenv' [env] s' /\ alloca_inv s' /\
-      (!inst n base sz.
-         MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
-         inst.inst_operands = [Lit n] /\
-         FLOOKUP s'.vs_allocas inst.inst_id = SOME (base, sz) ==>
-         sz = w2n n) /\
-      fresh_vars_wrt st' s' /\
-      (!aid. aid IN FDOM s'.vs_allocas ==> aid < st'.cs_next_id) /\
-      (!x. not_fresh_at st x ==> lookup_var x s' = lookup_var x s) /\
-      (!aid b sz. FLOOKUP s'.vs_allocas aid = SOME (b, sz) ==> f0 <= b) /\
-      (!n b sz. local_region cenv' [env] s' n b sz ==>
-                f0 <= b \/ mr n = SOME (b, sz)) /\
-      s'.vs_alloca_next = s.vs_alloca_next +
-        internal_stack_size cenv (MAP (\c. (FST c, FST (SND c))) caps) /\
-      s' = s with <| vs_vars := s'.vs_vars; vs_memory := s'.vs_memory;
-                     vs_allocas := s'.vs_allocas;
-                     vs_alloca_next := s'.vs_alloca_next |>
-Proof
-  rpt gen_tac >> strip_tac >>
-  `mat_pending cenv env st s f0 mr caps` by simp[mat_pending_def] >>
-  `mat_inv func cenv env st s f0 mr` by
-    (simp[mat_inv_def] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  drule_all materialize_run_compact >> strip_tac >>
-  qexists_tac `t` >> fs[mat_inv_def, mat_frame_def] >>
-  rpt conj_tac >> first_assum ACCEPT_TAC
-QED
+Finalise materialize_run_compact[local]
 
 Theorem internal_args_local_memloc[local]:
   !cenv params env idx args frontier mem name entry.
@@ -1438,23 +1374,6 @@ Proof
 QED
 
 
-(* Running the prologue of an internal function func, compiled in cenv from
-   st0, at the head of func's entry block, to st1, from the state
-   setup_callee builds for an INVOKE of func with arguments args from the
-   state caller, reaches the point where the body's code starts in a state
-   s1 related at the scope env the source binds the parameters in:
-   - each parameter is a local held through a pointer variable: a
-     stack-passed one in a region of its own ALLOCA, holding its value, a
-     memory-passed one in its argument buffer;
-   - the return PC and the return buffer are in variables the body's code
-     does not assign;
-   - every result from s1 is one from the callee's entry state.
-   The global part of the relation (storage, transient, immutables, logs,
-   contexts) is that of the caller's state in cenv, which the hypothesis
-   on caller states with no scope.  There is no assumption on the room
-   left for allocations, beyond that the stack-passed parameters' regions
-   fit a word: alloca_room fails at callee entry, as the caller's frontier
-   carries over. *)
 Theorem scratch_alloca_run[local]:
   !func cenv scopes st s n.
     local_ptrs_rel func cenv scopes s /\ alloca_inv s /\
@@ -1691,7 +1610,7 @@ Proof
   simp[]
 QED
 
-Theorem compile_internal_prologue_shape:
+Theorem compile_internal_prologue_shape[local]:
   !cenv params has_rb ret_type st cenv' rpc st'.
     compile_internal_prologue cenv params has_rb ret_type st = ((cenv',rpc),st') ==>
     st'.cs_blocks = st.cs_blocks /\ st'.cs_current_bb = st.cs_current_bb /\
@@ -1877,7 +1796,7 @@ Proof
 QED
 
 
-Theorem internal_prologue_run[local]:
+Theorem internal_prologue_run:
   !cenv params has_rb ret_type st0 cenv2 return_pc st1 func args caller
    s0 f cx vs env.
     compile_internal_prologue cenv params has_rb ret_type st0 =
@@ -2015,8 +1934,28 @@ Resume internal_prologue_run[returns]:
   conj_tac >- fs[mat_frame_def] >>
   drule materialize_internal_params_shape >> strip_tac >> simp[]
 QED
-Finalise internal_prologue_run
+Finalise internal_prologue_run[local]
 
+(* Running the prologue of an internal function func, compiled in cenv from
+   st0, at the head of func's entry block, to st1, from the state
+   setup_callee builds for an INVOKE of func with arguments args from the
+   state caller, reaches the point where the prologue leaves off (before the
+   immutables reservation of a constructor callee, the nonreentrant lock
+   and the body) in a state
+   s1 related at the scope env the source binds the parameters in:
+   - each parameter is a local held through a pointer variable: a
+     stack-passed one in a region of its own ALLOCA, holding its value, a
+     memory-passed one in its argument buffer;
+   - the return PC and the return buffer are in variables the body's code
+     does not assign;
+   - every result from s1 other than an Error is one from the callee's
+     entry state.
+   The global part of the relation (storage, transient, immutables, logs,
+   contexts) is that of the caller's state in cenv, which the hypothesis
+   on caller states with no scope.  There is no assumption on the room
+   left for allocations, beyond that the stack-passed parameters' regions
+   fit a word: alloca_room fails at callee entry, as the caller's frontier
+   carries over. *)
 Theorem compile_internal_prologue_entry:
   !cenv params has_rb ret_type st0 cenv2 return_pc st1 func ctx args caller
    s0 f cx vs env.
@@ -2066,16 +2005,7 @@ Proof
 QED
 
 
-(* The prologue's code is one open block of straight-line code, and it
-   leaves the compile env the body is compiled in with each parameter held
-   through a pointer variable of its own that the body's code does not
-   assign, when cenv holds the parameters, all at MemLoc slots, and no
-   other local.  build_compile_env gives internal functions such a cenv
-   only when they have no locals besides their parameters: it still
-   allocates MemLoc slots for the others (allocate_locals), which the body
-   never uses, since ce_alloca_locals has declarations allocate their own
-   ALLOCA. *)
-Theorem compile_internal_prologue_reserved:
+Theorem compile_internal_prologue_reserved[local]:
   !cenv params has_rb ret_type st0 cenv2 return_pc st1.
     compile_internal_prologue cenv params has_rb ret_type st0 =
       ((cenv2, return_pc), st1) /\
@@ -2118,6 +2048,15 @@ Proof
   rpt strip_tac >> first_x_assum drule >> simp[]
 QED
 
+(* The prologue's code is one open block of straight-line code, and it
+   leaves the compile env the body is compiled in with each parameter held
+   through a pointer variable of its own that the body's code does not
+   assign, when cenv holds the parameters, all at MemLoc slots, and no
+   other local.  build_compile_env gives internal functions such a cenv
+   only when they have no locals besides their parameters: it still
+   allocates MemLoc slots for the others (allocate_locals), which the body
+   never uses, since ce_alloca_locals has declarations allocate their own
+   ALLOCA. *)
 Theorem compile_internal_prologue_code:
   !cenv params has_rb ret_type st0 cenv2 return_pc st1.
     compile_internal_prologue cenv params has_rb ret_type st0 =
