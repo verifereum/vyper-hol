@@ -114,7 +114,11 @@ QED
    fixtures/exports/in_static_array/test_in_static_array.py at the pinned
    compiler: a source deployment, then each call's output as Vyper's EVM
    produced it. *)
-val () = holbuild_extra_deps ["fixtures/exports/in_static_array/test_in_static_array.json"];
+val () = holbuild_extra_deps [
+  "fixtures/exports/in_static_array/test_in_static_array.json",
+  "fixtures/exports/in_static_array/test_in_static_array.json.provenance",
+  "fixtures/exports/in_static_array/test_in_static_array.py"
+];
 val () = make_definitions_for_file
   ("in_static_array", "fixtures/exports/in_static_array/test_in_static_array.json");
 val traces = all_traces "-";
