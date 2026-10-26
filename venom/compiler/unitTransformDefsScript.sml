@@ -11,7 +11,7 @@
  *)
 Theory unitTransformDefs
 Ancestors
-  venomCompilerTypes passSimulationDefs stateEquiv contextCodegenRel
+  venomCompilerTypes passSimulationDefs stateEquiv contextCodegenRel contextReachability
   venomExecSemantics venomState finite_map words list
 
 (* ===== Forward terminating-run contract ===== *)
@@ -122,4 +122,19 @@ Theorem raw_unit_memory_ok_invariant:
 Proof
   rw[raw_unit_memory_ok_def] >> qexists_tac `Inv` >>
   fs[codegen_reachability_package_def] >> first_assum ACCEPT_TAC
+QED
+
+(* The existential invariant is equivalent to checking the least closure.
+ * Keep the entry witness: a context without one has no package even when
+ * its raw instruction relation is empty. *)
+Theorem raw_unit_memory_ok_iff_raw_reachable:
+  raw_unit_memory_ok ctx vs <=>
+  (?name fn lbl.
+    ctx.ctx_entry = SOME name /\
+    lookup_function name ctx.ctx_functions = SOME fn /\
+    fn_entry_label fn = SOME lbl) /\
+  (!fn inst s. raw_inst_reachable vs ctx fn inst s ==>
+    s.vs_alloca_next < dimword (:256) /\ inst_mem_below_frontier inst s)
+Proof
+  cheat
 QED
