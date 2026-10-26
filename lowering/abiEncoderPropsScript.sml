@@ -3217,6 +3217,233 @@ QED
      moves the cell, if there are dynamic elements, past the tails;
    - dyn_loop writes a dynamic array's encoding after its length word at
      dst and returns the encoding's whole length. *)
+(* Persistent loop facts deliberately exclude the changing counter contents. *)
+Definition enc_loop_ctx_def:
+  enc_loop_ctx st st' ops lo top tv v src outs s0 count_ptr ip s <=>
+    enc_pre st st' ops lo top tv v src outs s /\
+    enc_frame st st' lo top outs s0 s /\
+    s.vs_labels = s0.vs_labels /\
+    eval_operand count_ptr s = SOME (n2w ip) /\
+    FLOOKUP s.vs_allocas st.cs_next_id = SOME (ip,32) /\ lo <= ip
+End
+
+Theorem enc_pre_transport:
+  enc_pre st st' ops lo top tv v src outs s0 /\ value_has_type tv v /\
+  enc_frame st st' lo top outs s0 s ==>
+  enc_pre st st' ops lo top tv v src outs s
+Proof
+  rpt strip_tac >>
+  `val_in_memory tv v src s.vs_memory` by
+    (drule enc_frame_preserves_source >>
+     disch_then irule >> fs[enc_pre_def, EVERY_MEM] >>
+     rpt strip_tac >> rename1 `MEM e outs` >> Cases_on `e` >>
+     first_x_assum drule >> simp[]) >>
+  fs[enc_pre_def, enc_frame_def]
+QED
+
+Theorem enc_frame_mstore_scratch:
+  enc_scratch (frag_ids st st') lo top s /\
+  j IN frag_ids st st' /\ FLOOKUP s.vs_allocas j = SOME (ip,32) ==>
+  enc_frame st st' lo top outs s (mstore ip w s)
+Proof
+  strip_tac >>
+  drule enc_frame_mstore >> disch_then (qspecl_then [`w`, `ip`] mp_tac) >>
+  rewrite_tac[enc_frame_def] >> strip_tac >> asm_rewrite_tac[] >>
+  rpt strip_tac >>
+  qpat_x_assum `!a. _ ==> mem_bytes_at _ _ _ = _` irule >>
+  fs[mstore_def] >> metis_tac[]
+QED
+
+Theorem enc_loop_ctx_from_frame:
+  enc_pre st st' ops lo top tv v src outs s0 /\ value_has_type tv v /\
+  enc_frame st st' lo top outs s0 s /\ s.vs_labels = s0.vs_labels /\
+  eval_operand count_ptr s = SOME (n2w ip) /\
+  FLOOKUP s.vs_allocas st.cs_next_id = SOME (ip,32) /\ lo <= ip ==>
+  enc_loop_ctx st st' ops lo top tv v src outs s0 count_ptr ip s
+Proof
+  strip_tac >> simp[enc_loop_ctx_def] >> metis_tac[enc_pre_transport]
+QED
+
+Theorem enc_loop_ctx_jump[simp]:
+  enc_loop_ctx st st' ops lo top tv v src outs s0 count_ptr ip
+    (jump_to lbl s) =
+  enc_loop_ctx st st' ops lo top tv v src outs s0 count_ptr ip s
+Proof
+  simp[enc_loop_ctx_def, enc_frame_jump, enc_pre_def, enc_scratch_def,
+       jump_to_def, venomMemDefsTheory.alloca_inv_def,
+       venomMemDefsTheory.allocas_non_overlapping_def,
+       venomMemDefsTheory.alloca_next_valid_def]
+QED
+
+Theorem enc_loop_ctx_source:
+  enc_loop_ctx st st' ops lo top tv v src outs s0 count_ptr ip s ==>
+  val_in_memory tv v src s.vs_memory
+Proof
+  simp[enc_loop_ctx_def, enc_pre_def]
+QED
+
+Theorem enc_loop_ctx_operand:
+  enc_loop_ctx st st' ops lo top tv v src outs s0 count_ptr ip s /\
+  MEM op ops /\ eval_operand op s0 = SOME w ==>
+  eval_operand op s = SOME w
+Proof
+  strip_tac >> fs[enc_loop_ctx_def, enc_pre_def] >>
+  drule enc_frame_preserves_operand >> disch_then irule >>
+  simp[] >> rpt strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Theorem enc_loop_ctx_bounds:
+  enc_loop_ctx st st' ops lo top tv v src outs s0 count_ptr ip s ==>
+  src + type_memory_size tv <= lo /\ lo <= ip /\
+  ip + 32 <= top /\ top < dimword (:256)
+Proof
+  simp[enc_loop_ctx_def] >> strip_tac >>
+  drule enc_pre_bounds >> strip_tac >>
+  `enc_scratch (frag_ids st st') lo top s` by fs[enc_pre_def] >>
+  drule_all enc_scratch_alloca_bound >> fs[]
+QED
+
+Theorem enc_static_loop_init_code:
+  enc_static_loop_init st = ((count_ptr,hdr,body_lbl,exit),si) ==>
+  ?buf sa sz.
+    compile_alloc_buffer 32 st = (buf,sa) /\
+    emit_void MSTORE [buf.buf_operand; Lit 0w] sa = ((),sz) /\
+    count_ptr = buf.buf_operand /\
+    emitted_insts st si = emitted_insts st sa ++ emitted_insts sa sz /\
+    same_blocks st si /\
+    EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+      (emitted_insts st si) /\
+    si.cs_current_insts = st.cs_current_insts ++ emitted_insts st si
+Proof
+  simp[enc_static_loop_init_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def, fresh_label_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  drule emitted_insts_emit_void >> strip_tac >>
+  drule emit_void_same_blocks >> strip_tac >>
+  rename1 `emit_void MSTORE _ sa = ((),sz)` >>
+  qpat_x_assum `compile_alloc_buffer _ _ = _` mp_tac >>
+  simp[contextTheory.compile_alloc_buffer_def, comp_bind_def, comp_return_def] >>
+  pairarg_tac >> strip_tac >> gvs[] >>
+  drule emitted_insts_emit_op >> strip_tac >>
+  drule emit_op_same_blocks >> strip_tac >>
+  rename1 `emit_void MSTORE _ sa = ((),sz)` >>
+  `emitted_insts st sz = emitted_insts st sa ++ emitted_insts sa sz` by
+    (irule emitted_insts_append >> simp[]) >>
+  simp[emitted_insts_def, same_blocks_def, mk_inst_def, is_terminator_def] >>
+  gvs[same_blocks_def, DROP_APPEND, is_terminator_def] >>
+  `LENGTH st.cs_current_insts - (LENGTH st.cs_current_insts + 1) = 0` by
+    decide_tac >> simp[is_terminator_def]
+QED
+
+Theorem enc_static_loop_init_run:
+  enc_static_loop_init st = ((count_ptr,hdr,body_lbl,exit),si) /\
+  st.cs_next_id IN frag_ids st z /\
+  enc_scratch (frag_ids st z) lo top s0 ==>
+  ?ip s. run_inst_seq (emitted_insts st si) s0 = OK s /\
+    lo <= ip /\ ip + 32 <= top /\
+    eval_operand count_ptr s = SOME (n2w ip) /\
+    FLOOKUP s.vs_allocas st.cs_next_id = SOME (ip,32) /\
+    mem_word_at ip s.vs_memory = 0w /\ s.vs_labels = s0.vs_labels /\
+    enc_frame st z lo top outs s0 s
+Proof
+  strip_tac >> drule enc_static_loop_init_code >> strip_tac >>
+  `FINITE (frag_ids st z)` by simp[] >>
+  drule_all enc_compile_alloc_buffer_run >> strip_tac >>
+  `enc_frame st z lo top outs s0 t` by
+    (simp[enc_frame_def] >> rpt strip_tac >> metis_tac[]) >>
+  `enc_frame st z lo top outs t (mstore b 0w t)` by
+    (irule enc_frame_mstore_scratch >> simp[] >>
+     qexists_tac `st.cs_next_id` >> simp[]) >>
+  qexistsl_tac [`b`, `mstore b 0w t`] >>
+  conj_tac
+  >- (asm_rewrite_tac[] >> drule run_inst_seq_append >>
+      disch_then (qspec_then `emitted_insts sa sz` SUBST1_TAC) >>
+      drule emitted_insts_emit_void >> strip_tac >>
+      `b < dimword (:256)` by
+        (qpat_assum `enc_scratch _ _ _ s0` mp_tac >>
+         pure_rewrite_tac[enc_scratch_def] >> strip_tac >> decide_tac) >>
+      simp[run_inst_seq_def, step_inst_base_def, mk_inst_def,
+           exec_write2_def, eval_operand_def]) >>
+  simp[eval_operand_mstore, valueEncodingPropsTheory.mstore_mem_word_at_same] >>
+  conj_tac >- simp[mstore_def] >>
+  metis_tac[enc_frame_trans]
+QED
+
+Theorem enc_static_loop_init_frag:
+  enc_static_loop_init st = ((count_ptr,hdr,body_lbl,exit),si) /\
+  st.cs_next_id IN frag_ids st z /\
+  enc_pre st z ops lo top tv v src outs s0 /\ value_has_type tv v ==>
+  frag_exec ctx st si (\s. s = s0)
+    (\s. ?ip. enc_array_inv
+       (enc_loop_ctx st z ops lo top tv v src outs s0 count_ptr ip)
+       p B ts avs ip NONE 0 s) R
+Proof
+  strip_tac >>
+  `enc_scratch (frag_ids st z) lo top s0` by fs[enc_pre_def] >>
+  drule_all enc_static_loop_init_run >>
+  disch_then (qspec_then `outs` strip_assume_tac) >>
+  drule enc_static_loop_init_code >> strip_tac >>
+  fs[same_blocks_def] >> irule frag_exec_run_inst_seq >>
+  asm_simp_tac (srw_ss()) [rich_listTheory.IS_PREFIX_APPEND] >>
+  qexists_tac `ip` >> irule enc_array_inv_zero >>
+  simp[] >> irule enc_loop_ctx_from_frame >>
+  simp[enc_frame_inst_idx] >>
+  Cases_on `buf.buf_operand` >> fs[eval_operand_def, lookup_var_def]
+QED
+
+Theorem enc_loop_ctx_dynarray_source:
+  enc_loop_ctx st z ops lo top (ArrayTV tv (Dynamic n))
+    (ArrayV (DynArrayV vs)) src outs s0 count_ptr ip s /\ k < LENGTH vs ==>
+  mem_word_at src s.vs_memory = n2w (LENGTH vs) /\
+  val_in_memory tv (EL k vs) (src + 32 + k * type_memory_size tv) s.vs_memory
+Proof
+  strip_tac >> drule enc_loop_ctx_source >>
+  simp[valueEncodingProofsTheory.val_in_memory_dynarray_proof] >> strip_tac >>
+  drule_all elems_in_memory_EL >> simp[]
+QED
+
+Theorem enc_loop_ctx_dynarray_bounds:
+  enc_loop_ctx st z ops lo top (ArrayTV tv (Dynamic n))
+    (ArrayV (DynArrayV vs)) src outs s0 count_ptr ip s /\
+  value_has_type (ArrayTV tv (Dynamic n)) (ArrayV (DynArrayV vs)) /\
+  k < LENGTH vs ==>
+  value_has_type tv (EL k vs) /\
+  src + 32 + k * type_memory_size tv + type_memory_size tv <= lo /\
+  src + 32 + k * type_memory_size tv < dimword (:256)
+Proof
+  strip_tac >> drule enc_loop_ctx_bounds >> strip_tac >>
+  fs[value_has_type_def, type_memory_size_def] >>
+  conj_tac
+  >- (fs[all_have_type_EVERY, EVERY_EL] >> metis_tac[]) >>
+  `SUC k <= n` by decide_tac >>
+  `SUC k * type_memory_size tv <= n * type_memory_size tv` by
+    simp[arithmeticTheory.LE_MULT_RCANCEL] >>
+  qpat_x_assum `SUC k * _ <= _` mp_tac >>
+  pure_rewrite_tac[arithmeticTheory.MULT_CLAUSES] >> decide_tac
+QED
+
+Theorem enc_loop_ctx_array_slot:
+  enc_loop_ctx st z ops lo top tv v src outs s0 count_ptr ip s /\
+  MEM (dst,32 + len * asz) outs /\ k < len ==>
+  dst + 32 + k * asz + asz <= lo /\
+  dst + 32 + k * asz < dimword (:256) /\
+  regions_disjoint (src,type_memory_size tv) (dst + 32 + k * asz,asz)
+Proof
+  strip_tac >> drule enc_loop_ctx_bounds >> strip_tac >>
+  `dst + (32 + len * asz) <= lo /\
+   regions_disjoint (src,type_memory_size tv) (dst,32 + len * asz)` by
+    (qpat_x_assum `enc_loop_ctx _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     pure_rewrite_tac[enc_loop_ctx_def, enc_pre_def] >> strip_tac >>
+     qpat_x_assum `EVERY _ outs` mp_tac >>
+     rewrite_tac[EVERY_MEM] >> disch_then drule >> simp[]) >>
+  `SUC k * asz <= len * asz` by simp[arithmeticTheory.LE_MULT_RCANCEL] >>
+  qpat_x_assum `SUC k * asz <= _` mp_tac >>
+  pure_rewrite_tac[arithmeticTheory.MULT_CLAUSES] >> strip_tac >>
+  conj_tac >- decide_tac >> conj_tac >- (fs[] >> decide_tac) >>
+  drule regions_disjoint_subregions >> disch_then irule >> simp[] >>
+  decide_tac
+QED
+
 Theorem compile_abi_encode_frag:
   (!dst child_ptr ei is_dyn static_ofst dyn_ptr st op st' ctx env ty tv v
     av s0 dst_w src_w lo top.
