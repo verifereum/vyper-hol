@@ -58,6 +58,7 @@ Ancestors
   exprLowering compileEnv
   vyperAST vyperInterpreter vyperState vyperTypeSystem vyperTypeCallGraph
   vyperTyping vyperTypeInvariants vyperTypeExprResult vyperTypeExprSoundness
+  vyperStatePreservation
 
 (* ===== Compile-side facts ===== *)
 
@@ -143,34 +144,24 @@ Proof
   irule compile_bop_sim >> rpt conj_tac
   >~ [`binop_frag`]
   >- (rpt gen_tac >> strip_tac >>
-      qspecl_then [`cenv`, `cx`, `env`, `e1`, `es`, `INL (Value v1)`, `es1`]
+      qspecl_then [`cenv`, `cx`, `env`, `e1`, `es`, `INL v1`, `es1`]
         mp_tac expr_sim_pre_word_result >>
       impl_tac >- gvs[] >> strip_tac >>
-      first_x_assum (qspec_then `Value v1` mp_tac) >> simp[] >> strip_tac >>
+      first_x_assum (qspec_then `v1` mp_tac) >> simp[] >> strip_tac >>
       rename1 `value_has_type tv1 v1` >>
       `expr_sim_pre cenv cx env e2 es1` by (first_assum irule >> simp[]) >>
       conj_tac >- gvs[] >>
       conj_tac
-      >- (rpt strip_tac >>
-          qspecl_then [`cenv`, `cx`, `env`, `e2`, `es1`, `INL tv`, `es2`] mp_tac
-            expr_sim_pre_word_result >>
-          impl_tac >- gvs[] >> strip_tac >> gvs[]) >>
-      conj_tac
       >- metis_tac[expr_sim_ok_apply] >>
       rpt gen_tac >> strip_tac >>
-      qspecl_then [`cenv`, `cx`, `env`, `e2`, `es1`, `INL (Value v2)`, `es2`]
+      qspecl_then [`cenv`, `cx`, `env`, `e2`, `es1`, `INL v2`, `es2`]
         mp_tac expr_sim_pre_word_result >>
       impl_tac >- gvs[] >> strip_tac >>
-      first_x_assum (qspec_then `Value v2` mp_tac) >> simp[] >>
+      first_x_assum (qspec_then `v2` mp_tac) >> simp[] >>
       strip_tac >> rename1 `value_has_type tv2 v2` >> simp[] >>
       qspecl_then [`ctx`, `func`, `cenv`, `cx`, `bop`, `ann`, `e1`, `e2`,
                    `v1`, `v2`, `es2`, `tv1`, `tv2`] mp_tac binop_frag_typed >>
       impl_tac >- gvs[] >> simp[])
-  >~ [`eval_expr cx e1 es = (INL _, _)`]
-  >- (rpt strip_tac >>
-      qspecl_then [`cenv`, `cx`, `env`, `e1`, `es`, `INL tv`, `es1`] mp_tac
-        expr_sim_pre_word_result >>
-      impl_tac >- gvs[] >> strip_tac >> gvs[])
   >~ [`compile_binop`]
   >- (rpt gen_tac >> strip_tac >> drule compile_binop_shape >> simp[])
   >~ [`lower_value`]
@@ -276,19 +267,43 @@ Proof
      byte_widths_expr_def] >> gvs[]
 QED
 
-(* A result of a word type is a value: an ArrayRef is typed by an array
-   type, a HashMapRef by NoneTV. *)
-Theorem word_type_toplevel_value:
-  !t tenv tyv x.
-    is_word_type t /\ evaluate_type tenv t = SOME tyv /\
-    toplevel_value_typed x tyv ==>
+(* A conditional retains a place only for a memory aggregate. *)
+Theorem word_type_conditional_result_value:
+  !t env cx st source x.
+    is_word_type t /\ eval_result_typed (env,cx,st) x (Type t) /\
+    conditional_result cx source st = (INL x,st) ==>
     is_Value x
 Proof
-  Cases >> rw[is_word_type_def] >>
-  TRY (rename1 `BaseT bt` >> Cases_on `bt` >> gvs[is_word_type_def]) >>
-  TRY (rename1 `BytesT bd` >> Cases_on `bd` >> gvs[is_word_type_def]) >>
-  gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs()] >>
-  Cases_on `x` >> gvs[toplevel_value_typed_def]
+  rpt strip_tac >> Cases_on `x` >> gvs[] >>
+  Cases_on `source` >>
+  gvs[conditional_result_def, bind_def, return_def, raise_def, AllCaseEqs()] >>
+  qmatch_asmsub_abbrev_tac `if keep then _ else _` >>
+  Cases_on `keep` >> gvs[bind_def, return_def, AllCaseEqs()] >>
+  gvs[eval_result_typed_def, runtime_place_typed_def] >>
+  imp_res_tac vyperStateTheory.place_type_value_state >> gvs[] >>
+  Cases_on `t` >>
+  gvs[is_word_type_def, vyperValueTheory.evaluate_type_def, AllCaseEqs()]
+QED
+
+Theorem expr_sim_pre_ifexp_word_readable:
+  !cenv cx env t c a b es res es'.
+    expr_sim_pre cenv cx env (IfExp t c a b) es /\ is_word_type t /\
+    eval_expr cx (IfExp t c a b) es = (res,es') ==>
+    expr_read_res_ok cx es' res
+Proof
+  rpt strip_tac >> drule_all expr_sim_pre_eval_result >> strip_tac >>
+  Cases_on `res`
+  >- (rename1 `eval_expr _ _ _ = (INL r,_)` >>
+      `is_Value r` by
+        (qpat_x_assum `eval_expr _ (IfExp _ _ _ _) _ = _` mp_tac >>
+         simp[NoAsms, Once evaluate_def, bind_def, switch_BoolV_def, AllCaseEqs()] >>
+         strip_tac >> imp_res_tac read_result_state >>
+         imp_res_tac vyperStatePreservationTheory.conditional_result_state >> gvs[] >>
+         gvs[expr_type_def] >>
+         drule_all word_type_conditional_result_value >> simp[]) >>
+      Cases_on `r` >> gvs[expr_read_res_ok_def, read_result_def, return_def]) >>
+  drule_all expr_sim_pre_vv_res_ok >>
+  simp[expr_vv_res_ok_def, expr_read_res_ok_def, expr_res_ok_def]
 QED
 
 (* A ternary of a word type: compile_ifexp_vv_sim (exprSimIfExp), with the
@@ -304,19 +319,12 @@ Proof
      simp[vyperASTTheory.expr_size_def]) >>
   fs[expr_ok_def] >>
   simp[expr_vv_sim_def] >> rpt gen_tac >> strip_tac >>
-  `expr_res_ok res` by
-    (qspecl_then [`cenv`, `cx`, `env`, `IfExp t c a b`, `es`, `res`, `es'`]
-       mp_tac expr_sim_pre_res_ok >> simp[] >> disch_then irule >>
-     rpt strip_tac >>
-     drule_all expr_sim_pre_eval >> strip_tac >>
-     first_x_assum drule >>
-     simp[expr_result_typed_def, expr_runtime_typed_def,
-          vyperASTTheory.expr_type_def] >>
-     metis_tac[word_type_toplevel_value]) >>
+  `expr_read_res_ok cx es' res` by
+    metis_tac[expr_sim_pre_ifexp_word_readable] >>
   qspecl_then [`ctx`, `func`, `cenv`, `cx`, `ty`, `t`, `c`, `a`, `b`, `es`]
     mp_tac compile_ifexp_vv_sim >>
   impl_tac
-  >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
+  >- (simp[] >> rpt conj_tac
       >- (rpt gen_tac >> strip_tac >> drule lower_value_word_shape >>
           gvs[is_word_type_def])
       >- (rpt gen_tac >> strip_tac >> drule lower_value_word_shape >> gvs[])
@@ -330,11 +338,8 @@ QED
    memory arrays, structs and strings (#561).  Cheated: compile_ifexp_vv_sim
    needs the compile-state shape of the branches' lower_value, which for a
    non-word type is #674's compile_expr_shape, and that gives neither
-   cs_next_id's growth nor the shape under expr_sim_inv yet.  A ternary over
-   storage or transient arrays has an ArrayRef result and a memory copy,
-   which vv_holds relates through materialise; its branches' results are
-   not expr_res_ok, so it needs their expr_vv_sim and unwrap_value's copy
-   rather than their expr_sim (#575). *)
+   cs_next_id's growth nor the shape under expr_sim_inv yet.  A ternary over storage or transient arrays copies its value to memory;
+   retained memory aggregate places are related through read_result. *)
 Theorem compile_ifexp_aggregate_sim:
   !cenv t c a b.
     expr_sim_below cenv (expr_size (IfExp t c a b)) /\ ~is_word_type t ==>
