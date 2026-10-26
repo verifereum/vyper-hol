@@ -64,3 +64,15 @@ Proof
   simp[consume_call_outcome_def] >> pairarg_tac >> simp[] >>
   pairarg_tac >> simp[]
 QED
+
+(* No output buffer size can change a completion with empty returndata. *)
+Theorem consume_call_outcome_empty_output_size:
+  !rq ro rs s w t rs'.
+    consume_call_outcome rq ro rs s = (w,t) /\ t.vs_returndata = [] ==>
+    consume_call_outcome rq ro rs' s = (w,t)
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[consume_call_outcome_def, Excl "consume_call_outcome_eq"] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  gvs[]
+QED
