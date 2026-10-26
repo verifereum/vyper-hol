@@ -10,6 +10,9 @@
  *   compile_literal_vv_correct  — word literal case
  *   compile_name_correct     — variable lookup case
  *   compile_binop_correct    — binary operation case
+ *   compile_expr_grows, compile_binop_grows — compile_expr, lower_value
+ *                              and compile_binop only append (cs_extends)
+ *                              and grow the counters
  *
  * Helper:
  *   state_rel_jump_to, state_rel_push_scope, state_rel_pop_scope,
@@ -917,28 +920,26 @@ QED
 (* ===== ci_mono: Compile monad monotonicity ===== *)
 
 (* ci_mono st st' holds when the compile state transition from st to st'
-   either (1) appends to cs_current_insts without changing cs_blocks, or
-   (2) cs_blocks grew (meaning new_block was called, which resets ci).
-   This is the key invariant for all compile monad operations. *)
+   only appends code (cs_extends) and hands out variables and instruction
+   ids from st's counters on.  This is the key invariant for all compile
+   monad operations. *)
 Definition ci_mono_def:
   ci_mono (st:compile_state) (st':compile_state) ⇔
-    (isPREFIX st.cs_current_insts st'.cs_current_insts ∧
-     st'.cs_blocks = st.cs_blocks) ∨
-    LENGTH st'.cs_blocks > LENGTH st.cs_blocks
+    cs_extends st st' ∧ st.cs_next_var ≤ st'.cs_next_var ∧
+    st.cs_next_id ≤ st'.cs_next_id
 End
 
 Theorem ci_mono_refl[local]:
   ci_mono st st
 Proof
-  simp[ci_mono_def]
+  simp[ci_mono_def, cs_extends_refl]
 QED
 
 Theorem ci_mono_trans[local]:
   ci_mono a b ∧ ci_mono b c ⇒ ci_mono a c
 Proof
   simp[ci_mono_def] >> rpt strip_tac >> gvs[] >>
-  irule rich_listTheory.IS_PREFIX_TRANS >>
-  qexists `b.cs_current_insts` >> simp[]
+  irule cs_extends_trans >> qexists `b` >> simp[]
 QED
 
 (* ci_mono composes through monad_bind (= comp_bind) *)
@@ -980,71 +981,79 @@ Theorem ci_mono_same_blocks_isPREFIX[local]:
   ci_mono st st' ∧ same_blocks st st' ⇒
   isPREFIX st.cs_current_insts st'.cs_current_insts
 Proof
-  rw[ci_mono_def, same_blocks_def] >> gvs[]
+  rw[ci_mono_def, same_blocks_def, cs_extends_def] >>
+  gvs[listTheory.APPEND_EQ_SELF]
 QED
 
 (* ci_mono for primitives *)
 Theorem ci_mono_comp_return[local]:
   ∀ x sa. ci_mono sa (SND (comp_return x sa))
 Proof
-  simp[comp_return_def, ci_mono_def]
+  simp[comp_return_def, ci_mono_refl]
 QED
 
 Theorem ci_mono_emit[local]:
   ∀ inst sa. ci_mono sa (SND (emit inst sa))
 Proof
-  simp[emit_def, ci_mono_def, rich_listTheory.IS_PREFIX_APPEND3]
+  rpt gen_tac >> Cases_on `emit inst sa` >> drule cs_extends_emit >>
+  gvs[ci_mono_def, emit_def]
 QED
 
 Theorem ci_mono_fresh_var[local]:
   ∀ sa. ci_mono sa (SND (fresh_var sa))
 Proof
-  simp[fresh_var_def, ci_mono_def]
+  gen_tac >> Cases_on `fresh_var sa` >> drule cs_extends_fresh_var >>
+  gvs[ci_mono_def, fresh_var_def]
 QED
 
 Theorem ci_mono_fresh_id[local]:
   ∀ sa. ci_mono sa (SND (fresh_id sa))
 Proof
-  simp[fresh_id_def, ci_mono_def]
+  gen_tac >> Cases_on `fresh_id sa` >> drule cs_extends_fresh_id >>
+  gvs[ci_mono_def, fresh_id_def]
 QED
 
 Theorem ci_mono_fresh_label[local]:
   ∀ pfx sa. ci_mono sa (SND (fresh_label pfx sa))
 Proof
-  simp[fresh_label_def, ci_mono_def]
+  rpt gen_tac >> Cases_on `fresh_label pfx sa` >>
+  drule cs_extends_fresh_label >> gvs[ci_mono_def, fresh_label_def]
 QED
 
 Theorem ci_mono_new_block[local]:
   ∀ label sa. ci_mono sa (SND (new_block label sa))
 Proof
-  simp[new_block_def, LET_THM, ci_mono_def]
+  rpt gen_tac >> Cases_on `new_block label sa` >>
+  drule cs_extends_new_block >> gvs[ci_mono_def, new_block_def]
 QED
+
+(* Sequence ci_mono through binds, lets and conditionals, down to the
+   operations named in rws. *)
+fun ci_mono_chain_tac rws =
+  rpt (FIRST [irule ci_mono_bind, irule ci_mono_ignore_bind, IF_CASES_TAC] >>
+       rpt conj_tac >> rpt gen_tac >> PURE_REWRITE_TAC[LET_THM] >> BETA_TAC) >>
+  simp (ci_mono_comp_return :: rws);
+
+val ci_mono_prim_rws =
+  [ci_mono_emit, ci_mono_fresh_var, ci_mono_fresh_id, ci_mono_fresh_label,
+   ci_mono_new_block];
 
 Theorem ci_mono_emit_op[local]:
   ∀ opc ops sa. ci_mono sa (SND (emit_op opc ops sa))
 Proof
-  simp[emit_op_def, comp_bind_def, comp_ignore_bind_def,
-       fresh_id_def, fresh_var_def, emit_def, comp_return_def,
-       venomInstTheory.mk_inst_def, pairTheory.UNCURRY,
-       ci_mono_def, rich_listTheory.IS_PREFIX_APPEND3]
+  rw[emit_op_def] >> ci_mono_chain_tac ci_mono_prim_rws
 QED
 
 Theorem ci_mono_emit_void[local]:
   ∀ opc ops sa. ci_mono sa (SND (emit_void opc ops sa))
 Proof
-  simp[emit_void_def, comp_bind_def, comp_ignore_bind_def,
-       fresh_id_def, emit_def, comp_return_def,
-       venomInstTheory.mk_inst_def, pairTheory.UNCURRY,
-       ci_mono_def, rich_listTheory.IS_PREFIX_APPEND3]
+  rw[emit_void_def] >> ci_mono_chain_tac ci_mono_prim_rws
 QED
 
 Theorem ci_mono_emit_inst[local]:
   ∀ opc ops outs sa. ci_mono sa (SND (emit_inst opc ops outs sa))
 Proof
-  simp[emit_inst_def, comp_bind_def, comp_ignore_bind_def,
-       fresh_id_def, emit_def, comp_return_def,
-       venomInstTheory.mk_inst_def, pairTheory.UNCURRY,
-       ci_mono_def, rich_listTheory.IS_PREFIX_APPEND3]
+  rw[emit_inst_def] >> ci_mono_chain_tac ci_mono_prim_rws
 QED
 
 (* ci_mono for compile_ptr_load (used by unwrap_value) *)
@@ -1056,130 +1065,35 @@ Proof
   rw[] >> simp[ci_mono_emit_op]
 QED
 
-(* ===== blocks_len toolkit for ci_mono proofs ===== *)
-
-(* LENGTH cs_blocks is preserved by all primitives except new_block *)
-Theorem blocks_len_bind[local]:
-  ∀ (m : compile_state -> 'a # compile_state)
-    (g : 'a -> compile_state -> 'b # compile_state) sa.
-    LENGTH (SND (monad_bind m g sa)).cs_blocks =
-    LENGTH (SND (g (FST (m sa)) (SND (m sa)))).cs_blocks
-Proof
-  rw[comp_bind_def, LET_THM, pairTheory.UNCURRY]
-QED
-
-Theorem blocks_pres_emit_op[local]:
-  ∀ opc ops sa.
-    LENGTH (SND (emit_op opc ops sa)).cs_blocks = LENGTH sa.cs_blocks
-Proof
-  rw[emit_op_def, comp_bind_def, comp_ignore_bind_def, LET_THM,
-     pairTheory.UNCURRY, fresh_id_def, fresh_var_def, emit_def,
-     venomInstTheory.mk_inst_def, comp_return_def]
-QED
-
-Theorem blocks_pres_emit_void[local]:
-  ∀ opc ops sa.
-    LENGTH (SND (emit_void opc ops sa)).cs_blocks = LENGTH sa.cs_blocks
-Proof
-  rw[emit_void_def, comp_bind_def, comp_ignore_bind_def, LET_THM,
-     pairTheory.UNCURRY, fresh_id_def, emit_def,
-     venomInstTheory.mk_inst_def, comp_return_def]
-QED
-
-Theorem blocks_pres_emit_inst[local]:
-  ∀ opc ops outs sa.
-    LENGTH (SND (emit_inst opc ops outs sa)).cs_blocks = LENGTH sa.cs_blocks
-Proof
-  rw[emit_inst_def, comp_bind_def, comp_ignore_bind_def, LET_THM,
-     pairTheory.UNCURRY, fresh_id_def, emit_def,
-     venomInstTheory.mk_inst_def, comp_return_def]
-QED
-
-Theorem blocks_pres_compile_ptr_load[local]:
-  ∀ ic loc op sa.
-    LENGTH (SND (compile_ptr_load ic loc op sa)).cs_blocks =
-    LENGTH sa.cs_blocks
+Theorem ci_mono_compile_ptr_store[local]:
+  ∀ is_ctor loc op v sa.
+    ci_mono sa (SND (compile_ptr_store is_ctor loc op v sa))
 Proof
   rpt gen_tac >> Cases_on `loc` >>
-  rw[contextTheory.compile_ptr_load_def] >>
-  rw[blocks_pres_emit_op]
+  simp[contextTheory.compile_ptr_store_def] >>
+  rw[] >> simp[ci_mono_emit_void]
 QED
 
-Theorem blocks_pres_compile_ptr_store[local]:
-  ∀ ic loc op v sa.
-    LENGTH (SND (compile_ptr_store ic loc op v sa)).cs_blocks =
-    LENGTH sa.cs_blocks
-Proof
-  rpt gen_tac >> Cases_on `loc` >>
-  rw[contextTheory.compile_ptr_store_def] >>
-  rw[blocks_pres_emit_void]
-QED
-
-Theorem blocks_grow_new_block[local]:
-  ∀ lbl sa.
-    LENGTH (SND (new_block lbl sa)).cs_blocks =
-    SUC (LENGTH sa.cs_blocks)
-Proof
-  rw[new_block_def]
-QED
-
-Theorem blocks_pres_scaled_offset[local]:
-  ∀ scale base ctr sa.
-    LENGTH (SND
-      ((if scale = 1 then emit_op ADD [base; ctr]
-        else do scaled <- emit_op MUL [ctr; Lit (n2w scale)];
-                emit_op ADD [base; scaled]
-             od) sa)).cs_blocks =
-    LENGTH sa.cs_blocks
-Proof
-  rw[] >>
-  simp[comp_bind_def, LET_THM, pairTheory.UNCURRY, blocks_pres_emit_op]
-QED
-
-(* compile_word_copy_loop grows blocks by exactly 3 *)
-val blocks_len_rws = [blocks_len_bind,
-  SIMP_RULE bool_ss [] (Q.SPECL [`i`,`sa`] (INST_TYPE [alpha |-> ``:unit``] blocks_pres_emit_op)),
-  blocks_pres_emit_op, blocks_pres_emit_void, blocks_pres_emit_inst,
-  blocks_pres_compile_ptr_load, blocks_pres_compile_ptr_store,
-  blocks_pres_scaled_offset, blocks_grow_new_block,
-  SIMP_RULE bool_ss [LET_THM] fresh_var_def,
-  SIMP_RULE bool_ss [LET_THM] fresh_id_def,
-  SIMP_RULE bool_ss [LET_THM] fresh_label_def,
-  SIMP_RULE bool_ss [] emit_def,
-  comp_return_def];
-
-Theorem blocks_grow_compile_word_copy_loop[local]:
-  ∀ src dst wc ll sl ic sa.
-    LENGTH sa.cs_blocks + 3 =
-    LENGTH (SND (compile_word_copy_loop src dst wc ll sl ic sa)).cs_blocks
-Proof
-  rw[contextTheory.compile_word_copy_loop_def, LET_THM] >>
-  simp[comp_bind_def, comp_ignore_bind_def, pairTheory.UNCURRY,
-       fresh_label_def, fresh_var_def, comp_return_def,
-       blocks_pres_emit_inst, blocks_pres_emit_op,
-       blocks_pres_compile_ptr_load, blocks_pres_compile_ptr_store,
-       blocks_pres_scaled_offset, blocks_grow_new_block]
-QED
+val ci_mono_emit_rws =
+  ci_mono_prim_rws @
+  [ci_mono_emit_op, ci_mono_emit_void, ci_mono_emit_inst,
+   ci_mono_compile_ptr_load, ci_mono_compile_ptr_store];
 
 (* ci_mono for compile_word_copy_loop *)
 Theorem ci_mono_compile_word_copy_loop[local]:
   ∀ src dst wc ll sl ic sa.
     ci_mono sa (SND (compile_word_copy_loop src dst wc ll sl ic sa))
 Proof
-  rw[ci_mono_def] >> disj2_tac >>
-  `LENGTH sa.cs_blocks + 3 =
-   LENGTH (SND (compile_word_copy_loop src dst wc ll sl ic sa)).cs_blocks`
-    by rw[blocks_grow_compile_word_copy_loop] >>
-  simp[]
+  rw[contextTheory.compile_word_copy_loop_def, LET_THM] >>
+  ci_mono_chain_tac ci_mono_emit_rws
 QED
 
 (* ci_mono for compile_alloc_buffer *)
 Theorem ci_mono_compile_alloc_buffer[local]:
   ∀ size sa. ci_mono sa (SND (compile_alloc_buffer size sa))
 Proof
-  rw[contextTheory.compile_alloc_buffer_def,
-     comp_bind_def, comp_return_def, LET_THM, pairTheory.UNCURRY] >>
-  simp[ci_mono_emit_op]
+  rw[contextTheory.compile_alloc_buffer_def] >>
+  ci_mono_chain_tac ci_mono_emit_rws
 QED
 
 (* ci_mono for storage/transient/code_to_memory *)
@@ -1204,42 +1118,13 @@ Theorem ci_mono_compile_code_to_memory[local]:
     ci_mono sa (SND (compile_code_to_memory off dst wc sa))
 Proof
   rw[contextTheory.compile_code_to_memory_def] >>
-  rw[ci_mono_def]
-  >- simp[comp_return_def]
-  >> disj2_tac >>
-  simp[comp_bind_def, comp_ignore_bind_def, pairTheory.UNCURRY, LET_THM,
-       comp_return_def] >>
-  `LENGTH sa.cs_blocks + 3 =
-   LENGTH (SND (compile_word_copy_loop off dst wc LocCode LocMemory F sa)).cs_blocks`
-    by rw[blocks_grow_compile_word_copy_loop] >>
-  simp[]
+  ci_mono_chain_tac [ci_mono_compile_word_copy_loop]
 QED
 
-(* ci_mono for compile_ensure_in_memory:
-   Storage/Transient → blocks grow via compile_word_copy_loop (always)
-   Code → blocks grow when word_count > 0, isPREFIX when word_count = 0
-   Calldata → blocks preserved, isPREFIX via emit chain
-   Memory → trivial via comp_return *)
-
-(* Shared tactic abbreviation for blocks-grew cases *)
-val blocks_grew_tac =
-  simp[ci_mono_def, comp_bind_def, comp_ignore_bind_def,
-       comp_return_def, pairTheory.UNCURRY] >> disj2_tac;
-
-val blocks_grew_rws =
-  [contextTheory.compile_alloc_buffer_def,
-   comp_bind_def, comp_ignore_bind_def, comp_return_def,
-   pairTheory.UNCURRY, LET_THM,
-   GSYM blocks_grow_compile_word_copy_loop,
-   blocks_pres_emit_op];
-
-(* Shared tactic for isPREFIX cases *)
-val isPREFIX_prim_rws =
-  [contextTheory.compile_alloc_buffer_def,
-   emit_op_def, emit_void_def, comp_bind_def,
-   comp_ignore_bind_def, comp_return_def,
-   fresh_id_def, fresh_var_def, emit_def,
-   venomInstTheory.mk_inst_def, pairTheory.UNCURRY, LET_THM];
+val ci_mono_copy_rws =
+  ci_mono_emit_rws @
+  [ci_mono_compile_alloc_buffer, ci_mono_compile_storage_to_memory,
+   ci_mono_compile_transient_to_memory, ci_mono_compile_code_to_memory];
 
 Theorem ci_mono_compile_ensure_in_memory[local]:
   ∀ ptr_op loc mem_bytes word_count is_ctor sa.
@@ -1247,52 +1132,8 @@ Theorem ci_mono_compile_ensure_in_memory[local]:
       (SND (compile_ensure_in_memory ptr_op loc mem_bytes word_count is_ctor sa))
 Proof
   rpt gen_tac >> Cases_on `loc` >>
-  simp[contextTheory.compile_ensure_in_memory_def, LET_THM]
-  (* LocMemory *)
-  >- simp[comp_return_def, ci_mono_def]
-  (* A one-slot aggregate uses a straight-line load/store. *)
-  >- (Cases_on `word_count = 1`
-      >- (simp (ci_mono_def :: isPREFIX_prim_rws) >>
-          rewrite_tac[GSYM listTheory.APPEND_ASSOC] >>
-          simp[rich_listTheory.IS_PREFIX_APPEND3]) >>
-      simp[] >> blocks_grew_tac >>
-      simp (contextTheory.compile_storage_to_memory_def :: blocks_grew_rws))
-  >- (Cases_on `word_count = 1`
-      >- (simp (ci_mono_def :: isPREFIX_prim_rws) >>
-          rewrite_tac[GSYM listTheory.APPEND_ASSOC] >>
-          simp[rich_listTheory.IS_PREFIX_APPEND3]) >>
-      simp[] >> blocks_grew_tac >>
-      simp (contextTheory.compile_transient_to_memory_def :: blocks_grew_rws))
-  (* LocCode: case split on word_count *)
-  >- (simp[ci_mono_def, comp_bind_def, comp_ignore_bind_def,
-           comp_return_def, pairTheory.UNCURRY] >>
-      Cases_on `word_count = 0`
-      >- (disj1_tac >>
-          simp (contextTheory.compile_code_to_memory_def :: isPREFIX_prim_rws) >>
-          rewrite_tac[GSYM listTheory.APPEND_ASSOC] >>
-          simp[rich_listTheory.IS_PREFIX_APPEND3])
-      >> disj2_tac >>
-      simp (contextTheory.compile_code_to_memory_def :: blocks_grew_rws))
-  (* LocCalldata: compose the monotonicity interfaces of each primitive.
-     Avoid unfolding the emit chain into a very large isPREFIX goal. *)
-  >> irule ci_mono_bind
-  >> simp[ci_mono_emit_op]
-  >> rpt gen_tac
-  >> irule ci_mono_bind
-  >> simp[ci_mono_compile_alloc_buffer]
-  >> rpt gen_tac >> PURE_REWRITE_TAC[LET_THM]
-  >> irule ci_mono_ignore_bind
-  >> simp[ci_mono_emit_void]
-  >> gen_tac
-  >> irule ci_mono_bind
-  >> simp[ci_mono_emit_op]
-  >> rpt gen_tac
-  >> irule ci_mono_bind
-  >> simp[ci_mono_emit_op]
-  >> rpt gen_tac
-  >> irule ci_mono_ignore_bind
-  >> simp[ci_mono_emit_void]
-  >> gen_tac >> simp[ci_mono_comp_return]
+  simp[contextTheory.compile_ensure_in_memory_def] >>
+  ci_mono_chain_tac ci_mono_copy_rws
 QED
 
 (* ci_mono for unwrap_value *)
@@ -1302,7 +1143,7 @@ Proof
   rpt gen_tac >> Cases_on `vv` >>
   simp[unwrap_value_def]
   (* StackValue: comp_return *)
-  >- simp[comp_return_def, ci_mono_def]
+  >- simp[comp_return_def, ci_mono_refl]
   (* LocatedValue: split on is_word_type *)
   >> rw[]
   (* word type: compile_ptr_load *)
@@ -1310,7 +1151,7 @@ Proof
   (* non-word type: case on ptr_location *)
   >> Cases_on `p.ptr_location` >>
   simp[LET_THM]
-  >- simp[comp_return_def, ci_mono_def]
+  >- simp[comp_return_def, ci_mono_refl]
   >> simp[ci_mono_compile_ensure_in_memory]
 QED
 
@@ -1336,8 +1177,8 @@ QED
 (* ===== compile_expr ci_mono by induction ===== *)
 
 (*
- * ci_mono for compile_expr: every call either appends to cs_current_insts
- * (keeping cs_blocks) or increases LENGTH cs_blocks (via new_block).
+ * ci_mono for compile_expr: every call only appends code and hands out
+ * variables and instruction ids from its input state's counters on.
  * Proved by unfolding definitions and composing ci_mono lemmas.
  *)
 
@@ -3862,6 +3703,37 @@ Proof
   irule ci_mono_bind >> conj_tac
   >- (rpt strip_tac >> simp[ci_mono_unwrap_value])
   >> simp[cj 1 compile_expr_ci_mono]
+QED
+
+(* compile_expr and lower_value compile_expr only append code and hand out
+   variables and instruction ids from their start counters on. *)
+Theorem compile_expr_grows:
+  (∀cenv ty e st vv st'.
+     compile_expr cenv ty e st = (vv, st') ⇒
+     cs_extends st st' ∧ st.cs_next_var ≤ st'.cs_next_var ∧
+     st.cs_next_id ≤ st'.cs_next_id) ∧
+  (∀cenv ty e st op st'.
+     lower_value compile_expr cenv ty e st = (op, st') ⇒
+     cs_extends st st' ∧ st.cs_next_var ≤ st'.cs_next_var ∧
+     st.cs_next_id ≤ st'.cs_next_id)
+Proof
+  conj_tac >> rpt gen_tac >> strip_tac >| [
+    qspecl_then [`cenv`, `ty`, `e`, `st`] mp_tac (cj 1 compile_expr_ci_mono),
+    qspecl_then [`cenv`, `ty`, `e`, `st`] mp_tac
+      ci_mono_lower_value_compile_expr] >>
+  simp[ci_mono_def]
+QED
+
+Theorem compile_binop_grows:
+  ∀op x y ty base_literal exp_literal st z st'.
+    compile_binop op x y ty base_literal exp_literal st = (z, st') ⇒
+    cs_extends st st' ∧ st.cs_next_var ≤ st'.cs_next_var ∧
+    st.cs_next_id ≤ st'.cs_next_id
+Proof
+  rpt gen_tac >> strip_tac >>
+  qspecl_then [`op`, `x`, `y`, `ty`, `base_literal`, `exp_literal`, `st`]
+    mp_tac ci_mono_compile_binop >>
+  simp[ci_mono_def]
 QED
 
 (* ===== run_inst_seq preserves venom_state fields ===== *)

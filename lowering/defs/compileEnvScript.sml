@@ -4,6 +4,8 @@
  * TOP-LEVEL:
  *   compile_env      — maps Vyper vars to Venom locations
  *   compile_state    — monad state for code generation
+ *   cs_extends       — a compile state only appended to another;
+ *                      cs_extends_* for the monad primitives
  *   state_rel        — cross-level simulation relation
  *   result_rel       — maps Vyper exceptions to Venom exec_result
  *   is_word_type     — type fits in single EVM word (calling convention)
@@ -34,7 +36,7 @@ Theory compileEnv
 Ancestors
   valueEncoding venomExecSemantics venomInst venomPolicyTypes
   vyperState vyperContext vyperValue vyperABI contractABI
-  byte keccak finite_map pred_set
+  byte keccak finite_map pred_set list rich_list
 Libs
   monadsyntax
 
@@ -660,6 +662,78 @@ Definition emit_data_item_def:
         ((), cs with cs_data_sections :=
           (sec with ds_items := sec.ds_items ++ [item]) :: rest)
 End
+
+(* ===== The compile monad only appends ===== *)
+
+(* st' only appended to st: new finished blocks go in front (cs_blocks is
+   newest first), the oldest of them is st's current block, and the current
+   instructions only grow. *)
+Definition cs_extends_def:
+  cs_extends (st : compile_state) (st' : compile_state) <=>
+    ?new. st'.cs_blocks = new ++ st.cs_blocks /\
+      if new = [] then
+        st'.cs_current_bb = st.cs_current_bb /\
+        isPREFIX st.cs_current_insts st'.cs_current_insts
+      else
+        (LAST new).bb_label = st.cs_current_bb /\
+        isPREFIX st.cs_current_insts (LAST new).bb_instructions
+End
+
+Theorem cs_extends_refl:
+  !st. cs_extends st st
+Proof
+  rw[cs_extends_def] >> qexists_tac `[]` >> simp[]
+QED
+
+Theorem cs_extends_trans:
+  !st1 st2 st3. cs_extends st1 st2 /\ cs_extends st2 st3 ==> cs_extends st1 st3
+Proof
+  rw[cs_extends_def] >> qexists_tac `new' ++ new` >> simp[] >>
+  Cases_on `new = []` >> Cases_on `new' = []` >> gvs[LAST_APPEND_NOT_NIL] >>
+  metis_tac[isPREFIX_TRANS]
+QED
+
+Theorem cs_extends_same_block:
+  !st st'.
+    st'.cs_blocks = st.cs_blocks /\ st'.cs_current_bb = st.cs_current_bb /\
+    isPREFIX st.cs_current_insts st'.cs_current_insts ==>
+    cs_extends st st'
+Proof
+  rw[cs_extends_def] >> qexists_tac `[]` >> simp[]
+QED
+
+Theorem cs_extends_emit:
+  !inst st x st'. emit inst st = (x, st') ==> cs_extends st st'
+Proof
+  rw[emit_def] >> irule cs_extends_same_block >> simp[]
+QED
+
+Theorem cs_extends_new_block:
+  !lbl st x st'. new_block lbl st = (x, st') ==> cs_extends st st'
+Proof
+  rw[new_block_def, cs_extends_def] >>
+  qexists_tac `[<| bb_label := st.cs_current_bb;
+                   bb_instructions := st.cs_current_insts |>]` >>
+  simp[]
+QED
+
+Theorem cs_extends_fresh_var:
+  !st x st'. fresh_var st = (x, st') ==> cs_extends st st'
+Proof
+  rw[fresh_var_def] >> irule cs_extends_same_block >> simp[]
+QED
+
+Theorem cs_extends_fresh_label:
+  !sfx st x st'. fresh_label sfx st = (x, st') ==> cs_extends st st'
+Proof
+  rw[fresh_label_def] >> irule cs_extends_same_block >> simp[]
+QED
+
+Theorem cs_extends_fresh_id:
+  !st x st'. fresh_id st = (x, st') ==> cs_extends st st'
+Proof
+  rw[fresh_id_def] >> irule cs_extends_same_block >> simp[]
+QED
 
 (* ===== State Relation ===== *)
 
