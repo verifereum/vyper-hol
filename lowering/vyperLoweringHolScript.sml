@@ -17,8 +17,10 @@ Ancestors
   immutableLocationProps
   loweringShapeDefs
   loweringShapeProps
+  structFieldsProps
   (* compiler + correctness *)
   vyperCompiler
+  allocaBudgetChecks
   vyperLoweringCorrect
   configuredE2ECorrectness
   evalCompilerMemoryStores
