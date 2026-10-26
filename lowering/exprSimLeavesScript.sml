@@ -98,7 +98,7 @@ QED
 val literal_bytes_word_tac =
   gvs[lower_value_def, compile_expr_def, comp_bind_def, comp_return_def,
       compile_literal_vv_def, unwrap_value_def, evaluate_literal_def,
-      vyperASTTheory.expr_type_def] >>
+      vyperASTTheory.expr_type_def, bind_def, read_result_def, return_def] >>
   irule frag_exec_refl >>
   simp[expr_post_def, expr_val_rel_def, expr_val_at_def,
        vyperASTTheory.expr_type_def, eval_operand_def, is_word_type_def,
@@ -258,16 +258,23 @@ QED
 
 Theorem eval_expr_flag_member:
   !cx ann src fid mid es res es'.
-    eval_expr cx (FlagMember ann (src, fid) mid) es = (res, es') /\
+    (do result <- eval_expr cx (FlagMember ann (src, fid) mid); read_result cx result od) es = (res, es') /\
     expr_res_ok res ==>
     es' = es /\
     ?ts ls i. get_module_code cx src = SOME ts /\
               lookup_flag fid ts = SOME ls /\ INDEX_OF mid ls = SOME i /\
-              res = INL (Value (FlagV (2 ** i)))
+              res = INL (FlagV (2 ** i))
 Proof
-  rpt gen_tac >> simp[Once evaluate_def, lookup_flag_mem_def] >>
-  rpt (BasicProvers.TOP_CASE_TAC >> simp[raise_def, return_def]) >>
-  rw[] >> gvs[expr_res_ok_def]
+  rpt gen_tac >>
+  simp[Once evaluate_def, lookup_flag_mem_def] >>
+  Cases_on `get_module_code cx src` >>
+  gvs[bind_def, raise_def, return_def, expr_res_ok_def] >>
+  rename1 `get_module_code cx src = SOME ts` >>
+  Cases_on `lookup_flag fid ts` >>
+  gvs[bind_def, raise_def, return_def, expr_res_ok_def] >>
+  rename1 `lookup_flag fid ts = SOME ls` >>
+  Cases_on `INDEX_OF mid ls` >>
+  gvs[bind_def, read_result_def, raise_def, return_def, expr_res_ok_def]
 QED
 
 (* A flag member is the literal 2 ** id, id its index in its flag's
