@@ -8,7 +8,7 @@ val fixture_test_root = OS.FileSys.tmpName ();
 val () = OS.FileSys.remove fixture_test_root;
 val () = OS.FileSys.mkDir fixture_test_root;
 val fixture_test_dirs =
-  ["lowering", "lowering/defs", "lowering/defs/bytecode",
+  ["tests", "lowering", "lowering/defs", "lowering/defs/bytecode",
    "lowering/defs/bytecode/eval",
    "lowering/defs/bytecode/external-entries",
    "lowering/defs/bytecode/external-entries/oracle"];
@@ -38,7 +38,7 @@ in
 end;
 
 val fixture_test_contexts =
-  ["lowering/defs/bytecode/eval", "lowering/defs", "."];
+  ["lowering/defs/bytecode/eval", "lowering/defs", ".", "tests"];
 fun cleanup_fixture_test () = (
   OS.FileSys.remove fixture_test_file;
   List.app
@@ -51,7 +51,7 @@ val () = (
     (fn dir => check_fixture_from dir
       "../external-entries/oracle/nr_ext_nonpayable.hex")
     fixture_test_contexts;
-  (* The ordinary fixture directory still resolves in all three contexts. *)
+  (* The ordinary fixture directory still resolves in every context. *)
   OS.FileSys.rename
     {old = OS.Path.concat (fixture_test_root,
              "lowering/defs/bytecode/external-entries"),

@@ -56,11 +56,14 @@ fun resolve_bytecode_fixture filename =
   let
     (* Sibling fixtures use ../external-entries/... . Collapse the intervening
        python-o1-no-asm-opt/.. before filesystem access: isolated holbuild
-       stages need not contain the unrelated default-fixture directory. *)
+       stages need not contain the unrelated default-fixture directory.
+       The tests/ theories stage their fixtures at ../lowering/defs/bytecode,
+       so include that base as well as eval/, lowering/defs/ and the root. *)
     val candidates = List.map OS.Path.mkCanonical
       [OS.Path.concat ("../python-o1-no-asm-opt", filename),
        OS.Path.concat ("bytecode/python-o1-no-asm-opt", filename),
-       OS.Path.concat ("lowering/defs/bytecode/python-o1-no-asm-opt", filename)]
+       OS.Path.concat ("lowering/defs/bytecode/python-o1-no-asm-opt", filename),
+       OS.Path.concat ("../lowering/defs/bytecode/python-o1-no-asm-opt", filename)]
   in
     case List.find
            (fn path => OS.FileSys.access (path, [OS.FileSys.A_READ]))
