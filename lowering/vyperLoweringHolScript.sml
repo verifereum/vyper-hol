@@ -13,6 +13,7 @@ Ancestors
   valueEncodingProofs
   localPtrsProps
   loweringShapeProps
+  intCallStep intCallSource intCallLookup
   (* compiler + correctness *)
   vyperCompiler
   vyperLoweringCorrect
