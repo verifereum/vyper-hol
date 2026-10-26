@@ -3617,6 +3617,184 @@ Proof
   Cases_on `done_op` >> fs[eval_operand_def, lookup_var_def]
 QED
 
+Theorem enc_run_inst_seq_compose:
+  run_inst_seq xs s = OK t /\ run_inst_seq ys t = OK u ==>
+  run_inst_seq (xs ++ ys) s = OK u
+Proof
+  metis_tac[run_inst_seq_append]
+QED
+
+Theorem enc_emit_op_readonly_run:
+  emit_op opc args st = (op,st') /\
+  step_inst_base (mk_inst st.cs_next_id opc args
+    [STRING #"%" (toString st.cs_next_var)]) s =
+    OK (update_var (STRING #"%" (toString st.cs_next_var)) w s) ==>
+  ?t. run_inst_seq (emitted_insts st st') s = OK t /\
+      eval_operand op t = SOME w /\
+      (!old. (!x. old = Var x ==> not_fresh_at st x) ==>
+        eval_operand old t = eval_operand old s) /\
+      t.vs_memory = s.vs_memory /\ t.vs_labels = s.vs_labels /\
+      t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
+      t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+      t.vs_logs = s.vs_logs /\ t.vs_requests = s.vs_requests
+Proof
+  strip_tac >> drule emitted_insts_emit_op >> strip_tac >> gvs[] >>
+  qexists_tac `update_var (STRING #"%" (toString st.cs_next_var)) w s` >>
+  simp[run_inst_seq_def, eval_operand_update_var] >>
+  conj_tac >- (rpt strip_tac >> irule enc_eval_operand_update_old >>
+    qexists_tac `st` >> simp[]) >>
+  simp[update_var_def]
+QED
+
+Theorem enc_indexed_address_code:
+  emit_op ADD [base_op;Lit 32w] a = (data,b) /\
+  emit_op MUL [index;Lit (n2w stride)] b = (off,c) /\
+  emit_op ADD [data;off] c = (addr,d) ==>
+  emitted_insts a d =
+    emitted_insts a b ++ emitted_insts b c ++ emitted_insts c d /\
+  b.cs_next_var = a.cs_next_var + 1 /\
+  c.cs_next_var = a.cs_next_var + 2 /\
+  (!x. data = Var x ==> not_fresh_at b x) /\
+  (!x. off = Var x ==> not_fresh_at c x) /\
+  same_blocks a d /\
+  d.cs_current_insts = a.cs_current_insts ++ emitted_insts a d
+Proof
+  strip_tac >> imp_res_tac emitted_insts_emit_op >>
+  imp_res_tac emit_op_same_blocks >>
+  `emitted_insts a c = emitted_insts a b ++ emitted_insts b c` by
+    (irule emitted_insts_append >> simp[]) >>
+  `emitted_insts a d = emitted_insts a c ++ emitted_insts c d` by
+    (irule emitted_insts_append >> simp[]) >>
+  pure_asm_rewrite_tac[GSYM APPEND_ASSOC] >>
+  gvs[same_blocks_def, not_fresh_at_def, ASCIInumbersTheory.toString_11]
+QED
+
+Theorem enc_indexed_address_run:
+  emit_op ADD [base_op;Lit 32w] a = (data,b) /\
+  emit_op MUL [index;Lit (n2w stride)] b = (off,c) /\
+  emit_op ADD [data;off] c = (addr,d) /\
+  (!x. MEM (Var x) [base_op;index] ==> not_fresh_at a x) /\
+  eval_operand base_op s = SOME bw /\ eval_operand index s = SOME iw ==>
+  ?t. run_inst_seq (emitted_insts a d) s = OK t /\
+      eval_operand addr t = SOME (bw + 32w + iw * n2w stride) /\
+      (!old. (!x. old = Var x ==> not_fresh_at a x) ==>
+        eval_operand old t = eval_operand old s) /\
+      t.vs_memory = s.vs_memory /\ t.vs_labels = s.vs_labels /\
+      t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
+      t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+      t.vs_logs = s.vs_logs /\ t.vs_requests = s.vs_requests
+Proof
+  strip_tac >> drule_all enc_indexed_address_code >> strip_tac >>
+  `step_inst_base (mk_inst a.cs_next_id ADD [base_op;Lit 32w]
+     [STRING #"%" (toString a.cs_next_var)]) s =
+     OK (update_var (STRING #"%" (toString a.cs_next_var)) (bw + 32w) s)` by
+    (irule step_ADD >> simp[eval_operand_def]) >>
+  drule_all enc_emit_op_readonly_run >>
+  disch_then (qx_choose_then `s1` strip_assume_tac) >>
+  `eval_operand index s1 = SOME iw` by (fs[] >> metis_tac[]) >>
+  `step_inst_base (mk_inst b.cs_next_id MUL [index;Lit (n2w stride)]
+     [STRING #"%" (toString b.cs_next_var)]) s1 =
+     OK (update_var (STRING #"%" (toString b.cs_next_var)) (iw * n2w stride) s1)` by
+    (irule step_MUL >> simp[eval_operand_def]) >>
+  drule_all enc_emit_op_readonly_run >>
+  disch_then (qx_choose_then `s2` strip_assume_tac) >>
+  `eval_operand data s2 = SOME (bw + 32w)` by metis_tac[] >>
+  `step_inst_base (mk_inst c.cs_next_id ADD [data;off]
+     [STRING #"%" (toString c.cs_next_var)]) s2 =
+     OK (update_var (STRING #"%" (toString c.cs_next_var))
+       (bw + 32w + iw * n2w stride) s2)` by
+    (irule step_ADD >> simp[]) >>
+  drule_all enc_emit_op_readonly_run >>
+  disch_then (qx_choose_then `s3` strip_assume_tac) >>
+  qexists_tac `s3` >> simp[] >> conj_tac
+  >- (irule enc_run_inst_seq_compose >> qexists_tac `s2` >> simp[] >>
+      irule enc_run_inst_seq_compose >> qexists_tac `s1` >> simp[]) >>
+  rpt strip_tac >>
+  `(!x. old = Var x ==> not_fresh_at b x) /\
+   (!x. old = Var x ==> not_fresh_at c x)` by
+    (rpt strip_tac >> pure_rewrite_tac[not_fresh_at_def] >>
+     qpat_x_assum `!x. old = Var x ==> _` mp_tac >>
+     pure_rewrite_tac[not_fresh_at_def] >> simp[] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+  metis_tac[]
+QED
+
+Theorem enc_static_info_same_block:
+  compile_abi_encode_static_info dst src ei st = (op,st') ==>
+  same_blocks st st' /\
+  st'.cs_current_insts = st.cs_current_insts ++ emitted_insts st st'
+Proof
+  Cases_on `ei` >>
+  simp[compile_abi_encode_static_info_def, compile_abi_encode_static_def,
+       emit_op_def, emit_void_def, fresh_var_def, fresh_id_def, emit_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  rpt strip_tac >> gvs[same_blocks_def, emitted_insts_def, DROP_LENGTH_APPEND]
+QED
+
+Theorem enc_emit_op_append:
+  emit_op opc args a = (op,b) ==>
+  b.cs_current_insts = a.cs_current_insts ++ emitted_insts a b
+Proof
+  metis_tac[emitted_insts_emit_op]
+QED
+
+Theorem enc_emit_void_append:
+  emit_void opc args a = ((),b) ==>
+  b.cs_current_insts = a.cs_current_insts ++ emitted_insts a b
+Proof
+  metis_tac[emitted_insts_emit_void]
+QED
+
+Theorem enc_static_loop_body_code:
+  enc_static_loop_body dst src ei asz msz count_ptr sb = ((),se) ==>
+  ?i src_data src_off child_src dst_data dst_off child_dst ignored next
+    s1 s2 s3 s4 s5 s6 s7 s8 s9.
+    emit_op MLOAD [count_ptr] sb = (i,s1) /\
+    emit_op ADD [src; Lit 32w] s1 = (src_data,s2) /\
+    emit_op MUL [i; Lit (n2w msz)] s2 = (src_off,s3) /\
+    emit_op ADD [src_data;src_off] s3 = (child_src,s4) /\
+    emit_op ADD [dst; Lit 32w] s4 = (dst_data,s5) /\
+    emit_op MUL [i; Lit (n2w asz)] s5 = (dst_off,s6) /\
+    emit_op ADD [dst_data;dst_off] s6 = (child_dst,s7) /\
+    compile_abi_encode_static_info child_dst child_src ei s7 = (ignored,s8) /\
+    emit_op ADD [i;Lit 1w] s8 = (next,s9) /\
+    emit_void MSTORE [count_ptr;next] s9 = ((),se) /\
+    same_blocks sb se /\
+    se.cs_current_insts = sb.cs_current_insts ++ emitted_insts sb se /\
+    emitted_insts sb se =
+      emitted_insts sb s1 ++ emitted_insts s1 s4 ++
+      emitted_insts s4 s7 ++ emitted_insts s7 s8 ++ emitted_insts s8 se
+Proof
+  simp[enc_static_loop_body_def, comp_bind_def, comp_ignore_bind_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  rename1 `emit_op MLOAD [count_ptr] sb = (i,s1)` >>
+  rename1 `emit_op ADD [src; Lit 32w] s1 = (src_data,s2)` >>
+  rename1 `emit_op MUL [i; Lit (n2w msz)] s2 = (src_off,s3)` >>
+  rename1 `emit_op ADD [src_data;src_off] s3 = (child_src,s4)` >>
+  rename1 `emit_op ADD [dst; Lit 32w] s4 = (dst_data,s5)` >>
+  rename1 `emit_op MUL [i; Lit (n2w asz)] s5 = (dst_off,s6)` >>
+  rename1 `emit_op ADD [dst_data;dst_off] s6 = (child_dst,s7)` >>
+  rename1 `compile_abi_encode_static_info child_dst child_src ei s7 = (ignored,s8)` >>
+  rename1 `emit_op ADD [i; Lit 1w] s8 = (next,s9)` >>
+  imp_res_tac (cj 7 enc_indexed_address_code) >>
+  imp_res_tac (cj 6 enc_indexed_address_code) >>
+  imp_res_tac enc_emit_op_append >>
+  imp_res_tac enc_emit_void_append >>
+  imp_res_tac emit_op_same_blocks >>
+  imp_res_tac emit_void_same_blocks >>
+  drule enc_static_info_same_block >> strip_tac >>
+  `emitted_insts s8 se = emitted_insts s8 s9 ++ emitted_insts s9 se` by
+    (irule emitted_insts_append >> simp[]) >>
+  `emitted_insts sb s4 = emitted_insts sb s1 ++ emitted_insts s1 s4` by
+    (irule emitted_insts_append >> simp[] >> gvs[APPEND_ASSOC]) >>
+  `emitted_insts sb s7 = emitted_insts sb s4 ++ emitted_insts s4 s7` by
+    (irule emitted_insts_append >> simp[] >> gvs[APPEND_ASSOC]) >>
+  `emitted_insts sb s8 = emitted_insts sb s7 ++ emitted_insts s7 s8` by
+    (irule emitted_insts_append >> simp[] >> gvs[APPEND_ASSOC]) >>
+  `emitted_insts sb se = emitted_insts sb s8 ++ emitted_insts s8 se` by
+    (irule emitted_insts_append >> simp[] >> gvs[APPEND_ASSOC]) >>
+  gvs[same_blocks_def, APPEND_ASSOC] >> metis_tac[]
+QED
+
 Theorem compile_abi_encode_frag:
   (!dst child_ptr ei is_dyn static_ofst dyn_ptr st op st' ctx env ty tv v
     av s0 dst_w src_w lo top.
