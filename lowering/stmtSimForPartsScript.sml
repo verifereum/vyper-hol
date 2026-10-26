@@ -97,8 +97,8 @@ Proof
   `es2.scopes <> [] /\ MAP FDOM (TL es2.scopes) = MAP FDOM es.scopes` by
     (drule eval_stmts_preserves_scopes_dom >>
      simp[preserves_scopes_dom_def, Abbr `esA`]) >>
-  Cases_on `es2.scopes` >> fs[] >>
-  `!id. id IN FDOM h ==> lookup_scopes id t = NONE` by
+  Cases_on `es2.scopes` >> fs[] >> rename1 `es2.scopes = top2 :: rest2` >>
+  `!id. id IN FDOM top2 ==> lookup_scopes id rest2 = NONE` by
     (rpt strip_tac >> Cases_on `id = nm`
      >- (gvs[] >> irule lookup_scopes_none_map_fdom >> metis_tac[]) >>
      drule eval_stmts_new_in_head_not_in_tail >> simp[Abbr `esA`]) >>

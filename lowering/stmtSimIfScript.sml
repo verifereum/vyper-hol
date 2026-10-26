@@ -140,8 +140,8 @@ Proof
     `es2.scopes <> []` by
       (drule eval_stmts_preserves_scopes_dom >>
        simp[preserves_scopes_dom_def, Abbr `esA`]) >>
-    Cases_on `es2.scopes` >> gvs[] >>
-    `!id. id IN FDOM h ==> lookup_scopes id t = NONE` by
+    Cases_on `es2.scopes` >> gvs[] >> rename1 `es2.scopes = top2 :: rest2` >>
+    `!id. id IN FDOM top2 ==> lookup_scopes id rest2 = NONE` by
       (rpt strip_tac >> drule eval_stmts_new_in_head_not_in_tail >>
        simp[Abbr `esA`]) >>
     Cases_on `r2` >> simp[pop_scope_def, return_def, raise_def]) >>
@@ -382,6 +382,7 @@ Proof
   impl_tac >- fs[expr_res_ok_def] >>
   strip_tac >> fs[] >>
   rename1 `stmt_state_rel func cenv cx es1 sv` >>
+  rename1 `jump_to (if bj then then_lbl else else_lbl) sv` >>
   `!st l. sa.cs_next_var <= st.cs_next_var ==>
           ret_pc_ok cenv st (jump_to l sv)` by
     (rpt strip_tac >> REWRITE_TAC [ret_pc_ok_jump_to] >>
@@ -429,13 +430,13 @@ Proof
       qpat_x_assum
         `!fuel. (!e. run_from fuel ctx func (jump_to _ sv) <> Error e) ==> _`
         (qspec_then `fuel'` mp_tac) >>
-      qpat_x_assum `b'` (fn th => REWRITE_TAC [EQT_INTRO th]) >>
+      qpat_x_assum `bj` (fn th => REWRITE_TAC [EQT_INTRO th]) >>
       impl_tac >- metis_tac[] >> metis_tac[]) >>
     disj2_tac >>
     qpat_x_assum
       `!fuel. (!e. run_from fuel ctx func (jump_to _ sv) <> Error e) ==> _`
       (qspec_then `fuel` mp_tac) >>
-    qpat_x_assum `b'` (fn th => REWRITE_TAC [EQT_INTRO th]) >>
+    qpat_x_assum `bj` (fn th => REWRITE_TAC [EQT_INTRO th]) >>
     impl_tac >- metis_tac[exit_result_not_error] >> strip_tac >>
     qexists_tac `fuel'` >> gvs[]) >>
   qspecl_then [`ctx`, `func`, `cx`, `lctx`, `RetQ`, `cenv`, `ty`, `ss2`,
@@ -476,13 +477,13 @@ Proof
     qpat_x_assum
       `!fuel. (!e. run_from fuel ctx func (jump_to _ sv) <> Error e) ==> _`
       (qspec_then `fuel'` mp_tac) >>
-    qpat_x_assum `~b'` (fn th => REWRITE_TAC [EQF_INTRO th]) >>
+    qpat_x_assum `~bj` (fn th => REWRITE_TAC [EQF_INTRO th]) >>
     impl_tac >- metis_tac[] >> metis_tac[]) >>
   disj2_tac >>
   qpat_x_assum
     `!fuel. (!e. run_from fuel ctx func (jump_to _ sv) <> Error e) ==> _`
     (qspec_then `fuel` mp_tac) >>
-  qpat_x_assum `~b'` (fn th => REWRITE_TAC [EQF_INTRO th]) >>
+  qpat_x_assum `~bj` (fn th => REWRITE_TAC [EQF_INTRO th]) >>
   impl_tac >- metis_tac[exit_result_not_error] >> strip_tac >>
   qexists_tac `fuel'` >> gvs[]
 QED

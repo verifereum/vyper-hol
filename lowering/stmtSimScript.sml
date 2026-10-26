@@ -284,9 +284,10 @@ Proof
   simp[comp_ignore_bind_def, comp_bind_def, compile_stmt_def,
        comp_return_def] >>
   pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+  rename1 `emit_inst _ _ _ sa = (_, sj)` >>
   disj1_tac >> qexistsl_tac [`jump_to ex s0`, `cenv`] >>
   imp_res_tac emit_inst_extends >>
-  qspecl_then [`ctx`, `func`, `sa`, `cs'`, `s0`,
+  qspecl_then [`ctx`, `func`, `sa`, `sj`, `s0`,
                `mk_inst sa.cs_next_id JMP [Label ex] []`, `ex`]
     mp_tac run_from_jump_end >>
   impl_tac
@@ -309,9 +310,10 @@ Proof
   simp[comp_ignore_bind_def, comp_bind_def, compile_stmt_def,
        comp_return_def] >>
   pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+  rename1 `emit_inst _ _ _ sa = (_, sj)` >>
   disj1_tac >> qexistsl_tac [`jump_to inc s0`, `cenv`] >>
   imp_res_tac emit_inst_extends >>
-  qspecl_then [`ctx`, `func`, `sa`, `cs'`, `s0`,
+  qspecl_then [`ctx`, `func`, `sa`, `sj`, `s0`,
                `mk_inst sa.cs_next_id JMP [Label inc] []`, `inc`]
     mp_tac run_from_jump_end >>
   impl_tac
