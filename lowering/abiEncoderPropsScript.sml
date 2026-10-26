@@ -10161,6 +10161,103 @@ Proof
        mk_inst_def, is_terminator_def]
 QED
 
+Theorem enc_dyn_source_run:
+  emit_op MLOAD [count_ptr] a0 = (i,a1) /\
+  emit_op ADD [src;Lit 32w] a1 = (sd,a2) /\
+  emit_op MUL [i;Lit (n2w msz)] a2 = (so,a3) /\
+  emit_op ADD [sd;so] a3 = (child_src,a4) /\
+  (!x. MEM (Var x) [count_ptr;src] ==> not_fresh_at a0 x) /\
+  eval_operand count_ptr s = SOME (n2w ip) /\
+  eval_operand src s = SOME sw /\
+  mem_word_at ip s.vs_memory = iw /\ ip < dimword (:256) ==>
+  ?t. run_inst_seq (emitted_insts a0 a4) s = OK t /\
+      eval_operand i t = SOME iw /\
+      eval_operand child_src t = SOME (sw + 32w + iw * n2w msz) /\
+      (!old. (!x. old = Var x ==> not_fresh_at a0 x) ==>
+        eval_operand old t = eval_operand old s) /\
+      t.vs_memory = s.vs_memory /\ t.vs_labels = s.vs_labels /\
+      t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
+      t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+      t.vs_logs = s.vs_logs /\ t.vs_requests = s.vs_requests
+Proof
+  strip_tac >>
+  `a0.cs_next_var <= a1.cs_next_var` by
+    (qpat_assum `emit_op MLOAD _ a0 = _`
+       (mp_tac o MATCH_MP emitted_insts_emit_op) >> simp[]) >>
+  `!x. i = Var x ==> not_fresh_at a1 x` by
+    metis_tac[enc_emit_op_old_result] >>
+  `step_inst_base (mk_inst a0.cs_next_id MLOAD [count_ptr]
+    [STRING #"%" (toString a0.cs_next_var)]) s =
+    OK (update_var (STRING #"%" (toString a0.cs_next_var)) iw s)` by
+    (qpat_assum `eval_operand count_ptr s = _` (mp_tac o MATCH_MP step_MLOAD) >>
+     simp[GSYM mem_word_at_eq_mload]) >>
+  drule_all enc_emit_op_readonly_run >>
+  disch_then (qx_choose_then `s1` strip_assume_tac) >>
+  `eval_operand src s1 = SOME sw` by (fs[] >> metis_tac[]) >>
+  `!x. MEM (Var x) [src;i] ==> not_fresh_at a1 x` by
+    (fs[] >> metis_tac[enc_old_operand_mono]) >>
+  drule_all enc_indexed_address_run >>
+  disch_then (qx_choose_then `s2` strip_assume_tac) >>
+  `emitted_insts a0 a4 = emitted_insts a0 a1 ++ emitted_insts a1 a4` by
+    (irule emitted_insts_append >>
+     metis_tac[enc_emit_op_append, cj 7 enc_indexed_address_code]) >>
+  qexists_tac `s2` >> simp[] >> conj_tac
+  >- (irule enc_run_inst_seq_compose >> qexists_tac `s1` >> simp[]) >>
+  rpt strip_tac >>
+  `!x. old = Var x ==> not_fresh_at a1 x` by
+    (match_mp_tac enc_old_operand_mono >> qexists_tac `a0` >> simp[]) >>
+  metis_tac[]
+QED
+
+(* The two final readonly instructions of the dynamic-body prefix. *)
+Theorem enc_dyn_address_run:
+  emit_op MLOAD [dyn_ptr] a = (off,b) /\
+  emit_op ADD [dst;off] b = (addr,c) /\
+  (!x. MEM (Var x) [dyn_ptr;dst] ==> not_fresh_at a x) /\
+  eval_operand dyn_ptr s = SOME (n2w dp) /\
+  eval_operand dst s = SOME dw /\
+  mem_word_at dp s.vs_memory = ow /\ dp < dimword (:256) ==>
+  ?t. run_inst_seq (emitted_insts a c) s = OK t /\
+      eval_operand off t = SOME ow /\
+      eval_operand addr t = SOME (dw + ow) /\
+      (!old. (!x. old = Var x ==> not_fresh_at a x) ==>
+        eval_operand old t = eval_operand old s) /\
+      t.vs_memory = s.vs_memory /\ t.vs_labels = s.vs_labels /\
+      t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
+      t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+      t.vs_logs = s.vs_logs /\ t.vs_requests = s.vs_requests
+Proof
+  strip_tac >>
+  `a.cs_next_var <= b.cs_next_var` by
+    (qpat_assum `emit_op MLOAD _ a = _`
+       (mp_tac o MATCH_MP emitted_insts_emit_op) >> simp[]) >>
+  `!x. off = Var x ==> not_fresh_at b x` by
+    metis_tac[enc_emit_op_old_result] >>
+  `step_inst_base (mk_inst a.cs_next_id MLOAD [dyn_ptr]
+    [STRING #"%" (toString a.cs_next_var)]) s =
+    OK (update_var (STRING #"%" (toString a.cs_next_var)) ow s)` by
+    (qpat_assum `eval_operand dyn_ptr s = _` (mp_tac o MATCH_MP step_MLOAD) >>
+     simp[GSYM mem_word_at_eq_mload]) >>
+  drule_all enc_emit_op_readonly_run >>
+  disch_then (qx_choose_then `s1` strip_assume_tac) >>
+  `eval_operand dst s1 = SOME dw` by (fs[] >> metis_tac[]) >>
+  `step_inst_base (mk_inst b.cs_next_id ADD [dst;off]
+    [STRING #"%" (toString b.cs_next_var)]) s1 =
+    OK (update_var (STRING #"%" (toString b.cs_next_var)) (dw + ow) s1)` by
+    (irule step_ADD >> simp[]) >>
+  drule_all enc_emit_op_readonly_run >>
+  disch_then (qx_choose_then `s2` strip_assume_tac) >>
+  `emitted_insts a c = emitted_insts a b ++ emitted_insts b c` by
+    (irule emitted_insts_append >> metis_tac[enc_emit_op_append]) >>
+  qexists_tac `s2` >> simp[] >> conj_tac
+  >- (irule enc_run_inst_seq_compose >> qexists_tac `s1` >> simp[]) >>
+  rpt strip_tac >>
+  `!x. old = Var x ==> not_fresh_at b x` by
+    (match_mp_tac enc_old_operand_mono >> qexists_tac `a` >> simp[]) >>
+  metis_tac[]
+QED
+
+
 Theorem enc_dyn_loop_body_growth:
   enc_dyn_loop_body dst src ei asz msz count_ptr dyn_ptr sb = ((),se) ==>
   cs_extends sb se /\ sb.cs_next_id <= se.cs_next_id /\
