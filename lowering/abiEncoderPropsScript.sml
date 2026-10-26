@@ -6201,6 +6201,103 @@ Proof
   mp_tac enc_comp_grows_encoder >> simp[enc_comp_grows_def]
 QED
 
+Definition enc_result_bound_def:
+  enc_result_bound (m : operand compiler) <=>
+    !s op t. m s = (op,t) ==> !x. op = Var x ==> not_fresh_at t x
+End
+
+Theorem enc_result_bound_bind[local]:
+  (!x. enc_result_bound (f x)) ==> enc_result_bound (comp_bind m f)
+Proof
+  rw[enc_result_bound_def, comp_bind_def] >> pairarg_tac >> gvs[] >> metis_tac[]
+QED
+
+Theorem enc_result_bound_ignore[local]:
+  enc_result_bound n ==> enc_result_bound (comp_ignore_bind m n)
+Proof
+  simp[comp_ignore_bind_def, enc_result_bound_bind]
+QED
+
+Theorem enc_result_bound_lit[local]:
+  enc_result_bound (comp_return (Lit w))
+Proof
+  simp[enc_result_bound_def, comp_return_def]
+QED
+
+Theorem enc_result_bound_emit_op[local]:
+  enc_result_bound (emit_op opc args)
+Proof
+  rw[enc_result_bound_def] >> drule emitted_insts_emit_op >> strip_tac >>
+  gvs[not_fresh_at_def]
+QED
+
+Theorem enc_result_bound_static[local]:
+  enc_result_bound (compile_abi_encode_static dst src)
+Proof
+  rewrite_tac[compile_abi_encode_static_def] >>
+  irule enc_result_bound_bind >> gen_tac >> BETA_TAC >>
+  irule enc_result_bound_ignore >> simp[enc_result_bound_lit]
+QED
+
+Theorem enc_result_bound_dyn_static_loop[local]:
+  enc_result_bound (compile_abi_encode_dyn_static_loop dst src ei asz msz len)
+Proof
+  rewrite_tac[compile_abi_encode_dyn_static_loop_def] >>
+  rpt (FIRST [CHANGED_TAC (simp[LET_THM, enc_result_bound_emit_op]),
+        irule enc_result_bound_bind, irule enc_result_bound_ignore, gen_tac])
+QED
+
+Theorem enc_encoder_result_bound_aux[local]:
+  (!dst cp ei dyn off dp.
+    enc_result_bound (compile_abi_encode_child dst cp ei dyn off dp)) /\
+  (!dst src ei. enc_result_bound (compile_abi_encode_to_buf dst src ei)) /\
+  (!dst src eis so ho dp.
+    enc_result_bound (compile_abi_encode_complex_elems dst src eis so ho dp)) /\
+  (!dst src ei asz msz len.
+    enc_result_bound (compile_abi_encode_dyn_loop dst src ei asz msz len))
+Proof
+  ho_match_mp_tac compile_abi_encode_child_ind >> conj_tac
+  >- suspend "child" >>
+  rpt conj_tac >> rpt strip_tac >>
+  once_rewrite_tac[compile_abi_encode_child_def] >>
+  rpt (FIRST [CHANGED_TAC (gvs[LET_THM, enc_result_bound_emit_op,
+          enc_result_bound_lit, enc_result_bound_static,
+          enc_result_bound_dyn_static_loop]),
+        irule enc_result_bound_bind, irule enc_result_bound_ignore,
+        gen_tac, IF_CASES_TAC])
+QED
+
+Resume enc_encoder_result_bound_aux[child]:
+  rpt gen_tac >> strip_tac >> Cases_on `dyn` >>
+  gvs[Once compile_abi_encode_child_def] >>
+  rw[enc_result_bound_def, comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  gvs[enc_result_bound_def] >> rpt strip_tac >>
+  qpat_x_assum `!dst' s op t. _` drule >> simp[] >> strip_tac >>
+  imp_res_tac (SRULE [enc_comp_grows_def] enc_comp_grows_emit_op) >>
+  imp_res_tac (SRULE [enc_comp_grows_def] enc_comp_grows_emit_void) >>
+  fs[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]
+QED
+
+Finalise enc_encoder_result_bound_aux
+
+Theorem enc_encoder_result_bound:
+  (!dst cp ei dyn off dp st op st'.
+    compile_abi_encode_child dst cp ei dyn off dp st = (op,st') ==>
+    !x. op = Var x ==> not_fresh_at st' x) /\
+  (!dst src ei st op st'.
+    compile_abi_encode_to_buf dst src ei st = (op,st') ==>
+    !x. op = Var x ==> not_fresh_at st' x) /\
+  (!dst src eis so ho dp st op st'.
+    compile_abi_encode_complex_elems dst src eis so ho dp st = (op,st') ==>
+    !x. op = Var x ==> not_fresh_at st' x) /\
+  (!dst src ei asz msz len st op st'.
+    compile_abi_encode_dyn_loop dst src ei asz msz len st = (op,st') ==>
+    !x. op = Var x ==> not_fresh_at st' x)
+Proof
+  mp_tac enc_encoder_result_bound_aux >> simp[enc_result_bound_def]
+QED
+
 (* Recursive correctness is indexed by compiler arguments, not endpoints. *)
 Definition enc_buf_correct_def:
   enc_buf_correct dst src ei <=>
@@ -7024,6 +7121,477 @@ Resume enc_child_static_correct_labels[static_lift]:
 QED
 
 Finalise enc_child_static_correct_labels
+
+Theorem enc_child_dynamic_prefix_run:
+  emit_op ADD [dst; Lit (n2w h)] st = (head_op,a) /\
+  emit_op MLOAD [cursor] a = (offset_op,b) /\
+  emit_op ADD [dst;offset_op] b = (tail_op,m) /\
+  eval_operand dst s0 = SOME dw /\
+  eval_operand cursor s0 = SOME (n2w c) /\
+  mem_word_at c s0.vs_memory = n2w d /\ c < dimword (:256) /\
+  (!x. dst = Var x \/ cursor = Var x ==> not_fresh_at st x) /\
+  enc_scratch (frag_ids st end_st) lo top s0 ==>
+  ?s. run_inst_seq (emitted_insts st m) s0 = OK s /\
+      same_blocks st m /\
+      eval_operand head_op s = SOME (n2w (w2n dw + h)) /\
+      eval_operand offset_op s = SOME (n2w d) /\
+      eval_operand tail_op s = SOME (n2w (w2n dw + d)) /\
+      s.vs_memory = s0.vs_memory /\ s.vs_labels = s0.vs_labels /\
+      (!old. (!x. old = Var x ==> not_fresh_at st x) ==>
+         eval_operand old s = eval_operand old s0) /\
+      enc_frame st end_st lo top outs s0 s /\
+      (!x. head_op = Var x \/ offset_op = Var x \/ tail_op = Var x ==>
+         not_fresh_at m x) /\
+      (!x. not_fresh_at st x ==> not_fresh_at m x)
+Proof
+  rpt strip_tac >>
+  `step_inst_base (mk_inst st.cs_next_id ADD [dst; Lit (n2w h)]
+     [STRING #"%" (toString st.cs_next_var)]) s0 =
+     OK (update_var (STRING #"%" (toString st.cs_next_var))
+       (n2w (w2n dw + h)) s0)` by
+    (simp[GSYM wordsTheory.word_add_n2w, wordsTheory.n2w_w2n] >>
+     irule step_ADD >> simp[eval_operand_lit]) >>
+  `st.cs_next_var <= st.cs_next_var` by simp[] >>
+  drule_all enc_emit_op_run_frame >>
+  disch_then (qspec_then `outs` strip_assume_tac) >>
+  rename1 `run_inst_seq (emitted_insts st a) s0 = OK s1` >>
+  qpat_x_assum `step_inst_base _ _ = _` kall_tac >>
+  suspend "load"
+QED
+
+Resume enc_child_dynamic_prefix_run[load]:
+  `eval_operand cursor s1 = SOME (n2w c)` by
+    (qpat_x_assum `!old. _` (qspec_then `cursor` mp_tac) >>
+     impl_tac >- metis_tac[] >> simp[]) >>
+  `step_inst_base (mk_inst a.cs_next_id MLOAD [cursor]
+     [STRING #"%" (toString a.cs_next_var)]) s1 =
+     OK (update_var (STRING #"%" (toString a.cs_next_var)) (n2w d) s1)` by
+    (drule step_MLOAD >> simp[wordsTheory.w2n_n2w, mload_def,
+       GSYM mem_word_at_def]) >>
+  qpat_assum `emit_op ADD _ st = _`
+    (mp_then Any strip_assume_tac emitted_insts_emit_op) >>
+  `st.cs_next_var <= a.cs_next_var` by simp[] >>
+  `enc_scratch (frag_ids st end_st) lo top s1` by fs[enc_frame_def] >>
+  drule_all enc_emit_op_run_frame >>
+  disch_then (qspec_then `outs` strip_assume_tac) >>
+  rename1 `run_inst_seq (emitted_insts a b) s1 = OK s2` >>
+  qpat_x_assum `step_inst_base _ _ = _` kall_tac >>
+  suspend "address"
+QED
+
+Resume enc_child_dynamic_prefix_run[address]:
+  `eval_operand dst s1 = SOME dw` by
+    (qpat_x_assum `!old. _ ==> eval_operand old s1 = _`
+       (qspec_then `dst` mp_tac) >> impl_tac >- metis_tac[] >> simp[]) >>
+  `eval_operand dst s2 = SOME dw` by
+    (qpat_x_assum `!old. _ ==> eval_operand old s2 = _`
+       (qspec_then `dst` mp_tac) >>
+     impl_tac >- (fs[not_fresh_at_def] >> metis_tac[]) >> simp[]) >>
+  `step_inst_base (mk_inst b.cs_next_id ADD [dst;offset_op]
+     [STRING #"%" (toString b.cs_next_var)]) s2 =
+     OK (update_var (STRING #"%" (toString b.cs_next_var))
+       (n2w (w2n dw + d)) s2)` by
+    (simp[GSYM wordsTheory.word_add_n2w, wordsTheory.n2w_w2n] >>
+     irule step_ADD >> simp[]) >>
+  qpat_assum `emit_op MLOAD _ a = _`
+    (mp_then Any strip_assume_tac emitted_insts_emit_op) >>
+  `st.cs_next_var <= b.cs_next_var` by simp[] >>
+  `enc_scratch (frag_ids st end_st) lo top s2` by fs[enc_frame_def] >>
+  drule_all enc_emit_op_run_frame >>
+  disch_then (qspec_then `outs` strip_assume_tac) >>
+  rename1 `run_inst_seq (emitted_insts b m) s2 = OK s3` >>
+  qpat_x_assum `step_inst_base _ _ = _` kall_tac >>
+  suspend "compose"
+QED
+
+Resume enc_child_dynamic_prefix_run[compose]:
+  qpat_assum `emit_op ADD _ b = _`
+    (mp_then Any strip_assume_tac emitted_insts_emit_op) >>
+  `!x. not_fresh_at st x ==> not_fresh_at a x` by
+    (fs[not_fresh_at_def] >> rpt strip_tac >> first_x_assum irule >> decide_tac) >>
+  `!x. not_fresh_at a x ==> not_fresh_at b x` by
+    (fs[not_fresh_at_def] >> rpt strip_tac >> first_x_assum irule >> decide_tac) >>
+  `!x. not_fresh_at b x ==> not_fresh_at m x` by
+    (fs[not_fresh_at_def] >> rpt strip_tac >> first_x_assum irule >> decide_tac) >>
+  `eval_operand head_op s2 = SOME (n2w (w2n dw + h))` by
+    (qpat_x_assum `!old. _ ==> eval_operand old s2 = _`
+       (qspec_then `head_op` mp_tac) >>
+     impl_tac >- simp[not_fresh_at_def] >> simp[]) >>
+  `eval_operand head_op s3 = SOME (n2w (w2n dw + h))` by
+    (qpat_assum `!old. _ ==> eval_operand old s3 = _`
+       (qspec_then `head_op` mp_tac) >>
+     impl_tac >- simp[not_fresh_at_def] >> simp[]) >>
+  `eval_operand offset_op s3 = SOME (n2w d)` by
+    (qpat_assum `!old. _ ==> eval_operand old s3 = _`
+       (qspec_then `offset_op` mp_tac) >>
+     impl_tac >- simp[not_fresh_at_def] >> simp[]) >>
+  qexists_tac `s3` >>
+  conj_tac
+  >- (`emitted_insts st b = emitted_insts st a ++ emitted_insts a b` by
+        (irule emitted_insts_append >> simp[]) >>
+      `emitted_insts st m = emitted_insts st b ++ emitted_insts b m` by
+        (irule emitted_insts_append >> simp[]) >>
+      qpat_x_assum `emitted_insts st m = _` SUBST1_TAC >>
+      irule enc_run_inst_seq_compose >> qexists_tac `s2` >>
+      conj_tac
+      >- (qpat_x_assum `emitted_insts st b = _` SUBST1_TAC >>
+          irule enc_run_inst_seq_compose >> qexists_tac `s1` >>
+          asm_rewrite_tac[]) >>
+      asm_rewrite_tac[]) >>
+  simp[] >>
+  conj_tac >- metis_tac[same_blocks_trans] >>
+  conj_tac
+  >- (`enc_frame st end_st lo top outs s0 s2` by
+        (irule enc_frame_trans >> goal_assum (drule_at Any) >> simp[]) >>
+      irule enc_frame_trans >> goal_assum (drule_at Any) >> simp[]) >>
+  rpt strip_tac >> gvs[] >>
+  simp[not_fresh_at_def]
+QED
+
+Finalise enc_child_dynamic_prefix_run
+
+Theorem enc_child_dynamic_prefix_structure:
+  emit_op ADD [dst; Lit (n2w h)] st = (head_op,a) /\
+  emit_op MLOAD [cursor] a = (offset_op,b) /\
+  emit_op ADD [dst;offset_op] b = (tail_op,m) ==>
+  cs_extends st m /\
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+    (emitted_insts st m)
+Proof
+  strip_tac >>
+  imp_res_tac (SRULE [enc_comp_grows_def] enc_comp_grows_emit_op) >>
+  conj_tac >- metis_tac[cs_extends_trans] >>
+  imp_res_tac emit_op_extends >>
+  `emitted_insts st b = emitted_insts st a ++ emitted_insts a b` by
+    (irule emitted_insts_append >> simp[]) >>
+  `emitted_insts st m = emitted_insts st b ++ emitted_insts b m` by
+    (irule emitted_insts_append >> simp[]) >>
+  qpat_x_assum `emitted_insts st m = _` SUBST1_TAC >>
+  qpat_x_assum `emitted_insts st b = _` SUBST1_TAC >>
+  imp_res_tac emitted_insts_emit_op >>
+  simp[mk_inst_def, is_terminator_def]
+QED
+
+Theorem enc_child_dynamic_suffix_structure:
+  emit_void MSTORE [hp; off] z = ((),a) /\
+  emit_op ADD [off; sz] a = (next,b) /\
+  emit_void MSTORE [cursor; next] b = ((),e) ==>
+  cs_extends z e /\ isPREFIX z.cs_current_insts e.cs_current_insts /\
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+    (emitted_insts z e)
+Proof
+  strip_tac >>
+  imp_res_tac (SRULE [enc_comp_grows_def] enc_comp_grows_emit_op) >>
+  imp_res_tac (SRULE [enc_comp_grows_def] enc_comp_grows_emit_void) >>
+  conj_tac >- metis_tac[cs_extends_trans] >>
+  imp_res_tac emit_void_extends >> imp_res_tac emit_op_extends >>
+  conj_tac >- metis_tac[rich_listTheory.IS_PREFIX_APPEND3, rich_listTheory.IS_PREFIX_TRANS] >>
+  `emitted_insts z b = emitted_insts z a ++ emitted_insts a b` by
+    (irule emitted_insts_append >> simp[]) >>
+  `emitted_insts z e = emitted_insts z b ++ emitted_insts b e` by
+    (irule emitted_insts_append >> simp[]) >>
+  qpat_x_assum `emitted_insts z e = _` SUBST1_TAC >>
+  qpat_x_assum `emitted_insts z b = _` SUBST1_TAC >>
+  imp_res_tac emitted_insts_emit_op >> imp_res_tac emitted_insts_emit_void >>
+  simp[mk_inst_def, is_terminator_def]
+QED
+
+Theorem enc_child_dynamic_suffix_run:
+  emit_void MSTORE [head_op; offset_op] z = ((), a) /\
+  emit_op ADD [offset_op; size_op] a = (next_op, b) /\
+  emit_void MSTORE [cursor; next_op] b = ((), e) /\
+  eval_operand head_op s = SOME (n2w head) /\
+  eval_operand offset_op s = SOME (n2w d) /\
+  eval_operand size_op s = SOME (n2w nb) /\
+  eval_operand cursor s = SOME (n2w c) /\
+  (!x. size_op = Var x \/ cursor = Var x ==> not_fresh_at z x) /\
+  head < dimword (:256) /\ c < dimword (:256) /\
+  outer.cs_next_var <= z.cs_next_var /\
+  enc_scratch (frag_ids outer end_st) lo top s ==>
+  ?t. run_inst_seq (emitted_insts z e) s = OK t /\
+      same_blocks z e /\
+      t.vs_memory = (mstore c (n2w (d + nb)) (mstore head (n2w d) s)).vs_memory /\
+      t.vs_labels = s.vs_labels /\
+      eval_operand size_op t = SOME (n2w nb) /\
+      enc_frame outer end_st lo top [(head,32);(tail,nb);(c,32)] s t
+Proof
+  strip_tac >>
+  qpat_assum `emit_void MSTORE [head_op;offset_op] z = _`
+    (mp_then Any mp_tac enc_emit_mstore_run_frame) >>
+  disch_then drule >> disch_then drule >> disch_then drule >>
+  disch_then (qspecl_then [`[(head,32);(tail,nb);(c,32)]`, `32`, `head`] mp_tac) >>
+  simp[wordsTheory.w2n_n2w] >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts z a) s = OK s1` >>
+  suspend "add"
+QED
+
+Resume enc_child_dynamic_suffix_run[add]:
+  `step_inst_base (mk_inst a.cs_next_id ADD [offset_op;size_op]
+     [STRING #"%" (toString a.cs_next_var)]) s1 =
+     OK (update_var (STRING #"%" (toString a.cs_next_var))
+       (n2w (d + nb)) s1)` by
+    (simp[GSYM wordsTheory.word_add_n2w] >> irule step_ADD >> simp[]) >>
+  qpat_assum `emit_void MSTORE _ z = _`
+    (mp_then Any strip_assume_tac emitted_insts_emit_void) >>
+  `outer.cs_next_var <= a.cs_next_var` by simp[] >>
+  `enc_scratch (frag_ids outer end_st) lo top s1` by fs[enc_frame_def] >>
+  drule_all enc_emit_op_run_frame >>
+  disch_then (qspec_then `[(head,32);(tail,nb);(c,32)]` strip_assume_tac) >>
+  rename1 `run_inst_seq (emitted_insts a b) s1 = OK s2` >>
+  qpat_x_assum `step_inst_base _ _ = _` kall_tac >>
+  suspend "cursor"
+QED
+
+Resume enc_child_dynamic_suffix_run[cursor]:
+  `eval_operand cursor s2 = SOME (n2w c)` by
+    (qpat_assum `!old. _ ==> eval_operand old s2 = _`
+       (qspec_then `cursor` mp_tac) >>
+     impl_tac >- (fs[not_fresh_at_def] >> metis_tac[]) >> simp[]) >>
+  `eval_operand size_op s2 = SOME (n2w nb)` by
+    (qpat_assum `!old. _ ==> eval_operand old s2 = _`
+       (qspec_then `size_op` mp_tac) >>
+     impl_tac >- (fs[not_fresh_at_def] >> metis_tac[]) >> simp[]) >>
+  `enc_scratch (frag_ids outer end_st) lo top s2` by fs[enc_frame_def] >>
+  qpat_assum `emit_void MSTORE [cursor;next_op] b = _`
+    (mp_then Any mp_tac enc_emit_mstore_run_frame) >>
+  disch_then drule >> disch_then drule >> disch_then drule >>
+  disch_then (qspecl_then [`[(head,32);(tail,nb);(c,32)]`, `32`, `c`] mp_tac) >>
+  simp[wordsTheory.w2n_n2w] >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts b e) s2 = OK s3` >>
+  suspend "compose"
+QED
+
+Resume enc_child_dynamic_suffix_run[compose]:
+  imp_res_tac emit_void_extends >> imp_res_tac emit_op_extends >>
+  `emitted_insts z b = emitted_insts z a ++ emitted_insts a b` by
+    (irule emitted_insts_append >> simp[]) >>
+  `emitted_insts z e = emitted_insts z b ++ emitted_insts b e` by
+    (irule emitted_insts_append >> simp[]) >>
+  qexists_tac `s3` >> conj_tac
+  >- (qpat_x_assum `emitted_insts z e = _` SUBST1_TAC >>
+      irule enc_run_inst_seq_compose >> qexists_tac `s2` >>
+      conj_tac
+      >- (qpat_x_assum `emitted_insts z b = _` SUBST1_TAC >>
+          irule enc_run_inst_seq_compose >> qexists_tac `s1` >>
+          asm_rewrite_tac[]) >> asm_rewrite_tac[]) >>
+  conj_tac >- metis_tac[same_blocks_trans] >>
+  conj_tac
+  >- (qpat_x_assum `s3.vs_memory = _` SUBST1_TAC >>
+      CONV_TAC (BINOP_CONV (RAND_CONV (REWR_CONV mstore_def))) >>
+      simp[NoAsms] >> asm_rewrite_tac[]) >>
+  simp[] >>
+  `enc_frame outer end_st lo top [(head,32);(tail,nb);(c,32)] s s2` by
+    (irule enc_frame_trans >> goal_assum (drule_at Any) >> simp[]) >>
+  irule enc_frame_trans >> goal_assum (drule_at Any) >> simp[]
+QED
+
+Finalise enc_child_dynamic_suffix_run
+
+Theorem enc_child_dynamic_correct_labels:
+  (!child_dst. enc_buf_correct_labels child_dst child_ptr ei) ==>
+  enc_child_correct_labels dst child_ptr ei T static_ofst dyn_ptr
+Proof
+  strip_tac >> rewrite_tac[enc_child_correct_labels_def] >>
+  rpt gen_tac >> strip_tac >> simp[] >> rpt strip_tac >>
+  qpat_x_assum `compile_abi_encode_child _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[Once compile_abi_encode_child_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def] >>
+  rpt (pairarg_tac >> simp[]) >> strip_tac >>
+  qpat_x_assum `_ = st'` SUBST_ALL_TAC >>
+  gvs[] >>
+  rename1 `emit_op ADD [dst; Lit (n2w static_ofst)] st = (static_loc, a)` >>
+  rename1 `emit_op MLOAD [dyn_ptr] a = (dyn_ofst, b)` >>
+  rename1 `emit_op ADD [dst; dyn_ofst] b = (child_dst, m)` >>
+  rename1 `compile_abi_encode_to_buf child_dst child_ptr ei m = (op, z)` >>
+  qabbrev_tac `head = static_ofst + w2n dst_w` >>
+  qabbrev_tac `tail = d + w2n dst_w` >>
+  qabbrev_tac `nb = LENGTH (enc (vyper_to_abi_type env ty) av)` >>
+  `head < dimword (:256)` by
+    (drule enc_pre_bounds >> fs[enc_pre_def, Abbr `head`, Abbr `tail`]) >>
+  `enc_scratch (frag_ids st st') lo top s0` by fs[enc_pre_def] >>
+  `c < dimword (:256)` by
+    (drule_all enc_scratch_alloca_bound >>
+     qpat_x_assum `enc_scratch _ _ _ s0` mp_tac >>
+     pure_rewrite_tac[enc_scratch_def] >> rpt strip_tac >> decide_tac) >>
+  `!x. dst = Var x \/ dyn_ptr = Var x ==> not_fresh_at st x` by
+    (fs[enc_pre_def] >> metis_tac[]) >>
+  drule_all enc_child_dynamic_prefix_run >>
+  disch_then (qspec_then `[(head,32);(tail,nb);(c,32)]` strip_assume_tac) >>
+  rename1 `run_inst_seq (emitted_insts st m) s0 = OK s1` >>
+  suspend "dynamic_recursive"
+QED
+
+Resume enc_child_dynamic_correct_labels[dynamic_recursive]:
+  drule (cj 2 enc_encoder_growth) >> strip_tac >>
+  imp_res_tac (SRULE [enc_comp_grows_def] enc_comp_grows_emit_op) >>
+  imp_res_tac (SRULE [enc_comp_grows_def] enc_comp_grows_emit_void) >>
+  `frag_ids m z SUBSET frag_ids st st'` by
+    (fs[frag_ids_def, pred_setTheory.SUBSET_DEF, cs_extends_def] >> decide_tac) >>
+  `tail < dimword (:256)` by
+    (drule enc_pre_bounds >> fs[enc_pre_def]) >>
+  `eval_operand child_ptr s1 = SOME src_w` by
+    (qpat_x_assum `!old. _` (qspec_then `child_ptr` mp_tac) >>
+     impl_tac >- (fs[enc_pre_def] >> metis_tac[]) >> simp[]) >>
+  `enc_pre m z [child_dst;child_ptr] lo top tv v (w2n src_w)
+     [(tail,nb)] s1` by
+    (reverse (rw[enc_pre_def])
+     >- (irule enc_scratch_subset >> qexists_tac `frag_ids st st'` >>
+         simp[] >> fs[enc_frame_def]) >>
+     fs[enc_pre_def] >> metis_tac[]) >>
+  qabbrev_tac `t1 = s1 with vs_inst_idx := LENGTH m.cs_current_insts` >>
+  `enc_pre m z [child_dst;child_ptr] lo top tv v (w2n src_w)
+     [(tail,nb)] t1` by simp[Abbr `t1`, enc_pre_inst_idx] >>
+  qpat_x_assum `enc_pre m z _ _ _ _ _ _ _ s1` kall_tac >>
+  `enc_buf_correct_labels child_dst child_ptr ei` by simp[] >>
+  `enc_scratch (frag_ids st st') lo top s1` by fs[enc_frame_def] >>
+  `enc_scratch (frag_ids st st') lo top t1` by
+    (`enc_scratch (frag_ids st st') lo top t1 <=>
+       enc_scratch (frag_ids st st') lo top s1` by
+       (irule enc_scratch_cong >> simp[Abbr `t1`]) >> metis_tac[]) >>
+  qpat_x_assum `enc_scratch _ _ _ s1` kall_tac >>
+  `eval_operand child_ptr t1 = SOME src_w` by
+    simp[Abbr `t1`, enc_operand_inst_idx] >>
+  qpat_x_assum `eval_operand child_ptr s1 = _` kall_tac >>
+  `w2n (n2w tail : bytes32) = tail` by simp[wordsTheory.w2n_n2w] >>
+  `eval_operand child_dst t1 = SOME (n2w tail)` by
+    simp[Abbr `t1`, enc_operand_inst_idx, Abbr `tail`, arithmeticTheory.ADD_COMM] >>
+  qpat_x_assum `eval_operand child_dst s1 = _` kall_tac >>
+  `enc_pre m z [child_dst;child_ptr] lo top tv v (w2n src_w)
+     [(w2n (n2w tail : bytes32),LENGTH (enc (vyper_to_abi_type env ty) av))] t1`
+    by (qpat_x_assum `enc_pre m z _ _ _ _ _ _ _ _` mp_tac >>
+        simp[Abbr `nb`]) >>
+  `?p n. MEM (p,n) [(head,32);(tail,nb);(c,32)] /\
+     p <= w2n (n2w tail : bytes32) /\
+     w2n (n2w tail : bytes32) + LENGTH (enc (vyper_to_abi_type env ty) av) <= p+n`
+    by (qexistsl_tac [`tail`,`nb`] >> simp[Abbr `nb`]) >>
+  drule_all (SRULE [PULL_EXISTS] enc_buf_correct_labels_enclosing_local_frag) >>
+  disch_then (qspec_then `ctx` mp_tac) >> strip_tac >>
+  suspend "dynamic_suffix"
+QED
+
+Resume enc_child_dynamic_correct_labels[dynamic_suffix]:
+  drule_all enc_child_dynamic_prefix_structure >> strip_tac >>
+  `isPREFIX st.cs_current_insts m.cs_current_insts` by
+    (qpat_assum `same_blocks st m` mp_tac >> rewrite_tac[same_blocks_def] >>
+     strip_tac >> qpat_assum `cs_extends st m` mp_tac >>
+     rewrite_tac[cs_extends_def] >> strip_tac >>
+     rename1 `m.cs_blocks = bs ++ st.cs_blocks` >>
+     `LENGTH m.cs_blocks = LENGTH bs + LENGTH st.cs_blocks` by
+       (qpat_x_assum `m.cs_blocks = bs ++ st.cs_blocks` SUBST1_TAC >> simp[]) >>
+     `bs = []` by fs[] >> fs[]) >>
+  `frag_exec ctx st m (\s. s = s0) (\s. s = t1) (\r. F)` by
+    (irule frag_exec_run_inst_seq >>
+     simp[Abbr `t1`] >> fs[same_blocks_def]) >>
+  `cs_extends z st'` by metis_tac[cs_extends_trans] >>
+  `cs_extends m st'` by metis_tac[cs_extends_trans] >>
+  qpat_x_assum `!cd. enc_buf_correct_labels cd child_ptr ei` kall_tac >>
+  qpat_x_assum `abi_enc_plan _ _ _` kall_tac >>
+  qpat_x_assum `evaluate_type _ _ = _` kall_tac >>
+  qpat_x_assum `value_has_type _ _` kall_tac >>
+  qpat_x_assum `vyper_to_abi _ _ _ = _` kall_tac >>
+  qpat_x_assum `is_dynamic _` kall_tac >>
+  drule (cj 2 enc_encoder_result_bound) >> strip_tac >>
+  qpat_x_assum `compile_abi_encode_to_buf _ _ _ _ = _` kall_tac >>
+  qpat_x_assum `emit_op ADD _ st = _` kall_tac >>
+  qpat_x_assum `emit_op MLOAD _ a = _` kall_tac >>
+  qpat_x_assum `emit_op ADD _ b = _` kall_tac >>
+  qpat_x_assum `enc_buf_correct_labels _ _ _` kall_tac >>
+  rpt (qpat_x_assum `_ <= _.cs_next_id` kall_tac) >>
+  `st.cs_next_var <= z.cs_next_var` by decide_tac >>
+  qpat_x_assum `cs_extends st a` kall_tac >>
+  qpat_x_assum `cs_extends a b` kall_tac >>
+  qpat_x_assum `cs_extends b m` kall_tac >>
+  irule frag_exec_seq_pointwise >>
+  qexistsl_tac [`\s. s = t1`, `m`] >>
+  simp[] >>
+  suspend "dynamic_after_prefix"
+QED
+
+Resume enc_child_dynamic_correct_labels[dynamic_after_prefix]:
+  qpat_x_assum `frag_exec ctx m z _ _ _`
+    (mp_then Any irule frag_exec_then) >>
+  simp[] >> qx_gen_tac `s2` >> strip_tac >>
+  suspend "dynamic_stores"
+QED
+
+Resume enc_child_dynamic_correct_labels[dynamic_stores]:
+  `eval_operand static_loc t1 = SOME (n2w head)` by
+    simp[Abbr `t1`, enc_operand_inst_idx, Abbr `head`, arithmeticTheory.ADD_COMM] >>
+  `eval_operand dyn_ofst t1 = SOME (n2w d)` by
+    simp[Abbr `t1`, enc_operand_inst_idx] >>
+  `eval_operand dyn_ptr t1 = SOME (n2w c)` by
+    simp[Abbr `t1`, enc_operand_inst_idx] >>
+  `eval_operand static_loc s2 = SOME (n2w head)` by
+    (qpat_assum `enc_frame m z _ _ _ t1 s2`
+       (mp_then Any irule enc_frame_preserves_operand) >> simp[]) >>
+  `eval_operand dyn_ofst s2 = SOME (n2w d)` by
+    (qpat_assum `enc_frame m z _ _ _ t1 s2`
+       (mp_then Any irule enc_frame_preserves_operand) >> simp[]) >>
+  `eval_operand dyn_ptr s2 = SOME (n2w c)` by
+    (qpat_assum `enc_frame m z _ _ _ t1 s2`
+       (mp_then Any irule enc_frame_preserves_operand) >>
+     simp[] >> metis_tac[]) >>
+  suspend "dynamic_cursor"
+QED
+
+Resume enc_child_dynamic_correct_labels[dynamic_cursor]:
+  `head + 32 <= tail` by
+    (simp[Abbr `head`, Abbr `tail`] >> decide_tac) >>
+  `head + 32 <= lo /\ tail + nb <= lo` by
+    (qpat_assum `enc_pre st st' _ _ _ _ _ _ _ s0` mp_tac >>
+     simp[NoAsms, enc_pre_def] >> rpt strip_tac >> decide_tac) >>
+
+  `!x. op = Var x \/ dyn_ptr = Var x ==> not_fresh_at z x` by
+    (rpt strip_tac >> simp[] >>
+     irule freshWritesTheory.not_fresh_at_mono >>
+     qexists_tac `st` >> simp[]) >>
+  `enc_scratch (frag_ids st st') lo top s2` by fs[enc_frame_def] >>
+  drule_all enc_child_dynamic_suffix_run >>
+  disch_then (qspec_then `tail` strip_assume_tac) >>
+  rename1 `run_inst_seq (emitted_insts z st') s2 = OK s3` >>
+  drule_all enc_child_dynamic_suffix_structure >> strip_tac >>
+  suspend "dynamic_finish"
+QED
+
+Resume enc_child_dynamic_correct_labels[dynamic_finish]:
+  `enc_frame st st' lo top [(head,32);(tail,nb);(c,32)] s1 s2` by
+    (qpat_assum `enc_frame st st' _ _ _ t1 s2` mp_tac >>
+     simp[NoAsms, Abbr `t1`] >> POP_ASSUM_LIST (K all_tac) >>
+     simp[enc_frame_def, lookup_var_def] >> metis_tac[]) >>
+  `enc_frame st st' lo top [(head,32);(tail,nb);(c,32)] s0 s2` by
+    (irule enc_frame_trans >> qexists_tac `s1` >> simp[]) >>
+  `enc_frame st st' lo top [(head,32);(tail,nb);(c,32)] s0 s3` by
+    (irule enc_frame_trans >> qexists_tac `s2` >> simp[]) >>
+  `s3.vs_labels = s0.vs_labels` by simp[Abbr `t1`] >>
+  rpt (qpat_x_assum `enc_pre _ _ _ _ _ _ _ _ _ _` kall_tac) >>
+  rpt (qpat_x_assum `enc_scratch _ _ _ _` kall_tac) >>
+  rpt (qpat_x_assum `enc_frame m z _ _ _ _ _` kall_tac) >>
+  rpt (qpat_x_assum `eval_operand _ t1 = _` kall_tac) >>
+  rpt (qpat_x_assum `eval_operand _ s1 = _` kall_tac) >>
+  rpt (qpat_x_assum `_ <= _.cs_next_var` kall_tac) >>
+  rpt (qpat_x_assum `!x. _ ==> not_fresh_at _ x` kall_tac) >>
+  rpt (qpat_x_assum `emit_void _ _ _ = _` kall_tac) >>
+  rpt (qpat_x_assum `emit_op _ _ _ = _` kall_tac) >>
+  suspend "dynamic_memory"
+QED
+
+Resume enc_child_dynamic_correct_labels[dynamic_memory]:
+  `mem_bytes_at tail nb s3.vs_memory = enc (vyper_to_abi_type env ty) av` by
+    (qpat_assum `s3.vs_memory = _` SUBST1_TAC >>
+     `tail + nb <= c` by decide_tac >>
+     simp[mstore_mem_bytes_at_disjoint]) >>
+  `mem_word_at head s3.vs_memory = n2w d` by
+    (qpat_assum `s3.vs_memory = _` SUBST1_TAC >>
+     `head + 32 <= c` by decide_tac >>
+     simp[mstore_mem_word_at_disjoint, mstore_mem_word_at_same]) >>
+  `mem_word_at c s3.vs_memory = n2w (d + nb)` by
+    (qpat_assum `s3.vs_memory = _` SUBST1_TAC >>
+     simp[mstore_mem_word_at_same]) >>
+  irule frag_exec_run_inst_seq >>
+  simp[enc_operand_inst_idx] >> fs[same_blocks_def]
+QED
+
+Finalise enc_child_dynamic_correct_labels
 
 Theorem compile_abi_encode_frag:
   (!dst child_ptr ei is_dyn static_ofst dyn_ptr st op st' ctx env ty tv v
