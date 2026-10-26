@@ -467,10 +467,7 @@ Theorem external_return_static_unlock_result_rel:
     frag_exec ctx st st'
       (\s. state_rel func cenv cx es s /\
            (?p. eval_operand op s = SOME p /\
-                val_in_memory tv v0 (w2n p) s.vs_memory) /\
-           s.vs_accounts =
-             process_deletions es.pending_deletions es.accounts /\
-           s.vs_transient = es.tStorage)
+                val_in_memory tv v0 (w2n p) s.vs_memory))
       Q
       (external_call_result_rel tops ret tx
          (INL v, finalize_pending_deletions
@@ -542,10 +539,7 @@ Theorem external_return_static_cenv_unlock_result_rel:
     frag_exec ctx st st'
       (\s. state_rel func cenv cx es s /\
            (?p. eval_operand op s = SOME p /\
-                val_in_memory tv v0 (w2n p) s.vs_memory) /\
-           s.vs_accounts =
-             process_deletions es.pending_deletions es.accounts /\
-           s.vs_transient = es.tStorage)
+                val_in_memory tv v0 (w2n p) s.vs_memory))
       Q
       (external_call_result_rel tops ret tx
          (INL v, finalize_pending_deletions
@@ -716,10 +710,7 @@ Theorem external_return_abi_unlock_result_rel:
            alloca_inv s /\
            (!i. i IN frag_ids st st' ==> FLOOKUP s.vs_allocas i = NONE) /\
            s.vs_alloca_next + msz + 32 * (st'.cs_next_id - st.cs_next_id) <
-             dimword (:256) /\
-           s.vs_accounts =
-             process_deletions es.pending_deletions es.accounts /\
-           s.vs_transient = es.tStorage)
+             dimword (:256))
       Q
       (external_call_result_rel tops ret tx
          (INL v, finalize_pending_deletions

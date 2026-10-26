@@ -2,7 +2,8 @@
  * TOP-LEVEL: layouts_agree, source_deployment_rel, source_typing_ok,
  * source_storage_ok, call_outcomes_ok, tx_env_ok, tx_block_fields_rel,
  * value_transfer_ok, accounts_after_transfer, call_state_rel,
- * valid_vyper_call, compiled_event_info, return_bytes,
+ * call_external_transaction_pending_deletions,
+ * load_contract_pending_deletions, valid_vyper_call, compiled_event_info, return_bytes,
  * decode_strictness_exempt, source_exempt, call_result_rel, logs_correspond.
  * TASK056: all compiler/call consumers use this exact boundary; the obsolete
  * compatibility owner is deleted. No old/new equivalence is claimed.
@@ -13,7 +14,7 @@ Theory e2eDefs
 Ancestors
   vfmExecution vfmExecutionProp vfmState
   frameOutcome callTrace
-  vyperABI vyperEvent vyperInterpreter
+  vyperABI vyperEvent vyperInterpreter vyperCall
   vyperTypeContract vyperTypeContractSoundness vyperTypeInitialState
   vyperStorageLayoutSafety vyperRuntimeAccounts
   supportedProgram compileEnv selectorDispatch
@@ -127,6 +128,31 @@ Definition call_state_rel_def:
       tx_block_fields_rel tx es.txParams /\
       source_deployment_rel tops am tx
 End
+
+(* call_state_rel's am.pending_deletions = [] holds of every machine that
+   deployments and transactions reach from one with none: a successful
+   deployment or call commits its deletions (finalize_pending_deletions),
+   and a failed call returns the machine it was given. *)
+Theorem call_external_transaction_pending_deletions:
+  !orc am tx r am' rqs.
+    call_external_transaction orc am tx = (r, am', rqs) /\
+    am.pending_deletions = [] ==>
+    am'.pending_deletions = []
+Proof
+  rw[call_external_transaction_def] >> Cases_on `r`
+  >- (qpat_x_assum `call_external _ _ _ = _` mp_tac >>
+      simp[call_external_def] >> rpt (BasicProvers.TOP_CASE_TAC >> simp[]) >>
+      rw[] >> simp[])
+  >> drule call_external_error_rollback >> simp[clear_machine_logs_def]
+QED
+
+Theorem load_contract_pending_deletions:
+  !orc am tx mods exps am' rqs.
+    load_contract orc am tx mods exps = INL (am', rqs) ==>
+    am'.pending_deletions = []
+Proof
+  rw[load_contract_def] >> gvs[AllCaseEqs()]
+QED
 
 (* Exact PLAN lookup: the source lookup_function API, no invented additional
    MEM/selector-uniqueness premise. Supported-program restrictions are separate. *)
