@@ -30,4 +30,10 @@ Ancestors
   evalCompilerInternalLabels
   evalCompilerSliceBuffers
   evalCompilerPhiPointers
+  evalCompilerInternalFrames
+  evalCompilerInternalImmutables
+  (* focused internal-frame allocation, cleanup and whitelist regressions *)
+  calleeMemoryWitness
+  cleanupPromiseWitness
+  internalFrameWhitelistDiagnostic
   evalCompilerAllocationLimit
