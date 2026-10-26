@@ -47,9 +47,10 @@
  *
  * Not here: Assign/AugAssign (#550), Append and For over an array (#559),
  * Log (#570). Return of a word from an internal function is in
- * stmtSimReturn; AnnAssign of a word local and Raise and Assert with a
- * string literal reason are in stmtSimCases; the other returns,
- * declarations and reasons are not covered yet.
+ * stmtSimReturn; AnnAssign of a local whose value is a word_value (not an
+ * address or bytesN) and Raise and Assert with a string literal reason are
+ * in stmtSimCases; the other returns, declarations and reasons are not
+ * covered yet.
  *)
 
 Theory stmtSim
@@ -2449,10 +2450,13 @@ QED
    finish the code ends at the start of the exit block.  The body's
    judgment is assumed for the environment declare_local gives, at the
    iteration states over source states where the invariant P holds; P
-   holds at the start and again after each iteration that goes on.  Only for
-   n1 <= n2 (not the source's "no range" error), a loop variable of one
-   word, and ce_alloca_locals, which the lowering sets for external
-   functions only. *)
+   holds at the start and again after each iteration that goes on.  P sees
+   the state and not the counter, so this composes with an induction whose
+   hypothesis holds at every state satisfying an invariant, not with one
+   over the evaluator's recursion, which gives the body only at the visited
+   (state, counter) pairs.  Only for n1 <= n2 (not the source's "no range"
+   error), a loop variable of one word, and ce_alloca_locals, which the
+   lowering sets for external functions only. *)
 Theorem compile_for_range_frag:
   !P ctx func cx lctx RetQ cenv ty id fty a1 n1 a2 n2 bound stmts es res es'
    tyv.
