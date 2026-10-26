@@ -1,7 +1,7 @@
 (* TOP-LEVEL: val_in_memory_prim_enc, val_in_memory_flag_enc.
    Scalar layout facts shared by creation encoding and the legacy ABI proofs.
    This theory has no dependency on admitted recursive encoder correctness. *)
-Theory createAbiValueEncoding
+Theory abiValueEncoding
 Ancestors
   list rich_list words byte divides bitstring integer_word
   valueEncoding valueEncodingProps compileEnv vyperABI vyperTyping vyperValue contractABI
@@ -88,7 +88,7 @@ Proof
   rpt strip_tac >> gvs[]
 QED
 
-Theorem create_abi_base_memory:
+Theorem abi_base_memory:
   evaluate_type tenv (BaseT bt) = SOME tv ∧
   is_word_type (BaseT bt) ∧ value_has_type tv v ∧
   val_in_memory tv v off mem ∧ off + 32 ≤ LENGTH mem ∧
@@ -99,7 +99,7 @@ Proof
   gvs[] >> drule_all val_in_memory_prim_enc >> simp[]
 QED
 
-Theorem create_abi_word_type_size:
+Theorem abi_word_type_size:
   is_word_type ty ∧ evaluate_type tenv ty = SOME tv ⇒
   type_memory_size tv = 32
 Proof
@@ -109,7 +109,7 @@ Proof
   gvs[is_word_type_def, evaluate_type_def, type_memory_size_def, AllCaseEqs()]
 QED
 
-Theorem create_abi_flag_memory:
+Theorem abi_flag_memory:
   evaluate_type tenv (FlagT nsid) = SOME tv ∧
   val_in_memory tv v off mem ∧ off + 32 ≤ LENGTH mem ∧
   vyper_to_abi tenv (FlagT nsid) v = SOME av ⇒
@@ -122,7 +122,7 @@ QED
 
 (* The typed source word is exactly its ABI word, including bytes20 versus
    address alignment and flags; no untyped value-to-word heuristic is used. *)
-Theorem create_abi_word_memory:
+Theorem abi_word_memory:
   is_word_type ty ∧ evaluate_type tenv ty = SOME tv ∧
   value_has_type tv v ∧ val_in_memory tv v off mem ∧
   off + 32 ≤ LENGTH mem ∧ vyper_to_abi tenv ty v = SOME av ⇒
@@ -132,8 +132,8 @@ Proof
   rpt gen_tac >> strip_tac >>
   `mem_bytes_at off 32 mem = enc (vyper_to_abi_type tenv ty) av` by
     (Cases_on `ty` >> TRY (gvs[is_word_type_def] >> NO_TAC) >>
-     FIRST [drule_all create_abi_base_memory >> simp[],
-            drule_all create_abi_flag_memory >> simp[]]) >>
+     FIRST [drule_all abi_base_memory >> simp[],
+            drule_all abi_flag_memory >> simp[]]) >>
   conj_tac >- simp[] >>
   qpat_x_assum `mem_bytes_at off 32 mem = _`
     (mp_tac o AP_TERM ``LENGTH : byte list -> num``) >> simp[]
@@ -143,4 +143,4 @@ val _ = app (fn (name, th) =>
   if null (List.filter (fn s => s <> "DISK_THM")
              (#1 (Tag.dest_tag (Thm.tag th)))) then ()
   else raise Fail ("Oracle dependency in " ^ name))
-  (DB.thms "createAbiValueEncoding");
+  (DB.thms "abiValueEncoding");

@@ -24,7 +24,7 @@ Ancestors
   exprLoweringProps emitHelper emitHelperProps
   abiEncoder compileEnv
   venomExecSemantics venomState venomInst venomMemProps
-  valueEncoding valueEncodingProps createAbiValueEncoding
+  valueEncoding valueEncodingProps abiValueEncoding
   vyperABI vyperTyping contractABI fragExec
 Libs
   dep_rewrite wordsLib
@@ -301,10 +301,10 @@ QED
 
    Precondition off + 32 ≤ LENGTH mem ensures mem_bytes_at returns
    real memory (no zero-padding from REPLICATE). *)
-Theorem val_in_memory_prim_enc = createAbiValueEncodingTheory.val_in_memory_prim_enc
+Theorem val_in_memory_prim_enc = abiValueEncodingTheory.val_in_memory_prim_enc
 
 (* Flag types: same argument as prims but FlagTV instead of BaseTV *)
-Theorem val_in_memory_flag_enc = createAbiValueEncodingTheory.val_in_memory_flag_enc
+Theorem val_in_memory_flag_enc = abiValueEncodingTheory.val_in_memory_flag_enc
 
 (* Memory length fits in a word — needed so w2n/n2w round-trips *)
 Definition venom_memory_bound_def:

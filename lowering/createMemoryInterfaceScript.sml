@@ -7,10 +7,10 @@ Libs
   wordsLib
 
 (* Exact byte snapshots, disjoint-write frames and capacity bounds used by
-   creation preparation. The CFG consumers are in createCopyExecution and
-   createSlotCopyExecution. Callback simulation and recursive ABI execution
+   creation preparation. The CFG consumers are in copyExecution and
+   slotCopyExecution. Callback simulation and recursive ABI execution
    require their own contracts; state_rel alone does not protect private memory. *)
-Theorem compile_create_copy_dynamic_execution:
+Theorem compile_copy_memory_dynamic_execution:
   compile_copy_memory_dynamic dst src len cs = ((),cs') /\
   eval_operand dst s = SOME d /\ eval_operand src s = SOME p /\
   eval_operand len s = SOME n /\ fresh_vars_wrt cs s ==>

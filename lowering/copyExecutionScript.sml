@@ -1,4 +1,4 @@
-Theory createCopyExecution
+Theory copyExecution
 Ancestors
   createMemoryInterface createFrameInterface createSourceCallback fragExec context contextProps
   emitHelperProps exprLoweringProps venomMemProps venomExecSemantics
@@ -6,7 +6,7 @@ Ancestors
 
 (* Dynamic copying is one MCOPY, not a compiler-generated loop.  Lift its
    checked execution to the compositional CFG interface. *)
-Theorem compile_create_dynamic_copy_frag:
+Theorem compile_copy_memory_dynamic_frag:
   compile_copy_memory_dynamic dst src len cs = ((),cs') ==>
   cs_extends cs cs' /\
   frag_exec ctx cs cs'
@@ -31,7 +31,7 @@ Proof
   drule emitted_insts_emit_void >>
   simp[same_blocks_def] >> strip_tac >> strip_tac >>
   gvs[IS_PREFIX_APPEND, mk_inst_def, is_terminator_def] >> rpt strip_tac >>
-  drule_all compile_create_copy_dynamic_execution >>
+  drule_all compile_copy_memory_dynamic_execution >>
   strip_tac >> qexists_tac `s'` >> simp[] >>
   `LENGTH bytes = w2n n` by
     (qpat_x_assum `read_memory _ _ _ = bytes`
@@ -217,4 +217,4 @@ val _ = app (fn (name, th) =>
   if null (List.filter (fn s => s <> "DISK_THM")
              (#1 (Tag.dest_tag (Thm.tag th)))) then ()
   else raise Fail ("Oracle dependency in " ^ name))
-  (DB.thms "createCopyExecution");
+  (DB.thms "copyExecution");

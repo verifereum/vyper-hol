@@ -2,20 +2,20 @@
    theorem whose proof depends on an oracle admission. *)
 Theory createLoweringAudit
 Ancestors
-  createAllocationExecution createAbiWordTupleExecution createAbiBytesValueEncoding
-  createAbiBytesExecution createAbiBytesStepExecution
-  createAbiBytesFinalExecution createAbiBytesFrameExecution
+  bufferAllocationExecution abiWordTupleExecution abiBytesValueEncoding
+  abiBytesExecution abiBytesStepExecution
+  abiBytesFinalExecution abiBytesFrameExecution
   createDispatchExecution
-  createSlotCopyExecution createRequestCorrespondence exprCallbackContracts
+  slotCopyExecution createRequestCorrespondence exprCallbackContracts
 
 val checked_theories =
-  ["createAllocationExecution", "createAbiValueEncoding",
-    "createAbiBytesValueEncoding", "createAbiBytesExecution",
-    "createAbiBytesStepExecution", "createAbiBytesFinalExecution",
-    "createAbiBytesFrameExecution",
-   "createAbiTupleValueEncoding", "createAbiCopyExecution",
-   "createAbiWordTupleExecution", "createDispatchExecution",
-   "createMemoryInterface", "createCopyExecution", "createSlotCopyExecution",
+  ["bufferAllocationExecution", "abiValueEncoding",
+    "abiBytesValueEncoding", "abiBytesExecution",
+    "abiBytesStepExecution", "abiBytesFinalExecution",
+    "abiBytesFrameExecution",
+   "abiTupleValueEncoding", "abiCopyExecution",
+   "abiWordTupleExecution", "createDispatchExecution",
+   "createMemoryInterface", "copyExecution", "slotCopyExecution",
    "createSourceCallback", "createFrameInterface", "createRequestCorrespondence",
    "createOracleExecution", "exprCallbackContracts"];
 

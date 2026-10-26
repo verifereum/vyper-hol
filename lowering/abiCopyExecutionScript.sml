@@ -1,12 +1,12 @@
-(* TOP-LEVEL: compile_create_abi_copy_frag.
+(* TOP-LEVEL: compile_abi_copy_frag.
    Exact CFG execution of the production ABI bulk-copy case, including padded
-   source reads and a disjoint frame for previously saved creation bytecode. *)
-Theory createAbiCopyExecution
+   source reads and a disjoint frame for previously saved memory slices. *)
+Theory abiCopyExecution
 Ancestors
-  createCopyExecution createSourceCallback abiEncoder emitHelper
+  copyExecution createSourceCallback abiEncoder emitHelper
   compileEnv context venomState list words
 
-Theorem compile_create_abi_copy_shape:
+Theorem compile_abi_copy_shape:
   compile_abi_encode_to_buf dst src (AbiCopy n) cs = (result,cs') ⇔
   result = Lit (n2w n) ∧
   compile_copy_memory_dynamic dst src (Lit (n2w n)) cs = ((),cs')
@@ -16,7 +16,7 @@ Proof
   Cases_on `emit_void MCOPY [dst;src;Lit (n2w n)] cs` >> simp[] >> metis_tac[]
 QED
 
-Theorem compile_create_abi_copy_frag:
+Theorem compile_abi_copy_frag:
   n < 2 ** 256 ∧
   compile_abi_encode_to_buf dst src (AbiCopy n) cs = (result,cs') ⇒
   result = Lit (n2w n) ∧ cs_extends cs cs' ∧
@@ -31,8 +31,8 @@ Theorem compile_create_abi_copy_frag:
          create_memory_snapshot ((w2n d,bytes)::regions) s)
     (K F)
 Proof
-  strip_tac >> gvs[compile_create_abi_copy_shape] >>
-  drule compile_create_dynamic_copy_frag >>
+  strip_tac >> gvs[compile_abi_copy_shape] >>
+  drule compile_copy_memory_dynamic_frag >>
   disch_then (qspecl_then [`regions`, `p`, `n2w n : bytes32`, `live`, `d`,
                           `ctx`, `bytes`] mp_tac) >>
   simp[eval_operand_def, w2n_n2w, dimword_def]
@@ -42,4 +42,4 @@ val _ = app (fn (name, th) =>
   if null (List.filter (fn s => s <> "DISK_THM")
              (#1 (Tag.dest_tag (Thm.tag th)))) then ()
   else raise Fail ("Oracle dependency in " ^ name))
-  (DB.thms "createAbiCopyExecution");
+  (DB.thms "abiCopyExecution");

@@ -1,6 +1,6 @@
-Theory createSlotCopyExecution
+Theory slotCopyExecution
 Ancestors
-  createCopyExecution createMemoryInterface createSourceCallback createFrameInterface emitHelperProps fragExec
+  copyExecution createMemoryInterface createSourceCallback createFrameInterface emitHelperProps fragExec
   exprLoweringProps venomExecSemantics venomMemProps
   compileEnv emitHelper venomInst venomState list rich_list words
 Libs
@@ -811,7 +811,7 @@ Proof
   fs[slot_copy_inv_def, create_memory_snapshot_def]
 QED
 
-Theorem compile_create_slot_to_memory_frag:
+Theorem compile_slot_to_memory_frag:
   (loc = LocStorage \/ loc = LocTransient) /\
   compile_slot_to_memory src dst n loc cs = (result,cs') ==>
   cs_extends cs cs' /\
@@ -855,4 +855,4 @@ val _ = app (fn (name, th) =>
   if null (List.filter (fn s => s <> "DISK_THM")
              (#1 (Tag.dest_tag (Thm.tag th)))) then ()
   else raise Fail ("Oracle dependency in " ^ name))
-  (DB.thms "createSlotCopyExecution");
+  (DB.thms "slotCopyExecution");

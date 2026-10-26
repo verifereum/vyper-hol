@@ -1,11 +1,11 @@
-(* TOP-LEVEL: compile_create_abi_bytes_shape,
-   create_abi_bytes_mstore_mcopy_encoding, create_abi_bytes_mload_length,
-   create_abi_bytes_first_three_round.
+(* TOP-LEVEL: compile_abi_bytes_shape,
+   abi_bytes_mstore_mcopy_encoding, abi_bytes_mload_length,
+   abi_bytes_first_three_round.
    Exact generated code and its source-length, copy, and padding boundaries.
    The fragment execution proof composes these boundaries. *)
-Theory createAbiBytesExecution
+Theory abiBytesExecution
 Ancestors
-  abiEncoder compileEnv contractABI createAbiBytesValueEncoding emitHelper
+  abiEncoder compileEnv contractABI abiBytesValueEncoding emitHelper
   emitHelperProps exprLoweringProps
   fragExec venomInst
   venomExecSemantics venomLayout venomMemProps venomState valueEncoding
@@ -13,14 +13,14 @@ Ancestors
   list rich_list words byte
 Libs
   wordsLib
-Theorem create_abi_bytes_mask_not_31:
+Theorem abi_bytes_mask_not_31:
   (0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE0w:bytes32) =
     ~31w
 Proof
   wordsLib.WORD_DECIDE_TAC
 QED
 
-Theorem create_abi_bytes_and_complement:
+Theorem abi_bytes_and_complement:
   ∀x m:bytes32. word_and x (word_1comp m) = x - word_and x m
 Proof
   rpt gen_tac >>
@@ -33,7 +33,7 @@ Proof
   metis_tac[WORD_ADD_OR, WORD_ADD_SUB, WORD_ADD_COMM]
 QED
 
-Theorem create_abi_bytes_low_five:
+Theorem abi_bytes_low_five:
   ∀x:bytes32. x && 31w = n2w (w2n x MOD 32)
 Proof
   gen_tac >>
@@ -45,7 +45,7 @@ Proof
   simp[wordsTheory.w2n_n2w, wordsTheory.w2n_lt]
 QED
 
-Theorem create_abi_bytes_sub_mod_32[local]:
+Theorem abi_bytes_sub_mod_32[local]:
   ∀n. n - n MOD 32 = 32 * (n DIV 32)
 Proof
   gen_tac >>
@@ -53,7 +53,7 @@ Proof
   simp[] >> disch_then (qspec_then `n` mp_tac) >> decide_tac
 QED
 
-Theorem create_abi_bytes_mask_shift:
+Theorem abi_bytes_mask_shift:
   ∀x:bytes32.
     x && 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE0w =
     word_lsl (word_lsr x 5) 5
@@ -64,18 +64,18 @@ Proof
     (`x = n2w (w2n x)` by simp[] >>
      `w2n x MOD 32 ≤ w2n x` by
        simp[arithmeticTheory.MOD_LESS_EQ] >>
-     ONCE_REWRITE_TAC [create_abi_bytes_mask_not_31] >>
-     ONCE_REWRITE_TAC [create_abi_bytes_and_complement] >>
-     ONCE_REWRITE_TAC [create_abi_bytes_low_five] >>
+     ONCE_REWRITE_TAC [abi_bytes_mask_not_31] >>
+     ONCE_REWRITE_TAC [abi_bytes_and_complement] >>
+     ONCE_REWRITE_TAC [abi_bytes_low_five] >>
      metis_tac[wordsTheory.n2w_sub]) >>
   `word_lsl (word_lsr x 5) 5 = n2w (32 * (w2n x DIV 32))` by
     (`word_lsr x 5 = n2w (w2n (word_lsr x 5))` by simp[] >>
      pop_assum SUBST1_TAC >>
      simp[wordsTheory.word_lsl_n2w, wordsTheory.w2n_lsr]) >>
-  simp[create_abi_bytes_sub_mod_32]
+  simp[abi_bytes_sub_mod_32]
 QED
 
-Theorem create_abi_bytes_ceil32_div[local]:
+Theorem abi_bytes_ceil32_div[local]:
   ∀n. venomLayout$ceil32 n = ((n + 31) DIV 32) * 32
 Proof
   gen_tac >>
@@ -97,7 +97,7 @@ Proof
   rw[venomLayoutTheory.ceil32_def] >> decide_tac
 QED
 
-Theorem create_abi_bytes_round_word:
+Theorem abi_bytes_round_word:
   ∀n. n ≤ dimword (:256) - 32 ⇒
     word_and ((n2w n : bytes32) + 31w)
       0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE0w =
@@ -106,9 +106,9 @@ Proof
   rpt strip_tac >>
   `n + 31 < dimword (:256)` by
     (gvs[wordsTheory.dimword_def] >> decide_tac) >>
-  simp[create_abi_bytes_mask_shift, wordsTheory.word_add_n2w,
+  simp[abi_bytes_mask_shift, wordsTheory.word_add_n2w,
        wordsTheory.word_lsl_n2w, wordsTheory.w2n_lsr,
-       arithmeticTheory.LESS_MOD, create_abi_bytes_ceil32_div,
+       arithmeticTheory.LESS_MOD, abi_bytes_ceil32_div,
        arithmeticTheory.MULT_COMM] >>
   `word_lsr (n2w (n + 31) : bytes32) 5 =
      n2w (w2n (word_lsr (n2w (n + 31) : bytes32) 5))` by simp[] >>
@@ -118,13 +118,13 @@ Proof
        arithmeticTheory.MULT_COMM]
 QED
 
-Theorem create_abi_bytes_zero_word[local]:
+Theorem abi_bytes_zero_word[local]:
   word_to_bytes (0w:bytes32) T = REPLICATE 32 (0w:word8)
 Proof
   EVAL_TAC
 QED
 
-Theorem create_abi_bytes_zero_subword:
+Theorem abi_bytes_zero_subword:
   ∀off k s. k ≤ 32 ⇒
     mem_bytes_at (off + k) (32 - k) (mstore off 0w s).vs_memory =
     REPLICATE (32 - k) (0w:word8)
@@ -139,7 +139,7 @@ Proof
       mp_tac (Q.SPECL [`off`, `REPLICATE 32 (0w:word8)`, `s`]
         write_memory_with_expansion_read_self) >>
       simp[mem_bytes_at_def, mstore_eq_write_mem,
-           create_abi_bytes_zero_word, TAKE_APPEND1]) >>
+           abi_bytes_zero_word, TAKE_APPEND1]) >>
   `off + (k + (32 - k)) ≤ LENGTH (mstore off 0w s).vs_memory` by
     simp[LENGTH_mstore_eq, arithmeticTheory.MAX_DEF] >>
   drule_at_then Any mp_tac mem_bytes_at_split >>
@@ -152,7 +152,7 @@ Proof
        rich_listTheory.DROP_APPEND1, rich_listTheory.DROP_LENGTH_NIL]
 QED
 
-Theorem create_abi_bytes_zero_after_copy:
+Theorem abi_bytes_zero_after_copy:
   ∀off k dst src n s.
     k ≤ 32 ∧ dst + n ≤ off + k ⇒
     mem_bytes_at (off + k) (32 - k)
@@ -183,10 +183,10 @@ Proof
       (DROP (off + k)
         (mcopy dst src n (mstore off 0w s)).vs_memory)` by
     simp[mem_bytes_at_def, TAKE_APPEND1, LENGTH_DROP] >>
-  metis_tac[create_abi_bytes_zero_subword]
+  metis_tac[abi_bytes_zero_subword]
 QED
 
-Theorem create_abi_bytes_source_read_after_zero:
+Theorem abi_bytes_source_read_after_zero:
   ∀src n off s.
     src + n ≤ LENGTH s.vs_memory ∧ src + n ≤ off ⇒
     read_memory src n (mstore off 0w s) = read_memory src n s
@@ -201,7 +201,7 @@ Proof
   fs[read_memory_def, TAKE_APPEND1, LENGTH_DROP]
 QED
 
-Theorem create_abi_bytes_copy_read_self:
+Theorem abi_bytes_copy_read_self:
   ∀dst src n s.
     mem_bytes_at dst n (mcopy dst src n s).vs_memory = read_memory src n s
 Proof
@@ -222,21 +222,21 @@ Proof
   gvs[mem_bytes_at_def, TAKE_APPEND1]
 QED
 
-Theorem create_abi_bytes_ceil32_gap:
+Theorem abi_bytes_ceil32_gap:
   ∀n. n ≤ venomLayout$ceil32 n ∧ venomLayout$ceil32 n ≤ n + 32
 Proof
   gen_tac >> simp[venomLayoutTheory.ceil32_ge, venomLayoutTheory.ceil32_def] >>
   `n MOD 32 < 32` by simp[] >> decide_tac
 QED
 
-Theorem create_abi_bytes_ceil32_eq:
+Theorem abi_bytes_ceil32_eq:
   ∀n. venomLayout$ceil32 n = contractABI$ceil32 n
 Proof
-  simp[create_abi_bytes_ceil32_div, contractABITheory.ceil32_def,
+  simp[abi_bytes_ceil32_div, contractABITheory.ceil32_def,
        arithmeticTheory.MULT_COMM]
 QED
 
-Theorem create_abi_bytes_encoding_parts:
+Theorem abi_bytes_encoding_parts:
   ∀bs.
     enc (Bytes NONE) (contractABI$BytesV bs) =
     TAKE (32 + LENGTH bs) (enc (Bytes NONE) (contractABI$BytesV bs)) ++
@@ -245,12 +245,12 @@ Proof
   gen_tac >>
   simp[Once contractABITheory.enc_def, enc_number_def,
        byteTheory.LENGTH_word_to_bytes, TAKE_APPEND1, TAKE_APPEND,
-       listTheory.TAKE_LENGTH_TOO_LONG, create_abi_bytes_ceil32_eq,
+       listTheory.TAKE_LENGTH_TOO_LONG, abi_bytes_ceil32_eq,
        venomLayoutTheory.ceil32_ge] >>
   simp[]
 QED
 
-Theorem create_abi_bytes_mstore_mcopy_encoding:
+Theorem abi_bytes_mstore_mcopy_encoding:
   ∀bound bs src dst s.
     val_in_memory (BaseTV (BytesT (Dynamic bound))) (BytesV bs)
       src s.vs_memory ∧
@@ -264,21 +264,21 @@ Proof
   rpt strip_tac >>
   `LENGTH bs ≤ venomLayout$ceil32 (LENGTH bs) ∧
    venomLayout$ceil32 (LENGTH bs) ≤ LENGTH bs + 32` by
-    simp[create_abi_bytes_ceil32_gap] >>
+    simp[abi_bytes_ceil32_gap] >>
   `mem_bytes_at dst (32 + LENGTH bs)
       (mcopy dst src (32 + LENGTH bs)
         (mstore (dst + venomLayout$ceil32 (LENGTH bs)) 0w s)).vs_memory =
    TAKE (32 + LENGTH bs)
       (enc (Bytes NONE) (contractABI$BytesV bs))` by
-    (simp[create_abi_bytes_copy_read_self] >>
+    (simp[abi_bytes_copy_read_self] >>
      `read_memory src (32 + LENGTH bs)
         (mstore (dst + venomLayout$ceil32 (LENGTH bs)) 0w s) =
       read_memory src (32 + LENGTH bs) s` by
-       (irule create_abi_bytes_source_read_after_zero >> decide_tac) >>
+       (irule abi_bytes_source_read_after_zero >> decide_tac) >>
      `mem_bytes_at src (32 + LENGTH bs) s.vs_memory =
       TAKE (32 + LENGTH bs)
         (enc (Bytes NONE) (contractABI$BytesV bs))` by
-       (drule_all create_abi_dynamic_bytes_prefix >> simp[]) >>
+       (drule_all abi_dynamic_bytes_prefix >> simp[]) >>
      gvs[read_memory_def, mem_bytes_at_def]) >>
   `mem_bytes_at (dst + 32 + LENGTH bs)
       (venomLayout$ceil32 (LENGTH bs) - LENGTH bs)
@@ -290,7 +290,7 @@ Proof
         `32 + LENGTH (bs:byte list) -
            venomLayout$ceil32 (LENGTH (bs:byte list))`,
         `dst`, `src`, `32 + LENGTH (bs:byte list)`, `s`]
-        create_abi_bytes_zero_after_copy) >>
+        abi_bytes_zero_after_copy) >>
      impl_tac >- decide_tac >>
      simp[] >> decide_tac) >>
   `dst + (32 + venomLayout$ceil32 (LENGTH bs)) ≤
@@ -308,11 +308,11 @@ Proof
     mem_bytes_at_split) >>
   impl_tac >- decide_tac >>
   strip_tac >>
-  gvs[create_abi_bytes_encoding_parts, create_abi_bytes_ceil32_eq,
+  gvs[abi_bytes_encoding_parts, abi_bytes_ceil32_eq,
       TAKE_APPEND1, TAKE_APPEND,
       byteTheory.LENGTH_word_to_bytes, listTheory.TAKE_LENGTH_TOO_LONG] >>
   `LENGTH bs ≤ contractABI$ceil32 (LENGTH bs)` by
-    simp[GSYM create_abi_bytes_ceil32_eq,
+    simp[GSYM abi_bytes_ceil32_eq,
          venomLayoutTheory.ceil32_ge] >>
   `LENGTH bs + 32 + (contractABI$ceil32 (LENGTH bs) - LENGTH bs) =
    contractABI$ceil32 (LENGTH bs) + 32` by decide_tac >>
@@ -321,7 +321,7 @@ Proof
   asm_rewrite_tac[]
 QED
 
-Theorem create_abi_bytes_mload_length:
+Theorem abi_bytes_mload_length:
   val_in_memory (BaseTV (BytesT (Dynamic bound))) (BytesV bs)
     src s.vs_memory ⇒
   mload src s = n2w (LENGTH bs)
@@ -329,31 +329,31 @@ Proof
   simp[Once val_in_memory_def, GSYM mem_word_at_eq_mload]
 QED
 
-Definition create_abi_bytes_var_def:
-  create_abi_bytes_var cs k = "%" ++ toString (cs.cs_next_var + k)
+Definition abi_bytes_var_def:
+  abi_bytes_var cs k = "%" ++ toString (cs.cs_next_var + k)
 End
 
-Theorem create_abi_bytes_var_distinct:
+Theorem abi_bytes_var_distinct:
   ∀cs i j.
-    create_abi_bytes_var cs i = create_abi_bytes_var cs j ⇔ i = j
+    abi_bytes_var cs i = abi_bytes_var cs j ⇔ i = j
 Proof
-  simp[create_abi_bytes_var_def] >>
+  simp[abi_bytes_var_def] >>
   metis_tac[fresh_var_distinct, DECIDE ``b + i = b + j ⇔ i = j``]
 QED
 
-Theorem create_abi_bytes_input_disjoint:
+Theorem abi_bytes_input_disjoint:
   fresh_vars_wrt cs s ∧ eval_operand op s = SOME value ∧
-  op = Var name ⇒ name ≠ create_abi_bytes_var cs k
+  op = Var name ⇒ name ≠ abi_bytes_var cs k
 Proof
   strip_tac >>
   `cs.cs_next_var + k ≥ cs.cs_next_var` by simp[] >>
   drule_all fresh_vars_wrt_eval_operand >>
-  simp[create_abi_bytes_var_def, arithmeticTheory.ADD_COMM]
+  simp[abi_bytes_var_def, arithmeticTheory.ADD_COMM]
 QED
 
-Definition create_abi_bytes_append_def:
-  create_abi_bytes_append cs dst src prefix =
-    let v = create_abi_bytes_var cs in
+Definition abi_bytes_append_def:
+  abi_bytes_append cs dst src prefix =
+    let v = abi_bytes_var cs in
     let id = cs.cs_next_id in
     prefix ++ [mk_inst id MLOAD [src] [v 0]] ++
      [mk_inst (id + 1) ADD [Lit 31w; Var (v 0)] [v 1]] ++
@@ -371,93 +371,93 @@ Definition create_abi_bytes_append_def:
      [mk_inst (id + 9) ADD [Lit 32w; Var (v 6)] [v 7]]
 End
 
-Theorem create_abi_bytes_append_prefix:
-  create_abi_bytes_append cs dst src prefix =
-    prefix ++ create_abi_bytes_append cs dst src []
+Theorem abi_bytes_append_prefix:
+  abi_bytes_append cs dst src prefix =
+    prefix ++ abi_bytes_append cs dst src []
 Proof
-  simp[create_abi_bytes_append_def, APPEND_ASSOC]
+  simp[abi_bytes_append_def, APPEND_ASSOC]
 QED
 
-Theorem create_abi_bytes_append_length:
-  LENGTH (create_abi_bytes_append cs dst src prefix) = LENGTH prefix + 10
+Theorem abi_bytes_append_length:
+  LENGTH (abi_bytes_append cs dst src prefix) = LENGTH prefix + 10
 Proof
-  simp[create_abi_bytes_append_def]
+  simp[abi_bytes_append_def]
 QED
 
-Theorem create_abi_bytes_first_two_steps:
+Theorem abi_bytes_first_two_steps:
   ∀cs dst src s p len_word.
     fresh_vars_wrt cs s ∧ eval_operand src s = SOME p ∧
     mload (w2n p) s = len_word ⇒
-    run_inst_seq (TAKE 2 (create_abi_bytes_append cs dst src [])) s =
-      OK (update_var (create_abi_bytes_var cs 1) (31w + len_word)
-        (update_var (create_abi_bytes_var cs 0) len_word s))
+    run_inst_seq (TAKE 2 (abi_bytes_append cs dst src [])) s =
+      OK (update_var (abi_bytes_var cs 1) (31w + len_word)
+        (update_var (abi_bytes_var cs 0) len_word s))
 Proof
   rpt strip_tac >>
   `eval_operand src
-     (update_var (create_abi_bytes_var cs 0) len_word s) = SOME p` by
+     (update_var (abi_bytes_var cs 0) len_word s) = SOME p` by
     (irule eval_operand_update_var_mstore >> simp[] >>
-     metis_tac[create_abi_bytes_input_disjoint]) >>
+     metis_tac[abi_bytes_input_disjoint]) >>
   `step_inst_base
-     (mk_inst cs.cs_next_id MLOAD [src] [create_abi_bytes_var cs 0]) s =
-   OK (update_var (create_abi_bytes_var cs 0) len_word s)` by
+     (mk_inst cs.cs_next_id MLOAD [src] [abi_bytes_var cs 0]) s =
+   OK (update_var (abi_bytes_var cs 0) len_word s)` by
     (qpat_x_assum `mload (w2n p) s = len_word`
        (fn th => PURE_REWRITE_TAC [GSYM th]) >>
      irule step_MLOAD >> simp[]) >>
   `step_inst_base
      (mk_inst (cs.cs_next_id + 1) ADD
-       [Lit 31w; Var (create_abi_bytes_var cs 0)]
-       [create_abi_bytes_var cs 1])
-     (update_var (create_abi_bytes_var cs 0) len_word s) =
-   OK (update_var (create_abi_bytes_var cs 1) (31w + len_word)
-     (update_var (create_abi_bytes_var cs 0) len_word s))` by
+       [Lit 31w; Var (abi_bytes_var cs 0)]
+       [abi_bytes_var cs 1])
+     (update_var (abi_bytes_var cs 0) len_word s) =
+   OK (update_var (abi_bytes_var cs 1) (31w + len_word)
+     (update_var (abi_bytes_var cs 0) len_word s))` by
     (irule step_ADD >> simp[eval_operand_def, eval_operand_update_var]) >>
-  simp[create_abi_bytes_append_def, run_inst_seq_def,
+  simp[abi_bytes_append_def, run_inst_seq_def,
        listTheory.TAKE_def]
 QED
 
-Theorem create_abi_bytes_first_three_steps:
+Theorem abi_bytes_first_three_steps:
   ∀cs dst src s p len_word.
     fresh_vars_wrt cs s ∧ eval_operand src s = SOME p ∧
     mload (w2n p) s = len_word ⇒
-    run_inst_seq (TAKE 3 (create_abi_bytes_append cs dst src [])) s =
-      OK (update_var (create_abi_bytes_var cs 2)
+    run_inst_seq (TAKE 3 (abi_bytes_append cs dst src [])) s =
+      OK (update_var (abi_bytes_var cs 2)
         (word_and
           0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE0w
           (31w + len_word))
-        (update_var (create_abi_bytes_var cs 1) (31w + len_word)
-          (update_var (create_abi_bytes_var cs 0) len_word s)))
+        (update_var (abi_bytes_var cs 1) (31w + len_word)
+          (update_var (abi_bytes_var cs 0) len_word s)))
 Proof
   rpt strip_tac >>
-  `TAKE 3 (create_abi_bytes_append cs dst src []) =
-   TAKE 2 (create_abi_bytes_append cs dst src []) ++
+  `TAKE 3 (abi_bytes_append cs dst src []) =
+   TAKE 2 (abi_bytes_append cs dst src []) ++
      [mk_inst (cs.cs_next_id + 2) AND
        [Lit 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE0w;
-        Var (create_abi_bytes_var cs 1)]
-       [create_abi_bytes_var cs 2]]` by
-    simp[create_abi_bytes_append_def, listTheory.TAKE_def] >>
+        Var (abi_bytes_var cs 1)]
+       [abi_bytes_var cs 2]]` by
+    simp[abi_bytes_append_def, listTheory.TAKE_def] >>
   `step_inst_base
      (mk_inst (cs.cs_next_id + 2) AND
        [Lit 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE0w;
-        Var (create_abi_bytes_var cs 1)]
-       [create_abi_bytes_var cs 2])
-     (update_var (create_abi_bytes_var cs 1) (31w + len_word)
-       (update_var (create_abi_bytes_var cs 0) len_word s)) =
-   OK (update_var (create_abi_bytes_var cs 2)
+        Var (abi_bytes_var cs 1)]
+       [abi_bytes_var cs 2])
+     (update_var (abi_bytes_var cs 1) (31w + len_word)
+       (update_var (abi_bytes_var cs 0) len_word s)) =
+   OK (update_var (abi_bytes_var cs 2)
      (word_and
        0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE0w
        (31w + len_word))
-     (update_var (create_abi_bytes_var cs 1) (31w + len_word)
-       (update_var (create_abi_bytes_var cs 0) len_word s)))` by
+     (update_var (abi_bytes_var cs 1) (31w + len_word)
+       (update_var (abi_bytes_var cs 0) len_word s)))` by
     (irule step_AND >> simp[eval_operand_def, eval_operand_update_var]) >>
   drule_all_then (qspec_then `dst` strip_assume_tac)
-    create_abi_bytes_first_two_steps >>
+    abi_bytes_first_two_steps >>
   fs[wordsTheory.WORD_ADD_COMM] >>
   qpat_x_assum `run_inst_seq (TAKE 2 _) s = OK _`
     (fn th => REWRITE_TAC [MATCH_MP run_inst_seq_append th]) >>
   simp[run_inst_seq_def]
 QED
 
-Theorem create_abi_bytes_round_mask_first:
+Theorem abi_bytes_round_mask_first:
   ∀n. n ≤ dimword (:256) - 32 ⇒
     word_and
       0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE0w
@@ -471,50 +471,50 @@ Proof
    word_and ((n2w n:bytes32) + 31w)
      0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE0w` by
     metis_tac[wordsTheory.WORD_AND_COMM, wordsTheory.WORD_ADD_COMM] >>
-  metis_tac[create_abi_bytes_round_word]
+  metis_tac[abi_bytes_round_word]
 QED
 
-Theorem create_abi_bytes_first_three_round:
+Theorem abi_bytes_first_three_round:
   ∀cs dst src s p n.
     fresh_vars_wrt cs s ∧ eval_operand src s = SOME p ∧
     mload (w2n p) s = n2w n ∧ n ≤ dimword (:256) - 32 ⇒
     ∃s3.
-      run_inst_seq (TAKE 3 (create_abi_bytes_append cs dst src [])) s =
+      run_inst_seq (TAKE 3 (abi_bytes_append cs dst src [])) s =
         OK s3 ∧
-      eval_operand (Var (create_abi_bytes_var cs 2)) s3 =
+      eval_operand (Var (abi_bytes_var cs 2)) s3 =
         SOME (n2w (venomLayout$ceil32 n))
 Proof
   rpt strip_tac >>
   drule_all_then (qspec_then `dst` strip_assume_tac)
-    create_abi_bytes_first_three_steps >>
+    abi_bytes_first_three_steps >>
   goal_assum drule >>
-  simp[eval_operand_update_var, create_abi_bytes_round_mask_first]
+  simp[eval_operand_update_var, abi_bytes_round_mask_first]
 QED
 
-Theorem compile_create_abi_bytes_shape:
+Theorem compile_abi_bytes_shape:
   compile_abi_encode_to_buf dst src (AbiBytestring bound) cs =
-    (Var (create_abi_bytes_var cs 7),
+    (Var (abi_bytes_var cs 7),
      cs with <|cs_next_id := cs.cs_next_id + 10;
                cs_next_var := cs.cs_next_var + 8;
                cs_current_insts :=
-                 create_abi_bytes_append cs dst src cs.cs_current_insts|>)
+                 abi_bytes_append cs dst src cs.cs_current_insts|>)
 Proof
-  simp[Once compile_abi_encode_child_def, create_abi_bytes_append_def,
-       create_abi_bytes_var_def, comp_bind_def, comp_ignore_bind_def,
+  simp[Once compile_abi_encode_child_def, abi_bytes_append_def,
+       abi_bytes_var_def, comp_bind_def, comp_ignore_bind_def,
        comp_return_def, emit_op_def, emit_void_def, fresh_id_def,
        fresh_var_def, emit_def, LET_THM]
 QED
 
-Theorem compile_create_abi_bytes_fragment:
+Theorem compile_abi_bytes_fragment:
   compile_abi_encode_to_buf dst src (AbiBytestring bound) cs = (result,cs') ⇒
-  result = Var (create_abi_bytes_var cs 7) ∧
+  result = Var (abi_bytes_var cs 7) ∧
   same_blocks cs cs' ∧ cs_extends cs cs' ∧
-  emitted_insts cs cs' = create_abi_bytes_append cs dst src []
+  emitted_insts cs cs' = abi_bytes_append cs dst src []
 Proof
-  strip_tac >> gvs[compile_create_abi_bytes_shape] >>
-  `create_abi_bytes_append cs dst src cs.cs_current_insts =
-     cs.cs_current_insts ++ create_abi_bytes_append cs dst src []` by
-    (irule create_abi_bytes_append_prefix) >>
+  strip_tac >> gvs[compile_abi_bytes_shape] >>
+  `abi_bytes_append cs dst src cs.cs_current_insts =
+     cs.cs_current_insts ++ abi_bytes_append cs dst src []` by
+    (irule abi_bytes_append_prefix) >>
   pop_assum SUBST_ALL_TAC >>
   simp[same_blocks_def, cs_extends_def, emitted_insts_def,
        IS_PREFIX_APPEND, rich_listTheory.DROP_LENGTH_APPEND]
@@ -524,4 +524,4 @@ val _ = app (fn (name, th) =>
   if null (List.filter (fn s => s <> "DISK_THM")
              (#1 (Tag.dest_tag (Thm.tag th)))) then ()
   else raise Fail ("Oracle dependency in " ^ name))
-  (DB.thms "createAbiBytesExecution");
+  (DB.thms "abiBytesExecution");

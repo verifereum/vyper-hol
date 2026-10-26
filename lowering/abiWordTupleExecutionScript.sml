@@ -1,13 +1,13 @@
-(* TOP-LEVEL: compile_create_abi_word_tuple_frag.
-   Typed scalar constructor tuples are encoded by the actual ABI compiler's
+(* TOP-LEVEL: compile_abi_word_tuple_frag.
+   Typed scalar tuples are encoded by the actual ABI compiler's
    bulk-copy case, with exact source ABI bytes and preserved private slices. *)
-Theory createAbiWordTupleExecution
+Theory abiWordTupleExecution
 Ancestors
-  createAbiCopyExecution createAbiTupleValueEncoding createSourceCallback
+  abiCopyExecution abiTupleValueEncoding createSourceCallback
   fragExec exprLowering compileEnv valueEncoding valueEncodingProps
   vyperABI vyperValue vyperTyping vyperTypeABI venomState list words
 
-Theorem compile_create_abi_word_tuple_frag:
+Theorem compile_abi_word_tuple_frag:
   EVERY is_word_type tys ∧ evaluate_types tenv tys [] = SOME tvs ∧
   values_have_types tvs vs ∧ 32 * LENGTH tys < 2 ** 256 ∧
   compile_abi_encode_to_buf dst src
@@ -35,13 +35,13 @@ Proof
   drule_all (cj 2 vyper_to_abi_total) >> strip_tac >>
   qexists_tac `avs` >>
   `type_to_abi_enc_info sfields cenv (TupleT tys) = AbiCopy (32 * LENGTH tys)` by
-    (irule create_abi_word_tuple_metadata >> simp[]) >>
+    (irule abi_word_tuple_metadata >> simp[]) >>
   `compile_abi_encode_to_buf dst src (AbiCopy (32 * LENGTH tys)) cs =
      (result,cs')` by gvs[] >>
   mp_tac (Q.INST
     [`n` |-> `32 * LENGTH (tys : vyperAST$type list)`,
      `bytes` |-> `enc (vyper_to_abi_type tenv (TupleT tys)) (ListV avs)`]
-    compile_create_abi_copy_frag) >>
+    compile_abi_copy_frag) >>
   impl_tac >- simp[] >> strip_tac >> simp[] >>
   irule frag_exec_conseq >>
   qpat_assum `frag_exec ctx cs cs' _ _ _`
@@ -49,7 +49,7 @@ Proof
   simp[] >>
   rpt strip_tac >>
   `w2n p + 32 * LENGTH tys ≤ LENGTH s.vs_memory` by decide_tac >>
-  drule_all create_abi_typed_word_tuple_encoding >> strip_tac >>
+  drule_all abi_typed_word_tuple_encoding >> strip_tac >>
   gvs[read_memory_def, mem_bytes_at_def]
 QED
 
@@ -57,4 +57,4 @@ val _ = app (fn (name, th) =>
   if null (List.filter (fn s => s <> "DISK_THM")
              (#1 (Tag.dest_tag (Thm.tag th)))) then ()
   else raise Fail ("Oracle dependency in " ^ name))
-  (DB.thms "createAbiWordTupleExecution");
+  (DB.thms "abiWordTupleExecution");
