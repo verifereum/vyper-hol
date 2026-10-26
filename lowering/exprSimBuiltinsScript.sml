@@ -40,7 +40,12 @@
  *     bytes from ADD ptr 32, which wraps at 2 ** 256, while val_in_memory
  *     reads them at w2n ptr + 32, and nothing in stmt_state_rel or
  *     expr_val_at keeps a memory value below 2 ** 256 (exec_alloca's
- *     vs_alloca_next is unbounded).
+ *     vs_alloca_next is unbounded).  They wait for S3's alloca-frontier
+ *     invariant, vs_alloca_next < dimword (:256) along a run
+ *     (raw_unit_memory_ok), to reach the judgment (stmtLoweringProps notes
+ *     it as still unstated there), which gives the bound at the hash.  The
+ *     bound can't go in stmt_state_rel: INVOKE copies the callee's frontier
+ *     back, so a loop around an internal call keeps raising it.
  *
  * The STATICCALLs of sha256, ecrecover, ecadd and ecmul go to computed
  * precompiles: take_outcome answers them with precompile_result and leaves
