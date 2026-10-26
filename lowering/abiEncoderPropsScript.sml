@@ -4720,6 +4720,177 @@ Resume enc_static_loop_body_frag[counter]:
 QED
 Finalise enc_static_loop_body_frag
 
+Theorem enc_static_loop_exit_code:
+  enc_static_loop_exit src asz sx = (op,sz) ==>
+  ?len payload sa sb.
+    emit_op MLOAD [src] sx = (len,sa) /\
+    emit_op MUL [len;Lit (n2w asz)] sa = (payload,sb) /\
+    emit_op ADD [Lit 32w;payload] sb = (op,sz) /\
+    emitted_insts sx sz =
+      emitted_insts sx sa ++ emitted_insts sa sb ++ emitted_insts sb sz /\
+    same_blocks sx sz /\
+    sz.cs_current_insts = sx.cs_current_insts ++ emitted_insts sx sz /\
+    EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+      (emitted_insts sx sz) /\
+    sa.cs_next_var = sx.cs_next_var + 1 /\
+    sb.cs_next_var = sx.cs_next_var + 2
+Proof
+  simp[enc_static_loop_exit_def, comp_bind_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  rename1 `emit_op MLOAD [src] sx = (len,sa)` >>
+  rename1 `emit_op MUL [len;Lit (n2w asz)] sa = (payload,sb)` >>
+  imp_res_tac emitted_insts_emit_op >>
+  imp_res_tac emit_op_same_blocks >>
+  `emitted_insts sx sb = emitted_insts sx sa ++ emitted_insts sa sb` by
+    (irule emitted_insts_append >> simp[]) >>
+  `emitted_insts sx sz = emitted_insts sx sb ++ emitted_insts sb sz` by
+    (irule emitted_insts_append >> simp[]) >>
+  pure_asm_rewrite_tac[GSYM APPEND_ASSOC] >>
+  gvs[same_blocks_def, mk_inst_def, is_terminator_def]
+QED
+
+Theorem enc_static_loop_exit_run:
+  enc_static_loop_exit src asz sx = (op,sz) /\
+  eval_operand src s = SOME src_w /\
+  mem_word_at (w2n src_w) s.vs_memory = n2w n /\
+  a.cs_next_var <= sx.cs_next_var /\
+  enc_scratch (frag_ids a b) lo top s ==>
+  ?t. run_inst_seq (emitted_insts sx sz) s = OK t /\
+      eval_operand op t = SOME (n2w (32 + n * asz)) /\
+      t.vs_memory = s.vs_memory /\ t.vs_labels = s.vs_labels /\
+      enc_frame a b lo top outs s t
+Proof
+  strip_tac >> drule enc_static_loop_exit_code >> strip_tac >>
+  `step_inst_base (mk_inst sx.cs_next_id MLOAD [src]
+     [STRING #"%" (toString sx.cs_next_var)]) s =
+     OK (update_var (STRING #"%" (toString sx.cs_next_var)) (n2w n) s)` by
+    (drule step_MLOAD >> simp[GSYM mem_word_at_eq_mload]) >>
+  drule_all enc_emit_op_run_frame >>
+  disch_then (qspec_then `outs` (qx_choose_then `u` strip_assume_tac)) >>
+  `step_inst_base (mk_inst sa.cs_next_id MUL [len;Lit (n2w asz)]
+     [STRING #"%" (toString sa.cs_next_var)]) u =
+     OK (update_var (STRING #"%" (toString sa.cs_next_var))
+       (n2w (n * asz)) u)` by
+    (pure_rewrite_tac[GSYM wordsTheory.word_mul_n2w] >>
+     irule step_MUL >> simp[eval_operand_def]) >>
+  `a.cs_next_var <= sa.cs_next_var` by simp[] >>
+  `enc_scratch (frag_ids a b) lo top u` by fs[enc_frame_def] >>
+  drule_all enc_emit_op_run_frame >>
+  disch_then (qspec_then `outs` (qx_choose_then `v` strip_assume_tac)) >>
+  `step_inst_base (mk_inst sb.cs_next_id ADD [Lit 32w;payload]
+     [STRING #"%" (toString sb.cs_next_var)]) v =
+     OK (update_var (STRING #"%" (toString sb.cs_next_var))
+       (n2w (32 + n * asz)) v)` by
+    (pure_rewrite_tac[GSYM wordsTheory.word_add_n2w] >>
+     irule step_ADD >> simp[eval_operand_def]) >>
+  `a.cs_next_var <= sb.cs_next_var` by simp[] >>
+  `enc_scratch (frag_ids a b) lo top v` by fs[enc_frame_def] >>
+  drule_all enc_emit_op_run_frame >>
+  disch_then (qspec_then `outs` (qx_choose_then `t` strip_assume_tac)) >>
+  qexists_tac `t` >> simp[run_inst_seq_append] >>
+  conj_tac
+  >- (qspecl_then [`emitted_insts sx sa`,
+        `emitted_insts sa sb ++ emitted_insts sb sz`,`s`,`u`] mp_tac run_inst_seq_append >>
+      simp[] >> disch_then SUBST1_TAC >>
+      qspecl_then [`emitted_insts sa sb`,`emitted_insts sb sz`,`u`,`v`]
+        mp_tac run_inst_seq_append >> simp[]) >>
+  metis_tac[enc_frame_trans]
+QED
+
+Theorem enc_static_loop_exit_frag:
+  enc_static_loop_exit src asz sx = (op,sz) /\
+  eval_operand src s = SOME src_w /\
+  mem_word_at (w2n src_w) s.vs_memory = n2w n /\
+  a.cs_next_var <= sx.cs_next_var /\
+  enc_scratch (frag_ids a b) lo top s ==>
+  frag_exec ctx sx sz (\u. u = s)
+    (\t. eval_operand op t = SOME (n2w (32 + n * asz)) /\
+         t.vs_memory = s.vs_memory /\ t.vs_labels = s.vs_labels /\
+         enc_frame a b lo top outs s t) R
+Proof
+  strip_tac >> drule enc_static_loop_exit_code >> strip_tac >>
+  fs[same_blocks_def] >> irule frag_exec_run_inst_seq >>
+  asm_simp_tac (srw_ss()) [rich_listTheory.IS_PREFIX_APPEND] >>
+  drule_all enc_static_loop_exit_run >>
+  disch_then (qspec_then `outs` (qx_choose_then `t` strip_assume_tac)) >>
+  disj1_tac >> qexists_tac `t` >>
+  gvs[] >> Cases_on `op` >> gvs[eval_operand_def, lookup_var_def]
+QED
+
+Theorem enc_static_loop_iter_frag:
+  enc_static_loop_header count_ptr len_op sh = (cnd,sj) /\
+  enc_static_loop_body dst src ei (type_memory_size tv) (type_memory_size tv)
+    count_ptr sb = ((),se) /\
+  enc_static_loop_edges hdr body_lbl exit_lbl cnd (si,s1,sh,sj,s2,sb,se,s3,sx) /\
+  (!x. MEM (Var x) [count_ptr;len_op] ==> not_fresh_at sh x) /\
+  (!x. MEM (Var x) [count_ptr;src;dst] ==> not_fresh_at sb x) /\
+  st.cs_next_var <= sh.cs_next_var /\ st.cs_next_var <= sb.cs_next_var /\
+  st.cs_next_id IN frag_ids st z /\ frag_ids sb se SUBSET frag_ids st z /\
+  abi_enc_plan env ty ei /\ ~is_dynamic (vyper_to_abi_type env ty) /\
+  evaluate_type env ty = SOME tv /\
+  static_length (vyper_to_abi_type env ty) = type_memory_size tv /\
+  value_has_type (ArrayTV tv (Dynamic n)) (ArrayV (DynArrayV vs)) /\
+  LIST_REL (\v av. vyper_to_abi env ty v = SOME av) vs avs /\
+  has_types (REPLICATE (LENGTH vs) (vyper_to_abi_type env ty)) avs /\
+  LENGTH vs < dimword (:256) /\
+  MEM (dst_n,32 + LENGTH vs * type_memory_size tv) outs /\
+  MEM src ops /\ MEM dst ops /\ MEM len_op ops /\
+  eval_operand src s0 = SOME (n2w src_n) /\
+  eval_operand dst s0 = SOME (n2w dst_n) /\
+  eval_operand len_op s0 = SOME (n2w (LENGTH vs)) ==>
+  frag_exec ctx si sx
+    (enc_array_inv
+      (enc_loop_ctx st z ops lo top (ArrayTV tv (Dynamic n))
+        (ArrayV (DynArrayV vs)) src_n outs s0 count_ptr ip)
+      (dst_n + 32) B (REPLICATE (LENGTH vs) (vyper_to_abi_type env ty))
+      avs ip NONE 0)
+    (enc_array_header
+      (enc_loop_ctx st z ops lo top (ArrayTV tv (Dynamic n))
+        (ArrayV (DynArrayV vs)) src_n outs s0 count_ptr ip)
+      (dst_n + 32) B (REPLICATE (LENGTH vs) (vyper_to_abi_type env ty))
+      avs ip NONE cnd (LENGTH vs)) R
+Proof
+  strip_tac >>
+  `LENGTH avs = LENGTH vs` by metis_tac[LIST_REL_LENGTH] >>
+  qabbrev_tac `C = enc_loop_ctx st z ops lo top (ArrayTV tv (Dynamic n))
+    (ArrayV (DynArrayV vs)) src_n outs s0 count_ptr ip` >>
+  qabbrev_tac `Inv = \k. enc_array_inv C (dst_n + 32) B
+    (REPLICATE (LENGTH vs) (vyper_to_abi_type env ty)) avs ip NONE k` >>
+  qabbrev_tac `Hdr = \k. enc_array_header C (dst_n + 32) B
+    (REPLICATE (LENGTH vs) (vyper_to_abi_type env ty)) avs ip NONE cnd k` >>
+  `!k. k <= LENGTH vs ==> frag_exec ctx sh sj (Inv k) (Hdr k) R`
+    by suspend "headers" >>
+  `!k. k < LENGTH vs ==> frag_exec ctx sb se (Hdr k) (Inv (SUC k)) R`
+    by suspend "bodies" >>
+  `!k s l. Inv k s ==> Inv k (jump_to l s)` by
+    (simp[Abbr `Inv`] >> rpt strip_tac >>
+     irule enc_array_inv_jump >> simp[Abbr `C`]) >>
+  `!k s l. Hdr k s ==> Hdr k (jump_to l s)` by
+    (simp[Abbr `Hdr`] >> rpt strip_tac >>
+     irule enc_array_header_jump >> simp[Abbr `C`]) >>
+  `!k s. k <= LENGTH vs /\ Hdr k s ==>
+    ?w. eval_operand cnd s = SOME w /\ (w = 0w <=> k < LENGTH vs)` by
+    (simp[Abbr `Hdr`] >> metis_tac[enc_array_header_condition]) >>
+  imp_res_tac (cj 2 enc_static_loop_phase_extends) >>
+  imp_res_tac (cj 3 enc_static_loop_phase_extends) >>
+  fs[enc_static_loop_edges_def] >> drule_all frag_exec_loop >>
+  simp[Abbr `Inv`, Abbr `Hdr`, Abbr `C`]
+QED
+Resume enc_static_loop_iter_frag[headers]:
+  simp_tac (srw_ss()) [Abbr `Inv`, Abbr `Hdr`, Abbr `C`] >>
+  rpt strip_tac >>
+  `eval_operand len_op s0 = SOME (n2w (LENGTH avs)) /\
+   LENGTH avs < dimword (:256) /\ k <= LENGTH avs` by asm_rewrite_tac[] >>
+  drule_all enc_static_loop_header_frag >> disch_then irule
+QED
+Resume enc_static_loop_iter_frag[bodies]:
+  simp_tac (srw_ss()) [Abbr `Inv`, Abbr `Hdr`, Abbr `C`] >>
+  rpt strip_tac >> drule_all enc_static_loop_body_frag >>
+  disch_then (mp_then Any mp_tac frag_exec_conseq o SPEC_ALL) >>
+  disch_then irule >> simp[enc_array_header_def]
+QED
+Finalise enc_static_loop_iter_frag
+
 Theorem compile_abi_encode_frag:
   (!dst child_ptr ei is_dyn static_ofst dyn_ptr st op st' ctx env ty tv v
     av s0 dst_w src_w lo top.
