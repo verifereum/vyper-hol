@@ -3500,6 +3500,123 @@ Proof
       not_fresh_at_def, ASCIInumbersTheory.toString_11]
 QED
 
+Theorem enc_static_loop_header_run:
+  enc_static_loop_header count_ptr len_op sh = (done_op,sj) /\
+  (!x. MEM (Var x) [count_ptr;len_op] ==> not_fresh_at sh x) /\
+  eval_operand count_ptr s = SOME (n2w ip) /\
+  eval_operand len_op s = SOME (n2w n) /\
+  mem_word_at ip s.vs_memory = n2w k /\
+  ip < dimword (:256) /\ k < dimword (:256) /\ n < dimword (:256) /\
+  a.cs_next_var <= sh.cs_next_var /\
+  enc_scratch (frag_ids a b) lo top s ==>
+  ?t. run_inst_seq (emitted_insts sh sj) s = OK t /\
+      eval_operand done_op t = SOME (bool_to_word (~(k < n))) /\
+      t.vs_memory = s.vs_memory /\ t.vs_labels = s.vs_labels /\
+      (!old. (!x. old = Var x ==> not_fresh_at sh x) ==>
+        eval_operand old t = eval_operand old s) /\
+      enc_frame a b lo top outs s t
+Proof
+  strip_tac >> drule enc_static_loop_header_code >> strip_tac >>
+  `step_inst_base (mk_inst sh.cs_next_id MLOAD [count_ptr]
+     [STRING #"%" (toString sh.cs_next_var)]) s =
+     OK (update_var (STRING #"%" (toString sh.cs_next_var)) (n2w k) s)` by
+    (qpat_assum `eval_operand count_ptr s = _` (mp_tac o MATCH_MP step_MLOAD) >>
+     simp[GSYM mem_word_at_eq_mload]) >>
+  drule_all enc_emit_op_run_frame >>
+  disch_then (qspec_then `outs` (qx_choose_then `s1` strip_assume_tac)) >>
+  `eval_operand len_op s1 = SOME (n2w n)` by (fs[] >> metis_tac[]) >>
+  `step_inst_base (mk_inst sa.cs_next_id LT [i;len_op]
+     [STRING #"%" (toString sa.cs_next_var)]) s1 =
+     OK (update_var (STRING #"%" (toString sa.cs_next_var))
+       (bool_to_word (k < n)) s1)` by
+    (qpat_assum `eval_operand i s1 = _` (mp_then (Pos hd) mp_tac step_LT) >>
+     disch_then drule >> simp[]) >>
+  `a.cs_next_var <= sa.cs_next_var` by simp[] >>
+  `enc_scratch (frag_ids a b) lo top s1` by fs[enc_frame_def] >>
+  drule_all enc_emit_op_run_frame >>
+  disch_then (qspec_then `outs` (qx_choose_then `s2` strip_assume_tac)) >>
+  `step_inst_base (mk_inst sb.cs_next_id ISZERO [cmp]
+     [STRING #"%" (toString sb.cs_next_var)]) s2 =
+     OK (update_var (STRING #"%" (toString sb.cs_next_var))
+       (bool_to_word (~(k < n))) s2)` by
+    (qpat_assum `eval_operand cmp s2 = _` (mp_tac o MATCH_MP step_ISZERO) >>
+     `((bool_to_word (k < n):bytes32) = 0w) = ~(k < n)` by
+       (Cases_on `k < n` >> simp[] >> EVAL_TAC) >> simp[]) >>
+  `a.cs_next_var <= sb.cs_next_var` by simp[] >>
+  `enc_scratch (frag_ids a b) lo top s2` by fs[enc_frame_def] >>
+  drule_all enc_emit_op_run_frame >>
+  disch_then (qspec_then `outs` (qx_choose_then `s3` strip_assume_tac)) >>
+  qexists_tac `s3` >> simp[run_inst_seq_append] >>
+  conj_tac
+  >- (qspecl_then [`emitted_insts sh sa`,
+        `emitted_insts sa sb ++ emitted_insts sb sj`,`s`,`s1`] mp_tac run_inst_seq_append >>
+      simp[] >> disch_then SUBST1_TAC >>
+      qspecl_then [`emitted_insts sa sb`,`emitted_insts sb sj`,`s1`,`s2`]
+        mp_tac run_inst_seq_append >> simp[]) >>
+  conj_tac >- (rpt strip_tac >>
+    `(!x. old = Var x ==> not_fresh_at sa x) /\
+     (!x. old = Var x ==> not_fresh_at sb x)` by
+      (rpt strip_tac >> pure_rewrite_tac[not_fresh_at_def] >>
+       qpat_x_assum `!x. old = Var x ==> _` mp_tac >>
+       pure_rewrite_tac[not_fresh_at_def] >> simp[] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+    metis_tac[]) >>
+  metis_tac[enc_frame_trans]
+QED
+
+Theorem enc_static_loop_header_frag:
+  enc_static_loop_header count_ptr len_op sh = (done_op,sj) /\
+  (!x. MEM (Var x) [count_ptr;len_op] ==> not_fresh_at sh x) /\
+  st.cs_next_var <= sh.cs_next_var /\ MEM len_op ops /\
+  eval_operand len_op s0 = SOME (n2w (LENGTH avs)) /\
+  LENGTH avs < dimword (:256) /\ k <= LENGTH avs ==>
+  frag_exec ctx sh sj
+    (enc_array_inv
+      (enc_loop_ctx st z ops lo top tv v src outs s0 count_ptr ip)
+      p B ts avs ip tail_cell k)
+    (enc_array_header
+      (enc_loop_ctx st z ops lo top tv v src outs s0 count_ptr ip)
+      p B ts avs ip tail_cell done_op k) R
+Proof
+  strip_tac >> drule enc_static_loop_header_code >> strip_tac >>
+  fs[same_blocks_def] >> irule frag_exec_run_inst_seq >>
+  asm_simp_tac (srw_ss()) [rich_listTheory.IS_PREFIX_APPEND] >>
+  qx_gen_tac `s` >> strip_tac >>
+  `enc_loop_ctx st z ops lo top tv v src outs s0 count_ptr ip s` by
+    fs[enc_array_inv_def] >>
+  `eval_operand len_op s = SOME (n2w (LENGTH avs))` by
+    (drule_all enc_loop_ctx_operand >> simp[]) >>
+  `eval_operand count_ptr s = SOME (n2w ip) /\
+   enc_scratch (frag_ids st z) lo top s` by
+    fs[enc_loop_ctx_def, enc_pre_def] >>
+  `mem_word_at ip s.vs_memory = n2w k` by fs[enc_array_inv_def] >>
+  `ip < dimword (:256) /\ k < dimword (:256)` by
+    (drule enc_loop_ctx_bounds >> simp[] >> decide_tac) >>
+  fs[] >> drule_all (SRULE [] enc_static_loop_header_run) >>
+  disch_then (qspec_then `outs` (qx_choose_then `t` strip_assume_tac)) >>
+  `enc_loop_ctx st z ops lo top tv v src outs s0 count_ptr ip t` by
+    (irule enc_loop_ctx_readonly >> qexists_tac `s` >> simp[] >> metis_tac[]) >>
+  `eval_operand count_ptr t = SOME (n2w ip) /\
+   enc_scratch (frag_ids st z) lo top t` by
+    fs[enc_loop_ctx_def, enc_pre_def] >>
+  `enc_array_inv
+    (enc_loop_ctx st z ops lo top tv v src outs s0 count_ptr ip)
+    p B ts avs ip tail_cell k t` by
+    (irule enc_array_inv_readonly >> simp[] >> qexists_tac `s` >> simp[]) >>
+  simp[enc_array_header_def] >>
+  disj1_tac >> qexists_tac `t` >> conj_tac
+  >- (qpat_x_assum `run_inst_seq _ s = OK t` mp_tac >> simp[]) >>
+  conj_tac
+  >- (irule enc_array_inv_readonly >> simp[] >> conj_tac
+      >- (irule enc_loop_ctx_readonly >> qexists_tac `t` >>
+          simp[enc_frame_refl] >>
+          Cases_on `count_ptr` >> fs[eval_operand_def, lookup_var_def]) >>
+      qexists_tac `t` >> simp[]) >>
+  `bool_to_word (~(k < LENGTH avs)) =
+    (if k < LENGTH avs then 0w else 1w)` by
+    (Cases_on `k < LENGTH avs` >> simp[] >> EVAL_TAC) >>
+  Cases_on `done_op` >> fs[eval_operand_def, lookup_var_def]
+QED
+
 Theorem compile_abi_encode_frag:
   (!dst child_ptr ei is_dyn static_ofst dyn_ptr st op st' ctx env ty tv v
     av s0 dst_w src_w lo top.
