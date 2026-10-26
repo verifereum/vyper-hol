@@ -136,5 +136,11 @@ Theorem raw_unit_memory_ok_iff_raw_reachable:
   (!fn inst s. raw_inst_reachable vs ctx fn inst s ==>
     s.vs_alloca_next < dimword (:256) /\ inst_mem_below_frontier inst s)
 Proof
-  cheat
+  rewrite_tac[raw_unit_memory_ok_def] >> eq_tac
+  >- (rpt strip_tac
+      >- metis_tac[codegen_reachability_package_def]
+      >- metis_tac[raw_inst_reachable_minimal] >>
+      metis_tac[raw_inst_reachable_minimal]) >>
+  strip_tac >> qexists_tac `raw_inst_reachable vs` >>
+  simp[raw_inst_reachable_package] >> first_assum ACCEPT_TAC
 QED
