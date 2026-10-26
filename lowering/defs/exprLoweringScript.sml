@@ -1152,7 +1152,8 @@ Definition type_to_abi_dec_info_def:
                     type_memory_bytes cenv fty))
                 fields)) ∧
   type_to_abi_dec_info sfields cenv (FlagT nsid) =
-    DecPrimWord (IntClamp (cenv.ce_flag_n_members (nsid_to_string nsid)) F) ∧
+    (let n = cenv.ce_flag_n_members (nsid_to_string nsid) in
+     DecPrimWord (if n = 256 then NoClamp else IntClamp n F)) ∧
   type_to_abi_dec_info sfields cenv ty = DecPrimWord (type_to_abi_clamp ty)
 Termination
   WF_REL_TAC `inv_image ($< LEX $<) (λ(sfields, cenv, ty).
