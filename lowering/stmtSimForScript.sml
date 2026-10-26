@@ -221,7 +221,7 @@ Proof
                `sj.cs_next_id + 2`, `sb0`, `sb1`, `sj`, `sa`, `0`, `es`, `cc`,
                `w`, `res`, `es'`] mp_tac for_loop >>
   impl_tac
-  >- (REWRITE_TAC [for_code_def] >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
+  >- (REWRITE_TAC [for_code_def] >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
       TRY (simp[block_is_terminated_def, venomInstTheory.mk_inst_def,
                 is_terminator_def] >> NO_TAC) >>
       TRY (fs[] >> NO_TAC) >>
@@ -233,7 +233,7 @@ Proof
   strip_tac
   >- (rename1 `s9.vs_current_bb = exit_lbl` >> disj1_tac >>
       qexists_tac `s9` >> qexists_tac `cenv` >>
-      rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC)
+      rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
       >- simp[stmt_lands_def]
       >- simp[block_is_terminated_def]
       >- simp[cenv_top_ext_refl]

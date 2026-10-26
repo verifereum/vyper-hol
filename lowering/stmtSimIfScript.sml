@@ -391,18 +391,25 @@ Proof
      impl_tac >- fs[] >> simp[]) >>
   `sa.cs_next_var <= s6.cs_next_var /\ sa.cs_next_var <= s9.cs_next_var` by
     decide_tac >>
-  Cases_on `b` >> fs[]
-  >- (
-    qspecl_then [`ctx`, `func`, `cx`, `lctx`, `RetQ`, `cenv`, `ty`, `ss1`,
-                 `es1 with scopes := FEMPTY::es1.scopes`, `res`, `es2`, `sc`,
-                 `rest`, `s6`, `s7`, `s8`, `s9`, `else_lbl`, `x8`, `exit_lbl`,
-                 `sb`, `jump_to then_lbl sv`] mp_tac if_branch_frag >>
-    impl_tac
+  Cases_on `b` >> fs[] >|
+  [qpat_x_assum `bj` (fn th => RULE_ASSUM_TAC (REWRITE_RULE [EQT_INTRO th])) >>
+   qspecl_then [`ctx`, `func`, `cx`, `lctx`, `RetQ`, `cenv`, `ty`, `ss1`,
+                `es1 with scopes := FEMPTY::es1.scopes`, `res`, `es2`, `sc`,
+                `rest`, `s6`, `s7`, `s8`, `s9`, `else_lbl`, `x8`, `exit_lbl`,
+                `sb`, `jump_to then_lbl sv`] mp_tac if_branch_frag,
+   qpat_x_assum `~bj` (fn th => RULE_ASSUM_TAC (REWRITE_RULE [EQF_INTRO th])) >>
+   qspecl_then [`ctx`, `func`, `cx`, `lctx`, `RetQ`, `cenv`, `ty`, `ss2`,
+                `es1 with scopes := FEMPTY::es1.scopes`, `res`, `es2`, `sc`,
+                `rest`, `s9`, `s10`, `s11`, `sb`, `exit_lbl`,
+                `s11.cs_current_bb`, `exit_lbl`, `sb`, `jump_to else_lbl sv`]
+     mp_tac if_branch_frag] >>
+  (* the two branches go the same way from here *)
+  (impl_tac
     >- (rpt conj_tac >>
         fs[stmt_state_rel_jump_to, stmt_state_rel_push_scope, jump_to_def]
         >- (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> fs[]) >>
-        strip_tac >> fs[] >>
-        `?x11. new_block exit_lbl s11 = (x11, sb)` by metis_tac[] >>
+        strip_tac >>
+        qpat_x_assum `_ \/ _ ==> ?x11. _` mp_tac >> fs[] >> strip_tac >>
         imp_res_tac new_block_props >> fs[]) >>
     strip_tac
     >- (
@@ -413,79 +420,29 @@ Proof
           `?x11. new_block exit_lbl s11 = (x11, sb)` by metis_tac[] >>
           imp_res_tac new_block_props >> fs[block_is_terminated_def])
       >- (rpt strip_tac >>
-          `not_fresh_at s6 x` by
-            (fs[not_fresh_at_def] >> rw[] >> first_x_assum irule >>
-             decide_tac) >>
           `lookup_var x sv = SOME w` by res_tac >>
-          `lookup_var x (jump_to then_lbl sv) = SOME w` by
-            fs[lookup_var_def, jump_to_def] >>
-          res_tac)
+          qpat_x_assum
+            `!x w. not_fresh_at _ x /\ lookup_var x (jump_to _ sv) = SOME w ==> _`
+            irule >>
+          fs[lookup_var_def, jump_to_def] >>
+          irule freshWritesTheory.not_fresh_at_mono >> qexists_tac `sa` >> fs[])
       >- (rpt strip_tac >> res_tac >>
-          `FLOOKUP (jump_to then_lbl sv).vs_allocas aid = SOME b` by
-            fs[jump_to_def] >>
-          res_tac) >>
+          qpat_x_assum
+            `!aid b. FLOOKUP (jump_to _ sv).vs_allocas aid = SOME b ==> _` irule >>
+          fs[jump_to_def]) >>
       rpt strip_tac >>
       qpat_x_assum `!fuel. (!e. run_from fuel ctx func sz <> Error e) ==> _`
         (qspec_then `fuel` mp_tac) >> impl_tac >- fs[] >> strip_tac >>
       qpat_x_assum
         `!fuel. (!e. run_from fuel ctx func (jump_to _ sv) <> Error e) ==> _`
         (qspec_then `fuel'` mp_tac) >>
-      qpat_x_assum `bj` (fn th => REWRITE_TAC [EQT_INTRO th]) >>
       impl_tac >- metis_tac[] >> metis_tac[]) >>
     disj2_tac >>
     qpat_x_assum
       `!fuel. (!e. run_from fuel ctx func (jump_to _ sv) <> Error e) ==> _`
       (qspec_then `fuel` mp_tac) >>
-    qpat_x_assum `bj` (fn th => REWRITE_TAC [EQT_INTRO th]) >>
     impl_tac >- metis_tac[exit_result_not_error] >> strip_tac >>
-    qexists_tac `fuel'` >> gvs[]) >>
-  qspecl_then [`ctx`, `func`, `cx`, `lctx`, `RetQ`, `cenv`, `ty`, `ss2`,
-               `es1 with scopes := FEMPTY::es1.scopes`, `res`, `es2`, `sc`,
-               `rest`, `s9`, `s10`, `s11`, `sb`, `exit_lbl`,
-               `s11.cs_current_bb`, `exit_lbl`, `sb`, `jump_to else_lbl sv`]
-    mp_tac if_branch_frag >>
-  impl_tac
-  >- (rpt conj_tac >>
-      fs[stmt_state_rel_jump_to, stmt_state_rel_push_scope, jump_to_def]
-      >- (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> fs[]) >>
-      strip_tac >>
-      qpat_x_assum `_ \/ _ ==> ?x11. _` mp_tac >> fs[] >> strip_tac >>
-      imp_res_tac new_block_props >> fs[]) >>
-  strip_tac
-  >- (
-    disj1_tac >>
-    rename1 `stmt_state_rel func cenv cx (es2 with scopes := rest) sz` >>
-    qexistsl_tac [`sz`, `cenv`] >> fs[cenv_top_ext_refl] >> rpt conj_tac
-    >- (strip_tac >> fs[] >>
-        `?x11. new_block exit_lbl s11 = (x11, sb)` by metis_tac[] >>
-        imp_res_tac new_block_props >> fs[block_is_terminated_def])
-    >- (rpt strip_tac >>
-        `not_fresh_at s9 x` by
-          (fs[not_fresh_at_def] >> rw[] >> first_x_assum irule >>
-           decide_tac) >>
-        `lookup_var x sv = SOME w` by res_tac >>
-        `lookup_var x (jump_to else_lbl sv) = SOME w` by
-          fs[lookup_var_def, jump_to_def] >>
-        res_tac)
-    >- (rpt strip_tac >> res_tac >>
-        `FLOOKUP (jump_to else_lbl sv).vs_allocas aid = SOME b` by
-          fs[jump_to_def] >>
-        res_tac) >>
-    rpt strip_tac >>
-    qpat_x_assum `!fuel. (!e. run_from fuel ctx func sz <> Error e) ==> _`
-      (qspec_then `fuel` mp_tac) >> impl_tac >- fs[] >> strip_tac >>
-    qpat_x_assum
-      `!fuel. (!e. run_from fuel ctx func (jump_to _ sv) <> Error e) ==> _`
-      (qspec_then `fuel'` mp_tac) >>
-    qpat_x_assum `~bj` (fn th => REWRITE_TAC [EQF_INTRO th]) >>
-    impl_tac >- metis_tac[] >> metis_tac[]) >>
-  disj2_tac >>
-  qpat_x_assum
-    `!fuel. (!e. run_from fuel ctx func (jump_to _ sv) <> Error e) ==> _`
-    (qspec_then `fuel` mp_tac) >>
-  qpat_x_assum `~bj` (fn th => REWRITE_TAC [EQF_INTRO th]) >>
-  impl_tac >- metis_tac[exit_result_not_error] >> strip_tac >>
-  qexists_tac `fuel'` >> gvs[]
+    qexists_tac `fuel'` >> gvs[])
 QED
 
 (* ===== Raise and Assert ===== *)

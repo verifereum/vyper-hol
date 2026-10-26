@@ -472,7 +472,12 @@ Proof
      `k + SUC x = x + (k + 1)` by decide_tac >> simp[]) >>
   qpat_x_assum `eval_for _ _ _ _ _ _ = _` mp_tac >>
   qpat_assum `GENLIST _ (SUC m) = _` (fn th => REWRITE_TAC [th]) >>
-  strip_tac >> drule_all eval_for_cons_cases >> strip_tac >>
+  strip_tac >> drule_all eval_for_cons_cases >>
+  disch_then (qx_choosel_then [`r2`, `es2`, `sc`, `rest`]
+                (MAP_EVERY assume_tac o CONJUNCTS)) >>
+  `stmt_res_ok (InLoop exit_lbl incr_lbl) r2` by
+    (qpat_assum `_ /\ eval_for _ _ _ _ _ _ = _ \/ _` strip_assume_tac >>
+     fs[stmt_res_ok_def]) >>
   qspecl_then [`ctx`, `func`, `cenv`, `bc`, `cx`, `RetQ`, `ty`, `stmts`, `esk`,
                `cc`, `id`, `tyv`, `p`, `sz`, `w`, `ainst`, `cv`, `ev`, `dv`,
                `nv`, `n1`, `n2`, `k`, `cond_lbl`, `exit_lbl`, `body_lbl`,
@@ -480,35 +485,43 @@ Proof
                `sb1`, `sj`, `st`, `r2`, `es2`, `sc`, `rest`]
     mp_tac for_iteration >>
   (impl_tac
-   >- (REWRITE_TAC [for_code_def] >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC)
+   >- (REWRITE_TAC [for_code_def] >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
        >- (qpat_assum `!scs. lookup_scopes id scs = NONE ==> _` irule >>
-           first_assum ACCEPT_TAC)
-       >- (qpat_assum `!ei j r2 es2. P ei /\ _ ==> stmt_frag _ _ _ _ _ _ _ _ _ _`
-             irule >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
-       fs[stmt_res_ok_def])) >>
-  strip_tac >>
-  TRY (qpat_x_assum `stmt_exit _ _ _ _` mp_tac >>
-       qpat_x_assum `r2 = _` (fn th => REWRITE_TAC [th]) >>
-       REWRITE_TAC [stmt_exit_loop_ctl] >> NO_TAC) >>
-  (* the outcome cases that do not go together *)
-  TRY (rpt (qpat_x_assum `r2 = _` mp_tac) >>
-       rpt (qpat_x_assum `_ <> ContinueException` mp_tac) >> simp[] >>
-       NO_TAC) >>
-  (* another exception exits *)
-  TRY (qpat_assum `stmt_exit _ _ _ _` kall_tac >> disj2_tac >>
-       qexists_tac `fuel` >> qexists_tac `rr` >>
-       qpat_x_assum `es' = _` SUBST_ALL_TAC >>
-       qpat_x_assum `res = _` SUBST_ALL_TAC >> simp[] >> NO_TAC) >>
-  (* a break lands at the exit block *)
-  TRY (qpat_assum `r2 = INR BreakException` kall_tac >>
-       rename1 `stmt_state_rel func cenv cx _ s9` >> disj1_tac >>
-       qexists_tac `s9` >> fs[] >> NO_TAC) >>
+           first_assum ACCEPT_TAC) >>
+       qpat_assum `!ei j r2 es2. P ei /\ _ ==> stmt_frag _ _ _ _ _ _ _ _ _ _`
+         irule >> rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  (* the iteration's outcome: breaks, exits, or goes on *)
+  disch_then (DISJ_CASES_THEN2 (DISJ_CASES_THEN strip_assume_tac)
+                (CONJUNCTS_THEN2 assume_tac strip_assume_tac) o
+              ONCE_REWRITE_RULE [DISJ_COMM])
+  >- (
+    (* a break lands at the exit block *)
+    `res = INL () /\ es' = es2 with scopes := rest` by
+      (qpat_x_assum `_ /\ eval_for _ _ _ _ _ _ = _ \/ _` mp_tac >>
+       qpat_assum `r2 = _` (fn th => REWRITE_TAC [th]) >> simp[]) >>
+    disj1_tac >> qexists_tac `s` >> fs[])
+  >- (
+    (* another exception exits, and so does the loop *)
+    `res = r2 /\ es' = es2 with scopes := rest` by
+      (qpat_x_assum `_ /\ eval_for _ _ _ _ _ _ = _ \/ _` mp_tac >>
+       qpat_x_assum `stmt_exit _ _ r2 _` mp_tac >>
+       rpt (pop_assum kall_tac) >> rpt strip_tac >>
+       gvs[stmt_exit_loop_ctl]) >>
+    disj2_tac >> qexistsl_tac [`fuel`, `rr`] >>
+    qpat_x_assum `res = _` SUBST_ALL_TAC >>
+    qpat_x_assum `es' = _` SUBST_ALL_TAC >>
+    rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `eval_for cx tyv id stmts (GENLIST (\j. IntV (n1 + &(k + 1 + j))) m)
+     (es2 with scopes := rest) = (res, es')` by
+    (qpat_x_assum `_ /\ eval_for _ _ _ _ _ _ = _ \/ _` mp_tac >>
+     qpat_x_assum `r2 = _ \/ _` strip_assume_tac >>
+     pop_assum (fn th => REWRITE_TAC [th]) >> simp[]) >>
   (* the loop goes on from the incremented counter, where P holds again *)
   `P (es2 with scopes := rest)` by
     (qpat_assum `!ei j r2 es2 sc rest. P ei /\ _ ==> P _`
        (qspecl_then [`esk`, `k`, `r2`, `es2`, `sc`, `rest`] mp_tac) >>
      impl_tac
-     >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >> gvs[]) >>
+     >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> gvs[]) >>
      simp[]) >>
   `ret_pc_ok cenv st cc'` by
     (qspecl_then [`cenv`, `cenv`, `st`, `st`, `cc`, `cc'`] mp_tac
@@ -523,15 +536,16 @@ Proof
                   `w`, `res`, `es'`] mp_tac) >>
   (impl_tac
    >- (REWRITE_TAC [for_code_def] >> rpt conj_tac >>
-       TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
-       TRY decide_tac >>
-       TRY (simp[] >> irule lookup_scopes_none_map_fdom >>
-            qexists_tac `esk.scopes` >> fs[] >> NO_TAC) >>
-       metis_tac[])) >>
+       TRY (first_assum ACCEPT_TAC)
+       >- decide_tac
+       >- (simp[] >> irule lookup_scopes_none_map_fdom >>
+           qexists_tac `esk.scopes` >> fs[]) >>
+       qpat_assum `!a b. FLOOKUP cc.vs_allocas a = SOME b ==> _` irule >>
+       first_assum ACCEPT_TAC)) >>
   (strip_tac
     >- (rename1 `stmt_state_rel func cenv cx es' s9` >> disj1_tac >>
         qexists_tac `s9` >> rpt conj_tac >>
-        TRY (first_assum ACCEPT_TAC >> NO_TAC)
+        TRY (first_assum ACCEPT_TAC)
         >- (rpt strip_tac >>
             qpat_x_assum `!x v. not_fresh_at st x /\ lookup_var x cc' = SOME v ==> _`
               irule >> fs[] >>
