@@ -54,7 +54,10 @@ fun fixture_line line =
 
 fun resolve_bytecode_fixture filename =
   let
-    val candidates =
+    (* Sibling fixtures use ../external-entries/... . Collapse the intervening
+       python-o1-no-asm-opt/.. before filesystem access: isolated holbuild
+       stages need not contain the unrelated default-fixture directory. *)
+    val candidates = List.map OS.Path.mkCanonical
       [OS.Path.concat ("../python-o1-no-asm-opt", filename),
        OS.Path.concat ("bytecode/python-o1-no-asm-opt", filename),
        OS.Path.concat ("lowering/defs/bytecode/python-o1-no-asm-opt", filename)]
