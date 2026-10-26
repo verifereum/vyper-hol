@@ -98,7 +98,7 @@ Definition well_typed_literal_def:
   well_typed_literal (BaseT (IntT k)) (IntL n) =
     within_int_bound (Signed k) n /\
   well_typed_literal (BaseT DecimalT) (DecimalL n) =
-    within_int_bound (Signed 168) n /\
+    within_int_bound decimal_bound n /\
   well_typed_literal (BaseT (StringT n)) (StringL s) =
     (LENGTH s <= n) /\
   well_typed_literal (BaseT AddressT) (BytesL bs) =

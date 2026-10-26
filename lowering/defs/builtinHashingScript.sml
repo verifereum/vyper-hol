@@ -3,6 +3,8 @@
  *
  * TOP-LEVEL:
  *   compile_keccak256   — SHA3 opcode on memory buffer
+ *   compile_method_id_runtime — method_id of a signature that is not a
+ *                         literal
  *
  * Mirrors Python: ~/vyper/vyper/codegen_venom/builtins/hashing.py
  *)
@@ -44,6 +46,42 @@ Definition compile_keccak256_bytesm_def:
        buf <- return buf_alloc.buf_operand;
        emit_void MSTORE [buf; val_op];
        emit_op SHA3 [buf; Lit (n2w m)]
+    od
+End
+
+(* ===== method_id ===== *)
+(* Vyper folds method_id(sig) at compile time (vyper/builtins/functions.py
+   MethodID._try_fold) and rejects a signature that is not a literal, so
+   compile_expr lowers a literal signature to the folded literal itself.
+   The source semantics accepts any bytestring or bytesN and hashes it at
+   run time; compile_method_id_runtime does the same for a signature that
+   is not a literal: keccak256 of its bytes, keeping the first 4.  For
+   bytes4 the result is that left-aligned word, for Bytes[4] a buffer
+   holding the length 4 and that word. *)
+
+(* The hash of a method_id signature of type arg_ty: a bytesN value is the
+   word itself, a String or Bytes value a pointer to its buffer, as in
+   keccak256. *)
+Definition compile_method_id_hash_def:
+  compile_method_id_hash (BaseT (BytesT (Fixed m))) val_op =
+    compile_keccak256_bytesm val_op m ∧
+  compile_method_id_hash _ val_op = compile_keccak256_bytes val_op
+End
+
+Definition compile_method_id_runtime_def:
+  compile_method_id_runtime arg_ty val_op is_bytes4 =
+    do hash_op <- compile_method_id_hash arg_ty val_op;
+       sel_op <- emit_op SHR [Lit 224w; hash_op];
+       word_op <- emit_op SHL [Lit 224w; sel_op];
+       if is_bytes4 then return word_op
+       else
+         do buf_alloc <- compile_alloc_buffer 64;
+            buf <- return buf_alloc.buf_operand;
+            emit_void MSTORE [buf; Lit 4w];
+            data_ptr <- emit_op ADD [buf; Lit 32w];
+            emit_void MSTORE [data_ptr; word_op];
+            return buf
+         od
     od
 End
 

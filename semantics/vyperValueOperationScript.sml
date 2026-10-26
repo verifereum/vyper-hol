@@ -158,7 +158,7 @@ QED
 
 Definition bounded_decimal_op_def:
   bounded_decimal_op i =
-  if within_int_bound (Signed 168) i
+  if within_int_bound decimal_bound i
   then INL $ DecimalV i
   else INR (RuntimeError "bounded_decimal_op")
 End
@@ -217,7 +217,10 @@ QED
    for the default-valued slots it omits. The interpreter passes that type
    (evaluate_builtin); augmented assignment (assign_subscripts) passes the
    target's type instead, which is fine because In/NotIn are not augmented
-   assignment operators. *)
+   assignment operators.
+   TODO(semantic-limitation): the flag operators (And/Or/XOr/In on FlagV) go
+   through integer bit operations until native num bitwise support is
+   factored out. *)
 Definition evaluate_binop_def:
   evaluate_binop u tv bop v1 v2 =
   case bop
@@ -238,8 +241,8 @@ Definition evaluate_binop_def:
            bounded_int_op u (i1 * i2) | _ => INR (TypeError "binop"))
        | DecimalV i1 => (case v2 of DecimalV i2 =>
            (let p = i1 * i2;
-                q = SGN p * (ABS p / 10000000000) in
-            if within_int_bound (Signed 168) q
+                q = SGN p * (ABS p / decimal_scale) in
+            if within_int_bound decimal_bound q
             then INL $ DecimalV q
             else INR (RuntimeError "Decimal Mul bound")) | _ => INR (TypeError "binop"))
        | _ => INR (TypeError "binop"))
@@ -259,7 +262,7 @@ Definition evaluate_binop_def:
        | DecimalV i1 => (case v2 of DecimalV i2 =>
            (if i2 = 0 then INR (RuntimeError "Div0") else
             bounded_decimal_op $
-              w2i $ word_quot ((i2w (i1 * 10000000000)):bytes32) (i2w i2))
+              w2i $ word_quot ((i2w (i1 * decimal_scale)):bytes32) (i2w i2))
                          | _ => INR (TypeError "binop"))
        | _ => INR (TypeError "binop"))
      | UnsafeAdd => (case v1 of
@@ -330,8 +333,6 @@ Definition evaluate_binop_def:
        | BoolV b1 => (case v2 of BoolV b2 =>
            INL $ BoolV (b1 ∧ b2) | _ => INR (TypeError "binop"))
        | FlagV n1 => (case v2 of FlagV n2 =>
-           (* TODO(semantic-limitation): flag bitwise ops use integer bit
-              operations until native num bitwise support is factored out. *)
            INL $ FlagV (Num(int_and (&n1) (&n2)))
            | _ => INR (TypeError "binop"))
        | _ => INR (TypeError "binop"))
@@ -341,8 +342,6 @@ Definition evaluate_binop_def:
        | BoolV b1 => (case v2 of BoolV b2 =>
            INL $ BoolV (b1 ∨ b2) | _ => INR (TypeError "binop"))
        | FlagV n1 => (case v2 of FlagV n2 =>
-           (* TODO(semantic-limitation): flag bitwise ops use integer bit
-              operations until native num bitwise support is factored out. *)
            INL $ FlagV (Num(int_or (&n1) (&n2)))
            | _ => INR (TypeError "binop"))
        | _ => INR (TypeError "binop"))
@@ -352,15 +351,11 @@ Definition evaluate_binop_def:
        | BoolV b1 => (case v2 of BoolV b2 =>
            INL $ BoolV (b1 ≠ b2) | _ => INR (TypeError "binop"))
        | FlagV n1 => (case v2 of FlagV n2 =>
-           (* TODO(semantic-limitation): flag bitwise ops use integer bit
-              operations until native num bitwise support is factored out. *)
            INL $ FlagV (Num(int_xor (&n1) (&n2)))
            | _ => INR (TypeError "binop"))
        | _ => INR (TypeError "binop"))
      | In => (case v2 of
          FlagV n2 => (case v1 of FlagV n1 =>
-           (* TODO(semantic-limitation): use native num bitwise conjunction
-              once available/factored. *)
            INL $ BoolV (int_and (&n1) (&n2) ≠ 0)
            | _ => INR (TypeError "binop"))
        | ArrayV av => INL $ BoolV $ evaluate_in_array tv v1 av
@@ -598,7 +593,7 @@ Definition evaluate_as_wei_value_def:
           | GEther => 1000000000000000000000000000
           | TEther => 1000000000000000000000000000000 in
   let r = case v of IntV i => i * m
-                  | DecimalV i => (i * m) / 10000000000
+                  | DecimalV i => (i * m) / decimal_scale
                   | _ => -1 in
   if 0 ≤ r then
     let u = Unsigned 256 in
@@ -744,17 +739,17 @@ Definition evaluate_convert_def:
       ((word_of_bytes_be (PAD_RIGHT 0w 32 bs) : bytes32) >>
        (8 * (32 - LENGTH bs)))) ∧
   evaluate_convert _ (IntV i) (BaseT DecimalT) =
-    bounded_decimal_op (i * 10000000000) ∧
+    bounded_decimal_op (i * decimal_scale) ∧
   (* Check exact scaled bounds BEFORE truncation. Signed division truncates
      toward zero (EVM SDIV); unsigned division follows the nonnegative check. *)
   evaluate_convert _ (DecimalV i) (BaseT (IntT n)) =
-    (if -&(2 ** (n - 1)) * 10000000000 ≤ i ∧
-        i ≤ (&(2 ** (n - 1)) - 1) * 10000000000
-     then INL $ IntV (SGN i * (ABS i / 10000000000))
+    (if -&(2 ** (n - 1)) * decimal_scale ≤ i ∧
+        i ≤ (&(2 ** (n - 1)) - 1) * decimal_scale
+     then INL $ IntV (SGN i * (ABS i / decimal_scale))
      else INR (RuntimeError "convert decimal int")) ∧
   evaluate_convert _ (DecimalV i) (BaseT (UintT n)) =
-    (if 0 ≤ i ∧ i ≤ (&(2 ** n) - 1) * 10000000000
-     then INL $ IntV (i / 10000000000)
+    (if 0 ≤ i ∧ i ≤ (&(2 ** n) - 1) * decimal_scale
+     then INL $ IntV (i / decimal_scale)
      else INR (RuntimeError "convert decimal uint")) ∧
   evaluate_convert _ _ _ = INR (TypeError "convert")
 End
@@ -791,7 +786,7 @@ Definition safe_cast_def:
      | _ => NONE)
   | BaseTV DecimalT =>
     (case v of
-     | DecimalV d => if within_int_bound (Signed 168) d then SOME v else NONE
+     | DecimalV d => if within_int_bound decimal_bound d then SOME v else NONE
      | _ => NONE)
   | BaseTV (StringT n) =>
     (case v of

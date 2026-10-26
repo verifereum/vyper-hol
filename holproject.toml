@@ -7,7 +7,7 @@ version = "0.2.3"
 
 [build]
 roots = ["vyperHolScript.sml",
-         "semantics/type/vyperCheckContractLibTestScript.sml",
+         "tests/vyperCheckContractLibTestScript.sml",
          "tests/vyperStringScopeTestScript.sml",
          "frontend/vyperCheckContractFrontendLibTestScript.sml",
          "frontend/jsonConstEvalWitnessScript.sml",
@@ -24,6 +24,7 @@ roots = ["vyperHolScript.sml",
          "tests/vyperMembershipSemanticsTestScript.sml",
          "tests/vyperExtCallModesTestScript.sml",
          "tests/vyperUnreachableTestScript.sml",
+         "tests/vyperECPrecompileTestScript.sml",
          "tests/vyperPopReceiverTestScript.sml",
          "lowering/supported/supportedTypePropsScript.sml",
          "lowering/supported/supportedNamePropsScript.sml",
