@@ -137,17 +137,14 @@ fi
 }
 
 if [ "$mode" != update ]; then
-  env -u PYTHONPATH -u PYTHONHOME -u PYTHONSTARTUP \
-    PATH="$venv/bin:$PATH" PYTHONSAFEPATH=1 \
-    "$venv/bin/python" -I "$script_dir/memory_store_witnesses.py" prepare \
-    --repo "$repo_dir" --fixtures "$stage/memory-stores" --check
-  echo "memory-store Python oracle fixtures reproduce from VYPER_PIN"
-  env -u PYTHONPATH -u PYTHONHOME -u PYTHONSTARTUP \
-    PATH="$venv/bin:$PATH" PYTHONSAFEPATH=1 \
-    "$venv/bin/python" -I "$script_dir/memory_store_witnesses.py" prepare \
-    --corpus external-calls \
-    --repo "$repo_dir" --fixtures "$stage/external-calls" --check
-  echo "external-call Python oracle fixtures reproduce from VYPER_PIN"
+  for corpus in memory-stores external-calls internal-frames name-collisions; do
+    env -u PYTHONPATH -u PYTHONHOME -u PYTHONSTARTUP \
+      PATH="$venv/bin:$PATH" PYTHONSAFEPATH=1 \
+      "$venv/bin/python" -I "$script_dir/memory_store_witnesses.py" prepare \
+      --corpus "$corpus" \
+      --repo "$repo_dir" --fixtures "$stage/$corpus" --check
+    echo "$corpus Python oracle fixtures reproduce from VYPER_PIN"
+  done
 fi
 
 case "$mode" in
