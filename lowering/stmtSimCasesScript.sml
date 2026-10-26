@@ -6,7 +6,9 @@
  *
  * TOP-LEVEL:
  *   compile_annassign_word_stmt_frag — a word-local declaration, for every
- *                                      outcome of its right-hand side
+ *                                      outcome of its right-hand side; an
+ *                                      address or bytesN value is not a
+ *                                      word_value, so not covered yet
  *   compile_raise_reason_lit_frag    — raise with a string literal reason
  *   compile_assert_reason_lit_frag   — assert with a string literal reason
  *)
@@ -140,25 +142,6 @@ Proof
   `n = id` by metis_tac[] >> gvs[]
 QED
 
-(* x: T = e for a word type T, for every outcome: the right-hand side's
-   errors exit, and on a value the local is declared and stored
-   (compile_annassign_word_frag).  The right-hand side's judgment is at the
-   environment after the declaration, which binds x to its pointer; x is
-   not in scope at es. *)
-(* Why it holds.  The relation at the declared environment c comes from
-   stmt_state_rel_cenv_cong: declare_local_ptr changes only id, which no
-   scope at es holds, and binds it to a pointer, as cenv does if at all.
-   The ALLOCA then runs with the relation kept at c (its output is fresh,
-   local_ptrs_reserved), and expr_sim at c either exits with expr_exit, an
-   Abort that carries back over the ALLOCA, or reaches the MSTORE in
-   expr_post.  materialise and new_variable fail only with type errors,
-   which stmt_res_ok leaves out.  On success cenv'' = c; cenv_top_ext holds
-   since only id changes, a pointer on both sides, and the rest of the
-   scopes do not hold it.  The ALLOCA's output is fresh at sa, so the
-   lookup_var frame does not speak of it; a second run of the ALLOCA (in a
-   loop) keeps its allocation.  compile_annassign_word_frag's post has no
-   lookup_var or allocas frame, so the success case re-chains ALLOCA,
-   expr_post and MSTORE rather than citing it. *)
 Theorem frag_exec_no_exit_run:
   !ctx a b P Q func s.
     frag_exec ctx a b P Q (\r. F) /\ fn_has_code a b func /\ P s /\
@@ -449,6 +432,25 @@ Proof
   gvs[not_fresh_at_def] >> rpt strip_tac >> first_x_assum irule >> simp[]
 QED
 
+(* x: T = e for a word type T, for every outcome: the right-hand side's
+   errors exit, and on a value the local is declared and stored
+   (compile_annassign_word_frag).  The right-hand side's judgment is at the
+   environment after the declaration, which binds x to its pointer; x is
+   not in scope at es. *)
+(* Why it holds.  The relation at the declared environment c comes from
+   stmt_state_rel_cenv_cong: declare_local_ptr changes only id, which no
+   scope at es holds, and binds it to a pointer, as cenv does if at all.
+   The ALLOCA then runs with the relation kept at c (its output is fresh,
+   local_ptrs_reserved), and expr_sim at c either exits with expr_exit, an
+   Abort that carries back over the ALLOCA, or reaches the MSTORE in
+   expr_post.  materialise and new_variable fail only with type errors,
+   which stmt_res_ok leaves out.  On success cenv'' = c; cenv_top_ext holds
+   since only id changes, a pointer on both sides, and the rest of the
+   scopes do not hold it.  The ALLOCA's output is fresh at sa, so the
+   lookup_var frame does not speak of it; a second run of the ALLOCA (in a
+   loop) keeps its allocation.  compile_annassign_word_frag's post has no
+   lookup_var or allocas frame, so the success case re-chains ALLOCA,
+   expr_post and MSTORE rather than citing it. *)
 Theorem compile_annassign_word_stmt_frag:
   !ctx func cx lctx RetQ cenv ty id vtyp e es res es' etv.
     eval_stmt cx (AnnAssign id vtyp e) es = (res, es') /\
@@ -463,8 +465,7 @@ Theorem compile_annassign_word_stmt_frag:
     is_word_type (expr_type e) /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME etv /\
     (!tv es1. eval_expr cx e es = (INL tv, es1) ==>
-              ?v. tv = Value v /\ word_value v /\
-                  typed_val_to_w256 etv v = val_to_w256 v) /\
+              ?v. tv = Value v /\ word_value v) /\
     (!st0 c st1. declare_local cenv id vtyp st0 = (c, st1) ==>
        expr_sim ctx func c cx (expr_type e) e es /\
        !sa sb op. lower_value compile_expr c (expr_type e) e sa = (op, sb) ==>
@@ -472,7 +473,14 @@ Theorem compile_annassign_word_stmt_frag:
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ty (AnnAssign id vtyp e)) es res es'
 Proof
-  rpt gen_tac >> strip_tac >> simp[stmt_frag_def] >> rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  `!tv es1. eval_expr cx e es = (INL tv, es1) ==>
+     ?v. tv = Value v /\ word_value v /\
+         typed_val_to_w256 etv v = val_to_w256 v` by
+    (rpt strip_tac >> first_x_assum drule >> strip_tac >>
+     gvs[typed_val_to_w256_word_value]) >>
+  qpat_x_assum `!tv es1. _ ==> ?v. tv = Value v /\ word_value v` kall_tac >>
+  simp[stmt_frag_def] >> rpt gen_tac >> strip_tac >>
   `!st0 c st1. declare_local cenv id vtyp st0 = (c, st1) ==>
      !a b op. lower_value compile_expr c (expr_type e) e a = (op, b) ==>
               cs_extends a b` by metis_tac[] >>
@@ -770,22 +778,6 @@ Theorem reason_prefix_simple:
     EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) is
 Proof
   Induct >> simp[reason_prefix_def] >> metis_tac[reason_step_simple]
-QED
-
-Theorem reason_prefix_alloca_load_probe[local]:
-  reason_prefix []
-    [mk_inst 0 ALLOCA [Lit 0w] ["p"]; mk_inst 1 MLOAD [Var "p"] ["p"]]
-    ["p"; "p"]
-Proof
-  simp[reason_prefix_def, reason_step_def, reason_operand_def,
-       venomInstTheory.mk_inst_def]
-QED
-
-Theorem reason_prefix_mcopy_probe[local]:
-  reason_prefix ["p"] [mk_inst 0 MCOPY [Var "p"; Var "p"; Lit 0w] []] ["p"]
-Proof
-  simp[reason_prefix_def, reason_step_def, reason_operand_def,
-       venomInstTheory.mk_inst_def]
 QED
 
 Theorem compile_revert_reason_certificate:

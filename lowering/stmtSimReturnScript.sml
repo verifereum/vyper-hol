@@ -7,7 +7,7 @@
  *
  * TOP-LEVEL:
  *   intret_q                     — the RetQ of such a function: an IntRet
- *                                  whose values match the returned value
+ *                                  in result_rel with the returned value
  *   compile_return_word_int_frag — return e, for every outcome of e
  *)
 
@@ -19,15 +19,26 @@ Ancestors
   vyperInterpreter vyperState vyperExprNoControl
   venomExecSemantics venomInst venomState
 
-(* An internal function's return as result_rel (compileEnv) relates it to
-   the source's: an IntRet whose values match v, adopting no free memory
-   pointer.  The state relation at the return is left to the caller's
-   frame (#638). *)
+(* An internal function's return, related to the source's as result_rel
+   (compileEnv) does: an IntRet whose values match v, adopting no free
+   memory pointer, with state_rel at the source state without its scopes.
+   intret_vals_match checks the values only for stack returns
+   (ce_returns_count = 1 here); a memory return's are not on the stack. *)
 Definition intret_q_def:
-  intret_q ret_tv v (es : evaluation_state) r <=>
-    ?ir s. r = IntRet ir s /\ intret_vals_match ret_tv v ir.iret_values /\
-           ir.iret_adopt_fmp = NONE
+  intret_q func cenv cx ret_tv v (es : evaluation_state) r <=>
+    ?ir s. r = IntRet ir s /\
+           result_rel func ret_tv cenv cx (INR (ReturnException v), es) r
 End
+
+(* No scope holds a local once the frame is left. *)
+Theorem state_rel_scopes_nil:
+  !func cenv cx es s.
+    state_rel func cenv cx es s ==>
+    state_rel func cenv cx (es with scopes := []) s
+Proof
+  rw[state_rel_def, storage_rel_def, transient_rel_def, immutables_rel_def,
+     logs_rel_def, local_ptrs_rel_def, local_region_def, lookup_scopes_def]
+QED
 
 (* return e in an internal function whose result, a word, goes back on the
    stack (ce_returns_count = 1, no return buffer): e's fragment, whose
@@ -43,7 +54,7 @@ Theorem compile_return_word_int_frag:
     expr_sim ctx func cenv cx ty e es /\
     (!sa op sb. lower_value compile_expr cenv ty e sa = (op, sb) ==>
                 cs_extends sa sb) ==>
-    stmt_frag ctx func cx lctx (intret_q ret_tv) cenv
+    stmt_frag ctx func cx lctx (intret_q func cenv cx ret_tv) cenv
       (stmt_env cenv lctx ty (Return (SOME e))) es res es'
 Proof
   rpt gen_tac >> strip_tac >> simp[stmt_frag_def] >> rpt gen_tac >>
@@ -100,8 +111,10 @@ Proof
            eval_operands_def, eval_operand_def] >>
     qpat_x_assum `!fuel. (!e. run_from fuel ctx func sv <> Error e) ==> _`
       (qspec_then `0` mp_tac) >> simp[] >> strip_tac >>
+    `state_rel func cenv cx (es' with scopes := []) sv` by
+      (irule state_rel_scopes_nil >> fs[stmt_state_rel_def]) >>
     qexists_tac `fuel'` >>
-    simp[exit_result_def, stmt_exit_def, intret_q_def,
+    simp[exit_result_def, stmt_exit_def, intret_q_def, result_rel_def,
          intret_vals_match_def]) >>
   qexists_tac `fuel` >> Cases_on `r1` >> gvs[stmt_exit_def] >> disj1_tac >>
   ONCE_REWRITE_TAC [INST_TYPE [beta |-> ``:toplevel_value``]

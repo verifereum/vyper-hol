@@ -158,9 +158,9 @@ Definition cenv_top_ext_def:
 End
 
 (* The return PC of an internal function's frame (ce_return_pc, the
-   variable RETPC_PARAM binds at the function's entry) is defined, and the
-   code from sa on never assigns it.  RET reads it; an external function
-   has none. *)
+   variable RETPC_PARAM binds at the function's entry) is defined, and it
+   was handed out before sa, so stmt_frag's frame on old variables keeps
+   it.  RET reads it; an external function has none. *)
 Definition ret_pc_ok_def:
   ret_pc_ok cenv sa s <=>
     !x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
