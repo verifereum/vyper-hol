@@ -23,7 +23,7 @@ Definition task090_interface_calls_program_def:
           (Call (TupleT [BaseT (IntT 128); BaseT BoolT])
              (ExtCall T F
                 ("inspect", [BaseT (IntT 128); BaseT BoolT],
-                 TupleT [BaseT (IntT 128); BaseT BoolT]))
+                 TupleT [BaseT (IntT 128); BaseT BoolT]) [])
              [Name (BaseT AddressT) "target";
               Name (BaseT (IntT 128)) "delta";
               Name (BaseT BoolT) "enabled"] NONE))];
@@ -32,10 +32,10 @@ Definition task090_interface_calls_program_def:
        ([] : expr list) (BaseT BoolT)
        [Return (SOME
           (Call (BaseT BoolT)
-             (ExtCall F F ("update", [BaseT (UintT 256)], BaseT BoolT))
+             (ExtCall F F ("update", [BaseT (UintT 256)], BaseT BoolT) [EKValue])
              [Name (BaseT AddressT) "target";
-              Builtin (BaseT (UintT 256)) (Env ValueSent) [];
-              Name (BaseT (UintT 256)) "x"] NONE))]]
+              Name (BaseT (UintT 256)) "x";
+              Builtin (BaseT (UintT 256)) (Env ValueSent) []] NONE))]]
 End
 
 (* Hand-written HOL input paired with sources/send_value.vy. *)
@@ -45,7 +45,7 @@ Definition task090_send_value_program_def:
        [("recipient", BaseT AddressT); ("amount", BaseT (UintT 256))]
        ([] : expr list) NoneT
        [Expr
-          (Call NoneT Send
+          (Call NoneT (Send F)
              [Name (BaseT AddressT) "recipient";
               Name (BaseT (UintT 256)) "amount"] NONE)]]
 End

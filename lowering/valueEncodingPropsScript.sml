@@ -9,6 +9,7 @@
  *
  * Layer 1 (mstore/mem_word_at):
  *   mstore_mem_word_at_same      — mload after mstore at same offset
+ *   mem_bytes_at_mstore_same     — the 32 bytes at the offset of an mstore
  *   mstore_mem_word_at_disjoint  — mload after mstore at disjoint offset
  *   mstore_mem_bytes_at_disjoint — mem_bytes_at after mstore at disjoint offset
  *   mstore_establishes_val_in_memory_prim — mstore with val_to_w256 establishes val_in_memory
@@ -17,6 +18,7 @@
  *   type_memory_size_prim — primitive base types occupy 32 bytes
  *   type_memory_size_flag — FlagTV occupies 32 bytes
  *   mstore_preserves_val_in_memory — compound disjointness (mutual induction)
+ *   val_in_memory_mem_agree — val_in_memory depends only on its footprint
  *   val_in_memory_struct  — struct decomposition
  *   val_in_memory_dynarray — dynarray decomposition
  *   val_in_memory_sarray  — sarray decomposition
@@ -29,6 +31,8 @@ Theory valueEncodingProps
 Ancestors
   list rich_list
   valueEncoding valueEncodingProofs
+Libs
+  wordsLib
 
 (* ===== val_to_w256 agrees with encode_base_to_slot ===== *)
 
@@ -97,6 +101,22 @@ Theorem mstore_mem_word_at_same:
   ∀ off (w:bytes32) s.
     mem_word_at off (mstore off w s).vs_memory = w
 Proof ACCEPT_TAC mstore_mem_word_at_same_proof
+QED
+
+Theorem mem_bytes_at_mstore_same:
+  ∀ off (w:bytes32) s.
+    mem_bytes_at off 32 (mstore off w s).vs_memory = word_to_bytes w T
+Proof
+  rpt gen_tac >>
+  qabbrev_tac `M = (mstore off w s).vs_memory` >>
+  `word_of_bytes T (0w:bytes32) (mem_bytes_at off 32 M) = w` by
+    (qspecl_then [`off`, `w`, `s`] mp_tac mstore_mem_word_at_same >>
+     simp[mem_word_at_def, mem_bytes_at_def, Abbr `M`]) >>
+  `word_to_bytes (word_of_bytes T (0w:bytes32) (mem_bytes_at off 32 M)) T =
+   mem_bytes_at off 32 M` by
+    (irule venomMemProofsTheory.word_bytes_roundtrip_proof >>
+     simp[mem_bytes_at_def, dividesTheory.divides_def]) >>
+  metis_tac[]
 QED
 
 Theorem mstore_mem_word_at_disjoint:
@@ -195,6 +215,21 @@ Theorem mstore_preserves_val_in_memory:
     tuple_in_memory vs tvs off
       (mstore off2 w (s with vs_memory := mem)).vs_memory)
 Proof ACCEPT_TAC mstore_preserves_val_in_memory_proof
+QED
+
+(* val_in_memory reads only its footprint [off, off + type_memory_size ty):
+   memories that agree on any window covering it agree on the value. *)
+Theorem val_in_memory_mem_agree:
+  ∀ ty v off len mem mem'.
+    val_in_memory ty v off mem ∧ val_wf ty v ∧
+    type_memory_size ty ≤ len ∧
+    mem_bytes_at off len mem = mem_bytes_at off len mem' ⇒
+    val_in_memory ty v off mem'
+Proof
+  rpt strip_tac >> irule (CONJUNCT1 val_in_memory_mem_agree_proof) >>
+  conj_tac >- simp[] >>
+  qexists_tac `mem` >> simp[] >>
+  drule mem_bytes_at_agree_window >> simp[]
 QED
 
 (* ===== Layer 2: decomposition ===== *)

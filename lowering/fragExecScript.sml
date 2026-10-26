@@ -5,8 +5,9 @@
  * compile states st and st'.  frag_exec says what running that code does
  * inside any function that contains it (the blocks finished between st and
  * st', and the start of st''s current block): from the point
- * where st left off, execution reaches the point where st' leaves off, or
- * stops with Abort, Halt or IntRet.  Unlike running the fragment assembled
+ * where st left off, in a state that has not halted, execution reaches the
+ * point where st' leaves off without halting, or stops with Abort, Halt or
+ * IntRet.  Unlike running the fragment assembled
  * into a function of its own, the judgment composes, because the code after
  * the fragment is whatever the real function holds.
  *
@@ -24,13 +25,43 @@
  *   fn_has_code_split     — containment of a fragment holds for its parts
  *   frag_exec_seq         — sequential composition
  *   frag_exec_conseq, frag_exec_refl — consequence and the empty fragment
+ *   frag_exec_pointwise   — prove a fragment from each start state
  *   frag_exec_run_inst_seq — lift a straight-line run_inst_seq result
+ *
+ * Steps inside a block:
+ *   run_from_step         — a straight-line step moves run_from on
+ *   run_from_halt         — a halting step is the result of run_from
+ *   fn_has_code_same_block — the instructions a fragment appends to the
+ *                           current block are in the function
+ *
+ * Abort and halt lifting:
+ *   frag_exec_step_abort  — a one-instruction fragment that aborts
+ *   frag_exec_assert_fail — a failing emitted ASSERT aborts
+ *   stop_frag             — a STOP ends the run with empty return data
+ *   step_inst_invoke_abort, exec_block_step_abort, run_blocks_run_from,
+ *   run_context_run_blocks — Abort passes through INVOKE, exec_block,
+ *                           run_blocks and run_context unchanged
+ *   run_blocks_run_from_no_phi — run_blocks_run_from for a block without
+ *                           PHIs, which is every block the lowering emits
+ *
+ * Crossing blocks:
+ *   run_from_jump         — a jump enters the target block from its start
+ *   run_from_jump_result  — every non-Error result after a jump is a result
+ *                           before it, PHIs in the target or not
+ *   frag_exec_enter       — jumping into the start of a fragment
+ *
+ * Helpers:
+ *   fn_has_code_start, fn_has_code_mid, fn_has_code_new_block — the blocks
+ *                           and instructions a contained fragment puts in
+ *                           the function
+ *   lookup_block_fn_insts — an instruction of a looked-up block is in fn_insts
  *)
 
 Theory fragExec
 Ancestors
   list rich_list compileEnv emitHelper exprLoweringProps
-  venomExecSemantics venomInst venomInstProofs venomState instIdxIndep
+  venomExecSemantics venomExecProofs venomInst venomInstProofs venomState
+  instIdxIndep
 
 (* ===== Definitions ===== *)
 
@@ -95,18 +126,19 @@ Definition cs_extends_def:
 End
 
 (* The fragment judgment.  In every function containing the code emitted
-   between st and st', from a state satisfying P at the point where st left
-   off, either
+   between st and st', from a state satisfying P and not halted at the
+   point where st left off, either
    - execution reaches the point where st' leaves off in a state satisfying
-     Q, and every non-Error result from there is a result from the start, or
+     Q and not halted, and every non-Error result from there is a result
+     from the start, or
    - execution stops with an exit result satisfying R. *)
 Definition frag_exec_def:
   frag_exec ctx (st : compile_state) (st' : compile_state) P Q R <=>
     !fn s.
-      fn_has_code st st' fn /\ P s /\
+      fn_has_code st st' fn /\ P s /\ ~s.vs_halted /\
       s.vs_current_bb = st.cs_current_bb /\
       s.vs_inst_idx = LENGTH st.cs_current_insts ==>
-      (?s'. Q s' /\
+      (?s'. Q s' /\ ~s'.vs_halted /\
             s'.vs_current_bb = st'.cs_current_bb /\
             s'.vs_inst_idx = LENGTH st'.cs_current_insts /\
             !fuel r. run_from fuel ctx fn s' = r /\ (!e. r <> Error e) ==>
@@ -251,6 +283,66 @@ Proof
   metis_tac[]
 QED
 
+(* The start of a fragment is in fn too. *)
+Theorem fn_has_code_start:
+  !st st' fn.
+    cs_extends st st' /\ fn_has_code st st' fn ==>
+    ?bb. lookup_block st.cs_current_bb fn.fn_blocks = SOME bb /\
+         isPREFIX st.cs_current_insts bb.bb_instructions
+Proof
+  rw[cs_extends_def] >> Cases_on `new = []` >> gvs[]
+  >- (fs[fn_has_code_def] >> metis_tac[isPREFIX_TRANS]) >>
+  `emitted_blocks st st' = new` by (irule emitted_blocks_append >> simp[]) >>
+  fs[fn_has_code_def] >>
+  qexists_tac `LAST new` >>
+  metis_tac[rich_listTheory.MEM_LAST_NOT_NIL]
+QED
+
+(* fn contains the code of any part of a fragment it contains. *)
+Theorem fn_has_code_mid:
+  !st0 sa sb st' fn.
+    cs_extends st0 sa /\ cs_extends sa sb /\ cs_extends sb st' /\
+    fn_has_code st0 st' fn ==>
+    fn_has_code sa sb fn
+Proof
+  rpt strip_tac >>
+  `cs_extends st0 sb` by metis_tac[cs_extends_trans] >>
+  `fn_has_code st0 sb fn` by metis_tac[fn_has_code_split] >>
+  metis_tac[fn_has_code_split]
+QED
+
+(* A block finished by new_block is in fn as it was finished. *)
+Theorem fn_has_code_new_block:
+  !sa lbl x sb fn.
+    new_block lbl sa = (x, sb) /\ fn_has_code sa sb fn ==>
+    lookup_block sa.cs_current_bb fn.fn_blocks =
+      SOME <| bb_label := sa.cs_current_bb;
+              bb_instructions := sa.cs_current_insts |>
+Proof
+  rw[new_block_def] >>
+  `emitted_blocks sa (sa with <| cs_blocks :=
+       <| bb_label := sa.cs_current_bb;
+          bb_instructions := sa.cs_current_insts |> :: sa.cs_blocks;
+       cs_current_bb := lbl; cs_current_insts := [] |>) =
+   [<| bb_label := sa.cs_current_bb;
+       bb_instructions := sa.cs_current_insts |>]` by
+    (irule emitted_blocks_append >> simp[]) >>
+  fs[fn_has_code_def] >>
+  first_x_assum (qspec_then `<| bb_label := sa.cs_current_bb;
+                               bb_instructions := sa.cs_current_insts |>`
+                   mp_tac) >> simp[]
+QED
+
+Theorem lookup_block_fn_insts:
+  !lbl fn bb i.
+    lookup_block lbl fn.fn_blocks = SOME bb /\ MEM i bb.bb_instructions ==>
+    MEM i (fn_insts fn)
+Proof
+  rw[fn_insts_def] >> drule lookup_block_MEM >>
+  qspec_tac (`fn.fn_blocks`, `bbs`) >>
+  Induct >> rw[fn_insts_blocks_def] >> metis_tac[]
+QED
+
 (* ===== Judgment rules ===== *)
 
 Theorem frag_exec_conseq:
@@ -268,6 +360,16 @@ Theorem frag_exec_refl:
   !ctx st P Q R. (!s. P s ==> Q s) ==> frag_exec ctx st st P Q R
 Proof
   rw[frag_exec_def] >> disj1_tac >> qexists_tac `s` >> simp[] >>
+  metis_tac[]
+QED
+
+(* A fragment proved from each start state on its own. *)
+Theorem frag_exec_pointwise:
+  !ctx st st' P Q R.
+    (!s0. P s0 ==> frag_exec ctx st st' (\s. s = s0) Q R) ==>
+    frag_exec ctx st st' P Q R
+Proof
+  rw[frag_exec_def] >> first_x_assum drule >> simp[frag_exec_def] >>
   metis_tac[]
 QED
 
@@ -364,6 +466,19 @@ Proof
   simp[exec_result_map_def]
 QED
 
+Theorem run_inst_seq_preserves_halted[local]:
+  !is s s'.
+    run_inst_seq is s = OK s' /\
+    EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) is ==>
+    s'.vs_halted = s.vs_halted
+Proof
+  rpt strip_tac >>
+  drule_at (Pos hd)
+    (Q.ISPEC `\s:venom_state. s.vs_halted` run_inst_seq_preserves_field) >>
+  simp[] >> disch_then irule >> rpt strip_tac >> fs[EVERY_MEM] >>
+  metis_tac[step_preserves_halted, step_inst_non_invoke]
+QED
+
 (* A straight-line fragment within one block, given by its run_inst_seq
    behaviour: it either finishes in a state satisfying Q or aborts. *)
 Theorem frag_exec_run_inst_seq:
@@ -404,6 +519,8 @@ Proof
         (gen_tac >>
          qspecl_then [`t`, `s`, `fuel`, `ctx`, `bb`] mp_tac
            exec_block_run_inst_seq >> simp[]) >>
+      `s'.vs_halted = s.vs_halted` by
+        metis_tac[run_inst_seq_preserves_halted] >>
       qexists_tac `s' with vs_inst_idx := LENGTH st'.cs_current_insts` >>
       gvs[] >> rpt strip_tac >>
       qexists_tac `fuel` >> gvs[run_from_def]) >>
@@ -412,4 +529,282 @@ Proof
     (qspecl_then [`t`, `s`, `0`, `ctx`, `bb`] mp_tac
        exec_block_run_inst_seq >> simp[]) >>
   qexists_tac `0` >> simp[run_from_def, exit_result_def]
+QED
+
+(* ===== Steps inside a block ===== *)
+
+(* A straight-line instruction steps run_from to the next index. *)
+Theorem run_from_step:
+  !fuel ctx fn s bb inst s1.
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    get_instruction bb s.vs_inst_idx = SOME inst /\
+    inst.inst_opcode <> INVOKE /\ ~is_terminator inst.inst_opcode /\
+    step_inst_base inst s = OK s1 ==>
+    run_from fuel ctx fn s =
+    run_from fuel ctx fn (s1 with vs_inst_idx := SUC s.vs_inst_idx)
+Proof
+  rpt strip_tac >>
+  `s1.vs_current_bb = s.vs_current_bb /\ s1.vs_inst_idx = s.vs_inst_idx` by
+    metis_tac[step_preserves_control_flow, step_inst_non_invoke] >>
+  simp[run_from_def, Once exec_block_def, step_inst_non_invoke]
+QED
+
+(* A step that halts is the result of the run. *)
+Theorem run_from_halt:
+  !fuel ctx fn s bb inst s'.
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    get_instruction bb s.vs_inst_idx = SOME inst /\
+    inst.inst_opcode <> INVOKE /\ step_inst_base inst s = Halt s' ==>
+    run_from fuel ctx fn s = Halt s'
+Proof
+  rw[run_from_def, Once exec_block_def, step_inst_non_invoke]
+QED
+
+(* The instructions a fragment appends to the current block are in fn. *)
+Theorem fn_has_code_same_block:
+  !st st' fn new.
+    fn_has_code st st' fn /\ st'.cs_current_bb = st.cs_current_bb /\
+    st'.cs_current_insts = st.cs_current_insts ++ new ==>
+    ?bb. lookup_block st.cs_current_bb fn.fn_blocks = SOME bb /\
+         !i. i < LENGTH new ==>
+             get_instruction bb (LENGTH st.cs_current_insts + i) =
+             SOME (EL i new)
+Proof
+  rw[fn_has_code_def] >> qexists_tac `bb` >> rw[] >>
+  gvs[IS_PREFIX_APPEND, get_instruction_def] >>
+  PURE_REWRITE_TAC[GSYM APPEND_ASSOC] >> simp[EL_APPEND2, EL_APPEND1]
+QED
+
+(* ===== Abort lifting ===== *)
+
+(* Abort from an instruction is the result of its block. *)
+Theorem exec_block_step_abort:
+  !fuel ctx bb s inst a s'.
+    get_instruction bb s.vs_inst_idx = SOME inst /\
+    step_inst fuel ctx inst s = Abort a s' ==>
+    exec_block fuel ctx bb s = Abort a s'
+Proof
+  rw[Once exec_block_def]
+QED
+
+(* A fragment of one instruction that aborts in every start state. *)
+Theorem frag_exec_step_abort:
+  !ctx st st' inst P Q R.
+    st'.cs_blocks = st.cs_blocks /\ st'.cs_current_bb = st.cs_current_bb /\
+    st'.cs_current_insts = st.cs_current_insts ++ [inst] /\
+    (!s. P s ==>
+       ?fuel a s'. step_inst fuel ctx inst s = Abort a s' /\ R (Abort a s')) ==>
+    frag_exec ctx st st' P Q R
+Proof
+  rw[frag_exec_def] >> disj2_tac >>
+  first_x_assum drule >> strip_tac >>
+  drule_all fn_has_code_same_block >> strip_tac >>
+  `get_instruction bb (LENGTH st.cs_current_insts) = SOME inst` by
+    (qpat_x_assum `!i. _` (qspec_then `0` mp_tac) >> simp[]) >>
+  `exec_block fuel ctx bb s = Abort a s'` by
+    (irule exec_block_step_abort >> qexists_tac `inst` >> gvs[]) >>
+  qexists_tac `fuel` >>
+  gvs[run_from_def, exit_result_def]
+QED
+
+(* A failing emitted ASSERT aborts with Revert_abort. *)
+Theorem frag_exec_assert_fail:
+  !ctx st op x st' P Q R.
+    emit_void ASSERT [op] st = (x, st') /\
+    (!s. P s ==>
+       eval_operand op s = SOME 0w /\
+       R (Abort Revert_abort (revert_state (set_returndata [] s)))) ==>
+    frag_exec ctx st st' P Q R
+Proof
+  rpt strip_tac >> irule frag_exec_step_abort >>
+  gvs[emit_void_assert_inst] >>
+  `(mk_inst st.cs_next_id ASSERT [op] []).inst_opcode <> INVOKE` by
+    simp[venomInstTheory.mk_inst_def] >>
+  rpt strip_tac >> first_x_assum drule >> strip_tac >>
+  simp[step_inst_non_invoke, assert_false_correct]
+QED
+
+(* A STOP ends the run, with empty return data. *)
+Theorem stop_frag:
+  !ctx st st' id P Q R.
+    st'.cs_current_bb = st.cs_current_bb /\
+    st'.cs_current_insts = st.cs_current_insts ++ [mk_inst id STOP [] []] /\
+    (!s. P s ==> R (Halt (halt_state (s with vs_returndata := [])))) ==>
+    frag_exec ctx st st' P Q R
+Proof
+  rw[frag_exec_def] >> disj2_tac >>
+  drule_all fn_has_code_same_block >> strip_tac >>
+  `get_instruction bb (LENGTH st.cs_current_insts) =
+   SOME (mk_inst id STOP [] [])` by
+    (qpat_x_assum `!i. _` (qspec_then `0` mp_tac) >> simp[]) >>
+  `(mk_inst id STOP [] []).inst_opcode = STOP` by simp[mk_inst_def] >>
+  `step_inst_base (mk_inst id STOP [] []) s =
+   Halt (halt_state (s with vs_returndata := []))` by
+    (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >> simp[mk_inst_def]) >>
+  `run_from 0 ctx fn s = Halt (halt_state (s with vs_returndata := []))` by
+    (irule run_from_halt >>
+     qexistsl_tac [`bb`, `mk_inst id STOP [] []`] >> simp[]) >>
+  qexists_tac `0` >> simp[exit_result_def]
+QED
+
+(* Abort from a callee is the result of the INVOKE. *)
+Theorem step_inst_invoke_abort:
+  !fuel ctx inst s name arg_ops callee args cs a s'.
+    inst.inst_opcode = INVOKE /\
+    decode_invoke inst = SOME (name, arg_ops) /\
+    lookup_function name ctx.ctx_functions = SOME callee /\
+    eval_operands arg_ops s = SOME args /\
+    setup_callee callee args s = SOME cs /\
+    run_blocks fuel ctx callee cs = Abort a s' ==>
+    step_inst fuel ctx inst s = Abort a s'
+Proof
+  rw[Once step_inst_def]
+QED
+
+
+(* Entering a block is running it from past its PHIs, so every result of
+   run_from there, Abort included, is the result of run_blocks. *)
+Theorem run_blocks_run_from:
+  !fuel ctx fn s bb s_phi.
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    eval_phis s bb.bb_instructions = OK s_phi ==>
+    run_blocks (SUC fuel) ctx fn s =
+    run_from fuel ctx fn
+      (s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions)
+Proof
+  rpt strip_tac >>
+  `s_phi.vs_current_bb = s.vs_current_bb` by
+    metis_tac[eval_phis_preserves_current_bb] >>
+  simp[Once run_blocks_def, run_from_def] >>
+  Cases_on `exec_block fuel ctx bb
+              (s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions)` >>
+  simp[]
+QED
+
+Theorem eval_phis_no_phi[local]:
+  !l s. phi_prefix_length l = 0 ==> eval_phis s l = OK s
+Proof
+  Cases >> rw[eval_phis_def, phi_prefix_length_def]
+QED
+
+(* The lowering emits no PHIs, so entering one of its blocks is running it
+   from its first instruction. *)
+Theorem run_blocks_run_from_no_phi:
+  !fuel ctx fn s bb.
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    phi_prefix_length bb.bb_instructions = 0 ==>
+    run_blocks (SUC fuel) ctx fn s =
+    run_from fuel ctx fn (s with vs_inst_idx := 0)
+Proof
+  rpt strip_tac >>
+  `eval_phis s bb.bb_instructions = OK s` by simp[eval_phis_no_phi] >>
+  drule_all run_blocks_run_from >> simp[]
+QED
+
+(* The unit's result is the entry function's run_blocks result. *)
+Theorem run_context_run_blocks:
+  !fuel ctx s name fn lbl.
+    ctx.ctx_entry = SOME name /\
+    lookup_function name ctx.ctx_functions = SOME fn /\
+    fn_entry_label fn = SOME lbl ==>
+    run_context fuel ctx s =
+    run_blocks fuel ctx fn
+      (s with <| vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0 |>)
+Proof
+  rw[run_context_def, run_function_def]
+QED
+
+
+(* ===== Crossing blocks ===== *)
+
+(* A jump from the current block enters the target block from its first
+   instruction, at the cost of one unit of fuel. *)
+Theorem run_from_jump:
+  !fuel ctx fn s bb inst lbl bb'.
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    get_instruction bb s.vs_inst_idx = SOME inst /\
+    is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE /\
+    step_inst_base inst s = OK (jump_to lbl s) /\ ~s.vs_halted /\
+    lookup_block lbl fn.fn_blocks = SOME bb' /\
+    phi_prefix_length bb'.bb_instructions = 0 ==>
+    run_from (SUC fuel) ctx fn s = run_from fuel ctx fn (jump_to lbl s)
+Proof
+  rpt strip_tac >>
+  `(jump_to lbl s).vs_current_bb = lbl /\ ~(jump_to lbl s).vs_halted /\
+   jump_to lbl s with vs_inst_idx := 0 = jump_to lbl s` by
+    simp[jump_to_def] >>
+  `exec_block (SUC fuel) ctx bb s = OK (jump_to lbl s)` by
+    simp[Once exec_block_def, step_inst_non_invoke] >>
+  `run_blocks (SUC fuel) ctx fn (jump_to lbl s) =
+   run_from fuel ctx fn (jump_to lbl s with vs_inst_idx := 0)` by
+    (irule run_blocks_run_from_no_phi >> simp[]) >>
+  CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [run_from_def])) >>
+  asm_simp_tac std_ss [] >> simp[]
+QED
+
+Theorem step_inst_base_phi[local]:
+  !inst s.
+    inst.inst_opcode = PHI ==>
+    step_inst_base inst s = Error "phi outside prefix"
+Proof
+  rw[step_inst_base_def]
+QED
+
+(* Every non-Error result after a jump is the result before it, one unit of
+   fuel later.  No premise on the target: a missing block is an Error, and
+   so is a block that starts with a PHI, since run_from reaches the PHI by
+   stepping it. *)
+Theorem run_from_jump_result:
+  !fuel ctx fn s bb inst lbl r.
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    get_instruction bb s.vs_inst_idx = SOME inst /\
+    is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE /\
+    step_inst_base inst s = OK (jump_to lbl s) /\ ~s.vs_halted /\
+    run_from fuel ctx fn (jump_to lbl s) = r /\ (!e. r <> Error e) ==>
+    run_from (SUC fuel) ctx fn s = r
+Proof
+  rpt strip_tac >>
+  Cases_on `lookup_block lbl fn.fn_blocks`
+  >- gvs[run_from_def, jump_to_def] >>
+  rename1 `lookup_block lbl _ = SOME bb'` >>
+  Cases_on `phi_prefix_length bb'.bb_instructions = 0`
+  >- (drule_all run_from_jump >> simp[]) >>
+  `?phi rest. bb'.bb_instructions = phi :: rest /\ phi.inst_opcode = PHI` by
+    (Cases_on `bb'.bb_instructions` >> gvs[phi_prefix_length_def] >>
+     rename1 `h.inst_opcode` >> Cases_on `h.inst_opcode = PHI` >> gvs[]) >>
+  qpat_x_assum `run_from _ _ _ _ = _` mp_tac >>
+  simp[run_from_def, jump_to_def, Once exec_block_def, get_instruction_def,
+       step_inst_non_invoke, step_inst_base_phi]
+QED
+
+(* A jump to the start of a fragment's first block: what the fragment
+   reaches or exits with, the jump does too.  This is how a JNZ or JMP
+   enters a branch, a loop body or a failure block. *)
+Theorem frag_exec_enter:
+  !ctx fn s bb inst sa sb P Q R.
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    get_instruction bb s.vs_inst_idx = SOME inst /\
+    is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE /\
+    step_inst_base inst s = OK (jump_to sa.cs_current_bb s) /\
+    ~s.vs_halted /\
+    frag_exec ctx sa sb P Q R /\ fn_has_code sa sb fn /\
+    sa.cs_current_insts = [] /\ P (jump_to sa.cs_current_bb s) ==>
+    (?s'. Q s' /\ ~s'.vs_halted /\
+          s'.vs_current_bb = sb.cs_current_bb /\
+          s'.vs_inst_idx = LENGTH sb.cs_current_insts /\
+          !fuel r. run_from fuel ctx fn s' = r /\ (!e. r <> Error e) ==>
+                   ?fuel'. run_from fuel' ctx fn s = r) \/
+    (?fuel r. run_from fuel ctx fn s = r /\ exit_result r /\ R r)
+Proof
+  rpt strip_tac >>
+  `!fuel r. run_from fuel ctx fn (jump_to sa.cs_current_bb s) = r /\
+            (!e. r <> Error e) ==> run_from (SUC fuel) ctx fn s = r` by
+    metis_tac[run_from_jump_result] >>
+  qpat_x_assum `frag_exec _ _ _ _ _ _` mp_tac >>
+  simp[frag_exec_def] >>
+  disch_then (qspecl_then [`fn`, `jump_to sa.cs_current_bb s`] mp_tac) >>
+  impl_tac >- simp[jump_to_def] >>
+  strip_tac
+  >- (disj1_tac >> qexists_tac `s'` >> simp[] >> metis_tac[]) >>
+  disj2_tac >> metis_tac[exit_result_not_error]
 QED

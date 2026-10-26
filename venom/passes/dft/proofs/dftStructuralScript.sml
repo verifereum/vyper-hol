@@ -117,8 +117,8 @@ Proof
   fs[listTheory.MEM_nub, listTheory.MEM_APPEND,
      listTheory.MEM_MAP, listTheory.MEM_FILTER,
      optionTheory.IS_SOME_EXISTS] >> gvs[]
-  >- metis_tac[operand_producer_mem, optionTheory.THE_DEF]
   >- metis_tac[producing_inst_mem, optionTheory.THE_DEF]
+  >- metis_tac[operand_producer_mem, optionTheory.THE_DEF]
   >- (Cases_on `FLOOKUP eda inst.inst_id` >> gvs[] >> metis_tac[])
   >- metis_tac[operand_producer_mem, optionTheory.THE_DEF]
   >> Cases_on `FLOOKUP eda inst.inst_id` >> gvs[] >> metis_tac[]
