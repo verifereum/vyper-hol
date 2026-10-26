@@ -11,7 +11,7 @@
  *     variables handed out before the code and the allocations made before
  *     it kept, and every non-Error result from there a result from the
  *     start;
- *   - an error other than a type error or an assertion: an exit as
+ *   - an error other than a type error, or an assertion: an exit as
  *     expr_exit allows (an Abort; Revert_abort for an assertion, or
  *     ExHalt_abort for "UNREACHABLE");
  *   - a return: an exit the caller's RetQ accepts.  RetQ is the frame's:
@@ -28,7 +28,10 @@
  * own cenv (stmt_state_rel_pop_top_ext).
  *
  * TOP-LEVEL:
+ *   stmts_env, stmt_env — compile_stmts, and a statement with its
+ *                         declaration, returning the compile environment
  *   stmt_res_ok, stmt_exit, stmt_lands, cenv_top_ext, stmt_frag
+ *   cs_mono               — code only appended, variables handed out forward
  *   stmt_frag_nil, stmt_frag_cons — statement lists
  *   stmt_state_rel_pop_top_ext     — leaving a scope
  *   compile_pass_frag, compile_break_frag, compile_continue_frag
@@ -36,10 +39,12 @@
  *   compile_if_stmt_frag           — If, either branch, every outcome
  *   compile_raise_frag, compile_assert_frag
  *   compile_for_range_frag         — For over a range with literal ends
+ *   for_iteration                  — one pass of the range loop
  *   for_loop                       — the range loop from any counter value
  *
  * Not here: Assign/AugAssign (#550), Append and For over an array (#559),
- * Log (#570).
+ * Log (#570); Return; AnnAssign over stmt_frag (compile_annassign_word_frag
+ * in loweringSlice is frag_exec-shaped); Raise and Assert with a reason.
  *)
 
 Theory stmtSim
@@ -134,7 +139,8 @@ End
    or held through a pointer on both sides) that the scopes below the
    innermost do not hold: the declarations of the innermost scope, and
    names out of scope.  Leaving the innermost scope goes back to cenv
-   (stmt_state_rel_pop_top_ext). *)
+   (stmt_state_rel_pop_top_ext).  Of the other fields only ce_var_type and
+   ce_dynarray_capacity may differ, for any name. *)
 Definition cenv_top_ext_def:
   cenv_top_ext cenv cenv' (scopes : (string |-> scope_entry) list) <=>
     cenv' with <| ce_vars := cenv.ce_vars; ce_var_type := cenv.ce_var_type;
@@ -2340,7 +2346,10 @@ QED
 (* For over a range with literal ends: the loop variable's ALLOCA, the
    entry block, then the loop from the first counter value; on a normal
    finish the code ends at the start of the exit block.  The body's
-   judgment is assumed for the environment declare_local gives. *)
+   judgment is assumed for the environment declare_local gives.  Only for
+   n1 <= n2 (not the source's "no range" error), a loop variable of one
+   word, and ce_alloca_locals, which the lowering sets for external
+   functions only. *)
 Theorem compile_for_range_frag:
   !ctx func cx lctx RetQ cenv ty id fty a1 n1 a2 n2 bound stmts es res es'
    tyv.
