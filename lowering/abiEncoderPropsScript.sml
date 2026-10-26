@@ -10340,6 +10340,99 @@ Proof
   irule enc_frame_trans >> qexists_tac `t` >> simp[]
 QED
 
+Theorem enc_allocated_word_store_other:
+  alloca_inv s /\ i <> j /\
+  FLOOKUP s.vs_allocas i = SOME (ip,32) /\
+  FLOOKUP s.vs_allocas j = SOME (c,32) ==>
+  mem_word_at ip (mstore c w t).vs_memory = mem_word_at ip t.vs_memory
+Proof
+  strip_tac >> irule mstore_mem_word_at_disjoint >>
+  qpat_x_assum `alloca_inv s` mp_tac >>
+  pure_rewrite_tac[venomMemDefsTheory.alloca_inv_def,
+    venomMemDefsTheory.allocas_non_overlapping_def,
+    venomMemDefsTheory.regions_disjoint_def] >>
+  strip_tac >> metis_tac[]
+QED
+
+Theorem enc_dyn_loop_init_segments:
+  enc_dyn_loop_init len_op asz st = ((count_ptr,dyn_ptr,hdr,body_lbl,exit),si) /\
+  compile_alloc_buffer 32 st = (ibuf,sa) /\
+  emit_void MSTORE [ibuf.buf_operand;Lit 0w] sa = ((),sz) /\
+  compile_alloc_buffer 32 sz = (dbuf,sb) /\
+  emit_op MUL [len_op;Lit (n2w asz)] sb = (init_dyn,sc) /\
+  emit_void MSTORE [dbuf.buf_operand;init_dyn] sc = ((),sd) ==>
+  sz.cs_next_id = st.cs_next_id + 2 /\
+  sz.cs_next_var = st.cs_next_var + 1 /\
+  count_ptr = ibuf.buf_operand /\ dyn_ptr = dbuf.buf_operand /\
+  emitted_insts st si =
+    (emitted_insts st sa ++ emitted_insts sa sz) ++
+    (emitted_insts sz sb ++ (emitted_insts sb sc ++ emitted_insts sc sd))
+Proof
+  simp[enc_dyn_loop_init_def, contextTheory.compile_alloc_buffer_def,
+    emit_op_def, emit_void_def, fresh_var_def, fresh_id_def,
+    fresh_label_def, emit_def, comp_bind_def, comp_ignore_bind_def,
+    comp_return_def] >> rpt strip_tac >> gvs[] >>
+  `!n k. n - (n + k) = 0` by decide_tac >>
+  simp_tac (srw_ss()) [emitted_insts_def, DROP_APPEND,
+    listTheory.LENGTH_APPEND, listTheory.LENGTH, listTheory.DROP_def,
+    arithmeticTheory.ADD_SUB, arithmeticTheory.SUB_EQUAL_0] >>
+  simp[DROP_LENGTH_TOO_LONG]
+QED
+
+Theorem enc_dyn_loop_init_run:
+  enc_dyn_loop_init len_op asz st = ((count_ptr,dyn_ptr,hdr,body_lbl,exit),si) /\
+  st.cs_next_id IN frag_ids st z /\
+  st.cs_next_id + 2 IN frag_ids st z /\
+  (!x. len_op = Var x ==> not_fresh_at st x) /\
+  eval_operand len_op s0 = SOME (n2w n) /\
+  enc_scratch (frag_ids st z) lo top s0 ==>
+  ?ip c s. run_inst_seq (emitted_insts st si) s0 = OK s /\
+    lo <= ip /\ ip + 32 <= top /\ lo <= c /\ c + 32 <= top /\
+    eval_operand count_ptr s = SOME (n2w ip) /\
+    eval_operand dyn_ptr s = SOME (n2w c) /\
+    FLOOKUP s.vs_allocas st.cs_next_id = SOME (ip,32) /\
+    FLOOKUP s.vs_allocas (st.cs_next_id + 2) = SOME (c,32) /\
+    mem_word_at ip s.vs_memory = 0w /\
+    mem_word_at c s.vs_memory = n2w (n * asz) /\
+    s.vs_labels = s0.vs_labels /\ enc_frame st z lo top outs s0 s
+Proof
+  strip_tac >> drule enc_dyn_loop_init_code >> strip_tac >>
+  drule_all enc_dyn_loop_init_segments >> strip_tac >>
+  `st.cs_next_var <= st.cs_next_var` by simp[] >>
+  drule_all enc_alloc_buffer_store_run >>
+  disch_then (qspec_then `outs`
+    (qx_choose_then `ip` (qx_choose_then `s1` strip_assume_tac))) >>
+  `eval_operand len_op s1 = SOME (n2w n)` by
+    (irule enc_frame_preserves_operand >> goal_assum (drule_at Any) >> simp[]) >>
+  `!x. len_op = Var x ==> not_fresh_at sz x` by
+    (match_mp_tac enc_old_operand_mono >> qexists_tac `st` >> simp[]) >>
+  `st.cs_next_var <= sz.cs_next_var /\
+   sz.cs_next_id IN frag_ids st z` by simp[] >>
+  `enc_scratch (frag_ids st z) lo top s1` by fs[enc_frame_def] >>
+  drule_all enc_alloc_mul_store_run >>
+  disch_then (qspec_then `outs`
+    (qx_choose_then `c` (qx_choose_then `s2` strip_assume_tac))) >>
+  `FLOOKUP s2.vs_allocas st.cs_next_id = SOME (ip,32)` by fs[enc_frame_def] >>
+  `alloca_inv s2` by
+    (qpat_assum `enc_frame _ _ _ _ _ s1 s2` mp_tac >>
+     pure_rewrite_tac[enc_frame_def,enc_scratch_def] >> strip_tac >> simp[]) >>
+  `mem_word_at ip s2.vs_memory = 0w` by
+    (asm_rewrite_tac[] >>
+     `st.cs_next_id <> sz.cs_next_id` by decide_tac >>
+     drule_all enc_allocated_word_store_other >> simp[]) >>
+  `!x. count_ptr = Var x ==> not_fresh_at sz x` by
+    (qpat_assum `compile_alloc_buffer 32 st = _`
+       (mp_then Any mp_tac enc_alloc_buffer_frontiers) >>
+     simp[not_fresh_at_def] >> metis_tac[]) >>
+  qexistsl_tac [`ip`,`c`,`s2`] >> conj_tac
+  >- (asm_rewrite_tac[] >> irule enc_run_inst_seq_compose >>
+      qexists_tac `s1` >> simp[]) >>
+  asm_simp_tac (srw_ss()) [valueEncodingPropsTheory.mstore_mem_word_at_same] >>
+  conj_tac
+  >- (qpat_x_assum `FLOOKUP s2.vs_allocas sz.cs_next_id = _` mp_tac >> simp[]) >>
+  irule enc_frame_trans >> qexists_tac `s1` >> simp[]
+QED
+
 Theorem enc_dyn_loop_ctx_readonly:
   enc_dyn_loop_ctx st z ops lo top tv v src outs s0 count_ptr ip dyn_ptr j c s /\
   enc_frame st z lo top outs s t /\ t.vs_memory = s.vs_memory /\
@@ -10364,6 +10457,32 @@ Theorem enc_dyn_loop_ctx_inst_idx[simp]:
 Proof
   Cases_on `dyn_ptr` >>
   simp[enc_dyn_loop_ctx_def, eval_operand_def, lookup_var_def]
+QED
+
+Theorem enc_dyn_loop_init_frag:
+  enc_dyn_loop_init len_op asz st = ((count_ptr,dyn_ptr,hdr,body_lbl,exit),si) /\
+  st.cs_next_id IN frag_ids st z /\
+  st.cs_next_id + 2 IN frag_ids st z /\
+  (!x. len_op = Var x ==> not_fresh_at st x) /\
+  eval_operand len_op s0 = SOME (n2w n) /\
+  enc_pre st z ops lo top tv v src outs s0 /\ value_has_type tv v ==>
+  frag_exec ctx st si (\s. s = s0)
+    (\s. ?ip c. enc_array_inv
+       (enc_dyn_loop_ctx st z ops lo top tv v src outs s0 count_ptr ip
+          dyn_ptr (st.cs_next_id + 2) c)
+       p (n * asz) ts avs ip (SOME c) 0 s) R
+Proof
+  strip_tac >>
+  `enc_scratch (frag_ids st z) lo top s0` by fs[enc_pre_def] >>
+  drule_all enc_dyn_loop_init_run >>
+  disch_then (qspec_then `outs` strip_assume_tac) >>
+  drule enc_dyn_loop_init_insts >> strip_tac >>
+  fs[same_blocks_def] >> irule frag_exec_run_inst_seq >>
+  asm_simp_tac (srw_ss()) [rich_listTheory.IS_PREFIX_APPEND] >>
+  qexistsl_tac [`ip`,`c`] >> irule enc_array_inv_zero >> simp[] >>
+  simp[enc_dyn_loop_ctx_def] >>
+  irule enc_loop_ctx_from_frame >> simp[enc_frame_inst_idx] >>
+  Cases_on `count_ptr` >> fs[eval_operand_def, lookup_var_def]
 QED
 
 Theorem enc_dyn_loop_header_frag:
