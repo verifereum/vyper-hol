@@ -63,8 +63,7 @@ jobs:
         id: cache-key
         run: |
           toolchain_key="holbuild-v3-toolchain-${{ runner.os }}-${{ runner.arch }}-${{ steps.polyml.outputs.polyml-rev }}-${{ steps.holbuild.outputs.holbuild-rev }}"
-          compatibility_hash="${{ hashFiles('holproject.toml', 'VYPER_PIN') }}"
-          build_prefix="holbuild-v3-build-${{ runner.os }}-${{ runner.arch }}-${{ steps.polyml.outputs.polyml-rev }}-${{ steps.holbuild.outputs.holbuild-rev }}-${compatibility_hash}"
+          build_prefix="holbuild-v3-build-${{ runner.os }}-${{ runner.arch }}-${{ steps.polyml.outputs.polyml-rev }}-${{ steps.holbuild.outputs.holbuild-rev }}"
           snapshot_key="${build_prefix}-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}"
           echo "toolchain-key=${toolchain_key}" >> "$GITHUB_OUTPUT"
           echo "build-prefix=${build_prefix}" >> "$GITHUB_OUTPUT"
@@ -108,6 +107,9 @@ jobs:
         run: holbuild buildhol
 
       - name: Save holbuild toolchain cache after buildhol
+        # Every branch can restore main's entries, so other branches' copies
+        # only fill the 10 GB cache.
+        if: ${{ github.event_name == 'push' }}
         uses: actions/cache/save@v6
         continue-on-error: true
         with:
