@@ -20,7 +20,7 @@ runs:
       run: |
         sha=$(tr -d '[:space:]' < VYPER_PIN)
         echo "sha=$sha" >> "$GITHUB_OUTPUT"
-        echo "cache-key=vyper-tests-${{ runner.os }}-$sha-${{ hashFiles('tests/vyper-regression/**/*.py') }}" >> "$GITHUB_OUTPUT"
+        echo "cache-key=vyper-tests-${{ runner.os }}-$sha" >> "$GITHUB_OUTPUT"
 
     - name: Cache exported Vyper tests
       id: cache-vyper-tests
@@ -37,7 +37,5 @@ runs:
         cd vyper-src
         git fetch --unshallow --tags
         git checkout --detach ${{ steps.vyper-rev.outputs.sha }}
-        mkdir -p tests/functional/codegen/vyper_hol_regression
-        cp -R ../tests/vyper-regression/. tests/functional/codegen/vyper_hol_regression/
         pip install . --group test
-        pytest -s -n0 --export=../tests/vyper-test-exports -m "not fuzzing" tests/functional
+        pytest -s -n0 --export ../tests/vyper-test-exports -m "not fuzzing" tests/functional
