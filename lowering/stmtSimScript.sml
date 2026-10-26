@@ -1912,7 +1912,6 @@ Proof
   metis_tac[]
 QED
 
-(* The rest of an iteration from the increment block, at DD. *)
 (* Every non-Error result from a is one from b, and from b one from c:
    then from a one from c. *)
 Theorem run_from_results_trans[local]:
@@ -1927,6 +1926,7 @@ Proof
   metis_tac[]
 QED
 
+(* The rest of an iteration from the increment block, at DD. *)
 val for_incr_tac =
   qpat_x_assum `stmt_state_rel func cenv cx (es2 with scopes := rest) DD`
     assume_tac >>
