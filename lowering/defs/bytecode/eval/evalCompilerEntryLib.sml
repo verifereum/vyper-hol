@@ -183,6 +183,19 @@ in case root of
 end
 val entry_plan_spine_admin = CONV_TAC (LAND_CONV entry_plan_spine_conv)
 
+(* Both public analyzed entries share the first three analysis arguments.
+   Cleanup-aware production planning inserts height/growth before the function. *)
+val entry_plan_analyzed_names =
+  ["generate_fn_plan_analyzed", "generate_fn_plan_with_cleanup_analyzed"]
+val entry_plan_driver_names = entry_plan_analyzed_names @
+  ["generate_fn_plan_aux", "generate_succs_plan"]
+fun entry_is_analyzed head = is_const head andalso
+  List.exists (fn name => #Name (dest_thy_const head) = name)
+    entry_plan_analyzed_names
+fun entry_plan_argument_index head index =
+  if #Name (dest_thy_const head) = "generate_fn_plan_with_cleanup_analyzed"
+     andalso index >= 3 then index + 2 else index
+
 (* Resume the real planner only as far as its next complete block request.
    Each block evaluation remains a separate timed, kernel-checked conversion. *)
 fun entry_plan_resume tm = let
@@ -190,6 +203,7 @@ fun entry_plan_resume tm = let
     boolSyntax.conditional (SOME 1)
     |> computeLib.add_thms [optionTheory.option_case_lazily,
          stackPlanGenTheory.generate_fn_plan_analyzed_def,
+         stackPlanGenTheory.generate_fn_plan_with_cleanup_analyzed_def,
          stackPlanGenTheory.generate_fn_plan_aux_def]
   val resume = Lib.with_flag (computeLib.stoppers,
     SOME (fn t => is_const t andalso
@@ -201,7 +215,7 @@ fun entry_plan_resume tm = let
 in th
 end
 val entry_plan_once = entry_eval_stage_names entry_plan_resume
-  ["generate_fn_plan_analyzed", "generate_fn_plan_aux", "generate_succs_plan"]
+  entry_plan_driver_names
 
 fun entry_has_call names tm = can (find_term (fn t =>
   let val (h,args) = strip_comb t
@@ -219,9 +233,7 @@ fun entry_plan_control g =
 fun entry_plan_finish g =
   if entry_has_block (lhs (snd g)) then
     raise Fail "planner still has an unevaluated block"
-  else if entry_has_call
-    ["generate_fn_plan_analyzed", "generate_fn_plan_aux", "generate_succs_plan"]
-    (lhs (snd g)) then
+  else if entry_has_call entry_plan_driver_names (lhs (snd g)) then
       (entry_plan_once >> entry_plan_spine_admin >> entry_plan_finish) g
   else ALL_TAC g
 
@@ -236,9 +248,7 @@ end) "generate_block_plan"
    still requires successful code generation and the exact pinned result. *)
 fun entry_plan_next_control g =
   if entry_has_block (lhs (snd g)) then ALL_TAC g
-  else if entry_has_call
-    ["generate_fn_plan_analyzed", "generate_fn_plan_aux", "generate_succs_plan"]
-    (lhs (snd g)) then
+  else if entry_has_call entry_plan_driver_names (lhs (snd g)) then
       (entry_plan_once >> entry_plan_spine_admin >> entry_plan_next_control) g
   else ALL_TAC g
 fun entry_plan_next_block g =

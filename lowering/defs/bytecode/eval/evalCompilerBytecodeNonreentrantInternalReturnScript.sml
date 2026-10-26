@@ -53,8 +53,10 @@ Proof
   entry_guard "unit_global_inst_ids_distinct" >> entry_admin >> entry_stage "run_pipeline_stages" >> entry_admin >> entry_guard "unit_wf" >> entry_guard "unit_labels_wf" >> entry_guard "context_target_safe" >>
   entry_guard "concretized_static_layouts_wf" >> entry_guard "fmp_lowered_context_wf" >> entry_stage "fcg_analyze" >> entry_guard "reachable_fcg_acyclic" >> entry_guard "codegen_ready" >> entry_admin >>
   simp_tac pure_ss [codegenTheory.finalize_codegen_identity, codegenTheory.codegen_assembly_def] >> entry_guard "target_capabilities_wf" >> entry_guard "context_target_safe" >> entry_admin >>
-  simp_tac pure_ss [stackPlanGenTheory.generate_context_plan_def, stackPlanGenTheory.generate_context_plan_with_def] >> entry_stage "max_live_eom" >> entry_plan_admin >>
-  simp_tac pure_ss [Once stackPlanGenTheory.generate_context_regions_def, stackPlanGenTheory.generate_fn_plan_def] >> entry_plan_admin >> entry_analysis_stage "liveness_analyze" >> entry_analysis_stage "dfg_build_function" >>
+  simp_tac pure_ss [stackPlanGenTheory.generate_context_plan_def, LET_THM, stackPlanGenTheory.generate_context_plan_with_def] >>
+  entry_stage "fcg_analyze" >> entry_stage "cleanup_growth_table" >> entry_stage "max_live_eom" >> entry_plan_admin >>
+  simp_tac pure_ss [Once stackPlanGenTheory.generate_context_regions_def, stackPlanGenTheory.generate_fn_plan_with_cleanup_def] >>
+  entry_stage "cleanup_caller_height" >> entry_plan_admin >> entry_analysis_stage "liveness_analyze" >> entry_analysis_stage "dfg_build_function" >>
   entry_analysis_stage "cfg_analyze" >> entry_plan_control >> entry_plan_block >> entry_plan_spine_admin >> entry_plan_control >> entry_plan_block >> entry_plan_spine_admin >> entry_plan_control >> entry_plan_block >>
   entry_plan_spine_admin >> entry_plan_control >> entry_plan_block >> entry_plan_spine_admin >> entry_plan_control >> entry_plan_block >> entry_plan_spine_admin >> entry_plan_control >> entry_plan_block >> entry_plan_spine_admin >>
   entry_plan_finish >> entry_stage "generate_context_regions" >> entry_admin >>

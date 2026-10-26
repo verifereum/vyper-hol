@@ -41,7 +41,8 @@ val entry_concretize_start = entry_pass_begin >> entry_concretize_open
 val entry_concretize_function = simp_tac pure_ss
   [concretizeMemLocDefsTheory.concretize_function_fuel_in_context_def]
 val entry_concretize_layout = simp_tac pure_ss
-  [COND_CLAUSES, concretizeMemLocDefsTheory.compute_function_layout_fuel_in_context_def]
+  [OR_CLAUSES, COND_CLAUSES,
+   concretizeMemLocDefsTheory.compute_function_layout_fuel_in_context_def]
 val entry_allocation_open = entry_eval_stage
   (REWR_CONV concretizeMemLocDefsTheory.compute_alloc_map_fuel_in_context_def THENC
    SIMP_CONV pure_ss [Once LET_THM] THENC
@@ -66,16 +67,16 @@ fun entry_plan_small_resume tm = let
     | "generate_succs_plan" => argument 6 (List.length args) (entry_plan_compute computeLib.EVAL_CONV) tm
     | _ => REFL tm
   val prepared = TRANS work (RAND_CONV (entry_plan_compute computeLib.EVAL_CONV) (rhs (concl work)))
-  val equations = stackPlanGenTheory.generate_fn_plan_analyzed_def ::
+  val equations = [stackPlanGenTheory.generate_fn_plan_analyzed_def,
+    stackPlanGenTheory.generate_fn_plan_with_cleanup_analyzed_def] @
     List.map (fn n => cj n stackPlanGenTheory.generate_fn_plan_aux_def) [1,2,3,4]
   val unfolded = FIRST_CONV (List.map REWR_CONV equations) (rhs (concl prepared))
 in TRANS prepared unfolded end
 val entry_plan_small_once = entry_eval_stage_names entry_plan_small_resume
-  ["generate_fn_plan_analyzed", "generate_fn_plan_aux", "generate_succs_plan"]
+  entry_plan_driver_names
 fun entry_plan_small_control g =
   if entry_has_block (lhs (snd g)) then ALL_TAC g
-  else if entry_has_call
-    ["generate_fn_plan_analyzed", "generate_fn_plan_aux", "generate_succs_plan"]
+  else if entry_has_call entry_plan_driver_names
     (lhs (snd g)) then entry_plan_small_once g else ALL_TAC g
 val plan_admin = entry_plan_spine_admin
 open evalCompilerPlanCacheLib
@@ -86,9 +87,12 @@ fun plan_cache_vars g =
 (* Canonicalize each shared record once, before summary-cache registration.
    Subsequent lazy projections then match the same immutable arguments. *)
 fun entry_plan_normalize i = let
-  fun argument n cv = if n = 5 then RAND_CONV cv
-    else RATOR_CONV (argument (n+1) cv)
-in TRY (entry_eval_stage (argument i computeLib.EVAL_CONV) "generate_fn_plan_analyzed") end
+  fun normalize tm = let
+    val (head,args) = strip_comb tm
+    fun argument n cv = if n = List.length args - 1 then RAND_CONV cv
+      else RATOR_CONV (argument (n+1) cv)
+  in argument (entry_plan_argument_index head i) computeLib.EVAL_CONV tm end
+in TRY (entry_eval_stage_names normalize entry_plan_analyzed_names) end
 (* Follow the demanded case argument, without searching deferred continuations
    or traversing the complete analysis records just to locate a planner call. *)
 fun entry_plan_active names evaluate tm = let
@@ -109,10 +113,9 @@ in if List.exists (fn target => name = target) names andalso
 end
 val plan_control = CONV_TAC (LAND_CONV (TRY_CONV
   (entry_plan_active
-    ["generate_fn_plan_analyzed", "generate_fn_plan_aux", "generate_succs_plan"]
-    entry_plan_small_resume)))
+    entry_plan_driver_names entry_plan_small_resume)))
 val entry_plan_begin = CONV_TAC (LAND_CONV (CHANGED_CONV
-  (entry_plan_active ["generate_fn_plan_analyzed"] entry_plan_small_resume)))
+  (entry_plan_active entry_plan_analyzed_names entry_plan_small_resume)))
 
 (* One dominator-tree node or one child-list transition. The current block's
    instruction rename completes before the next recursive tree call begins. *)
@@ -188,7 +191,7 @@ fun entry_plan_cleanup_guard tm = let
   val (_,args) = strip_comb tm
   fun selected t = let val (h,aa) = strip_comb t in
     is_const h andalso #Name (dest_thy_const h) = "cleanup_elision_safe" andalso
-    List.length aa = 3 andalso entry_plan_closed t end
+    List.length aa = entry_function_arity (type_of h) andalso entry_plan_closed t end
   val target = find_term selected (hd args)
   val cs = entry_plan_readonly_cs (List.map type_of (snd (strip_comb target)))
     |> (fn cs => computeLib.set_skip cs boolSyntax.conditional (SOME 1))
@@ -268,21 +271,24 @@ val plan_step = plan_control >> plan_admin >> plan_block >> plan_admin >> plan_s
   plan_instruction >> plan_admin
 val plan_four = plan_step >> plan_step >> plan_step >> plan_step
 fun plan_finish g =
-  if entry_plan_has_call ["generate_fn_plan_analyzed", "generate_fn_plan_aux",
-      "generate_succs_plan", "generate_block_plan", "generate_block_insts_plan",
+  if entry_plan_has_call (entry_plan_driver_names @
+      ["generate_block_plan", "generate_block_insts_plan",
        "generate_inst_plan", "prepare_params_plan", "clean_stack_plan",
-       "cleanup_elision_safe"]
+       "cleanup_elision_safe"])
       (lhs (snd g)) then
     raise Fail "planner needs more finite instruction/control boundaries"
   else ALL_TAC g
 
 fun entry_plan_compact_dfg g = let
   fun selected tm = let val (h,args) = strip_comb tm in
-    is_const h andalso #Name (dest_thy_const h) = "generate_fn_plan_analyzed" andalso
-    List.length args = 6 andalso List.null (free_vars tm) end
+    entry_is_analyzed h andalso
+    List.length args = entry_function_arity (type_of h) andalso
+    List.null (free_vars tm) end
   val target = find_term selected (lhs (snd g))
-  val th = RATOR_CONV (RATOR_CONV (RATOR_CONV (RATOR_CONV
-    (RAND_CONV entry_compact_maps)))) target
+  val (_,args) = strip_comb target
+  fun argument i n cv = if i = n - 1 then RAND_CONV cv
+    else RATOR_CONV (argument i (n - 1) cv)
+  val th = argument 1 (List.length args) entry_compact_maps target
 in CONV_TAC (LAND_CONV (ONCE_DEPTH_CONV
      (fn t => if aconv t target then th else NO_CONV t))) g end
 
@@ -410,9 +416,12 @@ val entry_open_schedule = simp_tac pure_ss [venomPipelineRunnerTheory.run_callee
 val entry_open_codegen = simp_tac pure_ss [codegenTheory.finalize_codegen_identity,
      codegenTheory.codegen_assembly_def]
 val entry_open_plan = simp_tac pure_ss [stackPlanGenTheory.generate_context_plan_def,
-     stackPlanGenTheory.generate_context_plan_with_def]
+     LET_THM, stackPlanGenTheory.generate_context_plan_with_def] >>
+  entry_stage "fcg_analyze" >> entry_stage "cleanup_growth_table"
 val entry_open_region = simp_tac pure_ss [Once stackPlanGenTheory.generate_context_regions_def,
-     stackPlanGenTheory.generate_fn_plan_def]
+     stackPlanGenTheory.generate_fn_plan_def,
+     stackPlanGenTheory.generate_fn_plan_with_cleanup_def] >>
+  entry_stage "cleanup_caller_height"
 
 val entry_open_codegen_ready = simp_tac pure_ss
   ([stackPlanGenTheory.codegen_ready_def, stackPlanGenTheory.codegen_ready_fn_def,

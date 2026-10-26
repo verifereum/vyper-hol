@@ -620,7 +620,7 @@ End
 
 Definition checked_first_fit_def:
   checked_first_fit occupied sz =
-    if reserved_intervals_wf occupied then
+    if EVERY reserved_interval_wf occupied then
       checked_first_fit_scan (sort_reserved_by_pos occupied) sz 0
     else NONE
 End
@@ -676,6 +676,26 @@ Definition complete_alloc_positions_def:
         complete_alloc_positions_with_items items forced reserved fn positions
 End
 
+(* Imported intervals are occupied for dead-ALLOCA fill, not globally
+   pairwise-disjoint reservations: unrelated lifetimes can share positions. *)
+Definition complete_alloc_positions_with_imports_def:
+  complete_alloc_positions_with_imports items forced reserved imported fn
+      (positions : (allocation,num) fmap) =
+    if ~EVERY reserved_interval_wf imported \/
+       ~EVERY (\r. EVERY (reserved_intervals_disjoint r) reserved) imported
+    then NONE
+    else if ~forced_alloc_keys_valid (MAP FST items) forced \/
+            ~candidate_alloc_keys_valid (MAP FST items) positions then NONE
+    else case merge_forced_positions items forced positions of
+      NONE => NONE
+    | SOME merged =>
+        case checked_preserved_intervals items merged reserved of
+          NONE => NONE
+        | SOME occupied =>
+            complete_alloc_positions_aux (fn_insts fn) merged
+              (reserved ++ occupied ++ imported)
+End
+
 (* Liveness-aware allocation loop.
    already: (alloc, liveset, position, size) — pre-allocated
    to_alloc: (alloc, liveset, size) — sorted by |liveset| ascending
@@ -719,10 +739,103 @@ Definition compute_alloc_map_def:
       sorted_info pre_allocated
 End
 
-(* Python populates the liveset dictionary during its backward liveness walk.
-   Its stable size sort therefore breaks equal-size ties in reverse physical
-   instruction order, not ALLOCA source order.  Preserve that observable order
-   before applying the same stable sort below. *)
+(* Order sidecar for memory liveness. Unlike the canonical sorted sets, these
+   lists model OrderedSet insertion: union appends unseen keys; deletion keeps
+   survivor order. Pointer may-sets use canonical order; singleton resolutions
+   (the ordinary lowering case) have no pointer-order ambiguity. *)
+Definition ml_ordered_union_def:
+  ml_ordered_union xs ys =
+    FOLDL (\acc x. if MEM x acc then acc else acc ++ [x]) xs ys
+End
+
+Definition ml_ordered_inst_def:
+  ml_ordered_inst bpr mems sizes lbl idx inst live la keys =
+    let ws = find_base_allocas_opt bpr (inst_write_op inst) in
+    let rs = find_base_allocas_opt bpr (inst_read_op inst) in
+    let l1 = ml_ordered_union live rs in
+    let l2 = if inst.inst_opcode = INVOKE then
+      (case inst.inst_operands of Label name :: _ =>
+        FOLDL (\s op. ml_ordered_union s (find_base_allocas bpr op))
+          (ml_ordered_union l1 (mems name)) inst.inst_operands
+       | _ => l1) else l1 in
+    let la' = la |+ ((lbl,idx),l2) in
+    let keys' = ml_ordered_union keys [(lbl,idx)] in
+    let l3 = case (inst_write_size inst,ws) of
+      (SOME sz,[a]) => if sizes a = SOME sz then FILTER (\b. b <> a) l2 else l2
+      | _ => l2 in
+    (ml_ordered_union l3 (FILTER (\a. MEM a rs) ws),la',keys')
+End
+
+Definition ml_ordered_insts_def:
+  ml_ordered_insts bpr mems sizes lbl live la keys [] = (live,la,keys) /\
+  ml_ordered_insts bpr mems sizes lbl live la keys ((idx,inst)::rest) =
+    let (l,a,k) = ml_ordered_insts bpr mems sizes lbl live la keys rest in
+      ml_ordered_inst bpr mems sizes lbl idx inst l a k
+End
+
+Definition ml_ordered_block_def:
+  ml_ordered_block bpr mems sizes cfg la keys bb =
+    let succs = cfg_succs_of cfg bb.bb_label in
+    (* defaultdict reads insert even when the initial value is empty. *)
+    let keys1 = ml_ordered_union keys (MAP (\l. (l,0)) succs) in
+    let live = FOLDL ml_ordered_union [] (MAP (\l. ml_lookup la (l,0)) succs) in
+    let keys2 = ml_ordered_union keys1 [(bb.bb_label,0)] in
+    let (_,la',keys') = ml_ordered_insts bpr mems sizes bb.bb_label live la keys2
+      (MAPi (\i inst. (i,inst)) bb.bb_instructions) in
+    (la',keys')
+End
+
+Definition ml_ordered_pass_def:
+  ml_ordered_pass bpr mems sizes cfg blocks [] la keys = (la,keys) /\
+  ml_ordered_pass bpr mems sizes cfg blocks (lbl::rest) la keys =
+    case lookup_block lbl blocks of
+      NONE => ml_ordered_pass bpr mems sizes cfg blocks rest la keys
+    | SOME bb => let (la',keys') = ml_ordered_block bpr mems sizes cfg la keys bb in
+      ml_ordered_pass bpr mems sizes cfg blocks rest la' keys'
+End
+
+(* Stop on canonical membership convergence, just as dictionary equality in
+   Python ignores OrderedSet value order. Never use temporal allocation-key
+   occurrence during fixpoint iteration as final allocation priority. *)
+Definition ml_ordered_iter_def:
+  ml_ordered_iter 0 bpr mems sizes pallocas cfg fn la us ola keys = (us,ola,keys) /\
+  ml_ordered_iter (SUC fuel) bpr mems sizes pallocas cfg fn la us ola keys =
+    let (changed,la',us') = ml_one_pass bpr
+      (\n. incr_ssort alloc_to (mems n)) sizes pallocas cfg fn la us in
+    let (ola',keys') = ml_ordered_pass bpr mems sizes cfg fn.fn_blocks cfg.cfg_dfs_post ola keys in
+    if changed then ml_ordered_iter fuel bpr mems sizes pallocas cfg fn la' us' ola' keys'
+    else (us',ola',keys')
+End
+
+Definition ml_ordered_keys_def:
+  ml_ordered_keys fuel bpr mems sizes pallocas cfg fn =
+    let (us,ola,keys) = ml_ordered_iter fuel bpr mems sizes pallocas cfg fn
+      FEMPTY FEMPTY FEMPTY [] in
+    let ks = FOLDL (\acc addr.
+      ml_ordered_union acc
+        (FILTER (\a. MEM a (ml_lookup us addr)) (ml_lookup ola addr))) [] keys in
+    FOLDL (\acc inst. ml_ordered_union acc
+      (find_base_allocas_opt bpr (inst_write_op inst))) ks (fn_insts fn)
+End
+
+(* The sidecar supplies priority, not membership. Complete missing local keys
+   deterministically in instruction order; imported keys are handled separately
+   by the allocator's fixed reservations. No arbitrary set enumeration is used. *)
+Definition ml_complete_order_def:
+  ml_complete_order raw localkeys (ls : (allocation, inst_addr list) fmap) =
+    nub_first (FILTER (\a. MEM a localkeys /\ IS_SOME (FLOOKUP ls a))
+      (raw ++ localkeys))
+End
+
+Definition alloc_liveset_items_ordered_def:
+  alloc_liveset_items_ordered raw fn ls =
+    let localkeys = MAP (\inst. Allocation inst.inst_id)
+      (FILTER (\inst. is_alloca_op inst.inst_opcode) (fn_insts fn)) in
+    MAP (\a. (a,THE (FLOOKUP ls a))) (ml_complete_order raw localkeys ls)
+End
+
+(* Allocation priority follows final ordered liveat values in dictionary-key
+   insertion order. Canonical liveset membership remains authoritative. *)
 Definition alloc_liveset_items_def:
   alloc_liveset_items fn ls =
     MAP THE (FILTER IS_SOME
@@ -761,7 +874,8 @@ Definition compute_alloc_map_fuel_def:
                             if sz = 0 then NONE else SOME sz in
     let ls = mem_liveness_analyze_fuel fuel bpr mems_used alloca_sz_opt
                live_pallocas cfg fn in
-    let items = alloc_liveset_items fn ls in
+    let raw = ml_ordered_keys fuel bpr mems_used alloca_sz_opt live_pallocas cfg fn in
+    let items = alloc_liveset_items_ordered raw fn ls in
     let pre_allocated_dom = FDOM pre_allocated in
     let already = FILTER (\(alloc, _). alloc IN pre_allocated_dom) items in
     let to_alloc = FILTER (\(alloc, _). alloc NOTIN pre_allocated_dom) items in
@@ -776,43 +890,81 @@ Definition compute_alloc_map_fuel_def:
       sorted_info pre_allocated
 End
 
-(* A concretized callee's frame participates in the same backward liveat and
-   forward used analyses as local allocations. In particular it remains live
-   between two INVOKEs: reserving it only at the call instructions loses that
-   interference. Synthetic identities are above every local instruction ID. *)
-Definition call_frame_allocations_def:
-  call_frame_allocations ctx fn =
-    let fresh = SUC (FOLDL (\n inst. MAX n inst.inst_id) 0 (fn_insts fn)) in
-    MAPi (\i callee. (Allocation (fresh + i), callee.fn_name, THE callee.fn_eom))
-      (FILTER (\callee. case callee.fn_eom of
-                          NONE => F
-                        | SOME eom => eom <> 0) ctx.ctx_functions)
+(* Imported static allocations keep their callee positions.  Local candidates
+   stay local: importing these identities into the result map would violate
+   candidate_alloc_keys_valid at the checked completion boundary. *)
+Definition callee_mems_used_def:
+  callee_mems_used ctx name =
+    case lookup_function name ctx.ctx_functions of
+      NONE => []
+    | SOME fn => fn.fn_mems_used
 End
 
-Definition call_frame_mems_used_def:
-  call_frame_mems_used frames name =
-    MAP (\(alloc,_,_). alloc)
-      (FILTER (\(_,callee,_). callee = name) frames)
+(* A diamond can reach the same allocation through both arms.  Keep its first
+   occurrence, preserving call/instruction order rather than sorting by name. *)
+Definition unique_mems_used_def:
+  unique_mems_used [] = [] /\
+  unique_mems_used ((a,p,s)::rest) =
+    (a,p,s)::unique_mems_used (FILTER (\(b,_,_). b <> a) rest)
+Termination
+  WF_REL_TAC `measure LENGTH` >>
+  simp[arithmeticTheory.LT_SUC_LE, rich_listTheory.LENGTH_FILTER_LEQ]
 End
 
-Definition call_frame_livesets_def:
-  call_frame_livesets frames ls =
-    MAP (\(alloc,_,size).
-      let live = case FLOOKUP ls alloc of NONE => [] | SOME used => used in
-      (alloc, live, 0n, size)) frames
+Definition imported_mems_used_def:
+  imported_mems_used ctx fn =
+    unique_mems_used
+      (FLAT (MAP (\inst.
+        if inst.inst_opcode = INVOKE then
+          case inst.inst_operands of
+            Label name :: _ => callee_mems_used ctx name
+          | _ => []
+        else []) (fn_insts fn)))
 End
+
+Definition context_alloca_size_def:
+  context_alloca_size fn imports a =
+    case FIND (\(b,_,_). b = a) imports of
+      SOME (_,_,sz) => sz
+    | NONE => get_alloca_size fn a
+End
+
+Definition context_mem_livesets_def:
+  context_mem_livesets fuel ctx fn bpr cfg =
+    let imports = imported_mems_used ctx fn in
+    let sizes = context_alloca_size fn imports in
+    mem_liveness_analyze_fuel fuel bpr
+      (* Metadata preserves allocation order; the analysis consumes ordered sets. *)
+      (\name. incr_ssort alloc_to (MAP FST (callee_mems_used ctx name)))
+      (\a. let sz = sizes a in if sz = 0 then NONE else SOME sz)
+      ([] : allocation list) cfg fn
+End
+
+Definition imported_liveset_info_def:
+  imported_liveset_info imports (ls : (allocation, inst_addr list) fmap) =
+    FLAT (MAP (\(a,p,s).
+      case FLOOKUP ls a of
+        NONE => []
+      | SOME live => [(a,live,p,s)]) imports)
+End
+
+(* Imported fixed intervals participate in backward liveat and forward used,
+   so they remain live between calls (including calls through different diamond
+   arms sharing an allocation). Do not also reserve synthetic [0,eom) frames:
+   those would hide reusable gaps and discard transitive allocation identity. *)
 
 Definition compute_alloc_map_fuel_in_context_def:
   compute_alloc_map_fuel_in_context fuel ctx fn bpr cfg
                          (pre_allocated : (allocation, num) fmap)
                          (global_reserved : (num # num) list) =
     let alloca_sz = get_alloca_size fn in
-    let alloca_sz_opt = \a. let sz = alloca_sz a in
-                            if sz = 0 then NONE else SOME sz in
-    let frames = call_frame_allocations ctx fn in
-    let ls = mem_liveness_analyze_fuel fuel bpr (call_frame_mems_used frames)
-               alloca_sz_opt ([] : allocation list) cfg fn in
-    let items = alloc_liveset_items fn ls in
+    let imports = imported_mems_used ctx fn in
+    let ls = context_mem_livesets fuel ctx fn bpr cfg in
+    let raw = ml_ordered_keys fuel bpr
+      (\name. MAP FST (callee_mems_used ctx name))
+      (\a. let sz = context_alloca_size fn imports a in
+             if sz = 0 then NONE else SOME sz) [] cfg fn in
+    let items = alloc_liveset_items_ordered raw fn ls in
     let pre_allocated_dom = FDOM pre_allocated in
     let already = FILTER (\(alloc, _). alloc IN pre_allocated_dom) items in
     let to_alloc = FILTER (\(alloc, _). alloc NOTIN pre_allocated_dom) items in
@@ -824,7 +976,8 @@ Definition compute_alloc_map_fuel_in_context_def:
     let sorted_info = MAP (\(alloc, live).
       (alloc, live, alloca_sz alloc)) sorted in
     allocate_with_livesets global_reserved
-      (call_frame_livesets frames ls ++ already_info) sorted_info pre_allocated
+      (imported_liveset_info imports ls ++ already_info)
+      sorted_info pre_allocated
 End
 
 Definition alloc_result_to_map_def:
@@ -968,10 +1121,16 @@ Definition compute_function_layout_fuel_in_context_def:
         let bpr = bp_analyze_fuel fuel cfg fn in
         let candidate =
           compute_alloc_map_fuel_in_context fuel ctx fn bpr cfg seed reserved in
-          case complete_alloc_positions_with_items items
-                 fn.fn_forced_alloc_positions reserved fn candidate of
+        (* Only (0,0) is neutral for both the physical scan and eom.
+           Keep its identity in metadata/liveness, and retain non-origin
+           empty intervals: their endpoints can affect allocation. *)
+        let imported = FILTER (\(p,s). p <> 0 \/ s <> 0)
+          (MAP (\(_,p,s). (p,s)) (imported_mems_used ctx fn)) in
+          case complete_alloc_positions_with_imports items
+                 fn.fn_forced_alloc_positions reserved imported fn candidate of
             NONE => NONE
-          | SOME completed => mk_concretize_layout reserved completed fn
+          | SOME completed =>
+              mk_concretize_layout (reserved ++ imported) completed fn
 End
 
 Theorem compute_function_layout_fuel_eq_reference:
@@ -1027,6 +1186,17 @@ Definition apply_concretize_layout_def:
          fn_eom := SOME layout.cl_eom |>
 End
 
+(* Capture source allocation identities before rewriting away the ALLOCAs.
+   Checked layout completion supplies every local position.  Callee metadata
+   already includes transitive imports; diamond sharing is recorded once. *)
+Definition apply_context_concretize_layout_def:
+  apply_context_concretize_layout ctx layout fn =
+    let items = case static_alloca_items fn of NONE => [] | SOME xs => xs in
+    let own = MAP (\(a,s). (a, THE (FLOOKUP layout.cl_positions a), s)) items in
+    (apply_concretize_layout layout fn) with
+      fn_mems_used := unique_mems_used (own ++ imported_mems_used ctx fn)
+End
+
 Definition concretize_memloc_fuel_def:
   concretize_memloc_fuel fn =
     4 * (LENGTH (fn_insts fn) + LENGTH fn.fn_blocks + 1)
@@ -1074,11 +1244,12 @@ Definition concretize_function_fuel_in_context_def:
       if ~fn_has_alloca fn /\ fn.fn_forced_alloc_positions = FEMPTY
       then SOME fn else NONE
     else
-      case (if fn_needs_liveness_allocation fn then
+      case (if fn_needs_liveness_allocation fn \/
+               imported_mems_used ctx fn <> [] then
               compute_function_layout_fuel_in_context fuel ctx reserved fn
             else compute_function_layout_eval reserved fn) of
         NONE => NONE
-      | SOME layout => SOME (apply_concretize_layout layout fn)
+      | SOME layout => SOME (apply_context_concretize_layout ctx layout fn)
 End
 
 Definition concretize_function_eval_def:

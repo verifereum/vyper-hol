@@ -16,7 +16,6 @@ Definition supported_function_body_def:
        supported_stmts tops bindings body /\
        ~supported_stmts_expr_exists expr_nonmain_type_root body /\
        (vis = Internal ==>
-         supported_internal_stmts_shape body /\
          ~supported_stmts_expr_exists expr_internal_call_root body)
 End
 
@@ -122,7 +121,6 @@ QED
 
 Theorem supported_internal_body_contract:
   supported_function_body tops Internal args stmts ==>
-    supported_internal_stmts_shape stmts /\
     ~supported_stmts_expr_exists expr_internal_call_root stmts
 Proof
   simp[supported_function_body_def]

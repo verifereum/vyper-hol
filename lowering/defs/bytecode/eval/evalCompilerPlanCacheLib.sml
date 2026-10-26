@@ -20,10 +20,11 @@ in evalCompilerBytecodeLib.add_compile_eval th;
 end
 fun entry_plan_cache name indices g = let
   fun selected tm = let val (h,args) = strip_comb tm in
-    is_const h andalso #Name (dest_thy_const h) = "generate_fn_plan_analyzed"
-    andalso List.length args = 6 end
-  val (_,args) = strip_comb (find_term selected (lhs (snd g)))
-  val () = entry_plan_cache_call name (List.map (fn i => List.nth (args,i)) indices)
+    entry_is_analyzed h andalso
+    List.length args = entry_function_arity (type_of h) end
+  val (head,args) = strip_comb (find_term selected (lhs (snd g)))
+  val () = entry_plan_cache_call name
+    (List.map (fn i => List.nth (args,entry_plan_argument_index head i)) indices)
 in ALL_TAC g end
 fun plan_cache_vars g =
   (entry_plan_summary_thms := []; entry_plan_cache "cleanup_frame_vars" [3] g)
@@ -37,7 +38,9 @@ fun entry_cached_cleanup evaluate tm =
   case List.find (fn th => aconv (lhs (concl th)) tm) (!entry_plan_summary_thms) of
     SOME th => th
   | NONE => let
-      val opened = REWR_CONV stackPlanGenTheory.cleanup_elision_safe_def tm
+      val opened = PURE_REWRITE_CONV
+        [stackPlanGenTheory.cleanup_elision_safe_def,
+         stackPlanGenTheory.cleanup_height_safe_def] tm
       val rewritten = (PURE_REWRITE_CONV (!entry_plan_summary_thms)
         (rhs (concl opened)) handle UNCHANGED => REFL (rhs (concl opened)))
       val body = rhs (concl rewritten)

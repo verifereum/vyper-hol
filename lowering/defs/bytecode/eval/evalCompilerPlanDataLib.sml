@@ -34,10 +34,10 @@ fun entry_plan_compute evaluate tm = if List.null (free_vars tm) then evaluate t
 
 fun entry_plan_abbrev name index g = let
   fun selected tm = let val (h,args) = strip_comb tm in
-    is_const h andalso #Name (dest_thy_const h) = "generate_fn_plan_analyzed"
-    andalso List.length args = 6 andalso entry_plan_closed tm end
-  val args = snd (strip_comb (find_term selected (lhs (snd g))))
-  val value = List.nth(args,index)
+    entry_is_analyzed h andalso
+    List.length args = entry_function_arity (type_of h) andalso entry_plan_closed tm end
+  val (head,args) = strip_comb (find_term selected (lhs (snd g)))
+  val value = List.nth(args,entry_plan_argument_index head index)
   val variable = mk_var (name,type_of value)
   val () = if List.exists (aconv variable) (free_varsl (snd g :: fst g)) then
       raise Fail ("planner abbreviation already exists: " ^ name) else ()

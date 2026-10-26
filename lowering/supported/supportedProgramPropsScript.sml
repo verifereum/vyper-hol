@@ -62,13 +62,19 @@ Proof
   EVAL_TAC
 QED
 
-Theorem supported_internal_context_rejections:
-  EVERY (\stmts. ~supported_program [program_test_internal stmts])
+Theorem supported_internal_locals_and_loops:
+  EVERY (\stmts. supported_program [program_test_internal stmts])
     [[AnnAssign "local" (BaseT (UintT 256)) expr_test_uint];
      [If expr_test_uint [] [AnnAssign "local" (BaseT (UintT 256)) expr_test_uint]];
      [program_test_range []];
-     [If expr_test_uint [program_test_range []] []];
-     [Expr expr_test_internal];
+     [If expr_test_uint [program_test_range []] []]]
+Proof
+  EVAL_TAC
+QED
+
+Theorem supported_internal_context_rejections:
+  EVERY (\stmts. ~supported_program [program_test_internal stmts])
+    [[Expr expr_test_internal];
      [Return (SOME expr_test_internal)];
      [Assign (BaseTarget (NameTarget "arg")) expr_test_internal];
      [If expr_test_uint [] [Expr expr_test_internal]]]

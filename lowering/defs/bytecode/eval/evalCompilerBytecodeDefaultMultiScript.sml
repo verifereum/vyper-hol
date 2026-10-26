@@ -73,17 +73,20 @@ Proof
   entry_stage "static_alloca_items" >> simp_tac pure_ss [optionTheory.option_case_def] >>
   entry_stage "forced_candidate_positions" >> entry_ssa_let >> entry_analysis_stage "cfg_analyze" >>
   entry_ssa_let >> entry_stage "bp_analyze_fuel" >> entry_ssa_let >> entry_allocation_open >>
-  entry_stage "call_frame_allocations" >> entry_ml_open >>
+  entry_stage "imported_mems_used" >>
+  simp_tac pure_ss [concretizeMemLocDefsTheory.context_mem_livesets_def, LET_THM] >>
+  entry_ml_open >>
   entry_ml_tick >> entry_ml_tick >> entry_ml_tick >> entry_ml_tick >> entry_ml_tick >>
   entry_ml_tick >> entry_ml_tick >> entry_ml_tick >> entry_ml_tick >> entry_ml_tick >>
   entry_ml_tick >> entry_ml_tick >> entry_ml_tick >> entry_ml_tick >> entry_ml_tick >>
   entry_ml_tick >> entry_ml_tick >> entry_ml_tick >> entry_ml_tick >> entry_ml_tick >>
   entry_ml_finish >> entry_closed_pair_let >> entry_stage "ml_compute_livesets" >>
   entry_stage "ml_mark_stores_live" >> entry_allocation_finish_open >>
-  entry_stage "alloc_liveset_items" >> entry_stage "sort_alloc_liveset_items" >>
-  entry_stage "allocate_with_livesets" >> entry_ssa_let >> entry_stage "complete_alloc_positions_with_items" >>
+  entry_stage "ml_ordered_keys" >> entry_stage "alloc_liveset_items_ordered" >>
+  entry_stage "sort_alloc_liveset_items" >> entry_stage "allocate_with_livesets" >>
+  entry_ssa_let >> entry_stage "complete_alloc_positions_with_imports" >>
   simp_tac pure_ss [optionTheory.option_case_def] >> entry_stage "mk_concretize_layout" >>
-  simp_tac pure_ss [optionTheory.option_case_def] >> entry_stage "apply_concretize_layout" >>
+  simp_tac pure_ss [optionTheory.option_case_def] >> entry_stage "apply_context_concretize_layout" >>
   entry_admin >> entry_pass_check >> entry_pass_begin >> entry_execute_pass >> entry_admin >> entry_pass_check >> entry_ssa_start >>
   entry_ssa_cfg >> entry_ssa_let >> entry_dom_open >> entry_dom_fixpoint >> entry_dom_sets >> entry_dom_idom >> entry_dom_dominated >> entry_dom_frontier
   >> entry_ssa_let >> entry_ssa_live >> entry_admin >> entry_ssa_phi >> entry_admin >> entry_ssa_rename >> entry_admin >> entry_ssa_simplify >> entry_admin
