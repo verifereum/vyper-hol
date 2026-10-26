@@ -1491,6 +1491,74 @@ Proof
   rpt strip_tac >> first_x_assum drule >> decide_tac
 QED
 
+Theorem enc_alloca_missing_update:
+  {j | j IN ids /\ FLOOKUP (allocas |+ (i, r)) j = NONE} =
+  {j | j IN ids /\ FLOOKUP allocas j = NONE} DELETE i
+Proof
+  simp[pred_setTheory.EXTENSION, finite_mapTheory.FLOOKUP_UPDATE] >> metis_tac[]
+QED
+
+Theorem enc_alloca_missing_credit:
+  FINITE ids /\ i IN ids /\ FLOOKUP allocas i = NONE ==>
+  CARD {j | j IN ids /\ FLOOKUP allocas j = NONE} =
+    SUC (CARD {j | j IN ids /\ FLOOKUP (allocas |+ (i, r)) j = NONE})
+Proof
+  strip_tac >> rewrite_tac[enc_alloca_missing_update] >>
+  `FINITE {j | j IN ids /\ FLOOKUP allocas j = NONE}` by
+    (irule pred_setTheory.SUBSET_FINITE >> qexists_tac `ids` >>
+     simp[pred_setTheory.SUBSET_DEF]) >>
+  simp[pred_setTheory.CARD_DELETE] >>
+  `i IN {j | j IN ids /\ FLOOKUP allocas j = NONE}` by simp[] >>
+  `CARD {j | j IN ids /\ FLOOKUP allocas j = NONE} <> 0` by
+    (drule pred_setTheory.CARD_EQ_0 >>
+     metis_tac[pred_setTheory.NOT_IN_EMPTY]) >> decide_tac
+QED
+
+Theorem enc_alloca_inv_extend:
+  alloca_inv s /\ FLOOKUP s.vs_allocas i = NONE ==>
+  alloca_inv (s with <|
+    vs_allocas := s.vs_allocas |+ (i, (s.vs_alloca_next, sz));
+    vs_alloca_next := s.vs_alloca_next + sz |> )
+Proof
+  simp[venomMemDefsTheory.alloca_inv_def,
+       venomMemDefsTheory.allocas_non_overlapping_def,
+       venomMemDefsTheory.alloca_next_valid_def,
+       finite_mapTheory.FLOOKUP_UPDATE] >>
+  rpt strip_tac >>
+  gvs[AllCaseEqs()] >>
+  qpat_assum `!aid base n. FLOOKUP _ aid = SOME (base,n) ==> _`
+    (fn th => imp_res_tac th) >>
+  gvs[] >> metis_tac[]
+QED
+
+Theorem enc_scratch_alloca_fresh:
+  FINITE ids /\ i IN ids /\ enc_scratch ids lo top s /\
+  FLOOKUP s.vs_allocas i = NONE ==>
+  enc_scratch ids lo top (s with <|
+    vs_allocas := s.vs_allocas |+ (i, (s.vs_alloca_next, 32));
+    vs_alloca_next := s.vs_alloca_next + 32 |> )
+Proof
+  rpt strip_tac >>
+  `alloca_inv s` by fs[enc_scratch_def] >>
+  drule_all enc_alloca_inv_extend >>
+  disch_then (qspec_then `32` assume_tac) >>
+  drule_all enc_alloca_missing_credit >>
+  disch_then (qspec_then `(s.vs_alloca_next,32)` assume_tac) >>
+  qpat_x_assum `enc_scratch ids lo top s` mp_tac >>
+  pure_rewrite_tac[enc_scratch_def, venom_state_accfupds, combinTheory.K_THM] >>
+  strip_tac >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- decide_tac >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac
+  >- (map_every qx_gen_tac [`j`, `b`, `sz`] >> strip_tac >>
+      qpat_x_assum `FLOOKUP (_ |+ _) j = SOME _` mp_tac >>
+      Cases_on `i = j` >>
+      asm_simp_tac (srw_ss()) [finite_mapTheory.FLOOKUP_UPDATE] >>
+      strip_tac >> metis_tac[]) >>
+  decide_tac
+QED
+
 Theorem enc_scratch_outside_disjoint:
   enc_scratch ids lo top s /\ j NOTIN ids /\ i IN ids /\
   FLOOKUP s.vs_allocas j = SOME (c, n) /\
@@ -1910,6 +1978,56 @@ Theorem enc_scratch_update_var[simp]:
   enc_scratch ids lo top (update_var y w s) = enc_scratch ids lo top s
 Proof
   irule enc_scratch_cong >> simp[update_var_def]
+QED
+
+Theorem enc_exec_alloca_scratch:
+  FINITE ids /\ inst.inst_id IN ids /\ enc_scratch ids lo top s /\
+  inst.inst_outputs = [out] ==>
+  ?b t. exec_alloca inst s (32w:256 word) = OK t /\
+    lo <= b /\ b + 32 <= top /\
+    FLOOKUP t.vs_allocas inst.inst_id = SOME (b,32) /\
+    lookup_var out t = SOME (n2w b) /\ enc_scratch ids lo top t
+Proof
+  rpt strip_tac >>
+  `lo <= s.vs_alloca_next` by fs[enc_scratch_def] >>
+  Cases_on `FLOOKUP s.vs_allocas inst.inst_id`
+  >- (drule_all enc_scratch_alloca_fresh >> strip_tac >>
+      qmatch_asmsub_abbrev_tac `enc_scratch ids lo top t` >>
+      `FLOOKUP t.vs_allocas inst.inst_id =
+         SOME (s.vs_alloca_next,32)` by
+        simp[Abbr `t`, finite_mapTheory.FLOOKUP_UPDATE] >>
+      drule_all enc_scratch_alloca_bound >> strip_tac >>
+      qexistsl_tac [`s.vs_alloca_next`,
+        `update_var out (n2w s.vs_alloca_next) t`] >>
+      simp[exec_alloca_def, Abbr `t`, lookup_var_update_var,
+           enc_scratch_update_var, update_var_def,
+           finite_mapTheory.FLOOKUP_UPDATE]) >>
+  rename1 `FLOOKUP s.vs_allocas inst.inst_id = SOME r` >>
+  PairCases_on `r` >>
+  `lo <= r0 /\ r1 = 32` by
+    (fs[enc_scratch_def] >> first_x_assum irule >> metis_tac[]) >>
+  drule_all enc_scratch_alloca_bound >> strip_tac >>
+  qexistsl_tac [`r0`, `update_var out (n2w r0) s`] >>
+  simp[exec_alloca_def, lookup_var_update_var, enc_scratch_update_var,
+       update_var_def]
+QED
+
+Theorem enc_exec_alloca_preserves:
+  inst.inst_outputs = [out] /\ exec_alloca inst s alloc_size = OK t ==>
+  t.vs_memory = s.vs_memory /\ t.vs_labels = s.vs_labels /\
+  t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+  t.vs_logs = s.vs_logs /\ t.vs_requests = s.vs_requests /\
+  (!j. j <> inst.inst_id ==> FLOOKUP t.vs_allocas j = FLOOKUP s.vs_allocas j) /\
+  (!j r. FLOOKUP s.vs_allocas j = SOME r ==> FLOOKUP t.vs_allocas j = SOME r) /\
+  (!x. x <> out ==> lookup_var x t = lookup_var x s)
+Proof
+  strip_tac >>
+  qpat_x_assum `exec_alloca _ _ _ = _` mp_tac >>
+  Cases_on `FLOOKUP s.vs_allocas inst.inst_id` >>
+  asm_simp_tac (srw_ss()) [exec_alloca_def, AllCaseEqs()] >>
+  strip_tac >> gvs[] >>
+  simp[update_var_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  rpt strip_tac >> Cases_on `inst.inst_id = j` >> gvs[]
 QED
 
 Theorem enc_frame_update_var:
