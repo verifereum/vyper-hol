@@ -1,0 +1,21 @@
+# Median CI build seconds of each witness theory and its fixture count
+# then, written by `tools/ci_targets.py witness-times`. The witness
+# groups scale each time by the theory's fixture count now.
+evalCompilerDftStorageOrder 203 1
+evalCompilerExternalCallArgTypes 1182 5
+evalCompilerExternalCallDefaults 1226 5
+evalCompilerExternalCallKwargs 1531 10
+evalCompilerExternalCallReturns 593 2
+evalCompilerExternalCallSelectors 817 6
+evalCompilerInternalFrames 1498 13
+evalCompilerInternalFramesDiamond 222 1
+evalCompilerInternalFramesExtCall 240 1
+evalCompilerInternalLabels 721 9
+evalCompilerMemoryConstruction 1244 12
+evalCompilerMemoryStoreContexts 859 6
+evalCompilerMemoryStoreControls 311 3
+evalCompilerMemoryStoreTuples 1569 9
+evalCompilerMemoryStoreValues 1264 13
+evalCompilerNameCollisions 594 9
+evalCompilerPhiPointers 1209 11
+evalCompilerSliceBuffers 622 5

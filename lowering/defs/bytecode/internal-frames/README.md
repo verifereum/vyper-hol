@@ -78,7 +78,7 @@ The permanent normative checked-frontend equalities cover:
 * `ctl_local_internal` and `nm_local_return_buf` in the name-collision group.
 
 `evalCompilerInternalFrames` reaches the diamond and external-call child theories;
-`vyperLoweringHol` now reaches it and already reaches `evalCompilerNameCollisions`.
+The `evalCompilerWitnesses` root reaches it and `evalCompilerNameCollisions`.
 No old full-parity rollup is needed for focused validation.
 
 **Concrete expectation changes:** no existing pinned expectation changed. New
