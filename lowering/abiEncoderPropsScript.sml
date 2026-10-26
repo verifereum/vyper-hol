@@ -4428,6 +4428,22 @@ Proof
   fs[eval_operand_def, lookup_var_def]
 QED
 
+Theorem enc_head_upto_static_length:
+  has_types (REPLICATE N t) vs /\ k <= N /\ ~is_dynamic t ==>
+  LENGTH (enc_head_upto B (REPLICATE N t) vs k) = k * static_length t
+Proof
+  strip_tac >>
+  `TAKE k (REPLICATE N t) = REPLICATE k t` by
+    (simp[REPLICATE_GENLIST, TAKE_GENLIST] >>
+     AP_TERM_TAC >> simp[arithmeticTheory.MIN_DEF] >> decide_tac) >>
+  drule enc_head_upto_length >>
+  disch_then (qspec_then `k` mp_tac) >>
+  disch_then (qspec_then `B` mp_tac) >> simp[] >>
+  `!n q. head_lengths (REPLICATE n t) q = q + n * static_length t` by
+    (Induct >> simp[head_lengths_def, arithmeticTheory.MULT_CLAUSES]) >>
+  simp[]
+QED
+
 Theorem enc_static_loop_slot_frag:
   compile_abi_encode_static_info dst_op src_op ei a = (op,b) /\
   abi_enc_plan env ty ei /\ ~is_dynamic (vyper_to_abi_type env ty) /\
@@ -4469,6 +4485,65 @@ Proof
   >- (irule enc_loop_ctx_frame_step >> simp[] >> qexists_tac `s` >> simp[]) >>
   simp[] >> irule enc_static_slot_prefix >> simp[] >>
   qexistsl_tac [`a`,`b`,`lo`,`s`,`local_top`] >> simp[] >> metis_tac[]
+QED
+
+Theorem enc_static_loop_element_frag:
+  compile_abi_encode_static_info child_dst child_src ei a = (ignored,b) /\
+  abi_enc_plan env ty ei /\ ~is_dynamic (vyper_to_abi_type env ty) /\
+  evaluate_type env ty = SOME tv /\
+  static_length (vyper_to_abi_type env ty) = type_memory_size tv /\
+  value_has_type (ArrayTV tv (Dynamic n)) (ArrayV (DynArrayV vs)) /\
+  LIST_REL (\v av. vyper_to_abi env ty v = SOME av) vs avs /\
+  has_types (REPLICATE (LENGTH vs) (vyper_to_abi_type env ty)) avs /\
+  k < LENGTH vs /\ MEM (dst_n,32 + LENGTH vs * type_memory_size tv) outs /\
+  frag_ids a b SUBSET frag_ids st z /\
+  (!x. not_fresh_at st x ==> not_fresh_at a x) /\
+  (!x. MEM (Var x) [child_dst;child_src;count_ptr;index] ==> not_fresh_at a x) /\
+  enc_array_inv
+    (enc_loop_ctx st z ops lo top (ArrayTV tv (Dynamic n))
+      (ArrayV (DynArrayV vs)) src_n outs s0 count_ptr ip)
+    (dst_n + 32) B (REPLICATE (LENGTH vs) (vyper_to_abi_type env ty))
+    avs ip NONE k s /\
+  eval_operand index s = SOME (n2w k) /\
+  eval_operand child_src s = SOME (n2w (src_n + 32 + k * type_memory_size tv)) /\
+  eval_operand child_dst s = SOME (n2w (dst_n + 32 + k * type_memory_size tv)) ==>
+  frag_exec ctx a b (\u. u = s)
+    (\u. enc_loop_ctx st z ops lo top (ArrayTV tv (Dynamic n))
+           (ArrayV (DynArrayV vs)) src_n outs s0 count_ptr ip u /\
+         eval_operand index u = SOME (n2w k) /\
+         enc_prefix_mem (dst_n + 32) B
+           (REPLICATE (LENGTH vs) (vyper_to_abi_type env ty)) avs (SUC k) u) R
+Proof
+  strip_tac >>
+  `enc_loop_ctx st z ops lo top (ArrayTV tv (Dynamic n))
+     (ArrayV (DynArrayV vs)) src_n outs s0 count_ptr ip s` by
+    fs[enc_array_inv_def] >>
+  drule_all enc_loop_ctx_dynarray_bounds >> strip_tac >>
+  drule_all enc_loop_ctx_array_slot >> strip_tac >>
+  `!x. MEM (Var x) [child_dst;child_src] ==> not_fresh_at a x` by
+    (fs[] >> metis_tac[]) >>
+  drule_all enc_static_loop_element_pre >> strip_tac >>
+  `LENGTH (enc (vyper_to_abi_type env ty) (EL k avs)) = type_memory_size tv` by
+    (irule val_in_memory_static_enc_length >>
+     drule_all enc_loop_ctx_dynarray_source >> strip_tac >> metis_tac[]) >>
+  `LENGTH (enc_head_upto B
+     (REPLICATE (LENGTH vs) (vyper_to_abi_type env ty)) avs k) =
+     k * type_memory_size tv` by
+    (drule enc_head_upto_static_length >>
+     disch_then (qspecl_then [`k`,`B`] mp_tac) >> simp[]) >>
+  irule enc_static_loop_slot_frag >> simp[] >>
+  conj_tac >- fs[LIST_REL_EL_EQN] >>
+  conj_tac >- fs[enc_array_inv_def] >>
+  goal_assum (drule_at (Pat `compile_abi_encode_static_info _ _ _ _ = _`)) >>
+  goal_assum (drule_at (Pat `vyper_to_abi _ _ _ = _`)) >>
+  simp[wordsTheory.w2n_n2w, arithmeticTheory.LESS_MOD, EL_REPLICATE] >>
+  fs[] >> qexistsl_tac [`dst_n`,`32 + LENGTH vs * type_memory_size tv`] >>
+  simp[] >>
+  `SUC k * type_memory_size tv <= LENGTH vs * type_memory_size tv` by
+    simp[arithmeticTheory.LE_MULT_RCANCEL] >>
+  qpat_x_assum `SUC k * _ <= _` mp_tac >>
+  pure_rewrite_tac[arithmeticTheory.MULT_CLAUSES] >> decide_tac
+
 QED
 
 Theorem compile_abi_encode_frag:
