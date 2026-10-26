@@ -23,9 +23,8 @@
  *   external_return_static_cenv_result_rel,
  *   external_return_none_result_rel,
  *   external_fallthrough_result_rel -- S1 halt bridge (#640) for the
- *     return sequences loweringHalt covers, and the _unlock versions of
- *     all but the static and ABI ones, whose return may release a
- *     transient nonreentrant lock
+ *     return sequences loweringHalt covers, and their _unlock versions,
+ *     whose return may release a transient nonreentrant lock
  *   lower_vyper_runtime_unit_correct -- S1 (planned admission, Milestone 6)
  *   lower_vyper_runtime_unit_source_unit_ok -- S2 (Milestone 5)
  *   lower_vyper_runtime_unit_memory_ok -- S3 (Milestone 5)
@@ -471,11 +470,52 @@ Proof
   simp[]
 QED
 
-(* A return of a static complex value (tuple, struct, fixed array): the
-   operand points at memory holding the value, and the returned AbiCopy
-   size is its memory size.  The size is below dimword, so the size
-   literal of the copy and the RETURN does not wrap; nothing in the
-   lowering bounds it (vyper rejects allocations of 2^64 bytes or more). *)
+(* A return of a static complex value (tuple, struct, fixed array), with
+   the optional unlock first: the operand points at memory holding the
+   value, and the returned AbiCopy size is its memory size.  The size is
+   below dimword, so the size literal of the copy and the RETURN does not
+   wrap; nothing in the lowering bounds it (vyper rejects allocations of
+   2^64 bytes or more). *)
+Theorem external_return_static_unlock_result_rel:
+  !ctx op m msz nr nkey ut iv st x st' func cenv cx es es' ret tv v0 v
+     tops tx srcs exps layouts Q.
+    compile_external_return (SOME op) F F (AbiCopy m) msz nr nkey ut iv st =
+      (x, st') /\
+    (nr /\ ~iv ==> ut) /\ (!y. op = Var y ==> not_fresh_at st y) /\
+    (if nr /\ ~iv then release_nonreentrant_lock cx.txn.target nkey
+     else vyperState$return ()) es = (INL (), es') /\
+    evaluate_type (type_env tops) ret = SOME tv /\ safe_cast tv v0 = SOME v /\
+    ~is_dynamic (vyper_to_abi_type (type_env tops) ret) /\
+    m = type_memory_size tv /\ m < dimword(:256) ==>
+    frag_exec ctx st st'
+      (\s. state_rel func cenv cx es s /\
+           (?p. eval_operand op s = SOME p /\
+                val_in_memory tv v0 (w2n p) s.vs_memory) /\
+           s.vs_accounts =
+             process_deletions es.pending_deletions es.accounts /\
+           s.vs_transient = es.tStorage)
+      Q
+      (external_call_result_rel tops ret tx
+         (INL v, finalize_pending_deletions
+                   (abstract_machine_from_state srcs exps layouts es'),
+          es'.requests))
+Proof
+  rpt strip_tac >>
+  qspecl_then [`ctx`, `op`, `m`, `msz`, `nr`, `nkey`, `ut`, `iv`, `st`,
+               `x`, `st'`] mp_tac compile_external_return_copy_unlock_frag >>
+  simp[] >> disch_then irule >> simp[] >> rpt strip_tac >>
+  qexists_tac `p` >> simp[] >> rpt strip_tac >>
+  qspecl_then [`tops`, `ret`, `tv`, `v0`, `v`, `w2n p`, `s.vs_memory`]
+    mp_tac return_bytes_static_value >>
+  impl_tac >- asm_rewrite_tac[] >> strip_tac >>
+  qspecl_then [`func`, `cenv`, `cx`, `es`, `es'`, `s`, `ss`, `nr`, `nkey`,
+               `iv`, `tops`, `tx`, `srcs`, `exps`, `layouts`] mp_tac
+    external_halt_success_unlock >>
+  impl_tac >- simp[] >>
+  strip_tac >> gvs[external_call_result_rel_def]
+QED
+
+(* Its case with no release (nr ==> iv). *)
 Theorem external_return_static_result_rel:
   !ctx op m msz nr nkey ut iv st x st' func cenv cx es ret tv v0 v
      tops tx srcs exps layouts Q.
@@ -500,23 +540,58 @@ Theorem external_return_static_result_rel:
 Proof
   rpt strip_tac >>
   qspecl_then [`ctx`, `op`, `m`, `msz`, `nr`, `nkey`, `ut`, `iv`, `st`,
-               `x`, `st'`] mp_tac compile_external_return_copy_frag >>
-  simp[] >> disch_then irule >> simp[] >> rpt strip_tac >>
-  qexists_tac `p` >> simp[] >> rpt strip_tac >>
-  qspecl_then [`tops`, `ret`, `tv`, `v0`, `v`, `w2n p`, `s.vs_memory`]
-    mp_tac return_bytes_static_value >>
-  impl_tac >- asm_rewrite_tac[] >> strip_tac >>
-  qspecl_then [`func`, `cenv`, `cx`, `es`, `s`, `ss`, `tops`, `tx`, `srcs`,
-               `exps`, `layouts`] mp_tac external_halt_success >>
-  impl_tac >- simp[] >>
-  strip_tac >> gvs[external_call_result_rel_def]
+               `x`, `st'`, `func`, `cenv`, `cx`, `es`, `es`, `ret`, `tv`,
+               `v0`, `v`, `tops`, `tx`, `srcs`, `exps`, `layouts`, `Q`]
+    mp_tac external_return_static_unlock_result_rel >>
+  impl_tac
+  >- (Cases_on `nr` >> Cases_on `iv` >> gvs[vyperStateTheory.return_def]) >>
+  simp[]
 QED
 
-(* external_return_static_result_rel at a lowered function's compile env,
-   where the return statement passes the env's return encoding and buffer
-   size.  return_buffer_ok bounds the AbiCopy size; a unit that lowers has
-   it for each external function with a valued return
-   (lower_vyper_runtime_unit_return_buffer_ok). *)
+(* external_return_static_unlock_result_rel at a lowered function's
+   compile env, where the return statement passes the env's return
+   encoding and buffer size.  return_buffer_ok bounds the AbiCopy size; a
+   unit that lowers has it for each external function with a valued
+   return (lower_vyper_runtime_unit_return_buffer_ok). *)
+Theorem external_return_static_cenv_unlock_result_rel:
+  !ctx op m nr nkey ut iv st x st' func cenv cx es es' ret tv v0 v
+     tops tx srcs exps layouts Q.
+    compile_external_return (SOME op) F F cenv.ce_ret_enc_info
+      cenv.ce_max_return_size nr nkey ut iv st = (x, st') /\
+    cenv.ce_ret_enc_info = AbiCopy m /\ return_buffer_ok cenv /\
+    (nr /\ ~iv ==> ut) /\ (!y. op = Var y ==> not_fresh_at st y) /\
+    (if nr /\ ~iv then release_nonreentrant_lock cx.txn.target nkey
+     else vyperState$return ()) es = (INL (), es') /\
+    evaluate_type (type_env tops) ret = SOME tv /\ safe_cast tv v0 = SOME v /\
+    ~is_dynamic (vyper_to_abi_type (type_env tops) ret) /\
+    m = type_memory_size tv ==>
+    frag_exec ctx st st'
+      (\s. state_rel func cenv cx es s /\
+           (?p. eval_operand op s = SOME p /\
+                val_in_memory tv v0 (w2n p) s.vs_memory) /\
+           s.vs_accounts =
+             process_deletions es.pending_deletions es.accounts /\
+           s.vs_transient = es.tStorage)
+      Q
+      (external_call_result_rel tops ret tx
+         (INL v, finalize_pending_deletions
+                   (abstract_machine_from_state srcs exps layouts es'),
+          es'.requests))
+Proof
+  rpt strip_tac >>
+  `m < 2 ** 64` by
+    (qpat_x_assum `return_buffer_ok _` mp_tac >>
+     qpat_x_assum `_.ce_ret_enc_info = _`
+       (fn th => simp[return_buffer_ok_def, th])) >>
+  `2 ** 64 < dimword (:256)` by
+    simp[wordsTheory.dimword_def, venomMemPropsTheory.dimindex_256] >>
+  `m < dimword (:256)` by DECIDE_TAC >>
+  qpat_x_assum `compile_external_return _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  asm_rewrite_tac[] >> strip_tac >>
+  drule external_return_static_unlock_result_rel >> disch_then irule >> gvs[]
+QED
+
+(* Its case with no release (nr ==> iv). *)
 Theorem external_return_static_cenv_result_rel:
   !ctx op m nr nkey ut iv st x st' func cenv cx es ret tv v0 v
      tops tx srcs exps layouts Q.
@@ -541,16 +616,13 @@ Theorem external_return_static_cenv_result_rel:
           es.requests))
 Proof
   rpt strip_tac >>
-  `m < 2 ** 64` by
-    (qpat_x_assum `return_buffer_ok _` mp_tac >>
-     qpat_x_assum `_.ce_ret_enc_info = _`
-       (fn th => simp[return_buffer_ok_def, th])) >>
-  `2 ** 64 < dimword (:256)` by
-    simp[wordsTheory.dimword_def, venomMemPropsTheory.dimindex_256] >>
-  `m < dimword (:256)` by DECIDE_TAC >>
-  qpat_x_assum `compile_external_return _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
-  asm_rewrite_tac[] >> strip_tac >>
-  drule external_return_static_result_rel >> disch_then irule >> gvs[]
+  qspecl_then [`ctx`, `op`, `m`, `nr`, `nkey`, `ut`, `iv`, `st`, `x`, `st'`,
+               `func`, `cenv`, `cx`, `es`, `es`, `ret`, `tv`, `v0`, `v`,
+               `tops`, `tx`, `srcs`, `exps`, `layouts`, `Q`]
+    mp_tac external_return_static_cenv_unlock_result_rel >>
+  impl_tac
+  >- (Cases_on `nr` >> Cases_on `iv` >> gvs[vyperStateTheory.return_def]) >>
+  simp[]
 QED
 
 Theorem singleton_tuple_memory:
@@ -635,11 +707,12 @@ Proof
   simp[contractABITheory.enc_def, listTheory.REV_DEF]
 QED
 
-(* A return through the ABI encoder: the operand points at memory holding
-   the value, below the alloca frontier, and ei is a plan for the value's
-   type, wrapped in a singleton tuple when it is dynamic and the ABI wraps
-   it (a static one encodes the same either way), with the buffer size msz
-   at least the type's ABI size bound.  None of the return sequence's
+(* A return through the ABI encoder, with the optional unlock first: the
+   operand points at memory holding the value, below the alloca frontier,
+   and ei is a plan for the value's type, wrapped in a singleton tuple
+   when it is dynamic and the ABI wraps it (a static one encodes the same
+   either way), with the buffer size msz at least the type's ABI size
+   bound.  None of the return sequence's
    ALLOCAs has run, and the frontier stays below 2 ** 256 while they run;
    nothing in the lowering bounds it (vyper rejects allocations of 2^64
    bytes or more).  Not proved yet: that the ei and msz update_cenv_ret_abi
@@ -647,6 +720,68 @@ QED
    sizes and flags (type_memory_bytes, abi_embedded_static_size,
    is_abi_dynamic, abi_size_bound over ce_struct_fields) to agree with
    type_memory_size, static_length, is_dynamic and vyper_abi_size_bound. *)
+Theorem external_return_abi_unlock_result_rel:
+  !ctx op ei msz nr nkey ut iv st x st' func cenv cx es es' ret tv v0 v
+     tops tx srcs exps layouts Q.
+    compile_external_return (SOME op) F F ei msz nr nkey ut iv st =
+      (x, st') /\
+    (nr /\ ~iv ==> ut) /\ (!y. op = Var y ==> not_fresh_at st y) /\
+    (if nr /\ ~iv then release_nonreentrant_lock cx.txn.target nkey
+     else vyperState$return ()) es = (INL (), es') /\
+    evaluate_type (type_env tops) ret = SOME tv /\ safe_cast tv v0 = SOME v /\
+    abi_enc_plan (type_env tops)
+      (if needs_external_call_wrap ret /\
+          is_dynamic (vyper_to_abi_type (type_env tops) ret)
+       then TupleT [ret] else ret) ei /\
+    vyper_abi_size_bound (type_env tops)
+      (if needs_external_call_wrap ret /\
+          is_dynamic (vyper_to_abi_type (type_env tops) ret)
+       then TupleT [ret] else ret) <= msz ==>
+    frag_exec ctx st st'
+      (\s. state_rel func cenv cx es s /\
+           (?p. eval_operand op s = SOME p /\
+                val_in_memory tv v0 (w2n p) s.vs_memory /\
+                w2n p + type_memory_size tv <= s.vs_alloca_next) /\
+           alloca_inv s /\
+           (!i. i IN frag_ids st st' ==> FLOOKUP s.vs_allocas i = NONE) /\
+           s.vs_alloca_next + msz + 32 * (st'.cs_next_id - st.cs_next_id) <
+             dimword (:256) /\
+           s.vs_accounts =
+             process_deletions es.pending_deletions es.accounts /\
+           s.vs_transient = es.tStorage)
+      Q
+      (external_call_result_rel tops ret tx
+         (INL v, finalize_pending_deletions
+                   (abstract_machine_from_state srcs exps layouts es'),
+          es'.requests))
+Proof
+  rpt strip_tac >>
+  drule_all return_abi_value_package >>
+  disch_then (qspec_then
+    `needs_external_call_wrap ret /\
+     is_dynamic (vyper_to_abi_type (type_env tops) ret)` strip_assume_tac) >>
+  drule compile_external_return_abi_unlock_frag >>
+  disch_then irule >>
+  asm_rewrite_tac[] >>
+  qexistsl_tac [`av`, `type_env tops`, `tv'`,
+    `if needs_external_call_wrap ret /\
+        is_dynamic (vyper_to_abi_type (type_env tops) ret)
+     then TupleT [ret] else ret`, `v'`] >>
+  asm_rewrite_tac[] >> conj_tac
+  >- (rpt strip_tac >> fs[] >>
+      conj_tac >- metis_tac[] >>
+      rpt strip_tac >>
+      `return_bytes tops ret v ss.vs_returndata` by
+        (gvs[] >> drule chosen_return_abi_bytes >> simp[]) >>
+      qspecl_then [`func`, `cenv`, `cx`, `es`, `es'`, `s`, `ss`, `nr`,
+                   `nkey`, `iv`, `tops`, `tx`, `srcs`, `exps`, `layouts`]
+        mp_tac external_halt_success_unlock >>
+      impl_tac >- simp[] >>
+      simp[external_call_result_rel_def] >> metis_tac[]) >>
+  metis_tac[arithmeticTheory.LESS_EQ_TRANS]
+QED
+
+(* Its case with no release (nr ==> iv). *)
 Theorem external_return_abi_result_rel:
   !ctx op ei msz nr nkey ut iv st x st' func cenv cx es ret tv v0 v
      tops tx srcs exps layouts Q.
@@ -681,28 +816,13 @@ Theorem external_return_abi_result_rel:
           es.requests))
 Proof
   rpt strip_tac >>
-  drule_all return_abi_value_package >>
-  disch_then (qspec_then
-    `needs_external_call_wrap ret /\
-     is_dynamic (vyper_to_abi_type (type_env tops) ret)` strip_assume_tac) >>
-  drule compile_external_return_abi_frag >>
-  disch_then irule >>
-  asm_rewrite_tac[] >>
-  qexistsl_tac [`av`, `type_env tops`, `tv'`,
-    `if needs_external_call_wrap ret /\
-        is_dynamic (vyper_to_abi_type (type_env tops) ret)
-     then TupleT [ret] else ret`, `v'`] >>
-  asm_rewrite_tac[] >> conj_tac
-  >- (rpt strip_tac >> fs[] >>
-      conj_tac >- metis_tac[] >>
-      rpt strip_tac >>
-      `return_bytes tops ret v ss.vs_returndata` by
-        (gvs[] >> drule chosen_return_abi_bytes >> simp[]) >>
-      drule external_halt_success >>
-      disch_then (qspec_then `ss` mp_tac) >>
-      impl_tac >- simp[] >>
-      simp[external_call_result_rel_def] >> metis_tac[]) >>
-  metis_tac[arithmeticTheory.LESS_EQ_TRANS]
+  qspecl_then [`ctx`, `op`, `ei`, `msz`, `nr`, `nkey`, `ut`, `iv`, `st`,
+               `x`, `st'`, `func`, `cenv`, `cx`, `es`, `es`, `ret`, `tv`,
+               `v0`, `v`, `tops`, `tx`, `srcs`, `exps`, `layouts`, `Q`]
+    mp_tac external_return_abi_unlock_result_rel >>
+  impl_tac
+  >- (Cases_on `nr` >> Cases_on `iv` >> gvs[vyperStateTheory.return_def]) >>
+  simp[]
 QED
 
 (* ===== Label-space invariant at the start of lowering ===== *)

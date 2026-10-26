@@ -56,23 +56,39 @@ Termination
   WF_REL_TAC `measure (type_size o SND)`
 End
 
+(* Memory size of a struct field, resolved against the whole program's type
+   environment.  Vyper resolves type declarations in any order
+   (ModuleAnalyzer._visit_nodes_looping), so a field may name a struct
+   declared later; sizing it against only the earlier declarations would
+   give that field size 0.  Like the rest of the compiler (ce_module = NONE),
+   this covers the main module only: a field whose type doesn't evaluate in
+   its type_env, such as an imported flag, gets size 0. *)
+Definition field_mem_bytes_def:
+  field_mem_bytes tenv ty =
+    case evaluate_type tenv ty of
+      SOME tv => type_memory_size tv
+    | NONE => 0
+End
+
 Definition build_struct_fields_one_def:
-  build_struct_fields_one sft (args : (string # type) list) =
-    MAP (λ(name, ty). (name, ty, type_mem_bytes sft ty)) args
+  build_struct_fields_one tenv (args : (string # type) list) =
+    MAP (λ(name, ty). (name, ty, field_mem_bytes tenv ty)) args
 End
 
 Definition build_struct_fields_map_def:
-  build_struct_fields_map [] (sft : (string, (string # type # num) list) fmap) = sft ∧
-  build_struct_fields_map (top :: rest) sft =
+  build_struct_fields_map tenv []
+    (sft : (string, (string # type # num) list) fmap) = sft ∧
+  build_struct_fields_map tenv (top :: rest) sft =
     case top of
       StructDecl sname args =>
-        build_struct_fields_map rest
-          (sft |+ (sname, build_struct_fields_one (get_struct_fields sft) args))
-    | _ => build_struct_fields_map rest sft
+        build_struct_fields_map tenv rest
+          (sft |+ (sname, build_struct_fields_one tenv args))
+    | _ => build_struct_fields_map tenv rest sft
 End
 
 Definition make_struct_fields_map_def:
-  make_struct_fields_map tops = build_struct_fields_map tops FEMPTY
+  make_struct_fields_map tops =
+    build_struct_fields_map (type_env tops) tops FEMPTY
 End
 
 (* ===== Simple AST Extractors ===== *)
