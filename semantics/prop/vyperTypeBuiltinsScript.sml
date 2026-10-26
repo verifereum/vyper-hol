@@ -2709,6 +2709,21 @@ Proof
   simp[w2n_and_low_mask_lt]
 QED
 
+(* Helper: Not with any flag type preserves the statically computed result
+   type, at any context. *)
+Theorem flag_not_success_type:
+  is_flag_type ty ∧
+  evaluate_type (get_tenv cx) ty = SOME tv ∧
+  value_has_type tv v ∧
+  evaluate_builtin cx acc ty Not tys [v] = INL out ==>
+  value_has_type tv out
+Proof
+  Cases_on `ty` >> simp[] >> strip_tac >>
+  gvs[evaluate_type_def, AllCaseEqs(), value_has_type_def, evaluate_builtin_def] >>
+  rewrite_tac[wordsTheory.WORD_NEG_1, GSYM wordsTheory.WORD_NOT_0] >>
+  simp[w2n_and_low_mask_lt]
+QED
+
 (* ===== bytes32 Not ===== *)
 
 (* word_to_bytes_be always emits exactly 32 bytes. *)
