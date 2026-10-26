@@ -6013,6 +6013,341 @@ Resume compile_abi_encode_dyn_static_loop_abi_frag[positive_bound]:
 QED
 Finalise compile_abi_encode_dyn_static_loop_abi_frag
 
+(* Recursive correctness is indexed by compiler arguments, not endpoints. *)
+Definition enc_buf_correct_def:
+  enc_buf_correct dst src ei <=>
+  !st op st' ctx env ty tv v av s0 dst_w src_w lo top.
+    compile_abi_encode_to_buf dst src ei st = (op, st') /\
+    abi_enc_plan env ty ei /\
+    evaluate_type env ty = SOME tv /\ value_has_type tv v /\
+    vyper_to_abi env ty v = SOME av /\
+    eval_operand dst s0 = SOME dst_w /\ eval_operand src s0 = SOME src_w /\
+    enc_pre st st' [dst; src] lo top tv v (w2n src_w)
+      [(w2n dst_w, LENGTH (enc (vyper_to_abi_type env ty) av))] s0 ==>
+    frag_exec ctx st st' (\s. s = s0)
+      (\s. mem_bytes_at (w2n dst_w)
+             (LENGTH (enc (vyper_to_abi_type env ty) av)) s.vs_memory =
+           enc (vyper_to_abi_type env ty) av /\
+           eval_operand op s =
+             SOME (n2w (LENGTH (enc (vyper_to_abi_type env ty) av))) /\
+           enc_frame st st' lo top
+             [(w2n dst_w, LENGTH (enc (vyper_to_abi_type env ty) av))] s0 s)
+      (\r. F)
+End
+
+Definition enc_child_correct_def:
+  enc_child_correct dst child_ptr ei is_dyn static_ofst dyn_ptr <=>
+  !st op st' ctx env ty tv v av s0 dst_w src_w lo top.
+    compile_abi_encode_child dst child_ptr ei is_dyn static_ofst dyn_ptr st =
+      (op, st') /\
+    abi_enc_plan env ty ei /\
+    is_dyn = is_dynamic (vyper_to_abi_type env ty) /\
+    evaluate_type env ty = SOME tv /\ value_has_type tv v /\
+    vyper_to_abi env ty v = SOME av /\
+    eval_operand dst s0 = SOME dst_w /\
+    eval_operand child_ptr s0 = SOME src_w ==>
+    if ~is_dyn then
+      enc_pre st st' [dst; child_ptr] lo top tv v (w2n src_w)
+        [(w2n dst_w + static_ofst,
+          LENGTH (enc (vyper_to_abi_type env ty) av))] s0 ==>
+      frag_exec ctx st st' (\s. s = s0)
+        (\s. mem_bytes_at (w2n dst_w + static_ofst)
+               (LENGTH (enc (vyper_to_abi_type env ty) av)) s.vs_memory =
+             enc (vyper_to_abi_type env ty) av /\
+             eval_operand op s =
+               SOME (n2w (LENGTH (enc (vyper_to_abi_type env ty) av))) /\
+             enc_frame st st' lo top
+               [(w2n dst_w + static_ofst,
+                 LENGTH (enc (vyper_to_abi_type env ty) av))] s0 s)
+        (\r. F)
+    else
+      !c d j.
+        eval_operand dyn_ptr s0 = SOME (n2w c) /\
+        mem_word_at c s0.vs_memory = n2w d /\
+        j NOTIN frag_ids st st' /\
+        FLOOKUP s0.vs_allocas j = SOME (c, 32) /\ lo <= c /\
+        static_ofst + 32 <= d /\
+        enc_pre st st' [dst; child_ptr; dyn_ptr] lo top tv v (w2n src_w)
+          [(w2n dst_w + static_ofst, 32);
+           (w2n dst_w + d,
+            LENGTH (enc (vyper_to_abi_type env ty) av))] s0 ==>
+        frag_exec ctx st st' (\s. s = s0)
+          (\s. mem_bytes_at (w2n dst_w + d)
+                 (LENGTH (enc (vyper_to_abi_type env ty) av)) s.vs_memory =
+               enc (vyper_to_abi_type env ty) av /\
+               mem_word_at (w2n dst_w + static_ofst) s.vs_memory = n2w d /\
+               mem_word_at c s.vs_memory =
+                 n2w (d + LENGTH (enc (vyper_to_abi_type env ty) av)) /\
+               eval_operand op s =
+                 SOME (n2w (LENGTH (enc (vyper_to_abi_type env ty) av))) /\
+               enc_frame st st' lo top
+                 [(w2n dst_w + static_ofst, 32);
+                  (w2n dst_w + d,
+                   LENGTH (enc (vyper_to_abi_type env ty) av));
+                  (c, 32)] s0 s)
+          (\r. F)
+End
+
+Definition enc_elems_correct_def:
+  enc_elems_correct dst src elems src_offset head_offset dyn_ptr <=>
+  !st op st' ctx env ts tvs vs avs s0 dst_w src_w lo top c d.
+    compile_abi_encode_complex_elems dst src elems src_offset head_offset
+      dyn_ptr st = (op, st') /\
+    abi_enc_plans env ts elems /\
+    LIST_REL (\t tv. evaluate_type env t = SOME tv) ts tvs /\
+    LIST_REL value_has_type tvs vs /\
+    vyper_to_abi_list env ts vs = SOME avs /\
+    eval_operand dst s0 = SOME dst_w /\ eval_operand src s0 = SOME src_w /\
+    (EXISTS (\(_, _, _, is_dyn). is_dyn) elems ==>
+       eval_operand dyn_ptr s0 = SOME (n2w c) /\
+       mem_word_at c s0.vs_memory = n2w d /\
+       (?j. j NOTIN frag_ids st st' /\
+            FLOOKUP s0.vs_allocas j = SOME (c, 32)) /\ lo <= c /\
+       head_offset + SUM (MAP (\(_, abi_sz, _, _). abi_sz) elems) <= d) /\
+    enc_pre st st' [dst; src; dyn_ptr] lo top (TupleTV tvs)
+      (ArrayV (TupleV vs)) (w2n src_w + src_offset)
+      [(w2n dst_w + head_offset, SUM (MAP (\(_, abi_sz, _, _). abi_sz) elems));
+       (w2n dst_w + d,
+        LENGTH (enc_tuple d 0 (vyper_to_abi_types env ts) avs [] []) -
+        SUM (MAP (\(_, abi_sz, _, _). abi_sz) elems))] s0 ==>
+    frag_exec ctx st st' (\s. s = s0)
+      (\s. mem_bytes_at (w2n dst_w + head_offset)
+             (SUM (MAP (\(_, abi_sz, _, _). abi_sz) elems)) s.vs_memory ++
+           mem_bytes_at (w2n dst_w + d)
+             (LENGTH (enc_tuple d 0 (vyper_to_abi_types env ts) avs [] []) -
+              SUM (MAP (\(_, abi_sz, _, _). abi_sz) elems)) s.vs_memory =
+           enc_tuple d 0 (vyper_to_abi_types env ts) avs [] [] /\
+           (EXISTS (\(_, _, _, is_dyn). is_dyn) elems ==>
+            mem_word_at c s.vs_memory =
+              n2w (d +
+                LENGTH (enc_tuple d 0 (vyper_to_abi_types env ts) avs [] []) -
+                SUM (MAP (\(_, abi_sz, _, _). abi_sz) elems))) /\
+           enc_frame st st' lo top
+             [(w2n dst_w + head_offset,
+               SUM (MAP (\(_, abi_sz, _, _). abi_sz) elems));
+              (w2n dst_w + d,
+               LENGTH (enc_tuple d 0 (vyper_to_abi_types env ts) avs [] []) -
+               SUM (MAP (\(_, abi_sz, _, _). abi_sz) elems));
+              (c, 32)] s0 s)
+      (\r. F)
+End
+
+Definition enc_dyn_correct_def:
+  enc_dyn_correct dst src ei asz msz len_op <=>
+  !st op st' ctx env t n tv vs av s0 dst_w src_w lo top.
+    compile_abi_encode_dyn_loop dst src ei asz msz len_op st = (op, st') /\
+    abi_enc_plan env (ArrayT t (Dynamic n)) (AbiDynArray ei asz msz T) /\
+    evaluate_type env (ArrayT t (Dynamic n)) = SOME tv /\
+    value_has_type tv (ArrayV (DynArrayV vs)) /\
+    vyper_to_abi env (ArrayT t (Dynamic n)) (ArrayV (DynArrayV vs)) = SOME av /\
+    eval_operand dst s0 = SOME dst_w /\ eval_operand src s0 = SOME src_w /\
+    eval_operand len_op s0 = SOME (n2w (LENGTH vs)) /\
+    enc_pre st st' [dst; src; len_op] lo top tv (ArrayV (DynArrayV vs))
+      (w2n src_w)
+      [(w2n dst_w,
+        LENGTH (enc (vyper_to_abi_type env (ArrayT t (Dynamic n))) av) - 32)]
+      s0 ==>
+    frag_exec ctx st st' (\s. s = s0)
+      (\s. mem_bytes_at (w2n dst_w)
+             (LENGTH (enc (vyper_to_abi_type env (ArrayT t (Dynamic n))) av) -
+              32) s.vs_memory =
+           DROP 32 (enc (vyper_to_abi_type env (ArrayT t (Dynamic n))) av) /\
+           eval_operand op s =
+             SOME (n2w (LENGTH
+               (enc (vyper_to_abi_type env (ArrayT t (Dynamic n))) av))) /\
+           enc_frame st st' lo top
+             [(w2n dst_w,
+               LENGTH (enc (vyper_to_abi_type env (ArrayT t (Dynamic n))) av) -
+               32)] s0 s)
+      (\r. F)
+End
+
+Theorem compile_abi_encode_complex_nil_frag:
+  compile_abi_encode_complex_elems dst src [] src_offset head_offset
+    dyn_ptr st = (op, st') /\
+  abi_enc_plans env ts [] /\
+  LIST_REL (\t tv. evaluate_type env t = SOME tv) ts tvs /\
+  LIST_REL value_has_type tvs vs /\
+  vyper_to_abi_list env ts vs = SOME avs /\
+  enc_pre st st' [dst; src; dyn_ptr] lo top (TupleTV tvs)
+    (ArrayV (TupleV vs)) src_n outs s0 ==>
+  frag_exec ctx st st' (\s. s = s0)
+    (\s. mem_bytes_at head_n 0 s.vs_memory ++
+         mem_bytes_at tail_n
+           (LENGTH (enc_tuple d 0 (vyper_to_abi_types env ts) avs [] []))
+           s.vs_memory = enc_tuple d 0 (vyper_to_abi_types env ts) avs [] [] /\
+         enc_frame st st' lo top outs s0 s)
+    (\r. F)
+Proof
+  simp[Once compile_abi_encode_child_def, comp_return_def] >> strip_tac >>
+  gvs[] >>
+  `ts = []` by metis_tac[abi_enc_plan_cases, listTheory.NOT_CONS_NIL] >>
+  gvs[vyper_to_abi_def, vyper_to_abi_type_def] >>
+  irule frag_exec_refl >> simp[listTheory.REV_DEF, mem_bytes_at_def] >>
+  irule enc_frame_refl >> fs[enc_pre_def]
+QED
+
+Theorem enc_child_correct_apply:
+  enc_child_correct dst child_ptr ei is_dyn static_ofst dyn_ptr /\
+  compile_abi_encode_child dst child_ptr ei is_dyn static_ofst dyn_ptr st =
+    (op, st') /\
+  abi_enc_plan env ty ei /\
+  is_dyn = is_dynamic (vyper_to_abi_type env ty) /\
+  evaluate_type env ty = SOME tv /\ value_has_type tv v /\
+  vyper_to_abi env ty v = SOME av /\
+  eval_operand dst s0 = SOME dst_w /\ eval_operand child_ptr s0 = SOME src_w ==>
+  if ~is_dyn then
+    enc_pre st st' [dst; child_ptr] lo top tv v (w2n src_w)
+      [(w2n dst_w + static_ofst, LENGTH (enc (vyper_to_abi_type env ty) av))] s0 ==>
+    frag_exec ctx st st' (\s. s = s0)
+      (\s. mem_bytes_at (w2n dst_w + static_ofst)
+             (LENGTH (enc (vyper_to_abi_type env ty) av)) s.vs_memory =
+           enc (vyper_to_abi_type env ty) av /\
+           eval_operand op s =
+             SOME (n2w (LENGTH (enc (vyper_to_abi_type env ty) av))) /\
+           enc_frame st st' lo top
+             [(w2n dst_w + static_ofst,
+               LENGTH (enc (vyper_to_abi_type env ty) av))] s0 s)
+      (\r. F)
+  else
+    !c d j.
+      eval_operand dyn_ptr s0 = SOME (n2w c) /\
+      mem_word_at c s0.vs_memory = n2w d /\
+      j NOTIN frag_ids st st' /\
+      FLOOKUP s0.vs_allocas j = SOME (c, 32) /\ lo <= c /\
+      static_ofst + 32 <= d /\
+      enc_pre st st' [dst; child_ptr; dyn_ptr] lo top tv v (w2n src_w)
+        [(w2n dst_w + static_ofst, 32);
+         (w2n dst_w + d, LENGTH (enc (vyper_to_abi_type env ty) av))] s0 ==>
+      frag_exec ctx st st' (\s. s = s0)
+        (\s. mem_bytes_at (w2n dst_w + d)
+               (LENGTH (enc (vyper_to_abi_type env ty) av)) s.vs_memory =
+             enc (vyper_to_abi_type env ty) av /\
+             mem_word_at (w2n dst_w + static_ofst) s.vs_memory = n2w d /\
+             mem_word_at c s.vs_memory =
+               n2w (d + LENGTH (enc (vyper_to_abi_type env ty) av)) /\
+             eval_operand op s =
+               SOME (n2w (LENGTH (enc (vyper_to_abi_type env ty) av))) /\
+             enc_frame st st' lo top
+               [(w2n dst_w + static_ofst, 32);
+                (w2n dst_w + d, LENGTH (enc (vyper_to_abi_type env ty) av));
+                (c, 32)] s0 s)
+        (\r. F)
+Proof
+  rewrite_tac[enc_child_correct_def] >> rpt gen_tac >> strip_tac >>
+  first_x_assum irule >> simp[] >> goal_assum drule >> simp[]
+QED
+
+Theorem enc_elems_correct_apply:
+  enc_elems_correct dst src elems src_offset head_offset dyn_ptr /\
+  compile_abi_encode_complex_elems dst src elems src_offset head_offset
+    dyn_ptr st = (op, st') /\
+  abi_enc_plans env ts elems /\
+  LIST_REL (\t tv. evaluate_type env t = SOME tv) ts tvs /\
+  LIST_REL value_has_type tvs vs /\
+  vyper_to_abi_list env ts vs = SOME avs /\
+  eval_operand dst s0 = SOME dst_w /\ eval_operand src s0 = SOME src_w /\
+  (EXISTS (\(_, _, _, is_dyn). is_dyn) elems ==>
+     eval_operand dyn_ptr s0 = SOME (n2w c) /\
+     mem_word_at c s0.vs_memory = n2w d /\
+     (?j. j NOTIN frag_ids st st' /\
+          FLOOKUP s0.vs_allocas j = SOME (c, 32)) /\ lo <= c /\
+     head_offset + SUM (MAP (\(_, abi_sz, _, _). abi_sz) elems) <= d) /\
+  enc_pre st st' [dst; src; dyn_ptr] lo top (TupleTV tvs)
+    (ArrayV (TupleV vs)) (w2n src_w + src_offset)
+    [(w2n dst_w + head_offset, SUM (MAP (\(_, abi_sz, _, _). abi_sz) elems));
+     (w2n dst_w + d,
+      LENGTH (enc_tuple d 0 (vyper_to_abi_types env ts) avs [] []) -
+      SUM (MAP (\(_, abi_sz, _, _). abi_sz) elems))] s0 ==>
+  frag_exec ctx st st' (\s. s = s0)
+    (\s. mem_bytes_at (w2n dst_w + head_offset)
+           (SUM (MAP (\(_, abi_sz, _, _). abi_sz) elems)) s.vs_memory ++
+         mem_bytes_at (w2n dst_w + d)
+           (LENGTH (enc_tuple d 0 (vyper_to_abi_types env ts) avs [] []) -
+            SUM (MAP (\(_, abi_sz, _, _). abi_sz) elems)) s.vs_memory =
+         enc_tuple d 0 (vyper_to_abi_types env ts) avs [] [] /\
+         (EXISTS (\(_, _, _, is_dyn). is_dyn) elems ==>
+          mem_word_at c s.vs_memory =
+            n2w (d + LENGTH (enc_tuple d 0 (vyper_to_abi_types env ts) avs [] []) -
+              SUM (MAP (\(_, abi_sz, _, _). abi_sz) elems))) /\
+         enc_frame st st' lo top
+           [(w2n dst_w + head_offset, SUM (MAP (\(_, abi_sz, _, _). abi_sz) elems));
+            (w2n dst_w + d,
+             LENGTH (enc_tuple d 0 (vyper_to_abi_types env ts) avs [] []) -
+             SUM (MAP (\(_, abi_sz, _, _). abi_sz) elems));
+            (c, 32)] s0 s)
+    (\r. F)
+Proof
+  rewrite_tac[enc_elems_correct_def] >> rpt gen_tac >> strip_tac >>
+  first_x_assum irule >> simp[] >> goal_assum drule >> simp[] >>
+  qexists_tac `tvs` >> fs[arithmeticTheory.ADD_COMM]
+QED
+
+Theorem enc_dyn_correct_apply:
+  enc_dyn_correct dst src ei asz msz len_op /\
+  compile_abi_encode_dyn_loop dst src ei asz msz len_op st = (op, st') /\
+  abi_enc_plan env (ArrayT t (Dynamic n)) (AbiDynArray ei asz msz T) /\
+  evaluate_type env (ArrayT t (Dynamic n)) = SOME tv /\
+  value_has_type tv (ArrayV (DynArrayV vs)) /\
+  vyper_to_abi env (ArrayT t (Dynamic n)) (ArrayV (DynArrayV vs)) = SOME av /\
+  eval_operand dst s0 = SOME dst_w /\ eval_operand src s0 = SOME src_w /\
+  eval_operand len_op s0 = SOME (n2w (LENGTH vs)) /\
+  enc_pre st st' [dst; src; len_op] lo top tv (ArrayV (DynArrayV vs)) (w2n src_w)
+    [(w2n dst_w,
+      LENGTH (enc (vyper_to_abi_type env (ArrayT t (Dynamic n))) av) - 32)] s0 ==>
+  frag_exec ctx st st' (\s. s = s0)
+    (\s. mem_bytes_at (w2n dst_w)
+           (LENGTH (enc (vyper_to_abi_type env (ArrayT t (Dynamic n))) av) - 32)
+           s.vs_memory =
+         DROP 32 (enc (vyper_to_abi_type env (ArrayT t (Dynamic n))) av) /\
+         eval_operand op s =
+           SOME (n2w (LENGTH (enc (vyper_to_abi_type env (ArrayT t (Dynamic n))) av))) /\
+         enc_frame st st' lo top
+           [(w2n dst_w,
+             LENGTH (enc (vyper_to_abi_type env (ArrayT t (Dynamic n))) av) - 32)]
+           s0 s)
+    (\r. F)
+Proof
+  rewrite_tac[enc_dyn_correct_def] >> rpt gen_tac >> strip_tac >>
+  first_x_assum irule >> simp[] >> qexists_tac `vs` >> fs[]
+QED
+
+Theorem enc_buf_correct_apply:
+  enc_buf_correct dst src ei /\
+  compile_abi_encode_to_buf dst src ei st = (op, st') /\
+  abi_enc_plan env ty ei /\
+  evaluate_type env ty = SOME tv /\ value_has_type tv v /\
+  vyper_to_abi env ty v = SOME av /\
+  eval_operand dst s0 = SOME dst_w /\ eval_operand src s0 = SOME src_w /\
+  enc_pre st st' [dst; src] lo top tv v (w2n src_w)
+    [(w2n dst_w, LENGTH (enc (vyper_to_abi_type env ty) av))] s0 ==>
+  frag_exec ctx st st' (\s. s = s0)
+    (\s. mem_bytes_at (w2n dst_w)
+           (LENGTH (enc (vyper_to_abi_type env ty) av)) s.vs_memory =
+         enc (vyper_to_abi_type env ty) av /\
+         eval_operand op s =
+           SOME (n2w (LENGTH (enc (vyper_to_abi_type env ty) av))) /\
+         enc_frame st st' lo top
+           [(w2n dst_w, LENGTH (enc (vyper_to_abi_type env ty) av))] s0 s)
+    (\r. F)
+Proof
+  rewrite_tac[enc_buf_correct_def] >> rpt strip_tac >>
+  first_x_assum irule >> simp[] >> goal_assum drule >> simp[]
+QED
+
+Theorem enc_elems_correct_nil:
+  enc_elems_correct dst src [] src_offset head_offset dyn_ptr
+Proof
+  rewrite_tac[enc_elems_correct_def] >> rpt gen_tac >> strip_tac >>
+  fs[] >> drule_all compile_abi_encode_complex_nil_frag >> strip_tac >>
+  first_x_assum (qspecl_then
+    [`w2n dst_w + d`, `w2n dst_w + head_offset`, `d`, `ctx`] assume_tac) >>
+  drule frag_exec_weaken >> disch_then irule >>
+  simp[] >> rpt strip_tac >>
+  irule enc_frame_enlarge_outputs >> goal_assum (drule_at Any) >>
+  simp[] >> metis_tac[]
+QED
+
 Theorem compile_abi_encode_frag:
   (!dst child_ptr ei is_dyn static_ofst dyn_ptr st op st' ctx env ty tv v
     av s0 dst_w src_w lo top.
