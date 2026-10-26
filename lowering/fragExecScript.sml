@@ -26,7 +26,13 @@
  *   frag_exec_seq         — sequential composition
  *   frag_exec_conseq, frag_exec_refl — consequence and the empty fragment
  *   frag_exec_pointwise   — prove a fragment from each start state
+ *   frag_exec_seq_pointwise, frag_exec_then — sequencing, the second
+ *                           fragment known from each state the first ends in
+ *   frag_exec_exit_prefix — a fragment that only exits is followed by anything
+ *   frag_exec_weaken, frag_exec_pre_exit(_c), frag_exec_false_pre
+ *                         — forms of frag_exec_conseq
  *   frag_exec_run_inst_seq — lift a straight-line run_inst_seq result
+ *   frag_exec_loop        — a header/body/exit loop runs its body N times
  *
  * Steps inside a block:
  *   run_from_step         — a straight-line step moves run_from on
@@ -394,6 +400,80 @@ Proof
           rpt strip_tac >> metis_tac[])
       >> disj2_tac >> metis_tac[exit_result_not_error]) >>
   disj2_tac >> metis_tac[]
+QED
+
+(* ===== Composing fragments ===== *)
+
+Theorem frag_exec_false_pre:
+  !ctx st st' Q R. frag_exec ctx st st' (\s. F) Q R
+Proof
+  rw[frag_exec_def]
+QED
+
+(* A fragment that only exits is followed by anything. *)
+Theorem frag_exec_exit_prefix:
+  !ctx st1 st2 st3 P Q R.
+    frag_exec ctx st1 st2 P (\s. F) R /\ cs_extends st1 st2 /\
+    cs_extends st2 st3 ==>
+    frag_exec ctx st1 st3 P Q R
+Proof
+  rpt strip_tac >> irule frag_exec_seq >> qexistsl_tac [`\s. F`, `st2`] >>
+  simp[frag_exec_false_pre]
+QED
+
+(* Sequencing where the second fragment is known from each state the first
+   one ends in. *)
+Theorem frag_exec_seq_pointwise:
+  !ctx st1 st2 st3 P Q1 Q R.
+    frag_exec ctx st1 st2 P Q1 R /\
+    (!t. Q1 t ==> frag_exec ctx st2 st3 (\s. s = t) Q R) /\
+    cs_extends st1 st2 /\ cs_extends st2 st3 ==>
+    frag_exec ctx st1 st3 P Q R
+Proof
+  rpt strip_tac >> irule frag_exec_seq >> qexistsl_tac [`Q1`, `st2`] >>
+  simp[] >> irule frag_exec_pointwise >> simp[]
+QED
+
+(* frag_exec_seq_pointwise with the first fragment first, so that
+   MATCH_MP fixes the middle state and predicate. *)
+Theorem frag_exec_then:
+  !ctx st1 st2 P Q1 R.
+    frag_exec ctx st1 st2 P Q1 R ==>
+    !st3 Q.
+      (!t. Q1 t ==> frag_exec ctx st2 st3 (\s. s = t) Q R) /\
+      cs_extends st1 st2 /\ cs_extends st2 st3 ==>
+      frag_exec ctx st1 st3 P Q R
+Proof
+  metis_tac[frag_exec_seq_pointwise]
+QED
+
+Theorem frag_exec_weaken:
+  !ctx st st' P Q R.
+    frag_exec ctx st st' P Q R ==>
+    !P' Q' R'.
+      (!s. P' s ==> P s) /\ (!s. Q s ==> Q' s) /\ (!r. R r ==> R' r) ==>
+      frag_exec ctx st st' P' Q' R'
+Proof
+  metis_tac[frag_exec_conseq]
+QED
+
+Theorem frag_exec_pre_exit:
+  !ctx st st' P Q R P' R'.
+    frag_exec ctx st st' P Q R /\ (!s. P' s ==> P s) /\
+    (!r. R r ==> R' r) ==>
+    frag_exec ctx st st' P' Q R'
+Proof
+  rpt strip_tac >> irule frag_exec_conseq >>
+  qexistsl_tac [`P`, `Q`, `R`] >> simp[]
+QED
+
+Theorem frag_exec_pre_exit_c:
+  !ctx st st' P Q R.
+    frag_exec ctx st st' P Q R ==>
+    !P' R'. (!s. P' s ==> P s) /\ (!r. R r ==> R' r) ==>
+            frag_exec ctx st st' P' Q R'
+Proof
+  metis_tac[frag_exec_pre_exit]
 QED
 
 (* ===== Lifting straight-line code ===== *)
@@ -808,3 +888,316 @@ Proof
   >- (disj1_tac >> qexists_tac `s'` >> simp[] >> metis_tac[]) >>
   disj2_tac >> metis_tac[exit_result_not_error]
 QED
+
+(* Fixed-function interface for fragment outcomes. *)
+Definition frag_outcome_def:
+  frag_outcome ctx fn s st Q R <=>
+    (?t. Q t /\ ~t.vs_halted /\
+         t.vs_current_bb = st.cs_current_bb /\
+         t.vs_inst_idx = LENGTH st.cs_current_insts /\
+         !fuel r. run_from fuel ctx fn t = r /\ (!e. r <> Error e) ==>
+                  ?fuel'. run_from fuel' ctx fn s = r) \/
+    (?fuel r. run_from fuel ctx fn s = r /\ exit_result r /\ R r)
+End
+
+Theorem frag_outcome_refl:
+  Q s /\ ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  frag_outcome ctx fn s st Q R
+Proof
+  rw[frag_outcome_def] >> disj1_tac >> qexists_tac `s` >> simp[] >>
+  metis_tac[]
+QED
+
+Theorem frag_outcome_apply:
+  frag_exec ctx sa sb P Q R /\ fn_has_code sa sb fn /\
+  P s /\ ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  frag_outcome ctx fn s sb Q R
+Proof
+  simp[frag_exec_def, frag_outcome_def] >> metis_tac[]
+QED
+
+Theorem frag_outcome_compose:
+  frag_outcome ctx fn s sa P R /\
+  (!t. P t /\ ~t.vs_halted /\ t.vs_current_bb = sa.cs_current_bb /\
+       t.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+       frag_outcome ctx fn t sb Q R) ==>
+  frag_outcome ctx fn s sb Q R
+Proof
+  rw[frag_outcome_def]
+  >- (first_x_assum drule >> simp[] >> strip_tac
+      >- (rename1 `Q endpoint` >> disj1_tac >>
+          qexists_tac `endpoint` >> simp[] >> metis_tac[]) >>
+      disj2_tac >> metis_tac[exit_result_not_error]) >>
+  disj2_tac >> metis_tac[]
+QED
+
+Theorem frag_outcome_jump:
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME inst /\
+  is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE /\
+  step_inst_base inst s = OK (jump_to lbl s) /\ ~s.vs_halted /\
+  frag_outcome ctx fn (jump_to lbl s) sb Q R ==>
+  frag_outcome ctx fn s sb Q R
+Proof
+  rpt strip_tac >>
+  `!fuel r. run_from fuel ctx fn (jump_to lbl s) = r /\
+            (!e. r <> Error e) ==> run_from (SUC fuel) ctx fn s = r` by
+    metis_tac[run_from_jump_result] >>
+  gvs[frag_outcome_def]
+  >- (rename1 `Q endpoint` >> disj1_tac >>
+      qexists_tac `endpoint` >> simp[] >> metis_tac[]) >>
+  disj2_tac >> metis_tac[exit_result_not_error]
+QED
+
+Theorem cs_extends_emit_inst:
+  emit_inst opc ops outs sa = (x, sb) ==> cs_extends sa sb
+Proof
+  metis_tac[cs_appends_def, cs_appends_emit_helpers]
+QED
+
+Theorem fn_has_code_emit_new_block:
+  emit_inst opc ops outs sa = (x, sb) /\
+  new_block lbl sb = (y, sc) /\
+  cs_extends st0 sa /\ cs_extends sc stx /\ fn_has_code st0 stx fn ==>
+  ?bb. lookup_block sa.cs_current_bb fn.fn_blocks = SOME bb /\
+       get_instruction bb (LENGTH sa.cs_current_insts) =
+         SOME (mk_inst sa.cs_next_id opc ops outs)
+Proof
+  rpt strip_tac >>
+  `cs_extends sa sb` by metis_tac[cs_extends_emit_inst] >>
+  `cs_extends sb sc` by metis_tac[cs_extends_new_block] >>
+  `cs_extends st0 sb` by metis_tac[cs_extends_trans] >>
+  `fn_has_code sb sc fn` by metis_tac[fn_has_code_mid] >>
+  drule_all fn_has_code_new_block >>
+  qpat_x_assum `emit_inst _ _ _ _ = _` mp_tac >>
+  simp[emit_inst_def, comp_bind_def, fresh_id_def, emit_def] >>
+  rpt strip_tac >> gvs[] >>
+  simp[get_instruction_def, EL_APPEND_EQN]
+QED
+
+(* ===== Loops ===== *)
+
+Theorem frag_exec_loop_layout[local]:
+  !st0 st1 sth stj st2 stb ste st3 stx hdr body exit cnd
+   x0 x1 x2 x3 x4 x5 fn.
+  emit_inst JMP [Label hdr] [] st0 = (x0, st1) /\
+  new_block hdr st1 = (x1, sth) /\
+  emit_inst JNZ [cnd; Label exit; Label body] [] stj = (x2, st2) /\
+  new_block body st2 = (x3, stb) /\
+  emit_inst JMP [Label hdr] [] ste = (x4, st3) /\
+  new_block exit st3 = (x5, stx) /\
+  cs_extends sth stj /\ cs_extends stb ste /\ fn_has_code st0 stx fn ==>
+  fn_has_code sth stj fn /\ fn_has_code stb ste fn /\
+  (?bb. lookup_block st0.cs_current_bb fn.fn_blocks = SOME bb /\
+        get_instruction bb (LENGTH st0.cs_current_insts) =
+          SOME (mk_inst st0.cs_next_id JMP [Label hdr] [])) /\
+  (?bb. lookup_block stj.cs_current_bb fn.fn_blocks = SOME bb /\
+        get_instruction bb (LENGTH stj.cs_current_insts) =
+          SOME (mk_inst stj.cs_next_id JNZ [cnd; Label exit; Label body] [])) /\
+  (?bb. lookup_block ste.cs_current_bb fn.fn_blocks = SOME bb /\
+        get_instruction bb (LENGTH ste.cs_current_insts) =
+          SOME (mk_inst ste.cs_next_id JMP [Label hdr] [])) /\
+  sth.cs_current_bb = hdr /\ sth.cs_current_insts = [] /\
+  stb.cs_current_bb = body /\ stb.cs_current_insts = [] /\
+  stx.cs_current_bb = exit /\ stx.cs_current_insts = []
+Proof
+  rpt gen_tac >> strip_tac >>
+  `cs_extends st0 st1 /\ cs_extends stj st2 /\ cs_extends ste st3` by
+    metis_tac[cs_extends_emit_inst] >>
+  `cs_extends st1 sth /\ cs_extends st2 stb /\ cs_extends st3 stx` by
+    metis_tac[cs_extends_new_block] >>
+  `cs_extends st0 sth` by metis_tac[cs_extends_trans] >>
+  `cs_extends st0 stj` by metis_tac[cs_extends_trans] >>
+  `cs_extends st0 stb` by metis_tac[cs_extends_trans] >>
+  `cs_extends st0 ste` by metis_tac[cs_extends_trans] >>
+  `cs_extends ste stx` by metis_tac[cs_extends_trans] >>
+  `cs_extends stb stx` by metis_tac[cs_extends_trans] >>
+  `cs_extends stj stx` by metis_tac[cs_extends_trans] >>
+  `cs_extends sth stx` by metis_tac[cs_extends_trans] >>
+  rpt conj_tac
+  >- (irule fn_has_code_mid >> simp[] >>
+      qexistsl_tac [`stx`, `st0`] >> simp[])
+  >- (irule fn_has_code_mid >> simp[] >>
+      qexistsl_tac [`stx`, `st0`] >> simp[])
+  >- (irule fn_has_code_emit_new_block >>
+      goal_assum (drule_at Any) >> simp[cs_extends_refl] >>
+      metis_tac[cs_extends_refl])
+  >- (irule fn_has_code_emit_new_block >>
+      rename1 `new_block body_lbl st2 = (x3, stb)` >>
+      qexistsl_tac [`body_lbl`, `st2`, `stb`] >>
+      metis_tac[])
+  >- (irule fn_has_code_emit_new_block >>
+      qexistsl_tac [`exit`, `st3`, `stx`] >>
+      metis_tac[cs_extends_refl]) >>
+  gvs[new_block_def]
+QED
+
+Theorem frag_outcome_jmp[local]:
+  lookup_block sa.cs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb (LENGTH sa.cs_current_insts) =
+    SOME (mk_inst id JMP [Label lbl] []) /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  frag_outcome ctx fn (jump_to lbl s) sb Q R ==>
+  frag_outcome ctx fn s sb Q R
+Proof
+  rpt strip_tac >> irule frag_outcome_jump >>
+  goal_assum (drule_at Any) >>
+  simp[mk_inst_def, is_terminator_def, step_inst_base_def] >> metis_tac[]
+QED
+
+Theorem frag_outcome_jnz[local]:
+  !sa fn bb id cnd exit body s w ctx sb Q R.
+  lookup_block sa.cs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb (LENGTH sa.cs_current_insts) =
+    SOME (mk_inst id JNZ [cnd; Label exit; Label body] []) /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  eval_operand cnd s = SOME w /\
+  frag_outcome ctx fn (jump_to (if w = 0w then body else exit) s) sb Q R ==>
+  frag_outcome ctx fn s sb Q R
+Proof
+  rpt strip_tac >> irule frag_outcome_jump >>
+  goal_assum (drule_at Any) >>
+  simp[mk_inst_def, is_terminator_def, step_inst_base_def] >>
+  Cases_on `w = 0w` >> gvs[] >> metis_tac[]
+QED
+
+Theorem frag_outcome_loop_cond[local]:
+  !ctx fn sth stj stb ste stx hdr body exit cnd idj ide bbj bbe I J N R k s.
+  lookup_block stj.cs_current_bb fn.fn_blocks = SOME bbj /\
+  get_instruction bbj (LENGTH stj.cs_current_insts) =
+    SOME (mk_inst idj JNZ [cnd; Label exit; Label body] []) /\
+  lookup_block ste.cs_current_bb fn.fn_blocks = SOME bbe /\
+  get_instruction bbe (LENGTH ste.cs_current_insts) =
+    SOME (mk_inst ide JMP [Label hdr] []) /\
+  sth.cs_current_bb = hdr /\ sth.cs_current_insts = [] /\
+  stb.cs_current_bb = body /\ stb.cs_current_insts = [] /\
+  stx.cs_current_bb = exit /\ stx.cs_current_insts = [] /\
+  fn_has_code stb ste fn /\
+  (!k s l. I k s ==> I k (jump_to l s)) /\
+  (!k s l. J k s ==> J k (jump_to l s)) /\
+  (!k. k < N ==> frag_exec ctx stb ste (J k) (I (SUC k)) R) /\
+  (!k s. k <= N /\ J k s ==>
+    ?w. eval_operand cnd s = SOME w /\ (w = 0w <=> k < N)) /\
+  (!t. k < N /\ I (SUC k) t /\ ~t.vs_halted /\
+       t.vs_current_bb = hdr /\ t.vs_inst_idx = 0 ==>
+       frag_outcome ctx fn t stx (J N) R) /\
+  k <= N /\ J k s /\ ~s.vs_halted /\
+  s.vs_current_bb = stj.cs_current_bb /\
+  s.vs_inst_idx = LENGTH stj.cs_current_insts ==>
+  frag_outcome ctx fn s stx (J N) R
+Proof
+  rpt strip_tac >>
+  `?w. eval_operand cnd s = SOME w /\ (w = 0w <=> k < N)` by
+    metis_tac[] >>
+  qpat_assum `lookup_block stj.cs_current_bb _ = _`
+    (mp_then Any mp_tac frag_outcome_jnz) >>
+  disch_then drule >> simp[] >>
+  disch_then irule >> simp[] >>
+  Cases_on `k < N`
+  >- (gvs[] >>
+      irule frag_outcome_compose >>
+      rename1 `!a. a < N ==> frag_exec ctx stb ste (J a) (Inv (SUC a)) R` >>
+      qexistsl_tac [`Inv (SUC k)`, `ste`] >> conj_tac
+      >- (rpt strip_tac >>
+          qpat_assum `lookup_block ste.cs_current_bb _ = _`
+            (mp_then Any mp_tac frag_outcome_jmp) >>
+          disch_then drule >> disch_then irule >> simp[] >>
+          first_x_assum irule >> simp[jump_to_def] >> metis_tac[]) >>
+      `J k (jump_to stb.cs_current_bb s)` by metis_tac[] >>
+      irule frag_outcome_apply >>
+      simp[jump_to_def] >> qexistsl_tac [`J k`, `stb`] >>
+      gvs[jump_to_def]) >>
+  `k = N` by decide_tac >> gvs[] >>
+  `J N (jump_to stx.cs_current_bb s)` by metis_tac[] >>
+  irule frag_outcome_refl >> gvs[jump_to_def]
+QED
+
+Theorem frag_outcome_loop_header[local]:
+  !ctx fn sth stj stb ste stx hdr body exit cnd idj ide bbj bbe Inv J N R.
+  lookup_block stj.cs_current_bb fn.fn_blocks = SOME bbj /\
+  get_instruction bbj (LENGTH stj.cs_current_insts) =
+    SOME (mk_inst idj JNZ [cnd; Label exit; Label body] []) /\
+  lookup_block ste.cs_current_bb fn.fn_blocks = SOME bbe /\
+  get_instruction bbe (LENGTH ste.cs_current_insts) =
+    SOME (mk_inst ide JMP [Label hdr] []) /\
+  sth.cs_current_bb = hdr /\ sth.cs_current_insts = [] /\
+  stb.cs_current_bb = body /\ stb.cs_current_insts = [] /\
+  stx.cs_current_bb = exit /\ stx.cs_current_insts = [] /\
+  fn_has_code sth stj fn /\ fn_has_code stb ste fn /\
+  (!k s l. Inv k s ==> Inv k (jump_to l s)) /\
+  (!k s l. J k s ==> J k (jump_to l s)) /\
+  (!k. k <= N ==> frag_exec ctx sth stj (Inv k) (J k) R) /\
+  (!k s. k <= N /\ J k s ==>
+    ?w. eval_operand cnd s = SOME w /\ (w = 0w <=> k < N)) /\
+  (!k. k < N ==> frag_exec ctx stb ste (J k) (Inv (SUC k)) R) ==>
+  !d k s. k + d = N /\ Inv k s /\ ~s.vs_halted /\
+    s.vs_current_bb = hdr /\ s.vs_inst_idx = 0 ==>
+    frag_outcome ctx fn s stx (J N) R
+Proof
+  rpt gen_tac >> strip_tac >> Induct_on `d` >> rpt gen_tac >> strip_tac >>
+  (`!t. k < N /\ Inv (SUC k) t /\ ~t.vs_halted /\
+        t.vs_current_bb = hdr /\ t.vs_inst_idx = 0 ==>
+        frag_outcome ctx fn t stx (J N) R` by
+     (rpt strip_tac >> gvs[] >>
+      first_x_assum irule >> simp[] >> qexists_tac `SUC k` >> simp[]) >>
+   irule frag_outcome_compose >> qexistsl_tac [`J k`, `stj`] >>
+   reverse conj_tac
+   >- (irule frag_outcome_apply >> simp[] >>
+       qexistsl_tac [`Inv k`, `sth`] >> simp[] >>
+       first_x_assum irule >> decide_tac) >>
+   rpt strip_tac >>
+   `k <= N` by decide_tac >>
+   drule_all frag_outcome_loop_cond >> simp[])
+QED
+
+(* A loop as the lowering emits it: a jump to a header block whose
+   straight-line code ends in JNZ to the exit or to the body, the body
+   fragment, a jump back to the header, and the exit block.  I k holds at
+   the start of the header's k-th run and J k at its JNZ; the condition is
+   nonzero exactly at k = N, so the body runs N times.  Jumps change only
+   the position, so I and J must not depend on it. *)
+Theorem frag_exec_loop:
+  !ctx st0 st1 sth stj st2 stb ste st3 stx hdr body exit cnd
+   x0 x1 x2 x3 x4 x5 I J N R.
+    emit_inst JMP [Label hdr] [] st0 = (x0, st1) /\
+    new_block hdr st1 = (x1, sth) /\
+    emit_inst JNZ [cnd; Label exit; Label body] [] stj = (x2, st2) /\
+    new_block body st2 = (x3, stb) /\
+    emit_inst JMP [Label hdr] [] ste = (x4, st3) /\
+    new_block exit st3 = (x5, stx) /\
+    cs_extends sth stj /\ cs_extends stb ste /\
+    (!k s l. I k s ==> I k (jump_to l s)) /\
+    (!k s l. J k s ==> J k (jump_to l s)) /\
+    (!k. k <= N ==> frag_exec ctx sth stj (I k) (J k) R) /\
+    (!k s. k <= N /\ J k s ==>
+           ?w. eval_operand cnd s = SOME w /\ (w = 0w <=> k < N)) /\
+    (!k. k < N ==> frag_exec ctx stb ste (J k) (I (SUC k)) R) ==>
+    frag_exec ctx st0 stx (I 0) (J N) R
+Proof
+  rpt gen_tac >> strip_tac >>
+  simp[frag_exec_def, GSYM frag_outcome_def] >> rpt strip_tac >>
+  drule_all frag_exec_loop_layout >> strip_tac >>
+  rename1 `!k. k <= N ==> frag_exec ctx sth stj (Inv k) (J k) R` >>
+  `Inv 0 (jump_to hdr s)` by metis_tac[] >>
+  qpat_assum `lookup_block st0.cs_current_bb _ = _`
+    (mp_then Any mp_tac frag_outcome_jmp) >>
+  disch_then drule >> disch_then irule >> simp[] >>
+  `~(jump_to hdr s).vs_halted /\
+   (jump_to hdr s).vs_current_bb = hdr /\
+   (jump_to hdr s).vs_inst_idx = 0 /\ 0 + N = N` by
+    simp[jump_to_def] >>
+  drule_all frag_outcome_loop_header >> simp[SF ETA_ss]
+QED
+
+(* Reject accidental oracle dependencies in the completed loop rule. *)
+val _ =
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag frag_exec_loop)
+  in
+    if null axioms andalso List.all (fn s => s = "DISK_THM") oracles
+    then print "frag_exec_loop: kernel proof audit passed\n"
+    else raise Fail "frag_exec_loop has oracle or axiom dependencies"
+  end;

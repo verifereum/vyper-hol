@@ -197,11 +197,16 @@ Definition val_in_memory_def:
          elems_in_memory vs (offset + 32) elem_tv mem
      | _ => F)) ∧
 
-  (* SArray: elements in index order, no length word. *)
+  (* SArray: elements in index order, no length word.  The sparse value
+     omits indices holding the element type's default (make_array_value), so
+     an index below the length that is not a key holds that default. *)
   (val_in_memory ty (ArrayV (SArrayV kvs)) offset mem =
     (case ty of
-       ArrayTV elem_tv _ =>
-         kvs_in_memory kvs offset elem_tv mem
+       ArrayTV elem_tv bd =>
+         kvs_in_memory kvs offset elem_tv mem ∧
+         (∀n i. bd = Fixed n ∧ i < n ∧ ALOOKUP kvs i = NONE ⇒
+            val_in_memory elem_tv (default_value elem_tv)
+              (offset + i * type_memory_size elem_tv) mem)
      | _ => F)) ∧
 
   (* Tuple: elements concatenated. Thread element types from TupleTV. *)
@@ -248,24 +253,29 @@ Definition val_in_memory_def:
      val_in_memory etv v offset mem ∧
      tuple_in_memory vs rest_tvs (offset + type_memory_size etv) mem))
 Termination
-  WF_REL_TAC `measure $ λx.
+  (* Lexicographic: the type shrinks into an array's element type for the
+     defaults of absent sparse indices, where the value does not shrink. *)
+  WF_REL_TAC `inv_image ($< LEX $<) (λx.
     case x of
     (* val_in_memory *)
-      INL (_, v, _, _) => value_size v
+      INL (ty, v, _, _) => (type_value_size ty, value_size v)
     (* fields_in_memory *)
-    | INR (INL (fields, _, _, _)) =>
-        list_size (pair_size (list_size char_size) value_size) fields
+    | INR (INL (fields, field_tvs, _, _)) =>
+        (1 + list_size (pair_size (list_size char_size) type_value_size)
+               field_tvs,
+         list_size (pair_size (list_size char_size) value_size) fields)
     (* elems_in_memory *)
-    | INR (INR (INL (vs, _, _, _))) => list_size value_size vs
+    | INR (INR (INL (vs, _, tv, _))) =>
+        (type_value_size tv, list_size value_size vs)
     (* kvs_in_memory *)
-    | INR (INR (INR (INL (kvs, _, _, _)))) =>
-        list_size (pair_size (K 0) value_size) kvs
+    | INR (INR (INR (INL (kvs, _, tv, _)))) =>
+        (type_value_size tv, list_size (pair_size (K 0) value_size) kvs)
     (* tuple_in_memory *)
-    | INR (INR (INR (INR (vs, _, _, _)))) => list_size value_size vs`
-  >> simp[basicSizeTheory.pair_size_def, listTheory.list_size_def,
-          value_size_def]
-  >> Induct >> simp[listTheory.list_size_def, basicSizeTheory.pair_size_def]
-  >> Cases >> simp[basicSizeTheory.pair_size_def]
+    | INR (INR (INR (INR (vs, tvs, _, _)))) =>
+        (1 + list_size type_value_size tvs, list_size value_size vs))`
+  >> rw[] >> gvs[AllCaseEqs(), value_size_def, type_value_size_def,
+                 vyperASTTheory.base_type_size_def, listTheory.list_size_def,
+                 basicSizeTheory.pair_size_def]
 End
 
 (* ===== Value Well-Formedness for Memory Layout ===== *)

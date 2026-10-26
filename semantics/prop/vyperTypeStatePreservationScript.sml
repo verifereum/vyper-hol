@@ -526,7 +526,8 @@ Proof
   gvs[Once assign_subscripts_def, LET_THM] >>
   irule well_typed_binop_success_type >>
   qexists_tac `bop` >> qexists_tac `ty` >> qexists_tac `rhs_ty` >>
-  qexists_tac `env.type_defs` >> qexists_tac `leaf_tv` >> qexists_tac `tv` >>
+  qexists_tac `env.type_defs` >> qexists_tac `leaf_tv` >>
+  qexists_tac `leaf_tv` >> qexists_tac `tv` >>
   qexists_tac `ty` >> qexists_tac `case type_to_int_bound ty of NONE => Unsigned 0 | SOME u => u` >>
   qexists_tac `la` >> qexists_tac `nv` >>
   simp[]

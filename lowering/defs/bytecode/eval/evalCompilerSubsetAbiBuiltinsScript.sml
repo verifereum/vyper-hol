@@ -5,7 +5,7 @@
  *)
 
 Theory evalCompilerSubsetAbiBuiltins
-Ancestors evalCompiler
+Ancestors vyperAST
 
 (* Hand-written HOL input paired with sources/abi_static.vy. *)
 Definition task090_abi_static_program_def:

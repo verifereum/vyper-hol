@@ -1196,20 +1196,63 @@ val () = eval_send_def
             lift_option_type_def, type_check_def, check_def, assert_def]
   |> cv_auto_trans;
 
-Theorem eval_ext_call_preserves_non_accounts:
-  eval_ext_call cx static skip_check sig opts vs st = (res, st') ==>
-  st'.scopes = st.scopes /\ st'.immutables = st.immutables
+Theorem take_call_outcome_non_accounts[local]:
+  (SND (vyperCallOutcome$take_call_outcome target calldata value_opt st)).scopes = st.scopes /\
+  (SND (vyperCallOutcome$take_call_outcome target calldata value_opt st)).immutables = st.immutables
+Proof
+  Cases_on `vyperCallOutcome$take_call_outcome target calldata value_opt st` >>
+  simp[] >> drule vyperCallOutcomeTheory.take_call_outcome_frame >>
+  disch_then (fn th => once_rewrite_tac[th]) >> simp[]
+QED
+
+Theorem adopt_call_outcome_non_accounts[local]:
+  (SND (vyperCallOutcome$adopt_call_outcome rq outcome st)).scopes = st.scopes /\
+  (SND (vyperCallOutcome$adopt_call_outcome rq outcome st)).immutables = st.immutables
+Proof
+  Cases_on `vyperCallOutcome$adopt_call_outcome rq outcome st` >>
+  simp[] >> drule vyperCallOutcomeTheory.adopt_call_outcome_frame >>
+  strip_tac >> pop_assum (fn th => once_rewrite_tac[th]) >> simp[]
+QED
+
+(* Keep the result type independent of the case scrutinee's type variables. *)
+val ext_frame_projection_rewrites = let
+  val shapes = [``:'a option``, ``:'a + 'b``, ``:'a # 'b``]
+  val tests = [``SND : 'result # evaluation_state -> evaluation_state``,
+               ``\s:evaluation_state. s.scopes``,
+               ``\s:evaluation_state. s.immutables``]
+  fun project test ty = BETA_RULE (ISPEC test (TypeBase.case_rand_of ty))
+  fun constant ty = Prim_rec.prove_case_const_thm
+    {case_def = TypeBase.case_def_of ty,
+     nchotomy = TypeBase.nchotomy_of ty}
+in List.concat (map (fn test => map (project test) shapes @
+     [BETA_RULE (PART_MATCH (rator o lhs) COND_RAND test)]) tests) @
+   map constant shapes end;
+
+Theorem eval_ext_call_non_accounts[local]:
+  (SND (eval_ext_call cx static skip_check sig opts vs st)).scopes = st.scopes /\
+  (SND (eval_ext_call cx static skip_check sig opts vs st)).immutables = st.immutables
 Proof
   PairCases_on `sig` >> Cases_on `vs` >>
   simp[eval_ext_call_def, bind_def, ignore_bind_def, type_check_def,
        assert_def, return_def, raise_def, get_accounts_def,
        get_transient_storage_def, lift_option_def, lift_option_type_def,
        check_def, lift_sum_runtime_def, update_accounts_def,
-       update_transient_def, append_logs_def,
-       vyperCallOutcomeTheory.take_call_outcome_def,
-       vyperCallOutcomeTheory.adopt_call_outcome_def, LET_THM, UNCURRY,
+       update_transient_def, append_logs_def, LET_THM, UNCURRY,
        COND_RATOR, option_CASE_rator, prod_CASE_rator, sum_CASE_rator] >>
-  strip_tac >> gvs[AllCaseEqs()]
+  simp ext_frame_projection_rewrites >>
+  simp_tac (pure_ss ++ boolSimps.BOOL_ss)
+    ([pairTheory.pair_CASE_def, pairTheory.FST, pairTheory.SND,
+      evaluation_state_accfupds, combinTheory.K_THM,
+      take_call_outcome_non_accounts, adopt_call_outcome_non_accounts] @
+     ext_frame_projection_rewrites)
+QED
+
+Theorem eval_ext_call_preserves_non_accounts:
+  eval_ext_call cx static skip_check sig opts vs st = (res, st') ==>
+  st'.scopes = st.scopes /\ st'.immutables = st.immutables
+Proof
+  strip_tac >>
+  mp_tac eval_ext_call_non_accounts >> asm_rewrite_tac[] >> simp[]
 QED
 
 Theorem eval_send_preserves_non_accounts:
@@ -1508,7 +1551,7 @@ Definition evaluate_def:
     od else do
       vs <- eval_exprs cx es;
       acc <- get_accounts;
-      lift_sum $ evaluate_builtin cx acc ty bt vs
+      lift_sum $ evaluate_builtin cx acc ty bt (MAP expr_type es) vs
     od;
     return $ Value v
   od ∧
