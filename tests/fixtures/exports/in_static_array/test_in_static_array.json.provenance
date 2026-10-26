@@ -1,0 +1,51 @@
+{
+  "export_sha256": "52ea44cd8448ae68557d3d7d2756b29ebfd781373da9e48ad9ca5992a7d06d4a",
+  "fixture_sources": {
+    "tests/fixtures/exports/in_static_array/test_in_static_array.py": "9c45365455d50dc2f7ac21e4d3981b82127ad9ca7ebfc5323a6ca423cbf22cee"
+  },
+  "inputs": {
+    ".github/actions/setup-vyper-test-exports/action.yml": "41a323c6a7925b2377c4e3fd35f431c942ab97befb1f64002d7863312fb27232",
+    "VYPER_PIN": "9a123fbe3fda20b7ef84343203c21043151277d7175e47ecdc9ec774bf6a6b68",
+    "tests/semantics-build-constraints.txt": "5ea17fa1520d1732c4efe2d93b0456c095cc417df4bcd7f1953cec37462a2e65",
+    "tests/semantics-profile.json": "a25b4fc9444a8107f08436d47c70c81adea2874cb89134fd4ac9e77adbfd0954",
+    "tests/semantics-test-constraints.txt": "21849a5ae9b73cf03c7d864d18683c747ac2dd0b0789e62e148240d35a40a6f4",
+    "tools/vyper_test_export_plugin.py": "0c39aecaf73d3d2bbc83611720c342f0988da678520f63fdfcbac853e8599ff3",
+    "tools/vyper_test_exports.py": "870ad1f61eeee33b14fd3a86c5bed8a8b1d0900c0eadd67a63a6c6148f20ea75"
+  },
+  "profile": {
+    "harness_defaults": {
+      "bytecode_metadata": true,
+      "debug": false,
+      "enable_decimals": true
+    },
+    "pytest_args": [
+      "--experimental-codegen",
+      "--optimize",
+      "none",
+      "--evm-version",
+      "prague",
+      "--evm-backend",
+      "revm"
+    ],
+    "python_version": "3.11.11",
+    "vyper_version": "0.5.0a4+cd74ce4f"
+  },
+  "resolved_settings": [
+    {
+      "compiler_settings": {
+        "debug": false,
+        "enable_decimals": true,
+        "evm_version": "prague",
+        "experimental_codegen": true,
+        "optimize": "none"
+      },
+      "deployment_type": "source",
+      "item": "test_in_static_array_defaults",
+      "trace": 0
+    }
+  ],
+  "schema_version": 1,
+  "test_selections": [
+    "tests/hol_fixtures/in_static_array/test_in_static_array.py"
+  ]
+}
