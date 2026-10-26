@@ -664,4 +664,3 @@ Proof
   simp[eval_operand_def, step_inst_base_def, venomInstTheory.mk_inst_def] >>
   disch_then drule >> strip_tac >> goal_assum drule >> simp[]
 QED
-

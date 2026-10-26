@@ -88,10 +88,10 @@ def prepare(repo: Path, corpus: Path, output: Path, *, check: bool) -> None:
     (output / "provenance.json").write_text(json.dumps(provenance, indent=2) + "\n")
     if check:
         expected = json.loads((corpus / "oracle/provenance.json").read_text())
-        retained = set(expected["outputs"])
+        retained = set(names(corpus / "parity-fixtures.txt"))
         provenance["outputs"] = {
             name: digest for name, digest in provenance["outputs"].items()
-            if name in retained
+            if Path(name).stem in retained
         }
         if provenance != expected:
             raise ValueError("independent oracle provenance changed")
