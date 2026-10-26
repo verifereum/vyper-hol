@@ -4632,6 +4632,94 @@ Proof
   goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
 
+Theorem enc_static_loop_body_frag:
+  enc_static_loop_body dst src ei (type_memory_size tv) (type_memory_size tv)
+    count_ptr sb = ((),se) /\
+  (!x. MEM (Var x) [count_ptr;src;dst] ==> not_fresh_at sb x) /\
+  st.cs_next_var <= sb.cs_next_var /\ st.cs_next_id IN frag_ids st z /\
+  frag_ids sb se SUBSET frag_ids st z /\
+  abi_enc_plan env ty ei /\ ~is_dynamic (vyper_to_abi_type env ty) /\
+  evaluate_type env ty = SOME tv /\
+  static_length (vyper_to_abi_type env ty) = type_memory_size tv /\
+  value_has_type (ArrayTV tv (Dynamic n)) (ArrayV (DynArrayV vs)) /\
+  LIST_REL (\v av. vyper_to_abi env ty v = SOME av) vs avs /\
+  has_types (REPLICATE (LENGTH vs) (vyper_to_abi_type env ty)) avs /\
+  k < LENGTH vs /\ MEM (dst_n,32 + LENGTH vs * type_memory_size tv) outs /\
+  MEM src ops /\ MEM dst ops /\
+  eval_operand src s0 = SOME (n2w src_n) /\
+  eval_operand dst s0 = SOME (n2w dst_n) ==>
+  frag_exec ctx sb se
+    (enc_array_inv
+      (enc_loop_ctx st z ops lo top (ArrayTV tv (Dynamic n))
+        (ArrayV (DynArrayV vs)) src_n outs s0 count_ptr ip)
+      (dst_n + 32) B (REPLICATE (LENGTH vs) (vyper_to_abi_type env ty))
+      avs ip NONE k)
+    (enc_array_inv
+      (enc_loop_ctx st z ops lo top (ArrayTV tv (Dynamic n))
+        (ArrayV (DynArrayV vs)) src_n outs s0 count_ptr ip)
+      (dst_n + 32) B (REPLICATE (LENGTH vs) (vyper_to_abi_type env ty))
+      avs ip NONE (SUC k)) R
+Proof
+  strip_tac >> drule_all enc_static_loop_body_phases >> strip_tac >>
+  qabbrev_tac `C = enc_loop_ctx st z ops lo top (ArrayTV tv (Dynamic n))
+    (ArrayV (DynArrayV vs)) src_n outs s0 count_ptr ip` >>
+  qabbrev_tac `invbody = \j. enc_array_inv C (dst_n + 32) B
+    (REPLICATE (LENGTH vs) (vyper_to_abi_type env ty)) avs ip NONE j` >>
+  qabbrev_tac `A = \s. invbody k s /\ eval_operand i s = SOME (n2w k) /\
+    eval_operand child_src s = SOME (n2w (src_n + 32 + k * type_memory_size tv)) /\
+    eval_operand child_dst s = SOME (n2w (dst_n + 32 + k * type_memory_size tv))` >>
+  qabbrev_tac `E = \s. C s /\ eval_operand i s = SOME (n2w k) /\
+    enc_prefix_mem (dst_n + 32) B
+      (REPLICATE (LENGTH vs) (vyper_to_abi_type env ty)) avs (SUC k) s` >>
+  `frag_exec ctx sb s7 (invbody k) A R` by suspend "setup" >>
+  `frag_exec ctx s7 s8 A E R` by suspend "element" >>
+  `frag_exec ctx s8 se E (invbody (SUC k)) R` by suspend "counter" >>
+  `frag_exec ctx sb se (invbody k) (invbody (SUC k)) R` suffices_by
+    simp[Abbr `invbody`, Abbr `C`] >>
+  `frag_exec ctx s7 se A (invbody (SUC k)) R` by
+    (irule frag_exec_seq >> qexistsl_tac [`E`,`s8`] >> simp[]) >>
+  irule frag_exec_seq >> qexistsl_tac [`A`,`s7`] >> simp[]
+QED
+
+Resume enc_static_loop_body_frag[setup]:
+  simp_tac (srw_ss()) [Abbr `A`, Abbr `invbody`, Abbr `C`] >>
+  drule_all enc_static_loop_setup_frag >> disch_then irule
+QED
+Resume enc_static_loop_body_frag[element]:
+  `frag_ids s7 s8 SUBSET frag_ids st z` by
+    metis_tac[pred_setTheory.SUBSET_TRANS] >>
+  `!x. not_fresh_at st x ==> not_fresh_at s7 x` by
+    (rpt strip_tac >>
+     qpat_x_assum `!x. not_fresh_at sb x ==> not_fresh_at s7 x` irule >>
+     fs[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+  irule frag_exec_pointwise >>
+  simp_tac (srw_ss()) [Abbr `A`, Abbr `E`, Abbr `invbody`, Abbr `C`] >>
+  rpt strip_tac >> drule_all enc_static_loop_element_frag >> disch_then irule
+QED
+Resume enc_static_loop_body_frag[counter]:
+  irule frag_exec_pointwise >>
+  simp_tac (srw_ss()) [Abbr `E`, Abbr `invbody`, Abbr `C`] >>
+  qx_gen_tac `u` >> strip_tac >>
+  drule_all enc_loop_ctx_array_slot >> strip_tac >>
+  `LENGTH avs = LENGTH vs` by metis_tac[LIST_REL_LENGTH] >>
+  `st.cs_next_var <= s8.cs_next_var` by decide_tac >>
+  `EVERY (\t. ~is_dynamic t)
+    (REPLICATE (LENGTH vs) (vyper_to_abi_type env ty))` by simp[EVERY_REPLICATE] >>
+  `LENGTH (enc_head_upto B
+    (REPLICATE (LENGTH vs) (vyper_to_abi_type env ty)) avs (SUC k)) =
+    SUC k * type_memory_size tv` by
+    (drule enc_head_upto_static_length >>
+     disch_then (qspecl_then [`SUC k`,`B`] mp_tac) >> simp[]) >>
+  `dst_n + 32 + LENGTH (enc_head_upto B
+    (REPLICATE (LENGTH vs) (vyper_to_abi_type env ty)) avs (SUC k)) <= lo` by
+    (simp[] >> pure_rewrite_tac[arithmeticTheory.MULT_CLAUSES] >> decide_tac) >>
+  `SUC k <= LENGTH avs` by decide_tac >>
+  drule_all enc_static_loop_counter_frag >>
+  disch_then (mp_tac o SRULE [frag_exec_def]) >>
+  simp[frag_exec_def]
+QED
+Finalise enc_static_loop_body_frag
+
 Theorem compile_abi_encode_frag:
   (!dst child_ptr ei is_dyn static_ofst dyn_ptr st op st' ctx env ty tv v
     av s0 dst_w src_w lo top.
