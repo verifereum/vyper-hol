@@ -35,12 +35,13 @@
  *   mat_pending, mat_inv, mat_frame — the materialization induction's
  *                                 invariants (proof-internal)
  *
- * No alloca_room: under INVOKE's semantics the callee inherits the
+ * alloca_room: under INVOKE's semantics the callee inherits the
  * caller's allocation frontier (setup_callee keeps vs_alloca_next), so
- * the frontier is not bounded by the callee's own ALLOCAs.  The entry
- * lemma takes the one bound it needs as a hypothesis: the frontier at the
- * call plus internal_stack_size is below 2 ** 256, so the arguments'
- * ALLOCAs do not wrap.
+ * alloca_room at callee entry is not implied by the caller's state.  The
+ * entry lemma takes it as a hypothesis on the entry state, for the call
+ * site to discharge, and also takes the bound the materialization proof
+ * uses directly: the frontier at the call plus internal_stack_size is
+ * below 2 ** 256, so the arguments' ALLOCAs do not wrap.
  *)
 
 Theory intCallCallee
@@ -49,7 +50,7 @@ Ancestors
   fragExec localPtrsProps exprLoweringProps loweringHalt
   moduleLowering stmtLowering exprLowering emitHelper context compileEnv
   valueEncoding valueEncodingProps venomMemDefs
-  venomExecSemantics venomInst venomState vyperState
+  venomExecSemantics venomInst venomState venomMemProps vyperState
 
 (* ===== The prologue ===== *)
 
@@ -1796,6 +1797,48 @@ Proof
 QED
 
 
+(* A step of an instruction of func other than an INVOKE keeps the room in
+   func's frame: a fresh ALLOCA moves its size from the pending sizes to
+   the frontier, and nothing else moves either. *)
+Theorem step_inst_base_alloca_room[local]:
+  !func inst s s'.
+    step_inst_base inst s = OK s' /\ MEM inst (fn_insts func) /\
+    inst.inst_opcode <> INVOKE /\ alloca_room func s ==>
+    alloca_room func s'
+Proof
+  rpt strip_tac >> Cases_on `inst.inst_opcode = ALLOCA`
+  >- (qpat_x_assum `step_inst_base _ _ = OK _` mp_tac >>
+      asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >>
+      simp[exec_alloca_def, AllCaseEqs()] >> strip_tac >> gvs[]
+      >~ [`FLOOKUP s.vs_allocas inst.inst_id = SOME _`]
+      >- (irule alloca_room_fields >> qexists_tac `s` >>
+          simp[update_var_def]) >>
+      `inst.inst_id NOTIN FDOM s.vs_allocas` by fs[FLOOKUP_DEF] >>
+      drule_all alloca_room_fresh >> strip_tac >>
+      irule alloca_room_fields >>
+      qexists_tac `s with <| vs_allocas := s.vs_allocas |+
+                               (inst.inst_id, (s.vs_alloca_next, w2n alloc_size));
+                             vs_alloca_next := s.vs_alloca_next + w2n alloc_size |>` >>
+      simp[update_var_def]) >>
+  irule alloca_room_fields >> qexists_tac `s` >> simp[] >>
+  metis_tac[step_inst_base_preserves_allocas,
+            step_inst_base_preserves_alloca_next]
+QED
+
+Theorem run_inst_seq_alloca_room[local]:
+  !is func s t.
+    run_inst_seq is s = OK t /\
+    EVERY (\i. MEM i (fn_insts func) /\ i.inst_opcode <> INVOKE) is /\
+    alloca_room func s ==>
+    alloca_room func t
+Proof
+  Induct >> simp[run_inst_seq_def] >> rpt gen_tac >>
+  Cases_on `step_inst_base h s` >> simp[] >> strip_tac >>
+  rename1 `run_inst_seq is s1 = OK t` >>
+  qpat_x_assum `!func s t. _` irule >> simp[] >> qexists_tac `s1` >> simp[] >>
+  irule step_inst_base_alloca_room >> metis_tac[]
+QED
+
 Theorem internal_prologue_run:
   !cenv params has_rb ret_type st0 cenv2 return_pc st1 func args caller
    s0 f cx vs env.
@@ -1810,8 +1853,13 @@ Theorem internal_prologue_run:
       < dimword (:256) ==>
     ?t.
       run_inst_seq (emitted_insts st0 st1) s0 = OK t /\
-      stmt_state_rel func (cenv2 with ce_alloca_locals := T) cx
-        (vs with scopes := [env]) t /\
+      state_rel func (cenv2 with ce_alloca_locals := T) cx
+        (vs with scopes := [env]) t /\ alloca_inv t /\
+      (!inst n base sz.
+         MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+         inst.inst_operands = [Lit n] /\
+         FLOOKUP t.vs_allocas inst.inst_id = SOME (base, sz) ==>
+         sz = w2n n) /\
       fresh_vars_wrt st1 t /\ mat_frame st0 s0 t /\
       (?x. return_pc = Var x /\ not_fresh_at st1 x /\
            lookup_var x t = SOME s0.vs_return_pc_token) /\
@@ -1860,6 +1908,8 @@ Proof
   qexists_tac `t'` >>
   conj_tac >- suspend "sequence" >>
   conj_tac >- suspend "relation" >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
   simp[] >> suspend "returns"
 QED
 
@@ -1909,8 +1959,7 @@ Resume internal_prologue_run[relation]:
   qpat_x_assum `!inst w base sz. _ ==> sz = w2n w` mp_tac >>
   asm_x "cenv_stage" mp_tac >>
   rpt (pop_assum kall_tac) >> rpt strip_tac >>
-  drule_all internal_body_state_rel >>
-  simp[stmt_state_rel_def] >> metis_tac[]
+  drule_all internal_body_state_rel >> simp[]
 QED
 Resume internal_prologue_run[returns]:
   qpat_x_assum `mat_frame sc t u` mp_tac >>
@@ -1952,10 +2001,9 @@ Finalise internal_prologue_run[local]
      entry state.
    The global part of the relation (storage, transient, immutables, logs,
    contexts) is that of the caller's state in cenv, which the hypothesis
-   on caller states with no scope.  There is no assumption on the room
-   left for allocations, beyond that the stack-passed parameters' regions
-   fit a word: alloca_room fails at callee entry, as the caller's frontier
-   carries over. *)
+   on caller states with no scope.  alloca_room of the callee's entry
+   state is a hypothesis: the caller's frontier carries over, so only the
+   call site can establish it. *)
 Theorem compile_internal_prologue_entry:
   !cenv params has_rb ret_type st0 cenv2 return_pc st1 func ctx args caller
    s0 f cx vs env.
@@ -1969,7 +2017,8 @@ Theorem compile_internal_prologue_entry:
     internal_args_rel cenv params env (if has_rb then 1 else 0) args
       caller.vs_alloca_next caller.vs_memory /\
     caller.vs_alloca_next + internal_stack_size cenv params
-      < dimword (:256) ==>
+      < dimword (:256) /\
+    alloca_room func s0 ==>
     ?s1.
       ~s1.vs_halted /\ s1.vs_current_bb = st1.cs_current_bb /\
       s1.vs_inst_idx = LENGTH st1.cs_current_insts /\
@@ -1999,9 +2048,20 @@ Proof
   simp[frag_exec_def] >>
   disch_then (qspec_then `func` mp_tac) >>
   simp[] >> strip_tac >>
+  `alloca_room func t` by
+    (irule run_inst_seq_alloca_room >>
+     qexistsl_tac [`emitted_insts st0 st1`, `s0`] >> simp[] >>
+     fs[EVERY_MEM, emitted_insts_def, DROP_LENGTH_APPEND] >>
+     rpt strip_tac >> res_tac >> simp[] >>
+     qpat_x_assum `fn_has_code st0 st1 func` mp_tac >>
+     simp[fn_has_code_def] >> strip_tac >>
+     irule lookup_block_fn_insts >>
+     qexistsl_tac [`bb`, `st1.cs_current_bb`] >>
+     fs[IS_PREFIX_APPEND] >> gvs[]) >>
   qexists_tac `t with vs_inst_idx := LENGTH st1.cs_current_insts` >>
-  simp[stmt_state_rel_inst_idx, fresh_vars_wrt_def, lookup_var_def] >>
-  fs[fresh_vars_wrt_def, lookup_var_def]
+  simp[stmt_state_rel_inst_idx, stmt_state_rel_def, fresh_vars_wrt_def,
+       lookup_var_def] >>
+  fs[fresh_vars_wrt_def, lookup_var_def] >> metis_tac[]
 QED
 
 
