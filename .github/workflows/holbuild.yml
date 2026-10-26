@@ -275,10 +275,31 @@ jobs:
           if-no-files-found: error
           retention-days: 90
 
+  tested:
+    # On a push to main, whether a merge-group run already passed this commit:
+    # the merge queue fast-forwards main to the commit it tested, so the push
+    # run skips the tests and oracle and builds only to save main's snapshot.
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+    outputs:
+      merge-group-passed: ${{ steps.runs.outputs.merge-group-passed }}
+    steps:
+      - name: Find a successful merge-group run of this commit
+        id: runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          count=$(gh api "repos/${{ github.repository }}/actions/workflows/holbuild.yml/runs?head_sha=${{ github.sha }}&event=merge_group&status=success" -q .total_count)
+          echo "successful merge-group runs: $count"
+          echo "merge-group-passed=$([ "$count" -gt 0 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
   test-deps:
     # Builds only what the test groups load besides their own theories, so they
     # start long before build finishes.
-    if: github.event.pull_request.draft != true && (github.event.action != 'edited' || github.event.changes.base)
+    needs: tested
+    if: ${{ !cancelled() && needs.tested.outputs.merge-group-passed != 'true' && github.event.pull_request.draft != true && (github.event.action != 'edited' || github.event.changes.base) }}
     runs-on: ubuntu-latest
     timeout-minutes: 240
     outputs:
@@ -320,7 +341,8 @@ jobs:
           key: ${{ steps.cache-key.outputs.snapshot-key }}
 
   python-o1-oracle:
-    if: github.event.pull_request.draft != true && (github.event.action != 'edited' || github.event.changes.base)
+    needs: tested
+    if: ${{ !cancelled() && needs.tested.outputs.merge-group-passed != 'true' && github.event.pull_request.draft != true && (github.event.action != 'edited' || github.event.changes.base) }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -341,7 +363,8 @@ jobs:
             --vyper-repo vyper-src
 
   export-vyper-tests:
-    if: github.event.pull_request.draft != true && (github.event.action != 'edited' || github.event.changes.base)
+    needs: tested
+    if: ${{ !cancelled() && needs.tested.outputs.merge-group-passed != 'true' && github.event.pull_request.draft != true && (github.event.action != 'edited' || github.event.changes.base) }}
     runs-on: ubuntu-latest
     outputs:
       export-cache-key: ${{ steps.exports.outputs.export-cache-key }}
@@ -355,7 +378,9 @@ jobs:
           cache-key-suffix: ${{ env.CACHE_KEY_SUFFIX }}
 
   vyper-tests:
-    if: github.event.pull_request.draft != true && (github.event.action != 'edited' || github.event.changes.base)
+    # tested, skipped on other events than push, would skip this job through
+    # the implicit success(); the result checks stand in for it.
+    if: ${{ !cancelled() && needs.test-deps.result == 'success' && needs.export-vyper-tests.result == 'success' && github.event.pull_request.draft != true && (github.event.action != 'edited' || github.event.changes.base) }}
     needs: [test-deps, export-vyper-tests]
     runs-on: ubuntu-latest
     timeout-minutes: 90
@@ -416,8 +441,17 @@ jobs:
     name: ${{ (github.event.action == 'edited' && !github.event.changes.base) && 'holbuild-success (no-op edit)' || 'holbuild-success' }}
     if: always() && github.event.pull_request.draft != true && (github.event.action != 'edited' || github.event.changes.base)
     runs-on: ubuntu-latest
-    needs: [build, compiler, witnesses, build-rollup, test-deps, python-o1-oracle, export-vyper-tests, vyper-tests]
+    needs: [build, compiler, witnesses, build-rollup, tested, test-deps, python-o1-oracle, export-vyper-tests, vyper-tests]
     steps:
       - name: Check all jobs succeeded
-        if: ${{ needs.build.result != 'success' || needs.compiler.result != 'success' || needs.witnesses.result != 'success' || needs.build-rollup.result != 'success' || needs.test-deps.result != 'success' || needs.python-o1-oracle.result != 'success' || needs.export-vyper-tests.result != 'success' || needs.vyper-tests.result != 'success' }}
-        run: exit 1
+        env:
+          BUILD_RESULTS: ${{ needs.build.result }} ${{ needs.compiler.result }} ${{ needs.witnesses.result }} ${{ needs.build-rollup.result }}
+          TEST_RESULTS: ${{ needs.test-deps.result }} ${{ needs.python-o1-oracle.result }} ${{ needs.export-vyper-tests.result }} ${{ needs.vyper-tests.result }}
+          MERGE_GROUP_PASSED: ${{ needs.tested.outputs.merge-group-passed }}
+        run: |
+          for result in $BUILD_RESULTS; do
+            [ "$result" = success ] || exit 1
+          done
+          for result in $TEST_RESULTS; do
+            [ "$result" = success ] || { [ "$result" = skipped ] && [ "$MERGE_GROUP_PASSED" = true ]; } || exit 1
+          done
