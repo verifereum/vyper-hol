@@ -165,7 +165,8 @@ Proof
        vyperASTTheory.expr_type_def, eval_operand_def] >>
   rpt conj_tac
   >- metis_tac[val_in_memory_word_type]
-  >- (qexistsl_tac [`id`, `w2n w`, `sz`] >> simp[local_region_def]) >>
+  >- (qexistsl_tac [`id`, `w2n w`, `sz`] >> simp[local_region_def] >>
+      drule val_footprint_le >> decide_tac) >>
   rpt strip_tac >> gvs[]
 QED
 

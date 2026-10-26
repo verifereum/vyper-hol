@@ -23,7 +23,7 @@
  *                            ...), all but block.prevhash
  *   expr_val_rel_mem_agree — a non-word operand's value survives code that
  *                            keeps its type_memory_size bytes
- *   val_footprint, val_in_memory_footprint_agree,
+ *   val_footprint, val_footprint_le, val_in_memory_footprint_agree,
  *   expr_val_rel_footprint_agree — the bytes a memory value occupies, which
  *                            expr_val_at bounds, and the same at them
  *
@@ -193,6 +193,37 @@ Proof
   `(n + 31) MOD 32 < 32` by simp[] >>
   qspec_then `32` mp_tac arithmeticTheory.DIVISION >> simp[] >>
   disch_then (qspec_then `n + 31` strip_assume_tac) >> decide_tac
+QED
+
+Theorem word_size_le_of_le_mul[local]:
+  !len k. len <= 32 * k ==> word_size len <= k
+Proof
+  rw[vfmConstantsTheory.word_size_def] >>
+  `(32 * k + 31) DIV 32 = k` by
+    (once_rewrite_tac[arithmeticTheory.MULT_COMM] >>
+     irule arithmeticTheory.DIV_MULT >> simp[]) >>
+  `(len + 31) DIV 32 <= (32 * k + 31) DIV 32` by
+    (irule arithmeticTheory.DIV_LE_MONOTONE >> simp[]) >>
+  gvs[]
+QED
+
+(* A well-formed value's footprint fits its type's size. *)
+Theorem val_footprint_le:
+  !tv v. val_wf tv v ==> val_footprint tv v <= type_memory_size tv
+Proof
+  rpt strip_tac >>
+  `(?bs n. v = BytesV bs /\ tv = BaseTV (BytesT (Dynamic n))) \/
+   (?str n. v = StringV str /\ tv = BaseTV (StringT n)) \/
+   val_footprint tv v = type_memory_size tv` by
+    (Cases_on `v` >> simp[val_footprint_def] >>
+     rpt (BasicProvers.TOP_CASE_TAC >> simp[]))
+  >- (gvs[val_footprint_def, valueEncodingTheory.val_wf_def,
+          valueEncodingTheory.type_memory_size_def] >>
+      irule word_size_le_of_le_mul >> simp[])
+  >- (gvs[val_footprint_def, valueEncodingTheory.val_wf_def,
+          valueEncodingTheory.type_memory_size_def] >>
+      irule word_size_le_of_le_mul >> simp[]) >>
+  simp[]
 QED
 
 (* val_in_memory reads no more than the value's footprint. *)
