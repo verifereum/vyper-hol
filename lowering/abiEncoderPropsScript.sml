@@ -10135,6 +10135,211 @@ Proof
   rpt (goal_assum (drule_at Any))
 QED
 
+Theorem enc_dyn_loop_init_insts:
+  enc_dyn_loop_init len_op asz st = ((count_ptr,dyn_ptr,hdr,body_lbl,exit),si) ==>
+  same_blocks st si /\
+  si.cs_current_insts = st.cs_current_insts ++ emitted_insts st si /\
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+    (emitted_insts st si) /\
+  emitted_insts st si =
+    [mk_inst st.cs_next_id ALLOCA [Lit 32w]
+       [STRING #"%" (toString st.cs_next_var)];
+     mk_inst (st.cs_next_id + 1) MSTORE [count_ptr;Lit 0w] [];
+     mk_inst (st.cs_next_id + 2) ALLOCA [Lit 32w]
+       [STRING #"%" (toString (st.cs_next_var + 1))];
+     mk_inst (st.cs_next_id + 3) MUL [len_op;Lit (n2w asz)]
+       [STRING #"%" (toString (st.cs_next_var + 2))];
+     mk_inst (st.cs_next_id + 4) MSTORE
+       [dyn_ptr;Var (STRING #"%" (toString (st.cs_next_var + 2)))] []]
+Proof
+  simp[enc_dyn_loop_init_def, contextTheory.compile_alloc_buffer_def,
+    emit_op_def, emit_void_def, fresh_var_def, fresh_id_def,
+    fresh_label_def, emit_def, comp_bind_def, comp_ignore_bind_def,
+    comp_return_def] >> rpt strip_tac >> gvs[] >>
+  `!n k. n - (n + k) = 0` by decide_tac >>
+  simp[same_blocks_def, emitted_insts_def, DROP_APPEND,
+       mk_inst_def, is_terminator_def]
+QED
+
+Theorem enc_dyn_loop_body_growth:
+  enc_dyn_loop_body dst src ei asz msz count_ptr dyn_ptr sb = ((),se) ==>
+  cs_extends sb se /\ sb.cs_next_id <= se.cs_next_id /\
+  sb.cs_next_var <= se.cs_next_var
+Proof
+  `enc_comp_grows (enc_dyn_loop_body dst src ei asz msz count_ptr dyn_ptr)` by
+    (rewrite_tac[enc_dyn_loop_body_def] >>
+     rpt (FIRST [CHANGED_TAC (gvs[enc_comp_grows_emit_op,
+                   enc_comp_grows_emit_void, cj 2 enc_comp_grows_encoder]),
+                 irule enc_comp_grows_bind >> conj_tac,
+                 irule enc_comp_grows_ignore_bind >> conj_tac,
+                 gen_tac])) >>
+  fs[enc_comp_grows_def]
+QED
+
+Theorem enc_alloc_buffer_run_frame:
+  compile_alloc_buffer 32 st = (buf,st') /\
+  st.cs_next_id IN frag_ids a z /\ a.cs_next_var <= st.cs_next_var /\
+  enc_scratch (frag_ids a z) lo top s ==>
+  ?b t. run_inst_seq (emitted_insts st st') s = OK t /\
+    lo <= b /\ b + 32 <= top /\
+    eval_operand buf.buf_operand t = SOME (n2w b) /\
+    FLOOKUP t.vs_allocas st.cs_next_id = SOME (b,32) /\
+    t.vs_memory = s.vs_memory /\ t.vs_labels = s.vs_labels /\
+    (!old. (!x. old = Var x ==> not_fresh_at st x) ==>
+      eval_operand old t = eval_operand old s) /\
+    enc_frame a z lo top outs s t
+Proof
+  strip_tac >> `FINITE (frag_ids a z)` by simp[] >>
+  drule_all enc_compile_alloc_buffer_run >> strip_tac >>
+  qexistsl_tac [`b`,`t`] >> simp[] >> conj_tac
+  >- (Cases >> simp[eval_operand_def] >> rpt strip_tac >>
+      metis_tac[]) >>
+  simp[enc_frame_def] >> rpt strip_tac >- (
+    first_x_assum (qspec_then `x` mp_tac) >>
+    impl_tac >- (fs[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_LESS_EQ_TRANS]) >>
+    simp[]) >> metis_tac[]
+QED
+
+Theorem enc_emit_mstore_scratch_run:
+  emit_void MSTORE [dst_op;value] st = ((),st') /\
+  eval_operand dst_op s = SOME (n2w b) /\ eval_operand value s = SOME w /\
+  j IN frag_ids a z /\ FLOOKUP s.vs_allocas j = SOME (b,32) /\
+  enc_scratch (frag_ids a z) lo top s ==>
+  run_inst_seq (emitted_insts st st') s = OK (mstore b w s) /\
+  enc_frame a z lo top outs s (mstore b w s)
+Proof
+  strip_tac >>
+  `b + 32 <= top` by (drule_all enc_scratch_alloca_bound >> simp[]) >>
+  `top < dimword (:256)` by
+    (qpat_x_assum `enc_scratch _ _ _ _` mp_tac >>
+     pure_rewrite_tac[enc_scratch_def] >> strip_tac >> simp[]) >>
+  `b < dimword (:256)` by decide_tac >>
+  drule emitted_insts_emit_void >> strip_tac >> conj_tac
+  >- simp[run_inst_seq_def, step_inst_base_def, exec_write2_def, mk_inst_def] >>
+  irule enc_frame_mstore_scratch >> simp[] >> metis_tac[]
+QED
+
+Theorem enc_alloc_buffer_store_run:
+  compile_alloc_buffer 32 st = (buf,sa) /\
+  emit_void MSTORE [buf.buf_operand;Lit w] sa = ((),sz) /\
+  st.cs_next_id IN frag_ids a z /\ a.cs_next_var <= st.cs_next_var /\
+  enc_scratch (frag_ids a z) lo top s0 ==>
+  ?b s. run_inst_seq (emitted_insts st sa ++ emitted_insts sa sz) s0 = OK s /\
+    lo <= b /\ b + 32 <= top /\
+    eval_operand buf.buf_operand s = SOME (n2w b) /\
+    FLOOKUP s.vs_allocas st.cs_next_id = SOME (b,32) /\
+    mem_word_at b s.vs_memory = w /\ s.vs_labels = s0.vs_labels /\
+    enc_frame a z lo top outs s0 s
+Proof
+  strip_tac >> drule_all enc_alloc_buffer_run_frame >>
+  disch_then (qspec_then `outs` strip_assume_tac) >>
+  `enc_scratch (frag_ids a z) lo top t` by fs[enc_frame_def] >>
+  `eval_operand (Lit w) t = SOME w` by simp[eval_operand_def] >>
+  drule_all enc_emit_mstore_scratch_run >>
+  disch_then (qspec_then `outs` strip_assume_tac) >>
+  qexistsl_tac [`b`,`mstore b w t`] >> conj_tac
+  >- (qpat_assum `run_inst_seq (emitted_insts st sa) _ = _`
+        (mp_then Any mp_tac run_inst_seq_append) >>
+      disch_then (qspec_then `emitted_insts sa sz` SUBST1_TAC) >> simp[]) >>
+  simp[eval_operand_mstore,
+       valueEncodingPropsTheory.mstore_mem_word_at_same] >>
+  conj_tac >- simp[mstore_def] >> metis_tac[enc_frame_trans]
+QED
+
+Theorem enc_mul_store_scratch_run:
+  emit_op MUL [len_op;Lit (n2w asz)] sb = (prod_op,sc) /\
+  emit_void MSTORE [dyn_ptr;prod_op] sc = ((),sd) /\
+  eval_operand len_op s0 = SOME (n2w n) /\
+  eval_operand dyn_ptr s0 = SOME (n2w c) /\
+  (!x. dyn_ptr = Var x ==> not_fresh_at sb x) /\
+  a.cs_next_var <= sb.cs_next_var /\
+  j IN frag_ids a z /\ FLOOKUP s0.vs_allocas j = SOME (c,32) /\
+  enc_scratch (frag_ids a z) lo top s0 ==>
+  ?s. run_inst_seq (emitted_insts sb sc ++ emitted_insts sc sd) s0 = OK s /\
+    s.vs_memory = (mstore c (n2w (n * asz)) s0).vs_memory /\
+    s.vs_labels = s0.vs_labels /\
+    (!old. (!x. old = Var x ==> not_fresh_at sb x) ==>
+       eval_operand old s = eval_operand old s0) /\
+    enc_frame a z lo top outs s0 s
+Proof
+  strip_tac >>
+  `step_inst_base (mk_inst sb.cs_next_id MUL [len_op;Lit (n2w asz)]
+    [STRING #"%" (toString sb.cs_next_var)]) s0 =
+    OK (update_var (STRING #"%" (toString sb.cs_next_var))
+      (n2w (n * asz)) s0)` by
+    (pure_rewrite_tac[GSYM wordsTheory.word_mul_n2w] >>
+     irule step_MUL >> simp[eval_operand_def]) >>
+  drule_all enc_emit_op_run_frame >>
+  disch_then (qspec_then `outs` strip_assume_tac) >>
+  `eval_operand dyn_ptr s' = SOME (n2w c)` by metis_tac[] >>
+  `FLOOKUP s'.vs_allocas j = SOME (c,32)` by fs[enc_frame_def] >>
+  `enc_scratch (frag_ids a z) lo top s'` by fs[enc_frame_def] >>
+  drule_all enc_emit_mstore_scratch_run >>
+  disch_then (qspec_then `outs` strip_assume_tac) >>
+  qexists_tac `mstore c (n2w (n * asz)) s'` >> conj_tac
+  >- (qpat_assum `run_inst_seq (emitted_insts sb sc) _ = _`
+        (mp_then Any mp_tac run_inst_seq_append) >>
+      disch_then (qspec_then `emitted_insts sc sd` SUBST1_TAC) >> simp[]) >>
+  asm_simp_tac (srw_ss()) [eval_operand_mstore] >> conj_tac
+  >- simp[mstore_def] >> conj_tac
+  >- (rpt strip_tac >>
+      `eval_operand old s' = eval_operand old s0` by
+        (first_x_assum irule >> simp[]) >>
+      Cases_on `old` >> fs[eval_operand_def, lookup_var_def, mstore_def]) >>
+  irule enc_frame_trans >> qexists_tac `s'` >> simp[]
+QED
+
+Theorem enc_alloc_buffer_frontiers:
+  compile_alloc_buffer 32 st = (buf,sa) ==>
+  sa.cs_next_var = st.cs_next_var + 1 /\
+  sa.cs_next_id = st.cs_next_id + 1 /\
+  (!x. buf.buf_operand = Var x ==> not_fresh_at sa x)
+Proof
+  simp[contextTheory.compile_alloc_buffer_def, emit_op_def,
+       fresh_id_def, fresh_var_def, emit_def, comp_bind_def,
+       comp_ignore_bind_def, comp_return_def, not_fresh_at_def] >>
+  rpt strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Theorem enc_alloc_mul_store_run:
+  compile_alloc_buffer 32 st = (buf,sb) /\
+  emit_op MUL [len_op;Lit (n2w asz)] sb = (prod_op,sc) /\
+  emit_void MSTORE [buf.buf_operand;prod_op] sc = ((),sd) /\
+  (!x. len_op = Var x ==> not_fresh_at st x) /\
+  eval_operand len_op s0 = SOME (n2w n) /\
+  st.cs_next_id IN frag_ids a z /\ a.cs_next_var <= st.cs_next_var /\
+  enc_scratch (frag_ids a z) lo top s0 ==>
+  ?c s. run_inst_seq (emitted_insts st sb ++
+          (emitted_insts sb sc ++ emitted_insts sc sd)) s0 = OK s /\
+    lo <= c /\ c + 32 <= top /\
+    eval_operand buf.buf_operand s = SOME (n2w c) /\
+    FLOOKUP s.vs_allocas st.cs_next_id = SOME (c,32) /\
+    s.vs_memory = (mstore c (n2w (n * asz)) s0).vs_memory /\
+    s.vs_labels = s0.vs_labels /\
+    (!old. (!x. old = Var x ==> not_fresh_at st x) ==>
+      eval_operand old s = eval_operand old s0) /\
+    enc_frame a z lo top outs s0 s
+Proof
+  strip_tac >> drule enc_alloc_buffer_frontiers >> strip_tac >>
+  drule_all enc_alloc_buffer_run_frame >>
+  disch_then (qspec_then `outs` strip_assume_tac) >>
+  `eval_operand len_op t = SOME (n2w n)` by metis_tac[] >>
+  `a.cs_next_var <= sb.cs_next_var` by decide_tac >>
+  `enc_scratch (frag_ids a z) lo top t` by fs[enc_frame_def] >>
+  drule_all enc_mul_store_scratch_run >>
+  disch_then (qspec_then `outs` strip_assume_tac) >>
+  `FLOOKUP s.vs_allocas st.cs_next_id = SOME (b,32)` by fs[enc_frame_def] >>
+  qexistsl_tac [`b`,`s`] >> conj_tac
+  >- (irule enc_run_inst_seq_compose >> qexists_tac `t` >> simp[]) >>
+  asm_simp_tac (srw_ss()) [] >> conj_tac
+  >- simp[mstore_def] >> conj_tac
+  >- (rpt strip_tac >>
+      `!x. old = Var x ==> not_fresh_at sb x` by
+        (match_mp_tac enc_old_operand_mono >> qexists_tac `st` >> simp[]) >>
+      metis_tac[]) >>
+  irule enc_frame_trans >> qexists_tac `t` >> simp[]
+QED
+
 Theorem enc_dyn_loop_ctx_readonly:
   enc_dyn_loop_ctx st z ops lo top tv v src outs s0 count_ptr ip dyn_ptr j c s /\
   enc_frame st z lo top outs s t /\ t.vs_memory = s.vs_memory /\
