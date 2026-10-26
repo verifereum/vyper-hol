@@ -172,8 +172,9 @@ val for_incr_tac =
    the condition, body and increment blocks; the body's code between sb0
    and sb1 and its jump to the increment block at sj; the loop variable's
    ALLOCA ainst and its pointer p in bc, which is cenv with id bound; the
-   counter cv, end ev, condition dv and next counter nv, which are no
-   local's pointers and pairwise distinct. *)
+   counter cv, end ev, condition dv and next counter nv, distinct from p
+   and from each other as the loop needs, and cv, dv and nv no local's
+   pointers. *)
 Definition for_code_def:
   for_code func cenv bc ty stmts id tyv p sz ainst cv ev dv nv
     cond_lbl exit_lbl body_lbl incr_lbl j1 j2 j3 bbb i1 i2 i3 sb0 sb1 sj <=>

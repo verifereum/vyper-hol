@@ -107,7 +107,7 @@ QED
    a condition that is not a bool (a type error), or the branch the
    condition selects run in a fresh scope, which is popped after it
    whatever its outcome; its declarations are new to the scopes below. *)
-Theorem eval_stmt_if_all:
+Theorem eval_stmt_if_all[local]:
   !cx c ss1 ss2 es res es'.
     eval_stmt cx (If c ss1 ss2) es = (res, es') ==>
     ?r1 es1. eval_expr cx c es = (r1, es1) /\
@@ -152,7 +152,7 @@ QED
 
 (* compile_if_parts (loweringSlice), with where the code ends when both
    branches end their blocks: no exit block follows. *)
-Theorem compile_if_parts_all:
+Theorem compile_if_parts_all[local]:
   !cenv lctx ty c ss1 ss2 st st'.
     compile_stmt cenv lctx ty (If c ss1 ss2) st = ((), st') ==>
     ?cond_op s1 s4 s5 s6 s7 s8 s9 s10 s11 then_lbl else_lbl exit_lbl x5 x8.
@@ -208,7 +208,7 @@ QED
    branch's fresh scope: on normal completion it jumps to the exit block
    (when its code does not end its block, a JMP there follows it), and
    leaving the branch pops its scope, which goes back to cenv. *)
-Theorem if_branch_frag:
+Theorem if_branch_frag[local]:
   !ctx func cx lctx RetQ cenv ty ss esA res es2 sc rest sa sb sj sx lbl' x
    exit_lbl st' s0.
     stmt_frag ctx func cx lctx RetQ cenv (stmts_env cenv lctx ty ss)
@@ -449,7 +449,7 @@ QED
 
 (* An emitted instruction that aborts where the run reaches it exits as
    the source outcome allows. *)
-Theorem emit_abort_exit:
+Theorem emit_abort_exit[local]:
   !ctx func opc ops st st' s0 RetQ es' res.
     emit_inst opc ops [] st = ((), st') /\ fn_has_code st st' func /\
     s0.vs_current_bb = st.cs_current_bb /\
@@ -467,7 +467,7 @@ Proof
   qpat_x_assum `frag_exec _ _ _ _ _ _` mp_tac >> simp[frag_exec_def]
 QED
 
-Theorem step_revert_zero:
+Theorem step_revert_zero[local]:
   !id s.
     ?s'. step_inst_base (mk_inst id REVERT [Lit 0w; Lit 0w] []) s =
          Abort Revert_abort s'
@@ -476,7 +476,7 @@ Proof
   irule_at Any step_revert_behavior >> simp[eval_operand_def]
 QED
 
-Theorem step_invalid:
+Theorem step_invalid[local]:
   !id s.
     ?s'. step_inst_base (mk_inst id INVALID [] []) s = Abort ExHalt_abort s'
 Proof
