@@ -130,10 +130,14 @@ Theorem val_in_memory_word_type:
     value_has_type tvt v /\ val_in_memory tvt v off mem ==>
     mem_word_at off mem = typed_val_to_w256 tvt v
 Proof
-  Cases_on `t` >> simp[is_word_type_def] >>
-  TRY (rename1 `BaseT bt` >> Cases_on `bt` >> simp[is_word_type_def]) >>
-  TRY (rename1 `BytesT bd` >> Cases_on `bd` >> simp[is_word_type_def]) >>
-  rw[vyperValueTheory.evaluate_type_def, AllCaseEqs()] >>
+  rpt strip_tac >>
+  `(?n. t = BaseT (UintT n)) \/ (?n. t = BaseT (IntT n)) \/
+   t = BaseT BoolT \/ t = BaseT AddressT \/ t = BaseT DecimalT \/
+   (?m. t = BaseT (BytesT (Fixed m)) /\ m <= 32) \/ (?n. t = FlagT n)` by
+    (Cases_on `t` >> fs[is_word_type_def] >>
+     rename1 `BaseT bt` >> Cases_on `bt` >> fs[is_word_type_def] >>
+     rename1 `BytesT bd` >> Cases_on `bd` >> fs[is_word_type_def]) >>
+  gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs()] >>
   Cases_on `v` >>
   gvs[vyperTypingTheory.value_has_type_def, val_in_memory_def,
       typed_val_to_w256_def]
@@ -316,8 +320,10 @@ Proof
         (rpt strip_tac >> gvs[is_word_type_def]) >>
       simp[compile_expr_def, vyperASTTheory.expr_type_def] >> rpt gen_tac >>
       drule compile_literal_bytes_stack >>
-      disch_then (qspecl_then [`bs`, `sa`] strip_assume_tac) >> simp[]) >>
-  TRY (rename1 `BoolL b` >> Cases_on `b`) >>
+      disch_then (qspecl_then [`bs`, `sa`] strip_assume_tac) >> simp[])
+  >~ [`BoolL b`]
+  >- (Cases_on `b` >>
+      simp[compile_expr_def, compile_literal_vv_def, comp_return_def]) >>
   simp[compile_expr_def, compile_literal_vv_def, comp_return_def]
 QED
 

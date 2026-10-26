@@ -109,10 +109,14 @@ Theorem typed_val_to_w256_default_word:
     is_word_type t /\ evaluate_type tenv t = SOME tv ==>
     typed_val_to_w256 tv (default_value tv) = 0w
 Proof
-  Cases_on `t` >> simp[is_word_type_def] >>
-  TRY (rename1 `BaseT bt` >> Cases_on `bt` >> simp[is_word_type_def]) >>
-  TRY (rename1 `BytesT bd` >> Cases_on `bd` >> simp[is_word_type_def]) >>
-  rw[vyperValueTheory.evaluate_type_def, AllCaseEqs()] >>
+  rpt strip_tac >>
+  `(?n. t = BaseT (UintT n)) \/ (?n. t = BaseT (IntT n)) \/
+   t = BaseT BoolT \/ t = BaseT AddressT \/ t = BaseT DecimalT \/
+   (?m. t = BaseT (BytesT (Fixed m)) /\ m <= 32) \/ (?n. t = FlagT n)` by
+    (Cases_on `t` >> fs[is_word_type_def] >>
+     rename1 `BaseT bt` >> Cases_on `bt` >> fs[is_word_type_def] >>
+     rename1 `BytesT bd` >> Cases_on `bd` >> fs[is_word_type_def]) >>
+  gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs()] >>
   simp[vyperValueTheory.default_value_def, typed_val_to_w256_address_zero] >>
   simp[typed_val_to_w256_def, val_to_w256_def, integer_wordTheory.i2w_def] >>
   simp[listTheory.PAD_RIGHT, GSYM rich_listTheory.REPLICATE_GENLIST,
