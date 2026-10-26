@@ -19,7 +19,11 @@
  *   5 blobhash: compile_blobhash_sim (blockhash, compile_blockhash_sim, is
  *     #636 Leaves row 5, with block.prevhash)
  *   6 account reads: compile_acc_sim
- *   7 method_id: compile_method_id_sim
+ *   7 method_id: compile_method_id_sim; a literal signature with
+ *     output_type=bytes4 by compile_method_id_literal_word_sim (the folded
+ *     selector, a word literal), the rest cheated in
+ *     compile_method_id_other_sim (a Bytes[4] buffer, or a hash at run
+ *     time, both waiting for the alloca frontier below)
  *   8 ecrecover, ecadd, ecmul: compile_ecrecover_sim, compile_ecadd_sim,
  *     compile_ecmul_sim
  *
@@ -59,7 +63,9 @@
 
 Theory exprSimBuiltins
 Ancestors
-  list exprSim exprSimHyps vyperAST exprSimWordBuiltins
+  list exprSim exprSimHyps vyperAST exprSimWordBuiltins exprSimWordArgs
+  exprLowering compileEnv valueEncoding fragExec vyperInterpreter
+  vyperState vyperContext vyperValueOperation venomState
 
 (* ===== Lengths and calldata ===== *)
 
@@ -260,12 +266,103 @@ Proof
   cheat
 QED
 
+Theorem eval_exprs_single_literal:
+  !cx la l es. eval_exprs cx [Literal la l] es = (INL [evaluate_literal l], es)
+Proof
+  rpt gen_tac >>
+  rpt (simp[Once evaluate_def, bind_def, return_def, materialise_def])
+QED
+
+(* A literal signature is folded to the literal selector (#711). *)
+Theorem compile_expr_method_id_literal:
+  !cenv ty ann la l bs st.
+    method_id_literal (Literal la l) = SOME bs ==>
+    compile_expr cenv ty (Builtin ann MethodId [Literal la l]) st =
+    compile_literal_vv ann (BytesL (TAKE 4 (Keccak_256_w64 bs))) st
+Proof
+  rpt strip_tac >>
+  simp[compile_expr_builtin_dispatch, names_builtin_def] >>
+  simp[Once (CONJUNCT1 (CONJUNCT2 compile_expr_raw_def)),
+       compile_builtin_dispatch_body_def]
+QED
+
+(* The source hashes a literal signature to the selector the lowering
+   folds it to. *)
+Theorem eval_expr_method_id_literal:
+  !cx ann la l bs es res es'.
+    method_id_literal (Literal la l) = SOME bs /\
+    eval_expr cx (Builtin ann MethodId [Literal la l]) es = (res, es') ==>
+    es' = es /\ res = INL (Value (BytesV (TAKE 4 (Keccak_256_w64 bs))))
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_at (Pos last) eval_expr_builtin_cases >>
+  simp[builtin_args_length_ok_def, eval_exprs_single_literal] >>
+  strip_tac >> gvs[builtin_result_def] >>
+  Cases_on `l` >>
+  gvs[method_id_literal_def, evaluate_literal_def, evaluate_builtin_def]
+QED
+
+(* method_id of a literal signature with output_type=bytes4: the folded
+   selector as a word literal, no code. *)
+Theorem compile_method_id_literal_word_sim:
+  !cenv la l.
+    IS_SOME (method_id_literal (Literal la l)) ==>
+    expr_sim_ok cenv
+      (Builtin (BaseT (BytesT (Fixed 4))) MethodId [Literal la l])
+Proof
+  rw[expr_sim_ok_def, expr_sim_def, optionTheory.IS_SOME_EXISTS] >>
+  drule_all eval_expr_method_id_literal >> strip_tac >> gvs[] >>
+  drule compile_expr_method_id_literal >> strip_tac >>
+  gvs[lower_value_def, comp_bind_def, compile_literal_vv_def,
+      unwrap_value_def, comp_return_def] >>
+  irule frag_exec_refl >>
+  simp[expr_post_def, expr_val_rel_def, expr_val_at_def,
+       vyperASTTheory.expr_type_def, eval_operand_def, is_word_type_def,
+       vyperValueTheory.evaluate_type_def]
+QED
+
+Theorem compile_method_id_literal_word_case_sim:
+  !cenv la l.
+    IS_SOME (method_id_literal (Literal la l)) ==>
+    expr_ok cenv
+      (Builtin (BaseT (BytesT (Fixed 4))) MethodId [Literal la l])
+Proof
+  rpt strip_tac >> irule expr_ok_stack >> rpt conj_tac
+  >~ [`eval_expr`] >- metis_tac[eval_expr_builtin_value]
+  >~ [`expr_sim_ok`] >- simp[compile_method_id_literal_word_sim] >>
+  gvs[optionTheory.IS_SOME_EXISTS] >> rpt gen_tac >>
+  drule compile_expr_method_id_literal >>
+  simp[compile_literal_vv_def, comp_return_def]
+QED
+
+(* The other method_ids: a literal signature with the default Bytes[4]
+   output, a buffer holding the length 4 and the selector, and a signature
+   that is not a literal, hashed at run time (compile_method_id_runtime).
+   Cheated: both allocate a buffer with ALLOCA, and the runtime hash reads
+   its operand from ADD ptr 32, so they wait, with keccak256, for S3's
+   alloca frontier (see the header). *)
+Theorem compile_method_id_other_sim:
+  !cenv ann args.
+    expr_sim_below cenv (list_size expr_size args) /\
+    ~(ann = BaseT (BytesT (Fixed 4)) /\
+      ?la l. args = [Literal la l] /\
+             IS_SOME (method_id_literal (Literal la l))) ==>
+    expr_vv_ok cenv (Builtin ann MethodId args)
+Proof
+  cheat
+QED
+
 Theorem compile_method_id_sim:
   !cenv ann args.
     expr_sim_below cenv (list_size expr_size args) ==>
     expr_vv_ok cenv (Builtin ann MethodId args)
 Proof
-  cheat
+  rpt strip_tac >>
+  Cases_on `ann = BaseT (BytesT (Fixed 4)) /\
+            ?la l. args = [Literal la l] /\
+                   IS_SOME (method_id_literal (Literal la l))`
+  >- (gvs[] >> metis_tac[compile_method_id_literal_word_case_sim, expr_ok_def]) >>
+  irule compile_method_id_other_sim >> asm_rewrite_tac[]
 QED
 
 (* ===== Precompiles ===== *)
