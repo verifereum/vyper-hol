@@ -1040,6 +1040,24 @@ Proof
   fs[frag_exec_def]
 QED
 
+Theorem bytelike_revert_extends:
+  !cenv bs ml msg_ty msg_type msg_size sa sm buf sb.
+    compile_bytelike_literal bs ml sa = (buf, sm) /\
+    ~is_word_type msg_ty /\
+    compile_revert_with_reason cenv (LocatedValue msg_ty (base_ptr buf))
+      msg_type msg_size sm = ((), sb) ==>
+    cs_extends sa sb
+Proof
+  rpt strip_tac >>
+  drule compile_bytelike_literal_simple >> strip_tac >>
+  `reason_operand [x] buf.buf_operand` by simp[reason_operand_def] >>
+  drule_all compile_revert_reason_certificate >> strip_tac >>
+  drule compile_bytelike_literal_run >>
+  disch_then (qspec_then `ARB` strip_assume_tac) >>
+  simp[cs_extends_def] >> qexists `[]` >>
+  gvs[same_blocks_def] >> metis_tac[APPEND_ASSOC, IS_PREFIX_APPEND]
+QED
+
 Theorem compile_assert_reason_lit_frag:
   !ctx func cx lctx RetQ cenv ty e ml str es res es'.
     eval_stmt cx
@@ -1054,5 +1072,102 @@ Theorem compile_assert_reason_lit_frag:
          (Assert e (AssertReason (Literal (BaseT (StringT ml)) (StringL str)))))
       es res es'
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >> simp[stmt_frag_def] >> rpt gen_tac >>
+  strip_tac >> gvs[] >>
+  qpat_x_assum `stmt_env _ _ _ _ _ = _` mp_tac >>
+  simp[stmt_env_def, declare_stmt_local_def, compile_stmt_def,
+       compile_reason_message_def, vyperASTTheory.expr_type_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  Cases_on `lower_value compile_expr cenv (BaseT BoolT) e sa` >>
+  rename1 `_ = (op, s1)` >> simp[] >>
+  Cases_on `fresh_label "assert_ok" s1` >> rename1 `_ = (ok, s2)` >> simp[] >>
+  Cases_on `fresh_label "assert_fail" s2` >> rename1 `_ = (fl, s3)` >> simp[] >>
+  Cases_on `emit_inst JNZ [op; Label ok; Label fl] [] s3` >>
+  rename1 `_ = (u4, s4)` >> simp[] >>
+  Cases_on `new_block fl s4` >> rename1 `_ = (x5, s5)` >> simp[] >>
+  Cases_on `compile_bytelike_literal (MAP (n2w o ORD) str) ml s5` >>
+  rename1 `compile_bytelike_literal _ _ s5 = (buf, sm)` >> simp[] >>
+  Cases_on `compile_revert_with_reason cenv
+    (LocatedValue (BaseT (StringT (LENGTH str))) (base_ptr buf))
+    (BaseT (StringT ml)) (type_memory_bytes cenv (BaseT (StringT ml))) sm` >>
+  rename1 `compile_revert_with_reason _ _ _ _ sm = (u, s6)` >>
+  Cases_on `u` >> simp[] >>
+  Cases_on `new_block ok s6` >> rename1 `new_block ok s6 = (x7, s7)` >>
+  simp[] >> strip_tac >> gvs[] >> suspend "control"
 QED
+
+Resume compile_assert_reason_lit_frag[control]:
+  imp_res_tac fresh_label_props >> imp_res_tac new_block_props >>
+  imp_res_tac emit_inst_extends >>
+  `cs_extends s5 s6` by
+    (irule (INST_TYPE [alpha |-> ``:type``] bytelike_revert_extends) >>
+     goal_assum (drule_at Any) >>
+     qexistsl [`MAP (n2w o ORD) str`, `ml`] >> simp[is_word_type_def]) >>
+  `cs_extends sa s1 /\ cs_extends s1 s2 /\ cs_extends s2 s3 /\
+   cs_extends s3 s4 /\ cs_extends s4 s5 /\ cs_extends s6 s7` by
+    metis_tac[cs_extends_fresh_label, cs_extends_new_block,
+              cs_appends_emit_helpers, cs_appends_def] >>
+  `fn_has_code sa s1 func /\ fn_has_code s4 s5 func /\
+   fn_has_code s5 s6 func` by
+    metis_tac[fn_has_code_split, fn_has_code_mid, cs_extends_trans,
+              cs_extends_refl] >>
+  `lookup_block s4.cs_current_bb func.fn_blocks =
+     SOME <| bb_label := s4.cs_current_bb;
+             bb_instructions := s4.cs_current_insts |>` by
+    metis_tac[fn_has_code_new_block] >>
+  qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def] >>
+  Cases_on `eval_expr cx e es` >> rename1 `eval_expr cx e es = (r1, es1)` >>
+  strip_tac >> suspend "condition"
+QED
+
+Resume compile_assert_reason_lit_frag[condition]:
+  qpat_x_assum `_ = (res, es')` mp_tac >>
+  simp[Once evaluate_def, evaluate_literal_def, bind_def, return_def,
+       get_Value_def, lift_option_type_def, dest_StringV_def, raise_def] >>
+  strip_tac >>
+  `expr_res_ok r1 /\ !v. r1 = INL (Value v) ==> ?b. v = BoolV b` by
+    (Cases_on `r1` >> gvs[]
+     >- (rename1 `switch_BoolV tv` >>
+         Cases_on `?b. tv = Value (BoolV b)` >> gvs[expr_res_ok_def] >>
+         `tv <> Value (BoolV T) /\ tv <> Value (BoolV F)` by metis_tac[] >>
+         gvs[switch_BoolV_def, raise_def, stmt_res_ok_def]) >>
+     imp_res_tac (cj 1 eval_expr_no_control) >>
+     gvs[no_control_exc_def, expr_res_ok_def, stmt_res_ok_def]) >>
+  `s3.cs_current_bb = s1.cs_current_bb /\
+   s3.cs_current_insts = s1.cs_current_insts` by metis_tac[] >>
+  drule_all cond_jump_frag >> strip_tac
+  >- (Cases_on `b` >> gvs[switch_BoolV_def, return_def, raise_def]
+      >- (disj1_tac >> rename1 `stmt_state_rel func cenv cx es' sv` >>
+          qexists_tac `jump_to s7.cs_current_bb sv` >>
+          gvs[stmt_lands_def, stmt_state_rel_jump_to, cenv_top_ext_refl,
+              block_is_terminated_def] >>
+          simp[jump_to_def, lookup_var_def] >> fs[lookup_var_def, jump_to_def]) >>
+      suspend "abort") >>
+  disj2_tac >> qexists_tac `fuel` >> Cases_on `r1` >> gvs[stmt_exit_def] >>
+  disj1_tac >>
+  ONCE_REWRITE_TAC [INST_TYPE [beta |-> ``:toplevel_value``] expr_exit_INR_type] >>
+  first_assum ACCEPT_TAC
+QED
+
+Resume compile_assert_reason_lit_frag[abort]:
+  gvs[bind_def, return_def, get_Value_def, dest_StringV_def, raise_def] >>
+  disj2_tac >>
+  `frag_exec ctx s5 s6 (\s. T) (\s. F)
+     (stmt_exit RetQ es' (INR (AssertException str)))` by
+    (irule (INST_TYPE [alpha |-> ``:type``] compile_bytelike_revert_frag) >>
+     conj_tac >- simp[stmt_exit_def, expr_exit_def] >>
+     goal_assum (drule_at Any) >>
+     qexistsl [`MAP (n2w o ORD) str`, `ml`] >> simp[is_word_type_def]) >>
+  qpat_x_assum `frag_exec _ _ _ _ _ _` mp_tac >>
+  simp[frag_exec_def] >>
+  disch_then (qspec_then `func` mp_tac) >>
+  disch_then (qspec_then `jump_to s5.cs_current_bb s` mp_tac) >>
+  impl_tac >- simp[jump_to_def] >> strip_tac >>
+  qpat_x_assum `!fuel. (!e. run_from fuel ctx func (jump_to _ s) <> Error e) ==> _`
+    (qspec_then `fuel` mp_tac) >>
+  impl_tac >- metis_tac[exit_result_not_error] >> strip_tac >>
+  qexists_tac `fuel'` >> gvs[]
+QED
+
+Finalise compile_assert_reason_lit_frag
