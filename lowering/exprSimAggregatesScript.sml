@@ -40,11 +40,12 @@
  * #636's Infrastructure (a value an earlier operand left in memory survives
  * a later operand's fragment).
  *
- * StructLit, MakeArray and empty(T) of a type that is not a word build
- * their value in a buffer of their own, an ALLOCA, and nothing in expr_sim keeps
- * vs_alloca_next below 2 ** 256: the buffer's pointer may wrap, and its
- * stores (ADD ptr off) with it, so they wait for S3's alloca frontier as
- * the hashes do (exprSimBuiltins).
+ * StructLit, MakeArray and empty(T) of a type that is not a word are
+ * unprovable as the definitions stand: they build their value in a buffer
+ * of their own, an ALLOCA, and nothing in expr_sim keeps vs_alloca_next
+ * below 2 ** 256, so the buffer's pointer may wrap, and its stores
+ * (ADD ptr off) with it.  They wait for S3's alloca frontier to reach the
+ * judgment, as the hashes do (exprSimBuiltins).
  *)
 
 Theory exprSimAggregates
@@ -88,12 +89,6 @@ Proof
   simp[Once evaluate_def, return_def, evaluate_type_builtin_def] >>
   Cases_on `evaluate_type (get_tenv cx) t` >>
   simp[return_def, raise_def] >> rw[] >> gvs[expr_res_ok_def]
-QED
-
-Theorem word_of_bytes_be_zeros[local]:
-  word_of_bytes_be (REPLICATE 32 (0w:word8)) = (0w:bytes32)
-Proof
-  EVAL_TAC >> simp[]
 QED
 
 Theorem typed_val_to_w256_address_zero[local]:

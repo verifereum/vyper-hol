@@ -21,9 +21,8 @@
  *   6 account reads: compile_acc_sim
  *   7 method_id: compile_method_id_sim; a literal signature with
  *     output_type=bytes4 by compile_method_id_literal_word_sim (the folded
- *     selector, a word literal), the rest cheated in
- *     compile_method_id_other_sim (a Bytes[4] buffer, or a hash at run
- *     time, both waiting for the alloca frontier below)
+ *     selector, a word literal), the rest in compile_method_id_other_sim
+ *     (unprovable for now, below)
  *   8 ecrecover, ecadd, ecmul: compile_ecrecover_sim, compile_ecadd_sim,
  *     compile_ecmul_sim
  *
@@ -49,6 +48,9 @@
  *     it as still unstated there), which gives the bound at the hash.  The
  *     bound can't go in stmt_state_rel: INVOKE copies the callee's frontier
  *     back, so a loop around an internal call keeps raising it.
+ *   - compile_method_id_other_sim: a Bytes[4] output, and the runtime hash
+ *     of a signature, use ALLOCA'd buffers or ADD ptr 32, so it waits for
+ *     the same bound.
  *
  * The STATICCALLs of sha256, ecrecover, ecadd and ecmul go to computed
  * precompiles: take_outcome answers them with precompile_result and leaves
@@ -338,9 +340,11 @@ QED
 (* The other method_ids: a literal signature with the default Bytes[4]
    output, a buffer holding the length 4 and the selector, and a signature
    that is not a literal, hashed at run time (compile_method_id_runtime).
-   Cheated: both allocate a buffer with ALLOCA, and the runtime hash reads
-   its operand from ADD ptr 32, so they wait, with keccak256, for S3's
-   alloca frontier (see the header). *)
+   Cheated, and unprovable as the definitions stand: a Bytes[4] output is
+   an ALLOCA'd buffer, and the runtime hash reads a Bytes or String
+   signature from ADD ptr 32 and copies a bytesN one into an ALLOCA'd
+   buffer; nothing keeps vs_alloca_next below 2 ** 256, so they wait, with
+   keccak256, for S3's alloca frontier (see the header). *)
 Theorem compile_method_id_other_sim:
   !cenv ann args.
     expr_sim_below cenv (list_size expr_size args) /\

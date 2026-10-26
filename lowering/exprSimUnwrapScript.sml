@@ -13,8 +13,8 @@
  *   unwrap_value_sim   — unwrap_value's code takes vv_post to expr_post,
  *                        one lemma per form of value_vv:
  *                        expr_post_of_vv_post_stack,
- *                        expr_post_of_vv_post_memory,
- *                        unwrap_memory_word_sim (MLOAD),
+ *                        unwrap_memory_sim (expr_post_of_vv_post_memory,
+ *                        and unwrap_memory_word_sim's MLOAD),
  *                        unwrap_runtime_immutable_word_sim (DLOAD),
  *                        vv_post_calldata (no calldata pointers)
  *
@@ -271,6 +271,25 @@ Proof
   gvs[]
 QED
 
+(* A pointer into memory: an MLOAD for a word, the pointer itself for an
+   aggregate. *)
+Theorem unwrap_memory_sim:
+  !ctx func cenv cx e es sa sm sb s0 es' v t p op R.
+    unwrap_value cenv (LocatedValue t p) sm = (op, sb) /\
+    p.ptr_location = LocMemory /\
+    local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var ==>
+    frag_exec ctx sm sb
+      (\s. vv_post func cenv cx e es sa sm s0 es' (Value v)
+             (LocatedValue t p) s)
+      (\s. expr_post func cenv cx e es sa sb s0 es' v op s) R
+Proof
+  rpt strip_tac >> Cases_on `is_word_type t`
+  >- (irule unwrap_memory_word_sim >>
+      gvs[unwrap_value_def, contextTheory.compile_ptr_load_def]) >>
+  gvs[unwrap_value_def, comp_return_def] >> irule frag_exec_refl >>
+  rw[] >> metis_tac[expr_post_of_vv_post_memory]
+QED
+
 (* A word in storage or transient storage: an SLOAD or TLOAD.  Cheated:
    storage_holds relates the slot through decode_base_from_slot, which
    truncates, so a slot holding a word outside the type's range (0x1FF for a
@@ -377,11 +396,7 @@ Proof
       irule unwrap_runtime_immutable_word_sim >>
       gvs[unwrap_value_def, contextTheory.compile_ptr_load_def]) >>
   `p.ptr_location = LocMemory` by (Cases_on `p.ptr_location` >> gvs[]) >>
-  Cases_on `is_word_type t`
-  >- (irule unwrap_memory_word_sim >>
-      gvs[unwrap_value_def, contextTheory.compile_ptr_load_def]) >>
-  gvs[unwrap_value_def, comp_return_def] >> irule frag_exec_refl >>
-  rw[] >> metis_tac[expr_post_of_vv_post_memory]
+  irule unwrap_memory_sim >> simp[]
 QED
 
 (* unwrap_value's step: expr_vv_sim gives expr_sim.  compile_expr's
