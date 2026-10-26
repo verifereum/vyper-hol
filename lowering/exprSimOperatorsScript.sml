@@ -18,18 +18,10 @@
  *                              the rest
  *
  * Cheated, for the later #636 PRs:
- *   binop_frag_typed         — the operator's fragment on typed word
- *                              operands.  #692 proves it for the checked and
- *                              unchecked arithmetic, comparisons, min/max,
- *                              bit operations, flag membership and 256-bit
- *                              shifts (compile_checked_sim, ...); left are
- *                              ** and pow_mod (#572) and shifts of narrower
- *                              integers, which the type system admits
- *                              (well_typed_binop ShL/ShR) but the lowering
- *                              does not truncate (#572), and shifts by a
- *                              negative amount, where the source raises
- *                              and the lowering shifts.  Operators rows
- *                              2-5.
+ *   binop_frag_typed         — from exprSimBinopFrag, where it rests on
+ *                              cheats for ** and pow_mod and narrow or
+ *                              negative shifts (#572), and >> of narrow
+ *                              integers.  Operators rows 2-5.
  *   compile_bop_other_sim    — == and != on address, bytesN and bytestrings
  *                              (msg.sender == owner lands here),
  *                              in and not in on arrays (#569), Operators
@@ -60,7 +52,8 @@
 Theory exprSimOperators
 Ancestors
   list finite_map
-  fragExec exprSim exprSimHyps exprSimOps exprSimIfExp exprBopLowering
+  fragExec exprSim exprSimHyps exprSimOps exprSimIfExp exprSimBinopFrag
+  exprBopLowering
   loweringSlice
   exprLowering compileEnv
   vyperAST vyperInterpreter vyperState vyperTypeSystem vyperTypeCallGraph
@@ -107,22 +100,6 @@ Proof
   Cases_on `bop` >> gvs[well_typed_binop_def, is_word_type_def]
 QED
 
-Theorem binop_frag_typed:
-  !ctx func cenv cx bop ann e1 e2 v1 v2 es0 tv1 tv2.
-    well_typed_binop ann bop (expr_type e1) (expr_type e2) /\
-    word_value_type (expr_type e1) /\ word_value_type (expr_type e2) /\
-    evaluate_type (get_tenv cx) (expr_type e1) = SOME tv1 /\
-    value_has_type tv1 v1 /\
-    evaluate_type (get_tenv cx) (expr_type e2) = SOME tv2 /\
-    value_has_type tv2 v2 ==>
-    binop_frag ctx func cenv cx bop (expr_type e1) ann
-      (if bop = Exp then expr_int_literal e1 else NONE)
-      (if bop = Exp then expr_int_literal e2 else NONE)
-      [expr_type e1; expr_type e2] v1 v2 es0
-Proof
-  cheat
-QED
-
 Theorem expr_sim_pre_bop:
   !cenv cx env ann bop e1 e2 es.
     expr_sim_pre cenv cx env (Builtin ann (Bop bop) [e1; e2]) es ==>
@@ -160,6 +137,8 @@ Proof
    is_word_type (expr_type e2) /\ ~is_ArrayT (expr_type e2) /\
    ~is_bytestring_type (expr_type e2)` by gvs[word_value_type_word] >>
   imp_res_tac well_typed_expr_type_evaluates >>
+  `type_bits (expr_type e1) MOD 8 = 0` by
+    (irule byte_widths_expr_type >> gvs[expr_sim_pre_def]) >>
   `is_word_type ann` by (drule_all well_typed_binop_word_result >> simp[]) >>
   irule compile_bop_sim >> rpt conj_tac
   >~ [`binop_frag`]
@@ -293,7 +272,8 @@ Theorem expr_sim_pre_ifexp:
     !es'. expr_sim_inv cenv cx env es' ==>
           expr_sim_pre cenv cx env a es' /\ expr_sim_pre cenv cx env b es'
 Proof
-  rw[expr_sim_pre_def, well_typed_expr_def, int_calls_expr_def] >> gvs[]
+  rw[expr_sim_pre_def, well_typed_expr_def, int_calls_expr_def,
+     byte_widths_expr_def] >> gvs[]
 QED
 
 (* A result of a word type is a value: an ArrayRef is typed by an array

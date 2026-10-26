@@ -28,10 +28,9 @@
  *   - compile_blockhash_sim: the source raises a RuntimeError where
  *     BLOCKHASH returns 0 (#671), and call_ctx_rel does not relate the block
  *     hashes.
- *   - compile_calldata_len_sim, compile_calldata_slice_sim,
- *     compile_blobhash_sim, and compile_acc_sim for balance, codesize,
- *     codehash and is_contract: call_ctx_rel relates neither calldata nor
- *     blob hashes, and nothing relates the accounts.
+ *   - compile_blobhash_sim, and compile_acc_sim for balance, codesize,
+ *     codehash and is_contract: call_ctx_rel does not relate the blob
+ *     hashes, and nothing relates the accounts.
  *   - compile_acc_sim for .code: the lowering emits INVALID.
  *   - compile_len_sim: well_typed_builtin_app Len admits fixed arrays and
  *     bytesN, but the lowering always loads the operand's first word.

@@ -3,9 +3,9 @@
  * end in a Halt whose return data and effects are the success case of
  * external_call_result_rel (stated with it, in vyperLoweringCorrect, as
  * external_return_word_result_rel, external_return_prim_result_rel,
- * external_return_static_result_rel, external_return_none_result_rel,
- * external_fallthrough_result_rel and the _unlock versions of all but the
- * static one).  The fragment lemmas are stated with
+ * external_return_static_result_rel, external_return_abi_result_rel,
+ * external_return_none_result_rel, external_fallthrough_result_rel and the
+ * _unlock versions of all but the static and ABI ones).  The fragment lemmas are stated with
  * frag_exec (fragExec), like the statement lemmas of stmtLoweringProps and
  * loweringSlice.
  *
@@ -23,6 +23,9 @@
  *   compile_external_return_copy_frag — returning a static complex value
  *                             (tuple, struct, fixed array) halts with its
  *                             bytes in memory as return data
+ *   compile_external_return_abi_frag — returning a value through the ABI
+ *                             encoder halts with its ABI encoding as
+ *                             return data
  *   compile_return_none_external_frag — a return without a value halts
  *                             with empty return data
  *   compile_guarded_body_stop_frag — so does falling off the end of a
@@ -72,7 +75,7 @@ Ancestors
   list rich_list finite_map
   fragExec loweringSlice
   stmtLowering moduleLowering context emitHelper emitHelperProps compileEnv
-  abiEncoder
+  abiEncoder abiEncoderProps
   valueEncoding valueEncodingProps
   e2eDefs vyperABI contractABI vyperInterpreter vyperState vyperValue
   vyperValueOperation vfmExecution
@@ -543,6 +546,584 @@ Proof
         map_every (fn n => mp_tac (Q.SPEC n th)) [`0`, `1`, `2`]) >>
       simp[]) >>
   strip_tac >> qexists_tac `0` >> simp[exit_result_def]
+QED
+
+Definition halt_comp_grows_def:
+  halt_comp_grows (m : 'a compiler) <=>
+    !s x t. m s = (x,t) ==>
+      cs_extends s t /\ s.cs_next_id <= t.cs_next_id /\
+      s.cs_next_var <= t.cs_next_var
+End
+
+Theorem halt_comp_grows_return[local]:
+  !x. halt_comp_grows (comp_return x)
+Proof
+  simp[halt_comp_grows_def, comp_return_def, cs_extends_refl]
+QED
+
+Theorem halt_comp_grows_bind[local]:
+  !m f. halt_comp_grows m /\ (!a. halt_comp_grows (f a)) ==>
+    halt_comp_grows (comp_bind m f)
+Proof
+  rw[halt_comp_grows_def, comp_bind_def] >>
+  pairarg_tac >> gvs[] >>
+  metis_tac[cs_extends_trans, arithmeticTheory.LESS_EQ_TRANS]
+QED
+
+Theorem halt_comp_grows_ignore_bind[local]:
+  !m n. halt_comp_grows m /\ halt_comp_grows n ==>
+    halt_comp_grows (comp_ignore_bind m n)
+Proof
+  rpt strip_tac >> rewrite_tac[comp_ignore_bind_def] >>
+  irule halt_comp_grows_bind >> simp[]
+QED
+
+Theorem halt_comp_grows_emit[local]:
+  !i. halt_comp_grows (emit i)
+Proof
+  rw[halt_comp_grows_def] >>
+  drule cs_extends_emit >> strip_tac >>
+  gvs[emit_def]
+QED
+
+Theorem halt_comp_grows_fresh_id[local]:
+  halt_comp_grows fresh_id
+Proof
+  rw[halt_comp_grows_def] >>
+  drule cs_extends_fresh_id >> strip_tac >>
+  gvs[fresh_id_def]
+QED
+
+Theorem halt_comp_grows_fresh_var[local]:
+  halt_comp_grows fresh_var
+Proof
+  rw[halt_comp_grows_def] >>
+  drule cs_extends_fresh_var >> strip_tac >>
+  gvs[fresh_var_def]
+QED
+
+Theorem halt_comp_grows_fresh_label[local]:
+  !sfx. halt_comp_grows (fresh_label sfx)
+Proof
+  rw[halt_comp_grows_def] >>
+  drule cs_extends_fresh_label >> strip_tac >>
+  gvs[fresh_label_def]
+QED
+
+Theorem halt_comp_grows_new_block[local]:
+  !lbl. halt_comp_grows (new_block lbl)
+Proof
+  rw[halt_comp_grows_def] >>
+  drule cs_extends_new_block >> strip_tac >>
+  gvs[new_block_def]
+QED
+
+Theorem halt_comp_grows_emit_op[local]:
+  !opc args. halt_comp_grows (emit_op opc args)
+Proof
+  rw[emit_op_def] >> irule halt_comp_grows_bind >>
+  simp[halt_comp_grows_fresh_id] >> gen_tac >>
+  irule halt_comp_grows_bind >> simp[halt_comp_grows_fresh_var] >>
+  gen_tac >> irule halt_comp_grows_ignore_bind >>
+  simp[halt_comp_grows_emit, halt_comp_grows_return]
+QED
+
+Theorem halt_comp_grows_emit_inst[local]:
+  !opc args outs. halt_comp_grows (emit_inst opc args outs)
+Proof
+  rw[emit_inst_def] >> irule halt_comp_grows_bind >>
+  simp[halt_comp_grows_fresh_id, halt_comp_grows_emit]
+QED
+
+Theorem halt_comp_grows_emit_void[local]:
+  !opc args. halt_comp_grows (emit_void opc args)
+Proof
+  rw[emit_void_def] >> irule halt_comp_grows_bind >>
+  simp[halt_comp_grows_fresh_id, halt_comp_grows_emit]
+QED
+
+Theorem halt_comp_grows_alloc_buffer[local]:
+  !n. halt_comp_grows (compile_alloc_buffer n)
+Proof
+  rw[compile_alloc_buffer_def] >> irule halt_comp_grows_bind >>
+  simp[halt_comp_grows_emit_op, halt_comp_grows_return]
+QED
+
+Theorem halt_comp_grows_static[local]:
+  !dst src. halt_comp_grows (compile_abi_encode_static dst src)
+Proof
+  rw[compile_abi_encode_static_def] >>
+  irule halt_comp_grows_bind >> simp[halt_comp_grows_emit_op] >>
+  gen_tac >> irule halt_comp_grows_ignore_bind >>
+  simp[halt_comp_grows_emit_void, halt_comp_grows_return]
+QED
+
+Theorem halt_comp_grows_static_info[local]:
+  !dst src ei. halt_comp_grows (compile_abi_encode_static_info dst src ei)
+Proof
+  rpt gen_tac >> Cases_on `ei` >> simp[compile_abi_encode_static_info_def,
+    halt_comp_grows_static, halt_comp_grows_return] >>
+  irule halt_comp_grows_ignore_bind >>
+  simp[halt_comp_grows_emit_void, halt_comp_grows_return]
+QED
+
+Theorem halt_comp_grows_dyn_static_loop[local]:
+  !dst src ei asz msz len.
+    halt_comp_grows (compile_abi_encode_dyn_static_loop dst src ei asz msz len)
+Proof
+  rpt gen_tac >> rewrite_tac[compile_abi_encode_dyn_static_loop_def] >>
+  rpt (FIRST [CHANGED_TAC (simp[LET_THM,
+          halt_comp_grows_alloc_buffer, halt_comp_grows_emit_op,
+          halt_comp_grows_emit_void, halt_comp_grows_emit_inst,
+          halt_comp_grows_fresh_label, halt_comp_grows_new_block,
+          halt_comp_grows_static_info]),
+        irule halt_comp_grows_bind >> conj_tac,
+        irule halt_comp_grows_ignore_bind >> conj_tac,
+        gen_tac])
+QED
+
+Theorem halt_comp_grows_encoder[local]:
+  (!dst cp ei dyn off dp.
+    halt_comp_grows (compile_abi_encode_child dst cp ei dyn off dp)) /\
+  (!dst src ei. halt_comp_grows (compile_abi_encode_to_buf dst src ei)) /\
+  (!dst src eis so ho dp.
+    halt_comp_grows (compile_abi_encode_complex_elems dst src eis so ho dp)) /\
+  (!dst src ei asz msz len.
+    halt_comp_grows (compile_abi_encode_dyn_loop dst src ei asz msz len))
+Proof
+  ho_match_mp_tac compile_abi_encode_child_ind >> rpt conj_tac >>
+  rpt strip_tac >>
+  once_rewrite_tac[compile_abi_encode_child_def] >>
+  rpt (FIRST [CHANGED_TAC (gvs[LET_THM,
+          halt_comp_grows_alloc_buffer, halt_comp_grows_emit_op,
+          halt_comp_grows_emit_void, halt_comp_grows_emit_inst,
+          halt_comp_grows_fresh_label, halt_comp_grows_new_block,
+          halt_comp_grows_static, halt_comp_grows_return,
+          halt_comp_grows_dyn_static_loop]),
+        irule halt_comp_grows_bind >> conj_tac,
+        irule halt_comp_grows_ignore_bind >> conj_tac,
+        gen_tac, IF_CASES_TAC])
+QED
+
+Theorem compile_abi_encode_to_buf_extends:
+  !dst src ei st len st'.
+    compile_abi_encode_to_buf dst src ei st = (len,st') ==>
+    cs_extends st st'
+Proof
+  mp_tac (cj 2 halt_comp_grows_encoder) >>
+  simp[halt_comp_grows_def] >> metis_tac[]
+QED
+
+Theorem compile_abi_encode_to_buf_next_id:
+  !dst src ei st len st'.
+    compile_abi_encode_to_buf dst src ei st = (len,st') ==>
+    st.cs_next_id <= st'.cs_next_id
+Proof
+  mp_tac (cj 2 halt_comp_grows_encoder) >>
+  simp[halt_comp_grows_def] >> metis_tac[]
+QED
+
+Theorem frag_ids_count_diff:
+  !a b. frag_ids a b = count b.cs_next_id DIFF count a.cs_next_id
+Proof
+  rw[frag_ids_def, pred_setTheory.EXTENSION] >> decide_tac
+QED
+
+Theorem frag_ids_card:
+  !a b. CARD (frag_ids a b) = b.cs_next_id - a.cs_next_id
+Proof
+  rpt gen_tac >> Cases_on `a.cs_next_id <= b.cs_next_id`
+  >- (`count b.cs_next_id INTER count a.cs_next_id = count a.cs_next_id`
+        by (rw[pred_setTheory.EXTENSION] >> decide_tac) >>
+      simp[frag_ids_count_diff, pred_setTheory.CARD_DIFF_EQN]) >>
+  `frag_ids a b = {}` by
+    (rw[frag_ids_def, pred_setTheory.EXTENSION] >> decide_tac) >> simp[]
+QED
+
+Theorem compile_external_return_abi_parts:
+  !op ei msz nr nkey ut iv st x st'.
+    compile_external_return (SOME op) F F ei msz nr nkey ut iv st =
+      (x, st') /\ (nr ==> iv) ==>
+    ?buf sa len sb.
+      compile_alloc_buffer msz st = (buf, sa) /\
+      compile_abi_encode_to_buf buf.buf_operand op ei sa = (len, sb) /\
+      emit_inst RETURN [buf.buf_operand; len] [] sb = (x, st')
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `compile_external_return _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[compile_external_return_def, optional_unlock_view,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  pairarg_tac >> pairarg_tac >> gvs[] >>
+  pairarg_tac >> gvs[] >> metis_tac[]
+QED
+
+Theorem step_alloca_fresh:
+  !id n out s.
+    FLOOKUP s.vs_allocas id = NONE /\ n < dimword (:256) ==>
+    step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s =
+      OK (update_var out (n2w s.vs_alloca_next)
+        (s with <| vs_allocas := s.vs_allocas |+
+                      (id, (s.vs_alloca_next,n));
+                   vs_alloca_next := s.vs_alloca_next + n |>))
+Proof
+  rpt strip_tac >> PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+  simp[mk_inst_def, exec_alloca_def, wordsTheory.w2n_n2w]
+QED
+
+Theorem step_alloca_fresh_inv:
+  !id n out s s1.
+    step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK s1 /\
+    alloca_inv s ==> alloca_inv s1
+Proof
+  rpt strip_tac >> irule alloca_inv_step_inst >>
+  qexistsl_tac [`ARB`, `0`, `mk_inst id ALLOCA [Lit (n2w n)] [out]`, `s`] >>
+  simp[step_inst_non_invoke]
+QED
+
+Theorem enc_scratch_unallocated:
+  !st st' lo top s.
+    alloca_inv s /\ lo <= s.vs_alloca_next /\ top < dimword (:256) /\
+    (!i. i IN frag_ids st st' ==> FLOOKUP s.vs_allocas i = NONE) /\
+    s.vs_alloca_next + 32 * (st'.cs_next_id - st.cs_next_id) <= top ==>
+    enc_scratch (frag_ids st st') lo top s
+Proof
+  rpt strip_tac >>
+  `{i | i IN frag_ids st st' /\ FLOOKUP s.vs_allocas i = NONE} =
+    frag_ids st st'` by
+    (rw[pred_setTheory.EXTENSION] >> metis_tac[]) >>
+  simp[enc_scratch_def, frag_ids_card] >> metis_tac[optionTheory.NOT_SOME_NONE]
+QED
+
+Theorem enc_pre_unallocated:
+  !st st' ops lo top tv v src dst n s.
+    (!y. MEM (Var y) ops ==> not_fresh_at st y) /\
+    val_in_memory tv v src s.vs_memory /\
+    src + type_memory_size tv <= dst /\ dst + n <= lo /\
+    alloca_inv s /\ lo <= s.vs_alloca_next /\ top < dimword (:256) /\
+    (!i. i IN frag_ids st st' ==> FLOOKUP s.vs_allocas i = NONE) /\
+    s.vs_alloca_next + 32 * (st'.cs_next_id - st.cs_next_id) <= top ==>
+    enc_pre st st' ops lo top tv v src [(dst,n)] s
+Proof
+  rpt strip_tac >>
+  `enc_scratch (frag_ids st st') lo top s` by
+    (irule enc_scratch_unallocated >> simp[]) >>
+  simp[enc_pre_def, venomMemDefsTheory.regions_disjoint_def]
+QED
+
+Theorem step_alloca_enc_pre:
+  !id msz out op s p st st' tv v n top.
+    FLOOKUP s.vs_allocas id = NONE /\ id NOTIN frag_ids st st' /\
+    (!y. op = Var y ==> y <> out) /\
+    (!y. MEM (Var y) [Var out;op] ==> not_fresh_at st y) /\
+    eval_operand op s = SOME p /\
+    val_in_memory tv v (w2n p) s.vs_memory /\
+    w2n p + type_memory_size tv <= s.vs_alloca_next /\ n <= msz /\
+    alloca_inv s /\
+    (!i. i IN frag_ids st st' ==> FLOOKUP s.vs_allocas i = NONE) /\
+    s.vs_alloca_next + msz + 32 * (st'.cs_next_id - st.cs_next_id) <= top /\
+    top < dimword (:256) ==>
+    ?s1.
+      step_inst_base (mk_inst id ALLOCA [Lit (n2w msz)] [out]) s = OK s1 /\
+      eval_operand (Var out) s1 = SOME (n2w s.vs_alloca_next) /\
+      eval_operand op s1 = SOME p /\
+      enc_pre st st' [Var out;op] (s.vs_alloca_next + msz) top
+        tv v (w2n p) [(s.vs_alloca_next,n)] s1 /\
+      s1.vs_accounts = s.vs_accounts /\ s1.vs_transient = s.vs_transient /\
+      s1.vs_logs = s.vs_logs /\ s1.vs_requests = s.vs_requests
+Proof
+  rpt strip_tac >>
+  `msz < dimword (:256)` by decide_tac >>
+  drule_all step_alloca_fresh >>
+  disch_then (qspec_then `out` assume_tac) >>
+  qmatch_asmsub_abbrev_tac `OK s1` >> qexists_tac `s1` >>
+  `alloca_inv s1` by (irule step_alloca_fresh_inv >> metis_tac[]) >>
+  simp[Abbr `s1`, eval_operand_def, lookup_var_def, update_var_def,
+       FLOOKUP_UPDATE] >>
+  conj_tac
+  >- (Cases_on `op` >> gvs[eval_operand_def, lookup_var_def,
+        update_var_def, FLOOKUP_UPDATE]) >>
+  irule enc_pre_unallocated >>
+  gvs[update_var_def, FLOOKUP_UPDATE] >> metis_tac[]
+QED
+
+Theorem compile_alloc_buffer_parts:
+  !n st buf st'.
+    compile_alloc_buffer n st = (buf,st') ==>
+    buf.buf_operand = Var (STRING #"%" (toString st.cs_next_var)) /\
+    buf.buf_size = n /\ st'.cs_next_id = st.cs_next_id + 1 /\
+    st'.cs_next_var = st.cs_next_var + 1 /\
+    ~not_fresh_at st (STRING #"%" (toString st.cs_next_var)) /\
+    not_fresh_at st' (STRING #"%" (toString st.cs_next_var)) /\
+    (!y. not_fresh_at st y ==> not_fresh_at st' y)
+Proof
+  rpt gen_tac >>
+  simp[compile_alloc_buffer_def, emit_op_def, comp_bind_def,
+       comp_ignore_bind_def, comp_return_def, fresh_id_def, fresh_var_def,
+       emit_def] >> strip_tac >> gvs[not_fresh_at_def] >>
+  metis_tac[arithmeticTheory.LESS_EQ_REFL, arithmeticTheory.LESS_EQ_TRANS,
+            arithmeticTheory.LESS_EQ_ADD]
+QED
+
+Theorem compile_alloc_buffer_frag:
+  !ctx n st buf st' P Q R.
+    compile_alloc_buffer n st = (buf,st') /\
+    (!s. P s ==> ?s1.
+      step_inst_base
+        (mk_inst st.cs_next_id ALLOCA [Lit (n2w n)]
+          [STRING #"%" (toString st.cs_next_var)]) s = OK s1 /\
+      Q (s1 with vs_inst_idx := LENGTH st'.cs_current_insts)) ==>
+    frag_exec ctx st st' P Q R
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `compile_alloc_buffer _ _ = _` mp_tac >>
+  simp[compile_alloc_buffer_def, emit_op_def, comp_bind_def,
+       comp_ignore_bind_def, comp_return_def, fresh_id_def, fresh_var_def,
+       emit_def] >> strip_tac >> gvs[] >>
+  irule frag_exec_run_inst_seq >>
+  simp[exprLoweringPropsTheory.emitted_insts_def,
+       rich_listTheory.DROP_LENGTH_APPEND, mk_inst_def, is_terminator_def,
+       exprLoweringPropsTheory.run_inst_seq_def] >>
+  rpt strip_tac >> disj1_tac >>
+  first_x_assum drule >> strip_tac >>
+  qexists_tac `s1` >> gvs[mk_inst_def]
+QED
+
+Theorem enc_frame_var:
+  !st st' lo top outs s0 s name w.
+    enc_frame st st' lo top outs s0 s /\ not_fresh_at st name /\
+    eval_operand (Var name) s0 = SOME w ==>
+    eval_operand (Var name) s = SOME w
+Proof
+  simp[enc_frame_def, eval_operand_def] >> metis_tac[]
+QED
+
+Theorem enc_frame_effects:
+  !st st' lo top outs s0 s.
+    enc_frame st st' lo top outs s0 s ==>
+    s.vs_accounts = s0.vs_accounts /\ s.vs_transient = s0.vs_transient /\
+    s.vs_logs = s0.vs_logs /\ s.vs_requests = s0.vs_requests
+Proof
+  simp[enc_frame_def]
+QED
+
+Theorem return_buffer_run:
+  !fuel ctx fn s bb id buf len b bytes.
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    get_instruction bb s.vs_inst_idx =
+      SOME (mk_inst id RETURN [buf;len] []) /\
+    eval_operand buf s = SOME b /\
+    eval_operand len s = SOME (n2w (LENGTH bytes)) /\
+    LENGTH bytes < dimword (:256) /\
+    mem_bytes_at (w2n b) (LENGTH bytes) s.vs_memory = bytes ==>
+    ?ss. run_from fuel ctx fn s = Halt ss /\ ss.vs_returndata = bytes /\
+      ss.vs_accounts = s.vs_accounts /\ ss.vs_transient = s.vs_transient /\
+      ss.vs_logs = s.vs_logs /\ ss.vs_requests = s.vs_requests
+Proof
+  rpt strip_tac >>
+  qabbrev_tac `ss = halt_state (set_returndata bytes s)` >>
+  `step_inst_base (mk_inst id RETURN [buf;len] []) s = Halt ss` by
+    (qspecl_then [`buf`, `len`] mp_tac step_RETURN >>
+     disch_then drule >> disch_then drule >>
+     simp[GSYM mem_bytes_at_def, Abbr `ss`]) >>
+  qexists_tac `ss` >> conj_tac
+  >- (irule run_from_halt >>
+      qexistsl_tac [`bb`, `mk_inst id RETURN [buf;len] []`] >>
+      simp[mk_inst_def]) >>
+  simp[Abbr `ss`, halt_state_def, set_returndata_def]
+QED
+
+Theorem emit_return_buffer_frag:
+  !ctx buf len st x st' bytes P Q R.
+    emit_inst RETURN [buf;len] [] st = (x,st') /\
+    (!s. P s ==> ?b.
+      eval_operand buf s = SOME b /\
+      eval_operand len s = SOME (n2w (LENGTH bytes)) /\
+      LENGTH bytes < dimword (:256) /\
+      mem_bytes_at (w2n b) (LENGTH bytes) s.vs_memory = bytes /\
+      (!ss. ss.vs_returndata = bytes /\ ss.vs_accounts = s.vs_accounts /\
+        ss.vs_transient = s.vs_transient /\ ss.vs_logs = s.vs_logs /\
+        ss.vs_requests = s.vs_requests ==> R (Halt ss))) ==>
+    frag_exec ctx st st' P Q R
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `emit_inst _ _ _ _ = _` mp_tac >>
+  simp[emit_inst_def, comp_bind_def, fresh_id_def, emit_def] >>
+  strip_tac >> gvs[] >>
+  simp[frag_exec_def] >> rpt strip_tac >> disj2_tac >>
+  drule fn_has_code_same_block >> simp[] >> strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+   get_instruction bb s.vs_inst_idx =
+     SOME (mk_inst st.cs_next_id RETURN [buf;len] [])` by simp[] >>
+  drule_all (SRULE [] return_buffer_run) >>
+  disch_then (qspecl_then [`0`, `ctx`] mp_tac) >>
+  strip_tac >> qexists_tac `0` >> simp[exit_result_def]
+QED
+
+Theorem enc_pre_inst_idx[simp]:
+  !st st' ops lo top tv v src outs s k.
+    enc_pre st st' ops lo top tv v src outs (s with vs_inst_idx := k) =
+    enc_pre st st' ops lo top tv v src outs s
+Proof
+  simp[enc_pre_def, enc_scratch_def, venomMemDefsTheory.alloca_inv_def,
+       venomMemDefsTheory.allocas_non_overlapping_def,
+       venomMemDefsTheory.alloca_next_valid_def]
+QED
+
+Theorem compile_alloc_buffer_extends:
+  !n st buf st'. compile_alloc_buffer n st = (buf,st') ==>
+    cs_extends st st'
+Proof
+  mp_tac halt_comp_grows_alloc_buffer >>
+  simp[halt_comp_grows_def] >> metis_tac[]
+QED
+
+Theorem emit_inst_metadata:
+  !opc ops outs st x st'. emit_inst opc ops outs st = (x,st') ==>
+    st'.cs_next_id = st.cs_next_id + 1 /\ cs_extends st st'
+Proof
+  rpt gen_tac >>
+  simp[emit_inst_def, comp_bind_def, fresh_id_def, emit_def] >>
+  strip_tac >> gvs[] >> irule cs_extends_same_block >> simp[]
+QED
+
+Theorem compile_alloc_buffer_enc_frag:
+  !ctx msz st buf sa sb sf op s0 p tv v n R.
+    compile_alloc_buffer msz st = (buf,sa) /\
+    sa.cs_next_id <= sb.cs_next_id /\ sb.cs_next_id <= sf.cs_next_id /\
+    (!y. op = Var y ==> not_fresh_at st y) /\
+    eval_operand op s0 = SOME p /\
+    val_in_memory tv v (w2n p) s0.vs_memory /\
+    w2n p + type_memory_size tv <= s0.vs_alloca_next /\ n <= msz /\
+    alloca_inv s0 /\
+    (!i. i IN frag_ids st sf ==> FLOOKUP s0.vs_allocas i = NONE) /\
+    s0.vs_alloca_next + msz + 32 * (sf.cs_next_id - st.cs_next_id) <
+      dimword (:256) ==>
+    frag_exec ctx st sa (\s. s = s0)
+      (\s1. eval_operand buf.buf_operand s1 = SOME (n2w s0.vs_alloca_next) /\
+        eval_operand op s1 = SOME p /\
+        enc_pre sa sb [buf.buf_operand;op] (s0.vs_alloca_next + msz)
+          (s0.vs_alloca_next + msz + 32 * (sf.cs_next_id - st.cs_next_id))
+          tv v (w2n p) [(s0.vs_alloca_next,n)] s1 /\
+        s1.vs_accounts = s0.vs_accounts /\ s1.vs_transient = s0.vs_transient /\
+        s1.vs_logs = s0.vs_logs /\ s1.vs_requests = s0.vs_requests) R
+Proof
+  rpt strip_tac >> drule compile_alloc_buffer_parts >> strip_tac >>
+  irule compile_alloc_buffer_frag >>
+  qexistsl_tac [`buf`, `msz`] >>
+  asm_simp_tac (srw_ss()) [instIdxIndepTheory.eval_op_inst_idx] >>
+  irule step_alloca_enc_pre >> simp[] >>
+  conj_tac >- metis_tac[] >>
+  conj_tac >- metis_tac[] >>
+  conj_tac
+  >- (rpt strip_tac >> first_x_assum irule >>
+      gvs[frag_ids_def] >> decide_tac) >>
+  conj_tac >- (simp[frag_ids_def] >> decide_tac) >>
+  first_x_assum irule >> simp[frag_ids_def] >> decide_tac
+QED
+
+Theorem compile_abi_encode_return_frag:
+  !ctx name op ei sa len sb x sf env ty tv v av s1 b p lo top Q R.
+    compile_abi_encode_to_buf (Var name) op ei sa = (len,sb) /\
+    emit_inst RETURN [Var name;len] [] sb = (x,sf) /\
+    abi_enc_plan env ty ei /\ evaluate_type env ty = SOME tv /\
+    value_has_type tv v /\ vyper_to_abi env ty v = SOME av /\
+    not_fresh_at sa name /\ eval_operand (Var name) s1 = SOME b /\
+    eval_operand op s1 = SOME p /\
+    enc_pre sa sb [Var name;op] lo top tv v (w2n p)
+      [(w2n b,LENGTH (enc (vyper_to_abi_type env ty) av))] s1 /\
+    LENGTH (enc (vyper_to_abi_type env ty) av) < dimword (:256) /\
+    (!ss. ss.vs_returndata = enc (vyper_to_abi_type env ty) av /\
+      ss.vs_accounts = s1.vs_accounts /\ ss.vs_transient = s1.vs_transient /\
+      ss.vs_logs = s1.vs_logs /\ ss.vs_requests = s1.vs_requests ==>
+      R (Halt ss)) ==>
+    frag_exec ctx sa sf (\s. s = s1) Q R
+Proof
+  rpt strip_tac >>
+  drule_all (cj 2 compile_abi_encode_frag) >>
+  disch_then (qspec_then `ctx` assume_tac) >>
+  drule compile_abi_encode_to_buf_extends >> strip_tac >>
+  drule emit_inst_metadata >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `frag_exec ctx sa sb _ post _` >>
+  irule frag_exec_seq >> qexistsl_tac [`post`, `sb`] >>
+  simp[] >> conj_tac
+  >- (irule frag_exec_conseq >>
+      qexistsl_tac [`\s. s = s1`, `post`, `\r. F`] >> simp[]) >>
+  irule emit_return_buffer_frag >>
+  qexistsl_tac [`Var name`, `enc (vyper_to_abi_type env ty) av`, `len`, `x`] >>
+  simp[Abbr `post`] >> rpt strip_tac >>
+  qexists_tac `b` >>
+  `eval_operand (Var name) s = SOME b` by
+    (irule enc_frame_var >> metis_tac[]) >>
+  drule enc_frame_effects >> strip_tac >> simp[]
+QED
+
+(* Returning a value through the ABI encoder with plan ei for its type
+   (the non-word, non-raw path, without a lock release): ALLOCA a buffer
+   of msz bytes, encode the value into it, RETURN the encoding.  The
+   buffer and the encoder's scratch cells are fresh allocas, above the
+   value: none of the fragment's ALLOCAs has run, and the value lies below
+   the alloca frontier.  The frontier stays below 2 ** 256 while they run,
+   and the encoding fits in the buffer. *)
+Theorem compile_external_return_abi_frag:
+  !ctx op ei msz nr nkey ut iv st x st' env ty tv v av P Q R.
+    compile_external_return (SOME op) F F ei msz nr nkey ut iv st =
+      (x, st') /\
+    (nr ==> iv) /\ (!y. op = Var y ==> not_fresh_at st y) /\
+    abi_enc_plan env ty ei /\ evaluate_type env ty = SOME tv /\
+    value_has_type tv v /\ vyper_to_abi env ty v = SOME av /\
+    LENGTH (enc (vyper_to_abi_type env ty) av) <= msz /\
+    (!s. P s ==>
+         ?p. eval_operand op s = SOME p /\
+             val_in_memory tv v (w2n p) s.vs_memory /\
+             w2n p + type_memory_size tv <= s.vs_alloca_next /\
+             alloca_inv s /\
+             (!i. i IN frag_ids st st' ==> FLOOKUP s.vs_allocas i = NONE) /\
+             s.vs_alloca_next + msz + 32 * (st'.cs_next_id - st.cs_next_id) <
+               dimword (:256) /\
+             !ss. ss.vs_returndata = enc (vyper_to_abi_type env ty) av /\
+                  ss.vs_accounts = s.vs_accounts /\
+                  ss.vs_transient = s.vs_transient /\
+                  ss.vs_logs = s.vs_logs /\ ss.vs_requests = s.vs_requests ==>
+                  R (Halt ss)) ==>
+    frag_exec ctx st st' P Q R
+Proof
+  rpt strip_tac >>
+  drule_all compile_external_return_abi_parts >> strip_tac >>
+  drule compile_alloc_buffer_parts >> strip_tac >>
+  drule compile_alloc_buffer_extends >> strip_tac >>
+  drule compile_abi_encode_to_buf_next_id >> strip_tac >>
+  drule compile_abi_encode_to_buf_extends >> strip_tac >>
+  drule emit_inst_metadata >> strip_tac >>
+  irule frag_exec_pointwise >> qx_gen_tac `s0` >> strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  `sb.cs_next_id <= st'.cs_next_id` by decide_tac >>
+  drule_all compile_alloc_buffer_enc_frag >>
+  disch_then (qspecl_then [`ctx`, `R`] mp_tac) >>
+  simp[] >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `frag_exec ctx st sa _ ready R` >>
+  irule frag_exec_seq >> qexistsl_tac [`ready`, `sa`] >>
+  simp[] >> conj_tac
+  >- metis_tac[cs_extends_trans] >>
+  qpat_x_assum `frag_exec ctx st sa _ _ _` kall_tac >>
+  qpat_x_assum `compile_external_return _ _ _ _ _ _ _ _ _ _ = _` kall_tac >>
+  irule frag_exec_pointwise >> simp[Abbr `ready`] >>
+  qx_gen_tac `s1` >> strip_tac >>
+  `s0.vs_alloca_next < dimword (:256) /\
+   LENGTH (enc (vyper_to_abi_type env ty) av) < dimword (:256)` by decide_tac >>
+  `enc_pre sa sb [buf.buf_operand;op] (msz + s0.vs_alloca_next)
+      (msz + (s0.vs_alloca_next + 32 * (sb.cs_next_id + 1 - st.cs_next_id)))
+      tv v (w2n p)
+      [(w2n (n2w s0.vs_alloca_next : 256 word),
+        LENGTH (enc (vyper_to_abi_type env ty) av))] s1` by
+    simp[wordsTheory.w2n_n2w] >>
+  `!ss. ss.vs_returndata = enc (vyper_to_abi_type env ty) av /\
+    ss.vs_accounts = s1.vs_accounts /\ ss.vs_transient = s1.vs_transient /\
+    ss.vs_logs = s1.vs_logs /\ ss.vs_requests = s1.vs_requests ==>
+    R (Halt ss)` by (rpt strip_tac >> first_x_assum irule >> simp[]) >>
+  qpat_x_assum `buf.buf_operand = _` SUBST_ALL_TAC >>
+  drule_all compile_abi_encode_return_frag >>
+  disch_then (qspecl_then [`ctx`, `Q`] ACCEPT_TAC)
 QED
 
 (* ===== Returns that release the lock ===== *)
