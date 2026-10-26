@@ -5914,6 +5914,105 @@ Proof
   irule enc_prefix_mem_static_zero >> gvs[]
 QED
 
+Theorem compile_abi_encode_dyn_static_loop_abi_frag:
+  compile_abi_encode_dyn_static_loop dst src ei
+    (type_memory_size tv) (type_memory_size tv) len_op st = (op,z) /\
+  abi_enc_plan env ty ei /\ ~is_dynamic (vyper_to_abi_type env ty) /\
+  evaluate_type env ty = SOME tv /\
+  value_has_type (ArrayTV tv (Dynamic n)) (ArrayV (DynArrayV vs)) /\
+  vyper_to_abi_same env ty vs = SOME avs /\
+  eval_operand src s0 = SOME (n2w src_n) /\ src_n < dimword (:256) /\
+  eval_operand dst s0 = SOME (n2w dst_n) /\
+  eval_operand len_op s0 = SOME (n2w (LENGTH vs)) /\
+  MEM src ops /\ MEM dst ops /\ MEM len_op ops /\
+  MEM (dst_n,LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs))) outs /\
+  enc_pre st z ops lo top (ArrayTV tv (Dynamic n))
+    (ArrayV (DynArrayV vs)) src_n outs s0 ==>
+  frag_exec ctx st z (\s. s = s0)
+    (\s. mem_bytes_at (dst_n + 32)
+           (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)) - 32)
+           s.vs_memory = DROP 32 (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)) /\
+         eval_operand op s = SOME (n2w (LENGTH
+           (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))) /\
+         s.vs_labels = s0.vs_labels /\ enc_frame st z lo top outs s0 s) R
+Proof
+  strip_tac >>
+  `static_length (vyper_to_abi_type env ty) = type_memory_size tv` by
+    metis_tac[enc_static_type_memory_size] >>
+  `LIST_REL (\v av. vyper_to_abi env ty v = SOME av) vs avs` by
+    metis_tac[enc_same_conversion] >>
+  `LENGTH avs = LENGTH vs` by metis_tac[LIST_REL_LENGTH] >>
+  `enc_layout (REPLICATE (LENGTH vs) (vyper_to_abi_type env ty)) avs` by
+    (irule enc_dynarray_source_layout >> fs[enc_pre_def] >> metis_tac[]) >>
+  `LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)) =
+    32 + LENGTH vs * type_memory_size tv` by
+    (`enc_layout (REPLICATE (LENGTH avs) (vyper_to_abi_type env ty)) avs`
+       by simp[] >> drule_all enc_dynarray_static_length_layout >> simp[]) >>
+  `frag_exec ctx st z (\s. s = s0)
+    (\s. enc_prefix_mem (dst_n + 32)
+           (head_lengths (REPLICATE (LENGTH vs) (vyper_to_abi_type env ty)) 0)
+           (REPLICATE (LENGTH vs) (vyper_to_abi_type env ty)) avs (LENGTH vs) s /\
+         eval_operand op s = SOME (n2w (32 + LENGTH vs * type_memory_size tv)) /\
+         s.vs_labels = s0.vs_labels /\ enc_frame st z lo top outs s0 s) R`
+    by suspend "loop" >>
+  pop_assum (mp_then Any mp_tac frag_exec_conseq) >> disch_then irule >>
+  simp[Excl "enc_def"] >> suspend "payload"
+QED
+Resume compile_abi_encode_dyn_static_loop_abi_frag[loop]:
+  drule enc_static_loop_decompose >> strip_tac >>
+  drule_all enc_static_loop_phase_safety >> strip_tac >>
+  `st.cs_next_var <= sb.cs_next_var /\ st.cs_next_var <= sx.cs_next_var` by decide_tac >>
+  `!x. MEM (Var x) ops ==> not_fresh_at st x` by fs[enc_pre_def] >>
+  `(!x. MEM (Var x) [count_ptr;len_op] ==> not_fresh_at sh x) /\
+   (!x. MEM (Var x) [count_ptr;src;dst] ==> not_fresh_at sb x)` by
+    (simp[] >> metis_tac[freshWritesTheory.not_fresh_at_mono]) >>
+  `cs_extends si sx /\ frag_ids sb se SUBSET frag_ids st z` by suspend "phase_chain" >>
+  `MEM (dst_n,32 + LENGTH vs * type_memory_size tv) outs` by metis_tac[] >>
+  Cases_on `type_memory_size tv = 0`
+  >- (drule_all enc_static_loop_complete_frag_layout_zero >> disch_then irule) >>
+  `LENGTH vs < dimword (:256)` by suspend "positive_bound" >>
+  drule_all enc_static_loop_complete_frag_layout >> disch_then irule
+QED
+Resume compile_abi_encode_dyn_static_loop_abi_frag[payload]:
+  rpt gen_tac >> strip_tac >>
+  `enc_layout (REPLICATE (LENGTH avs) (vyper_to_abi_type env ty)) avs` by simp[] >>
+  drule enc_dynarray_payload_layout >>
+  drule enc_prefix_full_layout >>
+  simp[enc_tail_upto_static, enc_prefix_mem_def, Excl "enc_def"] >>
+  rpt strip_tac >>
+  `LENGTH vs <= LENGTH vs` by simp[] >>
+  drule_all enc_head_upto_static_length_layout >>
+  disch_then (qspec_then
+    `head_lengths (REPLICATE (LENGTH vs) (vyper_to_abi_type env ty)) 0` assume_tac) >>
+  gvs[enc_prefix_mem_def, Excl "enc_def"]
+QED
+Resume compile_abi_encode_dyn_static_loop_abi_frag[phase_chain]:
+  drule enc_static_loop_edges_frontiers >> strip_tac >>
+  drule enc_static_loop_header_frontiers >> strip_tac >>
+  drule enc_static_loop_body_frontiers >> strip_tac >>
+  reverse conj_tac
+  >- (fs[frag_ids_def, pred_setTheory.SUBSET_DEF] >> rpt strip_tac >>
+      first_x_assum irule >> decide_tac) >>
+  qpat_x_assum `enc_static_loop_edges _ _ _ _ _` mp_tac >>
+  simp[enc_static_loop_edges_def] >> strip_tac >>
+  `cs_extends si s1 /\ cs_extends s1 sh /\ cs_extends sh sj /\
+   cs_extends sj s2 /\ cs_extends s2 sb /\ cs_extends sb se /\
+   cs_extends se s3 /\ cs_extends s3 sx` by
+    metis_tac[cs_extends_emit_inst, cs_extends_new_block, enc_static_loop_phase_extends] >>
+  `cs_extends si sh /\ cs_extends sh s2 /\ cs_extends s2 se /\ cs_extends se sx` by
+    metis_tac[cs_extends_trans] >>
+  `cs_extends si s2 /\ cs_extends s2 sx` by metis_tac[cs_extends_trans] >>
+  metis_tac[cs_extends_trans]
+QED
+Resume compile_abi_encode_dyn_static_loop_abi_frag[positive_bound]:
+  drule enc_pre_bounds >> strip_tac >>
+  `LENGTH vs <= n` by fs[value_has_type_def] >>
+  Cases_on `type_memory_size tv` >>
+  fs[type_memory_size_def, arithmeticTheory.MULT_CLAUSES, Excl "enc_def"] >>
+  decide_tac
+QED
+Finalise compile_abi_encode_dyn_static_loop_abi_frag
+
 Theorem compile_abi_encode_frag:
   (!dst child_ptr ei is_dyn static_ofst dyn_ptr st op st' ctx env ty tv v
     av s0 dst_w src_w lo top.
