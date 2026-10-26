@@ -275,19 +275,9 @@ jobs:
         env:
           TMPDIR: ${{ runner.temp }}
         run: |
-          tests=$(find tests/generated -maxdepth 1 -type f -name 'vyperTest_*Script.sml' -printf '%f\n' | sort -V)
-          total=$(printf "%s\n" "$tests" | sed '/^$/d' | wc -l)
-          if [ "$total" -eq 0 ]; then
-            echo "No vyperTest_* scripts found in tests/generated/."
-            exit 1
-          fi
-          splits=10
-          group=${{ matrix.group }}
-          per_group=$(( (total + splits - 1) / splits ))
-          start=$(( group * per_group ))
-
-          echo "Group $group: tests $start to $((start + per_group - 1)) of $total"
-          targets=$(echo "$tests" | tail -n +$((start + 1)) | head -n "$per_group" | sed 's/Script\.sml$/Theory/' | tr '\n' ' ')
+          # Groups come from .github/vyper-test-groups.txt, balanced by measured
+          # build time; rerun `tools/vyper_test_groups.py plan` when tests change.
+          targets=$(python3 tools/vyper_test_groups.py targets --group ${{ matrix.group }} --groups ${{ strategy.job-total }})
           echo "Building: $targets"
           holbuild --verbose -j"$(nproc)" build --skip-checkpoints --skip-proof-steps $targets
 
