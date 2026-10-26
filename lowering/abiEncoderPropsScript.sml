@@ -4891,6 +4891,94 @@ Resume enc_static_loop_iter_frag[bodies]:
 QED
 Finalise enc_static_loop_iter_frag
 
+Theorem enc_static_loop_complete_frag:
+  enc_static_loop_init st = ((count_ptr,hdr,body_lbl,exit_lbl),si) /\
+  enc_static_loop_header count_ptr len_op sh = (cnd,sj) /\
+  enc_static_loop_body dst src ei (type_memory_size tv) (type_memory_size tv)
+    count_ptr sb = ((),se) /\
+  enc_static_loop_exit src (type_memory_size tv) sx = (op,z) /\
+  enc_static_loop_edges hdr body_lbl exit_lbl cnd (si,s1,sh,sj,s2,sb,se,s3,sx) /\
+  (!x. MEM (Var x) [count_ptr;len_op] ==> not_fresh_at sh x) /\
+  (!x. MEM (Var x) [count_ptr;src;dst] ==> not_fresh_at sb x) /\
+  st.cs_next_var <= sh.cs_next_var /\ st.cs_next_var <= sb.cs_next_var /\
+  st.cs_next_var <= sx.cs_next_var /\
+  st.cs_next_id IN frag_ids st z /\ frag_ids sb se SUBSET frag_ids st z /\
+  cs_extends si sx /\
+  abi_enc_plan env ty ei /\ ~is_dynamic (vyper_to_abi_type env ty) /\
+  evaluate_type env ty = SOME tv /\
+  static_length (vyper_to_abi_type env ty) = type_memory_size tv /\
+  value_has_type (ArrayTV tv (Dynamic n)) (ArrayV (DynArrayV vs)) /\
+  LIST_REL (\v av. vyper_to_abi env ty v = SOME av) vs avs /\
+  has_types (REPLICATE (LENGTH vs) (vyper_to_abi_type env ty)) avs /\
+  LENGTH vs < dimword (:256) /\
+  MEM (dst_n,32 + LENGTH vs * type_memory_size tv) outs /\
+  MEM src ops /\ MEM dst ops /\ MEM len_op ops /\
+  eval_operand src s0 = SOME (n2w src_n) /\ src_n < dimword (:256) /\
+  eval_operand dst s0 = SOME (n2w dst_n) /\
+  eval_operand len_op s0 = SOME (n2w (LENGTH vs)) /\
+  enc_pre st z ops lo top (ArrayTV tv (Dynamic n))
+    (ArrayV (DynArrayV vs)) src_n outs s0 ==>
+  frag_exec ctx st z (\s. s = s0)
+    (\s. enc_prefix_mem (dst_n + 32) B
+           (REPLICATE (LENGTH vs) (vyper_to_abi_type env ty)) avs (LENGTH vs) s /\
+         eval_operand op s = SOME (n2w (32 + LENGTH vs * type_memory_size tv)) /\
+         s.vs_labels = s0.vs_labels /\ enc_frame st z lo top outs s0 s) R
+Proof
+  strip_tac >>
+  qabbrev_tac `Inv = \ip. enc_array_inv
+    (enc_loop_ctx st z ops lo top (ArrayTV tv (Dynamic n))
+      (ArrayV (DynArrayV vs)) src_n outs s0 count_ptr ip)
+    (dst_n + 32) B (REPLICATE (LENGTH vs) (vyper_to_abi_type env ty)) avs ip NONE 0` >>
+  qabbrev_tac `Hdr = \ip. enc_array_header
+    (enc_loop_ctx st z ops lo top (ArrayTV tv (Dynamic n))
+      (ArrayV (DynArrayV vs)) src_n outs s0 count_ptr ip)
+    (dst_n + 32) B (REPLICATE (LENGTH vs) (vyper_to_abi_type env ty))
+    avs ip NONE cnd (LENGTH vs)` >>
+  `frag_exec ctx st si (\s. s = s0) (\s. ?ip. Inv ip s) R`
+    by suspend "init" >>
+  `frag_exec ctx si sx (\s. ?ip. Inv ip s) (\s. ?ip. Hdr ip s) R`
+    by suspend "iter" >>
+  `cs_extends st si /\ cs_extends sx z` by
+    metis_tac[enc_static_loop_phase_extends] >>
+  `cs_extends si z` by metis_tac[cs_extends_trans] >>
+  irule frag_exec_seq >> qexistsl_tac [`\s. ?ip. Inv ip s`, `si`] >>
+  simp[] >> irule frag_exec_seq_pointwise >>
+  qexistsl_tac [`\s. ?ip. Hdr ip s`, `sx`] >> simp[] >>
+  suspend "exit"
+QED
+Resume enc_static_loop_complete_frag[init]:
+  simp_tac (srw_ss()) [Abbr `Inv`] >>
+  drule_all enc_static_loop_init_frag >> disch_then irule
+QED
+Resume enc_static_loop_complete_frag[iter]:
+  irule frag_exec_pointwise >> simp_tac (srw_ss()) [Abbr `Inv`] >>
+  rpt strip_tac >>
+  drule_all enc_static_loop_iter_frag >>
+  disch_then (mp_then Any mp_tac frag_exec_conseq o SPEC_ALL) >>
+  disch_then irule >> simp[Abbr `Hdr`] >> metis_tac[]
+QED
+Resume enc_static_loop_complete_frag[exit]:
+  simp_tac (srw_ss()) [Abbr `Hdr`, enc_array_header_def, enc_array_inv_def] >>
+  rpt strip_tac >>
+  `eval_operand src t = SOME (n2w src_n)` by
+    (irule enc_loop_ctx_operand >> metis_tac[]) >>
+  `mem_word_at src_n t.vs_memory = n2w (LENGTH vs)` by
+    (drule enc_loop_ctx_source >>
+     simp[valueEncodingProofsTheory.val_in_memory_dynarray_proof]) >>
+  `enc_scratch (frag_ids st z) lo top t /\
+   enc_frame st z lo top outs s0 t /\ t.vs_labels = s0.vs_labels` by
+    fs[enc_loop_ctx_def, enc_pre_def] >>
+  `mem_word_at (w2n (n2w src_n : bytes32)) t.vs_memory = n2w (LENGTH vs)` by
+    simp[wordsTheory.w2n_n2w] >>
+  drule_all enc_static_loop_exit_frag >>
+  disch_then (mp_then Any mp_tac frag_exec_conseq o SPEC_ALL) >>
+  disch_then irule >> simp[] >> rpt strip_tac
+  >- fs[enc_prefix_mem_def] >>
+  metis_tac[enc_frame_trans]
+QED
+Finalise enc_static_loop_complete_frag
+
+
 Theorem compile_abi_encode_frag:
   (!dst child_ptr ei is_dyn static_ofst dyn_ptr st op st' ctx env ty tv v
     av s0 dst_w src_w lo top.
