@@ -4,7 +4,7 @@ Ancestors
   (* definitions *)
   moduleLowering
   (* property statements and proofs *)
-  moduleLoweringProps
+  moduleLoweringProps entryDispatchProps
   loweringSlice
   varsExt exprSim
   exprBopLowering
@@ -13,8 +13,10 @@ Ancestors
   valueEncodingProofs
   localPtrsProps
   loweringShapeProps
+  structFieldsProps
   (* compiler + correctness *)
   vyperCompiler
+  allocaBudgetChecks
   vyperLoweringCorrect
   configuredE2ECorrectness
   evalCompilerMemoryStores
@@ -23,3 +25,9 @@ Ancestors
   evalCompilerInternalLabels
   evalCompilerSliceBuffers
   evalCompilerPhiPointers
+  evalCompilerInternalFrames
+  (* focused internal-frame allocation, cleanup and whitelist regressions *)
+  calleeMemoryWitness
+  cleanupPromiseWitness
+  internalFrameWhitelistDiagnostic
+  evalCompilerAllocationLimit

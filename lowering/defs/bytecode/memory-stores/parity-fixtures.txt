@@ -30,6 +30,7 @@ storage_one_word_array
 enc_in_assign
 tup_nested_ret
 st_nested_lit
+st_forward_ref_lit
 arr_dyn_lit_word
 b20_dynarr_lit
 empty_string_ret
@@ -39,3 +40,4 @@ st_empty_ret
 c10_assign_empty_struct
 c11_annassign_empty_fixed_array
 c05_assign_empty_builtin_string
+method_id_lit

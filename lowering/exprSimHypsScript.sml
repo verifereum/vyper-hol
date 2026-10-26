@@ -14,10 +14,14 @@
  * TOP-LEVEL:
  *   expr_sim_inv      — the facts about the source state and the context
  *                       that every subexpression keeps: type soundness's
- *                       invariants, and the locals of the type environment
- *                       held through pointer variables
- *   expr_sim_pre      — expr_sim_inv, the expression well typed, and no
- *                       internal call in it
+ *                       invariants, the locals of the type environment
+ *                       held through pointer variables, and the flag
+ *                       member ids and member counts of the compile
+ *                       environment
+ *   expr_sim_pre      — expr_sim_inv, the expression well typed, its
+ *                       integer types of whole bytes, and no internal call
+ *                       in it
+ *   byte_widths_expr  — every node's type has a width of whole bytes
  *   expr_sim_ok       — expr_sim wherever expr_sim_pre holds
  *   expr_vv_ok        — expr_vv_sim wherever expr_sim_pre holds
  *   expr_ok           — both: the induction predicate
@@ -36,11 +40,11 @@
  *                       word_value_type one's values are word_values
  *   expr_sim_pre_builtin_arg — an argument of a builtin meets expr_sim_pre
  *                       wherever expr_sim_inv holds
+ *   byte_widths_expr_type — the expression's own type has whole bytes
  *   well_typed_expr_type_evaluates — a well-typed expression's type
  *                       evaluates
- *   expr_sim_of_vv_sim — unwrap_value's step: expr_vv_sim gives expr_sim
- *                       (cheated)
- *   expr_ok_of_vv, expr_ok_stack — expr_ok from expr_vv_ok, and from
+ *   expr_ok_of_vv, expr_ok_stack — expr_ok from expr_vv_ok (by
+ *                       exprSimUnwrap's expr_sim_of_vv_sim), and from
  *                       expr_sim_ok for a form lowered to a StackValue
  *
  * Why these hypotheses:
@@ -67,18 +71,51 @@
  *     internal functions and the constructor, are MemLoc
  *     (compile_register_kwarg_vars, local_ptrs_reserved), so the theorem
  *     says nothing yet about expressions there.
+ *   - The flag members clause: the compile environment's id of a flag
+ *     member is its index in its flag's declaration, the bit
+ *     lookup_flag_mem sets.  Vyper's compiler guarantees this:
+ *     FlagT.from_FlagDef (vyper/semantics/types/user.py) numbers the
+ *     members in declaration order and rejects a repeated one, and the
+ *     Venom lowering of a flag member is the literal 2 ** id
+ *     (codegen_venom/expr.py).  build_compile_env fills
+ *     ce_flag_member_id from the main module's declarations only, so for
+ *     a flag of an imported module with two members or more the clause
+ *     does not hold of the environment it builds.  expr_sim_inv is about
+ *     the whole target, so the theorem then says nothing about any
+ *     expression of the contract, not only those that use the flag.
+ *   - The flag counts clause: the compile environment's member count of a
+ *     flag type is the one the type environment gives it (FlagArgs, the
+ *     length of its declaration's member list), which bounds its values.
+ *     Vyper's lowering of ~ on a flag XORs with the mask of that many
+ *     bits, (1 << len(typ._flag_members)) - 1 (codegen_venom/expr.py
+ *     lower_UnaryOp).  build_compile_env fills ce_flag_n_members from the
+ *     main module's declarations only, and gives a flag of an imported
+ *     module 0 members, so the clause does not hold of the environment
+ *     it builds for any contract that imports a module declaring a flag;
+ *     the theorem then says nothing about that contract.  Restricting the
+ *     clause to the main module would not help: ~ on an imported flag
+ *     would then lower to an XOR with 0, not Vyper's mask.
+ *   - byte_widths_expr e: every integer type in the expression is
+ *     int8..int256 or uint8..uint256 in steps of 8, as Vyper's are
+ *     (IntegerT.signeds and IntegerT.unsigneds, bits = 8 * i for i in
+ *     1..32, vyper/semantics/types/primitives.py).  evaluate_type admits
+ *     any width up to 256; the unsafe operators' lowering wraps by whole
+ *     bytes, as Python's does, so it does not compute the source's result
+ *     at other widths.
  *   - int_calls_expr e = []: no internal call.  An internal call lowers to
  *     INVOKE, whose simulation is #638's call step; until that is stated
  *     this theorem excludes them, and #638 replaces this conjunct with its
  *     hypothesis on the callees.
  *
  * Not here yet:
- *   - The compile environment's metadata (struct fields, flag member ids,
+ *   - The rest of the compile environment's metadata (struct fields,
  *     dynamic array capacities, method ids) is not related to the source
- *     context.  The cases that read it (StructLit, Attribute, FlagMember,
- *     Pop, method_id, ...) will need a clause each in expr_sim_inv, and
- *     TopLevelName needs every module variable to be in ce_vars.  Each is
- *     to match what Vyper's compiler guarantees.
+ *     context.  The cases that read it (StructLit, Attribute, Pop,
+ *     method_id, ...) will need a clause each in expr_sim_inv, and
+ *     TopLevelName needs every immutable to be in ce_vars (#563); storage
+ *     and transient variables are there by storage_vars_rel and
+ *     transient_vars_rel.  Each is to match what Vyper's compiler
+ *     guarantees.
  *   - Keeping an operand's value_vv through the code between compile_expr
  *     and unwrap_value (a later operand's fragment) needs the operand
  *     composition of #636's Infrastructure: vv_post's memory frame for a
@@ -92,7 +129,7 @@ Ancestors
   vyperAST vyperInterpreter vyperState vyperTypeSystem vyperTypeCallGraph
   vyperTypeInvariants vyperTypeExprSoundness vyperTypeCallStackSoundness
   vyperTypeExprResult vyperTypeEvalSoundness vyperTypeBuiltins
-  vyperExprNoControl loweringSlice
+  vyperExprNoControl loweringSlice exprSimUnwrap
 Libs
   pairLib
 
@@ -104,7 +141,13 @@ Definition expr_sim_inv_def:
     accounts_well_typed es.accounts /\
     context_well_typed cx /\ functions_well_typed cx /\
     (!id ty. FLOOKUP env.var_types id = SOME ty ==>
-             ?p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz))
+             ?p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz)) /\
+    (!src fid ts ls mid i.
+       get_module_code cx src = SOME ts /\ lookup_flag fid ts = SOME ls /\
+       INDEX_OF mid ls = SOME i ==>
+       cenv.ce_flag_member_id (nsid_to_string (src, fid)) mid = i) /\
+    (!nsid m. FLOOKUP (get_tenv cx) nsid = SOME (FlagArgs m) ==>
+              cenv.ce_flag_n_members (nsid_to_string nsid) = m)
 End
 
 (* The types whose values are word_values (loweringSlice): integers,
@@ -113,9 +156,65 @@ Definition word_value_type_def:
   word_value_type t <=> is_numeric_type t \/ is_bool_type t \/ is_flag_type t
 End
 
+(* Every node of an expression has a type whose width, type_bits, is a
+   whole number of bytes: of the integer types, those Vyper has.  The same
+   recursion as int_calls_expr. *)
+Definition byte_widths_expr_def:
+  byte_widths_expr (Name t _) = (type_bits t MOD 8 = 0) /\
+  byte_widths_expr (TopLevelName t _) = (type_bits t MOD 8 = 0) /\
+  byte_widths_expr (FlagMember t _ _) = (type_bits t MOD 8 = 0) /\
+  byte_widths_expr (IfExp t c x y) =
+    (type_bits t MOD 8 = 0 /\ byte_widths_expr c /\ byte_widths_expr x /\
+     byte_widths_expr y) /\
+  byte_widths_expr (Literal t _) = (type_bits t MOD 8 = 0) /\
+  byte_widths_expr (StructLit t _ kes) =
+    (type_bits t MOD 8 = 0 /\ byte_widths_named_exprs kes) /\
+  byte_widths_expr (Subscript t x y) =
+    (type_bits t MOD 8 = 0 /\ byte_widths_expr x /\ byte_widths_expr y) /\
+  byte_widths_expr (Attribute t x _) =
+    (type_bits t MOD 8 = 0 /\ byte_widths_expr x) /\
+  byte_widths_expr (Builtin t _ es) =
+    (type_bits t MOD 8 = 0 /\ byte_widths_exprs es) /\
+  byte_widths_expr (TypeBuiltin t _ _ es) =
+    (type_bits t MOD 8 = 0 /\ byte_widths_exprs es) /\
+  byte_widths_expr (Pop t tgt) =
+    (type_bits t MOD 8 = 0 /\ byte_widths_target tgt) /\
+  byte_widths_expr (Call t _ es dflt) =
+    (type_bits t MOD 8 = 0 /\ byte_widths_exprs es /\ byte_widths_opt dflt) /\
+
+  byte_widths_target (NameTarget _) = T /\
+  byte_widths_target (TopLevelNameTarget _) = T /\
+  byte_widths_target (SubscriptTarget tgt e) =
+    (byte_widths_target tgt /\ byte_widths_expr e) /\
+  byte_widths_target (AttributeTarget tgt _) = byte_widths_target tgt /\
+
+  byte_widths_exprs [] = T /\
+  byte_widths_exprs (e::es) = (byte_widths_expr e /\ byte_widths_exprs es) /\
+
+  byte_widths_opt NONE = T /\
+  byte_widths_opt (SOME e) = byte_widths_expr e /\
+
+  byte_widths_named_exprs [] = T /\
+  byte_widths_named_exprs ((_,e)::kes) =
+    (byte_widths_expr e /\ byte_widths_named_exprs kes)
+Termination
+  qexists_tac `measure (\(x : expr + base_assignment_target + expr list +
+                                      expr option + (identifier # expr) list).
+    case x of
+    | INL e => expr_size e
+    | INR (INL tgt) => base_assignment_target_size tgt
+    | INR (INR (INL es)) => expr4_size es
+    | INR (INR (INR (INL opt))) => expr3_size opt
+    | INR (INR (INR (INR kes))) => expr1_size kes)` >>
+  conj_tac >- MATCH_ACCEPT_TAC prim_recTheory.WF_measure >>
+  PURE_REWRITE_TAC [prim_recTheory.measure_thm, sumTheory.sum_case_def] >>
+  simp[expr_size_def]
+End
+
 Definition expr_sim_pre_def:
   expr_sim_pre cenv cx env e es <=>
     expr_sim_inv cenv cx env es /\ well_typed_expr env e /\
+    byte_widths_expr e /\
     int_calls_expr e = [] /\ call_evaluation_safe cx (int_calls_expr e)
 End
 
@@ -270,14 +369,27 @@ Proof
   Induct >> rw[well_typed_expr_def, int_calls_expr_def] >> metis_tac[]
 QED
 
+Theorem byte_widths_exprs_mem:
+  !args e. byte_widths_exprs args /\ MEM e args ==> byte_widths_expr e
+Proof
+  Induct >> rw[byte_widths_expr_def] >> gvs[]
+QED
+
+Theorem byte_widths_expr_type:
+  !e. byte_widths_expr e ==> type_bits (expr_type e) MOD 8 = 0
+Proof
+  Cases >> rw[byte_widths_expr_def, expr_type_def]
+QED
+
 Theorem expr_sim_pre_builtin_arg:
   !cenv cx env ann bi args e es es'.
     expr_sim_pre cenv cx env (Builtin ann bi args) es /\ MEM e args /\
     expr_sim_inv cenv cx env es' ==>
     expr_sim_pre cenv cx env e es'
 Proof
-  rw[expr_sim_pre_def, well_typed_expr_def, int_calls_expr_def] >>
-  drule_all well_typed_exprs_mem >> gvs[]
+  rw[expr_sim_pre_def, well_typed_expr_def, int_calls_expr_def,
+     byte_widths_expr_def] >>
+  drule_all well_typed_exprs_mem >> drule_all byte_widths_exprs_mem >> gvs[]
 QED
 
 Theorem env_consistent_var_type_evaluates:
@@ -324,21 +436,6 @@ Proof
       irule (REWRITE_RULE [well_formed_type_def]
                raw_call_return_type_well_formed) >> simp[]) >>
   gvs[well_typed_expr_def]
-QED
-
-(* ===== From one judgment to the other ===== *)
-
-(* unwrap_value's code, run where compile_expr's code ends, takes vv_post to
-   expr_post: nothing for a StackValue, a load for a word type, a copy into
-   a buffer of the expression's own for an aggregate outside memory.
-   Cheated, for #636's Infrastructure (operand composition).  Unprovable as
-   the definitions stand for a non-word immutable: immutables_rel relates
-   only the 32-byte encodings. *)
-Theorem expr_sim_of_vv_sim:
-  !ctx func cenv cx ty e es.
-    expr_vv_sim ctx func cenv cx ty e es ==> expr_sim ctx func cenv cx ty e es
-Proof
-  cheat
 QED
 
 (* A case lemma that proves expr_vv_ok proves expr_ok. *)
