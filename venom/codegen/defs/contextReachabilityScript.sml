@@ -44,13 +44,16 @@ Theorem raw_inst_reachable_active:
   !initial_vs ctx fn inst s.
     raw_inst_reachable initial_vs ctx fn inst s ==> active_inst fn inst s
 Proof
-  cheat
+  ho_match_mp_tac raw_inst_reachable_ind >> simp[]
 QED
 
 Theorem raw_inst_reachable_closed:
   reachability_closed (raw_inst_reachable initial_vs) ctx
 Proof
-  cheat
+  rewrite_tac[reachability_closed_def, fn_entry_inv_def] >>
+  conj_tac >- metis_tac[raw_inst_reachable_next] >>
+  conj_tac >- metis_tac[raw_inst_reachable_block] >>
+  metis_tac[raw_inst_reachable_callee]
 QED
 
 Theorem raw_inst_reachable_fn_entry:
@@ -61,7 +64,8 @@ Theorem raw_inst_reachable_fn_entry:
     (initial_vs with <| vs_prev_bb := NONE; vs_current_bb := lbl;
                        vs_inst_idx := 0 |>)
 Proof
-  cheat
+  rewrite_tac[fn_entry_inv_def] >>
+  metis_tac[raw_inst_reachable_entry]
 QED
 
 (* An executable entry instruction is not required by the existing package:
