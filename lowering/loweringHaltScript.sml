@@ -4,9 +4,9 @@
  * external_call_result_rel (stated with it, in vyperLoweringCorrect, as
  * external_return_word_result_rel, external_return_prim_result_rel,
  * external_return_static_result_rel, external_return_abi_result_rel,
- * external_return_none_result_rel, external_fallthrough_result_rel and the
- * _unlock versions of all but the static and ABI ones).  The fragment lemmas are stated with
- * frag_exec (fragExec), like the statement lemmas of stmtLoweringProps and
+ * external_return_none_result_rel, external_fallthrough_result_rel and
+ * their _unlock versions).  The fragment lemmas are stated with frag_exec
+ * (fragExec), like the statement lemmas of stmtLoweringProps and
  * loweringSlice.
  *
  * Main lemmas:
@@ -33,8 +33,10 @@
  *   external_halt_success   — the effects compared on success, from
  *                             state_rel at the return
  *   compile_external_return_word_unlock_frag,
+ *   compile_external_return_copy_unlock_frag,
+ *   compile_external_return_abi_unlock_frag,
  *   compile_return_none_external_unlock_frag,
- *   compile_guarded_body_stop_unlock_frag — the same three, in a function
+ *   compile_guarded_body_stop_unlock_frag — the same five, in a function
  *                             whose return may release a transient
  *                             nonreentrant lock: one TSTORE of 0 at the
  *                             lock key before the halt
@@ -57,6 +59,9 @@
  *   unlock_stop_frag        — the optional unlock, then STOP
  *   compile_external_return_unlock — a return sequence is the optional
  *                             unlock, then the sequence without one
+ *   compile_external_return_unlock_seq, optional_unlock_state — running
+ *                             it: the unlock, then the sequence without
+ *                             one, from a state that reads the same
  *
  * Scope: the lemmas without _unlock have no unlock (nr ==> iv: no lock,
  * or a view function, whose return does not unlock); the _unlock ones
@@ -1316,6 +1321,178 @@ Proof
       qpat_assum `P s0` (irule_at Any) >>
       Cases_on `nr` >> Cases_on `iv` >> gvs[tstore_def])
   >> irule cs_extends_same_block >> simp[]
+QED
+
+(* The state after the optional unlock, at the start of the return
+   sequence without an unlock: only the transient storage (for a release)
+   and the instruction index differ, so operands, memory and allocas read
+   the same. *)
+Theorem optional_unlock_state:
+  !nr iv nkey n s u.
+    u = (if nr /\ ~iv then tstore (n2w nkey) 0w s else s) with
+          vs_inst_idx := n ==>
+    (!op. eval_operand op u = eval_operand op s) /\
+    u.vs_memory = s.vs_memory /\ u.vs_allocas = s.vs_allocas /\
+    u.vs_alloca_next = s.vs_alloca_next /\
+    (alloca_inv u <=> alloca_inv s) /\
+    u.vs_accounts = s.vs_accounts /\
+    u.vs_transient =
+      (if nr /\ ~iv then (tstore (n2w nkey) 0w s).vs_transient
+       else s.vs_transient) /\
+    u.vs_logs = s.vs_logs /\ u.vs_requests = s.vs_requests
+Proof
+  rpt gen_tac >> strip_tac >> Cases_on `nr /\ ~iv` >>
+  gvs[tstore_def, venomMemDefsTheory.alloca_inv_def,
+      venomMemDefsTheory.allocas_non_overlapping_def,
+      venomMemDefsTheory.alloca_next_valid_def] >>
+  Cases >> simp[eval_operand_def, lookup_var_def]
+QED
+
+(* A return sequence with the optional unlock first: the unlock, then
+   the sequence without one from the state it leaves. *)
+Theorem compile_external_return_unlock_seq:
+  !ctx rv p rr ei msz nr nkey ut iv st x st' P Q R.
+    compile_external_return rv p rr ei msz nr nkey ut iv st = (x, st') /\
+    (nr /\ ~iv ==> ut) /\
+    (!st1.
+       compile_external_return rv p rr ei msz F nkey ut iv st1 = (x, st') /\
+       st1.cs_next_var = st.cs_next_var /\
+       st.cs_next_id <= st1.cs_next_id ==>
+       cs_extends st1 st' /\
+       frag_exec ctx st1 st'
+         (\s1. ?s. P s /\
+               s1 = (if nr /\ ~iv then tstore (n2w nkey) 0w s else s) with
+                      vs_inst_idx := LENGTH st1.cs_current_insts)
+         Q R) ==>
+    frag_exec ctx st st' P Q R
+Proof
+  rpt strip_tac >>
+  drule compile_external_return_unlock >> strip_tac >>
+  drule_all optional_unlock_code >> strip_tac >>
+  `st1.cs_next_var = st.cs_next_var /\ st.cs_next_id <= st1.cs_next_id /\
+   cs_extends st st1` by
+    (qpat_x_assum `st1 = _` SUBST1_TAC >> rw[] >>
+     irule cs_extends_same_block >> simp[]) >>
+  qpat_x_assum `st1 = _` kall_tac >>
+  first_x_assum drule_all >> strip_tac >>
+  irule frag_exec_seq >>
+  qexistsl_tac
+    [`\s1. ?s. P s /\
+           s1 = (if nr /\ ~iv then tstore (n2w nkey) 0w s else s) with
+                  vs_inst_idx := LENGTH st1.cs_current_insts`, `st1`] >>
+  simp[] >>
+  irule optional_unlock_frag >> qexistsl_tac [`iv`, `nkey`, `nr`, `ut`] >>
+  simp[] >> rpt strip_tac >> qexists_tac `s` >> simp[]
+QED
+
+(* Returning a static complex value, with the optional unlock first. *)
+Theorem compile_external_return_copy_unlock_frag:
+  !ctx op m msz nr nkey ut iv st x st' P Q R.
+    compile_external_return (SOME op) F F (AbiCopy m) msz nr nkey ut iv st =
+      (x, st') /\
+    (nr /\ ~iv ==> ut) /\ (!y. op = Var y ==> not_fresh_at st y) /\
+    m < dimword(:256) /\
+    (!s. P s ==>
+         ?p. eval_operand op s = SOME p /\
+             !ss. ss.vs_returndata = mem_bytes_at (w2n p) m s.vs_memory /\
+                  ss.vs_accounts = s.vs_accounts /\
+                  ss.vs_transient =
+                    (if nr /\ ~iv then (tstore (n2w nkey) 0w s).vs_transient
+                     else s.vs_transient) /\
+                  ss.vs_logs = s.vs_logs /\ ss.vs_requests = s.vs_requests ==>
+                  R (Halt ss)) ==>
+    frag_exec ctx st st' P Q R
+Proof
+  rpt strip_tac >>
+  qspecl_then [`ctx`, `SOME op`, `F`, `F`, `AbiCopy m`, `msz`, `nr`, `nkey`,
+               `ut`, `iv`, `st`, `x`, `st'`, `P`, `Q`, `R`] mp_tac
+    compile_external_return_unlock_seq >>
+  impl_tac >> simp[] >> gen_tac >> strip_tac >> conj_tac
+  >- (drule compile_external_return_copy_parts >> simp[] >> strip_tac >>
+      irule cs_extends_same_block >> simp[] >>
+      qpat_x_assum `compile_external_return _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+      simp[compile_external_return_def, compile_alloc_buffer_def,
+           Once compile_abi_encode_child_def, emit_op_def, emit_void_def,
+           emit_inst_def, comp_bind_def, comp_ignore_bind_def,
+           comp_return_def, fresh_id_def, fresh_var_def, emit_def] >>
+      rpt strip_tac >> gvs[]) >>
+  qspecl_then [`ctx`, `op`, `m`, `msz`, `F`, `nkey`, `ut`, `iv`, `st1`, `()`,
+               `st'`] mp_tac compile_external_return_copy_frag >>
+  asm_rewrite_tac[] >> disch_then irule >> conj_tac
+  >- (rpt strip_tac >> gvs[not_fresh_at_def]) >>
+  rpt strip_tac >>
+  qpat_x_assum `(\s1. _) _` (strip_assume_tac o BETA_RULE) >>
+  qpat_x_assum `_ = (if _ then _ else _) with vs_inst_idx := _`
+    SUBST_ALL_TAC >>
+  rename1 `P s` >>
+  qpat_x_assum `!s. P s ==> _` drule >> strip_tac >>
+  qspecl_then [`nr`, `iv`, `nkey`, `LENGTH st1.cs_current_insts`, `s`,
+    `(if nr /\ ~iv then tstore (n2w nkey) 0w s else s) with
+       vs_inst_idx := LENGTH st1.cs_current_insts`]
+    mp_tac optional_unlock_state >>
+  REWRITE_TAC[] >> strip_tac >>
+  qexists_tac `p` >> asm_rewrite_tac[]
+QED
+
+(* Returning a value through the ABI encoder, with the optional unlock
+   first.  The unlock's TSTORE takes an instruction id below the
+   encoder's, so the hypotheses at st cover the sequence after it. *)
+Theorem compile_external_return_abi_unlock_frag:
+  !ctx op ei msz nr nkey ut iv st x st' env ty tv v av P Q R.
+    compile_external_return (SOME op) F F ei msz nr nkey ut iv st =
+      (x, st') /\
+    (nr /\ ~iv ==> ut) /\ (!y. op = Var y ==> not_fresh_at st y) /\
+    abi_enc_plan env ty ei /\ evaluate_type env ty = SOME tv /\
+    value_has_type tv v /\ vyper_to_abi env ty v = SOME av /\
+    LENGTH (enc (vyper_to_abi_type env ty) av) <= msz /\
+    (!s. P s ==>
+         ?p. eval_operand op s = SOME p /\
+             val_in_memory tv v (w2n p) s.vs_memory /\
+             w2n p + type_memory_size tv <= s.vs_alloca_next /\
+             alloca_inv s /\
+             (!i. i IN frag_ids st st' ==> FLOOKUP s.vs_allocas i = NONE) /\
+             s.vs_alloca_next + msz + 32 * (st'.cs_next_id - st.cs_next_id) <
+               dimword (:256) /\
+             !ss. ss.vs_returndata = enc (vyper_to_abi_type env ty) av /\
+                  ss.vs_accounts = s.vs_accounts /\
+                  ss.vs_transient =
+                    (if nr /\ ~iv then (tstore (n2w nkey) 0w s).vs_transient
+                     else s.vs_transient) /\
+                  ss.vs_logs = s.vs_logs /\ ss.vs_requests = s.vs_requests ==>
+                  R (Halt ss)) ==>
+    frag_exec ctx st st' P Q R
+Proof
+  rpt strip_tac >>
+  qspecl_then [`ctx`, `SOME op`, `F`, `F`, `ei`, `msz`, `nr`, `nkey`,
+               `ut`, `iv`, `st`, `x`, `st'`, `P`, `Q`, `R`] mp_tac
+    compile_external_return_unlock_seq >>
+  impl_tac >> simp[] >> gen_tac >> strip_tac >> conj_tac
+  >- (drule compile_external_return_abi_parts >> simp[] >> strip_tac >>
+      imp_res_tac compile_alloc_buffer_extends >>
+      imp_res_tac compile_abi_encode_to_buf_extends >>
+      imp_res_tac emit_inst_metadata >>
+      metis_tac[cs_extends_trans]) >>
+  qspecl_then [`ctx`, `op`, `ei`, `msz`, `F`, `nkey`, `ut`, `iv`, `st1`, `()`,
+               `st'`, `env`, `ty`, `tv`, `v`, `av`] mp_tac
+    compile_external_return_abi_frag >>
+  asm_rewrite_tac[] >> disch_then irule >> conj_tac
+  >- (rpt strip_tac >> gvs[not_fresh_at_def]) >>
+  rpt strip_tac >>
+  qpat_x_assum `(\s1. _) _` (strip_assume_tac o BETA_RULE) >>
+  qpat_x_assum `_ = (if _ then _ else _) with vs_inst_idx := _`
+    SUBST_ALL_TAC >>
+  rename1 `P s` >>
+  qpat_x_assum `!s. P s ==> _` drule >> strip_tac >>
+  qspecl_then [`nr`, `iv`, `nkey`, `LENGTH st1.cs_current_insts`, `s`,
+    `(if nr /\ ~iv then tstore (n2w nkey) 0w s else s) with
+       vs_inst_idx := LENGTH st1.cs_current_insts`]
+    mp_tac optional_unlock_state >>
+  REWRITE_TAC[] >> strip_tac >>
+  qexists_tac `p` >> asm_rewrite_tac[] >> conj_tac
+  >- (rpt strip_tac >>
+      qpat_x_assum `!i. i IN frag_ids st st' ==> _` irule >>
+      gvs[frag_ids_def]) >>
+  decide_tac
 QED
 
 (* A return without a value, in an external function, with the optional
