@@ -221,6 +221,7 @@ Proof
   simp[venom_call_request_def, read_memory_def, consume_call_outcome_def,
        take_outcome_def, record_request_def, computed_precompile_def,
        precompile_result_empty_ec, failed_outcome_def, adopt_outcome_def,
+       adopt_outcome_deletions_def,
        write_memory_with_expansion_def, call_probe_state_def,
        init_venom_state_def, empty_call_context_def, w2w_n2w]
 QED

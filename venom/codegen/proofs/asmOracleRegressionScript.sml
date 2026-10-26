@@ -57,10 +57,24 @@ val gas_initial_tac =
        asm_step_control_def, asm_step_extcall_def, asm_step_copy_def,
        asm_step_context_def, asm_gas_def, asm_push_val_def, asm_next_def];
 
-Theorem gas_counter_step_stack[local]:
+Theorem gas_step_stack[local]:
   (FST (HD (SND (step gas_counter_evm)).contexts)).stack = [98w]
 Proof
   gas_initial_tac >> gas_eval_tac
+QED
+
+Theorem gas_step_unrelated[local]:
+  ~asm_evm_rel [AsmOp "GAS"]
+    (asm_next (gas_counter_asm with as_stack := [0w]))
+    (SND (step gas_counter_evm))
+Proof
+  mp_tac gas_step_stack >>
+  Cases_on `(SND (step gas_counter_evm)).contexts` >>
+  simp[asm_evm_rel_def] >>
+  qmatch_asmsub_rename_tac `(SND (step gas_counter_evm)).contexts = ctxt_rb :: rest` >>
+  PairCases_on `ctxt_rb` >>
+  simp[asm_next_def, gas_counter_asm_def, asm_oracle_initial_def] >>
+  wordsLib.WORD_DECIDE_TAC
 QED
 
 (* The old step theorem admitted GAS because it fell through to AsmError.
@@ -85,15 +99,9 @@ Proof
   conj_tac >- (
     rw[asm_encoding_wf_def, compute_label_offsets_def,
        asm_inst_size_def] >> EVAL_TAC) >>
-  conj_tac >- gas_initial_tac >>
-  conj_tac >- gas_initial_tac >>
-  conj_tac >- gas_initial_tac >>
-  conj_tac >- gas_initial_tac >>
-  conj_tac >- gas_initial_tac >>
-  conj_tac >- gas_initial_tac >>
-  conj_tac >- (gas_initial_tac >> suspend "step_success") >>
-  conj_tac >- (gas_initial_tac >> suspend "step_stack") >>
-  suspend "step_unrelated"
+  simp[gas_step_unrelated] >>
+  gas_initial_tac >>
+  conj_tac >- suspend "step_success" >> suspend "step_stack"
 QED
 
 Resume gas_existing_relation_counterexample[step_success]:
@@ -101,14 +109,6 @@ Resume gas_existing_relation_counterexample[step_success]:
 QED
 Resume gas_existing_relation_counterexample[step_stack]:
   gas_eval_tac
-QED
-Resume gas_existing_relation_counterexample[step_unrelated]:
-  mp_tac gas_counter_step_stack >>
-  Cases_on `(SND (step gas_counter_evm)).contexts` >>
-  simp[asm_evm_rel_def] >>
-  rename1 `h::t` >> PairCases_on `h` >>
-  simp[gas_counter_asm_def, asm_oracle_initial_def, asm_next_def] >>
-  wordsLib.WORD_DECIDE_TAC
 QED
 Finalise gas_existing_relation_counterexample
 

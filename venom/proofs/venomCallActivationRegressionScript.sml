@@ -152,6 +152,7 @@ val computed_defs =
    exec_ext_call_def, consume_call_outcome_def,
    venom_call_request_def, read_memory_def, take_outcome_def,
    record_request_def, computed_precompile_def, adopt_outcome_def,
+   adopt_outcome_deletions_def,
    failed_outcome_def, write_memory_with_expansion_def,
    lookup_var_def, update_var_def, w2w_n2w,
    precompile_result_empty_ecrecover, precompile_result_empty_ec,
@@ -193,13 +194,6 @@ Proof
   simp[Excl "consume_call_outcome_eq"]
 QED
 
-Theorem consume_empty_returndata_size[local]:
-  consume_call_outcome rq ro rs s = (v,t) /\ t.vs_returndata = [] ==>
-  consume_call_outcome rq ro 0 s = (v,t)
-Proof
-  rw[consume_call_outcome_eq] >> gvs[]
-QED
-
 Theorem activated_computed_invalid_ec:
   let s = call_probe_state with <|
     vs_memory := REPLICATE 63 0w ++ [1w];
@@ -213,7 +207,7 @@ Proof
   pure_rewrite_tac [LET_THM] >> BETA_TAC >> strip_tac >>
   conj_tac >> irule probe_computed_dispatch >>
   simp[Excl "consume_call_outcome_eq"] >>
-  irule consume_empty_returndata_size >> simp[Excl "consume_call_outcome_eq"] >>
+  irule consume_call_outcome_empty_output_size >> simp[Excl "consume_call_outcome_eq"] >>
   qexists_tac `3` >> simp[Excl "consume_call_outcome_eq", venom_state_fupdcanon]
 QED
 

@@ -13,7 +13,7 @@
 Theory stackPlanGen
 Ancestors
   stackPlanOps livenessDefs cfgDefs venomWf passSharedDefs staticLayoutDefs
-  callLayoutDefs list relation pair pred_set arithmetic
+  callLayoutDefs fcgDefs list relation pair pred_set arithmetic
 
 (* =========================================================================
    Emit Input Operands
@@ -487,10 +487,9 @@ Definition must_halt_labels_def:
       cfg.cfg_dfs_post
 End
 
-(* A conservative version of Python's frame-growth check.  An external entry
-   has no PARAM pseudo-instructions, so its caller height is zero.  Counting
-   every SSA variable in the function is at least as large as the reachable
-   regional count used by Python. *)
+(* Python's per-function frame-growth bound counts all SSA variables and
+   the largest per-instruction transient. Regional bounds below additionally
+   account for callees and reject reachable CFG cycles. *)
 Definition cleanup_frame_vars_def:
   cleanup_frame_vars fn = nub (FLAT (MAP (λbb. FLAT (MAP (λinst.
     operand_vars inst.inst_operands ++ inst.inst_outputs)
@@ -503,12 +502,103 @@ Definition cleanup_max_transient_def:
     fn.fn_blocks))
 End
 
-Definition cleanup_elision_safe_def:
-  cleanup_elision_safe cfg fn bb <=>
-    ~EXISTS (λinst. is_param_opcode inst.inst_opcode)
-       (FLAT (MAP (λb. b.bb_instructions) fn.fn_blocks)) /\
+(* Python stack_safety.py: caller bounds and cycle-sensitive regional growth.
+   The table is evaluated in callee-first call-graph order. *)
+Definition cleanup_frame_growth_def:
+  cleanup_frame_growth fn = LENGTH (cleanup_frame_vars fn) + cleanup_max_transient fn
+End
+
+Definition cleanup_caller_height_def:
+  (cleanup_caller_height 0 ctx fcg name = NONE) /\
+  (cleanup_caller_height (SUC n) ctx fcg name =
+    let callers = FILTER (\c. MEM name (fcg_get_callees fcg c.fn_name)) ctx.ctx_functions in
+    let hs = (if ctx.ctx_entry = SOME name then [SOME 0] else []) ++
+      MAP (\c. OPTION_MAP (\h. h + cleanup_frame_growth c)
+        (cleanup_caller_height n ctx fcg c.fn_name)) callers in
+    if NULL hs \/ EXISTS IS_NONE hs then NONE
+    else SOME (FOLDL MAX 0 (MAP THE hs)))
+End
+
+Definition cleanup_inst_transient_def:
+  cleanup_inst_transient growth inst =
+    if inst.inst_opcode = INVOKE then
+      (case inst.inst_operands of
+         Label callee :: _ =>
+           (case ALOOKUP growth callee of
+              SOME (SOME g) => SOME (LENGTH inst.inst_operands + 2 + g)
+            | _ => NONE)
+       | _ => NONE)
+    else SOME (LENGTH inst.inst_operands + 2)
+End
+
+Definition cleanup_block_summary_def:
+  cleanup_block_summary growth bb =
+    OPTION_MAP (\ts.
+      (FLAT (MAP (\inst. operand_vars inst.inst_operands ++ inst.inst_outputs)
+                 bb.bb_instructions), FOLDL MAX 0 ts))
+      (OPT_MMAP (cleanup_inst_transient growth) bb.bb_instructions)
+End
+
+Definition cleanup_reach_iter_def:
+  (cleanup_reach_iter 0 cfg ls = ls) /\
+  (cleanup_reach_iter (SUC n) cfg ls =
+    cleanup_reach_iter n cfg (nub (ls ++ FLAT (MAP (cfg_succs_of cfg) ls))))
+End
+
+Definition cleanup_reach_def:
+  cleanup_reach cfg fn lbl = cleanup_reach_iter (LENGTH fn.fn_blocks) cfg [lbl]
+End
+
+Definition cleanup_peel_def:
+  (cleanup_peel 0 cfg ls = ls) /\
+  (cleanup_peel (SUC n) cfg ls =
+    cleanup_peel n cfg (FILTER (\l. EXISTS (\s. MEM s ls) (cfg_succs_of cfg l)) ls))
+End
+
+Definition cleanup_cyclic_def:
+  cleanup_cyclic cfg fn =
+    cleanup_peel (LENGTH fn.fn_blocks) cfg (MAP (\bb. bb.bb_label) fn.fn_blocks)
+End
+
+Definition cleanup_region_growth_def:
+  cleanup_region_growth growth cfg fn lbl =
+    if MEM lbl (cleanup_cyclic cfg fn) then NONE else
+    case OPT_MMAP (\l. case lookup_block l fn.fn_blocks of
+                          NONE => NONE
+                        | SOME bb => cleanup_block_summary growth bb)
+                  (cleanup_reach cfg fn lbl) of
+      NONE => NONE
+    | SOME sums => SOME (LENGTH (nub (FLAT (MAP FST sums))) +
+                         FOLDL MAX 0 (MAP SND sums))
+End
+
+Definition cleanup_growth_table_def:
+  cleanup_growth_table ctx fcg =
+    case ctx.ctx_entry of
+      NONE => []
+    | SOME e =>
+        FOLDL (\tbl name.
+          case lookup_function name ctx.ctx_functions of
+            NONE => tbl
+          | SOME func =>
+              case fn_entry_label func of
+                NONE => tbl
+              | SOME l =>
+                  (name, cleanup_region_growth tbl (cfg_analyze func) func l) :: tbl)
+          [] (fcg_postorder fcg e)
+End
+
+Definition cleanup_height_safe_def:
+  cleanup_height_safe ch growth cfg fn bb h <=>
     MEM bb.bb_label (must_halt_labels cfg fn) /\
-    LENGTH (cleanup_frame_vars fn) + cleanup_max_transient fn ≤ 1024
+    case (ch, cleanup_region_growth growth cfg fn bb.bb_label) of
+      (SOME c, SOME g) => c + h + g <= 1024
+    | _ => F
+End
+
+Definition cleanup_elision_safe_def:
+  cleanup_elision_safe ch growth cfg fn bb h <=>
+    cleanup_height_safe ch growth cfg fn bb h
 End
 
 (* There is no runtime operation for Python's _DeadStackItem.  Label operands
@@ -550,22 +640,27 @@ Definition clean_stack_plan_def:
               let layout = live_vars_at liveness pred_lbl
                 (LENGTH pred_bb.bb_instructions) in
               let to_pop = FILTER (λv. ¬ MEM v inputs) layout in
-              (* Even a halting block with no live inputs must mark retained
-                 physical slots dead.  Python keeps the slots but replaces
-                 their logical identities before planning REVERT/RETURN. *)
-              if NULL inputs ∧ cleanup_elision_safe cfg fn bb then
-                ([], ps with ps_stack :=
-                  MAP (K dead_stack_marker) ps.ps_stack)
-              else if cleanup_elision_safe cfg fn bb then
-                let physical = FILTER (λop.
-                      IS_SOME (stack_get_depth op ps.ps_stack))
-                      (MAP Var to_pop) in
-                let retained = FILTER (λop.
-                      below_all_live op inputs ps.ps_stack) physical in
-                let to_cleanup = FILTER (λop. ¬MEM op retained) physical in
+              let physical = FILTER (λop.
+                    IS_SOME (stack_get_depth op ps.ps_stack))
+                    (MAP Var to_pop) in
+              let retained = FILTER (λop.
+                    below_all_live op inputs ps.ps_stack) physical in
+              let to_cleanup = FILTER (λop. ¬MEM op retained) physical in
+              let ok = (ps.ps_cleanup_promised ∨
+                cleanup_elision_safe ps.ps_cleanup_height ps.ps_cleanup_growth
+                  cfg fn bb (LENGTH ps.ps_stack - LENGTH to_cleanup)) in
+              let promised = (ps.ps_cleanup_promised ∨ (ok ∧ ¬NULL retained)) in
+              (* A successful elision establishes a path-local promise.  Forget
+                 retained identities, not physical stack slots. *)
+              if NULL inputs ∧ ok then
+                ([], ps with <| ps_stack :=
+                  MAP (K dead_stack_marker) ps.ps_stack;
+                  ps_cleanup_promised := promised |>)
+              else if ok then
                 let (ops, ps') = popmany_plan to_cleanup ps in
-                (ops, ps' with ps_stack :=
-                  mark_dead_stack retained ps'.ps_stack)
+                (ops, ps' with <| ps_stack :=
+                  mark_dead_stack retained ps'.ps_stack;
+                  ps_cleanup_promised := promised |>)
               else popmany_plan (MAP Var to_pop) ps)
     | _ => ([], ps)
 End
@@ -1088,6 +1183,44 @@ End
    Top-Level Entry Points
    ========================================================================= *)
 
+Definition init_cleanup_plan_state_def:
+  init_cleanup_plan_state ch growth spill_base lbl_ctr =
+    (init_plan_state spill_base) with
+      <| ps_label_counter := lbl_ctr; ps_cleanup_height := ch;
+         ps_cleanup_growth := growth; ps_cleanup_promised := F |>
+End
+
+Definition generate_fn_plan_with_cleanup_analyzed_def:
+  generate_fn_plan_with_cleanup_analyzed liveness dfg cfg ch growth fn spill_base lbl_ctr =
+    if ~canonical_param_prefix fn then NONE else
+    let ps = init_cleanup_plan_state ch growth spill_base lbl_ctr in
+    case fn_entry_label fn of
+      NONE => SOME ([] : stack_op list, ps)
+    | SOME lbl =>
+        case generate_fn_plan_aux liveness dfg cfg fn [lbl] [] ps of
+          NONE => NONE
+        | SOME (ops, _, ps') => SOME (ops, ps')
+End
+
+Definition generate_fn_plan_with_cleanup_def:
+  generate_fn_plan_with_cleanup ch growth fn spill_base lbl_ctr =
+    generate_fn_plan_with_cleanup_analyzed (liveness_analyze fn)
+      (dfg_build_function fn) (cfg_analyze fn) ch growth fn spill_base lbl_ctr
+End
+
+Definition generate_fn_plan_with_cleanup_fuel_def:
+  generate_fn_plan_with_cleanup_fuel fuel ch growth fn spill_base lbl_ctr =
+    if ~canonical_param_prefix fn then NONE else
+    let ps = init_cleanup_plan_state ch growth spill_base lbl_ctr in
+    case fn_entry_label fn of
+      NONE => SOME ([] : stack_op list, ps)
+    | SOME lbl =>
+        case generate_fn_plan_aux_fuel fuel (liveness_analyze_fuel fuel fn)
+               (dfg_build_function fn) (cfg_analyze fn) fn [lbl] [] ps of
+          NONE => NONE
+        | SOME (ops, _, ps') => SOME (ops, ps')
+End
+
 Definition generate_fn_plan_analyzed_def:
   generate_fn_plan_analyzed liveness dfg cfg fn spill_base
       (lbl_ctr : num) =
@@ -1210,12 +1343,22 @@ End
 
 Definition generate_context_plan_def:
   generate_context_plan ctx =
-    generate_context_plan_with generate_fn_plan ctx
+    let fcg = fcg_analyze ctx in
+    let growth = cleanup_growth_table ctx fcg in
+    generate_context_plan_with
+      (\fn. generate_fn_plan_with_cleanup
+        (cleanup_caller_height (LENGTH ctx.ctx_functions) ctx fcg fn.fn_name)
+        growth fn) ctx
 End
 
 Definition generate_context_plan_fuel_def:
   generate_context_plan_fuel fuel ctx =
-    generate_context_plan_with (generate_fn_plan_fuel fuel) ctx
+    let fcg = fcg_analyze ctx in
+    let growth = cleanup_growth_table ctx fcg in
+    generate_context_plan_with
+      (\fn. generate_fn_plan_with_cleanup_fuel fuel
+        (cleanup_caller_height (LENGTH ctx.ctx_functions) ctx fcg fn.fn_name)
+        growth fn) ctx
 End
 Theorem generate_context_regions_rejects_malformed_spill:
   generate_context_regions
@@ -1245,3 +1388,97 @@ Definition context_plan_ops_def:
   context_plan_ops cp =
     FLAT (MAP (\r. r.sr_plan) cp.cp_regions) ++ revert_postamble
 End
+
+(* Small executable interfaces for stack_safety's option-valued analysis. *)
+Theorem cleanup_invoke_transient_evidence:
+  cleanup_inst_transient [] (mk_inst 0 INVOKE [Label "g"] []) = NONE /\
+  cleanup_inst_transient [("g",NONE)] (mk_inst 0 INVOKE [Label "g"] []) = NONE /\
+  cleanup_inst_transient [("g",SOME 7)] (mk_inst 0 INVOKE [Label "g"] []) = SOME 10
+Proof
+  EVAL_TAC
+QED
+
+Theorem cleanup_cfg_cycle_evidence:
+  loop = mk_raw_function "loop"
+    [<|bb_label := "entry"; bb_instructions := [mk_inst 0 JMP [Label "entry"] []]|>] ==>
+  cleanup_region_growth [] (cfg_analyze loop) loop "entry" = NONE
+Proof
+  strip_tac >> gvs[] >> EVAL_TAC
+QED
+
+Theorem cleanup_halt_height_boundary:
+  halt = mk_raw_function "halt"
+    [<|bb_label := "entry"; bb_instructions := [mk_inst 0 STOP [] []]|>] ==>
+  cleanup_height_safe (SOME 0) [] (cfg_analyze halt) halt (HD halt.fn_blocks) 1022 /\
+  ~cleanup_height_safe (SOME 0) [] (cfg_analyze halt) halt (HD halt.fn_blocks) 1023 /\
+  ~cleanup_height_safe NONE [] (cfg_analyze halt) halt (HD halt.fn_blocks) 0
+Proof
+  strip_tac >> gvs[] >> EVAL_TAC
+QED
+
+Theorem cleanup_entry_caller_height_evidence:
+  halt = mk_raw_function "halt"
+    [<|bb_label := "entry"; bb_instructions := [mk_inst 0 STOP [] []]|>] /\
+  ctx = mk_venom_context [halt] (SOME "halt") ==>
+  cleanup_caller_height 1 ctx (fcg_analyze ctx) "halt" = SOME 0 /\
+  cleanup_caller_height 1 ctx (fcg_analyze ctx) "absent" = NONE /\
+  cleanup_growth_table ctx (fcg_analyze ctx) = [("halt",SOME 2)]
+Proof
+  strip_tac >> gvs[] >> EVAL_TAC
+QED
+
+Theorem cleanup_shared_callee_height_evidence:
+  leaf = mk_raw_function "leaf"
+    [<|bb_label := "leaf"; bb_instructions := [mk_inst 0 STOP [] []]|>] /\
+  left = mk_raw_function "left"
+    [<|bb_label := "left"; bb_instructions :=
+       [mk_inst 1 INVOKE [Label "leaf"] []; mk_inst 2 STOP [] []]|>] /\
+  right = mk_raw_function "right"
+    [<|bb_label := "right"; bb_instructions :=
+       [mk_inst 3 INVOKE [Label "leaf"] []; mk_inst 4 STOP [] []]|>] /\
+  entry = mk_raw_function "entry"
+    [<|bb_label := "entry"; bb_instructions :=
+       [mk_inst 5 INVOKE [Label "left"] []; mk_inst 6 INVOKE [Label "right"] [];
+        mk_inst 7 STOP [] []]|>] /\
+  ctx = mk_venom_context [entry; left; right; leaf] (SOME "entry") ==>
+  cleanup_caller_height 4 ctx (fcg_analyze ctx) "leaf" = SOME 6 /\
+  ALOOKUP (cleanup_growth_table ctx (fcg_analyze ctx)) "entry" = SOME (SOME 8)
+Proof
+  strip_tac >> gvs[] >> EVAL_TAC
+QED
+
+Theorem cleanup_invoked_cycle_evidence:
+  loop = mk_raw_function "loop"
+    [<|bb_label := "loop"; bb_instructions := [mk_inst 0 JMP [Label "loop"] []]|>] /\
+  entry = mk_raw_function "entry"
+    [<|bb_label := "entry"; bb_instructions :=
+       [mk_inst 1 INVOKE [Label "loop"] []; mk_inst 2 STOP [] []]|>] /\
+  ctx = mk_venom_context [entry; loop] (SOME "entry") ==>
+  ALOOKUP (cleanup_growth_table ctx (fcg_analyze ctx)) "entry" = SOME NONE
+Proof
+  strip_tac >> gvs[] >> EVAL_TAC
+QED
+
+Theorem cleanup_cfg_diamond_evidence:
+  func = mk_raw_function "diamond"
+    [<|bb_label := "entry"; bb_instructions :=
+       [mk_inst 0 JNZ [Lit 1w; Label "left"; Label "right"] []]|>;
+     <|bb_label := "left"; bb_instructions := [mk_inst 1 JMP [Label "halt"] []]|>;
+     <|bb_label := "right"; bb_instructions := [mk_inst 2 JMP [Label "halt"] []]|>;
+     <|bb_label := "halt"; bb_instructions := [mk_inst 3 STOP [] []]|>] ==>
+  cleanup_region_growth [] (cfg_analyze func) func "entry" = SOME 5
+Proof
+  strip_tac >> gvs[] >> EVAL_TAC
+QED
+
+Theorem init_cleanup_plan_state_projections[simp]:
+  (init_cleanup_plan_state ch growth spill_base ctr).ps_stack = [] /\
+  (init_cleanup_plan_state ch growth spill_base ctr).ps_spilled = FEMPTY /\
+  (init_cleanup_plan_state ch growth spill_base ctr).ps_alloc = init_spill_alloc spill_base /\
+  (init_cleanup_plan_state ch growth spill_base ctr).ps_label_counter = ctr /\
+  (init_cleanup_plan_state ch growth spill_base ctr).ps_cleanup_height = ch /\
+  (init_cleanup_plan_state ch growth spill_base ctr).ps_cleanup_growth = growth /\
+  ~(init_cleanup_plan_state ch growth spill_base ctr).ps_cleanup_promised
+Proof
+  simp[init_cleanup_plan_state_def, stackPlanTypesTheory.init_plan_state_def]
+QED
