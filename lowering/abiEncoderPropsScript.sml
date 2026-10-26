@@ -10012,6 +10012,207 @@ Proof
   goal_assum (drule_at (Pat `enc_frame _ _ _ _ _ _ _`)) >> simp[]
 QED
 
+(* The header and control-flow edges coincide with the static-element loop. *)
+Definition enc_dyn_loop_init_def:
+  enc_dyn_loop_init len_op asz =
+    do ibuf <- compile_alloc_buffer 32;
+       emit_void MSTORE [ibuf.buf_operand; Lit 0w];
+       dbuf <- compile_alloc_buffer 32;
+       init_dyn <- emit_op MUL [len_op; Lit (n2w asz)];
+       emit_void MSTORE [dbuf.buf_operand; init_dyn];
+       hdr <- fresh_label "enc_dyn_hdr";
+       body <- fresh_label "enc_dyn_body";
+       exit <- fresh_label "enc_dyn_exit";
+       return (ibuf.buf_operand, dbuf.buf_operand, hdr, body, exit)
+    od
+End
+
+Definition enc_dyn_loop_body_def:
+  enc_dyn_loop_body dst src ei asz msz count_ptr dyn_ptr =
+    do i <- emit_op MLOAD [count_ptr];
+       src_data <- emit_op ADD [src; Lit 32w];
+       src_off <- emit_op MUL [i; Lit (n2w msz)];
+       child_src <- emit_op ADD [src_data; src_off];
+       dyn_ofst <- emit_op MLOAD [dyn_ptr];
+       child_dst <- emit_op ADD [dst; dyn_ofst];
+       child_len <- compile_abi_encode_to_buf child_dst child_src ei;
+       head_off <- emit_op MUL [i; Lit (n2w asz)];
+       head_pos <- emit_op ADD [dst; head_off];
+       emit_void MSTORE [head_pos; dyn_ofst];
+       new_dyn <- emit_op ADD [dyn_ofst; child_len];
+       emit_void MSTORE [dyn_ptr; new_dyn];
+       new_i <- emit_op ADD [i; Lit 1w];
+       emit_void MSTORE [count_ptr; new_i]
+    od
+End
+
+Definition enc_dyn_loop_exit_def:
+  enc_dyn_loop_exit dyn_ptr =
+    do final_dyn <- emit_op MLOAD [dyn_ptr];
+       emit_op ADD [Lit 32w; final_dyn]
+    od
+End
+
+Theorem enc_dyn_loop_phases:
+  compile_abi_encode_dyn_loop dst src ei asz msz len_op =
+    do phase <- enc_dyn_loop_init len_op asz;
+       let (count_ptr,dyn_ptr,hdr,body,exit) = phase in
+       do emit_inst JMP [Label hdr] [];
+          new_block hdr;
+          done_op <- enc_static_loop_header count_ptr len_op;
+          emit_inst JNZ [done_op; Label exit; Label body] [];
+          new_block body;
+          enc_dyn_loop_body dst src ei asz msz count_ptr dyn_ptr;
+          emit_inst JMP [Label hdr] [];
+          new_block exit;
+          enc_dyn_loop_exit dyn_ptr
+       od
+    od
+Proof
+  simp_tac (srw_ss()) [compile_abi_encode_child_def, enc_dyn_loop_init_def,
+    enc_static_loop_header_def, enc_dyn_loop_body_def, enc_dyn_loop_exit_def,
+    comp_ignore_bind_def, comp_bind_assoc, enc_comp_bind_return, LET_THM]
+QED
+
+Theorem enc_dyn_loop_decompose:
+  compile_abi_encode_dyn_loop dst src ei asz msz len_op st = (op,st') ==>
+  ?count_ptr dyn_ptr hdr body exit cnd si s1 sh sj s2 sb se s3 sx.
+    enc_dyn_loop_init len_op asz st = ((count_ptr,dyn_ptr,hdr,body,exit),si) /\
+    enc_static_loop_header count_ptr len_op sh = (cnd,sj) /\
+    enc_dyn_loop_body dst src ei asz msz count_ptr dyn_ptr sb = ((),se) /\
+    enc_dyn_loop_exit dyn_ptr sx = (op,st') /\
+    enc_static_loop_edges hdr body exit cnd (si,s1,sh,sj,s2,sb,se,s3,sx)
+Proof
+  rpt gen_tac >>
+  simp[enc_dyn_loop_phases, comp_bind_def, comp_ignore_bind_def] >>
+  rpt (pairarg_tac >> gvs[comp_bind_def, comp_ignore_bind_def]) >>
+  strip_tac >> gvs[] >> simp[enc_static_loop_edges_def] >>
+  gvs[new_block_def]
+QED
+
+Theorem enc_dyn_loop_init_frontiers:
+  enc_dyn_loop_init len_op asz st = ((count_ptr,dyn_ptr,hdr,body_lbl,exit),si) ==>
+  si.cs_next_id = st.cs_next_id + 5 /\
+  si.cs_next_var = st.cs_next_var + 3 /\
+  count_ptr = Var (STRING #"%" (toString st.cs_next_var)) /\
+  dyn_ptr = Var (STRING #"%" (toString (st.cs_next_var + 1)))
+Proof
+  simp[enc_dyn_loop_init_def, contextTheory.compile_alloc_buffer_def,
+    emit_op_def, emit_void_def, fresh_var_def, fresh_id_def,
+    fresh_label_def, emit_def, comp_bind_def, comp_ignore_bind_def,
+    comp_return_def] >> rpt strip_tac >> gvs[]
+QED
+
+Theorem enc_dyn_loop_straight_appends:
+  cs_appends (enc_dyn_loop_init len_op asz) /\
+  cs_appends (enc_dyn_loop_exit dyn_ptr)
+Proof
+  `cs_appends (compile_alloc_buffer 32)` by
+    (simp[contextTheory.compile_alloc_buffer_def] >> irule cs_appends_bind >>
+     rw[cs_appends_emit_helpers, cs_appends_return]) >>
+  simp[enc_dyn_loop_init_def, enc_dyn_loop_exit_def] >> conj_tac >>
+  rpt (FIRST [irule cs_appends_bind, irule cs_appends_ignore_bind] >>
+       rw[cs_appends_emit_helpers, cs_appends_return, cs_appends_prims]) >>
+  rw[cs_appends_emit_helpers, cs_appends_return, cs_appends_prims]
+QED
+
+Theorem enc_dyn_loop_init_code:
+  enc_dyn_loop_init len_op asz st = ((count_ptr,dyn_ptr,hdr,body_lbl,exit),si) ==>
+  ?ibuf dbuf sa sz sb sc init_dyn sd se sf sg.
+    compile_alloc_buffer 32 st = (ibuf,sa) /\
+    emit_void MSTORE [ibuf.buf_operand;Lit 0w] sa = ((),sz) /\
+    compile_alloc_buffer 32 sz = (dbuf,sb) /\
+    emit_op MUL [len_op;Lit (n2w asz)] sb = (init_dyn,sc) /\
+    emit_void MSTORE [dbuf.buf_operand;init_dyn] sc = ((),sd) /\
+    fresh_label "enc_dyn_hdr" sd = (hdr,se) /\
+    fresh_label "enc_dyn_body" se = (body_lbl,sf) /\
+    fresh_label "enc_dyn_exit" sf = (exit,sg) /\
+    count_ptr = ibuf.buf_operand /\ dyn_ptr = dbuf.buf_operand /\ si = sg
+Proof
+  simp[enc_dyn_loop_init_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  rpt (goal_assum (drule_at Any))
+QED
+
+Theorem enc_dyn_loop_ctx_readonly:
+  enc_dyn_loop_ctx st z ops lo top tv v src outs s0 count_ptr ip dyn_ptr j c s /\
+  enc_frame st z lo top outs s t /\ t.vs_memory = s.vs_memory /\
+  t.vs_labels = s.vs_labels /\
+  eval_operand count_ptr t = eval_operand count_ptr s /\
+  eval_operand dyn_ptr t = eval_operand dyn_ptr s ==>
+  enc_dyn_loop_ctx st z ops lo top tv v src outs s0 count_ptr ip dyn_ptr j c t
+Proof
+  simp[enc_dyn_loop_ctx_def] >> strip_tac >>
+  `enc_loop_ctx st z ops lo top tv v src outs s0 count_ptr ip t` by
+    (irule enc_loop_ctx_readonly >> qexists_tac `s` >> simp[]) >>
+  `FLOOKUP t.vs_allocas j = SOME (c,32)` by
+    (qpat_assum `enc_frame _ _ _ _ _ s t` mp_tac >>
+     rewrite_tac[enc_frame_def] >> metis_tac[]) >>
+  simp[]
+QED
+
+Theorem enc_dyn_loop_ctx_inst_idx[simp]:
+  enc_dyn_loop_ctx st z ops lo top tv v src outs s0 count_ptr ip dyn_ptr j c
+    (s with vs_inst_idx := idx) =
+  enc_dyn_loop_ctx st z ops lo top tv v src outs s0 count_ptr ip dyn_ptr j c s
+Proof
+  Cases_on `dyn_ptr` >>
+  simp[enc_dyn_loop_ctx_def, eval_operand_def, lookup_var_def]
+QED
+
+Theorem enc_dyn_loop_header_frag:
+  enc_static_loop_header count_ptr len_op sh = (done_op,sj) /\
+  (!x. MEM (Var x) [count_ptr;dyn_ptr;len_op] ==> not_fresh_at sh x) /\
+  st.cs_next_var <= sh.cs_next_var /\ MEM len_op ops /\
+  eval_operand len_op s0 = SOME (n2w (LENGTH avs)) /\
+  LENGTH avs < dimword (:256) /\ k <= LENGTH avs ==>
+  frag_exec ctx sh sj
+    (enc_array_inv
+      (enc_dyn_loop_ctx st z ops lo top tv v src outs s0 count_ptr ip dyn_ptr j c)
+      p B ts avs ip (SOME c) k)
+    (enc_array_header
+      (enc_dyn_loop_ctx st z ops lo top tv v src outs s0 count_ptr ip dyn_ptr j c)
+      p B ts avs ip (SOME c) done_op k) R
+Proof
+  strip_tac >> drule enc_static_loop_header_code >> strip_tac >>
+  fs[same_blocks_def] >> irule frag_exec_run_inst_seq >>
+  asm_simp_tac (srw_ss()) [rich_listTheory.IS_PREFIX_APPEND] >>
+  qx_gen_tac `s` >> strip_tac >>
+  `enc_dyn_loop_ctx st z ops lo top tv v src outs s0
+      count_ptr ip dyn_ptr j c s` by fs[enc_array_inv_def] >>
+  `eval_operand len_op s = SOME (n2w (LENGTH avs))` by
+    (drule_all enc_dyn_loop_ctx_operand >> simp[]) >>
+  `eval_operand count_ptr s = SOME (n2w ip) /\
+   enc_scratch (frag_ids st z) lo top s` by
+    fs[enc_dyn_loop_ctx_def, enc_loop_ctx_def, enc_pre_def] >>
+  `mem_word_at ip s.vs_memory = n2w k` by fs[enc_array_inv_def] >>
+  `ip < dimword (:256) /\ k < dimword (:256)` by
+    (fs[enc_dyn_loop_ctx_def] >> drule enc_loop_ctx_bounds >> simp[] >> decide_tac) >>
+  `!x. MEM (Var x) [count_ptr;len_op] ==> not_fresh_at sh x` by
+    (simp[] >> metis_tac[]) >>
+  fs[] >> drule_all (SRULE [] enc_static_loop_header_run) >>
+  disch_then (qspec_then `outs` (qx_choose_then `t` strip_assume_tac)) >>
+  `enc_dyn_loop_ctx st z ops lo top tv v src outs s0
+      count_ptr ip dyn_ptr j c t` by
+    (irule enc_dyn_loop_ctx_readonly >> qexists_tac `s` >> simp[] >> metis_tac[]) >>
+  `enc_array_inv
+    (enc_dyn_loop_ctx st z ops lo top tv v src outs s0 count_ptr ip dyn_ptr j c)
+    p B ts avs ip (SOME c) k t` by
+    (irule enc_array_inv_readonly >> simp[] >> qexists_tac `s` >> simp[]) >>
+  `enc_scratch (frag_ids st z) lo top t` by
+    fs[enc_dyn_loop_ctx_def, enc_loop_ctx_def, enc_pre_def] >>
+  simp[enc_array_header_def] >> disj1_tac >> qexists_tac `t` >> conj_tac
+  >- (qpat_x_assum `run_inst_seq _ s = OK t` mp_tac >> simp[]) >>
+  conj_tac
+  >- (irule enc_array_inv_readonly >> simp[] >>
+      qexists_tac `t` >> simp[]) >>
+  `bool_to_word (~(k < LENGTH avs)) =
+    (if k < LENGTH avs then 0w else 1w)` by
+    (Cases_on `k < LENGTH avs` >> simp[] >> EVAL_TAC) >>
+  Cases_on `done_op` >> fs[eval_operand_def, lookup_var_def]
+QED
+
 Theorem compile_abi_encode_frag:
   (!dst child_ptr ei is_dyn static_ofst dyn_ptr st op st' ctx env ty tv v
     av s0 dst_w src_w lo top.
