@@ -5836,6 +5836,84 @@ Proof
   simp[wordsTheory.WORD_EQ, arithmeticTheory.MOD_LESS_EQ]
 QED
 
+Theorem enc_prefix_mem_static_zero:
+  enc_layout (REPLICATE N t) avs /\ k <= N /\
+  ~is_dynamic t /\ static_length t = 0 ==>
+  enc_prefix_mem p B (REPLICATE N t) avs k s
+Proof
+  strip_tac >>
+  `LENGTH (enc_head_upto B (REPLICATE N t) avs k) = 0` by
+    (drule_all enc_head_upto_static_length_layout >> simp[]) >>
+  `enc_head_upto B (REPLICATE N t) avs k = []` by metis_tac[LENGTH_NIL] >>
+  simp[enc_prefix_mem_def, enc_tail_upto_static, mem_bytes_at_def]
+QED
+
+Theorem enc_static_loop_complete_frag_layout_zero:
+  enc_static_loop_init st = ((count_ptr,hdr,body_lbl,exit_lbl),si) /\
+  enc_static_loop_header count_ptr len_op sh = (cnd,sj) /\
+  enc_static_loop_body dst src ei (type_memory_size tv) (type_memory_size tv)
+    count_ptr sb = ((),se) /\
+  enc_static_loop_exit src (type_memory_size tv) sx = (op,z) /\
+  enc_static_loop_edges hdr body_lbl exit_lbl cnd (si,s1,sh,sj,s2,sb,se,s3,sx) /\
+  (!x. MEM (Var x) [count_ptr;len_op] ==> not_fresh_at sh x) /\
+  (!x. MEM (Var x) [count_ptr;src;dst] ==> not_fresh_at sb x) /\
+  st.cs_next_var <= sh.cs_next_var /\ st.cs_next_var <= sb.cs_next_var /\
+  st.cs_next_var <= sx.cs_next_var /\
+  st.cs_next_id IN frag_ids st z /\ frag_ids sb se SUBSET frag_ids st z /\
+  cs_extends si sx /\
+  abi_enc_plan env ty ei /\ ~is_dynamic (vyper_to_abi_type env ty) /\
+  evaluate_type env ty = SOME tv /\
+  static_length (vyper_to_abi_type env ty) = type_memory_size tv /\
+  value_has_type (ArrayTV tv (Dynamic n)) (ArrayV (DynArrayV vs)) /\
+  LIST_REL (\v av. vyper_to_abi env ty v = SOME av) vs avs /\
+  enc_layout (REPLICATE (LENGTH vs) (vyper_to_abi_type env ty)) avs /\
+  type_memory_size tv = 0 /\
+  MEM (dst_n,32 + LENGTH vs * type_memory_size tv) outs /\
+  MEM src ops /\ MEM dst ops /\ MEM len_op ops /\
+  eval_operand src s0 = SOME (n2w src_n) /\ src_n < dimword (:256) /\
+  eval_operand dst s0 = SOME (n2w dst_n) /\
+  eval_operand len_op s0 = SOME (n2w (LENGTH vs)) /\
+  enc_pre st z ops lo top (ArrayTV tv (Dynamic n))
+    (ArrayV (DynArrayV vs)) src_n outs s0 ==>
+  frag_exec ctx st z (\s. s = s0)
+    (\s. enc_prefix_mem (dst_n + 32) B
+           (REPLICATE (LENGTH vs) (vyper_to_abi_type env ty)) avs (LENGTH vs) s /\
+         eval_operand op s = SOME (n2w (32 + LENGTH vs * type_memory_size tv)) /\
+         s.vs_labels = s0.vs_labels /\ enc_frame st z lo top outs s0 s) R
+Proof
+  strip_tac >>
+  qabbrev_tac `m = LENGTH vs MOD dimword (:256)` >>
+  `m <= LENGTH vs /\ m < dimword (:256)` by
+    simp[Abbr `m`, arithmeticTheory.MOD_LESS_EQ] >>
+  `LENGTH (TAKE m vs) = m` by simp[LENGTH_TAKE] >>
+  `value_has_type (ArrayTV tv (Dynamic n))
+    (ArrayV (DynArrayV (TAKE m vs)))` by metis_tac[enc_dynarray_type_take] >>
+  `LIST_REL (\v av. vyper_to_abi env ty v = SOME av)
+    (TAKE m vs) (TAKE m avs)` by metis_tac[LIST_REL_TAKE] >>
+  `enc_layout (REPLICATE m (vyper_to_abi_type env ty)) (TAKE m avs)` by
+    (drule enc_layout_take >> disch_then (qspec_then `m` mp_tac) >>
+     simp[REPLICATE_GENLIST, TAKE_GENLIST, arithmeticTheory.MIN_DEF] >>
+     Cases_on `m < LENGTH vs` >> gvs[]) >>
+  `eval_operand len_op s0 = SOME (n2w m)` by
+    simp[Abbr `m`, wordsTheory.WORD_EQ] >>
+  `enc_pre st z ops lo top (ArrayTV tv (Dynamic n))
+    (ArrayV (DynArrayV (TAKE m vs))) src_n outs s0` by
+    (fs[enc_pre_def] >> irule enc_dynarray_memory_take >>
+     simp[Abbr `m`, wordsTheory.WORD_EQ, arithmeticTheory.MOD_LESS_EQ]) >>
+  qpat_x_assum `value_has_type _ (ArrayV (DynArrayV vs))` kall_tac >>
+  qpat_x_assum `LIST_REL _ vs avs` kall_tac >>
+  qpat_x_assum `enc_pre _ _ _ _ _ _ (ArrayV (DynArrayV vs)) _ _ _` kall_tac >>
+  `LENGTH (TAKE m vs) < dimword (:256) /\
+   enc_layout (REPLICATE (LENGTH (TAKE m vs)) (vyper_to_abi_type env ty))
+     (TAKE m avs) /\
+   MEM (dst_n,32 + LENGTH (TAKE m vs) * type_memory_size tv) outs /\
+   eval_operand len_op s0 = SOME (n2w (LENGTH (TAKE m vs)))` by gvs[] >>
+  drule_all enc_static_loop_complete_frag_layout >>
+  disch_then (mp_then Any mp_tac frag_exec_conseq o SPEC_ALL) >>
+  disch_then irule >> simp[] >> rpt strip_tac >>
+  irule enc_prefix_mem_static_zero >> gvs[]
+QED
+
 Theorem compile_abi_encode_frag:
   (!dst child_ptr ei is_dyn static_ofst dyn_ptr st op st' ctx env ty tv v
     av s0 dst_w src_w lo top.
