@@ -6,18 +6,22 @@
  * the account with BALANCE, EXTCODESIZE, EXTCODEHASH, or EXTCODESIZE and
  * GT 0, or hands out x itself for .address.  The source reads the account
  * at the same address from its accounts, which state_rel's accounts_rel
- * makes Venom's: exprSimUnop's compile_unop_sim with the address operand,
- * and a fragment that reads the accounts (unop_frag_accounts).
+ * makes Venom's: exprSimUnop's compile_unop_sim with the address operand.
+ * The account opcodes are no fresh_write_op, so their code is no
+ * straight_fresh action: unop_frag_read_then runs the read by
+ * emit_op_frag, then straight-line code on its result.
  *
  * TOP-LEVEL:
  *   compile_acc_read_sim   — expr_vv_ok of an account read other than
  *                            .code
  *   lower_value_acc        — how an account read lowers
  *   compile_acc_frag       — unop_frag of each read's code
+ *   compile_acc_stack      — an account read compiles to a StackValue
  *
- * Helpers: unop_frag_accounts (unop_frag of straight-line code whose result
- *   reads the accounts), address_word_w2w (the account address Venom reads
- *   from the address's word), account_item_type_word.
+ * Helpers: unop_frag_read_then (unop_frag of one account read, then
+ *   straight-line code), unop_frag_read (the read alone),
+ *   comp_bind_comp_return, address_word_w2w (the account address Venom
+ *   reads from the address's word), account_item_type_word.
  *
  * .code is not here: the lowering emits INVALID for it (compile_acc), so
  * the read's simulation does not hold; exprSimBuiltins leaves it cheated.
@@ -39,41 +43,6 @@ Libs
 
 (* ===== The fragment ===== *)
 
-(* unop_frag of straight-line code that ends with op holding w when the
-   operand holds w1 and the Venom accounts are the source's: state_rel
-   relates them (accounts_rel). *)
-Theorem unop_frag_accounts:
-  !ctx func cenv cx f w1 t v w es0.
-    (!x. straight_fresh (f x)) /\ is_word_type t /\
-    (!tv. evaluate_type (get_tenv cx) t = SOME tv ==>
-          w = typed_val_to_w256 tv v) /\
-    (!x sa sb op ss.
-       f x sa = (op, sb) /\ fresh_vars_wrt sa ss /\
-       eval_operand x ss = SOME w1 /\ ss.vs_accounts = es0.accounts ==>
-       ?ss'. run_inst_seq (emitted_insts sa sb) ss = OK ss' /\
-             eval_operand op ss' = SOME w) ==>
-    unop_frag ctx func cenv cx f w1 t (INL (Value v)) es0
-Proof
-  rpt gen_tac >> strip_tac >> simp[unop_frag_def] >> rpt gen_tac >>
-  strip_tac >>
-  qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es0`, `f x`, `sa`, `sb`, `op`,
-               `w`, `\ss. eval_operand x ss = SOME w1 /\
-                          ss.vs_accounts = es0.accounts`,
-               `\a. F`, `\r. F`, `s0`]
-    mp_tac frag_exec_straight_fresh >>
-  impl_tac
-  >- (asm_rewrite_tac[] >> BETA_TAC >> rpt conj_tac >> rpt strip_tac
-      >- (qspecl_then [`x`, `sa`, `ss`] mp_tac eval_operand_drop_fresh >>
-          asm_simp_tac bool_ss [])
-      >- simp[drop_fresh_def] >>
-      qpat_x_assum `!x sa sb op ss. _`
-        (qspecl_then [`x`, `sa`, `sb`, `op`, `ss`] mp_tac) >>
-      asm_rewrite_tac[]) >>
-  disch_then (fn th => match_mp_tac (MATCH_MP frag_exec_weaken th)) >>
-  simp[] >> rpt strip_tac >>
-  gvs[expr_val_rel_def, stmt_state_rel_def, state_rel_def, accounts_rel_def]
-QED
-
 (* The account address Venom reads (w2w of the operand) is the source's
    (word_of_bytes_be of the address's bytes). *)
 Theorem address_word_w2w:
@@ -90,6 +59,18 @@ Proof
      simp[dividesTheory.compute_divides]) >>
   pop_assum SUBST1_TAC >> simp[w2w_w2w, WORD_ALL_BITS]
 QED
+
+Theorem emit_op_extends_next_var[local]:
+  !opc ops sa v sb.
+    emit_op opc ops sa = (v, sb) ==>
+    cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule emitted_insts_emit_op >> drule emit_op_extends >> rpt strip_tac
+  >- (irule cs_extends_same_block >> gvs[same_blocks_def, IS_PREFIX_APPEND3]) >>
+  gvs[]
+QED
+
 
 (* The account reads are no fresh_write_op (they read the accounts), so
    their code is no straight_fresh action: one read by emit_op_frag, then
@@ -124,12 +105,8 @@ Proof
       simp[]) >>
   `sa.cs_next_var <= s1.cs_next_var /\ cs_extends sa s1 /\
    (!z. c = Var z ==> not_fresh_at s1 z)` by
-    (drule emitted_insts_emit_op >> drule emit_op_extends >>
-     rpt strip_tac
-     >- gvs[]
-     >- (irule cs_extends_same_block >>
-         gvs[same_blocks_def, IS_PREFIX_APPEND3]) >>
-     gvs[not_fresh_at_def, ASCIInumbersTheory.toString_11]) >>
+    (drule emit_op_extends_next_var >> drule emitted_insts_emit_op >>
+     rpt strip_tac >> gvs[not_fresh_at_def, ASCIInumbersTheory.toString_11]) >>
   `cs_extends s1 sb /\ s1.cs_next_var <= sb.cs_next_var` by
     metis_tac[straight_fresh_cs_extends] >>
   `local_ptrs_reserved cenv s1` by
@@ -209,7 +186,8 @@ Theorem compile_acc_frag:
            | IsContract =>
                comp_bind (emit_op EXTCODESIZE [x])
                  (\c. emit_op GT [c; Lit 0w])
-           | _ => comp_return x)
+           | Address => comp_return x
+           | Code => comp_return x)
       (typed_val_to_w256 (BaseTV AddressT) (BytesV bs))
       (account_item_type item)
       (unop_result cx (account_item_type item) (Acc item) [BaseT AddressT]
@@ -223,7 +201,7 @@ Proof
   drule address_word_w2w >> strip_tac >>
   Cases_on `item` >> gvs[]
   >~ [`comp_return`]
-  >- (irule unop_frag_accounts >>
+  >- (irule unop_frag_straight >>
       simp[account_item_type_def, vyperValueTheory.evaluate_type_def,
            evaluate_account_op_def, is_word_type_def, straight_fresh_return,
            comp_return_def, emitted_insts_refl, run_inst_seq_def])
@@ -268,7 +246,8 @@ Theorem lower_value_acc:
        | Codehash => emit_op EXTCODEHASH [x]
        | IsContract =>
            comp_bind (emit_op EXTCODESIZE [x]) (\c. emit_op GT [c; Lit 0w])
-       | _ => comp_return x) s1 = (op, sb)
+       | Address => comp_return x
+       | Code => comp_return x) s1 = (op, sb)
 Proof
   rpt strip_tac >>
   qpat_x_assum `lower_value _ _ _ _ _ = _` mp_tac >>
@@ -282,17 +261,6 @@ Proof
   rpt (pairarg_tac >> gvs[]) >>
   rw[] >> gvs[as_stack_val_pair, unwrap_value_def, comp_return_def,
               comp_bind_def]
-QED
-
-Theorem emit_op_extends_next_var[local]:
-  !opc ops sa v sb.
-    emit_op opc ops sa = (v, sb) ==>
-    cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var
-Proof
-  rpt gen_tac >> strip_tac >>
-  drule emitted_insts_emit_op >> drule emit_op_extends >> rpt strip_tac
-  >- (irule cs_extends_same_block >> gvs[same_blocks_def, IS_PREFIX_APPEND3]) >>
-  gvs[]
 QED
 
 Theorem names_builtin_acc[local]:
@@ -355,7 +323,8 @@ Proof
                     | IsContract =>
                         comp_bind (emit_op EXTCODESIZE [x])
                           (\c. emit_op GT [c; Lit 0w])
-                    | _ => comp_return x`, `es`]
+                    | Address => comp_return x
+                    | Code => comp_return x`, `es`]
     mp_tac compile_unop_sim >>
   impl_tac >- (
     rpt conj_tac
