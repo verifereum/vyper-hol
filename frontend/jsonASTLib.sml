@@ -639,14 +639,48 @@ fun normalize_interface_return (func_src, ret_ty, result_ty) =
           then NONE
   else SOME ret_ty
 
+(* Recognize the whole decimal token; parsing a numeric prefix or filtering
+   characters out of an expression would silently change its value. In
+   particular, an identifier such as _1 is not an underscored number. *)
+fun is_decimal_literal s = let
+  fun unsigned s =
+    if String.isPrefix "-" s orelse String.isPrefix "+" s
+    then String.extract (s, 1, NONE) else s
+  fun digit_tail [] = true
+    | digit_tail (#"_"::c::cs) = Char.isDigit c andalso digit_tail cs
+    | digit_tail (c::cs) = Char.isDigit c andalso digit_tail cs
+  fun digits s = case String.explode s of
+      [] => false
+    | c::cs => Char.isDigit c andalso digit_tail cs
+  fun mantissa s =
+    case String.fields (fn c => c = #".") (unsigned s) of
+      [whole] => digits whole
+    | [whole, frac] =>
+        (digits whole andalso (frac = "" orelse digits frac)) orelse
+        (whole = "" andalso digits frac)
+    | _ => false
+in
+  case String.fields (fn c => c = #"e" orelse c = #"E") s of
+    [base] => mantissa base
+  | [base, exponent] => mantissa base andalso digits (unsigned exponent)
+  | _ => false
+end
+
 fun d_json_expr () : term decoder = let
   (* Keep source syntax for declaration consumers, but lower node.reduced()
-     just as Vyper does whenever the compiler supplies a folded value. *)
+     when its serialized value is usable. The pinned compiler's Decimal
+     to_dict writes node_source_code into value, so a folded Decimal can
+     contain e.g. "min(3.0, 5.0)" rather than the computed number. Require a
+     decimal literal there, otherwise evaluate the original expression. *)
   fun with_folded (d : term decoder) : term decoder =
     JSONDecode.map (fn (original, folded_opt) =>
       case folded_opt of NONE => original
                        | SOME folded => mk_JE_Folded (original, folded)) $
-    tuple2 (d, try (field "folded_value" (delay d_json_expr)))
+    tuple2 (d, try (field "folded_value" $
+      check raw (fn json =>
+        decode (field "ast_type" string) json <> "Decimal" orelse
+        is_decimal_literal (decode (field "value" string) json))
+        "folded Decimal contains source text" (delay d_json_expr)))
   in achoose "expr" [
   (* Int literal - type may be absent for array indices/sizes *)
   check_ast_type "Int" $

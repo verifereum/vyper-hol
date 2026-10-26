@@ -504,6 +504,17 @@ val () = app (fn (original, expected) => (
       ``JE_Folded ^expected (JE_Int 1 JT_None)``
   | _ => raise Fail "test node is not an object")) fold_cases;
 
+(* Folded Decimal.value is the original source text at VYPER_PIN. Never
+   reinterpret an expression (or a numeric prefix) as a decimal literal. *)
+val () = app (fn (JSON.OBJECT fields, original) =>
+    app (fn text => check_fold_decode
+      (JSON.OBJECT (("folded_value",
+        fold_obj "Decimal" [("value", JSON.STRING text)])::fields)) original)
+      ["min(3.0, 5.0)", "1.0 + 2.0", "-(1.0 + 2.0)",
+       "max_value(decimal)", "1.5suffix", "1.2.3", "1e+", "",
+       "_1", "-_1", "_1e1", "1_.5", "1._5", "1__5"]
+  | _ => raise Fail "test node is not an object") fold_cases;
+
 Theorem nested_folded_integer_probe:
   json_expr_int_opt (JE_Folded (JE_Bool F)
     (JE_Folded (JE_Bool T) (JE_Int (~3) JT_None))) = SOME (~3)
@@ -522,6 +533,10 @@ QED
 val fold_literals = [
   (fold_one, ``JE_Int 1 JT_None``),
   (fold_obj "Decimal" [("value", JSON.STRING "1.5")], ``JE_Decimal "1.5"``),
+  (fold_obj "Decimal" [("value", JSON.STRING "-1.25e-2")],
+     ``JE_Decimal "-1.25e-2"``),
+  (fold_obj "Decimal" [("value", JSON.STRING "+1_000.0E+1")],
+     ``JE_Decimal "+1_000.0E+1"``),
   (fold_obj "Hex" [("value", JSON.STRING "0xdeadbeef"),
      ("type", JSON.OBJECT [("typeclass", JSON.STRING "bytes_m"), ("m", JSON.INT 4)])],
      ``JE_Hex "0xdeadbeef" (JT_BytesM 4)``),
