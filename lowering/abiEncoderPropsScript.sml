@@ -1020,12 +1020,15 @@ QED
 Theorem enc_tuple_cons_parts:
   has_types ts vs ==>
   enc_tuple hl tl (t::ts) (v::vs) [] [] =
-    let tail = if is_dynamic t then enc t v else [];
-        head = if is_dynamic t then enc_number (Uint 256) (NumV (hl + tl))
-               else enc t v;
-        rest = enc_tuple hl (tl + LENGTH tail) ts vs [] [];
-        n = head_lengths ts 0
-    in head ++ TAKE n rest ++ tail ++ DROP n rest
+    (if is_dynamic t then enc_number (Uint 256) (NumV (hl + tl))
+     else enc t v) ++
+    TAKE (head_lengths ts 0)
+      (enc_tuple hl (tl + LENGTH (if is_dynamic t then enc t v else []))
+         ts vs [] []) ++
+    (if is_dynamic t then enc t v else []) ++
+    DROP (head_lengths ts 0)
+      (enc_tuple hl (tl + LENGTH (if is_dynamic t then enc t v else []))
+         ts vs [] [])
 Proof
   strip_tac >> simp[Once enc_def] >>
   simp[Once enc_tuple_append]
@@ -1082,22 +1085,24 @@ Definition enc_prefix_head_def:
     enc_prefix_head (q + LENGTH (if is_dynamic t then enc t v else [])) ts vs)
 End
 
-Definition HP_def:
-  HP B ts vs k = enc_prefix_head B (TAKE k ts) (TAKE k vs)
+Definition enc_head_upto_def:
+  enc_head_upto B ts vs k = enc_prefix_head B (TAKE k ts) (TAKE k vs)
 End
 
-Definition TP_def:
-  TP ts vs k = enc_prefix_tail (TAKE k ts) (TAKE k vs)
+Definition enc_tail_upto_def:
+  enc_tail_upto ts vs k = enc_prefix_tail (TAKE k ts) (TAKE k vs)
 End
 
-Definition DP_def:
-  DP B ts vs k = B + LENGTH (TP ts vs k)
+Definition enc_offset_upto_def:
+  enc_offset_upto B ts vs k = B + LENGTH (enc_tail_upto ts vs k)
 End
 
 Theorem enc_prefix_zero[simp]:
-  HP B ts vs 0 = [] /\ TP ts vs 0 = [] /\ DP B ts vs 0 = B
+  enc_head_upto B ts vs 0 = [] /\ enc_tail_upto ts vs 0 = [] /\
+  enc_offset_upto B ts vs 0 = B
 Proof
-  simp[HP_def, TP_def, DP_def, enc_prefix_head_def, enc_prefix_tail_def]
+  simp[enc_head_upto_def, enc_tail_upto_def, enc_offset_upto_def,
+       enc_prefix_head_def, enc_prefix_tail_def]
 QED
 
 Theorem enc_prefix_tail_append:
@@ -1123,13 +1128,13 @@ QED
 
 Theorem enc_prefix_suc:
   LENGTH ts = LENGTH vs /\ k < LENGTH vs ==>
-  HP B ts vs (SUC k) = HP B ts vs k ++
+  enc_head_upto B ts vs (SUC k) = enc_head_upto B ts vs k ++
     (if is_dynamic (EL k ts) then
-       enc_number (Uint 256) (NumV (DP B ts vs k))
+       enc_number (Uint 256) (NumV (enc_offset_upto B ts vs k))
      else enc (EL k ts) (EL k vs)) /\
-  TP ts vs (SUC k) = TP ts vs k ++
+  enc_tail_upto ts vs (SUC k) = enc_tail_upto ts vs k ++
     (if is_dynamic (EL k ts) then enc (EL k ts) (EL k vs) else []) /\
-  DP B ts vs (SUC k) = DP B ts vs k +
+  enc_offset_upto B ts vs (SUC k) = enc_offset_upto B ts vs k +
     LENGTH (if is_dynamic (EL k ts) then enc (EL k ts) (EL k vs) else [])
 Proof
   strip_tac >>
@@ -1137,8 +1142,8 @@ Proof
     simp[arithmeticTheory.ADD1, TAKE_EL_SNOC, SNOC_APPEND] >>
   `TAKE (SUC k) vs = TAKE k vs ++ [EL k vs]` by
     simp[arithmeticTheory.ADD1, TAKE_EL_SNOC, SNOC_APPEND] >>
-  simp[HP_def, TP_def, DP_def, enc_prefix_head_append,
-       enc_prefix_tail_append, enc_prefix_head_def, enc_prefix_tail_def]
+  simp[enc_head_upto_def, enc_tail_upto_def, enc_offset_upto_def,
+       enc_prefix_head_append, enc_prefix_tail_append, enc_prefix_head_def, enc_prefix_tail_def]
 QED
 
 Theorem enc_prefix_head_length:
@@ -1168,23 +1173,23 @@ Proof
          TAKE_LENGTH_ID_rwt, DROP_LENGTH_TOO_LONG])
 QED
 
-Theorem HP_length:
+Theorem enc_head_upto_length:
   has_types ts vs ==>
-  LENGTH (HP B ts vs k) = head_lengths (TAKE k ts) 0
+  LENGTH (enc_head_upto B ts vs k) = head_lengths (TAKE k ts) 0
 Proof
-  strip_tac >> simp[HP_def] >>
+  strip_tac >> simp[enc_head_upto_def] >>
   irule enc_prefix_head_length >>
   gvs[has_types_LIST_REL] >> irule LIST_REL_TAKE >> goal_assum drule
 QED
 
 Theorem enc_prefix_full:
   has_types ts vs ==>
-  HP B ts vs (LENGTH vs) ++ TP ts vs (LENGTH vs) =
+  enc_head_upto B ts vs (LENGTH vs) ++ enc_tail_upto ts vs (LENGTH vs) =
     enc_tuple B 0 ts vs [] []
 Proof
   strip_tac >>
   `LENGTH ts = LENGTH vs` by metis_tac[has_types_LIST_REL, LIST_REL_LENGTH] >>
-  simp[HP_def, TP_def, TAKE_LENGTH_ID_rwt] >>
+  simp[enc_head_upto_def, enc_tail_upto_def, TAKE_LENGTH_ID_rwt] >>
   metis_tac[enc_prefix_assembly, arithmeticTheory.ADD_0]
 QED
 
@@ -1194,17 +1199,17 @@ Proof
   Induct_on `ts` >> Cases_on `vs` >> simp[enc_prefix_tail_def]
 QED
 
-Theorem TP_static:
-  ~is_dynamic t ==> TP (REPLICATE N t) vs k = []
+Theorem enc_tail_upto_static:
+  ~is_dynamic t ==> enc_tail_upto (REPLICATE N t) vs k = []
 Proof
-  strip_tac >> simp[TP_def] >>
+  strip_tac >> simp[enc_tail_upto_def] >>
   irule enc_prefix_tail_static >> simp[EVERY_TAKE]
 QED
 
-Theorem HP_dynamic_length:
+Theorem enc_head_upto_dynamic_length:
   has_types (REPLICATE N t) vs /\ k <= N /\ N = LENGTH vs /\
   is_dynamic t ==>
-  LENGTH (HP B (REPLICATE N t) vs k) = 32 * k
+  LENGTH (enc_head_upto B (REPLICATE N t) vs k) = 32 * k
 Proof
   strip_tac >>
   `TAKE k (REPLICATE N t) = REPLICATE k t` by
@@ -1212,7 +1217,7 @@ Proof
      AP_TERM_TAC >> simp[arithmeticTheory.MIN_DEF] >> decide_tac) >>
   drule head_lengths_REPLICATE >>
   disch_then (qspec_then `0` assume_tac) >>
-  drule HP_length >>
+  drule enc_head_upto_length >>
   disch_then (qspec_then `k` mp_tac) >>
   disch_then (qspec_then `B` mp_tac) >>
   qpat_x_assum `TAKE _ _ = _` kall_tac >>
@@ -1221,8 +1226,10 @@ QED
 
 Definition enc_prefix_mem_def:
   enc_prefix_mem p B ts vs k (s : venom_state) <=>
-    mem_bytes_at p (LENGTH (HP B ts vs k)) s.vs_memory = HP B ts vs k /\
-    mem_bytes_at (p + B) (LENGTH (TP ts vs k)) s.vs_memory = TP ts vs k
+    mem_bytes_at p (LENGTH (enc_head_upto B ts vs k)) s.vs_memory =
+      enc_head_upto B ts vs k /\
+    mem_bytes_at (p + B) (LENGTH (enc_tail_upto ts vs k)) s.vs_memory =
+      enc_tail_upto ts vs k
 End
 
 Theorem enc_prefix_mem_zero[simp]:
@@ -1234,13 +1241,16 @@ QED
 Theorem enc_prefix_mem_suc:
   has_types ts vs /\ k < LENGTH vs /\
   h = (if is_dynamic (EL k ts) then
-         enc_number (Uint 256) (NumV (DP B ts vs k))
+         enc_number (Uint 256) (NumV (enc_offset_upto B ts vs k))
        else enc (EL k ts) (EL k vs)) /\
   z = (if is_dynamic (EL k ts) then enc (EL k ts) (EL k vs) else []) /\
-  mem_bytes_at p (LENGTH (HP B ts vs k)) s.vs_memory = HP B ts vs k /\
-  mem_bytes_at (p+B) (LENGTH (TP ts vs k)) s.vs_memory = TP ts vs k /\
-  mem_bytes_at (p+LENGTH (HP B ts vs k)) (LENGTH h) s.vs_memory = h /\
-  mem_bytes_at (p+DP B ts vs k) (LENGTH z) s.vs_memory = z ==>
+  mem_bytes_at p (LENGTH (enc_head_upto B ts vs k)) s.vs_memory =
+    enc_head_upto B ts vs k /\
+  mem_bytes_at (p+B) (LENGTH (enc_tail_upto ts vs k)) s.vs_memory =
+    enc_tail_upto ts vs k /\
+  mem_bytes_at (p+LENGTH (enc_head_upto B ts vs k)) (LENGTH h) s.vs_memory =
+    h /\
+  mem_bytes_at (p+enc_offset_upto B ts vs k) (LENGTH z) s.vs_memory = z ==>
   enc_prefix_mem p B ts vs (SUC k) s
 Proof
   rpt strip_tac >>
@@ -1249,19 +1259,20 @@ Proof
   pure_rewrite_tac[enc_prefix_mem_def] >>
   pure_asm_rewrite_tac[] >>
   pure_rewrite_tac[LENGTH_APPEND, valueEncodingProofsTheory.mem_bytes_at_split_padded] >>
-  gvs[DP_def]
+  gvs[enc_offset_upto_def]
 QED
 
 Theorem enc_prefix_mem_exit_parts:
   has_types ts vs /\ enc_prefix_mem p B ts vs (LENGTH vs) s ==>
   mem_bytes_at p (head_lengths ts 0) s.vs_memory ++
-    mem_bytes_at (p+B) (LENGTH (TP ts vs (LENGTH vs))) s.vs_memory =
+    mem_bytes_at (p+B) (LENGTH (enc_tail_upto ts vs (LENGTH vs))) s.vs_memory =
     enc_tuple B 0 ts vs [] []
 Proof
   strip_tac >>
   `LENGTH ts = LENGTH vs` by metis_tac[has_types_LIST_REL, LIST_REL_LENGTH] >>
   drule enc_prefix_full >> disch_then (qspec_then `B` mp_tac) >>
-  drule HP_length >> disch_then (qspecl_then [`LENGTH vs`, `B`] mp_tac) >>
+  drule enc_head_upto_length >>
+  disch_then (qspecl_then [`LENGTH vs`, `B`] mp_tac) >>
   simp[TAKE_LENGTH_ID_rwt] >> rpt strip_tac >>
   gvs[enc_prefix_mem_def]
 QED
@@ -1287,7 +1298,7 @@ Definition enc_array_inv_def:
     inv_ctx s /\ k <= LENGTH vs /\ enc_prefix_mem p B ts vs k s /\
     mem_word_at ip s.vs_memory = n2w k /\
     (case tail_cell of NONE => T
-     | SOME c => mem_word_at c s.vs_memory = n2w (DP B ts vs k))
+     | SOME c => mem_word_at c s.vs_memory = n2w (enc_offset_upto B ts vs k))
 End
 
 Theorem enc_array_inv_zero:
@@ -1296,7 +1307,7 @@ Theorem enc_array_inv_zero:
    | SOME c => mem_word_at c s.vs_memory = n2w B) ==>
   enc_array_inv inv_ctx p B ts vs ip tail_cell 0 s
 Proof
-  Cases_on `tail_cell` >> simp[enc_array_inv_def, DP_def]
+  Cases_on `tail_cell` >> simp[enc_array_inv_def, enc_offset_upto_def]
 QED
 
 Theorem enc_array_inv_suc:
@@ -1304,7 +1315,8 @@ Theorem enc_array_inv_suc:
   enc_prefix_mem p B ts vs (SUC k) s /\
   mem_word_at ip s.vs_memory = n2w (SUC k) /\
   (case tail_cell of NONE => T
-   | SOME c => mem_word_at c s.vs_memory = n2w (DP B ts vs (SUC k))) ==>
+   | SOME c =>
+       mem_word_at c s.vs_memory = n2w (enc_offset_upto B ts vs (SUC k))) ==>
   enc_array_inv inv_ctx p B ts vs ip tail_cell (SUC k) s
 Proof
   simp[enc_array_inv_def]
@@ -1337,7 +1349,7 @@ QED
 
 Theorem enc_array_inv_tail:
   enc_array_inv inv_ctx p B ts vs ip (SOME c) k s ==>
-  mem_word_at c s.vs_memory = n2w (DP B ts vs k)
+  mem_word_at c s.vs_memory = n2w (enc_offset_upto B ts vs k)
 Proof
   simp[enc_array_inv_def]
 QED
@@ -1815,24 +1827,6 @@ Proof
 QED
 
 
-(* ===== Recursive ABI encode correctness ===== *)
-
-(* Mutual induction over compile_abi_encode_child / _to_buf /
-   _complex_elems / _dyn_loop.  Each clause runs its fragment from s0 to
-   its end (it never exits: R is F), and gives the frame of enc_frame.
-   With E the encoding enc (vyper_to_abi_type env ty) av:
-   - to_buf writes E at dst and returns its length;
-   - child writes E at dst + static_ofst for a static child; for a
-     dynamic one it writes E at dst + d, where d is the dynamic offset in
-     the cell at c (a scratch cell of the caller, at or above lo), and
-     puts d in the head slot at dst + static_ofst and d + LENGTH E back in
-     the cell;
-   - complex_elems writes the element heads from dst + head_offset and the
-     tails of the dynamic elements from dst + d, which together are
-     enc_tuple d 0 of the elements (the heads' offsets count from d), and
-     moves the cell, if there are dynamic elements, past the tails;
-   - dyn_loop writes a dynamic array's encoding after its length word at
-     dst and returns the encoding's whole length. *)
 (* Padded observations are stable even when a disjoint write grows memory. *)
 Theorem enc_write_memory_disjoint:
   !a n d bytes s.
@@ -2771,6 +2765,24 @@ Proof
   pure_asm_rewrite_tac[] >> rewrite_tac[]
 QED
 
+(* ===== Recursive ABI encode correctness ===== *)
+
+(* Mutual induction over compile_abi_encode_child / _to_buf /
+   _complex_elems / _dyn_loop.  Each clause runs its fragment from s0 to
+   its end (it never exits: R is F), and gives the frame of enc_frame.
+   With E the encoding enc (vyper_to_abi_type env ty) av:
+   - to_buf writes E at dst and returns its length;
+   - child writes E at dst + static_ofst for a static child; for a
+     dynamic one it writes E at dst + d, where d is the dynamic offset in
+     the cell at c (a scratch cell of the caller, at or above lo), and
+     puts d in the head slot at dst + static_ofst and d + LENGTH E back in
+     the cell;
+   - complex_elems writes the element heads from dst + head_offset and the
+     tails of the dynamic elements from dst + d, which together are
+     enc_tuple d 0 of the elements (the heads' offsets count from d), and
+     moves the cell, if there are dynamic elements, past the tails;
+   - dyn_loop writes a dynamic array's encoding after its length word at
+     dst and returns the encoding's whole length. *)
 Theorem compile_abi_encode_frag:
   (!dst child_ptr ei is_dyn static_ofst dyn_ptr st op st' ctx env ty tv v
     av s0 dst_w src_w lo top.
