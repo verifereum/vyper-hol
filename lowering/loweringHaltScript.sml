@@ -1381,8 +1381,13 @@ Proof
            s1 = (if nr /\ ~iv then tstore (n2w nkey) 0w s else s) with
                   vs_inst_idx := LENGTH st1.cs_current_insts`, `st1`] >>
   simp[] >>
-  irule optional_unlock_frag >> qexistsl_tac [`iv`, `nkey`, `nr`, `ut`] >>
-  simp[] >> rpt strip_tac >> qexists_tac `s` >> simp[]
+  qspecl_then
+    [`ctx`, `nr`, `nkey`, `ut`, `iv`, `st`, `st1`, `P`,
+     `\s1. ?s. P s /\
+           s1 = (if nr /\ ~iv then tstore (n2w nkey) 0w s else s) with
+                  vs_inst_idx := LENGTH st1.cs_current_insts`,
+     `R`] mp_tac optional_unlock_frag >>
+  impl_tac >- (simp[] >> metis_tac[]) >> simp[]
 QED
 
 (* Returning a static complex value, with the optional unlock first. *)
