@@ -10315,6 +10315,62 @@ Proof
 QED
 
 
+Theorem enc_dyn_body_setup_run:
+  emit_op MLOAD [count_ptr] a0 = (i,a1) /\
+  emit_op ADD [src;Lit 32w] a1 = (sd,a2) /\
+  emit_op MUL [i;Lit (n2w msz)] a2 = (so,a3) /\
+  emit_op ADD [sd;so] a3 = (child_src,a4) /\
+  emit_op MLOAD [dyn_ptr] a4 = (off,a5) /\
+  emit_op ADD [dst;off] a5 = (child_dst,a6) /\
+  (!x. MEM (Var x) [count_ptr;src;dyn_ptr;dst] ==> not_fresh_at a0 x) /\
+  eval_operand count_ptr s = SOME (n2w ip) /\
+  eval_operand src s = SOME (n2w sn) /\
+  eval_operand dyn_ptr s = SOME (n2w dp) /\
+  eval_operand dst s = SOME (n2w dn) /\
+  mem_word_at ip s.vs_memory = n2w k /\ ip < dimword (:256) /\
+  mem_word_at dp s.vs_memory = n2w d /\ dp < dimword (:256) ==>
+  ?t. run_inst_seq (emitted_insts a0 a6) s = OK t /\
+      eval_operand i t = SOME (n2w k) /\
+      eval_operand child_src t = SOME (n2w (sn + 32 + k * msz)) /\
+      eval_operand off t = SOME (n2w d) /\
+      eval_operand child_dst t = SOME (n2w (dn + d)) /\
+      (!old. (!x. old = Var x ==> not_fresh_at a0 x) ==>
+        eval_operand old t = eval_operand old s) /\
+      t.vs_memory = s.vs_memory /\ t.vs_labels = s.vs_labels /\
+      t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
+      t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+      t.vs_logs = s.vs_logs /\ t.vs_requests = s.vs_requests
+Proof
+  strip_tac >> drule_all enc_dyn_body_prefix_code >> strip_tac >>
+  `a4.cs_next_var = a0.cs_next_var + 4` by
+    (imp_res_tac (cj 4 emitted_insts_emit_op) >> decide_tac) >>
+  `!x. MEM (Var x) [count_ptr;src] ==> not_fresh_at a0 x` by
+    (fs[] >> metis_tac[]) >>
+  drule_all enc_dyn_source_run >>
+  disch_then (qx_choose_then `s1` strip_assume_tac) >>
+  `!x. MEM (Var x) [dyn_ptr;dst] ==> not_fresh_at a4 x` by
+    (fs[] >> metis_tac[enc_old_operand_mono, arithmeticTheory.LESS_EQ_ADD]) >>
+  `eval_operand dyn_ptr s1 = SOME (n2w dp) /\
+   eval_operand dst s1 = SOME (n2w dn)` by (fs[] >> metis_tac[]) >>
+  `mem_word_at dp s1.vs_memory = n2w d` by simp[] >>
+  drule_all enc_dyn_address_run >>
+  disch_then (qx_choose_then `s2` strip_assume_tac) >>
+  `!x. i = Var x ==> not_fresh_at a4 x` by
+    (match_mp_tac enc_old_operand_mono >> qexists_tac `a1` >>
+     imp_res_tac (cj 4 emitted_insts_emit_op) >>
+     simp[] >> metis_tac[enc_emit_op_old_result, arithmeticTheory.LESS_EQ_ADD]) >>
+  `!x. child_src = Var x ==> not_fresh_at a4 x` by
+    metis_tac[enc_emit_op_old_result] >>
+  qexists_tac `s2` >>
+  simp[GSYM wordsTheory.word_add_n2w, GSYM wordsTheory.word_mul_n2w] >>
+  conj_tac
+  >- (irule enc_run_inst_seq_compose >> qexists_tac `s1` >> simp[]) >>
+  rpt strip_tac >>
+  `!x. old = Var x ==> not_fresh_at a4 x` by
+    (match_mp_tac enc_old_operand_mono >> qexists_tac `a0` >> simp[]) >>
+  metis_tac[]
+QED
+
 Theorem enc_dyn_loop_body_growth:
   enc_dyn_loop_body dst src ei asz msz count_ptr dyn_ptr sb = ((),se) ==>
   cs_extends sb se /\ sb.cs_next_id <= se.cs_next_id /\
