@@ -928,6 +928,2581 @@ Definition enc_pre_def:
     enc_scratch (frag_ids st st') lo top s0
 End
 
+(* ===== Encoding plan boundaries ===== *)
+
+Theorem abi_enc_plans_nil[simp]:
+  abi_enc_plans env [] elems <=> elems = []
+Proof
+  simp[Once abi_enc_plan_cases]
+QED
+
+Theorem abi_enc_plans_cons:
+  abi_enc_plans env (t::ts) elems <=>
+    ?tv ei rest.
+      evaluate_type env t = SOME tv /\ abi_enc_plan env t ei /\
+      abi_enc_plans env ts rest /\
+      elems = (ei,
+        (if is_dynamic (vyper_to_abi_type env t) then 32
+         else static_length (vyper_to_abi_type env t)),
+        type_memory_size tv, is_dynamic (vyper_to_abi_type env t))::rest
+Proof
+  simp[Once abi_enc_plan_cases] >> metis_tac[]
+QED
+
+Theorem abi_enc_plans_memory_sizes:
+  !ts elems tvs.
+    abi_enc_plans env ts elems /\
+    LIST_REL (\t tv. evaluate_type env t = SOME tv) ts tvs ==>
+    MAP (\(_, _, msz, _). msz) elems = MAP type_memory_size tvs
+Proof
+  Induct >> simp[abi_enc_plans_cons, PULL_EXISTS] >>
+  rpt strip_tac >> gvs[] >> first_x_assum irule >>
+  goal_assum drule >> simp[]
+QED
+
+Theorem abi_enc_plan_static:
+  abi_enc_plan env ty ei /\ ~is_dynamic (vyper_to_abi_type env ty) ==>
+  ei = AbiPrimWord \/ ?n. ei = AbiCopy n
+Proof
+  simp[Once abi_enc_plan_cases] >> rpt strip_tac >>
+  gvs[vyper_to_abi_type_def, is_dynamic_def]
+QED
+
+Theorem abi_enc_plan_prim_size:
+  abi_enc_plan env ty AbiPrimWord /\ evaluate_type env ty = SOME tv ==>
+  type_memory_size tv = 32
+Proof
+  simp[Once abi_enc_plan_cases] >> strip_tac >>
+  Cases_on `ty` >>
+  gvs[is_word_type_def, vyperValueTheory.evaluate_type_def,
+      type_memory_size_def, AllCaseEqs()] >>
+  rename1 `is_word_type (BaseT bt)` >> Cases_on `bt` >>
+  gvs[is_word_type_def, vyperValueTheory.evaluate_type_def,
+      type_memory_size_def, AllCaseEqs()]
+QED
+
+Theorem compile_abi_encode_static_info_plan:
+  abi_enc_plan env ty ei /\ ~is_dynamic (vyper_to_abi_type env ty) ==>
+  compile_abi_encode_static_info dst src ei =
+    compile_abi_encode_to_buf dst src ei
+Proof
+  strip_tac >> drule_all abi_enc_plan_static >> strip_tac >>
+  gvs[compile_abi_encode_static_info_def, Once compile_abi_encode_child_def]
+QED
+
+Theorem abi_enc_plans_head_lengths:
+  !ts elems a.
+    abi_enc_plans env ts elems ==>
+    head_lengths (vyper_to_abi_types env ts) a =
+      a + SUM (MAP (\(_, asz, _, _). asz) elems)
+Proof
+  Induct >> simp[abi_enc_plans_cons, head_lengths_def, PULL_EXISTS] >>
+  rpt strip_tac >> gvs[] >>
+  rename1 `abi_enc_plan env t ei` >>
+  first_x_assum drule >> disch_then (qspec_then
+    `a + if is_dynamic (vyper_to_abi_type env t) then 32
+         else static_length (vyper_to_abi_type env t)` SUBST1_TAC) >>
+  decide_tac
+QED
+
+
+Theorem val_in_memory_static_enc_length:
+  evaluate_type env ty = SOME tv /\
+  ~is_dynamic (vyper_to_abi_type env ty) /\ value_has_type tv v /\
+  vyper_to_abi env ty v = SOME av /\ val_in_memory tv v off mem ==>
+  LENGTH (enc (vyper_to_abi_type env ty) av) = type_memory_size tv
+Proof
+  strip_tac >> drule_all val_in_memory_static_abi >>
+  disch_then (mp_tac o AP_TERM ``LENGTH : word8 list -> num``) >>
+  simp[mem_bytes_at_def]
+QED
+
+Theorem enc_tuple_cons_parts:
+  has_types ts vs ==>
+  enc_tuple hl tl (t::ts) (v::vs) [] [] =
+    (if is_dynamic t then enc_number (Uint 256) (NumV (hl + tl))
+     else enc t v) ++
+    TAKE (head_lengths ts 0)
+      (enc_tuple hl (tl + LENGTH (if is_dynamic t then enc t v else []))
+         ts vs [] []) ++
+    (if is_dynamic t then enc t v else []) ++
+    DROP (head_lengths ts 0)
+      (enc_tuple hl (tl + LENGTH (if is_dynamic t then enc t v else []))
+         ts vs [] [])
+Proof
+  strip_tac >> simp[Once enc_def] >>
+  simp[Once enc_tuple_append]
+QED
+
+Theorem enc_tuple_nil[simp]:
+  enc_tuple hl tl [] [] [] [] = []
+Proof
+  simp[Once enc_def, REV_REVERSE_LEM]
+QED
+
+Theorem enc_dynarray_parts:
+  has_types (REPLICATE (LENGTH vs) t) vs ==>
+  enc (Array NONE t) (ListV vs) =
+    enc_number (Uint 256) (NumV (LENGTH vs)) ++
+    enc_tuple (head_lengths (REPLICATE (LENGTH vs) t) 0) 0
+      (REPLICATE (LENGTH vs) t) vs [] []
+Proof
+  strip_tac >> simp[Once enc_def] >>
+  simp[Once enc_tuple_append, TAKE_DROP]
+QED
+
+Theorem enc_dynarray_payload:
+  has_types (REPLICATE (LENGTH vs) t) vs ==>
+  DROP 32 (enc (Array NONE t) (ListV vs)) =
+    enc_tuple (head_lengths (REPLICATE (LENGTH vs) t) 0) 0
+      (REPLICATE (LENGTH vs) t) vs [] []
+Proof
+  strip_tac >> drule enc_dynarray_parts >>
+  disch_then SUBST1_TAC >>
+  simp[enc_number_def, DROP_APPEND, byteTheory.LENGTH_word_to_bytes]
+QED
+
+(* The general ABI bound head_lengths_leq_LENGTH_enc_tuple supplies
+   head_lengths ts 0 <= LENGTH (enc_tuple hl tl ts vs [] []) under
+   has_types ts vs (instantiate its hds, tls with [] and n with 0).
+   Together with LENGTH_DROP this gives the exact tail-length subtraction;
+   no encoder-specific duplicate of that bound is needed. *)
+
+(* ===== Separated ABI prefixes ===== *)
+
+Definition enc_prefix_tail_def:
+  (enc_prefix_tail [] vs = []) /\
+  (enc_prefix_tail (t::ts) [] = []) /\
+  (enc_prefix_tail (t::ts) (v::vs) =
+    (if is_dynamic t then enc t v else []) ++ enc_prefix_tail ts vs)
+End
+
+Definition enc_prefix_head_def:
+  (enc_prefix_head q [] vs = []) /\
+  (enc_prefix_head q (t::ts) [] = []) /\
+  (enc_prefix_head q (t::ts) (v::vs) =
+    (if is_dynamic t then enc_number (Uint 256) (NumV q) else enc t v) ++
+    enc_prefix_head (q + LENGTH (if is_dynamic t then enc t v else [])) ts vs)
+End
+
+Definition enc_head_upto_def:
+  enc_head_upto B ts vs k = enc_prefix_head B (TAKE k ts) (TAKE k vs)
+End
+
+Definition enc_tail_upto_def:
+  enc_tail_upto ts vs k = enc_prefix_tail (TAKE k ts) (TAKE k vs)
+End
+
+Definition enc_offset_upto_def:
+  enc_offset_upto B ts vs k = B + LENGTH (enc_tail_upto ts vs k)
+End
+
+Definition enc_layout_def:
+  enc_layout ts avs <=>
+    LIST_REL (\t av. ~is_dynamic t ==> LENGTH (enc t av) = static_length t) ts avs
+End
+
+Theorem enc_layout_nil[simp]:
+  enc_layout [] []
+Proof
+  simp[enc_layout_def]
+QED
+
+Theorem enc_layout_cons[simp]:
+  enc_layout (t::ts) (av::avs) <=>
+  (~is_dynamic t ==> LENGTH (enc t av) = static_length t) /\ enc_layout ts avs
+Proof
+  simp[enc_layout_def]
+QED
+
+Theorem enc_layout_length:
+  enc_layout ts avs ==> LENGTH ts = LENGTH avs
+Proof
+  simp[enc_layout_def] >> metis_tac[LIST_REL_LENGTH]
+QED
+
+Theorem enc_layout_take:
+  enc_layout ts avs ==> enc_layout (TAKE k ts) (TAKE k avs)
+Proof
+  simp[enc_layout_def] >> strip_tac >>
+  irule LIST_REL_TAKE >> goal_assum drule
+QED
+
+Theorem enc_layout_el:
+  enc_layout ts avs /\ k < LENGTH avs /\ ~is_dynamic (EL k ts) ==>
+  LENGTH (enc (EL k ts) (EL k avs)) = static_length (EL k ts)
+Proof
+  simp[enc_layout_def, LIST_REL_EL_EQN] >> metis_tac[]
+QED
+
+Theorem enc_layout_uint1_probe:
+  enc_layout [Uint 1] [NumV 0] /\
+  enc_layout (REPLICATE 0 (Uint 1)) []
+Proof
+  EVAL_TAC
+QED
+
+Theorem enc_tuple_prefix_acc_lengths:
+  !ts vs hl tl hds tls. LENGTH ts = LENGTH vs ==>
+  enc_tuple hl tl ts vs hds tls =
+    FLAT (REVERSE hds) ++ enc_prefix_head (hl + tl) ts vs ++
+    FLAT (REVERSE tls) ++ enc_prefix_tail ts vs
+Proof
+  Induct_on `ts` >> Cases_on `vs` >>
+  simp[Once enc_def, enc_prefix_head_def, enc_prefix_tail_def,
+       REV_REVERSE_LEM] >> rpt strip_tac >>
+  Cases_on `is_dynamic h` >>
+  simp[Once enc_def, enc_prefix_head_def, enc_prefix_tail_def,
+       REV_REVERSE_LEM, APPEND_ASSOC, enc_number_def]
+QED
+
+Theorem enc_prefix_zero[simp]:
+  enc_head_upto B ts vs 0 = [] /\ enc_tail_upto ts vs 0 = [] /\
+  enc_offset_upto B ts vs 0 = B
+Proof
+  simp[enc_head_upto_def, enc_tail_upto_def, enc_offset_upto_def,
+       enc_prefix_head_def, enc_prefix_tail_def]
+QED
+
+Theorem enc_prefix_tail_append:
+  !ts vs us ws.
+    LENGTH ts = LENGTH vs ==>
+    enc_prefix_tail (ts ++ us) (vs ++ ws) =
+      enc_prefix_tail ts vs ++ enc_prefix_tail us ws
+Proof
+  Induct_on `ts` >> Cases_on `vs` >>
+  simp[enc_prefix_tail_def, APPEND_ASSOC]
+QED
+
+Theorem enc_prefix_head_append:
+  !ts vs q us ws.
+    LENGTH ts = LENGTH vs ==>
+    enc_prefix_head q (ts ++ us) (vs ++ ws) =
+      enc_prefix_head q ts vs ++
+      enc_prefix_head (q + LENGTH (enc_prefix_tail ts vs)) us ws
+Proof
+  Induct_on `ts` >> Cases_on `vs` >>
+  simp[enc_prefix_head_def, enc_prefix_tail_def, APPEND_ASSOC]
+QED
+
+Theorem enc_prefix_suc:
+  LENGTH ts = LENGTH vs /\ k < LENGTH vs ==>
+  enc_head_upto B ts vs (SUC k) = enc_head_upto B ts vs k ++
+    (if is_dynamic (EL k ts) then
+       enc_number (Uint 256) (NumV (enc_offset_upto B ts vs k))
+     else enc (EL k ts) (EL k vs)) /\
+  enc_tail_upto ts vs (SUC k) = enc_tail_upto ts vs k ++
+    (if is_dynamic (EL k ts) then enc (EL k ts) (EL k vs) else []) /\
+  enc_offset_upto B ts vs (SUC k) = enc_offset_upto B ts vs k +
+    LENGTH (if is_dynamic (EL k ts) then enc (EL k ts) (EL k vs) else [])
+Proof
+  strip_tac >>
+  `TAKE (SUC k) ts = TAKE k ts ++ [EL k ts]` by
+    simp[arithmeticTheory.ADD1, TAKE_EL_SNOC, SNOC_APPEND] >>
+  `TAKE (SUC k) vs = TAKE k vs ++ [EL k vs]` by
+    simp[arithmeticTheory.ADD1, TAKE_EL_SNOC, SNOC_APPEND] >>
+  simp[enc_head_upto_def, enc_tail_upto_def, enc_offset_upto_def,
+       enc_prefix_head_append, enc_prefix_tail_append, enc_prefix_head_def, enc_prefix_tail_def]
+QED
+
+Theorem enc_prefix_head_length:
+  !ts vs q. has_types ts vs ==>
+    LENGTH (enc_prefix_head q ts vs) = head_lengths ts 0
+Proof
+  Induct_on `ts` >> Cases_on `vs` >>
+  simp[enc_prefix_head_def, head_lengths_def] >>
+  rpt strip_tac >> rename1 `has_type ty av` >>
+  simp[SimpRHS, Once head_lengths_add] >>
+  Cases_on `is_dynamic ty`
+  >- simp[] >>
+  drule (cj 1 enc_has_static_length) >> simp[]
+QED
+
+Theorem enc_prefix_assembly:
+  !ts vs hl tl. has_types ts vs ==>
+    enc_prefix_head (hl + tl) ts vs ++ enc_prefix_tail ts vs =
+      enc_tuple hl tl ts vs [] []
+Proof
+  Induct_on `ts` >> Cases_on `vs` >> simp[enc_prefix_head_def,
+    enc_prefix_tail_def, enc_tuple_cons_parts] >>
+  rpt strip_tac >>
+  qpat_x_assum `!vs hl tl. _` (fn th =>
+    simp[GSYM th, enc_prefix_head_length,
+         TAKE_APPEND1, DROP_APPEND, APPEND_ASSOC,
+         TAKE_LENGTH_ID_rwt, DROP_LENGTH_TOO_LONG])
+QED
+
+Theorem enc_head_upto_length:
+  has_types ts vs ==>
+  LENGTH (enc_head_upto B ts vs k) = head_lengths (TAKE k ts) 0
+Proof
+  strip_tac >> simp[enc_head_upto_def] >>
+  irule enc_prefix_head_length >>
+  gvs[has_types_LIST_REL] >> irule LIST_REL_TAKE >> goal_assum drule
+QED
+
+Theorem enc_prefix_full:
+  has_types ts vs ==>
+  enc_head_upto B ts vs (LENGTH vs) ++ enc_tail_upto ts vs (LENGTH vs) =
+    enc_tuple B 0 ts vs [] []
+Proof
+  strip_tac >>
+  `LENGTH ts = LENGTH vs` by metis_tac[has_types_LIST_REL, LIST_REL_LENGTH] >>
+  simp[enc_head_upto_def, enc_tail_upto_def, TAKE_LENGTH_ID_rwt] >>
+  metis_tac[enc_prefix_assembly, arithmeticTheory.ADD_0]
+QED
+
+Theorem enc_prefix_tail_static:
+  !ts vs. EVERY (\t. ~is_dynamic t) ts ==> enc_prefix_tail ts vs = []
+Proof
+  Induct_on `ts` >> Cases_on `vs` >> simp[enc_prefix_tail_def]
+QED
+
+Theorem enc_tail_upto_static:
+  ~is_dynamic t ==> enc_tail_upto (REPLICATE N t) vs k = []
+Proof
+  strip_tac >> simp[enc_tail_upto_def] >>
+  irule enc_prefix_tail_static >> simp[EVERY_TAKE]
+QED
+
+Theorem enc_head_upto_dynamic_length:
+  has_types (REPLICATE N t) vs /\ k <= N /\ N = LENGTH vs /\
+  is_dynamic t ==>
+  LENGTH (enc_head_upto B (REPLICATE N t) vs k) = 32 * k
+Proof
+  strip_tac >>
+  `TAKE k (REPLICATE N t) = REPLICATE k t` by
+    (gvs[] >> simp[REPLICATE_GENLIST, TAKE_GENLIST] >>
+     AP_TERM_TAC >> simp[arithmeticTheory.MIN_DEF] >> decide_tac) >>
+  drule head_lengths_REPLICATE >>
+  disch_then (qspec_then `0` assume_tac) >>
+  drule enc_head_upto_length >>
+  disch_then (qspec_then `k` mp_tac) >>
+  disch_then (qspec_then `B` mp_tac) >>
+  qpat_x_assum `TAKE _ _ = _` kall_tac >>
+  simp[] >> decide_tac
+QED
+
+Theorem enc_prefix_assembly_layout:
+  enc_layout ts vs ==>
+  enc_prefix_head (hl + tl) ts vs ++ enc_prefix_tail ts vs =
+    enc_tuple hl tl ts vs [] []
+Proof
+  strip_tac >> drule enc_layout_length >>
+  strip_tac >> simp[enc_tuple_prefix_acc_lengths]
+QED
+
+Theorem enc_prefix_head_length_layout:
+  !ts vs q. enc_layout ts vs ==>
+  LENGTH (enc_prefix_head q ts vs) = head_lengths ts 0
+Proof
+  Induct_on `ts` >> Cases_on `vs` >>
+  simp[enc_layout_def, enc_prefix_head_def, head_lengths_def] >>
+  rpt strip_tac >> simp[SimpRHS, Once head_lengths_add] >>
+  rename1 `is_static ty ==> LENGTH (enc ty av) = static_length ty` >>
+  Cases_on `is_dynamic ty` >>
+  simp[enc_number_def, byteTheory.LENGTH_word_to_bytes]
+QED
+
+Theorem enc_head_upto_length_layout:
+  enc_layout ts vs ==>
+  LENGTH (enc_head_upto B ts vs k) = head_lengths (TAKE k ts) 0
+Proof
+  strip_tac >> simp[enc_head_upto_def] >>
+  irule enc_prefix_head_length_layout >>
+  irule enc_layout_take >> goal_assum drule
+QED
+
+Theorem enc_prefix_full_layout:
+  enc_layout ts vs ==>
+  enc_head_upto B ts vs (LENGTH vs) ++ enc_tail_upto ts vs (LENGTH vs) =
+    enc_tuple B 0 ts vs [] []
+Proof
+  strip_tac >> drule enc_layout_length >> strip_tac >>
+  simp[enc_head_upto_def, enc_tail_upto_def, TAKE_LENGTH_ID_rwt,
+       enc_tuple_prefix_acc_lengths]
+QED
+
+Theorem enc_head_upto_dynamic_length_layout:
+  enc_layout (REPLICATE N t) vs /\ k <= N /\ N = LENGTH vs /\
+  is_dynamic t ==>
+  LENGTH (enc_head_upto B (REPLICATE N t) vs k) = 32 * k
+Proof
+  strip_tac >>
+  `TAKE k (REPLICATE N t) = REPLICATE k t` by
+    (simp[REPLICATE_GENLIST, TAKE_GENLIST] >>
+     AP_TERM_TAC >> simp[arithmeticTheory.MIN_DEF] >> decide_tac) >>
+  drule head_lengths_REPLICATE >>
+  disch_then (qspec_then `0` assume_tac) >>
+  drule enc_head_upto_length_layout >>
+  disch_then (qspecl_then [`k`, `B`] mp_tac) >>
+  qpat_x_assum `TAKE _ _ = _` kall_tac >>
+  simp[] >> decide_tac
+QED
+
+Theorem enc_tuple_head_bound_layout:
+  enc_layout ts vs ==> head_lengths ts 0 <= LENGTH (enc_tuple hl tl ts vs [] [])
+Proof
+  strip_tac >> drule enc_layout_length >> strip_tac >>
+  simp[enc_tuple_prefix_acc_lengths, enc_prefix_head_length_layout]
+QED
+
+Theorem enc_tuple_cons_parts_layout:
+  enc_layout ts vs ==>
+  enc_tuple hl tl (t::ts) (v::vs) [] [] =
+    (if is_dynamic t then enc_number (Uint 256) (NumV (hl + tl))
+     else enc t v) ++
+    TAKE (head_lengths ts 0)
+      (enc_tuple hl (tl + LENGTH (if is_dynamic t then enc t v else []))
+         ts vs [] []) ++
+    (if is_dynamic t then enc t v else []) ++
+    DROP (head_lengths ts 0)
+      (enc_tuple hl (tl + LENGTH (if is_dynamic t then enc t v else []))
+         ts vs [] [])
+Proof
+  strip_tac >> drule enc_layout_length >> strip_tac >>
+  simp[enc_tuple_prefix_acc_lengths, enc_prefix_head_def, enc_prefix_tail_def,
+       enc_prefix_head_length_layout, TAKE_APPEND, DROP_APPEND,
+       TAKE_LENGTH_ID_rwt, DROP_LENGTH_TOO_LONG, APPEND_ASSOC]
+QED
+
+Theorem enc_tuple_cursor_shift:
+  LENGTH ts = LENGTH vs ==>
+  enc_tuple hl tl ts vs hds tls = enc_tuple (hl + tl) 0 ts vs hds tls
+Proof
+  simp[enc_tuple_prefix_acc_lengths]
+QED
+
+Theorem enc_tuple_cons_shift_parts_layout:
+  enc_layout ts vs ==>
+  enc_tuple d 0 (t::ts) (v::vs) [] [] =
+    (if is_dynamic t then enc_number (Uint 256) (NumV d) else enc t v) ++
+    TAKE (head_lengths ts 0)
+      (enc_tuple (d + LENGTH (if is_dynamic t then enc t v else [])) 0
+        ts vs [] []) ++
+    (if is_dynamic t then enc t v else []) ++
+    DROP (head_lengths ts 0)
+      (enc_tuple (d + LENGTH (if is_dynamic t then enc t v else [])) 0
+        ts vs [] [])
+Proof
+  strip_tac >> drule enc_layout_length >> strip_tac >>
+  drule enc_tuple_cons_parts_layout >>
+  disch_then (qspecl_then [`v`,`0`,`t`,`d`] mp_tac) >>
+  simp[enc_tuple_prefix_acc_lengths, Excl "enc_def"]
+QED
+
+Theorem enc_tuple_cons_shift_length_layout:
+  enc_layout ts vs /\
+  (~is_dynamic t ==> LENGTH (enc t v) = static_length t) ==>
+  LENGTH (enc_tuple d 0 (t::ts) (v::vs) [] []) =
+    (if is_dynamic t then 32 else static_length t) + head_lengths ts 0 +
+    LENGTH (if is_dynamic t then enc t v else []) +
+    (LENGTH (enc_tuple (d + LENGTH (if is_dynamic t then enc t v else [])) 0
+       ts vs [] []) - head_lengths ts 0)
+Proof
+  strip_tac >> drule enc_tuple_cons_shift_parts_layout >>
+  disch_then (qspecl_then [`v`,`t`,`d`] SUBST1_TAC) >>
+  `head_lengths ts 0 <=
+     LENGTH (enc_tuple (d + LENGTH (if is_dynamic t then enc t v else [])) 0
+       ts vs [] [])` by metis_tac[enc_tuple_head_bound_layout] >>
+  Cases_on `is_dynamic t` >>
+  simp[enc_number_def, byteTheory.LENGTH_word_to_bytes, LENGTH_TAKE,
+       LENGTH_DROP, arithmeticTheory.MIN_DEF] >> decide_tac
+QED
+
+Theorem enc_dynarray_parts_layout:
+  enc_layout (REPLICATE (LENGTH vs) t) vs ==>
+  enc (Array NONE t) (ListV vs) =
+    enc_number (Uint 256) (NumV (LENGTH vs)) ++
+    enc_tuple (head_lengths (REPLICATE (LENGTH vs) t) 0) 0
+      (REPLICATE (LENGTH vs) t) vs [] []
+Proof
+  strip_tac >> simp[Once enc_def] >>
+  simp[enc_tuple_prefix_acc_lengths, enc_number_def, APPEND_ASSOC]
+QED
+
+Theorem enc_dynarray_payload_layout:
+  enc_layout (REPLICATE (LENGTH vs) t) vs ==>
+  DROP 32 (enc (Array NONE t) (ListV vs)) =
+    enc_tuple (head_lengths (REPLICATE (LENGTH vs) t) 0) 0
+      (REPLICATE (LENGTH vs) t) vs [] []
+Proof
+  strip_tac >> drule enc_dynarray_parts_layout >>
+  disch_then SUBST1_TAC >>
+  simp[enc_number_def, DROP_APPEND, byteTheory.LENGTH_word_to_bytes]
+QED
+
+Theorem enc_tuple_tail_length_layout:
+  enc_layout ts vs ==>
+  LENGTH (enc_tuple hl tl ts vs [] []) - head_lengths ts 0 =
+    LENGTH (enc_prefix_tail ts vs)
+Proof
+  strip_tac >> drule enc_layout_length >> strip_tac >>
+  simp[enc_tuple_prefix_acc_lengths, enc_prefix_head_length_layout]
+QED
+
+Theorem enc_dynarray_static_length_layout:
+  enc_layout (REPLICATE (LENGTH vs) t) vs /\ ~is_dynamic t ==>
+  LENGTH (enc (Array NONE t) (ListV vs)) = 32 + LENGTH vs * static_length t
+Proof
+  strip_tac >> drule enc_dynarray_parts_layout >>
+  disch_then SUBST1_TAC >>
+  simp[enc_tuple_prefix_acc_lengths, enc_prefix_tail_static,
+       enc_prefix_head_length_layout, enc_number_def,
+       byteTheory.LENGTH_word_to_bytes] >>
+  `!n a. head_lengths (REPLICATE n t) a = a + n * static_length t` by
+    (Induct >> simp[head_lengths_def, arithmeticTheory.MULT_CLAUSES]) >>
+  simp[]
+QED
+
+Theorem enc_layout_empty_dynarray_probe:
+  LENGTH (enc (Array NONE (Uint 1)) (ListV [])) = 32 /\
+  DROP 32 (enc (Array NONE (Uint 1)) (ListV [])) = []
+Proof
+  EVAL_TAC
+QED
+
+Definition enc_prefix_mem_def:
+  enc_prefix_mem p B ts vs k (s : venom_state) <=>
+    mem_bytes_at p (LENGTH (enc_head_upto B ts vs k)) s.vs_memory =
+      enc_head_upto B ts vs k /\
+    mem_bytes_at (p + B) (LENGTH (enc_tail_upto ts vs k)) s.vs_memory =
+      enc_tail_upto ts vs k
+End
+
+Theorem enc_prefix_mem_zero[simp]:
+  enc_prefix_mem p B ts vs 0 s
+Proof
+  simp[enc_prefix_mem_def, mem_bytes_at_def]
+QED
+
+Theorem enc_prefix_mem_suc:
+  has_types ts vs /\ k < LENGTH vs /\
+  h = (if is_dynamic (EL k ts) then
+         enc_number (Uint 256) (NumV (enc_offset_upto B ts vs k))
+       else enc (EL k ts) (EL k vs)) /\
+  z = (if is_dynamic (EL k ts) then enc (EL k ts) (EL k vs) else []) /\
+  mem_bytes_at p (LENGTH (enc_head_upto B ts vs k)) s.vs_memory =
+    enc_head_upto B ts vs k /\
+  mem_bytes_at (p+B) (LENGTH (enc_tail_upto ts vs k)) s.vs_memory =
+    enc_tail_upto ts vs k /\
+  mem_bytes_at (p+LENGTH (enc_head_upto B ts vs k)) (LENGTH h) s.vs_memory =
+    h /\
+  mem_bytes_at (p+enc_offset_upto B ts vs k) (LENGTH z) s.vs_memory = z ==>
+  enc_prefix_mem p B ts vs (SUC k) s
+Proof
+  rpt strip_tac >>
+  `LENGTH ts = LENGTH vs` by metis_tac[has_types_LIST_REL, LIST_REL_LENGTH] >>
+  drule_all enc_prefix_suc >> disch_then (qspec_then `B` strip_assume_tac) >>
+  pure_rewrite_tac[enc_prefix_mem_def] >>
+  pure_asm_rewrite_tac[] >>
+  pure_rewrite_tac[LENGTH_APPEND, valueEncodingProofsTheory.mem_bytes_at_split_padded] >>
+  gvs[enc_offset_upto_def]
+QED
+
+Theorem enc_prefix_mem_exit_parts:
+  has_types ts vs /\ enc_prefix_mem p B ts vs (LENGTH vs) s ==>
+  mem_bytes_at p (head_lengths ts 0) s.vs_memory ++
+    mem_bytes_at (p+B) (LENGTH (enc_tail_upto ts vs (LENGTH vs))) s.vs_memory =
+    enc_tuple B 0 ts vs [] []
+Proof
+  strip_tac >>
+  `LENGTH ts = LENGTH vs` by metis_tac[has_types_LIST_REL, LIST_REL_LENGTH] >>
+  drule enc_prefix_full >> disch_then (qspec_then `B` mp_tac) >>
+  drule enc_head_upto_length >>
+  disch_then (qspecl_then [`LENGTH vs`, `B`] mp_tac) >>
+  simp[TAKE_LENGTH_ID_rwt] >> rpt strip_tac >>
+  gvs[enc_prefix_mem_def]
+QED
+
+Theorem enc_prefix_mem_exit:
+  has_types ts vs /\ B = head_lengths ts 0 /\
+  enc_prefix_mem p B ts vs (LENGTH vs) s ==>
+  mem_bytes_at p (LENGTH (enc_tuple B 0 ts vs [] [])) s.vs_memory =
+    enc_tuple B 0 ts vs [] []
+Proof
+  strip_tac >> drule_all enc_prefix_mem_exit_parts >>
+  disch_then (mp_tac o AP_TERM ``LENGTH : word8 list -> num``) >>
+  pure_rewrite_tac[LENGTH_APPEND, LENGTH_mem_bytes_at] >>
+  disch_then (SUBST1_TAC o SYM) >>
+  pure_rewrite_tac[valueEncodingProofsTheory.mem_bytes_at_split_padded] >>
+  metis_tac[enc_prefix_mem_exit_parts]
+QED
+
+Theorem enc_prefix_mem_suc_lengths:
+  LENGTH ts = LENGTH vs /\ k < LENGTH vs /\
+  h = (if is_dynamic (EL k ts) then
+         enc_number (Uint 256) (NumV (enc_offset_upto B ts vs k))
+       else enc (EL k ts) (EL k vs)) /\
+  z = (if is_dynamic (EL k ts) then enc (EL k ts) (EL k vs) else []) /\
+  mem_bytes_at p (LENGTH (enc_head_upto B ts vs k)) s.vs_memory =
+    enc_head_upto B ts vs k /\
+  mem_bytes_at (p+B) (LENGTH (enc_tail_upto ts vs k)) s.vs_memory =
+    enc_tail_upto ts vs k /\
+  mem_bytes_at (p+LENGTH (enc_head_upto B ts vs k)) (LENGTH h) s.vs_memory = h /\
+  mem_bytes_at (p+enc_offset_upto B ts vs k) (LENGTH z) s.vs_memory = z ==>
+  enc_prefix_mem p B ts vs (SUC k) s
+Proof
+  rpt strip_tac >>
+  drule_all enc_prefix_suc >> disch_then (qspec_then `B` strip_assume_tac) >>
+  pure_rewrite_tac[enc_prefix_mem_def] >> pure_asm_rewrite_tac[] >>
+  pure_rewrite_tac[LENGTH_APPEND, valueEncodingProofsTheory.mem_bytes_at_split_padded] >>
+  gvs[enc_offset_upto_def]
+QED
+
+Theorem enc_prefix_mem_exit_parts_layout:
+  enc_layout ts vs /\ enc_prefix_mem p B ts vs (LENGTH vs) s ==>
+  mem_bytes_at p (head_lengths ts 0) s.vs_memory ++
+    mem_bytes_at (p+B) (LENGTH (enc_tail_upto ts vs (LENGTH vs))) s.vs_memory =
+    enc_tuple B 0 ts vs [] []
+Proof
+  strip_tac >>
+  `LENGTH ts = LENGTH vs` by metis_tac[enc_layout_length] >>
+  drule enc_prefix_full_layout >> disch_then (qspec_then `B` mp_tac) >>
+  drule enc_head_upto_length_layout >>
+  disch_then (qspecl_then [`LENGTH vs`, `B`] mp_tac) >>
+  simp[TAKE_LENGTH_ID_rwt] >> rpt strip_tac >> gvs[enc_prefix_mem_def]
+QED
+
+Theorem enc_prefix_mem_exit_layout:
+  enc_layout ts vs /\ B = head_lengths ts 0 /\
+  enc_prefix_mem p B ts vs (LENGTH vs) s ==>
+  mem_bytes_at p (LENGTH (enc_tuple B 0 ts vs [] [])) s.vs_memory =
+    enc_tuple B 0 ts vs [] []
+Proof
+  strip_tac >> drule_all enc_prefix_mem_exit_parts_layout >>
+  disch_then (mp_tac o AP_TERM ``LENGTH : word8 list -> num``) >>
+  pure_rewrite_tac[LENGTH_APPEND, LENGTH_mem_bytes_at] >>
+  disch_then (SUBST1_TAC o SYM) >>
+  pure_rewrite_tac[valueEncodingProofsTheory.mem_bytes_at_split_padded] >>
+  metis_tac[enc_prefix_mem_exit_parts_layout]
+QED
+
+(* K carries the global source, operand and frame facts; cell contents
+   remain in the invariant rather than being frozen by K. *)
+Definition enc_array_inv_def:
+  enc_array_inv inv_ctx p B ts vs ip tail_cell k (s : venom_state) <=>
+    inv_ctx s /\ k <= LENGTH vs /\ enc_prefix_mem p B ts vs k s /\
+    mem_word_at ip s.vs_memory = n2w k /\
+    (case tail_cell of NONE => T
+     | SOME c => mem_word_at c s.vs_memory = n2w (enc_offset_upto B ts vs k))
+End
+
+Theorem enc_array_inv_zero:
+  inv_ctx s /\ mem_word_at ip s.vs_memory = 0w /\
+  (case tail_cell of NONE => T
+   | SOME c => mem_word_at c s.vs_memory = n2w B) ==>
+  enc_array_inv inv_ctx p B ts vs ip tail_cell 0 s
+Proof
+  Cases_on `tail_cell` >> simp[enc_array_inv_def, enc_offset_upto_def]
+QED
+
+Theorem enc_array_inv_suc:
+  inv_ctx s /\ SUC k <= LENGTH vs /\
+  enc_prefix_mem p B ts vs (SUC k) s /\
+  mem_word_at ip s.vs_memory = n2w (SUC k) /\
+  (case tail_cell of NONE => T
+   | SOME c =>
+       mem_word_at c s.vs_memory = n2w (enc_offset_upto B ts vs (SUC k))) ==>
+  enc_array_inv inv_ctx p B ts vs ip tail_cell (SUC k) s
+Proof
+  simp[enc_array_inv_def]
+QED
+
+Theorem enc_array_inv_context:
+  enc_array_inv inv_ctx p B ts vs ip tail_cell k s ==> inv_ctx s
+Proof
+  simp[enc_array_inv_def]
+QED
+
+Theorem enc_array_inv_bound:
+  enc_array_inv inv_ctx p B ts vs ip tail_cell k s ==> k <= LENGTH vs
+Proof
+  simp[enc_array_inv_def]
+QED
+
+Theorem enc_array_inv_prefix:
+  enc_array_inv inv_ctx p B ts vs ip tail_cell k s ==> enc_prefix_mem p B ts vs k s
+Proof
+  simp[enc_array_inv_def]
+QED
+
+Theorem enc_array_inv_count:
+  enc_array_inv inv_ctx p B ts vs ip tail_cell k s ==>
+  mem_word_at ip s.vs_memory = n2w k
+Proof
+  simp[enc_array_inv_def]
+QED
+
+Theorem enc_array_inv_tail:
+  enc_array_inv inv_ctx p B ts vs ip (SOME c) k s ==>
+  mem_word_at c s.vs_memory = n2w (enc_offset_upto B ts vs k)
+Proof
+  simp[enc_array_inv_def]
+QED
+
+Theorem enc_prefix_mem_jump[simp]:
+  enc_prefix_mem p B ts vs k (jump_to l s) = enc_prefix_mem p B ts vs k s
+Proof
+  simp[enc_prefix_mem_def, jump_to_def]
+QED
+
+Theorem enc_array_inv_jump:
+  (!s l. inv_ctx s ==> inv_ctx (jump_to l s)) /\
+  enc_array_inv inv_ctx p B ts vs ip tail_cell k s ==>
+  enc_array_inv inv_ctx p B ts vs ip tail_cell k (jump_to l s)
+Proof
+  Cases_on `tail_cell` >> simp[enc_array_inv_def, jump_to_def]
+QED
+
+Theorem enc_eval_operand_jump[simp]:
+  eval_operand op (jump_to l s) = eval_operand op s
+Proof
+  Cases_on `op` >> simp[eval_operand_def, lookup_var_def, jump_to_def]
+QED
+
+Theorem enc_frame_jump[simp]:
+  enc_frame st st' lo top outs s0 (jump_to l s) =
+  enc_frame st st' lo top outs s0 s
+Proof
+  simp[enc_frame_def, enc_scratch_def, jump_to_def, lookup_var_def,
+       venomMemDefsTheory.alloca_inv_def,
+       venomMemDefsTheory.allocas_non_overlapping_def,
+       venomMemDefsTheory.alloca_next_valid_def]
+QED
+
+Definition enc_array_header_def:
+  enc_array_header inv_ctx p B ts vs ip tail_cell cnd k s <=>
+    enc_array_inv inv_ctx p B ts vs ip tail_cell k s /\
+    eval_operand cnd s = SOME (if k < LENGTH vs then 0w else 1w)
+End
+
+Theorem enc_array_header_jump:
+  (!s l. inv_ctx s ==> inv_ctx (jump_to l s)) /\
+  enc_array_header inv_ctx p B ts vs ip tail_cell cnd k s ==>
+  enc_array_header inv_ctx p B ts vs ip tail_cell cnd k (jump_to l s)
+Proof
+  simp[enc_array_header_def] >> metis_tac[enc_array_inv_jump]
+QED
+
+Theorem enc_array_header_condition:
+  enc_array_header inv_ctx p B ts vs ip tail_cell cnd k s ==>
+  ?w. eval_operand cnd s = SOME w /\ (w = 0w <=> k < LENGTH vs)
+Proof
+  simp[enc_array_header_def] >> strip_tac >>
+  Cases_on `k < LENGTH vs` >> gvs[]
+QED
+
+(* ===== Source and region boundaries ===== *)
+
+Theorem enc_pre_bounds:
+  enc_pre st st' ops lo top tv v src outs s ==>
+  src + type_memory_size tv <= lo /\ lo <= top /\
+  top < dimword (:256)
+Proof
+  rewrite_tac[enc_pre_def, enc_scratch_def] >> strip_tac >>
+  rpt conj_tac >> decide_tac
+QED
+
+Theorem regions_disjoint_subregions:
+  regions_disjoint (a, n) (b, m) /\
+  a <= a' /\ a' + n' <= a + n /\
+  b <= b' /\ b' + m' <= b + m ==>
+  regions_disjoint (a', n') (b', m')
+Proof
+  rewrite_tac[venomMemDefsTheory.regions_disjoint_def] >> decide_tac
+QED
+
+Theorem enc_alloca_inv_cong:
+  (t : venom_state).vs_allocas = s.vs_allocas /\
+  t.vs_alloca_next = s.vs_alloca_next ==>
+  (alloca_inv t <=> alloca_inv s)
+Proof
+  simp[venomMemDefsTheory.alloca_inv_def,
+       venomMemDefsTheory.allocas_non_overlapping_def,
+       venomMemDefsTheory.alloca_next_valid_def]
+QED
+
+Theorem enc_scratch_cong:
+  (t : venom_state).vs_allocas = s.vs_allocas /\
+  t.vs_alloca_next = s.vs_alloca_next ==>
+  (enc_scratch ids lo top t <=> enc_scratch ids lo top s)
+Proof
+  strip_tac >> drule_all enc_alloca_inv_cong >>
+  simp[enc_scratch_def]
+QED
+
+Theorem enc_write_memory_allocas[simp]:
+  (write_memory_with_expansion dst bytes s).vs_allocas = s.vs_allocas
+Proof
+  simp[write_memory_with_expansion_def]
+QED
+
+Theorem enc_write_memory_alloca_next[simp]:
+  (write_memory_with_expansion dst bytes s).vs_alloca_next = s.vs_alloca_next
+Proof
+  simp[write_memory_with_expansion_def]
+QED
+
+Theorem enc_mcopy_allocas[simp]:
+  (mcopy dst src len s).vs_allocas = s.vs_allocas
+Proof
+  simp[mcopy_def]
+QED
+
+Theorem enc_mcopy_alloca_next[simp]:
+  (mcopy dst src len s).vs_alloca_next = s.vs_alloca_next
+Proof
+  simp[mcopy_def]
+QED
+
+Theorem enc_scratch_write_memory[simp]:
+  enc_scratch ids lo top (write_memory_with_expansion dst bytes s) =
+  enc_scratch ids lo top s
+Proof
+  irule enc_scratch_cong >> simp[]
+QED
+
+Theorem enc_scratch_mcopy[simp]:
+  enc_scratch ids lo top (mcopy dst src len s) = enc_scratch ids lo top s
+Proof
+  irule enc_scratch_cong >> simp[]
+QED
+
+Theorem enc_scratch_alloca_bound:
+  enc_scratch ids lo top s /\
+  FLOOKUP s.vs_allocas j = SOME (c, n) ==> c + n <= top
+Proof
+  rewrite_tac[enc_scratch_def, venomMemDefsTheory.alloca_inv_def,
+              venomMemDefsTheory.alloca_next_valid_def] >>
+  rpt strip_tac >> first_x_assum drule >> decide_tac
+QED
+
+Theorem enc_alloca_missing_update:
+  {j | j IN ids /\ FLOOKUP (allocas |+ (i, r)) j = NONE} =
+  {j | j IN ids /\ FLOOKUP allocas j = NONE} DELETE i
+Proof
+  simp[pred_setTheory.EXTENSION, finite_mapTheory.FLOOKUP_UPDATE] >> metis_tac[]
+QED
+
+Theorem enc_alloca_missing_credit:
+  FINITE ids /\ i IN ids /\ FLOOKUP allocas i = NONE ==>
+  CARD {j | j IN ids /\ FLOOKUP allocas j = NONE} =
+    SUC (CARD {j | j IN ids /\ FLOOKUP (allocas |+ (i, r)) j = NONE})
+Proof
+  strip_tac >> rewrite_tac[enc_alloca_missing_update] >>
+  `FINITE {j | j IN ids /\ FLOOKUP allocas j = NONE}` by
+    (irule pred_setTheory.SUBSET_FINITE >> qexists_tac `ids` >>
+     simp[pred_setTheory.SUBSET_DEF]) >>
+  simp[pred_setTheory.CARD_DELETE] >>
+  `i IN {j | j IN ids /\ FLOOKUP allocas j = NONE}` by simp[] >>
+  `CARD {j | j IN ids /\ FLOOKUP allocas j = NONE} <> 0` by
+    (drule pred_setTheory.CARD_EQ_0 >>
+     metis_tac[pred_setTheory.NOT_IN_EMPTY]) >> decide_tac
+QED
+
+Theorem enc_alloca_inv_extend:
+  alloca_inv s /\ FLOOKUP s.vs_allocas i = NONE ==>
+  alloca_inv (s with <|
+    vs_allocas := s.vs_allocas |+ (i, (s.vs_alloca_next, sz));
+    vs_alloca_next := s.vs_alloca_next + sz |> )
+Proof
+  simp[venomMemDefsTheory.alloca_inv_def,
+       venomMemDefsTheory.allocas_non_overlapping_def,
+       venomMemDefsTheory.alloca_next_valid_def,
+       finite_mapTheory.FLOOKUP_UPDATE] >>
+  rpt strip_tac >>
+  gvs[AllCaseEqs()] >>
+  qpat_assum `!aid base n. FLOOKUP _ aid = SOME (base,n) ==> _`
+    (fn th => imp_res_tac th) >>
+  gvs[] >> metis_tac[]
+QED
+
+Theorem enc_scratch_alloca_fresh:
+  FINITE ids /\ i IN ids /\ enc_scratch ids lo top s /\
+  FLOOKUP s.vs_allocas i = NONE ==>
+  enc_scratch ids lo top (s with <|
+    vs_allocas := s.vs_allocas |+ (i, (s.vs_alloca_next, 32));
+    vs_alloca_next := s.vs_alloca_next + 32 |> )
+Proof
+  rpt strip_tac >>
+  `alloca_inv s` by fs[enc_scratch_def] >>
+  drule_all enc_alloca_inv_extend >>
+  disch_then (qspec_then `32` assume_tac) >>
+  drule_all enc_alloca_missing_credit >>
+  disch_then (qspec_then `(s.vs_alloca_next,32)` assume_tac) >>
+  qpat_x_assum `enc_scratch ids lo top s` mp_tac >>
+  pure_rewrite_tac[enc_scratch_def, venom_state_accfupds, combinTheory.K_THM] >>
+  strip_tac >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- decide_tac >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac
+  >- (map_every qx_gen_tac [`j`, `b`, `sz`] >> strip_tac >>
+      qpat_x_assum `FLOOKUP (_ |+ _) j = SOME _` mp_tac >>
+      Cases_on `i = j` >>
+      asm_simp_tac (srw_ss()) [finite_mapTheory.FLOOKUP_UPDATE] >>
+      strip_tac >> metis_tac[]) >>
+  decide_tac
+QED
+
+Theorem enc_scratch_outside_disjoint:
+  enc_scratch ids lo top s /\ j NOTIN ids /\ i IN ids /\
+  FLOOKUP s.vs_allocas j = SOME (c, n) /\
+  FLOOKUP s.vs_allocas i = SOME (b, m) ==>
+  regions_disjoint (c, n) (b, m)
+Proof
+  rewrite_tac[enc_scratch_def, venomMemDefsTheory.alloca_inv_def,
+       venomMemDefsTheory.allocas_non_overlapping_def,
+       venomMemDefsTheory.regions_disjoint_def] >> rpt strip_tac >>
+  `j <> i` by metis_tac[] >> metis_tac[]
+QED
+
+Theorem tuple_in_memory_append:
+  !vs tvs off ws tws.
+    LENGTH vs = LENGTH tvs ==>
+    (tuple_in_memory (vs ++ ws) (tvs ++ tws) off mem <=>
+     tuple_in_memory vs tvs off mem /\
+     tuple_in_memory ws tws (off + SUM (MAP type_memory_size tvs)) mem)
+Proof
+  Induct >> Cases_on `tvs` >> simp[val_in_memory_def] >>
+  rpt strip_tac >> simp[CONJ_ASSOC]
+QED
+
+Theorem elems_in_memory_EL:
+  !vs off k.
+    elems_in_memory vs off tv mem /\ k < LENGTH vs ==>
+    val_in_memory tv (EL k vs) (off + k * type_memory_size tv) mem
+Proof
+  Induct >> simp[val_in_memory_def] >>
+  rpt gen_tac >> Cases_on `k` >>
+  simp[val_in_memory_def, arithmeticTheory.MULT_CLAUSES] >>
+  rpt strip_tac >> rename1 `k' < LENGTH vs` >>
+  first_x_assum drule >>
+  disch_then (qspec_then `k'` mp_tac) >> simp[]
+QED
+
+Theorem mem_bytes_at_pointwise:
+  (!a. off <= a /\ a < off + n ==>
+       mem_bytes_at a 1 mem = mem_bytes_at a 1 mem') ==>
+  mem_bytes_at off n mem = mem_bytes_at off n mem'
+Proof
+  strip_tac >> irule LIST_EQ >> simp[] >> rpt strip_tac >>
+  rename1 `k < n` >>
+  first_x_assum (qspec_then `off + k` mp_tac) >> simp[] >>
+  disch_then (mp_tac o AP_TERM ``EL 0 : word8 list -> word8``) >>
+  simp[valueEncodingProofsTheory.EL_mem_bytes_at]
+QED
+
+Theorem word_size_covers[local]:
+  n <= 32 * word_size n
+Proof
+  simp[vfmConstantsTheory.word_size_def] >>
+  qspec_then `32` mp_tac arithmeticTheory.DIVISION >>
+  rewrite_tac[EVAL ``0 < 32``] >>
+  disch_then (qspec_then `n + 31` strip_assume_tac) >> decide_tac
+QED
+
+Theorem value_has_type_val_wf_mutual[local]:
+  (!tv v. value_has_type tv v ==> val_wf tv v) /\
+  (!tvs vs. values_have_types tvs vs ==> tuple_val_wf vs tvs) /\
+  (!tv n kvs. sparse_has_type tv n kvs ==> kvs_val_wf kvs tv n) /\
+  (!tv vs. all_have_type tv vs ==> elems_val_wf vs tv) /\
+  (!fts fields. struct_has_type fts fields ==> fields_val_wf fields fts)
+Proof
+  ho_match_mp_tac value_has_type_ind >>
+  simp[value_has_type_def, val_wf_def, type_memory_size_def] >>
+  rpt strip_tac >> rename1 `word_size cap` >>
+  qspec_then `cap` mp_tac (GEN_ALL word_size_covers) >> decide_tac
+QED
+
+Theorem value_has_type_val_wf:
+  !tv v. value_has_type tv v ==> val_wf tv v
+Proof
+  metis_tac[value_has_type_val_wf_mutual]
+QED
+
+Theorem val_in_memory_pointwise:
+  val_in_memory tv v off mem /\ val_wf tv v /\
+  (!a. off <= a /\ a < off + type_memory_size tv ==>
+       mem_bytes_at a 1 mem = mem_bytes_at a 1 mem') ==>
+  val_in_memory tv v off mem'
+Proof
+  strip_tac >> irule val_in_memory_mem_agree >>
+  goal_assum drule >> simp[] >>
+  qexists_tac `type_memory_size tv` >> simp[] >>
+  qexists_tac `mem` >> simp[] >>
+  irule mem_bytes_at_pointwise >> simp[]
+QED
+
+Theorem typed_val_in_memory_pointwise:
+  value_has_type tv v /\ val_in_memory tv v src mem /\
+  (!a. src <= a /\ a < src + type_memory_size tv ==>
+       mem_bytes_at a 1 mem = mem_bytes_at a 1 mem') ==>
+  val_in_memory tv v src mem'
+Proof
+  strip_tac >> drule value_has_type_val_wf >> strip_tac >>
+  irule val_in_memory_pointwise >> goal_assum drule >> simp[] >>
+  qexists_tac `mem` >> simp[]
+QED
+
+Theorem enc_frame_preserves_source:
+  enc_frame st st' lo top outs s0 s /\
+  value_has_type tv v /\ val_in_memory tv v src s0.vs_memory /\
+  src + type_memory_size tv <= lo /\
+  EVERY (regions_disjoint (src, type_memory_size tv)) outs ==>
+  val_in_memory tv v src s.vs_memory
+Proof
+  strip_tac >> irule typed_val_in_memory_pointwise >>
+  goal_assum drule >> simp[] >>
+  qexists_tac `s0.vs_memory` >> simp[] >> rpt strip_tac >>
+  qpat_x_assum `enc_frame _ _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[enc_frame_def, enc_scratch_def] >> strip_tac >>
+  sym_tac >> first_x_assum irule >> reverse conj_tac
+  >- (qpat_x_assum `EVERY _ outs` mp_tac >>
+      rewrite_tac[EVERY_MEM] >> strip_tac >> rpt strip_tac >>
+      rename1 `MEM p outs` >> Cases_on `p` >>
+      first_x_assum drule >>
+      rewrite_tac[venomMemDefsTheory.regions_disjoint_def] >>
+      simp[] >> decide_tac) >>
+  rpt strip_tac >> first_x_assum drule_all >> decide_tac
+QED
+
+Theorem tuple_in_memory_EL:
+  !vs tvs off k.
+    LENGTH vs = LENGTH tvs /\ tuple_in_memory vs tvs off mem /\
+    k < LENGTH vs ==>
+    val_in_memory (EL k tvs) (EL k vs)
+      (off + SUM (MAP type_memory_size (TAKE k tvs))) mem
+Proof
+  Induct >> Cases_on `tvs` >> simp[val_in_memory_def] >>
+  rpt gen_tac >> Cases_on `k` >> simp[] >>
+  rpt strip_tac >> first_x_assum drule_all >> simp[]
+QED
+
+(* ===== Scratch and frame calculus ===== *)
+
+Theorem frag_ids_finite[simp]:
+  FINITE (frag_ids st st')
+Proof
+  irule pred_setTheory.SUBSET_FINITE_I >> qexists_tac `count st'.cs_next_id` >>
+  simp[frag_ids_def, pred_setTheory.SUBSET_DEF]
+QED
+
+Theorem frag_ids_same[simp]:
+  frag_ids st st = {}
+Proof
+  simp[frag_ids_def, pred_setTheory.EXTENSION]
+QED
+
+Theorem frag_ids_split:
+  st0.cs_next_id <= st1.cs_next_id /\
+  st1.cs_next_id <= st2.cs_next_id ==>
+  frag_ids st0 st2 = frag_ids st0 st1 UNION frag_ids st1 st2
+Proof
+  simp[frag_ids_def, pred_setTheory.EXTENSION] >> rpt strip_tac >> decide_tac
+QED
+
+Theorem frag_ids_disjoint:
+  DISJOINT (frag_ids st0 st1) (frag_ids st1 st2)
+Proof
+  simp[frag_ids_def, pred_setTheory.DISJOINT_DEF, pred_setTheory.EXTENSION] >> decide_tac
+QED
+
+Theorem enc_frame_refl:
+  enc_scratch (frag_ids st st') lo top s ==>
+  enc_frame st st' lo top outs s s
+Proof
+  simp[enc_frame_def]
+QED
+
+(* Label equality is an execution invariant separate from enc_frame. *)
+Theorem enc_frame_preserves_operand:
+  enc_frame st st' lo top outs s0 s /\
+  s.vs_labels = s0.vs_labels /\
+  (!x. op = Var x ==> not_fresh_at st x) /\
+  eval_operand op s0 = SOME w ==>
+  eval_operand op s = SOME w
+Proof
+  Cases_on `op` >> simp[eval_operand_def] >> strip_tac >>
+  gvs[] >> qpat_x_assum `enc_frame _ _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[enc_frame_def] >> strip_tac >> first_x_assum irule >> simp[]
+QED
+
+Theorem enc_missing_union_card:
+  FINITE ids /\ FINITE rest /\ DISJOINT ids rest ==>
+  CARD {i | i IN ids UNION rest /\ FLOOKUP s.vs_allocas i = NONE} =
+  CARD {i | i IN ids /\ FLOOKUP s.vs_allocas i = NONE} +
+  CARD {i | i IN rest /\ FLOOKUP s.vs_allocas i = NONE}
+Proof
+  strip_tac >>
+  `{i | i IN ids UNION rest /\ FLOOKUP s.vs_allocas i = NONE} =
+   {i | i IN ids /\ FLOOKUP s.vs_allocas i = NONE} UNION
+   {i | i IN rest /\ FLOOKUP s.vs_allocas i = NONE}` by
+    (simp[pred_setTheory.EXTENSION] >> metis_tac[]) >>
+  pop_assum SUBST1_TAC >> irule pred_setTheory.CARD_UNION_DISJOINT >>
+  simp[pred_setTheory.DISJOINT_DEF, pred_setTheory.EXTENSION] >>
+  gvs[pred_setTheory.DISJOINT_DEF, pred_setTheory.EXTENSION] >>
+  conj_tac
+  >- (irule pred_setTheory.SUBSET_FINITE_I >> qexists_tac `ids` >>
+      simp[pred_setTheory.SUBSET_DEF]) >>
+  irule pred_setTheory.SUBSET_FINITE_I >> qexists_tac `rest` >>
+  simp[pred_setTheory.SUBSET_DEF]
+QED
+
+Theorem enc_scratch_restrict_reserved:
+  FINITE ids /\ FINITE rest /\ DISJOINT ids rest /\
+  enc_scratch (ids UNION rest) lo top s ==>
+  enc_scratch ids lo
+    (top - 32 * CARD {i | i IN rest /\ FLOOKUP s.vs_allocas i = NONE}) s
+Proof
+  strip_tac >> drule_all enc_missing_union_card >>
+  disch_then (qspec_then `s` assume_tac) >>
+  qpat_x_assum `enc_scratch _ _ _ _` mp_tac >>
+  rewrite_tac[enc_scratch_def] >> strip_tac >>
+  asm_rewrite_tac[arithmeticTheory.LEFT_ADD_DISTRIB] >>
+  conj_tac >- decide_tac >> conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      qpat_x_assum `!i b sz. _` (qspecl_then [`i`, `b`, `sz`] mp_tac) >> simp[]) >>
+  qpat_x_assum `_ + 32 * _ <= top` mp_tac >>
+  asm_rewrite_tac[arithmeticTheory.LEFT_ADD_DISTRIB] >> decide_tac
+QED
+
+Theorem enc_scratch_restore_reserved:
+  FINITE ids /\ FINITE rest /\ DISJOINT ids rest /\
+  enc_scratch (ids UNION rest) lo top s0 /\
+  (!i. i IN rest ==> FLOOKUP s.vs_allocas i = FLOOKUP s0.vs_allocas i) /\
+  enc_scratch ids lo
+    (top - 32 * CARD {i | i IN rest /\ FLOOKUP s0.vs_allocas i = NONE}) s ==>
+  enc_scratch (ids UNION rest) lo top s
+Proof
+  strip_tac >> drule_all enc_missing_union_card >>
+  disch_then (fn th => map_every (fn q => qspec_then q assume_tac th) [`s`, `s0`]) >>
+  `{i | i IN rest /\ FLOOKUP s.vs_allocas i = NONE} =
+   {i | i IN rest /\ FLOOKUP s0.vs_allocas i = NONE}` by
+    (simp[pred_setTheory.EXTENSION] >> metis_tac[]) >>
+  qpat_x_assum `enc_scratch (ids UNION rest) _ _ _` mp_tac >>
+  qpat_x_assum `enc_scratch ids _ _ _` mp_tac >>
+  rewrite_tac[enc_scratch_def] >> ntac 2 strip_tac >>
+  asm_rewrite_tac[arithmeticTheory.LEFT_ADD_DISTRIB] >> conj_tac
+  >- (ntac 2 (qpat_x_assum `CARD _ = _` kall_tac) >>
+      rpt gen_tac >> strip_tac >>
+      Cases_on `i IN rest`
+      >- (qpat_x_assum `!i b sz. i IN ids UNION rest /\ _ ==> _`
+            (qspecl_then [`i`, `b`, `sz`] mp_tac) >>
+          qpat_x_assum `!i. i IN rest ==> _`
+            (qspec_then `i` mp_tac) >> simp[]) >>
+      qpat_x_assum `!i b sz. i IN ids /\ _ ==> _`
+        (qspecl_then [`i`, `b`, `sz`] mp_tac) >>
+      qpat_x_assum `i IN ids UNION rest` mp_tac >> simp[]) >>
+  qpat_x_assum `_ + 32 * _ <= top - _` mp_tac >>
+  qpat_x_assum `_.vs_alloca_next + 32 * _ <= top` mp_tac >>
+  asm_rewrite_tac[arithmeticTheory.LEFT_ADD_DISTRIB] >> decide_tac
+QED
+
+Theorem enc_frame_enlarge_outputs:
+  enc_frame st st' lo top outs s0 s /\
+  (!r. MEM r outs ==> MEM r larger) ==>
+  enc_frame st st' lo top larger s0 s
+Proof
+  rewrite_tac[enc_frame_def] >> strip_tac >> asm_rewrite_tac[] >>
+  rpt strip_tac >> first_x_assum irule >> simp[] >>
+  qpat_x_assum `EVERY _ larger` mp_tac >>
+  rewrite_tac[EVERY_MEM] >> metis_tac[]
+QED
+
+Theorem enc_frame_compose:
+  st0.cs_next_id <= st1.cs_next_id /\ st1.cs_next_id <= st2.cs_next_id /\
+  (!x. not_fresh_at st0 x ==> not_fresh_at st1 x) /\
+  enc_frame st0 st1 lo top1 outs1 s0 s1 /\
+  enc_frame st1 st2 lo top2 outs2 s1 s2 /\
+  enc_scratch (frag_ids st0 st2) lo top s2 ==>
+  enc_frame st0 st2 lo top (outs1 ++ outs2) s0 s2
+Proof
+  strip_tac >> drule_all frag_ids_split >> strip_tac >>
+  qpat_x_assum `enc_frame st0 _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `enc_frame st1 _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[enc_frame_def, EVERY_APPEND] >> ntac 2 strip_tac >>
+  asm_rewrite_tac[] >> conj_tac
+  >- (rpt strip_tac >> metis_tac[]) >> conj_tac
+  >- (rpt strip_tac >>
+      `mem_bytes_at a 1 s2.vs_memory = mem_bytes_at a 1 s1.vs_memory` by
+        (qpat_x_assum `!a. _ ==> mem_bytes_at _ _ s2.vs_memory = _` irule >>
+         simp[] >> rpt strip_tac >>
+         qpat_x_assum `!i b sz. i IN frag_ids st0 st1 UNION _ /\ _ ==> _`
+           irule >> simp[] >> goal_assum drule >> simp[]) >>
+      asm_rewrite_tac[] >>
+      qpat_x_assum `!a. _ ==> mem_bytes_at _ _ s1.vs_memory = _` irule >>
+      simp[] >> rpt strip_tac >>
+      qpat_x_assum `!i b sz. i IN frag_ids st0 st1 UNION _ /\ _ ==> _`
+        irule >> simp[] >> qexists_tac `i` >> simp[] >>
+      qpat_x_assum `!i r. FLOOKUP s1.vs_allocas i = SOME r ==> _` irule >>
+      simp[]) >>
+  conj_tac >- (rpt strip_tac >> gvs[] >> metis_tac[]) >>
+  rpt strip_tac >> metis_tac[]
+QED
+
+Theorem enc_frame_trans:
+  enc_frame st st' lo top outs s0 s1 /\
+  enc_frame st st' lo top outs s1 s2 ==>
+  enc_frame st st' lo top outs s0 s2
+Proof
+  rewrite_tac[enc_frame_def] >> strip_tac >> asm_rewrite_tac[] >>
+  conj_tac >- (rpt strip_tac >> metis_tac[]) >>
+  conj_tac
+  >- (rpt strip_tac >>
+      `mem_bytes_at a 1 s2.vs_memory = mem_bytes_at a 1 s1.vs_memory` by
+        (qpat_x_assum `!a. _ ==> mem_bytes_at _ _ s2.vs_memory = _` irule >>
+         conj_tac >- first_assum ACCEPT_TAC >> first_assum ACCEPT_TAC) >>
+      asm_rewrite_tac[] >>
+      qpat_x_assum `!a. _ ==> mem_bytes_at _ _ s1.vs_memory = _` irule >>
+      simp[] >> rpt strip_tac >>
+      qpat_x_assum `!i b sz. _ /\ _ ==> a < b \/ b + sz <= a` irule >>
+      goal_assum (drule_at Any) >> simp[] >>
+      qpat_x_assum `!i r. FLOOKUP s1.vs_allocas i = SOME r ==> _` irule >>
+      simp[]) >>
+  rpt strip_tac >> metis_tac[]
+QED
+
+Theorem enc_frame_cover_outputs:
+  enc_frame st st' lo top outs s0 s /\
+  (!b n. MEM (b,n) outs ==>
+     ?b' n'. MEM (b',n') larger /\ b' <= b /\ b + n <= b' + n') ==>
+  enc_frame st st' lo top larger s0 s
+Proof
+  rewrite_tac[enc_frame_def] >> strip_tac >> asm_rewrite_tac[] >>
+  rpt strip_tac >> first_x_assum irule >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  rewrite_tac[EVERY_MEM] >> rpt strip_tac >>
+  PairCases_on `e` >> gvs[] >>
+  qpat_x_assum `!b n. MEM (b,n) outs ==> _` drule >> strip_tac >>
+  qpat_x_assum `EVERY _ larger` mp_tac >>
+  rewrite_tac[EVERY_MEM, pairTheory.FORALL_PROD] >>
+  disch_then drule >> simp[] >> decide_tac
+QED
+
+
+(* Padded observations are stable even when a disjoint write grows memory. *)
+Theorem enc_write_memory_disjoint:
+  !a n d bytes s.
+    a + n <= d \/ d + LENGTH bytes <= a ==>
+    mem_bytes_at a n (write_memory_with_expansion d bytes s).vs_memory =
+    mem_bytes_at a n s.vs_memory
+Proof
+  rpt gen_tac >> disch_tac >>
+  simp[write_memory_with_expansion_def, LET_THM] >>
+  Cases_on `0 < d + LENGTH bytes - LENGTH s.vs_memory` >> simp[]
+  >- (qmatch_goalsub_abbrev_tac `TAKE d expanded` >>
+      `d + LENGTH bytes <= LENGTH expanded` by simp[Abbr `expanded`] >>
+      `mem_bytes_at a n
+        (TAKE d expanded ++ bytes ++ DROP (d + LENGTH bytes) expanded) =
+       mem_bytes_at a n expanded` by
+        (simp[mem_bytes_at_def] >>
+         irule valueEncodingProofsTheory.take_drop_splice_disjoint >> simp[]) >>
+      simp[Abbr `expanded`, valueEncodingProofsTheory.mem_bytes_at_append_zero]) >>
+  `d + LENGTH bytes <= LENGTH s.vs_memory` by simp[] >>
+  simp[mem_bytes_at_def] >>
+  irule valueEncodingProofsTheory.take_drop_splice_disjoint >> simp[]
+QED
+
+Theorem enc_mcopy_disjoint:
+  !a n dst src len s.
+    a + n <= dst \/ dst + len <= a ==>
+    mem_bytes_at a n (mcopy dst src len s).vs_memory =
+    mem_bytes_at a n s.vs_memory
+Proof
+  rpt strip_tac >> simp[mcopy_def] >>
+  irule enc_write_memory_disjoint >>
+  simp[LENGTH_TAKE_EQ, LENGTH_DROP]
+QED
+
+Theorem enc_frame_write_memory:
+  enc_scratch (frag_ids st st') lo top s ==>
+  enc_frame st st' lo top [(dst, LENGTH bytes)] s
+    (write_memory_with_expansion dst bytes s)
+Proof
+  strip_tac >> rewrite_tac[enc_frame_def] >>
+  simp[enc_scratch_write_memory] >>
+  conj_tac
+  >- (rpt strip_tac >> irule enc_write_memory_disjoint >> gvs[]) >>
+  simp[write_memory_with_expansion_def]
+QED
+
+Theorem enc_frame_mcopy:
+  enc_scratch (frag_ids st st') lo top s ==>
+  enc_frame st st' lo top [(dst, len)] s (mcopy dst src len s)
+Proof
+  strip_tac >> rewrite_tac[enc_frame_def] >>
+  simp[enc_scratch_mcopy] >>
+  conj_tac
+  >- (rpt strip_tac >> irule enc_mcopy_disjoint >> gvs[]) >>
+  simp[mcopy_def, write_memory_with_expansion_def]
+QED
+
+Theorem enc_frame_mstore:
+  enc_scratch (frag_ids st st') lo top s ==>
+  enc_frame st st' lo top [(dst, 32)] s (mstore dst w s)
+Proof
+  strip_tac >>
+  `32 = LENGTH (word_to_bytes (w : bytes32) T)` by
+    simp[byteTheory.LENGTH_word_to_bytes] >>
+  once_asm_rewrite_tac[] >>
+  rewrite_tac[valueEncodingProofsTheory.mstore_eq_wmwe] >>
+  irule enc_frame_write_memory >> simp[]
+QED
+
+Theorem enc_pre_inst_idx:
+  enc_pre st st' ops lo top tv v src outs (s with vs_inst_idx := idx) =
+  enc_pre st st' ops lo top tv v src outs s
+Proof
+  `enc_scratch (frag_ids st st') lo top (s with vs_inst_idx := idx) =
+   enc_scratch (frag_ids st st') lo top s` by
+    (irule enc_scratch_cong >> simp[]) >>
+  pure_rewrite_tac[enc_pre_def, venom_state_accfupds, combinTheory.K_THM] >>
+  asm_rewrite_tac[]
+QED
+
+Theorem enc_operand_inst_idx:
+  eval_operand op (s with vs_inst_idx := idx) = eval_operand op s
+Proof
+  Cases_on `op` >> simp[eval_operand_def, lookup_var_def]
+QED
+
+Theorem enc_frame_inst_idx[simp]:
+  enc_frame st st' lo top outs s0 (s with vs_inst_idx := idx) =
+  enc_frame st st' lo top outs s0 s
+Proof
+  simp[enc_frame_def, enc_scratch_def, lookup_var_def,
+       venomMemDefsTheory.alloca_inv_def,
+       venomMemDefsTheory.allocas_non_overlapping_def,
+       venomMemDefsTheory.alloca_next_valid_def]
+QED
+
+Theorem enc_scratch_update_var[simp]:
+  enc_scratch ids lo top (update_var y w s) = enc_scratch ids lo top s
+Proof
+  irule enc_scratch_cong >> simp[update_var_def]
+QED
+
+Theorem enc_exec_alloca_scratch:
+  FINITE ids /\ inst.inst_id IN ids /\ enc_scratch ids lo top s /\
+  inst.inst_outputs = [out] ==>
+  ?b t. exec_alloca inst s (32w:256 word) = OK t /\
+    lo <= b /\ b + 32 <= top /\
+    FLOOKUP t.vs_allocas inst.inst_id = SOME (b,32) /\
+    lookup_var out t = SOME (n2w b) /\ enc_scratch ids lo top t
+Proof
+  rpt strip_tac >>
+  `lo <= s.vs_alloca_next` by fs[enc_scratch_def] >>
+  Cases_on `FLOOKUP s.vs_allocas inst.inst_id`
+  >- (drule_all enc_scratch_alloca_fresh >> strip_tac >>
+      qmatch_asmsub_abbrev_tac `enc_scratch ids lo top t` >>
+      `FLOOKUP t.vs_allocas inst.inst_id =
+         SOME (s.vs_alloca_next,32)` by
+        simp[Abbr `t`, finite_mapTheory.FLOOKUP_UPDATE] >>
+      drule_all enc_scratch_alloca_bound >> strip_tac >>
+      qexistsl_tac [`s.vs_alloca_next`,
+        `update_var out (n2w s.vs_alloca_next) t`] >>
+      simp[exec_alloca_def, Abbr `t`, lookup_var_update_var,
+           enc_scratch_update_var, update_var_def,
+           finite_mapTheory.FLOOKUP_UPDATE]) >>
+  rename1 `FLOOKUP s.vs_allocas inst.inst_id = SOME r` >>
+  PairCases_on `r` >>
+  `lo <= r0 /\ r1 = 32` by
+    (fs[enc_scratch_def] >> first_x_assum irule >> metis_tac[]) >>
+  drule_all enc_scratch_alloca_bound >> strip_tac >>
+  qexistsl_tac [`r0`, `update_var out (n2w r0) s`] >>
+  simp[exec_alloca_def, lookup_var_update_var, enc_scratch_update_var,
+       update_var_def]
+QED
+
+Theorem enc_exec_alloca_preserves:
+  inst.inst_outputs = [out] /\ exec_alloca inst s alloc_size = OK t ==>
+  t.vs_memory = s.vs_memory /\ t.vs_labels = s.vs_labels /\
+  t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+  t.vs_logs = s.vs_logs /\ t.vs_requests = s.vs_requests /\
+  (!j. j <> inst.inst_id ==> FLOOKUP t.vs_allocas j = FLOOKUP s.vs_allocas j) /\
+  (!j r. FLOOKUP s.vs_allocas j = SOME r ==> FLOOKUP t.vs_allocas j = SOME r) /\
+  (!x. x <> out ==> lookup_var x t = lookup_var x s)
+Proof
+  strip_tac >>
+  qpat_x_assum `exec_alloca _ _ _ = _` mp_tac >>
+  Cases_on `FLOOKUP s.vs_allocas inst.inst_id` >>
+  asm_simp_tac (srw_ss()) [exec_alloca_def, AllCaseEqs()] >>
+  strip_tac >> gvs[] >>
+  simp[update_var_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  rpt strip_tac >> Cases_on `inst.inst_id = j` >> gvs[]
+QED
+
+Theorem enc_compile_alloc_buffer_run:
+  compile_alloc_buffer 32 st = (buf, st') /\
+  FINITE ids /\ st.cs_next_id IN ids /\ enc_scratch ids lo top s ==>
+  ?b t. run_inst_seq (emitted_insts st st') s = OK t /\
+    same_blocks st st' /\ lo <= b /\ b + 32 <= top /\
+    eval_operand buf.buf_operand t = SOME (n2w b) /\
+    FLOOKUP t.vs_allocas st.cs_next_id = SOME (b,32) /\
+    enc_scratch ids lo top t /\
+    t.vs_memory = s.vs_memory /\ t.vs_labels = s.vs_labels /\
+    t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+    t.vs_logs = s.vs_logs /\ t.vs_requests = s.vs_requests /\
+    (!j. j <> st.cs_next_id ==> FLOOKUP t.vs_allocas j = FLOOKUP s.vs_allocas j) /\
+    (!j r. FLOOKUP s.vs_allocas j = SOME r ==> FLOOKUP t.vs_allocas j = SOME r) /\
+    (!x. not_fresh_at st x ==> lookup_var x t = lookup_var x s)
+Proof
+  rpt strip_tac >>
+  gvs[contextTheory.compile_alloc_buffer_def, comp_bind_def, comp_return_def,
+      AllCaseEqs()] >>
+  pairarg_tac >> gvs[] >>
+  drule emitted_insts_emit_op >> strip_tac >>
+  drule emit_op_same_blocks >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `emitted_insts st st' = [inst]` >>
+  `inst.inst_id = st.cs_next_id /\
+   inst.inst_outputs = [STRING #"%" (toString st.cs_next_var)]` by
+    simp[Abbr `inst`, mk_inst_def] >>
+  `inst.inst_id IN ids` by simp[] >>
+  drule_all enc_exec_alloca_scratch >> strip_tac >>
+  drule_all enc_exec_alloca_preserves >> strip_tac >>
+  qexistsl_tac [`b`, `t`] >>
+  simp[run_inst_seq_def, eval_operand_def] >>
+  conj_tac
+  >- (qpat_x_assum `exec_alloca _ _ _ = OK t` mp_tac >>
+      simp[Abbr `inst`, step_inst_base_def, mk_inst_def]) >>
+  conj_tac >- metis_tac[] >>
+  rpt strip_tac >> first_x_assum irule >>
+  fs[not_fresh_at_def]
+QED
+
+Theorem enc_compile_alloc_buffer_frag:
+  compile_alloc_buffer 32 st = (buf, st') /\
+  st.cs_next_id IN frag_ids a z /\ a.cs_next_var <= st.cs_next_var /\
+  enc_scratch (frag_ids a z) lo top s0 ==>
+  frag_exec ctx st st' (\s. s = s0)
+    (\s. ?b. lo <= b /\ b + 32 <= top /\
+       eval_operand buf.buf_operand s = SOME (n2w b) /\
+       FLOOKUP s.vs_allocas st.cs_next_id = SOME (b,32) /\
+       s.vs_memory = s0.vs_memory /\ s.vs_labels = s0.vs_labels /\
+       enc_frame a z lo top outs s0 s) R
+Proof
+  rpt strip_tac >>
+  `FINITE (frag_ids a z)` by simp[] >>
+  drule_all enc_compile_alloc_buffer_run >> strip_tac >>
+  irule frag_exec_run_inst_seq >> simp[same_blocks_def] >>
+  reverse conj_tac
+  >- (qpat_x_assum `compile_alloc_buffer _ _ = _` mp_tac >>
+      simp[contextTheory.compile_alloc_buffer_def, comp_bind_def,
+           comp_return_def] >>
+      pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+      drule emitted_insts_emit_op >> strip_tac >>
+      drule emit_op_extends >> strip_tac >>
+      gvs[same_blocks_def, mk_inst_def, is_terminator_def]) >>
+  conj_tac
+  >- (Cases_on `buf.buf_operand` >>
+      gvs[eval_operand_def, lookup_var_def]) >>
+  simp[enc_frame_def] >> conj_tac
+  >- (rpt strip_tac >>
+      `not_fresh_at st x` by
+        (fs[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_LESS_EQ_TRANS]) >>
+      metis_tac[]) >>
+  rpt strip_tac >> first_x_assum irule >> metis_tac[]
+QED
+
+(* Named compiler phases keep loop consumers above the monadic plumbing. *)
+Definition enc_static_loop_init_def:
+  enc_static_loop_init =
+    do buf <- compile_alloc_buffer 32;
+       emit_void MSTORE [buf.buf_operand; Lit 0w];
+       hdr <- fresh_label "enc_dyn_hdr";
+       body <- fresh_label "enc_dyn_body";
+       exit <- fresh_label "enc_dyn_exit";
+       return (buf.buf_operand, hdr, body, exit)
+    od
+End
+
+Definition enc_static_loop_header_def:
+  enc_static_loop_header count_ptr len_op =
+    do i <- emit_op MLOAD [count_ptr];
+       cmp <- emit_op LT [i; len_op];
+       emit_op ISZERO [cmp]
+    od
+End
+
+Definition enc_static_loop_body_def:
+  enc_static_loop_body dst src ei asz msz count_ptr =
+    do i <- emit_op MLOAD [count_ptr];
+       src_data <- emit_op ADD [src; Lit 32w];
+       src_off <- emit_op MUL [i; Lit (n2w msz)];
+       child_src <- emit_op ADD [src_data; src_off];
+       dst_data <- emit_op ADD [dst; Lit 32w];
+       dst_off <- emit_op MUL [i; Lit (n2w asz)];
+       child_dst <- emit_op ADD [dst_data; dst_off];
+       compile_abi_encode_static_info child_dst child_src ei;
+       next <- emit_op ADD [i; Lit 1w];
+       emit_void MSTORE [count_ptr; next]
+    od
+End
+
+Definition enc_static_loop_exit_def:
+  enc_static_loop_exit src asz =
+    do len <- emit_op MLOAD [src];
+       payload <- emit_op MUL [len; Lit (n2w asz)];
+       emit_op ADD [Lit 32w; payload]
+    od
+End
+
+Theorem enc_comp_bind_return[local]:
+  comp_bind (comp_return x) f = f x
+Proof
+  simp[FUN_EQ_THM, comp_bind_def, comp_return_def]
+QED
+
+Theorem enc_static_loop_phases:
+  compile_abi_encode_dyn_static_loop dst src ei asz msz len_op =
+    do phase <- enc_static_loop_init;
+       let (count_ptr,hdr,body,exit) = phase in
+       do emit_inst JMP [Label hdr] [];
+          new_block hdr;
+          done_op <- enc_static_loop_header count_ptr len_op;
+          emit_inst JNZ [done_op; Label exit; Label body] [];
+          new_block body;
+          enc_static_loop_body dst src ei asz msz count_ptr;
+          emit_inst JMP [Label hdr] [];
+          new_block exit;
+          enc_static_loop_exit src asz
+       od
+    od
+Proof
+  simp_tac (srw_ss()) [compile_abi_encode_dyn_static_loop_def, enc_static_loop_init_def,
+       enc_static_loop_header_def, enc_static_loop_body_def,
+       enc_static_loop_exit_def, comp_ignore_bind_def, comp_bind_assoc,
+       enc_comp_bind_return, LET_THM]
+QED
+
+Definition enc_static_loop_edges_def:
+  enc_static_loop_edges hdr body exit cnd
+      (si,s1,sh,sj,s2,sb,se,s3,sx) <=>
+    emit_inst JMP [Label hdr] [] si = ((),s1) /\
+    new_block hdr s1 = (s1.cs_current_bb,sh) /\
+    emit_inst JNZ [cnd; Label exit; Label body] [] sj = ((),s2) /\
+    new_block body s2 = (s2.cs_current_bb,sb) /\
+    emit_inst JMP [Label hdr] [] se = ((),s3) /\
+    new_block exit s3 = (s3.cs_current_bb,sx)
+End
+
+Theorem enc_static_loop_decompose:
+  compile_abi_encode_dyn_static_loop dst src ei asz msz len_op st = (op,st') ==>
+  ?count_ptr hdr body exit cnd si s1 sh sj s2 sb se s3 sx.
+    enc_static_loop_init st = ((count_ptr,hdr,body,exit),si) /\
+    enc_static_loop_header count_ptr len_op sh = (cnd,sj) /\
+    enc_static_loop_body dst src ei asz msz count_ptr sb = ((),se) /\
+    enc_static_loop_exit src asz sx = (op,st') /\
+    enc_static_loop_edges hdr body exit cnd (si,s1,sh,sj,s2,sb,se,s3,sx)
+Proof
+  rpt gen_tac >>
+  simp[enc_static_loop_phases, comp_bind_def, comp_ignore_bind_def] >>
+  rpt (pairarg_tac >>
+       gvs[comp_bind_def, comp_ignore_bind_def]) >>
+  strip_tac >> gvs[] >>
+  simp[enc_static_loop_edges_def] >>
+  gvs[new_block_def]
+QED
+
+Theorem enc_static_info_appends:
+  cs_appends (compile_abi_encode_static_info dst src ei)
+Proof
+  Cases_on `ei` >>
+  simp[compile_abi_encode_static_info_def, compile_abi_encode_static_def] >>
+  rpt (FIRST [irule cs_appends_bind, irule cs_appends_ignore_bind] >>
+       rw[cs_appends_emit_helpers, cs_appends_return]) >>
+  rw[cs_appends_emit_helpers, cs_appends_return]
+QED
+
+Theorem enc_static_loop_phase_appends:
+  cs_appends enc_static_loop_init /\
+  cs_appends (enc_static_loop_header count_ptr len_op) /\
+  cs_appends (enc_static_loop_body dst src ei asz msz count_ptr) /\
+  cs_appends (enc_static_loop_exit src asz)
+Proof
+  `cs_appends (compile_alloc_buffer 32)` by
+    (simp[contextTheory.compile_alloc_buffer_def] >>
+     irule cs_appends_bind >>
+     rw[cs_appends_emit_helpers, cs_appends_return]) >>
+  simp[enc_static_loop_init_def, enc_static_loop_header_def,
+       enc_static_loop_body_def, enc_static_loop_exit_def] >>
+  rpt conj_tac >>
+  rpt (FIRST [irule cs_appends_bind, irule cs_appends_ignore_bind] >>
+       rw[cs_appends_emit_helpers, cs_appends_return, cs_appends_prims,
+          enc_static_info_appends]) >>
+  rw[cs_appends_emit_helpers, cs_appends_return, cs_appends_prims,
+     enc_static_info_appends]
+QED
+
+Theorem enc_static_info_frontiers:
+  compile_abi_encode_static_info dst src ei st = (op,st') ==>
+  st.cs_next_id <= st'.cs_next_id /\ st.cs_next_var <= st'.cs_next_var
+Proof
+  Cases_on `ei` >>
+  simp[compile_abi_encode_static_info_def, compile_abi_encode_static_def,
+       emit_op_def, emit_void_def, fresh_var_def, fresh_id_def, emit_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  rpt strip_tac >> gvs[]
+QED
+
+Theorem enc_static_loop_header_frontiers:
+  enc_static_loop_header count_ptr len_op st = (op,st') ==>
+  st'.cs_next_id = st.cs_next_id + 3 /\
+  st'.cs_next_var = st.cs_next_var + 3
+Proof
+  simp[enc_static_loop_header_def, emit_op_def, fresh_var_def,
+       fresh_id_def, emit_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def] >> rpt strip_tac >> gvs[]
+QED
+
+Theorem enc_static_loop_exit_frontiers:
+  enc_static_loop_exit src asz st = (op,st') ==>
+  st'.cs_next_id = st.cs_next_id + 3 /\
+  st'.cs_next_var = st.cs_next_var + 3
+Proof
+  simp[enc_static_loop_exit_def, emit_op_def, fresh_var_def,
+       fresh_id_def, emit_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def] >> rpt strip_tac >> gvs[]
+QED
+
+Theorem enc_static_loop_body_frontiers:
+  enc_static_loop_body dst src ei asz msz count_ptr st = (u,st') ==>
+  st.cs_next_id + 9 <= st'.cs_next_id /\
+  st.cs_next_var + 8 <= st'.cs_next_var
+Proof
+  rpt gen_tac >>
+  simp[enc_static_loop_body_def, comp_bind_def, comp_ignore_bind_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  imp_res_tac (cj 3 emitted_insts_emit_op) >>
+  imp_res_tac (cj 4 emitted_insts_emit_op) >>
+  imp_res_tac (cj 2 emitted_insts_emit_void) >>
+  imp_res_tac (cj 3 emitted_insts_emit_void) >>
+  imp_res_tac enc_static_info_frontiers >> decide_tac
+QED
+
+Theorem enc_static_loop_init_frontiers:
+  enc_static_loop_init st = ((count_ptr,hdr,body_lbl,exit),st') ==>
+  st'.cs_next_id = st.cs_next_id + 2 /\
+  st'.cs_next_var = st.cs_next_var + 1 /\
+  count_ptr = Var (STRING #"%" (toString st.cs_next_var))
+Proof
+  simp[enc_static_loop_init_def, contextTheory.compile_alloc_buffer_def,
+       emit_op_def, emit_void_def, fresh_var_def, fresh_id_def,
+       fresh_label_def, emit_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def] >> rpt strip_tac >> gvs[]
+QED
+
+Theorem enc_new_block_frontiers[local]:
+  new_block lbl st = (old_lbl,st') ==>
+  st'.cs_next_id = st.cs_next_id /\ st'.cs_next_var = st.cs_next_var
+Proof
+  simp[new_block_def] >> rpt strip_tac >> gvs[]
+QED
+
+Theorem enc_static_loop_edges_frontiers:
+  enc_static_loop_edges hdr body_lbl exit cnd (si,s1,sh,sj,s2,sb,se,s3,sx) ==>
+  sh.cs_next_id = si.cs_next_id + 1 /\ sh.cs_next_var = si.cs_next_var /\
+  sb.cs_next_id = sj.cs_next_id + 1 /\ sb.cs_next_var = sj.cs_next_var /\
+  sx.cs_next_id = se.cs_next_id + 1 /\ sx.cs_next_var = se.cs_next_var
+Proof
+  simp[enc_static_loop_edges_def] >> strip_tac >>
+  imp_res_tac (cj 2 emitted_insts_emit_inst) >>
+  imp_res_tac (cj 3 emitted_insts_emit_inst) >>
+  imp_res_tac enc_new_block_frontiers >> simp[]
+QED
+
+Theorem enc_static_loop_phase_extends:
+  (enc_static_loop_init st = (phase,si) ==> cs_extends st si) /\
+  (enc_static_loop_header count_ptr len_op sh = (cnd,sj) ==> cs_extends sh sj) /\
+  (enc_static_loop_body dst src ei asz msz count_ptr sb = (u,se) ==> cs_extends sb se) /\
+  (enc_static_loop_exit src asz sx = (op,st') ==> cs_extends sx st')
+Proof
+  mp_tac enc_static_loop_phase_appends >>
+  simp[cs_appends_def] >> metis_tac[]
+QED
+
+Theorem enc_static_loop_phase_safety:
+  enc_static_loop_init st = ((count_ptr,hdr,body_lbl,exit),si) /\
+  enc_static_loop_header count_ptr len_op sh = (cnd,sj) /\
+  enc_static_loop_body dst src ei asz msz count_ptr sb = (u,se) /\
+  enc_static_loop_exit src asz sx = (op,st') /\
+  enc_static_loop_edges hdr body_lbl exit cnd (si,s1,sh,sj,s2,sb,se,s3,sx) ==>
+  st.cs_next_id IN frag_ids st st' /\
+  frag_ids si sx SUBSET frag_ids st st' /\
+  st.cs_next_var <= sh.cs_next_var /\
+  sh.cs_next_var <= sb.cs_next_var /\
+  sb.cs_next_var <= sx.cs_next_var /\
+  sx.cs_next_var <= st'.cs_next_var /\
+  (!x. count_ptr = Var x ==> not_fresh_at sh x) /\
+  (!x. count_ptr = Var x ==> not_fresh_at sb x) /\
+  (!x. count_ptr = Var x ==> not_fresh_at sx x)
+Proof
+  strip_tac >>
+  drule enc_static_loop_init_frontiers >> strip_tac >>
+  drule enc_static_loop_header_frontiers >> strip_tac >>
+  drule enc_static_loop_body_frontiers >> strip_tac >>
+  drule enc_static_loop_exit_frontiers >> strip_tac >>
+  drule enc_static_loop_edges_frontiers >> strip_tac >>
+  simp[frag_ids_def, pred_setTheory.SUBSET_DEF, not_fresh_at_def,
+       ASCIInumbersTheory.toString_11] >>
+  rpt strip_tac >> gvs[] >> decide_tac
+QED
+
+Theorem enc_frame_update_var:
+  (!x. not_fresh_at st x ==> x <> y) /\
+  enc_frame st st' lo top outs s0 s ==>
+  enc_frame st st' lo top outs s0 (update_var y w s)
+Proof
+  simp[enc_frame_def, lookup_var_update_var, enc_scratch_update_var,
+       update_var_def] >> rpt strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Theorem enc_mstore_update_var:
+  mstore dst v (update_var y w s) = update_var y w (mstore dst v s)
+Proof
+  simp[mstore_def, update_var_def]
+QED
+
+Theorem compile_abi_encode_copy_frame_frag:
+  compile_abi_encode_to_buf dst src (AbiCopy mem_size) st = (op, st') /\
+  mem_size < dimword (:256) /\
+  eval_operand dst s0 = SOME dst_w /\ 
+  eval_operand src s0 = SOME src_w /\
+  enc_scratch (frag_ids st st') lo top s0 ==>
+  frag_exec ctx st st' (\s. s = s0)
+    (\s. s.vs_memory = (mcopy (w2n dst_w) (w2n src_w) mem_size s0).vs_memory /\
+         s.vs_labels = s0.vs_labels /\
+         eval_operand op s = SOME (n2w mem_size) /\
+         enc_frame st st' lo top [(w2n dst_w, mem_size)] s0 s) R
+Proof
+  rpt strip_tac >>
+  gvs[Once compile_abi_encode_child_def, comp_bind_def,
+      comp_ignore_bind_def, comp_return_def, AllCaseEqs()] >>
+  pairarg_tac >> gvs[] >>
+  drule emit_void_extends >> strip_tac >>
+  irule frag_exec_run_inst_seq >> simp[same_blocks_def] >>
+  reverse conj_tac
+  >- (drule emitted_insts_emit_void >> strip_tac >>
+      gvs[same_blocks_def, mk_inst_def, is_terminator_def]) >>
+  disj1_tac >>
+  qexists_tac `mcopy (w2n dst_w) (w2n src_w) mem_size s0` >>
+  conj_tac
+  >- (drule emit_void_MCOPY_run >> simp[eval_operand_def]) >>
+  simp[eval_operand_def, enc_frame_mcopy] >>
+  simp[mcopy_def, write_memory_with_expansion_def]
+QED
+
+Theorem enc_eval_operand_update_old:
+  (!y. op = Var y ==> not_fresh_at st y) /\ st.cs_next_var <= n ==>
+  eval_operand op (update_var (STRING #"%" (toString n)) w s) =
+  eval_operand op s
+Proof
+  Cases_on `op` >> simp[eval_operand_def, lookup_var_update_var,
+                           update_var_def, lookup_var_def] >>
+  metis_tac[not_fresh_at_def]
+QED
+
+Theorem enc_emit_op_run_frame:
+  emit_op opc args st = (op, st') /\
+  step_inst_base (mk_inst st.cs_next_id opc args
+    [STRING #"%" (toString st.cs_next_var)]) s =
+    OK (update_var (STRING #"%" (toString st.cs_next_var)) w s) /\
+  a.cs_next_var <= st.cs_next_var /\
+  enc_scratch (frag_ids a b) lo top s ==>
+  ?s'. run_inst_seq (emitted_insts st st') s = OK s' /\
+       eval_operand op s' = SOME w /\ same_blocks st st' /\
+       s'.vs_memory = s.vs_memory /\ s'.vs_labels = s.vs_labels /\
+       (!old. (!y. old = Var y ==> not_fresh_at st y) ==>
+          eval_operand old s' = eval_operand old s) /\
+       enc_frame a b lo top outs s s'
+Proof
+  rpt strip_tac >>
+  drule emitted_insts_emit_op >> strip_tac >> gvs[] >>
+  drule emit_op_extends >> strip_tac >>
+  qexists_tac `update_var (STRING #"%" (toString st.cs_next_var)) w s` >>
+  simp[run_inst_seq_def, eval_operand_update_var, same_blocks_def] >>
+  conj_tac >- simp[update_var_def] >>
+  conj_tac
+  >- (rpt strip_tac >> irule enc_eval_operand_update_old >>
+      qexists_tac `st` >> simp[]) >>
+  irule enc_frame_update_var >>
+  simp[not_fresh_at_def, enc_frame_refl] >> decide_tac
+QED
+
+Theorem enc_emit_mcopy_run_frame:
+  emit_void MCOPY [dst; src; sz] st = ((), st') /\
+  eval_operand dst s = SOME dw /\ eval_operand src s = SOME sw /\
+  eval_operand sz s = SOME nw /\
+  enc_scratch (frag_ids a b) lo top s /\
+  MEM (out_base,out_len) outs /\ out_base <= w2n dw /\
+  w2n dw + w2n nw <= out_base + out_len ==>
+  ?s'. run_inst_seq (emitted_insts st st') s = OK s' /\
+       s'.vs_memory = (mcopy (w2n dw) (w2n sw) (w2n nw) s).vs_memory /\
+       same_blocks st st' /\ s'.vs_labels = s.vs_labels /\
+       (!op. eval_operand op s' = eval_operand op s) /\
+       enc_frame a b lo top outs s s'
+Proof
+  rpt strip_tac >> drule_all emit_void_MCOPY_run >> strip_tac >>
+  drule emit_void_extends >> strip_tac >>
+  qexists_tac `mcopy (w2n dw) (w2n sw) (w2n nw) s` >>
+  simp[] >> conj_tac >- simp[mcopy_def, write_memory_with_expansion_def] >>
+  conj_tac
+  >- (Cases >> simp[eval_operand_def, lookup_var_def, mcopy_def,
+                    write_memory_with_expansion_def]) >>
+  irule enc_frame_cover_outputs >>
+  qexists_tac `[(w2n dw, w2n nw)]` >>
+  simp[enc_frame_mcopy] >> metis_tac[]
+QED
+
+Theorem enc_emit_mstore_run_frame:
+  emit_void MSTORE [dst; value] st = ((), st') /\
+  eval_operand dst s = SOME dw /\ eval_operand value s = SOME w /\
+  enc_scratch (frag_ids a b) lo top s /\
+  MEM (out_base,out_len) outs /\ out_base <= w2n dw /\
+  w2n dw + 32 <= out_base + out_len ==>
+  ?s'. run_inst_seq (emitted_insts st st') s = OK s' /\
+       s'.vs_memory = (mstore (w2n dw) w s).vs_memory /\
+       same_blocks st st' /\ s'.vs_labels = s.vs_labels /\
+       (!op. eval_operand op s' = eval_operand op s) /\
+       enc_frame a b lo top outs s s'
+Proof
+  rpt strip_tac >> drule emitted_insts_emit_void >> strip_tac >>
+  drule emit_void_extends >> strip_tac >>
+  qexists_tac `mstore (w2n dw) w s` >>
+  conj_tac
+  >- simp[run_inst_seq_def, step_inst_base_def, exec_write2_def, mk_inst_def] >>
+  simp[] >> conj_tac
+  >- (Cases >> simp[eval_operand_def, lookup_var_def, mstore_def]) >>
+  irule enc_frame_cover_outputs >>
+  qexists_tac `[(w2n dw, 32)]` >>
+  simp[enc_frame_mstore] >> metis_tac[]
+QED
+
+Theorem enc_round32_bounds:
+  l <= 32 * ((l + 31) DIV 32) /\
+  32 * ((l + 31) DIV 32) < l + 32
+Proof
+  `(l + 31) MOD 32 < 32` by simp[] >>
+  qspec_then `32` mp_tac arithmeticTheory.DIVISION >> simp[] >>
+  disch_then (qspec_then `l + 31` mp_tac) >> decide_tac
+QED
+
+Theorem enc_round32_word:
+  l + 31 < dimword (:256) ==>
+  (n2w (l + 31) : bytes32) &&
+    0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE0w =
+  n2w (32 * ((l + 31) DIV 32))
+Proof
+  strip_tac >>
+  `0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE0w : bytes32 =
+     UINT_MAXw << 5` by EVAL_TAC >>
+  asm_rewrite_tac[GSYM alignmentTheory.align_bitwise_and] >>
+  simp[alignmentTheory.align_w2n, arithmeticTheory.MULT_COMM]
+QED
+
+Theorem enc_mem_bytes_subrange:
+  start + n <= len ==>
+  mem_bytes_at (off + start) n mem =
+    TAKE n (DROP start (mem_bytes_at off len mem))
+Proof
+  strip_tac >> irule LIST_EQ >> simp[LENGTH_TAKE_EQ] >>
+  rpt strip_tac >>
+  `x + start < len` by decide_tac >>
+  simp[EL_TAKE, EL_DROP] >>
+  `start + x < len` by decide_tac >>
+  asm_simp_tac bool_ss [valueEncodingProofsTheory.EL_mem_bytes_at,
+                       arithmeticTheory.ADD_ASSOC]
+QED
+
+Theorem enc_mstore_zero_subrange:
+  start + n <= 32 ==>
+  mem_bytes_at (off + start) n (mstore off 0w s).vs_memory =
+    REPLICATE n 0w
+Proof
+  strip_tac >>
+  `word_to_bytes (0w:bytes32) T = REPLICATE 32 0w` by EVAL_TAC >>
+  drule enc_mem_bytes_subrange >>
+  disch_then (qspecl_then [`off`, `(mstore off 0w s).vs_memory`] mp_tac) >>
+  simp[mem_bytes_at_mstore_same, DROP_REPLICATE] >>
+  disch_then SUBST1_TAC >> irule LIST_EQ >>
+  simp[LENGTH_TAKE_EQ, EL_TAKE, EL_REPLICATE]
+QED
+
+Theorem enc_prezero_source:
+  l <= r /\ r <= l + 32 /\
+  regions_disjoint (src,32+l) (dst,32+r) ==>
+  mem_bytes_at src (32+l) (mstore (dst+r) 0w s).vs_memory =
+    mem_bytes_at src (32+l) s.vs_memory
+Proof
+  strip_tac >> irule mstore_mem_bytes_at_disjoint >>
+  fs[venomMemDefsTheory.regions_disjoint_def] >> decide_tac
+QED
+
+Theorem enc_prezero_copy_layout:
+  l <= r /\ r <= l + 32 /\
+  regions_disjoint (src,32+l) (dst,32+r) ==>
+  mem_bytes_at dst (32+r)
+    (mcopy dst src (32+l) (mstore (dst+r) 0w s)).vs_memory =
+  mem_bytes_at src (32+l) s.vs_memory ++ REPLICATE (r-l) 0w
+Proof
+  strip_tac >>
+  `32+r = (32+l) + (r-l)` by decide_tac >>
+  once_asm_rewrite_tac[] >>
+  CONV_TAC (LAND_CONV (REWR_CONV
+    valueEncodingProofsTheory.mem_bytes_at_split_padded)) >>
+  `mem_bytes_at dst (32+l)
+     (mcopy dst src (32+l) (mstore (dst+r) 0w s)).vs_memory =
+   mem_bytes_at src (32+l) s.vs_memory` by
+    (rewrite_tac[mem_bytes_at_def, mcopy_padded_read] >>
+     rewrite_tac[GSYM mem_bytes_at_def] >>
+     irule enc_prezero_source >> simp[]) >>
+  asm_rewrite_tac[] >> AP_TERM_TAC >>
+  `mem_bytes_at (dst+(32+l)) (r-l)
+     (mcopy dst src (32+l) (mstore (dst+r) 0w s)).vs_memory =
+   mem_bytes_at (dst+(32+l)) (r-l) (mstore (dst+r) 0w s).vs_memory` by
+    (irule enc_mcopy_disjoint >> simp[]) >>
+  asm_rewrite_tac[] >>
+  `dst + (32+l) = (dst+r) + (32+l-r)` by decide_tac >>
+  asm_rewrite_tac[] >> irule enc_mstore_zero_subrange >> decide_tac
+QED
+
+Theorem enc_emit_add_const_run_frame:
+  emit_op ADD [Lit (n2w k); arg] st = (op, st1) /\
+  eval_operand arg s = SOME (n2w l) /\
+  a.cs_next_var <= st.cs_next_var /\
+  enc_scratch (frag_ids a b) lo top s ==>
+  ?s1. run_inst_seq (emitted_insts st st1) s = OK s1 /\
+       eval_operand op s1 = SOME (n2w (k+l)) /\
+       same_blocks st st1 /\ s1.vs_memory = s.vs_memory /\
+       s1.vs_labels = s.vs_labels /\
+       (!old. (!y. old = Var y ==> not_fresh_at st y) ==>
+         eval_operand old s1 = eval_operand old s) /\
+       enc_frame a b lo top outs s s1
+Proof
+  strip_tac >> irule enc_emit_op_run_frame >>
+  simp[] >> qexistsl_tac [`[Lit (n2w k); arg]`, `ADD`] >> simp[] >>
+  pure_once_rewrite_tac[GSYM wordsTheory.word_add_n2w] >>
+  irule step_ADD >> simp[eval_operand_lit]
+QED
+
+Theorem enc_emit_and_const_run_frame:
+  emit_op AND [Lit mask; arg] st = (op, st1) /\
+  eval_operand arg s = SOME w /\
+  a.cs_next_var <= st.cs_next_var /\
+  enc_scratch (frag_ids a b) lo top s ==>
+  ?s1. run_inst_seq (emitted_insts st st1) s = OK s1 /\
+       eval_operand op s1 = SOME (mask && w) /\
+       same_blocks st st1 /\ s1.vs_memory = s.vs_memory /\
+       s1.vs_labels = s.vs_labels /\
+       (!old. (!y. old = Var y ==> not_fresh_at st y) ==>
+         eval_operand old s1 = eval_operand old s) /\
+       enc_frame a b lo top outs s s1
+Proof
+  strip_tac >> irule enc_emit_op_run_frame >>
+  simp[] >> qexistsl_tac [`[Lit mask; arg]`, `AND`] >> simp[] >>
+  irule step_AND >> simp[eval_operand_lit]
+QED
+
+Theorem enc_bytes_round_run:
+  emit_op ADD [Lit 31w; len_op] st = (ceil_op, st1) /\
+  emit_op AND
+    [Lit 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE0w;
+     ceil_op] st1 = (round_op, st2) /\
+  eval_operand len_op s = SOME (n2w l) /\ l+31 < dimword (:256) /\
+  a.cs_next_var <= st.cs_next_var /\
+  enc_scratch (frag_ids a b) lo top s ==>
+  ?s2. run_inst_seq (emitted_insts st st2) s = OK s2 /\
+       eval_operand round_op s2 = SOME (n2w (32*((l+31) DIV 32))) /\
+       same_blocks st st2 /\
+       st2.cs_current_insts = st.cs_current_insts ++ emitted_insts st st2 /\
+       s2.vs_memory = s.vs_memory /\ s2.vs_labels = s.vs_labels /\
+       (!old. (!y. old = Var y ==> not_fresh_at st y) ==>
+         eval_operand old s2 = eval_operand old s) /\
+       enc_frame a b lo top outs s s2
+Proof
+  strip_tac >>
+  drule_all enc_emit_add_const_run_frame >>
+  disch_then (qspec_then `outs` strip_assume_tac) >>
+  rename1 `run_inst_seq (emitted_insts st st1) s = OK s1` >>
+  `enc_scratch (frag_ids a b) lo top s1` by fs[enc_frame_def] >>
+  `a.cs_next_var <= st1.cs_next_var` by
+    (rev_drule emitted_insts_emit_op >> strip_tac >> decide_tac) >>
+  drule_all enc_emit_and_const_run_frame >>
+  disch_then (qspec_then `outs` strip_assume_tac) >>
+  rename1 `run_inst_seq (emitted_insts st1 st2) s1 = OK s2` >>
+  drule emit_op_extends >> strip_tac >>
+  rev_drule emit_op_extends >> strip_tac >>
+  drule_all run_inst_seq_chain >> strip_tac >>
+  qexists_tac `s2` >> simp[] >> conj_tac
+  >- (once_rewrite_tac[wordsTheory.WORD_AND_COMM] >>
+      irule enc_round32_word >> simp[]) >>
+  conj_tac >- fs[same_blocks_def] >>
+  conj_tac
+  >- (rpt strip_tac >>
+      `!y. old = Var y ==> not_fresh_at st1 y` by
+        (rev_drule emitted_insts_emit_op >> strip_tac >>
+         rpt strip_tac >>
+         qpat_x_assum `!y. old = Var y ==> _` drule >>
+         simp[not_fresh_at_def] >> rpt strip_tac >>
+         first_x_assum irule >> decide_tac) >>
+      metis_tac[]) >>
+  irule enc_frame_trans >> goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem enc_bytes_load_round_run:
+  emit_op MLOAD [src] st = (len_op, st1) /\
+  emit_op ADD [Lit 31w; len_op] st1 = (ceil_op, st2) /\
+  emit_op AND
+    [Lit 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE0w;
+     ceil_op] st2 = (round_op, st3) /\
+  eval_operand src s = SOME src_w /\
+  mem_word_at (w2n src_w) s.vs_memory = n2w l /\
+  l+31 < dimword (:256) /\ a.cs_next_var <= st.cs_next_var /\
+  enc_scratch (frag_ids a b) lo top s ==>
+  ?s3. run_inst_seq (emitted_insts st st3) s = OK s3 /\
+       eval_operand len_op s3 = SOME (n2w l) /\
+       eval_operand round_op s3 = SOME (n2w (32*((l+31) DIV 32))) /\
+       same_blocks st st3 /\
+       st3.cs_current_insts = st.cs_current_insts ++ emitted_insts st st3 /\
+       s3.vs_memory = s.vs_memory /\ s3.vs_labels = s.vs_labels /\
+       enc_frame a b lo top outs s s3
+Proof
+  strip_tac >>
+  `step_inst_base (mk_inst st.cs_next_id MLOAD [src]
+      [STRING #"%" (toString st.cs_next_var)]) s =
+     OK (update_var (STRING #"%" (toString st.cs_next_var)) (n2w l) s)` by
+    (qpat_x_assum `mem_word_at _ _ = _` (mp_tac o REWRITE_RULE [mem_word_at_eq_mload]) >>
+     disch_then (SUBST1_TAC o SYM) >> irule step_MLOAD >> simp[]) >>
+  drule_all enc_emit_op_run_frame >>
+  disch_then (qspec_then `outs` strip_assume_tac) >>
+  rename1 `run_inst_seq (emitted_insts st st1) s = OK s1` >>
+  `enc_scratch (frag_ids a b) lo top s1` by fs[enc_frame_def] >>
+  `a.cs_next_var <= st1.cs_next_var` by
+    (rev_drule emitted_insts_emit_op >> strip_tac >> decide_tac) >>
+  drule_all enc_bytes_round_run >>
+  disch_then (qspec_then `outs` strip_assume_tac) >>
+  rename1 `run_inst_seq (emitted_insts st1 st3) s1 = OK s3` >>
+  `!y. len_op = Var y ==> not_fresh_at st1 y` by
+    (rev_drule emitted_insts_emit_op >> strip_tac >>
+     simp[not_fresh_at_def] >> rpt strip_tac >> decide_tac) >>
+  rev_drule emit_op_extends >> strip_tac >>
+  drule_all run_inst_seq_chain >> strip_tac >>
+  qexists_tac `s3` >> simp[] >>
+  conj_tac >- fs[same_blocks_def] >>
+  irule enc_frame_trans >> goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem enc_bytes_prefix_run:
+  emit_op MLOAD [src] st = (len_op, st1) /\
+  emit_op ADD [Lit 31w; len_op] st1 = (ceil_op, st2) /\
+  emit_op AND
+    [Lit 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE0w;
+     ceil_op] st2 = (round_op, st3) /\
+  emit_op ADD [dst; round_op] st3 = (ptr_op, st4) /\
+  eval_operand src s = SOME src_w /\ eval_operand dst s = SOME dst_w /\
+  (!y. dst = Var y ==> not_fresh_at a y) /\
+  mem_word_at (w2n src_w) s.vs_memory = n2w l /\
+  l+31 < dimword (:256) /\ a.cs_next_var <= st.cs_next_var /\
+  enc_scratch (frag_ids a b) lo top s ==>
+  ?s4. run_inst_seq (emitted_insts st st4) s = OK s4 /\
+       eval_operand len_op s4 = SOME (n2w l) /\
+       eval_operand ptr_op s4 = SOME (dst_w + n2w (32*((l+31) DIV 32))) /\
+       same_blocks st st4 /\
+       st4.cs_current_insts = st.cs_current_insts ++ emitted_insts st st4 /\
+       s4.vs_memory = s.vs_memory /\ s4.vs_labels = s.vs_labels /\
+       enc_frame a b lo top outs s s4
+Proof
+  strip_tac >> drule_all enc_bytes_load_round_run >>
+  disch_then (qspec_then `outs` strip_assume_tac) >>
+  rename1 `run_inst_seq (emitted_insts st st3) s = OK s3` >>
+  `eval_operand dst s3 = SOME dst_w` by
+    (drule_all enc_frame_preserves_operand >> simp[]) >>
+  `a.cs_next_var <= st3.cs_next_var /\
+   (!y. len_op = Var y ==> not_fresh_at st3 y)` by
+    (imp_res_tac emitted_insts_emit_op >> simp[not_fresh_at_def] >>
+     rpt strip_tac >> decide_tac) >>
+  `enc_scratch (frag_ids a b) lo top s3` by fs[enc_frame_def] >>
+  `step_inst_base (mk_inst st3.cs_next_id ADD [dst; round_op]
+      [STRING #"%" (toString st3.cs_next_var)]) s3 =
+    OK (update_var (STRING #"%" (toString st3.cs_next_var))
+      (dst_w + n2w (32*((l+31) DIV 32))) s3)` by
+    (irule step_ADD >> simp[]) >>
+  drule_all enc_emit_op_run_frame >>
+  disch_then (qspec_then `outs` strip_assume_tac) >>
+  rename1 `run_inst_seq (emitted_insts st3 st4) s3 = OK s4` >>
+  drule emit_op_extends >> strip_tac >>
+  drule_all run_inst_seq_chain >> strip_tac >>
+  qexists_tac `s4` >> simp[] >>
+  conj_tac >- fs[same_blocks_def] >>
+  irule enc_frame_trans >> goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem enc_bytes_write_run:
+  emit_void MSTORE [ptr_op; Lit 0w] st = ((), st1) /\
+  emit_op ADD [Lit 32w; len_op] st1 = (copy_len, st2) /\
+  emit_void MCOPY [dst; src; copy_len] st2 = ((), st3) /\
+  eval_operand ptr_op s = SOME (n2w (d+r)) /\
+  eval_operand dst s = SOME (n2w d) /\ eval_operand src s = SOME (n2w p) /\
+  eval_operand len_op s = SOME (n2w l) /\
+  (!arg y. MEM arg [dst; src; len_op] /\ arg = Var y ==> not_fresh_at st1 y) /\
+  d+32+r < dimword (:256) /\ p < dimword (:256) /\ l <= r /\
+  a.cs_next_var <= st1.cs_next_var /\
+  enc_scratch (frag_ids a b) lo top s ==>
+  ?s3. run_inst_seq (emitted_insts st st3) s = OK s3 /\
+       s3.vs_memory = (mcopy d p (32+l) (mstore (d+r) 0w s)).vs_memory /\
+       eval_operand len_op s3 = SOME (n2w l) /\
+       same_blocks st st3 /\
+       st3.cs_current_insts = st.cs_current_insts ++ emitted_insts st st3 /\
+       s3.vs_labels = s.vs_labels /\
+       enc_frame a b lo top [(d,32+r)] s s3
+Proof
+  strip_tac >>
+  `w2n (n2w (d+r):bytes32) = d+r /\
+   w2n (n2w d:bytes32) = d /\ w2n (n2w (32+l):bytes32) = 32+l` by
+    (`d+r < dimword (:256) /\ d < dimword (:256) /\
+      32+l < dimword (:256)` by decide_tac >> simp[]) >>
+  `?base len. MEM (base,len) [(d,32+r)] /\
+     base <= w2n (n2w (d+r):bytes32) /\
+     w2n (n2w (d+r):bytes32) + 32 <= base + len` by simp[] >>
+  `eval_operand (Lit 0w) s = SOME 0w` by simp[eval_operand_lit] >>
+  drule_all enc_emit_mstore_run_frame >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts st st1) s = OK s1` >>
+  `enc_scratch (frag_ids a b) lo top s1` by fs[enc_frame_def] >>
+  `eval_operand len_op s1 = SOME (n2w l)` by simp[] >>
+  qpat_x_assum `eval_operand len_op s = _` kall_tac >>
+  drule_all enc_emit_add_const_run_frame >>
+  disch_then (qspec_then `[(d,32+r)]` strip_assume_tac) >>
+  rename1 `run_inst_seq (emitted_insts st1 st2) s1 = OK s2` >>
+  `eval_operand dst s2 = SOME (n2w d) /\
+   eval_operand src s2 = SOME (n2w p) /\
+   eval_operand len_op s2 = SOME (n2w l)` by fs[] >>
+  `enc_scratch (frag_ids a b) lo top s2` by fs[enc_frame_def] >>
+  `?base len. MEM (base,len) [(d,32+r)] /\
+     base <= w2n (n2w d:bytes32) /\
+     w2n (n2w d:bytes32) + w2n (n2w (32+l):bytes32) <= base + len` by simp[] >>
+  drule_all enc_emit_mcopy_run_frame >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts st2 st3) s2 = OK s3` >>
+  drule emit_op_extends >> strip_tac >>
+  drule emit_void_extends >> strip_tac >>
+  rev_drule emit_void_extends >> strip_tac >>
+  drule_all run_inst_seq_chain >> strip_tac >>
+  `run_inst_seq (emitted_insts st st2) s = OK s2` by simp[] >>
+  qpat_x_assum `run_inst_seq (emitted_insts st st1) s = _` kall_tac >>
+  drule_all run_inst_seq_chain >> strip_tac >>
+  qexists_tac `s3` >> simp[] >> conj_tac
+  >- simp[mcopy_def, write_memory_with_expansion_def] >>
+  conj_tac >- fs[same_blocks_def] >>
+  `enc_frame a b lo top [(d,32+r)] s s2` by
+    (irule enc_frame_trans >> qexists_tac `s1` >> simp[]) >>
+  irule enc_frame_trans >> qexists_tac `s2` >>
+  `r+32 = 32+r` by decide_tac >> pure_asm_rewrite_tac [] >> simp[]
+QED
+
+Theorem enc_bytes_size_run:
+  emit_op ADD [Lit 31w; len_op] st = (ceil_op, st1) /\
+  emit_op AND
+    [Lit 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE0w;
+     ceil_op] st1 = (round_op, st2) /\
+  emit_op ADD [Lit 32w; round_op] st2 = (size_op, st3) /\
+  eval_operand len_op s = SOME (n2w l) /\ l+31 < dimword (:256) /\
+  a.cs_next_var <= st.cs_next_var /\
+  enc_scratch (frag_ids a b) lo top s ==>
+  ?s3. run_inst_seq (emitted_insts st st3) s = OK s3 /\
+       eval_operand size_op s3 = SOME (n2w (32+32*((l+31) DIV 32))) /\
+       same_blocks st st3 /\
+       st3.cs_current_insts = st.cs_current_insts ++ emitted_insts st st3 /\
+       s3.vs_memory = s.vs_memory /\ s3.vs_labels = s.vs_labels /\
+       enc_frame a b lo top outs s s3
+Proof
+  strip_tac >> drule_all enc_bytes_round_run >>
+  disch_then (qspec_then `outs` strip_assume_tac) >>
+  rename1 `run_inst_seq (emitted_insts st st2) s = OK s2` >>
+  `a.cs_next_var <= st2.cs_next_var` by
+    (imp_res_tac emitted_insts_emit_op >> decide_tac) >>
+  `enc_scratch (frag_ids a b) lo top s2` by fs[enc_frame_def] >>
+  drule_all enc_emit_add_const_run_frame >>
+  disch_then (qspec_then `outs` strip_assume_tac) >>
+  rename1 `run_inst_seq (emitted_insts st2 st3) s2 = OK s3` >>
+  drule emit_op_extends >> strip_tac >>
+  drule_all run_inst_seq_chain >> strip_tac >>
+  qexists_tac `s3` >> simp[] >>
+  conj_tac >- fs[same_blocks_def] >>
+  irule enc_frame_trans >> goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem compile_abi_encode_bytes_frame_frag:
+  compile_abi_encode_to_buf dst src (AbiBytestring max_len) st = (op, st') /\
+  eval_operand dst s0 = SOME dst_w /\ eval_operand src s0 = SOME src_w /\
+  (!y. dst = Var y ==> not_fresh_at st y) /\
+  (!y. src = Var y ==> not_fresh_at st y) /\
+  mem_word_at (w2n src_w) s0.vs_memory = n2w l /\
+  l+31 < dimword (:256) /\ r = 32*((l+31) DIV 32) /\
+  w2n dst_w+32+r < dimword (:256) /\
+  regions_disjoint (w2n src_w,32+l) (w2n dst_w,32+r) /\
+  enc_scratch (frag_ids st st') lo top s0 ==>
+  frag_exec ctx st st' (\s. s = s0)
+    (\s. mem_bytes_at (w2n dst_w) (32+r) s.vs_memory =
+           mem_bytes_at (w2n src_w) (32+l) s0.vs_memory ++ REPLICATE (r-l) 0w /\
+         eval_operand op s = SOME (n2w (32+r)) /\
+         s.vs_labels = s0.vs_labels /\
+         enc_frame st st' lo top [(w2n dst_w,32+r)] s0 s) R
+Proof
+  strip_tac >>
+  gvs[Once compile_abi_encode_child_def, comp_bind_def,
+      comp_ignore_bind_def, comp_return_def] >>
+  ntac 9 (pairarg_tac >> gvs[]) >>
+  rename1 `emit_op MLOAD [src] st = (len_op, st1)` >>
+  rename1 `emit_op ADD [Lit 31w; len_op] st1 = (ceil_op, st2)` >>
+  rename1 `emit_op AND [_; ceil_op] st2 = (round_op, st3)` >>
+  rename1 `emit_op ADD [dst; round_op] st3 = (ptr_op, st4)` >>
+  rename1 `emit_void MSTORE [ptr_op; _] st4 = ((), st5)` >>
+  rename1 `emit_op ADD [Lit 32w; len_op] st5 = (copy_len, st6)` >>
+  rename1 `emit_void MCOPY [dst; src; copy_len] st6 = ((), st7)` >>
+  rename1 `emit_op ADD [Lit 31w; len_op] st7 = (ceil2, st8)` >>
+  rename1 `emit_op AND [_; ceil2] st8 = (round2, st9)` >>
+  qabbrev_tac `r = 32*((l+31) DIV 32)` >>
+  `st.cs_next_var <= st5.cs_next_var /\
+   st.cs_next_var <= st7.cs_next_var` by
+    (imp_res_tac (cj 4 emitted_insts_emit_op) >>
+     imp_res_tac (cj 3 emitted_insts_emit_void) >> decide_tac) >>
+  `!y. len_op = Var y ==> not_fresh_at st5 y` by
+    (qpat_assum `emit_op MLOAD _ _ = _`
+       (mp_then Any strip_assume_tac emitted_insts_emit_op) >>
+     simp[not_fresh_at_def] >> rpt strip_tac >>
+     imp_res_tac (cj 4 emitted_insts_emit_op) >>
+     imp_res_tac (cj 3 emitted_insts_emit_void) >> decide_tac) >>
+  `!arg y. MEM arg [dst; src; len_op] /\ arg = Var y ==>
+      not_fresh_at st5 y` by
+    (simp[] >> rpt strip_tac >> gvs[not_fresh_at_def] >>
+     rpt strip_tac >> first_x_assum irule >> decide_tac) >>
+  `st.cs_next_var <= st.cs_next_var` by simp[] >>
+  `l+31 < dimword (:256)` by simp[] >>
+  drule_all enc_bytes_prefix_run >>
+  disch_then (qspec_then `[(w2n dst_w,32+r)]` strip_assume_tac) >>
+  rename1 `run_inst_seq (emitted_insts st st4) s0 = OK s4` >>
+  suspend "bytes_writes"
+QED
+
+Resume compile_abi_encode_bytes_frame_frag[bytes_writes]:
+  `l <= r /\ r <= l+32` by
+    (mp_tac enc_round32_bounds >> simp[Abbr `r`]) >>
+  `eval_operand dst s4 = SOME (n2w (w2n dst_w)) /\
+   eval_operand src s4 = SOME (n2w (w2n src_w))` by
+    (simp[] >> conj_tac >> irule enc_frame_preserves_operand >>
+     goal_assum (drule_at Any) >> simp[]) >>
+  `eval_operand ptr_op s4 = SOME (n2w (w2n dst_w+r))` by
+    (simp[Abbr `r`, GSYM wordsTheory.word_add_n2w]) >>
+  `w2n dst_w+32+r < dimword (:256)` by simp[] >>
+  `w2n src_w < dimword (:256)` by irule wordsTheory.w2n_lt >>
+  `enc_scratch (frag_ids st st') lo top s4` by fs[enc_frame_def] >>
+  drule_all enc_bytes_write_run >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts st4 st7) s4 = OK s7` >>
+  `enc_scratch (frag_ids st st') lo top s7` by fs[enc_frame_def] >>
+  qpat_x_assum `eval_operand len_op s4 = _` kall_tac >>
+  drule_all enc_bytes_size_run >>
+  disch_then (qspec_then `[(w2n dst_w,32+r)]` strip_assume_tac) >>
+  rename1 `run_inst_seq (emitted_insts st7 st') s7 = OK s10` >>
+  qspecl_then [`st`, `st4`, `st7`] mp_tac run_inst_seq_chain >>
+  disch_then (drule_all_then strip_assume_tac) >>
+  `run_inst_seq (emitted_insts st st7) s0 = OK s7` by simp[] >>
+  qpat_x_assum `run_inst_seq (emitted_insts st st4) s0 = _` kall_tac >>
+  qspecl_then [`st`, `st7`, `st'`] mp_tac run_inst_seq_chain >>
+  disch_then (drule_all_then strip_assume_tac) >>
+  `enc_frame st st' lo top [(w2n dst_w,32+r)] s0 s7` by
+    (irule enc_frame_trans >> qexists_tac `s4` >> simp[]) >>
+  `enc_frame st st' lo top [(w2n dst_w,32+r)] s0 s10` by
+    (irule enc_frame_trans >> qexists_tac `s7` >> simp[]) >>
+  suspend "bytes_lift"
+QED
+
+Resume compile_abi_encode_bytes_frame_frag[bytes_lift]:
+  `r+32 = 32+r /\ l+32 = 32+l` by decide_tac >>
+  pure_asm_rewrite_tac[] >>
+  qpat_x_assum `r+32 = 32+r` kall_tac >>
+  qpat_x_assum `l+32 = 32+l` kall_tac >>
+  irule frag_exec_run_inst_seq >>
+  reverse conj_tac >- suspend "bytes_code" >>
+  BETA_TAC >> gen_tac >> disch_then SUBST1_TAC >>
+  disj1_tac >> qexists_tac `s10` >>
+  conj_tac >- simp[] >>
+  simp_tac (srw_ss()) [enc_frame_inst_idx] >>
+  conj_tac
+  >- (asm_rewrite_tac[] >>
+      qpat_assum `s4.vs_memory = s0.vs_memory`
+        (fn th => once_rewrite_tac[GSYM th]) >>
+      irule enc_prezero_copy_layout >> simp[]) >>
+  conj_tac
+  >- (Cases_on `op` >> gvs[eval_operand_def, lookup_var_def, Abbr `r`]) >>
+  simp[]
+QED
+
+Resume compile_abi_encode_bytes_frame_frag[bytes_code]:
+  conj_tac >- fs[same_blocks_def] >>
+  conj_tac >- fs[same_blocks_def] >>
+  reverse conj_tac >- simp[IS_PREFIX_APPEND] >>
+  rpt (qpat_x_assum `_ = _ ++ emitted_insts _ _` kall_tac) >>
+  imp_res_tac (cj 5 emitted_insts_emit_op) >>
+  imp_res_tac (cj 4 emitted_insts_emit_void) >>
+  pure_asm_rewrite_tac[emitted_insts_def, GSYM APPEND_ASSOC,
+    rich_listTheory.DROP_LENGTH_APPEND] >>
+  simp_tac (srw_ss()) [mk_inst_def, is_terminator_def]
+QED
+
+Finalise compile_abi_encode_bytes_frame_frag
+
+Theorem compile_abi_encode_prim_frame_frag:
+  compile_abi_encode_to_buf dst src AbiPrimWord st = (op, st') /\
+  eval_operand dst s0 = SOME dst_w /\ eval_operand src s0 = SOME src_w /\
+  (!y. dst = Var y ==> not_fresh_at st y) /\
+  enc_scratch (frag_ids st st') lo top s0 ==>
+  frag_exec ctx st st' (\s. s = s0)
+    (\s. mem_word_at (w2n dst_w) s.vs_memory = mload (w2n src_w) s0 /\
+         eval_operand op s = SOME 32w /\ s.vs_labels = s0.vs_labels /\
+         enc_frame st st' lo top [(w2n dst_w, 32)] s0 s) R
+Proof
+  rpt strip_tac >>
+  gvs[Once compile_abi_encode_child_def, compile_abi_encode_static_def,
+      comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
+  drule emitted_insts_emit_void >> strip_tac >>
+  drule emitted_insts_emit_op >> strip_tac >> gvs[] >>
+  drule emit_void_extends >> strip_tac >>
+  drule emit_op_extends >> strip_tac >>
+  irule frag_exec_run_inst_seq >> simp[same_blocks_def] >>
+  reverse conj_tac
+  >- (gvs[same_blocks_def] >>
+      qmatch_goalsub_rename_tac `emitted_insts st st2` >>
+      qmatch_asmsub_rename_tac `emitted_insts st1 st2` >>
+      qspecl_then [`st`, `st1`, `st2`] mp_tac emitted_insts_append >>
+      simp[mk_inst_def, is_terminator_def, IS_PREFIX_APPEND, APPEND_ASSOC]) >>
+  disj1_tac >>
+  qexists_tac `mstore (w2n dst_w) (mload (w2n src_w) s0)
+    (update_var (STRING #"%" (toString st.cs_next_var))
+      (mload (w2n src_w) s0) s0)` >>
+  conj_tac >- suspend "prim_run" >>
+  suspend "prim_post"
+QED
+
+Resume compile_abi_encode_prim_frame_frag[prim_run]:
+  qmatch_goalsub_rename_tac `emitted_insts st st2` >>
+  qmatch_asmsub_rename_tac `emitted_insts st1 st2` >>
+  qspecl_then [`st`, `st1`, `st2`] mp_tac emitted_insts_append >>
+  simp[] >> disch_then SUBST1_TAC >> simp[run_inst_seq_def] >>
+  qspec_then `src` mp_tac step_MLOAD >> disch_then drule >>
+  strip_tac >> simp[] >>
+  `eval_operand dst (update_var (STRING #"%" (toString st.cs_next_var))
+     (mload (w2n src_w) s0) s0) = SOME dst_w` by
+    (rewrite_tac[enc_eval_operand_update_old] >>
+     drule enc_eval_operand_update_old >> simp[]) >>
+  drule step_MSTORE >>
+  disch_then (qspec_then `Var (STRING #"%" (toString st.cs_next_var))` mp_tac) >>
+  simp[eval_operand_def, lookup_var_update_var]
+QED
+
+Resume compile_abi_encode_prim_frame_frag[prim_post]:
+  simp[valueEncodingPropsTheory.mstore_mem_word_at_same, eval_operand_def] >>
+  rewrite_tac[enc_mstore_update_var] >>
+  irule enc_frame_update_var >>
+  simp[not_fresh_at_def, enc_frame_mstore]
+QED
+
+Finalise compile_abi_encode_prim_frame_frag
+
+Theorem compile_abi_encode_copy_abi_frag:
+  compile_abi_encode_to_buf dst src (AbiCopy (type_memory_size tv)) st =
+    (op, st') /\
+  evaluate_type env ty = SOME tv /\
+  ~is_dynamic (vyper_to_abi_type env ty) /\ value_has_type tv v /\
+  vyper_to_abi env ty v = SOME av /\
+  eval_operand dst s0 = SOME dst_w /\ eval_operand src s0 = SOME src_w /\
+  enc_pre st st' [dst; src] lo top tv v (w2n src_w)
+    [(w2n dst_w, LENGTH (enc (vyper_to_abi_type env ty) av))] s0 ==>
+  frag_exec ctx st st' (\s. s = s0)
+    (\s. mem_bytes_at (w2n dst_w)
+           (LENGTH (enc (vyper_to_abi_type env ty) av)) s.vs_memory =
+           enc (vyper_to_abi_type env ty) av /\
+         eval_operand op s =
+           SOME (n2w (LENGTH (enc (vyper_to_abi_type env ty) av))) /\
+         s.vs_labels = s0.vs_labels /\
+         enc_frame st st' lo top
+           [(w2n dst_w, LENGTH (enc (vyper_to_abi_type env ty) av))] s0 s) R
+Proof
+  rpt strip_tac >>
+  `val_in_memory tv v (w2n src_w) s0.vs_memory` by fs[enc_pre_def] >>
+  `LENGTH (enc (vyper_to_abi_type env ty) av) = type_memory_size tv` by
+    (irule val_in_memory_static_enc_length >> metis_tac[]) >>
+  `type_memory_size tv < dimword (:256)` by
+    (drule enc_pre_bounds >> strip_tac >> decide_tac) >>
+  `enc_scratch (frag_ids st st') lo top s0` by fs[enc_pre_def] >>
+  drule_all compile_abi_encode_copy_frame_frag >>
+  disch_then (qspecl_then [`ctx`, `R`] mp_tac) >>
+  strip_tac >> irule frag_exec_conseq >> goal_assum (drule_at Any) >> simp[] >>
+  rpt strip_tac >> simp[] >>
+  rewrite_tac[mem_bytes_at_def, mcopy_padded_read] >>
+  rewrite_tac[GSYM mem_bytes_at_def] >>
+  irule val_in_memory_static_abi >> metis_tac[]
+QED
+
+Theorem compile_abi_encode_prim_abi_frag:
+  compile_abi_encode_to_buf dst src AbiPrimWord st = (op, st') /\
+  evaluate_type env ty = SOME tv /\
+  ~is_dynamic (vyper_to_abi_type env ty) /\ type_memory_size tv = 32 /\
+  value_has_type tv v /\ vyper_to_abi env ty v = SOME av /\
+  eval_operand dst s0 = SOME dst_w /\ eval_operand src s0 = SOME src_w /\
+  enc_pre st st' [dst; src] lo top tv v (w2n src_w)
+    [(w2n dst_w, LENGTH (enc (vyper_to_abi_type env ty) av))] s0 ==>
+  frag_exec ctx st st' (\s. s = s0)
+    (\s. mem_bytes_at (w2n dst_w)
+           (LENGTH (enc (vyper_to_abi_type env ty) av)) s.vs_memory =
+           enc (vyper_to_abi_type env ty) av /\
+         eval_operand op s =
+           SOME (n2w (LENGTH (enc (vyper_to_abi_type env ty) av))) /\
+         s.vs_labels = s0.vs_labels /\
+         enc_frame st st' lo top
+           [(w2n dst_w, LENGTH (enc (vyper_to_abi_type env ty) av))] s0 s) R
+Proof
+  rpt strip_tac >>
+  `val_in_memory tv v (w2n src_w) s0.vs_memory` by fs[enc_pre_def] >>
+  `LENGTH (enc (vyper_to_abi_type env ty) av) = 32` by
+    (drule_all val_in_memory_static_enc_length >> simp[]) >>
+  `mem_bytes_at (w2n src_w) 32 s0.vs_memory =
+     enc (vyper_to_abi_type env ty) av` by
+    (drule_all val_in_memory_static_abi >> simp[]) >>
+  `enc_scratch (frag_ids st st') lo top s0` by fs[enc_pre_def] >>
+  `!y. dst = Var y ==> not_fresh_at st y` by fs[enc_pre_def] >>
+  drule_all compile_abi_encode_prim_frame_frag >>
+  disch_then (qspecl_then [`ctx`, `R`] mp_tac) >> strip_tac >>
+  irule frag_exec_conseq >> goal_assum (drule_at Any) >> simp[] >>
+  rpt strip_tac >> simp[] >>
+  `mload (w2n dst_w) s = mload (w2n src_w) s0` by
+    fs[GSYM mem_word_at_eq_mload] >>
+  drule mload_eq_mem_bytes_at_eq >> simp[]
+QED
+
+
+Theorem compile_abi_encode_static_info_abi_frag:
+  compile_abi_encode_static_info dst src ei st = (op, st') /\
+  abi_enc_plan env ty ei /\ ~is_dynamic (vyper_to_abi_type env ty) /\
+  evaluate_type env ty = SOME tv /\ value_has_type tv v /\
+  vyper_to_abi env ty v = SOME av /\
+  eval_operand dst s0 = SOME dst_w /\ eval_operand src s0 = SOME src_w /\
+  enc_pre st st' [dst; src] lo top tv v (w2n src_w)
+    [(w2n dst_w, LENGTH (enc (vyper_to_abi_type env ty) av))] s0 ==>
+  frag_exec ctx st st' (\s. s = s0)
+    (\s. mem_bytes_at (w2n dst_w)
+           (LENGTH (enc (vyper_to_abi_type env ty) av)) s.vs_memory =
+           enc (vyper_to_abi_type env ty) av /\
+         eval_operand op s =
+           SOME (n2w (LENGTH (enc (vyper_to_abi_type env ty) av))) /\
+         s.vs_labels = s0.vs_labels /\
+         enc_frame st st' lo top
+           [(w2n dst_w, LENGTH (enc (vyper_to_abi_type env ty) av))] s0 s) R
+Proof
+  rpt strip_tac >>
+  drule_all compile_abi_encode_static_info_plan >> strip_tac >>
+  drule_all abi_enc_plan_static >> strip_tac >> gvs[]
+  >- (drule_all abi_enc_plan_prim_size >> strip_tac >>
+      drule_all compile_abi_encode_prim_abi_frag >>
+      disch_then (qspecl_then [`ctx`, `R`] ACCEPT_TAC)) >>
+  `n = type_memory_size tv` by
+    (qpat_x_assum `abi_enc_plan env ty (AbiCopy n)` mp_tac >>
+     simp[Once abi_enc_plan_cases] >> metis_tac[]) >>
+  gvs[] >> irule compile_abi_encode_copy_abi_frag >>
+  conj_tac >- simp[] >>
+  qexistsl_tac [`dst`, `src`, `src_w`, `tv`, `v`] >> simp[]
+QED
+
+Theorem enc_bytes_memory_layout:
+  mem_word_at p mem = n2w (LENGTH bs) /\
+  mem_bytes_at (p+32) (LENGTH bs) mem = bs ==>
+  enc (Bytes NONE) (contractABI$BytesV bs) =
+    mem_bytes_at p (32+LENGTH bs) mem ++
+    REPLICATE (32*((LENGTH bs+31) DIV 32)-LENGTH bs) 0w
+Proof
+  strip_tac >>
+  rewrite_tac[enc_def, valueEncodingProofsTheory.mem_bytes_at_split_padded] >>
+  simp[valueEncodingProofsTheory.mem_bytes_at_word, ceil32_def]
+QED
+
+Theorem enc_typed_bytes_layout:
+  (bt = BytesT (Dynamic n) \/ bt = StringT n) /\
+  evaluate_type env (BaseT bt) = SOME tv /\ value_has_type tv v /\
+  vyper_to_abi env (BaseT bt) v = SOME av /\
+  val_in_memory tv v p mem ==>
+  ?bs. mem_word_at p mem = n2w (LENGTH bs) /\
+       mem_bytes_at (p+32) (LENGTH bs) mem = bs /\
+       32+LENGTH bs <= type_memory_size tv /\
+       enc (vyper_to_abi_type env (BaseT bt)) av =
+         mem_bytes_at p (32+LENGTH bs) mem ++
+         REPLICATE (32*((LENGTH bs+31) DIV 32)-LENGTH bs) 0w /\
+       LENGTH (enc (vyper_to_abi_type env (BaseT bt)) av) =
+         32+32*((LENGTH bs+31) DIV 32)
+Proof
+  strip_tac >> Cases_on `v` >>
+  gvs[vyperValueTheory.evaluate_type_def, value_has_type_def,
+      vyper_to_abi_base_def, vyper_to_abi_type_def,
+      vyper_base_to_abi_type_def, val_in_memory_def] >>
+  qmatch_asmsub_abbrev_tac `mem_bytes_at (p+32) _ mem = bs` >>
+  qexists_tac `bs` >>
+  `LENGTH bs <= n` by simp[Abbr `bs`] >>
+  `LENGTH bs <= 32 * word_size n` by
+    (mp_tac word_size_covers >> strip_tac >> decide_tac) >>
+  `LENGTH bs < dimword (:256)` by (gvs[] >> decide_tac) >>
+  `mem_word_at p mem = n2w (LENGTH bs) /\
+   mem_bytes_at (p+32) (LENGTH bs) mem = bs` by simp[Abbr `bs`] >>
+  drule_all enc_bytes_memory_layout >>
+  simp[enc_def, ceil32_def, type_memory_size_def,
+       vfmConstantsTheory.word_size_def] >>
+  qspec_then `LENGTH bs` mp_tac (GEN_ALL enc_round32_bounds) >>
+  `n2w_o_ORD = ((n2w o ORD) : char -> word8)` by
+    simp[FUN_EQ_THM, vyperMiscTheory.n2w_o_ORD_def] >>
+  gvs[vfmConstantsTheory.word_size_def] >> decide_tac
+QED
+
+Theorem compile_abi_encode_bytes_abi_frag:
+  (bt = BytesT (Dynamic n) \/ bt = StringT n) /\
+  compile_abi_encode_to_buf dst src (AbiBytestring n) st = (op, st') /\
+  evaluate_type env (BaseT bt) = SOME tv /\ value_has_type tv v /\
+  vyper_to_abi env (BaseT bt) v = SOME av /\
+  eval_operand dst s0 = SOME dst_w /\ eval_operand src s0 = SOME src_w /\
+  enc_pre st st' [dst; src] lo top tv v (w2n src_w)
+    [(w2n dst_w, LENGTH (enc (vyper_to_abi_type env (BaseT bt)) av))] s0 ==>
+  frag_exec ctx st st' (\s. s = s0)
+    (\s. mem_bytes_at (w2n dst_w)
+           (LENGTH (enc (vyper_to_abi_type env (BaseT bt)) av)) s.vs_memory =
+           enc (vyper_to_abi_type env (BaseT bt)) av /\
+         eval_operand op s =
+           SOME (n2w (LENGTH (enc (vyper_to_abi_type env (BaseT bt)) av))) /\
+         s.vs_labels = s0.vs_labels /\
+         enc_frame st st' lo top
+           [(w2n dst_w, LENGTH (enc (vyper_to_abi_type env (BaseT bt)) av))] s0 s) R
+Proof
+  rpt gen_tac >> disch_then (CONJUNCTS_THEN2 assume_tac strip_assume_tac) >>
+  `val_in_memory tv v (w2n src_w) s0.vs_memory` by fs[enc_pre_def] >>
+  drule_all enc_typed_bytes_layout >> strip_tac >>
+  qabbrev_tac `r = 32*((LENGTH bs+31) DIV 32)` >>
+  `LENGTH bs <= r` by
+    (qspec_then `LENGTH bs` mp_tac (GEN_ALL enc_round32_bounds) >>
+     simp[Abbr `r`]) >>
+  drule enc_pre_bounds >> strip_tac >>
+  `w2n dst_w + (32+r) <= lo /\
+   regions_disjoint (w2n src_w,type_memory_size tv) (w2n dst_w,32+r) /\
+   (!y. dst = Var y ==> not_fresh_at st y) /\
+   (!y. src = Var y ==> not_fresh_at st y) /\
+   enc_scratch (frag_ids st st') lo top s0` by fs[enc_pre_def] >>
+  `LENGTH bs+31 < dimword (:256) /\
+   w2n dst_w+32+r < dimword (:256)` by decide_tac >>
+  `regions_disjoint (w2n src_w,32+LENGTH bs) (w2n dst_w,32+r)` by
+    (irule regions_disjoint_subregions >> goal_assum (drule_at Any) >> simp[]) >>
+  `r = 32*((LENGTH bs+31) DIV 32)` by simp[Abbr `r`] >>
+  drule_all compile_abi_encode_bytes_frame_frag >>
+  disch_then (qspecl_then [`ctx`, `R`] mp_tac) >> strip_tac >>
+  irule frag_exec_conseq >> goal_assum (drule_at Any) >>
+  pure_asm_rewrite_tac[] >> rewrite_tac[]
+QED
+
 (* ===== Recursive ABI encode correctness ===== *)
 
 (* Mutual induction over compile_abi_encode_child / _to_buf /
@@ -946,6 +3521,7232 @@ End
      moves the cell, if there are dynamic elements, past the tails;
    - dyn_loop writes a dynamic array's encoding after its length word at
      dst and returns the encoding's whole length. *)
+(* Persistent loop facts deliberately exclude the changing counter contents. *)
+Definition enc_loop_ctx_def:
+  enc_loop_ctx st st' ops lo top tv v src outs s0 count_ptr ip s <=>
+    enc_pre st st' ops lo top tv v src outs s /\
+    enc_frame st st' lo top outs s0 s /\
+    s.vs_labels = s0.vs_labels /\
+    eval_operand count_ptr s = SOME (n2w ip) /\
+    FLOOKUP s.vs_allocas st.cs_next_id = SOME (ip,32) /\ lo <= ip
+End
+
+Theorem enc_pre_transport:
+  enc_pre st st' ops lo top tv v src outs s0 /\ value_has_type tv v /\
+  enc_frame st st' lo top outs s0 s ==>
+  enc_pre st st' ops lo top tv v src outs s
+Proof
+  rpt strip_tac >>
+  `val_in_memory tv v src s.vs_memory` by
+    (drule enc_frame_preserves_source >>
+     disch_then irule >> fs[enc_pre_def, EVERY_MEM] >>
+     rpt strip_tac >> rename1 `MEM e outs` >> Cases_on `e` >>
+     first_x_assum drule >> simp[]) >>
+  fs[enc_pre_def, enc_frame_def]
+QED
+
+Theorem enc_frame_mstore_scratch:
+  enc_scratch (frag_ids st st') lo top s /\
+  j IN frag_ids st st' /\ FLOOKUP s.vs_allocas j = SOME (ip,32) ==>
+  enc_frame st st' lo top outs s (mstore ip w s)
+Proof
+  strip_tac >>
+  drule enc_frame_mstore >> disch_then (qspecl_then [`w`, `ip`] mp_tac) >>
+  rewrite_tac[enc_frame_def] >> strip_tac >> asm_rewrite_tac[] >>
+  rpt strip_tac >>
+  qpat_x_assum `!a. _ ==> mem_bytes_at _ _ _ = _` irule >>
+  fs[mstore_def] >> metis_tac[]
+QED
+
+Theorem enc_loop_ctx_from_frame:
+  enc_pre st st' ops lo top tv v src outs s0 /\ value_has_type tv v /\
+  enc_frame st st' lo top outs s0 s /\ s.vs_labels = s0.vs_labels /\
+  eval_operand count_ptr s = SOME (n2w ip) /\
+  FLOOKUP s.vs_allocas st.cs_next_id = SOME (ip,32) /\ lo <= ip ==>
+  enc_loop_ctx st st' ops lo top tv v src outs s0 count_ptr ip s
+Proof
+  strip_tac >> simp[enc_loop_ctx_def] >> metis_tac[enc_pre_transport]
+QED
+
+Theorem enc_loop_ctx_jump[simp]:
+  enc_loop_ctx st st' ops lo top tv v src outs s0 count_ptr ip
+    (jump_to lbl s) =
+  enc_loop_ctx st st' ops lo top tv v src outs s0 count_ptr ip s
+Proof
+  simp[enc_loop_ctx_def, enc_frame_jump, enc_pre_def, enc_scratch_def,
+       jump_to_def, venomMemDefsTheory.alloca_inv_def,
+       venomMemDefsTheory.allocas_non_overlapping_def,
+       venomMemDefsTheory.alloca_next_valid_def]
+QED
+
+Theorem enc_loop_ctx_source:
+  enc_loop_ctx st st' ops lo top tv v src outs s0 count_ptr ip s ==>
+  val_in_memory tv v src s.vs_memory
+Proof
+  simp[enc_loop_ctx_def, enc_pre_def]
+QED
+
+Theorem enc_loop_ctx_operand:
+  enc_loop_ctx st st' ops lo top tv v src outs s0 count_ptr ip s /\
+  MEM op ops /\ eval_operand op s0 = SOME w ==>
+  eval_operand op s = SOME w
+Proof
+  strip_tac >> fs[enc_loop_ctx_def, enc_pre_def] >>
+  drule enc_frame_preserves_operand >> disch_then irule >>
+  simp[] >> rpt strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Theorem enc_loop_ctx_bounds:
+  enc_loop_ctx st st' ops lo top tv v src outs s0 count_ptr ip s ==>
+  src + type_memory_size tv <= lo /\ lo <= ip /\
+  ip + 32 <= top /\ top < dimword (:256)
+Proof
+  simp[enc_loop_ctx_def] >> strip_tac >>
+  drule enc_pre_bounds >> strip_tac >>
+  `enc_scratch (frag_ids st st') lo top s` by fs[enc_pre_def] >>
+  drule_all enc_scratch_alloca_bound >> fs[]
+QED
+
+Theorem enc_static_loop_init_code:
+  enc_static_loop_init st = ((count_ptr,hdr,body_lbl,exit),si) ==>
+  ?buf sa sz.
+    compile_alloc_buffer 32 st = (buf,sa) /\
+    emit_void MSTORE [buf.buf_operand; Lit 0w] sa = ((),sz) /\
+    count_ptr = buf.buf_operand /\
+    emitted_insts st si = emitted_insts st sa ++ emitted_insts sa sz /\
+    same_blocks st si /\
+    EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+      (emitted_insts st si) /\
+    si.cs_current_insts = st.cs_current_insts ++ emitted_insts st si
+Proof
+  simp[enc_static_loop_init_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def, fresh_label_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  drule emitted_insts_emit_void >> strip_tac >>
+  drule emit_void_same_blocks >> strip_tac >>
+  rename1 `emit_void MSTORE _ sa = ((),sz)` >>
+  qpat_x_assum `compile_alloc_buffer _ _ = _` mp_tac >>
+  simp[contextTheory.compile_alloc_buffer_def, comp_bind_def, comp_return_def] >>
+  pairarg_tac >> strip_tac >> gvs[] >>
+  drule emitted_insts_emit_op >> strip_tac >>
+  drule emit_op_same_blocks >> strip_tac >>
+  rename1 `emit_void MSTORE _ sa = ((),sz)` >>
+  `emitted_insts st sz = emitted_insts st sa ++ emitted_insts sa sz` by
+    (irule emitted_insts_append >> simp[]) >>
+  simp[emitted_insts_def, same_blocks_def, mk_inst_def, is_terminator_def] >>
+  gvs[same_blocks_def, DROP_APPEND, is_terminator_def] >>
+  `LENGTH st.cs_current_insts - (LENGTH st.cs_current_insts + 1) = 0` by
+    decide_tac >> simp[is_terminator_def]
+QED
+
+Theorem enc_static_loop_init_run:
+  enc_static_loop_init st = ((count_ptr,hdr,body_lbl,exit),si) /\
+  st.cs_next_id IN frag_ids st z /\
+  enc_scratch (frag_ids st z) lo top s0 ==>
+  ?ip s. run_inst_seq (emitted_insts st si) s0 = OK s /\
+    lo <= ip /\ ip + 32 <= top /\
+    eval_operand count_ptr s = SOME (n2w ip) /\
+    FLOOKUP s.vs_allocas st.cs_next_id = SOME (ip,32) /\
+    mem_word_at ip s.vs_memory = 0w /\ s.vs_labels = s0.vs_labels /\
+    enc_frame st z lo top outs s0 s
+Proof
+  strip_tac >> drule enc_static_loop_init_code >> strip_tac >>
+  `FINITE (frag_ids st z)` by simp[] >>
+  drule_all enc_compile_alloc_buffer_run >> strip_tac >>
+  `enc_frame st z lo top outs s0 t` by
+    (simp[enc_frame_def] >> rpt strip_tac >> metis_tac[]) >>
+  `enc_frame st z lo top outs t (mstore b 0w t)` by
+    (irule enc_frame_mstore_scratch >> simp[] >>
+     qexists_tac `st.cs_next_id` >> simp[]) >>
+  qexistsl_tac [`b`, `mstore b 0w t`] >>
+  conj_tac
+  >- (asm_rewrite_tac[] >> drule run_inst_seq_append >>
+      disch_then (qspec_then `emitted_insts sa sz` SUBST1_TAC) >>
+      drule emitted_insts_emit_void >> strip_tac >>
+      `b < dimword (:256)` by
+        (qpat_assum `enc_scratch _ _ _ s0` mp_tac >>
+         pure_rewrite_tac[enc_scratch_def] >> strip_tac >> decide_tac) >>
+      simp[run_inst_seq_def, step_inst_base_def, mk_inst_def,
+           exec_write2_def, eval_operand_def]) >>
+  simp[eval_operand_mstore, valueEncodingPropsTheory.mstore_mem_word_at_same] >>
+  conj_tac >- simp[mstore_def] >>
+  metis_tac[enc_frame_trans]
+QED
+
+Theorem enc_static_loop_init_frag:
+  enc_static_loop_init st = ((count_ptr,hdr,body_lbl,exit),si) /\
+  st.cs_next_id IN frag_ids st z /\
+  enc_pre st z ops lo top tv v src outs s0 /\ value_has_type tv v ==>
+  frag_exec ctx st si (\s. s = s0)
+    (\s. ?ip. enc_array_inv
+       (enc_loop_ctx st z ops lo top tv v src outs s0 count_ptr ip)
+       p B ts avs ip NONE 0 s) R
+Proof
+  strip_tac >>
+  `enc_scratch (frag_ids st z) lo top s0` by fs[enc_pre_def] >>
+  drule_all enc_static_loop_init_run >>
+  disch_then (qspec_then `outs` strip_assume_tac) >>
+  drule enc_static_loop_init_code >> strip_tac >>
+  fs[same_blocks_def] >> irule frag_exec_run_inst_seq >>
+  asm_simp_tac (srw_ss()) [rich_listTheory.IS_PREFIX_APPEND] >>
+  qexists_tac `ip` >> irule enc_array_inv_zero >>
+  simp[] >> irule enc_loop_ctx_from_frame >>
+  simp[enc_frame_inst_idx] >>
+  Cases_on `buf.buf_operand` >> fs[eval_operand_def, lookup_var_def]
+QED
+
+Theorem enc_loop_ctx_dynarray_source:
+  enc_loop_ctx st z ops lo top (ArrayTV tv (Dynamic n))
+    (ArrayV (DynArrayV vs)) src outs s0 count_ptr ip s /\ k < LENGTH vs ==>
+  mem_word_at src s.vs_memory = n2w (LENGTH vs) /\
+  val_in_memory tv (EL k vs) (src + 32 + k * type_memory_size tv) s.vs_memory
+Proof
+  strip_tac >> drule enc_loop_ctx_source >>
+  simp[valueEncodingProofsTheory.val_in_memory_dynarray_proof] >> strip_tac >>
+  drule_all elems_in_memory_EL >> simp[]
+QED
+
+Theorem enc_loop_ctx_dynarray_bounds:
+  enc_loop_ctx st z ops lo top (ArrayTV tv (Dynamic n))
+    (ArrayV (DynArrayV vs)) src outs s0 count_ptr ip s /\
+  value_has_type (ArrayTV tv (Dynamic n)) (ArrayV (DynArrayV vs)) /\
+  k < LENGTH vs ==>
+  value_has_type tv (EL k vs) /\
+  src + 32 + k * type_memory_size tv + type_memory_size tv <= lo /\
+  src + 32 + k * type_memory_size tv < dimword (:256)
+Proof
+  strip_tac >> drule enc_loop_ctx_bounds >> strip_tac >>
+  fs[value_has_type_def, type_memory_size_def] >>
+  conj_tac
+  >- (fs[all_have_type_EVERY, EVERY_EL] >> metis_tac[]) >>
+  `SUC k <= n` by decide_tac >>
+  `SUC k * type_memory_size tv <= n * type_memory_size tv` by
+    simp[arithmeticTheory.LE_MULT_RCANCEL] >>
+  qpat_x_assum `SUC k * _ <= _` mp_tac >>
+  pure_rewrite_tac[arithmeticTheory.MULT_CLAUSES] >> decide_tac
+QED
+
+Theorem enc_loop_ctx_array_slot:
+  enc_loop_ctx st z ops lo top tv v src outs s0 count_ptr ip s /\
+  MEM (dst,32 + len * asz) outs /\ k < len ==>
+  dst + 32 + k * asz + asz <= lo /\
+  dst + 32 + k * asz < dimword (:256) /\
+  regions_disjoint (src,type_memory_size tv) (dst + 32 + k * asz,asz)
+Proof
+  strip_tac >> drule enc_loop_ctx_bounds >> strip_tac >>
+  `dst + (32 + len * asz) <= lo /\
+   regions_disjoint (src,type_memory_size tv) (dst,32 + len * asz)` by
+    (qpat_x_assum `enc_loop_ctx _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     pure_rewrite_tac[enc_loop_ctx_def, enc_pre_def] >> strip_tac >>
+     qpat_x_assum `EVERY _ outs` mp_tac >>
+     rewrite_tac[EVERY_MEM] >> disch_then drule >> simp[]) >>
+  `SUC k * asz <= len * asz` by simp[arithmeticTheory.LE_MULT_RCANCEL] >>
+  qpat_x_assum `SUC k * asz <= _` mp_tac >>
+  pure_rewrite_tac[arithmeticTheory.MULT_CLAUSES] >> strip_tac >>
+  conj_tac >- decide_tac >> conj_tac >- (fs[] >> decide_tac) >>
+  drule regions_disjoint_subregions >> disch_then irule >> simp[] >>
+  decide_tac
+QED
+
+Theorem enc_loop_ctx_readonly:
+  enc_loop_ctx st z ops lo top tv v src outs s0 count_ptr ip s /\
+  enc_frame st z lo top outs s t /\ t.vs_memory = s.vs_memory /\
+  t.vs_labels = s.vs_labels /\
+  eval_operand count_ptr t = eval_operand count_ptr s ==>
+  enc_loop_ctx st z ops lo top tv v src outs s0 count_ptr ip t
+Proof
+  strip_tac >> fs[enc_loop_ctx_def] >>
+  `enc_scratch (frag_ids st z) lo top t` by fs[enc_frame_def] >>
+  `FLOOKUP t.vs_allocas st.cs_next_id = SOME (ip,32)` by
+    (qpat_x_assum `enc_frame _ _ _ _ _ s t` mp_tac >>
+     rewrite_tac[enc_frame_def] >> strip_tac >> first_x_assum irule >> simp[]) >>
+  simp[enc_loop_ctx_def] >> conj_tac
+  >- fs[enc_pre_def] >> metis_tac[enc_frame_trans]
+QED
+
+Theorem enc_array_inv_readonly:
+  enc_array_inv inv_ctx p B ts vs ip tail_cell k s /\
+  inv_ctx t /\ t.vs_memory = s.vs_memory ==>
+  enc_array_inv inv_ctx p B ts vs ip tail_cell k t
+Proof
+  Cases_on `tail_cell` >> simp[enc_array_inv_def, enc_prefix_mem_def]
+QED
+
+Theorem enc_static_loop_header_code:
+  enc_static_loop_header count_ptr len_op sh = (done_op,sj) ==>
+  ?i cmp sa sb.
+    emit_op MLOAD [count_ptr] sh = (i,sa) /\
+    emit_op LT [i;len_op] sa = (cmp,sb) /\
+    emit_op ISZERO [cmp] sb = (done_op,sj) /\
+    emitted_insts sh sj =
+      emitted_insts sh sa ++ emitted_insts sa sb ++ emitted_insts sb sj /\
+    same_blocks sh sj /\
+    sj.cs_current_insts = sh.cs_current_insts ++ emitted_insts sh sj /\
+    EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+      (emitted_insts sh sj) /\
+    sa.cs_next_var = sh.cs_next_var + 1 /\
+    sb.cs_next_var = sh.cs_next_var + 2 /\
+    (!x. i = Var x ==> not_fresh_at sa x) /\
+    (!x. cmp = Var x ==> not_fresh_at sb x)
+Proof
+  simp[enc_static_loop_header_def, comp_bind_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  rename1 `emit_op MLOAD [count_ptr] sh = (i,sa)` >>
+  rename1 `emit_op LT [i;len_op] sa = (cmp,sb)` >>
+  imp_res_tac emitted_insts_emit_op >>
+  imp_res_tac emit_op_same_blocks >>
+  `emitted_insts sh sb = emitted_insts sh sa ++ emitted_insts sa sb` by
+    (irule emitted_insts_append >> simp[]) >>
+  `emitted_insts sh sj = emitted_insts sh sb ++ emitted_insts sb sj` by
+    (irule emitted_insts_append >> simp[]) >>
+  pure_asm_rewrite_tac[GSYM APPEND_ASSOC] >>
+  gvs[same_blocks_def, mk_inst_def, is_terminator_def,
+      not_fresh_at_def, ASCIInumbersTheory.toString_11]
+QED
+
+Theorem enc_static_loop_header_run:
+  enc_static_loop_header count_ptr len_op sh = (done_op,sj) /\
+  (!x. MEM (Var x) [count_ptr;len_op] ==> not_fresh_at sh x) /\
+  eval_operand count_ptr s = SOME (n2w ip) /\
+  eval_operand len_op s = SOME (n2w n) /\
+  mem_word_at ip s.vs_memory = n2w k /\
+  ip < dimword (:256) /\ k < dimword (:256) /\ n < dimword (:256) /\
+  a.cs_next_var <= sh.cs_next_var /\
+  enc_scratch (frag_ids a b) lo top s ==>
+  ?t. run_inst_seq (emitted_insts sh sj) s = OK t /\
+      eval_operand done_op t = SOME (bool_to_word (~(k < n))) /\
+      t.vs_memory = s.vs_memory /\ t.vs_labels = s.vs_labels /\
+      (!old. (!x. old = Var x ==> not_fresh_at sh x) ==>
+        eval_operand old t = eval_operand old s) /\
+      enc_frame a b lo top outs s t
+Proof
+  strip_tac >> drule enc_static_loop_header_code >> strip_tac >>
+  `step_inst_base (mk_inst sh.cs_next_id MLOAD [count_ptr]
+     [STRING #"%" (toString sh.cs_next_var)]) s =
+     OK (update_var (STRING #"%" (toString sh.cs_next_var)) (n2w k) s)` by
+    (qpat_assum `eval_operand count_ptr s = _` (mp_tac o MATCH_MP step_MLOAD) >>
+     simp[GSYM mem_word_at_eq_mload]) >>
+  drule_all enc_emit_op_run_frame >>
+  disch_then (qspec_then `outs` (qx_choose_then `s1` strip_assume_tac)) >>
+  `eval_operand len_op s1 = SOME (n2w n)` by (fs[] >> metis_tac[]) >>
+  `step_inst_base (mk_inst sa.cs_next_id LT [i;len_op]
+     [STRING #"%" (toString sa.cs_next_var)]) s1 =
+     OK (update_var (STRING #"%" (toString sa.cs_next_var))
+       (bool_to_word (k < n)) s1)` by
+    (qpat_assum `eval_operand i s1 = _` (mp_then (Pos hd) mp_tac step_LT) >>
+     disch_then drule >> simp[]) >>
+  `a.cs_next_var <= sa.cs_next_var` by simp[] >>
+  `enc_scratch (frag_ids a b) lo top s1` by fs[enc_frame_def] >>
+  drule_all enc_emit_op_run_frame >>
+  disch_then (qspec_then `outs` (qx_choose_then `s2` strip_assume_tac)) >>
+  `step_inst_base (mk_inst sb.cs_next_id ISZERO [cmp]
+     [STRING #"%" (toString sb.cs_next_var)]) s2 =
+     OK (update_var (STRING #"%" (toString sb.cs_next_var))
+       (bool_to_word (~(k < n))) s2)` by
+    (qpat_assum `eval_operand cmp s2 = _` (mp_tac o MATCH_MP step_ISZERO) >>
+     `((bool_to_word (k < n):bytes32) = 0w) = ~(k < n)` by
+       (Cases_on `k < n` >> simp[] >> EVAL_TAC) >> simp[]) >>
+  `a.cs_next_var <= sb.cs_next_var` by simp[] >>
+  `enc_scratch (frag_ids a b) lo top s2` by fs[enc_frame_def] >>
+  drule_all enc_emit_op_run_frame >>
+  disch_then (qspec_then `outs` (qx_choose_then `s3` strip_assume_tac)) >>
+  qexists_tac `s3` >> simp[run_inst_seq_append] >>
+  conj_tac
+  >- (qspecl_then [`emitted_insts sh sa`,
+        `emitted_insts sa sb ++ emitted_insts sb sj`,`s`,`s1`] mp_tac run_inst_seq_append >>
+      simp[] >> disch_then SUBST1_TAC >>
+      qspecl_then [`emitted_insts sa sb`,`emitted_insts sb sj`,`s1`,`s2`]
+        mp_tac run_inst_seq_append >> simp[]) >>
+  conj_tac >- (rpt strip_tac >>
+    `(!x. old = Var x ==> not_fresh_at sa x) /\
+     (!x. old = Var x ==> not_fresh_at sb x)` by
+      (rpt strip_tac >> pure_rewrite_tac[not_fresh_at_def] >>
+       qpat_x_assum `!x. old = Var x ==> _` mp_tac >>
+       pure_rewrite_tac[not_fresh_at_def] >> simp[] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+    metis_tac[]) >>
+  metis_tac[enc_frame_trans]
+QED
+
+Theorem enc_static_loop_header_frag:
+  enc_static_loop_header count_ptr len_op sh = (done_op,sj) /\
+  (!x. MEM (Var x) [count_ptr;len_op] ==> not_fresh_at sh x) /\
+  st.cs_next_var <= sh.cs_next_var /\ MEM len_op ops /\
+  eval_operand len_op s0 = SOME (n2w (LENGTH avs)) /\
+  LENGTH avs < dimword (:256) /\ k <= LENGTH avs ==>
+  frag_exec ctx sh sj
+    (enc_array_inv
+      (enc_loop_ctx st z ops lo top tv v src outs s0 count_ptr ip)
+      p B ts avs ip tail_cell k)
+    (enc_array_header
+      (enc_loop_ctx st z ops lo top tv v src outs s0 count_ptr ip)
+      p B ts avs ip tail_cell done_op k) R
+Proof
+  strip_tac >> drule enc_static_loop_header_code >> strip_tac >>
+  fs[same_blocks_def] >> irule frag_exec_run_inst_seq >>
+  asm_simp_tac (srw_ss()) [rich_listTheory.IS_PREFIX_APPEND] >>
+  qx_gen_tac `s` >> strip_tac >>
+  `enc_loop_ctx st z ops lo top tv v src outs s0 count_ptr ip s` by
+    fs[enc_array_inv_def] >>
+  `eval_operand len_op s = SOME (n2w (LENGTH avs))` by
+    (drule_all enc_loop_ctx_operand >> simp[]) >>
+  `eval_operand count_ptr s = SOME (n2w ip) /\
+   enc_scratch (frag_ids st z) lo top s` by
+    fs[enc_loop_ctx_def, enc_pre_def] >>
+  `mem_word_at ip s.vs_memory = n2w k` by fs[enc_array_inv_def] >>
+  `ip < dimword (:256) /\ k < dimword (:256)` by
+    (drule enc_loop_ctx_bounds >> simp[] >> decide_tac) >>
+  fs[] >> drule_all (SRULE [] enc_static_loop_header_run) >>
+  disch_then (qspec_then `outs` (qx_choose_then `t` strip_assume_tac)) >>
+  `enc_loop_ctx st z ops lo top tv v src outs s0 count_ptr ip t` by
+    (irule enc_loop_ctx_readonly >> qexists_tac `s` >> simp[] >> metis_tac[]) >>
+  `eval_operand count_ptr t = SOME (n2w ip) /\
+   enc_scratch (frag_ids st z) lo top t` by
+    fs[enc_loop_ctx_def, enc_pre_def] >>
+  `enc_array_inv
+    (enc_loop_ctx st z ops lo top tv v src outs s0 count_ptr ip)
+    p B ts avs ip tail_cell k t` by
+    (irule enc_array_inv_readonly >> simp[] >> qexists_tac `s` >> simp[]) >>
+  simp[enc_array_header_def] >>
+  disj1_tac >> qexists_tac `t` >> conj_tac
+  >- (qpat_x_assum `run_inst_seq _ s = OK t` mp_tac >> simp[]) >>
+  conj_tac
+  >- (irule enc_array_inv_readonly >> simp[] >> conj_tac
+      >- (irule enc_loop_ctx_readonly >> qexists_tac `t` >>
+          simp[enc_frame_refl] >>
+          Cases_on `count_ptr` >> fs[eval_operand_def, lookup_var_def]) >>
+      qexists_tac `t` >> simp[]) >>
+  `bool_to_word (~(k < LENGTH avs)) =
+    (if k < LENGTH avs then 0w else 1w)` by
+    (Cases_on `k < LENGTH avs` >> simp[] >> EVAL_TAC) >>
+  Cases_on `done_op` >> fs[eval_operand_def, lookup_var_def]
+QED
+
+Theorem enc_run_inst_seq_compose:
+  run_inst_seq xs s = OK t /\ run_inst_seq ys t = OK u ==>
+  run_inst_seq (xs ++ ys) s = OK u
+Proof
+  metis_tac[run_inst_seq_append]
+QED
+
+Theorem enc_emit_op_readonly_run:
+  emit_op opc args st = (op,st') /\
+  step_inst_base (mk_inst st.cs_next_id opc args
+    [STRING #"%" (toString st.cs_next_var)]) s =
+    OK (update_var (STRING #"%" (toString st.cs_next_var)) w s) ==>
+  ?t. run_inst_seq (emitted_insts st st') s = OK t /\
+      eval_operand op t = SOME w /\
+      (!old. (!x. old = Var x ==> not_fresh_at st x) ==>
+        eval_operand old t = eval_operand old s) /\
+      t.vs_memory = s.vs_memory /\ t.vs_labels = s.vs_labels /\
+      t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
+      t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+      t.vs_logs = s.vs_logs /\ t.vs_requests = s.vs_requests
+Proof
+  strip_tac >> drule emitted_insts_emit_op >> strip_tac >> gvs[] >>
+  qexists_tac `update_var (STRING #"%" (toString st.cs_next_var)) w s` >>
+  simp[run_inst_seq_def, eval_operand_update_var] >>
+  conj_tac >- (rpt strip_tac >> irule enc_eval_operand_update_old >>
+    qexists_tac `st` >> simp[]) >>
+  simp[update_var_def]
+QED
+
+Theorem enc_indexed_address_code:
+  emit_op ADD [base_op;Lit 32w] a = (data,b) /\
+  emit_op MUL [index;Lit (n2w stride)] b = (off,c) /\
+  emit_op ADD [data;off] c = (addr,d) ==>
+  emitted_insts a d =
+    emitted_insts a b ++ emitted_insts b c ++ emitted_insts c d /\
+  b.cs_next_var = a.cs_next_var + 1 /\
+  c.cs_next_var = a.cs_next_var + 2 /\
+  (!x. data = Var x ==> not_fresh_at b x) /\
+  (!x. off = Var x ==> not_fresh_at c x) /\
+  same_blocks a d /\
+  d.cs_current_insts = a.cs_current_insts ++ emitted_insts a d
+Proof
+  strip_tac >> imp_res_tac emitted_insts_emit_op >>
+  imp_res_tac emit_op_same_blocks >>
+  `emitted_insts a c = emitted_insts a b ++ emitted_insts b c` by
+    (irule emitted_insts_append >> simp[]) >>
+  `emitted_insts a d = emitted_insts a c ++ emitted_insts c d` by
+    (irule emitted_insts_append >> simp[]) >>
+  pure_asm_rewrite_tac[GSYM APPEND_ASSOC] >>
+  gvs[same_blocks_def, not_fresh_at_def, ASCIInumbersTheory.toString_11]
+QED
+
+Theorem enc_indexed_address_run:
+  emit_op ADD [base_op;Lit 32w] a = (data,b) /\
+  emit_op MUL [index;Lit (n2w stride)] b = (off,c) /\
+  emit_op ADD [data;off] c = (addr,d) /\
+  (!x. MEM (Var x) [base_op;index] ==> not_fresh_at a x) /\
+  eval_operand base_op s = SOME bw /\ eval_operand index s = SOME iw ==>
+  ?t. run_inst_seq (emitted_insts a d) s = OK t /\
+      eval_operand addr t = SOME (bw + 32w + iw * n2w stride) /\
+      (!old. (!x. old = Var x ==> not_fresh_at a x) ==>
+        eval_operand old t = eval_operand old s) /\
+      t.vs_memory = s.vs_memory /\ t.vs_labels = s.vs_labels /\
+      t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
+      t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+      t.vs_logs = s.vs_logs /\ t.vs_requests = s.vs_requests
+Proof
+  strip_tac >> drule_all enc_indexed_address_code >> strip_tac >>
+  `step_inst_base (mk_inst a.cs_next_id ADD [base_op;Lit 32w]
+     [STRING #"%" (toString a.cs_next_var)]) s =
+     OK (update_var (STRING #"%" (toString a.cs_next_var)) (bw + 32w) s)` by
+    (irule step_ADD >> simp[eval_operand_def]) >>
+  drule_all enc_emit_op_readonly_run >>
+  disch_then (qx_choose_then `s1` strip_assume_tac) >>
+  `eval_operand index s1 = SOME iw` by (fs[] >> metis_tac[]) >>
+  `step_inst_base (mk_inst b.cs_next_id MUL [index;Lit (n2w stride)]
+     [STRING #"%" (toString b.cs_next_var)]) s1 =
+     OK (update_var (STRING #"%" (toString b.cs_next_var)) (iw * n2w stride) s1)` by
+    (irule step_MUL >> simp[eval_operand_def]) >>
+  drule_all enc_emit_op_readonly_run >>
+  disch_then (qx_choose_then `s2` strip_assume_tac) >>
+  `eval_operand data s2 = SOME (bw + 32w)` by metis_tac[] >>
+  `step_inst_base (mk_inst c.cs_next_id ADD [data;off]
+     [STRING #"%" (toString c.cs_next_var)]) s2 =
+     OK (update_var (STRING #"%" (toString c.cs_next_var))
+       (bw + 32w + iw * n2w stride) s2)` by
+    (irule step_ADD >> simp[]) >>
+  drule_all enc_emit_op_readonly_run >>
+  disch_then (qx_choose_then `s3` strip_assume_tac) >>
+  qexists_tac `s3` >> simp[] >> conj_tac
+  >- (irule enc_run_inst_seq_compose >> qexists_tac `s2` >> simp[] >>
+      irule enc_run_inst_seq_compose >> qexists_tac `s1` >> simp[]) >>
+  rpt strip_tac >>
+  `(!x. old = Var x ==> not_fresh_at b x) /\
+   (!x. old = Var x ==> not_fresh_at c x)` by
+    (rpt strip_tac >> pure_rewrite_tac[not_fresh_at_def] >>
+     qpat_x_assum `!x. old = Var x ==> _` mp_tac >>
+     pure_rewrite_tac[not_fresh_at_def] >> simp[] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+  metis_tac[]
+QED
+
+Theorem enc_static_info_same_block:
+  compile_abi_encode_static_info dst src ei st = (op,st') ==>
+  same_blocks st st' /\
+  st'.cs_current_insts = st.cs_current_insts ++ emitted_insts st st'
+Proof
+  Cases_on `ei` >>
+  simp[compile_abi_encode_static_info_def, compile_abi_encode_static_def,
+       emit_op_def, emit_void_def, fresh_var_def, fresh_id_def, emit_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  rpt strip_tac >> gvs[same_blocks_def, emitted_insts_def, DROP_LENGTH_APPEND]
+QED
+
+Theorem enc_emit_op_append:
+  emit_op opc args a = (op,b) ==>
+  b.cs_current_insts = a.cs_current_insts ++ emitted_insts a b
+Proof
+  metis_tac[emitted_insts_emit_op]
+QED
+
+Theorem enc_emit_void_append:
+  emit_void opc args a = ((),b) ==>
+  b.cs_current_insts = a.cs_current_insts ++ emitted_insts a b
+Proof
+  metis_tac[emitted_insts_emit_void]
+QED
+
+Theorem enc_static_loop_body_code:
+  enc_static_loop_body dst src ei asz msz count_ptr sb = ((),se) ==>
+  ?i src_data src_off child_src dst_data dst_off child_dst ignored next
+    s1 s2 s3 s4 s5 s6 s7 s8 s9.
+    emit_op MLOAD [count_ptr] sb = (i,s1) /\
+    emit_op ADD [src; Lit 32w] s1 = (src_data,s2) /\
+    emit_op MUL [i; Lit (n2w msz)] s2 = (src_off,s3) /\
+    emit_op ADD [src_data;src_off] s3 = (child_src,s4) /\
+    emit_op ADD [dst; Lit 32w] s4 = (dst_data,s5) /\
+    emit_op MUL [i; Lit (n2w asz)] s5 = (dst_off,s6) /\
+    emit_op ADD [dst_data;dst_off] s6 = (child_dst,s7) /\
+    compile_abi_encode_static_info child_dst child_src ei s7 = (ignored,s8) /\
+    emit_op ADD [i;Lit 1w] s8 = (next,s9) /\
+    emit_void MSTORE [count_ptr;next] s9 = ((),se) /\
+    same_blocks sb se /\
+    se.cs_current_insts = sb.cs_current_insts ++ emitted_insts sb se /\
+    emitted_insts sb se =
+      emitted_insts sb s1 ++ emitted_insts s1 s4 ++
+      emitted_insts s4 s7 ++ emitted_insts s7 s8 ++ emitted_insts s8 se
+Proof
+  simp[enc_static_loop_body_def, comp_bind_def, comp_ignore_bind_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  rename1 `emit_op MLOAD [count_ptr] sb = (i,s1)` >>
+  rename1 `emit_op ADD [src; Lit 32w] s1 = (src_data,s2)` >>
+  rename1 `emit_op MUL [i; Lit (n2w msz)] s2 = (src_off,s3)` >>
+  rename1 `emit_op ADD [src_data;src_off] s3 = (child_src,s4)` >>
+  rename1 `emit_op ADD [dst; Lit 32w] s4 = (dst_data,s5)` >>
+  rename1 `emit_op MUL [i; Lit (n2w asz)] s5 = (dst_off,s6)` >>
+  rename1 `emit_op ADD [dst_data;dst_off] s6 = (child_dst,s7)` >>
+  rename1 `compile_abi_encode_static_info child_dst child_src ei s7 = (ignored,s8)` >>
+  rename1 `emit_op ADD [i; Lit 1w] s8 = (next,s9)` >>
+  imp_res_tac (cj 7 enc_indexed_address_code) >>
+  imp_res_tac (cj 6 enc_indexed_address_code) >>
+  imp_res_tac enc_emit_op_append >>
+  imp_res_tac enc_emit_void_append >>
+  imp_res_tac emit_op_same_blocks >>
+  imp_res_tac emit_void_same_blocks >>
+  drule enc_static_info_same_block >> strip_tac >>
+  `emitted_insts s8 se = emitted_insts s8 s9 ++ emitted_insts s9 se` by
+    (irule emitted_insts_append >> simp[]) >>
+  `emitted_insts sb s4 = emitted_insts sb s1 ++ emitted_insts s1 s4` by
+    (irule emitted_insts_append >> simp[] >> gvs[APPEND_ASSOC]) >>
+  `emitted_insts sb s7 = emitted_insts sb s4 ++ emitted_insts s4 s7` by
+    (irule emitted_insts_append >> simp[] >> gvs[APPEND_ASSOC]) >>
+  `emitted_insts sb s8 = emitted_insts sb s7 ++ emitted_insts s7 s8` by
+    (irule emitted_insts_append >> simp[] >> gvs[APPEND_ASSOC]) >>
+  `emitted_insts sb se = emitted_insts sb s8 ++ emitted_insts s8 se` by
+    (irule emitted_insts_append >> simp[] >> gvs[APPEND_ASSOC]) >>
+  gvs[same_blocks_def, APPEND_ASSOC] >> metis_tac[]
+QED
+
+Theorem enc_abi_list_index:
+  !ts vs avs. vyper_to_abi_list env ts vs = SOME avs ==>
+  LENGTH vs = LENGTH ts /\ LENGTH avs = LENGTH ts /\
+  (!k. k < LENGTH ts ==>
+    vyper_to_abi env (EL k ts) (EL k vs) = SOME (EL k avs))
+Proof
+  Induct_on `ts` >> Cases_on `vs` >>
+  simp[Once vyper_to_abi_def] >> rpt strip_tac >>
+  gvs[AllCaseEqs()] >>
+  first_x_assum drule >> strip_tac >> gvs[] >>
+  Cases_on `k` >> gvs[]
+QED
+
+Theorem enc_old_operand_mono:
+  !a b op. a.cs_next_var <= b.cs_next_var /\
+  (!x. op = Var x ==> not_fresh_at a x) ==>
+  (!x. op = Var x ==> not_fresh_at b x)
+Proof
+  simp[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]
+QED
+
+Theorem enc_emit_op_old_result:
+  emit_op opc args a = (op,b) ==>
+  (!x. op = Var x ==> not_fresh_at b x)
+Proof
+  strip_tac >> drule emitted_insts_emit_op >>
+  simp[not_fresh_at_def, ASCIInumbersTheory.toString_11]
+QED
+
+Theorem enc_static_loop_setup_run:
+  emit_op MLOAD [count_ptr] a0 = (i,a1) /\
+  emit_op ADD [src;Lit 32w] a1 = (sd,a2) /\
+  emit_op MUL [i;Lit (n2w msz)] a2 = (so,a3) /\
+  emit_op ADD [sd;so] a3 = (child_src,a4) /\
+  emit_op ADD [dst;Lit 32w] a4 = (dd,a5) /\
+  emit_op MUL [i;Lit (n2w asz)] a5 = (dof,a6) /\
+  emit_op ADD [dd;dof] a6 = (child_dst,a7) /\
+  (!x. MEM (Var x) [count_ptr;src;dst] ==> not_fresh_at a0 x) /\
+  eval_operand count_ptr s = SOME (n2w ip) /\
+  eval_operand src s = SOME (n2w src_n) /\
+  eval_operand dst s = SOME (n2w dst_n) /\
+  mem_word_at ip s.vs_memory = n2w k /\ ip < dimword (:256) ==>
+  ?t. run_inst_seq (emitted_insts a0 a7) s = OK t /\
+    eval_operand i t = SOME (n2w k) /\
+    eval_operand child_src t = SOME (n2w (src_n + 32 + k * msz)) /\
+    eval_operand child_dst t = SOME (n2w (dst_n + 32 + k * asz)) /\
+    (!old. (!x. old = Var x ==> not_fresh_at a0 x) ==>
+      eval_operand old t = eval_operand old s) /\
+    t.vs_memory = s.vs_memory /\ t.vs_labels = s.vs_labels /\
+    t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
+    t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+    t.vs_logs = s.vs_logs /\ t.vs_requests = s.vs_requests
+Proof
+  strip_tac >>
+  `a1.cs_next_var = a0.cs_next_var + 1 /\
+   a4.cs_next_var = a0.cs_next_var + 4` by
+    (imp_res_tac (cj 4 emitted_insts_emit_op) >> decide_tac) >>
+  `(!x. i = Var x ==> not_fresh_at a1 x) /\
+   (!x. child_src = Var x ==> not_fresh_at a4 x)` by
+    metis_tac[enc_emit_op_old_result] >>
+  `a1.cs_current_insts = a0.cs_current_insts ++ emitted_insts a0 a1 /\
+   a4.cs_current_insts = a1.cs_current_insts ++ emitted_insts a1 a4 /\
+   a7.cs_current_insts = a4.cs_current_insts ++ emitted_insts a4 a7` by
+    (imp_res_tac (cj 7 enc_indexed_address_code) >>
+     metis_tac[enc_emit_op_append]) >>
+  `step_inst_base (mk_inst a0.cs_next_id MLOAD [count_ptr]
+    [STRING #"%" (toString a0.cs_next_var)]) s =
+    OK (update_var (STRING #"%" (toString a0.cs_next_var)) (n2w k) s)` by
+    (qpat_assum `eval_operand count_ptr s = _` (mp_tac o MATCH_MP step_MLOAD) >>
+     simp[GSYM mem_word_at_eq_mload]) >>
+  drule_all enc_emit_op_readonly_run >>
+  disch_then (qx_choose_then `s1` strip_assume_tac) >>
+  `eval_operand src s1 = SOME (n2w src_n) /\
+   eval_operand dst s1 = SOME (n2w dst_n)` by (fs[] >> metis_tac[]) >>
+  `!x. MEM (Var x) [src;i] ==> not_fresh_at a1 x` by
+    (fs[] >> metis_tac[enc_old_operand_mono, arithmeticTheory.LESS_EQ_ADD]) >>
+  drule_all enc_indexed_address_run >>
+  disch_then (qx_choose_then `s2` strip_assume_tac) >>
+  `eval_operand dst s2 = SOME (n2w dst_n) /\
+   eval_operand i s2 = SOME (n2w k)` by
+    (fs[] >> metis_tac[enc_old_operand_mono, arithmeticTheory.LESS_EQ_ADD]) >>
+  `!x. dst = Var x ==> not_fresh_at a4 x` by
+    (match_mp_tac enc_old_operand_mono >> qexists_tac `a0` >> simp[] >> fs[] >> metis_tac[]) >>
+  `!x. i = Var x ==> not_fresh_at a4 x` by
+    (match_mp_tac enc_old_operand_mono >> qexists_tac `a1` >> simp[]) >>
+  `!x. MEM (Var x) [dst;i] ==> not_fresh_at a4 x` by (fs[] >> metis_tac[]) >>
+  qpat_x_assum `step_inst_base _ s = _` kall_tac >>
+  qpat_x_assum `emit_op MLOAD _ _ = _` kall_tac >>
+  qpat_x_assum `emit_op ADD [src;_] _ = _` kall_tac >>
+  qpat_x_assum `emit_op MUL [i;Lit (n2w msz)] _ = _` kall_tac >>
+  qpat_x_assum `emit_op ADD [sd;so] _ = _` kall_tac >>
+  drule_all enc_indexed_address_run >>
+  disch_then (qx_choose_then `s3` strip_assume_tac) >>
+  `emitted_insts a0 a4 = emitted_insts a0 a1 ++ emitted_insts a1 a4` by
+    (irule emitted_insts_append >> simp[]) >>
+  `emitted_insts a0 a7 = emitted_insts a0 a4 ++ emitted_insts a4 a7` by
+    (irule emitted_insts_append >> simp[]) >>
+  qexists_tac `s3` >> simp[GSYM wordsTheory.word_add_n2w,
+    GSYM wordsTheory.word_mul_n2w] >> conj_tac
+  >- (irule enc_run_inst_seq_compose >> qexists_tac `s2` >> simp[] >>
+      irule enc_run_inst_seq_compose >> qexists_tac `s1` >> simp[]) >>
+  rpt strip_tac >>
+  `(!x. old = Var x ==> not_fresh_at a1 x) /\
+   (!x. old = Var x ==> not_fresh_at a4 x)` by
+    (conj_tac >> match_mp_tac enc_old_operand_mono >>
+     qexists_tac `a0` >> simp[]) >> metis_tac[]
+QED
+
+Theorem enc_frame_readonly:
+  (!old. (!x. old = Var x ==> not_fresh_at st x) ==>
+    eval_operand old t = eval_operand old s) /\
+  t.vs_memory = s.vs_memory /\ t.vs_labels = s.vs_labels /\
+  t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
+  t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+  t.vs_logs = s.vs_logs /\ t.vs_requests = s.vs_requests /\
+  enc_scratch (frag_ids st z) lo top s ==>
+  enc_frame st z lo top outs s t
+Proof
+  strip_tac >> drule_all enc_scratch_cong >> strip_tac >>
+  simp[enc_frame_def] >> rpt strip_tac >>
+  qpat_x_assum `!old. _` (qspec_then `Var x` mp_tac) >>
+  simp[eval_operand_def]
+QED
+
+Theorem enc_scratch_subset:
+  FINITE ids /\ sub SUBSET ids /\ enc_scratch ids lo top s ==>
+  enc_scratch sub lo top s
+Proof
+  strip_tac >>
+  `FINITE {i | i IN ids /\ FLOOKUP s.vs_allocas i = NONE}` by
+    (irule pred_setTheory.SUBSET_FINITE_I >> qexists_tac `ids` >>
+     simp[pred_setTheory.SUBSET_DEF]) >>
+  `CARD {i | i IN sub /\ FLOOKUP s.vs_allocas i = NONE} <=
+   CARD {i | i IN ids /\ FLOOKUP s.vs_allocas i = NONE}` by
+    (irule pred_setTheory.CARD_SUBSET >> simp[] >>
+     gvs[pred_setTheory.SUBSET_DEF]) >>
+  qpat_x_assum `enc_scratch ids _ _ _` mp_tac >>
+  rewrite_tac[enc_scratch_def] >> strip_tac >>
+  simp[enc_scratch_def] >> rpt strip_tac >>
+  metis_tac[pred_setTheory.SUBSET_DEF]
+QED
+
+Theorem enc_static_loop_element_pre:
+  enc_loop_ctx st z ops lo top (ArrayTV tv (Dynamic n))
+    (ArrayV (DynArrayV vs)) src_n outs s0 count_ptr ip s /\
+  value_has_type (ArrayTV tv (Dynamic n)) (ArrayV (DynArrayV vs)) /\
+  k < LENGTH vs /\ MEM (dst_n,32 + LENGTH vs * type_memory_size tv) outs /\
+  frag_ids a b SUBSET frag_ids st z /\
+  (!x. MEM (Var x) [child_dst;child_src] ==> not_fresh_at a x) /\
+  evaluate_type env ty = SOME tv /\ ~is_dynamic (vyper_to_abi_type env ty) /\
+  LIST_REL (\v av. vyper_to_abi env ty v = SOME av) vs avs ==>
+  value_has_type tv (EL k vs) /\
+  vyper_to_abi env ty (EL k vs) = SOME (EL k avs) /\
+  enc_pre a b [child_dst;child_src] lo top tv (EL k vs)
+    (src_n + 32 + k * type_memory_size tv)
+    [(dst_n + 32 + k * type_memory_size tv,
+      LENGTH (enc (vyper_to_abi_type env ty) (EL k avs)))] s
+Proof
+  strip_tac >>
+  drule_all enc_loop_ctx_dynarray_source >> strip_tac >>
+  drule_all enc_loop_ctx_dynarray_bounds >> strip_tac >>
+  drule_all enc_loop_ctx_array_slot >> strip_tac >>
+  `vyper_to_abi env ty (EL k vs) = SOME (EL k avs)` by
+    (fs[LIST_REL_EL_EQN]) >>
+  `LENGTH (enc (vyper_to_abi_type env ty) (EL k avs)) = type_memory_size tv` by
+    (irule val_in_memory_static_enc_length >> metis_tac[]) >>
+  `enc_scratch (frag_ids st z) lo top s` by fs[enc_loop_ctx_def, enc_pre_def] >>
+  `enc_scratch (frag_ids a b) lo top s` by
+    (irule enc_scratch_subset >> qexists_tac `frag_ids st z` >> simp[]) >>
+  `SUC k <= n` by (fs[value_has_type_def]) >>
+  `SUC k * type_memory_size tv <= n * type_memory_size tv` by
+    simp[arithmeticTheory.LE_MULT_RCANCEL] >>
+  qpat_x_assum `SUC k * _ <= _` mp_tac >>
+  pure_rewrite_tac[arithmeticTheory.MULT_CLAUSES] >> strip_tac >>
+  simp[enc_pre_def] >>
+  irule regions_disjoint_subregions >>
+  goal_assum (drule_at Any) >>
+  simp[type_memory_size_def] >> decide_tac
+QED
+
+Theorem enc_abi_replicate_list:
+  vyper_to_abi_list env (REPLICATE (LENGTH vs) ty) vs = SOME avs ==>
+  LIST_REL (\v av. vyper_to_abi env ty v = SOME av) vs avs
+Proof
+  strip_tac >> drule enc_abi_list_index >>
+  simp[LIST_REL_EL_EQN, EL_REPLICATE] >> metis_tac[]
+QED
+
+Theorem enc_frame_preserves_bytes:
+  enc_frame st z lo top outs s t /\ p + n <= lo /\
+  EVERY (regions_disjoint (p,n)) outs ==>
+  mem_bytes_at p n t.vs_memory = mem_bytes_at p n s.vs_memory
+Proof
+  strip_tac >> irule mem_bytes_at_pointwise >> rpt strip_tac >>
+  qpat_x_assum `enc_frame _ _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[enc_frame_def, enc_scratch_def] >> strip_tac >>
+  first_x_assum irule >> conj_tac
+  >- (rpt strip_tac >> first_x_assum drule_all >> decide_tac) >>
+  qpat_x_assum `EVERY _ outs` mp_tac >>
+  rewrite_tac[EVERY_MEM] >> strip_tac >> rpt strip_tac >>
+  rename1 `MEM out outs` >> Cases_on `out` >>
+  first_x_assum drule >>
+  simp[venomMemDefsTheory.regions_disjoint_def] >> decide_tac
+QED
+
+Theorem enc_frame_preserves_external_bytes:
+  enc_frame a b lo top outs s t /\ j NOTIN frag_ids a b /\
+  FLOOKUP s.vs_allocas j = SOME (c,sz) /\
+  EVERY (regions_disjoint (c,sz)) outs ==>
+  mem_bytes_at c sz t.vs_memory = mem_bytes_at c sz s.vs_memory
+Proof
+  strip_tac >> irule mem_bytes_at_pointwise >> rpt strip_tac >>
+  qpat_x_assum `enc_frame _ _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[enc_frame_def, enc_scratch_def] >> strip_tac >>
+  first_x_assum irule >> reverse conj_tac
+  >- (qpat_x_assum `EVERY _ outs` mp_tac >>
+      rewrite_tac[EVERY_MEM] >> strip_tac >> rpt strip_tac >>
+      rename1 `MEM out outs` >> Cases_on `out` >>
+      first_x_assum drule >>
+      simp[venomMemDefsTheory.regions_disjoint_def] >> decide_tac) >>
+  rpt strip_tac >>
+  `FLOOKUP t.vs_allocas j = SOME (c,sz)` by metis_tac[] >>
+  `i <> j` by metis_tac[] >>
+  qpat_x_assum `alloca_inv t` mp_tac >>
+  pure_rewrite_tac[venomMemDefsTheory.alloca_inv_def,
+     venomMemDefsTheory.allocas_non_overlapping_def] >> strip_tac >>
+  qpat_x_assum `!a1 a2 b1 sz1 b2 sz2. _` drule_all >>
+  decide_tac
+QED
+
+Theorem enc_frame_preserves_external_word:
+  enc_frame a b lo top outs s t /\ j NOTIN frag_ids a b /\
+  FLOOKUP s.vs_allocas j = SOME (c,32) /\
+  EVERY (\(p,n). p+n <= lo) outs /\ lo <= c ==>
+  mem_word_at c t.vs_memory = mem_word_at c s.vs_memory
+Proof
+  strip_tac >>
+  `EVERY (regions_disjoint (c,32)) outs` by
+    (qpat_x_assum `EVERY _ outs` mp_tac >>
+     rewrite_tac[EVERY_MEM] >> strip_tac >>
+     rewrite_tac[EVERY_MEM] >> Cases >> strip_tac >>
+     first_x_assum drule >>
+     simp[venomMemDefsTheory.regions_disjoint_def]) >>
+  drule_all enc_frame_preserves_external_bytes >>
+  simp[mem_bytes_at_def, mem_word_at_def] >> metis_tac[]
+QED
+
+Theorem enc_static_slot_prefix:
+  has_types ts avs /\ EVERY (\t. ~is_dynamic t) ts /\
+  k < LENGTH avs /\ enc_prefix_mem p B ts avs k s /\
+  enc_frame a b lo top
+    [(p + LENGTH (enc_head_upto B ts avs k),
+      LENGTH (enc (EL k ts) (EL k avs)))] s t /\
+  p + LENGTH (enc_head_upto B ts avs k) <= lo /\
+  mem_bytes_at (p + LENGTH (enc_head_upto B ts avs k))
+    (LENGTH (enc (EL k ts) (EL k avs))) t.vs_memory =
+      enc (EL k ts) (EL k avs) ==>
+  enc_prefix_mem p B ts avs (SUC k) t
+Proof
+  strip_tac >>
+  `LENGTH ts = LENGTH avs` by metis_tac[has_types_LIST_REL, LIST_REL_LENGTH] >>
+  `~is_dynamic (EL k ts)` by fs[EVERY_EL] >>
+  `enc_tail_upto ts avs k = []` by
+    (simp[enc_tail_upto_def] >> irule enc_prefix_tail_static >>
+     simp[EVERY_TAKE]) >>
+  `mem_bytes_at p (LENGTH (enc_head_upto B ts avs k)) t.vs_memory =
+     enc_head_upto B ts avs k` by
+    (drule enc_frame_preserves_bytes >>
+     disch_then (qspecl_then [`p`, `LENGTH (enc_head_upto B ts avs k)`] mp_tac) >>
+     simp[venomMemDefsTheory.regions_disjoint_def] >>
+     fs[enc_prefix_mem_def]) >>
+  irule enc_prefix_mem_suc >> simp[] >>
+  fs[mem_bytes_at_def]
+QED
+
+Theorem enc_static_slot_prefix_lengths:
+  LENGTH ts = LENGTH avs /\ EVERY (\t. ~is_dynamic t) ts /\
+  k < LENGTH avs /\ enc_prefix_mem p B ts avs k s /\
+  enc_frame a b lo top
+    [(p + LENGTH (enc_head_upto B ts avs k),
+      LENGTH (enc (EL k ts) (EL k avs)))] s t /\
+  p + LENGTH (enc_head_upto B ts avs k) <= lo /\
+  mem_bytes_at (p + LENGTH (enc_head_upto B ts avs k))
+    (LENGTH (enc (EL k ts) (EL k avs))) t.vs_memory =
+      enc (EL k ts) (EL k avs) ==>
+  enc_prefix_mem p B ts avs (SUC k) t
+Proof
+  strip_tac >>
+  `~is_dynamic (EL k ts)` by fs[EVERY_EL] >>
+  `enc_tail_upto ts avs k = []` by
+    (simp[enc_tail_upto_def] >> irule enc_prefix_tail_static >>
+     simp[EVERY_TAKE]) >>
+  `mem_bytes_at p (LENGTH (enc_head_upto B ts avs k)) t.vs_memory =
+     enc_head_upto B ts avs k` by
+    (drule enc_frame_preserves_bytes >>
+     disch_then (qspecl_then [`p`, `LENGTH (enc_head_upto B ts avs k)`] mp_tac) >>
+     simp[venomMemDefsTheory.regions_disjoint_def] >>
+     fs[enc_prefix_mem_def]) >>
+  irule enc_prefix_mem_suc_lengths >> simp[] >> fs[mem_bytes_at_def]
+QED
+
+Theorem enc_static_counter_run_preserve:
+  emit_op ADD [index;Lit 1w] a = (next,b) /\
+  emit_void MSTORE [count_ptr;next] b = ((),c) /\
+  eval_operand index s = SOME (n2w k) /\
+  eval_operand count_ptr s = SOME (n2w ip) /\
+  (!x. count_ptr = Var x ==> not_fresh_at a x) /\
+  st.cs_next_var <= a.cs_next_var /\
+  enc_scratch (frag_ids st z) lo top s /\
+  j IN frag_ids st z /\ FLOOKUP s.vs_allocas j = SOME (ip,32) ==>
+  ?u. run_inst_seq (emitted_insts a b ++ emitted_insts b c) s = OK u /\
+      mem_word_at ip u.vs_memory = n2w (SUC k) /\
+      u.vs_labels = s.vs_labels /\
+      (!p n. p + n <= lo ==>
+        mem_bytes_at p n u.vs_memory = mem_bytes_at p n s.vs_memory) /\
+      enc_frame st z lo top outs s u /\
+      eval_operand count_ptr u = SOME (n2w ip)
+Proof
+  strip_tac >>
+  `step_inst_base (mk_inst a.cs_next_id ADD [index;Lit 1w]
+      [STRING #"%" (toString a.cs_next_var)]) s =
+    OK (update_var (STRING #"%" (toString a.cs_next_var)) (n2w (SUC k)) s)` by
+    (rewrite_tac[arithmeticTheory.ADD1, GSYM wordsTheory.word_add_n2w] >>
+     irule step_ADD >> simp[eval_operand_lit]) >>
+  drule_all enc_emit_op_run_frame >>
+  disch_then (qspec_then `outs` strip_assume_tac) >>
+  `eval_operand count_ptr s' = SOME (n2w ip)` by metis_tac[] >>
+  `enc_scratch (frag_ids st z) lo top s' /\
+   FLOOKUP s'.vs_allocas j = SOME (ip,32)` by fs[enc_frame_def] >>
+  `ip < dimword (:256)` by
+    (drule_all enc_scratch_alloca_bound >> strip_tac >>
+     qpat_x_assum `enc_scratch _ _ _ s` mp_tac >>
+     pure_rewrite_tac[enc_scratch_def] >> strip_tac >> decide_tac) >>
+  `enc_frame st z lo top outs s' (mstore ip (n2w (SUC k)) s')` by
+    (irule enc_frame_mstore_scratch >> metis_tac[]) >>
+  qexists_tac `mstore ip (n2w (SUC k)) s'` >> conj_tac
+  >- (irule enc_run_inst_seq_compose >> goal_assum (drule_at Any) >>
+      drule emitted_insts_emit_void >> strip_tac >>
+      simp[run_inst_seq_def, step_inst_base_def, mk_inst_def,
+           exec_write2_def]) >>
+  rewrite_tac[valueEncodingPropsTheory.mstore_mem_word_at_same] >>
+  conj_tac >- simp[mstore_def] >> conj_tac
+  >- (rpt strip_tac >>
+      `lo <= ip` by
+        (qpat_x_assum `enc_scratch _ _ _ s` mp_tac >>
+         pure_rewrite_tac[enc_scratch_def] >> strip_tac >> metis_tac[]) >>
+      `mem_bytes_at p n (mstore ip (n2w (SUC k)) s').vs_memory =
+       mem_bytes_at p n s'.vs_memory` suffices_by simp[] >>
+      irule mstore_mem_bytes_at_disjoint >>
+      simp[venomMemDefsTheory.regions_disjoint_def] >> decide_tac) >>
+  conj_tac
+  >- (irule enc_frame_trans >> qexists_tac `s'` >> simp[]) >>
+  Cases_on `count_ptr` >> fs[eval_operand_def, mstore_def, lookup_var_def]
+QED
+
+Theorem enc_static_counter_run:
+  emit_op ADD [index;Lit 1w] a = (next,b) /\
+  emit_void MSTORE [count_ptr;next] b = ((),c) /\
+  eval_operand index s = SOME (n2w k) /\
+  eval_operand count_ptr s = SOME (n2w ip) /\
+  (!x. count_ptr = Var x ==> not_fresh_at a x) /\
+  st.cs_next_var <= a.cs_next_var /\
+  enc_scratch (frag_ids st z) lo top s /\
+  j IN frag_ids st z /\ FLOOKUP s.vs_allocas j = SOME (ip,32) ==>
+  ?u. run_inst_seq (emitted_insts a b ++ emitted_insts b c) s = OK u /\
+      mem_word_at ip u.vs_memory = n2w (SUC k) /\
+      u.vs_labels = s.vs_labels /\
+      (!p n. p + n <= lo ==>
+        mem_bytes_at p n u.vs_memory = mem_bytes_at p n s.vs_memory) /\
+      enc_frame st z lo top outs s u
+Proof
+  strip_tac >> drule_all enc_static_counter_run_preserve >>
+  disch_then (qspec_then `outs` strip_assume_tac) >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem enc_static_slot_counter_inv:
+  has_types ts avs /\ EVERY (\t. ~is_dynamic t) ts /\
+  k < LENGTH avs /\ enc_prefix_mem p B ts avs k s /\
+  enc_frame a b lo top
+    [(p + LENGTH (enc_head_upto B ts avs k),
+      LENGTH (enc (EL k ts) (EL k avs)))] s t /\
+  p + LENGTH (enc_head_upto B ts avs k) <= lo /\
+  mem_bytes_at (p + LENGTH (enc_head_upto B ts avs k))
+    (LENGTH (enc (EL k ts) (EL k avs))) t.vs_memory =
+      enc (EL k ts) (EL k avs) /\
+  p + LENGTH (enc_head_upto B ts avs (SUC k)) <= lo /\
+  (!q n. q + n <= lo ==>
+    mem_bytes_at q n u.vs_memory = mem_bytes_at q n t.vs_memory) /\
+  mem_word_at ip u.vs_memory = n2w (SUC k) /\ inv_ctx u ==>
+  enc_array_inv inv_ctx p B ts avs ip NONE (SUC k) u
+Proof
+  strip_tac >>
+  `enc_prefix_mem p B ts avs (SUC k) t` by
+    (irule enc_static_slot_prefix >> metis_tac[]) >>
+  `enc_tail_upto ts avs (SUC k) = []` by
+    (simp[enc_tail_upto_def] >> irule enc_prefix_tail_static >>
+     simp[EVERY_TAKE]) >>
+  irule enc_array_inv_suc >> simp[] >>
+  fs[enc_prefix_mem_def] >>
+  simp[mem_bytes_at_def]
+QED
+
+Theorem enc_static_slot_counter_inv_lengths:
+  LENGTH ts = LENGTH avs /\ EVERY (\t. ~is_dynamic t) ts /\
+  k < LENGTH avs /\ enc_prefix_mem p B ts avs k s /\
+  enc_frame a b lo top
+    [(p + LENGTH (enc_head_upto B ts avs k),
+      LENGTH (enc (EL k ts) (EL k avs)))] s t /\
+  p + LENGTH (enc_head_upto B ts avs k) <= lo /\
+  mem_bytes_at (p + LENGTH (enc_head_upto B ts avs k))
+    (LENGTH (enc (EL k ts) (EL k avs))) t.vs_memory =
+      enc (EL k ts) (EL k avs) /\
+  p + LENGTH (enc_head_upto B ts avs (SUC k)) <= lo /\
+  (!q n. q + n <= lo ==>
+    mem_bytes_at q n u.vs_memory = mem_bytes_at q n t.vs_memory) /\
+  mem_word_at ip u.vs_memory = n2w (SUC k) /\ inv_ctx u ==>
+  enc_array_inv inv_ctx p B ts avs ip NONE (SUC k) u
+Proof
+  strip_tac >>
+  `enc_prefix_mem p B ts avs (SUC k) t` by
+    (irule enc_static_slot_prefix_lengths >> metis_tac[]) >>
+  `enc_tail_upto ts avs (SUC k) = []` by
+    (simp[enc_tail_upto_def] >> irule enc_prefix_tail_static >>
+     simp[EVERY_TAKE]) >>
+  irule enc_array_inv_suc >> simp[] >>
+  fs[enc_prefix_mem_def] >> simp[mem_bytes_at_def]
+QED
+
+Theorem enc_frame_lift:
+  enc_frame a b lo child_top local_outs s t /\
+  frag_ids a b SUBSET frag_ids st z /\
+  (!x. not_fresh_at st x ==> not_fresh_at a x) /\
+  (!p n. MEM (p,n) local_outs ==>
+    ?q m. MEM (q,m) outs /\ q <= p /\ p+n <= q+m) /\
+  enc_scratch (frag_ids st z) lo top t ==>
+  enc_frame st z lo top outs s t
+Proof
+  strip_tac >>
+  `enc_frame a b lo child_top outs s t` by
+    (irule enc_frame_cover_outputs >> metis_tac[]) >>
+  qpat_x_assum `enc_frame a b lo child_top outs s t` mp_tac >>
+  rewrite_tac[enc_frame_def] >> strip_tac >>
+  simp[enc_frame_def] >> conj_tac
+  >- (rpt strip_tac >>
+      qpat_x_assum `!a. _ ==> mem_bytes_at _ _ _ = _` irule >>
+      simp[] >> metis_tac[pred_setTheory.SUBSET_DEF]) >>
+  metis_tac[pred_setTheory.SUBSET_DEF]
+QED
+
+Theorem enc_pre_reserve_enclosing:
+  enc_pre a b ops lo top tv v src local_outs s /\
+  frag_ids a b SUBSET frag_ids st z /\
+  enc_scratch (frag_ids st z) lo top s ==>
+  enc_pre a b ops lo
+    (top - 32 * CARD {i | i IN (frag_ids st z DIFF frag_ids a b) /\
+                          FLOOKUP s.vs_allocas i = NONE})
+    tv v src local_outs s
+Proof
+  strip_tac >>
+  `FINITE (frag_ids st z DIFF frag_ids a b) /\
+   DISJOINT (frag_ids a b) (frag_ids st z DIFF frag_ids a b) /\
+   frag_ids a b UNION (frag_ids st z DIFF frag_ids a b) = frag_ids st z` by
+    (simp[] >> ASM_SET_TAC[]) >>
+  `enc_scratch (frag_ids a b) lo
+    (top - 32 * CARD {i | i IN (frag_ids st z DIFF frag_ids a b) /\
+                          FLOOKUP s.vs_allocas i = NONE}) s` by
+    (irule enc_scratch_restrict_reserved >> simp[]) >>
+  fs[enc_pre_def]
+QED
+
+Theorem enc_frame_restore_enclosing:
+  enc_frame a b lo
+    (top - 32 * CARD {i | i IN (frag_ids st z DIFF frag_ids a b) /\
+                          FLOOKUP s.vs_allocas i = NONE}) local_outs s t /\
+  frag_ids a b SUBSET frag_ids st z /\
+  enc_scratch (frag_ids st z) lo top s /\
+  (!x. not_fresh_at st x ==> not_fresh_at a x) /\
+  (!p n. MEM (p,n) local_outs ==>
+    ?q m. MEM (q,m) outs /\ q <= p /\ p+n <= q+m) ==>
+  enc_frame st z lo top outs s t
+Proof
+  strip_tac >>
+  `FINITE (frag_ids st z DIFF frag_ids a b) /\
+   DISJOINT (frag_ids a b) (frag_ids st z DIFF frag_ids a b) /\
+   frag_ids a b UNION (frag_ids st z DIFF frag_ids a b) = frag_ids st z` by
+    (simp[] >> ASM_SET_TAC[]) >>
+  `enc_scratch (frag_ids st z) lo top t` by
+    (qpat_assum `_ UNION _ = frag_ids st z`
+       (fn th => once_rewrite_tac[GSYM th]) >>
+     irule enc_scratch_restore_reserved >> simp[] >>
+     fs[enc_frame_def] >> metis_tac[pred_setTheory.IN_DIFF]) >>
+  irule enc_frame_lift >> metis_tac[]
+QED
+
+Theorem compile_abi_encode_static_info_enclosing_local_frag:
+  compile_abi_encode_static_info dst src ei a = (op,b) /\
+  abi_enc_plan env ty ei /\ ~is_dynamic (vyper_to_abi_type env ty) /\
+  evaluate_type env ty = SOME tv /\ value_has_type tv v /\
+  vyper_to_abi env ty v = SOME av /\
+  eval_operand dst s0 = SOME dst_w /\ eval_operand src s0 = SOME src_w /\
+  enc_pre a b [dst;src] lo top tv v (w2n src_w)
+    [(w2n dst_w,LENGTH (enc (vyper_to_abi_type env ty) av))] s0 /\
+  frag_ids a b SUBSET frag_ids st z /\
+  enc_scratch (frag_ids st z) lo top s0 /\
+  (!x. not_fresh_at st x ==> not_fresh_at a x) /\
+  (?p n. MEM (p,n) outs /\ p <= w2n dst_w /\
+    w2n dst_w + LENGTH (enc (vyper_to_abi_type env ty) av) <= p+n) ==>
+  frag_exec ctx a b (\s. s = s0)
+    (\s. mem_bytes_at (w2n dst_w)
+           (LENGTH (enc (vyper_to_abi_type env ty) av)) s.vs_memory =
+           enc (vyper_to_abi_type env ty) av /\
+         eval_operand op s =
+           SOME (n2w (LENGTH (enc (vyper_to_abi_type env ty) av))) /\
+         s.vs_labels = s0.vs_labels /\
+         enc_frame st z lo top outs s0 s /\
+         (?local_top. enc_frame a b lo local_top
+           [(w2n dst_w,LENGTH (enc (vyper_to_abi_type env ty) av))] s0 s)) R
+Proof
+  rpt strip_tac >>
+  drule_all enc_pre_reserve_enclosing >> strip_tac >>
+  drule_all compile_abi_encode_static_info_abi_frag >>
+  disch_then (qspecl_then [`ctx`, `R`] mp_tac) >> strip_tac >>
+  irule frag_exec_conseq >> goal_assum (drule_at Any) >> simp[] >>
+  rpt strip_tac
+  >- (irule enc_frame_restore_enclosing >> simp[] >>
+      qexistsl_tac [`a`, `b`,
+        `[(w2n dst_w,LENGTH (enc (vyper_to_abi_type env ty) av))]`] >>
+      simp[] >> qexistsl_tac [`p`, `n`] >> simp[]) >>
+  goal_assum (drule_at Any)
+QED
+
+Theorem compile_abi_encode_static_info_enclosing_frag:
+  compile_abi_encode_static_info dst src ei a = (op,b) /\
+  abi_enc_plan env ty ei /\ ~is_dynamic (vyper_to_abi_type env ty) /\
+  evaluate_type env ty = SOME tv /\ value_has_type tv v /\
+  vyper_to_abi env ty v = SOME av /\
+  eval_operand dst s0 = SOME dst_w /\ eval_operand src s0 = SOME src_w /\
+  enc_pre a b [dst;src] lo top tv v (w2n src_w)
+    [(w2n dst_w,LENGTH (enc (vyper_to_abi_type env ty) av))] s0 /\
+  frag_ids a b SUBSET frag_ids st z /\
+  enc_scratch (frag_ids st z) lo top s0 /\
+  (!x. not_fresh_at st x ==> not_fresh_at a x) /\
+  (?p n. MEM (p,n) outs /\ p <= w2n dst_w /\
+    w2n dst_w + LENGTH (enc (vyper_to_abi_type env ty) av) <= p+n) ==>
+  frag_exec ctx a b (\s. s = s0)
+    (\s. mem_bytes_at (w2n dst_w)
+           (LENGTH (enc (vyper_to_abi_type env ty) av)) s.vs_memory =
+           enc (vyper_to_abi_type env ty) av /\
+         eval_operand op s =
+           SOME (n2w (LENGTH (enc (vyper_to_abi_type env ty) av))) /\
+         s.vs_labels = s0.vs_labels /\
+         enc_frame st z lo top outs s0 s) R
+Proof
+  rpt strip_tac >>
+  drule_all enc_pre_reserve_enclosing >> strip_tac >>
+  drule_all compile_abi_encode_static_info_abi_frag >>
+  disch_then (qspecl_then [`ctx`, `R`] mp_tac) >> strip_tac >>
+  irule frag_exec_conseq >> goal_assum (drule_at Any) >> simp[] >>
+  rpt strip_tac >> irule enc_frame_restore_enclosing >> simp[] >>
+  qexistsl_tac [`a`, `b`,
+    `[(w2n dst_w,LENGTH (enc (vyper_to_abi_type env ty) av))]`] >>
+  simp[] >> qexistsl_tac [`p`, `n`] >> simp[]
+QED
+
+Theorem enc_loop_ctx_frame_step:
+  enc_loop_ctx st z ops lo top tv v src outs s0 count_ptr ip s /\
+  value_has_type tv v /\ enc_frame st z lo top outs s t /\
+  t.vs_labels = s.vs_labels /\
+  eval_operand count_ptr t = SOME (n2w ip) ==>
+  enc_loop_ctx st z ops lo top tv v src outs s0 count_ptr ip t
+Proof
+  strip_tac >>
+  `enc_pre st z ops lo top tv v src outs s /\
+   enc_frame st z lo top outs s0 s /\
+   s.vs_labels = s0.vs_labels /\
+   FLOOKUP s.vs_allocas st.cs_next_id = SOME (ip,32) /\ lo <= ip` by
+    fs[enc_loop_ctx_def] >>
+  `enc_pre st z ops lo top tv v src outs t` by
+    (irule enc_pre_transport >> metis_tac[]) >>
+  simp[enc_loop_ctx_def] >> conj_tac
+  >- (irule enc_frame_trans >> qexists_tac `s` >> simp[]) >>
+  fs[enc_frame_def] >> metis_tac[]
+QED
+
+Theorem enc_loop_ctx_inst_idx[simp]:
+  enc_loop_ctx st z ops lo top tv v src outs s0 count_ptr ip
+    (s with vs_inst_idx := idx) =
+  enc_loop_ctx st z ops lo top tv v src outs s0 count_ptr ip s
+Proof
+  Cases_on `count_ptr` >>
+  simp[eval_operand_def, lookup_var_def,
+       enc_loop_ctx_def, enc_pre_def, enc_scratch_def,
+       venomMemDefsTheory.alloca_inv_def,
+       venomMemDefsTheory.allocas_non_overlapping_def,
+       venomMemDefsTheory.alloca_next_valid_def]
+QED
+
+Theorem enc_static_loop_counter_frag:
+  emit_op ADD [index;Lit 1w] a = (next,b) /\
+  emit_void MSTORE [count_ptr;next] b = ((),c) /\
+  (!x. count_ptr = Var x ==> not_fresh_at a x) /\
+  st.cs_next_var <= a.cs_next_var /\ st.cs_next_id IN frag_ids st z /\
+  value_has_type tv v /\ EVERY (\t. ~is_dynamic t) ts /\
+  SUC k <= LENGTH avs /\
+  p + LENGTH (enc_head_upto B ts avs (SUC k)) <= lo ==>
+  frag_exec ctx a c
+    (\s. enc_loop_ctx st z ops lo top tv v src outs s0 count_ptr ip s /\
+         eval_operand index s = SOME (n2w k) /\
+         enc_prefix_mem p B ts avs (SUC k) s)
+    (enc_array_inv
+      (enc_loop_ctx st z ops lo top tv v src outs s0 count_ptr ip)
+      p B ts avs ip NONE (SUC k)) R
+Proof
+  strip_tac >>
+  `same_blocks a c /\
+   c.cs_current_insts = a.cs_current_insts ++
+     (emitted_insts a b ++ emitted_insts b c)` by
+    (imp_res_tac enc_emit_op_append >> imp_res_tac enc_emit_void_append >>
+     imp_res_tac emit_op_same_blocks >> imp_res_tac emit_void_same_blocks >>
+     fs[same_blocks_def, APPEND_ASSOC]) >>
+  `emitted_insts a c = emitted_insts a b ++ emitted_insts b c` by
+    (irule emitted_insts_append >>
+     imp_res_tac enc_emit_op_append >> imp_res_tac enc_emit_void_append >> simp[]) >>
+  fs[same_blocks_def] >> irule frag_exec_run_inst_seq >>
+  asm_simp_tac (srw_ss()) [rich_listTheory.IS_PREFIX_APPEND] >>
+  reverse conj_tac
+  >- (imp_res_tac emitted_insts_emit_op >>
+      imp_res_tac emitted_insts_emit_void >>
+      simp[mk_inst_def, is_terminator_def]) >>
+  qx_gen_tac `s` >> strip_tac >>
+  `eval_operand count_ptr s = SOME (n2w ip) /\
+   enc_scratch (frag_ids st z) lo top s /\
+   FLOOKUP s.vs_allocas st.cs_next_id = SOME (ip,32)` by
+    fs[enc_loop_ctx_def, enc_pre_def] >>
+  drule_all enc_static_counter_run_preserve >>
+  disch_then (qspec_then `outs` (qx_choose_then `u` strip_assume_tac)) >>
+  `enc_loop_ctx st z ops lo top tv v src outs s0 count_ptr ip u` by
+    (irule enc_loop_ctx_frame_step >> simp[] >> qexists_tac `s` >> simp[]) >>
+  `enc_tail_upto ts avs (SUC k) = []` by
+    (simp[enc_tail_upto_def] >> irule enc_prefix_tail_static >>
+     simp[EVERY_TAKE]) >>
+  disj1_tac >> qexists_tac `u` >> simp[] >>
+  irule enc_array_inv_suc >> simp[] >>
+  fs[enc_prefix_mem_def, mem_bytes_at_def]
+QED
+
+Theorem enc_static_loop_setup_code:
+  emit_op MLOAD [count_ptr] a0 = (i,a1) /\
+  emit_op ADD [src;Lit 32w] a1 = (sd,a2) /\
+  emit_op MUL [i;Lit (n2w msz)] a2 = (so,a3) /\
+  emit_op ADD [sd;so] a3 = (child_src,a4) /\
+  emit_op ADD [dst;Lit 32w] a4 = (dd,a5) /\
+  emit_op MUL [i;Lit (n2w asz)] a5 = (dof,a6) /\
+  emit_op ADD [dd;dof] a6 = (child_dst,a7) ==>
+  same_blocks a0 a7 /\
+  a7.cs_current_insts = a0.cs_current_insts ++ emitted_insts a0 a7 /\
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+    (emitted_insts a0 a7)
+Proof
+  strip_tac >>
+  imp_res_tac enc_indexed_address_code >>
+  imp_res_tac enc_emit_op_append >>
+  imp_res_tac emit_op_same_blocks >>
+  `emitted_insts a0 a4 = emitted_insts a0 a1 ++ emitted_insts a1 a4` by
+    (irule emitted_insts_append >> simp[]) >>
+  `emitted_insts a0 a7 = emitted_insts a0 a4 ++ emitted_insts a4 a7` by
+    (irule emitted_insts_append >> simp[]) >>
+  imp_res_tac emitted_insts_emit_op >>
+  gvs[same_blocks_def, APPEND_ASSOC, mk_inst_def, is_terminator_def]
+QED
+
+Theorem enc_static_loop_setup_frag:
+  emit_op MLOAD [count_ptr] a0 = (i,a1) /\
+  emit_op ADD [src_op;Lit 32w] a1 = (sd,a2) /\
+  emit_op MUL [i;Lit (n2w msz)] a2 = (so,a3) /\
+  emit_op ADD [sd;so] a3 = (child_src,a4) /\
+  emit_op ADD [dst_op;Lit 32w] a4 = (dd,a5) /\
+  emit_op MUL [i;Lit (n2w asz)] a5 = (dof,a6) /\
+  emit_op ADD [dd;dof] a6 = (child_dst,a7) /\
+  (!x. MEM (Var x) [count_ptr;src_op;dst_op] ==> not_fresh_at a0 x) /\
+  st.cs_next_var <= a0.cs_next_var /\ MEM src_op ops /\ MEM dst_op ops /\
+  eval_operand src_op s0 = SOME (n2w src_n) /\
+  eval_operand dst_op s0 = SOME (n2w dst_n) ==>
+  frag_exec ctx a0 a7
+    (enc_array_inv
+      (enc_loop_ctx st z ops lo top tv v src outs s0 count_ptr ip)
+      p B ts avs ip NONE k)
+    (\s. enc_array_inv
+      (enc_loop_ctx st z ops lo top tv v src outs s0 count_ptr ip)
+      p B ts avs ip NONE k s /\
+      eval_operand i s = SOME (n2w k) /\
+      eval_operand child_src s = SOME (n2w (src_n + 32 + k * msz)) /\
+      eval_operand child_dst s = SOME (n2w (dst_n + 32 + k * asz))) R
+Proof
+  strip_tac >> drule_all enc_static_loop_setup_code >> strip_tac >>
+  fs[same_blocks_def] >> irule frag_exec_run_inst_seq >>
+  asm_simp_tac (srw_ss()) [rich_listTheory.IS_PREFIX_APPEND] >>
+  qx_gen_tac `s` >> strip_tac >>
+  `enc_loop_ctx st z ops lo top tv v src outs s0 count_ptr ip s /\
+   mem_word_at ip s.vs_memory = n2w k` by fs[enc_array_inv_def] >>
+  `eval_operand src_op s = SOME (n2w src_n) /\
+   eval_operand dst_op s = SOME (n2w dst_n)` by
+    metis_tac[enc_loop_ctx_operand] >>
+  `eval_operand count_ptr s = SOME (n2w ip) /\
+   enc_scratch (frag_ids st z) lo top s` by
+    fs[enc_loop_ctx_def, enc_pre_def] >>
+  `ip < dimword (:256)` by
+    (drule enc_loop_ctx_bounds >> strip_tac >> decide_tac) >>
+  `!x. MEM (Var x) [count_ptr;src_op;dst_op] ==> not_fresh_at a0 x` by
+    (simp[] >> metis_tac[]) >>
+  drule_all enc_static_loop_setup_run >>
+  disch_then (qx_choose_then `t` strip_assume_tac) >>
+  `enc_frame st z lo top outs s t` by
+    (irule enc_frame_readonly >> simp[] >> rpt strip_tac >>
+     first_x_assum irule >>
+     match_mp_tac enc_old_operand_mono >> qexists_tac `st` >> simp[]) >>
+  `enc_loop_ctx st z ops lo top tv v src outs s0 count_ptr ip t` by
+    (irule enc_loop_ctx_readonly >> qexists_tac `s` >> simp[] >> metis_tac[]) >>
+  disj1_tac >> qexists_tac `t` >> simp[] >>
+  conj_tac
+  >- (irule enc_array_inv_readonly >> simp[] >>
+      qexists_tac `s` >> simp[]) >>
+  rpt conj_tac >> Cases_on `i` >> Cases_on `child_src` >> Cases_on `child_dst` >>
+  fs[eval_operand_def, lookup_var_def]
+QED
+
+Theorem enc_head_upto_static_length:
+  has_types (REPLICATE N t) vs /\ k <= N /\ ~is_dynamic t ==>
+  LENGTH (enc_head_upto B (REPLICATE N t) vs k) = k * static_length t
+Proof
+  strip_tac >>
+  `TAKE k (REPLICATE N t) = REPLICATE k t` by
+    (simp[REPLICATE_GENLIST, TAKE_GENLIST] >>
+     AP_TERM_TAC >> simp[arithmeticTheory.MIN_DEF] >> decide_tac) >>
+  drule enc_head_upto_length >>
+  disch_then (qspec_then `k` mp_tac) >>
+  disch_then (qspec_then `B` mp_tac) >> simp[] >>
+  `!n q. head_lengths (REPLICATE n t) q = q + n * static_length t` by
+    (Induct >> simp[head_lengths_def, arithmeticTheory.MULT_CLAUSES]) >>
+  simp[]
+QED
+
+Theorem enc_head_upto_static_length_layout:
+  enc_layout (REPLICATE N t) vs /\ k <= N /\ ~is_dynamic t ==>
+  LENGTH (enc_head_upto B (REPLICATE N t) vs k) = k * static_length t
+Proof
+  strip_tac >>
+  `TAKE k (REPLICATE N t) = REPLICATE k t` by
+    (simp[REPLICATE_GENLIST, TAKE_GENLIST] >>
+     AP_TERM_TAC >> simp[arithmeticTheory.MIN_DEF] >> decide_tac) >>
+  drule enc_head_upto_length_layout >>
+  disch_then (qspecl_then [`k`, `B`] mp_tac) >> simp[] >>
+  `!n q. head_lengths (REPLICATE n t) q = q + n * static_length t` by
+    (Induct >> simp[head_lengths_def, arithmeticTheory.MULT_CLAUSES]) >> simp[]
+QED
+
+Theorem enc_static_loop_slot_frag_lengths:
+  compile_abi_encode_static_info dst_op src_op ei a = (op,b) /\
+  abi_enc_plan env ty ei /\ ~is_dynamic (vyper_to_abi_type env ty) /\
+  evaluate_type env ty = SOME tv /\ value_has_type tv v /\
+  vyper_to_abi env ty v = SOME av /\
+  eval_operand dst_op s = SOME dst_w /\ eval_operand src_op s = SOME src_w /\
+  enc_pre a b [dst_op;src_op] lo top tv v (w2n src_w)
+    [(w2n dst_w,LENGTH (enc (vyper_to_abi_type env ty) av))] s /\
+  frag_ids a b SUBSET frag_ids st z /\
+  (!x. not_fresh_at st x ==> not_fresh_at a x) /\
+  (?q n. MEM (q,n) outs /\ q <= w2n dst_w /\
+    w2n dst_w + LENGTH (enc (vyper_to_abi_type env ty) av) <= q+n) /\
+  enc_loop_ctx st z ops lo top outer_tv outer_v src outs s0 count_ptr ip s /\
+  value_has_type outer_tv outer_v /\
+  (!x. MEM (Var x) [count_ptr;index] ==> not_fresh_at a x) /\
+  eval_operand index s = SOME (n2w k) /\
+  LENGTH ts = LENGTH avs /\ EVERY (\t. ~is_dynamic t) ts /\ k < LENGTH avs /\
+  enc_prefix_mem p B ts avs k s /\
+  w2n dst_w = p + LENGTH (enc_head_upto B ts avs k) /\ w2n dst_w <= lo /\
+  enc (EL k ts) (EL k avs) = enc (vyper_to_abi_type env ty) av ==>
+  frag_exec ctx a b (\u. u = s)
+    (\u. enc_loop_ctx st z ops lo top outer_tv outer_v src outs s0 count_ptr ip u /\
+         eval_operand index u = SOME (n2w k) /\
+         enc_prefix_mem p B ts avs (SUC k) u) R
+Proof
+  strip_tac >>
+  `enc_scratch (frag_ids st z) lo top s /\
+   eval_operand count_ptr s = SOME (n2w ip)` by
+    fs[enc_loop_ctx_def, enc_pre_def] >>
+  drule_all (SRULE [PULL_EXISTS] compile_abi_encode_static_info_enclosing_local_frag) >>
+  disch_then (qspecl_then [`ctx`,`R`] mp_tac) >> strip_tac >>
+  irule frag_exec_conseq >> goal_assum (drule_at Any) >> simp[] >>
+  qx_gen_tac `u` >> strip_tac >>
+  `eval_operand count_ptr u = SOME (n2w ip) /\
+   eval_operand index u = SOME (n2w k)` by
+    (conj_tac >> irule enc_frame_preserves_operand >>
+     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  conj_tac
+  >- (irule enc_loop_ctx_frame_step >> simp[] >> qexists_tac `s` >> simp[]) >>
+  simp[] >> irule enc_static_slot_prefix_lengths >> simp[] >>
+  qexistsl_tac [`a`,`b`,`lo`,`s`,`local_top`] >> simp[] >> metis_tac[]
+QED
+
+Theorem enc_static_loop_slot_frag:
+  compile_abi_encode_static_info dst_op src_op ei a = (op,b) /\
+  abi_enc_plan env ty ei /\ ~is_dynamic (vyper_to_abi_type env ty) /\
+  evaluate_type env ty = SOME tv /\ value_has_type tv v /\
+  vyper_to_abi env ty v = SOME av /\
+  eval_operand dst_op s = SOME dst_w /\ eval_operand src_op s = SOME src_w /\
+  enc_pre a b [dst_op;src_op] lo top tv v (w2n src_w)
+    [(w2n dst_w,LENGTH (enc (vyper_to_abi_type env ty) av))] s /\
+  frag_ids a b SUBSET frag_ids st z /\
+  (!x. not_fresh_at st x ==> not_fresh_at a x) /\
+  (?q n. MEM (q,n) outs /\ q <= w2n dst_w /\
+    w2n dst_w + LENGTH (enc (vyper_to_abi_type env ty) av) <= q+n) /\
+  enc_loop_ctx st z ops lo top outer_tv outer_v src outs s0 count_ptr ip s /\
+  value_has_type outer_tv outer_v /\
+  (!x. MEM (Var x) [count_ptr;index] ==> not_fresh_at a x) /\
+  eval_operand index s = SOME (n2w k) /\
+  has_types ts avs /\ EVERY (\t. ~is_dynamic t) ts /\ k < LENGTH avs /\
+  enc_prefix_mem p B ts avs k s /\
+  w2n dst_w = p + LENGTH (enc_head_upto B ts avs k) /\ w2n dst_w <= lo /\
+  enc (EL k ts) (EL k avs) = enc (vyper_to_abi_type env ty) av ==>
+  frag_exec ctx a b (\u. u = s)
+    (\u. enc_loop_ctx st z ops lo top outer_tv outer_v src outs s0 count_ptr ip u /\
+         eval_operand index u = SOME (n2w k) /\
+         enc_prefix_mem p B ts avs (SUC k) u) R
+Proof
+  strip_tac >>
+  `enc_scratch (frag_ids st z) lo top s /\
+   eval_operand count_ptr s = SOME (n2w ip)` by
+    fs[enc_loop_ctx_def, enc_pre_def] >>
+  drule_all (SRULE [PULL_EXISTS] compile_abi_encode_static_info_enclosing_local_frag) >>
+  disch_then (qspecl_then [`ctx`,`R`] mp_tac) >> strip_tac >>
+  irule frag_exec_conseq >> goal_assum (drule_at Any) >> simp[] >>
+  qx_gen_tac `u` >> strip_tac >>
+  `eval_operand count_ptr u = SOME (n2w ip) /\
+   eval_operand index u = SOME (n2w k)` by
+    (conj_tac >> irule enc_frame_preserves_operand >>
+     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  conj_tac
+  >- (irule enc_loop_ctx_frame_step >> simp[] >> qexists_tac `s` >> simp[]) >>
+  simp[] >> irule enc_static_slot_prefix >> simp[] >>
+  qexistsl_tac [`a`,`b`,`lo`,`s`,`local_top`] >> simp[] >> metis_tac[]
+QED
+
+Theorem enc_static_loop_element_frag:
+  compile_abi_encode_static_info child_dst child_src ei a = (ignored,b) /\
+  abi_enc_plan env ty ei /\ ~is_dynamic (vyper_to_abi_type env ty) /\
+  evaluate_type env ty = SOME tv /\
+  static_length (vyper_to_abi_type env ty) = type_memory_size tv /\
+  value_has_type (ArrayTV tv (Dynamic n)) (ArrayV (DynArrayV vs)) /\
+  LIST_REL (\v av. vyper_to_abi env ty v = SOME av) vs avs /\
+  has_types (REPLICATE (LENGTH vs) (vyper_to_abi_type env ty)) avs /\
+  k < LENGTH vs /\ MEM (dst_n,32 + LENGTH vs * type_memory_size tv) outs /\
+  frag_ids a b SUBSET frag_ids st z /\
+  (!x. not_fresh_at st x ==> not_fresh_at a x) /\
+  (!x. MEM (Var x) [child_dst;child_src;count_ptr;index] ==> not_fresh_at a x) /\
+  enc_array_inv
+    (enc_loop_ctx st z ops lo top (ArrayTV tv (Dynamic n))
+      (ArrayV (DynArrayV vs)) src_n outs s0 count_ptr ip)
+    (dst_n + 32) B (REPLICATE (LENGTH vs) (vyper_to_abi_type env ty))
+    avs ip NONE k s /\
+  eval_operand index s = SOME (n2w k) /\
+  eval_operand child_src s = SOME (n2w (src_n + 32 + k * type_memory_size tv)) /\
+  eval_operand child_dst s = SOME (n2w (dst_n + 32 + k * type_memory_size tv)) ==>
+  frag_exec ctx a b (\u. u = s)
+    (\u. enc_loop_ctx st z ops lo top (ArrayTV tv (Dynamic n))
+           (ArrayV (DynArrayV vs)) src_n outs s0 count_ptr ip u /\
+         eval_operand index u = SOME (n2w k) /\
+         enc_prefix_mem (dst_n + 32) B
+           (REPLICATE (LENGTH vs) (vyper_to_abi_type env ty)) avs (SUC k) u) R
+Proof
+  strip_tac >>
+  `enc_loop_ctx st z ops lo top (ArrayTV tv (Dynamic n))
+     (ArrayV (DynArrayV vs)) src_n outs s0 count_ptr ip s` by
+    fs[enc_array_inv_def] >>
+  drule_all enc_loop_ctx_dynarray_bounds >> strip_tac >>
+  drule_all enc_loop_ctx_array_slot >> strip_tac >>
+  `!x. MEM (Var x) [child_dst;child_src] ==> not_fresh_at a x` by
+    (fs[] >> metis_tac[]) >>
+  drule_all enc_static_loop_element_pre >> strip_tac >>
+  `LENGTH (enc (vyper_to_abi_type env ty) (EL k avs)) = type_memory_size tv` by
+    (irule val_in_memory_static_enc_length >>
+     drule_all enc_loop_ctx_dynarray_source >> strip_tac >> metis_tac[]) >>
+  `LENGTH (enc_head_upto B
+     (REPLICATE (LENGTH vs) (vyper_to_abi_type env ty)) avs k) =
+     k * type_memory_size tv` by
+    (drule enc_head_upto_static_length >>
+     disch_then (qspecl_then [`k`,`B`] mp_tac) >> simp[]) >>
+  irule enc_static_loop_slot_frag >> simp[] >>
+  conj_tac >- fs[LIST_REL_EL_EQN] >>
+  conj_tac >- fs[enc_array_inv_def] >>
+  goal_assum (drule_at (Pat `compile_abi_encode_static_info _ _ _ _ = _`)) >>
+  goal_assum (drule_at (Pat `vyper_to_abi _ _ _ = _`)) >>
+  simp[wordsTheory.w2n_n2w, arithmeticTheory.LESS_MOD, EL_REPLICATE] >>
+  fs[] >> qexistsl_tac [`dst_n`,`32 + LENGTH vs * type_memory_size tv`] >>
+  simp[] >>
+  `SUC k * type_memory_size tv <= LENGTH vs * type_memory_size tv` by
+    simp[arithmeticTheory.LE_MULT_RCANCEL] >>
+  qpat_x_assum `SUC k * _ <= _` mp_tac >>
+  pure_rewrite_tac[arithmeticTheory.MULT_CLAUSES] >> decide_tac
+
+QED
+
+Theorem enc_static_loop_element_frag_layout:
+  compile_abi_encode_static_info child_dst child_src ei a = (ignored,b) /\
+  abi_enc_plan env ty ei /\ ~is_dynamic (vyper_to_abi_type env ty) /\
+  evaluate_type env ty = SOME tv /\
+  static_length (vyper_to_abi_type env ty) = type_memory_size tv /\
+  value_has_type (ArrayTV tv (Dynamic n)) (ArrayV (DynArrayV vs)) /\
+  LIST_REL (\v av. vyper_to_abi env ty v = SOME av) vs avs /\
+  enc_layout (REPLICATE (LENGTH vs) (vyper_to_abi_type env ty)) avs /\
+  k < LENGTH vs /\ MEM (dst_n,32 + LENGTH vs * type_memory_size tv) outs /\
+  frag_ids a b SUBSET frag_ids st z /\
+  (!x. not_fresh_at st x ==> not_fresh_at a x) /\
+  (!x. MEM (Var x) [child_dst;child_src;count_ptr;index] ==> not_fresh_at a x) /\
+  enc_array_inv
+    (enc_loop_ctx st z ops lo top (ArrayTV tv (Dynamic n))
+      (ArrayV (DynArrayV vs)) src_n outs s0 count_ptr ip)
+    (dst_n + 32) B (REPLICATE (LENGTH vs) (vyper_to_abi_type env ty))
+    avs ip NONE k s /\
+  eval_operand index s = SOME (n2w k) /\
+  eval_operand child_src s = SOME (n2w (src_n + 32 + k * type_memory_size tv)) /\
+  eval_operand child_dst s = SOME (n2w (dst_n + 32 + k * type_memory_size tv)) ==>
+  frag_exec ctx a b (\u. u = s)
+    (\u. enc_loop_ctx st z ops lo top (ArrayTV tv (Dynamic n))
+           (ArrayV (DynArrayV vs)) src_n outs s0 count_ptr ip u /\
+         eval_operand index u = SOME (n2w k) /\
+         enc_prefix_mem (dst_n + 32) B
+           (REPLICATE (LENGTH vs) (vyper_to_abi_type env ty)) avs (SUC k) u) R
+Proof
+  strip_tac >>
+  `enc_loop_ctx st z ops lo top (ArrayTV tv (Dynamic n))
+     (ArrayV (DynArrayV vs)) src_n outs s0 count_ptr ip s` by
+    fs[enc_array_inv_def] >>
+  drule_all enc_loop_ctx_dynarray_bounds >> strip_tac >>
+  drule_all enc_loop_ctx_array_slot >> strip_tac >>
+  `!x. MEM (Var x) [child_dst;child_src] ==> not_fresh_at a x` by
+    (fs[] >> metis_tac[]) >>
+  drule_all enc_static_loop_element_pre >> strip_tac >>
+  `LENGTH (enc (vyper_to_abi_type env ty) (EL k avs)) = type_memory_size tv` by
+    (irule val_in_memory_static_enc_length >>
+     drule_all enc_loop_ctx_dynarray_source >> strip_tac >> metis_tac[]) >>
+  `LENGTH (enc_head_upto B
+     (REPLICATE (LENGTH vs) (vyper_to_abi_type env ty)) avs k) =
+     k * type_memory_size tv` by
+    (drule enc_head_upto_static_length_layout >>
+     disch_then (qspecl_then [`k`,`B`] mp_tac) >> simp[]) >>
+  `LENGTH avs = LENGTH vs` by metis_tac[LIST_REL_LENGTH] >>
+  irule enc_static_loop_slot_frag_lengths >> simp[] >>
+  conj_tac >- fs[enc_array_inv_def] >>
+  goal_assum (drule_at (Pat `compile_abi_encode_static_info _ _ _ _ = _`)) >>
+  goal_assum (drule_at (Pat `vyper_to_abi _ _ _ = _`)) >>
+  simp[wordsTheory.w2n_n2w, arithmeticTheory.LESS_MOD, EL_REPLICATE] >>
+  fs[] >> qexistsl_tac [`dst_n`,`32 + LENGTH vs * type_memory_size tv`] >>
+  simp[] >>
+  `SUC k * type_memory_size tv <= LENGTH vs * type_memory_size tv` by
+    simp[arithmeticTheory.LE_MULT_RCANCEL] >>
+  qpat_x_assum `SUC k * _ <= _` mp_tac >>
+  pure_rewrite_tac[arithmeticTheory.MULT_CLAUSES] >> decide_tac
+QED
+
+Theorem enc_static_info_extends:
+  compile_abi_encode_static_info dst src ei a = (op,b) ==> cs_extends a b
+Proof
+  strip_tac >> drule enc_static_info_same_block >>
+  simp[same_blocks_def] >> strip_tac >>
+  irule cs_extends_same_block >> simp[rich_listTheory.IS_PREFIX_APPEND]
+QED
+
+Theorem enc_static_body_chain:
+  emit_op MLOAD [count_ptr] sb = (i,s1) /\
+  emit_op ADD [src; Lit 32w] s1 = (sd,s2) /\
+  emit_op MUL [i; Lit (n2w msz)] s2 = (so,s3) /\
+  emit_op ADD [sd;so] s3 = (child_src,s4) /\
+  emit_op ADD [dst; Lit 32w] s4 = (dd,s5) /\
+  emit_op MUL [i; Lit (n2w asz)] s5 = (dof,s6) /\
+  emit_op ADD [dd;dof] s6 = (child_dst,s7) /\
+  compile_abi_encode_static_info child_dst child_src ei s7 = (ignored,s8) /\
+  emit_op ADD [i;Lit 1w] s8 = (next,s9) /\
+  emit_void MSTORE [count_ptr;next] s9 = ((),se) /\
+  (!x. MEM (Var x) [count_ptr;src;dst] ==> not_fresh_at sb x) ==>
+  cs_extends sb s7 /\ cs_extends s7 s8 /\ cs_extends s8 se /\
+  cs_extends s7 se /\ frag_ids s7 s8 SUBSET frag_ids sb se /\
+  sb.cs_next_var <= s7.cs_next_var /\ sb.cs_next_var <= s8.cs_next_var /\
+  (!x. not_fresh_at sb x ==> not_fresh_at s7 x) /\
+  (!x. MEM (Var x) [child_dst;child_src;count_ptr;i] ==> not_fresh_at s7 x) /\
+  (!x. count_ptr = Var x ==> not_fresh_at s8 x)
+Proof
+  strip_tac >>
+  imp_res_tac (cj 3 emitted_insts_emit_op) >>
+  imp_res_tac (cj 4 emitted_insts_emit_op) >>
+  imp_res_tac (cj 2 emitted_insts_emit_void) >>
+  imp_res_tac enc_static_info_frontiers >>
+  imp_res_tac enc_emit_op_old_result >>
+  imp_res_tac (SRULE [cs_appends_def] (cj 2 cs_appends_emit_helpers)) >>
+  imp_res_tac (SRULE [cs_appends_def] (cj 3 cs_appends_emit_helpers)) >>
+  drule enc_static_info_extends >> strip_tac >>
+  rpt (qpat_x_assum `emit_op _ _ _ = _` kall_tac) >>
+  qpat_x_assum `emit_void _ _ _ = _` kall_tac >>
+  qpat_x_assum `compile_abi_encode_static_info _ _ _ _ = _` kall_tac >>
+  `cs_extends sb s4` by
+    (irule cs_extends_trans >> qexists_tac `s2` >> metis_tac[cs_extends_trans]) >>
+  `cs_extends sb s7` by
+    (irule cs_extends_trans >> qexists_tac `s4` >> simp[] >>
+     irule cs_extends_trans >> qexists_tac `s5` >> metis_tac[cs_extends_trans]) >>
+  `cs_extends s8 se /\ cs_extends s7 se` by metis_tac[cs_extends_trans] >>
+  simp[] >> conj_tac
+  >- (simp[frag_ids_def, pred_setTheory.SUBSET_DEF] >> rpt strip_tac >> decide_tac) >>
+  `sb.cs_next_var <= s7.cs_next_var /\ sb.cs_next_var <= s8.cs_next_var /\
+   s4.cs_next_var <= s7.cs_next_var /\ s1.cs_next_var <= s7.cs_next_var` by decide_tac >>
+  simp[] >> conj_tac >- (simp[not_fresh_at_def] >> decide_tac) >>
+  simp[MEM] >> rpt strip_tac >>
+  fs[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]
+QED
+
+Theorem enc_static_loop_body_phases:
+  enc_static_loop_body dst src ei asz msz count_ptr sb = ((),se) /\
+  (!x. MEM (Var x) [count_ptr;src;dst] ==> not_fresh_at sb x) ==>
+  ?i src_data src_off child_src dst_data dst_off child_dst ignored next
+    s1 s2 s3 s4 s5 s6 s7 s8 s9.
+    emit_op MLOAD [count_ptr] sb = (i,s1) /\
+    emit_op ADD [src; Lit 32w] s1 = (src_data,s2) /\
+    emit_op MUL [i; Lit (n2w msz)] s2 = (src_off,s3) /\
+    emit_op ADD [src_data;src_off] s3 = (child_src,s4) /\
+    emit_op ADD [dst; Lit 32w] s4 = (dst_data,s5) /\
+    emit_op MUL [i; Lit (n2w asz)] s5 = (dst_off,s6) /\
+    emit_op ADD [dst_data;dst_off] s6 = (child_dst,s7) /\
+    compile_abi_encode_static_info child_dst child_src ei s7 = (ignored,s8) /\
+    emit_op ADD [i;Lit 1w] s8 = (next,s9) /\
+    emit_void MSTORE [count_ptr;next] s9 = ((),se) /\
+    same_blocks sb se /\
+    se.cs_current_insts = sb.cs_current_insts ++ emitted_insts sb se /\
+    emitted_insts sb se =
+      emitted_insts sb s1 ++ emitted_insts s1 s4 ++
+      emitted_insts s4 s7 ++ emitted_insts s7 s8 ++ emitted_insts s8 se /\
+    cs_extends sb s7 /\ cs_extends s7 s8 /\ cs_extends s8 se /\
+    cs_extends s7 se /\ frag_ids s7 s8 SUBSET frag_ids sb se /\
+    sb.cs_next_var <= s7.cs_next_var /\ sb.cs_next_var <= s8.cs_next_var /\
+    (!x. not_fresh_at sb x ==> not_fresh_at s7 x) /\
+    (!x. MEM (Var x) [child_dst;child_src;count_ptr;i] ==> not_fresh_at s7 x) /\
+    (!x. count_ptr = Var x ==> not_fresh_at s8 x)
+Proof
+  strip_tac >> drule enc_static_loop_body_code >> strip_tac >>
+  drule_all enc_static_body_chain >> strip_tac >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
+
+Theorem enc_static_loop_body_frag:
+  enc_static_loop_body dst src ei (type_memory_size tv) (type_memory_size tv)
+    count_ptr sb = ((),se) /\
+  (!x. MEM (Var x) [count_ptr;src;dst] ==> not_fresh_at sb x) /\
+  st.cs_next_var <= sb.cs_next_var /\ st.cs_next_id IN frag_ids st z /\
+  frag_ids sb se SUBSET frag_ids st z /\
+  abi_enc_plan env ty ei /\ ~is_dynamic (vyper_to_abi_type env ty) /\
+  evaluate_type env ty = SOME tv /\
+  static_length (vyper_to_abi_type env ty) = type_memory_size tv /\
+  value_has_type (ArrayTV tv (Dynamic n)) (ArrayV (DynArrayV vs)) /\
+  LIST_REL (\v av. vyper_to_abi env ty v = SOME av) vs avs /\
+  has_types (REPLICATE (LENGTH vs) (vyper_to_abi_type env ty)) avs /\
+  k < LENGTH vs /\ MEM (dst_n,32 + LENGTH vs * type_memory_size tv) outs /\
+  MEM src ops /\ MEM dst ops /\
+  eval_operand src s0 = SOME (n2w src_n) /\
+  eval_operand dst s0 = SOME (n2w dst_n) ==>
+  frag_exec ctx sb se
+    (enc_array_inv
+      (enc_loop_ctx st z ops lo top (ArrayTV tv (Dynamic n))
+        (ArrayV (DynArrayV vs)) src_n outs s0 count_ptr ip)
+      (dst_n + 32) B (REPLICATE (LENGTH vs) (vyper_to_abi_type env ty))
+      avs ip NONE k)
+    (enc_array_inv
+      (enc_loop_ctx st z ops lo top (ArrayTV tv (Dynamic n))
+        (ArrayV (DynArrayV vs)) src_n outs s0 count_ptr ip)
+      (dst_n + 32) B (REPLICATE (LENGTH vs) (vyper_to_abi_type env ty))
+      avs ip NONE (SUC k)) R
+Proof
+  strip_tac >> drule_all enc_static_loop_body_phases >> strip_tac >>
+  qabbrev_tac `C = enc_loop_ctx st z ops lo top (ArrayTV tv (Dynamic n))
+    (ArrayV (DynArrayV vs)) src_n outs s0 count_ptr ip` >>
+  qabbrev_tac `invbody = \j. enc_array_inv C (dst_n + 32) B
+    (REPLICATE (LENGTH vs) (vyper_to_abi_type env ty)) avs ip NONE j` >>
+  qabbrev_tac `A = \s. invbody k s /\ eval_operand i s = SOME (n2w k) /\
+    eval_operand child_src s = SOME (n2w (src_n + 32 + k * type_memory_size tv)) /\
+    eval_operand child_dst s = SOME (n2w (dst_n + 32 + k * type_memory_size tv))` >>
+  qabbrev_tac `E = \s. C s /\ eval_operand i s = SOME (n2w k) /\
+    enc_prefix_mem (dst_n + 32) B
+      (REPLICATE (LENGTH vs) (vyper_to_abi_type env ty)) avs (SUC k) s` >>
+  `frag_exec ctx sb s7 (invbody k) A R` by suspend "setup" >>
+  `frag_exec ctx s7 s8 A E R` by suspend "element" >>
+  `frag_exec ctx s8 se E (invbody (SUC k)) R` by suspend "counter" >>
+  `frag_exec ctx sb se (invbody k) (invbody (SUC k)) R` suffices_by
+    simp[Abbr `invbody`, Abbr `C`] >>
+  `frag_exec ctx s7 se A (invbody (SUC k)) R` by
+    (irule frag_exec_seq >> qexistsl_tac [`E`,`s8`] >> simp[]) >>
+  irule frag_exec_seq >> qexistsl_tac [`A`,`s7`] >> simp[]
+QED
+
+Resume enc_static_loop_body_frag[setup]:
+  simp_tac (srw_ss()) [Abbr `A`, Abbr `invbody`, Abbr `C`] >>
+  drule_all enc_static_loop_setup_frag >> disch_then irule
+QED
+Resume enc_static_loop_body_frag[element]:
+  `frag_ids s7 s8 SUBSET frag_ids st z` by
+    metis_tac[pred_setTheory.SUBSET_TRANS] >>
+  `!x. not_fresh_at st x ==> not_fresh_at s7 x` by
+    (rpt strip_tac >>
+     qpat_x_assum `!x. not_fresh_at sb x ==> not_fresh_at s7 x` irule >>
+     fs[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+  irule frag_exec_pointwise >>
+  simp_tac (srw_ss()) [Abbr `A`, Abbr `E`, Abbr `invbody`, Abbr `C`] >>
+  rpt strip_tac >> drule_all enc_static_loop_element_frag >> disch_then irule
+QED
+Resume enc_static_loop_body_frag[counter]:
+  irule frag_exec_pointwise >>
+  simp_tac (srw_ss()) [Abbr `E`, Abbr `invbody`, Abbr `C`] >>
+  qx_gen_tac `u` >> strip_tac >>
+  drule_all enc_loop_ctx_array_slot >> strip_tac >>
+  `LENGTH avs = LENGTH vs` by metis_tac[LIST_REL_LENGTH] >>
+  `st.cs_next_var <= s8.cs_next_var` by decide_tac >>
+  `EVERY (\t. ~is_dynamic t)
+    (REPLICATE (LENGTH vs) (vyper_to_abi_type env ty))` by simp[EVERY_REPLICATE] >>
+  `LENGTH (enc_head_upto B
+    (REPLICATE (LENGTH vs) (vyper_to_abi_type env ty)) avs (SUC k)) =
+    SUC k * type_memory_size tv` by
+    (drule enc_head_upto_static_length >>
+     disch_then (qspecl_then [`SUC k`,`B`] mp_tac) >> simp[]) >>
+  `dst_n + 32 + LENGTH (enc_head_upto B
+    (REPLICATE (LENGTH vs) (vyper_to_abi_type env ty)) avs (SUC k)) <= lo` by
+    (simp[] >> pure_rewrite_tac[arithmeticTheory.MULT_CLAUSES] >> decide_tac) >>
+  `SUC k <= LENGTH avs` by decide_tac >>
+  drule_all enc_static_loop_counter_frag >>
+  disch_then (mp_tac o SRULE [frag_exec_def]) >>
+  simp[frag_exec_def]
+QED
+Finalise enc_static_loop_body_frag
+
+Theorem enc_static_loop_body_frag_layout:
+  enc_static_loop_body dst src ei (type_memory_size tv) (type_memory_size tv)
+    count_ptr sb = ((),se) /\
+  (!x. MEM (Var x) [count_ptr;src;dst] ==> not_fresh_at sb x) /\
+  st.cs_next_var <= sb.cs_next_var /\ st.cs_next_id IN frag_ids st z /\
+  frag_ids sb se SUBSET frag_ids st z /\
+  abi_enc_plan env ty ei /\ ~is_dynamic (vyper_to_abi_type env ty) /\
+  evaluate_type env ty = SOME tv /\
+  static_length (vyper_to_abi_type env ty) = type_memory_size tv /\
+  value_has_type (ArrayTV tv (Dynamic n)) (ArrayV (DynArrayV vs)) /\
+  LIST_REL (\v av. vyper_to_abi env ty v = SOME av) vs avs /\
+  enc_layout (REPLICATE (LENGTH vs) (vyper_to_abi_type env ty)) avs /\
+  k < LENGTH vs /\ MEM (dst_n,32 + LENGTH vs * type_memory_size tv) outs /\
+  MEM src ops /\ MEM dst ops /\
+  eval_operand src s0 = SOME (n2w src_n) /\
+  eval_operand dst s0 = SOME (n2w dst_n) ==>
+  frag_exec ctx sb se
+    (enc_array_inv
+      (enc_loop_ctx st z ops lo top (ArrayTV tv (Dynamic n))
+        (ArrayV (DynArrayV vs)) src_n outs s0 count_ptr ip)
+      (dst_n + 32) B (REPLICATE (LENGTH vs) (vyper_to_abi_type env ty))
+      avs ip NONE k)
+    (enc_array_inv
+      (enc_loop_ctx st z ops lo top (ArrayTV tv (Dynamic n))
+        (ArrayV (DynArrayV vs)) src_n outs s0 count_ptr ip)
+      (dst_n + 32) B (REPLICATE (LENGTH vs) (vyper_to_abi_type env ty))
+      avs ip NONE (SUC k)) R
+Proof
+  strip_tac >> drule_all enc_static_loop_body_phases >> strip_tac >>
+  qabbrev_tac `C = enc_loop_ctx st z ops lo top (ArrayTV tv (Dynamic n))
+    (ArrayV (DynArrayV vs)) src_n outs s0 count_ptr ip` >>
+  qabbrev_tac `invbody = \j. enc_array_inv C (dst_n + 32) B
+    (REPLICATE (LENGTH vs) (vyper_to_abi_type env ty)) avs ip NONE j` >>
+  qabbrev_tac `A = \s. invbody k s /\ eval_operand i s = SOME (n2w k) /\
+    eval_operand child_src s = SOME (n2w (src_n + 32 + k * type_memory_size tv)) /\
+    eval_operand child_dst s = SOME (n2w (dst_n + 32 + k * type_memory_size tv))` >>
+  qabbrev_tac `E = \s. C s /\ eval_operand i s = SOME (n2w k) /\
+    enc_prefix_mem (dst_n + 32) B
+      (REPLICATE (LENGTH vs) (vyper_to_abi_type env ty)) avs (SUC k) s` >>
+  `frag_exec ctx sb s7 (invbody k) A R` by suspend "setup" >>
+  `frag_exec ctx s7 s8 A E R` by suspend "element" >>
+  `frag_exec ctx s8 se E (invbody (SUC k)) R` by suspend "counter" >>
+  `frag_exec ctx sb se (invbody k) (invbody (SUC k)) R` suffices_by
+    simp[Abbr `invbody`, Abbr `C`] >>
+  `frag_exec ctx s7 se A (invbody (SUC k)) R` by
+    (irule frag_exec_seq >> qexistsl_tac [`E`,`s8`] >> simp[]) >>
+  irule frag_exec_seq >> qexistsl_tac [`A`,`s7`] >> simp[]
+QED
+Resume enc_static_loop_body_frag_layout[setup]:
+  simp_tac (srw_ss()) [Abbr `A`, Abbr `invbody`, Abbr `C`] >>
+  drule_all enc_static_loop_setup_frag >> disch_then irule
+QED
+Resume enc_static_loop_body_frag_layout[element]:
+  `frag_ids s7 s8 SUBSET frag_ids st z` by
+    metis_tac[pred_setTheory.SUBSET_TRANS] >>
+  `!x. not_fresh_at st x ==> not_fresh_at s7 x` by
+    (rpt strip_tac >>
+     qpat_x_assum `!x. not_fresh_at sb x ==> not_fresh_at s7 x` irule >>
+     fs[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+  irule frag_exec_pointwise >>
+  simp_tac (srw_ss()) [Abbr `A`, Abbr `E`, Abbr `invbody`, Abbr `C`] >>
+  rpt strip_tac >> drule_all enc_static_loop_element_frag_layout >> disch_then irule
+QED
+Resume enc_static_loop_body_frag_layout[counter]:
+  irule frag_exec_pointwise >>
+  simp_tac (srw_ss()) [Abbr `E`, Abbr `invbody`, Abbr `C`] >>
+  qx_gen_tac `u` >> strip_tac >>
+  drule_all enc_loop_ctx_array_slot >> strip_tac >>
+  `LENGTH avs = LENGTH vs` by metis_tac[LIST_REL_LENGTH] >>
+  `st.cs_next_var <= s8.cs_next_var` by decide_tac >>
+  `EVERY (\t. ~is_dynamic t)
+    (REPLICATE (LENGTH vs) (vyper_to_abi_type env ty))` by simp[EVERY_REPLICATE] >>
+  `LENGTH (enc_head_upto B
+    (REPLICATE (LENGTH vs) (vyper_to_abi_type env ty)) avs (SUC k)) =
+    SUC k * type_memory_size tv` by
+    (drule enc_head_upto_static_length_layout >>
+     disch_then (qspecl_then [`SUC k`,`B`] mp_tac) >> simp[]) >>
+  `dst_n + 32 + LENGTH (enc_head_upto B
+    (REPLICATE (LENGTH vs) (vyper_to_abi_type env ty)) avs (SUC k)) <= lo` by
+    (simp[] >> pure_rewrite_tac[arithmeticTheory.MULT_CLAUSES] >> decide_tac) >>
+  `SUC k <= LENGTH avs` by decide_tac >>
+  drule_all enc_static_loop_counter_frag >>
+  disch_then (mp_tac o SRULE [frag_exec_def]) >> simp[frag_exec_def]
+QED
+Finalise enc_static_loop_body_frag_layout
+
+Theorem enc_static_loop_exit_code:
+  enc_static_loop_exit src asz sx = (op,sz) ==>
+  ?len payload sa sb.
+    emit_op MLOAD [src] sx = (len,sa) /\
+    emit_op MUL [len;Lit (n2w asz)] sa = (payload,sb) /\
+    emit_op ADD [Lit 32w;payload] sb = (op,sz) /\
+    emitted_insts sx sz =
+      emitted_insts sx sa ++ emitted_insts sa sb ++ emitted_insts sb sz /\
+    same_blocks sx sz /\
+    sz.cs_current_insts = sx.cs_current_insts ++ emitted_insts sx sz /\
+    EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+      (emitted_insts sx sz) /\
+    sa.cs_next_var = sx.cs_next_var + 1 /\
+    sb.cs_next_var = sx.cs_next_var + 2
+Proof
+  simp[enc_static_loop_exit_def, comp_bind_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  rename1 `emit_op MLOAD [src] sx = (len,sa)` >>
+  rename1 `emit_op MUL [len;Lit (n2w asz)] sa = (payload,sb)` >>
+  imp_res_tac emitted_insts_emit_op >>
+  imp_res_tac emit_op_same_blocks >>
+  `emitted_insts sx sb = emitted_insts sx sa ++ emitted_insts sa sb` by
+    (irule emitted_insts_append >> simp[]) >>
+  `emitted_insts sx sz = emitted_insts sx sb ++ emitted_insts sb sz` by
+    (irule emitted_insts_append >> simp[]) >>
+  pure_asm_rewrite_tac[GSYM APPEND_ASSOC] >>
+  gvs[same_blocks_def, mk_inst_def, is_terminator_def]
+QED
+
+Theorem enc_static_loop_exit_run:
+  enc_static_loop_exit src asz sx = (op,sz) /\
+  eval_operand src s = SOME src_w /\
+  mem_word_at (w2n src_w) s.vs_memory = n2w n /\
+  a.cs_next_var <= sx.cs_next_var /\
+  enc_scratch (frag_ids a b) lo top s ==>
+  ?t. run_inst_seq (emitted_insts sx sz) s = OK t /\
+      eval_operand op t = SOME (n2w (32 + n * asz)) /\
+      t.vs_memory = s.vs_memory /\ t.vs_labels = s.vs_labels /\
+      enc_frame a b lo top outs s t
+Proof
+  strip_tac >> drule enc_static_loop_exit_code >> strip_tac >>
+  `step_inst_base (mk_inst sx.cs_next_id MLOAD [src]
+     [STRING #"%" (toString sx.cs_next_var)]) s =
+     OK (update_var (STRING #"%" (toString sx.cs_next_var)) (n2w n) s)` by
+    (drule step_MLOAD >> simp[GSYM mem_word_at_eq_mload]) >>
+  drule_all enc_emit_op_run_frame >>
+  disch_then (qspec_then `outs` (qx_choose_then `u` strip_assume_tac)) >>
+  `step_inst_base (mk_inst sa.cs_next_id MUL [len;Lit (n2w asz)]
+     [STRING #"%" (toString sa.cs_next_var)]) u =
+     OK (update_var (STRING #"%" (toString sa.cs_next_var))
+       (n2w (n * asz)) u)` by
+    (pure_rewrite_tac[GSYM wordsTheory.word_mul_n2w] >>
+     irule step_MUL >> simp[eval_operand_def]) >>
+  `a.cs_next_var <= sa.cs_next_var` by simp[] >>
+  `enc_scratch (frag_ids a b) lo top u` by fs[enc_frame_def] >>
+  drule_all enc_emit_op_run_frame >>
+  disch_then (qspec_then `outs` (qx_choose_then `v` strip_assume_tac)) >>
+  `step_inst_base (mk_inst sb.cs_next_id ADD [Lit 32w;payload]
+     [STRING #"%" (toString sb.cs_next_var)]) v =
+     OK (update_var (STRING #"%" (toString sb.cs_next_var))
+       (n2w (32 + n * asz)) v)` by
+    (pure_rewrite_tac[GSYM wordsTheory.word_add_n2w] >>
+     irule step_ADD >> simp[eval_operand_def]) >>
+  `a.cs_next_var <= sb.cs_next_var` by simp[] >>
+  `enc_scratch (frag_ids a b) lo top v` by fs[enc_frame_def] >>
+  drule_all enc_emit_op_run_frame >>
+  disch_then (qspec_then `outs` (qx_choose_then `t` strip_assume_tac)) >>
+  qexists_tac `t` >> simp[run_inst_seq_append] >>
+  conj_tac
+  >- (qspecl_then [`emitted_insts sx sa`,
+        `emitted_insts sa sb ++ emitted_insts sb sz`,`s`,`u`] mp_tac run_inst_seq_append >>
+      simp[] >> disch_then SUBST1_TAC >>
+      qspecl_then [`emitted_insts sa sb`,`emitted_insts sb sz`,`u`,`v`]
+        mp_tac run_inst_seq_append >> simp[]) >>
+  metis_tac[enc_frame_trans]
+QED
+
+Theorem enc_static_loop_exit_frag:
+  enc_static_loop_exit src asz sx = (op,sz) /\
+  eval_operand src s = SOME src_w /\
+  mem_word_at (w2n src_w) s.vs_memory = n2w n /\
+  a.cs_next_var <= sx.cs_next_var /\
+  enc_scratch (frag_ids a b) lo top s ==>
+  frag_exec ctx sx sz (\u. u = s)
+    (\t. eval_operand op t = SOME (n2w (32 + n * asz)) /\
+         t.vs_memory = s.vs_memory /\ t.vs_labels = s.vs_labels /\
+         enc_frame a b lo top outs s t) R
+Proof
+  strip_tac >> drule enc_static_loop_exit_code >> strip_tac >>
+  fs[same_blocks_def] >> irule frag_exec_run_inst_seq >>
+  asm_simp_tac (srw_ss()) [rich_listTheory.IS_PREFIX_APPEND] >>
+  drule_all enc_static_loop_exit_run >>
+  disch_then (qspec_then `outs` (qx_choose_then `t` strip_assume_tac)) >>
+  disj1_tac >> qexists_tac `t` >>
+  gvs[] >> Cases_on `op` >> gvs[eval_operand_def, lookup_var_def]
+QED
+
+Theorem enc_static_loop_iter_frag:
+  enc_static_loop_header count_ptr len_op sh = (cnd,sj) /\
+  enc_static_loop_body dst src ei (type_memory_size tv) (type_memory_size tv)
+    count_ptr sb = ((),se) /\
+  enc_static_loop_edges hdr body_lbl exit_lbl cnd (si,s1,sh,sj,s2,sb,se,s3,sx) /\
+  (!x. MEM (Var x) [count_ptr;len_op] ==> not_fresh_at sh x) /\
+  (!x. MEM (Var x) [count_ptr;src;dst] ==> not_fresh_at sb x) /\
+  st.cs_next_var <= sh.cs_next_var /\ st.cs_next_var <= sb.cs_next_var /\
+  st.cs_next_id IN frag_ids st z /\ frag_ids sb se SUBSET frag_ids st z /\
+  abi_enc_plan env ty ei /\ ~is_dynamic (vyper_to_abi_type env ty) /\
+  evaluate_type env ty = SOME tv /\
+  static_length (vyper_to_abi_type env ty) = type_memory_size tv /\
+  value_has_type (ArrayTV tv (Dynamic n)) (ArrayV (DynArrayV vs)) /\
+  LIST_REL (\v av. vyper_to_abi env ty v = SOME av) vs avs /\
+  has_types (REPLICATE (LENGTH vs) (vyper_to_abi_type env ty)) avs /\
+  LENGTH vs < dimword (:256) /\
+  MEM (dst_n,32 + LENGTH vs * type_memory_size tv) outs /\
+  MEM src ops /\ MEM dst ops /\ MEM len_op ops /\
+  eval_operand src s0 = SOME (n2w src_n) /\
+  eval_operand dst s0 = SOME (n2w dst_n) /\
+  eval_operand len_op s0 = SOME (n2w (LENGTH vs)) ==>
+  frag_exec ctx si sx
+    (enc_array_inv
+      (enc_loop_ctx st z ops lo top (ArrayTV tv (Dynamic n))
+        (ArrayV (DynArrayV vs)) src_n outs s0 count_ptr ip)
+      (dst_n + 32) B (REPLICATE (LENGTH vs) (vyper_to_abi_type env ty))
+      avs ip NONE 0)
+    (enc_array_header
+      (enc_loop_ctx st z ops lo top (ArrayTV tv (Dynamic n))
+        (ArrayV (DynArrayV vs)) src_n outs s0 count_ptr ip)
+      (dst_n + 32) B (REPLICATE (LENGTH vs) (vyper_to_abi_type env ty))
+      avs ip NONE cnd (LENGTH vs)) R
+Proof
+  strip_tac >>
+  `LENGTH avs = LENGTH vs` by metis_tac[LIST_REL_LENGTH] >>
+  qabbrev_tac `C = enc_loop_ctx st z ops lo top (ArrayTV tv (Dynamic n))
+    (ArrayV (DynArrayV vs)) src_n outs s0 count_ptr ip` >>
+  qabbrev_tac `Inv = \k. enc_array_inv C (dst_n + 32) B
+    (REPLICATE (LENGTH vs) (vyper_to_abi_type env ty)) avs ip NONE k` >>
+  qabbrev_tac `Hdr = \k. enc_array_header C (dst_n + 32) B
+    (REPLICATE (LENGTH vs) (vyper_to_abi_type env ty)) avs ip NONE cnd k` >>
+  `!k. k <= LENGTH vs ==> frag_exec ctx sh sj (Inv k) (Hdr k) R`
+    by suspend "headers" >>
+  `!k. k < LENGTH vs ==> frag_exec ctx sb se (Hdr k) (Inv (SUC k)) R`
+    by suspend "bodies" >>
+  `!k s l. Inv k s ==> Inv k (jump_to l s)` by
+    (simp[Abbr `Inv`] >> rpt strip_tac >>
+     irule enc_array_inv_jump >> simp[Abbr `C`]) >>
+  `!k s l. Hdr k s ==> Hdr k (jump_to l s)` by
+    (simp[Abbr `Hdr`] >> rpt strip_tac >>
+     irule enc_array_header_jump >> simp[Abbr `C`]) >>
+  `!k s. k <= LENGTH vs /\ Hdr k s ==>
+    ?w. eval_operand cnd s = SOME w /\ (w = 0w <=> k < LENGTH vs)` by
+    (simp[Abbr `Hdr`] >> metis_tac[enc_array_header_condition]) >>
+  imp_res_tac (cj 2 enc_static_loop_phase_extends) >>
+  imp_res_tac (cj 3 enc_static_loop_phase_extends) >>
+  fs[enc_static_loop_edges_def] >> drule_all frag_exec_loop >>
+  simp[Abbr `Inv`, Abbr `Hdr`, Abbr `C`]
+QED
+Resume enc_static_loop_iter_frag[headers]:
+  simp_tac (srw_ss()) [Abbr `Inv`, Abbr `Hdr`, Abbr `C`] >>
+  rpt strip_tac >>
+  `eval_operand len_op s0 = SOME (n2w (LENGTH avs)) /\
+   LENGTH avs < dimword (:256) /\ k <= LENGTH avs` by asm_rewrite_tac[] >>
+  drule_all enc_static_loop_header_frag >> disch_then irule
+QED
+Resume enc_static_loop_iter_frag[bodies]:
+  simp_tac (srw_ss()) [Abbr `Inv`, Abbr `Hdr`, Abbr `C`] >>
+  rpt strip_tac >> drule_all enc_static_loop_body_frag >>
+  disch_then (mp_then Any mp_tac frag_exec_conseq o SPEC_ALL) >>
+  disch_then irule >> simp[enc_array_header_def]
+QED
+Finalise enc_static_loop_iter_frag
+
+Theorem enc_static_loop_iter_frag_layout:
+  enc_static_loop_header count_ptr len_op sh = (cnd,sj) /\
+  enc_static_loop_body dst src ei (type_memory_size tv) (type_memory_size tv)
+    count_ptr sb = ((),se) /\
+  enc_static_loop_edges hdr body_lbl exit_lbl cnd (si,s1,sh,sj,s2,sb,se,s3,sx) /\
+  (!x. MEM (Var x) [count_ptr;len_op] ==> not_fresh_at sh x) /\
+  (!x. MEM (Var x) [count_ptr;src;dst] ==> not_fresh_at sb x) /\
+  st.cs_next_var <= sh.cs_next_var /\ st.cs_next_var <= sb.cs_next_var /\
+  st.cs_next_id IN frag_ids st z /\ frag_ids sb se SUBSET frag_ids st z /\
+  abi_enc_plan env ty ei /\ ~is_dynamic (vyper_to_abi_type env ty) /\
+  evaluate_type env ty = SOME tv /\
+  static_length (vyper_to_abi_type env ty) = type_memory_size tv /\
+  value_has_type (ArrayTV tv (Dynamic n)) (ArrayV (DynArrayV vs)) /\
+  LIST_REL (\v av. vyper_to_abi env ty v = SOME av) vs avs /\
+  enc_layout (REPLICATE (LENGTH vs) (vyper_to_abi_type env ty)) avs /\
+  LENGTH vs < dimword (:256) /\
+  MEM (dst_n,32 + LENGTH vs * type_memory_size tv) outs /\
+  MEM src ops /\ MEM dst ops /\ MEM len_op ops /\
+  eval_operand src s0 = SOME (n2w src_n) /\
+  eval_operand dst s0 = SOME (n2w dst_n) /\
+  eval_operand len_op s0 = SOME (n2w (LENGTH vs)) ==>
+  frag_exec ctx si sx
+    (enc_array_inv
+      (enc_loop_ctx st z ops lo top (ArrayTV tv (Dynamic n))
+        (ArrayV (DynArrayV vs)) src_n outs s0 count_ptr ip)
+      (dst_n + 32) B (REPLICATE (LENGTH vs) (vyper_to_abi_type env ty))
+      avs ip NONE 0)
+    (enc_array_header
+      (enc_loop_ctx st z ops lo top (ArrayTV tv (Dynamic n))
+        (ArrayV (DynArrayV vs)) src_n outs s0 count_ptr ip)
+      (dst_n + 32) B (REPLICATE (LENGTH vs) (vyper_to_abi_type env ty))
+      avs ip NONE cnd (LENGTH vs)) R
+Proof
+  strip_tac >>
+  `LENGTH avs = LENGTH vs` by metis_tac[LIST_REL_LENGTH] >>
+  qabbrev_tac `C = enc_loop_ctx st z ops lo top (ArrayTV tv (Dynamic n))
+    (ArrayV (DynArrayV vs)) src_n outs s0 count_ptr ip` >>
+  qabbrev_tac `Inv = \k. enc_array_inv C (dst_n + 32) B
+    (REPLICATE (LENGTH vs) (vyper_to_abi_type env ty)) avs ip NONE k` >>
+  qabbrev_tac `Hdr = \k. enc_array_header C (dst_n + 32) B
+    (REPLICATE (LENGTH vs) (vyper_to_abi_type env ty)) avs ip NONE cnd k` >>
+  `!k. k <= LENGTH vs ==> frag_exec ctx sh sj (Inv k) (Hdr k) R`
+    by suspend "headers" >>
+  `!k. k < LENGTH vs ==> frag_exec ctx sb se (Hdr k) (Inv (SUC k)) R`
+    by suspend "bodies" >>
+  `!k s l. Inv k s ==> Inv k (jump_to l s)` by
+    (simp[Abbr `Inv`] >> rpt strip_tac >>
+     irule enc_array_inv_jump >> simp[Abbr `C`]) >>
+  `!k s l. Hdr k s ==> Hdr k (jump_to l s)` by
+    (simp[Abbr `Hdr`] >> rpt strip_tac >>
+     irule enc_array_header_jump >> simp[Abbr `C`]) >>
+  `!k s. k <= LENGTH vs /\ Hdr k s ==>
+    ?w. eval_operand cnd s = SOME w /\ (w = 0w <=> k < LENGTH vs)` by
+    (simp[Abbr `Hdr`] >> metis_tac[enc_array_header_condition]) >>
+  imp_res_tac (cj 2 enc_static_loop_phase_extends) >>
+  imp_res_tac (cj 3 enc_static_loop_phase_extends) >>
+  fs[enc_static_loop_edges_def] >> drule_all frag_exec_loop >>
+  simp[Abbr `Inv`, Abbr `Hdr`, Abbr `C`]
+QED
+Resume enc_static_loop_iter_frag_layout[headers]:
+  simp_tac (srw_ss()) [Abbr `Inv`, Abbr `Hdr`, Abbr `C`] >>
+  rpt strip_tac >>
+  `eval_operand len_op s0 = SOME (n2w (LENGTH avs)) /\
+   LENGTH avs < dimword (:256) /\ k <= LENGTH avs` by asm_rewrite_tac[] >>
+  drule_all enc_static_loop_header_frag >> disch_then irule
+QED
+Resume enc_static_loop_iter_frag_layout[bodies]:
+  simp_tac (srw_ss()) [Abbr `Inv`, Abbr `Hdr`, Abbr `C`] >>
+  rpt strip_tac >> drule_all enc_static_loop_body_frag_layout >>
+  disch_then (mp_then Any mp_tac frag_exec_conseq o SPEC_ALL) >>
+  disch_then irule >> simp[enc_array_header_def]
+QED
+Finalise enc_static_loop_iter_frag_layout
+
+Theorem enc_static_type_memory_size_mutual:
+  (!env ty. !tv. evaluate_type env ty = SOME tv /\
+    ~is_dynamic (vyper_to_abi_type env ty) ==>
+    static_length (vyper_to_abi_type env ty) = type_memory_size tv) /\
+  (!env ts. !tvs. OPT_MMAP (evaluate_type env) ts = SOME tvs /\
+    EVERY is_static (vyper_to_abi_types env ts) ==>
+    SUM (MAP static_length (vyper_to_abi_types env ts)) =
+    SUM (MAP type_memory_size tvs))
+Proof
+  ho_match_mp_tac vyper_to_abi_type_ind >> rpt conj_tac
+  >- suspend "base"
+  >- suspend "tuple"
+  >- (simp[vyper_to_abi_type_def])
+  >- suspend "array"
+  >- suspend "struct"
+  >- suspend "flag"
+  >- suspend "none"
+  >- suspend "nil"
+  >> suspend "cons"
+QED
+Resume enc_static_type_memory_size_mutual[base]:
+  gen_tac >> Cases >>
+  simp[vyper_to_abi_type_def, vyper_base_to_abi_type_def,
+       vyperValueTheory.evaluate_type_def, type_memory_size_def,
+       is_dynamic_def, static_length_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[type_memory_size_def]
+QED
+Resume enc_static_type_memory_size_mutual[tuple]:
+  rpt strip_tac >>
+  gvs[vyperValueTheory.evaluate_type_def, vyperValueTheory.evaluate_types_OPT_MMAP,
+      vyper_to_abi_type_def, AllCaseEqs(), type_memory_size_def,
+      valueEncodingProofsTheory.type_memory_size_list_sum,
+      valueEncodingProofsTheory.any_dynamic_every_static, static_length_Tuple_SUM] >>
+  first_x_assum irule >> simp[]
+QED
+Resume enc_static_type_memory_size_mutual[array]:
+  rpt strip_tac >>
+  gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs(), type_memory_size_def,
+      is_dynamic_def, static_length_def] >> metis_tac[]
+QED
+Resume enc_static_type_memory_size_mutual[struct]:
+  rpt strip_tac >>
+  gvs[vyperValueTheory.evaluate_type_def, vyper_to_abi_type_def,
+      AllCaseEqs(), vyperValueTheory.evaluate_types_OPT_MMAP,
+      type_memory_size_def,
+      valueEncodingProofsTheory.type_memory_size_fields_sum,
+      valueEncodingProofsTheory.any_dynamic_every_static,
+      static_length_Tuple_SUM] >>
+  drule vyperTypeABITheory.OPT_MMAP_LENGTH >> strip_tac >>
+  gvs[MAP_ZIP, GSYM MAP_MAP_o]
+QED
+Resume enc_static_type_memory_size_mutual[flag]:
+  simp[vyperValueTheory.evaluate_type_def, AllCaseEqs(),
+       type_memory_size_def, static_length_def] >>
+  rpt strip_tac >> gvs[type_memory_size_def]
+QED
+Resume enc_static_type_memory_size_mutual[none]:
+  simp[vyperValueTheory.evaluate_type_def, type_memory_size_def,
+       static_length_def]
+QED
+Resume enc_static_type_memory_size_mutual[nil]:
+  simp[OPT_MMAP_def]
+QED
+Resume enc_static_type_memory_size_mutual[cons]:
+  simp[OPT_MMAP_def, AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+  metis_tac[]
+QED
+Finalise enc_static_type_memory_size_mutual
+
+Theorem enc_static_type_memory_size:
+  evaluate_type env ty = SOME tv /\ ~is_dynamic (vyper_to_abi_type env ty) ==>
+  static_length (vyper_to_abi_type env ty) = type_memory_size tv
+Proof
+  metis_tac[enc_static_type_memory_size_mutual]
+QED
+
+Theorem enc_same_conversion:
+  vyper_to_abi_same env ty vs = SOME avs ==>
+  LIST_REL (\v av. vyper_to_abi env ty v = SOME av) vs avs
+Proof
+  simp[vyperABIRoundtripTheory.vyper_to_abi_same_OPT_MMAP] >>
+  strip_tac >> drule vyperTypeABITheory.OPT_MMAP_LIST_REL >> simp[]
+QED
+
+Theorem enc_same_conversion_length:
+  vyper_to_abi_same env ty vs = SOME avs ==> LENGTH avs = LENGTH vs
+Proof
+  strip_tac >> drule enc_same_conversion >>
+  metis_tac[LIST_REL_LENGTH]
+QED
+
+Theorem enc_source_static_layout:
+  evaluate_type env ty = SOME tv /\
+  value_has_type tv v /\ vyper_to_abi env ty v = SOME av /\
+  val_in_memory tv v p mem ==>
+  (~is_dynamic (vyper_to_abi_type env ty) ==>
+   LENGTH (enc (vyper_to_abi_type env ty) av) =
+     static_length (vyper_to_abi_type env ty))
+Proof
+  rpt strip_tac >>
+  drule_all val_in_memory_static_enc_length >>
+  drule_all enc_static_type_memory_size >> simp[]
+QED
+
+Theorem enc_elems_source_layout:
+  !vs avs p.
+    evaluate_type env ty = SOME tv /\
+    EVERY (value_has_type tv) vs /\
+    LIST_REL (\v av. vyper_to_abi env ty v = SOME av) vs avs /\
+    elems_in_memory vs p tv mem ==>
+    enc_layout (REPLICATE (LENGTH vs) (vyper_to_abi_type env ty)) avs
+Proof
+  Induct >> Cases_on `avs` >>
+  simp[enc_layout_def, val_in_memory_def] >> rpt gen_tac >> strip_tac >>
+  conj_tac >- metis_tac[enc_source_static_layout] >>
+  qpat_x_assum `!avs p. _` (mp_tac o REWRITE_RULE [enc_layout_def]) >>
+  disch_then drule_all >> simp[]
+QED
+
+Theorem enc_same_source_layout:
+  evaluate_type env ty = SOME tv /\
+  EVERY (value_has_type tv) vs /\
+  vyper_to_abi_same env ty vs = SOME avs /\
+  elems_in_memory vs p tv mem ==>
+  enc_layout (REPLICATE (LENGTH vs) (vyper_to_abi_type env ty)) avs
+Proof
+  strip_tac >> drule enc_same_conversion >> strip_tac >>
+  irule enc_elems_source_layout >> metis_tac[]
+QED
+
+Theorem enc_tuple_source_layout:
+  !ts tvs vs avs p.
+    LIST_REL (\t tv. evaluate_type env t = SOME tv) ts tvs /\
+    LIST_REL value_has_type tvs vs /\
+    vyper_to_abi_list env ts vs = SOME avs /\
+    tuple_in_memory vs tvs p mem ==>
+    enc_layout (vyper_to_abi_types env ts) avs
+Proof
+  Induct >> Cases_on `tvs` >> Cases_on `vs` >>
+  simp[Once vyper_to_abi_def, enc_layout_def, val_in_memory_def] >>
+  rpt gen_tac >> strip_tac >> gvs[AllCaseEqs()] >>
+  conj_tac >- metis_tac[enc_source_static_layout] >>
+  qpat_x_assum `!tvs vs avs p. _`
+    (mp_tac o REWRITE_RULE [enc_layout_def]) >>
+  disch_then drule_all >> simp[]
+QED
+
+Theorem enc_dynarray_source_layout:
+  evaluate_type env ty = SOME tv /\
+  value_has_type (ArrayTV tv (Dynamic n)) (ArrayV (DynArrayV vs)) /\
+  vyper_to_abi_same env ty vs = SOME avs /\
+  val_in_memory (ArrayTV tv (Dynamic n)) (ArrayV (DynArrayV vs)) p mem ==>
+  enc_layout (REPLICATE (LENGTH vs) (vyper_to_abi_type env ty)) avs
+Proof
+  simp[value_has_type_def, all_have_type_EVERY, val_in_memory_def] >>
+  rpt strip_tac >> irule enc_same_source_layout >> metis_tac[]
+QED
+
+Theorem enc_uint1_typing_bridge_counterexample:
+  evaluate_type FEMPTY (BaseT (UintT 1)) = SOME (BaseTV (UintT 1)) /\
+  value_has_type (BaseTV (UintT 1)) (vyperValue$IntV 0) /\
+  vyper_to_abi FEMPTY (BaseT (UintT 1)) (vyperValue$IntV 0) = SOME (NumV 0) /\
+  ~is_dynamic (vyper_to_abi_type FEMPTY (BaseT (UintT 1))) /\
+  ~has_type (vyper_to_abi_type FEMPTY (BaseT (UintT 1))) (NumV 0)
+Proof
+  EVAL_TAC
+QED
+
+Theorem enc_static_loop_complete_frag:
+  enc_static_loop_init st = ((count_ptr,hdr,body_lbl,exit_lbl),si) /\
+  enc_static_loop_header count_ptr len_op sh = (cnd,sj) /\
+  enc_static_loop_body dst src ei (type_memory_size tv) (type_memory_size tv)
+    count_ptr sb = ((),se) /\
+  enc_static_loop_exit src (type_memory_size tv) sx = (op,z) /\
+  enc_static_loop_edges hdr body_lbl exit_lbl cnd (si,s1,sh,sj,s2,sb,se,s3,sx) /\
+  (!x. MEM (Var x) [count_ptr;len_op] ==> not_fresh_at sh x) /\
+  (!x. MEM (Var x) [count_ptr;src;dst] ==> not_fresh_at sb x) /\
+  st.cs_next_var <= sh.cs_next_var /\ st.cs_next_var <= sb.cs_next_var /\
+  st.cs_next_var <= sx.cs_next_var /\
+  st.cs_next_id IN frag_ids st z /\ frag_ids sb se SUBSET frag_ids st z /\
+  cs_extends si sx /\
+  abi_enc_plan env ty ei /\ ~is_dynamic (vyper_to_abi_type env ty) /\
+  evaluate_type env ty = SOME tv /\
+  static_length (vyper_to_abi_type env ty) = type_memory_size tv /\
+  value_has_type (ArrayTV tv (Dynamic n)) (ArrayV (DynArrayV vs)) /\
+  LIST_REL (\v av. vyper_to_abi env ty v = SOME av) vs avs /\
+  has_types (REPLICATE (LENGTH vs) (vyper_to_abi_type env ty)) avs /\
+  LENGTH vs < dimword (:256) /\
+  MEM (dst_n,32 + LENGTH vs * type_memory_size tv) outs /\
+  MEM src ops /\ MEM dst ops /\ MEM len_op ops /\
+  eval_operand src s0 = SOME (n2w src_n) /\ src_n < dimword (:256) /\
+  eval_operand dst s0 = SOME (n2w dst_n) /\
+  eval_operand len_op s0 = SOME (n2w (LENGTH vs)) /\
+  enc_pre st z ops lo top (ArrayTV tv (Dynamic n))
+    (ArrayV (DynArrayV vs)) src_n outs s0 ==>
+  frag_exec ctx st z (\s. s = s0)
+    (\s. enc_prefix_mem (dst_n + 32) B
+           (REPLICATE (LENGTH vs) (vyper_to_abi_type env ty)) avs (LENGTH vs) s /\
+         eval_operand op s = SOME (n2w (32 + LENGTH vs * type_memory_size tv)) /\
+         s.vs_labels = s0.vs_labels /\ enc_frame st z lo top outs s0 s) R
+Proof
+  strip_tac >>
+  qabbrev_tac `Inv = \ip. enc_array_inv
+    (enc_loop_ctx st z ops lo top (ArrayTV tv (Dynamic n))
+      (ArrayV (DynArrayV vs)) src_n outs s0 count_ptr ip)
+    (dst_n + 32) B (REPLICATE (LENGTH vs) (vyper_to_abi_type env ty)) avs ip NONE 0` >>
+  qabbrev_tac `Hdr = \ip. enc_array_header
+    (enc_loop_ctx st z ops lo top (ArrayTV tv (Dynamic n))
+      (ArrayV (DynArrayV vs)) src_n outs s0 count_ptr ip)
+    (dst_n + 32) B (REPLICATE (LENGTH vs) (vyper_to_abi_type env ty))
+    avs ip NONE cnd (LENGTH vs)` >>
+  `frag_exec ctx st si (\s. s = s0) (\s. ?ip. Inv ip s) R`
+    by suspend "init" >>
+  `frag_exec ctx si sx (\s. ?ip. Inv ip s) (\s. ?ip. Hdr ip s) R`
+    by suspend "iter" >>
+  `cs_extends st si /\ cs_extends sx z` by
+    metis_tac[enc_static_loop_phase_extends] >>
+  `cs_extends si z` by metis_tac[cs_extends_trans] >>
+  irule frag_exec_seq >> qexistsl_tac [`\s. ?ip. Inv ip s`, `si`] >>
+  simp[] >> irule frag_exec_seq_pointwise >>
+  qexistsl_tac [`\s. ?ip. Hdr ip s`, `sx`] >> simp[] >>
+  suspend "exit"
+QED
+Resume enc_static_loop_complete_frag[init]:
+  simp_tac (srw_ss()) [Abbr `Inv`] >>
+  drule_all enc_static_loop_init_frag >> disch_then irule
+QED
+Resume enc_static_loop_complete_frag[iter]:
+  irule frag_exec_pointwise >> simp_tac (srw_ss()) [Abbr `Inv`] >>
+  rpt strip_tac >>
+  drule_all enc_static_loop_iter_frag >>
+  disch_then (mp_then Any mp_tac frag_exec_conseq o SPEC_ALL) >>
+  disch_then irule >> simp[Abbr `Hdr`] >> metis_tac[]
+QED
+Resume enc_static_loop_complete_frag[exit]:
+  simp_tac (srw_ss()) [Abbr `Hdr`, enc_array_header_def, enc_array_inv_def] >>
+  rpt strip_tac >>
+  `eval_operand src t = SOME (n2w src_n)` by
+    (irule enc_loop_ctx_operand >> metis_tac[]) >>
+  `mem_word_at src_n t.vs_memory = n2w (LENGTH vs)` by
+    (drule enc_loop_ctx_source >>
+     simp[valueEncodingProofsTheory.val_in_memory_dynarray_proof]) >>
+  `enc_scratch (frag_ids st z) lo top t /\
+   enc_frame st z lo top outs s0 t /\ t.vs_labels = s0.vs_labels` by
+    fs[enc_loop_ctx_def, enc_pre_def] >>
+  `mem_word_at (w2n (n2w src_n : bytes32)) t.vs_memory = n2w (LENGTH vs)` by
+    simp[wordsTheory.w2n_n2w] >>
+  drule_all enc_static_loop_exit_frag >>
+  disch_then (mp_then Any mp_tac frag_exec_conseq o SPEC_ALL) >>
+  disch_then irule >> simp[] >> rpt strip_tac
+  >- fs[enc_prefix_mem_def] >>
+  metis_tac[enc_frame_trans]
+QED
+Finalise enc_static_loop_complete_frag
+
+
+Theorem enc_static_loop_complete_frag_layout:
+  enc_static_loop_init st = ((count_ptr,hdr,body_lbl,exit_lbl),si) /\
+  enc_static_loop_header count_ptr len_op sh = (cnd,sj) /\
+  enc_static_loop_body dst src ei (type_memory_size tv) (type_memory_size tv)
+    count_ptr sb = ((),se) /\
+  enc_static_loop_exit src (type_memory_size tv) sx = (op,z) /\
+  enc_static_loop_edges hdr body_lbl exit_lbl cnd (si,s1,sh,sj,s2,sb,se,s3,sx) /\
+  (!x. MEM (Var x) [count_ptr;len_op] ==> not_fresh_at sh x) /\
+  (!x. MEM (Var x) [count_ptr;src;dst] ==> not_fresh_at sb x) /\
+  st.cs_next_var <= sh.cs_next_var /\ st.cs_next_var <= sb.cs_next_var /\
+  st.cs_next_var <= sx.cs_next_var /\
+  st.cs_next_id IN frag_ids st z /\ frag_ids sb se SUBSET frag_ids st z /\
+  cs_extends si sx /\
+  abi_enc_plan env ty ei /\ ~is_dynamic (vyper_to_abi_type env ty) /\
+  evaluate_type env ty = SOME tv /\
+  static_length (vyper_to_abi_type env ty) = type_memory_size tv /\
+  value_has_type (ArrayTV tv (Dynamic n)) (ArrayV (DynArrayV vs)) /\
+  LIST_REL (\v av. vyper_to_abi env ty v = SOME av) vs avs /\
+  enc_layout (REPLICATE (LENGTH vs) (vyper_to_abi_type env ty)) avs /\
+  LENGTH vs < dimword (:256) /\
+  MEM (dst_n,32 + LENGTH vs * type_memory_size tv) outs /\
+  MEM src ops /\ MEM dst ops /\ MEM len_op ops /\
+  eval_operand src s0 = SOME (n2w src_n) /\ src_n < dimword (:256) /\
+  eval_operand dst s0 = SOME (n2w dst_n) /\
+  eval_operand len_op s0 = SOME (n2w (LENGTH vs)) /\
+  enc_pre st z ops lo top (ArrayTV tv (Dynamic n))
+    (ArrayV (DynArrayV vs)) src_n outs s0 ==>
+  frag_exec ctx st z (\s. s = s0)
+    (\s. enc_prefix_mem (dst_n + 32) B
+           (REPLICATE (LENGTH vs) (vyper_to_abi_type env ty)) avs (LENGTH vs) s /\
+         eval_operand op s = SOME (n2w (32 + LENGTH vs * type_memory_size tv)) /\
+         s.vs_labels = s0.vs_labels /\ enc_frame st z lo top outs s0 s) R
+Proof
+  strip_tac >>
+  qabbrev_tac `Inv = \ip. enc_array_inv
+    (enc_loop_ctx st z ops lo top (ArrayTV tv (Dynamic n))
+      (ArrayV (DynArrayV vs)) src_n outs s0 count_ptr ip)
+    (dst_n + 32) B (REPLICATE (LENGTH vs) (vyper_to_abi_type env ty)) avs ip NONE 0` >>
+  qabbrev_tac `Hdr = \ip. enc_array_header
+    (enc_loop_ctx st z ops lo top (ArrayTV tv (Dynamic n))
+      (ArrayV (DynArrayV vs)) src_n outs s0 count_ptr ip)
+    (dst_n + 32) B (REPLICATE (LENGTH vs) (vyper_to_abi_type env ty))
+    avs ip NONE cnd (LENGTH vs)` >>
+  `frag_exec ctx st si (\s. s = s0) (\s. ?ip. Inv ip s) R`
+    by suspend "init" >>
+  `frag_exec ctx si sx (\s. ?ip. Inv ip s) (\s. ?ip. Hdr ip s) R`
+    by suspend "iter" >>
+  `cs_extends st si /\ cs_extends sx z` by
+    metis_tac[enc_static_loop_phase_extends] >>
+  `cs_extends si z` by metis_tac[cs_extends_trans] >>
+  irule frag_exec_seq >> qexistsl_tac [`\s. ?ip. Inv ip s`, `si`] >>
+  simp[] >> irule frag_exec_seq_pointwise >>
+  qexistsl_tac [`\s. ?ip. Hdr ip s`, `sx`] >> simp[] >> suspend "exit"
+QED
+Resume enc_static_loop_complete_frag_layout[init]:
+  simp_tac (srw_ss()) [Abbr `Inv`] >>
+  drule_all enc_static_loop_init_frag >> disch_then irule
+QED
+Resume enc_static_loop_complete_frag_layout[iter]:
+  irule frag_exec_pointwise >> simp_tac (srw_ss()) [Abbr `Inv`] >>
+  rpt strip_tac >> drule_all enc_static_loop_iter_frag_layout >>
+  disch_then (mp_then Any mp_tac frag_exec_conseq o SPEC_ALL) >>
+  disch_then irule >> simp[Abbr `Hdr`] >> metis_tac[]
+QED
+Resume enc_static_loop_complete_frag_layout[exit]:
+  simp_tac (srw_ss()) [Abbr `Hdr`, enc_array_header_def, enc_array_inv_def] >>
+  rpt strip_tac >>
+  `eval_operand src t = SOME (n2w src_n)` by
+    (irule enc_loop_ctx_operand >> metis_tac[]) >>
+  `mem_word_at src_n t.vs_memory = n2w (LENGTH vs)` by
+    (drule enc_loop_ctx_source >>
+     simp[valueEncodingProofsTheory.val_in_memory_dynarray_proof]) >>
+  `enc_scratch (frag_ids st z) lo top t /\
+   enc_frame st z lo top outs s0 t /\ t.vs_labels = s0.vs_labels` by
+    fs[enc_loop_ctx_def, enc_pre_def] >>
+  `mem_word_at (w2n (n2w src_n : bytes32)) t.vs_memory = n2w (LENGTH vs)` by
+    simp[wordsTheory.w2n_n2w] >>
+  drule_all enc_static_loop_exit_frag >>
+  disch_then (mp_then Any mp_tac frag_exec_conseq o SPEC_ALL) >>
+  disch_then irule >> simp[] >> rpt strip_tac
+  >- fs[enc_prefix_mem_def] >> metis_tac[enc_frame_trans]
+QED
+Finalise enc_static_loop_complete_frag_layout
+
+Theorem enc_elems_in_memory_take:
+  !vs k p. elems_in_memory vs p tv mem ==>
+    elems_in_memory (TAKE k vs) p tv mem
+Proof
+  Induct >> Cases_on `k` >> simp[val_in_memory_def] >>
+  rpt strip_tac >> first_x_assum irule >> simp[]
+QED
+
+Theorem enc_dynarray_memory_take:
+  val_in_memory (ArrayTV tv (Dynamic n)) (ArrayV (DynArrayV vs)) a mem /\
+  k <= LENGTH vs /\ (n2w k : bytes32) = n2w (LENGTH vs) ==>
+  val_in_memory (ArrayTV tv (Dynamic n))
+    (ArrayV (DynArrayV (TAKE k vs))) a mem
+Proof
+  simp[val_in_memory_def, LENGTH_TAKE] >>
+  rpt strip_tac >> irule enc_elems_in_memory_take >> simp[]
+QED
+
+Theorem enc_dynarray_type_take:
+  value_has_type (ArrayTV tv (Dynamic n)) (ArrayV (DynArrayV vs)) ==>
+  value_has_type (ArrayTV tv (Dynamic n)) (ArrayV (DynArrayV (TAKE k vs)))
+Proof
+  simp[value_has_type_def, all_have_type_EVERY] >>
+  rpt strip_tac >> simp[EVERY_TAKE, LENGTH_TAKE_EQ]
+QED
+
+Theorem enc_dynarray_memory_mod_take:
+  val_in_memory (ArrayTV tv (Dynamic n)) (ArrayV (DynArrayV vs)) a mem ==>
+  val_in_memory (ArrayTV tv (Dynamic n))
+    (ArrayV (DynArrayV (TAKE (LENGTH vs MOD dimword (:256)) vs))) a mem
+Proof
+  strip_tac >> irule enc_dynarray_memory_take >>
+  simp[wordsTheory.WORD_EQ, arithmeticTheory.MOD_LESS_EQ]
+QED
+
+Theorem enc_prefix_mem_static_zero:
+  enc_layout (REPLICATE N t) avs /\ k <= N /\
+  ~is_dynamic t /\ static_length t = 0 ==>
+  enc_prefix_mem p B (REPLICATE N t) avs k s
+Proof
+  strip_tac >>
+  `LENGTH (enc_head_upto B (REPLICATE N t) avs k) = 0` by
+    (drule_all enc_head_upto_static_length_layout >> simp[]) >>
+  `enc_head_upto B (REPLICATE N t) avs k = []` by metis_tac[LENGTH_NIL] >>
+  simp[enc_prefix_mem_def, enc_tail_upto_static, mem_bytes_at_def]
+QED
+
+Theorem enc_static_loop_complete_frag_layout_zero:
+  enc_static_loop_init st = ((count_ptr,hdr,body_lbl,exit_lbl),si) /\
+  enc_static_loop_header count_ptr len_op sh = (cnd,sj) /\
+  enc_static_loop_body dst src ei (type_memory_size tv) (type_memory_size tv)
+    count_ptr sb = ((),se) /\
+  enc_static_loop_exit src (type_memory_size tv) sx = (op,z) /\
+  enc_static_loop_edges hdr body_lbl exit_lbl cnd (si,s1,sh,sj,s2,sb,se,s3,sx) /\
+  (!x. MEM (Var x) [count_ptr;len_op] ==> not_fresh_at sh x) /\
+  (!x. MEM (Var x) [count_ptr;src;dst] ==> not_fresh_at sb x) /\
+  st.cs_next_var <= sh.cs_next_var /\ st.cs_next_var <= sb.cs_next_var /\
+  st.cs_next_var <= sx.cs_next_var /\
+  st.cs_next_id IN frag_ids st z /\ frag_ids sb se SUBSET frag_ids st z /\
+  cs_extends si sx /\
+  abi_enc_plan env ty ei /\ ~is_dynamic (vyper_to_abi_type env ty) /\
+  evaluate_type env ty = SOME tv /\
+  static_length (vyper_to_abi_type env ty) = type_memory_size tv /\
+  value_has_type (ArrayTV tv (Dynamic n)) (ArrayV (DynArrayV vs)) /\
+  LIST_REL (\v av. vyper_to_abi env ty v = SOME av) vs avs /\
+  enc_layout (REPLICATE (LENGTH vs) (vyper_to_abi_type env ty)) avs /\
+  type_memory_size tv = 0 /\
+  MEM (dst_n,32 + LENGTH vs * type_memory_size tv) outs /\
+  MEM src ops /\ MEM dst ops /\ MEM len_op ops /\
+  eval_operand src s0 = SOME (n2w src_n) /\ src_n < dimword (:256) /\
+  eval_operand dst s0 = SOME (n2w dst_n) /\
+  eval_operand len_op s0 = SOME (n2w (LENGTH vs)) /\
+  enc_pre st z ops lo top (ArrayTV tv (Dynamic n))
+    (ArrayV (DynArrayV vs)) src_n outs s0 ==>
+  frag_exec ctx st z (\s. s = s0)
+    (\s. enc_prefix_mem (dst_n + 32) B
+           (REPLICATE (LENGTH vs) (vyper_to_abi_type env ty)) avs (LENGTH vs) s /\
+         eval_operand op s = SOME (n2w (32 + LENGTH vs * type_memory_size tv)) /\
+         s.vs_labels = s0.vs_labels /\ enc_frame st z lo top outs s0 s) R
+Proof
+  strip_tac >>
+  qabbrev_tac `m = LENGTH vs MOD dimword (:256)` >>
+  `m <= LENGTH vs /\ m < dimword (:256)` by
+    simp[Abbr `m`, arithmeticTheory.MOD_LESS_EQ] >>
+  `LENGTH (TAKE m vs) = m` by simp[LENGTH_TAKE] >>
+  `value_has_type (ArrayTV tv (Dynamic n))
+    (ArrayV (DynArrayV (TAKE m vs)))` by metis_tac[enc_dynarray_type_take] >>
+  `LIST_REL (\v av. vyper_to_abi env ty v = SOME av)
+    (TAKE m vs) (TAKE m avs)` by metis_tac[LIST_REL_TAKE] >>
+  `enc_layout (REPLICATE m (vyper_to_abi_type env ty)) (TAKE m avs)` by
+    (drule enc_layout_take >> disch_then (qspec_then `m` mp_tac) >>
+     simp[REPLICATE_GENLIST, TAKE_GENLIST, arithmeticTheory.MIN_DEF] >>
+     Cases_on `m < LENGTH vs` >> gvs[]) >>
+  `eval_operand len_op s0 = SOME (n2w m)` by
+    simp[Abbr `m`, wordsTheory.WORD_EQ] >>
+  `enc_pre st z ops lo top (ArrayTV tv (Dynamic n))
+    (ArrayV (DynArrayV (TAKE m vs))) src_n outs s0` by
+    (fs[enc_pre_def] >> irule enc_dynarray_memory_take >>
+     simp[Abbr `m`, wordsTheory.WORD_EQ, arithmeticTheory.MOD_LESS_EQ]) >>
+  qpat_x_assum `value_has_type _ (ArrayV (DynArrayV vs))` kall_tac >>
+  qpat_x_assum `LIST_REL _ vs avs` kall_tac >>
+  qpat_x_assum `enc_pre _ _ _ _ _ _ (ArrayV (DynArrayV vs)) _ _ _` kall_tac >>
+  `LENGTH (TAKE m vs) < dimword (:256) /\
+   enc_layout (REPLICATE (LENGTH (TAKE m vs)) (vyper_to_abi_type env ty))
+     (TAKE m avs) /\
+   MEM (dst_n,32 + LENGTH (TAKE m vs) * type_memory_size tv) outs /\
+   eval_operand len_op s0 = SOME (n2w (LENGTH (TAKE m vs)))` by gvs[] >>
+  drule_all enc_static_loop_complete_frag_layout >>
+  disch_then (mp_then Any mp_tac frag_exec_conseq o SPEC_ALL) >>
+  disch_then irule >> simp[] >> rpt strip_tac >>
+  irule enc_prefix_mem_static_zero >> gvs[]
+QED
+
+Theorem compile_abi_encode_dyn_static_loop_abi_frag:
+  compile_abi_encode_dyn_static_loop dst src ei
+    (type_memory_size tv) (type_memory_size tv) len_op st = (op,z) /\
+  abi_enc_plan env ty ei /\ ~is_dynamic (vyper_to_abi_type env ty) /\
+  evaluate_type env ty = SOME tv /\
+  value_has_type (ArrayTV tv (Dynamic n)) (ArrayV (DynArrayV vs)) /\
+  vyper_to_abi_same env ty vs = SOME avs /\
+  eval_operand src s0 = SOME (n2w src_n) /\ src_n < dimword (:256) /\
+  eval_operand dst s0 = SOME (n2w dst_n) /\
+  eval_operand len_op s0 = SOME (n2w (LENGTH vs)) /\
+  MEM src ops /\ MEM dst ops /\ MEM len_op ops /\
+  MEM (dst_n,LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs))) outs /\
+  enc_pre st z ops lo top (ArrayTV tv (Dynamic n))
+    (ArrayV (DynArrayV vs)) src_n outs s0 ==>
+  frag_exec ctx st z (\s. s = s0)
+    (\s. mem_bytes_at (dst_n + 32)
+           (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)) - 32)
+           s.vs_memory = DROP 32 (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)) /\
+         eval_operand op s = SOME (n2w (LENGTH
+           (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))) /\
+         s.vs_labels = s0.vs_labels /\ enc_frame st z lo top outs s0 s) R
+Proof
+  strip_tac >>
+  `static_length (vyper_to_abi_type env ty) = type_memory_size tv` by
+    metis_tac[enc_static_type_memory_size] >>
+  `LIST_REL (\v av. vyper_to_abi env ty v = SOME av) vs avs` by
+    metis_tac[enc_same_conversion] >>
+  `LENGTH avs = LENGTH vs` by metis_tac[LIST_REL_LENGTH] >>
+  `enc_layout (REPLICATE (LENGTH vs) (vyper_to_abi_type env ty)) avs` by
+    (irule enc_dynarray_source_layout >> fs[enc_pre_def] >> metis_tac[]) >>
+  `LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)) =
+    32 + LENGTH vs * type_memory_size tv` by
+    (`enc_layout (REPLICATE (LENGTH avs) (vyper_to_abi_type env ty)) avs`
+       by simp[] >> drule_all enc_dynarray_static_length_layout >> simp[]) >>
+  `frag_exec ctx st z (\s. s = s0)
+    (\s. enc_prefix_mem (dst_n + 32)
+           (head_lengths (REPLICATE (LENGTH vs) (vyper_to_abi_type env ty)) 0)
+           (REPLICATE (LENGTH vs) (vyper_to_abi_type env ty)) avs (LENGTH vs) s /\
+         eval_operand op s = SOME (n2w (32 + LENGTH vs * type_memory_size tv)) /\
+         s.vs_labels = s0.vs_labels /\ enc_frame st z lo top outs s0 s) R`
+    by suspend "loop" >>
+  pop_assum (mp_then Any mp_tac frag_exec_conseq) >> disch_then irule >>
+  simp[Excl "enc_def"] >> suspend "payload"
+QED
+Resume compile_abi_encode_dyn_static_loop_abi_frag[loop]:
+  drule enc_static_loop_decompose >> strip_tac >>
+  drule_all enc_static_loop_phase_safety >> strip_tac >>
+  `st.cs_next_var <= sb.cs_next_var /\ st.cs_next_var <= sx.cs_next_var` by decide_tac >>
+  `!x. MEM (Var x) ops ==> not_fresh_at st x` by fs[enc_pre_def] >>
+  `(!x. MEM (Var x) [count_ptr;len_op] ==> not_fresh_at sh x) /\
+   (!x. MEM (Var x) [count_ptr;src;dst] ==> not_fresh_at sb x)` by
+    (simp[] >> metis_tac[freshWritesTheory.not_fresh_at_mono]) >>
+  `cs_extends si sx /\ frag_ids sb se SUBSET frag_ids st z` by suspend "phase_chain" >>
+  `MEM (dst_n,32 + LENGTH vs * type_memory_size tv) outs` by metis_tac[] >>
+  Cases_on `type_memory_size tv = 0`
+  >- (drule_all enc_static_loop_complete_frag_layout_zero >> disch_then irule) >>
+  `LENGTH vs < dimword (:256)` by suspend "positive_bound" >>
+  drule_all enc_static_loop_complete_frag_layout >> disch_then irule
+QED
+Resume compile_abi_encode_dyn_static_loop_abi_frag[payload]:
+  rpt gen_tac >> strip_tac >>
+  `enc_layout (REPLICATE (LENGTH avs) (vyper_to_abi_type env ty)) avs` by simp[] >>
+  drule enc_dynarray_payload_layout >>
+  drule enc_prefix_full_layout >>
+  simp[enc_tail_upto_static, enc_prefix_mem_def, Excl "enc_def"] >>
+  rpt strip_tac >>
+  `LENGTH vs <= LENGTH vs` by simp[] >>
+  drule_all enc_head_upto_static_length_layout >>
+  disch_then (qspec_then
+    `head_lengths (REPLICATE (LENGTH vs) (vyper_to_abi_type env ty)) 0` assume_tac) >>
+  gvs[enc_prefix_mem_def, Excl "enc_def"]
+QED
+Resume compile_abi_encode_dyn_static_loop_abi_frag[phase_chain]:
+  drule enc_static_loop_edges_frontiers >> strip_tac >>
+  drule enc_static_loop_header_frontiers >> strip_tac >>
+  drule enc_static_loop_body_frontiers >> strip_tac >>
+  reverse conj_tac
+  >- (fs[frag_ids_def, pred_setTheory.SUBSET_DEF] >> rpt strip_tac >>
+      first_x_assum irule >> decide_tac) >>
+  qpat_x_assum `enc_static_loop_edges _ _ _ _ _` mp_tac >>
+  simp[enc_static_loop_edges_def] >> strip_tac >>
+  `cs_extends si s1 /\ cs_extends s1 sh /\ cs_extends sh sj /\
+   cs_extends sj s2 /\ cs_extends s2 sb /\ cs_extends sb se /\
+   cs_extends se s3 /\ cs_extends s3 sx` by
+    metis_tac[cs_extends_emit_inst, cs_extends_new_block, enc_static_loop_phase_extends] >>
+  `cs_extends si sh /\ cs_extends sh s2 /\ cs_extends s2 se /\ cs_extends se sx` by
+    metis_tac[cs_extends_trans] >>
+  `cs_extends si s2 /\ cs_extends s2 sx` by metis_tac[cs_extends_trans] >>
+  metis_tac[cs_extends_trans]
+QED
+Resume compile_abi_encode_dyn_static_loop_abi_frag[positive_bound]:
+  drule enc_pre_bounds >> strip_tac >>
+  `LENGTH vs <= n` by fs[value_has_type_def] >>
+  Cases_on `type_memory_size tv` >>
+  fs[type_memory_size_def, arithmeticTheory.MULT_CLAUSES, Excl "enc_def"] >>
+  decide_tac
+QED
+Finalise compile_abi_encode_dyn_static_loop_abi_frag
+
+(* Syntax-only growth, independent of the recursive semantic invariant. *)
+Definition enc_comp_grows_def:
+  enc_comp_grows (m : 'a compiler) <=>
+    !s x t. m s = (x,t) ==>
+      cs_extends s t /\ s.cs_next_id <= t.cs_next_id /\
+      s.cs_next_var <= t.cs_next_var
+End
+
+Theorem enc_comp_grows_return[local]:
+  !x. enc_comp_grows (comp_return x)
+Proof
+  simp[enc_comp_grows_def, comp_return_def, cs_extends_refl]
+QED
+
+Theorem enc_comp_grows_bind[local]:
+  !m f. enc_comp_grows m /\ (!a. enc_comp_grows (f a)) ==>
+    enc_comp_grows (comp_bind m f)
+Proof
+  rw[enc_comp_grows_def, comp_bind_def] >> pairarg_tac >> gvs[] >>
+  metis_tac[cs_extends_trans, arithmeticTheory.LESS_EQ_TRANS]
+QED
+
+Theorem enc_comp_grows_ignore_bind[local]:
+  !m n. enc_comp_grows m /\ enc_comp_grows n ==>
+    enc_comp_grows (comp_ignore_bind m n)
+Proof
+  rpt strip_tac >> rewrite_tac[comp_ignore_bind_def] >>
+  irule enc_comp_grows_bind >> simp[]
+QED
+
+Theorem enc_comp_grows_emit[local]:
+  !i. enc_comp_grows (emit i)
+Proof
+  rw[enc_comp_grows_def] >> drule cs_extends_emit >> strip_tac >> gvs[emit_def]
+QED
+
+Theorem enc_comp_grows_fresh_id[local]:
+  enc_comp_grows fresh_id
+Proof
+  rw[enc_comp_grows_def] >> drule cs_extends_fresh_id >> strip_tac >>
+  gvs[fresh_id_def]
+QED
+
+Theorem enc_comp_grows_fresh_var[local]:
+  enc_comp_grows fresh_var
+Proof
+  rw[enc_comp_grows_def] >> drule cs_extends_fresh_var >> strip_tac >>
+  gvs[fresh_var_def]
+QED
+
+Theorem enc_comp_grows_fresh_label[local]:
+  !sfx. enc_comp_grows (fresh_label sfx)
+Proof
+  rw[enc_comp_grows_def] >> drule cs_extends_fresh_label >> strip_tac >>
+  gvs[fresh_label_def]
+QED
+
+Theorem enc_comp_grows_new_block[local]:
+  !lbl. enc_comp_grows (new_block lbl)
+Proof
+  rw[enc_comp_grows_def] >> drule cs_extends_new_block >> strip_tac >>
+  gvs[new_block_def]
+QED
+
+Theorem enc_comp_grows_emit_op[local]:
+  !opc args. enc_comp_grows (emit_op opc args)
+Proof
+  rw[emit_op_def] >> irule enc_comp_grows_bind >>
+  simp[enc_comp_grows_fresh_id] >> gen_tac >>
+  irule enc_comp_grows_bind >> simp[enc_comp_grows_fresh_var] >>
+  gen_tac >> irule enc_comp_grows_ignore_bind >>
+  simp[enc_comp_grows_emit, enc_comp_grows_return]
+QED
+
+Theorem enc_comp_grows_emit_inst[local]:
+  !opc args outs. enc_comp_grows (emit_inst opc args outs)
+Proof
+  rw[emit_inst_def] >> irule enc_comp_grows_bind >>
+  simp[enc_comp_grows_fresh_id, enc_comp_grows_emit]
+QED
+
+Theorem enc_comp_grows_emit_void[local]:
+  !opc args. enc_comp_grows (emit_void opc args)
+Proof
+  rw[emit_void_def] >> irule enc_comp_grows_bind >>
+  simp[enc_comp_grows_fresh_id, enc_comp_grows_emit]
+QED
+
+Theorem enc_comp_grows_alloc_buffer[local]:
+  !n. enc_comp_grows (compile_alloc_buffer n)
+Proof
+  rw[contextTheory.compile_alloc_buffer_def] >> irule enc_comp_grows_bind >>
+  simp[enc_comp_grows_emit_op, enc_comp_grows_return]
+QED
+
+Theorem enc_comp_grows_static[local]:
+  !dst src. enc_comp_grows (compile_abi_encode_static dst src)
+Proof
+  rw[compile_abi_encode_static_def] >>
+  irule enc_comp_grows_bind >> simp[enc_comp_grows_emit_op] >>
+  gen_tac >> irule enc_comp_grows_ignore_bind >>
+  simp[enc_comp_grows_emit_void, enc_comp_grows_return]
+QED
+
+Theorem enc_comp_grows_static_info[local]:
+  !dst src ei. enc_comp_grows (compile_abi_encode_static_info dst src ei)
+Proof
+  rpt gen_tac >> Cases_on `ei` >> simp[compile_abi_encode_static_info_def,
+    enc_comp_grows_static, enc_comp_grows_return] >>
+  irule enc_comp_grows_ignore_bind >>
+  simp[enc_comp_grows_emit_void, enc_comp_grows_return]
+QED
+
+Theorem enc_comp_grows_dyn_static_loop[local]:
+  !dst src ei asz msz len.
+    enc_comp_grows (compile_abi_encode_dyn_static_loop dst src ei asz msz len)
+Proof
+  rpt gen_tac >> rewrite_tac[compile_abi_encode_dyn_static_loop_def] >>
+  rpt (FIRST [CHANGED_TAC (simp[LET_THM,
+          enc_comp_grows_alloc_buffer, enc_comp_grows_emit_op,
+          enc_comp_grows_emit_void, enc_comp_grows_emit_inst,
+          enc_comp_grows_fresh_label, enc_comp_grows_new_block,
+          enc_comp_grows_static_info]),
+        irule enc_comp_grows_bind >> conj_tac,
+        irule enc_comp_grows_ignore_bind >> conj_tac,
+        gen_tac])
+QED
+
+Theorem enc_comp_grows_encoder[local]:
+  (!dst cp ei dyn off dp.
+    enc_comp_grows (compile_abi_encode_child dst cp ei dyn off dp)) /\
+  (!dst src ei. enc_comp_grows (compile_abi_encode_to_buf dst src ei)) /\
+  (!dst src eis so ho dp.
+    enc_comp_grows (compile_abi_encode_complex_elems dst src eis so ho dp)) /\
+  (!dst src ei asz msz len.
+    enc_comp_grows (compile_abi_encode_dyn_loop dst src ei asz msz len))
+Proof
+  ho_match_mp_tac compile_abi_encode_child_ind >> rpt conj_tac >>
+  rpt strip_tac >> once_rewrite_tac[compile_abi_encode_child_def] >>
+  rpt (FIRST [CHANGED_TAC (gvs[LET_THM,
+          enc_comp_grows_alloc_buffer, enc_comp_grows_emit_op,
+          enc_comp_grows_emit_void, enc_comp_grows_emit_inst,
+          enc_comp_grows_fresh_label, enc_comp_grows_new_block,
+          enc_comp_grows_static, enc_comp_grows_return,
+          enc_comp_grows_dyn_static_loop]),
+        irule enc_comp_grows_bind >> conj_tac,
+        irule enc_comp_grows_ignore_bind >> conj_tac,
+        gen_tac, IF_CASES_TAC])
+QED
+
+Theorem enc_encoder_growth:
+  (!dst cp ei dyn off dp st op st'.
+    compile_abi_encode_child dst cp ei dyn off dp st = (op,st') ==>
+    cs_extends st st' /\ st.cs_next_id <= st'.cs_next_id /\
+    st.cs_next_var <= st'.cs_next_var) /\
+  (!dst src ei st op st'.
+    compile_abi_encode_to_buf dst src ei st = (op,st') ==>
+    cs_extends st st' /\ st.cs_next_id <= st'.cs_next_id /\
+    st.cs_next_var <= st'.cs_next_var) /\
+  (!dst src eis so ho dp st op st'.
+    compile_abi_encode_complex_elems dst src eis so ho dp st = (op,st') ==>
+    cs_extends st st' /\ st.cs_next_id <= st'.cs_next_id /\
+    st.cs_next_var <= st'.cs_next_var) /\
+  (!dst src ei asz msz len st op st'.
+    compile_abi_encode_dyn_loop dst src ei asz msz len st = (op,st') ==>
+    cs_extends st st' /\ st.cs_next_id <= st'.cs_next_id /\
+    st.cs_next_var <= st'.cs_next_var)
+Proof
+  mp_tac enc_comp_grows_encoder >> simp[enc_comp_grows_def]
+QED
+
+Definition enc_result_bound_def:
+  enc_result_bound (m : operand compiler) <=>
+    !s op t. m s = (op,t) ==> !x. op = Var x ==> not_fresh_at t x
+End
+
+Theorem enc_result_bound_bind[local]:
+  (!x. enc_result_bound (f x)) ==> enc_result_bound (comp_bind m f)
+Proof
+  rw[enc_result_bound_def, comp_bind_def] >> pairarg_tac >> gvs[] >> metis_tac[]
+QED
+
+Theorem enc_result_bound_ignore[local]:
+  enc_result_bound n ==> enc_result_bound (comp_ignore_bind m n)
+Proof
+  simp[comp_ignore_bind_def, enc_result_bound_bind]
+QED
+
+Theorem enc_result_bound_lit[local]:
+  enc_result_bound (comp_return (Lit w))
+Proof
+  simp[enc_result_bound_def, comp_return_def]
+QED
+
+Theorem enc_result_bound_emit_op[local]:
+  enc_result_bound (emit_op opc args)
+Proof
+  rw[enc_result_bound_def] >> drule emitted_insts_emit_op >> strip_tac >>
+  gvs[not_fresh_at_def]
+QED
+
+Theorem enc_result_bound_static[local]:
+  enc_result_bound (compile_abi_encode_static dst src)
+Proof
+  rewrite_tac[compile_abi_encode_static_def] >>
+  irule enc_result_bound_bind >> gen_tac >> BETA_TAC >>
+  irule enc_result_bound_ignore >> simp[enc_result_bound_lit]
+QED
+
+Theorem enc_result_bound_dyn_static_loop[local]:
+  enc_result_bound (compile_abi_encode_dyn_static_loop dst src ei asz msz len)
+Proof
+  rewrite_tac[compile_abi_encode_dyn_static_loop_def] >>
+  rpt (FIRST [CHANGED_TAC (simp[LET_THM, enc_result_bound_emit_op]),
+        irule enc_result_bound_bind, irule enc_result_bound_ignore, gen_tac])
+QED
+
+Theorem enc_encoder_result_bound_aux[local]:
+  (!dst cp ei dyn off dp.
+    enc_result_bound (compile_abi_encode_child dst cp ei dyn off dp)) /\
+  (!dst src ei. enc_result_bound (compile_abi_encode_to_buf dst src ei)) /\
+  (!dst src eis so ho dp.
+    enc_result_bound (compile_abi_encode_complex_elems dst src eis so ho dp)) /\
+  (!dst src ei asz msz len.
+    enc_result_bound (compile_abi_encode_dyn_loop dst src ei asz msz len))
+Proof
+  ho_match_mp_tac compile_abi_encode_child_ind >> conj_tac
+  >- suspend "child" >>
+  rpt conj_tac >> rpt strip_tac >>
+  once_rewrite_tac[compile_abi_encode_child_def] >>
+  rpt (FIRST [CHANGED_TAC (gvs[LET_THM, enc_result_bound_emit_op,
+          enc_result_bound_lit, enc_result_bound_static,
+          enc_result_bound_dyn_static_loop]),
+        irule enc_result_bound_bind, irule enc_result_bound_ignore,
+        gen_tac, IF_CASES_TAC])
+QED
+
+Resume enc_encoder_result_bound_aux[child]:
+  rpt gen_tac >> strip_tac >> Cases_on `dyn` >>
+  gvs[Once compile_abi_encode_child_def] >>
+  rw[enc_result_bound_def, comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  gvs[enc_result_bound_def] >> rpt strip_tac >>
+  qpat_x_assum `!dst' s op t. _` drule >> simp[] >> strip_tac >>
+  imp_res_tac (SRULE [enc_comp_grows_def] enc_comp_grows_emit_op) >>
+  imp_res_tac (SRULE [enc_comp_grows_def] enc_comp_grows_emit_void) >>
+  fs[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]
+QED
+
+Finalise enc_encoder_result_bound_aux
+
+Theorem enc_encoder_result_bound:
+  (!dst cp ei dyn off dp st op st'.
+    compile_abi_encode_child dst cp ei dyn off dp st = (op,st') ==>
+    !x. op = Var x ==> not_fresh_at st' x) /\
+  (!dst src ei st op st'.
+    compile_abi_encode_to_buf dst src ei st = (op,st') ==>
+    !x. op = Var x ==> not_fresh_at st' x) /\
+  (!dst src eis so ho dp st op st'.
+    compile_abi_encode_complex_elems dst src eis so ho dp st = (op,st') ==>
+    !x. op = Var x ==> not_fresh_at st' x) /\
+  (!dst src ei asz msz len st op st'.
+    compile_abi_encode_dyn_loop dst src ei asz msz len st = (op,st') ==>
+    !x. op = Var x ==> not_fresh_at st' x)
+Proof
+  mp_tac enc_encoder_result_bound_aux >> simp[enc_result_bound_def]
+QED
+
+(* Recursive correctness is indexed by compiler arguments, not endpoints. *)
+Definition enc_buf_correct_def:
+  enc_buf_correct dst src ei <=>
+  !st op st' ctx env ty tv v av s0 dst_w src_w lo top.
+    compile_abi_encode_to_buf dst src ei st = (op, st') /\
+    abi_enc_plan env ty ei /\
+    evaluate_type env ty = SOME tv /\ value_has_type tv v /\
+    vyper_to_abi env ty v = SOME av /\
+    eval_operand dst s0 = SOME dst_w /\ eval_operand src s0 = SOME src_w /\
+    enc_pre st st' [dst; src] lo top tv v (w2n src_w)
+      [(w2n dst_w, LENGTH (enc (vyper_to_abi_type env ty) av))] s0 ==>
+    frag_exec ctx st st' (\s. s = s0)
+      (\s. mem_bytes_at (w2n dst_w)
+             (LENGTH (enc (vyper_to_abi_type env ty) av)) s.vs_memory =
+           enc (vyper_to_abi_type env ty) av /\
+           eval_operand op s =
+             SOME (n2w (LENGTH (enc (vyper_to_abi_type env ty) av))) /\
+           enc_frame st st' lo top
+             [(w2n dst_w, LENGTH (enc (vyper_to_abi_type env ty) av))] s0 s)
+      (\r. F)
+End
+
+Definition enc_child_correct_def:
+  enc_child_correct dst child_ptr ei is_dyn static_ofst dyn_ptr <=>
+  !st op st' ctx env ty tv v av s0 dst_w src_w lo top.
+    compile_abi_encode_child dst child_ptr ei is_dyn static_ofst dyn_ptr st =
+      (op, st') /\
+    abi_enc_plan env ty ei /\
+    is_dyn = is_dynamic (vyper_to_abi_type env ty) /\
+    evaluate_type env ty = SOME tv /\ value_has_type tv v /\
+    vyper_to_abi env ty v = SOME av /\
+    eval_operand dst s0 = SOME dst_w /\
+    eval_operand child_ptr s0 = SOME src_w ==>
+    if ~is_dyn then
+      enc_pre st st' [dst; child_ptr] lo top tv v (w2n src_w)
+        [(w2n dst_w + static_ofst,
+          LENGTH (enc (vyper_to_abi_type env ty) av))] s0 ==>
+      frag_exec ctx st st' (\s. s = s0)
+        (\s. mem_bytes_at (w2n dst_w + static_ofst)
+               (LENGTH (enc (vyper_to_abi_type env ty) av)) s.vs_memory =
+             enc (vyper_to_abi_type env ty) av /\
+             eval_operand op s =
+               SOME (n2w (LENGTH (enc (vyper_to_abi_type env ty) av))) /\
+             enc_frame st st' lo top
+               [(w2n dst_w + static_ofst,
+                 LENGTH (enc (vyper_to_abi_type env ty) av))] s0 s)
+        (\r. F)
+    else
+      !c d j.
+        eval_operand dyn_ptr s0 = SOME (n2w c) /\
+        mem_word_at c s0.vs_memory = n2w d /\
+        j NOTIN frag_ids st st' /\
+        FLOOKUP s0.vs_allocas j = SOME (c, 32) /\ lo <= c /\
+        static_ofst + 32 <= d /\
+        enc_pre st st' [dst; child_ptr; dyn_ptr] lo top tv v (w2n src_w)
+          [(w2n dst_w + static_ofst, 32);
+           (w2n dst_w + d,
+            LENGTH (enc (vyper_to_abi_type env ty) av))] s0 ==>
+        frag_exec ctx st st' (\s. s = s0)
+          (\s. mem_bytes_at (w2n dst_w + d)
+                 (LENGTH (enc (vyper_to_abi_type env ty) av)) s.vs_memory =
+               enc (vyper_to_abi_type env ty) av /\
+               mem_word_at (w2n dst_w + static_ofst) s.vs_memory = n2w d /\
+               mem_word_at c s.vs_memory =
+                 n2w (d + LENGTH (enc (vyper_to_abi_type env ty) av)) /\
+               eval_operand op s =
+                 SOME (n2w (LENGTH (enc (vyper_to_abi_type env ty) av))) /\
+               enc_frame st st' lo top
+                 [(w2n dst_w + static_ofst, 32);
+                  (w2n dst_w + d,
+                   LENGTH (enc (vyper_to_abi_type env ty) av));
+                  (c, 32)] s0 s)
+          (\r. F)
+End
+
+Definition enc_elems_correct_def:
+  enc_elems_correct dst src elems src_offset head_offset dyn_ptr <=>
+  !st op st' ctx env ts tvs vs avs s0 dst_w src_w lo top c d.
+    compile_abi_encode_complex_elems dst src elems src_offset head_offset
+      dyn_ptr st = (op, st') /\
+    abi_enc_plans env ts elems /\
+    LIST_REL (\t tv. evaluate_type env t = SOME tv) ts tvs /\
+    LIST_REL value_has_type tvs vs /\
+    vyper_to_abi_list env ts vs = SOME avs /\
+    eval_operand dst s0 = SOME dst_w /\ eval_operand src s0 = SOME src_w /\
+    (EXISTS (\(_, _, _, is_dyn). is_dyn) elems ==>
+       eval_operand dyn_ptr s0 = SOME (n2w c) /\
+       mem_word_at c s0.vs_memory = n2w d /\
+       (?j. j NOTIN frag_ids st st' /\
+            FLOOKUP s0.vs_allocas j = SOME (c, 32)) /\ lo <= c /\
+       head_offset + SUM (MAP (\(_, abi_sz, _, _). abi_sz) elems) <= d) /\
+    enc_pre st st' [dst; src; dyn_ptr] lo top (TupleTV tvs)
+      (ArrayV (TupleV vs)) (w2n src_w + src_offset)
+      [(w2n dst_w + head_offset, SUM (MAP (\(_, abi_sz, _, _). abi_sz) elems));
+       (w2n dst_w + d,
+        LENGTH (enc_tuple d 0 (vyper_to_abi_types env ts) avs [] []) -
+        SUM (MAP (\(_, abi_sz, _, _). abi_sz) elems))] s0 ==>
+    frag_exec ctx st st' (\s. s = s0)
+      (\s. mem_bytes_at (w2n dst_w + head_offset)
+             (SUM (MAP (\(_, abi_sz, _, _). abi_sz) elems)) s.vs_memory ++
+           mem_bytes_at (w2n dst_w + d)
+             (LENGTH (enc_tuple d 0 (vyper_to_abi_types env ts) avs [] []) -
+              SUM (MAP (\(_, abi_sz, _, _). abi_sz) elems)) s.vs_memory =
+           enc_tuple d 0 (vyper_to_abi_types env ts) avs [] [] /\
+           (EXISTS (\(_, _, _, is_dyn). is_dyn) elems ==>
+            mem_word_at c s.vs_memory =
+              n2w (d +
+                LENGTH (enc_tuple d 0 (vyper_to_abi_types env ts) avs [] []) -
+                SUM (MAP (\(_, abi_sz, _, _). abi_sz) elems))) /\
+           enc_frame st st' lo top
+             [(w2n dst_w + head_offset,
+               SUM (MAP (\(_, abi_sz, _, _). abi_sz) elems));
+              (w2n dst_w + d,
+               LENGTH (enc_tuple d 0 (vyper_to_abi_types env ts) avs [] []) -
+               SUM (MAP (\(_, abi_sz, _, _). abi_sz) elems));
+              (c, 32)] s0 s)
+      (\r. F)
+End
+
+Definition enc_dyn_correct_def:
+  enc_dyn_correct dst src ei asz msz len_op <=>
+  !st op st' ctx env t n tv vs av s0 dst_w src_w lo top.
+    compile_abi_encode_dyn_loop dst src ei asz msz len_op st = (op, st') /\
+    abi_enc_plan env (ArrayT t (Dynamic n)) (AbiDynArray ei asz msz T) /\
+    evaluate_type env (ArrayT t (Dynamic n)) = SOME tv /\
+    value_has_type tv (ArrayV (DynArrayV vs)) /\
+    vyper_to_abi env (ArrayT t (Dynamic n)) (ArrayV (DynArrayV vs)) = SOME av /\
+    eval_operand dst s0 = SOME dst_w /\ eval_operand src s0 = SOME src_w /\
+    eval_operand len_op s0 = SOME (n2w (LENGTH vs)) /\
+    enc_pre st st' [dst; src; len_op] lo top tv (ArrayV (DynArrayV vs))
+      (w2n src_w)
+      [(w2n dst_w,
+        LENGTH (enc (vyper_to_abi_type env (ArrayT t (Dynamic n))) av) - 32)]
+      s0 ==>
+    frag_exec ctx st st' (\s. s = s0)
+      (\s. mem_bytes_at (w2n dst_w)
+             (LENGTH (enc (vyper_to_abi_type env (ArrayT t (Dynamic n))) av) -
+              32) s.vs_memory =
+           DROP 32 (enc (vyper_to_abi_type env (ArrayT t (Dynamic n))) av) /\
+           eval_operand op s =
+             SOME (n2w (LENGTH
+               (enc (vyper_to_abi_type env (ArrayT t (Dynamic n))) av))) /\
+           enc_frame st st' lo top
+             [(w2n dst_w,
+               LENGTH (enc (vyper_to_abi_type env (ArrayT t (Dynamic n))) av) -
+               32)] s0 s)
+      (\r. F)
+End
+
+(* The recursive invariant also preserves labels, for arbitrary operands. *)
+Definition enc_buf_correct_labels_def:
+  enc_buf_correct_labels dst src ei <=>
+  !st op st' ctx env ty tv v av s0 dst_w src_w lo top.
+    compile_abi_encode_to_buf dst src ei st = (op, st') /\
+    abi_enc_plan env ty ei /\
+    evaluate_type env ty = SOME tv /\ value_has_type tv v /\
+    vyper_to_abi env ty v = SOME av /\
+    eval_operand dst s0 = SOME dst_w /\ eval_operand src s0 = SOME src_w /\
+    enc_pre st st' [dst; src] lo top tv v (w2n src_w)
+      [(w2n dst_w, LENGTH (enc (vyper_to_abi_type env ty) av))] s0 ==>
+    frag_exec ctx st st' (\s. s = s0)
+      (\s. mem_bytes_at (w2n dst_w)
+             (LENGTH (enc (vyper_to_abi_type env ty) av)) s.vs_memory =
+           enc (vyper_to_abi_type env ty) av /\
+           eval_operand op s =
+             SOME (n2w (LENGTH (enc (vyper_to_abi_type env ty) av))) /\
+           enc_frame st st' lo top
+             [(w2n dst_w, LENGTH (enc (vyper_to_abi_type env ty) av))] s0 s /\
+           s.vs_labels = s0.vs_labels)
+      (\r. F)
+End
+
+Definition enc_child_correct_labels_def:
+  enc_child_correct_labels dst child_ptr ei is_dyn static_ofst dyn_ptr <=>
+  !st op st' ctx env ty tv v av s0 dst_w src_w lo top.
+    compile_abi_encode_child dst child_ptr ei is_dyn static_ofst dyn_ptr st =
+      (op, st') /\
+    abi_enc_plan env ty ei /\
+    is_dyn = is_dynamic (vyper_to_abi_type env ty) /\
+    evaluate_type env ty = SOME tv /\ value_has_type tv v /\
+    vyper_to_abi env ty v = SOME av /\
+    eval_operand dst s0 = SOME dst_w /\
+    eval_operand child_ptr s0 = SOME src_w ==>
+    if ~is_dyn then
+      enc_pre st st' [dst; child_ptr] lo top tv v (w2n src_w)
+        [(w2n dst_w + static_ofst,
+          LENGTH (enc (vyper_to_abi_type env ty) av))] s0 ==>
+      frag_exec ctx st st' (\s. s = s0)
+        (\s. mem_bytes_at (w2n dst_w + static_ofst)
+               (LENGTH (enc (vyper_to_abi_type env ty) av)) s.vs_memory =
+             enc (vyper_to_abi_type env ty) av /\
+             eval_operand op s =
+               SOME (n2w (LENGTH (enc (vyper_to_abi_type env ty) av))) /\
+             enc_frame st st' lo top
+               [(w2n dst_w + static_ofst,
+                 LENGTH (enc (vyper_to_abi_type env ty) av))] s0 s /\
+             s.vs_labels = s0.vs_labels)
+        (\r. F)
+    else
+      !c d j.
+        eval_operand dyn_ptr s0 = SOME (n2w c) /\
+        mem_word_at c s0.vs_memory = n2w d /\
+        j NOTIN frag_ids st st' /\
+        FLOOKUP s0.vs_allocas j = SOME (c, 32) /\ lo <= c /\
+        static_ofst + 32 <= d /\
+        enc_pre st st' [dst; child_ptr; dyn_ptr] lo top tv v (w2n src_w)
+          [(w2n dst_w + static_ofst, 32);
+           (w2n dst_w + d,
+            LENGTH (enc (vyper_to_abi_type env ty) av))] s0 ==>
+        frag_exec ctx st st' (\s. s = s0)
+          (\s. mem_bytes_at (w2n dst_w + d)
+                 (LENGTH (enc (vyper_to_abi_type env ty) av)) s.vs_memory =
+               enc (vyper_to_abi_type env ty) av /\
+               mem_word_at (w2n dst_w + static_ofst) s.vs_memory = n2w d /\
+               mem_word_at c s.vs_memory =
+                 n2w (d + LENGTH (enc (vyper_to_abi_type env ty) av)) /\
+               eval_operand op s =
+                 SOME (n2w (LENGTH (enc (vyper_to_abi_type env ty) av))) /\
+               enc_frame st st' lo top
+                 [(w2n dst_w + static_ofst, 32);
+                  (w2n dst_w + d,
+                   LENGTH (enc (vyper_to_abi_type env ty) av));
+                  (c, 32)] s0 s /\
+               s.vs_labels = s0.vs_labels)
+          (\r. F)
+End
+
+Definition enc_elems_correct_labels_def:
+  enc_elems_correct_labels dst src elems src_offset head_offset dyn_ptr <=>
+  !st op st' ctx env ts tvs vs avs s0 dst_w src_w lo top c d.
+    compile_abi_encode_complex_elems dst src elems src_offset head_offset
+      dyn_ptr st = (op, st') /\
+    abi_enc_plans env ts elems /\
+    LIST_REL (\t tv. evaluate_type env t = SOME tv) ts tvs /\
+    LIST_REL value_has_type tvs vs /\
+    vyper_to_abi_list env ts vs = SOME avs /\
+    eval_operand dst s0 = SOME dst_w /\ eval_operand src s0 = SOME src_w /\
+    (EXISTS (\(_, _, _, is_dyn). is_dyn) elems ==>
+       eval_operand dyn_ptr s0 = SOME (n2w c) /\
+       mem_word_at c s0.vs_memory = n2w d /\
+       (?j. j NOTIN frag_ids st st' /\
+            FLOOKUP s0.vs_allocas j = SOME (c, 32)) /\ lo <= c /\
+       head_offset + SUM (MAP (\(_, abi_sz, _, _). abi_sz) elems) <= d) /\
+    enc_pre st st' [dst; src; dyn_ptr] lo top (TupleTV tvs)
+      (ArrayV (TupleV vs)) (w2n src_w + src_offset)
+      [(w2n dst_w + head_offset, SUM (MAP (\(_, abi_sz, _, _). abi_sz) elems));
+       (w2n dst_w + d,
+        LENGTH (enc_tuple d 0 (vyper_to_abi_types env ts) avs [] []) -
+        SUM (MAP (\(_, abi_sz, _, _). abi_sz) elems))] s0 ==>
+    frag_exec ctx st st' (\s. s = s0)
+      (\s. mem_bytes_at (w2n dst_w + head_offset)
+             (SUM (MAP (\(_, abi_sz, _, _). abi_sz) elems)) s.vs_memory ++
+           mem_bytes_at (w2n dst_w + d)
+             (LENGTH (enc_tuple d 0 (vyper_to_abi_types env ts) avs [] []) -
+              SUM (MAP (\(_, abi_sz, _, _). abi_sz) elems)) s.vs_memory =
+           enc_tuple d 0 (vyper_to_abi_types env ts) avs [] [] /\
+           (EXISTS (\(_, _, _, is_dyn). is_dyn) elems ==>
+            mem_word_at c s.vs_memory =
+              n2w (d +
+                LENGTH (enc_tuple d 0 (vyper_to_abi_types env ts) avs [] []) -
+                SUM (MAP (\(_, abi_sz, _, _). abi_sz) elems))) /\
+           enc_frame st st' lo top
+             [(w2n dst_w + head_offset,
+               SUM (MAP (\(_, abi_sz, _, _). abi_sz) elems));
+              (w2n dst_w + d,
+               LENGTH (enc_tuple d 0 (vyper_to_abi_types env ts) avs [] []) -
+               SUM (MAP (\(_, abi_sz, _, _). abi_sz) elems));
+              (c, 32)] s0 s /\
+           s.vs_labels = s0.vs_labels)
+      (\r. F)
+End
+
+Definition enc_dyn_correct_labels_def:
+  enc_dyn_correct_labels dst src ei asz msz len_op <=>
+  !st op st' ctx env t n tv vs av s0 dst_w src_w lo top.
+    compile_abi_encode_dyn_loop dst src ei asz msz len_op st = (op, st') /\
+    abi_enc_plan env (ArrayT t (Dynamic n)) (AbiDynArray ei asz msz T) /\
+    evaluate_type env (ArrayT t (Dynamic n)) = SOME tv /\
+    value_has_type tv (ArrayV (DynArrayV vs)) /\
+    vyper_to_abi env (ArrayT t (Dynamic n)) (ArrayV (DynArrayV vs)) = SOME av /\
+    eval_operand dst s0 = SOME dst_w /\ eval_operand src s0 = SOME src_w /\
+    eval_operand len_op s0 = SOME (n2w (LENGTH vs)) /\
+    enc_pre st st' [dst; src; len_op] lo top tv (ArrayV (DynArrayV vs))
+      (w2n src_w)
+      [(w2n dst_w,
+        LENGTH (enc (vyper_to_abi_type env (ArrayT t (Dynamic n))) av) - 32)]
+      s0 ==>
+    frag_exec ctx st st' (\s. s = s0)
+      (\s. mem_bytes_at (w2n dst_w)
+             (LENGTH (enc (vyper_to_abi_type env (ArrayT t (Dynamic n))) av) -
+              32) s.vs_memory =
+           DROP 32 (enc (vyper_to_abi_type env (ArrayT t (Dynamic n))) av) /\
+           eval_operand op s =
+             SOME (n2w (LENGTH
+               (enc (vyper_to_abi_type env (ArrayT t (Dynamic n))) av))) /\
+           enc_frame st st' lo top
+             [(w2n dst_w,
+               LENGTH (enc (vyper_to_abi_type env (ArrayT t (Dynamic n))) av) -
+               32)] s0 s /\
+           s.vs_labels = s0.vs_labels)
+      (\r. F)
+End
+
+Theorem compile_abi_encode_complex_nil_frag:
+  compile_abi_encode_complex_elems dst src [] src_offset head_offset
+    dyn_ptr st = (op, st') /\
+  abi_enc_plans env ts [] /\
+  LIST_REL (\t tv. evaluate_type env t = SOME tv) ts tvs /\
+  LIST_REL value_has_type tvs vs /\
+  vyper_to_abi_list env ts vs = SOME avs /\
+  enc_pre st st' [dst; src; dyn_ptr] lo top (TupleTV tvs)
+    (ArrayV (TupleV vs)) src_n outs s0 ==>
+  frag_exec ctx st st' (\s. s = s0)
+    (\s. mem_bytes_at head_n 0 s.vs_memory ++
+         mem_bytes_at tail_n
+           (LENGTH (enc_tuple d 0 (vyper_to_abi_types env ts) avs [] []))
+           s.vs_memory = enc_tuple d 0 (vyper_to_abi_types env ts) avs [] [] /\
+         enc_frame st st' lo top outs s0 s)
+    (\r. F)
+Proof
+  simp[Once compile_abi_encode_child_def, comp_return_def] >> strip_tac >>
+  gvs[] >>
+  `ts = []` by metis_tac[abi_enc_plan_cases, listTheory.NOT_CONS_NIL] >>
+  gvs[vyper_to_abi_def, vyper_to_abi_type_def] >>
+  irule frag_exec_refl >> simp[listTheory.REV_DEF, mem_bytes_at_def] >>
+  irule enc_frame_refl >> fs[enc_pre_def]
+QED
+
+Theorem enc_child_correct_apply:
+  enc_child_correct dst child_ptr ei is_dyn static_ofst dyn_ptr /\
+  compile_abi_encode_child dst child_ptr ei is_dyn static_ofst dyn_ptr st =
+    (op, st') /\
+  abi_enc_plan env ty ei /\
+  is_dyn = is_dynamic (vyper_to_abi_type env ty) /\
+  evaluate_type env ty = SOME tv /\ value_has_type tv v /\
+  vyper_to_abi env ty v = SOME av /\
+  eval_operand dst s0 = SOME dst_w /\ eval_operand child_ptr s0 = SOME src_w ==>
+  if ~is_dyn then
+    enc_pre st st' [dst; child_ptr] lo top tv v (w2n src_w)
+      [(w2n dst_w + static_ofst, LENGTH (enc (vyper_to_abi_type env ty) av))] s0 ==>
+    frag_exec ctx st st' (\s. s = s0)
+      (\s. mem_bytes_at (w2n dst_w + static_ofst)
+             (LENGTH (enc (vyper_to_abi_type env ty) av)) s.vs_memory =
+           enc (vyper_to_abi_type env ty) av /\
+           eval_operand op s =
+             SOME (n2w (LENGTH (enc (vyper_to_abi_type env ty) av))) /\
+           enc_frame st st' lo top
+             [(w2n dst_w + static_ofst,
+               LENGTH (enc (vyper_to_abi_type env ty) av))] s0 s)
+      (\r. F)
+  else
+    !c d j.
+      eval_operand dyn_ptr s0 = SOME (n2w c) /\
+      mem_word_at c s0.vs_memory = n2w d /\
+      j NOTIN frag_ids st st' /\
+      FLOOKUP s0.vs_allocas j = SOME (c, 32) /\ lo <= c /\
+      static_ofst + 32 <= d /\
+      enc_pre st st' [dst; child_ptr; dyn_ptr] lo top tv v (w2n src_w)
+        [(w2n dst_w + static_ofst, 32);
+         (w2n dst_w + d, LENGTH (enc (vyper_to_abi_type env ty) av))] s0 ==>
+      frag_exec ctx st st' (\s. s = s0)
+        (\s. mem_bytes_at (w2n dst_w + d)
+               (LENGTH (enc (vyper_to_abi_type env ty) av)) s.vs_memory =
+             enc (vyper_to_abi_type env ty) av /\
+             mem_word_at (w2n dst_w + static_ofst) s.vs_memory = n2w d /\
+             mem_word_at c s.vs_memory =
+               n2w (d + LENGTH (enc (vyper_to_abi_type env ty) av)) /\
+             eval_operand op s =
+               SOME (n2w (LENGTH (enc (vyper_to_abi_type env ty) av))) /\
+             enc_frame st st' lo top
+               [(w2n dst_w + static_ofst, 32);
+                (w2n dst_w + d, LENGTH (enc (vyper_to_abi_type env ty) av));
+                (c, 32)] s0 s)
+        (\r. F)
+Proof
+  rewrite_tac[enc_child_correct_def] >> rpt gen_tac >> strip_tac >>
+  first_x_assum irule >> simp[] >> goal_assum drule >> simp[]
+QED
+
+Theorem enc_elems_correct_apply:
+  enc_elems_correct dst src elems src_offset head_offset dyn_ptr /\
+  compile_abi_encode_complex_elems dst src elems src_offset head_offset
+    dyn_ptr st = (op, st') /\
+  abi_enc_plans env ts elems /\
+  LIST_REL (\t tv. evaluate_type env t = SOME tv) ts tvs /\
+  LIST_REL value_has_type tvs vs /\
+  vyper_to_abi_list env ts vs = SOME avs /\
+  eval_operand dst s0 = SOME dst_w /\ eval_operand src s0 = SOME src_w /\
+  (EXISTS (\(_, _, _, is_dyn). is_dyn) elems ==>
+     eval_operand dyn_ptr s0 = SOME (n2w c) /\
+     mem_word_at c s0.vs_memory = n2w d /\
+     (?j. j NOTIN frag_ids st st' /\
+          FLOOKUP s0.vs_allocas j = SOME (c, 32)) /\ lo <= c /\
+     head_offset + SUM (MAP (\(_, abi_sz, _, _). abi_sz) elems) <= d) /\
+  enc_pre st st' [dst; src; dyn_ptr] lo top (TupleTV tvs)
+    (ArrayV (TupleV vs)) (w2n src_w + src_offset)
+    [(w2n dst_w + head_offset, SUM (MAP (\(_, abi_sz, _, _). abi_sz) elems));
+     (w2n dst_w + d,
+      LENGTH (enc_tuple d 0 (vyper_to_abi_types env ts) avs [] []) -
+      SUM (MAP (\(_, abi_sz, _, _). abi_sz) elems))] s0 ==>
+  frag_exec ctx st st' (\s. s = s0)
+    (\s. mem_bytes_at (w2n dst_w + head_offset)
+           (SUM (MAP (\(_, abi_sz, _, _). abi_sz) elems)) s.vs_memory ++
+         mem_bytes_at (w2n dst_w + d)
+           (LENGTH (enc_tuple d 0 (vyper_to_abi_types env ts) avs [] []) -
+            SUM (MAP (\(_, abi_sz, _, _). abi_sz) elems)) s.vs_memory =
+         enc_tuple d 0 (vyper_to_abi_types env ts) avs [] [] /\
+         (EXISTS (\(_, _, _, is_dyn). is_dyn) elems ==>
+          mem_word_at c s.vs_memory =
+            n2w (d + LENGTH (enc_tuple d 0 (vyper_to_abi_types env ts) avs [] []) -
+              SUM (MAP (\(_, abi_sz, _, _). abi_sz) elems))) /\
+         enc_frame st st' lo top
+           [(w2n dst_w + head_offset, SUM (MAP (\(_, abi_sz, _, _). abi_sz) elems));
+            (w2n dst_w + d,
+             LENGTH (enc_tuple d 0 (vyper_to_abi_types env ts) avs [] []) -
+             SUM (MAP (\(_, abi_sz, _, _). abi_sz) elems));
+            (c, 32)] s0 s)
+    (\r. F)
+Proof
+  rewrite_tac[enc_elems_correct_def] >> rpt gen_tac >> strip_tac >>
+  first_x_assum irule >> simp[] >> goal_assum drule >> simp[] >>
+  qexists_tac `tvs` >> fs[arithmeticTheory.ADD_COMM]
+QED
+
+Theorem enc_dyn_correct_apply:
+  enc_dyn_correct dst src ei asz msz len_op /\
+  compile_abi_encode_dyn_loop dst src ei asz msz len_op st = (op, st') /\
+  abi_enc_plan env (ArrayT t (Dynamic n)) (AbiDynArray ei asz msz T) /\
+  evaluate_type env (ArrayT t (Dynamic n)) = SOME tv /\
+  value_has_type tv (ArrayV (DynArrayV vs)) /\
+  vyper_to_abi env (ArrayT t (Dynamic n)) (ArrayV (DynArrayV vs)) = SOME av /\
+  eval_operand dst s0 = SOME dst_w /\ eval_operand src s0 = SOME src_w /\
+  eval_operand len_op s0 = SOME (n2w (LENGTH vs)) /\
+  enc_pre st st' [dst; src; len_op] lo top tv (ArrayV (DynArrayV vs)) (w2n src_w)
+    [(w2n dst_w,
+      LENGTH (enc (vyper_to_abi_type env (ArrayT t (Dynamic n))) av) - 32)] s0 ==>
+  frag_exec ctx st st' (\s. s = s0)
+    (\s. mem_bytes_at (w2n dst_w)
+           (LENGTH (enc (vyper_to_abi_type env (ArrayT t (Dynamic n))) av) - 32)
+           s.vs_memory =
+         DROP 32 (enc (vyper_to_abi_type env (ArrayT t (Dynamic n))) av) /\
+         eval_operand op s =
+           SOME (n2w (LENGTH (enc (vyper_to_abi_type env (ArrayT t (Dynamic n))) av))) /\
+         enc_frame st st' lo top
+           [(w2n dst_w,
+             LENGTH (enc (vyper_to_abi_type env (ArrayT t (Dynamic n))) av) - 32)]
+           s0 s)
+    (\r. F)
+Proof
+  rewrite_tac[enc_dyn_correct_def] >> rpt gen_tac >> strip_tac >>
+  first_x_assum irule >> simp[] >> qexists_tac `vs` >> fs[]
+QED
+
+Theorem enc_buf_correct_apply:
+  enc_buf_correct dst src ei /\
+  compile_abi_encode_to_buf dst src ei st = (op, st') /\
+  abi_enc_plan env ty ei /\
+  evaluate_type env ty = SOME tv /\ value_has_type tv v /\
+  vyper_to_abi env ty v = SOME av /\
+  eval_operand dst s0 = SOME dst_w /\ eval_operand src s0 = SOME src_w /\
+  enc_pre st st' [dst; src] lo top tv v (w2n src_w)
+    [(w2n dst_w, LENGTH (enc (vyper_to_abi_type env ty) av))] s0 ==>
+  frag_exec ctx st st' (\s. s = s0)
+    (\s. mem_bytes_at (w2n dst_w)
+           (LENGTH (enc (vyper_to_abi_type env ty) av)) s.vs_memory =
+         enc (vyper_to_abi_type env ty) av /\
+         eval_operand op s =
+           SOME (n2w (LENGTH (enc (vyper_to_abi_type env ty) av))) /\
+         enc_frame st st' lo top
+           [(w2n dst_w, LENGTH (enc (vyper_to_abi_type env ty) av))] s0 s)
+    (\r. F)
+Proof
+  rewrite_tac[enc_buf_correct_def] >> rpt strip_tac >>
+  first_x_assum irule >> simp[] >> goal_assum drule >> simp[]
+QED
+
+Theorem enc_elems_correct_nil:
+  enc_elems_correct dst src [] src_offset head_offset dyn_ptr
+Proof
+  rewrite_tac[enc_elems_correct_def] >> rpt gen_tac >> strip_tac >>
+  fs[] >> drule_all compile_abi_encode_complex_nil_frag >> strip_tac >>
+  first_x_assum (qspecl_then
+    [`w2n dst_w + d`, `w2n dst_w + head_offset`, `d`, `ctx`] assume_tac) >>
+  drule frag_exec_weaken >> disch_then irule >>
+  simp[] >> rpt strip_tac >>
+  irule enc_frame_enlarge_outputs >> goal_assum (drule_at Any) >>
+  simp[] >> metis_tac[]
+QED
+
+Theorem enc_buf_correct_labels_apply:
+  enc_buf_correct_labels dst src ei /\
+  compile_abi_encode_to_buf dst src ei st = (op, st') /\
+  abi_enc_plan env ty ei /\
+  evaluate_type env ty = SOME tv /\ value_has_type tv v /\
+  vyper_to_abi env ty v = SOME av /\
+  eval_operand dst s0 = SOME dst_w /\ eval_operand src s0 = SOME src_w /\
+  enc_pre st st' [dst; src] lo top tv v (w2n src_w)
+    [(w2n dst_w, LENGTH (enc (vyper_to_abi_type env ty) av))] s0 ==>
+  frag_exec ctx st st' (\s. s = s0)
+    (\s. mem_bytes_at (w2n dst_w)
+           (LENGTH (enc (vyper_to_abi_type env ty) av)) s.vs_memory =
+         enc (vyper_to_abi_type env ty) av /\
+         eval_operand op s =
+           SOME (n2w (LENGTH (enc (vyper_to_abi_type env ty) av))) /\
+         enc_frame st st' lo top
+           [(w2n dst_w, LENGTH (enc (vyper_to_abi_type env ty) av))] s0 s /\
+         s.vs_labels = s0.vs_labels)
+    (\r. F)
+Proof
+  rewrite_tac[enc_buf_correct_labels_def] >> rpt strip_tac >>
+  first_x_assum irule >> simp[] >> goal_assum drule >> simp[]
+QED
+
+Theorem enc_child_correct_labels_apply:
+  enc_child_correct_labels dst child_ptr ei is_dyn static_ofst dyn_ptr /\
+  compile_abi_encode_child dst child_ptr ei is_dyn static_ofst dyn_ptr st =
+    (op, st') /\
+  abi_enc_plan env ty ei /\
+  is_dyn = is_dynamic (vyper_to_abi_type env ty) /\
+  evaluate_type env ty = SOME tv /\ value_has_type tv v /\
+  vyper_to_abi env ty v = SOME av /\
+  eval_operand dst s0 = SOME dst_w /\ eval_operand child_ptr s0 = SOME src_w ==>
+  if ~is_dyn then
+    enc_pre st st' [dst; child_ptr] lo top tv v (w2n src_w)
+      [(w2n dst_w + static_ofst, LENGTH (enc (vyper_to_abi_type env ty) av))] s0 ==>
+    frag_exec ctx st st' (\s. s = s0)
+      (\s. mem_bytes_at (w2n dst_w + static_ofst)
+             (LENGTH (enc (vyper_to_abi_type env ty) av)) s.vs_memory =
+           enc (vyper_to_abi_type env ty) av /\
+           eval_operand op s =
+             SOME (n2w (LENGTH (enc (vyper_to_abi_type env ty) av))) /\
+           enc_frame st st' lo top
+             [(w2n dst_w + static_ofst,
+               LENGTH (enc (vyper_to_abi_type env ty) av))] s0 s /\
+           s.vs_labels = s0.vs_labels)
+      (\r. F)
+  else
+    !c d j.
+      eval_operand dyn_ptr s0 = SOME (n2w c) /\
+      mem_word_at c s0.vs_memory = n2w d /\
+      j NOTIN frag_ids st st' /\
+      FLOOKUP s0.vs_allocas j = SOME (c, 32) /\ lo <= c /\
+      static_ofst + 32 <= d /\
+      enc_pre st st' [dst; child_ptr; dyn_ptr] lo top tv v (w2n src_w)
+        [(w2n dst_w + static_ofst, 32);
+         (w2n dst_w + d, LENGTH (enc (vyper_to_abi_type env ty) av))] s0 ==>
+      frag_exec ctx st st' (\s. s = s0)
+        (\s. mem_bytes_at (w2n dst_w + d)
+               (LENGTH (enc (vyper_to_abi_type env ty) av)) s.vs_memory =
+             enc (vyper_to_abi_type env ty) av /\
+             mem_word_at (w2n dst_w + static_ofst) s.vs_memory = n2w d /\
+             mem_word_at c s.vs_memory =
+               n2w (d + LENGTH (enc (vyper_to_abi_type env ty) av)) /\
+             eval_operand op s =
+               SOME (n2w (LENGTH (enc (vyper_to_abi_type env ty) av))) /\
+             enc_frame st st' lo top
+               [(w2n dst_w + static_ofst, 32);
+                (w2n dst_w + d, LENGTH (enc (vyper_to_abi_type env ty) av));
+                (c, 32)] s0 s /\
+             s.vs_labels = s0.vs_labels)
+        (\r. F)
+Proof
+  rewrite_tac[enc_child_correct_labels_def] >> rpt gen_tac >> strip_tac >>
+  first_x_assum irule >> simp[] >> goal_assum drule >> simp[]
+QED
+
+Theorem enc_elems_correct_labels_apply:
+  enc_elems_correct_labels dst src elems src_offset head_offset dyn_ptr /\
+  compile_abi_encode_complex_elems dst src elems src_offset head_offset
+    dyn_ptr st = (op, st') /\
+  abi_enc_plans env ts elems /\
+  LIST_REL (\t tv. evaluate_type env t = SOME tv) ts tvs /\
+  LIST_REL value_has_type tvs vs /\
+  vyper_to_abi_list env ts vs = SOME avs /\
+  eval_operand dst s0 = SOME dst_w /\ eval_operand src s0 = SOME src_w /\
+  (EXISTS (\(_, _, _, is_dyn). is_dyn) elems ==>
+     eval_operand dyn_ptr s0 = SOME (n2w c) /\
+     mem_word_at c s0.vs_memory = n2w d /\
+     (?j. j NOTIN frag_ids st st' /\
+          FLOOKUP s0.vs_allocas j = SOME (c, 32)) /\ lo <= c /\
+     head_offset + SUM (MAP (\(_, abi_sz, _, _). abi_sz) elems) <= d) /\
+  enc_pre st st' [dst; src; dyn_ptr] lo top (TupleTV tvs)
+    (ArrayV (TupleV vs)) (w2n src_w + src_offset)
+    [(w2n dst_w + head_offset, SUM (MAP (\(_, abi_sz, _, _). abi_sz) elems));
+     (w2n dst_w + d,
+      LENGTH (enc_tuple d 0 (vyper_to_abi_types env ts) avs [] []) -
+      SUM (MAP (\(_, abi_sz, _, _). abi_sz) elems))] s0 ==>
+  frag_exec ctx st st' (\s. s = s0)
+    (\s. mem_bytes_at (w2n dst_w + head_offset)
+           (SUM (MAP (\(_, abi_sz, _, _). abi_sz) elems)) s.vs_memory ++
+         mem_bytes_at (w2n dst_w + d)
+           (LENGTH (enc_tuple d 0 (vyper_to_abi_types env ts) avs [] []) -
+            SUM (MAP (\(_, abi_sz, _, _). abi_sz) elems)) s.vs_memory =
+         enc_tuple d 0 (vyper_to_abi_types env ts) avs [] [] /\
+         (EXISTS (\(_, _, _, is_dyn). is_dyn) elems ==>
+          mem_word_at c s.vs_memory =
+            n2w (d + LENGTH (enc_tuple d 0 (vyper_to_abi_types env ts) avs [] []) -
+              SUM (MAP (\(_, abi_sz, _, _). abi_sz) elems))) /\
+         enc_frame st st' lo top
+           [(w2n dst_w + head_offset, SUM (MAP (\(_, abi_sz, _, _). abi_sz) elems));
+            (w2n dst_w + d,
+             LENGTH (enc_tuple d 0 (vyper_to_abi_types env ts) avs [] []) -
+             SUM (MAP (\(_, abi_sz, _, _). abi_sz) elems));
+            (c, 32)] s0 s /\
+         s.vs_labels = s0.vs_labels)
+    (\r. F)
+Proof
+  rewrite_tac[enc_elems_correct_labels_def] >> rpt gen_tac >> strip_tac >>
+  first_x_assum irule >> simp[] >> goal_assum drule >> simp[] >>
+  qexists_tac `tvs` >> fs[arithmeticTheory.ADD_COMM]
+QED
+
+Theorem enc_dyn_correct_labels_apply:
+  enc_dyn_correct_labels dst src ei asz msz len_op /\
+  compile_abi_encode_dyn_loop dst src ei asz msz len_op st = (op, st') /\
+  abi_enc_plan env (ArrayT t (Dynamic n)) (AbiDynArray ei asz msz T) /\
+  evaluate_type env (ArrayT t (Dynamic n)) = SOME tv /\
+  value_has_type tv (ArrayV (DynArrayV vs)) /\
+  vyper_to_abi env (ArrayT t (Dynamic n)) (ArrayV (DynArrayV vs)) = SOME av /\
+  eval_operand dst s0 = SOME dst_w /\ eval_operand src s0 = SOME src_w /\
+  eval_operand len_op s0 = SOME (n2w (LENGTH vs)) /\
+  enc_pre st st' [dst; src; len_op] lo top tv (ArrayV (DynArrayV vs)) (w2n src_w)
+    [(w2n dst_w,
+      LENGTH (enc (vyper_to_abi_type env (ArrayT t (Dynamic n))) av) - 32)] s0 ==>
+  frag_exec ctx st st' (\s. s = s0)
+    (\s. mem_bytes_at (w2n dst_w)
+           (LENGTH (enc (vyper_to_abi_type env (ArrayT t (Dynamic n))) av) - 32)
+           s.vs_memory =
+         DROP 32 (enc (vyper_to_abi_type env (ArrayT t (Dynamic n))) av) /\
+         eval_operand op s =
+           SOME (n2w (LENGTH (enc (vyper_to_abi_type env (ArrayT t (Dynamic n))) av))) /\
+         enc_frame st st' lo top
+           [(w2n dst_w,
+             LENGTH (enc (vyper_to_abi_type env (ArrayT t (Dynamic n))) av) - 32)]
+           s0 s /\ s.vs_labels = s0.vs_labels)
+    (\r. F)
+Proof
+  rewrite_tac[enc_dyn_correct_labels_def] >> rpt gen_tac >> strip_tac >>
+  first_x_assum irule >> simp[] >> qexists_tac `vs` >> fs[]
+QED
+
+Theorem enc_buf_correct_labels_weaken:
+  enc_buf_correct_labels dst src ei ==> enc_buf_correct dst src ei
+Proof
+  strip_tac >> rewrite_tac[enc_buf_correct_def] >> rpt strip_tac >>
+  drule_all enc_buf_correct_labels_apply >>
+  disch_then (qspec_then `ctx` mp_tac) >>
+  strip_tac >> drule frag_exec_weaken >> disch_then irule >> simp[]
+QED
+
+Theorem enc_elems_correct_labels_weaken:
+  enc_elems_correct_labels dst src elems so ho dp ==>
+  enc_elems_correct dst src elems so ho dp
+Proof
+  strip_tac >> rewrite_tac[enc_elems_correct_def] >> rpt strip_tac >>
+  drule_all enc_elems_correct_labels_apply >>
+  disch_then (qspec_then `ctx` mp_tac) >>
+  strip_tac >> drule frag_exec_weaken >> disch_then irule >> simp[]
+QED
+
+Theorem enc_dyn_correct_labels_weaken:
+  enc_dyn_correct_labels dst src ei asz msz len_op ==>
+  enc_dyn_correct dst src ei asz msz len_op
+Proof
+  strip_tac >> rewrite_tac[enc_dyn_correct_def] >> rpt strip_tac >>
+  drule_all enc_dyn_correct_labels_apply >>
+  disch_then (qspec_then `ctx` mp_tac) >>
+  strip_tac >> drule frag_exec_weaken >> disch_then irule >> simp[]
+QED
+
+Theorem enc_child_correct_labels_weaken:
+  enc_child_correct_labels dst child_ptr ei dyn off dp ==>
+  enc_child_correct dst child_ptr ei dyn off dp
+Proof
+  strip_tac >> rewrite_tac[enc_child_correct_def] >> rpt gen_tac >> strip_tac >>
+  drule_all enc_child_correct_labels_apply >>
+  disch_then (qspecl_then [`top`, `lo`, `ctx`] mp_tac) >>
+  Cases_on `dyn` >> simp[] >> rpt strip_tac >>
+  first_x_assum drule_all >> strip_tac >>
+  drule frag_exec_weaken >> disch_then irule >> simp[]
+QED
+
+Theorem enc_elems_correct_labels_nil:
+  enc_elems_correct_labels dst src [] src_offset head_offset dyn_ptr
+Proof
+  rewrite_tac[enc_elems_correct_labels_def] >> rpt gen_tac >> strip_tac >>
+  fs[Once compile_abi_encode_child_def, comp_return_def] >> gvs[] >>
+  `ts = []` by metis_tac[abi_enc_plan_cases, listTheory.NOT_CONS_NIL] >>
+  gvs[vyper_to_abi_def, vyper_to_abi_type_def] >>
+  irule frag_exec_refl >> simp[listTheory.REV_DEF, mem_bytes_at_def] >>
+  irule enc_frame_refl >> fs[enc_pre_def]
+QED
+
+Theorem enc_buf_correct_labels_enclosing_local_frag:
+  enc_buf_correct_labels dst src ei /\
+  compile_abi_encode_to_buf dst src ei a = (op,b) /\
+  abi_enc_plan env ty ei /\
+  evaluate_type env ty = SOME tv /\ value_has_type tv v /\
+  vyper_to_abi env ty v = SOME av /\
+  eval_operand dst s0 = SOME dst_w /\ eval_operand src s0 = SOME src_w /\
+  enc_pre a b [dst;src] lo top tv v (w2n src_w)
+    [(w2n dst_w,LENGTH (enc (vyper_to_abi_type env ty) av))] s0 /\
+  frag_ids a b SUBSET frag_ids st z /\
+  enc_scratch (frag_ids st z) lo top s0 /\
+  (!x. not_fresh_at st x ==> not_fresh_at a x) /\
+  (?p n. MEM (p,n) outs /\ p <= w2n dst_w /\
+    w2n dst_w + LENGTH (enc (vyper_to_abi_type env ty) av) <= p+n) ==>
+  frag_exec ctx a b (\s. s = s0)
+    (\s. mem_bytes_at (w2n dst_w)
+           (LENGTH (enc (vyper_to_abi_type env ty) av)) s.vs_memory =
+           enc (vyper_to_abi_type env ty) av /\
+         eval_operand op s =
+           SOME (n2w (LENGTH (enc (vyper_to_abi_type env ty) av))) /\
+         s.vs_labels = s0.vs_labels /\
+         enc_frame st z lo top outs s0 s /\
+         (?local_top. enc_frame a b lo local_top
+           [(w2n dst_w,LENGTH (enc (vyper_to_abi_type env ty) av))] s0 s))
+    (\r. F)
+Proof
+  rpt strip_tac >>
+  drule_all enc_pre_reserve_enclosing >> strip_tac >>
+  drule_all enc_buf_correct_labels_apply >>
+  disch_then (qspec_then `ctx` mp_tac) >> strip_tac >>
+  irule frag_exec_conseq >> goal_assum (drule_at Any) >> simp[] >>
+  rpt strip_tac
+  >- (irule enc_frame_restore_enclosing >> simp[] >>
+      qexistsl_tac [`a`, `b`,
+        `[(w2n dst_w,LENGTH (enc (vyper_to_abi_type env ty) av))]`] >>
+      simp[] >> qexistsl_tac [`p`, `n`] >> simp[]) >>
+  goal_assum (drule_at Any)
+QED
+
+Theorem enc_child_static_correct_labels_enclosing_local_frag:
+  enc_child_correct_labels dst src ei F off dp /\
+  compile_abi_encode_child dst src ei F off dp a = (op,b) /\
+  abi_enc_plan env ty ei /\ ~is_dynamic (vyper_to_abi_type env ty) /\
+  evaluate_type env ty = SOME tv /\ value_has_type tv v /\
+  vyper_to_abi env ty v = SOME av /\
+  eval_operand dst s0 = SOME dst_w /\ eval_operand src s0 = SOME src_w /\
+  enc_pre a b [dst;src] lo top tv v (w2n src_w)
+    [(w2n dst_w + off,LENGTH (enc (vyper_to_abi_type env ty) av))] s0 /\
+  frag_ids a b SUBSET frag_ids st z /\
+  enc_scratch (frag_ids st z) lo top s0 /\
+  (!x. not_fresh_at st x ==> not_fresh_at a x) /\
+  (!p n. MEM (p,n)
+    [(w2n dst_w + off,LENGTH (enc (vyper_to_abi_type env ty) av))] ==>
+    ?q m. MEM (q,m) outs /\ q <= p /\ p+n <= q+m) ==>
+  frag_exec ctx a b (\s. s = s0)
+    (\s. mem_bytes_at (w2n dst_w + off)
+           (LENGTH (enc (vyper_to_abi_type env ty) av)) s.vs_memory =
+           enc (vyper_to_abi_type env ty) av /\
+         eval_operand op s =
+           SOME (n2w (LENGTH (enc (vyper_to_abi_type env ty) av))) /\
+         s.vs_labels = s0.vs_labels /\
+         enc_frame st z lo top outs s0 s /\
+         (?local_top. enc_frame a b lo local_top
+           [(w2n dst_w + off,LENGTH (enc (vyper_to_abi_type env ty) av))] s0 s))
+    (\r. F)
+Proof
+  rpt strip_tac >>
+  drule_all enc_pre_reserve_enclosing >> strip_tac >>
+  drule_all (SRULE [] (Q.INST [`is_dyn` |-> `F`]
+    enc_child_correct_labels_apply)) >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  irule frag_exec_conseq >> goal_assum (drule_at Any) >> simp[] >>
+  rpt strip_tac
+  >- (irule enc_frame_restore_enclosing >> simp[] >>
+      qexistsl_tac [`a`,`b`,
+        `[(w2n dst_w + off,LENGTH (enc (vyper_to_abi_type env ty) av))]`] >>
+      fs[] >> metis_tac[]) >>
+  goal_assum (drule_at Any)
+QED
+
+Theorem enc_child_dynamic_correct_labels_enclosing_local_frag:
+  enc_child_correct_labels dst src ei T off dp /\
+  compile_abi_encode_child dst src ei T off dp a = (op,b) /\
+  abi_enc_plan env ty ei /\ is_dynamic (vyper_to_abi_type env ty) /\
+  evaluate_type env ty = SOME tv /\ value_has_type tv v /\
+  vyper_to_abi env ty v = SOME av /\
+  eval_operand dst s0 = SOME dst_w /\ eval_operand src s0 = SOME src_w /\
+  eval_operand dp s0 = SOME (n2w c) /\ mem_word_at c s0.vs_memory = n2w d /\
+  j NOTIN frag_ids a b /\ FLOOKUP s0.vs_allocas j = SOME (c,32) /\
+  lo <= c /\ off + 32 <= d /\
+  enc_pre a b [dst;src;dp] lo top tv v (w2n src_w)
+    [(w2n dst_w + off,32);
+     (w2n dst_w + d,LENGTH (enc (vyper_to_abi_type env ty) av))] s0 /\
+  frag_ids a b SUBSET frag_ids st z /\
+  enc_scratch (frag_ids st z) lo top s0 /\
+  (!x. not_fresh_at st x ==> not_fresh_at a x) /\
+  (!p n. MEM (p,n)
+    [(w2n dst_w + off,32);
+     (w2n dst_w + d,LENGTH (enc (vyper_to_abi_type env ty) av));(c,32)] ==>
+    ?q m. MEM (q,m) outs /\ q <= p /\ p+n <= q+m) ==>
+  frag_exec ctx a b (\s. s = s0)
+    (\s. mem_bytes_at (w2n dst_w + d)
+           (LENGTH (enc (vyper_to_abi_type env ty) av)) s.vs_memory =
+           enc (vyper_to_abi_type env ty) av /\
+         mem_word_at (w2n dst_w + off) s.vs_memory = n2w d /\
+         mem_word_at c s.vs_memory =
+           n2w (d + LENGTH (enc (vyper_to_abi_type env ty) av)) /\
+         eval_operand op s =
+           SOME (n2w (LENGTH (enc (vyper_to_abi_type env ty) av))) /\
+         s.vs_labels = s0.vs_labels /\
+         enc_frame st z lo top outs s0 s /\
+         (?local_top. enc_frame a b lo local_top
+           [(w2n dst_w + off,32);
+            (w2n dst_w + d,LENGTH (enc (vyper_to_abi_type env ty) av));(c,32)] s0 s))
+    (\r. F)
+Proof
+  rpt strip_tac >>
+  drule_all enc_pre_reserve_enclosing >> strip_tac >>
+  drule_all (SRULE [] (Q.INST [`is_dyn` |-> `T`]
+    enc_child_correct_labels_apply)) >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  irule frag_exec_conseq >> goal_assum (drule_at Any) >> simp[] >>
+  rpt strip_tac
+  >- (irule enc_frame_restore_enclosing >> simp[] >>
+      qexistsl_tac [`a`,`b`,
+        `[(w2n dst_w + off,32);
+          (w2n dst_w + d,LENGTH (enc (vyper_to_abi_type env ty) av));(c,32)]`] >>
+      fs[] >> metis_tac[]) >>
+  goal_assum (drule_at Any)
+QED
+
+Theorem enc_elems_correct_labels_enclosing_local_frag:
+  enc_elems_correct_labels dst src elems so ho dp /\
+  compile_abi_encode_complex_elems dst src elems so ho dp a = (op,b) /\
+  abi_enc_plans env ts elems /\
+  LIST_REL (\t tv. evaluate_type env t = SOME tv) ts tvs /\
+  LIST_REL value_has_type tvs vs /\
+  vyper_to_abi_list env ts vs = SOME avs /\
+  eval_operand dst s0 = SOME dst_w /\ eval_operand src s0 = SOME src_w /\
+  (EXISTS (\(_,_,_,dyn). dyn) elems ==>
+    eval_operand dp s0 = SOME (n2w c) /\ mem_word_at c s0.vs_memory = n2w d /\
+    (?j. j NOTIN frag_ids a b /\ FLOOKUP s0.vs_allocas j = SOME (c,32)) /\
+    lo <= c /\ ho + SUM (MAP (\(_,sz,_,_). sz) elems) <= d) /\
+  enc_pre a b [dst;src;dp] lo top (TupleTV tvs) (ArrayV (TupleV vs))
+    (w2n src_w + so)
+    [(w2n dst_w + ho,SUM (MAP (\(_,sz,_,_). sz) elems));
+     (w2n dst_w + d,LENGTH (enc_tuple d 0 (vyper_to_abi_types env ts) avs [] []) -
+       SUM (MAP (\(_,sz,_,_). sz) elems))] s0 /\
+  frag_ids a b SUBSET frag_ids st z /\
+  enc_scratch (frag_ids st z) lo top s0 /\
+  (!x. not_fresh_at st x ==> not_fresh_at a x) /\
+  (!p n. MEM (p,n)
+    [(w2n dst_w + ho,SUM (MAP (\(_,sz,_,_). sz) elems));
+     (w2n dst_w + d,LENGTH (enc_tuple d 0 (vyper_to_abi_types env ts) avs [] []) -
+       SUM (MAP (\(_,sz,_,_). sz) elems));(c,32)] ==>
+    ?q m. MEM (q,m) outs /\ q <= p /\ p+n <= q+m) ==>
+  frag_exec ctx a b (\s. s = s0)
+    (\s. mem_bytes_at (w2n dst_w + ho)
+           (SUM (MAP (\(_,sz,_,_). sz) elems)) s.vs_memory ++
+         mem_bytes_at (w2n dst_w + d)
+           (LENGTH (enc_tuple d 0 (vyper_to_abi_types env ts) avs [] []) -
+            SUM (MAP (\(_,sz,_,_). sz) elems)) s.vs_memory =
+           enc_tuple d 0 (vyper_to_abi_types env ts) avs [] [] /\
+         (EXISTS (\(_,_,_,dyn). dyn) elems ==>
+          mem_word_at c s.vs_memory =
+            n2w (d + LENGTH (enc_tuple d 0 (vyper_to_abi_types env ts) avs [] []) -
+              SUM (MAP (\(_,sz,_,_). sz) elems))) /\
+         s.vs_labels = s0.vs_labels /\ enc_frame st z lo top outs s0 s /\
+         (?local_top. enc_frame a b lo local_top
+           [(w2n dst_w + ho,SUM (MAP (\(_,sz,_,_). sz) elems));
+            (w2n dst_w + d,LENGTH (enc_tuple d 0 (vyper_to_abi_types env ts) avs [] []) -
+              SUM (MAP (\(_,sz,_,_). sz) elems));(c,32)] s0 s))
+    (\r. F)
+Proof
+  rpt strip_tac >>
+  drule_all enc_pre_reserve_enclosing >> strip_tac >>
+  drule_all enc_elems_correct_labels_apply >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  irule frag_exec_conseq >> goal_assum (drule_at Any) >> simp[] >>
+  rpt strip_tac
+  >- (irule enc_frame_restore_enclosing >> simp[] >>
+      qexistsl_tac [`a`,`b`,
+        `[(w2n dst_w + ho,SUM (MAP (\(_,sz,_,_). sz) elems));
+          (w2n dst_w + d,LENGTH (enc_tuple d 0 (vyper_to_abi_types env ts) avs [] []) -
+            SUM (MAP (\(_,sz,_,_). sz) elems));(c,32)]`] >>
+      fs[] >> metis_tac[]) >>
+  goal_assum (drule_at Any)
+QED
+
+Theorem enc_child_static_correct_labels:
+  (!static_loc. enc_buf_correct_labels static_loc child_ptr ei) ==>
+  enc_child_correct_labels dst child_ptr ei F static_ofst dyn_ptr
+Proof
+  strip_tac >> rewrite_tac[enc_child_correct_labels_def] >>
+  rpt gen_tac >> strip_tac >> simp[] >> strip_tac >>
+  qpat_x_assum `compile_abi_encode_child _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[Once compile_abi_encode_child_def, comp_bind_def] >>
+  pairarg_tac >> simp[] >> strip_tac >>
+  rename1 `emit_op ADD [dst; Lit (n2w static_ofst)] st = (static_loc, mid)` >>
+  qabbrev_tac `out_base = static_ofst + w2n dst_w` >>
+  qabbrev_tac `nbytes = LENGTH (enc (vyper_to_abi_type env ty) av)` >>
+  `out_base < dimword (:256)` by
+    (drule enc_pre_bounds >> fs[enc_pre_def, Abbr `out_base`, Abbr `nbytes`]) >>
+  `step_inst_base (mk_inst st.cs_next_id ADD [dst; Lit (n2w static_ofst)]
+     [STRING #"%" (toString st.cs_next_var)]) s0 =
+     OK (update_var (STRING #"%" (toString st.cs_next_var)) (n2w out_base) s0)` by
+    (simp[Abbr `out_base`, GSYM wordsTheory.word_add_n2w,
+       wordsTheory.n2w_w2n] >> irule step_ADD >> simp[eval_operand_lit]) >>
+  `enc_scratch (frag_ids st st') lo top s0` by fs[enc_pre_def] >>
+  `st.cs_next_var <= st.cs_next_var` by simp[] >>
+  drule_all enc_emit_op_run_frame >>
+  disch_then (qspec_then `[(out_base,nbytes)]` strip_assume_tac) >>
+  rename1 `run_inst_seq (emitted_insts st mid) s0 = OK s1` >>
+  suspend "static_suffix"
+QED
+
+Resume enc_child_static_correct_labels[static_suffix]:
+  drule (cj 2 enc_encoder_growth) >> strip_tac >>
+  drule emit_op_extends >> strip_tac >>
+  drule emitted_insts_emit_op >> strip_tac >>
+  `frag_ids mid st' SUBSET frag_ids st st'` by
+    (fs[frag_ids_def, pred_setTheory.SUBSET_DEF, cs_extends_def] >> decide_tac) >>
+  `!x. not_fresh_at st x ==> not_fresh_at mid x` by
+    (fs[not_fresh_at_def, cs_extends_def] >> rpt strip_tac >>
+     first_x_assum irule >> decide_tac) >>
+  `enc_pre mid st' [static_loc;child_ptr] lo top tv v (w2n src_w)
+     [(out_base,nbytes)] s1` by
+    (reverse (rw[enc_pre_def])
+     >- (irule enc_scratch_subset >> qexists_tac `frag_ids st st'` >>
+         simp[] >> fs[enc_frame_def]) >>
+     fs[enc_pre_def] >>
+     gvs[not_fresh_at_def, ASCIInumbersTheory.toString_11] >>
+     rpt strip_tac >> first_x_assum irule >> decide_tac) >>
+  suspend "static_compose"
+QED
+
+Resume enc_child_static_correct_labels[static_compose]:
+  irule frag_exec_seq_pointwise >>
+  qexistsl_tac [
+    `\u. enc_pre mid st' [static_loc;child_ptr] lo top tv v (w2n src_w)
+           [(out_base,nbytes)] u /\
+         eval_operand static_loc u = SOME (n2w out_base) /\
+         eval_operand child_ptr u = SOME src_w /\
+         enc_frame st st' lo top [(out_base,nbytes)] s0 u /\
+         u.vs_labels = s0.vs_labels`, `mid`] >>
+  simp[] >> reverse conj_tac
+  >- suspend "static_lift" >>
+  qpat_assum `static_loc = _` (fn th => pure_rewrite_tac[GSYM th]) >>
+  qx_gen_tac `t` >> strip_tac >>
+  `enc_buf_correct_labels static_loc child_ptr ei` by simp[] >>
+  `enc_scratch (frag_ids st st') lo top t` by fs[enc_frame_def] >>
+  `w2n (n2w out_base : bytes32) = out_base` by simp[wordsTheory.w2n_n2w] >>
+  `enc_pre mid st' [static_loc;child_ptr] lo top tv v (w2n src_w)
+     [(w2n (n2w out_base : bytes32),LENGTH (enc (vyper_to_abi_type env ty) av))] t`
+    by (fs[Abbr `nbytes`] >> metis_tac[]) >>
+  `?p n. MEM (p,n) [(out_base,nbytes)] /\ p <= w2n (n2w out_base : bytes32) /\
+     w2n (n2w out_base : bytes32) + LENGTH (enc (vyper_to_abi_type env ty) av) <= p+n`
+    by (qexistsl_tac [`out_base`,`nbytes`] >> simp[Abbr `nbytes`]) >>
+  drule_all (SRULE [PULL_EXISTS] enc_buf_correct_labels_enclosing_local_frag) >>
+  disch_then (qspec_then `ctx` mp_tac) >> strip_tac >>
+  irule frag_exec_conseq >> goal_assum (drule_at Any) >> simp[] >>
+  rpt strip_tac >> gvs[Abbr `nbytes`] >>
+  irule enc_frame_trans >> goal_assum (drule_at Any) >> simp[]
+QED
+
+Resume enc_child_static_correct_labels[static_lift]:
+  conj_tac
+  >- (fs[same_blocks_def, cs_extends_def] >>
+      qexists_tac `[]` >> simp[IS_PREFIX_APPEND]) >>
+  irule frag_exec_run_inst_seq >>
+  fs[same_blocks_def] >>
+  simp[IS_PREFIX_APPEND] >>
+  reverse conj_tac >- simp[is_terminator_def] >>
+  simp[enc_pre_inst_idx, enc_operand_inst_idx] >>
+  conj_tac >- metis_tac[] >>
+  qpat_x_assum `!old. _` (qspec_then `child_ptr` mp_tac) >>
+  impl_tac >- (fs[enc_pre_def] >> metis_tac[]) >> simp[]
+QED
+
+Finalise enc_child_static_correct_labels
+
+Theorem enc_child_dynamic_prefix_run:
+  emit_op ADD [dst; Lit (n2w h)] st = (head_op,a) /\
+  emit_op MLOAD [cursor] a = (offset_op,b) /\
+  emit_op ADD [dst;offset_op] b = (tail_op,m) /\
+  eval_operand dst s0 = SOME dw /\
+  eval_operand cursor s0 = SOME (n2w c) /\
+  mem_word_at c s0.vs_memory = n2w d /\ c < dimword (:256) /\
+  (!x. dst = Var x \/ cursor = Var x ==> not_fresh_at st x) /\
+  enc_scratch (frag_ids st end_st) lo top s0 ==>
+  ?s. run_inst_seq (emitted_insts st m) s0 = OK s /\
+      same_blocks st m /\
+      eval_operand head_op s = SOME (n2w (w2n dw + h)) /\
+      eval_operand offset_op s = SOME (n2w d) /\
+      eval_operand tail_op s = SOME (n2w (w2n dw + d)) /\
+      s.vs_memory = s0.vs_memory /\ s.vs_labels = s0.vs_labels /\
+      (!old. (!x. old = Var x ==> not_fresh_at st x) ==>
+         eval_operand old s = eval_operand old s0) /\
+      enc_frame st end_st lo top outs s0 s /\
+      (!x. head_op = Var x \/ offset_op = Var x \/ tail_op = Var x ==>
+         not_fresh_at m x) /\
+      (!x. not_fresh_at st x ==> not_fresh_at m x)
+Proof
+  rpt strip_tac >>
+  `step_inst_base (mk_inst st.cs_next_id ADD [dst; Lit (n2w h)]
+     [STRING #"%" (toString st.cs_next_var)]) s0 =
+     OK (update_var (STRING #"%" (toString st.cs_next_var))
+       (n2w (w2n dw + h)) s0)` by
+    (simp[GSYM wordsTheory.word_add_n2w, wordsTheory.n2w_w2n] >>
+     irule step_ADD >> simp[eval_operand_lit]) >>
+  `st.cs_next_var <= st.cs_next_var` by simp[] >>
+  drule_all enc_emit_op_run_frame >>
+  disch_then (qspec_then `outs` strip_assume_tac) >>
+  rename1 `run_inst_seq (emitted_insts st a) s0 = OK s1` >>
+  qpat_x_assum `step_inst_base _ _ = _` kall_tac >>
+  suspend "load"
+QED
+
+Resume enc_child_dynamic_prefix_run[load]:
+  `eval_operand cursor s1 = SOME (n2w c)` by
+    (qpat_x_assum `!old. _` (qspec_then `cursor` mp_tac) >>
+     impl_tac >- metis_tac[] >> simp[]) >>
+  `step_inst_base (mk_inst a.cs_next_id MLOAD [cursor]
+     [STRING #"%" (toString a.cs_next_var)]) s1 =
+     OK (update_var (STRING #"%" (toString a.cs_next_var)) (n2w d) s1)` by
+    (drule step_MLOAD >> simp[wordsTheory.w2n_n2w, mload_def,
+       GSYM mem_word_at_def]) >>
+  qpat_assum `emit_op ADD _ st = _`
+    (mp_then Any strip_assume_tac emitted_insts_emit_op) >>
+  `st.cs_next_var <= a.cs_next_var` by simp[] >>
+  `enc_scratch (frag_ids st end_st) lo top s1` by fs[enc_frame_def] >>
+  drule_all enc_emit_op_run_frame >>
+  disch_then (qspec_then `outs` strip_assume_tac) >>
+  rename1 `run_inst_seq (emitted_insts a b) s1 = OK s2` >>
+  qpat_x_assum `step_inst_base _ _ = _` kall_tac >>
+  suspend "address"
+QED
+
+Resume enc_child_dynamic_prefix_run[address]:
+  `eval_operand dst s1 = SOME dw` by
+    (qpat_x_assum `!old. _ ==> eval_operand old s1 = _`
+       (qspec_then `dst` mp_tac) >> impl_tac >- metis_tac[] >> simp[]) >>
+  `eval_operand dst s2 = SOME dw` by
+    (qpat_x_assum `!old. _ ==> eval_operand old s2 = _`
+       (qspec_then `dst` mp_tac) >>
+     impl_tac >- (fs[not_fresh_at_def] >> metis_tac[]) >> simp[]) >>
+  `step_inst_base (mk_inst b.cs_next_id ADD [dst;offset_op]
+     [STRING #"%" (toString b.cs_next_var)]) s2 =
+     OK (update_var (STRING #"%" (toString b.cs_next_var))
+       (n2w (w2n dw + d)) s2)` by
+    (simp[GSYM wordsTheory.word_add_n2w, wordsTheory.n2w_w2n] >>
+     irule step_ADD >> simp[]) >>
+  qpat_assum `emit_op MLOAD _ a = _`
+    (mp_then Any strip_assume_tac emitted_insts_emit_op) >>
+  `st.cs_next_var <= b.cs_next_var` by simp[] >>
+  `enc_scratch (frag_ids st end_st) lo top s2` by fs[enc_frame_def] >>
+  drule_all enc_emit_op_run_frame >>
+  disch_then (qspec_then `outs` strip_assume_tac) >>
+  rename1 `run_inst_seq (emitted_insts b m) s2 = OK s3` >>
+  qpat_x_assum `step_inst_base _ _ = _` kall_tac >>
+  suspend "compose"
+QED
+
+Resume enc_child_dynamic_prefix_run[compose]:
+  qpat_assum `emit_op ADD _ b = _`
+    (mp_then Any strip_assume_tac emitted_insts_emit_op) >>
+  `!x. not_fresh_at st x ==> not_fresh_at a x` by
+    (fs[not_fresh_at_def] >> rpt strip_tac >> first_x_assum irule >> decide_tac) >>
+  `!x. not_fresh_at a x ==> not_fresh_at b x` by
+    (fs[not_fresh_at_def] >> rpt strip_tac >> first_x_assum irule >> decide_tac) >>
+  `!x. not_fresh_at b x ==> not_fresh_at m x` by
+    (fs[not_fresh_at_def] >> rpt strip_tac >> first_x_assum irule >> decide_tac) >>
+  `eval_operand head_op s2 = SOME (n2w (w2n dw + h))` by
+    (qpat_x_assum `!old. _ ==> eval_operand old s2 = _`
+       (qspec_then `head_op` mp_tac) >>
+     impl_tac >- simp[not_fresh_at_def] >> simp[]) >>
+  `eval_operand head_op s3 = SOME (n2w (w2n dw + h))` by
+    (qpat_assum `!old. _ ==> eval_operand old s3 = _`
+       (qspec_then `head_op` mp_tac) >>
+     impl_tac >- simp[not_fresh_at_def] >> simp[]) >>
+  `eval_operand offset_op s3 = SOME (n2w d)` by
+    (qpat_assum `!old. _ ==> eval_operand old s3 = _`
+       (qspec_then `offset_op` mp_tac) >>
+     impl_tac >- simp[not_fresh_at_def] >> simp[]) >>
+  qexists_tac `s3` >>
+  conj_tac
+  >- (`emitted_insts st b = emitted_insts st a ++ emitted_insts a b` by
+        (irule emitted_insts_append >> simp[]) >>
+      `emitted_insts st m = emitted_insts st b ++ emitted_insts b m` by
+        (irule emitted_insts_append >> simp[]) >>
+      qpat_x_assum `emitted_insts st m = _` SUBST1_TAC >>
+      irule enc_run_inst_seq_compose >> qexists_tac `s2` >>
+      conj_tac
+      >- (qpat_x_assum `emitted_insts st b = _` SUBST1_TAC >>
+          irule enc_run_inst_seq_compose >> qexists_tac `s1` >>
+          asm_rewrite_tac[]) >>
+      asm_rewrite_tac[]) >>
+  simp[] >>
+  conj_tac >- metis_tac[same_blocks_trans] >>
+  conj_tac
+  >- (`enc_frame st end_st lo top outs s0 s2` by
+        (irule enc_frame_trans >> goal_assum (drule_at Any) >> simp[]) >>
+      irule enc_frame_trans >> goal_assum (drule_at Any) >> simp[]) >>
+  rpt strip_tac >> gvs[] >>
+  simp[not_fresh_at_def]
+QED
+
+Finalise enc_child_dynamic_prefix_run
+
+Theorem enc_child_dynamic_prefix_structure:
+  emit_op ADD [dst; Lit (n2w h)] st = (head_op,a) /\
+  emit_op MLOAD [cursor] a = (offset_op,b) /\
+  emit_op ADD [dst;offset_op] b = (tail_op,m) ==>
+  cs_extends st m /\
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+    (emitted_insts st m)
+Proof
+  strip_tac >>
+  imp_res_tac (SRULE [enc_comp_grows_def] enc_comp_grows_emit_op) >>
+  conj_tac >- metis_tac[cs_extends_trans] >>
+  imp_res_tac emit_op_extends >>
+  `emitted_insts st b = emitted_insts st a ++ emitted_insts a b` by
+    (irule emitted_insts_append >> simp[]) >>
+  `emitted_insts st m = emitted_insts st b ++ emitted_insts b m` by
+    (irule emitted_insts_append >> simp[]) >>
+  qpat_x_assum `emitted_insts st m = _` SUBST1_TAC >>
+  qpat_x_assum `emitted_insts st b = _` SUBST1_TAC >>
+  imp_res_tac emitted_insts_emit_op >>
+  simp[mk_inst_def, is_terminator_def]
+QED
+
+Theorem enc_child_dynamic_suffix_structure:
+  emit_void MSTORE [hp; off] z = ((),a) /\
+  emit_op ADD [off; sz] a = (next,b) /\
+  emit_void MSTORE [cursor; next] b = ((),e) ==>
+  cs_extends z e /\ isPREFIX z.cs_current_insts e.cs_current_insts /\
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+    (emitted_insts z e)
+Proof
+  strip_tac >>
+  imp_res_tac (SRULE [enc_comp_grows_def] enc_comp_grows_emit_op) >>
+  imp_res_tac (SRULE [enc_comp_grows_def] enc_comp_grows_emit_void) >>
+  conj_tac >- metis_tac[cs_extends_trans] >>
+  imp_res_tac emit_void_extends >> imp_res_tac emit_op_extends >>
+  conj_tac >- metis_tac[rich_listTheory.IS_PREFIX_APPEND3, rich_listTheory.IS_PREFIX_TRANS] >>
+  `emitted_insts z b = emitted_insts z a ++ emitted_insts a b` by
+    (irule emitted_insts_append >> simp[]) >>
+  `emitted_insts z e = emitted_insts z b ++ emitted_insts b e` by
+    (irule emitted_insts_append >> simp[]) >>
+  qpat_x_assum `emitted_insts z e = _` SUBST1_TAC >>
+  qpat_x_assum `emitted_insts z b = _` SUBST1_TAC >>
+  imp_res_tac emitted_insts_emit_op >> imp_res_tac emitted_insts_emit_void >>
+  simp[mk_inst_def, is_terminator_def]
+QED
+
+Theorem enc_child_dynamic_suffix_run:
+  emit_void MSTORE [head_op; offset_op] z = ((), a) /\
+  emit_op ADD [offset_op; size_op] a = (next_op, b) /\
+  emit_void MSTORE [cursor; next_op] b = ((), e) /\
+  eval_operand head_op s = SOME (n2w head) /\
+  eval_operand offset_op s = SOME (n2w d) /\
+  eval_operand size_op s = SOME (n2w nb) /\
+  eval_operand cursor s = SOME (n2w c) /\
+  (!x. size_op = Var x \/ cursor = Var x ==> not_fresh_at z x) /\
+  head < dimword (:256) /\ c < dimword (:256) /\
+  outer.cs_next_var <= z.cs_next_var /\
+  enc_scratch (frag_ids outer end_st) lo top s ==>
+  ?t. run_inst_seq (emitted_insts z e) s = OK t /\
+      same_blocks z e /\
+      t.vs_memory = (mstore c (n2w (d + nb)) (mstore head (n2w d) s)).vs_memory /\
+      t.vs_labels = s.vs_labels /\
+      eval_operand size_op t = SOME (n2w nb) /\
+      enc_frame outer end_st lo top [(head,32);(tail,nb);(c,32)] s t
+Proof
+  strip_tac >>
+  qpat_assum `emit_void MSTORE [head_op;offset_op] z = _`
+    (mp_then Any mp_tac enc_emit_mstore_run_frame) >>
+  disch_then drule >> disch_then drule >> disch_then drule >>
+  disch_then (qspecl_then [`[(head,32);(tail,nb);(c,32)]`, `32`, `head`] mp_tac) >>
+  simp[wordsTheory.w2n_n2w] >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts z a) s = OK s1` >>
+  suspend "add"
+QED
+
+Resume enc_child_dynamic_suffix_run[add]:
+  `step_inst_base (mk_inst a.cs_next_id ADD [offset_op;size_op]
+     [STRING #"%" (toString a.cs_next_var)]) s1 =
+     OK (update_var (STRING #"%" (toString a.cs_next_var))
+       (n2w (d + nb)) s1)` by
+    (simp[GSYM wordsTheory.word_add_n2w] >> irule step_ADD >> simp[]) >>
+  qpat_assum `emit_void MSTORE _ z = _`
+    (mp_then Any strip_assume_tac emitted_insts_emit_void) >>
+  `outer.cs_next_var <= a.cs_next_var` by simp[] >>
+  `enc_scratch (frag_ids outer end_st) lo top s1` by fs[enc_frame_def] >>
+  drule_all enc_emit_op_run_frame >>
+  disch_then (qspec_then `[(head,32);(tail,nb);(c,32)]` strip_assume_tac) >>
+  rename1 `run_inst_seq (emitted_insts a b) s1 = OK s2` >>
+  qpat_x_assum `step_inst_base _ _ = _` kall_tac >>
+  suspend "cursor"
+QED
+
+Resume enc_child_dynamic_suffix_run[cursor]:
+  `eval_operand cursor s2 = SOME (n2w c)` by
+    (qpat_assum `!old. _ ==> eval_operand old s2 = _`
+       (qspec_then `cursor` mp_tac) >>
+     impl_tac >- (fs[not_fresh_at_def] >> metis_tac[]) >> simp[]) >>
+  `eval_operand size_op s2 = SOME (n2w nb)` by
+    (qpat_assum `!old. _ ==> eval_operand old s2 = _`
+       (qspec_then `size_op` mp_tac) >>
+     impl_tac >- (fs[not_fresh_at_def] >> metis_tac[]) >> simp[]) >>
+  `enc_scratch (frag_ids outer end_st) lo top s2` by fs[enc_frame_def] >>
+  qpat_assum `emit_void MSTORE [cursor;next_op] b = _`
+    (mp_then Any mp_tac enc_emit_mstore_run_frame) >>
+  disch_then drule >> disch_then drule >> disch_then drule >>
+  disch_then (qspecl_then [`[(head,32);(tail,nb);(c,32)]`, `32`, `c`] mp_tac) >>
+  simp[wordsTheory.w2n_n2w] >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts b e) s2 = OK s3` >>
+  suspend "compose"
+QED
+
+Resume enc_child_dynamic_suffix_run[compose]:
+  imp_res_tac emit_void_extends >> imp_res_tac emit_op_extends >>
+  `emitted_insts z b = emitted_insts z a ++ emitted_insts a b` by
+    (irule emitted_insts_append >> simp[]) >>
+  `emitted_insts z e = emitted_insts z b ++ emitted_insts b e` by
+    (irule emitted_insts_append >> simp[]) >>
+  qexists_tac `s3` >> conj_tac
+  >- (qpat_x_assum `emitted_insts z e = _` SUBST1_TAC >>
+      irule enc_run_inst_seq_compose >> qexists_tac `s2` >>
+      conj_tac
+      >- (qpat_x_assum `emitted_insts z b = _` SUBST1_TAC >>
+          irule enc_run_inst_seq_compose >> qexists_tac `s1` >>
+          asm_rewrite_tac[]) >> asm_rewrite_tac[]) >>
+  conj_tac >- metis_tac[same_blocks_trans] >>
+  conj_tac
+  >- (qpat_x_assum `s3.vs_memory = _` SUBST1_TAC >>
+      CONV_TAC (BINOP_CONV (RAND_CONV (REWR_CONV mstore_def))) >>
+      simp[NoAsms] >> asm_rewrite_tac[]) >>
+  simp[] >>
+  `enc_frame outer end_st lo top [(head,32);(tail,nb);(c,32)] s s2` by
+    (irule enc_frame_trans >> goal_assum (drule_at Any) >> simp[]) >>
+  irule enc_frame_trans >> goal_assum (drule_at Any) >> simp[]
+QED
+
+Finalise enc_child_dynamic_suffix_run
+
+Theorem enc_child_dynamic_correct_labels:
+  (!child_dst. enc_buf_correct_labels child_dst child_ptr ei) ==>
+  enc_child_correct_labels dst child_ptr ei T static_ofst dyn_ptr
+Proof
+  strip_tac >> rewrite_tac[enc_child_correct_labels_def] >>
+  rpt gen_tac >> strip_tac >> simp[] >> rpt strip_tac >>
+  qpat_x_assum `compile_abi_encode_child _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[Once compile_abi_encode_child_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def] >>
+  rpt (pairarg_tac >> simp[]) >> strip_tac >>
+  qpat_x_assum `_ = st'` SUBST_ALL_TAC >>
+  gvs[] >>
+  rename1 `emit_op ADD [dst; Lit (n2w static_ofst)] st = (static_loc, a)` >>
+  rename1 `emit_op MLOAD [dyn_ptr] a = (dyn_ofst, b)` >>
+  rename1 `emit_op ADD [dst; dyn_ofst] b = (child_dst, m)` >>
+  rename1 `compile_abi_encode_to_buf child_dst child_ptr ei m = (op, z)` >>
+  qabbrev_tac `head = static_ofst + w2n dst_w` >>
+  qabbrev_tac `tail = d + w2n dst_w` >>
+  qabbrev_tac `nb = LENGTH (enc (vyper_to_abi_type env ty) av)` >>
+  `head < dimword (:256)` by
+    (drule enc_pre_bounds >> fs[enc_pre_def, Abbr `head`, Abbr `tail`]) >>
+  `enc_scratch (frag_ids st st') lo top s0` by fs[enc_pre_def] >>
+  `c < dimword (:256)` by
+    (drule_all enc_scratch_alloca_bound >>
+     qpat_x_assum `enc_scratch _ _ _ s0` mp_tac >>
+     pure_rewrite_tac[enc_scratch_def] >> rpt strip_tac >> decide_tac) >>
+  `!x. dst = Var x \/ dyn_ptr = Var x ==> not_fresh_at st x` by
+    (fs[enc_pre_def] >> metis_tac[]) >>
+  drule_all enc_child_dynamic_prefix_run >>
+  disch_then (qspec_then `[(head,32);(tail,nb);(c,32)]` strip_assume_tac) >>
+  rename1 `run_inst_seq (emitted_insts st m) s0 = OK s1` >>
+  suspend "dynamic_recursive"
+QED
+
+Resume enc_child_dynamic_correct_labels[dynamic_recursive]:
+  drule (cj 2 enc_encoder_growth) >> strip_tac >>
+  imp_res_tac (SRULE [enc_comp_grows_def] enc_comp_grows_emit_op) >>
+  imp_res_tac (SRULE [enc_comp_grows_def] enc_comp_grows_emit_void) >>
+  `frag_ids m z SUBSET frag_ids st st'` by
+    (fs[frag_ids_def, pred_setTheory.SUBSET_DEF, cs_extends_def] >> decide_tac) >>
+  `tail < dimword (:256)` by
+    (drule enc_pre_bounds >> fs[enc_pre_def]) >>
+  `eval_operand child_ptr s1 = SOME src_w` by
+    (qpat_x_assum `!old. _` (qspec_then `child_ptr` mp_tac) >>
+     impl_tac >- (fs[enc_pre_def] >> metis_tac[]) >> simp[]) >>
+  `enc_pre m z [child_dst;child_ptr] lo top tv v (w2n src_w)
+     [(tail,nb)] s1` by
+    (reverse (rw[enc_pre_def])
+     >- (irule enc_scratch_subset >> qexists_tac `frag_ids st st'` >>
+         simp[] >> fs[enc_frame_def]) >>
+     fs[enc_pre_def] >> metis_tac[]) >>
+  qabbrev_tac `t1 = s1 with vs_inst_idx := LENGTH m.cs_current_insts` >>
+  `enc_pre m z [child_dst;child_ptr] lo top tv v (w2n src_w)
+     [(tail,nb)] t1` by simp[Abbr `t1`, enc_pre_inst_idx] >>
+  qpat_x_assum `enc_pre m z _ _ _ _ _ _ _ s1` kall_tac >>
+  `enc_buf_correct_labels child_dst child_ptr ei` by simp[] >>
+  `enc_scratch (frag_ids st st') lo top s1` by fs[enc_frame_def] >>
+  `enc_scratch (frag_ids st st') lo top t1` by
+    (`enc_scratch (frag_ids st st') lo top t1 <=>
+       enc_scratch (frag_ids st st') lo top s1` by
+       (irule enc_scratch_cong >> simp[Abbr `t1`]) >> metis_tac[]) >>
+  qpat_x_assum `enc_scratch _ _ _ s1` kall_tac >>
+  `eval_operand child_ptr t1 = SOME src_w` by
+    simp[Abbr `t1`, enc_operand_inst_idx] >>
+  qpat_x_assum `eval_operand child_ptr s1 = _` kall_tac >>
+  `w2n (n2w tail : bytes32) = tail` by simp[wordsTheory.w2n_n2w] >>
+  `eval_operand child_dst t1 = SOME (n2w tail)` by
+    simp[Abbr `t1`, enc_operand_inst_idx, Abbr `tail`, arithmeticTheory.ADD_COMM] >>
+  qpat_x_assum `eval_operand child_dst s1 = _` kall_tac >>
+  `enc_pre m z [child_dst;child_ptr] lo top tv v (w2n src_w)
+     [(w2n (n2w tail : bytes32),LENGTH (enc (vyper_to_abi_type env ty) av))] t1`
+    by (qpat_x_assum `enc_pre m z _ _ _ _ _ _ _ _` mp_tac >>
+        simp[Abbr `nb`]) >>
+  `?p n. MEM (p,n) [(head,32);(tail,nb);(c,32)] /\
+     p <= w2n (n2w tail : bytes32) /\
+     w2n (n2w tail : bytes32) + LENGTH (enc (vyper_to_abi_type env ty) av) <= p+n`
+    by (qexistsl_tac [`tail`,`nb`] >> simp[Abbr `nb`]) >>
+  drule_all (SRULE [PULL_EXISTS] enc_buf_correct_labels_enclosing_local_frag) >>
+  disch_then (qspec_then `ctx` mp_tac) >> strip_tac >>
+  suspend "dynamic_suffix"
+QED
+
+Resume enc_child_dynamic_correct_labels[dynamic_suffix]:
+  drule_all enc_child_dynamic_prefix_structure >> strip_tac >>
+  `isPREFIX st.cs_current_insts m.cs_current_insts` by
+    (qpat_assum `same_blocks st m` mp_tac >> rewrite_tac[same_blocks_def] >>
+     strip_tac >> qpat_assum `cs_extends st m` mp_tac >>
+     rewrite_tac[cs_extends_def] >> strip_tac >>
+     rename1 `m.cs_blocks = bs ++ st.cs_blocks` >>
+     `LENGTH m.cs_blocks = LENGTH bs + LENGTH st.cs_blocks` by
+       (qpat_x_assum `m.cs_blocks = bs ++ st.cs_blocks` SUBST1_TAC >> simp[]) >>
+     `bs = []` by fs[] >> fs[]) >>
+  `frag_exec ctx st m (\s. s = s0) (\s. s = t1) (\r. F)` by
+    (irule frag_exec_run_inst_seq >>
+     simp[Abbr `t1`] >> fs[same_blocks_def]) >>
+  `cs_extends z st'` by metis_tac[cs_extends_trans] >>
+  `cs_extends m st'` by metis_tac[cs_extends_trans] >>
+  qpat_x_assum `!cd. enc_buf_correct_labels cd child_ptr ei` kall_tac >>
+  qpat_x_assum `abi_enc_plan _ _ _` kall_tac >>
+  qpat_x_assum `evaluate_type _ _ = _` kall_tac >>
+  qpat_x_assum `value_has_type _ _` kall_tac >>
+  qpat_x_assum `vyper_to_abi _ _ _ = _` kall_tac >>
+  qpat_x_assum `is_dynamic _` kall_tac >>
+  drule (cj 2 enc_encoder_result_bound) >> strip_tac >>
+  qpat_x_assum `compile_abi_encode_to_buf _ _ _ _ = _` kall_tac >>
+  qpat_x_assum `emit_op ADD _ st = _` kall_tac >>
+  qpat_x_assum `emit_op MLOAD _ a = _` kall_tac >>
+  qpat_x_assum `emit_op ADD _ b = _` kall_tac >>
+  qpat_x_assum `enc_buf_correct_labels _ _ _` kall_tac >>
+  rpt (qpat_x_assum `_ <= _.cs_next_id` kall_tac) >>
+  `st.cs_next_var <= z.cs_next_var` by decide_tac >>
+  qpat_x_assum `cs_extends st a` kall_tac >>
+  qpat_x_assum `cs_extends a b` kall_tac >>
+  qpat_x_assum `cs_extends b m` kall_tac >>
+  irule frag_exec_seq_pointwise >>
+  qexistsl_tac [`\s. s = t1`, `m`] >>
+  simp[] >>
+  suspend "dynamic_after_prefix"
+QED
+
+Resume enc_child_dynamic_correct_labels[dynamic_after_prefix]:
+  qpat_x_assum `frag_exec ctx m z _ _ _`
+    (mp_then Any irule frag_exec_then) >>
+  simp[] >> qx_gen_tac `s2` >> strip_tac >>
+  suspend "dynamic_stores"
+QED
+
+Resume enc_child_dynamic_correct_labels[dynamic_stores]:
+  `eval_operand static_loc t1 = SOME (n2w head)` by
+    simp[Abbr `t1`, enc_operand_inst_idx, Abbr `head`, arithmeticTheory.ADD_COMM] >>
+  `eval_operand dyn_ofst t1 = SOME (n2w d)` by
+    simp[Abbr `t1`, enc_operand_inst_idx] >>
+  `eval_operand dyn_ptr t1 = SOME (n2w c)` by
+    simp[Abbr `t1`, enc_operand_inst_idx] >>
+  `eval_operand static_loc s2 = SOME (n2w head)` by
+    (qpat_assum `enc_frame m z _ _ _ t1 s2`
+       (mp_then Any irule enc_frame_preserves_operand) >> simp[]) >>
+  `eval_operand dyn_ofst s2 = SOME (n2w d)` by
+    (qpat_assum `enc_frame m z _ _ _ t1 s2`
+       (mp_then Any irule enc_frame_preserves_operand) >> simp[]) >>
+  `eval_operand dyn_ptr s2 = SOME (n2w c)` by
+    (qpat_assum `enc_frame m z _ _ _ t1 s2`
+       (mp_then Any irule enc_frame_preserves_operand) >>
+     simp[] >> metis_tac[]) >>
+  suspend "dynamic_cursor"
+QED
+
+Resume enc_child_dynamic_correct_labels[dynamic_cursor]:
+  `head + 32 <= tail` by
+    (simp[Abbr `head`, Abbr `tail`] >> decide_tac) >>
+  `head + 32 <= lo /\ tail + nb <= lo` by
+    (qpat_assum `enc_pre st st' _ _ _ _ _ _ _ s0` mp_tac >>
+     simp[NoAsms, enc_pre_def] >> rpt strip_tac >> decide_tac) >>
+
+  `!x. op = Var x \/ dyn_ptr = Var x ==> not_fresh_at z x` by
+    (rpt strip_tac >> simp[] >>
+     irule freshWritesTheory.not_fresh_at_mono >>
+     qexists_tac `st` >> simp[]) >>
+  `enc_scratch (frag_ids st st') lo top s2` by fs[enc_frame_def] >>
+  drule_all enc_child_dynamic_suffix_run >>
+  disch_then (qspec_then `tail` strip_assume_tac) >>
+  rename1 `run_inst_seq (emitted_insts z st') s2 = OK s3` >>
+  drule_all enc_child_dynamic_suffix_structure >> strip_tac >>
+  suspend "dynamic_finish"
+QED
+
+Resume enc_child_dynamic_correct_labels[dynamic_finish]:
+  `enc_frame st st' lo top [(head,32);(tail,nb);(c,32)] s1 s2` by
+    (qpat_assum `enc_frame st st' _ _ _ t1 s2` mp_tac >>
+     simp[NoAsms, Abbr `t1`] >> POP_ASSUM_LIST (K all_tac) >>
+     simp[enc_frame_def, lookup_var_def] >> metis_tac[]) >>
+  `enc_frame st st' lo top [(head,32);(tail,nb);(c,32)] s0 s2` by
+    (irule enc_frame_trans >> qexists_tac `s1` >> simp[]) >>
+  `enc_frame st st' lo top [(head,32);(tail,nb);(c,32)] s0 s3` by
+    (irule enc_frame_trans >> qexists_tac `s2` >> simp[]) >>
+  `s3.vs_labels = s0.vs_labels` by simp[Abbr `t1`] >>
+  rpt (qpat_x_assum `enc_pre _ _ _ _ _ _ _ _ _ _` kall_tac) >>
+  rpt (qpat_x_assum `enc_scratch _ _ _ _` kall_tac) >>
+  rpt (qpat_x_assum `enc_frame m z _ _ _ _ _` kall_tac) >>
+  rpt (qpat_x_assum `eval_operand _ t1 = _` kall_tac) >>
+  rpt (qpat_x_assum `eval_operand _ s1 = _` kall_tac) >>
+  rpt (qpat_x_assum `_ <= _.cs_next_var` kall_tac) >>
+  rpt (qpat_x_assum `!x. _ ==> not_fresh_at _ x` kall_tac) >>
+  rpt (qpat_x_assum `emit_void _ _ _ = _` kall_tac) >>
+  rpt (qpat_x_assum `emit_op _ _ _ = _` kall_tac) >>
+  suspend "dynamic_memory"
+QED
+
+Resume enc_child_dynamic_correct_labels[dynamic_memory]:
+  `mem_bytes_at tail nb s3.vs_memory = enc (vyper_to_abi_type env ty) av` by
+    (qpat_assum `s3.vs_memory = _` SUBST1_TAC >>
+     `tail + nb <= c` by decide_tac >>
+     simp[mstore_mem_bytes_at_disjoint]) >>
+  `mem_word_at head s3.vs_memory = n2w d` by
+    (qpat_assum `s3.vs_memory = _` SUBST1_TAC >>
+     `head + 32 <= c` by decide_tac >>
+     simp[mstore_mem_word_at_disjoint, mstore_mem_word_at_same]) >>
+  `mem_word_at c s3.vs_memory = n2w (d + nb)` by
+    (qpat_assum `s3.vs_memory = _` SUBST1_TAC >>
+     simp[mstore_mem_word_at_same]) >>
+  irule frag_exec_run_inst_seq >>
+  simp[enc_operand_inst_idx] >> fs[same_blocks_def]
+QED
+
+Finalise enc_child_dynamic_correct_labels
+
+(* Diagnostic boundary: choose the unused cursor inside a nonempty head. *)
+Theorem enc_frame_absorb_head_cursor[local]:
+  32 <= hn /\
+  enc_frame st st' lo top [(h,hn);(t,tn);(h,32)] s0 s ==>
+  enc_frame st st' lo top [(h,hn);(t,tn)] s0 s
+Proof
+  strip_tac >> irule enc_frame_cover_outputs >>
+  goal_assum (drule_at Any) >> simp[] >> rpt strip_tac
+  >- (qexistsl_tac [`h`,`hn`] >> simp[])
+  >- (qexistsl_tac [`t`,`tn`] >> simp[]) >>
+  qexistsl_tac [`h`,`hn`] >> simp[]
+QED
+
+Theorem enc_frag_absorb_head_cursor[local]:
+  32 <= hn /\
+  frag_exec ctx st st' P
+    (\s. Q s /\ enc_frame st st' lo top [(h,hn);(t,tn);(h,32)] s0 s) R ==>
+  frag_exec ctx st st' P
+    (\s. Q s /\ enc_frame st st' lo top [(h,hn);(t,tn)] s0 s) R
+Proof
+  strip_tac >> irule frag_exec_conseq >>
+  goal_assum (drule_at Any) >> simp[] >> rpt strip_tac >>
+  drule_all enc_frame_absorb_head_cursor >> simp[]
+QED
+
+Theorem enc_zero_static_remainder_shape[local]:
+  compile_abi_encode_complex_elems dst src [(AbiCopy 0,0,0,F)] so ho dp =
+  do ep <- emit_op ADD [src; Lit (n2w so)];
+     loc <- emit_op ADD [dst; Lit (n2w ho)];
+     emit_void MCOPY [loc;ep;Lit 0w];
+     return (Lit 0w)
+  od
+Proof
+  simp[compile_abi_encode_child_def, LET_THM,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def, FUN_EQ_THM] >>
+  gen_tac >> pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
+  pairarg_tac >> gvs[AllCaseEqs()] >>
+  qpat_x_assum `_ (emit_void _ _ _) = _` mp_tac >> pairarg_tac >> simp[]
+QED
+
+Theorem enc_zero_static_remainder_plan[local]:
+  abi_enc_plans env [TupleT []] [(AbiCopy 0,0,0,F)]
+Proof
+  simp[abi_enc_plans_cons, vyperValueTheory.evaluate_type_def, vyper_to_abi_type_def,
+       type_memory_size_def, static_length_def,
+       is_dynamic_def] >>
+  simp[Once abi_enc_plan_cases, vyperValueTheory.evaluate_type_def, vyper_to_abi_type_def,
+       type_memory_size_def, is_dynamic_def, vyperValueTheory.type_slot_size_def]
+QED
+
+Theorem enc_static_length_gap:
+  !t. static_length t = 0 \/ 32 <= static_length t
+Proof
+  recInduct static_length_ind >> rpt strip_tac >>
+  simp[Once static_length_def] >>
+  rename1 `n = 0 \/ 32 <= n * static_length t` >>
+  Cases_on `n` >> simp[arithmeticTheory.MULT]
+QED
+
+Theorem enc_plans_head_gap:
+  !ts elems. abi_enc_plans env ts elems ==>
+    SUM (MAP (\(_,sz,_,_). sz) elems) = 0 \/
+    32 <= SUM (MAP (\(_,sz,_,_). sz) elems)
+Proof
+  Induct >> simp[abi_enc_plans_cons, PULL_EXISTS] >>
+  rpt strip_tac >> gvs[] >>
+  first_x_assum drule >> strip_tac >>
+  rename1 `abi_enc_plan env t ei` >>
+  qspec_then `vyper_to_abi_type env t` mp_tac enc_static_length_gap >>
+  Cases_on `is_dynamic (vyper_to_abi_type env t)` >> simp[] >> decide_tac
+QED
+
+Theorem enc_static_zero_plan:
+  abi_enc_plan env ty ei /\ evaluate_type env ty = SOME tv /\
+  ~is_dynamic (vyper_to_abi_type env ty) /\
+  static_length (vyper_to_abi_type env ty) = 0 ==>
+  ei = AbiCopy 0 /\ type_memory_size tv = 0
+Proof
+  strip_tac >>
+  `type_memory_size tv = 0` by
+    (drule_all enc_static_type_memory_size >> simp[]) >>
+  drule_all abi_enc_plan_static >> strip_tac
+  >- (gvs[] >> drule_all abi_enc_plan_prim_size >> simp[]) >>
+  gvs[] >> qpat_x_assum `abi_enc_plan _ _ _` mp_tac >>
+  simp[Once abi_enc_plan_cases] >> rpt strip_tac >> gvs[]
+QED
+
+Theorem enc_zero_head_plans:
+  !ts elems.
+    abi_enc_plans env ts elems /\
+    ~EXISTS (\(_,_,_,dyn). dyn) elems /\
+    SUM (MAP (\(_,sz,_,_). sz) elems) = 0 ==>
+    EVERY (\e. e = (AbiCopy 0,0,0,F)) elems
+Proof
+  Induct >> simp[abi_enc_plans_cons, PULL_EXISTS] >>
+  rpt strip_tac >> gvs[] >>
+  drule_all enc_static_zero_plan >> strip_tac >> gvs[] >>
+  first_x_assum irule >> goal_assum drule >> simp[]
+QED
+
+Theorem enc_plans_all_static:
+  !ts elems. abi_enc_plans env ts elems /\
+    ~EXISTS (\(_,_,_,dyn). dyn) elems ==>
+    EVERY (\t. ~is_dynamic t) (vyper_to_abi_types env ts)
+Proof
+  Induct >> simp[abi_enc_plans_cons, PULL_EXISTS] >>
+  rpt strip_tac >> gvs[] >> first_x_assum irule >>
+  goal_assum drule >> simp[]
+QED
+
+Theorem enc_layout_zero_static_tuple:
+  enc_layout ats avs /\ EVERY (\t. ~is_dynamic t) ats /\
+  head_lengths ats 0 = 0 ==>
+  enc_tuple d 0 ats avs [] [] = []
+Proof
+  strip_tac >>
+  `LENGTH (enc_prefix_head d ats avs) = 0` by
+    (drule enc_prefix_head_length_layout >> simp[]) >>
+  `enc_prefix_head d ats avs = []` by metis_tac[LENGTH_NIL] >>
+  drule enc_prefix_assembly_layout >>
+  disch_then (qspecl_then [`0`,`d`] mp_tac) >>
+  simp[enc_prefix_tail_static]
+QED
+
+Theorem enc_zero_head_tuple:
+  abi_enc_plans env ts elems /\
+  ~EXISTS (\(_,_,_,dyn). dyn) elems /\
+  SUM (MAP (\(_,sz,_,_). sz) elems) = 0 /\
+  LIST_REL (\t tv. evaluate_type env t = SOME tv) ts tvs /\
+  LIST_REL value_has_type tvs vs /\
+  vyper_to_abi_list env ts vs = SOME avs /\
+  tuple_in_memory vs tvs p mem ==>
+  enc_tuple d 0 (vyper_to_abi_types env ts) avs [] [] = []
+Proof
+  strip_tac >>
+  drule_all enc_tuple_source_layout >> strip_tac >>
+  drule_all enc_plans_all_static >> strip_tac >>
+  `head_lengths (vyper_to_abi_types env ts) 0 = 0` by
+    (drule abi_enc_plans_head_lengths >> simp[]) >>
+  irule enc_layout_zero_static_tuple >> simp[]
+QED
+
+Theorem enc_zero_copy_cons_shape:
+  compile_abi_encode_complex_elems dst src ((AbiCopy 0,0,0,F)::rest) so ho dp =
+  do ep <- emit_op ADD [src; Lit (n2w so)];
+     loc <- emit_op ADD [dst; Lit (n2w ho)];
+     emit_void MCOPY [loc;ep;Lit 0w];
+     compile_abi_encode_complex_elems dst src rest so ho dp
+  od
+Proof
+  simp[Once compile_abi_encode_child_def, LET_THM,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def, FUN_EQ_THM] >>
+  gen_tac >> pairarg_tac >> simp[] >>
+  simp[Once compile_abi_encode_child_def, LET_THM,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  simp[Once compile_abi_encode_child_def, LET_THM,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >> pairarg_tac >> gvs[]
+QED
+
+Theorem enc_mcopy_zero_expands_probe:
+  (mcopy 1 0 0 (s with vs_memory := [])).vs_memory = [0w] /\
+  (s with vs_memory := []).vs_memory = []
+Proof
+  simp[mcopy_def, write_memory_with_expansion_def, write_memory_def,
+       mem_bytes_at_def] >> EVAL_TAC
+QED
+
+Theorem enc_mcopy_zero_bytes:
+  mem_bytes_at a n (mcopy dst src 0 s).vs_memory =
+  mem_bytes_at a n s.vs_memory
+Proof
+  simp[mcopy_def, write_memory_with_expansion_def, write_memory_def,
+       mem_bytes_at_def] >>
+  Cases_on `dst > LENGTH s.vs_memory` >>
+  simp[GSYM mem_bytes_at_def, valueEncodingProofsTheory.mem_bytes_at_append_zero]
+QED
+
+Theorem enc_bytes_agree_word:
+  (!a n. mem_bytes_at a n m1 = mem_bytes_at a n m0) ==>
+  mem_word_at c m1 = mem_word_at c m0
+Proof
+  simp[mem_word_at_def, mem_bytes_at_def] >> metis_tac[]
+QED
+
+Theorem enc_add_const_readonly:
+  emit_op ADD [arg; Lit (n2w k)] st = (op,st') /\
+  eval_operand arg s = SOME w ==>
+  ?t. run_inst_seq (emitted_insts st st') s = OK t /\
+      eval_operand op t = SOME (w + n2w k) /\
+      (!old. (!x. old = Var x ==> not_fresh_at st x) ==>
+        eval_operand old t = eval_operand old s) /\
+      t.vs_memory = s.vs_memory /\ t.vs_labels = s.vs_labels /\
+      t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
+      t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+      t.vs_logs = s.vs_logs /\ t.vs_requests = s.vs_requests
+Proof
+  strip_tac >> irule enc_emit_op_readonly_run >>
+  goal_assum (drule_at Any) >> irule step_ADD >> simp[eval_operand_lit]
+QED
+
+Theorem enc_mcopy_zero_readonly:
+  emit_void MCOPY [dst;src;Lit 0w] st = ((),st') /\
+  eval_operand dst s = SOME dw /\ eval_operand src s = SOME sw ==>
+  ?t. run_inst_seq (emitted_insts st st') s = OK t /\
+      (!a n. mem_bytes_at a n t.vs_memory = mem_bytes_at a n s.vs_memory) /\
+      (!old. eval_operand old t = eval_operand old s) /\
+      t.vs_labels = s.vs_labels /\
+      t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
+      t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+      t.vs_logs = s.vs_logs /\ t.vs_requests = s.vs_requests
+Proof
+  strip_tac >> qexists_tac `mcopy (w2n dw) (w2n sw) 0 s` >>
+  conj_tac >- (drule emit_void_MCOPY_run >> simp[eval_operand_lit]) >>
+  simp[enc_mcopy_zero_bytes] >>
+  simp[mcopy_def, write_memory_with_expansion_def] >>
+  Cases >> simp[eval_operand_def, lookup_var_def]
+QED
+
+(* Observationally read-only code may grow the zero-padded memory list. *)
+Definition enc_readonly_def:
+  enc_readonly st s t <=>
+    (!old. (!x. old = Var x ==> not_fresh_at st x) ==>
+      eval_operand old t = eval_operand old s) /\
+    (!a n. mem_bytes_at a n t.vs_memory = mem_bytes_at a n s.vs_memory) /\
+    t.vs_labels = s.vs_labels /\ t.vs_allocas = s.vs_allocas /\
+    t.vs_alloca_next = s.vs_alloca_next /\
+    t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+    t.vs_logs = s.vs_logs /\ t.vs_requests = s.vs_requests
+End
+
+Theorem enc_readonly_refl:
+  enc_readonly st s s
+Proof
+  simp[enc_readonly_def]
+QED
+
+Theorem enc_readonly_trans:
+  a.cs_next_var <= b.cs_next_var /\
+  enc_readonly a s t /\ enc_readonly b t u ==> enc_readonly a s u
+Proof
+  rw[enc_readonly_def] >> metis_tac[enc_old_operand_mono]
+QED
+
+Theorem enc_zero_copy_prefix_run:
+  emit_op ADD [src; Lit (n2w so)] st = (ep,a) /\
+  emit_op ADD [dst; Lit (n2w ho)] a = (loc,b) /\
+  emit_void MCOPY [loc;ep;Lit 0w] b = ((),c) /\
+  (!x. MEM (Var x) [dst;src] ==> not_fresh_at st x) /\
+  eval_operand dst s = SOME dw /\ eval_operand src s = SOME sw ==>
+  ?t. run_inst_seq (emitted_insts st c) s = OK t /\ enc_readonly st s t
+Proof
+  strip_tac >>
+  `a.cs_next_var = st.cs_next_var + 1 /\
+   b.cs_next_var = a.cs_next_var + 1` by
+    metis_tac[emitted_insts_emit_op] >>
+  `?s1. run_inst_seq (emitted_insts st a) s = OK s1 /\
+    eval_operand ep s1 = SOME (sw + n2w so) /\ enc_readonly st s s1 /\
+    s1.vs_memory = s.vs_memory` by
+    (qpat_x_assum `emit_op ADD [dst;_] a = _` kall_tac >>
+     drule_all enc_add_const_readonly >> simp[enc_readonly_def] >> metis_tac[]) >>
+  `eval_operand dst s1 = SOME dw` by
+    (fs[enc_readonly_def] >> metis_tac[]) >>
+  `?s2. run_inst_seq (emitted_insts a b) s1 = OK s2 /\
+    eval_operand loc s2 = SOME (dw + n2w ho) /\ enc_readonly a s1 s2 /\
+    s2.vs_memory = s1.vs_memory` by
+    (drule_all enc_add_const_readonly >> simp[enc_readonly_def] >> metis_tac[]) >>
+  `eval_operand ep s2 = SOME (sw + n2w so)` by
+    (qpat_x_assum `emit_op ADD [dst;_] a = _` kall_tac >>
+     drule enc_emit_op_old_result >> fs[enc_readonly_def] >> metis_tac[]) >>
+  `?t. run_inst_seq (emitted_insts b c) s2 = OK t /\ enc_readonly b s2 t` by
+    (drule_all enc_mcopy_zero_readonly >> simp[enc_readonly_def] >> metis_tac[]) >>
+  qexists_tac `t` >> conj_tac
+  >- (imp_res_tac enc_emit_op_append >> drule enc_emit_void_append >> strip_tac >>
+      `run_inst_seq (emitted_insts a c) s1 = OK t` by
+        metis_tac[run_inst_seq_chain] >>
+      metis_tac[run_inst_seq_chain]) >>
+  irule enc_readonly_trans >> qexistsl_tac [`b`,`s2`] >> simp[] >>
+  irule enc_readonly_trans >> qexistsl_tac [`a`,`s1`] >> simp[]
+QED
+
+Theorem enc_zero_copy_list_run:
+  !elems st op st' s.
+  EVERY (\e. e = (AbiCopy 0,0,0,F)) elems /\
+  compile_abi_encode_complex_elems dst src elems so ho dp st = (op,st') /\
+  (!x. MEM (Var x) [dst;src] ==> not_fresh_at st x) /\
+  eval_operand dst s = SOME dw /\ eval_operand src s = SOME sw ==>
+  same_blocks st st' /\
+  st'.cs_current_insts = st.cs_current_insts ++ emitted_insts st st' /\
+  op = Lit 0w /\
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+    (emitted_insts st st') /\
+  ?t. run_inst_seq (emitted_insts st st') s = OK t /\ enc_readonly st s t
+Proof
+  Induct_on `elems`
+  >- (simp[Once compile_abi_encode_child_def, comp_return_def] >>
+      rpt strip_tac >> gvs[] >>
+      simp[same_blocks_def, emitted_insts_def, run_inst_seq_def, enc_readonly_refl]) >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `EVERY _ (_::_)` mp_tac >>
+  pure_rewrite_tac[EVERY_DEF] >> BETA_TAC >> disch_then strip_assume_tac >>
+  qpat_x_assum `h = _` SUBST_ALL_TAC >>
+  qpat_x_assum `compile_abi_encode_complex_elems _ _ _ _ _ _ _ = _` mp_tac >>
+  pure_rewrite_tac[enc_zero_copy_cons_shape, comp_bind_def, comp_ignore_bind_def, LET_THM] >>
+  BETA_TAC >>
+  ntac 3 (pairarg_tac >> pop_assum (fn th =>
+    once_rewrite_tac[th] >> assume_tac th) >>
+    simp[NoAsms, LET_THM, comp_bind_def, comp_ignore_bind_def]) >> strip_tac >>
+  rename1 `emit_op ADD [src; Lit (n2w so)] st = (ep,ca)` >>
+  rename1 `emit_op ADD [dst; Lit (n2w ho)] ca = (loc,cb)` >>
+  rename1 `emit_void MCOPY [loc;ep;Lit 0w] cb = (u,cc)` >>
+  Cases_on `u` >>
+  `?t. run_inst_seq (emitted_insts st cc) s = OK t /\ enc_readonly st s t` by
+    (irule enc_zero_copy_prefix_run >> goal_assum (drule_at Any) >> metis_tac[]) >>
+  `st.cs_next_var <= cc.cs_next_var` by
+    (imp_res_tac (SRULE [enc_comp_grows_def] enc_comp_grows_emit_op) >>
+     drule (SRULE [enc_comp_grows_def] enc_comp_grows_emit_void) >>
+     strip_tac >> decide_tac) >>
+  `(!x. MEM (Var x) [dst;src] ==> not_fresh_at cc x) /\
+   eval_operand dst t = SOME dw /\ eval_operand src t = SOME sw` by
+    (fs[enc_readonly_def] >> metis_tac[enc_old_operand_mono]) >>
+  first_x_assum (qspecl_then [`cc`,`op`,`st'`,`t`] mp_tac) >>
+  impl_tac >- simp[] >> strip_tac >>
+  `same_blocks st st'` by
+    (imp_res_tac emit_op_same_blocks >> imp_res_tac emit_void_same_blocks >>
+     fs[same_blocks_def]) >>
+  imp_res_tac enc_emit_op_append >> drule enc_emit_void_append >> strip_tac >>
+  `emitted_insts st cb = emitted_insts st ca ++ emitted_insts ca cb` by
+    (irule emitted_insts_append >> simp[]) >>
+  `cb.cs_current_insts = st.cs_current_insts ++ emitted_insts st cb` by
+    simp[] >>
+  `emitted_insts st cc = emitted_insts st cb ++ emitted_insts cb cc` by
+    (irule emitted_insts_append >> simp[]) >>
+  `cc.cs_current_insts = st.cs_current_insts ++ emitted_insts st cc` by
+    simp[] >>
+  `run_inst_seq (emitted_insts st st') s = OK t' /\
+   st'.cs_current_insts = st.cs_current_insts ++ emitted_insts st st'` by
+    metis_tac[run_inst_seq_chain] >>
+  `emitted_insts st st' = emitted_insts st cc ++ emitted_insts cc st'` by
+    (qspecl_then [`st`,`cc`,`st'`] mp_tac emitted_insts_append >>
+     impl_tac >- metis_tac[] >> simp[]) >>
+  simp[] >> conj_tac
+  >- (imp_res_tac emitted_insts_emit_op >> imp_res_tac emitted_insts_emit_void >>
+      gvs[mk_inst_def, is_terminator_def]) >>
+  irule enc_readonly_trans >> goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem enc_readonly_inst_idx[simp]:
+  enc_readonly st s (t with vs_inst_idx := n) <=> enc_readonly st s t
+Proof
+  simp[enc_readonly_def, enc_operand_inst_idx]
+QED
+
+Theorem enc_readonly_word:
+  enc_readonly st s t ==> mem_word_at c t.vs_memory = mem_word_at c s.vs_memory
+Proof
+  strip_tac >> irule enc_bytes_agree_word >> fs[enc_readonly_def]
+QED
+
+Theorem enc_readonly_frame:
+  enc_readonly st s t /\ enc_scratch (frag_ids st st') lo top s ==>
+  enc_frame st st' lo top [] s t
+Proof
+  strip_tac >>
+  `enc_scratch (frag_ids st st') lo top t` by
+    (fs[enc_readonly_def] >> drule_all enc_scratch_cong >> simp[]) >>
+  fs[enc_readonly_def, enc_frame_def] >> rpt strip_tac >>
+  first_x_assum (qspec_then `Var x` mp_tac) >>
+  simp[eval_operand_def]
+QED
+
+Theorem enc_zero_copy_list_frag:
+  EVERY (\e. e = (AbiCopy 0,0,0,F)) elems /\
+  compile_abi_encode_complex_elems dst src elems so ho dp st = (op,st') /\
+  (!x. MEM (Var x) [dst;src] ==> not_fresh_at st x) /\
+  eval_operand dst s0 = SOME dw /\ eval_operand src s0 = SOME sw /\
+  enc_scratch (frag_ids st st') lo top s0 ==>
+  frag_exec ctx st st' (\s. s = s0)
+    (\s. enc_readonly st s0 s /\ enc_frame st st' lo top [] s0 s /\
+         eval_operand op s = SOME 0w) (\r. F)
+Proof
+  strip_tac >> drule_all enc_zero_copy_list_run >> strip_tac >>
+  irule frag_exec_run_inst_seq >>
+  fs[same_blocks_def, IS_PREFIX_APPEND] >>
+  simp[eval_operand_lit] >> irule enc_readonly_frame >> simp[]
+QED
+
+Theorem enc_elems_static_correct_labels_frag:
+  enc_elems_correct_labels dst src elems so ho dp /\
+  compile_abi_encode_complex_elems dst src elems so ho dp st = (op,st') /\
+  abi_enc_plans env ts elems /\
+  ~EXISTS (\(_,_,_,dyn). dyn) elems /\
+  LIST_REL (\t tv. evaluate_type env t = SOME tv) ts tvs /\
+  LIST_REL value_has_type tvs vs /\
+  vyper_to_abi_list env ts vs = SOME avs /\
+  eval_operand dst s0 = SOME dst_w /\ eval_operand src s0 = SOME src_w /\
+  enc_pre st st' [dst;src;dp] lo top (TupleTV tvs) (ArrayV (TupleV vs))
+    (w2n src_w + so)
+    [(w2n dst_w + ho,SUM (MAP (\(_,sz,_,_). sz) elems));
+     (w2n dst_w + d,LENGTH (enc_tuple d 0 (vyper_to_abi_types env ts) avs [] []) -
+       SUM (MAP (\(_,sz,_,_). sz) elems))] s0 ==>
+  frag_exec ctx st st' (\s. s = s0)
+    (\s. mem_bytes_at (w2n dst_w + ho)
+           (SUM (MAP (\(_,sz,_,_). sz) elems)) s.vs_memory ++
+         mem_bytes_at (w2n dst_w + d)
+           (LENGTH (enc_tuple d 0 (vyper_to_abi_types env ts) avs [] []) -
+             SUM (MAP (\(_,sz,_,_). sz) elems)) s.vs_memory =
+           enc_tuple d 0 (vyper_to_abi_types env ts) avs [] [] /\
+         s.vs_labels = s0.vs_labels /\
+         enc_frame st st' lo top
+           [(w2n dst_w + ho,SUM (MAP (\(_,sz,_,_). sz) elems));
+            (w2n dst_w + d,LENGTH (enc_tuple d 0 (vyper_to_abi_types env ts) avs [] []) -
+              SUM (MAP (\(_,sz,_,_). sz) elems))] s0 s)
+    (\r. F)
+Proof
+  rpt strip_tac >>
+  Cases_on `SUM (MAP (\(_,sz,_,_). sz) elems) = 0`
+  >- suspend "zero" >>
+  suspend "positive"
+QED
+
+Resume enc_elems_static_correct_labels_frag[zero]:
+  drule_all enc_zero_head_plans >> strip_tac >>
+  `tuple_in_memory vs tvs (w2n src_w + so) s0.vs_memory` by
+    fs[enc_pre_def, val_in_memory_def] >>
+  drule_all enc_zero_head_tuple >>
+  disch_then (qspec_then `d` assume_tac) >>
+  `(!x. MEM (Var x) [dst;src] ==> not_fresh_at st x) /\
+   enc_scratch (frag_ids st st') lo top s0` by
+    (fs[enc_pre_def] >> metis_tac[]) >>
+  drule_all enc_zero_copy_list_frag >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  irule frag_exec_conseq >> goal_assum (drule_at Any) >> simp[] >>
+  rpt strip_tac >> simp[mem_bytes_at_def]
+  >- fs[enc_readonly_def] >>
+  irule enc_frame_cover_outputs >> goal_assum (drule_at Any) >> simp[]
+QED
+
+Resume enc_elems_static_correct_labels_frag[positive]:
+  gvs[arithmeticTheory.ADD_COMM] >>
+  `~EXISTS (\(_,_,_,dyn). dyn) elems` by fs[] >>
+  drule enc_elems_correct_labels_apply >> simp[] >>
+  disch_then drule_all >>
+  disch_then (qspecl_then [`ctx`,`ho + w2n dst_w`] strip_assume_tac) >>
+  `32 <= SUM (MAP (\(_,sz,_,_). sz) elems)` by
+    (drule enc_plans_head_gap >> simp[]) >>
+  irule frag_exec_conseq >> goal_assum (drule_at Any) >> simp[] >>
+  rpt strip_tac >> irule enc_frame_absorb_head_cursor >> simp[]
+QED
+
+Finalise enc_elems_static_correct_labels_frag
+
+Theorem enc_elems_static_correct_labels_enclosing_local_frag:
+  enc_elems_correct_labels dst src elems so ho dp /\
+  compile_abi_encode_complex_elems dst src elems so ho dp a = (op,b) /\
+  abi_enc_plans env ts elems /\
+  ~EXISTS (\(_,_,_,dyn). dyn) elems /\
+  LIST_REL (\t tv. evaluate_type env t = SOME tv) ts tvs /\
+  LIST_REL value_has_type tvs vs /\
+  vyper_to_abi_list env ts vs = SOME avs /\
+  eval_operand dst s0 = SOME dst_w /\ eval_operand src s0 = SOME src_w /\
+  enc_pre a b [dst;src;dp] lo top (TupleTV tvs) (ArrayV (TupleV vs))
+    (w2n src_w + so)
+    [(w2n dst_w + ho,SUM (MAP (\(_,sz,_,_). sz) elems));
+     (w2n dst_w + d,LENGTH (enc_tuple d 0 (vyper_to_abi_types env ts) avs [] []) -
+       SUM (MAP (\(_,sz,_,_). sz) elems))] s0 /\
+  frag_ids a b SUBSET frag_ids st z /\
+  enc_scratch (frag_ids st z) lo top s0 /\
+  (!x. not_fresh_at st x ==> not_fresh_at a x) /\
+  (!p n. MEM (p,n)
+    [(w2n dst_w + ho,SUM (MAP (\(_,sz,_,_). sz) elems));
+     (w2n dst_w + d,LENGTH (enc_tuple d 0 (vyper_to_abi_types env ts) avs [] []) -
+       SUM (MAP (\(_,sz,_,_). sz) elems))] ==>
+    ?q m. MEM (q,m) outs /\ q <= p /\ p+n <= q+m) ==>
+  frag_exec ctx a b (\s. s = s0)
+    (\s. mem_bytes_at (w2n dst_w + ho)
+           (SUM (MAP (\(_,sz,_,_). sz) elems)) s.vs_memory ++
+         mem_bytes_at (w2n dst_w + d)
+           (LENGTH (enc_tuple d 0 (vyper_to_abi_types env ts) avs [] []) -
+            SUM (MAP (\(_,sz,_,_). sz) elems)) s.vs_memory =
+           enc_tuple d 0 (vyper_to_abi_types env ts) avs [] [] /\
+         s.vs_labels = s0.vs_labels /\ enc_frame st z lo top outs s0 s /\
+         (?local_top. enc_frame a b lo local_top
+           [(w2n dst_w + ho,SUM (MAP (\(_,sz,_,_). sz) elems));
+            (w2n dst_w + d,LENGTH (enc_tuple d 0 (vyper_to_abi_types env ts) avs [] []) -
+              SUM (MAP (\(_,sz,_,_). sz) elems))] s0 s))
+    (\r. F)
+Proof
+  rpt strip_tac >>
+  drule_all enc_pre_reserve_enclosing >> strip_tac >>
+  drule_all enc_elems_static_correct_labels_frag >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  irule frag_exec_conseq >> goal_assum (drule_at Any) >> simp[] >>
+  rpt strip_tac
+  >- (irule enc_frame_restore_enclosing >> simp[] >>
+      qexistsl_tac [`a`,`b`,
+        `[(w2n dst_w + ho,SUM (MAP (\(_,sz,_,_). sz) elems));
+          (w2n dst_w + d,LENGTH (enc_tuple d 0 (vyper_to_abi_types env ts) avs [] []) -
+            SUM (MAP (\(_,sz,_,_). sz) elems))]`] >>
+      fs[] >> metis_tac[]) >>
+  goal_assum (drule_at Any)
+QED
+
+Theorem enc_subregions_disjoint:
+  regions_disjoint (p,n) (q,m) /\
+  p <= p' /\ p' + n' <= p + n /\
+  q <= q' /\ q' + m' <= q + m ==>
+  regions_disjoint (p',n') (q',m')
+Proof
+  simp[venomMemDefsTheory.regions_disjoint_def] >> decide_tac
+QED
+
+Theorem enc_pre_subsource_transport:
+  enc_pre st z ops lo top tv v p outs s0 /\
+  value_has_type tv' v' /\ val_in_memory tv' v' p' s0.vs_memory /\
+  p <= p' /\ p' + type_memory_size tv' <= p + type_memory_size tv /\
+  (!q m. MEM (q,m) newouts ==>
+    ?b n. MEM (b,n) outs /\ b <= q /\ q+m <= b+n) /\
+  enc_frame a b lo local_top changed s0 s /\
+  EVERY (regions_disjoint (p',type_memory_size tv')) changed /\
+  enc_scratch (frag_ids st z) lo top s /\
+  frag_ids r r' SUBSET frag_ids st z /\
+  (!x. not_fresh_at st x ==> not_fresh_at r x) /\
+  (!op. MEM op newops ==> MEM op ops) ==>
+  enc_pre r r' newops lo top tv' v' p' newouts s
+Proof
+  rpt strip_tac >>
+  `p' + type_memory_size tv' <= lo` by fs[enc_pre_def] >>
+  `val_in_memory tv' v' p' s.vs_memory` by
+    (drule_all enc_frame_preserves_source >> simp[]) >>
+  rewrite_tac[enc_pre_def] >> rpt conj_tac
+  >- (rpt strip_tac >> first_x_assum irule >> fs[enc_pre_def] >>
+      metis_tac[])
+  >- simp[]
+  >- simp[]
+  >- (rewrite_tac[EVERY_MEM] >> Cases >> strip_tac >>
+      rename1 `MEM (q,m) newouts` >>
+      qpat_x_assum `!q m. MEM (q,m) newouts ==> _` drule >> strip_tac >>
+      qpat_x_assum `enc_pre _ _ _ _ _ _ _ _ _ _` mp_tac >>
+      simp[enc_pre_def, EVERY_MEM] >> strip_tac >>
+      first_x_assum drule >> simp[] >> strip_tac >>
+      drule_all enc_subregions_disjoint >> simp[]) >>
+  irule enc_scratch_subset >> goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem enc_pre_frame_operands:
+  enc_pre st z ops lo top tv v p outs s0 /\
+  enc_frame a b lo local_top changed s0 s /\ s.vs_labels = s0.vs_labels /\
+  (!x. not_fresh_at st x ==> not_fresh_at a x) ==>
+  !op w. MEM op ops /\ eval_operand op s0 = SOME w ==>
+    eval_operand op s = SOME w
+Proof
+  rpt strip_tac >>
+  `!x. op = Var x ==> not_fresh_at a x` by
+    (rpt strip_tac >> first_x_assum irule >> fs[enc_pre_def] >> metis_tac[]) >>
+  drule_all enc_frame_preserves_operand >> simp[]
+QED
+
+(* Cursor transport is separate from suffix-source transport: a static
+   child changes only regions below lo, while the cursor is external. *)
+Theorem enc_pre_frame_external_cursor:
+  enc_pre st z ops lo top tv v p outs s0 /\
+  enc_frame a b lo local_top changed s0 s /\ s.vs_labels = s0.vs_labels /\
+  (!x. not_fresh_at st x ==> not_fresh_at a x) /\
+  MEM dp ops /\ eval_operand dp s0 = SOME (n2w c) /\
+  mem_word_at c s0.vs_memory = n2w d /\
+  j NOTIN frag_ids st z /\ FLOOKUP s0.vs_allocas j = SOME (c,32) /\
+  frag_ids a b SUBSET frag_ids st z /\
+  frag_ids r r' SUBSET frag_ids st z /\
+  EVERY (\(q,n). q+n <= lo) changed /\ lo <= c ==>
+  eval_operand dp s = SOME (n2w c) /\
+  mem_word_at c s.vs_memory = n2w d /\
+  (?k. k NOTIN frag_ids r r' /\ FLOOKUP s.vs_allocas k = SOME (c,32))
+Proof
+  strip_tac >>
+  `j NOTIN frag_ids a b /\ j NOTIN frag_ids r r'` by
+    (fs[pred_setTheory.SUBSET_DEF] >> metis_tac[]) >>
+  `eval_operand dp s = SOME (n2w c)` by
+    (drule_all enc_pre_frame_operands >> disch_then irule >> simp[]) >>
+  `mem_word_at c s.vs_memory = mem_word_at c s0.vs_memory` by
+    (irule enc_frame_preserves_external_word >>
+     qpat_assum `enc_frame a b _ _ _ s0 s`
+       (irule_at (Pat `enc_frame _ _ _ _ _ _ _`)) >>
+     qexists_tac `j` >> simp[]) >>
+  `FLOOKUP s.vs_allocas j = SOME (c,32)` by
+    (fs[enc_frame_def] >> metis_tac[]) >>
+  simp[] >> qexists_tac `j` >> simp[]
+QED
+
+Theorem enc_tuple_tail_source:
+  val_in_memory (TupleTV (tv::tvs)) (ArrayV (TupleV (v::vs))) p mem ==>
+  val_in_memory (TupleTV tvs) (ArrayV (TupleV vs))
+    (p + type_memory_size tv) mem /\
+  p <= p + type_memory_size tv /\
+  p + type_memory_size tv + type_memory_size (TupleTV tvs) <=
+    p + type_memory_size (TupleTV (tv::tvs))
+Proof
+  simp[val_in_memory_def, type_memory_size_def]
+QED
+
+(* Canonical suffix regions for a cons head/payload partition. *)
+Theorem enc_cons_tail_output_containment:
+  rh <= rest_len /\
+  whole_len = hs + rh + delta + (rest_len-rh) ==>
+  !p n. MEM (p,n)
+    [(D+(ho+hs),rh); (D+(d+delta),rest_len-rh)] ==>
+    ?q m. MEM (q,m) [(D+ho,hs+rh); (D+d,whole_len-(hs+rh))] /\
+      q <= p /\ p+n <= q+m
+Proof
+  strip_tac >> simp[NoAsms] >> rpt gen_tac >> strip_tac
+  >- (qexistsl_tac [`D+ho`,`hs+rh`] >> simp[] >> decide_tac) >>
+  qexistsl_tac [`D+d`,`whole_len-(hs+rh)`] >> simp[] >> decide_tac
+QED
+
+Theorem enc_cons_tail_cursor_output_containment:
+  rh <= rest_len /\
+  whole_len = hs + rh + delta + (rest_len-rh) ==>
+  !p n. MEM (p,n)
+    [(D+(ho+hs),rh); (D+(d+delta),rest_len-rh); (c,32)] ==>
+    ?q m. MEM (q,m) [(ho+D,rh+hs); (d+D,whole_len-(rh+hs)); (c,32)] /\
+      q <= p /\ p+n <= q+m
+Proof
+  strip_tac >> simp[NoAsms] >> rpt gen_tac >> strip_tac
+  >- (qexistsl_tac [`ho+D`,`rh+hs`] >> simp[] >> decide_tac)
+  >- (qexistsl_tac [`d+D`,`whole_len-(rh+hs)`] >> simp[] >> decide_tac) >>
+  qexistsl_tac [`c`,`32`] >> simp[]
+QED
+
+Theorem enc_pre_cons_tail_transport:
+  enc_pre st z ops lo top (TupleTV (tv::tvs)) (ArrayV (TupleV (v::vs)))
+    (src_base+so) [(D+ho,hs+rh); (D+d,whole_len-(hs+rh))] s0 /\
+  value_has_type (TupleTV tvs) (ArrayV (TupleV vs)) /\
+  rh <= rest_len /\ whole_len = hs+rh+delta+(rest_len-rh) /\
+  enc_frame a b lo local_top changed s0 s /\
+  EVERY (regions_disjoint (src_base+(so+type_memory_size tv),
+    type_memory_size (TupleTV tvs))) changed /\
+  enc_scratch (frag_ids st z) lo top s /\
+  frag_ids r r' SUBSET frag_ids st z /\
+  (!x. not_fresh_at st x ==> not_fresh_at r x) ==>
+  enc_pre r r' ops lo top (TupleTV tvs) (ArrayV (TupleV vs))
+    (src_base+(so+type_memory_size tv))
+    [(D+(ho+hs),rh); (D+(d+delta),rest_len-rh)] s
+Proof
+  strip_tac >>
+  `src_base+(so+type_memory_size tv) = (src_base+so)+type_memory_size tv` by decide_tac >>
+  `val_in_memory (TupleTV (tv::tvs)) (ArrayV (TupleV (v::vs)))
+     (src_base+so) s0.vs_memory` by fs[enc_pre_def] >>
+  drule enc_tuple_tail_source >> strip_tac >>
+  `!p n. MEM (p,n) [(D+(ho+hs),rh); (D+(d+delta),rest_len-rh)] ==>
+     ?q m. MEM (q,m) [(D+ho,hs+rh); (D+d,whole_len-(hs+rh))] /\
+       q <= p /\ p+n <= q+m` by
+    (rpt gen_tac >> strip_tac >> irule enc_cons_tail_output_containment >>
+     qexistsl_tac [`delta`,`rest_len`] >> fs[]) >>
+  irule enc_pre_subsource_transport >> simp[] >>
+  qpat_assum `enc_pre st z _ _ _ _ _ _ _ s0`
+    (irule_at (Pat `enc_pre _ _ _ _ _ _ _ _ _ _`)) >>
+  qpat_assum `enc_frame a b _ _ _ s0 s`
+    (irule_at (Pat `enc_frame _ _ _ _ _ _ _`)) >>
+  gvs[] >>
+  qpat_x_assum `!p n. _` mp_tac >> POP_ASSUM_LIST (K ALL_TAC) >>
+  metis_tac[arithmeticTheory.ADD_COMM]
+QED
+
+(* Consumer boundary: preserve the original tuple/ABI expressions at entry,
+   while accepting the cons partition's abstract head and tail lengths. *)
+Theorem enc_pre_cons_tail_entry:
+  enc_pre st z ops lo top (TupleTV (tv::tvs)) (ArrayV (TupleV (v::vs)))
+    (so+src_base) [(ho+D,rh+hs); (d+D,whole_len-(rh+hs))] s0 /\
+  value_has_type (TupleTV tvs) (ArrayV (TupleV vs)) /\
+  rh <= LENGTH tail_bytes /\
+  whole_len = hs+rh+delta+(LENGTH tail_bytes-rh) /\
+  tail_bytes = enc_tuple (d+delta) 0 (vyper_to_abi_types env ts) avs [] [] /\
+  rh = SUM (MAP (\(_,sz,_,_). sz) rest) /\
+  enc_frame a b lo local_top changed s0 s /\
+  EVERY (regions_disjoint (so+src_base+type_memory_size tv,
+    type_memory_size (TupleTV tvs))) changed /\
+  enc_scratch (frag_ids st z) lo top s /\
+  frag_ids r r' SUBSET frag_ids st z /\
+  (!x. not_fresh_at st x ==> not_fresh_at r x) ==>
+  enc_pre r r' ops lo top (TupleTV tvs) (ArrayV (TupleV vs))
+    (src_base+(so+type_memory_size tv))
+    [(D+(ho+hs),SUM (MAP (\(_,sz,_,_). sz) rest));
+     (D+(d+delta),
+      LENGTH (enc_tuple (d+delta) 0 (vyper_to_abi_types env ts) avs [] [])-
+      SUM (MAP (\(_,sz,_,_). sz) rest))] s
+Proof
+  strip_tac >>
+  `enc_pre st z ops lo top (TupleTV (tv::tvs)) (ArrayV (TupleV (v::vs)))
+     (src_base+so) [(D+ho,hs+rh); (D+d,whole_len-(hs+rh))] s0` by
+    (qpat_assum `enc_pre _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[arithmeticTheory.ADD_COMM]) >>
+  `enc_pre r r' ops lo top (TupleTV tvs) (ArrayV (TupleV vs))
+     (src_base+(so+type_memory_size tv))
+     [(D+(ho+hs),rh);(D+(d+delta),LENGTH tail_bytes-rh)] s` suffices_by simp[] >>
+  irule enc_pre_cons_tail_transport >>
+  qpat_assum `enc_pre st z _ _ _ _ _ _ _ s0`
+    (irule_at (Pat `enc_pre _ _ _ _ _ _ _ _ _ _`)) >>
+  qpat_assum `enc_frame a b _ _ _ s0 s`
+    (irule_at (Pat `enc_frame _ _ _ _ _ _ _`)) >>
+  gvs[AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM]
+QED
+
+Theorem enc_cons_dynamic_child_disjoint_tail:
+  enc_pre st z ops lo top (TupleTV (tv::tvs)) (ArrayV (TupleV (v::vs)))
+    (so+src_base) [(ho+D,rh+hs); (d+D,whole_len-(rh+hs))] s0 /\
+  whole_len = hs+rh+delta+tail_len /\ lo <= c ==>
+  EVERY (regions_disjoint
+    (so+src_base+type_memory_size tv,type_memory_size (TupleTV tvs)))
+    [(ho+D,hs);(d+D,delta);(c,32)]
+Proof
+  simp[enc_pre_def, type_memory_size_def,
+       venomMemDefsTheory.regions_disjoint_def] >>
+  rpt strip_tac >> decide_tac
+QED
+
+Theorem enc_frame_preserves_bytes_allow_empty:
+  enc_frame st z lo top outs s t /\ p+n <= lo /\
+  EVERY (\(q,m). m = 0 \/ regions_disjoint (p,n) (q,m)) outs ==>
+  mem_bytes_at p n t.vs_memory = mem_bytes_at p n s.vs_memory
+Proof
+  strip_tac >> irule mem_bytes_at_pointwise >> rpt strip_tac >>
+  qpat_x_assum `enc_frame _ _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[enc_frame_def, enc_scratch_def] >> strip_tac >>
+  first_x_assum irule >> conj_tac
+  >- (rpt strip_tac >> first_x_assum drule_all >> decide_tac) >>
+  qpat_x_assum `EVERY _ outs` mp_tac >>
+  rewrite_tac[EVERY_MEM] >> strip_tac >> rpt strip_tac >>
+  rename1 `MEM out outs` >> Cases_on `out` >>
+  first_x_assum drule >>
+  simp[venomMemDefsTheory.regions_disjoint_def] >> rpt strip_tac >> decide_tac
+QED
+
+Theorem enc_word_at_number_bytes:
+  mem_word_at p mem = n2w d ==>
+  mem_bytes_at p 32 mem = enc_number (Uint 256) (NumV d)
+Proof
+  simp[mem_word_at_def, enc_number_def] >> strip_tac >>
+  pop_assum (SUBST1_TAC o SYM) >> simp[GSYM mem_bytes_at_def] >>
+  irule (GSYM word_bytes_roundtrip) >>
+  simp[LENGTH_mem_bytes_at, dividesTheory.divides_def]
+QED
+
+Theorem enc_layout_static_tuple_length:
+  enc_layout ats avs /\ EVERY (\t. ~is_dynamic t) ats ==>
+  LENGTH (enc_tuple d 0 ats avs [] []) = head_lengths ats 0
+Proof
+  strip_tac >> drule enc_prefix_head_length_layout >>
+  disch_then (qspec_then `d` assume_tac) >>
+  drule enc_prefix_assembly_layout >>
+  disch_then (qspecl_then [`0`,`d`] mp_tac) >>
+  simp[enc_prefix_tail_static] >> metis_tac[]
+QED
+
+Theorem enc_cons_tail_preserves_prefixes:
+  enc_frame st z lo top
+    ([(H+hs,rh);(B+delta,rt)] ++ extra) s t /\
+  H+hs <= lo /\ B+delta <= lo /\
+  ((rt = 0 /\ delta = 0) \/ H+hs+rh <= B) /\
+  EVERY (\(q,m). m = 0 \/ regions_disjoint (H,hs) (q,m)) extra /\
+  EVERY (\(q,m). m = 0 \/ regions_disjoint (B,delta) (q,m)) extra ==>
+  mem_bytes_at H hs t.vs_memory = mem_bytes_at H hs s.vs_memory /\
+  mem_bytes_at B delta t.vs_memory = mem_bytes_at B delta s.vs_memory
+Proof
+  strip_tac >> conj_tac
+  >- (irule enc_frame_preserves_bytes_allow_empty >>
+      qpat_assum `enc_frame _ _ _ _ _ _ _`
+        (irule_at (Pat `enc_frame _ _ _ _ _ _ _`)) >>
+      simp[venomMemDefsTheory.regions_disjoint_def] >> decide_tac) >>
+  Cases_on `delta = 0` >- simp[mem_bytes_at_def] >>
+  irule enc_frame_preserves_bytes_allow_empty >>
+  qpat_assum `enc_frame _ _ _ _ _ _ _`
+    (irule_at (Pat `enc_frame _ _ _ _ _ _ _`)) >>
+  simp[venomMemDefsTheory.regions_disjoint_def] >> decide_tac
+QED
+
+Theorem enc_cons_bytes_splice:
+  mem_bytes_at H hs mem = child_head /\
+  mem_bytes_at B delta mem = child_payload /\
+  mem_bytes_at (H+hs) rh mem ++ mem_bytes_at (B+delta) rt mem = rest_bytes ==>
+  mem_bytes_at H (hs+rh) mem ++ mem_bytes_at B (delta+rt) mem =
+    child_head ++ TAKE rh rest_bytes ++ child_payload ++ DROP rh rest_bytes
+Proof
+  strip_tac >> qpat_x_assum `_ ++ _ = rest_bytes` (SUBST1_TAC o SYM) >>
+  simp[valueEncodingProofsTheory.mem_bytes_at_split_padded,
+       TAKE_APPEND, DROP_APPEND, LENGTH_mem_bytes_at, APPEND_ASSOC,
+       TAKE_LENGTH_ID_rwt, DROP_LENGTH_TOO_LONG]
+QED
+
+Theorem enc_cons_tail_frame_splice:
+  enc_frame st z lo top
+    ([(H+hs,rh);(B+delta,rt)] ++ extra) s t /\
+  H+hs <= lo /\ B+delta <= lo /\
+  ((rt = 0 /\ delta = 0) \/ H+hs+rh <= B) /\
+  EVERY (\(q,m). m = 0 \/ regions_disjoint (H,hs) (q,m)) extra /\
+  EVERY (\(q,m). m = 0 \/ regions_disjoint (B,delta) (q,m)) extra /\
+  mem_bytes_at H hs s.vs_memory = child_head /\
+  mem_bytes_at B delta s.vs_memory = child_payload /\
+  mem_bytes_at (H+hs) rh t.vs_memory ++
+    mem_bytes_at (B+delta) rt t.vs_memory = rest_bytes ==>
+  mem_bytes_at H (hs+rh) t.vs_memory ++
+    mem_bytes_at B (delta+rt) t.vs_memory =
+    child_head ++ TAKE rh rest_bytes ++ child_payload ++ DROP rh rest_bytes
+Proof
+  strip_tac >>
+  `mem_bytes_at H hs t.vs_memory = mem_bytes_at H hs s.vs_memory /\
+   mem_bytes_at B delta t.vs_memory = mem_bytes_at B delta s.vs_memory` by
+    (irule enc_cons_tail_preserves_prefixes >>
+     qpat_assum `enc_frame _ _ _ _ _ _ _`
+       (irule_at (Pat `enc_frame _ _ _ _ _ _ _`)) >> simp[]) >>
+  irule enc_cons_bytes_splice >> simp[]
+QED
+
+Theorem enc_cons_static_tail_frame_splice:
+  enc_frame st z lo top ([(H+hs,rh);(B,rt)] ++ extra) s t /\
+  H+hs <= lo /\ (rt = 0 \/ H+hs+rh <= B) /\
+  EVERY (\(q,m). m = 0 \/ regions_disjoint (H,hs) (q,m)) extra /\
+  mem_bytes_at H hs s.vs_memory = child_head /\
+  mem_bytes_at (H+hs) rh t.vs_memory ++
+    mem_bytes_at B rt t.vs_memory = rest_bytes ==>
+  mem_bytes_at H (hs+rh) t.vs_memory ++ mem_bytes_at B rt t.vs_memory =
+    child_head ++ TAKE rh rest_bytes ++ DROP rh rest_bytes
+Proof
+  strip_tac >>
+  `mem_bytes_at H hs t.vs_memory = child_head` by
+    (`mem_bytes_at H hs t.vs_memory = mem_bytes_at H hs s.vs_memory` suffices_by simp[] >>
+     irule enc_frame_preserves_bytes_allow_empty >>
+     qpat_assum `enc_frame _ _ _ _ _ _ _`
+       (irule_at (Pat `enc_frame _ _ _ _ _ _ _`)) >>
+     simp[venomMemDefsTheory.regions_disjoint_def] >> decide_tac) >>
+  irule (SRULE []
+    (Q.INST [`delta` |-> `0`, `child_payload` |-> `[]`] enc_cons_bytes_splice)) >>
+  simp[mem_bytes_at_def]
+QED
+
+Theorem enc_elems_cons_correct_labels:
+  (!elem_src. enc_child_correct_labels dst elem_src ei is_dyn head_offset dyn_ptr) /\
+  enc_elems_correct_labels dst src rest (src_offset + mem_sz)
+    (head_offset + abi_sz) dyn_ptr ==>
+  enc_elems_correct_labels dst src ((ei,abi_sz,mem_sz,is_dyn)::rest)
+    src_offset head_offset dyn_ptr
+Proof
+  strip_tac >> rewrite_tac[enc_elems_correct_labels_def] >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `compile_abi_encode_complex_elems _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[Once compile_abi_encode_child_def, comp_bind_def, comp_ignore_bind_def] >>
+  rpt (pairarg_tac >> simp[]) >> strip_tac >>
+  rename1 `emit_op ADD [src; Lit (n2w src_offset)] st = (elem_src, a)` >>
+  rename1 `compile_abi_encode_child dst elem_src ei is_dyn head_offset dyn_ptr a = (child_op, b)` >>
+  suspend "cons_source"
+QED
+
+Resume enc_elems_cons_correct_labels[cons_source]:
+  Cases_on `ts` >- fs[] >>
+  qpat_x_assum `abi_enc_plans env _ _` mp_tac >>
+  simp[abi_enc_plans_cons, Excl "enc_def"] >> strip_tac >>
+  gvs[Excl "enc_def"] >>
+  gvs[AllCaseEqs(), Excl "enc_def"] >>
+  rename1 `evaluate_type env ty = SOME tv` >>
+  rename1 `value_has_type tv v` >>
+  rename1 `LIST_REL value_has_type tvs vs` >>
+  rename1 `abi_enc_plans env ts rest` >>
+  qmatch_goalsub_abbrev_tac `enc_tuple d 0 (at::ats) (av::avs) [] []` >>
+  qabbrev_tac `dyn = is_dynamic at` >>
+  qabbrev_tac `hs = if dyn then 32 else static_length at` >>
+  qabbrev_tac `rh = SUM (MAP (\(_,sz,_,_). sz) rest)` >>
+  qabbrev_tac `whole = enc_tuple d 0 (at::ats) (av::avs) [] []` >>
+  suspend "cons_layout"
+QED
+
+Resume enc_elems_cons_correct_labels[cons_layout]:
+  `val_in_memory tv v (src_offset + w2n src_w) s0.vs_memory /\
+   tuple_in_memory vs tvs (src_offset + w2n src_w + type_memory_size tv)
+     s0.vs_memory` by
+    (qpat_assum `enc_pre _ _ _ _ _ _ _ _ _ s0` mp_tac >>
+     simp[NoAsms, enc_pre_def, val_in_memory_def] >> metis_tac[]) >>
+  `enc_layout ats avs` by
+    (simp[Abbr `ats`] >> irule enc_tuple_source_layout >> metis_tac[]) >>
+  `~dyn ==> LENGTH (enc at av) = static_length at` by
+    (simp[Abbr `dyn`, Abbr `at`] >> strip_tac >>
+     irule enc_source_static_layout >> metis_tac[]) >>
+  `rh = head_lengths ats 0` by
+    (simp[Abbr `rh`, Abbr `ats`] >>
+     drule abi_enc_plans_head_lengths >> disch_then (qspec_then `0` mp_tac) >> simp[]) >>
+  suspend "cons_parts"
+QED
+
+Resume enc_elems_cons_correct_labels[cons_parts]:
+  qabbrev_tac `delta = LENGTH (if dyn then enc at av else [])` >>
+  qabbrev_tac `rest_bytes = enc_tuple (d + delta) 0 ats avs [] []` >>
+  `whole = (if dyn then enc_number (Uint 256) (NumV d) else enc at av) ++
+     TAKE rh rest_bytes ++ (if dyn then enc at av else []) ++ DROP rh rest_bytes` by
+    (drule enc_tuple_cons_shift_parts_layout >>
+     disch_then (qspecl_then [`av`,`at`,`d`] mp_tac) >>
+     simp[Abbr `whole`, Abbr `rest_bytes`, Abbr `delta`, Abbr `dyn`, Excl "enc_def"]) >>
+  `rh <= LENGTH rest_bytes` by
+    (simp[Abbr `rest_bytes`] >> irule enc_tuple_head_bound_layout >> simp[]) >>
+  `LENGTH whole = hs + rh + delta + (LENGTH rest_bytes - rh)` by
+    (simp[Abbr `whole`, Abbr `hs`, Abbr `rest_bytes`, Abbr `delta`, Abbr `dyn`, Excl "enc_def"] >>
+     Cases_on `is_dynamic at` >> simp[byteTheory.LENGTH_word_to_bytes]) >>
+  suspend "cons_add"
+QED
+
+Resume enc_elems_cons_correct_labels[cons_add]:
+  `src_offset + w2n src_w < dimword (:256)` by
+    (drule enc_pre_bounds >> strip_tac >> decide_tac) >>
+  `step_inst_base (mk_inst st.cs_next_id ADD [src; Lit (n2w src_offset)]
+     [STRING #"%" (toString st.cs_next_var)]) s0 =
+     OK (update_var (STRING #"%" (toString st.cs_next_var))
+       (n2w (src_offset + w2n src_w)) s0)` by
+    (simp[GSYM wordsTheory.word_add_n2w, wordsTheory.n2w_w2n] >>
+     irule step_ADD >> simp[eval_operand_lit]) >>
+  `enc_scratch (frag_ids st st') lo top s0` by fs[enc_pre_def] >>
+  `st.cs_next_var <= st.cs_next_var` by simp[] >>
+  drule_all enc_emit_op_run_frame >>
+  disch_then (qspec_then
+    `[(head_offset + w2n dst_w,rh + hs);
+      (d + w2n dst_w,LENGTH whole - (rh + hs));(c,32)]` strip_assume_tac) >>
+  rename1 `run_inst_seq (emitted_insts st a) s0 = OK s1` >>
+  suspend "cons_child_pre"
+QED
+
+Resume enc_elems_cons_correct_labels[cons_child_pre]:
+  drule (cj 1 enc_encoder_growth) >> strip_tac >>
+  drule (cj 3 enc_encoder_growth) >> strip_tac >>
+  drule emit_op_extends >> strip_tac >>
+  drule emitted_insts_emit_op >> strip_tac >>
+  `frag_ids a b SUBSET frag_ids st st' /\
+   frag_ids b st' SUBSET frag_ids st st'` by
+    (simp[frag_ids_def, pred_setTheory.SUBSET_DEF] >> rpt strip_tac >> decide_tac) >>
+  `!x. not_fresh_at st x ==> not_fresh_at a x` by
+    (fs[not_fresh_at_def, cs_extends_def] >> rpt strip_tac >>
+     first_x_assum irule >> decide_tac) >>
+  `eval_operand dst s1 = SOME dst_w /\ eval_operand src s1 = SOME src_w` by
+    (qpat_assum `!old. _` (fn th => simp[th]) >>
+     fs[enc_pre_def] >> metis_tac[]) >>
+  suspend "cons_child_regions"
+QED
+
+Resume enc_elems_cons_correct_labels[cons_child_regions]:
+  qpat_x_assum `step_inst_base _ _ = _` kall_tac >>
+  qpat_x_assum `st.cs_next_var <= st.cs_next_var` kall_tac >>
+  qpat_x_assum `a.cs_current_insts = _` kall_tac >>
+  qpat_x_assum `a.cs_current_insts = _` kall_tac >>
+  qpat_x_assum `emitted_insts st a = _` kall_tac >>
+  `type_memory_size tv <= type_memory_size (TupleTV (tv::tvs))` by
+    simp[type_memory_size_def] >>
+  `enc_scratch (frag_ids a b) lo top s1` by
+    (irule enc_scratch_subset >> qexists_tac `frag_ids st st'` >>
+     simp[] >> fs[enc_frame_def]) >>
+  `!y. MEM (Var y) [dst;elem_src;dyn_ptr] ==> not_fresh_at a y` by
+    (simp[] >> rpt gen_tac >> strip_tac
+     >- (first_x_assum irule >> fs[enc_pre_def] >> metis_tac[])
+     >- (gvs[not_fresh_at_def, ASCIInumbersTheory.toString_11] >> decide_tac) >>
+     first_x_assum irule >> fs[enc_pre_def] >> metis_tac[]) >>
+  suspend "cons_child_slices"
+QED
+
+Resume enc_elems_cons_correct_labels[cons_child_slices]:
+  `enc_pre a b [dst;elem_src;dyn_ptr] lo top tv v (src_offset + w2n src_w)
+    [(head_offset + w2n dst_w,hs);(d + w2n dst_w,delta)] s1` by
+    (simp[enc_pre_def, Excl "enc_def"] >>
+     qpat_x_assum `enc_pre st st' _ _ _ _ _ _ _ s0` mp_tac >>
+     qpat_x_assum `type_memory_size tv <= type_memory_size (TupleTV (tv::tvs))` mp_tac >>
+     qpat_x_assum `LENGTH whole = _` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     simp[enc_pre_def, venomMemDefsTheory.regions_disjoint_def,
+          Excl "enc_def"] >> decide_tac) >>
+  suspend "cons_child_call"
+QED
+
+Resume enc_elems_cons_correct_labels[cons_child_call]:
+  qmatch_goalsub_abbrev_tac `frag_exec ctx st st' _ post _` >>
+  `frag_exec ctx st a (\s. s = s0)
+     (\s. s = s1 with vs_inst_idx := LENGTH a.cs_current_insts) (\r. F)` by
+    (drule emitted_insts_emit_op >> strip_tac >>
+     irule frag_exec_run_inst_seq >> fs[same_blocks_def, Excl "enc_def"] >>
+     simp[IS_PREFIX_APPEND, is_terminator_def] >>
+     rpt strip_tac >> simp[] >> goal_assum (drule_at Any)) >>
+  suspend "cons_child_index"
+QED
+
+Resume enc_elems_cons_correct_labels[cons_child_index]:
+  rename1 `run_inst_seq (emitted_insts st a) s0 = OK raw` >>
+  qabbrev_tac `s1 = raw with vs_inst_idx := LENGTH a.cs_current_insts` >>
+  `frag_exec ctx st a (\s. s = s0) (\s. s = s1) (\r. F)` by
+    simp[Abbr `s1`] >>
+  `s1.vs_memory = s0.vs_memory /\ s1.vs_labels = s0.vs_labels /\
+   s1.vs_allocas = raw.vs_allocas` by simp[Abbr `s1`] >>
+  `eval_operand dst s1 = SOME dst_w /\ eval_operand src s1 = SOME src_w /\
+   eval_operand elem_src s1 = SOME (n2w (src_offset+w2n src_w))` by
+    simp[Abbr `s1`, enc_operand_inst_idx] >>
+  `!old. (!y. old = Var y ==> not_fresh_at st y) ==>
+      eval_operand old s1 = eval_operand old s0` by
+    simp[Abbr `s1`, enc_operand_inst_idx] >>
+  `enc_pre a b [dst;elem_src;dyn_ptr] lo top tv v (src_offset+w2n src_w)
+      [(head_offset+w2n dst_w,hs);(d+w2n dst_w,delta)] s1` by
+    simp[Abbr `s1`, enc_pre_inst_idx] >>
+  `enc_frame st st' lo top
+    [(head_offset+w2n dst_w,rh+hs);
+     (d+w2n dst_w,LENGTH whole-(rh+hs));(c,32)] s0 s1` by
+    simp[Abbr `s1`] >>
+  `enc_scratch (frag_ids st st') lo top s1` by
+    (qpat_assum `enc_frame st st' _ _ _ s0 s1` mp_tac >>
+     simp[NoAsms, enc_frame_def] >> metis_tac[]) >>
+  qpat_assum `!elem_src'. enc_child_correct_labels _ _ _ _ _ _`
+    (qspec_then `elem_src` assume_tac) >>
+  Cases_on `dyn`
+  >- suspend "cons_dynamic_child"
+  >> suspend "cons_static_child"
+QED
+
+Resume enc_elems_cons_correct_labels[cons_static_child]:
+  `enc_pre a b [dst;elem_src] lo top tv v
+     (w2n (n2w (src_offset + w2n src_w) : bytes32))
+     [(w2n dst_w + head_offset,LENGTH (enc (vyper_to_abi_type env ty) av))] s1` by
+    (fs[enc_pre_def, Abbr `delta`, Abbr `hs`, Abbr `at`,
+        wordsTheory.w2n_n2w, Excl "enc_def"] >> metis_tac[]) >>
+  `~is_dynamic (vyper_to_abi_type env ty)` by
+    (qpat_assum `Abbrev (F <=> _)` mp_tac >>
+     simp[markerTheory.Abbrev_def, Abbr `at`]) >>
+  `!p n. MEM (p,n)
+      [(w2n dst_w + head_offset,LENGTH (enc (vyper_to_abi_type env ty) av))] ==>
+      ?q m. MEM (q,m)
+       [(head_offset + w2n dst_w,hs+rh);
+        (d+w2n dst_w,LENGTH whole-(hs+rh));(c,32)] /\
+       q <= p /\ p+n <= q+m` by
+    (simp[NoAsms, Excl "enc_def"] >>
+     rpt strip_tac >> qexistsl_tac [`head_offset+w2n dst_w`,`hs+rh`] >>
+     fs[Abbr `hs`, Abbr `at`, Excl "enc_def"] ) >>
+  drule_all enc_child_static_correct_labels_enclosing_local_frag >>
+  disch_then (qspec_then `ctx` assume_tac) >>
+  suspend "cons_static_child_exec"
+QED
+
+Resume enc_elems_cons_correct_labels[cons_dynamic_child]:
+  `is_dynamic (vyper_to_abi_type env ty)` by
+    (qpat_assum `Abbrev (T <=> _)` mp_tac >>
+     simp[markerTheory.Abbrev_def, Abbr `at`]) >>
+  `enc_pre a b [dst;elem_src;dyn_ptr] lo top tv v
+     (w2n (n2w (src_offset + w2n src_w) : bytes32))
+     [(w2n dst_w + head_offset,32);
+      (w2n dst_w+d,LENGTH (enc (vyper_to_abi_type env ty) av))] s1` by
+    (fs[enc_pre_def, Abbr `delta`, Abbr `hs`, Abbr `at`,
+         wordsTheory.w2n_n2w, Excl "enc_def"] >> metis_tac[]) >>
+  `eval_operand dyn_ptr s1 = SOME (n2w c)` by
+    (qpat_assum `!old. _` (fn th => simp[th]) >>
+     fs[enc_pre_def, Excl "enc_def"] >> metis_tac[]) >>
+  suspend "cons_dynamic_child_cursor"
+QED
+
+Resume enc_elems_cons_correct_labels[cons_dynamic_child_cursor]:
+  qpat_assum `T \/ _ ==> _` mp_tac >> simp[Excl "enc_def"] >> strip_tac >>
+  rename1 `FLOOKUP s0.vs_allocas j = SOME (c,32)` >>
+  `mem_word_at c s1.vs_memory = n2w d` by simp[] >>
+  `j NOTIN frag_ids a b` by
+    (fs[pred_setTheory.SUBSET_DEF, Excl "enc_def"] >> metis_tac[]) >>
+  `FLOOKUP s1.vs_allocas j = SOME (c,32)` by
+    (fs[enc_frame_def] >> metis_tac[]) >>
+  `head_offset + 32 <= d` by (fs[Abbr `hs`] >> decide_tac) >>
+  `!p n. MEM (p,n)
+      [(w2n dst_w + head_offset,32);
+       (w2n dst_w+d,LENGTH (enc (vyper_to_abi_type env ty) av));(c,32)] ==>
+      ?q m. MEM (q,m)
+       [(head_offset + w2n dst_w,hs+rh);
+        (d+w2n dst_w,LENGTH whole-(hs+rh));(c,32)] /\
+       q <= p /\ p+n <= q+m` by
+    (simp[NoAsms, Excl "enc_def"] >> rpt gen_tac >> strip_tac
+     >- (qexistsl_tac [`head_offset+w2n dst_w`,`hs+rh`] >>
+         fs[Abbr `hs`, Excl "enc_def"])
+     >- (qexistsl_tac [`d+w2n dst_w`,`LENGTH whole-(hs+rh)`] >>
+         fs[Abbr `delta`, Abbr `at`, Excl "enc_def"] >> decide_tac) >>
+     qexistsl_tac [`c`,`32`] >> simp[]) >>
+  drule_all enc_child_dynamic_correct_labels_enclosing_local_frag >>
+  disch_then (qspec_then `ctx` assume_tac) >>
+  suspend "cons_dynamic_child_exec"
+QED
+
+Resume enc_elems_cons_correct_labels[cons_static_child_exec]:
+  `cs_extends st a` by
+    (`cs_appends (emit_op ADD [src; Lit (n2w src_offset)])` by
+       simp[cs_appends_emit_helpers] >>
+     fs[cs_appends_def] >> first_x_assum drule >> simp[]) >>
+  `cs_extends a st'` by metis_tac[cs_extends_trans] >>
+  irule frag_exec_seq_pointwise >>
+  qexistsl_tac [`\s. s = s1`,`a`] >>
+  simp[] >>
+  qpat_assum `frag_exec ctx a b _ _ _`
+    (mp_then Any mp_tac frag_exec_then) >>
+  disch_then (qspecl_then [`st'`,`post`] mp_tac) >>
+  impl_tac >- suspend "cons_static_remainder" >> simp[]
+QED
+
+Resume enc_elems_cons_correct_labels[cons_dynamic_child_exec]:
+  `cs_extends st a` by
+    (`cs_appends (emit_op ADD [src; Lit (n2w src_offset)])` by
+       simp[cs_appends_emit_helpers] >>
+     fs[cs_appends_def] >> first_x_assum drule >> simp[]) >>
+  `cs_extends a st'` by metis_tac[cs_extends_trans] >>
+  irule frag_exec_seq_pointwise >>
+  qexistsl_tac [`\s. s = s1`,`a`] >> simp[] >>
+  qpat_assum `frag_exec ctx a b _ _ _`
+    (mp_then Any mp_tac frag_exec_then) >>
+  disch_then (qspecl_then [`st'`,`post`] mp_tac) >>
+  impl_tac >- suspend "cons_dynamic_remainder" >> simp[]
+QED
+
+Resume enc_elems_cons_correct_labels[cons_static_remainder]:
+  simp[] >> qx_gen_tac `s2` >> strip_tac >>
+  `enc_pre st st' [dst;src;dyn_ptr] lo top (TupleTV (tv::tvs))
+      (ArrayV (TupleV (v::vs))) (src_offset+w2n src_w)
+      [(head_offset+w2n dst_w,rh+hs);
+       (d+w2n dst_w,LENGTH whole-(rh+hs))] s1` by
+    (qpat_x_assum `enc_pre st st' _ _ _ _ _ _ _ s0` mp_tac >>
+     simp[enc_pre_def, Excl "enc_def"] >> metis_tac[]) >>
+  `!old w. MEM old [dst;src;dyn_ptr] /\ eval_operand old s1 = SOME w ==>
+     eval_operand old s2 = SOME w` by
+    (rpt strip_tac >> irule enc_pre_frame_operands >>
+     qpat_assum `enc_pre st st' _ _ _ _ _ _ _ s1`
+       (irule_at (Pat `enc_pre _ _ _ _ _ _ _ _ _ _`)) >>
+     qpat_assum `enc_frame a b _ _ _ s1 s2`
+       (irule_at (Pat `enc_frame _ _ _ _ _ _ _`)) >> simp[]) >>
+  `value_has_type (TupleTV tvs) (ArrayV (TupleV vs))` by
+    (qpat_assum `LIST_REL value_has_type tvs vs` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[value_has_type_def] >>
+     qid_spec_tac `vs` >> Induct_on `tvs` >> Cases_on `vs` >>
+     simp[value_has_type_def, LIST_REL_def]) >>
+  `val_in_memory (TupleTV tvs) (ArrayV (TupleV vs))
+      (src_offset+w2n src_w+type_memory_size tv) s1.vs_memory` by
+    (simp[val_in_memory_def] >>
+     qpat_assum `tuple_in_memory vs tvs _ _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     `src_offset + w2n src_w + type_memory_size tv =
+      src_offset + (type_memory_size tv + w2n src_w)` by decide_tac >>
+     asm_rewrite_tac[]) >>
+  `EVERY (regions_disjoint
+      (src_offset+w2n src_w+type_memory_size tv,
+       type_memory_size (TupleTV tvs)))
+     [(w2n dst_w+head_offset,
+       LENGTH (enc (vyper_to_abi_type env ty) av))]` by
+    (`LENGTH (enc (vyper_to_abi_type env ty) av) = hs` by
+       fs[Abbr `at`, Abbr `hs`, Excl "enc_def"] >>
+     pop_assum mp_tac >>
+     qpat_assum `enc_pre st st' _ _ _ _ _ _ _ s0` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[enc_pre_def, type_memory_size_def,
+          venomMemDefsTheory.regions_disjoint_def, Excl "enc_def"] >>
+     pure_rewrite_tac[GSYM LENGTH_NIL] >>
+     rpt strip_tac >> decide_tac) >>
+  `enc_scratch (frag_ids st st') lo top s2` by
+    (qpat_assum `enc_frame st st' _ _ _ s1 s2` mp_tac >>
+     simp[NoAsms, enc_frame_def] >> metis_tac[]) >>
+  suspend "cons_static_tail_regions"
+QED
+
+Resume enc_elems_cons_correct_labels[cons_static_tail_regions]:
+  `delta = 0` by simp[Abbr `delta`] >>
+  `!x. not_fresh_at st x ==> not_fresh_at b x` by
+    (qpat_assum `a.cs_next_var <= b.cs_next_var` mp_tac >>
+     qpat_assum `a.cs_next_var = _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[not_fresh_at_def] >> rpt strip_tac >>
+     first_x_assum irule >> decide_tac) >>
+  `eval_operand dst s2 = SOME dst_w /\
+   eval_operand src s2 = SOME src_w` by
+    (conj_tac >> first_x_assum irule >> simp[]) >>
+  suspend "cons_static_cursor_entry"
+QED
+
+Resume enc_elems_cons_correct_labels[cons_static_cursor_entry]:
+  `EXISTS (\(_,_,_,dyn). dyn) rest ==>
+     eval_operand dyn_ptr s2 = SOME (n2w c) /\
+     mem_word_at c s2.vs_memory = n2w d /\
+     (?j. j NOTIN frag_ids b st' /\ FLOOKUP s2.vs_allocas j = SOME (c,32)) /\
+     lo <= c /\ head_offset+hs+rh <= d` by
+    (strip_tac >>
+     qpat_x_assum `F \/ _ ==> _` mp_tac >> simp[] >> strip_tac >>
+     rename1 `FLOOKUP s0.vs_allocas j = SOME (c,32)` >>
+     `!y. dyn_ptr = Var y ==> not_fresh_at st y` by
+       (qpat_assum `enc_pre st st' _ _ _ _ _ _ _ s0` mp_tac >>
+        POP_ASSUM_LIST (K ALL_TAC) >>
+        simp[enc_pre_def, Excl "enc_def"] >> metis_tac[]) >>
+     `eval_operand dyn_ptr s1 = SOME (n2w c)` by
+       (simp[Abbr `s1`, enc_operand_inst_idx]) >>
+     `FLOOKUP s1.vs_allocas j = SOME (c,32)` by
+       (simp[Abbr `s1`] >>
+        qpat_assum `enc_frame st st' _ _ _ s0 raw` mp_tac >>
+        qpat_assum `FLOOKUP s0.vs_allocas j = _` mp_tac >>
+        POP_ASSUM_LIST (K ALL_TAC) >>
+        simp[enc_frame_def] >> metis_tac[]) >>
+     `EVERY (\(p,n). p+n <= lo)
+        [(head_offset+w2n dst_w,static_length at)]` by
+       (`LENGTH (enc (vyper_to_abi_type env ty) av) = static_length at` by
+          (qpat_assum `~F ==> LENGTH _ = _` mp_tac >>
+           simp[Abbr `at`, Excl "enc_def"]) >>
+        pop_assum mp_tac >>
+        qpat_assum `enc_pre a b _ _ _ _ _ _ _ s1` mp_tac >>
+        POP_ASSUM_LIST (K ALL_TAC) >>
+        simp[enc_pre_def] >> metis_tac[]) >>
+     `eval_operand dyn_ptr s2 = SOME (n2w c) /\
+      mem_word_at c s2.vs_memory = n2w d /\
+      (?k. k NOTIN frag_ids b st' /\ FLOOKUP s2.vs_allocas k = SOME (c,32))` by
+       (irule enc_pre_frame_external_cursor >>
+        qpat_assum `enc_pre st st' _ _ _ _ _ _ _ s1`
+          (irule_at (Pat `enc_pre _ _ _ _ _ _ _ _ _ _`)) >>
+        qpat_assum `enc_frame a b _ _ _ s1 s2`
+          (irule_at (Pat `enc_frame _ _ _ _ _ _ _`)) >>
+        qexists_tac `j` >> simp[]) >>
+     qpat_assum `head_offset + _ <= d` mp_tac >>
+     simp[AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM] >>
+     goal_assum (drule_at Any) >> simp[]) >>
+  suspend "cons_static_typed_tail_entry"
+QED
+
+Resume enc_elems_cons_correct_labels[cons_static_typed_tail_entry]:
+  `enc_pre b st' [dst;src;dyn_ptr] lo top (TupleTV tvs)
+     (ArrayV (TupleV vs)) (w2n src_w+(src_offset+type_memory_size tv))
+     [(w2n dst_w+(head_offset+hs),SUM (MAP (\(_,sz,_,_). sz) rest));
+      (w2n dst_w+d,LENGTH (enc_tuple d 0 (vyper_to_abi_types env ts) avs [] [])-
+          SUM (MAP (\(_,sz,_,_). sz) rest))] s2` by
+    (`EVERY (regions_disjoint
+        (src_offset+w2n src_w+type_memory_size tv,type_memory_size (TupleTV tvs)))
+        [(head_offset+w2n dst_w,static_length at)]` by
+       (`LENGTH (enc (vyper_to_abi_type env ty) av) = static_length at` by
+          (qpat_assum `~F ==> LENGTH _ = _` mp_tac >>
+           simp[Abbr `at`, Excl "enc_def"]) >>
+        pop_assum mp_tac >> qpat_assum `EVERY (regions_disjoint _) _` mp_tac >>
+        POP_ASSUM_LIST (K ALL_TAC) >>
+        simp[arithmeticTheory.ADD_COMM] >> rpt strip_tac >> gvs[]) >>
+     irule (SRULE [] (Q.INST [`delta` |-> `0`] enc_pre_cons_tail_entry)) >>
+     qpat_assum `enc_pre st st' _ _ _ _ _ _ _ s1`
+       (irule_at (Pat `enc_pre _ _ _ _ _ _ _ _ _ _`)) >>
+     qpat_assum `enc_frame a b _ _ _ s1 s2`
+       (irule_at (Pat `enc_frame _ _ _ _ _ _ _`)) >>
+     qexists_tac `rest_bytes` >>
+     simp[Abbr `ats`, Abbr `rh`, Abbr `rest_bytes`, Excl "enc_def"]) >>
+  suspend "cons_static_tail_invoke"
+QED
+
+Resume enc_elems_cons_correct_labels[cons_static_tail_invoke]:
+  `!p n. MEM (p,n)
+     [(w2n dst_w+(head_offset+hs),SUM (MAP (\(_,sz,_,_). sz) rest));
+      (w2n dst_w+d,LENGTH (enc_tuple d 0 (vyper_to_abi_types env ts) avs [] [])-
+          SUM (MAP (\(_,sz,_,_). sz) rest));(c,32)] ==>
+     ?q m. MEM (q,m)
+       [(head_offset+w2n dst_w,rh+hs);
+        (d+w2n dst_w,LENGTH whole-(rh+hs));(c,32)] /\
+       q <= p /\ p+n <= q+m` by
+    (`!p n. MEM (p,n)
+        [(w2n dst_w+(head_offset+hs),rh);
+         (w2n dst_w+(d+delta),LENGTH rest_bytes-rh);(c,32)] ==>
+        ?q m. MEM (q,m)
+          [(head_offset+w2n dst_w,rh+hs);
+           (d+w2n dst_w,LENGTH whole-(rh+hs));(c,32)] /\
+          q <= p /\ p+n <= q+m` by
+       (qpat_assum `rh <= LENGTH rest_bytes` mp_tac >>
+        qpat_assum `LENGTH whole = _` mp_tac >>
+        POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
+        irule enc_cons_tail_cursor_output_containment >>
+        qexistsl_tac [`delta`,`LENGTH rest_bytes`] >>
+        simp[AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM]) >>
+     pop_assum mp_tac >>
+     simp[Abbr `rh`, Abbr `rest_bytes`, Abbr `ats`, Excl "enc_def"]) >>
+  `EXISTS (\(_,_,_,dyn). dyn) rest ==>
+     eval_operand dyn_ptr s2 = SOME (n2w c) /\
+     mem_word_at c s2.vs_memory = n2w d /\
+     (?j. j NOTIN frag_ids b st' /\ FLOOKUP s2.vs_allocas j = SOME (c,32)) /\
+     lo <= c /\ (head_offset+hs)+SUM (MAP (\(_,sz,_,_). sz) rest) <= d` by
+    (qpat_x_assum `EXISTS _ rest ==> _` mp_tac >> simp[Abbr `rh`]) >>
+  Cases_on `EXISTS (\(_,_,_,dyn). dyn) rest`
+  >- (drule_all enc_elems_correct_labels_enclosing_local_frag >>
+      disch_then (qspec_then `ctx` assume_tac) >>
+      irule frag_exec_conseq >> goal_assum (drule_at Any) >> simp[] >>
+      rpt strip_tac >>
+      qpat_x_assum `!elem_src'. _` kall_tac >>
+      qpat_x_assum `enc_elems_correct_labels _ _ _ _ _ _` kall_tac >>
+      qpat_x_assum `frag_exec ctx st a _ _ _` kall_tac >>
+      qpat_x_assum `frag_exec ctx a b _ _ _` kall_tac >>
+      qpat_x_assum `frag_exec ctx b st' _ _ _` kall_tac >>
+      suspend "cons_static_assembly") >>
+  suspend "cons_static_static_tail_invoke"
+QED
+
+Resume enc_elems_cons_correct_labels[cons_dynamic_remainder]:
+  simp[] >> qx_gen_tac `s2` >> strip_tac >>
+  `enc_pre st st' [dst;src;dyn_ptr] lo top (TupleTV (tv::tvs))
+      (ArrayV (TupleV (v::vs))) (src_offset+w2n src_w)
+      [(head_offset+w2n dst_w,rh+hs);
+       (d+w2n dst_w,LENGTH whole-(rh+hs))] s1` by
+    (qpat_x_assum `enc_pre st st' _ _ _ _ _ _ _ s0` mp_tac >>
+     simp[enc_pre_def, Excl "enc_def"] >> metis_tac[]) >>
+  `!old w. MEM old [dst;src;dyn_ptr] /\ eval_operand old s1 = SOME w ==>
+     eval_operand old s2 = SOME w` by
+    (rpt strip_tac >> irule enc_pre_frame_operands >>
+     qpat_assum `enc_pre st st' _ _ _ _ _ _ _ s1`
+       (irule_at (Pat `enc_pre _ _ _ _ _ _ _ _ _ _`)) >>
+     qpat_assum `enc_frame a b _ _ _ s1 s2`
+       (irule_at (Pat `enc_frame _ _ _ _ _ _ _`)) >> simp[]) >>
+  `value_has_type (TupleTV tvs) (ArrayV (TupleV vs))` by
+    (qpat_assum `LIST_REL value_has_type tvs vs` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> simp[value_has_type_def] >>
+     qid_spec_tac `vs` >> Induct_on `tvs` >> Cases_on `vs` >>
+     simp[value_has_type_def, LIST_REL_def]) >>
+  `enc_scratch (frag_ids st st') lo top s2` by
+    (qpat_assum `enc_frame st st' _ _ _ s1 s2` mp_tac >>
+     simp[NoAsms, enc_frame_def] >> metis_tac[]) >>
+  `!x. not_fresh_at st x ==> not_fresh_at b x` by
+    (qpat_assum `a.cs_next_var <= b.cs_next_var` mp_tac >>
+     qpat_assum `a.cs_next_var = _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> simp[not_fresh_at_def] >>
+     rpt strip_tac >> first_x_assum irule >> decide_tac) >>
+  suspend "cons_dynamic_tail_entry"
+QED
+
+Resume enc_elems_cons_correct_labels[cons_dynamic_tail_entry]:
+  qpat_assum `T \/ _ ==> _` mp_tac >> simp[Excl "enc_def"] >> strip_tac >>
+  `EVERY (regions_disjoint
+      (src_offset+w2n src_w+type_memory_size tv,type_memory_size (TupleTV tvs)))
+      [(head_offset+w2n dst_w,32);(d+w2n dst_w,LENGTH (enc at av));(c,32)]` by
+    (`hs = 32 /\ delta = LENGTH (enc at av)` by simp[Abbr `hs`, Abbr `delta`] >>
+     qpat_assum `enc_pre st st' _ _ _ _ _ _ _ s1` mp_tac >>
+     qpat_assum `LENGTH whole = _` mp_tac >>
+     qpat_assum `lo <= c` mp_tac >>
+     qpat_assum `hs = 32` mp_tac >>
+     qpat_assum `delta = LENGTH (enc at av)` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
+     drule enc_cons_dynamic_child_disjoint_tail >>
+     disch_then (qspecl_then [`LENGTH rest_bytes-rh`,`LENGTH (enc at av)`,`c`] mp_tac) >>
+     simp[AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM]) >>
+  `enc_pre b st' [dst;src;dyn_ptr] lo top (TupleTV tvs)
+     (ArrayV (TupleV vs)) (w2n src_w+(src_offset+type_memory_size tv))
+     [(w2n dst_w+(head_offset+hs),SUM (MAP (\(_,sz,_,_). sz) rest));
+      (w2n dst_w+(d+delta),
+       LENGTH (enc_tuple (d+delta) 0 (vyper_to_abi_types env ts) avs [] [])-
+       SUM (MAP (\(_,sz,_,_). sz) rest))] s2` by
+    (irule enc_pre_cons_tail_entry >>
+     qpat_assum `enc_pre st st' _ _ _ _ _ _ _ s1`
+       (irule_at (Pat `enc_pre _ _ _ _ _ _ _ _ _ _`)) >>
+     qpat_assum `enc_frame a b _ _ _ s1 s2`
+       (irule_at (Pat `enc_frame _ _ _ _ _ _ _`)) >>
+     qexists_tac `rest_bytes` >>
+     simp[Abbr `ats`, Abbr `rh`, Abbr `rest_bytes`, Excl "enc_def"]) >>
+  suspend "cons_dynamic_cursor_entry"
+QED
+
+Resume enc_elems_cons_correct_labels[cons_dynamic_cursor_entry]:
+  `eval_operand dst s2 = SOME dst_w /\
+   eval_operand src s2 = SOME src_w` by
+    (conj_tac >> first_x_assum irule >> simp[]) >>
+  `eval_operand dyn_ptr s2 = SOME (n2w c)` by
+    (first_x_assum irule >> simp[Abbr `s1`, enc_operand_inst_idx]) >>
+  `mem_word_at c s2.vs_memory = n2w (d+delta)` by
+    (qpat_assum `mem_word_at c s2.vs_memory = _` mp_tac >>
+     simp[Abbr `delta`, Excl "enc_def"]) >>
+  `?j. j NOTIN frag_ids b st' /\ FLOOKUP s2.vs_allocas j = SOME (c,32)` by
+    (rename1 `FLOOKUP s0.vs_allocas j = SOME (c,32)` >>
+     qexists_tac `j` >> conj_tac
+     >- (qpat_assum `j NOTIN frag_ids st st'` mp_tac >>
+         qpat_assum `frag_ids b st' SUBSET frag_ids st st'` mp_tac >>
+         POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[pred_setTheory.SUBSET_DEF]) >>
+     `FLOOKUP s1.vs_allocas j = SOME (c,32)` by
+       (simp[Abbr `s1`] >>
+        qpat_assum `enc_frame st st' _ _ _ s0 raw` mp_tac >>
+        qpat_assum `FLOOKUP s0.vs_allocas j = _` mp_tac >>
+        POP_ASSUM_LIST (K ALL_TAC) >>
+        simp[enc_frame_def] >> metis_tac[]) >>
+     qpat_assum `enc_frame a b _ _ _ s1 s2` mp_tac >>
+     qpat_assum `FLOOKUP s1.vs_allocas j = _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[enc_frame_def] >> metis_tac[]) >>
+  `EXISTS (\(_,_,_,dyn). dyn) rest ==>
+     eval_operand dyn_ptr s2 = SOME (n2w c) /\
+     mem_word_at c s2.vs_memory = n2w (d+delta) /\
+     (?j. j NOTIN frag_ids b st' /\ FLOOKUP s2.vs_allocas j = SOME (c,32)) /\
+     lo <= c /\ (head_offset+hs)+SUM (MAP (\(_,sz,_,_). sz) rest) <= d+delta` by
+    (`(head_offset+hs)+SUM (MAP (\(_,sz,_,_). sz) rest) <= d+delta` by
+       (qpat_assum `head_offset + _ <= d` mp_tac >>
+        simp[Abbr `rh`] >> POP_ASSUM_LIST (K ALL_TAC) >> decide_tac) >>
+     qpat_assum `eval_operand dyn_ptr s2 = _` mp_tac >>
+     qpat_assum `mem_word_at c s2.vs_memory = n2w (d+delta)` mp_tac >>
+     qpat_assum `FLOOKUP s2.vs_allocas _ = SOME (c,32)` mp_tac >>
+     qpat_assum `_ NOTIN frag_ids b st'` mp_tac >>
+     qpat_assum `lo <= c` mp_tac >>
+     pop_assum mp_tac >> POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]) >>
+  suspend "cons_dynamic_tail_invoke"
+QED
+
+Resume enc_elems_cons_correct_labels[cons_dynamic_tail_invoke]:
+  `!p n. MEM (p,n)
+     [(w2n dst_w+(head_offset+hs),SUM (MAP (\(_,sz,_,_). sz) rest));
+      (w2n dst_w+(d+delta),
+       LENGTH (enc_tuple (d+delta) 0 (vyper_to_abi_types env ts) avs [] [])-
+         SUM (MAP (\(_,sz,_,_). sz) rest));(c,32)] ==>
+     ?q m. MEM (q,m)
+       [(head_offset+w2n dst_w,rh+hs);
+        (d+w2n dst_w,LENGTH whole-(rh+hs));(c,32)] /\
+       q <= p /\ p+n <= q+m` by
+    (`!p n. MEM (p,n)
+        [(w2n dst_w+(head_offset+hs),rh);
+         (w2n dst_w+(d+delta),LENGTH rest_bytes-rh);(c,32)] ==>
+        ?q m. MEM (q,m)
+          [(head_offset+w2n dst_w,rh+hs);
+           (d+w2n dst_w,LENGTH whole-(rh+hs));(c,32)] /\
+          q <= p /\ p+n <= q+m` by
+       (qpat_assum `rh <= LENGTH rest_bytes` mp_tac >>
+        qpat_assum `LENGTH whole = _` mp_tac >>
+        POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
+        irule enc_cons_tail_cursor_output_containment >>
+        qexistsl_tac [`delta`,`LENGTH rest_bytes`] >>
+        simp[AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM]) >>
+     pop_assum mp_tac >>
+     simp[Abbr `rh`, Abbr `rest_bytes`, Abbr `ats`, Excl "enc_def"]) >>
+  Cases_on `EXISTS (\(_,_,_,dyn). dyn) rest`
+  >- (drule_all enc_elems_correct_labels_enclosing_local_frag >>
+      disch_then (qspec_then `ctx` assume_tac) >>
+      irule frag_exec_conseq >> goal_assum (drule_at Any) >> simp[] >>
+      rpt strip_tac >>
+      qpat_x_assum `!elem_src'. _` kall_tac >>
+      qpat_x_assum `enc_elems_correct_labels _ _ _ _ _ _` kall_tac >>
+      qpat_x_assum `frag_exec ctx st a _ _ _` kall_tac >>
+      qpat_x_assum `frag_exec ctx a b _ _ _` kall_tac >>
+      qpat_x_assum `frag_exec ctx b st' _ _ _` kall_tac >>
+      suspend "cons_dynamic_assembly") >>
+  suspend "cons_dynamic_static_tail_invoke"
+QED
+
+Resume enc_elems_cons_correct_labels[cons_dynamic_static_tail_invoke]:
+  `!p n. MEM (p,n)
+     [(w2n dst_w+(head_offset+hs),SUM (MAP (\(_,sz,_,_). sz) rest));
+      (w2n dst_w+(d+delta),
+       LENGTH (enc_tuple (d+delta) 0 (vyper_to_abi_types env ts) avs [] [])-
+         SUM (MAP (\(_,sz,_,_). sz) rest))] ==>
+     ?q m. MEM (q,m)
+       [(head_offset+w2n dst_w,rh+hs);
+        (d+w2n dst_w,LENGTH whole-(rh+hs));(c,32)] /\
+       q <= p /\ p+n <= q+m` by
+    (qpat_assum `!p n. MEM (p,n) _ ==> _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> simp[] >> metis_tac[]) >>
+  drule_all enc_elems_static_correct_labels_enclosing_local_frag >>
+  disch_then (qspec_then `ctx` assume_tac) >>
+  irule frag_exec_conseq >> goal_assum (drule_at Any) >> simp[] >>
+  rpt strip_tac >>
+  qpat_x_assum `!elem_src'. _` kall_tac >>
+  qpat_x_assum `enc_elems_correct_labels _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `frag_exec ctx st a _ _ _` kall_tac >>
+  qpat_x_assum `frag_exec ctx a b _ _ _` kall_tac >>
+  qpat_x_assum `frag_exec ctx b st' _ _ _` kall_tac >>
+  suspend "cons_dynamic_static_tail_assembly"
+QED
+
+Resume enc_elems_cons_correct_labels[cons_dynamic_static_tail_assembly]:
+  `mem_word_at c s.vs_memory = mem_word_at c s2.vs_memory` by
+    (irule enc_frame_preserves_external_word >>
+     qpat_assum `enc_frame b st' _ _ _ s2 s`
+       (irule_at (Pat `enc_frame _ _ _ _ _ _ _`)) >>
+     qpat_assum `FLOOKUP s2.vs_allocas _ = SOME (c,32)`
+       (irule_at (Pat `FLOOKUP _ _ = _`)) >>
+     simp[] >>
+     qpat_assum `enc_pre b st' _ _ _ _ _ _ _ s2` mp_tac >>
+     qpat_assum `rh = head_lengths ats 0` mp_tac >>
+     simp[NoAsms, Abbr `rh`, Abbr `rest_bytes`, Abbr `ats`, Excl "enc_def"] >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     pure_rewrite_tac[enc_pre_def] >> rpt strip_tac >>
+     qpat_x_assum `EVERY _ _` mp_tac >> simp[] >> rpt strip_tac >> decide_tac) >>
+  `EVERY (\t. ~is_dynamic t) ats` by
+    (drule_all enc_plans_all_static >> simp[Abbr `ats`]) >>
+  `LENGTH rest_bytes = rh` by
+    (qpat_assum `enc_layout ats avs` mp_tac >>
+     qpat_assum `EVERY (\t. ~is_dynamic t) ats` mp_tac >>
+     qpat_assum `rh = head_lengths ats 0` mp_tac >>
+     simp[NoAsms, Abbr `rest_bytes`] >>
+     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
+     drule_all enc_layout_static_tuple_length >> simp[]) >>
+  `mem_word_at c s.vs_memory = n2w (d+delta)` by simp[] >>
+  `mem_bytes_at (head_offset+w2n dst_w) 32 s2.vs_memory =
+     enc_number (Uint 256) (NumV d)` by
+    (irule enc_word_at_number_bytes >> simp[]) >>
+  `mem_bytes_at (head_offset+w2n dst_w) hs s2.vs_memory =
+     enc_number (Uint 256) (NumV d)` by simp[Abbr `hs`] >>
+  rename1 `enc_frame b st' lo tail_top _ s2 s` >>
+  `enc_frame b st' lo tail_top
+     [((head_offset+w2n dst_w)+hs,rh);
+      ((d+w2n dst_w)+delta,LENGTH rest_bytes-rh)] s2 s` by
+    (qpat_assum `enc_frame b st' lo tail_top _ s2 s` mp_tac >>
+     qpat_assum `rh = head_lengths ats 0` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
+     gvs[AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM]) >>
+  suspend "cons_dynamic_static_tail_bytes"
+QED
+
+Resume enc_elems_cons_correct_labels[cons_dynamic_static_tail_bytes]:
+  `head_offset + w2n dst_w + hs <= lo /\
+   d + w2n dst_w + delta <= lo` by
+    (simp[NoAsms, Abbr `hs`, Abbr `delta`, Abbr `at`] >>
+     qpat_assum `enc_pre a b _ _ _ _ _ _ _ s1` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> pure_rewrite_tac[enc_pre_def] >>
+     rpt strip_tac >> qpat_x_assum `EVERY _ _` mp_tac >>
+     simp[] >> rpt strip_tac >> decide_tac) >>
+  `head_offset+hs+rh <= d` by
+    (qpat_assum `T \/ _ ==> _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> simp[] >> decide_tac) >>
+  `mem_bytes_at (head_offset+w2n dst_w) (hs+rh) s.vs_memory ++
+   mem_bytes_at (d+w2n dst_w) (delta+(LENGTH rest_bytes-rh)) s.vs_memory =
+   enc_number (Uint 256) (NumV d) ++ TAKE rh rest_bytes ++
+   enc at av ++ DROP rh rest_bytes` by
+    (qpat_assum `enc_frame b st' lo tail_top
+       [((head_offset+w2n dst_w)+hs,rh);_] s2 s` mp_tac >>
+     qpat_assum `mem_bytes_at _ hs s2.vs_memory = _` mp_tac >>
+     qpat_assum `mem_bytes_at _ (LENGTH (enc at av)) s2.vs_memory = _` mp_tac >>
+     qpat_assum `mem_bytes_at _ _ s.vs_memory ++ _ = rest_bytes` mp_tac >>
+     qpat_assum `rh = head_lengths ats 0` mp_tac >>
+     qpat_assum `Abbrev (delta = _)` mp_tac >>
+     qpat_assum `head_offset+hs+rh <= d` mp_tac >>
+     qpat_assum `head_offset+w2n dst_w+hs <= lo` mp_tac >>
+     qpat_assum `d+w2n dst_w+delta <= lo` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp_tac (srw_ss()) [markerTheory.Abbrev_def] >> rpt strip_tac >>
+     qpat_x_assum `delta = _` SUBST_ALL_TAC >>
+     qpat_x_assum `rh = _` SUBST_ALL_TAC >>
+     full_simp_tac bool_ss [AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM] >>
+     irule (Q.INST [`extra` |-> `[]`] enc_cons_tail_frame_splice) >>
+     asm_simp_tac (srw_ss())
+       [AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM] >>
+     qpat_assum `enc_frame _ _ _ _ _ _ _`
+       (irule_at (Pat `enc_frame _ _ _ _ _ _ _`)) >>
+     simp[] >> decide_tac) >>
+  suspend "cons_dynamic_static_tail_post"
+QED
+
+Resume enc_elems_cons_correct_labels[cons_dynamic_static_tail_post]:
+  qpat_assum `Abbrev (post = _)` mp_tac >>
+  qpat_assum `whole = _` mp_tac >>
+  qpat_assum `LENGTH whole = _` mp_tac >>
+  qpat_assum `LENGTH rest_bytes = rh` mp_tac >>
+  qpat_assum `rh = head_lengths ats 0` mp_tac >>
+  qpat_assum `mem_bytes_at _ (hs+rh) s.vs_memory ++ _ = _` mp_tac >>
+  qpat_assum `mem_word_at c s.vs_memory = n2w (d+delta)` mp_tac >>
+  qpat_assum `s.vs_labels = s0.vs_labels` mp_tac >>
+  qpat_assum `enc_frame st st' lo top _ s0 s1` mp_tac >>
+  qpat_assum `enc_frame st st' lo top _ s1 s2` mp_tac >>
+  qpat_assum `enc_frame st st' lo top _ s2 s` mp_tac >>
+  POP_ASSUM_LIST (K ALL_TAC) >>
+  pure_rewrite_tac[markerTheory.Abbrev_def] >> rpt strip_tac >>
+  qpat_x_assum `rh = _` SUBST_ALL_TAC >>
+  qpat_x_assum `LENGTH rest_bytes = _` SUBST_ALL_TAC >>
+  full_simp_tac arith_ss
+    [AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM] >>
+  irule enc_frame_trans >> qexists_tac `s1` >> conj_tac
+  >- first_assum ACCEPT_TAC >>
+  irule enc_frame_trans >> qexists_tac `s2` >> simp[]
+QED
+
+Resume enc_elems_cons_correct_labels[cons_dynamic_assembly]:
+  `head_offset + w2n dst_w + hs <= lo /\
+   d + w2n dst_w + delta <= lo` by
+    (qpat_assum `enc_pre a b _ _ _ _ _ (src_offset + _) _ s1` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> simp[enc_pre_def] >> rpt strip_tac >> decide_tac) >>
+  `mem_bytes_at (head_offset+w2n dst_w) 32 s2.vs_memory =
+     enc_number (Uint 256) (NumV d)` by
+    (irule enc_word_at_number_bytes >> simp[]) >>
+  `head_offset+hs+rh <= d /\ lo <= c` by
+    (qpat_assum `T \/ _ ==> _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> simp[] >> rpt strip_tac >> decide_tac) >>
+  `mem_bytes_at (head_offset+w2n dst_w) hs s2.vs_memory =
+     enc_number (Uint 256) (NumV d)` by simp[Abbr `hs`] >>
+  suspend "cons_dynamic_tail_bytes"
+QED
+
+Resume enc_elems_cons_correct_labels[cons_dynamic_tail_bytes]:
+  rename1 `enc_frame b st' lo tail_top _ s2 s` >>
+  `mem_bytes_at (head_offset+w2n dst_w) (hs+rh) s.vs_memory ++
+   mem_bytes_at (d+w2n dst_w) (delta+(LENGTH rest_bytes-rh)) s.vs_memory =
+   enc_number (Uint 256) (NumV d) ++ TAKE rh rest_bytes ++
+   enc at av ++ DROP rh rest_bytes` by
+    (qpat_assum `enc_frame b st' lo tail_top _ s2 s` mp_tac >>
+     qpat_assum `mem_bytes_at _ hs s2.vs_memory = _` mp_tac >>
+     qpat_assum `mem_bytes_at _ (LENGTH (enc at av)) s2.vs_memory = _` mp_tac >>
+     qpat_assum `mem_bytes_at _ _ s.vs_memory ++ _ = rest_bytes` mp_tac >>
+     qpat_assum `rh = head_lengths ats 0` mp_tac >>
+     qpat_assum `Abbrev (delta = _)` mp_tac >>
+     qpat_assum `head_offset+hs+rh <= d` mp_tac >>
+     qpat_assum `head_offset+w2n dst_w+hs <= lo` mp_tac >>
+     qpat_assum `d+w2n dst_w+delta <= lo` mp_tac >>
+     qpat_assum `lo <= c` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp_tac (srw_ss()) [markerTheory.Abbrev_def] >> rpt strip_tac >>
+     qpat_x_assum `delta = _` SUBST_ALL_TAC >>
+     qpat_x_assum `rh = _` SUBST_ALL_TAC >>
+     full_simp_tac bool_ss [AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM] >>
+     irule (Q.INST [`extra` |-> `[(c,32)]`] enc_cons_tail_frame_splice) >>
+     asm_simp_tac (srw_ss())
+       [venomMemDefsTheory.regions_disjoint_def, AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM] >>
+     conj_tac >- (disj2_tac >> decide_tac) >>
+     qpat_assum `enc_frame _ _ _ _ _ _ _`
+       (irule_at (Pat `enc_frame _ _ _ _ _ _ _`)) >>
+     simp[venomMemDefsTheory.regions_disjoint_def] >> decide_tac) >>
+  suspend "cons_dynamic_tail_post"
+QED
+
+Resume enc_elems_cons_correct_labels[cons_dynamic_tail_post]:
+  qpat_assum `Abbrev (post = _)` mp_tac >>
+  qpat_assum `whole = _` mp_tac >>
+  qpat_assum `LENGTH whole = _` mp_tac >>
+  qpat_assum `rh <= LENGTH rest_bytes` mp_tac >>
+  qpat_assum `rh = head_lengths ats 0` mp_tac >>
+  qpat_assum `mem_bytes_at _ (hs+rh) s.vs_memory ++ _ = _` mp_tac >>
+  qpat_assum `mem_word_at c s.vs_memory = _` mp_tac >>
+  qpat_assum `s.vs_labels = s0.vs_labels` mp_tac >>
+  qpat_assum `enc_frame st st' lo top _ s0 s1` mp_tac >>
+  qpat_assum `enc_frame st st' lo top _ s1 s2` mp_tac >>
+  qpat_assum `enc_frame st st' lo top _ s2 s` mp_tac >>
+  POP_ASSUM_LIST (K ALL_TAC) >>
+  pure_rewrite_tac[markerTheory.Abbrev_def] >> rpt strip_tac >>
+  qpat_x_assum `rh = _` SUBST_ALL_TAC >>
+  full_simp_tac arith_ss
+    [AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM] >>
+  irule enc_frame_trans >> qexists_tac `s1` >> conj_tac
+  >- first_assum ACCEPT_TAC >>
+  irule enc_frame_trans >> qexists_tac `s2` >> simp[]
+QED
+
+Resume enc_elems_cons_correct_labels[cons_static_static_tail_invoke]:
+  `!p n. MEM (p,n)
+     [(w2n dst_w+(head_offset+hs),SUM (MAP (\(_,sz,_,_). sz) rest));
+      (w2n dst_w+d,LENGTH (enc_tuple d 0 (vyper_to_abi_types env ts) avs [] [])-
+          SUM (MAP (\(_,sz,_,_). sz) rest))] ==>
+     ?q m. MEM (q,m)
+       [(head_offset+w2n dst_w,rh+hs);
+        (d+w2n dst_w,LENGTH whole-(rh+hs));(c,32)] /\
+       q <= p /\ p+n <= q+m` by
+    (qpat_assum `!p n. MEM (p,n) _ ==> _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> simp[] >> metis_tac[]) >>
+  drule_all enc_elems_static_correct_labels_enclosing_local_frag >>
+  disch_then (qspec_then `ctx` assume_tac) >>
+  irule frag_exec_conseq >> goal_assum (drule_at Any) >> simp[] >>
+  rpt strip_tac >>
+  qpat_x_assum `!elem_src'. _` kall_tac >>
+  qpat_x_assum `enc_elems_correct_labels _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `frag_exec ctx st a _ _ _` kall_tac >>
+  qpat_x_assum `frag_exec ctx a b _ _ _` kall_tac >>
+  qpat_x_assum `frag_exec ctx b st' _ _ _` kall_tac >>
+  suspend "cons_static_static_assembly"
+QED
+
+Resume enc_elems_cons_correct_labels[cons_static_assembly]:
+  `head_offset+w2n dst_w+hs <= lo` by
+    (simp[NoAsms, Abbr `hs`, Abbr `at`] >>
+     qpat_assum `enc_pre a b _ _ _ _ _ _ _ s1` mp_tac >>
+     qpat_assum `~F ==> LENGTH _ = _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     pure_rewrite_tac[enc_pre_def] >> rpt strip_tac >>
+     qpat_x_assum `EVERY _ _` mp_tac >> simp[] >> rpt strip_tac >> decide_tac) >>
+  `head_offset+hs+rh <= d /\ lo <= c` by
+    (qpat_assum `F \/ _ ==> _` mp_tac >>
+     qpat_assum `EXISTS _ rest` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> simp[] >> rpt strip_tac >> decide_tac) >>
+  `mem_bytes_at (head_offset+w2n dst_w) hs s2.vs_memory = enc at av` by
+    simp[Abbr `hs`, Abbr `at`, Excl "enc_def"] >>
+  suspend "cons_static_dynamic_bytes"
+QED
+
+Resume enc_elems_cons_correct_labels[cons_static_dynamic_bytes]:
+  rename1 `enc_frame b st' lo tail_top _ s2 s` >>
+  `mem_bytes_at (head_offset+w2n dst_w) (hs+rh) s.vs_memory ++
+   mem_bytes_at (d+w2n dst_w) (LENGTH rest_bytes-rh) s.vs_memory =
+   enc at av ++ TAKE rh rest_bytes ++ DROP rh rest_bytes` by
+    (qpat_assum `enc_frame b st' lo tail_top _ s2 s` mp_tac >>
+     qpat_assum `mem_bytes_at _ hs s2.vs_memory = _` mp_tac >>
+     qpat_assum `mem_bytes_at _ _ s.vs_memory ++ _ = _` mp_tac >>
+     qpat_assum `rh = head_lengths ats 0` mp_tac >>
+     qpat_assum `Abbrev (rest_bytes = _)` mp_tac >>
+     qpat_assum `delta = 0` mp_tac >>
+     qpat_assum `head_offset+hs+rh <= d` mp_tac >>
+     qpat_assum `head_offset+w2n dst_w+hs <= lo` mp_tac >>
+     qpat_assum `lo <= c` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     pure_rewrite_tac[markerTheory.Abbrev_def] >> rpt strip_tac >>
+     qpat_x_assum `delta = _` SUBST_ALL_TAC >>
+     qpat_x_assum `rh = _` SUBST_ALL_TAC >>
+     qpat_x_assum `rest_bytes = _` SUBST_ALL_TAC >>
+     full_simp_tac bool_ss [AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM] >>
+     irule (Q.INST [`extra` |-> `[(c,32)]`] enc_cons_static_tail_frame_splice) >>
+     asm_simp_tac (srw_ss())
+       [AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM] >>
+     conj_tac >- (disj2_tac >> decide_tac) >>
+     qpat_assum `enc_frame _ _ _ _ _ _ _`
+       (irule_at (Pat `enc_frame _ _ _ _ _ _ _`)) >>
+     simp[venomMemDefsTheory.regions_disjoint_def] >> decide_tac) >>
+  suspend "cons_static_dynamic_post"
+QED
+
+Resume enc_elems_cons_correct_labels[cons_static_dynamic_post]:
+  qpat_assum `Abbrev (post = _)` mp_tac >>
+  qpat_assum `whole = _` mp_tac >>
+  qpat_assum `LENGTH whole = _` mp_tac >>
+  qpat_assum `rh <= LENGTH rest_bytes` mp_tac >>
+  qpat_assum `rh = head_lengths ats 0` mp_tac >>
+  qpat_assum `Abbrev (rest_bytes = _)` mp_tac >>
+  qpat_assum `delta = 0` mp_tac >>
+  qpat_assum `EXISTS _ rest` mp_tac >>
+  qpat_assum `mem_bytes_at _ (hs+rh) s.vs_memory ++ _ = _` mp_tac >>
+  qpat_assum `mem_word_at c s.vs_memory = _` mp_tac >>
+  qpat_assum `s.vs_labels = s0.vs_labels` mp_tac >>
+  qpat_assum `enc_frame st st' lo top _ s0 s1` mp_tac >>
+  qpat_assum `enc_frame st st' lo top _ s1 s2` mp_tac >>
+  qpat_assum `enc_frame st st' lo top _ s2 s` mp_tac >>
+  POP_ASSUM_LIST (K ALL_TAC) >>
+  pure_rewrite_tac[markerTheory.Abbrev_def] >> rpt strip_tac >>
+  qpat_x_assum `delta = _` SUBST_ALL_TAC >>
+  qpat_x_assum `rh = _` SUBST_ALL_TAC >>
+  qpat_x_assum `rest_bytes = _` SUBST_ALL_TAC >>
+  full_simp_tac arith_ss
+    [listTheory.APPEND, listTheory.APPEND_NIL,
+     AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM] >>
+  irule enc_frame_trans >> qexists_tac `s1` >> conj_tac
+  >- first_assum ACCEPT_TAC >>
+  irule enc_frame_trans >> qexists_tac `s2` >> simp[]
+QED
+
+Resume enc_elems_cons_correct_labels[cons_static_static_assembly]:
+  `EVERY (\t. ~is_dynamic t) ats` by
+    (drule_all enc_plans_all_static >> simp[Abbr `ats`]) >>
+  `LENGTH rest_bytes = rh` by
+    (qpat_assum `enc_layout ats avs` mp_tac >>
+     qpat_assum `EVERY (\t. ~is_dynamic t) ats` mp_tac >>
+     qpat_assum `rh = head_lengths ats 0` mp_tac >>
+     simp[NoAsms, Abbr `rest_bytes`] >>
+     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
+     drule_all enc_layout_static_tuple_length >> simp[]) >>
+  `head_offset+w2n dst_w+hs <= lo` by
+    (simp[NoAsms, Abbr `hs`, Abbr `at`] >>
+     qpat_assum `enc_pre a b _ _ _ _ _ _ _ s1` mp_tac >>
+     qpat_assum `~F ==> LENGTH _ = _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     pure_rewrite_tac[enc_pre_def] >> rpt strip_tac >>
+     qpat_x_assum `EVERY _ _` mp_tac >> simp[] >> rpt strip_tac >> decide_tac) >>
+  `mem_bytes_at (head_offset+w2n dst_w) hs s2.vs_memory = enc at av` by
+    simp[Abbr `hs`, Abbr `at`, Excl "enc_def"] >>
+  suspend "cons_static_static_bytes"
+QED
+
+Resume enc_elems_cons_correct_labels[cons_static_static_bytes]:
+  rename1 `enc_frame b st' lo tail_top _ s2 s` >>
+  `mem_bytes_at (head_offset+w2n dst_w) (hs+rh) s.vs_memory ++
+   mem_bytes_at (d+w2n dst_w) (LENGTH rest_bytes-rh) s.vs_memory =
+   enc at av ++ TAKE rh rest_bytes ++ DROP rh rest_bytes` by
+    (qpat_assum `enc_frame b st' lo tail_top _ s2 s` mp_tac >>
+     qpat_assum `mem_bytes_at _ hs s2.vs_memory = _` mp_tac >>
+     qpat_assum `mem_bytes_at _ _ s.vs_memory ++ _ = _` mp_tac >>
+     qpat_assum `rh = head_lengths ats 0` mp_tac >>
+     qpat_assum `Abbrev (rest_bytes = _)` mp_tac >>
+     qpat_assum `LENGTH rest_bytes = rh` mp_tac >>
+     qpat_assum `delta = 0` mp_tac >>
+     qpat_assum `head_offset+w2n dst_w+hs <= lo` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     pure_rewrite_tac[markerTheory.Abbrev_def] >> rpt strip_tac >>
+     qpat_x_assum `delta = _` SUBST_ALL_TAC >>
+     qpat_x_assum `rh = _` SUBST_ALL_TAC >>
+     qpat_x_assum `rest_bytes = _` SUBST_ALL_TAC >>
+     full_simp_tac arith_ss [AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM] >>
+     qpat_assum `LENGTH _ = _`
+       (fn th => full_simp_tac arith_ss [th]) >>
+     irule (Q.INST [`extra` |-> `[]`] enc_cons_static_tail_frame_splice) >>
+     asm_simp_tac (srw_ss())
+       [AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM] >>
+     qpat_assum `enc_frame _ _ _ _ _ _ _`
+       (irule_at (Pat `enc_frame _ _ _ _ _ _ _`)) >> simp[]) >>
+  suspend "cons_static_static_post"
+QED
+
+Resume enc_elems_cons_correct_labels[cons_static_static_post]:
+  qpat_assum `Abbrev (post = _)` mp_tac >>
+  qpat_assum `whole = _` mp_tac >>
+  qpat_assum `LENGTH whole = _` mp_tac >>
+  qpat_assum `LENGTH rest_bytes = rh` mp_tac >>
+  qpat_assum `rh = head_lengths ats 0` mp_tac >>
+  qpat_assum `Abbrev (rest_bytes = _)` mp_tac >>
+  qpat_assum `delta = 0` mp_tac >>
+  qpat_assum `~EXISTS _ rest` mp_tac >>
+  qpat_assum `mem_bytes_at _ (hs+rh) s.vs_memory ++ _ = _` mp_tac >>
+  qpat_assum `s.vs_labels = s0.vs_labels` mp_tac >>
+  qpat_assum `enc_frame st st' lo top _ s0 s1` mp_tac >>
+  qpat_assum `enc_frame st st' lo top _ s1 s2` mp_tac >>
+  qpat_assum `enc_frame st st' lo top _ s2 s` mp_tac >>
+  POP_ASSUM_LIST (K ALL_TAC) >>
+  pure_rewrite_tac[markerTheory.Abbrev_def] >> rpt strip_tac >>
+  qpat_x_assum `delta = _` SUBST_ALL_TAC >>
+  qpat_x_assum `rh = _` SUBST_ALL_TAC >>
+  qpat_x_assum `rest_bytes = _` SUBST_ALL_TAC >>
+  full_simp_tac arith_ss
+    [listTheory.APPEND, listTheory.APPEND_NIL,
+     AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM] >>
+  irule enc_frame_trans >> qexists_tac `s1` >> conj_tac
+  >- first_assum ACCEPT_TAC >>
+  irule enc_frame_trans >> qexists_tac `s2` >> simp[]
+QED
+
+Finalise enc_elems_cons_correct_labels
+
+Theorem enc_dynloop_plan_components:
+  abi_enc_plan env (ArrayT t (Dynamic n)) (AbiDynArray ei asz msz T) ==>
+  ?tv. evaluate_type env t = SOME tv /\ abi_enc_plan env t ei /\
+       is_dynamic (vyper_to_abi_type env t) /\ asz = 32 /\
+       msz = type_memory_size tv
+Proof
+  simp[Once abi_enc_plan_cases] >> rpt strip_tac >> gvs[] >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem enc_dynarray_source_element:
+  val_in_memory (ArrayTV tv (Dynamic n)) (ArrayV (DynArrayV vs)) p mem /\
+  k < LENGTH vs ==>
+  val_in_memory tv (EL k vs) (p + 32 + k * type_memory_size tv) mem
+Proof
+  simp[val_in_memory_def] >> rpt strip_tac >>
+  drule_all elems_in_memory_EL >>
+  simp[AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM]
+QED
+
+Theorem enc_same_conversion_element:
+  vyper_to_abi_same env ty vs = SOME avs /\ k < LENGTH vs ==>
+  vyper_to_abi env ty (EL k vs) = SOME (EL k avs)
+Proof
+  strip_tac >> drule enc_same_conversion >> simp[LIST_REL_EL_EQN]
+QED
+
+Theorem enc_dynarray_typed_element:
+  value_has_type (ArrayTV tv (Dynamic n)) (ArrayV (DynArrayV vs)) /\
+  k < LENGTH vs ==> value_has_type tv (EL k vs)
+Proof
+  simp[value_has_type_def, all_have_type_EVERY, EVERY_EL] >> metis_tac[]
+QED
+
+Theorem enc_dynamic_head_lengths:
+  is_dynamic t ==> !N q. head_lengths (REPLICATE N t) q = q + 32 * N
+Proof
+  strip_tac >> Induct >> simp[head_lengths_def, arithmeticTheory.MULT_CLAUSES]
+QED
+
+Theorem enc_dynamic_array_payload:
+  enc_layout (REPLICATE (LENGTH avs) t) avs /\ is_dynamic t ==>
+  DROP 32 (enc (Array NONE t) (ListV avs)) =
+    enc_tuple (32 * LENGTH avs) 0 (REPLICATE (LENGTH avs) t) avs [] []
+Proof
+  strip_tac >>
+  drule enc_dynamic_head_lengths >> strip_tac >>
+  drule enc_dynarray_payload_layout >>
+  pure_asm_rewrite_tac[arithmeticTheory.ADD_CLAUSES] >>
+  disch_then ACCEPT_TAC
+QED
+
+Theorem enc_tail_upto_length_bound:
+  !ts avs k. LENGTH (enc_tail_upto ts avs k) <= LENGTH (enc_prefix_tail ts avs)
+Proof
+  pure_rewrite_tac[enc_tail_upto_def] >>
+  Induct >> Cases_on `avs` >> Cases_on `k` >>
+  simp[enc_prefix_tail_def]
+QED
+
+Theorem enc_dynamic_array_child_containment:
+  enc_layout (REPLICATE (LENGTH avs) t) avs /\ is_dynamic t /\
+  k < LENGTH avs ==>
+  enc_offset_upto (32 * LENGTH avs) (REPLICATE (LENGTH avs) t) avs k +
+    LENGTH (enc t (EL k avs)) <=
+  LENGTH (enc_tuple (32 * LENGTH avs) 0
+    (REPLICATE (LENGTH avs) t) avs [] [])
+Proof
+  strip_tac >>
+  `LENGTH (REPLICATE (LENGTH avs) t) = LENGTH avs` by simp[] >>
+  drule_all enc_prefix_suc >>
+  simp[EL_REPLICATE] >> strip_tac >>
+  qspecl_then [`REPLICATE (LENGTH avs) t`,`avs`,`SUC k`]
+    mp_tac enc_tail_upto_length_bound >>
+  drule enc_dynamic_head_lengths >> strip_tac >>
+  simp[enc_tuple_prefix_acc_lengths, enc_prefix_head_length_layout,
+       enc_offset_upto_def, Excl "enc_def"]
+QED
+
+Theorem enc_dynamic_array_head_containment:
+  enc_layout (REPLICATE (LENGTH avs) t) avs /\ is_dynamic t /\
+  k < LENGTH avs ==>
+  32 * k + 32 <= LENGTH (enc_tuple (32 * LENGTH avs) 0
+    (REPLICATE (LENGTH avs) t) avs [] [])
+Proof
+  strip_tac >> drule enc_dynamic_head_lengths >> strip_tac >>
+  `32 * k + 32 <= 32 * LENGTH avs` by decide_tac >>
+  simp[enc_tuple_prefix_acc_lengths, enc_prefix_head_length_layout,
+       Excl "enc_def"]
+QED
+
+Theorem enc_dynarray_conversion_components:
+  evaluate_type env (ArrayT t (Dynamic n)) = SOME tv /\
+  vyper_to_abi env (ArrayT t (Dynamic n)) (ArrayV (DynArrayV vs)) = SOME av ==>
+  ?et avs. evaluate_type env t = SOME et /\ tv = ArrayTV et (Dynamic n) /\
+    vyper_to_abi_same env t vs = SOME avs /\ av = ListV avs
+Proof
+  simp[vyperValueTheory.evaluate_type_def, Once vyper_to_abi_def] >>
+  rpt strip_tac >> gvs[AllCaseEqs()] >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem enc_dynamic_array_runtime_bound:
+  enc_layout (REPLICATE (LENGTH avs) t) avs /\ is_dynamic t /\
+  p + LENGTH (enc_tuple (32 * LENGTH avs) 0
+    (REPLICATE (LENGTH avs) t) avs [] []) <= lo /\
+  lo < dimword (:256) ==>
+  LENGTH avs < dimword (:256) /\ 32 * LENGTH avs < dimword (:256)
+Proof
+  strip_tac >> drule enc_dynamic_head_lengths >> strip_tac >>
+  `32 * LENGTH avs <= LENGTH (enc_tuple (32 * LENGTH avs) 0
+      (REPLICATE (LENGTH avs) t) avs [] [])` by
+    simp[enc_tuple_prefix_acc_lengths, enc_prefix_head_length_layout,
+         Excl "enc_def"] >>
+  decide_tac
+QED
+
+(* Both cell contents vary; only their allocations and pointer operands persist. *)
+Definition enc_dyn_loop_ctx_def:
+  enc_dyn_loop_ctx st st' ops lo top tv v src outs s0
+      count_ptr ip dyn_ptr j c s <=>
+    enc_loop_ctx st st' ops lo top tv v src outs s0 count_ptr ip s /\
+    eval_operand dyn_ptr s = SOME (n2w c) /\
+    j IN frag_ids st st' /\ FLOOKUP s.vs_allocas j = SOME (c,32) /\ lo <= c
+End
+
+Theorem enc_dyn_loop_ctx_jump[simp]:
+  enc_dyn_loop_ctx st st' ops lo top tv v src outs s0
+    count_ptr ip dyn_ptr j c (jump_to lbl s) =
+  enc_dyn_loop_ctx st st' ops lo top tv v src outs s0
+    count_ptr ip dyn_ptr j c s
+Proof
+  simp[enc_dyn_loop_ctx_def, jump_to_def]
+QED
+
+Theorem enc_dyn_loop_ctx_source:
+  enc_dyn_loop_ctx st st' ops lo top tv v src outs s0
+    count_ptr ip dyn_ptr j c s ==> val_in_memory tv v src s.vs_memory
+Proof
+  simp[enc_dyn_loop_ctx_def] >> metis_tac[enc_loop_ctx_source]
+QED
+
+Theorem enc_dyn_loop_ctx_operand:
+  enc_dyn_loop_ctx st st' ops lo top tv v src outs s0
+    count_ptr ip dyn_ptr j c s /\ MEM op ops /\ eval_operand op s0 = SOME w ==>
+  eval_operand op s = SOME w
+Proof
+  simp[enc_dyn_loop_ctx_def] >> metis_tac[enc_loop_ctx_operand]
+QED
+
+Theorem enc_dyn_loop_ctx_from_frame:
+  enc_pre st st' ops lo top tv v src outs s0 /\ value_has_type tv v /\
+  enc_frame st st' lo top outs s0 s /\ s.vs_labels = s0.vs_labels /\
+  eval_operand count_ptr s = SOME (n2w ip) /\
+  FLOOKUP s.vs_allocas st.cs_next_id = SOME (ip,32) /\ lo <= ip /\
+  eval_operand dyn_ptr s = SOME (n2w c) /\
+  j IN frag_ids st st' /\ FLOOKUP s.vs_allocas j = SOME (c,32) /\ lo <= c ==>
+  enc_dyn_loop_ctx st st' ops lo top tv v src outs s0
+    count_ptr ip dyn_ptr j c s
+Proof
+  strip_tac >> simp[enc_dyn_loop_ctx_def] >>
+  irule enc_loop_ctx_from_frame >> simp[]
+QED
+
+Theorem enc_dyn_loop_ctx_step:
+  enc_dyn_loop_ctx st st' ops lo top tv v src outs s0
+    count_ptr ip dyn_ptr j c s /\ value_has_type tv v /\
+  enc_frame st st' lo top outs s u /\ u.vs_labels = s.vs_labels /\
+  eval_operand count_ptr u = SOME (n2w ip) /\
+  eval_operand dyn_ptr u = SOME (n2w c) ==>
+  enc_dyn_loop_ctx st st' ops lo top tv v src outs s0
+    count_ptr ip dyn_ptr j c u
+Proof
+  rewrite_tac[enc_dyn_loop_ctx_def, enc_loop_ctx_def] >> strip_tac >>
+  `enc_pre st st' ops lo top tv v src outs u` by
+    (drule_all enc_pre_transport >> simp[]) >>
+  `enc_frame st st' lo top outs s0 u` by
+    (irule enc_frame_trans >> qexists_tac `s` >> simp[]) >>
+  `!i r. FLOOKUP s.vs_allocas i = SOME r ==>
+      FLOOKUP u.vs_allocas i = SOME r` by
+    (qpat_assum `enc_frame st st' lo top outs s u` mp_tac >>
+     rewrite_tac[enc_frame_def] >> metis_tac[]) >>
+  simp[]
+QED
+
+Theorem enc_dyn_loop_ctx_preserves_cells:
+  enc_dyn_loop_ctx st st' ops lo top tv v src outs s0
+    count_ptr ip dyn_ptr j c s /\
+  enc_frame a b lo child_top child_outs s u /\
+  st.cs_next_id NOTIN frag_ids a b /\ j NOTIN frag_ids a b /\
+  EVERY (\(p,n). p+n <= lo) child_outs ==>
+  mem_word_at ip u.vs_memory = mem_word_at ip s.vs_memory /\
+  mem_word_at c u.vs_memory = mem_word_at c s.vs_memory
+Proof
+  simp[enc_dyn_loop_ctx_def, enc_loop_ctx_def] >> strip_tac >>
+  conj_tac
+  >- (irule enc_frame_preserves_external_word >>
+      qpat_assum `enc_frame a b _ _ _ s u`
+        (irule_at (Pat `enc_frame _ _ _ _ _ _ _`)) >>
+      qexists_tac `st.cs_next_id` >> simp[]) >>
+  irule enc_frame_preserves_external_word >>
+  qpat_assum `enc_frame a b _ _ _ s u`
+    (irule_at (Pat `enc_frame _ _ _ _ _ _ _`)) >>
+  qexists_tac `j` >> simp[]
+QED
+
+Theorem enc_pre_subsource_current:
+  enc_pre st z ops lo top tv v p outs s /\
+  val_in_memory tv' v' p' s.vs_memory /\
+  p <= p' /\ p' + type_memory_size tv' <= p + type_memory_size tv /\
+  (!q m. MEM (q,m) newouts ==>
+    ?b n. MEM (b,n) outs /\ b <= q /\ q+m <= b+n) /\
+  frag_ids a b SUBSET frag_ids st z /\
+  (!x. MEM (Var x) newops ==> not_fresh_at a x) ==>
+  enc_pre a b newops lo top tv' v' p' newouts s
+Proof
+  strip_tac >> rewrite_tac[enc_pre_def] >> rpt conj_tac
+  >- simp[]
+  >- simp[]
+  >- (fs[enc_pre_def] >> decide_tac)
+  >- (rewrite_tac[EVERY_MEM] >> Cases >> strip_tac >>
+      rename1 `MEM (q,m) newouts` >>
+      qpat_x_assum `!q m. MEM (q,m) newouts ==> _` drule >> strip_tac >>
+      qpat_x_assum `enc_pre _ _ _ _ _ _ _ _ _ _` mp_tac >>
+      simp[enc_pre_def, EVERY_MEM] >> strip_tac >>
+      first_x_assum drule >> simp[] >> strip_tac >>
+      drule_all enc_subregions_disjoint >> simp[]) >>
+  irule enc_scratch_subset >> goal_assum (drule_at Any) >> fs[enc_pre_def]
+QED
+
+Theorem enc_dyn_loop_ctx_child_pre:
+  enc_dyn_loop_ctx st z ops lo top (ArrayTV tv (Dynamic n))
+    (ArrayV (DynArrayV vs)) src outs s0 count_ptr ip dyn_ptr j c s /\
+  value_has_type (ArrayTV tv (Dynamic n)) (ArrayV (DynArrayV vs)) /\
+  k < LENGTH vs /\
+  (!q m. MEM (q,m) child_outs ==>
+    ?b n. MEM (b,n) outs /\ b <= q /\ q+m <= b+n) /\
+  frag_ids a b SUBSET frag_ids st z /\
+  (!x. MEM (Var x) child_ops ==> not_fresh_at a x) ==>
+  enc_pre a b child_ops lo top tv (EL k vs)
+    (src + 32 + k * type_memory_size tv) child_outs s
+Proof
+  strip_tac >>
+  `val_in_memory tv (EL k vs) (src + 32 + k * type_memory_size tv)
+      s.vs_memory` by
+    (drule enc_dyn_loop_ctx_source >> strip_tac >>
+     drule_all enc_dynarray_source_element >> simp[]) >>
+  `src + 32 + k * type_memory_size tv + type_memory_size tv <=
+      src + type_memory_size (ArrayTV tv (Dynamic n))` by
+    (fs[value_has_type_def, type_memory_size_def] >>
+     `SUC k <= n` by decide_tac >>
+     `SUC k * type_memory_size tv <= n * type_memory_size tv` by
+       simp[arithmeticTheory.LE_MULT_RCANCEL] >>
+     qpat_x_assum `SUC k * _ <= _` mp_tac >>
+     pure_rewrite_tac[arithmeticTheory.MULT_CLAUSES] >> decide_tac) >>
+  fs[enc_dyn_loop_ctx_def, enc_loop_ctx_def] >>
+  irule enc_pre_subsource_current >> simp[] >>
+  goal_assum (drule_at (Pat `enc_pre _ _ _ _ _ _ _ _ _ _`)) >> simp[]
+QED
+
+Theorem enc_dynamic_array_prefix_head_bound:
+  enc_layout (REPLICATE (LENGTH avs) t) avs /\ is_dynamic t ==>
+  LENGTH (enc_head_upto (32 * LENGTH avs)
+    (REPLICATE (LENGTH avs) t) avs k) <= 32 * LENGTH avs
+Proof
+  strip_tac >> Cases_on `k <= LENGTH avs`
+  >- (drule_all (SRULE [] (Q.INST [`N` |-> `LENGTH vs`]
+        enc_head_upto_dynamic_length_layout)) >>
+      disch_then (qspec_then `32 * LENGTH avs` mp_tac) >>
+      simp[arithmeticTheory.LE_MULT_LCANCEL]) >>
+  drule enc_head_upto_length_layout >>
+  disch_then (qspecl_then [`k`,`32 * LENGTH avs`] mp_tac) >>
+  simp[TAKE_LENGTH_TOO_LONG, enc_dynamic_head_lengths]
+QED
+
+Theorem enc_prefix_mem_preserve_tail_write:
+  enc_prefix_mem p B ts avs k s /\
+  enc_frame a b lo top [(p + enc_offset_upto B ts avs k,n)] s u /\
+  LENGTH (enc_head_upto B ts avs k) <= B /\
+  p + enc_offset_upto B ts avs k <= lo ==>
+  enc_prefix_mem p B ts avs k u
+Proof
+  rewrite_tac[enc_prefix_mem_def] >> strip_tac >>
+  `mem_bytes_at p (LENGTH (enc_head_upto B ts avs k)) u.vs_memory =
+      mem_bytes_at p (LENGTH (enc_head_upto B ts avs k)) s.vs_memory` by
+    (irule enc_frame_preserves_bytes_allow_empty >>
+     goal_assum (drule_at (Pat `enc_frame _ _ _ _ _ _ _`)) >>
+     simp[enc_offset_upto_def, venomMemDefsTheory.regions_disjoint_def] >>
+     fs[enc_offset_upto_def] >> decide_tac) >>
+  `mem_bytes_at (p+B) (LENGTH (enc_tail_upto ts avs k)) u.vs_memory =
+      mem_bytes_at (p+B) (LENGTH (enc_tail_upto ts avs k)) s.vs_memory` by
+    (irule enc_frame_preserves_bytes_allow_empty >>
+     goal_assum (drule_at (Pat `enc_frame _ _ _ _ _ _ _`)) >>
+     simp[enc_offset_upto_def, venomMemDefsTheory.regions_disjoint_def] >>
+     fs[enc_offset_upto_def]) >>
+  simp[]
+QED
+
+Theorem enc_dyn_loop_ctx_restore:
+  enc_dyn_loop_ctx st z ops lo top tv v src outs s0
+    count_ptr ip dyn_ptr j c s /\ value_has_type tv v /\
+  enc_frame st z lo top outs s u /\ u.vs_labels = s.vs_labels /\
+  enc_frame a b lo local_top child_outs s u /\
+  (!x. count_ptr = Var x ==> not_fresh_at a x) /\
+  (!x. dyn_ptr = Var x ==> not_fresh_at a x) /\
+  st.cs_next_id NOTIN frag_ids a b /\ j NOTIN frag_ids a b /\
+  EVERY (\(p,n). p+n <= lo) child_outs ==>
+  enc_dyn_loop_ctx st z ops lo top tv v src outs s0
+    count_ptr ip dyn_ptr j c u /\
+  mem_word_at ip u.vs_memory = mem_word_at ip s.vs_memory /\
+  mem_word_at c u.vs_memory = mem_word_at c s.vs_memory
+Proof
+  strip_tac >>
+  `eval_operand count_ptr s = SOME (n2w ip) /\
+   eval_operand dyn_ptr s = SOME (n2w c)` by
+    fs[enc_dyn_loop_ctx_def, enc_loop_ctx_def] >>
+  `eval_operand count_ptr u = SOME (n2w ip)` by
+    (irule enc_frame_preserves_operand >>
+     qpat_assum `enc_frame a b lo local_top child_outs s u`
+       (irule_at (Pat `enc_frame _ _ _ _ _ _ _`)) >> simp[]) >>
+  `eval_operand dyn_ptr u = SOME (n2w c)` by
+    (irule enc_frame_preserves_operand >>
+     qpat_assum `enc_frame a b lo local_top child_outs s u`
+       (irule_at (Pat `enc_frame _ _ _ _ _ _ _`)) >> simp[]) >>
+  conj_tac >- (irule enc_dyn_loop_ctx_step >> simp[] >>
+               qexists_tac `s` >> simp[]) >>
+  drule_all enc_dyn_loop_ctx_preserves_cells >> simp[]
+QED
+
+Theorem enc_dyn_loop_ctx_buffer_call:
+  enc_dyn_loop_ctx st z ops lo top tv v src_addr outs s0
+    count_ptr ip dyn_ptr j c s /\ value_has_type tv v /\
+  enc_prefix_mem p B ts avs k s /\
+  LENGTH (enc_head_upto B ts avs k) <= B /\
+  w2n dst_w = p + enc_offset_upto B ts avs k /\
+  enc_buf_correct_labels dst child_src ei /\
+  compile_abi_encode_to_buf dst child_src ei a = (op,b) /\
+  abi_enc_plan env ty ei /\ evaluate_type env ty = SOME child_tv /\
+  value_has_type child_tv child_v /\ vyper_to_abi env ty child_v = SOME av /\
+  eval_operand dst s = SOME dst_w /\ eval_operand child_src s = SOME src_w /\
+  enc_pre a b [dst;child_src] lo top child_tv child_v (w2n src_w)
+    [(w2n dst_w,LENGTH (enc (vyper_to_abi_type env ty) av))] s /\
+  frag_ids a b SUBSET frag_ids st z /\
+  (!x. not_fresh_at st x ==> not_fresh_at a x) /\
+  (?q m. MEM (q,m) outs /\ q <= w2n dst_w /\
+    w2n dst_w + LENGTH (enc (vyper_to_abi_type env ty) av) <= q+m) /\
+  (!x. count_ptr = Var x ==> not_fresh_at a x) /\
+  (!x. dyn_ptr = Var x ==> not_fresh_at a x) /\
+  st.cs_next_id NOTIN frag_ids a b /\ j NOTIN frag_ids a b ==>
+  frag_exec ctx a b (\u. u = s)
+    (\u. mem_bytes_at (w2n dst_w)
+           (LENGTH (enc (vyper_to_abi_type env ty) av)) u.vs_memory =
+           enc (vyper_to_abi_type env ty) av /\
+         eval_operand op u = SOME (n2w (LENGTH (enc (vyper_to_abi_type env ty) av))) /\
+         enc_dyn_loop_ctx st z ops lo top tv v src_addr outs s0
+           count_ptr ip dyn_ptr j c u /\
+         enc_prefix_mem p B ts avs k u /\
+         mem_word_at ip u.vs_memory = mem_word_at ip s.vs_memory /\
+         mem_word_at c u.vs_memory = mem_word_at c s.vs_memory)
+    (\r. F)
+Proof
+  strip_tac >>
+  `enc_scratch (frag_ids st z) lo top s` by
+    fs[enc_dyn_loop_ctx_def, enc_loop_ctx_def, enc_pre_def] >>
+  `w2n dst_w + LENGTH (enc (vyper_to_abi_type env ty) av) <= lo` by
+    fs[enc_pre_def] >>
+  drule_all (SRULE [PULL_EXISTS] enc_buf_correct_labels_enclosing_local_frag) >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  irule frag_exec_conseq >> goal_assum (drule_at Any) >> simp[] >>
+  rpt gen_tac >> strip_tac >>
+  rename1 `eval_operand op u = SOME _` >>
+  `enc_dyn_loop_ctx st z ops lo top tv v src_addr outs s0
+      count_ptr ip dyn_ptr j c u /\
+   mem_word_at ip u.vs_memory = mem_word_at ip s.vs_memory /\
+   mem_word_at c u.vs_memory = mem_word_at c s.vs_memory` by
+    (irule enc_dyn_loop_ctx_restore >>
+     goal_assum (drule_at (Pat `enc_frame _ _ _ _ _ _ _`)) >> simp[] >>
+     goal_assum (drule_at (Pat `enc_frame _ _ _ _ _ _ _`)) >> simp[]) >>
+  simp[] >> irule enc_prefix_mem_preserve_tail_write >> simp[] >>
+  goal_assum (drule_at (Pat `enc_prefix_mem _ _ _ _ _ _`)) >> simp[] >>
+  goal_assum (drule_at (Pat `enc_frame _ _ _ _ _ _ _`)) >> simp[]
+QED
+
+(* The header and control-flow edges coincide with the static-element loop. *)
+Definition enc_dyn_loop_init_def:
+  enc_dyn_loop_init len_op asz =
+    do ibuf <- compile_alloc_buffer 32;
+       emit_void MSTORE [ibuf.buf_operand; Lit 0w];
+       dbuf <- compile_alloc_buffer 32;
+       init_dyn <- emit_op MUL [len_op; Lit (n2w asz)];
+       emit_void MSTORE [dbuf.buf_operand; init_dyn];
+       hdr <- fresh_label "enc_dyn_hdr";
+       body <- fresh_label "enc_dyn_body";
+       exit <- fresh_label "enc_dyn_exit";
+       return (ibuf.buf_operand, dbuf.buf_operand, hdr, body, exit)
+    od
+End
+
+Definition enc_dyn_loop_body_def:
+  enc_dyn_loop_body dst src ei asz msz count_ptr dyn_ptr =
+    do i <- emit_op MLOAD [count_ptr];
+       src_data <- emit_op ADD [src; Lit 32w];
+       src_off <- emit_op MUL [i; Lit (n2w msz)];
+       child_src <- emit_op ADD [src_data; src_off];
+       dyn_ofst <- emit_op MLOAD [dyn_ptr];
+       child_dst <- emit_op ADD [dst; dyn_ofst];
+       child_len <- compile_abi_encode_to_buf child_dst child_src ei;
+       head_off <- emit_op MUL [i; Lit (n2w asz)];
+       head_pos <- emit_op ADD [dst; head_off];
+       emit_void MSTORE [head_pos; dyn_ofst];
+       new_dyn <- emit_op ADD [dyn_ofst; child_len];
+       emit_void MSTORE [dyn_ptr; new_dyn];
+       new_i <- emit_op ADD [i; Lit 1w];
+       emit_void MSTORE [count_ptr; new_i]
+    od
+End
+
+Definition enc_dyn_loop_exit_def:
+  enc_dyn_loop_exit dyn_ptr =
+    do final_dyn <- emit_op MLOAD [dyn_ptr];
+       emit_op ADD [Lit 32w; final_dyn]
+    od
+End
+
+Theorem enc_dyn_loop_phases:
+  compile_abi_encode_dyn_loop dst src ei asz msz len_op =
+    do phase <- enc_dyn_loop_init len_op asz;
+       let (count_ptr,dyn_ptr,hdr,body,exit) = phase in
+       do emit_inst JMP [Label hdr] [];
+          new_block hdr;
+          done_op <- enc_static_loop_header count_ptr len_op;
+          emit_inst JNZ [done_op; Label exit; Label body] [];
+          new_block body;
+          enc_dyn_loop_body dst src ei asz msz count_ptr dyn_ptr;
+          emit_inst JMP [Label hdr] [];
+          new_block exit;
+          enc_dyn_loop_exit dyn_ptr
+       od
+    od
+Proof
+  simp_tac (srw_ss()) [compile_abi_encode_child_def, enc_dyn_loop_init_def,
+    enc_static_loop_header_def, enc_dyn_loop_body_def, enc_dyn_loop_exit_def,
+    comp_ignore_bind_def, comp_bind_assoc, enc_comp_bind_return, LET_THM]
+QED
+
+Theorem enc_dyn_loop_decompose:
+  compile_abi_encode_dyn_loop dst src ei asz msz len_op st = (op,st') ==>
+  ?count_ptr dyn_ptr hdr body exit cnd si s1 sh sj s2 sb se s3 sx.
+    enc_dyn_loop_init len_op asz st = ((count_ptr,dyn_ptr,hdr,body,exit),si) /\
+    enc_static_loop_header count_ptr len_op sh = (cnd,sj) /\
+    enc_dyn_loop_body dst src ei asz msz count_ptr dyn_ptr sb = ((),se) /\
+    enc_dyn_loop_exit dyn_ptr sx = (op,st') /\
+    enc_static_loop_edges hdr body exit cnd (si,s1,sh,sj,s2,sb,se,s3,sx)
+Proof
+  rpt gen_tac >>
+  simp[enc_dyn_loop_phases, comp_bind_def, comp_ignore_bind_def] >>
+  rpt (pairarg_tac >> gvs[comp_bind_def, comp_ignore_bind_def]) >>
+  strip_tac >> gvs[] >> simp[enc_static_loop_edges_def] >>
+  gvs[new_block_def]
+QED
+
+Theorem enc_dyn_loop_init_frontiers:
+  enc_dyn_loop_init len_op asz st = ((count_ptr,dyn_ptr,hdr,body_lbl,exit),si) ==>
+  si.cs_next_id = st.cs_next_id + 5 /\
+  si.cs_next_var = st.cs_next_var + 3 /\
+  count_ptr = Var (STRING #"%" (toString st.cs_next_var)) /\
+  dyn_ptr = Var (STRING #"%" (toString (st.cs_next_var + 1)))
+Proof
+  simp[enc_dyn_loop_init_def, contextTheory.compile_alloc_buffer_def,
+    emit_op_def, emit_void_def, fresh_var_def, fresh_id_def,
+    fresh_label_def, emit_def, comp_bind_def, comp_ignore_bind_def,
+    comp_return_def] >> rpt strip_tac >> gvs[]
+QED
+
+Theorem enc_dyn_loop_straight_appends:
+  cs_appends (enc_dyn_loop_init len_op asz) /\
+  cs_appends (enc_dyn_loop_exit dyn_ptr)
+Proof
+  `cs_appends (compile_alloc_buffer 32)` by
+    (simp[contextTheory.compile_alloc_buffer_def] >> irule cs_appends_bind >>
+     rw[cs_appends_emit_helpers, cs_appends_return]) >>
+  simp[enc_dyn_loop_init_def, enc_dyn_loop_exit_def] >> conj_tac >>
+  rpt (FIRST [irule cs_appends_bind, irule cs_appends_ignore_bind] >>
+       rw[cs_appends_emit_helpers, cs_appends_return, cs_appends_prims]) >>
+  rw[cs_appends_emit_helpers, cs_appends_return, cs_appends_prims]
+QED
+
+Theorem enc_dyn_loop_init_code:
+  enc_dyn_loop_init len_op asz st = ((count_ptr,dyn_ptr,hdr,body_lbl,exit),si) ==>
+  ?ibuf dbuf sa sz sb sc init_dyn sd se sf sg.
+    compile_alloc_buffer 32 st = (ibuf,sa) /\
+    emit_void MSTORE [ibuf.buf_operand;Lit 0w] sa = ((),sz) /\
+    compile_alloc_buffer 32 sz = (dbuf,sb) /\
+    emit_op MUL [len_op;Lit (n2w asz)] sb = (init_dyn,sc) /\
+    emit_void MSTORE [dbuf.buf_operand;init_dyn] sc = ((),sd) /\
+    fresh_label "enc_dyn_hdr" sd = (hdr,se) /\
+    fresh_label "enc_dyn_body" se = (body_lbl,sf) /\
+    fresh_label "enc_dyn_exit" sf = (exit,sg) /\
+    count_ptr = ibuf.buf_operand /\ dyn_ptr = dbuf.buf_operand /\ si = sg
+Proof
+  simp[enc_dyn_loop_init_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  rpt (goal_assum (drule_at Any))
+QED
+
+Theorem enc_dyn_loop_init_insts:
+  enc_dyn_loop_init len_op asz st = ((count_ptr,dyn_ptr,hdr,body_lbl,exit),si) ==>
+  same_blocks st si /\
+  si.cs_current_insts = st.cs_current_insts ++ emitted_insts st si /\
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+    (emitted_insts st si) /\
+  emitted_insts st si =
+    [mk_inst st.cs_next_id ALLOCA [Lit 32w]
+       [STRING #"%" (toString st.cs_next_var)];
+     mk_inst (st.cs_next_id + 1) MSTORE [count_ptr;Lit 0w] [];
+     mk_inst (st.cs_next_id + 2) ALLOCA [Lit 32w]
+       [STRING #"%" (toString (st.cs_next_var + 1))];
+     mk_inst (st.cs_next_id + 3) MUL [len_op;Lit (n2w asz)]
+       [STRING #"%" (toString (st.cs_next_var + 2))];
+     mk_inst (st.cs_next_id + 4) MSTORE
+       [dyn_ptr;Var (STRING #"%" (toString (st.cs_next_var + 2)))] []]
+Proof
+  simp[enc_dyn_loop_init_def, contextTheory.compile_alloc_buffer_def,
+    emit_op_def, emit_void_def, fresh_var_def, fresh_id_def,
+    fresh_label_def, emit_def, comp_bind_def, comp_ignore_bind_def,
+    comp_return_def] >> rpt strip_tac >> gvs[] >>
+  `!n k. n - (n + k) = 0` by decide_tac >>
+  simp[same_blocks_def, emitted_insts_def, DROP_APPEND,
+       mk_inst_def, is_terminator_def]
+QED
+
+Theorem enc_current_insts_append_trans:
+  b.cs_current_insts = a.cs_current_insts ++ emitted_insts a b /\
+  c.cs_current_insts = b.cs_current_insts ++ emitted_insts b c ==>
+  c.cs_current_insts = a.cs_current_insts ++ emitted_insts a c
+Proof
+  strip_tac >> drule_all emitted_insts_append >>
+  disch_then (fn th => rewrite_tac[th]) >>
+  asm_rewrite_tac[APPEND_ASSOC]
+QED
+
+Theorem enc_dyn_loop_body_code:
+  enc_dyn_loop_body dst src ei asz msz count_ptr dyn_ptr sb = ((),se) ==>
+  ?i sd so child_src off child_dst child_len head_off head_pos new_dyn new_i
+    a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13.
+    emit_op MLOAD [count_ptr] sb = (i,a1) /\
+    emit_op ADD [src;Lit 32w] a1 = (sd,a2) /\
+    emit_op MUL [i;Lit (n2w msz)] a2 = (so,a3) /\
+    emit_op ADD [sd;so] a3 = (child_src,a4) /\
+    emit_op MLOAD [dyn_ptr] a4 = (off,a5) /\
+    emit_op ADD [dst;off] a5 = (child_dst,a6) /\
+    compile_abi_encode_to_buf child_dst child_src ei a6 = (child_len,a7) /\
+    emit_op MUL [i;Lit (n2w asz)] a7 = (head_off,a8) /\
+    emit_op ADD [dst;head_off] a8 = (head_pos,a9) /\
+    emit_void MSTORE [head_pos;off] a9 = ((),a10) /\
+    emit_op ADD [off;child_len] a10 = (new_dyn,a11) /\
+    emit_void MSTORE [dyn_ptr;new_dyn] a11 = ((),a12) /\
+    emit_op ADD [i;Lit 1w] a12 = (new_i,a13) /\
+    emit_void MSTORE [count_ptr;new_i] a13 = ((),se)
+Proof
+  simp[enc_dyn_loop_body_def, comp_bind_def, comp_ignore_bind_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  rpt (goal_assum (drule_at Any))
+QED
+
+Theorem enc_dyn_body_prefix_code:
+  emit_op MLOAD [count_ptr] a0 = (i,a1) /\
+  emit_op ADD [src;Lit 32w] a1 = (sd,a2) /\
+  emit_op MUL [i;Lit (n2w msz)] a2 = (so,a3) /\
+  emit_op ADD [sd;so] a3 = (child_src,a4) /\
+  emit_op MLOAD [dyn_ptr] a4 = (off,a5) /\
+  emit_op ADD [dst;off] a5 = (child_dst,a6) ==>
+  emitted_insts a0 a6 = emitted_insts a0 a4 ++ emitted_insts a4 a6 /\
+  a4.cs_current_insts = a0.cs_current_insts ++ emitted_insts a0 a4 /\
+  a6.cs_current_insts = a4.cs_current_insts ++ emitted_insts a4 a6
+Proof
+  strip_tac >> imp_res_tac enc_emit_op_append >>
+  `a2.cs_current_insts = a0.cs_current_insts ++ emitted_insts a0 a2` by
+    (irule enc_current_insts_append_trans >> qexists_tac `a1` >> simp[]) >>
+  `a3.cs_current_insts = a0.cs_current_insts ++ emitted_insts a0 a3` by
+    (irule enc_current_insts_append_trans >> qexists_tac `a2` >> simp[]) >>
+  `a4.cs_current_insts = a0.cs_current_insts ++ emitted_insts a0 a4` by
+    (irule enc_current_insts_append_trans >> qexists_tac `a3` >> simp[]) >>
+  `a6.cs_current_insts = a4.cs_current_insts ++ emitted_insts a4 a6` by
+    (irule enc_current_insts_append_trans >> qexists_tac `a5` >> simp[]) >>
+  simp[] >> irule emitted_insts_append >> simp[]
+QED
+
+Theorem enc_dyn_source_run:
+  emit_op MLOAD [count_ptr] a0 = (i,a1) /\
+  emit_op ADD [src;Lit 32w] a1 = (sd,a2) /\
+  emit_op MUL [i;Lit (n2w msz)] a2 = (so,a3) /\
+  emit_op ADD [sd;so] a3 = (child_src,a4) /\
+  (!x. MEM (Var x) [count_ptr;src] ==> not_fresh_at a0 x) /\
+  eval_operand count_ptr s = SOME (n2w ip) /\
+  eval_operand src s = SOME sw /\
+  mem_word_at ip s.vs_memory = iw /\ ip < dimword (:256) ==>
+  ?t. run_inst_seq (emitted_insts a0 a4) s = OK t /\
+      eval_operand i t = SOME iw /\
+      eval_operand child_src t = SOME (sw + 32w + iw * n2w msz) /\
+      (!old. (!x. old = Var x ==> not_fresh_at a0 x) ==>
+        eval_operand old t = eval_operand old s) /\
+      t.vs_memory = s.vs_memory /\ t.vs_labels = s.vs_labels /\
+      t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
+      t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+      t.vs_logs = s.vs_logs /\ t.vs_requests = s.vs_requests
+Proof
+  strip_tac >>
+  `a0.cs_next_var <= a1.cs_next_var` by
+    (qpat_assum `emit_op MLOAD _ a0 = _`
+       (mp_tac o MATCH_MP emitted_insts_emit_op) >> simp[]) >>
+  `!x. i = Var x ==> not_fresh_at a1 x` by
+    metis_tac[enc_emit_op_old_result] >>
+  `step_inst_base (mk_inst a0.cs_next_id MLOAD [count_ptr]
+    [STRING #"%" (toString a0.cs_next_var)]) s =
+    OK (update_var (STRING #"%" (toString a0.cs_next_var)) iw s)` by
+    (qpat_assum `eval_operand count_ptr s = _` (mp_tac o MATCH_MP step_MLOAD) >>
+     simp[GSYM mem_word_at_eq_mload]) >>
+  drule_all enc_emit_op_readonly_run >>
+  disch_then (qx_choose_then `s1` strip_assume_tac) >>
+  `eval_operand src s1 = SOME sw` by (fs[] >> metis_tac[]) >>
+  `!x. MEM (Var x) [src;i] ==> not_fresh_at a1 x` by
+    (fs[] >> metis_tac[enc_old_operand_mono]) >>
+  drule_all enc_indexed_address_run >>
+  disch_then (qx_choose_then `s2` strip_assume_tac) >>
+  `emitted_insts a0 a4 = emitted_insts a0 a1 ++ emitted_insts a1 a4` by
+    (irule emitted_insts_append >>
+     metis_tac[enc_emit_op_append, cj 7 enc_indexed_address_code]) >>
+  qexists_tac `s2` >> simp[] >> conj_tac
+  >- (irule enc_run_inst_seq_compose >> qexists_tac `s1` >> simp[]) >>
+  rpt strip_tac >>
+  `!x. old = Var x ==> not_fresh_at a1 x` by
+    (match_mp_tac enc_old_operand_mono >> qexists_tac `a0` >> simp[]) >>
+  metis_tac[]
+QED
+
+(* The two final readonly instructions of the dynamic-body prefix. *)
+Theorem enc_dyn_address_run:
+  emit_op MLOAD [dyn_ptr] a = (off,b) /\
+  emit_op ADD [dst;off] b = (addr,c) /\
+  (!x. MEM (Var x) [dyn_ptr;dst] ==> not_fresh_at a x) /\
+  eval_operand dyn_ptr s = SOME (n2w dp) /\
+  eval_operand dst s = SOME dw /\
+  mem_word_at dp s.vs_memory = ow /\ dp < dimword (:256) ==>
+  ?t. run_inst_seq (emitted_insts a c) s = OK t /\
+      eval_operand off t = SOME ow /\
+      eval_operand addr t = SOME (dw + ow) /\
+      (!old. (!x. old = Var x ==> not_fresh_at a x) ==>
+        eval_operand old t = eval_operand old s) /\
+      t.vs_memory = s.vs_memory /\ t.vs_labels = s.vs_labels /\
+      t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
+      t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+      t.vs_logs = s.vs_logs /\ t.vs_requests = s.vs_requests
+Proof
+  strip_tac >>
+  `a.cs_next_var <= b.cs_next_var` by
+    (qpat_assum `emit_op MLOAD _ a = _`
+       (mp_tac o MATCH_MP emitted_insts_emit_op) >> simp[]) >>
+  `!x. off = Var x ==> not_fresh_at b x` by
+    metis_tac[enc_emit_op_old_result] >>
+  `step_inst_base (mk_inst a.cs_next_id MLOAD [dyn_ptr]
+    [STRING #"%" (toString a.cs_next_var)]) s =
+    OK (update_var (STRING #"%" (toString a.cs_next_var)) ow s)` by
+    (qpat_assum `eval_operand dyn_ptr s = _` (mp_tac o MATCH_MP step_MLOAD) >>
+     simp[GSYM mem_word_at_eq_mload]) >>
+  drule_all enc_emit_op_readonly_run >>
+  disch_then (qx_choose_then `s1` strip_assume_tac) >>
+  `eval_operand dst s1 = SOME dw` by (fs[] >> metis_tac[]) >>
+  `step_inst_base (mk_inst b.cs_next_id ADD [dst;off]
+    [STRING #"%" (toString b.cs_next_var)]) s1 =
+    OK (update_var (STRING #"%" (toString b.cs_next_var)) (dw + ow) s1)` by
+    (irule step_ADD >> simp[]) >>
+  drule_all enc_emit_op_readonly_run >>
+  disch_then (qx_choose_then `s2` strip_assume_tac) >>
+  `emitted_insts a c = emitted_insts a b ++ emitted_insts b c` by
+    (irule emitted_insts_append >> metis_tac[enc_emit_op_append]) >>
+  qexists_tac `s2` >> simp[] >> conj_tac
+  >- (irule enc_run_inst_seq_compose >> qexists_tac `s1` >> simp[]) >>
+  rpt strip_tac >>
+  `!x. old = Var x ==> not_fresh_at b x` by
+    (match_mp_tac enc_old_operand_mono >> qexists_tac `a` >> simp[]) >>
+  metis_tac[]
+QED
+
+
+Theorem enc_dyn_body_setup_run:
+  emit_op MLOAD [count_ptr] a0 = (i,a1) /\
+  emit_op ADD [src;Lit 32w] a1 = (sd,a2) /\
+  emit_op MUL [i;Lit (n2w msz)] a2 = (so,a3) /\
+  emit_op ADD [sd;so] a3 = (child_src,a4) /\
+  emit_op MLOAD [dyn_ptr] a4 = (off,a5) /\
+  emit_op ADD [dst;off] a5 = (child_dst,a6) /\
+  (!x. MEM (Var x) [count_ptr;src;dyn_ptr;dst] ==> not_fresh_at a0 x) /\
+  eval_operand count_ptr s = SOME (n2w ip) /\
+  eval_operand src s = SOME (n2w sn) /\
+  eval_operand dyn_ptr s = SOME (n2w dp) /\
+  eval_operand dst s = SOME (n2w dn) /\
+  mem_word_at ip s.vs_memory = n2w k /\ ip < dimword (:256) /\
+  mem_word_at dp s.vs_memory = n2w d /\ dp < dimword (:256) ==>
+  ?t. run_inst_seq (emitted_insts a0 a6) s = OK t /\
+      eval_operand i t = SOME (n2w k) /\
+      eval_operand child_src t = SOME (n2w (sn + 32 + k * msz)) /\
+      eval_operand off t = SOME (n2w d) /\
+      eval_operand child_dst t = SOME (n2w (dn + d)) /\
+      (!old. (!x. old = Var x ==> not_fresh_at a0 x) ==>
+        eval_operand old t = eval_operand old s) /\
+      t.vs_memory = s.vs_memory /\ t.vs_labels = s.vs_labels /\
+      t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
+      t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+      t.vs_logs = s.vs_logs /\ t.vs_requests = s.vs_requests
+Proof
+  strip_tac >> drule_all enc_dyn_body_prefix_code >> strip_tac >>
+  `a4.cs_next_var = a0.cs_next_var + 4` by
+    (imp_res_tac (cj 4 emitted_insts_emit_op) >> decide_tac) >>
+  `!x. MEM (Var x) [count_ptr;src] ==> not_fresh_at a0 x` by
+    (fs[] >> metis_tac[]) >>
+  drule_all enc_dyn_source_run >>
+  disch_then (qx_choose_then `s1` strip_assume_tac) >>
+  `!x. MEM (Var x) [dyn_ptr;dst] ==> not_fresh_at a4 x` by
+    (fs[] >> metis_tac[enc_old_operand_mono, arithmeticTheory.LESS_EQ_ADD]) >>
+  `eval_operand dyn_ptr s1 = SOME (n2w dp) /\
+   eval_operand dst s1 = SOME (n2w dn)` by (fs[] >> metis_tac[]) >>
+  `mem_word_at dp s1.vs_memory = n2w d` by simp[] >>
+  drule_all enc_dyn_address_run >>
+  disch_then (qx_choose_then `s2` strip_assume_tac) >>
+  `!x. i = Var x ==> not_fresh_at a4 x` by
+    (match_mp_tac enc_old_operand_mono >> qexists_tac `a1` >>
+     imp_res_tac (cj 4 emitted_insts_emit_op) >>
+     simp[] >> metis_tac[enc_emit_op_old_result, arithmeticTheory.LESS_EQ_ADD]) >>
+  `!x. child_src = Var x ==> not_fresh_at a4 x` by
+    metis_tac[enc_emit_op_old_result] >>
+  qexists_tac `s2` >>
+  simp[GSYM wordsTheory.word_add_n2w, GSYM wordsTheory.word_mul_n2w] >>
+  conj_tac
+  >- (irule enc_run_inst_seq_compose >> qexists_tac `s1` >> simp[]) >>
+  rpt strip_tac >>
+  `!x. old = Var x ==> not_fresh_at a4 x` by
+    (match_mp_tac enc_old_operand_mono >> qexists_tac `a0` >> simp[]) >>
+  metis_tac[]
+QED
+
+Theorem enc_dyn_loop_body_growth:
+  enc_dyn_loop_body dst src ei asz msz count_ptr dyn_ptr sb = ((),se) ==>
+  cs_extends sb se /\ sb.cs_next_id <= se.cs_next_id /\
+  sb.cs_next_var <= se.cs_next_var
+Proof
+  `enc_comp_grows (enc_dyn_loop_body dst src ei asz msz count_ptr dyn_ptr)` by
+    (rewrite_tac[enc_dyn_loop_body_def] >>
+     rpt (FIRST [CHANGED_TAC (gvs[enc_comp_grows_emit_op,
+                   enc_comp_grows_emit_void, cj 2 enc_comp_grows_encoder]),
+                 irule enc_comp_grows_bind >> conj_tac,
+                 irule enc_comp_grows_ignore_bind >> conj_tac,
+                 gen_tac])) >>
+  fs[enc_comp_grows_def]
+QED
+
+Theorem enc_alloc_buffer_run_frame:
+  compile_alloc_buffer 32 st = (buf,st') /\
+  st.cs_next_id IN frag_ids a z /\ a.cs_next_var <= st.cs_next_var /\
+  enc_scratch (frag_ids a z) lo top s ==>
+  ?b t. run_inst_seq (emitted_insts st st') s = OK t /\
+    lo <= b /\ b + 32 <= top /\
+    eval_operand buf.buf_operand t = SOME (n2w b) /\
+    FLOOKUP t.vs_allocas st.cs_next_id = SOME (b,32) /\
+    t.vs_memory = s.vs_memory /\ t.vs_labels = s.vs_labels /\
+    (!old. (!x. old = Var x ==> not_fresh_at st x) ==>
+      eval_operand old t = eval_operand old s) /\
+    enc_frame a z lo top outs s t
+Proof
+  strip_tac >> `FINITE (frag_ids a z)` by simp[] >>
+  drule_all enc_compile_alloc_buffer_run >> strip_tac >>
+  qexistsl_tac [`b`,`t`] >> simp[] >> conj_tac
+  >- (Cases >> simp[eval_operand_def] >> rpt strip_tac >>
+      metis_tac[]) >>
+  simp[enc_frame_def] >> rpt strip_tac >- (
+    first_x_assum (qspec_then `x` mp_tac) >>
+    impl_tac >- (fs[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_LESS_EQ_TRANS]) >>
+    simp[]) >> metis_tac[]
+QED
+
+Theorem enc_emit_mstore_scratch_run:
+  emit_void MSTORE [dst_op;value] st = ((),st') /\
+  eval_operand dst_op s = SOME (n2w b) /\ eval_operand value s = SOME w /\
+  j IN frag_ids a z /\ FLOOKUP s.vs_allocas j = SOME (b,32) /\
+  enc_scratch (frag_ids a z) lo top s ==>
+  run_inst_seq (emitted_insts st st') s = OK (mstore b w s) /\
+  enc_frame a z lo top outs s (mstore b w s)
+Proof
+  strip_tac >>
+  `b + 32 <= top` by (drule_all enc_scratch_alloca_bound >> simp[]) >>
+  `top < dimword (:256)` by
+    (qpat_x_assum `enc_scratch _ _ _ _` mp_tac >>
+     pure_rewrite_tac[enc_scratch_def] >> strip_tac >> simp[]) >>
+  `b < dimword (:256)` by decide_tac >>
+  drule emitted_insts_emit_void >> strip_tac >> conj_tac
+  >- simp[run_inst_seq_def, step_inst_base_def, exec_write2_def, mk_inst_def] >>
+  irule enc_frame_mstore_scratch >> simp[] >> metis_tac[]
+QED
+
+Theorem enc_alloc_buffer_store_run:
+  compile_alloc_buffer 32 st = (buf,sa) /\
+  emit_void MSTORE [buf.buf_operand;Lit w] sa = ((),sz) /\
+  st.cs_next_id IN frag_ids a z /\ a.cs_next_var <= st.cs_next_var /\
+  enc_scratch (frag_ids a z) lo top s0 ==>
+  ?b s. run_inst_seq (emitted_insts st sa ++ emitted_insts sa sz) s0 = OK s /\
+    lo <= b /\ b + 32 <= top /\
+    eval_operand buf.buf_operand s = SOME (n2w b) /\
+    FLOOKUP s.vs_allocas st.cs_next_id = SOME (b,32) /\
+    mem_word_at b s.vs_memory = w /\ s.vs_labels = s0.vs_labels /\
+    enc_frame a z lo top outs s0 s
+Proof
+  strip_tac >> drule_all enc_alloc_buffer_run_frame >>
+  disch_then (qspec_then `outs` strip_assume_tac) >>
+  `enc_scratch (frag_ids a z) lo top t` by fs[enc_frame_def] >>
+  `eval_operand (Lit w) t = SOME w` by simp[eval_operand_def] >>
+  drule_all enc_emit_mstore_scratch_run >>
+  disch_then (qspec_then `outs` strip_assume_tac) >>
+  qexistsl_tac [`b`,`mstore b w t`] >> conj_tac
+  >- (qpat_assum `run_inst_seq (emitted_insts st sa) _ = _`
+        (mp_then Any mp_tac run_inst_seq_append) >>
+      disch_then (qspec_then `emitted_insts sa sz` SUBST1_TAC) >> simp[]) >>
+  simp[eval_operand_mstore,
+       valueEncodingPropsTheory.mstore_mem_word_at_same] >>
+  conj_tac >- simp[mstore_def] >> metis_tac[enc_frame_trans]
+QED
+
+Theorem enc_mul_store_scratch_run:
+  emit_op MUL [len_op;Lit (n2w asz)] sb = (prod_op,sc) /\
+  emit_void MSTORE [dyn_ptr;prod_op] sc = ((),sd) /\
+  eval_operand len_op s0 = SOME (n2w n) /\
+  eval_operand dyn_ptr s0 = SOME (n2w c) /\
+  (!x. dyn_ptr = Var x ==> not_fresh_at sb x) /\
+  a.cs_next_var <= sb.cs_next_var /\
+  j IN frag_ids a z /\ FLOOKUP s0.vs_allocas j = SOME (c,32) /\
+  enc_scratch (frag_ids a z) lo top s0 ==>
+  ?s. run_inst_seq (emitted_insts sb sc ++ emitted_insts sc sd) s0 = OK s /\
+    s.vs_memory = (mstore c (n2w (n * asz)) s0).vs_memory /\
+    s.vs_labels = s0.vs_labels /\
+    (!old. (!x. old = Var x ==> not_fresh_at sb x) ==>
+       eval_operand old s = eval_operand old s0) /\
+    enc_frame a z lo top outs s0 s
+Proof
+  strip_tac >>
+  `step_inst_base (mk_inst sb.cs_next_id MUL [len_op;Lit (n2w asz)]
+    [STRING #"%" (toString sb.cs_next_var)]) s0 =
+    OK (update_var (STRING #"%" (toString sb.cs_next_var))
+      (n2w (n * asz)) s0)` by
+    (pure_rewrite_tac[GSYM wordsTheory.word_mul_n2w] >>
+     irule step_MUL >> simp[eval_operand_def]) >>
+  drule_all enc_emit_op_run_frame >>
+  disch_then (qspec_then `outs` strip_assume_tac) >>
+  `eval_operand dyn_ptr s' = SOME (n2w c)` by metis_tac[] >>
+  `FLOOKUP s'.vs_allocas j = SOME (c,32)` by fs[enc_frame_def] >>
+  `enc_scratch (frag_ids a z) lo top s'` by fs[enc_frame_def] >>
+  drule_all enc_emit_mstore_scratch_run >>
+  disch_then (qspec_then `outs` strip_assume_tac) >>
+  qexists_tac `mstore c (n2w (n * asz)) s'` >> conj_tac
+  >- (qpat_assum `run_inst_seq (emitted_insts sb sc) _ = _`
+        (mp_then Any mp_tac run_inst_seq_append) >>
+      disch_then (qspec_then `emitted_insts sc sd` SUBST1_TAC) >> simp[]) >>
+  asm_simp_tac (srw_ss()) [eval_operand_mstore] >> conj_tac
+  >- simp[mstore_def] >> conj_tac
+  >- (rpt strip_tac >>
+      `eval_operand old s' = eval_operand old s0` by
+        (first_x_assum irule >> simp[]) >>
+      Cases_on `old` >> fs[eval_operand_def, lookup_var_def, mstore_def]) >>
+  irule enc_frame_trans >> qexists_tac `s'` >> simp[]
+QED
+
+Theorem enc_alloc_buffer_frontiers:
+  compile_alloc_buffer 32 st = (buf,sa) ==>
+  sa.cs_next_var = st.cs_next_var + 1 /\
+  sa.cs_next_id = st.cs_next_id + 1 /\
+  (!x. buf.buf_operand = Var x ==> not_fresh_at sa x)
+Proof
+  simp[contextTheory.compile_alloc_buffer_def, emit_op_def,
+       fresh_id_def, fresh_var_def, emit_def, comp_bind_def,
+       comp_ignore_bind_def, comp_return_def, not_fresh_at_def] >>
+  rpt strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Theorem enc_alloc_mul_store_run:
+  compile_alloc_buffer 32 st = (buf,sb) /\
+  emit_op MUL [len_op;Lit (n2w asz)] sb = (prod_op,sc) /\
+  emit_void MSTORE [buf.buf_operand;prod_op] sc = ((),sd) /\
+  (!x. len_op = Var x ==> not_fresh_at st x) /\
+  eval_operand len_op s0 = SOME (n2w n) /\
+  st.cs_next_id IN frag_ids a z /\ a.cs_next_var <= st.cs_next_var /\
+  enc_scratch (frag_ids a z) lo top s0 ==>
+  ?c s. run_inst_seq (emitted_insts st sb ++
+          (emitted_insts sb sc ++ emitted_insts sc sd)) s0 = OK s /\
+    lo <= c /\ c + 32 <= top /\
+    eval_operand buf.buf_operand s = SOME (n2w c) /\
+    FLOOKUP s.vs_allocas st.cs_next_id = SOME (c,32) /\
+    s.vs_memory = (mstore c (n2w (n * asz)) s0).vs_memory /\
+    s.vs_labels = s0.vs_labels /\
+    (!old. (!x. old = Var x ==> not_fresh_at st x) ==>
+      eval_operand old s = eval_operand old s0) /\
+    enc_frame a z lo top outs s0 s
+Proof
+  strip_tac >> drule enc_alloc_buffer_frontiers >> strip_tac >>
+  drule_all enc_alloc_buffer_run_frame >>
+  disch_then (qspec_then `outs` strip_assume_tac) >>
+  `eval_operand len_op t = SOME (n2w n)` by metis_tac[] >>
+  `a.cs_next_var <= sb.cs_next_var` by decide_tac >>
+  `enc_scratch (frag_ids a z) lo top t` by fs[enc_frame_def] >>
+  drule_all enc_mul_store_scratch_run >>
+  disch_then (qspec_then `outs` strip_assume_tac) >>
+  `FLOOKUP s.vs_allocas st.cs_next_id = SOME (b,32)` by fs[enc_frame_def] >>
+  qexistsl_tac [`b`,`s`] >> conj_tac
+  >- (irule enc_run_inst_seq_compose >> qexists_tac `t` >> simp[]) >>
+  asm_simp_tac (srw_ss()) [] >> conj_tac
+  >- simp[mstore_def] >> conj_tac
+  >- (rpt strip_tac >>
+      `!x. old = Var x ==> not_fresh_at sb x` by
+        (match_mp_tac enc_old_operand_mono >> qexists_tac `st` >> simp[]) >>
+      metis_tac[]) >>
+  irule enc_frame_trans >> qexists_tac `t` >> simp[]
+QED
+
+Theorem enc_allocated_word_store_other:
+  alloca_inv s /\ i <> j /\
+  FLOOKUP s.vs_allocas i = SOME (ip,32) /\
+  FLOOKUP s.vs_allocas j = SOME (c,32) ==>
+  mem_word_at ip (mstore c w t).vs_memory = mem_word_at ip t.vs_memory
+Proof
+  strip_tac >> irule mstore_mem_word_at_disjoint >>
+  qpat_x_assum `alloca_inv s` mp_tac >>
+  pure_rewrite_tac[venomMemDefsTheory.alloca_inv_def,
+    venomMemDefsTheory.allocas_non_overlapping_def,
+    venomMemDefsTheory.regions_disjoint_def] >>
+  strip_tac >> metis_tac[]
+QED
+
+Theorem enc_dyn_loop_init_segments:
+  enc_dyn_loop_init len_op asz st = ((count_ptr,dyn_ptr,hdr,body_lbl,exit),si) /\
+  compile_alloc_buffer 32 st = (ibuf,sa) /\
+  emit_void MSTORE [ibuf.buf_operand;Lit 0w] sa = ((),sz) /\
+  compile_alloc_buffer 32 sz = (dbuf,sb) /\
+  emit_op MUL [len_op;Lit (n2w asz)] sb = (init_dyn,sc) /\
+  emit_void MSTORE [dbuf.buf_operand;init_dyn] sc = ((),sd) ==>
+  sz.cs_next_id = st.cs_next_id + 2 /\
+  sz.cs_next_var = st.cs_next_var + 1 /\
+  count_ptr = ibuf.buf_operand /\ dyn_ptr = dbuf.buf_operand /\
+  emitted_insts st si =
+    (emitted_insts st sa ++ emitted_insts sa sz) ++
+    (emitted_insts sz sb ++ (emitted_insts sb sc ++ emitted_insts sc sd))
+Proof
+  simp[enc_dyn_loop_init_def, contextTheory.compile_alloc_buffer_def,
+    emit_op_def, emit_void_def, fresh_var_def, fresh_id_def,
+    fresh_label_def, emit_def, comp_bind_def, comp_ignore_bind_def,
+    comp_return_def] >> rpt strip_tac >> gvs[] >>
+  `!n k. n - (n + k) = 0` by decide_tac >>
+  simp_tac (srw_ss()) [emitted_insts_def, DROP_APPEND,
+    listTheory.LENGTH_APPEND, listTheory.LENGTH, listTheory.DROP_def,
+    arithmeticTheory.ADD_SUB, arithmeticTheory.SUB_EQUAL_0] >>
+  simp[DROP_LENGTH_TOO_LONG]
+QED
+
+Theorem enc_dyn_loop_init_run:
+  enc_dyn_loop_init len_op asz st = ((count_ptr,dyn_ptr,hdr,body_lbl,exit),si) /\
+  st.cs_next_id IN frag_ids st z /\
+  st.cs_next_id + 2 IN frag_ids st z /\
+  (!x. len_op = Var x ==> not_fresh_at st x) /\
+  eval_operand len_op s0 = SOME (n2w n) /\
+  enc_scratch (frag_ids st z) lo top s0 ==>
+  ?ip c s. run_inst_seq (emitted_insts st si) s0 = OK s /\
+    lo <= ip /\ ip + 32 <= top /\ lo <= c /\ c + 32 <= top /\
+    eval_operand count_ptr s = SOME (n2w ip) /\
+    eval_operand dyn_ptr s = SOME (n2w c) /\
+    FLOOKUP s.vs_allocas st.cs_next_id = SOME (ip,32) /\
+    FLOOKUP s.vs_allocas (st.cs_next_id + 2) = SOME (c,32) /\
+    mem_word_at ip s.vs_memory = 0w /\
+    mem_word_at c s.vs_memory = n2w (n * asz) /\
+    s.vs_labels = s0.vs_labels /\ enc_frame st z lo top outs s0 s
+Proof
+  strip_tac >> drule enc_dyn_loop_init_code >> strip_tac >>
+  drule_all enc_dyn_loop_init_segments >> strip_tac >>
+  `st.cs_next_var <= st.cs_next_var` by simp[] >>
+  drule_all enc_alloc_buffer_store_run >>
+  disch_then (qspec_then `outs`
+    (qx_choose_then `ip` (qx_choose_then `s1` strip_assume_tac))) >>
+  `eval_operand len_op s1 = SOME (n2w n)` by
+    (irule enc_frame_preserves_operand >> goal_assum (drule_at Any) >> simp[]) >>
+  `!x. len_op = Var x ==> not_fresh_at sz x` by
+    (match_mp_tac enc_old_operand_mono >> qexists_tac `st` >> simp[]) >>
+  `st.cs_next_var <= sz.cs_next_var /\
+   sz.cs_next_id IN frag_ids st z` by simp[] >>
+  `enc_scratch (frag_ids st z) lo top s1` by fs[enc_frame_def] >>
+  drule_all enc_alloc_mul_store_run >>
+  disch_then (qspec_then `outs`
+    (qx_choose_then `c` (qx_choose_then `s2` strip_assume_tac))) >>
+  `FLOOKUP s2.vs_allocas st.cs_next_id = SOME (ip,32)` by fs[enc_frame_def] >>
+  `alloca_inv s2` by
+    (qpat_assum `enc_frame _ _ _ _ _ s1 s2` mp_tac >>
+     pure_rewrite_tac[enc_frame_def,enc_scratch_def] >> strip_tac >> simp[]) >>
+  `mem_word_at ip s2.vs_memory = 0w` by
+    (asm_rewrite_tac[] >>
+     `st.cs_next_id <> sz.cs_next_id` by decide_tac >>
+     drule_all enc_allocated_word_store_other >> simp[]) >>
+  `!x. count_ptr = Var x ==> not_fresh_at sz x` by
+    (qpat_assum `compile_alloc_buffer 32 st = _`
+       (mp_then Any mp_tac enc_alloc_buffer_frontiers) >>
+     simp[not_fresh_at_def] >> metis_tac[]) >>
+  qexistsl_tac [`ip`,`c`,`s2`] >> conj_tac
+  >- (asm_rewrite_tac[] >> irule enc_run_inst_seq_compose >>
+      qexists_tac `s1` >> simp[]) >>
+  asm_simp_tac (srw_ss()) [valueEncodingPropsTheory.mstore_mem_word_at_same] >>
+  conj_tac
+  >- (qpat_x_assum `FLOOKUP s2.vs_allocas sz.cs_next_id = _` mp_tac >> simp[]) >>
+  irule enc_frame_trans >> qexists_tac `s1` >> simp[]
+QED
+
+Theorem enc_dyn_loop_ctx_readonly:
+  enc_dyn_loop_ctx st z ops lo top tv v src outs s0 count_ptr ip dyn_ptr j c s /\
+  enc_frame st z lo top outs s t /\ t.vs_memory = s.vs_memory /\
+  t.vs_labels = s.vs_labels /\
+  eval_operand count_ptr t = eval_operand count_ptr s /\
+  eval_operand dyn_ptr t = eval_operand dyn_ptr s ==>
+  enc_dyn_loop_ctx st z ops lo top tv v src outs s0 count_ptr ip dyn_ptr j c t
+Proof
+  simp[enc_dyn_loop_ctx_def] >> strip_tac >>
+  `enc_loop_ctx st z ops lo top tv v src outs s0 count_ptr ip t` by
+    (irule enc_loop_ctx_readonly >> qexists_tac `s` >> simp[]) >>
+  `FLOOKUP t.vs_allocas j = SOME (c,32)` by
+    (qpat_assum `enc_frame _ _ _ _ _ s t` mp_tac >>
+     rewrite_tac[enc_frame_def] >> metis_tac[]) >>
+  simp[]
+QED
+
+Theorem enc_dyn_loop_ctx_inst_idx[simp]:
+  enc_dyn_loop_ctx st z ops lo top tv v src outs s0 count_ptr ip dyn_ptr j c
+    (s with vs_inst_idx := idx) =
+  enc_dyn_loop_ctx st z ops lo top tv v src outs s0 count_ptr ip dyn_ptr j c s
+Proof
+  Cases_on `dyn_ptr` >>
+  simp[enc_dyn_loop_ctx_def, eval_operand_def, lookup_var_def]
+QED
+
+Theorem enc_dyn_loop_init_frag:
+  enc_dyn_loop_init len_op asz st = ((count_ptr,dyn_ptr,hdr,body_lbl,exit),si) /\
+  st.cs_next_id IN frag_ids st z /\
+  st.cs_next_id + 2 IN frag_ids st z /\
+  (!x. len_op = Var x ==> not_fresh_at st x) /\
+  eval_operand len_op s0 = SOME (n2w n) /\
+  enc_pre st z ops lo top tv v src outs s0 /\ value_has_type tv v ==>
+  frag_exec ctx st si (\s. s = s0)
+    (\s. ?ip c. enc_array_inv
+       (enc_dyn_loop_ctx st z ops lo top tv v src outs s0 count_ptr ip
+          dyn_ptr (st.cs_next_id + 2) c)
+       p (n * asz) ts avs ip (SOME c) 0 s) R
+Proof
+  strip_tac >>
+  `enc_scratch (frag_ids st z) lo top s0` by fs[enc_pre_def] >>
+  drule_all enc_dyn_loop_init_run >>
+  disch_then (qspec_then `outs` strip_assume_tac) >>
+  drule enc_dyn_loop_init_insts >> strip_tac >>
+  fs[same_blocks_def] >> irule frag_exec_run_inst_seq >>
+  asm_simp_tac (srw_ss()) [rich_listTheory.IS_PREFIX_APPEND] >>
+  qexistsl_tac [`ip`,`c`] >> irule enc_array_inv_zero >> simp[] >>
+  simp[enc_dyn_loop_ctx_def] >>
+  irule enc_loop_ctx_from_frame >> simp[enc_frame_inst_idx] >>
+  Cases_on `count_ptr` >> fs[eval_operand_def, lookup_var_def]
+QED
+
+Theorem enc_dyn_loop_header_frag:
+  enc_static_loop_header count_ptr len_op sh = (done_op,sj) /\
+  (!x. MEM (Var x) [count_ptr;dyn_ptr;len_op] ==> not_fresh_at sh x) /\
+  st.cs_next_var <= sh.cs_next_var /\ MEM len_op ops /\
+  eval_operand len_op s0 = SOME (n2w (LENGTH avs)) /\
+  LENGTH avs < dimword (:256) /\ k <= LENGTH avs ==>
+  frag_exec ctx sh sj
+    (enc_array_inv
+      (enc_dyn_loop_ctx st z ops lo top tv v src outs s0 count_ptr ip dyn_ptr j c)
+      p B ts avs ip (SOME c) k)
+    (enc_array_header
+      (enc_dyn_loop_ctx st z ops lo top tv v src outs s0 count_ptr ip dyn_ptr j c)
+      p B ts avs ip (SOME c) done_op k) R
+Proof
+  strip_tac >> drule enc_static_loop_header_code >> strip_tac >>
+  fs[same_blocks_def] >> irule frag_exec_run_inst_seq >>
+  asm_simp_tac (srw_ss()) [rich_listTheory.IS_PREFIX_APPEND] >>
+  qx_gen_tac `s` >> strip_tac >>
+  `enc_dyn_loop_ctx st z ops lo top tv v src outs s0
+      count_ptr ip dyn_ptr j c s` by fs[enc_array_inv_def] >>
+  `eval_operand len_op s = SOME (n2w (LENGTH avs))` by
+    (drule_all enc_dyn_loop_ctx_operand >> simp[]) >>
+  `eval_operand count_ptr s = SOME (n2w ip) /\
+   enc_scratch (frag_ids st z) lo top s` by
+    fs[enc_dyn_loop_ctx_def, enc_loop_ctx_def, enc_pre_def] >>
+  `mem_word_at ip s.vs_memory = n2w k` by fs[enc_array_inv_def] >>
+  `ip < dimword (:256) /\ k < dimword (:256)` by
+    (fs[enc_dyn_loop_ctx_def] >> drule enc_loop_ctx_bounds >> simp[] >> decide_tac) >>
+  `!x. MEM (Var x) [count_ptr;len_op] ==> not_fresh_at sh x` by
+    (simp[] >> metis_tac[]) >>
+  fs[] >> drule_all (SRULE [] enc_static_loop_header_run) >>
+  disch_then (qspec_then `outs` (qx_choose_then `t` strip_assume_tac)) >>
+  `enc_dyn_loop_ctx st z ops lo top tv v src outs s0
+      count_ptr ip dyn_ptr j c t` by
+    (irule enc_dyn_loop_ctx_readonly >> qexists_tac `s` >> simp[] >> metis_tac[]) >>
+  `enc_array_inv
+    (enc_dyn_loop_ctx st z ops lo top tv v src outs s0 count_ptr ip dyn_ptr j c)
+    p B ts avs ip (SOME c) k t` by
+    (irule enc_array_inv_readonly >> simp[] >> qexists_tac `s` >> simp[]) >>
+  `enc_scratch (frag_ids st z) lo top t` by
+    fs[enc_dyn_loop_ctx_def, enc_loop_ctx_def, enc_pre_def] >>
+  simp[enc_array_header_def] >> disj1_tac >> qexists_tac `t` >> conj_tac
+  >- (qpat_x_assum `run_inst_seq _ s = OK t` mp_tac >> simp[]) >>
+  conj_tac
+  >- (irule enc_array_inv_readonly >> simp[] >>
+      qexists_tac `t` >> simp[]) >>
+  `bool_to_word (~(k < LENGTH avs)) =
+    (if k < LENGTH avs then 0w else 1w)` by
+    (Cases_on `k < LENGTH avs` >> simp[] >> EVAL_TAC) >>
+  Cases_on `done_op` >> fs[eval_operand_def, lookup_var_def]
+QED
+
 Theorem compile_abi_encode_frag:
   (!dst child_ptr ei is_dyn static_ofst dyn_ptr st op st' ctx env ty tv v
     av s0 dst_w src_w lo top.
