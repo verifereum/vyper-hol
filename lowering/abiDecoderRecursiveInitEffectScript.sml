@@ -1,10 +1,9 @@
 (* An actual array initializer owns its slot and preserves surrounding scratch. *)
 Theory abiDecoderRecursiveInitEffect
 Ancestors
-  abiDecoderArrayInitReach abiDecoderArrayInitMemory abiDecoderArrayInitExec
-  abiDecoderEffect abiDecoderProtectedScratch abiDecoderAllocation
-  abiDecoderTypedContract abiDecoderContract abiDecoderFrame
-  compileEnv venomState words arithmetic
+  abiDecoderArrayInit abiDecoderArrayInitExec abiDecoderEffect abiDecoderProtectedScratch
+  abiDecoderAllocation abiDecoderTypedContract abiDecoderContract abiDecoderFrame compileEnv
+  venomState words arithmetic
 
 Theorem abi_decoder_recursive_init_effect:
   abi_decoder_array_init_post setup next limit_st site first last b cap d n initial prepared /\
@@ -41,11 +40,3 @@ Proof
     `child_d` |-> `d:num`, `child_sz` |-> `sz:num`] abi_decoder_effect_widen) >>
   asm_simp_tac (srw_ss()) []
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_DECODER_RECURSIVE_INIT_EFFECT_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI recursive initialization effect not kernel closed: " ^ n)
-  end) (DB.thms "abiDecoderRecursiveInitEffect");

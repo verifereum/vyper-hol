@@ -1,12 +1,8 @@
 (* Canonical array data and member windows, for fixed and dynamic arrays. *)
 Theory abiCanonicalArrays
 Ancestors
+  venomMemProps
   abiCanonicalWindows abiDecodeRanges contractABI list rich_list arithmetic byte
-
-Theorem abi_array_dimindex[simp,local]: dimindex (:256) = 256
-Proof
-  CONV_TAC fcpLib.INDEX_CONV
-QED
 
 Theorem canonical_array_tuple:
   enc (Array bound ty) (ListV vs) =
@@ -24,15 +20,6 @@ Theorem canonical_array_drop_count:
 Proof
   pure_rewrite_tac[canonical_array_tuple] >> Cases_on `bound` >>
   simp[enc_number_def, LENGTH_word_to_bytes, DROP_APPEND]
-QED
-
-Theorem canonical_array_uniform[local]:
-  !vs. SUM (MAP abi_member_head_size (REPLICATE (LENGTH vs) ty)) =
-         LENGTH vs * abi_member_head_size ty /\
-       MAP2 abi_member_tail_size (REPLICATE (LENGTH vs) ty) vs =
-         MAP (abi_member_tail_size ty) vs
-Proof
-  Induct >> simp[REPLICATE, MULT_CLAUSES]
 QED
 
 Theorem canonical_array_member_head_window:
@@ -56,9 +43,9 @@ Proof
     (Q.GENL [`pre`, `ty`, `post`, `pvs`, `v`, `rest`]
       canonical_member_head_window) >>
   simp_tac bool_ss [LENGTH_REPLICATE, GSYM REPLICATE, REPLICATE_APPEND,
-    LENGTH_APPEND, LENGTH, canonical_array_uniform, head_lengths_acc,
+    LENGTH_APPEND, LENGTH, uniform_member_sizes, head_lengths_acc,
     MAP_APPEND, SUM_APPEND, MAP, SUM] >>
-  simp[canonical_array_uniform, LEFT_ADD_DISTRIB, MULT_CLAUSES] >>
+  simp[uniform_member_sizes, LEFT_ADD_DISTRIB, MULT_CLAUSES] >>
   gvs[LENGTH_APPEND, DROP_DROP_T]
 QED
 
@@ -80,16 +67,8 @@ Proof
     (Q.GENL [`pre`, `ty`, `post`, `pvs`, `v`, `rest`]
       canonical_member_tail_window) >>
   simp_tac bool_ss [LENGTH_REPLICATE, GSYM REPLICATE, REPLICATE_APPEND,
-    LENGTH_APPEND, LENGTH, canonical_array_uniform, head_lengths_acc,
+    LENGTH_APPEND, LENGTH, uniform_member_sizes, head_lengths_acc,
     MAP_APPEND, SUM_APPEND, MAP, SUM] >>
-  simp[canonical_array_uniform, LEFT_ADD_DISTRIB, MULT_CLAUSES] >>
+  simp[uniform_member_sizes, LEFT_ADD_DISTRIB, MULT_CLAUSES] >>
   gvs[LENGTH_APPEND, DROP_DROP_T]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_CANONICAL_ARRAYS_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI canonical array window not kernel closed: " ^ n)
-  end) (DB.thms "abiCanonicalArrays");

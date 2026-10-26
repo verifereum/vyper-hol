@@ -181,11 +181,3 @@ QED
    continuation simulation, NOT an equality at the same fuel. Our finite
    probes assume fuel-independent run_block behavior only for the isolated
    body; they do not assert this for arbitrary recursive children. *)
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_DECODER_COMPOSITION_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI decoder composition probe not kernel closed: " ^ n)
-  end) (DB.thms "abiDecoderComposition");

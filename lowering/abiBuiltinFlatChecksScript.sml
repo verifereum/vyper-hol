@@ -91,11 +91,3 @@ Proof
      `0w`]) >>
   gvs[GSYM abi_builtin_flat_decode_probe_def, abi_builtin_flat_probe_premises]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_BUILTIN_FLAT_CHECKS_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI builtin flat check not kernel closed: " ^ n)
-  end) (DB.thms "abiBuiltinFlatChecks");

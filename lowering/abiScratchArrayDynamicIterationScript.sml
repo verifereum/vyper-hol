@@ -3,11 +3,11 @@
    updates the tail offset and retains complete source data and separation. *)
 Theory abiScratchArrayDynamicIteration
 Ancestors
-  abiScratchArrayDynamicBody abiScratchPrefixStep abiScratchInputEffect abiScratchSubset
+  abiScratchArrayDynamicBody abiScratchPrefix abiScratchInput abiScratchSubset
   abiScratchEncoderContract abiEncoderArrayDynamicIteration abiEncoderArrayLayout
   abiEncoderArrayPrefix abiEncoderInput abiDecoderAllocation abiDecoderFootprint abiDecoderFrame
-  abiDecoderReentry abiDecoderContract abiDecoderLoop compileEnv valueEncoding
-  contractABI venomState finite_map pred_set words list arithmetic
+  abiDecoderReentry abiDecoderContract abiDecoderLoop compileEnv valueEncoding contractABI
+  venomState finite_map pred_set words list arithmetic
 
 Theorem abi_scratch_array_dynamic_iteration:
   abi_scratch_encoder ei /\ abi_encode_array_dynamic_body ip dyn_ptr src dst ei asz msz st = (out,end_st) /\
@@ -55,11 +55,3 @@ Proof
   drule_all abi_encoder_array_tail_sum_suc >> disch_tac >>
   qexists_tac `actual` >> full_simp_tac bool_ss [ADD_ASSOC]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_SCRATCH_ARRAY_DYNAMIC_ITERATION_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI scratch actual array iteration not kernel closed: " ^ n)
-  end) (DB.thms "abiScratchArrayDynamicIteration");

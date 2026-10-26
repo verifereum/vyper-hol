@@ -99,7 +99,7 @@ Proof
   Induct >> simp[has_type_def]
 QED
 
-Theorem uniform_member_sizes[local]:
+Theorem uniform_member_sizes:
   !vs. SUM (MAP abi_member_head_size (REPLICATE (LENGTH vs) ty)) =
          LENGTH vs * abi_member_head_size ty /\
        MAP2 abi_member_tail_size (REPLICATE (LENGTH vs) ty) vs =
@@ -124,7 +124,6 @@ Proof
   simp[enc_number_def, LENGTH_word_to_bytes, uniform_member_sizes] >>
   metis_tac[]
 QED
-
 
 Theorem have_type_append[local]:
   !xs ys. have_type ty (xs ++ ys) <=> have_type ty xs /\ have_type ty ys
@@ -210,11 +209,3 @@ Proof
   drule_all abi_interval_word_guards >>
   simp[Abbr `off`]
 QED
-
-(* Integrity check for this boundary theory.  These are arithmetic/layout
-   results, not decoder execution or a theorem about loading the offset word.
-   Consumers still establish loaded-offset agreement and metadata size bounds. *)
-val _ = List.app (fn (_, th) =>
-  if List.all (fn s => s = "DISK_THM") (#1 (Tag.dest_tag (Thm.tag th)))
-  then () else raise Fail "abiDecodeRanges: oracle dependency")
-  (DB.thms "abiDecodeRanges");

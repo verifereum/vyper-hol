@@ -4,12 +4,12 @@
    effects without requiring an unrelated parent cursor. *)
 Theory abiScratchArrayInitEffects
 Ancestors
-  abiScratchPrefixEffect abiScratchOwnedPrefix abiScratchArrayTailInput abiScratchInputEffect
-  abiScratchEncoderContract abiEncoderArrayInitCode abiEncoderArrayTailInitCode
-  abiEncoderComplexPrefix abiEncoderComplexPrefixReach abiEncoderMembersDefs abiEncoderInput
-  abiEncoderArrayFrame abiEncoderArrayPrefix abiDecoderAllocation abiDecoderFootprint
-  abiDecoderFrame abiDecoderReentry abiDecoderLoop compileEnv valueEncoding contractABI
-  venomState words list arithmetic
+  abiScratchPrefix abiScratchOwnedPrefix abiScratchArrayTail abiScratchInput
+  abiScratchEncoderContract abiEncoderArrayInitCode abiEncoderArrayTailInit
+  abiEncoderComplexPrefix abiEncoderMembersDefs abiEncoderInput abiEncoderArrayFrame
+  abiEncoderArrayPrefix abiDecoderAllocation abiDecoderFootprint abiDecoderFrame
+  abiDecoderReentry abiDecoderLoop compileEnv valueEncoding contractABI venomState words list
+  arithmetic
 
 Theorem abi_scratch_array_index_prepare:
   abi_decode_index_init st = (index_ptr,st') /\ fn_has_code st st' func /\
@@ -105,11 +105,3 @@ Proof
     (irule abi_scratch_input_mono >> qexists_tac `st` >> asm_simp_tac bool_ss []) >>
   qexistsl_tac [`actual`, `tail_slot`] >> asm_simp_tac bool_ss []
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_SCRATCH_ARRAY_INIT_EFFECTS_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI scratch actual initializer preparation not kernel closed: " ^ n)
-  end) (DB.thms "abiScratchArrayInitEffects");

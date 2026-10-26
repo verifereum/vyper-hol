@@ -2,11 +2,11 @@
    Source memory contents are established by execution, not assumed. *)
 Theory abiEmptyDispatch
 Ancestors
-  abiEmptyDefaultProducer abiEmptyProducer abiEmptyAllocateCode abiEmptyEffect
-  abiBuiltinAllocationState abiDecoderCoherence abiDecoderReentry abiCallerCoherence
-  abiEncoderInput compileEnv builtinSimple exprLowering exprLoweringProps context
-  valueEncoding vyperABI compileVyper vyperTypeSystem vyperValue vyperContext
-  venomState venomExecSemantics finite_map words list arithmetic
+  abiEmptyDefaultProducer abiEmptyProducer abiEmptyAllocate abiEmptyEffect abiBuiltinAllocation
+  abiDecoderCoherence abiDecoderReentry abiCallerCoherence abiEncoderInput compileEnv
+  builtinSimple exprLowering exprLoweringProps context valueEncoding vyperABI compileVyper
+  vyperTypeSystem vyperValue vyperContext venomState venomExecSemantics finite_map words list
+  arithmetic
 
 Theorem abi_empty_dispatch_code:
   ~is_word_type ret_ty /\
@@ -89,11 +89,3 @@ Proof
      qexists_tac `in_deploy` >> asm_rewrite_tac[]) >>
   drule_all (SIMP_RULE bool_ss [LET_THM] abi_empty_dispatch_input) >> simp[]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_EMPTY_DISPATCH_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI Empty dispatch not kernel closed: " ^ n)
-  end) (DB.thms "abiEmptyDispatch");

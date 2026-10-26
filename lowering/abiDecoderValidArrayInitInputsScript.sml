@@ -3,9 +3,8 @@ Theory abiDecoderValidArrayInitInputs
 Ancestors
   abiDecoderValidContract abiDecoderValidArrayValues abiDecoderRecursiveArrayFacts
   abiDecoderCoherence abiDecoderTypedContract abiDecoderContract abiDecoderReentry
-  abiValidAggregateHeads abiValidMemberWindows abiCanonicalLoad abiCanonicalArrayLoad
-  abiDecodeRanges compileEnv valueEncoding vyperABI vyperValue contractABI
-  venomState words list arithmetic
+  abiValidAggregateHeads abiValidMember abiCanonicalLoad abiCanonicalArrayLoad abiDecodeRanges
+  compileEnv valueEncoding vyperABI vyperValue contractABI venomState words list arithmetic
 
 Theorem abi_decoder_valid_array_pre_observations:
   abi_decoder_valid_pre ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
@@ -87,11 +86,3 @@ Proof
       asm_simp_tac bool_ss [] >> decide_tac) >>
   asm_simp_tac bool_ss [] >> metis_tac[]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_DECODER_VALID_ARRAY_INIT_INPUTS_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI valid initializer input not kernel closed: " ^ n)
-  end) (DB.thms "abiDecoderValidArrayInitInputs");

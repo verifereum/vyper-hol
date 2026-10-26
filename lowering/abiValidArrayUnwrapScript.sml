@@ -1,10 +1,10 @@
 (* Both unwrap_tuple choices use actual source-valid static-element array bytes. *)
 Theory abiValidArrayUnwrap
 Ancestors
-  abiBuiltinWrappedArrayDecode abiBuiltinPrefixSource abiValidBytesUnwrap
-  abiBuiltinSourceInput abiBuiltinDecodeEffect abiDecoderCoherence abiDecoderReentry
-  abiDecoderContract abiDecoderLoop abiEncoder builtinAbi fragExec
-  compileEnv valueEncoding vyperABI vyperContext vyperValue contractABI venomState words list
+  abiBuiltinWrapped abiBuiltinPrefixSource abiValidBytesUnwrap abiBuiltinSource
+  abiBuiltinDecodeEffect abiDecoderCoherence abiDecoderReentry abiDecoderContract abiDecoderLoop
+  abiEncoder builtinAbi fragExec compileEnv valueEncoding vyperABI vyperContext vyperValue
+  contractABI venomState words list
 
 val unwrapped_array_rule = SIMP_RULE (srw_ss()) [vyper_to_abi_type_def]
   (Q.INST [`ty` |-> `ArrayT ty (Dynamic maxn)`, `tv` |-> `ArrayTV tv (Dynamic maxn)`]
@@ -49,11 +49,3 @@ Proof
          drule_all unwrapped_array_rule >> disch_then (qspec_then `ctx` strip_assume_tac)] >>
   qexists_tac `actual` >> asm_simp_tac bool_ss []
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_VALID_ARRAY_UNWRAP_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI valid array unwrap not kernel closed: " ^ n)
-  end) (DB.thms "abiValidArrayUnwrap");

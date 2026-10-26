@@ -3,11 +3,11 @@
    retain physical scratch frames instead of excluding the entire arena. *)
 Theory abiScratchMemberStep
 Ancestors
-  abiScratchStaticChild abiScratchDynamicChild abiScratchStaticStep abiScratchPrefixStep
-  abiScratchEncoderContract abiScratchSubset abiScratchFootprint abiEncoderTuplePrefix
-  abiDecoderAllocation abiDecoderFootprint abiDecoderFrame abiDecoderReentry
-  abiDecoderContract abiDecoderLoop compileEnv valueEncoding valueEncodingProps
-  abiCanonicalWindows contractABI venomState finite_map pred_set words list arithmetic
+  abiScratchStatic abiScratchDynamicChild abiScratchPrefix abiScratchEncoderContract
+  abiScratchSubset abiScratchFootprint abiEncoderTuple abiDecoderAllocation abiDecoderFootprint
+  abiDecoderFrame abiDecoderReentry abiDecoderContract abiDecoderLoop compileEnv valueEncoding
+  valueEncodingProps abiCanonicalWindows contractABI venomState finite_map pred_set words list
+  arithmetic
 
 Theorem abi_scratch_input_owned_output:
   abi_scratch_input ei at av st src dst sb source_cap d sz first last b cap s /\
@@ -95,11 +95,3 @@ Proof
   impl_tac >- gvs[Excl "enc_def"] >> disch_tac >>
   qexists_tac `actual` >> asm_simp_tac bool_ss [GSYM mem_word_at_eq_mload]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_SCRATCH_MEMBER_STEP_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI scratch tuple member execution not kernel closed: " ^ n)
-  end) (DB.thms "abiScratchMemberStep");

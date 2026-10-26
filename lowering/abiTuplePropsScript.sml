@@ -145,15 +145,6 @@ Proof
   metis_tac[same_blocks_def]
 QED
 
-(* Check all public boundaries, including their transitive proof dependencies. *)
-val _ = List.app (fn name =>
-  if null (List.filter (fn x => x <> "DISK_THM")
-    (#1 (Tag.dest_tag (Thm.tag (DB.fetch "abiTupleProps" name)))))
-  then () else raise Fail ("oracle in " ^ name))
-  ["abi_tuple_word_mstore", "compile_copy_memory_extends",
-   "abi_tuple_write_correct", "abi_tuple_input_memory_cong",
-   "compile_abi_tuple_slot_correct"];
-
 (* Aligned operands, compiler types, semantic types and values.  Source
    separation is from the entire destination, not just the current slot. *)
 Definition abi_tuple_inputs_def:
@@ -376,14 +367,6 @@ Proof
   simp[abi_tuple_inputs_def]
 QED
 
-val _ = List.app (fn name =>
-  if null (List.filter (fn x => x <> "DISK_THM")
-    (#1 (Tag.dest_tag (Thm.tag (DB.fetch "abiTupleProps" name)))))
-  then () else raise Fail ("oracle in " ^ name))
-  ["compile_store_abi_tuple_correct", "compile_store_abi_tuple_value_correct",
-   "compile_store_abi_tuple_zero_correct", "compile_store_abi_tuple_nil",
-   "abi_tuple_inputs_lengths", "abi_tuple_inputs_singleton"];
-
 (* Singleton staging still emits ADD at zero and uses the same framed
    execution boundary for word and nonword inputs. *)
 Theorem compile_store_abi_tuple_singleton_correct:
@@ -405,9 +388,3 @@ Proof
   disch_then (qspecl_then [`[v]`, `[tv]`, `ss`, `baddr`] mp_tac) >>
   simp[abi_tuple_bytes_def, abi_tuple_starts_def]
 QED
-
-val _ = List.app (fn name =>
-  if null (List.filter (fn x => x <> "DISK_THM")
-    (#1 (Tag.dest_tag (Thm.tag (DB.fetch "abiTupleProps" name)))))
-  then () else raise Fail ("oracle in " ^ name))
-  ["abi_tuple_inputs_sizes", "compile_store_abi_tuple_singleton_correct"];

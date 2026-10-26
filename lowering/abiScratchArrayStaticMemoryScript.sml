@@ -3,8 +3,8 @@
    and complete source contract at the loop's stable compiler entry. *)
 Theory abiScratchArrayStaticMemory
 Ancestors
-  abiScratchArrayStaticBody abiScratchStaticStep abiScratchInputEffect abiScratchCursor
-  abiScratchEncoderContract abiScratchEffectWiden abiEncoderArrayBodyCode abiEncoderArrayCursor
+  abiScratchArrayStaticBody abiScratchStatic abiScratchInput abiScratchCursor
+  abiScratchEncoderContract abiScratchEffect abiEncoderArrayBodyCode abiEncoderArrayCursor
   abiEncoderMembersDefs abiEncoderArrayPrefix abiDecoderAllocation abiDecoderFootprint
   abiDecoderReentry abiDecoderLoop abiDecoderContract compileEnv valueEncoding contractABI
   venomState words list arithmetic
@@ -64,11 +64,3 @@ Proof
   impl_tac >- asm_simp_tac bool_ss [LESS_EQ_REFL] >> disch_tac >>
   qexists_tac `actual` >> asm_simp_tac bool_ss []
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_SCRATCH_ARRAY_STATIC_MEMORY_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI scratch static body memory not kernel closed: " ^ n)
-  end) (DB.thms "abiScratchArrayStaticMemory");

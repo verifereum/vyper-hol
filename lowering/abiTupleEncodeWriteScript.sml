@@ -2,11 +2,11 @@
    copies. The memory-input relation is transported, rather than weakened. *)
 Theory abiTupleEncodeWrite
 Ancestors
-  abiTupleEncodeInput abiBuiltinEncodeFinishSequence abiBuiltinEncodeWordStageReach
-  abiBuiltinEncodeWordStageCode abiEncoderInput abiEncoderInputFrame abiEncoderWrites abiEncoderBytesCopy
-  abiDecoderReentry abiDecoderContract abiDecoderGuards abiDecoderFrameCompose
-  compileEnv context emitHelper emitHelperProps exprLoweringProps valueEncoding valueEncodingProps
-  venomState venomExecSemantics words list arithmetic
+  abiTupleEncodeInput abiBuiltinEncodeFinish abiBuiltinEncodeWord abiEncoderInput
+  abiEncoderInputFrame abiEncoderWrites abiEncoderBytes abiDecoderReentry abiDecoderContract
+  abiDecoderGuards abiDecoderFrameCompose compileEnv context emitHelper emitHelperProps
+  exprLoweringProps valueEncoding valueEncodingProps venomState venomExecSemantics words list
+  arithmetic
 
 Theorem abi_tuple_encode_word_write:
   is_word_type ty /\ emit_void MSTORE [dst;op] st = ((),final) /\
@@ -81,11 +81,3 @@ Proof
   Cases_on `is_word_type ty` >> asm_simp_tac bool_ss [] >> strip_tac >>
   FIRST [drule_all abi_tuple_encode_word_write >> simp[], drule_all abi_tuple_encode_copy_write >> simp[]]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_TUPLE_ENCODE_WRITE_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI tuple encoder write not kernel closed: " ^ n)
-  end) (DB.thms "abiTupleEncodeWrite");

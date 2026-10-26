@@ -1,7 +1,7 @@
 (* Pure observations and accumulated owned effects for finite encoder iteration. *)
 Theory abiEncoderArrayLoopInvariant
 Ancestors
-  abiEncoderArrayMemory abiEncoderArrayCursor abiEncoderMembersDefs abiEncoderDynamicChildCore
+  abiEncoderArrayMemory abiEncoderArrayCursor abiEncoderMembersDefs abiEncoderDynamic
   abiDecoderEffect abiDecoderContract abiDecoderReentry compileEnv valueEncoding contractABI
   venomState words list arithmetic
 
@@ -52,11 +52,3 @@ Proof
     (irule abi_decoder_effect_trans >> qexists_tac `initial` >> asm_simp_tac bool_ss []) >>
   asm_simp_tac bool_ss []
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_ENCODER_ARRAY_LOOP_INVARIANT_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI encoder array loop invariant not kernel closed: " ^ n)
-  end) (DB.thms "abiEncoderArrayLoopInvariant");

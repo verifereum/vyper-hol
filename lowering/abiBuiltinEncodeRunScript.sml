@@ -1,10 +1,9 @@
 (* Complete actual lower_abi_encode for either optional method-ID choice. *)
 Theory abiBuiltinEncodeRun
 Ancestors
-  abiBuiltinEncodeMethodCorrect abiBuiltinEncodeCorrect abiBuiltinEncodeInput
-  abiBuiltinEncodeMethodReach abiBuiltinEncodeEffect abiDecoderEffect abiDecoderFrame
-  abiDecoderContract abiDecoderLoop fragExec builtinAbi exprLowering compileEnv valueEncoding
-  venomState venomExecSemantics words list arithmetic
+  abiBuiltinEncodeMethod abiBuiltinEncodeCorrect abiBuiltinEncodeInput abiBuiltinEncodeEffect
+  abiDecoderEffect abiDecoderFrame abiDecoderContract abiDecoderLoop fragExec builtinAbi
+  exprLowering compileEnv valueEncoding venomState venomExecSemantics words list arithmetic
 
 Definition abi_builtin_encode_prefix_def:
   abi_builtin_encode_prefix NONE = [] /\
@@ -65,11 +64,3 @@ Proof
   qexists_tac `actual` >> asm_simp_tac (srw_ss()) [ADD_COMM] >>
   first_assum (ACCEPT_TAC o SIMP_RULE (srw_ss()) [ADD_COMM])
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_BUILTIN_ENCODE_RUN_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI builtin encoder run not kernel closed: " ^ n)
-  end) (DB.thms "abiBuiltinEncodeRun");

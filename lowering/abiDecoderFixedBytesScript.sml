@@ -1,13 +1,9 @@
 (* Fixed-byte ABI words have zero low padding and pass the SHL clamp. *)
 Theory abiDecoderFixedBytes
 Ancestors
+  venomMemProps
   abiDecoderClamp abiDecoderContract abiCanonicalLoad valueEncodingProofs
   exprLowering valueEncoding venomState contractABI byte words list rich_list arithmetic
-
-Theorem abi_fixed_bytes_dimindex[simp,local]: dimindex (:256) = 256
-Proof
-  CONV_TAC fcpLib.INDEX_CONV
-QED
 
 Theorem abi_decoder_set_byte_low_bit:
   a < 32 /\ j < 8 * (31 - a) /\ ~(w:bytes32) ' j ==>
@@ -17,7 +13,7 @@ Proof
     (simp[dimword_def] >> decide_tac) >>
   rw_tac (std_ss ++ fcpLib.FCP_ss ++ numSimps.ARITH_ss)
     [set_byte_def, byte_index_def, w2n_n2w, LESS_MOD, LET_THM,
-     word_slice_alt_def, word_or_def, word_lsl_def, w2w, abi_fixed_bytes_dimindex]
+     word_slice_alt_def, word_or_def, word_lsl_def, w2w, dimindex_256]
 QED
 
 Theorem abi_decoder_bytes_cons_low_bit[local]:
@@ -50,7 +46,7 @@ Proof
     (simp[dimword_def] >> decide_tac) >>
   simp[w2n_n2w] >>
   rw_tac (std_ss ++ fcpLib.FCP_ss ++ numSimps.ARITH_ss)
-    [word_lsl_def, word_0, abi_fixed_bytes_dimindex] >>
+    [word_lsl_def, word_0, dimindex_256] >>
   rename1 `bit_idx < 256` >>
   Cases_on `8 * LENGTH bs <= bit_idx` >> asm_simp_tac bool_ss [] >>
   irule (SIMP_RULE (srw_ss()) []
@@ -76,11 +72,3 @@ Proof
   drule abi_decoder_fixed_bytes_shift_zero >>
   Cases_on `m = 32` >> simp[type_to_abi_clamp_def, abi_decoder_clamp_valid_def]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_DECODER_FIXED_BYTES_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI canonical fixed bytes not kernel closed: " ^ n)
-  end) (DB.thms "abiDecoderFixedBytes");

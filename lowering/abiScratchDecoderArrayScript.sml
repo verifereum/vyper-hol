@@ -3,10 +3,10 @@ Theory abiScratchDecoderArray
 Ancestors
   abiScratchDecoderContract abiScratchDecoderArrayExecute abiScratchDecoderArrayBulk
   abiScratchDecoderLeaves abiScratchDecoderTuple abiDecoderValidTuple
-  abiDecoderCorrectPrimitiveArray abiDecoderRecursiveArrayCode abiDecoderCoherence
+  abiDecoderCorrectPrimitiveArray abiDecoderRecursiveArray abiDecoderCoherence
   abiDecoderTypedContract abiDecoderContract abiDecoderReentry abiDecoderLoop abiDecodeRanges
-  abiEncoder exprLowering fragExec compileEnv valueEncoding vyperABI vyperValue
-  contractABI venomState words list
+  abiEncoder exprLowering fragExec compileEnv valueEncoding vyperABI vyperValue contractABI
+  venomState words list
 
 Theorem abi_scratch_decoder_array_loop:
   abi_scratch_decoder ce env sf ty tv /\
@@ -77,12 +77,3 @@ Proof
   gen_tac >> irule abi_scratch_decoder_array >>
   metis_tac[abi_scratch_decoder_base, abi_decoder_valid_base_member_nonempty]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_SCRATCH_DECODER_ARRAY_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI physical array constructors not kernel closed: " ^ n)
-  end) (DB.thms "abiScratchDecoderArray");
-

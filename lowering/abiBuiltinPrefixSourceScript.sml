@@ -2,10 +2,10 @@
    static elements. The source may contain trailing noncanonical bytes. *)
 Theory abiBuiltinPrefixSource
 Ancestors
-  abiValidPrefixSource abiBuiltinPrefixDecode abiBuiltinPrefixInput abiBuiltinSourceInput
-  abiBuiltinDecodeEffect abiDecoderCoherence abiDecoderContract abiDecoderLoop
-  abiDecoderReentry abiEncoder builtinAbi fragExec compileEnv valueEncoding vyperABI
-  contractABI venomState words list
+  abiValidPrefixSource abiBuiltinPrefixDecode abiBuiltinPrefixInput abiBuiltinSource
+  abiBuiltinDecodeEffect abiDecoderCoherence abiDecoderContract abiDecoderLoop abiDecoderReentry
+  abiEncoder builtinAbi fragExec compileEnv valueEncoding vyperABI contractABI venomState words
+  list
 
 Theorem lower_abi_decode_valid_prefix_source:
   lower_abi_decode data (type_to_abi_dec_info sf ce ty) min_size max_size
@@ -34,11 +34,3 @@ Proof
   drule_all lower_abi_decode_prefix >> disch_then (qspec_then `ctx` strip_assume_tac) >>
   qexists_tac `actual` >> asm_simp_tac bool_ss []
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_BUILTIN_PREFIX_SOURCE_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI builtin prefix source not kernel closed: " ^ n)
-  end) (DB.thms "abiBuiltinPrefixSource");

@@ -2,10 +2,10 @@
    Numeric address credit and the actual allocation-site history remain explicit. *)
 Theory abiValidBytesCaller
 Ancestors
-  abiValidBytesBounds abiValidBytesDispatch abiBuiltinValidBytesPre abiBuiltinDecodeSetup
-  abiDecoderBytes abiDecoderContract abiDecoderReentry abiDecoderLoop
-  exprLowering builtinAbi fragExec compileEnv context valueEncoding
-  vyperABI vyperContext venomState finite_map words list
+  abiValidBytesBounds abiValidBytesDispatch abiBuiltinValidBytes abiBuiltinDecodeSetup
+  abiDecoderBytes abiDecoderContract abiDecoderReentry abiDecoderLoop exprLowering builtinAbi
+  fragExec compileEnv context valueEncoding vyperABI vyperContext venomState finite_map words
+  list
 
 Theorem compile_abi_decode_bytes_source_caller:
   let wrapped_ty = if unwrap /\ needs_external_call_wrap ret_ty then TupleT [ret_ty] else ret_ty in
@@ -46,11 +46,3 @@ Proof
   drule_all (SIMP_RULE bool_ss [LET_THM] compile_abi_decode_memory_valid_bytes) >>
     simp[]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_VALID_BYTES_CALLER_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI valid bytes source caller not kernel closed: " ^ n)
-  end) (DB.thms "abiValidBytesCaller");

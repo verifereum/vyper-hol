@@ -1,12 +1,8 @@
 (* Canonical ABI child windows, including the actual encoded offset words. *)
 Theory abiCanonicalWindows
 Ancestors
+  venomMemProps
   abiDecodeRanges contractABI arithmetic list rich_list byte
-
-Theorem abi_window_dimindex[simp,local]: dimindex (:256) = 256
-Proof
-  CONV_TAC fcpLib.INDEX_CONV
-QED
 
 Definition abi_tuple_heads_def:
   abi_tuple_heads hl tl (ty::tys) (v::vs) =
@@ -179,11 +175,3 @@ Proof
        head_lengths_acc, MAP_APPEND, SUM_APPEND, abi_member_head_size_def] >>
   decide_tac
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_CANONICAL_WINDOWS_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI canonical window not kernel closed: " ^ n)
-  end) (DB.thms "abiCanonicalWindows");

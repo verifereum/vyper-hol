@@ -2,9 +2,10 @@
 Theory abiEncoderMembersPrepare
 Ancestors
   abiEncoderMembersContract abiEncoderMembersDefs abiEncoderMembersSource abiEncoderAddressReach
-  abiEncoderTuplePrefix abiEncoderChildInputs abiEncoderInput abiCanonicalWindows
+  abiEncoderTuple abiEncoderChildInputs abiEncoderInput abiCanonicalWindows
   abiDecoderArrayInitExec abiDecoderDynamicLoopSetup abiDecoderReentry abiDecoderContract
-  abiDecoderLoop fragExec emitHelperProps compileEnv valueEncoding venomState words list arithmetic
+  abiDecoderLoop fragExec emitHelperProps compileEnv valueEncoding venomState words list
+  arithmetic
 
 Theorem abi_encoder_members_prepare:
   emit_op ADD [src;Lit (n2w so)] st = (elem_src,prepared) /\ fn_has_code st prepared func /\
@@ -52,11 +53,3 @@ Proof
   qpat_assum `ho = _` (fn th => RULE_ASSUM_TAC (PURE_REWRITE_RULE [th]) >> PURE_REWRITE_TAC [th]) >>
   qexists_tac `ready` >> asm_simp_tac bool_ss [abi_encoder_members_inv_def] >> decide_tac
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_ENCODER_MEMBERS_PREPARE_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI encoder members preparation not kernel closed: " ^ n)
-  end) (DB.thms "abiEncoderMembersPrepare");

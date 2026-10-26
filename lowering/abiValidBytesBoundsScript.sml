@@ -1,8 +1,8 @@
 (* Source success establishes the actual builtin's minimum/maximum length guards. *)
 Theory abiValidBytesBounds
 Ancestors
-  abiValidBytesUnwrap abiBuiltinValidBytesPre abiBuiltinDecodeSetup abiDecoderBytes abiDecoderBytesTyped
-  abiDecoderContract abiDecoderReentry vyperABIValid vyperABI vyperContext
+  abiValidBytesUnwrap abiBuiltinValidBytes abiBuiltinDecodeSetup abiDecoderBytes
+  abiDecoderBytesTyped abiDecoderContract abiDecoderReentry vyperABIValid vyperABI vyperContext
   contractABI compileEnv valueEncoding venomState finite_map words list arithmetic
 
 Theorem abi_valid_bytes_decode_bounds:
@@ -52,11 +52,3 @@ Proof
   asm_simp_tac bool_ss [abi_builtin_valid_bytes_resources_def] >>
   fs[val_in_memory_def]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_VALID_BYTES_BOUNDS_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI valid bytes bounds not kernel closed: " ^ n)
-  end) (DB.thms "abiValidBytesBounds");

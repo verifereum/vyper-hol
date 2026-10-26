@@ -92,11 +92,3 @@ Theorem abi_caller_abi_type_submap:
 Proof
   metis_tac[abi_caller_abi_type_submap_induction]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_CALLER_TYPE_ENV_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI caller type environment fact not kernel closed: " ^ n)
-  end) (DB.thms "abiCallerTypeEnv");

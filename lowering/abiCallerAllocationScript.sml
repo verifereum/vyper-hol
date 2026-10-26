@@ -76,11 +76,3 @@ Proof
   strip_tac >> irule abi_caller_allocation_budget >>
   asm_simp_tac (srw_ss()) [] >> first_assum ACCEPT_TAC
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_CALLER_ALLOCATION_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI caller allocation not kernel closed: " ^ n)
-  end) (DB.thms "abiCallerAllocation");

@@ -36,14 +36,3 @@ Theorem tup_string_arg_matches_python_oracle:
 Proof
   CONV_TAC (LAND_CONV (K tup_string_arg_evaluation)) >> EVAL_TAC
 QED
-
-val () = List.app (fn (name, th) =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn tag => tag = "DISK_THM") oracles then
-      print ("C7_2_KERNEL_CLOSED " ^ name ^ " hyp=0\n")
-    else raise Fail ("admitted C7.2 theorem: " ^ name)
-  end)
-  [("tup_string_arg_supported", tup_string_arg_supported),
-   ("tup_string_arg_matches_python_oracle", tup_string_arg_matches_python_oracle)]

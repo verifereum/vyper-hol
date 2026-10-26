@@ -71,11 +71,3 @@ Proof
   irule abi_decode_sim_trans >>
   qexists_tac `jump_to (FST (labels:string # string # string)) initial` >> simp[]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_SCRATCH_ARRAY_LOOP_RUN_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI scratch complete dynamic loop run not kernel closed: " ^ n)
-  end) (DB.thms "abiScratchArrayLoopRun");

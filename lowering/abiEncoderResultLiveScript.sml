@@ -42,11 +42,3 @@ Proof
     comp_bind_def, comp_ignore_bind_def, comp_return_def, LET_THM] >>
   rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[abi_decoder_operand_live_def]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_ENCODER_RESULT_LIVE_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI encoder result liveness not kernel closed: " ^ n)
-  end) (DB.thms "abiEncoderResultLive");

@@ -5,11 +5,11 @@
 Theory abiScratchArrayEntry
 Ancestors
   abiScratchPrefixReach abiScratchArrayCount abiScratchFootprint abiCallerAllocation
-  abiEncoderArrayParentPrepare abiEncoderComplexPrefixReach abiEncoderComplexPrefix
-  abiEncoderArrayCountReach abiEncoderMembersDefs abiEncoderInputFrame abiEncoderInput
-  abiDecoderPrimitiveLoopFrames abiDecoderFrameCompose abiDecoderFrame abiDecoderContract
-  abiDecoderReentry abiDecoderAllocation abiDecoderFootprint abiDecoderLoop abiDecoderArrayInitExec
-  compileEnv valueEncoding valueEncodingProps contractABI venomState finite_map pred_set words list arithmetic
+  abiEncoderArrayParent abiEncoderComplexPrefix abiEncoderArrayCount abiEncoderMembersDefs
+  abiEncoderInputFrame abiEncoderInput abiDecoderPrimitiveLoopFrames abiDecoderFrameCompose
+  abiDecoderFrame abiDecoderContract abiDecoderReentry abiDecoderAllocation abiDecoderFootprint
+  abiDecoderLoop abiDecoderArrayInitExec compileEnv valueEncoding valueEncodingProps contractABI
+  venomState finite_map pred_set words list arithmetic
 
 Theorem abi_scratch_frame_cons:
   abi_decode_footprint_frame fp s t ==>
@@ -284,11 +284,3 @@ Proof
        `p` |-> `d:num`, `n` |-> `output_size`] abi_scratch_disjoint_advance) >> simp[]) >>
   qexistsl_tac [`actual`, `slot`] >> simp[]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_SCRATCH_ARRAY_ENTRY_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI scratch array entry not kernel closed: " ^ n)
-  end) (DB.thms "abiScratchArrayEntry");

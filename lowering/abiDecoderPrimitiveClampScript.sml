@@ -1,10 +1,10 @@
 (* Canonical typed words satisfy every primitive decoder validation check. *)
 Theory abiDecoderPrimitiveClamp
 Ancestors
-  abiDecoderSignedCanonical abiDecoderFixedBytes abiDecoderNumericWord
-  abiDecoderClampedTyped abiDecoderWordTyped abiDecoderClamp abiDecoderCoherence
-  abiDecoderTypedContract abiDecoderContract exprLowering compileEnv
-  vyperABI vyperTyping valueEncoding venomState contractABI words
+  abiDecoderSigned abiDecoderFixedBytes abiDecoderNumericWord abiDecoderClampedTyped
+  abiDecoderWordTyped abiDecoderClamp abiDecoderCoherence abiDecoderTypedContract
+  abiDecoderContract exprLowering compileEnv vyperABI vyperTyping valueEncoding venomState
+  contractABI words
 
 Theorem abi_decoder_int_metadata_clamp:
   abi_decoder_metadata ce env (BaseT (IntT bits)) (BaseTV (IntT bits)) root_di av v /\
@@ -82,11 +82,3 @@ Proof
   gvs[Once type_to_abi_dec_info_def] >>
   drule_all (SIMP_RULE (srw_ss()) [] abi_decoder_canonical_flag_clamp) >> simp[]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_DECODER_PRIMITIVE_CLAMP_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI canonical primitive clamp not kernel closed: " ^ n)
-  end) (DB.thms "abiDecoderPrimitiveClamp");

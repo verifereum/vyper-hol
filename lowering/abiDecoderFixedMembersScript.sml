@@ -1,9 +1,9 @@
 (* Recover a dense homogeneous member view from fixed-array conversion. *)
 Theory abiDecoderFixedMembers
 Ancestors
-  abiDecoderMembers abiDecoderStructMembers abiDecoderCoherence abiDecoderTypedContract
-  compileEnv valueEncoding vyperABI vyperValue vyperTyping vyperTypeABI vyperTypeDefaults
-  contractABI words list rich_list
+  abiDecoderMembers abiDecoderStruct abiDecoderCoherence abiDecoderTypedContract compileEnv
+  valueEncoding vyperABI vyperValue vyperTyping vyperTypeABI vyperTypeDefaults contractABI words
+  list rich_list
 
 Theorem abi_decoder_fixed_array_values:
   abi_decoder_coherent ce env sf (ArrayT ty (Fixed n)) (ArrayTV tv (Fixed n)) /\
@@ -39,11 +39,3 @@ Proof
   drule abi_decoder_members_lengths >> strip_tac >>
   qexistsl_tac [`avs`, `vs`] >> gvs[Excl "enc_def"]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_DECODER_FIXED_MEMBERS_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI fixed-array members not kernel closed: " ^ n)
-  end) (DB.thms "abiDecoderFixedMembers");

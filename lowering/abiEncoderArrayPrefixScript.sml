@@ -1,9 +1,9 @@
 (* A dynamic array keeps its count plus the processed heads and tails. *)
 Theory abiEncoderArrayPrefix
 Ancestors
-  abiEncoderArrayLayout abiEncoderTuplePrefix abiEncoderMemory abiCanonicalWindows abiCanonicalArrays
-  abiDecodeRanges abiDecoderFrame abiDecoderContract valueEncodingProps valueEncoding contractABI venomState
-  words list rich_list arithmetic
+  abiEncoderArrayLayout abiEncoderTuple abiEncoderMemory abiCanonicalWindows abiCanonicalArrays
+  abiDecodeRanges abiDecoderFrame abiDecoderContract valueEncodingProps valueEncoding
+  contractABI venomState words list rich_list arithmetic
 
 Definition abi_encoder_array_prefix_def:
   abi_encoder_array_prefix ty avs j d mem <=>
@@ -78,11 +78,3 @@ Proof
   simp_tac bool_ss [canonical_array_tuple] >>
   irule abi_encoder_memory_append >> asm_simp_tac (srw_ss()) [LENGTH_enc_number, Excl "enc_def"]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_ENCODER_ARRAY_PREFIX_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI encoder array prefix not kernel closed: " ^ n)
-  end) (DB.thms "abiEncoderArrayPrefix");

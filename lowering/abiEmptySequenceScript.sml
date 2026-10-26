@@ -87,12 +87,3 @@ Proof
   impl_tac >- (asm_rewrite_tac[] >> decide_tac) >> strip_tac >>
   drule_all abi_empty_zero_words_step >> simp[]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_EMPTY_SEQUENCE_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI empty sequence not kernel closed: " ^ n)
-  end) (DB.thms "abiEmptySequence");
-

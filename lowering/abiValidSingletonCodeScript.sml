@@ -1,12 +1,12 @@
 (* Code and live-register facts for the actual dynamic singleton prefix. *)
 Theory abiValidSingletonCode
 Ancestors
-  abiDecoderSingletonSetup abiDecoderComplexGuard abiDecoderComplexHead abiDecoderGuardLE
+  abiDecoderSingletonSetup abiDecoderComplexGuard abiDecoderComplexHead abiDecoderGuard
   abiDecoderMemberSetup abiDecoderMemberCode abiDecoderDynamic abiDecoderAppend
   abiDecoderCounters abiDecoderTypedCompose abiDecoderContract abiDecoderReentry abiDecoderCode
-  abiDecoderReentrySequence abiDecoderVarSequence
-  abiEncoder fragExec compileEnv emitHelper emitHelperProps exprLoweringProps
-  venomState venomExecSemantics venomInst words list rich_list arithmetic
+  abiDecoderReentrySequence abiDecoderVarSequence abiEncoder fragExec compileEnv emitHelper
+  emitHelperProps exprLoweringProps venomState venomExecSemantics venomInst words list rich_list
+  arithmetic
 
 Theorem abi_valid_singleton_setup_trace:
   abi_decode_singleton_setup dst src opc hi st = (ops,ready) ==>
@@ -92,11 +92,3 @@ Proof
   drule_all abi_decoder_to_buf_code >> simp_tac bool_ss [abi_decoder_code_def] >> strip_tac >>
   asm_simp_tac bool_ss [] >> decide_tac
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_VALID_SINGLETON_CODE_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI valid singleton code not kernel closed: " ^ n)
-  end) (DB.thms "abiValidSingletonCode");

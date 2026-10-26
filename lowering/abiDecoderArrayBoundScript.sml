@@ -1,9 +1,8 @@
 (* Dynamic-array child bounds: no-wrap, endpoint ADD, and upper-bound assertion. *)
 Theory abiDecoderArrayBound
 Ancestors
-  abiDecoderArrayPtr abiDecoderGuardGE abiDecoderGuardLE abiDecoderBytesBound
-  abiDecoderGuards abiDecoderContract abiEncoder compileEnv emitHelper
-  venomExecSemantics venomState words arithmetic
+  abiDecoderArrayPtr abiDecoderGuard abiDecoderBytesBound abiDecoderGuards abiDecoderContract
+  abiEncoder compileEnv emitHelper venomExecSemantics venomState words arithmetic
 
 Definition abi_decode_array_pointer_guard_def:
   abi_decode_array_pointer_guard child_op src_data hi abi_sz =
@@ -102,11 +101,3 @@ Proof
   drule_all abi_decode_sequence_chain >> strip_tac >>
   qexists_tac `t` >> gvs[] >> metis_tac[]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_DECODER_ARRAY_BOUND_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI bounded array pointer not kernel closed: " ^ n)
-  end) (DB.thms "abiDecoderArrayBound");

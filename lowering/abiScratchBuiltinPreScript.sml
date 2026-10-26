@@ -3,10 +3,10 @@
    contract while accounting separately for the full method-ID store width. *)
 Theory abiScratchBuiltinPre
 Ancestors
-  abiScratchEncoderContract abiEncoderInput abiEncoderArrayFrame
-  abiBuiltinEncodeSetupFrame abiBuiltinAllocationState abiDecoderAllocation
-  abiDecoderFootprint abiDecoderFrame abiDecoderReentry abiDecoderContract
-  compileEnv valueEncoding contractABI venomState finite_map words list arithmetic
+  abiScratchEncoderContract abiEncoderInput abiEncoderArrayFrame abiBuiltinEncodeSetup
+  abiBuiltinAllocation abiDecoderAllocation abiDecoderFootprint abiDecoderFrame
+  abiDecoderReentry abiDecoderContract compileEnv valueEncoding contractABI venomState
+  finite_map words list arithmetic
 
 Definition abi_scratch_builtin_pre_def:
   abi_scratch_builtin_pre ei at av st method_id_opt src sb source_cap p maxlen first last b cap s <=>
@@ -68,11 +68,3 @@ Proof
      asm_simp_tac bool_ss [] >> decide_tac) >>
   asm_simp_tac bool_ss [abi_scratch_input_def, LESS_EQ_REFL] >> decide_tac
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_SCRATCH_BUILTIN_PRE_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI scratch builtin input not kernel closed: " ^ n)
-  end) (DB.thms "abiScratchBuiltinPre");

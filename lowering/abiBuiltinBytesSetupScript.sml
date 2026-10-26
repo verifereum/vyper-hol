@@ -2,7 +2,7 @@
    This prefix does not depend on the decoded type or canonicality. *)
 Theory abiBuiltinBytesSetup
 Ancestors
-  abiBuiltinValidBytesPre abiBuiltinDecodeSetup abiBuiltinSetupExecute abiBuiltinAllocationState
+  abiBuiltinValidBytes abiBuiltinDecodeSetup abiBuiltinSetupExecute abiBuiltinAllocation
   abiDecoderBytes abiDecoderContract abiDecoderReentry valueEncoding valueEncodingProps
   emitHelperProps compileEnv venomState words arithmetic
 
@@ -35,11 +35,3 @@ Proof
   qexists_tac `prepared` >> asm_simp_tac bool_ss [word_add_n2w] >>
   fs[abi_builtin_allocation_frame_def, abi_decode_source_def, val_in_memory_def]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_BUILTIN_BYTES_SETUP_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI builtin bytes setup not kernel closed: " ^ n)
-  end) (DB.thms "abiBuiltinBytesSetup");

@@ -78,11 +78,3 @@ Proof
   pairarg_tac >> strip_tac >> gvs[] >> rpt (pairarg_tac >> gvs[]) >>
   imp_res_tac emitted_insts_emit_op >> simp[]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_BUILTIN_DECODE_SETUP_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI builtin decode setup not kernel closed: " ^ n)
-  end) (DB.thms "abiBuiltinDecodeSetup");

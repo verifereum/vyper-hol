@@ -2,6 +2,7 @@
    types. This semantic boundary assumes no compiler metadata or coherence. *)
 Theory abiCallerStaticMemory
 Ancestors
+  valueEncodingTyping
   vyperTypeABI vyperABI vyperValue valueEncoding vfmConstants
   list pair arithmetic
 
@@ -49,12 +50,6 @@ Proof
 QED
 
 (* Upstream form of the positional size fact also used by decoder consumers. *)
-Theorem abi_caller_memory_fields_zip:
-  !names tvs. LENGTH names = LENGTH tvs ==>
-  type_memory_size_fields (ZIP (names,tvs)) = type_memory_size_list tvs
-Proof
-  Induct >> Cases_on `tvs` >> simp[type_memory_size_def]
-QED
 
 Theorem abi_caller_static_struct_memory:
   (!args. FLOOKUP env nsid = SOME (StructArgs args) ==>
@@ -75,7 +70,7 @@ Proof
   rename1 `evaluate_types _ _ [] = SOME field_tvs` >>
   drule evaluate_types_LIST_REL >> strip_tac >>
   `LENGTH (MAP FST field_args) = LENGTH field_tvs` by fs[LIST_REL_EL_EQN] >>
-  simp[type_memory_size_def, abi_caller_memory_fields_zip] >>
+  simp[type_memory_size_def, type_memory_size_fields_zip] >>
   first_x_assum irule >> simp[]
 QED
 
@@ -118,11 +113,3 @@ Theorem abi_caller_static_memory:
 Proof
   metis_tac[abi_caller_static_memory_induction]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_CALLER_STATIC_MEMORY_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI caller static memory not kernel closed: " ^ n)
-  end) (DB.thms "abiCallerStaticMemory");

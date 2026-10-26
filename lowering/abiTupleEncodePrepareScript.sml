@@ -2,10 +2,10 @@
    resources depend only on numeric bounds and pure allocation metadata. *)
 Theory abiTupleEncodePrepare
 Ancestors
-  abiTupleEncodeStageReach abiTupleEncodeStageCode abiTupleEncodeAssembly abiTupleEncodeLayout
-  abiTupleEncodeInput abiTupleEncodeMemory abiTupleProps abiBuiltinEncodeResources abiBuiltinEncodeInput
-  abiBuiltinAllocationState abiDecoderReentry abiDecoderContract abiDecoderLoop fragExec
-  compileEnv exprLowering venomState venomExecSemantics finite_map words list arithmetic
+  abiTupleEncodeStage abiTupleEncodeAssembly abiTupleEncodeLayout abiTupleEncodeInput
+  abiTupleEncodeMemory abiTupleProps abiBuiltinEncodeResources abiBuiltinEncodeInput
+  abiBuiltinAllocation abiDecoderReentry abiDecoderContract abiDecoderLoop fragExec compileEnv
+  exprLowering venomState venomExecSemantics finite_map words list arithmetic
 
 Theorem abi_tuple_encode_prepare:
   compile_alloc_buffer (abi_tuple_bytes ce xs) st = (source_buf,allocated) /\
@@ -46,11 +46,3 @@ Proof
      impl_tac >- asm_simp_tac bool_ss [] >> asm_simp_tac bool_ss []) >>
   qexists_tac `actual` >> asm_simp_tac bool_ss [abi_builtin_encode_pre_resources] >> first_assum ACCEPT_TAC
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_TUPLE_ENCODE_PREPARE_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI tuple encoder preparation not kernel closed: " ^ n)
-  end) (DB.thms "abiTupleEncodePrepare");

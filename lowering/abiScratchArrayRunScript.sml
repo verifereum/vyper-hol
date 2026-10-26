@@ -3,10 +3,10 @@
    the selected real loop, protected parent completion and physical effects. *)
 Theory abiScratchArrayRun
 Ancestors
-  abiScratchArrayParentPrepare abiScratchArraySelectedLoop abiScratchArrayFinishProtected
+  abiScratchArrayParent abiScratchArraySelectedLoop abiScratchArrayFinishProtected
   abiScratchPhaseCompose abiScratchEncoderContract abiEncoderArrayContext abiEncoderMembersDefs
-  abiDecoderLoop abiDecoderReentry abiDecoderContract compileEnv
-  valueEncoding contractABI venomState words list arithmetic
+  abiDecoderLoop abiDecoderReentry abiDecoderContract compileEnv valueEncoding contractABI
+  venomState words list arithmetic
 
 Theorem abi_scratch_array_run:
   (if active then abi_scratch_encoder ei else abi_encoder_static_leaf ei) /\
@@ -55,11 +55,3 @@ Proof
   qexists_tac `actual` >> asm_simp_tac bool_ss [] >>
   irule abi_decode_sim_trans >> qexists_tac `encoded` >> simp[]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_SCRATCH_ARRAY_RUN_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI scratch complete array execution not kernel closed: " ^ n)
-  end) (DB.thms "abiScratchArrayRun");

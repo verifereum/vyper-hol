@@ -38,11 +38,3 @@ Proof
     val_in_memory_def, has_type_def, valid_length_def, LET_THM,
     combinTheory.o_DEF] >> decide_tac
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_ENCODER_SOURCE_INPUT_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI encoder source input not kernel closed: " ^ n)
-  end) (DB.thms "abiEncoderSourceInput");

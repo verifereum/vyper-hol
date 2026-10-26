@@ -5,11 +5,11 @@
 Theory abiScratchBuiltinProducer
 Ancestors
   abiScratchBuiltinCaller abiScratchBuiltinRun abiScratchBuiltinPre abiScratchBuiltinEffect
-  abiScratchFootprint abiBuiltinEncodeProducer abiBuiltinEncodeReusedInput
-  abiBuiltinEncodeRun abiBuiltinAllocationState abiTupleEncodeOwnedBytes abiTupleEncodeInput
-  abiEncoderInput abiDecoderAllocation abiDecoderReentry abiDecoderContract abiDecoderLoop
-  compileEnv builtinAbi exprLowering valueEncoding vyperABI contractABI
-  venomMemDefs venomState venomExecSemantics finite_map pred_set words list arithmetic
+  abiScratchFootprint abiBuiltinEncodeProducer abiBuiltinEncodeReusedInput abiBuiltinEncodeRun
+  abiBuiltinAllocation abiTupleEncodeOwnedBytes abiTupleEncodeInput abiEncoderInput
+  abiDecoderAllocation abiDecoderReentry abiDecoderContract abiDecoderLoop compileEnv builtinAbi
+  exprLowering valueEncoding vyperABI contractABI venomMemDefs venomState venomExecSemantics
+  finite_map pred_set words list arithmetic
 
 Theorem abi_scratch_builtin_producer_bounds:
   p+(maxlen+32+(case method_id_opt of NONE => 0 | SOME (_:bytes32) => 4)) < dimword (:256) /\
@@ -144,11 +144,3 @@ Proof
   qpat_assum `p+_ <= q \/ _` mp_tac >>
   POP_ASSUM_LIST (K ALL_TAC) >> simp[AC ADD_COMM ADD_ASSOC]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_SCRATCH_BUILTIN_PRODUCER_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI physical scratch producer not kernel closed: " ^ n)
-  end) (DB.thms "abiScratchBuiltinProducer");

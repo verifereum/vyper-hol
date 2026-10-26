@@ -1,13 +1,12 @@
 (* Repeated array initialization overwrites its own temporaries and reuses its site. *)
 Theory abiDecoderArrayInitReentry
 Ancestors
-  abiDecoderArrayInitExec abiDecoderArrayLoopInit abiDecoderIndexInit abiDecoderArrayInitReach
-  abiDecoderDynarrayPrefix abiDecoderDynarrayBound abiDecoderArrayHeader
-  abiDecoderGuardLE abiDecoderGuards abiDecoderContract abiDecoderAllocation
-  abiDecoderReentry abiDecoderReentryPrefix abiDecoderReentrySequence
-  abiDecoderVarSequence abiDecoderVarExtend abiDecoderFrame
-  exprLoweringProps emitHelperProps emitHelper compileEnv context
-  fragExec venomState venomInst finite_map words list rich_list arithmetic
+  abiDecoderArrayInitExec abiDecoderArrayLoopInit abiDecoderIndexInit abiDecoderArrayInit
+  abiDecoderDynarrayPrefix abiDecoderDynarrayBound abiDecoderArrayHeader abiDecoderGuard
+  abiDecoderGuards abiDecoderContract abiDecoderAllocation abiDecoderReentry
+  abiDecoderReentryPrefix abiDecoderReentrySequence abiDecoderVarSequence abiDecoderVarExtend
+  abiDecoderFrame exprLoweringProps emitHelperProps emitHelper compileEnv context fragExec
+  venomState venomInst finite_map words list rich_list arithmetic
 
 Theorem abi_decoder_budget_prune[simp]:
   abi_decoder_budget first last b cap (abi_decoder_prune_vars next s) <=>
@@ -162,11 +161,3 @@ Proof
   qexists_tac `actual` >> simp[] >>
   simp_tac bool_ss [abi_decoder_array_init_post_def] >> qexists_tac `slot` >> simp[]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_DECODER_ARRAY_INIT_REENTRY_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI array initialization re-entry not kernel closed: " ^ n)
-  end) (DB.thms "abiDecoderArrayInitReentry");

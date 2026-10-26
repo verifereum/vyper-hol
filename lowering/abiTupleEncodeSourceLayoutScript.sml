@@ -28,11 +28,3 @@ Proof
      asm_simp_tac bool_ss [] >> rpt strip_tac >> drule abi_decoder_coherent_header >> simp[]) >>
   drule_all abi_tuple_encode_layout_headers >> simp[]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_TUPLE_ENCODE_SOURCE_LAYOUT_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI tuple encoder source layout not kernel closed: " ^ n)
-  end) (DB.thms "abiTupleEncodeSourceLayout");

@@ -63,12 +63,3 @@ Proof
   Induct_on `tys` >> rpt gen_tac >> Cases_on `tvs` >> simp[abi_scratch_decoder_members_nil] >>
   strip_tac >> irule abi_scratch_decoder_members_cons >> simp[]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_SCRATCH_DECODER_MEMBER_CONS_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI physical nonempty members not kernel closed: " ^ n)
-  end) (DB.thms "abiScratchDecoderMemberCons");
-

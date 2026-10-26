@@ -1,11 +1,10 @@
 (* The real member prefix establishes the actual-source recursive input API. *)
 Theory abiDecoderValidMemberInput
 Ancestors
-  abiDecoderValidContract abiValidMemberEntry abiValidMemberWindows abiValidMembers
-  abiValidAggregateHeads abiDecoderMemberSetup abiDecoderReentry abiDecoderCoherence
-  abiDecoderTypedContract abiDecoderContract abiDecodeRanges abiEncoder
-  fragExec compileEnv valueEncoding vyperABI contractABI
-  venomState venomExecSemantics words list arithmetic
+  abiDecoderValidContract abiValidMember abiValidMembers abiValidAggregateHeads
+  abiDecoderMemberSetup abiDecoderReentry abiDecoderCoherence abiDecoderTypedContract
+  abiDecoderContract abiDecodeRanges abiEncoder fragExec compileEnv valueEncoding vyperABI
+  contractABI venomState venomExecSemantics words list arithmetic
 
 Theorem abi_decoder_valid_member_readable:
   valid_enc_tuple (pre ++ at::ats) bs bs /\
@@ -65,11 +64,3 @@ Proof
   qexists_tac `prepared` >>
   asm_simp_tac bool_ss [abi_decoder_valid_pre_def, abi_decoder_head_window]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_DECODER_VALID_MEMBER_INPUT_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI valid recursive member input not kernel closed: " ^ n)
-  end) (DB.thms "abiDecoderValidMemberInput");

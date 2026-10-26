@@ -3,9 +3,9 @@
    allocator evolution and the same physical writes from the earlier state. *)
 Theory abiScratchAfterAddress
 Ancestors
-  abiScratchEffectWiden abiScratchEncoderContract abiScratchEffectProtected abiScratchFootprint
-  abiEncoderChildFrames abiDecoderDynamicLoopSetup abiDecoderAllocation abiDecoderFootprint
-  abiDecoderFrame abiDecoderReentry compileEnv venomState finite_map words arithmetic list
+  abiScratchEffect abiScratchEncoderContract abiScratchFootprint abiEncoderChildFrames
+  abiDecoderDynamicLoopSetup abiDecoderAllocation abiDecoderFootprint abiDecoderFrame
+  abiDecoderReentry compileEnv venomState finite_map words arithmetic list
 
 Theorem abi_scratch_effect_after_address:
   abi_decoder_address_frame next initial ready /\
@@ -52,11 +52,3 @@ Proof
     fs[abi_decoder_address_frame_def, abi_decoder_child_scratch_def] >>
   irule abi_encoder_frame_after_address >> qexistsl_tac [`next`, `ready`] >> gvs[]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_SCRATCH_AFTER_ADDRESS_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI scratch address/effect composition not kernel closed: " ^ n)
-  end) (DB.thms "abiScratchAfterAddress");

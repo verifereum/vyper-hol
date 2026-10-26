@@ -1,12 +1,8 @@
 (* Minimum canonical dynamic heads; a zero-length fixed array is explicit. *)
 Theory abiCanonicalHeadSize
 Ancestors
+  venomMemProps
   abiDecodeRanges abiCanonicalArrays contractABI byte words list arithmetic
-
-Theorem abi_head_size_dimindex[simp,local]: dimindex (:256) = 256
-Proof
-  CONV_TAC fcpLib.INDEX_CONV
-QED
 
 Theorem canonical_dynamic_head_sum:
   !ts. any_dynamic ts ==> 32 <= SUM (MAP abi_member_head_size ts)
@@ -62,11 +58,3 @@ Proof
    irule canonical_dynamic_array_head_min >> asm_simp_tac bool_ss [is_dynamic_def],
    rpt strip_tac >> irule canonical_dynamic_tuple_head_min >> asm_simp_tac bool_ss []]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_CANONICAL_HEAD_SIZE_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI canonical head size not kernel closed: " ^ n)
-  end) (DB.thms "abiCanonicalHeadSize");

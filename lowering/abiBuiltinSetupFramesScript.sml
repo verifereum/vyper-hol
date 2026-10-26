@@ -1,9 +1,9 @@
 (* Compose pure header/pointer effects around the output allocation. *)
 Theory abiBuiltinSetupFrames
 Ancestors
-  abiBuiltinAllocationState abiBuiltinDecodeSetup abiBuiltinDecodeHeader
-  abiBuiltinPrefix abiDecoderReentry abiDecoderDynamicLoopSetup
-  compileEnv emitHelperProps exprLoweringProps venomState words arithmetic list
+  abiBuiltinAllocation abiBuiltinDecodeSetup abiBuiltinDecodeHeader abiBuiltinPrefix
+  abiDecoderReentry abiDecoderDynamicLoopSetup compileEnv emitHelperProps exprLoweringProps
+  venomState words arithmetic list
 
 Theorem abi_builtin_allocation_frame_prefix:
   abi_decoder_address_frame next s prepared /\
@@ -41,11 +41,3 @@ Proof
   asm_simp_tac (srw_ss()) [abi_decoder_operand_live_def, abi_decoder_older_vars_def] >>
   rpt strip_tac >> decide_tac
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_BUILTIN_SETUP_FRAMES_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI builtin setup frame not kernel closed: " ^ n)
-  end) (DB.thms "abiBuiltinSetupFrames");

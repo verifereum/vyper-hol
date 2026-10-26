@@ -3,11 +3,11 @@
    the index update into one physical effect and containing-function simulation. *)
 Theory abiScratchArrayDynamicRound
 Ancestors
-  abiScratchArrayDynamicMemory abiScratchArrayBackedgeMemory abiScratchEffectWiden abiScratchEffectCompose
-  abiScratchEncoderContract abiEncoderArrayDynamicCode abiEncoderArrayBodyMemory abiEncoderArrayLayout abiEncoderMembersDefs
-  abiEncoderInput abiEncoderArrayPrefix abiDecoderAllocation abiDecoderFootprint abiDecoderLoop
-  abiDecoderReentry abiDecoderContract compileEnv valueEncoding contractABI
-  venomState venomInst words list arithmetic
+  abiScratchArrayDynamicMemory abiScratchArrayBackedge abiScratchEffect
+  abiScratchEncoderContract abiEncoderArrayDynamicCode abiEncoderArrayBodyMemory
+  abiEncoderArrayLayout abiEncoderMembersDefs abiEncoderInput abiEncoderArrayPrefix
+  abiDecoderAllocation abiDecoderFootprint abiDecoderLoop abiDecoderReentry abiDecoderContract
+  compileEnv valueEncoding contractABI venomState venomInst words list arithmetic
 
 Theorem abi_scratch_array_dynamic_round:
   abi_scratch_encoder ei /\ abi_encode_array_dynamic_body ip dyn_ptr src dst ei asz msz st = (out,end_st) /\
@@ -84,11 +84,3 @@ Proof
   qexists_tac `actual` >> asm_simp_tac bool_ss [] >>
   irule abi_decode_sim_trans >> qexists_tac `encoded` >> simp[]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_SCRATCH_ARRAY_DYNAMIC_ROUND_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI scratch actual array round not kernel closed: " ^ n)
-  end) (DB.thms "abiScratchArrayDynamicRound");

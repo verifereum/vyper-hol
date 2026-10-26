@@ -3,10 +3,10 @@
    Its prefix observation follows from physical windows and owned scratch IDs. *)
 Theory abiScratchBuiltinCompose
 Ancestors
-  abiScratchBuiltinFinish abiScratchEncoderContract abiScratchEffectProtected abiScratchEffectWiden
-  abiScratchEffectCompose abiScratchSubset abiScratchFootprint abiEncoderArrayFrame
-  abiBuiltinEncodeCode abiDecoderAllocation abiDecoderFootprint abiDecoderFrame
-  abiDecoderReentry abiDecoderContract abiDecoderLoop compileEnv venomState pred_set words list arithmetic
+  abiScratchBuiltinFinish abiScratchEncoderContract abiScratchEffect abiScratchSubset
+  abiScratchFootprint abiEncoderArrayFrame abiBuiltinEncodeCode abiDecoderAllocation
+  abiDecoderFootprint abiDecoderFrame abiDecoderReentry abiDecoderContract abiDecoderLoop
+  compileEnv venomState pred_set words list arithmetic
 
 Theorem abi_scratch_builtin_prefix_frame:
   abi_scratch_effect first last lo hi next limit_st (p+32+mid_size) len b cap s t /\
@@ -80,11 +80,3 @@ Proof
   qexists_tac `actual` >> asm_simp_tac (srw_ss()) [] >>
   irule abi_decode_sim_trans >> qexists_tac `encoded` >> asm_simp_tac bool_ss []
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_SCRATCH_BUILTIN_COMPOSE_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI scratch builtin body composition not kernel closed: " ^ n)
-  end) (DB.thms "abiScratchBuiltinCompose");

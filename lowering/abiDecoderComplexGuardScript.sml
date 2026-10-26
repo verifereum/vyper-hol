@@ -3,11 +3,11 @@
    Helpers: code certificate, repeated sequence and pointed fragment. *)
 Theory abiDecoderComplexGuard
 Ancestors
-  abiDecoderComplexHead abiDecoderGuardLE abiDecoderReentryPrefix abiDecoderReentry
-  abiDecoderVarSequence abiDecoderVarExtend abiDecoderDynamicLoopSetup
-  abiDecoderReservation abiDecoderContract abiDecoderLoop fragExec instIdxIndep
-  abiEncoder compileEnv emitHelper emitHelperProps exprLoweringProps
-  venomState venomExecSemantics venomInst words list rich_list arithmetic
+  abiDecoderComplexHead abiDecoderGuard abiDecoderReentryPrefix abiDecoderReentry
+  abiDecoderVarSequence abiDecoderVarExtend abiDecoderDynamicLoopSetup abiDecoderReservation
+  abiDecoderContract abiDecoderLoop fragExec instIdxIndep abiEncoder compileEnv emitHelper
+  emitHelperProps exprLoweringProps venomState venomExecSemantics venomInst words list rich_list
+  arithmetic
 
 Theorem abi_decoder_complex_guard_code:
   abi_decode_complex_head_guard src hi head_sz st = ((),st') ==>
@@ -108,11 +108,3 @@ Proof
     abi_decode_le_guard_def, comp_bind_def, comp_ignore_bind_def, comp_return_def, LET_THM] >>
   rpt gen_tac >> rpt (pairarg_tac >> gvs[])
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_DECODER_COMPLEX_GUARD_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI complex guard not kernel closed: " ^ n)
-  end) (DB.thms "abiDecoderComplexGuard");

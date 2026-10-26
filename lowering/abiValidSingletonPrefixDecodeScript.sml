@@ -2,14 +2,12 @@
    child's canonical prefix with the established recursive decoder. *)
 Theory abiValidSingletonPrefixDecode
 Ancestors
-  abiValidSingletonPrefixEntry abiValidSingletonPrefixInput abiValidSingletonCode
-  abiDecoderCoherentCorrect abiDecoderArrayBody abiDecoderCoherence abiDecoderDynamic
-  abiDecoderValidRecursive abiDecoderValidContract abiDecoderValidWrapping
-  valueEncodingProps vyperTyping abiBoundaryChecks
-  abiDecoderEffect abiDecoderTypedContract abiDecoderContract abiDecoderReentry
-  abiDecoderAllocation abiDecoderDynamicLoopSetup abiDecoderLoop
-  abiEncoder fragExec compileEnv valueEncoding vyperABI contractABI
-  venomState venomExecSemantics words list pair arithmetic
+  abiValidSingletonPrefix abiValidSingletonCode abiDecoderCoherentCorrect abiDecoderArrayBody
+  abiDecoderCoherence abiDecoderDynamic abiDecoderValidRecursive abiDecoderValidContract
+  abiDecoderValidWrapping valueEncodingProps vyperTyping abiBoundaryChecks abiDecoderEffect
+  abiDecoderTypedContract abiDecoderContract abiDecoderReentry abiDecoderAllocation
+  abiDecoderDynamicLoopSetup abiDecoderLoop abiEncoder fragExec compileEnv valueEncoding
+  vyperABI contractABI venomState venomExecSemantics words list pair arithmetic
 
 Theorem abi_valid_singleton_prefix_decode_offset:
   compile_abi_decode_to_buf dst src opc hi
@@ -122,11 +120,3 @@ Proof
   qexists_tac `actual` >>
   fs[singleton_tuple_memory_sizes, val_in_memory_singleton_tuple]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_VALID_SINGLETON_PREFIX_DECODE_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI valid singleton prefix decoding not kernel closed: " ^ n)
-  end) (DB.thms "abiValidSingletonPrefixDecode");

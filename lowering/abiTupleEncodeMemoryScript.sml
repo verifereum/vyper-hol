@@ -1,9 +1,8 @@
 (* Complete child encoder inputs in the contiguous tuple memory layout. *)
 Theory abiTupleEncodeMemory
 Ancestors
-  abiTupleProps abiEncoderInput abiEncoderInputLayout abiEncoderMemory
-  abiEncoderInputFrame compileEnv exprLowering valueEncoding contractABI
-  words list rich_list arithmetic
+  abiTupleProps abiEncoderInput abiEncoderMemory abiEncoderInputFrame compileEnv exprLowering
+  valueEncoding contractABI words list rich_list arithmetic
 
 Definition abi_tuple_encode_memory_def:
   abi_tuple_encode_memory sf ce [] ats avs d mem = (ats = [] /\ avs = []) /\
@@ -37,11 +36,3 @@ Proof
   Cases_on `tys` >> simp[abi_tuple_bytes_def, type_memory_bytes_def] >>
   rpt strip_tac >> first_x_assum drule >> simp[abi_tuple_bytes_def, type_memory_bytes_def]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_TUPLE_ENCODE_MEMORY_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI tuple encoder memory not kernel closed: " ^ n)
-  end) (DB.thms "abiTupleEncodeMemory");

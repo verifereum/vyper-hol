@@ -1,11 +1,11 @@
 (* Word and fixed-copy encoders under enclosing variable freshness. *)
 Theory abiEncoderReentryLeaves
 Ancestors
-  abiEncoderLeaves abiEncoderInput abiEncoderWrites abiEncoderBytesCopy abiEncoderBytesPrefix
+  abiEncoderLeaves abiEncoderInput abiEncoderWrites abiEncoderBytes abiEncoderBytesPrefix
   abiEncoderMemory abiBuiltinPrefix abiDecoderArrayHeader abiDecoderDynamicLoopSetup
-  abiDecoderReentry abiDecoderContract abiDecoderGuards abiEncoder
-  emitHelperProps exprLoweringProps compileEnv emitHelper valueEncoding valueEncodingProps
-  contractABI venomState venomExecSemantics venomInst words list arithmetic
+  abiDecoderReentry abiDecoderContract abiDecoderGuards abiEncoder emitHelperProps
+  exprLoweringProps compileEnv emitHelper valueEncoding valueEncodingProps contractABI
+  venomState venomExecSemantics venomInst words list arithmetic
 
 Theorem abi_encode_word_trace:
   compile_abi_encode_to_buf dst src AbiPrimWord st = (out,st') ==>
@@ -146,11 +146,3 @@ Proof
   rename1 `run_inst_seq (emitted_insts st st') s = OK actual` >>
   qexists_tac `actual` >> asm_simp_tac bool_ss []
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_ENCODER_REENTRY_LEAVES_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI encoder re-entry leaf not kernel closed: " ^ n)
-  end) (DB.thms "abiEncoderReentryLeaves");

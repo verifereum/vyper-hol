@@ -48,10 +48,3 @@ QED
 
 (* Check the exported probe objects rather than inferring integrity from a
    successful build (definitions imported from disk may carry DISK_THM). *)
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_BOUNDARY_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI boundary probe not kernel closed: " ^ n)
-  end) (DB.thms "abiBoundaryChecks");

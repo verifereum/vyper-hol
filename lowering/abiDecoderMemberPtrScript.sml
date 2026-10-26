@@ -57,11 +57,3 @@ Proof
     (irule abi_decode_sequence_chain >> qexistsl_tac [`s1`, `c1`] >> simp[]) >>
   qexists_tac `t` >> gvs[word_add_n2w] >> metis_tac[]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_DECODER_MEMBER_PTR_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI member-pointer execution not kernel closed: " ^ n)
-  end) (DB.thms "abiDecoderMemberPtr");

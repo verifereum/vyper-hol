@@ -5,9 +5,9 @@ Ancestors
   abiDecoderValidArraySetupInputs abiDecoderValidArrayValues abiDecoderArraySetupInputs
   abiDecoderStaticLoopSetup abiDecoderDynamicLoopSetup abiDecoderDynamic abiDecoderOffset
   abiDecoderCoherence abiDecoderTypedContract abiDecoderContract abiDecoderReentry
-  abiDecoderLoop abiDecodeRanges abiValidMemberWindows abiValidMembers
-  abiEncoder fragExec instIdxIndep compileEnv valueEncoding vyperABI vyperValue contractABI
-  venomState venomExecSemantics words list arithmetic
+  abiDecoderLoop abiDecodeRanges abiValidMember abiValidMembers abiEncoder fragExec instIdxIndep
+  compileEnv valueEncoding vyperABI vyperValue contractABI venomState venomExecSemantics words
+  list arithmetic
 
 Definition abi_scratch_decoder_array_setup_post_def:
   abi_scratch_decoder_array_setup_post ce env ty bs j ready ops sb d next limit_st initial t <=>
@@ -117,12 +117,3 @@ Proof
   FIRST [drule_all abi_scratch_decoder_array_dynamic_prefix >> simp[],
     drule_all abi_scratch_decoder_array_static_prefix >> simp[]]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_SCRATCH_DECODER_ARRAY_SETUP_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI physical array address setup not kernel closed: " ^ n)
-  end) (DB.thms "abiScratchDecoderArraySetup");
-

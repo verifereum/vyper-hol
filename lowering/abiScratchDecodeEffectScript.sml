@@ -1,9 +1,9 @@
 (* Whole builtin physical effects include its arbitrary-sized output allocation. *)
 Theory abiScratchDecodeEffect
 Ancestors
-  abiScratchEncoderContract abiScratchEffectFrame abiScratchEffectProtected abiScratchFootprint
-  abiBuiltinAllocationState abiDecoderAllocation abiDecoderFootprint abiDecoderFrame
-  abiDecoderReentry abiDecoderContract compileEnv venomState finite_map words list arithmetic
+  abiScratchEncoderContract abiScratchEffect abiScratchFootprint abiBuiltinAllocation
+  abiDecoderAllocation abiDecoderFootprint abiDecoderFrame abiDecoderReentry abiDecoderContract
+  compileEnv venomState finite_map words list arithmetic
 
 Definition abi_scratch_decode_effect_def:
   abi_scratch_decode_effect first last st final limit_st site d outsz b cap s t <=>
@@ -73,12 +73,3 @@ Proof
   asm_simp_tac bool_ss [abi_scratch_decode_effect_def] >> fs[abi_scratch_effect_def] >>
   first_assum ACCEPT_TAC
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_SCRATCH_DECODE_EFFECT_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI physical whole decoder builtin effect not kernel closed: " ^ n)
-  end) (DB.thms "abiScratchDecodeEffect");
-

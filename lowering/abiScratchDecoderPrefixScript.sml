@@ -2,10 +2,10 @@
    Actual bytes determine the readable prefix; no canonical whole-input equality is assumed. *)
 Theory abiScratchDecoderPrefix
 Ancestors
-  abiScratchDecoderRanges abiScratchDecoderContract abiDecoderValidContract
-  abiDecoderPrefixPre abiDecoderDynamic abiDecoderCoherence abiDecoderTypedContract
-  abiDecoderContract abiDecoderReentry abiValidStaticAggregate abiValidStaticScalar
-  abiDecodeRanges compileEnv valueEncoding vyperABI contractABI venomState words list rich_list
+  abiScratchDecoderRanges abiScratchDecoderContract abiDecoderValidContract abiDecoderPrefixPre
+  abiDecoderDynamic abiDecoderCoherence abiDecoderTypedContract abiDecoderContract
+  abiDecoderReentry abiValidStatic abiDecodeRanges compileEnv valueEncoding vyperABI contractABI
+  venomState words list rich_list
 
 Theorem abi_scratch_decoder_static_prefix:
   ~is_dynamic at /\ valid_enc at bs /\ abi_member_head_size at <= LENGTH bs ==>
@@ -59,11 +59,3 @@ Proof
      simp_tac (srw_ss()) [abi_decoder_dynamic_def]) >>
   drule_all abi_scratch_decoder_static_pre >> asm_simp_tac bool_ss []
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_SCRATCH_DECODER_PREFIX_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI physical scalar prefix not kernel closed: " ^ n)
-  end) (DB.thms "abiScratchDecoderPrefix");

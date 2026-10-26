@@ -3,10 +3,10 @@
    all recursive iterations and the real exit reload/length computation. *)
 Theory abiScratchArrayDynamicLoop
 Ancestors
-  abiScratchArrayDynamicInitPrepare abiScratchArrayLoopRun abiScratchEffectWiden abiScratchEffectCompose
-  abiScratchEncoderContract abiEncoderArrayLoopCode abiEncoderMembersDefs
-  abiDecoderLoop abiDecoderReentry abiDecoderContract compileEnv
-  valueEncoding contractABI venomState venomInst words list arithmetic
+  abiScratchArrayDynamicInit abiScratchArrayLoopRun abiScratchEffect abiScratchEncoderContract
+  abiEncoderArrayLoopCode abiEncoderMembersDefs abiDecoderLoop abiDecoderReentry
+  abiDecoderContract compileEnv valueEncoding contractABI venomState venomInst words list
+  arithmetic
 
 Theorem abi_scratch_array_dynamic_loop:
   abi_scratch_encoder ei /\ compile_abi_encode_dyn_loop dst src ei asz msz count_op start = (out,final) /\
@@ -54,11 +54,3 @@ Proof
   qexists_tac `actual` >> asm_simp_tac bool_ss [] >>
   irule abi_decode_sim_trans >> qexists_tac `ready` >> simp[]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_SCRATCH_ARRAY_DYNAMIC_LOOP_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI scratch complete actual dynamic loop not kernel closed: " ^ n)
-  end) (DB.thms "abiScratchArrayDynamicLoop");

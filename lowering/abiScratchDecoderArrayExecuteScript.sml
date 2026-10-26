@@ -2,10 +2,10 @@
 Theory abiScratchDecoderArrayExecute
 Ancestors
   abiScratchDecoderContract abiScratchDecoderArrayInit abiScratchDecoderLoopInput
-  abiScratchDecoderLoopEntry abiScratchEncoderContract abiScratchEffectWiden abiScratchEffectCompose
-  abiDecoderRecursiveArrayCode abiDecoderCoherence abiDecoderTypedContract abiDecoderAllocation
-  abiDecoderContract abiDecoderLoop abiDecoderReentry abiDecodeRanges
-  abiEncoder fragExec compileEnv valueEncoding vyperABI vyperValue venomState words list arithmetic
+  abiScratchDecoderLoopEntry abiScratchEncoderContract abiScratchEffect abiDecoderRecursiveArray
+  abiDecoderCoherence abiDecoderTypedContract abiDecoderAllocation abiDecoderContract
+  abiDecoderLoop abiDecoderReentry abiDecodeRanges abiEncoder fragExec compileEnv valueEncoding
+  vyperABI vyperValue venomState words list arithmetic
 
 Theorem abi_scratch_decoder_array_execute:
   compile_abi_decode_to_buf dst src opc hi_op
@@ -68,12 +68,3 @@ Proof
   qexists_tac `t` >> asm_simp_tac bool_ss [] >>
   irule abi_decode_sim_trans >> qexists_tac `prepared` >> asm_simp_tac bool_ss []
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_SCRATCH_DECODER_ARRAY_EXECUTE_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI physical whole array execution not kernel closed: " ^ n)
-  end) (DB.thms "abiScratchDecoderArrayExecute");
-

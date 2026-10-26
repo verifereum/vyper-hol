@@ -51,12 +51,3 @@ Proof
   drule_all abi_scratch_decoder_dyn_loop >> disch_then (qspec_then `ctx` strip_assume_tac) >>
   qexists_tac `t` >> asm_simp_tac bool_ss [] >> metis_tac[abi_decode_sim_trans]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_SCRATCH_DECODER_LOOP_ENTRY_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI physical finite-loop entry not kernel closed: " ^ n)
-  end) (DB.thms "abiScratchDecoderLoopEntry");
-

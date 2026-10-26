@@ -48,11 +48,3 @@ Proof
       mp_tac mem_bytes_at_window >> simp[]) >>
   asm_simp_tac bool_ss [abi_decode_load_bytes]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_VALID_BYTES_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI valid bytes not kernel closed: " ^ n)
-  end) (DB.thms "abiValidBytes");

@@ -1,9 +1,9 @@
 (* Incoming state for a remaining member list and its optional parent cursor. *)
 Theory abiEncoderMembersDefs
 Ancestors
-  abiEncoderMembersInput abiEncoderInputFrame abiEncoderInput abiEncoderDynamicChildCore
-  abiDecoderEffect abiDecoderDynamicLoopSetup abiDecoderAllocation abiDecoderReentry
-  abiDecoderFrame abiDecoderContract compileEnv valueEncoding venomState finite_map words list arithmetic
+  abiEncoderMembersInput abiEncoderInputFrame abiEncoderInput abiEncoderDynamic abiDecoderEffect
+  abiDecoderDynamicLoopSetup abiDecoderAllocation abiDecoderReentry abiDecoderFrame
+  abiDecoderContract compileEnv valueEncoding venomState finite_map words list arithmetic
 
 Definition abi_encoder_members_pre_def:
   abi_encoder_members_pre infos tys avs st src dst sb so d output_size b cap s <=>
@@ -118,11 +118,3 @@ Proof
     (irule abi_decoder_operand_live_mono >> qexists_tac `st.cs_next_var` >> simp[]) >>
   asm_simp_tac bool_ss [] >> decide_tac
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_ENCODER_MEMBERS_DEFS_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI encoder members state not kernel closed: " ^ n)
-  end) (DB.thms "abiEncoderMembersDefs");

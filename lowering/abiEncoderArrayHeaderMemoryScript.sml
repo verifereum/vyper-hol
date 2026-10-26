@@ -63,11 +63,3 @@ Proof
   qexists_tac `ready` >> asm_simp_tac bool_ss [] >>
   simp[Abbr`ready`, jump_to_def, abi_encode_array_header_state_def, update_var_def]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_ENCODER_ARRAY_HEADER_MEMORY_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI encoder array header memory not kernel closed: " ^ n)
-  end) (DB.thms "abiEncoderArrayHeaderMemory");

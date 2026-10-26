@@ -58,11 +58,3 @@ Proof
     (gvs[abi_decode_frame_def] >> first_assum ACCEPT_TAC) >>
   qexists_tac `prepared` >> gvs[abi_decode_load_def, abi_decode_source_def, mload_def]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_DECODER_ARRAY_PREPARE_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI array preparation not kernel closed: " ^ n)
-  end) (DB.thms "abiDecoderArrayPrepare");

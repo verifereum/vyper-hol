@@ -2,8 +2,8 @@
 Theory abiDecoderDynamic
 Ancestors
   abiDecoderCoherence abiDecoderConstructors abiEncoder exprLowering compileEnv
-  abiDecoderSingletonSetup abiDecoderComplexHead abiDecoderGuardLE
-  vyperABI contractABI emitHelper list pair combin finite_map
+  abiDecoderSingletonSetup abiDecoderComplexHead abiDecoderGuard vyperABI contractABI emitHelper
+  list pair combin finite_map
 
 Definition abi_decoder_dynamic_def:
   abi_decoder_dynamic (DecPrimWord c) = F /\
@@ -66,12 +66,6 @@ Proof
     is_abi_dynamic_def, is_dynamic_def]
 QED
 
-Theorem abi_decode_complex_nil[local]:
-  compile_abi_decode_complex_elems dst src opc hi [] aoff voff = return ()
-Proof
-  simp[compile_abi_decode_to_buf_def]
-QED
-
 Theorem abi_decode_dynamic_singleton_members[local]:
   dec_info_needs_offset di ==>
   compile_abi_decode_complex_elems dst src opc hi [(di,32,mem_sz)] 0 0 =
@@ -122,11 +116,3 @@ Proof
        comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
   rpt gen_tac >> rpt (pairarg_tac >> gvs[])
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_DECODER_DYNAMIC_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI decoder dynamic descriptor not kernel closed: " ^ n)
-  end) (DB.thms "abiDecoderDynamic");

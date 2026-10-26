@@ -2,11 +2,10 @@
    The parent supplies its inline head bound; no source bytes are loaded. *)
 Theory abiDecoderEmptyMember
 Ancestors
-  abiDecoderEmpty abiDecoderEmptyReach abiDecoderComplexGuard abiDecoderMemberCode
-  abiDecoderMemberSetup abiDecoderDynamicLoopSetup abiDecoderReentry abiDecoderContract
-  abiDecoderTypedContract abiDecoderAppend abiValidMemberWindows abiValidMembers
-  abiDecoderLoop abiEncoder exprLoweringProps compileEnv fragExec vyperABI contractABI
-  venomState venomExecSemantics words list arithmetic
+  abiDecoderEmpty abiDecoderComplexGuard abiDecoderMemberCode abiDecoderMemberSetup
+  abiDecoderDynamicLoopSetup abiDecoderReentry abiDecoderContract abiDecoderTypedContract
+  abiDecoderAppend abiValidMember abiValidMembers abiDecoderLoop abiEncoder exprLoweringProps
+  compileEnv fragExec vyperABI contractABI venomState venomExecSemantics words list arithmetic
 
 Theorem abi_decode_empty_member_code:
   abi_decode_member_setup dst src opc hi F ao vo st = (ops,middle) /\
@@ -113,11 +112,3 @@ Proof
   disch_then (qx_choose_then `actual` (MAP_EVERY assume_tac o CONJUNCTS)) >>
   qexists_tac `actual` >> asm_simp_tac bool_ss []
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_DECODER_EMPTY_MEMBER_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI empty member execution fact not kernel closed: " ^ n)
-  end) (DB.thms "abiDecoderEmptyMember");

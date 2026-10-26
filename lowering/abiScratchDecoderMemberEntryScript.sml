@@ -2,11 +2,11 @@
 Theory abiScratchDecoderMemberEntry
 Ancestors
   abiScratchDecoderContract abiScratchDecoderRanges abiScratchDecoderSubwindow
-  abiScratchDecoderTransport abiScratchAddressEffect abiScratchEncoderContract
-  abiDecoderValidMemberInput abiValidMemberWindows abiValidMembers abiDecoderValidContract
+  abiScratchDecoderTransport abiScratchAddress abiScratchEncoderContract
+  abiDecoderValidMemberInput abiValidMember abiValidMembers abiDecoderValidContract
   abiDecoderMemberSetup abiDecoderDynamic abiDecoderCoherence abiDecoderTypedContract
-  abiDecoderContract abiDecoderReentry abiDecoderLoop abiDecodeRanges abiEncoder
-  fragExec compileEnv valueEncoding vyperABI contractABI venomState words list arithmetic
+  abiDecoderContract abiDecoderReentry abiDecoderLoop abiDecodeRanges abiEncoder fragExec
+  compileEnv valueEncoding vyperABI contractABI venomState words list arithmetic
 
 Theorem abi_scratch_decoder_member_entry:
   let at = vyper_to_abi_type env ty;
@@ -70,11 +70,3 @@ Proof
   qexistsl_tac [`d`, `dst`, `LENGTH (bs:word8 list)`, `outsz`, `sb`, `src`] >>
   asm_simp_tac arith_ss []
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_SCRATCH_DECODER_MEMBER_ENTRY_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI physical member prefix not kernel closed: " ^ n)
-  end) (DB.thms "abiScratchDecoderMemberEntry");

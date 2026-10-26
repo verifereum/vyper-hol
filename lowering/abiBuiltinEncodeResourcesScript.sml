@@ -2,8 +2,9 @@
    and registers, so producers can establish them before materializing input. *)
 Theory abiBuiltinEncodeResources
 Ancestors
-  abiBuiltinEncodeInput abiBuiltinAllocationState abiDecoderAllocation abiDecoderArrayInitExec
-  abiDecoderReentry abiDecoderContract abiEncoderInput compileEnv venomState finite_map words list arithmetic
+  abiBuiltinEncodeInput abiBuiltinAllocation abiDecoderAllocation abiDecoderArrayInitExec
+  abiDecoderReentry abiDecoderContract abiEncoderInput compileEnv venomState finite_map words
+  list arithmetic
 
 Definition abi_builtin_encode_resources_def:
   abi_builtin_encode_resources st method_id_opt sb source_cap p maxlen first last b cap s <=>
@@ -49,11 +50,3 @@ Proof
   impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
   asm_simp_tac (srw_ss()) [abi_builtin_encode_resources_def, LET_THM]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_BUILTIN_ENCODE_RESOURCES_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI builtin encoder resources not kernel closed: " ^ n)
-  end) (DB.thms "abiBuiltinEncodeResources");

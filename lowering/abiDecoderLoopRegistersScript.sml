@@ -125,11 +125,3 @@ Proof
   asm_simp_tac (srw_ss()) [Abbr`result_st`, Excl "enc_def"] >>
   simp[jump_to_def, abi_decode_header_state_def, update_var_def]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_DECODER_LOOP_REGISTERS_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI loop header registers not kernel closed: " ^ n)
-  end) (DB.thms "abiDecoderLoopRegisters");

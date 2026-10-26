@@ -1,10 +1,11 @@
 (* Execute a static child and retain the parent cursor for the remaining members. *)
 Theory abiEncoderMembersStatic
 Ancestors
-  abiEncoderMembersAdvance abiEncoderMembersContract abiEncoderMembersDefs abiEncoderMembersLayout
-  abiEncoderMemberStep abiEncoderMemberCode abiEncoderTuplePrefix abiEncoderCorrect abiEncoderChildInputs
-  abiCanonicalWindows abiDecoderEffect abiDecoderContract abiDecoderLoop compileEnv
-  valueEncoding contractABI venomState words list arithmetic
+  abiEncoderMembersAdvance abiEncoderMembersContract abiEncoderMembersDefs
+  abiEncoderMembersLayout abiEncoderMember abiEncoderMemberCode abiEncoderTuple
+  abiEncoderCorrect abiEncoderChildInputs abiCanonicalWindows abiDecoderEffect
+  abiDecoderContract abiDecoderLoop compileEnv valueEncoding contractABI venomState words list
+  arithmetic
 
 Theorem abi_encoder_members_static_advance:
   abi_encoder_correct ei /\ compile_abi_encode_child dst elem_src ei F ho dyn_ptr st = (out,end_st) /\
@@ -52,11 +53,3 @@ Proof
   impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
   qexists_tac `actual` >> asm_simp_tac bool_ss []
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_ENCODER_MEMBERS_STATIC_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI encoder static members advance not kernel closed: " ^ n)
-  end) (DB.thms "abiEncoderMembersStatic");

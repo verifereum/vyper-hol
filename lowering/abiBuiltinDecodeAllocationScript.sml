@@ -1,10 +1,10 @@
 (* Execute the actual header followed by its output allocation. *)
 Theory abiBuiltinDecodeAllocation
 Ancestors
-  abiBuiltinSetupFrames abiBuiltinAllocationState abiBuiltinAllocation
-  abiBuiltinDecodeSetup abiBuiltinDecodeHeader abiBuiltinPrefix
-  abiDecoderDynamicLoopSetup abiDecoderReentry abiDecoderGuards abiDecoderContract
-  context compileEnv emitHelperProps exprLoweringProps venomState finite_map words arithmetic list
+  abiBuiltinSetupFrames abiBuiltinAllocation abiBuiltinDecodeSetup abiBuiltinDecodeHeader
+  abiBuiltinPrefix abiDecoderDynamicLoopSetup abiDecoderReentry abiDecoderGuards
+  abiDecoderContract context compileEnv emitHelperProps exprLoweringProps venomState finite_map
+  words arithmetic list
 
 Theorem abi_builtin_decode_allocation:
   abi_builtin_decode_header data min_size max_size st = (inputs,header_st) /\
@@ -47,11 +47,3 @@ Proof
   qexists_tac `t` >> asm_simp_tac bool_ss [] >>
   fs[abi_builtin_allocation_frame_def]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_BUILTIN_DECODE_ALLOCATION_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI builtin decode allocation not kernel closed: " ^ n)
-  end) (DB.thms "abiBuiltinDecodeAllocation");

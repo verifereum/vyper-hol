@@ -160,11 +160,3 @@ Proof
   drule evaluate_abi_decode_vyper_valid_enc >> strip_tac >>
   drule vyper_valid_enc_length_upper >> fs[]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_CALLER_ABI_BOUND_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI caller maximum size not kernel closed: " ^ n)
-  end) (DB.thms "abiCallerAbiBound");

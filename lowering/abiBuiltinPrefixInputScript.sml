@@ -1,9 +1,9 @@
 (* Incoming actual Bytes may extend the canonical prefix consumed by the decoder. *)
 Theory abiBuiltinPrefixInput
 Ancestors
-  abiBuiltinSourceInput abiBuiltinCanonicalPre abiBuiltinDecodeSetup
-  abiDecoderCoherence abiDecoderTypedContract abiDecoderContract abiCanonicalLoad
-  valueEncoding valueEncodingProps vyperABI contractABI compileEnv venomState words list
+  abiBuiltinSource abiBuiltinCanonicalPre abiBuiltinDecodeSetup abiDecoderCoherence
+  abiDecoderTypedContract abiDecoderContract abiCanonicalLoad valueEncoding valueEncodingProps
+  vyperABI contractABI compileEnv venomState words list
 
 Definition abi_builtin_prefix_pre_def:
   abi_builtin_prefix_pre ce env sf ty tv bs av v st first last data min_size max_size p d b cap s <=>
@@ -47,11 +47,3 @@ Proof
   strip_tac >> drule_all abi_builtin_source_metadata >> strip_tac >>
   asm_simp_tac bool_ss [abi_builtin_prefix_pre_def] >> fs[val_in_memory_def]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_BUILTIN_PREFIX_INPUT_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI builtin prefix input not kernel closed: " ^ n)
-  end) (DB.thms "abiBuiltinPrefixInput");

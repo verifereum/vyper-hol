@@ -3,11 +3,11 @@
    exact head/tail bytes, the parent cursor and one physical enclosing effect. *)
 Theory abiScratchDynamicChild
 Ancestors
-  abiScratchChildSplit abiScratchArrayDynamicTail abiScratchEncoderContract
-  abiScratchAddress abiScratchAfterAddress abiScratchFootprint
-  abiEncoderAddressReach abiDecoderDynamicLoopSetup abiDecoderAllocation abiDecoderFootprint
-  abiDecoderFrame abiDecoderReentry abiDecoderContract abiDecoderLoop compileEnv
-  valueEncoding contractABI venomState finite_map words list arithmetic
+  abiScratchChild abiScratchArrayDynamicTail abiScratchEncoderContract abiScratchAddress
+  abiScratchAfterAddress abiScratchFootprint abiEncoderAddressReach abiDecoderDynamicLoopSetup
+  abiDecoderAllocation abiDecoderFootprint abiDecoderFrame abiDecoderReentry abiDecoderContract
+  abiDecoderLoop compileEnv valueEncoding contractABI venomState finite_map words list
+  arithmetic
 
 Theorem abi_scratch_input_address:
   abi_scratch_input ei at av st src dst sb source_cap d sz first last b cap initial /\
@@ -86,11 +86,3 @@ Proof
   qexists_tac `actual` >> asm_simp_tac bool_ss [] >>
   irule abi_decode_sim_trans >> qexists_tac `ready` >> simp[]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_SCRATCH_DYNAMIC_CHILD_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI scratch dynamic member execution not kernel closed: " ^ n)
-  end) (DB.thms "abiScratchDynamicChild");

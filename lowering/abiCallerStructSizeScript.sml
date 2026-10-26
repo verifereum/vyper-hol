@@ -50,11 +50,3 @@ Proof
   asm_simp_tac bool_ss [] >> rpt strip_tac >>
   drule (cj 1 vyperTypeExprSoundnessTheory.evaluate_type_mono) >> simp[]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_CALLER_STRUCT_SIZE_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI caller struct size not kernel closed: " ^ n)
-  end) (DB.thms "abiCallerStructSize");

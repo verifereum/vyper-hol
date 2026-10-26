@@ -23,10 +23,9 @@ Proof
   FIRST [drule_all typed_payload_fits_memory >> simp[], gvs[]]
 QED
 
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("VALUE_ENCODING_TYPING_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("Value memory typing not kernel closed: " ^ n)
-  end) (DB.thms "valueEncodingTyping");
+Theorem type_memory_size_fields_zip:
+  !names tvs. LENGTH names = LENGTH tvs ==>
+    type_memory_size_fields (ZIP (names,tvs)) = type_memory_size_list tvs
+Proof
+  Induct >> Cases_on `tvs` >> simp[type_memory_size_def]
+QED

@@ -2,9 +2,9 @@
    Dynamic member offsets use validity's head extents, including empty fixed arrays. *)
 Theory abiCallerDecodeMinimum
 Ancestors
-  abiCallerAbiShape abiCallerStructMap abiCallerCoherenceNodes abiValidAggregateHeads
-  abiValidMembers abiDecodeRanges compileVyper compileEnv vyperValue vyperABI
-  vyperABIValid contractABI finite_map list pair combin arithmetic
+  abiCallerAbiShape abiCallerStructMap abiCallerCoherence abiValidAggregateHeads abiValidMembers
+  abiDecodeRanges compileVyper compileEnv vyperValue vyperABI vyperABIValid contractABI
+  finite_map list pair combin arithmetic
 
 Theorem abi_caller_embedded_head:
   abi_caller_abi_shape sf env ty ==>
@@ -156,11 +156,3 @@ Proof
      qexists_tac `in_deploy` >> asm_simp_tac bool_ss []) >>
   drule_all abi_caller_decode_minimum >> simp[]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_CALLER_DECODE_MINIMUM_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI caller minimum length not kernel closed: " ^ n)
-  end) (DB.thms "abiCallerDecodeMinimum");

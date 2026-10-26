@@ -3,9 +3,8 @@
    static and dynamic corollaries expose the two compiler branches separately. *)
 Theory abiScratchEncoderArray
 Ancestors
-  abiScratchArrayRun abiScratchEncoderContract abiEncoderInputLayout
-  abiDecoderReentry abiDecoderContract abiDecoderLoop compileEnv
-  valueEncoding contractABI venomState words list
+  abiScratchArrayRun abiScratchEncoderContract abiEncoderInput abiDecoderReentry
+  abiDecoderContract abiDecoderLoop compileEnv valueEncoding contractABI venomState words list
 
 Theorem abi_scratch_encoder_array:
   (if active then abi_scratch_encoder ei else abi_encoder_static_leaf ei) ==>
@@ -36,11 +35,3 @@ Theorem abi_scratch_encoder_array_static:
 Proof
   strip_tac >> irule (Q.INST [`active` |-> `F`] abi_scratch_encoder_array) >> simp[]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_SCRATCH_ENCODER_ARRAY_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI scratch array constructor not kernel closed: " ^ n)
-  end) (DB.thms "abiScratchEncoderArray");

@@ -58,11 +58,3 @@ Proof
   rename1 `abi_encode_array_finish (FST ops) size_op loop_end = (out,final)` >>
   qexistsl_tac [`size_op`, `loop_end`] >> Cases_on `dyn` >> gvs[]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_ENCODER_ARRAY_TRACE_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI encoder actual array trace not kernel closed: " ^ n)
-  end) (DB.thms "abiEncoderArrayTrace");

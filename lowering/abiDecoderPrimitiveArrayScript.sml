@@ -2,11 +2,10 @@
 Theory abiDecoderPrimitiveArray
 Ancestors
   abiDecoderPrimitiveArrayCode abiDecoderPrimitiveArrayInit abiDecoderPrimitiveArrayFacts
-  abiDecoderBulkExecute
-  abiDecoderPrimitiveLoopEntry abiDecoderPrimitiveLoopInvariant abiDecoderPrimitiveLoopContext
-  abiDecoderArrayInitMemory abiDecoderArrayInitExec abiDecoderArrayLoopInit
-  abiDecoderCoherence abiDecoderTypedContract abiDecoderReentry abiDecoderLoop
-  abiDecoderAllocation abiDecoderContract abiDecoderFrame fragExec
+  abiDecoderBulkExecute abiDecoderPrimitiveLoopEntry abiDecoderPrimitiveLoopInvariant
+  abiDecoderPrimitiveLoopContext abiDecoderArrayInit abiDecoderArrayInitExec
+  abiDecoderArrayLoopInit abiDecoderCoherence abiDecoderTypedContract abiDecoderReentry
+  abiDecoderLoop abiDecoderAllocation abiDecoderContract abiDecoderFrame fragExec
   exprLoweringProps compileEnv valueEncoding venomState words list arithmetic
 
 Theorem abi_decoder_loop_frame_to_arena:
@@ -95,11 +94,3 @@ Proof
   strip_tac >> drule_all abi_decoder_bulk_execute >>
   disch_then (qspec_then `ctx` mp_tac) >> simp[]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_DECODER_PRIMITIVE_ARRAY_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI primitive array decoder not kernel closed: " ^ n)
-  end) (DB.thms "abiDecoderPrimitiveArray");

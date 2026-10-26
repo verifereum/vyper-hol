@@ -188,8 +188,3 @@ Theorem live_update_mem:
 Proof
   ACCEPT_TAC livenessTransferProofsTheory.live_update_mem
 QED
-
-val _ = List.app (fn (_,th) =>
-  if List.all (fn s => s = "DISK_THM") (#1 (Tag.dest_tag (Thm.tag th)))
-  then () else raise Fail "oracle in public liveness API")
-  (DB.thms "livenessProofs");

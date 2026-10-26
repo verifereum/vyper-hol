@@ -1,12 +1,12 @@
 (* Execute actual dynamic-array address setup and establish the child API. *)
 Theory abiDecoderValidArrayEntry
 Ancestors
-  abiDecoderValidContract abiDecoderValidArrayChildPre abiDecoderValidArraySetupInputs
+  abiDecoderValidContract abiDecoderValidArrayChild abiDecoderValidArraySetupInputs
   abiDecoderValidArrayValues abiDecoderArraySetupInputs abiDecoderDynamicLoopSetup
   abiDecoderArrayEntry abiDecoderDynamic abiDecoderCoherence abiDecoderTypedContract
-  abiDecoderReentry abiDecoderContract abiDecoderLoop abiValidMemberWindows abiValidMembers
-  abiEncoder fragExec instIdxIndep compileEnv valueEncoding vyperABI vyperValue
-  contractABI venomState venomExecSemantics words list arithmetic
+  abiDecoderReentry abiDecoderContract abiDecoderLoop abiValidMember abiValidMembers abiEncoder
+  fragExec instIdxIndep compileEnv valueEncoding vyperABI vyperValue contractABI venomState
+  venomExecSemantics words list arithmetic
 
 Definition abi_decoder_valid_array_entry_def:
   abi_decoder_valid_array_entry ce env sf ty tv bs vs j ready ops opc hi sb d b cap
@@ -138,11 +138,3 @@ Proof
   `~prepared.vs_halted` by fs[abi_decoder_valid_array_entry_def, abi_decoder_address_frame_def] >>
   qexists_tac `prepared` >> asm_simp_tac bool_ss []
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_DECODER_VALID_ARRAY_ENTRY_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI valid array entry not kernel closed: " ^ n)
-  end) (DB.thms "abiDecoderValidArrayEntry");

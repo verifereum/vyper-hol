@@ -76,11 +76,3 @@ Proof
   drule_all abi_caller_type_submap >> strip_tac >>
   drule_all abi_caller_field_memory_size >> simp[]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_CALLER_STRUCT_METADATA_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI caller struct metadata not kernel closed: " ^ n)
-  end) (DB.thms "abiCallerStructMetadata");

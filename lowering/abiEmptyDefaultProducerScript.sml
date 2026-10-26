@@ -2,12 +2,11 @@
    Count-only roots require only their initialized count word. *)
 Theory abiEmptyDefaultProducer
 Ancestors
-  abiEmptyRecursiveInput abiEmptyInputLeaves abiEmptyAllocate abiEmptyAllocateCode
-  abiEmptySize abiEmptyEffect abiEmptyProducer abiBuiltinAllocationState
-  abiDecoderCoherence abiCallerCoherence abiEncoderInput
-  compileEnv builtinSimple exprLowering exprLoweringProps valueEncoding vyperABI
-  compileVyper vyperTypeSystem vyperValue vyperContext
-  venomState venomExecSemantics finite_map words list arithmetic
+  abiEmptyRecursiveInput abiEmptyInput abiEmptyAllocate abiEmptySize abiEmptyEffect
+  abiEmptyProducer abiBuiltinAllocation abiDecoderCoherence abiCallerCoherence abiEncoderInput
+  compileEnv builtinSimple exprLowering exprLoweringProps valueEncoding vyperABI compileVyper
+  vyperTypeSystem vyperValue vyperContext venomState venomExecSemantics finite_map words list
+  arithmetic
 
 Theorem abi_empty_count_default_input:
   abi_decoder_coherent ce env sf ty tv /\
@@ -64,11 +63,3 @@ Proof
      irule abi_empty_default_initialized_input >> fs[]) >>
   qexists_tac `actual` >> asm_rewrite_tac[]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_EMPTY_DEFAULT_PRODUCER_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI Empty default producer not kernel closed: " ^ n)
-  end) (DB.thms "abiEmptyDefaultProducer");

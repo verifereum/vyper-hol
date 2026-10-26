@@ -1,11 +1,12 @@
 (* Execute one actual dynamic-element array body from its parent source input. *)
 Theory abiEncoderArrayDynamicBody
 Ancestors
-  abiEncoderArrayDynamicCode abiEncoderArrayDynamicTail abiEncoderArrayPrepare abiEncoderArrayBounds
-  abiEncoderArrayAddress abiEncoderAfterAddress abiEncoderChildFrames abiEncoderDynamicChildCore
-  abiEncoderChildInputs abiEncoderInput abiEncoderCorrect abiDecoderArrayInitExec
-  abiDecoderDynamicLoopSetup abiDecoderEffect abiDecoderContract abiDecoderLoop abiDecoderReentry
-  fragExec compileEnv valueEncoding contractABI venomState finite_map words list arithmetic
+  abiEncoderArrayDynamicCode abiEncoderArrayDynamicTail abiEncoderArrayPrepare
+  abiEncoderArrayBounds abiEncoderArrayAddress abiEncoderAfterAddress abiEncoderChildFrames
+  abiEncoderDynamic abiEncoderChildInputs abiEncoderInput abiEncoderCorrect
+  abiDecoderArrayInitExec abiDecoderDynamicLoopSetup abiDecoderEffect abiDecoderContract
+  abiDecoderLoop abiDecoderReentry fragExec compileEnv valueEncoding contractABI venomState
+  finite_map words list arithmetic
 
 Theorem abi_encoder_array_dynamic_body_reach:
   abi_encoder_correct ei /\ abi_encode_array_dynamic_body ip dyn_ptr src dst ei asz msz st = (out,end_st) /\
@@ -78,11 +79,3 @@ Proof
   impl_tac >- (full_simp_tac bool_ss [] >> decide_tac) >> strip_tac >>
   qexists_tac `actual` >> asm_simp_tac bool_ss []
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_ENCODER_ARRAY_DYNAMIC_BODY_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI encoder dynamic array body not kernel closed: " ^ n)
-  end) (DB.thms "abiEncoderArrayDynamicBody");

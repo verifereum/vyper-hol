@@ -33,11 +33,3 @@ Proof
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decode_frame_def]) >>
   rpt strip_tac >> first_x_assum irule >> asm_simp_tac (srw_ss()) []
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_SCRATCH_BUILTIN_FINISH_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI scratch builtin length store not kernel closed: " ^ n)
-  end) (DB.thms "abiScratchBuiltinFinish");

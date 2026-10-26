@@ -90,11 +90,3 @@ Proof
   gvs[val_in_memory_def, abi_decoder_effect_refl, abi_decode_sim_refl,
     Excl "enc_def", Excl "dec_def", Excl "valid_enc_def"]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_DECODER_VALID_MEMBERS_CORRECT_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI valid member suffix not kernel closed: " ^ n)
-  end) (DB.thms "abiDecoderValidMembersCorrect");

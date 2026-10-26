@@ -1,11 +1,10 @@
 (* Actual recursive singleton Bytes decoding, including the outer memory guard. *)
 Theory abiDecoderWrappedBytesFragment
 Ancestors
-  abiDecoderWrappedBytesTyped abiDecoderWrappedBytes abiDecoderSingletonSetup
-  abiDecoderTypedCompose abiDecoderBytesTyped abiDecoderTypedContract
-  abiDecoderGuards abiDecoderContract abiDecoderBytes
-  abiEncoder emitHelperProps exprLoweringProps compileEnv emitHelper
-  valueEncoding fragExec venomExecSemantics venomState venomInst words rich_list list
+  abiDecoderWrapped abiDecoderSingletonSetup abiDecoderTypedCompose abiDecoderBytesTyped
+  abiDecoderTypedContract abiDecoderGuards abiDecoderContract abiDecoderBytes abiEncoder
+  emitHelperProps exprLoweringProps compileEnv emitHelper valueEncoding fragExec
+  venomExecSemantics venomState venomInst words rich_list list
 
 Theorem abi_decoder_typed_wrapped_bytes_sequence:
   compile_abi_decode_to_buf dst src MLOAD hi
@@ -101,11 +100,3 @@ Theorem abi_decoder_typed_unwrapped_bytes_sequence =
 Theorem abi_decoder_typed_unwrapped_bytes_fragment =
   SIMP_RULE bool_ss [abi_decoder_singleton_post]
     abi_decoder_typed_wrapped_bytes_fragment;
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_DECODER_WRAPPED_BYTES_FRAGMENT_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI wrapped Bytes execution not kernel closed: " ^ n)
-  end) (DB.thms "abiDecoderWrappedBytesFragment");

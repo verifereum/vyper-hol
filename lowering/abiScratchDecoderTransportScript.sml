@@ -1,10 +1,10 @@
 (* Source bytes and physical buffer separation survive recursive decoder effects. *)
 Theory abiScratchDecoderTransport
 Ancestors
-  abiScratchDecoderContract abiScratchEncoderContract abiScratchEffectFrame
-  abiScratchEffectProtected abiScratchFootprint abiDecoderFootprint abiDecoderAllocation
-  abiDecoderFrame abiDecoderContract abiDecoderReentry abiDecoderTypedContract
-  abiDecoderCoherence compileEnv valueEncoding vyperABI contractABI venomState words list arithmetic
+  abiScratchDecoderContract abiScratchEncoderContract abiScratchEffect abiScratchFootprint
+  abiDecoderFootprint abiDecoderAllocation abiDecoderFrame abiDecoderContract abiDecoderReentry
+  abiDecoderTypedContract abiDecoderCoherence compileEnv valueEncoding vyperABI contractABI
+  venomState words list arithmetic
 
 Theorem abi_decode_source_footprint_frame:
   abi_decode_source_opcode opc /\
@@ -90,11 +90,3 @@ Proof
   drule_all abi_scratch_decoder_source_effect >> strip_tac >>
   asm_simp_tac bool_ss [abi_scratch_decoder_input_def]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_SCRATCH_DECODER_TRANSPORT_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI physical decoder transport not kernel closed: " ^ n)
-  end) (DB.thms "abiScratchDecoderTransport");

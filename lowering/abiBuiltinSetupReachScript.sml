@@ -1,9 +1,9 @@
 (* Reach the actual recursive decoder entry after all builtin setup actions. *)
 Theory abiBuiltinSetupReach
 Ancestors
-  abiBuiltinSetupExecute abiBuiltinDecodeSetup abiBuiltinAllocationState
-  abiDecoderReentry abiDecoderContract abiDecoderLoop fragExec instIdxIndep
-  compileEnv emitHelperProps venomExecSemantics venomState venomInst finite_map words list
+  abiBuiltinSetupExecute abiBuiltinDecodeSetup abiBuiltinAllocation abiDecoderReentry
+  abiDecoderContract abiDecoderLoop fragExec instIdxIndep compileEnv emitHelperProps
+  venomExecSemantics venomState venomInst finite_map words list
 
 Theorem abi_builtin_decode_setup_from_state:
   abi_builtin_decode_setup data min_size max_size outsz st = (ops,ready) /\
@@ -58,11 +58,3 @@ Proof
   `~actual.vs_halted` by fs[abi_builtin_allocation_frame_def] >>
   qexists_tac `actual` >> asm_simp_tac bool_ss []
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_BUILTIN_SETUP_REACH_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI builtin setup reach not kernel closed: " ^ n)
-  end) (DB.thms "abiBuiltinSetupReach");

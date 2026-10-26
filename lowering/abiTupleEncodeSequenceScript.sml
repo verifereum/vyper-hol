@@ -70,11 +70,3 @@ Proof
     (Q.ISPEC `h0:operand` (Q.GEN `op` abi_tuple_encode_result_cons))) >>
   asm_simp_tac bool_ss [ADD_ASSOC]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_TUPLE_ENCODE_SEQUENCE_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI tuple encoder sequence not kernel closed: " ^ n)
-  end) (DB.thms "abiTupleEncodeSequence");

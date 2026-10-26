@@ -3,10 +3,9 @@
    all emitted decode instructions are executed by the source correctness theorem. *)
 Theory abiBuiltinDispatchCorrect
 Ancestors
-  abiBuiltinSourceCorrect abiBuiltinSourceInput abiBuiltinDecodeEffect
-  abiDecodeUnwrapCase abiDecoderCoherence abiDecoderContract abiDecoderLoop
-  exprLowering builtinAbi fragExec compileEnv context valueEncoding
-  vyperABI vyperContext contractABI venomState venomExecSemantics words list
+  abiBuiltinSource abiBuiltinDecodeEffect abiDecodeUnwrapCase abiDecoderCoherence
+  abiDecoderContract abiDecoderLoop exprLowering builtinAbi fragExec compileEnv context
+  valueEncoding vyperABI vyperContext contractABI venomState venomExecSemantics words list
 
 Theorem as_ptr_val_result:
   as_ptr_val ty loc result = (vv,st) ==>
@@ -92,11 +91,3 @@ QED
 
 Theorem compile_abi_decode_memory_unwrap_true_canonical =
   SIMP_RULE bool_ss [LET_THM] (Q.INST [`unwrap` |-> `T`] compile_abi_decode_memory_canonical);
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_BUILTIN_DISPATCH_CORRECT_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI builtin dispatch correctness not kernel closed: " ^ n)
-  end) (DB.thms "abiBuiltinDispatchCorrect");

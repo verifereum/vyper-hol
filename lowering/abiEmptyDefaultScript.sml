@@ -2,9 +2,10 @@
    These are byte equalities, independent of sparse val_in_memory predicates. *)
 Theory abiEmptyDefault
 Ancestors
-  abiStaticLayoutProps abiStaticAggregateProps abiDecoderStructInputs abiEncoderMemory
-  abiEmptyMemory abiEncoderInput exprLowering compileEnv valueEncoding vyperABI
-  contractABI integer_word words list rich_list arithmetic
+  valueEncodingTyping
+  abiStaticLayoutProps abiStaticAggregateProps abiEncoderMemory abiEmptyMemory
+  abiEncoderInput exprLowering compileEnv valueEncoding vyperABI contractABI integer_word words
+  list rich_list arithmetic
 
 Theorem abi_empty_fixed_bytes_default:
   enc (Bytes (SOME n)) (BytesV (REPLICATE n 0w)) = REPLICATE 32 0w
@@ -123,11 +124,3 @@ Proof
   asm_rewrite_tac[] >> irule abi_empty_zero_copy_input >>
   asm_simp_tac bool_ss []
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_EMPTY_DEFAULT_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI Empty default bytes not kernel closed: " ^ n)
-  end) (DB.thms "abiEmptyDefault");

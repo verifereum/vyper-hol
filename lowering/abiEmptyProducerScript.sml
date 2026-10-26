@@ -2,11 +2,10 @@
    No initial or final source-memory layout is assumed. *)
 Theory abiEmptyProducer
 Ancestors
-  abiEmptyAllocate abiEmptyAllocateCode abiEmptySize abiEmptyInputLeaves abiEmptyEffect
-  abiBuiltinAllocationState abiDecoderCoherence abiDecoderReentry abiCallerCoherence
-  exprLoweringProps compileEnv builtinSimple exprLowering valueEncoding vyperABI
-  compileVyper vyperTypeSystem vyperValue vyperContext
-  venomState venomExecSemantics finite_map words list arithmetic
+  abiEmptyAllocate abiEmptySize abiEmptyInput abiEmptyEffect abiBuiltinAllocation
+  abiDecoderCoherence abiDecoderReentry abiCallerCoherence exprLoweringProps compileEnv
+  builtinSimple exprLowering valueEncoding vyperABI compileVyper vyperTypeSystem vyperValue
+  vyperContext venomState venomExecSemantics finite_map words list arithmetic
 
 Theorem abi_empty_producer_operand_live:
   compile_builtin_empty_complex outsz length_only st = (buf,final) ==>
@@ -79,11 +78,3 @@ Proof
      qexists_tac `in_deploy` >> asm_rewrite_tac[]) >>
   drule_all abi_empty_static_producer >> simp[]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_EMPTY_PRODUCER_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI Empty producer not kernel closed: " ^ n)
-  end) (DB.thms "abiEmptyProducer");

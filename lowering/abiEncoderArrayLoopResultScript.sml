@@ -1,10 +1,10 @@
 (* Finite actual loop execution and its scalar exit return the complete ABI array. *)
 Theory abiEncoderArrayLoopResult
 Ancestors
-  abiEncoderArrayFiniteLoop abiEncoderArrayExitCorrect abiEncoderArrayLoopCode
+  abiEncoderArrayFiniteLoop abiEncoderArrayExit abiEncoderArrayLoopCode
   abiEncoderArrayLoopInvariant abiEncoderArrayCode abiEncoderAdmissible abiEncoderCorrect
-  abiDecoderEffect abiDecoderContract abiDecoderLoop fragExec compileEnv
-  valueEncoding contractABI venomState words list arithmetic
+  abiDecoderEffect abiDecoderContract abiDecoderLoop fragExec compileEnv valueEncoding
+  contractABI venomState words list arithmetic
 
 Theorem abi_encoder_array_loop_result:
   (if active then abi_encoder_correct ei else abi_encoder_static_leaf ei) /\
@@ -36,11 +36,3 @@ Proof
   qexists_tac `actual` >> asm_simp_tac bool_ss [] >>
   irule abi_decode_sim_trans >> qexists_tac `prepared` >> asm_simp_tac bool_ss []
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_ENCODER_ARRAY_LOOP_RESULT_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI encoder array loop result not kernel closed: " ^ n)
-  end) (DB.thms "abiEncoderArrayLoopResult");

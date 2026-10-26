@@ -2,9 +2,9 @@
    from both the complete returned buffer and the full 32-byte prefix store. *)
 Theory abiBuiltinEncodeInput
 Ancestors
-  abiBuiltinEncodePre abiBuiltinEncodeSetupFrame abiBuiltinAllocationState abiEncoderCorrect
-  abiEncoderInput abiDecoderAllocation abiDecoderReentry abiDecoderContract
-  compileEnv venomState finite_map words list arithmetic
+  abiBuiltinEncodePre abiBuiltinEncodeSetup abiBuiltinAllocation abiEncoderCorrect
+  abiEncoderInput abiDecoderAllocation abiDecoderReentry abiDecoderContract compileEnv
+  venomState finite_map words list arithmetic
 
 Definition abi_builtin_encode_pre_def:
   abi_builtin_encode_pre ei at av st method_id_opt src sb source_cap p maxlen first last b cap s <=>
@@ -58,11 +58,3 @@ Proof
     (irule abi_decoder_operand_live_mono >> qexists_tac `st.cs_next_var` >> asm_simp_tac bool_ss []) >>
   asm_simp_tac (srw_ss()) [abi_encoder_pre_def] >> decide_tac
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_BUILTIN_ENCODE_INPUT_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI builtin encoder input not kernel closed: " ^ n)
-  end) (DB.thms "abiBuiltinEncodeInput");

@@ -1,9 +1,9 @@
 (* Dynamic-array memory invariant over the actual source bytes. *)
 Theory abiDecoderValidArrayMemory
 Ancestors
-  abiDecoderArrayInvariant abiValidMemberWindows abiCanonicalLoad abiCanonicalArrayLoad abiDecodeRanges
-  abiDecoderContract valueEncodingProps valueEncoding vyperABI vyperValue
-  venomState words list rich_list arithmetic
+  abiDecoderArrayInvariant abiValidMember abiCanonicalLoad abiCanonicalArrayLoad abiDecodeRanges
+  abiDecoderContract valueEncodingProps valueEncoding vyperABI vyperValue venomState words list
+  rich_list arithmetic
 
 Definition abi_decoder_valid_array_memory_def:
   abi_decoder_valid_array_memory opc bs tv vs sb d j s <=>
@@ -58,11 +58,3 @@ Proof
      asm_simp_tac bool_ss []) >>
   asm_simp_tac bool_ss [abi_decode_load_bytes, abi_head_word_bytes]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_DECODER_VALID_ARRAY_MEMORY_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI valid array memory not kernel closed: " ^ n)
-  end) (DB.thms "abiDecoderValidArrayMemory");

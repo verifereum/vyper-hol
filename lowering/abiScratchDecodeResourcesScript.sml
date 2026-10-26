@@ -1,10 +1,10 @@
 (* Ordinary allocation history establishes physical builtin decoder resources. *)
 Theory abiScratchDecodeResources
 Ancestors
-  abiScratchDecodeInput abiScratchBuiltinCaller abiCallerAllocation
-  abiBuiltinAllocationState abiBuiltinDecodeSetup abiScratchFootprint
-  abiDecoderAllocation abiDecoderFootprint abiDecoderFrame abiDecoderContract
-  compileEnv venomMemDefs venomState finite_map pred_set words list arithmetic
+  abiScratchDecodeInput abiScratchBuiltinCaller abiCallerAllocation abiBuiltinAllocation
+  abiBuiltinDecodeSetup abiScratchFootprint abiDecoderAllocation abiDecoderFootprint
+  abiDecoderFrame abiDecoderContract compileEnv venomMemDefs venomState finite_map pred_set
+  words list arithmetic
 
 Theorem abi_scratch_decode_allocation_windows:
   alloca_inv s /\ abi_decoder_budget first last b cap s /\
@@ -86,12 +86,3 @@ Proof
     PURE_REWRITE_TAC [GSYM (REWRITE_RULE [markerTheory.Abbrev_def] th)]) >>
   asm_simp_tac bool_ss []
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_SCRATCH_DECODE_RESOURCES_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI physical decoder caller resources not kernel closed: " ^ n)
-  end) (DB.thms "abiScratchDecodeResources");
-

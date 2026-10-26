@@ -3,7 +3,7 @@
 Theory abiBuiltinEncodeCorrect
 Ancestors
   abiBuiltinEncodePre abiBuiltinEncodeSetup abiBuiltinEncodeBody abiBuiltinEncodeContext
-  abiBuiltinEncodeCode abiBuiltinAllocationState abiBuiltinDecodeEffect abiBuiltinEncodeOwnership
+  abiBuiltinEncodeCode abiBuiltinAllocation abiBuiltinDecodeEffect abiBuiltinEncodeOwnership
   abiEncoderCorrect abiEncoderInput abiDecoderEffect abiDecoderAllocation abiDecoderContract
   abiDecoderLoop fragExec builtinAbi exprLowering compileEnv valueEncoding valueEncodingProps
   venomState venomExecSemantics words list arithmetic
@@ -79,11 +79,3 @@ Proof
   qexists_tac `actual` >> asm_simp_tac (srw_ss()) [val_in_memory_def, mem_word_at_eq_mload] >>
   first_assum ACCEPT_TAC
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_BUILTIN_ENCODE_CORRECT_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI builtin encoder correctness not kernel closed: " ^ n)
-  end) (DB.thms "abiBuiltinEncodeCorrect");

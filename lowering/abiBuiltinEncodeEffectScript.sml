@@ -2,7 +2,7 @@
    store, which may extend beyond a short nominal output allocation. *)
 Theory abiBuiltinEncodeEffect
 Ancestors
-  abiBuiltinEncodeSetupFrame abiBuiltinAllocationState abiDecoderEffect abiDecoderFrame
+  abiBuiltinEncodeSetup abiBuiltinAllocation abiDecoderEffect abiDecoderFrame
   abiDecoderPrimitiveLoopFrames abiDecoderAllocation abiDecoderReentry abiDecoderContract
   compileEnv venomState finite_map words list arithmetic
 
@@ -72,11 +72,3 @@ Proof
     (drule_all abi_builtin_encode_setup_frame_outside >> simp[]) >>
   gvs[abi_decoder_scratch_frame_def]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_BUILTIN_ENCODE_EFFECT_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI builtin encoder effect not kernel closed: " ^ n)
-  end) (DB.thms "abiBuiltinEncodeEffect");

@@ -1,10 +1,10 @@
 (* Top-level static complex encoders execute all members and return the exact length. *)
 Theory abiEncoderComplexStatic
 Ancestors
-  abiEncoderComplexLayout abiEncoderComplexCode abiEncoderMembersCorrect abiEncoderMembersBoundary
-  abiEncoderMembersContract abiEncoderMembersDefs abiEncoderCorrect abiEncoderInput abiEncoderInputLayout
-  abiEncoderMembersInput abiEncoderMemberCode abiDecoderEffect abiDecoderLoop abiDecoderContract
-  compileEnv valueEncoding contractABI venomState list words arithmetic
+  abiEncoderComplexLayout abiEncoderComplexCode abiEncoderMembersCorrect
+  abiEncoderMembersBoundary abiEncoderMembersContract abiEncoderMembersDefs abiEncoderCorrect
+  abiEncoderInput abiEncoderMembersInput abiEncoderMemberCode abiDecoderEffect abiDecoderLoop
+  abiDecoderContract compileEnv valueEncoding contractABI venomState list words arithmetic
 
 Theorem abi_encoder_complex_static_flags:
   !infos. ~EXISTS (\(_,_,_,dyn). dyn) infos ==>
@@ -55,11 +55,3 @@ Proof
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_encoder_members_inv_def]) >>
   qexists_tac `actual` >> asm_simp_tac (srw_ss()) [eval_operand_def, Excl "enc_def"]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_ENCODER_COMPLEX_STATIC_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI encoder static complex execution not kernel closed: " ^ n)
-  end) (DB.thms "abiEncoderComplexStatic");

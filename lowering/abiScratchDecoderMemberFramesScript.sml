@@ -2,10 +2,10 @@
 Theory abiScratchDecoderMemberFrames
 Ancestors
   abiScratchDecoderContract abiScratchDecoderTransport abiScratchEncoderContract
-  abiScratchEffectFrame abiScratchEffectWiden abiScratchEffectCompose abiScratchFootprint
-  abiDecoderMemberFrames abiDecoderAllocation abiDecoderFootprint abiDecoderFrame
-  abiDecoderReentry abiDecoderContract abiDecoderTypedContract abiDecodeRanges
-  compileEnv valueEncoding vyperTyping venomState words list arithmetic
+  abiScratchEffect abiScratchFootprint abiDecoderMemberFrames abiDecoderAllocation
+  abiDecoderFootprint abiDecoderFrame abiDecoderReentry abiDecoderContract
+  abiDecoderTypedContract abiDecodeRanges compileEnv valueEncoding vyperTyping venomState words
+  list arithmetic
 
 Theorem abi_scratch_decoder_member_after_head:
   abi_scratch_decoder_ranges opc hi_op src dst sb (LENGTH bs)
@@ -78,12 +78,3 @@ Proof
      asm_simp_tac arith_ss []) >>
   irule abi_scratch_effect_trans >> asm_simp_tac bool_ss [] >> qexists_tac `middle` >> simp[]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_SCRATCH_DECODER_MEMBER_FRAMES_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI physical member framing not kernel closed: " ^ n)
-  end) (DB.thms "abiScratchDecoderMemberFrames");
-

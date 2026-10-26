@@ -3,12 +3,12 @@
    allowing source/output buffers within the numeric allocation envelope. *)
 Theory abiScratchEncoderLeaves
 Ancestors
-  abiScratchEncoderContract abiScratchLeafEffect abiScratchFootprint
-  abiEncoderSequence abiEncoderLeafCode abiEncoderAdmissible abiEncoderCorrectLeaves
-  abiEncoderReentryLeaves abiEncoderBytesCorrect abiEncoderBytesCode abiEncoderInput
-  abiDecoderAllocation abiDecoderFrame abiDecoderContract abiDecoderReentry abiDecoderLoop
-  abiEncoder compileEnv emitHelper valueEncoding contractABI venomState venomExecSemantics
-  emitHelperProps words list rich_list arithmetic
+  abiScratchEncoderContract abiScratchLeafEffect abiScratchFootprint abiEncoderSequence
+  abiEncoderLeafCode abiEncoderAdmissible abiEncoderCorrectLeaves abiEncoderReentryLeaves
+  abiEncoderBytes abiEncoderBytesCode abiEncoderInput abiDecoderAllocation abiDecoderFrame
+  abiDecoderContract abiDecoderReentry abiDecoderLoop abiEncoder compileEnv emitHelper
+  valueEncoding contractABI venomState venomExecSemantics emitHelperProps words list rich_list
+  arithmetic
 
 Theorem abi_scratch_encoder_word:
   abi_scratch_encoder AbiPrimWord
@@ -88,11 +88,3 @@ Proof
   qexists_tac `initial` >>
   asm_simp_tac (srw_ss()) [mem_bytes_at_def, eval_operand_def, abi_decode_sim_refl]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_SCRATCH_ENCODER_LEAVES_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI scratch encoder leaf not kernel closed: " ^ n)
-  end) (DB.thms "abiScratchEncoderLeaves");

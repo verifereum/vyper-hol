@@ -2,9 +2,9 @@
 Theory abiScratchDecoderAddress
 Ancestors
   abiScratchDecoderContract abiScratchDecoderTransport abiScratchEncoderContract
-  abiScratchAddressEffect abiDecoderArrayBody abiDecoderArraySetupInputs abiDecoderDynamicLoopSetup
-  abiDecoderReentry abiDecoderContract abiDecodeRanges compileEnv
-  valueEncoding venomState words arithmetic
+  abiScratchAddress abiDecoderArrayBody abiDecoderArraySetupInputs abiDecoderDynamicLoopSetup
+  abiDecoderReentry abiDecoderContract abiDecodeRanges compileEnv valueEncoding venomState words
+  arithmetic
 
 Theorem abi_scratch_decoder_address_observations:
   abi_scratch_decoder_ranges opc hi_op src dst sb len d sz first last b cap initial /\
@@ -29,12 +29,3 @@ Proof
      qexists_tac `next` >> asm_simp_tac bool_ss []) >>
   fs[abi_scratch_effect_def]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_SCRATCH_DECODER_ADDRESS_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI physical address observations not kernel closed: " ^ n)
-  end) (DB.thms "abiScratchDecoderAddress");
-

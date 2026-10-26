@@ -144,7 +144,7 @@ val runtime_checked = vyperCheckContractLib.check_contract
 val deployment_checked = vyperCheckContractLib.check_contract
   {in_deploy = true, layouts = fixture_layouts,
    address = ``(0w : address)``, modules = fixture_modules};
-val () = print "BYTES_DECIMAL_FIXTURE_CHECKER_ACCEPTED runtime+deployment hyp=0\n";
+val () = print "BYTES_DECIMAL_FIXTURE_CHECKER_ACCEPTED runtime+deployment\n";
 
 Theorem bytes_decimal_fixture_runtime_checked:
   IS_SOME (check_contract F [] (0w : address)

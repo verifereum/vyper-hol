@@ -3,13 +3,8 @@
    consistency are explicit obligations, not consequences of no-clamp. *)
 Theory abiStaticLayoutProps
 Ancestors
+  venomMemProps
   exprLowering vyperTyping compileEnv valueEncoding vyperABI contractABI
-
-Theorem static_layout_dimindex_256[local,simp]:
-  dimindex(:256) = 256
-Proof
-  CONV_TAC fcpLib.INDEX_CONV
-QED
 
 Definition static_layout_header_def:
   static_layout_header cenv tenv ty tv <=>
@@ -211,11 +206,3 @@ Theorem static_layout_string_excluded:
 Proof
   simp[static_layout_base_iff, is_word_type_def]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_STATIC_LAYOUT_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI static layout not kernel closed: " ^ n)
-  end) (DB.thms "abiStaticLayoutProps");

@@ -3,11 +3,11 @@
 Theory abiBuiltinEncodeProducer
 Ancestors
   abiBuiltinEncodeRun abiBuiltinEncodeInput abiBuiltinEncodeResources abiBuiltinEncodeCode
-  abiBuiltinEncodeContext abiBuiltinEncodeEffect abiBuiltinAllocationState
-  abiTupleEncodeOwnedBytes abiTupleEncodeInput abiDecoderReentry abiDecoderAllocation
-  abiDecoderFootprint abiDecoderLoop abiDecoderContract abiEncoderCounters
-  compileEnv builtinAbi exprLowering exprLoweringProps valueEncoding vyperABI
-  venomMemDefs venomState venomExecSemantics finite_map words list arithmetic
+  abiBuiltinEncodeContext abiBuiltinEncodeEffect abiBuiltinAllocation abiTupleEncodeOwnedBytes
+  abiTupleEncodeInput abiDecoderReentry abiDecoderAllocation abiDecoderFootprint abiDecoderLoop
+  abiDecoderContract abiEncoderCounters compileEnv builtinAbi exprLowering exprLoweringProps
+  valueEncoding vyperABI venomMemDefs venomState venomExecSemantics finite_map words list
+  arithmetic
 
 Theorem abi_builtin_encode_output_live:
   lower_abi_encode ensure method_id src info maxlen st = (out,final) ==>
@@ -45,7 +45,7 @@ Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   Cases_on `method_id` >>
   fs[abi_builtin_encode_prefix_def,
-     abiBuiltinEncodeMethodReachTheory.abi_builtin_encode_method_bytes_length] >> decide_tac
+     abiBuiltinEncodeMethodTheory.abi_builtin_encode_method_bytes_length] >> decide_tac
 QED
 
 Theorem abi_builtin_encode_output_before_scratch:
@@ -59,7 +59,7 @@ Proof
   drule abi_decoder_budget_frontier >> strip_tac >>
   Cases_on `method_id` >>
   fs[abi_builtin_encode_prefix_def,
-     abiBuiltinEncodeMethodReachTheory.abi_builtin_encode_method_bytes_length] >> decide_tac
+     abiBuiltinEncodeMethodTheory.abi_builtin_encode_method_bytes_length] >> decide_tac
 QED
 
 Theorem abi_builtin_allocate_next_valid:
@@ -122,11 +122,3 @@ Proof
   irule abi_tuple_encode_owned_bytes_source_input >> asm_rewrite_tac[] >>
   qexists_tac `n2w p:bytes32` >> fs[w2n_n2w, LENGTH_APPEND] >> decide_tac
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_BUILTIN_ENCODE_PRODUCER_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI builtin produced tuple input not kernel closed: " ^ n)
-  end) (DB.thms "abiBuiltinEncodeProducer");

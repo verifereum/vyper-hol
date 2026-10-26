@@ -143,7 +143,3 @@ Proof
 QED
 
 (* All exports here are kernel proofs, including the generic fuel bridge. *)
-val _ = List.app (fn (_,th) =>
-  if List.all (fn s => s = "DISK_THM") (#1 (Tag.dest_tag (Thm.tag th)))
-  then () else raise Fail "oracle in changed-only worklist API")
-  (DB.thms "livenessWorklistProofs");

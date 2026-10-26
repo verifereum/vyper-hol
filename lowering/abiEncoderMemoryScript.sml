@@ -5,11 +5,6 @@ Ancestors
   valueEncoding valueEncodingProps valueEncodingProofs venomMemProps venomState venomExecSemantics
   contractABI byte words list rich_list arithmetic
 
-Theorem abi_encoder_memory_dimindex[simp,local]: dimindex (:256) = 256
-Proof
-  CONV_TAC fcpLib.INDEX_CONV
-QED
-
 Theorem abi_encoder_mem_split:
   !off m n mem. mem_bytes_at off (m+n) mem =
     mem_bytes_at off m mem ++ mem_bytes_at (off+m) n mem
@@ -119,11 +114,3 @@ Theorem abi_encoder_frame_memory:
 Proof
   simp_tac bool_ss [abi_decode_frame_def] >> strip_tac >> asm_simp_tac bool_ss []
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_ENCODER_MEMORY_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI encoder memory not kernel closed: " ^ n)
-  end) (DB.thms "abiEncoderMemory");

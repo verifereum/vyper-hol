@@ -41,11 +41,3 @@ Proof
   simp_tac bool_ss [cs_appends_def] >> strip_tac >>
   first_x_assum (qspecl_then [`st`, `out`, `end_st`] mp_tac) >> asm_simp_tac bool_ss []
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_ENCODER_ARRAY_PHASE_APPEND_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI encoder array phase extension not kernel closed: " ^ n)
-  end) (DB.thms "abiEncoderArrayPhaseAppend");

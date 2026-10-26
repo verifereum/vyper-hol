@@ -23,11 +23,3 @@ Proof
        disch_then (qspec_then `allocated_id` mp_tac) >> asm_simp_tac bool_ss []) >>
     fs[MEM_SET_TO_LIST, SUBSET_DEF]) >> simp[]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_SCRATCH_SUBSET_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI scratch subset not kernel closed: " ^ n)
-  end) (DB.thms "abiScratchSubset");

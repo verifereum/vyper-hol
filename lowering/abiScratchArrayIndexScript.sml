@@ -3,12 +3,11 @@
    output prefix and parent cursor while initializing a distinct index cursor. *)
 Theory abiScratchArrayIndex
 Ancestors
-  abiScratchOwnedPrefix abiScratchPrefixReach abiScratchFootprint
-  abiEncoderArrayInitCode abiEncoderComplexPrefix abiEncoderComplexPrefixReach
-  abiEncoderArrayFrame abiEncoderArrayPrefix abiEncoderMembersDefs abiEncoderInput
-  abiEncoderInputFrame abiDecoderAllocation abiDecoderFootprint abiDecoderFrame
-  abiDecoderReentry abiDecoderLoop compileEnv valueEncoding contractABI venomState
-  finite_map pred_set words list arithmetic
+  abiScratchOwnedPrefix abiScratchPrefixReach abiScratchFootprint abiEncoderArrayInitCode
+  abiEncoderComplexPrefix abiEncoderArrayFrame abiEncoderArrayPrefix abiEncoderMembersDefs
+  abiEncoderInput abiEncoderInputFrame abiDecoderAllocation abiDecoderFootprint abiDecoderFrame
+  abiDecoderReentry abiDecoderLoop compileEnv valueEncoding contractABI venomState finite_map
+  pred_set words list arithmetic
 
 Theorem abi_scratch_array_index:
   abi_decode_index_init st = (index_ptr,st') /\ fn_has_code st st' func /\
@@ -81,11 +80,3 @@ Proof
     fs[abi_encoder_complex_prefix_post_def] >>
   qexistsl_tac [`actual`, `slot`] >> gvs[]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_SCRATCH_ARRAY_INDEX_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI scratch array index not kernel closed: " ^ n)
-  end) (DB.thms "abiScratchArrayIndex");

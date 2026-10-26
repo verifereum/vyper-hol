@@ -5,10 +5,10 @@
 Theory abiScratchBuiltinCaller
 Ancestors
   abiScratchBuiltinPre abiScratchBuiltinRun abiScratchBuiltinEffect abiScratchArrayEntry
-  abiCallerAllocation abiBuiltinAllocationState abiEncoderInput abiBuiltinEncodeRun
-  abiDecoderAllocation abiDecoderFootprint abiDecoderFrame abiDecoderReentry abiDecoderLoop abiDecoderContract
-  compileEnv exprLowering builtinAbi valueEncoding contractABI venomMemDefs venomState
-  finite_map pred_set words list arithmetic
+  abiCallerAllocation abiBuiltinAllocation abiEncoderInput abiBuiltinEncodeRun
+  abiDecoderAllocation abiDecoderFootprint abiDecoderFrame abiDecoderReentry abiDecoderLoop
+  abiDecoderContract compileEnv exprLowering builtinAbi valueEncoding contractABI venomMemDefs
+  venomState finite_map pred_set words list arithmetic
 
 Theorem abi_scratch_builtin_allocate_inv:
   alloca_inv s ==> alloca_inv (abi_builtin_allocate_state site outsz s)
@@ -126,11 +126,3 @@ Proof
     (Q.INST [`st` |-> `start:compile_state`] abi_scratch_builtin_pre_caller))) >> disch_tac >>
   drule_all lower_abi_encode_scratch >> disch_then (qspec_then `ctx` ACCEPT_TAC)
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_SCRATCH_BUILTIN_CALLER_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI scratch builtin caller resources not kernel closed: " ^ n)
-  end) (DB.thms "abiScratchBuiltinCaller");

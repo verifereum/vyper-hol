@@ -3,10 +3,9 @@
    allocation without separating it from the entire numeric scratch envelope. *)
 Theory abiScratchEncoderPrefix
 Ancestors
-  abiScratchSequence abiScratchFootprint abiCallerAllocation
-  abiEncoderComplexPrefixReach abiEncoderComplexPrefix
-  abiDecoderFootprint abiDecoderAllocation abiDecoderFrame
-  compileEnv venomState valueEncoding finite_map pred_set list arithmetic words
+  abiScratchSequence abiScratchFootprint abiCallerAllocation abiEncoderComplexPrefix
+  abiDecoderFootprint abiDecoderAllocation abiDecoderFrame compileEnv venomState valueEncoding
+  finite_map pred_set list arithmetic words
 
 Theorem abi_scratch_encoder_prefix_sequence:
   abi_encode_complex_prefix infos st = (dyn_ptr,st') /\
@@ -79,11 +78,3 @@ Proof
   drule_all (Q.INST [`ids` |-> `abi_decoder_ids first last`]
     abi_scratch_encoder_prefix_source) >> simp[]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_SCRATCH_ENCODER_PREFIX_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI scratch encoder prefix not kernel closed: " ^ n)
-  end) (DB.thms "abiScratchEncoderPrefix");

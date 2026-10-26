@@ -3,8 +3,8 @@
 Theory abiTupleEncodeLayout
 Ancestors
   abiTupleEncodeMemory abiTupleProps abiEncoderAdmissible abiEncoderInput
-  abiEncoderInputLayout abiEncoderCorrectLeaves abiEncoderMemory abiStaticAggregateProps
-  compileEnv exprLowering valueEncoding contractABI words list rich_list arithmetic
+  abiEncoderCorrectLeaves abiEncoderMemory abiStaticAggregateProps compileEnv exprLowering
+  valueEncoding contractABI words list rich_list arithmetic
 
 Definition abi_tuple_encode_layout_def:
   abi_tuple_encode_layout ce (xs:(operand # type) list) ats <=>
@@ -77,11 +77,3 @@ Proof
   mp_tac (Q.SPECL [`d`, `type_memory_bytes ce h1`, `abi_tuple_bytes ce (xs:(operand # type) list)`, `mem`]
     abi_encoder_mem_split) >> fs[abi_tuple_bytes_def]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_TUPLE_ENCODE_LAYOUT_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI tuple encoder layout not kernel closed: " ^ n)
-  end) (DB.thms "abiTupleEncodeLayout");

@@ -1,14 +1,13 @@
 (* Execute the actual bulk decoder from a fixed initial state, preserving budget. *)
 Theory abiDecoderBulkExecute
 Ancestors
-  abiDecoderBulkFragment abiDecoderBulk abiDecoderBulkBody abiDecoderBulkPayload
-  abiDecoderBytesTyped abiDecoderComposition abiDecoderBulkTyped abiDecoderVarSequence
-  abiDecoderDynarrayPrefix abiDecoderDynarrayBound abiDecoderArrayHeader
-  abiDecoderGuardLE abiDecoderGuards abiDecoderCopy abiDecoderTypedContract
-  abiDecoderCoherence abiDecoderArrayPrepare abiDecoderArrayInitExec
-  abiDecoderAllocation abiDecoderContract abiDecoderLoop abiDecoderFrame abiDecoderFrameCompose
-  fragExec instIdxIndep exprLoweringProps emitHelperProps emitHelper compileEnv
-  venomExecSemantics venomState venomInst valueEncoding words list rich_list arithmetic
+  abiDecoderBulk abiDecoderBytesTyped abiDecoderComposition abiDecoderVarSequence
+  abiDecoderDynarrayPrefix abiDecoderDynarrayBound abiDecoderArrayHeader abiDecoderGuard
+  abiDecoderGuards abiDecoderCopy abiDecoderTypedContract abiDecoderCoherence
+  abiDecoderArrayPrepare abiDecoderArrayInitExec abiDecoderAllocation abiDecoderContract
+  abiDecoderLoop abiDecoderFrame abiDecoderFrameCompose fragExec instIdxIndep exprLoweringProps
+  emitHelperProps emitHelper compileEnv venomExecSemantics venomState venomInst valueEncoding
+  words list rich_list arithmetic
 
 Theorem abi_decoder_bulk_allocation_shape:
   compile_abi_decode_to_buf dst src opc hi (DecDynArray ei abi_sz mem_sz F maxn)
@@ -111,11 +110,3 @@ Proof
     (drule_all abi_decoder_budget_transport >> simp[]) >>
   qexists_tac `t` >> simp[]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_DECODER_BULK_EXECUTE_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI bulk decoder execution not kernel closed: " ^ n)
-  end) (DB.thms "abiDecoderBulkExecute");

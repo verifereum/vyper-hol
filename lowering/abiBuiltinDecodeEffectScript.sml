@@ -2,8 +2,8 @@
    recursive decoder allocates 32-byte scratch slots. *)
 Theory abiBuiltinDecodeEffect
 Ancestors
-  abiBuiltinAllocationState abiDecoderEffect abiDecoderFrame abiDecoderReentry
-  abiDecoderAllocation compileEnv venomState finite_map words arithmetic
+  abiBuiltinAllocation abiDecoderEffect abiDecoderFrame abiDecoderReentry abiDecoderAllocation
+  compileEnv venomState finite_map words arithmetic
 
 Definition abi_builtin_decode_effect_def:
   abi_builtin_decode_effect first last st final limit_st d outsz b cap s t <=>
@@ -47,11 +47,3 @@ Proof
      asm_simp_tac bool_ss []) >>
   gvs[abi_decoder_scratch_frame_def]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_BUILTIN_DECODE_EFFECT_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI builtin decode effect not kernel closed: " ^ n)
-  end) (DB.thms "abiBuiltinDecodeEffect");

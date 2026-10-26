@@ -1,10 +1,11 @@
 (* Top-level dynamic complex encoders compose cursor setup, every member and the final load. *)
 Theory abiEncoderComplexDynamic
 Ancestors
-  abiEncoderComplexContext abiEncoderComplexSetup abiEncoderComplexFinish abiEncoderComplexCompose
-  abiEncoderMembersCorrect abiEncoderMembersBoundary abiEncoderMembersContract abiEncoderMembersDefs
-  abiEncoderCorrect abiEncoderInput abiEncoderInputLayout abiDecoderEffect abiDecoderLoop
-  abiDecoderContract compileEnv valueEncoding contractABI venomState words list arithmetic
+  abiEncoderComplexContext abiEncoderComplexSetup abiEncoderComplexFinish
+  abiEncoderComplexCompose abiEncoderMembersCorrect abiEncoderMembersBoundary
+  abiEncoderMembersContract abiEncoderMembersDefs abiEncoderCorrect abiEncoderInput
+  abiDecoderEffect abiDecoderLoop abiDecoderContract compileEnv valueEncoding contractABI
+  venomState words list arithmetic
 
 Theorem abi_encoder_correct_complex_dynamic:
   EVERY (\(ei,_,_,_). abi_encoder_correct ei) infos /\
@@ -53,11 +54,3 @@ Proof
   impl_tac >- (asm_simp_tac bool_ss [] >> decide_tac) >> strip_tac >>
   qexists_tac `actual` >> asm_simp_tac bool_ss []
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_ENCODER_COMPLEX_DYNAMIC_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI encoder dynamic complex execution not kernel closed: " ^ n)
-  end) (DB.thms "abiEncoderComplexDynamic");

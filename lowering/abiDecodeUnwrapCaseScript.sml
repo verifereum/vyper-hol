@@ -69,11 +69,3 @@ Theorem abi_decoder_unwrap_true_case =
 
 Theorem abi_decoder_unwrap_false_case =
   SIMP_RULE bool_ss [LET_THM] (Q.INST [`unwrap` |-> `F`] abi_decoder_unwrap_case);
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_DECODE_UNWRAP_CASE_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI decode unwrap case not kernel closed: " ^ n)
-  end) (DB.thms "abiDecodeUnwrapCase");

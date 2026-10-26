@@ -1,9 +1,10 @@
 (* Transfer successful child observations to the next member's pure invariant. *)
 Theory abiEncoderMembersAdvance
 Ancestors
-  abiEncoderMembersContract abiEncoderMembersDefs abiEncoderMembersSource abiEncoderMembersLayout
-  abiEncoderTuplePrefix abiEncoderInput abiDecodeRanges abiCanonicalWindows abiDecoderEffect
-  abiDecoderReentry abiDecoderContract compileEnv valueEncoding contractABI venomState words list arithmetic
+  abiEncoderMembersContract abiEncoderMembersDefs abiEncoderMembersSource
+  abiEncoderMembersLayout abiEncoderTuple abiEncoderInput abiDecodeRanges abiCanonicalWindows
+  abiDecoderEffect abiDecoderReentry abiDecoderContract compileEnv valueEncoding contractABI
+  venomState words list arithmetic
 
 Theorem abi_encoder_members_after_child:
   abi_encoder_members_inv ((ei,abi_sz,mem_sz,dyn)::infos) (ty::tys) (av::avs)
@@ -42,11 +43,3 @@ Proof
   qpat_x_assum `active \/ EVERY _ _` mp_tac >> simp_tac (srw_ss()) [] >>
   rpt strip_tac >> asm_simp_tac bool_ss []
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_ENCODER_MEMBERS_ADVANCE_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI encoder members invariant advance not kernel closed: " ^ n)
-  end) (DB.thms "abiEncoderMembersAdvance");

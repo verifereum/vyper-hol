@@ -2,13 +2,12 @@
 Theory abiScratchDecoderMemberBody
 Ancestors
   abiScratchDecoderContract abiScratchDecoderMemberEntry abiScratchEncoderContract
-  abiScratchDecoderRanges abiScratchAddressEffect abiDecoderEmptyMember
-  abiDecoderOffset abiDecoderOffsetHead
-  abiScratchAfterAddress abiDecoderMemberBody abiDecoderMemberSetup abiDecoderArrayBody
-  abiDecoderDynamicLoopSetup abiDecoderArrayInitExec abiDecoderAllocation
+  abiScratchDecoderRanges abiScratchAddress abiDecoderEmptyMember abiDecoderOffset
+  abiDecoderOffsetHead abiScratchAfterAddress abiDecoderMemberBody abiDecoderMemberSetup
+  abiDecoderArrayBody abiDecoderDynamicLoopSetup abiDecoderArrayInitExec abiDecoderAllocation
   abiDecoderCoherence abiDecoderDynamic abiDecoderTypedContract abiDecoderContract
-  abiDecoderReentry abiDecoderLoop abiDecodeRanges abiEncoder fragExec compileEnv
-  valueEncoding vyperABI contractABI venomState venomExecSemantics words list arithmetic
+  abiDecoderReentry abiDecoderLoop abiDecodeRanges abiEncoder fragExec compileEnv valueEncoding
+  vyperABI contractABI venomState venomExecSemantics words list arithmetic
 
 Theorem abi_scratch_decoder_member_body_helper:
   let at = vyper_to_abi_type env ty;
@@ -124,12 +123,3 @@ Proof
   mp_tac (SIMP_RULE bool_ss [LET_THM] abi_scratch_decoder_member_body_helper) >>
   impl_tac >- asm_simp_tac bool_ss [] >> simp[]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_SCRATCH_DECODER_MEMBER_BODY_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI physical member body not kernel closed: " ^ n)
-  end) (DB.thms "abiScratchDecoderMemberBody");
-

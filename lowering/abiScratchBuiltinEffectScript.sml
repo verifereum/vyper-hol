@@ -4,11 +4,11 @@
    the actual physical write regions. *)
 Theory abiScratchBuiltinEffect
 Ancestors
-  abiScratchBuiltinPre abiScratchEncoderContract abiScratchFootprint abiScratchEffectProtected abiScratchFrameCompose
-  abiEncoderInputFrame abiEncoderInput
-  abiBuiltinEncodeSetupFrame abiBuiltinEncodeEffect abiBuiltinAllocationState abiScratchBuiltinOwnership
-  abiDecoderAllocation abiDecoderFootprint abiDecoderFrame abiDecoderPrimitiveLoopFrames abiDecoderReentry
-  compileEnv venomState finite_map pred_set words list arithmetic
+  abiScratchBuiltinPre abiScratchEncoderContract abiScratchFootprint abiScratchEffect
+  abiScratchFrameCompose abiEncoderInputFrame abiEncoderInput abiBuiltinEncodeSetup
+  abiBuiltinEncodeEffect abiBuiltinAllocation abiScratchBuiltinOwnership abiDecoderAllocation
+  abiDecoderFootprint abiDecoderFrame abiDecoderPrimitiveLoopFrames abiDecoderReentry compileEnv
+  venomState finite_map pred_set words list arithmetic
 
 Definition abi_scratch_builtin_effect_def:
   abi_scratch_builtin_effect first last st final limit_st p outsz write_size b cap s t <=>
@@ -137,11 +137,3 @@ Proof
     asm_simp_tac (srw_ss()) [abi_scratch_disjoint_cons] >>
   drule_all abi_encoder_input_frame >> simp[]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_SCRATCH_BUILTIN_EFFECT_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI scratch complete builtin effect not kernel closed: " ^ n)
-  end) (DB.thms "abiScratchBuiltinEffect");

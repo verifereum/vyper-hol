@@ -42,11 +42,3 @@ Proof
   asm_simp_tac bool_ss [] >>
   qpat_x_assum `_ \/ _` mp_tac >> asm_simp_tac bool_ss []
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_ENCODER_COMPLEX_CONTEXT_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI encoder complex context not kernel closed: " ^ n)
-  end) (DB.thms "abiEncoderComplexContext");

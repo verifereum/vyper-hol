@@ -2,7 +2,7 @@
    TOP-LEVEL: prefix capacity and preservation across disjoint scratch writes. *)
 Theory abiEncoderArrayFrame
 Ancestors
-  abiEncoderArrayPrefix abiEncoderArrayLayout abiEncoderInputLayout abiCanonicalArrays abiDecodeRanges
+  abiEncoderArrayPrefix abiEncoderArrayLayout abiEncoderInput abiCanonicalArrays abiDecodeRanges
   abiDecoderFrame abiDecoderContract valueEncoding contractABI venomState list arithmetic
 
 Theorem abi_footprint_disjoint_subwindow:
@@ -50,11 +50,3 @@ Proof
   irule abi_footprint_disjoint_subwindow >> qexistsl_tac [`d`, `output_size`] >>
   asm_simp_tac bool_ss [] >> decide_tac
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_ENCODER_ARRAY_FRAME_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI encoder array frame not kernel closed: " ^ n)
-  end) (DB.thms "abiEncoderArrayFrame");

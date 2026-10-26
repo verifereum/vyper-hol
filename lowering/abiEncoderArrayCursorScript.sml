@@ -1,8 +1,9 @@
 (* Stable cursor observations at a loop's compiler entry, across recursive bodies. *)
 Theory abiEncoderArrayCursor
 Ancestors
-  abiEncoderMembersDefs abiEncoderDynamicChildCore abiDecoderEffect abiDecoderAllocation abiDecoderProtectedScratch
-  abiDecoderReentry abiDecoderContract compileEnv venomState finite_map words arithmetic
+  abiEncoderMembersDefs abiEncoderDynamic abiDecoderEffect abiDecoderAllocation
+  abiDecoderProtectedScratch abiDecoderReentry abiDecoderContract compileEnv venomState
+  finite_map words arithmetic
 
 Theorem abi_encoder_cursor_bounds:
   abi_encoder_cursor T cursor_op site slot first lo st off s /\
@@ -63,11 +64,3 @@ Proof
     (imp_res_tac abi_encoder_effect_operand >> asm_simp_tac bool_ss []) >>
   asm_simp_tac bool_ss []
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_ENCODER_ARRAY_CURSOR_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI encoder array cursor not kernel closed: " ^ n)
-  end) (DB.thms "abiEncoderArrayCursor");

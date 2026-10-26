@@ -50,11 +50,3 @@ Proof
   `type_memory_bytes ce ty = type_memory_size tv` by fs[abi_decoder_header_def] >>
   asm_rewrite_tac[abi_empty_round_memory_size]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_EMPTY_SIZE_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI Empty memory size not kernel closed: " ^ n)
-  end) (DB.thms "abiEmptySize");

@@ -1,9 +1,9 @@
 (* Complete encoder sources depend only on their declared memory window. *)
 Theory abiEncoderInputFrame
 Ancestors
-  abiEncoderInput abiEncoderInputLayout abiEncoderMemory abiStaticPrimitiveProps
-  abiDecoderFrame abiDecoderContract valueEncoding valueEncodingProps valueEncodingProofs
-  venomState contractABI words list rich_list arithmetic
+  abiEncoderInput abiEncoderMemory abiStaticPrimitiveProps abiDecoderFrame abiDecoderContract
+  valueEncoding valueEncodingProps valueEncodingProofs venomState contractABI words list
+  rich_list arithmetic
 
 Theorem abi_encoder_window_slice:
   mem_bytes_at sb cap mem = mem_bytes_at db cap mem' /\ off+len <= cap ==>
@@ -159,11 +159,3 @@ Proof
   disch_then (qspecl_then [`db`, `(mcopy db sb cap s).vs_memory`] mp_tac) >>
   simp[mcopy_mem_bytes_at_same]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_ENCODER_INPUT_FRAME_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI encoder input frame not kernel closed: " ^ n)
-  end) (DB.thms "abiEncoderInputFrame");

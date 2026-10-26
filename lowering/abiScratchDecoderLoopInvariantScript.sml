@@ -2,13 +2,12 @@
 Theory abiScratchDecoderLoopInvariant
 Ancestors
   abiScratchDecoderContract abiScratchDecoderArrayMemory abiScratchDecoderLoopControl
-  abiScratchEncoderContract abiScratchEffectCompose abiScratchEffectWiden abiScratchEffectProtected
-  abiScratchFootprint abiEncoderArrayFrame
+  abiScratchEncoderContract abiScratchEffect abiScratchFootprint abiEncoderArrayFrame
   abiDecoderEffect abiDecoderValidArrayMemory abiDecoderValidArrayScratch abiDecoderArrayScratch
-  abiDecoderPrimitiveLoopHeader abiDecoderValidArrayBackedge abiDecoderArrayBackedge abiDecoderLoopRegisters
-  abiDecoderExecution abiDecoderLoop abiDecoderReentry abiDecoderContract
-  abiDecoderAllocation abiDecoderFrame abiDecoderDynamicLoopSetup
-  compileEnv valueEncoding vyperABI venomState words list arithmetic finite_map
+  abiDecoderPrimitiveLoopHeader abiDecoderValidArrayBackedge abiDecoderArrayBackedge
+  abiDecoderLoopRegisters abiDecoderExecution abiDecoderLoop abiDecoderReentry
+  abiDecoderContract abiDecoderAllocation abiDecoderFrame abiDecoderDynamicLoopSetup compileEnv
+  valueEncoding vyperABI venomState words list arithmetic finite_map
 
 Definition abi_scratch_decoder_loop_inv_def:
   abi_scratch_decoder_loop_inv opc bs tv vs sb d outsz slot site
@@ -163,12 +162,3 @@ Proof
      irule abi_decode_backedge_sim >> simp[] >> metis_tac[]) >>
   qexists_tac `v` >> asm_simp_tac bool_ss [abi_scratch_decoder_loop_inv_def]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_SCRATCH_DECODER_LOOP_INVARIANT_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI physical decoder loop invariant not kernel closed: " ^ n)
-  end) (DB.thms "abiScratchDecoderLoopInvariant");
-

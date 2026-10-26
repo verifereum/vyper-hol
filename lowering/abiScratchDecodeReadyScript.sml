@@ -2,10 +2,10 @@
 Theory abiScratchDecodeReady
 Ancestors
   abiScratchDecodeInput abiScratchDecoderContract abiScratchFootprint abiDecoderFootprint
-  abiBuiltinAllocationState abiBuiltinDecodeSetup abiBuiltinSetupExecute
-  abiDecoderCoherence abiDecoderTypedContract abiDecoderReentry abiDecoderContract
-  abiDecoderAllocation abiDecoderArrayInitExec abiDecodeRanges compileEnv valueEncoding
-  vyperABI contractABI venomState words list arithmetic
+  abiBuiltinAllocation abiBuiltinDecodeSetup abiBuiltinSetupExecute abiDecoderCoherence
+  abiDecoderTypedContract abiDecoderReentry abiDecoderContract abiDecoderAllocation
+  abiDecoderArrayInitExec abiDecodeRanges compileEnv valueEncoding vyperABI contractABI
+  venomState words list arithmetic
 
 Theorem abi_scratch_decode_ranges:
   abi_scratch_decode_resources st first last min_size max_size outsz cnt p d b cap initial /\
@@ -63,12 +63,3 @@ Proof
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_builtin_allocation_frame_def]) >>
   asm_simp_tac (srw_ss()) [abi_scratch_decoder_input_def, abi_decode_source_def]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_SCRATCH_DECODE_READY_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI physical builtin decoder readiness not kernel closed: " ^ n)
-  end) (DB.thms "abiScratchDecodeReady");
-

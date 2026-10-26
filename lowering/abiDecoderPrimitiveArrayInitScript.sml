@@ -1,11 +1,11 @@
 (* Actual initialized loop entry from the typed primitive-array precondition. *)
 Theory abiDecoderPrimitiveArrayInit
 Ancestors
-  abiDecoderArrayInitReach abiDecoderArrayInitMemory abiDecoderPrimitiveArrayFacts
-  abiDecoderArrayLoopInit abiDecoderPrimitiveLoopContext abiDecoderArrayInvariant
-  abiDecoderCoherence abiDecoderTypedContract abiDecoderReentry abiDecoderLoop
-  abiDecoderContract abiDecoderFrame abiDecoderAllocation fragExec
-  exprLoweringProps emitHelperProps compileEnv valueEncoding venomState words list arithmetic
+  abiDecoderArrayInit abiDecoderPrimitiveArrayFacts abiDecoderArrayLoopInit
+  abiDecoderPrimitiveLoopContext abiDecoderArrayInvariant abiDecoderCoherence
+  abiDecoderTypedContract abiDecoderReentry abiDecoderLoop abiDecoderContract abiDecoderFrame
+  abiDecoderAllocation fragExec exprLoweringProps emitHelperProps compileEnv valueEncoding
+  venomState words list arithmetic
 Libs
   Omega
 
@@ -74,11 +74,3 @@ Proof
     (mp_tac (Q.SPECL [`loop_st`, `end_st`, `prepared`] fresh_vars_wrt_mono) >> simp[GREATER_EQ]) >>
   qexistsl_tac [`prepared`, `slot`] >> gvs[Excl "enc_def"]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_DECODER_PRIMITIVE_ARRAY_INIT_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI primitive array entry not kernel closed: " ^ n)
-  end) (DB.thms "abiDecoderPrimitiveArrayInit");

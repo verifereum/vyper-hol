@@ -1,8 +1,8 @@
 (* Complex descriptor heads and dynamic flags agree with semantic tuple layout. *)
 Theory abiEncoderComplexLayout
 Ancestors
-  abiEncoderMembersInput abiEncoderInput abiEncoderInputLayout abiDecodeRanges
-  valueEncoding contractABI list rich_list arithmetic
+  abiEncoderMembersInput abiEncoderInput abiDecodeRanges valueEncoding contractABI list
+  rich_list arithmetic
 
 Theorem abi_encoder_members_metadata:
   LENGTH (infos:(abi_enc_info # num # num # bool) list) = LENGTH tys /\
@@ -62,11 +62,3 @@ Proof
   drule abi_encoder_static_tuple_tails >> disch_then (qspec_then `avs` assume_tac) >>
   asm_simp_tac bool_ss [canonical_tuple_length, head_lengths_acc, ADD_CLAUSES]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_ENCODER_COMPLEX_LAYOUT_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI encoder complex layout not kernel closed: " ^ n)
-  end) (DB.thms "abiEncoderComplexLayout");

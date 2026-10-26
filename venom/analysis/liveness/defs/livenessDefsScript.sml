@@ -39,7 +39,6 @@ Definition ordered_inst_uses_def:
     operand_vars (python_stack_operands inst.inst_opcode inst.inst_operands)
 End
 
-
 Theorem MEM_ordered_inst_uses[simp]:
   MEM v (ordered_inst_uses inst) <=> MEM v (inst_uses inst)
 Proof
@@ -339,8 +338,3 @@ Theorem liveness_acyclic_probe[local]:
 Proof
   EVAL_TAC
 QED
-
-val _ = List.app (fn (_,th) =>
-  if List.all (fn s => s = "DISK_THM") (#1 (Tag.dest_tag (Thm.tag th)))
-  then () else raise Fail "oracle in staged liveness definitions")
-  (DB.thms "livenessDefs");

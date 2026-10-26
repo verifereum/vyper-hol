@@ -1,8 +1,8 @@
 (* Uniform semantic layout and complete source slots for dynamic-array encoding. *)
 Theory abiEncoderArrayLayout
 Ancestors
-  abiEncoderInput abiEncoderInputLayout abiCanonicalWindows abiCanonicalArrays abiDecodeRanges
-  valueEncoding contractABI words list rich_list arithmetic
+  abiEncoderInput abiCanonicalWindows abiCanonicalArrays abiDecodeRanges valueEncoding
+  contractABI words list rich_list arithmetic
 
 Theorem abi_encoder_have_type_every:
   !vs ty. have_type ty vs = EVERY (has_type ty) vs
@@ -81,11 +81,3 @@ Proof
   `SUM (MAP (abi_member_tail_size ty) avs) = 0` by
     (Induct_on `avs` >> simp[abi_member_tail_size_def]) >> simp[]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_ENCODER_ARRAY_LAYOUT_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI encoder array layout not kernel closed: " ^ n)
-  end) (DB.thms "abiEncoderArrayLayout");

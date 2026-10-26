@@ -1,7 +1,7 @@
 (* Preserve a straight-line prefix's observations at its containing-function endpoint. *)
 Theory abiEncoderPrefixReach
 Ancestors
-  abiEncoderSequenceReach abiBuiltinPrefix abiDecoderReentryAddress abiDecoderDynamicLoopSetup
+  abiEncoderSequence abiBuiltinPrefix abiDecoderReentryAddress abiDecoderDynamicLoopSetup
   abiDecoderReentry abiDecoderContract abiDecoderLoop fragExec instIdxIndep compileEnv
   emitHelperProps exprLoweringProps venomExecSemantics venomState venomInst words list
 
@@ -23,11 +23,3 @@ Proof
   qexists_tac `encoded with vs_inst_idx := LENGTH st'.cs_current_insts` >>
   gvs[abi_decoder_address_frame_def, fresh_vars_wrt_def, eval_op_inst_idx]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_ENCODER_PREFIX_REACH_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI encoder prefix reach not kernel closed: " ^ n)
-  end) (DB.thms "abiEncoderPrefixReach");

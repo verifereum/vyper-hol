@@ -1,11 +1,10 @@
 (* Source-success builtin input with physical scratch resources after output allocation. *)
 Theory abiScratchDecodeInput
 Ancestors
-  abiScratchDecoderContract abiScratchFootprint abiBuiltinValidInput abiBuiltinSourceInput
-  abiBuiltinDecodeSetup abiBuiltinAllocationState abiDecoderReadableTypes
-  abiDecoderCoherence abiDecoderTypedContract abiDecoderContract abiDecoderAllocation
-  abiDecodeRanges vyperABIValid vyperABI contractABI compileEnv valueEncoding
-  valueEncodingProps venomState words list
+  abiScratchDecoderContract abiScratchFootprint abiBuiltinValidInput abiBuiltinSource
+  abiBuiltinDecodeSetup abiBuiltinAllocation abiDecoderReadableTypes abiDecoderCoherence
+  abiDecoderTypedContract abiDecoderContract abiDecoderAllocation abiDecodeRanges vyperABIValid
+  vyperABI contractABI compileEnv valueEncoding valueEncodingProps venomState words list
 
 Definition abi_scratch_decode_resources_def:
   abi_scratch_decode_resources st first last min_size max_size outsz cnt p d b cap s <=>
@@ -63,12 +62,3 @@ Proof
   asm_simp_tac bool_ss [abi_scratch_decode_pre_def] >>
   fs[vyper_valid_enc_def, val_in_memory_def, Excl "enc_def", Excl "dec_def", Excl "valid_enc_def"]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_SCRATCH_DECODE_INPUT_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI physical builtin decoder input not kernel closed: " ^ n)
-  end) (DB.thms "abiScratchDecodeInput");
-

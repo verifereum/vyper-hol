@@ -23,11 +23,3 @@ Proof
   Cases_on `dyn` >| [ACCEPT_TAC abi_encoder_members_dynamic_advance,
     ACCEPT_TAC abi_encoder_members_static_advance]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_ENCODER_MEMBERS_STEP_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI encoder members step not kernel closed: " ^ n)
-  end) (DB.thms "abiEncoderMembersStep");

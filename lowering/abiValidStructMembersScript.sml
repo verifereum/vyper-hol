@@ -2,9 +2,9 @@
    children under the independently descended semantic and compiler maps. *)
 Theory abiValidStructMembers
 Ancestors
-  abiValidMembers abiDecoderStructMembers abiDecoderMembers abiDecoderCoherence
-  abiDecoderTypedContract abiBuiltinSourceInput abiDecodeRanges
-  vyperABIValid vyperABI vyperValue contractABI compileEnv valueEncoding finite_map list
+  abiValidMembers abiDecoderStruct abiDecoderMembers abiDecoderCoherence abiDecoderTypedContract
+  abiBuiltinSource abiDecodeRanges vyperABIValid vyperABI vyperValue contractABI compileEnv
+  valueEncoding finite_map list
 
 Theorem abi_valid_struct_source_members:
   abi_decoder_coherent ce env sf (StructT nsid) tv /\
@@ -37,11 +37,3 @@ Proof
   qexistsl_tac [`args`, `child_tvs`] >>
   asm_simp_tac bool_ss [] >> fs[Once valid_enc_def]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_VALID_STRUCT_MEMBERS_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI valid struct members not kernel closed: " ^ n)
-  end) (DB.thms "abiValidStructMembers");

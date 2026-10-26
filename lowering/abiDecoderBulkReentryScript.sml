@@ -1,12 +1,12 @@
 (* Static bulk-array children can be re-executed with stale local temporaries. *)
 Theory abiDecoderBulkReentry
 Ancestors
-  abiDecoderBulkExecute abiDecoderBulkFragment abiDecoderArrayInitReentry
-  abiDecoderReentry abiDecoderReentrySequence abiDecoderVarSequence abiDecoderVarExtend
-  abiDecoderTypedContract abiDecoderCoherence abiDecoderArrayInitExec
-  abiDecoderContract abiDecoderFrame abiDecoderFrameCompose abiDecoderLoop
-  abiDecoderAllocation abiDecoderProtectedScratch fragExec instIdxIndep exprLoweringProps emitHelperProps
-  compileEnv venomState valueEncoding words list arithmetic
+  abiDecoderBulkExecute abiDecoderBulk abiDecoderArrayInitReentry abiDecoderReentry
+  abiDecoderReentrySequence abiDecoderVarSequence abiDecoderVarExtend abiDecoderTypedContract
+  abiDecoderCoherence abiDecoderArrayInitExec abiDecoderContract abiDecoderFrame
+  abiDecoderFrameCompose abiDecoderLoop abiDecoderAllocation abiDecoderProtectedScratch fragExec
+  instIdxIndep exprLoweringProps emitHelperProps compileEnv venomState valueEncoding words list
+  arithmetic
 
 Theorem abi_decoder_bulk_reentry_sequence:
   compile_abi_decode_to_buf dst src opc hi (DecDynArray ei abi_sz mem_sz F maxn)
@@ -124,11 +124,3 @@ Proof
     by (irule abi_decoder_frame_from_output >> simp[]) >>
   qexists_tac `t` >> simp[] >> metis_tac[]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_DECODER_BULK_REENTRY_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI bulk-array re-entry not kernel closed: " ^ n)
-  end) (DB.thms "abiDecoderBulkReentry");

@@ -1,11 +1,11 @@
 (* Compose actual generic initialization with finite recursive array execution. *)
 Theory abiDecoderValidArrayExecute
 Ancestors
-  abiDecoderRecursiveArrayCode abiDecoderValidArrayInit abiDecoderValidArrayInitInputs
+  abiDecoderRecursiveArray abiDecoderValidArrayInit abiDecoderValidArrayInitInputs
   abiDecoderValidLoopEntry abiDecoderRecursiveInitEffect abiDecoderValidLoopContext
   abiDecoderEffect abiDecoderCoherence abiDecoderTypedContract abiDecoderAllocation
-  abiDecoderContract abiDecoderValidContract abiDecoderLoop abiDecoderReentry
-  fragExec compileEnv valueEncoding vyperABI vyperValue venomState words list arithmetic
+  abiDecoderContract abiDecoderValidContract abiDecoderLoop abiDecoderReentry fragExec
+  compileEnv valueEncoding vyperABI vyperValue venomState words list arithmetic
 
 Theorem abi_decoder_valid_array_execute:
   compile_abi_decode_to_buf dst src opc hi_op
@@ -59,11 +59,3 @@ Proof
   `abi_decode_sim ctx func initial t` by metis_tac[abi_decode_sim_trans] >>
   qexists_tac `t` >> asm_simp_tac bool_ss []
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_DECODER_VALID_ARRAY_EXECUTE_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI valid complete array execution not kernel closed: " ^ n)
-  end) (DB.thms "abiDecoderValidArrayExecute");

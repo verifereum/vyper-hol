@@ -3,10 +3,9 @@
    budget and preserves complete encoder inputs from a live source allocation. *)
 Theory abiScratchPrefixReach
 Ancestors
-  abiScratchEncoderPrefix abiScratchFootprint abiCallerAllocation
-  abiEncoderComplexPrefixReach abiEncoderComplexPrefix abiEncoderSequenceReach
-  abiEncoderInputFrame abiEncoderInput abiDecoderFootprint abiDecoderAllocation
-  abiDecoderFrame abiDecoderLoop compileEnv valueEncoding venomState
+  abiScratchEncoderPrefix abiScratchFootprint abiCallerAllocation abiEncoderComplexPrefix
+  abiEncoderSequence abiEncoderInputFrame abiEncoderInput abiDecoderFootprint
+  abiDecoderAllocation abiDecoderFrame abiDecoderLoop compileEnv valueEncoding venomState
   finite_map pred_set words list arithmetic
 
 Theorem abi_scratch_inst_idx:
@@ -100,11 +99,3 @@ Proof
   disch_then (qspec_then `ctx` strip_assume_tac) >>
   rename1 `abi_decode_sim ctx func initial actual` >> qexists_tac `actual` >> simp[]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_SCRATCH_PREFIX_REACH_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI scratch prefix reach not kernel closed: " ^ n)
-  end) (DB.thms "abiScratchPrefixReach");

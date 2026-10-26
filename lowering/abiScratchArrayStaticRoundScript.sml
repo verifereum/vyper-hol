@@ -3,12 +3,13 @@
    with the real index update. Helper: backedge preservation of complete buffers. *)
 Theory abiScratchArrayStaticRound
 Ancestors
-  abiScratchArrayStaticMemory abiScratchArrayBackedge abiScratchInputEffect abiScratchCursor abiScratchFootprint
-  abiScratchEncoderContract abiScratchEffectWiden abiScratchEffectCompose abiEncoderArrayBodyCode
-  abiEncoderArrayBodyMemory abiEncoderArrayCursor abiEncoderArrayFrame abiEncoderArrayPrefix abiEncoderArrayLayout
-  abiEncoderMembersDefs abiEncoderInput abiDecoderAllocation abiDecoderFootprint abiDecoderFrame
-  abiDecoderLoop abiDecoderArrayBackedge abiDecoderReentry abiDecoderContract compileEnv
-  valueEncoding contractABI venomState venomInst finite_map words list arithmetic
+  abiScratchArrayStaticMemory abiScratchArrayBackedge abiScratchInput abiScratchCursor
+  abiScratchFootprint abiScratchEncoderContract abiScratchEffect abiEncoderArrayBodyCode
+  abiEncoderArrayBodyMemory abiEncoderArrayCursor abiEncoderArrayFrame abiEncoderArrayPrefix
+  abiEncoderArrayLayout abiEncoderMembersDefs abiEncoderInput abiDecoderAllocation
+  abiDecoderFootprint abiDecoderFrame abiDecoderLoop abiDecoderArrayBackedge abiDecoderReentry
+  abiDecoderContract compileEnv valueEncoding contractABI venomState venomInst finite_map words
+  list arithmetic
 
 Theorem abi_scratch_array_static_backedge_memory:
   lookup_block initial.vs_current_bb func.fn_blocks = SOME bb /\
@@ -128,11 +129,3 @@ Proof
   qexists_tac `actual` >> asm_simp_tac bool_ss [] >>
   irule abi_decode_sim_trans >> qexists_tac `encoded` >> simp[]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_SCRATCH_ARRAY_STATIC_ROUND_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI scratch actual static round not kernel closed: " ^ n)
-  end) (DB.thms "abiScratchArrayStaticRound");

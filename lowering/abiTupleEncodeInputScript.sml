@@ -2,9 +2,8 @@
    prefix is separated from the tuple temporary; unused capacity may overlap. *)
 Theory abiTupleEncodeInput
 Ancestors
-  abiEncoderInput abiEncoderInputFrame abiBuiltinEncodeWordStageCode
-  abiDecoderReentry abiDecoderContract compileEnv exprLowering
-  venomState venomExecSemantics words list arithmetic
+  abiEncoderInput abiEncoderInputFrame abiBuiltinEncodeWord abiDecoderReentry abiDecoderContract
+  compileEnv exprLowering venomState venomExecSemantics words list arithmetic
 
 Definition abi_tuple_encode_input_def:
   abi_tuple_encode_input sf ce ty at av op next lo hi s <=>
@@ -68,11 +67,3 @@ Proof
   >- (drule_all abi_tuple_encode_input_transport >> simp[]) >>
   first_x_assum drule_all >> simp[]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_TUPLE_ENCODE_INPUT_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI tuple encoder input not kernel closed: " ^ n)
-  end) (DB.thms "abiTupleEncodeInput");

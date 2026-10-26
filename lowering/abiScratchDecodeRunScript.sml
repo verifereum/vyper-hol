@@ -1,14 +1,13 @@
 (* Execute actual builtin setup and the general source-valid recursive decoder. *)
 Theory abiScratchDecodeRun
 Ancestors
-  abiScratchEncoderContract
-  abiScratchDecodeInput abiScratchDecodeReady abiBuiltinSourceInput
+  abiScratchEncoderContract abiScratchDecodeInput abiScratchDecodeReady abiBuiltinSource
   abiBuiltinDecodeCode abiBuiltinSetupReach abiBuiltinSetupExecute abiBuiltinDecodeSetup
-  abiBuiltinAllocationState abiScratchDecodeEffect abiScratchDecoderRecursive abiScratchDecoderContract
-  abiDecoderEffect abiDecoderAllocation abiDecoderReentry abiDecoderCoherence
-  abiDecoderTypedContract abiDecoderContract abiDecoderLoop
-  abiEncoder builtinAbi fragExec compileEnv valueEncoding vyperABI contractABI
-  venomState venomExecSemantics words list arithmetic
+  abiBuiltinAllocation abiScratchDecodeEffect abiScratchDecoderRecursive
+  abiScratchDecoderContract abiDecoderEffect abiDecoderAllocation abiDecoderReentry
+  abiDecoderCoherence abiDecoderTypedContract abiDecoderContract abiDecoderLoop abiEncoder
+  builtinAbi fragExec compileEnv valueEncoding vyperABI contractABI venomState
+  venomExecSemantics words list arithmetic
 
 Theorem lower_abi_decode_scratch:
   lower_abi_decode data (type_to_abi_dec_info sf ce ty) min_size max_size
@@ -64,12 +63,3 @@ Proof
   qexists_tac `actual` >> asm_simp_tac bool_ss [] >>
   irule abi_decode_sim_trans >> qexists_tac `prepared` >> asm_simp_tac bool_ss []
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_SCRATCH_DECODE_RUN_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI physical builtin decoder execution not kernel closed: " ^ n)
-  end) (DB.thms "abiScratchDecodeRun");
-

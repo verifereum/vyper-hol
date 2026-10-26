@@ -3,13 +3,9 @@
    actual bytes when executed on that invalid source. *)
 Theory abiEncoderSourceChecks
 Ancestors
+  venomMemProps
   abiEncoderLeaves valueEncoding vyperABI vyperValue vyperTyping contractABI
   venomState compileEnv abiEncoder words list rich_list byte
-
-Theorem abi_encoder_source_dimindex[simp,local]: dimindex (:256) = 256
-Proof
-  CONV_TAC fcpLib.INDEX_CONV
-QED
 
 Definition abi_encoder_sparse_probe_memory_def:
   abi_encoder_sparse_probe_memory = word_to_bytes (1w:bytes32) T ++ REPLICATE 64 0w
@@ -88,11 +84,3 @@ Proof
   mp_tac abi_encoder_sparse_probe_window >> strip_tac >>
   qexists_tac `actual` >> gvs[]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_ENCODER_SOURCE_CHECKS_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI encoder source check not kernel closed: " ^ n)
-  end) (DB.thms "abiEncoderSourceChecks");

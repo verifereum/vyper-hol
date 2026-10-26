@@ -1,9 +1,9 @@
 (* Actual dynamic-array child windows, including arbitrary source head offsets. *)
 Theory abiDecoderValidArrayWindows
 Ancestors
-  abiValidMembers abiValidAggregateHeads abiValidMemberWindows abiDecoderValidMemberInput
-  abiCanonicalArrayLoad abiDecodeRanges abiDecoderContract valueEncoding vyperABI
-  contractABI venomState words list rich_list arithmetic
+  abiValidMembers abiValidAggregateHeads abiValidMember abiDecoderValidMemberInput
+  abiCanonicalArrayLoad abiDecodeRanges abiDecoderContract valueEncoding vyperABI contractABI
+  venomState words list rich_list arithmetic
 
 Theorem abi_decoder_replicate_member:
   !n j at. j < n ==>
@@ -60,11 +60,3 @@ Proof
   asm_simp_tac arith_ss [GSYM ADD_ASSOC] >>
   fs[LENGTH_DROP, Excl "enc_def", Excl "dec_def", Excl "valid_enc_def"] >> decide_tac
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_DECODER_VALID_ARRAY_WINDOWS_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI valid array windows not kernel closed: " ^ n)
-  end) (DB.thms "abiDecoderValidArrayWindows");

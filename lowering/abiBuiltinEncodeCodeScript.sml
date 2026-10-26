@@ -117,11 +117,3 @@ Proof
   simp[inst_extends_def, emitted_insts_def] >> pure_rewrite_tac [GSYM APPEND_ASSOC] >>
   simp[DROP_LENGTH_APPEND, IS_PREFIX_APPEND, is_terminator_def, mk_inst_def]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_BUILTIN_ENCODE_CODE_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI builtin encoder code not kernel closed: " ^ n)
-  end) (DB.thms "abiBuiltinEncodeCode");

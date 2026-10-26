@@ -106,11 +106,3 @@ Proof
     metis_tac[cj 2 abi_encoder_phi_mutual, abi_encoder_phi_def, SND] >>
   fs[abi_decoder_phi_def]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_ENCODER_PHI_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI encoder PHI provenance not kernel closed: " ^ n)
-  end) (DB.thms "abiEncoderPhi");

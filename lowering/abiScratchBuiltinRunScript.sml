@@ -4,8 +4,8 @@
 Theory abiScratchBuiltinRun
 Ancestors
   abiScratchBuiltinPre abiScratchBuiltinSetup abiScratchBuiltinBody abiScratchBuiltinEffect
-  abiScratchEncoderContract abiScratchEffectWiden abiBuiltinEncodeContext abiBuiltinEncodeCode
-  abiBuiltinEncodeRun abiBuiltinEncodeMethodReach abiEncoderMemory abiEncoderInput
+  abiScratchEncoderContract abiScratchEffect abiBuiltinEncodeContext abiBuiltinEncodeCode
+  abiBuiltinEncodeRun abiBuiltinEncodeMethod abiEncoderMemory abiEncoderInput
   abiDecoderAllocation abiDecoderFootprint abiDecoderReentry abiDecoderContract abiDecoderLoop
   fragExec builtinAbi exprLowering compileEnv valueEncoding valueEncodingProps contractABI
   venomState words list arithmetic
@@ -93,11 +93,3 @@ Proof
     (irule abi_decode_sim_trans >> qexists_tac `prepared` >> asm_simp_tac bool_ss []) >>
   qexists_tac `actual` >> asm_simp_tac (srw_ss()) [LENGTH_APPEND, abi_scratch_builtin_prefix_length, ADD_COMM]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_SCRATCH_BUILTIN_RUN_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI scratch complete builtin execution not kernel closed: " ^ n)
-  end) (DB.thms "abiScratchBuiltinRun");

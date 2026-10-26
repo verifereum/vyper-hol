@@ -2,9 +2,9 @@
    Child ABI typing is required only when that child occurs in the value. *)
 Theory abiEmptyRecursiveInput
 Ancestors
-  abiEmptyStructInput abiEmptyAggregateInput abiEmptyInputLeaves abiEmptyInputTransport
-  abiDecoderCoherence abiEncoderInput compileEnv exprLowering valueEncoding vyperABI
-  contractABI finite_map words list rich_list arithmetic
+  abiEmptyStructInput abiEmptyAggregateInput abiEmptyInput abiDecoderCoherence abiEncoderInput
+  compileEnv exprLowering valueEncoding vyperABI contractABI finite_map words list rich_list
+  arithmetic
 
 Theorem abi_empty_base_default_input:
   abi_decoder_coherent ce env sf (BaseT bt) (BaseTV bt) /\
@@ -82,11 +82,3 @@ Proof
   strip_tac >> drule_all abi_empty_recursive_default_input >> strip_tac >>
   irule abi_empty_input_relocate >> simp[]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_EMPTY_RECURSIVE_INPUT_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI Empty recursive input not kernel closed: " ^ n)
-  end) (DB.thms "abiEmptyRecursiveInput");

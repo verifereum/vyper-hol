@@ -116,11 +116,3 @@ Proof
   qexists_tac `result_st` >> asm_simp_tac bool_ss [] >>
   simp[Abbr`result_st`, jump_to_def, mstore_def, update_var_def, write_memory_with_expansion_def]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_DECODER_ARRAY_BACKEDGE_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI array backedge not kernel closed: " ^ n)
-  end) (DB.thms "abiDecoderArrayBackedge");

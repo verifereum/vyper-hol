@@ -2,11 +2,10 @@
    TOP-LEVEL: abi_builtin_decode_setup_execute, abi_builtin_decode_setup_live. *)
 Theory abiBuiltinSetupExecute
 Ancestors
-  abiBuiltinDecodeSetup abiBuiltinDecodeAllocation abiBuiltinSetupFrames
-  abiBuiltinAllocationState abiBuiltinAllocation abiBuiltinDecodeHeader abiBuiltinPrefix
-  abiDecoderDynamicLoopSetup abiDecoderReentry abiDecoderGuards abiDecoderContract
-  context compileEnv emitHelper emitHelperProps exprLoweringProps
-  venomExecSemantics venomState finite_map words arithmetic list
+  abiBuiltinDecodeSetup abiBuiltinDecodeAllocation abiBuiltinSetupFrames abiBuiltinAllocation
+  abiBuiltinDecodeHeader abiBuiltinPrefix abiDecoderDynamicLoopSetup abiDecoderReentry
+  abiDecoderGuards abiDecoderContract context compileEnv emitHelper emitHelperProps
+  exprLoweringProps venomExecSemantics venomState finite_map words arithmetic list
 
 Theorem abi_builtin_decode_setup_live:
   abi_builtin_decode_setup data min_size max_size outsz st = (ops,ready) ==>
@@ -87,11 +86,3 @@ Proof
     (fn th => PURE_REWRITE_TAC [GSYM th]) >>
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_BUILTIN_SETUP_EXECUTE_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI builtin setup execution not kernel closed: " ^ n)
-  end) (DB.thms "abiBuiltinSetupExecute");

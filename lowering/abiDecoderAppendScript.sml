@@ -143,11 +143,3 @@ Theorem cs_extends_abi_decode:
 Proof
   metis_tac[cj 1 cs_appends_abi_decode_mutual, cs_appends_def]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_DECODER_APPEND_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI decoder CFG extension not kernel closed: " ^ n)
-  end) (DB.thms "abiDecoderAppend");

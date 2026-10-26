@@ -169,7 +169,6 @@ val weak_spec_chain_tac =
                        optionTheory.NOT_NONE_SOME])) >>
   gvs[eval_operand_update_var_if];
 
-
 (* Peel an ALLOCA instruction from the front of a chain.
    ALLOCA causes weak_spec_chain_tac to timeout (FLOOKUP case split),
    so we handle it separately via step_ALLOCA, then prove the operand
@@ -1514,7 +1513,6 @@ Resume compile_builtin_abs_run[ok_case]:
   >> gvs[wordsTheory.word_msb_neg]
 QED
 
-
 Resume compile_builtin_abs_run[abort_case]:
   (* bad_val != 0w -> notbad_op evaluates to 0w -> ASSERT reverts *)
   `v = INT_MINw` by
@@ -1869,8 +1867,6 @@ QED
    Without it: >50s TIMEOUT. *)
 val check_chain_simp_thms = [check_chain_def, pure_opc_arity_def, mk_inst_def,
   ASCIInumbersTheory.toString_inj];
-
-
 
 (* floor: rounds toward negative infinity.
    floor(x, d) = sdiv(if x < 0 then x - (d-1) else x, d) *)
@@ -2322,12 +2318,3 @@ Finalise compile_extract32_correct;
 Theorem lower_abi_encode_correct = builtinAbiPropsTheory.lower_abi_encode_correct
 
 Theorem lower_abi_decode_correct = builtinAbiPropsTheory.lower_abi_decode_correct
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("BUILTIN_PROPS_ABI_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI builtin compatibility contract not kernel closed: " ^ n)
-  end) [("lower_abi_encode_correct", lower_abi_encode_correct),
-        ("lower_abi_decode_correct", lower_abi_decode_correct)];

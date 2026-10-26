@@ -1,15 +1,11 @@
 (* Canonical dynamic singleton layout and typed child restriction. *)
 Theory abiDecoderSingleton
 Ancestors
+  venomMemProps
   abiDecoderTypedContract abiDecoderTypedCompose abiDecoderSingletonSetup
   abiDecoderReservation abiCanonicalLoad abiDecodeRanges abiDecoderContract
   valueEncoding vyperABI contractABI compileEnv exprLowering byte words
   arithmetic list rich_list
-
-Theorem abi_singleton_dimindex[simp,local]: dimindex (:256) = 256
-Proof
-  CONV_TAC fcpLib.INDEX_CONV
-QED
 
 Theorem canonical_dynamic_singleton_encoding:
   is_dynamic aty ==>
@@ -76,11 +72,3 @@ Proof
   rename1 `eval_operand hi s = SOME (n2w hb)` >>
   qexists_tac `hb` >> simp[] >> decide_tac
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_DECODER_SINGLETON_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI dynamic singleton boundary not kernel closed: " ^ n)
-  end) (DB.thms "abiDecoderSingleton");

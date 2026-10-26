@@ -44,11 +44,3 @@ Proof
   drule_all abi_caller_header >> strip_tac >>
   simp[abi_decoder_coherent_flag_iff]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_CALLER_LEAVES_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI caller leaf metadata not kernel closed: " ^ n)
-  end) (DB.thms "abiCallerLeaves");

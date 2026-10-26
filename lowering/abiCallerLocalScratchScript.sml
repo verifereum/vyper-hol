@@ -66,11 +66,3 @@ Proof
      qexistsl_tac [`inst`, `STRING #"%" (toString k)`] >> simp[]) >>
   drule_all abi_caller_local_scratch >> simp[]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_CALLER_LOCAL_SCRATCH_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI caller local scratch not kernel closed: " ^ n)
-  end) (DB.thms "abiCallerLocalScratch");

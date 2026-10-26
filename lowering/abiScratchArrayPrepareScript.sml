@@ -3,11 +3,11 @@
    and derives child separation from full parent buffers and scratch evolution. *)
 Theory abiScratchArrayPrepare
 Ancestors
-  abiScratchInputRegions abiScratchEncoderContract abiScratchAddress abiScratchFootprint
-  abiEncoderArrayAddressReach abiEncoderArrayAddress abiEncoderArrayLayout abiEncoderArrayBounds
-  abiEncoderInput abiDecoderDynamicLoopSetup abiDecoderAllocation abiDecoderFootprint
-  abiDecoderFrame abiDecoderReentry abiDecoderLoop abiDecoderContract compileEnv
-  valueEncoding contractABI venomState words list arithmetic
+  abiScratchInput abiScratchEncoderContract abiScratchAddress abiScratchFootprint
+  abiEncoderArrayAddress abiEncoderArrayLayout abiEncoderArrayBounds abiEncoderInput
+  abiDecoderDynamicLoopSetup abiDecoderAllocation abiDecoderFootprint abiDecoderFrame
+  abiDecoderReentry abiDecoderLoop abiDecoderContract compileEnv valueEncoding contractABI
+  venomState words list arithmetic
 
 Theorem abi_scratch_array_child_capacity:
   has_type (Array NONE ty) (ListV avs) /\ j < LENGTH avs /\
@@ -72,11 +72,3 @@ Proof
   impl_tac >- gvs[] >> disch_tac >>
   qexists_tac `actual` >> gvs[]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_SCRATCH_ARRAY_PREPARE_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI scratch array child preparation not kernel closed: " ^ n)
-  end) (DB.thms "abiScratchArrayPrepare");

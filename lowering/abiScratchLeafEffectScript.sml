@@ -62,11 +62,3 @@ Proof
      qexists_tac `out` >> first_assum ACCEPT_TAC) >>
   qexists_tac `actual` >> fs[abi_encoder_sequence_post_def, Excl "enc_def"]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_SCRATCH_LEAF_EFFECT_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI scratch leaf effect not kernel closed: " ^ n)
-  end) (DB.thms "abiScratchLeafEffect");

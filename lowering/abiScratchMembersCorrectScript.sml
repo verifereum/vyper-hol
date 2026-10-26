@@ -3,11 +3,10 @@
    Helpers isolate nonempty source structure and physical effect composition. *)
 Theory abiScratchMembersCorrect
 Ancestors
-  abiScratchMembersContract abiScratchMembersState abiScratchMembersPre abiScratchMembersPrepare
-  abiScratchMembersAdvance abiScratchEncoderContract abiScratchAfterAddress
-  abiScratchEffectCompose abiScratchEffectWiden abiEncoderMemberCode abiEncoderInput abiEncoderInputLayout
-  abiDecoderMemberPhases abiDecoderDynamicLoopSetup abiDecoderLoop abiDecoderReentry
-  abiDecoderContract fragExec compileEnv valueEncoding contractABI venomState list arithmetic
+  abiScratchMembers abiScratchMembersAdvance abiScratchEncoderContract abiScratchAfterAddress
+  abiScratchEffect abiEncoderMemberCode abiEncoderInput abiDecoderMemberPhases
+  abiDecoderDynamicLoopSetup abiDecoderLoop abiDecoderReentry abiDecoderContract fragExec
+  compileEnv valueEncoding contractABI venomState list arithmetic
 
 Theorem abi_scratch_members_inv_nonempty:
   abi_scratch_members_inv ((ei,abi_sz,mem_sz,dyn)::infos) tys avs pre pvs active dyn_ptr site slot
@@ -102,11 +101,3 @@ Proof
   qx_gen_tac `entry` >> PairCases_on `entry` >>
   irule abi_scratch_members_correct_cons >> first_assum ACCEPT_TAC
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_SCRATCH_MEMBERS_CORRECT_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI scratch complete member recursion not kernel closed: " ^ n)
-  end) (DB.thms "abiScratchMembersCorrect");

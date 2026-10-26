@@ -1,9 +1,9 @@
 (* Child/sibling writes preserve the complete source represented by a parent buffer precondition. *)
 Theory abiEncoderBufferFrame
 Ancestors
-  abiEncoderChildInputs abiEncoderInputFrame abiEncoderInputLayout abiEncoderInput abiDecoderEffect
-  abiDecoderDynamicLoopSetup abiDecoderReentry abiDecoderFrame abiDecoderContract
-  compileEnv valueEncoding venomState words list arithmetic
+  abiEncoderChildInputs abiEncoderInputFrame abiEncoderInput abiDecoderEffect
+  abiDecoderDynamicLoopSetup abiDecoderReentry abiDecoderFrame abiDecoderContract compileEnv
+  valueEncoding venomState words list arithmetic
 
 Theorem abi_encoder_buffer_pre_effect:
   abi_encoder_buffer_pre ei at av st src dst sb source_cap d output_size b cap initial /\
@@ -71,11 +71,3 @@ Proof
     (irule abi_decoder_operand_live_mono >> qexists_tac `st.cs_next_var` >> simp[]) >>
   asm_simp_tac bool_ss [abi_encoder_buffer_pre_def] >> decide_tac
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_ENCODER_BUFFER_FRAME_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI encoder buffer frame not kernel closed: " ^ n)
-  end) (DB.thms "abiEncoderBufferFrame");

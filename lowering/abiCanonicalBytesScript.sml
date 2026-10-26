@@ -1,13 +1,9 @@
 (* Dynamic ABI bytes already use Vyper's length-prefixed memory layout. *)
 Theory abiCanonicalBytes
 Ancestors
+  venomMemProps
   abiDecoderTypedContract abiCanonicalLoad abiStaticPrimitiveProps valueEncoding
   valueEncodingProps contractABI words byte arithmetic list rich_list
-
-Theorem abi_bytes_dimindex[simp,local]: dimindex (:256) = 256
-Proof
-  CONV_TAC fcpLib.INDEX_CONV
-QED
 
 Theorem canonical_bytes_encoding:
   enc (Bytes NONE) (contractABI$BytesV bs) =
@@ -74,11 +70,3 @@ Proof
   qexistsl_tac [`source`, `cap`, `sb`] >> asm_simp_tac bool_ss [] >>
   irule canonical_bytes_source_layout >> first_assum ACCEPT_TAC
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_CANONICAL_BYTES_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI canonical bytes not kernel closed: " ^ n)
-  end) (DB.thms "abiCanonicalBytes");

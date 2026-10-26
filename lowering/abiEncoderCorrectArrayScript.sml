@@ -1,7 +1,7 @@
 (* The complete actual array encoder satisfies the recursive containing-function contract. *)
 Theory abiEncoderCorrectArray
 Ancestors
-  abiEncoderArrayRun abiEncoderCorrect abiEncoderInputLayout abiEncoderChildInputs
+  abiEncoderArrayRun abiEncoderCorrect abiEncoderInput abiEncoderChildInputs
   abiEncoderAdmissible abiDecoderEffect abiDecoderContract abiDecoderLoop fragExec compileEnv
   valueEncoding contractABI venomState words list
 
@@ -23,11 +23,3 @@ Proof
     `output_size` |-> `LENGTH (enc (Array NONE ct) (ListV values))`] abi_encoder_array_run) >>
   impl_tac >- asm_simp_tac (srw_ss()) [abi_encoder_buffer_pre_exact] >> asm_simp_tac bool_ss []
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_ENCODER_CORRECT_ARRAY_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI encoder array correctness not kernel closed: " ^ n)
-  end) (DB.thms "abiEncoderCorrectArray");

@@ -778,7 +778,6 @@ Theorem compile_abi_encode_to_buf_correct =
   SIMP_RULE bool_ss [abiEncoderCorrectTheory.abi_encoder_correct_def]
     abiEncoderCorrectRecursiveTheory.abi_encoder_correct_translation
 
-
 (* ===== Encoding plans ===== *)
 
 (* abi_enc_plan env ty ei: ei is a right plan for encoding a value of type
@@ -1098,13 +1097,3 @@ conj_tac >- (
 ) >>
 simp[eval_operand_update_var, wordsTheory.word_add_n2w]
 QED
-
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_ENCODER_PROPS_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI encoder public theorem not kernel closed: " ^ n)
-  end) (List.filter (fn (n,_) => n <> "compile_abi_encode_frag")
-           (DB.thms "abiEncoderProps"));

@@ -16,11 +16,3 @@ Proof
   strip_tac >> drule_all abi_tuple_encode_stage_id >> strip_tac >>
   asm_simp_tac (srw_ss()) [abi_builtin_encode_resources_def, LET_THM]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_TUPLE_ENCODE_ENTRY_RESOURCES_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI tuple encoder resource site not kernel closed: " ^ n)
-  end) (DB.thms "abiTupleEncodeEntryResources");

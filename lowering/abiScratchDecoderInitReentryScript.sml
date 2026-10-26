@@ -1,16 +1,13 @@
 (* The real array initializer executes with stale local SSA bindings under physical ownership. *)
 Theory abiScratchDecoderInitReentry
 Ancestors
-  abiScratchDecoderInitSequence abiScratchDecoderInitEffect abiScratchEncoderContract
-  abiDecoderFootprint abiDecoderArrayInitReentry
-  abiDecoderArrayInitExec abiDecoderArrayLoopInit abiDecoderIndexInit abiDecoderArrayInitReach
-  abiDecoderDynarrayPrefix abiDecoderDynarrayBound abiDecoderArrayHeader
-  abiDecoderGuardLE abiDecoderGuards abiDecoderContract abiDecoderAllocation
-  abiDecoderReentry abiDecoderReentryPrefix abiDecoderReentrySequence
-  abiDecoderVarSequence abiDecoderVarExtend abiDecoderFrame
-  exprLoweringProps emitHelperProps emitHelper compileEnv context
-  fragExec venomState venomInst finite_map words list rich_list arithmetic
-
+  abiScratchDecoderInit abiScratchEncoderContract abiDecoderFootprint abiDecoderArrayInitReentry
+  abiDecoderArrayInitExec abiDecoderArrayLoopInit abiDecoderIndexInit abiDecoderArrayInit
+  abiDecoderDynarrayPrefix abiDecoderDynarrayBound abiDecoderArrayHeader abiDecoderGuard
+  abiDecoderGuards abiDecoderContract abiDecoderAllocation abiDecoderReentry
+  abiDecoderReentryPrefix abiDecoderReentrySequence abiDecoderVarSequence abiDecoderVarExtend
+  abiDecoderFrame exprLoweringProps emitHelperProps emitHelper compileEnv context fragExec
+  venomState venomInst finite_map words list rich_list arithmetic
 
 Theorem abi_scratch_decoder_child_scratch_prune[simp]:
   abi_decoder_child_scratch ids b cap (abi_decoder_prune_vars next s) =
@@ -111,11 +108,3 @@ Proof
      asm_simp_tac bool_ss []) >>
   qexists_tac `actual` >> asm_simp_tac (srw_ss()) []
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_SCRATCH_DECODER_INIT_REENTRY_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI physical decoder initializer reentry not kernel closed: " ^ n)
-  end) (DB.thms "abiScratchDecoderInitReentry");

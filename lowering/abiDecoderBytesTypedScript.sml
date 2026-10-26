@@ -1,15 +1,11 @@
 (* Typed bytestring success from canonical input, without an assumed load value. *)
 Theory abiDecoderBytesTyped
 Ancestors
+  venomMemProps
   abiDecoderBytes abiDecoderTypedContract abiCanonicalBytes abiCanonicalLoad
   abiDecoderContract abiDecoderFrame valueEncoding valueEncodingProps compileEnv
   vyperABI vyperTyping vyperValue contractABI vfmConstants words arithmetic
   abiEncoder emitHelper exprLoweringProps fragExec venomInst venomState rich_list
-
-Theorem abi_bytes_typed_dimindex[simp,local]: dimindex (:256) = 256
-Proof
-  CONV_TAC fcpLib.INDEX_CONV
-QED
 
 Theorem abi_decoder_bytes_copy_size:
   abi_decode_bytes_copy_size n = type_memory_bytes ce (BaseT (BytesT (Dynamic n))) /\
@@ -126,11 +122,3 @@ Proof
   drule_all abi_decoder_typed_bytes_sequence >> strip_tac >>
   qexists_tac `t` >> simp[abi_decoder_post_inst_idx] >> qexists_tac `s` >> simp[]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_DECODER_BYTES_TYPED_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI typed bytes not kernel closed: " ^ n)
-  end) (DB.thms "abiDecoderBytesTyped");

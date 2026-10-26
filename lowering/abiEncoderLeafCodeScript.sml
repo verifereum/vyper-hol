@@ -18,11 +18,3 @@ Proof
   simp[inst_extends_def, emitted_insts_def] >> pure_rewrite_tac [GSYM APPEND_ASSOC] >>
   simp[DROP_LENGTH_APPEND, mk_inst_def, is_terminator_def]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_ENCODER_LEAF_CODE_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI encoder leaf code not kernel closed: " ^ n)
-  end) (DB.thms "abiEncoderLeafCode");

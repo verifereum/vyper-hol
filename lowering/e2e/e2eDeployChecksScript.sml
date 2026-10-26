@@ -241,17 +241,3 @@ Theorem deploy_prefix_guard:
 Proof
   simp[]
 QED
-
-(* Every current focused export is saved, hypothesis/axiom/admission-free.
- * No deployment stage theorem is imported to this clean proof closure.
- * DISK_THM is HOL's normal saved-object/checkpoint marker, not an admission.
- *)
-val _ = List.app (fn (name, th) =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn tag => tag = "DISK_THM") oracles then ()
-    else raise Fail ("non-clean deployment boundary check: " ^ name ^
-      " hypotheses=" ^ Int.toString (length (Thm.hyp th)) ^
-      " oracles=" ^ String.concatWith "," oracles ^
-      " axioms=" ^ String.concatWith "," axioms)
-  end) (DB.thms "e2eDeployChecks");

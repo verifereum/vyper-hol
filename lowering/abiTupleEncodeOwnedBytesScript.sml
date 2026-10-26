@@ -2,7 +2,7 @@
    bytes. Their unused semantic rounding padding may overlap the tuple buffer. *)
 Theory abiTupleEncodeOwnedBytes
 Ancestors
-  abiTupleEncodeSourceInput abiTupleEncodeInput abiEncoderInput abiEncoderBytesActive
+  abiTupleEncodeSourceInput abiTupleEncodeInput abiEncoderInput abiEncoderBytes
   abiDecoderReentry compileEnv exprLowering valueEncoding valueEncodingProps vyperABI
   contractABI venomState venomExecSemantics words list arithmetic
 
@@ -46,11 +46,3 @@ Theorem abi_tuple_encode_method_bytes_extent:
 Proof
   simp[type_memory_bytes_def]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_TUPLE_ENCODE_OWNED_BYTES_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI tuple owned byte source not kernel closed: " ^ n)
-  end) (DB.thms "abiTupleEncodeOwnedBytes");

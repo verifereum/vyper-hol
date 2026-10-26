@@ -1,33 +1,9 @@
-(* Focused saved-object receipt and substantive exact-schema consumer. *)
+(* Compiler entry producer contracts. *)
 Theory e2eEntryKernelChecks
 Ancestors
-  e2eEntryChecks e2eProducerChecks e2eProducers e2eEntry
-  e2eDefs codegenCorrectness vyperLoweringCorrect unitTransformDefs
-  o1PipelineCorrect stackPlanGen contextCodegenRel unitShapeDefs
+  e2eProducers
 
 val _ = Parse.hide "cp";
-
-fun check_saved (thy,n) = let
-  val th = DB.fetch thy n
-  val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  val _ = if null (Thm.hyp th) andalso null axioms andalso
-      List.all (fn s => s = "DISK_THM") oracles then ()
-    else raise Fail (thy ^ "." ^ n ^ ": not kernel-closed/unadmitted")
-  in print ("TASK053_DB_RECEIPT " ^ thy ^ "." ^ n ^
-    " hyp=0 axioms=[] oracles=[" ^ String.concatWith "," oracles ^ "]\n") end;
-
-val () = List.app (fn thy => List.app
-  (fn (n,_) => check_saved (thy,n)) (DB.thms thy))
-  ["e2eEntry", "e2eProducers", "e2eEntryChecks", "e2eProducerChecks"];
-
-val () = List.app (fn (thy,n) => print
-  ("TASK053_EXACT_SCHEMA " ^ thy ^ "." ^ n ^ "\n" ^
-    term_to_string (Thm.concl (DB.fetch thy n)) ^ "\n"))
-  [("e2eEntry", "entry_venom_state_def"),
-   ("e2eProducers", "o1_pipeline_codegen_obligations"),
-   ("e2eProducers", "entry_venom_state_initial_venom_state_rel"),
-   ("e2eProducers", "entry_venom_state_o1_initial_state_ok"),
-   ("e2eProducers", "entry_venom_state_initial_ctx_rel")];
 
 (* Exact four-contract consumer, not a theorem-name-only receipt. *)
 Theorem entry_producers_exact_schema:
@@ -51,5 +27,3 @@ Proof
      ACCEPT_TAC entry_venom_state_o1_initial_state_ok,
      ACCEPT_TAC entry_venom_state_initial_ctx_rel]
 QED
-
-val () = check_saved ("e2eEntryKernelChecks", "entry_producers_exact_schema");

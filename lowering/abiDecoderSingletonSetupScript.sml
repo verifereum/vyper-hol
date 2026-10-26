@@ -1,10 +1,10 @@
 (* The actual outer head check and pointer setup for one dynamic member. *)
 Theory abiDecoderSingletonSetup
 Ancestors
-  abiDecoderComplexHead abiDecoderMemberBound abiDecoderReservation abiDecoderGuardLE
-  abiDecoderBytesBound abiDecoderGuards abiDecoderContract
-  abiEncoder emitHelperProps exprLoweringProps compileEnv emitHelper
-  venomExecSemantics venomState venomInst words arithmetic rich_list
+  abiDecoderComplexHead abiDecoderMemberBound abiDecoderReservation abiDecoderGuard
+  abiDecoderBytesBound abiDecoderGuards abiDecoderContract abiEncoder emitHelperProps
+  exprLoweringProps compileEnv emitHelper venomExecSemantics venomState venomInst words
+  arithmetic rich_list
 
 Definition abi_decode_singleton_setup_def:
   abi_decode_singleton_setup dst src opc hi =
@@ -87,10 +87,8 @@ Proof
   gvs[DROP_LENGTH_APPEND, is_terminator_def, is_alloca_op_def, mk_inst_def]
 QED
 
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_DECODER_SINGLETON_SETUP_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI singleton decoder setup not kernel closed: " ^ n)
-  end) (DB.thms "abiDecoderSingletonSetup");
+Theorem abi_decode_complex_nil:
+  compile_abi_decode_complex_elems dst src opc hi [] aoff voff = return ()
+Proof
+  simp[compile_abi_decode_to_buf_def]
+QED

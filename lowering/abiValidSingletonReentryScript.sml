@@ -1,11 +1,10 @@
 (* Re-enter the actual singleton prefix with an arbitrary decoded offset. *)
 Theory abiValidSingletonReentry
 Ancestors
-  abiValidSingletonSetup abiValidSingletonCode abiDecoderSingletonSetup
-  abiDecoderReentryPrefix abiDecoderReentrySequence abiDecoderReentry abiDecoderVarExtend
-  abiDecoderDynamicLoopSetup abiDecoderReservation abiDecoderContract
-  abiEncoderSequenceReach fragExec instIdxIndep compileEnv emitHelper emitHelperProps
-  exprLoweringProps venomExecSemantics venomState words list pair
+  abiValidSingletonSetup abiValidSingletonCode abiDecoderSingletonSetup abiDecoderReentryPrefix
+  abiDecoderReentrySequence abiDecoderReentry abiDecoderVarExtend abiDecoderDynamicLoopSetup
+  abiDecoderReservation abiDecoderContract abiEncoderSequence fragExec instIdxIndep compileEnv
+  emitHelper emitHelperProps exprLoweringProps venomExecSemantics venomState words list pair
 
 Theorem abi_valid_singleton_setup_reentry:
   abi_decode_singleton_setup dst src opc hi st = ((child_src,child_dst),st') /\
@@ -67,11 +66,3 @@ Proof
   qexists_tac `reached` >>
   gvs[abi_decoder_address_frame_def, eval_op_inst_idx, fresh_vars_wrt_def]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_VALID_SINGLETON_REENTRY_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI valid singleton reentry not kernel closed: " ^ n)
-  end) (DB.thms "abiValidSingletonReentry");

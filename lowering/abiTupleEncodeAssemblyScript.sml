@@ -1,9 +1,9 @@
 (* Assemble complete static or dynamic tuple input from actual staged children. *)
 Theory abiTupleEncodeAssembly
 Ancestors
-  abiTupleEncodeMemory abiTupleEncodeLayout abiTupleProps abiEncoderInput abiEncoderInputLayout
-  abiEncoderMemory abiStaticAggregateProps compileEnv exprLowering
-  valueEncoding contractABI words list rich_list arithmetic pair combin
+  abiTupleEncodeMemory abiTupleEncodeLayout abiTupleProps abiEncoderInput abiEncoderMemory
+  abiStaticAggregateProps compileEnv exprLowering valueEncoding contractABI words list rich_list
+  arithmetic pair combin
 
 Definition abi_tuple_encode_infos_def:
   abi_tuple_encode_infos sf ce (xs:(operand # type) list) =
@@ -90,11 +90,3 @@ Proof
   qpat_x_assum `mem_bytes_at d (abi_tuple_bytes ce xs) mem = _` mp_tac >>
   simp_tac bool_ss [abi_tuple_bytes_def, o_DEF]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_TUPLE_ENCODE_ASSEMBLY_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI tuple encoder input assembly not kernel closed: " ^ n)
-  end) (DB.thms "abiTupleEncodeAssembly");

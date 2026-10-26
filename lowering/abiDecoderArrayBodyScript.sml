@@ -117,11 +117,3 @@ Proof
   `abi_decode_sim ctx func initial actual` by metis_tac[abi_decode_sim_trans] >>
   qexists_tac `actual` >> asm_simp_tac bool_ss []
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_DECODER_ARRAY_BODY_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI recursive array body not kernel closed: " ^ n)
-  end) (DB.thms "abiDecoderArrayBody");

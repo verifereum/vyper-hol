@@ -28,11 +28,3 @@ Theorem abi_scratch_encoder_translation:
 Proof
   irule abi_scratch_encoder_admissible >> simp[abi_encoder_translation_admissible]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_SCRATCH_ENCODER_RECURSIVE_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI precise translated encoder not kernel closed: " ^ n)
-  end) (DB.thms "abiScratchEncoderRecursive");

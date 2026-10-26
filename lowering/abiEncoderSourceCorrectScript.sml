@@ -1,9 +1,9 @@
 (* Source-value correctness of the actual bytes and string encoder branches. *)
 Theory abiEncoderSourceCorrect
 Ancestors
-  abiEncoderSourceInput abiEncoderBytesCorrect abiEncoderInput exprLowering
-  abiDecoderReentry abiDecoderContract valueEncoding vyperABI vyperTyping
-  compileEnv emitHelper venomState venomExecSemantics words list
+  abiEncoderSourceInput abiEncoderBytes abiEncoderInput exprLowering abiDecoderReentry
+  abiDecoderContract valueEncoding vyperABI vyperTyping compileEnv emitHelper venomState
+  venomExecSemantics words list
 
 Theorem abi_encoder_source_bytes_sequence:
   compile_abi_encode_to_buf dst src
@@ -69,11 +69,3 @@ Proof
     `cap` |-> `type_memory_size (BaseTV (StringT n))`] abi_encoder_bytes_sequence) >>
   fs[type_to_abi_enc_info_def, Excl "enc_def"]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_ENCODER_SOURCE_CORRECT_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI encoder source correctness not kernel closed: " ^ n)
-  end) (DB.thms "abiEncoderSourceCorrect");

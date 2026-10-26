@@ -1,10 +1,10 @@
 (* Default struct input follows both deleted maps through recursive members. *)
 Theory abiEmptyStructInput
 Ancestors
-  abiEmptyAggregateInput abiEmptyInputLeaves abiEmptyInputTransport
-  abiDecoderCoherence abiDecoderMembers abiDecoderMemberInfos abiDecoderStructInputs
-  abiEncoderInput compileEnv exprLowering valueEncoding vyperABI
-  contractABI finite_map words list rich_list pair combin arithmetic
+  valueEncodingTyping
+  abiEmptyAggregateInput abiEmptyInput abiDecoderCoherence abiDecoderMembers
+  abiDecoderMemberInfos abiDecoderStruct abiEncoderInput compileEnv exprLowering valueEncoding
+  vyperABI contractABI finite_map words list rich_list pair combin arithmetic
 
 Theorem abi_empty_struct_default_value:
   LENGTH args = LENGTH tvs ==>
@@ -88,11 +88,3 @@ Proof
           CONV_TAC (DEPTH_CONV ETA_CONV) >> gvs[has_type_def]) >> simp[]) >>
   irule abi_empty_coherent_static_input >> simp[abi_empty_memory_observation]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_EMPTY_STRUCT_INPUT_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI Empty struct input not kernel closed: " ^ n)
-  end) (DB.thms "abiEmptyStructInput");

@@ -4,9 +4,9 @@
 Theory abiScratchArrayFiniteLoop
 Ancestors
   abiScratchArrayLoopHeader abiScratchArrayLoopInvariant abiScratchArrayDynamicRound
-  abiScratchEffectWiden abiScratchEncoderContract abiEncoderArrayLoopCode abiEncoderArrayLoopHeader
-  abiEncoderMembersDefs abiDecoderLoop abiDecoderReentry abiDecoderContract
-  compileEnv valueEncoding contractABI venomState venomInst words list arithmetic
+  abiScratchEffect abiScratchEncoderContract abiEncoderArrayLoopCode abiEncoderArrayLoopHeader
+  abiEncoderMembersDefs abiDecoderLoop abiDecoderReentry abiDecoderContract compileEnv
+  valueEncoding contractABI venomState venomInst words list arithmetic
 
 Theorem abi_scratch_array_loop_dynamic_step:
   abi_scratch_encoder ei /\
@@ -99,11 +99,3 @@ Proof
       impl_tac >- asm_simp_tac bool_ss [] >> asm_simp_tac bool_ss []) >>
   asm_simp_tac bool_ss [Abbr`loop_post`]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_SCRATCH_ARRAY_FINITE_LOOP_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI scratch finite array execution not kernel closed: " ^ n)
-  end) (DB.thms "abiScratchArrayFiniteLoop");

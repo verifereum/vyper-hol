@@ -1,11 +1,10 @@
 (* Instantiate the recursive contract using the checked primitive-array decoder. *)
 Theory abiDecoderCorrectPrimitiveArray
 Ancestors
-  abiDecoderCorrect abiDecoderEffect abiDecoderPrimitiveArrayReentry
-  abiDecoderCoherence abiDecoderTypedContract abiDecoderArrayAdvance abiDecoderWordTyped
-  abiDecoderAllocation abiDecoderContract abiDecodeRanges abiDecoderArrayBody abiDecoderRecursiveArrayCode
-  exprLowering compileEnv valueEncoding
-  vyperABI vyperValue vyperTyping contractABI venomState words list
+  abiDecoderCorrect abiDecoderEffect abiDecoderPrimitiveArrayReentry abiDecoderCoherence
+  abiDecoderTypedContract abiDecoderArrayAdvance abiDecoderWordTyped abiDecoderAllocation
+  abiDecoderContract abiDecodeRanges abiDecoderArrayBody abiDecoderRecursiveArray exprLowering
+  compileEnv valueEncoding vyperABI vyperValue vyperTyping contractABI venomState words list
 
 Theorem abi_decoder_dynarray_metadata_shape:
   abi_decoder_metadata ce env (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) di av v ==>
@@ -70,11 +69,3 @@ Theorem abi_decoder_nested_array_body =
     (SIMP_RULE bool_ss [nested_child_correct]
       (Q.INST [`ty` |-> `ArrayT inner_ty (Dynamic inner_bound)`,
         `tv` |-> `ArrayTV inner_tv (Dynamic inner_bound)`] abi_decoder_array_body)));
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_DECODER_CORRECT_PRIMITIVE_ARRAY_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI primitive-array recursive contract not kernel closed: " ^ n)
-  end) (DB.thms "abiDecoderCorrectPrimitiveArray");

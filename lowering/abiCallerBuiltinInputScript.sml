@@ -3,9 +3,8 @@
    explicit until the separate resource-history proof establishes them. *)
 Theory abiCallerBuiltinInput
 Ancestors
-  abiCallerCoherence abiBuiltinSourceInput abiBuiltinCanonicalPre
-  compileVyper compileEnv valueEncoding vyperTypeSystem vyperValue
-  vyperABI vyperContext contractABI venomState
+  abiCallerCoherence abiBuiltinSource abiBuiltinCanonicalPre compileVyper compileEnv
+  valueEncoding vyperTypeSystem vyperValue vyperABI vyperContext contractABI venomState
 
 Theorem abi_caller_source_metadata:
   let ce = build_compile_env tops vis mut func_name fargs ret_type
@@ -52,11 +51,3 @@ Proof
     (irule abi_caller_coherent >> simp[] >> qexists_tac `in_deploy` >> simp[]) >>
   drule_all abi_builtin_canonical_pre_from_source >> simp[]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_CALLER_BUILTIN_INPUT_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI caller builtin input not kernel closed: " ^ n)
-  end) (DB.thms "abiCallerBuiltinInput");

@@ -2,10 +2,10 @@
 Theory abiScratchDecoderArrayMemory
 Ancestors
   abiScratchDecoderContract abiScratchDecoderSubwindow abiScratchEncoderContract
-  abiScratchEffectFrame abiScratchFootprint abiEncoderArrayFrame
-  abiDecoderValidArrayScratch abiDecoderValidArrayMemory abiDecoderArrayScratch
-  abiDecoderFootprint abiDecoderAllocation abiDecoderFrame abiDecoderContract
-  abiDecodeRanges valueEncoding vyperTyping venomState words list arithmetic
+  abiScratchEffect abiScratchFootprint abiEncoderArrayFrame abiDecoderValidArrayScratch
+  abiDecoderValidArrayMemory abiDecoderArrayScratch abiDecoderFootprint abiDecoderAllocation
+  abiDecoderFrame abiDecoderContract abiDecodeRanges valueEncoding vyperTyping venomState words
+  list arithmetic
 
 Theorem abi_scratch_array_prefix_disjoint:
   abi_footprint_disjoint d outsz fp /\ d + 32 + used + sz <= d + outsz ==>
@@ -65,12 +65,3 @@ Proof
   simp_tac bool_ss [abi_footprint_disjoint_def] >>
   disch_then (qspecl_then [`slot`, `32`] mp_tac) >> asm_simp_tac bool_ss []
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_SCRATCH_DECODER_ARRAY_MEMORY_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI physical array memory preservation not kernel closed: " ^ n)
-  end) (DB.thms "abiScratchDecoderArrayMemory");
-

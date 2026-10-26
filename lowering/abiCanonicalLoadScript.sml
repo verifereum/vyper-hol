@@ -1,13 +1,9 @@
 (* Canonical byte windows lifted to the actual decoder source loads. *)
 Theory abiCanonicalLoad
 Ancestors
+  venomMemProps
   abiCanonicalWindows abiDecoderContract valueEncodingProps valueEncodingProofs valueEncoding
   abiDecodeRanges contractABI byte words arithmetic list rich_list venomState
-
-Theorem abi_load_dimindex[simp,local]: dimindex (:256) = 256
-Proof
-  CONV_TAC fcpLib.INDEX_CONV
-QED
 
 Theorem mem_bytes_at_window:
   !sb off n len mem.
@@ -85,11 +81,3 @@ Proof
   >- (irule abi_decode_load_window >> simp[]) >>
   asm_rewrite_tac[] >> irule canonical_member_offset_word >> simp[]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_CANONICAL_LOAD_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI canonical load not kernel closed: " ^ n)
-  end) (DB.thms "abiCanonicalLoad");

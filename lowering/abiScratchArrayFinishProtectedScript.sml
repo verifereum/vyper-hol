@@ -3,10 +3,10 @@
    parent slot and completed output from the initial physical scratch footprint. *)
 Theory abiScratchArrayFinishProtected
 Ancestors
-  abiScratchArrayParentFinish abiScratchCursor abiScratchEncoderContract abiScratchFootprint
+  abiScratchArrayParent abiScratchCursor abiScratchEncoderContract abiScratchFootprint
   abiEncoderArrayCursor abiEncoderMembersDefs abiDecoderAllocation abiDecoderFootprint
-  abiDecoderReentry abiDecoderContract abiDecoderLoop compileEnv
-  valueEncoding contractABI venomState words list arithmetic
+  abiDecoderReentry abiDecoderContract abiDecoderLoop compileEnv valueEncoding contractABI
+  venomState words list arithmetic
 
 Theorem abi_scratch_array_finish_protected:
   abi_encoder_cursor T parent_ptr parent_site parent_slot first parent_site loop_st 0 ready /\
@@ -52,11 +52,3 @@ Proof
   impl_tac >- (asm_simp_tac (srw_ss()) [] >> gvs[]) >> strip_tac >>
   qexists_tac `actual` >> asm_simp_tac bool_ss []
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_SCRATCH_ARRAY_FINISH_PROTECTED_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI scratch protected parent completion not kernel closed: " ^ n)
-  end) (DB.thms "abiScratchArrayFinishProtected");

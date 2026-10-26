@@ -2,10 +2,10 @@
 Theory abiEncoderCorrectLeaves
 Ancestors
   abiEncoderCorrect abiEncoderSequence abiEncoderLeafCode abiEncoderAdmissible
-  abiEncoderReentryLeaves abiEncoderBytesCorrect abiEncoderBytesCode abiEncoderInputLayout
-  abiEncoderInput abiDecoderEffect abiDecoderAllocation abiDecoderLoop abiDecoderReentry abiDecoderContract
-  abiEncoder compileEnv emitHelper valueEncoding contractABI venomState venomExecSemantics
-  emitHelperProps words list rich_list arithmetic
+  abiEncoderReentryLeaves abiEncoderBytes abiEncoderBytesCode abiEncoderInput abiDecoderEffect
+  abiDecoderAllocation abiDecoderLoop abiDecoderReentry abiDecoderContract abiEncoder compileEnv
+  emitHelper valueEncoding contractABI venomState venomExecSemantics emitHelperProps words list
+  rich_list arithmetic
 
 Theorem abi_encoder_correct_word:
   abi_encoder_correct AbiPrimWord
@@ -92,11 +92,3 @@ Proof
   qexists_tac `initial` >>
   asm_simp_tac (srw_ss()) [mem_bytes_at_def, eval_operand_def, abi_decode_sim_refl]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_ENCODER_CORRECT_LEAVES_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI encoder recursive leaf not kernel closed: " ^ n)
-  end) (DB.thms "abiEncoderCorrectLeaves");

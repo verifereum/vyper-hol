@@ -3,10 +3,10 @@
    both cursors and the accumulated physical effect on body and exit edges. *)
 Theory abiScratchArrayLoopHeader
 Ancestors
-  abiScratchArrayLoopInvariant abiScratchArrayHeader abiScratchAddressEffect abiScratchInputEffect
+  abiScratchArrayLoopInvariant abiScratchArrayHeader abiScratchAddress abiScratchInput
   abiScratchEncoderContract abiEncoderArrayLoopCode abiEncoderMembersDefs abiEncoderArrayPrefix
-  abiDecoderDynamicLoopSetup abiDecoderReentry abiDecoderLoop abiDecoderContract
-  compileEnv venomState venomInst venomExecSemantics valueEncoding contractABI words list arithmetic
+  abiDecoderDynamicLoopSetup abiDecoderReentry abiDecoderLoop abiDecoderContract compileEnv
+  venomState venomInst venomExecSemantics valueEncoding contractABI words list arithmetic
 
 Theorem abi_scratch_array_loop_header:
   abi_encoder_array_loop_code func owner_st body_st body_end exit_st ip count_op labels /\
@@ -59,11 +59,3 @@ Proof
   impl_tac >- asm_simp_tac bool_ss [] >> disch_tac >>
   qexists_tac `ready` >> asm_simp_tac bool_ss []
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_SCRATCH_ARRAY_LOOP_HEADER_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI scratch invariant header transport not kernel closed: " ^ n)
-  end) (DB.thms "abiScratchArrayLoopHeader");

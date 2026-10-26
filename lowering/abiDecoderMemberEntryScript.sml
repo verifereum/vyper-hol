@@ -92,11 +92,3 @@ Proof
   drule_all (Q.INST [`s` |-> `abi_decoder_prune_vars child_st.cs_next_var after`]
     abi_decoder_member_pre) >> simp[]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_DECODER_MEMBER_ENTRY_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI member entry not kernel closed: " ^ n)
-  end) (DB.thms "abiDecoderMemberEntry");

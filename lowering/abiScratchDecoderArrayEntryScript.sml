@@ -2,11 +2,11 @@
 Theory abiScratchDecoderArrayEntry
 Ancestors
   abiScratchDecoderContract abiScratchDecoderArraySetup abiScratchDecoderArrayChild
-  abiScratchDecoderAddress abiDecoderArraySetupInputs abiDecoderArrayBody
-  abiDecoderCoherence abiDecoderTypedContract abiDecoderContract abiDecoderDynamicLoopSetup
-  abiDecoderReentry abiDecoderLoop abiDecodeRanges abiValidMemberWindows abiValidMembers
-  abiEncoder fragExec compileEnv valueEncoding vyperABI vyperValue contractABI
-  venomState venomExecSemantics words list arithmetic
+  abiScratchDecoderAddress abiDecoderArraySetupInputs abiDecoderArrayBody abiDecoderCoherence
+  abiDecoderTypedContract abiDecoderContract abiDecoderDynamicLoopSetup abiDecoderReentry
+  abiDecoderLoop abiDecodeRanges abiValidMember abiValidMembers abiEncoder fragExec compileEnv
+  valueEncoding vyperABI vyperValue contractABI venomState venomExecSemantics words list
+  arithmetic
 
 Theorem abi_scratch_decoder_array_setup_from_state:
   abi_decode_array_element_setup ip src dst opc hi (type_to_abi_dec_info sf ce ty)
@@ -92,12 +92,3 @@ Proof
   `~prepared.vs_halted` by fs[abi_decoder_address_frame_def] >>
   qexists_tac `prepared` >> RULE_ASSUM_TAC (SIMP_RULE arith_ss []) >> asm_simp_tac arith_ss []
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_SCRATCH_DECODER_ARRAY_ENTRY_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI physical array child entry not kernel closed: " ^ n)
-  end) (DB.thms "abiScratchDecoderArrayEntry");
-

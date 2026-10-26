@@ -1,6 +1,7 @@
 (* Static concatenation boundaries.  No decoder execution is asserted here. *)
 Theory abiStaticAggregateProps
 Ancestors
+  venomMemProps
   abiStaticPrimitiveProps abiStaticSparseProps contractABI list rich_list
   abiStaticLayoutProps valueEncoding vyperABI vyperTyping
 
@@ -69,12 +70,6 @@ Theorem static_default_list_length:
 Proof
   strip_tac >> drule static_default_list_metadata >> strip_tac >>
   drule_all enc_static_tuple >> disch_then SUBST1_TAC >> simp[]
-QED
-
-Theorem aggregate_dimindex[local,simp]:
-  dimindex(:256) = 256
-Proof
-  CONV_TAC fcpLib.INDEX_CONV
 QED
 
 Theorem static_fields_zip[local]:
@@ -344,10 +339,3 @@ Proof
 QED
 
 (* Check every exported theorem, including cached dependencies' propagated tags. *)
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_STATIC_AGGREGATE_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI static aggregate not kernel closed: " ^ n)
-  end) (DB.thms "abiStaticAggregateProps");

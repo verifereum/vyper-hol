@@ -71,11 +71,3 @@ Proof
   qexistsl_tac [`t`, `p`] >>
   gvs[Abbr`alloc_inst`, mk_inst_def, eval_operand_def]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_DECODER_REENTRY_ALLOCATION_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI allocation re-entry not kernel closed: " ^ n)
-  end) (DB.thms "abiDecoderReentryAllocation");

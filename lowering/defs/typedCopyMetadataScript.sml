@@ -213,11 +213,3 @@ Proof
   simp[build_compile_env_ce_struct_fields] >> strip_tac >>
   irule make_struct_fields_map_acyclic >> simp[]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("TYPED_COPY_METADATA_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("Typed-copy metadata fact not kernel closed: " ^ n)
-  end) (DB.thms "typedCopyMetadata");

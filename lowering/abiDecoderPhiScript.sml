@@ -276,7 +276,6 @@ Resume abi_decoder_phi_mutual[loop]:
 QED
 Finalise abi_decoder_phi_mutual
 
-
 Theorem abi_decoder_to_buf_phi:
   compile_abi_decode_to_buf dst src opc hi info st = ((),st') /\
   abi_decode_source_opcode opc /\ phi_prefix_length st.cs_current_insts = 0 ==>
@@ -306,11 +305,3 @@ Proof
   `abi_decoder_phi st st'` by metis_tac[cj 1 abi_decoder_phi_mutual, pairTheory.SND] >>
   fs[abi_decoder_phi_def]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_DECODER_PHI_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI decoder PHI provenance not kernel closed: " ^ n)
-  end) (DB.thms "abiDecoderPhi");

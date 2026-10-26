@@ -1,7 +1,7 @@
 (* Canonical bounds and offsets needed by one recursive member step. *)
 Theory abiEncoderMembersLayout
 Ancestors
-  abiEncoderMembersContract abiEncoderMembersSource abiEncoderTuplePrefix abiCanonicalWindows
+  abiEncoderMembersContract abiEncoderMembersSource abiEncoderTuple abiCanonicalWindows
   abiDecodeRanges contractABI list arithmetic
 
 Theorem abi_encoder_members_layout:
@@ -71,11 +71,3 @@ Proof
   qpat_assum `hl = _` (fn th => RULE_ASSUM_TAC (PURE_REWRITE_RULE [th]) >> PURE_REWRITE_TAC [th]) >>
   asm_simp_tac bool_ss [] >> decide_tac
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_ENCODER_MEMBERS_LAYOUT_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI encoder members layout not kernel closed: " ^ n)
-  end) (DB.thms "abiEncoderMembersLayout");

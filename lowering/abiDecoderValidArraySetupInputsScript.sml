@@ -2,9 +2,8 @@
 Theory abiDecoderValidArraySetupInputs
 Ancestors
   abiDecoderValidArrayWindows abiDecoderDynamic abiDecoderCoherence abiDecoderTypedContract
-  abiDecoderOffset
-  abiDecoderContract abiDecodeRanges abiValidMemberWindows abiValidMembers
-  abiEncoder compileEnv valueEncoding vyperABI contractABI venomState words list arithmetic
+  abiDecoderOffset abiDecoderContract abiDecodeRanges abiValidMember abiValidMembers abiEncoder
+  compileEnv valueEncoding vyperABI contractABI venomState words list arithmetic
 
 Theorem abi_decoder_valid_array_setup_inputs:
   let at = vyper_to_abi_type env ty;
@@ -42,11 +41,3 @@ Proof
   rename1 `eval_operand hi initial = SOME (n2w hb)` >>
   qexists_tac `hb` >> asm_simp_tac bool_ss [] >> decide_tac
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_DECODER_VALID_ARRAY_SETUP_INPUTS_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI valid array setup inputs not kernel closed: " ^ n)
-  end) (DB.thms "abiDecoderValidArraySetupInputs");

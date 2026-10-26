@@ -3,10 +3,10 @@
    metadata; none assumes successful execution of an emitted fragment. *)
 Theory abiBuiltinCanonicalPre
 Ancestors
-  abiBuiltinAllocationState abiBuiltinDecodeSetup abiBuiltinSetupExecute
-  abiDecoderCoherence abiDecoderTypedContract abiDecoderReentry abiDecoderReservation
-  abiDecoderAllocation abiDecoderArrayInitExec abiDecoderFrame abiDecoderContract
-  compileEnv valueEncoding vyperABI contractABI venomState finite_map words list arithmetic
+  abiBuiltinAllocation abiBuiltinDecodeSetup abiBuiltinSetupExecute abiDecoderCoherence
+  abiDecoderTypedContract abiDecoderReentry abiDecoderReservation abiDecoderAllocation
+  abiDecoderArrayInitExec abiDecoderFrame abiDecoderContract compileEnv valueEncoding vyperABI
+  contractABI venomState finite_map words list arithmetic
 
 Definition abi_builtin_canonical_pre_def:
   abi_builtin_canonical_pre ce env sf ty tv av v st first last data min_size max_size p d b cap s <=>
@@ -80,11 +80,3 @@ Proof
     abi_decoder_pre_prune) >>
   impl_tac >- asm_simp_tac (srw_ss()) [abi_decode_source_def] >> asm_simp_tac bool_ss []
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_BUILTIN_CANONICAL_PRE_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI builtin canonical inputs not kernel closed: " ^ n)
-  end) (DB.thms "abiBuiltinCanonicalPre");

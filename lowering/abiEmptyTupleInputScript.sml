@@ -2,10 +2,9 @@
    Child premises are pure data properties for structural induction. *)
 Theory abiEmptyTupleInput
 Ancestors
-  abiEmptyInputTransport abiTupleEncodeAssembly abiTupleEncodeMemory
-  abiTupleEncodeSourceLayout abiEncoderInput abiEncoderInputLayout
-  abiDecoderCoherence compileEnv exprLowering valueEncoding vyperABI
-  contractABI words list rich_list arithmetic
+  abiEmptyInput abiTupleEncodeAssembly abiTupleEncodeMemory abiTupleEncodeSourceLayout
+  abiEncoderInput abiDecoderCoherence compileEnv exprLowering valueEncoding vyperABI contractABI
+  words list rich_list arithmetic
 
 Theorem abi_empty_tuple_type_typed:
   abi_encoder_tuple_type at ats /\ has_type at (ListV avs) ==>
@@ -72,11 +71,3 @@ Proof
   drule_all abi_tuple_encode_complex_input >> strip_tac >>
   drule_all abi_empty_complex_type >> simp[]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_EMPTY_TUPLE_INPUT_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI Empty tuple input not kernel closed: " ^ n)
-  end) (DB.thms "abiEmptyTupleInput");

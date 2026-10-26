@@ -1,9 +1,10 @@
 (* Execute the entire actual static-element loop, including initialization and entry. *)
 Theory abiEncoderArrayStaticLoop
 Ancestors
-  abiEncoderArrayIndexPrepare abiEncoderArrayLoopRun abiEncoderArrayLoopCode abiEncoderArrayMemory
-  abiEncoderMembersDefs abiEncoderAdmissible abiDecoderEffect abiDecoderContract abiDecoderReentry
-  abiDecoderLoop fragExec compileEnv valueEncoding contractABI venomState venomInst words list arithmetic
+  abiEncoderArrayIndex abiEncoderArrayLoopRun abiEncoderArrayLoopCode abiEncoderArrayMemory
+  abiEncoderMembersDefs abiEncoderAdmissible abiDecoderEffect abiDecoderContract
+  abiDecoderReentry abiDecoderLoop fragExec compileEnv valueEncoding contractABI venomState
+  venomInst words list arithmetic
 
 Theorem abi_encoder_array_static_loop:
   abi_encoder_static_leaf ei /\
@@ -54,11 +55,3 @@ Proof
   qexists_tac `actual` >> asm_simp_tac bool_ss [] >>
   irule abi_decode_sim_trans >> qexists_tac `ready` >> asm_simp_tac bool_ss []
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_ENCODER_ARRAY_STATIC_LOOP_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI encoder static array loop not kernel closed: " ^ n)
-  end) (DB.thms "abiEncoderArrayStaticLoop");

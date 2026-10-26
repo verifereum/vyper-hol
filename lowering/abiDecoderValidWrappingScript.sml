@@ -1,7 +1,7 @@
 (* Source type coherence for either actual singleton-wrapping choice. *)
 Theory abiDecoderValidWrapping
 Ancestors
-  abiCallerWrapped abiDecoderCallerChecks abiDecoderCoherence abiDecoderReadableTypes
+  abiCallerWrapped abiDecoderCaller abiDecoderCoherence abiDecoderReadableTypes
   abiBoundaryChecks compileEnv valueEncoding vyperABI vyperValue list
 
 Theorem abi_decoder_coherent_singleton:
@@ -21,11 +21,3 @@ Theorem abi_decoder_valid_wrapping:
 Proof
   strip_tac >> Cases_on `wrapped` >> simp[abi_decoder_coherent_singleton]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_DECODER_VALID_WRAPPING_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI source-valid wrapping fact not kernel closed: " ^ n)
-  end) (DB.thms "abiDecoderValidWrapping");

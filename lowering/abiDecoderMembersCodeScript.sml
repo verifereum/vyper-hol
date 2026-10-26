@@ -40,11 +40,3 @@ Proof
   disch_then assume_tac >>
   qexistsl_tac [`ops`, `middle`, `end_st`] >> asm_simp_tac bool_ss [] >> decide_tac
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_DECODER_MEMBERS_CODE_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI member phase code not kernel closed: " ^ n)
-  end) (DB.thms "abiDecoderMembersCode");

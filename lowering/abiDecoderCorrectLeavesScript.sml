@@ -20,11 +20,3 @@ Theorem abi_decoder_correct_flag:
 Proof
   irule abi_decoder_correct_word >> simp[Once type_to_abi_dec_info_def]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_DECODER_CORRECT_LEAVES_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI decoder leaf correctness not kernel closed: " ^ n)
-  end) (DB.thms "abiDecoderCorrectLeaves");

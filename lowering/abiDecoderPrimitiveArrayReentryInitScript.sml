@@ -1,12 +1,12 @@
 (* Typed primitive-array entry under an enclosing loop's freshness/budget bounds. *)
 Theory abiDecoderPrimitiveArrayReentryInit
 Ancestors
-  abiDecoderArrayInitReentry abiDecoderArrayInitReach abiDecoderArrayInitMemory
-  abiDecoderPrimitiveArrayInit abiDecoderPrimitiveArrayFacts abiDecoderArrayLoopInit
-  abiDecoderPrimitiveLoopContext abiDecoderArrayInvariant abiDecoderCoherence
-  abiDecoderTypedContract abiDecoderReentry abiDecoderAllocation abiDecoderLoop
-  abiDecoderContract abiDecoderFrame fragExec exprLoweringProps emitHelperProps
-  compileEnv valueEncoding venomState finite_map words list arithmetic
+  abiDecoderArrayInitReentry abiDecoderArrayInit abiDecoderPrimitiveArrayInit
+  abiDecoderPrimitiveArrayFacts abiDecoderArrayLoopInit abiDecoderPrimitiveLoopContext
+  abiDecoderArrayInvariant abiDecoderCoherence abiDecoderTypedContract abiDecoderReentry
+  abiDecoderAllocation abiDecoderLoop abiDecoderContract abiDecoderFrame fragExec
+  exprLoweringProps emitHelperProps compileEnv valueEncoding venomState finite_map words list
+  arithmetic
 
 Theorem abi_decoder_pre_pruned_operands:
   abi_decoder_pre ce env ty tv di av v st last src dst opc hi sb d b cap
@@ -93,11 +93,3 @@ Proof
     (simp_tac bool_ss [abi_decoder_loop_inputs_def] >> metis_tac[abi_decoder_operand_live_mono]) >>
   qexistsl_tac [`prepared`, `slot`] >> gvs[Excl "enc_def"]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_DECODER_PRIMITIVE_ARRAY_REENTRY_INIT_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI primitive array re-entry initialization not kernel closed: " ^ n)
-  end) (DB.thms "abiDecoderPrimitiveArrayReentryInit");

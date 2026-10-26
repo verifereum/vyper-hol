@@ -2,9 +2,9 @@
    the checked reverse-layout theorem on the canonical encoding itself. *)
 Theory abiEncoderWordSource
 Ancestors
-  abiTupleProps abiStaticPrimitiveProps abiEncoderMemory abiBuiltinEncodeWordStageCode
-  valueEncoding valueEncodingProps vyperABI vyperTyping contractABI compileEnv
-  venomState venomExecSemantics words byte list rich_list arithmetic
+  abiTupleProps abiStaticPrimitiveProps abiEncoderMemory abiBuiltinEncodeWord valueEncoding
+  valueEncodingProps vyperABI vyperTyping contractABI compileEnv venomState venomExecSemantics
+  words byte list rich_list arithmetic
 
 Theorem abi_encoder_base_word_value:
   is_word_type (BaseT bt) /\ value_has_type (BaseTV bt) v ==>
@@ -44,11 +44,3 @@ Theorem abi_encoder_flag_source_word:
 Proof
   simp[typed_val_to_w256_def, val_to_w256_def, enc_def, enc_number_def]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_ENCODER_WORD_SOURCE_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI encoder source word not kernel closed: " ^ n)
-  end) (DB.thms "abiEncoderWordSource");

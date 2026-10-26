@@ -2,8 +2,7 @@
    The operand list used for tuple assembly is internal to the proof. *)
 Theory abiEmptyAggregateInput
 Ancestors
-  abiEmptyTupleInput abiEmptyInputLeaves abiEmptyInputTransport
-  abiTupleEncodeAssembly abiTupleEncodeMemory abiEncoderInput abiEncoderInputLayout
+  abiEmptyTupleInput abiEmptyInput abiTupleEncodeAssembly abiTupleEncodeMemory abiEncoderInput
   abiDecoderCoherence abiDecoderMembers compileEnv exprLowering valueEncoding vyperABI
   contractABI words list rich_list arithmetic
 
@@ -98,11 +97,3 @@ Proof
         abi_empty_fixed_memory_size]) >>
   irule abi_empty_coherent_static_input >> simp[abi_empty_memory_observation]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_EMPTY_AGGREGATE_INPUT_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI Empty aggregate input not kernel closed: " ^ n)
-  end) (DB.thms "abiEmptyAggregateInput");

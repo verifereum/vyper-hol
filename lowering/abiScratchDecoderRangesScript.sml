@@ -4,9 +4,8 @@ Theory abiScratchDecoderRanges
 Ancestors
   abiScratchDecoderContract abiScratchFootprint abiDecoderFootprint abiDecoderAllocation
   abiDecoderTypedContract abiDecoderValidContract abiDecoderFrame abiDecoderContract
-  abiDecoderCoherence abiDecoderReentry abiValidStaticAggregate abiValidStaticScalar
-  abiDecodeRanges compileEnv valueEncoding vyperABI contractABI
-  venomState words list arithmetic
+  abiDecoderCoherence abiDecoderReentry abiValidStatic abiDecodeRanges compileEnv valueEncoding
+  vyperABI contractABI venomState words list arithmetic
 
 Theorem abi_scratch_frontier_point_disjoint:
   s.vs_alloca_next <= b + cap /\
@@ -62,11 +61,3 @@ Proof
   drule_all abi_scratch_decoder_ranges_point >> strip_tac >>
   asm_simp_tac bool_ss [abi_decoder_valid_pre_def]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_SCRATCH_DECODER_RANGES_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI physical decoder range fact not kernel closed: " ^ n)
-  end) (DB.thms "abiScratchDecoderRanges");

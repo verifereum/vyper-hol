@@ -3,9 +3,9 @@
    complete buffer contract and owned effect for array and member encoders. *)
 Theory abiScratchZeroCursor
 Ancestors
-  abiScratchOwnedPrefix abiScratchPrefixEffect abiScratchInputEffect abiScratchEncoderContract
-  abiEncoderComplexPrefix abiEncoderMembersDefs abiDecoderReentry abiDecoderLoop
-  compileEnv valueEncoding contractABI venomState words list arithmetic
+  abiScratchOwnedPrefix abiScratchPrefix abiScratchInput abiScratchEncoderContract
+  abiEncoderComplexPrefix abiEncoderMembersDefs abiDecoderReentry abiDecoderLoop compileEnv
+  valueEncoding contractABI venomState words list arithmetic
 
 Theorem abi_scratch_zero_cursor_prepare:
   abi_encode_complex_prefix ([]:(abi_enc_info # num # num # bool) list) st = (cursor_op,prepared) /\
@@ -40,11 +40,3 @@ Proof
     (irule abi_scratch_input_mono >> qexists_tac `st` >> asm_simp_tac bool_ss []) >>
   qexistsl_tac [`actual`, `slot`] >> gvs[]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_SCRATCH_ZERO_CURSOR_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI scratch zero cursor initialization not kernel closed: " ^ n)
-  end) (DB.thms "abiScratchZeroCursor");

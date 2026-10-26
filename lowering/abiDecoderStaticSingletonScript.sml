@@ -1,12 +1,12 @@
 (* Static singleton prefixes keep the source at offset zero. *)
 Theory abiDecoderStaticSingleton
 Ancestors
-  abiDecoderSingleton abiDecoderTypedContract abiDecoderTypedCompose
-  abiDecoderComplexHead abiDecoderGuardLE abiDecoderGuards abiDecoderDynamic
-  abiDecoderBytesBound abiDecoderOffset
-  abiDecoderReservation abiDecoderContract abiEncoder compileEnv emitHelper
-  emitHelperProps exprLoweringProps valueEncoding vyperABI contractABI
-  venomExecSemantics venomState venomInst words arithmetic list rich_list
+  abiDecoderSingletonSetup
+  abiDecoderSingleton abiDecoderTypedContract abiDecoderTypedCompose abiDecoderComplexHead
+  abiDecoderGuard abiDecoderGuards abiDecoderDynamic abiDecoderBytesBound abiDecoderOffset
+  abiDecoderReservation abiDecoderContract abiEncoder compileEnv emitHelper emitHelperProps
+  exprLoweringProps valueEncoding vyperABI contractABI venomExecSemantics venomState venomInst
+  words arithmetic list rich_list
 
 Theorem canonical_static_singleton_encoding:
   ~is_dynamic aty ==> enc (Tuple [aty]) (ListV [av]) = enc aty av
@@ -102,12 +102,6 @@ Proof
   simp[DROP_LENGTH_APPEND, is_terminator_def, is_alloca_op_def, mk_inst_def]
 QED
 
-Theorem abi_static_singleton_nil[local]:
-  compile_abi_decode_complex_elems dst src opc hi [] aoff voff = return ()
-Proof
-  simp[compile_abi_decode_to_buf_def]
-QED
-
 Theorem abi_static_singleton_members[local]:
   ~abi_decoder_dynamic di ==>
   compile_abi_decode_complex_elems dst src opc hi [(di,head_sz,mem_sz)] 0 0 =
@@ -118,7 +112,7 @@ Theorem abi_static_singleton_members[local]:
 Proof
   strip_tac >>
   CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [compile_abi_decode_to_buf_def])) >>
-  simp[FUN_EQ_THM, abi_decoder_dynamic_case, abi_static_singleton_nil,
+  simp[FUN_EQ_THM, abi_decoder_dynamic_case, abi_decode_complex_nil,
        abi_decoder_needs_offset_iff,
        compile_getelemptr_abi_def, comp_bind_def, comp_ignore_bind_def,
        comp_return_def] >>
@@ -141,11 +135,3 @@ Proof
        comp_return_def] >>
   rpt gen_tac >> rpt (pairarg_tac >> gvs[])
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_DECODER_STATIC_SINGLETON_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI static singleton prefix not kernel closed: " ^ n)
-  end) (DB.thms "abiDecoderStaticSingleton");

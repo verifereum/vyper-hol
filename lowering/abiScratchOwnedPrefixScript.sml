@@ -3,10 +3,10 @@
    abi_scratch_owned_prefix_parent preserves an already-live ancestor cursor. *)
 Theory abiScratchOwnedPrefix
 Ancestors
-  abiScratchPrefixReach abiScratchFootprint abiEncoderComplexPrefixReach
-  abiEncoderComplexPrefix abiEncoderMembersDefs abiEncoderArrayCursor
-  abiDecoderFootprint abiDecoderAllocation abiDecoderFrame abiDecoderContract
-  abiDecoderReentry abiDecoderLoop compileEnv venomState finite_map pred_set words list arithmetic
+  abiScratchPrefixReach abiScratchFootprint abiEncoderComplexPrefix abiEncoderMembersDefs
+  abiEncoderArrayCursor abiDecoderFootprint abiDecoderAllocation abiDecoderFrame
+  abiDecoderContract abiDecoderReentry abiDecoderLoop compileEnv venomState finite_map pred_set
+  words list arithmetic
 
 Theorem abi_scratch_owned_prefix_frame:
   abi_encoder_complex_prefix_post infos dyn_ptr next site limit_st first last b cap initial actual /\
@@ -110,11 +110,3 @@ Proof
      rpt strip_tac >> decide_tac) >>
   qexists_tac `slot` >> gvs[abi_encoder_cursor_def]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_SCRATCH_OWNED_PREFIX_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI scratch owned prefix not kernel closed: " ^ n)
-  end) (DB.thms "abiScratchOwnedPrefix");

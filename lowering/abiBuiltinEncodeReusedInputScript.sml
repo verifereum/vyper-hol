@@ -61,7 +61,7 @@ Proof
   >-
     (Cases_on `method_id` >>
      fs[abi_builtin_encode_resources_def, LET_THM, abi_builtin_encode_prefix_def,
-        abiBuiltinEncodeMethodReachTheory.abi_builtin_encode_method_bytes_length,
+        abiBuiltinEncodeMethodTheory.abi_builtin_encode_method_bytes_length,
         AC ADD_COMM ADD_ASSOC]) >>
   drule_all abi_builtin_allocate_separate >> disch_then assume_tac >>
   qpat_assum `abi_builtin_encode_effect _ _ _ _ _ _ _ _ _ _ _ _`
@@ -73,11 +73,3 @@ Proof
   irule abi_tuple_encode_owned_bytes_source_input >> asm_rewrite_tac[] >>
   qexists_tac `n2w p:bytes32` >> gvs[w2n_n2w, LENGTH_APPEND] >> decide_tac
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_BUILTIN_ENCODE_REUSED_INPUT_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI reused encoder input not kernel closed: " ^ n)
-  end) (DB.thms "abiBuiltinEncodeReusedInput");

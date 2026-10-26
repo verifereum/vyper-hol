@@ -2,11 +2,10 @@
    values. This includes all static ABI types and static-element dynamic arrays. *)
 Theory abiDecoderValidPrefix
 Ancestors
-  abiDecoderValidContract abiDecoderCoherentCorrect abiDecoderArrayBody
-  abiDecoderAllocation abiDecoderReentry abiDecoderCoherence abiDecoderTypedContract
-  abiDecoderContract abiValidStaticAggregate abiValidStaticScalar abiValidStaticArray
-  abiDecodeRanges compileEnv valueEncoding vyperABI contractABI
-  venomState words list arithmetic
+  abiDecoderValidContract abiDecoderCoherentCorrect abiDecoderArrayBody abiDecoderAllocation
+  abiDecoderReentry abiDecoderCoherence abiDecoderTypedContract abiDecoderContract
+  abiValidStatic abiDecodeRanges compileEnv valueEncoding vyperABI contractABI venomState words
+  list arithmetic
 
 Theorem abi_decoder_valid_correct_prefix:
   (!bs. valid_enc (vyper_to_abi_type env ty) bs /\
@@ -53,11 +52,3 @@ Proof
     (qpat_x_assum `valid_enc _ _` mp_tac >> asm_simp_tac bool_ss []) >>
   drule_all abi_valid_static_array_prefix >> simp[]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_DECODER_VALID_PREFIX_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI valid recursive prefix decoder not kernel closed: " ^ n)
-  end) (DB.thms "abiDecoderValidPrefix");

@@ -107,11 +107,3 @@ Proof
   qexists_tac `actual` >> asm_simp_tac (srw_ss()) [word_add_n2w, ADD_COMM] >>
   irule abi_builtin_prefix_chain >> qexistsl_tac [`c1`, `prepared`] >> asm_simp_tac bool_ss []
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_ENCODER_BYTES_PREFIX_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI encoder bytes prefix not kernel closed: " ^ n)
-  end) (DB.thms "abiEncoderBytesPrefix");

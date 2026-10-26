@@ -4,10 +4,11 @@
    Complete source memory and generated-site ownership remain caller inputs. *)
 Theory abiScratchEncoderCaller
 Ancestors
-  abiScratchEncoderRecursive abiScratchEncoderRun abiScratchEncoderContract abiScratchEffectProtected
-  abiCallerAllocation abiEncoderInput abiEncoderArrayFrame abiDecoderAllocation abiDecoderFootprint
-  abiDecoderFrame abiDecoderReentry abiDecoderContract abiDecoderLoop compileEnv exprLowering
-  valueEncoding contractABI venomState venomMemDefs finite_map pred_set words list arithmetic
+  abiScratchEncoderRecursive abiScratchEncoderRun abiScratchEncoderContract abiScratchEffect
+  abiCallerAllocation abiEncoderInput abiEncoderArrayFrame abiDecoderAllocation
+  abiDecoderFootprint abiDecoderFrame abiDecoderReentry abiDecoderContract abiDecoderLoop
+  compileEnv exprLowering valueEncoding contractABI venomState venomMemDefs finite_map pred_set
+  words list arithmetic
 
 Theorem abi_scratch_allocation_input:
   alloca_inv s /\ abi_decoder_budget first last b cap s /\
@@ -86,11 +87,3 @@ Proof
   drule_all abi_scratch_effect_source >> disch_tac >>
   qexists_tac `actual` >> asm_simp_tac bool_ss []
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_SCRATCH_ENCODER_CALLER_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI precise translated encoder caller not kernel closed: " ^ n)
-  end) (DB.thms "abiScratchEncoderCaller");

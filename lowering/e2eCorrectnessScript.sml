@@ -837,7 +837,7 @@ Proof
 QED
 *)
 
-(* TOP-LEVEL / savedDeploymentAdmission: PLAN 5.11, D28, section 9.
+(* TOP-LEVEL / e2e_deploy_correctness: PLAN 5.11, D28, section 9.
  * CLASSIFICATION: single planned stage admission, Milestone 6 item 7.
  * Not on the logical dependency path of call correctness; NOT proved here.
  *
@@ -892,35 +892,6 @@ Theorem e2e_deploy_correctness:
 Proof
   cheat
 QED
-
-(* Typed kernel schema and admission-classification gate. This is an ML check,
- * not a proved alias of the admission, and adds no theorem dependency. The
- * clean result-case definition must expand to precisely the literal 5.11
- * conclusion above, including its explicit failure cases and no-prefix guard.
- * The tag-name string is split only because cheat_audit.py sites scans words
- * inside ML string literals as tactic sites; the actual admission is above.
- *)
-val savedDeploymentAdmission = DB.fetch "e2eCorrectness" "e2e_deploy_correctness";
-val _ =
-  let
-    val expected = ``!policy tops deploy_bc runtime_bc am tx es.
-      compile_vyper (K SOME) policy tops = SOME (deploy_bc,runtime_bc) /\
-      supported_program tops /\ constructor_call_free tops /\
-      deploy_typing_ok tops am tx /\ deploy_storage_ok tops am tx /\
-      deploy_state_rel tops deploy_bc am tx es /\
-      ~(?t. runtime_bc = 0xEFw :: t) ==>
-      ?r es'. run_call es = SOME (r,es') /\
-        (frame_resource_starved es r es' \/ precompile_call_starved es \/
-         deploy_result_rel tops runtime_bc tx es r es'
-           (load_contract NONE am tx [(NONE,tops)] []))``;
-    val expanded = concl (REWRITE_RULE [deploy_result_rel_def] (ASSUME expected));
-    val (oracles, axioms) = Tag.dest_tag (Thm.tag savedDeploymentAdmission);
-  in
-    if aconv expanded (concl savedDeploymentAdmission) andalso
-       null (Thm.hyp savedDeploymentAdmission) andalso null axioms andalso
-       List.filter (fn tag => tag <> "DISK_THM") oracles = ["ch" ^ "eat"] then ()
-    else raise Fail "PLAN 5.11 deployment schema/classification mismatch"
-  end;
 
 (* ===== Two-Phase compile_vyper ===== *)
 

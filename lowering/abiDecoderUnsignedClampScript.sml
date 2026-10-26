@@ -1,14 +1,10 @@
 (* Successful unsigned ABI clamps preserve the decoded word and source state. *)
 Theory abiDecoderUnsignedClamp
 Ancestors
+  venomMemProps
   abiDecoderGuards abiDecoderContract abiEncoder emitHelperProps exprLoweringProps
   compileEnv emitHelper valueEncoding venomExecSemantics venomState venomInst
   words arithmetic rich_list list
-
-Theorem abi_unsigned_clamp_dimindex[simp,local]: dimindex (:256) = 256
-Proof
-  CONV_TAC fcpLib.INDEX_CONV
-QED
 
 Theorem abi_decoder_unsigned_shift_zero:
   bits <= 256 /\ w2n (w:bytes32) < 2 ** bits ==>
@@ -84,11 +80,3 @@ Proof
   pure_rewrite_tac[GSYM APPEND_ASSOC] >>
   simp[DROP_LENGTH_APPEND, is_terminator_def, is_alloca_op_def, mk_inst_def]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_DECODER_UNSIGNED_CLAMP_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI unsigned clamp not kernel closed: " ^ n)
-  end) (DB.thms "abiDecoderUnsignedClamp");

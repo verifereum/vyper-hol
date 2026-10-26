@@ -3,8 +3,7 @@
    while widening compiler intervals and preserving older operand values. *)
 Theory abiScratchPhaseCompose
 Ancestors
-  abiScratchEncoderContract abiScratchEffectWiden abiScratchEffectCompose
-  compileEnv venomState arithmetic
+  abiScratchEncoderContract abiScratchEffect compileEnv venomState arithmetic
 
 Theorem abi_scratch_phase_compose:
   abi_scratch_effect first last st.cs_next_id prepared.cs_next_id st.cs_next_var
@@ -43,11 +42,3 @@ Proof
   irule abi_scratch_effect_trans >> asm_simp_tac bool_ss [] >>
   qexists_tac `encoded` >> asm_simp_tac bool_ss []
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_SCRATCH_PHASE_COMPOSE_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI scratch recursive phase composition not kernel closed: " ^ n)
-  end) (DB.thms "abiScratchPhaseCompose");

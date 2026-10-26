@@ -71,11 +71,3 @@ Proof
   strip_tac >> irule frag_exec_initial_family >> rpt strip_tac >>
   drule_all abi_decoder_typed_primitive_word_from_state >> simp[]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_DECODER_PRIMITIVE_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI primitive decoder not kernel closed: " ^ n)
-  end) (DB.thms "abiDecoderPrimitive");

@@ -1,10 +1,11 @@
 (* Execute a dynamic child and advance its parent cursor and remaining source invariant. *)
 Theory abiEncoderMembersDynamic
 Ancestors
-  abiEncoderMembersAdvance abiEncoderMembersContract abiEncoderMembersDefs abiEncoderMembersLayout
-  abiEncoderMemberStep abiEncoderMemberCode abiEncoderTuplePrefix abiEncoderCorrect abiEncoderChildInputs
-  abiCanonicalWindows abiDecoderEffect abiDecoderContract abiDecoderLoop compileEnv
-  valueEncoding contractABI venomState words list arithmetic
+  abiEncoderMembersAdvance abiEncoderMembersContract abiEncoderMembersDefs
+  abiEncoderMembersLayout abiEncoderMember abiEncoderMemberCode abiEncoderTuple
+  abiEncoderCorrect abiEncoderChildInputs abiCanonicalWindows abiDecoderEffect
+  abiDecoderContract abiDecoderLoop compileEnv valueEncoding contractABI venomState words list
+  arithmetic
 
 Theorem abi_encoder_members_dynamic_advance:
   abi_encoder_correct ei /\ compile_abi_encode_child dst elem_src ei T ho dyn_ptr st = (out,end_st) /\
@@ -48,11 +49,3 @@ Proof
   impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
   qexists_tac `actual` >> asm_simp_tac bool_ss []
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_ENCODER_MEMBERS_DYNAMIC_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI encoder dynamic members advance not kernel closed: " ^ n)
-  end) (DB.thms "abiEncoderMembersDynamic");

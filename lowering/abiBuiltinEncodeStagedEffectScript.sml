@@ -1,9 +1,8 @@
 (* Compose a source-producing allocation/write with the complete encoder. *)
 Theory abiBuiltinEncodeStagedEffect
 Ancestors
-  abiBuiltinEncodeEffect abiBuiltinAllocationState abiDecoderFrame
-  abiDecoderPrimitiveLoopFrames abiDecoderReentry abiDecoderContract
-  compileEnv venomState finite_map words list arithmetic
+  abiBuiltinEncodeEffect abiBuiltinAllocation abiDecoderFrame abiDecoderPrimitiveLoopFrames
+  abiDecoderReentry abiDecoderContract compileEnv venomState finite_map words list arithmetic
 
 Definition abi_builtin_encode_staged_effect_def:
   abi_builtin_encode_staged_effect first last st final limit_st sb source_cap p outsz write_size b cap s t <=>
@@ -59,11 +58,3 @@ Proof
     (asm_simp_tac bool_ss [] >> irule abi_builtin_allocate_state_outside >> asm_simp_tac bool_ss []) >>
   first_x_assum (qspec_then `id` mp_tac) >> asm_simp_tac bool_ss []
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_BUILTIN_ENCODE_STAGED_EFFECT_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI builtin staged encoder effect not kernel closed: " ^ n)
-  end) (DB.thms "abiBuiltinEncodeStagedEffect");

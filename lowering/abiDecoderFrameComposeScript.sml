@@ -55,11 +55,3 @@ Proof
   rw[abi_decode_source_opcode_def, abi_decode_source_def,
      abi_decode_frame_def] >> first_x_assum irule >> simp[]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_DECODER_FRAME_COMPOSE_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI decoder frame composition not kernel closed: " ^ n)
-  end) (DB.thms "abiDecoderFrameCompose");

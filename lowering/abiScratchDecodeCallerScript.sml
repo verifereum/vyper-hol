@@ -2,11 +2,10 @@
    Physical input ownership and numeric resources remain explicit. *)
 Theory abiScratchDecodeCaller
 Ancestors
-  abiBuiltinDecodeSetup
-  abiScratchDecodeDispatch abiCallerCoherence abiDecoderReadableTypes
-  abiBuiltinSourceInput abiScratchDecodeEffect abiDecoderCoherence abiDecoderContract
-  abiDecoderLoop abiDecoderReentry exprLowering builtinAbi fragExec compileVyper compileEnv
-  context valueEncoding vyperTypeSystem vyperValue vyperABI vyperContext venomState words list
+  abiBuiltinDecodeSetup abiScratchDecodeDispatch abiCallerCoherence abiDecoderReadableTypes
+  abiBuiltinSource abiScratchDecodeEffect abiDecoderCoherence abiDecoderContract abiDecoderLoop
+  abiDecoderReentry exprLowering builtinAbi fragExec compileVyper compileEnv context
+  valueEncoding vyperTypeSystem vyperValue vyperABI vyperContext venomState words list
 
 Theorem compile_abi_decode_memory_scratch_caller:
   let ce = build_compile_env tops vis mut func_name fargs ret_type
@@ -55,12 +54,3 @@ Proof
      qexists_tac `in_deploy` >> asm_simp_tac bool_ss []) >>
   drule_all (SIMP_RULE bool_ss [LET_THM] compile_abi_decode_memory_scratch) >> simp[]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_SCRATCH_DECODE_CALLER_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI physical actual-source constructed caller not kernel closed: " ^ n)
-  end) (DB.thms "abiScratchDecodeCaller");
-

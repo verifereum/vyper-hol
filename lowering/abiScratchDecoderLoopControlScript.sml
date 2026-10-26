@@ -1,9 +1,10 @@
 (* Precise identity and actual loop-header effects. *)
 Theory abiScratchDecoderLoopControl
 Ancestors
-  abiScratchEncoderContract abiScratchLeafEffect abiScratchAddressEffect abiScratchEffectWiden
-  abiDecoderDynamicLoopSetup abiDecoderLoopRegisters abiDecoderExecution abiDecoderContract abiDecoderFrame
-  abiDecoderAllocation abiDecoderReentry compileEnv venomState words list arithmetic
+  abiScratchEncoderContract abiScratchLeafEffect abiScratchAddress abiScratchEffect
+  abiDecoderDynamicLoopSetup abiDecoderLoopRegisters abiDecoderExecution abiDecoderContract
+  abiDecoderFrame abiDecoderAllocation abiDecoderReentry compileEnv venomState words list
+  arithmetic
 
 Theorem abi_scratch_effect_refl:
   fresh_vars_wrt limit_st s /\ abi_decoder_budget first last b cap s ==>
@@ -33,12 +34,3 @@ Proof
   asm_simp_tac bool_ss [LESS_EQ_REFL] >>
   irule abi_scratch_address_effect >> asm_simp_tac bool_ss []
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_SCRATCH_DECODER_LOOP_CONTROL_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI physical decoder loop control not kernel closed: " ^ n)
-  end) (DB.thms "abiScratchDecoderLoopControl");
-

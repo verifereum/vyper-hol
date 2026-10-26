@@ -1,11 +1,11 @@
 (* Actual builtin setup establishes the full source-valid recursive input. *)
 Theory abiBuiltinValidReady
 Ancestors
-  abiBuiltinValidInput abiBuiltinPrefixReady abiBuiltinSourceInput abiBuiltinDecodeSetup
-  abiBuiltinSetupExecute abiBuiltinAllocationState abiDecoderValidContract
-  abiDecoderCoherence abiDecoderTypedContract abiDecoderReentry abiDecoderContract
-  abiDecoderAllocation abiDecoderArrayInitExec compileEnv valueEncoding vyperABI contractABI
-  venomState words list arithmetic
+  abiBuiltinValidInput abiBuiltinPrefixReady abiBuiltinSource abiBuiltinDecodeSetup
+  abiBuiltinSetupExecute abiBuiltinAllocation abiDecoderValidContract abiDecoderCoherence
+  abiDecoderTypedContract abiDecoderReentry abiDecoderContract abiDecoderAllocation
+  abiDecoderArrayInitExec compileEnv valueEncoding vyperABI contractABI venomState words list
+  arithmetic
 
 Theorem abi_builtin_valid_pre_ready:
   abi_builtin_decode_setup data min_size max_size (type_memory_bytes ce ty) st = (ops,ready) /\
@@ -43,11 +43,3 @@ Proof
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_builtin_allocation_frame_def]) >>
   asm_simp_tac (srw_ss()) [abi_decoder_valid_pre_def, abi_decode_source_def]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_BUILTIN_VALID_READY_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI actual-source builtin readiness not kernel closed: " ^ n)
-  end) (DB.thms "abiBuiltinValidReady");

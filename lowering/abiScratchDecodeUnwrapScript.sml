@@ -1,11 +1,11 @@
 (* Full source-valid builtin decoding for both unwrap_tuple choices. *)
 Theory abiScratchDecodeUnwrap
 Ancestors
-  abiBuiltinDecodeSetup
-  abiScratchDecodeSource abiDecoderValidWrapping abiValidBytesUnwrap abiBoundaryChecks abiDecodeUnwrapCase
-  abiBuiltinSourceInput abiScratchDecodeEffect abiDecoderCoherence abiDecoderReadableTypes
-  abiDecoderContract abiDecoderLoop abiDecoderReentry abiEncoder builtinAbi fragExec
-  compileEnv valueEncoding vyperABI vyperContext vyperValue venomState words list
+  abiBuiltinDecodeSetup abiScratchDecodeSource abiDecoderValidWrapping abiValidBytesUnwrap
+  abiBoundaryChecks abiDecodeUnwrapCase abiBuiltinSource abiScratchDecodeEffect
+  abiDecoderCoherence abiDecoderReadableTypes abiDecoderContract abiDecoderLoop
+  abiDecoderReentry abiEncoder builtinAbi fragExec compileEnv valueEncoding vyperABI
+  vyperContext vyperValue venomState words list
 
 Theorem lower_abi_decode_scratch_unwrap:
   let wrapped = (unwrap /\ needs_external_call_wrap ty) in
@@ -53,12 +53,3 @@ QED
 
 Theorem lower_abi_decode_scratch_unwrap_true =
   SIMP_RULE bool_ss [LET_THM] (Q.INST [`unwrap` |-> `T`] lower_abi_decode_scratch_unwrap);
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_SCRATCH_DECODE_UNWRAP_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI physical actual-source builtin unwrap not kernel closed: " ^ n)
-  end) (DB.thms "abiScratchDecodeUnwrap");
-

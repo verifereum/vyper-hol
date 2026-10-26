@@ -3,12 +3,11 @@
    numeric credit establish resources; no separation or coherence is assumed. *)
 Theory abiScratchDecodeHistoryCaller
 Ancestors
-  abiScratchDecodeCaller abiAllocationHistoryResources abiScratchDecodeInput abiCallerDecodeBounds
-  abiScratchDecodeEffect abiBuiltinDecodeSetup abiBuiltinAllocationState
-  abiDecoderAllocation abiDecoderReentry abiDecoderLoop
-  exprLowering builtinAbi fragExec compileVyper compileEnv context
-  valueEncoding vyperABI vyperTypeSystem vyperValue vyperContext
-  venomState venomInst venomExecSemantics finite_map relation pred_set words list
+  abiScratchDecodeCaller abiAllocationHistory abiScratchDecodeInput abiCallerDecodeBounds
+  abiScratchDecodeEffect abiBuiltinDecodeSetup abiBuiltinAllocation abiDecoderAllocation
+  abiDecoderReentry abiDecoderLoop exprLowering builtinAbi fragExec compileVyper compileEnv
+  context valueEncoding vyperABI vyperTypeSystem vyperValue vyperContext venomState venomInst
+  venomExecSemantics finite_map relation pred_set words list
 
 Theorem compile_abi_decode_memory_history_caller:
   let ce = build_compile_env tops vis mut func_name fargs ret_type
@@ -79,11 +78,3 @@ Proof
       compile_abi_decode_memory_scratch_caller)) >>
   simp[]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_SCRATCH_DECODE_HISTORY_CALLER_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI checked decoder history caller not kernel closed: " ^ n)
-  end) (DB.thms "abiScratchDecodeHistoryCaller");

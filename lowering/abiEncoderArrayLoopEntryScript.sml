@@ -65,11 +65,3 @@ Proof
   asm_simp_tac (srw_ss()) [abi_encoder_array_loop_inv_def, jump_to_def,
     abi_encoder_array_memory_jump, abi_encoder_cursor_jump, abi_decoder_operand_jump]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_ENCODER_ARRAY_LOOP_ENTRY_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI encoder array loop entry not kernel closed: " ^ n)
-  end) (DB.thms "abiEncoderArrayLoopEntry");

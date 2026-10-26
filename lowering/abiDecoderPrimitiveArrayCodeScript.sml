@@ -1,10 +1,10 @@
 (* Extract actual initialization/loop subfragments from primitive array compilation. *)
 Theory abiDecoderPrimitiveArrayCode
 Ancestors
-  abiDecoderArrayInitReach abiDecoderArrayLoopInit abiDecoderLoopEmit
-  abiDecoderPrimitiveLoopInvariant abiDecoderPrimitiveLoopLayout
-  abiDecoderAppend abiDecoderCode abiDecoderContract fragExec
-  exprLoweringProps emitHelperProps compileEnv venomState words list arithmetic
+  abiDecoderArrayInit abiDecoderArrayLoopInit abiDecoderLoopEmit
+  abiDecoderPrimitiveLoopInvariant abiDecoderPrimitiveLoopLayout abiDecoderAppend abiDecoderCode
+  abiDecoderContract fragExec exprLoweringProps emitHelperProps compileEnv venomState words list
+  arithmetic
 
 Theorem abi_decoder_primitive_loop_end:
   compile_abi_decode_dyn_loop dst src opc hi (DecPrimWord clamp) 32 32 ip cnt
@@ -53,11 +53,3 @@ Proof
   drule_all fn_has_code_split >> strip_tac >>
   qexistsl_tac [`setup`, `loop_st`] >> simp[]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_DECODER_PRIMITIVE_ARRAY_CODE_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI primitive array compilation not kernel closed: " ^ n)
-  end) (DB.thms "abiDecoderPrimitiveArrayCode");

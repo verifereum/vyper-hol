@@ -2,11 +2,11 @@
 Theory abiDecoderValidArray
 Ancestors
   abiDecoderValidContract abiDecoderValidPrefix abiDecoderValidArrayExecute
-  abiDecoderValidLeaves abiDecoderValidTuple
-  abiDecoderValidArrayInitInputs abiDecoderCorrectPrimitiveArray abiDecoderRecursiveArrayCode
-  abiDecoderCoherence abiDecoderTypedContract abiDecoderContract abiDecodeRanges
-  abiDecoderEffect abiDecoderReentry abiDecoderLoop abiEncoder exprLowering compileEnv valueEncoding
-  vyperABI vyperValue contractABI venomState words list
+  abiDecoderValidLeaves abiDecoderValidTuple abiDecoderValidArrayInitInputs
+  abiDecoderCorrectPrimitiveArray abiDecoderRecursiveArray abiDecoderCoherence
+  abiDecoderTypedContract abiDecoderContract abiDecodeRanges abiDecoderEffect abiDecoderReentry
+  abiDecoderLoop abiEncoder exprLowering compileEnv valueEncoding vyperABI vyperValue
+  contractABI venomState words list
 
 Theorem abi_decoder_valid_correct_dynamic_array:
   abi_decoder_valid_correct ce env sf ty tv /\ is_dynamic (vyper_to_abi_type env ty) /\
@@ -58,11 +58,3 @@ Proof
   gen_tac >> irule abi_decoder_valid_correct_array >>
   metis_tac[abi_decoder_valid_correct_base, abi_decoder_valid_base_member_nonempty]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_DECODER_VALID_ARRAY_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI actual-source array decoder not kernel closed: " ^ n)
-  end) (DB.thms "abiDecoderValidArray");

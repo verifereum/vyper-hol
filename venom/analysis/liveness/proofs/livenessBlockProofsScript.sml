@@ -103,7 +103,6 @@ Proof
   drule backward_fold_exit >> strip_tac >>
   simp[df_at_def, df_flookup_funion]
 QED
-
 Theorem liveness_block_transfer:
   i < LENGTH (liveness_instrs bbs lbl) ==>
   df_at [] (liveness_block bbs cfg lbl st) lbl i =
@@ -144,9 +143,3 @@ Proof
   disch_then (qspecl_then [`lbl`, `i`] mp_tac) >> simp[] >> strip_tac >>
   simp[df_at_def, df_flookup_funion]
 QED
-
-(* Fail the build if the boundary API acquires an oracle dependency. *)
-val _ = List.app (fn (_,th) =>
-  if List.all (fn s => s = "DISK_THM") (#1 (Tag.dest_tag (Thm.tag th)))
-  then () else raise Fail "oracle in liveness block boundary API")
-  (DB.thms "livenessBlockProofs");

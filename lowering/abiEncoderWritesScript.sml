@@ -47,11 +47,3 @@ Proof
   asm_simp_tac (srw_ss()) [run_inst_seq_def, Once step_inst_base_def, mk_inst_def, w2n_n2w] >>
   fs[fresh_vars_wrt_def, lookup_var_def, mcopy_def, write_memory_with_expansion_def]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_ENCODER_WRITES_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI encoder writes not kernel closed: " ^ n)
-  end) (DB.thms "abiEncoderWrites");

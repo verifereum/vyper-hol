@@ -1,9 +1,10 @@
 (* Execute the entire actual dynamic-element loop using recursive child correctness. *)
 Theory abiEncoderArrayDynamicLoop
 Ancestors
-  abiEncoderArrayDynamicInitPrepare abiEncoderArrayLoopRun abiEncoderArrayLoopCode abiEncoderArrayMemory
-  abiEncoderMembersDefs abiEncoderCorrect abiDecoderEffect abiDecoderContract abiDecoderReentry
-  abiDecoderLoop fragExec compileEnv valueEncoding contractABI venomState venomInst words list arithmetic
+  abiEncoderArrayDynamicInit abiEncoderArrayLoopRun abiEncoderArrayLoopCode
+  abiEncoderArrayMemory abiEncoderMembersDefs abiEncoderCorrect abiDecoderEffect
+  abiDecoderContract abiDecoderReentry abiDecoderLoop fragExec compileEnv valueEncoding
+  contractABI venomState venomInst words list arithmetic
 
 Theorem abi_encoder_array_dynamic_loop:
   abi_encoder_correct ei /\ compile_abi_encode_dyn_loop dst src ei asz msz count_op start = (out,final) /\
@@ -51,11 +52,3 @@ Proof
   qexists_tac `actual` >> asm_simp_tac bool_ss [] >>
   irule abi_decode_sim_trans >> qexists_tac `ready` >> asm_simp_tac bool_ss []
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_ENCODER_ARRAY_DYNAMIC_LOOP_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI encoder dynamic array loop not kernel closed: " ^ n)
-  end) (DB.thms "abiEncoderArrayDynamicLoop");

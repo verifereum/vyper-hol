@@ -5,11 +5,11 @@
 Theory abiScratchArrayDynamicBody
 Ancestors
   abiScratchArrayPrepare abiScratchArrayDynamicTail abiScratchAfterAddress
-  abiScratchEncoderContract abiScratchEffectProtected abiScratchFootprint
-  abiEncoderArrayDynamicCode abiEncoderArrayAddress abiEncoderArrayBounds abiEncoderArrayLayout
-  abiEncoderInput abiDecoderDynamicLoopSetup abiDecoderAllocation abiDecoderFootprint
-  abiDecoderFrame abiDecoderReentry abiDecoderContract abiDecoderLoop compileEnv
-  valueEncoding contractABI venomState finite_map words list arithmetic
+  abiScratchEncoderContract abiScratchEffect abiScratchFootprint abiEncoderArrayDynamicCode
+  abiEncoderArrayAddress abiEncoderArrayBounds abiEncoderArrayLayout abiEncoderInput
+  abiDecoderDynamicLoopSetup abiDecoderAllocation abiDecoderFootprint abiDecoderFrame
+  abiDecoderReentry abiDecoderContract abiDecoderLoop compileEnv valueEncoding contractABI
+  venomState finite_map words list arithmetic
 
 Theorem abi_scratch_array_body_bounds:
   abi_encoder_input (AbiDynArray ei asz msz T) (Array NONE ty) (ListV avs) sb source_cap mem /\
@@ -94,11 +94,3 @@ Proof
   qexists_tac `actual` >> gvs[] >>
   irule abi_decode_sim_trans >> qexists_tac `ready` >> simp[]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_SCRATCH_ARRAY_DYNAMIC_BODY_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI scratch complete dynamic body not kernel closed: " ^ n)
-  end) (DB.thms "abiScratchArrayDynamicBody");

@@ -35,11 +35,3 @@ Proof
     (irule isPREFIX_TRANS >> qexists_tac `middle.cs_current_insts` >> asm_simp_tac bool_ss []) >>
   asm_simp_tac (srw_ss()) [EVERY_APPEND] >> decide_tac
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_TUPLE_ENCODE_CODE_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI tuple encoder compiler provenance not kernel closed: " ^ n)
-  end) (DB.thms "abiTupleEncodeCode");

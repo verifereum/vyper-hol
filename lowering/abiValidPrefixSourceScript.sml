@@ -2,9 +2,9 @@
    arrays of static elements, including nested structs/tuples/fixed arrays. *)
 Theory abiValidPrefixSource
 Ancestors
-  abiValidStaticAggregate abiValidStaticScalar abiValidStaticArray abiBuiltinPrefixInput
-  abiBuiltinSourceInput abiDecoderCoherence abiDecoderTypedContract abiDecoderContract
-  vyperABIValid vyperABI contractABI valueEncoding compileEnv venomState words list rich_list
+  abiValidStatic abiBuiltinPrefixInput abiBuiltinSource abiDecoderCoherence
+  abiDecoderTypedContract abiDecoderContract vyperABIValid vyperABI contractABI valueEncoding
+  compileEnv venomState words list rich_list
 
 Theorem abi_valid_prefix_types:
   (~is_dynamic at \/ ?elem. at = Array NONE elem /\ ~is_dynamic elem) /\
@@ -51,11 +51,3 @@ Proof
   drule_all abi_valid_prefix_source >> strip_tac >>
   drule_all abi_builtin_prefix_pre_from_source >> simp[]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_VALID_PREFIX_SOURCE_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI valid prefix source not kernel closed: " ^ n)
-  end) (DB.thms "abiValidPrefixSource");

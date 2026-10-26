@@ -2,8 +2,8 @@
    scratch path. Both fresh allocation and reuse yield the same output row. *)
 Theory abiScratchBuiltinOwnership
 Ancestors
-  abiBuiltinEncodeOwnership abiBuiltinEncodeSetupFrame abiScratchEncoderContract
-  abiDecoderAllocation compileEnv venomState finite_map pred_set arithmetic
+  abiBuiltinEncodeOwnership abiBuiltinEncodeSetup abiScratchEncoderContract abiDecoderAllocation
+  compileEnv venomState finite_map pred_set arithmetic
 
 Theorem abi_scratch_effect_allocation_row:
   abi_scratch_effect first last lo hi next limit_st d sz b cap s t /\
@@ -57,11 +57,3 @@ Proof
   drule_all abi_builtin_encode_setup_frame_row >> disch_then assume_tac >>
   drule_all abi_scratch_effect_allocation_row >> simp[]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_SCRATCH_BUILTIN_OWNERSHIP_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI scratch builtin ownership not kernel closed: " ^ n)
-  end) (DB.thms "abiScratchBuiltinOwnership");

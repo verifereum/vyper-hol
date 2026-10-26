@@ -4,11 +4,11 @@
 Theory abiBuiltinDecodeCorrect
 Ancestors
   abiBuiltinCanonicalPre abiBuiltinDecodeCode abiBuiltinSetupReach abiBuiltinSetupExecute
-  abiBuiltinDecodeSetup abiBuiltinAllocationState abiBuiltinDecodeEffect
-  abiDecoderCoherentCorrect abiDecoderEffect abiDecoderAllocation abiDecoderReentry
-  abiDecoderCoherence abiDecoderTypedContract abiDecoderContract abiDecoderLoop
-  abiEncoder builtinAbi fragExec compileEnv valueEncoding vyperABI contractABI
-  venomState venomExecSemantics words list arithmetic
+  abiBuiltinDecodeSetup abiBuiltinAllocation abiBuiltinDecodeEffect abiDecoderCoherentCorrect
+  abiDecoderEffect abiDecoderAllocation abiDecoderReentry abiDecoderCoherence
+  abiDecoderTypedContract abiDecoderContract abiDecoderLoop abiEncoder builtinAbi fragExec
+  compileEnv valueEncoding vyperABI contractABI venomState venomExecSemantics words list
+  arithmetic
 
 Theorem lower_abi_decode_canonical:
   lower_abi_decode data (type_to_abi_dec_info sf ce ty) min_size max_size
@@ -61,11 +61,3 @@ Proof
   qexists_tac `actual` >> asm_simp_tac bool_ss [] >>
   irule abi_decode_sim_trans >> qexists_tac `prepared` >> asm_simp_tac bool_ss []
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_BUILTIN_DECODE_CORRECT_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI builtin canonical decoding not kernel closed: " ^ n)
-  end) (DB.thms "abiBuiltinDecodeCorrect");

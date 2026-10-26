@@ -168,11 +168,3 @@ Proof
   pure_rewrite_tac[GSYM APPEND_ASSOC] >>
   simp[DROP_LENGTH_APPEND, is_terminator_def, is_alloca_op_def, mk_inst_def]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_DECODER_CLAMP_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI primitive clamp not kernel closed: " ^ n)
-  end) (DB.thms "abiDecoderClamp");

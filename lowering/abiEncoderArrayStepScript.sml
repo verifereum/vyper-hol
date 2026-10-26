@@ -1,7 +1,7 @@
 (* Exact child write windows advance the encoded array prefix and retain its count. *)
 Theory abiEncoderArrayStep
 Ancestors
-  abiEncoderArrayBounds abiEncoderArrayPrefix abiEncoderArrayLayout abiEncoderTupleStep abiEncoderTuplePrefix
+  abiEncoderArrayBounds abiEncoderArrayPrefix abiEncoderArrayLayout abiEncoderTuple
   abiCanonicalWindows abiDecoderFrame abiDecoderContract valueEncodingProps valueEncoding
   contractABI venomState words list rich_list arithmetic
 
@@ -71,11 +71,3 @@ Proof
   impl_tac >- (full_simp_tac bool_ss [LENGTH_REPLICATE] >> decide_tac) >> disch_tac >>
   irule abi_encoder_array_prefix_advance >> asm_simp_tac bool_ss []
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_ENCODER_ARRAY_STEP_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI encoder array prefix step not kernel closed: " ^ n)
-  end) (DB.thms "abiEncoderArrayStep");

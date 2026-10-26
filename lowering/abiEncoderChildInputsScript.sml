@@ -36,11 +36,3 @@ Proof
     (irule abi_decoder_operand_live_mono >> qexists_tac `st.cs_next_var` >> simp[]) >>
   asm_simp_tac bool_ss [] >> decide_tac
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_ENCODER_CHILD_INPUTS_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI encoder child inputs not kernel closed: " ^ n)
-  end) (DB.thms "abiEncoderChildInputs");

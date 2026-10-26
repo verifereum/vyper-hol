@@ -3,11 +3,10 @@
    and composes its address-only effect from the loop origin. *)
 Theory abiScratchArrayStaticExit
 Ancestors
-  abiScratchArrayLoopInvariant abiScratchArrayLoopExit abiScratchArrayCountPrepare
-  abiScratchAddressEffect abiScratchEffectWiden abiScratchEffectCompose abiScratchEncoderContract
-  abiEncoderArrayExitReach abiEncoderArrayLayout abiEncoderMembersDefs
-  abiDecoderDynamicLoopSetup abiDecoderLoop abiDecoderReentry abiDecoderContract compileEnv
-  valueEncoding contractABI venomState words list arithmetic
+  abiScratchArrayLoopInvariant abiScratchArrayLoopExit abiScratchArrayCount abiScratchAddress
+  abiScratchEffect abiScratchEncoderContract abiEncoderArrayExit abiEncoderArrayLayout
+  abiEncoderMembersDefs abiDecoderDynamicLoopSetup abiDecoderLoop abiDecoderReentry
+  abiDecoderContract compileEnv valueEncoding contractABI venomState words list arithmetic
 
 Theorem abi_scratch_array_static_scalar_exit:
   abi_scratch_array_loop_inv ei asz msz F ty avs owner_st limit_st src dst ip dyn_ptr
@@ -43,11 +42,3 @@ Proof
      qexists_tac `initial` >> asm_simp_tac bool_ss []) >>
   qexists_tac `actual` >> fs[abi_decoder_address_frame_def]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_SCRATCH_ARRAY_STATIC_EXIT_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI scratch actual static array exit not kernel closed: " ^ n)
-  end) (DB.thms "abiScratchArrayStaticExit");

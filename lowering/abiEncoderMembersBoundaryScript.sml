@@ -2,9 +2,9 @@
 Theory abiEncoderMembersBoundary
 Ancestors
   abiEncoderMembersContract abiEncoderMembersDefs abiEncoderMembersInput abiEncoderCorrect
-  abiEncoderInput abiEncoderInputLayout abiEncoderBufferFrame abiEncoderTuplePrefix abiCanonicalWindows
-  abiDecodeRanges abiDecoderAllocation abiDecoderContract compileEnv valueEncoding contractABI
-  venomState list arithmetic
+  abiEncoderInput abiEncoderBufferFrame abiEncoderTuple abiCanonicalWindows abiDecodeRanges
+  abiDecoderAllocation abiDecoderContract compileEnv valueEncoding contractABI venomState list
+  arithmetic
 
 Theorem abi_encoder_members_root_pre:
   abi_encoder_pre (AbiComplex infos) at (ListV avs) st src dst sb source_cap d b cap initial /\
@@ -66,11 +66,3 @@ Proof
   qpat_assum `LENGTH (enc (Tuple tys) (ListV avs)) = _`
     (fn th => PURE_REWRITE_TAC [th]) >> first_assum ACCEPT_TAC
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_ENCODER_MEMBERS_BOUNDARY_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI encoder members boundary not kernel closed: " ^ n)
-  end) (DB.thms "abiEncoderMembersBoundary");

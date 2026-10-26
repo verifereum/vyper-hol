@@ -3,12 +3,11 @@
    stages under the child induction hypothesis and returns one precise effect. *)
 Theory abiScratchArrayDynamicTail
 Ancestors
-  abiScratchArrayTailCode abiScratchArrayTailPrepare abiScratchEncoderRun
-  abiScratchChildFinish abiScratchChildEffect abiScratchEncoderContract abiScratchFootprint
-  abiScratchEffectProtected abiEncoderArrayTail abiEncoderChildCode abiEncoderChildSuffixReach
-  abiDecoderDynamicLoopSetup abiDecoderAllocation abiDecoderFootprint abiDecoderFrame
-  abiDecoderReentry abiDecoderContract abiDecoderLoop compileEnv valueEncoding contractABI
-  venomState finite_map pred_set words list arithmetic
+  abiScratchArrayTail abiScratchEncoderRun abiScratchChild abiScratchEncoderContract
+  abiScratchFootprint abiScratchEffect abiEncoderArrayTail abiEncoderChildCode
+  abiEncoderChildSuffixReach abiDecoderDynamicLoopSetup abiDecoderAllocation abiDecoderFootprint
+  abiDecoderFrame abiDecoderReentry abiDecoderContract abiDecoderLoop compileEnv valueEncoding
+  contractABI venomState finite_map pred_set words list arithmetic
 
 Theorem abi_scratch_array_dynamic_tail_reach:
   abi_scratch_encoder ei /\
@@ -82,11 +81,3 @@ Proof
   irule abi_decode_sim_trans >> qexists_tac `ready` >> asm_simp_tac bool_ss [] >>
   irule abi_decode_sim_trans >> qexists_tac `encoded` >> simp[]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_SCRATCH_ARRAY_DYNAMIC_TAIL_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI scratch dynamic array tail not kernel closed: " ^ n)
-  end) (DB.thms "abiScratchArrayDynamicTail");

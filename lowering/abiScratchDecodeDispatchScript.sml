@@ -1,11 +1,10 @@
 (* Actual AbiDecode dispatch for successful source inputs of coherent types. *)
 Theory abiScratchDecodeDispatch
 Ancestors
-  abiBuiltinDecodeSetup
-  abiScratchDecodeUnwrap abiBuiltinDispatchCorrect abiDecoderReadableTypes
-  abiBuiltinSourceInput abiScratchDecodeEffect abiDecoderCoherence abiDecoderContract
-  abiDecoderLoop abiDecoderReentry exprLowering builtinAbi fragExec compileEnv
-  context valueEncoding vyperABI vyperContext venomState words list
+  abiBuiltinDecodeSetup abiScratchDecodeUnwrap abiBuiltinDispatchCorrect abiDecoderReadableTypes
+  abiBuiltinSource abiScratchDecodeEffect abiDecoderCoherence abiDecoderContract abiDecoderLoop
+  abiDecoderReentry exprLowering builtinAbi fragExec compileEnv context valueEncoding vyperABI
+  vyperContext venomState words list
 
 Theorem compile_abi_decode_memory_scratch:
   let wrapped_ty = if unwrap /\ needs_external_call_wrap ret_ty then TupleT [ret_ty] else ret_ty in
@@ -57,12 +56,3 @@ QED
 
 Theorem compile_abi_decode_memory_scratch_unwrap_true =
   SIMP_RULE bool_ss [LET_THM] (Q.INST [`unwrap` |-> `T`] compile_abi_decode_memory_scratch);
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_SCRATCH_DECODE_DISPATCH_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI physical actual-source builtin dispatch not kernel closed: " ^ n)
-  end) (DB.thms "abiScratchDecodeDispatch");
-

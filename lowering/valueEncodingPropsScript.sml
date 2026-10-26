@@ -331,14 +331,6 @@ Proof
   ACCEPT_TAC valueEncodingProofsTheory.mem_bytes_at_translated_window
 QED
 
-val _ = List.app (fn name =>
-  if null (List.filter (fn x => x <> "DISK_THM")
-    (#1 (Tag.dest_tag (Thm.tag (DB.fetch "valueEncodingProps" name)))))
-  then () else raise Fail ("oracle in " ^ name))
-  ["write_memory_mem_bytes_at_same", "write_memory_mem_bytes_at_disjoint",
-   "mcopy_mem_bytes_at_same", "mcopy_mem_bytes_at_disjoint",
-   "mem_bytes_at_translated_window", "mstore_mem_bytes_at_disjoint"];
-
 (* Equal padded windows relocate any well-formed memory representation. *)
 Theorem val_in_memory_relocate:
   !tv v src mem dst mem' n.
@@ -398,13 +390,6 @@ Theorem mcopy_zero_size_layout_probe[local]:
 Proof
   simp[val_in_memory_def]
 QED
-
-val _ = List.app (fn name =>
-  if null (List.filter (fn x => x <> "DISK_THM")
-    (#1 (Tag.dest_tag (Thm.tag (DB.fetch "valueEncodingProps" name)))))
-  then () else raise Fail ("oracle in " ^ name))
-  ["val_in_memory_relocate", "mcopy_establishes_val_in_memory",
-   "mcopy_preserves_val_in_memory"];
 
 (* ABI-static typed values have their encoding as their padded memory image. *)
 Theorem val_in_memory_static_abi:

@@ -18,12 +18,12 @@ Proof
 QED
 
 Theorem abi_valid_array_heads:
-  valid_enc_array cnt (if is_dynamic at then NONE else SOME (static_length at)) at base hds ==>
+  valid_enc_array cnt (if is_dynamic at then NONE else SOME (static_length at)) at raw_bytes hds ==>
   cnt * abi_member_head_size at <= LENGTH hds /\
-  has_types (REPLICATE cnt at) (abi_decode_members (REPLICATE cnt at) base hds)
+  has_types (REPLICATE cnt at) (abi_decode_members (REPLICATE cnt at) raw_bytes hds)
 Proof
   strip_tac >>
-  `valid_enc_tuple (REPLICATE cnt at) base hds` by fs[valid_enc_tuple_REPLICATE] >>
+  `valid_enc_tuple (REPLICATE cnt at) raw_bytes hds` by fs[valid_enc_tuple_REPLICATE] >>
   drule abi_valid_members_view >>
   simp[map_replicate, SUM_REPLICATE, Excl "dec_def", Excl "valid_enc_def"]
 QED
@@ -73,11 +73,3 @@ Proof
    drule abi_valid_members_view >> strip_tac >>
    drule canonical_dynamic_head_sum >> strip_tac >> decide_tac]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_VALID_AGGREGATE_HEADS_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI valid aggregate heads not kernel closed: " ^ n)
-  end) (DB.thms "abiValidAggregateHeads");

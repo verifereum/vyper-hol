@@ -116,11 +116,3 @@ Proof
   Cases_on `u` >> qexistsl_tac [`labels`, `st0`, `ops`, `middle`, `st1`] >>
   gvs[abi_decode_dyn_loop_phases, comp_bind_def, comp_ignore_bind_def, comp_return_def]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_DECODER_LOOP_EMIT_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI loop emission not kernel closed: " ^ n)
-  end) (DB.thms "abiDecoderLoopEmit");

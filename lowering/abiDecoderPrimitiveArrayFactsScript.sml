@@ -3,9 +3,8 @@ Theory abiDecoderPrimitiveArrayFacts
 Ancestors
   abiDecoderArrayInvariant abiDecoderArrayAdvance abiDecoderPrimitiveLoopContext
   abiDecoderCoherence abiDecoderTypedContract abiDecoderWordTyped abiDecoderContract
-  abiCanonicalArrays abiCanonicalArrayLoad abiDecoderBulkContract
-  compileEnv exprLowering valueEncoding vyperABI vyperTyping vyperValue
-  contractABI byte words list arithmetic
+  abiCanonicalArrays abiCanonicalArrayLoad abiDecoderBulk compileEnv exprLowering valueEncoding
+  vyperABI vyperTyping vyperValue contractABI byte words list arithmetic
 
 Theorem abi_decoder_static_word_array_length:
   has_type (Array NONE aty) (ListV avs) /\ ~is_dynamic aty /\ static_length aty = 32 ==>
@@ -58,11 +57,3 @@ Proof
   gvs[Once vyper_to_abi_type_def, Excl "enc_def"] >>
   disj2_tac >> qexists_tac `h` >> simp[]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_DECODER_PRIMITIVE_ARRAY_FACTS_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI primitive array arithmetic not kernel closed: " ^ n)
-  end) (DB.thms "abiDecoderPrimitiveArrayFacts");

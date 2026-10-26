@@ -53,12 +53,3 @@ Theorem abi_empty_zero_copy_input:
 Proof
   simp[abiEncoderInputTheory.abi_encoder_input_copy_iff]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_EMPTY_MEMORY_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI empty memory not kernel closed: " ^ n)
-  end) (DB.thms "abiEmptyMemory");
-

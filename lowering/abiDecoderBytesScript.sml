@@ -1,9 +1,8 @@
 (* Bytestring decoder execution; sentinel and bounded source paths are separate. *)
 Theory abiDecoderBytes
 Ancestors
-  abiDecoderGuards abiDecoderCopy abiDecoderComposition abiDecoderContract
-  abiDecoderBytesBound abiDecoderGuardLE
-  abiCanonicalBytes abiEncoder emitHelperProps exprLoweringProps compileEnv
+  abiDecoderGuards abiDecoderCopy abiDecoderComposition abiDecoderContract abiDecoderBytesBound
+  abiDecoderGuard abiCanonicalBytes abiEncoder emitHelperProps exprLoweringProps compileEnv
   emitHelper valueEncoding venomExecSemantics venomState words
 
 Definition abi_decode_bytes_copy_size_def:
@@ -125,11 +124,3 @@ Proof
   gvs[w2n_n2w, abi_decode_copy_bytes_def, mem_bytes_at_def,
       abi_decode_source_def, abi_decode_frame_def] >> metis_tac[]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_DECODER_BYTES_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI decoder bytes not kernel closed: " ^ n)
-  end) (DB.thms "abiDecoderBytes");

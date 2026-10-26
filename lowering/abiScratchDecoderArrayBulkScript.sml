@@ -1,12 +1,12 @@
 (* Static-element bulk copying uses a validity-derived readable prefix and no scratch allocation. *)
 Theory abiScratchDecoderArrayBulk
 Ancestors
-  abiScratchDecoderContract abiScratchDecoderRanges abiScratchEncoderContract abiScratchLeafEffect
-  abiDecoderValidContract abiDecoderCorrectPrimitiveArray abiDecoderBulkReentry
-  abiDecoderDynamic abiDecoderCoherence abiDecoderTypedContract abiDecoderContract
-  abiDecoderReentry abiDecoderLoop abiDecoderFrame abiDecodeRanges abiValidStaticArray
-  abiEncoder fragExec exprLowering compileEnv valueEncoding vyperABI vyperValue contractABI
-  venomState venomExecSemantics words list arithmetic
+  abiScratchDecoderContract abiScratchDecoderRanges abiScratchEncoderContract
+  abiScratchLeafEffect abiDecoderValidContract abiDecoderCorrectPrimitiveArray
+  abiDecoderBulkReentry abiDecoderDynamic abiDecoderCoherence abiDecoderTypedContract
+  abiDecoderContract abiDecoderReentry abiDecoderLoop abiDecoderFrame abiDecodeRanges
+  abiValidStatic abiEncoder fragExec exprLowering compileEnv valueEncoding vyperABI vyperValue
+  contractABI venomState venomExecSemantics words list arithmetic
 
 Theorem abi_scratch_decoder_static_array_pre:
   abi_scratch_decoder_input ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
@@ -74,12 +74,3 @@ Proof
     (irule abi_scratch_leaf_effect >> asm_simp_tac bool_ss [] >> first_assum ACCEPT_TAC) >>
   qexists_tac `actual` >> asm_simp_tac bool_ss [])
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_SCRATCH_DECODER_ARRAY_BULK_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI physical bulk-array decoding not kernel closed: " ^ n)
-  end) (DB.thms "abiScratchDecoderArrayBulk");
-

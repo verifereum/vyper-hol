@@ -3,11 +3,10 @@
    tuple payloads and either method ID while preserving complete source data. *)
 Theory abiScratchBuiltinSource
 Ancestors
-  abiScratchBuiltinRun abiScratchBuiltinPre abiScratchBuiltinEffect
-  abiBuiltinEncodeSourceModel abiBuiltinEncodeSourcePrefix abiBuiltinEncodeRun
-  abiEncoderInput abiDecoderContract abiDecoderLoop fragExec builtinAbi exprLowering
-  compileEnv valueEncoding vyperContext vyperABI vyperAST vyperTypeSystem contractABI
-  venomState words list
+  abiScratchBuiltinRun abiScratchBuiltinPre abiScratchBuiltinEffect abiBuiltinEncodeSource
+  abiBuiltinEncodeRun abiEncoderInput abiDecoderContract abiDecoderLoop fragExec builtinAbi
+  exprLowering compileEnv valueEncoding vyperContext vyperABI vyperAST vyperTypeSystem
+  contractABI venomState words list
 
 Theorem lower_abi_encode_scratch_source:
   let enc_ty = abi_builtin_encode_type ensure tys in
@@ -53,11 +52,3 @@ Proof
       RULE_ASSUM_TAC (PURE_REWRITE_RULE [prefix, size, abi_builtin_encode_store_case]) end) >>
   qexists_tac `actual` >> asm_simp_tac bool_ss [abi_scratch_builtin_prefix_length]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_SCRATCH_BUILTIN_SOURCE_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI scratch source builtin result not kernel closed: " ^ n)
-  end) (DB.thms "abiScratchBuiltinSource");

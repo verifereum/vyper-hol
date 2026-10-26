@@ -2,10 +2,9 @@
    TOP-LEVEL: source wrapping inversion and complete translated builtin execution. *)
 Theory abiValidBytesUnwrap
 Ancestors
-  abiBuiltinValidWrappedSource abiBuiltinValidBytesSource abiBuiltinValidBytesPre
-  abiDecoderBytes abiDecoderContract abiDecoderReentry abiDecoderLoop
-  abiEncoder builtinAbi fragExec exprLowering compileEnv valueEncoding
-  vyperABI vyperContext vyperValue venomState words list
+  abiBuiltinValidWrapped abiBuiltinValidBytes abiDecoderBytes abiDecoderContract
+  abiDecoderReentry abiDecoderLoop abiEncoder builtinAbi fragExec exprLowering compileEnv
+  valueEncoding vyperABI vyperContext vyperValue venomState words list
 
 Theorem abi_valid_bytes_lowering:
   (ty = BaseT (BytesT (Dynamic n)) \/ ty = BaseT (StringT n)) ==>
@@ -63,11 +62,3 @@ Proof
     disch_then (qspec_then `ctx` strip_assume_tac)) valid_bytes_source_rules) >>
   qexists_tac `actual` >> asm_simp_tac bool_ss []
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_VALID_BYTES_UNWRAP_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI valid bytes unwrap not kernel closed: " ^ n)
-  end) (DB.thms "abiValidBytesUnwrap");

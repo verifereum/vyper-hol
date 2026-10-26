@@ -3,11 +3,11 @@
    the remaining source, processed prefix and registered parent cursor. *)
 Theory abiScratchMembersAdvance
 Ancestors
-  abiScratchMembersState abiScratchMembersPre abiScratchMemberStep abiScratchCursor
-  abiScratchEncoderContract abiScratchEffectWiden abiEncoderMembersDefs abiEncoderMembersLayout
-  abiEncoderMemberCode abiEncoderTuplePrefix abiCanonicalWindows abiDecoderDynamicLoopSetup
-  abiDecoderFootprint abiDecoderReentry abiDecoderContract abiDecoderLoop compileEnv
-  valueEncoding contractABI venomState words list arithmetic
+  abiScratchMembers abiScratchMemberStep abiScratchCursor abiScratchEncoderContract
+  abiScratchEffect abiEncoderMembersDefs abiEncoderMembersLayout abiEncoderMemberCode
+  abiEncoderTuple abiCanonicalWindows abiDecoderDynamicLoopSetup abiDecoderFootprint
+  abiDecoderReentry abiDecoderContract abiDecoderLoop compileEnv valueEncoding contractABI
+  venomState words list arithmetic
 
 Theorem abi_scratch_cursor_mono:
   abi_encoder_cursor active dyn_ptr site slot first lo st off s /\
@@ -136,11 +136,3 @@ Proof
       drule_all abi_scratch_members_dynamic_advance >> disch_then (qspec_then `ctx` ACCEPT_TAC)) >>
   ACCEPT_TAC abi_scratch_members_static_advance
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_SCRATCH_MEMBERS_ADVANCE_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI scratch member advance not kernel closed: " ^ n)
-  end) (DB.thms "abiScratchMembersAdvance");

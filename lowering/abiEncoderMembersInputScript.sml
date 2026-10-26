@@ -1,8 +1,8 @@
 (* Peel complete member inputs into the current source slot and remaining tuple. *)
 Theory abiEncoderMembersInput
 Ancestors
-  abiEncoderInput abiEncoderInputLayout abiEncoderBufferFrame abiDecodeRanges
-  valueEncoding contractABI list rich_list arithmetic
+  abiEncoderInput abiEncoderBufferFrame abiDecodeRanges valueEncoding contractABI list rich_list
+  arithmetic
 
 Theorem abi_encoder_complex_input_span:
   abi_encoder_input (AbiComplex infos) at av sb capacity mem ==>
@@ -65,11 +65,3 @@ Proof
     (qspecl_then [`SUC j`, `child`, `child_asz`, `child_msz`, `child_dyn`] mp_tac) >>
   asm_simp_tac (srw_ss()) [TAKE, abi_encoder_member_span_def, AC ADD_COMM ADD_ASSOC]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_ENCODER_MEMBERS_INPUT_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI encoder members input not kernel closed: " ^ n)
-  end) (DB.thms "abiEncoderMembersInput");

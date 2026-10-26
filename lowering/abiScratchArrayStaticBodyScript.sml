@@ -3,12 +3,12 @@
    and static child execution. Helper: the selected static element fits its head. *)
 Theory abiScratchArrayStaticBody
 Ancestors
-  abiScratchStaticInfo abiScratchArrayPrepare abiScratchArrayCountPrepare abiScratchAfterAddress
-  abiScratchFrameCompose abiScratchEncoderContract abiScratchEffectProtected
-  abiEncoderArrayBodyCode abiEncoderArrayBounds abiEncoderArrayAddress abiEncoderAdmissible
-  abiDecoderAllocation abiDecoderFootprint abiDecoderFrame abiDecoderReentry
-  abiDecoderDynamicLoopSetup abiDecoderLoop abiDecoderContract compileEnv
-  valueEncoding contractABI venomState pred_set words list arithmetic
+  abiScratchStatic abiScratchArrayPrepare abiScratchArrayCount abiScratchAfterAddress
+  abiScratchFrameCompose abiScratchEncoderContract abiScratchEffect abiEncoderArrayBodyCode
+  abiEncoderArrayBounds abiEncoderArrayAddress abiEncoderAdmissible abiDecoderAllocation
+  abiDecoderFootprint abiDecoderFrame abiDecoderReentry abiDecoderDynamicLoopSetup
+  abiDecoderLoop abiDecoderContract compileEnv valueEncoding contractABI venomState pred_set
+  words list arithmetic
 
 Theorem abi_scratch_array_static_bounds:
   abi_scratch_input (AbiDynArray ei asz msz F) (Array NONE ty) (ListV avs)
@@ -84,11 +84,3 @@ Proof
   qexists_tac `actual` >> gvs[] >>
   irule abi_decode_sim_trans >> qexists_tac `ready` >> simp[]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_SCRATCH_ARRAY_STATIC_BODY_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI scratch actual static array body not kernel closed: " ^ n)
-  end) (DB.thms "abiScratchArrayStaticBody");

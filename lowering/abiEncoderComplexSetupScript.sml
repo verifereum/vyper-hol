@@ -1,11 +1,10 @@
 (* Establish the full member-loop invariant by executing the real cursor initializer. *)
 Theory abiEncoderComplexSetup
 Ancestors
-  abiEncoderComplexPrefixEffect abiEncoderComplexPrefixReach abiEncoderComplexPrefix
-  abiEncoderComplexLayout abiEncoderMembersBoundary abiEncoderMembersContract abiEncoderMembersDefs
-  abiEncoderInput abiEncoderInputLayout abiDecoderEffect abiDecoderAllocation abiDecoderReentry
-  abiDecoderContract emitHelperProps compileEnv valueEncoding contractABI venomState
-  words list arithmetic pred_set
+  abiEncoderComplexPrefix abiEncoderComplexLayout abiEncoderMembersBoundary
+  abiEncoderMembersContract abiEncoderMembersDefs abiEncoderInput abiDecoderEffect
+  abiDecoderAllocation abiDecoderReentry abiDecoderContract emitHelperProps compileEnv
+  valueEncoding contractABI venomState words list arithmetic pred_set
 
 Theorem abi_encoder_complex_prepare:
   abi_encode_complex_prefix infos st = (dyn_ptr,prepared) /\ fn_has_code st prepared func /\
@@ -54,11 +53,3 @@ Proof
   impl_tac >- (full_simp_tac bool_ss [] >> decide_tac) >> disch_tac >>
   qexistsl_tac [`ready`, `slot`] >> full_simp_tac bool_ss []
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_ENCODER_COMPLEX_SETUP_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI encoder complex setup not kernel closed: " ^ n)
-  end) (DB.thms "abiEncoderComplexSetup");

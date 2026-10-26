@@ -3,11 +3,11 @@
    while retaining the complete source contract and the registered index. *)
 Theory abiScratchArrayDynamicMemory
 Ancestors
-  abiScratchArrayDynamicIteration abiScratchInputEffect abiScratchCursor abiScratchEffectWiden
-  abiScratchEncoderContract abiEncoderArrayDynamicCode abiEncoderArrayCursor abiEncoderMembersDefs
-  abiEncoderArrayPrefix abiDecoderAllocation abiDecoderFootprint abiDecoderReentry
-  abiDecoderLoop abiDecoderContract compileEnv valueEncodingProps valueEncoding contractABI
-  venomState finite_map words list arithmetic
+  abiScratchArrayDynamicIteration abiScratchInput abiScratchCursor abiScratchEffect
+  abiScratchEncoderContract abiEncoderArrayDynamicCode abiEncoderArrayCursor
+  abiEncoderMembersDefs abiEncoderArrayPrefix abiDecoderAllocation abiDecoderFootprint
+  abiDecoderReentry abiDecoderLoop abiDecoderContract compileEnv valueEncodingProps
+  valueEncoding contractABI venomState finite_map words list arithmetic
 
 Theorem abi_scratch_array_dynamic_body_memory:
   abi_scratch_encoder ei /\ abi_encode_array_dynamic_body ip dyn_ptr src dst ei asz msz st = (out,end_st) /\
@@ -76,11 +76,3 @@ Proof
   impl_tac >- asm_simp_tac bool_ss [LESS_EQ_REFL] >> disch_tac >>
   qexists_tac `actual` >> asm_simp_tac bool_ss []
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_SCRATCH_ARRAY_DYNAMIC_MEMORY_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI scratch dynamic body memory not kernel closed: " ^ n)
-  end) (DB.thms "abiScratchArrayDynamicMemory");

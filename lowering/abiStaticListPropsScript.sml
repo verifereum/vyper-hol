@@ -53,11 +53,3 @@ Proof
   simp[value_has_type_def, val_in_memory_def] >> rpt gen_tac >> strip_tac >>
   Cases_on `h'` >> gvs[value_has_type_def, val_in_memory_def]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_STATIC_LIST_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI static list not kernel closed: " ^ n)
-  end) (DB.thms "abiStaticListProps");

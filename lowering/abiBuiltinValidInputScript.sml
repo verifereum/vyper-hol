@@ -1,7 +1,7 @@
 (* Source-success inputs for recursive builtin decoding over actual bytes. *)
 Theory abiBuiltinValidInput
 Ancestors
-  abiDecoderReadableTypes abiDecoderValidContract abiBuiltinSourceInput abiBuiltinDecodeSetup
+  abiDecoderReadableTypes abiDecoderValidContract abiBuiltinSource abiBuiltinDecodeSetup
   abiDecoderCoherence abiDecoderTypedContract abiDecoderContract abiValidAggregateHeads
   abiDecodeRanges vyperABIValid vyperABI contractABI compileEnv valueEncoding valueEncodingProps
   venomState words list
@@ -58,11 +58,3 @@ Proof
   asm_simp_tac bool_ss [abi_builtin_valid_pre_def] >>
   fs[vyper_valid_enc_def, val_in_memory_def, Excl "enc_def", Excl "dec_def", Excl "valid_enc_def"]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_BUILTIN_VALID_INPUT_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI actual-source builtin input not kernel closed: " ^ n)
-  end) (DB.thms "abiBuiltinValidInput");

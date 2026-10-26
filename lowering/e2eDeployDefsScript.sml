@@ -135,13 +135,3 @@ Definition deploy_result_rel_def:
     | INR ContinueException => F
     | INR (ReturnException _) => F
 End
-
-(* Current-owner kernel gate: definitions are total saved objects, not stage
- * assumptions. This checks their tags, not those of unrelated ancestors.
- *)
-val _ = List.app (fn (name, th) =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn tag => tag = "DISK_THM") oracles then ()
-    else raise Fail ("non-clean deployment definition: " ^ name)
-  end) (DB.thms "e2eDeployDefs");

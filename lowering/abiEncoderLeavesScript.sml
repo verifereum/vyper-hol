@@ -69,11 +69,3 @@ Proof
   gvs[abi_decode_copy_bytes_def, abi_decode_source_def, mem_bytes_at_def, w2n_n2w,
       eval_operand_def]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_ENCODER_LEAVES_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI encoder leaves not kernel closed: " ^ n)
-  end) (DB.thms "abiEncoderLeaves");

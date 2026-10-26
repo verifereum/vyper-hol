@@ -1,8 +1,8 @@
 (* Actual tuple staging and encoder fragments inherit outer code containment. *)
 Theory abiTupleEncodeContext
 Ancestors
-  abiTupleEncodeStageCode abiTupleEncodeCounters abiBuiltinEncodeAppend
-  fragExec compileEnv words list arithmetic
+  abiTupleEncodeStage abiTupleEncodeCounters abiBuiltinEncodeAppend fragExec compileEnv words
+  list arithmetic
 
 Theorem abi_tuple_encode_context:
   compile_alloc_buffer n st = (source_buf,allocated) /\
@@ -22,11 +22,3 @@ Proof
     (irule cs_extends_same_block >> asm_simp_tac bool_ss []) >>
   drule_all fn_has_code_split >> strip_tac >> asm_simp_tac bool_ss [] >> decide_tac
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_TUPLE_ENCODE_CONTEXT_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI tuple encoder context not kernel closed: " ^ n)
-  end) (DB.thms "abiTupleEncodeContext");

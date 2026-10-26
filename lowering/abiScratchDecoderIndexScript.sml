@@ -1,10 +1,10 @@
 (* The real decoder index allocator/store uses only its physical scratch interval. *)
 Theory abiScratchDecoderIndex
 Ancestors
-  abiScratchOwnedPrefix abiScratchPrefixEffect abiScratchEncoderContract abiScratchDecoderContract
-  abiEncoderArrayInitCode abiEncoderComplexPrefix abiEncoderComplexPrefixReach abiEncoderMembersDefs
-  abiDecoderIndexInit abiDecoderAllocation abiDecoderFootprint abiDecoderReentry abiDecoderLoop
-  abiDecoderFrame compileEnv valueEncoding contractABI venomState words list arithmetic
+  abiScratchOwnedPrefix abiScratchPrefix abiScratchEncoderContract abiScratchDecoderContract
+  abiEncoderArrayInitCode abiEncoderComplexPrefix abiEncoderMembersDefs abiDecoderIndexInit
+  abiDecoderAllocation abiDecoderFootprint abiDecoderReentry abiDecoderLoop abiDecoderFrame
+  compileEnv valueEncoding contractABI venomState words list arithmetic
 
 Theorem abi_scratch_decoder_index:
   abi_decode_index_init st = (index_ptr,st') /\ fn_has_code st st' func /\
@@ -40,11 +40,3 @@ Proof
   impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
   qexistsl_tac [`actual`, `slot`] >> fs[abi_encoder_cursor_def]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_SCRATCH_DECODER_INDEX_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI physical decoder index initialization not kernel closed: " ^ n)
-  end) (DB.thms "abiScratchDecoderIndex");

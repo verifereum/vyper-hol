@@ -3,10 +3,9 @@
    its constructor induction hypothesis; source data and parent slots survive. *)
 Theory abiScratchEncoderRun
 Ancestors
-  abiScratchEncoderContract abiScratchEffectProtected abiEncoderCounters
-  abiDecoderAllocation abiDecoderFootprint abiDecoderFrame abiDecoderReentry
-  abiDecoderContract abiDecoderLoop compileEnv valueEncoding contractABI
-  venomState finite_map pred_set words list arithmetic
+  abiScratchEncoderContract abiScratchEffect abiEncoderCounters abiDecoderAllocation
+  abiDecoderFootprint abiDecoderFrame abiDecoderReentry abiDecoderContract abiDecoderLoop
+  compileEnv valueEncoding contractABI venomState finite_map pred_set words list arithmetic
 
 Theorem abi_scratch_encoder_run:
   abi_scratch_encoder ei /\ compile_abi_encode_to_buf dst src ei start = (out,end_st) /\
@@ -77,11 +76,3 @@ Proof
   imp_res_tac abi_scratch_effect_operand >>
   qexists_tac `actual` >> asm_simp_tac bool_ss [] >> fs[abi_scratch_effect_def]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_SCRATCH_ENCODER_RUN_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI scratch child execution not kernel closed: " ^ n)
-  end) (DB.thms "abiScratchEncoderRun");

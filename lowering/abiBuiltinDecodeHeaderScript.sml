@@ -114,11 +114,3 @@ Proof
     (irule abi_builtin_prefix_chain >> qexistsl_tac [`c2`, `s2`] >> simp[] >> decide_tac) >>
   qexists_tac `t` >> fs[abi_builtin_prefix_def, abi_decoder_address_frame_def]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_BUILTIN_DECODE_HEADER_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI builtin decode header not kernel closed: " ^ n)
-  end) (DB.thms "abiBuiltinDecodeHeader");

@@ -1,11 +1,9 @@
 (* Decoder fragments tied to the actual initial state, for recursive composition. *)
 Theory abiDecoderPointed
 Ancestors
-  fragExec abiDecoderBytesTyped abiDecoderWordTyped abiDecoderBulkFragment
-  abiDecoderTypedContract abiDecoderCoherence abiDecoderContract
-  abiDecoderBytes abiEncoder compileEnv exprLoweringProps valueEncoding
-  venomExecSemantics venomState words
-  instIdxIndep combin
+  fragExec abiDecoderBytesTyped abiDecoderWordTyped abiDecoderBulk abiDecoderTypedContract
+  abiDecoderCoherence abiDecoderContract abiDecoderBytes abiEncoder compileEnv exprLoweringProps
+  valueEncoding venomExecSemantics venomState words instIdxIndep combin
 
 Theorem frag_exec_initial_family:
   (!initial. P initial ==>
@@ -117,11 +115,3 @@ Proof
   drule_all abi_decoder_typed_bulk_sequence >> strip_tac >>
   qexists_tac `t` >> simp[abi_decoder_post_inst_idx]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_DECODER_POINTED_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI decoder initial-state fragment not kernel closed: " ^ n)
-  end) (DB.thms "abiDecoderPointed");

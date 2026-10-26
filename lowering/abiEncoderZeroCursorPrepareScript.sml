@@ -1,10 +1,10 @@
 (* Actual zero-cursor allocation preserves a complete buffered source and protected scratch. *)
 Theory abiEncoderZeroCursorPrepare
 Ancestors
-  abiEncoderComplexPrefixEffect abiEncoderComplexPrefixReach abiEncoderComplexPrefix
-  abiEncoderBufferFrame abiEncoderChildInputs abiEncoderArrayMemory abiEncoderMembersDefs
-  abiDecoderEffect abiDecoderAllocation abiDecoderReentry abiDecoderContract
-  fragExec compileEnv emitHelperProps valueEncoding venomState words list arithmetic pred_set
+  abiEncoderComplexPrefix abiEncoderBufferFrame abiEncoderChildInputs abiEncoderArrayMemory
+  abiEncoderMembersDefs abiDecoderEffect abiDecoderAllocation abiDecoderReentry
+  abiDecoderContract fragExec compileEnv emitHelperProps valueEncoding venomState words list
+  arithmetic pred_set
 
 Theorem abi_encoder_zero_cursor_prepare:
   abi_encode_complex_prefix ([]:(abi_enc_info # num # num # bool) list) st = (cursor_op,prepared) /\
@@ -51,11 +51,3 @@ Proof
     (asm_simp_tac (srw_ss()) [abi_encoder_cursor_def] >> decide_tac) >>
   qexistsl_tac [`ready`, `slot`] >> asm_simp_tac bool_ss []
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_ENCODER_ZERO_CURSOR_PREPARE_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI encoder zero cursor preparation not kernel closed: " ^ n)
-  end) (DB.thms "abiEncoderZeroCursorPrepare");

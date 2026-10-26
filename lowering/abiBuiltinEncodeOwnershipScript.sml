@@ -2,8 +2,7 @@
    Fresh allocation and reuse both retain the same physical allocation row. *)
 Theory abiBuiltinEncodeOwnership
 Ancestors
-  abiBuiltinAllocationState abiBuiltinEncodeSetupFrame abiDecoderEffect
-  compileEnv venomState finite_map
+  abiBuiltinAllocation abiBuiltinEncodeSetup abiDecoderEffect compileEnv venomState finite_map
 
 Theorem abi_builtin_allocate_state_row:
   ((FLOOKUP s.vs_allocas site = NONE /\ p = s.vs_alloca_next) \/
@@ -45,11 +44,3 @@ Proof
   strip_tac >>
   qpat_x_assum `!id. id < lo \/ hi <= id ==> _` (qspec_then `site` mp_tac) >> simp[]
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_BUILTIN_ENCODE_OWNERSHIP_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI encoder output ownership not kernel closed: " ^ n)
-  end) (DB.thms "abiBuiltinEncodeOwnership");

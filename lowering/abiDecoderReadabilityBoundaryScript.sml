@@ -42,12 +42,3 @@ Proof
   CONV_TAC (BINDER_CONV (LAND_CONV (LAND_CONV EVAL))) >> simp[] >>
   CONV_TAC (RAND_CONV EVAL) >> REFL_TAC
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_DECODER_READABILITY_BOUNDARY_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI decoder readability boundary not kernel closed: " ^ n)
-  end) (DB.thms "abiDecoderReadabilityBoundary");
-

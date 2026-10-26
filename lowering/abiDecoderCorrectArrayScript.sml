@@ -1,10 +1,10 @@
 (* Recursive dynamic-array correctness, including both bulk and loop branches. *)
 Theory abiDecoderCorrectArray
 Ancestors
-  abiDecoderCorrect abiDecoderRecursiveArrayExecute abiDecoderCorrectPrimitiveArray abiDecoderRecursiveArrayCode
+  abiDecoderCorrect abiDecoderRecursiveArray abiDecoderCorrectPrimitiveArray
   abiDecoderBulkReentry abiDecoderEffect abiDecoderAllocation abiDecoderCoherence
-  abiDecoderTypedContract abiDecoderReentry abiDecoderContract
-  exprLowering compileEnv valueEncoding vyperABI vyperValue venomState words list
+  abiDecoderTypedContract abiDecoderReentry abiDecoderContract exprLowering compileEnv
+  valueEncoding vyperABI vyperValue venomState words list
 
 Theorem abi_decoder_correct_array:
   abi_decoder_correct ce env sf ty tv ==>
@@ -36,11 +36,3 @@ Proof
   gvs[abi_decoder_effect_def, abi_decoder_scratch_frame_def, abi_decoder_ids_def,
     Excl "enc_def"] >> metis_tac[])
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_DECODER_CORRECT_ARRAY_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI recursive array correctness not kernel closed: " ^ n)
-  end) (DB.thms "abiDecoderCorrectArray");

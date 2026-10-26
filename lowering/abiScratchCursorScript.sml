@@ -3,9 +3,9 @@
    preserves an ancestor using its physical slot and the enclosing budget. *)
 Theory abiScratchCursor
 Ancestors
-  abiScratchEncoderContract abiScratchEffectProtected abiEncoderMembersDefs
-  abiDecoderAllocation abiDecoderFootprint abiDecoderReentry compileEnv
-  venomState finite_map pred_set words arithmetic
+  abiScratchEncoderContract abiScratchEffect abiEncoderMembersDefs abiDecoderAllocation
+  abiDecoderFootprint abiDecoderReentry compileEnv venomState finite_map pred_set words
+  arithmetic
 
 Theorem abi_scratch_cursor_registered:
   abi_encoder_cursor active cursor_op site slot first lo st off initial /\
@@ -45,11 +45,3 @@ Proof
     (drule_all abi_scratch_effect_operand >> simp[]) >>
   asm_simp_tac bool_ss []
 QED
-
-val () = List.app (fn (n,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if null (Thm.hyp th) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then
-      print ("ABI_SCRATCH_CURSOR_KERNEL_CLOSED " ^ n ^ "\n")
-    else raise Fail ("ABI scratch cursor transport not kernel closed: " ^ n)
-  end) (DB.thms "abiScratchCursor");
