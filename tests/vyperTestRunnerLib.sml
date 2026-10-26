@@ -22,6 +22,24 @@ fun is_trace_constant tm =
 
 val all_traces = List.filter is_trace_constant o constants
 
+fun trace_index tm = let
+  val {Name=name, ...} = dest_thy_const tm
+  val digits = Substring.taker Char.isDigit (Substring.full name)
+in
+  case Int.fromString (Substring.string digits) of
+    SOME i => i
+  | NONE => raise Fail ("Trace name has no index: " ^ name)
+end
+
+(* Chunk k of n holds the traces whose index is k mod n, so the n chunks
+   together replay every trace exactly once. *)
+fun trace_chunk (k, n) traces =
+  if 0 <= k andalso k < n then
+    List.filter (fn tm => trace_index tm mod n = k) traces
+  else raise Fail (String.concat [
+    "trace_chunk: chunk ", Int.toString k, " of ", Int.toString n,
+    " is not in 0 to chunks - 1"])
+
 fun run_test_on_traces traces_const = let
   val {Thy, Name=traces_name, ...} = dest_thy_const traces_const
   val () = if String.isPrefix traces_prefix traces_name then ()
