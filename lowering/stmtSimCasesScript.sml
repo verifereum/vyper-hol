@@ -815,6 +815,181 @@ Proof
   Cases_on `buf.buf_operand` >> gvs[reason_operand_def]
 QED
 
+Theorem reason_prefix_revert_run:
+  !is ds es s id off len.
+    reason_prefix ds is es /\ reason_known ds s /\
+    reason_operand es off /\ reason_operand es len ==>
+    ?t. run_inst_seq (is ++ [mk_inst id REVERT [off; len] []]) s =
+          Abort Revert_abort t /\ t.vs_labels = s.vs_labels
+Proof
+  rpt strip_tac >> drule_all reason_prefix_sound >> strip_tac >>
+  `?ow. eval_operand off t = SOME ow` by metis_tac[reason_operand_defined] >>
+  `?lw. eval_operand len t = SOME lw` by metis_tac[reason_operand_defined] >>
+  qpat_assum `run_inst_seq is s = OK t`
+    (mp_tac o MATCH_MP run_inst_seq_append) >>
+  disch_then (qspec_then `[mk_inst id REVERT [off; len] []]` mp_tac) >>
+  simp[run_inst_seq_def] >>
+  `step_inst_base (mk_inst id REVERT [off; len] []) t =
+    Abort Revert_abort (revert_state (set_returndata
+      (TAKE (w2n lw) (DROP (w2n ow) t.vs_memory ++ REPLICATE (w2n lw) 0w)) t))`
+    by (simp[venomInstTheory.mk_inst_def] >> irule step_revert_behavior >> simp[]) >>
+  simp[revert_state_def, set_returndata_def]
+QED
+
+Theorem compile_revert_reason_run:
+  !cenv msg_ty buf msg_type msg_size sa sb s ds.
+    ~is_word_type msg_ty /\ reason_operand ds buf.buf_operand /\
+    reason_known ds s /\
+    compile_revert_with_reason cenv (LocatedValue msg_ty (base_ptr buf))
+      msg_type msg_size sa = ((), sb) ==>
+    sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
+    same_blocks sa sb /\
+    ?t. run_inst_seq (emitted_insts sa sb) s = Abort Revert_abort t /\
+        t.vs_labels = s.vs_labels
+Proof
+  rpt strip_tac >>
+  drule_all compile_revert_reason_certificate >> strip_tac >> simp[] >>
+  irule reason_prefix_revert_run >> metis_tac[]
+QED
+
+Theorem reason_prefix_revert_frag:
+  !ctx sa sb ds es is id off len R.
+    same_blocks sa sb /\
+    sb.cs_current_insts = sa.cs_current_insts ++
+      (is ++ [mk_inst id REVERT [off; len] []]) /\
+    reason_prefix ds is es /\ reason_operand es off /\ reason_operand es len /\
+    (!t. R (Abort Revert_abort t)) ==>
+    frag_exec ctx sa sb (reason_known ds) (\s. F) R
+Proof
+  rpt strip_tac >>
+  qabbrev_tac `sm = sa with cs_current_insts := sa.cs_current_insts ++ is` >>
+  irule frag_exec_seq >> qexists `reason_known es` >> qexists `sm` >>
+  conj_tac >- (simp[cs_extends_def, Abbr `sm`] >> qexists `[]` >> simp[]) >>
+  conj_tac >- (simp[cs_extends_def, Abbr `sm`] >> qexists `[]` >>
+              fs[same_blocks_def]) >>
+  conj_tac
+  >- (`EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) is`
+        by metis_tac[reason_prefix_simple] >>
+      irule frag_exec_run_inst_seq >>
+      simp[Abbr `sm`, emitted_insts_def, DROP_APPEND1] >>
+      rpt strip_tac >> disj1_tac >>
+      drule_all reason_prefix_sound >> strip_tac >> qexists `t` >>
+      fs[reason_known_def, lookup_var_def])
+  >- (irule frag_exec_step_abort >>
+      fs[Abbr `sm`, same_blocks_def] >>
+      rpt strip_tac >>
+      `?ow. eval_operand off s = SOME ow` by metis_tac[reason_operand_defined] >>
+      `?lw. eval_operand len s = SOME lw` by metis_tac[reason_operand_defined] >>
+      qexists `0` >> simp[step_inst_non_invoke, venomInstTheory.mk_inst_def] >>
+      irule_at Any step_revert_behavior >> simp[])
+QED
+Theorem compile_revert_reason_frag:
+  !ctx cenv msg_ty buf msg_type msg_size sa sb ds R.
+    ~is_word_type msg_ty /\ reason_operand ds buf.buf_operand /\
+    compile_revert_with_reason cenv (LocatedValue msg_ty (base_ptr buf))
+      msg_type msg_size sa = ((), sb) /\
+    (!t. R (Abort Revert_abort t)) ==>
+    frag_exec ctx sa sb (reason_known ds) (\s. F) R
+Proof
+  rpt strip_tac >> drule_all compile_revert_reason_certificate >> strip_tac >>
+  irule reason_prefix_revert_frag >> simp[] >> metis_tac[]
+QED
+
+Theorem compile_store_byte_chunks_simple:
+  !ptr bs off sa sb.
+    compile_store_byte_chunks ptr bs off sa = ((), sb) ==>
+    sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
+    same_blocks sa sb /\
+    EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+      (emitted_insts sa sb)
+Proof
+  recInduct compile_store_byte_chunks_ind >> rpt gen_tac >> strip_tac
+  >- gvs[compile_store_byte_chunks_def, comp_return_def, emitted_insts_def,
+         same_blocks_def] >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  rename1 `compile_store_byte_chunks data_ptr (h::bs) offset sa = ((), sb)` >>
+  gvs[Once compile_store_byte_chunks_def, comp_bind_def,
+      comp_ignore_bind_def, LET_THM, AllCaseEqs()] >>
+  Cases_on `emit_op ADD [data_ptr; Lit (n2w offset)] sa` >>
+  rename1 `emit_op ADD _ sa = (dst, sm)` >>
+  Cases_on `emit_void MSTORE [dst; Lit (word_of_bytes T 0w
+    (h::TAKE 31 (bs ++ REPLICATE 31 0w)))] sm` >>
+  rename1 `emit_void MSTORE _ sm = (u, sh)` >> Cases_on `u` >> gvs[] >>
+  first_x_assum drule >> strip_tac >>
+  `sh.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sh /\
+   same_blocks sa sh /\
+   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+     (emitted_insts sa sh)` by
+    (gvs[emit_op_def, emit_void_def, comp_bind_def, comp_ignore_bind_def,
+         fresh_id_def, fresh_var_def, emit_def, comp_return_def] >>
+     simp[emitted_insts_def, DROP_APPEND1, same_blocks_def,
+          venomInstTheory.mk_inst_def, is_terminator_def]) >>
+  `emitted_insts sa sb = emitted_insts sa sh ++ emitted_insts sh sb`
+    by metis_tac[emitted_insts_append] >>
+  simp[] >> metis_tac[same_blocks_def, APPEND_ASSOC]
+QED
+
+Theorem compile_bytelike_literal_simple:
+  !bs ml sa buf sb.
+    compile_bytelike_literal bs ml sa = (buf, sb) ==>
+    (?x. buf.buf_operand = Var x) /\
+    EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+      (emitted_insts sa sb)
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `compile_bytelike_literal _ _ _ = _` mp_tac >>
+  simp[compile_bytelike_literal_def, comp_bind_def, comp_ignore_bind_def, LET_THM] >>
+  Cases_on `compile_alloc_buffer (32 + (ml + 31) DIV 32 * 32) sa` >>
+  rename1 `compile_alloc_buffer _ sa = (b, sm)` >>
+  Cases_on `emit_void MSTORE [b.buf_operand; Lit (n2w (LENGTH bs))] sm` >>
+  rename1 `emit_void MSTORE _ sm = (u, sh)` >> Cases_on `u` >>
+  Cases_on `compile_store_byte_chunks b.buf_operand bs 32 sh` >>
+  rename1 `compile_store_byte_chunks _ _ _ sh = (u, sf)` >>
+  Cases_on `u` >> simp[comp_return_def] >> strip_tac >> gvs[] >>
+  drule compile_store_byte_chunks_simple >> strip_tac >>
+  `sh.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sh /\
+   (?x. b.buf_operand = Var x) /\
+   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+     (emitted_insts sa sh)` by
+    (gvs[contextTheory.compile_alloc_buffer_def, emit_op_def, emit_void_def,
+         comp_bind_def, comp_ignore_bind_def, comp_return_def,
+         fresh_id_def, fresh_var_def, emit_def] >>
+     simp[emitted_insts_def, DROP_APPEND1, venomInstTheory.mk_inst_def,
+          is_terminator_def]) >>
+  `emitted_insts sa sb = emitted_insts sa sh ++ emitted_insts sh sb`
+    by metis_tac[emitted_insts_append] >> simp[]
+QED
+
+Theorem compile_bytelike_revert_frag:
+  !ctx cenv bs ml msg_ty msg_type msg_size sa sm buf sb R.
+    compile_bytelike_literal bs ml sa = (buf, sm) /\
+    ~is_word_type msg_ty /\
+    compile_revert_with_reason cenv (LocatedValue msg_ty (base_ptr buf))
+      msg_type msg_size sm = ((), sb) /\
+    (!t. R (Abort Revert_abort t)) ==>
+    frag_exec ctx sa sb (\s. T) (\s. F) R
+Proof
+  rpt strip_tac >> drule compile_bytelike_literal_simple >> strip_tac >>
+  `reason_operand [x] buf.buf_operand` by simp[reason_operand_def] >>
+  drule_all compile_revert_reason_certificate >> strip_tac >>
+  `sm.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sm /\
+   same_blocks sa sm` by
+    (drule compile_bytelike_literal_run >>
+     disch_then (qspec_then `ARB` strip_assume_tac) >> simp[]) >>
+  irule frag_exec_seq >> qexists `reason_known [x]` >> qexists `sm` >>
+  conj_tac >- (simp[cs_extends_def] >> qexists `[]` >> fs[same_blocks_def]) >>
+  conj_tac >- (simp[cs_extends_def] >> qexists `[]` >> fs[same_blocks_def] >>
+              metis_tac[IS_PREFIX_APPEND, APPEND_ASSOC]) >>
+  conj_tac
+  >- (irule frag_exec_run_inst_seq >> fs[same_blocks_def] >>
+      rpt strip_tac >> disj1_tac >>
+      drule compile_bytelike_literal_run >>
+      disch_then (qspec_then `s` strip_assume_tac) >> qexists `t` >>
+      gvs[reason_known_def, eval_operand_def, lookup_var_def]) >>
+  irule compile_revert_reason_frag >> metis_tac[]
+QED
+
+
 (* raise and assert with a string literal as the reason: the literal's
    buffer and the Error(string) encoding of compile_revert_with_reason,
    straight-line code that ends in a REVERT, which every assertion
