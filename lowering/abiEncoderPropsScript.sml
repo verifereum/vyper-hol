@@ -4967,6 +4967,31 @@ Proof
   metis_tac[enc_static_type_memory_size_mutual]
 QED
 
+Theorem enc_same_conversion:
+  vyper_to_abi_same env ty vs = SOME avs ==>
+  LIST_REL (\v av. vyper_to_abi env ty v = SOME av) vs avs
+Proof
+  simp[vyperABIRoundtripTheory.vyper_to_abi_same_OPT_MMAP] >>
+  strip_tac >> drule vyperTypeABITheory.OPT_MMAP_LIST_REL >> simp[]
+QED
+
+Theorem enc_same_conversion_length:
+  vyper_to_abi_same env ty vs = SOME avs ==> LENGTH avs = LENGTH vs
+Proof
+  strip_tac >> drule enc_same_conversion >>
+  metis_tac[LIST_REL_LENGTH]
+QED
+
+Theorem enc_uint1_typing_bridge_counterexample:
+  evaluate_type FEMPTY (BaseT (UintT 1)) = SOME (BaseTV (UintT 1)) /\
+  value_has_type (BaseTV (UintT 1)) (vyperValue$IntV 0) /\
+  vyper_to_abi FEMPTY (BaseT (UintT 1)) (vyperValue$IntV 0) = SOME (NumV 0) /\
+  ~is_dynamic (vyper_to_abi_type FEMPTY (BaseT (UintT 1))) /\
+  ~has_type (vyper_to_abi_type FEMPTY (BaseT (UintT 1))) (NumV 0)
+Proof
+  EVAL_TAC
+QED
+
 Theorem enc_static_loop_complete_frag:
   enc_static_loop_init st = ((count_ptr,hdr,body_lbl,exit_lbl),si) /\
   enc_static_loop_header count_ptr len_op sh = (cnd,sj) /\
