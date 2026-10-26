@@ -116,13 +116,22 @@ git clone --depth 1 https://github.com/vyperlang/vyper.git vyper-src
 cd vyper-src
 git fetch --unshallow --tags
 git checkout --detach "$(tr -d '[:space:]' < ../VYPER_PIN)"
+mkdir -p tests/functional/codegen/vyper_hol_regression
+cp -R ../tests/vyper-regression/. tests/functional/codegen/vyper_hol_regression/
 pip install . --group test
-pytest -s -n0 --export ../tests/vyper-test-exports -m "not fuzzing" tests/functional
+pytest -s -n0 --export=../tests/vyper-test-exports -m "not fuzzing" tests/functional
 ```
 
 The checkout command reads the repository's authoritative `VYPER_PIN`; keep it
 before installation and export so the installed compiler and generated fixtures
 come from the pinned revision.
+
+Generate the HOL test wrappers from those exports:
+
+```bash
+holbuild build vyperTestLib
+(cd tests && holbuild run --noconfig generateVyperTests.sml)
+```
 
 Then run individual generated test theories with `holbuild`, for example:
 
@@ -131,5 +140,11 @@ holbuild -j"$(nproc)" build vyperTest_functional_builtins_codegen_test_abi_decod
 ```
 
 The CI workflow runs the generated tests in parallel groups; see `.github/workflows/holbuild.yml` for that full setup.
+
+Local semantic regressions live as behavior-named pytests in
+[`tests/vyper-regression`](tests/vyper-regression/README.md). The pinned export
+includes them in the same cache and CI matrix as the upstream tests; exported
+traces and local generated wrappers are not versioned. Each enabled regression
+lands with the fix that makes it pass.
 
 The `vyperTestCoverageReportTheory` target derives `tests/vyper-coverage-report.txt` from the raw exported JSON; CI builds the target and prints the report. Its per-file and aggregate `[vyper-coverage]` summaries report exported items, fixtures and other non-test items, selected tests, direct and fixture-expanded trace counts, name and source-pattern exclusions, items with no exported traces, traceful items whose source is missing or supplied only by fixtures, unreferenced traced fixtures, malformed items, and files with no selected tests. It deliberately does not decode traces into HOL terms. Generated definitions theories additionally report successfully decoded traces and decode failures while performing their normal builds. Individual exclusion lines record the test name and selection reason. All these messages are reporting only: existing selection rules and decode-failure enforcement are unchanged.
