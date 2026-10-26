@@ -93,8 +93,8 @@ Theorem bop_result_compare:
     (!m. tv = BaseTV (UintT m) \/ tv = BaseTV (IntT m) \/ tv = FlagTV m ==>
          m <= 256) ==>
     bop_result cx ann bop tys v1 v2 es =
-      INL (Value (BoolV
-        (eval_compare bop ty (val_to_w256 v1) (val_to_w256 v2))))
+      INL (BoolV
+        (eval_compare bop ty (val_to_w256 v1) (val_to_w256 v2)))
 Proof
   rpt gen_tac >> strip_tac >> fs[word_value_def] >> gvs[]
   (* one kind of v1 at a time, so that each unfolding of evaluate_binop
@@ -248,7 +248,7 @@ Theorem bop_result_minmax:
     (is_uint256 ty <=> tv = BaseTV (UintT 256)) /\
     (!m. tv = BaseTV (UintT m) \/ tv = BaseTV (IntT m) \/ tv = FlagTV m ==>
          m <= 256) ==>
-    ?v. bop_result cx ann mm tys v1 v2 es = INL (Value v) /\ word_value v /\
+    ?v. bop_result cx ann mm tys v1 v2 es = INL v /\ word_value v /\
         val_to_w256 v =
           if eval_compare (if mm = Min then Lt else Gt) ty
                (val_to_w256 v1) (val_to_w256 v2)
