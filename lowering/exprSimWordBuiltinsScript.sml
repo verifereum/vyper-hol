@@ -606,7 +606,7 @@ Proof
   qspec_then `d` strip_assume_tac denomination_multiplier_bounds >>
   simp[builtin_result_def, evaluate_builtin_def, evaluate_as_wei_value_uint] >>
   Cases_on `w2n a * denomination_multiplier d < dimword (:256)` >>
-  gvs[dimword_def]
+  gvs[dimword_def] 
   >- (irule word_builtin_frag_success >>
       simp[straight_fresh_as_wei_value_int, word_value_def] >>
       rpt strip_tac >>

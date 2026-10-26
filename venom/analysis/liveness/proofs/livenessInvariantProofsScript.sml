@@ -284,3 +284,9 @@ Theorem lv_inv_boundary_inflation:
 Proof
   simp[lv_inv_def] >> metis_tac[lv_boundary_inflation]
 QED
+
+
+val _ = List.app (fn (_,th) =>
+  if List.all (fn s => s = "DISK_THM") (#1 (Tag.dest_tag (Thm.tag th)))
+  then () else raise Fail "oracle in liveness coherence API")
+  (DB.thms "livenessInvariantProofs");

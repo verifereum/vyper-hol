@@ -459,3 +459,16 @@ Proof
   irule expr_child_callback_agrees >> simp[] >>
   drule_all extcode_child_bound >> simp[]
 QED
+
+(* Issue #560 callback interfaces must remain kernel-closed. *)
+val () = List.app (fn th =>
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
+  in if null axioms andalso null (Thm.hyp th) andalso
+        List.all (fn name => name = "DISK_THM") oracles then ()
+     else raise Fail "admitted memory-construction callback contract"
+  end)
+  [compile_make_tuple_callback_contract,
+   compile_make_array_elems_callback_contract,
+   compile_make_array_callback_contract,
+   compile_struct_lit_callback_contract,
+   compile_make_array_list_child_calls];

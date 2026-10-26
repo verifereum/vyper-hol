@@ -294,3 +294,8 @@ Proof
   pop_assum (qspecl_then [`pred_lbl`, `pred_bb`, `succ_lbl`, `succ_bb`, `v`] mp_tac) >>
   simp_tac std_ss [LET_THM] >> simp[]
 QED
+
+val _ = List.app (fn (_,th) =>
+  if List.all (fn s => s = "DISK_THM") (#1 (Tag.dest_tag (Thm.tag th)))
+  then () else raise Fail "oracle in liveness local API")
+  (DB.thms "livenessLocalProofs");

@@ -13,9 +13,11 @@ struct
     val fallback = REWR_CONV function_selector_compute
     fun checked tm th =
       let val (l,r) = boolSyntax.dest_eq (Thm.concl th)
+          val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
       in
         if aconv l tm andalso type_of l = type_of r andalso
-           null (Thm.hyp th)
+           null (Thm.hyp th) andalso null axioms andalso
+           List.all (fn s => s = "DISK_THM") oracles
         then th else raise Fail "unsupported CV theorem"
       end
     fun selector_conv tm =

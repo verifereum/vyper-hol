@@ -139,3 +139,8 @@ Theorem liveness_recompute_finite_exhaustion:
 Proof
   irule lv_finite_exhaustion >> simp[lv_inv_init, lv_labels_initial]
 QED
+
+val _ = List.app (fn (_,th) =>
+  if List.all (fn s => s = "DISK_THM") (#1 (Tag.dest_tag (Thm.tag th)))
+  then () else raise Fail "oracle in liveness termination API")
+  (DB.thms "livenessTerminationProofs");

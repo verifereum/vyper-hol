@@ -16,7 +16,7 @@ Ancestors
   structFieldsProps
   (* compiler + correctness *)
   vyperCompiler
-  allocaBudgetProps allocaFrontierWitness
+  allocaBudgetChecks
   vyperLoweringCorrect
   configuredE2ECorrectness
   evalCompilerMemoryStores

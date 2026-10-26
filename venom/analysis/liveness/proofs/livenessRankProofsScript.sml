@@ -126,3 +126,8 @@ Proof
   gvs[liveness_changed_def, same_vars_set] >>
   Cases_on `lookup_block lbl bbs` >> gvs[liveness_instrs_def]
 QED
+
+val _ = List.app (fn (_,th) =>
+  if List.all (fn s => s = "DISK_THM") (#1 (Tag.dest_tag (Thm.tag th)))
+  then () else raise Fail "oracle in liveness rank API")
+  (DB.thms "livenessRankProofs");

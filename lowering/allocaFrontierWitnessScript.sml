@@ -181,3 +181,4 @@ Proof
   simp[o1_initial_state_ok_def, init_venom_state_def,
        frontier_not_memory_ok]
 QED
+
