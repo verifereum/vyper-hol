@@ -368,24 +368,22 @@ Theorem stmt_state_rel_pop_top_ext:
     stmt_state_rel func cenv cx (es with scopes := rest) ss
 Proof
   rpt strip_tac >>
-  drule_all stmt_state_rel_pop_scope >>
-  rw[stmt_state_rel_def] >- (
-    irule state_rel_cenv_cong >>
-    qexists_tac `cenv'` >> fs[cenv_top_ext_def] >> rpt conj_tac
-    >- (rpt strip_tac >> CCONTR_TAC >>
-        qpat_x_assum `!n. FLOOKUP cenv'.ce_vars n <> _ ==> _`
-          (qspec_then `n` mp_tac) >>
-        simp[] >> rpt strip_tac >> gvs[])
-    >- (rpt strip_tac >> spose_not_then assume_tac >>
-        qpat_x_assum `!n. FLOOKUP cenv'.ce_vars n <> _ ==> _`
-          (qspec_then `n` mp_tac) >>
-        simp[] >> metis_tac[])
-    >- (rpt strip_tac >> spose_not_then assume_tac >>
-        qpat_x_assum `!n. FLOOKUP cenv'.ce_vars n <> _ ==> _`
-          (qspec_then `n` mp_tac) >>
-        simp[] >> metis_tac[]) >>
-    fs[compileEnvTheory.compile_env_component_equality]) >>
-  res_tac
+  drule_all stmt_state_rel_pop_scope >> strip_tac >>
+  irule stmt_state_rel_cenv_cong >>
+  qexists_tac `cenv'` >> fs[cenv_top_ext_def] >> rpt conj_tac
+  >- (rpt strip_tac >> CCONTR_TAC >>
+      qpat_x_assum `!n. FLOOKUP cenv'.ce_vars n <> _ ==> _`
+        (qspec_then `n` mp_tac) >>
+      simp[] >> rpt strip_tac >> gvs[])
+  >- (rpt strip_tac >> spose_not_then assume_tac >>
+      qpat_x_assum `!n. FLOOKUP cenv'.ce_vars n <> _ ==> _`
+        (qspec_then `n` mp_tac) >>
+      simp[] >> metis_tac[])
+  >- (rpt strip_tac >> spose_not_then assume_tac >>
+      qpat_x_assum `!n. FLOOKUP cenv'.ce_vars n <> _ ==> _`
+        (qspec_then `n` mp_tac) >>
+      simp[] >> metis_tac[]) >>
+  fs[compileEnvTheory.compile_env_component_equality]
 QED
 
 (* A declaration keeps the locals' pointers reserved. *)

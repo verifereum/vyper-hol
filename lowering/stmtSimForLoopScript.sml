@@ -6,6 +6,8 @@
  * the loop to its end, a break, or an exit.
  *
  * TOP-LEVEL:
+ *   for_code       — the loop's blocks and instructions, and the variables
+ *                    and environment they use
  *   for_body_entry — the relation at the body's environment on entry
  *   for_iteration  — one pass of the range loop
  *   for_loop       — the range loop from any counter value
