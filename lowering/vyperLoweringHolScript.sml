@@ -9,7 +9,7 @@ Ancestors
   varsExt exprSim
   exprBopLowering
   exprSimOps exprSimCompare exprSimArith intBits freshWrites
-  exprSimMain stmtSim
+  exprSimMain stmtSim stmtSimCases
   valueEncodingProofs
   localPtrsProps
   loweringShapeProps

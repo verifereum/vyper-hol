@@ -38,13 +38,17 @@
  *   compile_expr_stmt_frag         — an expression statement
  *   compile_if_stmt_frag           — If, either branch, every outcome
  *   compile_raise_frag, compile_assert_frag
- *   compile_for_range_frag         — For over a range with literal ends
+ *   compile_for_range_frag         — For over a range with literal ends,
+ *                                    under a loop invariant
+ *   compile_for_range_frag_simple  — the same with the body's judgment at
+ *                                    every source state
  *   for_iteration                  — one pass of the range loop
  *   for_loop                       — the range loop from any counter value
  *
  * Not here: Assign/AugAssign (#550), Append and For over an array (#559),
- * Log (#570); Return; AnnAssign over stmt_frag (compile_annassign_word_frag
- * in loweringSlice is frag_exec-shaped); Raise and Assert with a reason.
+ * Log (#570); Return; AnnAssign of a word local and Raise and Assert with
+ * a string literal reason are in stmtSimCases; the other declarations and
+ * reasons are not covered yet.
  *)
 
 Theory stmtSim
