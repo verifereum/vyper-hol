@@ -936,9 +936,17 @@ End
 (* Per-variable mapping between interpreter layout slots and cenv StorageLoc.
    The interpreter uses lookup_var_slot_from_layout to get a slot number,
    then read_storage_slot/write_storage_slot to access it.
-   The lowering uses FLOOKUP ce_vars (module_var_key (ce_module, name))
-   → StorageLoc slot → SLOAD/SSTORE.
-   This relation ensures both reference the same storage slot.
+   The lowering uses FLOOKUP ce_vars (module_var_key nsid), with the
+   reference's own nsid, → StorageLoc slot → SLOAD/SSTORE.
+   This relation ensures both reference the same storage slot, both ways:
+   - every StorageLoc entry of the current module has the layout's slot;
+   - every storage variable or hashmap the source reads through
+     lookup_global, in any module, has an entry with that slot, as Python
+     takes each reference's slot from its varinfo
+     (vyper/codegen_venom/expr.py lower_Attribute).  build_compile_env has
+     entries for the main module only, so this direction holds only when
+     no other module has a variable with a layout slot, as when
+     source_deployment_rel limits the sources to [(NONE, tops)].
 
    cx.layouts : (address, (layout # layout)) alist
      where layout = ((num option # string), bytes32) alist
@@ -947,25 +955,46 @@ End
      Maps module_var_key (ce_module, var_name) → StorageLoc slot.
    cenv.ce_storage_layout : (string, bytes32) fmap
      Maps var_name → slot (redundant with ce_vars for StorageLoc). *)
+
+(* Whether a declaration found by find_var_decl_by_name is transient. *)
+Definition var_decl_transient_def:
+  var_decl_transient (StorageVarDecl is_transient _) = is_transient ∧
+  var_decl_transient (HashMapVarDecl is_transient _ _) = is_transient
+End
+
 Definition storage_vars_rel_def:
   storage_vars_rel cenv (cx:evaluation_context) ⇔
-    ∀ name (slot:bytes32).
-      FLOOKUP cenv.ce_vars (module_var_key (cenv.ce_module, name)) =
-        SOME (StorageLoc slot) ⇒
-      (* Interpreter layout maps (src_id_opt, name) → slot_num : num.
-         Compile env stores slot as bytes32. Relation: n2w slot_num = slot. *)
-      ∃ slot_num. lookup_var_slot_from_layout cx F cenv.ce_module name = SOME slot_num ∧
-                  n2w slot_num = slot
+    (∀ name (slot:bytes32).
+       FLOOKUP cenv.ce_vars (module_var_key (cenv.ce_module, name)) =
+         SOME (StorageLoc slot) ⇒
+       (* Interpreter layout maps (src_id_opt, name) → slot_num : num.
+          Compile env stores slot as bytes32. Relation: n2w slot_num = slot. *)
+       ∃ slot_num. lookup_var_slot_from_layout cx F cenv.ce_module name = SOME slot_num ∧
+                   n2w slot_num = slot) ∧
+    (∀ src ts name d id slot_num.
+       get_module_code cx src = SOME ts ∧
+       find_var_decl_by_name name ts = SOME (d, id) ∧
+       ¬var_decl_transient d ∧
+       lookup_var_slot_from_layout cx F src id = SOME slot_num ⇒
+       FLOOKUP cenv.ce_vars (module_var_key (src, name)) =
+         SOME (StorageLoc (n2w slot_num)))
 End
 
 (* Transient storage variables: same as storage_vars_rel but for transient. *)
 Definition transient_vars_rel_def:
   transient_vars_rel cenv (cx:evaluation_context) ⇔
-    ∀ name (slot:bytes32).
-      FLOOKUP cenv.ce_vars (module_var_key (cenv.ce_module, name)) =
-        SOME (TransientLoc slot) ⇒
-      ∃ slot_num. lookup_var_slot_from_layout cx T cenv.ce_module name = SOME slot_num ∧
-                  n2w slot_num = slot
+    (∀ name (slot:bytes32).
+       FLOOKUP cenv.ce_vars (module_var_key (cenv.ce_module, name)) =
+         SOME (TransientLoc slot) ⇒
+       ∃ slot_num. lookup_var_slot_from_layout cx T cenv.ce_module name = SOME slot_num ∧
+                   n2w slot_num = slot) ∧
+    (∀ src ts name d id slot_num.
+       get_module_code cx src = SOME ts ∧
+       find_var_decl_by_name name ts = SOME (d, id) ∧
+       var_decl_transient d ∧
+       lookup_var_slot_from_layout cx T src id = SOME slot_num ⇒
+       FLOOKUP cenv.ce_vars (module_var_key (src, name)) =
+         SOME (TransientLoc (n2w slot_num)))
 End
 
 (* Check if a type is a bytestring (dynamic Bytes or String).
@@ -1058,6 +1087,7 @@ Definition call_ctx_rel_def:
     (cc.cc_caller = txn.sender ∧
      cc.cc_address = txn.target ∧
      cc.cc_callvalue = n2w txn.value ∧
+     cc.cc_calldata = txn.calldata ∧
      tc.tc_origin = txn.origin ∧
      tc.tc_gasprice = n2w txn.gas_price ∧
      tc.tc_chainid = n2w txn.chain_id ∧
