@@ -127,7 +127,7 @@ Theorem compile_literal_memory_sim:
     expr_sim_pre cenv cx env (Literal ann l) es /\ ~is_word_type ann ==>
     expr_sim ctx func cenv cx ty (Literal ann l) es
 Proof
-  rpt strip_tac >> irule literal_memory_sim_of_vv >>
+  rpt strip_tac >> irule exprSimUnwrapTheory.expr_sim_of_vv_sim_memory >>
   `(?bs. l = BytesL bs /\ ~is_word_type ann) \/ (?str. l = StringL str)` by
     (gvs[expr_sim_pre_def, well_typed_expr_def] >> Cases_on `l` >> gvs[] >>
      Cases_on `ann` >> gvs[well_typed_literal_def] >>
@@ -198,13 +198,7 @@ Theorem compile_literal_case_sim:
 Proof
   rpt gen_tac >>
   Cases_on `(?bs. l = BytesL bs /\ ~is_word_type ann) \/ (?str. l = StringL str)`
-  >- (simp[expr_ok_def] >> conj_tac
-      >- (rw[expr_sim_ok_def] >> irule compile_literal_memory_sim >>
-          simp[PULL_EXISTS] >> qexists_tac `env` >> simp[] >>
-          gvs[expr_sim_pre_def, well_typed_expr_def] >>
-          Cases_on `ann` >> gvs[well_typed_literal_def] >>
-          rename1 `BaseT bt` >> Cases_on `bt` >>
-          gvs[well_typed_literal_def, is_word_type_def]) >>
+  >- (simp[expr_ok_def, compile_literal_sim] >>
       irule compile_literal_other_vv_sim >> simp[]) >>
   irule expr_ok_stack >> simp[compile_literal_sim] >> rpt conj_tac
   >~ [`eval_expr`]

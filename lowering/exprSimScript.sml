@@ -40,7 +40,8 @@
  * compose where the first one's value sits in a buffer it allocated: that
  * allocation's id is below the second's start counter and it holds no
  * local (alloca_inv, local_backed), so the second's expr_post keeps its
- * bytes, and val_in_memory with them (expr_val_rel_mem_agree).  A first
+ * bytes, and val_in_memory with them (expr_val_rel_footprint_agree:
+ * expr_val_at bounds the value's val_footprint bytes).  A first
  * operand that points into a local stays related through stmt_state_rel,
  * as long as the source leaves that local alone in between.  expr_frag,
  * which relates values by val_to_w256, follows for a word type whose typed

@@ -4,14 +4,12 @@
  * A bytes or string literal not of a word type is lowered to a buffer of
  * its own (compile_bytelike_literal): an ALLOCA, the length word, and the
  * bytes in 32-byte chunks.  This theory proves that case of the
- * expression simulation; exprSimLeaves uses it in compile_literal_sim.
+ * expression simulation; exprSimLeaves uses it for compile_literal_memory_sim and
+ * compile_literal_case_sim.
  *
  * TOP-LEVEL:
  *   compile_literal_other_vv_sim — the buffer simulates the literal
  *                              (expr_vv_ok)
- *   literal_memory_sim_of_vv — expr_sim from expr_vv_sim for an expression
- *                              lowered to a pointer into memory, without
- *                              expr_sim_of_vv_sim's storage cases
  *)
 
 Theory exprSimLiteralBuffer
@@ -140,16 +138,6 @@ Proof
   >- (irule exprLoweringPropsTheory.alloca_room_fields >>
       qexists_tac `s` >> simp[mstore_def]) >>
   simp[mstore_def] >> metis_tac[]
-QED
-
-Theorem literal_mstore_region_frame[local]:
-  !s a (w:bytes32) b sz off len.
-    b <= a /\ a + 32 <= b + sz /\
-    (off + len <= b \/ b + sz <= off) ==>
-    mem_bytes_at off len (mstore a w s).vs_memory = mem_bytes_at off len s.vs_memory
-Proof
-  rpt strip_tac >> irule valueEncodingPropsTheory.mstore_mem_bytes_at_disjoint >>
-  decide_tac
 QED
 
 Theorem literal_emit_mstore_run[local]:
@@ -732,19 +720,6 @@ Proof
   simp[] >> metis_tac[exprLoweringPropsTheory.same_blocks_trans, APPEND_ASSOC]
 QED
 
-Theorem literal_chunks_run_frag[local]:
-  !ptr bs off sa sb ctx P Q R.
-    compile_store_byte_chunks ptr bs off sa = ((),sb) /\
-    (!s. P s ==> ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
-      Q (t with vs_inst_idx := LENGTH sb.cs_current_insts)) ==>
-    frag_exec ctx sa sb P Q R
-Proof
-  rpt strip_tac >> drule literal_chunks_shape >> strip_tac >>
-  irule fragExecTheory.frag_exec_run_inst_seq >>
-  gvs[exprLoweringPropsTheory.same_blocks_def, rich_listTheory.IS_PREFIX_APPEND] >>
-  metis_tac[]
-QED
-
 Theorem literal_bytelike_run_frag[local]:
   !bs ml sa buf sb ctx P Q R.
     compile_bytelike_literal bs ml sa = (buf,sb) /\
@@ -867,8 +842,8 @@ Proof
   rename1 `BaseT bt` >> Cases_on `bt` >> gvs[well_typed_literal_def, is_word_type_def]
   >~ [`BytesT bd`] >- (Cases_on `bd` >>
     gvs[is_word_type_def, well_formed_type_def, vyperValueTheory.evaluate_type_def] >>
-    suspend "bytes") >>
-  suspend "string"
+    rename1 `BytesT (Dynamic n)` >> suspend "bytes") >>
+  rename1 `StringT n` >> suspend "string"
 QED
 
 Resume compile_literal_other_vv_sim[bytes]:
@@ -936,30 +911,3 @@ Resume compile_literal_other_vv_sim[string]:
 QED
 
 Finalise compile_literal_other_vv_sim
-
-(* Bytes and string literals, memory buffers of their own:
-   compile_literal_other_vv_sim's buffer, which unwrap_value hands out as it
-   is. Use a memory-only conversion to avoid unrelated storage admissions. *)
-Theorem literal_memory_sim_of_vv:
-  !ctx func cenv cx ty e es.
-    expr_vv_sim ctx func cenv cx ty e es /\
-    (!sa. ?t p sb. compile_expr cenv ty e sa = (LocatedValue t p,sb) /\
-      p.ptr_location = LocMemory /\ ~is_word_type t) /\
-    (!tv es'. eval_expr cx e es = (INL tv,es') ==> ?v. tv = Value v) ==>
-    expr_sim ctx func cenv cx ty e es
-Proof
-  rw[expr_sim_def] >>
-  qpat_x_assum `!sa. ?t p sb. _` (qspec_then `sa` strip_assume_tac) >>
-  gvs[lower_value_def, comp_bind_def, unwrap_value_def,
-      comp_return_def] >>
-  `expr_vv_res_ok res` by simp[expr_vv_res_ok_def] >>
-  qpat_x_assum `expr_vv_sim _ _ _ _ _ _ _` mp_tac >>
-  simp[expr_vv_sim_def] >>
-  disch_then drule >>
-  disch_then (qspec_then `s0` mp_tac) >> simp[] >> strip_tac >>
-  irule fragExecTheory.frag_exec_conseq >> first_assum (irule_at Any) >>
-  simp[] >> rpt strip_tac >>
-  `?v. tv = Value v` by metis_tac[] >> gvs[] >>
-  irule exprSimUnwrapTheory.expr_post_of_vv_post_memory >>
-  simp[] >> qexists_tac `t` >> simp[]
-QED
