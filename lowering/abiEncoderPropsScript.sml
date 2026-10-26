@@ -2207,6 +2207,23 @@ Proof
   irule enc_frame_write_memory >> simp[]
 QED
 
+Theorem enc_pre_inst_idx:
+  enc_pre st st' ops lo top tv v src outs (s with vs_inst_idx := idx) =
+  enc_pre st st' ops lo top tv v src outs s
+Proof
+  `enc_scratch (frag_ids st st') lo top (s with vs_inst_idx := idx) =
+   enc_scratch (frag_ids st st') lo top s` by
+    (irule enc_scratch_cong >> simp[]) >>
+  pure_rewrite_tac[enc_pre_def, venom_state_accfupds, combinTheory.K_THM] >>
+  asm_rewrite_tac[]
+QED
+
+Theorem enc_operand_inst_idx:
+  eval_operand op (s with vs_inst_idx := idx) = eval_operand op s
+Proof
+  Cases_on `op` >> simp[eval_operand_def, lookup_var_def]
+QED
+
 Theorem enc_frame_inst_idx[simp]:
   enc_frame st st' lo top outs s0 (s with vs_inst_idx := idx) =
   enc_frame st st' lo top outs s0 s
@@ -6916,7 +6933,6 @@ Proof
   goal_assum (drule_at Any)
 QED
 
-(* Checked prefix for C1.7.3.2; re-enable when completing the suffix.
 Theorem enc_child_static_correct_labels:
   (!static_loc. enc_buf_correct_labels static_loc child_ptr ei) ==>
   enc_child_correct_labels dst child_ptr ei F static_ofst dyn_ptr
@@ -6940,9 +6956,74 @@ Proof
   `st.cs_next_var <= st.cs_next_var` by simp[] >>
   drule_all enc_emit_op_run_frame >>
   disch_then (qspec_then `[(out_base,nbytes)]` strip_assume_tac) >>
-  FAIL_TAC "static-run"
+  rename1 `run_inst_seq (emitted_insts st mid) s0 = OK s1` >>
+  suspend "static_suffix"
 QED
-*)
+
+Resume enc_child_static_correct_labels[static_suffix]:
+  drule (cj 2 enc_encoder_growth) >> strip_tac >>
+  drule emit_op_extends >> strip_tac >>
+  drule emitted_insts_emit_op >> strip_tac >>
+  `frag_ids mid st' SUBSET frag_ids st st'` by
+    (fs[frag_ids_def, pred_setTheory.SUBSET_DEF, cs_extends_def] >> decide_tac) >>
+  `!x. not_fresh_at st x ==> not_fresh_at mid x` by
+    (fs[not_fresh_at_def, cs_extends_def] >> rpt strip_tac >>
+     first_x_assum irule >> decide_tac) >>
+  `enc_pre mid st' [static_loc;child_ptr] lo top tv v (w2n src_w)
+     [(out_base,nbytes)] s1` by
+    (reverse (rw[enc_pre_def])
+     >- (irule enc_scratch_subset >> qexists_tac `frag_ids st st'` >>
+         simp[] >> fs[enc_frame_def]) >>
+     fs[enc_pre_def] >>
+     gvs[not_fresh_at_def, ASCIInumbersTheory.toString_11] >>
+     rpt strip_tac >> first_x_assum irule >> decide_tac) >>
+  suspend "static_compose"
+QED
+
+Resume enc_child_static_correct_labels[static_compose]:
+  irule frag_exec_seq_pointwise >>
+  qexistsl_tac [
+    `\u. enc_pre mid st' [static_loc;child_ptr] lo top tv v (w2n src_w)
+           [(out_base,nbytes)] u /\
+         eval_operand static_loc u = SOME (n2w out_base) /\
+         eval_operand child_ptr u = SOME src_w /\
+         enc_frame st st' lo top [(out_base,nbytes)] s0 u /\
+         u.vs_labels = s0.vs_labels`, `mid`] >>
+  simp[] >> reverse conj_tac
+  >- suspend "static_lift" >>
+  qpat_assum `static_loc = _` (fn th => pure_rewrite_tac[GSYM th]) >>
+  qx_gen_tac `t` >> strip_tac >>
+  `enc_buf_correct_labels static_loc child_ptr ei` by simp[] >>
+  `enc_scratch (frag_ids st st') lo top t` by fs[enc_frame_def] >>
+  `w2n (n2w out_base : bytes32) = out_base` by simp[wordsTheory.w2n_n2w] >>
+  `enc_pre mid st' [static_loc;child_ptr] lo top tv v (w2n src_w)
+     [(w2n (n2w out_base : bytes32),LENGTH (enc (vyper_to_abi_type env ty) av))] t`
+    by (fs[Abbr `nbytes`] >> metis_tac[]) >>
+  `?p n. MEM (p,n) [(out_base,nbytes)] /\ p <= w2n (n2w out_base : bytes32) /\
+     w2n (n2w out_base : bytes32) + LENGTH (enc (vyper_to_abi_type env ty) av) <= p+n`
+    by (qexistsl_tac [`out_base`,`nbytes`] >> simp[Abbr `nbytes`]) >>
+  drule_all (SRULE [PULL_EXISTS] enc_buf_correct_labels_enclosing_local_frag) >>
+  disch_then (qspec_then `ctx` mp_tac) >> strip_tac >>
+  irule frag_exec_conseq >> goal_assum (drule_at Any) >> simp[] >>
+  rpt strip_tac >> gvs[Abbr `nbytes`] >>
+  irule enc_frame_trans >> goal_assum (drule_at Any) >> simp[]
+QED
+
+Resume enc_child_static_correct_labels[static_lift]:
+  conj_tac
+  >- (fs[same_blocks_def, cs_extends_def] >>
+      qexists_tac `[]` >> simp[IS_PREFIX_APPEND]) >>
+  irule frag_exec_run_inst_seq >>
+  fs[same_blocks_def] >>
+  simp[IS_PREFIX_APPEND] >>
+  reverse conj_tac >- simp[is_terminator_def] >>
+  simp[enc_pre_inst_idx, enc_operand_inst_idx] >>
+  conj_tac >- metis_tac[] >>
+  qpat_x_assum `!old. _` (qspec_then `child_ptr` mp_tac) >>
+  impl_tac >- (fs[enc_pre_def] >> metis_tac[]) >> simp[]
+QED
+
+Finalise enc_child_static_correct_labels
 
 Theorem compile_abi_encode_frag:
   (!dst child_ptr ei is_dyn static_ofst dyn_ptr st op st' ctx env ty tv v
