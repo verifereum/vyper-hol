@@ -526,6 +526,29 @@ Proof
   disj2_tac >> simp[stmt_exit_def] >> metis_tac[]
 QED
 
+(* Memory execution needs defined operands, not a memory-safety invariant.
+   ALLOCA (including repeat executions and zero sizes) is total by
+   loweringHaltTheory.step_alloca_frame. ADD, AND, MLOAD and MSTORE use
+   step_ADD, step_AND, step_MLOAD and step_MSTORE; update_var's lookup
+   equations give output definedness and the frame for the read steps.
+   REVERT with defined operands is step_revert_behavior. *)
+Theorem step_MCOPY_defined:
+  !dst src sz d a n id outs s.
+    eval_operand dst s = SOME d /\ eval_operand src s = SOME a /\
+    eval_operand sz s = SOME n ==>
+    step_inst_base (mk_inst id MCOPY [dst; src; sz] outs) s =
+      OK (mcopy (w2n d) (w2n a) (w2n n) s)
+Proof
+  simp[step_inst_base_def]
+QED
+
+Theorem lookup_var_mcopy[simp]:
+  !x dst src sz s.
+    lookup_var x (mcopy dst src sz s) = lookup_var x s
+Proof
+  simp[lookup_var_def, mcopy_def, write_memory_with_expansion_def, LET_THM]
+QED
+
 (* raise and assert with a string literal as the reason: the literal's
    buffer and the Error(string) encoding of compile_revert_with_reason,
    straight-line code that ends in a REVERT, which every assertion
