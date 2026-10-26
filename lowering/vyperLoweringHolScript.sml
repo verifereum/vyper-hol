@@ -13,6 +13,7 @@ Ancestors
   valueEncodingProofs
   localPtrsProps
   loweringShapeProps
+  intCallStep intCallLookup
   structFieldsProps
   (* compiler + correctness *)
   vyperCompiler
