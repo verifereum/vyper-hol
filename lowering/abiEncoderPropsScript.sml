@@ -4286,6 +4286,68 @@ Proof
   fs[enc_frame_def] >> metis_tac[]
 QED
 
+Theorem enc_loop_ctx_inst_idx[simp]:
+  enc_loop_ctx st z ops lo top tv v src outs s0 count_ptr ip
+    (s with vs_inst_idx := idx) =
+  enc_loop_ctx st z ops lo top tv v src outs s0 count_ptr ip s
+Proof
+  Cases_on `count_ptr` >>
+  simp[eval_operand_def, lookup_var_def,
+       enc_loop_ctx_def, enc_pre_def, enc_scratch_def,
+       venomMemDefsTheory.alloca_inv_def,
+       venomMemDefsTheory.allocas_non_overlapping_def,
+       venomMemDefsTheory.alloca_next_valid_def]
+QED
+
+Theorem enc_static_loop_counter_frag:
+  emit_op ADD [index;Lit 1w] a = (next,b) /\
+  emit_void MSTORE [count_ptr;next] b = ((),c) /\
+  (!x. count_ptr = Var x ==> not_fresh_at a x) /\
+  st.cs_next_var <= a.cs_next_var /\ st.cs_next_id IN frag_ids st z /\
+  value_has_type tv v /\ EVERY (\t. ~is_dynamic t) ts /\
+  SUC k <= LENGTH avs /\
+  p + LENGTH (enc_head_upto B ts avs (SUC k)) <= lo ==>
+  frag_exec ctx a c
+    (\s. enc_loop_ctx st z ops lo top tv v src outs s0 count_ptr ip s /\
+         eval_operand index s = SOME (n2w k) /\
+         enc_prefix_mem p B ts avs (SUC k) s)
+    (enc_array_inv
+      (enc_loop_ctx st z ops lo top tv v src outs s0 count_ptr ip)
+      p B ts avs ip NONE (SUC k)) R
+Proof
+  strip_tac >>
+  `same_blocks a c /\
+   c.cs_current_insts = a.cs_current_insts ++
+     (emitted_insts a b ++ emitted_insts b c)` by
+    (imp_res_tac enc_emit_op_append >> imp_res_tac enc_emit_void_append >>
+     imp_res_tac emit_op_same_blocks >> imp_res_tac emit_void_same_blocks >>
+     fs[same_blocks_def, APPEND_ASSOC]) >>
+  `emitted_insts a c = emitted_insts a b ++ emitted_insts b c` by
+    (irule emitted_insts_append >>
+     imp_res_tac enc_emit_op_append >> imp_res_tac enc_emit_void_append >> simp[]) >>
+  fs[same_blocks_def] >> irule frag_exec_run_inst_seq >>
+  asm_simp_tac (srw_ss()) [rich_listTheory.IS_PREFIX_APPEND] >>
+  reverse conj_tac
+  >- (imp_res_tac emitted_insts_emit_op >>
+      imp_res_tac emitted_insts_emit_void >>
+      simp[mk_inst_def, is_terminator_def]) >>
+  qx_gen_tac `s` >> strip_tac >>
+  `eval_operand count_ptr s = SOME (n2w ip) /\
+   enc_scratch (frag_ids st z) lo top s /\
+   FLOOKUP s.vs_allocas st.cs_next_id = SOME (ip,32)` by
+    fs[enc_loop_ctx_def, enc_pre_def] >>
+  drule_all enc_static_counter_run_preserve >>
+  disch_then (qspec_then `outs` (qx_choose_then `u` strip_assume_tac)) >>
+  `enc_loop_ctx st z ops lo top tv v src outs s0 count_ptr ip u` by
+    (irule enc_loop_ctx_frame_step >> simp[] >> qexists_tac `s` >> simp[]) >>
+  `enc_tail_upto ts avs (SUC k) = []` by
+    (simp[enc_tail_upto_def] >> irule enc_prefix_tail_static >>
+     simp[EVERY_TAKE]) >>
+  disj1_tac >> qexists_tac `u` >> simp[] >>
+  irule enc_array_inv_suc >> simp[] >>
+  fs[enc_prefix_mem_def, mem_bytes_at_def]
+QED
+
 Theorem compile_abi_encode_frag:
   (!dst child_ptr ei is_dyn static_ofst dyn_ptr st op st' ctx env ty tv v
     av s0 dst_w src_w lo top.
