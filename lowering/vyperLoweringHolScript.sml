@@ -14,8 +14,10 @@ Ancestors
   localPtrsProps
   loweringShapeProps
   intCallStep intCallLookup
+  structFieldsProps
   (* compiler + correctness *)
   vyperCompiler
+  allocaBudgetChecks
   vyperLoweringCorrect
   configuredE2ECorrectness
   evalCompilerMemoryStores
