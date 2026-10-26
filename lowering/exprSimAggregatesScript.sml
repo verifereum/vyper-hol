@@ -40,11 +40,12 @@
  * #636's Infrastructure (a value an earlier operand left in memory survives
  * a later operand's fragment).
  *
- * StructLit, MakeArray and empty(T) of a type that is not a word build
- * their value in a buffer of their own, an ALLOCA, and nothing in expr_sim keeps
- * vs_alloca_next below 2 ** 256: the buffer's pointer may wrap, and its
- * stores (ADD ptr off) with it, so they wait for S3's alloca frontier as
- * the hashes do (exprSimBuiltins).
+ * StructLit, MakeArray and empty(T) of a type that is not a word are
+ * unprovable as the definitions stand: they build their value in a buffer
+ * of their own, an ALLOCA, and nothing in expr_sim keeps vs_alloca_next
+ * below 2 ** 256, so the buffer's pointer may wrap, and its stores
+ * (ADD ptr off) with it.  They wait for S3's alloca frontier to reach the
+ * judgment, as the hashes do (exprSimBuiltins).
  *)
 
 Theory exprSimAggregates
@@ -90,12 +91,6 @@ Proof
   simp[return_def, raise_def] >> rw[] >> gvs[expr_res_ok_def]
 QED
 
-Theorem word_of_bytes_be_zeros[local]:
-  word_of_bytes_be (REPLICATE 32 (0w:word8)) = (0w:bytes32)
-Proof
-  EVAL_TAC >> simp[]
-QED
-
 Theorem typed_val_to_w256_address_zero[local]:
   typed_val_to_w256 (BaseTV AddressT) (BytesV (word_to_bytes (0w:address) T)) =
   0w
@@ -114,10 +109,14 @@ Theorem typed_val_to_w256_default_word:
     is_word_type t /\ evaluate_type tenv t = SOME tv ==>
     typed_val_to_w256 tv (default_value tv) = 0w
 Proof
-  Cases_on `t` >> simp[is_word_type_def] >>
-  TRY (rename1 `BaseT bt` >> Cases_on `bt` >> simp[is_word_type_def]) >>
-  TRY (rename1 `BytesT bd` >> Cases_on `bd` >> simp[is_word_type_def]) >>
-  rw[vyperValueTheory.evaluate_type_def, AllCaseEqs()] >>
+  rpt strip_tac >>
+  `(?n. t = BaseT (UintT n)) \/ (?n. t = BaseT (IntT n)) \/
+   t = BaseT BoolT \/ t = BaseT AddressT \/ t = BaseT DecimalT \/
+   (?m. t = BaseT (BytesT (Fixed m)) /\ m <= 32) \/ (?n. t = FlagT n)` by
+    (Cases_on `t` >> fs[is_word_type_def] >>
+     rename1 `BaseT bt` >> Cases_on `bt` >> fs[is_word_type_def] >>
+     rename1 `BytesT bd` >> Cases_on `bd` >> fs[is_word_type_def]) >>
+  gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs()] >>
   simp[vyperValueTheory.default_value_def, typed_val_to_w256_address_zero] >>
   simp[typed_val_to_w256_def, val_to_w256_def, integer_wordTheory.i2w_def] >>
   simp[listTheory.PAD_RIGHT, GSYM rich_listTheory.REPLICATE_GENLIST,
@@ -228,8 +227,11 @@ Proof
        typed_val_to_w256_def, val_to_w256_def] >>
   simp[integerTheory.INT_SUB] >>
   rw[vyperValueTheory.evaluate_type_def] >>
-  gvs[AllCaseEqs(), typed_val_to_w256_def, val_to_w256_def,
-      integer_wordTheory.i2w_def]
+  (* Keep symbolic signed bounds opaque to word arithmetic conversions. *)
+  PURE_REWRITE_TAC
+    [typed_val_to_w256_def, val_to_w256_def,
+     integer_wordTheory.i2w_0, integer_wordTheory.i2w_pos] >>
+  REFL_TAC
 QED
 
 Theorem compile_bound_builtin_case_sim:

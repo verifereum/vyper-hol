@@ -28,11 +28,12 @@
  *   compile_flag_member_case_sim — a flag member: the literal 2 ** id, by
  *                              expr_sim_inv's flag members clause
  *
- * Helpers: expr_sim_of_vv_sim_nocode, val_in_memory_word_type,
- *   eval_expr_toplevel_storage, eval_expr_toplevel_storage_slot,
- *   toplevel_storage_ce_vars, compile_toplevel_no_module_sim
+ * Helpers: expr_sim_of_vv_sim_memory, val_in_memory_word_type,
+ *   eval_expr_toplevel_storage, toplevel_storage_ce_vars,
+ *   compile_toplevel_no_module_sim
  *
- * Cheated, for the later #636 PRs:
+ * Unprovable as the definitions stand, to be fixed in the lowering, in
+ * state_rel or in the judgment before their PRs:
  *   compile_literal_memory_sim, compile_literal_other_vv_sim — bytes and
  *                              string literals not of a word type, memory
  *                              buffers (row 2).  The buffer is an ALLOCA,
@@ -43,15 +44,17 @@
  *                              for S3's alloca frontier, as the hashes do
  *                              (exprSimBuiltins).
  *   compile_toplevel_storage_undecodable_sim — a storage or transient
- *                              variable whose slot does not decode (row 3).
- *                              False as stated: the source raises a
- *                              RuntimeError where the lowering emits no
- *                              code.  It needs a storage invariant keeping
- *                              the variables' slots decodable.
- *   compile_toplevel_immutable_sim — immutables (row 3): the lowering has
- *                              no ImmutableLoc for them (#563).
- *   compile_prevhash_sim     — block.prevhash (row 5).  Unprovable as the
- *                              definitions stand: the source raises a
+ *                              variable whose slot does not decode (row 3):
+ *                              the source raises a RuntimeError where the
+ *                              lowering emits no code.  It needs a storage
+ *                              invariant keeping the variables' slots
+ *                              decodable.
+ *   compile_toplevel_immutable_sim — immutables and constants (row 3),
+ *                              which lookup_global reads from the
+ *                              immutables: nothing puts them in ce_vars,
+ *                              so the lowering may emit INVALID where the
+ *                              source reads a value (#563 for immutables).
+ *   compile_prevhash_sim     — block.prevhash (row 5): the source raises a
  *                              RuntimeError where BLOCKHASH returns 0 (#671),
  *                              and call_ctx_rel does not relate the block
  *                              hashes.
@@ -76,33 +79,39 @@ val expr_sizes = [listTheory.list_size_def, vyperASTTheory.expr_size_def,
 (* ===== No code before unwrap_value ===== *)
 
 (* expr_sim_of_vv_sim (exprSimUnwrap) for a form whose compile_expr emits
-   no code: the compile state does not move, so compile_expr_extends is not
-   needed. *)
-Theorem expr_sim_of_vv_sim_nocode:
+   no code and hands out a pointer into memory: the compile state does not
+   move, so compile_expr_extends is not needed, and unwrap_value is
+   unwrap_memory_sim's load or nothing, so no cheated unwrap case is. *)
+Theorem expr_sim_of_vv_sim_memory:
   !ctx func cenv cx ty e es.
     expr_vv_sim ctx func cenv cx ty e es /\
-    (!sa vv sm. compile_expr cenv ty e sa = (vv, sm) ==> sm = sa) ==>
+    (!sa vv sm. compile_expr cenv ty e sa = (vv, sm) ==>
+                sm = sa /\
+                ?t p. vv = LocatedValue t p /\ p.ptr_location = LocMemory) ==>
     expr_sim ctx func cenv cx ty e es
 Proof
   rw[expr_sim_def] >>
   qpat_x_assum `lower_value _ _ _ _ _ = _` mp_tac >>
   simp[lower_value_def, comp_bind_def] >>
   Cases_on `compile_expr cenv ty e sa` >> rename1 `_ = (vv, sm)` >>
-  `sm = sa` by metis_tac[] >> gvs[] >> strip_tac >>
+  qpat_x_assum `!sa vv sm. _` (drule_then strip_assume_tac) >>
+  gvs[] >> strip_tac >>
   drule unwrap_value_extends >> strip_tac >>
   `fn_has_code sa sa func` by metis_tac[fn_has_code_split, cs_extends_refl] >>
   `expr_vv_res_ok res` by simp[expr_vv_res_ok_def] >>
   qpat_x_assum `expr_vv_sim _ _ _ _ _ _ _`
     (mp_tac o SIMP_RULE std_ss [expr_vv_sim_def]) >>
-  disch_then (qspecl_then [`sa`, `sa`, `vv`, `res`, `es'`, `s0`] mp_tac) >>
+  disch_then (qspecl_then [`sa`, `sa`, `LocatedValue t p`, `res`, `es'`, `s0`]
+                mp_tac) >>
   simp[] >> strip_tac >>
   irule frag_exec_seq >> first_x_assum (irule_at Any) >>
   simp[cs_extends_refl] >>
   Cases_on `?v. res = INL (Value v)`
   >- (gvs[] >>
       qspecl_then [`ctx`, `func`, `cenv`, `cx`, `e`, `es`, `sa`, `sa`, `sb`,
-                   `s0`, `es'`, `v`, `vv`, `op`, `expr_exit (INL (Value v))`]
-        mp_tac unwrap_value_sim >>
+                   `s0`, `es'`, `v`, `t`, `p`, `op`,
+                   `expr_exit (INL (Value v))`]
+        mp_tac unwrap_memory_sim >>
       impl_tac >- asm_rewrite_tac[arithmeticTheory.LESS_EQ_REFL] >>
       strip_tac >> irule frag_exec_conseq >> first_x_assum (irule_at Any) >>
       simp[] >> rpt strip_tac >> gvs[]) >>
@@ -121,10 +130,14 @@ Theorem val_in_memory_word_type:
     value_has_type tvt v /\ val_in_memory tvt v off mem ==>
     mem_word_at off mem = typed_val_to_w256 tvt v
 Proof
-  Cases_on `t` >> simp[is_word_type_def] >>
-  TRY (rename1 `BaseT bt` >> Cases_on `bt` >> simp[is_word_type_def]) >>
-  TRY (rename1 `BytesT bd` >> Cases_on `bd` >> simp[is_word_type_def]) >>
-  rw[vyperValueTheory.evaluate_type_def, AllCaseEqs()] >>
+  rpt strip_tac >>
+  `(?n. t = BaseT (UintT n)) \/ (?n. t = BaseT (IntT n)) \/
+   t = BaseT BoolT \/ t = BaseT AddressT \/ t = BaseT DecimalT \/
+   (?m. t = BaseT (BytesT (Fixed m)) /\ m <= 32) \/ (?n. t = FlagT n)` by
+    (Cases_on `t` >> fs[is_word_type_def] >>
+     rename1 `BaseT bt` >> Cases_on `bt` >> fs[is_word_type_def] >>
+     rename1 `BytesT bd` >> Cases_on `bd` >> fs[is_word_type_def]) >>
+  gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs()] >>
   Cases_on `v` >>
   gvs[vyperTypingTheory.value_has_type_def, val_in_memory_def,
       typed_val_to_w256_def]
@@ -171,11 +184,12 @@ Theorem compile_name_other_sim:
               word_value entry.value) ==>
     expr_sim ctx func cenv cx ty (Name ann id) es
 Proof
-  rpt strip_tac >> irule expr_sim_of_vv_sim_nocode >> conj_tac
+  rpt strip_tac >> irule expr_sim_of_vv_sim_memory >> conj_tac
   >~ [`expr_vv_sim`] >- metis_tac[compile_name_vv_sim, expr_vv_ok_def] >>
   `?p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz)` by
     gvs[expr_sim_pre_def, expr_sim_inv_def, well_typed_expr_def] >>
-  simp[compile_expr_def, compile_name_vv_def, comp_return_def]
+  simp[compile_expr_def, compile_name_vv_def, comp_return_def,
+       contextTheory.mk_ptr_def]
 QED
 
 Theorem compile_name_sim:
@@ -306,8 +320,10 @@ Proof
         (rpt strip_tac >> gvs[is_word_type_def]) >>
       simp[compile_expr_def, vyperASTTheory.expr_type_def] >> rpt gen_tac >>
       drule compile_literal_bytes_stack >>
-      disch_then (qspecl_then [`bs`, `sa`] strip_assume_tac) >> simp[]) >>
-  TRY (rename1 `BoolL b` >> Cases_on `b`) >>
+      disch_then (qspecl_then [`bs`, `sa`] strip_assume_tac) >> simp[])
+  >~ [`BoolL b`]
+  >- (Cases_on `b` >>
+      simp[compile_expr_def, compile_literal_vv_def, comp_return_def]) >>
   simp[compile_expr_def, compile_literal_vv_def, comp_return_def]
 QED
 
@@ -382,25 +398,6 @@ Proof
   rpt strip_tac >> gvs[materialise_def, return_def, bind_def]
 QED
 
-(* The slot and type of a storage or transient variable, where the source
-   result is one expr_vv_sim speaks of. *)
-Theorem eval_expr_toplevel_storage_slot:
-  !cx ann src id es res es' ts tr typ id_str.
-    eval_expr cx (TopLevelName ann (src, id)) es = (res, es') /\
-    expr_vv_res_ok res /\
-    get_module_code cx src = SOME ts /\
-    find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ, id_str) ==>
-    ?slot tvt. lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
-               evaluate_type (get_tenv cx) typ = SOME tvt
-Proof
-  rpt gen_tac >> strip_tac >>
-  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >> lookup_global_tac >>
-  Cases_on `lookup_var_slot_from_layout cx tr src id_str` >>
-  Cases_on `evaluate_type (get_tenv cx) typ` >>
-  simp[raise_def, return_def] >> strip_tac >>
-  gvs[expr_vv_res_ok_def, expr_res_ok_def]
-QED
-
 (* The compile environment holds a storage or transient variable at the
    layout's slot (storage_vars_rel, transient_vars_rel). *)
 Theorem toplevel_storage_ce_vars:
@@ -470,10 +467,11 @@ Proof
   cheat
 QED
 
-(* An immutable (no storage declaration of the name).  Cheated: the
-   lowering has no ImmutableLoc for it (#563), so it emits INVALID, and
-   expr_sim_inv does not yet put the immutables in ce_vars nor bound their
-   offsets (immutable_holds). *)
+(* An immutable or a constant (no storage declaration of the name; both
+   are read from the immutables).  Cheated, and false as stated: nothing in
+   expr_sim_inv puts them in ce_vars (the lowering has no ImmutableLoc for
+   immutables yet, #563) nor bounds their offsets (immutable_holds), so the
+   lowering may emit INVALID where the source reads a value. *)
 Theorem compile_toplevel_immutable_sim:
   !ctx func cenv cx env ty ann src id es ts.
     expr_sim_pre cenv cx env (TopLevelName ann (src, id)) es /\
