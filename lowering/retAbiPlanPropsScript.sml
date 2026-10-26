@@ -13,11 +13,16 @@
  *
  * TOP-LEVEL:
  *   update_cenv_ret_abi_plan -- the plan and size of a return type
- *   build_compile_env_ret_abi_plan -- the same at build_compile_env
+ *   build_compile_env_ret_abi_plan -- the same at package_external_fn's env
  * Helpers:
  *   vyper_to_abi_type_submap -- evaluation and ABI type in a larger env
+ *   sfields_tenv_consistent_domsub -- struct map and env drop a struct
  *   abi_props_vyper -- compile-side ABI sizes and flags are the source's
+ *   abi_elem_props -- the same for a type in a smaller env than the map's
+ *   abi_enc_plan_static_copy, abi_enc_plans_map, abi_enc_plans_replicate
+ *     -- plans for static types, mapped and replicated element lists
  *   type_to_abi_enc_info_plan -- type_to_abi_enc_info builds a plan
+ *   external_return_needs_wrap_eq -- the compiler's wrap is the ABI's
  *)
 
 Theory retAbiPlanProps
@@ -62,7 +67,8 @@ Proof
   first_x_assum drule >> simp[]
 QED
 
-Theorem vyper_to_abi_type_dynamic:
+(* vyperTypeABI has these two as local lemmas. *)
+Theorem vyper_to_abi_type_dynamic[local]:
   (!tenv ty tv.
      evaluate_type tenv ty = SOME tv ==>
      is_dynamic (vyper_to_abi_type tenv ty) = vyper_is_dynamic tenv ty) /\
@@ -75,7 +81,7 @@ Proof
   rpt strip_tac >> TRY (Cases_on `bd`) >> gvs[vyper_is_dynamic_def]
 QED
 
-Theorem vyper_to_abi_static_length:
+Theorem vyper_to_abi_static_length[local]:
   (!tenv ty tv.
      evaluate_type tenv ty = SOME tv /\ ~vyper_is_dynamic tenv ty ==>
      static_length (vyper_to_abi_type tenv ty) = vyper_abi_size_bound tenv ty) /\
@@ -113,6 +119,17 @@ Proof
   >- (res_tac >> qexistsl [`nsid'`, `args'`] >> simp[] >>
       strip_tac >> gvs[])
 QED
+
+(* Instantiate the induction hypothesis at the struct map sf. *)
+val ih_at_sf =
+  first_x_assum (qspec_then
+    `sf : (string, (string # type # num) list) fmap` mp_tac) >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> strip_tac;
+
+val abi_size_defs =
+  [is_abi_dynamic_def, abi_size_bound_def, abi_static_size_def,
+   vyper_is_dynamic_def, vyper_abi_size_bound_def,
+   abi_embedded_static_size_def];
 
 Theorem abi_props_vyper:
   (!tenv ty tv.
@@ -152,31 +169,21 @@ Proof
             first_x_assum drule >> strip_tac >> simp[]) >>
       first_x_assum (qspec_then `fdomsub sf (nsid_to_string nsid)` mp_tac) >>
       impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
-      simp[is_abi_dynamic_def, abi_size_bound_def, abi_static_size_def,
-           vyper_is_dynamic_def, vyper_abi_size_bound_def,
-           abi_embedded_static_size_def] >>
+      simp abi_size_defs >>
       CONV_TAC (DEPTH_CONV ETA_CONV) >>
       gvs[vyper_is_dynamic_def, vyper_abi_size_bound_def])
   >~ [`ArrayT t bd`]
   >- (rpt (gen_tac ORELSE disch_then strip_assume_tac) >>
       gvs[evaluate_type_def, AllCaseEqs()] >>
-      first_x_assum (qspec_then
-        `sf : (string, (string # type # num) list) fmap` mp_tac) >>
-      impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
+      ih_at_sf >>
       Cases_on `bd` >>
-      simp[is_abi_dynamic_def, abi_size_bound_def, abi_static_size_def,
-           vyper_is_dynamic_def, vyper_abi_size_bound_def,
-           abi_embedded_static_size_def] >>
+      simp abi_size_defs >>
       Cases_on `vyper_is_dynamic tenv t` >> gvs[])
   >~ [`TupleT ts`]
   >- (rpt (gen_tac ORELSE disch_then strip_assume_tac) >>
       gvs[evaluate_type_def, AllCaseEqs()] >>
-      first_x_assum (qspec_then
-        `sf : (string, (string # type # num) list) fmap` mp_tac) >>
-      impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
-      simp[is_abi_dynamic_def, abi_size_bound_def, abi_static_size_def,
-           vyper_is_dynamic_def, vyper_abi_size_bound_def,
-           abi_embedded_static_size_def] >>
+      ih_at_sf >>
+      simp abi_size_defs >>
       CONV_TAC (DEPTH_CONV ETA_CONV) >>
       gvs[vyper_is_dynamic_def, vyper_abi_size_bound_def])
   >~ [`BaseT bt`]
@@ -188,12 +195,7 @@ Proof
   >~ [`evaluate_types tenv (t::ts) acc`]
   >- (rpt (gen_tac ORELSE disch_then strip_assume_tac) >>
       gvs[evaluate_type_def, AllCaseEqs()] >>
-      first_x_assum (qspec_then
-        `sf : (string, (string # type # num) list) fmap` mp_tac) >>
-      impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
-      first_x_assum (qspec_then
-        `sf : (string, (string # type # num) list) fmap` mp_tac) >>
-      impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
+      ih_at_sf >> ih_at_sf >>
       simp[vyper_is_dynamic_def, vyper_abi_size_bound_def] >>
       Cases_on `vyper_is_dynamic tenv t` >> gvs[]) >>
   rpt strip_tac >>
@@ -267,16 +269,10 @@ Proof
   irule abi_enc_plan_copy >> fs[]
 QED
 
-Theorem map_struct_field_types:
+Theorem map_struct_field_types[local]:
   !fields. MAP (\(fn, fty, sz). g fty) fields = MAP g (MAP (FST o SND) fields)
 Proof
   Induct >> simp[FORALL_PROD]
-QED
-
-Theorem GENLIST_K_REPLICATE:
-  GENLIST (K x) n = REPLICATE n x
-Proof
-  simp[REPLICATE_GENLIST]
 QED
 
 Theorem abi_enc_plans_replicate:
@@ -289,6 +285,93 @@ Theorem abi_enc_plans_replicate:
 Proof
   strip_tac >> Induct >> simp[abi_enc_plan_nil] >>
   irule abi_enc_plan_cons >> simp[]
+QED
+
+(* The StructT case of type_to_abi_enc_info_plan, given the plan for each
+   field (the induction hypothesis). *)
+Theorem type_to_abi_enc_info_plan_struct[local]:
+  FLOOKUP tenv nsid = SOME (StructArgs args) /\
+  assignable_type tenv (StructT nsid) /\
+  (!ty args x ty'.
+     FLOOKUP tenv nsid = SOME ty /\ ty = StructArgs args /\ MEM x args /\
+     ty' = SND x ==>
+     assignable_type (tenv \\ nsid) ty' ==>
+     !(sf' : (string, (string # type # 'a) list) fmap) cenv tenv1.
+       tenv \\ nsid SUBMAP tenv1 /\
+       sfields_tenv_consistent sf' (tenv \\ nsid) /\
+       (!k a. FLOOKUP (tenv \\ nsid) k = SOME (StructArgs a) ==>
+              FST k = NONE) /\
+       sfields_tenv_consistent cenv.ce_struct_fields tenv1 /\
+       (!k a. FLOOKUP tenv1 k = SOME (StructArgs a) ==> FST k = NONE) /\
+       (!t tv. evaluate_type tenv1 t = SOME tv ==>
+               type_memory_bytes cenv t = type_memory_size tv) ==>
+       abi_enc_plan (tenv \\ nsid) ty' (type_to_abi_enc_info sf' cenv ty')) /\
+  tenv SUBMAP tenv0 /\
+  sfields_tenv_consistent (sf : (string, (string # type # 'a) list) fmap) tenv /\
+  (!k a. FLOOKUP tenv k = SOME (StructArgs a) ==> FST k = NONE) /\
+  sfields_tenv_consistent cenv.ce_struct_fields tenv0 /\
+  (!k a. FLOOKUP tenv0 k = SOME (StructArgs a) ==> FST k = NONE) /\
+  (!t tv. evaluate_type tenv0 t = SOME tv ==>
+          type_memory_bytes cenv t = type_memory_size tv) ==>
+  abi_enc_plan tenv (StructT nsid)
+    (type_to_abi_enc_info sf cenv (StructT nsid))
+Proof
+  strip_tac >>
+  gvs[assignable_type_def, well_formed_type_def, IS_SOME_EXISTS] >>
+  simp[Once type_to_abi_enc_info_def] >>
+  IF_CASES_TAC >- (drule_all abi_enc_plan_static_copy >> simp[]) >>
+  `?fields. FLOOKUP sf (nsid_to_string nsid) = SOME fields /\
+            MAP (FST o SND) fields = MAP SND args`
+    by (qpat_x_assum `sfields_tenv_consistent sf tenv` mp_tac >>
+        simp[sfields_tenv_consistent_def] >> strip_tac >>
+        first_x_assum drule >> strip_tac >> simp[]) >>
+  drule_all abi_elem_props >> strip_tac >>
+  simp[map_struct_field_types] >>
+  irule abi_enc_plan_struct >> conj_tac >- gvs[] >>
+  qexists `args` >> simp[] >>
+  drule_all sfields_tenv_consistent_domsub >> strip_tac >>
+  irule abi_enc_plans_map >> simp[MEM_MAP, PULL_EXISTS] >>
+  qexists `tenv0` >> simp[] >>
+  reverse conj_tac
+  >- (irule SUBMAP_TRANS >> qexists `tenv` >> simp[]) >>
+  rpt gen_tac >> strip_tac >>
+  `assignable_type (tenv \\ nsid) (SND y)`
+    by (qpat_x_assum `EVERY _ args` mp_tac >> simp[EVERY_MEM] >>
+        disch_then drule >> simp[]) >>
+  conj_tac
+  >- (drule assignable_type_well_formed >> simp[well_formed_type_def]) >>
+  qpat_x_assum `!x. MEM x args ==> _` (drule_then (drule_then irule)) >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  qexists `tenv0` >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  irule SUBMAP_TRANS >> qexists `tenv` >> simp[]
+QED
+
+(* The ArrayT case of type_to_abi_enc_info_plan, given the element's plan. *)
+Theorem type_to_abi_enc_info_plan_array[local]:
+  evaluate_type tenv (ArrayT elem bd) = SOME tv /\
+  evaluate_type tenv elem = SOME etv /\
+  abi_enc_plan tenv elem (type_to_abi_enc_info sf cenv elem) /\
+  tenv SUBMAP tenv0 /\
+  sfields_tenv_consistent cenv.ce_struct_fields tenv0 /\
+  (!k a. FLOOKUP tenv0 k = SOME (StructArgs a) ==> FST k = NONE) /\
+  (!t tv. evaluate_type tenv0 t = SOME tv ==>
+          type_memory_bytes cenv t = type_memory_size tv) ==>
+  abi_enc_plan tenv (ArrayT elem bd)
+    (type_to_abi_enc_info sf cenv (ArrayT elem bd))
+Proof
+  strip_tac >>
+  Cases_on `bd` >> simp[Once type_to_abi_enc_info_def]
+  >- (IF_CASES_TAC >- (drule_all abi_enc_plan_static_copy >> simp[]) >>
+      simp[GSYM REPLICATE_GENLIST] >>
+      qpat_x_assum `evaluate_type tenv elem = _` assume_tac >>
+      drule_all abi_elem_props >> strip_tac >>
+      irule abi_enc_plan_sarray >>
+      gvs[is_abi_dynamic_def] >>
+      drule_all abi_enc_plans_replicate >>
+      disch_then (qspec_then `n` mp_tac) >> gvs[]) >>
+  qpat_x_assum `evaluate_type tenv elem = _` assume_tac >>
+  drule_all abi_elem_props >> strip_tac >> simp[] >>
+  irule abi_enc_plan_dynarray >> simp[]
 QED
 
 (* type_to_abi_enc_info builds a plan for an assignable type (which has no
@@ -311,36 +394,10 @@ Proof
   ho_match_mp_tac assignable_type_ind >> rpt conj_tac >> rpt gen_tac
   >~ [`StructT nsid`]
   >- (rpt (gen_tac ORELSE disch_then strip_assume_tac) >>
-      gvs[assignable_type_def, well_formed_type_def, IS_SOME_EXISTS] >>
-      Cases_on `FLOOKUP tenv nsid` >> gvs[] >>
-      rename1 `FLOOKUP tenv nsid = SOME targs` >> Cases_on `targs` >> gvs[] >>
-      rename1 `FLOOKUP tenv nsid = SOME (StructArgs args)` >>
-      simp[Once type_to_abi_enc_info_def] >>
-      IF_CASES_TAC >- (drule_all abi_enc_plan_static_copy >> simp[]) >>
-      `?fields. FLOOKUP sf (nsid_to_string nsid) = SOME fields /\
-                MAP (FST o SND) fields = MAP SND args`
-        by (qpat_x_assum `sfields_tenv_consistent sf tenv` mp_tac >>
-            simp[sfields_tenv_consistent_def] >> strip_tac >>
-            first_x_assum drule >> strip_tac >> simp[]) >>
-      drule_all abi_elem_props >> strip_tac >>
-      simp[map_struct_field_types] >>
-      irule abi_enc_plan_struct >> conj_tac >- gvs[] >>
-      qexists `args` >> simp[] >>
-      drule_all sfields_tenv_consistent_domsub >> strip_tac >>
-      irule abi_enc_plans_map >> simp[MEM_MAP, PULL_EXISTS] >>
-      qexists `tenv0` >> simp[] >>
-      reverse conj_tac
-      >- (irule SUBMAP_TRANS >> qexists `tenv` >> simp[]) >>
-      rpt gen_tac >> strip_tac >>
-      `assignable_type (tenv \\ nsid) (SND y)`
-        by (qpat_x_assum `EVERY _ args` mp_tac >> simp[EVERY_MEM] >>
-            disch_then drule >> simp[]) >>
-      conj_tac
-      >- (drule assignable_type_well_formed >> simp[well_formed_type_def]) >>
-      qpat_x_assum `!x'. MEM x' args ==> _` (drule_then (drule_then irule)) >>
-      rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-      qexists `tenv0` >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-      irule SUBMAP_TRANS >> qexists `tenv` >> simp[])
+      `?args. FLOOKUP tenv nsid = SOME (StructArgs args)`
+        by (qpat_x_assum `assignable_type _ _` mp_tac >>
+            simp[assignable_type_def] >> rpt BasicProvers.TOP_CASE_TAC >> simp[]) >>
+      drule_all type_to_abi_enc_info_plan_struct >> simp[])
   >~ [`TupleT tys`]
   >- (rpt (gen_tac ORELSE disch_then strip_assume_tac) >>
       gvs[assignable_type_def, well_formed_type_def, IS_SOME_EXISTS] >>
@@ -370,18 +427,7 @@ Proof
         by (first_x_assum irule >>
             rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
             qexists `tenv0` >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC)) >>
-      Cases_on `bd` >> simp[Once type_to_abi_enc_info_def]
-      >- (IF_CASES_TAC >- (drule_all abi_enc_plan_static_copy >> simp[]) >>
-          simp[GENLIST_K_REPLICATE] >>
-          qpat_x_assum `evaluate_type tenv elem = _` assume_tac >>
-          drule_all abi_elem_props >> strip_tac >>
-          irule abi_enc_plan_sarray >>
-          gvs[is_abi_dynamic_def] >>
-          drule_all abi_enc_plans_replicate >>
-          disch_then (qspec_then `n` mp_tac) >> gvs[]) >>
-      qpat_x_assum `evaluate_type tenv elem = _` assume_tac >>
-      drule_all abi_elem_props >> strip_tac >> simp[] >>
-      irule abi_enc_plan_dynarray >> simp[])
+      drule_all type_to_abi_enc_info_plan_array >> simp[])
   >~ [`BaseT bt`]
   >- (rpt strip_tac >>
       gvs[assignable_type_def, well_formed_type_def, IS_SOME_EXISTS] >>
@@ -464,8 +510,9 @@ Proof
   simp[vyper_abi_size_bound_def]
 QED
 
+(* The same at the env package_external_fn builds. *)
 Theorem build_compile_env_ret_abi_plan:
-  !tops vis mut func_name args ret_type fn_body use_trans ret.
+  !tops vis mut func_name args ret_type fn_body use_trans rr ret.
     ALL_DISTINCT (FLAT (MAP (type_def_keys_toplevel (NONE:num option)) tops)) /\
     assignable_type (type_env tops) ret ==>
     abi_enc_plan (type_env tops)
@@ -474,14 +521,14 @@ Theorem build_compile_env_ret_abi_plan:
        then TupleT [ret] else ret)
       (update_cenv_ret_abi
          (build_compile_env tops vis mut func_name args ret_type fn_body
-            use_trans) ret).ce_ret_enc_info /\
+            use_trans with ce_raw_return := rr) ret).ce_ret_enc_info /\
     vyper_abi_size_bound (type_env tops)
       (if needs_external_call_wrap ret /\
           is_dynamic (vyper_to_abi_type (type_env tops) ret)
        then TupleT [ret] else ret) =
       (update_cenv_ret_abi
          (build_compile_env tops vis mut func_name args ret_type fn_body
-            use_trans) ret).ce_max_return_size
+            use_trans with ce_raw_return := rr) ret).ce_max_return_size
 Proof
   rpt gen_tac >> strip_tac >> irule update_cenv_ret_abi_plan >>
   simp[build_compile_env_ce_struct_fields]
