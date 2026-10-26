@@ -27,7 +27,7 @@ env:
   # Uncached runs check that main still builds from source. Every cache key gets
   # this run's id, so no other run's entry is restored and no other run reads
   # what this one saves.
-  CACHE_KEY_SUFFIX: ${{ (github.event_name == 'schedule' || inputs.uncached) && format('-uncached-{0}-{1}', github.run_id, github.run_attempt) || '' }}
+  CACHE_KEY_SUFFIX: ${{ (github.event_name == 'schedule' || github.event_name == 'pull_request' || inputs.uncached) && format('-uncached-{0}-{1}', github.run_id, github.run_attempt) || '' }}
 
 jobs:
   build:
