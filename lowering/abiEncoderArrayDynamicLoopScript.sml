@@ -1,0 +1,61 @@
+(* Execute the entire actual dynamic-element loop using recursive child correctness. *)
+Theory abiEncoderArrayDynamicLoop
+Ancestors
+  abiEncoderArrayDynamicInitPrepare abiEncoderArrayLoopRun abiEncoderArrayLoopCode abiEncoderArrayMemory
+  abiEncoderMembersDefs abiEncoderCorrect abiDecoderEffect abiDecoderContract abiDecoderReentry
+  abiDecoderLoop fragExec compileEnv valueEncoding contractABI venomState venomInst words list arithmetic
+
+Theorem abi_encoder_array_dynamic_loop:
+  abi_encoder_correct ei /\ compile_abi_encode_dyn_loop dst src ei asz msz count_op start = (out,final) /\
+  fn_has_code start final func /\
+  abi_encoder_array_memory ei asz msz T ty avs start src dst sb source_cap d output_size b cap 0 initial /\
+  abi_decoder_operand_live start.cs_next_var count_op /\
+  eval_operand count_op initial = SOME (n2w (LENGTH avs)) /\
+  abi_decoder_budget first last b cap initial /\ first <= start.cs_next_id /\
+  final.cs_next_id <= hi /\ hi <= last /\ final.cs_next_var <= limit_st.cs_next_var /\
+  fresh_vars_wrt limit_st initial /\ ~initial.vs_halted /\
+  initial.vs_current_bb = start.cs_current_bb /\ initial.vs_inst_idx = LENGTH start.cs_current_insts ==>
+  ?actual.
+    mem_bytes_at d (LENGTH (enc (Array NONE ty) (ListV avs))) actual.vs_memory = enc (Array NONE ty) (ListV avs) /\
+    eval_operand out actual = SOME (n2w (LENGTH (enc (Array NONE ty) (ListV avs)))) /\
+    abi_decoder_effect first last start.cs_next_id hi start.cs_next_var limit_st d output_size b cap initial actual /\
+    actual.vs_current_bb = final.cs_current_bb /\ actual.vs_inst_idx = LENGTH final.cs_current_insts /\
+    ~actual.vs_halted /\ abi_decode_sim ctx func initial actual
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  drule_all abi_encode_array_dynamic_loop_code >> strip_tac >>
+  `owner_st.cs_next_id <= hi /\ owner_st.cs_next_var <= limit_st.cs_next_var /\
+   body_end.cs_next_id+3 <= hi /\ body_end.cs_next_var+1 <= limit_st.cs_next_var /\
+   start.cs_next_var <= owner_st.cs_next_var /\ start.cs_next_id < start.cs_next_id+2` by
+    (qpat_assum `abi_encoder_array_loop_code _ _ _ _ _ _ _ _`
+       (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_encoder_array_loop_code_def]) >> decide_tac) >>
+  drule_all abi_encoder_array_dynamic_init_prepare >> disch_then (qspec_then `ctx` strip_assume_tac) >>
+  qpat_assum `abi_decoder_effect _ _ _ _ _ _ _ _ _ _ initial ready`
+    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_effect_def]) >>
+  `eval_operand count_op ready = SOME (n2w (LENGTH avs))` by
+    (first_x_assum irule >> asm_simp_tac bool_ss []) >>
+  `abi_decoder_operand_live owner_st.cs_next_var count_op` by
+    (irule abi_decoder_operand_live_mono >> qexists_tac `start.cs_next_var` >> asm_simp_tac bool_ss []) >>
+  mp_tac (Q.INST [`active` |-> `T`, `ip` |-> `FST (ptrs:operand # operand)`,
+    `dyn_ptr` |-> `SND (ptrs:operand # operand)`, `site` |-> `start.cs_next_id`,
+    `slot` |-> `index_slot:num`, `cursor_site` |-> `start.cs_next_id+2`,
+    `cursor_slot` |-> `tail_slot:num`, `initial` |-> `ready:venom_state`]
+    abi_encoder_array_loop_run) >>
+  impl_tac >- asm_simp_tac (srw_ss()) [] >> strip_tac >>
+  `abi_decoder_effect first last start.cs_next_id hi start.cs_next_var limit_st d output_size b cap ready actual` by
+    (irule abi_decoder_effect_widen >>
+     qexistsl_tac [`d`, `hi`, `start.cs_next_id`, `owner_st.cs_next_var`, `output_size`] >>
+     asm_simp_tac (srw_ss()) []) >>
+  `abi_decoder_effect first last start.cs_next_id hi start.cs_next_var limit_st d output_size b cap initial actual` by
+    (irule abi_decoder_effect_trans >> qexists_tac `ready` >> asm_simp_tac bool_ss []) >>
+  qexists_tac `actual` >> asm_simp_tac bool_ss [] >>
+  irule abi_decode_sim_trans >> qexists_tac `ready` >> asm_simp_tac bool_ss []
+QED
+
+val () = List.app (fn (n,th) =>
+  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
+    if null (Thm.hyp th) andalso null axioms andalso
+       List.all (fn s => s = "DISK_THM") oracles then
+      print ("ABI_ENCODER_ARRAY_DYNAMIC_LOOP_KERNEL_CLOSED " ^ n ^ "\n")
+    else raise Fail ("ABI encoder dynamic array loop not kernel closed: " ^ n)
+  end) (DB.thms "abiEncoderArrayDynamicLoop");

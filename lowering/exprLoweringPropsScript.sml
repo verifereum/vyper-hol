@@ -18,7 +18,7 @@
 
 Theory exprLoweringProps
 Ancestors
-  exprLowering emitHelper compileEnv builtinSystem
+  exprLowering emitHelper compileEnv builtinSystem builtinSimple
   venomExecSemantics venomState venomInst venomInstProps
   vyperInterpreter vyperContext
   vyperState vyperValueOperation
@@ -3035,6 +3035,208 @@ rpt strip_tac >> first_assum irule)
   irule ci_mono_trans >> irule_at (Pos last) ci_mono_emit_void >> irule ci_mono_trans >> irule_at (Pos last) ci_mono_emit_op >> irule ci_mono_trans >> irule_at (Pos last) ci_mono_lower_value_cfn >> (conj_tac >- simp[]) >> irule ci_mono_lower_value_cfn >> simp[]
 QED
 
+Theorem ci_mono_lower_abi_encode[local]:
+  !ensure mid src info maxlen st.
+    ci_mono st (SND (lower_abi_encode ensure mid src info maxlen st))
+Proof
+  rpt gen_tac >> Cases_on `mid` >>
+  simp[builtinAbiTheory.lower_abi_encode_def, LET_THM] >>
+  rpt (FIRST [
+    CHANGED_TAC (simp[LET_THM, pairTheory.FORALL_PROD, pairTheory.UNCURRY_DEF,
+      ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return,
+      ci_mono_compile_alloc_buffer, cj 2 ci_mono_compile_abi_encode]),
+    gen_tac,
+    ho_match_mp_tac ci_mono_bind >> conj_tac,
+    ho_match_mp_tac ci_mono_ignore_bind >> conj_tac])
+QED
+
+Theorem ci_mono_lower_abi_decode[local]:
+  !src info minsz maxsz outsz st.
+    ci_mono st (SND (lower_abi_decode src info minsz maxsz outsz st))
+Proof
+  rpt gen_tac >> simp[builtinAbiTheory.lower_abi_decode_def, LET_THM] >>
+  rpt (FIRST [
+    CHANGED_TAC (simp[LET_THM, pairTheory.FORALL_PROD, pairTheory.UNCURRY_DEF,
+      ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return,
+      ci_mono_compile_alloc_buffer, cj 1 ci_mono_compile_abi_decode]),
+    gen_tac,
+    ho_match_mp_tac ci_mono_bind >> conj_tac,
+    ho_match_mp_tac ci_mono_ignore_bind >> conj_tac,
+    IF_CASES_TAC])
+QED
+
+Theorem ci_mono_compile_zero_words[local]:
+  !n base st. ci_mono st (SND (compile_zero_words base n st))
+Proof
+  Induct >> simp[compile_zero_words_def, ci_mono_comp_return, LET_THM] >>
+  rpt gen_tac >> ho_match_mp_tac ci_mono_ignore_bind >> conj_tac
+  >- simp[] >>
+  rpt gen_tac >> ho_match_mp_tac ci_mono_bind >> conj_tac
+  >- simp[ci_mono_emit_op] >> simp[ci_mono_emit_void]
+QED
+
+Theorem ci_mono_compile_builtin_empty_complex[local]:
+  !size has_length_word st.
+    ci_mono st (SND (compile_builtin_empty_complex size has_length_word st))
+Proof
+  rpt gen_tac >> simp[compile_builtin_empty_complex_def, LET_THM] >>
+  ho_match_mp_tac ci_mono_bind >> conj_tac
+  >- simp[ci_mono_compile_alloc_buffer] >>
+  rpt gen_tac >> simp[comp_bind_def, comp_return_def, LET_THM] >>
+  IF_CASES_TAC >> ho_match_mp_tac ci_mono_ignore_bind >> conj_tac >>
+  simp[ci_mono_emit_void, ci_mono_compile_zero_words, ci_mono_comp_return]
+QED
+
+(* Structural dispatcher steps use the interfaces of the emitted operations. *)
+val ci_mono_type_dispatch_rws =
+  [ci_mono_lower_abi_encode, ci_mono_lower_abi_decode,
+   ci_mono_lower_value_cfn, ci_mono_unwrap_value,
+   ci_mono_compile_type_convert, ci_mono_compile_extract32,
+   ci_mono_compile_clamp_extract32, ci_mono_compile_multi_exprs,
+   ci_mono_compile_alloc_buffer, ci_mono_compile_store_abi_tuple,
+   ci_mono_compile_builtin_empty_complex, ci_mono_emit_void, ci_mono_emit_op];
+
+fun CI_MONO_DISPATCH_TAC rws =
+  rpt (FIRST [
+    CHANGED_TAC (simp (ci_mono_as_stack_val :: ci_mono_as_ptr_val ::
+      ci_mono_refl :: LET_THM :: pairTheory.UNCURRY :: rws)),
+    FIRST (map (fn th => irule ci_mono_trans >>
+      irule_at (Pos last) th >> simp[]) rws),
+    irule ci_mono_trans >> first_assum (irule_at (Pos last)) >> simp[],
+    BasicProvers.TOP_CASE_TAC]);
+
+val CI_MONO_TYPE_DISPATCH_TAC = CI_MONO_DISPATCH_TAC ci_mono_type_dispatch_rws;
+
+Theorem ci_mono_compile_type_builtin_body[local]:
+  !cfn cenv vv_ty ty tb ret_ty args st.
+    (!cenv' ty' e' st'. ci_mono st' (SND (cfn cenv' ty' e' st'))) ==>
+    ci_mono st (SND
+      (compile_type_builtin_dispatch_body cfn cenv vv_ty ty tb ret_ty args st))
+Proof
+  rpt gen_tac >> strip_tac >> Cases_on `tb` >>
+  simp[compile_type_builtin_dispatch_body_def, LET_THM, pairTheory.UNCURRY] >>
+  CI_MONO_TYPE_DISPATCH_TAC
+QED
+
+Theorem ci_mono_compile_make_tuple_cfn[local]:
+  !es cfn cenv buf offset st.
+    (!cenv' ty' e' st'. ci_mono st' (SND (cfn cenv' ty' e' st'))) ==>
+    ci_mono st (SND (compile_make_tuple cfn cenv es buf offset st))
+Proof
+  Induct_on `es` >> rpt gen_tac >> strip_tac
+  >- simp[compile_make_tuple_def, ci_mono_comp_return] >>
+  simp[Once compile_make_tuple_def, LET_THM] >>
+  ho_match_mp_tac ci_mono_bind >> conj_tac
+  >- (rpt strip_tac >> irule ci_mono_lower_value_cfn >> simp[]) >>
+  rpt strip_tac >> ho_match_mp_tac ci_mono_bind >> conj_tac
+  >- simp[ci_mono_emit_op] >>
+  rpt strip_tac >> ho_match_mp_tac ci_mono_ignore_bind >> conj_tac
+  >- (rpt IF_CASES_TAC >>
+      simp[ci_mono_emit_void, ci_mono_compile_store_bytestring]) >>
+  rpt strip_tac >> first_x_assum irule >> simp[]
+QED
+
+Theorem ci_mono_compile_modular_names[local]:
+  (!ce rt aty a bty b mty m st.
+    ci_mono st (SND (compile_addmod_names ce rt aty a bty b mty m st))) /\
+  (!ce rt aty a bty b mty m st.
+    ci_mono st (SND (compile_mulmod_names ce rt aty a bty b mty m st))) /\
+  (!ce rt aty a bty b st.
+    ci_mono st (SND (compile_powmod256_names ce rt aty a bty b st)))
+Proof
+  rpt conj_tac >> rpt gen_tac >>
+  simp[compile_addmod_names_def, compile_mulmod_names_def,
+       compile_powmod256_names_def, LET_THM, pairTheory.UNCURRY] >>
+  CI_MONO_DISPATCH_TAC [ci_mono_compile_name_vv, ci_mono_unwrap_value,
+    ci_mono_compile_addmod, ci_mono_compile_mulmod, ci_mono_compile_pow_mod256]
+QED
+
+Theorem ci_mono_compile_ec_points[local]:
+  (!p1 p2 st. ci_mono st (SND (compile_ecadd_points p1 p2 st))) /\
+  (!p scalar st. ci_mono st (SND (compile_ecmul_point p scalar st)))
+Proof
+  rpt conj_tac >> rpt gen_tac >>
+  simp[builtinMiscTheory.compile_ecadd_points_def,
+       builtinMiscTheory.compile_ecmul_point_def, LET_THM] >>
+  rpt (FIRST [
+    CHANGED_TAC (simp[LET_THM, pairTheory.FORALL_PROD, pairTheory.UNCURRY_DEF,
+      ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return,
+      ci_mono_compile_alloc_buffer]),
+    gen_tac,
+    ho_match_mp_tac ci_mono_bind >> conj_tac,
+    ho_match_mp_tac ci_mono_ignore_bind >> conj_tac])
+QED
+
+val ci_mono_builtin_dispatch_rws = CONJUNCTS ci_mono_compile_ec_points @
+  ci_mono_type_dispatch_rws @
+  [ci_mono_compile_list_membership_in, ci_mono_compile_list_membership_notin,
+   ci_mono_compile_var_array_membership, ci_mono_compile_bytestring_hash,
+   ci_mono_compile_binop, ci_mono_compile_invert, ci_mono_compile_neg_helper,
+   ci_mono_compile_builtin_abs, ci_mono_compile_env_var, ci_mono_compile_acc_cfn,
+   ci_mono_compile_keccak256_bytes, ci_mono_compile_keccak256_bytesm,
+   ci_mono_compile_keccak256_word, ci_mono_compile_sha256_bytes,
+   ci_mono_compile_sha256_bytesm, ci_mono_compile_sha256_word,
+   ci_mono_compile_builtin_calldatasize, ci_mono_compile_builtin_len,
+   ci_mono_compile_blockhash, ci_mono_compile_blobhash,
+   ci_mono_compile_addmod, ci_mono_compile_mulmod, ci_mono_compile_ceil,
+   ci_mono_compile_floor, ci_mono_compile_pow_mod256, ci_mono_compile_ecrecover,
+   ci_mono_compile_ecadd, ci_mono_compile_ecmul, ci_mono_compile_concat_cfn,
+   ci_mono_compile_slice_calldata, ci_mono_compile_slice_code,
+   ci_mono_compile_slice_out_buf, ci_mono_compile_slice_extcode,
+   ci_mono_compile_slice_data, ci_mono_compile_slice_memory,
+   ci_mono_compile_bytestring_src, ci_mono_compile_uint2str,
+   ci_mono_compile_as_wei_value_decimal, ci_mono_compile_as_wei_value_int,
+   ci_mono_compile_make_tuple_cfn, ci_mono_compile_make_array_cfn];
+
+Theorem ci_mono_compile_builtin_body[local]:
+  !cfn cenv ret_ty ty bi args st.
+    (!cenv' ty' e' st'. ci_mono st' (SND (cfn cenv' ty' e' st'))) ==>
+    ci_mono st (SND
+      (compile_builtin_dispatch_body cfn cenv ret_ty ty bi args st))
+Proof
+  rpt gen_tac >> strip_tac >> Cases_on `bi` >>
+  simp[compile_builtin_dispatch_body_def, LET_THM, pairTheory.UNCURRY] >>
+  CI_MONO_DISPATCH_TAC ci_mono_builtin_dispatch_rws
+QED
+
+Theorem ci_mono_compile_expr_body[local]:
+  !cfn bfn tfn cenv ty e st.
+    (!ce t child sa. ci_mono sa (SND (cfn ce t child sa))) /\
+    (!ce rt t bi args sa. ci_mono sa (SND (bfn ce rt t bi args sa))) /\
+    (!ce vt t tb rt args sa. ci_mono sa (SND (tfn ce vt t tb rt args sa))) ==>
+    ci_mono st (SND (compile_expr_body cfn bfn tfn cenv ty e st))
+Proof
+  rpt gen_tac >> strip_tac >> Cases_on `e` >>
+  simp[compile_expr_body_def, LET_THM, pairTheory.UNCURRY] >>
+  CI_MONO_DISPATCH_TAC (CONJUNCTS ci_mono_compile_modular_names @
+    [ci_mono_compile_literal_vv, ci_mono_compile_name_vv,
+     ci_mono_compile_subscript_cfn, ci_mono_compile_attribute_cfn,
+     ci_mono_compile_struct_lit_cfn, ci_mono_compile_call,
+     ci_mono_compile_dynarray_pop, ci_mono_compile_alloc_buffer,
+     ci_mono_fresh_var, ci_mono_fresh_label, ci_mono_emit_inst,
+     ci_mono_new_block, ci_mono_lower_value_cfn])
+QED
+
+fun assert_abi_monotonicity_closed (n,th) =
+  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
+    if null (Thm.hyp th) andalso null axioms andalso
+       List.all (fn s => s = "DISK_THM") oracles then
+      print ("ABI_BUILTIN_MONOTONICITY_KERNEL_CLOSED " ^ n ^ "\n")
+    else raise Fail ("ABI builtin monotonicity not kernel closed: " ^ n)
+  end;
+
+val () = List.app assert_abi_monotonicity_closed
+  [("ci_mono_lower_abi_encode", ci_mono_lower_abi_encode),
+   ("ci_mono_lower_abi_decode", ci_mono_lower_abi_decode),
+   ("ci_mono_compile_zero_words", ci_mono_compile_zero_words),
+   ("ci_mono_compile_builtin_empty_complex", ci_mono_compile_builtin_empty_complex),
+   ("ci_mono_compile_type_builtin_body", ci_mono_compile_type_builtin_body),
+   ("ci_mono_compile_make_tuple_cfn", ci_mono_compile_make_tuple_cfn),
+   ("ci_mono_compile_modular_names", ci_mono_compile_modular_names),
+   ("ci_mono_compile_ec_points", ci_mono_compile_ec_points),
+   ("ci_mono_compile_builtin_body", ci_mono_compile_builtin_body),
+   ("ci_mono_compile_expr_body", ci_mono_compile_expr_body)];
+
 Theorem compile_expr_ci_mono[local]:
   (∀ cenv ty e st. ci_mono st (SND (compile_expr cenv ty e st))) ∧
   (∀ cenv ret_ty ty bi args st.
@@ -3042,8 +3244,21 @@ Theorem compile_expr_ci_mono[local]:
   (∀ cenv vv_ty ty tb ret_ty args st.
     ci_mono st (SND (compile_type_builtin_dispatch cenv vv_ty ty tb ret_ty args st)))
 Proof
-  cheat
+  ho_match_mp_tac compile_expr_ind >> rpt conj_tac >> rpt gen_tac >> strip_tac >>
+  ONCE_REWRITE_TAC [compile_expr_raw_def] >> simp_tac bool_ss [] >>
+  FIRST [irule ci_mono_compile_expr_body, irule ci_mono_compile_builtin_body,
+         irule ci_mono_compile_type_builtin_body] >>
+  rpt conj_tac >> rpt gen_tac >>
+  simp_tac bool_ss [exprCallBoundsTheory.expr_child_callback_def,
+    exprCallBoundsTheory.builtin_child_callback_def,
+    exprCallBoundsTheory.type_child_callback_def] >>
+  IF_CASES_TAC >>
+  simp[exprCallBoundsTheory.invalid_expr_call_def, LET_THM, pairTheory.UNCURRY,
+       ci_mono_emit_inst] >>
+  first_x_assum irule >> simp[]
 QED
+
+val () = assert_abi_monotonicity_closed ("compile_expr_ci_mono", compile_expr_ci_mono);
 
 (* Derive: lower_value compile_expr preserves ci_mono *)
 Theorem ci_mono_lower_value_compile_expr[local]:
@@ -3284,4 +3499,7 @@ Proof
     by (irule ci_mono_same_blocks_isPREFIX >> simp[]) >>
   gvs[GSYM prefix_drop_equiv, emitted_insts_def]
 QED
+
+val () = assert_abi_monotonicity_closed
+  ("compile_expr_extends_insts", compile_expr_extends_insts);
 

@@ -35,7 +35,6 @@ Theorem abi_bulk_copy_canonical_layout:
   ~is_abi_dynamic cenv.ce_struct_fields ty /\
   static_layout_compatible cenv tenv ty tv /\
   value_has_type tv v /\ vyper_to_abi tenv ty v = SOME av /\
-  dst + type_memory_bytes cenv ty <= LENGTH mem /\
   mem_bytes_at dst (type_memory_bytes cenv ty) mem =
     enc (vyper_to_abi_type tenv ty) av ==>
   val_in_memory tv v dst mem

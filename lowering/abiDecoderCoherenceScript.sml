@@ -16,10 +16,13 @@ Definition abi_decoder_header_def:
       static_length (vyper_to_abi_type env ty) = type_memory_size tv)
 End
 
+(* Bounds needed for descriptor and layout agreement. evaluate_type permits
+   fixed bytes of length zero, including unused children of empty arrays.
+   ABI value validity is checked separately by has_type in decoder metadata. *)
 Definition abi_decoder_scalar_valid_def:
   abi_decoder_scalar_valid (UintT n) = (0 < n /\ n <= 256) /\
   abi_decoder_scalar_valid (IntT n) = (0 < n /\ n <= 256) /\
-  abi_decoder_scalar_valid (BytesT (Fixed n)) = (0 < n /\ n <= 32) /\
+  abi_decoder_scalar_valid (BytesT (Fixed n)) = (n <= 32) /\
   abi_decoder_scalar_valid _ = T
 End
 
@@ -150,6 +153,43 @@ Theorem abi_decoder_flag_inconsistent_excluded:
   ~abi_decoder_coherent ce env sf (FlagT nsid) tv
 Proof
   simp[abi_decoder_coherent_flag_iff]
+QED
+
+Theorem abi_decoder_zero_fixed_bytes_probe:
+  evaluate_type env (BaseT (BytesT (Fixed 0))) =
+    SOME (BaseTV (BytesT (Fixed 0))) /\
+  abi_decoder_coherent ce env sf (BaseT (BytesT (Fixed 0)))
+    (BaseTV (BytesT (Fixed 0))) /\
+  (!av. ~has_type (Bytes (SOME 0)) av)
+Proof
+  conj_tac >- simp[vyperValueTheory.evaluate_type_def] >>
+  conj_tac
+  >- simp[abi_decoder_coherent_base_iff, abi_decoder_scalar_valid_def,
+       abi_decoder_header_def, vyperValueTheory.evaluate_type_def,
+       type_memory_size_def, type_memory_bytes_def, is_abi_dynamic_def,
+       abi_embedded_static_size_def, abi_static_size_def,
+       abi_member_head_size_def, is_dynamic_def, static_length_def] >>
+  Cases >> simp[has_type_def, valid_bytes_bound_def]
+QED
+
+Theorem abi_decoder_empty_zero_fixed_bytes_array_probe:
+  evaluate_type env (ArrayT (BaseT (BytesT (Fixed 0))) (Dynamic 1)) =
+    SOME (ArrayTV (BaseTV (BytesT (Fixed 0))) (Dynamic 1)) /\
+  abi_decoder_coherent ce env sf
+    (ArrayT (BaseT (BytesT (Fixed 0))) (Dynamic 1))
+    (ArrayTV (BaseTV (BytesT (Fixed 0))) (Dynamic 1)) /\
+  has_type (Array NONE (Bytes (SOME 0))) (ListV [])
+Proof
+  `dimindex (:256) = 256` by CONV_TAC fcpLib.INDEX_CONV >>
+  `evaluate_type env (ArrayT (BaseT (BytesT (Fixed 0))) (Dynamic 1)) =
+    SOME (ArrayTV (BaseTV (BytesT (Fixed 0))) (Dynamic 1))` by
+    simp[vyperValueTheory.evaluate_type_def, vyperValueTheory.type_slot_size_def,
+         wordsTheory.dimword_def] >>
+  simp[abi_decoder_coherent_array_iff, abi_decoder_zero_fixed_bytes_probe,
+       abi_decoder_header_def, type_memory_size_def, type_memory_bytes_def,
+       is_abi_dynamic_def, vyper_to_abi_type_def, abi_embedded_static_size_def,
+       abi_static_size_def, abi_member_head_size_def, is_dynamic_def,
+       has_type_def, valid_length_def, wordsTheory.dimword_def]
 QED
 
 Theorem abi_decoder_flag256_probe:

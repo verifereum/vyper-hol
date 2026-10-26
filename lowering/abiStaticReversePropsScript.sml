@@ -3,6 +3,7 @@ Theory abiStaticReverseProps
 Ancestors abiStaticListProps abiStaticAggregateProps abiStaticPrimitiveProps
   abiStaticSparseProps abiStaticLayoutProps valueEncoding vyperTyping vyperABI
   contractABI compileEnv list rich_list
+  valueEncodingTyping valueEncodingProps valueEncodingProofs
 
 Theorem static_sparse_memory_from_members[local]:
   !sp. (!k v. MEM (k,v) sp ==>
@@ -68,7 +69,7 @@ Proof
   Cases_on `h'` >> gvs[value_has_type_def, type_memory_size_def] >> metis_tac[]
 QED
 
-Theorem static_canonical_memory_layout:
+Theorem static_canonical_memory_layout_bounded[local]:
   !cenv tenv ty tv. static_layout_compatible cenv tenv ty tv ==>
   !v av off mem.
     value_has_type tv v /\ vyper_to_abi tenv ty v = SOME av /\
@@ -128,6 +129,32 @@ Proof
   >> gvs[AllCaseEqs(), type_memory_size_def, Excl "enc_def"]
   >> irule static_children_memory >> simp[]
   >> qexistsl_tac [`avs`, `cenv`, `tenv \\ nsid`, `MAP SND args`] >> simp[]
+QED
+
+(* Padded observations do not require the canonical bytes to be physically
+   present: extending memory with zero bytes preserves every observed window. *)
+Theorem static_canonical_memory_layout:
+  !cenv tenv ty tv. static_layout_compatible cenv tenv ty tv ==>
+  !v av off mem.
+    value_has_type tv v /\ vyper_to_abi tenv ty v = SOME av /\
+    mem_bytes_at off (type_memory_size tv) mem =
+      enc (vyper_to_abi_type tenv ty) av ==>
+    val_in_memory tv v off mem
+Proof
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  qabbrev_tac `padded = mem ++ REPLICATE (off + type_memory_size tv) 0w` >>
+  `off + type_memory_size tv <= LENGTH padded` by simp[Abbr `padded`] >>
+  `mem_bytes_at off (type_memory_size tv) padded =
+    enc (vyper_to_abi_type tenv ty) av` by
+    simp[Abbr `padded`, mem_bytes_at_append_zero] >>
+  `val_in_memory tv v off padded` by
+    (drule static_canonical_memory_layout_bounded >>
+     disch_then (qspecl_then [`v`, `av`, `off`, `padded`] mp_tac) >>
+     asm_simp_tac bool_ss []) >>
+  `val_wf tv v` by (drule_all (cj 1 value_has_type_val_wf) >> simp[]) >>
+  irule val_in_memory_relocate >> asm_simp_tac bool_ss [] >>
+  qexistsl_tac [`padded`, `type_memory_size tv`, `off`] >>
+  simp[Abbr `padded`, mem_bytes_at_append_zero]
 QED
 
 (* Audit the entire export surface, including dependency-propagated tags. *)

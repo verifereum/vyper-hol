@@ -116,6 +116,15 @@ Definition dec_info_needs_clamp_def:
     (dec_info_needs_clamp ei ∨ dec_infos_need_clamp rest)
 End
 
+(* An empty fixed array has no payload to read, even when its ABI type is
+   dynamic. Its parent still validates and advances past the ABI head slot. *)
+Definition dec_info_needs_offset_def:
+  dec_info_needs_offset (DecPrimWord c) = F /\
+  dec_info_needs_offset (DecBytestring n) = T /\
+  dec_info_needs_offset (DecDynArray ei a m d n) = T /\
+  dec_info_needs_offset (DecComplex d elems) = (d /\ elems <> [])
+End
+
 (* ===== Element Pointer Navigation ===== *)
 (* Python _get_element_ptr always materializes the member pointer with ADD,
    including the first member at offset zero. *)
@@ -517,10 +526,7 @@ Definition compile_abi_decode_to_buf_def:
     (return () : unit compiler) ∧
   compile_abi_decode_complex_elems dst src_op load_opc hi_op
     ((ei, abi_sz, mem_sz)::rest) abi_offset vyper_offset =
-    (let is_dyn = (case ei of DecBytestring _ => T
-                             | DecDynArray _ _ _ _ _ => T
-                             | DecComplex is_d _ => is_d
-                             | _ => F) in
+    (let is_dyn = dec_info_needs_offset ei in
      do elem_src <-
           compile_getelemptr_abi src_op is_dyn abi_offset load_opc hi_op;
         elem_dst <- emit_op ADD [dst; Lit (n2w vyper_offset)];
@@ -534,11 +540,7 @@ Definition compile_abi_decode_to_buf_def:
     (load_opc:opcode) (hi_op:operand)
     (elem_info:abi_dec_info) (elem_abi_sz:num) (elem_mem_sz:num)
     (i_ptr:operand) (cnt:operand) =
-    (let is_dyn_elem = (case elem_info of
-            DecBytestring _ => T
-          | DecDynArray _ _ _ _ _ => T
-          | DecComplex T _ => T
-          | _ => F) in
+    (let is_dyn_elem = dec_info_needs_offset elem_info in
      do hdr_lbl <- fresh_label "dec_dyn_hdr";
         body_lbl <- fresh_label "dec_dyn_body";
         exit_lbl <- fresh_label "dec_dyn_exit";

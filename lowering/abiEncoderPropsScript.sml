@@ -5,8 +5,8 @@
  *   compile_abi_int_clamp_correct       — int clamping either accepts or reverts on out-of-range
  *   compile_abi_bytes_clamp_correct   — bytes clamping either accepts or reverts on dirty high bits
  *   compile_abi_encode_static_correct — static type writes word to dst
- *   compile_abi_decode_static_correct — static type reads + clamps
- *   compile_abi_encode_to_buf_correct — recursive ABI encode correctness (single-block)
+ *   compile_abi_decode_static_correct — valid primitive read, clamp and exact word copy
+ *   compile_abi_encode_to_buf_correct — complete recursive encoder CFG correctness
  *   compile_get_element_ptr_zero       — zero-offset pointer ADD preserves value
  *   compile_get_element_ptr_correct   — get_element_ptr adds offset to parent pointer
  *   val_in_memory_prim_enc            — primitive val_in_memory matches ABI encoding
@@ -23,6 +23,7 @@ Ancestors
   abiEncoder compileEnv
   venomExecSemantics venomState venomInst venomMemProps
   valueEncoding valueEncodingProps
+  abiEncoderCorrect abiEncoderCorrectRecursive abiDecoderClampedWord
   vyperABI vyperTyping contractABI
 Libs
   dep_rewrite wordsLib
@@ -234,7 +235,6 @@ Proof
     gvs[Abbr`nv`, fresh_vars_wrt_def]) >>
   conj_tac >- (
     rpt strip_tac >>
-    irule eval_operand_mstore >>
     irule eval_operand_update_fresh >>
     gvs[Abbr`nv`] >>
     goal_assum $ drule_at Any >> rw[] ) >>
@@ -259,6 +259,9 @@ Proof
 QED
 
 (* Static ABI decoding: MLOAD + clamp *)
+(* Retired statement: arbitrary load opcodes, an undefined destination and a
+   callback with no code-extension guarantee do not imply safe decoding.
+   The original unproved statement is retained here for audit history.
 Theorem compile_abi_decode_static_correct:
   ∀ src_op dst_op load_opc clamp_fn ss st st' src_w.
     compile_abi_decode_static src_op dst_op load_opc clamp_fn st = ((), st') ∧
@@ -283,6 +286,26 @@ Theorem compile_abi_decode_static_correct:
       run_inst_seq (emitted_insts st st') ss = Abort Revert_abort ss'
 Proof
   cheat
+QED
+*)
+
+Theorem compile_abi_decode_static_correct:
+  compile_abi_decode_static src dst opc
+    (\v. compile_abi_clamp_basetype v clamp) st = ((),st') /\
+  abi_decode_source_opcode opc /\ eval_operand src s = SOME p /\
+  eval_operand dst s = SOME (n2w d) /\ d < dimword (:256) /\
+  abi_decoder_clamp_valid clamp (abi_decode_load opc p s) /\
+  fresh_vars_wrt st s ==>
+  ?t. run_inst_seq (emitted_insts st st') s = OK t /\
+    mem_word_at d t.vs_memory = abi_decode_load opc p s /\
+    abi_decode_frame d 32 s t /\ fresh_vars_wrt st' t /\
+    (!op w. eval_operand op s = SOME w ==> eval_operand op t = SOME w) /\
+    inst_extends st st'
+Proof
+  strip_tac >>
+  `compile_abi_decode_to_buf dst src opc (Lit 0w) (DecPrimWord clamp) st = ((),st')`
+    by simp[compile_abi_decode_to_buf_def] >>
+  drule_all abi_decoder_clamped_word_sequence >> simp[]
 QED
 
 (* ===== ABI Encoding / Memory Correspondence ===== *)
@@ -389,6 +412,13 @@ Definition single_block_enc_info_def:
     EVERY (λ(ei,_,_,_). single_block_enc_info ei) elems
 End
 
+(* ===== Recursive ABI Encode Correctness ===== *)
+
+(* Retired single-block proof attempt, preserved in full. Its val_in_memory
+   premise observes stored sparse-array keys only, whereas AbiCopy reads every
+   slot; abiEncoderSourceChecks proves a typed counterexample. It also lacks
+   source/output separation. The proved replacement below uses complete source
+   windows and covers the actual recursive CFG, including dynamic arrays.
 (* ===== Recursive ABI Encode Correctness (single-block) ===== *)
 
 (* Mutual induction over compile_abi_encode_child / compile_abi_encode_to_buf /
@@ -737,6 +767,12 @@ Resume compile_abi_encode_to_buf_correct[dyn_loop]:
 QED
 
 Finalise compile_abi_encode_to_buf_correct
+*)
+
+Theorem compile_abi_encode_to_buf_correct =
+  SIMP_RULE bool_ss [abiEncoderCorrectTheory.abi_encoder_correct_def]
+    abiEncoderCorrectRecursiveTheory.abi_encoder_correct_translation
+
 
 (* ===== Element Pointer ===== *)
 
@@ -782,3 +818,11 @@ conj_tac >- (
 simp[eval_operand_update_var, wordsTheory.word_add_n2w]
 QED
 
+
+val () = List.app (fn (n,th) =>
+  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
+    if null (Thm.hyp th) andalso null axioms andalso
+       List.all (fn s => s = "DISK_THM") oracles then
+      print ("ABI_ENCODER_PROPS_KERNEL_CLOSED " ^ n ^ "\n")
+    else raise Fail ("ABI encoder public theorem not kernel closed: " ^ n)
+  end) (DB.thms "abiEncoderProps");

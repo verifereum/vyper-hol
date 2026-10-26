@@ -3,13 +3,14 @@
    - metadata is root agreement; descendants still need compatibility closure;
    - reservation constrains existing ALLOCA mappings and the initial frontier,
      not the total budget of future fresh sites or repeated loop executions;
-   - canonical word/load agreement remains explicit in the word fragment;
+   - canonical word/load agreement is derived below for Uint256;
    - singleton Bytes restrictions validate one consumer, not general member
      head/tail closure. Allocation separation at lower_abi_decode and recursive
      capacity accounting remain downstream proof obligations. *)
 Theory abiDecoderTypedContract
 Ancestors
   abiDecoderFrame abiDecodeRanges abiWrappedDecodeProps abiStaticLayoutProps
+  abiCanonicalLoad vyperABI contractABI byte
   abiDecoderContract fragExec exprLoweringProps vyperTyping context
   abiEncoder emitHelper valueEncoding abiBoundaryChecks compileEnv
   emitHelperProps valueEncodingProps venomExecSemantics venomExecProofs venomInst
@@ -80,17 +81,37 @@ Proof
      abi_footprint_disjoint_def] >> metis_tac[]
 QED
 
-(* The extra load agreement is explicit: canonical byte/load adequacy for
-   arbitrary typed words is not established by this execution probe. *)
+(* ABI-to-Vyper conversion followed by encoding is the valid inverse direction;
+   it identifies the canonical word without assuming a source-value roundtrip. *)
+Theorem abi_decoder_uint256_canonical_load:
+  abi_decoder_pre ce env (BaseT (UintT 256)) (BaseTV (UintT 256))
+    (DecPrimWord NoClamp) av (IntV (&w2n w)) st last src dst opc hi sb d b cap s ==>
+  abi_decode_load opc (n2w sb : bytes32) s = w
+Proof
+  pure_rewrite_tac[abi_decoder_pre_def, abi_decoder_metadata_def,
+                   abi_decoder_ranges_def] >> rpt strip_tac >>
+  `av = NumV (w2n w)` by
+    (drule_all (cj 1 abi_to_vyper_vyper_to_abi) >>
+     simp[vyper_to_abi_def, vyper_to_abi_base_def]) >>
+  gvs[vyper_to_abi_type_def, enc_def, enc_number_def] >>
+  `sb < dimword (:256)` by decide_tac >>
+  asm_simp_tac bool_ss [abi_decode_load_bytes] >>
+  asm_rewrite_tac[] >> irule word_of_bytes_word_to_bytes >>
+  simp[dividesTheory.divides_def]
+QED
+
 Theorem abi_decoder_typed_word_sequence:
   compile_abi_decode_to_buf dst src opc hi (DecPrimWord NoClamp) st = ((),st') /\
   abi_decoder_pre ce env (BaseT (UintT 256)) (BaseTV (UintT 256))
-    (DecPrimWord NoClamp) av (IntV (&w2n w)) st last src dst opc hi sb d b cap s /\
-  abi_decode_load opc (n2w sb : bytes32) s = w ==>
+    (DecPrimWord NoClamp) av (IntV (&w2n (w:bytes32))) st last src dst opc hi sb d b cap s ==>
   ?t. run_inst_seq (emitted_insts st st') s = OK t /\
       abi_decoder_post (BaseTV (UintT 256)) (IntV (&w2n w)) st'
         d 32 b cap s t
 Proof
+  strip_tac >>
+  `abi_decode_load opc (n2w sb : bytes32) s = w` by
+    (drule_all abi_decoder_uint256_canonical_load >> simp[]) >>
+  qhdtm_x_assum `abi_decoder_pre` mp_tac >>
   pure_rewrite_tac[abi_decoder_pre_def, abi_decoder_ranges_def] >> rpt strip_tac >>
   `d < dimword (:256)` by decide_tac >>
   drule_all abi_decode_word_sequence >> strip_tac >>
@@ -99,7 +120,7 @@ Proof
   irule abi_decoder_frame_from_output >> simp[]
 QED
 
-Theorem abi_decoder_word_shape[local]:
+Theorem abi_decoder_word_shape:
   compile_abi_decode_to_buf dst src opc hi (DecPrimWord NoClamp) st = ((),st') /\
   abi_decode_source_opcode opc ==>
   st'.cs_blocks = st.cs_blocks /\ st'.cs_current_bb = st.cs_current_bb /\
@@ -123,8 +144,7 @@ Theorem abi_decoder_typed_word_fragment:
   compile_abi_decode_to_buf dst src opc hi (DecPrimWord NoClamp) st = ((),st') ==>
   frag_exec ctx st st'
     (\s. abi_decoder_pre ce env (BaseT (UintT 256)) (BaseTV (UintT 256))
-       (DecPrimWord NoClamp) av (IntV (&w2n w)) st last src dst opc hi sb d b cap s /\
-       abi_decode_load opc (n2w sb : bytes32) s = w)
+       (DecPrimWord NoClamp) av (IntV (&w2n (w:bytes32))) st last src dst opc hi sb d b cap s)
     (\t. ?s. abi_decoder_pre ce env (BaseT (UintT 256)) (BaseTV (UintT 256))
        (DecPrimWord NoClamp) av (IntV (&w2n w)) st last src dst opc hi sb d b cap s /\
        abi_decode_load opc (n2w sb : bytes32) s = w /\
@@ -136,6 +156,8 @@ Proof
   strip_tac >> drule_all abi_decoder_word_shape >> strip_tac >>
   irule frag_exec_run_inst_seq >> simp[] >> rpt strip_tac >>
   drule_all abi_decoder_typed_word_sequence >> strip_tac >>
+  `abi_decode_load opc (n2w sb : bytes32) s = w` by
+    (drule_all abi_decoder_uint256_canonical_load >> simp[]) >>
   qexists_tac `t` >> simp[] >> qexists_tac `s` >>
   gvs[abi_decoder_post_def, fresh_vars_wrt_def,
       venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def,

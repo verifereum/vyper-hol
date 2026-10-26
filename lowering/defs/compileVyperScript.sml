@@ -27,6 +27,7 @@ Ancestors
   jumptableUtils
   vyperContext
   vyperEvent
+  valueEncoding
   compileEnv
   vyperAST
   byte
@@ -56,22 +57,27 @@ Termination
 End
 
 Definition build_struct_fields_one_def:
-  build_struct_fields_one sft (args : (string # type) list) =
-    MAP (λ(name, ty). (name, ty, type_mem_bytes sft ty)) args
+  build_struct_fields_one tenv (args : (string # type) list) =
+    MAP (λ(name, ty).
+      (name, ty, case evaluate_type tenv ty of
+                   SOME tv => type_memory_size tv | NONE => 0)) args
 End
 
+(* Field sizes use the complete semantic environment, so a reference to a
+   later struct declaration has the same layout as an earlier reference.
+   Invalid field types are rejected by check_contract before compilation. *)
 Definition build_struct_fields_map_def:
-  build_struct_fields_map [] (sft : (string, (string # type # num) list) fmap) = sft ∧
-  build_struct_fields_map (top :: rest) sft =
+  build_struct_fields_map tenv [] (sft : (string, (string # type # num) list) fmap) = sft ∧
+  build_struct_fields_map tenv (top :: rest) sft =
     case top of
       StructDecl sname args =>
-        build_struct_fields_map rest
-          (sft |+ (sname, build_struct_fields_one (get_struct_fields sft) args))
-    | _ => build_struct_fields_map rest sft
+        build_struct_fields_map tenv rest
+          (sft |+ (sname, build_struct_fields_one tenv args))
+    | _ => build_struct_fields_map tenv rest sft
 End
 
 Definition make_struct_fields_map_def:
-  make_struct_fields_map tops = build_struct_fields_map tops FEMPTY
+  make_struct_fields_map tops = build_struct_fields_map (type_env tops) tops FEMPTY
 End
 
 (* ===== Simple AST Extractors ===== *)

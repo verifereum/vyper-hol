@@ -86,8 +86,8 @@ QED
 (* Every lookup in the actual metadata builder has a source declaration,
    or is inherited from its input map. Field sizes need not be guessed. *)
 Theorem built_struct_fields_origin:
-  !tops sf name fields.
-  FLOOKUP (build_struct_fields_map tops sf) name = SOME fields ==>
+  !tops env sf name fields.
+  FLOOKUP (build_struct_fields_map env tops sf) name = SOME fields ==>
   FLOOKUP sf name = SOME fields \/
   ?args. MEM (StructDecl name args) tops /\
          MAP (FST o SND) fields = MAP SND args
@@ -171,12 +171,12 @@ Theorem built_struct_fields_every:
   FEVERY (λ(name,fields). EVERY (P o FST o SND) fields) sf /\
   (!name args. MEM (StructDecl name args) tops ==> EVERY (P o SND) args) ==>
   FEVERY (λ(name,fields). EVERY (P o FST o SND) fields)
-    (build_struct_fields_map tops sf)
+    (build_struct_fields_map env tops sf)
 Proof
   simp[FEVERY_DEF] >> rpt strip_tac >>
-  rename1 `name IN FDOM (build_struct_fields_map tops sf)` >>
-  `FLOOKUP (build_struct_fields_map tops sf) name =
-   SOME ((build_struct_fields_map tops sf) ' name)` by simp[FLOOKUP_DEF] >>
+  rename1 `name IN FDOM (build_struct_fields_map env tops sf)` >>
+  `FLOOKUP (build_struct_fields_map env tops sf) name =
+   SOME ((build_struct_fields_map env tops sf) ' name)` by simp[FLOOKUP_DEF] >>
   drule built_struct_fields_origin >> strip_tac
   >- (fs[FLOOKUP_DEF] >>
       qpat_x_assum `sf ' name = _` (SUBST1_TAC o SYM) >>
@@ -213,3 +213,11 @@ Proof
   simp[build_compile_env_ce_struct_fields] >> strip_tac >>
   irule make_struct_fields_map_acyclic >> simp[]
 QED
+
+val () = List.app (fn (n,th) =>
+  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
+    if null (Thm.hyp th) andalso null axioms andalso
+       List.all (fn s => s = "DISK_THM") oracles then
+      print ("TYPED_COPY_METADATA_KERNEL_CLOSED " ^ n ^ "\n")
+    else raise Fail ("Typed-copy metadata fact not kernel closed: " ^ n)
+  end) (DB.thms "typedCopyMetadata");
