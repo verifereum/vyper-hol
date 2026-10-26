@@ -2673,12 +2673,13 @@ Proof
   drule_all abi_enc_plan_static >> strip_tac >> gvs[]
   >- (drule_all abi_enc_plan_prim_size >> strip_tac >>
       drule_all compile_abi_encode_prim_abi_frag >>
-      disch_then (qspecl_then [`ctx`, `R`] accept_tac)) >>
+      disch_then (qspecl_then [`ctx`, `R`] ACCEPT_TAC)) >>
   `n = type_memory_size tv` by
     (qpat_x_assum `abi_enc_plan env ty (AbiCopy n)` mp_tac >>
      simp[Once abi_enc_plan_cases] >> metis_tac[]) >>
   gvs[] >> irule compile_abi_encode_copy_abi_frag >>
-  goal_assum drule >> simp[]
+  conj_tac >- simp[] >>
+  qexistsl_tac [`dst`, `src`, `src_w`, `tv`, `v`] >> simp[]
 QED
 
 Theorem enc_bytes_memory_layout:
