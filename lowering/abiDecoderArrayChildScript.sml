@@ -2,7 +2,7 @@
 Theory abiDecoderArrayChild
 Ancestors
   abiDecoderCoherence abiDecoderTypedContract abiCanonicalArrayLoad abiDecodeRanges
-  abiDecoderWordTyped abiDecoderLayout
+  abiDecoderWordTyped abiDecoderLayout vyperABIRoundtrip
   vyperABI vyperTyping vyperValue contractABI compileEnv valueEncoding words arithmetic list rich_list
 Libs
   Omega

@@ -589,9 +589,11 @@ End
 
 (* ===== Local Variable Materialization ===== *)
 
-(* Collect lexical memory locals in source order.  build_compile_env uses the
-   same list to assign abstract MemLoc regions; function lowering turns those
-   regions into ALLOCA operands, matching Python Context.new_variable. *)
+(* Collect lexical memory locals in source order, one entry per declaration.
+   build_compile_env uses the list to assign abstract MemLoc regions in
+   internal functions and the constructor; external and fallback bodies
+   instead give each declaration its own ALLOCA (declare_local), matching
+   Python Context.new_variable. *)
 Definition collect_locals_def:
   collect_locals ([] : stmt list) = ([] : (string # type) list) /\
   collect_locals (AnnAssign id ty _ :: rest) =
@@ -605,32 +607,14 @@ Definition collect_locals_def:
   collect_locals (_ :: rest) = collect_locals rest
 End
 
-(* Reserve output variables up front so the immutable compile environment can
-   refer to local pointers throughout the body.  The ALLOCA instruction itself
-   is emitted at the source declaration/loop, matching Python's sequencing. *)
-Definition reserve_local_ptrs_def:
-  reserve_local_ptrs (cenv : compile_env)
-      ([] : (string # type) list) = return cenv /\
-  reserve_local_ptrs (cenv : compile_env) ((name,ty)::locals) =
-    case FLOOKUP cenv.ce_vars name of
-      SOME (MemLoc _ mem_size) =>
-        do ptr <- fresh_var;
-           reserve_local_ptrs
-             (cenv with ce_vars :=
-                cenv.ce_vars |+ (name,PtrVar (Var ptr) mem_size)) locals
-        od
-    | _ => reserve_local_ptrs cenv locals
-End
-
 (* ===== Guarded Body ===== *)
 Definition compile_guarded_body_def:
   compile_guarded_body cenv is_nonreentrant nkey use_transient
                        is_view body ret_type =
-    do cenv' <- reserve_local_ptrs cenv (collect_locals body);
-       (if is_nonreentrant then
+    do (if is_nonreentrant then
           compile_nonreentrant_lock nkey use_transient is_view
         else return ());
-       compile_stmts cenv' NoLoop
+       compile_stmts cenv NoLoop
          (case ret_type of SOME t => t | NONE => BaseT BoolT) body;
        cs <- comp_get;
        if block_is_terminated cs then return ()
@@ -733,7 +717,9 @@ Definition compile_internal_function_def:
           compile_nonreentrant_lock nkey use_transient is_view
         else return ());
        (* Compile body *)
-       compile_stmts cenv2 NoLoop
+       (* Declaration-site ALLOCAs apply in both runtime and constructor
+          internal functions; Deploy visibility does not imply an external body. *)
+       compile_stmts (cenv2 with ce_alloca_locals := T) NoLoop
          (case ret_type of SOME t => t | NONE => BaseT BoolT) body;
        cs <- comp_get;
        (if block_is_terminated cs then return ()
@@ -932,3 +918,19 @@ Definition compile_external_entry_points_def:
                                       common_label
     od
 End
+
+(* Regression boundary for internal bodies, including constructor callees:
+   declaration reserves a pointer; emission at that declaration binds it to
+   an ALLOCA rather than a literal slot. *)
+Theorem internal_declaration_alloca:
+  MAP (\inst. inst.inst_opcode)
+    (SND ((do env <- declare_local (cenv with ce_alloca_locals := T)
+                       id (BaseT (UintT 256));
+              emit_local_alloca env id od) cs)).cs_current_insts =
+  MAP (\inst. inst.inst_opcode) cs.cs_current_insts ++ [ALLOCA]
+Proof
+  simp[declare_local_def, emit_local_alloca_def, type_memory_bytes_def,
+       finite_mapTheory.FLOOKUP_UPDATE, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def, fresh_var_def, emitHelperTheory.emit_inst_def, fresh_id_def,
+       emit_def, mk_inst_def, listTheory.MAP_APPEND]
+QED

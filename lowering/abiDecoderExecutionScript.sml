@@ -238,7 +238,7 @@ QED
    the actual ADD/MSTORE/JMP suffix is handled by this adapter. *)
 Theorem abi_decode_child_backedge:
   frag_exec ctx st0 st1 B C (K F) /\ fn_has_code st0 st1 fn /\
-  B s /\ s.vs_current_bb = st0.cs_current_bb /\
+  B s /\ ~s.vs_halted /\ s.vs_current_bb = st0.cs_current_bb /\
   s.vs_inst_idx = LENGTH st0.cs_current_insts /\
   lookup_block st1.cs_current_bb fn.fn_blocks = SOME bb /\
   bb.bb_instructions = st1.cs_current_insts ++
@@ -293,6 +293,10 @@ Proof
       st0.cs_current_bb /\
     (jump_to body_lbl (abi_decode_header_state hv cv cmp done j ncount s)).vs_inst_idx =
       LENGTH st0.cs_current_insts` by simp[jump_to_def] >>
+  `~(jump_to body_lbl
+      (abi_decode_header_state hv cv cmp done j ncount s)).vs_halted` by
+    fs[abi_decode_loop_ready_def, jump_to_def,
+       abi_decode_header_state_def, update_var_def] >>
   `?t. J (SUC j) t /\ abi_decode_sim ctx fn
     (jump_to body_lbl (abi_decode_header_state hv cv cmp done j ncount s)) t` by
     (irule abi_decode_child_backedge >> simp[] >> conj_tac
@@ -413,11 +417,13 @@ Proof
   `?u. J ncount u /\ abi_decode_sim ctx fn s
     (jump_to exit_lbl (abi_decode_header_state hv cv cmp done ncount ncount u))` by
     (drule_all abi_decode_shell_sim >> simp[]) >>
+  `~u.vs_halted` by metis_tac[abi_decode_loop_ready_def] >>
   qexists_tac `jump_to exit_lbl
     (abi_decode_header_state hv cv cmp done ncount ncount u)` >>
-  simp[jump_to_def] >>
+  simp[jump_to_def, abi_decode_header_state_def, update_var_def] >>
   qpat_x_assum `abi_decode_sim ctx fn s _` mp_tac >>
-  simp[abi_decode_sim_def, jump_to_def] >> metis_tac[]
+  simp[abi_decode_sim_def, jump_to_def,
+       abi_decode_header_state_def, update_var_def] >> metis_tac[]
 QED
 
 (* These equations are exactly the header calls in

@@ -46,8 +46,8 @@ Proof
   simp[vyperContextTheory.type_env_def,
        vyperContextTheory.type_env_for_module_def,
        make_struct_fields_map_def, build_struct_fields_map_def,
-        build_struct_fields_one_def, type_mem_bytes_def,
-        vyperValueTheory.evaluate_type_def, valueEncodingTheory.type_memory_size_def,
+       build_struct_fields_one_def, field_mem_bytes_def,
+       vyperValueTheory.evaluate_type_def, valueEncodingTheory.type_memory_size_def,
        nsid_to_string_def, finite_mapTheory.FLOOKUP_UPDATE]
 QED
 

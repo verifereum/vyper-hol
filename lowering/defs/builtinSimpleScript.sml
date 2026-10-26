@@ -58,9 +58,8 @@ End
 Definition compile_zero_words_def:
   compile_zero_words (base_op:operand) (0:num) = return () ∧
   compile_zero_words base_op (SUC n) =
-    let offset = n * 32 in
     do compile_zero_words base_op n;
-       dst <- emit_op ADD [base_op; Lit (n2w offset)];
+       dst <- emit_op ADD [base_op; Lit (n2w (n * 32))];
        emit_void MSTORE [dst; Lit 0w]
     od
 End
@@ -125,3 +124,57 @@ Definition compile_builtin_abs_def:
        compile_select is_neg neg_val val_op
     od
 End
+
+(* Instruction-shape regressions: even offset zero materializes an ADD. *)
+Theorem compile_zero_words_zero:
+  compile_zero_words base_op 0 st = ((), st)
+Proof
+  simp[compile_zero_words_def, comp_return_def]
+QED
+
+Theorem compile_zero_words_two_order:
+  MAP (\i. (i.inst_opcode, if i.inst_opcode = ADD then i.inst_operands else []))
+    (SND (compile_zero_words base_op (SUC (SUC 0))
+      (st with cs_current_insts := []))).cs_current_insts =
+  [(ADD, [base_op; Lit 0w]); (MSTORE, []);
+   (ADD, [base_op; Lit 32w]); (MSTORE, [])]
+Proof
+  simp[compile_zero_words_def, emit_op_def, emit_void_def, fresh_id_def,
+       fresh_var_def, emit_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def, mk_inst_def]
+QED
+
+Theorem compile_zero_words_one_order:
+  MAP (\i. (i.inst_opcode, if i.inst_opcode = ADD then i.inst_operands else []))
+    (SND (compile_zero_words base_op (SUC 0)
+      (st with cs_current_insts := []))).cs_current_insts =
+  [(ADD, [base_op; Lit 0w]); (MSTORE, [])]
+Proof
+  simp[compile_zero_words_def, emit_op_def, emit_void_def, fresh_id_def,
+       fresh_var_def, emit_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def, mk_inst_def]
+QED
+
+Theorem compile_builtin_empty_complex_length_order:
+  MAP (\i. (i.inst_opcode, if i.inst_opcode = ALLOCA then i.inst_operands else []))
+    (SND (compile_builtin_empty_complex nbytes T
+      (st with cs_current_insts := []))).cs_current_insts =
+  [(ALLOCA, [Lit (n2w nbytes)]); (MSTORE, [])]
+Proof
+  simp[compile_builtin_empty_complex_def, compile_alloc_buffer_def,
+       emit_op_def, emit_void_def, fresh_id_def, fresh_var_def, emit_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def, mk_inst_def]
+QED
+
+Theorem compile_builtin_empty_complex_fixed_order:
+  MAP (\i. i.inst_opcode)
+    (SND (compile_builtin_empty_complex 64 F
+      (st with cs_current_insts := []))).cs_current_insts =
+  [ALLOCA; ADD; MSTORE; ADD; MSTORE]
+Proof
+  simp[compile_builtin_empty_complex_def, compile_alloc_buffer_def] >>
+  pure_rewrite_tac[arithmeticTheory.TWO, arithmeticTheory.ONE,
+                   compile_zero_words_def] >>
+  simp[emit_op_def, emit_void_def, fresh_id_def, fresh_var_def, emit_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def, mk_inst_def]
+QED

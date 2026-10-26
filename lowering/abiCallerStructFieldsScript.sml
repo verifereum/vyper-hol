@@ -10,7 +10,7 @@ Theorem abi_caller_struct_field_sizes:
   evaluate_type env ty = SOME tv ==>
   MEM (name,ty) args /\ sz = type_memory_size tv
 Proof
-  simp[build_struct_fields_one_def, MEM_MAP, EXISTS_PROD] >>
+  simp[build_struct_fields_one_def, field_mem_bytes_def, MEM_MAP, EXISTS_PROD] >>
   rpt strip_tac >> gvs[]
 QED
 

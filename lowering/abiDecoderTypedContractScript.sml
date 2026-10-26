@@ -10,7 +10,7 @@
 Theory abiDecoderTypedContract
 Ancestors
   abiDecoderFrame abiDecodeRanges abiWrappedDecodeProps abiStaticLayoutProps
-  abiCanonicalLoad vyperABI contractABI byte
+  abiCanonicalLoad vyperABI vyperABIRoundtrip contractABI byte
   abiDecoderContract fragExec exprLoweringProps vyperTyping context
   abiEncoder emitHelper valueEncoding abiBoundaryChecks compileEnv
   emitHelperProps valueEncodingProps venomExecSemantics venomExecProofs venomInst

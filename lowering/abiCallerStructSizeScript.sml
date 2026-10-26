@@ -16,7 +16,7 @@ Proof
   >- (Cases >> simp[build_struct_fields_one_def, type_memory_size_def]) >>
   qx_gen_tac `field_arg` >> Cases_on `field_arg` >> Cases >>
   simp[build_struct_fields_one_def, type_memory_size_def] >>
-  rpt strip_tac >> fs[build_struct_fields_one_def] >>
+  rpt strip_tac >> fs[build_struct_fields_one_def, field_mem_bytes_def] >>
   qpat_x_assum `!tvs. LIST_REL _ _ tvs ==> _` drule >> simp[ADD_COMM]
 QED
 

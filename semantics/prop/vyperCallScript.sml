@@ -24,7 +24,7 @@ Definition extcall_call_def:
     case build_ext_calldata (get_tenv cx) func_name arg_types arg_vals of
     | NONE => NONE
     | SOME calldata =>
-    case run_ext_call cx.txn.target target_addr calldata value_opt
+    case run_ext_call cx.txn.target target_addr calldata value_opt default_evm_gas_limit
                       accounts tStorage (vyper_to_tx_params cx.txn) of
     | NONE => NONE
     | SOME (success, returnData, accounts', tStorage', emitted_logs) =>
@@ -69,6 +69,18 @@ Proof
   Cases_on `safe_cast x h` >> simp[] >>
   Cases_on `bind_arguments tenv args t` >> simp[] >>
   strip_tac >> res_tac
+QED
+
+(* The arguments' scope binds exactly the parameter names. *)
+Theorem bind_arguments_fdom:
+  ∀tenv args vs env.
+    bind_arguments tenv args vs = SOME env ⇒ FDOM env = set (MAP FST args)
+Proof
+  Induct_on `args` >> simp[bind_arguments_def] >>
+  Cases_on `vs` >> simp[bind_arguments_def] >>
+  rpt gen_tac >> PairCases_on `h'` >>
+  simp[bind_arguments_def, AllCaseEqs(), PULL_EXISTS] >>
+  rpt strip_tac >> res_tac >> simp[]
 QED
 
 (* ===== Log Lifecycle Boundaries (issue #439) ===== *)

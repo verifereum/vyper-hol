@@ -50,12 +50,13 @@ Proof
 QED
 
 (* Extract the endpoint and the exact continuation simulation from a fragment
-   whose exit predicate is false. fn_has_code remains an explicit premise. *)
+   whose exit predicate is false. Code containment and a nonhalted start
+   remain explicit premises; the endpoint is also nonhalted. *)
 Theorem abi_decode_sim_from_fragment:
   frag_exec ctx st st' P Q (K F) /\ fn_has_code st st' fn /\ P s /\
-  s.vs_current_bb = st.cs_current_bb /\
+  ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts ==>
-  ?t. Q t /\ t.vs_current_bb = st'.cs_current_bb /\
+  ?t. Q t /\ ~t.vs_halted /\ t.vs_current_bb = st'.cs_current_bb /\
     t.vs_inst_idx = LENGTH st'.cs_current_insts /\
     abi_decode_sim ctx fn s t
 Proof

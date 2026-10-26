@@ -9,6 +9,7 @@
  *
  * Layer 1 (mstore/mem_word_at):
  *   mstore_mem_word_at_same      — mload after mstore at same offset
+ *   mem_bytes_at_mstore_same     — the 32 bytes at the offset of an mstore
  *   mstore_mem_word_at_disjoint  — mload after mstore at disjoint offset
  *   mstore_mem_bytes_at_disjoint — mem_bytes_at after mstore at disjoint offset
  *   mstore_establishes_val_in_memory_prim — mstore with val_to_w256 establishes val_in_memory
@@ -24,12 +25,18 @@
  *   val_in_memory_tuple   — tuple decomposition
  *   val_in_memory_fixed_bytes — fixed bytes word encoding
  *   val_in_memory_address — address word encoding
+ *   val_in_memory_static_abi — ABI-static values agree with their padded memory image
+ *   val_in_memory_relocate — equal padded windows relocate well-formed values
+ *   mcopy_establishes_val_in_memory — snapshot copying relocates values
+ *   mcopy_preserves_val_in_memory — disjoint snapshot copying preserves values
  *)
 
 Theory valueEncodingProps
 Ancestors
   list rich_list
   valueEncoding valueEncodingProofs
+Libs
+  wordsLib
 
 (* ===== val_to_w256 agrees with encode_base_to_slot ===== *)
 
@@ -98,6 +105,22 @@ Theorem mstore_mem_word_at_same:
   ∀ off (w:bytes32) s.
     mem_word_at off (mstore off w s).vs_memory = w
 Proof ACCEPT_TAC mstore_mem_word_at_same_proof
+QED
+
+Theorem mem_bytes_at_mstore_same:
+  ∀ off (w:bytes32) s.
+    mem_bytes_at off 32 (mstore off w s).vs_memory = word_to_bytes w T
+Proof
+  rpt gen_tac >>
+  qabbrev_tac `M = (mstore off w s).vs_memory` >>
+  `word_of_bytes T (0w:bytes32) (mem_bytes_at off 32 M) = w` by
+    (qspecl_then [`off`, `w`, `s`] mp_tac mstore_mem_word_at_same >>
+     simp[mem_word_at_def, mem_bytes_at_def, Abbr `M`]) >>
+  `word_to_bytes (word_of_bytes T (0w:bytes32) (mem_bytes_at off 32 M)) T =
+   mem_bytes_at off 32 M` by
+    (irule venomMemProofsTheory.word_bytes_roundtrip_proof >>
+     simp[mem_bytes_at_def, dividesTheory.divides_def]) >>
+  metis_tac[]
 QED
 
 Theorem mstore_mem_word_at_disjoint:
@@ -235,7 +258,10 @@ Theorem val_in_memory_sarray:
   ∀ kvs elem_tv bound offset mem.
     val_in_memory (ArrayTV elem_tv (Fixed bound))
                   (ArrayV (SArrayV kvs)) offset mem ⇔
-    kvs_in_memory kvs offset elem_tv mem
+    kvs_in_memory kvs offset elem_tv mem ∧
+    ∀i. i < bound ∧ ALOOKUP kvs i = NONE ⇒
+        val_in_memory elem_tv (default_value elem_tv)
+          (offset + i * type_memory_size elem_tv) mem
 Proof ACCEPT_TAC val_in_memory_sarray_proof
 QED
 
@@ -379,3 +405,14 @@ val _ = List.app (fn name =>
   then () else raise Fail ("oracle in " ^ name))
   ["val_in_memory_relocate", "mcopy_establishes_val_in_memory",
    "mcopy_preserves_val_in_memory"];
+
+(* ABI-static typed values have their encoding as their padded memory image. *)
+Theorem val_in_memory_static_abi:
+  !env ty tv v av off mem.
+    evaluate_type env ty = SOME tv /\
+    ~is_dynamic (vyper_to_abi_type env ty) /\ value_has_type tv v /\
+    vyper_to_abi env ty v = SOME av /\ val_in_memory tv v off mem ==>
+    mem_bytes_at off (type_memory_size tv) mem =
+    enc (vyper_to_abi_type env ty) av
+Proof ACCEPT_TAC val_in_memory_static_abi_proof
+QED

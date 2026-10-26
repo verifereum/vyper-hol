@@ -9,7 +9,9 @@
  *   compile_shift_correct          — compiled shift outputs asr/lsr/lsl based on sign of shift amount
  *   compile_builtin_min_correct    — compiled min outputs smaller value via cmp+branchless select
  *   compile_builtin_max_correct    — compiled max outputs larger value via cmp+branchless select
- *   compile_builtin_abs_correct    — compiled abs outputs |v| via neg+select; reverts on MIN_INT
+ *   compile_builtin_abs_run        — compiled abs outputs |v| via neg+select, and
+ *                                    reverts exactly on MIN_INT
+ *   compile_builtin_abs_correct    — the same, as "outputs |v| or reverts"
  *   compile_builtin_len_correct    — compiled len outputs stored length via ptr_load
  *   compile_raw_call_correct       — compiled raw_call: OK or revert [CHEATED]
  *   compile_raw_create_correct     — compiled raw_create: OK or revert [CHEATED]
@@ -332,7 +334,7 @@ End
 (* Generic unsafe binop correctness: given opcode opc whose exec_pure2
    implements word operation f, compile_unsafe_binop opc x y bits is_signed
    emits instructions that compute truncate_to_bits bits is_signed (f a b). *)
-Theorem compile_unsafe_binop_correct[local]:
+Theorem compile_unsafe_binop_correct:
   ∀ opc f x y bits is_signed ss st op st' a b.
     compile_unsafe_binop opc x y bits is_signed st = (op, st') ∧
     eval_operand x ss = SOME a ∧
@@ -956,7 +958,7 @@ QED
 (* compile_select: branchless ternary via XOR/MUL/XOR.
    When cond = bool_to_word b:
      b=T → result = then_val, b=F → result = else_val *)
-Theorem compile_select_correct[local]:
+Theorem compile_select_correct:
   ∀ cond_op then_op else_op cv tv ev b ss st op st'.
     compile_select cond_op then_op else_op st = (op, st') ∧
     eval_operand cond_op ss = SOME cv ∧
@@ -1356,21 +1358,47 @@ val compose_ok_tac = fn (ss_mid, cs_mid) =>
     qexistsl [ss_mid, cs_mid] >> asm_rewrite_tac[]) >>
   irule emit_extends_trans >> qexists cs_mid >> asm_rewrite_tac[];
 
+(* abs's overflow check: a negative word that is its own negation is
+   MIN_INT. *)
+Theorem abs_bad_word:
+  ∀ v : bytes32.
+    (bool_to_word (v < 0w) && bool_to_word (v = 0w - v) = 0w) ⇔ v ≠ INT_MINw
+Proof
+  gen_tac >>
+  `∀w : bytes32. w < 0w ∧ w = 0w - w ⇒ w = INT_MINw` by
+    (rpt strip_tac >> CCONTR_TAC >>
+     `-w = w` by metis_tac[wordsTheory.WORD_SUB_LZERO] >>
+     `w2i (-w) = -w2i w` by simp[integer_wordTheory.w2i_neg] >>
+     `w2i w < 0` by simp[integer_wordTheory.w2i_lt_0] >>
+     gvs[] >> intLib.ARITH_TAC) >>
+  eq_tac
+  >- (rpt strip_tac >> pop_assum SUBST_ALL_TAC >> pop_assum mp_tac >>
+      REWRITE_TAC[GSYM wordsTheory.word_msb_neg, wordsTheory.WORD_L_NEG,
+                  wordsTheory.WORD_SUB_LZERO, wordsTheory.WORD_NEG_L,
+                  bool_to_word_def, wordsTheory.WORD_AND_IDEM] >>
+      simp[wordsTheory.dimword_def]) >>
+  strip_tac >>
+  `~(v < 0w /\ v = 0w - v)` by
+    (strip_tac >> qpat_x_assum `v <> _` mp_tac >> simp[] >>
+     first_x_assum irule >> conj_tac >> first_assum ACCEPT_TAC) >>
+  Cases_on `v < 0w` >> gvs[bool_to_word_def, wordsTheory.WORD_AND_CLAUSES]
+QED
+
 (* abs with branchless select — needs fresh_vars_wrt to prevent clobber *)
-Theorem compile_builtin_abs_correct:
+Theorem compile_builtin_abs_run:
   ∀ val_op ss st op st' v.
     compile_builtin_abs val_op st = (op, st') ∧
     eval_operand val_op ss = SOME v ∧
     fresh_vars_wrt st ss
     ⇒
-    ∃ ss'.
-      (run_inst_seq (emitted_insts st st') ss = OK ss' ∧
-       eval_operand op ss' =
-         SOME (if word_msb v then word_sub 0w v else v)) ∨
-      (* MIN_INT case → revert *)
-      run_inst_seq (emitted_insts st st') ss = Abort Revert_abort ss'
+    (v ≠ INT_MINw ⇒
+     ∃ ss'. run_inst_seq (emitted_insts st st') ss = OK ss' ∧
+            eval_operand op ss' =
+              SOME (if word_msb v then word_sub 0w v else v)) ∧
+    (v = INT_MINw ⇒
+     ∃ ss'. run_inst_seq (emitted_insts st st') ss = Abort Revert_abort ss')
 Proof
-  rpt strip_tac >>
+  rpt gen_tac >> strip_tac >>
   gvs[compile_builtin_abs_def, comp_bind_def, comp_ignore_bind_def] >>
   rpt (pairarg_tac >> gvs[]) >>
   rename1 `emit_op SUB [Lit 0w; val_op] st = (neg_op, cs1)` >>
@@ -1445,12 +1473,17 @@ Proof
     by (irule run_emitted_compose2 >>
         qexistsl [`st4`, `cs4`] >> asm_rewrite_tac[]) >>
   (* Step 6: ASSERT — case split on bad_val *)
+  `bad_val = 0w ⇔ v ≠ INT_MINw` by simp[Abbr `bad_val`, abs_bad_word] >>
   Cases_on `bad_val = 0w`
   >- suspend "ok_case"
   >> suspend "abort_case"
 QED
 
-Resume compile_builtin_abs_correct[ok_case]:
+Resume compile_builtin_abs_run[ok_case]:
+  `v ≠ INT_MINw` by
+    (qpat_x_assum `_ ⇔ v ≠ INT_MINw` mp_tac >>
+     qpat_x_assum `bad_val = 0w` mp_tac >> tautLib.TAUT_TAC) >>
+  asm_rewrite_tac[] >>
   `eval_operand notbad_op st5 = SOME 1w`
     by gvs[bool_to_word_def] >>
   `(1w:bytes32) <> 0w` by simp[] >>
@@ -1466,7 +1499,7 @@ Resume compile_builtin_abs_correct[ok_case]:
     `st5`, `cs6`, `op`, `st'`] mp_tac compile_select_correct >>
   (impl_tac >- asm_rewrite_tac[]) >>
   disch_then (qx_choose_then `ss_final` strip_assume_tac) >>
-  qexists `ss_final` >> disj1_tac >>
+  qexists `ss_final` >>
   conj_tac
   >- (
     `cs5.cs_current_insts = st.cs_current_insts ++ emitted_insts st cs5` by
@@ -1482,8 +1515,12 @@ Resume compile_builtin_abs_correct[ok_case]:
 QED
 
 
-Resume compile_builtin_abs_correct[abort_case]:
+Resume compile_builtin_abs_run[abort_case]:
   (* bad_val != 0w -> notbad_op evaluates to 0w -> ASSERT reverts *)
+  `v = INT_MINw` by
+    (qpat_x_assum `_ ⇔ v ≠ INT_MINw` mp_tac >>
+     qpat_x_assum `bad_val ≠ 0w` mp_tac >> tautLib.TAUT_TAC) >>
+  asm_rewrite_tac[] >>
   `bool_to_word (bad_val = 0w) = 0w`
     by simp[bool_to_word_def] >>
   `eval_operand notbad_op st5 = SOME 0w`
@@ -1504,7 +1541,7 @@ Resume compile_builtin_abs_correct[abort_case]:
   (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
   strip_tac >>
   (* Extend cs6->st' -> abort st->st' *)
-  qexists `revert_state (set_returndata [] st5)` >> disj2_tac >>
+  qexists `revert_state (set_returndata [] st5)` >>
   qspecl_then [`st`, `cs6`, `st'`, `ss`, `Revert_abort`,
     `revert_state (set_returndata [] st5)`]
     mp_tac run_emitted_abort_extend >>
@@ -1512,7 +1549,24 @@ Resume compile_builtin_abs_correct[abort_case]:
   simp[]
 QED
 
-Finalise compile_builtin_abs_correct;
+Finalise compile_builtin_abs_run;
+
+Theorem compile_builtin_abs_correct:
+  ∀ val_op ss st op st' v.
+    compile_builtin_abs val_op st = (op, st') ∧
+    eval_operand val_op ss = SOME v ∧
+    fresh_vars_wrt st ss
+    ⇒
+    ∃ ss'.
+      (run_inst_seq (emitted_insts st st') ss = OK ss' ∧
+       eval_operand op ss' =
+         SOME (if word_msb v then word_sub 0w v else v)) ∨
+      (* MIN_INT case → revert *)
+      run_inst_seq (emitted_insts st st') ss = Abort Revert_abort ss'
+Proof
+  rpt strip_tac >> drule_all compile_builtin_abs_run >>
+  Cases_on `v = INT_MINw` >> rw[] >> metis_tac[]
+QED
 
 (* ===== Shift (strong spec) ===== *)
 (* Shift: 4 emit_ops + compile_select.

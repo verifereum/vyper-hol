@@ -3,7 +3,7 @@ Theory abiDecoderArrayInvariant
 Ancestors
   abiDecoderCoherence abiDecoderTypedContract abiDecoderContract abiCanonicalArrayLoad
   abiDecoderArrayPrefix abiDecoderFrameCompose valueEncodingProps valueEncoding
-  vyperABI vyperTyping vyperValue venomState words list rich_list arithmetic
+  vyperABI vyperABIRoundtrip vyperTyping vyperValue venomState words list rich_list arithmetic
 
 Theorem abi_decoder_dynarray_values:
   abi_decoder_metadata ce env (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))

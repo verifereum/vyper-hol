@@ -77,7 +77,7 @@ Proof
 QED
 
 Theorem built_struct_fields_types:
-  MAP (FST o SND) (build_struct_fields_one sft args) = MAP SND args
+  MAP (FST o SND) (build_struct_fields_one tenv args) = MAP SND args
 Proof
   simp[build_struct_fields_one_def, MAP_MAP_o, o_DEF] >>
   irule MAP_CONG >> simp[FORALL_PROD]

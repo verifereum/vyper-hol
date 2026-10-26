@@ -85,7 +85,7 @@ Definition well_typed_literal_def:
   well_typed_literal (BaseT (IntT k)) (IntL n) =
     within_int_bound (Signed k) n /\
   well_typed_literal (BaseT DecimalT) (DecimalL n) =
-    within_int_bound (Signed 168) n /\
+    within_int_bound decimal_bound n /\
   well_typed_literal (BaseT (StringT n)) (StringL s) =
     (LENGTH s <= n) /\
   well_typed_literal (BaseT AddressT) (BytesL bs) =
@@ -508,6 +508,33 @@ End
 
 (* ===== Expressions, places, and targets ===== *)
 
+(* Type of an extcall/staticcall keyword operand: value= and gas= are uint256,
+   default_return_value= has the call's return type. *)
+Definition ext_call_kw_type_def:
+  ext_call_kw_type ret_ty EKDefault = ret_ty /\
+  ext_call_kw_type ret_ty EKValue = BaseT (UintT 256) /\
+  ext_call_kw_type ret_ty EKGas = BaseT (UintT 256)
+End
+
+(* An external-call argument of type t fits a parameter declared as u, as in
+   Vyper's compare_type (validate_expected_type in fetch_call_return): a
+   bytestring or dynamic array may have a smaller bound, elementwise, and
+   every other type must match exactly. *)
+Definition arg_type_fits_def:
+  (arg_type_fits (BaseT (StringT n)) (BaseT (StringT m)) <=> n <= m) /\
+  (arg_type_fits (BaseT (BytesT (Dynamic n))) (BaseT (BytesT (Dynamic m))) <=>
+     n <= m) /\
+  (arg_type_fits (ArrayT t (Dynamic n)) (ArrayT u (Dynamic m)) <=>
+     n <= m /\ arg_type_fits t u) /\
+  (arg_type_fits (ArrayT t (Fixed n)) (ArrayT u (Fixed m)) <=>
+     n = m /\ arg_type_fits t u) /\
+  (arg_type_fits (TupleT ts) (TupleT us) <=> arg_types_fit ts us) /\
+  (arg_type_fits t u <=> t = u) /\
+  (arg_types_fit [] [] <=> T) /\
+  (arg_types_fit (t::ts) (u::us) <=> arg_type_fits t u /\ arg_types_fit ts us) /\
+  (arg_types_fit _ _ <=> F)
+End
+
 (* Positional type contract for creation builtin operands. *)
 Definition create_arg_types_ok_def:
   create_arg_types_ok CreateMinimalProxy has_salt tys =
@@ -597,15 +624,21 @@ Definition well_typed_expr_def:
        ty = sig.ret_ty /\ LENGTH args <= LENGTH sig.param_types /\
        LENGTH sig.param_types - sig.num_defaults <= LENGTH args /\
        MAP expr_type args = TAKE (LENGTH args) sig.param_types) /\
-  well_typed_expr env (Call ty (ExtCall is_static _ (_, arg_types, ret_ty)) args drv) =
-    (well_typed_exprs env args /\ well_typed_opt env drv /\ well_formed_type env.type_defs ty /\
-     ty = ret_ty /\
-     (if is_static then MAP expr_type args = BaseT AddressT :: arg_types
-      else MAP expr_type args = BaseT AddressT :: BaseT (UintT 256) :: arg_types) /\
-     (!e. drv = SOME e ==> expr_type e = ret_ty)) /\
-  well_typed_expr env (Call ty Send args drv) =
-    (well_typed_exprs env args /\ drv = NONE /\ LENGTH args = 2 /\ ty = NoneT /\
-     HD (MAP expr_type args) = BaseT AddressT /\ EL 1 (MAP expr_type args) = BaseT (UintT 256)) /\
+  well_typed_expr env (Call ty (ExtCall is_static _ (_, arg_types, ret_ty) opts) args drv) =
+    (well_typed_exprs env args /\ drv = NONE /\ well_formed_type env.type_defs ty /\
+     ty = ret_ty /\ ext_call_opts_ok is_static opts /\
+     LENGTH args = 1 + LENGTH arg_types + LENGTH opts /\
+     expr_type (HD args) = BaseT AddressT /\
+     (* positional arguments may be narrower than the declared types *)
+     EVERY (well_formed_type env.type_defs) arg_types /\
+     arg_types_fit (MAP expr_type (TAKE (LENGTH arg_types) (TL args)))
+       arg_types /\
+     MAP expr_type (DROP (1 + LENGTH arg_types) args) =
+       MAP (ext_call_kw_type ret_ty) opts) /\
+  well_typed_expr env (Call ty (Send has_gas) args drv) =
+    (well_typed_exprs env args /\ drv = NONE /\ ty = NoneT /\
+     MAP expr_type args = [BaseT AddressT; BaseT (UintT 256)] ++
+       (if has_gas then [BaseT (UintT 256)] else [])) /\
   well_typed_expr env (Call ty (RawCallTarget flags) args drv) =
     (well_typed_exprs env args /\ drv = NONE /\ ty = raw_call_return_type flags /\
      flags.rcf_max_outsize < dimword(:256) /\

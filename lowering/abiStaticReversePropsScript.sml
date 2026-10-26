@@ -4,6 +4,7 @@ Ancestors abiStaticListProps abiStaticAggregateProps abiStaticPrimitiveProps
   abiStaticSparseProps abiStaticLayoutProps valueEncoding vyperTyping vyperABI
   contractABI compileEnv list rich_list
   valueEncodingTyping valueEncodingProps valueEncodingProofs
+  vyperABIRoundtrip vyperTypeDefaults
 
 Theorem static_sparse_memory_from_members[local]:
   !sp. (!k v. MEM (k,v) sp ==>
@@ -21,6 +22,20 @@ Proof
   Induct >> simp[value_has_type_def] >> Cases_on `h` >>
   simp[value_has_type_def] >> rpt strip_tac >>
   Cases_on `q = k` >> gvs[] >> metis_tac[]
+QED
+
+(* Absent sparse entries contribute the canonical ABI default chunk. *)
+Theorem static_sparse_default_index[local]:
+  !n sp avs k. vyper_to_abi_sparse tenv ty tv n sp = SOME avs /\
+    k < n /\ ALOOKUP sp k = NONE ==>
+    EL k avs = default_to_abi tv
+Proof
+  Induct >- simp[] >> rpt gen_tac >>
+  simp[Once vyper_to_abi_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  imp_res_tac canonical_sparse_length >>
+  Cases_on `k = n` >> fs[EL_APPEND_EQN] >>
+  `k < n` by decide_tac >> gvs[] >> metis_tac[]
 QED
 
 Theorem static_children_memory[local]:
@@ -99,21 +114,29 @@ Proof
          metis_tac[static_default_encoding_length, static_typed_encoding_length]) >>
       drule_all canonical_typed_sparse_index >> strip_tac >>
       gvs[enc_static_array, type_memory_size_def, val_in_memory_def, Excl "enc_def"] >>
-      irule static_sparse_memory_from_members >> rpt strip_tac >>
-      `k < LENGTH avs /\ vyper_to_abi tenv ty v = SOME (EL k avs)` by metis_tac[] >>
-      `k * type_memory_bytes cenv ty + type_memory_bytes cenv ty <=
-        LENGTH avs * type_memory_bytes cenv ty` by
-        (qspecl_then [`k + 1`, `LENGTH avs`, `type_memory_bytes cenv ty`]
-          mp_tac arithmeticTheory.LESS_MONO_MULT >>
-         pure_rewrite_tac[arithmeticTheory.RIGHT_ADD_DISTRIB,
-           arithmeticTheory.MULT_CLAUSES] >> decide_tac) >>
-      first_x_assum irule >> conj_tac >- gvs[] >>
-      conj_tac >- (qexists_tac `EL k avs` >> simp[] >>
-        `EVERY (\bs. LENGTH bs = type_memory_bytes cenv ty)
-          (MAP (enc (vyper_to_abi_type tenv ty)) avs)` by simp[EVERY_MAP] >>
-        drule static_mem_flat_chunk >> simp[EL_MAP] >>
-        disch_then irule >> simp[]) >>
-      metis_tac[static_sparse_lookup_type, sorted_sparse_ALOOKUP])
+      `!k v. k < LENGTH avs /\ value_has_type tv v /\
+        vyper_to_abi tenv ty v = SOME (EL k avs) ==>
+        val_in_memory tv v (off + k * type_memory_bytes cenv ty) mem` by
+        (rpt strip_tac >>
+         `k * type_memory_bytes cenv ty + type_memory_bytes cenv ty <=
+           LENGTH avs * type_memory_bytes cenv ty` by
+           (qspecl_then [`k + 1`, `LENGTH avs`, `type_memory_bytes cenv ty`]
+             mp_tac arithmeticTheory.LESS_MONO_MULT >>
+            pure_rewrite_tac[arithmeticTheory.RIGHT_ADD_DISTRIB,
+              arithmeticTheory.MULT_CLAUSES] >> decide_tac) >>
+         first_x_assum irule >> conj_tac >- gvs[] >>
+         conj_tac >- (qexists_tac `EL k avs` >> simp[] >>
+           `EVERY (\bs. LENGTH bs = type_memory_bytes cenv ty)
+             (MAP (enc (vyper_to_abi_type tenv ty)) avs)` by simp[EVERY_MAP] >>
+           drule static_mem_flat_chunk >> simp[EL_MAP] >>
+           disch_then irule >> simp[]) >> simp[]) >>
+      conj_tac
+      >- (irule static_sparse_memory_from_members >> rpt strip_tac >>
+          gvs[] >> first_x_assum irule >>
+          metis_tac[static_sparse_lookup_type, sorted_sparse_ALOOKUP]) >>
+      rpt strip_tac >> first_x_assum irule >> simp[] >>
+      drule_all static_sparse_default_index >> strip_tac >>
+      metis_tac[default_value_has_type_thm, cj 1 vyper_to_abi_default_value])
   >- (Cases_on `v` >> gvs[value_has_type_def] >>
       rename1 `ArrayV arr` >> Cases_on `arr` >> gvs[value_has_type_def] >>
       gvs[Once vyper_to_abi_def, AllCaseEqs(), Excl "enc_def"] >>

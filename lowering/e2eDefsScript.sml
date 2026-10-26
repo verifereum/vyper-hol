@@ -122,6 +122,7 @@ Definition call_state_rel_def:
       es.rollback.tStorage = am.tStorage /\ am.logs = [] /\
       ctxt.msgParams.caller = tx.sender /\ ctxt.msgParams.callee = tx.target /\
       ctxt.msgParams.value = tx.value /\
+      ctxt.msgParams.data = tx.calldata /\
       tx_block_fields_rel tx es.txParams /\
       source_deployment_rel tops am tx
 End
