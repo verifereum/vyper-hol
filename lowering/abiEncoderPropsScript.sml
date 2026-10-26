@@ -5176,6 +5176,73 @@ Proof
   metis_tac[LIST_REL_LENGTH]
 QED
 
+Theorem enc_source_static_layout:
+  evaluate_type env ty = SOME tv /\
+  value_has_type tv v /\ vyper_to_abi env ty v = SOME av /\
+  val_in_memory tv v p mem ==>
+  (~is_dynamic (vyper_to_abi_type env ty) ==>
+   LENGTH (enc (vyper_to_abi_type env ty) av) =
+     static_length (vyper_to_abi_type env ty))
+Proof
+  rpt strip_tac >>
+  drule_all val_in_memory_static_enc_length >>
+  drule_all enc_static_type_memory_size >> simp[]
+QED
+
+Theorem enc_elems_source_layout:
+  !vs avs p.
+    evaluate_type env ty = SOME tv /\
+    EVERY (value_has_type tv) vs /\
+    LIST_REL (\v av. vyper_to_abi env ty v = SOME av) vs avs /\
+    elems_in_memory vs p tv mem ==>
+    enc_layout (REPLICATE (LENGTH vs) (vyper_to_abi_type env ty)) avs
+Proof
+  Induct >> Cases_on `avs` >>
+  simp[enc_layout_def, val_in_memory_def] >> rpt gen_tac >> strip_tac >>
+  conj_tac >- metis_tac[enc_source_static_layout] >>
+  qpat_x_assum `!avs p. _` (mp_tac o REWRITE_RULE [enc_layout_def]) >>
+  disch_then drule_all >> simp[]
+QED
+
+Theorem enc_same_source_layout:
+  evaluate_type env ty = SOME tv /\
+  EVERY (value_has_type tv) vs /\
+  vyper_to_abi_same env ty vs = SOME avs /\
+  elems_in_memory vs p tv mem ==>
+  enc_layout (REPLICATE (LENGTH vs) (vyper_to_abi_type env ty)) avs
+Proof
+  strip_tac >> drule enc_same_conversion >> strip_tac >>
+  irule enc_elems_source_layout >> metis_tac[]
+QED
+
+Theorem enc_tuple_source_layout:
+  !ts tvs vs avs p.
+    LIST_REL (\t tv. evaluate_type env t = SOME tv) ts tvs /\
+    LIST_REL value_has_type tvs vs /\
+    vyper_to_abi_list env ts vs = SOME avs /\
+    tuple_in_memory vs tvs p mem ==>
+    enc_layout (vyper_to_abi_types env ts) avs
+Proof
+  Induct >> Cases_on `tvs` >> Cases_on `vs` >>
+  simp[Once vyper_to_abi_def, enc_layout_def, val_in_memory_def] >>
+  rpt gen_tac >> strip_tac >> gvs[AllCaseEqs()] >>
+  conj_tac >- metis_tac[enc_source_static_layout] >>
+  qpat_x_assum `!tvs vs avs p. _`
+    (mp_tac o REWRITE_RULE [enc_layout_def]) >>
+  disch_then drule_all >> simp[]
+QED
+
+Theorem enc_dynarray_source_layout:
+  evaluate_type env ty = SOME tv /\
+  value_has_type (ArrayTV tv (Dynamic n)) (ArrayV (DynArrayV vs)) /\
+  vyper_to_abi_same env ty vs = SOME avs /\
+  val_in_memory (ArrayTV tv (Dynamic n)) (ArrayV (DynArrayV vs)) p mem ==>
+  enc_layout (REPLICATE (LENGTH vs) (vyper_to_abi_type env ty)) avs
+Proof
+  simp[value_has_type_def, all_have_type_EVERY, val_in_memory_def] >>
+  rpt strip_tac >> irule enc_same_source_layout >> metis_tac[]
+QED
+
 Theorem enc_uint1_typing_bridge_counterexample:
   evaluate_type FEMPTY (BaseT (UintT 1)) = SOME (BaseTV (UintT 1)) /\
   value_has_type (BaseTV (UintT 1)) (vyperValue$IntV 0) /\
