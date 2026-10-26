@@ -2102,6 +2102,250 @@ Proof
   rpt strip_tac >> first_x_assum irule >> metis_tac[]
 QED
 
+(* Named compiler phases keep loop consumers above the monadic plumbing. *)
+Definition enc_static_loop_init_def:
+  enc_static_loop_init =
+    do buf <- compile_alloc_buffer 32;
+       emit_void MSTORE [buf.buf_operand; Lit 0w];
+       hdr <- fresh_label "enc_dyn_hdr";
+       body <- fresh_label "enc_dyn_body";
+       exit <- fresh_label "enc_dyn_exit";
+       return (buf.buf_operand, hdr, body, exit)
+    od
+End
+
+Definition enc_static_loop_header_def:
+  enc_static_loop_header count_ptr len_op =
+    do i <- emit_op MLOAD [count_ptr];
+       cmp <- emit_op LT [i; len_op];
+       emit_op ISZERO [cmp]
+    od
+End
+
+Definition enc_static_loop_body_def:
+  enc_static_loop_body dst src ei asz msz count_ptr =
+    do i <- emit_op MLOAD [count_ptr];
+       src_data <- emit_op ADD [src; Lit 32w];
+       src_off <- emit_op MUL [i; Lit (n2w msz)];
+       child_src <- emit_op ADD [src_data; src_off];
+       dst_data <- emit_op ADD [dst; Lit 32w];
+       dst_off <- emit_op MUL [i; Lit (n2w asz)];
+       child_dst <- emit_op ADD [dst_data; dst_off];
+       compile_abi_encode_static_info child_dst child_src ei;
+       next <- emit_op ADD [i; Lit 1w];
+       emit_void MSTORE [count_ptr; next]
+    od
+End
+
+Definition enc_static_loop_exit_def:
+  enc_static_loop_exit src asz =
+    do len <- emit_op MLOAD [src];
+       payload <- emit_op MUL [len; Lit (n2w asz)];
+       emit_op ADD [Lit 32w; payload]
+    od
+End
+
+Theorem enc_comp_bind_return[local]:
+  comp_bind (comp_return x) f = f x
+Proof
+  simp[FUN_EQ_THM, comp_bind_def, comp_return_def]
+QED
+
+Theorem enc_static_loop_phases:
+  compile_abi_encode_dyn_static_loop dst src ei asz msz len_op =
+    do phase <- enc_static_loop_init;
+       let (count_ptr,hdr,body,exit) = phase in
+       do emit_inst JMP [Label hdr] [];
+          new_block hdr;
+          done_op <- enc_static_loop_header count_ptr len_op;
+          emit_inst JNZ [done_op; Label exit; Label body] [];
+          new_block body;
+          enc_static_loop_body dst src ei asz msz count_ptr;
+          emit_inst JMP [Label hdr] [];
+          new_block exit;
+          enc_static_loop_exit src asz
+       od
+    od
+Proof
+  simp_tac (srw_ss()) [compile_abi_encode_dyn_static_loop_def, enc_static_loop_init_def,
+       enc_static_loop_header_def, enc_static_loop_body_def,
+       enc_static_loop_exit_def, comp_ignore_bind_def, comp_bind_assoc,
+       enc_comp_bind_return, LET_THM]
+QED
+
+Definition enc_static_loop_edges_def:
+  enc_static_loop_edges hdr body exit cnd
+      (si,s1,sh,sj,s2,sb,se,s3,sx) <=>
+    emit_inst JMP [Label hdr] [] si = ((),s1) /\
+    new_block hdr s1 = (s1.cs_current_bb,sh) /\
+    emit_inst JNZ [cnd; Label exit; Label body] [] sj = ((),s2) /\
+    new_block body s2 = (s2.cs_current_bb,sb) /\
+    emit_inst JMP [Label hdr] [] se = ((),s3) /\
+    new_block exit s3 = (s3.cs_current_bb,sx)
+End
+
+Theorem enc_static_loop_decompose:
+  compile_abi_encode_dyn_static_loop dst src ei asz msz len_op st = (op,st') ==>
+  ?count_ptr hdr body exit cnd si s1 sh sj s2 sb se s3 sx.
+    enc_static_loop_init st = ((count_ptr,hdr,body,exit),si) /\
+    enc_static_loop_header count_ptr len_op sh = (cnd,sj) /\
+    enc_static_loop_body dst src ei asz msz count_ptr sb = ((),se) /\
+    enc_static_loop_exit src asz sx = (op,st') /\
+    enc_static_loop_edges hdr body exit cnd (si,s1,sh,sj,s2,sb,se,s3,sx)
+Proof
+  rpt gen_tac >>
+  simp[enc_static_loop_phases, comp_bind_def, comp_ignore_bind_def] >>
+  rpt (pairarg_tac >>
+       gvs[comp_bind_def, comp_ignore_bind_def]) >>
+  strip_tac >> gvs[] >>
+  simp[enc_static_loop_edges_def] >>
+  gvs[new_block_def]
+QED
+
+Theorem enc_static_info_appends:
+  cs_appends (compile_abi_encode_static_info dst src ei)
+Proof
+  Cases_on `ei` >>
+  simp[compile_abi_encode_static_info_def, compile_abi_encode_static_def] >>
+  rpt (FIRST [irule cs_appends_bind, irule cs_appends_ignore_bind] >>
+       rw[cs_appends_emit_helpers, cs_appends_return]) >>
+  rw[cs_appends_emit_helpers, cs_appends_return]
+QED
+
+Theorem enc_static_loop_phase_appends:
+  cs_appends enc_static_loop_init /\
+  cs_appends (enc_static_loop_header count_ptr len_op) /\
+  cs_appends (enc_static_loop_body dst src ei asz msz count_ptr) /\
+  cs_appends (enc_static_loop_exit src asz)
+Proof
+  `cs_appends (compile_alloc_buffer 32)` by
+    (simp[contextTheory.compile_alloc_buffer_def] >>
+     irule cs_appends_bind >>
+     rw[cs_appends_emit_helpers, cs_appends_return]) >>
+  simp[enc_static_loop_init_def, enc_static_loop_header_def,
+       enc_static_loop_body_def, enc_static_loop_exit_def] >>
+  rpt conj_tac >>
+  rpt (FIRST [irule cs_appends_bind, irule cs_appends_ignore_bind] >>
+       rw[cs_appends_emit_helpers, cs_appends_return, cs_appends_prims,
+          enc_static_info_appends]) >>
+  rw[cs_appends_emit_helpers, cs_appends_return, cs_appends_prims,
+     enc_static_info_appends]
+QED
+
+Theorem enc_static_info_frontiers:
+  compile_abi_encode_static_info dst src ei st = (op,st') ==>
+  st.cs_next_id <= st'.cs_next_id /\ st.cs_next_var <= st'.cs_next_var
+Proof
+  Cases_on `ei` >>
+  simp[compile_abi_encode_static_info_def, compile_abi_encode_static_def,
+       emit_op_def, emit_void_def, fresh_var_def, fresh_id_def, emit_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  rpt strip_tac >> gvs[]
+QED
+
+Theorem enc_static_loop_header_frontiers:
+  enc_static_loop_header count_ptr len_op st = (op,st') ==>
+  st'.cs_next_id = st.cs_next_id + 3 /\
+  st'.cs_next_var = st.cs_next_var + 3
+Proof
+  simp[enc_static_loop_header_def, emit_op_def, fresh_var_def,
+       fresh_id_def, emit_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def] >> rpt strip_tac >> gvs[]
+QED
+
+Theorem enc_static_loop_exit_frontiers:
+  enc_static_loop_exit src asz st = (op,st') ==>
+  st'.cs_next_id = st.cs_next_id + 3 /\
+  st'.cs_next_var = st.cs_next_var + 3
+Proof
+  simp[enc_static_loop_exit_def, emit_op_def, fresh_var_def,
+       fresh_id_def, emit_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def] >> rpt strip_tac >> gvs[]
+QED
+
+Theorem enc_static_loop_body_frontiers:
+  enc_static_loop_body dst src ei asz msz count_ptr st = (u,st') ==>
+  st.cs_next_id + 9 <= st'.cs_next_id /\
+  st.cs_next_var + 8 <= st'.cs_next_var
+Proof
+  rpt gen_tac >>
+  simp[enc_static_loop_body_def, comp_bind_def, comp_ignore_bind_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  imp_res_tac (cj 3 emitted_insts_emit_op) >>
+  imp_res_tac (cj 4 emitted_insts_emit_op) >>
+  imp_res_tac (cj 2 emitted_insts_emit_void) >>
+  imp_res_tac (cj 3 emitted_insts_emit_void) >>
+  imp_res_tac enc_static_info_frontiers >> decide_tac
+QED
+
+Theorem enc_static_loop_init_frontiers:
+  enc_static_loop_init st = ((count_ptr,hdr,body_lbl,exit),st') ==>
+  st'.cs_next_id = st.cs_next_id + 2 /\
+  st'.cs_next_var = st.cs_next_var + 1 /\
+  count_ptr = Var (STRING #"%" (toString st.cs_next_var))
+Proof
+  simp[enc_static_loop_init_def, contextTheory.compile_alloc_buffer_def,
+       emit_op_def, emit_void_def, fresh_var_def, fresh_id_def,
+       fresh_label_def, emit_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def] >> rpt strip_tac >> gvs[]
+QED
+
+Theorem enc_new_block_frontiers[local]:
+  new_block lbl st = (old_lbl,st') ==>
+  st'.cs_next_id = st.cs_next_id /\ st'.cs_next_var = st.cs_next_var
+Proof
+  simp[new_block_def] >> rpt strip_tac >> gvs[]
+QED
+
+Theorem enc_static_loop_edges_frontiers:
+  enc_static_loop_edges hdr body_lbl exit cnd (si,s1,sh,sj,s2,sb,se,s3,sx) ==>
+  sh.cs_next_id = si.cs_next_id + 1 /\ sh.cs_next_var = si.cs_next_var /\
+  sb.cs_next_id = sj.cs_next_id + 1 /\ sb.cs_next_var = sj.cs_next_var /\
+  sx.cs_next_id = se.cs_next_id + 1 /\ sx.cs_next_var = se.cs_next_var
+Proof
+  simp[enc_static_loop_edges_def] >> strip_tac >>
+  imp_res_tac (cj 2 emitted_insts_emit_inst) >>
+  imp_res_tac (cj 3 emitted_insts_emit_inst) >>
+  imp_res_tac enc_new_block_frontiers >> simp[]
+QED
+
+Theorem enc_static_loop_phase_extends:
+  (enc_static_loop_init st = (phase,si) ==> cs_extends st si) /\
+  (enc_static_loop_header count_ptr len_op sh = (cnd,sj) ==> cs_extends sh sj) /\
+  (enc_static_loop_body dst src ei asz msz count_ptr sb = (u,se) ==> cs_extends sb se) /\
+  (enc_static_loop_exit src asz sx = (op,st') ==> cs_extends sx st')
+Proof
+  mp_tac enc_static_loop_phase_appends >>
+  simp[cs_appends_def] >> metis_tac[]
+QED
+
+Theorem enc_static_loop_phase_safety:
+  enc_static_loop_init st = ((count_ptr,hdr,body_lbl,exit),si) /\
+  enc_static_loop_header count_ptr len_op sh = (cnd,sj) /\
+  enc_static_loop_body dst src ei asz msz count_ptr sb = (u,se) /\
+  enc_static_loop_exit src asz sx = (op,st') /\
+  enc_static_loop_edges hdr body_lbl exit cnd (si,s1,sh,sj,s2,sb,se,s3,sx) ==>
+  st.cs_next_id IN frag_ids st st' /\
+  frag_ids si sx SUBSET frag_ids st st' /\
+  st.cs_next_var <= sh.cs_next_var /\
+  sh.cs_next_var <= sb.cs_next_var /\
+  sb.cs_next_var <= sx.cs_next_var /\
+  sx.cs_next_var <= st'.cs_next_var /\
+  (!x. count_ptr = Var x ==> not_fresh_at sh x) /\
+  (!x. count_ptr = Var x ==> not_fresh_at sb x) /\
+  (!x. count_ptr = Var x ==> not_fresh_at sx x)
+Proof
+  strip_tac >>
+  drule enc_static_loop_init_frontiers >> strip_tac >>
+  drule enc_static_loop_header_frontiers >> strip_tac >>
+  drule enc_static_loop_body_frontiers >> strip_tac >>
+  drule enc_static_loop_exit_frontiers >> strip_tac >>
+  drule enc_static_loop_edges_frontiers >> strip_tac >>
+  simp[frag_ids_def, pred_setTheory.SUBSET_DEF, not_fresh_at_def,
+       ASCIInumbersTheory.toString_11] >>
+  rpt strip_tac >> gvs[] >> decide_tac
+QED
+
 Theorem enc_frame_update_var:
   (!x. not_fresh_at st x ==> x <> y) /\
   enc_frame st st' lo top outs s0 s ==>
