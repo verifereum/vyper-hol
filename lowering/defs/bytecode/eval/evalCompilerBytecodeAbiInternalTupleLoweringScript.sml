@@ -54,6 +54,9 @@ val internal_tuple_call_external_fns_eval = save_thm
          ^internal_tuple_call_external_sources``)
 val internal_tuple_call_external_fns =
   rhs (concl internal_tuple_call_external_fns_eval)
+val internal_tuple_call_return_buffers_ok_eval = save_thm
+  ("internal_tuple_call_return_buffers_ok_eval",
+   EQT_ELIM (EVAL ``EVERY external_return_buffer_ok ^internal_tuple_call_external_fns``))
 val internal_tuple_call_internal_fns_eval = save_thm
   ("internal_tuple_call_internal_fns_eval",
    EVAL
@@ -1098,6 +1101,7 @@ val internal_tuple_call_stmts_clean_step1 = RATOR_CONV
       ^internal_tuple_call_state13``
 val internal_tuple_call_stmts_clean_step2 = SIMP_CONV pure_ss
   [internal_tuple_call_stmts_nil_def_clean,
+   stmtLoweringTheory.declare_stmt_local_def,
    compileEnvTheory.comp_get_def,
    compileEnvTheory.comp_bind_def,
    compileEnvTheory.comp_ignore_bind_def,
@@ -1824,6 +1828,7 @@ val internal_tuple_call_lower_runtime_eval = save_thm
       internal_tuple_call_fallback_fn_eval,
       internal_tuple_call_entry_info_eval,
       internal_tuple_call_run_lowering_eval,
+      internal_tuple_call_return_buffers_ok_eval, boolTheory.COND_CLAUSES,
       LET_THM, pairTheory.FST, pairTheory.SND,
       pairTheory.UNCURRY_DEF, pairTheory.pair_case_def]
      ``lower_vyper_runtime_unit ^internal_tuple_call_tops

@@ -20,7 +20,7 @@ Libs
 Theorem CalldataLen_builtin_success_type:
   context_well_typed cx ∧
   evaluate_type tenv (BaseT (UintT 256)) = SOME tv ∧
-  evaluate_builtin cx acc (BaseT (UintT 256)) CalldataLen [] = INL v ==>
+  evaluate_builtin cx acc (BaseT (UintT 256)) CalldataLen tys [] = INL v ==>
   value_has_type tv v
 Proof
   rw[evaluate_builtin_def, evaluate_type_def] >>
@@ -50,7 +50,7 @@ QED
 Theorem CalldataSlice_builtin_no_type_error:
   MAP (evaluate_type tenv) [BaseT (UintT 256)] = MAP SOME tvs /\
   LIST_REL value_has_type tvs vs ==>
-  evaluate_builtin cx acc ty (CalldataSlice n) vs <> INR (TypeError msg)
+  evaluate_builtin cx acc ty (CalldataSlice n) tys vs <> INR (TypeError msg)
 Proof
   Cases_on `tvs` >> rw[evaluate_type_def] >> gvs[] >>
   rename1 `value_has_type (BaseTV (UintT 256)) sv` >>
@@ -60,7 +60,7 @@ QED
 
 Theorem CalldataSlice_builtin_success_type:
   evaluate_type tenv (BaseT (BytesT (Dynamic n))) = SOME tv /\
-  evaluate_builtin cx acc (BaseT (BytesT (Dynamic n))) (CalldataSlice n) vs = INL v ==>
+  evaluate_builtin cx acc (BaseT (BytesT (Dynamic n))) (CalldataSlice n) tys vs = INL v ==>
   value_has_type tv v
 Proof
   rpt strip_tac >> Cases_on `vs` >>
@@ -74,7 +74,7 @@ QED
 
 Theorem Env_builtin_no_type_error:
   context_well_typed cx ∧ item <> MsgGas ==>
-  !msg. evaluate_builtin cx acc (env_item_type item) (Env item) [] <> INR (TypeError msg)
+  !msg. evaluate_builtin cx acc (env_item_type item) (Env item) tys [] <> INR (TypeError msg)
 Proof
   strip_tac >> Cases_on `item` >>
   gvs[evaluate_builtin_def, env_item_type_def]
@@ -83,7 +83,7 @@ QED
 
 Theorem Env_builtin_success_type:
   context_well_typed cx ∧ evaluate_type tenv (env_item_type item) = SOME tv ∧
-  evaluate_builtin cx acc (env_item_type item) (Env item) [] = INL v ==>
+  evaluate_builtin cx acc (env_item_type item) (Env item) tys [] = INL v ==>
   value_has_type tv v
 Proof
   Cases_on`item` >> simp[evaluate_builtin_def, env_item_type_def] >>
@@ -115,7 +115,7 @@ QED
 Theorem Acc_builtin_sound:
   accounts_well_typed acc ∧ evaluate_type tenv (account_item_type item) = SOME tv ∧
   value_has_type (BaseTV AddressT) addr_v ==>
-  ?v. evaluate_builtin cx acc (account_item_type item) (Acc item) [addr_v] = INL v ∧
+  ?v. evaluate_builtin cx acc (account_item_type item) (Acc item) tys [addr_v] = INL v ∧
       value_has_type tv v
 Proof
   Cases_on `addr_v` >> rw[value_has_type_def] >>
@@ -709,7 +709,7 @@ Theorem well_typed_binop_no_type_error:
   evaluate_type tenv t1 = SOME tv1 ∧ evaluate_type tenv t2 = SOME tv2 ∧
   value_has_type tv1 v1 ∧ value_has_type tv2 v2 ∧
   u = (case type_to_int_bound ty of NONE => Unsigned 0 | SOME u => u) ==>
-  !msg. evaluate_binop u result_tv bop v1 v2 <> INR (TypeError msg)
+  !msg. evaluate_binop u tv bop v1 v2 <> INR (TypeError msg)
 Proof
   rpt gen_tac >> strip_tac >>
   Cases_on `bop` >>
@@ -734,7 +734,7 @@ Theorem well_typed_builtin_bop_no_type_error[local]:
   [evaluate_type (get_tenv cx) h; evaluate_type (get_tenv cx) h'] = MAP SOME tvs ∧
   evaluate_type (get_tenv cx) ty = SOME tv ∧
   LIST_REL value_has_type tvs vs ==>
-  !msg. evaluate_builtin cx acc ty (Bop bop) vs <> INR (TypeError msg)
+  !msg. evaluate_builtin cx acc ty (Bop bop) [h; h'] vs <> INR (TypeError msg)
 Proof
   rpt strip_tac >>
   Cases_on `tvs` >> gvs[] >>
@@ -1171,7 +1171,7 @@ Theorem well_typed_binop_success_type:
   evaluate_type tenv t1 = SOME tv1 ∧ evaluate_type tenv t2 = SOME tv2 ∧
   value_has_type tv1 v1 ∧ value_has_type tv2 v2 ∧
   u = (case type_to_int_bound ty of NONE => Unsigned 0 | SOME u => u) ∧
-  evaluate_binop u result_tv bop v1 v2 = INL v ==>
+  evaluate_binop u tv bop v1 v2 = INL v ==>
   value_has_type result_tv v
 Proof
   rpt gen_tac >> strip_tac >>
@@ -1285,13 +1285,15 @@ Theorem builtin_bop_success_type[local]:
   [evaluate_type (get_tenv cx) t1; evaluate_type (get_tenv cx) t2] = MAP SOME tvs /\
   evaluate_type (get_tenv cx) ty = SOME result_tv /\
   LIST_REL value_has_type tvs vs /\
-  evaluate_builtin cx acc ty (Bop bop) vs = INL v ==>
+  evaluate_builtin cx acc ty (Bop bop) [t1; t2] vs = INL v ==>
   value_has_type result_tv v
 Proof
   rpt strip_tac >>
   Cases_on `tvs` >> gvs[evaluate_builtin_def] >>
   irule well_typed_binop_success_type >>
-  qexistsl [`bop`, `t1`, `t2`, `get_tenv cx`, `h`, `x0`, `ty`,
+  qexistsl [`bop`, `t1`, `t2`, `get_tenv cx`,
+            `case evaluate_type (get_tenv cx) t2 of NONE => NoneTV | SOME tv => tv`,
+            `h`, `x0`, `ty`,
             `case type_to_int_bound ty of NONE => Unsigned 0 | SOME u => u`,
             `y`, `y'`] >>
   gvs[]
@@ -1370,7 +1372,7 @@ QED
 Theorem ceil_builtin_success_type[local]:
   !cx acc d v.
     within_int_bound (Signed 168) d /\
-    evaluate_builtin cx acc (BaseT (IntT 256)) Ceil [DecimalV d] = INL v ==>
+    evaluate_builtin cx acc (BaseT (IntT 256)) Ceil tys [DecimalV d] = INL v ==>
     ?i. v = IntV i /\ within_int_bound (Signed 256) i
 Proof
   rpt strip_tac >>
@@ -1383,7 +1385,7 @@ QED
 Theorem floor_builtin_success_type[local]:
   !cx acc d v.
     within_int_bound (Signed 168) d /\
-    evaluate_builtin cx acc (BaseT (IntT 256)) Floor [DecimalV d] = INL v ==>
+    evaluate_builtin cx acc (BaseT (IntT 256)) Floor tys [DecimalV d] = INL v ==>
     ?i. v = IntV i /\ within_int_bound (Signed 256) i
 Proof
   rpt strip_tac >>
@@ -1407,7 +1409,7 @@ Theorem flag_Not_no_type_error[local]:
   context_well_typed cx ∧
   evaluate_type (get_tenv cx) (FlagT fid) = SOME tv ∧
   value_has_type tv y ==>
-  !msg. evaluate_builtin cx acc (FlagT fid) Not [y] ≠ INR (TypeError msg)
+  !msg. evaluate_builtin cx acc (FlagT fid) Not tys [y] ≠ INR (TypeError msg)
 Proof
   strip_tac >>
   qpat_x_assum `evaluate_type _ _ = _` mp_tac >>
@@ -1423,7 +1425,7 @@ QED
 Theorem as_wei_value_uint_no_type_error[local]:
   is_uint_type ty ∧ evaluate_type (get_tenv cx) ty = SOME tv ∧
   value_has_type tv v ==>
-  !msg. evaluate_builtin cx acc ty (AsWeiValue dn) [v] ≠ INR (TypeError msg)
+  !msg. evaluate_builtin cx acc ty (AsWeiValue dn) tys [v] ≠ INR (TypeError msg)
 Proof
   strip_tac >>
   gvs[is_uint_type_def] >>
@@ -1529,7 +1531,7 @@ Theorem concat_no_type_error[local]:
   type_slot_size (BaseTV (BytesT (Dynamic n))) ≤
     115792089237316195423570985008687907853269984665640564039457584007913129639936 ∧
   n < 115792089237316195423570985008687907853269984665640564039457584007913129639936 ==>
-  !msg. evaluate_builtin cx acc ty (Concat n) vs ≠ INR (TypeError msg)
+  !msg. evaluate_builtin cx acc ty (Concat n) ts vs ≠ INR (TypeError msg)
 Proof
   strip_tac >>
   drule LIST_REL_value_has_type_imp_combined >>
@@ -1554,7 +1556,7 @@ Theorem concat_string_no_type_error[local]:
   type_slot_size (BaseTV (StringT n)) ≤
     115792089237316195423570985008687907853269984665640564039457584007913129639936 ∧
   n < 115792089237316195423570985008687907853269984665640564039457584007913129639936 ==>
-  !msg. evaluate_builtin cx acc ty (Concat n) vs ≠ INR (TypeError msg)
+  !msg. evaluate_builtin cx acc ty (Concat n) ts vs ≠ INR (TypeError msg)
 Proof
   strip_tac >>
   drule LIST_REL_value_has_type_imp_combined >>
@@ -1753,7 +1755,7 @@ Theorem slice_bytes_builtin_success_type[local]:
        then SOME (BaseTV (BytesT bd)) else NONE;
      SOME (BaseTV (UintT 256)); SOME (BaseTV (UintT 256))] = MAP SOME tvs ∧
     LIST_REL value_has_type tvs vs ∧
-    evaluate_builtin cx acc (BaseT (BytesT (Dynamic n))) (Slice n) vs = INL v ⇒
+    evaluate_builtin cx acc (BaseT (BytesT (Dynamic n))) (Slice n) tys vs = INL v ⇒
     ∃bs. v = BytesV bs ∧ LENGTH bs <= n
 Proof
   rpt strip_tac >>
@@ -1776,7 +1778,7 @@ Theorem slice_string_builtin_success_type[local]:
      then SOME (BaseTV (StringT m)) else NONE;
      SOME (BaseTV (UintT 256)); SOME (BaseTV (UintT 256))] = MAP SOME tvs ∧
     LIST_REL value_has_type tvs vs ∧
-    evaluate_builtin cx acc (BaseT (StringT n)) (Slice n) vs = INL v ⇒
+    evaluate_builtin cx acc (BaseT (StringT n)) (Slice n) tys vs = INL v ⇒
     ∃s. v = StringV s ∧ LENGTH s <= n
 Proof
   rpt strip_tac >>
@@ -1800,7 +1802,7 @@ Theorem slice_no_type_error[local]:
   MAP (evaluate_type (get_tenv cx)) ts = MAP SOME tvs ∧
   LIST_REL value_has_type tvs vs ∧
   EL 1 ts = BaseT (UintT 256) ∧ EL 2 ts = BaseT (UintT 256) ==>
-  !msg. evaluate_builtin cx acc ty (Slice n) vs ≠ INR (TypeError msg)
+  !msg. evaluate_builtin cx acc ty (Slice n) ts vs ≠ INR (TypeError msg)
 Proof
   rpt strip_tac >>
   imp_res_tac LIST_REL_LENGTH >>
@@ -1831,7 +1833,7 @@ Theorem slice_string_no_type_error[local]:
   MAP (evaluate_type (get_tenv cx)) ts = MAP SOME tvs ∧
   LIST_REL value_has_type tvs vs ∧
   EL 1 ts = BaseT (UintT 256) ∧ EL 2 ts = BaseT (UintT 256) ==>
-  !msg. evaluate_builtin cx acc ty (Slice n) vs ≠ INR (TypeError msg)
+  !msg. evaluate_builtin cx acc ty (Slice n) ts vs ≠ INR (TypeError msg)
 Proof
   rpt strip_tac >>
   imp_res_tac LIST_REL_LENGTH >>
@@ -1855,7 +1857,7 @@ Theorem make_array_no_type_error[local]:
   MAP (evaluate_type (get_tenv cx)) ts = MAP SOME tvs ∧
   LIST_REL value_has_type tvs vs ∧ context_well_typed cx ∧
   accounts_well_typed acc ==>
-  !msg. evaluate_builtin cx acc ty (MakeArray o' bd) vs ≠ INR (TypeError msg)
+  !msg. evaluate_builtin cx acc ty (MakeArray o' bd) ts vs ≠ INR (TypeError msg)
 Proof
   rpt strip_tac >>
   gvs[well_typed_builtin_app_def] >>
@@ -1876,7 +1878,7 @@ Theorem make_array_dispatch_no_type_error[local]:
     evaluate_type (get_tenv cx) ty = SOME tv ∧
     LIST_REL value_has_type tvs vs ∧ context_well_typed cx ∧
     accounts_well_typed acc ==>
-    evaluate_builtin cx acc ty (MakeArray o' bd) vs ≠ INR (TypeError msg)
+    evaluate_builtin cx acc ty (MakeArray o' bd) ts vs ≠ INR (TypeError msg)
 Proof
   rpt strip_tac >>
   drule_all make_array_no_type_error >>
@@ -1913,7 +1915,7 @@ Theorem make_array_success_type[local]:
   evaluate_type (get_tenv cx) ty = SOME tv ∧
   MAP (evaluate_type (get_tenv cx)) ts = MAP SOME tvs ∧
   LIST_REL value_has_type tvs vs ∧
-  evaluate_builtin cx acc ty (MakeArray o' bd) vs = INL v ==>
+  evaluate_builtin cx acc ty (MakeArray o' bd) ts vs = INL v ==>
   value_has_type tv v
 Proof
   rpt strip_tac >>
@@ -1941,7 +1943,8 @@ Theorem addmod_no_type_error[local]:
   [SOME tv; SOME tv; SOME tv] = MAP SOME tvs ∧
   evaluate_type (get_tenv cx) (BaseT (UintT 256)) = SOME tv ∧
   LIST_REL value_has_type tvs vs ==>
-  !msg. evaluate_builtin cx acc (BaseT (UintT 256)) AddMod vs <> INR (TypeError msg)
+  !msg. evaluate_builtin cx acc (BaseT (UintT 256)) AddMod
+          [BaseT (UintT 256); BaseT (UintT 256); BaseT (UintT 256)] vs <> INR (TypeError msg)
 Proof
   rpt strip_tac >>
   imp_res_tac evaluate_type_BaseT_SOME >>
@@ -1955,7 +1958,8 @@ Theorem mulmod_no_type_error[local]:
   [SOME tv; SOME tv; SOME tv] = MAP SOME tvs ∧
   evaluate_type (get_tenv cx) (BaseT (UintT 256)) = SOME tv ∧
   LIST_REL value_has_type tvs vs ==>
-  !msg. evaluate_builtin cx acc (BaseT (UintT 256)) MulMod vs <> INR (TypeError msg)
+  !msg. evaluate_builtin cx acc (BaseT (UintT 256)) MulMod
+          [BaseT (UintT 256); BaseT (UintT 256); BaseT (UintT 256)] vs <> INR (TypeError msg)
 Proof
   rpt strip_tac >>
   imp_res_tac evaluate_type_BaseT_SOME >>
@@ -1969,7 +1973,8 @@ Theorem powmod256_no_type_error[local]:
   [SOME tv; SOME tv] = MAP SOME tvs ∧
   evaluate_type (get_tenv cx) (BaseT (UintT 256)) = SOME tv ∧
   LIST_REL value_has_type tvs vs ==>
-  !msg. evaluate_builtin cx acc (BaseT (UintT 256)) PowMod256 vs <> INR (TypeError msg)
+  !msg. evaluate_builtin cx acc (BaseT (UintT 256)) PowMod256
+          [BaseT (UintT 256); BaseT (UintT 256)] vs <> INR (TypeError msg)
 Proof
   rpt strip_tac >>
   imp_res_tac evaluate_type_BaseT_SOME >>
@@ -1980,7 +1985,7 @@ QED
 Theorem addmod_success_type[local]:
   MAP SOME tvs = [SOME (BaseTV (UintT 256)); SOME (BaseTV (UintT 256)); SOME (BaseTV (UintT 256))] /\
   LIST_REL value_has_type tvs vs /\
-  evaluate_builtin cx acc (BaseT (UintT 256)) AddMod vs = INL v ==>
+  evaluate_builtin cx acc (BaseT (UintT 256)) AddMod tys vs = INL v ==>
   value_has_type (BaseTV (UintT 256)) v
 Proof
   rpt strip_tac >>
@@ -1997,7 +2002,7 @@ QED
 Theorem mulmod_success_type[local]:
   MAP SOME tvs = [SOME (BaseTV (UintT 256)); SOME (BaseTV (UintT 256)); SOME (BaseTV (UintT 256))] /\
   LIST_REL value_has_type tvs vs /\
-  evaluate_builtin cx acc (BaseT (UintT 256)) MulMod vs = INL v ==>
+  evaluate_builtin cx acc (BaseT (UintT 256)) MulMod tys vs = INL v ==>
   value_has_type (BaseTV (UintT 256)) v
 Proof
   rpt strip_tac >>
@@ -2014,7 +2019,7 @@ QED
 Theorem powmod256_success_type[local]:
   MAP SOME tvs = [SOME (BaseTV (UintT 256)); SOME (BaseTV (UintT 256))] /\
   LIST_REL value_has_type tvs vs /\
-  evaluate_builtin cx acc (BaseT (UintT 256)) PowMod256 vs = INL v ==>
+  evaluate_builtin cx acc (BaseT (UintT 256)) PowMod256 tys vs = INL v ==>
   value_has_type (BaseTV (UintT 256)) v
 Proof
   rpt strip_tac >>
@@ -2071,7 +2076,7 @@ Theorem ecrecover_value_list_no_type_error[local]:
   (!i. 0 < i ∧ i < 4 ⇒
        value_has_type (BaseTV (UintT 256)) (EL i vs) ∨
        value_has_type (BaseTV (BytesT (Fixed 32))) (EL i vs)) ==>
-  !msg. evaluate_builtin cx acc (BaseT AddressT) ECRecover vs <> INR (TypeError msg)
+  !msg. evaluate_builtin cx acc (BaseT AddressT) ECRecover tys vs <> INR (TypeError msg)
 Proof
   strip_tac >> gen_tac >>
   `ecrecover_arg_to_num (EL 1 vs) ≠ NONE` by (
@@ -2112,7 +2117,7 @@ Proof
 QED
 
 Theorem ecrecover_success_type[local]:
-  evaluate_builtin cx acc (BaseT AddressT) ECRecover vs = INL v ==>
+  evaluate_builtin cx acc (BaseT AddressT) ECRecover tys vs = INL v ==>
   value_has_type (BaseTV AddressT) v
 Proof
   rw[evaluate_builtin_def] >>
@@ -2140,7 +2145,7 @@ Theorem ecrecover_no_type_error[local]:
   EVERY (λt. t = BaseT (UintT 256) ∨ t = BaseT (BytesT (Fixed 32))) (TL ts) ∧
   MAP (evaluate_type (get_tenv cx)) ts = MAP SOME tvs ∧
   LIST_REL value_has_type tvs vs ==>
-  !msg. evaluate_builtin cx acc ty ECRecover vs ≠ INR (TypeError msg)
+  !msg. evaluate_builtin cx acc ty ECRecover ts vs ≠ INR (TypeError msg)
 Proof
   rpt strip_tac >>
   `LENGTH tvs = 4` by metis_tac[LENGTH_MAP, LIST_REL_LENGTH] >>
@@ -2229,7 +2234,7 @@ Theorem ecrecover_dispatch_no_type_error[local]:
    evaluate_type (get_tenv cx) b;
    evaluate_type (get_tenv cx) c] = MAP SOME tvs ∧
   LIST_REL value_has_type tvs vs ==>
-  !msg. evaluate_builtin cx acc (BaseT AddressT) ECRecover vs <> INR (TypeError msg)
+  !msg. evaluate_builtin cx acc (BaseT AddressT) ECRecover tys vs <> INR (TypeError msg)
 Proof
   strip_tac >> gvs[] >> gen_tac >>
   Cases_on `tvs` >> gvs[] >>
@@ -2296,7 +2301,7 @@ Theorem ecadd_no_type_error[local]:
   MAP (evaluate_type (get_tenv cx)) ts = MAP SOME tvs ∧
   LIST_REL value_has_type tvs vs ∧ context_well_typed cx ∧
   accounts_well_typed acc ==>
-  !msg. evaluate_builtin cx acc ty ECAdd vs ≠ INR (TypeError msg)
+  !msg. evaluate_builtin cx acc ty ECAdd ts vs ≠ INR (TypeError msg)
 Proof
   rpt strip_tac >>
   gvs[well_typed_builtin_app_def] >>
@@ -2326,7 +2331,7 @@ Theorem ecadd_dispatch_no_type_error[local]:
   [SOME tv; SOME tv] = MAP SOME tvs ∧
   evaluate_type (get_tenv cx) (ArrayT (BaseT (UintT 256)) (Fixed 2)) = SOME tv ∧
   LIST_REL value_has_type tvs vs ==>
-  !msg. evaluate_builtin cx acc (ArrayT (BaseT (UintT 256)) (Fixed 2)) ECAdd vs <> INR (TypeError msg)
+  !msg. evaluate_builtin cx acc (ArrayT (BaseT (UintT 256)) (Fixed 2)) ECAdd tys vs <> INR (TypeError msg)
 Proof
   rpt strip_tac >>
   Cases_on `tvs` >> gvs[] >>
@@ -2347,7 +2352,7 @@ Theorem ecmul_no_type_error[local]:
   MAP (evaluate_type (get_tenv cx)) ts = MAP SOME tvs ∧
   LIST_REL value_has_type tvs vs ∧ context_well_typed cx ∧
   accounts_well_typed acc ==>
-  !msg. evaluate_builtin cx acc ty ECMul vs ≠ INR (TypeError msg)
+  !msg. evaluate_builtin cx acc ty ECMul ts vs ≠ INR (TypeError msg)
 Proof
   rpt strip_tac >>
   gvs[well_typed_builtin_app_def] >>
@@ -2376,7 +2381,7 @@ Theorem ecmul_dispatch_no_type_error[local]:
   [SOME tv; evaluate_type (get_tenv cx) (BaseT (UintT 256))] = MAP SOME tvs ∧
   evaluate_type (get_tenv cx) (ArrayT (BaseT (UintT 256)) (Fixed 2)) = SOME tv ∧
   LIST_REL value_has_type tvs vs ==>
-  !msg. evaluate_builtin cx acc (ArrayT (BaseT (UintT 256)) (Fixed 2)) ECMul vs <> INR (TypeError msg)
+  !msg. evaluate_builtin cx acc (ArrayT (BaseT (UintT 256)) (Fixed 2)) ECMul tys vs <> INR (TypeError msg)
 Proof
   rpt strip_tac >>
   Cases_on `tvs` >> gvs[] >>
@@ -2568,7 +2573,7 @@ Proof
 QED
 
 Theorem ecadd_success_type[local]:
-  evaluate_builtin cx acc (ArrayT (BaseT (UintT 256)) (Fixed 2)) ECAdd vs = INL v ==>
+  evaluate_builtin cx acc (ArrayT (BaseT (UintT 256)) (Fixed 2)) ECAdd tys vs = INL v ==>
   value_has_type (ArrayTV (BaseTV (UintT 256)) (Fixed 2)) v
 Proof
   rw[evaluate_builtin_def] >>
@@ -2576,7 +2581,7 @@ Proof
 QED
 
 Theorem ecmul_success_type[local]:
-  evaluate_builtin cx acc (ArrayT (BaseT (UintT 256)) (Fixed 2)) ECMul vs = INL v ==>
+  evaluate_builtin cx acc (ArrayT (BaseT (UintT 256)) (Fixed 2)) ECMul tys vs = INL v ==>
   value_has_type (ArrayTV (BaseTV (UintT 256)) (Fixed 2)) v
 Proof
   rw[evaluate_builtin_def] >>
@@ -2589,7 +2594,7 @@ Theorem bool_not_no_type_error[local]:
   is_bool_type ty ∧
   evaluate_type (get_tenv cx) ty = SOME tv ∧
   value_has_type tv v ==>
-  !msg. evaluate_builtin cx acc ty Not [v] ≠ INR (TypeError msg)
+  !msg. evaluate_builtin cx acc ty Not tys [v] ≠ INR (TypeError msg)
 Proof
   strip_tac >> gen_tac >>
   qpat_x_assum `is_bool_type _` mp_tac >>
@@ -2604,7 +2609,7 @@ Theorem uint_not_no_type_error[local]:
   is_uint_type ty ∧
   evaluate_type (get_tenv cx) ty = SOME tv ∧
   value_has_type tv v ==>
-  !msg. evaluate_builtin cx acc ty Not [v] ≠ INR (TypeError msg)
+  !msg. evaluate_builtin cx acc ty Not tys [v] ≠ INR (TypeError msg)
 Proof
   strip_tac >> gen_tac >>
   qpat_x_assum `is_uint_type _` mp_tac >>
@@ -2662,7 +2667,7 @@ Theorem uint_not_success_type:
   is_uint256_type ty ∧
   evaluate_type (get_tenv cx) ty = SOME tv ∧
   value_has_type tv v ∧
-  evaluate_builtin cx acc ty Not [v] = INL out ==>
+  evaluate_builtin cx acc ty Not tys [v] = INL out ==>
   value_has_type tv out
 Proof
   strip_tac >>
@@ -2679,7 +2684,7 @@ Theorem bool_not_success_type:
   is_bool_type ty ∧
   evaluate_type (get_tenv cx) ty = SOME tv ∧
   value_has_type tv v ∧
-  evaluate_builtin cx acc ty Not [v] = INL out ==>
+  evaluate_builtin cx acc ty Not tys [v] = INL out ==>
   value_has_type tv out
 Proof
   strip_tac >>
@@ -2693,13 +2698,28 @@ Theorem flag_Not_success_type[local]:
   context_well_typed cx ∧
   evaluate_type (get_tenv cx) (FlagT fid) = SOME tv ∧
   value_has_type tv y ∧
-  evaluate_builtin cx acc (FlagT fid) Not [y] = INL out ==>
+  evaluate_builtin cx acc (FlagT fid) Not tys [y] = INL out ==>
   value_has_type tv out
 Proof
   strip_tac >>
   qpat_x_assum `evaluate_type _ _ = _` mp_tac >>
   simp[evaluate_type_def, AllCaseEqs()] >> strip_tac >>
   gvs[value_has_type_def, evaluate_type_def, evaluate_builtin_def] >>
+  rewrite_tac[wordsTheory.WORD_NEG_1, GSYM wordsTheory.WORD_NOT_0] >>
+  simp[w2n_and_low_mask_lt]
+QED
+
+(* Helper: Not with any flag type preserves the statically computed result
+   type, at any context. *)
+Theorem flag_not_success_type:
+  is_flag_type ty ∧
+  evaluate_type (get_tenv cx) ty = SOME tv ∧
+  value_has_type tv v ∧
+  evaluate_builtin cx acc ty Not tys [v] = INL out ==>
+  value_has_type tv out
+Proof
+  Cases_on `ty` >> simp[] >> strip_tac >>
+  gvs[evaluate_type_def, AllCaseEqs(), value_has_type_def, evaluate_builtin_def] >>
   rewrite_tac[wordsTheory.WORD_NEG_1, GSYM wordsTheory.WORD_NOT_0] >>
   simp[w2n_and_low_mask_lt]
 QED
@@ -2720,7 +2740,7 @@ Theorem bytes32_not_no_type_error[local]:
   is_bytes32_type ty ∧
   evaluate_type (get_tenv cx) ty = SOME tv ∧
   value_has_type tv v ==>
-  !msg. evaluate_builtin cx acc ty Not [v] ≠ INR (TypeError msg)
+  !msg. evaluate_builtin cx acc ty Not tys [v] ≠ INR (TypeError msg)
 Proof
   strip_tac >> gen_tac >>
   qpat_x_assum `is_bytes32_type _` mp_tac >>
@@ -2736,7 +2756,7 @@ Theorem bytes32_not_success_type[local]:
   is_bytes32_type ty ∧
   evaluate_type (get_tenv cx) ty = SOME tv ∧
   value_has_type tv v ∧
-  evaluate_builtin cx acc ty Not [v] = INL out ==>
+  evaluate_builtin cx acc ty Not tys [v] = INL out ==>
   value_has_type tv out
 Proof
   strip_tac >>
@@ -2752,7 +2772,7 @@ Theorem neg_no_type_error[local]:
   is_numeric_type ty ∧
   evaluate_type (get_tenv cx) ty = SOME tv ∧
   value_has_type tv v ==>
-  !msg. evaluate_builtin cx acc ty Neg [v] ≠ INR (TypeError msg)
+  !msg. evaluate_builtin cx acc ty Neg tys [v] ≠ INR (TypeError msg)
 Proof
   strip_tac >> gen_tac >>
   qpat_x_assum `is_numeric_type _` mp_tac >>
@@ -2780,7 +2800,7 @@ Theorem neg_success_type:
   is_numeric_type ty ∧
   evaluate_type (get_tenv cx) ty = SOME tv ∧
   value_has_type tv v ∧
-  evaluate_builtin cx acc ty Neg [v] = INL out ==>
+  evaluate_builtin cx acc ty Neg tys [v] = INL out ==>
   value_has_type tv out
 Proof
   strip_tac >>
@@ -2800,7 +2820,7 @@ Theorem keccak256_no_type_error[local]:
   MAP (evaluate_type (get_tenv cx)) ts = MAP SOME tvs ∧
   evaluate_type (get_tenv cx) ty = SOME tv ∧
   LIST_REL value_has_type tvs vs ==>
-  !msg. evaluate_builtin cx acc ty Keccak256 vs ≠ INR (TypeError msg)
+  !msg. evaluate_builtin cx acc ty Keccak256 ts vs ≠ INR (TypeError msg)
 Proof
   strip_tac >> gen_tac >>
   `LENGTH vs = 1` by metis_tac[LIST_REL_LENGTH, LENGTH_MAP] >>
@@ -2830,7 +2850,7 @@ Theorem sha256_no_type_error[local]:
   MAP (evaluate_type (get_tenv cx)) ts = MAP SOME tvs ∧
   evaluate_type (get_tenv cx) ty = SOME tv ∧
   LIST_REL value_has_type tvs vs ==>
-  !msg. evaluate_builtin cx acc ty Sha256 vs ≠ INR (TypeError msg)
+  !msg. evaluate_builtin cx acc ty Sha256 ts vs ≠ INR (TypeError msg)
 Proof
   strip_tac >> gen_tac >>
   `LENGTH vs = 1` by metis_tac[LIST_REL_LENGTH, LENGTH_MAP] >>
@@ -2860,7 +2880,7 @@ Theorem as_wei_value_no_type_error[local]:
   MAP (evaluate_type (get_tenv cx)) ts = MAP SOME tvs ∧
   evaluate_type (get_tenv cx) ty = SOME tv ∧
   LIST_REL value_has_type tvs vs ==>
-  !msg. evaluate_builtin cx acc ty (AsWeiValue dn) vs ≠ INR (TypeError msg)
+  !msg. evaluate_builtin cx acc ty (AsWeiValue dn) ts vs ≠ INR (TypeError msg)
 Proof
   strip_tac >> gen_tac >>
   `LENGTH vs = 1` by metis_tac[LIST_REL_LENGTH, LENGTH_MAP] >>
@@ -2880,7 +2900,7 @@ Theorem concat_bytes_no_type_error[local]:
   MAP (evaluate_type (get_tenv cx)) ts = MAP SOME tvs ∧
   evaluate_type (get_tenv cx) ty = SOME tv ∧
   LIST_REL value_has_type tvs vs ==>
-  !msg. evaluate_builtin cx acc ty (Concat n) vs ≠ INR (TypeError msg)
+  !msg. evaluate_builtin cx acc ty (Concat n) ts vs ≠ INR (TypeError msg)
 Proof
   strip_tac >> gen_tac >>
   drule LIST_REL_value_has_type_imp_combined >>
@@ -2903,7 +2923,7 @@ Theorem concat_bytes_dispatch_no_type_error[local]:
   MAP (evaluate_type (get_tenv cx)) ts = MAP SOME tvs ∧
   evaluate_type (get_tenv cx) (BaseT (BytesT (Dynamic n))) = SOME tv ∧
   LIST_REL value_has_type tvs vs ==>
-  evaluate_builtin cx acc (BaseT (BytesT (Dynamic n))) (Concat n) vs ≠ INR (TypeError msg)
+  evaluate_builtin cx acc (BaseT (BytesT (Dynamic n))) (Concat n) ts vs ≠ INR (TypeError msg)
 Proof
   rpt strip_tac >>
   drule LIST_REL_value_has_type_imp_combined >>
@@ -2916,7 +2936,7 @@ Proof
   Cases_on `vs` >> gvs[] >>
   Cases_on `t` >> gvs[] >>
   gvs[init_concat_output_def] >>
-  qpat_x_assum `evaluate_builtin _ _ _ _ _ = INR (TypeError msg)` mp_tac >>
+  qpat_x_assum `evaluate_builtin _ _ _ _ _ _ = INR (TypeError msg)` mp_tac >>
   simp[evaluate_builtin_def, evaluate_concat_def, init_concat_output_def,
        evaluate_concat_loop_bytes_no_type_error]
 QED
@@ -2927,7 +2947,7 @@ Theorem concat_string_builtin_no_type_error[local]:
   MAP (evaluate_type (get_tenv cx)) ts = MAP SOME tvs ∧
   evaluate_type (get_tenv cx) ty = SOME tv ∧
   LIST_REL value_has_type tvs vs ==>
-  !msg. evaluate_builtin cx acc ty (Concat n) vs ≠ INR (TypeError msg)
+  !msg. evaluate_builtin cx acc ty (Concat n) ts vs ≠ INR (TypeError msg)
 Proof
   strip_tac >> gen_tac >>
   drule LIST_REL_value_has_type_imp_combined >>
@@ -2950,7 +2970,7 @@ Theorem concat_string_dispatch_no_type_error[local]:
   MAP (evaluate_type (get_tenv cx)) ts = MAP SOME tvs ∧
   evaluate_type (get_tenv cx) (BaseT (StringT n)) = SOME tv ∧
   LIST_REL value_has_type tvs vs ==>
-  evaluate_builtin cx acc (BaseT (StringT n)) (Concat n) vs ≠ INR (TypeError msg)
+  evaluate_builtin cx acc (BaseT (StringT n)) (Concat n) ts vs ≠ INR (TypeError msg)
 Proof
   rpt strip_tac >>
   drule LIST_REL_value_has_type_imp_combined >>
@@ -2963,7 +2983,7 @@ Proof
   Cases_on `vs` >> gvs[] >>
   Cases_on `t` >> gvs[] >>
   gvs[init_concat_output_def] >>
-  qpat_x_assum `evaluate_builtin _ _ _ _ _ = INR (TypeError msg)` mp_tac >>
+  qpat_x_assum `evaluate_builtin _ _ _ _ _ _ = INR (TypeError msg)` mp_tac >>
   simp[evaluate_builtin_def, evaluate_concat_def, init_concat_output_def,
        evaluate_concat_loop_string_no_type_error]
 QED
@@ -2978,11 +2998,11 @@ Theorem slice_bytes_no_type_error[local]:
   MAP (evaluate_type (get_tenv cx)) ts = MAP SOME tvs ∧
   evaluate_type (get_tenv cx) ty = SOME tv ∧
   LIST_REL value_has_type tvs vs ==>
-  !msg. evaluate_builtin cx acc ty (Slice n) vs ≠ INR (TypeError msg)
+  !msg. evaluate_builtin cx acc ty (Slice n) ts vs ≠ INR (TypeError msg)
 Proof
   strip_tac >> gen_tac >>
   irule slice_no_type_error >> gvs[] >>
-  qexistsl [`ts`, `tvs`] >> gvs[] >>
+  qexistsl [`tvs`] >> gvs[] >>
   imp_res_tac LIST_REL_LENGTH >> fs[evaluate_type_def, LET_THM] >> gvs[]
 QED
 
@@ -2992,12 +3012,13 @@ Theorem slice_bytes_dispatch_no_type_error[local]:
         [BaseT (BytesT bd); BaseT (UintT 256); BaseT (UintT 256)] = MAP SOME tvs ∧
     evaluate_type (get_tenv cx) (BaseT (BytesT (Dynamic n))) = SOME tv ∧
     LIST_REL value_has_type tvs vs ==>
-    evaluate_builtin cx acc (BaseT (BytesT (Dynamic n))) (Slice n) vs ≠ INR (TypeError msg)
+    evaluate_builtin cx acc (BaseT (BytesT (Dynamic n))) (Slice n)
+      [BaseT (BytesT bd); BaseT (UintT 256); BaseT (UintT 256)] vs ≠ INR (TypeError msg)
 Proof
   rpt gen_tac >> strip_tac >>
   irule slice_bytes_no_type_error >>
   gvs[evaluate_type_def, LET_THM] >>
-  qexistsl [`[BaseT (BytesT bd); BaseT (UintT 256); BaseT (UintT 256)]`, `tvs`] >>
+  qexistsl [`tvs`] >>
   gvs[evaluate_type_def, LET_THM]
 QED
 
@@ -3011,11 +3032,11 @@ Theorem slice_string_builtin_no_type_error[local]:
   MAP (evaluate_type (get_tenv cx)) ts = MAP SOME tvs ∧
   evaluate_type (get_tenv cx) ty = SOME tv ∧
   LIST_REL value_has_type tvs vs ==>
-  !msg. evaluate_builtin cx acc ty (Slice n) vs ≠ INR (TypeError msg)
+  !msg. evaluate_builtin cx acc ty (Slice n) ts vs ≠ INR (TypeError msg)
 Proof
   strip_tac >> gen_tac >>
   irule slice_string_no_type_error >> gvs[] >>
-  qexistsl [`ts`, `tvs`] >> gvs[] >>
+  qexistsl [`tvs`] >> gvs[] >>
   imp_res_tac LIST_REL_LENGTH >> fs[evaluate_type_def, LET_THM] >> gvs[]
 QED
 
@@ -3025,12 +3046,13 @@ Theorem slice_string_dispatch_no_type_error[local]:
         [BaseT (StringT m); BaseT (UintT 256); BaseT (UintT 256)] = MAP SOME tvs ∧
     evaluate_type (get_tenv cx) (BaseT (StringT n)) = SOME tv ∧
     LIST_REL value_has_type tvs vs ==>
-    evaluate_builtin cx acc (BaseT (StringT n)) (Slice n) vs ≠ INR (TypeError msg)
+    evaluate_builtin cx acc (BaseT (StringT n)) (Slice n)
+      [BaseT (StringT m); BaseT (UintT 256); BaseT (UintT 256)] vs ≠ INR (TypeError msg)
 Proof
   rpt gen_tac >> strip_tac >>
   irule slice_string_builtin_no_type_error >>
   gvs[evaluate_type_def, LET_THM] >>
-  qexistsl [`[BaseT (StringT m); BaseT (UintT 256); BaseT (UintT 256)]`, `tvs`] >>
+  qexistsl [`tvs`] >>
   gvs[evaluate_type_def, LET_THM]
 QED
 
@@ -3054,7 +3076,7 @@ Proof
 QED
 
 Theorem blockhash_success_type[local]:
-  evaluate_builtin cx acc (BaseT (BytesT (Fixed 32))) BlockHash [IntV i] = INL v ==>
+  evaluate_builtin cx acc (BaseT (BytesT (Fixed 32))) BlockHash tys [IntV i] = INL v ==>
   ?bs. v = BytesV bs /\ LENGTH bs = 32
 Proof
   rw[evaluate_builtin_def] >>
@@ -3062,7 +3084,7 @@ Proof
 QED
 
 Theorem blobhash_success_type[local]:
-  evaluate_builtin cx acc (BaseT (BytesT (Fixed 32))) BlobHash [IntV i] = INL v ==>
+  evaluate_builtin cx acc (BaseT (BytesT (Fixed 32))) BlobHash tys [IntV i] = INL v ==>
   ?bs. v = BytesV bs /\ LENGTH bs = 32
 Proof
   rw[evaluate_builtin_def, evaluate_blob_hash_def]
@@ -3072,16 +3094,17 @@ Theorem acc_builtin_success_type[local]:
   evaluate_type (get_tenv cx) (account_item_type item) = SOME tv /\
   LENGTH bs = 20 /\
   accounts_well_typed acc /\
-  evaluate_builtin cx acc (account_item_type item) (Acc item) [BytesV bs] = INL v ==>
+  evaluate_builtin cx acc (account_item_type item) (Acc item) tys [BytesV bs] = INL v ==>
   value_has_type tv v
 Proof
   rpt strip_tac >>
-  `value_has_type (BaseTV AddressT) (BytesV bs)` by simp[value_has_type_def] >>
-  drule_all Acc_builtin_sound >>
-  disch_then (qspec_then `cx` strip_assume_tac) >> gvs[]
+  mp_tac (Q.INST [`tenv` |-> `get_tenv cx`, `addr_v` |-> `BytesV bs`]
+            Acc_builtin_sound) >>
+  impl_tac >- simp[value_has_type_def] >>
+  strip_tac >> gvs[]
 QED
 Theorem methodid_success_type[local]:
-  evaluate_builtin cx acc (BaseT (BytesT (Fixed 4))) MethodId [arg] = INL v ==>
+  evaluate_builtin cx acc (BaseT (BytesT (Fixed 4))) MethodId tys [arg] = INL v ==>
   ?bs. v = BytesV bs /\ LENGTH bs = 4
 Proof
   rpt strip_tac >>
@@ -3094,7 +3117,7 @@ Theorem blockhash_no_type_error[local]:
   evaluate_type (get_tenv cx) (BaseT (UintT 256)) = SOME arg_tv ∧
   evaluate_type (get_tenv cx) (BaseT (BytesT (Fixed 32))) = SOME ret_tv ∧
   value_has_type arg_tv y ==>
-  evaluate_builtin cx acc (BaseT (BytesT (Fixed 32))) BlockHash [y] <> INR (TypeError msg)
+  evaluate_builtin cx acc (BaseT (BytesT (Fixed 32))) BlockHash tys [y] <> INR (TypeError msg)
 Proof
   rpt strip_tac >>
   imp_res_tac evaluate_type_BaseT_SOME >>
@@ -3107,7 +3130,7 @@ Theorem well_typed_builtin_app_no_type_error:
   evaluate_type (get_tenv cx) ty = SOME tv ∧
   LIST_REL value_has_type tvs vs ∧ context_well_typed cx ∧ accounts_well_typed acc ∧
   (!item. blt = Env item ==> item ≠ MsgGas) ==>
-  !msg. evaluate_builtin cx acc ty blt vs <> INR (TypeError msg)
+  !msg. evaluate_builtin cx acc ty blt ts vs <> INR (TypeError msg)
 Proof
   strip_tac >>
   Cases_on `blt` >>
@@ -3221,7 +3244,7 @@ Theorem well_typed_builtin_app_success_type:
   MAP (evaluate_type (get_tenv cx)) ts = MAP SOME tvs ∧
   evaluate_type (get_tenv cx) ty = SOME tv ∧
   LIST_REL value_has_type tvs vs ∧ context_well_typed cx ∧ accounts_well_typed acc ∧
-  evaluate_builtin cx acc ty blt vs = INL v ==>
+  evaluate_builtin cx acc ty blt ts vs = INL v ==>
   value_has_type tv v
 Proof
   strip_tac >> Cases_on `blt` >>
@@ -3240,44 +3263,44 @@ Proof
   (* Phase 2: resolve type values *)
   gvs[evaluate_type_def] >>
   (* Not: solve each concrete type without searching across unrelated builtins. *)
-  TRY (rename1 `evaluate_builtin _ _ (BaseT (BytesT (Fixed 32))) Not [BytesV bs] = INL v` >>
+  TRY (rename1 `evaluate_builtin _ _ (BaseT (BytesT (Fixed 32))) Not _ [BytesV bs] = INL v` >>
        gvs[evaluate_builtin_def, value_has_type_def,
            LENGTH_word_to_bytes_be_32] >> NO_TAC) >>
-  TRY (rename1 `evaluate_builtin _ _ (BaseT (UintT 256)) Not [IntV i] = INL v` >>
+  TRY (rename1 `evaluate_builtin _ _ (BaseT (UintT 256)) Not _ [IntV i] = INL v` >>
        gvs[evaluate_builtin_def, type_to_int_bound_def, is_Unsigned_def] >>
        qspec_then `~((n2w (Num i)) : bytes32)` mp_tac wordsTheory.w2n_lt >>
        simp[dimword_256] >> NO_TAC) >>
-  TRY (rename1 `evaluate_builtin _ _ (BaseT BoolT) Not [BoolV b] = INL v` >>
+  TRY (rename1 `evaluate_builtin _ _ (BaseT BoolT) Not _ [BoolV b] = INL v` >>
        gvs[evaluate_builtin_def, value_has_type_def] >> NO_TAC) >>
-  TRY (rename1 `evaluate_builtin _ _ (FlagT fid) Not [_] = INL _` >>
+  TRY (rename1 `evaluate_builtin _ _ (FlagT fid) Not _ [_] = INL _` >>
        Cases_on `FLOOKUP (get_tenv cx) fid` >> gvs[] >>
        Cases_on `x` >> gvs[] >>
        gvs[value_has_type_def, evaluate_builtin_def, evaluate_type_def] >>
        rewrite_tac[wordsTheory.WORD_NEG_1, GSYM wordsTheory.WORD_NOT_0] >>
        simp[w2n_and_low_mask_lt] >> NO_TAC)
-    >> TRY (rename1 `evaluate_builtin _ _ _ Neg [_] = INL _` >>
+    >> TRY (rename1 `evaluate_builtin _ _ _ Neg _ [_] = INL _` >>
    gvs[evaluate_builtin_def, type_to_int_bound_def] >>
    pop_assum mp_tac >> rw[] >>
    imp_res_tac bounded_decimal_op_INL >> gvs[] >>
    imp_res_tac bounded_int_op_INL >> gvs[within_int_bound_def] >> NO_TAC)
   
   (* Hash builtins return fixed 32-byte values. *)
-  >> TRY (rename1 `evaluate_builtin _ _ _ Keccak256 [arg] = INL _` >>
+  >> TRY (rename1 `evaluate_builtin _ _ _ Keccak256 _ [arg] = INL _` >>
        Cases_on `arg` >>
        gvs[evaluate_builtin_def, value_has_type_def, LENGTH_Keccak_256_w64] >>
        NO_TAC) >>
-  TRY (rename1 `evaluate_builtin _ _ _ Sha256 [arg] = INL _` >>
+  TRY (rename1 `evaluate_builtin _ _ _ Sha256 _ [arg] = INL _` >>
        Cases_on `arg` >>
        gvs[evaluate_builtin_def, value_has_type_def, LENGTH_word_to_bytes] >>
        NO_TAC) >>
   (* AsWeiValue returns Uint256 on successful evaluation by construction. *)
-  TRY (rename1 `evaluate_builtin _ _ _ (AsWeiValue d) [_] = INL _` >>
+  TRY (rename1 `evaluate_builtin _ _ _ (AsWeiValue d) _ [_] = INL _` >>
        gvs[evaluate_builtin_def, evaluate_as_wei_value_def, LET_THM,
            value_has_type_def, within_int_bound_def, AllCaseEqs()] >>
        NO_TAC) >>
   (* Concat success preserves the dynamic bytes/string bound. *)
   TRY (rename1 `EVERY (λt. ∃bd. t = BaseT (BytesT bd)) ts` >>
-       rename1 `evaluate_builtin _ _ _ (Concat n) vs = INL v` >>
+       rename1 `evaluate_builtin _ _ _ (Concat n) _ vs = INL v` >>
        drule LIST_REL_value_has_type_imp_combined >>
        disch_then (qspecl_then [`ts`, `get_tenv cx`] mp_tac) >> simp[] >> strip_tac >>
        `EVERY (λv. ∃bs. v = BytesV bs) vs` by
@@ -3288,7 +3311,7 @@ Proof
        gvs[init_concat_output_def] >>
        imp_res_tac evaluate_concat_loop_bytes_success_type >> gvs[] >> NO_TAC) >>
   TRY (rename1 `EVERY (λt. ∃m. t = BaseT (StringT m)) ts` >>
-       rename1 `evaluate_builtin _ _ _ (Concat n) vs = INL v` >>
+       rename1 `evaluate_builtin _ _ _ (Concat n) _ vs = INL v` >>
        drule LIST_REL_value_has_type_imp_combined >>
        disch_then (qspecl_then [`ts`, `get_tenv cx`] mp_tac) >> simp[] >> strip_tac >>
        `EVERY (λv. ∃s. v = StringV s) vs` by
@@ -3299,15 +3322,15 @@ Proof
        gvs[init_concat_output_def] >>
        imp_res_tac evaluate_concat_loop_string_success_type >> gvs[] >> NO_TAC) >>
   (* Slice success preserves the dynamic bytes/string bound. *)
-  TRY (rename1 `evaluate_builtin _ _ (BaseT (BytesT (Dynamic n))) (Slice n) vs = INL v` >>
+  TRY (rename1 `evaluate_builtin _ _ (BaseT (BytesT (Dynamic n))) (Slice n) _ vs = INL v` >>
        metis_tac[slice_bytes_builtin_success_type] >> NO_TAC) >>
-  TRY (rename1 `evaluate_builtin _ _ (BaseT (StringT n)) (Slice n) vs = INL v` >>
+  TRY (rename1 `evaluate_builtin _ _ (BaseT (StringT n)) (Slice n) _ vs = INL v` >>
        metis_tac[slice_string_builtin_success_type] >> NO_TAC) >>
   (* MakeArray success produces the tuple/array value requested by the static rule. *)
-  TRY (rename1 `evaluate_builtin _ _ ty (MakeArray o' b) vs = INL v` >>
+  TRY (rename1 `evaluate_builtin _ _ ty (MakeArray o' b) _ vs = INL v` >>
        metis_tac[make_array_success_type] >> NO_TAC) >>
   (* Uint2Str success returns a string within the statically required bound. *)
-  TRY (rename1 `evaluate_builtin _ _ (BaseT (StringT n)) (Uint2Str n) [IntV i] = INL v` >>
+  TRY (rename1 `evaluate_builtin _ _ (BaseT (StringT n)) (Uint2Str n) _ [IntV i] = INL v` >>
        gvs[evaluate_builtin_def, compatible_bound_def] >>
        `STRLEN (toString (Num i)) <= 78` by
          (irule uint2str_strlen_bound >>
@@ -3315,27 +3338,27 @@ Proof
           gvs[value_has_type_def, well_formed_type_value_def]) >>
        gvs[] >> NO_TAC) >>
   (* Floor/Ceil success returns Int256 by the decimal division bounds. *)
-  TRY (rename1 `evaluate_builtin _ _ (BaseT (IntT 256)) Ceil [DecimalV d] = INL v` >>
+  TRY (rename1 `evaluate_builtin _ _ (BaseT (IntT 256)) Ceil _ [DecimalV d] = INL v` >>
        metis_tac[ceil_builtin_success_type] >> NO_TAC) >>
-  TRY (rename1 `evaluate_builtin _ _ (BaseT (IntT 256)) Floor [DecimalV d] = INL v` >>
+  TRY (rename1 `evaluate_builtin _ _ (BaseT (IntT 256)) Floor _ [DecimalV d] = INL v` >>
        metis_tac[floor_builtin_success_type] >> NO_TAC) >>
   (* Modular arithmetic builtins return Uint256 results. *)
-  TRY (rename1 `evaluate_builtin _ _ (BaseT (UintT 256)) AddMod vs = INL v` >>
+  TRY (rename1 `evaluate_builtin _ _ (BaseT (UintT 256)) AddMod _ vs = INL v` >>
        `value_has_type (BaseTV (UintT 256)) v` by
          metis_tac[addmod_success_type] >>
        gvs[value_has_type_def] >> NO_TAC) >>
-  TRY (rename1 `evaluate_builtin _ _ (BaseT (UintT 256)) MulMod vs = INL v` >>
+  TRY (rename1 `evaluate_builtin _ _ (BaseT (UintT 256)) MulMod _ vs = INL v` >>
        `value_has_type (BaseTV (UintT 256)) v` by
          metis_tac[mulmod_success_type] >>
        gvs[value_has_type_def] >> NO_TAC) >>
-  TRY (rename1 `evaluate_builtin _ _ (BaseT (UintT 256)) PowMod256 vs = INL v` >>
+  TRY (rename1 `evaluate_builtin _ _ (BaseT (UintT 256)) PowMod256 _ vs = INL v` >>
        `value_has_type (BaseTV (UintT 256)) v` by
          metis_tac[powmod256_success_type] >>
        gvs[value_has_type_def] >> NO_TAC) >>
   (* BlockHash/BlobHash success returns fixed bytes32 values. *)
-  TRY (rename1 `evaluate_builtin _ _ (BaseT (BytesT (Fixed 32))) BlockHash [IntV i] = INL v` >>
+  TRY (rename1 `evaluate_builtin _ _ (BaseT (BytesT (Fixed 32))) BlockHash _ [IntV i] = INL v` >>
        metis_tac[blockhash_success_type] >> NO_TAC) >>
-  TRY (rename1 `evaluate_builtin _ _ (BaseT (BytesT (Fixed 32))) BlobHash [IntV i] = INL v` >>
+  TRY (rename1 `evaluate_builtin _ _ (BaseT (BytesT (Fixed 32))) BlobHash _ [IntV i] = INL v` >>
        metis_tac[blobhash_success_type] >> NO_TAC) >>
   (* Phase 3: resolve builtin execution + related defs *)
   TRY (gvs[evaluate_builtin_def, type_to_int_bound_def,
@@ -3351,33 +3374,33 @@ Proof
   (* AsWeiValue: expand and use within_int_bound + evaluate_as_wei_value *)
   TRY (gvs[evaluate_as_wei_value_def, LET_THM] >> NO_TAC) >>
   (* Bop: delegate to the binary-operation boundary helper. *)
-  TRY (rename1 `evaluate_builtin _ _ ty (Bop b) vs = INL v` >>
+  TRY (rename1 `evaluate_builtin _ _ ty (Bop b) _ vs = INL v` >>
        metis_tac[builtin_bop_success_type] >> NO_TAC) >>
   (* Env: delegate to Env_builtin_success_type *)
   TRY (metis_tac[Env_builtin_success_type] >> NO_TAC) >>
   (* Acc: delegate to account builtin success helper. *)
-  TRY (rename1 `evaluate_builtin _ _ (account_item_type a) (Acc a) [BytesV bs] = INL v` >>
+  TRY (rename1 `evaluate_builtin _ _ (account_item_type a) (Acc a) _ [BytesV bs] = INL v` >>
        metis_tac[acc_builtin_success_type] >> NO_TAC) >>
   (* MethodId returns fixed bytes4. *)
-  TRY (rename1 `evaluate_builtin _ _ (BaseT (BytesT (Fixed 4))) MethodId [arg] = INL v` >>
+  TRY (rename1 `evaluate_builtin _ _ (BaseT (BytesT (Fixed 4))) MethodId _ [arg] = INL v` >>
        metis_tac[methodid_success_type] >> NO_TAC) >>~
   (* MethodId returns dynamic Bytes[4]. *)
-  [`evaluate_builtin _ _ (BaseT (BytesT (Dynamic 4))) MethodId [arg] = INL v`]
+  [`evaluate_builtin _ _ (BaseT (BytesT (Dynamic 4))) MethodId _ [arg] = INL v`]
   >- (Cases_on `arg` >> gvs[evaluate_builtin_def, LENGTH_TAKE_EQ])
   >- (Cases_on `arg` >> gvs[evaluate_builtin_def, LENGTH_TAKE_EQ]) >>
   (* ECRecover returns an address on success. *)
-  TRY (rename1 `evaluate_builtin _ _ (BaseT AddressT) ECRecover vs = INL v` >>
+  TRY (rename1 `evaluate_builtin _ _ (BaseT AddressT) ECRecover _ vs = INL v` >>
        `value_has_type (BaseTV AddressT) v` by metis_tac[ecrecover_success_type] >>
        gvs[value_has_type_def] >> NO_TAC) >>
   (* ECAdd/ECMul return uint256[2] arrays on success. *)
-  TRY (rename1 `evaluate_builtin _ _ (ArrayT (BaseT (UintT 256)) (Fixed 2)) ECAdd vs = INL v` >>
+  TRY (rename1 `evaluate_builtin _ _ (ArrayT (BaseT (UintT 256)) (Fixed 2)) ECAdd _ vs = INL v` >>
        metis_tac[ecadd_success_type] >> NO_TAC) >>
-  TRY (rename1 `evaluate_builtin _ _ (ArrayT (BaseT (UintT 256)) (Fixed 2)) ECMul vs = INL v` >>
+  TRY (rename1 `evaluate_builtin _ _ (ArrayT (BaseT (UintT 256)) (Fixed 2)) ECMul _ vs = INL v` >>
        metis_tac[ecmul_success_type] >> NO_TAC) >>
   (* Flag bitwise not: use w2n_and_low_mask_lt *)
   TRY (gvs[w2n_and_low_mask_lt] >> NO_TAC)
   (* Abs *)
-  >>~ [`evaluate_builtin _ _ _ Abs _`] >- (
+  >>~ [`evaluate_builtin _ _ _ Abs _ _`] >- (
     gvs[evaluate_builtin_def, type_to_int_bound_def,
         bounded_int_op_def] ) >>
   (* Arithmetic cleanup *)
@@ -3797,7 +3820,7 @@ Proof
 QED
 
 Theorem ext_call_args_typed:
-  well_typed_expr env (Call ty (ExtCall stat skip_check fsig) args drv) ==>
+  well_typed_expr env (Call ty (ExtCall stat skip_check fsig opts) args drv) ==>
   well_typed_exprs env args ∧ well_typed_opt env drv
 Proof
   Cases_on `fsig` >> Cases_on `r` >> rw[well_typed_expr_def]

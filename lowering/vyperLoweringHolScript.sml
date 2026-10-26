@@ -4,8 +4,15 @@ Ancestors
   (* definitions *)
   moduleLowering
   (* property statements and proofs *)
-  moduleLoweringProps
+  moduleLoweringProps entryDispatchProps
+  loweringSlice
+  varsExt exprSim
+  exprBopLowering
+  exprSimOps exprSimCompare exprSimArith intBits freshWrites
+  exprSimMain
   valueEncodingProofs
+  localPtrsProps
+  loweringShapeProps
   (* compiler + correctness *)
   vyperCompiler
   vyperLoweringCorrect
@@ -13,4 +20,7 @@ Ancestors
   evalCompilerMemoryStores
   evalCompilerExternalCalls
   evalCompilerNameCollisions
+  evalCompilerInternalLabels
   evalCompilerSliceBuffers
+  evalCompilerPhiPointers
+  evalCompilerAllocationLimit
