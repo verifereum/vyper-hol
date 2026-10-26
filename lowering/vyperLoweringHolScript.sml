@@ -13,6 +13,7 @@ Ancestors
   valueEncodingProofs
   localPtrsProps
   loweringShapeProps
+  structFieldsProps
   (* compiler + correctness *)
   vyperCompiler
   allocaBudgetChecks
