@@ -120,13 +120,14 @@ mkdir -p tests/functional/codegen/vyper_hol_regression
 cp -R ../tests/vyper-regression/. tests/functional/codegen/vyper_hol_regression/
 pip install . --group test
 pytest -s -n0 --export=../tests/vyper-test-exports -m "not fuzzing" tests/functional
+cd ..
 ```
 
 The checkout command reads the repository's authoritative `VYPER_PIN`; keep it
 before installation and export so the installed compiler and generated fixtures
 come from the pinned revision.
 
-Generate the HOL test wrappers from those exports:
+From the Vyper-HOL repository root, generate the HOL test wrappers from those exports:
 
 ```bash
 holbuild build vyperTestLib
