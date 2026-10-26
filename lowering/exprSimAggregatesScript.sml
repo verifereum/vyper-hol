@@ -223,8 +223,11 @@ Proof
        typed_val_to_w256_def, val_to_w256_def] >>
   simp[integerTheory.INT_SUB] >>
   rw[vyperValueTheory.evaluate_type_def] >>
-  gvs[AllCaseEqs(), typed_val_to_w256_def, val_to_w256_def,
-      integer_wordTheory.i2w_def]
+  (* Keep symbolic signed bounds opaque to word arithmetic conversions. *)
+  PURE_REWRITE_TAC
+    [typed_val_to_w256_def, val_to_w256_def,
+     integer_wordTheory.i2w_0, integer_wordTheory.i2w_pos] >>
+  REFL_TAC
 QED
 
 Theorem compile_bound_builtin_case_sim:
