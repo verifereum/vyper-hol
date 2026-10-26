@@ -22,6 +22,13 @@ Theorem st_nested_lit_matches_python_oracle:
 Proof
   CONV_TAC (LAND_CONV (K (#evaluation st_nested_lit))) >> EVAL_TAC
 QED
+(* S names T before T's declaration: T must still be laid out as two words. *)
+val st_forward_ref_lit = memoryStoreWitnessLib.evaluate fixture_root "st_forward_ref_lit"
+Theorem st_forward_ref_lit_matches_python_oracle:
+  ^(#term st_forward_ref_lit) = SOME ^(memoryStoreWitnessLib.oracle fixture_root "st_forward_ref_lit")
+Proof
+  CONV_TAC (LAND_CONV (K (#evaluation st_forward_ref_lit))) >> EVAL_TAC
+QED
 val arr_dyn_lit_word = memoryStoreWitnessLib.evaluate fixture_root "arr_dyn_lit_word"
 Theorem arr_dyn_lit_word_matches_python_oracle:
   ^(#term arr_dyn_lit_word) = SOME ^(memoryStoreWitnessLib.oracle fixture_root "arr_dyn_lit_word")
