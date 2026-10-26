@@ -549,6 +549,136 @@ Proof
   simp[lookup_var_def, mcopy_def, write_memory_with_expansion_def, LET_THM]
 QED
 
+Theorem byte_chunk_head_run:
+  !ptr off value sa dst sm sb s w.
+    emit_op ADD [ptr; Lit off] sa = (dst, sm) /\
+    emit_void MSTORE [dst; Lit value] sm = ((), sb) /\
+    eval_operand ptr s = SOME w ==>
+    sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
+    same_blocks sa sb /\ sb.cs_next_var = sa.cs_next_var + 1 /\
+    ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
+        t.vs_labels = s.vs_labels /\
+        (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s)
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[emit_op_def, emit_void_def, comp_bind_def, comp_ignore_bind_def,
+      fresh_id_def, fresh_var_def, emit_def, comp_return_def] >>
+  simp[emitted_insts_def, same_blocks_def, DROP_APPEND1,
+       run_inst_seq_def, step_inst_base_def, exec_pure2_def,
+       exec_write2_def, eval_operand_def, bind_outputs_def,
+       lookup_var_update_var] >>
+  rpt strip_tac >> simp[lookup_var_mstore, lookup_var_update_var] >>
+  gvs[not_fresh_at_def]
+QED
+
+Theorem compile_store_byte_chunks_run:
+  !ptr bs off sa sb s w.
+    compile_store_byte_chunks ptr bs off sa = ((), sb) /\
+    (!x. ptr = Var x ==> not_fresh_at sa x) /\
+    eval_operand ptr s = SOME w ==>
+    sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
+    same_blocks sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
+    ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
+        t.vs_labels = s.vs_labels /\
+        (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s)
+Proof
+  recInduct compile_store_byte_chunks_ind >> rpt gen_tac >> strip_tac
+  >- gvs[compile_store_byte_chunks_def, comp_return_def,
+         emitted_insts_def, same_blocks_def, run_inst_seq_def] >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  rename1 `compile_store_byte_chunks data_ptr (h::bs) offset sa = ((), sb)` >>
+  gvs[Once compile_store_byte_chunks_def, comp_bind_def,
+      comp_ignore_bind_def, LET_THM, AllCaseEqs()] >>
+  Cases_on `emit_op ADD [data_ptr; Lit (n2w offset)] sa` >>
+  rename1 `emit_op ADD _ sa = (dst, sm)` >>
+  Cases_on `emit_void MSTORE [dst; Lit (word_of_bytes T 0w
+    (h::TAKE 31 (bs ++ REPLICATE 31 0w)))] sm` >>
+  rename1 `emit_void MSTORE _ sm = (u, sh)` >> Cases_on `u` >> gvs[] >>
+  drule_all byte_chunk_head_run >> strip_tac >>
+  `(!x. data_ptr = Var x ==> not_fresh_at sh x) /\
+   eval_operand data_ptr t = SOME w` by
+    (conj_tac >- metis_tac[freshWritesTheory.not_fresh_at_mono, arithmeticTheory.LESS_EQ_ADD] >>
+     Cases_on `data_ptr` >> gvs[eval_operand_def]) >>
+  first_x_assum drule >> simp[] >> strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  `sb.cs_current_insts = sh.cs_current_insts ++ emitted_insts sh sb` by simp[] >>
+  `emitted_insts sa sb = emitted_insts sa sh ++ emitted_insts sh sb` by
+    metis_tac[emitted_insts_append] >>
+  simp[] >> conj_tac >- metis_tac[same_blocks_def] >>
+  qexists `t'` >> conj_tac
+  >- (qpat_assum `run_inst_seq _ s = OK t` (mp_tac o MATCH_MP run_inst_seq_append) >>
+      disch_then (qspec_then `emitted_insts sh sb` mp_tac) >> simp[]) >>
+  simp[] >> rpt strip_tac >>
+  `not_fresh_at sh x` by
+    (irule freshWritesTheory.not_fresh_at_mono >> qexists `sa` >> simp[]) >>
+  simp[]
+QED
+
+Theorem byte_literal_head_run:
+  !size len sa buf sm sb s.
+    compile_alloc_buffer size sa = (buf, sm) /\
+    emit_void MSTORE [buf.buf_operand; Lit len] sm = ((), sb) ==>
+    sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
+    same_blocks sa sb /\ sb.cs_next_var = sa.cs_next_var + 1 /\
+    (!x. buf.buf_operand = Var x ==> not_fresh_at sb x) /\
+    ?t w. run_inst_seq (emitted_insts sa sb) s = OK t /\
+          eval_operand buf.buf_operand t = SOME w /\ t.vs_labels = s.vs_labels /\
+          (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s)
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[contextTheory.compile_alloc_buffer_def, emit_op_def, emit_void_def,
+      comp_bind_def, comp_ignore_bind_def, fresh_id_def, fresh_var_def,
+      emit_def, comp_return_def] >>
+  simp[emitted_insts_def, same_blocks_def, DROP_APPEND1,
+       not_fresh_at_def] >>
+  Cases_on `FLOOKUP s.vs_allocas sa.cs_next_id`
+  >- (simp[run_inst_seq_def, step_inst_base_def, venomInstTheory.mk_inst_def, exec_alloca_def,
+           exec_write2_def, eval_operand_def, lookup_var_update_var] >>
+      rpt strip_tac >> simp[lookup_var_def, update_var_def, mstore_def,
+                           FLOOKUP_UPDATE] >> metis_tac[]) >>
+  rename1 `FLOOKUP s.vs_allocas sa.cs_next_id = SOME alloc` >> PairCases_on `alloc` >>
+  simp[run_inst_seq_def, step_inst_base_def, venomInstTheory.mk_inst_def, exec_alloca_def,
+       exec_write2_def, eval_operand_def, lookup_var_update_var] >>
+  rpt strip_tac >> simp[lookup_var_mstore, lookup_var_update_var] >> metis_tac[]
+QED
+
+Theorem compile_bytelike_literal_run:
+  !bs max_len sa buf sb s.
+    compile_bytelike_literal bs max_len sa = (buf, sb) ==>
+    sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
+    same_blocks sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
+    (!x. buf.buf_operand = Var x ==> not_fresh_at sb x) /\
+    ?t w. run_inst_seq (emitted_insts sa sb) s = OK t /\
+          eval_operand buf.buf_operand t = SOME w /\ t.vs_labels = s.vs_labels /\
+          (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s)
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `compile_bytelike_literal _ _ _ = _` mp_tac >>
+  simp[compile_bytelike_literal_def, comp_bind_def, comp_ignore_bind_def, LET_THM] >>
+  Cases_on `compile_alloc_buffer (32 + (max_len + 31) DIV 32 * 32) sa` >>
+  rename1 `compile_alloc_buffer _ sa = (b, sm)` >>
+  Cases_on `emit_void MSTORE [b.buf_operand; Lit (n2w (LENGTH bs))] sm` >>
+  rename1 `emit_void MSTORE _ sm = (u, sh)` >> Cases_on `u` >>
+  Cases_on `compile_store_byte_chunks b.buf_operand bs 32 sh` >>
+  rename1 `compile_store_byte_chunks _ _ _ sh = (u, sf)` >>
+  Cases_on `u` >> simp[comp_return_def] >> strip_tac >> gvs[] >>
+  drule_all byte_literal_head_run >> disch_then (qspec_then `s` strip_assume_tac) >>
+  drule_all compile_store_byte_chunks_run >> strip_tac >>
+  `sb.cs_current_insts = sh.cs_current_insts ++ emitted_insts sh sb` by simp[] >>
+  `emitted_insts sa sb = emitted_insts sa sh ++ emitted_insts sh sb` by
+    metis_tac[emitted_insts_append] >>
+  simp[] >> conj_tac >- metis_tac[same_blocks_def] >>
+  conj_tac >- metis_tac[freshWritesTheory.not_fresh_at_mono] >>
+  qexistsl [`t'`, `w`] >> conj_tac
+  >- (qpat_assum `run_inst_seq _ s = OK t` (mp_tac o MATCH_MP run_inst_seq_append) >>
+      disch_then (qspec_then `emitted_insts sh sb` mp_tac) >> simp[]) >>
+  conj_tac >- (Cases_on `b.buf_operand` >> gvs[eval_operand_def]) >>
+  simp[] >> rpt strip_tac >>
+  `not_fresh_at sh x` by
+    (irule freshWritesTheory.not_fresh_at_mono >> qexists `sa` >> simp[]) >>
+  simp[]
+QED
+
 (* raise and assert with a string literal as the reason: the literal's
    buffer and the Error(string) encoding of compile_revert_with_reason,
    straight-line code that ends in a REVERT, which every assertion
