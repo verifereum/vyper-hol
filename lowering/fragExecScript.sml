@@ -146,6 +146,14 @@ Definition cs_appends_def:
     !st x st'. m st = (x, st') ==> cs_extends st st'
 End
 
+(* A compile action that only appends code and hands out variables
+   forward. *)
+Definition cs_mono_def:
+  cs_mono (m : 'a compiler) <=>
+    !sa x sb. m sa = (x, sb) ==>
+              cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var
+End
+
 Theorem cs_appends_bind:
   !m f. cs_appends m /\ (!a. cs_appends (f a)) ==> cs_appends (comp_bind m f)
 Proof
