@@ -125,6 +125,9 @@ val scalar_convert_decimal_external_fns_eval = save_thm
       ^scalar_convert_decimal_external_sources``)
 val scalar_convert_decimal_external_fns =
   rhs (concl scalar_convert_decimal_external_fns_eval)
+val scalar_convert_decimal_return_buffers_ok_eval = save_thm
+  ("scalar_convert_decimal_return_buffers_ok_eval",
+   EQT_ELIM (EVAL ``EVERY external_return_buffer_ok ^scalar_convert_decimal_external_fns``))
 val scalar_convert_decimal_internal_fns_eval = save_thm
   ("scalar_convert_decimal_internal_fns_eval",
    evalCompilerBytecodeLib.weak_eval ``MAP (set_internal_package_target
@@ -481,6 +484,7 @@ val scalar_convert_decimal_runtime_unit_eval = save_thm
       scalar_convert_decimal_fallback_fn_eval,
       scalar_convert_decimal_entry_info_eval,
       scalar_convert_decimal_run_lowering_eval,
+      scalar_convert_decimal_return_buffers_ok_eval, boolTheory.COND_CLAUSES,
       LET_THM, pairTheory.FST, pairTheory.SND,
       pairTheory.UNCURRY_DEF, pairTheory.pair_case_def] @
      CONJUNCTS

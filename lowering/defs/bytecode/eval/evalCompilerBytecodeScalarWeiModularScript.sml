@@ -125,6 +125,9 @@ val scalar_modular_external_fns_eval = save_thm
       ^scalar_modular_external_sources``)
 val scalar_modular_external_fns =
   rhs (concl scalar_modular_external_fns_eval)
+val scalar_modular_return_buffers_ok_eval = save_thm
+  ("scalar_modular_return_buffers_ok_eval",
+   EQT_ELIM (EVAL ``EVERY external_return_buffer_ok ^scalar_modular_external_fns``))
 val scalar_modular_internal_fns_eval = save_thm
   ("scalar_modular_internal_fns_eval",
    evalCompilerBytecodeLib.weak_eval ``MAP (set_internal_package_target
@@ -505,6 +508,7 @@ val scalar_modular_lower_runtime_eval = save_thm
       scalar_modular_external_fns_eval, scalar_modular_internal_fns_eval,
       scalar_modular_fallback_fn_eval, scalar_modular_entry_info_eval,
       scalar_modular_run_lowering_eval,
+      scalar_modular_return_buffers_ok_eval, boolTheory.COND_CLAUSES,
       LET_THM, pairTheory.FST, pairTheory.SND,
       pairTheory.UNCURRY_DEF, pairTheory.pair_case_def] @
      CONJUNCTS
