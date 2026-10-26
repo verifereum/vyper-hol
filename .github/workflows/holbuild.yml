@@ -2,6 +2,13 @@ name: holbuild
 
 on:
   workflow_dispatch:
+    inputs:
+      uncached:
+        description: 'Build without restoring any cache'
+        type: boolean
+        default: false
+  schedule:
+    - cron: '0 3 * * 6'
   pull_request:
     # Draft PRs run no jobs. ready_for_review starts CI when a draft is marked
     # ready; converted_to_draft cancels the run of a PR turned back into a draft.
@@ -20,6 +27,10 @@ permissions:
 env:
   HBX_BASENAME: vyper-hol
   HBX_ARTEFACT_NAME: vyper-hol-hbx-${{ github.sha }}
+  # Uncached runs check that main still builds from source. Every cache key gets
+  # this run's id, so no other run's entry is restored and no other run reads
+  # what this one saves, and the remote cache login is withheld.
+  CACHE_KEY_SUFFIX: ${{ (github.event_name == 'schedule' || inputs.uncached) && format('-uncached-{0}-{1}', github.run_id, github.run_attempt) || '' }}
 
 jobs:
   build:
@@ -35,6 +46,8 @@ jobs:
 
       - uses: ./.github/actions/setup-polyml
         id: polyml
+        with:
+          cache-key-suffix: ${{ env.CACHE_KEY_SUFFIX }}
 
       - name: Get minimum holbuild version from holproject.toml
         id: holbuild-version
@@ -52,6 +65,7 @@ jobs:
         id: holbuild
         with:
           holbuild-ref: ${{ steps.holbuild-version.outputs.ref }}
+          cache-key-suffix: ${{ env.CACHE_KEY_SUFFIX }}
 
       - name: Report selected holbuild version
         run: holbuild --version
@@ -62,8 +76,8 @@ jobs:
       - name: Compute holbuild cache keys
         id: cache-key
         run: |
-          toolchain_key="holbuild-v3-toolchain-${{ runner.os }}-${{ runner.arch }}-${{ steps.polyml.outputs.polyml-rev }}-${{ steps.holbuild.outputs.holbuild-rev }}"
-          build_prefix="holbuild-v3-build-${{ runner.os }}-${{ runner.arch }}-${{ steps.polyml.outputs.polyml-rev }}-${{ steps.holbuild.outputs.holbuild-rev }}"
+          toolchain_key="holbuild-v3-toolchain-${{ runner.os }}-${{ runner.arch }}-${{ steps.polyml.outputs.polyml-rev }}-${{ steps.holbuild.outputs.holbuild-rev }}${CACHE_KEY_SUFFIX}"
+          build_prefix="holbuild-v3-build-${{ runner.os }}-${{ runner.arch }}-${{ steps.polyml.outputs.polyml-rev }}-${{ steps.holbuild.outputs.holbuild-rev }}${CACHE_KEY_SUFFIX}"
           snapshot_key="${build_prefix}-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}"
           echo "toolchain-key=${toolchain_key}" >> "$GITHUB_OUTPUT"
           echo "build-prefix=${build_prefix}" >> "$GITHUB_OUTPUT"
@@ -101,7 +115,7 @@ jobs:
       - name: Configure remote cache
         uses: ./.github/actions/setup-remote-cache
         with:
-          curl-config: ${{ secrets.HOLBUILD_REMOTE_CACHE_CURL_CONFIG }}
+          curl-config: ${{ !env.CACHE_KEY_SUFFIX && secrets.HOLBUILD_REMOTE_CACHE_CURL_CONFIG || '' }}
 
       - name: Build schema-2 HOL toolchain
         run: holbuild buildhol
@@ -187,6 +201,8 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/setup-vyper-test-exports
         id: exports
+        with:
+          cache-key-suffix: ${{ env.CACHE_KEY_SUFFIX }}
 
   vyper-tests:
     if: github.event.pull_request.draft != true
@@ -204,6 +220,8 @@ jobs:
 
       - uses: ./.github/actions/setup-polyml
         id: polyml
+        with:
+          cache-key-suffix: ${{ env.CACHE_KEY_SUFFIX }}
 
       - name: Get minimum holbuild version from holproject.toml
         id: holbuild-version
@@ -221,6 +239,7 @@ jobs:
         id: holbuild
         with:
           holbuild-ref: ${{ steps.holbuild-version.outputs.ref }}
+          cache-key-suffix: ${{ env.CACHE_KEY_SUFFIX }}
 
       - name: Configure holbuild cache
         run: echo "HOLBUILD_CACHE=$HOME/.cache/holbuild" >> "$GITHUB_ENV"
@@ -242,7 +261,7 @@ jobs:
       - name: Configure remote cache
         uses: ./.github/actions/setup-remote-cache
         with:
-          curl-config: ${{ secrets.HOLBUILD_REMOTE_CACHE_CURL_CONFIG }}
+          curl-config: ${{ !env.CACHE_KEY_SUFFIX && secrets.HOLBUILD_REMOTE_CACHE_CURL_CONFIG || '' }}
 
       - name: Build Vyper test coverage baseline
         if: matrix.group == 0

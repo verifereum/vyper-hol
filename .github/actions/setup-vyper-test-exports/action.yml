@@ -1,6 +1,12 @@
 name: 'Setup Vyper test exports'
 description: 'Exports/restores Vyper functional tests for generated HOL tests'
 
+inputs:
+  cache-key-suffix:
+    description: 'Appended to the cache key; a run-unique suffix keeps the cache out of the run'
+    required: false
+    default: ''
+
 outputs:
   export-cache-key:
     description: 'Cache key for the exported tests'
@@ -22,7 +28,7 @@ runs:
         sha=$(tr -d '[:space:]' < VYPER_PIN)
         echo "sha=$sha" >> "$GITHUB_OUTPUT"
         profile=$(python3 tools/vyper_test_exports.py cache-key)
-        echo "cache-key=vyper-tests-${{ runner.os }}-$sha-$profile" >> "$GITHUB_OUTPUT"
+        echo "cache-key=vyper-tests-${{ runner.os }}-$sha-$profile${{ inputs.cache-key-suffix }}" >> "$GITHUB_OUTPUT"
 
     - name: Cache exported Vyper tests
       id: cache-vyper-tests
