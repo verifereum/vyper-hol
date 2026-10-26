@@ -2153,7 +2153,7 @@ QED
    (a break included), related at the source state after the loop, or
    exits as the source's outcome allows. *)
 Theorem for_loop:
-  !m ctx func cenv bc cx lctx RetQ ty stmts id tyv p sz ainst cv ev dv nv
+  !m P ctx func cenv bc cx lctx RetQ ty stmts id tyv p sz ainst cv ev dv nv
    n1 n2 cond_lbl exit_lbl body_lbl incr_lbl j1 j2 j3 bbb i1 i2 i3
    sb0 sb1 sj st k esk cc w res es'.
     (* the code *)
@@ -2198,15 +2198,34 @@ Theorem for_loop:
     st.cs_next_var <= sb0.cs_next_var /\
     (!x. not_fresh_at st x ==> x <> dv /\ x <> cv /\ x <> nv) /\
     32 <= sz /\ type_memory_size tyv = 32 /\
-    (!es1 r2 es2. eval_stmts cx stmts es1 = (r2, es2) ==>
+    (* the body, at the iteration states over a source state where P holds *)
+    (!ei j r2 es2.
+       P ei /\ lookup_scopes id ei.scopes = NONE /\ j < Num (n2 - n1) /\
+       eval_stmts cx stmts
+         (ei with scopes :=
+            (FEMPTY |+ (id, <| assignable := F; type := tyv;
+                               value := IntV (n1 + &j) |>)) :: ei.scopes) = (r2, es2) ==>
        stmt_frag ctx func cx (InLoop exit_lbl incr_lbl) RetQ bc
-         (stmts_env bc (InLoop exit_lbl incr_lbl) ty stmts) es1 r2 es2) /\
+         (stmts_env bc (InLoop exit_lbl incr_lbl) ty stmts)
+         (ei with scopes :=
+            (FEMPTY |+ (id, <| assignable := F; type := tyv;
+                               value := IntV (n1 + &j) |>)) :: ei.scopes) r2 es2) /\
+    (* P holds again after an iteration that goes on *)
+    (!ei j r2 es2 sc rest.
+       P ei /\ lookup_scopes id ei.scopes = NONE /\ j < Num (n2 - n1) /\
+       eval_stmts cx stmts
+         (ei with scopes :=
+            (FEMPTY |+ (id, <| assignable := F; type := tyv;
+                               value := IntV (n1 + &j) |>)) :: ei.scopes) = (r2, es2) /\
+       (r2 = INL () \/ r2 = INR ContinueException) /\
+       es2.scopes = sc :: rest ==>
+       P (es2 with scopes := rest)) /\
     n1 <= n2 /\ Num (n2 - n1) < dimword (:256) /\
     (* the loop from iteration k *)
     k + m = Num (n2 - n1) /\
     eval_for cx tyv id stmts (GENLIST (\j. IntV (n1 + &(k + j))) m) esk =
       (res, es') /\
-    stmt_res_ok lctx res /\
+    stmt_res_ok lctx res /\ P esk /\
     cc.vs_current_bb = cond_lbl /\ cc.vs_inst_idx = 0 /\ ~cc.vs_halted /\
     stmt_state_rel func cenv cx esk cc /\
     lookup_scopes id esk.scopes = NONE /\
@@ -2270,8 +2289,8 @@ Proof
    >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC)
        >- (qpat_assum `!scs. lookup_scopes id scs = NONE ==> _` irule >>
            first_assum ACCEPT_TAC)
-       >- (qpat_assum `!es1 r2 es2. eval_stmts _ _ _ = _ ==> _` irule >>
-           first_assum ACCEPT_TAC) >>
+       >- (qpat_assum `!ei j r2 es2. P ei /\ _ ==> stmt_frag _ _ _ _ _ _ _ _ _ _`
+             irule >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
        fs[stmt_res_ok_def])) >>
   strip_tac >>
   TRY (qpat_x_assum `stmt_exit _ _ _ _` mp_tac >>
@@ -2290,9 +2309,15 @@ Proof
   TRY (qpat_assum `r2 = INR BreakException` kall_tac >>
        rename1 `stmt_state_rel func cenv cx _ s9` >> disj1_tac >>
        qexists_tac `s9` >> fs[] >> NO_TAC) >>
-  (* the loop goes on from the incremented counter *)
-  qpat_x_assum `!ctx func. _`
-    (qspecl_then [`ctx`, `func`, `cenv`, `bc`, `cx`, `lctx`, `RetQ`, `ty`,
+  (* the loop goes on from the incremented counter, where P holds again *)
+  `P (es2 with scopes := rest)` by
+    (qpat_assum `!ei j r2 es2 sc rest. P ei /\ _ ==> P _`
+       (qspecl_then [`esk`, `k`, `r2`, `es2`, `sc`, `rest`] mp_tac) >>
+     impl_tac
+     >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >> gvs[]) >>
+     simp[]) >>
+  qpat_x_assum `!P ctx func. _`
+    (qspecl_then [`P`, `ctx`, `func`, `cenv`, `bc`, `cx`, `lctx`, `RetQ`, `ty`,
                   `stmts`, `id`, `tyv`, `p`, `sz`, `ainst`, `cv`, `ev`, `dv`,
                   `nv`, `n1`, `n2`, `cond_lbl`, `exit_lbl`, `body_lbl`,
                   `incr_lbl`, `j1`, `j2`, `j3`, `bbb`, `i1`, `i2`, `i3`, `sb0`,
@@ -2346,12 +2371,14 @@ QED
 (* For over a range with literal ends: the loop variable's ALLOCA, the
    entry block, then the loop from the first counter value; on a normal
    finish the code ends at the start of the exit block.  The body's
-   judgment is assumed for the environment declare_local gives.  Only for
+   judgment is assumed for the environment declare_local gives, at the
+   iteration states over source states where the invariant P holds; P
+   holds at the start and again after each iteration that goes on.  Only for
    n1 <= n2 (not the source's "no range" error), a loop variable of one
    word, and ce_alloca_locals, which the lowering sets for external
    functions only. *)
 Theorem compile_for_range_frag:
-  !ctx func cx lctx RetQ cenv ty id fty a1 n1 a2 n2 bound stmts es res es'
+  !P ctx func cx lctx RetQ cenv ty id fty a1 n1 a2 n2 bound stmts es res es'
    tyv.
     eval_stmt cx
       (For id fty (Range (Literal a1 (IntL n1)) (Literal a2 (IntL n2)))
@@ -2364,11 +2391,28 @@ Theorem compile_for_range_frag:
     (!l. FLOOKUP cenv.ce_vars id = SOME l ==> ?q z. l = PtrVar q z) /\
     (!c lc sa sb. compile_stmts c lc ty stmts sa = ((), sb) ==>
                   cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var) /\
-    (!st0 c st1 ex inc es1 r2 es2.
+    P es /\
+    (!st0 c st1 ex inc ei j r2 es2.
        declare_local cenv id fty st0 = (c, st1) /\
-       eval_stmts cx stmts es1 = (r2, es2) ==>
+       P ei /\ lookup_scopes id ei.scopes = NONE /\ j < Num (n2 - n1) /\
+       eval_stmts cx stmts
+         (ei with scopes :=
+            (FEMPTY |+ (id, <| assignable := F; type := tyv;
+                               value := IntV (n1 + &j) |>)) :: ei.scopes) = (r2, es2) ==>
        stmt_frag ctx func cx (InLoop ex inc) RetQ c
-         (stmts_env c (InLoop ex inc) ty stmts) es1 r2 es2) ==>
+         (stmts_env c (InLoop ex inc) ty stmts)
+         (ei with scopes :=
+            (FEMPTY |+ (id, <| assignable := F; type := tyv;
+                               value := IntV (n1 + &j) |>)) :: ei.scopes) r2 es2) /\
+    (!ei j r2 es2 sc rest.
+       P ei /\ lookup_scopes id ei.scopes = NONE /\ j < Num (n2 - n1) /\
+       eval_stmts cx stmts
+         (ei with scopes :=
+            (FEMPTY |+ (id, <| assignable := F; type := tyv;
+                               value := IntV (n1 + &j) |>)) :: ei.scopes) = (r2, es2) /\
+       (r2 = INL () \/ r2 = INR ContinueException) /\
+       es2.scopes = sc :: rest ==>
+       P (es2 with scopes := rest)) ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ty
          (For id fty (Range (Literal a1 (IntL n1)) (Literal a2 (IntL n2)))
@@ -2494,7 +2538,7 @@ Proof
     by (simp[Abbr `cc`, jump_to_def, update_var_def, lookup_var_def,
              FLOOKUP_UPDATE] >> fs[jump_to_def]) >>
   (* the loop *)
-  qspecl_then [`Num (n2 - n1)`, `ctx`, `func`, `cenv`, `bc`, `cx`, `lctx`,
+  qspecl_then [`Num (n2 - n1)`, `P`, `ctx`, `func`, `cenv`, `bc`, `cx`, `lctx`,
                `RetQ`, `ty`, `stmts`, `id`, `tyv`, `p`, `sz`, `A`, `cv`, `ev`,
                `dv`, `nv`, `n1`, `n2`, `cond_lbl`, `exit_lbl`, `body_lbl`,
                `incr_lbl`, `sa.cs_next_id + 5`, `sa.cs_next_id + 6`,
@@ -2523,4 +2567,37 @@ Proof
       rpt strip_tac >> metis_tac[]) >>
   disj2_tac >> rename1 `exit_result r9` >>
   drule exit_result_not_error >> strip_tac >> metis_tac[]
+QED
+
+(* The same with the body's judgment at every source state. *)
+Theorem compile_for_range_frag_simple:
+  !ctx func cx lctx RetQ cenv ty id fty a1 n1 a2 n2 bound stmts es res es'
+   tyv.
+    eval_stmt cx
+      (For id fty (Range (Literal a1 (IntL n1)) (Literal a2 (IntL n2)))
+         bound stmts) es = (res, es') /\
+    evaluate_type (get_tenv cx) fty = SOME tyv /\ type_memory_size tyv = 32 /\
+    32 <= type_memory_bytes cenv fty /\
+    type_memory_bytes cenv fty < dimword (:256) /\
+    n1 <= n2 /\ Num (n2 - n1) <= bound /\ Num (n2 - n1) < dimword (:256) /\
+    cenv.ce_alloca_locals /\ lookup_scopes id es.scopes = NONE /\
+    (!l. FLOOKUP cenv.ce_vars id = SOME l ==> ?q z. l = PtrVar q z) /\
+    (!c lc sa sb. compile_stmts c lc ty stmts sa = ((), sb) ==>
+                  cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var) /\
+    (!st0 c st1 ex inc es1 r2 es2.
+       declare_local cenv id fty st0 = (c, st1) /\
+       eval_stmts cx stmts es1 = (r2, es2) ==>
+       stmt_frag ctx func cx (InLoop ex inc) RetQ c
+         (stmts_env c (InLoop ex inc) ty stmts) es1 r2 es2) ==>
+    stmt_frag ctx func cx lctx RetQ cenv
+      (stmt_env cenv lctx ty
+         (For id fty (Range (Literal a1 (IntL n1)) (Literal a2 (IntL n2)))
+            bound stmts)) es res es'
+Proof
+  rpt strip_tac >>
+  MATCH_MP_TAC (BETA_RULE (Q.SPEC `\e. T` compile_for_range_frag)) >>
+  qexists_tac `tyv` >> simp[] >> rpt strip_tac
+  >- (qpat_x_assum `!c lc sa sb. _` drule >> simp[])
+  >- (qpat_x_assum `!c lc sa sb. _` drule >> simp[]) >>
+  qpat_x_assum `!st0 c st1 ex inc es1 r2 es2. _` irule >> metis_tac[]
 QED
