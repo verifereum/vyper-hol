@@ -221,7 +221,7 @@ Proof
                `sj.cs_next_id + 2`, `sb0`, `sb1`, `sj`, `sa`, `0`, `es`, `cc`,
                `w`, `res`, `es'`] mp_tac for_loop >>
   impl_tac
-  >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
+  >- (REWRITE_TAC [for_code_def] >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
       TRY (simp[block_is_terminated_def, venomInstTheory.mk_inst_def,
                 is_terminator_def] >> NO_TAC) >>
       TRY (fs[] >> NO_TAC) >>

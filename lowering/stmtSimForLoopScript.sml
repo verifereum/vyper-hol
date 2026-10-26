@@ -165,18 +165,16 @@ val for_incr_tac =
   disch_then (qspecl_then [`fuel`, `run_from fuel ctx func XX`] mp_tac) >>
   impl_tac >- (simp[] >> first_assum ACCEPT_TAC) >> simp[];
 
-(* One iteration of a range loop, from the condition block with the counter
-   at n1 + k short of the end: the body runs in the loop variable's scope,
-   at bc, from the body block's MSTORE on.  On a normal end or a continue
-   the run comes back to the condition block with the counter at
-   n1 + k + 1, related at the source state after the iteration (the
-   loop variable's scope popped); on a break it reaches the exit block; on
-   any other outcome it exits as the body does. *)
-Theorem for_iteration:
-  !ctx func cenv bc cx RetQ ty stmts esk cc id tyv p sz w ainst cv ev dv nv
-   n1 n2 k cond_lbl exit_lbl body_lbl incr_lbl j1 j2 j3 bbb i1 i2 i3
-   sb0 sb1 sj st r2 es2 sc rest.
-    (* the code *)
+(* The range loop's code, as compile_for_range_parts lays it out, and the
+   facts about its variables and environments that every iteration uses:
+   the condition, body and increment blocks; the body's code between sb0
+   and sb1 and its jump to the increment block at sj; the loop variable's
+   ALLOCA ainst and its pointer p in bc, which is cenv with id bound; the
+   counter cv, end ev, condition dv and next counter nv, which are no
+   local's pointers and pairwise distinct. *)
+Definition for_code_def:
+  for_code func cenv bc ty stmts id tyv p sz ainst cv ev dv nv
+    cond_lbl exit_lbl body_lbl incr_lbl j1 j2 j3 bbb i1 i2 i3 sb0 sb1 sj <=>
     lookup_block cond_lbl func.fn_blocks =
       SOME <| bb_label := cond_lbl;
               bb_instructions :=
@@ -202,7 +200,6 @@ Theorem for_iteration:
     fn_inst_ids_distinct func /\
     MEM ainst (fn_insts func) /\ ainst.inst_opcode = ALLOCA /\
     ainst.inst_outputs = [p] /\
-    (* the environments and variables *)
     FLOOKUP bc.ce_vars id = SOME (PtrVar (Var p) sz) /\
     (!n. n <> id ==> FLOOKUP bc.ce_vars n = FLOOKUP cenv.ce_vars n) /\
     bc with <| ce_vars := cenv.ce_vars; ce_var_type := cenv.ce_var_type;
@@ -210,13 +207,29 @@ Theorem for_iteration:
     (!l. FLOOKUP cenv.ce_vars id = SOME l ==> ?q z. l = PtrVar q z) /\
     (!scs. not_local_ptr cenv scs cv /\ not_local_ptr cenv scs dv /\
            not_local_ptr cenv scs nv) /\
-    not_local_ptr bc (FEMPTY :: esk.scopes) p /\
     dv <> p /\ dv <> cv /\ dv <> ev /\ nv <> cv /\ nv <> ev /\ nv <> p /\
     cv <> ev /\ cv <> p /\ ev <> p /\
     not_fresh_at sb0 cv /\ not_fresh_at sb0 ev /\ not_fresh_at sb0 p /\
+    32 <= sz /\ type_memory_size tyv = 32
+End
+
+(* One iteration of a range loop, from the condition block with the counter
+   at n1 + k short of the end: the body runs in the loop variable's scope,
+   at bc, from the body block's MSTORE on.  On a normal end or a continue
+   the run comes back to the condition block with the counter at
+   n1 + k + 1, related at the source state after the iteration (the
+   loop variable's scope popped); on a break it reaches the exit block; on
+   any other outcome it exits as the body does. *)
+Theorem for_iteration:
+  !ctx func cenv bc cx RetQ ty stmts esk cc id tyv p sz w ainst cv ev dv nv
+   n1 n2 k cond_lbl exit_lbl body_lbl incr_lbl j1 j2 j3 bbb i1 i2 i3
+   sb0 sb1 sj st r2 es2 sc rest.
+    (* the code and the variables *)
+    for_code func cenv bc ty stmts id tyv p sz ainst cv ev dv nv
+      cond_lbl exit_lbl body_lbl incr_lbl j1 j2 j3 bbb i1 i2 i3 sb0 sb1 sj /\
+    not_local_ptr bc (FEMPTY :: esk.scopes) p /\
     st.cs_next_var <= sb0.cs_next_var /\ ret_pc_ok cenv st cc /\
     (!x. not_fresh_at st x ==> x <> dv /\ x <> cv /\ x <> nv) /\
-    32 <= sz /\ type_memory_size tyv = 32 /\
     (* the iteration *)
     n1 <= n2 /\ k < Num (n2 - n1) /\ Num (n2 - n1) < dimword (:256) /\
     cc.vs_current_bb = cond_lbl /\ cc.vs_inst_idx = 0 /\ ~cc.vs_halted /\
@@ -263,7 +276,7 @@ Theorem for_iteration:
     (?fuel rr. run_from fuel ctx func cc = rr /\ exit_result rr /\
                stmt_exit RetQ (es2 with scopes := rest) r2 rr)
 Proof
-  rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> REWRITE_TAC [for_code_def] >> strip_tac >>
   `bc.ce_module = cenv.ce_module /\ bc.ce_is_ctor = cenv.ce_is_ctor` by
     (qpat_assum `_ = cenv` (fn th => ONCE_REWRITE_TAC [SYM th]) >> simp[]) >>
   qspecl_then [`ctx`, `func`, `cenv`, `bc`, `cx`, `esk`, `cc`, `id`, `tyv`,
@@ -372,48 +385,13 @@ Theorem for_loop:
   !m P ctx func cenv bc cx lctx RetQ ty stmts id tyv p sz ainst cv ev dv nv
    n1 n2 cond_lbl exit_lbl body_lbl incr_lbl j1 j2 j3 bbb i1 i2 i3
    sb0 sb1 sj st k esk cc w res es'.
-    (* the code *)
-    lookup_block cond_lbl func.fn_blocks =
-      SOME <| bb_label := cond_lbl;
-              bb_instructions :=
-                [mk_inst j1 EQ [Var cv; Var ev] [dv];
-                 mk_inst j2 JNZ [Var dv; Label exit_lbl; Label body_lbl] []] |> /\
-    lookup_block body_lbl func.fn_blocks = SOME bbb /\
-    get_instruction bbb 0 = SOME (mk_inst j3 MSTORE [Var p; Var cv] []) /\
-    lookup_block incr_lbl func.fn_blocks =
-      SOME <| bb_label := incr_lbl;
-              bb_instructions := [mk_inst i1 ADD [Var cv; Lit 1w] [nv];
-                                  mk_inst i2 ASSIGN [Var nv] [cv];
-                                  mk_inst i3 JMP [Label cond_lbl] []] |> /\
-    compile_stmts bc (InLoop exit_lbl incr_lbl) ty stmts sb0 = ((), sb1) /\
-    fn_has_code sb0 sb1 func /\ local_ptrs_reserved bc sb0 /\
-    sb0.cs_current_bb = body_lbl /\ LENGTH sb0.cs_current_insts = 1 /\
-    ~block_is_terminated sb0 /\
-    (~block_is_terminated sb1 ==>
-     sj.cs_blocks = sb1.cs_blocks /\ sj.cs_current_bb = sb1.cs_current_bb /\
-     sj.cs_current_insts =
-       sb1.cs_current_insts ++
-       [mk_inst sb1.cs_next_id JMP [Label incr_lbl] []] /\
-     fn_has_code sb1 sj func) /\
-    fn_inst_ids_distinct func /\
-    MEM ainst (fn_insts func) /\ ainst.inst_opcode = ALLOCA /\
-    ainst.inst_outputs = [p] /\
-    (* the environments and variables *)
-    FLOOKUP bc.ce_vars id = SOME (PtrVar (Var p) sz) /\
-    (!n. n <> id ==> FLOOKUP bc.ce_vars n = FLOOKUP cenv.ce_vars n) /\
-    bc with <| ce_vars := cenv.ce_vars; ce_var_type := cenv.ce_var_type;
-               ce_dynarray_capacity := cenv.ce_dynarray_capacity |> = cenv /\
-    (!l. FLOOKUP cenv.ce_vars id = SOME l ==> ?q z. l = PtrVar q z) /\
-    (!scs. not_local_ptr cenv scs cv /\ not_local_ptr cenv scs dv /\
-           not_local_ptr cenv scs nv) /\
+    (* the code and the variables *)
+    for_code func cenv bc ty stmts id tyv p sz ainst cv ev dv nv
+      cond_lbl exit_lbl body_lbl incr_lbl j1 j2 j3 bbb i1 i2 i3 sb0 sb1 sj /\
     (!scs. lookup_scopes id scs = NONE ==>
            not_local_ptr bc (FEMPTY :: scs) p) /\
-    dv <> p /\ dv <> cv /\ dv <> ev /\ nv <> cv /\ nv <> ev /\ nv <> p /\
-    cv <> ev /\ cv <> p /\ ev <> p /\
-    not_fresh_at sb0 cv /\ not_fresh_at sb0 ev /\ not_fresh_at sb0 p /\
     st.cs_next_var <= sb0.cs_next_var /\ ret_pc_ok cenv st cc /\
     (!x. not_fresh_at st x ==> x <> dv /\ x <> cv /\ x <> nv) /\
-    32 <= sz /\ type_memory_size tyv = 32 /\
     (* the body, at the iteration states over a source state where P holds *)
     (!ei j r2 es2.
        P ei /\ lookup_scopes id ei.scopes = NONE /\ j < Num (n2 - n1) /\
@@ -462,7 +440,7 @@ Proof
   Induct
   >- (
     (* no iteration left: the counter is at the end *)
-    rpt gen_tac >> strip_tac >>
+    rpt gen_tac >> REWRITE_TAC [for_code_def] >> strip_tac >>
     `(i2w (n1 + &k) : bytes32) = i2w n2` by
       (`k = Num (n2 - n1)` by decide_tac >> simp[i2w_counter_end]) >>
     qpat_x_assum `eval_for _ _ _ _ _ _ = _` mp_tac >>
@@ -484,7 +462,7 @@ Proof
     >- fs[jump_to_def, update_var_def] >>
     metis_tac[]) >>
   (* an iteration, then the loop from the next counter *)
-  rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> REWRITE_TAC [for_code_def] >> strip_tac >>
   `k < Num (n2 - n1)` by decide_tac >>
   `GENLIST (\j. (IntV (n1 + &(k + j)) : value)) (SUC m) =
    (IntV (n1 + &k) : value) ::
@@ -502,7 +480,7 @@ Proof
                `sb1`, `sj`, `st`, `r2`, `es2`, `sc`, `rest`]
     mp_tac for_iteration >>
   (impl_tac
-   >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC)
+   >- (REWRITE_TAC [for_code_def] >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC)
        >- (qpat_assum `!scs. lookup_scopes id scs = NONE ==> _` irule >>
            first_assum ACCEPT_TAC)
        >- (qpat_assum `!ei j r2 es2. P ei /\ _ ==> stmt_frag _ _ _ _ _ _ _ _ _ _`
@@ -544,7 +522,8 @@ Proof
                   `sb1`, `sj`, `st`, `k + 1`, `es2 with scopes := rest`, `cc'`,
                   `w`, `res`, `es'`] mp_tac) >>
   (impl_tac
-   >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
+   >- (REWRITE_TAC [for_code_def] >> rpt conj_tac >>
+       TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
        TRY decide_tac >>
        TRY (simp[] >> irule lookup_scopes_none_map_fdom >>
             qexists_tac `esk.scopes` >> fs[] >> NO_TAC) >>
