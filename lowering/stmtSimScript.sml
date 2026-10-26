@@ -335,15 +335,33 @@ Theorem state_rel_cenv_cong:
            FLOOKUP cenv.ce_vars n = FLOOKUP cenv'.ce_vars n) /\
     (!n l. FLOOKUP cenv.ce_vars n = SOME l /\ (!p sz. l <> PtrVar p sz) ==>
            FLOOKUP cenv'.ce_vars n = SOME l) /\
+    (!n l. FLOOKUP cenv'.ce_vars n = SOME l /\ (!p sz. l <> PtrVar p sz) ==>
+           FLOOKUP cenv.ce_vars n = SOME l) /\
     cenv'.ce_module = cenv.ce_module /\ cenv'.ce_is_ctor = cenv.ce_is_ctor ==>
     state_rel func cenv cx vs ss
 Proof
   rw[state_rel_def]
   >- metis_tac[local_ptrs_rel_cenv_cong]
-  >- (fs[storage_vars_rel_def] >> rw[] >> first_x_assum irule >> res_tac >>
-      fs[])
-  >- (fs[transient_vars_rel_def] >> rw[] >> first_x_assum irule >>
-      res_tac >> fs[])
+  >- (simp[storage_vars_rel_def] >> conj_tac >> rpt strip_tac
+      >- (`FLOOKUP cenv'.ce_vars (module_var_key (cenv.ce_module,name)) =
+           SOME (StorageLoc slot)` by
+            (qpat_x_assum `!n l. FLOOKUP cenv.ce_vars n = SOME l /\ _ ==> _`
+               irule >> simp[]) >>
+          qpat_x_assum `storage_vars_rel cenv' cx` mp_tac >>
+          simp[storage_vars_rel_def] >> metis_tac[]) >>
+      qpat_x_assum `!n l. FLOOKUP cenv'.ce_vars n = SOME l /\ _ ==> _` irule >>
+      simp[] >> qpat_x_assum `storage_vars_rel cenv' cx` mp_tac >>
+      simp[storage_vars_rel_def] >> metis_tac[])
+  >- (simp[transient_vars_rel_def] >> conj_tac >> rpt strip_tac
+      >- (`FLOOKUP cenv'.ce_vars (module_var_key (cenv.ce_module,name)) =
+           SOME (TransientLoc slot)` by
+            (qpat_x_assum `!n l. FLOOKUP cenv.ce_vars n = SOME l /\ _ ==> _`
+               irule >> simp[]) >>
+          qpat_x_assum `transient_vars_rel cenv' cx` mp_tac >>
+          simp[transient_vars_rel_def] >> metis_tac[]) >>
+      qpat_x_assum `!n l. FLOOKUP cenv'.ce_vars n = SOME l /\ _ ==> _` irule >>
+      simp[] >> qpat_x_assum `transient_vars_rel cenv' cx` mp_tac >>
+      simp[transient_vars_rel_def] >> metis_tac[])
   >- (fs[immutables_rel_def, LET_THM] >> Cases_on `cenv.ce_is_ctor` >>
       gvs[] >> rpt strip_tac >>
       `FLOOKUP cenv'.ce_vars (module_var_key (cenv.ce_module,name)) =
@@ -370,6 +388,10 @@ Proof
         qpat_x_assum `!n. FLOOKUP cenv'.ce_vars n <> _ ==> _`
           (qspec_then `n` mp_tac) >>
         simp[] >> rpt strip_tac >> gvs[])
+    >- (rpt strip_tac >> spose_not_then assume_tac >>
+        qpat_x_assum `!n. FLOOKUP cenv'.ce_vars n <> _ ==> _`
+          (qspec_then `n` mp_tac) >>
+        simp[] >> metis_tac[])
     >- (rpt strip_tac >> spose_not_then assume_tac >>
         qpat_x_assum `!n. FLOOKUP cenv'.ce_vars n <> _ ==> _`
           (qspec_then `n` mp_tac) >>
@@ -1733,6 +1755,8 @@ Theorem stmt_state_rel_cenv_cong:
            FLOOKUP cenv.ce_vars n = FLOOKUP cenv'.ce_vars n) /\
     (!n l. FLOOKUP cenv.ce_vars n = SOME l /\ (!p sz. l <> PtrVar p sz) ==>
            FLOOKUP cenv'.ce_vars n = SOME l) /\
+    (!n l. FLOOKUP cenv'.ce_vars n = SOME l /\ (!p sz. l <> PtrVar p sz) ==>
+           FLOOKUP cenv.ce_vars n = SOME l) /\
     cenv'.ce_module = cenv.ce_module /\ cenv'.ce_is_ctor = cenv.ce_is_ctor ==>
     stmt_state_rel func cenv cx es ss
 Proof
@@ -1815,6 +1839,7 @@ Theorem for_body_entry:
     FLOOKUP cc.vs_allocas ainst.inst_id = SOME (w2n w, sz) /\
     n1 <= n2 /\ k < Num (n2 - n1) /\ Num (n2 - n1) < dimword (:256) /\
     lookup_scopes id esk.scopes = NONE /\
+    (!l. FLOOKUP cenv.ce_vars id = SOME l ==> ?q z. l = PtrVar q z) /\
     FLOOKUP bc.ce_vars id = SOME (PtrVar (Var p) sz) /\
     (!n. n <> id ==> FLOOKUP bc.ce_vars n = FLOOKUP cenv.ce_vars n) /\
     bc.ce_module = cenv.ce_module /\ bc.ce_is_ctor = cenv.ce_is_ctor /\
@@ -1867,7 +1892,8 @@ Proof
      irule stmt_state_rel_update_var >> simp[]) >>
   `stmt_state_rel func bc cx (esk with scopes := FEMPTY :: esk.scopes) s1` by
     (irule stmt_state_rel_cenv_cong >> qexists_tac `cenv` >> simp[] >>
-     rpt strip_tac >> Cases_on `n = id` >> gvs[lookup_scopes_def]) >>
+     rpt strip_tac >> Cases_on `n = id` >> gvs[lookup_scopes_def] >>
+     res_tac >> gvs[]) >>
   qspecl_then [`func`, `bc`, `cx`, `esk with scopes := FEMPTY :: esk.scopes`,
                `s1`, `id`, `p`, `sz`, `w`, `ainst`, `IntV (n1 + &k)`, `tyv`,
                `FEMPTY`, `esk.scopes`, `F`] mp_tac stmt_state_rel_declare_word >>
@@ -1881,6 +1907,20 @@ Proof
 QED
 
 (* The rest of an iteration from the increment block, at DD. *)
+(* Every non-Error result from a is one from b, and from b one from c:
+   then from a one from c. *)
+Theorem run_from_results_trans[local]:
+  !ctx func a b c.
+    (!fuel r. run_from fuel ctx func a = r /\ (!e. r <> Error e) ==>
+              ?fuel'. run_from fuel' ctx func b = r) /\
+    (!fuel r. run_from fuel ctx func b = r /\ (!e. r <> Error e) ==>
+              ?fuel'. run_from fuel' ctx func c = r) ==>
+    !fuel r. run_from fuel ctx func a = r /\ (!e. r <> Error e) ==>
+             ?fuel'. run_from fuel' ctx func c = r
+Proof
+  metis_tac[]
+QED
+
 val for_incr_tac =
   qpat_x_assum `stmt_state_rel func cenv cx (es2 with scopes := rest) DD`
     assume_tac >>
@@ -1903,7 +1943,18 @@ val for_incr_tac =
   >- (rpt strip_tac >> fs[jump_to_def, update_var_def, lookup_var_def,
                           FLOOKUP_UPDATE] >> metis_tac[])
   >- (rpt strip_tac >> fs[jump_to_def, update_var_def] >> metis_tac[]) >>
-  rpt strip_tac >> metis_tac[];
+  (* the results chain back through DD (and s3 when DD is its jump) to cc *)
+  rpt strip_tac >>
+  qmatch_goalsub_abbrev_tac `run_from fuel ctx func XX` >>
+  qspecl_then [`ctx`, `func`, `XX`, `DD`, `cc`] mp_tac
+    run_from_results_trans >>
+  impl_tac
+  >- (conj_tac >- first_assum ACCEPT_TAC >>
+      FIRST [first_assum ACCEPT_TAC,
+             MATCH_MP_TAC run_from_results_trans >> qexists_tac `s3` >>
+             conj_tac >> first_assum ACCEPT_TAC]) >>
+  disch_then (qspecl_then [`fuel`, `run_from fuel ctx func XX`] mp_tac) >>
+  impl_tac >- (simp[] >> first_assum ACCEPT_TAC) >> simp[];
 
 (* One iteration of a range loop, from the condition block with the counter
    at n1 + k short of the end: the body runs in the loop variable's scope,
