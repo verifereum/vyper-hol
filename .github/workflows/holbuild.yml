@@ -10,15 +10,20 @@ on:
   schedule:
     - cron: '0 3 * * 6'
   pull_request:
+    # Only PRs into main run CI; a PR stacked on another branch runs once it is
+    # retargeted to main (edited with a base change).
+    branches: [main]
     # Draft PRs run no jobs. ready_for_review starts CI when a draft is marked
     # ready; converted_to_draft cancels the run of a PR turned back into a draft.
-    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft, edited]
   merge_group:
   push:
     branches: [main]
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || (github.event_name == 'push' && github.sha) || github.ref }}
+  # An edit that leaves the base alone (title, description) runs no jobs, so its
+  # run gets a group of its own rather than cancelling the PR's real run.
+  group: ${{ github.workflow }}-${{ (github.event.action == 'edited' && !github.event.changes.base) && github.run_id || github.event.pull_request.number || (github.event_name == 'push' && github.sha) || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
@@ -34,7 +39,10 @@ env:
 
 jobs:
   build:
-    if: github.event.pull_request.draft != true
+    # A skipped job passes a required check; a no-op edit's skipped run must not
+    # report under the required name over the PR's real result.
+    name: ${{ (github.event.action == 'edited' && !github.event.changes.base) && 'build (no-op edit)' || 'build' }}
+    if: github.event.pull_request.draft != true && (github.event.action != 'edited' || github.event.changes.base)
     runs-on: ubuntu-latest
     timeout-minutes: 240
     outputs:
@@ -95,7 +103,7 @@ jobs:
   compiler:
     # Builds what the witnesses load besides each other, once for all
     # witness groups.
-    if: github.event.pull_request.draft != true
+    if: github.event.pull_request.draft != true && (github.event.action != 'edited' || github.event.changes.base)
     runs-on: ubuntu-latest
     timeout-minutes: 240
     outputs:
@@ -137,7 +145,7 @@ jobs:
           key: ${{ steps.cache-key.outputs.snapshot-key }}
 
   witnesses:
-    if: github.event.pull_request.draft != true
+    if: github.event.pull_request.draft != true && (github.event.action != 'edited' || github.event.changes.base)
     needs: compiler
     runs-on: ubuntu-latest
     timeout-minutes: 90
@@ -196,7 +204,7 @@ jobs:
   build-rollup:
     # Adds the witness groups to build's snapshot, builds the witness rollup
     # and exports the HBX of the whole project.
-    if: github.event.pull_request.draft != true
+    if: github.event.pull_request.draft != true && (github.event.action != 'edited' || github.event.changes.base)
     needs: [build, witnesses]
     runs-on: ubuntu-latest
     timeout-minutes: 240
@@ -270,7 +278,7 @@ jobs:
   test-deps:
     # Builds only what the test groups load besides their own theories, so they
     # start long before build finishes.
-    if: github.event.pull_request.draft != true
+    if: github.event.pull_request.draft != true && (github.event.action != 'edited' || github.event.changes.base)
     runs-on: ubuntu-latest
     timeout-minutes: 240
     outputs:
@@ -312,7 +320,7 @@ jobs:
           key: ${{ steps.cache-key.outputs.snapshot-key }}
 
   python-o1-oracle:
-    if: github.event.pull_request.draft != true
+    if: github.event.pull_request.draft != true && (github.event.action != 'edited' || github.event.changes.base)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -333,7 +341,7 @@ jobs:
             --vyper-repo vyper-src
 
   export-vyper-tests:
-    if: github.event.pull_request.draft != true
+    if: github.event.pull_request.draft != true && (github.event.action != 'edited' || github.event.changes.base)
     runs-on: ubuntu-latest
     outputs:
       export-cache-key: ${{ steps.exports.outputs.export-cache-key }}
@@ -347,7 +355,7 @@ jobs:
           cache-key-suffix: ${{ env.CACHE_KEY_SUFFIX }}
 
   vyper-tests:
-    if: github.event.pull_request.draft != true
+    if: github.event.pull_request.draft != true && (github.event.action != 'edited' || github.event.changes.base)
     needs: [test-deps, export-vyper-tests]
     runs-on: ubuntu-latest
     timeout-minutes: 90
@@ -404,7 +412,9 @@ jobs:
           fi
 
   holbuild-success:
-    if: always() && github.event.pull_request.draft != true
+    # Renamed on a no-op edit, as build is.
+    name: ${{ (github.event.action == 'edited' && !github.event.changes.base) && 'holbuild-success (no-op edit)' || 'holbuild-success' }}
+    if: always() && github.event.pull_request.draft != true && (github.event.action != 'edited' || github.event.changes.base)
     runs-on: ubuntu-latest
     needs: [build, compiler, witnesses, build-rollup, test-deps, python-o1-oracle, export-vyper-tests, vyper-tests]
     steps:
