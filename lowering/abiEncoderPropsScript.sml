@@ -4106,6 +4106,105 @@ Proof
   simp[mem_bytes_at_def]
 QED
 
+Theorem enc_frame_lift:
+  enc_frame a b lo child_top local_outs s t /\
+  frag_ids a b SUBSET frag_ids st z /\
+  (!x. not_fresh_at st x ==> not_fresh_at a x) /\
+  (!p n. MEM (p,n) local_outs ==>
+    ?q m. MEM (q,m) outs /\ q <= p /\ p+n <= q+m) /\
+  enc_scratch (frag_ids st z) lo top t ==>
+  enc_frame st z lo top outs s t
+Proof
+  strip_tac >>
+  `enc_frame a b lo child_top outs s t` by
+    (irule enc_frame_cover_outputs >> metis_tac[]) >>
+  qpat_x_assum `enc_frame a b lo child_top outs s t` mp_tac >>
+  rewrite_tac[enc_frame_def] >> strip_tac >>
+  simp[enc_frame_def] >> conj_tac
+  >- (rpt strip_tac >>
+      qpat_x_assum `!a. _ ==> mem_bytes_at _ _ _ = _` irule >>
+      simp[] >> metis_tac[pred_setTheory.SUBSET_DEF]) >>
+  metis_tac[pred_setTheory.SUBSET_DEF]
+QED
+
+Theorem enc_pre_reserve_enclosing:
+  enc_pre a b ops lo top tv v src local_outs s /\
+  frag_ids a b SUBSET frag_ids st z /\
+  enc_scratch (frag_ids st z) lo top s ==>
+  enc_pre a b ops lo
+    (top - 32 * CARD {i | i IN (frag_ids st z DIFF frag_ids a b) /\
+                          FLOOKUP s.vs_allocas i = NONE})
+    tv v src local_outs s
+Proof
+  strip_tac >>
+  `FINITE (frag_ids st z DIFF frag_ids a b) /\
+   DISJOINT (frag_ids a b) (frag_ids st z DIFF frag_ids a b) /\
+   frag_ids a b UNION (frag_ids st z DIFF frag_ids a b) = frag_ids st z` by
+    (simp[] >> ASM_SET_TAC[]) >>
+  `enc_scratch (frag_ids a b) lo
+    (top - 32 * CARD {i | i IN (frag_ids st z DIFF frag_ids a b) /\
+                          FLOOKUP s.vs_allocas i = NONE}) s` by
+    (irule enc_scratch_restrict_reserved >> simp[]) >>
+  fs[enc_pre_def]
+QED
+
+Theorem enc_frame_restore_enclosing:
+  enc_frame a b lo
+    (top - 32 * CARD {i | i IN (frag_ids st z DIFF frag_ids a b) /\
+                          FLOOKUP s.vs_allocas i = NONE}) local_outs s t /\
+  frag_ids a b SUBSET frag_ids st z /\
+  enc_scratch (frag_ids st z) lo top s /\
+  (!x. not_fresh_at st x ==> not_fresh_at a x) /\
+  (!p n. MEM (p,n) local_outs ==>
+    ?q m. MEM (q,m) outs /\ q <= p /\ p+n <= q+m) ==>
+  enc_frame st z lo top outs s t
+Proof
+  strip_tac >>
+  `FINITE (frag_ids st z DIFF frag_ids a b) /\
+   DISJOINT (frag_ids a b) (frag_ids st z DIFF frag_ids a b) /\
+   frag_ids a b UNION (frag_ids st z DIFF frag_ids a b) = frag_ids st z` by
+    (simp[] >> ASM_SET_TAC[]) >>
+  `enc_scratch (frag_ids st z) lo top t` by
+    (qpat_assum `_ UNION _ = frag_ids st z`
+       (fn th => once_rewrite_tac[GSYM th]) >>
+     irule enc_scratch_restore_reserved >> simp[] >>
+     fs[enc_frame_def] >> metis_tac[pred_setTheory.IN_DIFF]) >>
+  irule enc_frame_lift >> metis_tac[]
+QED
+
+Theorem compile_abi_encode_static_info_enclosing_frag:
+  compile_abi_encode_static_info dst src ei a = (op,b) /\
+  abi_enc_plan env ty ei /\ ~is_dynamic (vyper_to_abi_type env ty) /\
+  evaluate_type env ty = SOME tv /\ value_has_type tv v /\
+  vyper_to_abi env ty v = SOME av /\
+  eval_operand dst s0 = SOME dst_w /\ eval_operand src s0 = SOME src_w /\
+  enc_pre a b [dst;src] lo top tv v (w2n src_w)
+    [(w2n dst_w,LENGTH (enc (vyper_to_abi_type env ty) av))] s0 /\
+  frag_ids a b SUBSET frag_ids st z /\
+  enc_scratch (frag_ids st z) lo top s0 /\
+  (!x. not_fresh_at st x ==> not_fresh_at a x) /\
+  (?p n. MEM (p,n) outs /\ p <= w2n dst_w /\
+    w2n dst_w + LENGTH (enc (vyper_to_abi_type env ty) av) <= p+n) ==>
+  frag_exec ctx a b (\s. s = s0)
+    (\s. mem_bytes_at (w2n dst_w)
+           (LENGTH (enc (vyper_to_abi_type env ty) av)) s.vs_memory =
+           enc (vyper_to_abi_type env ty) av /\
+         eval_operand op s =
+           SOME (n2w (LENGTH (enc (vyper_to_abi_type env ty) av))) /\
+         s.vs_labels = s0.vs_labels /\
+         enc_frame st z lo top outs s0 s) R
+Proof
+  rpt strip_tac >>
+  drule_all enc_pre_reserve_enclosing >> strip_tac >>
+  drule_all compile_abi_encode_static_info_abi_frag >>
+  disch_then (qspecl_then [`ctx`, `R`] mp_tac) >> strip_tac >>
+  irule frag_exec_conseq >> goal_assum (drule_at Any) >> simp[] >>
+  rpt strip_tac >> irule enc_frame_restore_enclosing >> simp[] >>
+  qexistsl_tac [`a`, `b`,
+    `[(w2n dst_w,LENGTH (enc (vyper_to_abi_type env ty) av))]`] >>
+  simp[] >> qexistsl_tac [`p`, `n`] >> simp[]
+QED
+
 Theorem compile_abi_encode_frag:
   (!dst child_ptr ei is_dyn static_ofst dyn_ptr st op st' ctx env ty tv v
     av s0 dst_w src_w lo top.
