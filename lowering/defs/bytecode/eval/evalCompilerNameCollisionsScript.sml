@@ -89,3 +89,21 @@ Theorem nm_redeclared_loop_var_matches_python_oracle:
 Proof
   CONV_TAC (LAND_CONV (K (#evaluation nm_redeclared_loop_var))) >> EVAL_TAC
 QED
+
+(* #545: declaration-site ALLOCAs apply inside internal functions, including
+   user locals named like compiler bookkeeping. *)
+val ctl_local_internal = memoryStoreWitnessLib.evaluate fixture_root "ctl_local_internal"
+Theorem ctl_local_internal_matches_python_oracle:
+  ^(#term ctl_local_internal) =
+    SOME ^(memoryStoreWitnessLib.oracle fixture_root "ctl_local_internal")
+Proof
+  CONV_TAC (LAND_CONV (K (#evaluation ctl_local_internal))) >> EVAL_TAC
+QED
+
+val nm_local_return_buf = memoryStoreWitnessLib.evaluate fixture_root "nm_local_return_buf"
+Theorem nm_local_return_buf_matches_python_oracle:
+  ^(#term nm_local_return_buf) =
+    SOME ^(memoryStoreWitnessLib.oracle fixture_root "nm_local_return_buf")
+Proof
+  CONV_TAC (LAND_CONV (K (#evaluation nm_local_return_buf))) >> EVAL_TAC
+QED

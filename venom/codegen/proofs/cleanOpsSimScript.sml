@@ -671,7 +671,8 @@ Proof
       rename1 `lookup_block _ _ = SOME pred_bb` >>
       qabbrev_tac `inputs = input_vars_from pred_lbl
         bb.bb_instructions (live_vars_at liveness bb.bb_label 0)` >>
-      Cases_on `cleanup_elision_safe cfg fn bb`
+      qmatch_goalsub_abbrev_tac `if NULL inputs /\ ok then _ else _` >>
+      Cases_on `ok`
       >- (Cases_on `NULL inputs`
           >- (simp[] >> strip_tac >> gvs[] >>
               qexistsl_tac [`0`, `as`] >>
