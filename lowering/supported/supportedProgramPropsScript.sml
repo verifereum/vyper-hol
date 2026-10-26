@@ -204,13 +204,36 @@ Proof
 QED
 
 Theorem supported_name_checks_assembled:
-  supported_program [program_test_internal []; program_test_internal []] /\
+  ~supported_program [program_test_internal []; program_test_internal []] /\
   ~contract_namespaces_ok F
     [(NONE,[program_test_internal []; program_test_internal []])] /\
   ~supported_program [EventDecl "E" []; EventDecl "E" []] /\
   ~supported_program
     [VariableDecl Private Storage "field_name" (BaseT (UintT 256)) (SOME 0);
      StructDecl "S" [("field_name",BaseT (UintT 256))]]
+Proof
+  EVAL_TAC
+QED
+
+(* Source-shape uniqueness is internal-only, not a global namespace check. *)
+Theorem supported_function_name_sharing:
+  supported_program
+    [FunctionDecl External Pure F F "helper" [] [] NoneT [];
+     program_test_internal []] /\
+  supported_program [program_test_deploy []; program_test_deploy []]
+Proof
+  EVAL_TAC
+QED
+
+Theorem supported_default_expression_checks:
+  supported_program
+    [FunctionDecl External Pure F F "answer" [("x",BaseT (UintT 256))]
+       [expr_test_uint] NoneT []] /\
+  EVERY (\e. ~supported_program
+    [FunctionDecl Deploy Nonpayable F F "__init__" [] [e] NoneT []])
+    [Builtin (BaseT (UintT 256)) (Env MsgGas) [];
+     Builtin (BaseT (UintT 256)) (Bop Add) [];
+     Name (StructT (SOME 0,"S")) "x"]
 Proof
   EVAL_TAC
 QED

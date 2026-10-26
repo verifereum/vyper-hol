@@ -30,7 +30,7 @@ Proof
   simp_tac pure_ss [compile_vyper_def, compile_vyper_with_def] >> entry_stage "resolve_o1_policy" >> simp_tac pure_ss [optionTheory.option_case_def] >> entry_chunk 50 >> entry_chunk 50 >> entry_chunk 50 >> entry_chunk 50 >>
   entry_chunk 50 >> entry_chunk 50 >> entry_chunk 50 >> entry_chunk 50 >> entry_chunk 50 >> entry_chunk 50 >>
   simp_tac pure_ss [LET_THM, pairTheory.pair_case_thm, listTheory.MAP, combinTheory.o_DEF, external_has_defaults_def, listTheory.EXISTS_DEF, listTheory.NULL_DEF, NOT_CLAUSES, OR_CLAUSES, COND_CLAUSES] >> BETA_TAC >>
-  entry_stage "package_external_fn" >> entry_stage "run_lowering" >> simp_tac pure_ss [NOT_CLAUSES, OR_CLAUSES, COND_CLAUSES, optionTheory.option_case_def, checked_unit_pipeline_def] >>
+  entry_stage "package_external_fn" >> entry_guard "EVERY" >> entry_admin >> entry_stage "run_lowering" >> simp_tac pure_ss [NOT_CLAUSES, OR_CLAUSES, COND_CLAUSES, optionTheory.option_case_def, checked_unit_pipeline_def] >>
   simp_tac pure_ss [venomPipelineDriverTheory.run_venom_pipeline_def] >> entry_stage "pipeline_spec_wf" >> entry_stage "unit_wf" >> entry_stage "raw_static_inputs_wf" >>
   simp_tac pure_ss [NOT_CLAUSES, COND_CLAUSES, combinTheory.K_THM] >> entry_stage "init_ir_supply" >> simp[venomPassScheduleTheory.o1_pipeline_spec_def] >> entry_begin_mapped_stage >> entry_pass_begin >>
   entry_stage "execute_configured_fn_pass" >> entry_admin >> entry_pass_check >> entry_install_function >> entry_guard "ir_supply_covers_unit" >> entry_stage "lookup_unique_function" >> entry_admin >> entry_pass_begin >>
@@ -57,7 +57,9 @@ Proof
   simp_tac pure_ss [Once stackPlanGenTheory.generate_context_regions_def, stackPlanGenTheory.generate_fn_plan_def] >> entry_plan_admin >> entry_analysis_stage "liveness_analyze" >> entry_analysis_stage "dfg_build_function" >>
   entry_analysis_stage "cfg_analyze" >> entry_plan_control >> entry_plan_block >> entry_plan_spine_admin >> entry_plan_control >> entry_plan_block >> entry_plan_spine_admin >> entry_plan_control >> entry_plan_block >>
   entry_plan_spine_admin >> entry_plan_control >> entry_plan_block >> entry_plan_spine_admin >> entry_plan_control >> entry_plan_block >> entry_plan_spine_admin >> entry_plan_control >> entry_plan_block >> entry_plan_spine_admin >>
-  entry_plan_finish >> entry_stage "generate_context_regions" >> entry_admin >> CONV_TAC (LAND_CONV computeLib.EVAL_CONV) >> entry_report_result >> EVAL_TAC
+  entry_plan_finish >> entry_stage "generate_context_regions" >> entry_admin >>
+  entry_guard "spill_plan_in_region" >> entry_plan_admin >>
+  CONV_TAC (LAND_CONV computeLib.EVAL_CONV) >> entry_report_result >> EVAL_TAC
 QED
 
 val () = List.app (fn (name,th) =>

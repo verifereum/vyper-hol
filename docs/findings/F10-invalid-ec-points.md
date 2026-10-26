@@ -23,7 +23,9 @@ no-TypeError family. Valid `ecmul([1,2],0)` still succeeds with `[0,0]`.
 ## Current owners and reference evidence
 
 - [Source](../../semantics/vyperContextScript.sml): `evaluate_ecadd_def`,
-  `evaluate_ecmul_def`, `evaluate_ec_invalid_point_regression`,
+  `evaluate_ecmul_def`.
+- [Tests](../../tests/vyperECPrecompileTestScript.sml):
+  `evaluate_ec_invalid_point_regression`,
   `evaluate_ec_field_bound_regression`, `evaluate_ec_valid_point_regression`.
 - [Type consumers](../../semantics/prop/vyperTypeBuiltinsScript.sml): EC
   success typing and no-TypeError families (retained statements).

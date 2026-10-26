@@ -118,6 +118,8 @@ val checker_defs =
    vfmConstantsTheory.word_size_def,
    vyperValueTheory.compatible_bound_def,
    vyperValueTheory.within_int_bound_def,
+   vyperValueTheory.decimal_scale_def,
+   vyperValueTheory.decimal_bound_def,
    expr_type_def,
    well_typed_literal_def,
    well_typed_binop_def,

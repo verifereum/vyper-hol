@@ -25,7 +25,7 @@ Proof
   >> entry_chunk 50 >> entry_chunk 50 >> entry_chunk 50 >> entry_chunk 50 >> entry_chunk 50 >> entry_chunk 50 >> entry_chunk 50 >> entry_chunk 50 >> simp_tac pure_ss
   [lower_vyper_runtime_unit_def, base_dom1_program_def] >> entry_stage "type_env" >> entry_stage "classify_functions" >> plan_admin >> base_guard_check >> plan_admin >> entry_stage "build_selectors" >> simp_tac pure_ss
   [LET_THM, pairTheory.pair_case_thm, listTheory.MAP, combinTheory.o_DEF, external_has_defaults_def, listTheory.EXISTS_DEF, listTheory.NULL_DEF, NOT_CLAUSES, OR_CLAUSES, COND_CLAUSES] >>
-  BETA_TAC >> base_package >> base_package >> base_package >> base_package >> base_package >> entry_stage "run_lowering" >> simp_tac pure_ss [NOT_CLAUSES, OR_CLAUSES, COND_CLAUSES,
+  BETA_TAC >> base_package >> base_package >> base_package >> base_package >> base_package >> entry_guard "external_return_buffer_ok" >> entry_admin >> entry_stage "run_lowering" >> simp_tac pure_ss [NOT_CLAUSES, OR_CLAUSES, COND_CLAUSES,
   optionTheory.option_case_def, checked_unit_pipeline_def] >> simp_tac pure_ss [venomPipelineDriverTheory.run_venom_pipeline_def] >> entry_stage "pipeline_spec_wf" >> entry_stage
   "unit_wf" >> entry_stage "raw_static_inputs_wf" >> simp_tac pure_ss [NOT_CLAUSES, COND_CLAUSES, combinTheory.K_THM] >> entry_stage "init_ir_supply" >>
   simp[venomPassScheduleTheory.o1_pipeline_spec_def] >> simp_tac pure_ss [Once venomPipelineRunnerTheory.run_pipeline_stages_def] >>
@@ -139,7 +139,16 @@ Proof
   base_supply_unit_open >> base_supply_unit_part 0 >> base_supply_unit_part 1 >> base_supply_unit_part 2 >> base_supply_unit_part 3 >> plan_admin >> base_guard_check >> plan_admin >> instruction_ids >> plan_admin >> base_guard_check >> plan_admin >> base_supply_unit_open >> base_supply_unit_part 0 >> base_supply_unit_part 1 >> base_supply_unit_part 2 >> base_supply_unit_part 3 >> plan_admin >> base_guard_check >> plan_admin >> entry_stage "lookup_unique_function" >> plan_admin >> base_guard_check >> plan_admin >> pass_open >> current_function >> plan_admin >> base_guard_check >> plan_admin >> execute >> plan_admin >> base_guard_check >> plan_admin >> pass_effects >> pass_calls >> base_supply_guard "ir_supply_extends" >> plan_admin >> base_guard_check >> plan_admin >> base_supply_guard "ir_supply_covers_fn" >> plan_admin >> base_guard_check >> plan_admin >> base_supply_unit_open >> base_supply_unit_part 0 >> base_supply_unit_part 1 >> base_supply_unit_part 2 >> base_supply_unit_part 3 >> plan_admin >> base_guard_check >> plan_admin >> finish_pass >> plan_admin >> base_guard_check >> plan_admin >>
   replace_function >> plan_admin >> base_guard_check >> plan_admin >> apply_labels >> plan_admin >> base_guard_check >> plan_admin >> labels_ok >> labels_preserved >> base_supply_unit_open >> base_supply_unit_part 0 >> base_supply_unit_part 1 >> base_supply_unit_part 2 >> base_supply_unit_part 3 >> plan_admin >> base_guard_check >> plan_admin >> instruction_ids >> plan_admin >> base_guard_check >> plan_admin >> base_supply_unit_open >> base_supply_unit_part 0 >> base_supply_unit_part 1 >> base_supply_unit_part 2 >> base_supply_unit_part 3 >> plan_admin >> base_guard_check >> plan_admin >> entry_stage "lookup_unique_function" >> plan_admin >> base_guard_check >> plan_admin >> pass_open >> current_function >> plan_admin >> base_guard_check >> plan_admin >> execute >> plan_admin >> base_guard_check >> plan_admin >> pass_effects >> pass_calls >>
   base_supply_guard "ir_supply_extends" >> plan_admin >> base_guard_check >> plan_admin >> base_supply_guard "ir_supply_covers_fn" >> plan_admin >> base_guard_check >> plan_admin >> base_supply_unit_open >> base_supply_unit_part 0 >> base_supply_unit_part 1 >> base_supply_unit_part 2 >> base_supply_unit_part 3 >> plan_admin >> base_guard_check >> plan_admin >> finish_pass >> plan_admin >> base_guard_check >> plan_admin >> replace_function >> plan_admin >> base_guard_check >> plan_admin >> apply_labels >> plan_admin >> base_guard_check >> plan_admin >> labels_ok >> labels_preserved >>
-  base_supply_unit_open >> base_supply_unit_part 0 >> base_supply_unit_part 1 >> base_supply_unit_part 2 >> base_supply_unit_part 3 >> plan_admin >> base_guard_check >> plan_admin >> instruction_ids >> plan_admin >> base_guard_check >> plan_admin >> entry_begin_mapped_stage >> pass_open >> current_function >> plan_admin >> base_guard_check >> plan_admin >> execute >> plan_admin >> base_guard_check >> plan_admin >> pass_effects >>
+  base_supply_unit_open >> base_supply_unit_part 0 >> base_supply_unit_part 1 >> base_supply_unit_part 2 >> base_supply_unit_part 3 >> plan_admin >> base_guard_check >> plan_admin >> instruction_ids >> plan_admin >> base_guard_check >> plan_admin >> simp_tac pure_ss [Once venomPipelineRunnerTheory.run_pipeline_stages_def] >>
+  simp_tac pure_ss [venomPipelineRunnerTheory.run_pipeline_stage_def,
+    venomPipelineRunnerTheory.run_mapped_functions_def] >>
+  entry_stage "ctx_fn_names" >> plan_admin >>
+  simp_tac pure_ss [venomPipelineRunnerTheory.run_named_fn_schedules_def,
+    venomFnScheduleRunnerTheory.run_configured_fn_passes_def] >>
+  base_supply_unit_open >> base_supply_unit_part 0 >> base_supply_unit_part 1 >>
+  base_supply_unit_part 2 >> base_supply_unit_part 3 >>
+  plan_admin >> base_guard_check >> plan_admin >>
+  entry_stage "lookup_unique_function" >> plan_admin >> pass_open >> current_function >> plan_admin >> base_guard_check >> plan_admin >> execute >> plan_admin >> base_guard_check >> plan_admin >> pass_effects >>
   pass_calls >> base_supply_guard "ir_supply_extends" >> plan_admin >> base_guard_check >> plan_admin >> base_supply_guard "ir_supply_covers_fn" >> plan_admin >> base_guard_check >> plan_admin >> base_supply_unit_open >> base_supply_unit_part 0 >> base_supply_unit_part 1 >> base_supply_unit_part 2 >> base_supply_unit_part 3 >> plan_admin >> base_guard_check >> plan_admin >> finish_pass >> plan_admin >> base_guard_check >> plan_admin >> replace_function >> plan_admin >> base_guard_check >> plan_admin >> apply_labels >> plan_admin >> base_guard_check >> plan_admin >> labels_ok >> labels_preserved >>
   base_supply_unit_open >> base_supply_unit_part 0 >> base_supply_unit_part 1 >> base_supply_unit_part 2 >> base_supply_unit_part 3 >> plan_admin >> base_guard_check >> plan_admin >> instruction_ids >> plan_admin >> base_guard_check >> plan_admin >> base_supply_unit_open >> base_supply_unit_part 0 >> base_supply_unit_part 1 >> base_supply_unit_part 2 >> base_supply_unit_part 3 >> plan_admin >> base_guard_check >> plan_admin >> entry_stage "lookup_unique_function" >> plan_admin >> base_guard_check >> plan_admin >> pass_open >> current_function >> plan_admin >> base_guard_check >> plan_admin >> execute >> plan_admin >> base_guard_check >> plan_admin >> pass_effects >> pass_calls >> base_supply_guard "ir_supply_extends" >> plan_admin >> base_guard_check >> plan_admin >> base_supply_guard "ir_supply_covers_fn" >> plan_admin >> base_guard_check >> plan_admin >> base_supply_unit_open >> base_supply_unit_part 0 >> base_supply_unit_part 1 >> base_supply_unit_part 2 >> base_supply_unit_part 3 >> plan_admin >> base_guard_check >> plan_admin >> finish_pass >> plan_admin >> base_guard_check >> plan_admin >>
   replace_function >> plan_admin >> base_guard_check >> plan_admin >> apply_labels >> plan_admin >> base_guard_check >> plan_admin >> labels_ok >> labels_preserved >> base_supply_unit_open >> base_supply_unit_part 0 >> base_supply_unit_part 1 >> base_supply_unit_part 2 >> base_supply_unit_part 3 >> plan_admin >> base_guard_check >> plan_admin >> instruction_ids >> plan_admin >> base_guard_check >> plan_admin >> base_supply_unit_open >> base_supply_unit_part 0 >> base_supply_unit_part 1 >> base_supply_unit_part 2 >> base_supply_unit_part 3 >> plan_admin >> base_guard_check >> plan_admin >> entry_stage "lookup_unique_function" >> plan_admin >> base_guard_check >> plan_admin >> pass_open >> current_function >> plan_admin >> base_guard_check >> plan_admin >> execute >> plan_admin >> base_guard_check >> plan_admin >> pass_effects >> pass_calls >>
@@ -1869,9 +1878,22 @@ Proof
   base_fragment_step (base_dft_result_field 6) >>
   base_fragment_step (base_dft_result_finish) >> base_fragment_finish >> base_unshare_one >> base_unshare_one >> base_unshare_one >> base_unshare_one >> base_unshare_one >> base_unshare_one >> base_unshare_one >> base_unshare_one >> base_sharing_finish >> plan_admin >> base_guard_check >> plan_admin >> pass_effects >> pass_calls >> base_supply_guard "ir_supply_extends" >> plan_admin >> base_guard_check >> plan_admin >> base_supply_guard "ir_supply_covers_fn" >> plan_admin >> base_guard_check >> plan_admin >> base_supply_unit_open >> base_supply_unit_part 0 >> base_supply_unit_part 1 >> base_unit_input 2 0 >> base_unit_input 2 1 >> base_supply_unit_part 2 >> base_supply_unit_part 3 >> plan_admin >> base_guard_check >> plan_admin >> pass_open
   >> current_function >> plan_admin >> base_guard_check >> plan_admin >> execute >> plan_admin >> base_guard_check >> plan_admin >> pass_effects >> pass_calls >> base_supply_guard "ir_supply_extends" >> plan_admin >> base_guard_check >> plan_admin >> base_supply_guard "ir_supply_covers_fn" >> plan_admin >> base_guard_check >> plan_admin >> base_supply_unit_open >> base_supply_unit_part 0 >> base_supply_unit_part 1 >> base_supply_unit_part 2 >> base_supply_unit_part 3 >> plan_admin >> base_guard_check >> plan_admin >> base_empty_pass_fold >> plan_admin >> base_guard_check >> plan_admin >> entry_stage "replace_unique_function" >> plan_admin >> base_guard_check >> plan_admin >> entry_stage "apply_unit_label_map" >> plan_admin >> base_guard_check >> plan_admin >> entry_guard "unit_labels_wf" >> entry_guard
-  "list_subset" >> base_supply_unit_open >> base_supply_unit_part 0 >> base_supply_unit_part 1 >> base_supply_unit_part 2 >> base_unit_input 3 0 >> base_unit_input 3 1 >> base_unit_check 3 >> base_supply_unit_part 3 >> plan_admin >> base_guard_check >> plan_admin >> entry_guard "unit_global_inst_ids_distinct" >> plan_admin >> base_guard_check >> plan_admin >> entry_stage "run_pipeline_stages" >> plan_admin >> base_guard_check >> plan_admin >> entry_guard
-  "unit_wf" >> entry_guard "unit_labels_wf" >> entry_guard "context_target_safe" >> entry_guard "concretized_static_layouts_wf" >> entry_guard "fmp_lowered_context_wf" >> entry_stage
-  "fcg_analyze" >> entry_guard "reachable_fcg_acyclic" >> base_ready_open >> base_ready_internal "g" ``[BaseT (UintT 256)]`` false >> base_ready_internal "h" ``[] : type list`` false >> plan_admin >> base_guard_check >> plan_admin >>
+  "list_subset" >> base_supply_unit_open >> base_supply_unit_part 0 >> base_supply_unit_part 1 >> base_supply_unit_part 2 >> base_unit_input 3 0 >> base_unit_input 3 1 >> base_unit_check 3 >> base_supply_unit_part 3 >> plan_admin >> base_guard_check >> plan_admin >> entry_guard "unit_global_inst_ids_distinct" >> plan_admin >> base_guard_check >> plan_admin >> entry_stage "run_pipeline_stages" >> plan_admin >> base_guard_check >> plan_admin >>
+  (* Check final-unit structure separately from its per-function predicates. *)
+  base_eval_stage (REWR_CONV venomCompilerWfTheory.unit_wf_def)
+    "unit_wf" >>
+  base_eval_stage (REWR_CONV venomWfTheory.venom_wf_compute) "venom_wf" >>
+  base_native_guard "ctx_wf" >> base_native_guard "wf_invoke_targets" >>
+  base_native_guard "ctx_inst_ids_distinct" >>
+  base_eval_stage (RAND_CONV computeLib.EVAL_CONV THENC
+    PURE_REWRITE_CONV [listTheory.EVERY_DEF] THENC DEPTH_CONV BETA_CONV)
+    "EVERY" >>
+  base_native_guard "wf_function" >> base_native_guard "fn_inst_wf" >>
+  base_native_guard "wf_function" >> base_native_guard "fn_inst_wf" >>
+  base_native_guard "wf_function" >> base_native_guard "fn_inst_wf" >>
+  base_native_guard "unit_labels_wf" >> plan_admin >> base_guard_check >> plan_admin >>
+  entry_guard "unit_labels_wf" >> entry_guard "context_target_safe" >> entry_guard "concretized_static_layouts_wf" >> entry_guard "fmp_lowered_context_wf" >> entry_stage
+  "fcg_analyze" >> entry_guard "reachable_fcg_acyclic" >> base_ready_open >> base_ready_internal 0 "g" ``[BaseT (UintT 256)]`` false >> base_ready_internal 7 "h" ``[] : type list`` false >> plan_admin >> base_guard_check >> plan_admin >>
   entry_open_codegen_ready >> entry_guard "canonical_param_prefix" >> entry_guard
   "wf_function" >> entry_guard "fn_inst_wf" >> entry_guard "ssa_form" >> entry_open_dominance >> entry_guard "wf_function" >> entry_open_dominance_exec >>
   base_analysis_stage "cfg_analyze" >> simp_tac pure_ss [Once LET_THM] >> base_dom_open >> base_dom_flow_open >> entry_flow_open >> entry_flow_header >>
@@ -1962,7 +1984,26 @@ Proof
   entry_plan_abbrev "dfg_live" 0 >> entry_plan_abbrev "dfg_cfg" 2 >> entry_open_dfg >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >>
   base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >>
   base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >>
-  base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> entry_dfg_finish >> entry_plan_unabbrev "dfg_live" >> entry_plan_unabbrev "dfg_cfg" >> entry_plan_compact_dfg >> entry_plan_normalize 3 >> entry_plan_normalize 2 >> base_plan_vars_open >> base_plan_vars_input >>
+  base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> entry_dfg_finish >> entry_plan_unabbrev "dfg_live" >> entry_plan_unabbrev "dfg_cfg" >>
+  (* Compact the three DFG maps at separate timed boundaries. *)
+  base_eval_stage (RATOR_CONV (RATOR_CONV (RATOR_CONV (RATOR_CONV
+    (RAND_CONV (base_first_conv
+      (fn tm => finite_mapSyntax.is_fupdate tm andalso
+        type_of tm = ``:(string, instruction list) fmap``)
+      entry_compact_maps))))))
+    "generate_fn_plan_analyzed" >>
+  base_eval_stage (RATOR_CONV (RATOR_CONV (RATOR_CONV (RATOR_CONV
+    (RAND_CONV (base_first_conv
+      (fn tm => finite_mapSyntax.is_fupdate tm andalso
+        type_of tm = ``:(string, instruction) fmap``)
+      entry_compact_maps))))))
+    "generate_fn_plan_analyzed" >>
+  base_eval_stage (RATOR_CONV (RATOR_CONV (RATOR_CONV (RATOR_CONV
+    (RAND_CONV (base_first_conv
+      (fn tm => finite_mapSyntax.is_fupdate tm andalso
+        type_of tm = ``:(num, instruction) fmap``)
+      entry_compact_maps))))))
+    "generate_fn_plan_analyzed" >> entry_plan_normalize 3 >> entry_plan_normalize 2 >> base_plan_vars_open >> base_plan_vars_input >>
   base_plan_vars_tick >> base_plan_vars_tick >> base_plan_vars_tick >> base_plan_vars_tick >> base_plan_vars_tick >> base_plan_vars_tick >> base_plan_vars_tick >> base_plan_vars_tick >> base_plan_vars_tick >> base_plan_vars_tick >> base_plan_vars_tick >> base_plan_vars_tick >> base_plan_vars_tick >> base_plan_vars_tick >> base_plan_vars_tick >> base_plan_vars_tick >>
   base_plan_vars_tick >> base_plan_vars_tick >> base_plan_vars_tick >> base_plan_vars_tick >> base_plan_vars_tick >> base_plan_vars_tick >> base_plan_vars_tick >> base_plan_vars_tick >> base_plan_vars_tick >> base_plan_vars_tick >> base_plan_vars_tick >> base_plan_vars_tick >> base_plan_vars_tick >> base_plan_vars_tick >> base_plan_vars_tick >> base_plan_vars_tick >> base_plan_vars_finish >> plan_cache_transient >>
   plan_cache_halting >> entry_plan_abbrev "plan_live" 0 >> entry_plan_abbrev "plan_dfg" 1 >>
@@ -1976,6 +2017,66 @@ Proof
   plan_inputs >> plan_instruction >> plan_admin >> plan_control >> plan_admin >> plan_block >> plan_admin >> plan_setup >> plan_inputs >> plan_instruction >> plan_admin >> plan_control >> plan_admin >> plan_block >> plan_admin >> plan_setup >> plan_inputs >> plan_instruction >> plan_admin >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >>
   base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >>
   base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >>
+  base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >>
+  (* Keep each phase of this call-site instruction independently timed. *)
+  plan_control >> plan_admin >> plan_block >> plan_admin >> plan_setup >>
+  base_plan_input 4 >> base_plan_input 5 >> base_plan_input 6 >>
+  base_plan_input 7 >> base_plan_input 8 >> base_plan_input 9 >>
+  plan_instruction >> plan_admin >>
+  plan_control >> plan_admin >> plan_block >> plan_admin >> plan_setup >>
+  base_plan_input 4 >> base_plan_input 5 >> base_plan_input 6 >>
+  base_plan_input 7 >> base_plan_input 8 >> base_plan_input 9 >>
+  plan_instruction >> plan_admin >>
+  (* A literal finite phase schedule gives holbuild a boundary per phase.
+     Each four phases advances one instruction; surplus phases are identities. *)
+  MAP_EVERY (fn phase => case phase of
+      0 => plan_admin >> plan_control >> plan_admin >> plan_block >> plan_admin >> plan_setup
+    | 1 => base_plan_input 4 >> base_plan_input 5 >> base_plan_input 6
+    | 2 => base_plan_input 7 >> base_plan_input 8 >> base_plan_input 9
+    | _ => plan_instruction)
+   [0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,
+    0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,
+    0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,
+    0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,
+    0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,
+    0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,
+    0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,
+    0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,
+    0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,
+    0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,
+    0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,
+    0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,
+    0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,
+    0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,
+    0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,
+    0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,
+    0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,
+    0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,
+    0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,
+    0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,
+    0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,
+    0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,
+    0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,
+    0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,
+    0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,
+    0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,
+    0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,
+    0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,
+    0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,
+    0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,
+    0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,
+    0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,
+    0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,
+    0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,
+    0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,
+    0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,
+    0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,
+    0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,
+    0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,
+    0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3] >>
+  plan_admin >>
+  (* Original fixed paired transition budget, superseded by the phases above:
+  base_plan_pair >>
   base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >>
   base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >>
   base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >>
@@ -2003,7 +2104,7 @@ Proof
   base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >>
   base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >>
   base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >>
-  base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >> base_plan_pair >>
+  *)
   plan_finish >> entry_plan_unabbrev "plan_live" >> entry_plan_unabbrev "plan_dfg" >>
   entry_plan_unabbrev "plan_cfg" >> entry_plan_unabbrev "plan_func" >>
   entry_guard "spill_plan_in_region" >> entry_plan_admin >> entry_stage "generate_context_regions" >> plan_admin >> base_guard_check >> plan_admin >> entry_assembly_open >> entry_stage "execute_plan" >> entry_guard "assembly_target_safe" >> entry_stage "OPTION_MAP" >> entry_admin >> base_eval_stage (RAND_CONV computeLib.EVAL_CONV) "lower_vyper_deploy_unit" >> entry_stage "lower_vyper_deploy_unit" >> entry_admin >>

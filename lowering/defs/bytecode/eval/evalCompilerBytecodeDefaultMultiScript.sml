@@ -57,7 +57,7 @@ Theorem dflt_multi_matches_python_oracle:
 Proof
   simp_tac pure_ss [compile_vyper_def, compile_vyper_with_def] >> entry_stage "resolve_o1_policy" >> simp_tac pure_ss [optionTheory.option_case_def] >>
   entry_chunk 50 >> entry_chunk 50 >> entry_chunk 50 >> entry_chunk 50 >> entry_chunk 50 >> entry_chunk 50 >> entry_chunk 50 >> entry_chunk 50 >>
-  entry_chunk 50 >> entry_chunk 50 >> entry_choose_grouped_path >> entry_stage "package_external_group" >> entry_stage "run_grouped_lowering" >>
+  entry_chunk 50 >> entry_chunk 50 >> entry_choose_grouped_path >> entry_guard "EVERY" >> entry_admin >> entry_stage "package_external_group" >> entry_stage "run_grouped_lowering" >>
   entry_open_pipeline >> entry_stage "pipeline_spec_wf" >> entry_stage "unit_wf" >> entry_stage "raw_static_inputs_wf" >> simp_tac pure_ss [NOT_CLAUSES,
   COND_CLAUSES, combinTheory.K_THM] >> entry_stage "init_ir_supply" >> simp[venomPassScheduleTheory.o1_pipeline_spec_def] >> entry_begin_mapped_stage >>
   entry_pass_begin >> entry_execute_pass >> entry_admin >> entry_pass_check >> entry_install_function >> entry_begin_mapped_stage >> entry_pass_begin >>

@@ -1,0 +1,55 @@
+(*
+ * Expression simulation: places (#636, Places)
+ *
+ * The case lemmas of compile_expr_sim (exprSimMain) for subscripts,
+ * attributes and pop.  All cheated, for the later #636 PRs.
+ *
+ * TOP-LEVEL:
+ *   compile_subscript_sim — static and dynamic arrays with the bounds-check
+ *                           abort, hashmaps, tuples (#558), Places row 1
+ *   compile_attribute_sim — struct fields (#558), row 2
+ *   compile_pop_sim       — pop on a dynamic array, with the empty-array
+ *                           abort, row 3
+ *
+ * The induction hypothesis is expr_ok of every smaller expression, so of
+ * the index and of the whole base chain; its expr_vv_ok describes a base's
+ * value_vv, a storage or transient array's ArrayRef included.  It does not
+ * cover a hashmap base: that evaluates to a HashMapRef and is typed by
+ * type_place_expr, not well_typed_expr.  These lemmas' proofs need a place
+ * judgment for hashmap bases, proved by induction on the place chain with
+ * this hypothesis for the indices.
+ *
+ * The lowering also needs fixing first for nested places: compile_attribute
+ * finds the struct only for a Name base (struct_name is "" otherwise, so
+ * self.s.b reads at the wrong offset), and compile_subscript and pop fall
+ * back to a dynamic uint256 array in memory when the base or target is not
+ * a Name.
+ *)
+
+Theory exprSimPlaces
+Ancestors
+  list exprSim exprSimHyps vyperAST
+
+Theorem compile_subscript_sim:
+  !cenv ann base idx.
+    expr_sim_below cenv (expr_size (Subscript ann base idx)) ==>
+    expr_vv_ok cenv (Subscript ann base idx)
+Proof
+  cheat
+QED
+
+Theorem compile_attribute_sim:
+  !cenv ann base fld.
+    expr_sim_below cenv (expr_size (Attribute ann base fld)) ==>
+    expr_vv_ok cenv (Attribute ann base fld)
+Proof
+  cheat
+QED
+
+Theorem compile_pop_sim:
+  !cenv ann tgt.
+    expr_sim_below cenv (expr_size (Pop ann tgt)) ==>
+    expr_vv_ok cenv (Pop ann tgt)
+Proof
+  cheat
+QED

@@ -31,7 +31,7 @@ Proof
   simp_tac pure_ss [optionTheory.option_case_def] >> entry_chunk 50 >> entry_chunk 50 >> entry_chunk 50 >> entry_chunk 50 >> entry_chunk 50 >>
   entry_chunk 50 >> entry_chunk 50 >> entry_chunk 50 >> entry_chunk 50 >> entry_chunk 50 >>
   simp_tac pure_ss [LET_THM, pairTheory.pair_case_thm, listTheory.MAP, combinTheory.o_DEF, external_has_defaults_def, listTheory.EXISTS_DEF, listTheory.NULL_DEF, NOT_CLAUSES, OR_CLAUSES, COND_CLAUSES] >>
-  BETA_TAC >> entry_stage "package_external_fn" >> entry_stage "run_lowering" >>
+  BETA_TAC >> entry_stage "package_external_fn" >> entry_guard "EVERY" >> entry_admin >> entry_stage "run_lowering" >>
   simp_tac pure_ss [NOT_CLAUSES, OR_CLAUSES, COND_CLAUSES, optionTheory.option_case_def, checked_unit_pipeline_def] >>
   simp_tac pure_ss [venomPipelineDriverTheory.run_venom_pipeline_def] >> entry_stage "pipeline_spec_wf" >> entry_stage "unit_wf" >>
   entry_stage "raw_static_inputs_wf" >> simp_tac pure_ss [NOT_CLAUSES, COND_CLAUSES, combinTheory.K_THM] >> entry_stage "init_ir_supply" >>

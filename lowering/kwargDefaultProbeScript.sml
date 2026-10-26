@@ -31,6 +31,7 @@ Definition default_probe_env_def:
   default_probe_env = (ARB : compile_env) with
     <| ce_func_info := (\name. (1, 0, []));
        ce_func_param_types := (\name. []);
+       ce_func_ids := (\name. 0);
        ce_is_ctor := F |>
 End
 
@@ -43,7 +44,7 @@ Theorem kwarg_intcall_emission:
       [("a", Lit 128w, BaseT (UintT 256),
         Call (BaseT (UintT 256)) (IntCall (NONE, "g")) [] NONE)]
       4 0 (Lit 0w) kwarg_probe_state)).cs_current_insts =
-    [(ALLOCA, [Lit 32w]); (INVOKE, [Label "internal g()_runtime"]);
+    [(ALLOCA, [Lit 32w]); (INVOKE, [Label "internal 0 g()_runtime"]);
      (ADD, [Var "%0"; Lit 0w]); (MSTORE, [Var "%2"; Var "%1"]);
      (MLOAD, [Var "%0"]); (MSTORE, [Lit 128w; Var "%3"])]
 Proof
