@@ -4,9 +4,12 @@ Ancestors
   (* definitions *)
   moduleLowering
   (* property statements and proofs *)
-  moduleLoweringProps
+  moduleLoweringProps entryDispatchProps
   loweringSlice
   varsExt exprSim
+  exprBopLowering
+  exprSimOps exprSimCompare exprSimArith intBits freshWrites
+  exprSimMain
   valueEncodingProofs
   localPtrsProps
   structFieldsProps
@@ -21,3 +24,4 @@ Ancestors
   evalCompilerInternalLabels
   evalCompilerSliceBuffers
   evalCompilerPhiPointers
+  evalCompilerAllocationLimit

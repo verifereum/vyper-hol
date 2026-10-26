@@ -78,7 +78,7 @@ Definition abi_to_vyper_def[simp]:
   abi_to_vyper env (BaseT $ StringT z) (BytesV bs) =
     (if LENGTH bs ≤ z then SOME $ StringV (MAP (CHR o w2n) bs) else NONE) ∧
   abi_to_vyper env (BaseT $ DecimalT) (IntV i) =
-    (if within_int_bound (Signed 168) i then SOME $ DecimalV i else NONE) ∧
+    (if within_int_bound decimal_bound i then SOME $ DecimalV i else NONE) ∧
   abi_to_vyper env (TupleT ts) (ListV vs) =
     (case abi_to_vyper_list env ts vs of NONE => NONE
         | SOME vs => SOME $ ArrayV $ TupleV vs) ∧
@@ -252,7 +252,7 @@ End
 
 val () = cv_auto_trans vyper_valid_enc_def;
 
-(* TOP-LEVEL: shared decode step, after the buffer has been validated. *)
+(* Shared decode step, after the buffer has been validated. *)
 Definition decode_abi_value_def:
   decode_abi_value tenv typ bs =
     case abi_to_vyper tenv typ (dec (vyper_to_abi_type tenv typ) bs) of
@@ -262,7 +262,7 @@ End
 
 val () = cv_auto_trans decode_abi_value_def;
 
-(* TOP-LEVEL: decode a validated buffer (_abi_decode path). *)
+(* Decode a validated buffer (_abi_decode path). *)
 Definition evaluate_abi_decode_def:
   evaluate_abi_decode tenv typ bs =
     if vyper_valid_enc tenv typ bs then
@@ -272,7 +272,7 @@ End
 
 val () = cv_auto_trans evaluate_abi_decode_def;
 
-(* TOP-LEVEL: returndata gate, without the upper bound the cap enforces. *)
+(* Returndata gate, without the upper bound the cap enforces. *)
 Definition vyper_valid_enc_returndata_def:
   vyper_valid_enc_returndata env t bs ⇔
     (valid_enc (vyper_to_abi_type env t) bs ∧
@@ -281,7 +281,7 @@ End
 
 val () = cv_auto_trans vyper_valid_enc_returndata_def;
 
-(* TOP-LEVEL: decode extcall returndata, over the size-capped buffer. *)
+(* Decode extcall returndata, over the size-capped buffer. *)
 Definition evaluate_abi_decode_returndata_def:
   evaluate_abi_decode_returndata tenv typ bs =
     let bs = TAKE (vyper_abi_size_bound tenv typ) bs in
@@ -601,12 +601,9 @@ val vyper_to_abi_pre_def = cv_auto_trans_pre_rec
   \\ simp[cv_size_def, cv_snd_def, cv_fst_def]
   \\ cv_bounds_tac
   \\ TRY decide_tac
-  (* SArrayV case: c2n term needs more splits to expose inner Pair overhead.
-     Split the inner of cv_v (from cv_ispair guard) and its inner pair. *)
-  (* SArrayV case: c2n(cv_fst(cv_snd gV)) needs gV split into Pair,
-     then inner pair split, to get enough overhead for decide_tac. *)
-  (* SArrayV case: c2n(cv_fst(cv_snd v)) needs 2 splits to expose Pair overhead.
-     Split v (Num dismissed by cv_lt contradiction), then split inner of Pair. *)
+  (* SArrayV case: for c2n (cv_fst (cv_snd v)), split v (its Num case
+     contradicts cv_lt), then the inner pair, so decide_tac sees enough Pair
+     overhead. *)
   \\ TRY (let
        val c2n_tm = ``cv$c2n``
        fun fc tm =
@@ -691,8 +688,7 @@ val () = cv_auto_trans build_ext_calldata_def;
 
 (* ===== External Return Encoding (incl. @raw_return) ===== *)
 
-(* TOP-LEVEL: external_returndata
-   Returndata of an external call that produced value v for declared type typ.
+(* Returndata of an external call that produced value v for declared type typ.
    An ordinary function returns the ABI encoding of v (evaluate_abi_encode_bytes,
    inverse of the evaluate_abi_decode_return the call sites apply to observed
    returndata).  A @raw_return function returns its bytestring value's content
@@ -711,7 +707,7 @@ End
 
 val () = cv_auto_trans external_returndata_def;
 
-(* KEY LEMMA: the @raw_return branch returns exactly the value's own bytes. *)
+(* The @raw_return branch returns exactly the value's own bytes. *)
 Theorem external_returndata_raw_SOME_iff:
   ∀tenv typ v bs.
     external_returndata T tenv typ v = INL bs ⇔ raw_return_bytes v = SOME bs
@@ -720,7 +716,7 @@ Proof
   >> Cases_on `raw_return_bytes v` >> simp[]
 QED
 
-(* KEY LEMMA: an ordinary external call returns the ABI encoding. *)
+(* An ordinary external call returns the ABI encoding. *)
 Theorem external_returndata_plain:
   ∀tenv typ v.
     external_returndata F tenv typ v = evaluate_abi_encode_bytes tenv typ v
@@ -728,8 +724,7 @@ Proof
   simp[external_returndata_def] >> metis_tac[]
 QED
 
-(* TOP-LEVEL: external_returndata_agrees
-   Whether observed returndata agrees with the value the semantics computed.
+(* Whether observed returndata agrees with the value the semantics computed.
    An ordinary function ABI-encodes, so returndata must decode back to v; a
    @raw_return function returns raw content bytes, so returndata must be exactly
    those, as external_returndata produces. *)
@@ -747,7 +742,7 @@ End
 
 val () = cv_auto_trans external_returndata_agrees_def;
 
-(* KEY LEMMA: the @raw_return agreement is exactly byte equality against the
+(* The @raw_return agreement is exactly byte equality against the
    raw encoding; the ordinary agreement is exactly successful decoding. *)
 Theorem external_returndata_agrees_T:
   ∀tenv ret v out.
@@ -767,7 +762,7 @@ Proof
   >> simp[]
 QED
 
-(* KEY LEMMA: a @raw_return value with no bytestring representation is
+(* A @raw_return value with no bytestring representation is
    rejected rather than silently encoded. *)
 Theorem external_returndata_raw_NONE:
   ∀tenv typ v.

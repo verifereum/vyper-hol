@@ -48,7 +48,7 @@ argument evaluation is not an `eval_args NONE` call.
 - [Evaluator](../../semantics/vyperContextScript.sml): `evaluate_type_builtin`
   AbiEncode branch / `evaluate_abi_encode_bytes`.
 - [Contract checker](../../semantics/type/vyperTypeContractScript.sml): `check_contract`.
-- [Permanent tests](../../semantics/type/vyperCheckContractLibTestScript.sml):
+- [Permanent tests](../../tests/vyperCheckContractLibTestScript.sml):
   `abi_encode_dynamic_exact_bound`, `abi_encode_dynamic_wrapping_bounds`,
   `abi_encode_wrapping_lengths_eval` / `cv`,
   `abi_dynamic_fixture_runtime_checked` / `deployment_checked`.

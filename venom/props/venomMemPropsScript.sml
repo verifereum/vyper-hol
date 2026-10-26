@@ -561,6 +561,7 @@ Proof
   simp[HD_TAKE, HD_DROP, LENGTH_write_memory_with_expansion]
 QED
 
+(* A memory copy's destination reads back as its zero-padded source. *)
 Theorem mcopy_padded_read:
   !dst src n s.
     TAKE n (DROP dst (mcopy dst src n s).vs_memory ++ REPLICATE n 0w) =
