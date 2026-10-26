@@ -6013,6 +6013,177 @@ Resume compile_abi_encode_dyn_static_loop_abi_frag[positive_bound]:
 QED
 Finalise compile_abi_encode_dyn_static_loop_abi_frag
 
+(* Syntax-only growth, independent of the recursive semantic invariant. *)
+Definition enc_comp_grows_def:
+  enc_comp_grows (m : 'a compiler) <=>
+    !s x t. m s = (x,t) ==>
+      cs_extends s t /\ s.cs_next_id <= t.cs_next_id /\
+      s.cs_next_var <= t.cs_next_var
+End
+
+Theorem enc_comp_grows_return[local]:
+  !x. enc_comp_grows (comp_return x)
+Proof
+  simp[enc_comp_grows_def, comp_return_def, cs_extends_refl]
+QED
+
+Theorem enc_comp_grows_bind[local]:
+  !m f. enc_comp_grows m /\ (!a. enc_comp_grows (f a)) ==>
+    enc_comp_grows (comp_bind m f)
+Proof
+  rw[enc_comp_grows_def, comp_bind_def] >> pairarg_tac >> gvs[] >>
+  metis_tac[cs_extends_trans, arithmeticTheory.LESS_EQ_TRANS]
+QED
+
+Theorem enc_comp_grows_ignore_bind[local]:
+  !m n. enc_comp_grows m /\ enc_comp_grows n ==>
+    enc_comp_grows (comp_ignore_bind m n)
+Proof
+  rpt strip_tac >> rewrite_tac[comp_ignore_bind_def] >>
+  irule enc_comp_grows_bind >> simp[]
+QED
+
+Theorem enc_comp_grows_emit[local]:
+  !i. enc_comp_grows (emit i)
+Proof
+  rw[enc_comp_grows_def] >> drule cs_extends_emit >> strip_tac >> gvs[emit_def]
+QED
+
+Theorem enc_comp_grows_fresh_id[local]:
+  enc_comp_grows fresh_id
+Proof
+  rw[enc_comp_grows_def] >> drule cs_extends_fresh_id >> strip_tac >>
+  gvs[fresh_id_def]
+QED
+
+Theorem enc_comp_grows_fresh_var[local]:
+  enc_comp_grows fresh_var
+Proof
+  rw[enc_comp_grows_def] >> drule cs_extends_fresh_var >> strip_tac >>
+  gvs[fresh_var_def]
+QED
+
+Theorem enc_comp_grows_fresh_label[local]:
+  !sfx. enc_comp_grows (fresh_label sfx)
+Proof
+  rw[enc_comp_grows_def] >> drule cs_extends_fresh_label >> strip_tac >>
+  gvs[fresh_label_def]
+QED
+
+Theorem enc_comp_grows_new_block[local]:
+  !lbl. enc_comp_grows (new_block lbl)
+Proof
+  rw[enc_comp_grows_def] >> drule cs_extends_new_block >> strip_tac >>
+  gvs[new_block_def]
+QED
+
+Theorem enc_comp_grows_emit_op[local]:
+  !opc args. enc_comp_grows (emit_op opc args)
+Proof
+  rw[emit_op_def] >> irule enc_comp_grows_bind >>
+  simp[enc_comp_grows_fresh_id] >> gen_tac >>
+  irule enc_comp_grows_bind >> simp[enc_comp_grows_fresh_var] >>
+  gen_tac >> irule enc_comp_grows_ignore_bind >>
+  simp[enc_comp_grows_emit, enc_comp_grows_return]
+QED
+
+Theorem enc_comp_grows_emit_inst[local]:
+  !opc args outs. enc_comp_grows (emit_inst opc args outs)
+Proof
+  rw[emit_inst_def] >> irule enc_comp_grows_bind >>
+  simp[enc_comp_grows_fresh_id, enc_comp_grows_emit]
+QED
+
+Theorem enc_comp_grows_emit_void[local]:
+  !opc args. enc_comp_grows (emit_void opc args)
+Proof
+  rw[emit_void_def] >> irule enc_comp_grows_bind >>
+  simp[enc_comp_grows_fresh_id, enc_comp_grows_emit]
+QED
+
+Theorem enc_comp_grows_alloc_buffer[local]:
+  !n. enc_comp_grows (compile_alloc_buffer n)
+Proof
+  rw[contextTheory.compile_alloc_buffer_def] >> irule enc_comp_grows_bind >>
+  simp[enc_comp_grows_emit_op, enc_comp_grows_return]
+QED
+
+Theorem enc_comp_grows_static[local]:
+  !dst src. enc_comp_grows (compile_abi_encode_static dst src)
+Proof
+  rw[compile_abi_encode_static_def] >>
+  irule enc_comp_grows_bind >> simp[enc_comp_grows_emit_op] >>
+  gen_tac >> irule enc_comp_grows_ignore_bind >>
+  simp[enc_comp_grows_emit_void, enc_comp_grows_return]
+QED
+
+Theorem enc_comp_grows_static_info[local]:
+  !dst src ei. enc_comp_grows (compile_abi_encode_static_info dst src ei)
+Proof
+  rpt gen_tac >> Cases_on `ei` >> simp[compile_abi_encode_static_info_def,
+    enc_comp_grows_static, enc_comp_grows_return] >>
+  irule enc_comp_grows_ignore_bind >>
+  simp[enc_comp_grows_emit_void, enc_comp_grows_return]
+QED
+
+Theorem enc_comp_grows_dyn_static_loop[local]:
+  !dst src ei asz msz len.
+    enc_comp_grows (compile_abi_encode_dyn_static_loop dst src ei asz msz len)
+Proof
+  rpt gen_tac >> rewrite_tac[compile_abi_encode_dyn_static_loop_def] >>
+  rpt (FIRST [CHANGED_TAC (simp[LET_THM,
+          enc_comp_grows_alloc_buffer, enc_comp_grows_emit_op,
+          enc_comp_grows_emit_void, enc_comp_grows_emit_inst,
+          enc_comp_grows_fresh_label, enc_comp_grows_new_block,
+          enc_comp_grows_static_info]),
+        irule enc_comp_grows_bind >> conj_tac,
+        irule enc_comp_grows_ignore_bind >> conj_tac,
+        gen_tac])
+QED
+
+Theorem enc_comp_grows_encoder[local]:
+  (!dst cp ei dyn off dp.
+    enc_comp_grows (compile_abi_encode_child dst cp ei dyn off dp)) /\
+  (!dst src ei. enc_comp_grows (compile_abi_encode_to_buf dst src ei)) /\
+  (!dst src eis so ho dp.
+    enc_comp_grows (compile_abi_encode_complex_elems dst src eis so ho dp)) /\
+  (!dst src ei asz msz len.
+    enc_comp_grows (compile_abi_encode_dyn_loop dst src ei asz msz len))
+Proof
+  ho_match_mp_tac compile_abi_encode_child_ind >> rpt conj_tac >>
+  rpt strip_tac >> once_rewrite_tac[compile_abi_encode_child_def] >>
+  rpt (FIRST [CHANGED_TAC (gvs[LET_THM,
+          enc_comp_grows_alloc_buffer, enc_comp_grows_emit_op,
+          enc_comp_grows_emit_void, enc_comp_grows_emit_inst,
+          enc_comp_grows_fresh_label, enc_comp_grows_new_block,
+          enc_comp_grows_static, enc_comp_grows_return,
+          enc_comp_grows_dyn_static_loop]),
+        irule enc_comp_grows_bind >> conj_tac,
+        irule enc_comp_grows_ignore_bind >> conj_tac,
+        gen_tac, IF_CASES_TAC])
+QED
+
+Theorem enc_encoder_growth:
+  (!dst cp ei dyn off dp st op st'.
+    compile_abi_encode_child dst cp ei dyn off dp st = (op,st') ==>
+    cs_extends st st' /\ st.cs_next_id <= st'.cs_next_id /\
+    st.cs_next_var <= st'.cs_next_var) /\
+  (!dst src ei st op st'.
+    compile_abi_encode_to_buf dst src ei st = (op,st') ==>
+    cs_extends st st' /\ st.cs_next_id <= st'.cs_next_id /\
+    st.cs_next_var <= st'.cs_next_var) /\
+  (!dst src eis so ho dp st op st'.
+    compile_abi_encode_complex_elems dst src eis so ho dp st = (op,st') ==>
+    cs_extends st st' /\ st.cs_next_id <= st'.cs_next_id /\
+    st.cs_next_var <= st'.cs_next_var) /\
+  (!dst src ei asz msz len st op st'.
+    compile_abi_encode_dyn_loop dst src ei asz msz len st = (op,st') ==>
+    cs_extends st st' /\ st.cs_next_id <= st'.cs_next_id /\
+    st.cs_next_var <= st'.cs_next_var)
+Proof
+  mp_tac enc_comp_grows_encoder >> simp[enc_comp_grows_def]
+QED
+
 (* Recursive correctness is indexed by compiler arguments, not endpoints. *)
 Definition enc_buf_correct_def:
   enc_buf_correct dst src ei <=>
