@@ -14,7 +14,7 @@
 Theory stmtSimCases
 Ancestors
   list rich_list finite_map pred_set
-  fragExec localPtrsProps exprSim loweringSlice stmtSim
+  fragExec localPtrsProps exprSim loweringSlice stmtSim loweringHalt
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
   compileEnv valueEncoding
   vyperInterpreter vyperState vyperValue vyperValueOperation vyperExprNoControl
@@ -677,6 +677,115 @@ Proof
   `not_fresh_at sh x` by
     (irule freshWritesTheory.not_fresh_at_mono >> qexists `sa` >> simp[]) >>
   simp[]
+QED
+
+(* A focused definedness certificate for the reason encoder's memory code.
+   Outputs may already be bound: the certificate tracks availability only. *)
+Definition reason_known_def:
+  reason_known ds s <=> !x. MEM x ds ==> ?w. lookup_var x s = SOME w
+End
+
+Definition reason_operand_def:
+  reason_operand ds (Lit w) = T /\
+  reason_operand ds (Var x) = MEM x ds /\
+  reason_operand ds (Label l) = F
+End
+
+Definition reason_step_def:
+  reason_step ds i <=>
+    (?id sz out. i = mk_inst id ALLOCA [Lit sz] [out]) \/
+    (?id opc a b out. (opc = ADD \/ opc = AND) /\
+      i = mk_inst id opc [a; b] [out] /\
+      reason_operand ds a /\ reason_operand ds b) \/
+    (?id a out. i = mk_inst id MLOAD [a] [out] /\ reason_operand ds a) \/
+    (?id a b. i = mk_inst id MSTORE [a; b] [] /\
+      reason_operand ds a /\ reason_operand ds b) \/
+    (?id a b c. i = mk_inst id MCOPY [a; b; c] [] /\
+      reason_operand ds a /\ reason_operand ds b /\ reason_operand ds c)
+End
+
+Definition reason_prefix_def:
+  reason_prefix ds [] es = (es = ds) /\
+  reason_prefix ds (i::is) es =
+    (reason_step ds i /\ reason_prefix (i.inst_outputs ++ ds) is es)
+End
+
+Theorem reason_operand_defined:
+  !ds op s. reason_operand ds op /\ reason_known ds s ==>
+    ?w. eval_operand op s = SOME w
+Proof
+  Cases_on `op` >> simp[reason_operand_def, eval_operand_def, reason_known_def]
+QED
+
+Theorem reason_known_update:
+  !ds s out w. reason_known ds s ==>
+    reason_known (out::ds) (update_var out w s)
+Proof
+  simp[reason_known_def, lookup_var_update_var] >> metis_tac[]
+QED
+
+Theorem reason_step_sound:
+  !ds i s. reason_step ds i /\ reason_known ds s ==>
+    ?t. step_inst_base i s = OK t /\
+        reason_known (i.inst_outputs ++ ds) t /\ t.vs_labels = s.vs_labels
+Proof
+  rw[reason_step_def]
+  >- (qspecl_then [`id`, `sz`, `out`, `s`] strip_assume_tac step_alloca_frame >>
+      qexists `s1` >> simp[venomInstTheory.mk_inst_def, reason_known_def] >>
+      rpt strip_tac >> Cases_on `x = out` >> gvs[reason_known_def]) >>
+  imp_res_tac reason_operand_defined >> gvs[]
+  >~ [`step_inst_base (mk_inst _ ADD _ _) _`] >-
+    (irule_at Any emitHelperPropsTheory.step_ADD >>
+     simp[reason_known_update, update_var_def] >> metis_tac[])
+  >~ [`step_inst_base (mk_inst _ AND _ _) _`] >-
+    (irule_at Any emitHelperPropsTheory.step_AND >>
+     simp[reason_known_update, update_var_def] >> metis_tac[])
+  >~ [`step_inst_base (mk_inst _ MLOAD _ _) _`] >-
+    (irule_at Any step_MLOAD >>
+     simp[reason_known_update, update_var_def] >> metis_tac[])
+  >~ [`step_inst_base (mk_inst _ MSTORE _ _) _`] >-
+    (irule_at Any emitHelperPropsTheory.step_MSTORE >>
+     gvs[reason_known_def]) >>
+  irule_at Any step_MCOPY_defined >>
+  gvs[reason_known_def, mcopy_def, write_memory_with_expansion_def] >> metis_tac[]
+QED
+
+Theorem reason_prefix_sound:
+  !is ds es s. reason_prefix ds is es /\ reason_known ds s ==>
+    ?t. run_inst_seq is s = OK t /\ reason_known es t /\ t.vs_labels = s.vs_labels
+Proof
+  Induct >> simp[reason_prefix_def, run_inst_seq_def] >> rpt strip_tac >>
+  drule_all reason_step_sound >> strip_tac >>
+  first_x_assum drule >> disch_then drule >> strip_tac >> simp[] >> metis_tac[]
+QED
+
+Theorem reason_step_simple:
+  !ds i. reason_step ds i ==> i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode
+Proof
+  rw[reason_step_def] >> simp[venomInstTheory.mk_inst_def, is_terminator_def]
+QED
+
+Theorem reason_prefix_simple:
+  !is ds es. reason_prefix ds is es ==>
+    EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) is
+Proof
+  Induct >> simp[reason_prefix_def] >> metis_tac[reason_step_simple]
+QED
+
+Theorem reason_prefix_alloca_load_probe[local]:
+  reason_prefix []
+    [mk_inst 0 ALLOCA [Lit 0w] ["p"]; mk_inst 1 MLOAD [Var "p"] ["p"]]
+    ["p"; "p"]
+Proof
+  simp[reason_prefix_def, reason_step_def, reason_operand_def,
+       venomInstTheory.mk_inst_def]
+QED
+
+Theorem reason_prefix_mcopy_probe[local]:
+  reason_prefix ["p"] [mk_inst 0 MCOPY [Var "p"; Var "p"; Lit 0w] []] ["p"]
+Proof
+  simp[reason_prefix_def, reason_step_def, reason_operand_def,
+       venomInstTheory.mk_inst_def]
 QED
 
 (* raise and assert with a string literal as the reason: the literal's
