@@ -29,28 +29,25 @@
  *                              (msg.sender == owner lands here),
  *                              in and not in on arrays (#569), Operators
  *                              row 6
- *   compile_neg_sim (#572)   — row 7; not and abs are proved but for
- *                              lower_value_word_shape
+ *   compile_neg_sim (#572)   — row 7; not and abs are proved
  *   compile_ifexp_aggregate_sim — row 9 for aggregate ternaries (#561,
- *                              #674); word ternaries are proved but for
- *                              lower_value_word_shape
+ *                              #674); word ternaries are proved
  *                              (compile_ifexp_word_sim), and so are row 8's
  *                              and/or chains (#556), which the frontend
  *                              desugars to nested IfExps of type bool
  *                              (translate_boolop).  Bop And/Or are the
  *                              bitwise & and |.
  *
- * Compile-side facts, cheated (the shape #674's compile_expr_shape
- * proves for the shape judgment):
- *   lower_value_word_shape   — lowering a word-typed expression only
+ * Compile-side facts:
+ *   lower_value_word_shape   — lowering a well-typed word expression only
  *                              appends, hands out its variables, and
  *                              returns a variable it handed out or a literal
  *   compile_binop_shape      — compile_binop only appends
  * compile_bop_word_sim rests on these two and on binop_frag_typed, and
  * compile_ifexp_word_sim, compile_not_sim, compile_abs_sim and
  * exprSimConvert's compile_convert_word_sim on lower_value_word_shape.
- * lower_value_word_shape and compile_binop_shape are for word types only; the compound non-word cases need #674's
- * compile_expr_shape.
+ *
+ * Helpers: expr_sim_pre_lower_value_word_shape.
  *)
 
 Theory exprSimOperators
@@ -58,7 +55,7 @@ Ancestors
   list finite_map
   fragExec exprSim exprSimHyps exprSimOps exprSimIfExp exprSimBinopFrag
   exprSimUnop
-  exprBopLowering
+  exprBopLowering exprWordOperand
   loweringSlice
   exprLowering compileEnv
   vyperAST vyperInterpreter vyperState vyperContext vyperTypeSystem
@@ -67,15 +64,28 @@ Ancestors
 
 (* ===== Compile-side facts ===== *)
 
+(* The typing hypotheses keep a pointer from cenv out of the value.
+   unwrap_value loads only a word, and some conversions return their
+   operand: for an ill-typed e, convert(s, uint256) with s a struct lowers
+   to the pointer to s (ConvIdentity); for a local of the ill-formed type
+   bytes40, which the Name typing rule admits, convert(x, bytes32) lowers
+   to the pointer to x (ConvBytesMToBytesM). *)
 Theorem lower_value_word_shape:
-  !cenv ty e sa op sb.
+  !cenv env ty e sa op sb.
     lower_value compile_expr cenv ty e sa = (op, sb) /\
+    well_typed_expr env e /\
+    (!id t. FLOOKUP env.var_types id = SOME t ==>
+            well_formed_type env.type_defs t) /\
     is_word_type (expr_type e) ==>
     cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
     sa.cs_next_id <= sb.cs_next_id /\
     (!z. op = Var z ==> not_fresh_at sb z) /\ (!l. op <> Label l)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  drule (cj 2 exprLoweringPropsTheory.compile_expr_grows) >> strip_tac >>
+  drule lower_value_word_safe_operand >>
+  disch_then (qspec_then `env` mp_tac) >>
+  disch_then drule_all >> simp[exprSafeOperandTheory.safe_operand_def]
 QED
 
 Theorem compile_binop_shape:
@@ -83,7 +93,28 @@ Theorem compile_binop_shape:
     compile_binop bop x y ty bl el sa = (op, sb) ==>
     cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  drule exprLoweringPropsTheory.compile_binop_grows >> simp[]
+QED
+
+(* lower_value_word_shape for an operand that meets expr_sim_pre, which
+   carries both typing hypotheses. *)
+Theorem expr_sim_pre_lower_value_word_shape:
+  !cenv cx env e es ty sa op sb.
+    lower_value compile_expr cenv ty e sa = (op, sb) /\
+    expr_sim_pre cenv cx env e es /\ is_word_type (expr_type e) ==>
+    cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
+    sa.cs_next_id <= sb.cs_next_id /\
+    (!z. op = Var z ==> not_fresh_at sb z) /\ (!l. op <> Label l)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `well_typed_expr env e` by fs[expr_sim_pre_def] >>
+  `!id t. FLOOKUP env.var_types id = SOME t ==>
+          well_formed_type env.type_defs t` by
+    metis_tac[expr_sim_pre_var_types_well_formed] >>
+  drule lower_value_word_shape >> disch_then (qspec_then `env` mp_tac) >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  simp[]
 QED
 
 (* ===== Binary operators ===== *)
@@ -180,9 +211,11 @@ Proof
   >~ [`compile_binop`]
   >- (rpt gen_tac >> strip_tac >> drule compile_binop_shape >> simp[])
   >~ [`lower_value`]
-  >- (rpt gen_tac >> strip_tac >> drule lower_value_word_shape >> gvs[])
+  >- (rpt gen_tac >> strip_tac >>
+      drule expr_sim_pre_lower_value_word_shape >> disch_then drule >> simp[])
   >~ [`lower_value`]
-  >- (rpt gen_tac >> strip_tac >> drule lower_value_word_shape >> gvs[])
+  >- (rpt gen_tac >> strip_tac >>
+      drule expr_sim_pre_lower_value_word_shape >> disch_then drule >> simp[])
   >~ [`expr_sim`]
   >- metis_tac[expr_sim_ok_apply] >>
   gvs[]
@@ -279,7 +312,7 @@ QED
 
 (* not: ISZERO, NOT or the flag mask's XOR on the operand
    (exprSimUnop's compile_not_frag); the operand's compile-state shape is
-   lower_value_word_shape's, cheated. *)
+   lower_value_word_shape's. *)
 Theorem compile_not_sim:
   !cenv ann args.
     expr_sim_below cenv (list_size expr_size args) ==>
@@ -319,7 +352,8 @@ Proof
     >- simp[]
     >- simp[]
     >- (rpt strip_tac >> drule lower_value_not >> simp[])
-    >- (rpt gen_tac >> strip_tac >> drule lower_value_word_shape >> gvs[])
+    >- (rpt gen_tac >> strip_tac >>
+        drule expr_sim_pre_lower_value_word_shape >> disch_then drule >> simp[])
     >- (rpt gen_tac >> strip_tac >> drule_at Any straight_fresh_cs_extends >>
         simp[straight_fresh_not])
     >- metis_tac[expr_sim_pre_word_value]
@@ -344,7 +378,7 @@ QED
 
 (* abs: compile_builtin_abs on the operand (exprSimUnop's
    compile_abs_frag); the operand's compile-state shape is
-   lower_value_word_shape's, cheated. *)
+   lower_value_word_shape's. *)
 Theorem compile_abs_sim:
   !cenv ann args.
     expr_sim_below cenv (list_size expr_size args) ==>
@@ -376,7 +410,8 @@ Proof
     >- simp[is_word_type_def]
     >- simp[is_word_type_def]
     >- (rpt strip_tac >> drule lower_value_abs >> simp[])
-    >- (rpt gen_tac >> strip_tac >> drule lower_value_word_shape >>
+    >- (rpt gen_tac >> strip_tac >>
+        drule expr_sim_pre_lower_value_word_shape >> disch_then drule >>
         simp[is_word_type_def])
     >- (rpt gen_tac >> strip_tac >> drule_at Any straight_fresh_cs_extends >>
         simp[straight_fresh_abs])
@@ -405,7 +440,7 @@ Proof
 QED
 
 (* A ternary of a word type: compile_ifexp_vv_sim (exprSimIfExp), with the
-   operands' shape from lower_value_word_shape (cheated). *)
+   operands' shape from lower_value_word_shape. *)
 Theorem compile_ifexp_word_sim:
   !cenv t c a b.
     expr_sim_below cenv (expr_size (IfExp t c a b)) /\ is_word_type t ==>
@@ -430,9 +465,15 @@ Proof
     mp_tac compile_ifexp_vv_sim >>
   impl_tac
   >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
-      >- (rpt gen_tac >> strip_tac >> drule lower_value_word_shape >>
-          gvs[is_word_type_def])
-      >- (rpt gen_tac >> strip_tac >> drule lower_value_word_shape >> gvs[])
+      >- (rpt gen_tac >> strip_tac >>
+          drule expr_sim_pre_lower_value_word_shape >> disch_then drule >>
+          simp[is_word_type_def])
+      >- (rpt gen_tac >> strip_tac >> (* one goal each for e = a and e = b *)
+          (`expr_sim_inv cenv cx env es` by fs[expr_sim_pre_def] >>
+           `expr_sim_pre cenv cx env e es /\ is_word_type (expr_type e)` by
+             gvs[] >>
+           drule expr_sim_pre_lower_value_word_shape >> disch_then drule >>
+           simp[]))
       >- metis_tac[expr_sim_ok_def] >>
       rpt gen_tac >> strip_tac >> drule_all expr_sim_pre_eval >> strip_tac >>
       metis_tac[expr_sim_ok_def]) >>
