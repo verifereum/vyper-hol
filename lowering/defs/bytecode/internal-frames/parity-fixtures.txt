@@ -1,0 +1,15 @@
+p01_int_local_word
+p02_int_local_string
+p03_int_local_array
+p04_int_local_struct
+p06_int_for_range
+p09_int_chain
+p10_int_diamond
+p21_for_body_call
+p39_int_local_clobber
+p40_int_for_clobber
+p41_int_local_and_call
+p47_len_of_string_call
+p74_int_ext_call
+p76_int_assert_raise
+p92_int_revert_branch
