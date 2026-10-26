@@ -384,6 +384,7 @@ Definition make_create_block_def:
      ; requestsHash := 0w
      ; stateRoot := 0w
      ; withdrawalsRoot := 0w
+     ; rlpSize := 0
      ; transactions := []
      ; withdrawals := []
      |>
