@@ -2,7 +2,7 @@
    unrelated non-BUMP admissions. They are not premises of the BUMP theorem. *)
 Theory fmpBumpAudit
 Ancestors
-  fmpLowerExec fmpLowerProps emitSim genBlockSim fmpWfProps
+  fmpLowerExec fmpLowerSequenceExec fmpLowerProps emitSim genBlockSim fmpWfProps
   venomExecProofs venomMemProofs mem2varBlockSimHelpers dftBlockSim
   allocaRemapProofs
 
@@ -16,7 +16,10 @@ fun check_closed thy (name,th) =
 
 val _ = List.app (fn thy =>
   List.app (check_closed thy) (DB.thms thy))
-  ["fmpLowerExec", "fmpLowerProps", "emitSim", "fmpWfProps",
+  ["fmpLowerExec", "fmpLowerRestoreExec", "fmpLowerSequenceExec",
+   "fmpLowerIndexedProps", "fmpRestoreProps", "fmpLedgerProps",
+   "fmpProvenanceProps", "fmpReclaimProps", "fmpAliasProps",
+   "fmpLowerProps", "emitSim", "fmpWfProps",
    "venomExecProofs", "venomMemProofs", "mem2varBlockSimHelpers", "dftBlockSim",
    "allocaRemapProofs"];
 

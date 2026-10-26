@@ -5,17 +5,17 @@ Ancestors
   venomInst venomState list words venomLayout
 
 Theorem dalloca_expansion_exec:
-  !fuel ctx s size_op sz runner plus31 mask aligned out ai ni mi bi.
+  !fuel ctx s size_op sz frontier runner plus31 mask aligned out ai ni mi bi.
     eval_operand size_op s = SOME sz /\
-    lookup_var runner s = SOME s.vs_fmp /\
+    lookup_var runner s = SOME frontier /\
     ALL_DISTINCT [plus31;mask;aligned;runner;out] ==>
     run_insts fuel ctx
       [mk_inst ai ADD [size_op;Lit 31w] [plus31];
        mk_inst ni NOT [Lit 31w] [mask];
        mk_inst mi AND [Var plus31;Var mask] [aligned];
        mk_inst bi BUMP [Var runner;Var aligned] [out;runner]] s =
-    OK (update_var runner (s.vs_fmp + n2w (ceil32 (w2n sz)))
-         (update_var out s.vs_fmp
+    OK (update_var runner (frontier + n2w (ceil32 (w2n sz)))
+         (update_var out frontier
            (update_var aligned (n2w (ceil32 (w2n sz)))
              (update_var mask (~31w)
                (update_var plus31 (sz + 31w) s)))))
@@ -58,11 +58,11 @@ Theorem fmp_lower_dalloca_exec:
   fresh_inst_id s2 = (ai,s3) /\ fresh_inst_id s3 = (ni,s3a) /\
   fresh_inst_id s3a = (mi,s4) /\ fresh_inst_id s4 = (bi,s5) /\
   fmp_lower_inst infos c runner supply inst = SOME (code,supply') /\
-  eval_operand size_op s = SOME sz /\ lookup_var runner s = SOME s.vs_fmp /\
+  eval_operand size_op s = SOME sz /\ lookup_var runner s = SOME frontier /\
   ALL_DISTINCT [plus31;mask;aligned;runner;out] ==>
   run_insts fuel ctx code s =
-    OK (update_var runner (s.vs_fmp + n2w (ceil32 (w2n sz)))
-         (update_var out s.vs_fmp
+    OK (update_var runner (frontier + n2w (ceil32 (w2n sz)))
+         (update_var out frontier
            (update_var aligned (n2w (ceil32 (w2n sz)))
              (update_var mask (~31w)
                (update_var plus31 (sz + 31w) s)))))

@@ -118,7 +118,7 @@ Definition fmp_lower_input_def:
     fmp_lower_blocks_shape infos ctx fn.fn_blocks
 End
 
-(* Select restores at one exact endpoint while preserving plan order.  The
+(* Select restores at one exact original instruction point while preserving plan order.  The
    second component is threaded through all blocks and must be empty at the
    outer boundary, so an unlocated analysis result cannot be ignored. *)
 Definition fmp_select_point_restores_def:
@@ -229,24 +229,36 @@ Datatype:
     FmpBlocksResult (basic_block list) ((fmp_point # string) list) ir_supply
 End
 
-(* Reclaim points refer to original instruction indices.  Each block selects
-   its exact original endpoint before rewriting; leftovers are returned for the
-   outer checked boundary to reject. *)
+(* Walk only the original list. Restores precede the instruction at (label,k);
+   the empty case deliberately does not select an endpoint restore. Leftovers
+   are threaded across blocks and rejected by the outer checked boundary. *)
+Definition fmp_lower_indexed_def:
+  fmp_lower_indexed infos ctx runner label k s restores [] =
+    SOME ([],restores,s) /\
+  fmp_lower_indexed infos ctx runner label k s restores (inst::insts) =
+    let (bases,later) = fmp_select_point_restores (label,k) restores in
+    case fmp_emit_restores runner s bases of (prefix,s0) =>
+    case fmp_lower_inst infos ctx runner s0 inst of
+      NONE => NONE
+    | SOME (head,s1) =>
+        case fmp_lower_indexed infos ctx runner label (SUC k) s1 later insts of
+          NONE => NONE
+        | SOME (tail,leftover,s2) =>
+            SOME (prefix ++ head ++ tail,leftover,s2)
+End
 Definition fmp_lower_blocks_def:
   fmp_lower_blocks infos ctx runner s restores [] =
     SOME (FmpBlocksResult [] restores s) /\
   fmp_lower_blocks infos ctx runner s restores (bb::bbs) =
-    case fmp_lower_insts infos ctx runner s bb.bb_instructions of
+    case fmp_lower_indexed infos ctx runner bb.bb_label 0 s restores
+           bb.bb_instructions of
       NONE => NONE
-    | SOME (insts,s1) =>
-        let p = (bb.bb_label,LENGTH bb.bb_instructions) in
-        let (bases,later) = fmp_select_point_restores p restores in
-        case fmp_emit_restores runner s1 bases of (restore_insts,s2) =>
+    | SOME (insts,later,s2) =>
         case fmp_lower_blocks infos ctx runner s2 later bbs of
           NONE => NONE
         | SOME (FmpBlocksResult tail leftover s3) =>
             SOME (FmpBlocksResult
-              ((bb with bb_instructions := insts ++ restore_insts)::tail)
+              ((bb with bb_instructions := insts)::tail)
               leftover s3)
 End
 

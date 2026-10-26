@@ -40,6 +40,21 @@ Proof
   metis_tac[]
 QED
 
+Theorem fmp_lower_indexed_no_raw:
+  fmp_lower_indexed infos ctx runner label k s restores insts =
+    SOME (out,leftover,s') ==>
+  EVERY (\i. ~is_raw_fmp_opcode i.inst_opcode) out
+Proof
+  map_every qid_spec_tac [`s'`,`leftover`,`out`,`restores`,`s`,`k`] >>
+  Induct_on `insts`
+  >- simp[fmp_lower_indexed_def] >>
+  rpt gen_tac >>
+  Cases_on `fmp_select_point_restores (label,k) restores` >>
+  simp[fmp_lower_indexed_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[listTheory.EVERY_APPEND] >>
+  metis_tac[fmp_lower_inst_no_raw, fmp_emit_restores_no_raw]
+QED
+
 Theorem fmp_lower_blocks_no_raw:
   fmp_lower_blocks infos ctx runner s restores bbs =
     SOME (FmpBlocksResult out leftover s') ==>
@@ -47,14 +62,10 @@ Theorem fmp_lower_blocks_no_raw:
                      bb.bb_instructions) out
 Proof
   map_every qid_spec_tac [`s'`,`leftover`,`out`,`restores`,`s`] >>
-  Induct_on `bbs`
-  >- simp[fmp_lower_blocks_def]
-  >> rpt gen_tac >>
-  Cases_on `fmp_select_point_restores
-    (h.bb_label,LENGTH h.bb_instructions) restores` >>
+  Induct_on `bbs` >>
   simp[fmp_lower_blocks_def, AllCaseEqs()] >>
-  rpt strip_tac >> gvs[listTheory.EVERY_APPEND] >>
-  metis_tac[fmp_lower_insts_no_raw, fmp_emit_restores_no_raw]
+  rpt strip_tac >> gvs[] >>
+  metis_tac[fmp_lower_indexed_no_raw]
 QED
 
 Theorem fmp_install_root_no_raw:
