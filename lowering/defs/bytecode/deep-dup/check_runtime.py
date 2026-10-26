@@ -34,6 +34,14 @@ def load_hex(path):
     return {key: bytes.fromhex(fields[key]) for key in ('deploy', 'runtime')}
 
 
+def require_probe_status(statuses, name):
+    stages = statuses.get(name, [])
+    if (len(stages) != 6 or stages[2] not in ('SP=F', 'SP=T') or
+            stages[:2] + stages[3:] != ['FRONTEND', 'ACCEPT/ACCEPT', 'COMPILE',
+                                      'EVALUATED head=SOME', 'MATCH']):
+        raise ValueError(f'{name}: checker/compiler probe did not complete with MATCH: {stages}')
+
+
 def self_test():
     cases = json.loads((ROOT / 'cases.json').read_text())
     count = 0
@@ -52,7 +60,19 @@ def self_test():
                     raise AssertionError('negative result check accepted mismatch')
             count += 1
     assert count == 10
-    print('PASS: ten ABI vectors; success checks; revert and return-mismatch negative tests')
+    stages = ['FRONTEND', 'ACCEPT/ACCEPT', 'SP=F', 'COMPILE',
+              'EVALUATED head=SOME', 'MATCH']
+    require_probe_status({'witness': stages}, 'witness')
+    require_probe_status({'witness': stages[:2] + ['SP=T'] + stages[3:]}, 'witness')
+    for wrong in ([], stages[1:], [s for s in stages if s != 'ACCEPT/ACCEPT'],
+                  stages[:-1] + ['PARITY_DEFECT'], stages + ['ERROR=failed']):
+        try:
+            require_probe_status({'witness': wrong}, 'witness')
+        except ValueError:
+            pass
+        else:
+            raise AssertionError('incomplete or failed probe accepted')
+    print('PASS: ten ABI vectors; probe acceptance; revert, return-mismatch and failed-probe negative tests')
 
 
 def execute(runtime, calldata):
@@ -74,11 +94,17 @@ def execute(runtime, calldata):
 
 def compare(python_dir, hol_dir):
     cases = json.loads((ROOT / 'cases.json').read_text())
+    statuses = json.loads((hol_dir / 'status.json').read_text())
     failures = []
     for name, fixture in cases.items():
+        try:
+            require_probe_status(statuses, name)
+        except ValueError as failure:
+            failures.append(str(failure))
+            print('FAIL', failure)
         python = load_hex(python_dir / (name + '.hex'))
         hol = load_hex(hol_dir / (name + '.hex'))
-        # This file pair alone does not establish checker acceptance or provenance.
+        # Independent compiler provenance must also be checked by the caller.
         for kind in ('deploy', 'runtime'):
             print(name, kind, 'python_bytes=', len(python[kind]), 'hol_bytes=', len(hol[kind]))
             if python[kind] != hol[kind]:
