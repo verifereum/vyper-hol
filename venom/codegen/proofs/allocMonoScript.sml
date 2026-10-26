@@ -242,7 +242,7 @@ Proof
   >> CONV_TAC (DEPTH_CONV PairRules.PBETA_CONV) >>
   strip_tac >> gvs[] >>
   simp[foldl_free_next_offset] >>
-  qspecl_then [`top_n (dist + 1) ps.ps_stack`,
+  qspecl_then [`REVERSE (top_n (dist - 15) ps.ps_stack)`,
                `([],[],ps.ps_alloc)`]
     mp_tac foldl_alloc_next_offset >> simp[]
 QED
