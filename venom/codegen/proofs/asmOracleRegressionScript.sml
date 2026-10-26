@@ -65,6 +65,22 @@ Proof
   PairCases_on `frame` >> simp[asm_evm_rel_def]
 QED
 
+Theorem gas_step_stack[local]:
+  (FST (HD (SND (step gas_counter_evm)).contexts)).stack = [98w]
+Proof
+  ACCEPT_TAC gas_counter_evm_stack
+QED
+
+Theorem gas_step_unrelated[local]:
+  ~asm_evm_rel [AsmOp "GAS"]
+    (asm_next (gas_counter_asm with as_stack := [0w]))
+    (SND (step gas_counter_evm))
+Proof
+  strip_tac >> drule asm_evm_rel_stack >>
+  simp[gas_step_stack, asm_next_def] >>
+  simp[wordsTheory.dimword_def, fcpLib.INDEX_CONV ``dimindex(:256)``]
+QED
+
 (* The old step theorem admitted GAS because it fell through to AsmError.
  * With GAS active, its existing pre-relation ignores readings; empty asm
  * readings push 0, whereas the concrete EVM pushes 98, without an exception.
@@ -87,13 +103,7 @@ Proof
   conj_tac >- (
     rw[asm_encoding_wf_def, compute_label_offsets_def,
        asm_inst_size_def] >> EVAL_TAC) >>
-  `~asm_evm_rel [AsmOp "GAS"]
-     (asm_next (gas_counter_asm with as_stack := [0w]))
-     (SND (step gas_counter_evm))` by
-    (strip_tac >> drule asm_evm_rel_stack >>
-     simp[gas_counter_evm_stack, asm_next_def] >>
-     simp[wordsTheory.dimword_def, fcpLib.INDEX_CONV ``dimindex(:256)``]) >>
-  asm_simp_tac bool_ss [gas_counter_evm_stack] >>
+  simp[gas_step_unrelated, gas_counter_evm_stack] >>
   simp gas_state_defs >>
   simp[asm_evm_rel_def, asm_pc_to_offset_def, is_data_inst_def,
        asm_step_def, asm_step_op_def, asm_step_arith_def,

@@ -499,7 +499,7 @@ QED
 
 (* SOSpill off executes as 2 steps: push n2w off, then MSTORE.
    Result: TOS popped, value written to memory at off. *)
-Theorem spill_asm_steps[local]:
+Theorem spill_asm_steps:
   !lo o2pc prog off st.
     off < dimword(:256) /\
     LENGTH st.as_stack >= 1 /\
@@ -545,7 +545,7 @@ QED
    SORestore: 2 asm steps (AsmPush + MLOAD) — asm-level execution
    ========================================================================= *)
 
-Theorem restore_asm_steps[local]:
+Theorem restore_asm_steps:
   !lo o2pc prog off st.
     off < dimword(:256) /\
     asm_block_at prog st.as_pc
