@@ -1097,6 +1097,65 @@ Definition enc_offset_upto_def:
   enc_offset_upto B ts vs k = B + LENGTH (enc_tail_upto ts vs k)
 End
 
+Definition enc_layout_def:
+  enc_layout ts avs <=>
+    LIST_REL (\t av. ~is_dynamic t ==> LENGTH (enc t av) = static_length t) ts avs
+End
+
+Theorem enc_layout_nil[simp]:
+  enc_layout [] []
+Proof
+  simp[enc_layout_def]
+QED
+
+Theorem enc_layout_cons[simp]:
+  enc_layout (t::ts) (av::avs) <=>
+  (~is_dynamic t ==> LENGTH (enc t av) = static_length t) /\ enc_layout ts avs
+Proof
+  simp[enc_layout_def]
+QED
+
+Theorem enc_layout_length:
+  enc_layout ts avs ==> LENGTH ts = LENGTH avs
+Proof
+  simp[enc_layout_def] >> metis_tac[LIST_REL_LENGTH]
+QED
+
+Theorem enc_layout_take:
+  enc_layout ts avs ==> enc_layout (TAKE k ts) (TAKE k avs)
+Proof
+  simp[enc_layout_def] >> strip_tac >>
+  irule LIST_REL_TAKE >> goal_assum drule
+QED
+
+Theorem enc_layout_el:
+  enc_layout ts avs /\ k < LENGTH avs /\ ~is_dynamic (EL k ts) ==>
+  LENGTH (enc (EL k ts) (EL k avs)) = static_length (EL k ts)
+Proof
+  simp[enc_layout_def, LIST_REL_EL_EQN] >> metis_tac[]
+QED
+
+Theorem enc_layout_uint1_probe:
+  enc_layout [Uint 1] [NumV 0] /\
+  enc_layout (REPLICATE 0 (Uint 1)) []
+Proof
+  EVAL_TAC
+QED
+
+Theorem enc_tuple_prefix_acc_lengths:
+  !ts vs hl tl hds tls. LENGTH ts = LENGTH vs ==>
+  enc_tuple hl tl ts vs hds tls =
+    FLAT (REVERSE hds) ++ enc_prefix_head (hl + tl) ts vs ++
+    FLAT (REVERSE tls) ++ enc_prefix_tail ts vs
+Proof
+  Induct_on `ts` >> Cases_on `vs` >>
+  simp[Once enc_def, enc_prefix_head_def, enc_prefix_tail_def,
+       REV_REVERSE_LEM] >> rpt strip_tac >>
+  Cases_on `is_dynamic h` >>
+  simp[Once enc_def, enc_prefix_head_def, enc_prefix_tail_def,
+       REV_REVERSE_LEM, APPEND_ASSOC, enc_number_def]
+QED
+
 Theorem enc_prefix_zero[simp]:
   enc_head_upto B ts vs 0 = [] /\ enc_tail_upto ts vs 0 = [] /\
   enc_offset_upto B ts vs 0 = B
@@ -1222,6 +1281,141 @@ Proof
   disch_then (qspec_then `B` mp_tac) >>
   qpat_x_assum `TAKE _ _ = _` kall_tac >>
   simp[] >> decide_tac
+QED
+
+Theorem enc_prefix_assembly_layout:
+  enc_layout ts vs ==>
+  enc_prefix_head (hl + tl) ts vs ++ enc_prefix_tail ts vs =
+    enc_tuple hl tl ts vs [] []
+Proof
+  strip_tac >> drule enc_layout_length >>
+  strip_tac >> simp[enc_tuple_prefix_acc_lengths]
+QED
+
+Theorem enc_prefix_head_length_layout:
+  !ts vs q. enc_layout ts vs ==>
+  LENGTH (enc_prefix_head q ts vs) = head_lengths ts 0
+Proof
+  Induct_on `ts` >> Cases_on `vs` >>
+  simp[enc_layout_def, enc_prefix_head_def, head_lengths_def] >>
+  rpt strip_tac >> simp[SimpRHS, Once head_lengths_add] >>
+  rename1 `is_static ty ==> LENGTH (enc ty av) = static_length ty` >>
+  Cases_on `is_dynamic ty` >>
+  simp[enc_number_def, byteTheory.LENGTH_word_to_bytes]
+QED
+
+Theorem enc_head_upto_length_layout:
+  enc_layout ts vs ==>
+  LENGTH (enc_head_upto B ts vs k) = head_lengths (TAKE k ts) 0
+Proof
+  strip_tac >> simp[enc_head_upto_def] >>
+  irule enc_prefix_head_length_layout >>
+  irule enc_layout_take >> goal_assum drule
+QED
+
+Theorem enc_prefix_full_layout:
+  enc_layout ts vs ==>
+  enc_head_upto B ts vs (LENGTH vs) ++ enc_tail_upto ts vs (LENGTH vs) =
+    enc_tuple B 0 ts vs [] []
+Proof
+  strip_tac >> drule enc_layout_length >> strip_tac >>
+  simp[enc_head_upto_def, enc_tail_upto_def, TAKE_LENGTH_ID_rwt,
+       enc_tuple_prefix_acc_lengths]
+QED
+
+Theorem enc_head_upto_dynamic_length_layout:
+  enc_layout (REPLICATE N t) vs /\ k <= N /\ N = LENGTH vs /\
+  is_dynamic t ==>
+  LENGTH (enc_head_upto B (REPLICATE N t) vs k) = 32 * k
+Proof
+  strip_tac >>
+  `TAKE k (REPLICATE N t) = REPLICATE k t` by
+    (simp[REPLICATE_GENLIST, TAKE_GENLIST] >>
+     AP_TERM_TAC >> simp[arithmeticTheory.MIN_DEF] >> decide_tac) >>
+  drule head_lengths_REPLICATE >>
+  disch_then (qspec_then `0` assume_tac) >>
+  drule enc_head_upto_length_layout >>
+  disch_then (qspecl_then [`k`, `B`] mp_tac) >>
+  qpat_x_assum `TAKE _ _ = _` kall_tac >>
+  simp[] >> decide_tac
+QED
+
+Theorem enc_tuple_head_bound_layout:
+  enc_layout ts vs ==> head_lengths ts 0 <= LENGTH (enc_tuple hl tl ts vs [] [])
+Proof
+  strip_tac >> drule enc_layout_length >> strip_tac >>
+  simp[enc_tuple_prefix_acc_lengths, enc_prefix_head_length_layout]
+QED
+
+Theorem enc_tuple_cons_parts_layout:
+  enc_layout ts vs ==>
+  enc_tuple hl tl (t::ts) (v::vs) [] [] =
+    (if is_dynamic t then enc_number (Uint 256) (NumV (hl + tl))
+     else enc t v) ++
+    TAKE (head_lengths ts 0)
+      (enc_tuple hl (tl + LENGTH (if is_dynamic t then enc t v else []))
+         ts vs [] []) ++
+    (if is_dynamic t then enc t v else []) ++
+    DROP (head_lengths ts 0)
+      (enc_tuple hl (tl + LENGTH (if is_dynamic t then enc t v else []))
+         ts vs [] [])
+Proof
+  strip_tac >> drule enc_layout_length >> strip_tac >>
+  simp[enc_tuple_prefix_acc_lengths, enc_prefix_head_def, enc_prefix_tail_def,
+       enc_prefix_head_length_layout, TAKE_APPEND, DROP_APPEND,
+       TAKE_LENGTH_ID_rwt, DROP_LENGTH_TOO_LONG, APPEND_ASSOC]
+QED
+
+Theorem enc_dynarray_parts_layout:
+  enc_layout (REPLICATE (LENGTH vs) t) vs ==>
+  enc (Array NONE t) (ListV vs) =
+    enc_number (Uint 256) (NumV (LENGTH vs)) ++
+    enc_tuple (head_lengths (REPLICATE (LENGTH vs) t) 0) 0
+      (REPLICATE (LENGTH vs) t) vs [] []
+Proof
+  strip_tac >> simp[Once enc_def] >>
+  simp[enc_tuple_prefix_acc_lengths, enc_number_def, APPEND_ASSOC]
+QED
+
+Theorem enc_dynarray_payload_layout:
+  enc_layout (REPLICATE (LENGTH vs) t) vs ==>
+  DROP 32 (enc (Array NONE t) (ListV vs)) =
+    enc_tuple (head_lengths (REPLICATE (LENGTH vs) t) 0) 0
+      (REPLICATE (LENGTH vs) t) vs [] []
+Proof
+  strip_tac >> drule enc_dynarray_parts_layout >>
+  disch_then SUBST1_TAC >>
+  simp[enc_number_def, DROP_APPEND, byteTheory.LENGTH_word_to_bytes]
+QED
+
+Theorem enc_tuple_tail_length_layout:
+  enc_layout ts vs ==>
+  LENGTH (enc_tuple hl tl ts vs [] []) - head_lengths ts 0 =
+    LENGTH (enc_prefix_tail ts vs)
+Proof
+  strip_tac >> drule enc_layout_length >> strip_tac >>
+  simp[enc_tuple_prefix_acc_lengths, enc_prefix_head_length_layout]
+QED
+
+Theorem enc_dynarray_static_length_layout:
+  enc_layout (REPLICATE (LENGTH vs) t) vs /\ ~is_dynamic t ==>
+  LENGTH (enc (Array NONE t) (ListV vs)) = 32 + LENGTH vs * static_length t
+Proof
+  strip_tac >> drule enc_dynarray_parts_layout >>
+  disch_then SUBST1_TAC >>
+  simp[enc_tuple_prefix_acc_lengths, enc_prefix_tail_static,
+       enc_prefix_head_length_layout, enc_number_def,
+       byteTheory.LENGTH_word_to_bytes] >>
+  `!n a. head_lengths (REPLICATE n t) a = a + n * static_length t` by
+    (Induct >> simp[head_lengths_def, arithmeticTheory.MULT_CLAUSES]) >>
+  simp[]
+QED
+
+Theorem enc_layout_empty_dynarray_probe:
+  LENGTH (enc (Array NONE (Uint 1)) (ListV [])) = 32 /\
+  DROP 32 (enc (Array NONE (Uint 1)) (ListV [])) = []
+Proof
+  EVAL_TAC
 QED
 
 Definition enc_prefix_mem_def:
