@@ -19,17 +19,9 @@ runs:
       env:
         CURL_CONFIG: ${{ inputs.curl-config }}
         CACHE_URL: ${{ inputs.url }}
-        FORK_PR: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
       run: |
         if [ -z "$CURL_CONFIG" ]; then
-          # Fork PR runs get no secrets and uncached runs (CACHE_KEY_SUFFIX set
-          # by holbuild.yml) are given none, by design; any other run with an
-          # empty login means the repository secret is missing.
-          if [ "$FORK_PR" = true ] || [ -n "${CACHE_KEY_SUFFIX:-}" ]; then
-            echo 'No remote cache login for this run; using snapshot/local cache only'
-          else
-            echo '::warning::No remote cache login for this run; using snapshot/local cache only'
-          fi
+          echo 'No remote cache login for this run; using snapshot/local cache only'
           exit 0
         fi
         config="$RUNNER_TEMP/holbuild-remote-cache.curl"
