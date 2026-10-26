@@ -1,8 +1,0 @@
-[
-  {
-    "pid": 4112582,
-    "theory": "evalCompilerBytecodeScalarWeiModularTheory",
-    "stage": "/home/lukasz/work/vyper-hol/worktrees/issue-543/.holbuild/stage/96e52c7cd8ed0b7b42690bebe19d852f0f248d4b",
-    "reason": "No completed evaluation step for over 600 seconds"
-  }
-]

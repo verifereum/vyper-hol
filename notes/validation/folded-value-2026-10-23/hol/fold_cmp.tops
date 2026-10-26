@@ -1,2 +1,0 @@
-[FunctionDecl External Nonpayable F F "f" [] [] (BaseT BoolT)
-   [Return (SOME (Literal (BaseT BoolT) (BoolL T)))]]

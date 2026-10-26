@@ -1,8 +1,0 @@
-vyper.exceptions.StructureException: Value must be a literal
-
-  contract ".agent-files/folded-value-validation/sources/method_id_var.vy:4", function "f", line 4:21 
-       3 def f(s: String[30]) -> bytes4:
-  ---> 4     return method_id(s, output_type=bytes4)
-  ----------------------------^
-       5
-

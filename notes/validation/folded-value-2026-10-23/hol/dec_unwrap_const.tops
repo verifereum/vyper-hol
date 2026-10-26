@@ -1,9 +1,0 @@
-[VariableDecl Private (Constant (Literal (BaseT BoolT) (BoolL F))) "U"
-   (BaseT BoolT) NONE;
- FunctionDecl External Pure F F "f" [("d",BaseT (BytesT (Dynamic 64)))] []
-   (TupleT [BaseT (UintT 256); BaseT BoolT])
-   [Return
-      (SOME
-         (TypeBuiltin (TupleT [BaseT (UintT 256); BaseT BoolT]) (AbiDecode F)
-            (TupleT [BaseT (UintT 256); BaseT BoolT])
-            [Name (BaseT (BytesT (Dynamic 64))) "d"]))]]

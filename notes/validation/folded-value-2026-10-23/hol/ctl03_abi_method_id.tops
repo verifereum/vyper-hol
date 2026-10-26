@@ -1,7 +1,0 @@
-[FunctionDecl External Nonpayable F F "foo" [("x",BaseT (UintT 256))] []
-   (BaseT (BytesT (Dynamic 36)))
-   [Return
-      (SOME
-         (TypeBuiltin (BaseT (BytesT (Dynamic 36)))
-            (AbiEncode T (SOME [179w; 222w; 100w; 139w]))
-            (TupleT [BaseT (UintT 256)]) [Name (BaseT (UintT 256)) "x"]))]]

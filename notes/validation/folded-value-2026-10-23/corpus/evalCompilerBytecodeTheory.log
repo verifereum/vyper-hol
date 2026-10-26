@@ -1,3 +1,0 @@
-evalCompilerBytecodeTheory built
-holbuild: warning: checkpoint budget: checkpoint_gb_before=5.2 checkpoint_gb_after=4.9 checkpoint_max_gb=5.0 checkpoint_bytes_before=5561595052 checkpoint_bytes_after=5292017852 checkpoint_max_bytes=5368709120 evicted=1 checkpoint_limit_gb=5
-holbuild finished in 233.646s

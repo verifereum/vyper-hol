@@ -1,9 +1,0 @@
-{
-  "argv": [
-    "/home/lukasz/work/vyper-hol/worktrees/issue-543/.agent-files/folded-value-validation/venv/bin/vyper",
-    "-f",
-    "annotated_ast,layout",
-    "/home/lukasz/work/vyper-hol/worktrees/issue-543/.agent-files/folded-value-validation/sources/fold_abs.vy"
-  ],
-  "exit": 0
-}

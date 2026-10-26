@@ -37,20 +37,20 @@ roots = ["vyperHolScript.sml",
 
 # Preload the toolchain context before intLib loads hurdUtils. Its legacy
 # module manifest otherwise reaches hurdUtils.sml before this structure exists.
-[actions.supportedExprFormPropsTheory]
-loads = ["hurdUtilsContextTheory"]
-
-[actions.jsonToVyperTypeTheory]
-loads = ["hurdUtilsContextTheory"]
-
-[actions.jsonToVyperExprTheory]
-loads = ["hurdUtilsContextTheory"]
-
-[actions.jsonToVyperTopLevelTheory]
-loads = ["hurdUtilsContextTheory"]
-
-[actions.jsonToVyperTheory]
-loads = ["hurdUtilsContextTheory"]
+[actions]
+supportedExprFormPropsTheory = { loads = ["hurdUtilsContextTheory"] }
+vyperEvalMiscTheory = { loads = ["hurdUtilsContextTheory"] }
+vyperEvalBinopTheory = { loads = ["hurdUtilsContextTheory"] }
+vyperTypeBindArgumentsTheory = { loads = ["hurdUtilsContextTheory"] }
+vyperTypeGlobalLookupSoundnessTheory = { loads = ["hurdUtilsContextTheory"] }
+vyperTypeAssignContextTheory = { loads = ["hurdUtilsContextTheory"] }
+vyperTypeExtCallSoundnessTheory = { loads = ["hurdUtilsContextTheory"] }
+vyperTypeEvalSoundnessTheory = { loads = ["hurdUtilsContextTheory"] }
+vyperTypeStmtSoundnessTheory = { loads = ["hurdUtilsContextTheory"] }
+jsonToVyperTypeTheory = { loads = ["hurdUtilsContextTheory"] }
+jsonToVyperExprTheory = { loads = ["hurdUtilsContextTheory"] }
+jsonToVyperTopLevelTheory = { loads = ["hurdUtilsContextTheory"] }
+jsonToVyperTheory = { loads = ["hurdUtilsContextTheory"] }
 
 [dependencies.verifereum]
 git = "https://github.com/verifereum/verifereum.git"

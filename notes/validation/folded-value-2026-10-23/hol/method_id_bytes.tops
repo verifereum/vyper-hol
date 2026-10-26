@@ -1,5 +1,0 @@
-[FunctionDecl External Pure F F "f" [] [] (BaseT (BytesT (Dynamic 4)))
-   [Return
-      (SOME
-         (Literal (BaseT (BytesT (Dynamic 4)))
-            (BytesL [169w; 5w; 156w; 187w])))]]

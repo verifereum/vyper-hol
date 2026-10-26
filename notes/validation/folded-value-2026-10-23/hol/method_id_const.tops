@@ -1,7 +1,0 @@
-[VariableDecl Private
-   (Constant (Literal (BaseT (StringT 10)) (StringL "foo()"))) "SIG"
-   (BaseT (StringT 10)) NONE;
- FunctionDecl External Pure F F "f" [] [] (BaseT (BytesT (Fixed 4)))
-   [Return
-      (SOME
-         (Literal (BaseT (BytesT (Fixed 4))) (BytesL [194w; 152w; 85w; 120w])))]]

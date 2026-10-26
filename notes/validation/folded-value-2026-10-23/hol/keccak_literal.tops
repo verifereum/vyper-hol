@@ -1,8 +1,0 @@
-[FunctionDecl External Pure F F "f" [] [] (BaseT (BytesT (Fixed 32)))
-   [Return
-      (SOME
-         (Literal (BaseT (BytesT (Fixed 32)))
-            (BytesL
-               [28w; 138w; 255w; 149w; 6w; 133w; 194w; 237w; 75w; 195w; 23w;
-                79w; 52w; 114w; 40w; 123w; 86w; 217w; 81w; 123w; 156w; 148w;
-                129w; 39w; 49w; 154w; 9w; 167w; 163w; 109w; 234w; 200w])))]]

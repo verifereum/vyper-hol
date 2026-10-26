@@ -1,4 +1,0 @@
-# Preserve captured tool output exactly, including diagnostic whitespace.
-*.log -whitespace
-*.stdout -whitespace
-*.stderr -whitespace

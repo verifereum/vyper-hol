@@ -1,9 +1,0 @@
-evalCompilerSubsetScalarsTheory built
-evalCompilerBytecodeScalarWordEvalTheory built
-holbuild: warning: checkpoint budget: checkpoint_gb_before=5.5 checkpoint_gb_after=0.6 checkpoint_max_gb=5.0 checkpoint_bytes_before=5884417605 checkpoint_bytes_after=610012732 checkpoint_max_bytes=5368709120 evicted=1 checkpoint_limit_gb=5
-evalCompilerBytecodeAssertReasonTheory built
-evalCompilerBytecodeScalarIntegerMinTheory built
-evalCompilerBytecodeScalarDecimalMinPipelineTheory built
-holbuild: hol run failed while building theory script
-instrumented log: /home/lukasz/work/vyper-hol/worktrees/issue-543/.holbuild/logs/current/vyper-hol/evalCompilerBytecodeScalarConvertDecimalTheory/instrumented-failure.log
-
