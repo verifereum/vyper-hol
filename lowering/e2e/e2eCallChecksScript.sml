@@ -19,7 +19,7 @@ Theorem call_entry_compiler_fields:
   (entry_venom_state prog cp es).vs_outcomes = MAP SND (call_trace es) /\
   (entry_venom_state prog cp es).vs_requests = [] /\
   (entry_venom_state prog cp es).vs_call_ctx.cc_calldata =
-    (FST (HD es.contexts)).msgParams.data /\
+    buffer_to_list (FST (HD es.contexts)).msgParams.data /\
   (entry_venom_state prog cp es).vs_initial_fmp = n2w cp.cp_initial_fmp /\
   initial_codegen_state_rel cp (entry_venom_state prog cp es) /\
   (!l. FLOOKUP (entry_venom_state prog cp es).vs_labels l =
@@ -36,7 +36,7 @@ val expected_top = ``
     source_typing_ok tops am tx /\
     source_storage_ok tops am tx /\
     call_state_rel tops runtime_bc am tx es /\
-    valid_vyper_call tops tx (FST (HD es.contexts)).msgParams.data ret /\
+    valid_vyper_call tops tx (buffer_to_list (FST (HD es.contexts)).msgParams.data) ret /\
     call_outcomes_ok tops am tx (MAP SND (call_trace es))
     ==>
     ?r es'.
