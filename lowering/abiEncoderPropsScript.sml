@@ -9626,6 +9626,123 @@ QED
 
 Finalise enc_elems_cons_correct_labels
 
+Theorem enc_dynloop_plan_components:
+  abi_enc_plan env (ArrayT t (Dynamic n)) (AbiDynArray ei asz msz T) ==>
+  ?tv. evaluate_type env t = SOME tv /\ abi_enc_plan env t ei /\
+       is_dynamic (vyper_to_abi_type env t) /\ asz = 32 /\
+       msz = type_memory_size tv
+Proof
+  simp[Once abi_enc_plan_cases] >> rpt strip_tac >> gvs[] >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem enc_dynarray_source_element:
+  val_in_memory (ArrayTV tv (Dynamic n)) (ArrayV (DynArrayV vs)) p mem /\
+  k < LENGTH vs ==>
+  val_in_memory tv (EL k vs) (p + 32 + k * type_memory_size tv) mem
+Proof
+  simp[val_in_memory_def] >> rpt strip_tac >>
+  drule_all elems_in_memory_EL >>
+  simp[AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM]
+QED
+
+Theorem enc_same_conversion_element:
+  vyper_to_abi_same env ty vs = SOME avs /\ k < LENGTH vs ==>
+  vyper_to_abi env ty (EL k vs) = SOME (EL k avs)
+Proof
+  strip_tac >> drule enc_same_conversion >> simp[LIST_REL_EL_EQN]
+QED
+
+Theorem enc_dynarray_typed_element:
+  value_has_type (ArrayTV tv (Dynamic n)) (ArrayV (DynArrayV vs)) /\
+  k < LENGTH vs ==> value_has_type tv (EL k vs)
+Proof
+  simp[value_has_type_def, all_have_type_EVERY, EVERY_EL] >> metis_tac[]
+QED
+
+Theorem enc_dynamic_head_lengths:
+  is_dynamic t ==> !N q. head_lengths (REPLICATE N t) q = q + 32 * N
+Proof
+  strip_tac >> Induct >> simp[head_lengths_def, arithmeticTheory.MULT_CLAUSES]
+QED
+
+Theorem enc_dynamic_array_payload:
+  enc_layout (REPLICATE (LENGTH avs) t) avs /\ is_dynamic t ==>
+  DROP 32 (enc (Array NONE t) (ListV avs)) =
+    enc_tuple (32 * LENGTH avs) 0 (REPLICATE (LENGTH avs) t) avs [] []
+Proof
+  strip_tac >>
+  drule enc_dynamic_head_lengths >> strip_tac >>
+  drule enc_dynarray_payload_layout >>
+  pure_asm_rewrite_tac[arithmeticTheory.ADD_CLAUSES] >>
+  disch_then ACCEPT_TAC
+QED
+
+Theorem enc_tail_upto_length_bound:
+  !ts avs k. LENGTH (enc_tail_upto ts avs k) <= LENGTH (enc_prefix_tail ts avs)
+Proof
+  pure_rewrite_tac[enc_tail_upto_def] >>
+  Induct >> Cases_on `avs` >> Cases_on `k` >>
+  simp[enc_prefix_tail_def]
+QED
+
+Theorem enc_dynamic_array_child_containment:
+  enc_layout (REPLICATE (LENGTH avs) t) avs /\ is_dynamic t /\
+  k < LENGTH avs ==>
+  enc_offset_upto (32 * LENGTH avs) (REPLICATE (LENGTH avs) t) avs k +
+    LENGTH (enc t (EL k avs)) <=
+  LENGTH (enc_tuple (32 * LENGTH avs) 0
+    (REPLICATE (LENGTH avs) t) avs [] [])
+Proof
+  strip_tac >>
+  `LENGTH (REPLICATE (LENGTH avs) t) = LENGTH avs` by simp[] >>
+  drule_all enc_prefix_suc >>
+  simp[EL_REPLICATE] >> strip_tac >>
+  qspecl_then [`REPLICATE (LENGTH avs) t`,`avs`,`SUC k`]
+    mp_tac enc_tail_upto_length_bound >>
+  drule enc_dynamic_head_lengths >> strip_tac >>
+  simp[enc_tuple_prefix_acc_lengths, enc_prefix_head_length_layout,
+       enc_offset_upto_def, Excl "enc_def"]
+QED
+
+Theorem enc_dynamic_array_head_containment:
+  enc_layout (REPLICATE (LENGTH avs) t) avs /\ is_dynamic t /\
+  k < LENGTH avs ==>
+  32 * k + 32 <= LENGTH (enc_tuple (32 * LENGTH avs) 0
+    (REPLICATE (LENGTH avs) t) avs [] [])
+Proof
+  strip_tac >> drule enc_dynamic_head_lengths >> strip_tac >>
+  `32 * k + 32 <= 32 * LENGTH avs` by decide_tac >>
+  simp[enc_tuple_prefix_acc_lengths, enc_prefix_head_length_layout,
+       Excl "enc_def"]
+QED
+
+Theorem enc_dynarray_conversion_components:
+  evaluate_type env (ArrayT t (Dynamic n)) = SOME tv /\
+  vyper_to_abi env (ArrayT t (Dynamic n)) (ArrayV (DynArrayV vs)) = SOME av ==>
+  ?et avs. evaluate_type env t = SOME et /\ tv = ArrayTV et (Dynamic n) /\
+    vyper_to_abi_same env t vs = SOME avs /\ av = ListV avs
+Proof
+  simp[vyperValueTheory.evaluate_type_def, Once vyper_to_abi_def] >>
+  rpt strip_tac >> gvs[AllCaseEqs()] >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem enc_dynamic_array_runtime_bound:
+  enc_layout (REPLICATE (LENGTH avs) t) avs /\ is_dynamic t /\
+  p + LENGTH (enc_tuple (32 * LENGTH avs) 0
+    (REPLICATE (LENGTH avs) t) avs [] []) <= lo /\
+  lo < dimword (:256) ==>
+  LENGTH avs < dimword (:256) /\ 32 * LENGTH avs < dimword (:256)
+Proof
+  strip_tac >> drule enc_dynamic_head_lengths >> strip_tac >>
+  `32 * LENGTH avs <= LENGTH (enc_tuple (32 * LENGTH avs) 0
+      (REPLICATE (LENGTH avs) t) avs [] [])` by
+    simp[enc_tuple_prefix_acc_lengths, enc_prefix_head_length_layout,
+         Excl "enc_def"] >>
+  decide_tac
+QED
+
 Theorem compile_abi_encode_frag:
   (!dst child_ptr ei is_dyn static_ofst dyn_ptr st op st' ctx env ty tv v
     av s0 dst_w src_w lo top.
