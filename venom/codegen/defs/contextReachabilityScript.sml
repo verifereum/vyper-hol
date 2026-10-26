@@ -77,12 +77,25 @@ Theorem raw_inst_reachable_package:
     lookup_function name ctx.ctx_functions = SOME fn /\
     fn_entry_label fn = SOME lbl
 Proof
-  cheat
+  rewrite_tac[codegen_reachability_package_def] >>
+  simp[raw_inst_reachable_closed] >>
+  metis_tac[raw_inst_reachable_fn_entry]
 QED
 
 Theorem raw_inst_reachable_minimal:
   codegen_reachability_package Inv ctx initial_vs ==>
   !fn inst s. raw_inst_reachable initial_vs ctx fn inst s ==> Inv ctx fn inst s
 Proof
-  cheat
+  `!initial_vs ctx fn inst s.
+     raw_inst_reachable initial_vs ctx fn inst s ==>
+     codegen_reachability_package Inv ctx initial_vs ==> Inv ctx fn inst s`
+    suffices_by metis_tac[] >>
+  ho_match_mp_tac raw_inst_reachable_ind >>
+  rpt conj_tac
+  >- (rpt strip_tac >> drule codegen_reachability_package_entry >>
+      strip_tac >> gvs[] >> metis_tac[fn_entry_inv_active])
+  >- metis_tac[codegen_reachability_package_entry, reachability_closed_next]
+  >- metis_tac[codegen_reachability_package_entry, reachability_closed_block] >>
+  metis_tac[codegen_reachability_package_entry, reachability_closed_callee,
+            fn_entry_inv_active]
 QED
