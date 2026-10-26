@@ -5,7 +5,7 @@ Ancestors
   moduleLowering
   (* property statements and proofs *)
   moduleLoweringProps entryDispatchProps entryDecodeProps
-  abiDecodeStaticProps entryDecodeStaticProps
+  abiDecodeStaticProps entryDecodeStaticProps entryDecodePlanProps
   loweringSlice
   varsExt exprSim
   exprBopLowering
