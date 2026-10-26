@@ -9743,6 +9743,95 @@ Proof
   decide_tac
 QED
 
+(* Both cell contents vary; only their allocations and pointer operands persist. *)
+Definition enc_dyn_loop_ctx_def:
+  enc_dyn_loop_ctx st st' ops lo top tv v src outs s0
+      count_ptr ip dyn_ptr j c s <=>
+    enc_loop_ctx st st' ops lo top tv v src outs s0 count_ptr ip s /\
+    eval_operand dyn_ptr s = SOME (n2w c) /\
+    j IN frag_ids st st' /\ FLOOKUP s.vs_allocas j = SOME (c,32) /\ lo <= c
+End
+
+Theorem enc_dyn_loop_ctx_jump[simp]:
+  enc_dyn_loop_ctx st st' ops lo top tv v src outs s0
+    count_ptr ip dyn_ptr j c (jump_to lbl s) =
+  enc_dyn_loop_ctx st st' ops lo top tv v src outs s0
+    count_ptr ip dyn_ptr j c s
+Proof
+  simp[enc_dyn_loop_ctx_def, jump_to_def]
+QED
+
+Theorem enc_dyn_loop_ctx_source:
+  enc_dyn_loop_ctx st st' ops lo top tv v src outs s0
+    count_ptr ip dyn_ptr j c s ==> val_in_memory tv v src s.vs_memory
+Proof
+  simp[enc_dyn_loop_ctx_def] >> metis_tac[enc_loop_ctx_source]
+QED
+
+Theorem enc_dyn_loop_ctx_operand:
+  enc_dyn_loop_ctx st st' ops lo top tv v src outs s0
+    count_ptr ip dyn_ptr j c s /\ MEM op ops /\ eval_operand op s0 = SOME w ==>
+  eval_operand op s = SOME w
+Proof
+  simp[enc_dyn_loop_ctx_def] >> metis_tac[enc_loop_ctx_operand]
+QED
+
+Theorem enc_dyn_loop_ctx_from_frame:
+  enc_pre st st' ops lo top tv v src outs s0 /\ value_has_type tv v /\
+  enc_frame st st' lo top outs s0 s /\ s.vs_labels = s0.vs_labels /\
+  eval_operand count_ptr s = SOME (n2w ip) /\
+  FLOOKUP s.vs_allocas st.cs_next_id = SOME (ip,32) /\ lo <= ip /\
+  eval_operand dyn_ptr s = SOME (n2w c) /\
+  j IN frag_ids st st' /\ FLOOKUP s.vs_allocas j = SOME (c,32) /\ lo <= c ==>
+  enc_dyn_loop_ctx st st' ops lo top tv v src outs s0
+    count_ptr ip dyn_ptr j c s
+Proof
+  strip_tac >> simp[enc_dyn_loop_ctx_def] >>
+  irule enc_loop_ctx_from_frame >> simp[]
+QED
+
+Theorem enc_dyn_loop_ctx_step:
+  enc_dyn_loop_ctx st st' ops lo top tv v src outs s0
+    count_ptr ip dyn_ptr j c s /\ value_has_type tv v /\
+  enc_frame st st' lo top outs s u /\ u.vs_labels = s.vs_labels /\
+  eval_operand count_ptr u = SOME (n2w ip) /\
+  eval_operand dyn_ptr u = SOME (n2w c) ==>
+  enc_dyn_loop_ctx st st' ops lo top tv v src outs s0
+    count_ptr ip dyn_ptr j c u
+Proof
+  rewrite_tac[enc_dyn_loop_ctx_def, enc_loop_ctx_def] >> strip_tac >>
+  `enc_pre st st' ops lo top tv v src outs u` by
+    (drule_all enc_pre_transport >> simp[]) >>
+  `enc_frame st st' lo top outs s0 u` by
+    (irule enc_frame_trans >> qexists_tac `s` >> simp[]) >>
+  `!i r. FLOOKUP s.vs_allocas i = SOME r ==>
+      FLOOKUP u.vs_allocas i = SOME r` by
+    (qpat_assum `enc_frame st st' lo top outs s u` mp_tac >>
+     rewrite_tac[enc_frame_def] >> metis_tac[]) >>
+  simp[]
+QED
+
+Theorem enc_dyn_loop_ctx_preserves_cells:
+  enc_dyn_loop_ctx st st' ops lo top tv v src outs s0
+    count_ptr ip dyn_ptr j c s /\
+  enc_frame a b lo child_top child_outs s u /\
+  st.cs_next_id NOTIN frag_ids a b /\ j NOTIN frag_ids a b /\
+  EVERY (\(p,n). p+n <= lo) child_outs ==>
+  mem_word_at ip u.vs_memory = mem_word_at ip s.vs_memory /\
+  mem_word_at c u.vs_memory = mem_word_at c s.vs_memory
+Proof
+  simp[enc_dyn_loop_ctx_def, enc_loop_ctx_def] >> strip_tac >>
+  conj_tac
+  >- (irule enc_frame_preserves_external_word >>
+      qpat_assum `enc_frame a b _ _ _ s u`
+        (irule_at (Pat `enc_frame _ _ _ _ _ _ _`)) >>
+      qexists_tac `st.cs_next_id` >> simp[]) >>
+  irule enc_frame_preserves_external_word >>
+  qpat_assum `enc_frame a b _ _ _ s u`
+    (irule_at (Pat `enc_frame _ _ _ _ _ _ _`)) >>
+  qexists_tac `j` >> simp[]
+QED
+
 Theorem compile_abi_encode_frag:
   (!dst child_ptr ei is_dyn static_ofst dyn_ptr st op st' ctx env ty tv v
     av s0 dst_w src_w lo top.
