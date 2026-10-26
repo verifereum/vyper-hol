@@ -91,7 +91,7 @@ QED
 
 (* These are exact 32-byte results, not merely a successful BytesV result. *)
 Theorem invert_bytes32_zero_test:
-  evaluate_builtin cx acc (BaseT (BytesT (Fixed 32))) Not
+  evaluate_builtin cx acc (BaseT (BytesT (Fixed 32))) Not tys
     [BytesV (REPLICATE 32 (0w:word8))] =
     INL (BytesV (REPLICATE 32 (255w:word8)))
 Proof
@@ -114,7 +114,7 @@ QED
 
 
 Theorem invert_bytes32_ones_test:
-  evaluate_builtin cx acc (BaseT (BytesT (Fixed 32))) Not
+  evaluate_builtin cx acc (BaseT (BytesT (Fixed 32))) Not tys
     [BytesV (REPLICATE 32 (255w:word8))] =
     INL (BytesV (REPLICATE 32 (0w:word8)))
 Proof
@@ -135,7 +135,7 @@ Proof
 QED
 
 Theorem invert_bytes32_mixed_test:
-  evaluate_builtin cx acc (BaseT (BytesT (Fixed 32))) Not
+  evaluate_builtin cx acc (BaseT (BytesT (Fixed 32))) Not tys
     [BytesV (FLAT (REPLICATE 8 [0w; 255w; 1w; 254w]))] =
     INL (BytesV (FLAT (REPLICATE 8 [255w; 0w; 254w; 1w])))
 Proof
@@ -144,9 +144,9 @@ Proof
 QED
 
 Theorem invert_uint256_boundaries_test:
-  evaluate_builtin cx acc (BaseT (UintT 256)) Not [IntV 0] =
+  evaluate_builtin cx acc (BaseT (UintT 256)) Not tys [IntV 0] =
     INL (IntV (&(2 ** 256 - 1))) /\
-  evaluate_builtin cx acc (BaseT (UintT 256)) Not
+  evaluate_builtin cx acc (BaseT (UintT 256)) Not tys
     [IntV (&(2 ** 256 - 1))] = INL (IntV 0)
 Proof
   simp[evaluate_builtin_def, type_to_int_bound_def] >> EVAL_TAC
@@ -155,16 +155,16 @@ QED
 (* Out-of-range states bypass static typing; inversion must still never return
    a negative integer as the old arithmetic subtraction did. *)
 Theorem invert_oversized_uint_test:
-  evaluate_builtin cx acc (BaseT (UintT 256)) Not
+  evaluate_builtin cx acc (BaseT (UintT 256)) Not tys
     [IntV (&(2 ** 256))] = INL (IntV (&(2 ** 256 - 1)))
 Proof
   simp[evaluate_builtin_def, type_to_int_bound_def] >> EVAL_TAC
 QED
 
 Theorem invert_bool_test:
-  evaluate_builtin cx acc (BaseT BoolT) Not [BoolV T] =
+  evaluate_builtin cx acc (BaseT BoolT) Not tys [BoolV T] =
     INL (BoolV F) /\
-  evaluate_builtin cx acc (BaseT BoolT) Not [BoolV F] =
+  evaluate_builtin cx acc (BaseT BoolT) Not tys [BoolV F] =
     INL (BoolV T)
 Proof
   simp[evaluate_builtin_def]
@@ -174,7 +174,7 @@ Theorem invert_flag_test:
   evaluate_builtin
     (empty_evaluation_context with sources :=
       [(0w, [(NONE, [FlagDecl "Permissions" ["READ"; "WRITE"; "EXECUTE"]])])])
-    acc (FlagT (NONE, "Permissions")) Not [FlagV 1] = INL (FlagV 6)
+    acc (FlagT (NONE, "Permissions")) Not tys [FlagV 1] = INL (FlagV 6)
 Proof
   EVAL_TAC >>
   simp[finite_mapTheory.FLOOKUP_FUNION, finite_mapTheory.FLOOKUP_UPDATE] >>

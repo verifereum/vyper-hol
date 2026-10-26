@@ -4,6 +4,7 @@ Ancestors
   vyperEvalPureExpr
   vyperTypeSoundness
   vyperABIValid
+  vyperABIRoundtrip
   vyperTypeDeploymentMachine
   vyperTypeSelectedEntry
   vyperTypeEntryDefaults

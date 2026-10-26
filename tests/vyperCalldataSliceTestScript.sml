@@ -144,8 +144,8 @@ Proof
 QED
 
 Theorem calldata_slice_malformed_arity_test:
-  evaluate_builtin cx acc ty (CalldataSlice n) [] = INR (TypeError "builtin") /\
-  evaluate_builtin cx acc ty (CalldataSlice n) [sv; lv] = INR (TypeError "builtin")
+  evaluate_builtin cx acc ty (CalldataSlice n) tys [] = INR (TypeError "builtin") /\
+  evaluate_builtin cx acc ty (CalldataSlice n) tys [sv; lv] = INR (TypeError "builtin")
 Proof
   simp[evaluate_builtin_def]
 QED

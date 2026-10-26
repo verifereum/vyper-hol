@@ -84,7 +84,7 @@ QED
    annotation bounds. This matches lowering: an out-of-range positive literal
    such as 2^255 for int256 is not reinterpreted as a valid negative literal. *)
 Theorem evaluate_builtin_neg_int256_positive_signed_min_rejected:
-  evaluate_builtin cx msg (BaseT (IntT 256)) Neg [IntV (&(2 ** 255))] =
+  evaluate_builtin cx msg (BaseT (IntT 256)) Neg tys [IntV (&(2 ** 255))] =
   INR (RuntimeError "Neg operand bound")
 Proof
   simp[evaluate_builtin_def, type_to_int_bound_def, within_int_bound_def]

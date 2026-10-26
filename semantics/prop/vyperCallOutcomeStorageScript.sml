@@ -2,7 +2,7 @@
  * balances and code: adopted payload storage comes solely from PLAN T6.2. *)
 Theory vyperCallOutcomeStorage
 Ancestors
-  list pair option sum vyperState vyperCallOutcome vyperCallOutcomeBranches
+  list pair option sum vyperState vyperCallOutcome vyperCallOutcomeProps vyperCallOutcomeBranches
   vyperCallOutcomeFrame vyperEvalOutcomeSuffix vyperTypeStoragePreservation
   vyperStorageBackend vyperStorageReadSoundness vyperStorageLayoutSafety
   vyperAST vyperInterpreter vyperTypeCallOutcome vyperABI vyperTypeSystem extCallOracle

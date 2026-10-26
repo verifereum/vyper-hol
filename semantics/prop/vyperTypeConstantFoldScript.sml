@@ -33,10 +33,10 @@ QED
 (* Helper: the constant builtins read the context only through get_tenv, and
    never the accounts. *)
 Theorem evaluate_builtin_constant_context:
-  !bt cx mods acc ty vs.
+  !bt cx mods acc ty tys vs.
   constant_builtin bt /\ get_tenv cx = type_env_all_modules mods ==>
-  evaluate_builtin cx acc ty bt vs =
-  evaluate_builtin (constant_context mods) empty_accounts ty bt vs
+  evaluate_builtin cx acc ty bt tys vs =
+  evaluate_builtin (constant_context mods) empty_accounts ty bt tys vs
 Proof
   rpt gen_tac >> Cases_on `bt` >>
   simp[constant_builtin_def] >>
@@ -501,15 +501,15 @@ Theorem constant_builtin_success_typed[local]:
   MAP (evaluate_type (get_tenv cx)) ts = MAP SOME tvs /\
   evaluate_type (get_tenv cx) ty = SOME tv /\
   LIST_REL value_has_type tvs vs /\
-  evaluate_builtin cx acc ty bt vs = INL v ==>
+  evaluate_builtin cx acc ty bt ts vs = INL v ==>
   value_has_type tv v
 Proof
   strip_tac >>
-  `evaluate_builtin (constant_context mods) empty_accounts ty bt vs = INL v` by
+  `evaluate_builtin (constant_context mods) empty_accounts ty bt ts vs = INL v` by
     metis_tac[evaluate_builtin_constant_context] >>
-  drule_at (Pat `evaluate_builtin _ _ _ _ _ = _`)
+  drule_at (Pat `evaluate_builtin _ _ _ _ _ _ = _`)
     vyperTypeBuiltinsTheory.well_typed_builtin_app_success_type >>
-  disch_then (qspecl_then [`tvs`, `tv`, `ts`] mp_tac) >>
+  disch_then (qspecl_then [`tvs`, `tv`] mp_tac) >>
   simp[get_tenv_constant_context, constant_context_well_typed,
        constant_empty_accounts_well_typed] >> gvs[]
 QED
@@ -692,12 +692,12 @@ Proof
     gvs[exprs_runtime_typed_def] >>
     `?tv. evaluate_type (artifact_env artifact mods current_src).type_defs ty = SOME tv` by
       gvs[well_formed_type_def, IS_SOME_EXISTS] >>
-    `evaluate_builtin cx (initial_state am sc).accounts ty bt vs = INL v` by
+    `evaluate_builtin cx (initial_state am sc).accounts ty bt (MAP expr_type es) vs = INL v` by
       metis_tac[evaluate_builtin_constant_context] >>
     `value_has_type tv v` by
-      (drule_at (Pat `evaluate_builtin cx _ _ _ _ = _`)
+      (drule_at (Pat `evaluate_builtin cx _ _ _ _ _ = _`)
          constant_builtin_success_typed >>
-       disch_then (qspecl_then [`tvs`,`tv`,`MAP expr_type es`,`mods`] mp_tac) >>
+       disch_then (qspecl_then [`tvs`,`tv`,`mods`] mp_tac) >>
        simp[artifact_env_def, MAP_MAP_o] >> impl_tac
        >- (gvs[LIST_REL_EL_EQN, LIST_EQ_REWRITE, EL_MAP, artifact_env_def] >> metis_tac[]) >>
        simp[]) >>
@@ -1013,7 +1013,7 @@ Resume constant_eval_expr_fold_agreement[builtin]:
     drule_all constant_eval_exprs_fold_lift >> strip_tac >>
     gvs[return_def, raise_def, constant_result_shape_def, read_result_def] >>
     `get_tenv cx = type_env_all_modules mods` by simp[get_tenv_def] >>
-    `evaluate_builtin (constant_context mods) empty_accounts v8 bt vs = INL v''` by
+    `evaluate_builtin (constant_context mods) empty_accounts v8 bt (MAP expr_type es) vs = INL v''` by
       metis_tac[evaluate_builtin_constant_context] >>
     gvs[constant_value_def]
 QED

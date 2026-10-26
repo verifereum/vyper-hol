@@ -1,6 +1,6 @@
 Theory vyperEvalExprPreservesScopesDom
 Ancestors
-  pair sum vyperMisc vyperContext vyperState vyperCreate vyperInterpreter vyperLookup
+  pair sum vyperMisc vyperContext vyperState vyperCreate vyperCreateFrame vyperInterpreter vyperLookup
   vyperScopePreservation vyperStatePreservation vyperPlaceFrames vyperCallFrame vyperCallOutcomeFrame
   vyperCallOutcome[ignore_grammar]
 

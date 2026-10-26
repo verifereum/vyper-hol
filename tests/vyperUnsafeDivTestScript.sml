@@ -145,16 +145,17 @@ QED
 
 Theorem unsafe_div_builtin_zero_cv:
   evaluate_builtin empty_evaluation_context accounts (BaseT (UintT 8))
-    (Bop UnsafeDiv) [IntV 255; IntV 0] = INL (IntV 0) /\
+    (Bop UnsafeDiv) tys [IntV 255; IntV 0] = INL (IntV 0) /\
   evaluate_builtin empty_evaluation_context accounts (BaseT (IntT 256))
-    (Bop UnsafeDiv) [IntV (-&(2 ** 255)); IntV 0] = INL (IntV 0) /\
+    (Bop UnsafeDiv) tys [IntV (-&(2 ** 255)); IntV 0] = INL (IntV 0) /\
   evaluate_builtin empty_evaluation_context accounts (BaseT (UintT 8))
-    (Bop Div) [IntV 255; IntV 0] = INR (RuntimeError "Div0") /\
+    (Bop Div) tys [IntV 255; IntV 0] = INR (RuntimeError "Div0") /\
   evaluate_builtin empty_evaluation_context accounts (BaseT (IntT 256))
-    (Bop Div) [IntV (-&(2 ** 255)); IntV 0] = INR (RuntimeError "Div0")
+    (Bop Div) tys [IntV (-&(2 ** 255)); IntV 0] = INR (RuntimeError "Div0")
 Proof
   simp[evaluate_builtin_def, get_tenv_def, empty_evaluation_context_def,
-       type_to_int_bound_def, evaluate_type_def] >> CONV_TAC cv_eval
+       type_to_int_bound_def, evaluate_type_def, evaluate_binop_def] >>
+  CONV_TAC cv_eval
 QED
 
 (* Reuse the unchanged unsafe uint8 and int256 fixture families through

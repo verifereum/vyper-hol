@@ -2295,8 +2295,10 @@ End
    into the Call AST node before codegen (Python does this). *)
 Definition compile_call_def:
   compile_call cfn cenv ret_ty ty (IntCall func_id) args default_ret st =
-    (let label = nsid_to_string func_id in
-    let (returns_count, return_buf_size, pass_via_stack) = cenv.ce_func_info label in
+    (let name = nsid_to_string func_id in
+    let label = internal_fn_label (cenv.ce_func_ids name) name
+                  (cenv.ce_func_param_types name) cenv.ce_is_ctor in
+    let (returns_count, return_buf_size, pass_via_stack) = cenv.ce_func_info name in
     let arg_types = MAP expr_type args in
     let (arg_vals, st1) = compile_multi_vvs cfn cenv args st in
     let (return_buf, st2) =
@@ -2440,6 +2442,13 @@ End
 Definition is_msg_data_def:
   is_msg_data (Attribute _ (Name _ "msg") "data") = T ∧
   is_msg_data _ = F
+End
+
+(* The bytes of a literal method_id signature, which Vyper folds. *)
+Definition method_id_literal_def:
+  method_id_literal (Literal _ (StringL s)) = SOME (MAP (n2w o ORD) s) ∧
+  method_id_literal (Literal _ (BytesL bs)) = SOME bs ∧
+  method_id_literal _ = NONE
 End
 
 Definition is_self_code_def:
@@ -2602,13 +2611,16 @@ Definition compile_expr_body_def:
    | Attribute _ base_e fld_name =>
        compile_attribute compile_expr cenv ret_ty ty base_e fld_name st
    | StructLit _ name fields =>
+       (* The field layout comes from the literal's own struct, not the
+          caller's ty.  Mirrors Python: expr.py _lower_struct_constructor
+          (struct_t = func_t.typedef). *)
        (let struct_name = nsid_to_string name in
         let fld_info = get_struct_fields cenv.ce_struct_fields struct_name in
         let total_size = SUM (MAP (SND o SND) fld_info) in
                 let (buf_alloc, st2) = compile_alloc_buffer total_size st in
                 let buf = buf_alloc.buf_operand in
         let (_, st3) =
-          compile_struct_lit compile_expr cenv ty fields buf 0 st2 in
+          compile_struct_lit compile_expr cenv (StructT name) fields buf 0 st2 in
         (LocatedValue ret_ty (base_ptr buf_alloc), st3))
    | FlagMember _ flag_nsid mem_name =>
        (let flag_name = nsid_to_string flag_nsid in
@@ -2889,10 +2901,20 @@ Definition compile_builtin_dispatch_body_def:
           else
             as_stack_val ret_ty (compile_as_wei_value_int v multiplier (is_signed_type arg_ty) st1))
      | MethodId =>
+         (* A literal signature lowers to the literal Vyper folds it to:
+            Bytes[4] by default, bytes4 for output_type=bytes4
+            (vyper/builtins/functions.py MethodID._try_fold). *)
          (let e1 = HD args in
-          let (v, st1) = lower_value compile_expr cenv ty e1 st in
-          let (hash_op, st2) = compile_keccak256_word v st1 in
-          as_stack_val ret_ty (emit_op SHR [Lit 224w; hash_op] st2))
+          case method_id_literal e1 of
+            SOME bs =>
+              compile_literal_vv ret_ty (BytesL (TAKE 4 (Keccak_256_w64 bs))) st
+          | NONE =>
+              let arg_ty = expr_type e1 in
+              let (v, st1) = lower_value compile_expr cenv arg_ty e1 st in
+              if ret_ty = BaseT (BytesT (Fixed 4)) then
+                as_stack_val ret_ty (compile_method_id_runtime arg_ty v T st1)
+              else
+                as_ptr_val ret_ty LocMemory (compile_method_id_runtime arg_ty v F st1))
      | MakeArray elem_ty_opt bnd =>
          (case elem_ty_opt of
             NONE =>
@@ -3128,6 +3150,16 @@ Proof
        is_word_type_def, compile_ptr_load_def, compile_store_memory_def,
        emit_op_def, emit_void_def, fresh_id_def, fresh_var_def, emit_def,
        comp_bind_def, comp_ignore_bind_def, comp_return_def, mk_inst_def]
+QED
+
+(* A struct literal's lowering doesn't depend on the caller's ty. *)
+Theorem compile_expr_struct_lit_ty:
+  !cenv ty ann name fields st.
+    compile_expr cenv ty (StructLit ann name fields) st =
+    compile_expr cenv (StructT name) (StructLit ann name fields) st
+Proof
+  rpt gen_tac >> ONCE_REWRITE_TAC[compile_expr_raw_def] >>
+  simp[compile_expr_body_def]
 QED
 
 Theorem compile_make_array_empty_full_capacity:

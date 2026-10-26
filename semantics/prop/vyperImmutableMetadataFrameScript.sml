@@ -2,7 +2,7 @@ Theory vyperImmutableMetadataFrame
 Ancestors
   list option pair finite_map alist vyperAST vyperState vyperInterpreter
   vyperCallOutcomeFrame vyperPlaceFrames vyperStatePreservation
-  vyperImmutablesPreservation vyperCreate
+  vyperImmutablesPreservation vyperCreate vyperCreateFrame
 
 (* Resolved immutable paths retain their declared type across expression effects.
    Values may change; presence and declared type metadata may not. *)
