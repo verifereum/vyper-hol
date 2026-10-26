@@ -12,7 +12,25 @@ Ancestors compileVyper supportedProgram concretizeMemLocDefs codegenReadyCompute
 Libs memoryStoreWitnessLib vyperCheckContractFrontendLib jsonASTLib evalCompilerBytecodeLib finite_mapLib computeLib wordsLib supportedEvalLib
 
 fun holbuild_extra_deps (_ : string list) = ()
-val () = holbuild_extra_deps ["../name-collisions"]
+val () = holbuild_extra_deps
+  ["../name-collisions/oracle/nm_arg_return_pc.json",
+   "../name-collisions/oracle/nm_arg_return_pc.hex",
+   "../name-collisions/oracle/nm_ext_arg_return_pc.json",
+   "../name-collisions/oracle/nm_ext_arg_return_pc.hex",
+   "../name-collisions/oracle/nm_arg_storage.json",
+   "../name-collisions/oracle/nm_arg_storage.hex",
+   "../name-collisions/oracle/nm_local_storage_types.json",
+   "../name-collisions/oracle/nm_local_storage_types.hex",
+   "../name-collisions/oracle/nm_transient_local.json",
+   "../name-collisions/oracle/nm_transient_local.hex",
+   "../name-collisions/oracle/nm_redeclared_local.json",
+   "../name-collisions/oracle/nm_redeclared_local.hex",
+   "../name-collisions/oracle/nm_redeclared_loop_var.json",
+   "../name-collisions/oracle/nm_redeclared_loop_var.hex",
+   "../name-collisions/oracle/ctl_local_internal.json",
+   "../name-collisions/oracle/ctl_local_internal.hex",
+   "../name-collisions/oracle/nm_local_return_buf.json",
+   "../name-collisions/oracle/nm_local_return_buf.hex"]
 val () = supportedEvalLib.configure ()
 val () = computeLib.upd_compset add_finite_map_compset
 val () = computeLib.upd_compset (computeLib.add_thms

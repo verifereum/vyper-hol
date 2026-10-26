@@ -4,7 +4,11 @@ Ancestors compileVyper supportedProgram concretizeMemLocDefs codegenReadyCompute
 Libs memoryStoreWitnessLib vyperCheckContractFrontendLib jsonASTLib evalCompilerBytecodeLib finite_mapLib computeLib wordsLib supportedEvalLib
 
 fun holbuild_extra_deps (_ : string list) = ()
-val () = holbuild_extra_deps ["../external-calls"]
+val () = holbuild_extra_deps
+  ["../external-calls/oracle/e04_ret_string.json",
+   "../external-calls/oracle/e04_ret_string.hex",
+   "../external-calls/oracle/e05_ret_bytes.json",
+   "../external-calls/oracle/e05_ret_bytes.hex"]
 val () = supportedEvalLib.configure ()
 val () = computeLib.upd_compset add_finite_map_compset
 val () = computeLib.upd_compset (computeLib.add_thms

@@ -5,7 +5,33 @@ Ancestors evalCompilerInternalFramesDiamond evalCompilerInternalFramesExtCall al
 Libs memoryStoreWitnessLib finite_mapLib computeLib wordsLib supportedEvalLib
 
 fun holbuild_extra_deps (_ : string list) = ()
-val () = holbuild_extra_deps ["../internal-frames"]
+val () = holbuild_extra_deps
+  ["../internal-frames/oracle/p01_int_local_word.json",
+   "../internal-frames/oracle/p01_int_local_word.hex",
+   "../internal-frames/oracle/p03_int_local_array.json",
+   "../internal-frames/oracle/p03_int_local_array.hex",
+   "../internal-frames/oracle/p04_int_local_struct.json",
+   "../internal-frames/oracle/p04_int_local_struct.hex",
+   "../internal-frames/oracle/p06_int_for_range.json",
+   "../internal-frames/oracle/p06_int_for_range.hex",
+   "../internal-frames/oracle/p09_int_chain.json",
+   "../internal-frames/oracle/p09_int_chain.hex",
+   "../internal-frames/oracle/p21_for_body_call.json",
+   "../internal-frames/oracle/p21_for_body_call.hex",
+   "../internal-frames/oracle/p39_int_local_clobber.json",
+   "../internal-frames/oracle/p39_int_local_clobber.hex",
+   "../internal-frames/oracle/p40_int_for_clobber.json",
+   "../internal-frames/oracle/p40_int_for_clobber.hex",
+   "../internal-frames/oracle/p41_int_local_and_call.json",
+   "../internal-frames/oracle/p41_int_local_and_call.hex",
+   "../internal-frames/oracle/p76_int_assert_raise.json",
+   "../internal-frames/oracle/p76_int_assert_raise.hex",
+   "../internal-frames/oracle/p92_int_revert_branch.json",
+   "../internal-frames/oracle/p92_int_revert_branch.hex",
+   "../internal-frames/oracle/p02_int_local_string.json",
+   "../internal-frames/oracle/p02_int_local_string.hex",
+   "../internal-frames/oracle/p47_len_of_string_call.json",
+   "../internal-frames/oracle/p47_len_of_string_call.hex"]
 val () = supportedEvalLib.configure ()
 val () = computeLib.upd_compset add_finite_map_compset
 val () = computeLib.upd_compset (computeLib.add_thms [fmap_to_alist_FEMPTY, integer_wordTheory.i2w_pos])

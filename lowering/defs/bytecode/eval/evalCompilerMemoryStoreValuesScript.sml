@@ -4,7 +4,33 @@ Ancestors compileVyper supportedProgram concretizeMemLocDefs codegenReadyCompute
 Libs memoryStoreWitnessLib vyperCheckContractFrontendLib jsonASTLib evalCompilerBytecodeLib finite_mapLib computeLib wordsLib supportedEvalLib
 
 fun holbuild_extra_deps (_ : string list) = ()
-val () = holbuild_extra_deps ["../memory-stores"]
+val () = holbuild_extra_deps
+  ["../memory-stores/oracle/a01_str_local_reassign.json",
+   "../memory-stores/oracle/a01_str_local_reassign.hex",
+   "../memory-stores/oracle/a02_bytes_local_from_arg.json",
+   "../memory-stores/oracle/a02_bytes_local_from_arg.hex",
+   "../memory-stores/oracle/a11_local_string_from_intcall.json",
+   "../memory-stores/oracle/a11_local_string_from_intcall.hex",
+   "../memory-stores/oracle/c03_annassign_empty_dynarray.json",
+   "../memory-stores/oracle/c03_annassign_empty_dynarray.hex",
+   "../memory-stores/oracle/c04_annassign_empty_bytes.json",
+   "../memory-stores/oracle/c04_annassign_empty_bytes.hex",
+   "../memory-stores/oracle/a12_local_dynarray_from_arg.json",
+   "../memory-stores/oracle/a12_local_dynarray_from_arg.hex",
+   "../memory-stores/oracle/c06_assign_empty_storage_dynarray.json",
+   "../memory-stores/oracle/c06_assign_empty_storage_dynarray.hex",
+   "../memory-stores/oracle/a09_local_array_from_storage.json",
+   "../memory-stores/oracle/a09_local_array_from_storage.hex",
+   "../memory-stores/oracle/long_string_literal.json",
+   "../memory-stores/oracle/long_string_literal.hex",
+   "../memory-stores/oracle/long_bytes_literal.json",
+   "../memory-stores/oracle/long_bytes_literal.hex",
+   "../memory-stores/oracle/storage_one_word_array.json",
+   "../memory-stores/oracle/storage_one_word_array.hex",
+   "../memory-stores/oracle/enc_in_assign.json",
+   "../memory-stores/oracle/enc_in_assign.hex",
+   "../memory-stores/oracle/method_id_lit.json",
+   "../memory-stores/oracle/method_id_lit.hex"]
 val () = supportedEvalLib.configure ()
 val () = computeLib.upd_compset add_finite_map_compset
 val () = computeLib.upd_compset (computeLib.add_thms

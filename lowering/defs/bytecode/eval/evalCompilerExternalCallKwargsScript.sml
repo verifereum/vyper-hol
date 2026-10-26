@@ -6,7 +6,27 @@ Ancestors compileVyper supportedProgram concretizeMemLocDefs codegenReadyCompute
 Libs memoryStoreWitnessLib vyperCheckContractFrontendLib jsonASTLib evalCompilerBytecodeLib finite_mapLib computeLib wordsLib supportedEvalLib
 
 fun holbuild_extra_deps (_ : string list) = ()
-val () = holbuild_extra_deps ["../external-calls"]
+val () = holbuild_extra_deps
+  ["../external-calls/oracle/e40_extcall_gas.json",
+   "../external-calls/oracle/e40_extcall_gas.hex",
+   "../external-calls/oracle/e41_staticcall_gas.json",
+   "../external-calls/oracle/e41_staticcall_gas.hex",
+   "../external-calls/oracle/e42_extcall_gas_value_order.json",
+   "../external-calls/oracle/e42_extcall_gas_value_order.hex",
+   "../external-calls/oracle/e43_extcall_all_kwargs.json",
+   "../external-calls/oracle/e43_extcall_all_kwargs.hex",
+   "../external-calls/oracle/e44_skip_contract_check.json",
+   "../external-calls/oracle/e44_skip_contract_check.hex",
+   "../external-calls/oracle/e45_default_ret_ifexp.json",
+   "../external-calls/oracle/e45_default_ret_ifexp.hex",
+   "../external-calls/oracle/s01_send.json",
+   "../external-calls/oracle/s01_send.hex",
+   "../external-calls/oracle/s02_send_gas.json",
+   "../external-calls/oracle/s02_send_gas.hex",
+   "../external-calls/oracle/e19_gas_kw.json",
+   "../external-calls/oracle/e19_gas_kw.hex",
+   "../external-calls/oracle/e29_default_ret_skip.json",
+   "../external-calls/oracle/e29_default_ret_skip.hex"]
 val () = supportedEvalLib.configure ()
 val () = computeLib.upd_compset add_finite_map_compset
 val () = computeLib.upd_compset (computeLib.add_thms

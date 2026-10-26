@@ -4,7 +4,25 @@ Ancestors compileVyper supportedProgram concretizeMemLocDefs codegenReadyCompute
 Libs memoryStoreWitnessLib vyperCheckContractFrontendLib jsonASTLib evalCompilerBytecodeLib finite_mapLib computeLib wordsLib supportedEvalLib
 
 fun holbuild_extra_deps (_ : string list) = ()
-val () = holbuild_extra_deps ["../memory-stores"]
+val () = holbuild_extra_deps
+  ["../memory-stores/oracle/t01_tuple_assign_intcall.json",
+   "../memory-stores/oracle/t01_tuple_assign_intcall.hex",
+   "../memory-stores/oracle/t03_tuple_assign_abi_decode.json",
+   "../memory-stores/oracle/t03_tuple_assign_abi_decode.hex",
+   "../memory-stores/oracle/t04_tuple_assign_extcall.json",
+   "../memory-stores/oracle/t04_tuple_assign_extcall.hex",
+   "../memory-stores/oracle/t05_tuple_assign_storage_targets.json",
+   "../memory-stores/oracle/t05_tuple_assign_storage_targets.hex",
+   "../memory-stores/oracle/t06_tuple_assign_mixed_targets.json",
+   "../memory-stores/oracle/t06_tuple_assign_mixed_targets.hex",
+   "../memory-stores/oracle/t07_tuple_assign_string_elems.json",
+   "../memory-stores/oracle/t07_tuple_assign_string_elems.hex",
+   "../memory-stores/oracle/t08_tuple_assign_ret_type_mismatch.json",
+   "../memory-stores/oracle/t08_tuple_assign_ret_type_mismatch.hex",
+   "../memory-stores/oracle/t11_tuple_onew_decode_mem.json",
+   "../memory-stores/oracle/t11_tuple_onew_decode_mem.hex",
+   "../memory-stores/oracle/p16_return_tuple_bytes_widen.json",
+   "../memory-stores/oracle/p16_return_tuple_bytes_widen.hex"]
 val () = supportedEvalLib.configure ()
 val () = computeLib.upd_compset add_finite_map_compset
 val () = computeLib.upd_compset (computeLib.add_thms

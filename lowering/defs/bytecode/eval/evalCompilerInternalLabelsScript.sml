@@ -19,7 +19,25 @@ Ancestors compileVyper supportedProgram concretizeMemLocDefs codegenReadyCompute
 Libs memoryStoreWitnessLib vyperCheckContractFrontendLib jsonASTLib evalCompilerBytecodeLib finite_mapLib computeLib wordsLib supportedEvalLib
 
 fun holbuild_extra_deps (_ : string list) = ()
-val () = holbuild_extra_deps ["../internal-labels"]
+val () = holbuild_extra_deps
+  ["../internal-labels/oracle/p69_int_name_code_end.json",
+   "../internal-labels/oracle/p69_int_name_code_end.hex",
+   "../internal-labels/oracle/p87_int_name_revert.json",
+   "../internal-labels/oracle/p87_int_name_revert.hex",
+   "../internal-labels/oracle/p88_int_name_fn_prefix.json",
+   "../internal-labels/oracle/p88_int_name_fn_prefix.hex",
+   "../internal-labels/oracle/p90_int_name_fn_prefix_unused.json",
+   "../internal-labels/oracle/p90_int_name_fn_prefix_unused.hex",
+   "../internal-labels/oracle/p89_int_name_entry.json",
+   "../internal-labels/oracle/p89_int_name_entry.hex",
+   "../internal-labels/oracle/nm_int_entry.json",
+   "../internal-labels/oracle/nm_int_entry.hex",
+   "../internal-labels/oracle/nm_int_deploy.json",
+   "../internal-labels/oracle/nm_int_deploy.hex",
+   "../internal-labels/oracle/p70_int_name_reachable.json",
+   "../internal-labels/oracle/p70_int_name_reachable.hex",
+   "../internal-labels/oracle/p71_int_name_return_label.json",
+   "../internal-labels/oracle/p71_int_name_return_label.hex"]
 val () = supportedEvalLib.configure ()
 val () = computeLib.upd_compset add_finite_map_compset
 val () = computeLib.upd_compset (computeLib.add_thms
