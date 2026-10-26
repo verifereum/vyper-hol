@@ -4,17 +4,26 @@
  * package_internal_blocks splits a unit's blocks into one function per
  * internal body, so an INVOKE's target is looked up among the unit's
  * functions, not in the caller's fragment.  The lowering accepts a unit
- * only when its function names are distinct (lowering_context_ok), and that
- * makes the lookup find the function packaged for the label: the blocks
- * from that label's entry block to the next internal entry label.
+ * only when its function names are distinct (lowering_context_ok), so the
+ * lookup finds the function packaged for the label.  With the generator's
+ * shape facts, that function's blocks are the label's segment of the
+ * emitted block stream; which compile states made the segment is not
+ * stated here.
  *
  * TOP-LEVEL:
  *   package_internal_blocks_mem  — every descriptor gets its function, whose
  *                                  blocks start at the descriptor's label
  *   run_lowering_internal_lookup — a lowered unit resolves an internal
- *                                  function's label to its packaged function
- *   lower_vyper_runtime_unit_internal_lookup — the same for a source
- *                                  internal function, at its label
+ *                                  function's label to a function packaged
+ *                                  under it, starting at its entry block
+ *   run_lowering_internal_segments — with the shape facts
+ *                                  run_lowering_source_unit_ok takes, that
+ *                                  function's blocks are the descriptor's
+ *                                  segment of compile_generate_runtime's
+ *                                  block stream
+ *   lower_vyper_runtime_unit_internal_lookup — run_lowering_internal_lookup
+ *                                  for a source internal function, at its
+ *                                  label
  *   compile_call_intcall_label   — for a supported program, the label
  *                                  compile_call's INVOKE names is that label
  *)
@@ -112,6 +121,92 @@ Proof
      `mk_internal_function name fbs has_ret_buf ret_count`]
     mp_tac lookup_function_distinct_mem >>
   simp[mk_internal_function_metadata]
+QED
+
+Theorem run_lowering_descriptors_distinct[local]:
+  !selectors external_fns internal_fns fallback_fn rpolicy bucket_count
+   fn_metadata_bytes dense_buckets entry_info entry_label unit.
+    run_lowering selectors external_fns internal_fns fallback_fn rpolicy
+      bucket_count fn_metadata_bytes dense_buckets entry_info entry_label =
+      SOME unit ==>
+    ALL_DISTINCT (MAP FST (internal_fn_descriptors internal_fns))
+Proof
+  rpt gen_tac >>
+  simp[run_lowering_def, extract_context_with_internals_def, AllCaseEqs()] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  gvs[AllCaseEqs(), lowering_context_ok_def, ctx_fn_names_def,
+      mk_venom_context_def] >>
+  drule package_internal_blocks_metadata >> strip_tac >>
+  drule descriptor_names_fn_names >> strip_tac >> gvs[]
+QED
+
+(* With the generator's shape facts (those run_lowering_source_unit_ok
+   takes), the function an internal label resolves to is exactly that
+   descriptor's segment of the runtime block stream compile_generate_runtime
+   emits. *)
+Theorem run_lowering_internal_segments:
+  !selectors external_fns internal_fns fallback_fn rpolicy bucket_count
+   fn_metadata_bytes dense_buckets entry_info unit.
+    run_lowering selectors external_fns internal_fns fallback_fn rpolicy
+      bucket_count fn_metadata_bytes dense_buckets entry_info "__entry" =
+      SOME unit /\
+    EVERY (\(sel, lbl, z). isPREFIX "fn_" lbl) selectors /\
+    EVERY external_fn_shape_ok external_fns /\
+    fallback_shape_ok fallback_fn /\
+    EVERY internal_fn_shape_ok internal_fns /\
+    EVERY (\d. internal_label_ok (FST d))
+      (internal_fn_descriptors internal_fns) ==>
+    ?entry_blocks segs.
+      all_blocks (SND (compile_generate_runtime selectors external_fns
+                         internal_fns fallback_fn Linear bucket_count
+                         fn_metadata_bytes dense_buckets entry_info
+                         (initial_compile_state "__entry"))) =
+        entry_blocks ++ FLAT segs /\
+      LIST_REL internal_segment_ok (internal_fn_descriptors internal_fns) segs /\
+      !i. i < LENGTH segs ==>
+        lookup_function (FST (EL i (internal_fn_descriptors internal_fns)))
+          unit.cu_context.ctx_functions =
+        SOME (mk_internal_function
+                (FST (EL i (internal_fn_descriptors internal_fns)))
+                (EL i segs)
+                (FST (SND (EL i (internal_fn_descriptors internal_fns))))
+                (SND (SND (EL i (internal_fn_descriptors internal_fns)))))
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule run_lowering_descriptors_distinct >> strip_tac >>
+  `lowering_policy_ok rpolicy`
+    by (qpat_x_assum `run_lowering _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+        rw[run_lowering_def]) >>
+  `rpolicy.rpol_frontend_dispatch = Linear` by fs[lowering_policy_ok_def] >>
+  Cases_on `compile_generate_runtime selectors external_fns internal_fns
+              fallback_fn Linear bucket_count fn_metadata_bytes dense_buckets
+              entry_info (initial_compile_state "__entry")` >>
+  rename1 `_ = (u, st1)` >> Cases_on `u` >>
+  drule_all compile_generate_runtime_shape >> strip_tac >>
+  `package_internal_blocks (internal_fn_descriptors internal_fns)
+     (entry_blocks ++ FLAT segs) =
+   SOME (entry_blocks,
+         MAP2 (\d seg. mk_internal_function (FST d) seg (FST (SND d))
+                         (SND (SND d))) (internal_fn_descriptors internal_fns)
+              segs)`
+    by (match_mp_tac package_internal_blocks_segments >> ASM_REWRITE_TAC [] >>
+        REWRITE_TAC [EVERY_MEM] >> gen_tac >> strip_tac >> BETA_TAC >>
+        match_mp_tac internal_name_not_entry_label >> fs[EVERY_MEM]) >>
+  qexistsl_tac [`entry_blocks`, `segs`] >> simp[] >> rpt strip_tac >>
+  imp_res_tac LIST_REL_LENGTH >>
+  qpat_x_assum `run_lowering _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `all_blocks st1 = _`
+    (assume_tac o REWRITE_RULE [loweringShapeDefsTheory.all_blocks_def]) >>
+  gs[run_lowering_def, extract_context_with_internals_def] >>
+  strip_tac >> gvs[lowering_context_ok_def, ctx_fn_names_def,
+                   mk_venom_context_def] >>
+  qmatch_goalsub_abbrev_tac `lookup_function _ fns = SOME f` >>
+  `MEM f fns` by
+    (simp[Abbr `fns`, Abbr `f`, MEM_EL] >> disj2_tac >>
+     qexists_tac `i` >> simp[EL_MAP2]) >>
+  `ALL_DISTINCT (MAP (\f. f.fn_name) fns)` by simp[Abbr `fns`] >>
+  qspecl_then [`fns`, `f`] mp_tac lookup_function_distinct_mem >>
+  simp[Abbr `f`, mk_internal_function_metadata]
 QED
 
 (* The same for a source internal function of a lowered runtime unit, at

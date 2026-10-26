@@ -18,20 +18,19 @@
  *                              block, index and halted flag alone
  *   frag_exec_invoke         — an INVOKE that returns, at some fuel, is a
  *                              fragment: later steps compose with it (fuel
- *                              monotonicity, venomExecProofs' fuel_mono,
- *                              the fact behind run_blocks_fuel_mono)
+ *                              monotonicity, from venomExecProofs' fuel_mono)
  *   frag_exec_invoke_intret  — frag_exec_invoke from the callee's IntRet
  *   compile_call_intcall_shape — compile_call's IntCall case: arguments,
  *                              return buffer, staged arguments, INVOKE,
- *                              and the value it returns
- *   compile_intcall_return_buffer_alloca — the return buffer is one ALLOCA
- *                              of 32 * returns_count bytes (stack returns)
- *                              or return_buf_size bytes (memory return),
- *                              and only a memory return passes it to the
- *                              callee, as the INVOKE's first argument
- *   intcall_return_buffer_frag — running that ALLOCA in a fresh frame binds
- *                              the buffer operand to a new region of that
- *                              size
+ *                              and the value it returns.  The buffer is
+ *                              32 * returns_count bytes for stack returns,
+ *                              which the INVOKE's outputs are stored into,
+ *                              or return_buf_size bytes for a memory
+ *                              return, which alone passes it to the callee
+ *                              as the INVOKE's first argument
+ *
+ * loweringHalt's compile_alloc_buffer_insts and
+ * compile_alloc_buffer_fresh_frag give the buffer's ALLOCA and what it does.
  *)
 
 Theory intCallStep
@@ -305,45 +304,4 @@ Proof
     `compile_stage_intcall_args _ _ _ _ s2 = (ia, s3)` >>
   Cases_on `0 < rbs` >> gvs[] >>
   qexistsl_tac [`s2`, `ia`, `s3`] >> simp[]
-QED
-
-(* The return buffer is one ALLOCA of 32 * returns_count bytes for stack
-   returns, or return_buf_size bytes for a memory return; only a memory
-   return passes it to the callee, as the INVOKE's first argument. *)
-Theorem compile_intcall_return_buffer_alloca:
-  !n st rbuf st'.
-    compile_alloc_buffer n st = (rbuf, st') ==>
-    rbuf.buf_operand = Var (STRING #"%" (toString st.cs_next_var)) /\
-    rbuf.buf_size = n /\
-    st'.cs_blocks = st.cs_blocks /\ st'.cs_current_bb = st.cs_current_bb /\
-    st'.cs_current_insts =
-      st.cs_current_insts ++
-      [mk_inst st.cs_next_id ALLOCA [Lit (n2w n)]
-         [STRING #"%" (toString st.cs_next_var)]]
-Proof
-  simp[compile_alloc_buffer_def, emit_op_def, comp_bind_def,
-       comp_ignore_bind_def, comp_return_def, fresh_id_def, fresh_var_def,
-       emit_def] >>
-  rpt strip_tac >> gvs[]
-QED
-
-(* In a frame that has not run this ALLOCA yet, it binds the buffer operand
-   to a new region of n bytes at vs_alloca_next. *)
-Theorem intcall_return_buffer_frag:
-  !ctx n st rbuf st' P Q R.
-    compile_alloc_buffer n st = (rbuf, st') /\ n < dimword (:256) /\
-    (!s. P s ==>
-       FLOOKUP s.vs_allocas st.cs_next_id = NONE /\
-       Q ((update_var (STRING #"%" (toString st.cs_next_var))
-             (n2w s.vs_alloca_next)
-             (s with <| vs_allocas := s.vs_allocas |+
-                          (st.cs_next_id, (s.vs_alloca_next, n));
-                        vs_alloca_next := s.vs_alloca_next + n |>))
-          with vs_inst_idx := LENGTH st'.cs_current_insts)) ==>
-    frag_exec ctx st st' P Q R
-Proof
-  rpt strip_tac >> irule compile_alloc_buffer_frag >>
-  qexistsl_tac [`rbuf`, `n`] >> simp[] >> rpt strip_tac >>
-  first_x_assum drule >> strip_tac >>
-  gvs[step_alloca_fresh, arithmeticTheory.ADD_COMM]
 QED
