@@ -788,6 +788,33 @@ Proof
        venomInstTheory.mk_inst_def]
 QED
 
+Theorem compile_revert_reason_certificate:
+  !cenv msg_ty buf msg_type msg_size sa sb ds.
+    ~is_word_type msg_ty /\ reason_operand ds buf.buf_operand /\
+    compile_revert_with_reason cenv (LocatedValue msg_ty (base_ptr buf))
+      msg_type msg_size sa = ((), sb) ==>
+    ?prefix es id off len.
+      emitted_insts sa sb = prefix ++ [mk_inst id REVERT [off; len] []] /\
+      reason_prefix ds prefix es /\ reason_operand es off /\
+      reason_operand es len /\
+      sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
+      same_blocks sa sb
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[compile_revert_with_reason_def, unwrap_value_def, contextTheory.base_ptr_def,
+      contextTheory.compile_alloc_buffer_def, emit_op_def, emit_void_def,
+      emit_inst_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
+      fresh_var_def, fresh_id_def, emit_def] >>
+  qmatch_goalsub_abbrev_tac `sa.cs_current_insts ++ code` >>
+  simp[emitted_insts_def, DROP_APPEND1, same_blocks_def] >>
+  qexists `TAKE 31 code` >>
+  simp[Abbr `code`, TAKE_def] >>
+  simp[reason_prefix_def, venomInstTheory.mk_inst_def] >>
+  rpt conj_tac >>
+  simp[reason_step_def, venomInstTheory.mk_inst_def, reason_operand_def] >>
+  Cases_on `buf.buf_operand` >> gvs[reason_operand_def]
+QED
+
 (* raise and assert with a string literal as the reason: the literal's
    buffer and the Error(string) encoding of compile_revert_with_reason,
    straight-line code that ends in a REVERT, which every assertion
