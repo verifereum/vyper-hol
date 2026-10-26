@@ -17,7 +17,7 @@
  *   bind_arguments_word_arg, abi_head_size_word_prefix,
  *   abi_embedded_static_size_word, vyper_to_abi_types_EL; and the decode
  *   lemmas (compile_abi_clamp_structure, decode_emit_update_frame,
- *   decode_clamp_frame, vars_pc_only_memory, ...), which
+ *   decode_clamp_frame, ...), which
  *   abiDecodeStaticProps and entryDecodeStaticProps reuse
  *
  * The decoder's head offset (compile_register_positional_args adds
@@ -564,12 +564,6 @@ Theorem decode_mstore_frame:
     vars_pc_only (mstore a w s) (mstore a w t)
 Proof
   rw[vars_pc_only_def, venom_state_component_equality, mstore_def] >> gvs[]
-QED
-
-Theorem vars_pc_only_memory:
-  !s t. vars_pc_only s t ==> t.vs_memory = s.vs_memory
-Proof
-  rw[vars_pc_only_def] >> pop_assum (SUBST1_TAC o SYM) >> simp[]
 QED
 
 Theorem decode_emit_mstore_frame:

@@ -15,10 +15,11 @@
  *
  * Also used by entryDecodeStaticProps: static_dec (the static decode
  *   infos), dec_ok (every clamp accepts), dec_frame (what the decode
- *   changes), dec_straight (straight-line code) and their lemmas, and
- *   decode_static_buf_run (the induction behind _buf_frag).
+ *   changes), dec_run (copy or revert), dec_straight (straight-line
+ *   code) and their lemmas, and decode_static_buf_run (the induction
+ *   behind compile_abi_decode_static_buf_frag).
  *
- * Helpers: dec_run and the memory-window lemmas.
+ * Helpers: the memory-window lemmas.
  *
  * The decode of a static value from calldata (hi_op = Lit 0w, the bound
  * pinned Vyper omits for calldata) runs straight-line code: a word is

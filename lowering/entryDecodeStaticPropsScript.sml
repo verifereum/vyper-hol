@@ -25,12 +25,13 @@
  * Helpers: dec_value, decs_value, sparse_val and their lemmas.
  *
  * Not here: that type_to_abi_dec_info builds plans for every static
- * complex type (structs, nested aggregates), and that the decoder's head offsets (abi_embedded_static_size)
- * match the ABI's for them.  Both need the compile env's struct metadata
- * and sizes (ce_struct_fields, type_memory_bytes,
- * abi_embedded_static_size) to agree with the type environment, as the
- * encoder's plans do (abi_enc_plan).  For a word type the plan follows
- * from word_arg_clamp_ok (type_to_abi_dec_info_word_plan).
+ * complex type (structs, nested aggregates), and that the decoder's head
+ * offsets (abi_embedded_static_size) match the ABI's for them.  Both
+ * need the compile env's struct metadata and sizes (ce_struct_fields,
+ * type_memory_bytes, abi_embedded_static_size) to agree with the type
+ * environment, as the encoder's plans do (abi_enc_plan).  For a word
+ * type the plan follows from word_arg_clamp_ok
+ * (type_to_abi_dec_info_word_plan).
  *)
 Theory entryDecodeStaticProps
 Ancestors
@@ -187,12 +188,15 @@ Theorem word_type_dec_sizes:
     ~is_abi_dynamic sfields ty /\ abi_embedded_static_size sfields ty = 32 /\
     type_memory_bytes cenv ty = 32
 Proof
-  rpt gen_tac >> strip_tac >> simp[abi_embedded_static_size_word] >>
-  Cases_on `ty` >> fs[is_word_type_def, is_abi_dynamic_def, type_memory_bytes_def] >>
+  rpt gen_tac >> Cases_on `ty` >>
+  simp[is_word_type_def, is_abi_dynamic_def, type_memory_bytes_def,
+       abi_embedded_static_size_word] >>
   rename1 `BaseT bt` >> Cases_on `bt` >>
-  fs[is_word_type_def, is_abi_dynamic_def, type_memory_bytes_def] >>
+  simp[is_word_type_def, is_abi_dynamic_def, type_memory_bytes_def,
+       abi_embedded_static_size_word] >>
   rename1 `BytesT bd` >> Cases_on `bd` >>
-  fs[is_word_type_def, is_abi_dynamic_def, type_memory_bytes_def]
+  simp[is_word_type_def, is_abi_dynamic_def, type_memory_bytes_def,
+       abi_embedded_static_size_word]
 QED
 
 Theorem type_to_abi_dec_info_word_plans:
