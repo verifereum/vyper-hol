@@ -44,73 +44,14 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: ./.github/actions/setup-polyml
-        id: polyml
+      - uses: ./.github/actions/setup-holbuild-project
+        id: project
         with:
           cache-key-suffix: ${{ env.CACHE_KEY_SUFFIX }}
 
-      - name: Get minimum holbuild version from holproject.toml
-        id: holbuild-version
-        run: |
-          holbuild_ref="$(python3 - <<'PY'
-          import tomllib
-          with open("holproject.toml", "rb") as f:
-              data = tomllib.load(f)
-          print("v" + data["holbuild"]["minimum_version"])
-          PY
-          )"
-          echo "ref=$holbuild_ref" >> "$GITHUB_OUTPUT"
-
-      - uses: ./.github/actions/setup-holbuild
-        id: holbuild
-        with:
-          holbuild-ref: ${{ steps.holbuild-version.outputs.ref }}
-          cache-key-suffix: ${{ env.CACHE_KEY_SUFFIX }}
-
-      - name: Report selected holbuild version
-        run: holbuild --version
-
-      - name: Configure holbuild cache
-        run: echo "HOLBUILD_CACHE=$HOME/.cache/holbuild" >> "$GITHUB_ENV"
-
-      - name: Compute holbuild cache keys
+      - name: Compute holbuild snapshot key
         id: cache-key
-        run: |
-          toolchain_key="holbuild-v3-toolchain-${{ runner.os }}-${{ runner.arch }}-${{ steps.polyml.outputs.polyml-rev }}-${{ steps.holbuild.outputs.holbuild-rev }}${CACHE_KEY_SUFFIX}"
-          build_prefix="holbuild-v3-build-${{ runner.os }}-${{ runner.arch }}-${{ steps.polyml.outputs.polyml-rev }}-${{ steps.holbuild.outputs.holbuild-rev }}${CACHE_KEY_SUFFIX}"
-          snapshot_key="${build_prefix}-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}"
-          echo "toolchain-key=${toolchain_key}" >> "$GITHUB_OUTPUT"
-          echo "build-prefix=${build_prefix}" >> "$GITHUB_OUTPUT"
-          echo "snapshot-key=${snapshot_key}" >> "$GITHUB_OUTPUT"
-
-      - name: Restore latest compatible project snapshot
-        id: cache-holbuild-project
-        uses: actions/cache/restore@v6
-        with:
-          path: ~/.cache/holbuild
-          key: ${{ steps.cache-key.outputs.snapshot-key }}
-          restore-keys: |
-            ${{ steps.cache-key.outputs.build-prefix }}-
-
-      - name: Restore holbuild toolchain cache on project snapshot miss
-        id: cache-holbuild-toolchain
-        if: ${{ steps.cache-holbuild-project.outputs.cache-matched-key == '' }}
-        uses: actions/cache/restore@v6
-        with:
-          path: ~/.cache/holbuild
-          key: ${{ steps.cache-key.outputs.toolchain-key }}
-
-      - name: Report restored holbuild cache
-        env:
-          PROJECT_CACHE_HIT: ${{ steps.cache-holbuild-project.outputs.cache-hit }}
-          PROJECT_CACHE_KEY: ${{ steps.cache-holbuild-project.outputs.cache-matched-key }}
-          TOOLCHAIN_CACHE_HIT: ${{ steps.cache-holbuild-toolchain.outputs.cache-hit }}
-          TOOLCHAIN_CACHE_KEY: ${{ steps.cache-holbuild-toolchain.outputs.cache-matched-key }}
-        run: |
-          echo "project cache hit: ${PROJECT_CACHE_HIT:-false}"
-          echo "project cache key: ${PROJECT_CACHE_KEY:-<none>}"
-          echo "toolchain cache hit: ${TOOLCHAIN_CACHE_HIT:-false}"
-          echo "toolchain cache key: ${TOOLCHAIN_CACHE_KEY:-<none>}"
+        run: echo "snapshot-key=${{ steps.project.outputs.build-prefix }}-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}" >> "$GITHUB_OUTPUT"
 
       - name: Configure remote cache
         uses: ./.github/actions/setup-remote-cache
@@ -128,7 +69,7 @@ jobs:
         continue-on-error: true
         with:
           path: ~/.cache/holbuild
-          key: ${{ steps.cache-key.outputs.toolchain-key }}
+          key: ${{ steps.project.outputs.toolchain-key }}
 
       - name: Build project with holbuild
         env:
@@ -169,6 +110,50 @@ jobs:
           if-no-files-found: error
           retention-days: 90
 
+  test-deps:
+    # Builds only what the test groups load besides their own theories, so they
+    # start long before build finishes.
+    if: github.event.pull_request.draft != true
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    outputs:
+      holbuild-cache-key: ${{ steps.cache-key.outputs.snapshot-key }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup-holbuild-project
+        id: project
+        with:
+          cache-key-suffix: ${{ env.CACHE_KEY_SUFFIX }}
+
+      - name: Compute holbuild snapshot key
+        id: cache-key
+        run: echo "snapshot-key=${{ steps.project.outputs.stage-prefix }}-test-deps-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}" >> "$GITHUB_OUTPUT"
+
+      - name: Configure remote cache
+        uses: ./.github/actions/setup-remote-cache
+        with:
+          curl-config: ${{ !env.CACHE_KEY_SUFFIX && secrets.HOLBUILD_REMOTE_CACHE_CURL_CONFIG || '' }}
+
+      - name: Build schema-2 HOL toolchain
+        run: holbuild buildhol
+
+      - name: Build test dependencies
+        env:
+          TMPDIR: ${{ runner.temp }}
+        run: |
+          targets=$(python3 tools/ci_targets.py test-deps)
+          echo "Building: $targets"
+          holbuild --verbose -j"$(nproc)" build --skip-checkpoints --skip-proof-steps $targets
+
+      - name: Save holbuild test dependency snapshot
+        uses: actions/cache/save@v6
+        with:
+          path: ~/.cache/holbuild
+          key: ${{ steps.cache-key.outputs.snapshot-key }}
+
   python-o1-oracle:
     if: github.event.pull_request.draft != true
     runs-on: ubuntu-latest
@@ -206,7 +191,7 @@ jobs:
 
   vyper-tests:
     if: github.event.pull_request.draft != true
-    needs: [build, export-vyper-tests]
+    needs: [test-deps, export-vyper-tests]
     runs-on: ubuntu-latest
     timeout-minutes: 90
     strategy:
@@ -218,38 +203,10 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: ./.github/actions/setup-polyml
-        id: polyml
+      - uses: ./.github/actions/setup-holbuild-project
         with:
           cache-key-suffix: ${{ env.CACHE_KEY_SUFFIX }}
-
-      - name: Get minimum holbuild version from holproject.toml
-        id: holbuild-version
-        run: |
-          holbuild_ref="$(python3 - <<'PY'
-          import tomllib
-          with open("holproject.toml", "rb") as f:
-              data = tomllib.load(f)
-          print("v" + data["holbuild"]["minimum_version"])
-          PY
-          )"
-          echo "ref=$holbuild_ref" >> "$GITHUB_OUTPUT"
-
-      - uses: ./.github/actions/setup-holbuild
-        id: holbuild
-        with:
-          holbuild-ref: ${{ steps.holbuild-version.outputs.ref }}
-          cache-key-suffix: ${{ env.CACHE_KEY_SUFFIX }}
-
-      - name: Configure holbuild cache
-        run: echo "HOLBUILD_CACHE=$HOME/.cache/holbuild" >> "$GITHUB_ENV"
-
-      - name: Restore holbuild global cache
-        uses: actions/cache/restore@v6
-        with:
-          path: ~/.cache/holbuild
-          key: ${{ needs.build.outputs.holbuild-cache-key }}
-          fail-on-cache-miss: true
+          snapshot-key: ${{ needs.test-deps.outputs.holbuild-cache-key }}
 
       - name: Restore Vyper test exports
         uses: actions/cache/restore@v6
@@ -292,8 +249,8 @@ jobs:
   holbuild-success:
     if: always() && github.event.pull_request.draft != true
     runs-on: ubuntu-latest
-    needs: [build, python-o1-oracle, export-vyper-tests, vyper-tests]
+    needs: [build, test-deps, python-o1-oracle, export-vyper-tests, vyper-tests]
     steps:
       - name: Check all jobs succeeded
-        if: ${{ needs.build.result != 'success' || needs.python-o1-oracle.result != 'success' || needs.export-vyper-tests.result != 'success' || needs.vyper-tests.result != 'success' }}
+        if: ${{ needs.build.result != 'success' || needs.test-deps.result != 'success' || needs.python-o1-oracle.result != 'success' || needs.export-vyper-tests.result != 'success' || needs.vyper-tests.result != 'success' }}
         run: exit 1
