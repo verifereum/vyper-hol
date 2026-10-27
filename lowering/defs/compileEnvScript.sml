@@ -1226,20 +1226,23 @@ End
    - AssertException → Abort Revert_abort
    - Error → Abort (any abort type) *)
 (* Helper: check return values match for internal return.
-   Dispatches by number of return values:
-   - Single value: vals = [typed_val_to_w256 ret_tv v]
-   - Multi-return (TupleT): vals = MAP typed_val_to_w256 (ZIP elem_tvs elem_vals)
-   - Memory return: vals = [] (value in return buffer, not on stack) *)
+   Dispatches by the return type, as Python's _lower_internal_return does:
+   - Memory return: vals = [] (value in return buffer, not on stack)
+   - Tuple or struct (tuple-like), returned on the stack: one word per
+     member, vals = MAP typed_val_to_w256 over the members, for any number
+     of members, one included
+   - Any other value: vals = [typed_val_to_w256 ret_tv v] *)
 Definition intret_vals_match_def:
   intret_vals_match ret_tv v vals ⇔
-    case vals of
-      [w] => w = typed_val_to_w256 ret_tv v
-    | [] => T  (* Memory return: value in caller's buffer, not checked here *)
-    | _ => (case (ret_tv, v) of
+    vals = [] ∨
+    vals = (case (ret_tv, v) of
               (TupleTV elem_tvs, ArrayV (TupleV elem_vals)) =>
-                vals = MAP (λ(tv,ev). typed_val_to_w256 tv ev)
-                         (ZIP (elem_tvs, elem_vals))
-            | _ => F)
+                MAP (λ(tv,ev). typed_val_to_w256 tv ev)
+                  (ZIP (elem_tvs, elem_vals))
+            | (StructTV field_tvs, StructV fields) =>
+                MAP (λ(tv,ev). typed_val_to_w256 tv ev)
+                  (ZIP (MAP SND field_tvs, MAP SND fields))
+            | _ => [typed_val_to_w256 ret_tv v])
 End
 
 Definition result_rel_def:
