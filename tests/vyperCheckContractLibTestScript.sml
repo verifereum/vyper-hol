@@ -719,3 +719,20 @@ val () = check_accepts "main constant from imported constant" false
   empty_layouts import_constant_modules
 val () = check_accepts "main constant from imported constant (deploy)" true
   empty_layouts import_constant_modules
+
+(* Imports among themselves keep the frontend's dependency order: lib 2 reads
+   lib 1's constant, and the main module reads lib 2's. *)
+val () = check_accepts "constant chain through two imports" false
+  empty_layouts
+  ``[(NONE,
+      [VariableDecl Private
+         (Constant (TopLevelName (BaseT (UintT 256)) (SOME 2,"N"))) "K"
+         (BaseT (UintT 256)) NONE]);
+     (SOME 1,
+      [VariableDecl Private (Constant (Literal (BaseT (UintT 256)) (IntL 2)))
+         "M" (BaseT (UintT 256)) NONE]);
+     (SOME 2,
+      [VariableDecl Private
+         (Constant (TopLevelName (BaseT (UintT 256)) (SOME 1,"M"))) "N"
+         (BaseT (UintT 256)) NONE])]
+    : (num option # toplevel list) list``

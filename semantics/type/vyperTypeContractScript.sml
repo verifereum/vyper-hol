@@ -358,7 +358,9 @@ Definition merge_constant_imms_def:
       imms
 End
 
-(* constants_env and evaluate_all_constants over the contract's immutables. *)
+(* constants_env and evaluate_module_constants over the contract's immutables;
+   contract_constants_ok applies constants_fold to constants_order mods, as
+   evaluate_all_constants does. *)
 Definition constants_fold_module_def:
   constants_fold_module mods imms src [] acc = SOME acc /\
   constants_fold_module mods imms src

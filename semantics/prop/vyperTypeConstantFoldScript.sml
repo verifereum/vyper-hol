@@ -5,6 +5,7 @@
  * - constant_value_eval_expr
  * - constants_fold_evaluate_module_constants
  * - check_contract_evaluate_all_constants
+ * - contract_namespaces_ok_constants_order
  *
  * Helper:
  * - get_tenv_constant_context, get_tenv_sources
