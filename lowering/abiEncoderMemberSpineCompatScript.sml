@@ -11,7 +11,7 @@ Ancestors
   abiEncoderMemberPhaseEffect abiScratchAfterAddress abiEncoderRegisteredEffect
   abiEncoderExtendSim pred_set venomInst abiEncoderChildCode abiEncoderChildPrefix
   abiScratchEffect abiEncoderResultLive abiEncoderCounters
-  abiEncoderChildSuffix valueEncoding
+  abiEncoderChildSuffix valueEncoding abiEncoderChildSuffixReach abiScratchChild
 
 Definition abi_encoder_spine_source_pre_def:
   abi_encoder_spine_source_pre (at,av,sb,source_cap,d)
@@ -639,3 +639,60 @@ val _ =
       print "ENCODER_SPINE_COMPAT_AUDIT_OK shared_suffix_observations\n"
     else raise Fail "encoder spine compatibility admission dependency: shared_suffix_observations"
   end;
+
+(* Reuse the precise scratch composition interface at the raw cursor endpoint. *)
+Theorem abi_encoder_spine_cursor_post:
+  abi_encode_child_suffix head dp offset len ce = (out,en) /\
+  eval_operand head encoded = SOME (n2w h) /\ eval_operand dp encoded = SOME (n2w slot) /\
+  eval_operand offset encoded = SOME (n2w off) /\ eval_operand len encoded = SOME (n2w n) /\
+  abi_decoder_operand_live ce.cs_next_var dp /\ abi_decoder_operand_live ce.cs_next_var len /\
+  h < dimword (:256) /\ slot < dimword (:256) /\
+  en.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st encoded /\
+  abi_encoder_member_phase_raw ce en encoded actual ==>
+  abi_encoder_child_suffix_post out ce limit_st h slot off n encoded actual
+Proof
+  strip_tac >> drule_all abi_encoder_member_cursor_transport >>
+  simp[abi_encoder_child_suffix_post_def]
+QED
+
+Theorem abi_encoder_spine_dynamic_shared_scratch:
+  abi_encoder_shared_endpoint (ctx,func) (p,ce,len,limit_st)
+    (first,last,b,cap) (at,av,q) ready encoded /\
+  abi_decoder_address_frame st.cs_next_var initial ready /\
+  abi_encode_child_suffix head dp offset len ce = (out,en) /\
+  eval_operand head encoded = SOME (n2w h) /\ eval_operand dp encoded = SOME (n2w slot) /\
+  eval_operand offset encoded = SOME (n2w off) /\
+  abi_decoder_operand_live ce.cs_next_var dp /\ abi_decoder_operand_live ce.cs_next_var len /\
+  h < dimword (:256) /\ slot < dimword (:256) /\
+  en.cs_next_var <= limit_st.cs_next_var /\
+  abi_encoder_member_phase_raw ce en encoded actual /\
+  first <= st.cs_next_id /\ en.cs_next_id <= last /\
+  st.cs_next_id <= p.cs_next_id /\ ce.cs_next_id <= en.cs_next_id /\
+  st.cs_next_var <= p.cs_next_var /\ st.cs_next_var <= ce.cs_next_var /\
+  site IN abi_decoder_ids st.cs_next_id en.cs_next_id /\
+  FLOOKUP encoded.vs_allocas site = SOME (slot,32) /\
+  d <= h /\ h+32 <= d+extent /\ d <= q /\ q+LENGTH (enc at av) <= d+extent ==>
+  abi_scratch_effect first last st.cs_next_id en.cs_next_id st.cs_next_var
+    limit_st d extent b cap initial actual
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  `eval_operand len encoded = SOME (n2w (LENGTH (enc at av))) /\
+   fresh_vars_wrt limit_st encoded` by
+    fs[abi_encoder_shared_endpoint_def, abi_scratch_effect_def] >>
+  drule_all abi_encoder_spine_cursor_post >> disch_tac >>
+  drule abi_encoder_shared_endpoint_scratch >> disch_tac >>
+  irule (cj 1 abi_scratch_child_effect) >>
+  goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
+  goal_assum (drule_at Any) >> simp[] >>
+  goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> simp[] >>
+  qexists_tac `site` >> simp[]
+QED
+
+val _ = List.app (fn (name,th) =>
+  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
+    if List.all (fn s => s = "DISK_THM") oracles andalso null axioms then
+      print ("ENCODER_SPINE_COMPAT_AUDIT_OK " ^ name ^ "\n")
+    else raise Fail ("encoder spine compatibility admission dependency: " ^ name)
+  end)
+  [("cursor_post",abi_encoder_spine_cursor_post),
+   ("dynamic_shared_scratch",abi_encoder_spine_dynamic_shared_scratch)];
