@@ -144,7 +144,9 @@ Translation also repairs three things the compiler output leaves implicit:
 - The storage layout nests a module's variables under the alias its
   initializing module gives it. Layout keys keep the dotted alias path
   (`token.ownable`), and the translation's import map resolves each path along
-  the `initializes:` declarations.
+  the `initializes:` declarations. A module initialized through an attribute
+  (`initializes: token.ownable` in the main module) is keyed by its last
+  alias, `ownable`, under its initializer's path.
 
 Call `check_contract_result` when the caller also needs the prepared terms:
 
@@ -212,11 +214,12 @@ Use a temporary output when sanitizing a file in place, since input is read
 before output is written. Add `--forbid` for the local checkout root, generating
 username, or other machine-specific values not covered by the defaults.
 
-`interface_struct/`, `nested_initializes/` and `relative_uses/` reproduce the
-three cases above. Their JSON was generated at `VYPER_PIN` from
-`tests/fixtures/check_contract` with `vyper -f annotated_ast,layout` on
-`interface_struct/main.vy`, `nested_initializes/main.vy` and
-`relative_uses/pkg/mocks/main.vy`, then sanitized with `--replace "$PWD/="`.
+`interface_struct/`, `nested_initializes/`, `attribute_initializes/` and
+`relative_uses/` reproduce the three cases above. Their JSON was generated at
+`VYPER_PIN` from `tests/fixtures/check_contract` with
+`vyper -f annotated_ast,layout` on each directory's `main.vy` (for
+`relative_uses/`, `pkg/mocks/main.vy`), then sanitized with
+`--replace "$PWD/="`.
 
 The Flex Daddy example and its exact provenance are in
 `tests/fixtures/check_contract/third_party/flex/`. It is checked in both

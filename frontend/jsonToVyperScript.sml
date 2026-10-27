@@ -1103,18 +1103,45 @@ End
 (* The compiler's storage layout nests a module's variables under the alias
    its initializing module gives it (`initializes:`), so a layout key names a
    module by its dotted alias path from the main module: `token.ownable` is
-   the module `token` initializes as `ownable`.  Each alias resolves in its
-   parent's import map.  Modules are initialized at most once and imports are
-   acyclic, so a path visits each imported module at most once. *)
-Definition initialized_aliases_def:
-  initialized_aliases [] = [] ∧
-  initialized_aliases
-      (JTL_InitializesDecl (JE_Name name _ _ _) :: rest) =
-    name :: initialized_aliases rest ∧
-  initialized_aliases
-      (JTL_InitializesDecl (JE_Subscript (JE_Name name _ _ _) _ _) :: rest) =
-    name :: initialized_aliases rest ∧
-  initialized_aliases (_ :: rest) = initialized_aliases rest
+   the module `token` initializes as `ownable`.  An `initializes:` target is
+   an alias chain (`initializes: token.ownable` initializes the module
+   `token` imports as `ownable`), keyed by its last alias and resolved one
+   alias at a time through each module's import map.  Modules are
+   initialized at most once and imports are acyclic, so a path visits each
+   imported module at most once. *)
+Definition initialized_chain_def:
+  initialized_chain (JE_Name name _ _ _) = SOME [name] ∧
+  initialized_chain (JE_Attribute value attr _ _ _ _ _) =
+    OPTION_MAP (λchain. chain ++ [attr]) (initialized_chain value) ∧
+  initialized_chain _ = NONE
+End
+
+Definition initializes_target_def:
+  initializes_target (JE_Subscript target _ _) = target ∧
+  initializes_target target = target
+End
+
+Definition initialized_chains_def:
+  initialized_chains [] = [] ∧
+  initialized_chains (JTL_InitializesDecl target :: rest) =
+    (case initialized_chain (initializes_target target) of
+     | SOME chain => chain :: initialized_chains rest
+     | NONE => initialized_chains rest) ∧
+  initialized_chains (_ :: rest) = initialized_chains rest
+End
+
+Definition resolve_module_chain_def:
+  resolve_module_chain all_import_maps import_map [] = NONE ∧
+  resolve_module_chain all_import_maps import_map [alias] =
+    ALOOKUP import_map alias ∧
+  resolve_module_chain all_import_maps import_map (alias :: rest) =
+    case ALOOKUP import_map alias of
+    | NONE => NONE
+    | SOME nsid =>
+        resolve_module_chain all_import_maps
+          (case ALOOKUP all_import_maps nsid of
+           | SOME child_map => child_map
+           | NONE => []) rest
 End
 
 Definition initialized_module_paths_def:
@@ -1122,18 +1149,18 @@ Definition initialized_module_paths_def:
     [] ∧
   initialized_module_paths (SUC fuel) all_import_maps imports import_map body
       prefix =
-    FLAT (MAP (λalias.
-      case ALOOKUP import_map alias of
+    FLAT (MAP (λchain.
+      case resolve_module_chain all_import_maps import_map chain of
       | NONE => []
       | SOME nsid =>
-          let path = prefix ++ alias in
+          let path = prefix ++ LAST chain in
           (path, nsid) ::
           initialized_module_paths fuel all_import_maps imports
             (case ALOOKUP all_import_maps nsid of
              | SOME child_map => child_map
              | NONE => [])
             (find_module_body_nsid nsid imports) (path ++ "."))
-      (initialized_aliases body))
+      (initialized_chains body))
 End
 
 (* The main module's aliases, then every initialized module's alias path. *)

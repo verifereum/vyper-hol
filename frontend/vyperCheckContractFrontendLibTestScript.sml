@@ -392,12 +392,16 @@ val duplicate_translation = optionSyntax.dest_some
 val (duplicate_sources, duplicate_rest) = pairSyntax.dest_pair duplicate_translation;
 val (_, duplicate_import_map) = pairSyntax.dest_pair duplicate_rest;
 val (duplicate_entries, duplicate_source_ty) = listSyntax.dest_list duplicate_sources;
-(* Translation keeps one listing of the repeated interface. *)
-val expected_duplicate_sources = case duplicate_entries of
-    [_, _, _] => duplicate_sources
-  | _ => raise Fail "duplicate interface fixture has unexpected source count";
+(* Translation keeps one listing of the repeated interface, in import order. *)
+val duplicate_ids = listSyntax.mk_list
+  (map (fst o pairSyntax.dest_pair) duplicate_entries,
+   fst (pairSyntax.dest_prod duplicate_source_ty));
+val expected_duplicate_sources =
+  if aconv duplicate_ids ``[NONE; SOME 3; SOME 4]`` then duplicate_sources
+  else raise Fail ("duplicate interface fixture has unexpected sources " ^
+    term_to_string duplicate_ids);
 val duplicate_input = prepare_ast duplicate_ast;
-val _ = assert_modules "annotated repro preserves import order"
+val _ = assert_modules "annotated repro keeps one listing per module"
   expected_duplicate_sources duplicate_input;
 val duplicate_translated_input =
   vyperCheckContractFrontendLib.prepare_translated_input
@@ -449,6 +453,10 @@ val _ = check_fixture true "nested_initializes/main.json";
 (* lib_a is reached as `..lib_a` from main and `.lib_a` from lib_b. *)
 val _ = check_fixture false "relative_uses/pkg/mocks/main.json";
 val _ = check_fixture true "relative_uses/pkg/mocks/main.json";
+(* main initializes token and, as `token.ownable`, the module token imports;
+   ownable has a variable named `slot`. *)
+val _ = check_fixture false "attribute_initializes/main.json";
+val _ = check_fixture true "attribute_initializes/main.json";
 
 (* An inferred struct name declared in two modules keeps no source. *)
 Theorem nominal_source_needs_one_declaration:
@@ -479,6 +487,17 @@ val expected_nested_layout =
 val _ = if aconv (#layouts (fixture_input "nested_initializes/main.json"))
                  expected_nested_layout then ()
   else raise Fail "nested storage layout did not resolve the module path";
+
+(* ownable is initialized by main as `token.ownable`, so its variables sit at
+   the top of the layout under `ownable`. *)
+val attribute_layout = #layouts (fixture_input "attribute_initializes/main.json");
+val _ = if aconv attribute_layout
+  ``[(0w : address,
+      ([((SOME 4, "owner"), 1); ((SOME 4, "slot"), 2); ((NONE, "owner"), 3);
+        ((SOME 3, "supply"), 0)] : storage_layout,
+       [] : storage_layout))]`` then ()
+  else raise Fail ("attribute initializes layout: " ^
+    term_to_string attribute_layout);
 
 (* lib_a keeps its source ID 1 (module 3) and is listed once. *)
 val relative_uses_modules = #modules (fixture_input "relative_uses/pkg/mocks/main.json");
