@@ -17,24 +17,26 @@ val call_ctx = ``(0, SOME 9, [("lib", 7)], [], [], [], []) :
   (string # type) list # ((num option # string) # type) list #
   (((num option # string) # (num option # string)) list)``;
 val call_arg = ``Literal (BaseT BoolT) (BoolL T)``;
+(* An interface constructor yields its address as a stack value. *)
+val iface_result = ``Builtin (BaseT AddressT) (Acc Address) [^call_arg]``;
 fun call_name id tc = ``JE_Name ^id ^tc (JExplicitSource 1) JT_None``;
 fun call_attr base name tc =
   ``JE_Attribute ^base ^name ^tc NONE NONE JMissingSource JT_None``;
 val lib_name = call_name ``"lib"`` ``SOME "module"``;
 val self_name = call_name ``"self"`` ``SOME "module"``;
 val local_name = call_name ``"xs"`` ``NONE : string option``;
-fun check_call_with ctx source_ref label func ret_ty pop_idx expected = let
+fun check_call_with ctx source_ref label func ret_ty pop_target expected = let
   val translated = bossLib.EVAL
     ``translate_call ^ctx ^func [^call_arg] [] ^ret_ty
-        ^source_ref ^pop_idx``
+        ^source_ref ^pop_target``
 in
   if aconv (rhs (concl translated)) expected then ()
   else raise Fail ("translate_call dispatch: " ^ label)
 end;
-fun check_call label func ret_ty pop_idx expected =
-  check_call_with call_ctx ``JMissingSource`` label func ret_ty pop_idx expected;
+fun check_call label func ret_ty pop_target expected =
+  check_call_with call_ctx ``JMissingSource`` label func ret_ty pop_target expected;
 fun check_bool_call label func expected =
-  check_call label func ``JT_Named NONE "bool"`` ``NONE : expr option`` expected;
+  check_call label func ``JT_Named NONE "bool"`` ``NONE : base_assignment_target option`` expected;
 fun internal_call nsid name =
   ``Call (BaseT BoolT) (IntCall (^nsid, ^name)) [^call_arg] NONE``;
 val override_call_ctx =
@@ -46,10 +48,10 @@ val override_call_ctx =
 val _ = check_call_with override_call_ctx ``JExplicitSource 0``
   "abstract call links to concrete override"
   (call_attr self_name ``"compute"`` ``NONE : string option``)
-  ``JT_Named NONE "bool"`` ``NONE : expr option``
+  ``JT_Named NONE "bool"`` ``NONE : base_assignment_target option``
   (internal_call ``NONE : num option`` ``"compute"``);
 val _ = check_bool_call "interface before builtin"
-  (call_name ``"len"`` ``SOME "interface"``) call_arg;
+  (call_name ``"len"`` ``SOME "interface"``) iface_result;
 val _ = app (fn tc => check_bool_call "builtin with negative interface tag"
   (call_name ``"len"`` tc) ``Builtin (BaseT BoolT) Len [^call_arg]``)
   [``NONE : string option``, ``SOME "interfaces"``];
@@ -57,38 +59,56 @@ val _ = app (fn tc => check_bool_call "non-interface name"
   (call_name ``"unknown"`` tc) (internal_call ``NONE : num option`` ``"unknown"``))
   [``NONE : string option``, ``SOME "interfaces"``, ``SOME "module"``];
 val _ = app (fn shortcut => check_bool_call "interface shortcut before self"
-  (call_attr self_name shortcut ``NONE : string option``) call_arg)
+  (call_attr self_name shortcut ``NONE : string option``) iface_result)
   [``"__at__"``, ``"__interface__"``];
 val _ = check_bool_call "near shortcut name"
   (call_attr self_name ``"__at"`` ``SOME "interface"``)
   (internal_call ``SOME 9`` ``"__at"``);
 fun pop_call base = call_attr base ``"pop"`` ``SOME "interface"``;
-val _ = check_bool_call "pop before interface"
-  (pop_call local_name) ``Pop (BaseT BoolT) (NameTarget "xs")``;
-val _ = check_bool_call "pop self before module"
-  (pop_call (call_attr self_name ``"xs"`` ``NONE : string option``))
-  ``Pop (BaseT BoolT) (TopLevelNameTarget (NONE, "xs"))``;
-val _ = check_bool_call "pop module uses raw source, not alias"
-  (pop_call (call_attr lib_name ``"xs"`` ``NONE : string option``))
-  ``Pop (BaseT BoolT) (TopLevelNameTarget (SOME 3, "xs"))``;
-val _ = app (fn tc => check_bool_call "pop ordinary attribute negative tag/name"
-  (pop_call (call_attr (call_name ``"selfish"`` tc) ``"xs"`` ``NONE : string option``))
+fun check_pop label base expected = let
+  val func = pop_call base
+  val translated = bossLib.EVAL
+    ``translate_expr ^call_ctx
+        (JE_Call ^func [JE_Bool T] [] (JT_Named NONE "bool") JMissingSource)``
+in
+  if aconv (rhs (concl translated)) expected then ()
+  else raise Fail ("pop receiver translation: " ^ label)
+end;
+val _ = check_pop "pop before interface"
+  local_name ``Pop (BaseT BoolT) (NameTarget "xs")``;
+val _ = check_pop "pop self uses current module"
+  (call_attr self_name ``"xs"`` ``NONE : string option``)
+  ``Pop (BaseT BoolT) (TopLevelNameTarget (SOME 9, "xs"))``;
+val _ = check_pop "pop module uses canonical alias"
+  (call_attr lib_name ``"xs"`` ``NONE : string option``)
+  ``Pop (BaseT BoolT) (TopLevelNameTarget (SOME 7, "xs"))``;
+val _ = app (fn tc => check_pop "pop ordinary attribute negative tag/name"
+  (call_attr (call_name ``"selfish"`` tc) ``"xs"`` ``NONE : string option``)
   ``Pop (BaseT BoolT) (AttributeTarget (NameTarget "selfish") "xs")``)
   [``NONE : string option``, ``SOME "modules"``];
-val subscript_base = ``JE_Subscript ^local_name (JE_Int 7 JT_None) JT_None``;
-val _ = check_bool_call "pop subscript missing index" (pop_call subscript_base)
-  ``Pop (BaseT BoolT) (SubscriptTarget (NameTarget "xs") ^call_arg)``;
-val _ = check_call "pop subscript translated index" (pop_call subscript_base)
-  ``JT_Named NONE "bool"`` ``SOME (Literal (BaseT (UintT 256)) (IntL 7))``
-  ``Pop (BaseT BoolT) (SubscriptTarget (NameTarget "xs")
-      (Literal (BaseT (UintT 256)) (IntL 7)))``;
-val _ = check_bool_call "pop fallback" (pop_call ``JE_Bool T``)
+val subscript_base =
+  ``JE_Subscript ^local_name (JE_Int 7 (JT_Integer 256 F)) JT_None``;
+val subscript_target =
+  ``SubscriptTarget (NameTarget "xs") (Literal (BaseT (UintT 256)) (IntL 7))``;
+val _ = check_call "pop translated target" (pop_call subscript_base)
+  ``JT_Named NONE "bool"`` ``SOME ^subscript_target``
+  ``Pop (BaseT BoolT) ^subscript_target``;
+val _ = check_pop "pop translates subscript index" subscript_base
+  ``Pop (BaseT BoolT) ^subscript_target``;
+val _ = check_pop "pop nested subscript"
+  ``JE_Subscript ^subscript_base (JE_Int 2 (JT_Integer 256 F)) JT_None``
+  ``Pop (BaseT BoolT) (SubscriptTarget ^subscript_target
+      (Literal (BaseT (UintT 256)) (IntL 2)))``;
+val _ = check_pop "pop attribute of subscript"
+  (call_attr subscript_base ``"items"`` ``NONE : string option``)
+  ``Pop (BaseT BoolT) (AttributeTarget ^subscript_target "items")``;
+val _ = check_pop "pop fallback" ``JE_Bool T``
   (internal_call ``NONE : num option`` ``"pop"``);
 val _ = check_bool_call "self call before interface fallback"
   (call_attr self_name ``"foo"`` ``SOME "interface"``)
   (internal_call ``SOME 9`` ``"foo"``);
 val _ = check_bool_call "module interface fallback"
-  (call_attr lib_name ``"Foo"`` ``SOME "interface"``) call_arg;
+  (call_attr lib_name ``"Foo"`` ``SOME "interface"``) iface_result;
 val _ = check_bool_call "module alias fallback"
   (call_attr lib_name ``"foo"`` ``SOME "interfaces"``)
   (internal_call ``SOME 7`` ``"foo"``);
@@ -108,15 +128,15 @@ val _ = check_bool_call "non-attribute fallback" ``JE_Bool T``
   (internal_call ``SOME 9`` ``""``);
 val _ = check_call "module struct constructor source recovery"
   (call_attr lib_name ``"Record"`` ``NONE : string option``)
-  ``JT_Struct NONE "Record"`` ``NONE : expr option``
+  ``JT_Struct NONE "Record"`` ``NONE : base_assignment_target option``
   ``StructLit (StructT (SOME 3, "Record")) (SOME 3, "Record") []``;
 val _ = check_call "module struct constructor explicit source"
   (call_attr lib_name ``"Record"`` ``NONE : string option``)
-  ``JT_Struct (SOME 2) "Record"`` ``NONE : expr option``
+  ``JT_Struct (SOME 2) "Record"`` ``NONE : base_assignment_target option``
   ``StructLit (StructT (SOME 4, "Record")) (SOME 4, "Record") []``;
 val _ = check_call "module function returning struct"
   (call_attr lib_name ``"foo"`` ``NONE : string option``)
-  ``JT_Struct NONE "Record"`` ``NONE : expr option``
+  ``JT_Struct NONE "Record"`` ``NONE : base_assignment_target option``
   ``Call (StructT (SOME 9, "Record")) (IntCall (SOME 7, "foo")) [^call_arg] NONE``;
 
 (* Abstract functions are compile-time holes. Translation must link calls to
@@ -266,6 +286,128 @@ QED
 val address = ``0w : address``;
 val fixture_dir = "../tests/fixtures/check_contract/";
 
+val empty_layout = ``<| storage := []; transient := []; code := [] |> :
+  json_storage_layout``;
+fun prepare_sources sources =
+  vyperCheckContractFrontendLib.prepare_translated_input
+    {in_deploy = false, address = address, sources = sources,
+     import_map = ``[] : (string # num) list``, storage_layout = empty_layout};
+fun prepare_ast ast =
+  vyperCheckContractFrontendLib.prepare_check_input
+    {in_deploy = false, address = address, annotated_ast = ast,
+     storage_layout = empty_layout};
+fun assert_modules label expected (input : vyperCheckContractLib.check_input) =
+  if aconv (#modules input) expected then ()
+  else raise Fail ("source normalization: " ^ label ^ "\nexpected " ^
+    term_to_string expected ^ "\nactual " ^ term_to_string (#modules input));
+fun expect_source_conflict label prepare =
+  ((prepare (); raise Fail ("source conflict accepted: " ^ label))
+   handle Fail message =>
+     if String.isSubstring "conflicting definitions for source ID" message
+     then () else raise Fail message);
+
+val nominal_declarations =
+  ``[EventDecl "Ping" [(("x", BaseT (UintT 256)), F)];
+     StructDecl "Record" [("x", BaseT (UintT 256))];
+     FlagDecl "Mode" ["A"; "B"]]``;
+val distinct_sources =
+  ``[(NONE, []); (SOME 7, ^nominal_declarations); (SOME 2, []);
+     (SOME 9, ^nominal_declarations)]``;
+val _ = assert_modules "first occurrence order and distinct nominal identities"
+  distinct_sources
+  (prepare_sources
+    ``[(NONE, []); (SOME 7, ^nominal_declarations); (SOME 2, []);
+       (SOME 7, ^nominal_declarations); (SOME 9, ^nominal_declarations);
+       (SOME 2, []); (NONE, [])]``);
+val _ = assert_modules "normalization is idempotent" distinct_sources
+  (prepare_sources (#modules (prepare_sources distinct_sources)));
+val _ = assert_modules "closed source expressions still evaluate"
+  ``[(NONE, []); (SOME 7, ^nominal_declarations)]``
+  (prepare_sources
+    ``APPEND [(NONE, []); (SOME 7, ^nominal_declarations)]
+        [(SOME 7, ^nominal_declarations)]``);
+val _ = expect_source_conflict "different declaration bodies" (fn () =>
+  prepare_sources
+    ``[(NONE, []); (SOME 7, ^nominal_declarations);
+       (SOME 7, [FlagDecl "Mode" ["C"]])]``);
+val _ = expect_source_conflict "main module collision" (fn () =>
+  prepare_sources ``[(NONE, []); (NONE, ^nominal_declarations)]``);
+val _ = expect_source_conflict "slot annotation must not erase a conflict"
+  (fn () => prepare_sources
+    ``[(NONE, []);
+       (SOME 7, [VariableDecl Public Storage "x" (BaseT (UintT 256)) (SOME 1)]);
+       (SOME 7, [VariableDecl Public Storage "x" (BaseT (UintT 256)) (SOME 2)])]``);
+
+fun repeated_interface_ast first_body second_body =
+  ``JAnnotatedAST (JModule 0 F [])
+      [JImportedModule 1 "IPing.vyi" "utils/IPing.vyi" F ^first_body;
+       JImportedModule 1 "../utils/IPing.vyi" "utils/IPing.vyi" F ^second_body]``;
+val interface_event =
+  ``[JTL_EventDef "Ping"
+      [(JArg "x" (JT_Integer 256 F) (JTA_Integer 256 F), F)]]``;
+val interface_stub =
+  ``JTL_FunctionDef "ping" ["external"] [] [] []
+      (JFuncType [] JT_None) JTA_None [JS_Expr JE_Ellipsis]``;
+val _ = expect_source_conflict "annotated interface bodies" (fn () =>
+  prepare_ast (repeated_interface_ast interface_event
+    ``[JTL_FlagDef "Mode" ["A"]]``));
+val _ = expect_source_conflict "empty interface filtering must not erase a conflict"
+  (fn () => prepare_ast
+    (repeated_interface_ast ``[] : json_toplevel list`` interface_event));
+val _ = assert_modules "stub-only interfaces are removed"
+  ``[(NONE, [])] : (num option # toplevel list) list``
+  (prepare_ast (repeated_interface_ast ``[^interface_stub]``
+    ``[^interface_stub]``));
+val builtin_interfaces =
+  ``JAnnotatedAST (JModule 0 F [])
+      [JImportedModule (-2) "IERC20.vyi" "builtin/IERC20.vyi" F
+         [^interface_stub];
+       JImportedModule (-2) "IERC721.vyi" "builtin/IERC721.vyi" F
+         [^interface_stub]]``;
+val _ = assert_modules "builtin sentinel interfaces remain removable"
+  ``[(NONE, [])] : (num option # toplevel list) list``
+  (prepare_ast builtin_interfaces);
+val _ = assert_modules "builtin sentinel paths keep distinct canonical identities"
+  ``[(NONE, []); (SOME 5, ^nominal_declarations);
+     (SOME 6, ^nominal_declarations)]``
+  (prepare_ast
+    ``JAnnotatedAST (JModule 0 F [])
+        [JImportedModule (-2) "First.vyi" "builtin/First.vyi" F
+           (^interface_event ++
+            [JTL_StructDef "Record" [JArg "x" (JT_Integer 256 F) (JTA_Integer 256 F)];
+             JTL_FlagDef "Mode" ["A"; "B"]]);
+         JImportedModule (-2) "Second.vyi" "builtin/Second.vyi" F
+           (^interface_event ++
+            [JTL_StructDef "Record" [JArg "x" (JT_Integer 256 F) (JTA_Integer 256 F)];
+             JTL_FlagDef "Mode" ["A"; "B"]])]``);
+
+(* Generated at VYPER_PIN with `vyper -f annotated_ast,layout
+   duplicate_interface/main/c.vy`; resolved paths are relative to the fixture
+   root. The compiler repeats IPing, including its nonempty event declaration. *)
+val duplicate_path = fixture_dir ^ "duplicate_interface/main/c.json";
+val duplicate_ast = JSONDecode.decodeFile jsonASTLib.annotated_ast duplicate_path;
+val duplicate_translation = optionSyntax.dest_some
+  (rhs (concl (bossLib.EVAL ``translate_annotated_ast ^duplicate_ast``)));
+val (duplicate_sources, duplicate_rest) = pairSyntax.dest_pair duplicate_translation;
+val (_, duplicate_import_map) = pairSyntax.dest_pair duplicate_rest;
+val (duplicate_entries, duplicate_source_ty) = listSyntax.dest_list duplicate_sources;
+val expected_duplicate_sources = case duplicate_entries of
+    [main, first, second, pinger] =>
+      if aconv first second then
+        listSyntax.mk_list ([main, first, pinger], duplicate_source_ty)
+      else raise Fail "duplicate interface fixture did not reproduce equal sources"
+  | _ => raise Fail "duplicate interface fixture has unexpected source count";
+val duplicate_input = prepare_ast duplicate_ast;
+val _ = assert_modules "annotated repro preserves import order"
+  expected_duplicate_sources duplicate_input;
+val duplicate_translated_input =
+  vyperCheckContractFrontendLib.prepare_translated_input
+    {in_deploy = false, address = address, sources = duplicate_sources,
+     import_map = duplicate_import_map, storage_layout = empty_layout};
+val _ = assert_modules "translated repro agrees with annotated frontend"
+  expected_duplicate_sources duplicate_translated_input;
+val _ = vyperCheckContractLib.check_contract duplicate_translated_input;
+
 fun check_fixture in_deploy path = let
   val checked = vyperCheckContractFrontendLib.check_contract_file
     {in_deploy = in_deploy, address = address,
@@ -276,11 +418,15 @@ in
   else raise Fail ("frontend contract checker rejected " ^ path)
 end;
 
+val _ = check_fixture false "scoped_locals/main.json";
 val _ = check_fixture false "simple.json";
+val _ = check_fixture false "address_bytes20.json";
+val _ = check_fixture true "address_bytes20.json";
 val _ = check_fixture false "storage.json";
 val _ = check_fixture false "imported_struct/main.json";
 val _ = check_fixture false "imported_flag/main.json";
 val _ = check_fixture false "imported_interface/main.json";
+val _ = check_fixture false "duplicate_interface/main/c.json";
 val _ = check_fixture false "multimodule_storage/main.json";
 val _ = check_fixture false "defaults_control/main.json";
 val _ = check_fixture false "transient_storage/main.json";

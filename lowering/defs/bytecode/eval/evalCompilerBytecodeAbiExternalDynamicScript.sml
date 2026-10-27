@@ -11,11 +11,7 @@ val () = computeLib.upd_compset (computeLib.add_thms [fmap_to_alist_FEMPTY])
 val () = computeLib.upd_compset (computeLib.add_thms [i2w_pos])
 val () = Globals.max_print_depth := 20
 val () = computeLib.upd_compset
-  (computeLib.add_thms
-    [word_of_bytes_be_bytes32_external_dynamic,
-     word_of_bytes_bytes32_external_dynamic,
-     w2n_external_dynamic_n2w,
-     contextTheory.compile_copy_memory_def])
+  (computeLib.add_thms [contextTheory.compile_copy_memory_def])
 
 (* Stage the three analyses consumed again by stack planning.  Each theorem is
    kernel-produced from the checked pipeline result; no oracle data is used. *)
@@ -162,28 +158,7 @@ fun external_dynamic_insert_word (w,ws) =
 val external_dynamic_push_words =
   List.foldl external_dynamic_insert_word []
     (List.mapPartial external_dynamic_dest_push_word external_dynamic_ops)
-fun external_dynamic_w2n_eval w =
-  if same_const (#1 (strip_comb w)) ``set_byte`` then let
-    val bytes_th = SIMP_CONV (srw_ss())
-      [word_to_bytes_be_bytes32_genlist_external_dynamic,
-       get_byte_set_byte_bytes32_external_dynamic,
-       get_byte_set_byte_irrelevant_bytes32_external_dynamic]
-      ``word_to_bytes_be ^w``
-    val roundtrip = INST [``w:bytes32`` |-> w]
-      word_of_bytes_be_word_to_bytes_be_external_dynamic
-    val step1 = BETA_RULE (AP_TERM ``λx:bytes32. w2n x``
-      (SYM roundtrip))
-    val step2 = BETA_RULE (AP_TERM
-      ``λbs. w2n (word_of_bytes_be bs : bytes32)`` bytes_th)
-    val decoded = TRANS step1 step2
-    val expose = SIMP_CONV bool_ss
-      [word_of_bytes_be_bytes32_external_dynamic,
-       w2n_external_dynamic_n2w] (rhs (concl decoded))
-    val numeral = EVAL (rhs (concl expose))
-  in
-    TRANS decoded (TRANS expose numeral)
-  end else
-    EVAL ``w2n ^w``
+fun external_dynamic_w2n_eval w = EVAL ``w2n ^w``
 val external_dynamic_w2n_evals =
   map external_dynamic_w2n_eval external_dynamic_push_words
 fun external_dynamic_encode_eval w2n_th = let

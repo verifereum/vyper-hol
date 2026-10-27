@@ -13,8 +13,11 @@ Definition supported_pure_expr_def:
   supported_pure_expr tops (TopLevelName ty id) =
     supported_storage_scalar tops id ty /\
   supported_pure_expr tops (FlagMember ty id member) = F /\
+  (* A non-word ternary is a PHI of two memory pointers (#561: a14-01,
+     a10-04).  Tuple ternaries have no parity witness. *)
   supported_pure_expr tops (IfExp ty c a b) =
-    (supported_word_type ty /\ supported_pure_expr tops c /\
+    (supported_value_type tops ty /\ ~supported_tuple_type ty /\
+     supported_pure_expr tops c /\
      supported_pure_expr tops a /\ supported_pure_expr tops b) /\
   supported_pure_expr tops (StructLit ty id fields) =
     (supported_main_nsid id /\ supported_value_type tops ty /\
@@ -30,7 +33,7 @@ Definition supported_pure_expr_def:
   supported_pure_expr tops (Builtin ty blt es) =
     (supported_builtin_form tops ty blt es /\ supported_pure_exprs tops es) /\
   supported_pure_expr tops (TypeBuiltin ty blt target es) =
-    (supported_type_builtin_form ty blt target es /\ supported_pure_exprs tops es) /\
+    (supported_type_builtin_form tops ty blt target es /\ supported_pure_exprs tops es) /\
   supported_pure_expr tops (Pop ty target) = F /\
   supported_pure_expr tops (Call ty target es default) = F /\
   supported_pure_exprs tops [] = T /\
@@ -55,14 +58,20 @@ Definition supported_effect_expr_def:
       Call ty (IntCall id) args NONE =>
         IS_SOME (supported_function_decl tops id Internal) /\
         supported_pure_exprs tops args
-    | Call ty (ExtCall is_static skip_check (name, arg_types, ret)) args NONE =>
+    (* Operands: target :: positional args ++ keyword operands in source
+       order. Every operand is pure, so lowering default_return_value= before
+       the call matches the semantics, which evaluates it there too. *)
+    | Call ty (ExtCall is_static skip_check (name, arg_types, ret) opts) args NONE =>
         EVERY supported_word_type arg_types /\
-        supported_external_return_type ret /\
-        LENGTH args = LENGTH arg_types + (if is_static then 1 else 2) /\
-        supported_external_call_signature tops name arg_types /\
+        supported_external_return_type tops ret /\
+        ALL_DISTINCT opts /\ (is_static ==> ~MEM EKValue opts) /\
+        LENGTH args = 1 + LENGTH arg_types + LENGTH opts /\
         supported_pure_exprs tops args
-    | Call NoneT Send [a; v] NONE =>
+    | Call NoneT (Send F) [a; v] NONE =>
         supported_pure_expr tops a /\ supported_pure_expr tops v
+    | Call NoneT (Send T) [a; v; g] NONE =>
+        supported_pure_expr tops a /\ supported_pure_expr tops v /\
+        supported_pure_expr tops g
     | Pop ty (TopLevelNameTarget id) =>
         supported_storage_dynamic_array tops id
     | _ => F
@@ -84,11 +93,12 @@ QED
 
 Theorem supported_external_call_contract:
   supported_effect_expr tops
-    (Call ty (ExtCall is_static skip_check (name, arg_types, ret)) args NONE) <=>
+    (Call ty (ExtCall is_static skip_check (name, arg_types, ret) opts) args
+       NONE) <=>
   EVERY supported_word_type arg_types /\
-  supported_external_return_type ret /\
-  LENGTH args = LENGTH arg_types + (if is_static then 1 else 2) /\
-  supported_external_call_signature tops name arg_types /\
+  supported_external_return_type tops ret /\
+  ALL_DISTINCT opts /\ (is_static ==> ~MEM EKValue opts) /\
+  LENGTH args = 1 + LENGTH arg_types + LENGTH opts /\
   supported_pure_exprs tops args
 Proof
   simp[supported_effect_expr_def]
@@ -98,7 +108,8 @@ Theorem supported_call_default_rejected:
   ~supported_expr tops (Call ty target args (SOME default))
 Proof
   Cases_on `target` >>
-  simp[supported_expr_def, supported_effect_expr_def, supported_pure_expr_def]
+  simp[supported_expr_def, supported_effect_expr_def, supported_pure_expr_def] >>
+  BasicProvers.every_case_tac >> simp[]
 QED
 
 Theorem supported_pure_exprs_every:

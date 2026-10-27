@@ -17,7 +17,7 @@ Ancestors
   vyperTypeCallGraphSoundness vyperTypeCallStackSoundness
   vyperTypeContractStaticMaps vyperTypeContractContext
   vyperTypeContractFunction vyperTypeContractGetter vyperTypeEntryReadiness
-  vyperTypeStatePreservation
+  vyperTypeStatePreservation vyperTypeConstantFold
 Libs
   wordsLib
 
@@ -1742,6 +1742,32 @@ Proof
   metis_tac[]
 QED
 
+(* TOP-LEVEL: checked_deployment_constants_ready needs no success premise: the
+ * checker's constants fold makes evaluate_all_constants succeed from the
+ * immutables load_contract installs (check_contract_evaluate_all_constants). *)
+Theorem checked_deployment_constants_ready_from_check:
+  check_contract F layouts target mods = SOME artifact /\
+  (cx.in_deploy ==>
+    ?deploy_art. check_contract T layouts target mods = SOME deploy_art) /\
+  cx.layouts = layouts /\
+  cx.nonreentrant_slot = lookup_nonreentrant_slot layouts target /\
+  machine_well_typed am /\
+  deployment_constants_input_tags_agree
+    (type_env_all_modules mods) target mods am /\
+  context_well_typed cx /\
+  ALOOKUP cx.sources target = SOME mods /\
+  cx.txn.target = target /\
+  initial_immutables (type_env_all_modules mods) mods = SOME imms /\
+  ALOOKUP am.immutables target = SOME imms ==>
+  checked_deployment_constants_ready cx am target mods
+Proof
+  strip_tac >> gvs[] >>
+  drule_all check_contract_evaluate_all_constants >>
+  rw[IS_SOME_EXISTS] >>
+  irule checked_deployment_constants_ready_from_success >>
+  simp[get_tenv_def] >> metis_tac[]
+QED
+
 Theorem send_call_value_preserves_tv[local]:
   send_call_value mut cx st = (res,st') ==>
   preserves_tv cx st st'
@@ -2153,7 +2179,7 @@ Proof
   simp[no_control_exc_def]
 QED
 
-Theorem send_call_value_no_type_error_c53[local]:
+Theorem send_call_value_no_type_error_c53:
   no_type_error_eval (send_call_value mut cx st)
 Proof
   rw[send_call_value_def, bind_def, ignore_bind_def, check_def,
@@ -2257,7 +2283,7 @@ Proof
   simp[no_control_exc_def]
 QED
 
-Theorem call_lock_send_eval_no_loop_control_c53[local]:
+Theorem call_lock_send_eval_no_loop_control_c53:
   stmts_no_control_escape body /\
   (do
      (if nr then
@@ -2281,7 +2307,7 @@ Proof
   gvs[no_control_exc_def]
 QED
 
-Theorem call_lock_action_no_type_error_c53[local]:
+Theorem call_lock_action_no_type_error_c53:
   (nr ==> cx.nonreentrant_slot <> NONE) ==>
   no_type_error_eval
     ((if nr then
@@ -2300,7 +2326,7 @@ Proof
   gvs[AllCaseEqs(), return_def, raise_def]
 QED
 
-Theorem unlock_action_no_control_c53[local]:
+Theorem unlock_action_no_control_c53:
   (if nr /\ mut <> View /\ mut <> Pure then
      case cx.nonreentrant_slot of
        NONE => return ()
@@ -2389,7 +2415,7 @@ QED
 
 
 
-Theorem unlock_action_no_type_error_c53[local]:
+Theorem unlock_action_no_type_error_c53:
 
   no_type_error_eval
     ((if nr /\ mut <> View /\ mut <> Pure then

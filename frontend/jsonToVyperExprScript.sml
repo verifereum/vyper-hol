@@ -241,6 +241,17 @@ Definition kwarg_method_id_def:
 End
 
 
+(* The value=, gas= and default_return_value= operands of extcall/staticcall,
+   in source order, which is the order Vyper evaluates them in. *)
+Definition ext_call_kwargs_def:
+  ext_call_kwargs ([] : (identifier # expr) list) = [] /\
+  ext_call_kwargs ((k,e)::kes) =
+    (if k = "value" then [(EKValue,e)]
+     else if k = "gas" then [(EKGas,e)]
+     else if k = "default_return_value" then [(EKDefault,e)]
+     else []) ++ ext_call_kwargs kes
+End
+
 Definition raw_call_flags_of_kwargs_def:
   raw_call_flags_of_kwargs kwargs =
     <| rcf_max_outsize := kwarg_num "max_outsize" kwargs 0;
@@ -285,7 +296,11 @@ Definition make_builtin_call_def:
     else if name = "pow_mod256" then Builtin ty PowMod256 args
     else if name = "min" then Builtin ty (Bop Min) args
     else if name = "max" then Builtin ty (Bop Max) args
-    else if name = "send" then Call ty Send args NONE
+    (* send(to, value, gas=0): the gas operand follows the positional ones. *)
+    else if name = "send" then
+      (case ALOOKUP kwargs "gas" of
+       | SOME g => Call ty (Send T) (args ++ [g]) NONE
+       | NONE => Call ty (Send F) args NONE)
     (* ===== Chain interaction builtins ===== *)
     (* raw_call(to, data, max_outsize=0, gas=gas, value=0,
                 is_delegate_call=F, is_static_call=F, revert_on_failure=T)
@@ -570,10 +585,13 @@ Definition make_name_target_def:
     else NameTarget id
 End
 
+(* Python lowers I(addr) to a stack value (_lower_interface_constructor), so
+   the address is loaded where the constructor appears. *)
 Definition interface_constructor_result_def:
   interface_constructor_result ty [Literal _ (BytesL bs)] =
     Literal ty (BytesL bs) /\
-  interface_constructor_result _ args = HD args
+  interface_constructor_result _ args =
+    Builtin (BaseT AddressT) (Acc Address) [HD args]
 End
 
 (* Cross-module flag result metadata may omit its declaration source. Recover
@@ -685,7 +703,7 @@ Definition translate_attribute_def:
       TopLevelName (lookup_toplevel_type ctx nsid ty) nsid
     else if attr = "balance" /\ base_type_name = SOME "address" then Builtin (BaseT (UintT 256)) (Acc Balance) [translated_base]
     else if attr = "address" /\ base_type_name = SOME "address" then Builtin (BaseT AddressT) (Acc Address) [translated_base]
-    else if attr = "address" /\ base_typeclass = SOME "interface" then translated_base (* interface.address = interface (identity) *)
+    else if attr = "address" /\ base_typeclass = SOME "interface" then Builtin (BaseT AddressT) (Acc Address) [translated_base]
     else if attr = "is_contract" /\ base_type_name = SOME "address" then Builtin (BaseT BoolT) (Acc IsContract) [translated_base]
     else if attr = "codesize" /\ base_type_name = SOME "address" then Builtin (BaseT (UintT 256)) (Acc Codesize) [translated_base]
     else if attr = "codehash" /\ base_type_name = SOME "address" then Builtin (BaseT (BytesT (Fixed 32))) (Acc Codehash) [translated_base]
@@ -723,24 +741,16 @@ Definition translate_unary_def:
 End
 
 
-Definition call_pop_index_def:
-  call_pop_index (JE_Attribute base attr _ _ _ _ _) =
-    (if attr = "pop" then
-       case base of
-       | JE_Subscript (JE_Name _ _ _ _) idx _ => SOME idx
-       | _ => NONE
-     else NONE) /\
-  call_pop_index _ = NONE
+(* Recover a writable path without restricting the depth of a pop receiver. *)
+Definition expr_base_target_def:
+  expr_base_target (Name _ id) = SOME (NameTarget id) /\
+  expr_base_target (TopLevelName _ nsid) = SOME (TopLevelNameTarget nsid) /\
+  expr_base_target (Subscript _ base idx) =
+    OPTION_MAP (\tgt. SubscriptTarget tgt idx) (expr_base_target base) /\
+  expr_base_target (Attribute _ base attr) =
+    OPTION_MAP (\tgt. AttributeTarget tgt attr) (expr_base_target base) /\
+  expr_base_target _ = NONE
 End
-
-
-Theorem call_pop_index_size:
-  call_pop_index func = SOME idx ⇒ json_expr_size idx < json_expr_size func
-Proof
-  Cases_on `func` >> gvs[call_pop_index_def, AllCaseEqs(), json_expr_size_def] >>
-  Cases_on `j` >> gvs[call_pop_index_def, AllCaseEqs(), json_expr_size_def] >>
-  Cases_on `j'` >> gvs[call_pop_index_def, AllCaseEqs(), json_expr_size_def]
-QED
 
 
 (* Shared fallback after the name, interface shortcut, pop and self branches. *)
@@ -773,7 +783,7 @@ Definition translate_module_call_def:
 End
 
 Definition translate_call_def:
-  translate_call ctx func args' kwargs' ret_ty src_id_opt translated_pop_index =
+  translate_call ctx func args' kwargs' ret_ty src_id_opt translated_pop_target =
     let rty = translate_type (signature_type_ctx ctx src_id_opt) ret_ty in
     case func of
     | JE_Name name tc _ _ =>
@@ -784,19 +794,9 @@ Definition translate_call_def:
         if fname = "__at__" \/ fname = "__interface__" then
           interface_constructor_result rty args'
         else if fname = "pop" then
-          (case base of
-           | JE_Name id _ _ _ => Pop rty (make_name_target ctx id)
-           | JE_Attribute (JE_Name id tc src _) attr _ _ _ _ _ =>
-               if id = "self" then Pop rty (TopLevelNameTarget (NONE, attr))
-               else if tc = SOME "module" then
-                 Pop rty (TopLevelNameTarget (resolve_source_ref ctx src, attr))
-               else Pop rty (AttributeTarget (make_name_target ctx id) attr)
-           | JE_Subscript (JE_Name id _ _ _) idx _ =>
-               Pop rty (SubscriptTarget (make_name_target ctx id)
-                 (case translated_pop_index of
-                  | SOME e => e
-                  | NONE => Literal (BaseT BoolT) (BoolL T)))
-           | _ => Call rty (IntCall (NONE, "pop")) args' NONE)
+          (case translated_pop_target of
+           | SOME tgt => Pop rty tgt
+           | NONE => Call rty (IntCall (NONE, "pop")) args' NONE)
         else
           (case base of
            | JE_Name id _ _ _ =>
@@ -993,17 +993,20 @@ Definition translate_expr_def:
         [translate_expr ctx (HD args); value_e] NONE
     else let args' = translate_expr_list ctx args in
     let kwargs' = translate_kwargs ctx kwargs in
-    let translated_pop_index =
-      OPTION_MAP (translate_expr ctx) (call_pop_index func) in
+    let translated_pop_target =
+      case func of
+      | JE_Attribute base fname _ _ _ _ _ =>
+          if fname = "pop" then expr_base_target (translate_expr ctx base)
+          else NONE
+      | _ => NONE in
     translate_call ctx func args' kwargs' ret_ty src_id_opt
-      translated_pop_index) /\
+      translated_pop_target) /\
 
-  (* ExtCall - mutating external call (is_static = F) *)
+  (* ExtCall - mutating external call (is_static = F).
+     Operands: target :: positional args ++ keyword args in source order. *)
   (translate_expr ctx
       (JE_ExtCall func_name func_src arg_types ret_ty target args keywords) =
-    let value_expr = case find_keyword "value" keywords of
-                     | SOME v => translate_expr ctx v
-                     | NONE => Literal (BaseT (UintT 256)) (IntL 0) in
+    let kws = ext_call_kwargs (translate_kwargs ctx keywords) in
     let skip_check = json_keyword_bool "skip_contract_check" keywords F in
     let sig_ctx = signature_type_ctx ctx func_src in
     let ret_ty' = translate_type sig_ctx ret_ty in
@@ -1015,15 +1018,14 @@ Definition translate_expr_def:
       (ExtCall F skip_check
         (func_name,
          external_argument_types sig_ctx arg_types args',
-         ret_ty'))
-      (translate_expr ctx target :: value_expr :: args')
-      (OPTION_MAP (translate_expr ctx)
-        (find_keyword "default_return_value" keywords))) /\
+         ret_ty') (MAP FST kws))
+      (translate_expr ctx target :: args' ++ MAP SND kws) NONE) /\
 
-  (* StaticCall - read-only external call (is_static = T).
-     No value operand: args = [target; arg1; ...]. *)
+  (* StaticCall - read-only external call (is_static = T); same operand
+     layout as ExtCall, and Vyper rejects value= here. *)
   (translate_expr ctx
       (JE_StaticCall func_name func_src arg_types ret_ty target args keywords) =
+    let kws = ext_call_kwargs (translate_kwargs ctx keywords) in
     let skip_check = json_keyword_bool "skip_contract_check" keywords F in
     let sig_ctx = signature_type_ctx ctx func_src in
     let ret_ty' = translate_type sig_ctx ret_ty in
@@ -1033,10 +1035,8 @@ Definition translate_expr_def:
       (ExtCall T skip_check
         (func_name,
          external_argument_types sig_ctx arg_types args',
-         ret_ty'))
-      (translate_expr ctx target :: args')
-      (OPTION_MAP (translate_expr ctx)
-        (find_keyword "default_return_value" keywords))) /\
+         ret_ty') (MAP FST kws))
+      (translate_expr ctx target :: args' ++ MAP SND kws) NONE) /\
 
   (* Helper for translating expression lists *)
   (translate_expr_list ctx [] = []) /\
@@ -1052,7 +1052,6 @@ Termination
     | INR (INR (_, kws)) => list_size json_keyword_size kws)`
   >> rw[]
   >> imp_res_tac find_keyword_size
-  >> imp_res_tac call_pop_index_size
   >> gvs[]
   >> drule is_raw_call_calldata_call_nonempty
   >> Cases_on `args` >> gvs[]
@@ -1171,57 +1170,81 @@ End
 
 (* ===== Statement Translation ===== *)
 
+(* Vyper reads the name `UNREACHABLE` as an assert's message or a raise's
+   exception as the unreachable marker, which fails with INVALID rather than
+   reverting (vyper/semantics/analysis/local.py, vyper/codegen/stmt.py). *)
+Definition is_unreachable_def:
+  (is_unreachable (JE_Name name _ _ _) = (name = "UNREACHABLE")) /\
+  (is_unreachable _ = F)
+End
+
+(* Local bindings enter the context after their initializer and stay within
+   their block; loop binders are visible only in the loop body. *)
 Definition translate_stmt_def:
-  (translate_stmt ctx JS_Pass = Pass) /\
-  (translate_stmt ctx JS_Break = Break) /\
-  (translate_stmt ctx JS_Continue = Continue) /\
-  (translate_stmt ctx (JS_Expr e) = Expr (translate_expr ctx e)) /\
-  (translate_stmt ctx (JS_Return NONE) = Return NONE) /\
-  (translate_stmt ctx (JS_Return (SOME e)) = Return (SOME (translate_expr ctx e))) /\
-  (translate_stmt ctx (JS_Raise NONE) = Raise RaiseBare) /\
-  (translate_stmt ctx (JS_Raise (SOME e)) = Raise (RaiseReason (translate_expr ctx e))) /\
-  (translate_stmt ctx (JS_Assert test NONE) =
+  (translate_stmt nominal_index all_import_maps ctx JS_Pass = Pass) /\
+  (translate_stmt nominal_index all_import_maps ctx JS_Break = Break) /\
+  (translate_stmt nominal_index all_import_maps ctx JS_Continue = Continue) /\
+  (translate_stmt nominal_index all_import_maps ctx (JS_Expr e) = Expr (translate_expr ctx e)) /\
+  (translate_stmt nominal_index all_import_maps ctx (JS_Return NONE) = Return NONE) /\
+  (translate_stmt nominal_index all_import_maps ctx (JS_Return (SOME e)) = Return (SOME (translate_expr ctx e))) /\
+  (translate_stmt nominal_index all_import_maps ctx (JS_Raise NONE) = Raise RaiseBare) /\
+  (translate_stmt nominal_index all_import_maps ctx (JS_Raise (SOME e)) =
+    if is_unreachable e then Raise RaiseUnreachable
+    else Raise (RaiseReason (translate_expr ctx e))) /\
+  (translate_stmt nominal_index all_import_maps ctx (JS_Assert test NONE) =
     Assert (translate_expr ctx test) AssertBare) /\
-  (translate_stmt ctx (JS_Assert test (SOME msg)) =
-    Assert (translate_expr ctx test) (AssertReason (translate_expr ctx msg))) /\
-  (translate_stmt ctx (JS_Log (alias_opt, src, name) args) =
+  (translate_stmt nominal_index all_import_maps ctx (JS_Assert test (SOME msg)) =
+    Assert (translate_expr ctx test)
+      (if is_unreachable msg then AssertUnreachable
+       else AssertReason (translate_expr ctx msg))) /\
+  (translate_stmt nominal_index all_import_maps ctx (JS_Log (alias_opt, src, name) args) =
     let nsid =
       case alias_opt of
         NONE => resolve_source_ref ctx src
       | SOME alias => resolve_module_alias ctx alias src
     in
       Log (nsid, name) (MAP (translate_expr ctx) args)) /\
-  (translate_stmt ctx (JS_If test body orelse) =
+  (translate_stmt nominal_index all_import_maps ctx (JS_If test body orelse) =
     If (translate_expr ctx test)
-       (MAP (translate_stmt ctx) body)
-       (MAP (translate_stmt ctx) orelse)) /\
-  (translate_stmt ctx (JS_For var ty ann iter body) =
-    let fallback_ty = translate_decl_type (expr_type_ctx ctx) ty ann in
-    let var_ty = lookup_local_type ctx var fallback_ty in
+       (translate_stmts nominal_index all_import_maps ctx body)
+       (translate_stmts nominal_index all_import_maps ctx orelse)) /\
+  (translate_stmt nominal_index all_import_maps ctx (JS_For var ty ann iter body) =
+    let var_ty = canonical_decl_type nominal_index all_import_maps
+      (expr_type_ctx ctx) ty ann in
+    let body_ctx = expr_with_local_types ctx
+      ((var, var_ty) :: expr_local_types ctx) in
     For var var_ty (translate_iter ctx var_ty iter)
-        (get_iter_bound iter) (MAP (translate_stmt ctx) body)) /\
-  (translate_stmt ctx (JS_Assign tgt val) =
+        (get_iter_bound iter)
+        (translate_stmts nominal_index all_import_maps body_ctx body)) /\
+  (translate_stmt nominal_index all_import_maps ctx (JS_Assign tgt val) =
     Assign (translate_target ctx tgt) (translate_expr ctx val)) /\
-  (translate_stmt ctx (JS_AnnAssign var ty ann val) =
+  (translate_stmt nominal_index all_import_maps ctx (JS_AnnAssign var ty ann val) =
     AnnAssign var
-      (lookup_local_type ctx var
-        (translate_decl_type (expr_type_ctx ctx) ty ann))
+      (canonical_decl_type nominal_index all_import_maps
+        (expr_type_ctx ctx) ty ann)
       (translate_expr ctx val)) /\
-  (translate_stmt ctx (JS_AugAssign tgt op val) =
+  (translate_stmt nominal_index all_import_maps ctx (JS_AugAssign tgt op val) =
     AugAssign (expr_type (translate_expr ctx val))
       (translate_base_target ctx tgt) (translate_binop op) (translate_expr ctx val)) /\
-  (translate_stmt ctx (JS_Append tgt val) =
-    Append (translate_base_target ctx tgt) (translate_expr ctx val))
+  (translate_stmt nominal_index all_import_maps ctx (JS_Append tgt val) =
+    Append (translate_base_target ctx tgt) (translate_expr ctx val)) /\
+  (translate_stmts nominal_index all_import_maps ctx [] = []) /\
+  (translate_stmts nominal_index all_import_maps ctx (stmt :: rest) =
+    let next_ctx =
+      case stmt of
+        JS_AnnAssign var ty ann _ =>
+          expr_with_local_types ctx
+            ((var, canonical_decl_type nominal_index all_import_maps
+              (expr_type_ctx ctx) ty ann) :: expr_local_types ctx)
+      | _ => ctx
+    in
+      translate_stmt nominal_index all_import_maps ctx stmt ::
+      translate_stmts nominal_index all_import_maps next_ctx rest)
 Termination
-  qexists_tac `measure (json_stmt_size o SND)` >>
-  conj_tac >- MATCH_ACCEPT_TAC prim_recTheory.WF_measure >>
-  PURE_REWRITE_TAC [prim_recTheory.measure_thm, combinTheory.o_DEF,
-                    pairTheory.SND] >>
-  rw[] >> simp[json_stmt_size_def] >>
-  qpat_x_assum `MEM a _` mp_tac >>
-  rename1 `MEM a stmts` >>
-  Induct_on `stmts` >> rw[json_stmt_size_def] >>
-  res_tac >> simp[]
+  WF_REL_TAC `measure (λitem. case item of
+      INL (_,_,_,stmt) => json_stmt_size stmt
+    | INR (_,_,_,stmts) => list_size json_stmt_size stmts)` >>
+  simp[json_stmt_size_def]
 End
 
 

@@ -31,6 +31,7 @@ Theorem copy_elision_function_correct:
     alloca_inv s /\
     allocas_in_word s /\
     bp_ptrs_bounded bp fn s /\
+    bp_phis_closed bp fn /\
     bp_assigns_stable bp dfg /\
     (!bb s0 s_phi.
        MEM bb fn.fn_blocks /\

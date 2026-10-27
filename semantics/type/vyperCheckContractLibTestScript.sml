@@ -1,7 +1,7 @@
 Theory vyperCheckContractLibTest
 Ancestors
   vyperTypeContract evalCompilerSubsetAbiBuiltins vyperABI vyperContext
-  vyperTypeSystem
+  vyperTypeSystem vyperTyping vyperValueOperation
 Libs
   vyperCheckContractLib cv_transLib
 
@@ -10,6 +10,43 @@ val empty_layouts =
 val empty_modules =
   ``([(NONE, [])] : (num option # toplevel list) list)``
 val zero_address = ``(0w : address)``
+
+(* AddressV is represented as twenty bytes. Wider destinations need different
+   padding from ordinary byte strings and deliberately remain unsupported. *)
+Theorem address_bytes_conversion_boundary:
+  valid_conversion (BaseT AddressT) (BaseT (BytesT bd)) <=> bd = Fixed 20
+Proof
+  Cases_on `bd` >> simp[valid_conversion_def]
+QED
+
+Theorem address_bytes20_preserves_value:
+  value_has_type (BaseTV AddressT) v ==>
+  evaluate_convert tenv v (BaseT (BytesT (Fixed 20))) = INL v
+Proof
+  Cases_on `v` >>
+  simp[value_has_type_def, evaluate_convert_def, listTheory.PAD_RIGHT] >>
+  strip_tac >> gvs[]
+QED
+
+Theorem address_bytes20_values_eval:
+  evaluate_convert FEMPTY (AddressV 0w) (BaseT (BytesT (Fixed 20))) =
+    INL (BytesV (REPLICATE 20 0w)) /\
+  evaluate_convert FEMPTY (AddressV 1w) (BaseT (BytesT (Fixed 20))) =
+    INL (BytesV (REPLICATE 19 0w ++ [1w])) /\
+  evaluate_convert FEMPTY (AddressV 1461501637330902918203684832716283019655932542975w)
+    (BaseT (BytesT (Fixed 20))) = INL (BytesV (REPLICATE 20 255w))
+Proof
+  EVAL_TAC
+QED
+
+Theorem address_bytes_conversion_widths_eval:
+  EVERY (λn. valid_conversion (BaseT AddressT) (BaseT (BytesT (Fixed n))) =
+             (n = 20)) (GENLIST SUC 32) /\
+  ¬valid_conversion (BaseT AddressT) (BaseT (BytesT (Dynamic 20))) /\
+  ¬valid_conversion (BaseT AddressT) (BaseT (BytesT (Dynamic 32)))
+Proof
+  EVAL_TAC
+QED
 
 (* ABI encoding's bound follows the evaluator's singleton wrapping mode.
    The unchanged encode_dynamic fixture has an inner bound of 192 bytes,
@@ -131,6 +168,27 @@ fun assert_some th =
 fun assert_none th =
   if optionSyntax.is_none (rhs (concl th)) then ()
   else raise Fail "expected rejected check_contract result"
+
+fun check_address_bytes bd in_deploy = let
+  val modules =
+    ``([(NONE,
+         [FunctionDecl External Pure F F "f"
+            [("a", BaseT AddressT)] [] (BaseT (BytesT ^bd))
+            [Return (SOME
+               (TypeBuiltin (BaseT (BytesT ^bd)) Convert
+                 (BaseT (BytesT ^bd)) [Name (BaseT AddressT) "a"]))]])]
+        : (num option # toplevel list) list)``
+in
+  vyperCheckContractLib.check_contract_conv
+    ``check_contract ^(if in_deploy then T else F) ^empty_layouts
+        ^zero_address ^modules``
+end
+
+val () = List.app (fn in_deploy =>
+  (assert_some (check_address_bytes ``Fixed 20`` in_deploy);
+   List.app (fn bd => assert_none (check_address_bytes bd in_deploy))
+     [``Fixed 19``, ``Fixed 21``, ``Fixed 32``,
+      ``Dynamic 20``, ``Dynamic 32``])) [false, true]
 
 (* Basic API and ML-Boolean construction. *)
 val empty_check = vyperCheckContractLib.check_contract
@@ -324,6 +382,18 @@ val set_membership_input = ``(1 : num) IN {1; 2}``
 val (set_membership_result, _) =
   timed_checker_conv "predicate-set membership" set_membership_input
 val () = assert_closed_result set_membership_input ``T`` set_membership_result
+
+(* The compset leaves INSERT chains undeduplicated, so FDOM of a map with a
+   re-inserted key keeps the duplicate; membership must still decide. *)
+val reinserted_fdom = ``FDOM (FEMPTY |+ ("x", 1n) |+ ("y", 2n) |+ ("x", 3n))``
+val fresh_input = ``"z" NOTIN ^reinserted_fdom``
+val (fresh_result, _) =
+  timed_checker_conv "fresh key, re-inserted domain" fresh_input
+val () = assert_closed_result fresh_input ``T`` fresh_result
+val stale_input = ``"x" NOTIN ^reinserted_fdom``
+val (stale_result, _) =
+  timed_checker_conv "declared key, re-inserted domain" stale_input
+val () = assert_closed_result stale_input ``F`` stale_result
 
 (* One contract per builtin and type-builtin constructor, per account item,
    and per raw_create argument shape, each returning the builtin's result from
@@ -570,3 +640,63 @@ val nested_map_both_keys_modules =
     : (num option # toplevel list) list``
 val () = check_accepts "nested map read, calls in both keys" false
   nested_map_layouts nested_map_both_keys_modules
+
+(* Constant initializers are folded at check time, as Vyper folds them at
+   compile time: an initializer that fails to evaluate is rejected, and so is
+   a forward reference, which the deployment fold's declaration order cannot
+   evaluate. *)
+val u256 = ``BaseT (UintT 256)``
+fun const_lit n = ``Literal ^u256 (IntL ^(intSyntax.term_of_int (Arbint.fromInt n)))``
+fun const_bop bop a b = ``Builtin ^u256 (Bop ^bop) [^a; ^b]``
+fun const_name id =
+  ``TopLevelName ^u256 (NONE, ^(stringSyntax.fromMLstring id))``
+fun const_decl id e =
+  ``VariableDecl Private (Constant ^e) ^(stringSyntax.fromMLstring id) ^u256 NONE``
+fun check_constants decls =
+  vyperCheckContractLib.check_contract_conv
+    ``check_contract F ^empty_layouts ^zero_address
+        [(NONE, ^(listSyntax.mk_list (decls, ``:toplevel``)))]``
+val max_u256 = ``TypeBuiltin ^u256 MaxValue ^u256 []``
+
+val () = assert_some (check_constants
+  [const_decl "A" (const_lit 1),
+   const_decl "B" (const_bop ``vyperAST$Add`` (const_name "A") (const_lit 2)),
+   const_decl "C" (const_bop ``vyperAST$Sub`` max_u256 (const_name "B"))])
+val () = List.app (assert_none o check_constants)
+  [[const_decl "X" (const_bop ``vyperAST$Div`` (const_lit 1) (const_lit 0))],
+   [const_decl "X" (const_bop ``vyperAST$Sub`` (const_lit 0) (const_lit 1))],
+   [const_decl "X" (const_bop ``vyperAST$Add`` max_u256 (const_lit 1))],
+   [const_decl "B" (const_bop ``vyperAST$Add`` (const_name "A") (const_lit 1)),
+    const_decl "A" (const_lit 1)]]
+
+
+(* Every operation a constant initializer can use evaluates, rather than
+   leaving check_contract stuck. *)
+fun tdecl ty id e =
+  ``VariableDecl Private (Constant ^e) ^(stringSyntax.fromMLstring id) ^ty NONE``
+fun tbop ty bop a b = ``Builtin ^ty (Bop ^bop) [^a; ^b]``
+fun tname ty id = ``TopLevelName ^ty (NONE, ^(stringSyntax.fromMLstring id))``
+val dec = ``BaseT DecimalT``
+val b32 = ``BaseT (BytesT (Fixed 32))``
+fun dlit n =
+  ``Literal ^dec (DecimalL ^(intSyntax.term_of_int (Arbint.fromString n)))``
+fun int_const bop a b = [const_decl "X" (const_bop bop (const_lit a) (const_lit b))]
+fun dec_const bop =
+  [tdecl dec "X" (tbop dec bop (dlit "15000000000") (dlit "20000000000"))]
+val keccak_a =
+  ``Builtin ^b32 Keccak256 [Literal (BaseT (StringT 1)) (StringL "a")]``
+val () = List.app (assert_some o check_constants)
+  [int_const ``vyperAST$Div`` 7 2,
+   int_const ``vyperAST$Mod`` 7 3,
+   int_const ``vyperAST$Exp`` 10 18,
+   int_const ``vyperAST$And`` 6 3,
+   int_const ``vyperAST$Or`` 6 3,
+   int_const ``vyperAST$XOr`` 6 3,
+   int_const ``vyperAST$ShR`` 256 4,
+   [const_decl "X" (const_bop ``vyperAST$Sub``
+      (const_bop ``vyperAST$ShL`` (const_lit 1) (const_lit 160)) (const_lit 1))],
+   dec_const ``vyperAST$Mul``,
+   dec_const ``vyperAST$Div``,
+   [tdecl b32 "K" keccak_a,
+    tdecl ``BaseT BoolT`` "E"
+      ``Builtin (BaseT BoolT) (Bop Eq) [^(tname b32 "K"); ^(tname b32 "K")]``]]

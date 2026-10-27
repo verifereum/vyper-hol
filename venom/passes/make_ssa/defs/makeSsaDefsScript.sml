@@ -174,26 +174,236 @@ Definition block_assignments_def:
 End
 
 (* Update an assoc list entry in place: if key exists, update its value
-   without changing its position. If not, prepend. *)
-Definition alist_update_or_prepend_def:
-  alist_update_or_prepend key f default [] = [(key, default)] ∧
-  alist_update_or_prepend key f default ((k,v)::rest) =
+   without changing its position. If not, append it at the end. *)
+Definition alist_update_or_append_def:
+  alist_update_or_append key f default [] = [(key, default)] ∧
+  alist_update_or_append key f default ((k,v)::rest) =
     if k = key then (k, f v) :: rest
-    else (k,v) :: alist_update_or_prepend key f default rest
+    else (k,v) :: alist_update_or_append key f default rest
 End
 
-(* Compute definition points: for each variable, the set of block labels
-   where it is assigned. Returns assoc list: (var, [block_label]).
-   Preserves first-seen variable order (matches Python dict insertion order). *)
-Definition compute_defs_def:
-  compute_defs [] = [] ∧
-  compute_defs (bb::bbs) =
-    let vars = block_assignments bb in
-    let rest = compute_defs bbs in
-    FOLDR (λvar acc.
-      alist_update_or_prepend var (CONS bb.bb_label) [bb.bb_label] acc)
-    rest vars
+(* Compute definition points: for each variable, the block labels where it
+   is assigned. Returns assoc list: (var, [block_label]).
+   Mirrors Python make_ssa._compute_defs: blocks in the given (dominator
+   post-) order, variables in first-seen order (dict insertion order). Each
+   variable's labels are in reverse block order, because
+   insert_phis_for_var takes the head where Python's worklist pops the last.
+   The fold runs over the raw outputs rather than block_assignments, whose
+   nub keeps the last occurrence of a repeated variable. A variable assigned
+   twice in a block gets that block's label twice; the repeat is a no-op in
+   insert_phis_for_var, since all its frontiers are then in has_phi. *)
+Definition compute_defs_acc_def:
+  compute_defs_acc acc [] = acc ∧
+  compute_defs_acc acc (bb::bbs) =
+    compute_defs_acc
+      (FOLDL (λacc var.
+         alist_update_or_append var (CONS bb.bb_label) [bb.bb_label] acc)
+       acc (FLAT (MAP (λinst. inst.inst_outputs) bb.bb_instructions)))
+      bbs
 End
+
+Definition compute_defs_def:
+  compute_defs bbs = compute_defs_acc [] bbs
+End
+
+(* Order-insensitive facts about compute_defs: its keys, distinctness of
+   keys, and that every defining block is recorded. *)
+
+Theorem alist_update_or_append_keys:
+  ∀al k f d v.
+    MEM v (MAP FST (alist_update_or_append k f d al)) ⇔
+    v = k ∨ MEM v (MAP FST al)
+Proof
+  Induct >> simp[alist_update_or_append_def] >>
+  rpt gen_tac >> PairCases_on `h` >>
+  rw[alist_update_or_append_def] >> metis_tac[]
+QED
+
+Theorem alist_update_or_append_alookup:
+  ∀al k f d k'.
+    ALOOKUP (alist_update_or_append k f d al) k' =
+    if k' = k then SOME (case ALOOKUP al k of SOME v => f v | NONE => d)
+    else ALOOKUP al k'
+Proof
+  Induct >- rw[alist_update_or_append_def] >>
+  Cases >> rw[alist_update_or_append_def] >> gvs[]
+QED
+
+Theorem alist_update_or_append_all_distinct:
+  ∀al k f d.
+    ALL_DISTINCT (MAP FST al) ⇒
+    ALL_DISTINCT (MAP FST (alist_update_or_append k f d al))
+Proof
+  Induct >- rw[alist_update_or_append_def] >>
+  Cases >> rw[alist_update_or_append_def, alist_update_or_append_keys] >>
+  gvs[]
+QED
+
+Triviality foldl_update_keys:
+  ∀vars acc f d v.
+    MEM v (MAP FST (FOLDL (λacc var. alist_update_or_append var f d acc)
+                     acc vars)) ⇔
+    MEM v (MAP FST acc) ∨ MEM v vars
+Proof
+  Induct >> simp[alist_update_or_append_keys] >> metis_tac[]
+QED
+
+Triviality foldl_update_all_distinct:
+  ∀vars acc f d.
+    ALL_DISTINCT (MAP FST acc) ⇒
+    ALL_DISTINCT (MAP FST
+      (FOLDL (λacc var. alist_update_or_append var f d acc) acc vars))
+Proof
+  Induct >> simp[] >> rpt strip_tac >>
+  first_x_assum irule >> simp[alist_update_or_append_all_distinct]
+QED
+
+Triviality foldl_update_preserves:
+  ∀vars acc lbl var dbs.
+    ALOOKUP acc var = SOME dbs ⇒
+    ∃dbs'.
+      ALOOKUP (FOLDL (λacc v. alist_update_or_append v (CONS lbl) [lbl] acc)
+                 acc vars) var = SOME dbs' ∧
+      ∀x. MEM x dbs ⇒ MEM x dbs'
+Proof
+  Induct >- (simp[] >> metis_tac[]) >>
+  rpt strip_tac >> simp[] >>
+  `∃d1. ALOOKUP (alist_update_or_append h (CONS lbl) [lbl] acc) var =
+          SOME d1 ∧ ∀x. MEM x dbs ⇒ MEM x d1`
+    by (rw[alist_update_or_append_alookup] >> gvs[]) >>
+  first_x_assum (drule_then (qspec_then `lbl` strip_assume_tac)) >>
+  metis_tac[]
+QED
+
+Triviality foldl_update_records:
+  ∀vars acc lbl var.
+    MEM var vars ⇒
+    ∃dbs.
+      ALOOKUP (FOLDL (λacc v. alist_update_or_append v (CONS lbl) [lbl] acc)
+                 acc vars) var = SOME dbs ∧
+      MEM lbl dbs
+Proof
+  Induct >> simp[] >> rpt gen_tac >> strip_tac
+  >- (`∃d1. ALOOKUP (alist_update_or_append h (CONS lbl) [lbl] acc) var =
+             SOME d1 ∧ MEM lbl d1`
+        by (gvs[alist_update_or_append_alookup] >> CASE_TAC >> simp[]) >>
+      drule_then (qspecl_then [`vars`, `lbl`] strip_assume_tac)
+        foldl_update_preserves >>
+      metis_tac[])
+  >> first_x_assum irule >> simp[]
+QED
+
+Theorem compute_defs_acc_keys:
+  ∀bbs acc v.
+    MEM v (MAP FST (compute_defs_acc acc bbs)) ⇔
+    MEM v (MAP FST acc) ∨ MEM v (FLAT (MAP block_assignments bbs))
+Proof
+  Induct >>
+  simp[compute_defs_acc_def, foldl_update_keys, block_assignments_def,
+       MEM_nub] >>
+  metis_tac[]
+QED
+
+Theorem compute_defs_acc_all_distinct:
+  ∀bbs acc.
+    ALL_DISTINCT (MAP FST acc) ⇒
+    ALL_DISTINCT (MAP FST (compute_defs_acc acc bbs))
+Proof
+  Induct >> simp[compute_defs_acc_def] >> rpt strip_tac >>
+  first_x_assum irule >> simp[foldl_update_all_distinct]
+QED
+
+Triviality compute_defs_acc_preserves:
+  ∀bbs acc var dbs.
+    ALOOKUP acc var = SOME dbs ⇒
+    ∃dbs'. ALOOKUP (compute_defs_acc acc bbs) var = SOME dbs' ∧
+           ∀x. MEM x dbs ⇒ MEM x dbs'
+Proof
+  Induct >- (simp[compute_defs_acc_def] >> metis_tac[]) >>
+  rpt strip_tac >> simp[compute_defs_acc_def] >>
+  drule_then (qspecl_then [`FLAT (MAP (λinst. inst.inst_outputs)
+                                      h.bb_instructions)`, `h.bb_label`]
+    strip_assume_tac) foldl_update_preserves >>
+  first_x_assum drule >> metis_tac[]
+QED
+
+Theorem compute_defs_acc_complete:
+  ∀bbs acc bb var.
+    MEM bb bbs ∧ MEM var (block_assignments bb) ⇒
+    ∃dbs. ALOOKUP (compute_defs_acc acc bbs) var = SOME dbs ∧
+          MEM bb.bb_label dbs
+Proof
+  Induct >- simp[] >>
+  rpt gen_tac >> strip_tac >> simp[compute_defs_acc_def] >>
+  Cases_on `MEM bb bbs` >- (first_x_assum irule >> simp[]) >>
+  `bb = h` by gvs[] >> pop_assum SUBST_ALL_TAC >>
+  gvs[block_assignments_def, MEM_nub] >>
+  drule_then (qspecl_then [`acc`, `h.bb_label`] strip_assume_tac)
+    foldl_update_records >>
+  drule compute_defs_acc_preserves >> metis_tac[]
+QED
+
+Theorem compute_defs_keys:
+  ∀bbs v.
+    MEM v (MAP FST (compute_defs bbs)) ⇔
+    MEM v (FLAT (MAP block_assignments bbs))
+Proof
+  simp[compute_defs_def, compute_defs_acc_keys]
+QED
+
+Theorem compute_defs_all_distinct:
+  ∀bbs. ALL_DISTINCT (MAP FST (compute_defs bbs))
+Proof
+  simp[compute_defs_def, compute_defs_acc_all_distinct]
+QED
+
+Theorem compute_defs_complete:
+  ∀bbs bb var.
+    MEM bb bbs ∧ MEM var (block_assignments bb) ⇒
+    ∃dbs. ALOOKUP (compute_defs bbs) var = SOME dbs ∧ MEM bb.bb_label dbs
+Proof
+  simp[compute_defs_def, compute_defs_acc_complete]
+QED
+
+Theorem compute_defs_every_key:
+  ∀P bbs.
+    (∀bb. MEM bb bbs ⇒ EVERY P (block_assignments bb)) ⇒
+    EVERY (λp. P (FST p)) (compute_defs bbs)
+Proof
+  rw[EVERY_MEM, pairTheory.FORALL_PROD] >>
+  `MEM p_1 (MAP FST (compute_defs bbs))`
+    by (simp[MEM_MAP, pairTheory.EXISTS_PROD] >> metis_tac[]) >>
+  gvs[compute_defs_keys, MEM_FLAT, MEM_MAP] >> metis_tac[]
+QED
+
+(* Regression (#561, a14-02): keys in first-seen order across blocks and
+   within a block, as Python's dict; labels in reverse block order. The
+   previous FOLDR version gave [x; z; y] with x's labels [b1; b2]. *)
+Theorem compute_defs_first_seen_order:
+  compute_defs
+    [<| bb_label := "b1";
+        bb_instructions := [mk_inst 0 ASSIGN [] ["x"];
+                            mk_inst 1 ASSIGN [] ["y"]] |>;
+     <| bb_label := "b2";
+        bb_instructions := [mk_inst 2 ASSIGN [] ["z"];
+                            mk_inst 3 ASSIGN [] ["x"]] |>] =
+  [("x", ["b2"; "b1"]); ("y", ["b1"]); ("z", ["b2"])]
+Proof
+  EVAL_TAC
+QED
+
+(* A variable reassigned in its block keeps its first position, as in
+   Python; nub would keep the last and give [y; x]. *)
+Theorem compute_defs_first_seen_in_block:
+  compute_defs
+    [<| bb_label := "b1";
+        bb_instructions := [mk_inst 0 ASSIGN [] ["x"];
+                            mk_inst 1 ASSIGN [] ["y"];
+                            mk_inst 2 ASSIGN [] ["x"]] |>] =
+  [("x", ["b1"; "b1"]); ("y", ["b1"])]
+Proof
+  EVAL_TAC
+QED
 
 (* ===== PHI Node Insertion ===== *)
 

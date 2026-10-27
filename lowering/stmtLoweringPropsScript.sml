@@ -10,8 +10,9 @@
  *   compile_return_some_external_correct  — external return: Halt
  *   compile_return_some_internal_correct  — internal return: IntRet
  *
- * Helper:
- *   run_compiled_blocks    — run multi-block compiled code
+ * The multi-block statements are stated with frag_exec (fragExecTheory):
+ * the compiled fragment runs inside any function containing the code, and
+ * reaches the end of the fragment or exits.
  *
  * Source: vyperInterpreterScript.sml (eval_stmt/eval_stmts)
  * Target: venomExecSemanticsScript.sml (run_block/run_function)
@@ -20,7 +21,7 @@
 
 Theory stmtLoweringProps
 Ancestors
-  list
+  list fragExec
   stmtLowering exprLoweringProps exprLowering emitHelper emitHelperProps
   compileEnv venomExecSemantics venomExecProps venomInst venomState
 
@@ -42,32 +43,6 @@ End
 Definition assemble_function_def:
   assemble_function (st:compile_state) (st':compile_state) =
     mk_raw_function st.cs_current_bb (assemble_blocks st')
-End
-
-(* Run multi-block compiled code.
-   The first block starts at entry_idx (mid-block, after pre-existing
-   instructions). Subsequent blocks start at idx 0 via run_blocks.
-   Used for statements that create multi-block CFGs (If, For, Assert).
-   The ctx parameter supplies the function-call context (for INVOKE). *)
-Definition run_compiled_blocks_def:
-  run_compiled_blocks (ctx:venom_context) (st:compile_state) (st':compile_state)
-                      (ss:venom_state) fuel =
-    let fn = assemble_function st st' in
-    let entry_lbl = st.cs_current_bb in
-    let entry_idx = LENGTH st.cs_current_insts in
-    case lookup_block entry_lbl fn.fn_blocks of
-      NONE => Error "entry block not found"
-    | SOME bb =>
-        case exec_block fuel ctx bb
-               (ss with <| vs_current_bb := entry_lbl;
-                            vs_inst_idx := entry_idx |>) of
-          OK ss' =>
-            if ss'.vs_halted then Halt ss'
-            else run_blocks fuel ctx fn ss'
-        | IntRet vals ss' => IntRet vals ss'
-        | Halt ss' => Halt ss'
-        | Abort a ss' => Abort a ss'
-        | Error e => Error e
 End
 
 (* ===== Main Statement Correctness ===== *)
@@ -106,32 +81,51 @@ QED
 
 (* ===== Main Statement Correctness ===== *)
 
+(* The statement lemmas relate states with stmt_state_rel func, where func
+   is the function the fragment runs in.  Their code premises tie func to the
+   fragment:
+   - fn_has_code st st' func: func holds the fragment's code, so the ALLOCA
+     that declares a local is an instruction of func and backs the local
+     (local_backed);
+   - fn_inst_ids_distinct func: with the allocation facts of stmt_state_rel,
+     a re-executed ALLOCA (a loop body, a branch) returns a region no other
+     live local holds;
+   - local_ptrs_reserved cenv st: the locals are the pointer locals reserved
+     before st, so no temporary overwrites a local's pointer and no store
+     goes to a fixed MemLoc offset.
+   stmt_state_rel says nothing of the compiler temporaries, so it holds again
+   where a loop body starts its next iteration with the last one's
+   temporaries still bound.
+   Still unstated, like ctx below: every fresh ALLOCA runs with
+   vs_alloca_next below 2 ** 256, else its pointer wraps.  S3's
+   raw_unit_memory_ok gives that along a run. *)
+
 (* compile_stmt preserves state_rel: if the Vyper statement
-   evaluates successfully, the compiled Venom code produces
-   a related state. *)
+   evaluates successfully, the compiled Venom code reaches the end of the
+   fragment in a related state. *)
 Theorem compile_stmt_correct:
-  ∀ cenv cx lctx ty s es ss st es' ctx.
-    state_rel cenv cx es ss ∧
+  ∀ func cenv cx lctx ty s es st st' es' ctx.
     eval_stmt cx s es = (INL (), es') ∧
-    compile_stmt cenv lctx ty s st = ((), st')
+    compile_stmt cenv lctx ty s st = ((), st') ∧
+    fn_has_code st st' func ∧ fn_inst_ids_distinct func ∧
+    local_ptrs_reserved cenv st
     ⇒
-    ∃ ss' fuel.
-      run_compiled_blocks ctx st st' ss fuel = OK ss' ∧
-      state_rel cenv cx es' ss'
+    frag_exec ctx st st' (stmt_state_rel func cenv cx es)
+      (stmt_state_rel func cenv cx es') (λr. F)
 Proof
   cheat
 QED
 
 (* compile_stmts preserves state_rel *)
 Theorem compile_stmts_correct:
-  ∀ cenv cx lctx ty stmts es vss st es' ctx.
-    state_rel cenv cx es vss ∧
+  ∀ func cenv cx lctx ty stmts es st st' es' ctx.
     eval_stmts cx stmts es = (INL (), es') ∧
-    compile_stmts cenv lctx ty stmts st = ((), st')
+    compile_stmts cenv lctx ty stmts st = ((), st') ∧
+    fn_has_code st st' func ∧ fn_inst_ids_distinct func ∧
+    local_ptrs_reserved cenv st
     ⇒
-    ∃ vss' fuel.
-      run_compiled_blocks ctx st st' vss fuel = OK vss' ∧
-      state_rel cenv cx es' vss'
+    frag_exec ctx st st' (stmt_state_rel func cenv cx es)
+      (stmt_state_rel func cenv cx es') (λr. F)
 Proof
   cheat
 QED
@@ -140,76 +134,73 @@ QED
 
 (* --- Pass: no-op --- *)
 Theorem compile_pass_correct:
-  ∀ cenv cx lctx ty es ss st.
-    state_rel cenv cx es ss ∧
+  ∀ func cenv cx lctx ty es ss st.
+    state_rel func cenv cx es ss ∧
     compile_stmt cenv lctx ty Pass st = ((), st')
     ⇒
     st' = st ∧
-    state_rel cenv cx es ss
+    state_rel func cenv cx es ss
 Proof
   rw[compile_stmt_def, comp_return_def, comp_bind_def, comp_ignore_bind_def]
 QED
 
 (* --- Expr statement: side-effect expression --- *)
 Theorem compile_expr_stmt_correct:
-  ∀ cenv cx lctx ty e es ss st es'.
-    state_rel cenv cx es ss ∧
+  ∀ func cenv cx lctx ty e es ss st es'.
+    stmt_state_rel func cenv cx es ss ∧
     eval_stmt cx (Expr e) es = (INL (), es') ∧
-    compile_stmt cenv lctx ty (Expr e) st = ((), st')
+    compile_stmt cenv lctx ty (Expr e) st = ((), st') ∧
+    fn_has_code st st' func ∧ fn_inst_ids_distinct func ∧
+    local_ptrs_reserved cenv st
     ⇒
     ∃ ss'.
       run_inst_seq (emitted_insts st st') ss = OK ss' ∧
-      state_rel cenv cx es' ss'
+      stmt_state_rel func cenv cx es' ss'
 Proof
   cheat
 QED
 
 (* --- AnnAssign: variable declaration with init --- *)
 Theorem compile_annassign_correct:
-  ∀ cenv cx lctx ty id vtyp e es ss st st' es'.
-    state_rel cenv cx es ss ∧
+  ∀ func cenv cx lctx ty id vtyp e es ss st st' es'.
+    stmt_state_rel func cenv cx es ss ∧
     eval_stmt cx (AnnAssign id vtyp e) es = (INL (), es') ∧
-    compile_stmt cenv lctx ty (AnnAssign id vtyp e) st = ((), st')
+    compile_stmt cenv lctx ty (AnnAssign id vtyp e) st = ((), st') ∧
+    fn_has_code st st' func ∧ fn_inst_ids_distinct func ∧
+    local_ptrs_reserved cenv st
     ⇒
     ∃ ss'.
       run_inst_seq (emitted_insts st st') ss = OK ss' ∧
-      state_rel cenv cx es' ss'
+      stmt_state_rel func cenv cx es' ss'
 Proof
   cheat
 QED
 
 (* --- Assert: abort on false, continue on true --- *)
 (* NOTE: Assert creates multiple blocks (fail_block, ok_block) via new_block.
-   Must use run_compiled_blocks, not run_inst_seq. *)
+   Must use frag_exec, not run_inst_seq.
+   ctx is existential: nothing yet says ctx holds the compiled internal
+   functions, without which a condition calling one (INVOKE) errors.  The
+   ∀ctx statements in this file have the same gap until such a hypothesis
+   exists. *)
 Theorem compile_assert_correct_true:
-  ∀ cenv cx lctx ty cond_e msg es ss st st' es'.
-    state_rel cenv cx es ss ∧
+  ∀ func cenv cx lctx ty cond_e msg es st st' es'.
     eval_expr cx cond_e es = (INL (Value (BoolV T)), es') ∧
-    compile_stmt cenv lctx ty (Assert cond_e msg) st = ((), st')
+    compile_stmt cenv lctx ty (Assert cond_e msg) st = ((), st') ∧
+    fn_has_code st st' func ∧ fn_inst_ids_distinct func ∧
+    local_ptrs_reserved cenv st
     ⇒
-    ∃ ss' fuel ctx.
-      run_compiled_blocks ctx st st' ss fuel = OK ss' ∧
-      state_rel cenv cx es' ss'
+    ∃ctx.
+      frag_exec ctx st st' (stmt_state_rel func cenv cx es)
+        (stmt_state_rel func cenv cx es') (λr. F)
 Proof
   cheat
 QED
 
-(* Assert bare + false condition: revert with empty returndata.
-   Only for AssertBare — AssertReason has non-empty Error(string) data,
-   AssertUnreachable uses INVALID (not REVERT). *)
-Theorem compile_assert_bare_correct_false:
-  ∀ cenv cx lctx ty cond_e es ss st st' es'.
-    state_rel cenv cx es ss ∧
-    fresh_vars_wrt st ss ∧
-    supported_expr cond_e ∧
-    well_annotated cond_e ∧
-    eval_expr cx cond_e es = (INL (Value (BoolV F)), es') ∧
-    compile_stmt cenv lctx ty (Assert cond_e AssertBare) st = ((), st')
-    ⇒
-    ∃ fuel ctx.
-      run_compiled_blocks ctx st st' ss fuel =
-        Abort Revert_abort (revert_state (set_returndata [] ss))
-Proof
+(* Partial proof of compile_assert_bare_correct_false against its earlier
+   run_compiled_blocks statement, kept for reference; it stops before the
+   blocks are run:
+
   rw[compile_stmt_def, comp_bind_def, comp_ignore_bind_def] >>
   rpt (pairarg_tac >> gvs[]) >>
   gvs[comp_return_def] >>
@@ -223,18 +214,47 @@ Proof
   rpt strip_tac >>
   simp[run_compiled_blocks_def, assemble_function_def, assemble_blocks_def] >>
   cheat
+*)
+
+(* Assert bare + false condition: revert with empty returndata.
+   Only for AssertBare — AssertReason has non-empty Error(string) data,
+   AssertUnreachable uses INVALID (not REVERT).
+   The state reverted from is related to es', the source state after the
+   condition. *)
+Theorem compile_assert_bare_correct_false:
+  ∀ func cenv cx lctx ty cond_e es st st' es' ctx.
+    supported_expr cond_e ∧
+    well_annotated cond_e ∧
+    eval_expr cx cond_e es = (INL (Value (BoolV F)), es') ∧
+    compile_stmt cenv lctx ty (Assert cond_e AssertBare) st = ((), st') ∧
+    fn_has_code st st' func ∧ fn_inst_ids_distinct func ∧
+    local_ptrs_reserved cenv st
+    ⇒
+    frag_exec ctx st st' (stmt_state_rel func cenv cx es) (λss. F)
+      (λr. ∃ss. r = Abort Revert_abort (revert_state (set_returndata [] ss)) ∧
+                state_rel func cenv cx es' ss)
+Proof
+  cheat
 QED
 
-(* Assert with reason + false condition: revert with Error(string) encoded data *)
+(* Assert with reason + false condition: revert with Error(string) encoded data.
+   The state reverted from is related to the source state after the
+   condition and then the reason expression, SND (eval_expr cx reason_e es'):
+   the fail block evaluates the reason before reverting.
+   ctx is existential for the same reason as in compile_assert_correct_true:
+   the condition and the reason may call internal functions. *)
 Theorem compile_assert_reason_correct_false:
-  ∀ cenv cx lctx ty cond_e reason_e es ss st st' es'.
-    state_rel cenv cx es ss ∧
+  ∀ func cenv cx lctx ty cond_e reason_e es st st' es'.
     eval_expr cx cond_e es = (INL (Value (BoolV F)), es') ∧
-    compile_stmt cenv lctx ty (Assert cond_e (AssertReason reason_e)) st = ((), st')
+    compile_stmt cenv lctx ty (Assert cond_e (AssertReason reason_e)) st = ((), st') ∧
+    fn_has_code st st' func ∧ fn_inst_ids_distinct func ∧
+    local_ptrs_reserved cenv st
     ⇒
-    ∃ fuel ctx rd.
-      run_compiled_blocks ctx st st' ss fuel =
-        Abort Revert_abort (revert_state (set_returndata rd ss))
+    ∃ctx.
+      frag_exec ctx st st' (stmt_state_rel func cenv cx es) (λss. F)
+        (λr. ∃ss rd.
+               r = Abort Revert_abort (revert_state (set_returndata rd ss)) ∧
+               state_rel func cenv cx (SND (eval_expr cx reason_e es')) ss)
 Proof
   cheat
 QED
@@ -267,8 +287,8 @@ QED
 
 (* --- Return (SOME e) external: ABI-encode + RETURN → Halt --- *)
 Theorem compile_return_some_external_correct:
-  ∀ cenv cx lctx ty e es ss st st' v es'.
-    state_rel cenv cx es ss ∧
+  ∀ func cenv cx lctx ty e es ss st st' v es'.
+    state_rel func cenv cx es ss ∧
     cenv.ce_is_external ∧
     eval_expr cx e es = (INL (Value v), es') ∧
     compile_stmt cenv lctx ty (Return (SOME e)) st = ((), st')
@@ -281,8 +301,8 @@ QED
 
 (* --- Return (SOME e) internal: push to stack + RET → IntRet --- *)
 Theorem compile_return_some_internal_correct:
-  ∀ cenv cx lctx ty e es ss st st' v es' rpc_off sz.
-    state_rel cenv cx es ss ∧
+  ∀ func cenv cx lctx ty e es ss st st' v es' rpc_off sz.
+    state_rel func cenv cx es ss ∧
     ¬cenv.ce_is_external ∧
     cenv.ce_return_pc = SOME (MemLoc rpc_off sz) ∧
     eval_expr cx e es = (INL (Value v), es') ∧
@@ -296,30 +316,30 @@ QED
 
 (* --- If: multi-block correctness --- *)
 Theorem compile_if_correct:
-  ∀ cenv cx lctx ty cond_e then_body else_body es ss st es' ctx.
-    state_rel cenv cx es ss ∧
+  ∀ func cenv cx lctx ty cond_e then_body else_body es st st' es' ctx.
     eval_stmt cx (If cond_e then_body else_body) es = (INL (), es') ∧
-    compile_stmt cenv lctx ty (If cond_e then_body else_body) st = ((), st')
+    compile_stmt cenv lctx ty (If cond_e then_body else_body) st = ((), st') ∧
+    fn_has_code st st' func ∧ fn_inst_ids_distinct func ∧
+    local_ptrs_reserved cenv st
     ⇒
-    ∃ ss' fuel.
-      run_compiled_blocks ctx st st' ss fuel = OK ss' ∧
-      state_rel cenv cx es' ss'
+    frag_exec ctx st st' (stmt_state_rel func cenv cx es)
+      (stmt_state_rel func cenv cx es') (λr. F)
 Proof
   cheat
 QED
 
 (* --- For range: multi-block loop correctness --- *)
 Theorem compile_for_range_correct:
-  ∀ cenv cx lctx ty id fty start_e end_e bound body es ss st es' ctx.
-    state_rel cenv cx es ss ∧
+  ∀ func cenv cx lctx ty id fty start_e end_e bound body es st st' es' ctx.
     eval_stmt cx (For id fty (Range start_e end_e) bound body) es =
       (INL (), es') ∧
     compile_stmt cenv lctx ty (For id fty (Range start_e end_e) bound body) st =
-      ((), st')
+      ((), st') ∧
+    fn_has_code st st' func ∧ fn_inst_ids_distinct func ∧
+    local_ptrs_reserved cenv st
     ⇒
-    ∃ ss' fuel.
-      run_compiled_blocks ctx st st' ss fuel = OK ss' ∧
-      state_rel cenv cx es' ss'
+    frag_exec ctx st st' (stmt_state_rel func cenv cx es)
+      (stmt_state_rel func cenv cx es') (λr. F)
 Proof
   cheat
 QED

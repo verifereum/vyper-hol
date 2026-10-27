@@ -32,7 +32,9 @@ Definition int_calls_expr_def:
   int_calls_expr (Pop _ tgt) = int_calls_target tgt /\
   int_calls_expr (Call _ (IntCall callee) es _) =
     callee :: int_calls_exprs es /\
-  int_calls_expr (Call _ (ExtCall _ _ _) es default_ret) =
+  (* The evaluator ignores an ExtCall's last field (default_return_value= is
+     an operand); counting its calls only over-approximates. *)
+  int_calls_expr (Call _ (ExtCall _ _ _ _) es default_ret) =
     int_calls_exprs es ++ int_calls_opt default_ret /\
   int_calls_expr (Call _ _ es _) = int_calls_exprs es /\
 

@@ -2,7 +2,7 @@
 
 Theory vyperTypeEvalStoragePreservation
 Ancestors
-  pair vyperCreate vyperInterpreter vyperState vyperStorageBackend vyperStorageLayoutSafety
+  pair vyperAST vyperCreate vyperInterpreter vyperState vyperStorageBackend vyperStorageLayoutSafety
   vyperTypeSystem vyperTypeEnv vyperTypeInvariants vyperTypeValues vyperTypeCallGraph
   vyperEvalMisc vyperStatePreservation vyperScopePreservation
   vyperTypeCallStackSoundness vyperValue
@@ -1910,18 +1910,19 @@ Theorem eval_raw_call_preserves_contract_storage:
   contract_storage_well_formed cx st'
 Proof
   strip_tac >> qpat_x_assum `eval_raw_call _ _ _ _ _ _ = _` mp_tac >>
-  Cases_on `flags.rcf_is_delegate` >>
+  reverse (Cases_on `~(flags.rcf_is_delegate /\ flags.rcf_is_static) /\
+    ((flags.rcf_is_delegate \/ flags.rcf_is_static) ==> amount = 0)`) >>
   simp[eval_raw_call_def, bind_def, ignore_bind_def, type_check_def,
        assert_def, return_def, raise_def, get_accounts_def, get_transient_storage_def]
   >- (strip_tac >> gvs[]) >>
-  Cases_on `run_ext_call cx.txn.target target_addr calldata
-    (if flags.rcf_is_static then NONE else SOME amount)
-    st.accounts st.tStorage (vyper_to_tx_params cx.txn)` >>
-  simp[lift_option_def, bind_def, return_def, raise_def]
-  >- (strip_tac >> gvs[]) >>
+  fs[] >>
+  Cases_on `run_raw_call cx flags target_addr calldata amount
+    st.accounts st.tStorage` >>
+  simp[lift_option_def, bind_def, return_def, raise_def] >>
+  TRY (strip_tac >> gvs[] >> NO_TAC) >>
   PairCases_on `x` >> simp[] >>
   `contract_storage_well_formed cx (st with <|accounts := x2; tStorage := x3|>)` by
-    (drule_all protected_storage_calls_preserve_run_ext_call >> simp[]) >>
+    (drule_all protected_storage_calls_preserve_run_raw_call >> simp[]) >>
   `contract_storage_well_formed cx
      ((st with <|accounts := x2; tStorage := x3|>) with logs := st.logs ++ x4)` by
     metis_tac[contract_storage_well_formed_logs] >>
@@ -1942,7 +1943,7 @@ Resume eval_all_storage_preservation_mutual[Expr_Call_RawCallTarget]:
     simp[int_calls_expr_def] >> strip_tac >>
     qpat_x_assum `well_typed_expr env (Call _ (RawCallTarget _) _ _)` mp_tac >>
     rewrite_tac[Once well_typed_expr_def] >> strip_tac >>
-    qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+    (qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
     simp_tac(srw_ss())[Once evaluate_def, bind_def, ignore_bind_def,
       type_check_def, assert_def, return_def, raise_def,
       lift_option_type_def] >> simp[] >>
@@ -1956,7 +1957,7 @@ Resume eval_all_storage_preservation_mutual[Expr_Call_RawCallTarget]:
       metis_tac[runtime_storage_consistent_intro,
                 runtime_storage_consistent_layout] >>
     Cases_on `args_res` >> gvs[]
-    >- (
+    >> FIRST [(
       rename1 `eval_exprs cx es st = (INL vs,args_st)` >>
       `exprs_runtime_typed env es vs` by (
         irule eval_exprs_success_runtime_typed >> simp[] >>
@@ -1967,8 +1968,8 @@ Resume eval_all_storage_preservation_mutual[Expr_Call_RawCallTarget]:
       mp_tac raw_call_args_runtime_typed_dest >>
       impl_tac >- simp[] >> strip_tac >> gvs[] >>
       simp[bind_def, return_def] >> strip_tac >>
-      drule_all eval_raw_call_preserves_contract_storage >> simp[]) >>
-    rpt strip_tac >> gvs[]) >>
+      drule_all eval_raw_call_preserves_contract_storage >> simp[]),
+      rpt strip_tac >> gvs[]])) >>
   rpt strip_tac >> gvs[Once well_typed_expr_def]
 QED
 
@@ -1982,22 +1983,22 @@ Resume eval_all_storage_preservation_mutual[Expr_Call_RawCallCalldataTarget]:
     simp[int_calls_expr_def] >> strip_tac >>
     qpat_x_assum `well_typed_expr env (Call _ (RawCallCalldataTarget _) _ _)` mp_tac >>
     rewrite_tac[Once well_typed_expr_def] >> strip_tac >>
-    qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+    (qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
     simp_tac(srw_ss())[Once evaluate_def, bind_def, ignore_bind_def,
       type_check_def, assert_def, return_def, raise_def, lift_option_type_def] >>
     Cases_on `eval_exprs cx es st` >>
     rename1 `eval_exprs cx es st = (args_res,args_st)` >>
     first_x_assum drule_all >> strip_tac >>
     Cases_on `args_res` >> gvs[]
-    >- (
+    >> FIRST [(
       rename1 `eval_exprs cx es st = (INL vs,args_st)` >>
       `exprs_runtime_typed env es vs` by (
         irule eval_exprs_success_runtime_typed >> simp[] >>
         metis_tac[runtime_storage_consistent_runtime]) >>
       drule_all raw_call_calldata_args_runtime_typed_dest >> strip_tac >>
       gvs[bind_def, return_def] >> strip_tac >>
-      drule_all eval_raw_call_preserves_contract_storage >> simp[]) >>
-    rpt strip_tac >> gvs[]) >>
+      drule_all eval_raw_call_preserves_contract_storage >> simp[]),
+      rpt strip_tac >> gvs[]])) >>
   rpt strip_tac >> gvs[Once well_typed_expr_def]
 QED
 
@@ -2738,51 +2739,78 @@ Proof
   metis_tac[transfer_value_storage_frame]
 QED
 
+Theorem adopt_call_outcome_INR_storage[local]:
+  (adopt_call_outcome rq co s = (INR e,s')) <=> F
+Proof
+  rw[vyperCallOutcomeTheory.adopt_call_outcome_def] >> pairarg_tac >>
+  gvs[return_def]
+QED
+
+Theorem run_ext_call_storage_frame[local]:
+  protected_storage_calls_preserve cx /\ contract_storage_well_formed cx st /\
+  run_ext_call cx.txn.target callee calldata value_opt gas st.accounts
+    st.tStorage txp = SOME result /\
+  st'.accounts = FST (SND (SND result)) /\
+  st'.tStorage = FST (SND (SND (SND result))) ==>
+  contract_storage_well_formed cx st'
+Proof
+  PairCases_on `result` >> rpt strip_tac >> gvs[] >>
+  drule_all protected_storage_calls_preserve_run_ext_call >> strip_tac >>
+  irule contract_storage_well_formed_accounts_transient_frame >>
+  first_x_assum (irule_at Any) >> gvs[]
+QED
+
+Theorem eval_send_storage_preserved[local]:
+  contract_storage_well_formed cx st /\ oracle_storage_ok cx st /\
+  protected_storage_calls_preserve cx /\
+  eval_send cx has_gas vs st = (res,st') ==>
+  contract_storage_well_formed cx st'
+Proof
+  Cases_on `vs` >- (simp[eval_send_def, raise_def] >> rw[] >> gvs[]) >>
+  Cases_on `t` >- (simp[eval_send_def, raise_def] >> rw[] >> gvs[]) >>
+  simp[eval_send_def, bind_def, ignore_bind_def, type_check_def, assert_def,
+       check_def, lift_option_type_def, lift_option_def, get_accounts_def,
+       get_transient_storage_def, update_accounts_def, update_transient_def,
+       append_logs_def, return_def, raise_def,
+       COND_RATOR, vfmTypesTheory.option_CASE_rator,
+       vfmTypesTheory.prod_CASE_rator, vfmTypesTheory.sum_CASE_rator] >>
+  strip_tac >> gvs[AllCaseEqs()] >>
+  gvs[pairTheory.UNCURRY_RATOR, pairTheory.UNCURRY_EQ, combinTheory.C_THM,
+      combinTheory.o_THM, AllCaseEqs(), COND_RATOR, bind_def, return_def,
+      raise_def, assert_def, adopt_call_outcome_INR_storage] >>~-
+  ([`run_ext_call _ _ _ _ _ _ _ _ = SOME _`],
+   irule run_ext_call_storage_frame >> simp[] >> metis_tac[]) >>
+  metis_tac[take_call_outcome_storage_suffix,
+            take_adopt_call_outcome_storage_suffix]
+QED
+
 Resume eval_all_storage_preservation_mutual[Expr_Call_Send]:
   rpt gen_tac >> strip_tac >>
   conj_tac
   >- (
     strip_tac >>
     `call_evaluation_safe cx (int_calls_exprs es)` by
-      (qpat_x_assum `call_evaluation_safe cx (int_calls_expr (Call _ Send es _))`
+      (qpat_x_assum `call_evaluation_safe cx (int_calls_expr (Call _ (Send _) es _))`
          mp_tac >> simp[int_calls_expr_def]) >>
-    qpat_x_assum `well_typed_expr env (Call _ Send _ _)` mp_tac >>
+    qpat_x_assum `well_typed_expr env (Call _ (Send _) _ _)` mp_tac >>
     rewrite_tac[Once well_typed_expr_def] >> strip_tac >>
+    `LENGTH es = if has_gas then 3 else 2` by
+      (qpat_x_assum `MAP expr_type es = _` (mp_tac o Q.AP_TERM `LENGTH`) >>
+       rw[]) >>
+    qpat_x_assum `!s'' x t. type_check _ _ s'' = (INL x,t) ==> _`
+      (qspecl_then [`st`, `()`, `st`] mp_tac) >>
+    (impl_tac >- simp[type_check_def, assert_def]) >> strip_tac >>
     qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-    simp_tac(srw_ss())[Once evaluate_def, bind_def, ignore_bind_def,
-                         type_check_def, assert_def, return_def, raise_def,
-                         lift_option_type_def] >>
+    simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
+         assert_def, return_def] >>
     Cases_on `eval_exprs cx es st` >>
     rename1 `eval_exprs cx es st = (args_res,args_st)` >>
-    strip_tac >>
-    qpat_x_assum `!s'' x t. type_check (LENGTH es = 2) "Send args" s'' = (INL x,t) ==> _`
-      (qspecl_then [`st`, `()`, `st`] mp_tac) >>
-    (impl_tac >- simp[type_check_def, assert_def]) >>
-    strip_tac >> first_x_assum drule_all >> strip_tac >>
+    first_x_assum drule_all >> strip_tac >>
     Cases_on `args_res` >> gvs[]
-    >- (
-      `runtime_consistent env cx args_st` by
-        metis_tac[eval_exprs_preserves_runtime_consistent,
-                  runtime_storage_consistent_runtime] >>
-      `runtime_storage_consistent env cx args_st` by
-        metis_tac[runtime_storage_consistent_intro,
-                  runtime_storage_consistent_layout] >>
-      ORACLE_STORAGE_TAC >>
-      Cases_on `dest_AddressV (HD x)` >> gvs[return_def, raise_def] >>
-      Cases_on `dest_NumV (x❲1❳)` >> gvs[return_def, raise_def] >>
-      Cases_on `args_st.outcomes` >> gvs[bind_def, return_def]
-      >- (
-        (* Original concrete transfer tail, retained in NONE mode. *)
-        Cases_on `transfer_value cx.txn.target x' x'' args_st` >>
-        rename1 `transfer_value cx.txn.target x' x'' args_st =
-                   (transfer_res,transfer_st)` >>
-        drule_all transfer_value_preserves_contract_storage_well_formed >>
-        Cases_on `transfer_res` >> gvs[return_def, raise_def]) >>
-      drule_all (Send_outcome_storage_suffix |>
-        SRULE [bind_def, ignore_bind_def, return_def]) >> simp[]) >>
+    >- (ORACLE_STORAGE_TAC >> metis_tac[eval_send_storage_preserved]) >>
     rpt strip_tac >> gvs[]) >>
   rpt strip_tac >>
-  qpat_x_assum `type_place_expr env (Call _ Send _ _) = SOME vt` mp_tac >>
+  qpat_x_assum `type_place_expr env (Call _ (Send _) _ _) = SOME vt` mp_tac >>
   simp[Once well_typed_expr_def]
 QED
 
@@ -2945,7 +2973,7 @@ QED
 Theorem eval_create_contract_storage_postulate[local]:
   protected_storage_creates_preserve cx /\
   contract_storage_well_formed cx st /\
-  eval_create cx kind has_salt rof arg_tys vs st = (res,st') ==>
+  eval_create cx kind has_salt rof arg_tys vs blueprint_size st = (res,st') ==>
   contract_storage_well_formed cx st'
 Proof
   strip_tac >>
@@ -2955,11 +2983,13 @@ Proof
   Cases_on `create_arg_ctor_types kind has_salt arg_tys` >-
     gvs[eval_create_def, bind_def, lift_option_type_def, return_def, raise_def] >>
   rename1 `create_arg_ctor_types kind has_salt arg_tys = SOME ctor_tys` >>
-  Cases_on `build_create_code (get_tenv cx) kind ops st.accounts ctor_tys` >>
+  Cases_on `build_create_code (get_tenv cx) kind ops st.accounts ctor_tys blueprint_size` >>
   gvs[eval_create_def, bind_def, ignore_bind_def, lift_option_type_def,
       get_accounts_def, check_def, return_def, raise_def, AllCaseEqs()] >>
-  rename1 `build_create_code (get_tenv cx) kind ops st.accounts ctor_tys =
+  rename1 `build_create_code (get_tenv cx) kind ops st.accounts ctor_tys blueprint_size =
             SOME code_info` >>
+  (* Rejecting oversized initcode cannot alter protected storage. *)
+  Cases_on `code_info.cc_size_ok` >>
   (* COND_RATOR eta-expands the two pre-conditions, so the following gvs splits
      them into (balance, collision) = (T,T), (T,F), (F,T), (F,F) *)
   gvs[eval_create_def, bind_apply, ignore_bind_apply, lift_option_type_def,
@@ -2989,6 +3019,56 @@ Resume eval_all_storage_preservation_mutual[Expr_Call_CreateTarget]:
     qpat_x_assum `well_typed_expr env
         (Call _ (CreateTarget _ _ _) es _)` mp_tac >>
     rewrite_tac[Once well_typed_expr_def] >> strip_tac >>
+    Cases_on `kind` >| [ALL_TAC, ALL_TAC, (
+      rename1 `CreateFromBlueprint raw_args` >>
+      full_simp_tac bool_ss [create_kind_11, create_kind_distinct] >>
+      `well_typed_exprs env (TAKE (if has_salt then 4 else 3) es)` by
+        metis_tac[well_typed_exprs_TAKE] >>
+      `well_typed_exprs env (DROP (if has_salt then 4 else 3) es)` by
+        metis_tac[well_typed_exprs_DROP] >>
+      `call_evaluation_safe cx
+         (int_calls_exprs (TAKE (if has_salt then 4 else 3) es))` by
+        metis_tac[call_evaluation_safe_exprs_TAKE] >>
+      `call_evaluation_safe cx
+         (int_calls_exprs (DROP (if has_salt then 4 else 3) es))` by
+        metis_tac[call_evaluation_safe_exprs_DROP] >>
+      qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+      simp_tac(srw_ss())[Once evaluate_def, bind_def] >>
+      Cases_on `eval_exprs cx (TAKE (if has_salt then 4 else 3) es) st` >>
+      rename1 `eval_exprs cx (TAKE (if has_salt then 4 else 3) es) st =
+                 (prefix_res,prefix_st)` >>
+      first_x_assum drule_all >> strip_tac >>
+      `runtime_consistent env cx prefix_st` by
+        metis_tac[eval_exprs_preserves_runtime_consistent,
+                  runtime_storage_consistent_runtime] >>
+      `runtime_storage_consistent env cx prefix_st` by
+        metis_tac[runtime_storage_consistent_intro,
+                  runtime_storage_consistent_layout] >>
+      Cases_on `prefix_res` >> gvs[]
+      >- (
+        rename1 `eval_exprs cx (TAKE (if has_salt then 4 else 3) es) st =
+                   (INL prefix,prefix_st)` >>
+        Cases_on `check_create_blueprint has_salt prefix prefix_st` >>
+        rename1 `check_create_blueprint has_salt prefix prefix_st =
+                   (gate_res,gate_st)` >>
+        `gate_st = prefix_st` by (
+          qpat_x_assum `check_create_blueprint has_salt prefix prefix_st = _`
+            (mp_tac o Q.AP_TERM `SND`) >> simp[]) >>
+        gvs[] >>
+        rename1 `eval_exprs cx (TAKE (if has_salt then 4 else 3) es) st =
+                   (INL prefix,prefix_st)` >>
+        Cases_on `gate_res` >> gvs[]
+        >- (
+          Cases_on `eval_exprs cx (DROP (if has_salt then 4 else 3) es) prefix_st` >>
+          rename1 `eval_exprs cx (DROP (if has_salt then 4 else 3) es) prefix_st =
+                     (suffix_res,suffix_st)` >>
+          ORACLE_STORAGE_TAC >>
+          first_x_assum drule_all >> strip_tac >>
+          Cases_on `suffix_res` >> gvs[] >> strip_tac >>
+          metis_tac[eval_create_contract_storage_postulate]) >>
+        strip_tac >> gvs[]) >>
+      strip_tac >> gvs[]), ALL_TAC] >>
+    full_simp_tac bool_ss [create_kind_11, create_kind_distinct] >>
     qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
     simp[Once evaluate_def, bind_def] >>
     Cases_on `eval_exprs cx es st` >>
@@ -3000,7 +3080,9 @@ Resume eval_all_storage_preservation_mutual[Expr_Call_CreateTarget]:
        postulate, exactly as external calls use protected_storage_calls_preserve
        above. *)
     metis_tac[eval_create_contract_storage_postulate]) >>
-  rpt strip_tac >> gvs[Once well_typed_expr_def]
+  rpt strip_tac >>
+  qpat_x_assum `type_place_expr env (Call _ _ _ _) = SOME _` mp_tac >>
+  simp[Once well_typed_expr_def]
 QED
 
 Theorem eval_iterator_success_values_typed[local]:
@@ -3425,495 +3507,54 @@ Proof
   metis_tac[runtime_storage_consistent_storage]
 QED
 
+Theorem eval_ext_call_storage_preserved[local]:
+  contract_storage_well_formed cx st /\ oracle_storage_ok cx st /\
+  protected_storage_calls_preserve cx /\
+  eval_ext_call cx static skip_check sig opts vs st = (res,st') ==>
+  contract_storage_well_formed cx st'
+Proof
+  PairCases_on `sig` >>
+  Cases_on `vs` >- (simp[eval_ext_call_def, raise_def] >> rw[] >> gvs[]) >>
+  simp[eval_ext_call_def, bind_def, ignore_bind_def, type_check_def,
+       assert_def, check_def, lift_option_type_def, lift_option_def,
+       lift_sum_runtime_def, get_accounts_def, get_transient_storage_def,
+       update_accounts_def, update_transient_def, append_logs_def,
+       return_def, raise_def,
+       COND_RATOR, vfmTypesTheory.option_CASE_rator,
+       vfmTypesTheory.prod_CASE_rator, vfmTypesTheory.sum_CASE_rator] >>
+  strip_tac >> gvs[AllCaseEqs()] >>
+  gvs[pairTheory.UNCURRY_RATOR, pairTheory.UNCURRY_EQ, combinTheory.C_THM,
+      combinTheory.o_THM, AllCaseEqs(), COND_RATOR, bind_def, return_def,
+      raise_def, adopt_call_outcome_INR_storage] >>~-
+  ([`run_ext_call _ _ _ _ _ _ _ _ = SOME _`],
+   irule run_ext_call_storage_frame >> simp[] >> metis_tac[]) >>
+  metis_tac[take_call_outcome_storage_suffix,
+            take_adopt_call_outcome_storage_suffix]
+QED
+
 Resume eval_all_storage_preservation_mutual[Expr_Call_ExtCall]:
   rpt gen_tac >> strip_tac >>
   conj_tac
-  >- (strip_tac >>
-      `call_evaluation_safe cx (int_calls_exprs es)` by (
-        qpat_assum `call_evaluation_safe cx
-          (int_calls_expr (Call v14 (ExtCall is_static' skip_check (func_name,arg_types,ret_type)) es drv))`
-          mp_tac >> pure_rewrite_tac[int_calls_expr_def] >> strip_tac >>
-        irule call_evaluation_safe_append_left >>
-        qexists_tac `int_calls_opt drv` >> simp[]) >>
-      qpat_x_assum `well_typed_expr env
-        (Call v14 (ExtCall is_static' skip_check (func_name,arg_types,ret_type)) es drv)` mp_tac >>
-      rewrite_tac[Once well_typed_expr_def] >> strip_tac >>
-      Cases_on `eval_exprs cx es st` >>
-      rename1 `eval_exprs cx es st = (args_res,args_st)` >>
-      first_x_assum drule_all >> strip_tac >>
-      Cases_on `args_res`
-      >- (rename1 `eval_exprs cx es st = (INL vs,args_st)` >>
-          `exprs_runtime_typed env es vs` by (
-            irule eval_exprs_success_runtime_typed >> simp[] >>
-            metis_tac[runtime_storage_consistent_runtime]) >>
-          `runtime_consistent env cx args_st` by
-            metis_tac[eval_exprs_preserves_runtime_consistent,
-                      runtime_storage_consistent_runtime] >>
-          `runtime_storage_consistent env cx args_st` by
-            metis_tac[runtime_storage_consistent_intro,
-                      runtime_storage_consistent_layout] >>
-          Cases_on `is_static'`
-          >- (qpat_x_assum
-                `if T then MAP expr_type es = BaseT AddressT::arg_types else _`
-                mp_tac >> simp[] >> strip_tac >>
-              drule_all extcall_static_args_runtime_typed_dest >> strip_tac >>
-              `vs <> []` by
-                (drule_all extcall_static_args_runtime_typed_nonempty >> simp[]) >>
-              `get_tenv cx = env.type_defs` by
-                metis_tac[env_consistent_get_tenv, runtime_consistent_def] >>
-              drule_all extcall_static_args_runtime_typed_tail >> strip_tac >>
-              `?calldata.
-                 build_ext_calldata env.type_defs func_name arg_types (TL vs) =
-                   SOME calldata` by
-                (drule_all build_ext_calldata_typed >> simp[]) >>
-              pop_assum strip_assume_tac >>
-              ORACLE_STORAGE_TAC >>
-              reverse (Cases_on `args_st.outcomes`)
-              >- suspend "Expr_Call_ExtCall_static_oracle" >>
-              POP_ASSUM_LIST (fn ths => MAP_EVERY ASSUME_TAC
-                (List.rev (List.filter (fn th => not (is_forall (concl th) andalso
-                  can (find_term (aconv ``take_call_outcome``)) (concl th))) ths))) >>
-              qpat_x_assum `eval_expr cx (Call _ (ExtCall T _ _) _ _) st = (res,st')`
-                mp_tac >>
-              simp_tac(srw_ss())[Once evaluate_def, bind_def, ignore_bind_def,
-                check_def, type_check_def, assert_def, return_def, raise_def,
-                lift_option_type_def, lift_option_def, get_accounts_def,
-                get_transient_storage_def, update_accounts_def, update_transient_def] >>
-              qpat_assum `eval_exprs cx es st = (INL vs,args_st)`
-                (fn th => rewrite_tac[th]) >>
-              simp[return_def] >>
-              qpat_assum `dest_AddressV (HD vs) = SOME target_addr`
-                (fn th => rewrite_tac[th]) >>
-              qpat_assum `get_tenv cx = env.type_defs` (fn th => rewrite_tac[th]) >>
-              qpat_assum `build_ext_calldata env.type_defs _ _ _ = SOME calldata`
-                (fn th => rewrite_tac[th]) >>
-              rewrite_tac[return_def, raise_def] >>
-              Cases_on `~ext_call_precheck_ok skip_check ret_type target_addr args_st.accounts` >>
-              rewrite_tac[return_def, raise_def]
-              >- (strip_tac >>
-                  qpat_x_assum `_ args_st = (res,st')` mp_tac >>
-                  simp[assert_def, bind_def, return_def, raise_def,
-                       get_accounts_def, get_transient_storage_def] >>
-                  strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
-                  metis_tac[runtime_storage_consistent_storage]) >>
-              pop_assum (assume_tac o PURE_REWRITE_RULE[boolTheory.NOT_CLAUSES]) >>
-              simp_tac(srw_ss())[return_def, get_accounts_def, assert_def,
-                                 get_transient_storage_def, raise_def, bind_def] >>
-              asm_rewrite_tac[] >> simp_tac(srw_ss())[] >>
-              Cases_on `run_ext_call cx.txn.target target_addr calldata NONE
-                args_st.accounts args_st.tStorage (vyper_to_tx_params cx.txn)` >>
-              rewrite_tac[return_def, raise_def]
-              >- (simp[raise_def] >> strip_tac >>
-                  qpat_x_assum `_ args_st = (res,st')` mp_tac >>
-                  simp[vyperStateTheory.get_accounts_def,
-                       vyperStateTheory.get_transient_storage_def,
-                       bind_def, return_def, assert_def, raise_def] >>
-                  strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
-                  metis_tac[runtime_storage_consistent_storage]) >>
-              rename1 `SOME result` >> PairCases_on `result` >>
-              simp_tac(srw_ss())[assert_def, bind_def, return_def] >>
-              reverse (Cases_on `result0`) >> simp_tac(srw_ss())[]
-              >- (strip_tac >>
-                  qpat_x_assum `_ = (res,st')` mp_tac >>
-                  simp[vyperStateTheory.get_accounts_def,
-                       vyperStateTheory.get_transient_storage_def,
-                       bind_def, return_def, assert_def, raise_def] >>
-                  strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
-                  metis_tac[runtime_storage_consistent_storage]) >>
-              simp_tac(srw_ss())[vyperStateTheory.get_accounts_def,
-                                 vyperStateTheory.get_transient_storage_def,
-                                 bind_def, assert_def, update_accounts_def, update_transient_def,
-                                 return_def] >>
-              qmatch_abbrev_tac `GG` >>
-              first_x_assum drule >>
-              simp[type_check_def, check_def, assert_def, raise_def, return_def,
-                   lift_option_type_def, lift_option_def, get_accounts_def,
-                   get_transient_storage_def, update_accounts_def,
-                   update_transient_def] >>
-              disch_then drule >>
-              disch_then (qspec_then `args_st` mp_tac) >>
-              simp[raise_def, return_def] >>
-              disch_then (qspec_then `args_st` mp_tac) >>
-              simp[raise_def, return_def] >> strip_tac >>
-              unabbrev_all_tac >>
-              `accounts_well_typed args_st.accounts` by
-                metis_tac[runtime_consistent_def] >>
-              `accounts_well_typed result2` by (
-                drule_all run_ext_call_accounts_well_typed >> simp[]) >>
-              `contract_storage_well_formed cx
-                 (args_st with <| accounts := result2; tStorage := result3 |>)` by
-                metis_tac[protected_storage_calls_preserve_run_ext_call,
-                          runtime_storage_consistent_storage] >>
-              `runtime_consistent env cx
-                 (args_st with <| accounts := result2; tStorage := result3 |>)` by
-                metis_tac[update_accounts_transient_runtime_consistent] >>
-              `runtime_storage_consistent env cx
-                 (args_st with <| accounts := result2; tStorage := result3 |>)` by
-                metis_tac[runtime_storage_consistent_intro,
-                          runtime_storage_consistent_layout] >>
-              `runtime_consistent env cx
-                 ((args_st with <|accounts := result2; tStorage := result3|>) with
-                    logs := args_st.logs ++ result4)` by (
-                qspecl_then [`env`, `cx`,
-                  `args_st with <|accounts := result2; tStorage := result3|>`,
-                  `result4`] mp_tac runtime_consistent_logs_append >>
-                simp[]) >>
-              `contract_storage_well_formed cx
-                 ((args_st with <|accounts := result2; tStorage := result3|>) with
-                    logs := args_st.logs ++ result4)` by
-                metis_tac[contract_storage_well_formed_logs] >>
-              `runtime_storage_consistent env cx
-                 ((args_st with <|accounts := result2; tStorage := result3|>) with
-                    logs := args_st.logs ++ result4)` by
-                metis_tac[runtime_storage_consistent_intro,
-                          runtime_storage_consistent_layout] >>
-              ORACLE_STORAGE_TAC >>
-              Cases_on `result1 = [] /\ IS_SOME drv` >> gvs[]
-              >- ((* code check after the call: a failed check leaves storage alone *)
-              reverse (Cases_on `skip_check \/ ext_call_has_code target_addr result2`)
-              >- (rpt strip_tac >> qpat_x_assum `_ = (res,st')` mp_tac >>
-                  qpat_assum `~(skip_check \/ _)` (fn th =>
-                    simp_tac (srw_ss()) [append_logs_def, return_def, assert_def,
-                                         check_def, ignore_bind_def,
-                                         update_accounts_def, update_transient_def,
-                                         bind_def, raise_def, th]) >>
-                  strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
-                  (first_assum ACCEPT_TAC ORELSE asm_simp_tac (srw_ss()) [])) >>
-              Cases_on `drv` >> gvs[Once well_typed_expr_def] >> strip_tac >>
-                  `call_evaluation_safe cx (int_calls_expr x)` by (
-                    qpat_assum `call_evaluation_safe cx
-                      (int_calls_expr (Call _ (ExtCall T _ _) es (SOME x)))` mp_tac >>
-                    pure_rewrite_tac[int_calls_expr_def] >>
-                    metis_tac[call_evaluation_safe_append_right]) >>
-                  qpat_x_assum `!s0 t0 env' st'' res' st'''. _`
-                    (qspecl_then
-                      [`args_st with <|accounts := result2; tStorage := result3|>`,
-                       `(args_st with <|accounts := result2; tStorage := result3|>) with
-                          logs := args_st.logs ++ result4`,
-                       `env`,
-                       `(args_st with <|accounts := result2; tStorage := result3|>) with
-                          logs := args_st.logs ++ result4`,
-                       `res`, `st'`] mp_tac) >>
-                  simp[append_logs_def, return_def] >>
-                  qpat_x_assum `_ = (res,st')` mp_tac >>
-                  simp[bind_def, assert_def, check_def, ignore_bind_def,
-                       update_accounts_def, update_transient_def,
-                       append_logs_def, return_def] >>
-                  metis_tac[]) >>
-              strip_tac >> Cases_on `drv` >> gvs[] >>
-              qpat_x_assum `(do _ od) _ = (res,st')` mp_tac >>
-              simp[lift_sum_runtime_def, bind_def, return_def, raise_def] >>
-              qmatch_goalsub_rename_tac
-                `evaluate_abi_decode_return env.type_defs decode_ty result1` >>
-              Cases_on
-                `evaluate_abi_decode_return env.type_defs decode_ty result1` >>
-              gvs[return_def, raise_def] >> strip_tac >> gvs[] >>
-              qpat_x_assum `_ = (res,st')` mp_tac >>
-              simp[bind_def, assert_def, update_accounts_def,
-                   update_transient_def, append_logs_def, return_def] >>
-              metis_tac[runtime_storage_consistent_storage]) >>
-          qpat_x_assum
-            `if F then _ else MAP expr_type es =
-              BaseT AddressT::BaseT (UintT 256)::arg_types`
-            mp_tac >> simp[] >> strip_tac >>
-          drule_all extcall_nonstatic_args_runtime_typed_dest >> strip_tac >>
-          `vs <> [] /\ TL vs <> []` by
-            (drule_all extcall_nonstatic_args_runtime_typed_nonempty >> simp[]) >>
-          `get_tenv cx = env.type_defs` by
-            metis_tac[env_consistent_get_tenv, runtime_consistent_def] >>
-          drule_all extcall_nonstatic_args_runtime_typed_tail >> strip_tac >>
-          `?calldata.
-             build_ext_calldata env.type_defs func_name arg_types (TL (TL vs)) =
-               SOME calldata` by
-            (drule_all build_ext_calldata_typed >> simp[]) >>
-          pop_assum strip_assume_tac >>
-          ORACLE_STORAGE_TAC >>
-          reverse (Cases_on `args_st.outcomes`)
-          >- suspend "Expr_Call_ExtCall_nonstatic_oracle" >>
-          POP_ASSUM_LIST (fn ths => MAP_EVERY ASSUME_TAC
-            (List.rev (List.filter (fn th => not (is_forall (concl th) andalso
-              can (find_term (aconv ``take_call_outcome``)) (concl th))) ths))) >>
-          qpat_x_assum `eval_expr cx (Call _ (ExtCall F _ _) _ _) st = (res,st')`
-            mp_tac >>
-          simp_tac(srw_ss())[Once evaluate_def, bind_def, ignore_bind_def,
-            check_def, type_check_def, assert_def, return_def, raise_def,
-            lift_option_type_def, lift_option_def, get_accounts_def,
-            get_transient_storage_def, update_accounts_def, update_transient_def] >>
-          qpat_assum `eval_exprs cx es st = (INL vs,args_st)`
-            (fn th => rewrite_tac[th]) >>
-          simp_tac(srw_ss())[] >> asm_rewrite_tac[] >>
-          simp_tac(srw_ss()++boolSimps.LET_ss)[return_def] >>
-          qpat_assum `get_tenv cx = env.type_defs` (fn th => rewrite_tac[th]) >>
-          qpat_assum `build_ext_calldata env.type_defs _ _ _ = SOME calldata`
-            (fn th => rewrite_tac[th]) >>
-          rewrite_tac[return_def, raise_def] >>
-          Cases_on `~ext_call_precheck_ok skip_check ret_type target_addr args_st.accounts` >>
-          rewrite_tac[return_def, raise_def]
-          >- (qpat_x_assum `!s'' vs t. _` kall_tac >> strip_tac >>
-              gvs[assert_def, bind_def, return_def, raise_def,
-                  get_accounts_def, get_transient_storage_def] >>
-              metis_tac[runtime_storage_consistent_storage]) >>
-          pop_assum (assume_tac o PURE_REWRITE_RULE[boolTheory.NOT_CLAUSES]) >>
-          simp_tac(srw_ss())[return_def, get_accounts_def, assert_def,
-                             get_transient_storage_def, raise_def, bind_def] >>
-          asm_rewrite_tac[] >> simp_tac(srw_ss())[] >>
-          Cases_on `run_ext_call cx.txn.target target_addr calldata (SOME amount)
-            args_st.accounts args_st.tStorage (vyper_to_tx_params cx.txn)` >>
-          rewrite_tac[return_def, raise_def]
-          >- (simp[raise_def] >> strip_tac >>
-              qpat_x_assum `_ args_st = (res,st')` mp_tac >>
-              simp[vyperStateTheory.get_accounts_def,
-                   vyperStateTheory.get_transient_storage_def,
-                   bind_def, return_def, assert_def, raise_def] >>
-              strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
-              metis_tac[runtime_storage_consistent_storage]) >>
-          rename1 `run_ext_call cx.txn.target target_addr calldata (SOME amount)
-            args_st.accounts args_st.tStorage (vyper_to_tx_params cx.txn) = SOME result` >>
-          PairCases_on `result` >>
-          simp_tac(srw_ss())[assert_def, bind_def, return_def] >>
-          reverse (Cases_on `result0`) >> simp_tac(srw_ss())[]
-          >- (strip_tac >>
-              qpat_x_assum `_ = (res,st')` mp_tac >>
-              simp[vyperStateTheory.get_accounts_def,
-                   vyperStateTheory.get_transient_storage_def,
-                   bind_def, return_def, assert_def, raise_def] >>
-              strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
-              metis_tac[runtime_storage_consistent_storage]) >>
-          simp_tac(srw_ss())[vyperStateTheory.get_accounts_def,
-                             vyperStateTheory.get_transient_storage_def,
-                             bind_def, assert_def, update_accounts_def, update_transient_def,
-                             return_def] >>
-          `!s0 err.
-             (do
-                assert T err;
-                v <- return amount;
-                return (SOME v, TL (TL vs))
-              od) s0 = (INL (SOME amount, TL (TL vs)), s0)` by
-            (rpt gen_tac >> EVAL_TAC) >>
-          `!s0 err.
-             (case build_ext_calldata env.type_defs func_name arg_types
-                     (TL (TL vs)) of
-                NONE => raise err
-              | SOME v => return v) s0 = (INL calldata, s0)` by (
-            rpt gen_tac >>
-            qpat_assum
-              `build_ext_calldata env.type_defs func_name arg_types
-                 (TL (TL vs)) = SOME calldata`
-              (fn th => rewrite_tac[th]) >>
-            simp[return_def]) >>
-          qmatch_abbrev_tac `GG` >>
-          first_x_assum drule >>
-          simp[type_check_def, check_def, assert_def, raise_def, return_def,
-               lift_option_type_def, lift_option_def, get_accounts_def,
-               get_transient_storage_def, update_accounts_def,
-               update_transient_def] >>
-          strip_tac >>
-          `(result1 = [] /\ IS_SOME drv /\
-            (skip_check \/ ext_call_has_code target_addr result2)) ==>
-           !env0 st0 res0 st0'.
-             runtime_storage_consistent env0 cx st0 /\
-             oracle_storage_ok cx st0 /\
-             call_evaluation_safe cx (int_calls_expr (THE drv)) /\
-             eval_expr cx (THE drv) st0 = (res0,st0') ==>
-             (well_typed_expr env0 (THE drv) ==>
-              contract_storage_well_formed cx st0') /\
-             (!vt. type_place_expr env0 (THE drv) = SOME vt ==>
-              contract_storage_well_formed cx st0')` by (
-            disch_tac >> rpt strip_tac >>
-            (* Original specialization, before source-exception grammar makes
-               the successful prefix equalities simplify out of this IH:
-            qpat_x_assum `!s' value_opt arg_vals. _`
-              (qspecl_then
-                [`args_st`, `SOME amount`, `TL (TL vs)`, `args_st`,
-                 `args_st`, `calldata`, `args_st`, `args_st`, `args_st`,
-                 `args_st`, `args_st`, `result2`, `result3`, `result4`,
-                 `args_st with <|accounts := result2; tStorage := result3|>`,
-                 `(args_st with <|accounts := result2; tStorage := result3|>) with
-                    logs := args_st.logs ++ result4`,
-                 `env0`, `st0`, `res0`, `st0'`] mp_tac) >>
-            *)
-            qpat_x_assum
-              `!sa sb sc sd sr accounts transient logs se sf en s r t. _`
-              (qspecl_then
-                [`args_st`, `args_st`, `args_st`, `args_st`, `args_st`,
-                 `result2`, `result3`, `result4`,
-                 `args_st with <|accounts := result2; tStorage := result3|>`,
-                 `(args_st with <|accounts := result2; tStorage := result3|>) with
-                    logs := args_st.logs ++ result4`,
-                 `env0`, `st0`, `res0`, `st0'`] mp_tac) >>
-            simp[assert_def, bind_def, return_def, raise_def, append_logs_def] >>
-            (impl_tac >- EVAL_TAC) >> strip_tac >> metis_tac[]) >>
-          (* Original: qpat_x_assum `!s' value_opt arg_vals. _` kall_tac >> *)
-          qpat_x_assum
-            `!sa sb sc sd accounts transient logs se sf en s r t. _` kall_tac >>
-          unabbrev_all_tac >>
-          `accounts_well_typed args_st.accounts` by
-            metis_tac[runtime_consistent_def] >>
-          `accounts_well_typed result2` by (
-            drule_all run_ext_call_accounts_well_typed >> simp[]) >>
-          `contract_storage_well_formed cx
-             (args_st with <| accounts := result2; tStorage := result3 |>)` by
-            metis_tac[protected_storage_calls_preserve_run_ext_call,
-                      runtime_storage_consistent_storage] >>
-          `runtime_consistent env cx
-             (args_st with <| accounts := result2; tStorage := result3 |>)` by
-            metis_tac[update_accounts_transient_runtime_consistent] >>
-          `runtime_storage_consistent env cx
-             (args_st with <| accounts := result2; tStorage := result3 |>)` by
-            metis_tac[runtime_storage_consistent_intro,
-                      runtime_storage_consistent_layout] >>
-          `runtime_consistent env cx
-             ((args_st with <|accounts := result2; tStorage := result3|>) with
-                logs := args_st.logs ++ result4)` by (
-            qspecl_then [`env`, `cx`,
-              `args_st with <|accounts := result2; tStorage := result3|>`,
-              `result4`] mp_tac runtime_consistent_logs_append >>
-            simp[]) >>
-          `contract_storage_well_formed cx
-             ((args_st with <|accounts := result2; tStorage := result3|>) with
-                logs := args_st.logs ++ result4)` by
-            metis_tac[contract_storage_well_formed_logs] >>
-          `runtime_storage_consistent env cx
-             ((args_st with <|accounts := result2; tStorage := result3|>) with
-                logs := args_st.logs ++ result4)` by
-            metis_tac[runtime_storage_consistent_intro,
-                      runtime_storage_consistent_layout] >>
-          ORACLE_STORAGE_TAC >>
-          Cases_on `result1 = [] /\ IS_SOME drv` >> gvs[]
-          >- ((* code check after the call: a failed check leaves storage alone *)
-              reverse (Cases_on `skip_check \/ ext_call_has_code target_addr result2`)
-              >- (rpt strip_tac >> qpat_x_assum `_ = (res,st')` mp_tac >>
-                  qpat_assum `~(skip_check \/ _)` (fn th =>
-                    simp_tac (srw_ss()) [append_logs_def, return_def, assert_def,
-                                         check_def, ignore_bind_def,
-                                         update_accounts_def, update_transient_def,
-                                         bind_def, raise_def, th]) >>
-                  strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
-                  (first_assum ACCEPT_TAC ORELSE asm_simp_tac (srw_ss()) [])) >>
-              Cases_on `drv` >> gvs[Once well_typed_expr_def] >> strip_tac >>
-              `call_evaluation_safe cx (int_calls_expr x)` by (
-                qpat_assum `call_evaluation_safe cx
-                  (int_calls_expr (Call _ (ExtCall F _ _) es (SOME x)))` mp_tac >>
-                pure_rewrite_tac[int_calls_expr_def] >>
-                metis_tac[call_evaluation_safe_append_right]) >>
-              qpat_x_assum `!env0 st0 res0 st0'. _`
-                (qspecl_then
-                  [`env`,
-                   `(args_st with <|accounts := result2; tStorage := result3|>) with
-                      logs := args_st.logs ++ result4`,
-                   `res`, `st'`] mp_tac) >>
-              simp[append_logs_def, return_def] >>
-              qpat_x_assum `_ = (res,st')` mp_tac >>
-              simp[bind_def, assert_def, check_def, ignore_bind_def,
-                   update_accounts_def, update_transient_def,
-                   append_logs_def, return_def] >>
-              metis_tac[]) >>
-          strip_tac >> Cases_on `drv` >> gvs[] >>
-          qpat_x_assum `_ = (res,st')` mp_tac >>
-          simp[lift_sum_runtime_def, bind_def, ignore_bind_def, return_def,
-               raise_def, assert_def, update_accounts_def,
-               update_transient_def, append_logs_def] >>
-          qmatch_goalsub_rename_tac
-            `evaluate_abi_decode_return env.type_defs decode_ty result1` >>
-          Cases_on
-            `evaluate_abi_decode_return env.type_defs decode_ty result1` >>
-          simp[return_def, raise_def] >> rpt strip_tac >>
-          rpt BasicProvers.VAR_EQ_TAC >>
-          (first_assum ACCEPT_TAC ORELSE
-           metis_tac[runtime_storage_consistent_storage])) >>
-      rpt (qpat_x_assum `!s'' vs t. _` kall_tac) >>
-      POP_ASSUM_LIST (fn ths => MAP_EVERY ASSUME_TAC
-        (List.rev (List.filter (fn th => not (is_forall (concl th) andalso
-          can (find_term (aconv ``run_ext_call``)) (concl th))) ths))) >>
-      gvs[] >>
-      drule eval_extcall_args_error >>
-      disch_then (qspecl_then [`ret_type`, `is_static'`, `func_name`,
-                               `arg_types`, `drv`, `skip_check`] assume_tac) >>
-      qpat_x_assum `eval_expr _ _ _ = (res,st')` mp_tac >>
-      pop_assum (fn th => rewrite_tac[th, pairTheory.PAIR_EQ]) >>
-      rpt strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
-      qpat_assum `contract_storage_well_formed cx args_st` ACCEPT_TAC) >>
-  (* ExtCall is never a place expression *)
+  >- (
+    strip_tac >>
+    `call_evaluation_safe cx (int_calls_exprs es)` by (
+      qpat_x_assum `call_evaluation_safe cx
+          (int_calls_expr (Call _ (ExtCall _ _ _ _) es _))`
+        mp_tac >> pure_rewrite_tac[int_calls_expr_def] >> strip_tac >>
+      irule call_evaluation_safe_append_left >>
+      goal_assum (drule_at Any)) >>
+    `well_typed_exprs env es` by metis_tac[ext_call_args_typed] >>
+    qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+    simp[Once evaluate_def, bind_def] >>
+    Cases_on `eval_exprs cx es st` >>
+    rename1 `eval_exprs cx es st = (args_res,args_st)` >>
+    first_x_assum drule_all >> strip_tac >>
+    Cases_on `args_res` >> gvs[]
+    >- (ORACLE_STORAGE_TAC >> metis_tac[eval_ext_call_storage_preserved]) >>
+    rpt strip_tac >> gvs[]) >>
   rpt strip_tac >>
   qpat_x_assum `type_place_expr _ _ = SOME _` mp_tac >>
   simp_tac (srw_ss()) [Once well_typed_expr_def]
-QED
-
-fun EXTCALL_STORAGE_ORACLE_IH_TAC g =
-  POP_ASSUM_LIST (fn ths => MAP_EVERY ASSUME_TAC (List.rev (List.map
-    (fn th => if is_forall (concl th) andalso
-      can (find_term (aconv ``take_call_outcome``)) (concl th)
-      then SIMP_RULE (srw_ss())
-        [type_check_def, check_def, assert_def, lift_option_type_def,
-         return_def, raise_def, bind_def, ignore_bind_def, get_accounts_def]
-        th else th) (List.filter
-      (fn th => not (is_forall (concl th) andalso
-        can (find_term (aconv ``run_ext_call``)) (concl th))) ths)))) g;
-
-val EXTCALL_STORAGE_ORACLE_MARK_TAC = FIRST_X_ASSUM (fn th =>
-  if is_forall (concl th) andalso
-    can (find_term (aconv ``take_call_outcome``)) (concl th)
-  then mk_asm "storage_oracle_driver" th else NO_TAC);
-
-val EXTCALL_STORAGE_ORACLE_RETURN_TAC =
-  Cases_on `ret_type = NoneT /\ NULL (lookup_account target_addr args_st.accounts).code`
-  >- (POP_ASSUM_LIST (fn ths => MAP_EVERY ASSUME_TAC
-       (List.filter (fn th => not (is_forall (concl th))) ths)) >>
-      gvs[bind_def, ignore_bind_def, get_accounts_def, return_def, check_def,
-          assert_def, raise_def, runtime_storage_consistent_def]) >>
-  mp_tac (ExtCall_outcome_return_storage_preserved |> Q.INST
-    [`env` |-> `env`, `st` |-> `args_st`, `target` |-> `target_addr`,
-     `value_opt` |-> `value_opt`, `calldata` |-> `calldata`, `drv` |-> `drv`,
-     `ret_type` |-> `ret_type`, `res` |-> `res`, `st'` |-> `st'`, `cx` |-> `cx`]) >>
-  simp[] >> impl_tac >- (
-    rpt gen_tac >> strip_tac >>
-    drule_all take_adopt_call_outcome_runtime_storage_suffix >> strip_tac >>
-    `well_typed_expr env (THE drv)` by metis_tac[well_typed_opt_THE] >>
-    `call_evaluation_safe cx (int_calls_expr (THE drv))` by (
-      Cases_on `drv` >> gvs[] >>
-      qpat_assum `call_evaluation_safe cx (int_calls_expr (Call _ (ExtCall _ _ _) es (SOME _)))`
-        mp_tac >> pure_rewrite_tac[int_calls_expr_def] >>
-      metis_tac[call_evaluation_safe_append_right]) >>
-    FIRST [asm "storage_oracle_driver" (qspecl_then
-      [`st`, `vs`, `args_st`, `args_st`, `target_addr`, `args_st`, `args_st`,
-       `calldata`, `args_st`, `args_st`, `caseOracle`, `args_st`, `args_st`,
-       `args_st`, `args_st`, `rq`, `co`, `st1`, `st1`, `st2`] mp_tac),
-      asm "storage_oracle_driver" (qspecl_then
-      [`st`, `vs`, `args_st`, `args_st`, `target_addr`, `args_st`,
-       `args_st`, `value_opt`, `TL (TL vs)`, `args_st`, `args_st`,
-       `calldata`, `args_st`, `args_st`, `caseOracle`, `args_st`, `args_st`,
-       `args_st`, `args_st`, `rq`, `co`, `st1`, `st1`, `st2`] mp_tac)] >>
-    impl_tac >- (Cases_on `ret_type = NoneT` >>
-      gvs[return_def, assert_def, bind_def, ignore_bind_def, Abbr`value_opt`]) >>
-    disch_then (qspecl_then [`env`, `st2`, `r`, `t`] mp_tac) >>
-    simp[] >> strip_tac >> first_assum ACCEPT_TAC) >> simp[];
-
-Resume eval_all_storage_preservation_mutual[Expr_Call_ExtCall_static_oracle]:
-  qpat_x_assum `v14 = ret_type` SUBST_ALL_TAC >>
-  EXTCALL_STORAGE_ORACLE_IH_TAC >> EXTCALL_STORAGE_ORACLE_MARK_TAC >>
-  rename1 `args_st.outcomes = SOME caseOracle` >>
-  `build_ext_calldata (get_tenv cx) func_name arg_types (TL vs) = SOME calldata`
-    by simp[] >>
-  drule_all (eval_extcall_SOME_tail |> Q.INST [`stat` |-> `T`, `amount` |-> `0`] |> SRULE []) >>
-  disch_then (assume_tac o SPEC_ALL) >>
-  qpat_x_assum `eval_expr _ _ _ = (res,st')` mp_tac >>
-  qpat_x_assum `eval_expr _ _ _ = _` (fn th => rewrite_tac[th]) >> strip_tac >>
-  qabbrev_tac `value_opt = (NONE:num option)` >>
-  EXTCALL_STORAGE_ORACLE_RETURN_TAC
-QED
-
-Resume eval_all_storage_preservation_mutual[Expr_Call_ExtCall_nonstatic_oracle]:
-  qpat_x_assum `v14 = ret_type` SUBST_ALL_TAC >>
-  EXTCALL_STORAGE_ORACLE_IH_TAC >> EXTCALL_STORAGE_ORACLE_MARK_TAC >>
-  rename1 `args_st.outcomes = SOME caseOracle` >>
-  `build_ext_calldata (get_tenv cx) func_name arg_types (TL (TL vs)) = SOME calldata`
-    by simp[] >>
-  drule_all (eval_extcall_SOME_tail |> Q.INST [`stat` |-> `F`] |> SRULE []) >>
-  disch_then (assume_tac o SPEC_ALL) >>
-  qpat_x_assum `eval_expr _ _ _ = (res,st')` mp_tac >>
-  qpat_x_assum `eval_expr _ _ _ = _` (fn th => rewrite_tac[th]) >> strip_tac >>
-  qabbrev_tac `value_opt = SOME amount` >>
-  EXTCALL_STORAGE_ORACLE_RETURN_TAC
 QED
 
 Theorem lift_option_type_INL_eq_storage[local]:
@@ -4005,7 +3646,8 @@ Theorem protected_storage_calls_preserve_stk[local]:
   protected_storage_calls_preserve cx
 Proof
   simp[protected_storage_calls_preserve_def,
-       contract_storage_well_formed_stk]
+       contract_storage_well_formed_stk,
+       run_delegate_call_def, make_delegate_call_state_def]
 QED
 
 

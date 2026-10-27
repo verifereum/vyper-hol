@@ -1,7 +1,7 @@
 (* PLAN 5.6 name whitelist. TOP-LEVEL: supported_declaration_names,
    supported_function_bindings, supported_selectors_distinct.
    Helpers: supported_module_names, supported_function_names,
-   supported_event_names, supported_internal_name,
+   supported_event_names,
    supported_function_header_names, supported_struct_field_names.
    TASK_021 supplies ALL AnnAssign and For names (including nested branches)
    to supported_function_bindings. No body traversal or body placeholder. *)
@@ -34,12 +34,6 @@ Definition supported_event_names_def:
     supported_event_names rest
 End
 
-Definition supported_internal_name_def:
-  supported_internal_name name <=>
-    name <> "revert" /\ name <> "code_end" /\
-    ~isPREFIX "return_label_" name /\ ~isPREFIX "reachable_" name
-End
-
 (* Lists, not sets: repeated names in different branches/loops must fail.
    Concatenating catches cross-class collisions as well as duplicates.
    Module variables need no check: compile_env keys them by module_var_key
@@ -53,7 +47,6 @@ Definition supported_function_header_names_def:
   supported_function_header_names tops top <=>
     case top of
       FunctionDecl vis mut nr rr name args defaults ret stmts =>
-        (vis = Internal ==> supported_internal_name name) /\
         (name = "__default__" ==> NULL args) /\
         supported_function_bindings tops args [] []
     | _ => T
@@ -101,15 +94,6 @@ Theorem supported_fallback_no_arguments:
   args = []
 Proof
   simp[supported_function_header_names_def, NULL_EQ]
-QED
-
-Theorem supported_internal_label_contract:
-  supported_function_header_names tops
-    (FunctionDecl Internal mut nr rr name args defaults ret stmts) ==>
-  name <> "revert" /\ name <> "code_end" /\
-  ~isPREFIX "return_label_" name /\ ~isPREFIX "reachable_" name
-Proof
-  simp[supported_function_header_names_def, supported_internal_name_def]
 QED
 
 Theorem supported_declaration_names_unique:

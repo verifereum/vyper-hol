@@ -2658,7 +2658,7 @@ QED
 (* Helper: Not with uint256 type preserves the statically computed result type.
    Narrow unsigned types are excluded: the checker rejects them, matching the
    compiler, which refuses `~` below uint256. *)
-Theorem uint_not_success_type[local]:
+Theorem uint_not_success_type:
   is_uint256_type ty ∧
   evaluate_type (get_tenv cx) ty = SOME tv ∧
   value_has_type tv v ∧
@@ -2675,7 +2675,7 @@ Proof
 QED
 
 (* Helper: Not with bool type preserves the statically computed result type. *)
-Theorem bool_not_success_type[local]:
+Theorem bool_not_success_type:
   is_bool_type ty ∧
   evaluate_type (get_tenv cx) ty = SOME tv ∧
   value_has_type tv v ∧
@@ -2772,6 +2772,24 @@ Proof
   gvs[] >>
   imp_res_tac evaluate_type_BaseT_SOME >> gvs[] >>
   simp[evaluate_builtin_def, bounded_decimal_op_def]
+QED
+
+(* Neg on a numeric type preserves the statically computed result type: a
+   success is the bounded negation. *)
+Theorem neg_success_type:
+  is_numeric_type ty ∧
+  evaluate_type (get_tenv cx) ty = SOME tv ∧
+  value_has_type tv v ∧
+  evaluate_builtin cx acc ty Neg [v] = INL out ==>
+  value_has_type tv out
+Proof
+  strip_tac >>
+  qpat_x_assum `is_numeric_type _` mp_tac >>
+  REWRITE_TAC[is_numeric_type_inv, is_int_type_inv] >> strip_tac >>
+  gvs[] >> imp_res_tac evaluate_type_BaseT_SOME >> gvs[] >>
+  gvs[evaluate_builtin_def, type_to_int_bound_def, AllCaseEqs()] >>
+  imp_res_tac bounded_int_op_INL >> imp_res_tac bounded_decimal_op_INL >>
+  gvs[within_int_bound_def]
 QED
 
 (* Helper: Keccak256 with bytes or string input *)
@@ -3779,7 +3797,7 @@ Proof
 QED
 
 Theorem ext_call_args_typed:
-  well_typed_expr env (Call ty (ExtCall stat skip_check fsig) args drv) ==>
+  well_typed_expr env (Call ty (ExtCall stat skip_check fsig opts) args drv) ==>
   well_typed_exprs env args ∧ well_typed_opt env drv
 Proof
   Cases_on `fsig` >> Cases_on `r` >> rw[well_typed_expr_def]
