@@ -7,7 +7,7 @@ Ancestors
   abiScratchEncoderRecursive abiEncoderCorrectRecursive
   abiEncoderOpenInput abiEncoderRegisteredEffect abiEncoderStaticRepresentative
   abiEncoderOpenInputFrame abiEncoderResourceAdapter
-  abiEncoderExitPhi abiEncoderEntry abiEncoderExtendSim
+  abiEncoderExitPhi abiEncoderEntry abiEncoderExtendSim abiEncoderExtendControl
 
 fun audit_encoder_tag (name, th) =
   let
@@ -34,6 +34,10 @@ val _ = List.app audit_encoder_tag
    ("abi_encoder_pruned_entry", abi_encoder_pruned_entry),
    ("abi_encoder_extend_sim_trans", abi_encoder_extend_sim_trans),
    ("abi_encoder_run_sequence_extend_sim", abi_encoder_run_sequence_extend_sim),
+   ("abi_encoder_branch_phis_extend_sim", abi_encoder_branch_phis_extend_sim),
+   ("abi_encoder_array_loop_entry_extend_sim", abi_encoder_array_loop_entry_extend_sim),
+   ("abi_encoder_extend_finite_iteration", abi_encoder_extend_finite_iteration),
+   ("abi_encoder_array_loop_header_extend_sim", abi_encoder_array_loop_header_extend_sim),
    ("abi_encoder_structural_valid_layout", abi_encoder_structural_valid_layout),
    ("abi_encoder_open_members_layout", abi_encoder_open_members_layout),
    ("abi_encoder_open_giant_zero_prefix", abi_encoder_open_giant_zero_prefix),
