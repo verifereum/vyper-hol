@@ -5,13 +5,19 @@
  * and then compile_binop (exprBopLowering).  compile_bop_sim builds
  * expr_sim of the whole from expr_sim of the operands and binop_frag, the
  * operator's fragment from the operands' values to the source's
- * evaluate_builtin result.
+ * evaluate_builtin result.  compile_bop_typed_sim is the same composition
+ * for operands held in their typed words (typed_val_to_w256), which
+ * covers address and bytesN, whose values are BytesV; binop_frag_words is
+ * its fragment.
  *
  * TOP-LEVEL:
- *   binop_frag             — the operator's fragment
+ *   binop_frag_words       — the operator's fragment, from given operand
+ *                            words
+ *   binop_frag             — the fragment for operands of word values
  *   binop_frag_straight    — binop_frag from the run facts of straight-line
  *                            code
- *   compile_bop_sim        — the composition
+ *   compile_bop_typed_sim  — the composition, operands in typed words
+ *   compile_bop_sim        — the composition, operands of word values
  *   compile_bitwise_sim    — binop_frag for And, Or and XOr
  *   compile_flag_in_sim    — binop_frag for In and NotIn on flags
  *   compile_shift_sim      — binop_frag for ShL and ShR on 256-bit
@@ -24,10 +30,9 @@
  * nor fails on a negative amount, as the source does (RuntimeError).
  * Vyper itself rejects shifts of integer types other than int256 and
  * uint256.
- * Also not covered: == and != on address and bytesN.  Their values are
- * BytesV, which is no word_value, so compile_bop_sim does not apply.
  *
  * Helpers: eval_expr_bop_cases, eval_operand_frame, expr_val_rel_word,
+ *   expr_val_rel_typed,
  *   local_region_frame, expr_post_bop, bop_result_bitwise, flag_and_zero,
  *   compile_flag_in_correct, bop_result_flag_in, straight_fresh_flag_in,
  *   bop_result_shift
@@ -59,13 +64,16 @@ Definition bop_result_def:
     | INR e => INR (Error e)
 End
 
-(* The operator's fragment, from the operands holding v1 and v2 in a state
-   related at es0, the source state after both operands: on a value it
-   reaches its end with the result, a word value, holding it, keeping the
-   variables handed out before it, the allocations and the memory, and on
-   an error it exits as expr_exit allows. *)
-Definition binop_frag_def:
-  binop_frag ctx func cenv cx bop ty ann bl el tys v1 v2 es0 <=>
+(* The operator's fragment, from the operands holding the words w1 and w2
+   of their values v1 and v2 in a state related at es0, the source state
+   after both operands: on a value it reaches its end with the result, a
+   word value, holding it, keeping the variables handed out before it, the
+   allocations and the memory, and on an error it exits as expr_exit
+   allows.  The words are given because an operand of address or bytesN
+   type holds its value in the typed encoding typed_val_to_w256, which for
+   a bytes20 differs from val_to_w256 (compile_bop_typed_sim). *)
+Definition binop_frag_words_def:
+  binop_frag_words ctx func cenv cx bop ty ann bl el tys v1 v2 w1 w2 es0 <=>
     !sa sb x y op s0.
       compile_binop bop x y ty bl el sa = (op, sb) /\
       expr_res_ok (bop_result cx ann bop tys v1 v2 es0) /\
@@ -75,8 +83,7 @@ Definition binop_frag_def:
       local_ptrs_reserved cenv sa ==>
       frag_exec ctx sa sb
         (\s. s = s0 /\ stmt_state_rel func cenv cx es0 s /\
-             eval_operand x s = SOME (val_to_w256 v1) /\
-             eval_operand y s = SOME (val_to_w256 v2))
+             eval_operand x s = SOME w1 /\ eval_operand y s = SOME w2)
         (\s. ?v. bop_result cx ann bop tys v1 v2 es0 = INL (Value v) /\
                  word_value v /\
                  stmt_state_rel func cenv cx es0 s /\
@@ -87,6 +94,14 @@ Definition binop_frag_def:
                           FLOOKUP s.vs_allocas aid = SOME b) /\
                  s.vs_memory = s0.vs_memory)
         (expr_exit (bop_result cx ann bop tys v1 v2 es0))
+End
+
+(* binop_frag_words with the operands held in val_to_w256 of their values,
+   as word_values are (compile_bop_sim). *)
+Definition binop_frag_def:
+  binop_frag ctx func cenv cx bop ty ann bl el tys v1 v2 es0 <=>
+    binop_frag_words ctx func cenv cx bop ty ann bl el tys v1 v2
+      (val_to_w256 v1) (val_to_w256 v2) es0
 End
 
 (* ===== Evaluating a binary operator ===== *)
@@ -152,7 +167,7 @@ Theorem binop_frag_straight:
                     Abort Revert_abort ss')) ==>
     binop_frag ctx func cenv cx bop ty ann bl el tys v1 v2 es0
 Proof
-  rpt gen_tac >> strip_tac >> simp[binop_frag_def] >> rpt gen_tac >>
+  rpt gen_tac >> strip_tac >> simp[binop_frag_def, binop_frag_words_def] >> rpt gen_tac >>
   strip_tac >>
   qpat_x_assum `expr_res_ok _ ==> _` drule >> strip_tac
   >- (qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es0`,
@@ -217,6 +232,16 @@ Theorem expr_val_rel_word:
 Proof
   rw[expr_val_rel_def, optionTheory.IS_SOME_EXISTS] >> first_x_assum drule >>
   simp[typed_val_to_w256_word_value]
+QED
+
+(* A value related at a word type is the operand's typed_val_to_w256. *)
+Theorem expr_val_rel_typed:
+  !cx t tv v op s.
+    expr_val_rel cx t v op s /\ is_word_type t /\
+    evaluate_type (get_tenv cx) t = SOME tv ==>
+    eval_operand op s = SOME (typed_val_to_w256 tv v)
+Proof
+  rw[expr_val_rel_def] >> first_x_assum drule >> simp[]
 QED
 
 (* A live local's region after an expression evaluated from es, which keeps
@@ -300,13 +325,15 @@ Proof
   first_assum ACCEPT_TAC
 QED
 
-Theorem compile_bop_sim:
-  !ctx func cenv cx ty ann bop e1 e2 es.
+Theorem compile_bop_typed_sim:
+  !ctx func cenv cx ty ann bop e1 e2 es tv1 tv2.
     ~((bop = In \/ bop = NotIn) /\ is_ArrayT (expr_type e2)) /\
     ~(is_bytestring_type (expr_type e1) /\ (bop = Eq \/ bop = NotEq)) /\
     is_word_type ann /\
-    is_word_type (expr_type e1) /\ IS_SOME (evaluate_type (get_tenv cx) (expr_type e1)) /\
-    is_word_type (expr_type e2) /\ IS_SOME (evaluate_type (get_tenv cx) (expr_type e2)) /\
+    is_word_type (expr_type e1) /\
+    evaluate_type (get_tenv cx) (expr_type e1) = SOME tv1 /\
+    is_word_type (expr_type e2) /\
+    evaluate_type (get_tenv cx) (expr_type e2) = SOME tv2 /\
     (!sa sb op.
        lower_value compile_expr cenv (expr_type e1) e1 sa = (op, sb) ==>
        cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
@@ -324,15 +351,14 @@ Theorem compile_bop_sim:
     (!tv es1. eval_expr cx e1 es = (INL tv, es1) ==> ?v. tv = Value v) /\
     expr_sim ctx func cenv cx (expr_type e1) e1 es /\
     (!v1 es1. eval_expr cx e1 es = (INL (Value v1), es1) ==>
-       word_value v1 /\
        (!tv es2. eval_expr cx e2 es1 = (INL tv, es2) ==> ?v. tv = Value v) /\
        expr_sim ctx func cenv cx (expr_type e1) e2 es1 /\
        !v2 es2. eval_expr cx e2 es1 = (INL (Value v2), es2) ==>
-         word_value v2 /\
-         binop_frag ctx func cenv cx bop (expr_type e1) ann
+         binop_frag_words ctx func cenv cx bop (expr_type e1) ann
            (if bop = Exp then expr_int_literal e1 else NONE)
            (if bop = Exp then expr_int_literal e2 else NONE)
-           [expr_type e1; expr_type e2] v1 v2 es2) ==>
+           [expr_type e1; expr_type e2] v1 v2
+           (typed_val_to_w256 tv1 v1) (typed_val_to_w256 tv2 v2) es2) ==>
     expr_sim ctx func cenv cx ty (Builtin ann (Bop bop) [e1; e2]) es
 Proof
   rpt gen_tac >> strip_tac >>
@@ -417,8 +443,8 @@ Proof
   asm_rewrite_tac[] >> rpt strip_tac >> fs[] >>
   rename1 `expr_post func cenv cx e1 es sa s1 s0 es1 v1 x t` >>
   `stmt_state_rel func cenv cx es1 t /\
-   eval_operand x t = SOME (val_to_w256 v1)` by
-    (fs[expr_post_def] >> irule expr_val_rel_word >> metis_tac[]) >>
+   eval_operand x t = SOME (typed_val_to_w256 tv1 v1)` by
+    (fs[expr_post_def] >> irule expr_val_rel_typed >> metis_tac[]) >>
   (* the right operand, from t *)
   qpat_x_assum `expr_sim _ _ _ _ _ e2 _`
     (mp_tac o REWRITE_RULE [expr_sim_def]) >>
@@ -434,14 +460,14 @@ Proof
   asm_rewrite_tac[] >> rpt strip_tac >> fs[] >>
   rename1 `expr_post func cenv cx e2 es1 s1 s2 t es' v2 y u` >>
   `stmt_state_rel func cenv cx es' u /\
-   eval_operand y u = SOME (val_to_w256 v2) /\
-   eval_operand x u = SOME (val_to_w256 v1)` by
+   eval_operand y u = SOME (typed_val_to_w256 tv2 v2) /\
+   eval_operand x u = SOME (typed_val_to_w256 tv1 v1)` by
     (fs[expr_post_def] >> conj_tac
-     >- (irule expr_val_rel_word >> metis_tac[]) >>
+     >- (irule expr_val_rel_typed >> metis_tac[]) >>
      irule eval_operand_frame >> metis_tac[]) >>
   (* the operator, from u *)
-  qpat_x_assum `binop_frag _ _ _ _ _ _ _ _ _ tys _ _ _`
-    (mp_tac o REWRITE_RULE [binop_frag_def]) >>
+  qpat_x_assum `binop_frag_words _ _ _ _ _ _ _ _ _ tys _ _ _ _ _`
+    (mp_tac o REWRITE_RULE [binop_frag_words_def]) >>
   disch_then (qspecl_then [`s2`, `sb`, `x`, `y`, `op`, `u`] mp_tac) >>
   (impl_tac >- (gvs[] >> metis_tac[not_fresh_at_mono])) >>
   disch_then (fn th => match_mp_tac (MATCH_MP frag_exec_weaken th)) >> gvs[] >>
@@ -449,6 +475,62 @@ Proof
   irule expr_post_bop >> simp[] >>
   qexistsl_tac [`es1`, `s1`, `s2`, `t`, `u`, `v1`, `v2`, `x`, `y`] >>
   simp[]
+QED
+
+(* compile_bop_typed_sim for operands of the types whose values are
+   word_values, held in their plain encoding val_to_w256. *)
+Theorem compile_bop_sim:
+  !ctx func cenv cx ty ann bop e1 e2 es.
+    ~((bop = In \/ bop = NotIn) /\ is_ArrayT (expr_type e2)) /\
+    ~(is_bytestring_type (expr_type e1) /\ (bop = Eq \/ bop = NotEq)) /\
+    is_word_type ann /\
+    is_word_type (expr_type e1) /\ IS_SOME (evaluate_type (get_tenv cx) (expr_type e1)) /\
+    is_word_type (expr_type e2) /\ IS_SOME (evaluate_type (get_tenv cx) (expr_type e2)) /\
+    (!sa sb op.
+       lower_value compile_expr cenv (expr_type e1) e1 sa = (op, sb) ==>
+       cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
+       sa.cs_next_id <= sb.cs_next_id /\
+       (!z. op = Var z ==> not_fresh_at sb z) /\ (!l. op <> Label l)) /\
+    (!sa sb op.
+       lower_value compile_expr cenv (expr_type e1) e2 sa = (op, sb) ==>
+       cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
+       (!z. op = Var z ==> not_fresh_at sb z) /\ (!l. op <> Label l)) /\
+    (!x y sa sb op.
+       compile_binop bop x y (expr_type e1)
+         (if bop = Exp then expr_int_literal e1 else NONE)
+         (if bop = Exp then expr_int_literal e2 else NONE) sa = (op, sb) ==>
+       cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var) /\
+    (!tv es1. eval_expr cx e1 es = (INL tv, es1) ==> ?v. tv = Value v) /\
+    expr_sim ctx func cenv cx (expr_type e1) e1 es /\
+    (!v1 es1. eval_expr cx e1 es = (INL (Value v1), es1) ==>
+       word_value v1 /\
+       (!tv es2. eval_expr cx e2 es1 = (INL tv, es2) ==> ?v. tv = Value v) /\
+       expr_sim ctx func cenv cx (expr_type e1) e2 es1 /\
+       !v2 es2. eval_expr cx e2 es1 = (INL (Value v2), es2) ==>
+         word_value v2 /\
+         binop_frag ctx func cenv cx bop (expr_type e1) ann
+           (if bop = Exp then expr_int_literal e1 else NONE)
+           (if bop = Exp then expr_int_literal e2 else NONE)
+           [expr_type e1; expr_type e2] v1 v2 es2) ==>
+    expr_sim ctx func cenv cx ty (Builtin ann (Bop bop) [e1; e2]) es
+Proof
+  rpt gen_tac >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  qpat_x_assum `IS_SOME (evaluate_type _ (expr_type e1))`
+    (qx_choose_then `t1` assume_tac o
+     REWRITE_RULE [optionTheory.IS_SOME_EXISTS]) >>
+  qpat_x_assum `IS_SOME (evaluate_type _ (expr_type e2))`
+    (qx_choose_then `t2` assume_tac o
+     REWRITE_RULE [optionTheory.IS_SOME_EXISTS]) >>
+  irule compile_bop_typed_sim >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  qexistsl_tac [`t1`, `t2`] >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!v1 es1. _ ==> word_value v1 /\ _` drule >> strip_tac >>
+  rpt conj_tac >- first_assum ACCEPT_TAC >- first_assum ACCEPT_TAC >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!v2 es2. _ ==> word_value v2 /\ _` drule >> strip_tac >>
+  gvs[typed_val_to_w256_word_value, binop_frag_def]
 QED
 
 (* ===== Bitwise operators ===== *)
@@ -515,7 +597,7 @@ Theorem compile_bitwise_sim:
          (case type_to_int_bound ann of SOME u => u | NONE => Unsigned 0) i2) ==>
     binop_frag ctx func cenv cx bop ty ann bl el tys v1 v2 es0
 Proof
-  rpt gen_tac >> strip_tac >> simp[binop_frag_def] >> rpt gen_tac >>
+  rpt gen_tac >> strip_tac >> simp[binop_frag_def, binop_frag_words_def] >> rpt gen_tac >>
   strip_tac >>
   qspecl_then [`cx`, `ann`, `bop`, `v1`, `v2`, `es0`] mp_tac
     bop_result_bitwise >>
@@ -706,7 +788,7 @@ Theorem compile_shift_sim:
       i1 ==>
     binop_frag ctx func cenv cx bop ty ann bl el tys v1 v2 es0
 Proof
-  rpt gen_tac >> strip_tac >> simp[binop_frag_def] >> rpt gen_tac >>
+  rpt gen_tac >> strip_tac >> simp[binop_frag_def, binop_frag_words_def] >> rpt gen_tac >>
   strip_tac >>
   qspecl_then [`cx`, `ann`, `bop`, `ty`, `v1`, `v2`, `es0`, `i1`, `i2`]
     mp_tac bop_result_shift >>
