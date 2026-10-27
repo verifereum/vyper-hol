@@ -535,6 +535,14 @@ Definition arg_type_fits_def:
   (arg_types_fit _ _ <=> F)
 End
 
+(* A value of type t may be stored where type u is declared: the same type, or
+   t fits u by Vyper's implicit bound widening (a String, Bytes or DynArray
+   with a smaller bound, elementwise) and u is well formed. *)
+Definition type_widens_to_def:
+  type_widens_to tenv t u <=>
+    t = u \/ (arg_type_fits t u /\ well_formed_type tenv u)
+End
+
 (* Positional type contract for creation builtin operands. *)
 Definition create_arg_types_ok_def:
   create_arg_types_ok CreateMinimalProxy has_salt tys =
@@ -621,7 +629,8 @@ Definition well_typed_expr_def:
   well_typed_expr env (Call ty (IntCall (src_id_opt, fn_name)) args drv) =
     (well_typed_exprs env args /\ well_typed_opt env drv /\ well_formed_type env.type_defs ty /\
      ?sig. FLOOKUP env.fn_sigs (src_id_opt, fn_name) = SOME sig /\
-       ty = sig.ret_ty /\ LENGTH args <= LENGTH sig.param_types /\
+       type_widens_to env.type_defs sig.ret_ty ty /\
+       LENGTH args <= LENGTH sig.param_types /\
        LENGTH sig.param_types - sig.num_defaults <= LENGTH args /\
        MAP expr_type args = TAKE (LENGTH args) sig.param_types) /\
   well_typed_expr env (Call ty (ExtCall is_static _ (_, arg_types, ret_ty) opts) args drv) =
@@ -763,6 +772,18 @@ Termination
   WF_REL_TAC `measure (\(_,t,_). assignment_target_size t)`
 End
 
+(* A value of type t may be assigned to the target: a base target's declared
+   type is t or a wider one (type_widens_to); a tuple target takes exactly
+   its type. *)
+Definition atarget_accepts_def:
+  atarget_accepts env (BaseTarget bt) t =
+    (case type_place_target env bt of
+     | SOME (Type ty) => type_widens_to env.type_defs t ty
+     | _ => F) /\
+  atarget_accepts env (TupleTarget tgts) t =
+    well_typed_atarget env (TupleTarget tgts) t
+End
+
 Definition well_typed_iterator_def:
   well_typed_iterator env typ (Array e) =
     (well_typed_expr env e /\ ?bd. expr_type e = ArrayT typ bd) /\
@@ -782,7 +803,8 @@ Definition type_stmt_def:
   type_stmt env ret_ty (Return NONE) =
     (if ret_ty = NoneT then SOME env else NONE) /\
   type_stmt env ret_ty (Return (SOME e)) =
-    (if well_typed_expr env e /\ expr_type e = ret_ty /\ ret_ty <> NoneT then SOME env else NONE) /\
+    (if well_typed_expr env e /\ type_widens_to env.type_defs (expr_type e) ret_ty /\
+        ret_ty <> NoneT then SOME env else NONE) /\
   type_stmt env ret_ty (Raise RaiseBare) = SOME env /\
   type_stmt env ret_ty (Raise RaiseUnreachable) = SOME env /\
   type_stmt env ret_ty (Raise (RaiseReason e)) =
@@ -798,17 +820,17 @@ Definition type_stmt_def:
     (if well_typed_exprs env es then SOME env else NONE) /\
   type_stmt env ret_ty (AnnAssign id typ e) =
     (if well_typed_expr env e /\ assignable_type env.type_defs typ /\
-        expr_type e = typ /\ id NOTIN FDOM env.var_types
+        type_widens_to env.type_defs (expr_type e) typ /\ id NOTIN FDOM env.var_types
      then SOME (extend_local env id typ T)
      else NONE) /\
   type_stmt env ret_ty (Append bt e) =
     (case type_place_target env bt of
      | SOME (Type (ArrayT elem_ty (Dynamic n))) =>
-         if well_typed_expr env e /\ expr_type e = elem_ty /\
+         if well_typed_expr env e /\ type_widens_to env.type_defs (expr_type e) elem_ty /\
             assignable_type env.type_defs elem_ty then SOME env else NONE
      | _ => NONE) /\
   type_stmt env ret_ty (Assign tgt e) =
-    (if well_typed_atarget env tgt (expr_type e) /\ well_typed_expr env e /\
+    (if atarget_accepts env tgt (expr_type e) /\ well_typed_expr env e /\
         assignable_type env.type_defs (expr_type e) then SOME env else NONE) /\
   type_stmt env ret_ty (AugAssign ty bt bop e) =
     (if well_typed_target env bt ty /\ well_typed_expr env e /\
