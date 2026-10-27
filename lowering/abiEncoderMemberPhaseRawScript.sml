@@ -172,3 +172,12 @@ Proof
   disch_then (qspec_then `ctx` mp_tac) >>
   simp[abi_encoder_extend_sim_sim]
 QED
+
+(* Enforce the early instruction layer's import boundary at build time. *)
+val _ =
+  if List.exists
+       (fn name => List.exists (fn parent => parent = name) (Theory.ancestry "-"))
+       ["abiScratchMembers", "abiScratchComplex", "abiEncoderMembersPrepare",
+        "abiEncoderMembersCorrect", "abiEncoderComplexStatic"]
+  then raise Fail "member raw phase imports a legacy invariant/execution owner"
+  else ();
