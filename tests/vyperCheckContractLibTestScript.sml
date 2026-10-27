@@ -165,6 +165,21 @@ fun assert_some th =
   if optionSyntax.is_some (rhs (concl th)) then ()
   else raise Fail "expected successful check_contract result"
 
+(* ecrecover takes v as uint8 or uint256 only; r and s stay uint256 or bytes32. *)
+Theorem ecrecover_narrow_argument_rejection_test:
+  ~well_typed_builtin_app (BaseT AddressT) ECRecover
+    [BaseT (BytesT (Fixed 32)); BaseT (UintT 16); BaseT (UintT 256);
+     BaseT (UintT 256)] /\
+  ~well_typed_builtin_app (BaseT AddressT) ECRecover
+    [BaseT (BytesT (Fixed 32)); BaseT (UintT 256); BaseT (UintT 8);
+     BaseT (UintT 256)] /\
+  ~well_typed_builtin_app (BaseT AddressT) ECRecover
+    [BaseT (BytesT (Fixed 32)); BaseT (UintT 256); BaseT (UintT 256);
+     BaseT (UintT 8)]
+Proof
+  simp[well_typed_builtin_app_def]
+QED
+
 fun assert_none th =
   if optionSyntax.is_none (rhs (concl th)) then ()
   else raise Fail "expected rejected check_contract result"
@@ -507,6 +522,13 @@ val builtin_cases = [
    ``Builtin (BaseT AddressT) ECRecover
        [Name (BaseT (BytesT (Fixed 32))) "h"; Name (BaseT (UintT 256)) "v";
         Name (BaseT (UintT 256)) "r"; Name (BaseT (UintT 256)) "s"]``),
+  ("ECRecover uint8 v", ``Pure``,
+   ``[("h", BaseT (BytesT (Fixed 32))); ("v", BaseT (UintT 8));
+      ("r", BaseT (BytesT (Fixed 32))); ("s", BaseT (BytesT (Fixed 32)))]``,
+   ``BaseT AddressT``,
+   ``Builtin (BaseT AddressT) ECRecover
+       [Name (BaseT (BytesT (Fixed 32))) "h"; Name (BaseT (UintT 8)) "v";
+        Name (BaseT (BytesT (Fixed 32))) "r"; Name (BaseT (BytesT (Fixed 32))) "s"]``),
   ("ECAdd", ``View``, ``[("a", ^point_ty); ("b", ^point_ty)]``, point_ty,
    ``Builtin ^point_ty ECAdd [Name ^point_ty "a"; Name ^point_ty "b"]``),
   ("ECMul", ``View``, ``[("a", ^point_ty); ("s", BaseT (UintT 256))]``, point_ty,
