@@ -1,14 +1,17 @@
 (*
  * Statement simulation: the pieces of For over a range (#637)
  *
- * The source side of For over a range with literal ends, and the blocks
- * the lowering emits for it (entry, condition, increment) with what each
- * one does, as stmtSimForLoop uses them.
+ * The source side of For over a range with constant ends (literals,
+ * max_value and the like), and the blocks the lowering emits for it
+ * (entry, condition, increment) with what each one does, as
+ * stmtSimForLoop uses them.
  *
  * TOP-LEVEL:
- *   eval_stmt_for_range_lit, eval_for_cons_cases — the source loop
+ *   eval_stmt_for_range, eval_for_cons_cases — the source loop
  *   for_entry_block, for_cond_block, for_incr_block, for_start_block
  *   compile_for_range_parts — the code compile_stmt emits for the loop
+ *   eval_stmt_for_range_lit, compile_for_range_lit_parts — the same for
+ *     literal ends
  *)
 
 Theory stmtSimForParts
@@ -24,7 +27,27 @@ Ancestors
 Libs
   monadsyntax intLib
 
-(* ===== for over a literal range ===== *)
+(* ===== for over a range with constant ends ===== *)
+
+(* A range whose ends evaluate to integers without changing the state:
+   its values. *)
+Theorem eval_iterator_range:
+  !cx e1 n1 e2 n2 es.
+    eval_expr cx e1 es = (INL (Value (IntV n1)), es) /\
+    eval_expr cx e2 es = (INL (Value (IntV n2)), es) /\ n1 <= n2 ==>
+    eval_iterator cx (Range e1 e2) es =
+    (INL (GENLIST (\j. IntV (n1 + &j)) (Num (n2 - n1))), es)
+Proof
+  rpt strip_tac >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def, LET_THM, return_def] >>
+  simp[get_range_limits_def, lift_sum_def, return_def]
+QED
+
+Theorem eval_expr_int_lit:
+  !cx a n es. eval_expr cx (Literal a (IntL n)) es = (INL (Value (IntV n)), es)
+Proof
+  simp[Once evaluate_def, return_def, evaluate_literal_def]
+QED
 
 Theorem eval_iterator_range_lit:
   !cx a1 n1 a2 n2 es.
@@ -32,30 +55,44 @@ Theorem eval_iterator_range_lit:
     eval_iterator cx (Range (Literal a1 (IntL n1)) (Literal a2 (IntL n2))) es =
     (INL (GENLIST (\j. IntV (n1 + &j)) (Num (n2 - n1))), es)
 Proof
-  rpt strip_tac >>
-  simp[Once evaluate_def, bind_def, ignore_bind_def, LET_THM, return_def] >>
-  simp[Once evaluate_def, return_def, evaluate_literal_def] >>
-  simp[Once evaluate_def, return_def, evaluate_literal_def] >>
-  simp[get_range_limits_def, lift_sum_def, return_def]
+  rpt strip_tac >> irule eval_iterator_range >> simp[eval_expr_int_lit]
 QED
 
-(* A range with literal ends, nonempty or empty, within the loop's bound:
-   the loop over its values. *)
-Theorem eval_stmt_for_range_lit:
-  !cx id fty a1 n1 a2 n2 bound body es res es' tyv.
-    eval_stmt cx
-      (For id fty (Range (Literal a1 (IntL n1)) (Literal a2 (IntL n2)))
-         bound body) es = (res, es') /\
+(* A range of such ends, nonempty or empty, within the loop's bound: the
+   loop over its values. *)
+Theorem eval_stmt_for_range:
+  !cx id fty e1 n1 e2 n2 bound body es res es' tyv.
+    eval_stmt cx (For id fty (Range e1 e2) bound body) es = (res, es') /\
+    eval_expr cx e1 es = (INL (Value (IntV n1)), es) /\
+    eval_expr cx e2 es = (INL (Value (IntV n2)), es) /\
     evaluate_type (get_tenv cx) fty = SOME tyv /\ n1 <= n2 /\
     Num (n2 - n1) <= bound ==>
     eval_for cx tyv id body (GENLIST (\j. IntV (n1 + &j)) (Num (n2 - n1)))
       es = (res, es')
 Proof
   rpt gen_tac >> strip_tac >>
+  drule_all eval_iterator_range >> strip_tac >>
   qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
   simp[Once evaluate_def, bind_def, ignore_bind_def, LET_THM,
        lift_option_type_def, lift_option_def, return_def, raise_def] >>
-  simp[eval_iterator_range_lit, check_def, assert_def, compatible_bound_def]
+  simp[check_def, assert_def, compatible_bound_def]
+QED
+
+Theorem eval_stmt_for_range_lit:
+  !cx id fty a1 n1 a2 n2 bound stmts es res es' tyv.
+    eval_stmt cx
+      (For id fty (Range (Literal a1 (IntL n1)) (Literal a2 (IntL n2)))
+         bound stmts) es = (res, es') /\
+    evaluate_type (get_tenv cx) fty = SOME tyv /\ n1 <= n2 /\
+    Num (n2 - n1) <= bound ==>
+    eval_for cx tyv id stmts (GENLIST (\j. IntV (n1 + &j)) (Num (n2 - n1)))
+      es = (res, es')
+Proof
+  rpt strip_tac >>
+  qspecl_then [`cx`, `id`, `fty`, `Literal a1 (IntL n1)`, `n1`,
+               `Literal a2 (IntL n2)`, `n2`, `bound`, `stmts`, `es`, `res`,
+               `es'`, `tyv`] mp_tac eval_stmt_for_range >>
+  impl_tac >- simp[eval_expr_int_lit] >> simp[]
 QED
 
 (* One iteration: the body in a scope holding the loop variable, which is
@@ -358,16 +395,18 @@ Proof
        compile_literal_vv_def, unwrap_value_def]
 QED
 
-(* The code of a range loop with literal ends, its locals held through
+(* The code of a range loop whose ends lower to words without emitting
+   anything (literals, max_value, ...), its locals held through
    pointers: the loop variable's ALLOCA ending the block it starts in, the
    entry block (the counter and the end), the condition block, the body
    block (the counter stored into the loop variable, then the body), the
    increment block, and the exit block, where the code ends. *)
 Theorem compile_for_range_parts:
-  !cenv lctx ty id fty a1 n1 a2 n2 bound stmts st st' func.
-    compile_stmt cenv lctx ty
-      (For id fty (Range (Literal a1 (IntL n1)) (Literal a2 (IntL n2)))
-         bound stmts) st = ((), st') /\
+  !cenv lctx ty id fty e1 w1 e2 w2 bound stmts st st' func.
+    compile_stmt cenv lctx ty (For id fty (Range e1 e2) bound stmts) st =
+      ((), st') /\
+    lower_value compile_expr cenv fty e1 st = (Lit w1, st) /\
+    lower_value compile_expr cenv fty e2 st = (Lit w2, st) /\
     cenv.ce_alloca_locals /\ fn_has_code st st' func /\
     (!c lc sa sb. compile_stmts c lc ty stmts sa = ((), sb) ==>
                   cs_extends sa sb) ==>
@@ -400,9 +439,8 @@ Theorem compile_for_range_parts:
       lookup_block entry_lbl func.fn_blocks =
         SOME <| bb_label := entry_lbl;
                 bb_instructions :=
-                  [mk_inst (st.cs_next_id + 2) ASSIGN [Lit (i2w n1)] [cv];
-                   mk_inst (st.cs_next_id + 3) ADD
-                     [Lit (i2w n1); Lit (i2w n2 - i2w n1)] [ev];
+                  [mk_inst (st.cs_next_id + 2) ASSIGN [Lit w1] [cv];
+                   mk_inst (st.cs_next_id + 3) ADD [Lit w1; Lit (w2 - w1)] [ev];
                    mk_inst (st.cs_next_id + 4) JMP [Label cond_lbl] []] |> /\
       lookup_block cond_lbl func.fn_blocks =
         SOME <| bb_label := cond_lbl;
@@ -432,7 +470,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `compile_stmt _ _ _ _ _ = _` mp_tac >>
   simp[compile_stmt_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
-       LET_THM, lower_value_int_lit] >>
+       LET_THM] >>
   Cases_on `declare_local cenv id fty st` >> rename1 `_ = (bc, st1)` >>
   drule_all declare_local_ptr >> strip_tac >> gvs[] >>
   simp[emit_local_alloca_def, fresh_label_def, emit_inst_def, emit_op_def,
@@ -525,6 +563,81 @@ Proof
       simp_tac (srw_ss()) []) >>
   qpat_assum `st' = _` (fn th => REWRITE_TAC [th]) >>
   simp_tac (srw_ss()) []
+QED
+
+(* The literal-ends case. *)
+Theorem compile_for_range_lit_parts:
+  !cenv lctx ty id fty a1 n1 a2 n2 bound stmts st st' func.
+    compile_stmt cenv lctx ty
+      (For id fty (Range (Literal a1 (IntL n1)) (Literal a2 (IntL n2)))
+         bound stmts) st = ((), st') /\
+    cenv.ce_alloca_locals /\ fn_has_code st st' func /\
+    (!c lc sa sb. compile_stmts c lc ty stmts sa = ((), sb) ==>
+                  cs_extends sa sb) ==>
+    ?p cv ev dv entry_lbl cond_lbl body_lbl incr_lbl exit_lbl bc sb0 sb1 sj
+     nv.
+      p = STRING #"%" (toString st.cs_next_var) /\
+      cv = STRING #"%" (toString (st.cs_next_var + 1)) /\
+      ev = STRING #"%" (toString (st.cs_next_var + 2)) /\
+      dv = STRING #"%" (toString (st.cs_next_var + 3)) /\
+      entry_lbl = fresh_label_output "for_entry" st.cs_next_label /\
+      cond_lbl = fresh_label_output "for_cond" (st.cs_next_label + 1) /\
+      body_lbl = fresh_label_output "for_body" (st.cs_next_label + 2) /\
+      incr_lbl = fresh_label_output "for_incr" (st.cs_next_label + 3) /\
+      exit_lbl = fresh_label_output "for_exit" (st.cs_next_label + 4) /\
+      declare_local cenv id fty st =
+        (bc, st with cs_next_var := st.cs_next_var + 1) /\
+      sb0.cs_current_bb = body_lbl /\
+      sb0.cs_current_insts =
+        [mk_inst (st.cs_next_id + 7) MSTORE [Var p; Var cv] []] /\
+      sb0.cs_next_var = st.cs_next_var + 4 /\ cs_extends st sb0 /\
+      compile_stmts bc (InLoop exit_lbl incr_lbl) ty stmts sb0 = ((), sb1) /\
+      fn_has_code sb0 sb1 func /\
+      lookup_block st.cs_current_bb func.fn_blocks =
+        SOME <| bb_label := st.cs_current_bb;
+                bb_instructions :=
+                  st.cs_current_insts ++
+                  [mk_inst st.cs_next_id ALLOCA
+                     [Lit (n2w (type_memory_bytes cenv fty))] [p];
+                   mk_inst (st.cs_next_id + 1) JMP [Label entry_lbl] []] |> /\
+      lookup_block entry_lbl func.fn_blocks =
+        SOME <| bb_label := entry_lbl;
+                bb_instructions :=
+                  [mk_inst (st.cs_next_id + 2) ASSIGN [Lit (i2w n1)] [cv];
+                   mk_inst (st.cs_next_id + 3) ADD
+                     [Lit (i2w n1); Lit (i2w n2 - i2w n1)] [ev];
+                   mk_inst (st.cs_next_id + 4) JMP [Label cond_lbl] []] |> /\
+      lookup_block cond_lbl func.fn_blocks =
+        SOME <| bb_label := cond_lbl;
+                bb_instructions :=
+                  [mk_inst (st.cs_next_id + 5) EQ [Var cv; Var ev] [dv];
+                   mk_inst (st.cs_next_id + 6) JNZ
+                     [Var dv; Label exit_lbl; Label body_lbl] []] |> /\
+      (?bbb. lookup_block body_lbl func.fn_blocks = SOME bbb /\
+             get_instruction bbb 0 =
+               SOME (mk_inst (st.cs_next_id + 7) MSTORE [Var p; Var cv] [])) /\
+      (~block_is_terminated sb1 ==>
+       sj.cs_blocks = sb1.cs_blocks /\ sj.cs_current_bb = sb1.cs_current_bb /\
+       sj.cs_current_insts =
+         sb1.cs_current_insts ++
+         [mk_inst sb1.cs_next_id JMP [Label incr_lbl] []] /\
+       fn_has_code sb1 sj func) /\
+      sj.cs_next_var = sb1.cs_next_var /\
+      nv = STRING #"%" (toString sj.cs_next_var) /\
+      lookup_block incr_lbl func.fn_blocks =
+        SOME <| bb_label := incr_lbl;
+                bb_instructions :=
+                  [mk_inst sj.cs_next_id ADD [Var cv; Lit 1w] [nv];
+                   mk_inst (sj.cs_next_id + 1) ASSIGN [Var nv] [cv];
+                   mk_inst (sj.cs_next_id + 2) JMP [Label cond_lbl] []] |> /\
+      st'.cs_current_bb = exit_lbl /\ st'.cs_current_insts = []
+Proof
+  rpt strip_tac >>
+  qspecl_then [`cenv`, `lctx`, `ty`, `id`, `fty`, `Literal a1 (IntL n1)`,
+               `i2w n1`, `Literal a2 (IntL n2)`, `i2w n2`, `bound`, `stmts`,
+               `st`, `st'`, `func`] mp_tac compile_for_range_parts >>
+  impl_tac >- (simp[lower_value_int_lit] >> first_assum ACCEPT_TAC) >>
+  simp[]
 QED
 
 (* The counter of a range loop over [n1, n2), as a word. *)
