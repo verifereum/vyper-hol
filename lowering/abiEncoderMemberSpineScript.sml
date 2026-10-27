@@ -185,3 +185,58 @@ Proof
     gvs[abi_encoder_spine_call_def, abi_encoder_spine_core_code_def]) >>
   asm_rewrite_tac []
 QED
+
+(* Indexed invariant fold over the existing operational certificate.  The
+   interpretation proves transport, not another recursive execution engine. *)
+Theorem abi_encoder_member_spine_fold:
+  (!ei az mz dyn rest st so ho elem_src p len ce s r u.
+    Inv ((ei,az,mz,dyn)::rest) (st,so,ho) s /\
+    emit_op ADD [src;Lit (n2w so)] st = (elem_src,p) /\
+    abi_encoder_member_phase_raw st p s r /\
+    abi_encoder_spine_child core_run (ei,dyn,dst,elem_src,ho,dp,p,ce,len) r u ==>
+    Inv rest (ce,so+mz,ho+az) u) /\
+  (!st so ho out en s.
+    Inv [] (st,so,ho) s /\
+    compile_abi_encode_complex_elems dst src [] so ho dp st = (out,en) ==>
+    Post (out,en) s) ==>
+  !infos st so ho out en s t.
+    Inv infos (st,so,ho) s /\
+    abi_encoder_member_spine core_run (dst,src,dp) infos (st,so,ho) (out,en) s t ==>
+    Post (out,en) t
+Proof
+  strip_tac >> Induct
+  >- (simp_tac bool_ss [abi_encoder_member_spine_def] >> metis_tac[]) >>
+  qx_gen_tac `entry` >> PairCases_on `entry` >> rpt gen_tac >>
+  simp_tac bool_ss [abi_encoder_member_spine_def] >> rpt strip_tac >>
+  first_x_assum irule >> goal_assum (drule_at Any) >>
+  metis_tac[]
+QED
+
+(* The cons layout supplies the conditional PHI premise for the child as
+   well as code for both recursive intervals. *)
+Theorem abi_encoder_spine_cons_code:
+  compile_abi_encode_complex_elems dst src ((ei,az,mz,dyn)::rest)
+    so ho dp st = (out,en) /\ fn_has_code st en func /\
+  (st.cs_blocks = en.cs_blocks \/
+    !bb. lookup_block en.cs_current_bb func.fn_blocks = SOME bb ==>
+      phi_prefix_length bb.bb_instructions = 0) ==>
+  ?elem_src p len ce.
+    emit_op ADD [src;Lit (n2w so)] st = (elem_src,p) /\
+    compile_abi_encode_child dst elem_src ei dyn ho dp p = (len,ce) /\
+    compile_abi_encode_complex_elems dst src rest (so+mz) (ho+az) dp ce = (out,en) /\
+    fn_has_code st p func /\ fn_has_code p ce func /\ fn_has_code ce en func /\
+    cs_extends st p /\ cs_extends p ce /\ cs_extends ce en /\
+    p.cs_blocks = st.cs_blocks /\ p.cs_next_id = st.cs_next_id+1 /\
+    p.cs_next_var = st.cs_next_var+1 /\
+    p.cs_next_id <= ce.cs_next_id /\ ce.cs_next_id <= en.cs_next_id /\
+    p.cs_next_var <= ce.cs_next_var /\ ce.cs_next_var <= en.cs_next_var /\
+    (p.cs_blocks = ce.cs_blocks \/
+      !bb. lookup_block ce.cs_current_bb func.fn_blocks = SOME bb ==>
+        phi_prefix_length bb.bb_instructions = 0)
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  drule_all abi_encoder_member_cons_context >> strip_tac >>
+  drule_all abi_encoder_members_child_phi >> disch_tac >>
+  qexistsl_tac [`elem_src`, `prepared`, `child_len`, `child_end`] >>
+  asm_rewrite_tac []
+QED
