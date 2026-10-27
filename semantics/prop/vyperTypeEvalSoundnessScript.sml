@@ -461,10 +461,25 @@ Proof
   irule materialise_preserves_value_type >> simp[] >>
   metis_tac[evaluate_type_well_formed_type_value]
 QED
+(* A materialised value of e's type also has any type e's type widens to. *)
+Theorem materialise_widens_value_typed[local]:
+  state_well_typed st /\ expr_result_typed env e tvl /\
+  materialise cx tvl st = (INL v, st') /\
+  type_widens_to env.type_defs (expr_type e) ty ==>
+  ?tyv. evaluate_type env.type_defs ty = SOME tyv /\ value_has_type tyv v
+Proof
+  strip_tac >>
+  `?etv. evaluate_type env.type_defs (expr_type e) = SOME etv` by
+    gvs[expr_result_typed_def, expr_runtime_typed_def] >>
+  `value_has_type etv v` by
+    metis_tac[expr_result_typed_materialise_preserves_value_type] >>
+  metis_tac[type_widens_to_value_has_type]
+QED
+
 Theorem annassign_new_variable_after_materialise_sound[local]:
   env_consistent env cx st /\ state_well_typed st /\ accounts_well_typed st.accounts /\
   get_tenv cx = env.type_defs /\ evaluate_type env.type_defs typ = SOME tyv /\
-  expr_type e = typ /\ expr_result_typed env e tvl /\
+  type_widens_to env.type_defs (expr_type e) typ /\ expr_result_typed env e tvl /\
   id NOTIN FDOM env.var_types /\
   materialise cx tvl st = (INL v, st1) /\
   new_variable id tyv v st1 = (res, st') ==>
@@ -476,7 +491,7 @@ Proof
   rpt gen_tac >> strip_tac >> gvs[] >>
   drule materialise_state >> strip_tac >> gvs[] >>
   `value_has_type tyv v` by
-    metis_tac[expr_result_typed_materialise_preserves_value_type] >>
+    (drule_all materialise_widens_value_typed >> rw[] >> gvs[]) >>
   conj_tac
   >- metis_tac[new_variable_preserves_state_well_typed_result] >>
   conj_tac >- (drule new_variable_accounts >> rw[]) >>
@@ -502,7 +517,8 @@ Theorem annassign_statement_sound_from_expr_ih[local]:
      case res of INL tv => expr_result_typed env e tv | INR v1 => T) /\
   env_consistent env cx st /\ state_well_typed st /\ context_well_typed cx /\
   accounts_well_typed st.accounts /\ functions_well_typed cx /\
-  well_typed_expr env e /\ assignable_type env.type_defs typ /\ expr_type e = typ /\
+  well_typed_expr env e /\ assignable_type env.type_defs typ /\
+  type_widens_to env.type_defs (expr_type e) typ /\
   id NOTIN FDOM env.var_types /\
   get_tenv cx = env.type_defs /\ evaluate_type env.type_defs typ = SOME tyv /\
   eval_stmt cx (AnnAssign id typ e) st = (res, st') ==>
@@ -2902,14 +2918,12 @@ Resume eval_scc_type_sound_mutual[Return_SOME]:
     >- (
       drule materialise_state >> strip_tac >> gvs[] >>
       strip_tac >> gvs[] >>
-      gvs[expr_result_typed_def, expr_runtime_typed_def, return_exception_typed_def,
-          value_runtime_typed_def] >>
-      irule materialise_preserves_value_type >>
-      simp[] >>
-      metis_tac[evaluate_type_well_formed_type_value]) >>
+      gvs[return_exception_typed_def, value_runtime_typed_def] >>
+      metis_tac[materialise_widens_value_typed]) >>
     drule materialise_state >> strip_tac >> gvs[] >>
     strip_tac >> gvs[] >>
     conj_tac >- (
+      `expr_type e <> NoneT` by metis_tac[type_widens_to_not_NoneT] >>
       gvs[expr_result_typed_def, expr_runtime_typed_def] >>
       drule_all evaluate_type_not_NoneT_imp_not_NoneTV >> strip_tac >>
       drule_all materialise_typed_non_none_no_type_error >> simp[]) >>
@@ -3147,7 +3161,6 @@ Resume eval_scc_type_sound_mutual[Append]:
   rename1 `type_place_target env bt = SOME (Type (ArrayT elem_ty (Dynamic n)))` >>
   strip_tac >>
   qpat_x_assum `env = env'` (SUBST_ALL_TAC o SYM) >>
-  qpat_x_assum `expr_type e = elem_ty` (SUBST_ALL_TAC o SYM) >>
   qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
   simp_tac(srw_ss())[Once evaluate_def, bind_def] >>
   Cases_on `eval_base_target cx bt st` >>
@@ -3175,32 +3188,30 @@ Resume eval_scc_type_sound_mutual[Append]:
         Cases_on `assign_res` >> simp[return_def, ignore_bind_apply, no_type_error_result_def] >>
         strip_tac >> gvs[] >>
         imp_res_tac materialise_state >> gvs[] >>
-        `?elem_tv. evaluate_type env.type_defs (expr_type e) = SOME elem_tv` by (
+        `?elem_tv. evaluate_type env.type_defs elem_ty = SOME elem_tv` by (
           drule assignable_type_well_formed >>
           rw[well_formed_type_def, optionTheory.IS_SOME_EXISTS]) >>
         `well_formed_type_value elem_tv` by
           metis_tac[evaluate_type_well_formed_type_value] >>
         `value_has_type elem_tv v` by (
-          gvs[expr_result_typed_def, expr_runtime_typed_def] >>
-          drule_at(Pat`materialise`) materialise_preserves_value_type >>
-          simp[] >> disch_then irule >> simp[]) >>
+          drule_all materialise_widens_value_typed >> rw[] >> gvs[]) >>
         `target_runtime_typed env cx st1 (BaseTarget bt)
-           (ArrayT (expr_type e) (Dynamic n)) (BaseTargetV loc sbs)` by (
+           (ArrayT elem_ty (Dynamic n)) (BaseTargetV loc sbs)` by (
           rw[target_runtime_typed_def, target_value_shape_def,
              well_typed_atarget_def, well_typed_target_def] >>
           metis_tac[]) >>
         `runtime_consistent env cx st2` by simp[runtime_consistent_def] >>
         `target_runtime_typed env cx st2 (BaseTarget bt)
-           (ArrayT (expr_type e) (Dynamic n)) (BaseTargetV loc sbs)` by (
+           (ArrayT elem_ty (Dynamic n)) (BaseTargetV loc sbs)` by (
           irule target_runtime_typed_rebuild >> simp[] >> goal_assum drule) >>
-        `assign_operation_runtime_typed env (ArrayT (expr_type e) (Dynamic n)) (AppendOp v)` by
+        `assign_operation_runtime_typed env (ArrayT elem_ty (Dynamic n)) (AppendOp v)` by
           metis_tac[stmt_assign_operation_runtime_typed_Append_from_value_has_type] >>
         `assign_operation_matches_target_shape (BaseTargetV loc sbs) (AppendOp v)` by
           simp[stmt_assign_operation_matches_target_shape_Append_BaseTargetV] >>
         `assign_target_assignable_context cx (BaseTargetV loc sbs) st2` by
           metis_tac[target_runtime_typed_imp_assignable_context, runtime_consistent_def] >>
         rpt strip_tac >> gvs[] >>
-        `assignable_type env.type_defs (ArrayT (expr_type e) (Dynamic n))` by (
+        `assignable_type env.type_defs (ArrayT elem_ty (Dynamic n))` by (
           simp[assignable_type_def, well_formed_type_def] >>
           drule_at(Pat`target_runtime_typed`) target_runtime_typed_place_leaf_typed >>
           simp[] >> strip_tac >>
@@ -3211,7 +3222,7 @@ Resume eval_scc_type_sound_mutual[Append]:
         strip_tac >> gvs[runtime_consistent_def, no_type_error_result_def] >>
         qspecl_then [`cx`, `BaseTargetV loc sbs`, `st2`,
           `INR (Error (TypeError msg))`, `st'`, `env`, `BaseTarget bt`,
-          `expr_type e`, `elem_tv`, `n`, `v`] mp_tac
+          `elem_ty`, `elem_tv`, `n`, `v`] mp_tac
           assign_target_append_no_type_error >>
         simp[no_type_error_result_def, runtime_consistent_def] >>
         strip_tac >> drule (cj 1 assign_target_no_control) >>
@@ -3227,7 +3238,8 @@ Resume eval_scc_type_sound_mutual[Append]:
           drule_at_then Any drule
             materialise_typed_non_none_no_type_error >>
           simp[] >>
-          `expr_type e ≠ NoneT` by metis_tac[assignable_type_not_NoneT] >>
+          `expr_type e ≠ NoneT` by
+            metis_tac[assignable_type_not_NoneT, type_widens_to_not_NoneT] >>
           metis_tac[evaluate_type_not_NoneT_imp_not_NoneTV]) >>
       drule materialise_no_control >>
       rw[no_control_exc_return_exception_typed]) >>
@@ -3256,7 +3268,8 @@ QED
 Resume eval_scc_type_sound_mutual[Assign_Tuple]:
   rpt gen_tac >> strip_tac >> old_soundness_ihs_tac >>
   qpat_x_assum `type_stmt _ _ _ = _` mp_tac >>
-  simp_tac (srw_ss()) [Once type_stmt_def] >> strip_tac >> BasicProvers.VAR_EQ_TAC >>
+  simp_tac (srw_ss()) [Once type_stmt_def, atarget_accepts_def] >>
+  strip_tac >> BasicProvers.VAR_EQ_TAC >>
   qpat_x_assum `call_evaluation_safe cx (int_calls_stmt _)` mp_tac >>
   pure_rewrite_tac [int_calls_stmt_def] >> strip_tac >>
   `call_evaluation_safe cx (int_calls_expr e)` by
@@ -7551,7 +7564,7 @@ QED
 Theorem intcall_safe_cast_expr_result_typed[local]:
   !env loc src_id_opt fn es extra ret_ty ret_tv rv crv.
     well_typed_expr env (Call loc (IntCall (src_id_opt,fn)) es extra) /\
-    expr_type (Call loc (IntCall (src_id_opt,fn)) es extra) = ret_ty /\
+    type_widens_to env.type_defs ret_ty (expr_type (Call loc (IntCall (src_id_opt,fn)) es extra)) /\
     evaluate_type env.type_defs ret_ty = SOME ret_tv /\
     value_has_type ret_tv rv /\
     safe_cast ret_tv rv = SOME crv ==>
@@ -7560,6 +7573,7 @@ Proof
   rpt strip_tac >>
   `value_has_type ret_tv crv` by
     (drule_all safe_cast_preserves_well_typed >> simp[]) >>
+  drule_all type_widens_to_value_has_type >> strip_tac >>
   simp[expr_result_typed_def, expr_runtime_typed_def,
        toplevel_value_typed_def] >>
   metis_tac[well_typed_expr_not_hashmap_place]
@@ -7588,7 +7602,7 @@ Theorem intcall_default_success_post_push_sound[local]:
              env_consistent env_exn (cx with stk updated_by CONS (env_body.current_src,fn)) st0' /\
              return_exception_typed env_exn ret_ty1 exn) /\
     well_typed_expr env (Call loc (IntCall (src_id_opt,fn)) es extra) /\
-    expr_type (Call loc (IntCall (src_id_opt,fn)) es extra) = ret /\
+    type_widens_to env.type_defs ret (expr_type (Call loc (IntCall (src_id_opt,fn)) es extra)) /\
     evaluate_type env_body.type_defs ret = SOME rtv /\
     type_stmts env_body ret body = SOME env_after /\
     (ret = NoneT \/ stmts_no_fallthrough body) /\
@@ -7751,7 +7765,7 @@ Proof
      accounts_well_typed fin_st.accounts` by
       (qspecl_then [`cx`, `env`, `env_body`, `args_st`, `lock_st`,
                     `call_env`, `fn`, `fm`, `nr`, `body'`, `env_after`,
-                    `expr_type (Call loc (IntCall (src_id_opt,fn)) es extra)`,
+                    `NoneT`,
                     `y`, `fin_st`] mp_tac
          intcall_default_success_post_push_outer_inr_frame_ret >>
        impl_tac >- first_assum ACCEPT_TAC >>
@@ -7769,7 +7783,7 @@ Proof
                                `lock_st with scopes := [call_env]`, `st_bdy`] mp_tac) >>
       simp[]) >>
     qpat_x_assum `!env1 ret_ty1 env2 st0 res0 st0'. _`
-      (qspecl_then [`env_body`, `expr_type (Call loc (IntCall (src_id_opt,fn)) es extra)`, `env_after`,
+      (qspecl_then [`env_body`, `ret`, `env_after`,
                     `lock_st with scopes := [call_env]`,
                     `INR (ReturnException v)`, `st_bdy`] mp_tac) >>
     simp[context_well_typed_stk_irrelevant, functions_well_typed_stk_irrelevant] >>
@@ -7799,9 +7813,9 @@ Proof
     gvs[lift_option_type_def, return_def, raise_def] >>
     `env.type_defs = get_tenv cx` by
       gvs[env_consistent_def, env_context_consistent_def] >>
-    irule intcall_safe_cast_expr_result_typed >>
-    simp[] >>
-    qexists `v` >> simp[]) >>
+    qspecl_then [`env`, `loc`, `src_id_opt`, `fn`, `es`, `extra`, `ret`, `rtv`,
+                  `v`, `v`] mp_tac intcall_safe_cast_expr_result_typed >>
+    simp[]) >>
   all_tac >~ [`finally _ _ _ = (INR _,_)`] >- (
     `(!env1 ret_ty1 env2 st0 res0 st0'.
       type_stmts env1 ret_ty1 body' = SOME env2 /\
@@ -7825,7 +7839,7 @@ Proof
       simp[context_well_typed_stk_irrelevant, functions_well_typed_stk_irrelevant]) >>
     qspecl_then [`cx`, `env`, `env_body`, `args_st`, `lock_st`,
                   `call_env`, `fn`, `fm`, `nr`, `body'`, `env_after`,
-                  `expr_type (Call loc (IntCall (src_id_opt,fn)) es extra)`,
+                  `ret`,
                   `y`, `fin_st`] mp_tac
       intcall_default_success_post_push_outer_inr_frame_ret >>
     impl_tac >- first_assum ACCEPT_TAC >>
@@ -8503,7 +8517,7 @@ Theorem intcall_successful_defaults_lock_success_sound_from_body_ih[local]:
              env_consistent env_exn (cx with stk updated_by CONS (env_body.current_src,fn_name)) st0' /\
              return_exception_typed env_exn ret_ty1 exn) /\
     well_typed_expr env (Call loc (IntCall (src_id_opt,fn_name)) es extra) /\
-    expr_type (Call loc (IntCall (src_id_opt,fn_name)) es extra) = ret /\
+    type_widens_to env.type_defs ret (expr_type (Call loc (IntCall (src_id_opt,fn_name)) es extra)) /\
     evaluate_type (get_tenv cx) ret = SOME ret_tv /\
     type_stmts env_body ret body = SOME env_after /\
     (ret = NoneT \/ stmts_no_fallthrough body) /\
@@ -8553,7 +8567,7 @@ Proof
     intcall_default_success_post_push_sound) >>
   (CONJ_TAC THEN1 first_assum ACCEPT_TAC) >>
   (CONJ_TAC THEN1 (qpat_assum `well_typed_expr _ _` ACCEPT_TAC)) >>
-  (CONJ_TAC THEN1 (qpat_assum `expr_type _ = ret` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1 (qpat_assum `type_widens_to _ ret _` ACCEPT_TAC)) >>
   (CONJ_TAC THEN1 (
     qpat_assum `env_body.type_defs = get_tenv cx` (fn th =>
       simp[th] >> qpat_assum `evaluate_type (get_tenv cx) ret = SOME ret_tv` ACCEPT_TAC))) >>
@@ -8658,7 +8672,7 @@ Theorem intcall_successful_defaults_lock_success_sound_general[local]:
        | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (fm = View \/ fm = Pure)
      else return ()) dflt_st = (INL (),lock_st) /\
     well_typed_expr env (Call loc (IntCall (src_id_opt,fn)) es extra) /\
-    expr_type (Call loc (IntCall (src_id_opt,fn)) es extra) = ret /\
+    type_widens_to env.type_defs ret (expr_type (Call loc (IntCall (src_id_opt,fn)) es extra)) /\
     type_stmts env_body ret fn_body = SOME env_after /\
     (ret = NoneT \/ stmts_no_fallthrough fn_body) /\
     stmts_no_control_escape fn_body /\
@@ -8743,7 +8757,7 @@ Proof
     intcall_successful_defaults_lock_success_sound_from_body_ih) >>
   (CONJ_TAC THEN1 first_assum ACCEPT_TAC) >>
   (CONJ_TAC THEN1 (qpat_assum `well_typed_expr _ _` ACCEPT_TAC)) >>
-  (CONJ_TAC THEN1 (qpat_assum `expr_type _ = ret` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1 (qpat_assum `type_widens_to _ ret _` ACCEPT_TAC)) >>
   (CONJ_TAC THEN1 (qpat_assum `evaluate_type (get_tenv cx) ret = SOME ret_tv` ACCEPT_TAC)) >>
   (CONJ_TAC THEN1 (qpat_assum `type_stmts _ _ _ = SOME _` ACCEPT_TAC)) >>
   (CONJ_TAC THEN1 first_assum ACCEPT_TAC) >>
@@ -8847,7 +8861,7 @@ Theorem intcall_successful_defaults_continuation_lock_success_case[local]:
      else return ()) dflt_st = (lock_res,lock_st) /\
     lock_res = INL () /\
     well_typed_expr env (Call loc (IntCall (src_id_opt,fn)) es extra) /\
-    expr_type (Call loc (IntCall (src_id_opt,fn)) es extra) = ret /\
+    type_widens_to env.type_defs ret (expr_type (Call loc (IntCall (src_id_opt,fn)) es extra)) /\
     type_stmts env_body ret fn_body = SOME env_after /\
     (ret = NoneT \/ stmts_no_fallthrough fn_body) /\
     stmts_no_control_escape fn_body /\
@@ -8913,7 +8927,7 @@ Proof
   (CONJ_TAC THEN1 (qpat_assum `evaluate_type _ _ = SOME _` ACCEPT_TAC)) >>
   (CONJ_TAC THEN1 (qpat_assum `(if _ then _ else _) dflt_st = _` ACCEPT_TAC)) >>
   (CONJ_TAC THEN1 (qpat_assum `well_typed_expr _ _` ACCEPT_TAC)) >>
-  (CONJ_TAC THEN1 (qpat_assum `expr_type _ = ret` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1 (qpat_assum `type_widens_to _ ret _` ACCEPT_TAC)) >>
   (CONJ_TAC THEN1 (qpat_assum `type_stmts _ _ _ = SOME _` ACCEPT_TAC)) >>
   (CONJ_TAC THEN1 first_assum ACCEPT_TAC) >>
   (CONJ_TAC THEN1 (qpat_assum `stmts_no_control_escape _` ACCEPT_TAC)) >>
@@ -9013,7 +9027,7 @@ Theorem intcall_successful_defaults_continuation_sound_general[local]:
        | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (fm = View \/ fm = Pure)
      else return ()) dflt_st = (lock_res,lock_st) /\
     well_typed_expr env (Call loc (IntCall (src_id_opt,fn)) es extra) /\
-    expr_type (Call loc (IntCall (src_id_opt,fn)) es extra) = ret /\
+    type_widens_to env.type_defs ret (expr_type (Call loc (IntCall (src_id_opt,fn)) es extra)) /\
     type_stmts env_body ret fn_body = SOME env_after /\
     (ret = NoneT \/ stmts_no_fallthrough fn_body) /\
     stmts_no_control_escape fn_body /\
@@ -9085,7 +9099,7 @@ Proof
     (CONJ_TAC THEN1 (qpat_assum `(if _ then _ else _) dflt_st = _` ACCEPT_TAC)) >>
     (CONJ_TAC THEN1 simp[]) >>
     (CONJ_TAC THEN1 (qpat_assum `well_typed_expr _ _` ACCEPT_TAC)) >>
-    (CONJ_TAC THEN1 (qpat_assum `expr_type _ = ret` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (qpat_assum `type_widens_to _ ret _` ACCEPT_TAC)) >>
     (CONJ_TAC THEN1 (qpat_assum `type_stmts _ _ _ = SOME _` ACCEPT_TAC)) >>
     (CONJ_TAC THEN1 first_assum ACCEPT_TAC) >>
     (CONJ_TAC THEN1 (qpat_assum `stmts_no_control_escape _` ACCEPT_TAC)) >>
@@ -9234,7 +9248,7 @@ Theorem intcall_actual_args_success_default_success_branch[local]:
        | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (fm = View \/ fm = Pure)
      else return ()) dflt_st = (lock_res,lock_st) /\
     well_typed_expr env (Call loc (IntCall (src_id_opt,fn)) es extra) /\
-    expr_type (Call loc (IntCall (src_id_opt,fn)) es extra) = ret /\
+    type_widens_to env.type_defs ret (expr_type (Call loc (IntCall (src_id_opt,fn)) es extra)) /\
     type_stmts env_body ret fn_body = SOME env_after /\
     (ret = NoneT \/ stmts_no_fallthrough fn_body) /\
     stmts_no_control_escape fn_body /\
@@ -9361,7 +9375,7 @@ Theorem intcall_actual_args_success_default_success_branch_pair[local]:
        | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (fm = View \/ fm = Pure)
      else return ()) dflt_st = lock_pair /\
     well_typed_expr env (Call loc (IntCall (src_id_opt,fn)) es extra) /\
-    expr_type (Call loc (IntCall (src_id_opt,fn)) es extra) = ret /\
+    type_widens_to env.type_defs ret (expr_type (Call loc (IntCall (src_id_opt,fn)) es extra)) /\
     type_stmts env_body ret fn_body = SOME env_after /\
     (ret = NoneT \/ stmts_no_fallthrough fn_body) /\
     stmts_no_control_escape fn_body /\
@@ -9535,7 +9549,7 @@ Theorem intcall_actual_args_success_sound_from_generated_ih_general[local]:
     env_body.toplevel_vtypes = env.toplevel_vtypes /\
     env_body.flag_members = env.flag_members /\
     well_typed_expr env (Call loc (IntCall (src_id_opt,fn)) es extra) /\
-    expr_type (Call loc (IntCall (src_id_opt,fn)) es extra) = ret /\
+    type_widens_to env.type_defs ret (expr_type (Call loc (IntCall (src_id_opt,fn)) es extra)) /\
     evaluate_type (get_tenv cx) ret = SOME ret_tv /\
     type_stmts env_body ret fn_body = SOME env_after /\
     (ret = NoneT \/ stmts_no_fallthrough fn_body) /\
@@ -9950,7 +9964,7 @@ Proof
             intcall_call_evaluation_safe_body
             (LIST_CONJ [call_th, module_th, lookup_th]))))) >>
     strip_tac >>
-    MATCH_MP_TAC (Q.SPECL [`cx`, `env`, `sig.ret_ty`, `res`, `st'`, `src_id_opt`, `fn`,
+    MATCH_MP_TAC (Q.SPECL [`cx`, `env`, `loc`, `res`, `st'`, `src_id_opt`, `fn`,
                            `es`, `extra`, `r`, `x'`, `tc_ok`, `actual_vs`, `args_st`,
                            `x''0`, `x''1`, `x''2`, `x''3`, `x''4`, `x''5`,
                            `env_body`, `ret_tv`, `env_after`, `dflt_res`, `dflt_st`]
@@ -12479,8 +12493,11 @@ QED
 
 Resume eval_scc_type_sound_mutual[Assign_Base_sequence]:
   RESUME_TAC >> rpt gen_tac >> rpt (disch_then strip_assume_tac) >>
-  qpat_x_assum `well_typed_atarget _ _ _` mp_tac >>
-  simp_tac (srw_ss()) [well_typed_atarget_def] >> strip_tac >>
+  `?tty. well_typed_atarget env (BaseTarget bt) tty /\
+         type_widens_to env.type_defs (expr_type e) tty /\
+         assignable_type env.type_defs tty` by
+    metis_tac[atarget_accepts_well_typed_atarget] >>
+  fs[well_typed_atarget_def] >>
   qpat_x_assum `call_evaluation_safe _ (int_calls_stmt _)` mp_tac >>
   pure_rewrite_tac[int_calls_stmt_def, int_calls_atarget_def] >> strip_tac >>
   drule call_evaluation_safe_append_left >> strip_tac >>
@@ -12533,7 +12550,12 @@ Resume eval_scc_type_sound_mutual[Assign_Base_write]:
   rename1 `read_place_or_value cx pv target_st = (read_res,read_st)` >>
   drule_all ordinary_place_read_sound >> strip_tac >> gvs[] >>
   Cases_on `read_res` >> simp[] >> strip_tac >> gvs[no_type_error_result_def]
-  >- (`place_result_typed env cx read_st (PlaceR p) (Type (expr_type e))` by simp[] >>
+  >- (qmatch_assum_rename_tac
+        `read_place_or_value cx pv target_st = (INL v,target_st)` >>
+      `value_runtime_typed env tty v` by
+        (fs[value_runtime_typed_def] >>
+         drule_all type_widens_to_value_has_type >> strip_tac >> gvs[]) >>
+      `place_result_typed env cx target_st (PlaceR p) (Type tty)` by simp[] >>
       drule_all typed_target_place_write_sound >> strip_tac >>
       simp[no_type_error_result_def] >>
       Cases_on `res` >> fs[no_type_error_result_def] >>

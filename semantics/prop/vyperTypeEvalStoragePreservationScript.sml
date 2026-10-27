@@ -9,7 +9,7 @@ Ancestors
   vyperTypeBuiltins vyperTypeExprResult vyperTypeExprSoundness vyperTypeEvalSoundness
   vyperTypeExtCallSoundness vyperTypeABI vyperTypeEnvPreservation vyperTypeStatePreservation
   vyperTypeStmtSoundness vyperTypeAssignContext vyperTypeStoragePreservation
-  vyperTypeBindArguments vyperEvalOutcomeSuffix vyperCallOutcomeStorage
+  vyperTypeBindArguments vyperEvalOutcomeSuffix vyperCallOutcomeStorage vyperTypeArgFits
   vyperPlaceStoragePreservation vyperPlaceFrames vyperPlaceTyping
   vyperStoragePlaceProvenance
   vyperPlaceResultTyping vyperTargetPlaceWrite vyperAugAssignWriteSoundness
@@ -2259,6 +2259,10 @@ Resume eval_scc_storage_preservation_mutual[Assign_Base]:
   rename1 `eval_stmt cx (Assign (BaseTarget bt) e) st = (res,st')` >>
   qpat_x_assum `type_stmt _ _ _ = _` mp_tac >>
   simp_tac(srw_ss())[Once type_stmt_def] >> strip_tac >> BasicProvers.VAR_EQ_TAC >>
+  `?tty. well_typed_atarget env (BaseTarget bt) tty /\
+         type_widens_to env.type_defs (expr_type e) tty /\
+         assignable_type env.type_defs tty` by
+    metis_tac[atarget_accepts_well_typed_atarget] >>
   fs[well_typed_atarget_def] >>
   qpat_x_assum `call_evaluation_safe _ (int_calls_stmt _)` mp_tac >>
   pure_rewrite_tac[int_calls_stmt_def, int_calls_atarget_def] >> strip_tac >>
@@ -2311,9 +2315,14 @@ Resume eval_scc_storage_preservation_mutual[Assign_Base_write]:
   rename1 `read_place_or_value cx pv target_st = (read_res,read_st)` >>
   drule_all ordinary_place_read_sound >> strip_tac >> gvs[] >>
   Cases_on `read_res` >> gvs[]
-  >- (drule eval_target_place_region >> strip_tac >>
+  >- (qmatch_assum_rename_tac
+        `read_place_or_value cx pv target_st = (INL v,target_st)` >>
+      drule eval_target_place_region >> strip_tac >>
       `storage_layout_safe cx` by metis_tac[runtime_storage_consistent_layout] >>
-      `place_result_typed env cx read_st (PlaceR p) (Type (expr_type e))` by
+      `value_runtime_typed env tty v` by
+        (fs[value_runtime_typed_def] >>
+         drule_all type_widens_to_value_has_type >> strip_tac >> gvs[]) >>
+      `place_result_typed env cx target_st (PlaceR p) (Type tty)` by
         simp[place_result_typed_place] >>
       drule_all typed_write_place_preserves_storage >> simp[])
 QED
@@ -2322,7 +2331,8 @@ Resume eval_scc_storage_preservation_mutual[Assign_Tuple]:
   rpt gen_tac >> strip_tac >>
   rename1 `eval_stmt cx (Assign (TupleTarget gs) e) st = (res,st')` >>
   qpat_x_assum `type_stmt _ _ _ = _` mp_tac >>
-  simp_tac(srw_ss())[Once type_stmt_def] >> strip_tac >> BasicProvers.VAR_EQ_TAC >>
+  simp_tac(srw_ss())[Once type_stmt_def, atarget_accepts_def] >>
+  strip_tac >> BasicProvers.VAR_EQ_TAC >>
   qpat_x_assum `call_evaluation_safe _ (int_calls_stmt _)` mp_tac >>
   pure_rewrite_tac[int_calls_stmt_def] >> strip_tac >>
   drule call_evaluation_safe_append_left >> strip_tac >>
@@ -2379,7 +2389,6 @@ Resume eval_scc_storage_preservation_mutual[Append]:
   rename1 `type_place_target env bt = SOME (Type (ArrayT elem_ty (Dynamic n)))` >>
   strip_tac >>
   qpat_x_assum `env = env'` (SUBST_ALL_TAC o SYM) >>
-  qpat_x_assum `expr_type e = elem_ty` (SUBST_ALL_TAC o SYM) >>
   qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
   simp_tac(srw_ss())[Once evaluate_def, bind_def] >>
   Cases_on `eval_base_target cx bt st` >>
@@ -2399,7 +2408,7 @@ Resume eval_scc_storage_preservation_mutual[Append]:
     rename1 `eval_base_target cx bt st = (INL (loc,sbs),st1)` >>
     ORACLE_STORAGE_TAC >>
     `target_runtime_typed env cx st1 (BaseTarget bt)
-       (ArrayT (expr_type e) (Dynamic n)) (BaseTargetV loc sbs)` by (
+       (ArrayT elem_ty (Dynamic n)) (BaseTargetV loc sbs)` by (
       irule eval_base_target_success_runtime_typed >> simp[] >>
       metis_tac[runtime_storage_consistent_runtime]) >>
     Cases_on `eval_expr cx e st1` >>
@@ -2424,24 +2433,28 @@ Resume eval_scc_storage_preservation_mutual[Append]:
         Cases_on `assign_target cx (BaseTargetV loc sbs) (AppendOp v) st2` >>
         rename1 `assign_target cx (BaseTargetV loc sbs) (AppendOp v) st2 =
                    (assign_res,st4)` >>
-        `?elem_tv. evaluate_type env.type_defs (expr_type e) = SOME elem_tv` by (
+        `?elem_tv. evaluate_type env.type_defs elem_ty = SOME elem_tv` by (
           drule assignable_type_well_formed >>
           simp[well_formed_type_def, optionTheory.IS_SOME_EXISTS]) >>
-        `value_has_type elem_tv v` by
+        `?etv. evaluate_type env.type_defs (expr_type e) = SOME etv` by
+          gvs[expr_result_typed_def, expr_runtime_typed_def] >>
+        `value_has_type etv v` by
           metis_tac[expr_result_typed_materialise_preserves_value_type,
                     runtime_consistent_def] >>
+        `value_has_type elem_tv v` by (
+          drule_all type_widens_to_value_has_type >> rw[] >> gvs[]) >>
         `target_runtime_typed env cx st2 (BaseTarget bt)
-           (ArrayT (expr_type e) (Dynamic n)) (BaseTargetV loc sbs)` by
+           (ArrayT elem_ty (Dynamic n)) (BaseTargetV loc sbs)` by
           metis_tac[target_runtime_typed_rebuild, runtime_consistent_def] >>
         `assign_operation_runtime_typed env
-           (ArrayT (expr_type e) (Dynamic n)) (AppendOp v)` by
+           (ArrayT elem_ty (Dynamic n)) (AppendOp v)` by
           metis_tac[stmt_assign_operation_runtime_typed_Append_from_value_has_type] >>
         `assign_operation_matches_target_shape (BaseTargetV loc sbs) (AppendOp v)` by
           simp[stmt_assign_operation_matches_target_shape_Append_BaseTargetV] >>
         `assign_target_assignable_context cx (BaseTargetV loc sbs) st2` by
           metis_tac[target_runtime_typed_imp_assignable_context,
                     runtime_consistent_def] >>
-        `assignable_type env.type_defs (ArrayT (expr_type e) (Dynamic n))` by (
+        `assignable_type env.type_defs (ArrayT elem_ty (Dynamic n))` by (
           simp[assignable_type_def, well_formed_type_def] >>
           drule_at(Pat`target_runtime_typed`) target_runtime_typed_place_leaf_typed >>
           simp[] >> strip_tac >>
