@@ -20,7 +20,7 @@ Ancestors
   list rich_list arithmetic
   exprLowering exprLoweringProps emitHelper emitHelperProps compileEnv
   freshWrites valueEncoding valueEncodingProps entryDecodeProps
-  exprSim fragExec localPtrsProps context
+  exprSim fragExec localPtrsProps context valueCopy
   vyperTyping vyperValue vyperState venomExecSemantics venomState
 
 (* ===== Storing the results ===== *)
@@ -208,19 +208,6 @@ QED
 Finalise store_multi_results_run
 
 (* ===== The stored words hold the value ===== *)
-
-Theorem word_tv_memory_size[local]:
-  !tenv t tv.
-    is_word_type t /\ evaluate_type tenv t = SOME tv ==>
-    type_memory_size tv = 32
-Proof
-  Cases_on `t` >> simp[is_word_type_def]
-  >- (rename1 `BaseT bt` >> Cases_on `bt` >> simp[is_word_type_def] >>
-      TRY (rename1 `BytesT bd` >> Cases_on `bd` >> simp[is_word_type_def]) >>
-      simp[evaluate_type_def, type_memory_size_def]) >>
-  simp[evaluate_type_def, AllCaseEqs()] >> rw[] >>
-  simp[type_memory_size_def]
-QED
 
 Theorem word_tuple_in_memory[local]:
   !tvs vs tenv off mem.
