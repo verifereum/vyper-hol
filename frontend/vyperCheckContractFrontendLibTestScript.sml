@@ -1,6 +1,7 @@
 Theory vyperCheckContractFrontendLibTest
 Ancestors
   jsonToVyper jsonToVyperExpr jsonAST vyperAST vyperTypeContract
+  jsonNominalSources
 Libs
   vyperCheckContractFrontendLib
 
@@ -448,6 +449,18 @@ val _ = check_fixture true "nested_initializes/main.json";
 (* lib_a is reached as `..lib_a` from main and `.lib_a` from lib_b. *)
 val _ = check_fixture false "relative_uses/pkg/mocks/main.json";
 val _ = check_fixture true "relative_uses/pkg/mocks/main.json";
+
+(* An inferred struct name declared in two modules keeps no source. *)
+Theorem nominal_source_needs_one_declaration:
+  resolve_json_type [((StructKind, "S"), 1); ((StructKind, "S"), 1)]
+    (JT_Struct NONE "S") = JT_Struct (SOME 1) "S" ∧
+  resolve_json_type [((StructKind, "S"), 0); ((StructKind, "S"), 1)]
+    (JT_Struct NONE "S") = JT_Struct NONE "S" ∧
+  resolve_json_type [((StructKind, "S"), 1)]
+    (JT_Flag NONE "S") = JT_Flag NONE "S"
+Proof
+  EVAL_TAC
+QED
 
 fun fixture_input path = vyperCheckContractFrontendLib.prepare_check_input
   {in_deploy = false, address = address,
