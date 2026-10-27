@@ -5,11 +5,13 @@
 Theory abiEncoderReuseAudit
 Ancestors
   abiScratchEncoderRecursive abiEncoderCorrectRecursive
-  abiEncoderOpenInput abiEncoderRegisteredEffect abiEncoderStaticRepresentative
+  abiEncoderOpenInput abiEncoderRegisteredEffect abiEncoderRegisteredFrame
+  abiEncoderStaticRepresentative
   abiEncoderOpenInputFrame abiEncoderResourceAdapter
   abiEncoderExitPhi abiEncoderEntry abiEncoderExtendSim abiEncoderExtendControl
   abiEncoderSharedContract abiEncoderPrimitiveEffect
   abiEncoderCompositionCompat
+  abiEncoderSharedLeaves abiEncoderEnvelopeAdapter
 
 fun audit_encoder_tag (name, th) =
   let
@@ -24,6 +26,8 @@ fun audit_encoder_tag (name, th) =
 val _ = List.app audit_encoder_tag
   [("abi_scratch_encoder_admissible_mutual", abi_scratch_encoder_admissible_mutual),
    ("abi_scratch_encoder_translation", abi_scratch_encoder_translation),
+   ("abi_encoder_correct_admissible_mutual", abi_encoder_correct_admissible_mutual),
+   ("abi_encoder_correct_translation", abi_encoder_correct_translation),
    ("abi_encoder_input_open", abi_encoder_input_open),
    ("abi_encoder_aligned_bytes_representative", abi_encoder_aligned_bytes_representative),
    ("abi_encoder_static_source_representative", abi_encoder_static_source_representative),
@@ -42,6 +46,11 @@ val _ = List.app audit_encoder_tag
    ("abi_encoder_array_loop_header_extend_sim", abi_encoder_array_loop_header_extend_sim),
    ("abi_encoder_shared_run", abi_encoder_shared_run),
    ("abi_encoder_shared_scratch", abi_encoder_shared_scratch),
+   ("abi_encoder_shared_word", abi_encoder_shared_word),
+   ("abi_encoder_shared_copy", abi_encoder_shared_copy),
+   ("abi_encoder_shared_bytes", abi_encoder_shared_bytes),
+   ("abi_encoder_shared_empty", abi_encoder_shared_empty),
+   ("abi_encoder_shared_correct", abi_encoder_shared_correct),
    ("abi_encoder_shared_endpoint_intro", abi_encoder_shared_endpoint_intro),
    ("abi_encoder_register_alloca_inv", abi_encoder_register_alloca_inv),
    ("abi_encoder_weak_child_sequence", abi_encoder_weak_child_sequence),
