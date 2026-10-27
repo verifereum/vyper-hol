@@ -5,7 +5,7 @@ Ancestors
   abiEncoderMemberSourceAdapter abiEncoderMemberSourceInterpret
   abiEncoderMemberSourceContract abiEncoderMembersAdvance abiEncoderMembersLayout
   abiEncoderMembersContract abiEncoderMembersDefs abiEncoderTuple abiEncoderChildInputs
-  abiEncoderMemberCode abiCanonicalWindows abiDecoderEffect abiDecoderContract
+  abiEncoderMemberCode abiCanonicalWindows abiDecoderEffect abiDecoderContract abiDecoderLoop
   compileEnv valueEncoding valueEncodingProps contractABI venomState words list arithmetic
 
 Theorem abi_encoder_members_static_endpoint:
@@ -112,8 +112,39 @@ Proof
   strip_tac >> asm_rewrite_tac []
 QED
 
+(* The list interpretation keeps origin/initial fixed, rather than resetting
+   its effect ledger to the most recent prepare state. *)
+Theorem abi_encoder_members_origin_transport:
+  abi_decoder_effect first last lo hi origin.cs_next_var limit_st d sz b cap initial s /\
+  abi_decode_sim ctx func initial s /\
+  abi_decoder_address_frame st.cs_next_var s r /\ fresh_vars_wrt limit_st r /\
+  abi_decoder_budget first last b cap s /\
+  abi_decode_sim ctx func s r /\
+  abi_decoder_effect first last lo ce.cs_next_id prepared.cs_next_var
+    limit_st d sz b cap r u /\ abi_decode_sim ctx func r u /\
+  origin.cs_next_var <= st.cs_next_var /\ origin.cs_next_var <= prepared.cs_next_var /\
+  ce.cs_next_id <= hi ==>
+  abi_decoder_effect first last lo hi origin.cs_next_var limit_st d sz b cap initial u /\
+  abi_decode_sim ctx func initial u
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  `abi_decoder_effect first last lo hi origin.cs_next_var limit_st d sz b cap s r` by
+    (irule abi_decoder_address_effect >> asm_rewrite_tac [] >>
+     qexists_tac `st.cs_next_var` >> asm_rewrite_tac []) >>
+  `abi_decoder_effect first last lo hi origin.cs_next_var limit_st d sz b cap r u` by
+    (irule abi_decoder_effect_widen >>
+     qexistsl_tac [`d`, `ce.cs_next_id`, `lo:num`, `prepared.cs_next_var`, `sz:num`] >>
+     simp[]) >>
+  conj_tac
+  >- (irule abi_decoder_effect_trans >> qexists_tac `s` >> asm_rewrite_tac [] >>
+      irule abi_decoder_effect_trans >> qexists_tac `r` >> asm_rewrite_tac []) >>
+  irule abi_decode_sim_trans >> qexists_tac `s` >> asm_rewrite_tac [] >>
+  irule abi_decode_sim_trans >> qexists_tac `r` >> asm_rewrite_tac []
+QED
+
 val _ = List.app (fn th =>
   let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
     if List.all (fn s => s = "DISK_THM") oracles andalso null axioms andalso null (Thm.hyp th)
     then () else raise Fail "source member endpoint has an admission, axiom or hypothesis"
-  end) [abi_encoder_members_static_endpoint, abi_encoder_members_dynamic_endpoint];
+  end) [abi_encoder_members_static_endpoint, abi_encoder_members_dynamic_endpoint,
+  abi_encoder_members_origin_transport];
