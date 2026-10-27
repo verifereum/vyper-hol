@@ -423,6 +423,40 @@ Proof
   Cases_on `place_ptr.ptr_location` >> gvs[]
 QED
 
+Theorem unwrap_memory_read_result_sim:
+  !ctx func cenv cx e es sa sm sb s0 es' raw res t p op.
+    read_result cx raw es' = (res, es') /\
+    unwrap_value cenv (LocatedValue t p) sm = (op, sb) /\
+    p.ptr_location = LocMemory /\ local_ptrs_reserved cenv sm /\
+    sa.cs_next_var <= sm.cs_next_var ==>
+    frag_exec ctx sm sb
+      (\s. vv_post func cenv cx e es sa sm s0 es' raw (LocatedValue t p) s)
+      (\s. ?v. res = INL v /\ expr_post func cenv cx e es sa sb s0 es' v op s)
+      (expr_exit res)
+Proof
+  rpt strip_tac >> Cases_on `res`
+  >- (rename1 `read_result cx raw es' = (INL v, es')` >>
+      drule vv_post_read_result >> strip_tac >>
+      irule frag_exec_conseq >>
+      qexistsl_tac
+        [`\s. vv_post func cenv cx e es sa sm s0 es' (Value v) (LocatedValue t p) s`,
+         `\s. expr_post func cenv cx e es sa sb s0 es' v op s`,
+         `\r. F`] >>
+      simp[] >> irule unwrap_memory_sim >> simp[]) >>
+  rename1 `read_result cx raw es' = (INR exc, es')` >>
+  irule frag_exec_conseq >> qexistsl_tac [`\s. F`, `\s. F`, `\r. F`] >>
+  simp[fragExecTheory.frag_exec_false_pre] >> metis_tac[vv_post_failed_read]
+QED
+
+val () =
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag unwrap_memory_read_result_sim)
+  in
+    if null axioms andalso null (Thm.hyp unwrap_memory_read_result_sim) andalso
+       List.all (fn oracle => oracle = "DISK_THM") oracles then
+      print "MEMORY_FORCE_AUDIT unwrap_memory_read_result_sim OK\n"
+    else raise Fail "unwrap_memory_read_result_sim: admitted proof dependency"
+  end;
+
 Theorem expr_exit_exception_transport[local]:
   !exc result.
     expr_res_ok (INR exc : value + exception) ==>
