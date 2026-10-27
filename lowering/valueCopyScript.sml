@@ -19,6 +19,8 @@
  *   compile_store_memory_run — compile_store_memory at one type puts the
  *                            value at the destination and changes memory
  *                            only there
+ *   stage_store_run        — and so does compile_stage_intcall_args's
+ *                            store of a memory-passed argument
  *)
 
 Theory valueCopy
@@ -435,3 +437,70 @@ Resume compile_store_memory_run[copy]:
 QED
 
 Finalise compile_store_memory_run
+
+(* compile_stage_intcall_args's test for a bytestring type. *)
+Theorem stage_bytestring_case:
+  !ty. (case ty of
+          BaseT (BytesT (Dynamic _)) => T
+        | BaseT (StringT _) => T
+        | _ => F) = is_bytestring_type ty
+Proof
+  Cases >> simp[is_bytestring_type_def] >> rename1 `BaseT bt` >>
+  Cases_on `bt` >> simp[is_bytestring_type_def] >> rename1 `BytesT bd` >>
+  Cases_on `bd` >> simp[is_bytestring_type_def]
+QED
+
+(* The store compile_stage_intcall_args emits for a memory-passed argument
+   into its buffer dst: compile_store_memory at one type, except that it
+   copies with MCOPY whatever type_memory_bytes is. *)
+Theorem stage_store_run:
+  !cenv src dst ty sa sb s tenv tv v sw dw.
+    (if is_word_type ty then emit_void MSTORE [dst; src]
+     else if is_bytestring_type ty then
+       do compile_store_bytestring src dst; return () od
+     else emit_void MCOPY [dst; src; Lit (n2w (type_memory_bytes cenv ty))])
+      sa = ((),sb) /\
+    (!x. src = Var x ==> not_fresh_at sa x) /\
+    (!x. dst = Var x ==> not_fresh_at sa x) /\
+    eval_operand src s = SOME sw /\ eval_operand dst s = SOME dw /\
+    evaluate_type tenv ty = SOME tv /\ value_has_type tv v /\ val_wf tv v /\
+    type_memory_bytes cenv ty = type_memory_size tv /\
+    (if is_word_type ty then sw = typed_val_to_w256 tv v
+     else val_in_memory tv v (w2n sw) s.vs_memory) /\
+    w2n dw + type_memory_size tv + 64 < dimword (:256) ==>
+    sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
+    same_blocks sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
+    sa.cs_next_id <= sb.cs_next_id /\
+    EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+      (emitted_insts sa sb) /\
+    ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
+      val_in_memory tv v (w2n dw) t.vs_memory /\
+      (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s /\
+      (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+      (!a len. a + len <= w2n dw \/ w2n dw + type_memory_size tv <= a ==>
+         mem_bytes_at a len t.vs_memory = mem_bytes_at a len s.vs_memory)
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `is_word_type ty \/ is_bytestring_type ty`
+  >- (`compile_store_memory cenv src dst ty ty sa = ((),sb)` by
+        (qpat_x_assum `(if _ then _ else _) sa = _` mp_tac >>
+         Cases_on `is_word_type ty` >> fs[compile_store_memory_def] >>
+         Cases_on `compile_store_bytestring src dst sa` >>
+         simp[comp_bind_def, comp_ignore_bind_def, comp_return_def]) >>
+      qspecl_then [`cenv`, `src`, `dst`, `ty`, `sa`, `sb`, `s`, `tenv`, `tv`,
+                   `v`, `sw`, `dw`] mp_tac compile_store_memory_run >>
+      impl_tac >- simp[] >> simp[]) >>
+  gvs[] >>
+  `val_footprint tv v <= type_memory_size tv` by
+    metis_tac[val_footprint_le_type_size] >>
+  qspecl_then [`sa`, `sb`, `dst`, `src`, `type_memory_size tv`, `s`, `dw`,
+               `sw`] mp_tac emit_mcopy_run >>
+  impl_tac >- simp[] >> strip_tac >> simp[] >> rpt conj_tac
+  >~ [`val_in_memory`] >- (irule mcopy_val_in_memory >> simp[])
+  >~ [`lookup_var`]
+  >- simp[mcopy_def, write_memory_with_expansion_def, LET_THM, lookup_var_def]
+  >~ [`mem_bytes_at`]
+  >- (rpt strip_tac >> irule mem_bytes_at_mcopy_disjoint >> decide_tac) >>
+  simp[mcopy_def, write_memory_with_expansion_def, LET_THM,
+       venom_state_component_equality]
+QED
