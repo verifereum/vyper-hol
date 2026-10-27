@@ -20,7 +20,7 @@ env:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     # The cache login is an environment secret that only trusted main runs can read.
     environment: ${{ ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'merge_group' && github.event.merge_group.base_ref == 'refs/heads/main')) && 'bazel-cache' || '' }}
     outputs:
@@ -151,7 +151,7 @@ jobs:
           retention-days: 90
 
   python-o1-oracle:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v7
         with:
@@ -171,7 +171,7 @@ jobs:
             --vyper-repo vyper-src
 
   export-vyper-tests:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     outputs:
       export-cache-key: ${{ steps.exports.outputs.export-cache-key }}
     steps:
@@ -183,7 +183,7 @@ jobs:
 
   vyper-tests:
     needs: [build, export-vyper-tests]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     # The cache login is an environment secret that only trusted main runs can read.
     environment: ${{ ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'merge_group' && github.event.merge_group.base_ref == 'refs/heads/main')) && 'bazel-cache' || '' }}
     strategy:
@@ -275,7 +275,7 @@ jobs:
 
   holbuild-success:
     if: always()
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     needs: [build, python-o1-oracle, export-vyper-tests, vyper-tests]
     steps:
       - name: Check all jobs succeeded
