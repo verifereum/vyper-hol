@@ -1,14 +1,24 @@
 name: holbuild
+run-name: ${{ github.event_name == 'workflow_dispatch' && inputs.approved_sha && format('Approved PR {0} at {1}', inputs.pr_number, inputs.approved_sha) || '' }}
 
 on:
   workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'PR to test (leave both inputs blank for an ordinary main run)'
+        type: string
+        default: ''
+      approved_sha:
+        description: 'Full current head SHA approved to run with cache credentials, including its local actions'
+        type: string
+        default: ''
   pull_request:
   merge_group:
   push:
     branches: [main]
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || (github.event_name == 'push' && github.sha) || github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
@@ -16,18 +26,80 @@ permissions:
 
 env:
   HBX_BASENAME: vyper-hol
-  HBX_ARTEFACT_NAME: vyper-hol-hbx-${{ github.sha }}
 
 jobs:
-  build:
+  select-source:
     runs-on: ubuntu-latest
-    # The cache login is an environment secret that only trusted main runs can read.
-    environment: ${{ ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'merge_group' && github.event.merge_group.base_ref == 'refs/heads/main')) && 'bazel-cache' || '' }}
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      repository: ${{ steps.source.outputs.repository }}
+      sha: ${{ steps.source.outputs.sha }}
+      approved: ${{ steps.source.outputs.approved }}
+    steps:
+      # No checkout or environment secrets before validating the approval.
+      - uses: actions/github-script@v8
+        id: source
+        env:
+          PR_NUMBER: ${{ inputs.pr_number }}
+          APPROVED_SHA: ${{ inputs.approved_sha }}
+        with:
+          script: |
+            let repository = `${context.repo.owner}/${context.repo.repo}`;
+            let sha = context.sha;
+            let approved = false;
+            if (context.eventName === 'workflow_dispatch') {
+              if (context.ref !== 'refs/heads/main') {
+                throw new Error('Dispatch holbuild on main so its workflow is trusted');
+              }
+              const number = process.env.PR_NUMBER;
+              const requested = process.env.APPROVED_SHA;
+              if (number || requested) {
+                if (!/^[1-9][0-9]*$/.test(number) || !Number.isSafeInteger(Number(number))) {
+                  throw new Error(`Invalid PR number: ${number}`);
+                }
+                if (!/^[0-9a-f]{40}$/.test(requested)) {
+                  throw new Error(`Expected a full lowercase commit SHA, got: ${requested}`);
+                }
+                const {data: pr} = await github.rest.pulls.get({
+                  ...context.repo, pull_number: Number(number),
+                });
+                if (pr.state !== 'open' || pr.base.repo.full_name !== repository || pr.base.ref !== 'main') {
+                  throw new Error('Expected an open PR targeting this repository main branch');
+                }
+                if (!pr.head.repo || pr.head.sha !== requested) {
+                  throw new Error(`PR head is ${pr.head.sha}, not approved SHA ${requested}; approve its current head explicitly`);
+                }
+                repository = pr.head.repo.full_name;
+                sha = requested;
+                approved = true;
+              }
+            }
+            core.setOutput('repository', repository);
+            core.setOutput('sha', sha);
+            core.setOutput('approved', String(approved));
+            await core.summary
+              .addHeading('Selected source')
+              .addTable([
+                [{data: 'Repository', header: true}, {data: 'Commit', header: true}, {data: 'Explicit PR approval', header: true}],
+                [repository, sha, String(approved)],
+              ])
+              .addRaw('Workflow and job definitions come from the triggering workflow; local actions and build inputs come from the selected commit. A dispatch result tests this commit, not the workflow main SHA.\n')
+              .write();
+
+  build:
+    needs: [select-source]
+    runs-on: ubuntu-latest
+    # Explicit main-dispatch approval also trusts the selected commit's local actions.
+    environment: ${{ (needs.select-source.outputs.approved == 'true' || (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'merge_group' && github.event.merge_group.base_ref == 'refs/heads/main')) && 'bazel-cache' || '' }}
     outputs:
       holbuild-cache-key: ${{ steps.cache-key.outputs.snapshot-key }}
     steps:
       - uses: actions/checkout@v7
         with:
+          repository: ${{ needs.select-source.outputs.repository }}
+          ref: ${{ needs.select-source.outputs.sha }}
           persist-credentials: false
 
       - uses: ./.github/actions/setup-polyml
@@ -62,7 +134,7 @@ jobs:
           toolchain_key="holbuild-v3-toolchain-${{ runner.os }}-${{ runner.arch }}-${{ steps.polyml.outputs.polyml-rev }}-${{ steps.holbuild.outputs.holbuild-rev }}"
           compatibility_hash="${{ hashFiles('holproject.toml', 'VYPER_PIN') }}"
           build_prefix="holbuild-v3-build-${{ runner.os }}-${{ runner.arch }}-${{ steps.polyml.outputs.polyml-rev }}-${{ steps.holbuild.outputs.holbuild-rev }}-${compatibility_hash}"
-          snapshot_key="${build_prefix}-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}"
+          snapshot_key="${build_prefix}-${{ needs.select-source.outputs.sha }}-${{ github.run_id }}-${{ github.run_attempt }}"
           echo "toolchain-key=${toolchain_key}" >> "$GITHUB_OUTPUT"
           echo "build-prefix=${build_prefix}" >> "$GITHUB_OUTPUT"
           echo "snapshot-key=${snapshot_key}" >> "$GITHUB_OUTPUT"
@@ -142,7 +214,7 @@ jobs:
       - name: Upload HBX artefact
         uses: actions/upload-artifact@v7.0.1
         with:
-          name: ${{ env.HBX_ARTEFACT_NAME }}
+          name: vyper-hol-hbx-${{ needs.select-source.outputs.sha }}
           path: |
             ${{ env.HBX_BASENAME }}.hbx
             ${{ env.HBX_BASENAME }}.hbx.json
@@ -151,10 +223,13 @@ jobs:
           retention-days: 90
 
   python-o1-oracle:
+    needs: [select-source]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
         with:
+          repository: ${{ needs.select-source.outputs.repository }}
+          ref: ${{ needs.select-source.outputs.sha }}
           persist-credentials: false
 
       - uses: actions/setup-python@v6
@@ -171,21 +246,23 @@ jobs:
             --vyper-repo vyper-src
 
   export-vyper-tests:
+    needs: [select-source]
     runs-on: ubuntu-latest
     outputs:
       export-cache-key: ${{ steps.exports.outputs.export-cache-key }}
     steps:
       - uses: actions/checkout@v7
         with:
+          repository: ${{ needs.select-source.outputs.repository }}
+          ref: ${{ needs.select-source.outputs.sha }}
           persist-credentials: false
       - uses: ./.github/actions/setup-vyper-test-exports
         id: exports
 
   vyper-tests:
-    needs: [build, export-vyper-tests]
+    needs: [select-source, build, export-vyper-tests]
     runs-on: ubuntu-latest
-    # The cache login is an environment secret that only trusted main runs can read.
-    environment: ${{ ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'merge_group' && github.event.merge_group.base_ref == 'refs/heads/main')) && 'bazel-cache' || '' }}
+    environment: ${{ (needs.select-source.outputs.approved == 'true' || (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'merge_group' && github.event.merge_group.base_ref == 'refs/heads/main')) && 'bazel-cache' || '' }}
     strategy:
       fail-fast: false
       matrix:
@@ -193,6 +270,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
+          repository: ${{ needs.select-source.outputs.repository }}
+          ref: ${{ needs.select-source.outputs.sha }}
           persist-credentials: false
 
       - uses: ./.github/actions/setup-polyml
@@ -276,8 +355,8 @@ jobs:
   holbuild-success:
     if: always()
     runs-on: ubuntu-latest
-    needs: [build, python-o1-oracle, export-vyper-tests, vyper-tests]
+    needs: [select-source, build, python-o1-oracle, export-vyper-tests, vyper-tests]
     steps:
       - name: Check all jobs succeeded
-        if: ${{ needs.build.result != 'success' || needs.python-o1-oracle.result != 'success' || needs.export-vyper-tests.result != 'success' || needs.vyper-tests.result != 'success' }}
+        if: ${{ needs.select-source.result != 'success' || needs.build.result != 'success' || needs.python-o1-oracle.result != 'success' || needs.export-vyper-tests.result != 'success' || needs.vyper-tests.result != 'success' }}
         run: exit 1
