@@ -25,6 +25,9 @@ Ancestors
   abiEncoderMembersCorrect abiScratchMemberContract abiScratchMemberInterpret
   abiScratchMembersEndpoint abiScratchMembersEntry abiScratchMembersIndex
   abiScratchMembersInterpret abiScratchMembersCorrect abiEncoderSharedMemberContract
+  abiEncoderOpenPrefix abiEncoderZeroFrame abiEncoderSharedMembersInput
+  abiEncoderSharedMembersIndex abiEncoderSharedMembersPrepare
+  abiEncoderSharedMembersRequest abiEncoderSharedMembersOutput abiEncoderSharedMembersEndpoint
 
 fun audit_encoder_tag (name, th) =
   let
@@ -266,6 +269,34 @@ val _ = List.app audit_encoder_tag
    ("abi_encoder_shared_member_dynamic_cursor_input", abi_encoder_shared_member_dynamic_cursor_input),
    ("abi_encoder_shared_members_child_dispatch", abi_encoder_shared_members_child_dispatch),
    ("abi_encoder_shared_members_child_run", abi_encoder_shared_members_child_run),
+   ("abi_encoder_open_prefix_tail_advance", abi_encoder_open_prefix_tail_advance),
+   ("abi_encoder_open_prefix_head_advance", abi_encoder_open_prefix_head_advance),
+   ("abi_encoder_shared_members_index_initial", abi_encoder_shared_members_index_initial),
+   ("abi_encoder_shared_members_index_source", abi_encoder_shared_members_index_source),
+   ("abi_encoder_shared_members_index_empty", abi_encoder_shared_members_index_empty),
+   ("abi_encoder_shared_members_inv_layout", abi_encoder_shared_members_inv_layout),
+   ("abi_encoder_shared_members_after_child", abi_encoder_shared_members_after_child),
+   ("abi_encoder_shared_members_origin_transport", abi_encoder_shared_members_origin_transport),
+   ("abi_encoder_shared_members_index_advance", abi_encoder_shared_members_index_advance),
+   ("abi_encoder_shared_members_pre_mono", abi_encoder_shared_members_pre_mono),
+   ("abi_encoder_shared_members_pre_address", abi_encoder_shared_members_pre_address),
+   ("abi_encoder_shared_members_pre_shape", abi_encoder_shared_members_pre_shape),
+   ("abi_encoder_shared_members_pre_empty", abi_encoder_shared_members_pre_empty),
+   ("abi_encoder_shared_open_input_frame", abi_encoder_shared_open_input_frame),
+   ("abi_encoder_shared_members_pre_effect", abi_encoder_shared_members_pre_effect),
+   ("abi_encoder_shared_members_pre_cons", abi_encoder_shared_members_pre_cons),
+   ("abi_encoder_shared_members_child_buffer", abi_encoder_shared_members_child_buffer),
+   ("abi_encoder_shared_member_static_output", abi_encoder_shared_member_static_output),
+   ("abi_encoder_shared_members_prepare_raw_transport", abi_encoder_shared_members_prepare_raw_transport),
+   ("abi_encoder_shared_members_prepare_extend", abi_encoder_shared_members_prepare_extend),
+   ("abi_encoder_shared_members_index_prepare", abi_encoder_shared_members_index_prepare),
+   ("abi_encoder_shared_member_static_input", abi_encoder_shared_member_static_input),
+   ("abi_encoder_shared_members_static_request", abi_encoder_shared_members_static_request),
+   ("abi_encoder_shared_member_dynamic_input", abi_encoder_shared_member_dynamic_input),
+   ("abi_encoder_shared_members_dynamic_request", abi_encoder_shared_members_dynamic_request),
+   ("abi_encoder_mem_bytes_singletons", abi_encoder_mem_bytes_singletons),
+   ("abi_encoder_footprint_frame_zero_slice", abi_encoder_footprint_frame_zero_slice),
+   ("abi_encoder_shared_members_static_endpoint", abi_encoder_shared_members_static_endpoint),
    ("abi_scratch_members_correct_cons", abi_scratch_members_correct_cons),
    ("abi_scratch_members_correct_all", abi_scratch_members_correct_all),
    ("abi_encoder_members_inv_nonempty", abi_encoder_members_inv_nonempty),
