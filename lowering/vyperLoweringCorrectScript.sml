@@ -21,6 +21,7 @@
  *   external_return_word_result_rel, external_return_prim_result_rel,
  *   external_return_static_result_rel, external_return_abi_result_rel,
  *   external_return_static_cenv_result_rel,
+ *   external_return_abi_cenv_result_rel,
  *   external_return_none_result_rel,
  *   external_fallthrough_result_rel -- S1 halt bridge (#640) for the
  *     return sequences loweringHalt covers, and their _unlock versions,
@@ -54,7 +55,7 @@ Ancestors
   venomState
   compileEnv e2eDefs supportedProgram compileVyper immutableSectionRel
   unitTransformDefs unitShapeDefs
-  fragExec loweringHalt loweringShapeProps
+  fragExec loweringHalt loweringShapeProps retAbiPlanProps
 
 (* TASK056 RETIRED SOURCE ARCHIVE: old NONE-mode helpers, replaced by the
    exact oracle-mode boundary below. Original text retained without bridges.
@@ -716,11 +717,9 @@ QED
    bound.  None of the return sequence's
    ALLOCAs has run, and the frontier stays below 2 ** 256 while they run;
    nothing in the lowering bounds it (vyper rejects allocations of 2^64
-   bytes or more).  Not proved yet: that the ei and msz update_cenv_ret_abi
-   builds meet the plan and the bound.  That needs the compile env's
-   sizes and flags (type_memory_bytes, abi_embedded_static_size,
-   is_abi_dynamic, abi_size_bound over ce_struct_fields) to agree with
-   type_memory_size, static_length, is_dynamic and vyper_abi_size_bound. *)
+   bytes or more).  For the case with no release,
+   external_return_abi_cenv_result_rel discharges the plan and the bound
+   for the ei and msz update_cenv_ret_abi builds. *)
 Theorem external_return_abi_unlock_result_rel:
   !ctx op ei msz nr nkey ut iv st x st' func cenv cx es es' ret tv v0 v
      tops tx srcs exps layouts Q.
@@ -824,6 +823,49 @@ Proof
   impl_tac
   >- (Cases_on `nr` >> Cases_on `iv` >> gvs[vyperStateTheory.return_def]) >>
   simp[]
+QED
+
+(* The same, for the plan and buffer size update_cenv_ret_abi builds from a
+   compile env with the program's struct map (as build_compile_env's is), for
+   a return type with no NoneT in it (retAbiPlanProps). *)
+Theorem external_return_abi_cenv_result_rel:
+  !ctx op nr nkey ut iv st x st' func cenv cenv0 cx es ret tv v0 v
+     tops tx srcs exps layouts Q.
+    compile_external_return (SOME op) F F cenv.ce_ret_enc_info
+      cenv.ce_max_return_size nr nkey ut iv st = (x, st') /\
+    cenv.ce_ret_enc_info = (update_cenv_ret_abi cenv0 ret).ce_ret_enc_info /\
+    cenv.ce_max_return_size =
+      (update_cenv_ret_abi cenv0 ret).ce_max_return_size /\
+    cenv0.ce_struct_fields = make_struct_fields_map tops /\
+    ALL_DISTINCT (FLAT (MAP (type_def_keys_toplevel (NONE:num option)) tops)) /\
+    assignable_type (type_env tops) ret /\
+    (nr ==> iv) /\ (!y. op = Var y ==> not_fresh_at st y) /\
+    evaluate_type (type_env tops) ret = SOME tv /\ safe_cast tv v0 = SOME v ==>
+    frag_exec ctx st st'
+      (\s. state_rel func cenv cx es s /\
+           (?p. eval_operand op s = SOME p /\
+                val_in_memory tv v0 (w2n p) s.vs_memory /\
+                w2n p + type_memory_size tv <= s.vs_alloca_next) /\
+           alloca_inv s /\
+           (!i. i IN frag_ids st st' ==> FLOOKUP s.vs_allocas i = NONE) /\
+           s.vs_alloca_next + cenv.ce_max_return_size +
+             32 * (st'.cs_next_id - st.cs_next_id) < dimword (:256) /\
+           s.vs_accounts =
+             process_deletions es.pending_deletions es.accounts /\
+           s.vs_transient = es.tStorage)
+      Q
+      (external_call_result_rel tops ret tx
+         (INL v, finalize_pending_deletions
+                   (abstract_machine_from_state srcs exps layouts es),
+          es.requests))
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all update_cenv_ret_abi_plan >> strip_tac >>
+  irule external_return_abi_result_rel >>
+  reverse (rpt conj_tac)
+  >- (qexistsl [`cenv.ce_ret_enc_info`, `iv`, `nkey`, `nr`, `ut`, `x`] >>
+      gvs[]) >>
+  gvs[]
 QED
 
 (* ===== Label-space invariant at the start of lowering ===== *)

@@ -142,9 +142,9 @@ Theorem deploy_state_creation_entry:
     es.contexts = [(ctxt,rb)] /\ ctxt.msgParams.outputTo = Code tx.target /\
     ctxt.msgParams.code = deploy_bc ++ bs /\
     ctxt.msgParams.parsed = parse_code 0 FEMPTY (deploy_bc ++ bs) /\
-    ctxt.msgParams.data = [] /\ constructor_args_encode tops tx bs /\
+    buffer_to_list ctxt.msgParams.data = [] /\ constructor_args_encode tops tx bs /\
     ctxt.jumpDest = NONE /\ ~ctxt.msgParams.static /\
-    ctxt.pc = 0 /\ ctxt.stack = [] /\ ctxt.memory = [] /\
+    ctxt.pc = 0 /\ ctxt.stack = [] /\ buffer_to_list ctxt.memory = [] /\
     ctxt.returnData = [] /\ ctxt.logs = []
 Proof
   rw[deploy_state_rel_def] >> qexistsl_tac [`ctxt`,`rb`,`args_bytes`] >> simp[]

@@ -5,11 +5,13 @@ Ancestors
   moduleLowering
   (* property statements and proofs *)
   moduleLoweringProps entryDispatchProps entryDecodeProps
+  abiDecodeStaticProps entryDecodeStaticProps entryDecodePlanProps
   loweringSlice
   varsExt exprSim
   exprBopLowering
   exprSimOps exprSimCompare exprSimArith intBits freshWrites
-  exprSimMain
+  exprSimMain stmtSim stmtSimIf stmtSimFor stmtSimReturn stmtSimDecl
+  stmtSimReason
   valueEncodingProofs
   localPtrsProps
   immutableStagingBridge
@@ -17,6 +19,7 @@ Ancestors
   immutableLocationProps
   loweringShapeDefs
   loweringShapeProps
+  intCallStep intCallLookup
   structFieldsProps
   (* compiler + correctness *)
   vyperCompiler

@@ -55,7 +55,7 @@ Theorem boundary_live_and_fresh:
     es.contexts = (ctxt,rb)::rest /\
     ~ctxt.msgParams.static /\ ctxt.jumpDest = NONE /\
     ctxt.pc = 0 /\ ctxt.stack = [] /\ ctxt.logs = [] /\
-    ctxt.memory = [] /\ ctxt.returnData = [] /\
+    buffer_to_list ctxt.memory = [] /\ ctxt.returnData = [] /\
     installed_code_rel tops code (account_immutables am tx.target)
       ctxt.msgParams.code /\
     ctxt.msgParams.parsed = parse_code 0 FEMPTY ctxt.msgParams.code /\

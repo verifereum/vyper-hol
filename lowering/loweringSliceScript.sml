@@ -7,11 +7,11 @@
  * local_ptrs_reserved.  The sub-fragments (a right-hand side, a condition,
  * branch bodies) enter as hypotheses of the same shape, stated at the
  * source state where they run, so the lemmas compose with each other and
- * with the general statement and expression induction.  The exception is
- * compile_annassign_word_frag: it also needs vs_alloca_next below 2 ** 256
- * at its start, which stmt_state_rel does not carry (see the note on
- * stmt_state_rel in stmtLoweringProps), so it does not yet chain after
- * another declaration or sit inside an If body.
+ * with the general statement and expression induction.  A declaration's
+ * ALLOCA keeps its base below 2 ** 256 through alloca_room, which
+ * stmt_state_rel carries.  Constructor declarations additionally require
+ * the allocation-prefix guard that keeps their stores off immutables;
+ * runtime declarations use the trivial cap = 0 guard.
  *
  * TOP-LEVEL:
  *   expr_frag               — an expression's fragment, in the form the
@@ -327,10 +327,10 @@ QED
 
 (* An ALLOCA of func whose output is no live local's pointer, run fresh or
    again, keeps stmt_state_rel and holds its region's base in its output.
-   The frontier below 2 ** 256 keeps the base from wrapping. *)
+   alloca_room keeps the base from wrapping. *)
 Theorem stmt_state_rel_exec_alloca:
   !func cenv cx es s inst p n s1.
-    stmt_state_rel func cenv cx es s /\ s.vs_alloca_next < dimword (:256) /\
+    stmt_state_rel func cenv cx es s /\
     fn_inst_ids_distinct func /\ MEM inst (fn_insts func) /\
     inst.inst_opcode = ALLOCA /\ inst.inst_operands = [Lit n] /\
     inst.inst_outputs = [p] /\ not_local_ptr cenv es.scopes p /\
@@ -340,6 +340,19 @@ Theorem stmt_state_rel_exec_alloca:
         FLOOKUP s1.vs_allocas inst.inst_id = SOME (w2n w, w2n n)
 Proof
   rpt gen_tac >> strip_tac >>
+  `s.vs_alloca_next < dimword (:256)` by
+    metis_tac[alloca_room_next_lt, stmt_state_rel_def] >>
+  `alloca_room func s1` by
+    (qpat_x_assum `exec_alloca _ _ _ = _` mp_tac >>
+     simp[exec_alloca_def, AllCaseEqs(), LET_THM] >> rw[] >>
+     fs[stmt_state_rel_def] >> irule alloca_room_fields
+     >- (qexists_tac `s with <| vs_allocas := s.vs_allocas |+
+                                  (inst.inst_id, (s.vs_alloca_next, w2n n));
+                                vs_alloca_next := s.vs_alloca_next + w2n n |>` >>
+         simp[update_var_def] >>
+         qspecl_then [`func`, `s`, `inst`, `n`] mp_tac alloca_room_fresh >>
+         fs[FLOOKUP_DEF]) >>
+     qexists_tac `s` >> simp[update_var_def]) >>
   `local_ptrs_rel func cenv es.scopes s1` by
     (qspecl_then [`func`, `cenv`, `es.scopes`, `s`, `s1`, `inst`, `p`, `n`]
        mp_tac local_ptrs_rel_exec_alloca >>
@@ -383,9 +396,10 @@ Proof
 QED
 
 (* Storing a word into a new local's region, whose ALLOCA ran, binds the
-   local in the innermost scope. *)
+   local in the innermost scope, assignable (a declaration) or not (a loop
+   variable). *)
 Theorem stmt_state_rel_declare_word:
-  !func cenv cx es s id p sz w inst v tyv sc rest cap.
+  !func cenv cx es s id p sz w inst v tyv sc rest cap a.
     stmt_state_rel func cenv cx es s /\ fn_inst_ids_distinct func /\
     es.scopes = sc :: rest /\ lookup_scopes id es.scopes = NONE /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
@@ -399,12 +413,12 @@ Theorem stmt_state_rel_declare_word:
        immutable_prefix_bound cenv cx.txn.target cenv.ce_module es cap) ==>
     stmt_state_rel func cenv cx
       (es with scopes :=
-         (sc |+ (id, <| assignable := T; type := tyv; value := v |>)) :: rest)
+         (sc |+ (id, <| assignable := a; type := tyv; value := v |>)) :: rest)
       (mstore (w2n w) (val_to_w256 v) s)
 Proof
   rpt strip_tac >>
   qabbrev_tac `s' = mstore (w2n w) (val_to_w256 v) s` >>
-  qabbrev_tac `entry = <| assignable := T; type := tyv; value := v |>` >>
+  qabbrev_tac `entry = <| assignable := a; type := tyv; value := v |>` >>
   qabbrev_tac `scs' = (sc |+ (id, entry)) :: rest` >>
   `s'.vs_vars = s.vs_vars /\ s'.vs_allocas = s.vs_allocas /\
    s'.vs_alloca_next = s.vs_alloca_next /\
@@ -459,6 +473,8 @@ Proof
        fs[stmt_state_rel_def]) >>
      simp[]) >>
   `alloca_inv s'` by (irule alloca_inv_fields >> qexists_tac `s` >> simp[]) >>
+  `alloca_room func s'` by
+    (irule alloca_room_fields >> qexists_tac `s` >> fs[stmt_state_rel_def]) >>
   fs[stmt_state_rel_def] >> metis_tac[]
 QED
 
@@ -474,8 +490,7 @@ QED
 Theorem annassign_alloca_frag[local]:
   !ctx func cenv cx es st st1 p sz s0 R cap.
     emit_inst ALLOCA [Lit (n2w sz)] [p] st = ((), st1) /\
-    stmt_state_rel func cenv cx es s0 /\
-    s0.vs_alloca_next < dimword (:256) /\ fn_inst_ids_distinct func /\
+    stmt_state_rel func cenv cx es s0 /\ fn_inst_ids_distinct func /\
     MEM (mk_inst st.cs_next_id ALLOCA [Lit (n2w sz)] [p]) (fn_insts func) /\
     not_local_ptr cenv es.scopes p /\ sz < dimword (:256) /\
     cap <= s0.vs_alloca_next /\
@@ -500,6 +515,8 @@ Proof
   qspecl_then [`func`, `cenv`, `cx`, `es`, `s0`, `A`, `p`, `n2w sz`, `s1`]
     mp_tac stmt_state_rel_exec_alloca >>
   impl_tac >- simp[] >> strip_tac >>
+  `s0.vs_alloca_next < dimword (:256)` by
+    metis_tac[stmt_state_rel_def, alloca_room_next_lt] >>
   `cap <= w2n w` by
     (qpat_x_assum `exec_alloca _ _ _ = _` mp_tac >>
      simp[exec_alloca_def, LET_THM] >>
@@ -599,9 +616,8 @@ QED
 
 (* Slice lemma 1, the declaration: x: T = e for a word type T held through
    a pointer local.  The ALLOCA may run for the first time or again (in a
-   loop); the frontier bound in the precondition is what keeps a fresh
-   ALLOCA's base from wrapping, which S3's raw_unit_memory_ok gives along a
-   run.  The immutable prefix cap bounds initialized immutables at the
+   loop); alloca_room in stmt_state_rel keeps a fresh ALLOCA's base from
+   wrapping.  The immutable prefix cap bounds initialized immutables at the
    source post-state (the RHS may initialize more of them); both fresh and
    existing allocations start above the cap.  The RHS keeps this local's
    allocation and pointer, so the final store misses that prefix even if
@@ -629,7 +645,6 @@ Theorem compile_annassign_word_frag:
     expr_frag ctx func cenv cx (expr_type e) e es R ==>
     frag_exec ctx st st'
       (\s. stmt_state_rel func cenv cx es s /\
-           s.vs_alloca_next < dimword (:256) /\
            cap <= s.vs_alloca_next /\
            (!aid b n. FLOOKUP s.vs_allocas aid = SOME (b,n) ==> cap <= b))
       (stmt_state_rel func cenv cx es') R
@@ -684,7 +699,7 @@ Proof
   `lookup_var p s = SOME w` by metis_tac[] >> simp[] >>
   qspecl_then [`func`, `cenv`, `cx`, `es1`, `s`, `id`, `p`, `sz`, `w`,
                `mk_inst st.cs_next_id ALLOCA [Lit (n2w sz)] [p]`,
-               `v`, `tyv`, `sc`, `rest`, `cap`]
+               `v`, `tyv`, `sc`, `rest`, `cap`, `T`]
     MATCH_MP_TAC stmt_state_rel_declare_word >>
   fs[venomInstTheory.mk_inst_def]
 QED

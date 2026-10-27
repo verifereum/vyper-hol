@@ -77,7 +77,7 @@ Definition call_state_rel_def:
     ctxt.stack = [] ∧
     ctxt.logs = [] ∧
     ctxt.returnData = [] ∧
-    ctxt.memory = [] ∧
+    buffer_to_list ctxt.memory = [] ∧
     (* Accounts and transient storage match *)
     rb.accounts = am.accounts ∧
     rb.tStorage = am.tStorage ∧
@@ -259,8 +259,8 @@ Theorem call_state_rel_initial_evm_rel_legacy[local]:
     rb.tStorage = vs.vs_transient /\
     ctxt.returnData = vs.vs_returndata /\
     ctxt.logs = vs.vs_logs /\
-    (!i. read_byte i vs.vs_memory = read_byte i ctxt.memory) /\
-    ctxt.msgParams.data = vs.vs_call_ctx.cc_calldata
+    (!i. read_byte i vs.vs_memory = read_byte i (buffer_to_list ctxt.memory)) /\
+    buffer_to_list ctxt.msgParams.data = vs.vs_call_ctx.cc_calldata
     ==>
     initial_evm_rel_legacy cp bytecode vs es
 Proof
@@ -459,7 +459,7 @@ Theorem e2e_vyper_to_evm:
     asm_pc_to_offset prog off = 0 /\
     es.contexts = (ctxt, rb) :: rest /\
     call_state_rel tops runtime_bc am tx tenv ctxt rb es.txParams /\
-    valid_vyper_call am tx tenv ctxt.msgParams.data ret /\
+    valid_vyper_call am tx tenv (buffer_to_list ctxt.msgParams.data) ret /\
     cenv.ce_type_env = tenv /\
     cenv.ce_event_info = compiled_event_info tops /\
     checked_unit_transform_correct_legacy pipeline rpolicy R_ok R_term unit vs /\
@@ -536,7 +536,7 @@ Theorem e2e_vyper_to_evm_legacy:
     asm_pc_to_offset prog off = 0 /\
     es.contexts = (ctxt, rb) :: rest /\
     call_state_rel_legacy tops runtime_bc am tx tenv ctxt rb es.txParams /\
-    valid_vyper_call_legacy am tx tenv ctxt.msgParams.data ret /\
+    valid_vyper_call_legacy am tx tenv (buffer_to_list ctxt.msgParams.data) ret /\
     cenv.ce_type_env = tenv /\
     cenv.ce_event_info = compiled_event_info tops /\
     checked_unit_transform_correct_legacy pipeline rpolicy R_ok R_term unit vs /\
@@ -651,7 +651,7 @@ Theorem vyper_call_correct:
     asm_pc_to_offset prog off = 0 /\
     es.contexts = (ctxt, rb) :: rest /\
     call_state_rel tops runtime_bc am tx tenv ctxt rb es.txParams /\
-    valid_vyper_call am tx tenv ctxt.msgParams.data ret /\
+    valid_vyper_call am tx tenv (buffer_to_list ctxt.msgParams.data) ret /\
     cenv.ce_type_env = tenv /\
     cenv.ce_event_info = compiled_event_info tops /\
     checked_unit_transform_correct_legacy pipeline rpolicy R_ok R_term unit vs /\
@@ -703,7 +703,7 @@ Theorem vyper_call_correct:
     asm_pc_to_offset prog off = 0 /\
     es.contexts = (ctxt, rb) :: rest /\
     call_state_rel_legacy tops runtime_bc am tx tenv ctxt rb es.txParams /\
-    valid_vyper_call_legacy am tx tenv ctxt.msgParams.data ret /\
+    valid_vyper_call_legacy am tx tenv (buffer_to_list ctxt.msgParams.data) ret /\
     cenv.ce_type_env = tenv /\
     cenv.ce_event_info = compiled_event_info tops /\
     checked_unit_transform_correct_legacy pipeline rpolicy R_ok R_term unit vs /\
@@ -733,7 +733,7 @@ Theorem vyper_call_correct:
     source_typing_ok tops am tx /\
     source_storage_ok tops am tx /\
     call_state_rel tops runtime_bc am tx es /\
-    valid_vyper_call tops tx (FST (HD es.contexts)).msgParams.data ret /\
+    valid_vyper_call tops tx (buffer_to_list (FST (HD es.contexts)).msgParams.data) ret /\
     call_outcomes_ok tops am tx (MAP SND (call_trace es))
     ==>
     ?r es'.
@@ -757,7 +757,7 @@ Proof
   qabbrev_tac `vs = entry_venom_state prog cplan es` >>
   `vs.vs_outcomes = MAP SND (call_trace es) /\
    vs.vs_initial_fmp = n2w cplan.cp_initial_fmp /\
-   vs.vs_call_ctx.cc_calldata = (FST (HD es.contexts)).msgParams.data` by
+   vs.vs_call_ctx.cc_calldata = buffer_to_list (FST (HD es.contexts)).msgParams.data` by
     simp[Abbr`vs`, entry_venom_state_def] >>
   `valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
    call_outcomes_ok tops am tx vs.vs_outcomes` by simp[] >>
