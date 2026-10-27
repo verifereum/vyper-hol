@@ -59,7 +59,7 @@ Theorem abi_caller_allocation_budget:
     FLOOKUP s.vs_allocas id = SOME (off,sz) ==> sz = 32 /\ b <= off) ==>
   abi_decoder_budget first last b cap s
 Proof
-  simp_tac bool_ss [abi_decoder_budget_def, alloca_inv_def,
+  pure_rewrite_tac [abi_decoder_budget_def, alloca_inv_def,
     alloca_next_valid_def, allocas_non_overlapping_def] >>
   rpt strip_tac >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
   metis_tac[]
