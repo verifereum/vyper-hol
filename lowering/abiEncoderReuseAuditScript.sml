@@ -16,15 +16,18 @@ Ancestors
   abiEncoderSourceAggregate abiEncoderSourcePrimitive abiEncoderSourceProducer
   abiEncoderMemberPhaseRaw abiEncoderMemberSourcePhase abiEncoderMemberPhaseExec
   abiEncoderMemberSpine abiEncoderMemberPhaseEffect abiEncoderMemberSpineCompat
+  abiEncoderChildContext abiEncoderChildSourcePhase abiEncoderMemberSourceAdapter
+  abiScratchMemberAdapter abiEncoderStatic abiEncoderDynamic abiScratchStatic
+  abiEncoderMembersPrepare
 
 fun audit_encoder_tag (name, th) =
   let
     val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
     val bad = List.filter (fn s => s <> "DISK_THM") oracles
   in
-    if null bad andalso null axioms then
+    if null bad andalso null axioms andalso null (Thm.hyp th) then
       print ("ENCODER_REUSE_AUDIT_OK " ^ name ^ "\n")
-    else raise Fail ("encoder reuse admission dependency: " ^ name)
+    else raise Fail ("encoder reuse admission or undischarged hypothesis: " ^ name)
   end;
 
 val _ = List.app audit_encoder_tag
@@ -170,6 +173,24 @@ val _ = List.app audit_encoder_tag
    ("abi_encoder_spine_dynamic_scratch_pre", abi_encoder_spine_dynamic_scratch_pre),
    ("abi_encoder_spine_dynamic_scratch_cursor", abi_encoder_spine_dynamic_scratch_cursor),
    ("abi_encoder_spine_dynamic_scratch", abi_encoder_spine_dynamic_scratch),
+   ("abi_encoder_static_child_structural_context", abi_encoder_static_child_structural_context),
+   ("abi_encoder_child_static_place_raw_transport", abi_encoder_child_static_place_raw_transport),
+   ("abi_encoder_static_child_spine_reach", abi_encoder_static_child_spine_reach),
+   ("abi_encoder_source_suffix_raw_post", abi_encoder_source_suffix_raw_post),
+   ("abi_encoder_source_suffix_raw_sim", abi_encoder_source_suffix_raw_sim),
+   ("abi_encoder_source_suffix_raw_control", abi_encoder_source_suffix_raw_control),
+   ("abi_encoder_source_dynamic_finish_transport", abi_encoder_source_dynamic_finish_transport),
+   ("abi_encoder_source_dynamic_prepare_transport", abi_encoder_source_dynamic_prepare_transport),
+   ("abi_encoder_source_dynamic_core_run", abi_encoder_source_dynamic_core_run),
+   ("abi_encoder_dynamic_child_spine_reach", abi_encoder_dynamic_child_spine_reach),
+   ("abi_scratch_spine_frame_after_address", abi_scratch_spine_frame_after_address),
+   ("abi_scratch_static_child_spine_reach", abi_scratch_static_child_spine_reach),
+   ("abi_scratch_dynamic_finish_raw_transport", abi_scratch_dynamic_finish_raw_transport),
+   ("abi_encoder_static_child_context", abi_encoder_static_child_context),
+   ("abi_encoder_static_child_reach", abi_encoder_static_child_reach),
+   ("abi_encoder_dynamic_child_reach", abi_encoder_dynamic_child_reach),
+   ("abi_encoder_members_prepare", abi_encoder_members_prepare),
+   ("abi_scratch_static_child_reach", abi_scratch_static_child_reach),
    ("abi_encoder_shared_endpoint_intro", abi_encoder_shared_endpoint_intro),
    ("abi_encoder_register_alloca_inv", abi_encoder_register_alloca_inv),
    ("abi_encoder_weak_child_sequence", abi_encoder_weak_child_sequence),
