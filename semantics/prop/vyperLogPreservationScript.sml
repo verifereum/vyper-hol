@@ -2302,10 +2302,12 @@ QED
 Theorem evaluate_all_constants_logs:
   evaluate_all_constants cx am addr mods = SOME am' ==> am'.logs = am.logs
 Proof
-  qid_spec_tac `am` >> Induct_on `mods` >-
-    simp[vyperInterpreterTheory.evaluate_all_constants_def] >>
+  simp[vyperInterpreterTheory.evaluate_all_constants_def] >>
+  qid_spec_tac `am` >>
+  qspec_tac (`constants_order mods`, `mods`) >> Induct >-
+    simp[vyperInterpreterTheory.evaluate_module_constants_def] >>
   gen_tac >> PairCases_on `h` >> gen_tac >>
-  simp[vyperInterpreterTheory.evaluate_all_constants_def, AllCaseEqs()] >>
+  simp[vyperInterpreterTheory.evaluate_module_constants_def, AllCaseEqs()] >>
   rpt strip_tac >>
   first_x_assum drule >>
   simp[merge_constants_logs]

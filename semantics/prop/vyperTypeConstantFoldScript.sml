@@ -3,8 +3,9 @@
  *
  * TOP-LEVEL:
  * - constant_value_eval_expr
- * - constants_fold_evaluate_all_constants
+ * - constants_fold_evaluate_module_constants
  * - check_contract_evaluate_all_constants
+ * - contract_namespaces_ok_constants_order
  *
  * Helper:
  * - get_tenv_constant_context, get_tenv_sources
@@ -15,7 +16,7 @@
 
 Theory vyperTypeConstantFold
 Ancestors
-  list finite_map alist option pair
+  list finite_map alist option pair sorting
   vyperAST vyperValue vyperState vyperContext vyperInterpreter
   vyperTypeContract vyperTypeConstantCells vyperTypeInvariants
   vyperTypeSystem vyperTypeValues vyperTypeExprSoundness
@@ -1132,7 +1133,7 @@ QED
 
 (* TOP-LEVEL: when the checker's fold succeeds, so does deployment's, leaving
    the same immutables for the contract. *)
-Theorem constants_fold_evaluate_all_constants:
+Theorem constants_fold_evaluate_module_constants:
   !rest imms am imms' cx artifact mode layouts addr.
     constants_fold mods imms rest = SOME imms' /\
     check_contract mode (layouts : ('checker_addr, ((num option # string), 'checker_slot) alist # ((num option # string), 'checker_slot) alist) alist)
@@ -1142,13 +1143,13 @@ Theorem constants_fold_evaluate_all_constants:
     ALOOKUP am.immutables cx.txn.target = SOME imms /\
     deployment_constant_cells_typed (type_env_all_modules mods) cx.txn.target mods am ==>
     ?am_c.
-      evaluate_all_constants cx am cx.txn.target rest = SOME am_c /\
+      evaluate_module_constants cx am cx.txn.target rest = SOME am_c /\
       ALOOKUP am_c.immutables cx.txn.target = SOME imms' /\
       deployment_constant_cells_typed (type_env_all_modules mods) cx.txn.target mods am_c
 Proof
-  Induct >- simp[constants_fold_def, evaluate_all_constants_def] >>
+  Induct >- simp[constants_fold_def, evaluate_module_constants_def] >>
   rpt gen_tac >> PairCases_on `h` >>
-  rw[constants_fold_def, evaluate_all_constants_def] >> gvs[AllCaseEqs()] >>
+  rw[constants_fold_def, evaluate_module_constants_def] >> gvs[AllCaseEqs()] >>
   `contract_namespaces_ok F mods` by metis_tac[check_contract_runtime_namespaces] >>
   `ALOOKUP mods h0 = SOME h1` by
     (irule ALOOKUP_ALL_DISTINCT_MEM >> gvs[contract_namespaces_ok_def]) >>
@@ -1179,11 +1180,27 @@ Proof
   `contract_constants_ok mods` by
     (qpat_x_assum `check_contract _ _ _ _ = _` mp_tac >>
      simp[check_contract_def] >> rw[]) >>
-  gvs[contract_constants_ok_def, IS_SOME_EXISTS] >>
+  gvs[contract_constants_ok_def, IS_SOME_EXISTS, evaluate_all_constants_def] >>
   `deployment_constant_cells_typed (type_env_all_modules mods) cx.txn.target mods am` by
     (rw[deployment_constant_cells_typed_def] >>
      drule_all checked_initial_immutables_constant_absent >> gvs[]) >>
-  drule_at (Pat `check_contract _ _ _ _ = _`) constants_fold_evaluate_all_constants >>
-  disch_then (qspec_then `mods` mp_tac) >>
-  simp[EVERY_MEM] >> disch_then drule_all >> metis_tac[]
+  drule_at (Pat `check_contract _ _ _ _ = _`) constants_fold_evaluate_module_constants >>
+  disch_then (qspec_then `constants_order mods` mp_tac) >>
+  simp[EVERY_MEM, MEM_constants_order] >> disch_then drule_all >> metis_tac[]
+QED
+
+Theorem ALL_DISTINCT_contract_keys_constants_order[local]:
+  ALL_DISTINCT (contract_keys f (constants_order mods)) <=>
+  ALL_DISTINCT (contract_keys f mods)
+Proof
+  irule ALL_DISTINCT_PERM >> simp[contract_keys_def] >>
+  irule PERM_FLAT >> irule PERM_MAP >> simp[PERM_constants_order]
+QED
+
+Theorem contract_namespaces_ok_constants_order:
+  contract_namespaces_ok b (constants_order mods) <=> contract_namespaces_ok b mods
+Proof
+  `ALL_DISTINCT (MAP FST (constants_order mods)) <=> ALL_DISTINCT (MAP FST mods)` by (
+    irule ALL_DISTINCT_PERM >> irule PERM_MAP >> simp[PERM_constants_order]) >>
+  simp[contract_namespaces_ok_def, ALL_DISTINCT_contract_keys_constants_order]
 QED
