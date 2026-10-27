@@ -135,7 +135,9 @@ Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   `site IN abi_decoder_ids first last` by simp[abi_decoder_ids_def] >>
   drule_all abi_decoder_budget_site_bounds >> strip_tac >>
-  `b+cap < dimword (:256)` by fs[abi_decoder_budget_def] >>
+  `b+cap < dimword (:256)` by
+    (qpat_assum `abi_decoder_budget _ _ _ _ initial`
+       (mp_tac o CONJUNCT1 o PURE_REWRITE_RULE [abi_decoder_budget_def]) >> simp[]) >>
   `h < dimword (:256) /\ slot < dimword (:256) /\ h+32 <= d+output_size /\
    ((d+off)+len <= h \/ h+32 <= d+off) /\
    ((d+off)+len <= slot \/ slot+32 <= d+off) /\
@@ -232,17 +234,15 @@ Theorem abi_encoder_source_dynamic_core_run:
     ~t.vs_halted /\ abi_decode_sim ctx func initial t
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  drule_all abi_encoder_correct_run >> disch_then (qspec_then `ctx` strip_assume_tac) >>
+  `abi_encoder_spine_core_code func (ei,dst,src,start,end_st,out)` by
+    fs[abi_encoder_spine_core_code_def] >>
+  `abi_encoder_member_core_pre (at,av,sb,source_cap,d) (first,last,b,cap,limit_st)
+    (ei,dst,src,start,end_st,out) initial` by fs[abi_encoder_member_core_pre_def] >>
+  drule_all abi_encoder_member_source_core_run >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
   rename1 `abi_decode_sim ctx func initial actual` >>
-  mp_tac (Q.INST [`lo` |-> `start.cs_next_id`, `hi` |-> `end_st.cs_next_id`,
-    `next` |-> `start.cs_next_var`, `sz` |-> `LENGTH (enc at av)`,
-    `s` |-> `initial:venom_state`, `t` |-> `actual:venom_state`] abi_decoder_effect_protected_slot) >>
-  impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
-  `!op w. abi_decoder_operand_live start.cs_next_var op /\ eval_operand op initial = SOME w ==>
-    eval_operand op actual = SOME w` by
-    (fs[abi_decoder_effect_def] >> metis_tac[]) >>
-  qexists_tac `actual` >> asm_simp_tac bool_ss [] >>
-  fs[abi_decoder_effect_def] >> metis_tac[]
+  drule_all abi_encoder_member_source_core_saved >> strip_tac >>
+  qexists_tac `actual` >> fs[abi_encoder_member_core_post_def] >> metis_tac[]
 QED
 
 Theorem abi_encoder_dynamic_child_spine_reach:

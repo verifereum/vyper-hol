@@ -3,7 +3,8 @@
 Theory abiEncoderMemberSourceContract
 Ancestors
   abiEncoderMemberSpine abiEncoderCorrect abiEncoderInput abiDecoderEffect
-  abiDecoderContract abiDecoderLoop fragExec compileEnv valueEncoding venomState
+  abiDecoderContract abiDecoderLoop abiDecoderProtectedScratch abiDecoderReentry
+  fragExec compileEnv valueEncoding venomState finite_map
 
 Definition abi_encoder_member_core_pre_def:
   abi_encoder_member_core_pre (at,av,sb,source_cap,d) (first,last,b,cap,limit_st)
@@ -54,6 +55,30 @@ Proof
   irule abi_encoder_member_source_core_run >> asm_rewrite_tac []
 QED
 
+(* Saved cursor operands are observations transported by the genuine core
+   effect, not an additional execution contract. *)
+Theorem abi_encoder_member_source_core_saved:
+  abi_encoder_member_core_post (ctx,func) (at,av,sb,source_cap,d)
+    (first,last,b,cap,limit_st) (ei,dst,src,start,en,out) initial actual /\
+  first <= site /\ site < last /\ site < start.cs_next_id /\
+  FLOOKUP initial.vs_allocas site = SOME (slot,32) ==>
+  (!op w. abi_decoder_operand_live start.cs_next_var op /\ eval_operand op initial = SOME w ==>
+    eval_operand op actual = SOME w) /\
+  FLOOKUP actual.vs_allocas site = SOME (slot,32) /\
+  mload slot actual = mload slot initial /\ fresh_vars_wrt limit_st actual /\
+  abi_decoder_budget first last b cap actual
+Proof
+  simp_tac bool_ss [abi_encoder_member_core_post_def] >>
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  drule abi_decoder_effect_protected_slot >>
+  disch_then (qspecl_then [`slot`, `site`] mp_tac) >>
+  simp_tac bool_ss [] >> strip_tac >>
+  `!op w. abi_decoder_operand_live start.cs_next_var op /\ eval_operand op initial = SOME w ==>
+    eval_operand op actual = SOME w` by
+    (fs[abi_decoder_effect_def] >> metis_tac[]) >>
+  asm_simp_tac bool_ss [] >> fs[abi_decoder_effect_def] >> metis_tac[]
+QED
+
 val _ =
   if List.exists
        (fn name => List.exists (fn parent => parent = name) (Theory.ancestry "-"))
@@ -68,4 +93,5 @@ val _ = List.app (fn th =>
   let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
     if List.all (fn s => s = "DISK_THM") oracles andalso null axioms then ()
     else raise Fail "source core contract has an admission or axiom"
-  end) [abi_encoder_member_source_core_run, abi_encoder_member_source_child_run];
+  end) [abi_encoder_member_source_core_run, abi_encoder_member_source_child_run,
+    abi_encoder_member_source_core_saved];
