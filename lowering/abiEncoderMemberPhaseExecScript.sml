@@ -371,3 +371,53 @@ Proof
   disch_then (qspec_then `ctx` mp_tac) >>
   simp[abi_encoder_extend_sim_sim]
 QED
+
+Theorem abi_encoder_members_prepare_raw_compat:
+  emit_op ADD [src;Lit (n2w so)] st = (elem_src,prepared) /\ fn_has_code st prepared func /\
+  abi_encoder_members_inv ((ei,abi_sz,mem_sz,dyn)::infos) (ty::tys) (av::avs)
+    pre pvs active dyn_ptr site slot first last lo st limit_st
+    src dst sb so ho d hl output_size b cap initial /\
+  prepared.cs_next_var <= limit_st.cs_next_var ==>
+  ?ready. abi_encoder_members_inv ((ei,abi_sz,mem_sz,dyn)::infos) (ty::tys) (av::avs)
+      pre pvs active dyn_ptr site slot first last lo prepared limit_st
+      src dst sb so ho d hl output_size b cap ready /\
+    abi_encoder_buffer_pre ei ty av prepared elem_src dst (sb+so) mem_sz d output_size b cap ready /\
+    abi_decoder_address_frame st.cs_next_var initial ready /\ abi_decode_sim ctx func initial ready
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  `fresh_vars_wrt limit_st initial /\ ~initial.vs_halted /\
+   initial.vs_current_bb = st.cs_current_bb /\ initial.vs_inst_idx = LENGTH st.cs_current_insts /\
+   eval_operand src initial = SOME (n2w sb)` by
+    fs[abi_encoder_members_inv_def, abi_encoder_members_pre_def] >>
+  `eval_operand (Lit (n2w so)) initial = SOME (n2w so)` by simp[eval_operand_def] >>
+  drule_all (SRULE [] (Q.INST [`opc` |-> `ADD`] abi_encoder_member_binary_raw)) >> strip_tac >>
+  drule_all abi_encoder_members_prepare_raw_transport >> strip_tac >>
+  drule_all (SRULE [] (Q.INST [`opc` |-> `ADD`] abi_encoder_member_binary_raw_sim)) >>
+  disch_then (qspec_then `ctx` assume_tac) >>
+  qexists_tac `ready` >> simp[]
+QED
+
+Theorem abi_scratch_members_prepare_raw_compat:
+  emit_op ADD [src;Lit (n2w so)] st = (elem_src,prepared) /\ fn_has_code st prepared func /\
+  abi_scratch_members_inv ((ei,abi_sz,mem_sz,dyn)::infos) (ty::tys) (av::avs)
+    pre pvs active dyn_ptr site slot first last lo st limit_st
+    src dst sb so ho d hl output_size b cap initial /\
+  prepared.cs_next_var <= limit_st.cs_next_var ==>
+  ?ready. abi_scratch_members_inv ((ei,abi_sz,mem_sz,dyn)::infos) (ty::tys) (av::avs)
+      pre pvs active dyn_ptr site slot first last lo prepared limit_st
+      src dst sb so ho d hl output_size b cap ready /\
+    abi_scratch_input ei ty av prepared elem_src dst (sb+so) mem_sz d output_size first last b cap ready /\
+    abi_decoder_address_frame st.cs_next_var initial ready /\ abi_decode_sim ctx func initial ready
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  `fresh_vars_wrt limit_st initial /\ ~initial.vs_halted /\
+   initial.vs_current_bb = st.cs_current_bb /\ initial.vs_inst_idx = LENGTH st.cs_current_insts /\
+   eval_operand src initial = SOME (n2w sb)` by
+    fs[abi_scratch_members_inv_def, abi_scratch_members_pre_def] >>
+  `eval_operand (Lit (n2w so)) initial = SOME (n2w so)` by simp[eval_operand_def] >>
+  drule_all (SRULE [] (Q.INST [`opc` |-> `ADD`] abi_encoder_member_binary_raw)) >> strip_tac >>
+  drule_all abi_scratch_members_prepare_raw_transport >> strip_tac >>
+  drule_all (SRULE [] (Q.INST [`opc` |-> `ADD`] abi_encoder_member_binary_raw_sim)) >>
+  disch_then (qspec_then `ctx` assume_tac) >>
+  qexists_tac `ready` >> simp[]
+QED
