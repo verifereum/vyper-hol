@@ -19,6 +19,7 @@ Ancestors
   abiEncoderChildContext abiEncoderChildSourcePhase abiEncoderMemberSourceAdapter
   abiScratchMemberAdapter abiEncoderStatic abiEncoderDynamic abiScratchStatic
   abiEncoderMembersPrepare
+  abiEncoderMemberSourceContract abiEncoderMemberSourceInterpret abiScratchDynamicChild
 
 fun audit_encoder_tag (name, th) =
   let
@@ -186,6 +187,17 @@ val _ = List.app audit_encoder_tag
    ("abi_scratch_spine_frame_after_address", abi_scratch_spine_frame_after_address),
    ("abi_scratch_static_child_spine_reach", abi_scratch_static_child_spine_reach),
    ("abi_scratch_dynamic_finish_raw_transport", abi_scratch_dynamic_finish_raw_transport),
+   ("abi_scratch_dynamic_prepare_raw_transport", abi_scratch_dynamic_prepare_raw_transport),
+   ("abi_scratch_dynamic_child_spine_reach", abi_scratch_dynamic_child_spine_reach),
+   ("abi_encoder_spine_child_generate", abi_encoder_spine_child_generate),
+   ("abi_encoder_spine_cons_layout", abi_encoder_spine_cons_layout),
+   ("abi_encoder_member_spine_generate", abi_encoder_member_spine_generate),
+   ("abi_encoder_member_source_core_run", abi_encoder_member_source_core_run),
+   ("abi_encoder_member_source_child_run", abi_encoder_member_source_child_run),
+   ("abi_encoder_member_source_core_saved", abi_encoder_member_source_core_saved),
+   ("abi_encoder_member_source_static_input", abi_encoder_member_source_static_input),
+   ("abi_encoder_member_source_static_output", abi_encoder_member_source_static_output),
+   ("abi_scratch_dynamic_child_reach", abi_scratch_dynamic_child_reach),
    ("abi_encoder_static_child_context", abi_encoder_static_child_context),
    ("abi_encoder_static_child_reach", abi_encoder_static_child_reach),
    ("abi_encoder_dynamic_child_reach", abi_encoder_dynamic_child_reach),
