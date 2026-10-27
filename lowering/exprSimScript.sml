@@ -23,6 +23,9 @@
  *                            ...), all but block.prevhash
  *   expr_val_rel_mem_agree — a non-word operand's value survives code that
  *                            keeps its type_memory_size bytes
+ *   val_footprint, val_footprint_le, val_in_memory_footprint_agree,
+ *   expr_val_rel_footprint_agree — the bytes a memory value occupies, which
+ *                            expr_val_at bounds, and the same at them
  *
  * Helpers: expr_exit_INL, typed_val_to_w256_word_value, eval_expr_env,
  *   lower_value_env
@@ -37,7 +40,8 @@
  * compose where the first one's value sits in a buffer it allocated: that
  * allocation's id is below the second's start counter and it holds no
  * local (alloca_inv, local_backed), so the second's expr_post keeps its
- * bytes, and val_in_memory with them (expr_val_rel_mem_agree).  A first
+ * bytes, and val_in_memory with them (expr_val_rel_footprint_agree:
+ * expr_val_at bounds the value's val_footprint bytes).  A first
  * operand that points into a local stays related through stmt_state_rel,
  * as long as the source leaves that local alone in between.  expr_frag,
  * which relates values by val_to_w256, follows for a word type whose typed
@@ -118,10 +122,32 @@ Definition expr_val_rel_def:
              else val_in_memory tv v (w2n w) s.vs_memory
 End
 
+(* The bytes from its address that the value v of type tv occupies in
+   memory: for a dynamic bytes or string value, its length word and its data
+   rounded up to whole words; for any other value, type_memory_size tv.  A
+   bytes or string literal's annotation is the type it is used at (Bytes[100]
+   for a literal of 3 bytes assigned to a Bytes[100] local), while the
+   lowering, like Python's _lower_bytelike, allocates a buffer the size of
+   the literal's own length, so expr_val_at bounds a value by this and not
+   by its type's size.  val_in_memory reads no more than these bytes
+   (val_in_memory_footprint_agree). *)
+Definition val_footprint_def:
+  val_footprint tv v =
+    case v of
+      BytesV bs =>
+        (case tv of
+           BaseTV (BytesT (Dynamic _)) => 32 + 32 * word_size (LENGTH bs)
+         | _ => type_memory_size tv)
+    | StringV str =>
+        (case tv of
+           BaseTV (StringT _) => 32 + 32 * word_size (LENGTH str)
+         | _ => type_memory_size tv)
+    | _ => type_memory_size tv
+End
+
 (* Where the value v of an expression of type t, lowered from compile state
    sa to sb, sits in s when t is not a word type: well formed for its type
-   (val_wf), so val_in_memory reads no more than type_memory_size bytes,
-   and those bytes lie inside
+   (val_wf), and its val_footprint bytes lie inside
    - an allocation of one of the expression's own ALLOCAs (instruction id
      in [sa.cs_next_id, sb.cs_next_id)), or
    - the region of a live local at es.
@@ -135,9 +161,9 @@ Definition expr_val_at_def:
       ?w. eval_operand op s = SOME w /\
           ((?aid b sz. FLOOKUP s.vs_allocas aid = SOME (b, sz) /\
                        sa.cs_next_id <= aid /\ aid < sb.cs_next_id /\
-                       b <= w2n w /\ w2n w + type_memory_size tv <= b + sz) \/
+                       b <= w2n w /\ w2n w + val_footprint tv v <= b + sz) \/
            (?n b sz. local_region cenv es.scopes s n b sz /\
-                     b <= w2n w /\ w2n w + type_memory_size tv <= b + sz))
+                     b <= w2n w /\ w2n w + val_footprint tv v <= b + sz))
 End
 
 (* Operand composition: the value of a non-word operand survives code that
@@ -157,6 +183,106 @@ Proof
                `s'.vs_memory`] mp_tac
     valueEncodingPropsTheory.val_in_memory_mem_agree >>
   asm_rewrite_tac[arithmeticTheory.LESS_EQ_REFL]
+QED
+
+(* A dynamic bytes value's data fits in its rounded-up words. *)
+Theorem le_word_size_mul[local]:
+  !n. n <= 32 * word_size n
+Proof
+  rw[vfmConstantsTheory.word_size_def] >>
+  `(n + 31) MOD 32 < 32` by simp[] >>
+  qspec_then `32` mp_tac arithmeticTheory.DIVISION >> simp[] >>
+  disch_then (qspec_then `n + 31` strip_assume_tac) >> decide_tac
+QED
+
+Theorem word_size_le_of_le_mul[local]:
+  !len k. len <= 32 * k ==> word_size len <= k
+Proof
+  rw[vfmConstantsTheory.word_size_def] >>
+  `(32 * k + 31) DIV 32 = k` by
+    (once_rewrite_tac[arithmeticTheory.MULT_COMM] >>
+     irule arithmeticTheory.DIV_MULT >> simp[]) >>
+  `(len + 31) DIV 32 <= (32 * k + 31) DIV 32` by
+    (irule arithmeticTheory.DIV_LE_MONOTONE >> simp[]) >>
+  gvs[]
+QED
+
+(* A well-formed value's footprint fits its type's size. *)
+Theorem val_footprint_le:
+  !tv v. val_wf tv v ==> val_footprint tv v <= type_memory_size tv
+Proof
+  rpt strip_tac >>
+  `(?bs n. v = BytesV bs /\ tv = BaseTV (BytesT (Dynamic n))) \/
+   (?str n. v = StringV str /\ tv = BaseTV (StringT n)) \/
+   val_footprint tv v = type_memory_size tv` by
+    (Cases_on `v` >> simp[val_footprint_def] >>
+     rpt (BasicProvers.TOP_CASE_TAC >> simp[]))
+  >- (gvs[val_footprint_def, valueEncodingTheory.val_wf_def,
+          valueEncodingTheory.type_memory_size_def] >>
+      irule word_size_le_of_le_mul >> simp[])
+  >- (gvs[val_footprint_def, valueEncodingTheory.val_wf_def,
+          valueEncodingTheory.type_memory_size_def] >>
+      irule word_size_le_of_le_mul >> simp[]) >>
+  simp[]
+QED
+
+(* val_in_memory reads no more than the value's footprint. *)
+Theorem val_in_memory_footprint_agree:
+  !tv v off mem mem'.
+    val_in_memory tv v off mem /\ val_wf tv v /\
+    mem_bytes_at off (val_footprint tv v) mem =
+      mem_bytes_at off (val_footprint tv v) mem' ==>
+    val_in_memory tv v off mem'
+Proof
+  rpt strip_tac >>
+  `(?bs n. v = BytesV bs /\ tv = BaseTV (BytesT (Dynamic n))) \/
+   (?str n. v = StringV str /\ tv = BaseTV (StringT n)) \/
+   val_footprint tv v = type_memory_size tv` by
+    (Cases_on `v` >> simp[val_footprint_def] >>
+     rpt (BasicProvers.TOP_CASE_TAC >> simp[]))
+  >- (gvs[val_footprint_def, val_in_memory_def] >>
+      drule valueEncodingProofsTheory.mem_bytes_at_agree_window >>
+      strip_tac >>
+      `LENGTH bs <= 32 * word_size (LENGTH bs)` by simp[le_word_size_mul] >>
+      `mem_word_at off mem' = mem_word_at off mem` by
+        (qpat_x_assum `!off2. _ ==> mem_word_at _ _ = _` irule >> simp[]) >>
+      `mem_bytes_at (off + 32) (LENGTH bs) mem' =
+       mem_bytes_at (off + 32) (LENGTH bs) mem` by
+        (qpat_x_assum `!off2 len2. _ ==> mem_bytes_at _ _ _ = _` irule >>
+         simp[]) >>
+      simp[])
+  >- (gvs[val_footprint_def, val_in_memory_def] >>
+      drule valueEncodingProofsTheory.mem_bytes_at_agree_window >>
+      strip_tac >>
+      `LENGTH str <= 32 * word_size (LENGTH str)` by simp[le_word_size_mul] >>
+      `mem_word_at off mem' = mem_word_at off mem` by
+        (qpat_x_assum `!off2. _ ==> mem_word_at _ _ = _` irule >> simp[]) >>
+      `mem_bytes_at (off + 32) (LENGTH str) mem' =
+       mem_bytes_at (off + 32) (LENGTH str) mem` by
+        (qpat_x_assum `!off2 len2. _ ==> mem_bytes_at _ _ _ = _` irule >>
+         simp[]) >>
+      simp[]) >>
+  qpat_x_assum `val_footprint _ _ = _` (fn th => fs[th]) >>
+  qspecl_then [`tv`, `v`, `off`, `type_memory_size tv`, `mem`, `mem'`]
+    mp_tac valueEncodingPropsTheory.val_in_memory_mem_agree >>
+  asm_rewrite_tac[arithmeticTheory.LESS_EQ_REFL]
+QED
+
+(* Operand composition at the footprint expr_val_at bounds: the value of a
+   non-word operand survives code that keeps the operand and its
+   val_footprint bytes. *)
+Theorem expr_val_rel_footprint_agree:
+  !cx t v op s s' w tv.
+    expr_val_rel cx t v op s /\ ~is_word_type t /\
+    eval_operand op s = SOME w /\ eval_operand op s' = SOME w /\
+    evaluate_type (get_tenv cx) t = SOME tv /\ val_wf tv v /\
+    mem_bytes_at (w2n w) (val_footprint tv v) s.vs_memory =
+      mem_bytes_at (w2n w) (val_footprint tv v) s'.vs_memory ==>
+    expr_val_rel cx t v op s'
+Proof
+  rw[expr_val_rel_def] >> gvs[] >>
+  irule val_in_memory_footprint_agree >> simp[] >>
+  qexists_tac `s.vs_memory` >> simp[]
 QED
 
 (* Where the fragment of e that started in s0, related at es, lowered from
@@ -299,9 +425,9 @@ Definition vv_at_def:
        ?w. eval_operand p.ptr_operand s = SOME w /\
            ((?aid b sz. FLOOKUP s.vs_allocas aid = SOME (b, sz) /\
                         sa.cs_next_id <= aid /\ aid < sb.cs_next_id /\
-                        b <= w2n w /\ w2n w + type_memory_size tvt <= b + sz) \/
+                        b <= w2n w /\ w2n w + val_footprint tvt v <= b + sz) \/
             (?n b sz. local_region cenv es.scopes s n b sz /\
-                      b <= w2n w /\ w2n w + type_memory_size tvt <= b + sz)))
+                      b <= w2n w /\ w2n w + val_footprint tvt v <= b + sz)))
 End
 
 (* expr_post with a value_vv in place of an operand. *)
