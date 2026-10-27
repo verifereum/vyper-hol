@@ -41,6 +41,8 @@ Ancestors
   sccp
   (* interprocedural *)
   functionInliner
+  (* configured pipeline runner structural guarantees *)
+  venomPipelineRunnerProps
   (* dead function traversal *)
   venomDft
   (* invoke copy forwarding *)
