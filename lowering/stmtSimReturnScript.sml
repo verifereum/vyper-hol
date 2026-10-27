@@ -212,28 +212,28 @@ Proof
      >- metis_tac[not_fresh_at_mono, arithmeticTheory.LESS_EQ_ADD] >>
      Cases_on `bop` >> gvs[eval_operand_def]) >>
   first_x_assum drule_all >> strip_tac >> gvs[] >>
+  rename1 `run_inst_seq (emitted_insts sh sf) _ = OK (_ with vs_vars := vs2)` >>
   `emitted_insts sa sf = emitted_insts sa sh ++ emitted_insts sh sf` by
     metis_tac[emitted_insts_append] >>
   `same_blocks sa sf` by fs[same_blocks_def] >>
   `not_fresh_at sf x` by (irule not_fresh_at_mono >> qexists `sh` >> simp[]) >>
-  `run_inst_seq (emitted_insts sa sf) s = OK (s with vs_vars := vs')` by
+  `run_inst_seq (emitted_insts sa sf) s = OK (s with vs_vars := vs2)` by
     (simp[] >>
      qpat_assum `run_inst_seq (emitted_insts sa sh) _ = OK _`
        (mp_tac o MATCH_MP run_inst_seq_append) >> simp[]) >>
   `!y. not_fresh_at sa y ==>
-       lookup_var y (s with vs_vars := vs') = lookup_var y s` by
+       lookup_var y (s with vs_vars := vs2) = lookup_var y s` by
     (rpt strip_tac >>
      `not_fresh_at sh y` by
        (irule not_fresh_at_mono >> qexists `sa` >> simp[]) >>
      metis_tac[]) >>
-  `lookup_var x (s with vs_vars := vs') =
+  `lookup_var x (s with vs_vars := vs2) =
      SOME (mem_word_at (w2n (w + n2w off)) s.vs_memory)` by
     (gvs[eval_operand_def] >> metis_tac[]) >>
-  simp[] >> rpt conj_tac >>
-  TRY (rpt strip_tac >> gvs[] >>
-       irule not_fresh_at_mono >> qexists `sh` >> simp[] >> NO_TAC) >>
-  TRY decide_tac >>
-  qexists `vs'` >>
+  simp[] >> conj_tac
+  >- (rpt strip_tac >> gvs[] >>
+      irule not_fresh_at_mono >> qexists `sh` >> simp[]) >>
+  qexists `vs2` >>
   simp[eval_operands_def, tuple_words_def, eval_operand_def]
 QED
 
@@ -370,12 +370,6 @@ Proof
   disch_then (qspec_then `ARB` strip_assume_tac) >> res_tac >> simp[]
 QED
 
-Theorem values_have_types_length[local]:
-  !tvs vs. values_have_types tvs vs ==> LENGTH vs = LENGTH tvs
-Proof
-  Induct >> Cases_on `vs` >> simp[value_has_type_def]
-QED
-
 Theorem intret_vals_match_tuple[local]:
   !tvs vs.
     1 < LENGTH tvs /\ LENGTH vs = LENGTH tvs ==>
@@ -407,7 +401,8 @@ QED
    (ce_returns_count = LENGTH tys > 1, no return buffer): e's fragment,
    whose errors exit, leaves a pointer to the tuple in memory; its words
    are loaded and returned with the return PC.  The pointer's variable, if
-   any, was handed out before the loads, so they do not overwrite it. *)
+   any, was handed out before the loads (a local's is, by
+   local_ptrs_reserved), so they do not overwrite it. *)
 Theorem compile_return_tuple_int_frag:
   !ctx func cx lctx cenv e es res es' rpc rsz tys ret_tv.
     eval_stmt cx (Return (SOME e)) es = (res, es') /\
@@ -419,7 +414,8 @@ Theorem compile_return_tuple_int_frag:
     (!tv es1. eval_expr cx e es = (INL tv, es1) ==>
               ?v. tv = Value v /\ value_has_type ret_tv v) /\
     expr_sim ctx func cenv cx (TupleT tys) e es /\
-    (!sa op sb. lower_value compile_expr cenv (TupleT tys) e sa = (op, sb) ==>
+    (!sa op sb. local_ptrs_reserved cenv sa /\
+                lower_value compile_expr cenv (TupleT tys) e sa = (op, sb) ==>
                 !x. op = Var x ==> not_fresh_at sb x) ==>
     stmt_frag ctx func cx lctx (intret_q func cenv cx ret_tv) cenv
       (stmt_env cenv lctx (TupleT tys) (Return (SOME e))) es res es'
@@ -534,8 +530,10 @@ Resume compile_return_tuple_int_frag[loads]:
      rpt strip_tac >> gvs[]) >>
   qpat_x_assum `!fuel. (!e. run_from fuel ctx func sl <> Error e) ==> _`
     (qspec_then `0` mp_tac) >> simp[] >> strip_tac >>
+  rename1 `run_from fv ctx func sv = _` >>
   qpat_x_assum `!fuel. (!e. run_from fuel ctx func sv <> Error e) ==> _`
-    (qspec_then `fuel'` mp_tac) >> simp[] >> strip_tac >>
+    (qspec_then `fv` mp_tac) >> simp[] >> strip_tac >>
+  rename1 `run_from f0 ctx func s0 = _` >>
   `state_rel func cenv cx (es' with scopes := []) sl` by
     (irule state_rel_frame >>
      simp[local_ptrs_rel_def, lookup_scopes_def, local_region_def] >>
@@ -543,7 +541,7 @@ Resume compile_return_tuple_int_frag[loads]:
      irule state_rel_scopes_nil >> fs[stmt_state_rel_def]) >>
   `LENGTH vs = LENGTH tvs /\ LENGTH tvs = LENGTH tys` by
     (drule values_have_types_length >> drule LIST_REL_LENGTH >> simp[]) >>
-  qexists_tac `fuel''` >>
+  qexists_tac `f0` >>
   simp[exit_result_def, stmt_exit_def, intret_q_def, result_rel_def,
        Abbr `words`] >>
   disj2_tac >> irule intret_vals_match_tuple >> simp[]

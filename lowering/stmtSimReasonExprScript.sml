@@ -15,7 +15,8 @@
  *   compile_raise_reason_frag   — raise with a reason
  *   compile_assert_reason_frag  — assert with a reason
  *
- * Helper: compile_reason_message_expr, reason_expr_revert_frag,
+ * Helper: compile_reason_message_expr, reason_ds,
+ *   reason_expr_revert_extends, reason_expr_revert_frag,
  *   eval_raise_reason_cases
  *)
 
@@ -79,7 +80,7 @@ Proof
   drule compile_expr_extends >> strip_tac >>
   `reason_operand (reason_ds op) op` by
     (Cases_on `op` >> gvs[reason_ds_def, reason_operand_def]) >>
-  drule_all compile_revert_reason_certificate_vv >> strip_tac >>
+  drule_all compile_revert_reason_certificate >> strip_tac >>
   `cs_extends sm sb` by
     (simp[cs_extends_def] >> qexists `[]` >>
      gvs[same_blocks_def] >>
@@ -107,7 +108,7 @@ Proof
   `reason_operand (reason_ds op) op` by
     (Cases_on `op` >> gvs[reason_ds_def, reason_operand_def]) >>
   qspecl_then [`ctx`, `cenv`, `vv`, `op`, `rty`, `msz`, `sm`, `sb`,
-               `reason_ds op`, `R`] mp_tac compile_revert_reason_vv_frag >>
+               `reason_ds op`, `R`] mp_tac compile_revert_reason_frag >>
   impl_tac >- simp[] >> strip_tac >>
   `fn_has_code sa sm func` by metis_tac[fn_has_code_split] >>
   qpat_x_assum `expr_vv_sim _ _ _ _ _ _ _`
@@ -348,8 +349,9 @@ Resume compile_assert_reason_frag[abort]:
   qpat_x_assum
     `!fuel. (!e. run_from fuel ctx func (jump_to _ sv) <> Error e) ==> _`
     (qspec_then `fuel` mp_tac) >>
-  impl_tac >- metis_tac[exit_result_not_error] >> strip_tac >>
-  qexists_tac `fuel'` >> gvs[]
+  impl_tac >- metis_tac[exit_result_not_error] >>
+  disch_then (qx_choose_then `f0` strip_assume_tac) >>
+  qexists_tac `f0` >> gvs[]
 QED
 
 Finalise compile_assert_reason_frag

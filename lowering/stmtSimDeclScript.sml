@@ -8,7 +8,7 @@
  * value of the declared type.
  *
  * TOP-LEVEL:
- *   compile_annassign_store_stmt_frag — a one-word local's declaration, for
+ *   compile_annassign_stmt_frag       — a one-word local's declaration, for
  *                                       every outcome of its right-hand
  *                                       side, storing the typed word of the
  *                                       right-hand side's value
@@ -460,7 +460,7 @@ QED
    loop) keeps its allocation.  compile_annassign_word_frag's post has no
    lookup_var or allocas frame, so the success case re-chains ALLOCA,
    expr_post and MSTORE rather than citing it. *)
-Theorem compile_annassign_store_stmt_frag:
+Theorem compile_annassign_stmt_frag:
   !ctx func cx lctx RetQ cenv ty id vtyp e es res es' etv.
     eval_stmt cx (AnnAssign id vtyp e) es = (res, es') /\
     cenv.ce_alloca_locals /\
@@ -557,7 +557,7 @@ Theorem compile_annassign_word_stmt_frag:
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ty (AnnAssign id vtyp e)) es res es'
 Proof
-  rpt strip_tac >> irule compile_annassign_store_stmt_frag >>
+  rpt strip_tac >> irule compile_annassign_stmt_frag >>
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
   TRY (qexists_tac `etv` >> simp[]) >> rpt strip_tac >>
   qpat_x_assum `!tv es1. _ ==> ?v. tv = Value v /\ word_value v` drule >>
@@ -587,7 +587,7 @@ Theorem compile_annassign_typed_stmt_frag:
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ty (AnnAssign id vtyp e)) es res es'
 Proof
-  rpt strip_tac >> gvs[] >> irule compile_annassign_store_stmt_frag >>
+  rpt strip_tac >> gvs[] >> irule compile_annassign_stmt_frag >>
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
   TRY (qexists_tac `tyv` >> gvs[]) >> rpt strip_tac >>
   qpat_x_assum `!tv es1. _ ==> ?v. tv = Value v /\ value_has_type _ v` drule >>

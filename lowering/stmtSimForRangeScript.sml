@@ -11,15 +11,20 @@
  * the condition block on the loop is stmtSimForLoop's for_loop.
  *
  * TOP-LEVEL:
- *   eval_stmt_for_range_cases — the source outcomes of a range over
- *                               expressions
- *   range_end_words           — the range's words: the order check and the
- *                               rounds
+ *   compile_for_range_checked_frag — the statement fragment of For over
+ *                                    such a range
+ *   eval_stmt_for_range_cases      — the source outcomes of a range over
+ *                                    expressions
+ *   range_end_words                — the range's words: the order check
+ *                                    and the rounds
+ *
+ * Helper: range_outcome, for_entry_checked_block, for_range_checked_code,
+ *   compile_stmt_for_range_checked, for_range_checked_parts
  *)
 
 Theory stmtSimForRange
 Ancestors
-  stmtSim stmtSimForParts stmtSimForLoop stmtSimFor
+  stmtSim stmtSimForParts stmtSimForLoop stmtSimFor exprSimOperators
   list rich_list finite_map pred_set
   fragExec localPtrsProps exprSim loweringSlice freshWrites
   vyperEvalExprPreservesScopesDom
@@ -128,14 +133,19 @@ Proof
   simp[wordsTheory.w2n_n2w]
 QED
 
+Theorem is_int_type_cases[local]:
+  !t. is_int_type t <=> (?m. t = BaseT (UintT m)) \/ (?m. t = BaseT (IntT m))
+Proof
+  Cases >> simp[] >> rename1 `BaseT bt` >> Cases_on `bt` >> simp[]
+QED
+
 (* The ends' words, for ends of the loop variable's integer type: the
    comparison compile_range_bound_checks makes (signed for a signed type)
    says start > end exactly when the source has no range, and the rounds
    end - start is the range's length. *)
 Theorem range_end_words:
   !tenv fty tyv n1 n2.
-    ((?m. fty = BaseT (UintT m)) \/ (?m. fty = BaseT (IntT m))) /\
-    evaluate_type tenv fty = SOME tyv /\
+    is_int_type fty /\ evaluate_type tenv fty = SOME tyv /\
     value_has_type tyv (IntV n1) /\ value_has_type tyv (IntV n2) ==>
     ((if is_signed_type fty then word_gt (i2w n1 : bytes32) (i2w n2)
       else w2n (i2w n1 : bytes32) > w2n (i2w n2 : bytes32)) <=> n2 < n1) /\
@@ -143,7 +153,7 @@ Theorem range_end_words:
      Num (n2 - n1) < dimword (:256) /\
      w2n (i2w n2 - i2w n1 : bytes32) = Num (n2 - n1))
 Proof
-  rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> REWRITE_TAC [is_int_type_cases] >> strip_tac >>
   gvs[evaluate_type_def, AllCaseEqs(), value_has_type_def,
       is_signed_type_def]
   >- (`2 ** m <= dimword (:256)` by
@@ -174,6 +184,29 @@ Theorem eval_operand_update_other_op[local]:
              eval_operand op (update_var x w s) = eval_operand op s
 Proof
   Cases >> simp[eval_operand_def, lookup_var_update_var, update_var_def]
+QED
+
+Theorem exec_alloca_frame[local]:
+  !inst s n s1 p.
+    inst.inst_outputs = [p] /\ exec_alloca inst s n = OK s1 ==>
+    s1.vs_current_bb = s.vs_current_bb /\ s1.vs_inst_idx = s.vs_inst_idx /\
+    s1.vs_halted = s.vs_halted /\
+    (!x. x <> p ==> lookup_var x s1 = lookup_var x s) /\
+    (!a b. FLOOKUP s.vs_allocas a = SOME b ==>
+           FLOOKUP s1.vs_allocas a = SOME b)
+Proof
+  rpt gen_tac >> simp[exec_alloca_def] >> BasicProvers.every_case_tac >>
+  rw[] >> fs[update_var_def, lookup_var_def, FLOOKUP_UPDATE] >> rw[] >>
+  fs[FLOOKUP_DEF] >> metis_tac[]
+QED
+
+Theorem eval_operand_jump_to_frame[local]:
+  !op s s' l v.
+    eval_operand op s = SOME v /\ (!l. op <> Label l) /\
+    (!x. op = Var x ==> lookup_var x s' = lookup_var x s) ==>
+    eval_operand op (jump_to l s') = SOME v
+Proof
+  Cases >> simp[eval_operand_def, lookup_var_def, jump_to_def]
 QED
 
 Theorem step_ASSIGN_op[local]:
@@ -279,11 +312,13 @@ Proof
   qabbrev_tac `s5 = update_var g2 (bool_to_word bad2) s4` >>
   qabbrev_tac `s6 = update_var z2 (bool_to_word (bool_to_word bad2 = 0w)) s5` >>
   qabbrev_tac `s7 = update_var ev (a + (b - a)) s6` >>
+  `!x w s. MEM x [cv; rv; g1; z1; g2; z2; ev] ==>
+           eval_operand op1 (update_var x w s) = eval_operand op1 s /\
+           eval_operand op2 (update_var x w s) = eval_operand op2 s` by
+    (rpt strip_tac >> irule eval_operand_update_other_op >> metis_tac[]) >>
   `!s. (s = s1 \/ s = s2 \/ s = s3 \/ s = s4 \/ s = s5 \/ s = s6) ==>
        eval_operand op1 s = SOME a /\ eval_operand op2 s = SOME b` by
-    (rpt strip_tac >> gvs[markerTheory.Abbrev_def] >>
-     Cases_on `op1` >> Cases_on `op2` >>
-     gvs[eval_operand_def, lookup_var_update_var, update_var_def]) >>
+    (rpt strip_tac >> gvs[markerTheory.Abbrev_def]) >>
   `eval_operand (Var rv) s2 = SOME (b - a) /\
    eval_operand (Var rv) s6 = SOME (b - a) /\
    eval_operand (Var g1) s3 = SOME (bool_to_word bad1) /\
@@ -681,11 +716,36 @@ QED
 
 (* ===== For over a range with nonliteral ends ===== *)
 
-(* The loop variable's types a range loop over two expressions takes. *)
-Definition range_word_type_def:
-  range_word_type t <=> (?m. t = BaseT (UintT m)) \/ (?m. t = BaseT (IntT m))
-End
+Theorem is_int_type_memory_size[local]:
+  !tenv t tv. is_int_type t /\ evaluate_type tenv t = SOME tv ==>
+              type_memory_size tv = 32
+Proof
+  rw[is_int_type_cases] >>
+  gvs[evaluate_type_def, AllCaseEqs(), type_memory_size_def]
+QED
 
+Theorem value_has_type_int_between[local]:
+  !tyv i1 i2 i.
+    value_has_type tyv (IntV i1) /\ value_has_type tyv (IntV i2) /\
+    i1 <= i /\ i <= i2 ==>
+    value_has_type tyv (IntV i)
+Proof
+  Cases >> simp[value_has_type_def] >> rename1 `BaseTV bt` >>
+  Cases_on `bt` >> simp[value_has_type_def, within_int_bound_def] >>
+  rw[] >> intLib.ARITH_TAC
+QED
+
+Theorem range_value_has_type[local]:
+  !tyv n1 n2.
+    value_has_type tyv (IntV n1) /\ value_has_type tyv (IntV n2) /\
+    n1 <= n2 ==>
+    !j. j < Num (n2 - n1) ==> value_has_type tyv (IntV (n1 + &j))
+Proof
+  rpt strip_tac >>
+  qspecl_then [`tyv`, `n1`, `n2`, `n1 + &j`] mp_tac
+    value_has_type_int_between >>
+  impl_tac >- (simp[] >> intLib.ARITH_TAC) >> simp[]
+QED
 
 (* The exit of an expression's fragment is the statement's, where the
    statement raises what the expression does. *)
@@ -703,18 +763,22 @@ Proof
 QED
 
 (* For over a range whose ends are expressions, not both lowered to
-   literals: the ends' fragments, whose errors exit, then the loop
-   variable's ALLOCA and the checked entry block, whose failed checks
-   revert as the source's range errors exit, then the loop
-   (compile_for_range_frag's for_loop).  The ends are of the loop
-   variable's integer type, and their operands are held in variables the
-   later code leaves alone.  The body's judgment is assumed for every
-   start value, at the states where P holds; P holds after the ends and
-   again after each iteration that goes on. *)
+   literals (that case is compile_for_range_frag): the ends'
+   fragments, whose errors exit, then the loop variable's ALLOCA and the
+   checked entry block, whose failed checks revert as the source's range
+   errors exit, then the loop (compile_for_range_frag's for_loop).  The
+   ends are of the loop variable's integer type and well typed, so their
+   operands are held in variables the later code leaves alone
+   (lower_value_word_shape).  The body's judgment is assumed for every
+   loop value of the variable's type, at the states where P holds; P holds
+   after the ends and again after each iteration that goes on.  The
+   entry block compares the rounds with the word n2w bound, so the bound
+   must fit a word; nothing upstream bounds it yet. *)
 Theorem compile_for_range_checked_frag:
-  !P ctx func cx lctx RetQ cenv ty id fty e1 e2 bound stmts es res es' tyv.
+  !P ctx func cx lctx RetQ cenv env ty id fty e1 e2 bound stmts es res es'
+   tyv.
     eval_stmt cx (For id fty (Range e1 e2) bound stmts) es = (res, es') /\
-    range_word_type fty /\
+    is_int_type fty /\
     evaluate_type (get_tenv cx) fty = SOME tyv /\
     32 <= type_memory_bytes cenv fty /\
     type_memory_bytes cenv fty < dimword (:256) /\ bound < dimword (:256) /\
@@ -733,15 +797,17 @@ Theorem compile_for_range_checked_frag:
             !tv2 es2. eval_expr cx e2 es1 = (INL tv2, es2) ==>
               ?n2. tv2 = Value (IntV n2) /\ value_has_type tyv (IntV n2) /\
                    P es2) /\
+    well_typed_expr env e1 /\ well_typed_expr env e2 /\
+    (!x t. FLOOKUP env.var_types x = SOME t ==>
+           well_formed_type env.type_defs t) /\
     (!sa op1 s1 op2 s2.
        lower_value compile_expr cenv fty e1 sa = (op1, s1) /\
        lower_value compile_expr cenv fty e2 s1 = (op2, s2) ==>
-       (!x. op1 = Var x ==> not_fresh_at s1 x) /\ (!l. op1 <> Label l) /\
-       (!x. op2 = Var x ==> not_fresh_at s2 x) /\ (!l. op2 <> Label l) /\
        ~((?w. op1 = Lit w) /\ (?w. op2 = Lit w))) /\
     (!st0 c st1 ex inc ei n1 j r2 es2.
        declare_local cenv id fty st0 = (c, st1) /\
        P ei /\ lookup_scopes id ei.scopes = NONE /\
+       value_has_type tyv (IntV (n1 + &j)) /\
        eval_stmts cx stmts
          (ei with scopes :=
             (FEMPTY |+ (id, <| assignable := F; type := tyv;
@@ -755,6 +821,7 @@ Theorem compile_for_range_checked_frag:
          r2 es2) /\
     (!ei n1 j r2 es2 sc rest.
        P ei /\ lookup_scopes id ei.scopes = NONE /\
+       value_has_type tyv (IntV (n1 + &j)) /\
        eval_stmts cx stmts
          (ei with scopes :=
             (FEMPTY |+ (id, <| assignable := F; type := tyv;
@@ -769,7 +836,7 @@ Proof
   rpt gen_tac >>
   disch_then (fn th => MAP_EVERY assume_tac (CONJUNCTS th)) >>
   `is_word_type fty` by
-    (fs[range_word_type_def] >> gvs[is_word_type_def]) >>
+    (fs[is_int_type_cases] >> gvs[is_word_type_def]) >>
   REWRITE_TAC [stmt_frag_def] >>
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `stmt_env _ _ _ _ _ = _` mp_tac >>
@@ -786,8 +853,13 @@ Proof
   rename1 `_ = (op2, s2)` >>
   qpat_x_assum `!sa op1 s1 op2 s2. lower_value _ _ _ e1 _ = _ /\ _ ==> _`
     (qspecl_then [`sa`, `op1`, `s1`, `op2`, `s2`] mp_tac) >>
-  impl_tac >- simp[] >>
-  disch_then (fn th => MAP_EVERY assume_tac (CONJUNCTS th)) >>
+  impl_tac >- simp[] >> disch_then assume_tac >>
+  qspecl_then [`cenv`, `env`, `fty`, `e1`, `sa`, `op1`, `s1`] mp_tac
+    lower_value_word_shape >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
+  qspecl_then [`cenv`, `env`, `fty`, `e2`, `s1`, `op2`, `s2`] mp_tac
+    lower_value_word_shape >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
   `cs_extends sa s1 /\ sa.cs_next_var <= s1.cs_next_var /\
    cs_extends s1 s2 /\ s1.cs_next_var <= s2.cs_next_var` by
     metis_tac[cj 2 compile_expr_grows] >>
@@ -858,8 +930,9 @@ Resume compile_for_range_checked_frag[ends]:
   >- (rpt BasicProvers.VAR_EQ_TAC >> simp[] >> strip_tac >> disj2_tac >>
       qpat_x_assum `!fuel. (!e. run_from fuel ctx func t1 <> Error e) ==> _`
         (qspec_then `fuel` mp_tac) >>
-      impl_tac >- metis_tac[exit_result_not_error] >> strip_tac >>
-      qexists_tac `fuel'` >> simp[] >>
+      impl_tac >- metis_tac[exit_result_not_error] >>
+      disch_then (qx_choose_then `f0` strip_assume_tac) >>
+      qexists_tac `f0` >> simp[] >>
       irule expr_exit_stmt_exit >> qexists `INR ex` >> simp[]) >>
   qpat_x_assum `r2 = _` SUBST_ALL_TAC >> simp[] >> strip_tac >>
   rename1 `expr_post func cenv cx e2 es1 s1 s2 t1 es2 (IntV n2) op2 t2` >>
@@ -918,10 +991,9 @@ Resume compile_for_range_checked_frag[alloca]:
    ~sA.vs_halted /\ (!x. x <> p ==> lookup_var x sA = lookup_var x t2) /\
    (!a b. FLOOKUP t2.vs_allocas a = SOME b ==>
           FLOOKUP sA.vs_allocas a = SOME b)` by
-    (qpat_x_assum `exec_alloca _ _ _ = _` mp_tac >> simp[exec_alloca_def] >>
-     BasicProvers.every_case_tac >> rw[] >>
-     fs[update_var_def, lookup_var_def, FLOOKUP_UPDATE] >> rw[] >>
-     fs[FLOOKUP_DEF] >> metis_tac[]) >>
+    (qspecl_then [`A`, `t2`, `n2w sz : bytes32`, `sA`, `p`]
+       mp_tac exec_alloca_frame >>
+     impl_tac >- simp[] >> simp[]) >>
   `w2n (n2w sz : bytes32) = sz` by fs[] >>
   `FLOOKUP sA.vs_allocas s2.cs_next_id = SOME (w2n wp, sz)` by
     (qpat_x_assum `FLOOKUP sA.vs_allocas A.inst_id = _` mp_tac >>
@@ -945,9 +1017,13 @@ Resume compile_for_range_checked_frag[entry]:
      fs[not_fresh_at_def] >> rw[] >> first_x_assum irule >> simp[]) >>
   `eval_operand op1 (jump_to entry_lbl sA) = SOME (i2w n1) /\
    eval_operand op2 (jump_to entry_lbl sA) = SOME (i2w n2)` by
-    (Cases_on `op1` >> Cases_on `op2` >>
-     gvs[eval_operand_def, jump_to_def, lookup_var_def] >>
-     fs[GSYM lookup_var_def] >> metis_tac[]) >>
+    (conj_tac
+     >- (qspecl_then [`op1`, `t2`, `sA`, `entry_lbl`, `i2w n1`] mp_tac
+           eval_operand_jump_to_frame >>
+         impl_tac >- (simp[] >> metis_tac[]) >> simp[]) >>
+     qspecl_then [`op2`, `t2`, `sA`, `entry_lbl`, `i2w n2`] mp_tac
+       eval_operand_jump_to_frame >>
+     impl_tac >- (simp[] >> metis_tac[]) >> simp[]) >>
   qspecl_then [`ctx`, `func`, `jump_to entry_lbl sA`, `entry_lbl`, `cond_lbl`,
                `op1`, `op2`, `i2w n1`, `i2w n2`,
                `if is_signed_type fty then SGT else GT`,
@@ -955,53 +1031,43 @@ Resume compile_for_range_checked_frag[entry]:
                `s2.cs_next_id + 2`]
     mp_tac for_entry_checked_block >>
   impl_tac
-  >- (fs[jump_to_def] >> rw[] >> fs[] >>
+  >- (simp[jump_to_def] >> rw[] >>
       simp[ALL_DISTINCT, ASCIInumbersTheory.toString_inj] >> metis_tac[]) >>
   strip_tac >>
   qspecl_then [`get_tenv cx`, `fty`, `tyv`, `n1`, `n2`] mp_tac
     range_end_words >>
-  impl_tac >- fs[range_word_type_def] >>
+  impl_tac >- fs[] >>
   strip_tac >>
   `w2n (n2w bound : bytes32) = bound` by simp[] >>
   `(if (if is_signed_type fty then SGT else GT) = SGT
     then word_gt (i2w n1 : bytes32) (i2w n2)
     else w2n (i2w n1 : bytes32) > w2n (i2w n2 : bytes32)) <=> n2 < n1` by
-    (Cases_on `is_signed_type fty` >> gvs[]) >>
+    (qpat_x_assum `(if is_signed_type fty then _ else _) <=> _`
+       (SUBST1_TAC o SYM) >>
+     Cases_on `is_signed_type fty` >> simp[]) >>
   qpat_x_assum `range_outcome _ _ _ _ _ _ _ _ _ _`
-    (strip_assume_tac o REWRITE_RULE [range_outcome_def])
-  >- suspend "no_range"
-  >- suspend "too_long" >>
+    (DISJ_CASES_THEN2 assume_tac strip_assume_tac o
+     REWRITE_RULE [range_outcome_def, DISJ_ASSOC])
+  >- suspend "range_error" >>
   suspend "loop"
 QED
 
-Resume compile_for_range_checked_frag[no_range]:
+(* The range's runtime errors: the entry block's ASSERT reverts, after the
+   ends' code. *)
+Resume compile_for_range_checked_frag[range_error]:
+  qpat_x_assum `(n2 < n1 /\ _) \/ _` strip_assume_tac >>
   qpat_x_assum `_ ==> ?fuel t. run_from fuel ctx func _ = Abort _ _`
-    mp_tac >> simp[] >> strip_tac >>
+    mp_tac >> simp[integerTheory.INT_NOT_LT] >> strip_tac >>
   disj2_tac >>
   qpat_x_assum `!fuel rr. run_from fuel ctx func (jump_to entry_lbl sA) = rr /\ _ ==> _`
     (qspecl_then [`fuel`, `Abort Revert_abort t`] mp_tac) >>
-  simp[] >> strip_tac >>
+  simp[] >> strip_tac >> rename1 `run_from f2 ctx func t2 = _` >>
   qpat_x_assum `!fuel. (!e. run_from fuel ctx func t2 <> Error e) ==> _`
-    (qspec_then `fuel'` mp_tac) >> simp[] >> strip_tac >>
+    (qspec_then `f2` mp_tac) >> simp[] >> strip_tac >>
+  rename1 `run_from f1 ctx func t1 = _` >>
   qpat_x_assum `!fuel. (!e. run_from fuel ctx func t1 <> Error e) ==> _`
-    (qspec_then `fuel''` mp_tac) >> simp[] >> strip_tac >>
-  qexists_tac `fuel'''` >>
-  simp[exit_result_def, stmt_exit_def, expr_exit_def]
-QED
-
-Resume compile_for_range_checked_frag[too_long]:
-  `~(n2 < n1)` by simp[integerTheory.INT_NOT_LT] >>
-  qpat_x_assum `_ ==> ?fuel t. run_from fuel ctx func _ = Abort _ _`
-    mp_tac >> simp[] >> strip_tac >>
-  disj2_tac >>
-  qpat_x_assum `!fuel rr. run_from fuel ctx func (jump_to entry_lbl sA) = rr /\ _ ==> _`
-    (qspecl_then [`fuel`, `Abort Revert_abort t`] mp_tac) >>
-  simp[] >> strip_tac >>
-  qpat_x_assum `!fuel. (!e. run_from fuel ctx func t2 <> Error e) ==> _`
-    (qspec_then `fuel'` mp_tac) >> simp[] >> strip_tac >>
-  qpat_x_assum `!fuel. (!e. run_from fuel ctx func t1 <> Error e) ==> _`
-    (qspec_then `fuel''` mp_tac) >> simp[] >> strip_tac >>
-  qexists_tac `fuel'''` >>
+    (qspec_then `f1` mp_tac) >> simp[] >> strip_tac >>
+  rename1 `run_from f0 ctx func s0 = _` >> qexists_tac `f0` >>
   simp[exit_result_def, stmt_exit_def, expr_exit_def]
 QED
 
@@ -1036,7 +1102,10 @@ Resume compile_for_range_checked_frag[loop]:
        (qpat_assum `p = _` SUBST1_TAC >> irule reserved_fresh_not_local >>
         qexists_tac `s2` >> simp[]) >>
      fs[not_local_ptr_def] >> rpt strip_tac >>
-     `name <> id` by (strip_tac >> fs[lookup_scopes_def]) >> metis_tac[]) >>
+     `name <> id` by
+       (strip_tac >> qpat_x_assum `lookup_scopes _ (FEMPTY::_) = _` mp_tac >>
+        simp[lookup_scopes_def]) >>
+     metis_tac[]) >>
   suspend "state"
 QED
 
@@ -1047,8 +1116,8 @@ Resume compile_for_range_checked_frag[state]:
   `stmt_state_rel func cenv cx es2 cc` by
     (simp[Abbr `cc`, stmt_state_rel_jump_to] >>
      irule stmt_state_rel_vars_frame >> simp[stmt_state_rel_jump_to] >>
-     rpt strip_tac >>
-     `not_fresh_at s2 p'` by
+     qx_genl_tac [`nm`, `en`, `q`, `qsz`] >> strip_tac >>
+     `not_fresh_at s2 q` by
        (fs[local_ptrs_reserved_def] >> metis_tac[]) >>
      qpat_assum `!q. not_fresh_at s2 q ==> _` (drule_then strip_assume_tac) >>
      qpat_x_assum `!x. ~MEM x _ ==> _` drule >>
@@ -1099,10 +1168,44 @@ QED
 
 Resume compile_for_range_checked_frag[run_loop]:
   `type_memory_size tyv = 32` by
-    (qpat_x_assum `range_word_type fty` mp_tac >>
-     qpat_x_assum `evaluate_type (get_tenv cx) fty = _` mp_tac >>
-     rw[range_word_type_def] >>
-     gvs[evaluate_type_def, AllCaseEqs(), type_memory_size_def]) >>
+    (qspecl_then [`get_tenv cx`, `fty`, `tyv`] mp_tac
+       is_int_type_memory_size >> simp[]) >>
+  `!j. j < Num (n2 - n1) ==> value_has_type tyv (IntV (n1 + &j))` by
+    (qspecl_then [`tyv`, `n1`, `n2`] mp_tac range_value_has_type >> simp[]) >>
+  (* the body's judgment and P's preservation as for_loop takes them *)
+  `!ei j r9 es9.
+     P ei /\ lookup_scopes id ei.scopes = NONE /\ j < Num (n2 - n1) /\
+     eval_stmts cx stmts
+       (ei with scopes :=
+          (FEMPTY |+ (id, <| assignable := F; type := tyv;
+                             value := IntV (n1 + &j) |>)) :: ei.scopes) =
+       (r9, es9) ==>
+     stmt_frag ctx func cx (InLoop exit_lbl incr_lbl) RetQ bc
+       (stmts_env bc (InLoop exit_lbl incr_lbl) ty stmts)
+       (ei with scopes :=
+          (FEMPTY |+ (id, <| assignable := F; type := tyv;
+                             value := IntV (n1 + &j) |>)) :: ei.scopes)
+       r9 es9` by
+    (rpt strip_tac >>
+     qpat_x_assum `!st0 c st1 ex inc ei n1 j r2 es2. _`
+       (qspecl_then [`s2`, `bc`, `s2 with cs_next_var := s2.cs_next_var + 1`,
+                     `exit_lbl`, `incr_lbl`, `ei`, `n1`, `j`, `r9`, `es9`]
+          mp_tac) >>
+     simp[]) >>
+  `!ei j r9 es9 sc9 rest9.
+     P ei /\ lookup_scopes id ei.scopes = NONE /\ j < Num (n2 - n1) /\
+     eval_stmts cx stmts
+       (ei with scopes :=
+          (FEMPTY |+ (id, <| assignable := F; type := tyv;
+                             value := IntV (n1 + &j) |>)) :: ei.scopes) =
+       (r9, es9) /\
+     (r9 = INL () \/ r9 = INR ContinueException) /\
+     es9.scopes = sc9 :: rest9 ==>
+     P (es9 with scopes := rest9)` by
+    (rpt strip_tac >>
+     qpat_x_assum `!ei n1 j r2 es2 sc rest. _`
+       (qspecl_then [`ei`, `n1`, `j`, `r9`, `es9`, `sc9`, `rest9`] mp_tac) >>
+     simp[]) >>
   qspecl_then [`Num (n2 - n1)`, `P`, `ctx`, `func`, `cenv`, `bc`, `cx`, `lctx`,
                `RetQ`, `ty`, `stmts`, `id`, `tyv`, `p`, `sz`, `A`, `cv`, `ev`,
                `dv`, `nv`, `n1`, `n2`, `cond_lbl`, `exit_lbl`, `body_lbl`,
@@ -1116,10 +1219,8 @@ Resume compile_for_range_checked_frag[run_loop]:
                 is_terminator_def] >> NO_TAC) >>
       TRY (fs[] >> NO_TAC) >>
       TRY (simp[not_fresh_at_def] >> NO_TAC) >>
-      TRY (rw[not_fresh_at_def] >>
-           TRY (first_x_assum (qspec_then `sj.cs_next_var` mp_tac)) >>
-           simp[] >> NO_TAC) >>
-      rpt strip_tac >> first_x_assum irule >> metis_tac[]) >>
+      rw[not_fresh_at_def] >>
+      TRY (first_x_assum (qspec_then `sj.cs_next_var` mp_tac)) >> simp[]) >>
   strip_tac
   >- (rename1 `s9.vs_current_bb = exit_lbl` >> disj1_tac >>
       qexists_tac `s9` >> qexists_tac `cenv` >>
