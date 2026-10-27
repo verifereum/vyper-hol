@@ -268,37 +268,19 @@ QED
 
 (* ===== Unary operators ===== *)
 
-(* A result of a word type is a value: an ArrayRef is typed by an array
-   type, a HashMapRef by NoneTV. *)
-Theorem word_type_toplevel_value:
-  !t tenv tyv x.
-    is_word_type t /\ evaluate_type tenv t = SOME tyv /\
-    toplevel_value_typed x tyv ==>
-    is_Value x
-Proof
-  Cases >> rw[is_word_type_def] >>
-  TRY (rename1 `BaseT bt` >> Cases_on `bt` >> gvs[is_word_type_def]) >>
-  TRY (rename1 `BytesT bd` >> Cases_on `bd` >> gvs[is_word_type_def]) >>
-  gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs()] >>
-  Cases_on `x` >> gvs[toplevel_value_typed_def]
-QED
-
-(* An expression of a word type evaluates to a value of its type. *)
+(* Forced success has the expression's evaluated type, including place reads. *)
 Theorem expr_sim_pre_word_value:
-  !cenv cx env e es tv es'.
+  !cenv cx env e es v es'.
     expr_sim_pre cenv cx env e es /\ is_word_type (expr_type e) /\
-    eval_expr cx e es = (INL tv, es') ==>
-    ?v tyv. tv = Value v /\
-            evaluate_type (get_tenv cx) (expr_type e) = SOME tyv /\
-            value_has_type tyv v
+    (do r <- eval_expr cx e; read_result cx r od) es = (INL v, es') ==>
+    ?tyv. evaluate_type (get_tenv cx) (expr_type e) = SOME tyv /\
+          value_has_type tyv v
 Proof
   rpt strip_tac >> drule_all expr_sim_pre_eval >> strip_tac >>
   `env.type_defs = get_tenv cx` by
     gvs[expr_sim_pre_def, expr_sim_inv_def, env_consistent_def,
         env_context_consistent_def] >>
-  gvs[expr_result_typed_def, expr_runtime_typed_def] >>
-  drule_all word_type_toplevel_value >> strip_tac >>
-  Cases_on `tv` >> gvs[toplevel_value_typed_def]
+  gvs[expr_result_typed_def, expr_runtime_typed_def, value_result_typed_def]
 QED
 
 (* not: ISZERO, NOT or the flag mask's XOR on the operand
@@ -347,7 +329,6 @@ Proof
         drule expr_sim_pre_lower_value_word_shape >> disch_then drule >> simp[])
     >- (rpt gen_tac >> strip_tac >> drule_at Any straight_fresh_cs_extends >>
         simp[straight_fresh_not])
-    >- metis_tac[expr_sim_pre_word_value]
     >- metis_tac[expr_ok_def, expr_sim_ok_def] >>
     rpt strip_tac >> drule_all expr_sim_pre_word_value >> strip_tac >> gvs[] >>
     irule_at Any compile_not_frag >> gvs[] >>
@@ -406,10 +387,9 @@ Proof
         simp[is_word_type_def])
     >- (rpt gen_tac >> strip_tac >> drule_at Any straight_fresh_cs_extends >>
         simp[straight_fresh_abs])
-    >- metis_tac[expr_sim_pre_word_value, is_word_type_def]
     >- metis_tac[expr_ok_def, expr_sim_ok_def] >>
     rpt strip_tac >>
-    qspecl_then [`cenv`, `cx`, `env`, `e1`, `es`, `Value v1`, `es1`] mp_tac
+    qspecl_then [`cenv`, `cx`, `env`, `e1`, `es`, `v1`, `es1`] mp_tac
       expr_sim_pre_word_value >>
     simp[is_word_type_def] >> strip_tac >>
     gvs[vyperValueTheory.evaluate_type_def, compile_abs_frag]) >>
