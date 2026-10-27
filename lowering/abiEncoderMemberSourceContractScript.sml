@@ -79,6 +79,72 @@ Proof
   asm_simp_tac bool_ss [] >> fs[abi_decoder_effect_def] >> metis_tac[]
 QED
 
+(* Entry observations are ghost data retained with the genuine core post.
+   In particular the cursor law quantifies over arbitrary core-entry states. *)
+Definition abi_encoder_member_cursor_saved_def:
+  abi_encoder_member_cursor_saved (head,offset,dp,h,off,slot,site)
+      (first,last,b,cap,limit_st) (ei,dst,src,st,en,out) s <=>
+    abi_decoder_operand_live st.cs_next_var head /\
+    abi_decoder_operand_live st.cs_next_var offset /\
+    abi_decoder_operand_live st.cs_next_var dp /\
+    eval_operand head s = SOME (n2w h) /\ eval_operand offset s = SOME (n2w off) /\
+    eval_operand dp s = SOME (n2w slot) /\
+    first <= site /\ site < last /\ site < st.cs_next_id /\
+    FLOOKUP s.vs_allocas site = SOME (slot,32)
+End
+
+Definition abi_encoder_member_dynamic_pre_def:
+  abi_encoder_member_dynamic_pre value resources cursor c s <=>
+    abi_encoder_member_core_pre value resources c s /\
+    abi_encoder_member_cursor_saved cursor resources c s
+End
+
+Definition abi_encoder_member_dynamic_post_def:
+  abi_encoder_member_dynamic_post (ctx,func) value resources cursor c s t <=>
+    abi_encoder_member_core_post (ctx,func) value resources c s t /\
+    abi_encoder_member_cursor_saved cursor resources c s /\
+    abi_encoder_spine_core_code func c
+End
+
+Theorem abi_encoder_member_source_dynamic_run:
+  abi_encoder_spine_core_code func c /\
+  abi_encoder_member_dynamic_pre value resources cursor c s ==>
+  ?t. abi_decode_sim ctx func s t /\
+    abi_encoder_member_dynamic_post (ctx,func) value resources cursor c s t
+Proof
+  simp_tac bool_ss [abi_encoder_member_dynamic_pre_def, abi_encoder_member_dynamic_post_def] >>
+  strip_tac >> drule_all abi_encoder_member_source_core_run >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  qexists_tac `t` >> asm_rewrite_tac []
+QED
+
+Theorem abi_encoder_member_source_dynamic_saved:
+  abi_encoder_member_dynamic_post (ctx,func) (at,av,sb:num,source_cap:num,d)
+    (first,last,b,cap,limit_st) (head,offset,dp,h,off,slot,site)
+    (ei:abi_enc_info,dst:operand,src:operand,st,en,out) initial actual ==>
+  eval_operand head actual = SOME (n2w h) /\ eval_operand offset actual = SOME (n2w off) /\
+  eval_operand dp actual = SOME (n2w slot) /\
+  FLOOKUP actual.vs_allocas site = SOME (slot,32) /\
+  mload slot actual = mload slot initial /\ fresh_vars_wrt limit_st actual /\
+  abi_decoder_budget first last b cap actual
+Proof
+  simp_tac bool_ss [abi_encoder_member_dynamic_post_def, abi_encoder_member_cursor_saved_def] >>
+  strip_tac >> drule_all abi_encoder_member_source_core_saved >> strip_tac >> metis_tac[]
+QED
+
+Theorem abi_encoder_member_source_dynamic_child_run:
+  abi_encoder_spine_child_input func limit_st
+    (abi_encoder_member_dynamic_pre value resources cursor)
+    (abi_encoder_member_dynamic_post (ctx,func) value resources cursor) c s ==>
+  ?t. abi_encoder_spine_child (\c r u. abi_decode_sim ctx func r u) c s t /\
+    abi_encoder_spine_child_output
+      (abi_encoder_member_dynamic_post (ctx,func) value resources cursor) c s t
+Proof
+  strip_tac >> irule abi_encoder_spine_child_generate >>
+  goal_assum (drule_at Any) >> rpt strip_tac >> BETA_TAC >>
+  irule abi_encoder_member_source_dynamic_run >> asm_rewrite_tac []
+QED
+
 val _ =
   if List.exists
        (fn name => List.exists (fn parent => parent = name) (Theory.ancestry "-"))
@@ -94,4 +160,5 @@ val _ = List.app (fn th =>
     if List.all (fn s => s = "DISK_THM") oracles andalso null axioms then ()
     else raise Fail "source core contract has an admission or axiom"
   end) [abi_encoder_member_source_core_run, abi_encoder_member_source_child_run,
-    abi_encoder_member_source_core_saved];
+    abi_encoder_member_source_core_saved, abi_encoder_member_source_dynamic_run,
+    abi_encoder_member_source_dynamic_saved, abi_encoder_member_source_dynamic_child_run];
