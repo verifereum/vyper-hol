@@ -78,9 +78,10 @@ Proof
     (strip_assume_tac o ONCE_REWRITE_RULE [abi_encoder_open_input_cases]) >>
   gvs[] >> ONCE_REWRITE_TAC [abi_encoder_open_input_cases] >>
   asm_simp_tac (srw_ss()) [LET_THM] >>
-  gvs[AC ADD_COMM ADD_ASSOC, MULT_COMM] >>
-  FIRST [decide_tac,
-    rename1 `abi_encoder_tuple_type at ats` >> qexists_tac `ats` >> gvs[] >> decide_tac]
+  gvs[AC ADD_COMM ADD_ASSOC, MULT_COMM]
+  >>~- ([`abi_encoder_tuple_type at ats`],
+        qexists_tac `ats` >> gvs[] >> decide_tac) >>
+  decide_tac
 QED
 
 Theorem abi_encoder_open_input_valid:
@@ -197,7 +198,7 @@ Theorem abi_encoder_structural_valid_layout:
 Proof
   ho_match_mp_tac abi_encoder_structural_valid_ind >> rpt strip_tac
   >- (simp[abi_encoder_layout_valid_def] >> strip_tac >>
-      irule (cj 1 enc_has_static_length) >> simp[]) 
+      irule (cj 1 enc_has_static_length) >> simp[])
   >- (`LIST_REL abi_encoder_layout_valid ats avs` by
         simp[LIST_REL_EL_EQN] >>
       `LENGTH (enc (Tuple ats) (ListV avs)) =
