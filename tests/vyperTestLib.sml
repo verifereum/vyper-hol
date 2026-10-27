@@ -707,28 +707,10 @@ fun test_files () =
   |> Lib.sort lexless
   |> List.map (fn path => (json_path_to_id path, path))
 
-(* Test files whose traces are replayed by several test theories, each taking
-   one chunk, so that CI can run the chunks on different shards. *)
-val test_trace_chunks = [("functional_codegen_features_test_clampers", 4)]
-
-(* The test theories of a test file, each with the expression for the traces
-   it replays. *)
-fun test_theories id = let
-  val all = String.concat ["all_traces \"vyperTestDefs_", id, "\""]
-in
-  case List.find (fn (cid, _) => cid = id) test_trace_chunks of
-    NONE => [(String.concat ["vyperTest_", id], all)]
-  | SOME (_, n) => List.tabulate (n, fn k =>
-      (String.concat ["vyperTest_", id, "_chunk", Int.toString k],
-       String.concat ["trace_chunk (", Int.toString k, ", ", Int.toString n,
-                      ") $ ", all]))
-end
-
 fun cleanup_generated_scripts files = let
   val keep =
     List.map (fn (id, _) => String.concat ["vyperTestDefs_", id, "Script.sml"]) files @
-    List.concat (List.map (fn (id, _) =>
-      List.map (fn (thy, _) => thy ^ "Script.sml") (test_theories id)) files)
+    List.map (fn (id, _) => String.concat ["vyperTest_", id, "Script.sml"]) files
   fun is_keep name = List.exists (fn k => k = name) keep
   fun is_gen name =
     (String.isPrefix "vyperTestDefs_" name orelse
@@ -1240,18 +1222,17 @@ fun generate_test_scripts () = let
   val gen_dir = generated_dir
   val () = cleanup_generated_scripts files
   val () = List.app (fn (id, _) => let
+    val thyname = String.concat["vyperTest_", id]
     val defsname = String.concat["vyperTestDefs_", id]
-    fun write (thyname, traces) = let
-      val fname = OS.Path.concat(gen_dir, String.concat[thyname, "Script.sml"])
-      val contents = String.concat [
-        "Theory ", thyname, "[no_sig_docs]\nAncestors ", defsname,
-        "\nLibs vyperTestRunnerLib\nval () = ",
-        "run_tests_on_traces $ ", traces, ";\n"]
-      val out = TextIO.openOut(fname)
-      val () = TextIO.output(out, contents)
-      val () = TextIO.closeOut out
-    in () end
-  in List.app write (test_theories id) end) files
+    val fname = OS.Path.concat(gen_dir, String.concat[thyname, "Script.sml"])
+    val contents = String.concat [
+      "Theory ", thyname, "[no_sig_docs]\nAncestors ", defsname,
+      "\nLibs vyperTestRunnerLib\nval () = ",
+      "run_tests_on_traces $ all_traces \"", defsname, "\";\n"]
+    val out = TextIO.openOut(fname)
+    val () = TextIO.output(out, contents)
+    val () = TextIO.closeOut out
+  in () end) files
 in
   ()
 end
