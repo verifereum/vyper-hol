@@ -6,6 +6,7 @@ Theory abiEncoderReuseAudit
 Ancestors
   abiScratchEncoderRecursive abiEncoderCorrectRecursive
   abiEncoderOpenInput abiEncoderRegisteredEffect abiEncoderStaticRepresentative
+  abiEncoderOpenInputFrame abiEncoderResourceAdapter
 
 fun audit_encoder_tag (name, th) =
   let
@@ -23,6 +24,11 @@ val _ = List.app audit_encoder_tag
    ("abi_encoder_input_open", abi_encoder_input_open),
    ("abi_encoder_aligned_bytes_representative", abi_encoder_aligned_bytes_representative),
    ("abi_encoder_static_source_representative", abi_encoder_static_source_representative),
+   ("abi_encoder_open_input_mem_agree", abi_encoder_open_input_mem_agree),
+   ("abi_encoder_zero_source_value_diagnostic", abi_encoder_zero_source_value_diagnostic),
+   ("abi_encoder_zero_source_pre_diagnostic", abi_encoder_zero_source_pre_diagnostic),
+   ("abi_encoder_scratch_budget", abi_encoder_scratch_budget),
+   ("abi_encoder_prune_entry", abi_encoder_prune_entry),
    ("abi_encoder_structural_valid_layout", abi_encoder_structural_valid_layout),
    ("abi_encoder_open_members_layout", abi_encoder_open_members_layout),
    ("abi_encoder_open_giant_zero_prefix", abi_encoder_open_giant_zero_prefix),
