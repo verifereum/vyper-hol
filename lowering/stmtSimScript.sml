@@ -19,8 +19,9 @@
  *     the return sequence for an external one (#640).
  * stmt_state_rel speaks of the current frame's locals and variables, so an
  * internal-function body reuses the judgment with its own RetQ.  The
- * allocation frontier vs_alloca_next is shared by every frame; alloca_room
- * assumes INVOKE gives the caller its frontier back (#641).
+ * allocation frontier vs_alloca_next is the current frame's: a callee
+ * allocates above its caller's, and INVOKE gives the caller its frontier
+ * back (merge_callee_state), so alloca_room survives a call.
  *
  * A list's declarations extend the compile environment its later
  * statements see; the relation at a list's end is at the extended cenv',

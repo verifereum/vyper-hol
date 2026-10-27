@@ -45,9 +45,7 @@
  *     vs_alloca_next is unbounded).  They wait for S3's alloca-frontier
  *     invariant, vs_alloca_next < dimword (:256) along a run
  *     (raw_unit_memory_ok), to reach the judgment (stmtLoweringProps notes
- *     it as still unstated there), which gives the bound at the hash.  The
- *     bound can't go in stmt_state_rel: INVOKE copies the callee's frontier
- *     back, so a loop around an internal call keeps raising it.
+ *     it as still unstated there), which gives the bound at the hash.
  *   - compile_method_id_other_sim: a Bytes[4] output, and the runtime hash
  *     of a signature, use ALLOCA'd buffers or ADD ptr 32, so it waits for
  *     the same bound.
