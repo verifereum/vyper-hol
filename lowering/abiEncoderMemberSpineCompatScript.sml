@@ -11,6 +11,7 @@ Ancestors
   abiEncoderMemberPhaseEffect abiScratchAfterAddress abiEncoderRegisteredEffect
   abiEncoderExtendSim pred_set venomInst abiEncoderChildCode abiEncoderChildPrefix
   abiScratchEffect abiEncoderResultLive abiEncoderCounters
+  abiEncoderChildSuffix valueEncoding
 
 Definition abi_encoder_spine_source_pre_def:
   abi_encoder_spine_source_pre (at,av,sb,source_cap,d)
@@ -593,4 +594,48 @@ val _ =
     if List.all (fn s => s = "DISK_THM") oracles andalso null axioms then
       print "ENCODER_SPINE_COMPAT_AUDIT_OK dynamic_shared_run\n"
     else raise Fail "encoder spine compatibility admission dependency: dynamic_shared_run"
+  end;
+
+(* Rich observations are transported to the actual suffix endpoint, not by
+   asserting the unchanged child endpoint predicate there. *)
+Theorem abi_encoder_spine_shared_suffix_observations:
+  abi_encoder_shared_endpoint (ctx,func) (p,ce,len,limit_st)
+    (first,last,b,cap) (at,av,q) ready encoded /\
+  abi_encode_child_suffix head dp offset len ce = (out,en) /\
+  eval_operand head encoded = SOME (n2w h) /\ eval_operand dp encoded = SOME (n2w slot) /\
+  eval_operand offset encoded = SOME (n2w off) /\
+  abi_decoder_operand_live ce.cs_next_var dp /\ abi_decoder_operand_live ce.cs_next_var len /\
+  h < dimword (:256) /\ slot < dimword (:256) /\ en.cs_next_var <= limit_st.cs_next_var /\
+  abi_encoder_member_phase_raw ce en encoded actual /\
+  (LENGTH (enc at av) = 0 \/
+    ((q+LENGTH (enc at av) <= h \/ h+32 <= q) /\
+     (q+LENGTH (enc at av) <= slot \/ slot+32 <= q))) /\
+  d <= h /\ h+32 <= d+extent /\ id IN ids /\
+  FLOOKUP encoded.vs_allocas id = SOME (slot,32) ==>
+  mem_bytes_at q (LENGTH (enc at av)) actual.vs_memory = enc at av /\
+  eval_operand out actual = SOME (n2w (LENGTH (enc at av))) /\
+  abi_encoder_registered_effect ids [(d,extent)] encoded actual /\
+  (alloca_inv ready ==> alloca_inv actual)
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  `eval_operand len encoded = SOME (n2w (LENGTH (enc at av))) /\
+   fresh_vars_wrt limit_st encoded /\
+   (alloca_inv ready ==> alloca_inv encoded)` by
+    fs[abi_encoder_shared_endpoint_def, abi_scratch_effect_def] >>
+  drule_all abi_encoder_member_cursor_transport >> strip_tac >>
+  drule_all abi_encoder_member_cursor_registered >> strip_tac >>
+  asm_rewrite_tac [] >>
+  Cases_on `LENGTH (enc at av) = 0`
+  >- (gvs[LENGTH_NIL] >> simp[mem_bytes_at_def]) >>
+  `mem_bytes_at q (LENGTH (enc at av)) actual.vs_memory =
+   mem_bytes_at q (LENGTH (enc at av)) encoded.vs_memory` by
+    (asm_rewrite_tac [] >> irule abi_encoder_child_suffix_preserves_tail >> gvs[]) >>
+  metis_tac[abi_encoder_shared_endpoint_bytes]
+QED
+
+val _ =
+  let val (oracles,axioms) = Tag.dest_tag (Thm.tag abi_encoder_spine_shared_suffix_observations) in
+    if List.all (fn s => s = "DISK_THM") oracles andalso null axioms then
+      print "ENCODER_SPINE_COMPAT_AUDIT_OK shared_suffix_observations\n"
+    else raise Fail "encoder spine compatibility admission dependency: shared_suffix_observations"
   end;
