@@ -21,7 +21,7 @@ Theorem fn_sig_argument_bounds:
   LENGTH args <= LENGTH sig.param_types /\
   LENGTH sig.param_types - sig.num_defaults <= LENGTH args /\
   MAP expr_type args = TAKE (LENGTH args) sig.param_types /\
-  ty = sig.ret_ty
+  type_widens_to env.type_defs sig.ret_ty ty
 Proof
   rw[well_typed_expr_def] >> gvs[]
 QED

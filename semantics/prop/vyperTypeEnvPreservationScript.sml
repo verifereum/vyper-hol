@@ -290,7 +290,8 @@ Proof
   rpt strip_tac >> gvs[] >>
   irule extend_local_env_consistent_weaken >> simp[] >>
   qexists_tac `T` >> qexists_tac `s''` >>
-  qexists_tac `expr_type e` >>
+  rename1 `assignable_type env.type_defs annty` >>
+  qexists_tac `annty` >>
   gvs[extend_local_def, FLOOKUP_UPDATE] >>
   first_x_assum irule >> simp[FLOOKUP_DEF]
 QED
