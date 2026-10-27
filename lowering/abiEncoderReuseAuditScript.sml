@@ -20,6 +20,8 @@ Ancestors
   abiScratchMemberAdapter abiEncoderStatic abiEncoderDynamic abiScratchStatic
   abiEncoderMembersPrepare
   abiEncoderMemberSourceContract abiEncoderMemberSourceInterpret abiScratchDynamicChild
+  abiEncoderMembersEndpoint abiEncoderSourceMembersIndex
+  abiEncoderSourceMembersEntry abiEncoderSourceMembersInterpret
 
 fun audit_encoder_tag (name, th) =
   let
@@ -198,6 +200,31 @@ val _ = List.app audit_encoder_tag
    ("abi_encoder_member_source_static_input", abi_encoder_member_source_static_input),
    ("abi_encoder_member_source_static_output", abi_encoder_member_source_static_output),
    ("abi_scratch_dynamic_child_reach", abi_scratch_dynamic_child_reach),
+   ("abi_encoder_member_source_dynamic_input", abi_encoder_member_source_dynamic_input),
+   ("abi_encoder_member_source_dynamic_output", abi_encoder_member_source_dynamic_output),
+   ("abi_encoder_member_source_dynamic_run", abi_encoder_member_source_dynamic_run),
+   ("abi_encoder_member_source_dynamic_saved", abi_encoder_member_source_dynamic_saved),
+   ("abi_encoder_member_source_dynamic_child_run", abi_encoder_member_source_dynamic_child_run),
+   ("abi_encoder_members_static_endpoint", abi_encoder_members_static_endpoint),
+   ("abi_encoder_members_dynamic_endpoint", abi_encoder_members_dynamic_endpoint),
+   ("abi_encoder_members_origin_transport", abi_encoder_members_origin_transport),
+   ("abi_encoder_source_members_index_prepare", abi_encoder_source_members_index_prepare),
+   ("abi_encoder_source_members_static_request", abi_encoder_source_members_static_request),
+   ("abi_encoder_source_members_dynamic_request", abi_encoder_source_members_dynamic_request),
+   ("abi_encoder_source_members_static_exit", abi_encoder_source_members_static_exit),
+   ("abi_encoder_source_members_dynamic_exit", abi_encoder_source_members_dynamic_exit),
+   ("abi_encoder_source_members_index_cons_shape", abi_encoder_source_members_index_cons_shape),
+   ("abi_encoder_source_members_index_initial", abi_encoder_source_members_index_initial),
+   ("abi_encoder_source_members_index_source", abi_encoder_source_members_index_source),
+   ("abi_encoder_source_members_index_empty", abi_encoder_source_members_index_empty),
+   ("abi_encoder_source_members_index_advance", abi_encoder_source_members_index_advance),
+   ("abi_encoder_source_members_child_dispatch", abi_encoder_source_members_child_dispatch),
+   ("abi_encoder_source_members_child_run", abi_encoder_source_members_child_run),
+   ("abi_encoder_source_members_entry_input", abi_encoder_source_members_entry_input),
+   ("abi_encoder_source_members_entry_exit", abi_encoder_source_members_entry_exit),
+   ("abi_encoder_source_members_entry_prepare", abi_encoder_source_members_entry_prepare),
+   ("abi_encoder_source_members_empty_post", abi_encoder_source_members_empty_post),
+   ("abi_encoder_source_members_generate", abi_encoder_source_members_generate),
    ("abi_encoder_static_child_context", abi_encoder_static_child_context),
    ("abi_encoder_static_child_reach", abi_encoder_static_child_reach),
    ("abi_encoder_dynamic_child_reach", abi_encoder_dynamic_child_reach),

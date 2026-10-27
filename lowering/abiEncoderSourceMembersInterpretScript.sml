@@ -3,7 +3,7 @@ Theory abiEncoderSourceMembersInterpret
 Ancestors
   abiEncoderSourceMembersEntry abiEncoderMemberSourceContract abiEncoderMemberSpine
   abiDecoderLoop pair abiEncoderSourceMembersIndex abiEncoderTuple abiEncoderInput
-  abiEncoder compileEnv venomState list arithmetic
+  abiEncoder abiEncoderMembersContract abiDecoderEffect compileEnv venomState list arithmetic
 
 Definition abi_encoder_source_members_child_pre_def:
   abi_encoder_source_members_child_pre resources (dyn,value,cursor) c s <=>
@@ -174,10 +174,76 @@ Proof
   qexistsl_tac [`ty`,`tys`,`av`,`avs`,`pre`,`pvs`] >> asm_rewrite_tac []
 QED
 
+Theorem abi_encoder_source_members_empty_post:
+  abi_encoder_spine_code func limit_st hi (dst,src,dp) [] (st,so,ho) (out,en) /\
+  abi_encoder_source_members_index (ctx,func) (origin,initial)
+    (first,last,lo,hi,b,cap,limit_st) (active,dp,site,slot,src,dst,sb,d,hl,sz)
+    (all_tys,all_avs,end_so,end_ho) [] (st,so,ho) x s ==>
+  abi_encoder_members_inv [] [] [] all_tys all_avs active dp site slot first last lo
+    en limit_st src dst sb end_so end_ho d hl sz b cap s /\
+  abi_decoder_effect first last lo hi origin.cs_next_var limit_st d sz b cap initial s /\
+  abi_decode_sim ctx func initial s
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  drule abi_encoder_source_members_index_empty >> strip_tac >>
+  qpat_assum `abi_encoder_spine_code _ _ _ _ _ _ _`
+    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_encoder_spine_code_def]) >>
+  qpat_x_assum `compile_abi_encode_complex_elems _ _ [] _ _ _ _ = _` mp_tac >>
+  simp_tac bool_ss [Once compile_abi_encode_child_def, comp_return_def] >>
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >> gvs[]
+QED
+
+
+Theorem abi_encoder_source_members_generate:
+  hi <= last /\
+  abi_encoder_spine_code func limit_st hi (dst,src,dp) infos (st,so,ho) (out,en) /\
+  abi_encoder_source_members_index (ctx,func) (origin,initial)
+    (first,last,lo,hi,b,cap,limit_st) (active,dp,site,slot,src,dst,sb,d,hl,sz)
+    (all_tys,all_avs,end_so,end_ho) infos (st,so,ho) x s ==>
+  ?t. abi_encoder_member_spine (\c r u. abi_decode_sim ctx func r u)
+      (dst,src,dp) infos (st,so,ho) (out,en) s t /\
+    abi_encoder_members_inv [] [] [] all_tys all_avs active dp site slot first last lo
+      en limit_st src dst sb end_so end_ho d hl sz b cap t /\
+    abi_decoder_effect first last lo hi origin.cs_next_var limit_st d sz b cap initial t /\
+    abi_decode_sim ctx func initial t
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  mp_tac (SRULE [] (Q.SPECL [
+    `abi_encoder_source_members_child_pre (first,last,b,cap,limit_st)`,
+    `abi_encoder_source_members_child_post (ctx,func) (first,last,b,cap,limit_st)`,
+    `\c r u. abi_decode_sim ctx func r u`,
+    `\(out,en) t.
+      abi_encoder_members_inv [] [] [] all_tys all_avs active dp site slot first last lo
+        en limit_st src dst sb end_so end_ho d hl sz b cap t /\
+      abi_decoder_effect first last lo hi origin.cs_next_var limit_st d sz b cap initial t /\
+      abi_decode_sim ctx func initial t`, `hi`] (  Q.ISPECL [
+    `abi_encoder_source_members_index (ctx,func) (origin,initial)
+      (first,last,lo,hi,b,cap,limit_st) (active,dp,site,slot,src,dst,sb,d,hl,sz)
+      (all_tys,all_avs,end_so,end_ho)`,
+    `\i (st:compile_state,so,ho) x (s:venom_state).
+      abi_encoder_source_members_entry (ctx,func) (origin,initial)
+        (first,last,lo,hi,b,cap,limit_st) (active,dp,site,slot,src,dst,sb,d,hl,sz)
+        (all_tys,all_avs,end_so,end_ho) i (st,so,ho) x s`]
+    (Q.GENL [`Inv`,`Entry`,`child_pre`,`child_post`,`core_run`,`Post`,`last`]
+      abi_encoder_member_spine_generate)))) >>
+  simp_tac bool_ss [] >> impl_tac
+  >- (conj_tac >- MATCH_ACCEPT_TAC abi_encoder_source_members_child_run >>
+      conj_tac >- (rpt gen_tac >> MATCH_ACCEPT_TAC abi_encoder_source_members_index_source) >>
+      conj_tac
+      >- (rpt gen_tac >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+          drule_all abi_encoder_source_members_entry_prepare >> simp[]) >>
+      conj_tac >- (rpt gen_tac >> MATCH_ACCEPT_TAC abi_encoder_source_members_entry_input) >>
+      conj_tac >- (rpt gen_tac >> MATCH_ACCEPT_TAC abi_encoder_source_members_entry_exit) >>
+      rpt gen_tac >> MATCH_ACCEPT_TAC abi_encoder_source_members_empty_post) >>
+  disch_then (qspecl_then [`infos`,`st`,`so`,`ho`,`out`,`en`,`x`,`s`] mp_tac) >>
+  asm_rewrite_tac []
+QED
+
 val _ = List.app (fn th =>
   let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
     if List.all (fn s => s = "DISK_THM") oracles andalso null axioms andalso null (Thm.hyp th)
     then () else raise Fail "source interpretation has an admission, axiom or hypothesis"
   end) [abi_encoder_source_members_child_run, abi_encoder_source_members_child_dispatch,
     abi_encoder_source_members_entry_input, abi_encoder_source_members_entry_exit,
-    abi_encoder_source_members_entry_prepare];
+    abi_encoder_source_members_entry_prepare, abi_encoder_source_members_empty_post,
+    abi_encoder_source_members_generate];
