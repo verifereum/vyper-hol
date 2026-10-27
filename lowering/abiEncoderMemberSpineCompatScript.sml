@@ -773,3 +773,51 @@ val _ = List.app (fn (name,th) =>
    ("suffix_extend_sim",abi_encoder_spine_suffix_extend_sim),
    ("dynamic_shared_sim",abi_encoder_spine_dynamic_shared_sim),
    ("shared_registered_window",abi_encoder_spine_shared_registered_window)];
+
+Theorem abi_encoder_spine_dynamic_shared_registered:
+  abi_encode_child_prefix dst ho dp st = (ops,p) /\
+  eval_operand dst initial = SOME (n2w d) /\ eval_operand dp initial = SOME (n2w slot) /\
+  mload slot initial = n2w off /\ slot < dimword (:256) /\
+  abi_decoder_operand_live st.cs_next_var dst /\ abi_decoder_operand_live st.cs_next_var dp /\
+  p.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
+  abi_encoder_member_phase_raw st p initial ready /\
+  abi_encoder_shared_endpoint (ctx,func) (p,ce,len,limit_st)
+    (first,last,b,cap) (at,av,q) ready encoded /\
+  abi_encode_child_suffix head dp offset len ce = (out,en) /\
+  eval_operand head encoded = SOME (n2w h) /\ eval_operand dp encoded = SOME (n2w slot) /\
+  eval_operand offset encoded = SOME (n2w off) /\
+  abi_decoder_operand_live ce.cs_next_var dp /\ abi_decoder_operand_live ce.cs_next_var len /\
+  h < dimword (:256) /\ en.cs_next_var <= limit_st.cs_next_var /\
+  abi_encoder_member_phase_raw ce en encoded actual /\
+  st.cs_next_id <= p.cs_next_id /\ ce.cs_next_id <= en.cs_next_id /\
+  d <= h /\ h+32 <= d+extent /\ d <= q /\ q+LENGTH (enc at av) <= d+extent /\
+  site IN abi_decoder_ids st.cs_next_id en.cs_next_id /\
+  FLOOKUP encoded.vs_allocas site = SOME (slot,32) ==>
+  abi_encoder_registered_effect (abi_decoder_ids st.cs_next_id en.cs_next_id)
+    [(d,extent)] initial actual /\ (alloca_inv initial ==> alloca_inv actual)
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  `eval_operand len encoded = SOME (n2w (LENGTH (enc at av))) /\
+   fresh_vars_wrt limit_st encoded /\ (alloca_inv ready ==> alloca_inv encoded)` by
+    fs[abi_encoder_shared_endpoint_def, abi_scratch_effect_def] >>
+  `abi_encoder_registered_effect (abi_decoder_ids st.cs_next_id en.cs_next_id)
+    [(d,extent)] initial ready /\ (alloca_inv initial ==> alloca_inv ready)` by
+    (drule_all abi_encoder_member_prefix_registered >> simp[]) >>
+  `abi_encoder_registered_effect (abi_decoder_ids st.cs_next_id en.cs_next_id)
+    [(d,extent)] ready encoded` by
+    (drule_all abi_encoder_spine_shared_registered_window >> simp[]) >>
+  `abi_encoder_registered_effect (abi_decoder_ids st.cs_next_id en.cs_next_id)
+    [(d,extent)] encoded actual /\ (alloca_inv encoded ==> alloca_inv actual)` by
+    (drule_all abi_encoder_member_cursor_registered >> simp[]) >>
+  conj_tac >- (irule abi_encoder_registered_effect_trans >>
+    qexists_tac `ready` >> simp[] >>
+    irule abi_encoder_registered_effect_trans >> qexists_tac `encoded` >> simp[]) >>
+  metis_tac[]
+QED
+
+val _ =
+  let val (oracles,axioms) = Tag.dest_tag (Thm.tag abi_encoder_spine_dynamic_shared_registered) in
+    if List.all (fn s => s = "DISK_THM") oracles andalso null axioms then
+      print "ENCODER_SPINE_COMPAT_AUDIT_OK dynamic_shared_registered\n"
+    else raise Fail "encoder spine compatibility admission dependency: dynamic_shared_registered"
+  end;
