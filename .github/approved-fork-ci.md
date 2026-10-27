@@ -39,15 +39,18 @@ or token write permission is added.
 
 ## Validation
 
-The `select-source` job runs first, with no checkout and no cache login. On
-an approval it checks that the dispatch is on `main`, that the PR is open,
-targets this repository's `main`, and still has exactly the approved head
-SHA. Every job that checks out code waits for it and checks out the
-repository and immutable SHA it returns, with checkout credential
-persistence disabled. A later push cannot change the checked-out source; a
-run for the new head needs a fresh approval. If the PR moves before
-validation, validation fails. On any other event `select-source` returns
-the triggering commit and grants nothing.
+The `select-source` job runs first, with no checkout and no cache login. It
+checks that the dispatch is on `main`, that the PR is open, targets this
+repository's `main`, and still has exactly the approved head SHA. Every job
+that checks out code waits for it and checks out the repository and
+immutable SHA it returns, with checkout credential persistence disabled. A
+later push cannot change the checked-out source; a run for the new head
+needs a fresh approval. If the PR moves before validation, validation
+fails, and so does the run.
+
+`select-source` runs only on a dispatch with either PR input set. Every
+other run skips it, so it takes no runner from the 20-job cap, and the
+other jobs check out the triggering commit, as they would without it.
 
 ## Jobs
 
@@ -58,8 +61,8 @@ commit: `toolchain`, `build`, `compiler`, the witness groups,
 the test groups. `tested` runs only on pushes, so the tests are never
 skipped. Every cache-using job gets the cache login through the
 `bazel-cache` environment, which admits the run because it is on `main`.
-`holbuild-success` also requires `select-source` to succeed, so a rejected
-approval fails the run.
+A failed `select-source` stops every other job, and `holbuild-success` fails
+unless `select-source` succeeded or was skipped.
 
 ## Caches
 
@@ -80,17 +83,17 @@ approvals do not cancel one another. The run belongs to the dispatch on
 `main`: it attaches no check to the PR and does not move the merge queue.
 
 `release.yml` promotes the HBX of the latest successful `holbuild` run of
-the release commit. An approved run's commit is the `main` commit it was
-dispatched on, but its artefact is named after the approved SHA, so it is
-never promoted; if it is that latest run, the release fails to find the
-artefact, and an ordinary run of the release commit is needed.
+the release commit. An approved run counts as a run of the `main` commit it
+was dispatched on, but builds the PR head, so the release passes over
+dispatches titled `Approved PR`.
 
 ## Local checks
 
-The selector and job wiring are checked with PyYAML, and with Node on
-`PATH` for the selector script and expressions:
+The selector, the job graph and the release filter are checked with PyYAML,
+with Node on `PATH` for the selector script and workflow expressions, and
+with jq for the release filter:
 
 ```sh
 cd tools && python3 -m unittest -q test_approved_fork_ci
-actionlint .github/workflows/holbuild.yml
+actionlint .github/workflows/holbuild.yml .github/workflows/release.yml
 ```

@@ -45,13 +45,18 @@ jobs:
           echo "HBX_ARTEFACT_NAME=$artefact_name" >> "$GITHUB_ENV"
 
       - name: Find matching holbuild run
+        env:
+          # An approved PR run (.github/approved-fork-ci.md) is a dispatch on a
+          # main commit that builds a PR head instead, so it is never the run.
+          LATEST_RELEASE_RUN: '[.[] | select(.event != "workflow_dispatch" or (.displayTitle | startswith("Approved PR ") | not))][0].databaseId // empty'
         run: |
           run_id="$(gh run list \
             --workflow "$HOLBUILD_WORKFLOW" \
             --commit "$RELEASE_SHA" \
             --status success \
-            --json databaseId \
-            --jq '.[0].databaseId // empty')"
+            --limit 100 \
+            --json databaseId,event,displayTitle \
+            --jq "$LATEST_RELEASE_RUN")"
 
           if [ -z "$run_id" ]; then
             echo "::error::No successful $HOLBUILD_WORKFLOW run found for $RELEASE_SHA. Run holbuild for $RELEASE_TAG, wait for artefact $HBX_ARTEFACT_NAME, then rerun this workflow."

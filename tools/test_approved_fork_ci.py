@@ -2,7 +2,8 @@
 
 The selector script and the workflow expressions run under Node, with
 mocked GitHub responses; those tests are skipped without `node` on PATH.
-The job wiring is read with PyYAML.
+The release run filter runs under jq, and is skipped without `jq`. The job
+wiring is read with PyYAML.
 """
 
 from __future__ import annotations
@@ -19,8 +20,10 @@ from typing import Any
 import yaml
 
 
-WORKFLOW = Path(__file__).resolve().parents[1] / ".github/workflows/holbuild.yml"
+WORKFLOWS = Path(__file__).resolve().parents[1] / ".github/workflows"
+WORKFLOW = WORKFLOWS / "holbuild.yml"
 NODE = shutil.which("node")
+JQ = shutil.which("jq")
 MAIN_SHA = "a" * 40
 FORK_SHA = "b" * 40
 LATER_SHA = "c" * 40
@@ -31,8 +34,9 @@ OPEN_PR = {
     "base": {"repo": {"full_name": "verifereum/vyper-hol"}, "ref": "main"},
     "head": {"repo": {"full_name": "contributor/vyper-hol"}, "sha": FORK_SHA},
 }
-ORDINARY = {"select-source": {"result": "success", "outputs": {
-    "repository": "verifereum/vyper-hol", "sha": MAIN_SHA, "approved": "false"}}}
+ORDINARY = {"select-source": {"result": "skipped", "outputs": {}}}
+CACHE_JOBS = {"toolchain", "build", "compiler", "witnesses", "build-rollup", "test-deps", "vyper-tests"}
+STATUS_FUNCTIONS = ("always()", "cancelled()", "success()", "failure()")
 
 NODE_HARNESS = r"""
 const fs = require('node:fs');
@@ -82,10 +86,10 @@ process.env.UNCACHED = input.uncached ?? '';
 """
 
 
-def load_workflow() -> dict[str, Any]:
-    """The holbuild workflow, with every scalar kept as a string."""
+def load_workflow(name: str = "holbuild.yml") -> dict[str, Any]:
+    """A workflow, with every scalar kept as a string."""
     # BaseLoader keeps the `on` key as a string rather than True.
-    return yaml.load(WORKFLOW.read_text(), Loader=yaml.BaseLoader)
+    return yaml.load((WORKFLOWS / name).read_text(), Loader=yaml.BaseLoader)
 
 
 def run_node(payload: dict[str, Any]) -> dict[str, Any]:
@@ -105,6 +109,12 @@ def render(template: str, **contexts: Any) -> str:
     return result["value"]
 
 
+def holds(condition: str, **contexts: Any) -> bool:
+    """Whether a job or step `if` holds: its value is truthy."""
+    expression = re.fullmatch(r"\$\{\{(.*)\}\}", condition.strip(), re.S)
+    return render("${{ !!(" + (expression[1] if expression else condition) + ") }}", **contexts) == "true"
+
+
 def step(job: dict[str, Any], **match: str) -> dict[str, Any]:
     """The one step of `job` whose fields start with the given values."""
     found = [s for s in job["steps"] if all(s.get(k, "").startswith(v) for k, v in match.items())]
@@ -113,13 +123,69 @@ def step(job: dict[str, Any], **match: str) -> dict[str, Any]:
     return found[0]
 
 
+class Run:
+    """One simulated run: which jobs start, from their `if` and their needs.
+
+    select-source, when it starts, ends with `source`; holbuild-success runs
+    its check step; every other job that starts succeeds.
+    """
+
+    def __init__(self, github: dict[str, Any], inputs: dict[str, Any], source: dict[str, Any]) -> None:
+        self.jobs = load_workflow()["jobs"]
+        self.github = github
+        self.inputs = inputs
+        self.results: dict[str, str] = {}
+        self.outputs: dict[str, dict[str, str]] = {}
+        # Jobs are listed after the jobs they need.
+        for name, job in self.jobs.items():
+            if not self._starts(name):
+                self.results[name], self.outputs[name] = "skipped", {}
+            elif name == "select-source":
+                self.results[name], self.outputs[name] = source["result"], source["outputs"]
+            elif name == "holbuild-success":
+                self.results[name], self.outputs[name] = self._rollup(), {}
+            else:
+                self.results[name], self.outputs[name] = "success", {}
+        self.outputs["tested"] = {"merge-group-passed": "false"} if self.results["tested"] == "success" else {}
+
+    def needs(self, name: str) -> dict[str, Any]:
+        """The needs context of job `name`."""
+        needs = self.jobs[name].get("needs", [])
+        names = [needs] if isinstance(needs, str) else needs
+        return {n: {"result": self.results[n], "outputs": self.outputs[n]} for n in names}
+
+    def render(self, name: str, template: str) -> str:
+        """Evaluate `template` as job `name` would."""
+        return render(template, github=self.github, inputs=self.inputs, needs=self.needs(name))
+
+    @property
+    def started(self) -> set[str]:
+        """The jobs that started."""
+        return {name for name, result in self.results.items() if result != "skipped"}
+
+    def _starts(self, name: str) -> bool:
+        """Whether job `name` starts."""
+        condition = self.jobs[name].get("if", "success()")
+        starts = holds(condition, github=self.github, inputs=self.inputs, needs=self.needs(name))
+        if any(function in condition for function in STATUS_FUNCTIONS):
+            return starts
+        return starts and all(need["result"] == "success" for need in self.needs(name).values())
+
+    def _rollup(self) -> str:
+        """The result of holbuild-success's check step."""
+        check = self.jobs["holbuild-success"]["steps"][0]
+        env = {key: self.render("holbuild-success", value) for key, value in check["env"].items()}
+        return "success" if subprocess.run(["bash", "-c", check["run"]], env=env).returncode == 0 else "failure"
+
+
 @unittest.skipUnless(NODE, "needs node on PATH")
 class TestSelectSource(unittest.TestCase):
     """The selector approves only a validated, current PR head from a main dispatch."""
 
     @classmethod
     def setUpClass(cls) -> None:
-        cls.script = load_workflow()["jobs"]["select-source"]["steps"][0]["with"]["script"]
+        cls.job = load_workflow()["jobs"]["select-source"]
+        cls.script = cls.job["steps"][0]["with"]["script"]
 
     def select(self, **changes: Any) -> dict[str, Any]:
         """Run the selector on an approved dispatch, with `changes` applied."""
@@ -137,6 +203,19 @@ class TestSelectSource(unittest.TestCase):
             else:
                 payload[key] = value
         return run_node(payload)
+
+    def test_runs_only_on_a_dispatch_with_pr_inputs(self) -> None:
+        cases = [
+            ("workflow_dispatch", {"pr_number": "758", "approved_sha": FORK_SHA}, True),
+            ("workflow_dispatch", {"pr_number": "758", "approved_sha": ""}, True),
+            ("workflow_dispatch", {"pr_number": "", "approved_sha": FORK_SHA}, True),
+            ("workflow_dispatch", {"pr_number": "", "approved_sha": "", "uncached": True}, False),
+            ("pull_request", {}, False), ("push", {}, False),
+            ("merge_group", {}, False), ("schedule", {}, False),
+        ]
+        for event, inputs, expected in cases:
+            with self.subTest(event=event, inputs=inputs):
+                self.assertEqual(holds(self.job["if"], github={"event_name": event}, inputs=inputs), expected)
 
     def test_approved_head_selects_fork_repository_and_exact_sha(self) -> None:
         result = self.select()
@@ -193,20 +272,56 @@ class TestSelectSource(unittest.TestCase):
         self.assertEqual(result["error"], "Resource not accessible by integration")
         self.assertEqual(result["outputs"], {})
 
-    def test_other_runs_select_the_triggering_commit_without_api(self) -> None:
-        ordinary = {"repository": "verifereum/vyper-hol", "sha": MAIN_SHA, "approved": "false"}
-        cases = [
-            ({"eventName": "pull_request", "ref": "refs/pull/758/merge"}, "758", FORK_SHA, "false"),
-            ({"eventName": "push"}, "", "", ""),
-            ({"eventName": "merge_group", "ref": "refs/heads/gh-readonly-queue/main/pr-758"}, "", "", ""),
-            ({"eventName": "schedule"}, "", "", ""),
-            ({}, "", "", "true"),
-            ({"ref": "refs/heads/feature"}, "", "", "false"),
+
+@unittest.skipUnless(NODE, "needs node on PATH")
+class TestJobGraph(unittest.TestCase):
+    """Approved runs start every job at the PR head; other runs skip only the selector."""
+
+    DISPATCH = {"event_name": "workflow_dispatch", "ref": "refs/heads/main", "sha": MAIN_SHA,
+                "repository": "verifereum/vyper-hol", "run_id": 42, "run_attempt": 1, "event": {}}
+    APPROVAL = {"uncached": False, "pr_number": "758", "approved_sha": FORK_SHA}
+    BUILD_AND_TEST = CACHE_JOBS | {"python-o1-oracle", "export-vyper-tests", "holbuild-success"}
+
+    def test_ordinary_runs_skip_the_selector_and_start_the_rest(self) -> None:
+        events = [
+            ("workflow_dispatch", "refs/heads/main", {}, {"uncached": False, "pr_number": "", "approved_sha": ""}),
+            ("pull_request", "refs/pull/9/merge", {"action": "synchronize", "pull_request": {
+                "draft": False, "head": {"repo": {"full_name": "verifereum/vyper-hol"}}}}, {}),
+            ("merge_group", "refs/heads/gh-readonly-queue/main/pr-9", {"merge_group": {"base_ref": "refs/heads/main"}}, {}),
+            ("push", "refs/heads/main", {}, {}),
         ]
-        for context, number, sha, uncached in cases:
-            with self.subTest(context=context, uncached=uncached):
-                result = self.select(context=context, number=number, sha=sha, uncached=uncached)
-                self.assertEqual((result["outputs"], result["calls"]), (ordinary, []))
+        for event, ref, payload, inputs in events:
+            with self.subTest(event=event):
+                run = Run(self.DISPATCH | {"event_name": event, "ref": ref, "event": payload}, inputs, ORDINARY["select-source"])
+                expected = self.BUILD_AND_TEST | ({"tested"} if event == "push" else set())
+                self.assertEqual(run.started, expected)
+                self.assertEqual(run.results["holbuild-success"], "success")
+                checkout = step(run.jobs["build"], uses="actions/checkout@")["with"]
+                self.assertEqual(run.render("build", checkout["repository"]), "")
+                self.assertEqual(run.render("build", checkout["ref"]), "")
+
+    def test_fork_pr_starts_nothing(self) -> None:
+        payload = {"action": "synchronize", "pull_request": {"draft": False, "head": {"repo": {"full_name": "contributor/vyper-hol"}}}}
+        run = Run(self.DISPATCH | {"event_name": "pull_request", "ref": "refs/pull/9/merge", "event": payload}, {}, ORDINARY["select-source"])
+        self.assertEqual(run.started, set())
+
+    def test_approved_run_starts_every_job_with_the_login_at_the_pr_head(self) -> None:
+        run = Run(self.DISPATCH, self.APPROVAL, APPROVED["select-source"])
+        self.assertEqual(run.started, self.BUILD_AND_TEST | {"select-source"})
+        self.assertEqual(run.results["holbuild-success"], "success")
+        for name in sorted(CACHE_JOBS):
+            with self.subTest(job=name):
+                self.assertEqual(run.render(name, run.jobs[name]["environment"]), "bazel-cache")
+                checkout = step(run.jobs[name], uses="actions/checkout@")["with"]
+                self.assertEqual(run.render(name, checkout["repository"]), "contributor/vyper-hol")
+                self.assertEqual(run.render(name, checkout["ref"]), FORK_SHA)
+
+    def test_failed_selection_stops_every_job_and_fails_the_run(self) -> None:
+        for result in ("failure", "cancelled"):
+            with self.subTest(result=result):
+                run = Run(self.DISPATCH, self.APPROVAL, {"result": result, "outputs": {}})
+                self.assertEqual(run.started, {"select-source", "holbuild-success"})
+                self.assertEqual(run.results["holbuild-success"], "failure")
 
 
 @unittest.skipUnless(NODE, "needs node on PATH")
@@ -228,11 +343,9 @@ class TestRunExpressions(unittest.TestCase):
             ("push", "refs/heads/feature", ORDINARY, ""),
             ("merge_group", "refs/heads/gh-readonly-queue/main/pr-758", ORDINARY, "bazel-cache"),
         ]
-        jobs = [name for name, job in self.jobs.items() if "environment" in job]
-        self.assertEqual(set(jobs), {
-            "toolchain", "build", "compiler", "witnesses", "build-rollup", "test-deps", "vyper-tests",
-        })
-        for name in jobs:
+        jobs = {name for name, job in self.jobs.items() if "environment" in job}
+        self.assertEqual(jobs, CACHE_JOBS)
+        for name in sorted(jobs):
             for event, ref, needs, expected in cases:
                 with self.subTest(job=name, event=event, ref=ref):
                     github = {"event_name": event, "ref": ref,
@@ -259,11 +372,18 @@ class TestRunExpressions(unittest.TestCase):
     def test_approved_build_snapshot_is_outside_the_restore_prefix(self) -> None:
         command = step(self.jobs["build"], id="cache-key")["run"]
         steps = {"project": {"outputs": {"build-prefix": "holbuild-v3-build-T", "stage-prefix": "holbuild-v3-stage-T"}}}
-        github = {"run_id": 42, "run_attempt": 1}
+        github = {"run_id": 42, "run_attempt": 1, "sha": MAIN_SHA}
         approved = render(command, github=github, needs=APPROVED, steps=steps)
         self.assertIn(f"snapshot-key=holbuild-v3-stage-T-build-{FORK_SHA}-42-1", approved)
         ordinary = render(command, github=github, needs=ORDINARY, steps=steps)
         self.assertIn(f"snapshot-key=holbuild-v3-build-T-{MAIN_SHA}-42-1", ordinary)
+
+    def test_artefact_names_the_selected_sha(self) -> None:
+        name = step(self.jobs["build-rollup"], name="Upload HBX artefact")["with"]["name"]
+        name = name.replace("${{ env.HBX_BASENAME }}", "vyper-hol")
+        github = {"sha": MAIN_SHA}
+        self.assertEqual(render(name, github=github, needs=APPROVED), f"vyper-hol-hbx-{FORK_SHA}")
+        self.assertEqual(render(name, github=github, needs=ORDINARY), f"vyper-hol-hbx-{MAIN_SHA}")
 
 
 class TestJobWiring(unittest.TestCase):
@@ -281,80 +401,78 @@ class TestJobWiring(unittest.TestCase):
                 if s.get("uses", "").startswith("actions/checkout@"):
                     checkouts.add(name)
                     self.assertIn("select-source", job["needs"])
+                    # Empty outputs of a skipped select-source leave
+                    # checkout's own default: the triggering ref and commit.
                     self.assertEqual(s["with"], {
                         "repository": "${{ needs.select-source.outputs.repository }}",
                         "ref": "${{ needs.select-source.outputs.sha }}",
                         "persist-credentials": "false",
                     })
-        self.assertEqual(checkouts, {
-            "toolchain", "build", "compiler", "witnesses", "build-rollup", "test-deps",
-            "python-o1-oracle", "export-vyper-tests", "vyper-tests",
-        })
+        self.assertEqual(checkouts, CACHE_JOBS | {"python-o1-oracle", "export-vyper-tests"})
 
-    def test_selector_has_no_secrets_and_the_pr_trust_gate(self) -> None:
+    def test_selector_has_no_secrets(self) -> None:
         selector = self.jobs["select-source"]
         self.assertNotIn("environment", selector)
         self.assertNotIn("needs", selector)
-        self.assertEqual(selector["if"], self.jobs["toolchain"]["if"])
         self.assertEqual(selector["permissions"], {"contents": "read", "pull-requests": "read"})
         self.assertEqual(self.workflow["permissions"], {"contents": "read"})
         self.assertEqual(set(self.workflow["on"]), {
             "workflow_dispatch", "schedule", "pull_request", "merge_group", "push",
         })
 
-    def test_jobs_that_override_status_checks_require_the_selector(self) -> None:
-        for name in ("python-o1-oracle", "export-vyper-tests"):
-            with self.subTest(job=name):
-                self.assertIn("needs.select-source.result == 'success'", self.jobs[name]["if"])
+    def test_every_job_needs_the_selector(self) -> None:
+        for name, job in self.jobs.items():
+            if name not in ("select-source", "tested"):
+                with self.subTest(job=name):
+                    self.assertIn("select-source", job["needs"])
 
-    def test_snapshot_keys_and_artefact_name_the_selected_sha(self) -> None:
+    def test_snapshot_keys_name_the_selected_sha(self) -> None:
         for name in ("toolchain", "build", "compiler", "test-deps"):
             with self.subTest(job=name):
                 command = step(self.jobs[name], id="cache-key")["run"]
-                self.assertIn("-${{ needs.select-source.outputs.sha }}-${{ github.run_id }}", command)
-                self.assertNotIn("github.sha", command)
-        upload = step(self.jobs["build-rollup"], name="Upload HBX artefact")
-        self.assertEqual(upload["with"]["name"], "${{ env.HBX_BASENAME }}-hbx-${{ needs.select-source.outputs.sha }}")
+                self.assertIn("-${{ needs.select-source.outputs.sha || github.sha }}-${{ github.run_id }}", command)
         rollup = step(self.jobs["build-rollup"], name="Save holbuild project snapshot")
         self.assertEqual(rollup["with"]["key"], "${{ needs.build.outputs.holbuild-cache-key }}-rollup")
 
     def test_only_the_ordinary_build_snapshot_uses_the_restore_prefix(self) -> None:
-        text = WORKFLOW.read_text()
-        self.assertEqual(text.count("outputs.build-prefix"), 1)
+        self.assertEqual(WORKFLOW.read_text().count("outputs.build-prefix"), 1)
         self.assertIn("outputs.build-prefix", step(self.jobs["build"], id="cache-key")["run"])
         toolchain_save = step(self.jobs["build"], name="Save holbuild toolchain cache")
         self.assertEqual(toolchain_save["if"], "${{ github.event_name == 'push' }}")
 
+    def test_success_check_needs_every_job(self) -> None:
+        self.assertEqual(set(self.jobs["holbuild-success"]["needs"]), set(self.jobs) - {"holbuild-success"})
 
-class TestSuccessRollup(unittest.TestCase):
-    """holbuild-success fails unless the selector and every build job succeeded."""
+
+@unittest.skipUnless(JQ, "needs jq on PATH")
+class TestReleaseRunChoice(unittest.TestCase):
+    """The release takes the newest successful holbuild run of its commit that is not an approved PR run."""
 
     @classmethod
     def setUpClass(cls) -> None:
-        job = load_workflow()["jobs"]["holbuild-success"]
-        cls.needs = job["needs"]
-        cls.check = job["steps"][0]
+        find = step(load_workflow("release.yml")["jobs"]["promote-hbx"], name="Find matching holbuild run")
+        cls.filter = find["env"]["LATEST_RELEASE_RUN"]
 
-    def passes(self, results: dict[str, str], *, merge_group_passed: str = "") -> bool:
-        """Whether the rollup step exits 0 for the given job results."""
-        env = {
-            key: re.sub(r"\$\{\{ needs\.([\w-]+)\.result \}\}", lambda m: results[m[1]], value)
-            for key, value in self.check["env"].items() if key != "MERGE_GROUP_PASSED"
-        }
-        env["MERGE_GROUP_PASSED"] = merge_group_passed
-        return subprocess.run(["bash", "-c", self.check["run"]], env=env).returncode == 0
+    def choose(self, runs: list[dict[str, Any]]) -> str:
+        """The run id the filter picks from `runs`, newest first."""
+        result = subprocess.run([JQ, "-r", self.filter], input=json.dumps(runs), text=True,
+                                capture_output=True, check=True)
+        return result.stdout.strip()
 
-    def test_every_job_is_needed(self) -> None:
-        self.assertEqual(self.needs[0], "select-source")
-        jobs = set(load_workflow()["jobs"]) - {"holbuild-success"}
-        self.assertEqual(set(self.needs), jobs)
+    def test_approved_runs_are_passed_over(self) -> None:
+        runs = [
+            {"databaseId": 3, "event": "workflow_dispatch", "displayTitle": f"Approved PR 758 at {FORK_SHA}"},
+            {"databaseId": 2, "event": "workflow_dispatch", "displayTitle": "holbuild"},
+            {"databaseId": 1, "event": "push", "displayTitle": "Merge pull request #757"},
+        ]
+        self.assertEqual(self.choose(runs), "2")
+        self.assertEqual(self.choose(runs[:1]), "")
 
-    def test_selector_failure_fails_the_run(self) -> None:
-        results = {name: "success" for name in self.needs}
-        self.assertTrue(self.passes(results))
-        for status in ("failure", "skipped", "cancelled"):
-            with self.subTest(status=status):
-                self.assertFalse(self.passes(results | {"select-source": status}, merge_group_passed="true"))
+    def test_push_and_merge_group_runs_are_kept_whatever_their_title(self) -> None:
+        for event in ("push", "merge_group"):
+            with self.subTest(event=event):
+                runs = [{"databaseId": 5, "event": event, "displayTitle": "Approved PR handling"}]
+                self.assertEqual(self.choose(runs), "5")
 
 
 if __name__ == "__main__":

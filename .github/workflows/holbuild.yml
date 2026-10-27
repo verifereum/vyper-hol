@@ -50,9 +50,10 @@ env:
 
 jobs:
   select-source:
-    # The commit every other job checks out: the triggering commit, or a PR head
-    # a maintainer approved by dispatching on main (.github/approved-fork-ci.md).
-    if: (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository)) && (github.event.action != 'edited' || github.event.changes.base)
+    # Validates a maintainer's approval of a PR head (.github/approved-fork-ci.md),
+    # so it runs only on a dispatch with PR inputs. Every other run skips it, and
+    # its empty outputs leave each checkout on the triggering commit.
+    if: github.event_name == 'workflow_dispatch' && (inputs.pr_number || inputs.approved_sha)
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -71,47 +72,40 @@ jobs:
           UNCACHED: ${{ inputs.uncached }}
         with:
           script: |
-            let repository = `${context.repo.owner}/${context.repo.repo}`;
-            let sha = context.sha;
-            let approved = false;
+            const repository = `${context.repo.owner}/${context.repo.repo}`;
             const number = process.env.PR_NUMBER;
             const requested = process.env.APPROVED_SHA;
-            if (context.eventName === 'workflow_dispatch' && (number || requested)) {
-              if (context.ref !== 'refs/heads/main') {
-                throw new Error(`Dispatch on main so the workflow is trusted, not on ${context.ref}`);
-              }
-              if (process.env.UNCACHED === 'true') {
-                throw new Error('An approved run uses the remote cache login, which uncached withholds; leave uncached off');
-              }
-              if (!/^[1-9][0-9]*$/.test(number) || !Number.isSafeInteger(Number(number))) {
-                throw new Error(`Invalid PR number: ${number}`);
-              }
-              if (!/^[0-9a-f]{40}$/.test(requested)) {
-                throw new Error(`Expected a full lowercase commit SHA, got: ${requested}`);
-              }
-              const {data: pr} = await github.rest.pulls.get({
-                ...context.repo, pull_number: Number(number),
-              });
-              if (pr.state !== 'open' || pr.base.repo.full_name !== repository || pr.base.ref !== 'main') {
-                throw new Error(`Expected an open PR into ${repository} main`);
-              }
-              if (!pr.head.repo || pr.head.sha !== requested) {
-                throw new Error(`PR head is ${pr.head.sha}, not approved SHA ${requested}; approve its current head explicitly`);
-              }
-              repository = pr.head.repo.full_name;
-              sha = requested;
-              approved = true;
+            if (context.ref !== 'refs/heads/main') {
+              throw new Error(`Dispatch on main so the workflow is trusted, not on ${context.ref}`);
             }
-            core.setOutput('repository', repository);
-            core.setOutput('sha', sha);
-            core.setOutput('approved', String(approved));
+            if (process.env.UNCACHED === 'true') {
+              throw new Error('An approved run uses the remote cache login, which uncached withholds; leave uncached off');
+            }
+            if (!/^[1-9][0-9]*$/.test(number) || !Number.isSafeInteger(Number(number))) {
+              throw new Error(`Invalid PR number: ${number}`);
+            }
+            if (!/^[0-9a-f]{40}$/.test(requested)) {
+              throw new Error(`Expected a full lowercase commit SHA, got: ${requested}`);
+            }
+            const {data: pr} = await github.rest.pulls.get({
+              ...context.repo, pull_number: Number(number),
+            });
+            if (pr.state !== 'open' || pr.base.repo.full_name !== repository || pr.base.ref !== 'main') {
+              throw new Error(`Expected an open PR into ${repository} main`);
+            }
+            if (!pr.head.repo || pr.head.sha !== requested) {
+              throw new Error(`PR head is ${pr.head.sha}, not approved SHA ${requested}; approve its current head explicitly`);
+            }
+            core.setOutput('repository', pr.head.repo.full_name);
+            core.setOutput('sha', requested);
+            core.setOutput('approved', 'true');
             await core.summary
-              .addHeading('Selected source')
+              .addHeading(`Approved PR ${number}`)
               .addTable([
-                [{data: 'Repository', header: true}, {data: 'Commit', header: true}, {data: 'Approved PR', header: true}],
-                [repository, sha, approved ? number : 'none'],
+                [{data: 'Repository', header: true}, {data: 'Commit', header: true}],
+                [pr.head.repo.full_name, requested],
               ])
-              .addRaw('Job definitions come from the triggering workflow; local actions and build inputs come from the selected commit.\n')
+              .addRaw('Job definitions come from main; local actions and build inputs come from this commit.\n')
               .write();
 
   toolchain:
@@ -120,8 +114,10 @@ jobs:
     # if build and compiler share one toolchain. Without a project snapshot to
     # carry it, this job builds it once for build, compiler and test-deps. With
     # the remote login, holbuild restores the published HOL toolchain instead of
-    # building a new one, so keys stay those of earlier runs.
-    if: (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository)) && (github.event.action != 'edited' || github.event.changes.base)
+    # building a new one, so keys stay those of earlier runs. select-source is
+    # skipped unless a PR head is approved: !cancelled() keeps that skip from
+    # skipping this job and so all the others, and a failed approval stops it.
+    if: ${{ !cancelled() && (needs.select-source.result == 'success' || needs.select-source.result == 'skipped') && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository)) && (github.event.action != 'edited' || github.event.changes.base) }}
     needs: select-source
     runs-on: ubuntu-24.04
     timeout-minutes: 60
@@ -143,7 +139,7 @@ jobs:
 
       - name: Compute holbuild toolchain snapshot key
         id: cache-key
-        run: echo "snapshot-key=${{ steps.project.outputs.stage-prefix }}-toolchain-${{ needs.select-source.outputs.sha }}-${{ github.run_id }}-${{ github.run_attempt }}" >> "$GITHUB_OUTPUT"
+        run: echo "snapshot-key=${{ steps.project.outputs.stage-prefix }}-toolchain-${{ needs.select-source.outputs.sha || github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}" >> "$GITHUB_OUTPUT"
 
       - name: Configure remote cache
         if: ${{ steps.project.outputs.project-snapshot-key == '' }}
@@ -166,7 +162,7 @@ jobs:
     # A skipped job passes a required check; a no-op edit's skipped run must not
     # report under the required name over the PR's real result.
     name: ${{ (github.event.action == 'edited' && !github.event.changes.base) && 'build (no-op edit)' || 'build' }}
-    if: (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository)) && (github.event.action != 'edited' || github.event.changes.base)
+    if: ${{ !cancelled() && needs.toolchain.result == 'success' && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository)) && (github.event.action != 'edited' || github.event.changes.base) }}
     needs: [select-source, toolchain]
     runs-on: ubuntu-24.04
     timeout-minutes: 240
@@ -195,7 +191,7 @@ jobs:
         # restores from, so its snapshot goes under the stage prefix: the exact
         # key is restored by this run's build-rollup and matches no later
         # run's restore prefix.
-        run: echo "snapshot-key=${{ needs.select-source.outputs.approved == 'true' && format('{0}-build', steps.project.outputs.stage-prefix) || steps.project.outputs.build-prefix }}-${{ needs.select-source.outputs.sha }}-${{ github.run_id }}-${{ github.run_attempt }}" >> "$GITHUB_OUTPUT"
+        run: echo "snapshot-key=${{ needs.select-source.outputs.approved == 'true' && format('{0}-build', steps.project.outputs.stage-prefix) || steps.project.outputs.build-prefix }}-${{ needs.select-source.outputs.sha || github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}" >> "$GITHUB_OUTPUT"
 
       - name: Configure remote cache
         uses: ./.github/actions/setup-remote-cache
@@ -239,7 +235,7 @@ jobs:
   compiler:
     # Builds what the witnesses load besides each other, once for all
     # witness groups.
-    if: (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository)) && (github.event.action != 'edited' || github.event.changes.base)
+    if: ${{ !cancelled() && needs.toolchain.result == 'success' && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository)) && (github.event.action != 'edited' || github.event.changes.base) }}
     needs: [select-source, toolchain]
     runs-on: ubuntu-24.04
     timeout-minutes: 240
@@ -264,7 +260,7 @@ jobs:
 
       - name: Compute holbuild snapshot key
         id: cache-key
-        run: echo "snapshot-key=${{ steps.project.outputs.stage-prefix }}-compiler-${{ needs.select-source.outputs.sha }}-${{ github.run_id }}-${{ github.run_attempt }}" >> "$GITHUB_OUTPUT"
+        run: echo "snapshot-key=${{ steps.project.outputs.stage-prefix }}-compiler-${{ needs.select-source.outputs.sha || github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}" >> "$GITHUB_OUTPUT"
 
       - name: Configure remote cache
         uses: ./.github/actions/setup-remote-cache
@@ -289,7 +285,7 @@ jobs:
           key: ${{ steps.cache-key.outputs.snapshot-key }}
 
   witnesses:
-    if: (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository)) && (github.event.action != 'edited' || github.event.changes.base)
+    if: ${{ !cancelled() && needs.compiler.result == 'success' && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository)) && (github.event.action != 'edited' || github.event.changes.base) }}
     needs: [select-source, compiler]
     runs-on: ubuntu-24.04
     timeout-minutes: 90
@@ -354,7 +350,7 @@ jobs:
   build-rollup:
     # Adds the witness groups to build's snapshot, builds the witness rollup
     # and exports the HBX of the whole project.
-    if: (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository)) && (github.event.action != 'edited' || github.event.changes.base)
+    if: ${{ !cancelled() && needs.build.result == 'success' && needs.witnesses.result == 'success' && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository)) && (github.event.action != 'edited' || github.event.changes.base) }}
     needs: [select-source, build, witnesses]
     runs-on: ubuntu-24.04
     timeout-minutes: 240
@@ -423,7 +419,7 @@ jobs:
       - name: Upload HBX artefact
         uses: actions/upload-artifact@v7.0.1
         with:
-          name: ${{ env.HBX_BASENAME }}-hbx-${{ needs.select-source.outputs.sha }}
+          name: ${{ env.HBX_BASENAME }}-hbx-${{ needs.select-source.outputs.sha || github.sha }}
           path: |
             ${{ env.HBX_BASENAME }}.hbx
             ${{ env.HBX_BASENAME }}.hbx.json
@@ -479,7 +475,7 @@ jobs:
 
       - name: Compute holbuild snapshot key
         id: cache-key
-        run: echo "snapshot-key=${{ steps.project.outputs.stage-prefix }}-test-deps-${{ needs.select-source.outputs.sha }}-${{ github.run_id }}-${{ github.run_attempt }}" >> "$GITHUB_OUTPUT"
+        run: echo "snapshot-key=${{ steps.project.outputs.stage-prefix }}-test-deps-${{ needs.select-source.outputs.sha || github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}" >> "$GITHUB_OUTPUT"
 
       - name: Configure remote cache
         uses: ./.github/actions/setup-remote-cache
@@ -505,7 +501,7 @@ jobs:
 
   python-o1-oracle:
     needs: [select-source, tested]
-    if: ${{ !cancelled() && needs.select-source.result == 'success' && needs.tested.outputs.merge-group-passed != 'true' && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository)) && (github.event.action != 'edited' || github.event.changes.base) }}
+    if: ${{ !cancelled() && (needs.select-source.result == 'success' || needs.select-source.result == 'skipped') && needs.tested.outputs.merge-group-passed != 'true' && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository)) && (github.event.action != 'edited' || github.event.changes.base) }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
@@ -529,7 +525,7 @@ jobs:
 
   export-vyper-tests:
     needs: [select-source, tested]
-    if: ${{ !cancelled() && needs.select-source.result == 'success' && needs.tested.outputs.merge-group-passed != 'true' && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository)) && (github.event.action != 'edited' || github.event.changes.base) }}
+    if: ${{ !cancelled() && (needs.select-source.result == 'success' || needs.select-source.result == 'skipped') && needs.tested.outputs.merge-group-passed != 'true' && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository)) && (github.event.action != 'edited' || github.event.changes.base) }}
     runs-on: ubuntu-24.04
     outputs:
       export-cache-key: ${{ steps.exports.outputs.export-cache-key }}
@@ -618,10 +614,13 @@ jobs:
     steps:
       - name: Check all jobs succeeded
         env:
-          BUILD_RESULTS: ${{ needs.select-source.result }} ${{ needs.toolchain.result }} ${{ needs.build.result }} ${{ needs.compiler.result }} ${{ needs.witnesses.result }} ${{ needs.build-rollup.result }}
+          # Skipped unless a PR head is approved; a failed approval fails the run.
+          SOURCE_RESULT: ${{ needs.select-source.result }}
+          BUILD_RESULTS: ${{ needs.toolchain.result }} ${{ needs.build.result }} ${{ needs.compiler.result }} ${{ needs.witnesses.result }} ${{ needs.build-rollup.result }}
           TEST_RESULTS: ${{ needs.test-deps.result }} ${{ needs.python-o1-oracle.result }} ${{ needs.export-vyper-tests.result }} ${{ needs.vyper-tests.result }}
           MERGE_GROUP_PASSED: ${{ needs.tested.outputs.merge-group-passed }}
         run: |
+          [ "$SOURCE_RESULT" = success ] || [ "$SOURCE_RESULT" = skipped ] || exit 1
           for result in $BUILD_RESULTS; do
             [ "$result" = success ] || exit 1
           done
