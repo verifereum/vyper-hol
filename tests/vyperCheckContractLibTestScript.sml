@@ -165,6 +165,21 @@ fun assert_some th =
   if optionSyntax.is_some (rhs (concl th)) then ()
   else raise Fail "expected successful check_contract result"
 
+(* ecrecover takes v as uint8 or uint256 only; r and s stay uint256 or bytes32. *)
+Theorem ecrecover_narrow_argument_rejection_test:
+  ~well_typed_builtin_app (BaseT AddressT) ECRecover
+    [BaseT (BytesT (Fixed 32)); BaseT (UintT 16); BaseT (UintT 256);
+     BaseT (UintT 256)] /\
+  ~well_typed_builtin_app (BaseT AddressT) ECRecover
+    [BaseT (BytesT (Fixed 32)); BaseT (UintT 256); BaseT (UintT 8);
+     BaseT (UintT 256)] /\
+  ~well_typed_builtin_app (BaseT AddressT) ECRecover
+    [BaseT (BytesT (Fixed 32)); BaseT (UintT 256); BaseT (UintT 256);
+     BaseT (UintT 8)]
+Proof
+  simp[well_typed_builtin_app_def]
+QED
+
 fun assert_none th =
   if optionSyntax.is_none (rhs (concl th)) then ()
   else raise Fail "expected rejected check_contract result"
