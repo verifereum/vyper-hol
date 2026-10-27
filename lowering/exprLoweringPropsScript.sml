@@ -145,6 +145,66 @@ Definition alloca_room_def:
     ss.vs_alloca_next + pending_alloca_size func ss < dimword (:256)
 End
 
+(* Initialized constructor immutable capacity regions lie below the bump
+   frontier and miss every recorded ALLOCA of this function.  Restricting
+   the second clause to ALLOCA instructions is intentional: fixed immutable
+   reservations may themselves be recorded in vs_allocas.  Runtime reads
+   use the data section and impose no memory separation obligation. *)
+Definition immutable_alloca_sep_def:
+  immutable_alloca_sep func cenv cx (vs:evaluation_state) (ss:venom_state) <=>
+    cenv.ce_is_ctor ==>
+    !name tv v off.
+      FLOOKUP cenv.ce_vars (module_var_key (cenv.ce_module,name)) =
+        SOME (ImmutableLoc off) /\
+      FLOOKUP (case ALOOKUP vs.immutables cx.txn.target of NONE => FEMPTY
+        | SOME imms => get_source_immutables cenv.ce_module imms) name =
+        SOME (tv,v) ==>
+      off + type_memory_size tv <= ss.vs_alloca_next /\
+      !inst b sz.
+        MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+        FLOOKUP ss.vs_allocas inst.inst_id = SOME (b,sz) ==>
+        regions_disjoint off (type_memory_size tv) b sz
+End
+
+Theorem immutable_alloca_sep_fields:
+  !func cenv cx vs vs' ss ss'.
+    immutable_alloca_sep func cenv cx vs ss /\
+    vs'.immutables = vs.immutables /\
+    ss'.vs_allocas = ss.vs_allocas /\
+    ss'.vs_alloca_next = ss.vs_alloca_next ==>
+    immutable_alloca_sep func cenv cx vs' ss'
+Proof
+  rw[immutable_alloca_sep_def] >> metis_tac[]
+QED
+
+Theorem immutable_alloca_sep_cenv_cong:
+  !func cenv cenv' cx vs ss.
+    immutable_alloca_sep func cenv' cx vs ss /\
+    (!n off. FLOOKUP cenv.ce_vars n = SOME (ImmutableLoc off) ==>
+       FLOOKUP cenv'.ce_vars n = SOME (ImmutableLoc off)) /\
+    cenv'.ce_module = cenv.ce_module /\ cenv'.ce_is_ctor = cenv.ce_is_ctor ==>
+    immutable_alloca_sep func cenv cx vs ss
+Proof
+  rw[immutable_alloca_sep_def] >> metis_tac[]
+QED
+
+Theorem immutable_alloca_sep_exec_alloca:
+  !func cenv cx vs ss inst (n:bytes32) ss'.
+    immutable_alloca_sep func cenv cx vs ss /\
+    exec_alloca inst ss n = OK ss' ==>
+    immutable_alloca_sep func cenv cx vs ss'
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `exec_alloca _ _ _ = _` mp_tac >>
+  simp[exec_alloca_def, AllCaseEqs(), LET_THM] >> rw[] >>
+  fs[immutable_alloca_sep_def, update_var_def] >> rpt strip_tac >>
+  first_x_assum drule_all >> strip_tac >> simp[] >>
+  TRY (conj_tac >- decide_tac) >> rpt strip_tac >>
+  gvs[finite_mapTheory.FLOOKUP_UPDATE] >>
+  Cases_on `inst'.inst_id = inst.inst_id` >>
+  gvs[compileEnvTheory.regions_disjoint_def] >> metis_tac[]
+QED
+
 (* state_rel in func, the function running, with the Venom-side facts a
    statement fragment needs and keeps:
    - alloca_inv: the recorded allocations are disjoint and below the
@@ -159,6 +219,7 @@ End
 Definition stmt_state_rel_def:
   stmt_state_rel func cenv cx vs ss ⇔
     state_rel func cenv cx vs ss ∧ alloca_inv ss ∧ alloca_room func ss ∧
+    immutable_alloca_sep func cenv cx vs ss ∧
     ∀inst n base sz.
       MEM inst (fn_insts func) ∧ inst.inst_opcode = ALLOCA ∧
       inst.inst_operands = [Lit n] ∧
@@ -484,7 +545,7 @@ Theorem stmt_state_rel_jump_to:
 Proof
   simp[stmt_state_rel_def, state_rel_jump_to, jump_to_def, alloca_inv_def,
        allocas_non_overlapping_def, alloca_next_valid_def, alloca_room_def,
-       pending_alloca_size_def]
+       pending_alloca_size_def, immutable_alloca_sep_def]
 QED
 
 Theorem stmt_state_rel_inst_idx:
@@ -497,7 +558,7 @@ Proof
        transient_rel_def, immutables_rel_def, logs_rel_def, call_ctx_rel_def,
        contract_storage_def, contract_transient_def, alloca_inv_def,
        allocas_non_overlapping_def, alloca_next_valid_def, alloca_room_def,
-       pending_alloca_size_def]
+       pending_alloca_size_def, immutable_alloca_sep_def]
 QED
 
 Theorem stmt_state_rel_push_scope:
@@ -505,7 +566,7 @@ Theorem stmt_state_rel_push_scope:
     stmt_state_rel func cenv cx (es with scopes := FEMPTY :: es.scopes) s <=>
     stmt_state_rel func cenv cx es s
 Proof
-  simp[stmt_state_rel_def, state_rel_push_scope]
+  simp[stmt_state_rel_def, state_rel_push_scope, immutable_alloca_sep_def]
 QED
 
 Theorem stmt_state_rel_pop_scope:
@@ -514,7 +575,8 @@ Theorem stmt_state_rel_pop_scope:
     (!n. n IN FDOM sc ==> lookup_scopes n rest = NONE) ==>
     stmt_state_rel func cenv cx (es with scopes := rest) s
 Proof
-  rw[stmt_state_rel_def] >> metis_tac[state_rel_pop_scope]
+  rw[stmt_state_rel_def] >>
+  fs[immutable_alloca_sep_def] >> metis_tac[state_rel_pop_scope]
 QED
 
 Theorem local_ptrs_rel_cenv_cong:
@@ -585,7 +647,9 @@ Theorem stmt_state_rel_cenv_cong:
     cenv'.ce_module = cenv.ce_module /\ cenv'.ce_is_ctor = cenv.ce_is_ctor ==>
     stmt_state_rel func cenv cx es ss
 Proof
-  rw[stmt_state_rel_def] >- (irule state_rel_cenv_cong >> metis_tac[]) >>
+  rw[stmt_state_rel_def] >- (irule state_rel_cenv_cong >> metis_tac[])
+  >- (irule immutable_alloca_sep_cenv_cong >> qexists_tac `cenv'` >>
+      simp[] >> rpt strip_tac >> first_x_assum irule >> simp[]) >>
   res_tac
 QED
 
@@ -598,7 +662,9 @@ Proof
   rpt strip_tac >> fs[stmt_state_rel_def] >> rpt conj_tac
   >- (irule state_rel_update_var_local >> simp[])
   >- (irule alloca_inv_fields >> qexists_tac `s` >> simp[update_var_def])
-  >- (irule alloca_room_fields >> qexists_tac `s` >> simp[update_var_def]) >>
+  >- (irule alloca_room_fields >> qexists_tac `s` >> simp[update_var_def])
+  >- (irule immutable_alloca_sep_fields >> qexistsl_tac [`s`, `es`] >>
+      simp[update_var_def]) >>
   simp[update_var_def] >> metis_tac[]
 QED
 

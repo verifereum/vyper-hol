@@ -19,7 +19,7 @@ Ancestors
   immutableLocationProps
   loweringShapeDefs
   loweringShapeProps
-  intCallStep intCallLookup
+  intCallStep intCallLookup intCallCallee
   structFieldsProps
   (* compiler + correctness *)
   vyperCompiler

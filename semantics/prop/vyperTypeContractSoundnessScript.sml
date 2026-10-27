@@ -340,18 +340,18 @@ Proof
      empty_immutables_def, alistTheory.ALOOKUP_ADELKEY]
 QED
 
-Theorem evaluate_all_constants_preserves_lookup_not_source[local]:
+Theorem evaluate_module_constants_preserves_lookup_not_source[local]:
   ~(MEM src (MAP FST mods)) /\
-  evaluate_all_constants cx am addr mods = SOME am_c /\
+  evaluate_module_constants cx am addr mods = SOME am_c /\
   FLOOKUP (get_source_immutables src
     (case ALOOKUP am.immutables addr of SOME m => m | NONE => [])) id = SOME x ==>
   FLOOKUP (get_source_immutables src
     (case ALOOKUP am_c.immutables addr of SOME m => m | NONE => [])) id = SOME x
 Proof
   qid_spec_tac `am_c` >> qid_spec_tac `am` >>
-  Induct_on `mods` >- (rw[evaluate_all_constants_def] >> gvs[]) >>
+  Induct_on `mods` >- (rw[evaluate_module_constants_def] >> gvs[]) >>
   gen_tac >> gen_tac >> PairCases_on `h` >>
-  rw[evaluate_all_constants_def] >>
+  rw[evaluate_module_constants_def] >>
   gvs[AllCaseEqs()] >>
   first_x_assum irule >>
   simp[] >>
@@ -360,19 +360,57 @@ Proof
   irule merge_constants_preserves_lookup_not_source >>
   simp[]
 QED
-Theorem evaluate_all_constants_preserves_merged_lookup_not_source[local]:
+Theorem evaluate_module_constants_preserves_merged_lookup_not_source[local]:
   ~(MEM src (MAP FST mods)) /\
-  evaluate_all_constants cx (merge_constants addr src cenv am) addr mods = SOME am_c /\
+  evaluate_module_constants cx (merge_constants addr src cenv am) addr mods = SOME am_c /\
   FLOOKUP cenv id = SOME x ==>
   FLOOKUP (get_source_immutables src
     (case ALOOKUP am_c.immutables addr of SOME m => m | NONE => [])) id = SOME x
 Proof
   rw[] >>
-  drule evaluate_all_constants_preserves_lookup_not_source >>
+  drule evaluate_module_constants_preserves_lookup_not_source >>
   disch_then drule >>
   disch_then irule >>
   simp[merge_constants_def, get_source_immutables_set_same,
        empty_immutables_def, FLOOKUP_FUNION]
+QED
+
+Theorem evaluate_module_constants_contains_constant_type[local]:
+  contract_namespaces_ok F mods /\
+  ALOOKUP mods src = SOME ts /\
+  MEM (VariableDecl vis (Constant e) id ty init) ts /\
+  evaluate_module_constants cx am addr mods = SOME am_c ==>
+  ?tv v. FLOOKUP (get_source_immutables src
+    (case ALOOKUP am_c.immutables addr of SOME m => m | NONE => []))
+    id = SOME (tv,v) /\
+    evaluate_type (get_tenv cx) ty = SOME tv
+Proof
+  qid_spec_tac `am_c` >> qid_spec_tac `am` >>
+  qid_spec_tac `ts` >> qid_spec_tac `src` >>
+  Induct_on `mods` >- rw[evaluate_module_constants_def] >>
+  gen_tac >> gen_tac >> gen_tac >> gen_tac >> PairCases_on `h` >>
+  rw[evaluate_module_constants_def, alistTheory.ALOOKUP_def] >>
+  gvs[AllCaseEqs()] >-
+    (`ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel h0) h1))` by
+       gvs[contract_namespaces_ok_def, contract_keys_def, ALL_DISTINCT_APPEND] >>
+     drule constants_env_contains_constant_type >>
+     disch_then drule >>
+     disch_then drule >>
+     strip_tac >>
+     `FLOOKUP (get_source_immutables h0
+        (case ALOOKUP am_c.immutables addr of SOME m => m | NONE => []))
+        id = SOME (tv,v)` by
+       (gvs[contract_namespaces_ok_def] >>
+        drule evaluate_module_constants_preserves_merged_lookup_not_source >>
+        disch_then drule >>
+        disch_then drule >>
+        simp[]) >>
+     qexistsl [`tv`,`v`] >>
+     gvs[set_current_module_def, get_tenv_def]) >>
+  first_x_assum irule >>
+  gvs[contract_namespaces_ok_def] >>
+  conj_tac >- metis_tac[] >>
+  gvs[contract_keys_def, ALL_DISTINCT_APPEND]
 QED
 
 Theorem evaluate_all_constants_contains_constant_type[local]:
@@ -385,32 +423,15 @@ Theorem evaluate_all_constants_contains_constant_type[local]:
     id = SOME (tv,v) /\
     evaluate_type (get_tenv cx) ty = SOME tv
 Proof
-  qid_spec_tac `am_c` >> qid_spec_tac `am` >>
-  qid_spec_tac `ts` >> qid_spec_tac `src` >>
-  Induct_on `mods` >- rw[evaluate_all_constants_def] >>
-  gen_tac >> gen_tac >> gen_tac >> gen_tac >> PairCases_on `h` >>
-  rw[evaluate_all_constants_def, alistTheory.ALOOKUP_def] >>
-  gvs[AllCaseEqs()] >-
-    (`ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel h0) h1))` by
-       gvs[contract_namespaces_ok_def, contract_keys_def, ALL_DISTINCT_APPEND] >>
-     drule constants_env_contains_constant_type >>
-     disch_then drule >>
-     disch_then drule >>
-     strip_tac >>
-     `FLOOKUP (get_source_immutables h0
-        (case ALOOKUP am_c.immutables addr of SOME m => m | NONE => []))
-        id = SOME (tv,v)` by
-       (gvs[contract_namespaces_ok_def] >>
-        drule evaluate_all_constants_preserves_merged_lookup_not_source >>
-        disch_then drule >>
-        disch_then drule >>
-        simp[]) >>
-     qexistsl [`tv`,`v`] >>
-     gvs[set_current_module_def, get_tenv_def]) >>
-  first_x_assum irule >>
-  gvs[contract_namespaces_ok_def] >>
-  conj_tac >- metis_tac[] >>
-  gvs[contract_keys_def, ALL_DISTINCT_APPEND]
+  rw[evaluate_all_constants_def] >>
+  `contract_namespaces_ok F (constants_order mods)` by
+    simp[contract_namespaces_ok_constants_order] >>
+  `ALOOKUP (constants_order mods) src = SOME ts` by
+    (irule alistTheory.ALOOKUP_ALL_DISTINCT_MEM >>
+     fs[contract_namespaces_ok_def, MEM_constants_order] >>
+     metis_tac[alistTheory.ALOOKUP_MEM]) >>
+  drule_all evaluate_module_constants_contains_constant_type >>
+  simp[]
 QED
 
 Theorem contract_toplevel_vtype_key_MEM_Variable[local]:
@@ -1595,7 +1616,7 @@ Proof
   >- (first_x_assum (qspecl_then [`acc`,`cenv`] mp_tac) >> simp[])
 QED
 
-Theorem checked_evaluate_all_constants_preserves_invariants[local]:
+Theorem checked_evaluate_module_constants_preserves_invariants[local]:
   !work am am_c.
     check_contract F cx.layouts cx.txn.target mods = SOME artifact /\
     ALOOKUP cx.sources cx.txn.target = SOME mods /\
@@ -1604,15 +1625,15 @@ Theorem checked_evaluate_all_constants_preserves_invariants[local]:
     machine_well_typed am /\
     deployment_constant_cells_typed
       (type_env_all_modules mods) cx.txn.target mods am /\
-    evaluate_all_constants cx am cx.txn.target work = SOME am_c ==>
+    evaluate_module_constants cx am cx.txn.target work = SOME am_c ==>
     machine_well_typed am_c /\
     deployment_constant_cells_typed
       (type_env_all_modules mods) cx.txn.target mods am_c
 Proof
   Induct_on `work`
-  >- simp[evaluate_all_constants_def] >>
+  >- simp[evaluate_module_constants_def] >>
   rpt gen_tac >> PairCases_on `h` >> strip_tac >>
-  gvs[evaluate_all_constants_def, AllCaseEqs()] >>
+  gvs[evaluate_module_constants_def, AllCaseEqs()] >>
   `ALOOKUP mods h0 = SOME h1` by
     (irule alistTheory.ALOOKUP_ALL_DISTINCT_MEM >>
      gvs[contract_namespaces_ok_def]) >>
@@ -1680,9 +1701,11 @@ Proof
   `machine_well_typed am_c /\
    deployment_constant_cells_typed
      (type_env_all_modules mods) target mods am_c` by
-    (gvs[] >> irule checked_evaluate_all_constants_preserves_invariants >>
-     simp[listTheory.EVERY_MEM] >>
-     qexistsl [`am`,`mods`] >> simp[listTheory.EVERY_MEM]) >>
+    (gvs[evaluate_all_constants_def] >>
+     irule checked_evaluate_module_constants_preserves_invariants >>
+     simp[listTheory.EVERY_MEM, MEM_constants_order] >>
+     qexistsl [`am`,`constants_order mods`] >>
+     simp[listTheory.EVERY_MEM, MEM_constants_order]) >>
   rw[deployment_constants_output_typed_def]
   >- gvs[machine_well_typed_def] >>
   `ALOOKUP mods src = SOME ts` by
@@ -3045,10 +3068,12 @@ Theorem evaluate_all_constants_preserves_layouts[local]:
   evaluate_all_constants cx am addr mods = SOME am_c ==>
   am_c.layouts = am.layouts
 Proof
+  simp[evaluate_all_constants_def] >>
   qid_spec_tac `am_c` >> qid_spec_tac `am` >>
-  Induct_on `mods` >- rw[evaluate_all_constants_def] >>
+  qspec_tac (`constants_order mods`, `mods`) >>
+  Induct >- rw[evaluate_module_constants_def] >>
   Cases_on `h` >>
-  rw[evaluate_all_constants_def] >>
+  rw[evaluate_module_constants_def] >>
   gvs[AllCaseEqs(), merge_constants_def] >>
   first_x_assum drule >> simp[]
 QED

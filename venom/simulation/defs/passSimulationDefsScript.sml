@@ -19,6 +19,7 @@
  *   block_simulates          — whole-block simulation predicate
  *   terminates               — execution terminates (not Error)
  *   pass_correct             — combined termination + result equivalence (R_ok, R_term)
+ *   ctx_pass_correct         — pass_correct for a context transform, run with run_context
  *)
 
 Theory passSimulationDefs
@@ -121,4 +122,13 @@ Definition pass_correct_def:
     (!fuel fuel'.
        terminates (exec1 fuel) /\ terminates (exec2 fuel') ==>
        lift_result R_ok R_term R_abort (exec1 fuel) (exec2 fuel'))
+End
+
+(* A context-level pass: transforms a context, preserves semantics.
+   R_ok/R_term are the per-state relations for OK/terminal results. *)
+Definition ctx_pass_correct_def:
+  ctx_pass_correct (p : venom_context -> venom_context) R_ok R_term ctx s <=>
+    pass_correct R_ok R_term R_term
+      (\fuel. run_context fuel ctx s)
+      (\fuel. run_context fuel (p ctx) s)
 End

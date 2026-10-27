@@ -263,6 +263,56 @@ Proof
                    arithmeticTheory.LESS_EQ_TRANS]]
 QED
 
+(* Transport the semantic immutable relation by capacity-sized memory
+   agreement, without strengthening it to canonical padding. *)
+Theorem immutables_rel_mem_agree:
+  !cenv addr src ctor es s t.
+    immutables_rel cenv addr src ctor es s /\
+    t.vs_data_section = s.vs_data_section /\
+    LENGTH s.vs_memory <= LENGTH t.vs_memory /\
+    (ctor ==> !name tv v off.
+      FLOOKUP cenv.ce_vars (module_var_key (src,name)) =
+        SOME (ImmutableLoc off) /\
+      FLOOKUP (case ALOOKUP es.immutables addr of NONE => FEMPTY
+        | SOME imms => get_source_immutables src imms) name = SOME (tv,v) ==>
+      mem_bytes_at off (type_memory_size tv) t.vs_memory =
+        mem_bytes_at off (type_memory_size tv) s.vs_memory) ==>
+    immutables_rel cenv addr src ctor es t
+Proof
+  rpt gen_tac >> strip_tac >> Cases_on `ctor`
+  >- (fs[immutables_rel_def] >> rpt gen_tac >> strip_tac >>
+      qpat_x_assum `!name tv v byte_offset. _ ==> _ /\ _` drule_all >> strip_tac >>
+      `mem_bytes_at byte_offset (type_memory_size tv) t.vs_memory =
+       mem_bytes_at byte_offset (type_memory_size tv) s.vs_memory` by metis_tac[] >>
+      simp[] >> irule val_in_memory_mem_agree >>
+      conj_tac >- metis_tac[immutable_admissible_val_wf] >>
+      qexistsl_tac [`type_memory_size tv`, `s.vs_memory`] >> simp[]) >>
+  fs[immutables_rel_def] >> metis_tac[]
+QED
+
+Theorem immutables_rel_mstore_alloca:
+  !func cenv cx es s inst b sz at w.
+    immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es s /\
+    immutable_alloca_sep func cenv cx es s /\
+    MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+    FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz) /\
+    b <= at /\ at + 32 <= b + sz ==>
+    immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es
+      (mstore at w s)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `LENGTH s.vs_memory <= LENGTH (mstore at w s).vs_memory` by
+    (simp[immutable_mstore_capacity, arithmeticTheory.MAX_DEF] >>
+     IF_CASES_TAC >> decide_tac) >>
+  `(mstore at w s).vs_data_section = s.vs_data_section` by simp[mstore_def] >>
+  irule immutables_rel_mem_agree >> qexists_tac `s` >> simp[] >>
+  fs[immutable_alloca_sep_def] >> rpt strip_tac >>
+  first_x_assum drule_all >> strip_tac >>
+  `regions_disjoint off (type_memory_size tv) b sz` by metis_tac[] >>
+  irule mstore_mem_bytes_at_disjoint >>
+  gvs[compileEnvTheory.regions_disjoint_def] >> decide_tac
+QED
+
 Theorem immutables_rel_mstore_outside_prefix:
   immutables_rel cenv addr src ctor es s /\
   (ctor ==> immutable_prefix_bound cenv addr src es cap) /\ cap <= at ==>
@@ -353,6 +403,9 @@ Proof
          qspecl_then [`func`, `s`, `inst`, `n`] mp_tac alloca_room_fresh >>
          fs[FLOOKUP_DEF]) >>
      qexists_tac `s` >> simp[update_var_def]) >>
+  `immutable_alloca_sep func cenv cx es s1` by
+    (irule immutable_alloca_sep_exec_alloca >>
+     qexistsl_tac [`inst`, `n`, `s`] >> fs[stmt_state_rel_def]) >>
   `local_ptrs_rel func cenv es.scopes s1` by
     (qspecl_then [`func`, `cenv`, `es.scopes`, `s`, `s1`, `inst`, `p`, `n`]
        mp_tac local_ptrs_rel_exec_alloca >>
@@ -475,6 +528,9 @@ Proof
   `alloca_inv s'` by (irule alloca_inv_fields >> qexists_tac `s` >> simp[]) >>
   `alloca_room func s'` by
     (irule alloca_room_fields >> qexists_tac `s` >> fs[stmt_state_rel_def]) >>
+  `immutable_alloca_sep func cenv cx (es with scopes := scs') s'` by
+    (irule immutable_alloca_sep_fields >> qexistsl_tac [`s`, `es`] >>
+     fs[stmt_state_rel_def]) >>
   fs[stmt_state_rel_def] >> metis_tac[]
 QED
 

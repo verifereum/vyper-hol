@@ -98,6 +98,7 @@ val checker_defs =
    well_typed_expr_compute,
    well_typed_target_def,
    well_typed_atarget_def,
+   atarget_accepts_def,
    well_typed_iterator_def,
    type_stmt_def,
    well_typed_stmt_def,
@@ -134,6 +135,7 @@ val checker_defs =
    ext_call_opts_ok_def,
    ext_call_kw_type_def,
    arg_type_fits_def,
+   type_widens_to_def,
    create_arg_types_ok_compute,
    optionTheory.option_case_lazily,
    optionTheory.IS_SOME_DEF,
@@ -149,6 +151,7 @@ val checker_defs =
      constant_value rejects those builtins before evaluating them. *)
   [contract_constants_ok_def,
    constants_fold_def,
+   vyperInterpreterTheory.constants_order_def,
    constants_fold_module_def,
    merge_constant_imms_def,
    constant_value_def,
