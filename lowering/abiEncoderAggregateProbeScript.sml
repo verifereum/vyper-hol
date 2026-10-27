@@ -1,8 +1,10 @@
 (* Checked aggregate interface diagnostics for the source encoder bridge. *)
 Theory abiEncoderAggregateProbe
 Ancestors
-  abiEncoderSourceBridge abiEncoderInput vyperValue vyperTyping valueEncoding vyperABI
-  contractABI words list rich_list
+  abiEncoderSourceBridge abiEncoderInput abiEncoderProps vyperValue vyperTyping valueEncoding vyperABI
+  contractABI compileEnv venomMemDefs words list rich_list
+Libs
+  dep_rewrite
 
 Theorem encoder_array_requires_positive_slots:
   evaluate_type env (ArrayT ty bd) = SOME atv ==>
@@ -109,4 +111,68 @@ Theorem encoder_zero_tuple_input_unavailable:
 Proof
   strip_tac >> drule abi_encoder_input_typed >>
   simp[encoder_zero_tuple_abi_cardinality_diagnostic]
+QED
+
+Theorem encoder_zero_tuple_static_members:
+  !n. ~any_dynamic (REPLICATE n (Tuple []))
+Proof
+  Induct >> simp[REPLICATE, is_dynamic_def]
+QED
+
+Theorem encoder_zero_tuple_plan:
+  abi_enc_plan env (TupleT (REPLICATE n (TupleT []))) (AbiCopy 0)
+Proof
+  `abi_enc_plan env (TupleT (REPLICATE n (TupleT [])))
+     (AbiCopy (type_memory_size (TupleTV (REPLICATE n (TupleTV [])))))`
+    suffices_by simp[type_memory_size_def, encoder_zero_tuple_slot_members] >>
+  irule abi_enc_plan_copy >>
+  simp[encoder_zero_tuple_source_diagnostic, vyper_to_abi_type_def,
+       encoder_zero_tuple_abi_members, is_dynamic_def,
+       encoder_zero_tuple_static_members]
+QED
+
+Theorem encoder_zero_tuple_pre:
+  enc_pre st st' ops lo top (TupleTV (REPLICATE n (TupleTV [])))
+    (ArrayV (TupleV (REPLICATE n (ArrayV (TupleV []))))) sb [(db,0)] s <=>
+  ((!y. MEM (Var y) ops ==> not_fresh_at st y) /\ sb <= lo /\ db <= lo /\
+   enc_scratch (frag_ids st st') lo top s)
+Proof
+  simp[enc_pre_def, encoder_zero_tuple_memory_diagnostic,
+       type_memory_size_def, encoder_zero_tuple_slot_members,
+       venomMemDefsTheory.regions_disjoint_def]
+QED
+
+Theorem encoder_zero_tuple_typed_members:
+  !n. has_types (REPLICATE n (Tuple [])) (REPLICATE n (ListV []))
+Proof
+  Induct >> simp[REPLICATE, has_type_def, valid_length_def]
+QED
+
+Theorem encoder_zero_tuple_flat_encoding:
+  !n. FLAT (MAP2 enc (REPLICATE n (Tuple []))
+    (REPLICATE n (ListV []))) = []
+Proof
+  Induct >> simp[REPLICATE, enc_def, REV_DEF]
+QED
+
+Theorem encoder_zero_tuple_encoding:
+  enc (vyper_to_abi_type env (TupleT (REPLICATE n (TupleT []))))
+    (ListV (REPLICATE n (ListV []))) = []
+Proof
+  pure_rewrite_tac[vyper_to_abi_type_def, encoder_zero_tuple_abi_members] >>
+  DEP_REWRITE_TAC[enc_tuple_static] >>
+  simp[encoder_zero_tuple_typed_members, encoder_zero_tuple_static_members,
+       encoder_zero_tuple_flat_encoding]
+QED
+
+Theorem encoder_zero_tuple_giant_diagnostic:
+  abi_enc_plan env (TupleT (REPLICATE (dimword (:256)) (TupleT []))) (AbiCopy 0) /\
+  enc (vyper_to_abi_type env (TupleT (REPLICATE (dimword (:256)) (TupleT []))))
+    (ListV (REPLICATE (dimword (:256)) (ListV []))) = [] /\
+  ~abi_encoder_input ei (vyper_to_abi_type env
+      (TupleT (REPLICATE (dimword (:256)) (TupleT []))))
+    (ListV (REPLICATE (dimword (:256)) (ListV []))) sb cap mem
+Proof
+  simp[encoder_zero_tuple_plan, encoder_zero_tuple_encoding,
+       encoder_zero_tuple_input_unavailable]
 QED
