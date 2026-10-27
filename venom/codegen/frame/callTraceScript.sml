@@ -62,7 +62,8 @@ Definition request_of_def:
           cr_target := w2w (EL 1 c.stack);
           cr_value := if valueOffset = 1 then w2n (EL 2 c.stack) else 0;
           cr_data := take_pad_0 (w2n (EL (3 + valueOffset) c.stack))
-                       (DROP (w2n (EL (2 + valueOffset) c.stack)) c.memory);
+                       (DROP (w2n (EL (2 + valueOffset) c.stack))
+                         (buffer_to_list c.memory));
           cr_static := (next_opcode c = SOME StaticCall \/ c.msgParams.static);
           cr_accounts := s.rollback.accounts;
           cr_tStorage := s.rollback.tStorage |>

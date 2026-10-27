@@ -376,6 +376,7 @@ Definition make_venom_call_state_def:
     <| contexts := [(ctxt, rb)];
        txParams := venom_to_tx_params s;
        rollback := rb;
+       originalAccounts := rb.accounts;
        msdomain := Collect empty_domain |>
 End
 
@@ -398,6 +399,7 @@ Definition make_venom_delegatecall_state_def:
     <| contexts := [(ctxt, rb)];
        txParams := venom_to_tx_params s;
        rollback := rb;
+       originalAccounts := rb.accounts;
        msdomain := Collect empty_domain |>
 End
 
@@ -416,6 +418,7 @@ Definition make_venom_create_state_def:
     <| contexts := [(ctxt, rb)];
        txParams := venom_to_tx_params s;
        rollback := rb;
+       originalAccounts := rb.accounts;
        msdomain := Collect empty_domain |>
 End
 

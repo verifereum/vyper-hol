@@ -5,7 +5,6 @@
  *   compile_abi_int_clamp_correct       — int clamping either accepts or reverts on out-of-range
  *   compile_abi_bytes_clamp_correct   — bytes clamping either accepts or reverts on dirty high bits
  *   compile_abi_encode_static_correct — static type writes word to dst
- *   compile_abi_decode_static_correct — static type reads + clamps
  *   compile_abi_encode_to_buf_correct — recursive ABI encode correctness (single-block)
  *   compile_abi_encode_frag           — recursive ABI encode correctness over frag_exec,
  *                                       for an encoding plan abi_enc_plan
@@ -260,32 +259,9 @@ Proof
   gvs[Abbr`rng`]
 QED
 
-(* Static ABI decoding: MLOAD + clamp *)
-Theorem compile_abi_decode_static_correct:
-  ∀ src_op dst_op load_opc clamp_fn ss st st' src_w.
-    compile_abi_decode_static src_op dst_op load_opc clamp_fn st = ((), st') ∧
-    eval_operand src_op ss = SOME src_w ∧
-    fresh_vars_wrt st ss ∧
-    (* clamp_fn: either succeeds preserving operands & freshness, or reverts *)
-    (∀ val_op st0 st0' ss0 v.
-       clamp_fn val_op st0 = ((), st0') ∧
-       eval_operand val_op ss0 = SOME v ∧
-       fresh_vars_wrt st0 ss0 ⇒
-       (∃ ss0'.
-         run_inst_seq (emitted_insts st0 st0') ss0 = OK ss0' ∧
-         fresh_vars_wrt st0' ss0' ∧
-         (∀ op w. eval_operand op ss0 = SOME w ⇒
-                  eval_operand op ss0' = SOME w)) ∨
-       (∃ ss0'.
-         run_inst_seq (emitted_insts st0 st0') ss0 =
-           Abort Revert_abort ss0'))
-    ⇒
-    ∃ ss'.
-      run_inst_seq (emitted_insts st st') ss = OK ss' ∨
-      run_inst_seq (emitted_insts st st') ss = Abort Revert_abort ss'
-Proof
-  cheat
-QED
+(* Static ABI decoding (load, clamp, MSTORE) is in abiDecodeStaticProps:
+   compile_abi_decode_static_run and compile_abi_decode_static_correct,
+   which give the value in memory at the destination. *)
 
 (* ===== ABI Encoding / Memory Correspondence ===== *)
 

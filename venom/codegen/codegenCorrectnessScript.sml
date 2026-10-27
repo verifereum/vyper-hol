@@ -76,7 +76,7 @@ Definition msg_ctx_rel_def:
     cc.cc_caller = mp.caller ∧
     cc.cc_address = mp.callee ∧
     cc.cc_callvalue = n2w mp.value ∧
-    cc.cc_calldata = mp.data ∧
+    cc.cc_calldata = buffer_to_list mp.data ∧
     cc.cc_static = mp.static
 End
 
@@ -143,7 +143,7 @@ Definition initial_state_rel_def:
          ctxt.returnData = vs.vs_returndata ∧
          ctxt.logs = vs.vs_logs ∧
          (* Equality is required only outside every context spill region. *)
-         context_memory_rel cp vs.vs_memory ctxt.memory ∧
+         context_memory_rel cp vs.vs_memory (buffer_to_list ctxt.memory) ∧
          (* Translate the selected instruction index to an EVM byte PC. *)
          ctxt.pc = asm_pc_to_offset prog off ∧
          ctxt.jumpDest = NONE ∧
@@ -163,7 +163,7 @@ Theorem initial_state_rel_entry_clauses[local]:
   ∀cp prog off fn vs es ctxt rb rest.
     initial_state_rel cp prog off fn vs es /\
     es.contexts = (ctxt, rb) :: rest ==>
-    context_memory_rel cp vs.vs_memory ctxt.memory /\
+    context_memory_rel cp vs.vs_memory (buffer_to_list ctxt.memory) /\
     ctxt.pc = asm_pc_to_offset prog off
 Proof
   rpt strip_tac >> gvs[initial_state_rel_def]
@@ -244,7 +244,7 @@ Proof
   every_case_tac >> gvs[] >>
   rename1 `es.contexts = (ctxt, rb) :: rest` >>
   qexists_tac `<| as_stack := ctxt.stack;
-                   as_memory := ctxt.memory;
+                   as_memory := buffer_to_list ctxt.memory;
                    as_accounts := vs.vs_accounts;
                    as_transient := vs.vs_transient;
                    as_returndata := vs.vs_returndata;
@@ -401,7 +401,7 @@ Definition initial_ctx_rel_legacy_def:
          ctxt.returnData = vs.vs_returndata ∧
          ctxt.logs = vs.vs_logs ∧
          ctxt.stack = [] ∧
-         context_memory_rel cp vs.vs_memory ctxt.memory ∧
+         context_memory_rel cp vs.vs_memory (buffer_to_list ctxt.memory) ∧
          ctxt.pc = asm_pc_to_offset prog off
      | [] => F)
 End
