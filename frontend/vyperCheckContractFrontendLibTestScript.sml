@@ -425,6 +425,9 @@ val _ = check_fixture true "address_bytes20.json";
 val _ = check_fixture false "storage.json";
 val _ = check_fixture false "imported_struct/main.json";
 val _ = check_fixture false "imported_flag/main.json";
+(* lib2 reads lib1's constant and main reads lib2's. *)
+val _ = check_fixture false "imported_constants/main.json";
+val _ = check_fixture true "imported_constants/main.json";
 val _ = check_fixture false "imported_interface/main.json";
 val _ = check_fixture false "duplicate_interface/main/c.json";
 val _ = check_fixture false "multimodule_storage/main.json";

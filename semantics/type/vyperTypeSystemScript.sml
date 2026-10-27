@@ -251,9 +251,14 @@ Definition well_typed_builtin_app_def:
     (LENGTH ts = 1 /\
      (ty = BaseT (BytesT (Dynamic 4)) \/ ty = BaseT (BytesT (Fixed 4))) /\
      is_bytes_or_string_type (HD ts)) /\
+  (* Vyper: ecrecover(hash: bytes32, v: uint256 | uint8,
+                       r: uint256 | bytes32, s: uint256 | bytes32).
+     v: bytes32 is accepted here too, which Vyper rejects. *)
   well_typed_builtin_app ty ECRecover ts =
     (LENGTH ts = 4 /\ ty = BaseT AddressT /\ HD ts = BaseT (BytesT (Fixed 32)) /\
-     EVERY (\t. t = BaseT (UintT 256) \/ t = BaseT (BytesT (Fixed 32))) (TL ts)) /\
+     (EL 1 ts = BaseT (UintT 8) \/ EL 1 ts = BaseT (UintT 256) \/
+      EL 1 ts = BaseT (BytesT (Fixed 32))) /\
+     EVERY (\t. t = BaseT (UintT 256) \/ t = BaseT (BytesT (Fixed 32))) (TL (TL ts))) /\
   well_typed_builtin_app ty ECAdd ts =
     (LENGTH ts = 2 /\ ty = ArrayT (BaseT (UintT 256)) (Fixed 2) /\
      EVERY (\t. t = ArrayT (BaseT (UintT 256)) (Fixed 2)) ts) /\
