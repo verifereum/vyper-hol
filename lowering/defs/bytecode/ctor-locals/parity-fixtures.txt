@@ -1,0 +1,2 @@
+ctor_local_word
+ctor_arg_local_array
