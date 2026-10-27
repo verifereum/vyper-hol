@@ -494,6 +494,7 @@ Definition make_asm_call_state_def:
     <| contexts := [(ctxt, rb)];
        txParams := asm_to_tx_params s;
        rollback := rb;
+       originalAccounts := rb.accounts;
        msdomain := Collect empty_domain |>
 End
 
@@ -510,6 +511,7 @@ Definition make_asm_delegatecall_state_def:
     <| contexts := [(ctxt, rb)];
        txParams := asm_to_tx_params s;
        rollback := rb;
+       originalAccounts := rb.accounts;
        msdomain := Collect empty_domain |>
 End
 
@@ -525,6 +527,7 @@ Definition make_asm_create_state_def:
     <| contexts := [(ctxt, rb)];
        txParams := asm_to_tx_params s;
        rollback := rb;
+       originalAccounts := rb.accounts;
        msdomain := Collect empty_domain |>
 End
 

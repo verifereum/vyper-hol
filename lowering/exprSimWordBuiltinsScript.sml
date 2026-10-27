@@ -27,8 +27,7 @@
  *   compile_typed_word_builtin_sim — compile_word_builtin_sim on typed
  *                            operands
  *
- * The operands' shape is exprSimOperators' lower_value_word_shape, which
- * is cheated.
+ * The operands' shape is exprSimOperators' lower_value_word_shape.
  *)
 
 Theory exprSimWordBuiltins
@@ -730,10 +729,13 @@ Proof
       >- (rpt strip_tac >> drule_all expr_sim_pre_word_result >> simp[]) >>
       rpt strip_tac >> drule_all expr_sim_pre_word_result >>
       simp[] >> metis_tac[]) >>
-  simp[wb_args_shape_def] >> rpt strip_tac >>
-  drule lower_value_word_shape >>
+  simp[wb_args_shape_def] >> rpt gen_tac >> strip_tac >>
   `word_value_type (expr_type e)` by
     (gvs[EVERY_MEM] >> first_x_assum drule >> simp[]) >>
+  `expr_sim_pre cenv cx env e es` by
+    (drule expr_sim_pre_builtin_arg >> disch_then irule >>
+     gvs[expr_sim_pre_def]) >>
+  drule expr_sim_pre_lower_value_word_shape >> disch_then drule >>
   simp[word_value_type_word]
 QED
 

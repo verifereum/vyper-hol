@@ -449,6 +449,8 @@ Proof
      rpt strip_tac >> gvs[]) >>
   `alloca_inv (s with vs_vars := V)` by
     (irule alloca_inv_fields >> qexists_tac `s` >> fs[stmt_state_rel_def]) >>
+  `alloca_room func (s with vs_vars := V)` by
+    (irule alloca_room_fields >> qexists_tac `s` >> fs[stmt_state_rel_def]) >>
   fs[stmt_state_rel_def, state_rel_def, storage_rel_def, transient_rel_def,
      immutables_rel_def, logs_rel_def, contract_storage_def,
      contract_transient_def] >>

@@ -16,9 +16,14 @@ Ancestors
   asmSem codegenRel asmWf symbolResolve vfmExecution vfmContext
   vfmOperation vfmExecutionProp asmToBytecodeProofs asmParseProofs
   asmEncodeParse vfmState list rich_list pair option
-  finite_map arithmetic While
+  finite_map arithmetic While vfmBuffer
 Libs
-  fcpLib numLib
+  fcpLib numLib dep_rewrite
+
+(* Memory and calldata are buffers; the relation states them as lists, so
+   rewrite every buffer read and extension into its list equation. *)
+val () = augment_srw_ss [rewrites [buffer_take_to_list, buffer_read_to_list,
+                                   buffer_to_list_extend]];
 
 (* ===== Dimension lemma for bytes32 = word256 ===== *)
 
@@ -313,7 +318,8 @@ Theorem asm_evm_step_setup:
       ctxt.msgParams.code = assemble prog /\
       ctxt.msgParams.parsed = parse_code 0 FEMPTY (assemble prog) /\
       ctxt.stack = as.as_stack /\
-      ctxt.memory = as.as_memory /\
+      buffer_to_list ctxt.memory = as.as_memory /\
+      buffer_length ctxt.memory = LENGTH as.as_memory /\
       ctxt.pc = asm_pc_to_offset prog as.as_pc /\
       ctxt.jumpDest = NONE /\
       ctxt.returnData = as.as_returndata /\
@@ -338,7 +344,9 @@ Proof
     (irule assemble_parse_exact >> simp[]) >>
   `asm_pc_to_offset prog as.as_pc < LENGTH (assemble prog)` by
     (irule offset_in_bounds >> simp[]) >>
-  qexists_tac `op` >> simp[]
+  qexists_tac `op` >> simp[] >>
+  qpat_x_assum `buffer_to_list _ = as.as_memory` (SUBST1_TAC o SYM) >>
+  simp[]
 QED
 
 (* ===== PC step correspondence ===== *)
@@ -610,13 +618,14 @@ Proof
 QED
 
 Triviality asm_evm_rel_next_stack_memory:
-  !prog as es ctxt rb stk mem gas.
+  !prog as es ctxt rb stk mem m gas.
     asm_evm_rel prog as es /\ es.contexts = [(ctxt, rb)] /\
-    as.as_pc < LENGTH prog /\ asm_inst_size (EL as.as_pc prog) = 1 ==>
+    as.as_pc < LENGTH prog /\ asm_inst_size (EL as.as_pc prog) = 1 /\
+    buffer_to_list m = mem ==>
     asm_evm_rel prog
       (asm_next (as with <|as_stack := stk; as_memory := mem|>))
       (es with contexts :=
-         [(ctxt with <|stack := stk; memory := mem;
+         [(ctxt with <|stack := stk; memory := m;
                       pc := asm_pc_to_offset prog as.as_pc + 1;
                       gasUsed := gas|>, rb)])
 Proof
@@ -716,7 +725,7 @@ Triviality asm_evm_rel_next_sstore:
     as.as_pc < LENGTH prog /\ asm_inst_size (EL as.as_pc prog) = 1 /\
     ctxt1.msgParams = ctxt.msgParams /\
     ctxt1.stack = stk /\
-    ctxt1.memory = as.as_memory /\
+    buffer_to_list ctxt1.memory = as.as_memory /\
     ctxt1.pc = asm_pc_to_offset prog as.as_pc + 1 /\
     ctxt1.jumpDest = NONE /\
     ctxt1.returnData = as.as_returndata /\
@@ -742,7 +751,7 @@ Triviality asm_evm_rel_next_sstore_domain:
     as.as_pc < LENGTH prog /\ asm_inst_size (EL as.as_pc prog) = 1 /\
     ctxt1.msgParams = ctxt.msgParams /\
     ctxt1.stack = stk /\
-    ctxt1.memory = as.as_memory /\
+    buffer_to_list ctxt1.memory = as.as_memory /\
     ctxt1.pc = asm_pc_to_offset prog as.as_pc + 1 /\
     ctxt1.jumpDest = NONE /\
     ctxt1.returnData = as.as_returndata /\
@@ -763,14 +772,15 @@ Proof
 QED
 
 Triviality asm_evm_rel_next_stack_memory_logs:
-  !prog as es ctxt rb stk mem logs gas.
+  !prog as es ctxt rb stk mem m logs gas.
     asm_evm_rel prog as es /\ es.contexts = [(ctxt, rb)] /\
-    as.as_pc < LENGTH prog /\ asm_inst_size (EL as.as_pc prog) = 1 ==>
+    as.as_pc < LENGTH prog /\ asm_inst_size (EL as.as_pc prog) = 1 /\
+    buffer_to_list m = mem ==>
     asm_evm_rel prog
       (asm_next (as with <|as_stack := stk; as_memory := mem;
                            as_logs := logs|>))
       (es with contexts :=
-         [(ctxt with <|stack := stk; memory := mem; logs := logs;
+         [(ctxt with <|stack := stk; memory := m; logs := logs;
                       pc := asm_pc_to_offset prog as.as_pc + 1;
                       gasUsed := gas|>, rb)])
 Proof
@@ -785,7 +795,7 @@ QED
 Triviality asm_evm_rel_calldata:
   !prog as es ctxt rb.
     asm_evm_rel prog as es /\ es.contexts = [(ctxt, rb)] ==>
-    ctxt.msgParams.data = as.as_call_ctx.cc_calldata
+    buffer_to_list ctxt.msgParams.data = as.as_call_ctx.cc_calldata
 Proof
   rpt strip_tac >> gvs[asm_evm_rel_def]
 QED
@@ -1134,6 +1144,40 @@ Proof
   decide_tac
 QED
 
+(* x is below the next multiple of 32 above it *)
+Theorem lt_round_up_32[local]:
+  !x. x < 32 * (x DIV 32) + 32
+Proof
+  gen_tac >>
+  `x = x DIV 32 * 32 + x MOD 32 /\ x MOD 32 < 32` by
+    (mp_tac (Q.SPEC `32` arithmeticTheory.DIVISION) >> simp[]) >>
+  decide_tac
+QED
+
+(* Instantiate lt_round_up_32 at every x DIV 32 in the goal *)
+val div32_tac : tactic = fn (asl, g) =>
+  let
+    val ts = find_terms (fn t => numSyntax.is_div t andalso
+                                 aconv (rand t) ``32n``)
+               (list_mk_conj (g :: asl))
+  in
+    MAP_EVERY (fn t => assume_tac (SPEC (lhand t) lt_round_up_32))
+      (op_mk_set aconv ts) (asl, g)
+  end;
+
+Theorem add_max_sub[local]:
+  !a b. a + (MAX a b - a) = MAX a b
+Proof
+  rw[MAX_DEF]
+QED
+
+(* A write into memory after expansion lands inside the expanded memory,
+   so the buffer write is the list splice the assembly does. *)
+val mem_write_tac : tactic =
+  DEP_REWRITE_TAC[buffer_to_list_write_le] >>
+  gvs[dim256, add_max_sub, arithmeticTheory.MAX_LE] >>
+  rpt strip_tac >> div32_tac >> decide_tac;
+
 (* asm_expand_memory always expands to at least the requested size *)
 Theorem asm_expand_memory_length[local]:
   !n (mem:byte list). n <= LENGTH (asm_expand_memory n mem)
@@ -1189,6 +1233,27 @@ Proof
     by simp[listTheory.LENGTH_TAKE_EQ] >>
   simp[]
 QED
+
+(* An EVM write into memory that was first extended, stated on lists. *)
+Theorem buffer_write_extended[local]:
+  !b K off bs bs' n M.
+    buffer_to_list b ++ REPLICATE K 0w = M /\ bs = bs' /\ LENGTH bs = n /\
+    (bs <> [] ==> off <= LENGTH M) ==>
+    buffer_to_list (buffer_write off bs (buffer_extend K b)) =
+    TAKE off M ++ bs' ++ DROP (off + n) M
+Proof
+  rpt strip_tac >> gvs[] >>
+  DEP_REWRITE_TAC[buffer_to_list_write_le] >> simp[]
+QED
+
+(* MCOPY's write once both sides expanded memory to the same size, given as
+   the MAX fact in the assumptions. *)
+val mcopy_write_tac : tactic =
+  irule asm_evm_rel_next_stack_memory >> simp[asm_inst_size_def] >>
+  irule buffer_write_extended >>
+  gvs[asm_expand_eq_evm_norm, take_drop_expand_len] >> rpt strip_tac >>
+  irule arithmeticTheory.LESS_EQ_TRANS >>
+  irule_at (Pos last) asm_expand_memory_length >> decide_tac;
 
 Theorem sha3_expand_memory_eq[local]:
   !off sz (mem:byte list).
@@ -1284,9 +1349,8 @@ Proof
        asm_expand_memory (w2n h + 32) as.as_memory` by (
         simp[asm_expand_memory_def, LET_THM, MAX_DEF] >>
         IF_CASES_TAC >> simp[]) >>
-      pop_assum SUBST_ALL_TAC >>
-      irule asm_evm_rel_next_stack_memory >>
-      simp[asm_inst_size_def]
+      pop_assum (fn th =>
+        irule asm_evm_rel_next_stack_memory >> simp[asm_inst_size_def, th])
     ) >>
     (* Gas fail *)
     gas_close_tac
@@ -1322,7 +1386,8 @@ Proof
       gvs[asm_expand_memory_def, MAX_DEF] >>
       rpt (IF_CASES_TAC >> gvs[]) >>
       irule asm_evm_rel_next_stack_memory >>
-      simp[asm_inst_size_def]
+      simp[asm_inst_size_def] >>
+      mem_write_tac
     ) >>
     (* Gas fail *)
     gas_close_tac
@@ -1360,9 +1425,10 @@ Proof
        asm_expand_memory (w2n h + 1) as.as_memory` by (
         simp[asm_expand_memory_def, LET_THM, MAX_DEF] >>
         IF_CASES_TAC >> simp[]) >>
-      pop_assum SUBST_ALL_TAC >>
+      pop_assum (fn th => SUBST_ALL_TAC th >> assume_tac th) >>
       irule asm_evm_rel_next_stack_memory >>
-      simp[asm_inst_size_def]
+      simp[asm_inst_size_def] >>
+      mem_write_tac
     ) >>
     (* Gas fail *)
     gas_close_tac
@@ -1574,13 +1640,15 @@ Resume asm_evm_step_memory_dispatch[sha3_nonzero]:
       simp[inc_pc_or_jump_def, LET_THM, opcode_def] >>
       simp[bind_def, get_current_context_def, return_def,
            set_current_context_def, is_call_def] >>
+      qpat_x_assum `buffer_to_list ctxt.memory = _`
+        (fn th => REWRITE_TAC[th] >> assume_tac th) >>
       qmatch_goalsub_abbrev_tac `as.as_memory ++ REPLICATE evm_pad (0w:byte)` >>
       `as.as_memory ++ REPLICATE evm_pad (0w:byte) =
        asm_expand_memory (w2n h + w2n h') as.as_memory`
         by simp[Abbr`evm_pad`, sha3_expand_memory_eq] >>
-      pop_assum SUBST_ALL_TAC >>
+      pop_assum (fn th => SUBST_ALL_TAC th >> assume_tac th) >>
       irule asm_evm_rel_next_stack_memory >>
-      simp[asm_inst_size_def])
+      gvs[asm_inst_size_def])
   >> ASM_REWRITE_TAC[] >>
   simp[] >>
   DISJ1_TAC >>
@@ -1599,6 +1667,7 @@ Resume asm_evm_step_memory_dispatch[sstore]:
        get_current_context_def, return_def, set_current_context_def,
        step_inst_def, step_sstore_def, pop_stack_def, LET_THM] >>
   simp[step_sstore_gas_consumption_def,
+       sstore_base_gas_def, sstore_refund_updates_def,
        get_gas_left_def, get_accounts_def, get_original_def,
        get_callee_def, get_static_def,
        access_slot_def, domain_check_def, set_domain_def,
@@ -2012,25 +2081,12 @@ Resume asm_evm_step_memory_dispatch[mcopy_dst_before_src]:
   DISJ2_TAC >>
   simp[return_def, bind_def, get_current_context_def,
        set_current_context_def, LET_THM] >>
-  qmatch_goalsub_abbrev_tac
-    `TAKE (w2n h) evm_expanded ++
-     TAKE (w2n h'') (DROP (w2n h') evm_expanded) ++
-     DROP evm_drop evm_expanded` >>
   simp[inc_pc_or_jump_def, LET_THM, opcode_def,
        bind_def, get_current_context_def, return_def,
        set_current_context_def, is_call_def] >>
-  `w2n h + w2n h'' < w2n h' + w2n h''` by DECIDE_TAC >>
   `MAX (w2n h' + w2n h'') (w2n h + w2n h'') =
    w2n h' + w2n h''` by simp[MAX_DEF] >>
-  `evm_expanded =
-   asm_expand_memory (MAX (w2n h' + w2n h'') (w2n h + w2n h''))
-     as.as_memory`
-    by simp[Abbr`evm_expanded`, asm_expand_eq_evm_norm] >>
-  `evm_drop = w2n h + w2n h''`
-    by (simp[Abbr`evm_drop`] >> simp[take_drop_expand_len]) >>
-  gvs[] >>
-  irule asm_evm_rel_next_stack_memory >>
-  simp[asm_inst_size_def]
+  mcopy_write_tac
 QED
 
 Resume asm_evm_step_memory_dispatch[mcopy_src_before_dst]:
@@ -2046,24 +2102,12 @@ Resume asm_evm_step_memory_dispatch[mcopy_src_before_dst_unfolded]:
   DISJ2_TAC >>
   simp[return_def, bind_def, get_current_context_def,
        set_current_context_def, LET_THM] >>
-  qmatch_goalsub_abbrev_tac
-    `TAKE (w2n h) evm_expanded ++
-     TAKE (w2n h'') (DROP (w2n h') evm_expanded) ++
-     DROP evm_drop evm_expanded` >>
   simp[inc_pc_or_jump_def, LET_THM, opcode_def,
        bind_def, get_current_context_def, return_def,
        set_current_context_def, is_call_def] >>
   `MAX (w2n h' + w2n h'') (w2n h + w2n h'') =
    w2n h + w2n h''` by simp[MAX_DEF] >>
-  `evm_expanded =
-   asm_expand_memory (MAX (w2n h' + w2n h'') (w2n h + w2n h''))
-     as.as_memory`
-    by simp[Abbr`evm_expanded`, asm_expand_eq_evm_norm] >>
-  `evm_drop = w2n h + w2n h''`
-    by (simp[Abbr`evm_drop`] >> simp[take_drop_expand_len]) >>
-  gvs[] >>
-  irule asm_evm_rel_next_stack_memory >>
-  simp[asm_inst_size_def]
+  mcopy_write_tac
 QED
 
 Resume asm_evm_step_memory_dispatch[mcopy_same_start]:
@@ -2078,21 +2122,7 @@ Resume asm_evm_step_memory_dispatch[mcopy_same_start]:
   simp[inc_pc_or_jump_def, LET_THM, opcode_def,
        bind_def, get_current_context_def, return_def,
        set_current_context_def, is_call_def] >>
-  qpat_x_assum `asm_evm_rel _ _ _` mp_tac >>
-  strip_tac >>
-  gvs[asm_evm_rel_def, asm_next_def, LET_THM] >>
-  ONCE_REWRITE_TAC[GSYM arithmeticTheory.ADD1] >>
-  simp[asm_pc_to_offset_suc, asm_inst_size_def] >>
-  `?mcpy_d. mcpy_d = w2n h` by (qexists_tac `w2n h` >> simp[]) >>
-  pop_assum (SUBST_ALL_TAC o SYM) >>
-  `?mcpy_s. mcpy_s = w2n h'` by (qexists_tac `w2n h'` >> simp[]) >>
-  pop_assum (SUBST_ALL_TAC o SYM) >>
-  `?mcpy_z. mcpy_z = w2n h''` by (qexists_tac `w2n h''` >> simp[]) >>
-  pop_assum (SUBST_ALL_TAC o SYM) >>
-  simp[asm_expand_eq_evm_norm] >>
-  PURE_REWRITE_TAC[MAX_DEF] >>
-  IF_CASES_TAC >> gvs[take_drop_expand_len] >>
-  `mcpy_s = mcpy_d` by DECIDE_TAC >> gvs[take_drop_expand_len]
+  irule asm_evm_rel_next_stack >> simp[asm_inst_size_def]
 QED
 
 Finalise asm_evm_step_memory_dispatch
@@ -2427,6 +2457,11 @@ Proof
   ]
 QED
 
+(* A copy whose destination already lies inside memory: no extension. *)
+val mem_write_within_tac : tactic =
+  DEP_REWRITE_TAC[buffer_to_list_write_le] >>
+  gvs[LENGTH_TAKE_EQ] >> rpt strip_tac >> div32_tac >> decide_tac;
+
 val extcodecopy_ok_tac : tactic =
   DISJ2_TAC >>
   simp[inc_pc_or_jump_def, LET_THM, opcode_def,
@@ -2442,6 +2477,27 @@ val extcodecopy_ok_tac : tactic =
        vfmTypesTheory.take_pad_0_0] >>
   simp[asm_expand_memory_def, LET_THM, MAX_DEF] >>
   rpt (IF_CASES_TAC >> gvs[]);
+
+(* The copy opcodes write source bytes into memory extended to cover the
+   destination; stated on lists so the cases below see the old splice. *)
+Theorem buffer_to_list_write_expand[local]:
+  !off bs b L sz.
+    L = buffer_length b /\ LENGTH bs = sz ==>
+    buffer_to_list (buffer_write off bs
+      (buffer_extend (MAX L (32 * ((off + (sz + 31)) DIV 32)) - L) b)) =
+    TAKE off (buffer_to_list b ++
+              REPLICATE (MAX L (32 * ((off + (sz + 31)) DIV 32)) - L) 0w) ++
+    bs ++
+    DROP (off + sz) (buffer_to_list b ++
+                     REPLICATE (MAX L (32 * ((off + (sz + 31)) DIV 32)) - L) 0w)
+Proof
+  rpt strip_tac >> gvs[] >>
+  DEP_REWRITE_TAC[buffer_to_list_write_le] >>
+  simp[add_max_sub, arithmeticTheory.MAX_LE] >>
+  Cases_on `bs` >> gvs[] >> div32_tac >> decide_tac
+QED
+
+val () = augment_srw_ss [rewrites [buffer_to_list_write_expand]];
 
 Theorem asm_evm_step_copy_dispatch[local]:
   !prog as es name r.
@@ -2499,20 +2555,13 @@ QED
 
 Resume asm_evm_step_copy_dispatch[calldatacopy_ok_nonzero]:
   DISJ2_TAC >>
-  qmatch_goalsub_abbrev_tac
-    `TAKE (w2n h) evm_dst ++
-     take_pad_0 (w2n h'') (DROP (w2n h') ctxt.msgParams.data) ++
-     DROP (w2n h + w2n h'') evm_dst` >>
   simp[inc_pc_or_jump_def, LET_THM, opcode_def,
        bind_def, get_current_context_def, return_def,
        set_current_context_def, is_call_def] >>
-  `evm_dst = asm_expand_memory (w2n h + w2n h'') as.as_memory`
-    by simp[Abbr`evm_dst`, asm_expand_eq_evm_norm] >>
-  sg `ctxt.msgParams.data = as.as_call_ctx.cc_calldata`
+  sg `buffer_to_list ctxt.msgParams.data = as.as_call_ctx.cc_calldata`
   >- (drule_all asm_evm_rel_calldata >> simp[]) >>
-  gvs[take_drop_expand_eq_pad] >>
   irule asm_evm_rel_next_stack_memory >>
-  simp[asm_inst_size_def]
+  simp[asm_inst_size_def, asm_expand_eq_evm_norm, take_drop_expand_eq_pad]
 QED
 
 Resume asm_evm_step_copy_dispatch[calldatacopy_ok_zero]:
@@ -2594,7 +2643,8 @@ Resume asm_evm_step_copy_dispatch[returndatacopy]:
   simp[asm_evm_rel_def, asm_next_def, LET_THM] >>
   strip_tac >> gvs[] >>
   ONCE_REWRITE_TAC[GSYM arithmeticTheory.ADD1] >>
-  simp[asm_pc_to_offset_suc, asm_inst_size_def]
+  simp[asm_pc_to_offset_suc, asm_inst_size_def] >>
+  mem_write_within_tac
 QED
 
 Resume asm_evm_step_copy_dispatch[codecopy]:
@@ -2631,7 +2681,8 @@ Resume asm_evm_step_copy_dispatch[codecopy]:
   simp[asm_evm_rel_def, asm_next_def, LET_THM] >>
   strip_tac >> gvs[] >>
   ONCE_REWRITE_TAC[GSYM arithmeticTheory.ADD1] >>
-  simp[asm_pc_to_offset_suc, asm_inst_size_def]
+  simp[asm_pc_to_offset_suc, asm_inst_size_def] >>
+  mem_write_within_tac
 QED
 
 Resume asm_evm_step_copy_dispatch[extcodecopy]:
@@ -2684,7 +2735,8 @@ Resume asm_evm_step_copy_dispatch[extcodecopy_ok1]:
   simp[take_drop_expand_eq_pad, asm_expand_eq_evm_simp,
        vfmTypesTheory.take_pad_0_0] >>
   simp[asm_expand_memory_def, LET_THM, MAX_DEF] >>
-  rpt (IF_CASES_TAC >> gvs[])
+  rpt (IF_CASES_TAC >> gvs[]) >>
+  mem_write_within_tac
 QED
 
 Resume asm_evm_step_copy_dispatch[extcodecopy_ok2]:
@@ -2701,7 +2753,8 @@ Resume asm_evm_step_copy_dispatch[extcodecopy_ok2]:
   simp[take_drop_expand_eq_pad, asm_expand_eq_evm_simp,
        vfmTypesTheory.take_pad_0_0] >>
   simp[asm_expand_memory_def, LET_THM, MAX_DEF] >>
-  rpt (IF_CASES_TAC >> gvs[])
+  rpt (IF_CASES_TAC >> gvs[]) >>
+  mem_write_within_tac
 QED
 
 Resume asm_evm_step_copy_dispatch[extcodecopy_ok3]:
@@ -2718,7 +2771,8 @@ Resume asm_evm_step_copy_dispatch[extcodecopy_ok3]:
   simp[take_drop_expand_eq_pad, asm_expand_eq_evm_simp,
        vfmTypesTheory.take_pad_0_0] >>
   simp[asm_expand_memory_def, LET_THM, MAX_DEF] >>
-  rpt (IF_CASES_TAC >> gvs[])
+  rpt (IF_CASES_TAC >> gvs[]) >>
+  mem_write_within_tac
 QED
 
 Resume asm_evm_step_copy_dispatch[extcodecopy_ok4]:
@@ -2735,7 +2789,8 @@ Resume asm_evm_step_copy_dispatch[extcodecopy_ok4]:
   simp[take_drop_expand_eq_pad, asm_expand_eq_evm_simp,
        vfmTypesTheory.take_pad_0_0] >>
   simp[asm_expand_memory_def, LET_THM, MAX_DEF] >>
-  rpt (IF_CASES_TAC >> gvs[])
+  rpt (IF_CASES_TAC >> gvs[]) >>
+  mem_write_within_tac
 QED
 
 Resume asm_evm_step_copy_dispatch[extcodecopy_ok5]:
@@ -2752,7 +2807,8 @@ Resume asm_evm_step_copy_dispatch[extcodecopy_ok5]:
   simp[take_drop_expand_eq_pad, asm_expand_eq_evm_simp,
        vfmTypesTheory.take_pad_0_0] >>
   simp[asm_expand_memory_def, LET_THM, MAX_DEF] >>
-  rpt (IF_CASES_TAC >> gvs[])
+  rpt (IF_CASES_TAC >> gvs[]) >>
+  mem_write_within_tac
 QED
 
 Resume asm_evm_step_copy_dispatch[extcodecopy_ok6]:
@@ -2769,7 +2825,8 @@ Resume asm_evm_step_copy_dispatch[extcodecopy_ok6]:
   simp[take_drop_expand_eq_pad, asm_expand_eq_evm_simp,
        vfmTypesTheory.take_pad_0_0] >>
   simp[asm_expand_memory_def, LET_THM, MAX_DEF] >>
-  rpt (IF_CASES_TAC >> gvs[])
+  rpt (IF_CASES_TAC >> gvs[]) >>
+  mem_write_within_tac
 QED
 
 Resume asm_evm_step_copy_dispatch[extcodecopy_ok7]:
@@ -2786,7 +2843,8 @@ Resume asm_evm_step_copy_dispatch[extcodecopy_ok7]:
   simp[take_drop_expand_eq_pad, asm_expand_eq_evm_simp,
        vfmTypesTheory.take_pad_0_0] >>
   simp[asm_expand_memory_def, LET_THM, MAX_DEF] >>
-  rpt (IF_CASES_TAC >> gvs[])
+  rpt (IF_CASES_TAC >> gvs[]) >>
+  mem_write_within_tac
 QED
 
 Resume asm_evm_step_copy_dispatch[extcodecopy_ok8]:
@@ -2803,7 +2861,8 @@ Resume asm_evm_step_copy_dispatch[extcodecopy_ok8]:
   simp[take_drop_expand_eq_pad, asm_expand_eq_evm_simp,
        vfmTypesTheory.take_pad_0_0] >>
   simp[asm_expand_memory_def, LET_THM, MAX_DEF] >>
-  rpt (IF_CASES_TAC >> gvs[])
+  rpt (IF_CASES_TAC >> gvs[]) >>
+  mem_write_within_tac
 QED
 
 Finalise asm_evm_step_copy_dispatch
