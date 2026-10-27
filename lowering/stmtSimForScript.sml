@@ -23,7 +23,7 @@ Libs
 
 (* ===== For over a literal range ===== *)
 
-Theorem reserved_fresh_not_local[local]:
+Theorem reserved_fresh_not_local:
   !cenv st n scs.
     local_ptrs_reserved cenv st /\ st.cs_next_var <= n ==>
     not_local_ptr cenv scs (STRING #"%" (toString n))
