@@ -133,7 +133,8 @@ Proof
   qpat_x_assum `!lbl bb. _`
     (qspec_then `middle.vs_current_bb` mp_tac) >>
   simp[] >> strip_tac >>
-  qexistsl_tac [`bb''`, `entered`] >>
+  rename1 `lookup_block middle.vs_current_bb fn'.fn_blocks = SOME target'` >>
+  qexistsl_tac [`target'`, `entered`] >>
   simp[] >>
   once_rewrite_tac[GSYM eval_phis_prefix] >>
   asm_rewrite_tac[] >> simp[eval_phis_prefix]
@@ -335,7 +336,8 @@ Proof
   qpat_x_assum `!lbl bb. _`
     (qspec_then `middle.vs_current_bb` mp_tac) >>
   simp[] >> strip_tac >>
-  qexistsl_tac [`bb''`, `entered`] >> simp[] >>
+  rename1 `lookup_block middle.vs_current_bb fn'.fn_blocks = SOME target'` >>
+  qexistsl_tac [`target'`, `entered`] >> simp[] >>
   once_rewrite_tac[GSYM eval_phis_prefix] >>
   asm_rewrite_tac[] >> simp[eval_phis_prefix]
 QED
