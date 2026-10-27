@@ -2192,6 +2192,16 @@ Proof
   drule read_results_state >> simp[]
 QED
 
+Theorem read_results_restored_runtime_typed:
+  st'.scopes = st.scopes /\
+  vyperImmutableMetadataFrame$immutable_metadata_frame st st' /\
+  expr_results_typed (env,cx,st) es results /\ state_well_typed st' /\
+  read_results cx results st' = (INL vs,st'') ==>
+  st'' = st' /\ exprs_runtime_typed env es vs
+Proof
+  strip_tac >> drule_all read_results_restored_typed >> simp[]
+QED
+
 Theorem live_memory_result_read[local]:
   typed_scope_transition st st' /\ state_well_typed st' /\
   live_memory_result st (PlaceR (MemoryPlace id path)) /\
