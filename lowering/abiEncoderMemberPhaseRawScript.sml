@@ -5,7 +5,8 @@ Ancestors
   abiEncoderExtendSim abiEncoderAddressReach emitHelperProps emitHelper venomInst
   abiDecoderReentryAddress abiDecoderReentry abiDecoderDynamicLoopSetup
   abiDecoderContract abiDecoderLoop fragExec compileEnv venomState
-  venomExecSemantics instIdxIndep words list
+  venomExecSemantics venomInstProps exprLoweringProps abiEncoderChildCode
+  instIdxIndep words list
 
 Definition abi_encoder_member_phase_raw_def:
   abi_encoder_member_phase_raw st final initial ready <=>
@@ -213,4 +214,29 @@ Proof
   drule_all abi_encode_child_prefix_sequence >> strip_tac >>
   gvs[abi_builtin_prefix_def, abi_encoder_member_phase_raw_def] >>
   gvs[eval_op_inst_idx, fresh_vars_wrt_def, abi_decoder_address_frame_def]
+QED
+
+Theorem abi_encoder_member_prefix_control:
+  abi_encode_child_prefix dst ho dp st = (ops,final) /\
+  eval_operand dst initial = SOME (n2w d) /\ eval_operand dp initial = SOME (n2w slot) /\
+  mload slot initial = n2w off /\ slot < dimword (:256) /\
+  abi_decoder_operand_live st.cs_next_var dst /\ abi_decoder_operand_live st.cs_next_var dp /\
+  final.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
+  abi_encoder_member_phase_raw st final initial ready ==>
+  ready.vs_current_bb = initial.vs_current_bb /\
+  ready.vs_inst_idx = LENGTH final.cs_current_insts /\
+  ready.vs_halted = initial.vs_halted
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  drule_all abi_encode_child_prefix_sequence >> strip_tac >>
+  gvs[abi_builtin_prefix_def, abi_encoder_member_phase_raw_def] >>
+  gvs[abi_decoder_address_frame_def] >>
+  drule abi_encode_child_prefix_shape >> strip_tac >>
+  irule (BETA_RULE (Q.ISPEC `\s:venom_state. s.vs_current_bb` run_inst_seq_preserves_field)) >>
+  qexists_tac `emitted_insts st final` >> asm_rewrite_tac [] >>
+  rpt strip_tac >>
+  `i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode` by
+    (fs[EVERY_MEM] >> metis_tac[]) >>
+  `step_inst 0 ctx i ss1 = OK ss2` by simp[step_inst_non_invoke] >>
+  drule_all step_preserves_control_flow >> simp[]
 QED
