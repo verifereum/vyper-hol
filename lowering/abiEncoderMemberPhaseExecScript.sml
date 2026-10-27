@@ -210,68 +210,6 @@ Proof
   gvs[abi_decoder_address_frame_def, w2n_n2w]
 QED
 
-Theorem abi_encoder_member_tail_raw:
-  abi_encode_array_tail data_op dyn_ptr st = (ops,final) /\
-  eval_operand data_op initial = SOME (n2w d) /\ eval_operand dyn_ptr initial = SOME (n2w slot) /\
-  mload slot initial = n2w off /\ slot < dimword (:256) /\
-  abi_decoder_operand_live st.cs_next_var data_op /\
-  final.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial ==>
-  ?ready. abi_encoder_member_phase_raw st final initial ready
-Proof
-  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  drule_all abi_encode_array_tail_sequence >> strip_tac >>
-  gvs[abi_builtin_prefix_def] >>
-  qexists_tac `actual with vs_inst_idx := LENGTH final.cs_current_insts` >>
-  simp[abi_encoder_member_phase_raw_def] >> qexists_tac `actual` >> simp[]
-QED
-
-Theorem abi_encoder_member_tail_transport:
-  abi_encode_array_tail data_op dyn_ptr st = (ops,final) /\
-  eval_operand data_op initial = SOME (n2w d) /\ eval_operand dyn_ptr initial = SOME (n2w slot) /\
-  mload slot initial = n2w off /\ slot < dimword (:256) /\
-  abi_decoder_operand_live st.cs_next_var data_op /\
-  final.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
-  abi_encoder_member_phase_raw st final initial ready ==>
-  eval_operand (FST ops) ready = SOME (n2w off) /\
-  eval_operand (SND ops) ready = SOME (n2w (d+off)) /\
-  fresh_vars_wrt limit_st ready /\ abi_decoder_address_frame st.cs_next_var initial ready
-Proof
-  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  drule_all abi_encode_array_tail_sequence >> strip_tac >>
-  gvs[abi_builtin_prefix_def, abi_encoder_member_phase_raw_def] >>
-  gvs[eval_op_inst_idx, fresh_vars_wrt_def, abi_decoder_address_frame_def]
-QED
-
-Theorem abi_encoder_member_phase_extend_sim:
-  final.cs_blocks = st.cs_blocks /\ final.cs_current_bb = st.cs_current_bb /\ inst_extends st final /\
-  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) (emitted_insts st final) /\
-  fn_has_code st final func /\ abi_encoder_member_phase_raw st final initial ready /\
-  ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
-  initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
-  abi_encoder_extend_sim ctx func initial ready
-Proof
-  strip_tac >> gvs[abi_encoder_member_phase_raw_def] >>
-  irule abi_encoder_run_sequence_extend_sim >> simp[] >> qexists_tac `st` >> simp[]
-QED
-
-Theorem abi_encoder_member_binary_raw_sim:
-  emit_op opc [lhs;rhs] st = (out,final) /\ (opc = ADD \/ opc = MUL) /\
-  fn_has_code st final func /\ abi_encoder_member_phase_raw st final initial ready /\
-  ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
-  initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
-  abi_decode_sim ctx func initial ready
-Proof
-  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  drule abi_encoder_emit_address_shape >> strip_tac >>
-  drule inst_extends_emit_op >> strip_tac >>
-  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
-    (emitted_insts st final)` by
-    (drule emitted_insts_emit_op >> strip_tac >>
-     gvs[mk_inst_def] >> Cases_on `opc = ADD` >> gvs[is_terminator_def]) >>
-  drule_all abi_encoder_member_phase_extend_sim >>
-  disch_then (qspec_then `ctx` mp_tac) >>
-  simp[abi_encoder_extend_sim_sim]
-QED
 
 Theorem abi_encoder_members_prepare_raw_compat:
   emit_op ADD [src;Lit (n2w so)] st = (elem_src,prepared) /\ fn_has_code st prepared func /\
