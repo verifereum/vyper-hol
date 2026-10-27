@@ -5,7 +5,7 @@
  * that returns one word on the stack: the value's fragment, then RET with
  * the value and the return PC, which ret_pc_ok in stmt_frag keeps defined.
  *
- * A tuple of words returned on the stack (ce_returns_count > 1): the
+ * A tuple of two or more words returned on the stack: the
  * value's fragment leaves a pointer to the tuple in memory, whose words
  * compile_load_tuple_elements loads (an ADD and an MLOAD each) for the RET.
  *
@@ -33,8 +33,8 @@ Ancestors
 (* An internal function's return, related to the source's as result_rel
    (compileEnv) does: an IntRet whose values match v, adopting no free
    memory pointer, with state_rel at the source state without its scopes.
-   intret_vals_match checks the values only for stack returns
-   (ce_returns_count = 1 here); a memory return's are not on the stack. *)
+   intret_vals_match checks the values only for stack returns; a memory
+   return's are not on the stack. *)
 Definition intret_q_def:
   intret_q func cenv cx ret_tv v (es : evaluation_state) r <=>
     ?ir s. r = IntRet ir s /\

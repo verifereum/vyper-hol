@@ -1211,13 +1211,9 @@ End
    ret_tv: type_value for the return type — used by typed_val_to_w256
    for correct BytesV encoding (AddressT → PAD_LEFT, BytesT → PAD_RIGHT).
 
-   Internal returns dispatch by returns_count:
-   - returns_count = 1: single stack value, vals = [typed_val_to_w256 v]
-   - returns_count > 1: multi-return (TupleT with all word elements),
-     vals = MAP typed_val_to_w256 (ZIP elem_tvs elem_vals)
-   - returns_count = 0: memory return, value in caller's return buffer.
-     IntRet vals with vals = [] (no stack values), state_rel must show
-     the return value is in memory at the return buffer address.
+   Internal returns: IntRet vals, with vals matching the value as
+   intret_vals_match (below) says.  A memory return has vals = []; its
+   value is in the caller's return buffer.
 
    External returns:
    - Halt: ABI-encoded return data. state_rel on final state.

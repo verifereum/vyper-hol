@@ -16,6 +16,7 @@
  *   mcopy_val_in_memory    — MCOPY of at least the footprint does that
  *   mem_bytes_at_mcopy_disjoint — and leaves the bytes outside its
  *                            destination alone
+ *   word_tv_memory_size    — a word type's value takes 32 bytes
  *   compile_store_memory_run — compile_store_memory at one type puts the
  *                            value at the destination and changes memory
  *                            only there
@@ -33,13 +34,13 @@ Ancestors
 Libs
   blastLib
 
-Theorem mem_word_at_drop:
+Theorem mem_word_at_drop[local]:
   !k off mem. mem_word_at (k + off) mem = mem_word_at off (DROP k mem)
 Proof
   simp[mem_word_at_def, DROP_DROP_T]
 QED
 
-Theorem mem_bytes_at_drop:
+Theorem mem_bytes_at_drop[local]:
   !k off len mem.
     mem_bytes_at (k + off) len mem = mem_bytes_at off len (DROP k mem)
 Proof
@@ -111,7 +112,7 @@ Proof
   simp[mem_bytes_at_def, mcopy_padded_read]
 QED
 
-Theorem mem_bytes_at_write_disjoint:
+Theorem mem_bytes_at_write_disjoint[local]:
   !a len d bytes s.
     a + len <= d \/ d + LENGTH bytes <= a ==>
     mem_bytes_at a len (write_memory_with_expansion d bytes s).vs_memory =
@@ -156,22 +157,6 @@ Proof
       simp[evaluate_type_def, type_memory_size_def]) >>
   simp[evaluate_type_def, AllCaseEqs()] >> rw[] >>
   simp[type_memory_size_def]
-QED
-
-(* A well-typed value takes no more than its type's size. *)
-Theorem val_footprint_le_type_size:
-  !tv v. value_has_type tv v ==> val_footprint tv v <= type_memory_size tv
-Proof
-  rpt strip_tac >> Cases_on `v` >> simp[val_footprint_def] >>
-  rpt (CASE_TAC >> simp[]) >>
-  gvs[value_has_type_def, type_memory_size_def, word_size_def] >>
-  irule DIV_LE_MONOTONE >> simp[]
-QED
-
-Theorem mload_mem_word_at:
-  !off s. mload off s = mem_word_at off s.vs_memory
-Proof
-  simp[mload_def, mem_word_at_def]
 QED
 
 Theorem eval_operand_update_not_fresh[local]:
@@ -259,7 +244,7 @@ Proof
   simp[step_inst_base_def]
 QED
 
-Theorem store_bytestring_run:
+Theorem store_bytestring_run[local]:
   !val_op dst_op sa sb s src dst L.
     compile_store_bytestring val_op dst_op sa = ((),sb) /\
     (!x. val_op = Var x ==> not_fresh_at sa x) /\
@@ -293,7 +278,7 @@ Proof
        venomInstTheory.is_terminator_def] >>
   simp[run_inst_seq_def, step_MLOAD_some, step_ADD_some, step_AND_some,
        step_MCOPY_some, eval_operand_def, lookup_var_update_var,
-       mload_mem_word_at] >>
+       GSYM mem_word_at_eq_mload] >>
   simp[update_var_def, mcopy_def, write_memory_with_expansion_def, LET_THM] >>
   rpt strip_tac >> gvs[not_fresh_at_def, lookup_var_def, update_var_def,
                        finite_mapTheory.FLOOKUP_UPDATE] >>
@@ -399,7 +384,7 @@ Resume compile_store_memory_run[bytestring]:
      `LL < dimword (:256)` by (fs[Abbr `LL`] >> decide_tac) >>
      qexists_tac `LL` >> fs[LESS_MOD]) >>
   `val_footprint tv v <= type_memory_size tv` by
-    metis_tac[val_footprint_le_type_size] >>
+    metis_tac[val_footprint_le] >>
   qspecl_then [`src`, `dst`, `sa`, `sb`, `s`, `sw`, `dw`, `L`] mp_tac
     store_bytestring_run >>
   `L <= 32 * word_size L` by
@@ -416,7 +401,7 @@ QED
 
 Resume compile_store_memory_run[copy]:
   `val_footprint tv v <= type_memory_size tv` by
-    metis_tac[val_footprint_le_type_size] >>
+    metis_tac[val_footprint_le] >>
   Cases_on `type_memory_size tv` >> gvs[compile_copy_memory_def]
   >- (gvs[comp_return_def] >>
       simp[emitted_insts_def, same_blocks_def, run_inst_seq_def] >>
@@ -437,18 +422,6 @@ Resume compile_store_memory_run[copy]:
 QED
 
 Finalise compile_store_memory_run
-
-(* compile_stage_intcall_args's test for a bytestring type. *)
-Theorem stage_bytestring_case:
-  !ty. (case ty of
-          BaseT (BytesT (Dynamic _)) => T
-        | BaseT (StringT _) => T
-        | _ => F) = is_bytestring_type ty
-Proof
-  Cases >> simp[is_bytestring_type_def] >> rename1 `BaseT bt` >>
-  Cases_on `bt` >> simp[is_bytestring_type_def] >> rename1 `BytesT bd` >>
-  Cases_on `bd` >> simp[is_bytestring_type_def]
-QED
 
 (* The store compile_stage_intcall_args emits for a memory-passed argument
    into its buffer dst: compile_store_memory at one type, except that it
@@ -492,7 +465,7 @@ Proof
       impl_tac >- simp[] >> simp[]) >>
   gvs[] >>
   `val_footprint tv v <= type_memory_size tv` by
-    metis_tac[val_footprint_le_type_size] >>
+    metis_tac[val_footprint_le] >>
   qspecl_then [`sa`, `sb`, `dst`, `src`, `type_memory_size tv`, `s`, `dw`,
                `sw`] mp_tac emit_mcopy_run >>
   impl_tac >- simp[] >> strip_tac >> simp[] >> rpt conj_tac
