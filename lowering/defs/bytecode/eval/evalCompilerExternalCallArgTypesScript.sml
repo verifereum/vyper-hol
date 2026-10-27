@@ -6,17 +6,7 @@ Ancestors compileVyper supportedProgram concretizeMemLocDefs codegenReadyCompute
 Libs memoryStoreWitnessLib vyperCheckContractFrontendLib jsonASTLib evalCompilerBytecodeLib finite_mapLib computeLib wordsLib supportedEvalLib
 
 fun holbuild_extra_deps (_ : string list) = ()
-val () = holbuild_extra_deps
-  ["../external-calls/oracle/e25_arg_strlit_short.json",
-   "../external-calls/oracle/e25_arg_strlit_short.hex",
-   "../external-calls/oracle/e36_arg_bytes_literal.json",
-   "../external-calls/oracle/e36_arg_bytes_literal.hex",
-   "../external-calls/oracle/e26_arg_str_smaller.json",
-   "../external-calls/oracle/e26_arg_str_smaller.hex",
-   "../external-calls/oracle/e27_arg_dyn_smaller.json",
-   "../external-calls/oracle/e27_arg_dyn_smaller.hex",
-   "../external-calls/oracle/e46_arg_storage_str.json",
-   "../external-calls/oracle/e46_arg_storage_str.hex"]
+val () = holbuild_extra_deps ["../external-calls"]
 val () = supportedEvalLib.configure ()
 val () = computeLib.upd_compset add_finite_map_compset
 val () = computeLib.upd_compset (computeLib.add_thms

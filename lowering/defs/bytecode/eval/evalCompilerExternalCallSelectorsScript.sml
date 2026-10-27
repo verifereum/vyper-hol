@@ -4,19 +4,7 @@ Ancestors compileVyper supportedProgram concretizeMemLocDefs codegenReadyCompute
 Libs memoryStoreWitnessLib vyperCheckContractFrontendLib jsonASTLib evalCompilerBytecodeLib finite_mapLib computeLib wordsLib supportedEvalLib
 
 fun holbuild_extra_deps (_ : string list) = ()
-val () = holbuild_extra_deps
-  ["../external-calls/oracle/i15_iface_ret_iface_direct.json",
-   "../external-calls/oracle/i15_iface_ret_iface_direct.hex",
-   "../external-calls/oracle/i09_iface_ret_iface.json",
-   "../external-calls/oracle/i09_iface_ret_iface.hex",
-   "../external-calls/oracle/c03_iface_address_attr.json",
-   "../external-calls/oracle/c03_iface_address_attr.hex",
-   "../external-calls/oracle/i02_iface_default_param.json",
-   "../external-calls/oracle/i02_iface_default_param.hex",
-   "../external-calls/oracle/i03_two_ifaces_same_name.json",
-   "../external-calls/oracle/i03_two_ifaces_same_name.hex",
-   "../external-calls/oracle/i13_ext_fn_before_iface.json",
-   "../external-calls/oracle/i13_ext_fn_before_iface.hex"]
+val () = holbuild_extra_deps ["../external-calls"]
 val () = supportedEvalLib.configure ()
 val () = computeLib.upd_compset add_finite_map_compset
 val () = computeLib.upd_compset (computeLib.add_thms

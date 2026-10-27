@@ -7,17 +7,7 @@ Ancestors compileVyper supportedProgram concretizeMemLocDefs codegenReadyCompute
 Libs memoryStoreWitnessLib vyperCheckContractFrontendLib jsonASTLib evalCompilerBytecodeLib finite_mapLib computeLib wordsLib supportedEvalLib
 
 fun holbuild_extra_deps (_ : string list) = ()
-val () = holbuild_extra_deps
-  ["../memory-stores/oracle/t01_tuple_assign_intcall.json",
-   "../memory-stores/oracle/t01_tuple_assign_intcall.hex",
-   "../memory-stores/oracle/t04_tuple_assign_extcall.json",
-   "../memory-stores/oracle/t04_tuple_assign_extcall.hex",
-   "../memory-stores/oracle/t05_tuple_assign_storage_targets.json",
-   "../memory-stores/oracle/t05_tuple_assign_storage_targets.hex",
-   "../memory-stores/oracle/t08_tuple_assign_ret_type_mismatch.json",
-   "../memory-stores/oracle/t08_tuple_assign_ret_type_mismatch.hex",
-   "../memory-stores/oracle/p16_return_tuple_bytes_widen.json",
-   "../memory-stores/oracle/p16_return_tuple_bytes_widen.hex"]
+val () = holbuild_extra_deps ["../memory-stores"]
 val () = supportedEvalLib.configure ()
 val () = computeLib.upd_compset add_finite_map_compset
 val () = computeLib.upd_compset (computeLib.add_thms
