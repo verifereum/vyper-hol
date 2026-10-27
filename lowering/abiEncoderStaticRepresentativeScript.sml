@@ -1,7 +1,7 @@
 (* Additive static-copy representatives; no source cardinality restriction. *)
 Theory abiEncoderStaticRepresentative
 Ancestors
-  abiEncoderOpenInput valueEncodingProps contractABI valueEncoding words list arithmetic
+  abiEncoderOpenInput valueEncodingProps abiCallerStaticMemory contractABI valueEncoding words list arithmetic
 
 Theorem abi_encoder_zero_copy_representative:
   abi_encoder_open_input (AbiCopy 0) (Tuple []) (ListV []) sb 0 mem /\
@@ -60,4 +60,31 @@ Theorem abi_encoder_pair_typing:
   has_type (Tuple [a;b]) (ListV [x;y])
 Proof
   simp[has_type_def, valid_length_def, wordsTheory.dimword_def]
+QED
+
+Theorem abi_encoder_static_length_alignment_mutual:
+  (!at. static_length at MOD 32 = 0) /\
+  (!ats. SUM (MAP static_length ats) MOD 32 = 0)
+Proof
+  ho_match_mp_tac abi_type_induction >>
+  simp[static_length_def, static_length_Tuple_SUM, arithmeticTheory.MOD_PLUS,
+    arithmeticTheory.MOD_TIMES2] >> rpt strip_tac
+  >- (rename1 `static_length (Array bound at)` >> Cases_on `bound` >>
+      simp[static_length_def] >>
+      once_rewrite_tac[GSYM arithmeticTheory.MOD_TIMES2] >> simp[]) >>
+  once_rewrite_tac[GSYM arithmeticTheory.MOD_PLUS] >> simp[]
+QED
+
+Theorem abi_encoder_static_length_alignment:
+  !at. static_length at MOD 32 = 0
+Proof
+  simp[abi_encoder_static_length_alignment_mutual]
+QED
+
+Theorem abi_encoder_static_source_alignment:
+  evaluate_type env ty = SOME tv /\ ~is_dynamic (vyper_to_abi_type env ty) ==>
+  type_memory_size tv MOD 32 = 0
+Proof
+  strip_tac >> drule_all abi_caller_static_memory >>
+  metis_tac[abi_encoder_static_length_alignment]
 QED
