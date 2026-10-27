@@ -2,6 +2,7 @@
 Theory abiEncoderMemberSpine
 Ancestors
   abiEncoderMemberPhaseRaw abiEncoderChildCode abiEncoderMemberCode abiEncoder
+  abiDecoderMemberPhases
   compileEnv emitHelper venomInst venomState words list
 
 Definition abi_encoder_spine_call_def:
@@ -242,3 +243,186 @@ Proof
   qexistsl_tac [`elem_src`, `prepared`, `child_len`, `child_end`] >>
   asm_rewrite_tac []
 QED
+
+(* A request contains only structural data and universal phase transport.
+   Core execution remains the genuine recursive to-buffer runner. *)
+Definition abi_encoder_spine_child_input_def:
+  abi_encoder_spine_child_input func limit_st child_pre child_post
+      (ei,dyn,dst,src,ho,dp,st,en,out) s <=>
+    if dyn then
+      ?ops p len ce d slot off.
+        abi_encode_child_prefix dst ho dp st = (ops,p) /\
+        abi_encoder_spine_core_code func (ei,SND (SND ops),src,p,ce,len) /\
+        abi_encode_child_suffix (FST ops) dp (FST (SND ops)) len ce = (out,en) /\
+        eval_operand dst s = SOME (n2w d) /\ eval_operand dp s = SOME (n2w slot) /\
+        mload slot s = n2w off /\ slot < dimword (:256) /\
+        abi_decoder_operand_live st.cs_next_var dst /\ abi_decoder_operand_live st.cs_next_var dp /\
+        p.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s /\
+        (!r. abi_encoder_member_phase_raw st p s r ==>
+          child_pre (ei,SND (SND ops),src,p,ce,len) r) /\
+        (!r u. child_post (ei,SND (SND ops),src,p,ce,len) r u ==>
+          abi_encoder_spine_cursor_input (FST ops,dp,FST (SND ops),len,ce,en,limit_st) u)
+    else
+      ?head p d.
+        emit_op ADD [dst;Lit (n2w ho)] st = (head,p) /\
+        abi_encoder_spine_core_code func (ei,head,src,p,en,out) /\
+        eval_operand dst s = SOME d /\
+        p.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s /\
+        (!r. abi_encoder_member_phase_raw st p s r ==>
+          child_pre (ei,head,src,p,en,out) r)
+End
+
+Definition abi_encoder_spine_child_output_def:
+  abi_encoder_spine_child_output child_post (ei,dyn,dst,src,ho,dp,st,en,out) s t <=>
+    if dyn then
+      ?ops p len ce r u.
+        abi_encode_child_prefix dst ho dp st = (ops,p) /\
+        abi_encoder_member_phase_raw st p s r /\
+        child_post (ei,SND (SND ops),src,p,ce,len) r u /\
+        abi_encode_child_suffix (FST ops) dp (FST (SND ops)) len ce = (out,en) /\
+        abi_encoder_member_phase_raw ce en u t
+    else
+      ?head p r.
+        emit_op ADD [dst;Lit (n2w ho)] st = (head,p) /\
+        abi_encoder_member_phase_raw st p s r /\
+        child_post (ei,head,src,p,en,out) r t
+End
+
+Theorem abi_encoder_spine_child_generate:
+  (!c r. abi_encoder_spine_core_code func c /\ child_pre c r ==>
+    ?u. core_run c r u /\ child_post c r u) ==>
+  !c s. abi_encoder_spine_child_input func limit_st child_pre child_post c s ==>
+    ?t. abi_encoder_spine_child core_run c s t /\
+      abi_encoder_spine_child_output child_post c s t
+Proof
+  strip_tac >> rpt gen_tac >> PairCases_on `c` >> Cases_on `c1` >>
+  simp_tac bool_ss [abi_encoder_spine_child_input_def] >> rpt strip_tac
+  >- (drule_all abi_encoder_spine_dynamic_run >> strip_tac >>
+      qexists_tac `t` >> asm_simp_tac bool_ss [abi_encoder_spine_child_output_def] >>
+      qexistsl_tac [`ops`, `p`, `len`, `ce`, `r`, `u`] >> asm_rewrite_tac []) >>
+  drule_all abi_encoder_spine_static_run >>
+  disch_then (qspec_then `c5` strip_assume_tac) >>
+  qexists_tac `t` >> asm_simp_tac bool_ss [abi_encoder_spine_child_output_def] >>
+  qexistsl_tac [`head`, `p`, `r`] >> asm_rewrite_tac []
+QED
+
+(* The code ledger is structural: it contains no runtime invariant. *)
+Definition abi_encoder_spine_code_def:
+  abi_encoder_spine_code func limit_st last (dst,src,dp) infos
+      (st,so,ho) (out,en) <=>
+    compile_abi_encode_complex_elems dst src infos so ho dp st = (out,en) /\
+    fn_has_code st en func /\
+    (st.cs_blocks = en.cs_blocks \/
+      !bb. lookup_block en.cs_current_bb func.fn_blocks = SOME bb ==>
+        phi_prefix_length bb.bb_instructions = 0) /\
+    en.cs_next_id <= last /\ en.cs_next_var <= limit_st.cs_next_var
+End
+
+Definition abi_encoder_spine_cons_layout_def:
+  abi_encoder_spine_cons_layout func limit_st last (dst,src,dp)
+      (ei,az,mz,dyn,rest) (st,so,ho) (out,en) (elem_src,p,len,ce) <=>
+    emit_op ADD [src;Lit (n2w so)] st = (elem_src,p) /\
+    compile_abi_encode_child dst elem_src ei dyn ho dp p = (len,ce) /\
+    fn_has_code st p func /\ fn_has_code p ce func /\
+    cs_extends st p /\ cs_extends p ce /\ cs_extends ce en /\
+    p.cs_blocks = st.cs_blocks /\ p.cs_next_id = st.cs_next_id+1 /\
+    p.cs_next_var = st.cs_next_var+1 /\
+    p.cs_next_id <= ce.cs_next_id /\ ce.cs_next_id <= en.cs_next_id /\
+    p.cs_next_var <= ce.cs_next_var /\ ce.cs_next_var <= en.cs_next_var /\
+    p.cs_next_var <= limit_st.cs_next_var /\
+    (p.cs_blocks = ce.cs_blocks \/
+      !bb. lookup_block ce.cs_current_bb func.fn_blocks = SOME bb ==>
+        phi_prefix_length bb.bb_instructions = 0) /\
+    abi_encoder_spine_code func limit_st last (dst,src,dp) rest
+      (ce,so+mz,ho+az) (out,en)
+End
+
+Theorem abi_encoder_spine_cons_layout:
+  abi_encoder_spine_code func limit_st last (dst,src,dp)
+    ((ei,az,mz,dyn)::rest) (st,so,ho) (out,en) ==>
+  ?elem_src p len ce.
+    abi_encoder_spine_cons_layout func limit_st last (dst,src,dp)
+      (ei,az,mz,dyn,rest) (st,so,ho) (out,en) (elem_src,p,len,ce)
+Proof
+  simp_tac bool_ss [abi_encoder_spine_code_def] >>
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  drule_all abi_encoder_spine_cons_code >> strip_tac >>
+  `cs_extends st ce` by
+    (irule cs_extends_trans >> qexists_tac `p` >> asm_rewrite_tac []) >>
+  drule_all abi_decoder_members_tail_phi >> strip_tac >>
+  qexistsl_tac [`elem_src`, `p`, `len`, `ce`] >>
+  gvs[abi_encoder_spine_cons_layout_def, abi_encoder_spine_code_def] >>
+  decide_tac
+QED
+
+(* A single list generator. Entry/exit callbacks transport observations over
+   supplied endpoints; they do not execute prepare, child, or suffix code. *)
+Theorem abi_encoder_member_spine_generate:
+  (!y c r. abi_encoder_spine_core_code func c /\ child_pre y c r ==>
+    ?u. core_run c r u /\ child_post y c r u) /\
+  (!ei az mz dyn rest st so ho x s.
+    Inv ((ei,az,mz,dyn)::rest) (st,so,ho) x s ==>
+    (?sw. eval_operand src s = SOME sw) /\ fresh_vars_wrt limit_st s) /\
+  (!ei az mz dyn rest st so ho out en x s elem_src p len ce r.
+    abi_encoder_spine_code func limit_st last (dst,src,dp)
+      ((ei,az,mz,dyn)::rest) (st,so,ho) (out,en) /\
+    Inv ((ei,az,mz,dyn)::rest) (st,so,ho) x s /\
+    abi_encoder_spine_cons_layout func limit_st last (dst,src,dp)
+      (ei,az,mz,dyn,rest) (st,so,ho) (out,en) (elem_src,p,len,ce) /\
+    abi_encoder_member_phase_raw st p s r ==>
+    ?y. Entry (ei,az,mz,dyn,rest) (st,so,ho) x s (elem_src,p,len,ce) r y) /\
+  (!ei az mz dyn rest st so ho x s elem_src p len ce r y.
+    Entry (ei,az,mz,dyn,rest) (st,so,ho) x s (elem_src,p,len,ce) r y ==>
+    abi_encoder_spine_child_input func limit_st (child_pre y) (child_post y)
+      (ei,dyn,dst,elem_src,ho,dp,p,ce,len) r) /\
+  (!ei az mz dyn rest st so ho x s elem_src p len ce r y u.
+    Entry (ei,az,mz,dyn,rest) (st,so,ho) x s (elem_src,p,len,ce) r y /\
+    abi_encoder_spine_child_output (child_post y)
+      (ei,dyn,dst,elem_src,ho,dp,p,ce,len) r u ==>
+    ?x'. Inv rest (ce,so+mz,ho+az) x' u) /\
+  (!st so ho out en x s.
+    abi_encoder_spine_code func limit_st last (dst,src,dp) [] (st,so,ho) (out,en) /\
+    Inv [] (st,so,ho) x s ==> Post (out,en) s) ==>
+  !infos st so ho out en x s.
+    abi_encoder_spine_code func limit_st last (dst,src,dp) infos (st,so,ho) (out,en) /\
+    Inv infos (st,so,ho) x s ==>
+    ?t. abi_encoder_member_spine core_run (dst,src,dp) infos (st,so,ho) (out,en) s t /\
+      Post (out,en) t
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >> Induct
+  >- (rpt strip_tac >> qexists_tac `s` >>
+      simp_tac bool_ss [abi_encoder_member_spine_def] >>
+      conj_tac >- fs[abi_encoder_spine_code_def] >> metis_tac[]) >>
+  qx_gen_tac `entry` >> PairCases_on `entry` >> rpt gen_tac >>
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  drule abi_encoder_spine_cons_layout >> strip_tac >>
+  `(?sw. eval_operand src s = SOME sw) /\ fresh_vars_wrt limit_st s`
+    by metis_tac[] >>
+  `emit_op ADD [src;Lit (n2w so)] st = (elem_src,p) /\
+    p.cs_next_var <= limit_st.cs_next_var`
+    by fs[abi_encoder_spine_cons_layout_def] >>
+  `eval_operand (Lit (n2w so)) s = SOME (n2w so)` by simp[eval_operand_def] >>
+  drule_all (SRULE [] (Q.INST [`opc` |-> `ADD`] abi_encoder_member_binary_raw)) >> strip_tac >>
+  `?y. Entry (entry0,entry1,entry2,entry3,infos) (st,so,ho) x s
+    (elem_src,p,len,ce) ready y` by metis_tac[] >>
+  `abi_encoder_spine_child_input func limit_st (child_pre y) (child_post y)
+    (entry0,entry3,dst,elem_src,ho,dp,p,ce,len) ready` by metis_tac[] >>
+  `!c r. abi_encoder_spine_core_code func c /\ child_pre y c r ==>
+    ?u. core_run c r u /\ child_post y c r u` by metis_tac[] >>
+  drule abi_encoder_spine_child_generate >> disch_then drule >> strip_tac >>
+  rename1 `abi_encoder_spine_child core_run _ ready encoded` >>
+  `?x'. Inv infos (ce,so+entry2,ho+entry1) x' encoded` by metis_tac[] >>
+  `abi_encoder_spine_code func limit_st last (dst,src,dp) infos
+    (ce,so+entry2,ho+entry1) (out,en)` by fs[abi_encoder_spine_cons_layout_def] >>
+  first_x_assum (drule_all_then strip_assume_tac) >>
+  qexists_tac `t` >> asm_simp_tac bool_ss [abi_encoder_member_spine_def] >>
+  qexistsl_tac [`elem_src`, `p`, `len`, `ce`, `ready`, `encoded`] >> asm_rewrite_tac []
+QED
+
+val _ = List.app (fn th =>
+  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
+    if List.all (fn s => s = "DISK_THM") oracles andalso null axioms then ()
+    else raise Fail "member certificate generator has an admission or axiom"
+  end)
+  [abi_encoder_spine_child_generate, abi_encoder_spine_cons_layout,
+   abi_encoder_member_spine_generate];
