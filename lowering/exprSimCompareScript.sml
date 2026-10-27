@@ -6,7 +6,10 @@
  * from arithmeticProps' compile_compare_correct through
  * frag_exec_writes_fresh.  The source compares the values; the lowering
  * compares their words, unsigned for uint256 and signed otherwise, which
- * agree on values of the type (value_has_type).
+ * agree on values of the type (value_has_type).  Eq and NotEq on two
+ * address or two bytesN values, which are BytesV, compare their typed
+ * words (typed_val_to_w256) the same way, and those are equal just when
+ * the bytes are.
  *
  * Min and Max compare the same way and pick an operand branchlessly
  * (compile_select).
@@ -14,10 +17,13 @@
  * TOP-LEVEL:
  *   bop_result_compare   — the source result is eval_compare on the words
  *   compile_compare_sim  — binop_frag for the comparisons
+ *   compile_compare_bytes_sim — binop_frag_words for == and != on address
+ *                          and bytesN, whose values are BytesV in their
+ *                          typed words
  *   compile_minmax_sim   — binop_frag for Min and Max
  *
- * Helpers: int_word_cmp, compile_compare_shape, bop_result_minmax,
- *   straight_fresh_minmax, compile_minmax_correct
+ * Helpers: int_word_cmp, compile_compare_shape, typed_val_to_w256_bytes_11,
+ *   bop_result_minmax, straight_fresh_minmax, compile_minmax_correct
  *)
 
 Theory exprSimCompare
@@ -218,6 +224,79 @@ Proof
   simp[] >> rpt strip_tac >>
   Cases_on `eval_compare bop ty (val_to_w256 v1) (val_to_w256 v2)` >>
   fs[val_to_w256_def, word_value_def]
+QED
+
+(* ===== Equality on address and bytesN ===== *)
+
+(* The typed words of two address values, or of two bytesN values of one
+   width, are equal just when their bytes are: an address is the low 20
+   bytes of its word, a bytesN the high N bytes. *)
+Theorem typed_val_to_w256_bytes_11:
+  !tv b1 b2.
+    (tv = BaseTV AddressT \/ ?m. tv = BaseTV (BytesT (Fixed m)) /\ m <= 32) /\
+    value_has_type tv (BytesV b1) /\ value_has_type tv (BytesV b2) ==>
+    (typed_val_to_w256 tv (BytesV b1) = typed_val_to_w256 tv (BytesV b2) <=>
+     b1 = b2)
+Proof
+  rpt strip_tac >> eq_tac >> simp[] >>
+  gvs[value_has_type_def, typed_val_to_w256_def] >> strip_tac
+  >- (`DROP 12 (word_to_bytes_be
+                  (word_of_bytes_be (PAD_LEFT 0w 32 b1) : bytes32)) = b1 /\
+       DROP 12 (word_to_bytes_be
+                  (word_of_bytes_be (PAD_LEFT 0w 32 b2) : bytes32)) = b2` by
+        simp[valueEncodingProofsTheory.word_to_bytes_be_pad_left_roundtrip] >>
+      metis_tac[]) >>
+  fs[valueEncodingProofsTheory.word_of_bytes_be_pad_right] >>
+  `TAKE (LENGTH b1) (word_to_bytes_be (word_of_bytes_be b1 : bytes32)) = b1 /\
+   TAKE (LENGTH b2) (word_to_bytes_be (word_of_bytes_be b2 : bytes32)) = b2` by
+    simp[valueEncodingProofsTheory.TAKE_word_to_bytes_be_word_of_bytes_be] >>
+  metis_tac[]
+QED
+
+(* binop_frag_words for == and != on two address or two bytesN values of
+   one type, held in their typed words: compile_compare's EQ on the words
+   is the source's comparison of the bytes. *)
+Theorem compile_compare_bytes_sim:
+  !ctx func cenv cx bop ty ann bl el tys tv b1 b2 es0.
+    (bop = Eq \/ bop = NotEq) /\
+    (tv = BaseTV AddressT \/ ?m. tv = BaseTV (BytesT (Fixed m)) /\ m <= 32) /\
+    value_has_type tv (BytesV b1) /\ value_has_type tv (BytesV b2) ==>
+    binop_frag_words ctx func cenv cx bop ty ann bl el tys
+      (BytesV b1) (BytesV b2)
+      (typed_val_to_w256 tv (BytesV b1)) (typed_val_to_w256 tv (BytesV b2)) es0
+Proof
+  rpt gen_tac >> strip_tac >>
+  qabbrev_tac `w1 = typed_val_to_w256 tv (BytesV b1)` >>
+  qabbrev_tac `w2 = typed_val_to_w256 tv (BytesV b2)` >>
+  `(w1 = w2 <=> b1 = b2)` by
+    (unabbrev_all_tac >> irule typed_val_to_w256_bytes_11 >> simp[]) >>
+  `MEM bop [Lt; Gt; Eq; NotEq; LtE; GtE] /\
+   bop_result cx ann bop tys (BytesV b1) (BytesV b2) es0 =
+     INL (Value (BoolV (eval_compare bop ty w1 w2)))` by
+    gvs[bop_result_def, evaluate_builtin_def, evaluate_binop_def,
+        binop_negate_def, eval_compare_def] >>
+  simp[binop_frag_words_def] >> rpt gen_tac >> strip_tac >>
+  `compile_compare bop x y ty sa = (op, sb)` by
+    (qpat_x_assum `compile_binop _ _ _ _ _ _ _ = _` mp_tac >> fs[] >>
+     rw[compile_binop_def]) >>
+  drule_all compile_compare_shape >> strip_tac >>
+  qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es0`, `sa`, `sb`, `op`,
+     `bool_to_word (eval_compare bop ty w1 w2)`,
+     `\ss. eval_operand x ss = SOME w1 /\ eval_operand y ss = SOME w2`,
+     `\a. F`, `\r. F`, `s0`] mp_tac frag_exec_writes_fresh >>
+  (impl_tac
+   >- (asm_rewrite_tac[] >> BETA_TAC >> rpt conj_tac >> rpt strip_tac >>
+      FIRST [
+        qspecl_then [`x`, `sa`, `ss`] mp_tac eval_operand_drop_fresh >>
+        qspecl_then [`y`, `sa`, `ss`] mp_tac eval_operand_drop_fresh >>
+        asm_simp_tac bool_ss [] >> NO_TAC,
+        qspecl_then [`bop`, `x`, `y`, `ty`, `ss`, `sa`, `op`, `sb`,
+                     `w1`, `w2`] mp_tac compile_compare_correct >>
+        simp[]])) >>
+  disch_then (fn th => match_mp_tac (MATCH_MP frag_exec_weaken th)) >>
+  simp[] >> rpt strip_tac >>
+  Cases_on `eval_compare bop ty w1 w2` >>
+  gvs[val_to_w256_def, word_value_def, bool_to_word_def]
 QED
 
 (* ===== Min and Max ===== *)
