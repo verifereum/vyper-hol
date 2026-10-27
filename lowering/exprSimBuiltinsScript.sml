@@ -35,8 +35,6 @@
  *     codehash and is_contract: call_ctx_rel does not relate the blob
  *     hashes, and nothing relates the accounts.
  *   - compile_acc_sim for .code: the lowering emits INVALID.
- *   - compile_len_sim: well_typed_builtin_app Len admits fixed arrays and
- *     bytesN, but the lowering always loads the operand's first word.
  *   - compile_keccak256_sim and compile_sha256_sim for a Bytes or String
  *     operand: compile_keccak256_bytes and compile_sha256_bytes read the
  *     bytes from ADD ptr 32, which wraps at 2 ** 256, while val_in_memory
