@@ -56,8 +56,8 @@ Ancestors
 
 (* compile_internal_function up to the code that is not the prologue's: the
    immutables reservation of a constructor callee, the nonreentrant lock and
-   the body.  It returns the compile env the body is compiled in (before
-   ce_alloca_locals is set) and the return-PC operand. *)
+   the body.  It returns the compile env the body is compiled in and the
+   return-PC operand. *)
 Definition compile_internal_prologue_def:
   compile_internal_prologue cenv params has_return_buf ret_type =
     do return_buf_var <-
