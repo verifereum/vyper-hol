@@ -2,7 +2,8 @@
 Theory abiEncoderMemberPhaseExec
 Ancestors
   abiScratchMembers abiScratchAddress abiScratchChild abiScratchEncoderContract
-  abiEncoderChildSuffix abiDecoderFrame
+  abiEncoderChildSuffix abiDecoderFrame abiEncoderMembersBoundary
+  abiDecoderAllocation abiDecoderIndexInit abiDecoderProtectedScratch pred_set
   abiEncoderMembersContract abiEncoderMembersDefs abiEncoderMembersSource
   abiEncoderTuple abiEncoderChildInputs abiEncoderInput abiCanonicalWindows
   abiDecoderArrayInitExec abiDecoderLoop emitHelperProps valueEncoding arithmetic
@@ -247,4 +248,33 @@ Proof
   drule_all abi_encode_child_suffix_sequence >> strip_tac >>
   gvs[abi_encoder_member_phase_raw_def] >>
   gvs[eval_op_inst_idx, fresh_vars_wrt_def, abi_decode_footprint_frame_def]
+QED
+
+Theorem abi_encoder_complex_finish_raw_transport:
+  abi_encoder_members_inv [] [] [] tys avs T dyn_ptr site slot first last lo st limit_st
+    src dst sb so ho d hl output_size b cap encoded /\
+  emit_op MLOAD [dyn_ptr] st = (out,end_st) /\
+  end_st.cs_next_id <= last /\ end_st.cs_next_var <= limit_st.cs_next_var /\ 
+  abi_encoder_member_phase_raw st end_st encoded actual ==>
+  mem_bytes_at d (LENGTH (enc (Tuple tys) (ListV avs))) actual.vs_memory =
+    enc (Tuple tys) (ListV avs) /\
+  eval_operand out actual = SOME (n2w (LENGTH (enc (Tuple tys) (ListV avs)))) /\
+  fresh_vars_wrt limit_st actual /\ abi_decoder_address_frame st.cs_next_var encoded actual /\
+  actual.vs_current_bb = end_st.cs_current_bb /\ actual.vs_inst_idx = LENGTH end_st.cs_current_insts /\
+  ~actual.vs_halted
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  drule emitted_insts_emit_op >> strip_tac >>
+  drule abi_encoder_members_final_output >> strip_tac >>
+  qpat_assum `abi_encoder_members_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ encoded`
+    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_encoder_members_inv_def]) >>
+  qpat_x_assum `abi_encoder_cursor T _ _ _ _ _ _ (LENGTH _) _`
+    (MAP_EVERY assume_tac o CONJUNCTS o SIMP_RULE bool_ss [abi_encoder_cursor_def]) >>
+  `site IN abi_decoder_ids first last` by
+    (simp_tac std_ss [abi_decoder_ids_def, GSPECIFICATION] >> decide_tac) >>
+  drule_all abi_decoder_budget_site_bounds >> strip_tac >>
+  drule abi_decoder_budget_word_bound >> strip_tac >> `slot < dimword (:256)` by decide_tac >>
+  drule_all abi_encoder_member_load_transport >> strip_tac >>
+  drule abi_encoder_emit_address_shape >> strip_tac >>
+  gvs[abi_decoder_address_frame_def, w2n_n2w]
 QED
