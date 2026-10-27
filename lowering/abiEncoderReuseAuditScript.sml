@@ -13,6 +13,7 @@ Ancestors
   abiEncoderCompositionCompat
   abiEncoderSharedLeaves abiEncoderEnvelopeAdapter
   abiEncoderSourceWindow abiEncoderSourceTransport
+  abiEncoderSourceAggregate abiEncoderSourcePrimitive abiEncoderSourceProducer
 
 fun audit_encoder_tag (name, th) =
   let
@@ -70,6 +71,34 @@ val _ = List.app audit_encoder_tag
    ("abi_encoder_struct_parent", abi_encoder_struct_parent),
    ("abi_encoder_sparse_zero_probe", abi_encoder_sparse_zero_probe),
    ("abi_encoder_sparse_absent_probe", abi_encoder_sparse_absent_probe),
+   ("abi_encoder_enc_tuple_cong", abi_encoder_enc_tuple_cong),
+   ("abi_encoder_head_lengths_cong", abi_encoder_head_lengths_cong),
+   ("abi_encoder_tuple_encoding_cong", abi_encoder_tuple_encoding_cong),
+   ("source_rep_metadata", source_rep_metadata),
+   ("source_rep_transport", source_rep_transport),
+   ("source_reps_nil", source_reps_nil),
+   ("source_reps_index", source_reps_index),
+   ("source_reps_cons", source_reps_cons),
+   ("abi_encoder_dynamic_empty_input", abi_encoder_dynamic_empty_input),
+   ("abi_encoder_dynamic_empty_classification", abi_encoder_dynamic_empty_classification),
+   ("source_reps_lengths", source_reps_lengths),
+   ("source_reps_span", source_reps_span),
+   ("source_reps_full_span", source_reps_full_span),
+   ("source_reps_members", source_reps_members),
+   ("abi_encoder_source_complex_input", abi_encoder_source_complex_input),
+   ("abi_encoder_tuple_type_encoding", abi_encoder_tuple_type_encoding),
+   ("abi_encoder_tuple_type_encoding_cong", abi_encoder_tuple_type_encoding_cong),
+   ("abi_encoder_dynamic_array_encoding_cong", abi_encoder_dynamic_array_encoding_cong),
+   ("source_rep_static_copy", source_rep_static_copy),
+   ("source_translation_list", source_translation_list),
+   ("source_reps_abi_metadata", source_reps_abi_metadata),
+   ("source_reps_any_dynamic", source_reps_any_dynamic),
+   ("source_reps_tuple_head", source_reps_tuple_head),
+   ("abi_encoder_copy32_word", abi_encoder_copy32_word),
+   ("abi_encoder_word_source_shape", abi_encoder_word_source_shape),
+   ("source_rep_primitive", source_rep_primitive),
+   ("abi_encoder_uniform_source", abi_encoder_uniform_source),
+   ("abi_encoder_source_window", abi_encoder_source_window),
    ("abi_encoder_shared_endpoint_intro", abi_encoder_shared_endpoint_intro),
    ("abi_encoder_register_alloca_inv", abi_encoder_register_alloca_inv),
    ("abi_encoder_weak_child_sequence", abi_encoder_weak_child_sequence),

@@ -251,7 +251,7 @@ Proof
   drule_all source_rep_transport >> metis_tac[]
 QED
 
-(* Retained tags complement the transitive source dependency audit. *)
+(* Loaded .dat files retain oracle tags but erase upstream axiom dependencies. *)
 val _ = List.app (fn (name,th) =>
   let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
     if List.all (fn s => s = "DISK_THM") oracles andalso null axioms then
