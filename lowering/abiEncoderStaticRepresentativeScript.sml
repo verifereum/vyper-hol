@@ -88,3 +88,35 @@ Proof
   strip_tac >> drule_all abi_caller_static_memory >>
   metis_tac[abi_encoder_static_length_alignment]
 QED
+
+Theorem abi_encoder_block_count_representative:
+  !n bs. LENGTH bs = 32*n ==>
+  ?at av. has_type at av /\ ~is_dynamic at /\
+    static_length at = LENGTH bs /\ enc at av = bs
+Proof
+  Induct
+  >- (rpt strip_tac >> gvs[] >> qexistsl_tac [`Tuple []`, `ListV []`] >>
+      simp[has_type_def, is_dynamic_def, static_length_def, enc_def, REV_DEF]) >>
+  rpt strip_tac >>
+  `32 <= LENGTH bs /\ LENGTH (DROP 32 bs) = 32*n` by
+    (simp[LENGTH_DROP] >> decide_tac) >>
+  first_x_assum (qspec_then `DROP 32 bs` mp_tac) >> simp[] >>
+  disch_then (qx_choosel_then [`at`, `av`] strip_assume_tac) >>
+  `LENGTH (TAKE 32 bs) = 32` by simp[LENGTH_TAKE] >>
+  drule abi_encoder_bytes32_representative >> strip_tac >>
+  qexistsl_tac [`Tuple [Bytes (SOME 32); at]`, `ListV [BytesV (TAKE 32 bs); av]`] >>
+  simp[abi_encoder_pair_typing, abi_encoder_static_pair_encoding,
+    is_dynamic_def, static_length_def, static_length_Tuple_SUM] >>
+  metis_tac[TAKE_DROP]
+QED
+
+Theorem abi_encoder_aligned_bytes_representative:
+  LENGTH bs MOD 32 = 0 ==>
+  ?at av. has_type at av /\ ~is_dynamic at /\
+    static_length at = LENGTH bs /\ enc at av = bs
+Proof
+  strip_tac >> irule abi_encoder_block_count_representative >>
+  qexists_tac `LENGTH bs DIV 32` >>
+  qspec_then `32` mp_tac arithmeticTheory.DIVISION >> simp[] >>
+  disch_then (qspec_then `LENGTH bs` mp_tac) >> simp[] >> decide_tac
+QED
