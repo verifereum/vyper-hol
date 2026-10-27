@@ -474,3 +474,146 @@ Proof
       [mk_inst 1 PHI [Label "entry"; Lit 7w] ["x"]; mk_inst 2 STOP [] []]|>]` >>
   simp[observer_jump_phi_region_closed, observer_jump_phi_region_agrees]
 QED
+
+(* Safety is an invariant of reachable, nonhalted inputs, not of arbitrary
+   states. Old instructions outside R impose no opcode restriction. *)
+Definition observer_region_safe_def:
+  observer_region_safe fn cut R <=>
+    (!bb. lookup_block (FST cut) fn.fn_blocks = SOME bb ==>
+       ?id. get_instruction bb (SND cut) = SOME (mk_inst id STOP [] [])) /\
+    (!lbl idx bb inst.
+      (lbl,idx) IN R /\ (lbl,idx) <> cut /\
+      lookup_block lbl fn.fn_blocks = SOME bb /\
+      get_instruction bb idx = SOME inst ==>
+      inst.inst_opcode <> INVOKE /\
+      (!s h. ~s.vs_halted ==> step_inst_base inst s <> Halt h) /\
+      (!s middle. ~s.vs_halted /\ step_inst_base inst s = OK middle ==>
+         ~middle.vs_halted))
+End
+
+Theorem observer_setfmp_halted_probe:
+  step_inst_base (mk_inst 0 SETFMP [Lit 7w] []) (s with vs_halted := T) =
+  OK (s with <|vs_halted := T; vs_fmp := 7w|>)
+Proof
+  simp[Once step_inst_base_def, mk_inst_def, eval_operand_def]
+QED
+
+Theorem observer_same_block_not_closed:
+  ~observer_closed
+    (fn with fn_blocks :=
+      [<|bb_label := "entry"; bb_instructions :=
+        [mk_inst 0 SETFMP [Lit 7w] []; mk_inst 1 STOP [] []]|>])
+    ("entry",1)
+Proof
+  strip_tac >> fs[observer_closed_def] >>
+  qpat_x_assum `!lbl idx bb inst. _`
+    (qspecl_then [`"entry"`, `0`] mp_tac) >>
+  simp[lookup_block_def, listTheory.FIND_thm, get_instruction_def] >>
+  disj2_tac >> qexists_tac `ARB with vs_halted := T` >>
+  simp[Once step_inst_base_def, mk_inst_def, eval_operand_def]
+QED
+
+Theorem observer_same_block_region_safe:
+  observer_region_safe
+    (fn with fn_blocks :=
+      [<|bb_label := "entry"; bb_instructions :=
+        [mk_inst 0 SETFMP [Lit 7w] []; mk_inst 1 STOP [] []]|>])
+    ("entry",1) {("entry",0); ("entry",1)}
+Proof
+  rw[observer_region_safe_def] >>
+  gvs[lookup_block_def, listTheory.FIND_thm, get_instruction_def] >>
+  simp[Once step_inst_base_def, mk_inst_def, eval_operand_def] >>
+  rpt strip_tac >> gvs[Once step_inst_base_def, mk_inst_def, eval_operand_def]
+QED
+
+Theorem observer_jump_phi_region_safe:
+  observer_region_safe
+    (fn with fn_blocks :=
+      [<|bb_label := "entry"; bb_instructions :=
+        [mk_inst 0 JMP [Label "exit"] []]|>;
+       <|bb_label := "exit"; bb_instructions :=
+        [mk_inst 1 PHI [Label "entry"; Lit 7w] ["x"];
+         mk_inst 2 STOP [] []]|>])
+    ("exit",1) {("entry",0); ("exit",1)}
+Proof
+  rw[observer_region_safe_def] >>
+  gvs[lookup_block_def, listTheory.FIND_thm, get_instruction_def] >>
+  simp[Once step_inst_base_def, mk_inst_def, jump_to_def] >>
+  rpt strip_tac >> gvs[Once step_inst_base_def, mk_inst_def, jump_to_def]
+QED
+
+Theorem observer_old_prefix_region_safe:
+  observer_region_safe
+    (fn with fn_blocks :=
+      [<|bb_label := "entry"; bb_instructions :=
+        [old; mk_inst 0 SETFMP [Lit 7w] []; mk_inst 1 STOP [] []]|>])
+    ("entry",2) {("entry",1); ("entry",2)}
+Proof
+  rw[observer_region_safe_def] >>
+  gvs[lookup_block_def, listTheory.FIND_thm, get_instruction_def] >>
+  simp[Once step_inst_base_def, mk_inst_def, eval_operand_def] >>
+  rpt strip_tac >> gvs[Once step_inst_base_def, mk_inst_def, eval_operand_def]
+QED
+
+Theorem observer_old_prefix_region_closed:
+  observer_region_closed ctx
+    (fn with fn_blocks :=
+      [<|bb_label := "entry"; bb_instructions :=
+        [old; mk_inst 0 SETFMP [Lit 7w] []; mk_inst 1 STOP [] []]|>])
+    ("entry",2) {("entry",1); ("entry",2)}
+Proof
+  rw[observer_region_closed_def, abi_observer_step_def] >>
+  gvs[lookup_block_def, listTheory.FIND_thm, get_instruction_def] >>
+  gvs[step_inst_non_invoke, Once step_inst_base_def, mk_inst_def,
+      is_terminator_def, eval_operand_def]
+QED
+
+Theorem observer_old_stop_or_invoke_not_closed:
+  old = mk_inst 9 STOP [] [] \/ old.inst_opcode = INVOKE ==>
+  ~observer_closed
+    (fn with fn_blocks :=
+      [<|bb_label := "entry"; bb_instructions :=
+        [old; mk_inst 0 SETFMP [Lit 7w] []; mk_inst 1 STOP [] []]|>])
+    ("entry",2)
+Proof
+  rpt strip_tac >> fs[observer_closed_def] >>
+  qpat_x_assum `!lbl idx bb inst. _`
+    (qspecl_then [`"entry"`, `0`] mp_tac) >>
+  simp[lookup_block_def, listTheory.FIND_thm, get_instruction_def] >>
+  gvs[mk_inst_def] >>
+  simp[Once step_inst_base_def]
+QED
+
+Theorem observer_old_stop_prefix_probe:
+  observer_region_safe
+    (fn with fn_blocks :=
+      [<|bb_label := "entry"; bb_instructions :=
+        [mk_inst 9 STOP [] []; mk_inst 0 SETFMP [Lit 7w] [];
+         mk_inst 1 STOP [] []]|>])
+    ("entry",2) {("entry",1); ("entry",2)} /\
+  observer_region_closed ctx
+    (fn with fn_blocks :=
+      [<|bb_label := "entry"; bb_instructions :=
+        [mk_inst 9 STOP [] []; mk_inst 0 SETFMP [Lit 7w] [];
+         mk_inst 1 STOP [] []]|>])
+    ("entry",2) {("entry",1); ("entry",2)}
+Proof
+  simp[observer_old_prefix_region_safe, observer_old_prefix_region_closed]
+QED
+
+Theorem observer_old_invoke_prefix_probe:
+  observer_region_safe
+    (fn with fn_blocks :=
+      [<|bb_label := "entry"; bb_instructions :=
+        [mk_inst 9 INVOKE [] []; mk_inst 0 SETFMP [Lit 7w] [];
+         mk_inst 1 STOP [] []]|>])
+    ("entry",2) {("entry",1); ("entry",2)} /\
+  observer_region_closed ctx
+    (fn with fn_blocks :=
+      [<|bb_label := "entry"; bb_instructions :=
+        [mk_inst 9 INVOKE [] []; mk_inst 0 SETFMP [Lit 7w] [];
+         mk_inst 1 STOP [] []]|>])
+    ("entry",2) {("entry",1); ("entry",2)}
+Proof
+  simp[observer_old_prefix_region_safe, observer_old_prefix_region_closed]
+QED
