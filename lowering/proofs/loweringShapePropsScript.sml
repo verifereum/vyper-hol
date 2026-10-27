@@ -11468,11 +11468,20 @@ Resume compile_internal_function_shape[materialize]:
   mp_tac (Q.SPECL [`cenv`, `rb`, `pc`, `st`] internal_cenv_install_shape) >>
   simp[Abbr `cenv1`]
 QED
+Theorem cenv_shape_ok_alloca_locals[local]:
+  cenv_shape_ok st (cenv with ce_alloca_locals := enabled) =
+  cenv_shape_ok st cenv
+Proof
+  simp[cenv_shape_ok_def]
+QED
+
 Resume compile_internal_function_shape[suffix]:
   Cases_on `cenv2.ce_return_pc = SOME (PtrVar pc 0)`
   >- (simp[comp_ignore_bind_def] >> irule shape_step_conseq >>
       irule_at Any (SRULE [comp_ignore_bind_def, comp_bind_assoc,
-        internal_comp_bind_return] internal_alloc_body_suffix_shape) >> simp[]) >>
+        internal_comp_bind_return, cenv_shape_ok_alloca_locals]
+        (Q.SPECL [`cenv`, `cenv2 with ce_alloca_locals := T`]
+          internal_alloc_body_suffix_shape)) >> simp[]) >>
   simp[shape_step_def]
 QED
 Finalise compile_internal_function_shape
@@ -11498,7 +11507,7 @@ Proof
      [<| bb_label := name; bb_instructions := [] |>]`
     by gvs[new_block_def, all_blocks_def] >>
   `state_insts s = state_insts st` by gvs[state_insts_def] >>
-  fs[shape_extends_def, fragExecTheory.cs_extends_def] >>
+  fs[shape_extends_def, compileEnvTheory.cs_extends_def] >>
   qexists_tac `REVERSE new ++
     [<| bb_label := t.cs_current_bb;
         bb_instructions := t.cs_current_insts |>]` >>

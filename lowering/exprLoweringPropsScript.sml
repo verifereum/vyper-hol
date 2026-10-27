@@ -5,17 +5,25 @@
  *   run_inst_seq             — run instruction sequence on Venom state
  *   emitted_insts            — extract new instructions from compile state
  *   stmt_state_rel           — state_rel with the Venom-side allocation
- *                              facts a fragment keeps
+ *                              facts a fragment keeps, and alloca_room
+ *   alloca_room, pending_alloca_size — the frontier plus the sizes of the
+ *                              ALLOCAs not yet run stays below 2 ** 256
  *   compile_expr_correct     — main expression lowering correctness
  *   compile_literal_vv_correct  — word literal case
  *   compile_name_correct     — variable lookup case
  *   compile_binop_correct    — binary operation case
+ *   compile_expr_grows, compile_binop_grows — compile_expr, lower_value
+ *                              and compile_binop only append (cs_extends)
+ *                              and grow the counters
  *
  * Helper:
  *   state_rel_jump_to, state_rel_push_scope, state_rel_pop_scope,
  *   state_rel_frame, stmt_state_rel_jump_to, stmt_state_rel_inst_idx,
  *   stmt_state_rel_push_scope, stmt_state_rel_pop_scope,
  *   stmt_state_rel_update_var — frames for the state relations
+ *   local_ptrs_rel_cenv_cong, state_rel_cenv_cong,
+ *   stmt_state_rel_cenv_cong — the relations at another compile
+ *                              environment that agrees on what they read
  *   local_ptrs_reserved_next_var, local_ptrs_reserved_fresh,
  *   local_ptrs_reserved_not_live — local_ptrs_reserved survives a later
  *                              cs_next_var, and fresh variables and the
@@ -114,6 +122,29 @@ Definition well_annotated_def:
   well_annotated _ = T
 End
 
+(* The sizes func's frame can still allocate: those of its ALLOCAs whose ids
+   have no allocation yet.  Every ALLOCA the lowering emits has a literal
+   size; any other counts as the whole address space. *)
+Definition pending_alloca_size_def:
+  pending_alloca_size (func:ir_function) (ss:venom_state) =
+    SUM (MAP (\inst. case inst.inst_operands of
+                       [Lit n] => w2n n
+                     | _ => dimword (:256))
+             (FILTER (\inst. inst.inst_opcode = ALLOCA /\
+                             inst.inst_id NOTIN FDOM ss.vs_allocas)
+                (fn_insts func)))
+End
+
+(* Room in func's frame: the frontier plus every allocation func can still
+   make stays below 2 ** 256, so no ALLOCA of func hands out a wrapped
+   pointer.  A fresh ALLOCA of func moves its size from the pending sizes to
+   the frontier; a step that leaves the allocations alone keeps it.  An
+   INVOKE does not: the callee's allocations move the frontier too (#638). *)
+Definition alloca_room_def:
+  alloca_room func (ss:venom_state) <=>
+    ss.vs_alloca_next + pending_alloca_size func ss < dimword (:256)
+End
+
 (* state_rel in func, the function running, with the Venom-side facts a
    statement fragment needs and keeps:
    - alloca_inv: the recorded allocations are disjoint and below the
@@ -121,16 +152,75 @@ End
    - an allocation recorded for an ALLOCA of func has the size it asks for.
      A re-executed ALLOCA (a loop body, a branch) returns the recorded base
      without checking its size, so with alloca_inv this is what makes its
-     region miss every other live local. *)
+     region miss every other live local;
+   - alloca_room: func's allocations still to come fit below 2 ** 256, so
+     the frontier stays below 2 ** 256 and a declaration's ALLOCA hands out
+     its base unwrapped, after other declarations and inside bodies. *)
 Definition stmt_state_rel_def:
   stmt_state_rel func cenv cx vs ss ⇔
-    state_rel func cenv cx vs ss ∧ alloca_inv ss ∧
+    state_rel func cenv cx vs ss ∧ alloca_inv ss ∧ alloca_room func ss ∧
     ∀inst n base sz.
       MEM inst (fn_insts func) ∧ inst.inst_opcode = ALLOCA ∧
       inst.inst_operands = [Lit n] ∧
       FLOOKUP ss.vs_allocas inst.inst_id = SOME (base, sz) ⇒
       sz = w2n n
 End
+
+Theorem alloca_room_fields:
+  !func ss ss'.
+    alloca_room func ss /\
+    ss'.vs_allocas = ss.vs_allocas /\ ss'.vs_alloca_next = ss.vs_alloca_next ==>
+    alloca_room func ss'
+Proof
+  rw[alloca_room_def, pending_alloca_size_def] >> gvs[]
+QED
+
+Theorem alloca_room_next_lt:
+  !func ss. alloca_room func ss ==> ss.vs_alloca_next < dimword (:256)
+Proof
+  rw[alloca_room_def] >> decide_tac
+QED
+
+Theorem SUM_MAP_FILTER_mono[local]:
+  !(f:'a -> num) P P' l.
+    (!y. P' y ==> P y) ==>
+    SUM (MAP f (FILTER P' l)) <= SUM (MAP f (FILTER P l))
+Proof
+  rpt gen_tac >> strip_tac >> Induct_on `l` >> rw[] >> gvs[] >> res_tac
+QED
+
+Theorem SUM_MAP_FILTER_drop[local]:
+  !(f:'a -> num) P P' x l.
+    MEM x l /\ P x /\ ~P' x /\ (!y. P' y ==> P y) ==>
+    SUM (MAP f (FILTER P' l)) + f x <= SUM (MAP f (FILTER P l))
+Proof
+  rpt gen_tac >> strip_tac >> rpt (pop_assum mp_tac) >>
+  Induct_on `l` >> rw[] >> gvs[] >> metis_tac[SUM_MAP_FILTER_mono]
+QED
+
+(* A fresh ALLOCA of func fits below 2 ** 256 and keeps the room. *)
+Theorem alloca_room_fresh:
+  !func ss inst n.
+    alloca_room func ss /\ MEM inst (fn_insts func) /\
+    inst.inst_opcode = ALLOCA /\ inst.inst_operands = [Lit n] /\
+    inst.inst_id NOTIN FDOM ss.vs_allocas ==>
+    ss.vs_alloca_next + w2n n < dimword (:256) /\
+    alloca_room func
+      (ss with <| vs_allocas :=
+                    ss.vs_allocas |+ (inst.inst_id, (ss.vs_alloca_next, w2n n));
+                  vs_alloca_next := ss.vs_alloca_next + w2n n |>)
+Proof
+  rpt gen_tac >> strip_tac >>
+  qspecl_then
+    [`\i:instruction. case i.inst_operands of
+                        [Lit n] => w2n n | _ => dimword (:256)`,
+     `\i. i.inst_opcode = ALLOCA /\ i.inst_id NOTIN FDOM ss.vs_allocas`,
+     `\i. i.inst_opcode = ALLOCA /\
+          i.inst_id NOTIN (inst.inst_id INSERT FDOM ss.vs_allocas)`,
+     `inst`, `fn_insts func`] mp_tac SUM_MAP_FILTER_drop >>
+  impl_tac >- simp[] >>
+  fs[alloca_room_def, pending_alloca_size_def]
+QED
 
 (* The expression lemmas relate states with stmt_state_rel func, where func
    is the function the code runs in, under the code premises of the
@@ -391,7 +481,8 @@ Theorem stmt_state_rel_jump_to:
     stmt_state_rel func cenv cx es s
 Proof
   simp[stmt_state_rel_def, state_rel_jump_to, jump_to_def, alloca_inv_def,
-       allocas_non_overlapping_def, alloca_next_valid_def]
+       allocas_non_overlapping_def, alloca_next_valid_def, alloca_room_def,
+       pending_alloca_size_def]
 QED
 
 Theorem stmt_state_rel_inst_idx:
@@ -403,7 +494,8 @@ Proof
        local_region_def, local_backed_def, lookup_var_def, storage_rel_def,
        transient_rel_def, immutables_rel_def, logs_rel_def, call_ctx_rel_def,
        contract_storage_def, contract_transient_def, alloca_inv_def,
-       allocas_non_overlapping_def, alloca_next_valid_def]
+       allocas_non_overlapping_def, alloca_next_valid_def, alloca_room_def,
+       pending_alloca_size_def]
 QED
 
 Theorem stmt_state_rel_push_scope:
@@ -423,6 +515,78 @@ Proof
   rw[stmt_state_rel_def] >> metis_tac[state_rel_pop_scope]
 QED
 
+Theorem local_ptrs_rel_cenv_cong:
+  !func cenv cenv' scopes ss.
+    local_ptrs_rel func cenv' scopes ss /\
+    (!n e. lookup_scopes n scopes = SOME e ==>
+           FLOOKUP cenv.ce_vars n = FLOOKUP cenv'.ce_vars n) ==>
+    local_ptrs_rel func cenv scopes ss
+Proof
+  rw[local_ptrs_rel_def, local_region_def] >> metis_tac[]
+QED
+
+(* state_rel reads cenv through the locals in scope and its other
+   (storage, transient, immutable) bindings. *)
+Theorem state_rel_cenv_cong:
+  !func cenv cenv' cx vs ss.
+    state_rel func cenv' cx vs ss /\
+    (!n e. lookup_scopes n vs.scopes = SOME e ==>
+           FLOOKUP cenv.ce_vars n = FLOOKUP cenv'.ce_vars n) /\
+    (!n l. FLOOKUP cenv.ce_vars n = SOME l /\ (!p sz. l <> PtrVar p sz) ==>
+           FLOOKUP cenv'.ce_vars n = SOME l) /\
+    (!n l. FLOOKUP cenv'.ce_vars n = SOME l /\ (!p sz. l <> PtrVar p sz) ==>
+           FLOOKUP cenv.ce_vars n = SOME l) /\
+    cenv'.ce_module = cenv.ce_module /\ cenv'.ce_is_ctor = cenv.ce_is_ctor ==>
+    state_rel func cenv cx vs ss
+Proof
+  rw[state_rel_def]
+  >- metis_tac[local_ptrs_rel_cenv_cong]
+  >- (simp[storage_vars_rel_def] >> conj_tac >> rpt strip_tac
+      >- (`FLOOKUP cenv'.ce_vars (module_var_key (cenv.ce_module,name)) =
+           SOME (StorageLoc slot)` by
+            (qpat_x_assum `!n l. FLOOKUP cenv.ce_vars n = SOME l /\ _ ==> _`
+               irule >> simp[]) >>
+          qpat_x_assum `storage_vars_rel cenv' cx` mp_tac >>
+          simp[storage_vars_rel_def] >> metis_tac[]) >>
+      qpat_x_assum `!n l. FLOOKUP cenv'.ce_vars n = SOME l /\ _ ==> _` irule >>
+      simp[] >> qpat_x_assum `storage_vars_rel cenv' cx` mp_tac >>
+      simp[storage_vars_rel_def] >> metis_tac[])
+  >- (simp[transient_vars_rel_def] >> conj_tac >> rpt strip_tac
+      >- (`FLOOKUP cenv'.ce_vars (module_var_key (cenv.ce_module,name)) =
+           SOME (TransientLoc slot)` by
+            (qpat_x_assum `!n l. FLOOKUP cenv.ce_vars n = SOME l /\ _ ==> _`
+               irule >> simp[]) >>
+          qpat_x_assum `transient_vars_rel cenv' cx` mp_tac >>
+          simp[transient_vars_rel_def] >> metis_tac[]) >>
+      qpat_x_assum `!n l. FLOOKUP cenv'.ce_vars n = SOME l /\ _ ==> _` irule >>
+      simp[] >> qpat_x_assum `transient_vars_rel cenv' cx` mp_tac >>
+      simp[transient_vars_rel_def] >> metis_tac[])
+  >- (fs[immutables_rel_def, LET_THM] >> Cases_on `cenv.ce_is_ctor` >>
+      gvs[] >> rpt strip_tac >>
+      `FLOOKUP cenv'.ce_vars (module_var_key (cenv.ce_module,name)) =
+       SOME (ImmutableLoc byte_offset)` by (first_x_assum irule >> simp[]) >>
+      metis_tac[]) >>
+  fs[logs_rel_def, listTheory.LIST_REL_EL_EQN, log_entry_equiv_def]
+QED
+
+(* stmt_state_rel reads the compile environment through the locals in
+   scope and its other bindings. *)
+Theorem stmt_state_rel_cenv_cong:
+  !func cenv cenv' cx es ss.
+    stmt_state_rel func cenv' cx es ss /\
+    (!n e. lookup_scopes n es.scopes = SOME e ==>
+           FLOOKUP cenv.ce_vars n = FLOOKUP cenv'.ce_vars n) /\
+    (!n l. FLOOKUP cenv.ce_vars n = SOME l /\ (!p sz. l <> PtrVar p sz) ==>
+           FLOOKUP cenv'.ce_vars n = SOME l) /\
+    (!n l. FLOOKUP cenv'.ce_vars n = SOME l /\ (!p sz. l <> PtrVar p sz) ==>
+           FLOOKUP cenv.ce_vars n = SOME l) /\
+    cenv'.ce_module = cenv.ce_module /\ cenv'.ce_is_ctor = cenv.ce_is_ctor ==>
+    stmt_state_rel func cenv cx es ss
+Proof
+  rw[stmt_state_rel_def] >- (irule state_rel_cenv_cong >> metis_tac[]) >>
+  res_tac
+QED
+
 (* Assigning a variable that is no live local's pointer. *)
 Theorem stmt_state_rel_update_var:
   !func cenv cx es s x w.
@@ -431,7 +595,8 @@ Theorem stmt_state_rel_update_var:
 Proof
   rpt strip_tac >> fs[stmt_state_rel_def] >> rpt conj_tac
   >- (irule state_rel_update_var_local >> simp[])
-  >- (irule alloca_inv_fields >> qexists_tac `s` >> simp[update_var_def]) >>
+  >- (irule alloca_inv_fields >> qexists_tac `s` >> simp[update_var_def])
+  >- (irule alloca_room_fields >> qexists_tac `s` >> simp[update_var_def]) >>
   simp[update_var_def] >> metis_tac[]
 QED
 
@@ -922,28 +1087,26 @@ QED
 (* ===== ci_mono: Compile monad monotonicity ===== *)
 
 (* ci_mono st st' holds when the compile state transition from st to st'
-   either (1) appends to cs_current_insts without changing cs_blocks, or
-   (2) cs_blocks grew (meaning new_block was called, which resets ci).
-   This is the key invariant for all compile monad operations. *)
+   only appends code (cs_extends) and hands out variables and instruction
+   ids from st's counters on.  This is the key invariant for all compile
+   monad operations. *)
 Definition ci_mono_def:
   ci_mono (st:compile_state) (st':compile_state) ⇔
-    (isPREFIX st.cs_current_insts st'.cs_current_insts ∧
-     st'.cs_blocks = st.cs_blocks) ∨
-    LENGTH st'.cs_blocks > LENGTH st.cs_blocks
+    cs_extends st st' ∧ st.cs_next_var ≤ st'.cs_next_var ∧
+    st.cs_next_id ≤ st'.cs_next_id
 End
 
 Theorem ci_mono_refl[local]:
   ci_mono st st
 Proof
-  simp[ci_mono_def]
+  simp[ci_mono_def, cs_extends_refl]
 QED
 
 Theorem ci_mono_trans[local]:
   ci_mono a b ∧ ci_mono b c ⇒ ci_mono a c
 Proof
   simp[ci_mono_def] >> rpt strip_tac >> gvs[] >>
-  irule rich_listTheory.IS_PREFIX_TRANS >>
-  qexists `b.cs_current_insts` >> simp[]
+  irule cs_extends_trans >> qexists `b` >> simp[]
 QED
 
 (* ci_mono composes through monad_bind (= comp_bind) *)
@@ -985,71 +1148,79 @@ Theorem ci_mono_same_blocks_isPREFIX[local]:
   ci_mono st st' ∧ same_blocks st st' ⇒
   isPREFIX st.cs_current_insts st'.cs_current_insts
 Proof
-  rw[ci_mono_def, same_blocks_def] >> gvs[]
+  rw[ci_mono_def, same_blocks_def, cs_extends_def] >>
+  gvs[listTheory.APPEND_EQ_SELF]
 QED
 
 (* ci_mono for primitives *)
 Theorem ci_mono_comp_return[local]:
   ∀ x sa. ci_mono sa (SND (comp_return x sa))
 Proof
-  simp[comp_return_def, ci_mono_def]
+  simp[comp_return_def, ci_mono_refl]
 QED
 
 Theorem ci_mono_emit[local]:
   ∀ inst sa. ci_mono sa (SND (emit inst sa))
 Proof
-  simp[emit_def, ci_mono_def, rich_listTheory.IS_PREFIX_APPEND3]
+  rpt gen_tac >> Cases_on `emit inst sa` >> drule cs_extends_emit >>
+  gvs[ci_mono_def, emit_def]
 QED
 
 Theorem ci_mono_fresh_var[local]:
   ∀ sa. ci_mono sa (SND (fresh_var sa))
 Proof
-  simp[fresh_var_def, ci_mono_def]
+  gen_tac >> Cases_on `fresh_var sa` >> drule cs_extends_fresh_var >>
+  gvs[ci_mono_def, fresh_var_def]
 QED
 
 Theorem ci_mono_fresh_id[local]:
   ∀ sa. ci_mono sa (SND (fresh_id sa))
 Proof
-  simp[fresh_id_def, ci_mono_def]
+  gen_tac >> Cases_on `fresh_id sa` >> drule cs_extends_fresh_id >>
+  gvs[ci_mono_def, fresh_id_def]
 QED
 
 Theorem ci_mono_fresh_label[local]:
   ∀ pfx sa. ci_mono sa (SND (fresh_label pfx sa))
 Proof
-  simp[fresh_label_def, ci_mono_def]
+  rpt gen_tac >> Cases_on `fresh_label pfx sa` >>
+  drule cs_extends_fresh_label >> gvs[ci_mono_def, fresh_label_def]
 QED
 
 Theorem ci_mono_new_block[local]:
   ∀ label sa. ci_mono sa (SND (new_block label sa))
 Proof
-  simp[new_block_def, LET_THM, ci_mono_def]
+  rpt gen_tac >> Cases_on `new_block label sa` >>
+  drule cs_extends_new_block >> gvs[ci_mono_def, new_block_def]
 QED
+
+(* Sequence ci_mono through binds, lets and conditionals, down to the
+   operations named in rws. *)
+fun ci_mono_chain_tac rws =
+  rpt (FIRST [irule ci_mono_bind, irule ci_mono_ignore_bind, IF_CASES_TAC] >>
+       rpt conj_tac >> rpt gen_tac >> PURE_REWRITE_TAC[LET_THM] >> BETA_TAC) >>
+  simp (ci_mono_comp_return :: rws);
+
+val ci_mono_prim_rws =
+  [ci_mono_emit, ci_mono_fresh_var, ci_mono_fresh_id, ci_mono_fresh_label,
+   ci_mono_new_block];
 
 Theorem ci_mono_emit_op[local]:
   ∀ opc ops sa. ci_mono sa (SND (emit_op opc ops sa))
 Proof
-  simp[emit_op_def, comp_bind_def, comp_ignore_bind_def,
-       fresh_id_def, fresh_var_def, emit_def, comp_return_def,
-       venomInstTheory.mk_inst_def, pairTheory.UNCURRY,
-       ci_mono_def, rich_listTheory.IS_PREFIX_APPEND3]
+  rw[emit_op_def] >> ci_mono_chain_tac ci_mono_prim_rws
 QED
 
 Theorem ci_mono_emit_void[local]:
   ∀ opc ops sa. ci_mono sa (SND (emit_void opc ops sa))
 Proof
-  simp[emit_void_def, comp_bind_def, comp_ignore_bind_def,
-       fresh_id_def, emit_def, comp_return_def,
-       venomInstTheory.mk_inst_def, pairTheory.UNCURRY,
-       ci_mono_def, rich_listTheory.IS_PREFIX_APPEND3]
+  rw[emit_void_def] >> ci_mono_chain_tac ci_mono_prim_rws
 QED
 
 Theorem ci_mono_emit_inst[local]:
   ∀ opc ops outs sa. ci_mono sa (SND (emit_inst opc ops outs sa))
 Proof
-  simp[emit_inst_def, comp_bind_def, comp_ignore_bind_def,
-       fresh_id_def, emit_def, comp_return_def,
-       venomInstTheory.mk_inst_def, pairTheory.UNCURRY,
-       ci_mono_def, rich_listTheory.IS_PREFIX_APPEND3]
+  rw[emit_inst_def] >> ci_mono_chain_tac ci_mono_prim_rws
 QED
 
 (* ci_mono for compile_ptr_load (used by unwrap_value) *)
@@ -1061,130 +1232,35 @@ Proof
   rw[] >> simp[ci_mono_emit_op]
 QED
 
-(* ===== blocks_len toolkit for ci_mono proofs ===== *)
-
-(* LENGTH cs_blocks is preserved by all primitives except new_block *)
-Theorem blocks_len_bind[local]:
-  ∀ (m : compile_state -> 'a # compile_state)
-    (g : 'a -> compile_state -> 'b # compile_state) sa.
-    LENGTH (SND (monad_bind m g sa)).cs_blocks =
-    LENGTH (SND (g (FST (m sa)) (SND (m sa)))).cs_blocks
-Proof
-  rw[comp_bind_def, LET_THM, pairTheory.UNCURRY]
-QED
-
-Theorem blocks_pres_emit_op[local]:
-  ∀ opc ops sa.
-    LENGTH (SND (emit_op opc ops sa)).cs_blocks = LENGTH sa.cs_blocks
-Proof
-  rw[emit_op_def, comp_bind_def, comp_ignore_bind_def, LET_THM,
-     pairTheory.UNCURRY, fresh_id_def, fresh_var_def, emit_def,
-     venomInstTheory.mk_inst_def, comp_return_def]
-QED
-
-Theorem blocks_pres_emit_void[local]:
-  ∀ opc ops sa.
-    LENGTH (SND (emit_void opc ops sa)).cs_blocks = LENGTH sa.cs_blocks
-Proof
-  rw[emit_void_def, comp_bind_def, comp_ignore_bind_def, LET_THM,
-     pairTheory.UNCURRY, fresh_id_def, emit_def,
-     venomInstTheory.mk_inst_def, comp_return_def]
-QED
-
-Theorem blocks_pres_emit_inst[local]:
-  ∀ opc ops outs sa.
-    LENGTH (SND (emit_inst opc ops outs sa)).cs_blocks = LENGTH sa.cs_blocks
-Proof
-  rw[emit_inst_def, comp_bind_def, comp_ignore_bind_def, LET_THM,
-     pairTheory.UNCURRY, fresh_id_def, emit_def,
-     venomInstTheory.mk_inst_def, comp_return_def]
-QED
-
-Theorem blocks_pres_compile_ptr_load[local]:
-  ∀ ic loc op sa.
-    LENGTH (SND (compile_ptr_load ic loc op sa)).cs_blocks =
-    LENGTH sa.cs_blocks
+Theorem ci_mono_compile_ptr_store[local]:
+  ∀ is_ctor loc op v sa.
+    ci_mono sa (SND (compile_ptr_store is_ctor loc op v sa))
 Proof
   rpt gen_tac >> Cases_on `loc` >>
-  rw[contextTheory.compile_ptr_load_def] >>
-  rw[blocks_pres_emit_op]
+  simp[contextTheory.compile_ptr_store_def] >>
+  rw[] >> simp[ci_mono_emit_void]
 QED
 
-Theorem blocks_pres_compile_ptr_store[local]:
-  ∀ ic loc op v sa.
-    LENGTH (SND (compile_ptr_store ic loc op v sa)).cs_blocks =
-    LENGTH sa.cs_blocks
-Proof
-  rpt gen_tac >> Cases_on `loc` >>
-  rw[contextTheory.compile_ptr_store_def] >>
-  rw[blocks_pres_emit_void]
-QED
-
-Theorem blocks_grow_new_block[local]:
-  ∀ lbl sa.
-    LENGTH (SND (new_block lbl sa)).cs_blocks =
-    SUC (LENGTH sa.cs_blocks)
-Proof
-  rw[new_block_def]
-QED
-
-Theorem blocks_pres_scaled_offset[local]:
-  ∀ scale base ctr sa.
-    LENGTH (SND
-      ((if scale = 1 then emit_op ADD [base; ctr]
-        else do scaled <- emit_op MUL [ctr; Lit (n2w scale)];
-                emit_op ADD [base; scaled]
-             od) sa)).cs_blocks =
-    LENGTH sa.cs_blocks
-Proof
-  rw[] >>
-  simp[comp_bind_def, LET_THM, pairTheory.UNCURRY, blocks_pres_emit_op]
-QED
-
-(* compile_word_copy_loop grows blocks by exactly 3 *)
-val blocks_len_rws = [blocks_len_bind,
-  SIMP_RULE bool_ss [] (Q.SPECL [`i`,`sa`] (INST_TYPE [alpha |-> ``:unit``] blocks_pres_emit_op)),
-  blocks_pres_emit_op, blocks_pres_emit_void, blocks_pres_emit_inst,
-  blocks_pres_compile_ptr_load, blocks_pres_compile_ptr_store,
-  blocks_pres_scaled_offset, blocks_grow_new_block,
-  SIMP_RULE bool_ss [LET_THM] fresh_var_def,
-  SIMP_RULE bool_ss [LET_THM] fresh_id_def,
-  SIMP_RULE bool_ss [LET_THM] fresh_label_def,
-  SIMP_RULE bool_ss [] emit_def,
-  comp_return_def];
-
-Theorem blocks_grow_compile_word_copy_loop[local]:
-  ∀ src dst wc ll sl ic sa.
-    LENGTH sa.cs_blocks + 3 =
-    LENGTH (SND (compile_word_copy_loop src dst wc ll sl ic sa)).cs_blocks
-Proof
-  rw[contextTheory.compile_word_copy_loop_def, LET_THM] >>
-  simp[comp_bind_def, comp_ignore_bind_def, pairTheory.UNCURRY,
-       fresh_label_def, fresh_var_def, comp_return_def,
-       blocks_pres_emit_inst, blocks_pres_emit_op,
-       blocks_pres_compile_ptr_load, blocks_pres_compile_ptr_store,
-       blocks_pres_scaled_offset, blocks_grow_new_block]
-QED
+val ci_mono_emit_rws =
+  ci_mono_prim_rws @
+  [ci_mono_emit_op, ci_mono_emit_void, ci_mono_emit_inst,
+   ci_mono_compile_ptr_load, ci_mono_compile_ptr_store];
 
 (* ci_mono for compile_word_copy_loop *)
 Theorem ci_mono_compile_word_copy_loop[local]:
   ∀ src dst wc ll sl ic sa.
     ci_mono sa (SND (compile_word_copy_loop src dst wc ll sl ic sa))
 Proof
-  rw[ci_mono_def] >> disj2_tac >>
-  `LENGTH sa.cs_blocks + 3 =
-   LENGTH (SND (compile_word_copy_loop src dst wc ll sl ic sa)).cs_blocks`
-    by rw[blocks_grow_compile_word_copy_loop] >>
-  simp[]
+  rw[contextTheory.compile_word_copy_loop_def, LET_THM] >>
+  ci_mono_chain_tac ci_mono_emit_rws
 QED
 
 (* ci_mono for compile_alloc_buffer *)
 Theorem ci_mono_compile_alloc_buffer[local]:
   ∀ size sa. ci_mono sa (SND (compile_alloc_buffer size sa))
 Proof
-  rw[contextTheory.compile_alloc_buffer_def,
-     comp_bind_def, comp_return_def, LET_THM, pairTheory.UNCURRY] >>
-  simp[ci_mono_emit_op]
+  rw[contextTheory.compile_alloc_buffer_def] >>
+  ci_mono_chain_tac ci_mono_emit_rws
 QED
 
 (* ci_mono for storage/transient/code_to_memory *)
@@ -1209,42 +1285,13 @@ Theorem ci_mono_compile_code_to_memory[local]:
     ci_mono sa (SND (compile_code_to_memory off dst wc sa))
 Proof
   rw[contextTheory.compile_code_to_memory_def] >>
-  rw[ci_mono_def]
-  >- simp[comp_return_def]
-  >> disj2_tac >>
-  simp[comp_bind_def, comp_ignore_bind_def, pairTheory.UNCURRY, LET_THM,
-       comp_return_def] >>
-  `LENGTH sa.cs_blocks + 3 =
-   LENGTH (SND (compile_word_copy_loop off dst wc LocCode LocMemory F sa)).cs_blocks`
-    by rw[blocks_grow_compile_word_copy_loop] >>
-  simp[]
+  ci_mono_chain_tac [ci_mono_compile_word_copy_loop]
 QED
 
-(* ci_mono for compile_ensure_in_memory:
-   Storage/Transient → blocks grow via compile_word_copy_loop (always)
-   Code → blocks grow when word_count > 0, isPREFIX when word_count = 0
-   Calldata → blocks preserved, isPREFIX via emit chain
-   Memory → trivial via comp_return *)
-
-(* Shared tactic abbreviation for blocks-grew cases *)
-val blocks_grew_tac =
-  simp[ci_mono_def, comp_bind_def, comp_ignore_bind_def,
-       comp_return_def, pairTheory.UNCURRY] >> disj2_tac;
-
-val blocks_grew_rws =
-  [contextTheory.compile_alloc_buffer_def,
-   comp_bind_def, comp_ignore_bind_def, comp_return_def,
-   pairTheory.UNCURRY, LET_THM,
-   GSYM blocks_grow_compile_word_copy_loop,
-   blocks_pres_emit_op];
-
-(* Shared tactic for isPREFIX cases *)
-val isPREFIX_prim_rws =
-  [contextTheory.compile_alloc_buffer_def,
-   emit_op_def, emit_void_def, comp_bind_def,
-   comp_ignore_bind_def, comp_return_def,
-   fresh_id_def, fresh_var_def, emit_def,
-   venomInstTheory.mk_inst_def, pairTheory.UNCURRY, LET_THM];
+val ci_mono_copy_rws =
+  ci_mono_emit_rws @
+  [ci_mono_compile_alloc_buffer, ci_mono_compile_storage_to_memory,
+   ci_mono_compile_transient_to_memory, ci_mono_compile_code_to_memory];
 
 Theorem ci_mono_compile_ensure_in_memory[local]:
   ∀ ptr_op loc mem_bytes word_count is_ctor sa.
@@ -1252,52 +1299,8 @@ Theorem ci_mono_compile_ensure_in_memory[local]:
       (SND (compile_ensure_in_memory ptr_op loc mem_bytes word_count is_ctor sa))
 Proof
   rpt gen_tac >> Cases_on `loc` >>
-  simp[contextTheory.compile_ensure_in_memory_def, LET_THM]
-  (* LocMemory *)
-  >- simp[comp_return_def, ci_mono_def]
-  (* A one-slot aggregate uses a straight-line load/store. *)
-  >- (Cases_on `word_count = 1`
-      >- (simp (ci_mono_def :: isPREFIX_prim_rws) >>
-          rewrite_tac[GSYM listTheory.APPEND_ASSOC] >>
-          simp[rich_listTheory.IS_PREFIX_APPEND3]) >>
-      simp[] >> blocks_grew_tac >>
-      simp (contextTheory.compile_storage_to_memory_def :: blocks_grew_rws))
-  >- (Cases_on `word_count = 1`
-      >- (simp (ci_mono_def :: isPREFIX_prim_rws) >>
-          rewrite_tac[GSYM listTheory.APPEND_ASSOC] >>
-          simp[rich_listTheory.IS_PREFIX_APPEND3]) >>
-      simp[] >> blocks_grew_tac >>
-      simp (contextTheory.compile_transient_to_memory_def :: blocks_grew_rws))
-  (* LocCode: case split on word_count *)
-  >- (simp[ci_mono_def, comp_bind_def, comp_ignore_bind_def,
-           comp_return_def, pairTheory.UNCURRY] >>
-      Cases_on `word_count = 0`
-      >- (disj1_tac >>
-          simp (contextTheory.compile_code_to_memory_def :: isPREFIX_prim_rws) >>
-          rewrite_tac[GSYM listTheory.APPEND_ASSOC] >>
-          simp[rich_listTheory.IS_PREFIX_APPEND3])
-      >> disj2_tac >>
-      simp (contextTheory.compile_code_to_memory_def :: blocks_grew_rws))
-  (* LocCalldata: compose the monotonicity interfaces of each primitive.
-     Avoid unfolding the emit chain into a very large isPREFIX goal. *)
-  >> irule ci_mono_bind
-  >> simp[ci_mono_emit_op]
-  >> rpt gen_tac
-  >> irule ci_mono_bind
-  >> simp[ci_mono_compile_alloc_buffer]
-  >> rpt gen_tac >> PURE_REWRITE_TAC[LET_THM]
-  >> irule ci_mono_ignore_bind
-  >> simp[ci_mono_emit_void]
-  >> gen_tac
-  >> irule ci_mono_bind
-  >> simp[ci_mono_emit_op]
-  >> rpt gen_tac
-  >> irule ci_mono_bind
-  >> simp[ci_mono_emit_op]
-  >> rpt gen_tac
-  >> irule ci_mono_ignore_bind
-  >> simp[ci_mono_emit_void]
-  >> gen_tac >> simp[ci_mono_comp_return]
+  simp[contextTheory.compile_ensure_in_memory_def] >>
+  ci_mono_chain_tac ci_mono_copy_rws
 QED
 
 (* ci_mono for unwrap_value *)
@@ -1307,7 +1310,7 @@ Proof
   rpt gen_tac >> Cases_on `vv` >>
   simp[unwrap_value_def]
   (* StackValue: comp_return *)
-  >- simp[comp_return_def, ci_mono_def]
+  >- simp[comp_return_def, ci_mono_refl]
   (* LocatedValue: split on is_word_type *)
   >> rw[]
   (* word type: compile_ptr_load *)
@@ -1315,7 +1318,7 @@ Proof
   (* non-word type: case on ptr_location *)
   >> Cases_on `p.ptr_location` >>
   simp[LET_THM]
-  >- simp[comp_return_def, ci_mono_def]
+  >- simp[comp_return_def, ci_mono_refl]
   >> simp[ci_mono_compile_ensure_in_memory]
 QED
 
@@ -1341,8 +1344,8 @@ QED
 (* ===== compile_expr ci_mono by induction ===== *)
 
 (*
- * ci_mono for compile_expr: every call either appends to cs_current_insts
- * (keeping cs_blocks) or increases LENGTH cs_blocks (via new_block).
+ * ci_mono for compile_expr: every call only appends code and hands out
+ * variables and instruction ids from its input state's counters on.
  * Proved by unfolding definitions and composing ci_mono lemmas.
  *)
 
@@ -3867,6 +3870,37 @@ Proof
   irule ci_mono_bind >> conj_tac
   >- (rpt strip_tac >> simp[ci_mono_unwrap_value])
   >> simp[cj 1 compile_expr_ci_mono]
+QED
+
+(* compile_expr and lower_value compile_expr only append code and hand out
+   variables and instruction ids from their start counters on. *)
+Theorem compile_expr_grows:
+  (∀cenv ty e st vv st'.
+     compile_expr cenv ty e st = (vv, st') ⇒
+     cs_extends st st' ∧ st.cs_next_var ≤ st'.cs_next_var ∧
+     st.cs_next_id ≤ st'.cs_next_id) ∧
+  (∀cenv ty e st op st'.
+     lower_value compile_expr cenv ty e st = (op, st') ⇒
+     cs_extends st st' ∧ st.cs_next_var ≤ st'.cs_next_var ∧
+     st.cs_next_id ≤ st'.cs_next_id)
+Proof
+  conj_tac >> rpt gen_tac >> strip_tac >| [
+    qspecl_then [`cenv`, `ty`, `e`, `st`] mp_tac (cj 1 compile_expr_ci_mono),
+    qspecl_then [`cenv`, `ty`, `e`, `st`] mp_tac
+      ci_mono_lower_value_compile_expr] >>
+  simp[ci_mono_def]
+QED
+
+Theorem compile_binop_grows:
+  ∀op x y ty base_literal exp_literal st z st'.
+    compile_binop op x y ty base_literal exp_literal st = (z, st') ⇒
+    cs_extends st st' ∧ st.cs_next_var ≤ st'.cs_next_var ∧
+    st.cs_next_id ≤ st'.cs_next_id
+Proof
+  rpt gen_tac >> strip_tac >>
+  qspecl_then [`op`, `x`, `y`, `ty`, `base_literal`, `exp_literal`, `st`]
+    mp_tac ci_mono_compile_binop >>
+  simp[ci_mono_def]
 QED
 
 (* ===== run_inst_seq preserves venom_state fields ===== *)

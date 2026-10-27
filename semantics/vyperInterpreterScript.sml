@@ -785,6 +785,7 @@ Definition make_ext_call_state_def:
     <| contexts := [(ctxt, rollback)]
      ; txParams := txParams
      ; rollback := rollback
+     ; originalAccounts := accounts
      ; msdomain := Collect empty_domain
      |>
 End
@@ -931,7 +932,7 @@ Definition make_delegate_call_state_def:
          toDelete := [] |> in
     <| contexts := [(ctxt, rollback)];
        txParams := vyper_to_tx_params cx.txn; rollback := rollback;
-       msdomain := Collect empty_domain |>
+       originalAccounts := accounts; msdomain := Collect empty_domain |>
 End
 
 val () = cv_auto_trans make_delegate_call_state_def;

@@ -4,14 +4,17 @@
  *
  * The case lemmas of compile_expr_sim (exprSimMain) for struct and array
  * literals and the type builtins but extract32.  Cheated, for the later
- * #636 PRs, but for max_value, min_value, epsilon and the conversions
- * exprSimConvert proves (which rest on the cheated
+ * #636 PRs, but for max_value, min_value, epsilon, empty(T) of a word type
+ * and the conversions exprSimConvert proves (which rest on the cheated
  * lower_value_word_shape).
  *
  * TOP-LEVEL:
  *   compile_struct_lit_sim, compile_make_array_sim — StructLit, MakeArray
  *                           (lists and tuples), row 1
- *   compile_empty_sim     — empty(T), row 2
+ *   compile_empty_sim     — empty(T), row 2: compile_empty_word_sim, the
+ *                           literal 0, for a word type;
+ *                           compile_empty_memory_sim, a zeroed buffer, for
+ *                           the rest (cheated)
  *   compile_bound_builtin_case_sim — max_value, min_value and epsilon of
  *                           a numeric type (row 2): a Lit of the bound.
  *                           compile_max_value_sim, compile_min_value_sim
@@ -36,6 +39,13 @@
  * expr_sim_ok.  Composing the elements needs the operand composition of
  * #636's Infrastructure (a value an earlier operand left in memory survives
  * a later operand's fragment).
+ *
+ * StructLit, MakeArray and empty(T) of a type that is not a word are
+ * unprovable as the definitions stand: they build their value in a buffer
+ * of their own, an ALLOCA, and nothing in expr_sim keeps vs_alloca_next
+ * below 2 ** 256, so the buffer's pointer may wrap, and its stores
+ * (ADD ptr off) with it.  They wait for S3's alloca frontier to reach the
+ * judgment, as the hashes do (exprSimBuiltins).
  *)
 
 Theory exprSimAggregates
@@ -60,12 +70,107 @@ Proof
   cheat
 QED
 
+(* ===== empty(T) ===== *)
+
+Theorem eval_expr_empty:
+  !cx ann t args es res es'.
+    eval_expr cx (TypeBuiltin ann Empty t args) es = (res, es') /\
+    expr_res_ok res ==>
+    es' = es /\ args = [] /\
+    ?tv. evaluate_type (get_tenv cx) t = SOME tv /\
+         res = INL (Value (default_value tv))
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
+       assert_def, return_def, raise_def, lift_sum_def,
+       type_builtin_args_length_ok_def] >>
+  Cases_on `args` >> simp[raise_def] >>
+  simp[Once evaluate_def, return_def, evaluate_type_builtin_def] >>
+  Cases_on `evaluate_type (get_tenv cx) t` >>
+  simp[return_def, raise_def] >> rw[] >> gvs[expr_res_ok_def]
+QED
+
+Theorem typed_val_to_w256_address_zero[local]:
+  typed_val_to_w256 (BaseTV AddressT) (BytesV (word_to_bytes (0w:address) T)) =
+  0w
+Proof
+  `LENGTH (word_to_bytes (0w:address) T) = 20` by
+    simp_tac (srw_ss() ++ wordsLib.SIZES_ss)
+      [byteTheory.LENGTH_word_to_bytes] >>
+  mp_tac (INST [``a:address`` |-> ``0w:address``]
+            valueEncodingProofsTheory.val_to_w256_address) >>
+  simp[val_to_w256_def, typed_val_to_w256_def]
+QED
+
+(* The default value of a word type is the word 0 in its typed encoding. *)
+Theorem typed_val_to_w256_default_word:
+  !tenv t tv.
+    is_word_type t /\ evaluate_type tenv t = SOME tv ==>
+    typed_val_to_w256 tv (default_value tv) = 0w
+Proof
+  rpt strip_tac >>
+  `(?n. t = BaseT (UintT n)) \/ (?n. t = BaseT (IntT n)) \/
+   t = BaseT BoolT \/ t = BaseT AddressT \/ t = BaseT DecimalT \/
+   (?m. t = BaseT (BytesT (Fixed m)) /\ m <= 32) \/ (?n. t = FlagT n)` by
+    (Cases_on `t` >> fs[is_word_type_def] >>
+     rename1 `BaseT bt` >> Cases_on `bt` >> fs[is_word_type_def] >>
+     rename1 `BytesT bd` >> Cases_on `bd` >> fs[is_word_type_def]) >>
+  gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs()] >>
+  simp[vyperValueTheory.default_value_def, typed_val_to_w256_address_zero] >>
+  simp[typed_val_to_w256_def, val_to_w256_def, integer_wordTheory.i2w_def] >>
+  simp[listTheory.PAD_RIGHT, GSYM rich_listTheory.REPLICATE_GENLIST,
+       rich_listTheory.REPLICATE_APPEND] >>
+  EVAL_TAC >> simp[]
+QED
+
+(* empty(T) of a word type: the literal 0, no code. *)
+Theorem compile_empty_word_sim:
+  !cenv ann t args.
+    is_word_type t ==> expr_sim_ok cenv (TypeBuiltin ann Empty t args)
+Proof
+  rw[expr_sim_ok_def, expr_sim_def] >>
+  drule_all eval_expr_empty >> strip_tac >> gvs[] >>
+  `ann = t` by
+    gvs[expr_sim_pre_def, well_typed_expr_def, type_builtin_result_ok_def] >>
+  gvs[lower_value_def, compile_expr_type_builtin_dispatch, comp_bind_def] >>
+  gvs[Once compile_expr_def, unwrap_value_def, comp_return_def] >>
+  irule frag_exec_refl >>
+  simp[expr_post_def, expr_val_rel_def, expr_val_at_def,
+       vyperASTTheory.expr_type_def, eval_operand_def] >>
+  metis_tac[typed_val_to_w256_default_word]
+QED
+
+Theorem compile_empty_word_case_sim:
+  !cenv ann t args.
+    is_word_type t ==> expr_ok cenv (TypeBuiltin ann Empty t args)
+Proof
+  rpt strip_tac >> irule expr_ok_stack >> rpt conj_tac
+  >~ [`eval_expr`] >- metis_tac[eval_expr_type_builtin_value]
+  >~ [`expr_sim_ok`] >- simp[compile_empty_word_sim] >>
+  rpt gen_tac >>
+  simp[compile_expr_type_builtin_dispatch, Once compile_expr_def]
+QED
+
+(* empty(T) of any other type: a zeroed buffer of its own.  Cheated: the
+   buffer is an ALLOCA, and nothing in expr_sim keeps vs_alloca_next below
+   2 ** 256, so its pointer may wrap and its region need not miss the live
+   locals (S3's alloca frontier, as for the hashes in exprSimBuiltins). *)
+Theorem compile_empty_memory_sim:
+  !cenv ann t args.
+    ~is_word_type t ==> expr_vv_ok cenv (TypeBuiltin ann Empty t args)
+Proof
+  cheat
+QED
+
 Theorem compile_empty_sim:
   !cenv ann t args.
     expr_sim_below cenv (list_size expr_size args) ==>
     expr_vv_ok cenv (TypeBuiltin ann Empty t args)
 Proof
-  cheat
+  rpt strip_tac >> Cases_on `is_word_type t`
+  >- metis_tac[compile_empty_word_case_sim, expr_ok_def] >>
+  simp[compile_empty_memory_sim]
 QED
 
 (* ===== max_value, min_value, epsilon ===== *)
@@ -122,8 +227,11 @@ Proof
        typed_val_to_w256_def, val_to_w256_def] >>
   simp[integerTheory.INT_SUB] >>
   rw[vyperValueTheory.evaluate_type_def] >>
-  gvs[AllCaseEqs(), typed_val_to_w256_def, val_to_w256_def,
-      integer_wordTheory.i2w_def]
+  (* Keep symbolic signed bounds opaque to word arithmetic conversions. *)
+  PURE_REWRITE_TAC
+    [typed_val_to_w256_def, val_to_w256_def,
+     integer_wordTheory.i2w_0, integer_wordTheory.i2w_pos] >>
+  REFL_TAC
 QED
 
 Theorem compile_bound_builtin_case_sim:

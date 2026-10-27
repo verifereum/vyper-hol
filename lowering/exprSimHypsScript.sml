@@ -19,9 +19,11 @@
  *                       member ids and member counts of the compile
  *                       environment
  *   expr_sim_pre      — expr_sim_inv, the expression well typed, its
- *                       integer types of whole bytes, and no internal call
- *                       in it
+ *                       integer types of whole bytes, its buffers below
+ *                       the allocation limit, and no internal call in it
  *   byte_widths_expr  — every node's type has a width of whole bytes
+ *   alloc_limits_expr, literal_alloc_ok — every static buffer the lowering
+ *                       allocates for a node is below 2 ** 64 bytes
  *   expr_sim_ok       — expr_sim wherever expr_sim_pre holds
  *   expr_vv_ok        — expr_vv_sim wherever expr_sim_pre holds
  *   expr_ok           — both: the induction predicate
@@ -41,6 +43,7 @@
  *   expr_sim_pre_builtin_arg — an argument of a builtin meets expr_sim_pre
  *                       wherever expr_sim_inv holds
  *   byte_widths_expr_type — the expression's own type has whole bytes
+ *   expr_sim_pre_var_types_well_formed — the local types are well formed
  *   well_typed_expr_type_evaluates — a well-typed expression's type
  *                       evaluates
  *   expr_ok_of_vv, expr_ok_stack — expr_ok from expr_vv_ok (by
@@ -102,6 +105,16 @@
  *     any width up to 256; the unsafe operators' lowering wraps by whole
  *     bytes, as Python's does, so it does not compute the source's result
  *     at other widths.
+ *   - alloc_limits_expr e: every static buffer the lowering allocates for
+ *     the expression's nodes, so far a bytes or string literal's, is below
+ *     2 ** 64 bytes.  Python's Context.allocate_buffer
+ *     (vyper/codegen_venom/context.py) raises MemoryAllocationException
+ *     for a buffer of 2 ** 64 bytes or more, and _lower_bytelike allocates
+ *     its buffer through it.  The lowering's ALLOCA takes the size as a
+ *     word literal and cannot fail, so a buffer of 2 ** 256 bytes or more
+ *     would wrap; evaluate_type admits Bytes[n] and String[n] for any
+ *     n < 2 ** 256.  return_buffer_ok is the same limit for an external
+ *     function's return buffer.
  *   - int_calls_expr e = []: no internal call.  An internal call lowers to
  *     INVOKE, whose simulation is #638's call step; until that is stated
  *     this theorem excludes them, and #638 replaces this conjunct with its
@@ -129,7 +142,7 @@ Ancestors
   vyperAST vyperInterpreter vyperState vyperTypeSystem vyperTypeCallGraph
   vyperTypeInvariants vyperTypeExprSoundness vyperTypeCallStackSoundness
   vyperTypeExprResult vyperTypeEvalSoundness vyperTypeBuiltins
-  vyperExprNoControl loweringSlice exprSimUnwrap
+  vyperExprNoControl loweringSlice exprSimUnwrap exprSafeOperand
 Libs
   pairLib
 
@@ -211,10 +224,70 @@ Termination
   simp[expr_size_def]
 End
 
+(* The buffer the lowering allocates for a bytes or string literal, its
+   length word and its data rounded up to whole words, is below 2 ** 64
+   bytes.  A bytesN or address literal has at most 32 bytes and no buffer,
+   and the bound holds of it all the same. *)
+Definition literal_alloc_ok_def:
+  literal_alloc_ok (BytesL bs) = (32 + 32 * word_size (LENGTH bs) < 2 ** 64) /\
+  literal_alloc_ok (StringL str) =
+    (32 + 32 * word_size (LENGTH str) < 2 ** 64) /\
+  literal_alloc_ok _ = T
+End
+
+(* Every static buffer the lowering allocates for a node of the expression
+   is below Python's allocation limit, 2 ** 64 bytes: so far the buffer of
+   a bytes or string literal.  The same recursion as byte_widths_expr. *)
+Definition alloc_limits_expr_def:
+  alloc_limits_expr (Name t _) = T /\
+  alloc_limits_expr (TopLevelName t _) = T /\
+  alloc_limits_expr (FlagMember t _ _) = T /\
+  alloc_limits_expr (IfExp t c x y) =
+    (alloc_limits_expr c /\ alloc_limits_expr x /\ alloc_limits_expr y) /\
+  alloc_limits_expr (Literal t l) = literal_alloc_ok l /\
+  alloc_limits_expr (StructLit t _ kes) = alloc_limits_named_exprs kes /\
+  alloc_limits_expr (Subscript t x y) =
+    (alloc_limits_expr x /\ alloc_limits_expr y) /\
+  alloc_limits_expr (Attribute t x _) = alloc_limits_expr x /\
+  alloc_limits_expr (Builtin t _ es) = alloc_limits_exprs es /\
+  alloc_limits_expr (TypeBuiltin t _ _ es) = alloc_limits_exprs es /\
+  alloc_limits_expr (Pop t tgt) = alloc_limits_target tgt /\
+  alloc_limits_expr (Call t _ es dflt) =
+    (alloc_limits_exprs es /\ alloc_limits_opt dflt) /\
+
+  alloc_limits_target (NameTarget _) = T /\
+  alloc_limits_target (TopLevelNameTarget _) = T /\
+  alloc_limits_target (SubscriptTarget tgt e) =
+    (alloc_limits_target tgt /\ alloc_limits_expr e) /\
+  alloc_limits_target (AttributeTarget tgt _) = alloc_limits_target tgt /\
+
+  alloc_limits_exprs [] = T /\
+  alloc_limits_exprs (e::es) = (alloc_limits_expr e /\ alloc_limits_exprs es) /\
+
+  alloc_limits_opt NONE = T /\
+  alloc_limits_opt (SOME e) = alloc_limits_expr e /\
+
+  alloc_limits_named_exprs [] = T /\
+  alloc_limits_named_exprs ((_,e)::kes) =
+    (alloc_limits_expr e /\ alloc_limits_named_exprs kes)
+Termination
+  qexists_tac `measure (\(x : expr + base_assignment_target + expr list +
+                                      expr option + (identifier # expr) list).
+    case x of
+    | INL e => expr_size e
+    | INR (INL tgt) => base_assignment_target_size tgt
+    | INR (INR (INL es)) => expr4_size es
+    | INR (INR (INR (INL opt))) => expr3_size opt
+    | INR (INR (INR (INR kes))) => expr1_size kes)` >>
+  conj_tac >- MATCH_ACCEPT_TAC prim_recTheory.WF_measure >>
+  PURE_REWRITE_TAC [prim_recTheory.measure_thm, sumTheory.sum_case_def] >>
+  simp[expr_size_def]
+End
+
 Definition expr_sim_pre_def:
   expr_sim_pre cenv cx env e es <=>
     expr_sim_inv cenv cx env es /\ well_typed_expr env e /\
-    byte_widths_expr e /\
+    byte_widths_expr e /\ alloc_limits_expr e /\
     int_calls_expr e = [] /\ call_evaluation_safe cx (int_calls_expr e)
 End
 
@@ -412,6 +485,12 @@ Proof
   Induct >> rw[byte_widths_expr_def] >> gvs[]
 QED
 
+Theorem alloc_limits_exprs_mem:
+  !args e. alloc_limits_exprs args /\ MEM e args ==> alloc_limits_expr e
+Proof
+  Induct >> rw[alloc_limits_expr_def] >> gvs[]
+QED
+
 Theorem byte_widths_expr_type:
   !e. byte_widths_expr e ==> type_bits (expr_type e) MOD 8 = 0
 Proof
@@ -425,8 +504,9 @@ Theorem expr_sim_pre_builtin_arg:
     expr_sim_pre cenv cx env e es'
 Proof
   rw[expr_sim_pre_def, well_typed_expr_def, int_calls_expr_def,
-     byte_widths_expr_def] >>
-  drule_all well_typed_exprs_mem >> drule_all byte_widths_exprs_mem >> gvs[]
+     byte_widths_expr_def, alloc_limits_expr_def] >>
+  drule_all well_typed_exprs_mem >> drule_all byte_widths_exprs_mem >>
+  drule_all alloc_limits_exprs_mem >> gvs[]
 QED
 
 Theorem env_consistent_var_type_evaluates:
@@ -439,40 +519,30 @@ Proof
   metis_tac[optionTheory.IS_SOME_DEF]
 QED
 
-(* A well-typed expression's type evaluates: its typing rule says the type
-   is well formed, but for a local, whose type evaluates by
-   env_scopes_consistent, and pop, whose type is assignable. *)
+(* The local types are well formed: they evaluate by env_scopes_consistent. *)
+Theorem expr_sim_pre_var_types_well_formed:
+  !cenv cx env e es.
+    expr_sim_pre cenv cx env e es ==>
+    !id t. FLOOKUP env.var_types id = SOME t ==>
+           well_formed_type env.type_defs t
+Proof
+  rw[expr_sim_pre_def, expr_sim_inv_def, well_formed_type_def] >>
+  `env.type_defs = get_tenv cx` by
+    gvs[env_consistent_def, env_context_consistent_def] >>
+  metis_tac[env_consistent_var_type_evaluates]
+QED
+
+(* A well-typed expression's type evaluates. *)
 Theorem well_typed_expr_type_evaluates:
   !cenv cx env e es.
     expr_sim_pre cenv cx env e es ==>
     IS_SOME (evaluate_type (get_tenv cx) (expr_type e))
 Proof
-  rw[expr_sim_pre_def] >>
-  `env_consistent env cx es` by gvs[expr_sim_inv_def] >>
-  `env.type_defs = get_tenv cx` by
-    gvs[env_consistent_def, env_context_consistent_def] >>
-  `well_formed_type env.type_defs (expr_type e)` suffices_by
-    gvs[well_formed_type_def] >>
-  Cases_on `e` >> simp[vyperASTTheory.expr_type_def]
-  >~ [`Name _ _`]
-  >- (gvs[well_typed_expr_def, well_formed_type_def] >>
-      metis_tac[env_consistent_var_type_evaluates])
-  >~ [`TopLevelName _ nsid`]
-  >- (PairCases_on `nsid` >> gvs[well_typed_expr_def])
-  >~ [`Pop _ _`]
-  >- (gvs[well_typed_expr_def, assignable_type_def] >>
-      metis_tac[assignable_type_well_formed])
-  >~ [`Call _ target _ _`]
-  >- (Cases_on `target` >>
-      gvs[well_typed_expr_def, well_formed_type_def,
-          vyperValueTheory.evaluate_type_def]
-      >~ [`IntCall nsid`]
-      >- (PairCases_on `nsid` >> gvs[well_typed_expr_def, well_formed_type_def])
-      >~ [`ExtCall _ _ sig _`]
-      >- (PairCases_on `sig` >> gvs[well_typed_expr_def, well_formed_type_def]) >>
-      irule (REWRITE_RULE [well_formed_type_def]
-               raw_call_return_type_well_formed) >> simp[]) >>
-  gvs[well_typed_expr_def]
+  rpt strip_tac >> drule expr_sim_pre_var_types_well_formed >> strip_tac >>
+  `well_typed_expr env e /\ env.type_defs = get_tenv cx` by
+    gvs[expr_sim_pre_def, expr_sim_inv_def, env_consistent_def,
+        env_context_consistent_def] >>
+  drule_all well_typed_expr_type_well_formed >> gvs[well_formed_type_def]
 QED
 
 (* A case lemma that proves expr_vv_ok proves expr_ok. *)
