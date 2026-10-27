@@ -168,3 +168,57 @@ Proof
   drule_all abi_encoder_step_inputs_defined >> strip_tac >>
   drule_all abi_encoder_step_extend_inputs >> simp[]
 QED
+
+Theorem abi_encoder_vars_extend_control:
+  abi_decoder_vars_extend extras s t ==>
+  s.vs_current_bb = t.vs_current_bb /\ s.vs_inst_idx = t.vs_inst_idx /\
+  s.vs_halted = t.vs_halted
+Proof
+  rw[abi_decoder_vars_extend_def, Excl "vsr_complete_mask_equality"] >>
+  fs[vsr_frame_def, venom_state_component_equality]
+QED
+
+Theorem abi_encoder_vars_extend_idx:
+  abi_decoder_vars_extend extras s t ==>
+  abi_decoder_vars_extend extras (s with vs_inst_idx := idx) (t with vs_inst_idx := idx)
+Proof
+  rw[abi_decoder_vars_extend_def, Excl "vsr_complete_mask_equality"] >>
+  fs[vsr_frame_def, venom_state_component_equality]
+QED
+
+Theorem abi_encoder_observer_step_extend:
+  abi_decoder_vars_extend extras s s' /\ abi_observer_step ctx fn cut s t ==>
+  ?t'. abi_observer_step ctx fn cut s' t' /\ abi_decoder_vars_extend extras t t'
+Proof
+  rw[abi_observer_step_def] >>
+  drule abi_encoder_vars_extend_control >> strip_tac >>
+  gvs[step_inst_non_invoke] >>
+  drule_all abi_encoder_step_extend >> strip_tac >>
+  rename1 `abi_decoder_vars_extend extras middle extended` >>
+  drule_all abi_encoder_vars_extend_control >> strip_tac
+  >- (qexists_tac `extended with vs_inst_idx := SUC s'.vs_inst_idx` >>
+      simp[] >> conj_tac >- metis_tac[] >>
+      irule abi_encoder_vars_extend_idx >> simp[]) >>
+  drule_all abi_encoder_phis_extend >> strip_tac >>
+  rename1 `abi_decoder_vars_extend extras entered entered'` >>
+  drule_all abi_encoder_vars_extend_control >> strip_tac >>
+  qexists_tac `entered' with vs_inst_idx := phi_prefix_length target.bb_instructions` >>
+  simp[] >> conj_tac
+  >- metis_tac[] >>
+  irule abi_encoder_vars_extend_idx >> simp[]
+QED
+
+Theorem abi_encoder_local_prefix_extend:
+  local_prefix ctx fn cut s t ==>
+  !s'. abi_decoder_vars_extend extras s s' ==>
+  ?t'. local_prefix ctx fn cut s' t' /\ abi_decoder_vars_extend extras t t'
+Proof
+  Induct_on `local_prefix` >> rpt strip_tac
+  >- (drule abi_encoder_vars_extend_control >> strip_tac >>
+      qexists_tac `s'` >> simp[] >>
+      irule (cj 1 local_prefix_rules) >> metis_tac[]) >>
+  drule_all abi_encoder_observer_step_extend >> strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  goal_assum (drule_at Any) >>
+  irule (cj 2 local_prefix_rules) >> metis_tac[]
+QED
