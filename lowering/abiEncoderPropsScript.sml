@@ -262,7 +262,10 @@ Proof
   gvs[Abbr`rng`]
 QED
 
-(* Static ABI decoding: MLOAD + clamp *)
+(* Static ABI decoding: load + clamp + MSTORE.
+   The generalized load-step and typed val_in_memory APIs are also available as
+   abiDecodeStaticPropsTheory.compile_abi_decode_static_run and
+   abiDecodeStaticPropsTheory.compile_abi_decode_static_correct. *)
 (* Retired statement: arbitrary load opcodes, an undefined destination and a
    callback with no code-extension guarantee do not imply safe decoding.
    The original unproved statement is retained here for audit history.
