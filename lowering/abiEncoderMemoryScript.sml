@@ -96,7 +96,8 @@ Proof
       qexists_tac `mem_bytes_at p k (mstore (db+rounded) 0w s).vs_memory` >> conj_tac
       >- (irule mcopy_mem_bytes_at_disjoint >> decide_tac) >>
       irule mstore_mem_bytes_at_disjoint >> decide_tac)) >>
-  simp[mcopy_def, mstore_def, write_memory_with_expansion_def]
+  simp_tac bool_ss [mcopy_def, mstore_def, write_memory_with_expansion_def,
+    LET_THM, venom_state_accfupds]
 QED
 
 Theorem abi_encoder_bytes_write_memory_cong:
@@ -104,7 +105,8 @@ Theorem abi_encoder_bytes_write_memory_cong:
   (mcopy db sb (32+cnt) (mstore (db+rounded) 0w s)).vs_memory =
   (mcopy db sb (32+cnt) (mstore (db+rounded) 0w t)).vs_memory
 Proof
-  simp[mcopy_def, mstore_def, write_memory_with_expansion_def]
+  simp_tac bool_ss [mcopy_def, mstore_def, write_memory_with_expansion_def,
+    LET_THM, venom_state_accfupds]
 QED
 
 Theorem abi_encoder_frame_memory:
