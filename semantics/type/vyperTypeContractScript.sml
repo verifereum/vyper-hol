@@ -384,14 +384,15 @@ Definition constants_fold_def:
 End
 
 (* Every constant initializer evaluates, folding in the order the deployment
-   fold uses: modules in mods order, declarations in source order, starting
-   from the immutables load_contract installs.  A forward reference between
-   constants is rejected, as that order cannot evaluate it. *)
+   fold uses: modules in constants_order (imports first, the main module
+   last), declarations in source order, starting from the immutables
+   load_contract installs.  A forward reference between constants is
+   rejected, as that order cannot evaluate it. *)
 Definition contract_constants_ok_def:
   contract_constants_ok mods <=>
     case initial_immutables (type_env_all_modules mods) mods of
     | NONE => F
-    | SOME imms => IS_SOME (constants_fold mods imms mods)
+    | SOME imms => IS_SOME (constants_fold mods imms (constants_order mods))
 End
 
 (* Vyper accepts a default argument only from its RUNTIME_CONSTANT class

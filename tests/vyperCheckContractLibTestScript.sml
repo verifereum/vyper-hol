@@ -700,3 +700,22 @@ val () = List.app (assert_some o check_constants)
    [tdecl b32 "K" keccak_a,
     tdecl ``BaseT BoolT`` "E"
       ``Builtin (BaseT BoolT) (Bop Eq) [^(tname b32 "K"); ^(tname b32 "K")]``]]
+
+(* A main-module constant initialized from an imported module's constant: the
+   imports' constants are folded first (constants_order). *)
+val import_constant_modules =
+  ``[(NONE,
+      [VariableDecl Private
+         (Constant (TopLevelName (BaseT (UintT 256)) (SOME 3,"N"))) "N"
+         (BaseT (UintT 256)) NONE;
+       FunctionDecl External Pure F F "f" [] [] (BaseT (UintT 256))
+         [Return (SOME (TopLevelName (BaseT (UintT 256)) (NONE,"N")))]]);
+     (SOME 3,
+      [VariableDecl Private (Constant (Literal (BaseT (UintT 256)) (IntL 2)))
+         "N" (BaseT (UintT 256)) NONE])]
+    : (num option # toplevel list) list``
+
+val () = check_accepts "main constant from imported constant" false
+  empty_layouts import_constant_modules
+val () = check_accepts "main constant from imported constant (deploy)" true
+  empty_layouts import_constant_modules
