@@ -523,3 +523,74 @@ val _ = List.app (fn (name,th) =>
   end)
   [("dynamic_shared_pre", abi_encoder_spine_dynamic_shared_pre),
    ("dynamic_shared_cursor", abi_encoder_spine_dynamic_shared_cursor)];
+
+Definition abi_encoder_spine_dynamic_shared_post_def:
+  abi_encoder_spine_dynamic_shared_post ambient value resources (st,p,initial) c ready encoded <=>
+    abi_encoder_spine_shared_post ambient value resources c ready encoded /\
+    abi_encoder_member_phase_raw st p initial ready
+End
+
+(* The shared dynamic core is run by the existing prefix/core/suffix engine.
+   Its endpoint at encoded remains available for suffix effect composition. *)
+Theorem abi_encoder_spine_dynamic_shared_run:
+  abi_encode_child_prefix dst ho dp st = (ops,p) /\
+  abi_encoder_spine_core_code func (ei,SND (SND ops),src,p,ce,len) /\
+  abi_encode_child_suffix (FST ops) dp (FST (SND ops)) len ce = (out,en) /\
+  abi_encoder_shared ei /\
+  abi_encoder_shared_input (ei,at,av) (st,src,dst) (sb,source_cap)
+    (d,output_size) (first,last,b,cap) initial /\
+  eval_operand dp initial = SOME (n2w slot) /\
+  mload slot initial = n2w off /\ slot < dimword (:256) /\ d+ho < dimword (:256) /\
+  abi_decoder_operand_live st.cs_next_var dp /\
+  off+LENGTH (enc at av) <= output_size /\
+  abi_decoder_budget first last b cap initial /\
+  first <= p.cs_next_id /\ ce.cs_next_id <= last /\
+  p.cs_next_var <= limit_st.cs_next_var /\ ce.cs_next_var <= limit_st.cs_next_var /\
+  en.cs_next_var <= limit_st.cs_next_var /\
+  fresh_vars_wrt limit_st initial /\ ~initial.vs_halted /\
+  initial.vs_current_bb = st.cs_current_bb ==>
+  ?ready encoded actual.
+    abi_encoder_spine_child
+      (abi_encoder_spine_shared_post (ctx,func) (at,av,sb,source_cap,d+off)
+        (first,last,b,cap,limit_st))
+      (ei,T,dst,src,ho,dp,st,en,out) initial actual /\
+    abi_encoder_member_phase_raw st p initial ready /\
+    abi_encoder_spine_dynamic_shared_post (ctx,func) (at,av,sb,source_cap,d+off)
+      (first,last,b,cap,limit_st) (st,p,initial)
+      (ei,SND (SND ops),src,p,ce,len) ready encoded /\
+    abi_encoder_member_phase_raw ce en encoded actual
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  irule abi_encoder_spine_dynamic_run >>
+  conj_tac >- (qexistsl_tac [`off`, `slot`] >> simp[]) >>
+  conj_tac >- (qexists_tac `d` >> fs[abi_encoder_shared_input_def]) >>
+  asm_rewrite_tac [] >>
+  conj_tac >- fs[abi_encoder_shared_input_def] >>
+  conj_tac
+  >- (qexistsl_tac [`\c r. abi_encoder_spine_shared_pre (at,av,sb,source_cap,d+off)
+          (first,last,b,cap,limit_st) c r /\ abi_encoder_member_phase_raw st p initial r`, `func`] >>
+      asm_rewrite_tac [] >> conj_tac
+      >- (rpt gen_tac >> simp_tac bool_ss [] >> strip_tac >>
+          drule_all abi_encoder_spine_shared_core_run >>
+          disch_then (qspec_then `ctx` strip_assume_tac) >>
+          qexists_tac `t` >> simp[abi_encoder_spine_dynamic_shared_post_def]) >>
+      rpt gen_tac >> disch_tac >> simp[] >>
+      irule abi_encoder_spine_dynamic_shared_pre >>
+      asm_rewrite_tac [] >> goal_assum (drule_at Any) >>
+      qexistsl_tac [`dp`, `dst`, `ho`, `output_size`, `slot`] >> asm_rewrite_tac []) >>
+  qexists_tac `limit_st` >> asm_rewrite_tac [] >>
+  rpt gen_tac >> simp_tac bool_ss [abi_encoder_spine_dynamic_shared_post_def,
+    abi_encoder_spine_shared_post_def] >> strip_tac >>
+  irule abi_encoder_spine_dynamic_shared_cursor >>
+  asm_rewrite_tac [] >> goal_assum (drule_at Any) >>
+  goal_assum (drule_at Any) >>
+  qexistsl_tac [`dst`, `ei`, `ho`, `slot`, `src`] >>
+  fs[abi_encoder_shared_input_def]
+QED
+
+val _ =
+  let val (oracles,axioms) = Tag.dest_tag (Thm.tag abi_encoder_spine_dynamic_shared_run) in
+    if List.all (fn s => s = "DISK_THM") oracles andalso null axioms then
+      print "ENCODER_SPINE_COMPAT_AUDIT_OK dynamic_shared_run\n"
+    else raise Fail "encoder spine compatibility admission dependency: dynamic_shared_run"
+  end;
