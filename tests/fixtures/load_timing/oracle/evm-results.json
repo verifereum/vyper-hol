@@ -55,6 +55,30 @@
       "returned": 5,
       "runtime_sha256": "ee0c03003f41c13679716d02bd56944b7008b29a63085e66c06437fc08486b59",
       "signature": "f()"
+    },
+    {
+      "arguments": [],
+      "expected": 10,
+      "fixture": "call_storage_read",
+      "returned": 10,
+      "runtime_sha256": "4fb0fa0ba355c7b0f8480d34738e59bf8340512a5e535f342c84c93eb45be443",
+      "signature": "f()"
+    },
+    {
+      "arguments": [],
+      "expected": 1,
+      "fixture": "call_memory_pop",
+      "returned": 1,
+      "runtime_sha256": "6e5c5463b66f466fcc973b5ebaa8d1030b93780a7285688deacdeaef39ee1f2a",
+      "signature": "f()"
+    },
+    {
+      "arguments": [],
+      "expected": 0,
+      "fixture": "builtin_eager_read",
+      "returned": 0,
+      "runtime_sha256": "cd4e9cf8ae447ef46a1e2b4df70bc3da01317459f87f0d931276f60f692cbf13",
+      "signature": "f()"
     }
   ],
   "evm_version": "Prague",

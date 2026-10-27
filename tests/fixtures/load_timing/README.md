@@ -1,6 +1,6 @@
 # Load timing witnesses
 
-These contracts make assignment load timing observable through a return value.
+These contracts make assignment and call load timing observable through a return value.
 `pop_refill` returns 9 because the target's internal call refills the popped
 storage slot before assignment reads it. `conditional_snapshot` returns 5 for
 either flag because selecting a storage aggregate copies it before the target's
@@ -10,6 +10,12 @@ array retains its location: the target's pop shortens that array before the
 assignment copies it. Copying at conditional selection instead would return 2.
 `nested_retained_pop` returns 5 after an index expression pops the enclosing
 array: the previously captured inner location still contains the array to pop.
+`call_storage_read` returns 10 because internal calls capture every argument
+before reading the storage scalar changed by the later argument.
+`call_memory_pop` returns 1 because the later argument pops the memory array
+before the call copies it. Eager reads would return 0 and 2 respectively.
+`builtin_eager_read` returns 0: `min` reads its first storage argument before
+evaluating the second argument, which changes that storage slot.
 
 `vyperLoadTimingTestTheory` translates the annotated AST and layout in `oracle/`,
 binds the entry's declared parameters, and executes the source interpreter.

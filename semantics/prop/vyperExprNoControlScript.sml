@@ -332,6 +332,14 @@ Proof
   metis_tac[read_place_no_control, no_control_exc_def]
 QED
 
+Theorem read_results_no_control:
+  !results cx st exc st'.
+    read_results cx results st = (INR exc,st') ==> no_control_exc exc
+Proof
+  Induct >> simp[read_results_def, bind_def, return_def, AllCaseEqs()] >>
+  rpt strip_tac >> metis_tac[read_result_no_control]
+QED
+
 Theorem switch_BoolV_no_control:
   ∀v f g s exc s'.
   switch_BoolV cx v f g s = (INR exc, s') ⇒
@@ -651,7 +659,7 @@ Theorem int_call_no_control[local]:
         LENGTH (FST (SND (SND tup))) ≤
         LENGTH es + LENGTH (FST (SND (SND (SND tup)))))
        "IntCall args length" s'5 = (INL x',t'3) ∧
-     eval_exprs cx es s'6 = (INL vs,t'4) ∧
+     eval_expr_results cx es s'6 = (INL vs,t'4) ∧
      get_scopes s'7 = (INL prev,t'5) ∧
      set_scopes [FEMPTY] s'8 = (INL x'',t'6) ⇒
      ∀s exc st'.
@@ -672,7 +680,7 @@ Theorem int_call_no_control[local]:
         LENGTH (FST (SND (SND tup))) ≤
         LENGTH es + LENGTH (FST (SND (SND (SND tup)))))
        "IntCall args length" s'5 = (INL x',t'3) ⇒
-     ∀s exc st'. eval_exprs cx es s = (INR exc,st') ⇒
+     ∀s exc st'. eval_expr_results cx es s = (INR exc,st') ⇒
        no_control_exc exc) ⇒
   ∀s exc st'.
     eval_expr cx (Call v16 (IntCall (src_id_opt,fn)) es v17) s =
@@ -693,6 +701,7 @@ Proof
     rpt gen_tac >> strip_tac >>
     step_tac >- (gvs at_mono) >>
     metis_tac[])
+  >> step_tac >- metis_tac[read_results_no_control]
   >> pop_assum mp_tac
   >> PURE_ONCE_REWRITE_TAC[GSYM DE_MORGAN_THM]
   >> strip_tac >> drule int_call_tail_no_control >> simp[]
@@ -761,15 +770,17 @@ val canonical_no_control_ind = evaluate_ind
               `\cx es. !s exc st'. eval_exprs cx es s = (INR exc,st') ==> no_control_exc exc`,
               `\cx t. !s exc st'. eval_base_place cx t s = (INR exc,st') ==> no_control_exc exc`,
               `\cx t. !s exc st'. eval_target_place cx t s = (INR exc,st') ==> no_control_exc exc`,
-              `\cx g v. T`, `\cx gs vs. T`]
+              `\cx g v. T`, `\cx gs vs. T`,
+              `\cx es. !s exc st'. eval_expr_results cx es s = (INR exc,st') ==> no_control_exc exc`]
   |> CONV_RULE (DEPTH_CONV BETA_CONV)
   |> PURE_REWRITE_RULE [FORALL_SIMP, AND_CLAUSES, IMP_CLAUSES];
 
-Theorem canonical_eval_no_control:
+Theorem canonical_eval_no_control_with_results:
   (!cx e s exc st'. eval_expr cx e s = (INR exc,st') ==> no_control_exc exc) /\
   (!cx es s exc st'. eval_exprs cx es s = (INR exc,st') ==> no_control_exc exc) /\
   (!cx t s exc st'. eval_base_place cx t s = (INR exc,st') ==> no_control_exc exc) /\
-  (!cx t s exc st'. eval_target_place cx t s = (INR exc,st') ==> no_control_exc exc)
+  (!cx t s exc st'. eval_target_place cx t s = (INR exc,st') ==> no_control_exc exc) /\
+  (!cx es s exc st'. eval_expr_results cx es s = (INR exc,st') ==> no_control_exc exc)
 Proof
   ho_match_mp_tac canonical_no_control_ind >>
   conj_tac >- (simp[Once evaluate_def, bind_def, ignore_bind_def,
@@ -800,40 +811,44 @@ Proof
   conj_tac >- suspend "PlaceTopName" >>
   conj_tac >- suspend "PlaceAttribute" >>
   conj_tac >- suspend "PlaceSubscript" >>
-  suspend "TargetPlace"
+  conj_tac >- suspend "TargetPlace" >>
+  conj_tac >- simp[Once evaluate_def, return_def] >>
+  rpt strip_tac >> pop_assum mp_tac >>
+  simp[Once evaluate_def, bind_def, return_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >> metis_tac[]
 QED
 
-Resume canonical_eval_no_control[IfExp]:
+Resume canonical_eval_no_control_with_results[IfExp]:
   rpt strip_tac >> pop_assum mp_tac >>
   simp[Once evaluate_def, bind_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[] >>
   metis_tac[switch_BoolV_no_control, conditional_result_no_control]
 QED
 
-Resume canonical_eval_no_control[Literal]:
+Resume canonical_eval_no_control_with_results[Literal]:
   simp[Once evaluate_def, return_def]
 QED
 
-Resume canonical_eval_no_control[StructLit]:
+Resume canonical_eval_no_control_with_results[StructLit]:
   rpt strip_tac >> pop_assum mp_tac >>
   simp[Once evaluate_def, bind_def, return_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[] >> metis_tac[lift_option_type_no_control]
 QED
 
-Resume canonical_eval_no_control[Subscript]:
+Resume canonical_eval_no_control_with_results[Subscript]:
   rpt strip_tac >> pop_assum mp_tac >>
   simp[Once evaluate_def, bind_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[] >>
   metis_tac[read_result_no_control, select_result_no_control]
 QED
 
-Resume canonical_eval_no_control[Attribute]:
+Resume canonical_eval_no_control_with_results[Attribute]:
   rpt strip_tac >> pop_assum mp_tac >>
   simp[Once evaluate_def, bind_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[] >> metis_tac[select_result_no_control]
 QED
 
-Resume canonical_eval_no_control[Builtin]:
+Resume canonical_eval_no_control_with_results[Builtin]:
   rpt gen_tac >> strip_tac >> Cases_on `bt = Len` >>
   rpt strip_tac >> pop_assum mp_tac >>
   simp[Once evaluate_def, bind_def, ignore_bind_def, return_def,
@@ -843,20 +858,20 @@ Resume canonical_eval_no_control[Builtin]:
     lift_sum_no_control]
 QED
 
-Resume canonical_eval_no_control[Pop]:
+Resume canonical_eval_no_control_with_results[Pop]:
   rpt strip_tac >> pop_assum mp_tac >>
   simp[Once evaluate_def, bind_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[] >> metis_tac[pop_place_no_control]
 QED
 
-Resume canonical_eval_no_control[TypeBuiltin]:
+Resume canonical_eval_no_control_with_results[TypeBuiltin]:
   rpt strip_tac >> pop_assum mp_tac >>
   simp[Once evaluate_def, bind_def, ignore_bind_def, return_def,
     AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
   metis_tac[type_check_no_control, lift_sum_no_control]
 QED
 
-Resume canonical_eval_no_control[Send]:
+Resume canonical_eval_no_control_with_results[Send]:
   rpt strip_tac >> pop_assum mp_tac >>
   simp[Once evaluate_def, bind_def, ignore_bind_def,
     type_check_def, assert_def, return_def, raise_def, AllCaseEqs()] >>
@@ -867,26 +882,26 @@ Resume canonical_eval_no_control[Send]:
   disch_then drule >> simp[]
 QED
 
-Resume canonical_eval_no_control[ExtCall]:
+Resume canonical_eval_no_control_with_results[ExtCall]:
   rpt strip_tac >> pop_assum mp_tac >>
   simp[Once evaluate_def, bind_def, AllCaseEqs()] >>
-  rpt strip_tac >> gvs[] >> metis_tac[eval_ext_call_no_control]
+  rpt strip_tac >> gvs[] >> metis_tac[eval_ext_call_no_control, read_results_no_control]
 QED
 
-Resume canonical_eval_no_control[IntCall]:
+Resume canonical_eval_no_control_with_results[IntCall]:
   rpt gen_tac >> strip_tac >> gvs[] >>
   match_mp_tac int_call_no_control >> gvs[] >> metis_tac[]
 QED
 
-Resume canonical_eval_no_control[RawCall]:
+Resume canonical_eval_no_control_with_results[RawCall]:
   metis_tac[raw_call_no_control]
 QED
 
-Resume canonical_eval_no_control[RawCallCalldata]:
+Resume canonical_eval_no_control_with_results[RawCallCalldata]:
   metis_tac[raw_call_calldata_no_control]
 QED
 
-Resume canonical_eval_no_control[RawLog]:
+Resume canonical_eval_no_control_with_results[RawLog]:
   rpt strip_tac >> pop_assum mp_tac >>
   simp[Once evaluate_def, bind_def, ignore_bind_def, return_def,
     AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
@@ -895,14 +910,14 @@ Resume canonical_eval_no_control[RawLog]:
   imp_res_tac push_log_no_control >> res_tac
 QED
 
-Resume canonical_eval_no_control[RawRevert]:
+Resume canonical_eval_no_control_with_results[RawRevert]:
   rpt strip_tac >> pop_assum mp_tac >>
   simp[Once evaluate_def, bind_def, ignore_bind_def, return_def,
     raise_def, AllCaseEqs()] >> rpt strip_tac >> gvs[no_control_exc_def] >>
   metis_tac[type_check_no_control, no_control_exc_def]
 QED
 
-Resume canonical_eval_no_control[SelfDestruct]:
+Resume canonical_eval_no_control_with_results[SelfDestruct]:
   rpt strip_tac >> pop_assum mp_tac >>
   simp[Once evaluate_def, bind_def, ignore_bind_def, return_def,
     get_accounts_def, AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
@@ -911,56 +926,72 @@ Resume canonical_eval_no_control[SelfDestruct]:
   imp_res_tac transfer_value_no_control >> res_tac
 QED
 
-Resume canonical_eval_no_control[Create]:
+Resume canonical_eval_no_control_with_results[Create]:
   rpt gen_tac >> strip_tac >> Cases_on `kind` >> gvs[] >>
   rpt strip_tac >> pop_assum mp_tac >>
   simp[Once evaluate_def, bind_def, ignore_bind_def, return_def,
     AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
   imp_res_tac eval_create_no_control >>
-  imp_res_tac check_create_blueprint_no_control >> res_tac
+  imp_res_tac check_create_blueprint_no_control >>
+  imp_res_tac read_results_no_control >> res_tac
 QED
 
-Resume canonical_eval_no_control[ExprsNil]:
+Resume canonical_eval_no_control_with_results[ExprsNil]:
   simp[Once evaluate_def, return_def]
 QED
 
-Resume canonical_eval_no_control[ExprsCons]:
+Resume canonical_eval_no_control_with_results[ExprsCons]:
   rpt strip_tac >> pop_assum mp_tac >>
   simp[Once evaluate_def, bind_def, return_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[] >> metis_tac[read_result_no_control]
 QED
 
-Resume canonical_eval_no_control[PlaceName]:
+Resume canonical_eval_no_control_with_results[PlaceName]:
   simp[Once evaluate_def, bind_def, ignore_bind_def,
     get_scopes_def, return_def, type_check_def, assert_def, raise_def,
     AllCaseEqs(), no_control_exc_def]
 QED
 
-Resume canonical_eval_no_control[PlaceTopName]:
+Resume canonical_eval_no_control_with_results[PlaceTopName]:
   simp[Once evaluate_def, bind_def, AllCaseEqs()] >>
   metis_tac[lookup_global_no_control]
 QED
 
-Resume canonical_eval_no_control[PlaceAttribute]:
+Resume canonical_eval_no_control_with_results[PlaceAttribute]:
   rpt strip_tac >> pop_assum mp_tac >>
   simp[Once evaluate_def, bind_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[] >> metis_tac[extend_place_no_control]
 QED
 
-Resume canonical_eval_no_control[PlaceSubscript]:
+Resume canonical_eval_no_control_with_results[PlaceSubscript]:
   rpt strip_tac >> pop_assum mp_tac >>
   simp[Once evaluate_def, bind_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[] >>
   metis_tac[read_result_no_control, extend_place_no_control]
 QED
 
-Resume canonical_eval_no_control[TargetPlace]:
+Resume canonical_eval_no_control_with_results[TargetPlace]:
   rpt strip_tac >> pop_assum mp_tac >>
   simp[Once evaluate_def, bind_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[] >> metis_tac[get_place_no_control]
 QED
 
-Finalise canonical_eval_no_control
+Finalise canonical_eval_no_control_with_results
+
+Theorem canonical_eval_no_control:
+  (!cx e s exc st'. eval_expr cx e s = (INR exc,st') ==> no_control_exc exc) /\
+  (!cx es s exc st'. eval_exprs cx es s = (INR exc,st') ==> no_control_exc exc) /\
+  (!cx t s exc st'. eval_base_place cx t s = (INR exc,st') ==> no_control_exc exc) /\
+  (!cx t s exc st'. eval_target_place cx t s = (INR exc,st') ==> no_control_exc exc)
+Proof
+  metis_tac[canonical_eval_no_control_with_results]
+QED
+
+Theorem eval_expr_results_no_control:
+  eval_expr_results cx es st = (INR exc,st') ==> no_control_exc exc
+Proof
+  metis_tac[canonical_eval_no_control_with_results]
+QED
 
 Theorem eval_expr_no_control:
   (∀cx e s exc st'.
@@ -991,7 +1022,8 @@ val tuple_no_control_ind = evaluate_ind
               `\cx ty nm body vs. T`, `\cx e. T`, `\cx es. T`,
               `\cx t. T`, `\cx t. T`,
               `\cx g v. !st exc st'. assign_tuple_targets cx g v st = (INR exc,st') ==> no_control_exc exc`,
-              `\cx gs vs. !st exc st'. assign_tuple_target_list cx gs vs st = (INR exc,st') ==> no_control_exc exc`]
+              `\cx gs vs. !st exc st'. assign_tuple_target_list cx gs vs st = (INR exc,st') ==> no_control_exc exc`,
+              `\cx es. T`]
   |> CONV_RULE (DEPTH_CONV BETA_CONV)
   |> PURE_REWRITE_RULE [FORALL_SIMP, AND_CLAUSES, IMP_CLAUSES];
 

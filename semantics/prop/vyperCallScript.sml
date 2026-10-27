@@ -62,13 +62,14 @@ QED
    reentrancy lock: the body runs in the callee's scope, the caller's
    scopes come back, and the result is handle_function's value, cast. *)
 Theorem eval_expr_intcall_unfold:
-  ∀cx ty src fn es drv st ts mut args dflts ret body vs st1 env rtv.
+  ∀cx ty src fn es drv st ts mut args dflts ret body results vs st1 env rtv.
     ¬MEM (src, fn) cx.stk ∧
     get_module_code cx src = SOME ts ∧
     lookup_callable_function cx.in_deploy fn ts =
       SOME (mut, F, args, dflts, ret, body) ∧
     LENGTH es = LENGTH args ∧
-    eval_exprs cx es st = (INL vs, st1) ∧
+    eval_expr_results cx es st = (INL results, st1) ∧
+    read_results cx results st1 = (INL vs, st1) ∧
     bind_arguments (get_tenv cx) args vs = SOME env ∧
     evaluate_type (get_tenv cx) ret = SOME rtv ⇒
     eval_expr cx (Call ty (IntCall (src, fn)) es drv) st =
@@ -106,7 +107,7 @@ Theorem eval_expr_intcall_args_raise:
     lookup_callable_function cx.in_deploy fn ts =
       SOME (mut, nr, args, dflts, ret, body) ∧
     LENGTH es = LENGTH args ∧
-    eval_exprs cx es st = (INR e, st1) ⇒
+    eval_expr_results cx es st = (INR e, st1) ⇒
     eval_expr cx (Call ty (IntCall (src, fn)) es drv) st = (INR e, st1)
 Proof
   rpt strip_tac >>

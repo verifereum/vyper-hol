@@ -87,6 +87,12 @@ Proof
   first_x_assum drule >> simp[]
 QED
 
+Theorem outcomes_frame_read_results[local]:
+  outcomes_frame (read_results cx results)
+Proof
+  irule outcomes_frame_state_preserving >> metis_tac[read_results_state]
+QED
+
 Theorem outcomes_frame_reads[simp]:
   outcomes_frame (read_result cx tv) /\
   outcomes_frame (select_result cx out_ty pv sb) /\
@@ -502,7 +508,7 @@ QED
 val outcomes_suffix_frame_simps =
   List.map (GEN_ALL o MATCH_MP outcomes_suffix_frame o SPEC_ALL)
     (List.concat (List.map (CONJUNCTS o SPEC_ALL)
-      [outcomes_frame_reads,
+      [outcomes_frame_reads, outcomes_frame_read_results,
        outcomes_frame_primitives, outcomes_frame_handlers,
        outcomes_frame_return, outcomes_frame_raise, outcomes_frame_create,
        outcomes_frame_check_create_blueprint,
@@ -562,6 +568,212 @@ val OUTCOMES_CONSTRUCTOR_TAC =
   rpt strip_tac >> simp_tac bool_ss [Once evaluate_def] >>
   OUTCOMES_SUFFIX_TAC >> OUTCOMES_GUARD_TAC;
 
+Theorem eval_outcomes_suffix_with_results:
+  (!cx s. outcomes_suffix (eval_stmt cx s)) /\
+  (!cx ss. outcomes_suffix (eval_stmts cx ss)) /\
+  (!cx it. outcomes_suffix (eval_iterator cx it)) /\
+  (!cx tyv id body vs. outcomes_suffix (eval_for cx tyv id body vs)) /\
+  (!cx e. outcomes_suffix (eval_expr cx e)) /\
+  (!cx es. outcomes_suffix (eval_exprs cx es)) /\
+  (!cx t. outcomes_suffix (eval_base_place cx t)) /\
+  (!cx t. outcomes_suffix (eval_target_place cx t)) /\
+  (!cx g v. outcomes_suffix (assign_tuple_targets cx g v)) /\
+  (!cx gs vs. outcomes_suffix (assign_tuple_target_list cx gs vs)) /\
+  (!cx es. outcomes_suffix (eval_expr_results cx es))
+Proof
+  ho_match_mp_tac evaluate_ind >>
+  map_every (fn n => conj_tac >- suspend ("c" ^ Int.toString n))
+    (List.tabulate (60, fn n => n + 1)) >> suspend "c61"
+QED
+
+Resume eval_outcomes_suffix_with_results[c1]:
+  OUTCOMES_CONSTRUCTOR_TAC
+QED
+Resume eval_outcomes_suffix_with_results[c2]:
+  OUTCOMES_CONSTRUCTOR_TAC
+QED
+Resume eval_outcomes_suffix_with_results[c3]:
+  OUTCOMES_CONSTRUCTOR_TAC
+QED
+Resume eval_outcomes_suffix_with_results[c4]:
+  OUTCOMES_CONSTRUCTOR_TAC
+QED
+Resume eval_outcomes_suffix_with_results[c5]:
+  OUTCOMES_CONSTRUCTOR_TAC
+QED
+Resume eval_outcomes_suffix_with_results[c6]:
+  OUTCOMES_CONSTRUCTOR_TAC
+QED
+Resume eval_outcomes_suffix_with_results[c7]:
+  OUTCOMES_CONSTRUCTOR_TAC
+QED
+Resume eval_outcomes_suffix_with_results[c8]:
+  OUTCOMES_CONSTRUCTOR_TAC
+QED
+Resume eval_outcomes_suffix_with_results[c9]:
+  OUTCOMES_CONSTRUCTOR_TAC
+QED
+Resume eval_outcomes_suffix_with_results[c10]:
+  OUTCOMES_CONSTRUCTOR_TAC
+QED
+Resume eval_outcomes_suffix_with_results[c11]:
+  OUTCOMES_CONSTRUCTOR_TAC
+QED
+Resume eval_outcomes_suffix_with_results[c12]:
+  OUTCOMES_CONSTRUCTOR_TAC
+QED
+Resume eval_outcomes_suffix_with_results[c13]:
+  OUTCOMES_CONSTRUCTOR_TAC
+QED
+Resume eval_outcomes_suffix_with_results[c14]:
+  OUTCOMES_CONSTRUCTOR_TAC
+QED
+Resume eval_outcomes_suffix_with_results[c15]:
+  OUTCOMES_CONSTRUCTOR_TAC
+QED
+Resume eval_outcomes_suffix_with_results[c16]:
+  OUTCOMES_CONSTRUCTOR_TAC
+QED
+Resume eval_outcomes_suffix_with_results[c17]:
+  OUTCOMES_CONSTRUCTOR_TAC
+QED
+Resume eval_outcomes_suffix_with_results[c18]:
+  OUTCOMES_CONSTRUCTOR_TAC
+QED
+Resume eval_outcomes_suffix_with_results[c19]:
+  OUTCOMES_CONSTRUCTOR_TAC
+QED
+Resume eval_outcomes_suffix_with_results[c20]:
+  OUTCOMES_CONSTRUCTOR_TAC
+QED
+Resume eval_outcomes_suffix_with_results[c21]:
+  OUTCOMES_CONSTRUCTOR_TAC
+QED
+Resume eval_outcomes_suffix_with_results[c22]:
+  OUTCOMES_CONSTRUCTOR_TAC
+QED
+Resume eval_outcomes_suffix_with_results[c23]:
+  OUTCOMES_CONSTRUCTOR_TAC
+QED
+Resume eval_outcomes_suffix_with_results[c24]:
+  OUTCOMES_CONSTRUCTOR_TAC
+QED
+Resume eval_outcomes_suffix_with_results[c25]:
+  OUTCOMES_CONSTRUCTOR_TAC
+QED
+Resume eval_outcomes_suffix_with_results[c26]:
+  OUTCOMES_CONSTRUCTOR_TAC
+QED
+Resume eval_outcomes_suffix_with_results[c27]:
+  OUTCOMES_CONSTRUCTOR_TAC
+QED
+Resume eval_outcomes_suffix_with_results[c28]:
+  OUTCOMES_CONSTRUCTOR_TAC
+QED
+Resume eval_outcomes_suffix_with_results[c29]:
+  OUTCOMES_CONSTRUCTOR_TAC
+QED
+Resume eval_outcomes_suffix_with_results[c30]:
+  OUTCOMES_CONSTRUCTOR_TAC
+QED
+Resume eval_outcomes_suffix_with_results[c31]:
+  OUTCOMES_CONSTRUCTOR_TAC
+QED
+Resume eval_outcomes_suffix_with_results[c32]:
+  OUTCOMES_CONSTRUCTOR_TAC
+QED
+Resume eval_outcomes_suffix_with_results[c33]:
+  OUTCOMES_CONSTRUCTOR_TAC
+QED
+Resume eval_outcomes_suffix_with_results[c34]:
+  OUTCOMES_CONSTRUCTOR_TAC
+QED
+Resume eval_outcomes_suffix_with_results[c35]:
+  OUTCOMES_CONSTRUCTOR_TAC
+QED
+Resume eval_outcomes_suffix_with_results[c36]:
+  OUTCOMES_CONSTRUCTOR_TAC
+QED
+Resume eval_outcomes_suffix_with_results[c37]:
+  OUTCOMES_CONSTRUCTOR_TAC
+QED
+Resume eval_outcomes_suffix_with_results[c38]:
+  OUTCOMES_CONSTRUCTOR_TAC
+QED
+Resume eval_outcomes_suffix_with_results[c39]:
+  OUTCOMES_CONSTRUCTOR_TAC
+QED
+Resume eval_outcomes_suffix_with_results[c40]:
+  OUTCOMES_CONSTRUCTOR_TAC
+QED
+Resume eval_outcomes_suffix_with_results[c41]:
+  OUTCOMES_CONSTRUCTOR_TAC
+QED
+Resume eval_outcomes_suffix_with_results[c42]:
+  OUTCOMES_CONSTRUCTOR_TAC
+QED
+Resume eval_outcomes_suffix_with_results[c43]:
+  OUTCOMES_CONSTRUCTOR_TAC
+QED
+Resume eval_outcomes_suffix_with_results[c44]:
+  OUTCOMES_CONSTRUCTOR_TAC
+QED
+Resume eval_outcomes_suffix_with_results[c45]:
+  OUTCOMES_CONSTRUCTOR_TAC
+QED
+Resume eval_outcomes_suffix_with_results[c46]:
+  rpt strip_tac >> simp_tac bool_ss [Once evaluate_def] >>
+  OUTCOMES_SUFFIX_TAC >> gvs[] >> OUTCOMES_GUARD_TAC
+QED
+Resume eval_outcomes_suffix_with_results[c47]:
+  OUTCOMES_CONSTRUCTOR_TAC
+QED
+Resume eval_outcomes_suffix_with_results[c48]:
+  OUTCOMES_CONSTRUCTOR_TAC
+QED
+Resume eval_outcomes_suffix_with_results[c49]:
+  OUTCOMES_CONSTRUCTOR_TAC
+QED
+Resume eval_outcomes_suffix_with_results[c50]:
+  OUTCOMES_CONSTRUCTOR_TAC
+QED
+Resume eval_outcomes_suffix_with_results[c51]:
+  OUTCOMES_CONSTRUCTOR_TAC
+QED
+Resume eval_outcomes_suffix_with_results[c52]:
+  OUTCOMES_CONSTRUCTOR_TAC
+QED
+Resume eval_outcomes_suffix_with_results[c53]:
+  OUTCOMES_CONSTRUCTOR_TAC
+QED
+Resume eval_outcomes_suffix_with_results[c54]:
+  OUTCOMES_CONSTRUCTOR_TAC
+QED
+Resume eval_outcomes_suffix_with_results[c55]:
+  OUTCOMES_CONSTRUCTOR_TAC
+QED
+Resume eval_outcomes_suffix_with_results[c56]:
+  OUTCOMES_CONSTRUCTOR_TAC
+QED
+Resume eval_outcomes_suffix_with_results[c57]:
+  OUTCOMES_CONSTRUCTOR_TAC
+QED
+Resume eval_outcomes_suffix_with_results[c58]:
+  OUTCOMES_CONSTRUCTOR_TAC
+QED
+Resume eval_outcomes_suffix_with_results[c59]:
+  OUTCOMES_CONSTRUCTOR_TAC
+QED
+
+Resume eval_outcomes_suffix_with_results[c60]:
+  OUTCOMES_CONSTRUCTOR_TAC
+QED
+Resume eval_outcomes_suffix_with_results[c61]:
+  OUTCOMES_CONSTRUCTOR_TAC
+QED
+
+Finalise eval_outcomes_suffix_with_results
+
 Theorem eval_outcomes_suffix_mutual:
   (!cx s. outcomes_suffix (eval_stmt cx s)) /\
   (!cx ss. outcomes_suffix (eval_stmts cx ss)) /\
@@ -574,191 +786,21 @@ Theorem eval_outcomes_suffix_mutual:
   (!cx g v. outcomes_suffix (assign_tuple_targets cx g v)) /\
   (!cx gs vs. outcomes_suffix (assign_tuple_target_list cx gs vs))
 Proof
-  ho_match_mp_tac evaluate_ind >>
-  map_every (fn n => conj_tac >- suspend ("c" ^ Int.toString n))
-    (List.tabulate (58, fn n => n + 1)) >> suspend "c59"
+  metis_tac[eval_outcomes_suffix_with_results]
 QED
 
-Resume eval_outcomes_suffix_mutual[c1]:
-  OUTCOMES_CONSTRUCTOR_TAC
-QED
-Resume eval_outcomes_suffix_mutual[c2]:
-  OUTCOMES_CONSTRUCTOR_TAC
-QED
-Resume eval_outcomes_suffix_mutual[c3]:
-  OUTCOMES_CONSTRUCTOR_TAC
-QED
-Resume eval_outcomes_suffix_mutual[c4]:
-  OUTCOMES_CONSTRUCTOR_TAC
-QED
-Resume eval_outcomes_suffix_mutual[c5]:
-  OUTCOMES_CONSTRUCTOR_TAC
-QED
-Resume eval_outcomes_suffix_mutual[c6]:
-  OUTCOMES_CONSTRUCTOR_TAC
-QED
-Resume eval_outcomes_suffix_mutual[c7]:
-  OUTCOMES_CONSTRUCTOR_TAC
-QED
-Resume eval_outcomes_suffix_mutual[c8]:
-  OUTCOMES_CONSTRUCTOR_TAC
-QED
-Resume eval_outcomes_suffix_mutual[c9]:
-  OUTCOMES_CONSTRUCTOR_TAC
-QED
-Resume eval_outcomes_suffix_mutual[c10]:
-  OUTCOMES_CONSTRUCTOR_TAC
-QED
-Resume eval_outcomes_suffix_mutual[c11]:
-  OUTCOMES_CONSTRUCTOR_TAC
-QED
-Resume eval_outcomes_suffix_mutual[c12]:
-  OUTCOMES_CONSTRUCTOR_TAC
-QED
-Resume eval_outcomes_suffix_mutual[c13]:
-  OUTCOMES_CONSTRUCTOR_TAC
-QED
-Resume eval_outcomes_suffix_mutual[c14]:
-  OUTCOMES_CONSTRUCTOR_TAC
-QED
-Resume eval_outcomes_suffix_mutual[c15]:
-  OUTCOMES_CONSTRUCTOR_TAC
-QED
-Resume eval_outcomes_suffix_mutual[c16]:
-  OUTCOMES_CONSTRUCTOR_TAC
-QED
-Resume eval_outcomes_suffix_mutual[c17]:
-  OUTCOMES_CONSTRUCTOR_TAC
-QED
-Resume eval_outcomes_suffix_mutual[c18]:
-  OUTCOMES_CONSTRUCTOR_TAC
-QED
-Resume eval_outcomes_suffix_mutual[c19]:
-  OUTCOMES_CONSTRUCTOR_TAC
-QED
-Resume eval_outcomes_suffix_mutual[c20]:
-  OUTCOMES_CONSTRUCTOR_TAC
-QED
-Resume eval_outcomes_suffix_mutual[c21]:
-  OUTCOMES_CONSTRUCTOR_TAC
-QED
-Resume eval_outcomes_suffix_mutual[c22]:
-  OUTCOMES_CONSTRUCTOR_TAC
-QED
-Resume eval_outcomes_suffix_mutual[c23]:
-  OUTCOMES_CONSTRUCTOR_TAC
-QED
-Resume eval_outcomes_suffix_mutual[c24]:
-  OUTCOMES_CONSTRUCTOR_TAC
-QED
-Resume eval_outcomes_suffix_mutual[c25]:
-  OUTCOMES_CONSTRUCTOR_TAC
-QED
-Resume eval_outcomes_suffix_mutual[c26]:
-  OUTCOMES_CONSTRUCTOR_TAC
-QED
-Resume eval_outcomes_suffix_mutual[c27]:
-  OUTCOMES_CONSTRUCTOR_TAC
-QED
-Resume eval_outcomes_suffix_mutual[c28]:
-  OUTCOMES_CONSTRUCTOR_TAC
-QED
-Resume eval_outcomes_suffix_mutual[c29]:
-  OUTCOMES_CONSTRUCTOR_TAC
-QED
-Resume eval_outcomes_suffix_mutual[c30]:
-  OUTCOMES_CONSTRUCTOR_TAC
-QED
-Resume eval_outcomes_suffix_mutual[c31]:
-  OUTCOMES_CONSTRUCTOR_TAC
-QED
-Resume eval_outcomes_suffix_mutual[c32]:
-  OUTCOMES_CONSTRUCTOR_TAC
-QED
-Resume eval_outcomes_suffix_mutual[c33]:
-  OUTCOMES_CONSTRUCTOR_TAC
-QED
-Resume eval_outcomes_suffix_mutual[c34]:
-  OUTCOMES_CONSTRUCTOR_TAC
-QED
-Resume eval_outcomes_suffix_mutual[c35]:
-  OUTCOMES_CONSTRUCTOR_TAC
-QED
-Resume eval_outcomes_suffix_mutual[c36]:
-  OUTCOMES_CONSTRUCTOR_TAC
-QED
-Resume eval_outcomes_suffix_mutual[c37]:
-  OUTCOMES_CONSTRUCTOR_TAC
-QED
-Resume eval_outcomes_suffix_mutual[c38]:
-  OUTCOMES_CONSTRUCTOR_TAC
-QED
-Resume eval_outcomes_suffix_mutual[c39]:
-  OUTCOMES_CONSTRUCTOR_TAC
-QED
-Resume eval_outcomes_suffix_mutual[c40]:
-  OUTCOMES_CONSTRUCTOR_TAC
-QED
-Resume eval_outcomes_suffix_mutual[c41]:
-  OUTCOMES_CONSTRUCTOR_TAC
-QED
-Resume eval_outcomes_suffix_mutual[c42]:
-  OUTCOMES_CONSTRUCTOR_TAC
-QED
-Resume eval_outcomes_suffix_mutual[c43]:
-  OUTCOMES_CONSTRUCTOR_TAC
-QED
-Resume eval_outcomes_suffix_mutual[c44]:
-  OUTCOMES_CONSTRUCTOR_TAC
-QED
-Resume eval_outcomes_suffix_mutual[c45]:
-  OUTCOMES_CONSTRUCTOR_TAC
-QED
-Resume eval_outcomes_suffix_mutual[c46]:
-  rpt strip_tac >> simp_tac bool_ss [Once evaluate_def] >>
-  OUTCOMES_SUFFIX_TAC >> gvs[] >> OUTCOMES_GUARD_TAC
-QED
-Resume eval_outcomes_suffix_mutual[c47]:
-  OUTCOMES_CONSTRUCTOR_TAC
-QED
-Resume eval_outcomes_suffix_mutual[c48]:
-  OUTCOMES_CONSTRUCTOR_TAC
-QED
-Resume eval_outcomes_suffix_mutual[c49]:
-  OUTCOMES_CONSTRUCTOR_TAC
-QED
-Resume eval_outcomes_suffix_mutual[c50]:
-  OUTCOMES_CONSTRUCTOR_TAC
-QED
-Resume eval_outcomes_suffix_mutual[c51]:
-  OUTCOMES_CONSTRUCTOR_TAC
-QED
-Resume eval_outcomes_suffix_mutual[c52]:
-  OUTCOMES_CONSTRUCTOR_TAC
-QED
-Resume eval_outcomes_suffix_mutual[c53]:
-  OUTCOMES_CONSTRUCTOR_TAC
-QED
-Resume eval_outcomes_suffix_mutual[c54]:
-  OUTCOMES_CONSTRUCTOR_TAC
-QED
-Resume eval_outcomes_suffix_mutual[c55]:
-  OUTCOMES_CONSTRUCTOR_TAC
-QED
-Resume eval_outcomes_suffix_mutual[c56]:
-  OUTCOMES_CONSTRUCTOR_TAC
-QED
-Resume eval_outcomes_suffix_mutual[c57]:
-  OUTCOMES_CONSTRUCTOR_TAC
-QED
-Resume eval_outcomes_suffix_mutual[c58]:
-  OUTCOMES_CONSTRUCTOR_TAC
-QED
-Resume eval_outcomes_suffix_mutual[c59]:
-  OUTCOMES_CONSTRUCTOR_TAC
+Theorem eval_expr_results_outcomes_suffix:
+  outcomes_suffix (eval_expr_results cx es)
+Proof
+  metis_tac[eval_outcomes_suffix_with_results]
 QED
 
-Finalise eval_outcomes_suffix_mutual
+Theorem eval_expr_results_outcome_suffix:
+  eval_expr_results cx es st = (res,st') ==>
+    outcome_suffix st.outcomes st'.outcomes
+Proof
+  metis_tac[eval_expr_results_outcomes_suffix, outcomes_suffix_result]
+QED
 
 Definition outcomes_NONE_frame_def:
   outcomes_NONE_frame f <=>
