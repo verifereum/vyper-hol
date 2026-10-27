@@ -1923,7 +1923,7 @@ Proof
   metis_tac[ci_mono_trans]
 QED
 
-Theorem ci_mono_emit_membership_eqs[local]:
+Theorem ci_mono_emit_membership_eqs:
   !ops needle sa. ci_mono sa (SND (emit_membership_eqs needle ops sa))
 Proof
   Induct >> rpt gen_tac >>
