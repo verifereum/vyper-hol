@@ -10,11 +10,13 @@
  *
  * TOP-LEVEL:
  *   expr_sim_of_vv_sim — expr_vv_sim gives expr_sim
+ *   expr_sim_of_vv_sim_buffer — the same for an expression lowered to a
+ *                        pointer into memory, without the cheated cases
  *   unwrap_value_sim   — unwrap_value's code takes vv_post to expr_post,
  *                        one lemma per form of value_vv:
  *                        expr_post_of_vv_post_stack,
- *                        expr_post_of_vv_post_memory,
- *                        unwrap_memory_word_sim (MLOAD),
+ *                        unwrap_memory_sim (expr_post_of_vv_post_memory,
+ *                        and unwrap_memory_word_sim's MLOAD),
  *                        unwrap_runtime_immutable_word_sim (DLOAD),
  *                        vv_post_calldata (no calldata pointers)
  *
@@ -269,6 +271,25 @@ Proof
   gvs[]
 QED
 
+(* A pointer into memory: an MLOAD for a word, the pointer itself for an
+   aggregate. *)
+Theorem unwrap_memory_sim:
+  !ctx func cenv cx e es sa sm sb s0 es' v t p op R.
+    unwrap_value cenv (LocatedValue t p) sm = (op, sb) /\
+    p.ptr_location = LocMemory /\
+    local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var ==>
+    frag_exec ctx sm sb
+      (\s. vv_post func cenv cx e es sa sm s0 es' (Value v)
+             (LocatedValue t p) s)
+      (\s. expr_post func cenv cx e es sa sb s0 es' v op s) R
+Proof
+  rpt strip_tac >> Cases_on `is_word_type t`
+  >- (irule unwrap_memory_word_sim >>
+      gvs[unwrap_value_def, contextTheory.compile_ptr_load_def]) >>
+  gvs[unwrap_value_def, comp_return_def] >> irule frag_exec_refl >>
+  rw[] >> metis_tac[expr_post_of_vv_post_memory]
+QED
+
 (* A word in storage or transient storage: an SLOAD or TLOAD.  Cheated:
    storage_holds relates the slot through decode_base_from_slot, which
    truncates, so a slot holding a word outside the type's range (0x1FF for a
@@ -375,11 +396,7 @@ Proof
       irule unwrap_runtime_immutable_word_sim >>
       gvs[unwrap_value_def, contextTheory.compile_ptr_load_def]) >>
   `p.ptr_location = LocMemory` by (Cases_on `p.ptr_location` >> gvs[]) >>
-  Cases_on `is_word_type t`
-  >- (irule unwrap_memory_word_sim >>
-      gvs[unwrap_value_def, contextTheory.compile_ptr_load_def]) >>
-  gvs[unwrap_value_def, comp_return_def] >> irule frag_exec_refl >>
-  rw[] >> metis_tac[expr_post_of_vv_post_memory]
+  irule unwrap_memory_sim >> simp[]
 QED
 
 (* unwrap_value's step: expr_vv_sim gives expr_sim.  compile_expr's
@@ -417,5 +434,34 @@ Proof
   qexistsl_tac [`\s. F`, `\s. F`, `expr_exit res`] >>
   simp[fragExecTheory.frag_exec_false_pre] >>
   gvs[expr_res_ok_def]
+QED
+
+(* expr_sim_of_vv_sim for an expression that compile_expr always lowers to
+   a pointer into memory to a non-word value, with only values as results:
+   unwrap_value hands the pointer out as it is (expr_post_of_vv_post_memory).
+   Unlike expr_sim_of_vv_sim, this doesn't go through the storage and
+   immutable cases of unwrap_value_sim. *)
+Theorem expr_sim_of_vv_sim_buffer:
+  !ctx func cenv cx ty e es.
+    expr_vv_sim ctx func cenv cx ty e es /\
+    (!sa. ?t p sb. compile_expr cenv ty e sa = (LocatedValue t p,sb) /\
+      p.ptr_location = LocMemory /\ ~is_word_type t) /\
+    (!tv es'. eval_expr cx e es = (INL tv,es') ==> ?v. tv = Value v) ==>
+    expr_sim ctx func cenv cx ty e es
+Proof
+  rw[expr_sim_def] >>
+  qpat_x_assum `!sa. ?t p sb. _` (qspec_then `sa` strip_assume_tac) >>
+  gvs[lower_value_def, comp_bind_def, unwrap_value_def,
+      comp_return_def] >>
+  `expr_vv_res_ok res` by simp[expr_vv_res_ok_def] >>
+  qpat_x_assum `expr_vv_sim _ _ _ _ _ _ _` mp_tac >>
+  simp[expr_vv_sim_def] >>
+  disch_then drule >>
+  disch_then (qspec_then `s0` mp_tac) >> simp[] >> strip_tac >>
+  irule fragExecTheory.frag_exec_conseq >> first_assum (irule_at Any) >>
+  simp[] >> rpt strip_tac >>
+  `?v. tv = Value v` by metis_tac[] >> gvs[] >>
+  irule expr_post_of_vv_post_memory >>
+  simp[] >> qexists_tac `t` >> simp[]
 QED
 
