@@ -22,7 +22,6 @@
  *   7 method_id: compile_method_id_sim; a literal signature with
  *     output_type=bytes4 by compile_method_id_literal_word_sim (the folded
  *     selector, a word literal), the rest in compile_method_id_other_sim
- *     (unprovable for now, below)
  *   8 ecrecover, ecadd, ecmul: compile_ecrecover_sim, compile_ecadd_sim,
  *     compile_ecmul_sim
  *
@@ -37,26 +36,20 @@
  *   - compile_acc_sim for .code: the lowering emits INVALID.
  *   - compile_len_sim: well_typed_builtin_app Len admits fixed arrays and
  *     bytesN, but the lowering always loads the operand's first word.
- *   - compile_keccak256_sim and compile_sha256_sim for a Bytes or String
- *     operand: compile_keccak256_bytes and compile_sha256_bytes read the
- *     bytes from ADD ptr 32, which wraps at 2 ** 256, while val_in_memory
- *     reads them at w2n ptr + 32, and nothing in stmt_state_rel or
- *     expr_val_at keeps a memory value below 2 ** 256 (exec_alloca's
- *     vs_alloca_next is unbounded).  They wait for S3's alloca-frontier
- *     invariant, vs_alloca_next < dimword (:256) along a run
- *     (raw_unit_memory_ok), to reach the judgment (stmtLoweringProps notes
- *     it as still unstated there), which gives the bound at the hash.  The
- *     bound can't go in stmt_state_rel: INVOKE copies the callee's frontier
- *     back, so a loop around an internal call keeps raising it.
- *   - compile_method_id_other_sim: a Bytes[4] output, and the runtime hash
- *     of a signature, use ALLOCA'd buffers or ADD ptr 32, so it waits for
- *     the same bound.
+ *
+ * The hashes and method_id read a bytestring operand at ADD ptr 32 and
+ * allocate buffers of their own.  Neither wraps at 2 ** 256:
+ * stmt_state_rel's alloca_room keeps the frontier below 2 ** 256, every
+ * allocation ends below the frontier (alloca_inv) and so does every live
+ * local region (local_ptrs_rel), and
+ * expr_val_at puts the operand's value inside one of them
+ * (exprSimLiteralBuffer proves a buffer leaf the same way).
  *
  * The STATICCALLs of sha256, ecrecover, ecadd and ecmul go to computed
  * precompiles: take_outcome answers them with precompile_result and leaves
  * the outcomes and requests alone (extCallOracle), as the source does.
  *
- * len, the hashes of a bytestring and slice read their operand's value_vv
+ * len and slice read their operand's value_vv
  * (compile_expr without unwrap_value), which the induction hypothesis's
  * expr_vv_ok of the operand describes.  A msg.data or .code operand is
  * never evaluated as a value, so for those the hypothesis says nothing and
@@ -97,6 +90,23 @@ QED
 
 (* ===== Hashes ===== *)
 
+(* keccak256 and sha256 of a Bytes[n], String[n] or bytesN operand
+   (well_typed_builtin_app; the word branch of the lowering is not
+   reached), a bytes32 result on the stack:
+   - Bytes or String: lower_value hands out a pointer to the operand's
+     value, length word then data (val_in_memory); MLOAD reads the length,
+     ADD ptr 32 the data's address, unwrapped since the value lies inside
+     an allocation or a local region, below 2 ** 256.  SHA3 hashes those
+     bytes, the source's Keccak_256_w64; sha256 hands them to the precompile
+     at 2 by STATICCALL, which take_outcome answers with the SHA-256 digest
+     (precompile_result_sha256) and no change to the outcomes, requests,
+     accounts or logs, written to an ALLOCA'd 32-byte buffer and loaded.
+   - bytesN: the operand is the left-aligned word; it is MSTOREd to an
+     ALLOCA'd 32-byte buffer and its first N bytes, the value's bytes, are
+     hashed.
+   The buffers are fresh allocations, so the stores keep stmt_state_rel and
+   the memory expr_post's frame asks for (as exprSimLiteralBuffer's
+   literal_mstore_state_rel). *)
 Theorem compile_keccak256_sim:
   !cenv ann args.
     expr_sim_below cenv (list_size expr_size args) ==>
@@ -337,14 +347,17 @@ Proof
   simp[compile_literal_vv_def, comp_return_def]
 QED
 
-(* The other method_ids: a literal signature with the default Bytes[4]
-   output, a buffer holding the length 4 and the selector, and a signature
-   that is not a literal, hashed at run time (compile_method_id_runtime).
-   Cheated, and unprovable as the definitions stand: a Bytes[4] output is
-   an ALLOCA'd buffer, and the runtime hash reads a Bytes or String
-   signature from ADD ptr 32 and copies a bytesN one into an ALLOCA'd
-   buffer; nothing keeps vs_alloca_next below 2 ** 256, so they wait, with
-   keccak256, for S3's alloca frontier (see the header). *)
+(* The other method_ids:
+   - a literal signature with the default Bytes[4] output: compile_expr
+     emits what it emits for the literal Bytes[4] the source evaluates it to
+     (compile_expr_method_id_literal, eval_expr_method_id_literal), a buffer
+     holding the length 4 and the selector, which
+     exprSimLiteralBuffer's compile_literal_other_vv_sim simulates;
+   - a signature that is not a literal, hashed at run time
+     (compile_method_id_runtime): keccak256 of its bytes as in
+     compile_keccak256_sim, SHR then SHL by 224 keeping the first 4 bytes
+     left-aligned, the typed encoding of the bytes4 selector; for Bytes[4]
+     that word goes after the length 4 in an ALLOCA'd 64-byte buffer. *)
 Theorem compile_method_id_other_sim:
   !cenv ann args.
     expr_sim_below cenv (list_size expr_size args) /\
