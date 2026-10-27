@@ -12,7 +12,7 @@ Ancestors
   abiEncoderExtendSim pred_set venomInst abiEncoderChildCode abiEncoderChildPrefix
   abiScratchEffect abiScratchFootprint abiEncoderDynamic abiDecoderEffect
   abiEncoderResultLive abiEncoderCounters
-  abiEncoderChildSuffix valueEncoding abiEncoderChildSuffixReach abiScratchChild
+  abiEncoderChildSuffix valueEncoding abiEncoderChildSuffixReach abiScratchChild abiScratchAddress
 
 Definition abi_encoder_spine_source_pre_def:
   abi_encoder_spine_source_pre (at,av,sb,source_cap,d)
@@ -1142,3 +1142,140 @@ val _ = List.app (fn (name,th) =>
   [("dynamic_source_pre",abi_encoder_spine_dynamic_source_pre),
    ("dynamic_source_cursor",abi_encoder_spine_dynamic_source_cursor),
    ("dynamic_source",abi_encoder_spine_dynamic_source)];
+
+Theorem abi_encoder_spine_dynamic_scratch_pre:
+  abi_encode_child_prefix dst ho dp st = (ops,p) /\
+  abi_scratch_encoder ei /\
+  abi_scratch_input ei at av st src dst sb source_cap d extent first last b cap initial /\
+  eval_operand dp initial = SOME (n2w slot) /\
+  mload slot initial = n2w off /\ slot < dimword (:256) /\
+  abi_decoder_operand_live st.cs_next_var dp /\
+  off+LENGTH (enc at av) <= extent /\
+  abi_decoder_budget first last b cap initial /\
+  first <= p.cs_next_id /\ ce.cs_next_id <= last /\
+  p.cs_next_var <= limit_st.cs_next_var /\ ce.cs_next_var <= limit_st.cs_next_var /\
+  fresh_vars_wrt limit_st initial /\ ~initial.vs_halted /\
+  initial.vs_current_bb = st.cs_current_bb /\
+  abi_encoder_member_phase_raw st p initial ready ==>
+  abi_encoder_spine_scratch_pre (at,av,sb,source_cap,d+off)
+    (first,last,b,cap,limit_st) (ei,SND (SND ops),src,p,ce,len) ready
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  `eval_operand dst initial = SOME (n2w d) /\
+   abi_decoder_operand_live st.cs_next_var dst` by fs[abi_scratch_input_def] >>
+  drule_all abi_encoder_member_prefix_transport >> strip_tac >>
+  drule_all abi_encoder_member_prefix_control >> strip_tac >>
+  drule abi_encode_child_prefix_shape >> strip_tac >>
+  drule abi_encode_child_prefix_live >> strip_tac >>
+  `st.cs_next_var <= p.cs_next_var` by decide_tac >>
+  drule_all abi_scratch_address >>
+  disch_then (qspecl_then [`abi_decoder_ids first last`, `[]`] strip_assume_tac) >>
+  drule_all abi_scratch_child_input_address >> disch_tac >>
+  simp[abi_encoder_spine_scratch_pre_def]
+QED
+
+Theorem abi_encoder_spine_dynamic_scratch_cursor:
+  abi_encode_child_prefix dst ho dp st = (ops,p) /\
+  abi_encoder_spine_core_code func (ei,SND (SND ops),src,p,ce,len) /\
+  eval_operand dst initial = SOME (n2w d) /\ eval_operand dp initial = SOME (n2w slot) /\
+  mload slot initial = n2w off /\ slot < dimword (:256) /\ d+ho < dimword (:256) /\
+  abi_decoder_operand_live st.cs_next_var dst /\ abi_decoder_operand_live st.cs_next_var dp /\
+  p.cs_next_var <= limit_st.cs_next_var /\ en.cs_next_var <= limit_st.cs_next_var /\
+  fresh_vars_wrt limit_st initial /\
+  abi_encoder_member_phase_raw st p initial ready /\
+  abi_encoder_spine_scratch_post (ctx,func) (at,av,sb,source_cap,d+off)
+    (first,last,b,cap,limit_st) (ei,SND (SND ops),src,p,ce,len) ready encoded ==>
+  abi_encoder_spine_cursor_input (FST ops,dp,FST (SND ops),len,ce,en,limit_st) encoded
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  drule_all abi_encoder_member_prefix_transport >> strip_tac >>
+  drule abi_encode_child_prefix_live >> strip_tac >>
+  drule abi_encode_child_prefix_shape >> strip_tac >>
+  `abi_decoder_operand_live p.cs_next_var dp` by
+    (irule abi_decoder_operand_live_mono >> goal_assum (drule_at Any) >> simp[]) >>
+  `eval_operand dp ready = SOME (n2w slot)` by fs[abi_decoder_address_frame_def] >>
+  `abi_scratch_effect first last p.cs_next_id ce.cs_next_id p.cs_next_var
+    limit_st (d+off) (LENGTH (enc at av)) b cap ready encoded` by
+    fs[abi_encoder_spine_scratch_post_def] >>
+  `eval_operand (FST ops) encoded = SOME (n2w (d+ho)) /\
+   eval_operand (FST (SND ops)) encoded = SOME (n2w off) /\
+   eval_operand dp encoded = SOME (n2w slot)` by
+    metis_tac[abi_scratch_effect_operand] >>
+  `p.cs_next_var <= ce.cs_next_var` by
+    (fs[abi_encoder_spine_core_code_def] >> drule abi_encoder_counters >> simp[]) >>
+  `abi_decoder_operand_live ce.cs_next_var dp` by
+    (irule abi_decoder_operand_live_mono >> qexists_tac `p.cs_next_var` >> simp[]) >>
+  `abi_decoder_operand_live ce.cs_next_var len` by
+    (fs[abi_encoder_spine_core_code_def] >> drule abi_encode_result_live >> simp[]) >>
+  simp_tac bool_ss [abi_encoder_spine_cursor_input_def] >>
+  qexistsl_tac [`d+ho`, `slot`, `off`, `LENGTH (enc at av)`] >>
+  fs[abi_encoder_spine_scratch_post_def, abi_scratch_effect_def]
+QED
+
+Definition abi_encoder_spine_dynamic_scratch_post_def:
+  abi_encoder_spine_dynamic_scratch_post ambient value resources (st,p,initial) c ready encoded <=>
+    abi_encoder_spine_scratch_post ambient value resources c ready encoded /\
+    abi_encoder_member_phase_raw st p initial ready
+End
+
+Theorem abi_encoder_spine_dynamic_scratch:
+  abi_encode_child_prefix dst ho dp st = (ops,p) /\
+  abi_encoder_spine_core_code func (ei,SND (SND ops),src,p,ce,len) /\
+  abi_encode_child_suffix (FST ops) dp (FST (SND ops)) len ce = (out,en) /\
+  abi_scratch_encoder ei /\
+  abi_scratch_input ei at av st src dst sb source_cap d extent first last b cap initial /\
+  eval_operand dp initial = SOME (n2w slot) /\
+  mload slot initial = n2w off /\ slot < dimword (:256) /\ d+ho < dimword (:256) /\
+  abi_decoder_operand_live st.cs_next_var dp /\
+  off+LENGTH (enc at av) <= extent /\
+  abi_decoder_budget first last b cap initial /\
+  first <= p.cs_next_id /\ ce.cs_next_id <= last /\
+  p.cs_next_var <= limit_st.cs_next_var /\ ce.cs_next_var <= limit_st.cs_next_var /\
+  en.cs_next_var <= limit_st.cs_next_var /\
+  fresh_vars_wrt limit_st initial /\ ~initial.vs_halted /\
+  initial.vs_current_bb = st.cs_current_bb ==>
+  ?ready encoded actual.
+    abi_encoder_spine_child
+      (abi_encoder_spine_scratch_post (ctx,func) (at,av,sb,source_cap,d+off)
+        (first,last,b,cap,limit_st))
+      (ei,T,dst,src,ho,dp,st,en,out) initial actual /\
+    abi_encoder_member_phase_raw st p initial ready /\
+    abi_encoder_spine_dynamic_scratch_post (ctx,func) (at,av,sb,source_cap,d+off)
+      (first,last,b,cap,limit_st) (st,p,initial)
+      (ei,SND (SND ops),src,p,ce,len) ready encoded /\
+    abi_encoder_member_phase_raw ce en encoded actual
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  irule abi_encoder_spine_dynamic_run >>
+  conj_tac >- (qexistsl_tac [`off`, `slot`] >> simp[]) >>
+  conj_tac >- (qexists_tac `d` >> fs[abi_scratch_input_def]) >>
+  asm_rewrite_tac [] >>
+  conj_tac >- fs[abi_scratch_input_def] >>
+  conj_tac
+  >- (qexistsl_tac [`\c r. abi_encoder_spine_scratch_pre (at,av,sb,source_cap,d+off)
+          (first,last,b,cap,limit_st) c r /\ abi_encoder_member_phase_raw st p initial r`, `func`] >>
+      asm_rewrite_tac [] >> conj_tac
+      >- (rpt gen_tac >> simp_tac bool_ss [] >> strip_tac >>
+          drule_all abi_encoder_spine_scratch_core_run >>
+          disch_then (qspec_then `ctx` strip_assume_tac) >>
+          qexists_tac `t` >> simp[abi_encoder_spine_dynamic_scratch_post_def]) >>
+      rpt gen_tac >> disch_tac >> simp[] >>
+      irule abi_encoder_spine_dynamic_scratch_pre >>
+      asm_rewrite_tac [] >> goal_assum (drule_at Any) >>
+      qexistsl_tac [`dp`, `dst`, `extent`, `ho`, `slot`] >> asm_rewrite_tac []) >>
+  qexists_tac `limit_st` >> asm_rewrite_tac [] >>
+  rpt gen_tac >> simp_tac bool_ss [abi_encoder_spine_dynamic_scratch_post_def] >> strip_tac >>
+  `eval_operand dst initial = SOME (n2w d) /\
+   abi_decoder_operand_live st.cs_next_var dst` by fs[abi_scratch_input_def] >>
+  drule_all abi_encoder_spine_dynamic_scratch_cursor >> simp[]
+QED
+
+val _ = List.app (fn (name,th) =>
+  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
+    if List.all (fn s => s = "DISK_THM") oracles andalso null axioms then
+      print ("ENCODER_SPINE_COMPAT_AUDIT_OK " ^ name ^ "\n")
+    else raise Fail ("encoder spine compatibility admission dependency: " ^ name)
+  end)
+  [("dynamic_scratch_pre",abi_encoder_spine_dynamic_scratch_pre),
+   ("dynamic_scratch_cursor",abi_encoder_spine_dynamic_scratch_cursor),
+   ("dynamic_scratch",abi_encoder_spine_dynamic_scratch)];
