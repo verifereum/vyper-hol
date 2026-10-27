@@ -2,7 +2,7 @@
 Theory abiScratchMembersEntry
 Ancestors
   abiScratchMembersIndex abiEncoderMemberPhaseExec abiEncoderMemberPhaseRaw
-  abiScratchMemberInterpret abiEncoderMemberCode
+  abiScratchMemberInterpret abiScratchMembersEndpoint abiEncoderMemberCode
   abiEncoderMemberSpine abiScratchMembers abiScratchAddress abiScratchEffect
   abiEncoderMembersDefs abiEncoderInput abiDecoderLoop abiDecoderDynamicLoopSetup
   compileEnv venomState list arithmetic
@@ -109,6 +109,78 @@ Proof
   drule_all abi_scratch_member_dynamic_input >> simp[]
 QED
 
+Theorem abi_scratch_members_static_exit:
+  abi_scratch_members_index (ctx,func) (origin,initial)
+    (first,last,lo,hi,b,cap,limit_st) (active,dp,site,slot,src,dst,sb,d,hl,sz)
+    target ((ei,az,mz,F)::infos) (p,so,ho) (ty::tys,av::avs,pre,pvs) r /\
+  abi_scratch_input ei ty av p elem_src dst (sb+so) mz d sz first last b cap r /\
+  compile_abi_encode_child dst elem_src ei F ho dp p = (len,ce) /\
+  fn_has_code p ce func /\
+  (p.cs_blocks = ce.cs_blocks \/
+    !bb. lookup_block ce.cs_current_bb func.fn_blocks = SOME bb ==>
+      phi_prefix_length bb.bb_instructions = 0) /\
+  ce.cs_next_id <= last /\ ce.cs_next_id <= hi /\ hi <= last /\
+  ce.cs_next_var <= limit_st.cs_next_var /\
+  abi_encoder_spine_child_output
+    (abi_scratch_member_core_post (ctx,func) (ty,av,sb+so,mz,d+ho)
+      (first,last,b,cap,limit_st))
+    (ei,F,dst,elem_src,ho,dp,p,ce,len) r u ==>
+  abi_scratch_members_index (ctx,func) (origin,initial)
+    (first,last,lo,hi,b,cap,limit_st) (active,dp,site,slot,src,dst,sb,d,hl,sz)
+    target infos (ce,so+mz,ho+az) (tys,avs,pre++[ty],pvs++[av]) u
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  `abi_scratch_members_inv ((ei,az,mz,F)::infos) (ty::tys) (av::avs) pre pvs
+    active dp site slot first last lo p limit_st src dst sb so ho d hl sz b cap r /\
+    fresh_vars_wrt limit_st r` by
+    (PairCases_on `target` >> fs[abi_scratch_members_index_def, abi_scratch_members_inv_def]) >>
+  drule_all abi_scratch_members_static_endpoint >> strip_tac >>
+  `p.cs_next_var <= ce.cs_next_var` by
+    (drule abi_encoder_child_bounds >> simp[]) >>
+  `abi_decoder_address_frame p.cs_next_var r r` by simp[abi_decoder_address_frame_def] >>
+  `abi_decode_sim ctx func r r` by simp[abi_decode_sim_refl] >>
+  irule abi_scratch_members_index_advance >>
+  asm_rewrite_tac [] >> qexistsl_tac [`F`, `ei`, `p`, `r`, `r`, `p`] >>
+  asm_rewrite_tac [] >> decide_tac
+QED
+
+Theorem abi_scratch_members_dynamic_exit:
+  abi_scratch_members_index (ctx,func) (origin,initial)
+    (first,last,lo,hi,b,cap,limit_st) (active,dp,site,slot,src,dst,sb,d,hl,sz)
+    target ((ei,az,mz,T)::infos) (p,so,ho) (ty::tys,av::avs,pre,pvs) r /\
+  abi_scratch_input ei ty av p elem_src dst (sb+so) mz d sz first last b cap r /\
+  compile_abi_encode_child dst elem_src ei T ho dp p = (len,ce) /\
+  abi_encode_child_prefix dst ho dp p = (ops,prepared) /\
+  fn_has_code p ce func /\
+  (p.cs_blocks = ce.cs_blocks \/
+    !bb. lookup_block ce.cs_current_bb func.fn_blocks = SOME bb ==>
+      phi_prefix_length bb.bb_instructions = 0) /\
+  ce.cs_next_id <= last /\ ce.cs_next_id <= hi /\ hi <= last /\
+  ce.cs_next_var <= limit_st.cs_next_var /\
+  off = hl+LENGTH (FLAT (abi_tuple_tails pre pvs)) /\
+  abi_encoder_spine_child_output
+    (abi_scratch_member_dynamic_post (ctx,func) (ty,av,sb+so,mz,d+off)
+      (first,last,b,cap,limit_st) (FST ops,FST (SND ops),dp,d+ho,off,slot,site))
+    (ei,T,dst,elem_src,ho,dp,p,ce,len) r u ==>
+  abi_scratch_members_index (ctx,func) (origin,initial)
+    (first,last,lo,hi,b,cap,limit_st) (active,dp,site,slot,src,dst,sb,d,hl,sz)
+    target infos (ce,so+mz,ho+az) (tys,avs,pre++[ty],pvs++[av]) u
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  `abi_scratch_members_inv ((ei,az,mz,T)::infos) (ty::tys) (av::avs) pre pvs
+    active dp site slot first last lo p limit_st src dst sb so ho d hl sz b cap r /\
+    fresh_vars_wrt limit_st r` by
+    (PairCases_on `target` >> fs[abi_scratch_members_index_def, abi_scratch_members_inv_def]) >>
+  drule_all abi_scratch_members_dynamic_endpoint >> strip_tac >>
+  `p.cs_next_var <= ce.cs_next_var` by
+    (drule abi_encoder_child_bounds >> simp[]) >>
+  `abi_decoder_address_frame p.cs_next_var r r` by simp[abi_decoder_address_frame_def] >>
+  `abi_decode_sim ctx func r r` by simp[abi_decode_sim_refl] >>
+  irule abi_scratch_members_index_advance >>
+  asm_rewrite_tac [] >> qexistsl_tac [`T`, `ei`, `p`, `r`, `r`, `p`] >>
+  asm_rewrite_tac [] >> decide_tac
+QED
+
 val _ =
   if List.exists (fn name => List.exists (fn parent => parent = name) (Theory.ancestry "-"))
     ["abiScratchMembersCorrect", "abiScratchComplex", "abiScratchEncoderRecursive"]
@@ -119,4 +191,5 @@ val _ = List.app (fn th =>
     if List.all (fn s => s = "DISK_THM") oracles andalso null axioms andalso null (Thm.hyp th)
     then () else raise Fail "scratch member entry has an admission, axiom or hypothesis"
   end) [abi_scratch_members_index_prepare, abi_scratch_members_static_request,
-    abi_scratch_members_dynamic_request];
+    abi_scratch_members_dynamic_request, abi_scratch_members_static_exit,
+    abi_scratch_members_dynamic_exit];
