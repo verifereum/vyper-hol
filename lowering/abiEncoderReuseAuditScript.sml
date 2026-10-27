@@ -15,7 +15,7 @@ Ancestors
   abiEncoderSourceWindow abiEncoderSourceTransport
   abiEncoderSourceAggregate abiEncoderSourcePrimitive abiEncoderSourceProducer
   abiEncoderMemberPhaseRaw abiEncoderMemberSourcePhase abiEncoderMemberPhaseExec
-  abiEncoderMemberSpine abiEncoderMemberPhaseEffect
+  abiEncoderMemberSpine abiEncoderMemberPhaseEffect abiEncoderMemberSpineCompat
 
 fun audit_encoder_tag (name, th) =
   let
@@ -130,6 +130,30 @@ val _ = List.app audit_encoder_tag
    ("abi_encoder_spine_dynamic_run", abi_encoder_spine_dynamic_run),
    ("abi_encoder_member_binary_registered", abi_encoder_member_binary_registered),
    ("abi_encoder_member_load_registered", abi_encoder_member_load_registered),
+   ("abi_encoder_member_prefix_control", abi_encoder_member_prefix_control),
+   ("abi_encoder_member_cursor_bytes", abi_encoder_member_cursor_bytes),
+   ("abi_encoder_member_spine_fold", abi_encoder_member_spine_fold),
+   ("abi_encoder_spine_cons_code", abi_encoder_spine_cons_code),
+   ("abi_encoder_member_step_globals", abi_encoder_member_step_globals),
+   ("abi_encoder_member_phase_globals", abi_encoder_member_phase_globals),
+   ("abi_encoder_member_suffix_opcodes", abi_encoder_member_suffix_opcodes),
+   ("abi_encoder_member_cursor_registered", abi_encoder_member_cursor_registered),
+   ("abi_encoder_member_prefix_opcodes", abi_encoder_member_prefix_opcodes),
+   ("abi_encoder_member_prefix_registered", abi_encoder_member_prefix_registered),
+   ("abi_encoder_spine_source_core_run", abi_encoder_spine_source_core_run),
+   ("abi_encoder_spine_static_source_pre", abi_encoder_spine_static_source_pre),
+   ("abi_encoder_spine_static_source", abi_encoder_spine_static_source),
+   ("abi_encoder_spine_scratch_core_run", abi_encoder_spine_scratch_core_run),
+   ("abi_encoder_spine_static_scratch_pre", abi_encoder_spine_static_scratch_pre),
+   ("abi_encoder_spine_static_scratch", abi_encoder_spine_static_scratch),
+   ("abi_encoder_spine_shared_core_run", abi_encoder_spine_shared_core_run),
+   ("abi_encoder_spine_shared_input_address", abi_encoder_spine_shared_input_address),
+   ("abi_encoder_spine_static_shared_pre", abi_encoder_spine_static_shared_pre),
+   ("abi_encoder_spine_static_shared_transport", abi_encoder_spine_static_shared_transport),
+   ("abi_encoder_spine_static_shared", abi_encoder_spine_static_shared),
+   ("abi_encoder_spine_dynamic_shared_pre", abi_encoder_spine_dynamic_shared_pre),
+   ("abi_encoder_spine_dynamic_shared_cursor", abi_encoder_spine_dynamic_shared_cursor),
+   ("abi_encoder_spine_dynamic_shared_run", abi_encoder_spine_dynamic_shared_run),
    ("abi_encoder_shared_endpoint_intro", abi_encoder_shared_endpoint_intro),
    ("abi_encoder_register_alloca_inv", abi_encoder_register_alloca_inv),
    ("abi_encoder_weak_child_sequence", abi_encoder_weak_child_sequence),
