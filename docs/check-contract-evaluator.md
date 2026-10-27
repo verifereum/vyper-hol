@@ -94,8 +94,9 @@ the shared compset should contain only dependencies of the general checker.
 
 `check_contract` evaluates every constant initializer, through
 `contract_constants_ok`, in the order deployment does
-(`evaluate_all_constants`): modules in list order, declarations in source
-order. A contract whose initializer fails (division by zero, an out-of-bounds
+(`evaluate_all_constants`): imported modules first, in the frontend's
+dependency order, then the main module (`constants_order`); declarations in
+source order. A contract whose initializer fails (division by zero, an out-of-bounds
 result) or reads a constant that has not been folded yet checks to `NONE`.
 The shared compset therefore includes the value operations the constant
 builtins reach: integer, decimal and bitwise arithmetic, and the
