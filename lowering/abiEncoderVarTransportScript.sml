@@ -100,22 +100,25 @@ Proof
   gvs[abi_encoder_ignored_inputs_def, abi_decoder_reentry_opcode_def] >>
   qpat_x_assum `step_inst_base inst s = OK u` mp_tac >>
   asm_simp_tac (srw_ss()) [step_inst_base_opcode_eqs] >>
-  rpt strip_tac >>
-  FIRST_PROVE [
-    drule abi_decoder_pure1_inputs >> simp[],
-    drule abi_decoder_pure2_inputs >> simp[],
-    drule abi_encoder_pure3_inputs >> simp[],
-    drule abi_decoder_read1_inputs >> simp[],
-    drule abi_decoder_write2_inputs >> simp[],
-    (gvs[abi_decoder_inputs_defined_def, AllCaseEqs()] >>
-     rpt strip_tac >> gvs[eval_operand_def] >>
-     FIRST_PROVE [
-       metis_tac[abi_encoder_extract_labels_inputs, abi_encoder_eval_operands_inputs],
-       (rename1 `eval_operand (HD (REVERSE log_ops)) s = SOME log_off` >>
+  rpt strip_tac
+  >>~- ([`exec_pure1 f inst s = OK u`],
+        drule abi_decoder_pure1_inputs >> simp[])
+  >>~- ([`exec_pure2 f inst s = OK u`],
+        drule abi_decoder_pure2_inputs >> simp[])
+  >>~- ([`exec_pure3 f inst s = OK u`],
+        drule abi_encoder_pure3_inputs >> simp[])
+  >>~- ([`exec_read1 f inst s = OK u`],
+        drule abi_decoder_read1_inputs >> simp[])
+  >>~- ([`exec_write2 f inst s = OK u`],
+        drule abi_decoder_write2_inputs >> simp[]) >>
+  gvs[abi_decoder_inputs_defined_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[eval_operand_def]
+  >>~- ([`eval_operand (HD (REVERSE log_ops)) s = SOME log_off`],
         rename1 `eval_operand (EL 1 (REVERSE log_ops)) s = SOME log_sz` >>
         rename1 `eval_operands (DROP 2 (REVERSE log_ops)) s = SOME log_topics` >>
         irule abi_encoder_log_inputs >>
-        qexistsl_tac [`log_off`, `log_ops`, `log_sz`, `log_topics`] >> simp[])])]
+        qexistsl_tac [`log_off`, `log_ops`, `log_sz`, `log_topics`] >> simp[]) >>
+  metis_tac[abi_encoder_extract_labels_inputs, abi_encoder_eval_operands_inputs]
 QED
 
 Theorem abi_encoder_step_extend_inputs[local]:
