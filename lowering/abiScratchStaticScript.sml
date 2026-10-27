@@ -1,6 +1,6 @@
 Theory abiScratchStatic
 Ancestors
-  abiScratchEncoderRun abiScratchChild abiScratchAfterAddress abiScratchAddress
+  abiScratchMemberAdapter abiScratchEncoderRun abiScratchChild abiScratchAfterAddress abiScratchAddress
   abiScratchFrameCompose abiScratchEncoderContract abiScratchFootprint abiEncoderStatic
   abiEncoderAddressReach abiEncoderChildFrames abiDecoderDynamicLoopSetup abiDecoderAllocation
   abiDecoderFootprint abiDecoderFrame abiDecoderReentry abiDecoderContract abiDecoderLoop
@@ -57,41 +57,7 @@ Theorem abi_scratch_static_child_reach:
     actual.vs_current_bb = end_st.cs_current_bb /\ actual.vs_inst_idx = LENGTH end_st.cs_current_insts /\
     ~actual.vs_halted /\ abi_decode_sim ctx func initial actual
 Proof
-  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  drule_all abi_encoder_static_child_context >> strip_tac >>
-  `eval_operand dst initial = SOME (n2w d)` by fs[abi_scratch_input_def] >>
-  mp_tac (Q.INST [`opc` |-> `ADD`, `lhs` |-> `dst`, `rhs` |-> `Lit (n2w offset)`,
-    `a` |-> `n2w d:bytes32`, `b` |-> `n2w offset:bytes32`, `st'` |-> `prepared`, `out` |-> `head`]
-    abi_encoder_binary_reach) >>
-  impl_tac >- (asm_simp_tac (srw_ss()) [eval_operand_def] >> decide_tac) >> strip_tac >>
-  rename1 `abi_decode_sim ctx func initial ready` >>
-  `eval_operand head ready = SOME (n2w (d+offset))` by fs[word_add_n2w] >>
-  mp_tac (Q.INST [`next` |-> `st.cs_next_var`, `s` |-> `initial:venom_state`,
-    `t` |-> `ready:venom_state`, `ids` |-> `abi_decoder_ids first last`] abi_scratch_address) >>
-  impl_tac >- asm_simp_tac bool_ss [] >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  `abi_scratch_input ei at av prepared src head sb source_cap (d+offset)
-    (LENGTH (enc at av)) first last b cap ready` by
-    (mp_tac (Q.INST [`prepared` |-> `prepared:compile_state`, `actual` |-> `ready:venom_state`,
-       `child_dst` |-> `head:operand`, `off` |-> `offset:num`] abi_scratch_child_input_address) >>
-     asm_simp_tac bool_ss [] >> decide_tac) >>
-  mp_tac (Q.INST [`start` |-> `prepared`, `initial` |-> `ready:venom_state`,
-    `dst` |-> `head:operand`, `d` |-> `d+offset`] abi_scratch_encoder_run) >>
-  impl_tac >- (asm_simp_tac (srw_ss()) [] >> decide_tac) >> strip_tac >>
-  rename1 `abi_decode_sim ctx func ready actual` >>
-  `abi_scratch_effect first last st.cs_next_id end_st.cs_next_id st.cs_next_var
-    limit_st d output_size b cap initial actual` by
-    (mp_tac (Q.INST [`child_d` |-> `d+offset`, `child_lo` |-> `prepared.cs_next_id`,
-       `child_hi` |-> `end_st.cs_next_id`, `child_next` |-> `prepared.cs_next_var`,
-       `child_sz` |-> `LENGTH (enc at av)`, `ready` |-> `ready:venom_state`,
-       `lo` |-> `st.cs_next_id`, `hi` |-> `end_st.cs_next_id`, `next` |-> `st.cs_next_var`,
-       `sz` |-> `output_size:num`] abi_scratch_effect_after_address) >>
-     asm_simp_tac bool_ss [LESS_EQ_REFL] >> decide_tac) >>
-  mp_tac (Q.INST [`lo` |-> `st.cs_next_id`, `child_lo` |-> `prepared.cs_next_id`,
-    `hi` |-> `end_st.cs_next_id`, `child_next` |-> `prepared.cs_next_var`, `next` |-> `st.cs_next_var`,
-    `d` |-> `d+offset`, `sz` |-> `LENGTH (enc at av)`] abi_scratch_child_frame_after_address) >>
-  impl_tac >- (asm_simp_tac bool_ss [] >> decide_tac) >> disch_tac >>
-  qexists_tac `actual` >> asm_simp_tac bool_ss [] >>
-  irule abi_decode_sim_trans >> qexists_tac `ready` >> simp[]
+  MATCH_ACCEPT_TAC abiScratchMemberAdapterTheory.abi_scratch_static_child_spine_reach
 QED
 
 (* ===== Info ===== *)
