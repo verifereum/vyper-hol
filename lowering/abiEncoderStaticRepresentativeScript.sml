@@ -120,3 +120,23 @@ Proof
   qspec_then `32` mp_tac arithmeticTheory.DIVISION >> simp[] >>
   disch_then (qspec_then `LENGTH bs` mp_tac) >> simp[] >> decide_tac
 QED
+
+Theorem abi_encoder_static_source_representative:
+  evaluate_type env ty = SOME tv /\
+  ~is_dynamic (vyper_to_abi_type env ty) /\ value_has_type tv v /\
+  vyper_to_abi env ty v = SOME av /\ val_in_memory tv v sb mem ==>
+  ?at' av'. enc at' av' = enc (vyper_to_abi_type env ty) av /\
+    abi_encoder_open_input (AbiCopy (type_memory_size tv)) at' av' sb
+      (type_memory_size tv) mem
+Proof
+  rpt strip_tac >>
+  drule_all abi_encoder_static_source_alignment >> strip_tac >>
+  drule_all val_in_memory_static_abi >> strip_tac >>
+  `LENGTH (mem_bytes_at sb (type_memory_size tv) mem) MOD 32 = 0` by
+    simp[mem_bytes_at_def] >>
+  drule abi_encoder_aligned_bytes_representative >>
+  disch_then (qx_choosel_then [`at'`, `av'`] strip_assume_tac) >>
+  qexistsl_tac [`at'`, `av'`] >> conj_tac >- metis_tac[] >>
+  irule abiEncoderOpenInputTheory.copy >>
+  gvs[mem_bytes_at_def]
+QED
