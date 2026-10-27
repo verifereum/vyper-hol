@@ -12,6 +12,7 @@ Ancestors
   abiEncoderSharedContract abiEncoderPrimitiveEffect
   abiEncoderCompositionCompat
   abiEncoderSharedLeaves abiEncoderEnvelopeAdapter
+  abiEncoderSourceWindow abiEncoderSourceTransport
 
 fun audit_encoder_tag (name, th) =
   let
@@ -51,6 +52,24 @@ val _ = List.app audit_encoder_tag
    ("abi_encoder_shared_bytes", abi_encoder_shared_bytes),
    ("abi_encoder_shared_empty", abi_encoder_shared_empty),
    ("abi_encoder_shared_correct", abi_encoder_shared_correct),
+   ("abi_encoder_uniform_block_representative", abi_encoder_uniform_block_representative),
+   ("abi_encoder_uniform_aligned_representative", abi_encoder_uniform_aligned_representative),
+   ("abi_encoder_uniform_static_source", abi_encoder_uniform_static_source),
+   ("abi_encoder_open_bytes_source", abi_encoder_open_bytes_source),
+   ("abi_encoder_open_string_source", abi_encoder_open_string_source),
+   ("abi_encoder_same_conversion", abi_encoder_same_conversion),
+   ("abi_encoder_elems_memory", abi_encoder_elems_memory),
+   ("abi_encoder_dense_source", abi_encoder_dense_source),
+   ("abi_encoder_list_conversion", abi_encoder_list_conversion),
+   ("abi_encoder_tuple_memory", abi_encoder_tuple_memory),
+   ("abi_encoder_tuple_source", abi_encoder_tuple_source),
+   ("abi_encoder_sparse_conversion", abi_encoder_sparse_conversion),
+   ("abi_encoder_sparse_source", abi_encoder_sparse_source),
+   ("abi_encoder_dynamic_source", abi_encoder_dynamic_source),
+   ("abi_encoder_tuple_parent", abi_encoder_tuple_parent),
+   ("abi_encoder_struct_parent", abi_encoder_struct_parent),
+   ("abi_encoder_sparse_zero_probe", abi_encoder_sparse_zero_probe),
+   ("abi_encoder_sparse_absent_probe", abi_encoder_sparse_absent_probe),
    ("abi_encoder_shared_endpoint_intro", abi_encoder_shared_endpoint_intro),
    ("abi_encoder_register_alloca_inv", abi_encoder_register_alloca_inv),
    ("abi_encoder_weak_child_sequence", abi_encoder_weak_child_sequence),
