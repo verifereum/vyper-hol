@@ -696,3 +696,80 @@ val _ = List.app (fn (name,th) =>
   end)
   [("cursor_post",abi_encoder_spine_cursor_post),
    ("dynamic_shared_scratch",abi_encoder_spine_dynamic_shared_scratch)];
+
+Theorem abi_encoder_spine_prefix_extend_sim:
+  abi_encode_child_prefix dst ho dp st = (ops,p) /\ fn_has_code st p func /\
+  abi_encoder_member_phase_raw st p initial ready /\ ~initial.vs_halted /\
+  initial.vs_current_bb = st.cs_current_bb /\
+  initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  abi_encoder_extend_sim ctx func initial ready
+Proof
+  strip_tac >> drule abi_encode_child_prefix_shape >> strip_tac >>
+  irule abi_encoder_member_phase_extend_sim >>
+  goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
+  fs[EVERY_MEM]
+QED
+
+Theorem abi_encoder_spine_suffix_extend_sim:
+  abi_encode_child_suffix head dp offset len ce = (out,en) /\ fn_has_code ce en func /\
+  abi_encoder_member_phase_raw ce en encoded actual /\ ~encoded.vs_halted /\
+  encoded.vs_current_bb = ce.cs_current_bb /\
+  encoded.vs_inst_idx = LENGTH ce.cs_current_insts ==>
+  abi_encoder_extend_sim ctx func encoded actual
+Proof
+  strip_tac >> drule abi_encode_child_suffix_shape >> strip_tac >>
+  irule abi_encoder_member_phase_extend_sim >>
+  goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
+  fs[EVERY_MEM]
+QED
+
+Theorem abi_encoder_spine_dynamic_shared_sim:
+  abi_encode_child_prefix dst ho dp st = (ops,p) /\ fn_has_code st p func /\
+  abi_encoder_member_phase_raw st p initial ready /\ ~initial.vs_halted /\
+  initial.vs_current_bb = st.cs_current_bb /\
+  initial.vs_inst_idx = LENGTH st.cs_current_insts /\
+  abi_encoder_shared_endpoint (ctx,func) (p,ce,len,limit_st)
+    (first,last,b,cap) (at,av,q) ready encoded /\
+  abi_encode_child_suffix head dp offset len ce = (out,en) /\ fn_has_code ce en func /\
+  abi_encoder_member_phase_raw ce en encoded actual ==>
+  abi_encoder_extend_sim ctx func initial actual
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  drule_all abi_encoder_spine_prefix_extend_sim >>
+  disch_then (qspec_then `ctx` assume_tac) >>
+  `~encoded.vs_halted /\ encoded.vs_current_bb = ce.cs_current_bb /\
+   encoded.vs_inst_idx = LENGTH ce.cs_current_insts /\
+   abi_encoder_extend_sim ctx func ready encoded` by
+    fs[abi_encoder_shared_endpoint_def] >>
+  drule_all abi_encoder_spine_suffix_extend_sim >>
+  disch_then (qspec_then `ctx` assume_tac) >>
+  irule abi_encoder_extend_sim_trans >> qexists_tac `ready` >> simp[] >>
+  irule abi_encoder_extend_sim_trans >> qexists_tac `encoded` >> simp[]
+QED
+
+Theorem abi_encoder_spine_shared_registered_window:
+  abi_encoder_shared_endpoint (ctx,func) (p,ce,len,limit_st)
+    (first,last,b,cap) (at,av,q) ready encoded /\
+  lo <= p.cs_next_id /\ ce.cs_next_id <= hi /\
+  d <= q /\ q+LENGTH (enc at av) <= d+extent ==>
+  abi_encoder_registered_effect (abi_decoder_ids lo hi) [(d,extent)] ready encoded
+Proof
+  strip_tac >>
+  `abi_encoder_registered_effect (abi_decoder_ids p.cs_next_id ce.cs_next_id)
+    [(q,LENGTH (enc at av))] ready encoded` by
+    fs[abi_encoder_shared_endpoint_def] >>
+  irule abi_encoder_registered_effect_enlarge >>
+  goal_assum (drule_at Any) >>
+  simp[SUBSET_DEF,abi_decoder_ids_def] >> conj_tac >> rpt strip_tac >> decide_tac
+QED
+
+val _ = List.app (fn (name,th) =>
+  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
+    if List.all (fn s => s = "DISK_THM") oracles andalso null axioms then
+      print ("ENCODER_SPINE_COMPAT_AUDIT_OK " ^ name ^ "\n")
+    else raise Fail ("encoder spine compatibility admission dependency: " ^ name)
+  end)
+  [("prefix_extend_sim",abi_encoder_spine_prefix_extend_sim),
+   ("suffix_extend_sim",abi_encoder_spine_suffix_extend_sim),
+   ("dynamic_shared_sim",abi_encoder_spine_dynamic_shared_sim),
+   ("shared_registered_window",abi_encoder_spine_shared_registered_window)];
