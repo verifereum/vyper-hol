@@ -151,13 +151,13 @@ Definition call_state_rel_def:
       ctxt.msgParams.parsed = parse_code 0 FEMPTY runtime_bc /\
       LENGTH runtime_bc <= 24576 /\
       ctxt.pc = 0 /\ ctxt.stack = [] /\ ctxt.logs = [] /\
-      ctxt.returnData = [] /\ ctxt.memory = [] /\
+      ctxt.returnData = [] /\ buffer_to_list ctxt.memory = [] /\
       value_transfer_ok tx am.accounts /\
       es.rollback.accounts = accounts_after_transfer tx am.accounts /\
       es.rollback.tStorage = am.tStorage /\ am.logs = [] /\
       ctxt.msgParams.caller = tx.sender /\ ctxt.msgParams.callee = tx.target /\
       ctxt.msgParams.value = tx.value /\
-      ctxt.msgParams.data = tx.calldata /\
+      buffer_to_list ctxt.msgParams.data = tx.calldata /\
       tx_block_fields_rel tx es.txParams /\
       source_deployment_rel tops am tx
 End

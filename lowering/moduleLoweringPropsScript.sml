@@ -131,6 +131,12 @@ Proof
   rw[vars_pc_only_def] >> pop_assum (SUBST1_TAC o SYM) >> simp[]
 QED
 
+Theorem vars_pc_only_memory:
+  !s t. vars_pc_only s t ==> t.vs_memory = s.vs_memory
+Proof
+  rw[vars_pc_only_def] >> pop_assum (SUBST1_TAC o SYM) >> simp[]
+QED
+
 (* A jump or a move of the instruction index reads and writes no variable. *)
 Theorem control_moves_keep_vars:
   !l n ss st op x.

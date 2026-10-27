@@ -15,7 +15,10 @@
  * Helpers: abi_clamp_ok, abi_head_size, enc_tuple_heads,
  *   enc_tuple_static_head, val_in_memory_word, vyper_to_abi_word_enc,
  *   bind_arguments_word_arg, abi_head_size_word_prefix,
- *   abi_embedded_static_size_word
+ *   abi_embedded_static_size_word, vyper_to_abi_types_EL; and the decode
+ *   lemmas (compile_abi_clamp_structure, decode_emit_update_frame,
+ *   decode_clamp_frame, ...), which
+ *   abiDecodeStaticProps and entryDecodeStaticProps reuse
  *
  * The decoder's head offset (compile_register_positional_args adds
  * abi_embedded_static_size for each argument) agrees with the ABI's
@@ -175,7 +178,7 @@ QED
 
 (* ===== The calldata word ===== *)
 
-Theorem vyper_to_abi_types_EL[local]:
+Theorem vyper_to_abi_types_EL:
   !tys i. i < LENGTH tys ==>
     LENGTH (vyper_to_abi_types tenv tys) = LENGTH tys /\
     EL i (vyper_to_abi_types tenv tys) = vyper_to_abi_type tenv (EL i tys)
@@ -467,7 +470,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem compile_abi_clamp_structure[local]:
+Theorem compile_abi_clamp_structure:
   !cl op st st'.
   compile_abi_clamp_basetype op cl st = ((), st') ==>
   st'.cs_blocks = st.cs_blocks /\
@@ -518,7 +521,7 @@ Proof
   simp[is_terminator_def]
 QED
 
-Theorem decode_emit_update_frame[local]:
+Theorem decode_emit_update_frame:
   !opc ops st v st' s w.
   emit_op opc ops st = (v, st') /\ fresh_vars_wrt st s /\
   step_inst_base (mk_inst st.cs_next_id opc ops
@@ -556,14 +559,14 @@ Proof
   simp[mem_word_at_def] >> drule step_CALLDATALOAD >> simp[]
 QED
 
-Theorem decode_mstore_frame[local]:
+Theorem decode_mstore_frame:
   !s t a w. vars_pc_only s t ==>
     vars_pc_only (mstore a w s) (mstore a w t)
 Proof
   rw[vars_pc_only_def, venom_state_component_equality, mstore_def] >> gvs[]
 QED
 
-Theorem decode_emit_mstore_frame[local]:
+Theorem decode_emit_mstore_frame:
   !op1 op2 p w st st' s.
   emit_void MSTORE [op1; op2] st = ((), st') /\
   eval_operand op1 s = SOME p /\ eval_operand op2 s = SOME w /\
@@ -576,7 +579,7 @@ Proof
   gvs[lookup_var_def, mstore_def, write_memory_with_expansion_def]
 QED
 
-Theorem decode_frame_compose[local]:
+Theorem decode_frame_compose:
   !st st1 s t u.
   st.cs_next_var <= st1.cs_next_var /\
   vars_pc_only s t /\ vars_pc_only t u /\
@@ -746,7 +749,7 @@ Proof
   drule_all decode_two_tests_assert >> Cases_on `extended = w` >> simp[]
 QED
 
-Theorem decode_clamp_frame[local]:
+Theorem decode_clamp_frame:
   !cl op st st' s w.
   compile_abi_clamp_basetype op cl st = ((), st') /\
   eval_operand op s = SOME w /\ fresh_vars_wrt st s ==>
@@ -935,10 +938,7 @@ Proof
   rw[] >> gvs[] >>
   rename1 `vars_pc_only _ tt` >>
   `tt.vs_memory = (mstore (w2n p) (typed_val_to_w256 tv v) s0).vs_memory` by
-    (qpat_x_assum `vars_pc_only _ tt`
-       (mp_tac o Q.AP_TERM `venom_state_vs_memory` o
-        REWRITE_RULE [vars_pc_only_def]) >>
-     simp[]) >>
+    metis_tac[vars_pc_only_memory] >>
   drule_all val_in_memory_word >>
   disch_then (qspecl_then [`w2n p`, `tt.vs_memory`] SUBST1_TAC) >>
   qpat_x_assum `tt.vs_memory = _` SUBST1_TAC >>
