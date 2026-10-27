@@ -165,6 +165,21 @@ fun assert_some th =
   if optionSyntax.is_some (rhs (concl th)) then ()
   else raise Fail "expected successful check_contract result"
 
+(* ecrecover takes v as uint8 or uint256 only; r and s stay uint256 or bytes32. *)
+Theorem ecrecover_narrow_argument_rejection_test:
+  ~well_typed_builtin_app (BaseT AddressT) ECRecover
+    [BaseT (BytesT (Fixed 32)); BaseT (UintT 16); BaseT (UintT 256);
+     BaseT (UintT 256)] /\
+  ~well_typed_builtin_app (BaseT AddressT) ECRecover
+    [BaseT (BytesT (Fixed 32)); BaseT (UintT 256); BaseT (UintT 8);
+     BaseT (UintT 256)] /\
+  ~well_typed_builtin_app (BaseT AddressT) ECRecover
+    [BaseT (BytesT (Fixed 32)); BaseT (UintT 256); BaseT (UintT 256);
+     BaseT (UintT 8)]
+Proof
+  simp[well_typed_builtin_app_def]
+QED
+
 fun assert_none th =
   if optionSyntax.is_none (rhs (concl th)) then ()
   else raise Fail "expected rejected check_contract result"
@@ -507,6 +522,13 @@ val builtin_cases = [
    ``Builtin (BaseT AddressT) ECRecover
        [Name (BaseT (BytesT (Fixed 32))) "h"; Name (BaseT (UintT 256)) "v";
         Name (BaseT (UintT 256)) "r"; Name (BaseT (UintT 256)) "s"]``),
+  ("ECRecover uint8 v", ``Pure``,
+   ``[("h", BaseT (BytesT (Fixed 32))); ("v", BaseT (UintT 8));
+      ("r", BaseT (BytesT (Fixed 32))); ("s", BaseT (BytesT (Fixed 32)))]``,
+   ``BaseT AddressT``,
+   ``Builtin (BaseT AddressT) ECRecover
+       [Name (BaseT (BytesT (Fixed 32))) "h"; Name (BaseT (UintT 8)) "v";
+        Name (BaseT (BytesT (Fixed 32))) "r"; Name (BaseT (BytesT (Fixed 32))) "s"]``),
   ("ECAdd", ``View``, ``[("a", ^point_ty); ("b", ^point_ty)]``, point_ty,
    ``Builtin ^point_ty ECAdd [Name ^point_ty "a"; Name ^point_ty "b"]``),
   ("ECMul", ``View``, ``[("a", ^point_ty); ("s", BaseT (UintT 256))]``, point_ty,
@@ -849,4 +871,40 @@ val () = check_rejects
       [VariableDecl Private Storage "arr" (ArrayT ^s10 (Dynamic 4)) NONE;
        FunctionDecl External Nonpayable F F "f" [("t",^s20)] [] NoneT
          [Append (TopLevelNameTarget (NONE,"arr")) (Name ^s20 "t")]])]
+    : (num option # toplevel list) list``
+
+(* A main-module constant initialized from an imported module's constant: the
+   imports' constants are folded first (constants_order). *)
+val import_constant_modules =
+  ``[(NONE,
+      [VariableDecl Private
+         (Constant (TopLevelName (BaseT (UintT 256)) (SOME 3,"N"))) "N"
+         (BaseT (UintT 256)) NONE;
+       FunctionDecl External Pure F F "f" [] [] (BaseT (UintT 256))
+         [Return (SOME (TopLevelName (BaseT (UintT 256)) (NONE,"N")))]]);
+     (SOME 3,
+      [VariableDecl Private (Constant (Literal (BaseT (UintT 256)) (IntL 2)))
+         "N" (BaseT (UintT 256)) NONE])]
+    : (num option # toplevel list) list``
+
+val () = check_accepts "main constant from imported constant" false
+  empty_layouts import_constant_modules
+val () = check_accepts "main constant from imported constant (deploy)" true
+  empty_layouts import_constant_modules
+
+(* Imports among themselves keep the frontend's dependency order: lib 2 reads
+   lib 1's constant, and the main module reads lib 2's. *)
+val () = check_accepts "constant chain through two imports" false
+  empty_layouts
+  ``[(NONE,
+      [VariableDecl Private
+         (Constant (TopLevelName (BaseT (UintT 256)) (SOME 2,"N"))) "K"
+         (BaseT (UintT 256)) NONE]);
+     (SOME 1,
+      [VariableDecl Private (Constant (Literal (BaseT (UintT 256)) (IntL 2)))
+         "M" (BaseT (UintT 256)) NONE]);
+     (SOME 2,
+      [VariableDecl Private
+         (Constant (TopLevelName (BaseT (UintT 256)) (SOME 1,"M"))) "N"
+         (BaseT (UintT 256)) NONE])]
     : (num option # toplevel list) list``
