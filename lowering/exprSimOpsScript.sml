@@ -11,10 +11,11 @@
  * its fragment.
  *
  * TOP-LEVEL:
- *   binop_frag             — the operator's fragment
+ *   binop_frag_words       — the operator's fragment, from given operand
+ *                            words
+ *   binop_frag             — the fragment for operands of word values
  *   binop_frag_straight    — binop_frag from the run facts of straight-line
  *                            code
- *   binop_frag_words       — the fragment from given operand words
  *   compile_bop_typed_sim  — the composition, operands in typed words
  *   compile_bop_sim        — the composition, operands of word values
  *   compile_bitwise_sim    — binop_frag for And, Or and XOr
@@ -31,7 +32,7 @@
  * uint256.
  *
  * Helpers: eval_expr_bop_cases, eval_operand_frame, expr_val_rel_word,
- *   expr_val_rel_typed, binop_frag_words_val,
+ *   expr_val_rel_typed,
  *   local_region_frame, expr_post_bop, bop_result_bitwise, flag_and_zero,
  *   compile_flag_in_correct, bop_result_flag_in, straight_fresh_flag_in,
  *   bop_result_shift
@@ -63,40 +64,14 @@ Definition bop_result_def:
     | INR e => INR (Error e)
 End
 
-(* The operator's fragment, from the operands holding v1 and v2 in a state
-   related at es0, the source state after both operands: on a value it
-   reaches its end with the result, a word value, holding it, keeping the
-   variables handed out before it, the allocations and the memory, and on
-   an error it exits as expr_exit allows. *)
-Definition binop_frag_def:
-  binop_frag ctx func cenv cx bop ty ann bl el tys v1 v2 es0 <=>
-    !sa sb x y op s0.
-      compile_binop bop x y ty bl el sa = (op, sb) /\
-      expr_res_ok (bop_result cx ann bop tys v1 v2 es0) /\
-      (!z. x = Var z ==> not_fresh_at sa z) /\
-      (!z. y = Var z ==> not_fresh_at sa z) /\
-      fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-      local_ptrs_reserved cenv sa ==>
-      frag_exec ctx sa sb
-        (\s. s = s0 /\ stmt_state_rel func cenv cx es0 s /\
-             eval_operand x s = SOME (val_to_w256 v1) /\
-             eval_operand y s = SOME (val_to_w256 v2))
-        (\s. ?v. bop_result cx ann bop tys v1 v2 es0 = INL (Value v) /\
-                 word_value v /\
-                 stmt_state_rel func cenv cx es0 s /\
-                 eval_operand op s = SOME (val_to_w256 v) /\
-                 (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==>
-                        lookup_var z s = SOME w) /\
-                 (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
-                          FLOOKUP s.vs_allocas aid = SOME b) /\
-                 s.vs_memory = s0.vs_memory)
-        (expr_exit (bop_result cx ann bop tys v1 v2 es0))
-End
-
-(* binop_frag with the operands' words w1 and w2 given, rather than their
-   values' val_to_w256: the operands of address and bytesN type hold
-   their values in the typed encoding typed_val_to_w256, which for a
-   bytes20 differs from val_to_w256 (compile_bop_typed_sim). *)
+(* The operator's fragment, from the operands holding the words w1 and w2
+   of their values v1 and v2 in a state related at es0, the source state
+   after both operands: on a value it reaches its end with the result, a
+   word value, holding it, keeping the variables handed out before it, the
+   allocations and the memory, and on an error it exits as expr_exit
+   allows.  The words are given because an operand of address or bytesN
+   type holds its value in the typed encoding typed_val_to_w256, which for
+   a bytes20 differs from val_to_w256 (compile_bop_typed_sim). *)
 Definition binop_frag_words_def:
   binop_frag_words ctx func cenv cx bop ty ann bl el tys v1 v2 w1 w2 es0 <=>
     !sa sb x y op s0.
@@ -121,14 +96,13 @@ Definition binop_frag_words_def:
         (expr_exit (bop_result cx ann bop tys v1 v2 es0))
 End
 
-Theorem binop_frag_words_val:
-  !ctx func cenv cx bop ty ann bl el tys v1 v2 es0.
-    binop_frag ctx func cenv cx bop ty ann bl el tys v1 v2 es0 <=>
+(* binop_frag_words with the operands held in val_to_w256 of their values,
+   as word_values are (compile_bop_sim). *)
+Definition binop_frag_def:
+  binop_frag ctx func cenv cx bop ty ann bl el tys v1 v2 es0 <=>
     binop_frag_words ctx func cenv cx bop ty ann bl el tys v1 v2
       (val_to_w256 v1) (val_to_w256 v2) es0
-Proof
-  simp[binop_frag_def, binop_frag_words_def]
-QED
+End
 
 (* ===== Evaluating a binary operator ===== *)
 
@@ -193,7 +167,7 @@ Theorem binop_frag_straight:
                     Abort Revert_abort ss')) ==>
     binop_frag ctx func cenv cx bop ty ann bl el tys v1 v2 es0
 Proof
-  rpt gen_tac >> strip_tac >> simp[binop_frag_def] >> rpt gen_tac >>
+  rpt gen_tac >> strip_tac >> simp[binop_frag_def, binop_frag_words_def] >> rpt gen_tac >>
   strip_tac >>
   qpat_x_assum `expr_res_ok _ ==> _` drule >> strip_tac
   >- (qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es0`,
@@ -556,7 +530,7 @@ Proof
   rpt conj_tac >- first_assum ACCEPT_TAC >- first_assum ACCEPT_TAC >>
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `!v2 es2. _ ==> word_value v2 /\ _` drule >> strip_tac >>
-  gvs[typed_val_to_w256_word_value, GSYM binop_frag_words_val]
+  gvs[typed_val_to_w256_word_value, binop_frag_def]
 QED
 
 (* ===== Bitwise operators ===== *)
@@ -623,7 +597,7 @@ Theorem compile_bitwise_sim:
          (case type_to_int_bound ann of SOME u => u | NONE => Unsigned 0) i2) ==>
     binop_frag ctx func cenv cx bop ty ann bl el tys v1 v2 es0
 Proof
-  rpt gen_tac >> strip_tac >> simp[binop_frag_def] >> rpt gen_tac >>
+  rpt gen_tac >> strip_tac >> simp[binop_frag_def, binop_frag_words_def] >> rpt gen_tac >>
   strip_tac >>
   qspecl_then [`cx`, `ann`, `bop`, `v1`, `v2`, `es0`] mp_tac
     bop_result_bitwise >>
@@ -814,7 +788,7 @@ Theorem compile_shift_sim:
       i1 ==>
     binop_frag ctx func cenv cx bop ty ann bl el tys v1 v2 es0
 Proof
-  rpt gen_tac >> strip_tac >> simp[binop_frag_def] >> rpt gen_tac >>
+  rpt gen_tac >> strip_tac >> simp[binop_frag_def, binop_frag_words_def] >> rpt gen_tac >>
   strip_tac >>
   qspecl_then [`cx`, `ann`, `bop`, `ty`, `v1`, `v2`, `es0`, `i1`, `i2`]
     mp_tac bop_result_shift >>
