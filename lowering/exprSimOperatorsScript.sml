@@ -436,7 +436,7 @@ Theorem expr_sim_pre_ifexp:
           expr_sim_pre cenv cx env a es' /\ expr_sim_pre cenv cx env b es'
 Proof
   rw[expr_sim_pre_def, well_typed_expr_def, int_calls_expr_def,
-     byte_widths_expr_def] >> gvs[]
+     byte_widths_expr_def, alloc_limits_expr_def] >> gvs[]
 QED
 
 (* A ternary of a word type: compile_ifexp_vv_sim (exprSimIfExp), with the
