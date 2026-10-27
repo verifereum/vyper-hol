@@ -1,10 +1,12 @@
-# Encoder shared-runner ownership proposal (C1.B.A)
+# Shared ABI encoder runner proposal
 
-**For owner decision, not authorization to edit #762.** No established theory
-has been edited for this proposal. The frozen theorem remains unresolved;
-no execution counterexample has been established. A thin adapter is insufficient:
-the checked same-shape cardinality obstruction defeats the old input interface,
-and reserve framing does not imply registered-slot framing.
+Derive the source-value encoder contract from one shared recursive execution
+proof, with the existing descriptor/window contracts as corollaries. The
+source-value bridge is still unproved, and no execution counterexample has
+been established. The existing interfaces alone do not supply the bridge:
+checked same-shape cardinality bounds exclude some source aggregates, and
+framing a physical scratch reserve does not imply framing registered slots.
+No established core proof has been changed by this proposal.
 
 ## Exact proposed shared runner interface
 
@@ -54,8 +56,8 @@ Only the input relation changes, and the postcondition gains a conjunct at the
 Old `abi_scratch_encoder` follows by `abi_encoder_input_open` and projection;
 its definition and all existing theorem statements can remain unchanged.
 The new derivation must replace/factor existing proof bodies, not coexist with
-an independent recursive execution proof. This requires owner approval under
-the task's preservation/ownership constraints.
+an independent recursive execution proof. The factoring touches the constructor, member and array proof families
+listed below; it preserves their exported contracts.
 
 ## Minimal factoring sites (not an exhaustive rewrite)
 
@@ -98,8 +100,9 @@ encoding-equivalent leaf representative (or another approved interface).
 Separately derive physical budgets/disjointness, PHI conditions, scratch-count
 bounds, and variable restoration from the frozen premises; then identify
 `abi_decoder_ids` with `frag_ids` and apply registered_effect_frame at that
-same endpoint. These are unproved obligations, not extra public hypotheses.
-The proposal selects the runner boundary, not a proof of these bridges.
+same endpoint. These remain unproved obligations. The public source-value theorem must
+retain its existing hypotheses. This proposal specifies the runner boundary;
+it does not discharge these bridges.
 
 ## Audit scope
 
@@ -111,7 +114,10 @@ axiom-freedom audit. Such a claim would require source auditing. Neither a
 successful build nor importing a legacy admitted ancestor proves use of its
 admitted theorem. No complete transitive source axiom audit is claimed here.
 
-**Decision requested:** may the existing constructor/member/array proof bodies
-and recursive closure be factored as above, preserving every established
-statement/definition, with one shared derivation and old-contract corollaries?
-Until an explicit owner decision, do not edit #762 or begin universal recursion.
+## Implementation scope
+
+Factor the constructor/member/array proof bodies and recursive closure as
+above, preserving established statements and definitions. The result should
+be one shared execution derivation with old-contract corollaries. Its cost is
+reworking these core proof bodies rather than adding only a downstream
+adapter. Do not maintain a second independent recursive execution proof.
