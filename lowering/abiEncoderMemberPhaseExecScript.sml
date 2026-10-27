@@ -1,7 +1,7 @@
 (* Concrete endpoints, independent of the invariant transported by a member. *)
 Theory abiEncoderMemberPhaseExec
 Ancestors
-  abiScratchMembers abiScratchAddress
+  abiScratchMembers abiScratchAddress abiScratchChild abiScratchEncoderContract
   abiEncoderMembersContract abiEncoderMembersDefs abiEncoderMembersSource
   abiEncoderTuple abiEncoderChildInputs abiEncoderInput abiCanonicalWindows
   abiDecoderArrayInitExec abiDecoderLoop emitHelperProps valueEncoding arithmetic
@@ -185,4 +185,28 @@ Proof
   `st.cs_next_var <= prepared.cs_next_var` by decide_tac >>
   `eval_operand head ready = SOME (n2w (d+offset))` by fs[word_add_n2w] >>
   drule_all abi_encoder_child_pre_address >> simp[]
+QED
+
+Theorem abi_scratch_member_static_place_raw_transport:
+  emit_op ADD [dst;Lit (n2w offset)] st = (head,prepared) /\
+  abi_scratch_input ei at av st src dst sb source_cap d output_size first last b cap initial /\
+  abi_decoder_budget first last b cap initial /\
+  offset+LENGTH (enc at av) <= output_size /\
+  prepared.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
+  abi_encoder_member_phase_raw st prepared initial ready ==>
+  abi_scratch_input ei at av prepared src head sb source_cap (d+offset)
+    (LENGTH (enc at av)) first last b cap ready /\
+  fresh_vars_wrt limit_st ready /\ abi_decoder_address_frame st.cs_next_var initial ready
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  `eval_operand dst initial = SOME (n2w d)` by fs[abi_scratch_input_def] >>
+  `eval_operand (Lit (n2w offset)) initial = SOME (n2w offset)` by simp[eval_operand_def] >>
+  drule_all (SRULE [] (Q.INST [`opc` |-> `ADD`] abi_encoder_member_binary_transport)) >> strip_tac >>
+  drule abi_decoder_operand_live_emit >> strip_tac >>
+  drule emitted_insts_emit_op >> strip_tac >>
+  `st.cs_next_var <= prepared.cs_next_var` by decide_tac >>
+  `eval_operand head ready = SOME (n2w (d+offset))` by fs[word_add_n2w] >>
+  drule_all abi_scratch_address >>
+  disch_then (qspecl_then [`abi_decoder_ids first last`, `[]`] strip_assume_tac) >>
+  drule_all abi_scratch_child_input_address >> simp[]
 QED
