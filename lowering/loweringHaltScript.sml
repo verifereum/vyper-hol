@@ -893,6 +893,46 @@ Proof
   qexists_tac `s1` >> gvs[mk_inst_def]
 QED
 
+(* compile_alloc_buffer emits exactly one ALLOCA of n bytes into the current
+   block, and its buffer operand is that ALLOCA's output. *)
+Theorem compile_alloc_buffer_insts:
+  !n st buf st'.
+    compile_alloc_buffer n st = (buf, st') ==>
+    buf.buf_operand = Var (STRING #"%" (toString st.cs_next_var)) /\
+    buf.buf_size = n /\
+    st'.cs_blocks = st.cs_blocks /\ st'.cs_current_bb = st.cs_current_bb /\
+    st'.cs_current_insts =
+      st.cs_current_insts ++
+      [mk_inst st.cs_next_id ALLOCA [Lit (n2w n)]
+         [STRING #"%" (toString st.cs_next_var)]]
+Proof
+  simp[compile_alloc_buffer_def, emit_op_def, comp_bind_def,
+       comp_ignore_bind_def, comp_return_def, fresh_id_def, fresh_var_def,
+       emit_def] >>
+  rpt strip_tac >> gvs[]
+QED
+
+(* In a frame that has not run this ALLOCA yet, compile_alloc_buffer binds
+   the buffer operand to a new region of n bytes at vs_alloca_next. *)
+Theorem compile_alloc_buffer_fresh_frag:
+  !ctx n st buf st' P Q R.
+    compile_alloc_buffer n st = (buf, st') /\ n < dimword (:256) /\
+    (!s. P s ==>
+       FLOOKUP s.vs_allocas st.cs_next_id = NONE /\
+       Q ((update_var (STRING #"%" (toString st.cs_next_var))
+             (n2w s.vs_alloca_next)
+             (s with <| vs_allocas := s.vs_allocas |+
+                          (st.cs_next_id, (s.vs_alloca_next, n));
+                        vs_alloca_next := s.vs_alloca_next + n |>))
+          with vs_inst_idx := LENGTH st'.cs_current_insts)) ==>
+    frag_exec ctx st st' P Q R
+Proof
+  rpt strip_tac >> irule compile_alloc_buffer_frag >>
+  qexistsl_tac [`buf`, `n`] >> simp[] >> rpt strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  gvs[step_alloca_fresh, arithmeticTheory.ADD_COMM]
+QED
+
 Theorem enc_frame_var:
   !st st' lo top outs s0 s name w.
     enc_frame st st' lo top outs s0 s /\ not_fresh_at st name /\

@@ -4,9 +4,11 @@ Keep executable pytest scenarios here, grouped by semantic area and named for th
 behavior they exercise. Add each scenario in the same commit as its semantics fix.
 Unfixed divergences belong in issues, not in the enabled test suite.
 
-The pinned Vyper export action copies this directory into
-`tests/functional/codegen/vyper_hol_regression/` before invoking upstream pytest
-with `--export`. The export cache includes both `VYPER_PIN` and the pytest sources.
+The pinned export generator temporarily copies this directory into
+`tests/functional/codegen/vyper_hol_regression/` for a default full-suite export
+and removes the copy afterwards. Focused `--test`/`--fixture` exports do not add
+these regressions. Export provenance and the cache key include every regression
+pytest source, as well as the pin and semantics profile.
 Do not commit exported JSON, duplicated Vyper source, or generated HOL wrappers.
 
 From `tests/`, run `holbuild run --noconfig generateVyperTests.sml` after building
