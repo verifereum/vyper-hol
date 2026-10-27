@@ -296,3 +296,181 @@ Proof
            resolve_phi_def, eval_operand_def, phi_prefix_length_def]) >>
   irule (cj 1 local_prefix_rules) >> simp[jump_to_def, update_var_def]
 QED
+
+Definition observer_region_closed_def:
+  observer_region_closed ctx fn cut R <=>
+    !s t. abi_observer_step ctx fn cut s t /\
+      (s.vs_current_bb,s.vs_inst_idx) IN R ==>
+      (t.vs_current_bb,t.vs_inst_idx) IN R
+End
+
+Definition region_code_agrees_def:
+  region_code_agrees fn fn' cut R <=>
+    (!lbl idx bb inst.
+      (lbl,idx) IN R /\ (lbl,idx) <> cut /\
+      lookup_block lbl fn.fn_blocks = SOME bb /\
+      get_instruction bb idx = SOME inst ==>
+      ?bb'. lookup_block lbl fn'.fn_blocks = SOME bb' /\
+            get_instruction bb' idx = SOME inst) /\
+    (!lbl bb. lookup_block lbl fn.fn_blocks = SOME bb /\
+       (lbl,phi_prefix_length bb.bb_instructions) IN R ==>
+      ?bb'. lookup_block lbl fn'.fn_blocks = SOME bb' /\
+        phi_prefix_length bb'.bb_instructions =
+          phi_prefix_length bb.bb_instructions /\
+        TAKE (phi_prefix_length bb'.bb_instructions) bb'.bb_instructions =
+          TAKE (phi_prefix_length bb.bb_instructions) bb.bb_instructions)
+End
+
+Theorem abi_observer_step_region_transfer:
+  abi_observer_step ctx fn cut s t /\
+  (s.vs_current_bb,s.vs_inst_idx) IN R /\
+  (t.vs_current_bb,t.vs_inst_idx) IN R /\
+  region_code_agrees fn fn' cut R ==>
+  abi_observer_step ctx fn' cut s t
+Proof
+  rw[abi_observer_step_def, region_code_agrees_def] >>
+  qpat_assum `!lbl idx bb inst. _` (drule_all_then strip_assume_tac) >>
+  simp[] >>
+  drule eval_phis_preserves_current_bb >> strip_tac >> fs[] >>
+  qpat_x_assum `!lbl bb. _`
+    (qspec_then `middle.vs_current_bb` mp_tac) >>
+  simp[] >> strip_tac >>
+  qexistsl_tac [`bb''`, `entered`] >> simp[] >>
+  once_rewrite_tac[GSYM eval_phis_prefix] >>
+  asm_rewrite_tac[] >> simp[eval_phis_prefix]
+QED
+
+Theorem local_prefix_region_transfer:
+  local_prefix ctx fn cut s t ==>
+  !R fn'. (s.vs_current_bb,s.vs_inst_idx) IN R /\
+    observer_region_closed ctx fn cut R /\
+    region_code_agrees fn fn' cut R ==> local_prefix ctx fn' cut s t
+Proof
+  Induct_on `local_prefix` >> rpt strip_tac
+  >- (irule (cj 1 local_prefix_rules) >> simp[]) >>
+  rename1 `abi_observer_step ctx fn cut s middle` >>
+  `(middle.vs_current_bb,middle.vs_inst_idx) IN R` by
+    metis_tac[observer_region_closed_def] >>
+  irule (cj 2 local_prefix_rules) >> qexists_tac `middle` >> conj_tac
+  >- (irule abi_observer_step_region_transfer >> metis_tac[]) >>
+  first_x_assum irule >> simp[] >> metis_tac[]
+QED
+
+Theorem observer_run_prefix_transfer:
+  observer_closed fn cut /\ ~s.vs_halted /\
+  run_from fuel ctx fn s = Halt h /\
+  (s.vs_current_bb,s.vs_inst_idx) IN R /\
+  observer_region_closed ctx fn cut R /\
+  region_code_agrees fn fn' cut R ==>
+  ?u. local_prefix ctx fn' cut s u /\ stop_view u = h
+Proof
+  strip_tac >> drule_all observer_run_prefix >> strip_tac >>
+  qexists_tac `u` >> simp[] >> irule local_prefix_region_transfer >> metis_tac[]
+QED
+
+Theorem observer_same_block_region_closed:
+  observer_region_closed ctx
+    (fn with fn_blocks :=
+      [<|bb_label := "entry"; bb_instructions :=
+        [mk_inst 0 SETFMP [Lit 7w] []; mk_inst 1 STOP [] []]|>])
+    ("entry",1) {("entry",0); ("entry",1)}
+Proof
+  rw[observer_region_closed_def, abi_observer_step_def] >>
+  gvs[lookup_block_def, listTheory.FIND_thm, get_instruction_def] >>
+  gvs[step_inst_non_invoke, Once step_inst_base_def, mk_inst_def,
+      is_terminator_def, eval_operand_def]
+QED
+
+Theorem observer_same_block_region_agrees:
+  region_code_agrees
+    (fn with fn_blocks :=
+      [<|bb_label := "entry"; bb_instructions :=
+        [mk_inst 0 SETFMP [Lit 7w] []; mk_inst 1 STOP [] []]|>])
+    (fn' with fn_blocks :=
+      [<|bb_label := "entry"; bb_instructions :=
+        mk_inst 0 SETFMP [Lit 7w] [] :: suffix|>])
+    ("entry",1) {("entry",0); ("entry",1)}
+Proof
+  rw[region_code_agrees_def] >>
+  gvs[lookup_block_def, listTheory.FIND_thm, get_instruction_def,
+      phi_prefix_length_def, mk_inst_def]
+QED
+
+Theorem observer_same_block_suffix_transfer:
+  ~s.vs_halted /\ s.vs_current_bb = "entry" /\ s.vs_inst_idx = 0 ==>
+  local_prefix ctx
+    (fn' with fn_blocks :=
+      [<|bb_label := "entry"; bb_instructions :=
+        mk_inst 0 SETFMP [Lit 7w] [] :: suffix|>])
+    ("entry",1) s (s with <|vs_fmp := 7w; vs_inst_idx := 1|>)
+Proof
+  strip_tac >> drule_all observer_same_block_probe >> strip_tac >>
+  irule local_prefix_region_transfer >>
+  qexists_tac `{("entry",0); ("entry",1)}` >>
+  qexists_tac `fn with fn_blocks :=
+    [<|bb_label := "entry"; bb_instructions :=
+      [mk_inst 0 SETFMP [Lit 7w] []; mk_inst 1 STOP [] []]|>]` >>
+  simp[observer_same_block_region_closed, observer_same_block_region_agrees]
+QED
+
+Theorem observer_jump_phi_region_closed:
+  observer_region_closed ctx
+    (fn with fn_blocks :=
+      [<|bb_label := "entry"; bb_instructions :=
+        [mk_inst 0 JMP [Label "exit"] []]|>;
+       <|bb_label := "exit"; bb_instructions :=
+        [mk_inst 1 PHI [Label "entry"; Lit 7w] ["x"];
+         mk_inst 2 STOP [] []]|>])
+    ("exit",1) {("entry",0); ("exit",1)}
+Proof
+  rw[observer_region_closed_def, abi_observer_step_def] >>
+  gvs[lookup_block_def, listTheory.FIND_thm, get_instruction_def] >>
+  gvs[step_inst_non_invoke, Once step_inst_base_def, mk_inst_def,
+      is_terminator_def, jump_to_def, listTheory.FIND_thm,
+      eval_phis_def, eval_one_phi_def, resolve_phi_def,
+      eval_operand_def, update_var_def, phi_prefix_length_def]
+QED
+
+Theorem observer_jump_phi_region_agrees:
+  phi_prefix_length suffix = 0 ==>
+  region_code_agrees
+    (fn with fn_blocks :=
+      [<|bb_label := "entry"; bb_instructions :=
+        [mk_inst 0 JMP [Label "exit"] []]|>;
+       <|bb_label := "exit"; bb_instructions :=
+        [mk_inst 1 PHI [Label "entry"; Lit 7w] ["x"];
+         mk_inst 2 STOP [] []]|>])
+    (fn' with fn_blocks :=
+      [<|bb_label := "entry"; bb_instructions :=
+        [mk_inst 0 JMP [Label "exit"] []]|>;
+       <|bb_label := "exit"; bb_instructions :=
+        mk_inst 1 PHI [Label "entry"; Lit 7w] ["x"] :: suffix|>])
+    ("exit",1) {("entry",0); ("exit",1)}
+Proof
+  strip_tac >> rw[region_code_agrees_def] >>
+  gvs[lookup_block_def, listTheory.FIND_thm, get_instruction_def,
+      phi_prefix_length_def, mk_inst_def]
+QED
+
+Theorem observer_jump_phi_suffix_transfer:
+  ~s.vs_halted /\ s.vs_current_bb = "entry" /\ s.vs_inst_idx = 0 /\
+  phi_prefix_length suffix = 0 ==>
+  local_prefix ctx
+    (fn' with fn_blocks :=
+      [<|bb_label := "entry"; bb_instructions :=
+        [mk_inst 0 JMP [Label "exit"] []]|>;
+       <|bb_label := "exit"; bb_instructions :=
+        mk_inst 1 PHI [Label "entry"; Lit 7w] ["x"] :: suffix|>])
+    ("exit",1) s
+    ((update_var "x" 7w (jump_to "exit" s)) with vs_inst_idx := 1)
+Proof
+  strip_tac >> drule_all observer_jump_phi_probe >> strip_tac >>
+  irule local_prefix_region_transfer >>
+  qexists_tac `{("entry",0); ("exit",1)}` >>
+  qexists_tac `fn with fn_blocks :=
+    [<|bb_label := "entry"; bb_instructions :=
+      [mk_inst 0 JMP [Label "exit"] []]|>;
+     <|bb_label := "exit"; bb_instructions :=
+      [mk_inst 1 PHI [Label "entry"; Lit 7w] ["x"]; mk_inst 2 STOP [] []]|>]` >>
+  simp[observer_jump_phi_region_closed, observer_jump_phi_region_agrees]
+QED
