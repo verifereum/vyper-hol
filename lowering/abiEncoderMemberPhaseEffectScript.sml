@@ -64,6 +64,7 @@ Theorem abi_encoder_member_phase_globals:
   ready.vs_logs = initial.vs_logs /\ ready.vs_requests = initial.vs_requests
 Proof
   strip_tac >> gvs[abi_encoder_member_phase_raw_def] >>
+  rename1 `run_inst_seq (emitted_insts st final) initial = OK u` >>
   ` (u.vs_accounts,u.vs_transient,u.vs_logs,u.vs_requests) =
     (initial.vs_accounts,initial.vs_transient,initial.vs_logs,initial.vs_requests)` by
     (irule (BETA_RULE (Q.ISPEC
