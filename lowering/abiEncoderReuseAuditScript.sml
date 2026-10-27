@@ -9,6 +9,7 @@ Ancestors
   abiEncoderOpenInputFrame abiEncoderResourceAdapter
   abiEncoderExitPhi abiEncoderEntry abiEncoderExtendSim abiEncoderExtendControl
   abiEncoderSharedContract abiEncoderPrimitiveEffect
+  abiEncoderCompositionCompat
 
 fun audit_encoder_tag (name, th) =
   let
@@ -43,6 +44,12 @@ val _ = List.app audit_encoder_tag
    ("abi_encoder_shared_scratch", abi_encoder_shared_scratch),
    ("abi_encoder_shared_endpoint_intro", abi_encoder_shared_endpoint_intro),
    ("abi_encoder_register_alloca_inv", abi_encoder_register_alloca_inv),
+   ("abi_encoder_weak_child_sequence", abi_encoder_weak_child_sequence),
+   ("abi_encoder_rich_child_sequence", abi_encoder_rich_child_sequence),
+   ("abi_encoder_scratch_call_sequence", abi_encoder_scratch_call_sequence),
+   ("abi_encoder_correct_call_sequence", abi_encoder_correct_call_sequence),
+   ("abi_encoder_shared_call_sequence", abi_encoder_shared_call_sequence),
+   ("abi_encoder_array_child_compat", abi_encoder_array_child_compat),
    ("abi_encoder_structural_valid_layout", abi_encoder_structural_valid_layout),
    ("abi_encoder_open_members_layout", abi_encoder_open_members_layout),
    ("abi_encoder_open_giant_zero_prefix", abi_encoder_open_giant_zero_prefix),
