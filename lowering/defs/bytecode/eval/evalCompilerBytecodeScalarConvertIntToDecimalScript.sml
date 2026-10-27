@@ -65,7 +65,7 @@ val scalar_convert_int_to_decimal_resolved_policy = optionSyntax.dest_some
   (rhs (concl scalar_convert_int_to_decimal_policy_eval))
 val scalar_convert_int_to_decimal_package_eval = save_thm
   ("scalar_convert_int_to_decimal_package_eval",
-   EVAL ``package_external_fn scalar_convert_int_to_decimal_program F
+   evalCompilerBytecodeLib.weak_eval ``package_external_fn scalar_convert_int_to_decimal_program F
       (assign_nkeys scalar_convert_int_to_decimal_program 0)
       (let (ext_fns,int_fns,fb,ctor) =
          classify_functions scalar_convert_int_to_decimal_program
@@ -111,16 +111,19 @@ val scalar_convert_int_to_decimal_selectors =
   rhs (concl scalar_convert_int_to_decimal_selectors_eval)
 val scalar_convert_int_to_decimal_external_fns_eval = save_thm
   ("scalar_convert_int_to_decimal_external_fns_eval",
-   EVAL ``MAP (set_external_package_target
+   evalCompilerBytecodeLib.weak_eval ``MAP (set_external_package_target
                  (^scalar_convert_int_to_decimal_resolved_policy).rpol_target o
                package_external_fn ^scalar_convert_int_to_decimal_tops F
                  ^scalar_convert_int_to_decimal_nkeys)
       ^scalar_convert_int_to_decimal_external_sources``)
 val scalar_convert_int_to_decimal_external_fns =
   rhs (concl scalar_convert_int_to_decimal_external_fns_eval)
+val scalar_convert_int_to_decimal_return_buffers_ok_eval = save_thm
+  ("scalar_convert_int_to_decimal_return_buffers_ok_eval",
+   EQT_ELIM (EVAL ``EVERY external_return_buffer_ok ^scalar_convert_int_to_decimal_external_fns``))
 val scalar_convert_int_to_decimal_internal_fns_eval = save_thm
   ("scalar_convert_int_to_decimal_internal_fns_eval",
-   EVAL ``MAP (set_internal_package_target
+   evalCompilerBytecodeLib.weak_eval ``MAP (set_internal_package_target
                  (^scalar_convert_int_to_decimal_resolved_policy).rpol_target o
                package_internal_fn ^scalar_convert_int_to_decimal_tops F
                  ^scalar_convert_int_to_decimal_nkeys F 0)
@@ -129,7 +132,7 @@ val scalar_convert_int_to_decimal_internal_fns =
   rhs (concl scalar_convert_int_to_decimal_internal_fns_eval)
 val scalar_convert_int_to_decimal_fallback_fn_eval = save_thm
   ("scalar_convert_int_to_decimal_fallback_fn_eval",
-   EVAL ``set_fallback_package_target
+   evalCompilerBytecodeLib.weak_eval ``set_fallback_package_target
       (^scalar_convert_int_to_decimal_resolved_policy).rpol_target
       (package_fallback_fn ^scalar_convert_int_to_decimal_tops F
         ^scalar_convert_int_to_decimal_nkeys
@@ -213,7 +216,7 @@ val scalar_convert_int_to_decimal_state4 = #2 (pairSyntax.dest_pair
   (rhs (concl scalar_convert_int_to_decimal_entry_checks_eval)))
 val scalar_convert_int_to_decimal_register_args_eval = save_thm
   ("scalar_convert_int_to_decimal_register_args_eval",
-   EVAL ``compile_register_positional_args
+   evalCompilerBytecodeLib.weak_eval ``compile_register_positional_args
       ^scalar_convert_int_to_decimal_cenv
       ^scalar_convert_int_to_decimal_pos_args 4
       ^scalar_convert_int_to_decimal_state4``)
@@ -223,22 +226,8 @@ val scalar_convert_int_to_decimal_body_cenv =
   #1 (pairSyntax.dest_pair scalar_convert_int_to_decimal_register_args_pair)
 val scalar_convert_int_to_decimal_state5 =
   #2 (pairSyntax.dest_pair scalar_convert_int_to_decimal_register_args_pair)
-val scalar_convert_int_to_decimal_collect_locals_eval = save_thm
-  ("scalar_convert_int_to_decimal_collect_locals_eval",
-   EVAL ``collect_locals ^scalar_convert_int_to_decimal_body``)
-val scalar_convert_int_to_decimal_locals =
-  rhs (concl scalar_convert_int_to_decimal_collect_locals_eval)
-val scalar_convert_int_to_decimal_reserve_locals_eval = save_thm
-  ("scalar_convert_int_to_decimal_reserve_locals_eval",
-   EVAL ``reserve_local_ptrs ^scalar_convert_int_to_decimal_body_cenv
-      ^scalar_convert_int_to_decimal_locals
-      ^scalar_convert_int_to_decimal_state5``)
-val scalar_convert_int_to_decimal_reserve_pair =
-  rhs (concl scalar_convert_int_to_decimal_reserve_locals_eval)
-val scalar_convert_int_to_decimal_body_cenv2 =
-  #1 (pairSyntax.dest_pair scalar_convert_int_to_decimal_reserve_pair)
-val scalar_convert_int_to_decimal_state6 =
-  #2 (pairSyntax.dest_pair scalar_convert_int_to_decimal_reserve_pair)
+val scalar_convert_int_to_decimal_body_cenv2 = scalar_convert_int_to_decimal_body_cenv
+val scalar_convert_int_to_decimal_state6 = scalar_convert_int_to_decimal_state5
 val scalar_convert_int_to_decimal_ret_ty = optionSyntax.dest_some
   scalar_convert_int_to_decimal_ret_type
 val (scalar_convert_int_to_decimal_stmt_terms,_) =
@@ -295,6 +284,7 @@ val scalar_convert_int_to_decimal_stmts_step2 = SIMP_CONV pure_ss
    scalar_convert_int_to_decimal_block_terminated_eval,
    scalar_convert_int_to_decimal_stmt_eval,
    scalar_convert_int_to_decimal_compile_stmts_nil_def,
+   stmtLoweringTheory.declare_stmt_local_def,
    boolTheory.COND_CLAUSES, LET_THM, pairTheory.FST, pairTheory.SND,
    pairTheory.UNCURRY_DEF, pairTheory.pair_case_def]
   (rhs (concl scalar_convert_int_to_decimal_stmts_step1))
@@ -313,8 +303,6 @@ val () = computeLib.upd_compset
   [scalar_convert_int_to_decimal_new_block_eval,
    scalar_convert_int_to_decimal_entry_checks_eval,
    scalar_convert_int_to_decimal_register_args_eval,
-   scalar_convert_int_to_decimal_collect_locals_eval,
-   scalar_convert_int_to_decimal_reserve_locals_eval,
    scalar_convert_int_to_decimal_stmts_eval])
 val scalar_convert_int_to_decimal_state7 = #2 (pairSyntax.dest_pair
   (rhs (concl scalar_convert_int_to_decimal_stmts_eval)))
@@ -324,8 +312,6 @@ val scalar_convert_int_to_decimal_guarded_body_eval = save_thm
   ("scalar_convert_int_to_decimal_guarded_body_eval",
    SIMP_CONV pure_ss
     [moduleLoweringTheory.compile_guarded_body_def,
-     scalar_convert_int_to_decimal_collect_locals_eval,
-     scalar_convert_int_to_decimal_reserve_locals_eval,
      scalar_convert_int_to_decimal_stmts_eval,
      scalar_convert_int_to_decimal_block_terminated7_eval,
      compileEnvTheory.comp_bind_def, compileEnvTheory.comp_ignore_bind_def,
@@ -514,6 +500,7 @@ val scalar_convert_int_to_decimal_runtime_unit_eval = save_thm
       scalar_convert_int_to_decimal_fallback_fn_eval,
       scalar_convert_int_to_decimal_entry_info_eval,
       scalar_convert_int_to_decimal_run_lowering_eval,
+      scalar_convert_int_to_decimal_return_buffers_ok_eval, boolTheory.COND_CLAUSES,
       LET_THM, pairTheory.FST, pairTheory.SND,
       pairTheory.UNCURRY_DEF, pairTheory.pair_case_def] @
      CONJUNCTS

@@ -396,7 +396,7 @@ Definition asm_evm_rel_def:
            parse_code 0 FEMPTY (assemble prog) ∧
          (* Stack, memory, PC, jumpDest *)
          ctxt.stack = as.as_stack ∧
-         ctxt.memory = as.as_memory ∧
+         buffer_to_list ctxt.memory = as.as_memory ∧
          ctxt.pc = asm_pc_to_offset prog as.as_pc ∧
          ctxt.jumpDest = NONE ∧
          (* Return data and logs *)
@@ -409,7 +409,7 @@ Definition asm_evm_rel_def:
          as.as_call_ctx.cc_caller = ctxt.msgParams.caller ∧
          as.as_call_ctx.cc_address = ctxt.msgParams.callee ∧
          as.as_call_ctx.cc_callvalue = n2w ctxt.msgParams.value ∧
-         as.as_call_ctx.cc_calldata = ctxt.msgParams.data ∧
+         as.as_call_ctx.cc_calldata = buffer_to_list ctxt.msgParams.data ∧
          as.as_call_ctx.cc_static = ctxt.msgParams.static ∧
          (* Tx context *)
          as.as_tx_ctx.tc_origin = es.txParams.origin ∧
@@ -500,3 +500,34 @@ Definition asm_evm_result_rel_def:
         exc ≠ Reverted ∧ asm_evm_rel prog as es
     | _ => F
 End
+
+(* Cleanup analysis is ghost metadata: simulation observes only the physical
+   stack, spilled values and allocator. *)
+Theorem venom_asm_rel_cleanup_height[simp]:
+  venom_asm_rel lo (ps with ps_cleanup_height := ch) vs ast =
+  venom_asm_rel lo ps vs ast
+Proof
+  simp[venom_asm_rel_def]
+QED
+
+Theorem venom_asm_rel_cleanup_growth[simp]:
+  venom_asm_rel lo (ps with ps_cleanup_growth := growth) vs ast =
+  venom_asm_rel lo ps vs ast
+Proof
+  simp[venom_asm_rel_def]
+QED
+
+Theorem venom_asm_rel_cleanup_promised[simp]:
+  venom_asm_rel lo (ps with ps_cleanup_promised := promised) vs ast =
+  venom_asm_rel lo ps vs ast
+Proof
+  simp[venom_asm_rel_def]
+QED
+
+Theorem venom_asm_rel_stack_cleanup_promised[simp]:
+  venom_asm_rel lo
+    (ps with <| ps_stack := stk; ps_cleanup_promised := promised |>) vs ast =
+  venom_asm_rel lo (ps with ps_stack := stk) vs ast
+Proof
+  simp[venom_asm_rel_def]
+QED

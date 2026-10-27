@@ -135,12 +135,10 @@ Theorem venom_frame_rel_nested_constructor_witnesses:
       ok = parent with <|
         returnData := out; stack := 1w :: parent.stack; pc := SUC parent.pc;
         logs := parent.logs ++ (child.logs ++ lgs);
-        memory := TAKE mr.offset parent.memory ++ TAKE mr.size out ++
-          DROP (mr.offset + LENGTH (TAKE mr.size out)) parent.memory |>;
+        memory := buffer_write mr.offset (TAKE mr.size out) parent.memory |>;
       bad = parent with <|
         returnData := out; stack := 0w :: parent.stack; pc := SUC parent.pc;
-        memory := TAKE mr.offset parent.memory ++ TAKE mr.size out ++
-          DROP (mr.offset + LENGTH (TAKE mr.size out)) parent.memory |>;
+        memory := buffer_write mr.offset (TAKE mr.size out) parent.memory |>;
       vs' = vs with <| vs_returndata := out; vs_logs := lgs;
         vs_accounts := es.rollback.accounts; vs_transient := es.rollback.tStorage;
         vs_requests := MAP FST (call_trace start) |>

@@ -2,7 +2,7 @@ Theory vyperInterpreter
 Ancestors
   vyperCallOutcome[ignore_grammar]
   arithmetic alist combin option list finite_map pair
-  rich_list cv cv_std vfmState vfmContext vfmCompute[ignore_grammar]
+  rich_list sorting cv cv_std vfmState vfmContext vfmCompute[ignore_grammar]
   vfmExecution[ignore_grammar] vyperAST vyperABI
   vyperMisc vyperNsidFmap vyperValue vyperValueOperation vyperStorage vyperContext vyperState
   vyperEvent vyperEvmBoundary vyperCreate vyperRuntimeAccounts
@@ -497,6 +497,20 @@ Proof
   >- simp[order_custom_error_args_def, custom_error_exprs_def]
 QED
 
+Theorem exprs_bound_TAKE:
+  ∀ts n es. exprs_bound ts (TAKE n es) ≤ exprs_bound ts es
+Proof
+  Induct_on `es` >> Cases_on `n` >> simp[bound_def]
+QED
+
+Theorem exprs_bound_slices_lt[simp]:
+  exprs_bound ts (TAKE n es) < SUC (exprs_bound ts es) /\
+  exprs_bound ts (DROP n es) < SUC (exprs_bound ts es)
+Proof
+  mp_tac (Q.SPECL [`ts`, `n`, `es`] exprs_bound_TAKE) >>
+  mp_tac (Q.SPECL [`ts`, `n`, `es`] exprs_bound_DROP) >> simp[]
+QED
+
 (* Extract callable functions - for termination proof *)
 (* Internal and Deploy are separate so we can order Internal before Deploy *)
 Definition dest_Internal_Fn_def:
@@ -801,12 +815,17 @@ val () = cv_auto_trans get_range_limits_def;
 
 (* Build a transaction record for initial_context via the shared EVM boundary
    helpers in vyperEvmBoundary. *)
-(* Build execution_state for an external call *)
+(* Build execution_state for an external call that forwards gas: as EVM
+   CALL does, the callee also gets the stipend when value is sent.
+   The callee starts with a fresh access set and with the accounts at the
+   call as its original storage, so it pays cold-access and clean-slot
+   prices where the EVM may charge warm or dirty ones. A call with limited
+   gas can therefore fail here where it completes on chain. *)
 Definition make_ext_call_state_def:
-  make_ext_call_state caller callee code calldata value_opt
+  make_ext_call_state caller callee code calldata value_opt gas
                       accounts tStorage txParams =
-    let gas_limit = default_evm_gas_limit in
     let value = (case value_opt of NONE => 0 | SOME v => v) in
+    let gas_limit = gas + (if value = 0 then 0 else call_stipend) in
     let is_static = IS_NONE value_opt in
     let tx = make_evm_tx caller callee value calldata gas_limit in
     let ctxt = initial_context callee code is_static empty_return_destination tx in
@@ -822,6 +841,7 @@ Definition make_ext_call_state_def:
     <| contexts := [(ctxt, rollback)]
      ; txParams := txParams
      ; rollback := rollback
+     ; originalAccounts := accounts
      ; msdomain := Collect empty_domain
      |>
 End
@@ -893,8 +913,8 @@ End
    - caller: address of the calling contract (becomes msg.sender)
    - callee: address being called
    - calldata: encoded function call (from build_ext_calldata)
-   - value: ETH to send (becomes msg.value)
-   - is_static: true for staticcall (read-only)
+   - value_opt: ETH to send (becomes msg.value); NONE for staticcall
+   - gas: gas forwarded to the callee (forwarded_gas)
    - accounts: current account states
    - tStorage: current transient storage
    - txParams: transaction parameters (preserves tx.origin, block info)
@@ -904,11 +924,11 @@ End
    pay, REVERT or another exceptional halt) give success = F, the original
    accounts and transient storage, and an empty emitted-log list. *)
 Definition run_ext_call_def:
-  run_ext_call caller callee calldata value_opt
+  run_ext_call caller callee calldata value_opt gas
                accounts tStorage txParams =
     if ext_call_value_transfer_ok caller callee value_opt accounts then
       let code = (lookup_account callee accounts).code in
-      let s0 = make_ext_call_state caller callee code calldata value_opt
+      let s0 = make_ext_call_state caller callee code calldata value_opt gas
                                    accounts tStorage txParams in
       if fIN callee precompile_addresses then
         let outcome = vfmExecution$dispatch_precompiles callee s0 in
@@ -935,6 +955,20 @@ End
 
 val () = cv_auto_trans run_ext_call_def;
 
+(* The gas an external call forwards: the value of its gas= operand, capped
+   at the model's gas limit, or the call's default without one (all gas for
+   extcall/staticcall, none for send, as in Vyper's lower_send).  The type
+   checker makes the operand a uint256; any other value forwards the
+   default. *)
+Definition forwarded_gas_def:
+  forwarded_gas default_gas gas_opt =
+    case OPTION_BIND gas_opt dest_NumV of
+    | SOME g => MIN g default_evm_gas_limit
+    | NONE => default_gas
+End
+
+val () = cv_auto_trans forwarded_gas_def;
+
 (* DELEGATECALL loads code from target_addr but retains the current message's
    address, caller and value. In particular there is no entry value transfer. *)
 Definition make_delegate_call_state_def:
@@ -954,7 +988,7 @@ Definition make_delegate_call_state_def:
          toDelete := [] |> in
     <| contexts := [(ctxt, rollback)];
        txParams := vyper_to_tx_params cx.txn; rollback := rollback;
-       msdomain := Collect empty_domain |>
+       originalAccounts := accounts; msdomain := Collect empty_domain |>
 End
 
 val () = cv_auto_trans make_delegate_call_state_def;
@@ -982,7 +1016,7 @@ Definition run_raw_call_def:
       run_delegate_call cx target_addr calldata accounts tStorage
     else run_ext_call cx.txn.target target_addr calldata
       (if flags.rcf_is_static then NONE else SOME amount)
-      accounts tStorage (vyper_to_tx_params cx.txn)
+      default_evm_gas_limit accounts tStorage (vyper_to_tx_params cx.txn)
 End
 
 val () = cv_auto_trans run_raw_call_def;
@@ -1063,6 +1097,230 @@ Proof
   simp[update_accounts_def, update_transient_def, append_logs_def,
        check_def, assert_def, bind_def, ignore_bind_def, return_def, raise_def] >>
   rpt strip_tac >> gvs[]
+QED
+
+(* ===== extcall / staticcall / send after operand evaluation ===== *)
+
+(* The value of the keyword argument of kind kw; opts lists the kinds of
+   the keyword values kw_vals, both in source order. *)
+Definition ext_call_kwarg_def:
+  ext_call_kwarg kw (k::ks) (v::vs) =
+    (if k = kw then SOME v else ext_call_kwarg kw ks vs) ∧
+  ext_call_kwarg kw _ _ = NONE
+End
+
+val () = cv_auto_trans ext_call_kwarg_def;
+
+(* Each keyword argument at most once; staticcall sends no value. *)
+Definition ext_call_opts_ok_def:
+  ext_call_opts_ok is_static opts ⇔
+    ALL_DISTINCT opts ∧ (is_static ⇒ ¬MEM EKValue opts)
+End
+
+val () = cv_auto_trans ext_call_opts_ok_def;
+
+(* extcall/staticcall once all operands are values.  vs is the operand list
+   of ExtCall, evaluated in Vyper's order (expr.py _lower_external_call and
+   _parse_external_call_kwargs): the target, the positional arguments, then
+   the keyword arguments in source order, so default_return_value is
+   evaluated before the call whether or not it is used.
+   Vyper checks EXTCODESIZE before the call when no return data is expected
+   (ext_call_precheck_ok), reverts with the callee's return data when the
+   call fails, and checks EXTCODESIZE again on the default_return_value path,
+   unless skip_contract_check.  The outcome comes from the external-call
+   oracle when st.outcomes is SOME, otherwise from running the callee. *)
+Definition eval_ext_call_def:
+  eval_ext_call cx is_static skip_check (func_name, arg_types, ret_type) opts [] =
+    raise (Error (TypeError "ExtCall operands")) ∧
+  eval_ext_call cx is_static skip_check (func_name, arg_types, ret_type) opts
+                (target_v :: rest) = do
+    type_check (LENGTH rest = LENGTH arg_types + LENGTH opts ∧
+                ext_call_opts_ok is_static opts) "ExtCall operands";
+    target_addr <- lift_option_type (dest_AddressV target_v) "ExtCall target not address";
+    arg_vals <<- TAKE (LENGTH arg_types) rest;
+    kw_vals <<- DROP (LENGTH arg_types) rest;
+    value_opt <- (if is_static then return NONE else
+      case ext_call_kwarg EKValue opts kw_vals of
+      | NONE => return (SOME 0)
+      | SOME v => do
+          n <- lift_option_type (dest_NumV v) "ExtCall value not int";
+          return (SOME n)
+        od);
+    gas_opt <<- ext_call_kwarg EKGas opts kw_vals;
+    default_opt <<- ext_call_kwarg EKDefault opts kw_vals;
+    tenv <<- get_tenv cx;
+    calldata <- lift_option_type (build_ext_calldata tenv func_name arg_types arg_vals)
+                                 "ExtCall build_calldata";
+    accounts <- get_accounts;
+    check (ext_call_precheck_ok skip_check ret_type target_addr accounts)
+          "ExtCall target has no code";
+    outcomes <- (λst. return st.outcomes st);
+    returnData <- (case outcomes of
+      | SOME _ => do
+          (rq, outcome) <- vyperCallOutcome$take_call_outcome target_addr calldata value_opt;
+          (if call_outcome_success outcome then return ()
+           else raise $ Error $ RevertData $ call_outcome_return_data outcome);
+          vyperCallOutcome$adopt_call_outcome rq outcome;
+          return (call_outcome_return_data outcome)
+        od
+      | NONE => do
+          tStorage <- get_transient_storage;
+          result <- lift_option
+            (run_ext_call cx.txn.target target_addr calldata value_opt
+                          (forwarded_gas default_evm_gas_limit gas_opt)
+                          accounts tStorage (vyper_to_tx_params cx.txn))
+            "ExtCall run failed";
+          success <<- FST result; result1 <<- SND result;
+          returnData <<- FST result1; result2 <<- SND result1;
+          accounts' <<- FST result2; result3 <<- SND result2;
+          tStorage' <<- FST result3; emitted_logs <<- SND result3;
+          (if success then return () else raise $ Error $ RevertData returnData);
+          update_accounts (K accounts');
+          update_transient (K tStorage');
+          append_logs emitted_logs;
+          return returnData
+        od);
+    case (if returnData = [] then default_opt else NONE) of
+    | SOME default_v => do
+        accounts' <- get_accounts;
+        check (skip_check ∨ ext_call_has_code target_addr accounts')
+              "ExtCall target has no code";
+        return $ Value default_v
+      od
+    | NONE => do
+        ret_val <- lift_sum_runtime (evaluate_abi_decode_return tenv ret_type returnData);
+        return $ Value ret_val
+      od
+  od
+End
+
+val () = eval_ext_call_def
+  |> SRULE [FUN_EQ_THM, bind_def, ignore_bind_def, LET_RATOR, COND_RATOR,
+            prod_CASE_rator, sum_CASE_rator, option_CASE_rator, UNCURRY,
+            lift_option_def, lift_option_type_def, type_check_def, check_def,
+            assert_def]
+  |> cv_auto_trans;
+
+(* send(to, value[, gas=...]); vs = [to; value] ++ (if has_gas then [gas] else []),
+   evaluated in Vyper's order (lower_send).  Without the outcome oracle the
+   recipient's code runs, with the given gas (none without gas=) plus the
+   stipend when value is sent; send fails when that call fails. *)
+Definition eval_send_def:
+  eval_send cx has_gas (to_v :: amount_v :: gas_vs) = do
+    type_check (LENGTH gas_vs = if has_gas then 1 else 0) "Send args";
+    toAddr <- lift_option_type (dest_AddressV to_v) "Send not AddressV";
+    amount <- lift_option_type (dest_NumV amount_v) "Send not NumV";
+    (* the gas operand is send's only keyword argument *)
+    gas_opt <<- ext_call_kwarg EKGas [EKGas] gas_vs;
+    outcomes <- (λst. return st.outcomes st);
+    case outcomes of
+    | SOME _ => do
+      (rq, outcome) <- vyperCallOutcome$take_call_outcome toAddr [] (SOME amount);
+      check (call_outcome_success outcome) "send failed";
+      vyperCallOutcome$adopt_call_outcome rq outcome;
+      return $ Value $ NoneV
+    od
+    | NONE => do
+      accounts <- get_accounts;
+      tStorage <- get_transient_storage;
+      result <- lift_option
+        (run_ext_call cx.txn.target toAddr [] (SOME amount)
+                      (forwarded_gas 0 gas_opt)
+                      accounts tStorage (vyper_to_tx_params cx.txn))
+        "send run failed";
+      success <<- FST result; result1 <<- SND result;
+      result2 <<- SND result1;
+      accounts' <<- FST result2; result3 <<- SND result2;
+      tStorage' <<- FST result3; emitted_logs <<- SND result3;
+      check success "send failed";
+      update_accounts (K accounts');
+      update_transient (K tStorage');
+      append_logs emitted_logs;
+      return $ Value $ NoneV
+    od
+  od ∧
+  eval_send cx has_gas _ = raise (Error (TypeError "Send args"))
+End
+
+val () = eval_send_def
+  |> SRULE [FUN_EQ_THM, bind_def, ignore_bind_def, LET_RATOR, COND_RATOR,
+            prod_CASE_rator, sum_CASE_rator, option_CASE_rator, UNCURRY,
+            lift_option_type_def, type_check_def, check_def, assert_def]
+  |> cv_auto_trans;
+
+Theorem take_call_outcome_non_accounts[local]:
+  (SND (vyperCallOutcome$take_call_outcome target calldata value_opt st)).scopes = st.scopes /\
+  (SND (vyperCallOutcome$take_call_outcome target calldata value_opt st)).immutables = st.immutables
+Proof
+  Cases_on `vyperCallOutcome$take_call_outcome target calldata value_opt st` >>
+  simp[] >> drule vyperCallOutcomeTheory.take_call_outcome_frame >>
+  disch_then (fn th => once_rewrite_tac[th]) >> simp[]
+QED
+
+Theorem adopt_call_outcome_non_accounts[local]:
+  (SND (vyperCallOutcome$adopt_call_outcome rq outcome st)).scopes = st.scopes /\
+  (SND (vyperCallOutcome$adopt_call_outcome rq outcome st)).immutables = st.immutables
+Proof
+  Cases_on `vyperCallOutcome$adopt_call_outcome rq outcome st` >>
+  simp[] >> drule vyperCallOutcomeTheory.adopt_call_outcome_frame >>
+  strip_tac >> pop_assum (fn th => once_rewrite_tac[th]) >> simp[]
+QED
+
+(* Keep the result type independent of the case scrutinee's type variables. *)
+val ext_frame_projection_rewrites = let
+  val shapes = [``:'a option``, ``:'a + 'b``, ``:'a # 'b``]
+  val tests = [``SND : 'result # evaluation_state -> evaluation_state``,
+               ``\s:evaluation_state. s.scopes``,
+               ``\s:evaluation_state. s.immutables``]
+  fun project test ty = BETA_RULE (ISPEC test (TypeBase.case_rand_of ty))
+  fun constant ty = Prim_rec.prove_case_const_thm
+    {case_def = TypeBase.case_def_of ty,
+     nchotomy = TypeBase.nchotomy_of ty}
+in List.concat (map (fn test => map (project test) shapes @
+     [BETA_RULE (PART_MATCH (rator o lhs) COND_RAND test)]) tests) @
+   map constant shapes end;
+
+Theorem eval_ext_call_non_accounts[local]:
+  (SND (eval_ext_call cx static skip_check sig opts vs st)).scopes = st.scopes /\
+  (SND (eval_ext_call cx static skip_check sig opts vs st)).immutables = st.immutables
+Proof
+  PairCases_on `sig` >> Cases_on `vs` >>
+  simp[eval_ext_call_def, bind_def, ignore_bind_def, type_check_def,
+       assert_def, return_def, raise_def, get_accounts_def,
+       get_transient_storage_def, lift_option_def, lift_option_type_def,
+       check_def, lift_sum_runtime_def, update_accounts_def,
+       update_transient_def, append_logs_def, LET_THM, UNCURRY,
+       COND_RATOR, option_CASE_rator, prod_CASE_rator, sum_CASE_rator] >>
+  simp ext_frame_projection_rewrites >>
+  simp_tac (pure_ss ++ boolSimps.BOOL_ss)
+    ([pairTheory.pair_CASE_def, pairTheory.FST, pairTheory.SND,
+      evaluation_state_accfupds, combinTheory.K_THM,
+      take_call_outcome_non_accounts, adopt_call_outcome_non_accounts] @
+     ext_frame_projection_rewrites)
+QED
+
+Theorem eval_ext_call_preserves_non_accounts:
+  eval_ext_call cx static skip_check sig opts vs st = (res, st') ==>
+  st'.scopes = st.scopes /\ st'.immutables = st.immutables
+Proof
+  strip_tac >>
+  mp_tac eval_ext_call_non_accounts >> asm_rewrite_tac[] >> simp[]
+QED
+
+Theorem eval_send_preserves_non_accounts:
+  eval_send cx has_gas vs st = (res, st') ==>
+  st'.scopes = st.scopes /\ st'.immutables = st.immutables
+Proof
+  Cases_on `vs` >- simp[eval_send_def, raise_def] >>
+  Cases_on `t` >- simp[eval_send_def, raise_def] >>
+  simp[eval_send_def, bind_def, ignore_bind_def, type_check_def,
+       assert_def, return_def, raise_def, lift_option_type_def, check_def,
+       get_accounts_def, update_accounts_def, get_transient_storage_def,
+       lift_option_def, update_transient_def, append_logs_def,
+       vyperCallOutcomeTheory.take_call_outcome_def,
+       vyperCallOutcomeTheory.adopt_call_outcome_def, LET_THM, UNCURRY,
+       COND_RATOR, option_CASE_rator, prod_CASE_rator, sum_CASE_rator] >>
+  strip_tac >> gvs[AllCaseEqs()]
 QED
 
 (* Dynamic array bounds check: reads stored length from storage *)
@@ -1385,7 +1643,7 @@ Definition evaluate_def:
     od else do
       vs <- eval_exprs cx es;
       acc <- get_accounts;
-      lift_sum $ evaluate_builtin cx acc ty bt vs
+      lift_sum $ evaluate_builtin cx acc ty bt (MAP expr_type es) vs
     od;
     return $ Value v
   od ∧
@@ -1401,86 +1659,14 @@ Definition evaluate_def:
     v <- lift_sum $ evaluate_type_builtin cx tb typ vs;
     return $ Value v
   od ∧
-  eval_expr cx (Call _ Send es _) = do
-    type_check (LENGTH es = 2) "Send args";
+  eval_expr cx (Call _ (Send has_gas) es _) = do
+    type_check (LENGTH es = if has_gas then 3 else 2) "Send args";
     vs <- eval_exprs cx es;
-    toAddr <- lift_option_type (dest_AddressV $ EL 0 vs) "Send not AddressV";
-    amount <- lift_option_type (dest_NumV $ EL 1 vs) "Send not NumV";
-    outcomes <- (λst. return st.outcomes st);
-    case outcomes of
-    | SOME _ => do
-      (rq, outcome) <- vyperCallOutcome$take_call_outcome toAddr [] (SOME amount);
-      check (call_outcome_success outcome) "send failed";
-      vyperCallOutcome$adopt_call_outcome rq outcome;
-      return $ Value $ NoneV
-    od
-    | NONE => do
-    transfer_value cx.txn.target toAddr amount;
-    return $ Value $ NoneV
-    od
+    eval_send cx has_gas vs
   od ∧
-  eval_expr cx (Call _ (ExtCall is_static skip_check (func_name, arg_types, ret_type)) es drv) = do
+  eval_expr cx (Call _ (ExtCall is_static skip_check sig opts) es _) = do
     vs <- eval_exprs cx es;
-    type_check (vs ≠ []) "ExtCall no target";
-    target_addr <- lift_option_type (dest_AddressV (HD vs)) "ExtCall target not address";
-    (* Convention: staticcall (T) args = [target; arg1; ...]
-                   extcall (F) args = [target; value; arg1; ...] *)
-    (value_opt, arg_vals) <- if is_static then
-      return (NONE, TL vs)
-    else do
-      type_check (TL vs ≠ []) "ExtCall no value";
-      v <- lift_option_type (dest_NumV (HD (TL vs))) "ExtCall value not int";
-      return (SOME v, TL (TL vs))
-    od;
-    tenv <<- get_tenv cx;
-    calldata <- lift_option_type (build_ext_calldata tenv func_name arg_types arg_vals)
-                                 "ExtCall build_calldata";
-    outcomes <- (λst. return st.outcomes st);
-    case outcomes of
-    | SOME _ => do
-      accounts <- get_accounts;
-      (if ret_type = NoneT then
-        check (¬NULL (lookup_account target_addr accounts).code) "ExtCall target has no code"
-       else return ());
-      (rq, outcome) <- vyperCallOutcome$take_call_outcome target_addr calldata value_opt;
-      check (call_outcome_success outcome) "ExtCall reverted";
-      vyperCallOutcome$adopt_call_outcome rq outcome;
-      if call_outcome_return_data outcome = [] ∧ IS_SOME drv then
-        eval_expr cx (THE drv)
-      else do
-        ret_val <- lift_sum_runtime (evaluate_abi_decode_return tenv ret_type
-          (call_outcome_return_data outcome));
-        return $ Value ret_val
-      od
-    od
-    | NONE => do
-    accounts <- get_accounts;
-    check (ext_call_precheck_ok skip_check ret_type target_addr accounts)
-          "ExtCall target has no code";
-    (* Vyper reverts if target has no code (EXTCODESIZE == 0), see
-         ext_call_precheck_ok for when this check is performed *)
-    tStorage <- get_transient_storage;
-    txParams <<- vyper_to_tx_params cx.txn;
-    caller <<- cx.txn.target;
-    result <- lift_option
-      (run_ext_call caller target_addr calldata value_opt accounts tStorage txParams)
-      "ExtCall run failed";
-    (success, returnData, accounts', tStorage', emitted_logs) <<- result;
-    check success "ExtCall reverted";
-    update_accounts (K accounts');
-    update_transient (K tStorage');
-    append_logs emitted_logs;
-    if returnData = [] ∧ IS_SOME drv then do
-      (* default_return_value path: Vyper checks EXTCODESIZE after the call *)
-      check (skip_check ∨ ext_call_has_code target_addr accounts')
-            "ExtCall target has no code";
-      eval_expr cx (THE drv)
-    od
-    else do
-      ret_val <- lift_sum_runtime (evaluate_abi_decode_return tenv ret_type returnData);
-      return $ Value ret_val
-    od
-    od
+    eval_ext_call cx is_static skip_check sig opts vs
   od ∧
   eval_expr cx (Call _ (IntCall (src_id_opt, fn)) es _) = do
     type_check (¬MEM (src_id_opt, fn) cx.stk) "recursion";
@@ -1581,13 +1767,22 @@ Definition evaluate_def:
        unless in same transaction as creation. We model the simple case. *)
     return $ Value NoneV
   od ∧
-  (* Creation operands use the kind-specific runtime layouts documented on
-     CreateTarget.  eval_exprs preserves their evaluation order and the shared
-     helper performs decoding, initcode/address derivation and account effects. *)
-  eval_expr cx (Call ty (CreateTarget kind has_salt rof) es _) = do
-    vs <- eval_exprs cx es;
-    eval_create cx kind has_salt rof (MAP expr_type es) vs
-  od ∧
+  (* Blueprint validation interrupts the runtime operand layout before ctor
+     arguments, retaining the modular copy size even if those arguments deploy
+     code at a previously empty target. *)
+  eval_expr cx (Call ty (CreateTarget kind has_salt rof) es _) =
+    (case kind of
+     | CreateFromBlueprint raw_args => do
+         prefix <- eval_exprs cx (TAKE (if has_salt then 4 else 3) es);
+         code_size <- check_create_blueprint has_salt prefix;
+         suffix <- eval_exprs cx (DROP (if has_salt then 4 else 3) es);
+         eval_create cx kind has_salt rof (MAP expr_type es)
+           (prefix ++ suffix) (SOME code_size)
+       od
+     | _ => do
+         vs <- eval_exprs cx es;
+         eval_create cx kind has_salt rof (MAP expr_type es) vs NONE
+       od) ∧
   eval_exprs cx [] = return [] ∧
   eval_exprs cx (e::es) = do
     tv <- eval_expr cx e;
@@ -1624,6 +1819,15 @@ Termination
        `order_custom_error_args params err = SOME es`
     \\ drule_all order_custom_error_args_exprs_bound
     \\ gvs[]),
+    (* Blueprint operand slices are bounded by the original argument list. *)
+    (qmatch_goalsub_abbrev_tac `exprs_bound fts (TAKE n es)`
+    \\ irule LESS_EQ_LESS_TRANS
+    \\ qexists_tac `exprs_bound fts es`
+    \\ simp[exprs_bound_TAKE] \\ NO_TAC),
+    (qmatch_goalsub_abbrev_tac `exprs_bound fts (DROP n es)`
+    \\ irule LESS_EQ_LESS_TRANS
+    \\ qexists_tac `exprs_bound fts es`
+    \\ simp[exprs_bound_DROP] \\ NO_TAC),
     (* For loop: compatible_bound case *)
     (rename1`compatible_bound`
     \\ gvs[compatible_bound_def, check_def, type_check_def, assert_def]
@@ -1845,16 +2049,54 @@ End
 
 val () = cv_auto_trans set_current_module_def;
 
-(* Evaluate constants for all modules and merge into am.immutables. *)
-Definition evaluate_all_constants_def:
-  evaluate_all_constants cx am addr [] = SOME am ∧
-  evaluate_all_constants cx am addr ((src_id_opt, ts) :: rest) =
+(* The order in which modules' constants are evaluated: imported modules
+   first, the main module (source NONE) last, so a main-module constant can
+   read an imported module's constant, as Vyper allows.  The frontend lists
+   the main module first and the imports in dependency order
+   (imports_topsorted), so the result is in dependency order. *)
+Definition constants_order_def:
+  constants_order [] = [] ∧
+  constants_order ((src_id_opt, ts) :: rest) =
+    if IS_SOME src_id_opt then (src_id_opt, ts) :: constants_order rest
+    else constants_order rest ++ [(src_id_opt, ts)]
+End
+
+val () = cv_auto_trans constants_order_def;
+
+(* constants_order only reorders the modules. *)
+Theorem PERM_constants_order:
+  !mods. PERM (constants_order mods) mods
+Proof
+  Induct >- simp[constants_order_def] >>
+  Cases >> rename1 `(sid,ts)` >>
+  Cases_on `IS_SOME sid` >> gvs[constants_order_def] >>
+  once_rewrite_tac[PERM_FUN_APPEND_CONS] >> simp[]
+QED
+
+Theorem MEM_constants_order:
+  !mods x. MEM x (constants_order mods) <=> MEM x mods
+Proof
+  rpt gen_tac >> irule MEM_PERM >> simp[PERM_constants_order]
+QED
+
+(* Evaluate the constants of the given modules, in list order, and merge
+   them into am.immutables. *)
+Definition evaluate_module_constants_def:
+  evaluate_module_constants cx am addr [] = SOME am ∧
+  evaluate_module_constants cx am addr ((src_id_opt, ts) :: rest) =
     case constants_env (set_current_module cx src_id_opt)
                        am addr src_id_opt ts FEMPTY of
     | NONE => NONE
     | SOME cenv =>
         let am' = merge_constants addr src_id_opt cenv am in
-        evaluate_all_constants cx am' addr rest
+        evaluate_module_constants cx am' addr rest
+End
+
+(* Evaluate constants for all modules, imports first (constants_order), and
+   merge them into am.immutables. *)
+Definition evaluate_all_constants_def:
+  evaluate_all_constants cx am addr mods =
+    evaluate_module_constants cx am addr (constants_order mods)
 End
 
 Definition send_call_value_def:

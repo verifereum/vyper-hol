@@ -359,7 +359,7 @@ Definition constant_value_def:
               | _ => NONE)
            else
              case evaluate_builtin (constant_context mods) empty_accounts
-                    ty bt vs of
+                    ty bt (MAP expr_type es) vs of
              | INL v => SOME v
              | INR _ => NONE) /\
   constant_value mods imms (TypeBuiltin _ tb typ es) =
@@ -398,7 +398,9 @@ Definition merge_constant_imms_def:
       imms
 End
 
-(* constants_env and evaluate_all_constants over the contract's immutables. *)
+(* constants_env and evaluate_module_constants over the contract's immutables;
+   contract_constants_ok applies constants_fold to constants_order mods, as
+   evaluate_all_constants does. *)
 Definition constants_fold_module_def:
   constants_fold_module mods imms src [] acc = SOME acc /\
   constants_fold_module mods imms src
@@ -424,14 +426,15 @@ Definition constants_fold_def:
 End
 
 (* Every constant initializer evaluates, folding in the order the deployment
-   fold uses: modules in mods order, declarations in source order, starting
-   from the immutables load_contract installs.  A forward reference between
-   constants is rejected, as that order cannot evaluate it. *)
+   fold uses: modules in constants_order (imports first, the main module
+   last), declarations in source order, starting from the immutables
+   load_contract installs.  A forward reference between constants is
+   rejected, as that order cannot evaluate it. *)
 Definition contract_constants_ok_def:
   contract_constants_ok mods <=>
     case initial_immutables (type_env_all_modules mods) mods of
     | NONE => F
-    | SOME imms => IS_SOME (constants_fold mods imms mods)
+    | SOME imms => IS_SOME (constants_fold mods imms (constants_order mods))
 End
 
 (* Vyper accepts a default argument only from its RUNTIME_CONSTANT class

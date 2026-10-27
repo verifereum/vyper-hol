@@ -165,7 +165,8 @@ End
 (* Keep the logical runner on the original ABI semantics. Only its CV
    implementation uses the unconditionally proved-equivalent fast paths. *)
 val () = compute_vyper_args_def
-  |> REWRITE_RULE [vyper_abi_dec_eq_fast, vyper_abi_valid_enc_eq_fast]
+  |> REWRITE_RULE [GSYM (CONJUNCT1 vyper_abi_dec_fast_eq),
+                  GSYM (CONJUNCT1 vyper_abi_valid_enc_fast_eq)]
   |> cv_auto_trans;
 
 Definition increment_account_nonce_def:
@@ -301,7 +302,7 @@ Definition raw_call_evm_def:
   raw_call_evm am ct =
     let value_opt = if ct.static then NONE else SOME ct.value in
     let txParams = vyper_to_tx_params (call_trace_txn ct) in
-    case run_ext_call ct.sender ct.target ct.callData value_opt
+    case run_ext_call ct.sender ct.target ct.callData value_opt default_evm_gas_limit
                       am.accounts am.tStorage txParams of
     | NONE => (INR (Error $ RuntimeError "raw_call_evm"), am)
     | SOME (success, returnData, accounts, tStorage, emitted_logs) =>
@@ -384,6 +385,7 @@ Definition make_create_block_def:
      ; requestsHash := 0w
      ; stateRoot := 0w
      ; withdrawalsRoot := 0w
+     ; rlpSize := 0
      ; transactions := []
      ; withdrawals := []
      |>

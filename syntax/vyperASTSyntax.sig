@@ -14,6 +14,7 @@ signature vyperASTSyntax = sig
   val ext_call_sig_ty : hol_type
   val raw_call_flags_ty : hol_type
   val create_kind_ty : hol_type
+  val ext_call_kw_ty : hol_type
   val type_builtin_ty : hol_type
   val expr_ty : hol_type
   val custom_error_ty : hol_type
@@ -329,11 +330,13 @@ signature vyperASTSyntax = sig
   val is_IntCall : term -> bool
 
   val ExtCall_tm : term
-  val mk_ExtCall_tm : term * term * term -> term
-  val dest_ExtCall_tm : term -> term * term * term
+  val mk_ExtCall_tm : term * term * term * term -> term
+  val dest_ExtCall_tm : term -> term * term * term * term
   val is_ExtCall : term -> bool
 
   val Send_tm : term
+  val mk_Send_tm : term -> term
+  val dest_Send_tm : term -> term
   val is_Send : term -> bool
   val mk_raw_call_flags : {max_outsize: term, is_delegate: term, is_static: term, revert_on_failure: term} -> term
   val dest_raw_call_flags : term -> {max_outsize: term, is_delegate: term, is_static: term, revert_on_failure: term}
@@ -520,6 +523,9 @@ signature vyperASTSyntax = sig
   val dest_AbiEncode_tm : term -> term * term
   val is_AbiEncode : term -> bool
 
+  val EKValue_tm : term val is_EKValue : term -> bool
+  val EKGas_tm : term val is_EKGas : term -> bool
+  val EKDefault_tm : term val is_EKDefault : term -> bool
   val CreateMinimalProxy_tm : term val is_CreateMinimalProxy : term -> bool
   val CreateCopyOf_tm : term val is_CreateCopyOf : term -> bool
   val CreateFromBlueprint_tm : term
@@ -651,8 +657,8 @@ signature vyperASTSyntax = sig
 
   datatype call_target_view =
       VIntCall of term
-    | VExtCall of term * term * term
-    | VSend
+    | VExtCall of term * term * term * term
+    | VSend of term
     | VRawCallTarget of term
     | VRawCallCalldataTarget of term
     | VRawLog

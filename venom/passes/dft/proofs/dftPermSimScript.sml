@@ -26,6 +26,8 @@ Ancestors
   venomExecSemantics venomExecProps venomEffects
   venomState venomInst venomInstProps
   sorting pred_set list rich_list
+Libs
+  stepInstBaseLib
 
 (* ===== Symmetry helpers ===== *)
 
@@ -1266,9 +1268,8 @@ val nf_nt_ops = List.filter (fn op_tm =>
 ) (TypeBase.constructors_of ``:opcode``);
 
 val nfnt_clauses = map (fn op_tm =>
-  SIMP_CONV (srw_ss()) [step_inst_base_def]
-    (mk_comb(mk_comb(``step_inst_base``,
-      ``inst with inst_opcode := ^op_tm``), ``st:venom_state``))
+  STEP_INST_BASE_OPCODE_SIMP_CONV
+    ``step_inst_base (inst with inst_opcode := ^op_tm) st``
 ) nf_nt_ops;
 
 val exec_helper_defs = [

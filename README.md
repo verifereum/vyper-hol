@@ -127,20 +127,61 @@ Release instructions, including the prebuilt holbuild archive artefact, are in [
 
 ### Running the Vyper test suite
 
-The test runner expects exported JSON fixtures to be available at `tests/vyper-test-exports`. To generate them locally, clone and install Vyper, then export the functional tests:
+The test runner expects exported JSON fixtures at `tests/vyper-test-exports`.
+`tests/semantics-profile.json` selects Venom, `--optimize none`, Prague and the
+revm execution backend explicitly. The upstream harness enables decimals and
+bytecode metadata and disables compiler debugging by default. Individual tests
+can override compiler settings or source pragmas; each export's `.provenance`
+sidecar records the resolved settings for every deployment, including legacy or
+raw-bytecode deployments. Those overrides remain part of the upstream test.
+The upstream JSON does not record per-test execution-backend or metadata
+overrides; the profile records their harness defaults, not a claim that every
+deployment uses them.
+
+The semantics EVM target follows the newest fork supported by `VYPER_PIN`.
+The export plugin rejects an older run target, so a repin adding a newer fork
+requires updating the explicit profile and regenerating exports. Per-test
+compiler overrides remain supported.
+
+The export plugin preserves exact revm runtime bytes. Upstream's `get_code`
+strips all trailing zeros, which loses real STOP/data bytes as well as revm's
+analysis padding. The plugin removes only padding verified against the account's
+code hash when recording deployment traces; upstream test-facing calls are
+unchanged. HOL's exact runtime-byte comparison remains enabled.
+
+The compiler bytecode oracle has its own profile in
+`lowering/defs/bytecode/python_o1_bytecode_oracle.py`: Venom/NONE/Prague with
+metadata disabled and decimals enabled by fixture pragmas. These profiles can
+evolve independently. At this pin NONE runs the O1 Venom passes but disables
+assembly optimisation; it is not `-O O1`. Both compile for Prague (the newest
+target the pin supports), whereas the HOL EVM semantics executes Osaka.
+Metadata need not match for behavioral replay. Bytecode parity is opt-in and
+is not implied by a passing semantics replay.
+
+Use Python 3.11.11 in an isolated environment, then run from this repository:
 
 ```bash
 git clone --depth 1 https://github.com/vyperlang/vyper.git vyper-src
 cd vyper-src
 git fetch --unshallow --tags
 git checkout --detach "$(tr -d '[:space:]' < ../VYPER_PIN)"
-pip install . --group test
-pytest -s -n0 --export ../tests/vyper-test-exports -m "not fuzzing" tests/functional
+git config core.abbrev 8
+SETUPTOOLS_SCM_PRETEND_VERSION_FOR_VYPER=0.5.0a4+cd74ce4f \
+  PIP_CONSTRAINT="../tests/semantics-test-constraints.txt ../tests/semantics-build-constraints.txt" \
+  pip install . --group test
+cd ..
+python tools/vyper_test_exports.py generate \
+  --vyper-repo vyper-src --output tests/vyper-test-exports
 ```
 
-The checkout command reads the repository's authoritative `VYPER_PIN`; keep it
-before installation and export so the installed compiler and generated fixtures
-come from the pinned revision.
+The generator requires a clean pinned checkout, checks Python/package versions,
+and refuses an existing output directory so an incremental export cannot leave
+stale tests behind. Use repeated `--test tests/.../test_file.py::test_name`
+arguments for focused exports. It writes provenance only after pytest succeeds.
+Replay checks each file's hash and provenance against the pin, profile,
+constraints, generator and setup action; CI's export cache key covers those
+same inputs. A profile or generator change requires regeneration, including
+the committed exports under `tests/fixtures/exports`. Keep their sidecars.
 
 Then run individual generated test theories with `holbuild`, for example:
 
