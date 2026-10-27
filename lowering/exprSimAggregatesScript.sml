@@ -74,21 +74,22 @@ QED
 
 Theorem eval_expr_empty:
   !cx ann t args es res es'.
-    eval_expr cx (TypeBuiltin ann Empty t args) es = (res, es') /\
+    (do r <- eval_expr cx (TypeBuiltin ann Empty t args); read_result cx r od) es = (res, es') /\
     expr_res_ok res ==>
     es' = es /\ args = [] /\
     ?tv. evaluate_type (get_tenv cx) t = SOME tv /\
-         res = INL (Value (default_value tv))
+         res = INL (default_value tv)
 Proof
   rpt gen_tac >> strip_tac >>
-  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  qpat_x_assum `bind _ _ _ = _` mp_tac >>
   simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
        assert_def, return_def, raise_def, lift_sum_def,
        type_builtin_args_length_ok_def] >>
   Cases_on `args` >> simp[raise_def] >>
   simp[Once evaluate_def, return_def, evaluate_type_builtin_def] >>
   Cases_on `evaluate_type (get_tenv cx) t` >>
-  simp[return_def, raise_def] >> rw[] >> gvs[expr_res_ok_def]
+  simp[return_def, raise_def, bind_def, read_result_def] >>
+  rw[] >> gvs[expr_res_ok_def]
 QED
 
 Theorem typed_val_to_w256_address_zero[local]:
