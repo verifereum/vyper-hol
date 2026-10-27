@@ -1,10 +1,21 @@
 (* Independent checked-frontend bytecode witnesses for default_return_value. *)
 Theory evalCompilerExternalCallDefaults
 Ancestors compileVyper supportedProgram concretizeMemLocDefs codegenReadyCompute alist byte integer_word option
-Libs memoryStoreWitnessLib vyperCheckContractFrontendLib jsonASTLib evalCompilerBytecodeLib finite_mapLib computeLib wordsLib
+Libs memoryStoreWitnessLib vyperCheckContractFrontendLib jsonASTLib evalCompilerBytecodeLib finite_mapLib computeLib wordsLib supportedEvalLib
 
 fun holbuild_extra_deps (_ : string list) = ()
-val () = holbuild_extra_deps ["../external-calls"]
+val () = holbuild_extra_deps
+  ["../external-calls/oracle/e21_default_ret.json",
+   "../external-calls/oracle/e21_default_ret.hex",
+   "../external-calls/oracle/e22_static_default.json",
+   "../external-calls/oracle/e22_static_default.hex",
+   "../external-calls/oracle/e30_default_ret_tuple.json",
+   "../external-calls/oracle/e30_default_ret_tuple.hex",
+   "../external-calls/oracle/e37_default_ret_string.json",
+   "../external-calls/oracle/e37_default_ret_string.hex",
+   "../external-calls/oracle/e38_default_ret_local_array.json",
+   "../external-calls/oracle/e38_default_ret_local_array.hex"]
+val () = supportedEvalLib.configure ()
 val () = computeLib.upd_compset add_finite_map_compset
 val () = computeLib.upd_compset (computeLib.add_thms
   [fmap_to_alist_FEMPTY, i2w_pos, byteTheory.set_byte_bit_field_insert])
