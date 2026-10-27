@@ -2,7 +2,7 @@
 Theory abiEncoderVarTransport
 Ancestors
   abiDecoderVarSequence abiDecoderVarExtend abiEncoderObserver
-  execEquivParamDefs venomExecSemantics venomState list
+  execEquivParamDefs execEquivParamProps stateEquiv venomExecSemantics venomState list
 
 Theorem abi_encoder_vars_extend_prev:
   abi_decoder_vars_extend extras s t ==> s.vs_prev_bb = t.vs_prev_bb
@@ -116,4 +116,55 @@ Proof
         rename1 `eval_operands (DROP 2 (REVERSE log_ops)) s = SOME log_topics` >>
         irule abi_encoder_log_inputs >>
         qexistsl_tac [`log_off`, `log_ops`, `log_sz`, `log_topics`] >> simp[])])]
+QED
+
+Theorem abi_encoder_step_extend_inputs[local]:
+  abi_decoder_vars_extend extras s t /\ inst.inst_opcode <> INVOKE /\
+  abi_decoder_inputs_defined inst s /\ step_inst_base inst s = OK u ==>
+  ?v. step_inst_base inst t = OK v /\ abi_decoder_vars_extend extras u v
+Proof
+  strip_tac >>
+  drule abi_decoder_vars_extend_inputs >> disch_then drule >> strip_tac >>
+  mp_tac (Q.SPECL [`abi_decoder_vars_extend extras`,
+    `\s t. vsr_term_frame s = vsr_term_frame t`, `0`, `ARB`, `inst`, `s`, `t`]
+    execEquivParamPropsTheory.step_inst_preserves_R) >>
+  impl_tac >- simp[abi_decoder_vars_extend_valid] >>
+  asm_simp_tac (srw_ss()) [step_inst_non_invoke] >>
+  Cases_on `step_inst_base inst t` >> simp[lift_result_def] >> metis_tac[]
+QED
+
+Theorem abi_encoder_vars_extend_frame[local]:
+  abi_decoder_vars_extend extras s t ==>
+  s.vs_memory = t.vs_memory /\ s.vs_call_ctx = t.vs_call_ctx /\
+  s.vs_tx_ctx = t.vs_tx_ctx /\ s.vs_block_ctx = t.vs_block_ctx /\
+  s.vs_accounts = t.vs_accounts /\ s.vs_returndata = t.vs_returndata /\
+  s.vs_code = t.vs_code
+Proof
+  rw[abi_decoder_vars_extend_def, Excl "vsr_complete_mask_equality"] >>
+  fs[vsr_frame_def, venom_state_component_equality]
+QED
+
+Theorem abi_encoder_step_extend_ignored[local]:
+  abi_decoder_vars_extend extras s t /\ abi_encoder_ignored_inputs inst.inst_opcode /\
+  step_inst_base inst s = OK u ==>
+  ?v. step_inst_base inst t = OK v /\ abi_decoder_vars_extend extras u v
+Proof
+  strip_tac >> Cases_on `inst.inst_opcode` >>
+  gvs[abi_encoder_ignored_inputs_def] >>
+  qpat_x_assum `step_inst_base inst s = OK u` mp_tac >>
+  asm_simp_tac (srw_ss()) [step_inst_base_opcode_eqs, exec_read0_def] >>
+  rpt strip_tac >> gvs[AllCaseEqs()] >>
+  drule abi_encoder_vars_extend_frame >> strip_tac >>
+  asm_rewrite_tac[] >> irule abi_decoder_vars_extend_update >> simp[]
+QED
+
+Theorem abi_encoder_step_extend:
+  abi_decoder_vars_extend extras s t /\ inst.inst_opcode <> INVOKE /\
+  step_inst_base inst s = OK u ==>
+  ?v. step_inst_base inst t = OK v /\ abi_decoder_vars_extend extras u v
+Proof
+  strip_tac >> Cases_on `abi_encoder_ignored_inputs inst.inst_opcode`
+  >- (drule_all abi_encoder_step_extend_ignored >> simp[]) >>
+  drule_all abi_encoder_step_inputs_defined >> strip_tac >>
+  drule_all abi_encoder_step_extend_inputs >> simp[]
 QED
