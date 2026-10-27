@@ -1,10 +1,23 @@
 (* Independent checked-frontend bytecode witnesses for memory stores. *)
 Theory evalCompilerMemoryStoreContexts
 Ancestors compileVyper supportedProgram concretizeMemLocDefs codegenReadyCompute alist byte integer_word option
-Libs memoryStoreWitnessLib vyperCheckContractFrontendLib jsonASTLib evalCompilerBytecodeLib finite_mapLib computeLib wordsLib
+Libs memoryStoreWitnessLib vyperCheckContractFrontendLib jsonASTLib evalCompilerBytecodeLib finite_mapLib computeLib wordsLib supportedEvalLib
 
 fun holbuild_extra_deps (_ : string list) = ()
-val () = holbuild_extra_deps ["../memory-stores"]
+val () = holbuild_extra_deps
+  ["../memory-stores/oracle/r07_assert_storage_string_reason.json",
+   "../memory-stores/oracle/r07_assert_storage_string_reason.hex",
+   "../memory-stores/oracle/p06_local_append_struct.json",
+   "../memory-stores/oracle/p06_local_append_struct.hex",
+   "../memory-stores/oracle/p15_local_append_bytes.json",
+   "../memory-stores/oracle/p15_local_append_bytes.hex",
+   "../memory-stores/oracle/p64_string_annassign_call.json",
+   "../memory-stores/oracle/p64_string_annassign_call.hex",
+   "../memory-stores/oracle/e70_noData_live_mem2.json",
+   "../memory-stores/oracle/e70_noData_live_mem2.hex",
+   "../memory-stores/oracle/dec_from_memory2.json",
+   "../memory-stores/oracle/dec_from_memory2.hex"]
+val () = supportedEvalLib.configure ()
 val () = computeLib.upd_compset add_finite_map_compset
 val () = computeLib.upd_compset (computeLib.add_thms
   [fmap_to_alist_FEMPTY, i2w_pos])
