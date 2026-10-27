@@ -13,8 +13,8 @@
  *
  * The induction hypothesis is expr_ok of every smaller expression, so of
  * the index and of the whole base chain; its expr_vv_ok describes a base's
- * value_vv, a storage or transient array's ArrayRef included.  It does not
- * cover a hashmap base: that evaluates to a HashMapRef and is typed by
+ * value_vv, captured memory, storage and transient places included.  It
+ * does not cover a hashmap base: that evaluates to a HashMapRef and is typed by
  * type_place_expr, not well_typed_expr.  These lemmas' proofs need a place
  * judgment for hashmap bases, proved by induction on the place chain with
  * this hypothesis for the indices.

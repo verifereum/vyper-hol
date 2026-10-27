@@ -8,35 +8,35 @@ Ancestors
   vyperPlaceTyping vyperPlaceWriteSoundness vyperTargetPlaceWrite
   vyperStatePreservation vyperExprNoControl
 
-Theorem update_get_Value_sound:
+Theorem update_read_value_result_sound:
   well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn /\
   expr_result_typed env e rhs /\
-  get_Value rhs st = (res,st') ==>
+  read_result cx rhs st = (res,st') ==>
   st' = st /\ no_type_error_result res /\
   case res of INL v => value_runtime_typed env (expr_type e) v | INR _ => T
 Proof
-  rpt gen_tac >> strip_tac >> imp_res_tac get_Value_state >> gvs[] >>
+  rpt gen_tac >> strip_tac >> imp_res_tac read_result_state >> gvs[] >>
   Cases_on `res` >> simp[no_type_error_result_def]
   >- (Cases_on `rhs` >>
-      gvs[get_Value_def, return_def, raise_def, expr_result_typed_def,
-          expr_runtime_typed_def, value_runtime_typed_def, toplevel_value_typed_def]) >>
+      gvs[read_result_def, return_def, raise_def, expr_result_typed_def,
+          expr_runtime_typed_def, value_runtime_typed_def, value_result_typed_def]) >>
   gvs[expr_result_typed_def, expr_runtime_typed_def] >>
   drule_all well_typed_binop_not_In_second_type >> strip_tac >>
   drule_all evaluate_type_not_ArrayT_imp_not_ArrayTV >> strip_tac >>
   drule_all evaluate_type_not_NoneT_imp_not_NoneTV >> strip_tac >>
-  drule_all get_Value_no_type_error >> simp[no_type_error_result_def]
+  drule_all read_value_result_no_type_error >> simp[no_type_error_result_def]
 QED
 
 Theorem update_place_tail_no_control:
   (do
-    v <- get_Value rhs;
+    v <- read_result cx rhs;
     result <- lift_sum (evaluate_binop
       (case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0) ptv bop cur v);
     write_place cx p result
   od) st = (INR exn,st') ==> no_control_exc exn
 Proof
   simp[bind_def, AllCaseEqs()] >> rpt strip_tac >>
-  metis_tac[get_Value_no_control, lift_sum_no_control, write_place_no_control]
+  metis_tac[read_result_no_control, lift_sum_no_control, write_place_no_control]
 QED
 
 Theorem update_place_tail_sound:
@@ -46,7 +46,7 @@ Theorem update_place_tail_sound:
   well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn /\
   expr_result_typed env e rhs /\
   (do
-    v <- get_Value rhs;
+    v <- read_result cx rhs;
     result <- lift_sum (evaluate_binop
       (case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0) ptv bop cur v);
     write_place cx p result
@@ -56,13 +56,13 @@ Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `do _ od _ = _` mp_tac >>
   simp_tac (srw_ss()) [bind_def] >>
-  Cases_on `get_Value rhs st` >>
-  rename1 `get_Value rhs st = (answer,middle)` >>
-  drule_all update_get_Value_sound >> strip_tac >> gvs[] >>
+  Cases_on `read_result cx rhs st` >>
+  rename1 `read_result cx rhs st = (answer,middle)` >>
+  drule_all update_read_value_result_sound >> strip_tac >> gvs[] >>
   reverse (Cases_on `answer`)
   >- (simp[] >> strip_tac >> gvs[no_type_error_result_def]) >>
   simp[] >> strip_tac >> gvs[] >>
-  qmatch_assum_rename_tac `get_Value rhs input = (INL right,input)` >>
+  qmatch_assum_rename_tac `read_result cx rhs input = (INL right,input)` >>
   fs[value_runtime_typed_def] >>
   qmatch_assum_rename_tac `evaluate_type env.type_defs (expr_type e) = SOME rhs_tv` >>
   `!msg. evaluate_binop

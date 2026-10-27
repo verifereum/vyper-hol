@@ -4,12 +4,6 @@ Ancestors
   vyperTypeEnv vyperStatePreservation vyperTypeStatePreservation vyperPlaceInvariants
   vyperPlaceStatePreservation vyperPlaceFrames
 
-Definition runtime_place_typed_def:
-  runtime_place_typed cx st p tv <=>
-    well_formed_type_value tv /\
-    place_type_value cx p st = (INL tv,st)
-End
-
 Theorem runtime_place_typed_storage[simp]:
   runtime_place_typed cx st (StoragePlace tr slot ptv) tv <=>
     tv = ptv /\ well_formed_type_value tv
@@ -144,7 +138,7 @@ QED
 
 Theorem extend_place_typed:
   runtime_place_typed cx st p tv /\ subscript_type tv sb = SOME etv /\
-  extend_place cx input_tv (PlaceR p) sb st = (INL (PlaceR q),st') ==>
+  extend_place cx (PlaceR p) sb st = (INL (PlaceR q),st') ==>
     runtime_place_typed cx st' q etv
 Proof
   Cases_on `p`

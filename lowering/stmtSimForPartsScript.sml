@@ -36,7 +36,7 @@ Proof
   simp[Once evaluate_def, bind_def, ignore_bind_def, LET_THM, return_def] >>
   simp[Once evaluate_def, return_def, evaluate_literal_def] >>
   simp[Once evaluate_def, return_def, evaluate_literal_def] >>
-  simp[get_range_limits_def, lift_sum_def, return_def]
+  simp[read_result_def, get_range_limits_def, lift_sum_def, return_def]
 QED
 
 (* A range with literal ends, nonempty or empty, within the loop's bound:

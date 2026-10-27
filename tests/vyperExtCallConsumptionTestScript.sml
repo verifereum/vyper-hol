@@ -52,7 +52,7 @@ Proof
        assert_def, raise_def, lift_option_type_def, lift_option_def,
        eval_ext_call_def, eval_ext_call_effects_def, ext_call_opts_ok_def, ext_call_kwarg_def,
        ext_call_precheck_ok_def, lift_sum_runtime_def,
-       evaluate_literal_def, dest_AddressV_def, get_Value_def, materialise_def,
+       evaluate_literal_def, dest_AddressV_def, read_result_def,
        empty_evaluation_context_def, get_tenv_def,
        get_accounts_def, take_call_outcome_def, call_outcome_request_def,
        take_outcome_def, record_request_def, computed_precompile_addresses,

@@ -34,8 +34,8 @@
  *
  * The elements of a struct or array literal are lowered as
  * cfn ...; ADD ...; unwrap_value, and an element that is a storage or
- * transient array evaluates to an ArrayRef: these lemmas use the induction
- * hypothesis's expr_vv_ok of each element (expr_sim_below_mem), not
+ * transient array evaluates to a captured storage place: these lemmas use
+ * the induction hypothesis's expr_vv_ok of each element (expr_sim_below_mem), not
  * expr_sim_ok.  Composing the elements needs the operand composition of
  * #636's Infrastructure (a value an earlier operand left in memory survives
  * a later operand's fragment).
@@ -74,21 +74,22 @@ QED
 
 Theorem eval_expr_empty:
   !cx ann t args es res es'.
-    eval_expr cx (TypeBuiltin ann Empty t args) es = (res, es') /\
+    (do r <- eval_expr cx (TypeBuiltin ann Empty t args); read_result cx r od) es = (res, es') /\
     expr_res_ok res ==>
     es' = es /\ args = [] /\
     ?tv. evaluate_type (get_tenv cx) t = SOME tv /\
-         res = INL (Value (default_value tv))
+         res = INL (default_value tv)
 Proof
   rpt gen_tac >> strip_tac >>
-  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  qpat_x_assum `bind _ _ _ = _` mp_tac >>
   simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
        assert_def, return_def, raise_def, lift_sum_def,
        type_builtin_args_length_ok_def] >>
   Cases_on `args` >> simp[raise_def] >>
   simp[Once evaluate_def, return_def, evaluate_type_builtin_def] >>
   Cases_on `evaluate_type (get_tenv cx) t` >>
-  simp[return_def, raise_def] >> rw[] >> gvs[expr_res_ok_def]
+  simp[return_def, raise_def, bind_def, read_result_def] >>
+  rw[] >> gvs[expr_res_ok_def]
 QED
 
 Theorem typed_val_to_w256_address_zero[local]:
@@ -177,10 +178,10 @@ QED
 
 Theorem eval_expr_bound_builtin:
   !cx ann tb t args es res es'.
-    eval_expr cx (TypeBuiltin ann tb t args) es = (res, es') /\
+    (do result <- eval_expr cx (TypeBuiltin ann tb t args); read_result cx result od) es = (res, es') /\
     expr_res_ok res /\ MEM tb [MaxValue; MinValue; Epsilon] ==>
     es' = es /\ args = [] /\
-    ?v. res = INL (Value v) /\ evaluate_type_builtin cx tb t [] = INL v
+    ?v. res = INL v /\ evaluate_type_builtin cx tb t [] = INL v
 Proof
   rpt gen_tac >> strip_tac >>
   `!n. type_builtin_args_length_ok tb n <=> n = 0` by
@@ -190,13 +191,13 @@ Proof
      Cases_on `t` >> gvs[evaluate_max_value_def, evaluate_min_value_def] >>
      rename1 `BaseT bt` >> Cases_on `bt` >>
      gvs[evaluate_max_value_def, evaluate_min_value_def, AllCaseEqs()]) >>
-  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-  simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
-       assert_def, return_def, raise_def, lift_sum_def] >>
+  qpat_x_assum `(do result <- eval_expr _ _; read_result _ result od) _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, read_result_def, return_def,
+       ignore_bind_def, type_check_def, assert_def, raise_def, lift_sum_def] >>
   Cases_on `args` >> simp[raise_def] >>
-  simp[Once evaluate_def, return_def] >>
+  simp[Once evaluate_def, bind_def, read_result_def, return_def] >>
   Cases_on `evaluate_type_builtin cx tb t []` >>
-  simp[return_def, raise_def] >> rw[] >> gvs[expr_res_ok_def]
+  simp[read_result_def, return_def, raise_def] >> rw[] >> gvs[expr_res_ok_def]
 QED
 
 (* max_value, min_value and epsilon of a numeric type: a Lit of the bound,

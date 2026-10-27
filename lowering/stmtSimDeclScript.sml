@@ -226,9 +226,9 @@ QED
 Theorem eval_annassign_word_error[local]:
   !cx id typ e es ex es' lctx.
     eval_stmt cx (AnnAssign id typ e) es = (INR ex, es') /\
-    stmt_res_ok lctx (INR ex) /\
-    (!tv es1. eval_expr cx e es = (INL tv, es1) ==> ?v. tv = Value v) ==>
-    eval_expr cx e es = (INR ex, es') /\ expr_res_ok (INR ex : toplevel_value + exception)
+    stmt_res_ok lctx (INR ex) ==>
+    (do result <- eval_expr cx e; read_result cx result od) es = (INR ex, es') /\
+    expr_res_ok (INR ex : value + exception)
 Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
@@ -239,11 +239,17 @@ Proof
   simp[return_def] >>
   Cases_on `eval_expr cx e es` >>
   rename1 `eval_expr cx e es = (r1, es1)` >> Cases_on `r1`
-  >- (gvs[] >> gvs[materialise_def, return_def] >>
-      simp[new_variable_def, bind_def, ignore_bind_def, get_scopes_def,
-           type_check_def, assert_def, set_scopes_def, raise_def, return_def] >>
-      rw[AllCaseEqs()] >> gvs[stmt_res_ok_def, expr_res_ok_def] >>
-      Cases_on `es1.scopes` >> gvs[raise_def, set_scopes_def, return_def]) >>
+  >- (rename1 `eval_expr cx e es = (INL raw, es1)` >>
+      Cases_on `read_result cx raw es1` >>
+      rename1 `read_result cx raw es1 = (r2, es2)` >> Cases_on `r2`
+      >- (simp[] >>
+          simp[new_variable_def, bind_def, ignore_bind_def, get_scopes_def,
+               type_check_def, assert_def, set_scopes_def, raise_def, return_def] >>
+          rw[AllCaseEqs()] >> gvs[stmt_res_ok_def, expr_res_ok_def] >>
+          Cases_on `es2.scopes` >> gvs[raise_def, set_scopes_def, return_def]) >>
+      simp[] >> strip_tac >> gvs[] >>
+      drule read_result_no_control >>
+      gvs[no_control_exc_def, stmt_res_ok_def, expr_res_ok_def]) >>
   simp[] >> strip_tac >> gvs[stmt_res_ok_def, expr_res_ok_def] >>
   imp_res_tac (cj 1 eval_expr_no_control) >> gvs[no_control_exc_def]
 QED
@@ -342,8 +348,8 @@ Theorem annassign_word_success_run[local]:
     eval_stmt cx (AnnAssign id vtyp e) es = (INL (), es') /\
     (!tyv. evaluate_type (get_tenv cx) vtyp = SOME tyv ==> type_memory_size tyv = 32) /\
     is_word_type (expr_type e) /\ evaluate_type (get_tenv cx) (expr_type e) = SOME etv /\
-    (!tv es1. eval_expr cx e es = (INL tv, es1) ==>
-       ?v. tv = Value v /\ word_value v /\ typed_val_to_w256 etv v = val_to_w256 v) /\
+    (!v es1. (do result <- eval_expr cx e; read_result cx result od) es = (INL v, es1) ==>
+       word_value v /\ typed_val_to_w256 etv v = val_to_w256 v) /\
     expr_sim ctx func cenv cx (expr_type e) e es /\
     lower_value compile_expr cenv (expr_type e) e sa = (op, sb) /\
     emit_void MSTORE [Var p; op] sb = ((), sf) /\
@@ -365,12 +371,14 @@ Theorem annassign_word_success_run[local]:
 Proof
   rpt gen_tac >> strip_tac >>
   drule eval_stmt_annassign_value >> strip_tac >>
-  qpat_x_assum `!tv es1. eval_expr _ _ _ = _ ==> _` drule >> strip_tac >>
-  gvs[materialise_def, return_def] >>
+  ` (do result <- eval_expr cx e; read_result cx result od) es = (INL v, es2)` by
+    simp[bind_def] >>
+  `es2 = es1` by metis_tac[read_result_state] >> gvs[] >>
+  `word_value v /\ typed_val_to_w256 etv v = val_to_w256 v` by metis_tac[] >>
   `type_memory_size tyv = 32` by simp[] >>
   `not_local_ptr cenv es1.scopes p` by metis_tac[local_ptrs_reserved_not_live] >>
   qpat_x_assum `expr_sim _ _ _ _ _ _ _` (mp_tac o REWRITE_RULE [expr_sim_def]) >>
-  disch_then (qspecl_then [`sa`, `sb`, `op`, `INL (Value v)`, `es1`, `s0`] mp_tac) >>
+  disch_then (qspecl_then [`sa`, `sb`, `op`, `INL v`, `es1`, `s0`] mp_tac) >>
   impl_tac >- simp[expr_res_ok_def] >>
   simp[frag_exec_def] >> disch_then (qspec_then `func` mp_tac) >>
   impl_tac >- simp[] >> simp[] >> strip_tac >>
@@ -383,8 +391,8 @@ QED
 Theorem expr_sim_error_run[local]:
   !ctx func cenv cx ty e es ex es' sa sb op s0.
     expr_sim ctx func cenv cx ty e es /\
-    eval_expr cx e es = (INR ex, es') /\
-    expr_res_ok (INR ex : toplevel_value + exception) /\
+    (do result <- eval_expr cx e; read_result cx result od) es = (INR ex, es') /\
+    expr_res_ok (INR ex : value + exception) /\
     lower_value compile_expr cenv ty e sa = (op, sb) /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sa /\ stmt_state_rel func cenv cx es s0 /\
@@ -399,22 +407,18 @@ Proof
   impl_tac >- simp[] >>
   simp[frag_exec_def] >> disch_then (qspec_then `func` mp_tac) >>
   impl_tac >- simp[] >> simp[] >> strip_tac >>
-  ONCE_REWRITE_TAC [INST_TYPE [beta |-> ``:toplevel_value``] expr_exit_INR_type] >>
-  metis_tac[]
+  metis_tac[expr_exit_INR_type]
 QED
 
 Theorem annassign_word_top_ext[local]:
   !cenv c cx id vtyp e es es' sa st.
     declare_local cenv id vtyp sa = (c, st) /\ cenv.ce_alloca_locals /\
     (!l. FLOOKUP cenv.ce_vars id = SOME l ==> ?q z. l = PtrVar q z) /\
-    eval_stmt cx (AnnAssign id vtyp e) es = (INL (), es') /\
-    (!tv es1. eval_expr cx e es = (INL tv, es1) ==> ?v. tv = Value v) ==>
+    eval_stmt cx (AnnAssign id vtyp e) es = (INL (), es') ==>
     cenv_top_ext cenv c es'.scopes
 Proof
   rpt gen_tac >> strip_tac >>
-  drule eval_stmt_annassign_value >> strip_tac >>
-  qpat_x_assum `!tv es1. eval_expr _ _ _ = _ ==> _` drule >> strip_tac >>
-  gvs[materialise_def, return_def] >>
+  drule eval_stmt_annassign_value >> strip_tac >> gvs[] >>
   irule cenv_top_ext_declare_local >> simp[] >>
   qexistsl [`id`, `sa`, `st`, `vtyp`] >> gvs[lookup_scopes_def, AllCaseEqs()]
 QED
@@ -461,8 +465,8 @@ Theorem compile_annassign_word_stmt_frag:
     (!l. FLOOKUP cenv.ce_vars id = SOME l ==> ?q z. l = PtrVar q z) /\
     is_word_type (expr_type e) /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME etv /\
-    (!tv es1. eval_expr cx e es = (INL tv, es1) ==>
-              ?v. tv = Value v /\ word_value v) /\
+    (!v es1. (do result <- eval_expr cx e; read_result cx result od) es = (INL v, es1) ==>
+              word_value v) /\
     (!st0 c st1. declare_local cenv id vtyp st0 = (c, st1) ==>
        expr_sim ctx func c cx (expr_type e) e es /\
        !sa sb op. lower_value compile_expr c (expr_type e) e sa = (op, sb) ==>
@@ -471,12 +475,11 @@ Theorem compile_annassign_word_stmt_frag:
       (stmt_env cenv lctx ty (AnnAssign id vtyp e)) es res es'
 Proof
   rpt gen_tac >> strip_tac >>
-  `!tv es1. eval_expr cx e es = (INL tv, es1) ==>
-     ?v. tv = Value v /\ word_value v /\
-         typed_val_to_w256 etv v = val_to_w256 v` by
+  `!v es1. (do result <- eval_expr cx e; read_result cx result od) es = (INL v, es1) ==>
+     word_value v /\ typed_val_to_w256 etv v = val_to_w256 v` by
     (rpt strip_tac >> first_x_assum drule >> strip_tac >>
      gvs[typed_val_to_w256_word_value]) >>
-  qpat_x_assum `!tv es1. _ ==> ?v. tv = Value v /\ word_value v` kall_tac >>
+  qpat_x_assum `!v es1. _ ==> word_value v` kall_tac >>
   simp[stmt_frag_def] >> rpt gen_tac >> strip_tac >>
   `!st0 c st1. declare_local cenv id vtyp st0 = (c, st1) ==>
      !a b op. lower_value compile_expr c (expr_type e) e a = (op, b) ==>
@@ -502,8 +505,6 @@ Proof
          SOME (w2n w, type_memory_bytes cenv vtyp)` by
         simp[Abbr `ai`, venomInstTheory.mk_inst_def] >>
       drule_all annassign_word_success_run >> strip_tac >>
-      `!tv es1. eval_expr cx e es = (INL tv, es1) ==> ?v. tv = Value v` by
-        (rpt strip_tac >> first_x_assum drule >> metis_tac[]) >>
       drule_all annassign_word_top_ext >> strip_tac >>
       `!x. not_fresh_at sa x ==> x <> p /\ not_fresh_at sA x` by
         (`sA.cs_next_var = st.cs_next_var` by
@@ -522,11 +523,22 @@ Proof
         (qspec_then `fuel` mp_tac) >> simp[] >> strip_tac >>
       qpat_x_assum `!fuel r. run_from fuel ctx func salloc = r /\ _ ==> _`
         drule >> simp[]) >>
-  `eval_expr cx e es = (INR y, es') /\
-   expr_res_ok (INR y : toplevel_value + exception)` by
+  `(do result <- eval_expr cx e; read_result cx result od) es = (INR y, es') /\
+   expr_res_ok (INR y : value + exception)` by
     (drule eval_annassign_word_error >> simp[] >>
      disch_then (qspec_then `lctx` mp_tac) >> simp[] >> metis_tac[]) >>
   drule_all expr_sim_error_run >> strip_tac >>
   drule exit_result_not_error >> strip_tac >>
   disj2_tac >> simp[stmt_exit_def] >> metis_tac[]
 QED
+
+(* Integrity gate for forced declaration consumers, including read failures. *)
+val () = List.app (fn th =>
+  let val (ors, axs) = Tag.dest_tag (Thm.tag th)
+  in if null axs andalso null (Thm.hyp th) andalso
+        List.all (fn s => s = "DISK_THM") ors
+     then print "DECL_FORCE_AUDIT OK\n"
+     else raise Fail "forced declaration inherited admission"
+  end) [eval_annassign_word_error, annassign_word_success_run,
+        expr_sim_error_run, annassign_word_top_ext,
+        compile_annassign_word_stmt_frag];

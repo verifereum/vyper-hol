@@ -19,9 +19,8 @@ fun check_closed (thy,name) =
 val () = List.app check_closed
   [("vyperSmallStep","eval_cps_eq"),
    ("vyperTypeEvalSoundness","eval_scc_type_sound_mutual"),
-   ("vyperTypeEvalSoundness","eval_all_type_sound_mutual"),
+   ("vyperTypeEvalSoundness","eval_expr_read_type_sound"),
    ("vyperTypeEvalStoragePreservation","eval_scc_storage_preservation_mutual"),
-   ("vyperTypeEvalStoragePreservation","eval_all_storage_preservation_mutual"),
    ("vyperStorageRegionWrite","storage_subregion_typed_write_preserves_root"),
    ("vyperStoragePlaceProvenance","eval_target_place_region"),
    ("vyperPlaceStoragePreservation","write_place_preserves_contract_storage")];

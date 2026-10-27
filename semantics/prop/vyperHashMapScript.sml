@@ -48,7 +48,7 @@ Definition is_leaf_hashmap_ref_def:
      | NONE => F) ∧
   is_leaf_hashmap_ref cx (HashMapRef _ _ _ (HashMapT _ _)) = F ∧
   is_leaf_hashmap_ref _ (Value _) = F ∧
-  is_leaf_hashmap_ref _ (ArrayRef _ _ _ _) = F
+  is_leaf_hashmap_ref _ (PlaceR _) = F
 End
 
 Definition hashmap_ref_value_tv_def:
@@ -319,13 +319,6 @@ Definition hashmap_index_chain_def:
     | SOME href' => hashmap_index_chain href' kvs
     | NONE => NONE
 End
-
-(* check_array_bounds is a no-op for HashMapRef *)
-Theorem check_array_bounds_hashmap:
-  check_array_bounds cx (HashMapRef is_t slot kt vt) kv st = (INL (), st)
-Proof
-  Cases_on `kv` >> rw[check_array_bounds_def, return_def]
-QED
 
 (* ValueSubscript / subscript_to_value / encode_hashmap_key connection *)
 Theorem encode_hashmap_key_ValueSubscript:

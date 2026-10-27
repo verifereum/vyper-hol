@@ -150,63 +150,34 @@ Proof
 QED
 
 Theorem extend_place_state:
-  extend_place cx tv pv sb st = (res,st') ==> st' = st
+  extend_place cx res sb st = (result,st') ==> st' = st
 Proof
-  Cases_on `pv`
+  Cases_on `res`
+  >- simp[extend_place_def, raise_def]
   >- (Cases_on `p` >>
-      simp[extend_place_def, bind_def, ignore_bind_def] >>
-      rpt (BasicProvers.FULL_CASE_TAC >> gvs[]) >>
+      simp[extend_place_def, bind_def, ignore_bind_def, return_def, raise_def] >>
+      rpt (BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def]) >>
       metis_tac[extend_storage_place_state, place_type_value_state,
                 read_place_state, lift_sum_state, return_state]) >>
-  Cases_on `t` >> Cases_on `sb` >>
-  simp[extend_place_def, bind_def, ignore_bind_def, get_Value_def,
+  Cases_on `sb` >>
+  simp[extend_place_def, bind_def, lift_option_type_def, return_def, raise_def] >>
+  rpt (BasicProvers.FULL_CASE_TAC >> gvs[bind_def, return_def, raise_def])
+QED
+
+Theorem select_result_state:
+  select_result cx ty res sb st = (result,st') ==> st' = st
+Proof
+  Cases_on `res` >>
+  simp[select_result_def, bind_def, lift_option_type_def,
        lift_sum_def, return_def, raise_def] >>
   rpt (BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def]) >>
-  metis_tac[extend_storage_place_state]
-QED
-
-Theorem write_place_scopes_dom:
-  write_place cx p v st = (res,st') ==>
-  MAP FDOM st.scopes = MAP FDOM st'.scopes
-Proof
-  Cases_on `p`
-  >- metis_tac[write_storage_place_scopes]
-  >- (rename1 `MemoryPlace id path` >> strip_tac >>
-      Cases_on `find_containing_scope id st.scopes` >>
-      gvs[write_place_def, bind_def, get_scopes_def, lift_option_type_def,
-          return_def, raise_def] >> PairCases_on `x` >>
-      gvs[bind_def, ignore_bind_def, lift_sum_def, type_check_def, assert_def,
-          set_scopes_def, return_def, raise_def, AllCaseEqs()] >>
-      drule vyperLookupTheory.find_containing_scope_structure >> strip_tac >>
-      gvs[MAP_APPEND, FLOOKUP_DEF, FDOM_FUPDATE] >>
-      rpt (BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def]) >>
-      metis_tac[pred_setTheory.ABSORPTION]) >>
-  metis_tac[write_immutable_place_scopes]
-QED
-
-Theorem lookup_global_place_state:
-  lookup_global_place cx src id st = (res,st') ==> st' = st
-Proof
-  simp[lookup_global_place_def, bind_def, lift_option_type_def,
-       get_immutables_def, get_address_immutables_def, return_def, raise_def] >>
-  rpt (BasicProvers.FULL_CASE_TAC >>
-       gvs[bind_def, get_immutables_def, get_address_immutables_def,
-           lift_option_type_def, return_def, raise_def])
+  metis_tac[extend_place_state]
 QED
 
 Theorem get_place_state:
   get_place pv st = (res,st') ==> st' = st
 Proof
   Cases_on `pv` >> simp[get_place_def, return_def, raise_def]
-QED
-
-Theorem extend_target_place_state:
-  extend_target_place cx pv sb st = (res,st') ==> st' = st
-Proof
-  Cases_on `pv`
-  >- (simp[extend_target_place_def] >> metis_tac[extend_place_state]) >>
-  Cases_on `t` >> simp[extend_target_place_def, raise_def] >>
-  metis_tac[extend_place_state]
 QED
 
 (* Fail the build if a frame boundary acquires an admitted dependency. *)

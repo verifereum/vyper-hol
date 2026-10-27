@@ -1539,7 +1539,7 @@ Proof
   simp[]
 QED
 
-Theorem uint256_header_write_read_exact[local]:
+Theorem uint256_header_write_read_exact:
   len < dimword(:256) /\
   write_storage_slot cx b (n2w off) (BaseTV (UintT 256)) (IntV (&len)) st =
     (INL (), st') ==>
@@ -2900,8 +2900,7 @@ QED
    every other leaf and every ordinary declaration is framed by the explicit
    semantic-region separation conjunct of storage_layout_safe.  This stronger
    region-shaped statement also covers nested hashmap key paths and residual
-   structural updates, because assign_target writes the reconstructed whole
-   final leaf value. *)
+   structural updates when the reconstructed whole leaf value is written. *)
 Theorem declared_hashmap_leaf_write_preserves_contract_storage_well_formed:
   contract_storage_well_formed cx st /\
   storage_layout_safe cx /\

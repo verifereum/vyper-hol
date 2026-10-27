@@ -106,6 +106,18 @@ Proof
   metis_tac[compile_ensure_in_memory_extends]
 QED
 
+(* Captured results with the same read have the same compiled-value relation. *)
+Theorem vv_post_read_result:
+  !func cenv cx e es sa sb s0 es' tv v vv s.
+    read_result cx tv es' = (INL v, es') ==>
+    (vv_post func cenv cx e es sa sb s0 es' tv vv s <=>
+     vv_post func cenv cx e es sa sb s0 es' (Value v) vv s)
+Proof
+  rpt strip_tac >> Cases_on `vv` >>
+  simp[vv_post_def, vv_holds_def, vv_at_def, storage_holds_def,
+       immutable_holds_def, read_result_def, return_def]
+QED
+
 (* ===== unwrap_value's code ===== *)
 
 (* unwrap_value's code, run where compile_expr's code ends, takes vv_post to
@@ -117,7 +129,8 @@ Theorem expr_post_of_vv_post_stack:
     vv_post func cenv cx e es sa sb s0 es' (Value v) (StackValue t op) s ==>
     expr_post func cenv cx e es sa sb s0 es' v op s
 Proof
-  rw[vv_post_def, expr_post_def, vv_holds_def, vv_at_def]
+  rw[vv_post_def, expr_post_def, vv_holds_def, vv_at_def,
+     read_result_def, return_def]
 QED
 
 (* An aggregate in memory: the pointer is the operand, no code. *)
@@ -128,7 +141,7 @@ Theorem expr_post_of_vv_post_memory:
     expr_post func cenv cx e es sa sb s0 es' v p.ptr_operand s
 Proof
   rw[vv_post_def, expr_post_def, vv_holds_def, vv_at_def] >>
-  gvs[materialise_def, return_def, expr_val_rel_def, expr_val_at_def] >>
+  gvs[read_result_def, return_def, expr_val_rel_def, expr_val_at_def] >>
   metis_tac[]
 QED
 
@@ -174,7 +187,7 @@ Proof
    ?w. eval_operand p.ptr_operand s1 = SOME w /\
        !tvt. evaluate_type (get_tenv cx) (expr_type e) = SOME tvt ==>
              mem_word_at (w2n w) s1.vs_memory = typed_val_to_w256 tvt v` by
-    (gvs[vv_post_def, vv_holds_def, materialise_def, return_def] >>
+    (gvs[vv_post_def, vv_holds_def, read_result_def, return_def] >>
      metis_tac[]) >>
   qpat_x_assum `t = _` SUBST_ALL_TAC >>
   drule loweringSliceTheory.emit_op_frag >>
@@ -223,7 +236,7 @@ Theorem immutable_holds_dload:
           typed_val_to_w256 tvt v
 Proof
   rw[immutable_holds_def, exprLoweringPropsTheory.stmt_state_rel_def,
-     state_rel_def, immutables_rel_def] >>
+     state_rel_def, immutables_rel_def, read_result_def, return_def] >>
   gvs[] >> first_x_assum drule_all >> strip_tac >>
   simp[rich_listTheory.TAKE_APPEND1]
 QED
@@ -399,6 +412,86 @@ Proof
   irule unwrap_memory_sim >> simp[]
 QED
 
+Theorem vv_post_failed_read[local]:
+  !func cenv cx e es sa sm s0 es' raw vv s exc.
+    read_result cx raw es' = (INR exc, es') ==>
+    ~vv_post func cenv cx e es sa sm s0 es' raw vv s
+Proof
+  rpt strip_tac >> Cases_on `vv` >>
+  gvs[vv_post_def, vv_holds_def, storage_holds_def, immutable_holds_def] >>
+  rename1 `eval_operand place_ptr.ptr_operand s = SOME word` >>
+  Cases_on `place_ptr.ptr_location` >> gvs[]
+QED
+
+Theorem unwrap_memory_read_result_sim:
+  !ctx func cenv cx e es sa sm sb s0 es' raw res t p op.
+    read_result cx raw es' = (res, es') /\
+    unwrap_value cenv (LocatedValue t p) sm = (op, sb) /\
+    p.ptr_location = LocMemory /\ local_ptrs_reserved cenv sm /\
+    sa.cs_next_var <= sm.cs_next_var ==>
+    frag_exec ctx sm sb
+      (\s. vv_post func cenv cx e es sa sm s0 es' raw (LocatedValue t p) s)
+      (\s. ?v. res = INL v /\ expr_post func cenv cx e es sa sb s0 es' v op s)
+      (expr_exit res)
+Proof
+  rpt strip_tac >> Cases_on `res`
+  >- (rename1 `read_result cx raw es' = (INL v, es')` >>
+      drule vv_post_read_result >> strip_tac >>
+      irule frag_exec_conseq >>
+      qexistsl_tac
+        [`\s. vv_post func cenv cx e es sa sm s0 es' (Value v) (LocatedValue t p) s`,
+         `\s. expr_post func cenv cx e es sa sb s0 es' v op s`,
+         `\r. F`] >>
+      simp[] >> irule unwrap_memory_sim >> simp[]) >>
+  rename1 `read_result cx raw es' = (INR exc, es')` >>
+  irule frag_exec_conseq >> qexistsl_tac [`\s. F`, `\s. F`, `\r. F`] >>
+  simp[fragExecTheory.frag_exec_false_pre] >> metis_tac[vv_post_failed_read]
+QED
+
+val () =
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag unwrap_memory_read_result_sim)
+  in
+    if null axioms andalso null (Thm.hyp unwrap_memory_read_result_sim) andalso
+       List.all (fn oracle => oracle = "DISK_THM") oracles then
+      print "MEMORY_FORCE_AUDIT unwrap_memory_read_result_sim OK\n"
+    else raise Fail "unwrap_memory_read_result_sim: admitted proof dependency"
+  end;
+
+Theorem expr_exit_exception_transport:
+  !exc result.
+    expr_res_ok (INR exc : value + exception) ==>
+    (expr_exit (INR exc : eval_result + exception) result <=>
+     expr_exit (INR exc : value + exception) result)
+Proof
+  rpt strip_tac >> gvs[expr_res_ok_def] >>
+  Cases_on `result` >> simp[expr_exit_def]
+QED
+
+Theorem unwrap_read_result_sim[local]:
+  !ctx func cenv cx e es sa sm sb s0 es' raw res vv op.
+    read_result cx raw es' = (res, es') /\
+    unwrap_value cenv vv sm = (op, sb) /\
+    local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
+    sa.cs_next_id <= sm.cs_next_id ==>
+    frag_exec ctx sm sb
+      (\s. vv_post func cenv cx e es sa sm s0 es' raw vv s)
+      (\s. ?v. res = INL v /\ expr_post func cenv cx e es sa sb s0 es' v op s)
+      (expr_exit res)
+Proof
+  rpt strip_tac >> Cases_on `res`
+  >- (rename1 `read_result cx raw es' = (INL v, es')` >>
+      drule vv_post_read_result >> strip_tac >>
+      irule frag_exec_conseq >>
+      qexistsl_tac
+        [`\s. vv_post func cenv cx e es sa sm s0 es' (Value v) vv s`,
+         `\s. expr_post func cenv cx e es sa sb s0 es' v op s`,
+         `\r. F`] >>
+      simp[] >> irule unwrap_value_sim >> simp[]) >>
+  rename1 `read_result cx raw es' = (INR exc, es')` >>
+  irule frag_exec_conseq >> qexistsl_tac [`\s. F`, `\s. F`, `\r. F`] >>
+  simp[fragExecTheory.frag_exec_false_pre] >> metis_tac[vv_post_failed_read]
+QED
+
 (* unwrap_value's step: expr_vv_sim gives expr_sim.  compile_expr's
    fragment ends in vv_post, and unwrap_value's code takes that to
    expr_post. *)
@@ -416,31 +509,40 @@ Proof
   `fn_has_code sa sm func` by metis_tac[fn_has_code_split] >>
   `local_ptrs_reserved cenv sm` by
     metis_tac[exprLoweringPropsTheory.local_ptrs_reserved_next_var] >>
-  `expr_vv_res_ok res` by simp[expr_vv_res_ok_def] >>
+  Cases_on `eval_expr cx e es` >> rename1 `_ = (raw, est)` >>
+  qpat_x_assum `(do result <- _; _ od) _ = _` mp_tac >>
+  simp[bind_def] >>
+  Cases_on `raw`
+  >- (rename1 `eval_expr cx e es = (INL r, est)` >> simp[] >> strip_tac >>
+      drule read_result_state >> strip_tac >> gvs[] >>
+      `expr_vv_res_ok (INL r)` by
+        (Cases_on `r` >> gvs[expr_vv_res_ok_def, read_result_def,
+                             raise_def, expr_res_ok_def]) >>
+      qpat_x_assum `expr_vv_sim _ _ _ _ _ _ _`
+        (mp_tac o SIMP_RULE std_ss [expr_vv_sim_def]) >>
+      disch_then (qspecl_then [`sa`, `sm`, `vv`, `INL r`, `es'`, `s0`] mp_tac) >>
+      simp[] >> strip_tac >>
+      irule frag_exec_seq >>
+      qexistsl_tac [`\s. vv_post func cenv cx e es sa sm s0 es' r vv s`, `sm`] >>
+      simp[] >> conj_tac
+      >- (irule frag_exec_conseq >> first_x_assum (irule_at Any) >>
+          simp[FUN_EQ_THM]) >>
+      irule unwrap_read_result_sim >> simp[]) >>
+  rename1 `eval_expr cx e es = (INR exc, est)` >>
+  strip_tac >> gvs[] >>
+  `expr_vv_res_ok (INR exc)` by gvs[expr_vv_res_ok_def, expr_res_ok_def] >>
   qpat_x_assum `expr_vv_sim _ _ _ _ _ _ _`
     (mp_tac o SIMP_RULE std_ss [expr_vv_sim_def]) >>
-  disch_then (qspecl_then [`sa`, `sm`, `vv`, `res`, `es'`, `s0`] mp_tac) >>
+  disch_then (qspecl_then [`sa`, `sm`, `vv`, `INR exc`, `es'`, `s0`] mp_tac) >>
   simp[] >> strip_tac >>
-  irule frag_exec_seq >> first_x_assum (irule_at Any) >> simp[] >>
-  Cases_on `?v. res = INL (Value v)`
-  >- (gvs[] >>
-      qspecl_then [`ctx`, `func`, `cenv`, `cx`, `e`, `es`, `sa`, `sm`, `sb`,
-                   `s0`, `es'`, `v`, `vv`, `op`, `expr_exit (INL (Value v))`]
-        mp_tac unwrap_value_sim >>
-      impl_tac >- asm_rewrite_tac[] >>
-      strip_tac >> irule frag_exec_conseq >> first_x_assum (irule_at Any) >>
-      simp[] >> rpt strip_tac >> gvs[]) >>
-  irule frag_exec_conseq >>
-  qexistsl_tac [`\s. F`, `\s. F`, `expr_exit res`] >>
-  simp[fragExecTheory.frag_exec_false_pre] >>
-  gvs[expr_res_ok_def]
+  irule frag_exec_seq >> qexistsl_tac [`\s. F`, `sm`] >> simp[] >>
+  conj_tac
+  >- (irule frag_exec_conseq >> first_x_assum (irule_at Any) >>
+      simp[expr_exit_exception_transport]) >>
+  simp[fragExecTheory.frag_exec_false_pre]
 QED
 
-(* expr_sim_of_vv_sim for an expression that compile_expr always lowers to
-   a pointer into memory to a non-word value, with only values as results:
-   unwrap_value hands the pointer out as it is (expr_post_of_vv_post_memory).
-   Unlike expr_sim_of_vv_sim, this doesn't go through the storage and
-   immutable cases of unwrap_value_sim. *)
+(* Memory-buffer forcing uses only the oracle-clean memory boundary. *)
 Theorem expr_sim_of_vv_sim_buffer:
   !ctx func cenv cx ty e es.
     expr_vv_sim ctx func cenv cx ty e es /\
@@ -450,17 +552,53 @@ Theorem expr_sim_of_vv_sim_buffer:
     expr_sim ctx func cenv cx ty e es
 Proof
   rw[expr_sim_def] >>
+  qpat_x_assum `lower_value _ _ _ _ _ = _` mp_tac >>
+  simp[lower_value_def, comp_bind_def] >>
+  Cases_on `compile_expr cenv ty e sa` >> rename1 `_ = (vv, sm)` >>
+  simp[] >> strip_tac >>
+  qpat_x_assum `!tv es'. eval_expr _ _ _ = _ ==> _` kall_tac >>
   qpat_x_assum `!sa. ?t p sb. _` (qspec_then `sa` strip_assume_tac) >>
-  gvs[lower_value_def, comp_bind_def, unwrap_value_def,
-      comp_return_def] >>
-  `expr_vv_res_ok res` by simp[expr_vv_res_ok_def] >>
-  qpat_x_assum `expr_vv_sim _ _ _ _ _ _ _` mp_tac >>
-  simp[expr_vv_sim_def] >>
-  disch_then drule >>
-  disch_then (qspec_then `s0` mp_tac) >> simp[] >> strip_tac >>
-  irule fragExecTheory.frag_exec_conseq >> first_assum (irule_at Any) >>
-  simp[] >> rpt strip_tac >>
-  `?v. tv = Value v` by metis_tac[] >> gvs[] >>
-  irule expr_post_of_vv_post_memory >>
-  simp[] >> qexists_tac `t` >> simp[]
+  gvs[] >> rename1 `compile_expr cenv ty e sa = (LocatedValue t p, sm)` >>
+  drule compile_expr_extends >> strip_tac >>
+  drule unwrap_value_extends >> strip_tac >>
+  `fn_has_code sa sm func` by metis_tac[fn_has_code_split] >>
+  `local_ptrs_reserved cenv sm` by
+    metis_tac[exprLoweringPropsTheory.local_ptrs_reserved_next_var] >>
+  Cases_on `eval_expr cx e es` >> rename1 `_ = (raw, est)` >>
+  qpat_x_assum `(do result <- _; _ od) _ = _` mp_tac >>
+  simp[bind_def] >> Cases_on `raw`
+  >- (rename1 `eval_expr cx e es = (INL r, est)` >> simp[] >> strip_tac >>
+      drule read_result_state >> strip_tac >> gvs[] >>
+      `expr_vv_res_ok (INL r)` by
+        (Cases_on `r` >> gvs[expr_vv_res_ok_def, read_result_def,
+                             raise_def, expr_res_ok_def]) >>
+      qpat_x_assum `expr_vv_sim _ _ _ _ _ _ _`
+        (mp_tac o SIMP_RULE std_ss [expr_vv_sim_def]) >>
+      disch_then (qspecl_then [`sa`, `sm`, `LocatedValue t p`, `INL r`, `es'`, `s0`] mp_tac) >>
+      simp[] >> strip_tac >>
+      irule frag_exec_seq >>
+      qexistsl_tac [`\s. vv_post func cenv cx e es sa sm s0 es' r (LocatedValue t p) s`, `sm`] >>
+      simp[] >> conj_tac
+      >- (irule frag_exec_conseq >> first_x_assum (irule_at Any) >>
+          simp[FUN_EQ_THM]) >>
+      irule unwrap_memory_read_result_sim >> simp[]) >>
+  rename1 `eval_expr cx e es = (INR exc, est)` >> strip_tac >> gvs[] >>
+  `expr_vv_res_ok (INR exc)` by gvs[expr_vv_res_ok_def, expr_res_ok_def] >>
+  qpat_x_assum `expr_vv_sim _ _ _ _ _ _ _`
+    (mp_tac o SIMP_RULE std_ss [expr_vv_sim_def]) >>
+  disch_then (qspecl_then [`sa`, `sm`, `LocatedValue t p`, `INR exc`, `es'`, `s0`] mp_tac) >>
+  simp[] >> strip_tac >>
+  irule frag_exec_seq >> qexistsl_tac [`\s. F`, `sm`] >> simp[] >> conj_tac
+  >- (irule frag_exec_conseq >> first_x_assum (irule_at Any) >>
+      simp[expr_exit_exception_transport]) >>
+  simp[fragExecTheory.frag_exec_false_pre]
 QED
+
+val () =
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag expr_sim_of_vv_sim_buffer)
+  in
+    if null axioms andalso null (Thm.hyp expr_sim_of_vv_sim_buffer) andalso
+       List.all (fn oracle => oracle = "DISK_THM") oracles then
+      print "MEMORY_FORCE_AUDIT expr_sim_of_vv_sim_buffer OK\n"
+    else raise Fail "expr_sim_of_vv_sim_buffer: admitted proof dependency"
+  end;
