@@ -612,3 +612,11 @@ Proof
   disch_then (qspec_then `orc` assume_tac) >>
   qexistsl [`imms`,`am_c`,`scope`] >> simp[]
 QED
+
+(* Audit the complete dependency chain of the frozen result. *)
+val _ = let
+  val (oracles,axioms) = Tag.dest_tag (Thm.tag checked_load_contract_no_static_error)
+in
+  if List.all (fn s => s = "DISK_THM") oracles andalso null axioms
+  then () else raise Fail "unchecked oracle or axiom in checked deployment theorem"
+end;

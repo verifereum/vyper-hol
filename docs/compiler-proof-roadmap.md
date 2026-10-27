@@ -318,8 +318,9 @@ the codegen stage. 2.2 closes the whole path from source to bytecode.
 - **Proof sketches.** Each scoped cheat has an informal proof sketch in a
   comment above the lemma. The sketch says which invariants the proof needs
   and where they come from.
-- **Review proof dependencies.** Reviewers verify that the top theorem
-  depends only on the documented scoped obligations.
+- **Checked by the dependency tool.** At the end of the step,
+  `tools/cheat_audit.py deps` on the top theorem lists exactly the scoped
+  cheats and nothing else.
 
 ### 2.1 Codegen and frame infrastructure
 

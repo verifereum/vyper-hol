@@ -114,3 +114,8 @@ Proof
   simp[same_vars_set] >> strip_tac >>
   asm_rewrite_tac[] >> irule liveness_out_edge_subset >> simp[]
 QED
+
+val _ = List.app (fn (_,th) =>
+  if List.all (fn s => s = "DISK_THM") (#1 (Tag.dest_tag (Thm.tag th)))
+  then () else raise Fail "oracle in liveness convergence API")
+  (DB.thms "livenessConvergenceProofs");

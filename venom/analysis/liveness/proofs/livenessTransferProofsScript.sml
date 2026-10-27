@@ -507,3 +507,7 @@ Proof
 QED
 
 (* Each exported set interface is kernel proved. *)
+val _ = List.app (fn (_,th) =>
+  if List.all (fn s => s = "DISK_THM") (#1 (Tag.dest_tag (Thm.tag th)))
+  then () else raise Fail "oracle in liveness transfer API")
+  (DB.thms "livenessTransferProofs");
