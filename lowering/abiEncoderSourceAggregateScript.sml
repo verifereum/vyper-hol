@@ -2,7 +2,7 @@
 Theory abiEncoderSourceAggregate
 Ancestors
   abiEncoderSourceTransport abiEncoderSourceWindow abiCallerStaticMemory
-  abiEncoderOpenInput abiEncoderInput abiDecodeRanges contractABI list rich_list arithmetic
+  abiEncoderOpenInput abiEncoderInput abiDecodeRanges contractABI list rich_list arithmetic vyperABI
 
 Theorem abi_encoder_enc_tuple_cong:
   !ats cts avs rvs hl tl hds tls.
@@ -271,6 +271,60 @@ Proof
   metis_tac[]
 QED
 
+Theorem source_translation_list:
+  !ts. vyper_to_abi_types env ts = MAP (vyper_to_abi_type env) ts
+Proof
+  Induct >> simp[vyper_to_abi_type_def]
+QED
+
+Theorem source_reps_abi_metadata:
+  source_reps env ts infos cts ==>
+  LENGTH (vyper_to_abi_types env ts) = LENGTH cts /\
+  (!i. i < LENGTH ts ==>
+    is_dynamic (EL i cts) = is_dynamic (EL i (vyper_to_abi_types env ts)) /\
+    abi_member_head_size (EL i cts) =
+      abi_member_head_size (EL i (vyper_to_abi_types env ts)))
+Proof
+  strip_tac >> drule source_reps_lengths >> strip_tac >>
+  simp[source_translation_list] >> rpt strip_tac >>
+  Cases_on `EL i infos` >> PairCases_on `r` >>
+  drule_all source_reps_index >> strip_tac >>
+  drule_all source_rep_metadata >> simp[EL_MAP]
+QED
+
+Theorem source_reps_any_dynamic:
+  source_reps env ts infos cts ==>
+  any_dynamic cts = any_dynamic (vyper_to_abi_types env ts)
+Proof
+  strip_tac >> drule source_reps_abi_metadata >> strip_tac >>
+  drule source_reps_lengths >> strip_tac >>
+  simp[any_dynamic_EXISTS, EXISTS_MEM, MEM_EL] >> metis_tac[]
+QED
+
+Theorem static_tuple_sum[local]:
+  !cts. static_length (Tuple cts) = SUM (MAP static_length cts)
+Proof
+  Induct >> simp[static_length_def]
+QED
+
+Theorem source_reps_tuple_head:
+  source_reps env ts infos cts ==>
+  abi_member_head_size (Tuple cts) =
+    abi_member_head_size (Tuple (vyper_to_abi_types env ts))
+Proof
+  strip_tac >> drule source_reps_any_dynamic >> strip_tac >>
+  drule source_reps_abi_metadata >> strip_tac >>
+  Cases_on `any_dynamic (vyper_to_abi_types env ts)` >>
+  simp[abi_member_head_size_def, is_dynamic_def, static_length_def] >>
+  simp[static_tuple_sum] >> AP_TERM_TAC >> irule LIST_EQ >>
+  drule source_reps_lengths >> strip_tac >> simp[] >> qx_gen_tac `i` >> strip_tac >>
+  qpat_assum `!i. i < LENGTH ts ==> _` (qspec_then `i` assume_tac) >>
+  fs[any_dynamic_EXISTS, EXISTS_MEM, MEM_EL] >>
+  `~is_dynamic (EL i cts) /\
+   ~is_dynamic (EL i (vyper_to_abi_types env ts))` by metis_tac[] >>
+  fs[EL_MAP, abi_member_head_size_def]
+QED
+
 (* Retained tags do not reconstruct axiom provenance erased by .dat loading. *)
 val _ = List.app (fn (name,th) =>
   let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
@@ -278,7 +332,10 @@ val _ = List.app (fn (name,th) =>
       print ("ENCODER_SOURCE_AGGREGATE_AUDIT_OK " ^ name ^ "\n")
     else raise Fail ("source aggregate admission dependency: " ^ name)
   end)
-  [("tuple_acc", abi_encoder_enc_tuple_cong),
+  [("abi_metadata", source_reps_abi_metadata),
+   ("any_dynamic", source_reps_any_dynamic),
+   ("tuple_head", source_reps_tuple_head),
+   ("tuple_acc", abi_encoder_enc_tuple_cong),
    ("heads", abi_encoder_head_lengths_cong),
    ("tuple_bytes", abi_encoder_tuple_encoding_cong),
    ("rep_metadata", source_rep_metadata),
