@@ -2,6 +2,9 @@
 Theory abiScratchMemberInterpret
 Ancestors
   abiScratchMemberContract abiScratchMemberAdapter abiEncoderMemberPhaseExec
+  abiScratchChild abiEncoderChildCode
+  abiScratchFootprint abiScratchFrameCompose abiEncoderChildEffect
+  abiEncoderChildPrefix abiEncoderMemberPhaseEffect abiEncoderExtendSim abiEncoderInput
   abiEncoderMemberSpine abiEncoderChildContext abiEncoderAddressReach
   abiScratchAddress abiScratchAfterAddress abiScratchEffect abiScratchEncoderContract
   abiEncoderMemberPhaseRaw abiDecoderDynamicLoopSetup abiDecoderReentry
@@ -147,9 +150,90 @@ Proof
       head_bound_th, slot_bound_th, final_bound_th])))))
 QED
 
+Theorem abi_scratch_member_dynamic_output:
+  compile_abi_encode_child dst src ei T ho dp st = (out,en) /\
+  abi_encode_child_prefix dst ho dp st = (ops,prepared) /\ fn_has_code st en func /\
+  (st.cs_blocks = en.cs_blocks \/
+    !bb. lookup_block en.cs_current_bb func.fn_blocks = SOME bb ==>
+      phi_prefix_length bb.bb_instructions = 0) /\
+  abi_scratch_input ei at av st src dst sb source_cap d output_size first last b cap initial /\
+  eval_operand dp initial = SOME (n2w slot) /\ mload slot initial = n2w off /\
+  abi_decoder_operand_live st.cs_next_var dp /\
+  ho+32 <= off /\ off+LENGTH (enc at av) <= output_size /\
+  abi_decoder_budget first last b cap initial /\ first <= lo /\ lo <= site /\ site < st.cs_next_id /\
+  FLOOKUP initial.vs_allocas site = SOME (slot,32) /\ en.cs_next_id <= last /\
+  en.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
+  ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
+  initial.vs_inst_idx = LENGTH st.cs_current_insts /\
+  abi_encoder_spine_child_output
+    (abi_scratch_member_dynamic_post (ctx,func) (at,av,sb,source_cap,d+off) (first,last,b,cap,limit_st)
+      (FST ops,FST (SND ops),dp,d+ho,off,slot,site))
+    (ei,T,dst,src,ho,dp,st,en,out) initial t ==>
+  mem_bytes_at (d+off) (LENGTH (enc at av)) t.vs_memory = enc at av /\
+  mem_word_at (d+ho) t.vs_memory = n2w off /\
+  mem_word_at slot t.vs_memory = n2w (off+LENGTH (enc at av)) /\
+  FLOOKUP t.vs_allocas site = SOME (slot,32) /\
+  eval_operand out t = SOME (n2w (LENGTH (enc at av))) /\
+  abi_scratch_effect first last lo en.cs_next_id st.cs_next_var
+    limit_st d output_size b cap initial t /\
+  t.vs_current_bb = en.cs_current_bb /\ t.vs_inst_idx = LENGTH en.cs_current_insts /\
+  ~t.vs_halted /\ abi_decode_sim ctx func initial t
+Proof
+  simp_tac bool_ss [abi_encoder_spine_child_output_def] >>
+  disch_then (MAP_EVERY strip_assume_tac o CONJUNCTS) >>
+  drule_all abi_encoder_dynamic_child_context >> strip_tac >> gvs[] >> (
+  imp_res_tac abi_scratch_member_dynamic_saved >>
+  fs[abi_scratch_member_dynamic_post_def, abi_scratch_member_core_post_def,
+    abi_encoder_spine_core_code_def] >> gvs[] >>
+  rename1 `abi_encoder_member_phase_raw st prepared initial r` >>
+  rename1 `compile_abi_encode_to_buf _ src ei prepared = (child_len,child_end)` >>
+  `prepared.cs_next_var <= limit_st.cs_next_var /\ child_end.cs_next_var <= limit_st.cs_next_var /\
+    first <= prepared.cs_next_id /\ child_end.cs_next_id <= last /\ site < last /\
+    site < prepared.cs_next_id /\ st.cs_next_var <= prepared.cs_next_var /\
+    st.cs_next_var <= child_end.cs_next_var` by decide_tac >>
+  `site IN abi_decoder_ids first last` by (simp[abi_decoder_ids_def] >> decide_tac) >>
+  drule_all abi_decoder_budget_site_bounds >> strip_tac >>
+  `b+cap < dimword (:256)` by
+    (qpat_assum `abi_decoder_budget _ _ _ _ initial`
+      (mp_tac o CONJUNCT1 o PURE_REWRITE_RULE [abi_decoder_budget_def]) >> simp[]) >>
+  `slot < dimword (:256)` by decide_tac >>
+  `d+output_size < dimword (:256)` by fs[abi_scratch_input_def] >>
+  `abi_decoder_operand_live child_end.cs_next_var dp` by
+    (irule abi_decoder_operand_live_mono >> qexists_tac `st.cs_next_var` >> simp[]) >>
+  drule_all abi_scratch_dynamic_prepare_raw_transport >> strip_tac >>
+  `abi_scratch_evolution (abi_decoder_ids first last) b cap r u` by fs[abi_scratch_effect_def] >>
+  `abi_scratch_evolution (abi_decoder_ids first last) b cap initial u` by
+    (drule_all abi_scratch_evolution_trans >> simp[]) >>
+  `abi_footprint_disjoint d output_size
+    (abi_decoder_child_scratch (abi_decoder_ids first last) b cap u)` by
+    (mp_tac (Q.INST [`s` |-> `initial:venom_state`, `t` |-> `u:venom_state`,
+      `ids` |-> `abi_decoder_ids first last`, `p` |-> `d:num`, `n` |-> `output_size:num`]
+      abi_scratch_disjoint_advance) >> impl_tac >- fs[abi_scratch_input_def] >> simp[]) >>
+  `d <= d+ho /\ d+ho+32 <= d+off` by decide_tac >>
+  drule_all abi_scratch_dynamic_finish_raw_transport >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  `lo <= prepared.cs_next_id /\ child_end.cs_next_id <= en.cs_next_id /\
+    site IN abi_decoder_ids lo en.cs_next_id /\ d <= d+off /\
+    (d+off)+LENGTH (enc at av) <= d+output_size /\ d+ho+32 <= d+output_size` by
+    (simp[abi_decoder_ids_def] >> decide_tac) >>
+  `abi_scratch_effect first last prepared.cs_next_id child_end.cs_next_id prepared.cs_next_var
+    limit_st (d+off) (LENGTH (enc at av)) b cap r u` by fs[] >>
+  drule_all abi_scratch_child_effect >> strip_tac >>
+  drule abi_encode_child_prefix_shape >> strip_tac >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+    (emitted_insts st prepared)` by fs[EVERY_CONJ] >>
+  drule_all abi_encoder_member_phase_extend_sim >>
+  disch_then (qspec_then `ctx` mp_tac) >>
+  disch_then (assume_tac o MATCH_MP abi_encoder_extend_sim_sim) >>
+  `abi_decode_sim ctx func initial t` by
+    (irule abi_decode_sim_trans >> qexists_tac `r` >> asm_simp_tac bool_ss [] >>
+     irule abi_decode_sim_trans >> qexists_tac `u` >> asm_simp_tac bool_ss []) >>
+  fs[])
+QED
+
 val _ = List.app (fn th =>
   let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
     if List.all (fn s => s = "DISK_THM") oracles andalso null axioms andalso null (Thm.hyp th)
     then () else raise Fail "scratch child interpretation has an admission, axiom or hypothesis"
   end) [abi_scratch_member_static_input, abi_scratch_member_static_output,
-    abi_scratch_member_dynamic_input];
+    abi_scratch_member_dynamic_input, abi_scratch_member_dynamic_output];
