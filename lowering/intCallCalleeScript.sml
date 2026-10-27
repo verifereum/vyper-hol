@@ -56,8 +56,8 @@ Ancestors
 
 (* compile_internal_function up to the code that is not the prologue's: the
    immutables reservation of a constructor callee, the nonreentrant lock and
-   the body.  It returns the compile env the body is compiled in (before
-   ce_alloca_locals is set) and the return-PC operand. *)
+   the body.  It returns the compile env the body is compiled in and the
+   return-PC operand. *)
 Definition compile_internal_prologue_def:
   compile_internal_prologue cenv params has_return_buf ret_type =
     do return_buf_var <-
@@ -1606,6 +1606,7 @@ Proof
   >- (fs[storage_vars_rel_def] >> metis_tac[])
   >- fs[transient_rel_def, contract_transient_def]
   >- (fs[transient_vars_rel_def] >> metis_tac[])
+  >- fs[accounts_rel_def]
   >- (fs[immutables_rel_def] >> metis_tac[])
   >- fs[logs_rel_def, log_entry_equiv_def, LIST_REL_EL_EQN] >>
   simp[]
@@ -2112,11 +2113,9 @@ QED
    leaves the compile env the body is compiled in with each parameter held
    through a pointer variable of its own that the body's code does not
    assign, when cenv holds the parameters, all at MemLoc slots, and no
-   other local.  build_compile_env gives internal functions such a cenv
-   only when they have no locals besides their parameters: it still
-   allocates MemLoc slots for the others (allocate_locals), which the body
-   never uses, since ce_alloca_locals has declarations allocate their own
-   ALLOCA. *)
+   other local.  build_compile_env gives every internal function such a
+   cenv (package_internal_fn_prologue_code below): its locals get no slot,
+   since ce_alloca_locals has each declaration allocate its own ALLOCA. *)
 Theorem compile_internal_prologue_code:
   !cenv params has_rb ret_type st0 cenv2 return_pc st1.
     compile_internal_prologue cenv params has_rb ret_type st0 =
@@ -2147,4 +2146,40 @@ Proof
       Cases_on `t'` >> gvs[LAST_DEF, LAST_APPEND]) >>
   drule_all compile_internal_prologue_reserved >> strip_tac >>
   gvs[local_ptrs_reserved_def] >> metis_tac[]
+QED
+
+(* compile_internal_prologue_code at the compile env and parameters
+   package_internal_fn gives every internal function, runtime and
+   constructor callees alike. *)
+Theorem package_internal_fn_prologue_code:
+  !tops use_trans nkey_map is_ctor_context immutables_len mut nr rr fname
+   fargs dflts ret body fn_lbl cenv params has_rb is_nr nkey use_tr is_view
+   is_ctor imm_len body' ret_type st0 cenv2 return_pc st1.
+    package_internal_fn tops use_trans nkey_map is_ctor_context immutables_len
+      (mut, nr, rr, fname, fargs, dflts, ret, body) =
+      (fn_lbl, cenv, params, has_rb, is_nr, nkey, use_tr, is_view, is_ctor,
+       imm_len, body', ret_type) /\
+    ALL_DISTINCT (MAP FST fargs) /\
+    compile_internal_prologue cenv params has_rb ret_type st0 =
+      ((cenv2, return_pc), st1) ==>
+    st1.cs_blocks = st0.cs_blocks /\
+    st1.cs_current_bb = st0.cs_current_bb /\
+    isPREFIX st0.cs_current_insts st1.cs_current_insts /\
+    EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+      (emitted_insts st0 st1) /\
+    ~block_is_terminated st1 /\
+    local_ptrs_reserved (cenv2 with ce_alloca_locals := T) st1
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[compileVyperTheory.package_internal_fn_def,
+      compileVyperTheory.update_cenv_nonreentrant_def] >>
+  drule compile_internal_prologue_code >>
+  disch_then irule >>
+  qspecl_then [`tops`, `if is_ctor then Deploy else Internal`, `mut`, `fname`,
+               `fargs`, `ret`, `body'`, `use_tr`]
+    strip_assume_tac compileVyperTheory.build_compile_env_vars >>
+  simp[MAP_ZIP, LENGTH_ZIP_MIN, EL_ZIP, EL_MAP,
+       LENGTH_compute_pass_via_stack] >>
+  rpt strip_tac >> first_x_assum irule >>
+  simp[MEM_MAP] >> metis_tac[MEM_EL]
 QED

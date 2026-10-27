@@ -6,12 +6,13 @@ Ancestors
   (* property statements and proofs *)
   moduleLoweringProps entryDispatchProps entryDecodeProps
   abiDecodeStaticProps entryDecodeStaticProps entryDecodePlanProps
+  entryChecksProps
   loweringSlice
   varsExt exprSim
   exprBopLowering
   exprSimOps exprSimCompare exprSimArith intBits freshWrites
   exprSimMain stmtSim stmtSimIf stmtSimFor stmtSimReturn stmtSimDecl
-  stmtSimReason
+  stmtSimReason stmtSimReasonExpr stmtSimForRange
   valueEncodingProofs
   localPtrsProps
   loweringShapeProps
@@ -25,6 +26,7 @@ Ancestors
   evalCompilerMemoryStores
   evalCompilerExternalCalls
   evalCompilerNameCollisions
+  evalCompilerCtorLocals
   evalCompilerInternalLabels
   evalCompilerSliceBuffers
   evalCompilerPhiPointers

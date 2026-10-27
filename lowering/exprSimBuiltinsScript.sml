@@ -18,7 +18,9 @@
  *     compile_slice_sim, compile_extract32_sim, compile_uint2str_sim
  *   5 blobhash: compile_blobhash_sim (blockhash, compile_blockhash_sim, is
  *     #636 Leaves row 5, with block.prevhash)
- *   6 account reads: compile_acc_sim
+ *   6 account reads: compile_acc_sim; all but .code by exprSimAccounts'
+ *     compile_acc_read_sim, .code in compile_acc_code_sim (unprovable for
+ *     now, below)
  *   7 method_id: compile_method_id_sim; a literal signature with
  *     output_type=bytes4 by compile_method_id_literal_word_sim (the folded
  *     selector, a word literal), the rest in compile_method_id_other_sim
@@ -31,10 +33,9 @@
  *   - compile_blockhash_sim: the source raises a RuntimeError where
  *     BLOCKHASH returns 0 (#671), and call_ctx_rel does not relate the block
  *     hashes.
- *   - compile_blobhash_sim, and compile_acc_sim for balance, codesize,
- *     codehash and is_contract: call_ctx_rel does not relate the blob
- *     hashes, and nothing relates the accounts.
- *   - compile_acc_sim for .code: the lowering emits INVALID.
+ *   - compile_blobhash_sim: call_ctx_rel does not relate the blob hashes.
+ *   - compile_acc_code_sim, a bare .code: the lowering emits INVALID, as
+ *     Python's codegen refuses it; the supported subset leaves it out.
  *   - compile_keccak256_sim and compile_sha256_sim for a Bytes or String
  *     operand: compile_keccak256_bytes and compile_sha256_bytes read the
  *     bytes from ADD ptr 32, which wraps at 2 ** 256, while val_in_memory
@@ -65,7 +66,7 @@ Theory exprSimBuiltins
 Ancestors
   list exprSim exprSimHyps vyperAST exprSimWordBuiltins exprSimWordArgs
   exprLowering compileEnv valueEncoding fragExec vyperInterpreter
-  vyperState vyperContext vyperValueOperation venomState
+  vyperState vyperContext vyperValueOperation venomState exprSimAccounts
 
 (* ===== Lengths and calldata ===== *)
 
@@ -258,12 +259,29 @@ Proof
   cheat
 QED
 
+(* A bare .code: the lowering emits INVALID (compile_acc), where the source
+   reads the account's code, so this does not hold as the definitions
+   stand.  Python's codegen rejects it too (CompilerPanic ".code requires
+   slice() context", codegen_venom/expr.py): x.code is only lowered as
+   slice's first argument, with EXTCODECOPY.  The supported subset leaves
+   it out (supported_builtin_form), so expr_sim_pre needs that exclusion
+   for this case to go. *)
+Theorem compile_acc_code_sim:
+  !cenv ann args.
+    expr_sim_below cenv (list_size expr_size args) ==>
+    expr_vv_ok cenv (Builtin ann (Acc Code) args)
+Proof
+  cheat
+QED
+
 Theorem compile_acc_sim:
   !cenv ann item args.
     expr_sim_below cenv (list_size expr_size args) ==>
     expr_vv_ok cenv (Builtin ann (Acc item) args)
 Proof
-  cheat
+  rpt strip_tac >> Cases_on `item = Code`
+  >- (gvs[] >> irule compile_acc_code_sim >> simp[]) >>
+  irule compile_acc_read_sim >> simp[]
 QED
 
 Theorem eval_exprs_single_literal:
