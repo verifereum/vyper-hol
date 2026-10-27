@@ -24,7 +24,7 @@ Ancestors
   abiEncoderSourceMembersEntry abiEncoderSourceMembersInterpret
   abiEncoderMembersCorrect abiScratchMemberContract abiScratchMemberInterpret
   abiScratchMembersEndpoint abiScratchMembersEntry abiScratchMembersIndex
-  abiScratchMembersInterpret abiScratchMembersCorrect
+  abiScratchMembersInterpret abiScratchMembersCorrect abiEncoderSharedMemberContract
 
 fun audit_encoder_tag (name, th) =
   let
@@ -260,6 +260,12 @@ val _ = List.app audit_encoder_tag
    ("abi_scratch_members_entry_prepare", abi_scratch_members_entry_prepare),
    ("abi_scratch_members_empty_post", abi_scratch_members_empty_post),
    ("abi_scratch_members_generate", abi_scratch_members_generate),
+   ("abi_encoder_shared_member_core_run", abi_encoder_shared_member_core_run),
+   ("abi_encoder_shared_member_dynamic_run", abi_encoder_shared_member_dynamic_run),
+   ("abi_encoder_shared_member_dynamic_saved", abi_encoder_shared_member_dynamic_saved),
+   ("abi_encoder_shared_member_dynamic_cursor_input", abi_encoder_shared_member_dynamic_cursor_input),
+   ("abi_encoder_shared_members_child_dispatch", abi_encoder_shared_members_child_dispatch),
+   ("abi_encoder_shared_members_child_run", abi_encoder_shared_members_child_run),
    ("abi_scratch_members_correct_cons", abi_scratch_members_correct_cons),
    ("abi_scratch_members_correct_all", abi_scratch_members_correct_all),
    ("abi_encoder_members_inv_nonempty", abi_encoder_members_inv_nonempty),
