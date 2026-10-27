@@ -22,6 +22,8 @@ Ancestors
   abiEncoderMemberSourceContract abiEncoderMemberSourceInterpret abiScratchDynamicChild
   abiEncoderMembersEndpoint abiEncoderSourceMembersIndex
   abiEncoderSourceMembersEntry abiEncoderSourceMembersInterpret
+  abiEncoderMembersCorrect abiScratchMemberContract abiScratchMemberInterpret
+  abiScratchMembersEndpoint abiScratchMembersEntry abiScratchMembersIndex
 
 fun audit_encoder_tag (name, th) =
   let
@@ -225,6 +227,33 @@ val _ = List.app audit_encoder_tag
    ("abi_encoder_source_members_entry_prepare", abi_encoder_source_members_entry_prepare),
    ("abi_encoder_source_members_empty_post", abi_encoder_source_members_empty_post),
    ("abi_encoder_source_members_generate", abi_encoder_source_members_generate),
+   ("abi_scratch_member_core_run", abi_scratch_member_core_run),
+   ("abi_scratch_member_child_run", abi_scratch_member_child_run),
+   ("abi_scratch_member_core_saved", abi_scratch_member_core_saved),
+   ("abi_scratch_member_dynamic_run", abi_scratch_member_dynamic_run),
+   ("abi_scratch_member_dynamic_saved", abi_scratch_member_dynamic_saved),
+   ("abi_scratch_member_dynamic_child_run", abi_scratch_member_dynamic_child_run),
+   ("abi_scratch_member_dynamic_cursor_input", abi_scratch_member_dynamic_cursor_input),
+   ("abi_scratch_member_static_input", abi_scratch_member_static_input),
+   ("abi_scratch_member_static_output", abi_scratch_member_static_output),
+   ("abi_scratch_member_dynamic_input", abi_scratch_member_dynamic_input),
+   ("abi_scratch_member_dynamic_output_detailed", abi_scratch_member_dynamic_output_detailed),
+   ("abi_scratch_member_dynamic_output", abi_scratch_member_dynamic_output),
+   ("abi_scratch_members_static_endpoint", abi_scratch_members_static_endpoint),
+   ("abi_scratch_members_dynamic_endpoint", abi_scratch_members_dynamic_endpoint),
+   ("abi_scratch_members_index_prepare", abi_scratch_members_index_prepare),
+   ("abi_scratch_members_static_request", abi_scratch_members_static_request),
+   ("abi_scratch_members_dynamic_request", abi_scratch_members_dynamic_request),
+   ("abi_scratch_members_static_exit", abi_scratch_members_static_exit),
+   ("abi_scratch_members_dynamic_exit", abi_scratch_members_dynamic_exit),
+   ("abi_scratch_members_index_initial", abi_scratch_members_index_initial),
+   ("abi_scratch_members_index_source", abi_scratch_members_index_source),
+   ("abi_scratch_members_index_empty", abi_scratch_members_index_empty),
+   ("abi_scratch_members_origin_transport", abi_scratch_members_origin_transport),
+   ("abi_scratch_members_index_advance", abi_scratch_members_index_advance),
+   ("abi_encoder_members_inv_nonempty", abi_encoder_members_inv_nonempty),
+   ("abi_encoder_members_correct_cons", abi_encoder_members_correct_cons),
+   ("abi_encoder_members_correct_all", abi_encoder_members_correct_all),
    ("abi_encoder_static_child_context", abi_encoder_static_child_context),
    ("abi_encoder_static_child_reach", abi_encoder_static_child_reach),
    ("abi_encoder_dynamic_child_reach", abi_encoder_dynamic_child_reach),
