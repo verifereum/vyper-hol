@@ -23,3 +23,17 @@ Proof
   metis_tac[abi_enc_plan_static_leaf]
 QED
 
+
+Theorem enc_pre_source_end_bound:
+  enc_pre st st' ops lo top tv v src outs s ==>
+  src + type_memory_size tv < dimword (:256)
+Proof
+  simp[enc_pre_def, enc_scratch_def] >> rpt strip_tac >> decide_tac
+QED
+
+Theorem enc_pre_source_capacity_bound:
+  enc_pre st st' ops lo top tv v src outs s ==>
+  type_memory_size tv < dimword (:256)
+Proof
+  strip_tac >> drule enc_pre_source_end_bound >> decide_tac
+QED
