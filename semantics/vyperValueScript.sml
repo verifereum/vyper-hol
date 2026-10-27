@@ -49,8 +49,10 @@ val () = cv_auto_trans type_slot_size_def;
 Definition evaluate_type_def:
   evaluate_type tenv (BaseT bt) =
     (case bt of
-     | IntT m => if 1 < m ∧ m ≤ 256 then SOME (BaseTV bt) else NONE
-     | UintT m => if 0 < m ∧ m ≤ 256 then SOME (BaseTV bt) else NONE
+     | IntT m =>
+       if 1 < m ∧ m ≤ 256 ∧ m MOD 8 = 0 then SOME (BaseTV bt) else NONE
+     | UintT m =>
+       if 0 < m ∧ m ≤ 256 ∧ m MOD 8 = 0 then SOME (BaseTV bt) else NONE
      | BytesT (Fixed n) => if n ≤ 32 then SOME (BaseTV bt) else NONE
      | BytesT (Dynamic n) =>
        let tv = BaseTV bt in
