@@ -37,3 +37,83 @@ Proof
       irule abi_decoder_vars_extend_update >> simp[]) >>
   simp[eval_phis_def] >> metis_tac[]
 QED
+
+Definition abi_encoder_ignored_inputs_def:
+  abi_encoder_ignored_inputs opc <=>
+    MEM opc [NOP; CALLER; ADDRESS; CALLVALUE; GAS; ORIGIN; GASPRICE; CHAINID;
+      COINBASE; TIMESTAMP; NUMBER; PREVRANDAO; GASLIMIT; BASEFEE; BLOBBASEFEE;
+      SELFBALANCE; CALLDATASIZE; RETURNDATASIZE; MEMTOP; CODESIZE]
+End
+
+Theorem abi_encoder_eval_operands_inputs:
+  !ops ws. eval_operands ops s = SOME ws ==>
+  !x. MEM (Var x) ops ==> IS_SOME (lookup_var x s)
+Proof
+  Induct >> simp[eval_operands_def] >>
+  rpt gen_tac >> strip_tac >> gvs[AllCaseEqs()] >>
+  rpt strip_tac >> gvs[eval_operand_def] >> metis_tac[]
+QED
+
+Theorem abi_encoder_pure3_inputs:
+  exec_pure3 f inst s = OK u ==> abi_decoder_inputs_defined inst s
+Proof
+  rw[exec_pure3_def, abi_decoder_inputs_defined_def] >>
+  gvs[AllCaseEqs()] >> gvs[eval_operand_def]
+QED
+
+Theorem abi_encoder_extract_labels_inputs:
+  !ops labels. extract_labels ops = SOME labels ==>
+  !x. ~MEM (Var x) ops
+Proof
+  Induct >> simp[extract_labels_def] >>
+  Cases_on `h` >> simp[extract_labels_def, AllCaseEqs()] >>
+  metis_tac[]
+QED
+
+Theorem abi_encoder_log_inputs[local]:
+  2 <= LENGTH ops /\
+  eval_operand (HD (REVERSE ops)) s = SOME off /\
+  eval_operand (EL 1 (REVERSE ops)) s = SOME sz /\
+  eval_operands (DROP 2 (REVERSE ops)) s = SOME topics /\
+  MEM (Var x) ops ==> IS_SOME (lookup_var x s)
+Proof
+  strip_tac >>
+  `MEM (Var x) (REVERSE ops)` by simp[] >>
+  qpat_x_assum `MEM (Var x) ops` kall_tac >>
+  qpat_x_assum `2 <= LENGTH ops` mp_tac >>
+  `LENGTH (REVERSE ops) = LENGTH ops` by simp[] >>
+  pop_assum (SUBST1_TAC o SYM) >>
+  namedCases_on `REVERSE ops` ["", "first tail"] >> simp[] >>
+  namedCases_on `tail` ["", "second rest"] >> simp[] >>
+  gvs[] >> rpt strip_tac >> gvs[eval_operand_def] >>
+  metis_tac[abi_encoder_eval_operands_inputs]
+QED
+
+Theorem abi_encoder_step_inputs_defined:
+  ~abi_encoder_ignored_inputs inst.inst_opcode /\
+  step_inst_base inst s = OK u ==> abi_decoder_inputs_defined inst s
+Proof
+  strip_tac >>
+  Cases_on `abi_decoder_reentry_opcode inst.inst_opcode`
+  >- metis_tac[abi_decoder_step_inputs_defined] >>
+  Cases_on `inst.inst_opcode` >>
+  gvs[abi_encoder_ignored_inputs_def, abi_decoder_reentry_opcode_def] >>
+  qpat_x_assum `step_inst_base inst s = OK u` mp_tac >>
+  asm_simp_tac (srw_ss()) [step_inst_base_opcode_eqs] >>
+  rpt strip_tac >>
+  FIRST_PROVE [
+    drule abi_decoder_pure1_inputs >> simp[],
+    drule abi_decoder_pure2_inputs >> simp[],
+    drule abi_encoder_pure3_inputs >> simp[],
+    drule abi_decoder_read1_inputs >> simp[],
+    drule abi_decoder_write2_inputs >> simp[],
+    (gvs[abi_decoder_inputs_defined_def, AllCaseEqs()] >>
+     rpt strip_tac >> gvs[eval_operand_def] >>
+     FIRST_PROVE [
+       metis_tac[abi_encoder_extract_labels_inputs, abi_encoder_eval_operands_inputs],
+       (rename1 `eval_operand (HD (REVERSE log_ops)) s = SOME log_off` >>
+        rename1 `eval_operand (EL 1 (REVERSE log_ops)) s = SOME log_sz` >>
+        rename1 `eval_operands (DROP 2 (REVERSE log_ops)) s = SOME log_topics` >>
+        irule abi_encoder_log_inputs >>
+        qexistsl_tac [`log_off`, `log_ops`, `log_sz`, `log_topics`] >> simp[])])]
+QED
