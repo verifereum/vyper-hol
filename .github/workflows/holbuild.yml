@@ -44,10 +44,13 @@ jobs:
     # holbuild hashes the HOL toolchain's bytes into every action key, and two
     # HOL builds differ, so build-rollup finds the witness groups' actions only
     # if build and compiler share one toolchain. Without a project snapshot to
-    # carry it, this job builds it once for both.
+    # carry it, this job builds it once for build, compiler and test-deps. With
+    # the remote login, holbuild restores the published HOL toolchain instead of
+    # building a new one, so keys stay those of earlier runs.
     if: (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository)) && (github.event.action != 'edited' || github.event.changes.base)
     runs-on: ubuntu-24.04
     timeout-minutes: 60
+    environment: ${{ ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'merge_group' && github.event.merge_group.base_ref == 'refs/heads/main') || github.event_name == 'pull_request') && 'bazel-cache' || '' }}
     outputs:
       snapshot-key: ${{ steps.project.outputs.project-snapshot-key == '' && steps.cache-key.outputs.snapshot-key || '' }}
     steps:
@@ -64,6 +67,12 @@ jobs:
       - name: Compute holbuild toolchain snapshot key
         id: cache-key
         run: echo "snapshot-key=${{ steps.project.outputs.stage-prefix }}-toolchain-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}" >> "$GITHUB_OUTPUT"
+
+      - name: Configure remote cache
+        if: ${{ steps.project.outputs.project-snapshot-key == '' }}
+        uses: ./.github/actions/setup-remote-cache
+        with:
+          curl-config: ${{ !env.CACHE_KEY_SUFFIX && secrets.HOLBUILD_REMOTE_CACHE_CURL_CONFIG || '' }}
 
       - name: Build schema-2 HOL toolchain
         if: ${{ steps.project.outputs.project-snapshot-key == '' }}
@@ -352,8 +361,8 @@ jobs:
   test-deps:
     # Builds only what the test groups load besides their own theories, so they
     # start long before build finishes.
-    needs: tested
-    if: ${{ !cancelled() && needs.tested.outputs.merge-group-passed != 'true' && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository)) && (github.event.action != 'edited' || github.event.changes.base) }}
+    needs: [toolchain, tested]
+    if: ${{ !cancelled() && needs.toolchain.result == 'success' && needs.tested.outputs.merge-group-passed != 'true' && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository)) && (github.event.action != 'edited' || github.event.changes.base) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 240
     # The cache login is a secret of the bazel-cache environment, which main,
@@ -370,6 +379,7 @@ jobs:
         id: project
         with:
           cache-key-suffix: ${{ env.CACHE_KEY_SUFFIX }}
+          toolchain-snapshot-key: ${{ needs.toolchain.outputs.snapshot-key }}
 
       - name: Compute holbuild snapshot key
         id: cache-key
