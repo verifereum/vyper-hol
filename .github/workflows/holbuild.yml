@@ -46,7 +46,7 @@ jobs:
     # if build and compiler share one toolchain. Without a project snapshot to
     # carry it, this job builds it once for both.
     if: (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository)) && (github.event.action != 'edited' || github.event.changes.base)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 60
     outputs:
       snapshot-key: ${{ steps.project.outputs.project-snapshot-key == '' && steps.cache-key.outputs.snapshot-key || '' }}
@@ -82,7 +82,7 @@ jobs:
     name: ${{ (github.event.action == 'edited' && !github.event.changes.base) && 'build (no-op edit)' || 'build' }}
     if: (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository)) && (github.event.action != 'edited' || github.event.changes.base)
     needs: toolchain
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 240
     # The cache login is a secret of the bazel-cache environment, which main,
     # merge-queue and pull request refs may deploy to.
@@ -148,7 +148,7 @@ jobs:
     # witness groups.
     if: (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository)) && (github.event.action != 'edited' || github.event.changes.base)
     needs: toolchain
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 240
     # The cache login is a secret of the bazel-cache environment, which main,
     # merge-queue and pull request refs may deploy to.
@@ -195,7 +195,7 @@ jobs:
   witnesses:
     if: (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository)) && (github.event.action != 'edited' || github.event.changes.base)
     needs: compiler
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 90
     # The cache login is a secret of the bazel-cache environment, which main,
     # merge-queue and pull request refs may deploy to.
@@ -257,7 +257,7 @@ jobs:
     # and exports the HBX of the whole project.
     if: (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository)) && (github.event.action != 'edited' || github.event.changes.base)
     needs: [build, witnesses]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 240
     # The cache login is a secret of the bazel-cache environment, which main,
     # merge-queue and pull request refs may deploy to.
@@ -334,7 +334,7 @@ jobs:
     # the merge queue fast-forwards main to the commit it tested, so the push
     # run skips the tests and oracle and builds only to save main's snapshot.
     if: github.event_name == 'push'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       actions: read
     outputs:
@@ -354,7 +354,7 @@ jobs:
     # start long before build finishes.
     needs: tested
     if: ${{ !cancelled() && needs.tested.outputs.merge-group-passed != 'true' && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository)) && (github.event.action != 'edited' || github.event.changes.base) }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 240
     # The cache login is a secret of the bazel-cache environment, which main,
     # merge-queue and pull request refs may deploy to.
@@ -400,7 +400,7 @@ jobs:
   python-o1-oracle:
     needs: tested
     if: ${{ !cancelled() && needs.tested.outputs.merge-group-passed != 'true' && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository)) && (github.event.action != 'edited' || github.event.changes.base) }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
         with:
@@ -422,7 +422,7 @@ jobs:
   export-vyper-tests:
     needs: tested
     if: ${{ !cancelled() && needs.tested.outputs.merge-group-passed != 'true' && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository)) && (github.event.action != 'edited' || github.event.changes.base) }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       export-cache-key: ${{ steps.exports.outputs.export-cache-key }}
     steps:
@@ -439,7 +439,7 @@ jobs:
     # the implicit success(); the result checks stand in for it.
     if: ${{ !cancelled() && needs.test-deps.result == 'success' && needs.export-vyper-tests.result == 'success' && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository)) && (github.event.action != 'edited' || github.event.changes.base) }}
     needs: [test-deps, export-vyper-tests]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 90
     # The cache login is a secret of the bazel-cache environment, which main,
     # merge-queue and pull request refs may deploy to.
@@ -447,7 +447,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        group: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+        group: [0, 1, 2, 3, 4, 5]
     steps:
       - uses: actions/checkout@v7
         with:
@@ -500,7 +500,7 @@ jobs:
     # Renamed on a no-op edit, as build is.
     name: ${{ (github.event.action == 'edited' && !github.event.changes.base) && 'holbuild-success (no-op edit)' || 'holbuild-success' }}
     if: always() && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository)) && (github.event.action != 'edited' || github.event.changes.base)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: [toolchain, build, compiler, witnesses, build-rollup, tested, test-deps, python-o1-oracle, export-vyper-tests, vyper-tests]
     steps:
       - name: Check all jobs succeeded
