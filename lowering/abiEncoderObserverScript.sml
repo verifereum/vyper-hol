@@ -617,3 +617,119 @@ Theorem observer_old_invoke_prefix_probe:
 Proof
   simp[observer_old_prefix_region_safe, observer_old_prefix_region_closed]
 QED
+
+Theorem observer_region_run_prefix_aux:
+  !fuel n s bb h.
+    observer_region_safe fn cut R /\ observer_region_closed ctx fn cut R /\
+    (s.vs_current_bb,s.vs_inst_idx) IN R /\ ~s.vs_halted /\
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    LENGTH bb.bb_instructions - s.vs_inst_idx = n /\
+    run_from fuel ctx fn s = Halt h ==>
+    ?u. local_prefix ctx fn cut s u /\ stop_view u = h
+Proof
+  completeInduct_on `fuel` >> completeInduct_on `n` >> rpt strip_tac >>
+  Cases_on `(s.vs_current_bb,s.vs_inst_idx) = cut`
+  >- (qexists_tac `s` >> conj_tac
+      >- (irule (cj 1 local_prefix_rules) >> simp[]) >>
+      qpat_x_assum `observer_region_safe fn cut R`
+        (strip_assume_tac o REWRITE_RULE[observer_region_safe_def]) >>
+      qpat_x_assum `!bb. _` (qspec_then `bb` mp_tac) >>
+      impl_tac >- (Cases_on `cut` >> gvs[]) >> strip_tac >>
+      `SND cut = s.vs_inst_idx` by (Cases_on `cut` >> gvs[]) >>
+      gvs[] >>
+      `run_from fuel ctx fn s = Halt (stop_view s)` by
+        (rewrite_tac[stop_view_def] >> irule run_from_halt >>
+         qexistsl_tac [`bb`, `mk_inst id STOP [] []`] >>
+         simp[Once step_inst_base_def, mk_inst_def]) >> gvs[]) >>
+  Cases_on `get_instruction bb s.vs_inst_idx`
+  >- (qpat_x_assum `run_from fuel ctx fn s = _` mp_tac >>
+      simp[Once run_from_def, Once exec_block_def]) >>
+  rename1 `get_instruction bb s.vs_inst_idx = SOME inst` >>
+  `inst.inst_opcode <> INVOKE /\
+    (!h. step_inst_base inst s <> Halt h) /\
+    (!middle. step_inst_base inst s = OK middle ==> ~middle.vs_halted)` by
+      metis_tac[observer_region_safe_def] >>
+  Cases_on `step_inst_base inst s` >>
+  qpat_x_assum `run_from fuel ctx fn s = _` mp_tac >>
+  simp[Once run_from_def, Once exec_block_def, step_inst_non_invoke] >>
+  strip_tac >> gvs[] >>
+  rename1 `step_inst_base inst s = OK middle` >>
+  `~middle.vs_halted` by metis_tac[] >>
+  Cases_on `is_terminator inst.inst_opcode`
+  >- suspend "jump" >> suspend "ordinary"
+QED
+
+Resume observer_region_run_prefix_aux[ordinary]:
+  `middle.vs_current_bb = s.vs_current_bb` by
+    metis_tac[venomInstProofsTheory.step_preserves_control_flow, step_inst_non_invoke] >>
+  `abi_observer_step ctx fn cut s
+     (middle with vs_inst_idx := SUC s.vs_inst_idx)` by
+    (simp[abi_observer_step_def, step_inst_non_invoke] >> metis_tac[]) >>
+  qpat_assum `observer_region_closed ctx fn cut R`
+    (mp_tac o REWRITE_RULE[observer_region_closed_def]) >>
+  disch_then drule >> simp[] >> strip_tac >>
+  qpat_x_assum `!m. m < LENGTH _ - _ ==> _`
+    (qspec_then `LENGTH bb.bb_instructions - SUC s.vs_inst_idx` mp_tac) >>
+  impl_tac >- gvs[get_instruction_def] >>
+  disch_then (qspecl_then
+    [`middle with vs_inst_idx := SUC s.vs_inst_idx`, `bb`, `h`] mp_tac) >>
+  simp[] >> impl_tac >- gvs[run_from_def] >>
+  strip_tac >> qexists_tac `u` >> simp[] >>
+  irule (cj 2 local_prefix_rules) >>
+  qexists_tac `middle with vs_inst_idx := SUC s.vs_inst_idx` >> simp[]
+QED
+
+Resume observer_region_run_prefix_aux[jump]:
+  gvs[] >> Cases_on `fuel`
+  >- gvs[Once run_blocks_def] >>
+  qpat_x_assum `run_blocks _ _ _ _ = _` mp_tac >>
+  simp[Once run_blocks_def] >>
+  Cases_on `lookup_block middle.vs_current_bb fn.fn_blocks` >> simp[] >>
+  rename1 `lookup_block middle.vs_current_bb fn.fn_blocks = SOME target` >>
+  qspecl_then [`middle`, `target.bb_instructions`]
+    strip_assume_tac eval_phis_ok_or_error_defs >> simp[] >> strip_tac >>
+  rename1 `eval_phis middle target.bb_instructions = OK entered` >>
+  `entered.vs_current_bb = middle.vs_current_bb /\ ~entered.vs_halted` by
+    metis_tac[eval_phis_preserves_current_bb, eval_phis_preserves_halted] >>
+  `abi_observer_step ctx fn cut s
+     (entered with vs_inst_idx := phi_prefix_length target.bb_instructions)` by
+    (simp[abi_observer_step_def, step_inst_non_invoke] >>
+     qexistsl_tac [`bb`, `inst`, `middle`] >> simp[] >> metis_tac[]) >>
+  qpat_assum `observer_region_closed ctx fn cut R`
+    (mp_tac o REWRITE_RULE[observer_region_closed_def]) >>
+  disch_then drule >> simp[] >> strip_tac >>
+  qpat_x_assum `!m. m < SUC n ==> _` (qspec_then `n` mp_tac) >> simp[] >>
+  disch_then (qspecl_then
+    [`entered with vs_inst_idx := phi_prefix_length target.bb_instructions`,
+     `target`, `h`] mp_tac) >>
+  simp[] >> impl_tac >- gvs[run_from_def] >>
+  strip_tac >> qexists_tac `u` >> simp[] >>
+  irule (cj 2 local_prefix_rules) >>
+  qexists_tac `entered with vs_inst_idx := phi_prefix_length target.bb_instructions` >>
+  simp[]
+QED
+
+Finalise observer_region_run_prefix_aux
+
+Theorem observer_region_run_prefix:
+  observer_region_safe fn cut R /\ observer_region_closed ctx fn cut R /\
+  (s.vs_current_bb,s.vs_inst_idx) IN R /\ ~s.vs_halted /\
+  run_from fuel ctx fn s = Halt h ==>
+  ?u. local_prefix ctx fn cut s u /\ stop_view u = h
+Proof
+  rpt strip_tac >>
+  Cases_on `lookup_block s.vs_current_bb fn.fn_blocks`
+  >- gvs[run_from_def] >>
+  irule observer_region_run_prefix_aux >> metis_tac[]
+QED
+
+Theorem observer_region_run_prefix_transfer:
+  observer_region_safe fn cut R /\ observer_region_closed ctx fn cut R /\
+  (s.vs_current_bb,s.vs_inst_idx) IN R /\ ~s.vs_halted /\
+  run_from fuel ctx fn s = Halt h /\
+  region_code_agrees fn fn' cut R ==>
+  ?u. local_prefix ctx fn' cut s u /\ stop_view u = h
+Proof
+  strip_tac >> drule_all observer_region_run_prefix >> strip_tac >>
+  qexists_tac `u` >> simp[] >> irule local_prefix_region_transfer >> metis_tac[]
+QED
