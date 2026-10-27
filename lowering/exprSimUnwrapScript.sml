@@ -508,11 +508,8 @@ Proof
   simp[fragExecTheory.frag_exec_false_pre]
 QED
 
-(* expr_sim_of_vv_sim for an expression that compile_expr always lowers to
-   a pointer into memory to a non-word value, with only values as results:
-   unwrap_value hands the pointer out as it is (expr_post_of_vv_post_memory).
-   Unlike expr_sim_of_vv_sim, this doesn't go through the storage and
-   immutable cases of unwrap_value_sim. *)
+(* Compatibility specialization for memory-buffer consumers.  The canonical
+   raw-to-forced adapter also covers these stronger representation premises. *)
 Theorem expr_sim_of_vv_sim_buffer:
   !ctx func cenv cx ty e es.
     expr_vv_sim ctx func cenv cx ty e es /\
@@ -521,18 +518,5 @@ Theorem expr_sim_of_vv_sim_buffer:
     (!tv es'. eval_expr cx e es = (INL tv,es') ==> ?v. tv = Value v) ==>
     expr_sim ctx func cenv cx ty e es
 Proof
-  rw[expr_sim_def] >>
-  qpat_x_assum `!sa. ?t p sb. _` (qspec_then `sa` strip_assume_tac) >>
-  gvs[lower_value_def, comp_bind_def, unwrap_value_def,
-      comp_return_def] >>
-  `expr_vv_res_ok res` by simp[expr_vv_res_ok_def] >>
-  qpat_x_assum `expr_vv_sim _ _ _ _ _ _ _` mp_tac >>
-  simp[expr_vv_sim_def] >>
-  disch_then drule >>
-  disch_then (qspec_then `s0` mp_tac) >> simp[] >> strip_tac >>
-  irule fragExecTheory.frag_exec_conseq >> first_assum (irule_at Any) >>
-  simp[] >> rpt strip_tac >>
-  `?v. tv = Value v` by metis_tac[] >> gvs[] >>
-  irule expr_post_of_vv_post_memory >>
-  simp[] >> qexists_tac `t` >> simp[]
+  rpt strip_tac >> irule expr_sim_of_vv_sim >> simp[]
 QED
