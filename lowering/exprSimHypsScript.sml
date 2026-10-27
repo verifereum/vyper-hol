@@ -41,6 +41,7 @@
  *   expr_sim_pre_builtin_arg — an argument of a builtin meets expr_sim_pre
  *                       wherever expr_sim_inv holds
  *   byte_widths_expr_type — the expression's own type has whole bytes
+ *   expr_sim_pre_var_types_well_formed — the local types are well formed
  *   well_typed_expr_type_evaluates — a well-typed expression's type
  *                       evaluates
  *   expr_ok_of_vv, expr_ok_stack — expr_ok from expr_vv_ok (by
@@ -129,7 +130,7 @@ Ancestors
   vyperAST vyperInterpreter vyperState vyperTypeSystem vyperTypeCallGraph
   vyperTypeInvariants vyperTypeExprSoundness vyperTypeCallStackSoundness
   vyperTypeExprResult vyperTypeEvalSoundness vyperTypeBuiltins
-  vyperExprNoControl loweringSlice exprSimUnwrap
+  vyperExprNoControl loweringSlice exprSimUnwrap exprSafeOperand
 Libs
   pairLib
 
@@ -402,40 +403,30 @@ Proof
   metis_tac[optionTheory.IS_SOME_DEF]
 QED
 
-(* A well-typed expression's type evaluates: its typing rule says the type
-   is well formed, but for a local, whose type evaluates by
-   env_scopes_consistent, and pop, whose type is assignable. *)
+(* The local types are well formed: they evaluate by env_scopes_consistent. *)
+Theorem expr_sim_pre_var_types_well_formed:
+  !cenv cx env e es.
+    expr_sim_pre cenv cx env e es ==>
+    !id t. FLOOKUP env.var_types id = SOME t ==>
+           well_formed_type env.type_defs t
+Proof
+  rw[expr_sim_pre_def, expr_sim_inv_def, well_formed_type_def] >>
+  `env.type_defs = get_tenv cx` by
+    gvs[env_consistent_def, env_context_consistent_def] >>
+  metis_tac[env_consistent_var_type_evaluates]
+QED
+
+(* A well-typed expression's type evaluates. *)
 Theorem well_typed_expr_type_evaluates:
   !cenv cx env e es.
     expr_sim_pre cenv cx env e es ==>
     IS_SOME (evaluate_type (get_tenv cx) (expr_type e))
 Proof
-  rw[expr_sim_pre_def] >>
-  `env_consistent env cx es` by gvs[expr_sim_inv_def] >>
-  `env.type_defs = get_tenv cx` by
-    gvs[env_consistent_def, env_context_consistent_def] >>
-  `well_formed_type env.type_defs (expr_type e)` suffices_by
-    gvs[well_formed_type_def] >>
-  Cases_on `e` >> simp[vyperASTTheory.expr_type_def]
-  >~ [`Name _ _`]
-  >- (gvs[well_typed_expr_def, well_formed_type_def] >>
-      metis_tac[env_consistent_var_type_evaluates])
-  >~ [`TopLevelName _ nsid`]
-  >- (PairCases_on `nsid` >> gvs[well_typed_expr_def])
-  >~ [`Pop _ _`]
-  >- (gvs[well_typed_expr_def, assignable_type_def] >>
-      metis_tac[assignable_type_well_formed])
-  >~ [`Call _ target _ _`]
-  >- (Cases_on `target` >>
-      gvs[well_typed_expr_def, well_formed_type_def,
-          vyperValueTheory.evaluate_type_def]
-      >~ [`IntCall nsid`]
-      >- (PairCases_on `nsid` >> gvs[well_typed_expr_def, well_formed_type_def])
-      >~ [`ExtCall _ _ sig _`]
-      >- (PairCases_on `sig` >> gvs[well_typed_expr_def, well_formed_type_def]) >>
-      irule (REWRITE_RULE [well_formed_type_def]
-               raw_call_return_type_well_formed) >> simp[]) >>
-  gvs[well_typed_expr_def]
+  rpt strip_tac >> drule expr_sim_pre_var_types_well_formed >> strip_tac >>
+  `well_typed_expr env e /\ env.type_defs = get_tenv cx` by
+    gvs[expr_sim_pre_def, expr_sim_inv_def, env_consistent_def,
+        env_context_consistent_def] >>
+  drule_all well_typed_expr_type_well_formed >> gvs[well_formed_type_def]
 QED
 
 (* A case lemma that proves expr_vv_ok proves expr_ok. *)
