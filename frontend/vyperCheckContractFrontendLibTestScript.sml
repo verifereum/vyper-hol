@@ -391,11 +391,9 @@ val duplicate_translation = optionSyntax.dest_some
 val (duplicate_sources, duplicate_rest) = pairSyntax.dest_pair duplicate_translation;
 val (_, duplicate_import_map) = pairSyntax.dest_pair duplicate_rest;
 val (duplicate_entries, duplicate_source_ty) = listSyntax.dest_list duplicate_sources;
+(* Translation keeps one listing of the repeated interface. *)
 val expected_duplicate_sources = case duplicate_entries of
-    [main, first, second, pinger] =>
-      if aconv first second then
-        listSyntax.mk_list ([main, first, pinger], duplicate_source_ty)
-      else raise Fail "duplicate interface fixture did not reproduce equal sources"
+    [_, _, _] => duplicate_sources
   | _ => raise Fail "duplicate interface fixture has unexpected source count";
 val duplicate_input = prepare_ast duplicate_ast;
 val _ = assert_modules "annotated repro preserves import order"
@@ -441,6 +439,42 @@ val _ = check_fixture false "third_party/flex/daddy/daddy.json";
 val _ = check_fixture true "third_party/flex/daddy/daddy.json";
 val _ = check_fixture false "interface_struct_return/main.json";
 val _ = check_fixture false "abi_encode/main.json";
+(* Struct and flag declared in an interface and used as I.S / I.Mode in
+   storage, HashMap values, empty(), literals and returns. *)
+val _ = check_fixture false "interface_struct/main.json";
+(* main initializes token, which initializes ownable; main has its own owner. *)
+val _ = check_fixture false "nested_initializes/main.json";
+val _ = check_fixture true "nested_initializes/main.json";
+(* lib_a is reached as `..lib_a` from main and `.lib_a` from lib_b. *)
+val _ = check_fixture false "relative_uses/pkg/mocks/main.json";
+val _ = check_fixture true "relative_uses/pkg/mocks/main.json";
+
+fun fixture_input path = vyperCheckContractFrontendLib.prepare_check_input
+  {in_deploy = false, address = address,
+   annotated_ast = JSONDecode.decodeFile jsonASTLib.annotated_ast
+     (fixture_dir ^ path),
+   storage_layout = JSONDecode.decodeFile jsonASTLib.storage_layout
+     (fixture_dir ^ path)};
+
+(* token (source 1) nests ownable (source 2) under its own alias; the
+   main module's owner keeps its own key. *)
+val expected_nested_layout =
+  ``[(0w : address,
+      ([((NONE, "owner"), 2); ((SOME 4, "owner"), 0);
+        ((SOME 3, "supply"), 1)] : storage_layout,
+       [] : storage_layout))]``;
+val _ = if aconv (#layouts (fixture_input "nested_initializes/main.json"))
+                 expected_nested_layout then ()
+  else raise Fail "nested storage layout did not resolve the module path";
+
+(* lib_a keeps its source ID 1 (module 3) and is listed once. *)
+val relative_uses_modules = #modules (fixture_input "relative_uses/pkg/mocks/main.json");
+val _ = if aconv (listSyntax.mk_list
+                   (map (fst o pairSyntax.dest_pair)
+                     (fst (listSyntax.dest_list relative_uses_modules)),
+                    ``:num option``))
+                 ``[NONE; SOME 3; SOME 4]`` then ()
+  else raise Fail "repeated relative import changed module identity";
 
 val multimodule_path = fixture_dir ^ "multimodule_storage/main.json";
 val multimodule_input = vyperCheckContractFrontendLib.prepare_check_input

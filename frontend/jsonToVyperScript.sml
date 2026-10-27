@@ -1,12 +1,15 @@
 Theory jsonToVyper
 Ancestors
   integer alist rich_list jsonAST vyperAST jsonToVyperType jsonToVyperTopLevel
+  jsonNominalSources
 Libs
   intLib
 
 (* Vyper assigns the shared source ID -2 to builtin modules.  Canonicalize
    colliding source IDs by matching the exact resolved paths emitted on import
-   metadata and imported module ASTs. *)
+   metadata and imported module ASTs.  One module reached along several import
+   paths is listed once per path under one source ID and one resolved path;
+   that is not a collision, and the module keeps its source ID. *)
 Definition max_nonnegative_source_id_def:
   max_nonnegative_source_id [] = 0 ∧
   max_nonnegative_source_id
@@ -14,10 +17,12 @@ Definition max_nonnegative_source_id_def:
     MAX (Num src_id) (max_nonnegative_source_id rest)
 End
 
-Definition source_id_occurrences_def:
-  source_id_occurrences src_id [] = 0 ∧
-  source_id_occurrences src_id (JImportedModule sid _ _ _ _ :: rest) =
-    (if src_id = sid then 1 else 0) + source_id_occurrences src_id rest
+Definition source_id_shared_def:
+  source_id_shared src_id resolved_path [] = F ∧
+  source_id_shared src_id resolved_path
+      (JImportedModule sid _ other_path _ _ :: rest) =
+    ((src_id = sid ∧ resolved_path ≠ other_path) ∨
+     source_id_shared src_id resolved_path rest)
 End
 
 Definition build_module_identity_map_aux_def:
@@ -25,7 +30,8 @@ Definition build_module_identity_map_aux_def:
   build_module_identity_map_aux all_imports (next : num)
       (JImportedModule (src_id : int) _ resolved_path _ _ :: rest) =
     let canonical_id : int =
-      if source_id_occurrences src_id all_imports = 1 then src_id else &next in
+      if source_id_shared src_id resolved_path all_imports then &next
+      else src_id in
     (resolved_path,canonical_id) ::
       build_module_identity_map_aux all_imports (next + 1) rest
 End
@@ -77,9 +83,30 @@ Definition canonicalize_imported_modules_def:
     canonicalize_imported_modules identities rest
 End
 
+(* Drop a repeated listing of one module: same resolved path, nonreentrancy
+   default and body, whatever relative path reached it.  Differing listings of
+   one resolved path are kept, so that later source normalization reports the
+   conflict instead of choosing a definition. *)
+Definition same_imported_module_def:
+  same_imported_module
+      (JImportedModule src_id _ resolved_path nr_default body)
+      (JImportedModule src_id' _ resolved_path' nr_default' body') =
+    (src_id = src_id' ∧ resolved_path = resolved_path' ∧
+     nr_default = nr_default' ∧ body = body')
+End
+
+Definition remove_repeated_imports_def:
+  remove_repeated_imports seen [] = [] ∧
+  remove_repeated_imports seen (imp :: rest) =
+    if EXISTS (same_imported_module imp) seen
+    then remove_repeated_imports seen rest
+    else imp :: remove_repeated_imports (imp :: seen) rest
+End
+
 Definition canonicalize_annotated_ast_imports_def:
   canonicalize_annotated_ast_imports
-      (JAnnotatedAST (JModule main_src_id nr_default body) imports) =
+      (JAnnotatedAST (JModule main_src_id nr_default body) raw_imports) =
+    let imports = remove_repeated_imports [] raw_imports in
     let identities = build_module_identity_map main_src_id imports in
     JAnnotatedAST
       (JModule main_src_id nr_default
@@ -139,8 +166,9 @@ Definition imports_topsorted_def:
 End
 
 (* ===== Storage Layout Key Transformation ===== *)
-(* Transform storage layout keys from (alias_opt, var_name) to (source_id_opt, var_name).
-   Uses import_map to convert alias to source_id. *)
+(* Transform storage layout keys from (module_path_opt, var_name) to
+   (source_id_opt, var_name).  Uses the translation's layout import map to
+   convert an alias or dotted alias path to a source_id. *)
 
 (* Transform a single storage layout key.
    (NONE, "counter") -> (NONE, "counter")  -- main module
@@ -1072,10 +1100,55 @@ Definition annotate_slots_def:
     top :: annotate_slots layout alias rest
 End
 
+(* The compiler's storage layout nests a module's variables under the alias
+   its initializing module gives it (`initializes:`), so a layout key names a
+   module by its dotted alias path from the main module: `token.ownable` is
+   the module `token` initializes as `ownable`.  Each alias resolves in its
+   parent's import map.  Modules are initialized at most once and imports are
+   acyclic, so a path visits each imported module at most once. *)
+Definition initialized_aliases_def:
+  initialized_aliases [] = [] ∧
+  initialized_aliases
+      (JTL_InitializesDecl (JE_Name name _ _ _) :: rest) =
+    name :: initialized_aliases rest ∧
+  initialized_aliases
+      (JTL_InitializesDecl (JE_Subscript (JE_Name name _ _ _) _ _) :: rest) =
+    name :: initialized_aliases rest ∧
+  initialized_aliases (_ :: rest) = initialized_aliases rest
+End
+
+Definition initialized_module_paths_def:
+  initialized_module_paths 0 all_import_maps imports import_map body prefix =
+    [] ∧
+  initialized_module_paths (SUC fuel) all_import_maps imports import_map body
+      prefix =
+    FLAT (MAP (λalias.
+      case ALOOKUP import_map alias of
+      | NONE => []
+      | SOME nsid =>
+          let path = prefix ++ alias in
+          (path, nsid) ::
+          initialized_module_paths fuel all_import_maps imports
+            (case ALOOKUP all_import_maps nsid of
+             | SOME child_map => child_map
+             | NONE => [])
+            (find_module_body_nsid nsid imports) (path ++ "."))
+      (initialized_aliases body))
+End
+
+(* The main module's aliases, then every initialized module's alias path. *)
+Definition layout_import_map_def:
+  layout_import_map all_import_maps imports import_map toplevels =
+    import_map ++
+    initialized_module_paths (LENGTH imports + 1) all_import_maps imports
+      import_map toplevels ""
+End
+
 (* Translate annotated AST, returning:
    - sources: (source_id, toplevels) alist
    - exports: func_name -> source_id
-   - import_map: alias -> source_id (for storage layout key transformation)
+   - import_map: alias or layout module path -> source_id (for storage layout
+     key transformation)
    Returns NONE if imports are not topologically sorted. *)
 Definition translate_annotated_ast_canonical_def:
   translate_annotated_ast_canonical
@@ -1104,12 +1177,14 @@ Definition translate_annotated_ast_canonical_def:
       translate_imported_modules nominal_index all_import_maps
         all_toplevel_types override_map main_src_id imports in
     let exports = extract_exports_with_indexes all_import_maps all_inline_maps exports_map main_index in
-    SOME (sources, exports, import_map)
+    SOME (sources, exports,
+          layout_import_map all_import_maps imports import_map toplevels)
 End
 
 Definition translate_annotated_ast_def:
   translate_annotated_ast ast =
-    translate_annotated_ast_canonical (canonicalize_annotated_ast_imports ast)
+    translate_annotated_ast_canonical
+      (resolve_nominal_sources (canonicalize_annotated_ast_imports ast))
 End
 
 (* Annotate all sources with storage slots from json_storage_layout.
