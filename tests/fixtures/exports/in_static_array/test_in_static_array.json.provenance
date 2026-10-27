@@ -4,7 +4,7 @@
     "tests/fixtures/exports/in_static_array/test_in_static_array.py": "9c45365455d50dc2f7ac21e4d3981b82127ad9ca7ebfc5323a6ca423cbf22cee"
   },
   "inputs": {
-    ".github/actions/setup-vyper-test-exports/action.yml": "49f413eb6fbf5b3d0a03baadaab3c7afd686ec62fef2b523c3f4c9620c62ea48",
+    ".github/actions/setup-vyper-test-exports/action.yml": "41a323c6a7925b2377c4e3fd35f431c942ab97befb1f64002d7863312fb27232",
     "VYPER_PIN": "9a123fbe3fda20b7ef84343203c21043151277d7175e47ecdc9ec774bf6a6b68",
     "tests/semantics-build-constraints.txt": "5ea17fa1520d1732c4efe2d93b0456c095cc417df4bcd7f1953cec37462a2e65",
     "tests/semantics-profile.json": "a25b4fc9444a8107f08436d47c70c81adea2874cb89134fd4ac9e77adbfd0954",
