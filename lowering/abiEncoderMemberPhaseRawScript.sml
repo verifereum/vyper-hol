@@ -1,7 +1,7 @@
 (* Early concrete member endpoints: no legacy member invariant owners. *)
 Theory abiEncoderMemberPhaseRaw
 Ancestors
-  abiEncoderChildSuffix abiDecoderFrame abiEncoderArrayTail abiBuiltinPrefix
+  abiEncoderChildSuffix abiEncoderChildPrefix abiDecoderFrame abiEncoderArrayTail abiBuiltinPrefix
   abiEncoderExtendSim abiEncoderAddressReach emitHelperProps emitHelper venomInst
   abiDecoderReentryAddress abiDecoderReentry abiDecoderDynamicLoopSetup
   abiDecoderContract abiDecoderLoop fragExec compileEnv venomState
@@ -181,3 +181,36 @@ val _ =
         "abiEncoderMembersCorrect", "abiEncoderComplexStatic"]
   then raise Fail "member raw phase imports a legacy invariant/execution owner"
   else ();
+
+Theorem abi_encoder_member_prefix_raw:
+  abi_encode_child_prefix dst ho dp st = (ops,final) /\
+  eval_operand dst initial = SOME (n2w d) /\ eval_operand dp initial = SOME (n2w slot) /\
+  mload slot initial = n2w off /\ slot < dimword (:256) /\
+  abi_decoder_operand_live st.cs_next_var dst /\ abi_decoder_operand_live st.cs_next_var dp /\
+  final.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial ==>
+  ?ready. abi_encoder_member_phase_raw st final initial ready
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  drule_all abi_encode_child_prefix_sequence >> strip_tac >>
+  gvs[abi_builtin_prefix_def] >>
+  qexists_tac `actual with vs_inst_idx := LENGTH final.cs_current_insts` >>
+  simp[abi_encoder_member_phase_raw_def] >> qexists_tac `actual` >> simp[]
+QED
+
+Theorem abi_encoder_member_prefix_transport:
+  abi_encode_child_prefix dst ho dp st = (ops,final) /\
+  eval_operand dst initial = SOME (n2w d) /\ eval_operand dp initial = SOME (n2w slot) /\
+  mload slot initial = n2w off /\ slot < dimword (:256) /\
+  abi_decoder_operand_live st.cs_next_var dst /\ abi_decoder_operand_live st.cs_next_var dp /\
+  final.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
+  abi_encoder_member_phase_raw st final initial ready ==>
+  eval_operand (FST ops) ready = SOME (n2w (d+ho)) /\
+  eval_operand (FST (SND ops)) ready = SOME (n2w off) /\
+  eval_operand (SND (SND ops)) ready = SOME (n2w (d+off)) /\
+  fresh_vars_wrt limit_st ready /\ abi_decoder_address_frame st.cs_next_var initial ready
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  drule_all abi_encode_child_prefix_sequence >> strip_tac >>
+  gvs[abi_builtin_prefix_def, abi_encoder_member_phase_raw_def] >>
+  gvs[eval_op_inst_idx, fresh_vars_wrt_def, abi_decoder_address_frame_def]
+QED
