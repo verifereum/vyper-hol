@@ -305,7 +305,9 @@ Proof
   gvs[not_fresh_at_def, finite_mapTheory.FLOOKUP_UPDATE]
 QED
 
-(* The nonpayable check on its own, which compile_entry_checks emits too. *)
+(* The payable check (CALLVALUE is zero) on its own, as
+   compile_payable_check_ok_or_revert has it, for the fallback and for
+   compile_entry_checks. *)
 Theorem payable_check_frag:
   emit_op CALLVALUE [] st0 = (cv, st1) /\
   emit_op ISZERO [cv] st1 = (nv, st2) /\

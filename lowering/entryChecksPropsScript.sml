@@ -9,9 +9,10 @@
  * nonpayable function reverts on both sides, as send_call_value's
  * check (mut = Payable) fails in the source.
  *
- * min_calldata_size is 4 plus the ABI head sizes of the required
- * arguments, as Python's _emit_entry_checks takes it
- * (SELECTOR_BYTES + calldata_args_t.abi_type.static_size()).
+ * min_calldata_size is 4 plus the ABI head sizes of the positional
+ * arguments.  For a function without defaults, the only case here, that is
+ * Python's SELECTOR_BYTES + calldata_args_t.abi_type.static_size(), which
+ * _generate_external_entry_points passes to _emit_entry_checks.
  *
  * TOP-LEVEL:
  *   compile_entry_checks_frag — the two checks as a fragment: they fall
@@ -78,7 +79,9 @@ Proof
        is_terminator_def]
 QED
 
-(* The four opcodes' steps, apart from step_inst_base's case split. *)
+(* The four opcodes' steps, apart from step_inst_base's case split.
+   compile_cds_check_ok_or_revert covers the same instructions but does
+   not say which exit the calldata length takes, which the frag needs. *)
 Theorem step_cds_check_ops[local]:
   step_inst_base (mk_inst id CALLDATASIZE ops outs) s =
     exec_read0 (\s. n2w (LENGTH s.vs_call_ctx.cc_calldata))
