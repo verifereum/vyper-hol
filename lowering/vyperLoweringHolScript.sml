@@ -19,7 +19,7 @@ Ancestors
   transientLockFrameProps
   selectorCompilerProps checkedSelectorTableProps
   loweringShapeDefs loweringShapeProps
-  intCallStep intCallLookup
+  intCallStep intCallLookup intCallCallee
   structFieldsProps
   (* compiler + correctness *)
   vyperCompiler
