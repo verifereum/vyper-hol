@@ -14,6 +14,8 @@ Ancestors
   abiEncoderSharedLeaves abiEncoderEnvelopeAdapter
   abiEncoderSourceWindow abiEncoderSourceTransport
   abiEncoderSourceAggregate abiEncoderSourcePrimitive abiEncoderSourceProducer
+  abiEncoderMemberPhaseRaw abiEncoderMemberSourcePhase abiEncoderMemberPhaseExec
+  abiEncoderMemberSpine abiEncoderMemberPhaseEffect
 
 fun audit_encoder_tag (name, th) =
   let
@@ -99,6 +101,35 @@ val _ = List.app audit_encoder_tag
    ("source_rep_primitive", source_rep_primitive),
    ("abi_encoder_uniform_source", abi_encoder_uniform_source),
    ("abi_encoder_source_window", abi_encoder_source_window),
+   ("abi_encoder_member_binary_raw", abi_encoder_member_binary_raw),
+   ("abi_encoder_member_binary_transport", abi_encoder_member_binary_transport),
+   ("abi_encoder_member_load_raw", abi_encoder_member_load_raw),
+   ("abi_encoder_member_load_transport", abi_encoder_member_load_transport),
+   ("abi_encoder_member_cursor_raw", abi_encoder_member_cursor_raw),
+   ("abi_encoder_member_cursor_transport", abi_encoder_member_cursor_transport),
+   ("abi_encoder_member_tail_raw", abi_encoder_member_tail_raw),
+   ("abi_encoder_member_tail_transport", abi_encoder_member_tail_transport),
+   ("abi_encoder_member_phase_extend_sim", abi_encoder_member_phase_extend_sim),
+   ("abi_encoder_member_binary_raw_sim", abi_encoder_member_binary_raw_sim),
+   ("abi_encoder_member_prefix_raw", abi_encoder_member_prefix_raw),
+   ("abi_encoder_member_prefix_transport", abi_encoder_member_prefix_transport),
+   ("abi_encoder_members_prepare_raw_transport", abi_encoder_members_prepare_raw_transport),
+   ("abi_encoder_member_static_place_raw_transport", abi_encoder_member_static_place_raw_transport),
+   ("abi_encoder_complex_finish_raw_transport", abi_encoder_complex_finish_raw_transport),
+   ("abi_encoder_members_prepare_raw_compat", abi_encoder_members_prepare_raw_compat),
+   ("abi_scratch_members_prepare_raw_transport", abi_scratch_members_prepare_raw_transport),
+   ("abi_scratch_member_static_place_raw_transport", abi_scratch_member_static_place_raw_transport),
+   ("abi_scratch_complex_finish_raw_transport", abi_scratch_complex_finish_raw_transport),
+   ("abi_scratch_members_prepare_raw_compat", abi_scratch_members_prepare_raw_compat),
+   ("abi_encoder_spine_child_compile", abi_encoder_spine_child_compile),
+   ("abi_encoder_member_spine_compile", abi_encoder_member_spine_compile),
+   ("abi_encoder_spine_child_mono", abi_encoder_spine_child_mono),
+   ("abi_encoder_member_spine_mono", abi_encoder_member_spine_mono),
+   ("abi_encoder_spine_static_run", abi_encoder_spine_static_run),
+   ("abi_encoder_spine_cursor_run", abi_encoder_spine_cursor_run),
+   ("abi_encoder_spine_dynamic_run", abi_encoder_spine_dynamic_run),
+   ("abi_encoder_member_binary_registered", abi_encoder_member_binary_registered),
+   ("abi_encoder_member_load_registered", abi_encoder_member_load_registered),
    ("abi_encoder_shared_endpoint_intro", abi_encoder_shared_endpoint_intro),
    ("abi_encoder_register_alloca_inv", abi_encoder_register_alloca_inv),
    ("abi_encoder_weak_child_sequence", abi_encoder_weak_child_sequence),
