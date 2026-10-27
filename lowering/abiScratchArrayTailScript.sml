@@ -41,7 +41,11 @@ Proof
     abi_encode_array_tail_init_sequence) >> impl_tac >- gvs[] >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts st st') initial = OK actual` >>
   `actual.vs_alloca_next <= b+cap` by
-    (fs[abi_encoder_complex_prefix_post_def, abi_decoder_budget_def] >> decide_tac) >>
+    (qpat_assum `abi_encoder_complex_prefix_post _ _ _ _ _ _ _ _ _ _ _`
+       (strip_assume_tac o PURE_REWRITE_RULE [abi_encoder_complex_prefix_post_def]) >>
+     qpat_x_assum `abi_decoder_budget first last b cap actual`
+       (strip_assume_tac o PURE_REWRITE_RULE [abi_decoder_budget_def]) >>
+     decide_tac) >>
   `abi_scratch_evolution (abi_decoder_ids first last) b cap initial actual` by
     (mp_tac (Q.SPECL [`emitted_insts st st'`, `initial`, `actual`,
        `abi_decoder_ids first last`, `b`, `cap`] abi_scratch_sequence_evolution) >> simp[]) >>
