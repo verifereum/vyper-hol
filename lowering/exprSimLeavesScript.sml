@@ -611,3 +611,14 @@ Theorem compile_flag_member_sim:
 Proof
   metis_tac[compile_flag_member_case_sim, expr_ok_def]
 QED
+
+(* Integrity gate: memory forcing must not introduce admitted dependencies
+   into the existing Name and memory-literal consumers. *)
+val () = List.app (fn th =>
+  let val (ors, axs) = Tag.dest_tag (Thm.tag th)
+  in if null axs andalso null (Thm.hyp th) andalso
+        List.all (fn s => s = "DISK_THM") ors
+     then print "MEMORY_CONSUMER_AUDIT OK\n"
+     else raise Fail "memory consumer inherited admission"
+  end) [compile_name_other_sim, compile_name_sim, compile_name_case_sim,
+        compile_literal_memory_sim];
