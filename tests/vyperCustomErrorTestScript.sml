@@ -104,7 +104,7 @@ QED
 
 Definition custom_error_call_def:
   custom_error_call target =
-    Call custom_error_uint (ExtCall T F ("f",[],custom_error_uint))
+    Call custom_error_uint (ExtCall T F ("f",[],custom_error_uint) [])
       [Literal (BaseT AddressT)
         (BytesL (REPLICATE 19 0w ++ [target]))] NONE
 End
@@ -176,4 +176,3 @@ Proof
   \\ ACCEPT_TAC custom_error_arguments_left_to_right_once
 QED
 
-val _ = export_theory();
