@@ -9,10 +9,6 @@ inputs:
   holbuild-ref:
     required: true
     description: 'holbuild git revision or tag to use'
-  cache-key-suffix:
-    description: 'Appended to the cache key; a run-unique suffix keeps the cache out of the run'
-    required: false
-    default: ''
 
 outputs:
   holbuild-rev:
@@ -27,7 +23,7 @@ runs:
       id: cache-holbuild
       with:
         path: ~/holbuild
-        key: holbuild-tool-${{ runner.os }}-${{ runner.arch }}-${{ inputs.holbuild-ref }}${{ inputs.cache-key-suffix }}
+        key: holbuild-tool-${{ runner.os }}-${{ runner.arch }}-${{ inputs.holbuild-ref }}
 
     - name: Clone holbuild
       shell: bash

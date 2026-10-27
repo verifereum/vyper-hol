@@ -2,10 +2,6 @@ name: 'Setup holbuild project'
 description: 'Sets up Poly/ML and holbuild, and restores a holbuild cache snapshot for this project'
 
 inputs:
-  cache-key-suffix:
-    description: 'Appended to every cache key; a run-unique suffix keeps the caches out of the run'
-    required: false
-    default: ''
   snapshot-key:
     description: 'Exact key of a snapshot an earlier job of this run saved; empty restores the latest compatible snapshot'
     required: false
@@ -38,8 +34,6 @@ runs:
   steps:
     - uses: ./.github/actions/setup-polyml
       id: polyml
-      with:
-        cache-key-suffix: ${{ inputs.cache-key-suffix }}
 
     - name: Get minimum holbuild version from holproject.toml
       id: holbuild-version
@@ -58,7 +52,6 @@ runs:
       id: holbuild
       with:
         holbuild-ref: ${{ steps.holbuild-version.outputs.ref }}
-        cache-key-suffix: ${{ inputs.cache-key-suffix }}
 
     - name: Report selected holbuild version
       shell: bash
@@ -73,13 +66,10 @@ runs:
       shell: bash
       run: |
         tools="${{ runner.os }}-${{ runner.arch }}-${{ steps.polyml.outputs.polyml-rev }}-${{ steps.holbuild.outputs.holbuild-rev }}"
-        suffix="${{ inputs.cache-key-suffix }}"
-        echo "toolchain-key=holbuild-v3-toolchain-${tools}${suffix}" >> "$GITHUB_OUTPUT"
-        # The suffix comes before -build-, so a normal run's restore prefix
-        # does not match an uncached run's snapshot.
-        echo "build-prefix=holbuild-v3${suffix}-build-${tools}" >> "$GITHUB_OUTPUT"
+        echo "toolchain-key=holbuild-v3-toolchain-${tools}" >> "$GITHUB_OUTPUT"
+        echo "build-prefix=holbuild-v3-build-${tools}" >> "$GITHUB_OUTPUT"
         # Outside build-prefix, so no later run restores a partial snapshot.
-        echo "stage-prefix=holbuild-v3${suffix}-stage-${tools}" >> "$GITHUB_OUTPUT"
+        echo "stage-prefix=holbuild-v3-stage-${tools}" >> "$GITHUB_OUTPUT"
 
     - name: Restore project snapshot from this run
       if: ${{ inputs.snapshot-key != '' }}

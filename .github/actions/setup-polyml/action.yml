@@ -6,10 +6,6 @@ inputs:
     description: 'Poly/ML git tag to use'
     required: false
     default: 'v5.9.2'
-  cache-key-suffix:
-    description: 'Appended to the cache key; a run-unique suffix keeps the cache out of the run'
-    required: false
-    default: ''
 
 outputs:
   polyml-rev:
@@ -35,7 +31,7 @@ runs:
       id: cache-polyml
       with:
         path: ~/polyml-install
-        key: polyml-${{ runner.os }}-${{ runner.arch }}-${{ steps.version.outputs.polyml-rev }}${{ inputs.cache-key-suffix }}
+        key: polyml-${{ runner.os }}-${{ runner.arch }}-${{ steps.version.outputs.polyml-rev }}
 
     - name: Build Poly/ML
       if: steps.cache-polyml.outputs.cache-hit != 'true'
@@ -54,7 +50,7 @@ runs:
       continue-on-error: true
       with:
         path: ~/polyml-install
-        key: polyml-${{ runner.os }}-${{ runner.arch }}-${{ steps.version.outputs.polyml-rev }}${{ inputs.cache-key-suffix }}
+        key: polyml-${{ runner.os }}-${{ runner.arch }}-${{ steps.version.outputs.polyml-rev }}
 
     - name: Add Poly/ML to PATH
       shell: bash
