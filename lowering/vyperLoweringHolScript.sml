@@ -11,7 +11,7 @@ Ancestors
   exprBopLowering
   exprSimOps exprSimCompare exprSimArith intBits freshWrites
   exprSimMain stmtSim stmtSimIf stmtSimFor stmtSimReturn stmtSimDecl
-  stmtSimReason
+  stmtSimReason stmtSimReasonExpr stmtSimForRange
   valueEncodingProofs
   localPtrsProps
   loweringShapeProps
