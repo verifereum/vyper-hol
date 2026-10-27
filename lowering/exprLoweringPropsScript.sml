@@ -37,7 +37,7 @@
 
 Theory exprLoweringProps
 Ancestors
-  exprLowering emitHelper compileEnv builtinSystem
+  exprLowering emitHelper compileEnv accountsRelProps builtinSystem
   venomExecSemantics venomState venomInst venomInstProps
   vyperInterpreter vyperContext
   vyperState vyperValueOperation
@@ -469,8 +469,8 @@ Theorem state_rel_frame:
 Proof
   rpt strip_tac >>
   qpat_x_assum `es' = _` SUBST1_TAC >>
-  fs[state_rel_def, storage_rel_def, transient_rel_def, immutables_rel_def,
-     logs_rel_def, call_ctx_rel_def, contract_storage_def,
+  fs[state_rel_def, storage_rel_def, transient_rel_def, accounts_rel_def,
+     immutables_rel_def, logs_rel_def, call_ctx_rel_def, contract_storage_def,
      contract_transient_def]
 QED
 
