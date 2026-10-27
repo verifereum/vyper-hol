@@ -79,7 +79,7 @@ The permanent normative checked-frontend equalities cover:
 
 `evalCompilerInternalFrames` reaches the diamond, external-call and two halves'
 child theories (`evalCompilerInternalFrames1` and `evalCompilerInternalFrames2`);
-`vyperLoweringHol` now reaches it and already reaches `evalCompilerNameCollisions`.
+the `evalCompilerWitnesses` root reaches it and `evalCompilerNameCollisions`.
 No old full-parity rollup is needed for focused validation.
 
 **Concrete expectation changes:** no existing pinned expectation changed. New
