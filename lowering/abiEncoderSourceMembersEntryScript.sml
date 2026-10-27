@@ -6,7 +6,7 @@ Ancestors
   abiEncoderMemberSpine abiEncoderMembersContract abiEncoderMembersDefs
   abiEncoderMembersLayout abiEncoderMemberSourceInterpret abiEncoderMemberSourceContract
   abiEncoderMemberSourceAdapter abiEncoderMembersEndpoint abiEncoderMemberCode
-  abiDecoderDynamicLoopSetup
+  abiDecoderDynamicLoopSetup abiEncoderInput
   abiDecoderEffect abiDecoderLoop compileEnv venomState list arithmetic
 
 Theorem abi_encoder_source_members_index_prepare:
@@ -180,10 +180,32 @@ Proof
   asm_rewrite_tac [] >> decide_tac
 QED
 
+Theorem abi_encoder_source_members_index_cons_shape:
+  abi_encoder_source_members_index (ctx,func) (origin,initial)
+    resources (active,dp,site,slot,src,dst,sb,d,hl,sz)
+    target ((ei,az,mz,dyn)::infos) (st,so,ho) x s ==>
+  ?ty tys av avs pre pvs. x = (ty::tys,av::avs,pre,pvs)
+Proof
+  PairCases_on `resources` >> PairCases_on `target` >> PairCases_on `x` >>
+  simp_tac bool_ss [abi_encoder_source_members_index_def] >>
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  qpat_assum `abi_encoder_members_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_encoder_members_inv_def]) >>
+  qpat_assum `abi_encoder_members_pre _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_encoder_members_pre_def]) >>
+  `LENGTH ((ei,az,mz,dyn)::infos) = LENGTH x0 /\ LENGTH x0 = LENGTH x1` by
+    (qpat_assum `abi_encoder_input _ _ _ _ _ _`
+       (fn th => POP_ASSUM_LIST (K all_tac) >> mp_tac th) >>
+     simp_tac (srw_ss()) [abi_encoder_complex_input_iff, abi_encoder_tuple_type_def] >>
+     rpt strip_tac >> gvs[]) >>
+  Cases_on `x0` >- gvs[] >>
+  Cases_on `x1` >- gvs[] >> simp[]
+QED
+
 val _ = List.app (fn th =>
   let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
     if List.all (fn s => s = "DISK_THM") oracles andalso null axioms andalso null (Thm.hyp th)
     then () else raise Fail "source entry has an admission, axiom or hypothesis"
   end) [abi_encoder_source_members_index_prepare, abi_encoder_source_members_static_request,
     abi_encoder_source_members_dynamic_request, abi_encoder_source_members_static_exit,
-    abi_encoder_source_members_dynamic_exit];
+    abi_encoder_source_members_dynamic_exit, abi_encoder_source_members_index_cons_shape];
