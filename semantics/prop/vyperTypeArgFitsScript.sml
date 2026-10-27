@@ -1,6 +1,8 @@
 (*
- * A value of an external-call argument whose type fits the declared
- * parameter type (arg_type_fits) also has the declared type.
+ * A value whose type fits a wider declared type (arg_type_fits: an external
+ * call argument; type_widens_to: implicit bound widening in the checker) also
+ * has the declared type, and an assignment target the checker accepts is a
+ * well-typed target.
  *)
 
 Theory vyperTypeArgFits
