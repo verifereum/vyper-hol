@@ -240,3 +240,21 @@ Proof
   `step_inst 0 ctx i ss1 = OK ss2` by simp[step_inst_non_invoke] >>
   drule_all step_preserves_control_flow >> simp[]
 QED
+
+(* The cursor writes only the head word and its registered cursor slot. *)
+Theorem abi_encoder_member_cursor_bytes:
+  abi_encode_child_suffix head dp offset len st = (out,final) /\
+  eval_operand head initial = SOME (n2w h) /\ eval_operand dp initial = SOME (n2w slot) /\
+  eval_operand offset initial = SOME (n2w off) /\ eval_operand len initial = SOME (n2w n) /\
+  abi_decoder_operand_live st.cs_next_var dp /\ abi_decoder_operand_live st.cs_next_var len /\
+  h < dimword (:256) /\ slot < dimword (:256) /\
+  final.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
+  abi_encoder_member_phase_raw st final initial ready /\
+  (q+cnt <= h \/ h+32 <= q) /\ (q+cnt <= slot \/ slot+32 <= q) ==>
+  mem_bytes_at q cnt ready.vs_memory = mem_bytes_at q cnt initial.vs_memory /\
+  eval_operand out ready = SOME (n2w n)
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  drule_all abi_encoder_member_cursor_transport >> strip_tac >>
+  asm_rewrite_tac [] >> irule abi_encoder_child_suffix_preserves_tail >> simp[]
+QED
