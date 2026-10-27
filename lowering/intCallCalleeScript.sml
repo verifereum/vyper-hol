@@ -1606,6 +1606,7 @@ Proof
   >- (fs[storage_vars_rel_def] >> metis_tac[])
   >- fs[transient_rel_def, contract_transient_def]
   >- (fs[transient_vars_rel_def] >> metis_tac[])
+  >- fs[accounts_rel_def]
   >- (fs[immutables_rel_def] >> metis_tac[])
   >- fs[logs_rel_def, log_entry_equiv_def, LIST_REL_EL_EQN] >>
   simp[]
