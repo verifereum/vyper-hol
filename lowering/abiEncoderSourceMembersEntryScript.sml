@@ -5,7 +5,8 @@ Ancestors
   abiEncoderSourceMembersIndex abiEncoderMemberSourcePhase abiEncoderMemberPhaseRaw
   abiEncoderMemberSpine abiEncoderMembersContract abiEncoderMembersDefs
   abiEncoderMembersLayout abiEncoderMemberSourceInterpret abiEncoderMemberSourceContract
-  abiEncoderMemberSourceAdapter
+  abiEncoderMemberSourceAdapter abiEncoderMembersEndpoint abiEncoderMemberCode
+  abiDecoderDynamicLoopSetup
   abiDecoderEffect abiDecoderLoop compileEnv venomState list arithmetic
 
 Theorem abi_encoder_source_members_index_prepare:
@@ -108,9 +109,81 @@ Proof
   drule_all abi_encoder_member_source_dynamic_input >> simp[]
 QED
 
+Theorem abi_encoder_source_members_static_exit:
+  abi_encoder_source_members_index (ctx,func) (origin,initial)
+    (first,last,lo,hi,b,cap,limit_st) (active,dp,site,slot,src,dst,sb,d,hl,sz)
+    target ((ei,az,mz,F)::infos) (p,so,ho) (ty::tys,av::avs,pre,pvs) r /\
+  abi_encoder_buffer_pre ei ty av p elem_src dst (sb+so) mz d sz b cap r /\
+  compile_abi_encode_child dst elem_src ei F ho dp p = (len,ce) /\
+  fn_has_code p ce func /\
+  (p.cs_blocks = ce.cs_blocks \/
+    !bb. lookup_block ce.cs_current_bb func.fn_blocks = SOME bb ==>
+      phi_prefix_length bb.bb_instructions = 0) /\
+  ce.cs_next_id <= last /\ ce.cs_next_id <= hi /\
+  ce.cs_next_var <= limit_st.cs_next_var /\
+  abi_encoder_spine_child_output
+    (abi_encoder_member_core_post (ctx,func) (ty,av,sb+so,mz,d+ho)
+      (first,last,b,cap,limit_st))
+    (ei,F,dst,elem_src,ho,dp,p,ce,len) r u ==>
+  abi_encoder_source_members_index (ctx,func) (origin,initial)
+    (first,last,lo,hi,b,cap,limit_st) (active,dp,site,slot,src,dst,sb,d,hl,sz)
+    target infos (ce,so+mz,ho+az) (tys,avs,pre++[ty],pvs++[av]) u
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  `abi_encoder_members_inv ((ei,az,mz,F)::infos) (ty::tys) (av::avs) pre pvs
+    active dp site slot first last lo p limit_st src dst sb so ho d hl sz b cap r /\
+    fresh_vars_wrt limit_st r` by
+    (PairCases_on `target` >> fs[abi_encoder_source_members_index_def, abi_encoder_members_inv_def]) >>
+  drule_all abi_encoder_members_static_endpoint >> strip_tac >>
+  `p.cs_next_var <= ce.cs_next_var` by
+    (drule abi_encoder_child_bounds >> simp[]) >>
+  `abi_decoder_address_frame p.cs_next_var r r` by simp[abi_decoder_address_frame_def] >>
+  `abi_decode_sim ctx func r r` by simp[abi_decode_sim_refl] >>
+  irule abi_encoder_source_members_index_advance >>
+  asm_rewrite_tac [] >> qexistsl_tac [`F`, `ei`, `p`, `r`, `r`, `p`] >> asm_rewrite_tac [] >> decide_tac
+QED
+
+Theorem abi_encoder_source_members_dynamic_exit:
+  abi_encoder_source_members_index (ctx,func) (origin,initial)
+    (first,last,lo,hi,b,cap,limit_st) (active,dp,site,slot,src,dst,sb,d,hl,sz)
+    target ((ei,az,mz,T)::infos) (p,so,ho) (ty::tys,av::avs,pre,pvs) r /\
+  abi_encoder_buffer_pre ei ty av p elem_src dst (sb+so) mz d sz b cap r /\
+  compile_abi_encode_child dst elem_src ei T ho dp p = (len,ce) /\
+  abi_encode_child_prefix dst ho dp p = (ops,prepared) /\
+  fn_has_code p ce func /\
+  (p.cs_blocks = ce.cs_blocks \/
+    !bb. lookup_block ce.cs_current_bb func.fn_blocks = SOME bb ==>
+      phi_prefix_length bb.bb_instructions = 0) /\
+  ce.cs_next_id <= last /\ ce.cs_next_id <= hi /\
+  ce.cs_next_var <= limit_st.cs_next_var /\
+  off = hl+LENGTH (FLAT (abi_tuple_tails pre pvs)) /\
+  abi_encoder_spine_child_output
+    (abi_encoder_member_dynamic_post (ctx,func) (ty,av,sb+so,mz,d+off)
+      (first,last,b,cap,limit_st) (FST ops,FST (SND ops),dp,d+ho,off,slot,site))
+    (ei,T,dst,elem_src,ho,dp,p,ce,len) r u ==>
+  abi_encoder_source_members_index (ctx,func) (origin,initial)
+    (first,last,lo,hi,b,cap,limit_st) (active,dp,site,slot,src,dst,sb,d,hl,sz)
+    target infos (ce,so+mz,ho+az) (tys,avs,pre++[ty],pvs++[av]) u
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  `abi_encoder_members_inv ((ei,az,mz,T)::infos) (ty::tys) (av::avs) pre pvs
+    active dp site slot first last lo p limit_st src dst sb so ho d hl sz b cap r /\
+    fresh_vars_wrt limit_st r` by
+    (PairCases_on `target` >> fs[abi_encoder_source_members_index_def, abi_encoder_members_inv_def]) >>
+  drule_all abi_encoder_members_dynamic_endpoint >> strip_tac >>
+  `p.cs_next_var <= ce.cs_next_var` by
+    (drule abi_encoder_child_bounds >> simp[]) >>
+  `abi_decoder_address_frame p.cs_next_var r r` by simp[abi_decoder_address_frame_def] >>
+  `abi_decode_sim ctx func r r` by simp[abi_decode_sim_refl] >>
+  irule abi_encoder_source_members_index_advance >>
+  asm_rewrite_tac [] >> qexistsl_tac [`T`, `ei`, `p`, `r`, `r`, `p`] >>
+  asm_rewrite_tac [] >> decide_tac
+QED
+
 val _ = List.app (fn th =>
   let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
     if List.all (fn s => s = "DISK_THM") oracles andalso null axioms andalso null (Thm.hyp th)
     then () else raise Fail "source entry has an admission, axiom or hypothesis"
   end) [abi_encoder_source_members_index_prepare, abi_encoder_source_members_static_request,
-    abi_encoder_source_members_dynamic_request];
+    abi_encoder_source_members_dynamic_request, abi_encoder_source_members_static_exit,
+    abi_encoder_source_members_dynamic_exit];
