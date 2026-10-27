@@ -10,7 +10,7 @@ Ancestors
   abiDecoderArrayInitExec abiDecoderLoop emitHelperProps valueEncoding arithmetic
   abiEncoderAddressReach abiDecoderReentryAddress abiDecoderDynamicLoopSetup
   abiDecoderReentry abiDecoderContract fragExec compileEnv venomState
-  venomExecSemantics instIdxIndep words list
+  venomExecSemantics venomInst emitHelper instIdxIndep words list
 
 Definition abi_encoder_member_phase_raw_def:
   abi_encoder_member_phase_raw st final initial ready <=>
@@ -351,4 +351,23 @@ Theorem abi_encoder_member_phase_extend_sim:
 Proof
   strip_tac >> gvs[abi_encoder_member_phase_raw_def] >>
   irule abi_encoder_run_sequence_extend_sim >> simp[] >> qexists_tac `st` >> simp[]
+QED
+
+Theorem abi_encoder_member_binary_raw_sim:
+  emit_op opc [lhs;rhs] st = (out,final) /\ (opc = ADD \/ opc = MUL) /\
+  fn_has_code st final func /\ abi_encoder_member_phase_raw st final initial ready /\
+  ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
+  initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  abi_decode_sim ctx func initial ready
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  drule abi_encoder_emit_address_shape >> strip_tac >>
+  drule inst_extends_emit_op >> strip_tac >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+    (emitted_insts st final)` by
+    (drule emitted_insts_emit_op >> strip_tac >>
+     gvs[mk_inst_def] >> Cases_on `opc = ADD` >> gvs[is_terminator_def]) >>
+  drule_all abi_encoder_member_phase_extend_sim >>
+  disch_then (qspec_then `ctx` mp_tac) >>
+  simp[abi_encoder_extend_sim_sim]
 QED
