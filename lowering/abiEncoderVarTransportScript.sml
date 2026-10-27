@@ -28,7 +28,8 @@ Theorem abi_encoder_phis_extend:
   ?v. eval_phis t insts = OK v /\ abi_decoder_vars_extend extras u v
 Proof
   Induct >- simp[eval_phis_def] >>
-  rpt gen_tac >> Cases_on `h.inst_opcode = PHI`
+  rpt gen_tac >> rename1 `eval_phis s (inst::rest) = OK u` >>
+  Cases_on `inst.inst_opcode = PHI`
   >- (simp[eval_phis_def] >> strip_tac >>
       gvs[AllCaseEqs()] >>
       drule_all abi_encoder_one_phi_extend >> strip_tac >>
