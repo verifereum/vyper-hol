@@ -11,7 +11,7 @@ these regressions. Export provenance and the cache key include every regression
 pytest source, as well as the pin and semantics profile.
 Do not commit exported JSON, duplicated Vyper source, or generated HOL wrappers.
 
-From `tests/`, run `holbuild run --noconfig generateVyperTests.sml` after building
+Follow the inline generation command in the repository README after building
 `vyperTestLib` and exporting the tests. The generated `vyperTest_*` theories join
 the normal CI matrix. Generation preserves existing definition scripts, including
 their JSON/CV proof boundaries, and creates definitions for newly exported

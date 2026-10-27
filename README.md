@@ -172,7 +172,10 @@ From the Vyper-HOL repository root, generate the HOL test wrappers from those ex
 
 ```bash
 holbuild build vyperTestLib
-(cd tests && holbuild run --noconfig generateVyperTests.sml)
+generator=$(mktemp --suffix=.sml)
+trap 'rm -f "$generator"' EXIT
+printf '%s\n' 'vyperTestLib.generate_tests ();' > "$generator"
+(cd tests && holbuild run --noconfig vyperTestLib "$generator")
 ```
 
 Then run individual generated test theories with `holbuild`, for example:

@@ -240,7 +240,10 @@ jobs:
       - name: Generate test theories from pinned exports
         run: |
           holbuild build --skip-checkpoints --skip-proof-steps vyperTestLib
-          (cd tests && holbuild run --noconfig generateVyperTests.sml)
+          generator=$(mktemp --suffix=.sml)
+          trap 'rm -f "$generator"' EXIT
+          printf '%s\n' 'vyperTestLib.generate_tests ();' > "$generator"
+          (cd tests && holbuild run --noconfig vyperTestLib "$generator")
 
       - name: Build Vyper test coverage baseline
         if: matrix.group == 0
