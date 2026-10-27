@@ -802,9 +802,9 @@ End
 (* Bring a local or loop variable into scope at its declaration, returning
    the environment for the rest of its block.  With ce_alloca_locals it gets a
    fresh pointer variable for an allocation of its declared type's size,
-   which emit_local_alloca then emits; else it keeps the MemLoc slot that
-   build_compile_env reserved for its name.  A name re-declared in a disjoint
-   block thus gets that block's allocation, type and capacity.
+   which emit_local_alloca then emits; else it keeps whatever ce_vars holds
+   for its name.  A name re-declared in a disjoint block thus gets that
+   block's allocation, type and capacity.
    Mirrors Python: Context.new_variable, which rebinds the name.  Python keeps
    an If branch's names after the If; dropping them at the end of the block
    is the same for well-typed code, which cannot use them there. *)
