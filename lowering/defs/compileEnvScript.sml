@@ -490,9 +490,8 @@ Datatype:
        Mirrors Python: func_t.do_raw_return *)
     ce_raw_return : bool;
     (* T when each local and loop variable gets a fresh ALLOCA at its
-       declaration (external and fallback bodies); F when it keeps the MemLoc
-       slot build_compile_env reserved for its name (internal functions and
-       the constructor body).
+       declaration, as in every body build_compile_env sets up; F when it
+       keeps whatever ce_vars already holds for its name.
        Mirrors Python: Context.new_variable -> allocate_buffer -> alloca *)
     ce_alloca_locals : bool
   |>
@@ -876,9 +875,10 @@ End
    before st (declare_local, compile_register_positional_args), one per
    local:
    - no variable sits at a fixed MemLoc offset: state_rel does not relate
-     those (the locals of internal bodies and of the constructor, and
-     default arguments, which compile_register_kwarg_vars keeps at MemLoc),
-     and a store to one could hit a live local's region;
+     those (the parameters build_compile_env places, until the code that
+     registers them rebinds them, and default arguments, which
+     compile_register_kwarg_vars keeps at MemLoc), and a store to one could
+     hit a live local's region;
    - no compiler variable fresh at st is a local's pointer, so a temporary of
      the code compiled from st on never overwrites one;
    - distinct locals have distinct pointers, so declaring a local leaves the
@@ -1179,8 +1179,8 @@ End
    the sub-relations below and exactly the current oracle suffix and request
    prefix; NONE-mode compatibility does not satisfy it.
    - local_ptrs_rel: locals in scope, held in memory through their pointer
-     variables (PtrVar).  MemLoc locals at fixed offsets, which the internal
-     function bodies still use until #545, are not related.
+     variables (PtrVar).  MemLoc variables at fixed offsets are not
+     related.
    - storage_rel, storage_vars_rel: storage, and the slots of storage
      variables.
    - transient_rel, transient_vars_rel: transient storage, and the slots of
@@ -1342,6 +1342,12 @@ Definition compute_pass_via_stack_def:
     else
       F :: compute_pass_via_stack rest stack_items
 End
+
+Theorem LENGTH_compute_pass_via_stack:
+  !tys n. LENGTH (compute_pass_via_stack tys n) = LENGTH tys
+Proof
+  Induct >> rw[compute_pass_via_stack_def]
+QED
 
 (* Compute calling convention for an internal function.
    returns_count: number of stack-returned values (0 = memory return).
