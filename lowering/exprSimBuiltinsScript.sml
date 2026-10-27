@@ -41,11 +41,9 @@
  *     operand: compile_keccak256_bytes and compile_sha256_bytes read the
  *     bytes from ADD ptr 32, which wraps at 2 ** 256, while val_in_memory
  *     reads them at w2n ptr + 32, and nothing in stmt_state_rel or
- *     expr_val_at keeps a memory value below 2 ** 256 (exec_alloca's
- *     vs_alloca_next is unbounded).  They wait for S3's alloca-frontier
- *     invariant, vs_alloca_next < dimword (:256) along a run
- *     (raw_unit_memory_ok), to reach the judgment (stmtLoweringProps notes
- *     it as still unstated there), which gives the bound at the hash.
+ *     expr_val_at keeps a memory value below 2 ** 256: alloca_room bounds
+ *     the frontier, but expr_val_at does not keep a value's pointer plus
+ *     its length below it.  They wait for that.
  *   - compile_method_id_other_sim: a Bytes[4] output, and the runtime hash
  *     of a signature, use ALLOCA'd buffers or ADD ptr 32, so it waits for
  *     the same bound.

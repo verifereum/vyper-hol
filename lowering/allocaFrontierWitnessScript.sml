@@ -4,7 +4,7 @@
 Theory allocaFrontierWitness
 Ancestors
   vyperCompiler venomExecSemantics venomState venomInst finite_map list words
-  unitTransformDefs contextCodegenRel
+  contextCodegenRel
 
 Definition frontier_callee_def:
   frontier_callee = mk_raw_function "callee"
