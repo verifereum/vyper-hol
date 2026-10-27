@@ -158,6 +158,7 @@ val checker_defs =
      constant_value rejects those builtins before evaluating them. *)
   [contract_constants_ok_def,
    constants_fold_def,
+   vyperInterpreterTheory.constants_order_def,
    constants_fold_module_def,
    merge_constant_imms_def,
    constant_value_def,

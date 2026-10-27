@@ -2,7 +2,7 @@ Theory vyperInterpreter
 Ancestors
   vyperCallOutcome[ignore_grammar]
   arithmetic alist combin option list finite_map pair
-  rich_list cv cv_std vfmState vfmContext vfmCompute[ignore_grammar]
+  rich_list sorting cv cv_std vfmState vfmContext vfmCompute[ignore_grammar]
   vfmExecution[ignore_grammar] vyperAST vyperABI
   vyperMisc vyperNsidFmap vyperValue vyperValueOperation vyperStorage vyperContext vyperState
   vyperEvent vyperEvmBoundary vyperCreate vyperRuntimeAccounts
@@ -1951,16 +1951,54 @@ End
 
 val () = cv_auto_trans set_current_module_def;
 
-(* Evaluate constants for all modules and merge into am.immutables. *)
-Definition evaluate_all_constants_def:
-  evaluate_all_constants cx am addr [] = SOME am ∧
-  evaluate_all_constants cx am addr ((src_id_opt, ts) :: rest) =
+(* The order in which modules' constants are evaluated: imported modules
+   first, the main module (source NONE) last, so a main-module constant can
+   read an imported module's constant, as Vyper allows.  The frontend lists
+   the main module first and the imports in dependency order
+   (imports_topsorted), so the result is in dependency order. *)
+Definition constants_order_def:
+  constants_order [] = [] ∧
+  constants_order ((src_id_opt, ts) :: rest) =
+    if IS_SOME src_id_opt then (src_id_opt, ts) :: constants_order rest
+    else constants_order rest ++ [(src_id_opt, ts)]
+End
+
+val () = cv_auto_trans constants_order_def;
+
+(* constants_order only reorders the modules. *)
+Theorem PERM_constants_order:
+  !mods. PERM (constants_order mods) mods
+Proof
+  Induct >- simp[constants_order_def] >>
+  Cases >> rename1 `(sid,ts)` >>
+  Cases_on `IS_SOME sid` >> gvs[constants_order_def] >>
+  once_rewrite_tac[PERM_FUN_APPEND_CONS] >> simp[]
+QED
+
+Theorem MEM_constants_order:
+  !mods x. MEM x (constants_order mods) <=> MEM x mods
+Proof
+  rpt gen_tac >> irule MEM_PERM >> simp[PERM_constants_order]
+QED
+
+(* Evaluate the constants of the given modules, in list order, and merge
+   them into am.immutables. *)
+Definition evaluate_module_constants_def:
+  evaluate_module_constants cx am addr [] = SOME am ∧
+  evaluate_module_constants cx am addr ((src_id_opt, ts) :: rest) =
     case constants_env (set_current_module cx src_id_opt)
                        am addr src_id_opt ts FEMPTY of
     | NONE => NONE
     | SOME cenv =>
         let am' = merge_constants addr src_id_opt cenv am in
-        evaluate_all_constants cx am' addr rest
+        evaluate_module_constants cx am' addr rest
+End
+
+(* Evaluate constants for all modules, imports first (constants_order), and
+   merge them into am.immutables. *)
+Definition evaluate_all_constants_def:
+  evaluate_all_constants cx am addr mods =
+    evaluate_module_constants cx am addr (constants_order mods)
 End
 
 Definition send_call_value_def:
