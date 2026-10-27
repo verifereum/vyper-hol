@@ -68,10 +68,29 @@ Proof
   simp[abi_encoder_empty_preserving_def, comp_return_def]
 QED
 
+(* Dispatch on compiler syntax, never on tactic success or exceptions. *)
+fun compiler_head tm =
+  let val (head,args) = strip_comb tm in
+    (if is_const head then #Name (dest_thy_const head) else "", args)
+  end;
+
+fun compiler_exit_nonempty tm =
+  case compiler_head tm of
+    ("emit_op", _) => true
+  | ("emit_void", _) => true
+  | ("comp_bind", [_,f]) => compiler_exit_nonempty (snd (dest_abs f))
+  | ("comp_ignore_bind", [_,f]) => compiler_exit_nonempty f
+  | _ => false;
+
 fun exit_nonempty_tac g =
-  (FIRST [FIRST_PROVE [simp[abi_encoder_exit_nonempty_emit]],
-    ho_match_mp_tac abi_encoder_exit_nonempty_bind >> gen_tac >> exit_nonempty_tac,
-    ho_match_mp_tac abi_encoder_exit_nonempty_ignore >> exit_nonempty_tac]) g;
+  (case compiler_head (rand (snd g)) of
+    ("emit_op", _) => simp[abi_encoder_exit_nonempty_emit]
+  | ("emit_void", _) => simp[abi_encoder_exit_nonempty_emit]
+  | ("comp_bind", _) =>
+      ho_match_mp_tac abi_encoder_exit_nonempty_bind >> gen_tac >> exit_nonempty_tac
+  | ("comp_ignore_bind", _) =>
+      ho_match_mp_tac abi_encoder_exit_nonempty_ignore >> exit_nonempty_tac
+  | _ => FAIL_TAC "unsupported nonempty compiler syntax") g;
 
 Theorem abi_encoder_empty_preserving_prims:
   (!opc ops. abi_encoder_empty_preserving (emit_op opc ops)) /\
@@ -90,14 +109,25 @@ Proof
 QED
 
 fun empty_preserving_tac extra g =
-  (FIRST [irule abi_encoder_nonempty_preserving >> exit_nonempty_tac,
-    FIRST_PROVE [simp (extra @ [abi_encoder_empty_preserving_prims,
-      abi_encoder_empty_preserving_return, LET_THM])],
-    first_x_assum irule,
-    ho_match_mp_tac abi_encoder_empty_preserving_bind >> conj_tac
-      >- empty_preserving_tac extra >> gen_tac >> empty_preserving_tac extra,
-    ho_match_mp_tac abi_encoder_empty_preserving_ignore >> conj_tac >> empty_preserving_tac extra,
-    IF_CASES_TAC >> fs[] >> empty_preserving_tac extra]) g;
+  let val tm = rand (snd g) in
+    (if compiler_exit_nonempty tm then
+       irule abi_encoder_nonempty_preserving >> exit_nonempty_tac
+     else if is_cond tm then
+       IF_CASES_TAC >> fs[] >> empty_preserving_tac extra
+     else case compiler_head tm of
+       ("comp_bind", _) =>
+         ho_match_mp_tac abi_encoder_empty_preserving_bind >> conj_tac
+           >- empty_preserving_tac extra >> gen_tac >> empty_preserving_tac extra
+     | ("comp_ignore_bind", _) =>
+         ho_match_mp_tac abi_encoder_empty_preserving_ignore >> conj_tac >>
+         empty_preserving_tac extra
+     | ("compile_abi_encode_to_buf", _) => first_x_assum irule
+     | ("compile_abi_encode_child", _) => first_x_assum irule
+     | ("compile_abi_encode_complex_elems", _) => first_x_assum irule
+     | ("compile_abi_encode_dyn_loop", _) => first_x_assum irule
+     | _ => simp (extra @ [abi_encoder_empty_preserving_prims,
+         abi_encoder_empty_preserving_return, LET_THM])) g
+  end;
 
 Theorem abi_encoder_empty_preserving_alloc:
   abi_encoder_empty_preserving (compile_alloc_buffer n)
@@ -144,7 +174,8 @@ Proof
   Cases_on `prefix` >> simp[] >>
   Cases_on `insts` >> simp[phi_prefix_length_def] >>
   rpt strip_tac >> gvs[] >>
-  Cases_on `h.inst_opcode = PHI` >> gvs[]
+  rename1 `inst.inst_opcode = PHI` >>
+  Cases_on `inst.inst_opcode = PHI` >> gvs[]
 QED
 
 Theorem abi_encoder_core_containing_exit_phi:
