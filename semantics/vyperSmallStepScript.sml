@@ -1763,18 +1763,7 @@ Proof
   \\ rw[Once OWHILE_THM]
 QED
 
-val evaluate_all_constants_pre_def = evaluate_all_constants_def
-  |> cv_auto_trans_pre "evaluate_all_constants_pre";
-
-Theorem evaluate_all_constants_pre[cv_pre]:
-  !cx am addr mods. evaluate_all_constants_pre cx am addr mods
-Proof
-  Induct_on `mods` >> rpt gen_tac
-  >- simp[Once evaluate_all_constants_pre_def] >>
-  PairCases_on `h` >>
-  simp[Once evaluate_all_constants_pre_def, constants_env_pre] >>
-  rpt strip_tac >> simp[]
-QED
+val () = cv_auto_trans evaluate_all_constants_def;
 
 val call_external_function_pre_def = call_external_function_def
      |> SRULE [eval_stmts_eq_cont_cps,
