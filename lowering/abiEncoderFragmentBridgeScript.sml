@@ -57,4 +57,3 @@ Proof
   simp[enc_scratch_def, alloca_inv_def, allocas_non_overlapping_def,
        alloca_next_valid_def]
 QED
-
