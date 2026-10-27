@@ -4,7 +4,7 @@ Ancestors
   abiScratchMembers abiScratchAddress abiScratchChild abiScratchEncoderContract
   abiEncoderChildSuffix abiDecoderFrame abiEncoderMembersBoundary
   abiDecoderAllocation abiDecoderIndexInit abiDecoderProtectedScratch pred_set
-  abiScratchComplex abiEncoderArrayTail abiBuiltinPrefix
+  abiScratchComplex abiEncoderArrayTail abiBuiltinPrefix abiEncoderExtendSim
   abiEncoderMembersContract abiEncoderMembersDefs abiEncoderMembersSource
   abiEncoderTuple abiEncoderChildInputs abiEncoderInput abiCanonicalWindows
   abiDecoderArrayInitExec abiDecoderLoop emitHelperProps valueEncoding arithmetic
@@ -339,4 +339,16 @@ Proof
   drule_all abi_encode_array_tail_sequence >> strip_tac >>
   gvs[abi_builtin_prefix_def, abi_encoder_member_phase_raw_def] >>
   gvs[eval_op_inst_idx, fresh_vars_wrt_def, abi_decoder_address_frame_def]
+QED
+
+Theorem abi_encoder_member_phase_extend_sim:
+  final.cs_blocks = st.cs_blocks /\ final.cs_current_bb = st.cs_current_bb /\ inst_extends st final /\
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) (emitted_insts st final) /\
+  fn_has_code st final func /\ abi_encoder_member_phase_raw st final initial ready /\
+  ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
+  initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  abi_encoder_extend_sim ctx func initial ready
+Proof
+  strip_tac >> gvs[abi_encoder_member_phase_raw_def] >>
+  irule abi_encoder_run_sequence_extend_sim >> simp[] >> qexists_tac `st` >> simp[]
 QED
