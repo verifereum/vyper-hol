@@ -8,6 +8,8 @@ Ancestors
   abiEncoderMemberPhaseExec abiEncoderOpenInputFrame abiEncoderArrayFrame
   abiDecoderFootprint abiDecoderReentry emitHelperProps
   abiDecoderArrayInitExec abiDecoderDynamicLoopSetup
+  abiEncoderMemberPhaseEffect abiScratchAfterAddress abiEncoderRegisteredEffect
+  abiEncoderExtendSim pred_set venomInst
 
 Definition abi_encoder_spine_source_pre_def:
   abi_encoder_spine_source_pre (at,av,sb,source_cap,d)
@@ -329,3 +331,114 @@ val _ = List.app (fn (name,th) =>
   [("shared_core_run", abi_encoder_spine_shared_core_run),
    ("shared_input_address", abi_encoder_spine_shared_input_address),
    ("static_shared_pre", abi_encoder_spine_static_shared_pre)];
+
+(* Reattach the real ADD endpoint, retaining the exact child output window. *)
+Theorem abi_encoder_spine_static_shared_transport:
+  emit_op ADD [dst;Lit (n2w ho)] st = (head,p) /\
+  fn_has_code st p func /\
+  eval_operand dst initial = SOME (n2w d) /\
+  p.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
+  ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
+  initial.vs_inst_idx = LENGTH st.cs_current_insts /\
+  abi_encoder_member_phase_raw st p initial ready /\
+  abi_encoder_shared_endpoint (ctx,func) (p,en,out,limit_st)
+    (first,last,b,cap) (at,av,d+ho) ready actual ==>
+  abi_encoder_shared_endpoint (ctx,func) (st,en,out,limit_st)
+    (first,last,b,cap) (at,av,d+ho) initial actual
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  `eval_operand (Lit (n2w ho)) initial = SOME (n2w ho)` by simp[eval_operand_def] >>
+  drule_all (SRULE [] (Q.INST [`opc` |-> `ADD`] abi_encoder_member_binary_transport)) >>
+  strip_tac >>
+  drule abi_encoder_emit_address_shape >> strip_tac >>
+  drule emitted_insts_emit_op >> strip_tac >>
+  drule inst_extends_emit_op >> strip_tac >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+    (emitted_insts st p)` by simp[mk_inst_def, is_terminator_def] >>
+  drule_all abi_encoder_member_phase_extend_sim >>
+  disch_then (qspec_then `ctx` assume_tac) >>
+  `abi_encoder_registered_effect (abi_decoder_ids st.cs_next_id en.cs_next_id)
+    [(d+ho,LENGTH (enc at av))] initial ready /\
+   (alloca_inv initial ==> alloca_inv ready)` by
+    (drule_all (SRULE [] (Q.INST [`opc` |-> `ADD`] abi_encoder_member_binary_registered)) >>
+     simp[]) >>
+  qpat_x_assum `abi_encoder_shared_endpoint _ _ _ _ _ _`
+    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_encoder_shared_endpoint_def]) >>
+  `abi_scratch_effect first last st.cs_next_id en.cs_next_id st.cs_next_var
+    limit_st (d+ho) (LENGTH (enc at av)) b cap initial actual` by
+    (irule abi_scratch_effect_after_address >>
+     qexistsl_tac [`d+ho`, `en.cs_next_id`, `p.cs_next_id`, `p.cs_next_var`,
+       `LENGTH (enc at av)`, `ready`] >> simp[]) >>
+  `abi_encoder_registered_effect (abi_decoder_ids st.cs_next_id en.cs_next_id)
+    [(d+ho,LENGTH (enc at av))] ready actual` by
+    (irule abi_encoder_registered_effect_enlarge >>
+     qexistsl_tac [`abi_decoder_ids p.cs_next_id en.cs_next_id`,
+       `[(d+ho,LENGTH (enc at av))]`] >>
+     simp[abi_decoder_ids_def, SUBSET_DEF]) >>
+  simp_tac bool_ss [abi_encoder_shared_endpoint_def] >>
+  asm_rewrite_tac [] >> rpt conj_tac
+  >- (irule abi_encoder_registered_effect_trans >> qexists_tac `ready` >> simp[])
+  >- metis_tac[] >>
+  irule abi_encoder_extend_sim_trans >> qexists_tac `ready` >> simp[]
+QED
+
+Theorem abi_encoder_spine_static_shared:
+  emit_op ADD [dst;Lit (n2w ho)] st = (head,p) /\
+  fn_has_code st p func /\
+  abi_encoder_spine_core_code func (ei,head,src,p,en,out) /\
+  abi_encoder_shared ei /\
+  abi_encoder_shared_input (ei,at,av) (st,src,dst) (sb,source_cap)
+    (d,output_size) (first,last,b,cap) initial /\
+  ho+LENGTH (enc at av) <= output_size /\
+  abi_decoder_budget first last b cap initial /\
+  first <= p.cs_next_id /\ en.cs_next_id <= last /\
+  p.cs_next_var <= limit_st.cs_next_var /\ en.cs_next_var <= limit_st.cs_next_var /\
+  fresh_vars_wrt limit_st initial /\ ~initial.vs_halted /\
+  initial.vs_current_bb = st.cs_current_bb /\
+  initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  ?ready actual.
+    abi_encoder_spine_child
+      (abi_encoder_spine_shared_post (ctx,func) (at,av,sb,source_cap,d+ho)
+        (first,last,b,cap,limit_st))
+      (ei,F,dst,src,ho,dp,st,en,out) initial actual /\
+    abi_encoder_member_phase_raw st p initial ready /\
+    abi_encoder_spine_shared_post (ctx,func) (at,av,sb,source_cap,d+ho)
+      (first,last,b,cap,limit_st) (ei,head,src,p,en,out) ready actual /\
+    abi_encoder_shared_endpoint (ctx,func) (st,en,out,limit_st)
+      (first,last,b,cap) (at,av,d+ho) initial actual
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  `?ready actual.
+    abi_encoder_spine_child
+      (abi_encoder_spine_shared_post (ctx,func) (at,av,sb,source_cap,d+ho)
+        (first,last,b,cap,limit_st))
+      (ei,F,dst,src,ho,dp,st,en,out) initial actual /\
+    abi_encoder_member_phase_raw st p initial ready /\
+    abi_encoder_spine_shared_post (ctx,func) (at,av,sb,source_cap,d+ho)
+      (first,last,b,cap,limit_st) (ei,head,src,p,en,out) ready actual` by
+    (irule abi_encoder_spine_static_run >>
+     conj_tac >- fs[abi_encoder_shared_input_def] >>
+     conj_tac >- asm_rewrite_tac [] >>
+     conj_tac
+     >- (qexistsl_tac [`abi_encoder_spine_shared_pre (at,av,sb,source_cap,d+ho)
+             (first,last,b,cap,limit_st)`, `func`] >>
+         asm_rewrite_tac [] >> conj_tac
+         >- (rpt strip_tac >> drule_all abi_encoder_spine_shared_core_run >> simp[]) >>
+         rpt strip_tac >> irule abi_encoder_spine_static_shared_pre >>
+         asm_rewrite_tac [] >>
+         qexistsl_tac [`dst`, `initial`, `output_size`, `st`] >> asm_rewrite_tac []) >>
+     qexists_tac `limit_st` >> asm_rewrite_tac []) >>
+  qexistsl_tac [`ready`, `actual`] >> asm_rewrite_tac [] >>
+  irule abi_encoder_spine_static_shared_transport >>
+  asm_rewrite_tac [] >> qexistsl_tac [`dst`, `head`, `p`, `ready`] >>
+  fs[abi_encoder_shared_input_def, abi_encoder_spine_shared_post_def]
+QED
+
+val _ = List.app (fn (name,th) =>
+  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
+    if List.all (fn s => s = "DISK_THM") oracles andalso null axioms then
+      print ("ENCODER_SPINE_COMPAT_AUDIT_OK " ^ name ^ "\n")
+    else raise Fail ("encoder spine compatibility admission dependency: " ^ name)
+  end)
+  [("static_shared_transport", abi_encoder_spine_static_shared_transport),
+   ("static_shared", abi_encoder_spine_static_shared)];
