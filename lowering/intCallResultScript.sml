@@ -13,6 +13,13 @@
  *     slot of the buffer and leave everything else alone
  *   stack_results_val_in_memory — the words of a stack-returned value,
  *     laid out 32 bytes apart, hold the value in memory (val_in_memory)
+ *   buffer_vv_holds — a value held in memory at the buffer's address is
+ *     what the buffer's LocatedValue stands for (vv_holds); this is also
+ *     the caller's side of a memory return
+ *   store_multi_results_frag — the stores, from a related state, end
+ *     related, with the buffer's LocatedValue holding the returned value
+ *   result_state_memory_frame, store_result_operand_frame — what such
+ *     straight-line code keeps
  *)
 
 Theory intCallResult
