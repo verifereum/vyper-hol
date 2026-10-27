@@ -4,7 +4,7 @@ Ancestors
   abiScratchMembers abiScratchAddress abiScratchChild abiScratchEncoderContract
   abiEncoderChildSuffix abiDecoderFrame abiEncoderMembersBoundary
   abiDecoderAllocation abiDecoderIndexInit abiDecoderProtectedScratch pred_set
-  abiScratchComplex
+  abiScratchComplex abiEncoderArrayTail abiBuiltinPrefix
   abiEncoderMembersContract abiEncoderMembersDefs abiEncoderMembersSource
   abiEncoderTuple abiEncoderChildInputs abiEncoderInput abiCanonicalWindows
   abiDecoderArrayInitExec abiDecoderLoop emitHelperProps valueEncoding arithmetic
@@ -307,4 +307,36 @@ Proof
   drule_all abi_encoder_member_load_transport >> strip_tac >>
   drule abi_encoder_emit_address_shape >> strip_tac >>
   gvs[abi_decoder_address_frame_def, w2n_n2w]
+QED
+
+Theorem abi_encoder_member_tail_raw:
+  abi_encode_array_tail data_op dyn_ptr st = (ops,final) /\
+  eval_operand data_op initial = SOME (n2w d) /\ eval_operand dyn_ptr initial = SOME (n2w slot) /\
+  mload slot initial = n2w off /\ slot < dimword (:256) /\
+  abi_decoder_operand_live st.cs_next_var data_op /\
+  final.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial ==>
+  ?ready. abi_encoder_member_phase_raw st final initial ready
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  drule_all abi_encode_array_tail_sequence >> strip_tac >>
+  gvs[abi_builtin_prefix_def] >>
+  qexists_tac `actual with vs_inst_idx := LENGTH final.cs_current_insts` >>
+  simp[abi_encoder_member_phase_raw_def] >> qexists_tac `actual` >> simp[]
+QED
+
+Theorem abi_encoder_member_tail_transport:
+  abi_encode_array_tail data_op dyn_ptr st = (ops,final) /\
+  eval_operand data_op initial = SOME (n2w d) /\ eval_operand dyn_ptr initial = SOME (n2w slot) /\
+  mload slot initial = n2w off /\ slot < dimword (:256) /\
+  abi_decoder_operand_live st.cs_next_var data_op /\
+  final.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
+  abi_encoder_member_phase_raw st final initial ready ==>
+  eval_operand (FST ops) ready = SOME (n2w off) /\
+  eval_operand (SND ops) ready = SOME (n2w (d+off)) /\
+  fresh_vars_wrt limit_st ready /\ abi_decoder_address_frame st.cs_next_var initial ready
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  drule_all abi_encode_array_tail_sequence >> strip_tac >>
+  gvs[abi_builtin_prefix_def, abi_encoder_member_phase_raw_def] >>
+  gvs[eval_op_inst_idx, fresh_vars_wrt_def, abi_decoder_address_frame_def]
 QED
