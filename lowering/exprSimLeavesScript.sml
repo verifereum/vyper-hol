@@ -83,35 +83,7 @@ Theorem expr_sim_of_vv_sim_memory:
                 ?t p. vv = LocatedValue t p /\ p.ptr_location = LocMemory) ==>
     expr_sim ctx func cenv cx ty e es
 Proof
-  rw[expr_sim_def] >>
-  qpat_x_assum `lower_value _ _ _ _ _ = _` mp_tac >>
-  simp[lower_value_def, comp_bind_def] >>
-  Cases_on `compile_expr cenv ty e sa` >> rename1 `_ = (vv, sm)` >>
-  qpat_x_assum `!sa vv sm. _` (drule_then strip_assume_tac) >>
-  gvs[] >> strip_tac >>
-  drule unwrap_value_extends >> strip_tac >>
-  `fn_has_code sa sa func` by metis_tac[fn_has_code_split, cs_extends_refl] >>
-  `expr_vv_res_ok res` by simp[expr_vv_res_ok_def] >>
-  qpat_x_assum `expr_vv_sim _ _ _ _ _ _ _`
-    (mp_tac o SIMP_RULE std_ss [expr_vv_sim_def]) >>
-  disch_then (qspecl_then [`sa`, `sa`, `LocatedValue t p`, `res`, `es'`, `s0`]
-                mp_tac) >>
-  simp[] >> strip_tac >>
-  irule frag_exec_seq >> first_x_assum (irule_at Any) >>
-  simp[cs_extends_refl] >>
-  Cases_on `?v. res = INL (Value v)`
-  >- (gvs[] >>
-      qspecl_then [`ctx`, `func`, `cenv`, `cx`, `e`, `es`, `sa`, `sa`, `sb`,
-                   `s0`, `es'`, `v`, `t`, `p`, `op`,
-                   `expr_exit (INL (Value v))`]
-        mp_tac unwrap_memory_sim >>
-      impl_tac >- asm_rewrite_tac[arithmeticTheory.LESS_EQ_REFL] >>
-      strip_tac >> irule frag_exec_conseq >> first_x_assum (irule_at Any) >>
-      simp[] >> rpt strip_tac >> gvs[]) >>
-  irule frag_exec_conseq >>
-  qexistsl_tac [`\s. F`, `\s. F`, `expr_exit res`] >>
-  simp[fragExecTheory.frag_exec_false_pre] >>
-  gvs[expr_res_ok_def]
+  rpt strip_tac >> irule expr_sim_of_vv_sim >> simp[]
 QED
 
 (* ===== Locals ===== *)
@@ -153,6 +125,14 @@ Proof
   `?p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz)` by
     gvs[expr_sim_pre_def, expr_sim_inv_def, well_typed_expr_def] >>
   drule_then (qspecl_then [`cx`, `ann`] assume_tac) eval_name_word >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, get_scopes_def, return_def,
+       type_check_def, assert_def, check_def, ignore_bind_def] >>
+  strip_tac >> gvs[] >>
+  qpat_x_assum `bind _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, get_scopes_def, return_def,
+       type_check_def, assert_def, check_def, ignore_bind_def,
+       read_result_def] >> strip_tac >>
   gvs[compile_expr_def, compile_name_vv_def, comp_return_def,
       contextTheory.mk_ptr_def, vyperASTTheory.expr_type_def] >>
   irule frag_exec_refl >> rpt strip_tac >> gvs[] >>
@@ -161,7 +141,7 @@ Proof
        val_in_memory entry.type entry.value (w2n w) s.vs_memory` by
     (fs[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def] >>
      first_x_assum drule_all >> metis_tac[]) >>
-  simp[vv_post_def, vv_holds_def, vv_at_def, materialise_def, return_def,
+  simp[vv_post_def, vv_holds_def, vv_at_def, read_result_def, return_def,
        vyperASTTheory.expr_type_def, eval_operand_def] >>
   rpt conj_tac
   >- metis_tac[val_in_memory_word_type]
@@ -392,9 +372,9 @@ val lookup_global_tac =
   simp[Once evaluate_def, lookup_global_def, bind_def, lift_option_type_def,
        return_def, raise_def, LET_THM];
 
-(* A storage or transient variable whose slot decodes at es: the source
-   reads it (an aggregate array stays an ArrayRef, which materialise reads
-   the same way) and leaves the state alone. *)
+(* A storage or transient variable whose slot decodes at es: evaluation
+   returns a StoragePlace for every type; read_result reads that place
+   and leaves the state alone. *)
 Theorem eval_expr_toplevel_storage:
   !cx ann src id es res es' ts tr typ id_str slot tvt v.
     eval_expr cx (TopLevelName ann (src, id)) es = (res, es') /\
@@ -403,12 +383,12 @@ Theorem eval_expr_toplevel_storage:
     lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
     evaluate_type (get_tenv cx) typ = SOME tvt /\
     read_storage_slot cx tr (n2w slot) tvt es = (INL v, es) ==>
-    es' = es /\ ?tv. res = INL tv /\ materialise cx tv es = (INL v, es)
+    es' = es /\ ?tv. res = INL tv /\ read_result cx tv es = (INL v, es)
 Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >> lookup_global_tac >>
-  Cases_on `tvt` >> gvs[return_def, bind_def, materialise_def] >>
-  rpt strip_tac >> gvs[materialise_def, return_def, bind_def]
+  rpt strip_tac >>
+  gvs[read_result_def, read_place_def, return_def, bind_def]
 QED
 
 (* The compile environment holds a storage or transient variable at the
@@ -463,8 +443,8 @@ QED
 (* A storage or transient variable whose slot does not decode at es (a
    dynamic array, bytestring or string, or an aggregate holding one, whose
    length word is above its bound).  Cheated, and false as stated: the
-   source raises a RuntimeError reading it (or materialising the ArrayRef
-   later), where the lowering emits no code and hands out the slot.
+   source raises a RuntimeError when read_result reads the StoragePlace,
+   where the lowering emits no code and hands out the slot.
    Nothing in stmt_state_rel keeps a variable's slots decodable; the fix is
    a storage invariant, as for exprSimUnwrap's unwrap_storage_word_sim. *)
 Theorem compile_toplevel_storage_undecodable_sim:
