@@ -2030,8 +2030,8 @@ QED
 
 
 (* Helper: ECRecover arg types imply ecrecover_arg_to_num returns SOME *)
-Theorem ecrecover_arg_Uint256_not_none[local]:
-  !v. value_has_type (BaseTV (UintT 256)) v ⇒ ecrecover_arg_to_num v ≠ NONE
+Theorem ecrecover_arg_Uint_not_none[local]:
+  !n v. value_has_type (BaseTV (UintT n)) v ⇒ ecrecover_arg_to_num v ≠ NONE
 Proof
   rpt strip_tac >> Cases_on `v` >> fs[value_has_type_def, ecrecover_arg_to_num_def]
 QED
@@ -2074,26 +2074,30 @@ Theorem ecrecover_value_list_no_type_error[local]:
   LENGTH vs = 4 ∧
   value_has_type (BaseTV (BytesT (Fixed 32))) (EL 0 vs) ∧
   (!i. 0 < i ∧ i < 4 ⇒
+       value_has_type (BaseTV (UintT 8)) (EL i vs) ∨
        value_has_type (BaseTV (UintT 256)) (EL i vs) ∨
        value_has_type (BaseTV (BytesT (Fixed 32))) (EL i vs)) ==>
   !msg. evaluate_builtin cx acc (BaseT AddressT) ECRecover tys vs <> INR (TypeError msg)
 Proof
   strip_tac >> gen_tac >>
   `ecrecover_arg_to_num (EL 1 vs) ≠ NONE` by (
-    `value_has_type (BaseTV (UintT 256)) (EL 1 vs) ∨
+    `value_has_type (BaseTV (UintT 8)) (EL 1 vs) ∨
+     value_has_type (BaseTV (UintT 256)) (EL 1 vs) ∨
      value_has_type (BaseTV (BytesT (Fixed 32))) (EL 1 vs)` by (
       qpat_assum `!i. 0 < i ∧ i < 4 ⇒ _` (qspec_then `1` mp_tac) >> simp[]) >>
-    metis_tac[ecrecover_arg_Uint256_not_none, ecrecover_arg_BytesT32_not_none]) >>
+    metis_tac[ecrecover_arg_Uint_not_none, ecrecover_arg_BytesT32_not_none]) >>
   `ecrecover_arg_to_num (EL 2 vs) ≠ NONE` by (
-    `value_has_type (BaseTV (UintT 256)) (EL 2 vs) ∨
+    `value_has_type (BaseTV (UintT 8)) (EL 2 vs) ∨
+     value_has_type (BaseTV (UintT 256)) (EL 2 vs) ∨
      value_has_type (BaseTV (BytesT (Fixed 32))) (EL 2 vs)` by (
       qpat_assum `!i. 0 < i ∧ i < 4 ⇒ _` (qspec_then `2` mp_tac) >> simp[]) >>
-    metis_tac[ecrecover_arg_Uint256_not_none, ecrecover_arg_BytesT32_not_none]) >>
+    metis_tac[ecrecover_arg_Uint_not_none, ecrecover_arg_BytesT32_not_none]) >>
   `ecrecover_arg_to_num (EL 3 vs) ≠ NONE` by (
-    `value_has_type (BaseTV (UintT 256)) (EL 3 vs) ∨
+    `value_has_type (BaseTV (UintT 8)) (EL 3 vs) ∨
+     value_has_type (BaseTV (UintT 256)) (EL 3 vs) ∨
      value_has_type (BaseTV (BytesT (Fixed 32))) (EL 3 vs)` by (
       qpat_assum `!i. 0 < i ∧ i < 4 ⇒ _` (qspec_then `3` mp_tac) >> simp[]) >>
-    metis_tac[ecrecover_arg_Uint256_not_none, ecrecover_arg_BytesT32_not_none]) >>
+    metis_tac[ecrecover_arg_Uint_not_none, ecrecover_arg_BytesT32_not_none]) >>
   `?v0 v1 v2 v3. vs = [v0; v1; v2; v3]` by (
     map_every qexists [`EL 0 vs`, `EL 1 vs`, `EL 2 vs`, `EL 3 vs`] >>
     simp[list_el_decomp_4]) >>
@@ -2185,7 +2189,7 @@ Proof
     rpt strip_tac >>
     `value_has_type (EL i tvs) (EL i vs)` by (`i < 4:num` by decide_tac >> res_tac) >>
     `EL i tvs = BaseTV (UintT 256) ∨ EL i tvs = BaseTV (BytesT (Fixed 32))` by simp[] >>
-    metis_tac[ecrecover_arg_Uint256_not_none, ecrecover_arg_BytesT32_not_none]) >>
+    metis_tac[ecrecover_arg_Uint_not_none, ecrecover_arg_BytesT32_not_none]) >>
   (* value_has_type for element 0: metis needs 0<4 explicitly since it can't do arithmetic *)
   `value_has_type (BaseTV (BytesT (Fixed 32))) (EL 0 vs)` by (
     `0 < 4:num` by decide_tac >>
@@ -2197,19 +2201,19 @@ Proof
     `1 < 4:num` by decide_tac >>
     `value_has_type (EL 1 tvs) (EL 1 vs)` by metis_tac[] >>
     `EL 1 tvs = BaseTV (UintT 256) ∨ EL 1 tvs = BaseTV (BytesT (Fixed 32))` by metis_tac[] >>
-    metis_tac[ecrecover_arg_Uint256_not_none, ecrecover_arg_BytesT32_not_none]) >>
+    metis_tac[ecrecover_arg_Uint_not_none, ecrecover_arg_BytesT32_not_none]) >>
   `ecrecover_arg_to_num (EL 2 vs) ≠ NONE` by (
     `0 < 2:num` by decide_tac >>
     `2 < 4:num` by decide_tac >>
     `value_has_type (EL 2 tvs) (EL 2 vs)` by metis_tac[] >>
     `EL 2 tvs = BaseTV (UintT 256) ∨ EL 2 tvs = BaseTV (BytesT (Fixed 32))` by metis_tac[] >>
-    metis_tac[ecrecover_arg_Uint256_not_none, ecrecover_arg_BytesT32_not_none]) >>
+    metis_tac[ecrecover_arg_Uint_not_none, ecrecover_arg_BytesT32_not_none]) >>
   `ecrecover_arg_to_num (EL 3 vs) ≠ NONE` by (
     `0 < 3:num` by decide_tac >>
     `3 < 4:num` by decide_tac >>
     `value_has_type (EL 3 tvs) (EL 3 vs)` by metis_tac[] >>
     `EL 3 tvs = BaseTV (UintT 256) ∨ EL 3 tvs = BaseTV (BytesT (Fixed 32))` by metis_tac[] >>
-    metis_tac[ecrecover_arg_Uint256_not_none, ecrecover_arg_BytesT32_not_none]) >>
+    metis_tac[ecrecover_arg_Uint_not_none, ecrecover_arg_BytesT32_not_none]) >>
   (* Remove assumptions that would conflict with list decomposition or fs[EL] *)
   qpat_x_assum `LIST_REL value_has_type tvs vs` kall_tac >>
   qpat_x_assum `MAP (evaluate_type (get_tenv cx)) ts = MAP SOME tvs` kall_tac >>
@@ -2226,7 +2230,7 @@ Proof
 QED
 
 Theorem ecrecover_dispatch_no_type_error[local]:
-  (a = BaseT (UintT 256) ∨ a = BaseT (BytesT (Fixed 32))) ∧
+  (a = BaseT (UintT 8) ∨ a = BaseT (UintT 256) ∨ a = BaseT (BytesT (Fixed 32))) ∧
   (b = BaseT (UintT 256) ∨ b = BaseT (BytesT (Fixed 32))) ∧
   (c = BaseT (UintT 256) ∨ c = BaseT (BytesT (Fixed 32))) ∧
   [evaluate_type (get_tenv cx) (BaseT (BytesT (Fixed 32)));

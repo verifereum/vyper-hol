@@ -507,6 +507,13 @@ val builtin_cases = [
    ``Builtin (BaseT AddressT) ECRecover
        [Name (BaseT (BytesT (Fixed 32))) "h"; Name (BaseT (UintT 256)) "v";
         Name (BaseT (UintT 256)) "r"; Name (BaseT (UintT 256)) "s"]``),
+  ("ECRecover uint8 v", ``Pure``,
+   ``[("h", BaseT (BytesT (Fixed 32))); ("v", BaseT (UintT 8));
+      ("r", BaseT (BytesT (Fixed 32))); ("s", BaseT (BytesT (Fixed 32)))]``,
+   ``BaseT AddressT``,
+   ``Builtin (BaseT AddressT) ECRecover
+       [Name (BaseT (BytesT (Fixed 32))) "h"; Name (BaseT (UintT 8)) "v";
+        Name (BaseT (BytesT (Fixed 32))) "r"; Name (BaseT (BytesT (Fixed 32))) "s"]``),
   ("ECAdd", ``View``, ``[("a", ^point_ty); ("b", ^point_ty)]``, point_ty,
    ``Builtin ^point_ty ECAdd [Name ^point_ty "a"; Name ^point_ty "b"]``),
   ("ECMul", ``View``, ``[("a", ^point_ty); ("s", BaseT (UintT 256))]``, point_ty,
