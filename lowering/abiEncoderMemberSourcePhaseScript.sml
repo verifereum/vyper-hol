@@ -1,7 +1,7 @@
 (* Source invariant transport, before the legacy execution wrappers. *)
 Theory abiEncoderMemberSourcePhase
 Ancestors
-  abiEncoderMemberPhaseRaw abiEncoderMembersBoundary
+  abiEncoderChildSourcePhase abiEncoderMemberPhaseRaw abiEncoderMembersBoundary
   abiEncoderMembersContract abiEncoderMembersDefs abiEncoderMembersSource
   abiEncoderTuple abiEncoderChildInputs abiEncoderInput abiCanonicalWindows
   abiDecoderAllocation abiDecoderFrame abiDecoderDynamicLoopSetup
@@ -65,15 +65,7 @@ Theorem abi_encoder_member_static_place_raw_transport:
   abi_encoder_pre ei at av prepared src head sb source_cap (d+offset) b cap ready /\
   fresh_vars_wrt limit_st ready /\ abi_decoder_address_frame st.cs_next_var initial ready
 Proof
-  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  `eval_operand dst initial = SOME (n2w d)` by fs[abi_encoder_buffer_pre_def] >>
-  `eval_operand (Lit (n2w offset)) initial = SOME (n2w offset)` by simp[eval_operand_def] >>
-  drule_all (SRULE [] (Q.INST [`opc` |-> `ADD`] abi_encoder_member_binary_transport)) >> strip_tac >>
-  drule abi_decoder_operand_live_emit >> strip_tac >>
-  drule emitted_insts_emit_op >> strip_tac >>
-  `st.cs_next_var <= prepared.cs_next_var` by decide_tac >>
-  `eval_operand head ready = SOME (n2w (d+offset))` by fs[word_add_n2w] >>
-  drule_all abi_encoder_child_pre_address >> simp[]
+  MATCH_ACCEPT_TAC abiEncoderChildSourcePhaseTheory.abi_encoder_child_static_place_raw_transport
 QED
 
 Theorem abi_encoder_complex_finish_raw_transport:

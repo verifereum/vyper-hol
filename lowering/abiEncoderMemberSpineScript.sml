@@ -91,7 +91,9 @@ QED
 val _ =
   if List.exists
        (fn name => List.exists (fn parent => parent = name) (Theory.ancestry "-"))
-       ["abiScratchMembers", "abiScratchComplex", "abiEncoderMembersPrepare",
+       ["abiEncoderStatic", "abiEncoderDynamic", "abiEncoderMemberSourcePhase", "abiEncoderMembersDefs",
+        "abiScratchStatic", "abiScratchDynamicChild", "abiScratchMemberStep", "abiEncoderMember",
+        "abiScratchMembers", "abiScratchComplex", "abiEncoderMembersPrepare",
         "abiEncoderMembersCorrect", "abiEncoderComplexStatic"]
   then raise Fail "member spine imports a legacy invariant/execution owner"
   else ();

@@ -1,7 +1,7 @@
 (* Early source-contract interpretation of the common member engine. *)
 Theory abiEncoderMemberSourceAdapter
 Ancestors
-  abiEncoderMemberSpine abiEncoderMemberSourcePhase abiEncoderStatic abiEncoderAddressReach
+  abiEncoderMemberSpine abiEncoderChildSourcePhase abiEncoderAddressReach
   abiEncoderMemberPhaseRaw abiDecoderDynamicLoopSetup abiDecoderArrayInitExec
   abiEncoderChildFrames abiEncoderCorrect abiEncoderChildInputs abiDecoderEffect
   abiDecoderReentry abiDecoderContract abiDecoderLoop fragExec compileEnv
@@ -31,7 +31,7 @@ Theorem abi_encoder_static_child_spine_reach:
     ~t.vs_halted /\ abi_decode_sim ctx func initial t
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  drule_all abi_encoder_static_child_context >> strip_tac >>
+  drule_all abi_encoder_static_child_structural_context >> strip_tac >>
   drule abi_encoder_emit_address_shape >> strip_tac >>
   `prepared.cs_next_var <= limit_st.cs_next_var /\ first <= prepared.cs_next_id /\
    st.cs_next_var <= prepared.cs_next_var /\ st.cs_next_id <= prepared.cs_next_id` by decide_tac >>
@@ -60,7 +60,7 @@ Proof
   `eval_operand (Lit (n2w offset)) initial = SOME (n2w offset)` by simp[eval_operand_def] >>
   `!r. abi_encoder_member_phase_raw st prepared initial r ==>
     Pre (ei,head,src,prepared,end_st,out) r` by
-    (rpt strip_tac >> drule_all abi_encoder_member_static_place_raw_transport >> strip_tac >>
+    (rpt strip_tac >> drule_all abi_encoder_child_static_place_raw_transport >> strip_tac >>
      `abi_decoder_budget first last b cap r` by
        (mp_tac (Q.INST [`s` |-> `initial:venom_state`, `t` |-> `r:venom_state`]
          abi_decoder_budget_transport) >> fs[abi_decoder_address_frame_def]) >>
@@ -76,7 +76,7 @@ Proof
   qpat_x_assum `!c rr. _` kall_tac >>
   qpat_x_assum `!rr. _` kall_tac >>
   qpat_x_assum `Abbrev (Pre = _)` kall_tac >>
-  drule_all abi_encoder_member_static_place_raw_transport >> strip_tac >>
+  drule_all abi_encoder_child_static_place_raw_transport >> strip_tac >>
   drule_all (SRULE [] (Q.INST [`opc` |-> `ADD`] abi_encoder_member_binary_raw_sim)) >>
   disch_then (qspec_then `ctx` assume_tac) >>
   `abi_decode_footprint_frame [(d+offset,LENGTH (enc at av));(b,cap)] initial t` by
@@ -104,7 +104,9 @@ QED
 val _ =
   if List.exists
        (fn name => List.exists (fn parent => parent = name) (Theory.ancestry "-"))
-       ["abiEncoderMemberSpineCompat", "abiEncoderMemberPhaseExec", "abiEncoderMember",
+       ["abiEncoderStatic", "abiEncoderDynamic", "abiEncoderMemberSourcePhase", "abiEncoderMembersDefs",
+        "abiScratchStatic", "abiScratchDynamicChild", "abiScratchMemberStep", "abiScratchComplex",
+        "abiEncoderMemberSpineCompat", "abiEncoderMemberPhaseExec", "abiEncoderMember",
         "abiScratchMembers", "abiEncoderMembersCorrect", "abiEncoderComplexStatic"]
   then raise Fail "source adapter imports a member execution owner"
   else ();
