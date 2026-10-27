@@ -5,7 +5,8 @@ Ancestors
   abiScratchEncoderContract abiEncoderSharedContract abiDecoderAllocation
   abiDecoderFrame abiDecoderContract fragExec compileEnv venomState words list
   abiEncoderChildInputs abiEncoderMemberPhaseRaw abiEncoderAddressReach
-  abiEncoderMemberPhaseExec
+  abiEncoderMemberPhaseExec abiEncoderOpenInputFrame abiEncoderArrayFrame
+  abiDecoderFootprint abiDecoderReentry emitHelperProps
   abiDecoderArrayInitExec abiDecoderDynamicLoopSetup
 
 Definition abi_encoder_spine_source_pre_def:
@@ -222,3 +223,109 @@ val _ = List.app (fn (name,th) =>
   [("scratch_core_run", abi_encoder_spine_scratch_core_run),
    ("static_scratch_pre", abi_encoder_spine_static_scratch_pre),
    ("static_scratch", abi_encoder_spine_static_scratch)];
+
+(* The rich runner consumes open input and the shared child contract directly.
+   In particular it is not obtained by strengthening either weak runner. *)
+Definition abi_encoder_spine_shared_pre_def:
+  abi_encoder_spine_shared_pre (at,av,sb,source_cap,d)
+    (first,last,b,cap,limit_st) (ei,dst,src,st,en,out) s <=>
+    abi_encoder_shared ei /\
+    abi_encoder_shared_input (ei,at,av) (st,src,dst) (sb,source_cap)
+      (d,LENGTH (enc at av)) (first,last,b,cap) s /\
+    abi_decoder_budget first last b cap s /\
+    first <= st.cs_next_id /\ en.cs_next_id <= last /\
+    en.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s /\
+    ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+    s.vs_inst_idx = LENGTH st.cs_current_insts
+End
+
+Definition abi_encoder_spine_shared_post_def:
+  abi_encoder_spine_shared_post (ctx,func) (at,av,sb,source_cap,d)
+    (first,last,b,cap,limit_st) (ei,dst,src,st,en,out) s t <=>
+    abi_encoder_shared_endpoint (ctx,func) (st,en,out,limit_st)
+      (first,last,b,cap) (at,av,d) s t
+End
+
+Theorem abi_encoder_spine_shared_core_run:
+  abi_encoder_spine_core_code func c /\
+  abi_encoder_spine_shared_pre value resources c s ==>
+  ?t. abi_encoder_spine_shared_post (ctx,func) value resources c s t
+Proof
+  PairCases_on `c` >> PairCases_on `value` >> PairCases_on `resources` >>
+  simp_tac bool_ss [abi_encoder_spine_core_code_def,
+    abi_encoder_spine_shared_pre_def, abi_encoder_spine_shared_post_def] >>
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  drule_all abi_encoder_shared_run >> simp[]
+QED
+
+Theorem abi_encoder_spine_shared_input_address:
+  abi_encoder_shared_input (ei,at,av) (st,src,dst) (sb,source_cap)
+    (d,output_size) (first,last,b,cap) initial /\
+  abi_decoder_address_frame st.cs_next_var initial actual /\
+  st.cs_next_var <= prepared.cs_next_var /\
+  abi_decoder_operand_live prepared.cs_next_var child_dst /\
+  eval_operand child_dst actual = SOME (n2w (d+off)) /\
+  off+LENGTH (enc at av) <= output_size ==>
+  abi_encoder_shared_input (ei,at,av) (prepared,src,child_dst) (sb,source_cap)
+    (d+off,LENGTH (enc at av)) (first,last,b,cap) actual
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  qpat_x_assum `abi_encoder_shared_input _ _ _ _ _ _`
+    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_encoder_shared_input_def]) >>
+  `actual.vs_memory = initial.vs_memory /\
+   actual.vs_allocas = initial.vs_allocas /\ actual.vs_alloca_next = initial.vs_alloca_next` by
+    fs[abi_decoder_address_frame_def] >>
+  `eval_operand src actual = SOME (n2w sb)` by fs[abi_decoder_address_frame_def] >>
+  `abi_decoder_operand_live prepared.cs_next_var src` by
+    (irule abi_decoder_operand_live_mono >> goal_assum (drule_at Any) >> simp[]) >>
+  `abi_decoder_child_scratch (abi_decoder_ids first last) b cap actual =
+   abi_decoder_child_scratch (abi_decoder_ids first last) b cap initial` by
+    simp[abi_decoder_child_scratch_def] >>
+  `abi_footprint_disjoint (d+off) (LENGTH (enc at av))
+    (abi_decoder_child_scratch (abi_decoder_ids first last) b cap initial)` by
+    (irule abi_footprint_disjoint_subwindow >> goal_assum (drule_at Any) >> decide_tac) >>
+  simp_tac bool_ss [abi_encoder_shared_input_def] >>
+  asm_rewrite_tac [] >>
+  full_simp_tac bool_ss [abi_encoder_zero_aware_separation] >> decide_tac
+QED
+
+Theorem abi_encoder_spine_static_shared_pre:
+  emit_op ADD [dst;Lit (n2w ho)] st = (head,p) /\
+  abi_encoder_shared ei /\
+  abi_encoder_shared_input (ei,at,av) (st,src,dst) (sb,source_cap)
+    (d,output_size) (first,last,b,cap) initial /\
+  ho+LENGTH (enc at av) <= output_size /\
+  abi_decoder_budget first last b cap initial /\
+  first <= p.cs_next_id /\ en.cs_next_id <= last /\
+  p.cs_next_var <= limit_st.cs_next_var /\ en.cs_next_var <= limit_st.cs_next_var /\
+  fresh_vars_wrt limit_st initial /\ ~initial.vs_halted /\
+  initial.vs_current_bb = st.cs_current_bb /\
+  abi_encoder_member_phase_raw st p initial ready ==>
+  abi_encoder_spine_shared_pre (at,av,sb,source_cap,d+ho)
+    (first,last,b,cap,limit_st) (ei,head,src,p,en,out) ready
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  `eval_operand dst initial = SOME (n2w d)` by fs[abi_encoder_shared_input_def] >>
+  `eval_operand (Lit (n2w ho)) initial = SOME (n2w ho)` by simp[eval_operand_def] >>
+  drule_all (SRULE [] (Q.INST [`opc` |-> `ADD`] abi_encoder_member_binary_transport)) >>
+  strip_tac >> drule abi_encoder_emit_address_shape >> strip_tac >>
+  drule abi_decoder_operand_live_emit >> strip_tac >>
+  drule emitted_insts_emit_op >> strip_tac >>
+  `st.cs_next_var <= p.cs_next_var` by decide_tac >>
+  `eval_operand head ready = SOME (n2w (d+ho))` by fs[word_add_n2w] >>
+  drule_all abi_encoder_spine_shared_input_address >> disch_tac >>
+  `abi_decoder_budget first last b cap ready` by
+    (mp_tac (Q.INST [`s` |-> `initial:venom_state`, `t` |-> `ready:venom_state`]
+       abi_decoder_budget_transport) >> fs[abi_decoder_address_frame_def]) >>
+  simp[abi_encoder_spine_shared_pre_def]
+QED
+
+val _ = List.app (fn (name,th) =>
+  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
+    if List.all (fn s => s = "DISK_THM") oracles andalso null axioms then
+      print ("ENCODER_SPINE_COMPAT_AUDIT_OK " ^ name ^ "\n")
+    else raise Fail ("encoder spine compatibility admission dependency: " ^ name)
+  end)
+  [("shared_core_run", abi_encoder_spine_shared_core_run),
+   ("shared_input_address", abi_encoder_spine_shared_input_address),
+   ("static_shared_pre", abi_encoder_spine_static_shared_pre)];
