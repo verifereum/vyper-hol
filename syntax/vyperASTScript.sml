@@ -394,26 +394,17 @@ Datatype:
   | InterfaceDecl identifier (interface_func list)
 End
 
-(* Consume keyword arguments in declaration order.  Removing each match makes
-   duplicates, omissions, and unknown names fail instead of being ignored. *)
-Definition take_custom_error_kwarg_def:
-  take_custom_error_kwarg name [] = NONE ∧
-  take_custom_error_kwarg name ((key,e)::rest) =
-    if key = name then SOME (e,rest)
-    else
-      case take_custom_error_kwarg name rest of
-      | NONE => NONE
-      | SOME (found,rest') => SOME (found,(key,e)::rest')
-End
-
+(* Keyword arguments must name the parameters in declaration order: Vyper
+   rejects any other order ("keys are required to be in order",
+   validate_kwargs in vyper/semantics/analysis/utils.py), and duplicates,
+   omissions and unknown names with it. *)
 Definition order_custom_error_kwargs_def:
-  order_custom_error_kwargs [] kwargs =
-    (if NULL kwargs then SOME [] else NONE) ∧
-  order_custom_error_kwargs ((name,ty)::params) kwargs =
-    case take_custom_error_kwarg name kwargs of
-    | NONE => NONE
-    | SOME (e,kwargs') =>
-        OPTION_MAP (CONS e) (order_custom_error_kwargs params kwargs')
+  order_custom_error_kwargs [] [] = SOME [] ∧
+  order_custom_error_kwargs ((name,ty)::params) ((key,e)::kwargs) =
+    (if key = name then
+       OPTION_MAP (CONS e) (order_custom_error_kwargs params kwargs)
+     else NONE) ∧
+  order_custom_error_kwargs _ _ = NONE
 End
 
 Definition custom_error_exprs_def:
@@ -421,51 +412,20 @@ Definition custom_error_exprs_def:
     positional ++ MAP SND kwargs
 End
 
-Theorem take_custom_error_kwarg_perm:
-  take_custom_error_kwarg name kwargs = SOME (e,rest) ⇒
-  PERM (MAP SND kwargs) (e::MAP SND rest)
+Theorem order_custom_error_kwargs_SOME:
+  ∀params kwargs es.
+    order_custom_error_kwargs params kwargs = SOME es ⇒ es = MAP SND kwargs
 Proof
-  qid_spec_tac `rest` >>
-  qid_spec_tac `e` >>
-  qid_spec_tac `name` >>
-  Induct_on `kwargs` >- simp[take_custom_error_kwarg_def] >>
-  Cases_on `h` >>
-  rw[take_custom_error_kwarg_def] >>
-  gvs[AllCaseEqs(), PERM_CONS_IFF] >>
-  irule PERM_TRANS >>
-  qexists_tac `r::e::MAP SND rest'` >>
-  conj_tac
-  >- (qpat_x_assum `∀name e rest. _`
-        (qspecl_then [`name`, `e`, `rest'`] mp_tac) >>
-      simp[]) >>
-  simp[PERM_SWAP_AT_FRONT]
+  ho_match_mp_tac order_custom_error_kwargs_ind >>
+  rw[order_custom_error_kwargs_def] >> gvs[]
 QED
 
 Theorem order_custom_error_kwargs_perm:
   order_custom_error_kwargs params kwargs = SOME es ⇒
   PERM (MAP SND kwargs) es
 Proof
-  qid_spec_tac `es` >>
-  qid_spec_tac `kwargs` >>
-  Induct_on `params`
-  >- (Cases_on `kwargs` >> simp[order_custom_error_kwargs_def]) >>
-  Cases_on `h` >>
-  rw[order_custom_error_kwargs_def] >>
-  gvs[AllCaseEqs()] >>
-  first_x_assum drule >> strip_tac >>
-  drule_all take_custom_error_kwarg_perm >>
-  strip_tac >>
-  irule PERM_TRANS >>
-  qexists_tac `e::MAP SND kwargs'` >>
-  simp[PERM_CONS_IFF]
+  strip_tac >> drule order_custom_error_kwargs_SOME >> simp[]
 QED
-
-Theorem list_size_append_custom:
-  ∀f xs ys. list_size f (xs ++ ys) = list_size f xs + list_size f ys
-Proof
-  Induct_on `xs` >> simp[listTheory.list_size_def]
-QED
-
 
 Theorem list_size_map_snd_le:
   ∀kwargs : (identifier # expr) list.
@@ -480,7 +440,7 @@ Theorem custom_error_exprs_size[simp]:
   list_size expr_size (custom_error_exprs err) < custom_error_size err + 2
 Proof
   Cases_on `err` >>
-  simp[custom_error_exprs_def, list_size_append_custom] >>
+  simp[custom_error_exprs_def, listTheory.list_size_append] >>
   irule LESS_EQ_LESS_TRANS >>
   qexists_tac
     `list_size (pair_size (list_size char_size) expr_size) l0` >>
@@ -518,20 +478,8 @@ Proof
   >- simp[order_custom_error_args_def, custom_error_exprs_def]
 QED
 
-val () = cv_auto_trans take_custom_error_kwarg_def;
 val () = cv_auto_trans custom_error_exprs_def;
-
-val order_custom_error_kwargs_pre_def =
-  cv_auto_trans_pre "order_custom_error_kwargs_pre"
-                    order_custom_error_kwargs_def;
-
-Theorem order_custom_error_kwargs_pre[cv_pre]:
-  ∀params kwargs. order_custom_error_kwargs_pre params kwargs
-Proof
-  ho_match_mp_tac order_custom_error_kwargs_ind >> rw[] >>
-  rw[Once order_custom_error_kwargs_pre_def]
-QED
-
+val () = cv_auto_trans order_custom_error_kwargs_def;
 val () = cv_auto_trans order_custom_error_args_def;
 
 (* some helper functions over the AST datatypes *)

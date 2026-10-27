@@ -187,7 +187,22 @@ Definition custom_errors_stmt_ok_def:
     (custom_errors_stmts_ok mods yes ∧ custom_errors_stmts_ok mods no) ∧
   custom_errors_stmt_ok mods (For id ty it n body) =
     custom_errors_stmts_ok mods body ∧
-  custom_errors_stmt_ok mods _ = T ∧
+  custom_errors_stmt_ok mods (Raise RaiseBare) = T ∧
+  custom_errors_stmt_ok mods (Raise RaiseUnreachable) = T ∧
+  custom_errors_stmt_ok mods (Raise (RaiseReason e)) = T ∧
+  custom_errors_stmt_ok mods (Assert e AssertBare) = T ∧
+  custom_errors_stmt_ok mods (Assert e AssertUnreachable) = T ∧
+  custom_errors_stmt_ok mods (Assert e (AssertReason r)) = T ∧
+  custom_errors_stmt_ok mods Pass = T ∧
+  custom_errors_stmt_ok mods Continue = T ∧
+  custom_errors_stmt_ok mods Break = T ∧
+  custom_errors_stmt_ok mods (Expr e) = T ∧
+  custom_errors_stmt_ok mods (Log id es) = T ∧
+  custom_errors_stmt_ok mods (Return eo) = T ∧
+  custom_errors_stmt_ok mods (Assign tgt e) = T ∧
+  custom_errors_stmt_ok mods (AugAssign ty tgt bop e) = T ∧
+  custom_errors_stmt_ok mods (Append tgt e) = T ∧
+  custom_errors_stmt_ok mods (AnnAssign id ty e) = T ∧
   custom_errors_stmts_ok mods [] = T ∧
   custom_errors_stmts_ok mods (stmt::rest) =
     (custom_errors_stmt_ok mods stmt ∧ custom_errors_stmts_ok mods rest)

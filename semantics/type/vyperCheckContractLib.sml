@@ -20,7 +20,6 @@ val checker_defs =
    vyperEventTheory.lookup_custom_error_args_in_def,
    order_custom_error_args_def,
    order_custom_error_kwargs_def,
-   take_custom_error_kwarg_def,
    custom_error_exprs_def,
    check_function_body_in_mode_def,
    check_function_body_def,

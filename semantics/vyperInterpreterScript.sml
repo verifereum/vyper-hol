@@ -451,36 +451,12 @@ Proof
   \\ simp[]
 QED
 
-Theorem take_custom_error_kwarg_exprs_bound:
-  ∀name kwargs e rest ts.
-    take_custom_error_kwarg name kwargs = SOME (e,rest) ⇒
-    exprs_bound ts (MAP SND kwargs) =
-      1 + expr_bound ts e + exprs_bound ts (MAP SND rest)
-Proof
-  Induct_on `kwargs`
-  >- simp[take_custom_error_kwarg_def]
-  >> Cases_on `h`
-  >> rw[take_custom_error_kwarg_def]
-  >> gvs[AllCaseEqs(), bound_def]
-  >> TRY (first_x_assum drule)
-  >> simp[bound_def]
-  >> decide_tac
-QED
-
 Theorem order_custom_error_kwargs_exprs_bound:
   ∀params kwargs es ts.
     order_custom_error_kwargs params kwargs = SOME es ⇒
     exprs_bound ts es = exprs_bound ts (MAP SND kwargs)
 Proof
-  Induct_on `params`
-  >- (Cases_on `kwargs` >> gvs[order_custom_error_kwargs_def, bound_def])
-  >> Cases_on `h`
-  >> rw[order_custom_error_kwargs_def]
-  >> gvs[AllCaseEqs(), bound_def]
-  >> first_x_assum drule
-  >> drule_all take_custom_error_kwarg_exprs_bound
-  >> simp[bound_def]
-  >> decide_tac
+  rpt strip_tac >> drule order_custom_error_kwargs_SOME >> simp[]
 QED
 
 Theorem order_custom_error_args_exprs_bound:

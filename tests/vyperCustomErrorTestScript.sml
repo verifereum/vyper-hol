@@ -68,8 +68,17 @@ End
 Theorem custom_error_keyword_declaration_order:
   order_custom_error_args
     [("a",custom_error_uint); ("b",custom_error_uint)]
-    (CustomError (NONE,"Ordered") [] [("b",two_expr); ("a",one_expr)]) =
+    (CustomError (NONE,"Ordered") [] [("a",one_expr); ("b",two_expr)]) =
     SOME [one_expr; two_expr] /\
+  order_custom_error_args
+    [("a",custom_error_uint); ("b",custom_error_uint)]
+    (CustomError (NONE,"Ordered") [] [("b",two_expr); ("a",one_expr)]) = NONE /\
+  order_custom_error_args
+    [("a",custom_error_uint); ("b",custom_error_uint)]
+    (CustomError (NONE,"Ordered") [] [("a",one_expr)]) = NONE /\
+  order_custom_error_args
+    [("a",custom_error_uint); ("b",custom_error_uint)]
+    (CustomError (NONE,"Ordered") [] [("a",one_expr); ("c",two_expr)]) = NONE /\
   order_custom_error_args
     [("a",custom_error_uint); ("b",custom_error_uint)]
     (CustomError (NONE,"Ordered") [] [("a",one_expr); ("a",two_expr)]) = NONE /\
@@ -166,6 +175,38 @@ Theorem custom_error_arguments_left_to_right_once:
 Proof
   CONV_TAC cv_eval
 QED
+(* An error declared in an imported module, raised by its qualified name. *)
+Definition imported_error_context_def:
+  imported_error_context = empty_evaluation_context with
+    sources := [(0w,[(NONE,[]);
+      (SOME 1,
+        [ErrorDecl "Ordered"
+          [("a",custom_error_uint); ("b",custom_error_uint)]])])]
+End
+
+Definition imported_error_body_def:
+  imported_error_body =
+    [Raise (RaiseCustomError
+      (CustomError (SOME 1,"Ordered") [one_expr; two_expr] []))]
+End
+val () = cv_auto_trans imported_error_context_def;
+val () = cv_auto_trans imported_error_body_def;
+
+Definition imported_error_cps_test_def:
+  imported_error_cps_test =
+    (FST (vyperSmallStep$fromk (vyperSmallStep$cont
+      (vyperSmallStep$eval_stmts_cps imported_error_context imported_error_body
+        empty_state vyperSmallStep$DoneK))) =
+     INR (Error (RevertData ordered_error_payload)))
+End
+val () = cv_trans imported_error_cps_test_def;
+
+Theorem imported_custom_error_payload:
+  imported_error_cps_test
+Proof
+  CONV_TAC cv_eval
+QED
+
 Theorem custom_error_recursive_cps_exact_agreement:
   custom_error_execution_observations
     (vyperInterpreter$eval_stmts custom_error_context custom_error_body
