@@ -19,10 +19,10 @@ Ancestors
   vyperTypeABI vyperTypeBindArguments vyperTypeExprResult vyperTypeStmtResult
   vyperTypeCallOutcome[ignore_grammar] vyperCallOutcome[ignore_grammar]
   vyperTypeArgFits vyperTypeExtCallSoundness vyperTypeGlobalLookupSoundness vyperTypeAssignContext vyperTypeBuiltins vyperTypeExprSoundness vyperTypeAssignSoundness
-  vyperAssignTarget vyperExprNoControl vyperScopePreservation vyperEvalPreservesScopes
+  vyperExprNoControl vyperScopePreservation vyperEvalPreservesScopes
   vyperEvalMisc vyperStatePreservation vyperAssignPreservesType vyperTypeStatePreservation
   vyperTypeCallGraph vyperTypeCallStackSoundness vyperPlaceResultTyping vyperPlaceTyping
-  vyperPlaceWriteSoundness vyperTargetPlaceWrite
+  vyperPlaceWriteSoundness vyperTargetPlaceWrite vyperPlaceMutationSoundness
   vyperAugAssignWriteSoundness
 Libs
   wordsLib markerLib intLib
@@ -366,18 +366,16 @@ Proof
   simp[Once well_typed_expr_def]
 QED
 
-Theorem expr_result_typed_materialise_no_type_error:
+Theorem expr_result_typed_read_result_no_type_error:
   well_typed_expr env e /\
   expr_result_typed env e tv /\
-  materialise cx tv st = (INR err, st') ==>
+  read_result cx tv st = (INR err, st') ==>
   !msg. err <> Error (TypeError msg)
 Proof
-  rw[] >>
-  spose_not_then assume_tac >>
-  gvs[] >>
-  drule_then assume_tac materialise_type_error_imp_HashMapRef >>
-  gvs[expr_result_typed_def] >>
-  metis_tac[well_typed_expr_not_hashmap_place]
+  rpt strip_tac >>
+  gvs[expr_result_typed_def, expr_runtime_typed_def,
+      value_result_typed_def, read_result_def, return_def]
+
 QED
 
 Theorem eval_expr_exception_return_typed:
@@ -396,24 +394,6 @@ Proof
   rw[no_control_exc_return_exception_typed]
 QED
 
-Theorem eval_target_no_control:
-  (!tgt cx st exn st'.
-    eval_target cx tgt st = (INR exn, st') ==> no_control_exc exn) /\
-  (!tgts cx st exn st'.
-    eval_targets cx tgts st = (INR exn, st') ==> no_control_exc exn) /\
-  (!cx bt st exn st'.
-    eval_base_target cx bt st = (INR exn, st') ==> no_control_exc exn)
-Proof
-  rewrite_tac[CONJ_ASSOC] >>
-  reverse conj_asm2_tac >- (
-    rpt strip_tac >>
-    drule_then irule (cj 1 eval_expr_no_control_with_bt)  ) >>
-  ho_match_mp_tac (TypeBase.induction_of``:assignment_target``) >>
-  simp[eval_legacy_targets_def, bind_apply, ignore_bind_apply, AllCaseEqs(),
-       EXISTS_PROD, bind_def] >>
-  rpt strip_tac >> gvs[return_def] >>
-  metis_tac[]
-QED
 
 Theorem eval_iterator_no_control:
   !cx it st exn st'.
@@ -422,11 +402,7 @@ Proof
   Cases_on `it` >>
   rw[evaluate_def, bind_def, return_def, raise_def, lift_option_type_def,
      lift_sum_def, option_CASE_rator, sum_CASE_rator, AllCaseEqs()] >>
-  TRY (drule (cj 1 eval_expr_no_control) >> simp[] >> NO_TAC) >>
-  TRY (drule materialise_no_control >> simp[] >> NO_TAC) >>
-  TRY (drule get_Value_no_control >> simp[] >> NO_TAC) >>
-  gvs[AllCaseEqs(), option_CASE_rator, sum_CASE_rator,
-      return_def, raise_def, no_control_exc_def]
+  metis_tac[cj 1 eval_expr_no_control, read_result_no_control, no_control_exc_def]
 QED
 
 
@@ -437,12 +413,12 @@ Proof
   rw[value_runtime_typed_def] >> metis_tac[]
 QED
 
-Theorem materialise_preserves_value_type:
-  state_well_typed st /\ toplevel_value_typed tvl tv /\ well_formed_type_value tv /\
-  materialise cx tvl st = (INL v, st') ==>
+Theorem read_result_preserves_value_type:
+  state_well_typed st /\ value_result_typed tvl tv /\ well_formed_type_value tv /\
+  read_result cx tvl st = (INL v, st') ==>
   value_has_type tv v
 Proof
-  metis_tac[materialise_preserves_type]
+  metis_tac[read_result_preserves_type]
 QED
 
 Theorem expr_result_typed_runtime_typed:
@@ -451,37 +427,137 @@ Proof
   rw[expr_result_typed_def]
 QED
 
-Theorem expr_result_typed_materialise_preserves_value_type:
+Theorem expr_result_typed_read_result_preserves_value_type:
   state_well_typed st /\ expr_result_typed env e tvl /\
   evaluate_type env.type_defs (expr_type e) = SOME tyv /\
-  materialise cx tvl st = (INL v, st') ==>
+  read_result cx tvl st = (INL v, st') ==>
   value_has_type tyv v
 Proof
   rw[expr_result_typed_def, expr_runtime_typed_def] >> gvs[] >>
-  irule materialise_preserves_value_type >> simp[] >>
+  irule read_result_preserves_value_type >> simp[] >>
   metis_tac[evaluate_type_well_formed_type_value]
 QED
-(* A materialised value of e's type also has any type e's type widens to. *)
-Theorem materialise_widens_value_typed[local]:
-  state_well_typed st /\ expr_result_typed env e tvl /\
-  materialise cx tvl st = (INL v, st') /\
-  type_widens_to env.type_defs (expr_type e) ty ==>
-  ?tyv. evaluate_type env.type_defs ty = SOME tyv /\ value_has_type tyv v
+Definition live_memory_result_def:
+  live_memory_result st pv <=>
+    case pv of
+    | PlaceR (MemoryPlace id path) =>
+        ?entry fresh old. lookup_scopes id st.scopes = SOME entry /\
+          memory_eval_path entry.type path /\
+          memory_history_region entry fresh old [path]
+    | _ => T
+End
+
+Theorem live_result_read_typed[local]:
+  state_well_typed st /\ eval_result_typed (env,cx,st) pv (Type ty) /\
+  live_memory_result st pv /\ read_result cx pv st = (res,st') ==>
+  st' = st /\ no_type_error_result res /\
+  (case res of INL v => value_runtime_typed env ty v | INR _ => T)
 Proof
-  strip_tac >>
-  `?etv. evaluate_type env.type_defs (expr_type e) = SOME etv` by
-    gvs[expr_result_typed_def, expr_runtime_typed_def] >>
-  `value_has_type etv v` by
-    metis_tac[expr_result_typed_materialise_preserves_value_type] >>
-  metis_tac[type_widens_to_value_has_type]
+  Cases_on `pv`
+  >- (rpt strip_tac >>
+      gvs[eval_result_typed_def, read_result_def, return_def,
+          no_type_error_result_def, value_runtime_typed_def])
+  >- (rpt strip_tac >>
+      gvs[eval_result_typed_def, live_memory_result_def, read_result_def] >>
+      drule_all read_place_live_typed >>
+      simp[value_runtime_typed_def] >> metis_tac[]) >>
+  simp[eval_result_typed_def]
 QED
 
-Theorem annassign_new_variable_after_materialise_sound[local]:
+(* Reading a live result preserves every permitted implicit bound widening. *)
+Theorem read_live_result_widens_type[local]:
+  state_well_typed st /\ eval_result_typed (env,cx,st) pv (Type src_ty) /\
+  live_memory_result st pv /\ read_result cx pv st = (INL v,st') /\
+  type_widens_to env.type_defs src_ty dst_ty ==>
+  value_runtime_typed env dst_ty v
+Proof
+  strip_tac >> drule_all live_result_read_typed >> strip_tac >>
+  gvs[value_runtime_typed_def] >>
+  drule_all type_widens_to_value_has_type >> rw[] >> gvs[]
+QED
+
+Theorem switch_BoolV_live_empty_scope_post[local]:
+  state_well_typed st /\
+  eval_result_typed (env,cx,st) pv (Type (BaseT BoolT)) /\
+  live_memory_result st pv /\
+  switch_BoolV cx pv kt kf (st with scopes := FEMPTY::st.scopes) = (res,st') /\
+  (!r s. kt (st with scopes := FEMPTY::st.scopes) = (r,s) ==> P r s) /\
+  (!r s. kf (st with scopes := FEMPTY::st.scopes) = (r,s) ==> P r s) /\
+  (!exn. no_type_error_result (INR exn) /\ no_control_exc exn ==>
+    P (INR exn) (st with scopes := FEMPTY::st.scopes)) ==>
+  P res st'
+Proof
+  rpt strip_tac >>
+  Cases_on `read_result cx pv st` >>
+  rename1 `read_result cx pv st = (rr,rs)` >>
+  drule_all live_result_read_typed >> strip_tac >> gvs[] >>
+  reverse (Cases_on `rr`)
+  >- (drule read_result_no_control >> strip_tac >>
+      gvs[switch_BoolV_def, bind_def, read_result_empty_scope,
+          no_type_error_result_def] >> metis_tac[]) >>
+  gvs[value_runtime_typed_def, evaluate_type_def] >>
+  drule value_has_type_BoolTV >> strip_tac >>
+  Cases_on `b` >> gvs[switch_BoolV_def, bind_def, read_result_empty_scope]
+QED
+
+Theorem switch_BoolV_live_post[local]:
+  state_well_typed st /\
+  eval_result_typed (env,cx,st) pv (Type (BaseT BoolT)) /\
+  live_memory_result st pv /\
+  switch_BoolV cx pv kt kf st = (res,st') /\
+  (!r s. kt st = (r,s) ==> P r s) /\
+  (!r s. kf st = (r,s) ==> P r s) /\
+  (!exn. no_type_error_result (INR exn) /\ no_control_exc exn ==>
+    P (INR exn) st) ==> P res st'
+Proof
+  rpt strip_tac >>
+  Cases_on `read_result cx pv st` >>
+  rename1 `read_result cx pv st = (rr,rs)` >>
+  drule_all live_result_read_typed >> strip_tac >> gvs[] >>
+  reverse (Cases_on `rr`)
+  >- (drule read_result_no_control >> strip_tac >>
+      gvs[switch_BoolV_def, bind_def, no_type_error_result_def] >> metis_tac[]) >>
+  gvs[value_runtime_typed_def, evaluate_type_def] >>
+  drule value_has_type_BoolTV >> strip_tac >>
+  Cases_on `b` >> gvs[switch_BoolV_def, bind_def]
+QED
+
+Theorem conditional_result_live_typed[local]:
+  state_well_typed st /\ eval_result_typed (env,cx,st) pv (Type ty) /\
+  live_memory_result st pv /\ conditional_result cx pv st = (res,st') ==>
+  st' = st /\ no_type_error_result res /\
+  (case res of INL out => eval_result_typed (env,cx,st') out (Type ty) /\
+                         live_memory_result st' out | INR _ => T)
+Proof
+  Cases_on `pv`
+  >- (simp[conditional_result_def, return_def] >> rpt strip_tac >>
+      gvs[no_type_error_result_def, live_memory_result_def])
+  >- (strip_tac >>
+      `?tv. evaluate_type env.type_defs ty = SOME tv /\
+            runtime_place_typed cx st p tv` by gvs[eval_result_typed_def] >>
+      `place_type_value cx p st = (INL tv,st)` by
+        gvs[runtime_place_typed_def] >>
+      qpat_x_assum `conditional_result _ _ _ = _` mp_tac >>
+      simp[conditional_result_def, bind_def] >>
+      IF_CASES_TAC
+      >- (simp[return_def] >> strip_tac >> gvs[no_type_error_result_def]) >>
+      Cases_on `read_result cx (PlaceR p) st` >>
+      rename1 `read_result cx (PlaceR p) st = (rr,rs)` >>
+      drule_all live_result_read_typed >> strip_tac >> gvs[] >>
+      Cases_on `rr` >>
+      gvs[read_result_def, bind_def, return_def, no_type_error_result_def,
+          eval_result_typed_def, value_runtime_typed_def, live_memory_result_def] >>
+      strip_tac >> gvs[eval_result_typed_def, live_memory_result_def]) >>
+  simp[eval_result_typed_def]
+QED
+
+Theorem annassign_new_variable_after_read_result_sound[local]:
   env_consistent env cx st /\ state_well_typed st /\ accounts_well_typed st.accounts /\
   get_tenv cx = env.type_defs /\ evaluate_type env.type_defs typ = SOME tyv /\
-  type_widens_to env.type_defs (expr_type e) typ /\ expr_result_typed env e tvl /\
+  type_widens_to env.type_defs (expr_type e) typ /\
+  eval_result_typed (env,cx,st) tvl (Type (expr_type e)) /\ live_memory_result st tvl /\
   id NOTIN FDOM env.var_types /\
-  materialise cx tvl st = (INL v, st1) /\
+  read_result cx tvl st = (INL v, st1) /\
   new_variable id tyv v st1 = (res, st') ==>
   state_well_typed st' /\ accounts_well_typed st'.accounts /\ no_type_error_result res /\
   case res of
@@ -489,9 +565,10 @@ Theorem annassign_new_variable_after_materialise_sound[local]:
   | INR exn => env_consistent env cx st' /\ return_exception_typed env ret_ty exn
 Proof
   rpt gen_tac >> strip_tac >> gvs[] >>
-  drule materialise_state >> strip_tac >> gvs[] >>
+  drule read_result_state >> strip_tac >> gvs[] >>
   `value_has_type tyv v` by
-    (drule_all materialise_widens_value_typed >> rw[] >> gvs[]) >>
+    (drule_all read_live_result_widens_type >>
+     simp[value_runtime_typed_def]) >>
   conj_tac
   >- metis_tac[new_variable_preserves_state_well_typed_result] >>
   conj_tac >- (drule new_variable_accounts >> rw[]) >>
@@ -510,13 +587,17 @@ Theorem annassign_statement_sound_from_expr_ih[local]:
   (!env st res st'.
      env_consistent env cx st /\ state_well_typed st /\ context_well_typed cx /\
      accounts_well_typed st.accounts /\ functions_well_typed cx /\
+     call_evaluation_safe cx (int_calls_expr e) /\
      eval_expr cx e st = (res, st') ==>
      well_typed_expr env e ==>
      state_well_typed st' /\ env_consistent env cx st' /\
      accounts_well_typed st'.accounts /\ no_type_error_result res /\
-     case res of INL tv => expr_result_typed env e tv | INR v1 => T) /\
+     case res of INL tv =>
+       eval_result_typed (env,cx,st') tv (Type (expr_type e)) /\
+       live_memory_result st' tv | INR v1 => T) /\
   env_consistent env cx st /\ state_well_typed st /\ context_well_typed cx /\
   accounts_well_typed st.accounts /\ functions_well_typed cx /\
+  call_evaluation_safe cx (int_calls_expr e) /\
   well_typed_expr env e /\ assignable_type env.type_defs typ /\
   type_widens_to env.type_defs (expr_type e) typ /\
   id NOTIN FDOM env.var_types /\
@@ -537,31 +618,32 @@ Proof
   Cases_on `expr_res` >> gvs[no_type_error_result_def]
   >- (
     rename1 `eval_expr cx e st = (INL tvl, st1)` >>
-    Cases_on `materialise cx tvl st1` >> rename1 `materialise cx tvl st1 = (mat_res, st2)` >>
+    Cases_on `read_result cx tvl st1` >> rename1 `read_result cx tvl st1 = (mat_res, st2)` >>
     Cases_on `mat_res` >> gvs[no_type_error_result_def]
     >- (
-      rename1 `materialise cx tvl st1 = (INL v, st2)` >>
+      rename1 `read_result cx tvl st1 = (INL v, st2)` >>
       strip_tac >>
       `new_variable id tyv v st2 = (res,st')` by (
-        qpat_x_assum `do tyv <- return tyv; tv <- eval_expr cx e; v <- materialise cx tv; new_variable id tyv v od st = (res,st')` mp_tac >>
+        qpat_x_assum `do tyv <- return tyv; tv <- eval_expr cx e; v <- read_result cx tv; new_variable id tyv v od st = (res,st')` mp_tac >>
         simp[bind_def, return_def, pairTheory.UNCURRY]) >>
-      metis_tac[annassign_new_variable_after_materialise_sound,
+      metis_tac[annassign_new_variable_after_read_result_sound,
                 no_type_error_result_def]) >>
-    rename1 `materialise cx tvl st1 = (INR exn, st2)` >>
+    rename1 `read_result cx tvl st1 = (INR exn, st2)` >>
     strip_tac >>
     `res = INR exn /\ st' = st2` by (
-      qpat_x_assum `do tyv <- return tyv; tv <- eval_expr cx e; v <- materialise cx tv; new_variable id tyv v od st = (res,st')` mp_tac >>
+      qpat_x_assum `do tyv <- return tyv; tv <- eval_expr cx e; v <- read_result cx tv; new_variable id tyv v od st = (res,st')` mp_tac >>
       simp[bind_def, return_def, raise_def, pairTheory.UNCURRY]) >>
     gvs[no_type_error_result_def] >>
     `!msg. exn <> Error (TypeError msg)` by
-      metis_tac[expr_result_typed_materialise_no_type_error] >>
-    drule materialise_state >> strip_tac >> gvs[] >>
-    drule materialise_no_control >>
+      (drule_all live_result_read_typed >>
+       simp[no_type_error_result_def]) >>
+    drule read_result_state >> strip_tac >> gvs[] >>
+    drule read_result_no_control >>
     rw[no_control_exc_return_exception_typed]) >>
   rename1 `eval_expr cx e st = (INR exn, st1)` >>
   strip_tac >>
   `res = INR exn /\ st' = st1` by (
-    qpat_x_assum `do tyv <- return tyv; tv <- eval_expr cx e; v <- materialise cx tv; new_variable id tyv v od st = (res,st')` mp_tac >>
+    qpat_x_assum `do tyv <- return tyv; tv <- eval_expr cx e; v <- read_result cx tv; new_variable id tyv v od st = (res,st')` mp_tac >>
     simp[bind_def, return_def, raise_def, pairTheory.UNCURRY]) >>
   gvs[no_type_error_result_def] >>
   drule eval_expr_exception_return_typed >> rw[]
@@ -748,17 +830,14 @@ Proof
   ho_match_mp_tac stmt_induction >>
   rw[stmt_no_fallthrough_def, evaluate_def, bind_def, return_def, raise_def,
      pairTheory.UNCURRY, finally_def, ignore_bind_def, switch_BoolV_def, AllCaseEqs()] >>
-  TRY (rename1 `eval_stmt cx (Raise reason) st <> _` >>
-       Cases_on `reason` >>
-       gvs[evaluate_def, bind_def, return_def, raise_def,
-           pairTheory.UNCURRY, AllCaseEqs()]) >>
-  TRY (rename1 `eval_stmt cx (Return opt_e) st <> _` >>
-       Cases_on `opt_e` >>
-       gvs[evaluate_def, bind_def, return_def, raise_def,
-           pairTheory.UNCURRY, AllCaseEqs()]) >>
-  TRY (rename1 `eval_expr cx e st = (INL tv,_)` >>
-       Cases_on `tv = Value (BoolV T)` >> gvs[] >>
-       Cases_on `tv = Value (BoolV F)` >> gvs[raise_def]) >>
+  (fn g =>
+    if can (find_term (fn t => is_const t andalso #Name (dest_thy_const t) = "Raise")) (snd g)
+    then (rename1 `Raise reason` >> Cases_on `reason`) g
+    else if can (find_term (fn t => is_const t andalso #Name (dest_thy_const t) = "Return")) (snd g)
+    then (rename1 `Return opt_e` >> Cases_on `opt_e`) g
+    else all_tac g) >>
+  gvs[evaluate_def, bind_def, return_def, raise_def,
+      pairTheory.UNCURRY, COND_RATOR, AllCaseEqs()] >>
   metis_tac[]
 QED
 Theorem no_control_exc_no_loop_control[local]:
@@ -809,19 +888,9 @@ Theorem eval_stmt_assert_no_loop_control[local]:
 Proof
   Cases >>
   rw[Once evaluate_def, bind_def, switch_BoolV_def, return_def, raise_def,
-     AllCaseEqs(), no_control_exc_def] >>
-  TRY (drule (cj 1 eval_expr_no_control) >>
-       metis_tac[no_control_exc_no_loop_control]) >>
-  TRY (rename1 `(if tv = Value (BoolV T) then _ else _) _ = _` >>
-       Cases_on `tv = Value (BoolV T)` >>
-       gvs[bind_def, return_def, raise_def, AllCaseEqs(), no_control_exc_def] >>
-       Cases_on `tv = Value (BoolV F)` >>
-       gvs[bind_def, return_def, raise_def, AllCaseEqs(), no_control_exc_def] >>
-       TRY (imp_res_tac get_Value_no_control >> gvs[no_control_exc_def] >> NO_TAC) >>
-       TRY (imp_res_tac lift_option_type_no_control >> gvs[no_control_exc_def] >> NO_TAC) >>
-       TRY (drule (cj 1 eval_expr_no_control) >>
-            metis_tac[no_control_exc_no_loop_control]) >>
-       NO_TAC)
+     COND_RATOR, AllCaseEqs(), no_control_exc_def] >>
+  metis_tac[cj 1 eval_expr_no_control, read_result_no_control,
+            lift_option_type_no_control, no_control_exc_no_loop_control]
 QED
 Theorem eval_stmt_raise_no_loop_control[local]:
   !r cx st exn st'.
@@ -831,10 +900,8 @@ Proof
   Cases >>
   rw[Once evaluate_def, bind_def, return_def, raise_def,
      AllCaseEqs(), no_control_exc_def] >>
-  TRY (imp_res_tac get_Value_no_control >> gvs[no_control_exc_def] >> NO_TAC) >>
-  TRY (imp_res_tac lift_option_type_no_control >> gvs[no_control_exc_def] >> NO_TAC) >>
-  TRY (drule (cj 1 eval_expr_no_control) >>
-       metis_tac[no_control_exc_no_loop_control])
+  metis_tac[cj 1 eval_expr_no_control, read_result_no_control,
+            lift_option_type_no_control, no_control_exc_no_loop_control]
 QED
 
 Theorem eval_stmt_return_no_loop_control[local]:
@@ -845,9 +912,8 @@ Proof
   Cases >>
   rw[Once evaluate_def, bind_def, return_def, raise_def,
      AllCaseEqs(), no_control_exc_def] >>
-  TRY (imp_res_tac materialise_no_control >> gvs[no_control_exc_def] >> NO_TAC) >>
-  TRY (drule (cj 1 eval_expr_no_control) >>
-       metis_tac[no_control_exc_no_loop_control])
+  metis_tac[cj 1 eval_expr_no_control, read_result_no_control,
+            no_control_exc_no_loop_control]
 QED
 
 
@@ -857,9 +923,8 @@ Theorem assign_stmt_no_control[local]:
 Proof
   Cases_on `g` >> simp[Once evaluate_def, bind_def, ignore_bind_def,
     AllCaseEqs()] >> rpt strip_tac >>
-  metis_tac[eval_place_no_control, eval_target_place_no_control,
-    read_place_or_value_no_control, write_place_no_control,
-    assign_tuple_targets_no_control, eval_expr_no_control, materialise_no_control]
+  metis_tac[eval_target_place_no_control, read_result_no_control,
+    write_place_no_control, assign_tuple_targets_no_control, cj 1 eval_expr_no_control]
 QED
 
 Theorem augassign_stmt_no_control[local]:
@@ -868,7 +933,7 @@ Proof
   simp[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs()] >>
   rpt strip_tac >>
   metis_tac[eval_target_place_no_control, read_place_no_control,
-    place_type_value_no_control, eval_expr_no_control, get_Value_no_control,
+    place_type_value_no_control, cj 1 eval_expr_no_control, read_result_no_control,
     lift_sum_no_control, lift_option_type_no_control, write_place_no_control]
 QED
 
@@ -885,54 +950,21 @@ Proof
   ho_match_mp_tac stmt_induction >>
   rw[stmt_no_control_escape_def, evaluate_def, bind_def, ignore_bind_def,
      finally_def, try_def, switch_BoolV_def, return_def, raise_def,
-     pairTheory.UNCURRY, AllCaseEqs()] >>
-  TRY (drule assign_stmt_no_control >> simp[no_control_exc_no_loop_control] >> NO_TAC) >>
-  TRY (drule augassign_stmt_no_control >> simp[no_control_exc_no_loop_control] >> NO_TAC) >>
-  TRY (imp_res_tac read_place_no_control >> imp_res_tac no_control_exc_no_loop_control >> NO_TAC) >>
-  TRY (imp_res_tac place_type_value_no_control >> imp_res_tac no_control_exc_no_loop_control >> NO_TAC) >>
-  TRY (imp_res_tac eval_target_place_no_control >> imp_res_tac no_control_exc_no_loop_control >> NO_TAC) >>
-  TRY (imp_res_tac eval_base_place_no_control >> imp_res_tac no_control_exc_no_loop_control >> NO_TAC) >>
-  TRY (imp_res_tac get_place_no_control >> imp_res_tac no_control_exc_no_loop_control >> NO_TAC) >>
-  TRY (imp_res_tac write_place_no_control >> imp_res_tac no_control_exc_no_loop_control >> NO_TAC) >>
-  TRY (imp_res_tac no_control_exc_no_loop_control >> NO_TAC) >>
-  TRY (imp_res_tac check_no_control >> gvs[no_control_exc_def] >> NO_TAC) >>
-  TRY (imp_res_tac type_check_no_control >> gvs[no_control_exc_def] >> NO_TAC) >>
-  TRY (imp_res_tac lift_option_no_control >> gvs[no_control_exc_def] >> NO_TAC) >>
-  TRY (imp_res_tac lift_option_type_no_control >> gvs[no_control_exc_def] >> NO_TAC) >>
-  TRY (imp_res_tac lift_sum_no_control >> gvs[no_control_exc_def] >> NO_TAC) >>
-  TRY (imp_res_tac push_scope_no_control >> gvs[no_control_exc_def] >> NO_TAC) >>
-  TRY (imp_res_tac pop_scope_no_control >> gvs[no_control_exc_def] >> NO_TAC) >>
-  TRY (imp_res_tac new_variable_no_control >> gvs[no_control_exc_def] >> NO_TAC) >>
-  TRY (imp_res_tac get_Value_no_control >> gvs[no_control_exc_def] >> NO_TAC) >>
-  TRY (imp_res_tac materialise_no_control >> gvs[no_control_exc_def] >> NO_TAC) >>
-  TRY (imp_res_tac push_log_no_control >> gvs[no_control_exc_def] >> NO_TAC) >>
-  TRY (imp_res_tac assign_target_no_control >> gvs[no_control_exc_def] >> NO_TAC) >>
-  TRY (imp_res_tac eval_iterator_no_control >> gvs[no_control_exc_def] >> NO_TAC) >>
-  TRY (imp_res_tac eval_for_no_loop_control >> NO_TAC) >>
-  TRY (imp_res_tac eval_stmt_assert_no_loop_control >> NO_TAC) >>
-  TRY (imp_res_tac eval_stmt_raise_no_loop_control >> NO_TAC) >>
-  TRY (imp_res_tac eval_stmt_return_no_loop_control >> NO_TAC) >>
-  TRY (drule (cj 1 eval_expr_no_control) >> simp[no_control_exc_no_loop_control] >> NO_TAC) >>
-  TRY (drule (cj 2 eval_expr_no_control) >> simp[no_control_exc_no_loop_control] >> NO_TAC) >>
-  TRY (drule (cj 1 eval_target_no_control) >> simp[no_control_exc_no_loop_control] >> NO_TAC) >>
-  TRY (drule (cj 3 eval_target_no_control) >> simp[no_control_exc_no_loop_control] >> NO_TAC) >>
-  TRY (first_x_assum drule_all >> simp[] >> NO_TAC) >>
-  TRY (rename1 `if tv = Value (BoolV T) then _ else _` >>
-       Cases_on `tv = Value (BoolV T)` >> gvs[raise_def, no_control_exc_def] >>
-       Cases_on `tv = Value (BoolV F)` >> gvs[raise_def, no_control_exc_def] >>
-       res_tac >> gvs[] >> NO_TAC) >>
-  TRY (rename1 `eval_stmt cx (Assert e a) st = _` >>
-       Cases_on `a` >>
-       gvs[evaluate_def, bind_def, switch_BoolV_def, return_def, raise_def,
-           AllCaseEqs(), no_control_exc_def] >>
-       TRY (drule (cj 1 eval_expr_no_control) >> simp[no_control_exc_def] >> NO_TAC) >>
-       TRY (rename1 `(if tv = Value (BoolV T) then _ else _) _ = _` >>
-            Cases_on `tv = Value (BoolV T)` >> gvs[return_def, raise_def, no_control_exc_def] >>
-            Cases_on `tv = Value (BoolV F)` >> gvs[return_def, raise_def, no_control_exc_def] >>
-            NO_TAC) >>
-       NO_TAC) >>
-  TRY (res_tac >> gvs[] >> NO_TAC) >>
-  TRY (metis_tac[no_fallthrough_eval_no_success])
+     pairTheory.UNCURRY, COND_RATOR, AllCaseEqs()] >>
+  map_every imp_res_tac
+    [assign_stmt_no_control, augassign_stmt_no_control,
+     read_place_no_control, place_type_value_no_control,
+     eval_target_place_no_control, eval_base_place_no_control,
+     get_place_no_control, write_place_no_control, append_place_no_control,
+     check_no_control, type_check_no_control, lift_option_no_control,
+     lift_option_type_no_control, lift_sum_no_control,
+     push_scope_no_control, pop_scope_no_control, new_variable_no_control,
+     read_result_no_control, push_log_no_control, assign_tuple_targets_no_control,
+     eval_iterator_no_control, cj 1 eval_expr_no_control, cj 2 eval_expr_no_control] >>
+  gvs[no_control_exc_def] >>
+  metis_tac[eval_for_no_loop_control, eval_stmt_assert_no_loop_control,
+    eval_stmt_raise_no_loop_control, eval_stmt_return_no_loop_control,
+    no_fallthrough_eval_no_success]
 QED
 
 Theorem stmts_no_control_escape_eval_stmts_no_loop_control:
@@ -1176,63 +1208,31 @@ Proof
   simp[]
 QED
 
-Theorem location_runtime_typed_rebuild[local]:
-  !env cx st loc vt st'.
-    location_runtime_typed env cx st loc vt /\
-    runtime_consistent env cx st' ==>
-    location_runtime_typed env cx st' loc vt
-Proof
-  rw[] >> Cases_on `loc` >> gvs[location_runtime_typed_def, runtime_consistent_def,
-                                     env_consistent_def, env_scopes_consistent_def,
-                                     env_immutables_consistent_def]
-  >- (
-    rename1 `FLOOKUP env.var_types s = SOME var_ty` >>
-    `?entry'. lookup_scopes s st'.scopes = SOME entry'` by metis_tac[IS_SOME_EXISTS] >>
-    `env.type_defs = get_tenv cx` by fs[env_context_consistent_def] >>
-    `evaluate_type (get_tenv cx) var_ty = SOME entry'.type` by metis_tac[] >>
-    `entry'.type = entry.type` by gvs[] >>
-    qexists_tac `entry'` >> simp[]) >>
-  rename1 `FLOOKUP env.bare_globals (src_id_opt,s) = SOME imm_ty` >>
-  `?pair. FLOOKUP (get_source_immutables src_id_opt
-      (case ALOOKUP st'.immutables cx.txn.target of NONE => [] | SOME m => m))
-      s = SOME pair` by metis_tac[IS_SOME_EXISTS] >>
-  PairCases_on `pair` >>
-  `env.type_defs = get_tenv cx` by fs[env_context_consistent_def] >>
-  `evaluate_type (get_tenv cx) imm_ty = SOME pair0` by metis_tac[] >>
-  qexists_tac `get_source_immutables src_id_opt
-      (case ALOOKUP st'.immutables cx.txn.target of NONE => [] | SOME m => m)` >>
-  qexists_tac `pair1` >>
-  Cases_on `ALOOKUP st'.immutables cx.txn.target` >>
-  Cases_on `ALOOKUP x src_id_opt` >>
-  gvs[get_immutables_def, get_address_immutables_def, bind_def, return_def,
-      lift_option_type_def, lift_option_def, get_source_immutables_def,
-      AllCaseEqs()]
-QED
 
-Theorem subscript_vtype_index_get_Value_no_type_error[local]:
+Theorem subscript_vtype_index_read_value_result_no_type_error[local]:
   !base_vt idx_ty result_vt env e tv st res st'.
     subscript_vtype base_vt idx_ty = SOME result_vt /\
     expr_result_typed env e tv /\ expr_type e = idx_ty /\
-    get_Value tv st = (res, st') ==>
+    read_result cx tv st = (res, st') ==>
     no_type_error_result res
 Proof
   rw[expr_result_typed_def, expr_runtime_typed_def] >>
-  irule get_Value_no_type_error >>
-  qexistsl_tac [`st`, `st'`, `tv`, `tv'`] >> simp[] >>
+  irule read_value_result_no_type_error >>
+  qexistsl_tac [`cx`, `st`, `st'`, `tv`, `tv'`] >> simp[] >>
   Cases_on `base_vt` >> gvs[subscript_vtype_def]
   >- (Cases_on `t` >> gvs[subscript_vtype_def] >>
       Cases_on `expr_type e` >> gvs[is_int_type_def, evaluate_type_def, AllCaseEqs()]) >>
   Cases_on `expr_type e` >> gvs[hashmap_key_type_def, evaluate_type_def, AllCaseEqs(), LET_THM]
 QED
-Theorem get_Value_INR_no_type_error[local]:
+Theorem read_value_result_INR_no_type_error[local]:
   !tv tyv st y st'.
-    toplevel_value_typed tv tyv /\ tyv <> NoneTV /\
+    value_result_typed tv tyv /\ tyv <> NoneTV /\
     (!t b. tyv <> ArrayTV t b) /\
-    get_Value tv st = (INR y, st') ==>
+    read_result cx tv st = (INR y, st') ==>
     !msg. y <> Error (TypeError msg)
 Proof
   rw[] >>
-  drule_all get_Value_no_type_error >>
+  drule_all read_value_result_no_type_error >>
   gvs[no_type_error_result_def]
 QED
 
@@ -1240,7 +1240,7 @@ Theorem subscript_vtype_value_step_type[local]:
   !base_vt idx_ty result_vt env e tv st st' v loc_vt sbs.
     subscript_vtype base_vt idx_ty = SOME result_vt /\
     expr_result_typed env e tv /\ expr_type e = idx_ty /\
-    get_Value tv st = (INL v, st') /\
+    read_result cx tv st = (INL v, st') /\
     target_path_type env loc_vt sbs base_vt ==>
     target_path_type env loc_vt (ValueSubscript v::sbs) result_vt
 Proof
@@ -1250,10 +1250,10 @@ Proof
   Cases_on `base_vt` >> gvs[subscript_vtype_def]
   >- (Cases_on `t` >> gvs[subscript_vtype_def] >>
       Cases_on `expr_type e` >> gvs[is_int_type_def, evaluate_type_def, AllCaseEqs()] >>
-      Cases_on `tv` >> gvs[get_Value_def, return_def, toplevel_value_typed_def] >>
+      Cases_on `tv` >> gvs[read_result_def, return_def, value_result_typed_def] >>
       Cases_on `v` >> gvs[value_has_type_def]) >>
   Cases_on `expr_type e` >> gvs[hashmap_key_type_def, evaluate_type_def, AllCaseEqs(), LET_THM] >>
-  Cases_on `tv` >> gvs[get_Value_def, return_def, toplevel_value_typed_def] >>
+  Cases_on `tv` >> gvs[read_result_def, return_def, value_result_typed_def] >>
   Cases_on `v` >> gvs[value_has_type_def]
 QED
 
@@ -1642,24 +1642,6 @@ Proof
     simp[pop_scope_def, return_def, raise_def]) >>
   Cases_on`r1` >> gvs[no_type_error_result_def]
 QED
-Theorem target_runtime_typed_imp_shape[local]:
-  !env cx st tgt ty gv.
-    target_runtime_typed env cx st tgt ty gv ==>
-    target_value_shape env tgt gv
-Proof
-  Cases_on `tgt` >> Cases_on `gv` >>
-  rw[target_runtime_typed_def, target_value_shape_def]
-QED
-
-Theorem target_values_runtime_typed_imp_shape[local]:
-  !env cx st tgts tys gvs.
-    target_values_runtime_typed env cx st tgts tys gvs ==>
-    target_values_shape env tgts gvs
-Proof
-  Induct_on `tgts` >> Cases_on `tys` >> Cases_on `gvs` >>
-  simp[target_runtime_typed_def, target_value_shape_def] >>
-  metis_tac[target_runtime_typed_imp_shape]
-QED
 
 Theorem extract_elements_well_typed[local]:
   !arr_tv av elem_tv bd vs.
@@ -1793,14 +1775,14 @@ QED
 
 Theorem iterator_range_first_get_value_error_eq[local]:
   !cx e' tv1 st1 y res st'.
-    get_Value tv1 st1 = (INR y, st1) /\
+    read_result cx tv1 st1 = (INR y, st1) /\
     (case (INL tv1,st1) of
        (INL tv1,s'') =>
-         (case get_Value tv1 s'' of
+         (case read_result cx tv1 s'' of
             (INL v1,s'') =>
               (case eval_expr cx e' s'' of
                  (INL tv2,s'') =>
-                   (case get_Value tv2 s'' of
+                   (case read_result cx tv2 s'' of
                       (INL v2,s'') =>
                         (case lift_sum (get_range_limits v1 v2) s'' of
                            (INL rl,s'') =>
@@ -1822,11 +1804,11 @@ Theorem iterator_range_expr_error_eq[local]:
   !cx e' y st1 res st'.
     (case (INR y,st1) of
        (INL tv1,s'') =>
-         (case get_Value tv1 s'' of
+         (case read_result cx tv1 s'' of
             (INL v1,s'') =>
               (case eval_expr cx e' s'' of
                  (INL tv2,s'') =>
-                   (case get_Value tv2 s'' of
+                   (case read_result cx tv2 s'' of
                       (INL v2,s'') =>
                         (case lift_sum (get_range_limits v1 v2) s'' of
                            (INL rl,s'') =>
@@ -1844,15 +1826,15 @@ Proof
   simp[]
 QED
 
-Theorem int_expr_get_Value_INR_no_type_error[local]:
+Theorem int_expr_read_value_result_INR_no_type_error[local]:
   !env e tv ty st y st'.
     expr_result_typed env e tv /\ expr_type e = ty /\ is_int_type ty /\
-    get_Value tv st = (INR y, st') ==>
+    read_result cx tv st = (INR y, st') ==>
     no_type_error_result (INR y)
 Proof
   rw[expr_result_typed_def, expr_runtime_typed_def, no_type_error_result_def] >>
-  irule get_Value_INR_no_type_error >>
-  qexistsl_tac [`st`, `st'`, `tv`, `tv'`] >> simp[] >>
+  irule read_value_result_INR_no_type_error >>
+  qexistsl_tac [`cx`, `st`, `st'`, `tv`, `tv'`] >> simp[] >>
   drule_all is_int_type_evaluate_type_not_None_Array >> simp[]
 QED
 
@@ -1864,21 +1846,11 @@ Definition typed_scope_transition_def:
       EVERY (\ev. entry_pop_event_valid (SND ev)) events
 End
 
-Definition live_memory_result_def:
-  live_memory_result st pv <=>
-    case pv of
-    | PlaceR (MemoryPlace id path) =>
-        ?entry fresh old. lookup_scopes id st.scopes = SOME entry /\
-          memory_eval_path entry.type path /\
-          memory_history_region entry fresh old [path]
-    | _ => T
-End
-
-Theorem lookup_global_place_live[local]:
-  lookup_global_place cx src id st = (res,st') ==>
+Theorem lookup_global_live[local]:
+  lookup_global cx src id st = (res,st') ==>
   (case res of INL pv => live_memory_result st' pv | INR _ => T)
 Proof
-  simp[lookup_global_place_def, bind_def, lift_option_type_def,
+  simp[lookup_global_def, bind_def, lift_option_type_def,
        return_def, raise_def, AllCaseEqs()] >> rpt strip_tac >>
   gvs[vyperMiscTheory.option_CASE_rator, vyperMiscTheory.prod_CASE_rator,
       var_decl_info_CASE_rator, bind_def, lift_option_type_def, return_def,
@@ -1975,12 +1947,11 @@ Theorem typed_scope_spec_primitives[local,simp]:
   typed_scope_spec P (type_check b msg) (\x st. T) /\
   typed_scope_spec P (check b msg) (\x st. T) /\
   typed_scope_spec P (lift_option_type opt msg) (\x st. T) /\
-  typed_scope_spec P (get_Value tv) (\x st. T) /\
-  typed_scope_spec P (materialise cx tv) (\x st. T)
+  typed_scope_spec P (read_result cx tv) (\x st. T)
 Proof
   rpt conj_tac >> irule typed_scope_spec_scopes >>
   metis_tac[return_scopes, raise_scopes, get_scopes_scopes, type_check_scopes,
-            check_scopes, lift_option_type_scopes, get_Value_scopes, materialise_scopes]
+            check_scopes, lift_option_type_scopes, read_result_scopes]
 QED
 
 Theorem typed_scope_spec_plain_run[local]:
@@ -1991,7 +1962,7 @@ Proof
 QED
 
 Theorem typed_scope_spec_name_target[local,simp]:
-  typed_scope_spec P (eval_base_target cx (NameTarget id)) (\x st. T)
+  typed_scope_spec P (eval_base_place cx (NameTarget id)) (\x st. T)
 Proof
   rewrite_tac[Once evaluate_def] >>
   irule typed_scope_spec_trace_bind >> simp[] >> gen_tac >>
@@ -2004,15 +1975,15 @@ Theorem typed_scope_spec_name_expr[local,simp]:
 Proof
   rewrite_tac[Once evaluate_def] >>
   irule typed_scope_spec_trace_bind >> simp[] >> gen_tac >>
+  rewrite_tac[ignore_bind_def] >>
   irule typed_scope_spec_trace_bind >> simp[]
 QED
 
 Theorem typed_scope_spec_toplevel_target[local,simp]:
-  typed_scope_spec P (eval_base_target cx (TopLevelNameTarget (src,id))) (\x st. T)
+  typed_scope_spec P (eval_base_place cx (TopLevelNameTarget (src,id))) (\x st. T)
 Proof
-  rewrite_tac[Once evaluate_def] >>
-  irule typed_scope_spec_trace_bind >> simp[] >> qx_gen_tac `ts` >>
-  Cases_on `is_immutable_decl id ts` >> simp[]
+  rewrite_tac[Once evaluate_def] >> irule typed_scope_spec_scopes >>
+  metis_tac[lookup_global_scopes]
 QED
 
 Theorem typed_scope_spec_global_expr[local,simp]:
@@ -2046,26 +2017,17 @@ Proof
        type_slot_size_def]
 QED
 
-Theorem assign_pop_typed_transition[local]:
-  state_well_typed st /\
-  location_runtime_typed env cx st loc vt /\
-  target_path_type env vt subs (Type (ArrayT elem_ty (Dynamic n))) /\
-  assign_target cx (BaseTargetV loc subs) PopOp st = (res,st') ==>
+Theorem pop_place_typed_transition[local]:
+  runtime_consistent env cx st /\
+  runtime_place_typed cx st p (ArrayTV etv (Dynamic n)) /\
+  runtime_place_writable cx st p /\ live_memory_result st (PlaceR p) /\
+  pop_place cx p st = (res,st') ==>
   typed_scope_transition st st'
 Proof
-  rpt strip_tac >> Cases_on `loc`
-  >- (gvs[location_runtime_typed_def] >>
-      drule_at (Pat `assign_target _ _ _ _ = _`)
-        assign_scoped_pop_operational_typed_trace >>
-      simp[] >> impl_tac
-      >- (rpt strip_tac >> gvs[] >>
-      `well_formed_vtype env.type_defs (Type ty)` by
-        simp[well_formed_vtype_def, well_formed_type_def, IS_SOME_EXISTS] >>
-      drule_all target_path_type_Type_evaluate_leaf >>
-      simp[evaluate_type_def, AllCaseEqs()] >> metis_tac[]) >>
-      simp[typed_scope_transition_def]) >>
-  irule typed_scope_transition_scopes >>
-  drule_at (Pat `assign_target _ _ _ _ = _`) assign_nonscoped_pop_scopes >> simp[]
+  rpt strip_tac >>
+  drule_at (Pat `pop_place _ _ _ = _`) pop_place_valid_scope_trace >>
+  simp[GSYM typed_scope_transition_def] >>
+  Cases_on `p` >> gvs[live_memory_result_def] >> metis_tac[]
 QED
 
 Theorem runtime_place_typed_transport:
@@ -2081,11 +2043,11 @@ Proof
   drule_all immutable_metadata_frame_lookup >> strip_tac >> metis_tac[]
 QED
 
-Theorem place_result_typed_transport[local]:
+Theorem eval_result_typed_transport[local]:
   typed_scope_transition st st' /\ vyperImmutableMetadataFrame$immutable_metadata_frame st st' /\
-  place_result_typed env cx st pv vt ==> place_result_typed env cx st' pv vt
+  eval_result_typed (env,cx,st) pv vt ==> eval_result_typed (env,cx,st') pv vt
 Proof
-  Cases_on `pv` >> Cases_on `vt` >> simp[place_result_typed_def] >>
+  Cases_on `pv` >> Cases_on `vt` >> simp[eval_result_typed_def] >>
   metis_tac[runtime_place_typed_transport]
 QED
 
@@ -2106,7 +2068,7 @@ Proof
   drule_all scope_pop_trace_lookup >> strip_tac >>
   drule entry_pop_trace_metadata >> strip_tac >>
   drule_all typed_scope_trace_live_region >> strip_tac >> gvs[] >>
-  qexistsl_tac [`fresh'`, `old`] >> simp[]
+  qexistsl_tac [`fresh'`, `old'`] >> simp[]
 QED
 
 Theorem live_memory_result_read[local]:
@@ -2133,6 +2095,29 @@ Proof
       disch_then drule_all >> strip_tac >> gvs[]) >>
   irule read_nonmemory_place_success_type >> simp[] >>
   goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem read_live_result_success_type:
+  state_well_typed st /\
+  eval_result_typed (env,cx,st) res (Type ty) /\
+  live_memory_result st res /\ read_result cx res st = (INL v,st') ==>
+  value_runtime_typed env ty v
+Proof
+  Cases_on `res` >>
+  gvs[eval_result_typed_def, read_result_def, return_def,
+      value_runtime_typed_def] >>
+  metis_tac[read_live_place_success_type]
+QED
+
+Theorem read_typed_result_error:
+  state_well_typed st /\
+  eval_result_typed (env,cx,st) res (Type ty) /\
+  read_result cx res st = (INR err,st') ==>
+  !msg. err <> Error (TypeError msg)
+Proof
+  Cases_on `res` >>
+  gvs[eval_result_typed_def, read_result_def, return_def] >>
+  metis_tac[read_place_typed_error]
 QED
 
 Theorem extend_storage_place_live[local]:
@@ -2164,7 +2149,7 @@ Theorem extend_live_memory_success[local]:
   live_memory_result st (PlaceR (MemoryPlace id path)) /\
   place_type_value cx (MemoryPlace id path) st = (INL tv,st) /\
   subscript_type tv sb = SOME etv /\
-  extend_place cx input_tv (PlaceR (MemoryPlace id path)) sb st = (INL pv,st') ==>
+  extend_place cx (PlaceR (MemoryPlace id path)) sb st = (INL pv,st') ==>
   live_memory_result st' pv
 Proof
   simp[live_memory_result_def, extend_place_def, bind_def, ignore_bind_def,
@@ -2193,7 +2178,7 @@ Theorem extend_live_memory_typed_success[local]:
   state_well_typed st /\
   runtime_place_typed cx st (MemoryPlace id path) tv /\
   live_memory_result st (PlaceR (MemoryPlace id path)) /\
-  extend_place cx input_tv (PlaceR (MemoryPlace id path)) sb st = (INL pv,st') ==>
+  extend_place cx (PlaceR (MemoryPlace id path)) sb st = (INL pv,st') ==>
   live_memory_result st' pv
 Proof
   rpt strip_tac >>
@@ -2214,7 +2199,7 @@ QED
 Theorem extend_live_place_typed_success[local]:
   state_well_typed st /\ runtime_place_typed cx st p tv /\
   live_memory_result st (PlaceR p) /\
-  extend_place cx input_tv (PlaceR p) sb st = (INL pv,st') ==>
+  extend_place cx (PlaceR p) sb st = (INL pv,st') ==>
   live_memory_result st' pv
 Proof
   rpt strip_tac >> Cases_on `p`
@@ -2229,7 +2214,7 @@ Theorem extend_live_place_success[local]:
   state_well_typed st /\ runtime_place_typed cx st p tv /\
   subscript_type tv sb = SOME etv /\
   live_memory_result st (PlaceR p) /\
-  extend_place cx input_tv (PlaceR p) sb st = (INL pv,st') ==>
+  extend_place cx (PlaceR p) sb st = (INL pv,st') ==>
   live_memory_result st' pv
 Proof
   rpt strip_tac >> Cases_on `p`
@@ -2242,58 +2227,64 @@ Proof
       extend_memory_place_def, live_memory_result_def]
 QED
 
-Theorem extend_value_result_live[local]:
-  extend_place cx input_tv (ValueR vv) sb s = (INL pv,t) ==>
+Theorem select_value_result_live[local]:
+  select_result cx input_ty (Value vv) sb s = (INL pv,t) ==>
   live_memory_result t pv
 Proof
-  Cases_on `vv` >> Cases_on `sb` >>
-  simp[extend_place_def, bind_def, ignore_bind_def, return_def, raise_def,
-       AllCaseEqs()] >> rpt strip_tac >>
-  gvs[subscript_result_place_def, live_memory_result_def,
-      vyperMiscTheory.sum_CASE_rator, AllCaseEqs()] >>
-  TRY (drule extend_storage_place_live >> simp[live_memory_result_def] >> NO_TAC) >>
-  Cases_on `res` >> gvs[subscript_result_place_def, live_memory_result_def] >>
-  PairCases_on `y` >> gvs[subscript_result_place_def, live_memory_result_def]
+  simp[select_result_def, bind_def, lift_option_type_def, lift_sum_def,
+       return_def, raise_def, AllCaseEqs()] >> rpt strip_tac >>
+  gvs[live_memory_result_def]
 QED
 
 Theorem transported_typed_result_extend_live[local]:
-  !t s env cx bp vt input_tv sb pv u.
+  !t s env cx bp vt input_ty sb pv u.
   state_well_typed t /\ typed_scope_transition s t /\
   vyperImmutableMetadataFrame$immutable_metadata_frame s t /\
-  place_result_typed env cx s bp vt /\ live_memory_result s bp /\
-  extend_place cx input_tv bp sb t = (INL pv,u) ==>
+  eval_result_typed (env,cx,s) bp vt /\ live_memory_result s bp /\
+  select_result cx input_ty bp sb t = (INL pv,u) ==>
   live_memory_result u pv
 Proof
   rpt strip_tac >> Cases_on `bp`
-  >- (Cases_on `vt` >> gvs[place_result_typed_def] >>
+  >- metis_tac[select_value_result_live]
+  >- (rename1 `PlaceR p` >> Cases_on `vt` >> gvs[eval_result_typed_def] >>
       `runtime_place_typed cx t p tv` by
         metis_tac[runtime_place_typed_transport] >>
       `live_memory_result t (PlaceR p)` by
-        (Cases_on `p` >> TRY (simp[live_memory_result_def] >> NO_TAC) >>
-         metis_tac[live_memory_result_transport]) >>
+        (Cases_on `p`
+         >- simp[live_memory_result_def]
+         >- (irule live_memory_result_transport >> goal_assum drule_all)
+         >> simp[live_memory_result_def]) >>
+      gvs[select_result_def] >>
       drule_all extend_live_place_typed_success >> simp[]) >>
-  drule extend_value_result_live >> simp[]
+  gvs[select_result_def, extend_place_def, bind_def, lift_option_type_def,
+      return_def, raise_def, AllCaseEqs(), live_memory_result_def] >>
+  Cases_on `sb` >> gvs[extend_place_def, bind_def, lift_option_type_def,
+      return_def, raise_def, AllCaseEqs(), live_memory_result_def] >>
+  rename1 `HashMapRef tr slot kt value_ty` >> Cases_on `value_ty` >>
+  gvs[bind_def, return_def, raise_def, AllCaseEqs(), live_memory_result_def]
 QED
 
-Theorem extend_target_typed_result_live[local]:
-  state_well_typed st /\ place_result_typed env cx st bp vt /\
+Theorem extend_typed_result_live[local]:
+  state_well_typed st /\ eval_result_typed (env,cx,st) bp vt /\
   live_memory_result st bp /\
-  extend_target_place cx bp sb st = (INL pv,u) ==>
+  extend_place cx bp sb st = (INL pv,u) ==>
   live_memory_result u pv
 Proof
   rpt strip_tac >> Cases_on `bp`
-  >- (Cases_on `vt` >> gvs[place_result_typed_def, extend_target_place_def] >>
+  >- gvs[extend_place_def, raise_def]
+  >- (Cases_on `vt` >> gvs[eval_result_typed_def] >>
       drule_all extend_live_place_typed_success >> simp[]) >>
-  Cases_on `t` >>
-  gvs[extend_target_place_def, raise_def] >>
-  drule extend_value_result_live >> simp[]
+  Cases_on `sb` >> gvs[extend_place_def, raise_def] >>
+  rename1 `HashMapRef tr slot kt value_ty` >> Cases_on `value_ty` >>
+  gvs[extend_place_def, bind_def, lift_option_type_def, return_def,
+      raise_def, AllCaseEqs(), live_memory_result_def]
 QED
 
 Theorem extend_live_place_attribute_no_type_error[local]:
   state_well_typed st /\ runtime_place_typed cx st p tv /\
   live_memory_result st (PlaceR p) /\
   subscript_type tv (AttrSubscript id) = SOME etv /\
-  extend_place cx input_tv (PlaceR p) (AttrSubscript id) st = (res,st') ==>
+  extend_place cx (PlaceR p) (AttrSubscript id) st = (res,st') ==>
   no_type_error_result res
 Proof
   rpt strip_tac >>
@@ -2365,7 +2356,7 @@ QED
 Theorem extend_live_array_place_sound[local]:
   state_well_typed st /\ runtime_place_typed cx st p (ArrayTV etv bd) /\
   live_memory_result st (PlaceR p) /\
-  extend_place cx input_tv (PlaceR p) (ValueSubscript (IntV i)) st = (res,st') ==>
+  extend_place cx (PlaceR p) (ValueSubscript (IntV i)) st = (res,st') ==>
   no_type_error_result res /\
   case res of INL pv => ?q. pv = PlaceR q /\ runtime_place_typed cx st' q etv | INR err => T
 Proof
@@ -2394,7 +2385,7 @@ Theorem extend_live_tuple_place_sound[local]:
   state_well_typed st /\ runtime_place_typed cx st p (TupleTV tvs) /\
   live_memory_result st (PlaceR p) /\
   subscript_type (TupleTV tvs) (ValueSubscript (IntV i)) = SOME etv /\
-  extend_place cx input_tv (PlaceR p) (ValueSubscript (IntV i)) st = (res,st') ==>
+  extend_place cx (PlaceR p) (ValueSubscript (IntV i)) st = (res,st') ==>
   no_type_error_result res /\
   case res of INL pv => ?q. pv = PlaceR q /\ runtime_place_typed cx st' q etv | INR err => T
 Proof
@@ -2463,61 +2454,64 @@ QED
 
 Theorem extend_target_array_place_sound[local]:
   state_well_typed st /\ live_memory_result st (PlaceR p) /\
-  place_result_typed env cx st (PlaceR p) (Type (ArrayT elem bd)) /\
+  eval_result_typed (env,cx,st) (PlaceR p) (Type (ArrayT elem bd)) /\
   expr_result_typed env e (Value v) /\ is_int_type (expr_type e) /\
-  extend_target_place cx (PlaceR p) (ValueSubscript v) st = (res,st') ==>
+  extend_place cx (PlaceR p) (ValueSubscript v) st = (res,st') ==>
   no_type_error_result res /\
-  case res of INL pv => place_result_typed env cx st' pv (Type elem) | INR err => T
+  case res of INL pv => eval_result_typed (env,cx,st') pv (Type elem) | INR err => T
 Proof
-  simp[place_result_typed_place, expr_result_typed_def, expr_runtime_typed_def,
-       extend_target_place_def] >> rpt gen_tac >> strip_tac >>
+  simp[eval_result_typed_def, evaluate_type_def,
+       expr_result_typed_def, expr_runtime_typed_def] >>
+  rpt gen_tac >> strip_tac >>
   Cases_on `expr_type e` >> gvs[is_int_type_def, evaluate_type_def,
-       AllCaseEqs(), toplevel_value_typed_def] >>
+       AllCaseEqs(), value_result_typed_def] >>
   Cases_on `v` >> gvs[value_has_type_def] >>
   drule_all extend_live_array_place_sound >> strip_tac >> simp[] >>
-  Cases_on `res` >> gvs[] >> simp[place_result_typed_place] >> metis_tac[]
+  Cases_on `res` >> gvs[] >> simp[eval_result_typed_def] >> metis_tac[]
 QED
 
 Theorem extend_target_hashmap_place_sound[local]:
   env_consistent env cx st /\
   well_formed_vtype env.type_defs (HashMapT kt leaf) /\
   subscript_vtype (HashMapT kt leaf) (expr_type e) = SOME out /\
-  extend_target_place cx (ValueR (HashMapRef tr slot kt leaf)) (ValueSubscript v) st = (res,st') ==>
+  extend_place cx (HashMapRef tr slot kt leaf) (ValueSubscript v) st = (res,st') ==>
   no_type_error_result res /\
-  case res of INL pv => place_result_typed env cx st' pv out | INR err => T
+  case res of INL pv => eval_result_typed (env,cx,st') pv out | INR err => T
 Proof
   simp[subscript_vtype_def] >> rpt gen_tac >> strip_tac >> gvs[] >>
   `env.type_defs = get_tenv cx` by
     gvs[env_consistent_def, env_context_consistent_def] >>
   Cases_on `leaf` >>
   gvs[well_formed_vtype_def, well_formed_type_def, IS_SOME_EXISTS,
-      extend_target_place_def, extend_place_def, evaluate_subscript_def,
-      bind_def, lift_sum_def, return_def, raise_def, subscript_result_place_def,
+      extend_place_def, bind_def, lift_option_type_def, return_def, raise_def,
       AllCaseEqs()] >>
-  simp[no_type_error_result_def, place_result_typed_def, place_expr_result_typed_def] >>
+  simp[no_type_error_result_def, eval_result_typed_def, runtime_place_typed_def,
+       place_type_value_def, return_def] >>
   metis_tac[evaluate_type_well_formed_type_value]
 QED
 
 Theorem extend_target_subscript_place_sound[local]:
   env_consistent env cx st /\ state_well_typed st /\
   well_formed_vtype env.type_defs bvt /\
-  place_result_typed env cx st pv bvt /\ live_memory_result st pv /\
-  (case pv of PlaceR p => T | ValueR vv => is_HashMapRef vv) /\
+  eval_result_typed (env,cx,st) pv bvt /\ live_memory_result st pv /\
+  (case pv of Value _ => F | _ => T) /\
   subscript_vtype bvt (expr_type e) = SOME out /\ expr_result_typed env e (Value v) /\
-  extend_target_place cx pv (ValueSubscript v) st = (res,st') ==>
+  extend_place cx pv (ValueSubscript v) st = (res,st') ==>
   no_type_error_result res /\
-  case res of INL q => place_result_typed env cx st' q out | INR err => T
+  case res of INL q => eval_result_typed (env,cx,st') q out | INR err => T
 Proof
   rpt gen_tac >> strip_tac >> Cases_on `pv`
-  >- (Cases_on `bvt` >> gvs[] >> Cases_on `t` >> gvs[subscript_vtype_def] >>
-      metis_tac[extend_target_array_place_sound, place_result_typed_place]) >>
-  Cases_on `t` >> gvs[is_HashMapRef_def] >>
-  Cases_on `bvt` >> gvs[place_result_typed_def, place_expr_result_typed_def,
-      is_HashMapRef_def, toplevel_value_typed_def] >>
-  drule_all extend_target_hashmap_place_sound >> strip_tac >>
-  Cases_on `res` >> gvs[place_result_typed_def, place_expr_result_typed_def] >>
-  Cases_on `x` >> Cases_on `out` >>
-  gvs[place_result_typed_def, place_expr_result_typed_def]
+  >- gvs[]
+  >- (Cases_on `bvt`
+      >- (rename1 `Type base_ty` >> Cases_on `base_ty` >>
+          gvs[subscript_vtype_def] >>
+          `eval_result_typed (env,cx,st) (PlaceR p) (Type (ArrayT t b))` by
+            simp[eval_result_typed_def] >>
+          drule_all extend_target_array_place_sound >> simp[]) >>
+      gvs[eval_result_typed_def]) >>
+  Cases_on `bvt` >> gvs[eval_result_typed_def] >>
+  drule_all extend_target_hashmap_place_sound >>
+  simp[eval_result_typed_def]
 QED
 
 (* Split only the new outer contracts, not the old ordinary/place result pair. *)
@@ -2531,26 +2525,66 @@ fun has_soundness_aux_conj tm =
 
 fun expose_soundness_aux_tac g =
   if has_soundness_aux_conj (snd g) then
-    (FIRST [conj_tac, gen_tac, disch_then strip_assume_tac] >>
-      expose_soundness_aux_tac) g
+    ((if is_conj (snd g) then conj_tac
+      else if is_forall (snd g) then gen_tac
+      else disch_then strip_assume_tac) >> expose_soundness_aux_tac) g
   else all_tac g;
 
-val old_soundness_ihs_tac =
-  rule_assum_tac (underAIs (fn th =>
-    if has_soundness_aux_conj (concl th) then CONJUNCT1 th else th)) >>
-  rpt (first_x_assum (fn th =>
-    if free_in ``typed_scope_transition`` (concl th) orelse
-       free_in ``live_memory_result`` (concl th) orelse
-       free_in ``writable_place_result`` (concl th) then kall_tac th else NO_TAC));
-
-(* Each invocation records exactly one original TypedTrace root. The index
-   disambiguates repeated constructor branches; the equation is its inventory. *)
+(* Trace roots are keyed by the outer evaluator equation, never by an IH. *)
+val soundness_root_inventory = ref ([] : string list);
 val trace_root_inventory = ref ([] : (string * term) list);
+fun trace_root_key tm =
+  let val body = #2 (strip_forall tm)
+      val (premises,conclusion) = dest_imp body
+      val _ = if same_const (fst (strip_comb conclusion)) ``typed_scope_transition``
+              then () else raise Fail "Not a scope-transition conclusion"
+      val equation = List.last (strip_conj premises)
+      val (evaluator,args) = strip_comb (lhs equation)
+      fun name t = #1 (dest_const (fst (strip_comb t)))
+      val operation = name evaluator
+      val arg = el 2 args
+      val constructor = if operation = "eval_target_place" then "" else name arg
+      val suffix =
+        case operation of
+          "eval_target_place" => "Target"
+        | "eval_base_place" => "Base_" ^ constructor
+        | "eval_exprs" => if listSyntax.is_nil arg then "Exprs_nil" else "Exprs_cons"
+        | "eval_expr" => "Expr_" ^ constructor ^
+            (if constructor = "Call" then "_" ^ name (el 2 (#2 (strip_comb arg))) else "")
+        | _ => raise Fail ("Unknown transition evaluator: " ^ operation)
+  in "Trace_" ^ suffix end;
 fun suspend_trace_root g =
-  let val i = length (!trace_root_inventory) + 1
-      val label = "TraceRoot" ^ Int.toString i
-      val tm = #2 g
+  let val tm = #2 g
+      val label = trace_root_key tm
+      val _ = if List.exists (fn (key,_) => key = label) (!trace_root_inventory)
+              then raise Fail ("Duplicate transition root: " ^ label) else ()
       val _ = trace_root_inventory := !trace_root_inventory @ [(label,tm)]
+  in suspend label g end;
+
+val live_root_inventory = ref ([] : (string * term) list);
+fun live_root_key tm =
+  let val body = #2 (strip_forall tm)
+      val (premises,conclusion) = dest_imp body
+      val _ = if free_in ``live_memory_result`` conclusion then ()
+              else raise Fail "Not a live-result conclusion"
+      val (evaluator,args) = strip_comb (lhs (List.last (strip_conj premises)))
+      fun name t = #1 (dest_const (fst (strip_comb t)))
+      val operation = name evaluator
+      val arg = el 2 args
+      val suffix =
+        case operation of
+          "eval_target_place" => "Target"
+        | "eval_base_place" => "Base_" ^ name arg
+        | "eval_expr" => "Expr_" ^ name arg ^
+            (if name arg = "Call" then "_" ^ name (el 2 (#2 (strip_comb arg))) else "")
+        | _ => raise Fail ("Unknown live-result evaluator: " ^ operation)
+  in "LiveRoot" ^ suffix end;
+fun suspend_live_root g =
+  let val tm = #2 g
+      val label = live_root_key tm
+      val _ = if List.exists (fn (key,_) => key = label) (!live_root_inventory)
+              then raise Fail ("Duplicate live-result root: " ^ label) else ()
+      val _ = live_root_inventory := !live_root_inventory @ [(label,tm)]
   in suspend label g end;
 
 Theorem eval_scc_type_sound_mutual:
@@ -2583,24 +2617,6 @@ Theorem eval_scc_type_sound_mutual:
     case res of
     | INL vs => ?tyv. evaluate_type env.type_defs ty = SOME tyv /\ EVERY (value_has_type tyv) vs
     | INR _ => T) /\
-  (!cx bt. (!env vt st res st'.
-    type_place_target env bt = SOME vt /\ env_consistent env cx st /\ state_well_typed st /\
-    context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
-    call_evaluation_safe cx (int_calls_target bt) /\
-    eval_base_target cx bt st = (res, st') ==>
-    state_well_typed st' /\ env_consistent env cx st' /\ accounts_well_typed st'.accounts /\
-    no_type_error_result res /\
-    case res of
-    | INL (loc,sbs) =>
-        base_target_value_shape env bt loc sbs /\
-        ?loc_vt. location_runtime_typed env cx st' loc loc_vt /\
-          target_path_type env loc_vt sbs vt
-    | INR _ => T) /\
-   (!env vt st res st'.
-    type_place_target env bt = SOME vt /\ env_consistent env cx st /\ state_well_typed st /\
-    context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
-    call_evaluation_safe cx (int_calls_target bt) /\ eval_base_target cx bt st = (res,st') ==>
-    typed_scope_transition st st')) /\
   (!cx tyv id body vs. !env ret_ty ty env_after st res st'.
     evaluate_type env.type_defs ty = SOME tyv /\ EVERY (value_has_type tyv) vs /\
     id NOTIN FDOM env.var_types /\
@@ -2617,26 +2633,27 @@ Theorem eval_scc_type_sound_mutual:
   (!cx e. (!env st res st'.
     env_consistent env cx st /\ state_well_typed st /\
     context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
-    call_evaluation_safe cx (int_calls_expr e) /\
-    eval_expr cx e st = (res, st') ==>
+    call_evaluation_safe cx (int_calls_expr e) /\ eval_expr cx e st = (res,st') ==>
     ((well_typed_expr env e ==>
       state_well_typed st' /\ env_consistent env cx st' /\ accounts_well_typed st'.accounts /\
       no_type_error_result res /\
-      case res of
-      | INL tv => expr_result_typed env e tv
-      | INR _ => T) /\
+      case res of INL pv => eval_result_typed (env,cx,st') pv (Type (expr_type e)) | INR _ => T) /\
      (!vt. type_place_expr env e = SOME vt ==>
       state_well_typed st' /\ env_consistent env cx st' /\ accounts_well_typed st'.accounts /\
       no_type_error_result res /\
-      case res of
-      | INL tv => place_expr_result_typed env tv vt
-      | INR _ => T))) /\
+      case res of INL pv => eval_result_typed (env,cx,st') pv vt | INR _ => T))) /\
    (!env st res st'.
     (well_typed_expr env e \/ ?vt. type_place_expr env e = SOME vt) /\
     env_consistent env cx st /\ state_well_typed st /\
     context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_expr e) /\ eval_expr cx e st = (res,st') ==>
-    typed_scope_transition st st')) /\
+    typed_scope_transition st st') /\
+   (!env st res st'.
+    (well_typed_expr env e \/ ?vt. type_place_expr env e = SOME vt) /\
+    env_consistent env cx st /\ state_well_typed st /\
+    context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
+    call_evaluation_safe cx (int_calls_expr e) /\ eval_expr cx e st = (res,st') ==>
+    case res of INL pv => live_memory_result st' pv | INR _ => T)) /\
   (!cx es. (!env st res st'.
     well_typed_exprs env es /\ env_consistent env cx st /\ state_well_typed st /\
     context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
@@ -2652,37 +2669,13 @@ Theorem eval_scc_type_sound_mutual:
     context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_exprs es) /\ eval_exprs cx es st = (res,st') ==>
     typed_scope_transition st st')) /\
-  (!cx e. (!env st res st'.
-    env_consistent env cx st /\ state_well_typed st /\
-    context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
-    call_evaluation_safe cx (int_calls_expr e) /\ eval_place cx e st = (res,st') ==>
-    ((well_typed_expr env e ==>
-      state_well_typed st' /\ env_consistent env cx st' /\ accounts_well_typed st'.accounts /\
-      no_type_error_result res /\
-      case res of INL pv => ordinary_place_result_typed env cx st' e pv | INR _ => T) /\
-     (!vt. type_place_expr env e = SOME vt ==>
-      state_well_typed st' /\ env_consistent env cx st' /\ accounts_well_typed st'.accounts /\
-      no_type_error_result res /\
-      case res of INL pv => place_result_typed env cx st' pv vt | INR _ => T))) /\
-   (!env st res st'.
-    (well_typed_expr env e \/ ?vt. type_place_expr env e = SOME vt) /\
-    env_consistent env cx st /\ state_well_typed st /\
-    context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
-    call_evaluation_safe cx (int_calls_expr e) /\ eval_place cx e st = (res,st') ==>
-    typed_scope_transition st st') /\
-   (!env st res st'.
-    (well_typed_expr env e \/ ?vt. type_place_expr env e = SOME vt) /\
-    env_consistent env cx st /\ state_well_typed st /\
-    context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
-    call_evaluation_safe cx (int_calls_expr e) /\ eval_place cx e st = (res,st') ==>
-    case res of INL pv => live_memory_result st' pv | INR _ => T)) /\
   (!cx bt. (!env vt st res st'.
     type_place_target env bt = SOME vt /\ env_consistent env cx st /\ state_well_typed st /\
     context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_target bt) /\ eval_base_place cx bt st = (res,st') ==>
     state_well_typed st' /\ env_consistent env cx st' /\ accounts_well_typed st'.accounts /\
     no_type_error_result res /\
-    case res of INL pv => place_result_typed env cx st' pv vt | INR _ => T) /\
+    case res of INL pv => eval_result_typed (env,cx,st') pv vt | INR _ => T) /\
    (!env vt st res st'.
     type_place_target env bt = SOME vt /\ env_consistent env cx st /\ state_well_typed st /\
     context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
@@ -2704,7 +2697,7 @@ Theorem eval_scc_type_sound_mutual:
     call_evaluation_safe cx (int_calls_target bt) /\ eval_target_place cx bt st = (res,st') ==>
     state_well_typed st' /\ env_consistent env cx st' /\ accounts_well_typed st'.accounts /\
     no_type_error_result res /\
-    case res of INL p => place_result_typed env cx st' (PlaceR p) (Type ty) | INR _ => T) /\
+    case res of INL p => eval_result_typed (env,cx,st') (PlaceR p) (Type ty) | INR _ => T) /\
    (!env ty st res st'.
     well_typed_target env bt ty /\ env_consistent env cx st /\ state_well_typed st /\
     context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
@@ -2738,143 +2731,80 @@ Theorem eval_scc_type_sound_mutual:
 Proof
   ho_match_mp_tac evaluate_ind >> rpt conj_tac >>
   rpt gen_tac >> strip_tac >> expose_soundness_aux_tac >>
-  TRY (goal_term (fn g => if free_in ``writable_place_result`` g then
-    if free_in ``eval_target_place`` g then suspend "WritableRootTarget"
-    else let
-      val app = find_term (fn tm =>
-        let val (h,args) = strip_comb tm
-        in same_const h ``eval_base_place`` andalso length args = 3 end
-        handle HOL_ERR _ => false) g
-      val ctor = #Name (dest_thy_const (#1 (strip_comb (el 2 (#2 (strip_comb app))))))
-    in suspend ("WritableRootBase_" ^ ctor) end
-    else NO_TAC)) >>
-  TRY (goal_term (fn g => if free_in ``typed_scope_transition`` g then suspend_trace_root else NO_TAC)) >>
-  TRY (goal_term (fn g => if free_in ``live_memory_result`` g then
+  (fn (g as (asms,w)) =>
     let
-      fun application_of c tm =
+      fun head tm = #Name (dest_thy_const (#1 (strip_comb tm)))
+      fun app tm =
         let val (h,args) = strip_comb tm
-        in same_const h c andalso length args = 3 end handle HOL_ERR _ => false
-      fun label c prefix =
-        let val tm = find_term (application_of c) g
-            val arg = el 2 (#2 (strip_comb tm))
-            val ctor = #Name (dest_thy_const (#1 (strip_comb arg)))
-        in prefix ^ ctor end
-      val nm = if free_in ``eval_target_place`` g then "LiveRootTarget"
-               else if free_in ``eval_base_place`` g then label ``eval_base_place`` "LiveRootBase_"
-               else label ``eval_place`` "LiveRootExpr_"
-    in suspend nm end else NO_TAC)) >>
-  TRY (goal_term (fn g =>
-    let
-      fun choose c prefix =
-        let
-          fun app tm = let val (h,args) = strip_comb tm
-            in same_const h c andalso length args = 3 end handle HOL_ERR _ => false
-          val tm = find_term app g
-          val arg = el 2 (#2 (strip_comb tm))
-          val ctor = #Name (dest_thy_const (#1 (strip_comb arg)))
-        in suspend (prefix ^ ctor) end
-    in if free_in ``eval_place`` g then choose ``eval_place`` "PlaceRoot_"
-       else if free_in ``eval_base_place`` g then choose ``eval_base_place`` "BasePlaceRoot_"
-       else NO_TAC end)) >>
-  TRY (goal_term (fn g => if free_in ``eval_target_place`` g then suspend "TargetPlace" else NO_TAC)) >>
-  TRY (goal_term (fn g => if free_in ``assign_tuple_targets`` g then
-    let
-      val app = find_term (fn tm =>
-        let val (h,args) = strip_comb tm
-        in same_const h ``assign_tuple_targets`` andalso length args = 4 end
-        handle HOL_ERR _ => false) g
-      val ctor = #Name (dest_thy_const (#1 (strip_comb (el 2 (#2 (strip_comb app))))))
-    in suspend ("TupleStore_" ^ ctor) end else NO_TAC)) >>
-  TRY (goal_term (fn g => if free_in ``assign_tuple_target_list`` g then
-    let
-      val app = find_term (fn tm =>
-        let val (h,args) = strip_comb tm
-        in same_const h ``assign_tuple_target_list`` andalso length args = 4 end
-        handle HOL_ERR _ => false) g
-      val args = #2 (strip_comb app)
-      fun shape tm = if listSyntax.is_nil tm then "nil" else "cons"
-    in suspend ("TupleStores_" ^ shape (el 2 args) ^ "_" ^ shape (el 3 args)) end
-    else NO_TAC)) >>
-  TRY (qpat_assum `eval_place _ _ _ = _` (K (suspend "Place"))) >>
-  TRY (qpat_assum `eval_base_place _ _ _ = _` (K (suspend "BasePlace"))) >>
-  TRY (qpat_assum `eval_target_place _ _ _ = _` (K (suspend "TargetPlace"))) >>
-  TRY (qpat_assum `assign_tuple_targets _ (BaseTarget _) _ _ = _`
-    (K (suspend "TupleStore_BaseTarget"))) >>
-  TRY (qpat_assum `assign_tuple_targets _ (TupleTarget _) _ _ = _`
-    (K (suspend "TupleStore_TupleTarget"))) >>
-  TRY (qpat_assum `assign_tuple_target_list _ [] [] _ = _`
-    (K (suspend "TupleStores_nil_nil"))) >>
-  TRY (qpat_assum `assign_tuple_target_list _ (_::_) [] _ = _`
-    (K (suspend "TupleStores_cons_nil"))) >>
-  TRY (qpat_assum `assign_tuple_target_list _ [] (_::_) _ = _`
-    (K (suspend "TupleStores_nil_cons"))) >>
-  TRY(rename1 `Assign (BaseTarget _) _` >> suspend "Assign_Base") >>
-  TRY(rename1 `Assign (TupleTarget _) _` >> suspend "Assign_Tuple") >>
-  TRY(rename1 `AugAssign` >> suspend "AugAssign") >>
-  old_soundness_ihs_tac >>
-  (fn g => if null (fst g) then (rpt gen_tac >> strip_tac) g else all_tac g) >>
-  TRY(rename1 `Pass` >> suspend "Pass") >>
-  TRY(rename1 `Continue` >> suspend "Continue") >>
-  TRY(rename1 `Break` >> suspend "Break") >>
-  TRY(rename1 `Return NONE` >> suspend "Return_NONE") >>
-  TRY(rename1 `Return (SOME _)` >> suspend "Return_SOME") >>
-  TRY(rename1 `Raise RaiseBare` >> suspend "RaiseBare") >>
-  TRY(rename1 `Raise RaiseUnreachable` >> suspend "RaiseUnreachable") >>
-  TRY(rename1 `Raise (RaiseReason _)` >> suspend "RaiseReason") >>
-  TRY(rename1 `AssertBare` >> suspend "AssertBare") >>
-  TRY(rename1 `AssertUnreachable` >> suspend "AssertUnreachable") >>
-  TRY(rename1 `AssertReason` >> suspend "AssertReason") >>
-  TRY(rename1 `Log` >> suspend "Log") >>
-  TRY(rename1 `AnnAssign` >> suspend "AnnAssign") >>
-  TRY(rename1 `Append` >> suspend "Append") >>
-  TRY(rename1 `Assign (BaseTarget _) _` >> suspend "Assign_Base") >>
-  TRY(rename1 `Assign (TupleTarget _) _` >> suspend "Assign_Tuple") >>
-  TRY(rename1 `AugAssign` >> suspend "AugAssign") >>
-  TRY(rename1 `If` >> suspend "If") >>
-  TRY(rename1 `For` >> suspend "For") >>
-  TRY(rename1 `Expr` >> suspend "Expr") >>
-  TRY(rename1 `eval_stmts _ []` >> suspend "Stmts_nil") >>
-  TRY(rename1 `eval_stmts _ (_::_)` >> suspend "Stmts_cons") >>
-  TRY(rename1 `eval_for _ _ _ _ []` >> suspend "For_nil") >>
-  TRY(rename1 `eval_for _ _ _ _ (_::_)` >> suspend "For_cons") >>
-  TRY(rename1 `Array` >> suspend "Iterator_Array") >>
-  TRY(rename1 `Range` >> suspend "Iterator_Range") >>
-  TRY(rename1 `BaseTarget` >> suspend "Target_Base") >>
-  TRY(rename1 `TupleTarget` >> suspend "Target_Tuple") >>
-  TRY(rename1 `eval_targets _ []` >> suspend "Targets_nil") >>
-  TRY(rename1 `eval_targets _ (_::_)` >> suspend "Targets_cons") >>
-  TRY(rename1 `NameTarget` >> suspend "BaseTarget_Name") >>
-  TRY(rename1 `TopLevelNameTarget` >> suspend "BaseTarget_TopLevel") >>
-  TRY(rename1 `SubscriptTarget` >> suspend "BaseTarget_Subscript") >>
-  TRY(rename1 `AttributeTarget` >> suspend "BaseTarget_Attribute") >>
-  TRY(rename1 `Name` >> suspend "Expr_Name") >>
-  TRY(rename1 `TopLevelName` >> suspend "Expr_TopLevelName") >>
-  TRY(rename1 `FlagMember` >> suspend "Expr_FlagMember") >>
-  TRY(rename1 `IfExp` >> suspend "Expr_IfExp") >>
-  TRY(rename1 `Literal` >> suspend "Expr_Literal") >>
-  TRY(rename1 `StructLit` >> suspend "Expr_StructLit") >>
-  TRY(rename1 `Subscript` >> suspend "Expr_Subscript") >>
-  TRY(rename1 `Attribute` >> suspend "Expr_Attribute") >>
-  TRY(rename1 `Builtin` >> suspend "Expr_Builtin") >>
-  TRY(rename1 `TypeBuiltin` >> suspend "Expr_TypeBuiltin") >>
-  TRY(rename1 `Pop` >> suspend "Expr_Pop") >>
-  TRY(rename1 `IntCall` >> suspend "Expr_Call_IntCall") >>
-  TRY(rename1 `ExtCall` >> (
-    rpt gen_tac >> strip_tac >>
-    reverse conj_tac >- (
-      rpt gen_tac >> strip_tac >>
-      qpat_x_assum `type_place_expr _ (Call _ (ExtCall _ _ _ _) _ _) = SOME _` mp_tac >>
-      simp[type_place_expr_Call_ExtCall_NONE]) >>
-    suspend "Expr_Call_ExtCall_result")) >>
-  TRY(rename1 `Send` >> suspend "Expr_Call_Send") >>
-  TRY(rename1 `RawCallTarget` >> suspend "Expr_Call_RawCallTarget") >>
-  TRY(rename1 `RawCallCalldataTarget` >> suspend "Expr_Call_RawCallCalldataTarget") >>
-  TRY(rename1 `RawLog` >> suspend "Expr_Call_RawLog") >>
-  TRY(rename1 `RawRevert` >> suspend "Expr_Call_RawRevert") >>
-  TRY(rename1 `SelfDestructTarget` >> suspend "Expr_Call_SelfDestructTarget") >>
-  TRY(rename1 `CreateTarget` >> suspend "Expr_Call_CreateTarget") >>
-  TRY(rename1 `eval_exprs _ []` >> suspend "Exprs_nil") >>
-  TRY(rename1 `eval_exprs _ (_::_)` >> suspend "Exprs_cons")
+            val n = #Name (dest_thy_const h)
+        in (List.exists (fn s => s = n) ["eval_stmt", "eval_stmts", "eval_iterator", "eval_for",
+              "eval_expr", "eval_exprs", "eval_base_place", "eval_target_place"]
+            andalso length args = (if n = "eval_for" then 6 else 3)) orelse
+           (List.exists (fn s => s = n) ["assign_tuple_targets", "assign_tuple_target_list"] andalso
+            length args = 4)
+        end handle HOL_ERR _ => false
+      val body = #2 (strip_forall w)
+      val equations = if is_imp body then strip_conj (fst (dest_imp body)) else asms
+      val outer = List.filter (fn a => is_eq a andalso app (lhs a)) equations
+      val tm = case outer of [equation] => lhs equation
+             | _ => raise Fail "Expected one outer evaluator equation"
+      val (h,args) = strip_comb tm
+      val n = head h
+      val arg = el 2 args
+      fun shape t = if listSyntax.is_nil t then "nil" else "cons"
+      fun expr_label e =
+        let val (_,xs) = strip_comb e
+        in if head e = "Call" then "Expr_Call_" ^ head (el 2 xs)
+           else "Expr_" ^ head e end
+      fun stmt_label s =
+        let val (_,xs) = strip_comb s
+            val c = head s
+        in if c = "Return" then "Return_" ^ head (hd xs)
+           else if c = "Raise" then head (hd xs)
+           else if c = "Assert" then head (el 2 xs)
+           else if c = "Assign" then
+             (if head (hd xs) = "BaseTarget" then "Assign_Base" else "Assign_Tuple")
+           else c end
+      val is_trace = free_in ``typed_scope_transition`` w
+      val is_live = free_in ``live_memory_result`` w
+      val is_writable = free_in ``writable_place_result`` w
+      val label =
+        if is_writable then
+          (if n = "eval_target_place" then "WritableRootTarget"
+           else "WritableRootBase_" ^ head arg)
+        else if is_live then
+          (if n = "eval_target_place" then "LiveRootTarget"
+           else if n = "eval_base_place" then "LiveRootBase_" ^ head arg
+           else "LiveRootExpr_" ^ head arg)
+        else if n = "eval_stmt" then stmt_label arg
+        else if n = "eval_stmts" then "Stmts_" ^ shape arg
+        else if n = "eval_iterator" then "Iterator_" ^ head arg
+        else if n = "eval_for" then "For_" ^ shape (el 5 args)
+        else if n = "eval_expr" then expr_label arg
+        else if n = "eval_exprs" then "Exprs_" ^ shape arg
+        else if n = "eval_base_place" then "BasePlaceRoot_" ^ head arg
+        else if n = "eval_target_place" then "TargetPlace"
+        else if n = "assign_tuple_targets" then "TupleStore_" ^ head arg
+        else if n = "assign_tuple_target_list" then
+          "TupleStores_" ^ shape arg ^ "_" ^ shape (el 3 args)
+        else raise Fail ("Unknown soundness evaluator: " ^ n)
+      val key = if is_trace then trace_root_key w
+                else if is_live then live_root_key w else label
+      val _ = if List.exists (fn seen => seen = key) (!soundness_root_inventory)
+              then raise Fail ("Duplicate soundness root: " ^ key) else ()
+      val _ = soundness_root_inventory := key :: !soundness_root_inventory
+    in
+      if is_trace then suspend_trace_root g
+      else if is_live then suspend_live_root g
+      else if label = "Expr_Call_ExtCall" then
+        (rpt gen_tac >> strip_tac >>
+         reverse conj_tac >- (
+           rpt gen_tac >> strip_tac >>
+           qpat_x_assum `type_place_expr _ (Call _ (ExtCall _ _ _ _) _ _) = SOME _` mp_tac >>
+           simp[type_place_expr_Call_ExtCall_NONE]) >>
+         suspend "Expr_Call_ExtCall_result") g
+      else suspend label g
+    end)
 QED
 
 Resume eval_scc_type_sound_mutual[Pass]:
@@ -2912,22 +2842,23 @@ Resume eval_scc_type_sound_mutual[Return_SOME]:
   Cases_on `er` >> gvs[no_type_error_result_def]
   >- (
     rename1 `eval_expr cx e st = (INL tv,s1)` >>
-    Cases_on `materialise cx tv s1` >>
-    rename1 `materialise cx tv s1 = (mr,s2)` >>
+    `live_memory_result s1 tv` by (
+      qpat_assum `!env st res st'. _ ==> case res of INL pv => live_memory_result _ pv | INR _ => T`
+        (qspecl_then [`env`, `st`, `INL tv`, `s1`] mp_tac) >> simp[]) >>
+    Cases_on `read_result cx tv s1` >>
+    rename1 `read_result cx tv s1 = (mr,s2)` >>
     Cases_on `mr` >> gvs[raise_def, no_type_error_result_def]
     >- (
-      drule materialise_state >> strip_tac >> gvs[] >>
+      drule read_result_state >> strip_tac >> gvs[] >>
       strip_tac >> gvs[] >>
+      drule_all live_result_read_typed >> strip_tac >>
       gvs[return_exception_typed_def, value_runtime_typed_def] >>
-      metis_tac[materialise_widens_value_typed]) >>
-    drule materialise_state >> strip_tac >> gvs[] >>
+      metis_tac[type_widens_to_value_has_type]) >>
+    drule read_result_state >> strip_tac >> gvs[] >>
     strip_tac >> gvs[] >>
-    conj_tac >- (
-      `expr_type e <> NoneT` by metis_tac[type_widens_to_not_NoneT] >>
-      gvs[expr_result_typed_def, expr_runtime_typed_def] >>
-      drule_all evaluate_type_not_NoneT_imp_not_NoneTV >> strip_tac >>
-      drule_all materialise_typed_non_none_no_type_error >> simp[]) >>
-    drule materialise_no_control >> strip_tac >>
+    conj_tac >- (drule_all live_result_read_typed >>
+      simp[no_type_error_result_def]) >>
+    drule read_result_no_control >> strip_tac >>
     Cases_on `y` >> gvs[no_control_exc_def, return_exception_typed_def]) >>
   strip_tac >> gvs[] >>
   drule_all eval_expr_exception_return_typed >> simp[]
@@ -2960,13 +2891,19 @@ Resume eval_scc_type_sound_mutual[RaiseReason]:
     rw[] >> gvs[no_type_error_result_def]) >>
   BasicProvers.VAR_EQ_TAC >>
   first_x_assum drule_all >> simp[] >> strip_tac >>
-  qhdtm_x_assum `expr_result_typed` mp_tac >>
-  asm_rewrite_tac[expr_result_typed_def, expr_runtime_typed_def] >>
-  simp[evaluate_type_def] >> strip_tac >>
-  drule toplevel_value_typed_StringTV >> strip_tac >> gvs[] >>
-  gvs[get_Value_def, return_def, dest_StringV_def,
-      lift_option_type_def, no_type_error_result_def, return_exception_typed_def] >>
-  imp_res_tac raise_state >> gvs[]
+  gvs[] >> rename1 `eval_expr cx e st = (INL pv,mid)` >>
+  `live_memory_result mid pv` by (
+    qpat_assum `!env st res st'. _ ==> case res of INL pv => live_memory_result _ pv | INR _ => T`
+      (qspecl_then [`env`, `st`, `INL pv`, `mid`] mp_tac) >> simp[]) >>
+  drule_all live_result_read_typed >> strip_tac >>
+  gvs[value_runtime_typed_def, evaluate_type_def, no_type_error_result_def,
+      return_exception_typed_def, value_has_type_StringTV, AllCaseEqs(),
+      dest_StringV_def, lift_option_type_def, return_def, raise_def] >>
+  imp_res_tac value_has_type_StringTV >>
+  gvs[dest_StringV_def, return_def, raise_def, no_type_error_result_def,
+      return_exception_typed_def] >>
+  drule read_result_no_control >> strip_tac >>
+  Cases_on `e'` >> gvs[no_control_exc_def]
 QED
 
 Resume eval_scc_type_sound_mutual[AssertBare]:
@@ -2984,13 +2921,24 @@ Resume eval_scc_type_sound_mutual[AssertBare]:
   first_x_assum drule_all >> strip_tac >>
   Cases_on `expr_res` >> gvs[no_type_error_result_def]
   >- (
-    qhdtm_x_assum `expr_result_typed` mp_tac >>
-    asm_rewrite_tac[expr_result_typed_def, expr_runtime_typed_def] >>
-    simp[evaluate_type_def] >> strip_tac >>
-    drule toplevel_value_typed_BoolTV >> strip_tac >>
-    Cases_on `b` >> gvs[switch_BoolV_def, return_def, raise_def,
+    `live_memory_result st1 x` by (
+      qpat_assum `!env st res st'. _ ==> case res of INL pv => live_memory_result _ pv | INR _ => T`
+        (qspecl_then [`env`, `st`, `INL x`, `st1`] mp_tac) >> simp[]) >>
+    Cases_on `read_result cx x st1` >>
+    rename1 `read_result cx x st1 = (loaded,st2)` >>
+    drule_all live_result_read_typed >> strip_tac >> gvs[] >>
+    reverse (Cases_on `loaded`)
+    >- (drule read_result_no_control >> strip_tac >>
+        Cases_on `y` >>
+        gvs[switch_BoolV_def, bind_def, raise_def, no_control_exc_def,
+            no_type_error_result_def, return_exception_typed_def] >>
+        rpt strip_tac >> gvs[]) >>
+    gvs[value_runtime_typed_def, evaluate_type_def] >>
+    drule value_has_type_BoolTV >> strip_tac >> gvs[] >>
+    Cases_on `b` >>
+    gvs[switch_BoolV_def, bind_def, return_def, raise_def,
         no_type_error_result_def, return_exception_typed_def] >>
-    metis_tac[return_state, raise_state]) >>
+    rpt strip_tac >> gvs[]) >>
   strip_tac >> gvs[] >>
   drule_all eval_expr_exception_return_typed >> simp[]
 QED
@@ -3010,13 +2958,24 @@ Resume eval_scc_type_sound_mutual[AssertUnreachable]:
   first_x_assum drule_all >> strip_tac >>
   Cases_on `expr_res` >> gvs[no_type_error_result_def]
   >- (
-    qhdtm_x_assum `expr_result_typed` mp_tac >>
-    asm_rewrite_tac[expr_result_typed_def, expr_runtime_typed_def] >>
-    simp[evaluate_type_def] >> strip_tac >>
-    drule toplevel_value_typed_BoolTV >> strip_tac >>
-    Cases_on `b` >> gvs[switch_BoolV_def, return_def, raise_def,
+    `live_memory_result st1 x` by (
+      qpat_assum `!env st res st'. _ ==> case res of INL pv => live_memory_result _ pv | INR _ => T`
+        (qspecl_then [`env`, `st`, `INL x`, `st1`] mp_tac) >> simp[]) >>
+    Cases_on `read_result cx x st1` >>
+    rename1 `read_result cx x st1 = (loaded,st2)` >>
+    drule_all live_result_read_typed >> strip_tac >> gvs[] >>
+    reverse (Cases_on `loaded`)
+    >- (drule read_result_no_control >> strip_tac >>
+        Cases_on `y` >>
+        gvs[switch_BoolV_def, bind_def, raise_def, no_control_exc_def,
+            no_type_error_result_def, return_exception_typed_def] >>
+        rpt strip_tac >> gvs[]) >>
+    gvs[value_runtime_typed_def, evaluate_type_def] >>
+    drule value_has_type_BoolTV >> strip_tac >> gvs[] >>
+    Cases_on `b` >>
+    gvs[switch_BoolV_def, bind_def, return_def, raise_def,
         no_type_error_result_def, return_exception_typed_def] >>
-    metis_tac[return_state, raise_state]) >>
+    rpt strip_tac >> gvs[]) >>
   strip_tac >> gvs[] >>
   drule_all eval_expr_exception_return_typed >> simp[]
 QED
@@ -3043,41 +3002,55 @@ Resume eval_scc_type_sound_mutual[AssertReason]:
   qpat_x_assum `well_typed_expr env e ==> _` (drule_then strip_assume_tac) >>
   Cases_on `expr_res` >> rewrite_tac[no_type_error_result_def]
   >- (
-    `expr_result_typed env e x` by (
-      qpat_x_assum `case INL x of INL tv => expr_result_typed env e tv | INR v1 => T` mp_tac >>
-      simp[]) >>
-    qhdtm_x_assum `expr_result_typed` mp_tac >>
-    asm_rewrite_tac[expr_result_typed_def, expr_runtime_typed_def] >>
-    rewrite_tac[Once evaluate_type_def] >> strip_tac >>
-    `tv = BaseTV BoolT` by
-      (qpat_x_assum `_ = SOME tv` mp_tac >>
-       rewrite_tac[Once evaluate_type_def] >> simp[]) >>
-    qpat_x_assum `tv = BaseTV BoolT` SUBST_ALL_TAC >>
-    drule toplevel_value_typed_BoolTV >> strip_tac >>
-    qpat_x_assum `x = Value (BoolV b)` SUBST_ALL_TAC >>
-    Cases_on `b` >> rewrite_tac[switch_BoolV_def, return_def]
-    >- (
-      qpat_x_assum `!s'' tv t. _` kall_tac >>
-      qpat_x_assum `!vt. _` kall_tac >>
-      rpt strip_tac >> gvs[return_def, no_type_error_result_def]) >>
+    qpat_x_assum `!env st res st'. _ ==> typed_scope_transition _ _` kall_tac >>
+    qpat_x_assum `!vt. _` kall_tac >>
+    qpat_x_assum `case INL x of INL pv => eval_result_typed _ pv _ | INR _ => T` mp_tac >>
+    simp_tac (srw_ss()) [] >> strip_tac >>
+    `live_memory_result st1 x` by (
+      qpat_assum `!env st res st'. _ ==> case res of INL pv => live_memory_result _ pv | INR _ => T`
+        (qspecl_then [`env`, `st`, `INL x`, `st1`] mp_tac) >> simp[]) >>
+    qpat_x_assum `!s tv t. eval_expr cx e s = (INL tv,t) ==> _`
+      (drule_then (mk_asm "reason_ih")) >>
+    Cases_on `read_result cx x st1` >>
+    rename1 `read_result cx x st1 = (loaded,st2)` >>
+    drule_all live_result_read_typed >> strip_tac >> gvs[] >>
+    reverse (Cases_on `loaded`)
+    >- (drule read_result_no_control >> strip_tac >>
+        Cases_on `y` >>
+        gvs[switch_BoolV_def, bind_def, raise_def, no_control_exc_def,
+            no_type_error_result_def, return_exception_typed_def] >>
+        rpt strip_tac >> gvs[]) >>
+    gvs[value_runtime_typed_def, evaluate_type_def] >>
+    drule value_has_type_BoolTV >> strip_tac >> gvs[] >>
+    Cases_on `b` >> simp[switch_BoolV_def, bind_def, return_def]
+    >- (rpt strip_tac >> gvs[no_type_error_result_def]) >>
+    asm_x "reason_ih" strip_assume_tac >>
     Cases_on `eval_expr cx e' st1` >>
     rename1 `eval_expr cx e' st1 = (reason_res, st2)` >>
     first_x_assum drule_all >> strip_tac >>
     Cases_on `reason_res` >> gvs[no_type_error_result_def]
     >- (
-      qhdtm_x_assum `expr_result_typed` mp_tac >>
-      asm_rewrite_tac[expr_result_typed_def, expr_runtime_typed_def] >>
-      simp[evaluate_type_def] >> strip_tac >>
-      drule toplevel_value_typed_StringTV >> strip_tac >>
-      gvs[bind_def, get_Value_def, return_def, dest_StringV_def,
-          lift_option_type_def, raise_def, no_type_error_result_def,
-          return_exception_typed_def] >>
-      rw[] >> gvs[]) >>
+      `live_memory_result st2 x'` by (
+        qpat_assum `!env st res st'. _ ==> case res of INL pv => live_memory_result _ pv | INR _ => T`
+          (qspecl_then [`env`, `st1`, `INL x'`, `st2`] mp_tac) >> simp[]) >>
+      Cases_on `read_result cx x' st2` >>
+      rename1 `read_result cx x' st2 = (reason_loaded,st3)` >>
+      drule_all live_result_read_typed >> strip_tac >> gvs[] >>
+      reverse (Cases_on `reason_loaded`)
+      >- (drule read_result_no_control >> strip_tac >>
+          Cases_on `y` >>
+          gvs[no_control_exc_def, return_exception_typed_def,
+              no_type_error_result_def] >> rpt strip_tac >> gvs[]) >>
+      gvs[value_runtime_typed_def, evaluate_type_def] >>
+      drule value_has_type_StringTV >> strip_tac >>
+      gvs[dest_StringV_def, lift_option_type_def, return_def, raise_def,
+          no_type_error_result_def, return_exception_typed_def] >>
+      rpt strip_tac >> gvs[]) >>
     gvs[bind_def, no_type_error_result_def] >>
     rw[] >>
     drule eval_expr_exception_return_typed >> simp[]) >>
   rpt strip_tac >>
-  qpat_x_assum `!s'' tv t. _` kall_tac >>
+  qpat_x_assum `!s tv t. eval_expr cx e s = (INL tv,t) ==> _` kall_tac >>
   qpat_x_assum `!vt. _` kall_tac >>
   gvs[no_type_error_result_def] >>
   drule_all eval_expr_exception_return_typed >> simp[]
@@ -3094,7 +3067,8 @@ Resume eval_scc_type_sound_mutual[Log]:
        no_type_error_result_def, AllCaseEqs()] >>
   Cases_on `eval_exprs cx es st` >>
   rename1 `eval_exprs cx es st = (exprs_res, st1)` >>
-  first_x_assum drule_all >> strip_tac >>
+  qpat_x_assum `!env st res st'. _ ==> _ /\ env_consistent _ _ _ /\ _`
+    (drule_all_then strip_assume_tac) >>
   Cases_on `exprs_res` >> gvs[no_type_error_result_def]
   >- (
     strip_tac >> gvs[state_well_typed_def, accounts_well_typed_def] >>
@@ -3131,9 +3105,13 @@ Resume eval_scc_type_sound_mutual[AnnAssign]:
       qpat_x_assum `!tenv s'' tyv t. _`
         (qspecl_then [`env.type_defs`, `st`, `tyv`, `st`] mp_tac) >>
       simp[lift_option_type_def, return_def] >>
-      disch_then drule_all >> strip_tac >>
+      strip_tac >>
+      qpat_x_assum `!env st res st'. _ ==> _ /\ !vt. _`
+        (drule_all_then strip_assume_tac) >>
       qpat_x_assum `well_typed_expr env' e ==> _` (drule_then strip_assume_tac) >>
-      simp[]) >>
+      qpat_x_assum `!env st res st'. _ ==> case res of INL pv => live_memory_result _ pv | INR _ => T`
+        (qspecl_then [`env'`, `st''`, `res'`, `st'''`] mp_tac) >>
+      simp[] >> Cases_on `res'` >> gvs[]) >>
   rpt conj_tac >> asm_rewrite_tac[]
 QED
 
@@ -3161,112 +3139,76 @@ Resume eval_scc_type_sound_mutual[Append]:
   rename1 `type_place_target env bt = SOME (Type (ArrayT elem_ty (Dynamic n)))` >>
   strip_tac >>
   qpat_x_assum `env = env'` (SUBST_ALL_TAC o SYM) >>
+  `well_typed_target env bt (ArrayT elem_ty (Dynamic n))` by
+    simp[well_typed_target_def] >>
   qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
   simp_tac(srw_ss())[Once evaluate_def, bind_def] >>
-  Cases_on `eval_base_target cx bt st` >>
-  rename1 `eval_base_target cx bt st = (bt_res, st1)` >>
-  first_x_assum drule_all >> strip_tac >>
-  Cases_on `bt_res`
-  >- (
-    PairCases_on `x` >>
-    qpat_x_assum `case INL _ of _ => _ | _ => _` mp_tac >> rewrite_tac[] >> strip_tac >>
-    Cases_on `eval_expr cx e st1` >>
-    rename1 `eval_expr cx e st1 = (expr_res, st2)` >>
-    first_x_assum drule_all >> strip_tac >>
-    Cases_on `expr_res` >> gvs[no_type_error_result_def]
-    >- (
-      rename1 `eval_expr cx e st1 = (INL tvl, st2)` >>
-      Cases_on `materialise cx tvl st2` >>
-      rename1 `materialise cx tvl st2 = (mat_res, st3)` >>
-      Cases_on `mat_res` >> gvs[no_type_error_result_def]
-      >- (
-        rename1 `materialise cx tvl st2 = (INL v, st3)` >>
-        qpat_x_assum `do _ od _ = _` mp_tac >>
-        simp[bind_apply, bind_def, return_def, ignore_bind_apply] >>
-        Cases_on `assign_target cx (BaseTargetV x0 x1) (AppendOp v) st3` >>
-        rename1 `assign_target cx (BaseTargetV loc sbs) (AppendOp v) st3 = (assign_res, st4)` >>
-        Cases_on `assign_res` >> simp[return_def, ignore_bind_apply, no_type_error_result_def] >>
-        strip_tac >> gvs[] >>
-        imp_res_tac materialise_state >> gvs[] >>
-        `?elem_tv. evaluate_type env.type_defs elem_ty = SOME elem_tv` by (
-          drule assignable_type_well_formed >>
-          rw[well_formed_type_def, optionTheory.IS_SOME_EXISTS]) >>
-        `well_formed_type_value elem_tv` by
-          metis_tac[evaluate_type_well_formed_type_value] >>
-        `value_has_type elem_tv v` by (
-          drule_all materialise_widens_value_typed >> rw[] >> gvs[]) >>
-        `target_runtime_typed env cx st1 (BaseTarget bt)
-           (ArrayT elem_ty (Dynamic n)) (BaseTargetV loc sbs)` by (
-          rw[target_runtime_typed_def, target_value_shape_def,
-             well_typed_atarget_def, well_typed_target_def] >>
-          metis_tac[]) >>
-        `runtime_consistent env cx st2` by simp[runtime_consistent_def] >>
-        `target_runtime_typed env cx st2 (BaseTarget bt)
-           (ArrayT elem_ty (Dynamic n)) (BaseTargetV loc sbs)` by (
-          irule target_runtime_typed_rebuild >> simp[] >> goal_assum drule) >>
-        `assign_operation_runtime_typed env (ArrayT elem_ty (Dynamic n)) (AppendOp v)` by
-          metis_tac[stmt_assign_operation_runtime_typed_Append_from_value_has_type] >>
-        `assign_operation_matches_target_shape (BaseTargetV loc sbs) (AppendOp v)` by
-          simp[stmt_assign_operation_matches_target_shape_Append_BaseTargetV] >>
-        `assign_target_assignable_context cx (BaseTargetV loc sbs) st2` by
-          metis_tac[target_runtime_typed_imp_assignable_context, runtime_consistent_def] >>
-        rpt strip_tac >> gvs[] >>
-        `assignable_type env.type_defs (ArrayT elem_ty (Dynamic n))` by (
-          simp[assignable_type_def, well_formed_type_def] >>
-          drule_at(Pat`target_runtime_typed`) target_runtime_typed_place_leaf_typed >>
-          simp[] >> strip_tac >>
-          drule place_leaf_typed_evaluate_type >>
-          simp[optionTheory.IS_SOME_EXISTS]) >>
-        drule_at(Pat`assign_target`) assign_target_preserves_runtime_consistent_result >>
-        disch_then $ drule_at(Pat`target_runtime_typed`) >> simp[] >>
-        strip_tac >> gvs[runtime_consistent_def, no_type_error_result_def] >>
-        qspecl_then [`cx`, `BaseTargetV loc sbs`, `st2`,
-          `INR (Error (TypeError msg))`, `st'`, `env`, `BaseTarget bt`,
-          `elem_ty`, `elem_tv`, `n`, `v`] mp_tac
-          assign_target_append_no_type_error >>
-        simp[no_type_error_result_def, runtime_consistent_def] >>
-        strip_tac >> drule (cj 1 assign_target_no_control) >>
-        rw[no_control_exc_return_exception_typed]) >>
-      strip_tac >> gvs[] >>
-      qpat_x_assum `do _ od _ = _` mp_tac >>
-      simp[bind_apply, bind_def, return_def, ignore_bind_apply] >>
-      strip_tac >> gvs[] >>
-      drule materialise_state >> strip_tac >> gvs[] >>
-      conj_tac
-      >- (rpt strip_tac >> gvs[] >>
-          gvs[expr_result_typed_def, expr_runtime_typed_def] >>
-          drule_at_then Any drule
-            materialise_typed_non_none_no_type_error >>
-          simp[] >>
-          `expr_type e ≠ NoneT` by
-            metis_tac[assignable_type_not_NoneT, type_widens_to_not_NoneT] >>
-          metis_tac[evaluate_type_not_NoneT_imp_not_NoneTV]) >>
-      drule materialise_no_control >>
-      rw[no_control_exc_return_exception_typed]) >>
-    strip_tac >> gvs[] >>
-    qpat_x_assum `do _ od _ = _` mp_tac >>
-    simp[bind_apply, bind_def, return_def, ignore_bind_apply] >>
-    strip_tac >> gvs[] >>
-    drule eval_expr_exception_return_typed >> rw[]) >>
-  strip_tac >>
-  qpat_x_assum `case (INR _,_) of _ => _ | _ => _` mp_tac >>
-  pure_rewrite_tac[pairTheory.pair_case_def] >> BETA_TAC >>
-  pure_rewrite_tac[sumTheory.sum_case_def] >> BETA_TAC >> strip_tac >>
-  qpat_x_assum `(INR y,st1) = (res,st')` mp_tac >>
-  pure_rewrite_tac[pairTheory.PAIR_EQ] >> strip_tac >>
-  qpat_x_assum `INR y = res` (SUBST_ALL_TAC o SYM) >>
-  qpat_x_assum `st1 = st'` (SUBST_ALL_TAC o SYM) >>
-  conj_tac >- qpat_assum `state_well_typed st1` ACCEPT_TAC >>
-  conj_tac >- qpat_assum `accounts_well_typed st1.accounts` ACCEPT_TAC >>
-  conj_tac >- (qpat_x_assum `!s'' loc sbs t'. _` kall_tac >>
-                qpat_x_assum `case INR _ of _ => _ | _ => _` kall_tac >>
-                fs[no_type_error_result_def]) >>
-  drule (cj 3 eval_target_no_control) >>
-  rw[no_control_exc_return_exception_typed]
+  Cases_on `eval_target_place cx bt st` >>
+  rename1 `eval_target_place cx bt st = (target_res, st1)` >>
+  qpat_x_assum `!env ty st res st'. _ ==> state_well_typed _ /\ _`
+    (drule_all_then strip_assume_tac) >>
+  qpat_x_assum `!env ty st res st'. _ ==> case res of INL p => live_memory_result _ _ | INR _ => T`
+    (drule_all_then strip_assume_tac) >>
+  qpat_x_assum `!env ty st res st'. _ ==> case res of INL p => writable_place_result _ _ _ | INR _ => T`
+    (drule_all_then strip_assume_tac) >>
+  reverse (Cases_on `target_res`)
+  >- (qpat_x_assum `!s p t. eval_target_place cx bt s = (INL p,t) ==> _` kall_tac >>
+      gvs[no_type_error_result_def] >> strip_tac >> gvs[] >>
+      drule eval_target_place_no_control >>
+      simp[no_control_exc_return_exception_typed]) >>
+  simp_tac(srw_ss()) [] >>
+  qpat_x_assum `!s p t. eval_target_place cx bt s = (INL p,t) ==> _`
+    (drule_then strip_assume_tac) >>
+  Cases_on `eval_expr cx e st1` >>
+  rename1 `eval_expr cx e st1 = (expr_res,st2)` >>
+  qpat_x_assum `!env st res st'. _ ==> _ /\ !vt. _`
+    (drule_all_then strip_assume_tac) >>
+  qpat_x_assum `well_typed_expr env e ==> _` (drule_then strip_assume_tac) >>
+  qpat_x_assum `!env st res st'. _ ==> typed_scope_transition _ _`
+    (qspecl_then [`env`, `st1`, `expr_res`, `st2`] mp_tac) >> simp[] >> strip_tac >>
+  qpat_x_assum `!env st res st'. _ ==> case res of INL pv => live_memory_result _ pv | INR _ => T`
+    (qspecl_then [`env`, `st1`, `expr_res`, `st2`] mp_tac) >> simp[] >> strip_tac >>
+  qpat_x_assum `!env ty st res st'. _` kall_tac >>
+  qpat_x_assum `!vt. _` kall_tac >>
+  reverse (Cases_on `expr_res`)
+  >- (simp[] >> strip_tac >> gvs[no_type_error_result_def] >>
+      drule eval_expr_exception_return_typed >> simp[]) >>
+  gvs[] >>
+  `vyperImmutableMetadataFrame$immutable_metadata_frame st1 st2` by
+    (drule eval_expr_immutable_metadata_frame >> simp[]) >>
+  `eval_result_typed (env,cx,st2) (PlaceR x) (Type (ArrayT elem_ty (Dynamic n)))` by
+    (irule eval_result_typed_transport >> qexists_tac `st1` >> simp[]) >>
+  `writable_place_result cx st2 (PlaceR x)` by
+    (irule writable_place_result_transport >> qexists_tac `st1` >> simp[]) >>
+  `live_memory_result st2 (PlaceR x)` by
+    (Cases_on `x` >> simp[live_memory_result_def] >>
+     drule_all live_memory_result_transport >> simp[live_memory_result_def]) >>
+  `?elem_tv. evaluate_type env.type_defs elem_ty = SOME elem_tv /\
+     runtime_place_typed cx st2 x (ArrayTV elem_tv (Dynamic n))` by
+    gvs[eval_result_typed_def, evaluate_type_def, AllCaseEqs()] >>
+  Cases_on `read_result cx x' st2` >>
+  rename1 `read_result cx x' st2 = (loaded,st3)` >>
+  drule_all live_result_read_typed >> strip_tac >> gvs[] >>
+  reverse (Cases_on `loaded`)
+  >- (simp[] >> strip_tac >> gvs[no_type_error_result_def] >>
+      drule read_result_no_control >> simp[no_control_exc_return_exception_typed]) >>
+  qmatch_assum_rename_tac `read_result cx x' st2 = (INL right,st2)` >>
+  `value_runtime_typed env elem_ty right` by
+    (drule_all read_live_result_widens_type >> simp[]) >>
+  `value_has_type elem_tv right` by gvs[value_runtime_typed_def] >>
+  strip_tac >> gvs[] >>
+  `runtime_consistent env cx st2` by simp[runtime_consistent_def] >>
+  `runtime_place_writable cx st2 x` by gvs[writable_place_result_def] >>
+  drule_at (Pat `append_place`) append_place_sound >>
+  disch_then (qspecl_then [`n`, `elem_tv`, `env`] mp_tac) >> simp[] >>
+  impl_tac >- (Cases_on `x` >> gvs[live_memory_result_def] >> metis_tac[]) >>
+  strip_tac >> gvs[runtime_consistent_def] >>
+  Cases_on `res` >> gvs[no_type_error_result_def] >>
+  drule append_place_no_control >> simp[no_control_exc_return_exception_typed]
 QED
 
 Resume eval_scc_type_sound_mutual[Assign_Tuple]:
-  rpt gen_tac >> strip_tac >> old_soundness_ihs_tac >>
+  rpt gen_tac >> strip_tac >>
   qpat_x_assum `type_stmt _ _ _ = _` mp_tac >>
   simp_tac (srw_ss()) [Once type_stmt_def, atarget_accepts_def] >>
   strip_tac >> BasicProvers.VAR_EQ_TAC >>
@@ -3280,32 +3222,31 @@ Resume eval_scc_type_sound_mutual[Assign_Tuple]:
   simp_tac (srw_ss()) [Once evaluate_def, bind_apply] >>
   Cases_on `eval_expr cx e st` >>
   rename1 `eval_expr cx e st = (er,s1)` >>
-  first_x_assum drule_all >> strip_tac >>
+  qpat_x_assum `!env st res st'. _ ==> _ /\ !vt. _`
+    (drule_all_then strip_assume_tac) >>
+  qpat_x_assum `well_typed_expr env e ==> _` (drule_then strip_assume_tac) >>
+  qpat_x_assum `!env st res st'. _ ==> case res of INL pv => live_memory_result _ pv | INR _ => T`
+    (qspecl_then [`env`, `st`, `er`, `s1`] mp_tac) >> simp[] >> strip_tac >>
+  qpat_x_assum `!env st res st'. _ ==> typed_scope_transition _ _` kall_tac >>
   qpat_x_assum `!vt. _` kall_tac >>
-  qpat_x_assum `well_typed_expr env e ==> _` drule_all >> strip_tac >>
-  Cases_on `er`
-  >- (rename1 `eval_expr cx e st = (INL tv,s1)` >>
-      Cases_on `materialise cx tv s1` >>
-      rename1 `materialise cx tv s1 = (mr,s2)` >>
-      `s2 = s1` by metis_tac[materialise_state] >> BasicProvers.VAR_EQ_TAC >>
-      Cases_on `mr`
-      >- (rename1 `materialise cx tv s1 = (INL v,s1)` >>
-          `value_runtime_typed env (expr_type e) v` by
-            (gvs[expr_result_typed_def, expr_runtime_typed_def, value_runtime_typed_def] >>
-             metis_tac[materialise_preserves_value_type, evaluate_type_well_formed_type_value]) >>
-          qpat_assum `materialise _ _ _ = _` (fn th => simp_tac (srw_ss()) [th]) >>
-          strip_tac >>
-          qpat_x_assum `!s0 tv t s1 v t1. _` drule_all >> strip_tac >>
-          simp[] >> Cases_on `res` >> simp[] >>
-          metis_tac[assign_tuple_targets_no_control, no_control_exc_return_exception_typed]) >>
-      qpat_x_assum `!s0 tv t s1 v t1. _` kall_tac >>
-      simp[] >> strip_tac >> gvs[] >>
-      conj_tac >- (simp[no_type_error_result_def] >>
-        metis_tac[expr_result_typed_materialise_no_type_error]) >>
-      metis_tac[materialise_no_control, no_control_exc_return_exception_typed]) >>
-  qpat_x_assum `!s0 tv t s1 v t1. _` kall_tac >>
-  simp[] >> strip_tac >> gvs[no_type_error_result_def] >>
-  drule eval_expr_exception_return_typed >> simp[]
+  reverse (Cases_on `er`)
+  >- (qpat_x_assum `!s tv t s' v t'. _` kall_tac >>
+      simp[] >> strip_tac >> gvs[no_type_error_result_def] >>
+      drule eval_expr_exception_return_typed >> simp[]) >>
+  qpat_x_assum `!s tv t s' v t'. _` (mk_asm "tuple_ih") >>
+  gvs[] >> rename1 `eval_expr cx e st = (INL tv,s1)` >>
+  Cases_on `read_result cx tv s1` >>
+  rename1 `read_result cx tv s1 = (mr,s2)` >>
+  drule_all live_result_read_typed >> strip_tac >> gvs[] >>
+  reverse (Cases_on `mr`)
+  >- (simp[] >> strip_tac >> gvs[no_type_error_result_def] >>
+      drule read_result_no_control >> simp[no_control_exc_return_exception_typed]) >>
+  simp_tac(srw_ss()) [] >>
+  strip_tac >> gvs[] >>
+  asm_x "tuple_ih" strip_assume_tac >>
+  qpat_x_assum `!s tv t s' v t'. _` (drule_all_then strip_assume_tac) >>
+  gvs[] >> Cases_on `res` >> gvs[no_type_error_result_def] >>
+  drule assign_tuple_targets_no_control >> simp[no_control_exc_return_exception_typed]
 QED
 
 Resume eval_scc_type_sound_mutual[Assign_Base]:
@@ -3362,17 +3303,13 @@ Resume eval_scc_type_sound_mutual[If]:
   qpat_x_assum `well_typed_expr env e ==> _` mp_tac >>
   (impl_tac >- first_assum ACCEPT_TAC) >>
   pure_rewrite_tac[sumTheory.sum_case_def] >> BETA_TAC >> strip_tac >>
-  qpat_x_assum `expr_result_typed env e tv`
-    (strip_assume_tac o
-     REWRITE_RULE [expr_result_typed_def, expr_runtime_typed_def,
-                   evaluate_type_def]) >>
-  qpat_x_assum `evaluate_type env.type_defs (expr_type e) = SOME tv'` mp_tac >>
-  ASM_REWRITE_TAC[evaluate_type_def, vyperASTTheory.base_type_case_def] >> strip_tac >>
-  qpat_x_assum `SOME (BaseTV BoolT) = SOME tv'` mp_tac >>
-  disch_then (assume_tac o REWRITE_RULE [optionTheory.SOME_11]) >>
-  BasicProvers.VAR_EQ_TAC >>
-  drule toplevel_value_typed_BoolTV >> strip_tac >>
-  BasicProvers.VAR_EQ_TAC >>
+  qpat_x_assum `!env st res st'. _ ==> case res of INL pv => live_memory_result st' pv | INR _ => T`
+    (qspecl_then [`env`,`st`,`INL tv`,`st1`] mp_tac) >>
+  (impl_tac >- (conj_tac >- (disj1_tac >> first_assum ACCEPT_TAC) >>
+    rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  pure_rewrite_tac[sumTheory.sum_case_def] >> BETA_TAC >> strip_tac >>
+  qpat_x_assum `!env st res st'. _ ==> typed_scope_transition st st'` kall_tac >>
+  qpat_x_assum `!vt. type_place_expr env e = SOME vt ==> _` kall_tac >>
   strip_tac >>
   qpat_x_assum `IS_SOME (type_stmts env ret_ty ss)`
     (strip_assume_tac o REWRITE_RULE [optionTheory.IS_SOME_EXISTS]) >>
@@ -3400,20 +3337,34 @@ Resume eval_scc_type_sound_mutual[If]:
   simp_tac std_ss [pairTheory.PAIR_EQ, sumTheory.sum_case_def] >>
   qmatch_assum_rename_tac`body_fun st2 = (rf,sf)` >>
   qho_match_abbrev_tac`P rf sf` >>
-  irule switch_BoolV_post >>
+  `st1 with scopes := FEMPTY::st1.scopes = st2` by
+    simp[Abbr`st2`, evaluation_state_component_equality] >>
+  irule switch_BoolV_live_empty_scope_post >>
+  qexistsl_tac [`cx`,`env`,`eval_stmts cx ss'`,`eval_stmts cx ss`,`tv`,`st1`] >>
   qunabbrev_tac`body_fun` >>
-  goal_assum $ drule_at(Pat`switch_BoolV`) >>
   simp[] >>
+  qpat_x_assum `st1 with scopes := FEMPTY::st1.scopes = st2` kall_tac >>
+  conj_tac >- (
+    rpt strip_tac >> qunabbrev_tac`P` >> BETA_TAC >>
+    simp[Abbr`st2`] >>
+    conj_tac >- (
+      irule push_scope_preserves_state_well_typed >>
+      qexistsl_tac [`st1`,`()`] >>
+      simp[push_scope_def, return_def, evaluation_state_component_equality]) >>
+    conj_tac >- gvs[no_type_error_result_def] >>
+    irule no_control_exc_return_exception_typed >> simp[]) >>
   `accounts_well_typed st2.accounts` by simp[Abbr`st2`] >>
   `env_consistent env cx st2` by (simp[Abbr`st2`] >> irule push_scope_env_consistent >> simp[]) >>
   conj_tac >- (
     rpt gen_tac >> strip_tac >>
+    rename1 `eval_stmts cx ss' st2 = (res1,st1')` >>
     qunabbrev_tac`P` >> BETA_TAC >>
     `state_well_typed st2` by (
       irule push_scope_preserves_state_well_typed >>
       qexists_tac `st1` >> qexists_tac `()` >>
       simp[push_scope_def, return_def, Abbr`st2`]) >>
     first_x_assum drule_all >> strip_tac >>
+    qpat_x_assum `!env ret_ty env' st' res st''. _` kall_tac >>
     simp[] >>
     `st2 = st1 with scopes := FEMPTY::st1.scopes`
       by simp[evaluation_state_component_equality, Abbr`st2`] >>
@@ -3518,7 +3469,9 @@ Resume eval_scc_type_sound_mutual[If]:
       gvs[Abbr`stp`]) >>
     irule env_extends_return_exception_typed >>
     qexists_tac `env_exn` >> simp[]) >>
+  conj_tac >- (
   rpt gen_tac >> strip_tac >>
+  rename1 `eval_stmts cx ss st2 = (res1,st1')` >>
   qunabbrev_tac`P` >> BETA_TAC >>
   `state_well_typed st2` by (
     irule push_scope_preserves_state_well_typed >>
@@ -3624,7 +3577,8 @@ Resume eval_scc_type_sound_mutual[If]:
     qexists_tac `INR y` >> qexists_tac `ss` >> simp[] >>
     gvs[Abbr`stp`]) >>
   irule env_extends_return_exception_typed >>
-  qexists_tac `env_exn` >> simp[]
+  qexists_tac `env_exn` >> simp[]) >>
+  metis_tac[]
 QED
 
 Resume eval_scc_type_sound_mutual[Expr]:
@@ -3641,8 +3595,8 @@ Resume eval_scc_type_sound_mutual[Expr]:
   first_x_assum drule_all >> strip_tac >>
   Cases_on `q` >> gvs[no_type_error_result_def]
   >- (
-    strip_tac >> gvs[expr_result_typed_def] >>
-    metis_tac[]) >>
+    strip_tac >> Cases_on `x` >>
+    gvs[eval_result_typed_def]) >>
   strip_tac >> gvs[] >>
   drule_all eval_expr_exception_return_typed >> simp[]
 QED
@@ -3971,19 +3925,21 @@ Resume eval_scc_type_sound_mutual[Iterator_Array]:
   Cases_on `expr_res` >> gvs[no_type_error_result_def]
   >- (
     rename1 `eval_expr cx e st = (INL tvl, st1)` >>
-    Cases_on `materialise cx tvl st1` >>
-    rename1 `materialise cx tvl st1 = (mat_res, st2)` >>
+    qpat_x_assum `!env' st' res st''. _ ==> case res of INL pv => live_memory_result st'' pv | INR _ => T`
+      (qspecl_then [`env`,`st`,`INL tvl`,`st1`] mp_tac) >>
+    simp[] >> strip_tac >>
+    qpat_x_assum `!env' st' res st''. _ ==> typed_scope_transition st' st''` kall_tac >>
+    Cases_on `read_result cx tvl st1` >>
+    rename1 `read_result cx tvl st1 = (mat_res, st2)` >>
+    drule_all live_result_read_typed >> strip_tac >>
     Cases_on `mat_res` >> gvs[no_type_error_result_def]
     >- (
-      rename1 `materialise cx tvl st1 = (INL v, st2)` >>
-      drule materialise_state >> strip_tac >> gvs[] >>
-      gvs[expr_result_typed_def, expr_runtime_typed_def] >>
+      rename1 `read_result cx tvl st1 = (INL v, st2)` >>
+      drule read_result_state >> strip_tac >> gvs[] >>
+      gvs[value_runtime_typed_def] >>
       `env.type_defs = get_tenv cx` by gvs[env_consistent_def, env_context_consistent_def] >>
       gvs[] >>
       drule evaluate_type_ArrayT_cases >> strip_tac >> gvs[] >>
-      `value_has_type (ArrayTV elem_tv bd) v` by
-        metis_tac[materialise_preserves_value_type,
-                  evaluate_type_well_formed_type_value] >>
       Cases_on `lift_option_type (extract_elements (ArrayTV elem_tv bd) v) "For not ArrayV" st2` >>
       rename1 `lift_option_type _ _ st2 = (lift_res, st3)` >>
       drule lift_option_type_state >> strip_tac >> gvs[] >>
@@ -4002,15 +3958,7 @@ Resume eval_scc_type_sound_mutual[Iterator_Array]:
       Cases_on `extract_elements (ArrayTV elem_tv bd) v` >>
       gvs[lift_option_type_def, raise_def, return_def] >>
       Cases_on `v` >> gvs[extract_elements_def, value_has_type_def]) >>
-    drule materialise_state >> strip_tac >> gvs[] >>
-    strip_tac >> gvs[] >>
-    gvs[expr_result_typed_def, expr_runtime_typed_def] >>
-    `env.type_defs = get_tenv cx` by gvs[env_consistent_def, env_context_consistent_def] >>
-    gvs[] >>
-    drule evaluate_type_ArrayT_cases >> strip_tac >> gvs[] >>
-    irule materialise_typed_non_none_no_type_error >>
-    qexists_tac `cx` >> qexists_tac `st'` >> qexists_tac `st'` >>
-    qexists_tac `tvl` >> qexists_tac `ArrayTV elem_tv bd` >> simp[]) >>
+    strip_tac >> gvs[]) >>
   strip_tac >> gvs[]
 QED
 
@@ -4031,46 +3979,58 @@ Resume eval_scc_type_sound_mutual[Iterator_Range]:
   Cases_on `eval_expr cx e st` >>
   rename1 `eval_expr cx e st = (expr1_res, st1)` >>
   last_x_assum drule_all >> strip_tac >>
+  qpat_x_assum `well_typed_expr env e ==> _` mp_tac >>
+  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
   Cases_on `expr1_res`
   >- (
     qpat_x_assum `case INL _ of _ => _ | _ => _` mp_tac >> rewrite_tac[] >> strip_tac >>
     rename1 `eval_expr cx e st = (INL tv1, st1)` >>
-    Cases_on `get_Value tv1 st1` >>
-    rename1 `get_Value tv1 st1 = (val1_res, st2)` >>
+    qpat_x_assum `!env st res st'. _ ==> case res of INL pv => live_memory_result st' pv | INR _ => T`
+      (qspecl_then [`env`,`st`,`INL tv1`,`st1`] mp_tac) >>
+    (impl_tac >- (conj_tac >- (disj1_tac >> first_assum ACCEPT_TAC) >>
+      rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+    pure_rewrite_tac[sumTheory.sum_case_def] >> BETA_TAC >> strip_tac >>
+    qpat_x_assum `!env st res st'. _ ==> typed_scope_transition st st'` kall_tac >>
+    qpat_x_assum `case INL tv1 of INL pv => eval_result_typed _ pv _ | INR _ => T` mp_tac >>
+    pure_rewrite_tac[sumTheory.sum_case_def] >> BETA_TAC >> strip_tac >>
+    Cases_on `read_result cx tv1 st1` >>
+    rename1 `read_result cx tv1 st1 = (val1_res, st2)` >>
+    drule_all live_result_read_typed >> strip_tac >>
     Cases_on `val1_res`
     >- (
-      rename1 `get_Value tv1 st1 = (INL v1, st2)` >>
-      drule get_Value_state >> strip_tac >>
+      rename1 `read_result cx tv1 st1 = (INL v1, st2)` >>
+      drule read_result_state >> strip_tac >>
       qpat_x_assum `st2 = st1` SUBST_ALL_TAC >>
       qpat_x_assum `!s'' tv1 t s''' s t'. _`
         (qspecl_then [`st`, `tv1`, `st1`, `st1`, `v1`, `st1`] mp_tac) >>
       simp[] >> strip_tac >>
       Cases_on `eval_expr cx e' st1` >>
       rename1 `eval_expr cx e' st1 = (expr2_res, st3)` >>
-      qpat_x_assum `!env' st' res st''. _`
+      qpat_x_assum `!env' st' res st''. _ ==> case res of INL pv => live_memory_result st'' pv | INR _ => T`
         (qspecl_then [`env`, `st1`, `expr2_res`, `st3`] mp_tac) >>
-      impl_tac >- simp[] >> strip_tac >>
+      (impl_tac >- simp[]) >> strip_tac >>
+      qpat_x_assum `!env' st' res st''. _ ==> typed_scope_transition st' st''` kall_tac >>
+      qpat_x_assum `!env' st' res st''. _ ==> (_ /\ _)`
+        (qspecl_then [`env`, `st1`, `expr2_res`, `st3`] mp_tac) >>
+      (impl_tac >- simp[]) >> strip_tac >>
       qpat_x_assum `well_typed_expr env e' ==> _` mp_tac >>
       impl_tac >- simp[] >> strip_tac >>
       Cases_on `expr2_res`
       >- (
         qpat_x_assum `case INL _ of _ => _ | _ => _` mp_tac >> rewrite_tac[] >> strip_tac >>
         rename1 `eval_expr cx e' st1 = (INL tv2, st3)` >>
-        Cases_on `get_Value tv2 st3` >>
-        rename1 `get_Value tv2 st3 = (val2_res, st4)` >>
+        Cases_on `read_result cx tv2 st3` >>
+        rename1 `read_result cx tv2 st3 = (val2_res, st4)` >>
+        drule_at (Pat `read_result`) live_result_read_typed >>
+        disch_then (qspecl_then [`ty`,`env`] mp_tac) >>
+        (impl_tac >- gvs[]) >> strip_tac >>
         Cases_on `val2_res`
         >- (
           qpat_x_assum `case INL _ of _ => _ | _ => _` mp_tac >> rewrite_tac[] >> strip_tac >>
-          rename1 `get_Value tv2 st3 = (INL v2, st4)` >>
-          drule get_Value_state >> strip_tac >>
+          rename1 `read_result cx tv2 st3 = (INL v2, st4)` >>
+          drule read_result_state >> strip_tac >>
           qpat_x_assum `st4 = st3` SUBST_ALL_TAC >>
-          `tv1 = Value v1` by (
-            qpat_x_assum `get_Value tv1 _ = _` mp_tac >>
-            Cases_on `tv1` >> simp[get_Value_def, return_def, raise_def]) >>
-          `tv2 = Value v2` by (
-            qpat_x_assum `get_Value tv2 _ = _` mp_tac >>
-            Cases_on `tv2` >> simp[get_Value_def, return_def, raise_def]) >>
-          gvs[expr_result_typed_def, expr_runtime_typed_def, toplevel_value_typed_def] >>
+          gvs[value_runtime_typed_def] >>
           `?i1. v1 = IntV i1` by metis_tac[int_typed_value_is_IntV] >>
           `?i2. v2 = IntV i2` by metis_tac[int_typed_value_is_IntV] >>
           gvs[] >>
@@ -4085,183 +4045,38 @@ Resume eval_scc_type_sound_mutual[Iterator_Range]:
             qpat_x_assum `case (range_res,st5) of _ => _ | _ => _` mp_tac >>
             Cases_on `range_res` >> simp[return_def, raise_def]) >>
           strip_tac >> gvs[]) >>
-        imp_res_tac get_Value_state >> gvs[] >>
-        strip_tac >> gvs[] >>
-        gvs[expr_result_typed_def, expr_runtime_typed_def] >>
-        qspecl_then [`env.type_defs`, `expr_type e`, `tv`] mp_tac
-          is_int_type_evaluate_type_not_None_Array >>
-        impl_tac >- simp[] >> strip_tac >>
-        simp[no_type_error_result_def] >>
-        irule get_Value_INR_no_type_error >>
-        qexistsl_tac [`st'`, `st'`, `tv2`, `tv`] >> simp[]) >>
+        strip_tac >> gvs[no_type_error_result_def]) >>
       strip_tac >> gvs[return_def, no_type_error_result_def] >> metis_tac[]) >>
-    drule get_Value_state >> strip_tac >>
-    qpat_x_assum `st2 = st1` SUBST_ALL_TAC >>
-    strip_tac >>
-    drule_all iterator_range_first_get_value_error_eq >> strip_tac >>
-    qpat_x_assum `res = INR y` SUBST_ALL_TAC >>
-    qpat_x_assum `st' = st1` SUBST_ALL_TAC >>
-    qpat_x_assum `well_typed_expr env e ==> _` mp_tac >>
-    impl_tac >- simp[] >> strip_tac >>
-    qpat_x_assum `case INL tv1 of _ => _ | _ => _` mp_tac >>
-    rewrite_tac[] >> strip_tac >>
-    rpt conj_tac >> simp[] >>
-    irule int_expr_get_Value_INR_no_type_error >>
-    qexistsl_tac [`e`, `env`, `st1`, `st1`, `tv1`, `ty`] >>
-    simp[] >>
-    qpat_x_assum `case INL tv1 of _ => _ | _ => _` mp_tac >>
-    simp[sum_case_def]) >>
+    qpat_x_assum `!s'' tv1 t s''' s t'. _` kall_tac >>
+    strip_tac >> gvs[no_type_error_result_def]) >>
   strip_tac >>
   drule_all iterator_range_expr_error_eq >> strip_tac >>
   qpat_x_assum `res = INR y` SUBST_ALL_TAC >>
   qpat_x_assum `st' = st1` SUBST_ALL_TAC >>
-  qpat_x_assum `well_typed_expr env e ==> _` mp_tac >>
-  impl_tac >- simp[] >> strip_tac >>
-  qpat_x_assum `case INR y of _ => _ | _ => _` mp_tac >>
-  simp[sum_case_def] >>
-  qpat_x_assum `(case (INR y,st1) of _ => _ | _ => _) = (INR y,st1)` kall_tac >>
-  fs[no_type_error_result_def]
+  qpat_x_assum `!s'' tv1 t s''' s t'. _` kall_tac >>
+  qpat_x_assum `no_type_error_result (INR y)` mp_tac >>
+  simp[no_type_error_result_def]
 QED
 
 (* Legacy wrappers have their own, disconnected structural induction. *)
-Theorem eval_legacy_targets_type_sound[local]:
-  (!cx bt env vt st res st'.
-    type_place_target env bt = SOME vt /\ env_consistent env cx st /\ state_well_typed st /\
-    context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
-    call_evaluation_safe cx (int_calls_target bt) /\ eval_base_target cx bt st = (res,st') ==>
-    state_well_typed st' /\ env_consistent env cx st' /\ accounts_well_typed st'.accounts /\
-    no_type_error_result res /\
-    case res of
-    | INL (loc,sbs) => base_target_value_shape env bt loc sbs /\
-        ?loc_vt. location_runtime_typed env cx st' loc loc_vt /\ target_path_type env loc_vt sbs vt
-    | INR _ => T) ==>
-  ((!tgt cx env ty st res st'.
-    well_typed_atarget env tgt ty /\ env_consistent env cx st /\ state_well_typed st /\
-    context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
-    call_evaluation_safe cx (int_calls_atarget tgt) /\ eval_target cx tgt st = (res,st') ==>
-    state_well_typed st' /\ env_consistent env cx st' /\ accounts_well_typed st'.accounts /\
-    no_type_error_result res /\
-    case res of INL gv => target_runtime_typed env cx st' tgt ty gv | INR _ => T) /\
-   (!tgts cx env tys st res st'.
-    LIST_REL (\t ty. well_typed_atarget env t ty) tgts tys /\
-    env_consistent env cx st /\ state_well_typed st /\
-    context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
-    call_evaluation_safe cx (int_calls_atargets tgts) /\ eval_targets cx tgts st = (res,st') ==>
-    state_well_typed st' /\ env_consistent env cx st' /\ accounts_well_typed st'.accounts /\
-    no_type_error_result res /\
-    case res of
-    | INL gvs => LIST_REL3 (\t ty gv. target_runtime_typed env cx st' t ty gv) tgts tys gvs
-    | INR _ => T))
-Proof
-  strip_tac >> ho_match_mp_tac (TypeBase.induction_of ``:assignment_target``) >> rpt conj_tac >>
-  rpt gen_tac >>
-  TRY (disch_then (fn th =>
-    if List.all is_forall (strip_conj (concl th)) then strip_assume_tac th else NO_TAC)) >>
-  TRY (rename1 `BaseTarget` >> suspend "Target_Base") >>
-  TRY (rename1 `TupleTarget` >> suspend "Target_Tuple") >>
-  TRY (rename1 `eval_targets _ []` >> suspend "Targets_nil") >>
-  TRY (rename1 `eval_targets _ (_::_)` >> suspend "Targets_cons")
-QED
 
-Resume eval_legacy_targets_type_sound[Target_Base]:
+
+Resume eval_scc_type_sound_mutual[BasePlaceRoot_NameTarget]:
   rpt gen_tac >> strip_tac >>
-  rename1 `eval_target cx (BaseTarget bt) st = _` >>
-  qpat_x_assum `call_evaluation_safe cx (int_calls_atarget (BaseTarget bt))` mp_tac >>
-  pure_rewrite_tac[int_calls_atarget_def] >> strip_tac >>
-  qpat_x_assum `eval_target _ _ _ = _` mp_tac >>
-  simp_tac(srw_ss())[Once eval_legacy_targets_def, bind_def] >>
-  gvs[well_typed_atarget_def, well_typed_target_def] >>
-  Cases_on `eval_base_target cx bt st` >>
-  rename1 `eval_base_target cx bt st = (bt_res, st1)` >>
-  first_x_assum drule_all >> strip_tac >>
-  Cases_on `bt_res` >> gvs[no_type_error_result_def]
-  >- (Cases_on `x` >> gvs[return_def] >> strip_tac >> gvs[] >>
-      simp[target_runtime_typed_def, target_value_shape_def,
-           well_typed_atarget_def, well_typed_target_def] >> metis_tac[]) >>
-  simp[return_def] >> strip_tac >> gvs[]
-QED
-
-Resume eval_legacy_targets_type_sound[Target_Tuple]:
-  rpt gen_tac >> strip_tac >>
-  rename1 `eval_target cx (TupleTarget tgts) st = _` >>
-  qpat_x_assum `call_evaluation_safe cx (int_calls_atarget (TupleTarget tgts))` mp_tac >>
-  pure_rewrite_tac[int_calls_atarget_def] >> strip_tac >>
-  qpat_x_assum `eval_target _ _ _ = _` mp_tac >>
-  simp_tac(srw_ss())[Once eval_legacy_targets_def, bind_def] >>
-  qpat_x_assum `!cx bt env vt st res st'. _` kall_tac >>
-  qpat_x_assum `well_typed_atarget env (TupleTarget tgts) ty` mp_tac >>
-  simp_tac (srw_ss()) [Once well_typed_atarget_def] >> strip_tac >>
-  BasicProvers.VAR_EQ_TAC >>
-  Cases_on `eval_targets cx tgts st` >>
-  rename1 `eval_targets cx tgts st = (tgts_res, st1)` >>
-  first_x_assum drule_all >> strip_tac >>
-  Cases_on `tgts_res` >> gvs[no_type_error_result_def, return_def]
-  >- (strip_tac >> gvs[target_runtime_typed_def] >>
-      conj_tac >- gvs[well_typed_atarget_def] >>
-      simp[target_value_shape_def] >>
-      conj_tac
-      >- metis_tac[target_values_runtime_typed_imp_shape,
-                   target_values_runtime_typed_LIST_REL3] >>
-      simp[target_values_runtime_typed_LIST_REL3]) >>
-  strip_tac >> gvs[]
-QED
-
-Resume eval_legacy_targets_type_sound[Targets_nil]:
-  rpt gen_tac >> strip_tac >>
-  gvs[Once eval_legacy_targets_def, return_def, no_type_error_result_def, LIST_REL3_def]
-QED
-
-Resume eval_legacy_targets_type_sound[Targets_cons]:
-  rpt gen_tac >> strip_tac >>
-  qpat_x_assum `!cx bt env vt st res st'. _` kall_tac >>
-  qpat_x_assum `call_evaluation_safe cx (int_calls_atargets (tgt::tgts))` mp_tac >>
-  pure_rewrite_tac[int_calls_atarget_def] >> strip_tac >>
-  `call_evaluation_safe cx (int_calls_atarget tgt)` by
-    (irule call_evaluation_safe_append_left >>
-     qexists_tac `int_calls_atargets tgts` >> simp[]) >>
-  `call_evaluation_safe cx (int_calls_atargets tgts)` by
-    (irule call_evaluation_safe_append_right >>
-     qexists_tac `int_calls_atarget tgt` >> simp[]) >>
-  qpat_x_assum `eval_targets _ _ _ = _` mp_tac >>
-  simp_tac(srw_ss())[Once eval_legacy_targets_def, bind_def] >>
-  Cases_on `tys` >- fs[] >>
-  qpat_x_assum `LIST_REL _ (tgt::tgts) (h::t)` mp_tac >>
-  simp_tac(srw_ss())[listTheory.LIST_REL_CONS1] >> strip_tac >>
-  Cases_on `eval_target cx tgt st` >>
-  rename1 `eval_target cx tgt st = (target_res, st1)` >>
-  qpat_x_assum `!cx env ty st res st'. well_typed_atarget env tgt ty /\ _ ==> _` drule_all >> strip_tac >>
-  Cases_on `target_res` >> gvs[no_type_error_result_def]
-  >- (Cases_on `eval_targets cx tgts st1` >>
-      rename1 `eval_targets cx tgts st1 = (targets_res, st2)` >>
-      first_x_assum drule_all >> strip_tac >>
-      Cases_on `targets_res` >> gvs[no_type_error_result_def, return_def]
-      >- (strip_tac >> gvs[LIST_REL3_def] >>
-          metis_tac[target_runtime_typed_rebuild, runtime_consistent_def]) >>
-      strip_tac >> gvs[]) >>
-  simp[return_def] >> strip_tac >> gvs[]
-QED
-
-Finalise eval_legacy_targets_type_sound
-
-Resume eval_scc_type_sound_mutual[BaseTarget_Name]:
-  rpt gen_tac >>
-  `∃ty. vt = Type ty` by gvs[well_typed_expr_def,AllCaseEqs()] >>
+  `?ty. vt = Type ty` by
+    gvs[type_place_target_NameTarget, AllCaseEqs()] >>
   gvs[] >>
-  drule_all NameTarget_sound >>
-  strip_tac >>
-  qpat_x_assum `eval_base_target _ _ _ = _` mp_tac >>
+  drule_all NameTarget_sound >> strip_tac >>
+  qpat_x_assum `eval_base_place _ _ _ = _` mp_tac >>
   simp[Once evaluate_def, bind_def, return_def, assert_def, ignore_bind_def,
-    get_scopes_def, type_check_def, assert_def] >>
+    get_scopes_def, type_check_def, lift_option_type_def, lift_option_def] >>
   strip_tac >> gvs[] >>
-  simp[no_type_error_result_def, base_target_value_shape_def] >>
-  qexists_tac `Type ty` >> simp[location_runtime_typed_def] >>
-  conj_tac >- (
-    gvs[well_typed_expr_def, AllCaseEqs(), LET_THM,
-        env_consistent_def, env_scopes_consistent_def,
-        env_context_consistent_def] >>
-    first_x_assum (qspecl_then [`id`, `ty`, `entry`] mp_tac) >>
-    simp[]) >>
-  simp[target_path_type_refl]
+  simp[no_type_error_result_def, runtime_place_typed_memory, subscripts_type_def] >>
+  gvs[type_place_target_NameTarget, AllCaseEqs(),
+      env_consistent_def, env_scopes_consistent_def, env_context_consistent_def] >>
+  `EVERY scope_well_typed st.scopes` by gvs[state_well_typed_def] >>
+  drule_all lookup_scopes_well_typed_type >> strip_tac >>
+  metis_tac[]
 QED
 
 Theorem is_immutable_decl_MEM_Immutable_exists[local]:
@@ -4307,188 +4122,153 @@ Proof
   qpat_x_assum `!src id ty tv v. _` drule_all >> simp[]
 QED
 
-Resume eval_scc_type_sound_mutual[BaseTarget_TopLevel]:
+Resume eval_scc_type_sound_mutual[BasePlaceRoot_TopLevelNameTarget]:
   rpt gen_tac >> strip_tac >>
-  qpat_x_assum `type_place_target _ (TopLevelNameTarget _) = _` mp_tac >>
-  simp[type_place_target_TopLevelNameTarget] >> strip_tac >> gvs[] >>
-  TRY (drule eval_base_target_TopLevelNameTarget_preserves_state >> simp[]) >|
-  [
-    `FLOOKUP env.bare_globals (src_id_opt,id) = SOME ty /\
-     ?ts. get_module_code cx src_id_opt = SOME ts /\
-          is_immutable_decl id ts /\
-          IS_SOME (FLOOKUP (get_source_immutables src_id_opt
-            (case ALOOKUP st.immutables cx.txn.target of NONE => [] | SOME m => m))
-            id)` by (
-      gvs[env_consistent_def, env_context_consistent_def,
-          env_immutables_consistent_def] >>
-      qpat_x_assum `!src id ty. FLOOKUP env.bare_global_assignable (src,id) = SOME ty ==> _`
-        drule >> simp[] >> strip_tac >>
-      qpat_x_assum `!src id ty. FLOOKUP env.bare_globals (src,id) = SOME ty ==> _`
-        (qspecl_then [`src_id_opt`, `id`, `ty`] mp_tac) >>
-      simp[]) >>
-    qpat_x_assum `eval_base_target _ _ _ = _` mp_tac >>
-    simp[Once evaluate_def, bind_def, lift_option_type_def, return_def, raise_def] >>
-    strip_tac >> gvs[no_type_error_result_def, base_target_value_shape_def,
-                     location_runtime_typed_def, target_path_type_refl,
-                     optionTheory.IS_SOME_EXISTS] >>
-    gvs[IS_SOME_EXISTS, get_immutables_def, get_address_immutables_def,
-        lift_option_type_def, lift_option_def, return_def,
-        get_source_immutables_def, AllCaseEqs()] >>
-    Cases_on `ALOOKUP st.immutables cx.txn.target` >> gvs[return_def, raise_def] >>
-    PairCases_on `x` >> gvs[] >>
-    qexists_tac `Type ty` >> simp[target_path_type_refl] >>
-    qexists_tac `case ALOOKUP x' src_id_opt of NONE => FEMPTY | SOME imm => imm` >>
-    qexists_tac `x1` >> qexists_tac `x0` >>
-    gvs[env_consistent_def, env_context_consistent_def, env_immutables_consistent_def,
-        get_immutables_def, get_address_immutables_def, lift_option_type_def,
-        lift_option_def, bind_def, return_def, get_source_immutables_def] >>
-    qpat_x_assum `!src id ty' tv v. _`
-      (qspecl_then [`src_id_opt`, `id`, `ty`, `x0`, `x1`] mp_tac) >>
-    simp[base_target_value_shape_def, optionTheory.IS_SOME_EXISTS] >>
-    strip_tac >> gvs[],
-
-    `?code. get_module_code cx src_id_opt = SOME code` by (
-      gvs[env_consistent_def, env_context_consistent_def] >>
-      Cases_on `vt` >> gvs[] >> metis_tac[]) >>
-    qpat_x_assum `eval_base_target _ _ _ = _` mp_tac >>
-    simp[Once evaluate_def, bind_def, lift_option_type_def, return_def, raise_def,
-         get_immutables_def, get_address_immutables_def] >>
-    Cases_on `get_module_code cx src_id_opt` >> gvs[return_def, raise_def] >>
-    Cases_on `is_immutable_decl id code` >- (
-      drule_all nonbare_toplevel_not_immutable >> simp[]) >>
-    gvs[return_def] >>
-    simp[no_type_error_result_def, base_target_value_shape_def] >>
-    simp[location_runtime_typed_def] >>
-    gvs[place_leaf_typed_def, leaf_type_def] >>
-    rw[] >> gvs[env_consistent_def] >>
-    gvs[env_context_consistent_def] >>
-    first_x_assum drule >>
-    rw[well_formed_vtype_def, well_formed_type_def] >>
-    gvs[IS_SOME_EXISTS, target_path_type_refl, base_target_value_shape_def] >>
-    TRY (qexists_tac `vt` >> simp[location_runtime_typed_def, target_path_type_refl]) >>
-    TRY (rw[lift_option_type_def, return_def])
-  ]
+  drule eval_base_place_TopLevelNameTarget_preserves_state >> strip_tac >> gvs[] >>
+  qpat_x_assum `eval_base_place _ _ _ = _` mp_tac >>
+  pure_rewrite_tac[Once evaluate_def] >> strip_tac >>
+  drule_all lookup_global_target_no_type_error >> strip_tac >>
+  simp[] >> Cases_on `res` >> simp[] >>
+  drule_all lookup_global_target_success_typed >> simp[]
 QED
 
-Resume eval_scc_type_sound_mutual[BaseTarget_Subscript]:
+Resume eval_scc_type_sound_mutual[BasePlaceRoot_SubscriptTarget]:
   rpt gen_tac >> strip_tac >>
-  qpat_x_assum `call_evaluation_safe cx (int_calls_target (SubscriptTarget bt e))` mp_tac >>
+  rename1 `eval_base_place cx (SubscriptTarget t e) st = (res,st')` >>
+  qpat_x_assum `call_evaluation_safe cx (int_calls_target (SubscriptTarget t e))` mp_tac >>
   pure_rewrite_tac[int_calls_expr_def] >> strip_tac >>
-  `call_evaluation_safe cx (int_calls_target bt)` by
+  `call_evaluation_safe cx (int_calls_target t)` by
     (irule call_evaluation_safe_append_left >>
      qexists_tac `int_calls_expr e` >> simp[]) >>
   `call_evaluation_safe cx (int_calls_expr e)` by
     (irule call_evaluation_safe_append_right >>
-     qexists_tac `int_calls_target bt` >> simp[]) >>
+     qexists_tac `int_calls_target t` >> simp[]) >>
   qpat_x_assum `type_place_target _ (SubscriptTarget _ _) = _` mp_tac >>
   rewrite_tac[type_place_target_SubscriptTarget] >> strip_tac >>
-  qpat_x_assum `eval_base_target _ _ _ = _` mp_tac >>
+  qpat_x_assum `eval_base_place _ _ _ = _` mp_tac >>
   simp_tac(srw_ss())[Once evaluate_def, bind_def] >>
-  Cases_on `eval_base_target cx bt st` >>
-  rename1 `eval_base_target cx bt st = (bt_res, st1)` >>
-  first_x_assum drule_all >> strip_tac >>
+  Cases_on `eval_base_place cx t st` >>
+  rename1 `eval_base_place cx t st = (bt_res, st1)` >>
+  qpat_assum `!env vt st res st'. _ ==> state_well_typed st' /\ _`
+    drule_all >> strip_tac >>
   Cases_on `bt_res`
-  >- (PairCases_on `x` >> rewrite_tac[bind_def, return_def] >>
-      qpat_x_assum `!s'' loc sbs t'. _`
-        (qspecl_then [`st`, `x0`, `x1`, `st1`] mp_tac) >> simp[] >>
-      strip_tac >>
+  >- (rename1 `eval_base_place cx t st = (INL pv,st1)` >>
+      qpat_x_assum `!s'' pv t'. eval_base_place _ _ _ = _ ==> _` drule >> strip_tac >>
+      qpat_x_assum `!env vt st res st'. _ ==> case res of INL pv => live_memory_result _ _ | INR _ => T`
+        drule_all >> pure_rewrite_tac[sumTheory.sum_case_def] >> strip_tac >>
+      qpat_x_assum `!env vt st res st'. _ ==> typed_scope_transition _ _` kall_tac >>
+      qpat_x_assum `!env vt st res st'. _ ==> case res of INL pv => writable_place_result _ _ _ | INR _ => T` kall_tac >>
+      qpat_x_assum `!env vt st res st'. _ ==> state_well_typed _ /\ _` kall_tac >>
+      simp_tac (srw_ss()) [] >>
       Cases_on `eval_expr cx e st1` >>
-      rename1 `eval_expr cx e st1 = (expr_res, st2)` >>
-      first_x_assum drule_all >> strip_tac >>
-      Cases_on `expr_res` >> gvs[no_type_error_result_def, bind_def, return_def]
-      >- (Cases_on `get_Value x st2` >>
-          rename1 `get_Value tv st2 = (value_res, st3)` >>
-          `no_type_error_result value_res` by
-            metis_tac[subscript_vtype_index_get_Value_no_type_error] >>
-          Cases_on `value_res` >> gvs[no_type_error_result_def, return_def] >>
-          Cases_on `tv` >> gvs[get_Value_def, return_def, raise_def] >>
-          strip_tac >> gvs[base_target_value_shape_def] >> simp[] >>
-          qexists_tac `loc_vt` >> simp[] >>
-          conj_tac >- (
-            irule location_runtime_typed_rebuild >>
-            simp[runtime_consistent_def] >>
-            qexists_tac `st1` >> simp[]) >>
-          irule subscript_vtype_value_step_type >>
-          qexistsl_tac [`vt'`, `e`, `expr_type e`, `st'`, `st'`, `Value v`] >>
-          simp[get_Value_def, return_def]) >>
+      rename1 `eval_expr cx e st1 = (er,st2)` >>
+      qpat_x_assum `!env st res st'. _ ==> typed_scope_transition _ _`
+        (qspecl_then [`env`,`st1`,`er`,`st2`] mp_tac) >>
+      (impl_tac >- (conj_tac >- (disj1_tac >> first_assum ACCEPT_TAC) >> simp[])) >> strip_tac >>
+      qpat_x_assum `!env st res st'. _ ==> case res of INL pv => live_memory_result _ _ | INR _ => T`
+        (qspecl_then [`env`,`st1`,`er`,`st2`] mp_tac) >>
+      (impl_tac >- (conj_tac >- (disj1_tac >> first_assum ACCEPT_TAC) >> simp[])) >> strip_tac >>
+      qpat_x_assum `!env st res st'. _ ==> (_ /\ _)` drule_all >> strip_tac >>
+      qpat_x_assum `well_typed_expr env e ==> _` drule >>
+      simp[] >> strip_tac >>
+      Cases_on `er` >> gvs[no_type_error_result_def]
+      >- (rename1 `read_result cx idx st2` >>
+          Cases_on `read_result cx idx st2` >>
+          rename1 `read_result cx idx st2 = (rr,st3)` >>
+          drule_all live_result_read_typed >> strip_tac >> gvs[] >>
+          Cases_on `rr` >> gvs[no_type_error_result_def]
+          >- (rename1 `read_result cx idx st2 = (INL v,st2)` >>
+              `vyperImmutableMetadataFrame$immutable_metadata_frame st1 st2` by
+                (drule eval_expr_immutable_metadata_frame >> simp[]) >>
+              `eval_result_typed (env,cx,st2) pv vt'` by
+                (irule eval_result_typed_transport >> goal_assum drule_all) >>
+              `live_memory_result st2 pv` by
+                (Cases_on `pv`
+                 >- simp[live_memory_result_def]
+                 >- (rename1 `PlaceR p` >> Cases_on `p`
+                     >- simp[live_memory_result_def]
+                     >- (irule live_memory_result_transport >> goal_assum drule_all)
+                     >> simp[live_memory_result_def])
+                 >> simp[live_memory_result_def]) >>
+              `well_formed_vtype env.type_defs vt'` by
+                metis_tac[type_place_target_well_formed_vtype_stmt] >>
+              `case pv of Value _ => F | _ => T` by
+                (drule eval_base_place_result_shape >> strip_tac >> gvs[]) >>
+              `expr_result_typed env e (Value v)` by
+                gvs[expr_result_typed_def, expr_runtime_typed_def, value_runtime_typed_def,
+                    value_result_typed_def] >>
+              strip_tac >>
+              drule vyperPlaceFramesTheory.extend_place_state >> strip_tac >> gvs[] >>
+              drule_all extend_target_subscript_place_sound >>
+              simp[no_type_error_result_def]) >>
+          strip_tac >> gvs[]) >>
       strip_tac >> gvs[]) >>
-  strip_tac >> pop_assum mp_tac >>
-  simp_tac(srw_ss())[] >>
-  strip_tac >>
-  qpat_x_assum `INR y = res` (fn th => SUBST_ALL_TAC (SYM th)) >>
-  qpat_x_assum `st1 = st'` (fn th => SUBST_ALL_TAC (SYM th)) >>
-  simp[no_type_error_result_def]
+  qpat_x_assum `!s'' pv t'. eval_base_place _ _ _ = _ ==> _` kall_tac >>
+  gvs[no_type_error_result_def] >> strip_tac >> gvs[]
 QED
 
-Resume eval_scc_type_sound_mutual[BaseTarget_Attribute]:
+Resume eval_scc_type_sound_mutual[BasePlaceRoot_AttributeTarget]:
   rpt gen_tac >> strip_tac >>
+  rename1 `eval_base_place cx (AttributeTarget bt id) st = (res,st')` >>
   qpat_x_assum `call_evaluation_safe cx (int_calls_target (AttributeTarget bt id))` mp_tac >>
   pure_rewrite_tac[int_calls_expr_def] >> strip_tac >>
   qpat_x_assum `type_place_target _ (AttributeTarget _ _) = _` mp_tac >>
-  CONV_TAC(LAND_CONV(LAND_CONV(ONCE_REWRITE_CONV[well_typed_expr_def]))) >>
-  simp[AllCaseEqs(), PULL_EXISTS] >>
-  strip_tac >> gvs[] >>
-  qpat_x_assum `eval_base_target _ _ _ = _` mp_tac >>
-  simp[Once evaluate_def, bind_def, return_def] >>
-  Cases_on `eval_base_target cx bt st` >>
-  rename1 `eval_base_target cx bt st = (bt_res, st1)` >>
-  simp[AllCaseEqs(),return_def,EXISTS_PROD] >>
-  ntac 3 strip_tac >> gvs[] >>
-  first_x_assum drule_all >> strip_tac >>
-  gvs[no_type_error_result_def, base_target_value_shape_def] >>
-  goal_assum drule >>
-  Cases_on`tgt_ty` >> gvs[attribute_type_def, AllCaseEqs()] >>
-  simp[target_path_type_def] >>
-  goal_assum drule >>
-  simp[target_path_step_type_def] >>
-  simp[attribute_type_def]
+  rewrite_tac[type_place_target_AttributeTarget] >> strip_tac >> gvs[] >>
+  qpat_x_assum `eval_base_place _ _ _ = _` mp_tac >>
+  simp_tac(srw_ss())[Once evaluate_def, bind_def] >>
+  Cases_on `eval_base_place cx bt st` >>
+  rename1 `eval_base_place cx bt st = (br,st1)` >>
+  qpat_x_assum `!env vt st res st'. _ ==> state_well_typed _ /\ _`
+    drule_all >> strip_tac >>
+  Cases_on `br`
+  >- (rename1 `eval_base_place cx bt st = (INL pv,st1)` >>
+      qpat_x_assum `!env vt st res st'. _ ==> case res of INL pv => live_memory_result _ _ | INR _ => T`
+        drule_all >> pure_rewrite_tac[sumTheory.sum_case_def] >> BETA_TAC >> strip_tac >>
+      qpat_x_assum `!env vt st res st'. _ ==> typed_scope_transition _ _` kall_tac >>
+      qpat_x_assum `!env vt st res st'. _ ==> case res of INL pv => writable_place_result _ _ _ | INR _ => T` kall_tac >>
+      simp[] >> strip_tac >>
+      drule vyperPlaceFramesTheory.extend_place_state >> strip_tac >> gvs[] >>
+      drule eval_base_place_result_shape >> strip_tac >> gvs[eval_result_typed_def] >>
+      drule_all attribute_type_runtime_step >> strip_tac >>
+      drule_all extend_live_place_attribute_no_type_error >> strip_tac >>
+      simp[] >> Cases_on `res` >> simp[] >>
+      drule extend_place_place_success_shape >> strip_tac >> gvs[] >>
+      drule_all extend_place_typed >> simp[]) >>
+  strip_tac >> gvs[no_type_error_result_def]
 QED
 
 Resume eval_scc_type_sound_mutual[Expr_Name]:
-  rpt gen_tac >> strip_tac >>
-  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-  simp_tac(srw_ss())[Once evaluate_def, bind_def, get_scopes_def,
-      lift_option_type_def, return_def, raise_def, no_type_error_result_def,
-      AllCaseEqs()] >>
-  strip_tac >> gvs[]
+  rpt gen_tac >> strip_tac >> conj_tac
   >- (strip_tac >>
       drule_all well_typed_Name_lookup >> strip_tac >>
-      `lookup_scopes_val id st.scopes = SOME entry.value` by
-        simp[lookup_scopes_val_SOME] >>
-      gvs[bind_def, return_def, expr_result_typed_def, expr_runtime_typed_def,
-          well_typed_expr_def, expr_type_def, toplevel_value_typed_Value]) >>
-  rpt strip_tac >>
-  `lookup_scopes_val id st.scopes <> NONE` by (
-    fs[well_typed_expr_def, lookup_scopes_val_NONE, env_consistent_def,
-       env_scopes_consistent_def, IS_SOME_EXISTS] >>
-    Cases_on `lookup_scopes id st.scopes` >>
-    simp[] >>
-    qpat_x_assum `!id' ty. FLOOKUP env.var_types id' = SOME ty ==> _`
-      (qspecl_then [`id`, `cx'`] mp_tac) >>
-    simp[]) >>
-  Cases_on `lookup_scopes_val id st.scopes` >>
-  gvs[well_typed_expr_def, return_def, raise_def, bind_def]
+      qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+      simp[Once evaluate_def, type_check_def, assert_def, ignore_bind_def,
+           bind_def, get_scopes_def, return_def] >>
+      strip_tac >> gvs[] >>
+      simp[no_type_error_result_def, eval_result_typed_def, expr_type_def,
+           runtime_place_typed_memory, subscripts_type_def] >>
+      `EVERY scope_well_typed st.scopes` by gvs[state_well_typed_def] >>
+      drule_all lookup_scopes_well_typed_type >> strip_tac >>
+      metis_tac[]) >>
+  rpt strip_tac >> gvs[well_typed_expr_def]
 QED
 
 Resume eval_scc_type_sound_mutual[Expr_TopLevelName]:
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-  simp[Once evaluate_def] >> strip_tac >> gvs[]
-  >- (strip_tac >>
-      imp_res_tac lookup_global_state >> gvs[] >>
-      drule_all lookup_global_TopLevelName_sound >>
-      strip_tac >> gvs[]) >>
-  rpt strip_tac >>
+  simp[Once evaluate_def] >> strip_tac >>
   imp_res_tac lookup_global_state >> gvs[] >>
-  drule_all lookup_global_TopLevelName_place_sound >>
-  strip_tac >> gvs[]
+  conj_tac
+  >- (strip_tac >> simp[expr_type_def] >>
+      metis_tac[lookup_global_TopLevelName_sound]) >>
+  rpt strip_tac >> metis_tac[lookup_global_TopLevelName_place_sound]
 QED
 
 Resume eval_scc_type_sound_mutual[Expr_FlagMember]:
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-  simp[Once evaluate_def] >> strip_tac >> gvs[]
-  >- (strip_tac >>
+  simp[Once evaluate_def] >> strip_tac >> gvs[] >> conj_tac
+  >- (disch_tac >>
       drule_all flag_member_sound >> strip_tac >>
       imp_res_tac lookup_flag_mem_state >> gvs[] >>
       PairCases_on `nsid` >>
@@ -4503,7 +4283,7 @@ Resume eval_scc_type_sound_mutual[Expr_FlagMember]:
       simp[lookup_flag_mem_def, return_def, raise_def] >>
       Cases_on `INDEX_OF mid members` >> strip_tac >>
       gvs[return_def, no_type_error_result_def, expr_result_typed_def,
-          expr_runtime_typed_def, expr_type_def, toplevel_value_typed_Value,
+          expr_runtime_typed_def, expr_type_def, value_result_typed_Value,
           evaluate_type_def, value_has_type_def, INDEX_OF_eq_NONE,
           INDEX_OF_eq_SOME] >>
       irule bitTheory.TWOEXP_MONO >> simp[]) >>
@@ -4519,130 +4299,6 @@ Proof
   simp[evaluate_type_def]
 QED
 
-Theorem expr_result_typed_BaseT_BoolT_value[local]:
-  expr_result_typed env e tv /\ expr_type e = BaseT BoolT ==>
-  toplevel_value_typed tv (BaseTV BoolT)
-Proof
-  rw[expr_result_typed_def, expr_runtime_typed_def] >>
-  gvs[evaluate_type_BaseT_BoolT]
-QED
-
-Theorem expr_result_typed_IfExp_branch[local]:
-  well_typed_expr env branch /\ expr_type branch = ty /\
-  expr_result_typed env branch tv ==>
-  expr_result_typed env (IfExp ty cond e1 e2) tv
-Proof
-  rw[expr_result_typed_def, expr_runtime_typed_def, expr_type_def,
-      well_typed_expr_def] >>
-  metis_tac[well_typed_expr_not_hashmap_place]
-QED
-
-Theorem ifexp_branch_from_cond_ih[local]:
-  (!s0 tv0 t0.
-     eval_expr cx cond s0 = (INL tv0,t0) ==>
-     !env0 st0 res0 st0'.
-       env_consistent env0 cx st0 /\ state_well_typed st0 /\
-       context_well_typed cx /\ accounts_well_typed st0.accounts /\
-       functions_well_typed cx /\ eval_expr cx branch st0 = (res0,st0') ==>
-       (well_typed_expr env0 branch ==>
-        state_well_typed st0' /\ env_consistent env0 cx st0' /\
-        accounts_well_typed st0'.accounts /\ no_type_error_result res0 /\
-        case res0 of INL tv => expr_result_typed env0 branch tv | INR exn => T) /\
-       !vt. type_place_expr env0 branch = SOME vt ==>
-        state_well_typed st0' /\ env_consistent env0 cx st0' /\
-        accounts_well_typed st0'.accounts /\ no_type_error_result res0 /\
-        case res0 of INL tv => place_expr_result_typed env0 tv vt | INR exn => T) /\
-  eval_expr cx cond cond_st = (INL cond_tv,branch_st) /\
-  well_typed_expr env branch /\ expr_type branch = ty /\
-  env_consistent env cx branch_st /\ state_well_typed branch_st /\
-  context_well_typed cx /\ accounts_well_typed branch_st.accounts /\
-  functions_well_typed cx /\ eval_expr cx branch branch_st = (res,st') ==>
-  state_well_typed st' /\ env_consistent env cx st' /\
-  accounts_well_typed st'.accounts /\ no_type_error_result res /\
-  case res of
-    INL tv => expr_result_typed env (IfExp ty cond e_true e_false) tv
-  | INR exn => T
-Proof
-  strip_tac >>
-  qpat_x_assum `!s0 tv0 t0. eval_expr cx cond s0 = (INL tv0,t0) ==> _`
-    (qspecl_then [`cond_st`,`cond_tv`,`branch_st`] mp_tac) >>
-  simp[] >>
-  disch_then (qspecl_then [`env`,`branch_st`,`res`,`st'`] mp_tac) >>
-  (impl_tac >- simp[]) >>
-  strip_tac >>
-  Cases_on `res` >> gvs[] >>
-  irule expr_result_typed_IfExp_branch >> simp[] >>
-  qexists `branch` >> simp[]
-QED
-
-Theorem ifexp_switch_from_branch_ihs[local]:
-  toplevel_value_typed cond_tv (BaseTV BoolT) /\
-  eval_expr cx cond cond_st = (INL cond_tv,branch_st) /\
-  switch_BoolV cond_tv (eval_expr cx e_true) (eval_expr cx e_false) branch_st = (res,st') /\
-  (!s0 tv0 t0.
-     eval_expr cx cond s0 = (INL tv0,t0) ==>
-     !env0 st0 res0 st0'.
-       env_consistent env0 cx st0 /\ state_well_typed st0 /\
-       context_well_typed cx /\ accounts_well_typed st0.accounts /\
-       functions_well_typed cx /\ eval_expr cx e_true st0 = (res0,st0') ==>
-       (well_typed_expr env0 e_true ==>
-        state_well_typed st0' /\ env_consistent env0 cx st0' /\
-        accounts_well_typed st0'.accounts /\ no_type_error_result res0 /\
-        case res0 of INL tv => expr_result_typed env0 e_true tv | INR exn => T) /\
-       !vt. type_place_expr env0 e_true = SOME vt ==>
-        state_well_typed st0' /\ env_consistent env0 cx st0' /\
-        accounts_well_typed st0'.accounts /\ no_type_error_result res0 /\
-        case res0 of INL tv => place_expr_result_typed env0 tv vt | INR exn => T) /\
-  (!s0 tv0 t0.
-     eval_expr cx cond s0 = (INL tv0,t0) ==>
-     !env0 st0 res0 st0'.
-       env_consistent env0 cx st0 /\ state_well_typed st0 /\
-       context_well_typed cx /\ accounts_well_typed st0.accounts /\
-       functions_well_typed cx /\ eval_expr cx e_false st0 = (res0,st0') ==>
-       (well_typed_expr env0 e_false ==>
-        state_well_typed st0' /\ env_consistent env0 cx st0' /\
-        accounts_well_typed st0'.accounts /\ no_type_error_result res0 /\
-        case res0 of INL tv => expr_result_typed env0 e_false tv | INR exn => T) /\
-       !vt. type_place_expr env0 e_false = SOME vt ==>
-        state_well_typed st0' /\ env_consistent env0 cx st0' /\
-        accounts_well_typed st0'.accounts /\ no_type_error_result res0 /\
-        case res0 of INL tv => place_expr_result_typed env0 tv vt | INR exn => T) /\
-  well_typed_expr env e_true /\ expr_type e_true = ty /\
-  well_typed_expr env e_false /\ expr_type e_false = ty /\
-  env_consistent env cx branch_st /\ state_well_typed branch_st /\
-  context_well_typed cx /\ accounts_well_typed branch_st.accounts /\
-  functions_well_typed cx ==>
-  state_well_typed st' /\ env_consistent env cx st' /\
-  accounts_well_typed st'.accounts /\ no_type_error_result res /\
-  case res of
-    INL tv => expr_result_typed env (IfExp ty cond e_true e_false) tv
-  | INR exn => T
-Proof
-  strip_tac >>
-  qho_match_abbrev_tac `P res st'` >>
-  irule switch_BoolV_post >>
-  goal_assum $ drule_at (Pat `switch_BoolV`) >>
-  simp[] >>
-  rpt strip_tac
-  >- (qunabbrev_tac `P` >> BETA_TAC >>
-      irule ifexp_branch_from_cond_ih >>
-      conj_tac >- simp[] >>
-      conj_tac >- simp[] >>
-      qexistsl [`e_false`,`branch_st`,`cond_st`,`cond_tv`] >>
-      conj_tac >- (
-        qpat_assum `!s0 tv0 t0. eval_expr cx cond s0 = (INL tv0,t0) ==> !env0 st0 res0 st0'. _`
-          ACCEPT_TAC) >>
-      asm_rewrite_tac[])
-  >- (qunabbrev_tac `P` >> BETA_TAC >>
-      irule ifexp_branch_from_cond_ih >>
-      conj_tac >- simp[] >>
-      conj_tac >- simp[] >>
-      qexistsl [`e_true`,`branch_st`,`cond_st`,`cond_tv`] >>
-      conj_tac >- (
-        qpat_assum `!s0 tv0 t0. eval_expr cx cond s0 = (INL tv0,t0) ==> !env0 st0 res0 st0'. _`
-          ACCEPT_TAC) >>
-      asm_rewrite_tac[])
-QED
 
 Theorem type_place_expr_IfExp_NONE[local]:
   !env ty cond e_true e_false.
@@ -4670,72 +4326,76 @@ Resume eval_scc_type_sound_mutual[Expr_IfExp]:
     simp[type_place_expr_IfExp_NONE]) >>
   disch_then mp_tac >>
   simp_tac(srw_ss())[Once well_typed_expr_def] >> strip_tac >>
+  rename1 `expr_type e' = ty` >>
+  qpat_x_assum `!s0 pv t. eval_expr cx e s0 = (INL pv,t) ==> _`
+    (mk_asm "true_branch") >>
+  qpat_x_assum `!s0 pv t. eval_expr cx e s0 = (INL pv,t) ==> _`
+    (mk_asm "false_branch") >>
+  Cases_on `eval_expr cx e st` >>
+  rename1 `eval_expr cx e st = (cr,st1)` >>
+  qpat_x_assum `!env st res st'. env_consistent _ _ _ /\ _ ==> _`
+    (qspecl_then [`env`,`st`,`cr`,`st1`] mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  qpat_x_assum `well_typed_expr env e ==> _` mp_tac >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  reverse (Cases_on `cr`)
+  >- (asm_x "true_branch" kall_tac >> asm_x "false_branch" kall_tac >>
       qpat_x_assum `eval_expr _ (IfExp _ _ _ _) _ = _` mp_tac >>
-      simp_tac(srw_ss())[Once evaluate_def, bind_def] >>
-      Cases_on `eval_expr cx e st` >>
-      rename1 `eval_expr cx e st = (cond_res, st1)` >>
-      qpat_x_assum `!env st res st'. env_consistent env cx st /\ state_well_typed st /\ context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\ call_evaluation_safe cx (int_calls_expr e) /\ eval_expr cx e st = (res,st') ==> _`
-        (qspecl_then [`env`,`st`,`cond_res`,`st1`] mp_tac) >>
-      impl_tac >- simp[] >>
-      strip_tac >>
-      qpat_x_assum `well_typed_expr env e ==> _` mp_tac >>
-      impl_tac >- simp[] >>
-      strip_tac >>
-      Cases_on `cond_res`
-      >- (
-        simp_tac bool_ss [] >>
-        qpat_x_assum `case INL x of INL tv => expr_result_typed env e tv | INR v1 => T`
-          (assume_tac o SIMP_RULE (srw_ss()) []) >>
-        `toplevel_value_typed x (BaseTV BoolT)` by
-          metis_tac[expr_result_typed_BaseT_BoolT_value] >>
-        qpat_x_assum `(case (INL _,_) of _ => _ | _ => _) = _` mp_tac >>
-        simp_tac bool_ss [] >> strip_tac >>
-        strip_tac >>
-        `switch_BoolV x (eval_expr cx e') (eval_expr cx e'') st1 = (res,st')` by (
-          qpat_x_assum `(case (INL x,st1) of
-                           (INL tv,s'') => switch_BoolV tv (eval_expr cx e') (eval_expr cx e'') s''
-                         | (INR exn,s'') => (INR exn,s'')) = (res,st')` mp_tac >>
-          simp_tac(srw_ss())[]) >>
-        irule ifexp_switch_from_branch_ihs >>
-        conj_tac >- (
-          rpt strip_tac >>
-          qpat_x_assum `!s'' tv t. eval_expr cx e s'' = (INL tv,t) ==> !env st res st'. env_consistent env cx st /\ state_well_typed st /\ context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\ call_evaluation_safe cx (int_calls_expr e'') /\ eval_expr cx e'' st = (res,st') ==> _`
-            (qspecl_then [`s0`,`tv0`,`t0`] mp_tac) >>
-          (impl_tac >- asm_rewrite_tac[]) >>
-          strip_tac >>
-          qpat_x_assum `!env st res st'. _`
-            (qspecl_then [`env0`,`st0`,`res0`,`st0'`] mp_tac) >>
-          (impl_tac >- simp[]) >>
-          strip_tac >>
-          metis_tac[]) >>
-        conj_tac >- (
-          rpt strip_tac >>
-          qpat_x_assum `!s'' tv t. eval_expr cx e s'' = (INL tv,t) ==> !env st res st'. env_consistent env cx st /\ state_well_typed st /\ context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\ call_evaluation_safe cx (int_calls_expr e') /\ eval_expr cx e' st = (res,st') ==> _`
-            (qspecl_then [`s0`,`tv0`,`t0`] mp_tac) >>
-          (impl_tac >- asm_rewrite_tac[]) >>
-          strip_tac >>
-          qpat_x_assum `!env st res st'. _`
-            (qspecl_then [`env0`,`st0`,`res0`,`st0'`] mp_tac) >>
-          (impl_tac >- simp[]) >>
-          strip_tac >>
-          metis_tac[]) >>
-        asm_rewrite_tac[] >>
-        qexistsl [`st1`,`st`,`x`] >>
-        asm_rewrite_tac[])
-      >- (
-        simp_tac bool_ss [] >>
-        strip_tac >>
-        qpat_x_assum `(case (INR y,st1) of
-                         (INL tv,s'') => switch_BoolV tv (eval_expr cx e') (eval_expr cx e'') s''
-                       | (INR exn,s'') => (INR exn,s'')) = (res,st')` mp_tac >>
-        simp_tac(srw_ss())[] >>
-        strip_tac >>
-        qpat_x_assum `INR y = res` (assume_tac o GSYM) >>
-        qpat_x_assum `st1 = st'` (assume_tac o GSYM) >>
-        qpat_x_assum `no_type_error_result (INR y)` mp_tac >>
-        strip_tac >>
-        asm_rewrite_tac[] >>
-        simp_tac(srw_ss())[])
+      simp[Once evaluate_def, bind_def] >> strip_tac >> gvs[]) >>
+  rename1 `eval_expr cx e st = (INL cp,st1)` >>
+  qpat_x_assum `!env st res st'. _ ==> case res of INL pv => live_memory_result _ pv | INR _ => T`
+    (qspecl_then [`env`,`st`,`INL cp`,`st1`] mp_tac) >>
+  (impl_tac >- simp[]) >> simp_tac bool_ss [] >> disch_tac >>
+  asm_x "true_branch" mp_tac >>
+  disch_then (qspecl_then [`st`,`cp`,`st1`] mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  asm_x "false_branch" mp_tac >>
+  disch_then (qspecl_then [`st`,`cp`,`st1`] mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  Cases_on `switch_BoolV cx cp (eval_expr cx e') (eval_expr cx e'') st1` >>
+  rename1 `switch_BoolV _ _ _ _ _ = (br,st2)` >>
+  `state_well_typed st2 /\ env_consistent env cx st2 /\
+   accounts_well_typed st2.accounts /\ no_type_error_result br /\
+   (case br of INL pv => eval_result_typed (env,cx,st2) pv (Type ty) /\
+                        live_memory_result st2 pv | INR _ => T)` by
+    (qho_match_abbrev_tac `P br st2` >>
+     irule switch_BoolV_live_post >>
+     goal_assum $ drule_at (Pat `switch_BoolV`) >>
+     qexists `env` >> simp[expr_type_def] >> conj_tac
+     >- (rpt (qpat_x_assum `!env st res st'. _` kall_tac) >>
+         simp[Abbr `P`, no_type_error_result_def]) >>
+     conj_tac
+     >- (rpt gen_tac >> disch_tac >>
+         qpat_x_assum `!env st res st'. env_consistent _ _ _ /\ _ ==> (well_typed_expr env e'' ==> _) /\ _`
+           (qspecl_then [`env`,`st1`,`r`,`s`] mp_tac) >>
+         (impl_tac >- simp[]) >> strip_tac >>
+         qpat_x_assum `well_typed_expr env e'' ==> _` mp_tac >>
+         (impl_tac >- simp[]) >> strip_tac >>
+         qpat_x_assum `!env st res st'. (well_typed_expr env e'' \/ _) /\ _ ==> case res of INL pv => live_memory_result _ pv | INR _ => T`
+           (qspecl_then [`env`,`st1`,`r`,`s`] mp_tac) >>
+         (impl_tac >- simp[]) >>
+         rpt (qpat_x_assum `!env st res st'. _` kall_tac) >>
+         Cases_on `r` >> gvs[Abbr `P`]) >>
+     conj_tac
+     >- (rpt gen_tac >> disch_tac >>
+         qpat_x_assum `!env st res st'. env_consistent _ _ _ /\ _ ==> (well_typed_expr env e' ==> _) /\ _`
+           (qspecl_then [`env`,`st1`,`r`,`s`] mp_tac) >>
+         (impl_tac >- simp[]) >> strip_tac >>
+         qpat_x_assum `well_typed_expr env e' ==> _` mp_tac >>
+         (impl_tac >- simp[]) >> strip_tac >>
+         qpat_x_assum `!env st res st'. (well_typed_expr env e' \/ _) /\ _ ==> case res of INL pv => live_memory_result _ pv | INR _ => T`
+           (qspecl_then [`env`,`st1`,`r`,`s`] mp_tac) >>
+         (impl_tac >- simp[]) >>
+         rpt (qpat_x_assum `!env st res st'. _` kall_tac) >>
+         Cases_on `r` >> gvs[Abbr `P`]) >>
+     rpt (qpat_x_assum `!env st res st'. _` kall_tac) >> gvs[]) >>
+  rpt (qpat_x_assum `!env st res st'. _` kall_tac) >>
+  qpat_x_assum `eval_expr _ (IfExp _ _ _ _) _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def] >>
+  Cases_on `br` >> simp[] >> strip_tac >>
+  gvs[] >>
+  drule_all conditional_result_live_typed >> strip_tac >>
+  Cases_on `res` >> gvs[expr_type_def]
 QED
 
 Resume eval_scc_type_sound_mutual[Expr_Literal]:
@@ -4746,7 +4406,8 @@ Resume eval_scc_type_sound_mutual[Expr_Literal]:
   gvs[no_type_error_result_def, well_typed_expr_def, well_formed_type_def,
       expr_type_def, optionTheory.IS_SOME_EXISTS] >>
   rw[expr_result_typed_def, expr_runtime_typed_def, expr_type_def] >>
-  metis_tac[literal_toplevel_value_typed]
+  drule_all literal_value_result_typed >> simp[value_result_typed_def] >>
+  metis_tac[]
 QED
 
 
@@ -4798,11 +4459,10 @@ Theorem struct_lit_expr_result_typed[local]:
   MAP FST kes = MAP FST args /\
   MAP (expr_type o SND) kes = MAP SND args /\
   exprs_runtime_typed env (MAP SND kes) vs ==>
-  expr_result_typed env (StructLit (StructT nsid) nsid kes)
-    (Value (StructV (ZIP (MAP FST args,vs))))
+  eval_result_typed (env,cx,st)
+    (Value (StructV (ZIP (MAP FST args,vs)))) (Type (StructT nsid))
 Proof
-  rw[exprs_runtime_typed_def, expr_result_typed_def, expr_runtime_typed_def,
-     expr_type_def, toplevel_value_typed_def] >>
+  rw[exprs_runtime_typed_def, eval_result_typed_def] >>
   qexists_tac `StructTV (ZIP (MAP FST args,tvs))` >>
   gvs[well_formed_type_def, IS_SOME_EXISTS] >>
   qpat_x_assum `evaluate_type _ (StructT _) = SOME _` mp_tac >>
@@ -4847,6 +4507,7 @@ Resume eval_scc_type_sound_mutual[Expr_StructLit]:
   simp_tac bool_ss [] >>
   `well_typed_exprs env (MAP SND kes)` by
     (irule well_typed_named_exprs_MAP_SND_stmt >> first_assum ACCEPT_TAC) >>
+  disch_then (mp_tac o CONJUNCT1) >>
   disch_then drule_all >> strip_tac >>
   Cases_on `exprs_res` >> simp_tac(srw_ss())[]
   >- (
@@ -4854,8 +4515,9 @@ Resume eval_scc_type_sound_mutual[Expr_StructLit]:
     qpat_x_assum `(let ks = MAP FST kes in do vs <- eval_exprs cx (MAP SND kes); return (Value (StructV (ZIP (ks,vs)))) od) st = (res,st')` mp_tac >>
     asm_simp_tac(srw_ss())[bind_def, return_def, LET_THM] >>
     strip_tac >> gvs[no_type_error_result_def] >>
-    irule struct_lit_expr_result_typed >>
-    asm_rewrite_tac[])
+    simp[expr_type_def] >>
+    irule (SRULE [eval_result_typed_def] struct_lit_expr_result_typed) >>
+    asm_rewrite_tac[] >> qexists `kes` >> asm_rewrite_tac[])
   >- (
     strip_tac >>
     qpat_x_assum `eval_exprs cx (MAP SND kes) st = (INR y,st1)` (fn ev_th =>
@@ -4892,17 +4554,86 @@ Proof
   rpt gen_tac >> strip_tac >> gvs[expr_type_def]
 QED
 
-Theorem evaluate_subscript_success_not_HashMapRef_stmt[local]:
-  !tenv tv_ty tv idx res.
-    evaluate_subscript tenv tv_ty tv idx = INL (INL res) /\ ~is_HashMapRef tv ==>
-    ~is_HashMapRef res
+Theorem select_ordinary_subscript_sound[local]:
+  !env cx st base ct ie rt idx res st'.
+  env_consistent env cx st /\ state_well_typed st /\
+  eval_result_typed (env,cx,st) base (Type ct) /\ live_memory_result st base /\
+  subscript_type_ok ct ie rt /\ subscript_index_matches ct ie idx /\
+  value_runtime_typed env (expr_type ie) idx /\
+  select_result cx ct base (ValueSubscript idx) st = (res,st') ==>
+  st' = st /\ no_type_error_result res /\
+  (case res of INL pv => eval_result_typed (env,cx,st') pv (Type rt) | INR _ => T)
 Proof
   rpt gen_tac >> strip_tac >>
-  Cases_on `tv` >> gvs[is_HashMapRef_def]
-  >- (Cases_on `v` >> Cases_on `idx` >>
-      gvs[evaluate_subscript_def, AllCaseEqs(), is_HashMapRef_def])
-  >- (Cases_on `idx` >>
-      gvs[evaluate_subscript_def, AllCaseEqs(), is_HashMapRef_def])
+  `env.type_defs = get_tenv cx` by
+    gvs[env_consistent_def, env_context_consistent_def] >>
+  Cases_on `ct` >>
+  gvs[subscript_type_ok_def, subscript_index_matches_def, AllCaseEqs()]
+  >- (gvs[eval_result_typed_def] >>
+      drule evaluate_type_TupleT_cases >> strip_tac >> gvs[] >>
+      `LENGTH tvs = LENGTH l` by metis_tac[LIST_REL_LENGTH] >>
+      `evaluate_type (get_tenv cx) (EL (Num n) l) = SOME (EL (Num n) tvs)` by
+        gvs[LIST_REL_EL_EQN] >>
+      `well_formed_type_value (TupleTV tvs)` by
+        metis_tac[evaluate_type_well_formed_type_value] >>
+      `subscript_type (TupleTV tvs) (ValueSubscript (IntV n)) = SOME (EL (Num n) tvs)` by
+        simp[subscript_type_def, oEL_THM] >>
+      `subscripts_type (TupleTV tvs) [ValueSubscript (IntV n)] = SOME (EL (Num n) tvs)` by
+        simp[subscripts_type_def] >>
+      Cases_on `base'` >> gvs[select_result_def]
+       >- (rename1 `value_has_type (TupleTV tvs) vv` >>
+           Cases_on `evaluate_subscripts (TupleTV tvs) vv [ValueSubscript (IntV n)]` >>
+           gvs[bind_def, lift_option_type_def, lift_sum_def, return_def, raise_def] >>
+           simp[no_type_error_result_def]
+           >- (drule_all vyperPlaceStatePreservationTheory.evaluate_subscripts_type >> simp[]) >>
+           metis_tac[evaluate_subscripts_typed_error]) >>
+       rename1 `runtime_place_typed cx st p (TupleTV tvs)` >>
+       drule_all extend_live_tuple_place_sound >> strip_tac >>
+       `st' = st` by metis_tac[vyperPlaceFramesTheory.extend_place_state, SND] >>
+       Cases_on `res` >> gvs[]) >>
+  qpat_x_assum `value_runtime_typed _ _ _` mp_tac >>
+  simp[value_runtime_typed_def] >> strip_tac >>
+  drule_all int_typed_value_is_IntV >> strip_tac >> gvs[] >>
+  gvs[eval_result_typed_def] >>
+  drule evaluate_type_ArrayT_cases >> strip_tac >> gvs[] >>
+  `well_formed_type_value (ArrayTV elem_tv b)` by
+    metis_tac[evaluate_type_well_formed_type_value] >>
+  Cases_on `base'` >> gvs[select_result_def]
+  >- (rename1 `value_has_type (ArrayTV elem_tv b) vv` >>
+      Cases_on `evaluate_subscripts (ArrayTV elem_tv b) vv [ValueSubscript (IntV i)]` >>
+      gvs[bind_def, lift_option_type_def, lift_sum_def, return_def, raise_def] >>
+      drule_all array_subscript_place_check >> simp[no_type_error_result_def] >>
+      strip_tac >>
+      `subscripts_type (ArrayTV elem_tv b) [ValueSubscript (IntV i)] = SOME elem_tv` by
+        simp[subscripts_type_def] >>
+      drule_all vyperPlaceStatePreservationTheory.evaluate_subscripts_type >> simp[]) >>
+  drule_all extend_live_array_place_sound >> strip_tac >>
+  `st' = st` by metis_tac[vyperPlaceFramesTheory.extend_place_state, SND] >>
+  Cases_on `res` >> gvs[]
+QED
+
+Theorem select_projection_subscript_sound[local]:
+  !env cx st bp bvt ct ie out idx res st'.
+  env_consistent env cx st /\ state_well_typed st /\
+  eval_result_typed (env,cx,st) bp bvt /\ live_memory_result st bp /\
+  well_formed_vtype env.type_defs bvt /\ vtype_annotation_ok bvt ct /\
+  subscript_vtype bvt (expr_type ie) = SOME out /\
+  value_runtime_typed env (expr_type ie) idx /\
+  select_result cx ct bp (ValueSubscript idx) st = (res,st') ==>
+  st' = st /\ no_type_error_result res /\
+  (case res of INL pv => eval_result_typed (env,cx,st') pv out | INR _ => T)
+Proof
+  rpt gen_tac >> strip_tac >> Cases_on `bvt`
+  >- (rename1 `Type input_ty` >> Cases_on `input_ty` >>
+      gvs[subscript_vtype_def, vtype_annotation_ok_def] >>
+      irule select_ordinary_subscript_sound >> simp[] >>
+      goal_assum (drule_at (Pat `select_result`)) >>
+      qexists `ie` >> simp[subscript_type_ok_def, subscript_index_matches_def]) >>
+  gvs[eval_result_typed_def] >>
+  gvs[select_result_def, vtype_annotation_ok_def] >>
+  `st' = st` by metis_tac[vyperPlaceFramesTheory.extend_place_state, SND] >>
+  drule_all extend_target_hashmap_place_sound >>
+  simp[eval_result_typed_def]
 QED
 
 Theorem values_have_types_LIST_REL_stmt[local]:
@@ -4937,37 +4668,6 @@ Proof
       metis_tac[array_index_has_type])
 QED
 
-Theorem evaluate_subscript_typed_stmt[local]:
-  !tenv arr_tv x idx x' ct ie result_ty.
-    evaluate_subscript tenv arr_tv x idx = INL x' /\
-    toplevel_value_typed x arr_tv /\
-    ~is_HashMapRef x /\
-    subscript_type_ok ct ie result_ty /\
-    subscript_index_matches ct ie idx /\
-    evaluate_type tenv ct = SOME arr_tv ==>
-    ?rtv. evaluate_type tenv result_ty = SOME rtv /\
-          (case x' of
-           | INL tv => toplevel_value_typed tv rtv
-           | INR (is_trans, slot, tv) => tv = rtv)
-Proof
-  rpt gen_tac >> Cases_on `x` >>
-  simp[toplevel_value_typed_def, is_HashMapRef_def]
-  >- (Cases_on `v` >> Cases_on `idx` >>
-      simp[evaluate_subscript_def, AllCaseEqs()] >>
-      rpt strip_tac >> gvs[] >>
-      imp_res_tac subscript_type_ok_evaluate_stmt >>
-      Cases_on `evaluate_type tenv result_ty` >> gvs[toplevel_value_typed_def] >>
-      irule evaluate_subscript_value_well_typed_stmt >>
-      qexistsl [`arr_tv`,`a`,`ct`,`i`,`ie`,`tenv`,`result_ty`] >>
-      asm_rewrite_tac[])
-  >> (Cases_on `idx` >>
-      simp[evaluate_subscript_def, AllCaseEqs(), LET_THM] >>
-      rpt strip_tac >> gvs[] >>
-      Cases_on `ct` >> gvs[subscript_type_ok_def] >>
-      gvs[Once evaluate_type_def, AllCaseEqs()] >>
-      simp[toplevel_value_typed_def])
-QED
-
 Theorem value_has_type_TupleTV_dest_stmt[local]:
   !tvs v. value_has_type (TupleTV tvs) v ==>
           ?vs. v = ArrayV (TupleV vs) /\ values_have_types tvs vs
@@ -4983,85 +4683,6 @@ Proof
   Cases_on `a` >> gvs[value_has_type_inv]
 QED
 
-Theorem check_array_bounds_error_not_TypeError_stmt[local]:
-  !cx tv v st y st'.
-    check_array_bounds cx tv v st = (INR y, st') ==>
-    !msg. y <> Error (TypeError msg)
-Proof
-  rw[oneline check_array_bounds_def, bind_def, return_def, raise_def,
-     check_def, assert_def, AllCaseEqs(), toplevel_value_CASE_rator,
-     value_CASE_rator, bound_CASE_rator] >>
-  gvs[get_storage_backend_no_error]
-QED
-
-Theorem evaluate_subscript_error_not_TypeError_stmt[local]:
-  !tenv arr_tv x idx err ct ie result_ty idx_tv.
-    evaluate_subscript tenv arr_tv x idx = INR err /\
-    toplevel_value_typed x arr_tv /\
-    ~is_HashMapRef x /\
-    subscript_type_ok ct ie result_ty /\
-    evaluate_type tenv ct = SOME arr_tv /\
-    evaluate_type tenv (expr_type ie) = SOME idx_tv /\
-    value_has_type idx_tv idx ==>
-    !msg. err <> TypeError msg
-Proof
-  rpt gen_tac >> strip_tac >>
-  `is_int_type (expr_type ie)` by
-    metis_tac[subscript_type_ok_index_is_int_stmt] >>
-  Cases_on `expr_type ie` >> gvs[is_int_type_def] >>
-  rename1 `expr_type ie = BaseT idx_bt` >>
-  Cases_on `idx_bt` >> gvs[is_int_type_def, Once evaluate_type_def] >>
-  Cases_on `ct` >> gvs[subscript_type_ok_def] >>
-  gvs[Once evaluate_type_def, AllCaseEqs()] >>
-  Cases_on `x` >> gvs[toplevel_value_typed_def, is_HashMapRef_def] >>
-  TRY (drule value_has_type_TupleTV_dest_stmt >> strip_tac >> gvs[]) >>
-  TRY (drule value_has_type_ArrayTV_dest_stmt >> strip_tac >> gvs[]) >>
-  Cases_on `idx` >>
-  gvs[value_has_type_inv, evaluate_subscript_def, array_index_def,
-      AllCaseEqs(), LET_THM, value_has_type_def]
-QED
-
-Theorem expr_subscript_storage_tail_sound_stmt[local]:
-  !cx env e e' v9 x x'' y rtv bounds_st res st'.
-    state_well_typed bounds_st /\
-    env_consistent env cx bounds_st /\
-    accounts_well_typed bounds_st.accounts /\
-    evaluate_type (get_tenv cx) v9 = SOME rtv /\
-    (case y of (is_trans,slot,tv') => tv' = rtv) /\
-    well_formed_type_value rtv /\
-    check_array_bounds cx x x'' bounds_st = (INL (),bounds_st) /\
-    (do
-       check_array_bounds cx x x'';
-       res <- return (INR y);
-       case res of
-         INL v => return v
-       | INR (is_transient,slot,tv) =>
-         do v <- read_storage_slot cx is_transient slot tv; return (Value v) od
-     od bounds_st = (res,st')) ==>
-    state_well_typed st' /\ env_consistent env cx st' /\
-    accounts_well_typed st'.accounts /\
-    (!msg. res <> INR (Error (TypeError msg))) /\
-    (case res of
-     | INL tv =>
-         (?tv'. evaluate_type (get_tenv cx) (expr_type (Subscript v9 e e')) = SOME tv' /\
-                toplevel_value_typed tv tv') /\
-         (is_HashMapRef tv ==> ?kt vt. type_place_expr env (Subscript v9 e e') = SOME (HashMapT kt vt))
-     | INR v1 => T)
-Proof
-  rpt gen_tac >> PairCases_on `y` >> simp[] >> rpt strip_tac >>
-  qpat_x_assum `do check_array_bounds cx x x''; _ od bounds_st = (res,st')` mp_tac >>
-  simp[bind_def, ignore_bind_def, return_def] >> strip_tac >>
-  Cases_on `read_storage_slot cx y0 y1 rtv bounds_st` >>
-  rename1 `read_storage_slot cx y0 y1 rtv bounds_st = (read_res,read_st)` >>
-  `read_st = bounds_st` by metis_tac[read_storage_slot_state] >> gvs[] >>
-  Cases_on `read_res` >> gvs[return_def, raise_def]
-  >- (drule read_storage_slot_error >> strip_tac >> gvs[])
-  >- (`value_has_type rtv x'` by metis_tac[read_storage_slot_success_type] >>
-      qexists_tac `rtv` >>
-      simp[expr_result_typed_def, expr_runtime_typed_def, expr_type_def,
-           toplevel_value_typed_def, is_HashMapRef_def]) >>
-  simp[toplevel_value_typed_def, is_HashMapRef_def]
-QED
 Theorem vtype_annotation_ok_well_formed_type_stmt[local]:
   !tenv vt ty.
     well_formed_vtype tenv vt /\ vtype_annotation_ok vt ty ==>
@@ -5103,657 +4724,20 @@ Proof
   metis_tac[]
 QED
 
-Theorem place_expr_result_typed_expr_result_typed_stmt[local]:
-  !env e tv vt.
-    type_place_expr env e = SOME vt /\
-    place_expr_result_typed env tv vt ==>
-    expr_result_typed env e tv
-Proof
-  rw[place_expr_result_typed_def, expr_result_typed_def,
-     expr_runtime_typed_def] >>
-  `vtype_annotation_ok vt (expr_type e)` by
-    metis_tac[type_place_expr_annotation_ok_stmt] >>
-  Cases_on `vt` >>
-  gvs[vtype_annotation_ok_def, evaluate_type_def,
-      toplevel_value_typed_def, is_HashMapRef_def] >>
-  metis_tac[]
-QED
-
-Theorem check_array_bounds_hashmap_stmt[local]:
-  !cx is_t slot kt vt kv st.
-    check_array_bounds cx (HashMapRef is_t slot kt vt) kv st = (INL (), st)
-Proof
-  Cases_on `kv` >> rw[check_array_bounds_def, return_def]
-QED
-
-
-Theorem expr_subscript_place_projection_tail_sound_stmt[local]:
-  !cx env e e' v9 base_vt result_vt base_tv idx_tv idx st res st'.
-    state_well_typed st /\
-    env_consistent env cx st /\
-    accounts_well_typed st.accounts /\
-    well_formed_type env.type_defs v9 /\
-    type_place_expr env e = SOME base_vt /\
-    subscript_vtype base_vt (expr_type e') = SOME result_vt /\
-    vtype_annotation_ok result_vt v9 /\
-    place_expr_result_typed env base_tv base_vt /\
-    expr_result_typed env e' idx_tv /\
-    get_Value idx_tv st = (INL idx,st) /\
-    (do
-       arr_tv <- lift_option_type (evaluate_type (get_tenv cx) (expr_type e))
-                   "Subscript array type";
-       check_array_bounds cx base_tv idx;
-       res <- lift_sum (evaluate_subscript (get_tenv cx) arr_tv base_tv idx);
-       case res of
-         INL v => return v
-       | INR (is_transient,slot,tv) =>
-           do v <- read_storage_slot cx is_transient slot tv; return (Value v) od
-     od st = (res,st')) ==>
-    state_well_typed st' /\ env_consistent env cx st' /\
-    accounts_well_typed st'.accounts /\ no_type_error_result res /\
-    (case res of INL tv => place_expr_result_typed env tv result_vt | INR _ => T)
-Proof
-  rpt gen_tac >> strip_tac >>
-  `env.type_defs = get_tenv cx` by
-    gvs[env_consistent_def, env_context_consistent_def] >>
-  Cases_on `base_vt`
-  >- (
-    `vtype_annotation_ok (Type t) (expr_type e)` by
-      metis_tac[type_place_expr_annotation_ok_stmt] >>
-    gvs[vtype_annotation_ok_def, place_expr_result_typed_def] >>
-    Cases_on `expr_type e` >> gvs[subscript_vtype_def, subscript_type_ok_def] >>
-    qpat_x_assum `do arr_tv <- lift_option_type _ _; _ od st = (res,st')` mp_tac >>
-    simp[bind_def, lift_option_type_def, return_def, lift_sum_def] >>
-    Cases_on `check_array_bounds cx base_tv idx st` >>
-    rename1 `check_array_bounds cx base_tv idx st = (bounds_res,bounds_st)` >>
-    `bounds_st = st` by metis_tac[check_array_bounds_state] >> gvs[] >>
-    Cases_on `bounds_res` >> gvs[return_def, raise_def]
-    >- (
-      Cases_on `evaluate_subscript (get_tenv cx) tyv base_tv idx` >> gvs[return_def, raise_def]
-      >- (
-        rename1 `evaluate_subscript (get_tenv cx) tyv base_tv idx = INL sub_res` >>
-        `subscript_type_ok (ArrayT t b) e' t` by
-          simp[subscript_type_ok_def] >>
-        `subscript_index_matches (ArrayT t b) e' idx` by
-          simp[subscript_index_matches_def] >>
-        drule_all evaluate_subscript_typed_stmt >> strip_tac >>
-        Cases_on `sub_res` >> gvs[return_def, bind_def]
-        >- (
-          `~is_HashMapRef x` by
-            (drule_all evaluate_subscript_success_not_HashMapRef_stmt >> simp[]) >>
-          strip_tac >>
-          qpat_x_assum `do check_array_bounds cx base_tv idx; _ od bounds_st = (res,st')` mp_tac >>
-          simp[bind_def, ignore_bind_def, return_def] >> strip_tac >>
-          gvs[no_type_error_result_def, place_expr_result_typed_def]) >>
-        strip_tac >> PairCases_on `y` >> gvs[] >>
-        qpat_x_assum `do check_array_bounds cx base_tv idx; _ od bounds_st = (res,st')` mp_tac >>
-        simp[bind_def, ignore_bind_def, return_def] >> strip_tac >> gvs[] >>
-        Cases_on `read_storage_slot cx y0 y1 rtv bounds_st` >>
-        rename1 `read_storage_slot cx y0 y1 rtv bounds_st = (read_res,read_st)` >>
-        `read_st = bounds_st` by metis_tac[read_storage_slot_state] >> gvs[] >>
-        Cases_on `read_res` >> gvs[return_def, raise_def, no_type_error_result_def]
-        >- (`well_formed_type_value rtv` by metis_tac[evaluate_type_well_formed_type_value] >>
-            `value_has_type rtv x` by metis_tac[read_storage_slot_success_type] >>
-            gvs[place_expr_result_typed_def, toplevel_value_typed_def, is_HashMapRef_def]) >>
-        drule read_storage_slot_error >> strip_tac >> simp[]) >>
-      strip_tac >>
-      qpat_x_assum `do check_array_bounds cx base_tv idx; _ od bounds_st = (res,st')` mp_tac >>
-      simp[bind_def, ignore_bind_def, return_def, raise_def] >> strip_tac >> gvs[] >>
-      `?idx_tyv. evaluate_type (get_tenv cx) (expr_type e') = SOME idx_tyv /\
-                 value_has_type idx_tyv idx` by (
-        qpat_x_assum `expr_result_typed env e' idx_tv` mp_tac >>
-        simp[expr_result_typed_def, expr_runtime_typed_def] >> strip_tac >>
-        Cases_on `idx_tv` >>
-        gvs[get_Value_def, return_def, raise_def, toplevel_value_typed_def]) >>
-      `subscript_type_ok (ArrayT t b) e' t` by
-        simp[subscript_type_ok_def] >>
-      drule_all evaluate_subscript_error_not_TypeError_stmt >>
-      strip_tac >> simp[no_type_error_result_def]) >>
-    strip_tac >>
-    qpat_x_assum `do check_array_bounds cx base_tv idx; _ od bounds_st = (res,st')` mp_tac >>
-    simp[bind_def, ignore_bind_def, return_def, raise_def] >> strip_tac >> gvs[] >>
-    drule_all check_array_bounds_error_not_TypeError_stmt >>
-    strip_tac >> simp[no_type_error_result_def])
-  >- (
-    `vtype_annotation_ok (HashMapT t v) (expr_type e)` by
-      metis_tac[type_place_expr_annotation_ok_stmt] >>
-    Cases_on `result_vt` >>
-    gvs[vtype_annotation_ok_def, place_expr_result_typed_def, subscript_vtype_def]
-    >- (
-      `?rtv. evaluate_type (get_tenv cx) t' = SOME rtv` by
-        gvs[well_formed_type_def, IS_SOME_EXISTS] >>
-      qpat_x_assum `do arr_tv <- lift_option_type _ _; _ od st = (res,st')` mp_tac >>
-      simp[bind_def, lift_option_type_def, return_def, lift_sum_def,
-           evaluate_type_def, check_array_bounds_hashmap_stmt, evaluate_subscript_def] >>
-      strip_tac >>
-      Cases_on `read_storage_slot cx is_t (hashmap_slot slot (encode_hashmap_key (expr_type e') idx)) rtv st` >>
-      rename1 `read_storage_slot cx is_t (hashmap_slot slot (encode_hashmap_key kt idx)) rtv st = (read_res,read_st)` >>
-      `read_st = st` by metis_tac[read_storage_slot_state] >> gvs[] >>
-      Cases_on `read_res` >> gvs[return_def, raise_def, no_type_error_result_def]
-      >- (gvs[bind_def, ignore_bind_def, return_def, check_array_bounds_hashmap_stmt] >>
-          `well_formed_type_value rtv` by metis_tac[evaluate_type_well_formed_type_value] >>
-          `value_has_type rtv x` by metis_tac[read_storage_slot_success_type] >>
-          gvs[place_expr_result_typed_def, toplevel_value_typed_def, is_HashMapRef_def]) >>
-      gvs[bind_def, ignore_bind_def, return_def, check_array_bounds_hashmap_stmt] >>
-      drule read_storage_slot_error >> strip_tac >> simp[]) >>
-    qpat_x_assum `do arr_tv <- lift_option_type _ _; _ od st = (res,st')` mp_tac >>
-    simp[bind_def, ignore_bind_def, lift_option_type_def, return_def, lift_sum_def,
-         evaluate_type_def, check_array_bounds_hashmap_stmt, evaluate_subscript_def] >>
-    strip_tac >> gvs[return_def, no_type_error_result_def, place_expr_result_typed_def])
-QED
-
-Theorem expr_subscript_place_projection_branch_sound_stmt[local]:
-  !cx env e e' v9 base_vt result_vt base_tv st1 res st'.
-    state_well_typed st1 /\
-    env_consistent env cx st1 /\
-    context_well_typed cx /\
-    accounts_well_typed st1.accounts /\
-    functions_well_typed cx /\
-    well_formed_type env.type_defs v9 /\
-    well_typed_expr env e' /\
-    type_place_expr env e = SOME base_vt /\
-    subscript_vtype base_vt (expr_type e') = SOME result_vt /\
-    vtype_annotation_ok result_vt v9 /\
-    place_expr_result_typed env base_tv base_vt /\
-    (!env0 st0 res0 st0'.
-      env_consistent env0 cx st0 /\ state_well_typed st0 /\ context_well_typed cx /\
-      accounts_well_typed st0.accounts /\ functions_well_typed cx /\
-      eval_expr cx e' st0 = (res0,st0') ==>
-      (well_typed_expr env0 e' ==>
-       state_well_typed st0' /\ env_consistent env0 cx st0' /\
-       accounts_well_typed st0'.accounts /\ no_type_error_result res0 /\
-       case res0 of INL tv => expr_result_typed env0 e' tv | INR v1 => T) /\
-      !vt.
-        type_place_expr env0 e' = SOME vt ==>
-        state_well_typed st0' /\ env_consistent env0 cx st0' /\
-        accounts_well_typed st0'.accounts /\ no_type_error_result res0 /\
-        case res0 of INL tv => place_expr_result_typed env0 tv vt | INR v1 => T) ==>
-    (case (INL base_tv,st1) of
-       (INL tv1,s'') =>
-         (case eval_expr cx e' s'' of
-            (INL tv2,s'') =>
-              (case get_Value tv2 s'' of
-                 (INL v2,s'') =>
-                   (let
-                      tenv = get_tenv cx
-                    in
-                      do
-                        arr_tv <- lift_option_type (evaluate_type tenv (expr_type e))
-                          "Subscript array type";
-                        check_array_bounds cx tv1 v2;
-                        res <- lift_sum (evaluate_subscript tenv arr_tv tv1 v2);
-                        case res of
-                          INL v => return v
-                        | INR (is_transient,slot,tv) =>
-                          do v <- read_storage_slot cx is_transient slot tv; return (Value v) od
-                      od) s''
-               | (INR e,s'') => (INR e,s''))
-          | (INR e,s'') => (INR e,s''))
-     | (INR e,s'') => (INR e,s'')) = (res,st') ==>
-    state_well_typed st' /\ env_consistent env cx st' /\
-    accounts_well_typed st'.accounts /\ no_type_error_result res /\
-    (case res of INL tv => place_expr_result_typed env tv result_vt | INR _ => T)
-Proof
-  rpt gen_tac >> strip_tac >>
-  Cases_on `eval_expr cx e'' st1` >>
-  rename1 `eval_expr cx e'' st1 = (idx_res,st2)` >>
-  qpat_x_assum `!env0 st0 res0 st0'. _ ==> _`
-    (qspecl_then [`env`,`st1`,`idx_res`,`st2`] mp_tac) >>
-  (impl_tac >- simp[]) >> strip_tac >>
-  qpat_x_assum `well_typed_expr env e'' ==> _` mp_tac >>
-  (impl_tac >- simp[]) >> strip_tac >>
-  simp_tac(srw_ss())[] >>
-  Cases_on `idx_res` >> gvs[]
-  >- (
-    Cases_on `get_Value x st2` >>
-    rename1 `get_Value x st2 = (val_res,st3)` >>
-    Cases_on `val_res` >> gvs[]
-    >- (
-      strip_tac >>
-      drule get_Value_state >> strip_tac >> gvs[] >>
-      qspecl_then [`cx`,`env`,`e'`,`e''`,`v9`,`base_vt`,`result_vt`,`base_tv`,`x`,`x'`,`st2`,`res`,`st'`]
-        mp_tac expr_subscript_place_projection_tail_sound_stmt >>
-      (impl_tac >- simp[]) >>
-      simp[]) >>
-    strip_tac >>
-    drule get_Value_state >> strip_tac >> gvs[] >>
-    qspecl_then [`base_vt`,`expr_type e''`,`result_vt`,`env`,`e''`,`x`,`st'`,`INR y`,`st'`]
-      mp_tac subscript_vtype_index_get_Value_no_type_error >>
-    simp[] >> strip_tac >> gvs[no_type_error_result_def]) >>
-  strip_tac >> gvs[]
-QED
-
-
-Theorem expr_subscript_ordinary_tail_sound_stmt[local]:
-  !cx env e e' v9 base_tv idx_tv idx st res st'.
-    state_well_typed st /\
-    env_consistent env cx st /\
-    accounts_well_typed st.accounts /\
-    well_formed_type env.type_defs v9 /\
-    subscript_type_ok (expr_type e) e' v9 /\
-    subscript_index_matches (expr_type e) e' idx /\
-    expr_result_typed env e base_tv /\
-    expr_result_typed env e' idx_tv /\
-    get_Value idx_tv st = (INL idx,st) /\
-    (do
-       arr_tv <- lift_option_type (evaluate_type (get_tenv cx) (expr_type e))
-                   "Subscript array type";
-       check_array_bounds cx base_tv idx;
-       sub_res <- lift_sum (evaluate_subscript (get_tenv cx) arr_tv base_tv idx);
-       case sub_res of
-         INL v => return v
-       | INR (is_transient,slot,tv) =>
-           do v <- read_storage_slot cx is_transient slot tv; return (Value v) od
-     od st = (res,st')) ==>
-    state_well_typed st' /\ env_consistent env cx st' /\
-    accounts_well_typed st'.accounts /\ no_type_error_result res /\
-    (case res of INL tv => expr_result_typed env (Subscript v9 e e') tv | INR _ => T)
-Proof
-  rpt gen_tac >> strip_tac >>
-  `env.type_defs = get_tenv cx` by
-    gvs[env_consistent_def, env_context_consistent_def] >>
-  qpat_x_assum `expr_result_typed env e base_tv` mp_tac >>
-  simp[expr_result_typed_def, expr_runtime_typed_def] >> strip_tac >>
-  qpat_x_assum `expr_result_typed env e' idx_tv` mp_tac >>
-  simp[expr_result_typed_def, expr_runtime_typed_def] >> strip_tac >>
-  `~is_HashMapRef base_tv` by (
-    Cases_on `base_tv` >>
-    gvs[is_HashMapRef_def, toplevel_value_typed_def] >>
-    Cases_on `expr_type e` >>
-    gvs[subscript_type_ok_def, Once evaluate_type_def, AllCaseEqs()]) >>
-  `value_has_type tv' idx` by (
-    qpat_x_assum `get_Value idx_tv st = (INL idx,st)` mp_tac >>
-    Cases_on `idx_tv` >>
-    gvs[get_Value_def, return_def, raise_def, toplevel_value_typed_def] >>
-    metis_tac[]) >>
-  qpat_x_assum `do arr_tv <- lift_option_type _ _; _ od st = (res,st')` mp_tac >>
-  simp[bind_def, lift_option_type_def, return_def, lift_sum_def] >>
-  Cases_on `check_array_bounds cx base_tv idx st` >>
-  rename1 `check_array_bounds cx base_tv idx st = (bounds_res,bounds_st)` >>
-  `bounds_st = st` by metis_tac[check_array_bounds_state] >> gvs[] >>
-  Cases_on `bounds_res` >> gvs[return_def, raise_def]
-  >- (
-    Cases_on `evaluate_subscript (get_tenv cx) tv base_tv idx` >> gvs[return_def, raise_def]
-    >- (
-      rename1 `evaluate_subscript (get_tenv cx) tv base_tv idx = INL sub_res` >>
-      drule_all evaluate_subscript_typed_stmt >> strip_tac >>
-      Cases_on `sub_res` >> gvs[return_def, bind_def]
-      >- (
-        `~is_HashMapRef x` by
-          (drule_all evaluate_subscript_success_not_HashMapRef_stmt >> simp[]) >>
-        strip_tac >>
-        qpat_x_assum `do check_array_bounds cx base_tv idx; _ od bounds_st = (res,st')` mp_tac >>
-        simp[bind_def, ignore_bind_def, return_def] >> strip_tac >>
-        gvs[no_type_error_result_def, expr_result_typed_def, expr_runtime_typed_def, expr_type_def]) >>
-      strip_tac >>
-      simp[no_type_error_result_def, expr_result_typed_def, expr_runtime_typed_def] >>
-      irule expr_subscript_storage_tail_sound_stmt >>
-      qexistsl [`bounds_st`,`rtv`,`base_tv`,`idx`,`y`] >>
-      simp[] >>
-      `well_formed_type_value rtv` by metis_tac[evaluate_type_well_formed_type_value] >>
-      simp[]) >>
-    strip_tac >>
-    qpat_x_assum `do check_array_bounds cx base_tv idx; _ od bounds_st = (res,st')` mp_tac >>
-    simp[bind_def, ignore_bind_def, return_def, raise_def] >> strip_tac >> gvs[] >>
-    drule_all evaluate_subscript_error_not_TypeError_stmt >>
-    strip_tac >> simp[no_type_error_result_def]) >>
-  strip_tac >>
-  qpat_x_assum `do check_array_bounds cx base_tv idx; _ od bounds_st = (res,st')` mp_tac >>
-  simp[bind_def, ignore_bind_def, return_def, raise_def] >> strip_tac >> gvs[] >>
-  drule_all check_array_bounds_error_not_TypeError_stmt >>
-  strip_tac >> simp[no_type_error_result_def]
-QED
-
-
-Theorem expr_subscript_index_get_Value_INR_no_type_error_stmt[local]:
-  !env e e' v9 tv st y st'.
-    expr_result_typed env e' tv /\
-    subscript_type_ok (expr_type e) e' v9 /\
-    get_Value tv st = (INR y, st') ==>
-    no_type_error_result (INR y)
-Proof
-  rpt strip_tac >>
-  qspecl_then [`env`,`e'`,`tv`,`expr_type e'`,`st`,`y`,`st'`]
-    mp_tac int_expr_get_Value_INR_no_type_error >>
-  (impl_tac >- (
-    simp[] >>
-    drule subscript_type_ok_index_is_int_stmt >> simp[])) >>
-  simp[]
-QED
-
 Theorem eval_expr_subscript_index_matches_stmt[local]:
   !ct ie rt cx st tv st1 idx st2.
     subscript_type_ok ct ie rt /\
     eval_expr cx ie st = (INL tv,st1) /\
-    get_Value tv st1 = (INL idx,st2) ==>
+    read_result cx tv st1 = (INL idx,st2) ==>
     subscript_index_matches ct ie idx
 Proof
   rpt gen_tac >> Cases_on `ct` >> simp[subscript_index_matches_def] >>
   rpt strip_tac >>
   gvs[subscript_type_ok_tuple] >>
-  gvs[Once evaluate_def, evaluate_literal_def, return_def, get_Value_def]
-QED
-
-Theorem expr_subscript_ordinary_base_success_sound_stmt[local]:
-  !cx env e e' v9 base_tv st st1 res st'.
-    env_consistent env cx st /\ state_well_typed st /\ context_well_typed cx /\
-    accounts_well_typed st.accounts /\ functions_well_typed cx /\
-    well_typed_expr env e' /\
-    well_formed_type env.type_defs v9 /\
-    subscript_type_ok (expr_type e) e' v9 /\
-    eval_expr cx e st = (INL base_tv,st1) /\
-    state_well_typed st1 /\ env_consistent env cx st1 /\
-    accounts_well_typed st1.accounts /\
-    expr_result_typed env e base_tv /\
-    (!env0 st0 res0 st0'.
-      env_consistent env0 cx st0 /\ state_well_typed st0 /\ context_well_typed cx /\
-      accounts_well_typed st0.accounts /\ functions_well_typed cx /\
-      eval_expr cx e' st0 = (res0,st0') ==>
-      (well_typed_expr env0 e' ==>
-       state_well_typed st0' /\ env_consistent env0 cx st0' /\
-       accounts_well_typed st0'.accounts /\ no_type_error_result res0 /\
-       case res0 of INL tv => expr_result_typed env0 e' tv | INR v1 => T) /\
-      !vt.
-        type_place_expr env0 e' = SOME vt ==>
-        state_well_typed st0' /\ env_consistent env0 cx st0' /\
-        accounts_well_typed st0'.accounts /\ no_type_error_result res0 /\
-        case res0 of INL tv => place_expr_result_typed env0 tv vt | INR v1 => T) /\
-    eval_expr cx (Subscript v9 e e') st = (res,st') ==>
-    state_well_typed st' /\ env_consistent env cx st' /\
-    accounts_well_typed st'.accounts /\ no_type_error_result res /\
-    case res of INL tv => expr_result_typed env (Subscript v9 e e') tv | INR v1 => T
-Proof
-  rpt gen_tac >> strip_tac >>
-  qpat_x_assum `eval_expr cx (Subscript v9 e e') st = (res,st')` mp_tac >>
-  simp_tac(srw_ss())[Once evaluate_def, bind_def, return_def, raise_def] >>
-  qpat_x_assum `eval_expr cx e st = (INL base_tv,st1)`
-    (fn th => simp_tac(srw_ss())[th]) >>
-  Cases_on `eval_expr cx e' st1` >>
-  rename1 `eval_expr cx e' st1 = (idx_res,st2)` >>
-  qpat_x_assum `!env0 st0 res0 st0'.
-    env_consistent env0 cx st0 /\ state_well_typed st0 /\ context_well_typed cx /\
-    accounts_well_typed st0.accounts /\ functions_well_typed cx /\
-    eval_expr cx e' st0 = (res0,st0') ==> _`
-    (qspecl_then [`env`,`st1`,`idx_res`,`st2`] mp_tac) >>
-  (impl_tac >- simp[]) >> strip_tac >>
-  Cases_on `idx_res`
-  >- (
-    simp_tac(srw_ss())[] >> strip_tac >>
-    qpat_x_assum `well_typed_expr env e' ==> _` mp_tac >>
-    (impl_tac >- simp[]) >> strip_tac >>
-    qpat_x_assum `case INL x of INL tv => expr_result_typed env e' tv | INR v1 => T` mp_tac >>
-    simp_tac(srw_ss())[] >> strip_tac >>
-    qpat_x_assum `(case get_Value x st2 of _ => _) = (res,st')` mp_tac >>
-    Cases_on `get_Value x st2` >>
-    rename1 `get_Value x st2 = (val_res,st3)` >>
-    Cases_on `val_res`
-    >- (
-      simp_tac(srw_ss())[] >> strip_tac >> gvs[] >>
-      rename1 `get_Value x st2 = (INL idx,st3)` >>
-      drule get_Value_state >> strip_tac >> gvs[] >>
-      `subscript_index_matches (expr_type e) e' idx` by
-        (drule_all eval_expr_subscript_index_matches_stmt >> simp[]) >>
-      qspecl_then [`cx`,`env`,`e`,`e'`,`v9`,`base_tv`,`x`,`idx`,`st2`,`res`,`st'`]
-        mp_tac expr_subscript_ordinary_tail_sound_stmt >>
-      (impl_tac >- simp[]) >>
-      simp[]) >>
-    simp_tac(srw_ss())[] >> strip_tac >> gvs[] >>
-    rename1 `get_Value x st2 = (INR val_err,st3)` >>
-    drule get_Value_state >> strip_tac >> gvs[] >>
-    irule expr_subscript_index_get_Value_INR_no_type_error_stmt >>
-    qexistsl [`e`,`e'`,`env`,`st2`,`st2`,`x`,`v9`] >>
-    simp[])
-  >- (
-    simp_tac(srw_ss())[] >> strip_tac >>
-    qpat_x_assum `well_typed_expr env e' ==> _` mp_tac >>
-    (impl_tac >- simp[]) >> strip_tac >>
-    gvs[])
-QED
-
-Theorem expr_subscript_ordinary_static_branch_sound_stmt[local]:
-  !cx env e e' v9 st res st'.
-    env_consistent env cx st /\ state_well_typed st /\ context_well_typed cx /\
-    accounts_well_typed st.accounts /\ functions_well_typed cx /\
-    call_evaluation_safe cx (int_calls_expr (Subscript v9 e e')) /\
-    well_typed_expr env e /\ well_typed_expr env e' /\
-    well_formed_type env.type_defs v9 /\
-    subscript_type_ok (expr_type e) e' v9 /\
-    eval_expr cx (Subscript v9 e e') st = (res,st') /\
-    (!env0 st0 res0 st0'.
-      env_consistent env0 cx st0 /\ state_well_typed st0 /\ context_well_typed cx /\
-      accounts_well_typed st0.accounts /\ functions_well_typed cx /\
-      call_evaluation_safe cx (int_calls_expr e) /\
-      eval_expr cx e st0 = (res0,st0') ==>
-      (well_typed_expr env0 e ==>
-       state_well_typed st0' /\ env_consistent env0 cx st0' /\
-       accounts_well_typed st0'.accounts /\ no_type_error_result res0 /\
-       case res0 of INL tv => expr_result_typed env0 e tv | INR v1 => T) /\
-      !vt.
-        type_place_expr env0 e = SOME vt ==>
-        state_well_typed st0' /\ env_consistent env0 cx st0' /\
-        accounts_well_typed st0'.accounts /\ no_type_error_result res0 /\
-        case res0 of INL tv => place_expr_result_typed env0 tv vt | INR v1 => T) /\
-    (!s'' tv1 t.
-      eval_expr cx e s'' = (INL tv1,t) ==>
-      !env0 st0 res0 st0'.
-        env_consistent env0 cx st0 /\ state_well_typed st0 /\ context_well_typed cx /\
-        accounts_well_typed st0.accounts /\ functions_well_typed cx /\
-        call_evaluation_safe cx (int_calls_expr e') /\
-        eval_expr cx e' st0 = (res0,st0') ==>
-        (well_typed_expr env0 e' ==>
-         state_well_typed st0' /\ env_consistent env0 cx st0' /\
-         accounts_well_typed st0'.accounts /\ no_type_error_result res0 /\
-         case res0 of INL tv => expr_result_typed env0 e' tv | INR v1 => T) /\
-        !vt.
-          type_place_expr env0 e' = SOME vt ==>
-          state_well_typed st0' /\ env_consistent env0 cx st0' /\
-          accounts_well_typed st0'.accounts /\ no_type_error_result res0 /\
-          case res0 of INL tv => place_expr_result_typed env0 tv vt | INR v1 => T) ==>
-    state_well_typed st' /\ env_consistent env cx st' /\
-    accounts_well_typed st'.accounts /\ no_type_error_result res /\
-    case res of INL tv => expr_result_typed env (Subscript v9 e e') tv | INR v1 => T
-Proof
-  rpt gen_tac >> strip_tac >>
-  `call_evaluation_safe cx (int_calls_expr e)` by (
-    qpat_assum `call_evaluation_safe cx (int_calls_expr (Subscript v9 e e'))` mp_tac >>
-    pure_rewrite_tac[int_calls_expr_def] >>
-    metis_tac[call_evaluation_safe_append_left]) >>
-  `call_evaluation_safe cx (int_calls_expr e')` by (
-    qpat_assum `call_evaluation_safe cx (int_calls_expr (Subscript v9 e e'))` mp_tac >>
-    pure_rewrite_tac[int_calls_expr_def] >>
-    metis_tac[call_evaluation_safe_append_right]) >>
-  Cases_on `eval_expr cx e st` >>
-  rename1 `eval_expr cx e st = (base_res,st1)` >>
-  qpat_x_assum `!env0 st0 res0 st0'.
-    env_consistent env0 cx st0 /\ state_well_typed st0 /\ context_well_typed cx /\
-    accounts_well_typed st0.accounts /\ functions_well_typed cx /\
-    call_evaluation_safe cx (int_calls_expr e) /\
-    eval_expr cx e st0 = (res0,st0') ==> _`
-    (qspecl_then [`env`,`st`,`base_res`,`st1`] mp_tac) >>
-  (impl_tac >- simp[]) >> strip_tac >>
-  Cases_on `base_res`
-  >- (
-    rename1 `eval_expr cx e st = (INL base_tv,st1)` >>
-    qpat_x_assum `well_typed_expr env e ==> _` mp_tac >>
-    (impl_tac >- simp[]) >> strip_tac >>
-    qpat_x_assum `!s'' tv1 t. eval_expr cx e s'' = (INL tv1,t) ==> _`
-      (qspecl_then [`st`,`base_tv`,`st1`] mp_tac) >>
-    (impl_tac >- simp[]) >> strip_tac >>
-    qpat_x_assum `case INL base_tv of INL tv => expr_result_typed env e tv | INR v1 => T` mp_tac >>
-    simp_tac(srw_ss())[] >> strip_tac >>
-    qspecl_then [`cx`,`env`,`e`,`e'`,`v9`,`base_tv`,`st`,`st1`,`res`,`st'`]
-      mp_tac expr_subscript_ordinary_base_success_sound_stmt >>
-    disch_then irule >>
-    rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-    rpt gen_tac >> strip_tac >>
-    qpat_assum `!env0 st0 res0 st0'.
-      env_consistent env0 cx st0 /\ state_well_typed st0 /\ context_well_typed cx /\
-      accounts_well_typed st0.accounts /\ functions_well_typed cx /\
-      call_evaluation_safe cx (int_calls_expr e') /\
-      eval_expr cx e' st0 = (res0,st0') ==> _` irule >>
-    conj_tac >- first_assum ACCEPT_TAC >>
-    conj_tac >- first_assum ACCEPT_TAC >>
-    conj_tac >- first_assum ACCEPT_TAC >>
-    qexists `st0` >> rpt conj_tac >> first_assum ACCEPT_TAC)
-  >- (
-    qpat_x_assum `eval_expr cx (Subscript v9 e e') st = (res,st')` mp_tac >>
-    simp_tac(srw_ss())[Once evaluate_def, bind_def, return_def, raise_def] >>
-    qpat_x_assum `eval_expr cx e st = (INR y,st1)`
-      (fn th => simp_tac(srw_ss())[th]) >>
-    strip_tac >>
-    qpat_x_assum `well_typed_expr env e ==> _` mp_tac >>
-    (impl_tac >- simp[]) >> strip_tac >>
-    qpat_x_assum `INR y = res` (fn th => rewrite_tac[GSYM th]) >>
-    qpat_x_assum `st1 = st'` (fn th => rewrite_tac[GSYM th]) >>
-    rewrite_tac[] >>
-    conj_tac >- first_assum ACCEPT_TAC >>
-    conj_tac >- first_assum ACCEPT_TAC >>
-    conj_tac >- first_assum ACCEPT_TAC >>
-    conj_tac >- first_assum ACCEPT_TAC >>
-    simp_tac(srw_ss())[])
-QED
-
-Theorem expr_subscript_place_as_ordinary_branch_sound_stmt[local]:
-  !cx env e e' v9 base_vt st res st'.
-    env_consistent env cx st /\ state_well_typed st /\ context_well_typed cx /\
-    accounts_well_typed st.accounts /\ functions_well_typed cx /\
-    call_evaluation_safe cx (int_calls_expr (Subscript v9 e e')) /\
-    well_typed_expr env e' /\
-    type_place_expr env e = SOME base_vt /\
-    subscript_vtype base_vt (expr_type e') = SOME (Type v9) /\
-    eval_expr cx (Subscript v9 e e') st = (res,st') /\
-    (!env0 st0 res0 st0'.
-      env_consistent env0 cx st0 /\ state_well_typed st0 /\ context_well_typed cx /\
-      accounts_well_typed st0.accounts /\ functions_well_typed cx /\
-      call_evaluation_safe cx (int_calls_expr e) /\
-      eval_expr cx e st0 = (res0,st0') ==>
-      (well_typed_expr env0 e ==>
-       state_well_typed st0' /\ env_consistent env0 cx st0' /\
-       accounts_well_typed st0'.accounts /\ no_type_error_result res0 /\
-       case res0 of INL tv => expr_result_typed env0 e tv | INR v1 => T) /\
-      !vt.
-        type_place_expr env0 e = SOME vt ==>
-        state_well_typed st0' /\ env_consistent env0 cx st0' /\
-        accounts_well_typed st0'.accounts /\ no_type_error_result res0 /\
-        case res0 of INL tv => place_expr_result_typed env0 tv vt | INR v1 => T) /\
-    (!s'' tv1 t.
-      eval_expr cx e s'' = (INL tv1,t) ==>
-      !env0 st0 res0 st0'.
-        env_consistent env0 cx st0 /\ state_well_typed st0 /\ context_well_typed cx /\
-        accounts_well_typed st0.accounts /\ functions_well_typed cx /\
-        call_evaluation_safe cx (int_calls_expr e') /\
-        eval_expr cx e' st0 = (res0,st0') ==>
-        (well_typed_expr env0 e' ==>
-         state_well_typed st0' /\ env_consistent env0 cx st0' /\
-         accounts_well_typed st0'.accounts /\ no_type_error_result res0 /\
-         case res0 of INL tv => expr_result_typed env0 e' tv | INR v1 => T) /\
-        !vt.
-          type_place_expr env0 e' = SOME vt ==>
-          state_well_typed st0' /\ env_consistent env0 cx st0' /\
-          accounts_well_typed st0'.accounts /\ no_type_error_result res0 /\
-          case res0 of INL tv => place_expr_result_typed env0 tv vt | INR v1 => T) ==>
-    state_well_typed st' /\ env_consistent env cx st' /\
-    accounts_well_typed st'.accounts /\ no_type_error_result res /\
-    case res of INL tv => expr_result_typed env (Subscript v9 e e') tv | INR v1 => T
-Proof
-  rpt gen_tac >> strip_tac >>
-  `call_evaluation_safe cx (int_calls_expr e)` by (
-    qpat_assum `call_evaluation_safe cx (int_calls_expr (Subscript v9 e e'))` mp_tac >>
-    pure_rewrite_tac[int_calls_expr_def] >>
-    metis_tac[call_evaluation_safe_append_left]) >>
-  `call_evaluation_safe cx (int_calls_expr e')` by (
-    qpat_assum `call_evaluation_safe cx (int_calls_expr (Subscript v9 e e'))` mp_tac >>
-    pure_rewrite_tac[int_calls_expr_def] >>
-    metis_tac[call_evaluation_safe_append_right]) >>
-  Cases_on `eval_expr cx e st` >>
-  rename1 `eval_expr cx e st = (base_res,st1)` >>
-  qpat_x_assum `!env0 st0 res0 st0'.
-    env_consistent env0 cx st0 /\ state_well_typed st0 /\ context_well_typed cx /\
-    accounts_well_typed st0.accounts /\ functions_well_typed cx /\
-    call_evaluation_safe cx (int_calls_expr e) /\
-    eval_expr cx e st0 = (res0,st0') ==> _`
-    (qspecl_then [`env`,`st`,`base_res`,`st1`] mp_tac) >>
-  (impl_tac >- simp[]) >> strip_tac >>
-  Cases_on `base_res`
-  >- (
-    rename1 `eval_expr cx e st = (INL base_tv,st1)` >>
-    qpat_x_assum `!vt. type_place_expr env e = SOME vt ==> state_well_typed st1 /\ _`
-      (qspec_then `base_vt` mp_tac) >>
-    (impl_tac >- simp[]) >> strip_tac >>
-    qpat_x_assum `case INL base_tv of INL tv => place_expr_result_typed env tv base_vt | INR v1 => T`
-      mp_tac >> simp_tac(srw_ss())[] >> strip_tac >>
-    `well_formed_type env.type_defs v9` by (
-      `well_formed_vtype env.type_defs base_vt` by
-        metis_tac[type_place_expr_well_formed_vtype_stmt] >>
-      `well_formed_vtype env.type_defs (Type v9)` by
-        metis_tac[subscript_vtype_well_formed_stmt] >>
-      `vtype_annotation_ok (Type v9) v9` by simp[vtype_annotation_ok_def] >>
-      metis_tac[vtype_annotation_ok_well_formed_type_stmt]) >>
-    qpat_x_assum `!s'' tv1 t. eval_expr cx e s'' = (INL tv1,t) ==> _`
-      (qspecl_then [`st`,`base_tv`,`st1`] mp_tac) >>
-    (impl_tac >- simp[]) >> strip_tac >>
-    qspecl_then [`cx`,`env`,`e`,`e'`,`v9`,`base_vt`,`Type v9`,`base_tv`,`st1`,`res`,`st'`]
-      mp_tac expr_subscript_place_projection_branch_sound_stmt >>
-    (impl_tac >- (
-      rpt conj_tac
-      >- first_assum ACCEPT_TAC
-      >- first_assum ACCEPT_TAC
-      >- first_assum ACCEPT_TAC
-      >- first_assum ACCEPT_TAC
-      >- first_assum ACCEPT_TAC
-      >- first_assum ACCEPT_TAC
-      >- first_assum ACCEPT_TAC
-      >- first_assum ACCEPT_TAC
-      >- first_assum ACCEPT_TAC
-      >- simp[vtype_annotation_ok_def]
-      >- first_assum ACCEPT_TAC
-      >> (rpt gen_tac >> strip_tac >>
-          qpat_assum `!env0 st0 res0 st0'.
-            env_consistent env0 cx st0 /\ state_well_typed st0 /\ context_well_typed cx /\
-            accounts_well_typed st0.accounts /\ functions_well_typed cx /\
-            call_evaluation_safe cx (int_calls_expr e') /\
-            eval_expr cx e' st0 = (res0,st0') ==> _` irule >>
-          conj_tac >- first_assum ACCEPT_TAC >>
-          conj_tac >- first_assum ACCEPT_TAC >>
-          conj_tac >- first_assum ACCEPT_TAC >>
-          qexists `st0` >> rpt conj_tac >> first_assum ACCEPT_TAC))) >>
-    strip_tac >>
-    `state_well_typed st' /\ env_consistent env cx st' /\
-     accounts_well_typed st'.accounts /\ no_type_error_result res /\
-     (case res of INL tv => place_expr_result_typed env tv (Type v9) | INR v1 => T)` by (
-      first_x_assum irule >>
-      qpat_x_assum `eval_expr cx (Subscript v9 e e') st = (res,st')` mp_tac >>
-      simp_tac(srw_ss())[Once evaluate_def, bind_def, return_def, raise_def] >>
-      qpat_x_assum `eval_expr cx e st = (INL base_tv,st1)`
-        (fn th => simp_tac(srw_ss())[th])) >>
-    rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-    Cases_on `res` >> simp[] >>
-    qpat_x_assum `case INL x of INL tv => place_expr_result_typed env tv (Type v9) | INR v1 => T`
-      mp_tac >> simp_tac(srw_ss())[] >> strip_tac >>
-    irule place_expr_result_typed_expr_result_typed_stmt >>
-    qexists `Type v9` >> simp[Once well_typed_expr_def, vtype_annotation_ok_def])
-  >- (
-    qpat_x_assum `eval_expr cx (Subscript v9 e e') st = (res,st')` mp_tac >>
-    simp_tac(srw_ss())[Once evaluate_def, bind_def, return_def, raise_def] >>
-    qpat_x_assum `eval_expr cx e st = (INR y,st1)`
-      (fn th => simp_tac(srw_ss())[th]) >>
-    strip_tac >>
-    qpat_x_assum `!vt. type_place_expr env e = SOME vt ==> state_well_typed st1 /\ _`
-      (qspec_then `base_vt` mp_tac) >>
-    (impl_tac >- simp[]) >> strip_tac >>
-    qpat_x_assum `INR y = res` (fn th => rewrite_tac[GSYM th]) >>
-    qpat_x_assum `st1 = st'` (fn th => rewrite_tac[GSYM th]) >>
-    rewrite_tac[] >>
-    conj_tac >- first_assum ACCEPT_TAC >>
-    conj_tac >- first_assum ACCEPT_TAC >>
-    conj_tac >- first_assum ACCEPT_TAC >>
-    conj_tac >- first_assum ACCEPT_TAC >>
-    simp_tac(srw_ss())[])
+  gvs[Once evaluate_def, evaluate_literal_def, return_def, read_result_def]
 QED
 
 Resume eval_scc_type_sound_mutual[Expr_Subscript]:
-  (* C2.1.1.13.4 splits the ordinary Subscript static alternatives at this
-     boundary and discharges them through the two proved local adapters above. *)
   rpt gen_tac >> strip_tac >>
   `call_evaluation_safe cx (int_calls_expr e)` by (
     qpat_assum `call_evaluation_safe cx (int_calls_expr (Subscript v9 e e'))` mp_tac >>
@@ -5764,81 +4748,144 @@ Resume eval_scc_type_sound_mutual[Expr_Subscript]:
     pure_rewrite_tac[int_calls_expr_def] >>
     metis_tac[call_evaluation_safe_append_right]) >>
   conj_tac
-  >- (
-    strip_tac >>
-    qpat_x_assum `well_typed_expr env (Subscript v9 e e')` mp_tac >>
-    CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [well_typed_expr_def])) >>
-    strip_tac
-    >- (qspecl_then [`cx`,`env`,`e`,`e'`,`v9`,`st`,`res`,`st'`]
-          match_mp_tac expr_subscript_ordinary_static_branch_sound_stmt >>
-        asm_rewrite_tac[])
-    >- (qmatch_asmsub_rename_tac `type_place_expr env e = SOME base_vt` >>
-        qspecl_then [`cx`,`env`,`e`,`e'`,`v9`,`base_vt`,`st`,`res`,`st'`]
-          match_mp_tac expr_subscript_place_as_ordinary_branch_sound_stmt >>
-        asm_rewrite_tac[]))
-  >> gen_tac >> strip_tac >>
+  >- (strip_tac >>
+      qpat_x_assum `well_typed_expr env (Subscript v9 e e')` mp_tac >>
+      CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [well_typed_expr_def])) >>
+      strip_tac
+      >- (qpat_x_assum `!env st res st'. _ ==> typed_scope_transition _ _` kall_tac >>
+          qpat_x_assum `eval_expr cx (Subscript _ e e') st = _` mp_tac >>
+          simp_tac(srw_ss())[Once evaluate_def, bind_def] >>
+          Cases_on `eval_expr cx e st` >>
+          rename1 `eval_expr cx e st = (br,st1)` >>
+          qpat_x_assum `!env st res st'. _ ==> case res of INL pv => live_memory_result _ _ | INR _ => T`
+            (qspecl_then [`env`,`st`,`br`,`st1`] mp_tac) >>
+          (impl_tac >- (conj_tac >- (disj1_tac >> first_assum ACCEPT_TAC) >> simp[])) >> strip_tac >>
+          qpat_x_assum `!env st res st'. _ ==> (_ /\ _)` drule_all >> strip_tac >>
+          qpat_x_assum `well_typed_expr env e ==> _` drule >>
+          simp_tac(srw_ss())[] >> strip_tac >>
+          Cases_on `br`
+          >- (rename1 `eval_expr cx e st = (INL base_pv,st1)` >>
+              qpat_x_assum `!s'' pv t. eval_expr cx e s'' = (INL pv,t) ==> _` drule >> strip_tac >>
+              simp_tac(srw_ss())[] >>
+              Cases_on `eval_expr cx e' st1` >>
+              rename1 `eval_expr cx e' st1 = (ir,st2)` >>
+              qpat_x_assum `!env st res st'. _ ==> typed_scope_transition _ _`
+                (qspecl_then [`env`,`st1`,`ir`,`st2`] mp_tac) >>
+              (impl_tac >- (conj_tac >- (disj1_tac >> first_assum ACCEPT_TAC) >> simp[])) >> strip_tac >>
+              qpat_x_assum `!env st res st'. _ ==> case res of INL pv => live_memory_result _ _ | INR _ => T`
+                (qspecl_then [`env`,`st1`,`ir`,`st2`] mp_tac) >>
+              (impl_tac >- (conj_tac >- (disj1_tac >> first_assum ACCEPT_TAC) >> simp[])) >> strip_tac >>
+              qpat_x_assum `!env st res st'. _ ==> (_ /\ _)` drule_all >> strip_tac >>
+              qpat_x_assum `well_typed_expr env e' ==> _` drule >>
+              simp_tac(srw_ss())[] >> strip_tac >>
+              Cases_on `ir`
+              >- (rename1 `eval_expr cx e' st1 = (INL idx,st2)` >>
+                  simp_tac(srw_ss())[] >>
+                  Cases_on `read_result cx idx st2` >>
+                  rename1 `read_result cx idx st2 = (rr,st3)` >>
+                  rule_assum_tac (REWRITE_RULE [sumTheory.sum_case_def]) >>
+                  rule_assum_tac BETA_RULE >>
+                  qpat_x_assum `!vt. type_place_expr env e = SOME vt ==> _` kall_tac >>
+                  qpat_x_assum `!vt. type_place_expr env e' = SOME vt ==> _` kall_tac >>
+                  drule_all live_result_read_typed >> strip_tac >> gvs[] >>
+                  Cases_on `rr`
+                  >- (rename1 `read_result cx idx st2 = (INL v,st2)` >>
+                      `vyperImmutableMetadataFrame$immutable_metadata_frame st1 st2` by
+                        (drule eval_expr_immutable_metadata_frame >> simp[]) >>
+                      `eval_result_typed (env,cx,st2) base_pv (Type (expr_type e))` by
+                        (irule eval_result_typed_transport >> goal_assum drule_all) >>
+                      `live_memory_result st2 base_pv` by
+                        (Cases_on `base_pv`
+                         >- simp[live_memory_result_def]
+                         >- (rename1 `PlaceR p` >> Cases_on `p`
+                             >- simp[live_memory_result_def]
+                             >- (irule live_memory_result_transport >> goal_assum drule_all)
+                             >> simp[live_memory_result_def])
+                         >> simp[live_memory_result_def]) >>
+                      `subscript_index_matches (expr_type e) e' v` by
+                        (drule_all eval_expr_subscript_index_matches_stmt >> simp[]) >>
+                      simp_tac(srw_ss())[] >> strip_tac >>
+                      rule_assum_tac (REWRITE_RULE [sumTheory.sum_case_def]) >>
+                      rule_assum_tac BETA_RULE >>
+                      drule_all select_ordinary_subscript_sound >> strip_tac >> gvs[expr_type_def]) >>
+                  simp_tac(srw_ss())[] >> strip_tac >> gvs[no_type_error_result_def]) >>
+              simp_tac(srw_ss())[] >> strip_tac >> gvs[no_type_error_result_def]) >>
+          qpat_x_assum `!s'' pv t. _` kall_tac >>
+          simp_tac(srw_ss())[] >> strip_tac >> gvs[no_type_error_result_def]) >>
+      simp_tac(srw_ss())[expr_type_def] >>
+      suspend "Expr_Subscript_projection") >>
+  gen_tac >> strip_tac >>
   qpat_x_assum `type_place_expr env (Subscript v9 e e') = SOME vt` mp_tac >>
   simp_tac(srw_ss())[Once well_typed_expr_def, AllCaseEqs()] >>
-  strip_tac >>
-  qpat_x_assum `eval_expr cx (Subscript v9 e e') st = (res,st')` mp_tac >>
-  simp_tac(srw_ss())[Once evaluate_def, bind_def, return_def, raise_def] >>
+  strip_tac >> suspend "Expr_Subscript_projection"
+QED
+
+Resume eval_scc_type_sound_mutual[Expr_Subscript_projection]:
+  RESUME_TAC >> (
+  qmatch_asmsub_rename_tac `type_place_expr env e = SOME bvt` >>
+  `well_formed_vtype env.type_defs bvt` by
+    metis_tac[type_place_expr_well_formed_vtype_stmt] >>
+  `vtype_annotation_ok bvt (expr_type e)` by
+    metis_tac[type_place_expr_annotation_ok_stmt] >>
+  qpat_x_assum `!env st res st'. _ ==> typed_scope_transition _ _` kall_tac >>
+  qpat_x_assum `eval_expr cx (Subscript _ e e') st = _` mp_tac >>
+  simp_tac(srw_ss())[Once evaluate_def, bind_def] >>
   Cases_on `eval_expr cx e st` >>
-  rename1 `eval_expr cx e st = (base_res,st1)` >>
-  qpat_x_assum `!env0 st0 res0 st0'.
-    env_consistent env0 cx st0 /\ state_well_typed st0 /\ context_well_typed cx /\
-    accounts_well_typed st0.accounts /\ functions_well_typed cx /\
-    call_evaluation_safe cx (int_calls_expr e) /\
-    eval_expr cx e st0 = (res0,st0') ==> _`
-    (qspecl_then [`env`,`st`,`base_res`,`st1`] mp_tac) >>
+  rename1 `eval_expr cx e st = (br,st1)` >>
+  qpat_x_assum `!env st res st'. _ ==> case res of INL pv => live_memory_result _ _ | INR _ => T`
+    (qspecl_then [`env`,`st`,`br`,`st1`] mp_tac) >>
+  (impl_tac >- (conj_tac >- (disj2_tac >> goal_assum drule) >> simp[])) >> strip_tac >>
+  qpat_x_assum `!env st res st'. _ ==> (_ /\ _)` drule_all >> strip_tac >>
+  qpat_x_assum `well_typed_expr env e ==> _` kall_tac >>
+  qpat_x_assum `!vt. type_place_expr env e = SOME vt ==> _`
+    (qspec_then `bvt` mp_tac) >>
   (impl_tac >- simp[]) >> strip_tac >>
-  Cases_on `base_res`
-  >- (
-    qpat_x_assum `!vt. type_place_expr env e = SOME vt ==> state_well_typed st1 /\ _`
-      (qspec_then `vt'` mp_tac) >>
-    (impl_tac >- simp[]) >> strip_tac >>
-    strip_tac >>
-    qpat_x_assum `case INL x of INL tv => place_expr_result_typed env tv vt' | INR v1 => T` mp_tac >>
-    simp_tac(srw_ss())[] >> strip_tac >>
-    `well_formed_type env.type_defs v8`
-      by (
-        drule_at Any vtype_annotation_ok_well_formed_type_stmt >>
-        disch_then irule >>
-        irule subscript_vtype_well_formed_stmt >>
-        goal_assum $ drule_at Any >>
-        irule type_place_expr_well_formed_vtype_stmt >>
-        metis_tac[] ) >>
-    qpat_x_assum `!s'' tv1 t. eval_expr cx e s'' = (INL tv1,t) ==> _`
-      (qspecl_then [`st`,`x`,`st1`] mp_tac) >>
-    (impl_tac >- simp[]) >> strip_tac >>
-    qspecl_then [`cx`,`env`,`e`,`e'`,`v8`,`vt'`,`vt`,`x`,`st1`,`res`,`st'`]
-      mp_tac expr_subscript_place_projection_branch_sound_stmt >>
-    (impl_tac >- (
-      rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-      rpt gen_tac >> strip_tac >>
-      qpat_assum `!env0 st0 res0 st0'.
-        env_consistent env0 cx st0 /\ state_well_typed st0 /\ context_well_typed cx /\
-        accounts_well_typed st0.accounts /\ functions_well_typed cx /\
-        call_evaluation_safe cx (int_calls_expr e') /\
-        eval_expr cx e' st0 = (res0,st0') ==> _` irule >>
-      conj_tac >- first_assum ACCEPT_TAC >>
-      conj_tac >- first_assum ACCEPT_TAC >>
-      conj_tac >- first_assum ACCEPT_TAC >>
-      qexists `st0` >> rpt conj_tac >> first_assum ACCEPT_TAC)) >>
-    (disch_then irule >> first_assum ACCEPT_TAC))
-  >- (
-    qpat_x_assum `!vt. type_place_expr env e = SOME vt ==> state_well_typed st1 /\ _`
-      (qspec_then `vt'` mp_tac) >>
-    (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
-    strip_tac >>
-    qpat_x_assum `(case (INR y,st1) of _ => _) = (res,st')` mp_tac >>
-    simp_tac(srw_ss())[] >> strip_tac >>
-    pop_assum (fn th => rewrite_tac[GSYM th]) >>
-    pop_assum (fn th => rewrite_tac[GSYM th]) >>
-    rpt conj_tac >- first_assum ACCEPT_TAC
-    >- first_assum ACCEPT_TAC
-    >- first_assum ACCEPT_TAC
-    >- first_assum ACCEPT_TAC
-    >> simp[])
+  Cases_on `br`
+  >- (rename1 `eval_expr cx e st = (INL base_pv,st1)` >>
+      qpat_x_assum `!s'' pv t. eval_expr cx e s'' = (INL pv,t) ==> _` drule >> strip_tac >>
+      simp_tac(srw_ss())[] >>
+      Cases_on `eval_expr cx e' st1` >>
+      rename1 `eval_expr cx e' st1 = (ir,st2)` >>
+      qpat_x_assum `!env st res st'. _ ==> typed_scope_transition _ _`
+        (qspecl_then [`env`,`st1`,`ir`,`st2`] mp_tac) >>
+      (impl_tac >- (conj_tac >- (disj1_tac >> first_assum ACCEPT_TAC) >> simp[])) >> strip_tac >>
+      qpat_x_assum `!env st res st'. _ ==> case res of INL pv => live_memory_result _ _ | INR _ => T`
+        (qspecl_then [`env`,`st1`,`ir`,`st2`] mp_tac) >>
+      (impl_tac >- (conj_tac >- (disj1_tac >> first_assum ACCEPT_TAC) >> simp[])) >> strip_tac >>
+      qpat_x_assum `!env st res st'. _ ==> (_ /\ _)` drule_all >> strip_tac >>
+      qpat_x_assum `well_typed_expr env e' ==> _` drule >>
+      simp_tac(srw_ss())[] >> strip_tac >>
+      qpat_x_assum `!vt. type_place_expr env e' = SOME vt ==> _` kall_tac >>
+      Cases_on `ir`
+      >- (rename1 `eval_expr cx e' st1 = (INL idx,st2)` >>
+          simp_tac(srw_ss())[] >>
+          Cases_on `read_result cx idx st2` >>
+          rename1 `read_result cx idx st2 = (rr,st3)` >>
+          rule_assum_tac (REWRITE_RULE [sumTheory.sum_case_def]) >>
+          rule_assum_tac BETA_RULE >>
+          drule_all live_result_read_typed >> strip_tac >> gvs[] >>
+          Cases_on `rr`
+          >- (rename1 `read_result cx idx st2 = (INL v,st2)` >>
+              `vyperImmutableMetadataFrame$immutable_metadata_frame st1 st2` by
+                (drule eval_expr_immutable_metadata_frame >> simp[]) >>
+              `eval_result_typed (env,cx,st2) base_pv bvt` by
+                (irule eval_result_typed_transport >> goal_assum drule_all) >>
+              `live_memory_result st2 base_pv` by
+                (Cases_on `base_pv`
+                 >- simp[live_memory_result_def]
+                 >- (rename1 `PlaceR p` >> Cases_on `p`
+                     >- simp[live_memory_result_def]
+                     >- (irule live_memory_result_transport >> goal_assum drule_all)
+                     >> simp[live_memory_result_def])
+                 >> simp[live_memory_result_def]) >>
+              simp_tac(srw_ss())[] >> strip_tac >>
+              rule_assum_tac (REWRITE_RULE [sumTheory.sum_case_def]) >>
+              rule_assum_tac BETA_RULE >>
+              drule_all select_projection_subscript_sound >> strip_tac >> gvs[expr_type_def]) >>
+          simp_tac(srw_ss())[] >> strip_tac >> gvs[no_type_error_result_def]) >>
+      simp_tac(srw_ss())[] >> strip_tac >> gvs[no_type_error_result_def]) >>
+  qpat_x_assum `!s'' pv t. _` kall_tac >>
+  simp_tac(srw_ss())[] >> strip_tac >> gvs[no_type_error_result_def])
 QED
 
 
@@ -5868,90 +4915,75 @@ Proof
   qexists_tac `field_v` >> simp[]
 QED
 
-Theorem expr_attribute_success_tail_sound_stmt[local]:
-  !cx env e id ty base_tv st st1 res st'.
-    state_well_typed st1 /\ env_consistent env cx st1 /\
-    accounts_well_typed st1.accounts /\
-    expr_result_typed env e base_tv /\
-    attribute_type env.type_defs (expr_type e) id = SOME ty /\
-    eval_expr cx e st = (INL base_tv,st1) /\
-    eval_expr cx (Attribute ty e id) st = (res,st') ==>
-    state_well_typed st' /\ env_consistent env cx st' /\
-    accounts_well_typed st'.accounts /\ no_type_error_result res /\
-    (case res of
-     | INL tv => expr_result_typed env (Attribute ty e id) tv
-     | INR _ => T)
+Theorem select_attribute_sound[local]:
+  !env cx st bp ct id rt res st'.
+  env_consistent env cx st /\ state_well_typed st /\
+  eval_result_typed (env,cx,st) bp (Type ct) /\ live_memory_result st bp /\
+  attribute_type env.type_defs ct id = SOME rt /\
+  select_result cx ct bp (AttrSubscript id) st = (res,st') ==>
+  st' = st /\ no_type_error_result res /\
+  (case res of INL pv => eval_result_typed (env,cx,st') pv (Type rt) | INR _ => T)
 Proof
   rpt gen_tac >> strip_tac >>
-  qpat_x_assum `eval_expr cx (Attribute ty e id) st = (res,st')` mp_tac >>
-  simp_tac(srw_ss())[Once evaluate_def, bind_def, return_def, raise_def] >>
-  asm_rewrite_tac[] >>
-  qhdtm_x_assum `expr_result_typed` mp_tac >>
-  simp[expr_result_typed_def, expr_runtime_typed_def] >>
-  strip_tac >>
-  Cases_on `expr_type e` >> gvs[attribute_type_def, evaluate_type_def, AllCaseEqs()] >>
-  strip_tac >>
-  `?sv. base_tv = Value sv /\
-        value_has_type (StructTV (ZIP (MAP FST fields,tvs))) sv` by
-    (Cases_on `base_tv` >> gvs[toplevel_value_typed_def]) >>
-  gvs[get_Value_def, return_def, bind_def] >>
-  `?field_tv. evaluate_type env.type_defs ty = SOME field_tv /\
-              ALOOKUP (ZIP (MAP FST fields,tvs)) id = SOME field_tv` by (
-    qspecl_then [`env.type_defs`,`StructT p`,`id`,`ty`,
-                 `ZIP (MAP FST fields,tvs)`] mp_tac attribute_type_evaluates >>
-    simp[attribute_type_def, evaluate_type_def]) >>
-  drule_all evaluate_attribute_value_has_type >> strip_tac >>
-  gvs[lift_sum_def, return_def, no_type_error_result_def,
-      expr_result_typed_def, expr_runtime_typed_def, expr_type_def,
-      toplevel_value_typed_def]
+  `env.type_defs = get_tenv cx` by
+    gvs[env_consistent_def, env_context_consistent_def] >>
+  Cases_on `bp`
+  >- (gvs[eval_result_typed_def] >>
+      drule_all attribute_type_runtime_step >> strip_tac >>
+      `well_formed_type_value tv` by metis_tac[evaluate_type_well_formed_type_value] >>
+      `subscripts_type tv [AttrSubscript id] = SOME field_tv` by
+        simp[subscripts_type_def] >>
+      Cases_on `evaluate_subscripts tv v [AttrSubscript id]` >>
+      gvs[select_result_def, bind_def, lift_option_type_def, lift_sum_def,
+          return_def, raise_def] >> simp[no_type_error_result_def]
+      >- (drule_all vyperPlaceStatePreservationTheory.evaluate_subscripts_type >> simp[]) >>
+      metis_tac[evaluate_subscripts_typed_error])
+  >- (rename1 `PlaceR p` >>
+      `?tv. evaluate_type env.type_defs ct = SOME tv /\ runtime_place_typed cx st p tv` by
+        gvs[eval_result_typed_def] >>
+      drule_all attribute_type_runtime_step >> strip_tac >>
+      gvs[select_result_def] >>
+      `st' = st` by metis_tac[vyperPlaceFramesTheory.extend_place_state, SND] >>
+      `no_type_error_result res` by metis_tac[extend_live_place_attribute_no_type_error] >>
+      Cases_on `res` >> simp[] >>
+      `eval_result_typed (env,cx,st) (PlaceR p) (Type ct)` by
+        (simp[eval_result_typed_def] >> metis_tac[]) >>
+      `attribute_type env.type_defs ct id = SOME rt` by simp[] >>
+      drule_all extend_place_attribute_success_typed >> simp[]) >>
+  gvs[eval_result_typed_def]
 QED
 
 Resume eval_scc_type_sound_mutual[Expr_Attribute]:
   rpt gen_tac >> strip_tac >>
   `call_evaluation_safe cx (int_calls_expr e)` by (
     qpat_assum `call_evaluation_safe cx (int_calls_expr (Attribute ty e id))` mp_tac >>
-    pure_rewrite_tac[int_calls_expr_def] >>
-    strip_tac >> first_assum ACCEPT_TAC) >>
-  conj_tac
-  >- (
-    strip_tac >>
-    rename1 `well_typed_expr env (Attribute ty e id)` >>
-    qpat_x_assum `well_typed_expr env (Attribute ty e id)` mp_tac >>
-    CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [well_typed_expr_def])) >>
-    strip_tac >>
-    Cases_on `eval_expr cx e st` >>
-    rename1 `eval_expr cx e st = (base_res,st1)` >>
-    qpat_x_assum `!env0 st0 res0 st0'.
-      env_consistent env0 cx st0 /\ state_well_typed st0 /\ context_well_typed cx /\
-      accounts_well_typed st0.accounts /\ functions_well_typed cx /\
-      call_evaluation_safe cx (int_calls_expr e) /\
-      eval_expr cx e st0 = (res0,st0') ==> _`
-      (qspecl_then [`env`,`st`,`base_res`,`st1`] mp_tac) >>
-    (impl_tac >- simp[]) >> strip_tac >>
-    Cases_on `base_res`
-    >- (
-      rename1 `eval_expr cx e st = (INL base_tv,st1)` >>
-      qpat_x_assum `well_typed_expr env e ==> _` mp_tac >>
-      (impl_tac >- simp[]) >> strip_tac >>
-      qpat_x_assum `case INL base_tv of INL tv => expr_result_typed env e tv | INR v1 => T`
-        mp_tac >> simp_tac(srw_ss())[] >> strip_tac >>
-      qspecl_then [`cx`,`env`,`e`,`id`,`ty`,`base_tv`,`st`,`st1`,`res`,`st'`]
-        match_mp_tac expr_attribute_success_tail_sound_stmt >>
-      qpat_x_assum `attribute_type_ok env.type_defs (expr_type e) id ty` mp_tac >>
-      simp[attribute_type_ok_def])
-    >- (
-      qpat_x_assum `eval_expr cx (Attribute ty e id) st = (res,st')` mp_tac >>
-      simp_tac(srw_ss())[Once evaluate_def, bind_def, return_def, raise_def] >>
-      qpat_x_assum `eval_expr cx e st = (INR y,st1)`
-        (fn th => simp_tac(srw_ss())[th]) >>
-      strip_tac >>
-      qpat_x_assum `well_typed_expr env e ==> _` mp_tac >>
-      (impl_tac >- simp[]) >> strip_tac >>
-      qpat_x_assum `INR y = res` (assume_tac o GSYM) >>
-      qpat_x_assum `st1 = st'` (assume_tac o GSYM) >>
-      simp[])) >>
-  gen_tac >> strip_tac >>
-  gvs[Once well_typed_expr_def]
+    pure_rewrite_tac[int_calls_expr_def] >> simp[]) >>
+  reverse conj_tac >- (rpt strip_tac >>
+    qpat_x_assum `type_place_expr _ (Attribute _ _ _) = SOME _` mp_tac >>
+    simp_tac(srw_ss())[Once well_typed_expr_def]) >>
+  strip_tac >>
+  qpat_x_assum `well_typed_expr env (Attribute ty e id)` mp_tac >>
+  CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [well_typed_expr_def])) >>
+  strip_tac >>
+  qpat_x_assum `!env st res st'. _ ==> typed_scope_transition _ _` kall_tac >>
+  qpat_x_assum `eval_expr cx (Attribute ty e id) st = _` mp_tac >>
+  simp_tac(srw_ss())[Once evaluate_def, bind_def] >>
+  Cases_on `eval_expr cx e st` >>
+  rename1 `eval_expr cx e st = (br,st1)` >>
+  qpat_x_assum `!env st res st'. _ ==> case res of INL pv => live_memory_result _ _ | INR _ => T`
+    (qspecl_then [`env`,`st`,`br`,`st1`] mp_tac) >>
+  (impl_tac >- (conj_tac >- (disj1_tac >> first_assum ACCEPT_TAC) >> simp[])) >> strip_tac >>
+  qpat_x_assum `!env st res st'. _ ==> (_ /\ _)` drule_all >> strip_tac >>
+  qpat_x_assum `well_typed_expr env e ==> _` drule >>
+  simp_tac(srw_ss())[] >> strip_tac >>
+  Cases_on `br`
+  >- (simp_tac(srw_ss())[] >> strip_tac >>
+      rule_assum_tac (REWRITE_RULE [sumTheory.sum_case_def]) >>
+      rule_assum_tac BETA_RULE >>
+      qpat_x_assum `attribute_type_ok _ _ _ _` mp_tac >>
+      simp_tac(srw_ss())[attribute_type_ok_def] >> strip_tac >>
+      drule_all select_attribute_sound >> strip_tac >> gvs[expr_type_def]) >>
+  simp_tac(srw_ss())[] >> strip_tac >> gvs[no_type_error_result_def]
 QED
 
 (* ===== Builtin, type-builtin, and pop expression cases ===== *)
@@ -6035,10 +5067,9 @@ Theorem type_builtin_exprs_runtime_success_type_stmt_adapter[local]:
   exprs_runtime_typed env es vs /\
   context_well_typed cx /\
   evaluate_type_builtin cx tb target_ty vs = INL v ==>
-  expr_result_typed env (TypeBuiltin result_ty tb target_ty es) (Value v)
+  value_runtime_typed env result_ty v
 Proof
-  rw[exprs_runtime_typed_def, expr_result_typed_def, expr_runtime_typed_def,
-     expr_type_def, toplevel_value_typed_Value] >>
+  rw[exprs_runtime_typed_def, value_runtime_typed_def] >>
   `MAP (evaluate_type (get_tenv cx)) (MAP expr_type es) = MAP SOME tvs` by
     gvs[LIST_REL_EL_EQN, LIST_EQ_REWRITE, EL_MAP] >>
   `?result_tv. evaluate_type (get_tenv cx) result_ty = SOME result_tv` by
@@ -6047,6 +5078,61 @@ Proof
   irule well_typed_type_builtin_success_type >>
   qexistsl_tac [`cx`, `result_ty`, `target_ty`, `tb`, `MAP expr_type es`, `tvs`, `vs`] >>
   gvs[]
+QED
+
+Theorem Len_live_result_sound[local]:
+  state_well_typed st /\ well_typed_builtin_app ty Len [arg_ty] /\
+  eval_result_typed (env,cx,st) pv (Type arg_ty) /\ live_memory_result st pv /\
+  result_array_length cx pv st = (res,st') ==>
+  st' = st /\ no_type_error_result res /\
+  (case res of INL n => eval_result_typed (env,cx,st) (Value (IntV (&n))) (Type ty) | INR _ => T)
+Proof
+  strip_tac >>
+  Cases_on `?tr slot tv bd. pv = PlaceR (StoragePlace tr slot (ArrayTV tv bd))`
+  >- (gvs[] >>
+      gvs[eval_result_typed_def, runtime_place_typed_storage] >>
+      Cases_on `bd` >>
+      gvs[result_array_length_def, return_def, bind_def, get_storage_backend_def,
+          get_accounts_def, get_transient_storage_def, AllCaseEqs(),
+          no_type_error_result_def]
+      >- (Cases_on `arg_ty` >>
+          gvs[evaluate_type_def, AllCaseEqs(), well_typed_builtin_app_def,
+              value_has_type_def, type_slot_size_def] >>
+          `n <= n * type_slot_size tv` by simp[] >> decide_tac)
+      >- (drule vyperStorageBackendTheory.get_storage_backend_state >> strip_tac >> gvs[] >>
+          `w2n (lookup_storage slot storage) < dimword(:256)` by
+            simp_tac(srw_ss())[wordsTheory.w2n_lt] >>
+          gvs[well_typed_builtin_app_def, evaluate_type_def, value_has_type_def]) >>
+      metis_tac[get_storage_backend_no_error]) >>
+  `result_array_length cx pv = do v <- read_result cx pv; result_array_length cx (Value v) od` by
+    (Cases_on `pv`
+     >- simp[FUN_EQ_THM, result_array_length_def, read_result_def, return_def, bind_def]
+     >- (rename1 `PlaceR p` >> namedCases_on `p` ["tr slot ptv", "mid path", "src iid path"]
+         >- (Cases_on `ptv` >>
+             gvs[result_array_length_def, FUN_EQ_THM, bind_def, read_result_def, return_def]) >>
+         simp[result_array_length_def, FUN_EQ_THM, bind_def, read_result_def, return_def]) >>
+     simp[FUN_EQ_THM, result_array_length_def, read_result_def, raise_def, bind_def]) >>
+  qpat_x_assum `result_array_length cx pv st = _` mp_tac >>
+  asm_rewrite_tac[] >> simp_tac(srw_ss())[bind_def] >>
+  Cases_on `read_result cx pv st` >>
+  rename1 `read_result cx pv st = (rr,rs)` >>
+  drule_all live_result_read_typed >> strip_tac >> gvs[] >>
+  Cases_on `rr`
+  >- (rename1 `read_result cx pv st = (INL v,st)` >>
+      simp_tac(srw_ss())[] >> strip_tac >>
+      `st' = st` by metis_tac[result_array_length_state] >> gvs[] >>
+      gvs[value_runtime_typed_def] >>
+      `value_result_typed (Value v) tv` by simp[value_result_typed_def] >>
+      Cases_on `res` >> simp[no_type_error_result_def]
+      >- (`well_formed_type_value tv` by metis_tac[evaluate_type_well_formed_type_value] >>
+          `x < dimword(:256)` by (drule_all Len_result_fits_uint256 >> simp[]) >>
+          gvs[well_typed_builtin_app_def, eval_result_typed_def,
+              evaluate_type_def, value_has_type_def]) >>
+      `well_formed_type_value tv` by metis_tac[evaluate_type_well_formed_type_value] >>
+      Cases_on `y` >> simp[no_type_error_result_def] >>
+      Cases_on `e` >> simp[no_type_error_result_def] >>
+      metis_tac[Len_result_array_length_no_type_error]) >>
+  simp_tac(srw_ss())[] >> strip_tac >> gvs[no_type_error_result_def]
 QED
 
 Resume eval_scc_type_sound_mutual[Expr_Builtin]:
@@ -6085,51 +5171,36 @@ Resume eval_scc_type_sound_mutual[Expr_Builtin]:
       qpat_x_assum `!s'' x t. _ /\ bt = Len ==> _`
         (qspecl_then [`st`,`()`,`st`] mp_tac) >>
       (impl_tac >- simp[type_check_def, assert_def]) >> strip_tac >>
-      qpat_x_assum `!env st res st'. _`
+      `well_typed_expr env (HD es)` by
+        (qpat_assum `well_typed_exprs env es` mp_tac >>
+         rpt (qpat_x_assum `!env st res st'. _` kall_tac) >>
+         qpat_x_assum `!s'' x t. _` kall_tac >>
+         Cases_on `es` >> gvs[Once well_typed_expr_def]) >>
+      `well_typed_builtin_app ty Len [expr_type (HD es)]` by
+        (rpt (qpat_x_assum `!env st res st'. _` kall_tac) >>
+         qpat_x_assum `!s'' x t. _` kall_tac >>
+         Cases_on `es` >> gvs[well_typed_builtin_app_def] >>
+         Cases_on `t` >> gvs[]) >>
+      qpat_x_assum `!env st res st'. _ ==> (well_typed_expr _ _ ==> _) /\ _`
         (qspecl_then [`env`,`st`,`arg_res`,`arg_st`] mp_tac) >>
       (impl_tac >- simp[]) >> strip_tac >>
+      qpat_x_assum `well_typed_expr env (HD es) ==> _` mp_tac >>
+      (impl_tac >- simp[]) >> strip_tac >>
+      qpat_x_assum `!env st res st'. _ ==> case res of INL pv => live_memory_result st' pv | INR _ => T`
+        (qspecl_then [`env`,`st`,`arg_res`,`arg_st`] mp_tac) >>
+      (impl_tac >- simp[]) >> strip_tac >>
+      rpt (qpat_x_assum `!env st res st'. _` kall_tac) >>
+      qpat_x_assum `!s'' x t. _` kall_tac >>
       Cases_on `arg_res`
       >- (rename1 `eval_expr cx (HD es) st = (INL arg_tv,arg_st)` >>
-          qpat_x_assum `well_typed_expr env (HD es) ==> _` mp_tac >>
-          (impl_tac >- (qpat_x_assum `well_typed_builtin_app ty bt (MAP expr_type es)` mp_tac >>
-                        Cases_on `es` >> simp[well_typed_builtin_app_def] >>
-                        Cases_on `t` >> gvs[well_typed_expr_def])) >>
-          simp_tac(srw_ss())[] >> strip_tac >>
-          Cases_on `toplevel_array_length cx arg_tv arg_st` >>
-          rename1 `toplevel_array_length cx arg_tv arg_st = (len_res,len_st)` >>
-          Cases_on `len_res`
-          >- (rename1 `toplevel_array_length cx arg_tv arg_st = (INL len,len_st)` >>
-              drule toplevel_array_length_state >> strip_tac >> gvs[] >>
-              strip_tac >> gvs[expr_result_typed_def, expr_runtime_typed_def,
-                               expr_type_def, toplevel_value_typed_Value] >>
-              conj_tac >- simp[no_type_error_result_def] >>
-              qexists_tac `BaseTV (UintT 256)` >>
-              conj_tac
-              >- (qpat_x_assum `well_typed_builtin_app ty Len (MAP expr_type es)` mp_tac >>
-                  Cases_on `es` >> simp[well_typed_builtin_app_def, evaluate_type_def] >>
-                  Cases_on `t` >> gvs[]) >>
-              irule Len_builtin_sound >>
-              qexistsl_tac [`tv`,`arg_tv`,`expr_type (HD es)`,`cx`,`arg_st`,`arg_st`,`get_tenv cx`,`ty`] >>
-              simp[] >>
-              qpat_x_assum `well_typed_builtin_app ty Len (MAP expr_type es)` mp_tac >>
-              Cases_on `es` >> simp[well_typed_builtin_app_def, evaluate_type_def] >>
-              Cases_on `t` >> gvs[]) >>
-          rename1 `toplevel_array_length cx arg_tv arg_st = (INR len_exn,len_st)` >>
-          drule toplevel_array_length_state >> strip_tac >> gvs[] >>
-          strip_tac >> gvs[no_type_error_result_def,
-                           expr_result_typed_def, expr_runtime_typed_def] >>
-          strip_tac >> spose_not_then assume_tac >> gvs[] >>
-          `well_formed_type_value tv` by metis_tac[evaluate_type_well_formed_type_value] >>
-          `well_typed_builtin_app ty Len [expr_type (HD es)]` by
-            (qpat_x_assum `well_typed_builtin_app ty Len (MAP expr_type es)` mp_tac >>
-             Cases_on `es` >> simp[well_typed_builtin_app_def] >>
-             Cases_on `t` >> gvs[]) >>
-          drule_all Len_toplevel_array_length_no_type_error >> simp[]) >>
-      qpat_x_assum `well_typed_expr env (HD es) ==> _` mp_tac >>
-      (impl_tac >- (qpat_x_assum `well_typed_builtin_app ty bt (MAP expr_type es)` mp_tac >>
-                    Cases_on `es` >> simp[well_typed_builtin_app_def] >>
-                    Cases_on `t` >> gvs[well_typed_expr_def])) >>
-      strip_tac >> strip_tac >> gvs[]) >>
+          gvs[] >>
+          Cases_on `result_array_length cx arg_tv arg_st` >>
+          rename1 `result_array_length cx arg_tv arg_st = (len_res,len_st)` >>
+          drule_all Len_live_result_sound >> strip_tac >> gvs[] >>
+          Cases_on `len_res` >>
+          simp_tac(srw_ss())[return_def, raise_def] >> strip_tac >>
+          gvs[no_type_error_result_def, expr_type_def]) >>
+      simp_tac(srw_ss())[] >> strip_tac >> gvs[]) >>
   qpat_assum `bt <> Len` (fn th => rewrite_tac[th]) >>
   qpat_assum `builtin_args_length_ok bt (LENGTH es)` (fn th => rewrite_tac[th]) >>
   simp_tac(srw_ss())[bind_def, ignore_bind_def, return_def, raise_def,
@@ -6139,9 +5210,11 @@ Resume eval_scc_type_sound_mutual[Expr_Builtin]:
   qpat_x_assum `!s'' x t. _ /\ bt <> Len ==> _`
     (qspecl_then [`st`,`()`,`st`] mp_tac) >>
   (impl_tac >- (simp[type_check_def, assert_def] >> metis_tac[])) >> strip_tac >>
-  qpat_x_assum `!env st res st'. _`
+  qpat_x_assum `!env st res st'. _ ==> _ /\ _ /\ _ /\ _ /\ case res of INL vs => exprs_runtime_typed env es vs | INR _ => T`
     (qspecl_then [`env`,`st`,`args_res`,`args_st`] mp_tac) >>
   (impl_tac >- simp[]) >> strip_tac >>
+  rpt (qpat_x_assum `!env st res st'. _` kall_tac) >>
+  qpat_x_assum `!s'' x t. _` kall_tac >>
   Cases_on `args_res`
   >- (
     rename1 `eval_exprs cx es st = (INL vs,args_st)` >>
@@ -6161,7 +5234,7 @@ Resume eval_scc_type_sound_mutual[Expr_Builtin]:
       strip_tac >>
       gvs[nested_return_value_case, no_type_error_result_def] >>
       gvs[expr_result_typed_def, expr_runtime_typed_def, expr_type_def,
-          toplevel_value_typed_Value] >>
+          value_result_typed_Value] >>
       mp_tac (Q.INST [`blt` |-> `bt`, `ts` |-> `MAP expr_type es`,
                        `acc` |-> `(args_st:evaluation_state).accounts`,
                        `tv` |-> `ret_tv`, `v` |-> `builtin_v`,
@@ -6207,9 +5280,10 @@ Resume eval_scc_type_sound_mutual[Expr_TypeBuiltin]:
   qpat_x_assum `!s'' x t. type_check _ _ _ = _ ==> _`
     (qspecl_then [`st`,`()`,`st`] mp_tac) >>
   (impl_tac >- simp[type_check_def, assert_def]) >> strip_tac >>
-  qpat_x_assum `!env st res st'. _`
+  qpat_x_assum `!env st res st'. _ ==> _ /\ _ /\ _ /\ _ /\ case res of INL vs => exprs_runtime_typed env es vs | INR _ => T`
     (qspecl_then [`env`,`st`,`args_res`,`args_st`] mp_tac) >>
   (impl_tac >- simp[]) >> strip_tac >>
+  rpt (qpat_x_assum `!env st res st'. _` kall_tac) >>
   Cases_on `args_res`
   >- (rename1 `eval_exprs cx es st = (INL vs,args_st)` >>
       qpat_x_assum `case INL vs of INL vs => exprs_runtime_typed env es vs | INR v1 => T`
@@ -6218,10 +5292,9 @@ Resume eval_scc_type_sound_mutual[Expr_TypeBuiltin]:
       >- (rename1 `evaluate_type_builtin cx tb typ vs = INL builtin_v` >>
           strip_tac >>
           gvs[lift_sum_def, return_def, no_type_error_result_def] >>
-          irule type_builtin_exprs_runtime_success_type_stmt_adapter >>
-          simp[] >>
-          qexistsl_tac [`cx`,`vs`] >>
-          simp[]) >>
+          simp_tac(srw_ss())[expr_type_def] >>
+          metis_tac[type_builtin_exprs_runtime_success_type_stmt_adapter,
+                    value_runtime_typed_def]) >>
       rename1 `evaluate_type_builtin cx tb typ vs = INR type_exn` >>
       strip_tac >>
       gvs[lift_sum_def, raise_def, no_type_error_result_def] >>
@@ -6233,79 +5306,50 @@ QED
 
 Resume eval_scc_type_sound_mutual[Expr_Pop]:
   rpt gen_tac >> strip_tac >>
-  `call_evaluation_safe cx (int_calls_target bt)` by (
-    qpat_assum `call_evaluation_safe cx (int_calls_expr (Pop v11 bt))` mp_tac >>
-    pure_rewrite_tac[int_calls_expr_def] >>
-    strip_tac >> first_assum ACCEPT_TAC) >>
-  (reverse conj_tac
-   >- (gen_tac >> strip_tac >>
-       gvs[Once well_typed_expr_def]) >>
-   strip_tac >>
-   drule well_typed_expr_Pop_dynamic_target_assignable >> strip_tac >>
-      qpat_x_assum `eval_expr cx (Pop v11 bt) st = (res,st')` mp_tac >>
-      simp_tac(srw_ss())[Once evaluate_def, bind_def] >>
-      Cases_on `eval_base_target cx bt st` >>
-      rename1 `eval_base_target cx bt st = (bt_res, st1)` >>
-      first_x_assum drule_all >> strip_tac >>
-      Cases_on `bt_res`
-      >- (gvs[no_type_error_result_def] >>
-          PairCases_on `x` >>
-          gvs[] >>
-          rename1 `type_place_target env bt = SOME (Type (ArrayT elem_ty (Dynamic n)))` >>
-          strip_tac >>
-          qpat_x_assum `do _ od st1 = (res,st')` mp_tac >>
-          simp[bind_apply, bind_def, return_def, ignore_bind_apply] >>
-          Cases_on `assign_target cx (BaseTargetV x0 x1) PopOp st1` >>
-          rename1 `assign_target cx (BaseTargetV loc sbs) PopOp st1 = (assign_res, st2)` >>
-          `runtime_consistent env cx st1` by simp[runtime_consistent_def] >>
-          `target_runtime_typed env cx st1 (BaseTarget bt)
-             (ArrayT elem_ty (Dynamic n)) (BaseTargetV loc sbs)` by (
-            simp[target_runtime_typed_def, target_value_shape_def,
-                 well_typed_atarget_def, well_typed_target_def] >>
-            qexists_tac `loc_vt` >> simp[]) >>
-          `?elem_tv. evaluate_type env.type_defs elem_ty = SOME elem_tv` by (
-            `?vt final_tv.
-               location_runtime_typed env cx st1 loc vt /\
-               target_path_type env vt sbs (Type (ArrayT elem_ty (Dynamic n))) /\
-               place_leaf_typed env vt sbs (ArrayT elem_ty (Dynamic n)) final_tv` by
-              metis_tac[target_runtime_typed_place_leaf_typed] >>
-            `evaluate_type env.type_defs (ArrayT elem_ty (Dynamic n)) = SOME final_tv` by
-              metis_tac[place_leaf_typed_evaluate_type] >>
-            Cases_on `evaluate_type env.type_defs elem_ty` >> gvs[evaluate_type_def]) >>
-          `assign_operation_runtime_typed env (ArrayT elem_ty (Dynamic n)) PopOp` by
-            metis_tac[stmt_assign_operation_runtime_typed_Pop_from_dynamic_array] >>
-          `assign_operation_matches_target_shape (BaseTargetV loc sbs) PopOp` by
-            simp[assign_operation_matches_target_shape_def] >>
-          `assign_target_assignable_context cx (BaseTargetV loc sbs) st1` by
-            metis_tac[target_runtime_typed_imp_assignable_context] >>
-          Cases_on `assign_res` >> simp[return_def, raise_def, lift_option_type_def]
-          >- suspend "Expr_Pop_assign_inl" >>
-          suspend "Expr_Pop_assign_inr") >>
-      strip_tac >> gvs[no_type_error_result_def])
-QED
-
-Resume eval_scc_type_sound_mutual[Expr_Pop_assign_inl]:
-  `runtime_consistent env cx st2` by (
-    drule_at(Pat`assign_target`) assign_target_preserves_runtime_consistent >>
-    disch_then $ drule_at(Pat`target_runtime_typed`) >>
-    simp[]) >>
-  `?v. x = SOME v /\ value_has_type elem_tv v` by
-    metis_tac[assign_target_pop_success_some_typed] >>
-  strip_tac >> gvs[return_def, expr_result_typed_def, expr_runtime_typed_def,
-                   toplevel_value_typed_def, runtime_consistent_def, expr_type_def]
-QED
-
-Resume eval_scc_type_sound_mutual[Expr_Pop_assign_inr]:
-  strip_tac >> gvs[] >>
-  `runtime_consistent env cx st'` by
-    metis_tac[assign_target_preserves_runtime_consistent_result] >>
-  gvs[runtime_consistent_def] >>
-  qspecl_then [`cx`, `BaseTargetV loc sbs`, `PopOp`, `st1`,
-               `INR y`, `st'`, `env`, `BaseTarget bt`,
-               `ArrayT elem_ty (Dynamic n)`] mp_tac assign_target_no_type_error >>
-  simp[no_type_error_result_def] >>
-  impl_tac >- simp[runtime_consistent_def] >>
-  simp[]
+  rename1 `eval_expr cx (Pop v11 bt) st = (res,st')` >>
+  `call_evaluation_safe cx (int_calls_target bt)` by
+    (qpat_assum `call_evaluation_safe cx (int_calls_expr (Pop v11 bt))` mp_tac >>
+     pure_rewrite_tac[int_calls_expr_def] >> strip_tac >> first_assum ACCEPT_TAC) >>
+  reverse conj_tac
+  >- (gen_tac >> strip_tac >> gvs[Once well_typed_expr_def]) >>
+  strip_tac >>
+  drule well_typed_expr_Pop_dynamic_target_assignable >> strip_tac >>
+  `well_typed_target env bt (ArrayT v11 (Dynamic n))` by simp[well_typed_target_def] >>
+  qpat_x_assum `eval_expr cx (Pop v11 bt) st = (res,st')` mp_tac >>
+  simp_tac(srw_ss())[Once evaluate_def, bind_def] >>
+  Cases_on `eval_target_place cx bt st` >>
+  rename1 `eval_target_place cx bt st = (target_res,st1)` >>
+  qpat_x_assum `!env ty st res st'. _ ==> state_well_typed _ /\ _`
+    (drule_all_then strip_assume_tac) >>
+  qpat_x_assum `!env ty st res st'. _ ==> case res of INL p => live_memory_result _ _ | INR _ => T`
+    (drule_all_then strip_assume_tac) >>
+  qpat_x_assum `!env ty st res st'. _ ==> case res of INL p => writable_place_result _ _ _ | INR _ => T`
+    (drule_all_then strip_assume_tac) >>
+  rpt (qpat_x_assum `!env ty st res st'. _` kall_tac) >>
+  Cases_on `target_res`
+  >- (rename1 `eval_target_place cx bt st = (INL p,st1)` >>
+      gvs[eval_result_typed_def, evaluate_type_def, AllCaseEqs()] >>
+      rename1 `evaluate_type env.type_defs v11 = SOME tv` >>
+      `runtime_consistent env cx st1` by simp[runtime_consistent_def] >>
+      `runtime_place_writable cx st1 p` by gvs[writable_place_result_def] >>
+      Cases_on `pop_place cx p st1` >>
+      rename1 `pop_place cx p st1 = (pop_res,pop_st)` >>
+      `runtime_consistent env cx pop_st /\ no_type_error_result pop_res` by
+        (irule pop_place_sound >> goal_assum (drule_at Any) >>
+         Cases_on `p` >> gvs[live_memory_result_def] >> metis_tac[]) >>
+      Cases_on `pop_res`
+      >- (rename1 `pop_place cx p st1 = (INL pv,pop_st)` >>
+          `case pv of Value v => value_has_type tv v
+             | PlaceR q => runtime_place_typed cx pop_st q tv
+             | HashMapRef _ _ _ _ => F` by
+            (irule pop_place_result_typed >>
+             goal_assum (drule_at (Pat `pop_place _ _ _ = _`)) >>
+             Cases_on `p` >> gvs[live_memory_result_def] >> metis_tac[]) >>
+          simp_tac(srw_ss())[] >> strip_tac >>
+          gvs[runtime_consistent_def, expr_type_def, eval_result_typed_def] >>
+          Cases_on `pv` >> gvs[]) >>
+      simp_tac(srw_ss())[] >> strip_tac >> gvs[runtime_consistent_def]) >>
+  simp_tac(srw_ss())[] >> strip_tac >> gvs[no_type_error_result_def]
 QED
 
 
@@ -7303,14 +6347,15 @@ Proof
   gvs[finally_def, ignore_bind_def, bind_def, return_def, raise_def,
       prod_CASE_rator, sum_CASE_rator] >>
   gvs[AllCaseEqs(), no_type_error_result_def] >>
+  `!exn st'. eval_stmts cxf body' pushed_st = (INR exn,st') ==>
+      exn <> BreakException /\ exn <> ContinueException` by
+    metis_tac[stmts_no_control_escape_eval_stmts_no_loop_control] >>
   Cases_on `eval_stmts cxf body' pushed_st` >>
   Cases_on `q` >>
   TRY (drule (cj 2 no_fallthrough_eval_no_success) >>
        disch_then (qspecl_then [`cxf`, `pushed_st`, `r`] mp_tac) >>
        simp[] >> NO_TAC) >>
   TRY (rename1 `eval_stmts cxf body' pushed_st = (INR y,_)` >>
-       `y <> BreakException /\ y <> ContinueException` by
-         metis_tac[stmts_no_control_escape_eval_stmts_no_loop_control] >>
        Cases_on `y`) >>
   gvs[try_def, handle_function_def, pop_function_def, set_scopes_def,
       release_nonreentrant_lock_def, get_transient_storage_def, update_transient_def,
@@ -7575,7 +6620,7 @@ Proof
     (drule_all safe_cast_preserves_well_typed >> simp[]) >>
   drule_all type_widens_to_value_has_type >> strip_tac >>
   simp[expr_result_typed_def, expr_runtime_typed_def,
-       toplevel_value_typed_def] >>
+       value_result_typed_def] >>
   metis_tac[well_typed_expr_not_hashmap_place]
 QED
 
@@ -7710,7 +6755,7 @@ Proof
         strip_tac >> simp[]) >>
       gvs[intcall_safe_cast_NoneTV_NoneV, lift_option_type_def,
           return_def, raise_def, expr_result_typed_def, expr_runtime_typed_def,
-          toplevel_value_typed_def, evaluate_type_def]) >>
+          value_result_typed_def, evaluate_type_def]) >>
     qpat_x_assum `!env1 ret_ty1 env2 st0 res0 st0'. _`
       (qspecl_then [`env_body`, `NoneT`, `env_after`,
                     `lock_st with scopes := [call_env]`,
@@ -7739,7 +6784,7 @@ Proof
       gvs[return_exception_typed_def, value_runtime_typed_def, evaluate_type_def] >>
     gvs[intcall_safe_cast_NoneTV_NoneV, lift_option_type_def,
         return_def, raise_def, expr_result_typed_def, expr_runtime_typed_def,
-        toplevel_value_typed_def, evaluate_type_def])
+        value_result_typed_def, evaluate_type_def])
   >- (
     `(!env1 ret_ty1 env2 st0 res0 st0'.
       type_stmts env1 ret_ty1 body' = SOME env2 /\
@@ -8036,10 +7081,11 @@ Proof
                            `()`, `lock_st'`, `lock_st'`, `cxf'`,
                            `pushed_st'`] mp_tac) >>
   impl_tac >- (
+    `LENGTH es <= LENGTH args /\ LENGTH args - LENGTH es <= LENGTH dflts` by
+      (qpat_x_assum `type_check _ "IntCall args length" r = _` mp_tac >>
+       simp[type_check_def, assert_def] >> IF_CASES_TAC >> gvs[] >> decide_tac) >>
     rpt conj_tac >>
     (first_assum ACCEPT_TAC ORELSE
-     (qpat_x_assum `type_check _ "IntCall args length" r = _` mp_tac >>
-      simp[type_check_def, assert_def] >> IF_CASES_TAC >> gvs[] >> decide_tac) ORELSE
      gvs[get_scopes_def, set_scopes_def, return_def])) >>
   disch_then (qspecl_then [`env1`, `ret_ty1`, `env2`, `st0`, `res0`, `st0'`] mp_tac) >>
   impl_tac >- (rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE gvs[])) >>
@@ -10053,25 +9099,25 @@ Resume eval_scc_type_sound_mutual[Expr_Call_IntCall]:
   qpat_x_assum
     `!s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20 args0
         sstup0 dflts0 sstup20 ret0 body0 s5 x5 t5.
-        _ ==>
-        !env0 st0 res0 st0'.
+        _ ==> ((!env0 st0 res0 st0'.
           well_typed_exprs env0 es /\ env_consistent env0 cx st0 /\
           state_well_typed st0 /\ context_well_typed cx /\
           accounts_well_typed st0.accounts /\ functions_well_typed cx /\
           call_evaluation_safe cx (int_calls_exprs es) /\
-          eval_exprs cx es st0 = (res0,st0') ==> _`
-    (mk_asm "actual_ih") >>
+          eval_exprs cx es st0 = (res0,st0') ==> _) /\ _)`
+    (fn th => (mk_asm "actual_package" th THEN
+               mk_asm "actual_ih" (cj 1 th))) >>
   qpat_x_assum
     `!s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20 args0
         sstup0 dflts0 sstup20 ret0 body0 s5 x5 t5 s6 vs0 t6 es0 cx0 s7 prev0 t7 s8 x8 t8.
-        _ ==>
-        !env0 st0 res0 st0'.
+        _ ==> ((!env0 st0 res0 st0'.
           well_typed_exprs env0 es0 /\ env_consistent env0 cx0 st0 /\
           state_well_typed st0 /\ context_well_typed cx0 /\
           accounts_well_typed st0.accounts /\ functions_well_typed cx0 /\
           call_evaluation_safe cx0 (int_calls_exprs es0) /\
-          eval_exprs cx0 es0 st0 = (res0,st0') ==> _`
-    (mk_asm "default_ih") >>
+          eval_exprs cx0 es0 st0 = (res0,st0') ==> _) /\ _)`
+    (fn th => (mk_asm "default_package" th THEN
+               mk_asm "default_ih" (cj 1 th))) >>
   qpat_x_assum
     `!s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20 args0
         sstup0 dflts0 sstup20 ret0 body0 s5 x5 t5 s6 vs0 t6 needed0 cxd0
@@ -10086,14 +9132,21 @@ Resume eval_scc_type_sound_mutual[Expr_Call_IntCall]:
           call_evaluation_safe cx0 (int_calls_stmts body0) /\
           eval_stmts cx0 body0 st0 = (res0,st0') ==> _`
     (mk_asm "body_ih") >>
-  MATCH_MP_TAC (Q.SPECL [`cx`, `env`, `st`, `res`, `st'`, `v16`,
-                         `src_id_opt`, `fn`, `es`, `v17`]
-    intcall_expr_sound_from_generated_ih) >>
-  rpt conj_tac >>
-  (asm "actual_ih" (fn th => MATCH_ACCEPT_TAC th) ORELSE
-   asm "default_ih" (fn th => MATCH_ACCEPT_TAC th) ORELSE
-   asm "body_ih" (fn th => MATCH_ACCEPT_TAC th) ORELSE
-   first_assum ACCEPT_TAC)
+  `state_well_typed st' /\ env_consistent env cx st' /\
+   accounts_well_typed st'.accounts /\ no_type_error_result res /\
+   (case res of
+    | INL tv => expr_result_typed env
+        (Call v16 (IntCall (src_id_opt,fn)) es v17) tv
+    | INR _ => T)` suffices_by
+    (strip_tac >> Cases_on `res` >>
+     gvs[expr_result_typed_def, expr_runtime_typed_def,
+         value_result_typed_def, eval_result_typed_def, expr_type_def]) >>
+  match_mp_tac intcall_expr_sound_from_generated_ih >>
+  qexists_tac `st` >>
+  conj_tac >- (asm "actual_ih" MATCH_ACCEPT_TAC) >>
+  conj_tac >- (asm "default_ih" MATCH_ACCEPT_TAC) >>
+  conj_tac >- (asm "body_ih" MATCH_ACCEPT_TAC) >>
+  simp[]
 QED
 
 (* ===== External and special call Resume blocks ===== *)
@@ -10110,7 +9163,9 @@ Resume eval_scc_type_sound_mutual[Expr_Call_ExtCall_result]:
   simp_tac(srw_ss())[Once evaluate_def, bind_def] >>
   Cases_on `eval_exprs cx es st` >>
   rename1 `eval_exprs cx es st = (args_res,args_st)` >>
-  first_x_assum drule_all >> strip_tac >>
+  qpat_x_assum `!env0 st0 res0 st0'. _ ==> _ /\ _ /\ _ /\ _ /\
+    (case res0 of INL vs => exprs_runtime_typed env0 es vs | INR _ => T)`
+    drule_all >> strip_tac >>
   Cases_on `args_res` >> gvs[no_type_error_result_def]
   >- (strip_tac >>
       `runtime_consistent env cx args_st` by simp[runtime_consistent_def] >>
@@ -10120,7 +9175,12 @@ Resume eval_scc_type_sound_mutual[Expr_Call_ExtCall_result]:
         qspecl_then [`es`, `expr_type`, `LENGTH fsig1`] mp_tac
           (Q.GENL [`xs`, `f`, `n`] MAP_HD_TAKE_DROP) >>
         simp[]) >>
-      drule_all eval_ext_call_result_sound >> simp[no_type_error_result_def]) >>
+      drule_all eval_ext_call_result_sound >>
+      disch_then (qspec_then `NONE` mp_tac) >>
+      strip_tac >> Cases_on `res` >>
+      gvs[no_type_error_result_def, expr_result_typed_def,
+          expr_runtime_typed_def, value_result_typed_def,
+          eval_result_typed_def, expr_type_def]) >>
   strip_tac >> gvs[]
 QED
 
@@ -10143,14 +9203,20 @@ Resume eval_scc_type_sound_mutual[Expr_Call_Send]:
     qpat_x_assum `!s'' x t. type_check _ "Send args" s'' = (INL x,t) ==> _`
       (qspecl_then [`st`, `()`, `st`] mp_tac) >>
     impl_tac >- simp[type_check_def, assert_def, return_def] >>
-    disch_then (qspecl_then [`env`, `st`, `args_res`, `args_st`] mp_tac) >>
+    disch_then (fn th =>
+      qspecl_then [`env`, `st`, `args_res`, `args_st`] mp_tac (cj 1 th)) >>
     simp[] >> strip_tac >>
     Cases_on `args_res` >> gvs[no_type_error_result_def]
     >- (strip_tac >>
         `runtime_consistent env cx args_st` by simp[runtime_consistent_def] >>
         `MAP expr_type es = [BaseT AddressT; BaseT (UintT 256)] ++
            (if has_gas then [BaseT (UintT 256)] else [])` by fs[] >>
-        drule_all eval_send_result_sound >> simp[no_type_error_result_def]) >>
+        drule_all eval_send_result_sound >>
+        disch_then (qspec_then `NONE` mp_tac) >>
+        strip_tac >> Cases_on `res` >>
+        gvs[no_type_error_result_def, expr_result_typed_def,
+            expr_runtime_typed_def, value_result_typed_def,
+            eval_result_typed_def, expr_type_def]) >>
     strip_tac >> gvs[]) >>
   rpt strip_tac >>
   qpat_x_assum `type_place_expr _ _ = SOME _` mp_tac >>
@@ -10172,9 +9238,11 @@ Resume eval_scc_type_sound_mutual[Expr_Call_RawCallTarget]:
     simp[] >>
     Cases_on `eval_exprs cx es st` >>
     rename1 `eval_exprs cx es st = (args_res,args_st)` >>
-    first_x_assum drule_all >> strip_tac >>
-    Cases_on `args_res` >> gvs[no_type_error_result_def]
-    >> FIRST [(
+    qpat_x_assum `!env0 st0 res0 st0'. _ ==> _ /\ _ /\ _ /\ _ /\
+      (case res0 of INL vs => exprs_runtime_typed env0 es vs | INR _ => T)`
+      drule_all >> strip_tac >>
+    (Cases_on `args_res`
+    >- (gvs[no_type_error_result_def] >>
       rename1 `exprs_runtime_typed env es vs` >>
       mp_tac raw_call_args_runtime_typed_dest >>
       impl_tac >- simp[] >>
@@ -10192,8 +9260,13 @@ Resume eval_scc_type_sound_mutual[Expr_Call_RawCallTarget]:
         eval_raw_call_result_sound) >>
       impl_tac >- simp[] >> strip_tac >>
       Cases_on `res` >>
-      gvs[runtime_consistent_def, no_type_error_result_def, expr_type_def]),
-      strip_tac >> gvs[]])) >>
+      gvs[runtime_consistent_def, no_type_error_result_def, expr_type_def] >>
+      qpat_x_assum `!e. expr_type e = raw_call_return_type flags ==> _`
+        (qspec_then `Literal (raw_call_return_type flags) (IntL 0)` mp_tac) >>
+      simp[expr_type_def, expr_result_typed_def, expr_runtime_typed_def,
+           value_result_typed_def] >>
+      strip_tac >> gvs[eval_result_typed_def]) >>
+      gvs[no_type_error_result_def] >> strip_tac >> gvs[]))) >>
   rpt strip_tac >> gvs[Once well_typed_expr_def]
 QED
 
@@ -10211,9 +9284,11 @@ Resume eval_scc_type_sound_mutual[Expr_Call_RawCallCalldataTarget]:
       type_check_def, assert_def, return_def, raise_def, lift_option_type_def] >>
     Cases_on `eval_exprs cx es st` >>
     rename1 `eval_exprs cx es st = (args_res,args_st)` >>
-    first_x_assum drule_all >> strip_tac >>
-    Cases_on `args_res` >> gvs[no_type_error_result_def]
-    >> FIRST [(
+    qpat_x_assum `!env0 st0 res0 st0'. _ ==> _ /\ _ /\ _ /\ _ /\
+      (case res0 of INL vs => exprs_runtime_typed env0 es vs | INR _ => T)`
+      drule_all >> strip_tac >>
+    (Cases_on `args_res`
+    >- (gvs[no_type_error_result_def] >>
       drule_all raw_call_calldata_args_runtime_typed_dest >> strip_tac >>
       `((flags.rcf_is_delegate \/ flags.rcf_is_static) ==> amount = 0)` by (
         strip_tac >>
@@ -10230,8 +9305,13 @@ Resume eval_scc_type_sound_mutual[Expr_Call_RawCallCalldataTarget]:
         eval_raw_call_result_sound) >>
       impl_tac >- simp[] >> strip_tac >>
       Cases_on `res` >>
-      gvs[runtime_consistent_def, no_type_error_result_def, expr_type_def]),
-      strip_tac >> gvs[]])) >>
+      gvs[runtime_consistent_def, no_type_error_result_def, expr_type_def] >>
+      qpat_x_assum `!e. expr_type e = raw_call_return_type flags ==> _`
+        (qspec_then `Literal (raw_call_return_type flags) (IntL 0)` mp_tac) >>
+      simp[expr_type_def, expr_result_typed_def, expr_runtime_typed_def,
+           value_result_typed_def] >>
+      strip_tac >> gvs[eval_result_typed_def]) >>
+      gvs[no_type_error_result_def] >> strip_tac >> gvs[]))) >>
   rpt strip_tac >> gvs[Once well_typed_expr_def]
 QED
 
@@ -10250,7 +9330,9 @@ Resume eval_scc_type_sound_mutual[Expr_Call_RawLog]:
     simp[] >>
     Cases_on `eval_exprs cx es st` >>
     rename1 `eval_exprs cx es st = (args_res,args_st)` >>
-    first_x_assum drule_all >> strip_tac >>
+    qpat_x_assum `!env0 st0 res0 st0'. _ ==> _ /\ _ /\ _ /\ _ /\
+      (case res0 of INL vs => exprs_runtime_typed env0 es vs | INR _ => T)`
+      drule_all >> strip_tac >>
     Cases_on `args_res` >> gvs[no_type_error_result_def]
     >- (
       rename1 `exprs_runtime_typed env es vs` >>
@@ -10265,7 +9347,10 @@ Resume eval_scc_type_sound_mutual[Expr_Call_RawLog]:
         mp_tac raw_log_tail_result_sound_simp >>
       asm "topics_bound" (fn th =>
         simp[th, type_check_def, bind_def, ignore_bind_def, assert_def,
-             return_def, runtime_consistent_def])) >>
+             return_def, runtime_consistent_def]) >>
+      strip_tac >> Cases_on `res` >>
+      gvs[expr_result_typed_def, expr_runtime_typed_def,
+          value_result_typed_def, eval_result_typed_def, expr_type_def]) >>
     strip_tac >> gvs[]) >>
   rpt strip_tac >> gvs[Once well_typed_expr_def]
 QED
@@ -10285,7 +9370,9 @@ Resume eval_scc_type_sound_mutual[Expr_Call_RawRevert]:
     simp[] >>
     Cases_on `eval_exprs cx es st` >>
     rename1 `eval_exprs cx es st = (args_res,args_st)` >>
-    first_x_assum drule_all >> strip_tac >>
+    qpat_x_assum `!env0 st0 res0 st0'. _ ==> _ /\ _ /\ _ /\ _ /\
+      (case res0 of INL vs => exprs_runtime_typed env0 es vs | INR _ => T)`
+      drule_all >> strip_tac >>
     Cases_on `args_res` >> gvs[no_type_error_result_def]
     >- (
       rename1 `exprs_runtime_typed env es vs` >>
@@ -10315,14 +9402,19 @@ Resume eval_scc_type_sound_mutual[Expr_Call_SelfDestructTarget]:
     simp[] >>
     Cases_on `eval_exprs cx es st` >>
     rename1 `eval_exprs cx es st = (args_res,args_st)` >>
-    first_x_assum drule_all >> strip_tac >>
+    qpat_x_assum `!env0 st0 res0 st0'. _ ==> _ /\ _ /\ _ /\ _ /\
+      (case res0 of INL vs => exprs_runtime_typed env0 es vs | INR _ => T)`
+      drule_all >> strip_tac >>
     Cases_on `args_res` >> gvs[no_type_error_result_def]
     >- (
       rename1 `exprs_runtime_typed env es vs` >>
       strip_tac >>
       qspecl_then [`env`, `cx`, `es`, `vs`, `args_st`, `res`, `st'`]
         mp_tac selfdestruct_tail_result_sound_simp >>
-      simp[type_check_def, assert_def, runtime_consistent_def]) >>
+      simp[type_check_def, assert_def, runtime_consistent_def] >>
+      strip_tac >> Cases_on `res` >>
+      gvs[expr_result_typed_def, expr_runtime_typed_def,
+          value_result_typed_def, eval_result_typed_def, expr_type_def]) >>
     strip_tac >> gvs[]) >>
   rpt strip_tac >> gvs[Once well_typed_expr_def]
 QED
@@ -10353,7 +9445,11 @@ Resume eval_scc_type_sound_mutual[Expr_Call_CreateTarget]:
       Cases_on `eval_exprs cx (TAKE (if has_salt then 4 else 3) es) st` >>
       rename1 `eval_exprs cx (TAKE (if has_salt then 4 else 3) es) st =
                  (prefix_res,prefix_st)` >>
-      first_x_assum drule_all >> strip_tac >>
+      qpat_x_assum `!s0 prefix0 t0 s1 code0 t1. _ ==> _`
+        (mk_asm "suffix_package") >>
+      qpat_x_assum `!env0 st0 res0 st0'. _ ==> _ /\ _ /\ _ /\ _ /\
+        (case res0 of INL vs => exprs_runtime_typed env0 (TAKE _ es) vs | INR _ => T)`
+        drule_all >> strip_tac >>
       Cases_on `prefix_res` >> gvs[no_type_error_result_def]
       >- (
         rename1 `exprs_runtime_typed env
@@ -10372,7 +9468,11 @@ Resume eval_scc_type_sound_mutual[Expr_Call_CreateTarget]:
           Cases_on `eval_exprs cx (DROP (if has_salt then 4 else 3) es) prefix_st` >>
           rename1 `eval_exprs cx (DROP (if has_salt then 4 else 3) es) prefix_st =
                      (suffix_res,suffix_st)` >>
-          first_x_assum drule_all >> strip_tac >>
+          asm "suffix_package" drule_all >>
+          disch_then (fn th => assume_tac (cj 1 th)) >>
+          qpat_x_assum `!env0 st0 res0 st0'. _ ==> _ /\ _ /\ _ /\ _ /\
+            (case res0 of INL vs => exprs_runtime_typed env0 (DROP _ es) vs | INR _ => T)`
+            drule_all >> strip_tac >>
           Cases_on `suffix_res` >> gvs[no_type_error_result_def]
           >- (
             rename1 `exprs_runtime_typed env
@@ -10383,7 +9483,10 @@ Resume eval_scc_type_sound_mutual[Expr_Call_CreateTarget]:
               simp[runtime_consistent_def] >>
             strip_tac >>
             drule_all create_tail_result_sound_simp >>
-            simp[no_type_error_result_def]) >>
+            simp[no_type_error_result_def] >>
+            strip_tac >> Cases_on `res` >>
+            gvs[expr_result_typed_def, expr_runtime_typed_def,
+                value_result_typed_def, eval_result_typed_def, expr_type_def]) >>
           strip_tac >> gvs[]) >>
         strip_tac >> gvs[] >>
         metis_tac[check_create_blueprint_no_type_error]) >>
@@ -10396,13 +9499,18 @@ Resume eval_scc_type_sound_mutual[Expr_Call_CreateTarget]:
     simp[] >>
     Cases_on `eval_exprs cx es st` >>
     rename1 `eval_exprs cx es st = (args_res,args_st)` >>
-    first_x_assum drule_all >> strip_tac >>
+    qpat_x_assum `!env0 st0 res0 st0'. _ ==> _ /\ _ /\ _ /\ _ /\
+      (case res0 of INL vs => exprs_runtime_typed env0 es vs | INR _ => T)`
+      drule_all >> strip_tac >>
     Cases_on `args_res` >> gvs[no_type_error_result_def]
     >- (
       `runtime_consistent env cx args_st` by simp[runtime_consistent_def] >>
       strip_tac >>
       drule_all create_tail_result_sound_simp >>
-      simp[no_type_error_result_def]) >>
+      simp[no_type_error_result_def] >>
+      strip_tac >> Cases_on `res` >>
+      gvs[expr_result_typed_def, expr_runtime_typed_def,
+          value_result_typed_def, eval_result_typed_def, expr_type_def]) >>
     strip_tac >> gvs[])) >>
   rpt strip_tac >>
   qpat_x_assum `type_place_expr env (Call _ _ _ _) = SOME _` mp_tac >>
@@ -10427,391 +9535,182 @@ Resume eval_scc_type_sound_mutual[Exprs_cons]:
   simp_tac(srw_ss())[Once evaluate_def, bind_def, return_def] >>
   Cases_on `eval_expr cx e st` >>
   rename1 `eval_expr cx e st = (r1,st1)` >>
-  first_x_assum drule_all >> strip_tac >>
+  qpat_x_assum `!env0 st0 res0 st0'. _ ==>
+    (well_typed_expr env0 e ==> _) /\ _` drule_all >>
+  strip_tac >>
   Cases_on `r1`
   >- (
-    Cases_on `materialise cx x st1` >>
-    rename1 `materialise cx x st1 = (mr,stm)` >>
+    `live_memory_result st1 x` by (
+      qpat_x_assum `!env st res st'. _ ==> case res of INL pv => live_memory_result _ _ | INR _ => T`
+        (qspecl_then [`env`,`st`,`INL x`,`st1`] mp_tac) >>
+      (impl_tac >- (conj_tac >- (disj1_tac >> first_assum ACCEPT_TAC) >> simp[])) >>
+      simp[]) >>
+    qpat_x_assum `well_typed_expr env e ==> _` drule >>
+    simp_tac(srw_ss())[] >> strip_tac >>
+    `runtime_consistent env cx st1` by simp[runtime_consistent_def] >>
+    Cases_on `read_result cx x st1` >>
+    rename1 `read_result cx x st1 = (mr,stm)` >>
+    drule_all live_result_read_typed >> strip_tac >> gvs[] >>
     Cases_on `mr`
     >- (
-      `stm = st1` by metis_tac[materialise_state] >> gvs[] >>
       Cases_on `eval_exprs cx es st1` >>
       rename1 `eval_exprs cx es st1 = (r2,st2)` >>
-      first_x_assum drule_all >> strip_tac >>
+      qpat_x_assum `!s tv t sr v tr. _ ==> _ /\ _` drule_all >>
+      disch_then (strip_assume_tac o cj 1) >>
+      qpat_x_assum `!env st res st'. _ ==> _ /\ _ /\ _ /\ _ /\
+        (case res of INL vs => exprs_runtime_typed _ _ vs | INR _ => T)`
+        drule_all >> strip_tac >>
       Cases_on `r2` >> gvs[no_type_error_result_def]
-      >- (
-        strip_tac >> gvs[exprs_runtime_typed_def, expr_result_typed_def,
-          expr_runtime_typed_def] >>
-        drule_at(Pat`materialise`) materialise_preserves_value_type >>
-        simp[] >> strip_tac >>
-        qexists_tac `tv::tvs` >> simp[] >>
-        metis_tac[evaluate_type_well_formed_type_value]) >>
+      >- (strip_tac >>
+          gvs[exprs_runtime_typed_def, value_runtime_typed_def] >>
+          qexists_tac `tv::tvs` >> simp[]) >>
       strip_tac >> gvs[]) >>
-    strip_tac >> gvs[] >>
-    `st' = st1` by metis_tac[materialise_state] >> gvs[] >>
-    rw[no_type_error_result_def] >>
-    drule_all expr_result_typed_materialise_no_type_error >> simp[]) >>
-  strip_tac >> gvs[] >>
-  rpt (pop_assum mp_tac) >> rpt strip_tac >>
-  fs[no_type_error_result_def]
+    strip_tac >> gvs[no_type_error_result_def]) >>
+  strip_tac >> gvs[no_type_error_result_def]
 QED
 
-(* Original TypedTrace had 43 roots (before markerLib's shared-label
-   conjunction). Every old root is now suspended once, in induction order.
-   Print the actual evaluation equation, not a nested IH's evaluator. *)
-val trace_root_labels = List.tabulate (43, fn i => "TraceRoot" ^ Int.toString (i+1));
+(* Each transition root has exactly one semantic key and one suspended goal. *)
+val trace_root_labels = [
+  "Trace_Target", "Trace_Base_SubscriptTarget", "Trace_Base_AttributeTarget",
+  "Trace_Base_TopLevelNameTarget", "Trace_Base_NameTarget",
+  "Trace_Exprs_cons", "Trace_Exprs_nil",
+  "Trace_Expr_Call_CreateTarget", "Trace_Expr_Call_SelfDestructTarget",
+  "Trace_Expr_Call_RawRevert", "Trace_Expr_Call_RawLog",
+  "Trace_Expr_Call_RawCallCalldataTarget", "Trace_Expr_Call_RawCallTarget",
+  "Trace_Expr_Call_IntCall", "Trace_Expr_Call_ExtCall", "Trace_Expr_Call_Send",
+  "Trace_Expr_TypeBuiltin", "Trace_Expr_Pop", "Trace_Expr_Builtin",
+  "Trace_Expr_Attribute", "Trace_Expr_Subscript", "Trace_Expr_StructLit",
+  "Trace_Expr_Literal", "Trace_Expr_IfExp", "Trace_Expr_FlagMember",
+  "Trace_Expr_TopLevelName", "Trace_Expr_Name"];
 val _ = let
   val SOME (_,parent) = markerLib.lookup_suspension "eval_scc_type_sound_mutual"
   fun check label =
     let val roots = markerLib.extract_suspended_goal [parent] label
         val _ = if length roots = 1 then () else raise Fail ("non-singleton " ^ label)
         val (_,tm) = markerLib.resumption_to_goal roots
-        val body = #2 (strip_forall tm)
-        val equation = List.last (strip_conj (#1 (dest_imp body)))
-          handle HOL_ERR _ => body
-    in print ("Singleton TypedTrace obligation " ^ label ^ ": " ^
-         term_to_string equation ^ "\n") end
-  val _ = if length (!trace_root_inventory) = 43 then ()
-          else raise Fail "TypedTrace root inventory changed"
+        val _ = if trace_root_key tm = label then ()
+                else raise Fail ("Wrong transition key: " ^ label)
+    in print ("Singleton transition obligation " ^ label ^ "\n") end
+  val actual = map #1 (!trace_root_inventory)
+  val _ = if List.all (fn key => List.exists (fn x => x = key) actual) trace_root_labels
+             andalso List.all (fn key => List.exists (fn x => x = key) trace_root_labels) actual
+          then () else raise Fail "Transition inventory mismatch"
 in List.app check trace_root_labels end;
 
-(* Shared Trace routing tree. The local suspend composes handlers inline;
-   blueprint evaluation uses an explicit marker for its guarded stages. *)
+(* The semantic root selects its handler before any recursive equation unfolds. *)
+fun trace_value_start_tac g = (
+  rpt gen_tac >> strip_tac >>
+  IF (qpat_assum `type_place_expr _ _ = SOME _` (K all_tac))
+    (qpat_x_assum `type_place_expr _ _ = SOME _` mp_tac >>
+     simp[NoAsms, Once well_typed_expr_def])
+    all_tac) g;
+
 fun trace_result_tac label g = let val suspend = trace_result_tac in
   (case label of
-  "TypedTrace" => (rpt gen_tac >> strip_tac >>
-  TRY (qpat_x_assum `eval_exprs _ [] _ = _` mp_tac >>
-       simp[Once evaluate_def, return_def] >> strip_tac >> gvs[] >>
-       irule typed_scope_transition_refl >> NO_TAC) >>
-  IF (qpat_assum `eval_target_place _ _ _ = _` (K all_tac))
-     (suspend "TraceTarget") all_tac >>
-  TRY (irule typed_scope_transition_scopes >> simp[] >> NO_TAC) >>
-  suspend "TraceRemaining"
-)
+    "Trace_Target" => (rpt gen_tac >> strip_tac >> suspend "TraceTarget")
+  | "Trace_Base_NameTarget" => (rpt gen_tac >> strip_tac >>
+      qpat_x_assum `eval_base_place _ _ _ = _` mp_tac >>
+      simp[NoAsms, Once evaluate_def, get_scopes_def, type_check_def,
+           assert_def, ignore_bind_def, bind_def, return_def, raise_def,
+           AllCaseEqs()] >> strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+      irule typed_scope_transition_refl)
+  | "Trace_Base_TopLevelNameTarget" => (rpt gen_tac >> strip_tac >>
+      qpat_x_assum `eval_base_place _ _ _ = _` mp_tac >>
+      rewrite_tac[Once evaluate_def] >> strip_tac >>
+      drule lookup_global_state >> strip_tac >> gvs[] >>
+      irule typed_scope_transition_refl)
+  | "Trace_Base_AttributeTarget" => (rpt gen_tac >> strip_tac >>
+      suspend "TraceBaseAttribute")
+  | "Trace_Base_SubscriptTarget" => (rpt gen_tac >> strip_tac >>
+      markerLib.suspend "Trace_Base_Subscript_Selection")
+  | "Trace_Exprs_nil" => (rpt gen_tac >> strip_tac >>
+      qpat_x_assum `eval_exprs _ [] _ = _` mp_tac >>
+      simp[Once evaluate_def, return_def] >> strip_tac >> gvs[] >>
+      irule typed_scope_transition_refl)
+  | "Trace_Exprs_cons" => (rpt gen_tac >> strip_tac >> suspend "TraceExprsCons")
+  | "Trace_Expr_Name" => (rpt gen_tac >> strip_tac >>
+      qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+      simp[NoAsms, Once evaluate_def, get_scopes_def, type_check_def,
+           assert_def, ignore_bind_def, bind_def, return_def, raise_def,
+           AllCaseEqs()] >> strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+      irule typed_scope_transition_refl)
+  | "Trace_Expr_TopLevelName" => (rpt gen_tac >> strip_tac >>
+      qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+      rewrite_tac[Once evaluate_def] >> strip_tac >>
+      drule lookup_global_state >> strip_tac >> gvs[] >>
+      irule typed_scope_transition_refl)
+  | "Trace_Expr_FlagMember" => (rpt gen_tac >> strip_tac >>
+      qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+      simp[NoAsms, Once evaluate_def, lift_option_type_def,
+           return_def, raise_def, AllCaseEqs()] >> strip_tac >>
+      rpt BasicProvers.VAR_EQ_TAC >> irule typed_scope_transition_refl)
+  | "Trace_Expr_Literal" => (rpt gen_tac >> strip_tac >>
+      qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+      simp[Once evaluate_def, return_def] >> strip_tac >> gvs[] >>
+      irule typed_scope_transition_refl)
+  | "Trace_Expr_Call_ExtCall" => (trace_value_start_tac >>
+      markerLib.suspend "Trace_ExtCall_Operands")
+  | "Trace_Expr_Call_IntCall" => (trace_value_start_tac >> markerLib.suspend "Trace_IntCall_Operands")
+  | "Trace_Expr_Call_CreateTarget" => (trace_value_start_tac >>
+      markerLib.suspend "Trace_Create_Operands")
+  | "Trace_Expr_Call_Send" => (trace_value_start_tac >> suspend "TraceSend")
+  | "Trace_Expr_Call_RawLog" => (trace_value_start_tac >> suspend "TraceRawLog")
+  | "Trace_Expr_Call_RawRevert" => (trace_value_start_tac >> suspend "TraceRawRevert")
+  | "Trace_Expr_Call_SelfDestructTarget" => (trace_value_start_tac >> suspend "TraceSelfDestruct")
+  | "Trace_Expr_Call_RawCallCalldataTarget" => (trace_value_start_tac >> suspend "TraceRawCalldata")
+  | "Trace_Expr_Call_RawCallTarget" => (trace_value_start_tac >> suspend "TraceRawCall")
+  | "Trace_Expr_TypeBuiltin" => (trace_value_start_tac >> suspend "TraceTypeBuiltin")
+  | "Trace_Expr_Builtin" => (trace_value_start_tac >> suspend "TraceBuiltin")
+  | "Trace_Expr_StructLit" => (trace_value_start_tac >> suspend "TraceStructLit")
+  | "Trace_Expr_Attribute" => (rpt gen_tac >> strip_tac >>
+      markerLib.suspend "Trace_Attribute_Selection")
+  | "Trace_Expr_Subscript" => (rpt gen_tac >> strip_tac >>
+      suspend "TraceExprSubscript")
+  | "Trace_Expr_IfExp" => (trace_value_start_tac >> suspend "TraceExprIfExp")
+  | "Trace_Expr_Pop" => (rpt gen_tac >> strip_tac >>
+      markerLib.suspend "Trace_Pop_Target")
   | "TraceTarget" => (
-  qpat_x_assum `eval_target_place _ _ _ = _` mp_tac >>
-  Cases_on `eval_base_place cx bt st` >>
-  rename1 `eval_base_place cx bt st = (base_res,mid)` >>
-  Cases_on `base_res` >>
-  simp[Once evaluate_def, bind_def, get_place_def, AllCaseEqs()] >>
-  strip_tac >> gvs[well_typed_target_def] >>
-  imp_res_tac vyperPlaceFramesTheory.get_place_state >> rpt BasicProvers.VAR_EQ_TAC >>
-  qpat_x_assum `!env vt st res st'. _ ==> typed_scope_transition _ _` drule_all >>
-  simp[]
-)
-  | "TraceRemaining" => (
-  TRY (qpat_x_assum `type_place_expr _ _ = SOME _` mp_tac >>
-       simp[NoAsms, Once well_typed_expr_def] >> NO_TAC) >>
-  TRY (qpat_x_assum `eval_place _ _ _ = _` mp_tac >>
-       simp[NoAsms, Once evaluate_def, bind_def, return_def, AllCaseEqs()] >>
-       strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
-       qpat_x_assum `!env st res st'. _ ==> typed_scope_transition _ _`
-         (qspec_then `env` mp_tac) >>
-       rpt (first_x_assum (fn th => if is_forall (concl th) then kall_tac th else NO_TAC)) >>
-       simp[] >> NO_TAC) >>
-  IF (rename1 `Call _ (IntCall _) _ _`) (suspend "TraceIntCall") all_tac >>
-  IF (rename1 `Call _ (CreateTarget _ _ _) _ _`) (suspend "TraceCreate") all_tac >>
-  suspend "TraceLater"
-)
-  | "TraceCreate" => (
-  drule create_call_evaluation_safe_args >> strip_tac >>
-  qpat_x_assum `well_typed_expr _ _` mp_tac >>
-  simp[NoAsms, Once well_typed_expr_def] >> strip_tac >>
-  Cases_on `kind` >> gvs[] >>
-  TRY (rename1 `CreateFromBlueprint raw_args` >> markerLib.suspend "TraceCreateBlueprint") >>
-  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-  simp[NoAsms, Once evaluate_def, bind_def, AllCaseEqs()] >>
-  strip_tac >>
-  gvs[int_calls_expr_def] >>
-  qpat_x_assum `!env st res st'. _ ==> typed_scope_transition _ _` drule_all >>
-  strip_tac >>
-  imp_res_tac vyperCreateFrameTheory.eval_create_preserves_scopes_immutables >>
-  rpt (first_x_assum (fn th => if is_forall (concl th) then kall_tac th else NO_TAC)) >>
-  metis_tac[typed_scope_transition_trans, typed_scope_transition_scopes]
-)
-  | "TraceLater" => (
-  IF (rename1 `Call _ (ExtCall _ _ _ _) _ _`) (suspend "TraceExtCall") all_tac >>
-  IF (qpat_assum `eval_exprs _ (_::_) _ = _` (K all_tac))
-     (suspend "TraceExprsCons") all_tac >>
-  suspend "TraceOther"
-)
-  | "TraceExprsCons" => (
-  qpat_x_assum `well_typed_exprs env (e::es)` mp_tac >>
-  simp[NoAsms, Once well_typed_expr_def] >> strip_tac >>
-  drule exprs_cons_call_evaluation_safe_head >> strip_tac >>
-  drule exprs_cons_call_evaluation_safe_tail >> strip_tac >>
-  qpat_x_assum `eval_exprs _ (_::_) _ = _` mp_tac >>
-  simp[NoAsms, Once evaluate_def, bind_def, return_def, AllCaseEqs()] >>
-  strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
-  qpat_x_assum `!env st res st'. _ ==> typed_scope_transition _ _`
-    (drule_at (Pat `eval_expr _ _ _ = _`)) >>
-  disch_then (qspec_then `env` mp_tac) >>
-  (impl_tac >- (rpt conj_tac >> TRY disj1_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
-  first_x_assum drule_all >>
-  disch_then (mp_tac o CONJUNCT1) >> disch_then drule >> strip_tac >>
-  imp_res_tac materialise_state >> rpt BasicProvers.VAR_EQ_TAC >>
-  TRY (first_assum ACCEPT_TAC) >>
-  first_x_assum drule_all >> disch_then (mp_tac o CONJUNCT2) >>
-  disch_then drule_all >> strip_tac >>
-  rpt (first_x_assum (fn th => if is_forall (concl th) then kall_tac th else NO_TAC)) >>
-  metis_tac[typed_scope_transition_trans]
-)
-  | "TraceOther" => (
-  TRY (FIRST [qpat_x_assum `eval_place _ _ _ = _` mp_tac,
-              qpat_x_assum `eval_base_place _ _ _ = _` mp_tac,
-              qpat_x_assum `eval_base_target _ _ _ = _` mp_tac,
-              qpat_x_assum `eval_expr _ _ _ = _` mp_tac] >>
-       simp[NoAsms, Once evaluate_def, get_scopes_def, type_check_def,
-            return_def, raise_def, bind_def, ignore_bind_def, AllCaseEqs()] >>
-       strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
-       TRY (irule typed_scope_transition_refl >> NO_TAC) >>
-       imp_res_tac vyperPlaceFramesTheory.lookup_global_place_state >>
-       rpt BasicProvers.VAR_EQ_TAC >>
-       irule typed_scope_transition_refl >> NO_TAC) >>
-  IF (qpat_assum `eval_place _ (Name _ _) _ = _` (K all_tac))
-     (suspend "TraceName") all_tac >>
-  suspend "TraceRest"
-)
-  | "TraceName" => (
-  qpat_x_assum `eval_place _ _ _ = _` mp_tac >>
-  simp[NoAsms, Once evaluate_def, get_scopes_def, type_check_def,
-       assert_def, ignore_bind_def, bind_def, return_def, raise_def, AllCaseEqs()] >>
-  strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
-  irule typed_scope_transition_refl
-)
-  | "TraceRest" => (
-  TRY (qpat_x_assum `eval_base_place _ (NameTarget _) _ = _` mp_tac >>
-       simp[NoAsms, Once evaluate_def, get_scopes_def, type_check_def, assert_def,
-            ignore_bind_def, bind_def, return_def, raise_def, AllCaseEqs()] >>
-       strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
-       irule typed_scope_transition_refl >> NO_TAC) >>
-  TRY (drule_at (Pat `f st = _`) typed_scope_spec_plain_run >>
-       simp[NoAsms] >> NO_TAC) >>
-  suspend "TracePending"
-)
-  | "TracePending" => (
-  IF (rename1 `Pop _ _`) (suspend "TracePop") all_tac >>
-  suspend "TraceCompound"
-)
-  | "TracePop" => (
-  qpat_x_assum `well_typed_expr _ _` mp_tac >>
-  simp[NoAsms, Once well_typed_expr_def] >> strip_tac >>
-  fs[int_calls_expr_def] >>
-  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-  simp[NoAsms, Once evaluate_def, bind_def, return_def, AllCaseEqs()] >>
-  strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
-  qpat_x_assum `!env vt st res st'. _ ==> typed_scope_transition _ _` drule_all >>
-  strip_tac >> first_x_assum drule_all >> strip_tac >>
-  PairCases_on `x` >>
-  gvs[bind_def, lift_option_type_def, return_def, raise_def, AllCaseEqs()] >>
-  TRY (rename1 `(case popped of NONE => _ | SOME _ => _) _ = _` >>
-       Cases_on `popped` >> gvs[return_def, raise_def]) >>
-  suspend "TracePopOperation"
-)
-  | "TracePopOperation" => (
-  drule_at (Pat `assign_target _ _ _ _ = _`) assign_pop_typed_transition >>
-  disch_then drule_all >> strip_tac >>
-  TRY (irule typed_scope_transition_trans >> goal_assum drule >> simp[] >> NO_TAC) >>
-  suspend "TracePopSuffix"
-)
-  | "TracePopSuffix" => ( Cases_on `popped` >> gvs[return_def, raise_def] >>
-  metis_tac[typed_scope_transition_trans]
-)
-  | "TraceCompound" => (
-  IF (qpat_assum `eval_place _ (Attribute _ _ _) _ = _` (K all_tac))
-     (suspend "TracePlaceAttribute") all_tac >>
-  suspend "TraceCompoundRest"
-)
-  | "TracePlaceAttribute" => (
-  qpat_x_assum `well_typed_expr _ _` mp_tac >>
-  simp[NoAsms, Once well_typed_expr_def] >> strip_tac >>
-  fs[int_calls_expr_def] >>
-  qpat_x_assum `eval_place _ _ _ = _` mp_tac >>
-  simp[NoAsms, Once evaluate_def, bind_def, return_def, AllCaseEqs()] >>
-  strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
-  qpat_x_assum `!env st res st'. _ ==> typed_scope_transition _ _`
-    (drule_at (Pat `eval_place _ _ _ = _`)) >>
-  disch_then (qspec_then `env` mp_tac) >> simp[] >> strip_tac >>
-  imp_res_tac vyperPlaceFramesTheory.extend_place_state >>
-  rpt (first_x_assum (fn th => if is_forall (concl th) then kall_tac th else NO_TAC)) >>
-  gvs[lift_option_type_def, bind_def, return_def, raise_def, AllCaseEqs()] >>
-  Cases_on `evaluate_type (get_tenv cx) (expr_type e)` >>
-  gvs[return_def, raise_def]
-)
-  | "TraceCompoundRest" => (
-  IF (qpat_assum `eval_place _ (Subscript _ _ _) _ = _` (K all_tac))
-     (suspend "TracePlaceSubscript") all_tac >>
-  suspend "TraceCompoundOther"
-)
-  | "TracePlaceSubscript" => (
-  FIRST [qpat_x_assum `well_typed_expr _ _` mp_tac,
-         qpat_x_assum `type_place_expr _ _ = SOME _` mp_tac] >>
-  simp[NoAsms, Once well_typed_expr_def, AllCaseEqs()] >> strip_tac >>
-  qpat_x_assum `call_evaluation_safe _ (int_calls_expr (Subscript _ _ _))` mp_tac >>
-  simp[NoAsms, int_calls_expr_def] >> strip_tac >>
-  drule call_evaluation_safe_append_left >> strip_tac >>
-  drule call_evaluation_safe_append_right >> strip_tac >>
-  qpat_x_assum `eval_place _ _ _ = _` mp_tac >>
-  simp[NoAsms, Once evaluate_def, bind_def, return_def, AllCaseEqs()] >>
-  strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
-  qpat_x_assum `!env st res st'. _ ==> typed_scope_transition _ _`
-    (drule_at (Pat `eval_place _ _ _ = _`)) >>
-  disch_then (qspec_then `env` mp_tac) >>
-  (impl_tac >- (rpt conj_tac >> FIRST [first_assum ACCEPT_TAC,
-       disj1_tac >> first_assum ACCEPT_TAC, disj2_tac >> goal_assum drule])) >>
-  strip_tac >>
-  TRY (first_assum (fn th => if is_forall (concl th) then NO_TAC else
-         MATCH_ACCEPT_TAC th) >> NO_TAC) >>
-  first_x_assum drule_all >> strip_tac >>
-  qpat_x_assum `!s pv t. _ ==> _` drule >> strip_tac >>
-  suspend "TracePlaceSubscriptIndex"
-)
-  | "TraceCompoundOther" => (
-  IF (qpat_assum `eval_base_place _ (AttributeTarget _ _) _ = _` (K all_tac))
-     (suspend "TraceBaseAttribute") all_tac >>
-  suspend "TraceCompoundPending"
-)
+      qpat_x_assum `eval_target_place _ _ _ = _` mp_tac >>
+      Cases_on `eval_base_place cx bt st` >>
+      rename1 `eval_base_place cx bt st = (base_res,mid)` >>
+      Cases_on `base_res` >>
+      simp[Once evaluate_def, bind_def, get_place_def, AllCaseEqs()] >>
+      strip_tac >> gvs[well_typed_target_def] >>
+      imp_res_tac vyperPlaceFramesTheory.get_place_state >> rpt BasicProvers.VAR_EQ_TAC >>
+      qpat_x_assum `!env vt st res st'. _ ==> typed_scope_transition _ _` drule_all >>
+      simp[])
   | "TraceBaseAttribute" => (
-  qpat_x_assum `type_place_target _ _ = SOME _` mp_tac >>
-  simp[NoAsms, Once well_typed_expr_def, AllCaseEqs()] >> strip_tac >>
-  qpat_x_assum `call_evaluation_safe _ _` mp_tac >>
-  simp[NoAsms, int_calls_expr_def] >> strip_tac >>
-  qpat_x_assum `eval_base_place _ _ _ = _` mp_tac >>
-  simp[NoAsms, Once evaluate_def, bind_def, return_def, AllCaseEqs()] >>
-  strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
-  qpat_x_assum `!env vt st res st'. _ ==> typed_scope_transition _ _` drule_all >>
-  strip_tac >>
-  imp_res_tac vyperPlaceFramesTheory.extend_target_place_state >>
-  rpt BasicProvers.VAR_EQ_TAC >> first_assum ACCEPT_TAC
-)
-  | "TraceCompoundPending" => (
-  IF (qpat_assum `eval_base_place _ (SubscriptTarget _ _) _ = _` (K all_tac))
-     (suspend "TraceBaseSubscript") all_tac >>
-  suspend "TraceCompoundNext"
-)
-  | "TraceBaseSubscript" => (
-  qpat_x_assum `type_place_target _ _ = SOME _` mp_tac >>
-  simp[NoAsms, Once well_typed_expr_def, AllCaseEqs()] >> strip_tac >>
-  qpat_x_assum `call_evaluation_safe _ _` mp_tac >>
-  simp[NoAsms, int_calls_expr_def] >> strip_tac >>
-  drule call_evaluation_safe_append_left >> strip_tac >>
-  drule call_evaluation_safe_append_right >> strip_tac >>
-  qpat_x_assum `eval_base_place _ _ _ = _` mp_tac >>
-  simp[NoAsms, Once evaluate_def, bind_def, return_def, AllCaseEqs()] >>
-  strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
-  qpat_x_assum `!env vt st res st'. _ ==> typed_scope_transition _ _` drule_all >>
-  strip_tac >>
-  TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
-  qpat_x_assum `!env vt st res st'. _ ==> state_well_typed _ /\ _` drule_all >>
-  strip_tac >>
-  qpat_x_assum `!s pv t. _ ==> _` drule >> strip_tac >>
-  suspend "TracePlaceSubscriptIndex"
-)
-  | "TracePlaceSubscriptIndex" => (
-  TRY (FIRST [qpat_x_assum `well_typed_expr _ _ ==> _` mp_tac >>
-           (impl_tac >- first_assum ACCEPT_TAC) >>
-           simp[NoAsms] >> strip_tac,
-         qpat_x_assum `!vt. type_place_expr _ _ = SOME vt ==> _` drule >>
-           simp[NoAsms] >> strip_tac]) >>
-  qpat_x_assum `!env st res st'. _ ==> typed_scope_transition _ _`
-    (drule_at (Pat `eval_expr _ _ _ = _`)) >>
-  disch_then (qspec_then `env` mp_tac) >>
-  (impl_tac >- (rpt conj_tac >> FIRST [first_assum ACCEPT_TAC,
-       disj1_tac >> first_assum ACCEPT_TAC])) >> strip_tac >>
-  rpt (first_x_assum (fn th => if is_forall (concl th) then kall_tac th else NO_TAC)) >>
-  imp_res_tac get_Value_state >>
-  imp_res_tac lift_option_type_state >>
-  imp_res_tac vyperPlaceFramesTheory.extend_place_state >>
-  imp_res_tac vyperPlaceFramesTheory.extend_target_place_state >>
-  rpt BasicProvers.VAR_EQ_TAC >>
-  metis_tac[typed_scope_transition_trans]
-)
-  | "TraceCompoundNext" => (
-  IF (qpat_assum `eval_base_target _ (AttributeTarget _ _) _ = _` (K all_tac))
-     (suspend "TraceTargetAttribute") all_tac >>
-  suspend "TraceCompoundResidual"
-)
-  | "TraceTargetAttribute" => (
-  qpat_x_assum `type_place_target _ _ = SOME _` mp_tac >>
-  simp[NoAsms, Once well_typed_expr_def, AllCaseEqs()] >> strip_tac >>
-  qpat_x_assum `call_evaluation_safe _ _` mp_tac >>
-  simp[NoAsms, int_calls_expr_def] >> strip_tac >>
-  qpat_x_assum `eval_base_target _ _ _ = _` mp_tac >>
-  simp[NoAsms, Once evaluate_def, bind_def, return_def, AllCaseEqs()] >>
-  strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
-  qpat_x_assum `!env vt st res st'. _ ==> typed_scope_transition _ _` drule_all >>
-  strip_tac >>
-  TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
-  PairCases_on `x` >>
-  qpat_x_assum `(\(loc,sbs). _) _ _ = _` mp_tac >>
-  simp[NoAsms, return_def] >> strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
-  first_assum ACCEPT_TAC
-)
-  | "TraceCompoundResidual" => (
-  IF (qpat_assum `eval_base_target _ (SubscriptTarget _ _) _ = _` (K all_tac))
-     (suspend "TraceTargetSubscript") all_tac >>
-  suspend "TraceExprCompound"
-)
-  | "TraceTargetSubscript" => (
-  qpat_x_assum `type_place_target _ _ = SOME _` mp_tac >>
-  simp[NoAsms, Once well_typed_expr_def, AllCaseEqs()] >> strip_tac >>
-  qpat_x_assum `call_evaluation_safe _ _` mp_tac >>
-  simp[NoAsms, int_calls_expr_def] >> strip_tac >>
-  drule call_evaluation_safe_append_left >> strip_tac >>
-  drule call_evaluation_safe_append_right >> strip_tac >>
-  qpat_x_assum `eval_base_target _ _ _ = _` mp_tac >>
-  simp[NoAsms, Once evaluate_def, bind_def, return_def, AllCaseEqs()] >>
-  strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
-  qpat_x_assum `!env vt st res st'. _ ==> typed_scope_transition _ _` drule_all >>
-  strip_tac >>
-  TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
-  rename1 `eval_base_target cx bt st = (INL pair,mid)` >>
-  PairCases_on `pair` >>
-  qpat_x_assum `(\(loc,sbs). _) _ _ = _` mp_tac >>
-  simp[NoAsms, bind_def, return_def, AllCaseEqs()] >> strip_tac >>
-  rpt BasicProvers.VAR_EQ_TAC >>
-  qpat_x_assum `!env vt st res st'. _ ==> state_well_typed _ /\ _` drule_all >>
-  strip_tac >>
-  qpat_x_assum `!s loc sbs t. _ ==> _` drule >> strip_tac >>
-  qpat_x_assum `!env st res st'. _ ==> typed_scope_transition _ _`
-    (drule_at (Pat `eval_expr _ _ _ = _`)) >>
-  disch_then (qspec_then `env` mp_tac) >>
-  (impl_tac >- (rpt conj_tac >> FIRST [first_assum ACCEPT_TAC,
-       disj1_tac >> first_assum ACCEPT_TAC])) >> strip_tac >>
-  rpt (first_x_assum (fn th => if is_forall (concl th) then kall_tac th else NO_TAC)) >>
-  imp_res_tac get_Value_state >>
-  rpt BasicProvers.VAR_EQ_TAC >>
-  gvs[return_def] >> metis_tac[typed_scope_transition_trans]
-)
-  | "TraceExprCompound" => (
-  IF (qpat_assum `eval_expr _ (Attribute _ _ _) _ = _` (K all_tac))
-     (suspend "TraceExprAttribute") all_tac >>
-  suspend "TraceExprRest"
-)
-  | "TraceExprAttribute" => (
-  FIRST [qpat_x_assum `well_typed_expr _ _` mp_tac,
-         qpat_x_assum `type_place_expr _ _ = SOME _` mp_tac] >>
-  simp[NoAsms, Once well_typed_expr_def, AllCaseEqs()] >> strip_tac >>
-  qpat_x_assum `call_evaluation_safe _ _` mp_tac >>
-  simp[NoAsms, int_calls_expr_def] >> strip_tac >>
-  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-  simp[NoAsms, Once evaluate_def, bind_def, return_def, AllCaseEqs()] >>
-  strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
-  qpat_x_assum `!env st res st'. _ ==> typed_scope_transition _ _`
-    (drule_at (Pat `eval_expr _ _ _ = _`)) >>
-  disch_then (qspec_then `env` mp_tac) >>
-  (impl_tac >- (rpt conj_tac >> FIRST [first_assum ACCEPT_TAC,
-       disj1_tac >> first_assum ACCEPT_TAC, disj2_tac >> goal_assum drule])) >>
-  strip_tac >>
-  rpt (first_x_assum (fn th => if is_forall (concl th) then kall_tac th else NO_TAC)) >>
-  imp_res_tac get_Value_state >> imp_res_tac lift_sum_state >>
-  gvs[return_def]
-)
-  | "TraceExprRest" => (
-  IF (qpat_assum `eval_expr _ (Call _ (Send _) _ _) _ = _` (K all_tac))
-     (suspend "TraceSend") all_tac >>
-  suspend "TraceExprRemaining"
-)
+      qpat_x_assum `type_place_target _ (AttributeTarget _ _) = SOME _` mp_tac >>
+      rewrite_tac[type_place_target_AttributeTarget] >> strip_tac >>
+      markerLib.suspend "Trace_Base_Attribute_Selection")
+  | "TraceExprsCons" => (
+      qpat_x_assum `well_typed_exprs env (e::es)` mp_tac >>
+      simp[NoAsms, Once well_typed_expr_def] >> strip_tac >>
+      drule exprs_cons_call_evaluation_safe_head >> strip_tac >>
+      drule exprs_cons_call_evaluation_safe_tail >> strip_tac >>
+      qpat_x_assum `eval_exprs _ (_::_) _ = _` mp_tac >>
+      simp[NoAsms, Once evaluate_def, bind_def, return_def, AllCaseEqs()] >>
+      strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+      qpat_x_assum `!env st res st'. _ ==> typed_scope_transition _ _`
+        (drule_at (Pat `eval_expr _ _ _ = _`)) >>
+      disch_then (qspec_then `env` mp_tac) >>
+      (impl_tac >- (conj_tac >- (disj1_tac >> first_assum ACCEPT_TAC) >> simp[])) >> strip_tac >>
+      imp_res_tac read_result_state >> rpt BasicProvers.VAR_EQ_TAC >>
+      FIRST [first_assum ACCEPT_TAC,
+        qpat_x_assum `!env st res st'. _ ==> (_ /\ _)`
+          (drule_at (Pat `eval_expr _ _ _ = _`)) >>
+        disch_then (qspec_then `env` mp_tac) >>
+        (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
+        qpat_x_assum `well_typed_expr env e ==> _` mp_tac >>
+        (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+        qpat_x_assum `!s0 tv t s1 v t1. eval_expr _ _ _ = _ /\ read_result _ _ _ = _ ==> _`
+          (drule_all_then strip_assume_tac) >>
+        qpat_x_assum `!env st res st'. _ ==> typed_scope_transition _ _`
+          (drule_at (Pat `eval_exprs _ _ _ = _`)) >>
+        disch_then (qspec_then `env` mp_tac) >>
+        (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
+        rpt (first_x_assum (fn th => if is_forall (concl th) then kall_tac th else NO_TAC)) >>
+        metis_tac[typed_scope_transition_trans]])
   | "TraceSend" => (
   drule send_call_evaluation_safe_args >> strip_tac >>
   qpat_x_assum `well_typed_expr _ _` mp_tac >>
@@ -10828,14 +9727,9 @@ fun trace_result_tac label g = let val suspend = trace_result_tac in
     (drule_at (Pat `eval_exprs _ _ _ = _`)) >>
   disch_then (qspec_then `env` mp_tac) >>
   (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
-  TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
+  asm_rewrite_tac[] >>
   imp_res_tac eval_send_preserves_non_accounts >>
   metis_tac[typed_scope_transition_trans, typed_scope_transition_scopes]
-)
-  | "TraceExprRemaining" => (
-  IF (qpat_assum `eval_expr _ (Call _ RawLog _ _) _ = _` (K all_tac))
-     (suspend "TraceRawLog") all_tac >>
-  suspend "TraceExprRemaining2"
 )
   | "TraceRawLog" => (
   drule rawlog_call_evaluation_safe_args >> strip_tac >>
@@ -10848,10 +9742,10 @@ fun trace_result_tac label g = let val suspend = trace_result_tac in
     (drule_at (Pat `eval_exprs _ _ _ = _`)) >>
   disch_then (qspec_then `env` mp_tac) >>
   (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
-  TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
+  asm_rewrite_tac[] >>
   imp_res_tac type_check_state >> imp_res_tac lift_option_type_state >>
   rpt BasicProvers.VAR_EQ_TAC >>
-  TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
+  asm_rewrite_tac[] >>
   qpat_x_assum `push_log _ _ = _` mp_tac >>
   simp[NoAsms, push_log_def, return_def] >> strip_tac >>
   rpt BasicProvers.VAR_EQ_TAC >>
@@ -10859,11 +9753,6 @@ fun trace_result_tac label g = let val suspend = trace_result_tac in
   irule typed_scope_transition_trans >> qexists_tac `mid` >>
   conj_tac >- (irule typed_scope_transition_scopes >> simp[]) >>
   first_assum ACCEPT_TAC
-)
-  | "TraceExprRemaining2" => (
-  IF (qpat_assum `eval_expr _ (Call _ RawRevert _ _) _ = _` (K all_tac))
-     (suspend "TraceRawRevert") all_tac >>
-  suspend "TraceExprRemaining3"
 )
   | "TraceRawRevert" => (
   drule rawrevert_call_evaluation_safe_args >> strip_tac >>
@@ -10879,11 +9768,6 @@ fun trace_result_tac label g = let val suspend = trace_result_tac in
   imp_res_tac type_check_state >> imp_res_tac lift_option_type_state >>
   rpt BasicProvers.VAR_EQ_TAC >> first_assum ACCEPT_TAC
 )
-  | "TraceExprRemaining3" => (
-  IF (qpat_assum `eval_expr _ (Call _ SelfDestructTarget _ _) _ = _` (K all_tac))
-     (suspend "TraceSelfDestruct") all_tac >>
-  suspend "TraceExprRemaining4"
-)
   | "TraceSelfDestruct" => (
   drule selfdestruct_call_evaluation_safe_args >> strip_tac >>
   qpat_x_assum `well_typed_expr _ _` mp_tac >>
@@ -10897,7 +9781,7 @@ fun trace_result_tac label g = let val suspend = trace_result_tac in
   (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
   imp_res_tac type_check_state >> imp_res_tac lift_option_type_state >>
   rpt BasicProvers.VAR_EQ_TAC >>
-  TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
+  asm_rewrite_tac[] >>
   qpat_x_assum `get_accounts _ = _` mp_tac >>
   simp[NoAsms, get_accounts_def, return_def] >> strip_tac >>
   rpt BasicProvers.VAR_EQ_TAC >>
@@ -10907,11 +9791,6 @@ fun trace_result_tac label g = let val suspend = trace_result_tac in
   irule typed_scope_transition_trans >> qexists_tac `mid` >>
   (conj_tac >- (irule typed_scope_transition_scopes >> first_assum ACCEPT_TAC) >>
    first_assum ACCEPT_TAC)
-)
-  | "TraceExprRemaining4" => (
-  IF (qpat_assum `eval_expr _ (Builtin _ _ _) _ = _` (K all_tac))
-     (suspend "TraceBuiltin") all_tac >>
-  suspend "TraceExprRemaining5"
 )
   | "TraceBuiltin" => (
   qpat_x_assum `call_evaluation_safe _ _` mp_tac >>
@@ -10938,7 +9817,7 @@ fun trace_result_tac label g = let val suspend = trace_result_tac in
   disch_then (qspec_then `env` mp_tac) >>
   (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
   imp_res_tac lift_sum_state >> rpt BasicProvers.VAR_EQ_TAC >>
-  TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
+  asm_rewrite_tac[] >>
   qpat_x_assum `get_accounts _ = _` mp_tac >>
   simp[NoAsms, get_accounts_def, return_def] >> strip_tac >>
   rpt BasicProvers.VAR_EQ_TAC >> first_assum ACCEPT_TAC
@@ -10969,70 +9848,55 @@ fun trace_result_tac label g = let val suspend = trace_result_tac in
   disch_then (qspec_then `env` mp_tac) >>
   (impl_tac >- (rpt conj_tac >> FIRST [first_assum ACCEPT_TAC,
     disj1_tac >> first_assum ACCEPT_TAC])) >> strip_tac >>
-  imp_res_tac lift_sum_state >> imp_res_tac toplevel_array_length_state >>
+  imp_res_tac lift_sum_state >> imp_res_tac result_array_length_state >>
   rpt BasicProvers.VAR_EQ_TAC >> first_assum ACCEPT_TAC
 )
-  | "TraceExprRemaining5" => (
-  IF (qpat_assum `eval_expr _ (Subscript _ _ _) _ = _` (K all_tac))
-     (suspend "TraceExprSubscript") all_tac >>
-  suspend "TraceExprRemaining6"
-)
   | "TraceExprSubscript" => (
-  FIRST [qpat_x_assum `well_typed_expr _ _` mp_tac,
-         qpat_x_assum `type_place_expr _ _ = SOME _` mp_tac] >>
-  simp[NoAsms, Once well_typed_expr_def, AllCaseEqs()] >> strip_tac >>
-  qpat_x_assum `call_evaluation_safe _ _` mp_tac >>
-  simp[NoAsms, int_calls_expr_def] >> strip_tac >>
-  drule call_evaluation_safe_append_left >> strip_tac >>
-  drule call_evaluation_safe_append_right >> strip_tac >>
-  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-  simp[NoAsms, Once evaluate_def, bind_def, return_def, AllCaseEqs()] >>
-  strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
-  qpat_x_assum `!env st res st'. _ ==> typed_scope_transition _ _`
-    (drule_at (Pat `eval_expr _ _ _ = _`)) >>
-  disch_then (qspec_then `env` mp_tac) >>
-  (impl_tac >- (rpt conj_tac >> FIRST [first_assum ACCEPT_TAC,
-       disj1_tac >> first_assum ACCEPT_TAC, disj2_tac >> goal_assum drule])) >>
-  strip_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
-  qpat_x_assum `!env st res st'. _ ==> (_ ==> _) /\ _` drule_all >> strip_tac >>
-  FIRST [qpat_x_assum `well_typed_expr _ _ ==> _` mp_tac >>
-           (impl_tac >- first_assum ACCEPT_TAC) >> simp[NoAsms] >> strip_tac,
-         qpat_x_assum `!vt. type_place_expr _ _ = SOME vt ==> _` drule >>
-           simp[NoAsms] >> strip_tac] >>
-  qpat_x_assum `!s'' tv1 t. eval_expr _ _ s'' = (INL tv1,t) ==> _` drule >>
-  strip_tac >>
-  qpat_x_assum `!env st res st'. _ ==> typed_scope_transition _ _`
-    (drule_at (Pat `eval_expr _ _ _ = _`)) >>
-  disch_then (qspec_then `env` mp_tac) >>
-  (impl_tac >- (rpt conj_tac >> FIRST [first_assum ACCEPT_TAC,
-    disj1_tac >> first_assum ACCEPT_TAC])) >> strip_tac >>
-  rpt (first_x_assum (fn th => if is_forall (concl th) then kall_tac th else NO_TAC)) >>
-  imp_res_tac get_Value_state >> imp_res_tac lift_option_type_state >>
-  rpt BasicProvers.VAR_EQ_TAC >>
-  TRY (drule_all typed_scope_transition_trans >> simp[] >> NO_TAC) >>
-  qpat_x_assum `ignore_bind _ _ _ = _` mp_tac >>
-  simp[NoAsms, bind_def, ignore_bind_def, return_def, AllCaseEqs()] >>
-  strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
-  imp_res_tac check_array_bounds_state >> imp_res_tac lift_sum_state >>
-  imp_res_tac read_storage_slot_state >> rpt BasicProvers.VAR_EQ_TAC >>
-  TRY (qmatch_asmsub_rename_tac
-      `lift_sum (evaluate_subscript _ _ _ _) _ = (INL choice,_)` >>
-    Cases_on `choice` >>
-    TRY (qmatch_asmsub_rename_tac
-      `lift_sum (evaluate_subscript _ _ _ _) _ = (INL (INR raw),_)` >>
-      PairCases_on `raw`) >>
-    gvs[bind_def, return_def, AllCaseEqs()]) >>
-  imp_res_tac read_storage_slot_state >> rpt BasicProvers.VAR_EQ_TAC >>
-  ntac 2 (qpat_x_assum `typed_scope_transition _ _` mp_tac) >>
-  POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
-  drule_all typed_scope_transition_trans >>
-  simp[]
-)
-  | "TraceExprRemaining6" => (
-  IF (qpat_assum `eval_expr _ (StructLit _ _ _) _ = _` (K all_tac))
-     (suspend "TraceStructLit") all_tac >>
-  suspend "TraceExprRemaining7"
-)
+      IF (qpat_assum `well_typed_expr _ (Subscript _ _ _)` (K all_tac))
+        (qpat_x_assum `well_typed_expr _ (Subscript _ _ _)` mp_tac)
+        (qpat_x_assum `type_place_expr _ (Subscript _ _ _) = SOME _` mp_tac) >>
+      simp[NoAsms, Once well_typed_expr_def, AllCaseEqs()] >> strip_tac >>
+      qpat_x_assum `call_evaluation_safe _ _` mp_tac >>
+      simp[NoAsms, int_calls_expr_def] >> strip_tac >>
+      drule call_evaluation_safe_append_left >> strip_tac >>
+      drule call_evaluation_safe_append_right >> strip_tac >>
+      Cases_on `eval_expr cx e st` >>
+      qpat_x_assum `!env st res st'. _ ==> typed_scope_transition _ _`
+        (drule_at (Pat `eval_expr _ _ _ = _`)) >>
+      disch_then (qspec_then `env` mp_tac) >>
+      (impl_tac >- (rpt conj_tac >> FIRST [first_assum ACCEPT_TAC,
+        disj1_tac >> first_assum ACCEPT_TAC,
+        disj2_tac >> goal_assum drule])) >> strip_tac >>
+      qpat_x_assum `!env st res st'. _ ==> (_ /\ _)`
+        (drule_at (Pat `eval_expr _ _ _ = _`)) >>
+      disch_then (qspec_then `env` mp_tac) >>
+      (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
+      FIRST [
+        qpat_x_assum `!vt. type_place_expr env e = SOME vt ==> _` drule >> strip_tac,
+        qpat_x_assum `well_typed_expr env e ==> _` mp_tac >>
+          (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac] >>
+      qpat_x_assum `!env st res st'. _ ==> (case res of INL pv => live_memory_result _ _ | INR _ => T)` kall_tac >>
+      (reverse (Cases_on `q`)
+      >- (qpat_x_assum `!s'' res t. _` kall_tac >>
+          qpat_x_assum `eval_expr cx (Subscript _ _ _) _ = _` mp_tac >>
+          simp[NoAsms, Once evaluate_def, bind_def] >>
+          asm_rewrite_tac[] >> simp[NoAsms, raise_def] >>
+          strip_tac >> rpt BasicProvers.VAR_EQ_TAC >> first_assum ACCEPT_TAC) >>
+      qpat_x_assum `!s'' res t. eval_expr _ _ _ = _ ==> _`
+        (qspecl_then [`st`,`x`,`r`] mp_tac) >>
+      (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+      Cases_on `eval_expr cx e' r` >>
+      qpat_x_assum `!env st res st'. _ ==> typed_scope_transition _ _`
+        (drule_at (Pat `eval_expr _ _ _ = _`)) >>
+      disch_then (qspec_then `env` mp_tac) >>
+      (impl_tac >- (rpt conj_tac >> FIRST [first_assum ACCEPT_TAC,
+        disj1_tac >> first_assum ACCEPT_TAC])) >> strip_tac >>
+      rpt (first_x_assum (fn th => if is_forall (concl th) then kall_tac th else NO_TAC)) >>
+      qpat_x_assum `eval_expr cx (Subscript _ _ _) _ = _` mp_tac >>
+      simp[NoAsms, Once evaluate_def, bind_def] >> asm_rewrite_tac[] >>
+      simp[NoAsms, AllCaseEqs()] >> strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+      imp_res_tac read_result_state >> imp_res_tac vyperPlaceFramesTheory.select_result_state >>
+      gvs[] >> metis_tac[typed_scope_transition_trans]))
   | "TraceStructLit" => (
   qpat_x_assum `call_evaluation_safe _ _` mp_tac >>
   pure_rewrite_tac[int_calls_expr_def, GSYM int_calls_exprs_MAP_SND] >> strip_tac >>
@@ -11051,11 +9915,6 @@ fun trace_result_tac label g = let val suspend = trace_result_tac in
   disch_then (qspec_then `env` mp_tac) >>
   (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> simp[]
 )
-  | "TraceExprRemaining7" => (
-  IF (qpat_assum `eval_expr _ (Call _ (RawCallCalldataTarget _) _ _) _ = _` (K all_tac))
-     (suspend "TraceRawCalldata") all_tac >>
-  suspend "TraceExprRemaining8"
-)
   | "TraceRawCalldata" => (
   qpat_x_assum `call_evaluation_safe _ _` mp_tac >>
   simp[NoAsms, int_calls_expr_def] >> strip_tac >>
@@ -11071,16 +9930,11 @@ fun trace_result_tac label g = let val suspend = trace_result_tac in
   rpt (first_x_assum (fn th => if is_forall (concl th) then kall_tac th else NO_TAC)) >>
   imp_res_tac type_check_state >> imp_res_tac lift_option_type_state >>
   imp_res_tac eval_raw_call_preserves_non_accounts >> rpt BasicProvers.VAR_EQ_TAC >>
-  TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
+  asm_rewrite_tac[] >>
   qmatch_asmsub_rename_tac `eval_exprs cx es st = (INL vs,mid)` >>
   irule typed_scope_transition_trans >> qexists_tac `mid` >>
   (conj_tac >- (irule typed_scope_transition_scopes >> first_assum ACCEPT_TAC) >>
    first_assum ACCEPT_TAC)
-)
-  | "TraceExprRemaining8" => (
-  IF (qpat_assum `eval_expr _ (Call _ (RawCallTarget _) _ _) _ = _` (K all_tac))
-     (suspend "TraceRawCall") all_tac >>
-  suspend "TraceExprRemaining9"
 )
   | "TraceRawCall" => (
   drule rawcall_call_evaluation_safe_args >> strip_tac >>
@@ -11096,16 +9950,11 @@ fun trace_result_tac label g = let val suspend = trace_result_tac in
   rpt (first_x_assum (fn th => if is_forall (concl th) then kall_tac th else NO_TAC)) >>
   imp_res_tac type_check_state >> imp_res_tac lift_option_type_state >>
   imp_res_tac eval_raw_call_preserves_non_accounts >> rpt BasicProvers.VAR_EQ_TAC >>
-  TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
+  asm_rewrite_tac[] >>
   qmatch_asmsub_rename_tac `eval_exprs cx es st = (INL vs,mid)` >>
   irule typed_scope_transition_trans >> qexists_tac `mid` >>
   (conj_tac >- (irule typed_scope_transition_scopes >> first_assum ACCEPT_TAC) >>
    first_assum ACCEPT_TAC)
-)
-  | "TraceExprRemaining9" => (
-  IF (qpat_assum `eval_expr _ (TypeBuiltin _ _ _ _) _ = _` (K all_tac))
-     (suspend "TraceTypeBuiltin") all_tac >>
-  suspend "TraceExprRemaining10"
 )
   | "TraceTypeBuiltin" => (
   qpat_x_assum `call_evaluation_safe _ _` mp_tac >>
@@ -11129,7 +9978,7 @@ fun trace_result_tac label g = let val suspend = trace_result_tac in
   imp_res_tac lift_sum_state >> rpt BasicProvers.VAR_EQ_TAC >>
   first_assum ACCEPT_TAC
 )
-  | "TraceExprRemaining10" => (
+  | "TraceExprIfExp" => (
   qpat_x_assum `well_typed_expr _ _` mp_tac >>
   simp[NoAsms, Once well_typed_expr_def] >> strip_tac >>
   qpat_x_assum `call_evaluation_safe _ _` mp_tac >>
@@ -11145,33 +9994,123 @@ fun trace_result_tac label g = let val suspend = trace_result_tac in
   disch_then (qspec_then `env` mp_tac) >>
   (impl_tac >- (rpt conj_tac >> FIRST [first_assum ACCEPT_TAC,
     disj1_tac >> first_assum ACCEPT_TAC])) >> strip_tac >>
-  TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
+  asm_rewrite_tac[] >>
   qpat_x_assum `!env st res st'. _ ==> (_ ==> _) /\ _` drule_all >> strip_tac >>
   qpat_x_assum `well_typed_expr _ _ ==> _` mp_tac >>
   (impl_tac >- first_assum ACCEPT_TAC) >> simp[NoAsms] >> strip_tac >>
-  imp_res_tac get_Value_state >> rpt BasicProvers.VAR_EQ_TAC >>
-  TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
+  imp_res_tac read_result_state >> rpt BasicProvers.VAR_EQ_TAC >>
+  asm_rewrite_tac[] >>
   rpt (qpat_x_assum `!s'' tv t. eval_expr _ _ s'' = (INL tv,t) ==> _` drule >> strip_tac) >>
-  qpat_x_assum `switch_BoolV _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `switch_BoolV cx _ _ _ _ = _` mp_tac >>
   simp[NoAsms, switch_BoolV_def, bind_def, return_def, raise_def,
        AllCaseEqs()] >> strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
-  imp_res_tac get_Value_state >> rpt BasicProvers.VAR_EQ_TAC >>
-  TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
+  imp_res_tac read_result_state >> rpt BasicProvers.VAR_EQ_TAC >>
+  asm_rewrite_tac[] >>
   qpat_x_assum `(if _ then _ else _) _ = _` mp_tac >>
   simp[NoAsms, COND_RATOR, raise_def] >> rpt IF_CASES_TAC >>
   simp[NoAsms, raise_def] >> strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
-  TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
+  asm_rewrite_tac[] >>
   qpat_x_assum `!env st res st'. _ ==> typed_scope_transition _ _`
     (drule_at (Pat `eval_expr _ _ _ = _`)) >>
   disch_then (qspec_then `env` mp_tac) >>
   (impl_tac >- (rpt conj_tac >> FIRST [first_assum ACCEPT_TAC,
     disj1_tac >> first_assum ACCEPT_TAC])) >> strip_tac >>
   rpt (first_x_assum (fn th => if is_forall (concl th) then kall_tac th else NO_TAC)) >>
-  ntac 2 (qpat_x_assum `typed_scope_transition _ _` mp_tac) >>
-  POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
-  drule_all typed_scope_transition_trans >> simp[]
+  imp_res_tac conditional_result_state >> rpt BasicProvers.VAR_EQ_TAC >>
+  irule typed_scope_transition_trans >>
+  goal_assum (drule_at Any) >> asm_rewrite_tac[]
 )
-  | "TraceIntCall" => (
+  | _ => raise Fail ("Unknown Trace route: " ^ label)) g end;
+
+Resume eval_scc_type_sound_mutual[Trace_Target]:
+  RESUME_TAC >> trace_result_tac "Trace_Target"
+QED
+Resume eval_scc_type_sound_mutual[Trace_Base_SubscriptTarget]:
+  RESUME_TAC >> trace_result_tac "Trace_Base_SubscriptTarget"
+QED
+Resume eval_scc_type_sound_mutual[Trace_Base_AttributeTarget]:
+  RESUME_TAC >> trace_result_tac "Trace_Base_AttributeTarget"
+QED
+Resume eval_scc_type_sound_mutual[Trace_Base_TopLevelNameTarget]:
+  RESUME_TAC >> trace_result_tac "Trace_Base_TopLevelNameTarget"
+QED
+Resume eval_scc_type_sound_mutual[Trace_Base_NameTarget]:
+  RESUME_TAC >> trace_result_tac "Trace_Base_NameTarget"
+QED
+Resume eval_scc_type_sound_mutual[Trace_Exprs_cons]:
+  RESUME_TAC >> trace_result_tac "Trace_Exprs_cons"
+QED
+Resume eval_scc_type_sound_mutual[Trace_Exprs_nil]:
+  RESUME_TAC >> trace_result_tac "Trace_Exprs_nil"
+QED
+Resume eval_scc_type_sound_mutual[Trace_Expr_Call_CreateTarget]:
+  RESUME_TAC >> trace_result_tac "Trace_Expr_Call_CreateTarget"
+QED
+Resume eval_scc_type_sound_mutual[Trace_Expr_Call_SelfDestructTarget]:
+  RESUME_TAC >> trace_result_tac "Trace_Expr_Call_SelfDestructTarget"
+QED
+Resume eval_scc_type_sound_mutual[Trace_Expr_Call_RawRevert]:
+  RESUME_TAC >> trace_result_tac "Trace_Expr_Call_RawRevert"
+QED
+Resume eval_scc_type_sound_mutual[Trace_Expr_Call_RawLog]:
+  RESUME_TAC >> trace_result_tac "Trace_Expr_Call_RawLog"
+QED
+Resume eval_scc_type_sound_mutual[Trace_Expr_Call_RawCallCalldataTarget]:
+  RESUME_TAC >> trace_result_tac "Trace_Expr_Call_RawCallCalldataTarget"
+QED
+Resume eval_scc_type_sound_mutual[Trace_Expr_Call_RawCallTarget]:
+  RESUME_TAC >> trace_result_tac "Trace_Expr_Call_RawCallTarget"
+QED
+Resume eval_scc_type_sound_mutual[Trace_Expr_Call_IntCall]:
+  RESUME_TAC >> trace_result_tac "Trace_Expr_Call_IntCall"
+QED
+Resume eval_scc_type_sound_mutual[Trace_Expr_Call_ExtCall]:
+  RESUME_TAC >> trace_result_tac "Trace_Expr_Call_ExtCall"
+QED
+Resume eval_scc_type_sound_mutual[Trace_Expr_Call_Send]:
+  RESUME_TAC >> trace_result_tac "Trace_Expr_Call_Send"
+QED
+Resume eval_scc_type_sound_mutual[Trace_Expr_TypeBuiltin]:
+  RESUME_TAC >> trace_result_tac "Trace_Expr_TypeBuiltin"
+QED
+Resume eval_scc_type_sound_mutual[Trace_Expr_Pop]:
+  RESUME_TAC >> trace_result_tac "Trace_Expr_Pop"
+QED
+Resume eval_scc_type_sound_mutual[Trace_Expr_Builtin]:
+  RESUME_TAC >> trace_result_tac "Trace_Expr_Builtin"
+QED
+Resume eval_scc_type_sound_mutual[Trace_Expr_Attribute]:
+  RESUME_TAC >> trace_result_tac "Trace_Expr_Attribute"
+QED
+Resume eval_scc_type_sound_mutual[Trace_Expr_Subscript]:
+  RESUME_TAC >> trace_result_tac "Trace_Expr_Subscript"
+QED
+Resume eval_scc_type_sound_mutual[Trace_Expr_StructLit]:
+  RESUME_TAC >> trace_result_tac "Trace_Expr_StructLit"
+QED
+Resume eval_scc_type_sound_mutual[Trace_Expr_Literal]:
+  RESUME_TAC >> trace_result_tac "Trace_Expr_Literal"
+QED
+Resume eval_scc_type_sound_mutual[Trace_Expr_IfExp]:
+  RESUME_TAC >> trace_result_tac "Trace_Expr_IfExp"
+QED
+Resume eval_scc_type_sound_mutual[Trace_Expr_FlagMember]:
+  RESUME_TAC >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[NoAsms, Once evaluate_def, lift_option_type_def,
+       return_def, raise_def, AllCaseEqs()] >> strip_tac >>
+  drule lookup_flag_mem_state >> strip_tac >> gvs[] >>
+  irule typed_scope_transition_refl
+QED
+Resume eval_scc_type_sound_mutual[Trace_Expr_TopLevelName]:
+  RESUME_TAC >> trace_result_tac "Trace_Expr_TopLevelName"
+QED
+Resume eval_scc_type_sound_mutual[Trace_Expr_Name]:
+  RESUME_TAC >> trace_result_tac "Trace_Expr_Name"
+QED
+
+Resume eval_scc_type_sound_mutual[Trace_IntCall_Operands]:
+  RESUME_TAC >>
   ntac 2 (pop_last_assum kall_tac) >>
   qpat_x_assum `well_typed_expr _ _` mp_tac >>
   simp[NoAsms, Once well_typed_expr_def] >> strip_tac >>
@@ -11182,7 +10121,7 @@ fun trace_result_tac label g = let val suspend = trace_result_tac in
        type_check_def, assert_def,
        return_def, raise_def, get_scopes_def, AllCaseEqs()] >>
   strip_tac >> imp_res_tac lift_option_type_state >> rpt BasicProvers.VAR_EQ_TAC >>
-  TRY (irule typed_scope_transition_refl >> NO_TAC) >>
+  simp[NoAsms, typed_scope_transition_refl] >>
   pop_last_assum mp_tac >>
   simp[NoAsms, type_check_def, assert_def, return_def, raise_def,
        lift_option_type_INL_eq] >>
@@ -11195,74 +10134,22 @@ fun trace_result_tac label g = let val suspend = trace_result_tac in
     (drule_at (Pat `eval_exprs _ _ _ = _`)) >>
   disch_then (qspec_then `env` mp_tac) >>
   (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
-  TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
   rpt (first_x_assum (fn th => if is_forall (concl th) then kall_tac th else NO_TAC)) >>
   imp_res_tac finally_set_scopes >>
   imp_res_tac (SRULE[ignore_bind_def] finally_conditional_lock_scopes) >>
   qpat_assum `typed_scope_transition _ _`
     (mp_then Any irule typed_scope_transition_trans) >>
   irule typed_scope_transition_scopes >>
-  TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
+  asm_rewrite_tac[] >>
   gvs[push_function_def, return_def, AllCaseEqs()] >>
   Cases_on `FST (SND tup)` >> gvs[return_def] >>
   Cases_on `cx.nonreentrant_slot` >> gvs[raise_def] >>
   drule acquire_nonreentrant_lock_scopes >> simp[]
-)
-  | _ => raise Fail ("Unknown Trace route: " ^ label)) g end;
+QED
 
-Resume eval_scc_type_sound_mutual[TraceRoot1]:
-  RESUME_TAC >> trace_result_tac "TypedTrace"
-QED
-Resume eval_scc_type_sound_mutual[TraceRoot2]:
-  RESUME_TAC >> trace_result_tac "TypedTrace"
-QED
-Resume eval_scc_type_sound_mutual[TraceRoot3]:
-  RESUME_TAC >> trace_result_tac "TypedTrace"
-QED
-Resume eval_scc_type_sound_mutual[TraceRoot4]:
-  RESUME_TAC >> trace_result_tac "TypedTrace"
-QED
-Resume eval_scc_type_sound_mutual[TraceRoot5]:
-  RESUME_TAC >> trace_result_tac "TypedTrace"
-QED
-Resume eval_scc_type_sound_mutual[TraceRoot6]:
-  RESUME_TAC >> trace_result_tac "TypedTrace"
-QED
-Resume eval_scc_type_sound_mutual[TraceRoot7]:
-  RESUME_TAC >> trace_result_tac "TypedTrace"
-QED
-Resume eval_scc_type_sound_mutual[TraceRoot8]:
-  RESUME_TAC >> trace_result_tac "TypedTrace"
-QED
-Resume eval_scc_type_sound_mutual[TraceRoot9]:
-  RESUME_TAC >> trace_result_tac "TypedTrace"
-QED
-Resume eval_scc_type_sound_mutual[TraceRoot10]:
-  RESUME_TAC >> trace_result_tac "TypedTrace"
-QED
-Resume eval_scc_type_sound_mutual[TraceRoot11]:
-  RESUME_TAC >> trace_result_tac "TypedTrace"
-QED
-Resume eval_scc_type_sound_mutual[TraceRoot12]:
-  RESUME_TAC >> trace_result_tac "TypedTrace"
-QED
-Resume eval_scc_type_sound_mutual[TraceRoot13]:
-  RESUME_TAC >> trace_result_tac "TypedTrace"
-QED
-Resume eval_scc_type_sound_mutual[TraceRoot14]:
-  RESUME_TAC >> trace_result_tac "TypedTrace"
-QED
-Resume eval_scc_type_sound_mutual[TraceRoot15]:
-  RESUME_TAC >> trace_result_tac "TypedTrace"
-QED
-Resume eval_scc_type_sound_mutual[TraceRoot16]:
-  RESUME_TAC >> trace_result_tac "TypedTrace"
-QED
 (* External calls evaluate every operand before the shared call helper. *)
-Resume eval_scc_type_sound_mutual[TraceRoot17]:
-  RESUME_TAC >> rpt gen_tac >> strip_tac >>
-  TRY (qpat_x_assum `type_place_expr _ (Call _ (ExtCall _ _ _ _) _ _) = SOME _` mp_tac >>
-       simp[type_place_expr_Call_ExtCall_NONE] >> NO_TAC) >>
+Resume eval_scc_type_sound_mutual[Trace_ExtCall_Operands]:
+  RESUME_TAC >>
   drule extcall_call_evaluation_safe_args >> strip_tac >>
   PairCases_on `sig` >>
   qpat_x_assum `well_typed_expr env (Call _ (ExtCall _ _ _ _) _ _)` mp_tac >>
@@ -11273,79 +10160,21 @@ Resume eval_scc_type_sound_mutual[TraceRoot17]:
     (drule_at (Pat `eval_exprs _ _ _ = _`)) >>
   disch_then (qspec_then `env` mp_tac) >>
   (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
-  TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
+  asm_rewrite_tac[] >>
   imp_res_tac eval_ext_call_preserves_non_accounts >>
   metis_tac[typed_scope_transition_trans, typed_scope_transition_scopes]
 QED
 
-Resume eval_scc_type_sound_mutual[TraceRoot18]:
-  RESUME_TAC >> rpt gen_tac >> strip_tac >>
-  TRY (qpat_x_assum `type_place_expr _ (Call _ (IntCall _) _ _) = SOME _` mp_tac >>
-       simp[type_place_expr_Call_IntCall_NONE] >> NO_TAC) >>
-  ntac 2 (pop_last_assum kall_tac) >>
-  qpat_x_assum `well_typed_expr _ _` mp_tac >>
-  simp[NoAsms, Once well_typed_expr_def] >> strip_tac >>
-  qpat_x_assum `call_evaluation_safe _ _` mp_tac >>
-  simp[NoAsms, int_calls_expr_def] >> strip_tac >>
-  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-  simp[NoAsms, Once evaluate_def, bind_def, ignore_bind_def,
-       type_check_def, assert_def,
-       return_def, raise_def, get_scopes_def, AllCaseEqs()] >>
-  strip_tac >> imp_res_tac lift_option_type_state >> rpt BasicProvers.VAR_EQ_TAC >>
-  TRY (irule typed_scope_transition_refl >> NO_TAC) >>
-  pop_last_assum mp_tac >>
-  simp[NoAsms, type_check_def, assert_def, return_def, raise_def,
-       lift_option_type_INL_eq] >>
-  imp_res_tac lift_option_type_INL_eq >>
-  disch_then drule_all >> strip_tac >>
-  `call_evaluation_safe cx (int_calls_exprs es)` by
-    (qpat_x_assum `call_evaluation_safe _ _` mp_tac >>
-     simp[NoAsms, call_evaluation_safe_def] >> metis_tac[]) >>
-  qpat_x_assum `!env st res st'. _ ==> typed_scope_transition _ _`
-    (drule_at (Pat `eval_exprs _ _ _ = _`)) >>
-  disch_then (qspec_then `env` mp_tac) >>
-  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
-  TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
-  rpt (first_x_assum (fn th => if is_forall (concl th) then kall_tac th else NO_TAC)) >>
-  imp_res_tac finally_set_scopes >>
-  imp_res_tac (SRULE[ignore_bind_def] finally_conditional_lock_scopes) >>
-  qpat_assum `typed_scope_transition _ _`
-    (mp_then Any irule typed_scope_transition_trans) >>
-  irule typed_scope_transition_scopes >>
-  TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
-  gvs[push_function_def, return_def, AllCaseEqs()] >>
-  Cases_on `FST (SND tup)` >> gvs[return_def] >>
-  Cases_on `cx.nonreentrant_slot` >> gvs[raise_def] >>
-  drule acquire_nonreentrant_lock_scopes >> simp[]
-QED
-
-Resume eval_scc_type_sound_mutual[TraceRoot19]:
-  RESUME_TAC >> trace_result_tac "TypedTrace"
-QED
-Resume eval_scc_type_sound_mutual[TraceRoot20]:
-  RESUME_TAC >> trace_result_tac "TypedTrace"
-QED
-Resume eval_scc_type_sound_mutual[TraceRoot21]:
-  RESUME_TAC >> trace_result_tac "TypedTrace"
-QED
-Resume eval_scc_type_sound_mutual[TraceRoot22]:
-  RESUME_TAC >> trace_result_tac "TypedTrace"
-QED
-Resume eval_scc_type_sound_mutual[TraceRoot23]:
-  RESUME_TAC >> trace_result_tac "TypedTrace"
-QED
-Resume eval_scc_type_sound_mutual[TraceRoot24]:
-  RESUME_TAC >> rpt gen_tac >> strip_tac >>
-  TRY (qpat_x_assum `type_place_expr _ _ = SOME _` mp_tac >>
-       simp[Once well_typed_expr_def] >> NO_TAC) >>
+Resume eval_scc_type_sound_mutual[Trace_Create_Operands]:
+  RESUME_TAC >>
   drule create_call_evaluation_safe_args >> strip_tac >>
   qpat_x_assum `well_typed_expr _ _` mp_tac >>
   simp[NoAsms, Once well_typed_expr_def] >> strip_tac >>
   Cases_on `kind` >>
   RULE_ASSUM_TAC (SIMP_RULE bool_ss [create_kind_11, create_kind_distinct]) >>
   rpt (first_x_assum (fn th => if is_conj (concl th) then strip_assume_tac th else NO_TAC)) >>
-  rpt BasicProvers.VAR_EQ_TAC >>
-  TRY (rename1 `CreateFromBlueprint raw_args` >> suspend "TraceCreateBlueprint") >>
+  rpt BasicProvers.VAR_EQ_TAC
+  >~ [`CreateFromBlueprint raw_args`] >- suspend "TraceCreateBlueprint" >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
   simp[NoAsms, Once evaluate_def, bind_def, AllCaseEqs()] >> strip_tac >>
   qpat_x_assum `!env st res st'. _ ==> typed_scope_transition _ _` drule_all >>
@@ -11354,1056 +10183,156 @@ Resume eval_scc_type_sound_mutual[TraceRoot24]:
   rpt (first_x_assum (fn th => if is_forall (concl th) then kall_tac th else NO_TAC)) >>
   metis_tac[typed_scope_transition_trans, typed_scope_transition_scopes]
 QED
-Resume eval_scc_type_sound_mutual[TraceRoot25]:
-  RESUME_TAC >> trace_result_tac "TypedTrace"
-QED
-Resume eval_scc_type_sound_mutual[TraceRoot26]:
-  RESUME_TAC >> trace_result_tac "TypedTrace"
-QED
-Resume eval_scc_type_sound_mutual[TraceRoot27]:
-  RESUME_TAC >> trace_result_tac "TypedTrace"
-QED
-Resume eval_scc_type_sound_mutual[TraceRoot28]:
-  RESUME_TAC >> trace_result_tac "TypedTrace"
-QED
-Resume eval_scc_type_sound_mutual[TraceRoot29]:
-  RESUME_TAC >> trace_result_tac "TypedTrace"
-QED
-Resume eval_scc_type_sound_mutual[TraceRoot30]:
-  RESUME_TAC >> trace_result_tac "TypedTrace"
-QED
-Resume eval_scc_type_sound_mutual[TraceRoot31]:
-  RESUME_TAC >> trace_result_tac "TypedTrace"
-QED
-Resume eval_scc_type_sound_mutual[TraceRoot32]:
-  RESUME_TAC >> trace_result_tac "TypedTrace"
-QED
-Resume eval_scc_type_sound_mutual[TraceRoot33]:
-  RESUME_TAC >> trace_result_tac "TypedTrace"
-QED
-Resume eval_scc_type_sound_mutual[TraceRoot34]:
-  RESUME_TAC >> trace_result_tac "TypedTrace"
-QED
-Resume eval_scc_type_sound_mutual[TraceRoot35]:
-  RESUME_TAC >> trace_result_tac "TypedTrace"
-QED
-Resume eval_scc_type_sound_mutual[TraceRoot36]:
-  RESUME_TAC >> trace_result_tac "TypedTrace"
-QED
-Resume eval_scc_type_sound_mutual[TraceRoot37]:
-  RESUME_TAC >> trace_result_tac "TypedTrace"
-QED
-Resume eval_scc_type_sound_mutual[TraceRoot38]:
-  RESUME_TAC >> trace_result_tac "TypedTrace"
-QED
-Resume eval_scc_type_sound_mutual[TraceRoot39]:
-  RESUME_TAC >> trace_result_tac "TypedTrace"
-QED
-Resume eval_scc_type_sound_mutual[TraceRoot40]:
-  RESUME_TAC >> trace_result_tac "TypedTrace"
-QED
-Resume eval_scc_type_sound_mutual[TraceRoot41]:
-  RESUME_TAC >> trace_result_tac "TypedTrace"
-QED
-Resume eval_scc_type_sound_mutual[TraceRoot42]:
-  RESUME_TAC >> trace_result_tac "TypedTrace"
-QED
-Resume eval_scc_type_sound_mutual[TraceRoot43]:
-  RESUME_TAC >> trace_result_tac "TypedTrace"
-QED
 
-(* Place registrations, like Live registrations, must each denote one root. *)
-val place_root_labels = [
-  "PlaceRoot_Name", "PlaceRoot_TopLevelName", "PlaceRoot_FlagMember",
-  "PlaceRoot_IfExp", "PlaceRoot_Literal", "PlaceRoot_StructLit",
-  "PlaceRoot_Subscript", "PlaceRoot_Attribute", "PlaceRoot_Builtin",
-  "PlaceRoot_TypeBuiltin", "PlaceRoot_Pop", "PlaceRoot_Call",
-  "BasePlaceRoot_NameTarget", "BasePlaceRoot_TopLevelNameTarget",
-  "BasePlaceRoot_AttributeTarget", "BasePlaceRoot_SubscriptTarget"];
+val live_root_labels = [
+  "LiveRootExpr_Name", "LiveRootExpr_TopLevelName", "LiveRootExpr_FlagMember",
+  "LiveRootExpr_IfExp", "LiveRootExpr_Literal", "LiveRootExpr_StructLit",
+  "LiveRootExpr_Subscript", "LiveRootExpr_Attribute", "LiveRootExpr_Builtin",
+  "LiveRootExpr_TypeBuiltin", "LiveRootExpr_Pop",
+  "LiveRootExpr_Call_IntCall", "LiveRootExpr_Call_ExtCall", "LiveRootExpr_Call_Send",
+  "LiveRootExpr_Call_RawCallTarget", "LiveRootExpr_Call_RawCallCalldataTarget",
+  "LiveRootExpr_Call_RawLog", "LiveRootExpr_Call_RawRevert",
+  "LiveRootExpr_Call_SelfDestructTarget", "LiveRootExpr_Call_CreateTarget",
+  "LiveRootBase_NameTarget", "LiveRootBase_TopLevelNameTarget",
+  "LiveRootBase_AttributeTarget", "LiveRootBase_SubscriptTarget", "LiveRootTarget"];
 val _ = let
   val SOME (_,parent) = markerLib.lookup_suspension "eval_scc_type_sound_mutual"
+  val actual = map #1 (!live_root_inventory)
   fun check label =
     if length (markerLib.extract_suspended_goal [parent] label) = 1
-    then print ("Singleton Place obligation: " ^ label ^ "\n")
-    else raise Fail ("non-singleton Place obligation: " ^ label)
- in List.app check place_root_labels end;
+    then print ("Singleton live-result obligation: " ^ label ^ "\n")
+    else raise Fail ("Non-singleton live-result obligation: " ^ label)
+  val _ = if List.all (fn key => List.exists (fn x => x = key) actual) live_root_labels
+             andalso List.all (fn key => List.exists (fn x => x = key) live_root_labels) actual
+          then () else raise Fail "Live-result inventory mismatch"
+ in List.app check live_root_labels end;
 
-Resume eval_scc_type_sound_mutual[BasePlaceRoot_NameTarget]:
-  RESUME_TAC >> rpt strip_tac >>
-  `?ty. vt = Type ty` by gvs[well_typed_expr_def, AllCaseEqs()] >>
-  gvs[] >> drule_all NameTarget_sound >> strip_tac >>
+Resume eval_scc_type_sound_mutual[LiveRootExpr_Name]:
+  RESUME_TAC >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[NoAsms, Once evaluate_def, bind_def, get_scopes_def, type_check_def,
+       assert_def, check_def, ignore_bind_def, return_def, raise_def,
+       AllCaseEqs()] >> strip_tac >> gvs[IS_SOME_EXISTS] >>
+  irule live_memory_result_fresh >> goal_assum (drule_at Any) >>
+  simp[memory_eval_path_def, subscripts_type_def, evaluate_subscripts_def]
+QED
+Resume eval_scc_type_sound_mutual[LiveRootExpr_TopLevelName]:
+  RESUME_TAC >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  pure_once_rewrite_tac[evaluate_def] >> metis_tac[lookup_global_live]
+QED
+Resume eval_scc_type_sound_mutual[LiveRootExpr_FlagMember]:
+  RESUME_TAC >> rpt gen_tac >> strip_tac >> PairCases_on `nsid` >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[NoAsms, Once evaluate_def, lookup_flag_mem_def, lift_option_type_def,
+       bind_def, return_def, raise_def, AllCaseEqs()] >> strip_tac >>
+  Cases_on `get_module_code cx nsid0` >> gvs[raise_def] >>
+  Cases_on `lookup_flag nsid1 x` >> gvs[raise_def] >>
+  Cases_on `INDEX_OF mid x'` >>
+  gvs[return_def, raise_def, live_memory_result_def]
+QED
+Resume eval_scc_type_sound_mutual[LiveRootExpr_IfExp]:
+  RESUME_TAC >> trace_value_start_tac >>
+  qpat_x_assum `well_typed_expr _ _` mp_tac >>
+  simp[NoAsms, Once well_typed_expr_def] >> strip_tac >>
+  suspend "Live_IfExp_Selected_Conversion"
+QED
+Resume eval_scc_type_sound_mutual[LiveRootExpr_Literal]:
+  RESUME_TAC >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[NoAsms, Once evaluate_def, return_def] >> strip_tac >>
+  gvs[live_memory_result_def]
+QED
+Resume eval_scc_type_sound_mutual[LiveRootExpr_StructLit]:
+  RESUME_TAC >> trace_value_start_tac >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[NoAsms, Once evaluate_def, bind_def, return_def, AllCaseEqs()] >>
+  strip_tac >> gvs[live_memory_result_def]
+QED
+Resume eval_scc_type_sound_mutual[LiveRootExpr_Subscript]:
+  RESUME_TAC >> rpt gen_tac >> strip_tac >>
+  suspend "Live_Subscript_Capture_Index_Selection"
+QED
+Resume eval_scc_type_sound_mutual[LiveRootExpr_Attribute]:
+  RESUME_TAC >> rpt gen_tac >> strip_tac >>
+  suspend "Live_Attribute_Capture_Selection"
+QED
+Resume eval_scc_type_sound_mutual[LiveRootExpr_Builtin]:
+  RESUME_TAC >> trace_value_start_tac >>
+  suspend "Live_Builtin_Returned_Result"
+QED
+Resume eval_scc_type_sound_mutual[LiveRootExpr_TypeBuiltin]:
+  RESUME_TAC >> trace_value_start_tac >>
+  suspend "Live_TypeBuiltin_Returned_Result"
+QED
+Resume eval_scc_type_sound_mutual[LiveRootExpr_Pop]:
+  RESUME_TAC >> trace_value_start_tac >>
+  suspend "Live_Pop_Retained_Owner"
+QED
+Resume eval_scc_type_sound_mutual[LiveRootExpr_Call_IntCall]:
+  RESUME_TAC >> trace_value_start_tac >> suspend "Live_IntCall_Returned_Result"
+QED
+Resume eval_scc_type_sound_mutual[LiveRootExpr_Call_ExtCall]:
+  RESUME_TAC >> trace_value_start_tac >> suspend "Live_ExtCall_Returned_Result"
+QED
+Resume eval_scc_type_sound_mutual[LiveRootExpr_Call_Send]:
+  RESUME_TAC >> trace_value_start_tac >> suspend "Live_Send_Returned_Result"
+QED
+Resume eval_scc_type_sound_mutual[LiveRootExpr_Call_RawCallTarget]:
+  RESUME_TAC >> trace_value_start_tac >> suspend "Live_RawCall_Returned_Result"
+QED
+Resume eval_scc_type_sound_mutual[LiveRootExpr_Call_RawCallCalldataTarget]:
+  RESUME_TAC >> trace_value_start_tac >> suspend "Live_RawCallCalldata_Returned_Result"
+QED
+Resume eval_scc_type_sound_mutual[LiveRootExpr_Call_RawLog]:
+  RESUME_TAC >> trace_value_start_tac >> suspend "Live_RawLog_Returned_Result"
+QED
+Resume eval_scc_type_sound_mutual[LiveRootExpr_Call_RawRevert]:
+  RESUME_TAC >> trace_value_start_tac >> suspend "Live_RawRevert_Returned_Result"
+QED
+Resume eval_scc_type_sound_mutual[LiveRootExpr_Call_SelfDestructTarget]:
+  RESUME_TAC >> trace_value_start_tac >> suspend "Live_SelfDestruct_Returned_Result"
+QED
+Resume eval_scc_type_sound_mutual[LiveRootExpr_Call_CreateTarget]:
+  RESUME_TAC >> trace_value_start_tac >> suspend "Live_Create_Returned_Result"
+QED
+Resume eval_scc_type_sound_mutual[LiveRootBase_NameTarget]:
+  RESUME_TAC >> rpt gen_tac >> strip_tac >>
   qpat_x_assum `eval_base_place _ _ _ = _` mp_tac >>
-  simp[Once evaluate_def, bind_def, return_def, assert_def, ignore_bind_def,
-       get_scopes_def, type_check_def] >> strip_tac >> gvs[] >>
-  simp[no_type_error_result_def, place_result_typed_place,
-       runtime_place_typed_memory, subscripts_type_def] >>
-  conj_tac
-  >- (gvs[well_typed_expr_def, AllCaseEqs(), LET_THM,
-          env_consistent_def, env_scopes_consistent_def,
-          env_context_consistent_def] >>
-      first_x_assum (qspecl_then [`id`,`ty`,`entry`] mp_tac) >> simp[]) >>
-  irule lookup_scopes_well_typed_type >> goal_assum drule >>
-  gvs[state_well_typed_def]
+  simp[NoAsms, Once evaluate_def, bind_def, get_scopes_def, lift_option_type_def,
+       ignore_bind_def, type_check_def, assert_def, check_def,
+       return_def, raise_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
+  fs[IS_SOME_EXISTS] >> irule live_memory_result_fresh >>
+  goal_assum (drule_at Any) >>
+  simp[evaluate_subscripts_def, memory_eval_path_def, subscripts_type_def, subscript_type_def]
 QED
-
-Resume eval_scc_type_sound_mutual[BasePlaceRoot_TopLevelNameTarget]:
-  RESUME_TAC >> rpt strip_tac >>
+Resume eval_scc_type_sound_mutual[LiveRootBase_TopLevelNameTarget]:
+  RESUME_TAC >> rpt gen_tac >> strip_tac >>
   qpat_x_assum `eval_base_place _ _ _ = _` mp_tac >>
-  rewrite_tac[Once evaluate_def] >> strip_tac >>
-  imp_res_tac vyperPlaceFramesTheory.lookup_global_place_state >> gvs[] >>
-  drule_all lookup_global_place_target_no_type_error >> strip_tac >> simp[] >>
-  Cases_on `res` >> simp[] >>
-  drule_all lookup_global_place_target_success_typed >> simp[]
+  pure_once_rewrite_tac[evaluate_def] >> metis_tac[lookup_global_live]
 QED
-
-Resume eval_scc_type_sound_mutual[PlaceRoot_TopLevelName]:
-  RESUME_TAC >> rpt strip_tac >>
-  qpat_x_assum `eval_place _ _ _ = _` mp_tac >>
-  rewrite_tac[Once evaluate_def] >> strip_tac >>
-  imp_res_tac vyperPlaceFramesTheory.lookup_global_place_state >> gvs[] >>
-  TRY (drule_all well_typed_global_place_type >> strip_tac) >>
-  TRY (drule_all lookup_global_place_expr_no_type_error >> simp[] >> NO_TAC) >>
-  Cases_on `res` >> simp[] >>
-  FIRST [drule_all lookup_global_place_ordinary_success_typed >> simp[],
-         drule_all lookup_global_place_expr_success_typed >> simp[]]
+Resume eval_scc_type_sound_mutual[LiveRootBase_AttributeTarget]:
+  RESUME_TAC >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `type_place_target _ (AttributeTarget _ _) = SOME _` mp_tac >>
+  rewrite_tac[type_place_target_AttributeTarget] >> strip_tac >>
+  suspend "Live_Base_Attribute_Selection"
 QED
-
-Resume eval_scc_type_sound_mutual[BasePlaceRoot_AttributeTarget]:
-  RESUME_TAC >> rpt gen_tac >>
-      rewrite_tac[type_place_target_AttributeTarget] >> strip_tac >>
-      gvs[int_calls_expr_def] >>
-      qpat_x_assum `eval_base_place _ (AttributeTarget _ _) _ = _` mp_tac >>
-      simp[Once evaluate_def, bind_def, AllCaseEqs()] >> strip_tac >>
-      qpat_assum `!env vt st res st'. _ ==> (case _ of INL pv => live_memory_result _ _ | INR _ => T)`
-        (drule_all_then strip_assume_tac) >>
-      qpat_assum `!env vt st res st'. _ ==> state_well_typed _ /\ _`
-        (drule_all_then strip_assume_tac) >>
-      gvs[] >> drule eval_base_place_result_shape >> strip_tac >>
-      gvs[place_expr_result_typed_def, is_HashMapRef_def] >>
-      drule vyperPlaceFramesTheory.extend_target_place_state >> strip_tac >> gvs[] >>
-      `no_type_error_result res` by
-        (drule_all attribute_type_runtime_step >> strip_tac >>
-         gvs[extend_target_place_def] >>
-         drule_all extend_live_place_attribute_no_type_error >> simp[]) >>
-      simp[] >> Cases_on `res` >> simp[] >>
-      irule extend_target_place_attribute_success_typed >>
-      goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> simp[]
-QED
-
-Resume eval_scc_type_sound_mutual[BasePlaceRoot_SubscriptTarget]:
-  RESUME_TAC >> rpt gen_tac >>
+Resume eval_scc_type_sound_mutual[LiveRootBase_SubscriptTarget]:
+  RESUME_TAC >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `type_place_target _ (SubscriptTarget _ _) = SOME _` mp_tac >>
   rewrite_tac[type_place_target_SubscriptTarget] >> strip_tac >>
-  qpat_x_assum `call_evaluation_safe cx (int_calls_target (SubscriptTarget bt e))` mp_tac >>
-  pure_rewrite_tac[int_calls_expr_def] >> strip_tac >>
-  `call_evaluation_safe cx (int_calls_target bt)` by
-    metis_tac[call_evaluation_safe_append_left] >>
-  `call_evaluation_safe cx (int_calls_expr e)` by
-    metis_tac[call_evaluation_safe_append_right] >>
-  qpat_x_assum `eval_base_place _ (SubscriptTarget _ _) _ = _` mp_tac >>
-  simp_tac(srw_ss())[Once evaluate_def, bind_def] >>
-  Cases_on `eval_base_place cx bt st` >>
-  rename1 `eval_base_place cx bt st = (base_res,st1)` >>
-  qpat_assum `!env vt st res st'. _ ==> state_well_typed _ /\ _`
-    (drule_all_then strip_assume_tac) >>
-  reverse (Cases_on `base_res`)
-  >- (simp_tac(srw_ss())[] >> strip_tac >>
-      rpt (qpat_x_assum `!x. _` kall_tac) >> gvs[]) >>
-  qpat_x_assum `!s pv t. eval_base_place _ _ _ = _ ==> _`
-    (drule_then strip_assume_tac) >>
-  qpat_x_assum `!env vt st res st'. _ ==> (case _ of INL pv => live_memory_result _ _ | INR _ => T)`
-    (drule_all_then strip_assume_tac) >>
-  ntac 2 (qpat_x_assum `!env vt st res st'. _` kall_tac) >>
-  simp_tac(srw_ss())[] >>
-  Cases_on `eval_expr cx e st1` >>
-  rename1 `eval_expr cx e st1 = (idx_res,st2)` >>
-  qpat_x_assum `!env st res st'. _ ==> (_ /\ _)`
-    (drule_all_then (CONJUNCTS_THEN2 (drule_then strip_assume_tac) kall_tac)) >>
-  qpat_x_assum `!env st res st'. _ ==> typed_scope_transition _ _`
-    (qspec_then `env` mp_tac) >> simp[] >>
-  disch_then (drule_all_then strip_assume_tac) >>
-  reverse (Cases_on `idx_res`)
-  >- (simp_tac(srw_ss())[] >> strip_tac >> gvs[no_type_error_result_def]) >>
-  simp_tac(srw_ss())[] >> strip_tac >> gvs[] >>
-  Cases_on `get_Value x' st2` >>
-  rename1 `get_Value idx_tv st2 = (value_res,st3)` >>
-  `no_type_error_result value_res` by
-    metis_tac[subscript_vtype_index_get_Value_no_type_error] >>
-  Cases_on `idx_tv` >>
-  gvs[get_Value_def, return_def, raise_def, no_type_error_result_def] >>
-  `vyperImmutableMetadataFrame$immutable_metadata_frame st1 st2` by
-    metis_tac[eval_expr_immutable_metadata_frame] >>
-  `place_result_typed env cx st2 x vt'` by
-    metis_tac[place_result_typed_transport] >>
-  drule vyperPlaceFramesTheory.extend_target_place_state >> strip_tac >> gvs[] >>
-  `well_formed_vtype env.type_defs vt'` by
-    metis_tac[type_place_target_well_formed_vtype_stmt] >>
-  `live_memory_result st' x` by
-    (Cases_on `x` >> TRY (simp[live_memory_result_def] >> NO_TAC) >>
-     Cases_on `p` >> TRY (simp[live_memory_result_def] >> NO_TAC) >>
-     irule live_memory_result_transport >>
-     qexists_tac `st1` >> simp[]) >>
-  `case x of PlaceR p => T | ValueR vv => is_HashMapRef vv` by
-    (drule eval_base_place_result_shape >> strip_tac >>
-     gvs[is_HashMapRef_def]) >>
-  drule_all extend_target_subscript_place_sound >>
-  simp[no_type_error_result_def]
+  suspend "Live_Base_Subscript_Capture_Index_Selection"
 QED
-
-fun place_fallback_tac g = (
-  rpt gen_tac >> strip_tac >> conj_tac
-  >- (strip_tac >>
-      qpat_x_assum `eval_place _ _ _ = _` mp_tac >>
-      pure_once_rewrite_tac[evaluate_def] >>
-      simp_tac(srw_ss())[bind_def, return_def, AllCaseEqs()] >> strip_tac >>
-      qpat_x_assum `!env st res st'. _ ==> (_ /\ _)`
-        (drule_at (Pat `eval_expr _ _ _ = _`)) >>
-      disch_then (qspec_then `env` mp_tac) >>
-      (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
-      disch_then (CONJUNCTS_THEN2 mp_tac kall_tac) >>
-      disch_then drule >> strip_tac >>
-      gvs[ordinary_place_result_typed_def, no_type_error_result_def]) >>
-  simp[Once well_typed_expr_def]
-) g;
-
-Resume eval_scc_type_sound_mutual[PlaceRoot_FlagMember]:
-  RESUME_TAC >> place_fallback_tac
-QED
-Resume eval_scc_type_sound_mutual[PlaceRoot_IfExp]:
-  RESUME_TAC >> place_fallback_tac
-QED
-Resume eval_scc_type_sound_mutual[PlaceRoot_Literal]:
-  RESUME_TAC >> place_fallback_tac
-QED
-Resume eval_scc_type_sound_mutual[PlaceRoot_StructLit]:
-  RESUME_TAC >> place_fallback_tac
-QED
-Resume eval_scc_type_sound_mutual[PlaceRoot_Builtin]:
-  RESUME_TAC >> place_fallback_tac
-QED
-Resume eval_scc_type_sound_mutual[PlaceRoot_TypeBuiltin]:
-  RESUME_TAC >> place_fallback_tac
-QED
-Resume eval_scc_type_sound_mutual[PlaceRoot_Pop]:
-  RESUME_TAC >> place_fallback_tac
-QED
-Resume eval_scc_type_sound_mutual[PlaceRoot_Call]:
-  RESUME_TAC >> place_fallback_tac
-QED
-Resume eval_scc_type_sound_mutual[PlaceRoot_Name]:
-  RESUME_TAC >> rpt gen_tac >> strip_tac >> conj_tac
-  >- (strip_tac >> drule_all well_typed_Name_lookup >> strip_tac >>
-      qpat_x_assum `eval_place _ _ _ = _` mp_tac >>
-      simp[Once evaluate_def, bind_def, get_scopes_def, type_check_def,
-           assert_def, check_def, ignore_bind_def, return_def, raise_def] >>
-      strip_tac >> gvs[ordinary_place_result_typed_def, expr_type_def,
-           place_result_typed_place, runtime_place_typed_memory, subscripts_type_def,
-           no_type_error_result_def] >>
-      irule lookup_scopes_well_typed_type >> goal_assum drule >>
-      gvs[state_well_typed_def]) >>
-  simp[Once well_typed_expr_def]
-QED
-Resume eval_scc_type_sound_mutual[PlaceRoot_Attribute]:
-  RESUME_TAC >> rpt gen_tac >> strip_tac >> conj_tac
-  >- (strip_tac >>
-      qpat_x_assum `well_typed_expr _ _` mp_tac >>
-      simp[NoAsms, Once well_typed_expr_def] >> strip_tac >>
-      fs[int_calls_expr_def] >>
-      qpat_x_assum `eval_place _ _ _ = _` mp_tac >>
-      simp_tac(srw_ss())[Once evaluate_def, bind_def] >>
-      Cases_on `eval_place cx e st` >>
-      rename1 `eval_place cx e st = (br,s1)` >>
-      qpat_assum `!env st res st'. _ ==> (_ /\ _)`
-        (drule_at (Pat `eval_place _ _ _ = _`)) >>
-      disch_then (qspec_then `env` mp_tac) >>
-      (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
-      disch_then (CONJUNCTS_THEN2 mp_tac kall_tac) >>
-      (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
-      reverse (Cases_on `br`)
-      >- (simp_tac(srw_ss())[] >> strip_tac >>
-          rpt (qpat_x_assum `!a b c d. _` kall_tac) >>
-          gvs[no_type_error_result_def]) >>
-      simp_tac(srw_ss())[] >> strip_tac >>
-      qpat_x_assum `!env st res st'. _ ==> (case _ of INL pv => live_memory_result _ _ | INR _ => T)`
-        (drule_at (Pat `eval_place _ _ _ = _`)) >>
-      disch_then (qspec_then `env` mp_tac) >>
-      (impl_tac >- (rpt conj_tac >> FIRST [first_assum ACCEPT_TAC,
-         disj1_tac >> first_assum ACCEPT_TAC])) >> strip_tac >>
-      rpt (qpat_x_assum `!a b c d. _` kall_tac) >>
-      gvs[] >> Cases_on `x`
-      >- (gvs[ordinary_place_result_typed_def, place_result_typed_place,
-               attribute_type_ok_def] >>
-          `get_tenv cx = env.type_defs` by
-            gvs[env_consistent_def, env_context_consistent_def] >>
-          gvs[lift_option_type_def, return_def, bind_def] >>
-          drule vyperPlaceFramesTheory.extend_place_state >> strip_tac >> gvs[] >>
-          drule_all attribute_type_runtime_step >> strip_tac >>
-          drule_all extend_live_place_attribute_no_type_error >> strip_tac >>
-          simp[] >> Cases_on `res` >> simp[] >>
-          drule extend_place_place_success_shape >> strip_tac >> gvs[] >>
-          simp[ordinary_place_result_typed_def, expr_type_def, place_result_typed_place] >>
-          metis_tac[extend_place_typed]) >>
-      gvs[ordinary_place_result_typed_def, expr_result_typed_def,
-          expr_runtime_typed_def, attribute_type_ok_def] >>
-      `get_tenv cx = env.type_defs` by
-        gvs[env_consistent_def, env_context_consistent_def] >>
-      Cases_on `expr_type e` >>
-      gvs[attribute_type_def, evaluate_type_def, AllCaseEqs()] >>
-      Cases_on `t` >> gvs[toplevel_value_typed_def] >>
-      `?field_tv. evaluate_type env.type_defs ty = SOME field_tv /\
-        ALOOKUP (ZIP (MAP FST fields,tvs)) id = SOME field_tv` by
-        (qspecl_then [`env.type_defs`, `StructT p`, `id`, `ty`,
-          `ZIP (MAP FST fields,tvs)`] mp_tac attribute_type_evaluates >>
-         simp[attribute_type_def, evaluate_type_def]) >>
-      drule_all evaluate_attribute_value_has_type >> strip_tac >>
-      gvs[lift_option_type_def, extend_place_def, get_Value_def,
-          bind_def, return_def, raise_def, lift_sum_def,
-          ordinary_place_result_typed_def, expr_result_typed_def,
-          expr_runtime_typed_def, expr_type_def, toplevel_value_typed_def,
-          no_type_error_result_def]) >>
-  simp[Once well_typed_expr_def]
-QED
-Theorem storage_tuple_extension_boundary_probe[local]:
-  !cx st.
-    extend_place cx (TupleTV [BaseTV BoolT])
-      (PlaceR (StoragePlace F 0w (TupleTV [BaseTV BoolT])))
-      (ValueSubscript (IntV 0)) st =
-      (INL (PlaceR (StoragePlace F 0w (BaseTV BoolT))),st)
-Proof
-  simp[extend_place_def, extend_storage_place_def, bind_def,
-       check_def, assert_def, ignore_bind_def, return_def,
-       lift_option_type_def, oEL_THM, tuple_prefix_slot_size_def]
-QED
-
-Theorem ordinary_tuple_subscript_runtime_step[local]:
-  subscript_type_ok (TupleT ts) ie rt /\
-  subscript_index_matches (TupleT ts) ie idx /\
-  evaluate_type tenv (TupleT ts) = SOME atv ==>
-  ?rtv. evaluate_type tenv rt = SOME rtv /\
-        subscript_type atv (ValueSubscript idx) = SOME rtv
-Proof
-  simp[subscript_type_ok_tuple, subscript_index_matches_def] >>
-  rpt strip_tac >> gvs[] >>
-  drule evaluate_type_TupleT_cases >> strip_tac >> gvs[] >>
-  gvs[LIST_REL_EL_EQN, subscript_type_def] >> metis_tac[]
-QED
-
-Theorem extend_ordinary_place_subscript_sound[local]:
-  state_well_typed st /\
-  ordinary_place_result_typed env cx st e (PlaceR p) /\
-  live_memory_result st (PlaceR p) /\
-  subscript_type_ok (expr_type e) ie rt /\
-  subscript_index_matches (expr_type e) ie (IntV i) /\
-  extend_place cx input_tv (PlaceR p) (ValueSubscript (IntV i)) st = (res,st') ==>
-  no_type_error_result res /\
-  case res of INL out => ordinary_place_result_typed env cx st' (Subscript rt e ie) out
-            | INR err => T
-Proof
-  simp[ordinary_place_result_typed_def, place_result_typed_place] >>
-  rpt gen_tac >> strip_tac >>
-  Cases_on `expr_type e` >> TRY (gvs[subscript_type_ok_def] >> NO_TAC)
-  >- (drule_all ordinary_tuple_subscript_runtime_step >> strip_tac >>
-      drule evaluate_type_TupleT_cases >> strip_tac >> gvs[] >>
-      drule_all extend_live_tuple_place_sound >> strip_tac >> simp[] >>
-      Cases_on `res` >> gvs[] >>
-      simp[ordinary_place_result_typed_def, expr_type_def, place_result_typed_place] >>
-      metis_tac[]) >>
-  gvs[evaluate_type_def, subscript_type_ok_def, AllCaseEqs()] >>
-  drule_all extend_live_array_place_sound >> strip_tac >> simp[] >>
-  Cases_on `res` >> gvs[] >>
-  simp[ordinary_place_result_typed_def, expr_type_def, place_result_typed_place] >>
-  metis_tac[]
-QED
-
-Theorem extend_ordinary_value_subscript_sound[local]:
-  env_consistent env cx st /\
-  expr_result_typed env e vv /\
-  expr_result_typed env ie (Value idx) /\
-  subscript_type_ok (expr_type e) ie rt /\
-  subscript_index_matches (expr_type e) ie idx /\
-  well_formed_type env.type_defs rt /\
-  (!tr slot etv bd. vv <> ArrayRef tr slot etv bd) /\
-  extend_place cx atv (ValueR vv) (ValueSubscript idx) st = (res,st') /\
-  evaluate_type env.type_defs (expr_type e) = SOME atv ==>
-  no_type_error_result res /\
-  case res of INL out => ordinary_place_result_typed env cx st' (Subscript rt e ie) out
-            | INR err => T
-Proof
-  rpt gen_tac >> strip_tac >>
-  `env.type_defs = get_tenv cx` by
-    gvs[env_consistent_def, env_context_consistent_def] >>
-  `toplevel_value_typed vv atv` by
-    gvs[expr_result_typed_def, expr_runtime_typed_def] >>
-  `~is_HashMapRef vv` by (
-    Cases_on `vv` >>
-    gvs[is_HashMapRef_def, toplevel_value_typed_def] >>
-    Cases_on `expr_type e` >>
-    gvs[subscript_type_ok_def, Once evaluate_type_def, AllCaseEqs()]) >>
-  `extend_place cx atv (ValueR vv) (ValueSubscript idx) =
-    do r <- lift_sum (evaluate_subscript (get_tenv cx) atv vv idx);
-       return (subscript_result_place r) od` by
-    (Cases_on `vv` >> gvs[extend_place_def]) >>
-  Cases_on `evaluate_subscript (get_tenv cx) atv vv idx` >>
-  gvs[bind_def, lift_sum_def, return_def, raise_def, subscript_result_place_def, AllCaseEqs()]
-  >- (drule_all evaluate_subscript_typed_stmt >> strip_tac >>
-      Cases_on `x` >>
-      gvs[subscript_result_place_def, ordinary_place_result_typed_def,
-          place_result_typed_place, runtime_place_typed_storage,
-          no_type_error_result_def, expr_result_typed_def, expr_runtime_typed_def,
-          expr_type_def]
-      >- (drule_all evaluate_subscript_success_not_HashMapRef_stmt >> simp[]) >>
-      PairCases_on `y` >>
-      gvs[subscript_result_place_def, ordinary_place_result_typed_def,
-          place_result_typed_place, runtime_place_typed_storage, expr_type_def] >>
-      metis_tac[evaluate_type_well_formed_type_value]) >>
-  qpat_x_assum `expr_result_typed env ie (Value idx)` mp_tac >>
-  simp[expr_result_typed_def, expr_runtime_typed_def, toplevel_value_typed_def] >>
-  strip_tac >>
-  drule_all evaluate_subscript_error_not_TypeError_stmt >>
-  simp[no_type_error_result_def]
-QED
-
-Theorem extend_ordinary_subscript_sound[local]:
-  env_consistent env cx st /\ state_well_typed st /\
-  ordinary_place_result_typed env cx st e pv /\ live_memory_result st pv /\
-  expr_result_typed env ie (Value (IntV i)) /\
-  subscript_type_ok (expr_type e) ie rt /\
-  subscript_index_matches (expr_type e) ie (IntV i) /\
-  well_formed_type env.type_defs rt /\
-  evaluate_type env.type_defs (expr_type e) = SOME atv /\
-  extend_place cx atv pv (ValueSubscript (IntV i)) st = (res,st') ==>
-  no_type_error_result res /\
-  case res of INL out => ordinary_place_result_typed env cx st' (Subscript rt e ie) out
-            | INR err => T
-Proof
-  rpt gen_tac >> strip_tac >> Cases_on `pv`
-  >- (drule_all extend_ordinary_place_subscript_sound >> simp[]) >>
-  gvs[ordinary_place_result_typed_def] >>
-  Cases_on `?tr slot etv bd. t = ArrayRef tr slot etv bd`
-  >- (pop_assum strip_assume_tac >> gvs[] >>
-      `runtime_place_typed cx st (StoragePlace tr slot (ArrayTV etv bd)) (ArrayTV etv bd)` by
-        (gvs[runtime_place_typed_storage, expr_result_typed_def,
-             expr_runtime_typed_def, toplevel_value_typed_def] >>
-         metis_tac[evaluate_type_well_formed_type_value, toplevel_value_typed_def]) >>
-      `ordinary_place_result_typed env cx st e
-        (PlaceR (StoragePlace tr slot (ArrayTV etv bd)))` by
-        gvs[ordinary_place_result_typed_def, place_result_typed_place,
-            expr_result_typed_def, expr_runtime_typed_def, toplevel_value_typed_def] >>
-      `live_memory_result st (PlaceR (StoragePlace tr slot (ArrayTV etv bd)))` by
-        simp[live_memory_result_def] >>
-      `extend_place cx atv (PlaceR (StoragePlace tr slot (ArrayTV etv bd)))
-        (ValueSubscript (IntV i)) st = (res,st')` by
-        gvs[extend_place_def] >>
-      drule_all extend_ordinary_place_subscript_sound >>
-      Cases_on `res` >> simp[ordinary_place_result_typed_def]) >>
-  `!tr slot etv bd. t <> ArrayRef tr slot etv bd` by metis_tac[] >>
-  drule_all extend_ordinary_value_subscript_sound >> Cases_on `res` >> simp[ordinary_place_result_typed_def]
-QED
-
-Theorem static_place_annotation_runtime_type[local]:
-  env_consistent env cx st /\ type_place_expr env e = SOME vt ==>
-  ?tv. evaluate_type env.type_defs (expr_type e) = SOME tv
-Proof
-  rpt strip_tac >>
-  drule_all type_place_expr_well_formed_vtype_stmt >> strip_tac >>
-  drule type_place_expr_annotation_ok_stmt >> strip_tac >>
-  Cases_on `vt` >>
-  gvs[vtype_annotation_ok_def, well_formed_vtype_def,
-      well_formed_type_def, IS_SOME_EXISTS, evaluate_type_def]
-QED
-
-Theorem ordinary_place_from_static_type[local]:
-  place_result_typed env cx st pv (Type (expr_type e)) ==>
-  ordinary_place_result_typed env cx st e pv
-Proof
-  Cases_on `pv` >>
-  simp[ordinary_place_result_typed_def, place_result_typed_value,
-       place_expr_result_typed_def, expr_result_typed_def, expr_runtime_typed_def] >>
-  rpt strip_tac >> gvs[] >>
-  Cases_on `t` >> gvs[is_HashMapRef_def, toplevel_value_typed_def]
-QED
-
-Theorem extend_place_static_shape[local]:
-  (case pv of PlaceR p => T | ValueR vv => is_HashMapRef vv) ==>
-  extend_place cx atv pv (ValueSubscript idx) =
-  extend_target_place cx pv (ValueSubscript idx)
-Proof
-  Cases_on `pv`
-  >- (Cases_on `p` >> simp[extend_target_place_def, extend_place_def]) >>
-  Cases_on `t` >> simp[is_HashMapRef_def, extend_target_place_def] >>
-  metis_tac[extend_place_hashmap_type_independent]
-QED
-
-Theorem eval_static_place_result_shape[local]:
-  !e env vt st pv st'.
-  type_place_expr env e = SOME vt /\ eval_place cx e st = (INL pv,st') ==>
-  (case pv of PlaceR p => T | ValueR vv => is_HashMapRef vv)
-Proof
-  measureInduct_on `expr_size e` >> rpt gen_tac >>
-  Cases_on `e` >> simp[Once well_typed_expr_def, AllCaseEqs()] >>
-  rpt strip_tac
-  >- (PairCases_on `p` >>
-      gvs[Once evaluate_def] >>
-      drule lookup_global_place_result_shape >>
-      strip_tac >> gvs[is_HashMapRef_def]) >>
-  qpat_x_assum `eval_place _ _ _ = _` mp_tac >>
-  simp[Once evaluate_def, bind_def, lift_option_type_def, return_def,
-       raise_def, AllCaseEqs()] >> strip_tac >>
-  first_x_assum (qspec_then `e'` mp_tac) >>
-  (impl_tac >- simp[expr_size_def]) >>
-  disch_then drule >> gvs[] >> disch_then drule >> strip_tac >>
-  drule extend_place_static_shape >> strip_tac >> gvs[] >>
-  drule extend_target_place_result_shape >> strip_tac >> gvs[is_HashMapRef_def]
-QED
-
-Theorem extend_static_place_subscript_sound[local]:
-  env_consistent env cx st /\ state_well_typed st /\
-  well_formed_vtype env.type_defs bvt /\
-  place_result_typed env cx st pv bvt /\ live_memory_result st pv /\
-  (case pv of PlaceR p => T | ValueR vv => is_HashMapRef vv) /\
-  subscript_vtype bvt (expr_type ie) = SOME out /\
-  expr_result_typed env ie (Value idx) /\
-  extend_place cx atv pv (ValueSubscript idx) st = (res,st') ==>
-  no_type_error_result res /\
-  case res of INL q => place_result_typed env cx st' q out | INR err => T
-Proof
-  rpt gen_tac >> strip_tac >>
-  drule extend_place_static_shape >> strip_tac >> gvs[] >>
-  drule_all extend_target_subscript_place_sound >> simp[]
-QED
-
-fun place_subscript_spine_tac ordinary g = (
-        qpat_x_assum `call_evaluation_safe _ (int_calls_expr (Subscript _ _ _))` mp_tac >>
-        simp[NoAsms, int_calls_expr_def] >> strip_tac >>
-        drule call_evaluation_safe_append_left >> strip_tac >>
-        drule call_evaluation_safe_append_right >> strip_tac >>
-        qpat_x_assum `eval_place _ (Subscript _ _ _) _ = _` mp_tac >>
-        simp_tac(srw_ss())[Once evaluate_def, bind_def] >>
-        Cases_on `eval_place cx e st` >>
-        rename1 `eval_place cx e st = (br,s1)` >>
-        qpat_assum `!env st res st'. _ ==> (_ /\ _)`
-          (drule_at (Pat `eval_place _ _ _ = _`)) >>
-        disch_then (qspec_then `env` mp_tac) >>
-        (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
-        (if ordinary then
-           disch_then (CONJUNCTS_THEN2 mp_tac kall_tac) >>
-           (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac
-         else
-           disch_then (CONJUNCTS_THEN2 kall_tac mp_tac) >>
-           disch_then drule >> strip_tac) >>
-        reverse (Cases_on `br`)
-        >- (simp_tac(srw_ss())[] >> strip_tac >>
-            rpt (qpat_x_assum `!a b c d. _` kall_tac) >>
-            qpat_x_assum `!s pv t. _` kall_tac >>
-            gvs[no_type_error_result_def]) >>
-        qpat_x_assum `!s pv t. eval_place cx e s = (INL pv,t) ==> _`
-          (drule_at (Pat `eval_place _ _ _ = _`)) >> strip_tac >>
-        qpat_x_assum `!env st res st'. _ ==> (case _ of INL pv => live_memory_result _ _ | INR _ => T)`
-          (drule_at (Pat `eval_place _ _ _ = _`)) >>
-        disch_then (qspec_then `env` mp_tac) >>
-        (impl_tac >- (rpt conj_tac >> FIRST [first_assum ACCEPT_TAC,
-           disj1_tac >> first_assum ACCEPT_TAC,
-           disj2_tac >> goal_assum drule])) >> strip_tac >>
-        Cases_on `eval_expr cx e' s1` >>
-        rename1 `eval_expr cx e' s1 = (ir,s2)` >>
-        qpat_assum `!env st res st'. _ ==> (_ /\ _)`
-          (drule_at (Pat `eval_expr _ _ _ = _`)) >>
-        disch_then (qspec_then `env` mp_tac) >>
-        (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
-        disch_then (CONJUNCTS_THEN2 mp_tac kall_tac) >>
-        (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
-        qpat_x_assum `!env st res st'. _ ==> typed_scope_transition _ _`
-          (drule_at (Pat `eval_expr _ _ _ = _`)) >>
-        disch_then (qspec_then `env` mp_tac) >>
-        (impl_tac >- (rpt conj_tac >> FIRST [first_assum ACCEPT_TAC,
-           disj1_tac >> first_assum ACCEPT_TAC,
-           disj2_tac >> goal_assum drule])) >> strip_tac >>
-        rpt (qpat_x_assum `!a b c d. _` kall_tac) >>
-        reverse (Cases_on `ir`)
-        >- (simp_tac(srw_ss())[] >> strip_tac >> gvs[no_type_error_result_def]) >>
-        simp_tac(srw_ss())[] >> strip_tac >> gvs[]
-) g;
-
-fun place_ordinary_subscript_tail_tac g = (
-        `is_int_type (expr_type e')` by metis_tac[subscript_type_ok_index_is_int_stmt] >>
-        Cases_on `get_Value x' s2` >> rename1 `get_Value x' s2 = (vr,s3)` >>
-        `s3 = s2` by metis_tac[get_Value_state] >> gvs[] >>
-        reverse (Cases_on `vr`)
-        >- (gvs[] >> drule_all expr_subscript_index_get_Value_INR_no_type_error_stmt >> simp[no_type_error_result_def]) >>
-        `expr_result_typed env e' (Value x'')` by
-          (gvs[expr_result_typed_def, expr_runtime_typed_def] >>
-           Cases_on `x'` >>
-           gvs[get_Value_def, return_def, raise_def, toplevel_value_typed_def]) >>
-        `?i. x'' = IntV i` by
-          (gvs[expr_result_typed_def, expr_runtime_typed_def] >>
-           Cases_on `expr_type e'` >>
-           gvs[is_int_type_def, evaluate_type_def, AllCaseEqs()] >>
-           Cases_on `x''` >> gvs[toplevel_value_typed_def, value_has_type_def]) >>
-        pop_assum strip_assume_tac >> gvs[] >>
-        `vyperImmutableMetadataFrame$immutable_metadata_frame s1 s2` by
-          metis_tac[vyperImmutableMetadataFrameTheory.eval_expr_immutable_metadata_frame] >>
-        `ordinary_place_result_typed env cx s2 e x` by
-          (Cases_on `x` >> gvs[ordinary_place_result_typed_def] >>
-           drule_all runtime_place_typed_transport >> simp[]) >>
-        `live_memory_result s2 x` by
-          (Cases_on `x` >> TRY (simp[live_memory_result_def] >> NO_TAC) >>
-           Cases_on `p` >> TRY (simp[live_memory_result_def] >> NO_TAC) >>
-           metis_tac[live_memory_result_transport]) >>
-        `get_tenv cx = env.type_defs` by
-          gvs[env_consistent_def, env_context_consistent_def] >>
-        `?atv. evaluate_type env.type_defs (expr_type e) = SOME atv` by
-          (Cases_on `x` >>
-           gvs[ordinary_place_result_typed_def, place_result_typed_place,
-               expr_result_typed_def, expr_runtime_typed_def]) >>
-        gvs[lift_option_type_def, return_def, raise_def] >>
-        drule eval_expr_subscript_index_matches_stmt >>
-        disch_then drule >> disch_then drule >> strip_tac >>
-        drule vyperPlaceFramesTheory.extend_place_state >> strip_tac >> gvs[] >>
-        drule_all extend_ordinary_subscript_sound >> simp[]
-) g;
-
-fun place_static_subscript_tail_tac g = (
-  Cases_on `get_Value x' s2` >> rename1 `get_Value x' s2 = (vr,s3)` >>
-  `s3 = s2` by metis_tac[get_Value_state] >> gvs[] >>
-  reverse (Cases_on `vr`)
-  >- (gvs[] >>
-      drule_at (Pat `subscript_vtype _ _ = _`) subscript_vtype_index_get_Value_no_type_error >>
-      disch_then drule >> simp[] >> disch_then drule >>
-      simp[no_type_error_result_def]) >>
-  `expr_result_typed env e' (Value x'')` by
-    (gvs[expr_result_typed_def, expr_runtime_typed_def] >> Cases_on `x'` >>
-     gvs[get_Value_def, return_def, raise_def, toplevel_value_typed_def]) >>
-  `vyperImmutableMetadataFrame$immutable_metadata_frame s1 s2` by
-    metis_tac[vyperImmutableMetadataFrameTheory.eval_expr_immutable_metadata_frame] >>
-  drule_all place_result_typed_transport >> strip_tac >>
-  `live_memory_result s2 x` by
-    (Cases_on `x` >> TRY (simp[live_memory_result_def] >> NO_TAC) >>
-     Cases_on `p` >> TRY (simp[live_memory_result_def] >> NO_TAC) >>
-     metis_tac[live_memory_result_transport]) >>
-  drule_all type_place_expr_well_formed_vtype_stmt >> strip_tac >>
-  drule_all eval_static_place_result_shape >> strip_tac >>
-  drule_all static_place_annotation_runtime_type >> strip_tac >>
-  `get_tenv cx = env.type_defs` by
-    gvs[env_consistent_def, env_context_consistent_def] >>
-  gvs[lift_option_type_def, return_def, raise_def] >>
-  drule vyperPlaceFramesTheory.extend_place_state >> strip_tac >> gvs[] >>
-  drule_all extend_static_place_subscript_sound >> strip_tac >> simp[] >>
-  Cases_on `res` >> gvs[] >>
-  irule ordinary_place_from_static_type >> simp[expr_type_def]
-) g;
-
-Resume eval_scc_type_sound_mutual[PlaceRoot_Subscript]:
-  RESUME_TAC >> rpt gen_tac >> strip_tac >> conj_tac
-  >- (strip_tac >>
-      qpat_x_assum `well_typed_expr _ _` mp_tac >>
-      simp[NoAsms, Once well_typed_expr_def] >> strip_tac
-      >- (place_subscript_spine_tac true >> place_ordinary_subscript_tail_tac) >>
-      place_subscript_spine_tac false >> place_static_subscript_tail_tac) >>
-  gen_tac >> strip_tac >>
-  qpat_x_assum `type_place_expr env (Subscript _ _ _) = SOME _` mp_tac >>
-  simp[NoAsms, Once well_typed_expr_def, AllCaseEqs()] >> strip_tac >>
-  place_subscript_spine_tac false >> place_static_subscript_tail_tac
-QED
-
-(* Each root below is a singleton suspension. These mutually recursive tactics
-   reuse the checked Live proof tree without registering shared descendants. *)
-fun live_result_tac g = (
-  rpt gen_tac >> strip_tac >>
-  TRY (qpat_assum `eval_target_place _ _ _ = _` (K (live_target_tac))) >>
-  TRY (qpat_assum `eval_base_place _ (NameTarget _) _ = _` (K (live_base_name_tac))) >>
-  live_remaining_tac
-) g
-and live_target_tac g = (
+Resume eval_scc_type_sound_mutual[LiveRootTarget]:
+  RESUME_TAC >> rpt gen_tac >> strip_tac >>
   qpat_x_assum `eval_target_place _ _ _ = _` mp_tac >>
-  simp[Once evaluate_def, bind_def, AllCaseEqs()] >> strip_tac >>
+  simp[NoAsms, Once evaluate_def, bind_def, AllCaseEqs()] >> strip_tac >>
   imp_res_tac vyperPlaceFramesTheory.get_place_state >> gvs[] >>
   gvs[well_typed_target_def] >>
   qpat_x_assum `!env vt st res st'. _ ==> (case _ of INL pv => live_memory_result _ _ | INR _ => T)`
     (drule_all_then assume_tac) >>
   Cases_on `res` >> gvs[get_place_def, return_def, raise_def, AllCaseEqs()] >>
   Cases_on `pv` >> gvs[get_place_def, return_def, raise_def]
-) g
-and live_base_name_tac g = (
-  qpat_x_assum `eval_base_place _ _ _ = _` mp_tac >>
-  simp[Once evaluate_def, bind_def, get_scopes_def, lift_option_type_def,
-       ignore_bind_def, type_check_def, assert_def, check_def,
-       return_def, raise_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
-  fs[IS_SOME_EXISTS] >> irule live_memory_result_fresh >>
-  goal_assum (drule_at Any) >> simp[evaluate_subscripts_def, memory_eval_path_def, subscripts_type_def, subscript_type_def]
-) g
-and live_remaining_tac g = (
-  TRY (qpat_x_assum `type_place_expr _ _ = SOME _` mp_tac >>
-       simp[NoAsms, Once well_typed_expr_def] >> NO_TAC) >>
-  live_constructors_tac
-) g
-and live_constructors_tac g = (
-  TRY (qpat_x_assum `eval_place _ (Name _ _) _ = _` mp_tac >>
-       simp[Once evaluate_def, bind_def, get_scopes_def, type_check_def,
-            assert_def, check_def, ignore_bind_def, return_def, raise_def,
-            AllCaseEqs()] >> strip_tac >> gvs[IS_SOME_EXISTS] >>
-       irule live_memory_result_fresh >> goal_assum (drule_at Any) >>
-       simp[memory_eval_path_def, subscripts_type_def, evaluate_subscripts_def] >> NO_TAC) >>
-  TRY (qpat_assum `eval_place _ (Attribute _ _ _) _ = _` (K (live_attribute_tac))) >>
-  TRY (qpat_assum `eval_place _ (Subscript _ _ _) _ = _` (K (live_subscript_tac))) >>
-  TRY (qpat_assum `eval_place _ (TopLevelName _ _) _ = _` (K (live_global_tac))) >>
-  TRY (qpat_assum `eval_base_place _ _ _ = _` (K (live_base_other_tac))) >>
-  qpat_x_assum `eval_place _ _ _ = _` mp_tac >>
-  pure_once_rewrite_tac[evaluate_def] >>
-  simp[bind_def, return_def, AllCaseEqs()] >> strip_tac >>
-  qpat_x_assum `_ = res` (SUBST1_TAC o SYM) >>
-  simp[NoAsms, live_memory_result_def]
-) g
-and live_global_tac g = (
-  qpat_x_assum `eval_place _ _ _ = _` mp_tac >>
-  pure_once_rewrite_tac[evaluate_def] >>
-  metis_tac[lookup_global_place_live]
-) g
-and live_attribute_tac g = (
-  qpat_x_assum `well_typed_expr _ _` mp_tac >>
-  simp[NoAsms, Once well_typed_expr_def] >> strip_tac >>
-  fs[int_calls_expr_def] >>
-  qpat_x_assum `eval_place _ _ _ = _` mp_tac >>
-  simp[NoAsms, Once evaluate_def, bind_def, return_def, AllCaseEqs()] >>
-  strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
-  qpat_x_assum `!env st res st'. _ ==> (case _ of INL pv => live_memory_result _ _ | INR _ => T)`
-    (drule_at (Pat `eval_place _ _ _ = _`)) >>
-  disch_then (qspec_then `env` mp_tac) >> simp[] >> strip_tac >>
-  qpat_x_assum `!env st res st'. _ ==> (_ /\ _)`
-    (drule_at (Pat `eval_place _ _ _ = _`)) >>
-  disch_then (qspec_then `env` mp_tac) >> simp[] >> strip_tac >>
-  qpat_x_assum `!a b c d. _` kall_tac >>
-  gvs[lift_option_type_def, vyperMiscTheory.option_CASE_rator,
-      return_def, raise_def, AllCaseEqs()] >>
-  Cases_on `res` >> simp[] >>
-  Cases_on `pv`
-  >- (gvs[ordinary_place_result_typed_def, place_result_typed_place,
-          attribute_type_ok_def] >>
-      drule_all attribute_type_runtime_step >> strip_tac >>
-      `memory_eval_path tv [AttrSubscript id]` by
-        (Cases_on `tv` >> gvs[subscript_type_def, memory_eval_path_def, subscripts_type_def, subscript_type_def]) >>
-      drule_all extend_live_place_success >> simp[]) >>
-  Cases_on `t` >>
-  gvs[extend_place_def, bind_def, ignore_bind_def, return_def, raise_def,
-      AllCaseEqs(), live_memory_result_def] >>
-  drule extend_storage_place_live >> simp[live_memory_result_def]
-) g
-and live_subscript_tac g = (
-  TRY (qpat_assum `well_typed_expr _ _` (K (live_ord_subscript_tac))) >>
-  live_static_subscript_tac
-) g
-and live_ord_subscript_tac g = (
-  qpat_x_assum `well_typed_expr _ _` mp_tac >>
-  simp[NoAsms, Once well_typed_expr_def] >> strip_tac >>
-  TRY (qpat_assum `type_place_expr env e = SOME _`
-        (K (live_ord_static_base_tac))) >>
-  qpat_x_assum `call_evaluation_safe _ (int_calls_expr (Subscript _ _ _))` mp_tac >>
-  simp[NoAsms, int_calls_expr_def] >> strip_tac >>
-  drule call_evaluation_safe_append_left >> strip_tac >>
-  drule call_evaluation_safe_append_right >> strip_tac >>
-  qpat_x_assum `eval_place _ _ _ = _` mp_tac >>
-  simp_tac(srw_ss())[Once evaluate_def, bind_def] >>
-  Cases_on `eval_place cx e st` >>
-  rename1 `eval_place cx e st = (base_res,st1)` >>
-  qpat_x_assum `!env st res st'. _ ==> (_ /\ _)`
-    (drule_at (Pat `eval_place _ _ _ = _`)) >>
-  disch_then (qspec_then `env` mp_tac) >>
-  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
-  disch_then (CONJUNCTS_THEN2 mp_tac kall_tac) >>
-  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
-  reverse (Cases_on `base_res`)
-  >- (simp_tac(srw_ss())[] >> strip_tac >>
-      rpt (qpat_x_assum `!x. _` kall_tac) >> gvs[]) >>
-  qpat_x_assum `!s pv t. eval_place cx e s = (INL pv,t) ==> _`
-    (qspecl_then [`st`, `x`, `st1`] mp_tac) >>
-  disch_then (drule_then strip_assume_tac) >>
-  qpat_x_assum `!env st res st'. _ ==> (case _ of INL pv => live_memory_result _ _ | INR _ => T)`
-    (drule_at (Pat `eval_place _ _ _ = _`)) >>
-  disch_then (qspec_then `env` mp_tac) >> simp[] >> strip_tac >>
-  Cases_on `eval_expr cx e' st1` >>
-  rename1 `eval_expr cx e' st1 = (idx_res,st2)` >>
-  qpat_x_assum `!env st res st'. _ ==> (_ /\ _)`
-    (drule_at (Pat `eval_expr _ _ _ = _`)) >>
-  disch_then (qspec_then `env` mp_tac) >>
-  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
-  disch_then (CONJUNCTS_THEN2 mp_tac kall_tac) >>
-  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
-  qpat_x_assum `!env st res st'. _ ==> typed_scope_transition _ _`
-    (drule_at (Pat `eval_expr _ _ _ = _`)) >>
-  disch_then (qspec_then `env` mp_tac) >>
-  (impl_tac >- (rpt conj_tac >> FIRST [first_assum ACCEPT_TAC,
-       disj1_tac >> first_assum ACCEPT_TAC])) >> strip_tac >>
-  reverse (Cases_on `idx_res`)
-  >- (simp_tac(srw_ss())[] >> strip_tac >> gvs[]) >>
-  simp_tac(srw_ss())[] >> strip_tac >>
-  imp_res_tac vyperStatePreservationTheory.get_Value_state >>
-  gvs[lift_option_type_def, vyperMiscTheory.option_CASE_rator,
-      return_def, raise_def, AllCaseEqs()] >>
-  drule get_Value_state >> strip_tac >> gvs[] >>
-  rename1 `eval_expr cx e' st1 = (INL x',st2)` >>
-  Cases_on `res` >> simp[] >> rename1 `live_memory_result st' pv` >>
-  Cases_on `x`
-  >- (gvs[ordinary_place_result_typed_def, place_result_typed_place] >>
-      `vyperImmutableMetadataFrame$immutable_metadata_frame st1 st2` by
-        metis_tac[vyperImmutableMetadataFrameTheory.eval_expr_immutable_metadata_frame] >>
-      `runtime_place_typed cx st2 p tv` by
-        metis_tac[runtime_place_typed_transport] >>
-      `live_memory_result st2 (PlaceR p)` by
-        (Cases_on `p` >> TRY (simp[live_memory_result_def] >> NO_TAC) >>
-         metis_tac[live_memory_result_transport]) >>
-      drule_all extend_live_place_typed_success >> simp[]) >>
-  drule extend_value_result_live >> simp[]
-) g
-and live_static_subscript_tac g = (
-  qpat_x_assum `type_place_expr env (Subscript _ _ _) = SOME _` mp_tac >>
-  simp[NoAsms, Once well_typed_expr_def, AllCaseEqs()] >> strip_tac >>
-  qpat_x_assum `call_evaluation_safe _ (int_calls_expr (Subscript _ _ _))` mp_tac >>
-  simp[NoAsms, int_calls_expr_def] >> strip_tac >>
-  drule call_evaluation_safe_append_left >> strip_tac >>
-  drule call_evaluation_safe_append_right >> strip_tac >>
-  qpat_x_assum `eval_place _ _ _ = _` mp_tac >>
-  simp_tac(srw_ss())[Once evaluate_def, bind_def] >>
-  Cases_on `eval_place cx e st` >>
-  rename1 `eval_place cx e st = (base_res,st1)` >>
-  qpat_x_assum `!env st res st'. _ ==> (_ /\ _)`
-    (drule_at (Pat `eval_place _ _ _ = _`)) >>
-  disch_then (qspec_then `env` mp_tac) >>
-  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
-  disch_then (CONJUNCTS_THEN2 kall_tac mp_tac) >>
-  disch_then drule >> strip_tac >>
-  reverse (Cases_on `base_res`)
-  >- (simp_tac(srw_ss())[] >> strip_tac >>
-      rpt (qpat_x_assum `!x. _` kall_tac) >> gvs[]) >>
-  qpat_x_assum `!s pv t. eval_place cx e s = (INL pv,t) ==> _`
-    (qspecl_then [`st`, `x`, `st1`] mp_tac) >>
-  disch_then (drule_then strip_assume_tac) >>
-  qpat_x_assum `!env st res st'. _ ==> (case _ of INL pv => live_memory_result _ _ | INR _ => T)`
-    (drule_at (Pat `eval_place _ _ _ = _`)) >>
-  disch_then (qspec_then `env` mp_tac) >> simp[] >> strip_tac >>
-  Cases_on `eval_expr cx e' st1` >>
-  rename1 `eval_expr cx e' st1 = (idx_res,st2)` >>
-  qpat_x_assum `!env st res st'. _ ==> (_ /\ _)`
-    (drule_at (Pat `eval_expr _ _ _ = _`)) >>
-  disch_then (qspec_then `env` mp_tac) >>
-  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
-  disch_then (CONJUNCTS_THEN2 mp_tac kall_tac) >>
-  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
-  qpat_x_assum `!env st res st'. _ ==> typed_scope_transition _ _`
-    (drule_at (Pat `eval_expr _ _ _ = _`)) >>
-  disch_then (qspec_then `env` mp_tac) >>
-  (impl_tac >- (rpt conj_tac >> FIRST [first_assum ACCEPT_TAC,
-       disj1_tac >> first_assum ACCEPT_TAC])) >> strip_tac >>
-  reverse (Cases_on `idx_res`)
-  >- (simp_tac(srw_ss())[] >> strip_tac >> gvs[]) >>
-  simp_tac(srw_ss())[] >> strip_tac >>
-  imp_res_tac vyperStatePreservationTheory.get_Value_state >>
-  gvs[lift_option_type_def, vyperMiscTheory.option_CASE_rator,
-      return_def, raise_def, AllCaseEqs()] >>
-  drule get_Value_state >> strip_tac >> gvs[] >>
-  rename1 `eval_expr cx e' st1 = (INL x',st2)` >>
-  Cases_on `res` >> simp[] >>
-  `vyperImmutableMetadataFrame$immutable_metadata_frame st1 st2` by
-    metis_tac[vyperImmutableMetadataFrameTheory.eval_expr_immutable_metadata_frame] >>
-  drule_all transported_typed_result_extend_live >> simp[]
-) g
-and live_base_other_tac g = (
-  FIRST [
-    qpat_x_assum `eval_base_place _ (TopLevelNameTarget _) _ = _` mp_tac >>
-      pure_once_rewrite_tac[evaluate_def] >> metis_tac[lookup_global_place_live],
-    qpat_assum `eval_base_place _ (AttributeTarget _ _) _ = _` (K live_base_attribute_tac),
-    live_base_subscript_tac]
-) g
-and live_ord_static_base_tac g = (
-  qpat_x_assum `call_evaluation_safe _ (int_calls_expr (Subscript _ _ _))` mp_tac >>
-  simp[NoAsms, int_calls_expr_def] >> strip_tac >>
-  drule call_evaluation_safe_append_left >> strip_tac >>
-  drule call_evaluation_safe_append_right >> strip_tac >>
-  qpat_x_assum `eval_place _ _ _ = _` mp_tac >>
-  simp_tac(srw_ss())[Once evaluate_def, bind_def] >>
-  Cases_on `eval_place cx e st` >>
-  rename1 `eval_place cx e st = (base_res,st1)` >>
-  qpat_x_assum `!env st res st'. _ ==> (_ /\ _)`
-    (drule_at (Pat `eval_place _ _ _ = _`)) >>
-  disch_then (qspec_then `env` mp_tac) >>
-  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
-  disch_then (CONJUNCTS_THEN2 kall_tac mp_tac) >>
-  disch_then drule >> strip_tac >>
-  reverse (Cases_on `base_res`)
-  >- (simp_tac(srw_ss())[] >> strip_tac >>
-      rpt (qpat_x_assum `!x. _` kall_tac) >> gvs[]) >>
-  qpat_x_assum `!s pv t. eval_place cx e s = (INL pv,t) ==> _`
-    (qspecl_then [`st`, `x`, `st1`] mp_tac) >>
-  disch_then (drule_then strip_assume_tac) >>
-  qpat_x_assum `!env st res st'. _ ==> (case _ of INL pv => live_memory_result _ _ | INR _ => T)`
-    (drule_at (Pat `eval_place _ _ _ = _`)) >>
-  disch_then (qspec_then `env` mp_tac) >> simp[] >> strip_tac >>
-  Cases_on `eval_expr cx e' st1` >>
-  rename1 `eval_expr cx e' st1 = (idx_res,st2)` >>
-  qpat_x_assum `!env st res st'. _ ==> (_ /\ _)`
-    (drule_at (Pat `eval_expr _ _ _ = _`)) >>
-  disch_then (qspec_then `env` mp_tac) >>
-  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
-  disch_then (CONJUNCTS_THEN2 mp_tac kall_tac) >>
-  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
-  qpat_x_assum `!env st res st'. _ ==> typed_scope_transition _ _`
-    (drule_at (Pat `eval_expr _ _ _ = _`)) >>
-  disch_then (qspec_then `env` mp_tac) >>
-  (impl_tac >- (rpt conj_tac >> FIRST [first_assum ACCEPT_TAC,
-       disj1_tac >> first_assum ACCEPT_TAC])) >> strip_tac >>
-  reverse (Cases_on `idx_res`)
-  >- (simp_tac(srw_ss())[] >> strip_tac >> gvs[]) >>
-  simp_tac(srw_ss())[] >> strip_tac >>
-  imp_res_tac vyperStatePreservationTheory.get_Value_state >>
-  gvs[lift_option_type_def, vyperMiscTheory.option_CASE_rator,
-      return_def, raise_def, AllCaseEqs()] >>
-  drule get_Value_state >> strip_tac >> gvs[] >>
-  rename1 `eval_expr cx e' st1 = (INL x',st2)` >>
-  Cases_on `res` >> simp[] >>
-  `vyperImmutableMetadataFrame$immutable_metadata_frame st1 st2` by
-    metis_tac[vyperImmutableMetadataFrameTheory.eval_expr_immutable_metadata_frame] >>
-  drule_all transported_typed_result_extend_live >> simp[]
-) g
-and live_base_attribute_tac g = (
-  qpat_x_assum `type_place_target env (AttributeTarget _ _) = SOME _` mp_tac >>
-  simp[NoAsms, Once well_typed_expr_def, AllCaseEqs()] >> strip_tac >>
-  fs[int_calls_expr_def] >>
-  qpat_x_assum `eval_base_place _ _ _ = _` mp_tac >>
-  simp[NoAsms, Once evaluate_def, bind_def, return_def, AllCaseEqs()] >>
-  strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
-  qpat_x_assum `!env vt st res st'. _ ==> (case _ of INL pv => live_memory_result _ _ | INR _ => T)`
-    (drule_at (Pat `eval_base_place _ _ _ = _`)) >>
-  disch_then (qspec_then `env` mp_tac) >> simp[] >> strip_tac >>
-  qpat_x_assum `!env vt st res st'. _ ==> (_ /\ _)`
-    (drule_at (Pat `eval_base_place _ _ _ = _`)) >>
-  disch_then (qspec_then `env` mp_tac) >> simp[] >> strip_tac >>
-  gvs[lift_option_type_def, vyperMiscTheory.option_CASE_rator,
-      return_def, raise_def, AllCaseEqs()] >>
-  Cases_on `res` >> simp[] >>
-  drule_all extend_target_typed_result_live >> simp[]
-) g
-and live_base_subscript_tac g = (
-  qpat_x_assum `type_place_target env (SubscriptTarget _ _) = SOME _` mp_tac >>
-  simp[NoAsms, Once well_typed_expr_def, AllCaseEqs()] >> strip_tac >>
-  qpat_x_assum `call_evaluation_safe _ (int_calls_target (SubscriptTarget _ _))` mp_tac >>
-  simp[NoAsms, int_calls_expr_def] >> strip_tac >>
-  drule call_evaluation_safe_append_left >> strip_tac >>
-  drule call_evaluation_safe_append_right >> strip_tac >>
-  qpat_x_assum `eval_base_place _ _ _ = _` mp_tac >>
-  simp_tac(srw_ss())[Once evaluate_def, bind_def] >>
-  Cases_on `eval_base_place cx bt st` >>
-  rename1 `eval_base_place cx bt st = (base_res,st1)` >>
-  qpat_x_assum `!env vt st res st'. _ ==> (_ /\ _)`
-    (drule_at (Pat `eval_base_place _ _ _ = _`)) >>
-  disch_then (qspecl_then [`env`, `vt'`] mp_tac) >>
-  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
-  reverse (Cases_on `base_res`)
-  >- (simp_tac(srw_ss())[] >> strip_tac >>
-      rpt (qpat_x_assum `!x. _` kall_tac) >> gvs[]) >>
-  qpat_x_assum `!s pv t. eval_base_place cx bt s = (INL pv,t) ==> _`
-    (qspecl_then [`st`, `x`, `st1`] mp_tac) >>
-  disch_then (drule_then strip_assume_tac) >>
-  qpat_x_assum `!env vt st res st'. _ ==> (case _ of INL pv => live_memory_result _ _ | INR _ => T)`
-    (drule_at (Pat `eval_base_place _ _ _ = _`)) >>
-  disch_then (qspec_then `env` mp_tac) >> simp[] >> strip_tac >>
-  Cases_on `eval_expr cx e st1` >>
-  rename1 `eval_expr cx e st1 = (idx_res,st2)` >>
-  qpat_x_assum `!env st res st'. _ ==> (_ /\ _)`
-    (drule_at (Pat `eval_expr _ _ _ = _`)) >>
-  disch_then (qspec_then `env` mp_tac) >>
-  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
-  disch_then (CONJUNCTS_THEN2 mp_tac kall_tac) >>
-  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
-  qpat_x_assum `!env st res st'. _ ==> typed_scope_transition _ _`
-    (drule_at (Pat `eval_expr _ _ _ = _`)) >>
-  disch_then (qspec_then `env` mp_tac) >>
-  (impl_tac >- (rpt conj_tac >> FIRST [first_assum ACCEPT_TAC,
-       disj1_tac >> first_assum ACCEPT_TAC])) >> strip_tac >>
-  reverse (Cases_on `idx_res`)
-  >- (simp_tac(srw_ss())[] >> strip_tac >> gvs[]) >>
-  simp_tac(srw_ss())[] >> strip_tac >>
-  gvs[AllCaseEqs()] >>
-  drule get_Value_state >> strip_tac >> gvs[] >>
-  rename1 `eval_expr cx e st1 = (INL x',st2)` >>
-  Cases_on `res` >> simp[] >>
-  `vyperImmutableMetadataFrame$immutable_metadata_frame st1 st2` by
-    metis_tac[vyperImmutableMetadataFrameTheory.eval_expr_immutable_metadata_frame] >>
-  `place_result_typed env cx st2 x vt'` by
-    metis_tac[place_result_typed_transport] >>
-  `live_memory_result st2 x` by
-    (Cases_on `x`
-     >- (Cases_on `p` >> TRY (simp[live_memory_result_def] >> NO_TAC) >>
-         irule live_memory_result_transport >>
-         goal_assum (drule_at Any) >> first_assum ACCEPT_TAC) >>
-     simp[live_memory_result_def]) >>
-  drule_all extend_target_typed_result_live >> simp[]
-) g;
-
-(* Inventory: the original 17 LiveResult obligations are 12 expression
-   constructors, four base-target constructors, and target unwrapping.
-   No descendant is suspended by live_result_tac. *)
-val live_root_labels = [
-  "LiveRootExpr_Name", "LiveRootExpr_TopLevelName", "LiveRootExpr_FlagMember",
-  "LiveRootExpr_IfExp", "LiveRootExpr_Literal", "LiveRootExpr_StructLit",
-  "LiveRootExpr_Subscript", "LiveRootExpr_Attribute", "LiveRootExpr_Builtin",
-  "LiveRootExpr_TypeBuiltin", "LiveRootExpr_Pop", "LiveRootExpr_Call",
-  "LiveRootBase_NameTarget", "LiveRootBase_TopLevelNameTarget",
-  "LiveRootBase_AttributeTarget", "LiveRootBase_SubscriptTarget", "LiveRootTarget"];
-val _ = let
-  val SOME (_,parent) = markerLib.lookup_suspension "eval_scc_type_sound_mutual"
-  fun check label =
-    if length (markerLib.extract_suspended_goal [parent] label) = 1
-    then print ("Singleton Live obligation: " ^ label ^ "\n")
-    else raise Fail ("non-singleton Live obligation: " ^ label)
- in List.app check live_root_labels end;
-
-Resume eval_scc_type_sound_mutual[LiveRootExpr_Name]:
-  RESUME_TAC >> live_result_tac
-QED
-Resume eval_scc_type_sound_mutual[LiveRootExpr_TopLevelName]:
-  RESUME_TAC >> live_result_tac
-QED
-Resume eval_scc_type_sound_mutual[LiveRootExpr_FlagMember]:
-  RESUME_TAC >> live_result_tac
-QED
-Resume eval_scc_type_sound_mutual[LiveRootExpr_IfExp]:
-  RESUME_TAC >> live_result_tac
-QED
-Resume eval_scc_type_sound_mutual[LiveRootExpr_Literal]:
-  RESUME_TAC >> live_result_tac
-QED
-Resume eval_scc_type_sound_mutual[LiveRootExpr_StructLit]:
-  RESUME_TAC >> live_result_tac
-QED
-Resume eval_scc_type_sound_mutual[LiveRootExpr_Subscript]:
-  RESUME_TAC >> live_result_tac
-QED
-Resume eval_scc_type_sound_mutual[LiveRootExpr_Attribute]:
-  RESUME_TAC >> live_result_tac
-QED
-Resume eval_scc_type_sound_mutual[LiveRootExpr_Builtin]:
-  RESUME_TAC >> live_result_tac
-QED
-Resume eval_scc_type_sound_mutual[LiveRootExpr_TypeBuiltin]:
-  RESUME_TAC >> live_result_tac
-QED
-Resume eval_scc_type_sound_mutual[LiveRootExpr_Pop]:
-  RESUME_TAC >> live_result_tac
-QED
-Resume eval_scc_type_sound_mutual[LiveRootExpr_Call]:
-  RESUME_TAC >> live_result_tac
-QED
-Resume eval_scc_type_sound_mutual[LiveRootBase_NameTarget]:
-  RESUME_TAC >> live_result_tac
-QED
-Resume eval_scc_type_sound_mutual[LiveRootBase_TopLevelNameTarget]:
-  RESUME_TAC >> live_result_tac
-QED
-Resume eval_scc_type_sound_mutual[LiveRootBase_AttributeTarget]:
-  RESUME_TAC >> live_result_tac
-QED
-Resume eval_scc_type_sound_mutual[LiveRootBase_SubscriptTarget]:
-  RESUME_TAC >> live_result_tac
-QED
-Resume eval_scc_type_sound_mutual[LiveRootTarget]:
-  RESUME_TAC >> live_result_tac
 QED
 
 Resume eval_scc_type_sound_mutual[TargetPlace]:
@@ -12418,18 +10347,7 @@ Resume eval_scc_type_sound_mutual[TargetPlace]:
   >- gvs[no_type_error_result_def] >>
   drule eval_base_place_result_shape >> strip_tac >>
   gvs[get_place_def, return_def, raise_def, AllCaseEqs(), is_HashMapRef_def,
-      place_result_typed_def, place_expr_result_typed_def, no_type_error_result_def]
-QED
-
-Theorem ordinary_place_result_transport:
-  typed_scope_transition st st' /\
-  vyperImmutableMetadataFrame$immutable_metadata_frame st st' /\
-  ordinary_place_result_typed env cx st e pv ==>
-  ordinary_place_result_typed env cx st' e pv
-Proof
-  Cases_on `pv` >> simp[ordinary_place_result_typed_def] >>
-  strip_tac >> drule_all runtime_place_typed_transport >> strip_tac >>
-  goal_assum drule >> simp[]
+      eval_result_typed_def, no_type_error_result_def]
 QED
 
 Theorem live_result_transport:
@@ -12437,31 +10355,24 @@ Theorem live_result_transport:
   live_memory_result st' pv
 Proof
   Cases_on `pv`
-  >- (Cases_on `p` >> strip_tac >>
-      FIRST [drule_all live_memory_result_transport >> simp[],
-             simp[live_memory_result_def]]) >>
+  >- simp[live_memory_result_def]
+  >- (Cases_on `p`
+      >- simp[live_memory_result_def]
+      >- (strip_tac >> drule_all live_memory_result_transport >> simp[])
+      >- simp[live_memory_result_def]) >>
   simp[live_memory_result_def]
 QED
 
-Theorem ordinary_place_read_sound:
-  state_well_typed st /\ well_typed_expr env e /\
-  ordinary_place_result_typed env cx st e pv /\ live_memory_result st pv /\
-  read_place_or_value cx pv st = (res,st') ==>
+Theorem typed_result_read_sound[local]:
+  state_well_typed st /\
+  eval_result_typed (env,cx,st) pv (Type ty) /\ live_memory_result st pv /\
+  read_result cx pv st = (res,st') ==>
   st' = st /\ no_type_error_result res /\
-  case res of INL v => value_runtime_typed env (expr_type e) v | INR _ => T
+  case res of INL v => value_runtime_typed env ty v | INR _ => T
 Proof
-  Cases_on `pv` >>
-  simp[read_place_or_value_def, ordinary_place_result_typed_def] >>
-  rpt gen_tac >> strip_tac
-  >- (imp_res_tac read_place_preserves_state >> gvs[place_result_typed_place] >>
-      Cases_on `res` >> simp[value_runtime_typed_def, no_type_error_result_def]
-      >- (drule_all read_live_place_success_type >> metis_tac[]) >>
-      drule_all read_place_typed_error >> simp[]) >>
-  imp_res_tac materialise_state >> gvs[] >>
-  Cases_on `res` >> simp[no_type_error_result_def]
-  >- (gvs[expr_result_typed_def, expr_runtime_typed_def, value_runtime_typed_def] >>
-      metis_tac[materialise_preserves_value_type, evaluate_type_well_formed_type_value]) >>
-  drule_all expr_result_typed_materialise_no_type_error >> simp[]
+  rpt strip_tac >> imp_res_tac read_result_state >> gvs[] >>
+  Cases_on `res` >> simp[no_type_error_result_def] >>
+  metis_tac[read_live_result_success_type, read_typed_result_error]
 QED
 
 Theorem live_place_read_sound:
@@ -12479,7 +10390,7 @@ QED
 Theorem typed_target_place_write_sound[local]:
   env_consistent env cx st /\ state_well_typed st /\ context_well_typed cx /\
   accounts_well_typed st.accounts /\
-  place_result_typed env cx st (PlaceR p) (Type ty) /\
+  eval_result_typed (env,cx,st) (PlaceR p) (Type ty) /\
   writable_place_result cx st (PlaceR p) /\ value_runtime_typed env ty v /\
   write_place cx p v st = (res,st') ==>
   state_well_typed st' /\ env_consistent env cx st' /\
@@ -12487,7 +10398,7 @@ Theorem typed_target_place_write_sound[local]:
 Proof
   rpt gen_tac >> strip_tac >>
   `runtime_consistent env cx st` by simp[runtime_consistent_def] >>
-  gvs[value_runtime_typed_def, place_result_typed_place, writable_place_result_def] >>
+  gvs[value_runtime_typed_def, eval_result_typed_def, writable_place_result_def] >>
   drule_all write_place_sound >> simp[runtime_consistent_def]
 QED
 
@@ -12497,22 +10408,24 @@ Resume eval_scc_type_sound_mutual[Assign_Base_sequence]:
          type_widens_to env.type_defs (expr_type e) tty /\
          assignable_type env.type_defs tty` by
     metis_tac[atarget_accepts_well_typed_atarget] >>
-  fs[well_typed_atarget_def] >>
+  qpat_x_assum `well_typed_atarget env (BaseTarget bt) tty`
+    (assume_tac o REWRITE_RULE [well_typed_atarget_def]) >>
   qpat_x_assum `call_evaluation_safe _ (int_calls_stmt _)` mp_tac >>
   pure_rewrite_tac[int_calls_stmt_def, int_calls_atarget_def] >> strip_tac >>
   drule call_evaluation_safe_append_left >> strip_tac >>
   drule call_evaluation_safe_append_right >> strip_tac >>
   qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
   simp_tac (srw_ss()) [Once evaluate_def, bind_def] >>
-  Cases_on `eval_place cx e st` >>
-  rename1 `eval_place cx e st = (rhs_res,rhs_st)` >>
-  qpat_x_assum `!env st res st'. _ ==> (_ /\ _)`
-    (drule_all_then (CONJUNCTS_THEN2 (drule_then strip_assume_tac) kall_tac)) >>
+  Cases_on `eval_expr cx e st` >>
+  rename1 `eval_expr cx e st = (rhs_res,rhs_st)` >>
+  qpat_x_assum `!env st res st'. _ ==> _ /\ !vt. _`
+    (drule_all_then strip_assume_tac) >>
+  qpat_x_assum `well_typed_expr env e ==> _` (drule_then strip_assume_tac) >>
   reverse (Cases_on `rhs_res`)
-  >- (simp[] >> strip_tac >> gvs[no_type_error_result_def] >>
-      irule no_control_exc_return_exception_typed >>
-      drule eval_place_no_control >> simp[]) >>
-  qpat_x_assum `!s'' pv t'. eval_place _ _ _ = _ ==> _`
+  >- (POP_ASSUM_LIST (map_every assume_tac o List.filter (not o is_forall o concl)) >>
+      simp[] >> strip_tac >> gvs[no_type_error_result_def] >>
+      drule eval_expr_exception_return_typed >> simp[]) >>
+  qpat_x_assum `!s'' pv t'. eval_expr _ _ _ = _ ==> _`
     (drule_then strip_assume_tac) >>
   qpat_x_assum `!env st res st'. _ ==> (case _ of INL pv => live_memory_result _ _ | INR _ => T)`
     (qspec_then `env` mp_tac) >> simp[] >>
@@ -12538,31 +10451,32 @@ Resume eval_scc_type_sound_mutual[Assign_Base_write]:
   RESUME_TAC >>
   POP_ASSUM_LIST (map_every assume_tac o List.filter (not o is_forall o concl)) >>
   RULE_ASSUM_TAC (SIMP_RULE (srw_ss()) []) >>
-  qmatch_assum_rename_tac `eval_place cx e st = (INL pv,rhs_st)` >>
+  qmatch_assum_rename_tac `eval_expr cx e st = (INL pv,rhs_st)` >>
   qmatch_assum_rename_tac `eval_target_place cx bt rhs_st = (INL p,target_st)` >>
   `vyperImmutableMetadataFrame$immutable_metadata_frame rhs_st target_st` by
-    (drule (cj 10 eval_metadata_frame_mutual) >> simp[]) >>
-  `ordinary_place_result_typed env cx target_st e pv` by
-    (irule ordinary_place_result_transport >> qexists_tac `rhs_st` >> simp[]) >>
+    (drule (cj 8 eval_metadata_frame_mutual) >> simp[]) >>
+  `eval_result_typed (env,cx,target_st) pv (Type (expr_type e))` by
+    (irule eval_result_typed_transport >> qexists_tac `rhs_st` >> simp[]) >>
   `live_memory_result target_st pv` by
     (irule live_result_transport >> qexists_tac `rhs_st` >> simp[]) >>
-  Cases_on `read_place_or_value cx pv target_st` >>
-  rename1 `read_place_or_value cx pv target_st = (read_res,read_st)` >>
-  drule_all ordinary_place_read_sound >> strip_tac >> gvs[] >>
+  Cases_on `read_result cx pv target_st` >>
+  rename1 `read_result cx pv target_st = (read_res,read_st)` >>
+  drule_all typed_result_read_sound >> strip_tac >> gvs[] >>
   Cases_on `read_res` >> simp[] >> strip_tac >> gvs[no_type_error_result_def]
   >- (qmatch_assum_rename_tac
-        `read_place_or_value cx pv target_st = (INL v,target_st)` >>
+        `read_result cx pv target_st = (INL v,target_st)` >>
       `value_runtime_typed env tty v` by
         (fs[value_runtime_typed_def] >>
          drule_all type_widens_to_value_has_type >> strip_tac >> gvs[]) >>
-      `place_result_typed env cx target_st (PlaceR p) (Type tty)` by simp[] >>
+      `eval_result_typed (env,cx,target_st) (PlaceR p) (Type tty)` by
+        simp[eval_result_typed_def] >>
       drule_all typed_target_place_write_sound >> strip_tac >>
       simp[no_type_error_result_def] >>
       Cases_on `res` >> fs[no_type_error_result_def] >>
       irule no_control_exc_return_exception_typed >>
       drule write_place_no_control >> simp[]) >>
   irule no_control_exc_return_exception_typed >>
-  drule read_place_or_value_no_control >> simp[]
+  drule read_result_no_control >> simp[]
 QED
 
 Resume eval_scc_type_sound_mutual[AugAssign_place]:
@@ -12620,6 +10534,8 @@ Resume eval_scc_type_sound_mutual[AugAssign_rhs]:
   qpat_x_assum `!env st res st'. _ ==> typed_scope_transition _ _`
     (qspec_then `env` mp_tac) >> simp[] >>
   disch_then (drule_all_then strip_assume_tac) >>
+  qpat_x_assum `!env st res st'. _ ==> case res of INL pv => live_memory_result _ _ | INR _ => T`
+    (qspecl_then [`env`, `target_st`, `rhs_res`, `rhs_st`] mp_tac) >> simp[] >> strip_tac >>
   (reverse (Cases_on `rhs_res`) >| [
     simp[] >> strip_tac >> gvs[no_type_error_result_def] >>
       drule eval_expr_exception_return_typed >> simp[],
@@ -12639,11 +10555,40 @@ Resume eval_scc_type_sound_mutual[AugAssign_write]:
     (irule writable_place_result_transport >> qexists_tac `target_st` >> simp[]) >>
   `runtime_place_writable cx rhs_st p` by fs[writable_place_result_def] >>
   `runtime_consistent env cx rhs_st` by simp[runtime_consistent_def] >>
-  simp_tac (srw_ss()) [] >> strip_tac >>
-  drule_all (SIMP_RULE (srw_ss()) [Once bind_def] update_place_tail_sound) >> strip_tac >>
-  fs[runtime_consistent_def] >> Cases_on `res` >> simp[] >>
-  irule no_control_exc_return_exception_typed >>
-  drule (SIMP_RULE (srw_ss()) [Once bind_def] update_place_tail_no_control) >> simp[]
+  Cases_on `read_result cx rhs rhs_st` >>
+  rename1 `read_result cx rhs rhs_st = (loaded,read_st)` >>
+  drule_all typed_result_read_sound >> strip_tac >> gvs[] >>
+  reverse (Cases_on `loaded`)
+  >- (simp[] >> strip_tac >> gvs[no_type_error_result_def] >>
+      drule read_result_no_control >> simp[no_control_exc_return_exception_typed]) >>
+  simp[] >> strip_tac >> suspend "AugAssign_value_write"
+QED
+
+Resume eval_scc_type_sound_mutual[AugAssign_value_write]:
+  RESUME_TAC >>
+  qmatch_assum_rename_tac `read_result cx rhs rhs_st = (INL right,rhs_st)` >>
+  fs[value_runtime_typed_def] >>
+  qmatch_assum_rename_tac `evaluate_type env.type_defs (expr_type e) = SOME rhs_tv` >>
+  `!msg. evaluate_binop
+    (case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0) ptv bop cur right <>
+    INR (TypeError msg)` by
+    (irule well_typed_binop_no_type_error >>
+     qexistsl_tac [`ptv`,`ty`,`expr_type e`,`env.type_defs`,`ptv`,`rhs_tv`,`ty`] >> simp[]) >>
+  qpat_x_assum `_ = (res,st')` mp_tac >>
+  simp_tac (srw_ss()) [bind_def, lift_sum_def] >>
+  Cases_on `evaluate_binop
+    (case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0) ptv bop cur right` >>
+  simp[return_def, raise_def] >> strip_tac >> gvs[no_type_error_result_def]
+  >- (qmatch_assum_rename_tac `evaluate_binop _ ptv bop cur right = INL result` >>
+      `value_has_type ptv result` by
+        (irule well_typed_binop_success_type >>
+         qexistsl_tac [`bop`,`ty`,`expr_type e`,`env.type_defs`,`ptv`,`ptv`,`rhs_tv`,`ty`,
+           `case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0`,
+           `cur`,`right`] >> simp[]) >>
+      drule_all write_place_sound >> strip_tac >> gvs[runtime_consistent_def] >>
+      Cases_on `res` >> gvs[no_type_error_result_def] >>
+      drule write_place_no_control >> simp[no_control_exc_return_exception_typed]) >>
+  simp[return_exception_typed_def]
 QED
 
 Theorem value_runtime_typed_tuple_components:
@@ -12675,7 +10620,8 @@ Resume eval_scc_type_sound_mutual[TupleStore_BaseTarget]:
   >- (simp_tac (srw_ss()) [] >> strip_tac >> gvs[no_type_error_result_def]) >>
   simp_tac (srw_ss()) [] >> strip_tac >> gvs[] >>
   qmatch_assum_rename_tac `eval_target_place cx bt st = (INL p,middle)` >>
-  `place_result_typed env cx middle (PlaceR p) (Type ty)` by simp[] >>
+  `eval_result_typed (env,cx,middle) (PlaceR p) (Type ty)` by
+    simp[eval_result_typed_def] >>
   drule_all typed_target_place_write_sound >> simp[]
 QED
 
@@ -12734,19 +10680,19 @@ QED
    and public compatibility contracts keep their original preconditions. *)
 Theorem subscript_vtype_result_step_type[local]:
   subscript_vtype bvt (expr_type e) = SOME out /\
-  expr_result_typed env e (Value key) ==>
+  value_runtime_typed env (expr_type e) key ==>
   target_path_step_type env bvt (ValueSubscript key) out
 Proof
-  strip_tac >>
-  mp_tac (Q.SPECL [`bvt`,`expr_type e`,`out`,`env`,`e`,`Value key`,
-    `ARB`,`ARB`,`key`,`bvt`,`[]`] subscript_vtype_value_step_type) >>
-  simp[get_Value_def, return_def, target_path_type_def]
-QED
-
-Theorem get_Value_success_Value[local]:
-  get_Value tv st = (INL key,st') ==> tv = Value key /\ st' = st
-Proof
-  Cases_on `tv` >> simp[get_Value_def, return_def, raise_def]
+  strip_tac >> Cases_on `bvt` >> gvs[subscript_vtype_def]
+  >- (Cases_on `t` >> gvs[subscript_vtype_def] >>
+      Cases_on `expr_type e` >>
+      gvs[is_int_type_def, value_runtime_typed_def, evaluate_type_def, AllCaseEqs()] >>
+      Cases_on `key` >> gvs[value_has_type_def, target_path_step_type_def]) >>
+  Cases_on `expr_type e` >>
+  gvs[hashmap_key_type_def, value_runtime_typed_def, evaluate_type_def, AllCaseEqs(), LET_THM] >>
+  Cases_on `key` >>
+  gvs[value_has_type_def, target_path_step_type_def, hashmap_key_type_def,
+      value_runtime_typed_def, evaluate_type_def, value_has_type_def]
 QED
 
 Resume eval_scc_type_sound_mutual[WritableRootBase_NameTarget]:
@@ -12763,7 +10709,7 @@ QED
 Resume eval_scc_type_sound_mutual[WritableRootBase_TopLevelNameTarget]:
   RESUME_TAC >> rpt strip_tac >>
   qpat_x_assum `eval_base_place _ _ _ = _` mp_tac >>
-  rewrite_tac[Once evaluate_def] >> metis_tac[lookup_global_place_writable]
+  rewrite_tac[Once evaluate_def] >> metis_tac[lookup_global_writable]
 QED
 
 Resume eval_scc_type_sound_mutual[WritableRootBase_AttributeTarget]:
@@ -12778,7 +10724,7 @@ Resume eval_scc_type_sound_mutual[WritableRootBase_AttributeTarget]:
     (drule_all_then strip_assume_tac) >>
   qpat_assum `!env vt st res st'. _ ==> (case _ of INL pv => writable_place_result _ _ _ | INR _ => T)`
     (drule_all_then strip_assume_tac) >> gvs[] >>
-  irule extend_target_place_writable >>
+  irule extend_place_writable >>
   goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
   goal_assum (drule_at Any) >>
   POP_ASSUM_LIST (map_every assume_tac o List.filter (not o is_forall o concl)) >>
@@ -12796,8 +10742,7 @@ Resume eval_scc_type_sound_mutual[WritableRootBase_SubscriptTarget]:
   drule call_evaluation_safe_append_right >> strip_tac >>
   Cases_on `res` >> simp[] >>
   qpat_x_assum `eval_base_place _ (SubscriptTarget _ _) _ = _` mp_tac >>
-  simp[NoAsms, Once evaluate_def, bind_def, get_Value_def,
-       return_def, raise_def, AllCaseEqs()] >> strip_tac >>
+  simp[NoAsms, Once evaluate_def, bind_def, AllCaseEqs()] >> strip_tac >>
   rpt BasicProvers.VAR_EQ_TAC >>
   qpat_x_assum `!s pv t. eval_base_place _ _ _ = _ ==> _`
     (drule_then strip_assume_tac) >>
@@ -12805,23 +10750,29 @@ Resume eval_scc_type_sound_mutual[WritableRootBase_SubscriptTarget]:
     (drule_all_then strip_assume_tac) >>
   qpat_assum `!env vt st res st'. _ ==> (case _ of INL pv => writable_place_result _ _ _ | INR _ => T)`
     (drule_all_then strip_assume_tac) >>
-  qpat_x_assum `!env st res st'. _ ==> (_ /\ _)`
-    (drule_all_then (CONJUNCTS_THEN2 (drule_then strip_assume_tac) kall_tac)) >>
+  qpat_x_assum `!env st res st'. _ ==> _ /\ !vt. _`
+    (drule_all_then strip_assume_tac) >>
+  qpat_x_assum `well_typed_expr env e ==> _` (drule_then strip_assume_tac) >>
   qpat_x_assum `!env st res st'. _ ==> typed_scope_transition _ _`
     (qspec_then `env` mp_tac) >> simp[] >>
   disch_then (drule_all_then strip_assume_tac) >>
+  qpat_x_assum `!env st res st'. _ ==> case res of INL pv => live_memory_result _ _ | INR _ => T`
+    (qspec_then `env` mp_tac) >> simp[] >>
+  disch_then (drule_all_then strip_assume_tac) >>
   POP_ASSUM_LIST (map_every assume_tac o List.filter (not o is_forall o concl)) >>
-  imp_res_tac get_Value_success_Value >> gvs[] >>
+  gvs[] >>
   qmatch_assum_rename_tac `eval_base_place cx bt st = (INL base_pv,st1)` >>
-  qmatch_assum_rename_tac `eval_expr cx e st1 = (INL (Value key),st2)` >>
+  qmatch_assum_rename_tac `eval_expr cx e st1 = (INL idx,st2)` >>
+  drule_all typed_result_read_sound >> strip_tac >> gvs[] >>
+  qmatch_assum_rename_tac `eval_expr cx e st1 = (INL idx,st2)` >>
   `vyperImmutableMetadataFrame$immutable_metadata_frame st1 st2` by
-    metis_tac[eval_expr_immutable_metadata_frame] >>
-  `place_result_typed env cx st2 base_pv base_vt` by
-    metis_tac[place_result_typed_transport] >>
+    (drule eval_expr_immutable_metadata_frame >> simp[]) >>
+  `eval_result_typed (env,cx,st2) base_pv base_vt` by
+    (irule eval_result_typed_transport >> qexists_tac `st1` >> simp[eval_result_typed_def]) >>
   `writable_place_result cx st2 base_pv` by
     metis_tac[writable_place_result_transport] >>
   drule_all subscript_vtype_result_step_type >> strip_tac >>
-  drule_all extend_target_place_writable >> simp[]
+  drule_all extend_place_writable >> simp[]
 QED
 
 Resume eval_scc_type_sound_mutual[WritableRootTarget]:
@@ -12906,120 +10857,563 @@ Resume eval_scc_type_sound_mutual[TraceBlueprintSuffix]:
   metis_tac[typed_scope_transition_trans, typed_scope_transition_scopes]
 QED
 
+Resume eval_scc_type_sound_mutual[Live_Base_Attribute_Selection]:
+  RESUME_TAC >>
+  qpat_x_assum `eval_base_place _ (AttributeTarget _ _) _ = _` mp_tac >>
+  simp[NoAsms, Once evaluate_def, bind_def, AllCaseEqs()] >> strip_tac >>
+  gvs[int_calls_expr_def] >>
+  qpat_assum `!env vt st res st'. _ ==> state_well_typed _ /\ _`
+    (drule_all_then strip_assume_tac) >>
+  qpat_assum `!env vt st res st'. _ ==> (case _ of INL pv => live_memory_result _ _ | INR _ => T)`
+    (drule_all_then assume_tac) >>
+  Cases_on `res` >> gvs[] >>
+  drule_all extend_typed_result_live >> simp[]
+QED
+
+Resume eval_scc_type_sound_mutual[Live_IntCall_Returned_Result]:
+  RESUME_TAC >> Cases_on `res` >> simp[] >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def, return_def,
+       AllCaseEqs(), live_memory_result_def] >>
+  strip_tac >> gvs[]
+QED
+
+Resume eval_scc_type_sound_mutual[Trace_Base_Attribute_Selection]:
+  RESUME_TAC >>
+  qpat_x_assum `eval_base_place _ (AttributeTarget _ _) _ = _` mp_tac >>
+  simp[NoAsms, Once evaluate_def, bind_def, AllCaseEqs()] >> strip_tac >>
+  gvs[int_calls_expr_def] >>
+  imp_res_tac vyperPlaceFramesTheory.extend_place_state >> gvs[] >>
+  qpat_x_assum `!env vt st res st'. _ ==> typed_scope_transition _ _`
+    (drule_all_then assume_tac) >> simp[]
+QED
+
+Theorem eval_create_success_value[local]:
+  eval_create cx kind has_salt rof arg_tys vs blueprint_size st = (INL pv,st') ==>
+  ?v. pv = Value v
+Proof
+  Cases_on `dest_create_args kind has_salt vs` >>
+  simp[vyperCreateTheory.eval_create_def, bind_apply, ignore_bind_apply,
+       lift_option_type_def, get_accounts_def, update_accounts_def,
+       get_pending_deletions_def, get_transient_storage_def, check_def, assert_def,
+       vyperCreateTheory.create_soft_failure_def, return_def, raise_def] >>
+  Cases_on `create_arg_ctor_types kind has_salt arg_tys` >>
+  simp[bind_apply, ignore_bind_apply, return_def, raise_def] >>
+  Cases_on `build_create_code (get_tenv cx) kind x st.accounts x' blueprint_size` >>
+  simp[bind_apply, ignore_bind_apply, return_def, raise_def] >>
+  rpt (IF_CASES_TAC >>
+    simp[bind_apply, ignore_bind_apply, get_transient_storage_def,
+         get_pending_deletions_def, update_accounts_def,
+         check_def, assert_def, return_def, raise_def]) >>
+  rpt strip_tac >>
+  qmatch_asmsub_abbrev_tac `run_create_evm ca cb cc cd ce cf cg ch` >>
+  (Cases_on `run_create_evm ca cb cc cd ce cf cg ch`
+   >- gvs[ignore_bind_apply, update_accounts_def, return_def, raise_def]) >>
+  rename1 `run_create_evm ca cb cc cd ce cf cg ch = SOME adapter` >>
+  PairCases_on `adapter` >>
+  Cases_on `adapter0` >>
+  gvs[ignore_bind_apply, update_accounts_def, update_transient_def,
+      update_pending_deletions_def, append_logs_def, return_def, raise_def]
+QED
+
+Resume eval_scc_type_sound_mutual[Live_Create_Returned_Result]:
+  RESUME_TAC >> Cases_on `res` >> simp[] >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >>
+  Cases_on `kind` >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def, return_def,
+       AllCaseEqs(), live_memory_result_def] >>
+  strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+  drule eval_create_success_value >> strip_tac >> gvs[]
+QED
+
+Theorem eval_ext_call_success_value[local]:
+  eval_ext_call cx static skip sigt opts vs st = (INL pv,st') ==>
+  ?v. pv = Value v
+Proof
+  PairCases_on `sigt` >> Cases_on `vs` >>
+  simp[eval_ext_call_def, bind_apply, ignore_bind_apply,
+       lift_option_type_def, type_check_def, check_def, assert_def,
+       return_def, raise_def, get_accounts_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  qmatch_asmsub_abbrev_tac `eval_ext_call_effects ca cb cc cd ce cf cg` >>
+  Cases_on `eval_ext_call_effects ca cb cc cd ce cf cg` >>
+  gvs[bind_apply, ignore_bind_apply, lift_sum_runtime_def,
+      return_def, raise_def, get_accounts_def, check_def, assert_def,
+      AllCaseEqs()] >>
+  Cases_on `if returnData = [] then
+    ext_call_kwarg EKDefault opts (DROP (LENGTH sigt1) t) else NONE` >>
+  gvs[bind_apply, ignore_bind_apply, return_def, raise_def,
+      get_accounts_def, assert_def, AllCaseEqs()] >>
+  Cases_on `evaluate_abi_decode_return (get_tenv ca) sigt2 returnData` >>
+  gvs[bind_apply, return_def, raise_def]
+QED
+
+Resume eval_scc_type_sound_mutual[Live_ExtCall_Returned_Result]:
+  RESUME_TAC >> Cases_on `res` >> simp[] >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >>
+  simp[Once evaluate_def, bind_def, return_def, AllCaseEqs(),
+       live_memory_result_def] >>
+  strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+  drule eval_ext_call_success_value >> strip_tac >> gvs[]
+QED
+
+Resume eval_scc_type_sound_mutual[Live_RawLog_Returned_Result]:
+  RESUME_TAC >> Cases_on `res` >> simp[] >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
+       assert_def, return_def, raise_def, AllCaseEqs(), live_memory_result_def] >>
+  strip_tac >> gvs[]
+QED
+
+Resume eval_scc_type_sound_mutual[Live_RawRevert_Returned_Result]:
+  RESUME_TAC >> Cases_on `res` >> simp[] >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
+       assert_def, return_def, raise_def, AllCaseEqs(), live_memory_result_def] >>
+  strip_tac >> gvs[]
+QED
+
+Resume eval_scc_type_sound_mutual[Live_SelfDestruct_Returned_Result]:
+  RESUME_TAC >> Cases_on `res` >> simp[] >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
+       assert_def, return_def, raise_def, AllCaseEqs(), live_memory_result_def] >>
+  strip_tac >> gvs[]
+QED
+
+Theorem eval_send_success_value[local]:
+  eval_send cx has_gas vs st = (INL pv,st') ==> ?v. pv = Value v
+Proof
+  Cases_on `vs` >- simp[eval_send_def, raise_def] >>
+  Cases_on `t` >- simp[eval_send_def, raise_def] >>
+  Cases_on `dest_AddressV h` >> Cases_on `dest_NumV h'` >>
+  simp[eval_send_def, bind_apply, ignore_bind_apply, type_check_def,
+       check_def, assert_def, return_def, raise_def, lift_option_type_def,
+       AllCaseEqs()] >>
+  rpt strip_tac >> gvs[AllCaseEqs(), return_def, raise_def] >>
+  Cases_on `st.outcomes` >>
+  gvs[bind_apply, ignore_bind_apply, return_def, raise_def, AllCaseEqs(),
+      get_accounts_def, get_transient_storage_def, lift_option_def,
+      bind_def, ignore_bind_def, check_def, assert_def] >>
+  rpt strip_tac >> gvs[] >>
+  pairarg_tac >> gvs[bind_def, ignore_bind_def, check_def, assert_def,
+                       return_def, raise_def, AllCaseEqs()]
+QED
+
+Resume eval_scc_type_sound_mutual[Live_Send_Returned_Result]:
+  RESUME_TAC >> Cases_on `res` >> simp[] >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >>
+  simp[Once evaluate_def, bind_def, return_def, AllCaseEqs(),
+       live_memory_result_def, ignore_bind_def, type_check_def, assert_def,
+       raise_def] >>
+  strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+  drule eval_send_success_value >> strip_tac >> gvs[]
+QED
+
+Theorem eval_raw_call_success_value[local]:
+  eval_raw_call cx flags addr data amount st = (INL pv,st') ==>
+  ?v. pv = Value v
+Proof
+  simp[eval_raw_call_def, bind_apply, ignore_bind_apply, type_check_def,
+       check_def, assert_def, get_accounts_def, get_transient_storage_def,
+       return_def, raise_def] >>
+  Cases_on `run_raw_call cx flags addr data amount st.accounts st.tStorage` >>
+  simp[lift_option_def, bind_apply, ignore_bind_apply, return_def, raise_def,
+       update_accounts_def, update_transient_def, append_logs_def] >>
+  rpt (IF_CASES_TAC >>
+    simp[bind_apply, ignore_bind_apply, return_def, raise_def]) >>
+  rpt strip_tac >> gvs[]
+QED
+
+Resume eval_scc_type_sound_mutual[Live_RawCall_Returned_Result]:
+  RESUME_TAC >> Cases_on `res` >> simp[] >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
+       assert_def, return_def, raise_def, AllCaseEqs(), live_memory_result_def] >>
+  strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+  drule eval_raw_call_success_value >> strip_tac >> gvs[]
+QED
+
+Resume eval_scc_type_sound_mutual[Live_RawCallCalldata_Returned_Result]:
+  RESUME_TAC >> Cases_on `res` >> simp[] >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
+       assert_def, return_def, raise_def, AllCaseEqs(), live_memory_result_def] >>
+  strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+  drule eval_raw_call_success_value >> strip_tac >> gvs[]
+QED
+
+Resume eval_scc_type_sound_mutual[Live_Builtin_Returned_Result]:
+  RESUME_TAC >> Cases_on `res` >> simp[] >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
+       assert_def, return_def, raise_def, AllCaseEqs(), live_memory_result_def] >>
+  strip_tac >> gvs[]
+QED
+
+Resume eval_scc_type_sound_mutual[Live_TypeBuiltin_Returned_Result]:
+  RESUME_TAC >> Cases_on `res` >> simp[] >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
+       assert_def, return_def, raise_def, AllCaseEqs(), live_memory_result_def] >>
+  strip_tac >> gvs[]
+QED
+
+Resume eval_scc_type_sound_mutual[Trace_Attribute_Selection]:
+  RESUME_TAC >>
+  qpat_x_assum `call_evaluation_safe cx (int_calls_expr (Attribute _ _ _))`
+    (assume_tac o REWRITE_RULE [int_calls_expr_def]) >>
+  FIRST [
+    qpat_x_assum `well_typed_expr env (Attribute _ _ _)`
+      (strip_assume_tac o SIMP_RULE (srw_ss()) [Once well_typed_expr_def]),
+    qpat_x_assum `type_place_expr env (Attribute _ _ _) = SOME vt`
+      (strip_assume_tac o SIMP_RULE (srw_ss()) [Once well_typed_expr_def, AllCaseEqs()])] >>
+  Cases_on `eval_expr cx e st` >>
+  qpat_x_assum `!env st res st'. _ ==> typed_scope_transition _ _`
+    (drule_at (Pat `eval_expr _ _ _ = _`)) >>
+  disch_then (qspec_then `env` mp_tac) >>
+  (impl_tac >- (rpt conj_tac >> FIRST [first_assum ACCEPT_TAC,
+    disj1_tac >> first_assum ACCEPT_TAC,
+    disj2_tac >> goal_assum drule])) >> strip_tac >>
+  rpt (first_x_assum (fn th => if is_forall (concl th) then kall_tac th else NO_TAC)) >>
+  qpat_x_assum `eval_expr _ (Attribute _ _ _) _ = _` mp_tac >>
+  simp[NoAsms, Once evaluate_def, bind_def] >> asm_rewrite_tac[] >>
+  simp[NoAsms, AllCaseEqs()] >> strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+  imp_res_tac vyperPlaceFramesTheory.select_result_state >> gvs[]
+QED
+
+Resume eval_scc_type_sound_mutual[Live_Attribute_Capture_Selection]:
+  RESUME_TAC >>
+  FIRST [
+    qpat_x_assum `well_typed_expr env (Attribute _ _ _)`
+      (strip_assume_tac o SIMP_RULE (srw_ss()) [Once well_typed_expr_def]),
+    qpat_x_assum `type_place_expr env (Attribute _ _ _) = SOME vt` mp_tac >>
+      simp[Once well_typed_expr_def]] >>
+  qpat_x_assum `call_evaluation_safe cx (int_calls_expr (Attribute _ _ _))`
+    (assume_tac o REWRITE_RULE [int_calls_expr_def]) >>
+  Cases_on `eval_expr cx e st` >>
+  qpat_x_assum `!env st res st'. _ ==> (_ /\ _)`
+    (drule_at (Pat `eval_expr _ _ _ = _`)) >>
+  disch_then (qspec_then `env` mp_tac) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
+  qpat_x_assum `well_typed_expr env e ==> _` (drule_then strip_assume_tac) >>
+  qpat_x_assum `!env st res st'. _ ==> case res of INL pv => live_memory_result _ _ | INR _ => T`
+    (drule_at (Pat `eval_expr _ _ _ = _`)) >>
+  disch_then (qspec_then `env` mp_tac) >>
+  (impl_tac >- (rpt conj_tac >> FIRST [first_assum ACCEPT_TAC,
+    disj1_tac >> first_assum ACCEPT_TAC])) >> strip_tac >>
+  rpt (first_x_assum (fn th => if is_forall (concl th) then kall_tac th else NO_TAC)) >>
+  qpat_x_assum `eval_expr _ (Attribute _ _ _) _ = _` mp_tac >>
+  simp[NoAsms, Once evaluate_def, bind_def] >> asm_rewrite_tac[] >>
+  simp[NoAsms, AllCaseEqs()] >> strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+  simp[] >> Cases_on `res` >> gvs[] >>
+  irule transported_typed_result_extend_live >>
+  goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
+  qexistsl_tac [`env`, `Type (expr_type e)`] >>
+  simp[typed_scope_transition_refl, vyperImmutableMetadataFrameTheory.immutable_metadata_frame_refl]
+QED
+
+Resume eval_scc_type_sound_mutual[Live_Pop_Retained_Owner]:
+  RESUME_TAC >>
+  rename1 `eval_expr cx (Pop ty bt) st = (res,st')` >>
+  drule well_typed_expr_Pop_dynamic_target_assignable >> strip_tac >>
+  `well_typed_target env bt (ArrayT ty (Dynamic n))` by simp[well_typed_target_def] >>
+  qpat_x_assum `call_evaluation_safe cx (int_calls_expr (Pop _ _))`
+    (assume_tac o REWRITE_RULE [int_calls_expr_def]) >>
+  Cases_on `eval_target_place cx bt st` >>
+  rename1 `eval_target_place cx bt st = (target_res,st1)` >>
+  qpat_x_assum `!env ty st res st'. _ ==> state_well_typed _ /\ _`
+    (drule_all_then strip_assume_tac) >>
+  qpat_x_assum `!env ty st res st'. _ ==> case res of INL p => live_memory_result _ _ | INR _ => T`
+    (drule_all_then strip_assume_tac) >>
+  qpat_x_assum `!env ty st res st'. _ ==> case res of INL p => writable_place_result _ _ _ | INR _ => T`
+    (drule_all_then strip_assume_tac) >>
+  rpt (qpat_x_assum `!env ty st res st'. _` kall_tac) >>
+  qpat_x_assum `eval_expr cx (Pop _ _) _ = _` mp_tac >>
+  simp[NoAsms, Once evaluate_def, bind_def] >> asm_rewrite_tac[] >>
+  (reverse (Cases_on `target_res`) >- (simp[] >> strip_tac >> gvs[])) >>
+  simp[] >> strip_tac >>
+  gvs[eval_result_typed_def, evaluate_type_def, AllCaseEqs()] >>
+  rename1 `evaluate_type env.type_defs ty = SOME tv` >>
+  `runtime_consistent env cx st1` by simp[runtime_consistent_def] >>
+  `runtime_place_writable cx st1 x` by gvs[writable_place_result_def] >>
+  Cases_on `res` >> simp[] >> rename1 `pop_place cx x st1 = (INL pv,st')` >>
+  Cases_on `pv` >> simp[live_memory_result_def] >>
+  drule_at (Pat `pop_place _ _ _ = _`) pop_place_result_live >>
+  disch_then (qspecl_then [`n`,`tv`,`env`] mp_tac) >>
+  impl_tac >- (Cases_on `x` >> gvs[live_memory_result_def] >> metis_tac[]) >>
+  simp[live_memory_result_def]
+QED
+
+Resume eval_scc_type_sound_mutual[Trace_Pop_Target]:
+  RESUME_TAC >>
+  rename1 `eval_expr cx (Pop ty bt) st = (res,st')` >>
+  FIRST [drule well_typed_expr_Pop_dynamic_target_assignable >> strip_tac,
+    qpat_x_assum `type_place_expr env (Pop _ _) = SOME vt` mp_tac >>
+      simp[Once well_typed_expr_def]] >>
+  `well_typed_target env bt (ArrayT ty (Dynamic n))` by simp[well_typed_target_def] >>
+  qpat_x_assum `call_evaluation_safe cx (int_calls_expr (Pop _ _))`
+    (assume_tac o REWRITE_RULE [int_calls_expr_def]) >>
+  Cases_on `eval_target_place cx bt st` >>
+  rename1 `eval_target_place cx bt st = (target_res,st1)` >>
+  qpat_x_assum `!env ty st res st'. _ ==> state_well_typed _ /\ _`
+    (drule_all_then strip_assume_tac) >>
+  qpat_x_assum `!env ty st res st'. _ ==> case res of INL p => live_memory_result _ _ | INR _ => T`
+    (drule_all_then strip_assume_tac) >>
+  qpat_x_assum `!env ty st res st'. _ ==> case res of INL p => writable_place_result _ _ _ | INR _ => T`
+    (drule_all_then strip_assume_tac) >>
+  qpat_x_assum `!env ty st res st'. _ ==> typed_scope_transition _ _`
+    (drule_all_then strip_assume_tac) >>
+  qpat_x_assum `eval_expr cx (Pop _ _) _ = _` mp_tac >>
+  simp[NoAsms, Once evaluate_def, bind_def] >> asm_rewrite_tac[] >>
+  (reverse (Cases_on `target_res`) >- (simp[] >> strip_tac >> gvs[])) >>
+  simp[] >> strip_tac >>
+  gvs[eval_result_typed_def, evaluate_type_def, AllCaseEqs()] >>
+  rename1 `evaluate_type env.type_defs ty = SOME tv` >>
+  `runtime_consistent env cx st1` by simp[runtime_consistent_def] >>
+  `runtime_place_writable cx st1 x` by gvs[writable_place_result_def] >>
+  irule typed_scope_transition_trans >> qexists_tac `st1` >> simp[] >>
+  irule pop_place_typed_transition >>
+  goal_assum (drule_at (Pat `pop_place _ _ _ = _`)) >>
+  qexistsl_tac [`env`,`tv`,`n`] >> simp[]
+QED
+
+Resume eval_scc_type_sound_mutual[Live_Subscript_Capture_Index_Selection]:
+  RESUME_TAC >>
+  IF (qpat_assum `well_typed_expr _ (Subscript _ _ _)` (K all_tac))
+    (qpat_x_assum `well_typed_expr _ (Subscript _ _ _)` mp_tac)
+    (qpat_x_assum `type_place_expr _ (Subscript _ _ _) = SOME _` mp_tac) >>
+  simp[NoAsms, Once well_typed_expr_def, AllCaseEqs()] >> strip_tac >>
+  qpat_x_assum `call_evaluation_safe _ _` mp_tac >>
+  simp[NoAsms, int_calls_expr_def] >> strip_tac >>
+  drule call_evaluation_safe_append_left >> strip_tac >>
+  drule call_evaluation_safe_append_right >> strip_tac >>
+  Cases_on `eval_expr cx e st` >>
+  qpat_assum `!env st res st'. _ ==> (_ /\ _)`
+    (drule_at (Pat `eval_expr _ _ _ = _`)) >>
+  disch_then (qspec_then `env` mp_tac) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
+  FIRST [
+    qpat_x_assum `!vt. type_place_expr env e = SOME vt ==> _` drule >> strip_tac,
+    qpat_x_assum `well_typed_expr env e ==> _` mp_tac >>
+      (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac] >>
+  qpat_x_assum `!env st res st'. _ ==> case res of INL pv => live_memory_result _ _ | INR _ => T`
+    (drule_at (Pat `eval_expr _ _ _ = _`)) >>
+  disch_then (qspec_then `env` mp_tac) >>
+  (impl_tac >- (rpt conj_tac >> FIRST [first_assum ACCEPT_TAC,
+    disj1_tac >> first_assum ACCEPT_TAC,
+    disj2_tac >> goal_assum drule])) >> strip_tac >>
+  (reverse (Cases_on `q`)
+  >- (qpat_x_assum `!s'' res t. _` kall_tac >>
+      rpt (first_x_assum (fn th => if is_forall (concl th) then kall_tac th else NO_TAC)) >>
+      qpat_x_assum `eval_expr cx (Subscript _ _ _) _ = _` mp_tac >>
+      simp[NoAsms, Once evaluate_def, bind_def] >> asm_rewrite_tac[] >>
+      simp[NoAsms, raise_def] >> strip_tac >> gvs[]) >>
+  qpat_x_assum `!s'' res t. eval_expr _ _ _ = _ ==> _`
+    (qspecl_then [`st`,`x`,`r`] mp_tac) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+  Cases_on `eval_expr cx e' r` >>
+  qpat_x_assum `!env st res st'. _ ==> (_ /\ _)`
+    (drule_at (Pat `eval_expr _ _ _ = _`)) >>
+  disch_then (qspec_then `env` mp_tac) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
+  qpat_x_assum `well_typed_expr env e' ==> _` mp_tac >>
+  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+  qpat_x_assum `!env st res st'. _ ==> typed_scope_transition _ _`
+    (drule_at (Pat `eval_expr _ _ _ = _`)) >>
+  disch_then (qspec_then `env` mp_tac) >>
+  (impl_tac >- (rpt conj_tac >> FIRST [first_assum ACCEPT_TAC,
+    disj1_tac >> first_assum ACCEPT_TAC])) >> strip_tac >>
+  rpt (first_x_assum (fn th => if is_forall (concl th) then kall_tac th else NO_TAC)) >>
+  qpat_x_assum `eval_expr cx (Subscript _ _ _) _ = _` mp_tac >>
+  simp[NoAsms, Once evaluate_def, bind_def] >> asm_rewrite_tac[] >>
+  simp[NoAsms, AllCaseEqs()] >> strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+  imp_res_tac read_result_state >> gvs[] >>
+  Cases_on `res` >> simp[] >>
+  irule transported_typed_result_extend_live >>
+  goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
+  goal_assum (drule_at Any) >> simp[] >>
+  goal_assum (drule_at Any) >> simp[] >>
+  drule eval_expr_immutable_metadata_frame >> simp[])
+QED
+
+Resume eval_scc_type_sound_mutual[Trace_Base_Subscript_Selection]:
+  RESUME_TAC >>
+  qpat_x_assum `type_place_target env (SubscriptTarget _ _) = SOME _` mp_tac >>
+  simp[NoAsms, Once well_typed_expr_def, AllCaseEqs()] >> strip_tac >>
+  qpat_x_assum `call_evaluation_safe _ _` mp_tac >>
+  simp[NoAsms, int_calls_expr_def] >> strip_tac >>
+  drule call_evaluation_safe_append_left >> strip_tac >>
+  drule call_evaluation_safe_append_right >> strip_tac >>
+  Cases_on `eval_base_place cx bt st` >>
+  qpat_x_assum `!env vt st res st'. _ ==> typed_scope_transition _ _`
+    (drule_all_then assume_tac) >>
+  qpat_x_assum `!env vt st res st'. _ ==> _ /\ _`
+    (drule_all_then strip_assume_tac) >>
+  (reverse (Cases_on `q`)
+  >- (rpt (first_x_assum (fn th => if is_forall (concl th) then kall_tac th else NO_TAC)) >>
+      qpat_x_assum `eval_base_place cx (SubscriptTarget _ _) _ = _` mp_tac >>
+      simp[NoAsms, Once evaluate_def, bind_def] >> asm_rewrite_tac[] >>
+      simp[NoAsms, raise_def] >> strip_tac >> gvs[]) >>
+  qpat_x_assum `!s'' pv t'. eval_base_place _ _ _ = _ ==> _`
+    (qspecl_then [`st`,`x`,`r`] mp_tac) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+  Cases_on `eval_expr cx e r` >>
+  qpat_x_assum `!env st res st'. _ ==> typed_scope_transition _ _`
+    (drule_at (Pat `eval_expr _ _ _ = _`)) >>
+  disch_then (qspec_then `env` mp_tac) >>
+  (impl_tac >- (rpt conj_tac >> FIRST [first_assum ACCEPT_TAC,
+    disj1_tac >> first_assum ACCEPT_TAC])) >> strip_tac >>
+  rpt (first_x_assum (fn th => if is_forall (concl th) then kall_tac th else NO_TAC)) >>
+  qpat_x_assum `eval_base_place cx (SubscriptTarget _ _) _ = _` mp_tac >>
+  simp[NoAsms, Once evaluate_def, bind_def] >> asm_rewrite_tac[] >>
+  simp[NoAsms, AllCaseEqs()] >> strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+  imp_res_tac read_result_state >> imp_res_tac vyperPlaceFramesTheory.extend_place_state >>
+  gvs[] >> metis_tac[typed_scope_transition_trans])
+QED
+
+Resume eval_scc_type_sound_mutual[Live_Base_Subscript_Capture_Index_Selection]:
+  RESUME_TAC >>
+  qpat_x_assum `call_evaluation_safe _ _` mp_tac >>
+  simp[NoAsms, int_calls_expr_def] >> strip_tac >>
+  drule call_evaluation_safe_append_left >> strip_tac >>
+  drule call_evaluation_safe_append_right >> strip_tac >>
+  Cases_on `eval_base_place cx bt st` >>
+  qpat_x_assum `!env vt st res st'. _ ==> _ /\ _`
+    (drule_all_then strip_assume_tac) >>
+  qpat_x_assum `!env vt st res st'. _ ==> case res of INL pv => live_memory_result _ _ | INR _ => T`
+    (drule_all_then assume_tac) >>
+  (reverse (Cases_on `q`)
+  >- (rpt (first_x_assum (fn th => if is_forall (concl th) then kall_tac th else NO_TAC)) >>
+      qpat_x_assum `eval_base_place cx (SubscriptTarget _ _) _ = _` mp_tac >>
+      simp[NoAsms, Once evaluate_def, bind_def] >> asm_rewrite_tac[] >>
+      simp[NoAsms, raise_def] >> strip_tac >> gvs[]) >>
+  qpat_x_assum `!s'' pv t'. eval_base_place _ _ _ = _ ==> _`
+    (qspecl_then [`st`,`x`,`r`] mp_tac) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+  Cases_on `eval_expr cx e r` >>
+  qpat_x_assum `!env st res st'. _ ==> (_ /\ _)`
+    (drule_at (Pat `eval_expr _ _ _ = _`)) >>
+  disch_then (qspec_then `env` mp_tac) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
+  qpat_x_assum `well_typed_expr env e ==> _` mp_tac >>
+  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+  qpat_x_assum `!env st res st'. _ ==> typed_scope_transition _ _`
+    (drule_at (Pat `eval_expr _ _ _ = _`)) >>
+  disch_then (qspec_then `env` mp_tac) >>
+  (impl_tac >- (rpt conj_tac >> FIRST [first_assum ACCEPT_TAC,
+    disj1_tac >> first_assum ACCEPT_TAC])) >> strip_tac >>
+  rpt (first_x_assum (fn th => if is_forall (concl th) then kall_tac th else NO_TAC)) >>
+  qpat_x_assum `eval_base_place cx (SubscriptTarget _ _) _ = _` mp_tac >>
+  simp[NoAsms, Once evaluate_def, bind_def] >> asm_rewrite_tac[] >>
+  simp[NoAsms, AllCaseEqs()] >> strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+  imp_res_tac read_result_state >> gvs[] >>
+  Cases_on `res` >> simp[] >>
+  `vyperImmutableMetadataFrame$immutable_metadata_frame r r''` by
+    (drule eval_expr_immutable_metadata_frame >> simp[]) >>
+  `eval_result_typed (env,cx,r'') x vt'` by
+    (irule eval_result_typed_transport >> goal_assum (drule_at Any) >> simp[]) >>
+  `live_memory_result r'' x` by
+    (Cases_on `x` >> simp[live_memory_result_def] >>
+     rename1 `PlaceR p` >> Cases_on `p` >> simp[live_memory_result_def] >>
+     drule_all live_memory_result_transport >> simp[live_memory_result_def]) >>
+  irule extend_typed_result_live >> goal_assum (drule_at Any) >>
+  goal_assum (drule_at Any) >> simp[] >> goal_assum drule)
+QED
+
+Resume eval_scc_type_sound_mutual[Live_IfExp_Selected_Conversion]:
+  RESUME_TAC >>
+  qpat_x_assum `call_evaluation_safe _ _` mp_tac >>
+  simp[NoAsms, int_calls_expr_def] >> strip_tac >>
+  imp_res_tac call_evaluation_safe_append_left >>
+  imp_res_tac call_evaluation_safe_append_right >>
+  drule call_evaluation_safe_append_left >> strip_tac >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[NoAsms, Once evaluate_def, bind_def, return_def, AllCaseEqs()] >>
+  strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+  qpat_x_assum `!env st res st'. _ ==> (_ ==> _) /\ _` drule_all >> strip_tac >>
+  qpat_x_assum `well_typed_expr _ _ ==> _` mp_tac >>
+  (impl_tac >- first_assum ACCEPT_TAC) >> simp[NoAsms] >> strip_tac >>
+  imp_res_tac read_result_state >> rpt BasicProvers.VAR_EQ_TAC >>
+  asm_rewrite_tac[] >>
+  rpt (qpat_x_assum `!s'' tv t. eval_expr _ _ s'' = (INL tv,t) ==> _` drule >> strip_tac) >>
+  qpat_x_assum `switch_BoolV cx _ _ _ _ = _` mp_tac >>
+  simp[NoAsms, switch_BoolV_def, bind_def, return_def, raise_def,
+       AllCaseEqs()] >> strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+  imp_res_tac read_result_state >> rpt BasicProvers.VAR_EQ_TAC >>
+  asm_rewrite_tac[] >>
+  qpat_x_assum `(if _ then _ else _) _ = _` mp_tac >>
+  simp[NoAsms, COND_RATOR, raise_def] >> rpt IF_CASES_TAC >>
+  simp[NoAsms, raise_def] >> strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+  asm_rewrite_tac[] >>
+  rpt (qpat_x_assum `!env st res st'. (well_typed_expr env e \/ _) /\ _ ==> _` kall_tac) >>
+  qpat_x_assum `!env st res st'. _ ==> (_ ==> _) /\ _`
+    (drule_at (Pat `eval_expr _ _ _ = _`)) >>
+  disch_then (qspec_then `env` mp_tac) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
+  qpat_x_assum `well_typed_expr _ _ ==> _` mp_tac >>
+  (impl_tac >- first_assum ACCEPT_TAC) >> simp[NoAsms] >> strip_tac >>
+  qpat_x_assum `!env st res st'. _ ==> case res of INL pv => live_memory_result _ _ | INR _ => T`
+    (drule_at (Pat `eval_expr _ _ _ = _`)) >>
+  disch_then (qspec_then `env` mp_tac) >>
+  (impl_tac >- (rpt conj_tac >> FIRST [first_assum ACCEPT_TAC,
+    disj1_tac >> first_assum ACCEPT_TAC])) >> strip_tac >>
+  rpt (first_x_assum (fn th => if is_forall (concl th) then kall_tac th else NO_TAC)) >>
+  gvs[] >> drule_all conditional_result_live_typed >> strip_tac >> gvs[] >>
+  Cases_on `res` >> gvs[]
+QED
+
 Finalise eval_scc_type_sound_mutual
 val _ = if null (hyp eval_scc_type_sound_mutual) then
   print "Soundness SCC finalised with no suspension hypotheses\n"
   else raise Fail "Soundness SCC retains hypotheses";
 
-
-(* Public compatibility interface: keep the original nine contracts exactly. *)
-Theorem eval_all_type_sound_mutual:
-  (!cx s. !env ret_ty env' st res st'.
-    type_stmt env ret_ty s = SOME env' /\ env_consistent env cx st /\ state_well_typed st /\
-    context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
-    call_evaluation_safe cx (int_calls_stmt s) /\
-    eval_stmt cx s st = (res, st') ==>
-    state_well_typed st' /\ accounts_well_typed st'.accounts /\ no_type_error_result res /\
-    case res of
-    | INL _ => env_consistent env' cx st'
-    | INR exn => env_consistent env cx st' /\ return_exception_typed env ret_ty exn) /\
-  (!cx ss. !env ret_ty env' st res st'.
-    type_stmts env ret_ty ss = SOME env' /\ env_consistent env cx st /\ state_well_typed st /\
-    context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
-    call_evaluation_safe cx (int_calls_stmts ss) /\
-    eval_stmts cx ss st = (res, st') ==>
-    state_well_typed st' /\ accounts_well_typed st'.accounts /\ no_type_error_result res /\
-    case res of
-    | INL _ => env_consistent env' cx st'
-    | INR exn => ?env_exn. env_extends env env_exn /\ env_consistent env_exn cx st' /\
-                           return_exception_typed env_exn ret_ty exn) /\
-  (!cx it. !env ty st res st'.
-    well_typed_iterator env ty it /\ env_consistent env cx st /\ state_well_typed st /\
-    context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
-    call_evaluation_safe cx (int_calls_iterator it) /\
-    eval_iterator cx it st = (res, st') ==>
-    state_well_typed st' /\ env_consistent env cx st' /\ accounts_well_typed st'.accounts /\
-    no_type_error_result res /\
-    case res of
-    | INL vs => ?tyv. evaluate_type env.type_defs ty = SOME tyv /\ EVERY (value_has_type tyv) vs
-    | INR _ => T) /\
-  (!cx tgt. !env ty st res st'.
-    well_typed_atarget env tgt ty /\ env_consistent env cx st /\ state_well_typed st /\
-    context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
-    call_evaluation_safe cx (int_calls_atarget tgt) /\
-    eval_target cx tgt st = (res, st') ==>
-    state_well_typed st' /\ env_consistent env cx st' /\ accounts_well_typed st'.accounts /\
-    no_type_error_result res /\
-    case res of
-    | INL gv => target_runtime_typed env cx st' tgt ty gv
-    | INR _ => T) /\
-  (!cx tgts. !env tys st res st'.
-    LIST_REL (\t ty. well_typed_atarget env t ty) tgts tys /\
-    env_consistent env cx st /\ state_well_typed st /\
-    context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
-    call_evaluation_safe cx (int_calls_atargets tgts) /\
-    eval_targets cx tgts st = (res, st') ==>
-    state_well_typed st' /\ env_consistent env cx st' /\ accounts_well_typed st'.accounts /\
-    no_type_error_result res /\
-    case res of
-    | INL gvs => LIST_REL3 (\t ty gv. target_runtime_typed env cx st' t ty gv) tgts tys gvs
-    | INR _ => T) /\
-  (!cx bt. !env vt st res st'.
-    type_place_target env bt = SOME vt /\ env_consistent env cx st /\ state_well_typed st /\
-    context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
-    call_evaluation_safe cx (int_calls_target bt) /\
-    eval_base_target cx bt st = (res, st') ==>
-    state_well_typed st' /\ env_consistent env cx st' /\ accounts_well_typed st'.accounts /\
-    no_type_error_result res /\
-    case res of
-    | INL (loc,sbs) =>
-        base_target_value_shape env bt loc sbs /\
-        ?loc_vt. location_runtime_typed env cx st' loc loc_vt /\
-          target_path_type env loc_vt sbs vt
-    | INR _ => T) /\
-  (!cx tyv id body vs. !env ret_ty ty env_after st res st'.
-    evaluate_type env.type_defs ty = SOME tyv /\ EVERY (value_has_type tyv) vs /\
-    id NOTIN FDOM env.var_types /\
-    type_stmts (extend_local env id ty F) ret_ty body = SOME env_after /\
-    env_consistent env cx st /\ state_well_typed st /\
-    context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
-    call_evaluation_safe cx (int_calls_stmts body) /\
-    eval_for cx tyv id body vs st = (res, st') ==>
-    state_well_typed st' /\ accounts_well_typed st'.accounts /\ env_consistent env cx st' /\
-    no_type_error_result res /\
-    case res of
-    | INR exn => return_exception_typed env ret_ty exn
-    | INL _ => T) /\
-  (!cx e. !env st res st'.
-    env_consistent env cx st /\ state_well_typed st /\
-    context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
-    call_evaluation_safe cx (int_calls_expr e) /\
-    eval_expr cx e st = (res, st') ==>
-    ((well_typed_expr env e ==>
-      state_well_typed st' /\ env_consistent env cx st' /\ accounts_well_typed st'.accounts /\
-      no_type_error_result res /\
-      case res of
-      | INL tv => expr_result_typed env e tv
-      | INR _ => T) /\
-     (!vt. type_place_expr env e = SOME vt ==>
-      state_well_typed st' /\ env_consistent env cx st' /\ accounts_well_typed st'.accounts /\
-      no_type_error_result res /\
-      case res of
-      | INL tv => place_expr_result_typed env tv vt
-      | INR _ => T))) /\
-  (!cx es. !env st res st'.
-    well_typed_exprs env es /\ env_consistent env cx st /\ state_well_typed st /\
-    context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
-    call_evaluation_safe cx (int_calls_exprs es) /\
-    eval_exprs cx es st = (res, st') ==>
-    state_well_typed st' /\ env_consistent env cx st' /\ accounts_well_typed st'.accounts /\
-    no_type_error_result res /\
-    case res of
-    | INL vs => exprs_runtime_typed env es vs
-    | INR _ => T)
+(* Forcing is part of the public expression guarantee, not a caller premise. *)
+Theorem eval_expr_read_type_sound:
+  well_typed_expr env e /\ env_consistent env cx st /\ state_well_typed st /\
+  context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
+  call_evaluation_safe cx (int_calls_expr e) /\
+  (do result <- eval_expr cx e; read_result cx result od) st = (res,st') ==>
+  state_well_typed st' /\ no_type_error_result res /\
+  (case res of INL v => value_runtime_typed env (expr_type e) v | INR _ => T)
 Proof
-  mp_tac eval_scc_type_sound_mutual >> strip_tac >>
-  old_soundness_ihs_tac >>
-  drule eval_legacy_targets_type_sound >> strip_tac >>
-  rpt conj_tac >> rpt gen_tac >> first_assum MATCH_ACCEPT_TAC
+  rpt strip_tac >>
+  qspecl_then [`cx`,`e`] strip_assume_tac (cj 5 eval_scc_type_sound_mutual) >>
+  qpat_x_assum `bind _ _ _ = _` mp_tac >>
+  simp[NoAsms, bind_def, AllCaseEqs()] >> strip_tac >>
+  rpt BasicProvers.VAR_EQ_TAC >>
+  qpat_x_assum `!env st res st'. _ ==> (_ /\ _)` drule_all >> strip_tac >>
+  qpat_x_assum `well_typed_expr _ _ ==> _` mp_tac >>
+  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+  qpat_x_assum `!env st res st'. _ ==> case res of INL pv => live_memory_result _ _ | INR _ => T`
+    (drule_at (Pat `eval_expr _ _ _ = _`)) >>
+  disch_then (qspec_then `env` mp_tac) >>
+  (impl_tac >- (rpt conj_tac >> FIRST [first_assum ACCEPT_TAC,
+    disj1_tac >> first_assum ACCEPT_TAC])) >> strip_tac >>
+  rpt (first_x_assum (fn th => if is_forall (concl th) then kall_tac th else NO_TAC)) >>
+  imp_res_tac read_result_state >> gvs[]
+  >~ [`no_type_error_result (INR _)`]
+  >- gvs[no_type_error_result_def] >>
+  drule_all live_result_read_typed >> strip_tac >> simp[]
 QED
+
+val _ = List.app (fn (name,th) =>
+  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
+    if null (Thm.hyp th) andalso null axioms andalso
+       List.all (fn oracle => oracle = "DISK_THM") oracles then
+      print (name ^ " is closed\n")
+    else raise Fail (name ^ " is not closed")
+  end)
+  [("eval_scc_type_sound_mutual",eval_scc_type_sound_mutual),
+   ("eval_expr_read_type_sound",eval_expr_read_type_sound)];

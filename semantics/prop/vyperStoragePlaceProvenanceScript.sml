@@ -26,15 +26,13 @@ Definition storage_mapping_region_def:
         SOME (tr,leaf_slot,leaf_tv)
 End
 
-(* Non-map values cannot become target places: extend_target_place rejects
-   them and get_place does not convert values to places. This predicate is
-   deliberately used for target evaluation, not unrestricted extend_place. *)
+(* Values cannot become target places: extend_place rejects them and
+   get_place does not convert them. Mapping roots carry declared provenance. *)
 Definition storage_result_region_def:
   storage_result_region cx (PlaceR p) = storage_place_region cx p /\
-  storage_result_region cx (ValueR (HashMapRef tr slot kt vt)) =
+  storage_result_region cx (HashMapRef tr slot kt vt) =
     storage_mapping_region cx tr slot (HashMapT kt vt) /\
-  storage_result_region cx (ValueR (Value v)) = T /\
-  storage_result_region cx (ValueR (ArrayRef tr slot tv bd)) = T
+  storage_result_region cx (Value v) = T
 End
 
 Theorem declared_storage_place_region:
@@ -74,12 +72,12 @@ Proof
   strip_tac >> irule declared_storage_place_region >> goal_assum (drule_at Any)
 QED
 
-Theorem lookup_global_place_storage_region:
-  lookup_global_place cx mid var_name st =
+Theorem lookup_global_storage_region:
+  lookup_global cx mid var_name st =
     (INL (PlaceR (StoragePlace tr slot tv)),st') ==>
   declared_storage_region cx mid var_name [] = SOME (tr,slot,tv)
 Proof
-  simp[lookup_global_place_def, bind_def, lift_option_type_def,
+  simp[lookup_global_def, bind_def, lift_option_type_def,
        return_def, raise_def, AllCaseEqs()] >> rpt strip_tac >>
   gvs[vyperMiscTheory.option_CASE_rator, vyperMiscTheory.prod_CASE_rator,
       var_decl_info_CASE_rator, bind_def, lift_option_type_def,
@@ -87,12 +85,12 @@ Proof
   simp[declared_storage_region_def]
 QED
 
-Theorem lookup_global_place_mapping_region:
-  lookup_global_place cx mid var_name st =
-    (INL (ValueR (HashMapRef tr slot kt vt)),st') ==>
+Theorem lookup_global_mapping_region:
+  lookup_global cx mid var_name st =
+    (INL (HashMapRef tr slot kt vt),st') ==>
   storage_mapping_region cx tr slot (HashMapT kt vt)
 Proof
-  simp[lookup_global_place_def, bind_def, lift_option_type_def,
+  simp[lookup_global_def, bind_def, lift_option_type_def,
        return_def, raise_def, AllCaseEqs()] >> rpt strip_tac >>
   gvs[vyperMiscTheory.option_CASE_rator, vyperMiscTheory.prod_CASE_rator,
       var_decl_info_CASE_rator, bind_def, lift_option_type_def,
@@ -102,20 +100,16 @@ Proof
   asm_simp_tac (srw_ss()) [declared_storage_region_def]
 QED
 
-Theorem lookup_global_place_region:
-  lookup_global_place cx mid var_name st = (INL pv,st') ==>
+Theorem lookup_global_region:
+  lookup_global cx mid var_name st = (INL pv,st') ==>
   storage_result_region cx pv
 Proof
-  Cases_on `pv`
-  >- (rename1 `storage_result_region cx (PlaceR resolved_place)` >>
-      Cases_on `resolved_place` >>
-      simp[storage_result_region_def, storage_place_region_def] >> rpt strip_tac >>
-      drule lookup_global_place_storage_region >> strip_tac >>
-      drule (SIMP_RULE (srw_ss()) [storage_place_region_def] declared_storage_place_region) >>
-      simp[]) >>
-  rename1 `storage_result_region cx (ValueR resolved_value)` >>
-  Cases_on `resolved_value` >> simp[storage_result_region_def] >> rpt strip_tac >>
-  drule lookup_global_place_mapping_region >> simp[]
+  Cases_on `pv` >> simp[storage_result_region_def]
+  >- (rename1 `storage_place_region cx p` >> Cases_on `p` >>
+      simp[storage_place_region_def] >> strip_tac >>
+      drule lookup_global_storage_region >> strip_tac >>
+      metis_tac[declared_storage_place_region, storage_place_region_def]) >>
+  strip_tac >> drule lookup_global_mapping_region >> simp[]
 QED
 
 Theorem resolve_array_element_empty[local]:
@@ -163,38 +157,34 @@ QED
 
 Theorem extend_mapping_place_region:
   storage_mapping_region cx tr slot (HashMapT kt vt) /\
-  extend_target_place cx (ValueR (HashMapRef tr slot kt vt)) sb st = (INL pv,st') ==>
+  extend_place cx (HashMapRef tr slot kt vt) sb st = (INL pv,st') ==>
   storage_result_region cx pv
 Proof
   Cases_on `sb` >>
-  simp[extend_target_place_def, extend_place_def, get_Value_def,
-       bind_def, lift_sum_def, return_def, raise_def,
-       evaluate_subscript_def, AllCaseEqs(), subscript_result_place_def] >>
-  rpt strip_tac >>
-  gvs[vyperMiscTheory.sum_CASE_rator, return_def, raise_def, AllCaseEqs(),
-      subscript_result_place_def, storage_result_region_def] >>
+  simp[extend_place_def, bind_def, lift_option_type_def,
+       return_def, raise_def, AllCaseEqs()] >> rpt strip_tac >>
+  gvs[value_type_CASE_rator, vyperMiscTheory.option_CASE_rator,
+      bind_def, lift_option_type_def, return_def, raise_def, AllCaseEqs(),
+      storage_result_region_def] >>
   drule storage_mapping_region_step >>
   disch_then (qspec_then `v` assume_tac) >>
-  FIRST [drule_all storage_mapping_region_leaf >> simp[], simp[]]
+  metis_tac[storage_mapping_region_leaf]
 QED
 
-Theorem extend_target_place_region:
+Theorem extend_place_region:
   storage_result_region cx pv /\
-  extend_target_place cx pv sb st = (INL next,st') ==>
+  extend_place cx pv sb st = (INL next,st') ==>
   storage_result_region cx next
 Proof
-  Cases_on `pv`
-  >- (rename1 `PlaceR resolved_place` >> Cases_on `resolved_place` >>
+  Cases_on `pv` >> simp[storage_result_region_def, extend_place_def, raise_def]
+  >- (rename1 `PlaceR p` >> Cases_on `p` >>
       simp[storage_result_region_def] >> strip_tac >>
-      gvs[extend_target_place_def, extend_place_def, bind_def,
-          ignore_bind_def, return_def, AllCaseEqs()] >>
-      FIRST [drule_all extend_storage_place_region >>
-               simp[storage_result_region_def],
-             simp[storage_result_region_def, storage_place_region_def,
-                  extend_memory_place_def]]) >>
-  rename1 `ValueR resolved_value` >> Cases_on `resolved_value` >>
-  simp[storage_result_region_def, extend_target_place_def, raise_def] >>
-  metis_tac[SRULE[extend_target_place_def] extend_mapping_place_region]
+      gvs[extend_place_def, bind_def, ignore_bind_def, return_def,
+          AllCaseEqs()] >>
+      gvs[storage_result_region_def, storage_place_region_def,
+          extend_memory_place_def] >>
+      metis_tac[extend_storage_place_region, storage_place_region_def]) >>
+  metis_tac[extend_mapping_place_region, storage_result_region_def]
 QED
 
 Theorem eval_base_place_region:
@@ -208,11 +198,11 @@ Proof
        type_check_def, assert_def, ignore_bind_def, return_def, raise_def] >>
   rpt strip_tac >> gvs[] >>
   FIRST [simp[storage_result_region_def, storage_place_region_def] >> NO_TAC,
-         drule lookup_global_place_region >> simp[] >> NO_TAC,
+         drule lookup_global_region >> simp[] >> NO_TAC,
          qmatch_assum_rename_tac `eval_base_place cx child st = (INL child_pv,child_st)` >>
          qpat_x_assum `!y. _` (qspec_then `child` mp_tac) >>
          simp[expr_size_def] >> strip_tac >> first_x_assum drule >> strip_tac >>
-         drule_all extend_target_place_region >> simp[]]
+         drule_all extend_place_region >> simp[]]
 QED
 
 Theorem eval_target_place_region:

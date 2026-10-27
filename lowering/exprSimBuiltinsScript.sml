@@ -272,7 +272,7 @@ Theorem eval_exprs_single_literal:
   !cx la l es. eval_exprs cx [Literal la l] es = (INL [evaluate_literal l], es)
 Proof
   rpt gen_tac >>
-  rpt (simp[Once evaluate_def, bind_def, return_def, materialise_def])
+  rpt (CHANGED_TAC (simp[Once evaluate_def, bind_def, return_def, read_result_def]))
 QED
 
 (* A literal signature is folded to the literal selector (#711). *)
@@ -297,11 +297,13 @@ Theorem eval_expr_method_id_literal:
     es' = es /\ res = INL (Value (BytesV (TAKE 4 (Keccak_256_w64 bs))))
 Proof
   rpt gen_tac >> strip_tac >>
-  drule_at (Pos last) eval_expr_builtin_cases >>
-  simp[builtin_args_length_ok_def, eval_exprs_single_literal] >>
-  strip_tac >> gvs[builtin_result_def] >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
+       assert_def, return_def, raise_def, builtin_args_length_ok_def,
+       eval_exprs_single_literal, get_accounts_def, lift_sum_def] >>
   Cases_on `l` >>
-  gvs[method_id_literal_def, evaluate_literal_def, evaluate_builtin_def]
+  gvs[method_id_literal_def, evaluate_literal_def, evaluate_builtin_def,
+      return_def, raise_def]
 QED
 
 (* method_id of a literal signature with output_type=bytes4: the folded
@@ -313,7 +315,10 @@ Theorem compile_method_id_literal_word_sim:
       (Builtin (BaseT (BytesT (Fixed 4))) MethodId [Literal la l])
 Proof
   rw[expr_sim_ok_def, expr_sim_def, optionTheory.IS_SOME_EXISTS] >>
-  drule_all eval_expr_method_id_literal >> strip_tac >> gvs[] >>
+  Cases_on `eval_expr cx
+    (Builtin (BaseT (BytesT (Fixed 4))) MethodId [Literal la l]) es` >>
+  drule_all eval_expr_method_id_literal >> strip_tac >>
+  gvs[bind_def, read_result_def, return_def] >>
   drule compile_expr_method_id_literal >> strip_tac >>
   gvs[lower_value_def, comp_bind_def, compile_literal_vv_def,
       unwrap_value_def, comp_return_def] >>

@@ -54,7 +54,7 @@
  *   - well_typed_expr, env_consistent, state_well_typed,
  *     accounts_well_typed, context_well_typed, functions_well_typed and
  *     call_evaluation_safe are exactly the premises of type soundness
- *     (vyperTypeEvalSoundness's eval_all_type_sound_mutual, the expression
+ *     (vyperTypeEvalSoundness's eval_scc_type_sound_mutual, the expression
  *     conjunct).  The lowering trusts the annotations: an operator picks its
  *     bounds from the operand's annotated type, a literal is emitted at its
  *     annotated type.  So an expression whose values do not have their
@@ -368,40 +368,78 @@ QED
 
 (* ===== Type soundness ===== *)
 
-Theorem expr_sim_pre_eval:
+Theorem expr_sim_pre_eval_result:
   !cenv cx env e es res es'.
     expr_sim_pre cenv cx env e es /\ eval_expr cx e es = (res, es') ==>
     expr_sim_inv cenv cx env es' /\ no_type_error_result res /\
-    !tv. res = INL tv ==> expr_result_typed env e tv
+    !tv. res = INL tv ==>
+         eval_result_typed (env,cx,es') tv (Type (expr_type e))
 Proof
   rpt gen_tac >> simp[expr_sim_pre_def, expr_sim_inv_def] >> strip_tac >>
-  qspecl_then [`cx`, `e`, `env`, `es`, `res`, `es'`] mp_tac
-    (cj 8 eval_all_type_sound_mutual) >>
-  impl_tac >- gvs[] >> disch_then (mp_tac o CONJUNCT1) >>
-  impl_tac >- gvs[] >>
-  Cases_on `res` >> rpt strip_tac >> gvs[]
+  qspecl_then [`cx`, `e`] (mp_tac o CONJUNCT1)
+    (cj 5 eval_scc_type_sound_mutual) >>
+  disch_then (qspecl_then [`env`, `es`, `res`, `es'`] mp_tac) >>
+  impl_tac >- gvs[] >> strip_tac >>
+  qpat_x_assum `well_typed_expr env e ==> _` mp_tac >>
+  impl_tac >- gvs[] >> Cases_on `res` >> gvs[]
+QED
+
+Theorem expr_sim_pre_eval:
+  !cenv cx env e es res es'.
+    expr_sim_pre cenv cx env e es /\ (do result <- eval_expr cx e; read_result cx result od) es = (res, es') ==>
+    expr_sim_inv cenv cx env es' /\ no_type_error_result res /\
+    !v. res = INL v ==> expr_result_typed env e (Value v)
+Proof
+  rpt strip_tac >>
+  `state_well_typed es' /\ no_type_error_result res /\
+   (case res of INL v => value_runtime_typed env (expr_type e) v | INR _ => T)` by
+    (drule_at (Pat `bind _ _ _ = _`) eval_expr_read_type_sound >>
+     disch_then (qspec_then `env` mp_tac) >>
+     gvs[expr_sim_pre_def, expr_sim_inv_def]) >>
+  qpat_x_assum `(do result <- eval_expr _ _; read_result _ result od) _ = _` mp_tac >>
+  simp[NoAsms, bind_def, AllCaseEqs()] >> strip_tac >>
+  imp_res_tac read_result_state >> gvs[] >>
+  drule_all expr_sim_pre_eval_result >> strip_tac >> simp[] >>
+  gvs[expr_result_typed_def, expr_runtime_typed_def, value_runtime_typed_def,
+      value_result_typed_def, is_HashMapRef_def]
 QED
 
 Theorem expr_sim_pre_res_ok:
   !cenv cx env e es res es'.
-    expr_sim_pre cenv cx env e es /\ eval_expr cx e es = (res, es') /\
-    (!tv. res = INL tv ==> is_Value tv) ==>
+    expr_sim_pre cenv cx env e es /\ (do result <- eval_expr cx e; read_result cx result od) es = (res, es') ==>
     expr_res_ok res
 Proof
   rpt strip_tac >> drule_all expr_sim_pre_eval >> strip_tac >>
-  Cases_on `res` >> gvs[expr_res_ok_def]
-  >- (rename1 `is_Value tv` >> Cases_on `tv` >> gvs[]) >>
-  drule (cj 1 eval_expr_no_control) >>
+  Cases_on `res` >> gvs[expr_res_ok_def] >>
   rename1 `INR exc` >>
+  `no_control_exc exc` by
+    (qpat_x_assum `(do result <- eval_expr _ _; read_result _ result od) _ = _` mp_tac >>
+     simp[NoAsms, bind_def, AllCaseEqs()] >> strip_tac >>
+     metis_tac[cj 1 eval_expr_no_control, read_result_no_control]) >>
   Cases_on `exc` >> gvs[no_control_exc_def, no_type_error_result_def] >>
+  rename1 `Error err` >> Cases_on `err` >> gvs[]
+QED
+
+Theorem expr_sim_pre_vv_res_ok:
+  !cenv cx env e es res es'.
+    expr_sim_pre cenv cx env e es /\ eval_expr cx e es = (res, es') ==>
+    expr_vv_res_ok res
+Proof
+  rpt strip_tac >> drule_all expr_sim_pre_eval_result >> strip_tac >>
+  Cases_on `res` >> gvs[expr_vv_res_ok_def]
+  >- (rename1 `eval_result_typed _ tv _` >> Cases_on `tv` >>
+      gvs[eval_result_typed_def]) >>
+  drule (cj 1 eval_expr_no_control) >>
+  rename1 `INR exc` >> Cases_on `exc` >>
+  gvs[no_control_exc_def, no_type_error_result_def] >>
   rename1 `Error err` >> Cases_on `err` >> gvs[]
 QED
 
 Theorem word_value_type_typed:
   !t tenv tyv x.
     word_value_type t /\ evaluate_type tenv t = SOME tyv /\
-    toplevel_value_typed x tyv ==>
-    ?v. x = Value v /\ word_value v /\ value_has_type tyv v
+    value_has_type tyv x ==>
+    word_value x /\ value_has_type tyv x
 Proof
   rpt strip_tac >>
   `(?n. t = BaseT (UintT n)) \/ (?n. t = BaseT (IntT n)) \/
@@ -409,27 +447,26 @@ Proof
     (Cases_on `t` >> fs[word_value_type_def] >>
      rename1 `BaseT bt` >> Cases_on `bt` >> fs[is_int_type_def]) >>
   gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs()] >>
-  Cases_on `x` >> gvs[toplevel_value_typed_def] >>
-  rename1 `value_has_type _ v` >> Cases_on `v` >>
+  Cases_on `x` >>
   gvs[vyperTypingTheory.value_has_type_def, word_value_def]
 QED
 
 Theorem expr_sim_pre_word_result:
   !cenv cx env e es res es'.
     expr_sim_pre cenv cx env e es /\ word_value_type (expr_type e) /\
-    eval_expr cx e es = (res, es') ==>
+    (do result <- eval_expr cx e; read_result cx result od) es = (res, es') ==>
     expr_sim_inv cenv cx env es' /\ expr_res_ok res /\
     !tv. res = INL tv ==>
-         ?v tyv. tv = Value v /\ word_value v /\
+         ?tyv. word_value tv /\
                  evaluate_type (get_tenv cx) (expr_type e) = SOME tyv /\
-                 value_has_type tyv v
+                 value_has_type tyv tv
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all expr_sim_pre_eval >> strip_tac >>
   `env.type_defs = get_tenv cx` by
     gvs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
   Cases_on `res` >> gvs[]
-  >- (gvs[expr_result_typed_def, expr_runtime_typed_def] >>
+  >- (gvs[expr_result_typed_def, expr_runtime_typed_def, value_result_typed_def] >>
       drule_all word_value_type_typed >> strip_tac >> gvs[expr_res_ok_def]) >>
   irule expr_sim_pre_res_ok >> simp[] >> metis_tac[]
 QED

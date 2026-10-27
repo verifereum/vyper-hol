@@ -931,11 +931,7 @@ Proof
     gvs[expr_sim_pre_def, expr_sim_inv_def] >>
   drule_all vyperTypeEnvTheory.well_typed_Name_lookup >> strip_tac >>
   `word_value entry.value` by
-    (mp_tac word_value_type_typed >>
-     disch_then (qspec_then `ann` mp_tac) >>
-     disch_then (qspec_then `env.type_defs` mp_tac) >>
-     disch_then (qspecl_then [`tv`, `Value entry.value`] mp_tac) >>
-     simp[vyperTypeInvariantsTheory.toplevel_value_typed_def]) >>
+    (drule_all word_value_type_typed >> simp[]) >>
   irule compile_name_word_sim >>
   gvs[expr_sim_pre_def, expr_sim_inv_def, well_typed_expr_def] >>
   metis_tac[word_value_type_word]

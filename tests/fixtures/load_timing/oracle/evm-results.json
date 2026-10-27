@@ -1,0 +1,63 @@
+{
+  "cases": [
+    {
+      "arguments": [],
+      "expected": 9,
+      "fixture": "pop_refill",
+      "returned": 9,
+      "runtime_sha256": "b9feab4e3d5dc0d9ba3665f6228653c59c58b6a4567adcd8b4b214e4dafc7586",
+      "signature": "f()"
+    },
+    {
+      "arguments": [
+        1
+      ],
+      "expected": 5,
+      "fixture": "conditional_snapshot",
+      "returned": 5,
+      "runtime_sha256": "1c2ceed3b912e8b2fdf9341533083ed524432af35af8378720922ca7cd40261c",
+      "signature": "f(bool)"
+    },
+    {
+      "arguments": [
+        0
+      ],
+      "expected": 5,
+      "fixture": "conditional_snapshot",
+      "returned": 5,
+      "runtime_sha256": "1c2ceed3b912e8b2fdf9341533083ed524432af35af8378720922ca7cd40261c",
+      "signature": "f(bool)"
+    },
+    {
+      "arguments": [
+        1
+      ],
+      "expected": 1,
+      "fixture": "conditional_memory_view",
+      "returned": 1,
+      "runtime_sha256": "85df0e106704e14b2714e72d98a2207ae87c3535ed72617638e83a48799cc6d3",
+      "signature": "f(bool)"
+    },
+    {
+      "arguments": [
+        0
+      ],
+      "expected": 1,
+      "fixture": "conditional_memory_view",
+      "returned": 1,
+      "runtime_sha256": "85df0e106704e14b2714e72d98a2207ae87c3535ed72617638e83a48799cc6d3",
+      "signature": "f(bool)"
+    },
+    {
+      "arguments": [],
+      "expected": 5,
+      "fixture": "nested_retained_pop",
+      "returned": 5,
+      "runtime_sha256": "ee0c03003f41c13679716d02bd56944b7008b29a63085e66c06437fc08486b59",
+      "signature": "f()"
+    }
+  ],
+  "evm_version": "Prague",
+  "py_evm_version": "0.12.1b1",
+  "python_version": "3.11.11"
+}

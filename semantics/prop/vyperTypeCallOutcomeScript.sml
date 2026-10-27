@@ -99,14 +99,15 @@ Theorem Send_outcome_type_sound:
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all (checked_call_outcome_type_sound |>
-    INST_TYPE [alpha |-> ``:toplevel_value``] |> Q.INST
+    INST_TYPE [alpha |-> ``:eval_result``] |> Q.INST
     [`Q` |-> `\res t. no_type_error_result res /\
       case res of INL tv => expr_result_typed env (Call NoneT (Send has_gas) es extra) tv | INR _ => T`,
      `k` |-> `\bs. vyperState$return (Value NoneV)`] |> SRULE
     [return_def, no_type_error_result_def, expr_result_typed_def,
-     expr_runtime_typed_def, expr_type_def, toplevel_value_typed_def,
+     expr_runtime_typed_def, expr_type_def, value_result_typed_def,
      evaluate_type_def, value_has_type_def, is_HashMapRef_def]) >>
   disch_then (mp_tac o SPEC_ALL) >>
   simp[runtime_consistent_def, no_type_error_result_def,
-       expr_result_typed_def, expr_runtime_typed_def, expr_type_def]
+       expr_result_typed_def, expr_runtime_typed_def, expr_type_def,
+       value_result_typed_def]
 QED
