@@ -101,7 +101,10 @@ Proof
   rpt strip_tac >> gvs[] >>
   imp_res_tac read_result_state >>
   gvs[AllCaseEqs(), return_def, raise_def, read_result_def] >>
-  gvs[AllCaseEqs(), return_def, raise_def]
+  gvs[AllCaseEqs(), return_def, raise_def] >>
+  qmatch_asmsub_abbrev_tac `evaluate_builtin cx ac ann bi ts vs` >>
+  Cases_on `evaluate_builtin cx ac ann bi ts vs` >>
+  gvs[return_def, raise_def, Abbr `ac`, Abbr `ts`, Abbr `vs`]
 QED
 
 (* ===== The composition ===== *)
