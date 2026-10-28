@@ -109,16 +109,20 @@ QED
 
 Theorem fixed_bytes_builtin_boundaries_cv:
   evaluate_type_builtin empty_evaluation_context Convert
-    (BaseT (BytesT (Fixed 4))) [BytesV [1w; 2w; 3w; 4w]] =
+    (BaseT (BytesT (Fixed 4))) [BaseT (BytesT (Dynamic 32))]
+    [BytesV [1w; 2w; 3w; 4w]] =
       INL (BytesV [1w; 2w; 3w; 4w]) /\
   evaluate_type_builtin empty_evaluation_context Convert
-    (BaseT (BytesT (Fixed 4))) [BytesV [1w; 2w]] =
+    (BaseT (BytesT (Fixed 4))) [BaseT (BytesT (Dynamic 32))]
+    [BytesV [1w; 2w]] =
       INL (BytesV [1w; 2w; 0w; 0w]) /\
   evaluate_type_builtin empty_evaluation_context Convert
-    (BaseT (BytesT (Fixed 4))) [BytesV ([1w; 2w; 3w; 4w] ++ REPLICATE 28 0w)] =
+    (BaseT (BytesT (Fixed 4))) [BaseT (BytesT (Dynamic 32))]
+    [BytesV ([1w; 2w; 3w; 4w] ++ REPLICATE 28 0w)] =
       INL (BytesV [1w; 2w; 3w; 4w]) /\
   evaluate_type_builtin empty_evaluation_context Convert
-    (BaseT (BytesT (Fixed 4))) [BytesV ([1w; 2w; 3w; 4w] ++ REPLICATE 27 0w ++ [1w])] =
+    (BaseT (BytesT (Fixed 4))) [BaseT (BytesT (Dynamic 32))]
+    [BytesV ([1w; 2w; 3w; 4w] ++ REPLICATE 27 0w ++ [1w])] =
       INR (RuntimeError "convert BytesV bound")
 Proof
   simp[evaluate_type_builtin_def, get_tenv_def,

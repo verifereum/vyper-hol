@@ -11,37 +11,58 @@ val empty_modules =
   ``([(NONE, [])] : (num option # toplevel list) list)``
 val zero_address = ``(0w : address)``
 
-(* AddressV is represented as twenty bytes. Wider destinations need different
-   padding from ordinary byte strings and deliberately remain unsupported. *)
+(* AddressV is twenty bytes, like a bytes20 or Bytes[20] value, but Vyper
+   converts an address to bytesM (20 <= M <= 32) as an integer, left-padding
+   it, while byte strings are right-padded. *)
 Theorem address_bytes_conversion_boundary:
-  valid_conversion (BaseT AddressT) (BaseT (BytesT bd)) <=> bd = Fixed 20
+  valid_conversion (BaseT AddressT) (BaseT (BytesT bd)) <=>
+  ?m. bd = Fixed m /\ 20 <= m /\ m <= 32
 Proof
   Cases_on `bd` >> simp[valid_conversion_def]
 QED
 
-Theorem address_bytes20_preserves_value:
-  value_has_type (BaseTV AddressT) v ==>
-  evaluate_convert tenv v (BaseT (BytesT (Fixed 20))) = INL v
+Theorem address_bytes_left_padded:
+  value_has_type (BaseTV AddressT) (BytesV bs) /\ 20 <= m ==>
+  evaluate_type_builtin cx Convert (BaseT (BytesT (Fixed m)))
+    [BaseT AddressT] [BytesV bs] =
+  INL (BytesV (REPLICATE (m - 20) 0w ++ bs))
 Proof
-  Cases_on `v` >>
-  simp[value_has_type_def, evaluate_convert_def, listTheory.PAD_RIGHT] >>
-  strip_tac >> gvs[]
+  simp[value_has_type_def, evaluate_type_builtin_def,
+       evaluate_convert_from_def, listTheory.PAD_LEFT,
+       rich_listTheory.REPLICATE_GENLIST]
 QED
 
-Theorem address_bytes20_values_eval:
-  evaluate_convert FEMPTY (AddressV 0w) (BaseT (BytesT (Fixed 20))) =
-    INL (BytesV (REPLICATE 20 0w)) /\
-  evaluate_convert FEMPTY (AddressV 1w) (BaseT (BytesT (Fixed 20))) =
+Theorem address_bytes_values_eval:
+  evaluate_type_builtin empty_evaluation_context Convert
+    (BaseT (BytesT (Fixed 20))) [BaseT AddressT] [AddressV 1w] =
     INL (BytesV (REPLICATE 19 0w ++ [1w])) /\
-  evaluate_convert FEMPTY (AddressV 1461501637330902918203684832716283019655932542975w)
-    (BaseT (BytesT (Fixed 20))) = INL (BytesV (REPLICATE 20 255w))
+  evaluate_type_builtin empty_evaluation_context Convert
+    (BaseT (BytesT (Fixed 21))) [BaseT AddressT] [AddressV 1w] =
+    INL (BytesV (REPLICATE 20 0w ++ [1w])) /\
+  evaluate_type_builtin empty_evaluation_context Convert
+    (BaseT (BytesT (Fixed 32))) [BaseT AddressT] [AddressV 0w] =
+    INL (BytesV (REPLICATE 32 0w)) /\
+  evaluate_type_builtin empty_evaluation_context Convert
+    (BaseT (BytesT (Fixed 32))) [BaseT AddressT] [AddressV 1w] =
+    INL (BytesV (REPLICATE 31 0w ++ [1w])) /\
+  evaluate_type_builtin empty_evaluation_context Convert
+    (BaseT (BytesT (Fixed 32))) [BaseT AddressT]
+    [AddressV 1461501637330902918203684832716283019655932542975w] =
+    INL (BytesV (REPLICATE 12 0w ++ REPLICATE 20 255w)) /\
+  (* Byte-string sources of the same twenty bytes are right-padded. *)
+  evaluate_type_builtin empty_evaluation_context Convert
+    (BaseT (BytesT (Fixed 32))) [BaseT (BytesT (Fixed 20))] [AddressV 1w] =
+    INL (BytesV (REPLICATE 19 0w ++ [1w] ++ REPLICATE 12 0w)) /\
+  evaluate_type_builtin empty_evaluation_context Convert
+    (BaseT (BytesT (Fixed 32))) [BaseT (BytesT (Dynamic 20))] [AddressV 1w] =
+    INL (BytesV (REPLICATE 19 0w ++ [1w] ++ REPLICATE 12 0w))
 Proof
   EVAL_TAC
 QED
 
 Theorem address_bytes_conversion_widths_eval:
   EVERY (λn. valid_conversion (BaseT AddressT) (BaseT (BytesT (Fixed n))) =
-             (n = 20)) (GENLIST SUC 32) /\
+             (20 <= n)) (GENLIST SUC 32) /\
   ¬valid_conversion (BaseT AddressT) (BaseT (BytesT (Dynamic 20))) /\
   ¬valid_conversion (BaseT AddressT) (BaseT (BytesT (Dynamic 32)))
 Proof
@@ -124,6 +145,7 @@ Definition abi_encode_wrapping_cases_ok_def:
   abi_encode_wrapping_cases_ok = EVERY (λ(ensure, method_id, n).
     case evaluate_type_builtin empty_evaluation_context (AbiEncode ensure method_id)
       (TupleT [TupleT [BaseT (StringT 16); BaseT (BytesT (Dynamic 16))]])
+      [TupleT [BaseT (StringT 16); BaseT (BytesT (Dynamic 16))]]
       [ArrayV (TupleV [StringV "abcdefghijklmnop"; BytesV (REPLICATE 16 1w)])] of
       INL (BytesV bs) => LENGTH bs = n
     | _ => F)
@@ -200,10 +222,10 @@ in
 end
 
 val () = List.app (fn in_deploy =>
-  (assert_some (check_address_bytes ``Fixed 20`` in_deploy);
+  (List.app (fn bd => assert_some (check_address_bytes bd in_deploy))
+     [``Fixed 20``, ``Fixed 21``, ``Fixed 32``];
    List.app (fn bd => assert_none (check_address_bytes bd in_deploy))
-     [``Fixed 19``, ``Fixed 21``, ``Fixed 32``,
-      ``Dynamic 20``, ``Dynamic 32``])) [false, true]
+     [``Fixed 19``, ``Dynamic 20``, ``Dynamic 32``])) [false, true]
 
 (* Basic API and ML-Boolean construction. *)
 val empty_check = vyperCheckContractLib.check_contract

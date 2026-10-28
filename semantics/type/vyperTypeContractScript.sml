@@ -329,7 +329,7 @@ Definition constant_value_def:
        case constant_values mods imms es of
        | NONE => NONE
        | SOME vs =>
-           case evaluate_type_builtin (constant_context mods) tb typ vs of
+           case evaluate_type_builtin (constant_context mods) tb typ (MAP expr_type es) vs of
            | INL v => SOME v
            | INR _ => NONE) /\
   constant_value mods imms _ = NONE /\

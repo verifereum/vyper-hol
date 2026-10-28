@@ -101,7 +101,7 @@ Definition eval_pure_expr_def:
     (if type_builtin_args_length_ok tb (LENGTH es) then
        (case eval_pure_exprs cx st es of
         | SOME vs =>
-          (case evaluate_type_builtin cx tb typ vs of
+          (case evaluate_type_builtin cx tb typ (MAP expr_type es) vs of
            | INL v => SOME (Value v)
            | INR _ => NONE)
         | NONE => NONE)
@@ -450,7 +450,7 @@ Proof
       rename1 `eval_exprs cx es st = (INL vs, s1)` >>
       `eval_pure_exprs cx st es = SOME vs` by metis_tac[] >>
       simp[] >>
-      Cases_on `evaluate_type_builtin cx tb typ vs` >>
+      Cases_on `evaluate_type_builtin cx tb typ (MAP expr_type es) vs` >>
       gvs[vyperStateTheory.lift_sum_def, vyperStateTheory.return_def,
           vyperStateTheory.raise_def])
   (* Pop - impossible *)

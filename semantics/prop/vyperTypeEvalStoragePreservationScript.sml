@@ -1783,7 +1783,7 @@ Resume eval_all_storage_preservation_mutual[Expr_TypeBuiltin]:
     first_x_assum drule_all >> strip_tac >>
     Cases_on `exprs_res` >> gvs[bind_def, return_def, raise_def]
     >- (
-      Cases_on `lift_sum (evaluate_type_builtin cx tb typ x) st1` >>
+      Cases_on `lift_sum (evaluate_type_builtin cx tb typ (MAP expr_type es) x) st1` >>
       imp_res_tac lift_sum_state >> gvs[] >>
       Cases_on `q` >> gvs[return_def, raise_def] >>
       rpt strip_tac >> gvs[]) >>

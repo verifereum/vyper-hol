@@ -427,8 +427,9 @@ Definition valid_conversion_def:
   valid_conversion (BaseT (IntT _)) (BaseT (UintT _)) = T /\
   valid_conversion (BaseT (IntT _)) (BaseT (IntT _)) = T /\
   valid_conversion (BaseT AddressT) (BaseT (UintT _)) = T /\
-  (* Wider bytes require left padding for addresses, unlike BytesV conversion. *)
-  valid_conversion (BaseT AddressT) (BaseT (BytesT bd)) = (bd = Fixed 20) /\
+  (* Vyper's to_bytes_m needs 160 <= 8 * m; evaluate_convert_from left-pads. *)
+  valid_conversion (BaseT AddressT) (BaseT (BytesT (Fixed m))) =
+    (20 <= m /\ m <= 32) /\
   valid_conversion (BaseT (UintT _)) (BaseT AddressT) = T /\
   valid_conversion (BaseT (IntT _)) (BaseT AddressT) = T /\
   valid_conversion (FlagT _) (BaseT (IntT _)) = T /\

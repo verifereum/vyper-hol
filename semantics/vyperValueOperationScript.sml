@@ -695,6 +695,32 @@ Proof
   rw[evaluate_convert_pre_def]
 QED
 
+(* An address is a 20-byte BytesV, like a bytes20 or Bytes[20] value, but
+   Vyper converts it to bytesM as the integer it denotes: shl(256 - 8 * M, addr)
+   keeps the address in the low bytes (_convert.py to_bytes_m). So the source
+   type decides the padding; every other conversion is evaluate_convert. *)
+Definition evaluate_convert_from_def:
+  evaluate_convert_from tenv from_ty v to_ty =
+    if from_ty = BaseT AddressT then
+      case (v, to_ty) of
+        (BytesV bs, BaseT (BytesT (Fixed m))) =>
+          if LENGTH bs ≤ m then INL $ BytesV (PAD_LEFT 0w m bs)
+          else INR (RuntimeError "convert address bytes")
+      | _ => evaluate_convert tenv v to_ty
+    else evaluate_convert tenv v to_ty
+End
+
+val () = cv_auto_trans evaluate_convert_from_def;
+
+(* Only an address source converted to bytesM differs from evaluate_convert. *)
+Theorem evaluate_convert_from_not_address_bytes:
+  ~(from_ty = BaseT AddressT /\ ?m. to_ty = BaseT (BytesT (Fixed m))) ==>
+  evaluate_convert_from tenv from_ty v to_ty = evaluate_convert tenv v to_ty
+Proof
+  rw[evaluate_convert_from_def] >> CASE_TAC >> CASE_TAC >> gvs[] >>
+  CASE_TAC >> gvs[] >> CASE_TAC >> gvs[]
+QED
+
 (* implicit conversion from one type to another, used e.g. for function
 * calls/returns. only "safe" conversions are allowed, e.g., extending the
 * maximum length of a dynamic array*)
