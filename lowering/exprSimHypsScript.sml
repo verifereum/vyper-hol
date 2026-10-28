@@ -211,17 +211,24 @@ Definition byte_widths_expr_def:
   byte_widths_named_exprs ((_,e)::kes) =
     (byte_widths_expr e /\ byte_widths_named_exprs kes)
 Termination
+  (* the measure names the container sizes with `list_size`/`option_size` over
+     `expr_size`, as in `vyperTypeCallGraph`, so that the obligations are
+     arithmetic over one set of size functions. *)
   qexists_tac `measure (\(x : expr + base_assignment_target + expr list +
                                       expr option + (identifier # expr) list).
     case x of
     | INL e => expr_size e
     | INR (INL tgt) => base_assignment_target_size tgt
-    | INR (INR (INL es)) => expr4_size es
-    | INR (INR (INR (INL opt))) => expr3_size opt
-    | INR (INR (INR (INR kes))) => expr1_size kes)` >>
+    | INR (INR (INL es)) => list_size expr_size es
+    | INR (INR (INR (INL opt))) => option_size expr_size opt
+    | INR (INR (INR (INR kes))) =>
+        list_size (pair_size (list_size char_size) expr_size) kes)` >>
   conj_tac >- MATCH_ACCEPT_TAC prim_recTheory.WF_measure >>
   PURE_REWRITE_TAC [prim_recTheory.measure_thm, sumTheory.sum_case_def] >>
-  simp[expr_size_def]
+  simp[expr_size_def, listTheory.list_size_def,
+       basicSizeTheory.pair_size_def, basicSizeTheory.option_size_def,
+       bnfPrelimsTheory.option_size_map, bnfPrelimsTheory.pair_size_map,
+       listTheory.list_size_map, SF ETA_ss]
 End
 
 (* The buffer the lowering allocates for a bytes or string literal, its
@@ -271,17 +278,24 @@ Definition alloc_limits_expr_def:
   alloc_limits_named_exprs ((_,e)::kes) =
     (alloc_limits_expr e /\ alloc_limits_named_exprs kes)
 Termination
+  (* the measure names the container sizes with `list_size`/`option_size` over
+     `expr_size`, as in `vyperTypeCallGraph`, so that the obligations are
+     arithmetic over one set of size functions. *)
   qexists_tac `measure (\(x : expr + base_assignment_target + expr list +
                                       expr option + (identifier # expr) list).
     case x of
     | INL e => expr_size e
     | INR (INL tgt) => base_assignment_target_size tgt
-    | INR (INR (INL es)) => expr4_size es
-    | INR (INR (INR (INL opt))) => expr3_size opt
-    | INR (INR (INR (INR kes))) => expr1_size kes)` >>
+    | INR (INR (INL es)) => list_size expr_size es
+    | INR (INR (INR (INL opt))) => option_size expr_size opt
+    | INR (INR (INR (INR kes))) =>
+        list_size (pair_size (list_size char_size) expr_size) kes)` >>
   conj_tac >- MATCH_ACCEPT_TAC prim_recTheory.WF_measure >>
   PURE_REWRITE_TAC [prim_recTheory.measure_thm, sumTheory.sum_case_def] >>
-  simp[expr_size_def]
+  simp[expr_size_def, listTheory.list_size_def,
+       basicSizeTheory.pair_size_def, basicSizeTheory.option_size_def,
+       bnfPrelimsTheory.option_size_map, bnfPrelimsTheory.pair_size_map,
+       listTheory.list_size_map, SF ETA_ss]
 End
 
 Definition expr_sim_pre_def:
