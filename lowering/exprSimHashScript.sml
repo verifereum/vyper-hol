@@ -590,7 +590,7 @@ Proof
     (rpt conj_tac >> Cases_on `ptr_op` >> Cases_on `len_op` >> Cases_on `ret_op` >>
      gvs[eval_operand_def, lookup_var_update_var]) >>
   simp[Once run_inst_seq_def, Once step_inst_base_def, mk_inst_def,
-       exec_read0_def, bind_outputs_def] >>
+       exec_read0_def, exec_gas_def, bind_outputs_def] >>
   `read_memory (w2n p) (w2n n)
      (update_var gas_var (n2w s.vs_call_ctx.cc_gas) s) = bs` by
     simp[read_memory_def, update_var_def, GSYM mem_bytes_at_def] >>

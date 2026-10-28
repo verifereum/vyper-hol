@@ -292,7 +292,7 @@ Proof
   qpat_x_assum `run_inst_seq _ _ = _` mp_tac >>
   simp[exprLoweringPropsTheory.run_inst_seq_def,
        venomExecSemanticsTheory.step_inst_base_def,
-       venomExecSemanticsTheory.exec_read0_def,
+       venomExecSemanticsTheory.exec_read0_def, venomExecSemanticsTheory.exec_gas_def,
        venomExecSemanticsTheory.exec_pure1_def,
        venomInstTheory.mk_inst_def, eval_operand_def,
        lookup_var_def, update_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>

@@ -328,6 +328,29 @@ val exec_read0_sim = prove(``
   rpt gen_tac >> strip_tac >> simp[exec_read0_def] >>
   rpt (CASE_TAC >> gvs[]) >> gvs cat_close_defs);
 
+(* Equivalent states hold the same gas readings, so GAS pops the same one. *)
+val execution_equiv_gas_readings = prove(``
+  !vars s1 s2.
+    execution_equiv vars s1 s2 ==> s1.vs_gas_readings = s2.vs_gas_readings``,
+  simp[execution_equiv_def, stateFrameTheory.execution_frame_def,
+       venom_state_component_equality]);
+
+val exec_gas_sim = prove(``
+  !inst1 inst2 s1 s2.
+    LENGTH inst1.inst_outputs = LENGTH inst2.inst_outputs /\
+    execution_equiv UNIV s1 s2 ==>
+    case (exec_gas inst1 s1, exec_gas inst2 s2) of
+      (OK s1', OK s2') => execution_equiv UNIV s1' s2'
+    | (Error _, Error _) => T
+    | (Abort a1 s1', Abort a2 s2') => a1 = a2 /\ execution_equiv UNIV s1' s2'
+    | _ => F``,
+  rpt gen_tac >> strip_tac >>
+  imp_res_tac execution_equiv_gas_readings >>
+  simp[exec_gas_def] >>
+  rpt (CASE_TAC >> gvs[]) >>
+  gvs (stateFrameTheory.execution_frame_def ::
+       venom_state_component_equality :: cat_close_defs));
+
 val exec_read1_sim = prove(``
   !f inst1 inst2 s1 s2.
     LENGTH inst1.inst_operands = LENGTH inst2.inst_operands /\
@@ -443,6 +466,16 @@ val exec_read0_step_sim = prove(
   rpt gen_tac >> strip_tac >> simp[step_sim_def] >>
   drule_all exec_read0_sim >> strip_tac >> fs[pair_case_simp]);
 
+val exec_gas_step_sim = prove(
+  ``!inst1 inst2 s1 s2.
+    LENGTH inst1.inst_outputs = LENGTH inst2.inst_outputs /\
+    execution_equiv UNIV s1 s2 /\
+    step_inst_base inst1 s1 = exec_gas inst1 s1 /\
+    step_inst_base inst2 s2 = exec_gas inst2 s2 ==>
+    step_sim inst1 inst2 s1 s2``,
+  rpt gen_tac >> strip_tac >> simp[step_sim_def] >>
+  drule_all exec_gas_sim >> strip_tac >> fs[pair_case_simp]);
+
 val exec_read1_step_sim = prove(
   ``!f inst1 inst2 s1 s2.
     LENGTH inst1.inst_operands = LENGTH inst2.inst_operands /\
@@ -529,6 +562,20 @@ fun prove_cat cat_thm opc cr = let
     TRY (first_assum ACCEPT_TAC) >>
     TRY (asm_rewrite_tac[]) >>
     solve_f_eq)
+  end;
+
+(* GAS has no semantic function argument to instantiate. *)
+fun prove_gas cr opc = let
+  val goal = ``!inst1 inst2 s1 s2.
+    sim_pre inst1 inst2 s1 s2 /\ inst1.inst_opcode = ^opc ==>
+    step_sim inst1 inst2 s1 s2``
+  in prove(goal,
+    rpt gen_tac >> strip_tac >> fs[sim_pre_def] >>
+    match_mp_tac exec_gas_step_sim >>
+    imp_res_tac cr >>
+    rpt conj_tac >>
+    TRY (first_assum ACCEPT_TAC) >>
+    asm_rewrite_tac[])
   end;
 
 (* ================================================================
@@ -1075,6 +1122,7 @@ fun prove_opcode opc = let
                     "exec_read0","exec_read1","exec_write2"]
     then (* Category opcodes *)
     prove_cat (cat_thm_for cat) opc cr
+  else if cat = "exec_gas" then prove_gas cr opc
   else if name = "LOG" then prove_log cr opc
   else if name = "ALLOCA" then prove_alloca cr opc
   else if name = "CALL" orelse name = "STATICCALL"
@@ -1133,7 +1181,7 @@ val output_close = [update_var_def, lookup_var_def,
   make_venom_create_state_def, venom_to_tx_params_def,
   extract_venom_result_def, set_returndata_def, mcopy_def, LET_THM,
   exec_pure1_def, exec_pure2_def, exec_pure3_def,
-  exec_read0_def, exec_read1_def, exec_write2_def,
+  exec_read0_def, exec_gas_def, exec_read1_def, exec_write2_def,
   mstore_def, mstore8_def, sstore_def, tstore_def, exec_alloca_def];
 
 (* Extract inst2's opcode from sim_pre so imp_res_tac cr can match both *)
@@ -1394,6 +1442,25 @@ fun prove_output_ext_call bridge_thm cr opc =
   rpt (EVAL_CASE_TAC_ASM >> gvs[]) >>
   metis_tac[bridge_thm]);
 
+(* Both GAS steps pop the same reading: the states' readings agree. *)
+fun prove_output_gas cr opc =
+  prove(``!inst1 inst2 s1 s2 s1' s2'.
+    sim_pre inst1 inst2 s1 s2 /\ inst1.inst_opcode = ^opc /\
+    inst1.inst_id = inst2.inst_id /\
+    ALL_DISTINCT inst1.inst_outputs /\
+    ALL_DISTINCT inst2.inst_outputs /\
+    step_inst_base inst1 s1 = OK s1' /\
+    step_inst_base inst2 s2 = OK s2' ==>
+    !k. k < LENGTH inst1.inst_outputs ==>
+        lookup_var (EL k inst1.inst_outputs) s1' =
+        lookup_var (EL k inst2.inst_outputs) s2'``,
+  rpt gen_tac >> strip_tac >>
+  specialize_cr cr >>
+  fs[sim_pre_def] >>
+  imp_res_tac execution_equiv_gas_readings >>
+  gvs[exec_gas_def, AllCaseEqs()] >>
+  simp[lookup_var_def, update_var_def, finite_mapTheory.FLOOKUP_UPDATE]);
+
 fun prove_output_opcode opc = let
   val cr = get_cr opc
   val name = fst (dest_const opc)
@@ -1403,6 +1470,7 @@ fun prove_output_opcode opc = let
        then prove_output_ext_call exec_delegatecall_output cr opc
      else if name = "CREATE" orelse name = "CREATE2"
        then prove_output_ext_call exec_create_output cr opc
+     else if name = "GAS" then prove_output_gas cr opc
      else case output_thm_for_cat (get_rhs_head cr) of
        SOME out_thm => prove_output_cat out_thm cr opc
      | NONE => prove_output_inline cr opc

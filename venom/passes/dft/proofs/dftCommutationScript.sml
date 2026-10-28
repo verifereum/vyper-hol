@@ -396,6 +396,20 @@ Proof
   Cases_on `t` >> gvs[map_result_state_def, MEM, update_var_commutes]
 QED
 
+Theorem exec_gas_frame[local]:
+  !inst s x v.
+  ~MEM x inst.inst_outputs ==>
+  exec_gas inst (update_var x v s) =
+  map_result_state (update_var x v) (exec_gas inst s)
+Proof
+  rw[exec_gas_def] >>
+  Cases_on `inst.inst_outputs` >> gvs[map_result_state_def] >>
+  Cases_on `t` >> gvs[map_result_state_def] >>
+  Cases_on `s.vs_gas_readings` >>
+  gvs[map_result_state_def, update_var_def,
+      finite_mapTheory.FUPDATE_COMMUTES]
+QED
+
 Theorem exec_read1_frame[local]:
   !f inst s x v.
   (!y. MEM (Var y) inst.inst_operands ==> x <> y) /\
@@ -439,7 +453,7 @@ QED
 (* Frame lemmas for the exec_* helpers *)
 val helper_frames = [
   exec_pure1_frame, exec_pure2_frame, exec_pure3_frame,
-  exec_read0_frame, exec_read1_frame, exec_write2_frame
+  exec_read0_frame, exec_gas_frame, exec_read1_frame, exec_write2_frame
 ];
 
 (* Rewrites for threading update_var through state operations *)

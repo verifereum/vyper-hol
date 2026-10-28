@@ -73,6 +73,17 @@ Proof
   rw[]
 QED
 
+Theorem exec_gas_static_preserves:
+  exec_gas y s = OK s' ==>
+  s'.vs_call_ctx = s.vs_call_ctx /\
+  s'.vs_logs = s.vs_logs /\
+  s'.vs_accounts = s.vs_accounts /\
+  s'.vs_transient = s.vs_transient
+Proof
+  rw[exec_gas_def, AllCaseEqs(), update_var_def] >>
+  rw[]
+QED
+
 Theorem exec_read1_static_preserves:
   exec_read1 x y s = OK s' ==>
   s'.vs_call_ctx = s.vs_call_ctx /\
@@ -154,6 +165,7 @@ Proof
     FIRST [
       drule exec_pure1_static_preserves >> simp[contract_storage_def],
       drule exec_read0_static_preserves >> simp[contract_storage_def],
+      drule exec_gas_static_preserves >> simp[contract_storage_def],
       drule exec_read1_static_preserves >> simp[contract_storage_def],
       drule exec_pure2_static_preserves >> simp[contract_storage_def],
       drule exec_pure3_static_preserves >> simp[contract_storage_def],

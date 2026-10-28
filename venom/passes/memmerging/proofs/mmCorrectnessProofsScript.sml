@@ -1468,7 +1468,7 @@ Resume memzero_inst_step_sim[rep_gt32]:
   (sg `step_inst fuel ctx (mk_calldatasize_inst inst.inst_id) s2 =
     OK (update_var cds_var (n2w (LENGTH s2.vs_call_ctx.cc_calldata)) s2)`
    >- (simp[mk_calldatasize_inst_def, step_inst_non_invoke, is_terminator_def,
-           step_inst_base_def, exec_read0_def, Abbr `cds_var`])) >>
+           step_inst_base_def, exec_read0_def, exec_gas_def, Abbr `cds_var`])) >>
   simp[] >>
   qabbrev_tac `s2_a = update_var cds_var
     (n2w (LENGTH s2.vs_call_ctx.cc_calldata)) s2` >>
@@ -1893,7 +1893,7 @@ Proof
     `step_inst fuel ctx (mk_calldatasize_inst inst.inst_id) s =
      OK (update_var cds_var (n2w (LENGTH s.vs_call_ctx.cc_calldata)) s)` by
       simp[mk_calldatasize_inst_def, step_inst_non_invoke, is_terminator_def,
-           step_inst_base_def, exec_read0_def, Abbr `cds_var`] >>
+           step_inst_base_def, exec_read0_def, exec_gas_def, Abbr `cds_var`] >>
     fs[] >>
     qabbrev_tac `s_a = update_var cds_var
       (n2w (LENGTH s.vs_call_ctx.cc_calldata)) s` >>
@@ -2653,7 +2653,7 @@ local
   ) non_abort_ops;
   val exec_helper_defs = [
     exec_pure1_def, exec_pure2_def, exec_pure3_def,
-    exec_read0_def, exec_read1_def, exec_write2_def,
+    exec_read0_def, exec_gas_def, exec_read1_def, exec_write2_def,
     exec_alloca_def, exec_ext_call_def, exec_create_def,
     exec_delegatecall_def, LET_THM, AllCaseEqs()];
   val direct_clause_pairs = ListPair.zip(non_abort_ops, base_clauses);
@@ -2708,7 +2708,7 @@ Triviality mm_exec_helpers_no_halt_intret[simp]:
   (!inst s sz vs s'. exec_alloca inst s sz <> IntRet vs s')
 Proof
   rw[exec_pure1_def, exec_pure2_def, exec_pure3_def,
-     exec_read0_def, exec_read1_def, exec_write2_def, exec_alloca_def] >>
+     exec_read0_def, exec_gas_def, exec_read1_def, exec_write2_def, exec_alloca_def] >>
   gvs[AllCaseEqs()]
 QED
 
@@ -2840,7 +2840,7 @@ Proof
   Cases_on `MEM inst.inst_id nop_set`
   >- ( (* NOP: mk_nop_from always succeeds *)
     simp[run_insts_def, mk_nop_from_def, step_inst_non_invoke,
-         step_inst_base_def, is_terminator_def, exec_read0_def])
+         step_inst_base_def, is_terminator_def, exec_read0_def, exec_gas_def])
   >> Cases_on `ALOOKUP rep_map inst.inst_id`
   >- ( (* Unchanged: same instruction → OK or Error by memzero_inst_ok *)
     fs[] >>
@@ -2867,7 +2867,7 @@ Proof
       fs[] >>
       simp[run_insts_def, LET_THM] >>
       simp[mk_calldatasize_inst_def, step_inst_non_invoke, step_inst_base_def,
-           is_terminator_def, exec_read0_def, eval_operand_def, update_var_def] >>
+           is_terminator_def, exec_read0_def, exec_gas_def, eval_operand_def, update_var_def] >>
       simp[mk_memzero_calldatacopy_def, step_inst_non_invoke, step_inst_base_def,
            is_terminator_def, exec_write2_def, eval_operand_def,
            lookup_var_def, FLOOKUP_UPDATE]))

@@ -400,6 +400,24 @@ Proof
   rw[exec_read0_def, update_var_def] >> gvs[AllCaseEqs()]
 QED
 
+Triviality exec_gas_result_alloca_fields[local]:
+  !inst (s:venom_state) r.
+    exec_gas inst s = r ==>
+    case r of
+      OK s' => s'.vs_allocas = s.vs_allocas /\
+               s'.vs_alloca_next = s.vs_alloca_next
+    | Halt s' => s'.vs_allocas = s.vs_allocas /\
+                 s'.vs_alloca_next = s.vs_alloca_next
+    | Abort a s' => s'.vs_allocas = s.vs_allocas /\
+                    s'.vs_alloca_next = s.vs_alloca_next
+    | IntRet v s' => s'.vs_allocas = s.vs_allocas /\
+                     s'.vs_alloca_next = s.vs_alloca_next
+    | Error e => T
+Proof
+  rpt gen_tac >> Cases_on `r` >>
+  rw[exec_gas_def, update_var_def] >> gvs[AllCaseEqs()]
+QED
+
 Triviality exec_read1_result_alloca_fields[local]:
   !f inst (s:venom_state) r.
     exec_read1 f inst s = r ==>
@@ -531,6 +549,7 @@ val effect_free_alloca_tac =
     drule exec_pure2_result_alloca_fields >> simp[],
     drule exec_pure3_result_alloca_fields >> simp[],
     drule exec_read0_result_alloca_fields >> simp[],
+    drule exec_gas_result_alloca_fields >> simp[],
     drule exec_read1_result_alloca_fields >> simp[],
     alloca_field_solve_tac
   ];
@@ -546,7 +565,7 @@ val alloca_field_finish_tac =
     rw[exec_pure1_def] >> alloca_field_solve_tac >> NO_TAC,
     rw[exec_pure2_def] >> alloca_field_solve_tac >> NO_TAC,
     rw[exec_pure3_def] >> alloca_field_solve_tac >> NO_TAC,
-    rw[exec_read0_def] >> alloca_field_solve_tac >> NO_TAC,
+    rw[exec_read0_def, exec_gas_def] >> alloca_field_solve_tac >> NO_TAC,
     rw[exec_read1_def] >> alloca_field_solve_tac >> NO_TAC,
     rw[exec_write2_def] >> alloca_field_solve_tac >> NO_TAC,
     rw[] >>
@@ -743,7 +762,7 @@ Triviality opcode_alloca_field_class[local]:
     is_ext_call_op op \/
     op = SSTORE \/ op = TSTORE \/ op = ISTORE \/ op = LOG \/
     op = ASSERT \/ op = ASSERT_UNREACHABLE \/
-    op = DALLOCA \/ op = SETFMP \/ is_terminator op
+    op = DALLOCA \/ op = SETFMP \/ is_terminator op \/ op = GAS
 Proof
   Cases >> EVAL_TAC
 QED
@@ -879,6 +898,17 @@ Proof
   rpt strip_tac >> alloca_field_finish_tac
 QED
 
+Triviality step_inst_base_gas_alloca_fields[local]:
+  !inst (s:venom_state) s'.
+    (step_inst_base inst s = OK s' \/ step_inst_base inst s = Halt s' \/
+     (?a. step_inst_base inst s = Abort a s') \/
+     (?v. step_inst_base inst s = IntRet v s')) /\
+    inst.inst_opcode = GAS ==>
+    s'.vs_allocas = s.vs_allocas /\ s'.vs_alloca_next = s.vs_alloca_next
+Proof
+  rpt strip_tac >> alloca_field_finish_tac
+QED
+
 Triviality step_inst_base_assert_alloca_fields[local]:
   !inst (s:venom_state) s'.
     (step_inst_base inst s = OK s' \/ step_inst_base inst s = Halt s' \/
@@ -951,6 +981,7 @@ Proof
   >- (qspecl_then [`inst`, `s`, `s'`] mp_tac step_inst_base_fmp_write_alloca_fields >> impl_tac >- gvs[] >> gvs[])
   >- (qspecl_then [`inst`, `s`, `s'`] mp_tac step_inst_base_fmp_write_alloca_fields >> impl_tac >- gvs[] >> gvs[])
   >- (qspecl_then [`inst`, `s`, `s'`] mp_tac step_inst_base_terminator_alloca_fields >> impl_tac >- gvs[] >> gvs[])
+  >- (qspecl_then [`inst`, `s`, `s'`] mp_tac step_inst_base_gas_alloca_fields >> impl_tac >- gvs[] >> gvs[])
 QED
 
 Theorem step_inst_base_preserves_allocas:

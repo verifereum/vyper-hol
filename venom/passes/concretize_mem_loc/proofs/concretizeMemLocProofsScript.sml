@@ -1906,7 +1906,7 @@ val exec_ok_or_error_thms = let
 in
   map prove_for
     [exec_pure1_def, exec_pure2_def, exec_pure3_def,
-     exec_read0_def, exec_read1_def]
+     exec_read0_def, exec_gas_def, exec_read1_def]
 end;
 
 Triviality exec_result_helpers_not_intret_cml[simp]:
@@ -1925,7 +1925,7 @@ Triviality exec_result_helpers_not_intret_cml[simp]:
      exec_create inst s v off sz salt <> IntRet vals s')
 Proof
   rw[exec_pure1_def, exec_pure2_def, exec_pure3_def,
-     exec_read0_def, exec_read1_def, exec_write2_def,
+     exec_read0_def, exec_gas_def, exec_read1_def, exec_write2_def,
      exec_alloca_def, exec_ext_call_def, exec_delegatecall_def,
      exec_create_def, extract_venom_result_def] >>
   gvs[AllCaseEqs()]

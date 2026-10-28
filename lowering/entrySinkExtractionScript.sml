@@ -47,7 +47,7 @@ Proof
   Cases_on `i.inst_opcode` >> gvs[is_terminator_def] >>
   asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >>
   simp[exec_pure1_def, exec_pure2_def, exec_pure3_def,
-       exec_read0_def, exec_read1_def, exec_write2_def,
+       exec_read0_def, exec_gas_def, exec_read1_def, exec_write2_def,
        exec_ext_call_def, exec_delegatecall_def, exec_create_def,
        exec_alloca_def, AllCaseEqs()]
 QED

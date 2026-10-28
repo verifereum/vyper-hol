@@ -172,7 +172,7 @@ fun prev_bb_cases_tac ss =
 
 val exec_prev_bb_ss = prev_bb_case_ss ++ rewrites
   [exec_pure1_def, exec_pure2_def, exec_pure3_def,
-   exec_read0_def, exec_read1_def, exec_write2_def];
+   exec_read0_def, exec_gas_def, exec_read1_def, exec_write2_def];
 
 val exec_prev_bb_tac = prev_bb_cases_tac exec_prev_bb_ss;
 
@@ -205,6 +205,14 @@ Theorem exec_read0_prev_bb[local]:
     (!s p. g (s with vs_prev_bb := p) = g s) ==>
     exec_read0 g inst (s with vs_prev_bb := p) =
     exec_result_map_prev_bb (\s'. s' with vs_prev_bb := p) (exec_read0 g inst s)
+Proof
+  rpt strip_tac >> exec_prev_bb_tac
+QED
+
+Theorem exec_gas_prev_bb[local]:
+  !inst s p.
+    exec_gas inst (s with vs_prev_bb := p) =
+    exec_result_map_prev_bb (\s'. s' with vs_prev_bb := p) (exec_gas inst s)
 Proof
   rpt strip_tac >> exec_prev_bb_tac
 QED
@@ -379,7 +387,7 @@ val prev_bb_dispatch_tac =
 
 val opcode_prev_bb_ss = prev_bb_case_ss ++ rewrites
   (prev_bb_rw @ [exec_pure1_prev_bb, exec_pure2_prev_bb,
-                exec_pure3_prev_bb, exec_alloca_prev_bb,
+                exec_pure3_prev_bb, exec_gas_prev_bb, exec_alloca_prev_bb,
                 exec_ext_call_prev_bb, exec_delegatecall_prev_bb,
                 exec_create_prev_bb]);
 

@@ -766,13 +766,21 @@ Proof
   rw[exec_read0_def]
 QED
 
+Triviality exec_gas_ops_irrel[local]:
+  !inst ops s.
+    exec_gas (inst with inst_operands := ops) s = exec_gas inst s
+Proof
+  rw[exec_gas_def]
+QED
+
 (* These opcodes never inspect operands. Cache just their proved dispatch
    equations; do not unfold the full semantics or use the global simpset. *)
 val ops_irrel_dispatch = let
   val rules = CONJUNCTS step_inst_base_opcode_eqs
   fun key th = rhs (fst (dest_imp (concl (SPEC_ALL th))))
   val projection_ss = bool_ss ++ rewrites
-    [instruction_accfupds, combinTheory.K_THM, exec_read0_ops_irrel]
+    [instruction_accfupds, combinTheory.K_THM, exec_read0_ops_irrel,
+     exec_gas_ops_irrel]
   fun selected opc =
     (opc, projection_ss ++ rewrites
       [valOf (List.find (fn th => aconv (key th) opc) rules)])

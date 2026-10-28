@@ -143,7 +143,11 @@ Theorem vsr_oracle_updates[simp]:
   vsr_term_frame (s with vs_outcomes := os) =
     vsr_term_frame s with vs_outcomes := os /\
   vsr_term_frame (s with vs_requests := rqs) =
-    vsr_term_frame s with vs_requests := rqs
+    vsr_term_frame s with vs_requests := rqs /\
+  vsr_frame (s with vs_gas_readings := gs) =
+    vsr_frame s with vs_gas_readings := gs /\
+  vsr_term_frame (s with vs_gas_readings := gs) =
+    vsr_term_frame s with vs_gas_readings := gs
 Proof
   simp[vsr_frame_def, vsr_term_frame_def]
 QED
@@ -152,7 +156,10 @@ Theorem vsr_oracle_same_updates[simp]:
   (vsr_frame s with vs_outcomes := s.vs_outcomes) = vsr_frame s /\
   (vsr_frame s with vs_requests := s.vs_requests) = vsr_frame s /\
   (vsr_term_frame s with vs_outcomes := s.vs_outcomes) = vsr_term_frame s /\
-  (vsr_term_frame s with vs_requests := s.vs_requests) = vsr_term_frame s
+  (vsr_term_frame s with vs_requests := s.vs_requests) = vsr_term_frame s /\
+  (vsr_frame s with vs_gas_readings := s.vs_gas_readings) = vsr_frame s /\
+  (vsr_term_frame s with vs_gas_readings := s.vs_gas_readings) =
+    vsr_term_frame s
 Proof
   simp[vsr_frame_def, vsr_term_frame_def, venom_state_component_equality]
 QED

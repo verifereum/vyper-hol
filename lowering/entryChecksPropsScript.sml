@@ -127,7 +127,7 @@ Proof
     simp[emitted_insts_def, APPEND_ASSOC, DROP_LENGTH_APPEND] >>
   gvs[] >>
   simp[run_inst_seq_def, step_cds_check_ops] >>
-  simp[exec_read0_def, exec_pure1_def, exec_pure2_def, mk_inst_def,
+  simp[exec_read0_def, exec_gas_def, exec_pure1_def, exec_pure2_def, mk_inst_def,
        eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
   IF_CASES_TAC >> simp[vars_pc_only_def] >>
   conj_tac

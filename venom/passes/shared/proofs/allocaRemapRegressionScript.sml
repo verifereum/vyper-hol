@@ -111,7 +111,7 @@ Theorem unequal_fmp_remap_output:
   ~(?v2. step_inst_base probe_inst probe_s2 = OK v2 /\
     original_alloca_remap_rel probe_fn {} FEMPTY (update_var "x" 0w probe_s1) v2)
 Proof
-  simp[probe_inst_def, step_inst_base_def, exec_read0_def] >>
+  simp[probe_inst_def, step_inst_base_def, exec_read0_def, exec_gas_def] >>
   simp[original_alloca_remap_rel_def, probe_no_pointers, lookup_var_def,
        update_var_def, probe_s1_def, probe_s2_def, init_venom_state_def] >>
   DISJ1_TAC >> qexists_tac `"x"` >> EVAL_TAC >> simp[]

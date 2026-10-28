@@ -114,6 +114,28 @@ Proof
   irule ssa_sim_update_var >> gvs[]
 QED
 
+Triviality exec_gas_renamed:
+  !inst1 inst2 sigma s1 s2 s1'.
+    ssa_sim sigma s1 s2 /\
+    LENGTH inst2.inst_outputs = LENGTH inst1.inst_outputs /\
+    (!x. lookup_var x s1 <> NONE /\ x <> HD inst1.inst_outputs ==>
+         sigma x <> HD inst2.inst_outputs) /\
+    exec_gas inst1 s1 = OK s1' ==>
+    ?s2'. exec_gas inst2 s2 = OK s2' /\
+          ssa_sim ((HD inst1.inst_outputs =+ HD inst2.inst_outputs) sigma)
+                  s1' s2'
+Proof
+  rpt strip_tac >>
+  `s1.vs_gas_readings = s2.vs_gas_readings` by
+    fs[ssa_sim_def, ssaFrameTheory.ssa_frame_def, venom_state_component_equality] >>
+  gvs[exec_gas_def, AllCaseEqs()] >>
+  Cases_on `inst2.inst_outputs` >> gvs[] >>
+  Cases_on `t` >> gvs[] >>
+  irule ssa_sim_update_var >>
+  gvs[ssa_sim_def, ssaFrameTheory.ssa_frame_def, lookup_var_def,
+      venom_state_component_equality]
+QED
+
 Triviality exec_read1_renamed:
   !f inst1 inst2 sigma s1 s2 s1'.
     ssa_sim sigma s1 s2 /\
@@ -494,6 +516,10 @@ Proof
        conj_tac >- first_assum ACCEPT_TAC >>
        qexists_tac `s1` >> gvs[] >> NO_TAC) >>
   TRY (simp[opcode_has_output_def] >>
+       irule exec_gas_renamed >>
+       conj_tac >- first_assum ACCEPT_TAC >>
+       qexists_tac `s1` >> gvs[] >> NO_TAC) >>
+  TRY (simp[opcode_has_output_def] >>
        irule exec_read1_renamed >>
        conj_tac >- first_assum ACCEPT_TAC >>
        conj_tac >- first_assum ACCEPT_TAC >>
@@ -507,7 +533,7 @@ Proof
        gvs[mstore_def, istore_def, mstore8_def, sstore_def, tstore_def,
            contract_storage_def, contract_transient_def,
            ssa_sim_def] >> NO_TAC) >>
-  gvs[exec_read0_def] >>
+  gvs[exec_read0_def, exec_gas_def] >>
   gvs[exec_read1_def] >>
   gvs[exec_write2_def] >>
   gvs[exec_alloca_def] >>

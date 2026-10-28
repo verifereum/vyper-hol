@@ -178,7 +178,7 @@ Theorem exec_read0_vars_ext:
       (exec_read0 f inst (s with vs_vars := V))
 Proof
   rpt strip_tac >> Cases_on `exec_read0 f inst s` >>
-  gvs[vars_ext_result_def, exec_read0_def, AllCaseEqs()] >>
+  gvs[vars_ext_result_def, exec_read0_def, exec_gas_def, AllCaseEqs()] >>
   simp exec_simps
 QED
 

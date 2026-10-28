@@ -189,7 +189,7 @@ Theorem step_CALLDATASIZE:
     step_inst_base (mk_inst id CALLDATASIZE [] [out]) ss =
     OK (update_var out (n2w (LENGTH ss.vs_call_ctx.cc_calldata)) ss)
 Proof
-  rw[step_inst_base_def, exec_read0_def, mk_inst_def]
+  rw[step_inst_base_def, exec_read0_def, exec_gas_def, mk_inst_def]
 QED
 
 Theorem compile_selector_checks_appends:

@@ -1213,7 +1213,7 @@ Proof
   Cases_on `inst.inst_opcode` >>
   gvs[is_alloca_op_def, is_terminator_def, is_ext_call_op_def] >>
   simp[exec_pure1_def, exec_pure2_def, exec_pure3_def,
-       exec_read0_def, exec_read1_def, exec_write2_def] >>
+       exec_read0_def, exec_gas_def, exec_read1_def, exec_write2_def] >>
   rpt strip_tac >> gvs[AllCaseEqs()] >>
   rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
   simp[update_var_def, mstore_def, mstore8_def, sstore_def, tstore_def,
@@ -1365,7 +1365,7 @@ Proof
   gvs[is_alloca_op_def, is_terminator_def, is_ext_call_op_def,
       read_effects_def, all_effects_def, empty_effects_def] >>
   simp[exec_pure1_def, exec_pure2_def, exec_pure3_def,
-       exec_read0_def, exec_read1_def, exec_write2_def,
+       exec_read0_def, exec_gas_def, exec_read1_def, exec_write2_def,
        AllCaseEqs()] >>
   rpt strip_tac >> gvs[]
 QED
@@ -1476,7 +1476,7 @@ Proof
         metis_tac[no_pv_outputs_from_no_pv_inputs] >>
       `LENGTH s1.vs_memory = LENGTH s2.vs_memory` by
         fs[alloca_remap_rel_def, LET_DEF] >>
-      gvs[step_inst_base_def, exec_read0_def, AllCaseEqs()] >>
+      gvs[step_inst_base_def, exec_read0_def, exec_gas_def, AllCaseEqs()] >>
       irule remap_update_nonpointer >> simp[]) >>
   (* Step 1: Extract scalar fields from alloca_remap_rel *)
   `s1.vs_prev_bb = s2.vs_prev_bb /\ s1.vs_params = s2.vs_params /\
@@ -3847,6 +3847,14 @@ Proof
   rw[exec_read0_def] >> rpt strip_tac >> gvs[AllCaseEqs()]
 QED
 
+Theorem exec_gas_error_transfer[local]:
+  !inst s1 s2 err.
+    exec_gas inst s1 = Error err ==>
+    ?err'. exec_gas inst s2 = Error err'
+Proof
+  rw[exec_gas_def] >> gvs[AllCaseEqs()]
+QED
+
 Theorem exec_read1_error_transfer[local]:
   !f inst s1 s2 err.
     (!op. eval_operand op s1 = NONE ==> eval_operand op s2 = NONE) /\
@@ -3925,12 +3933,13 @@ Proof
   TRY (drule_all exec_pure2_error_transfer >> simp[] >> NO_TAC) >>
   TRY (drule_all exec_pure3_error_transfer >> simp[] >> NO_TAC) >>
   TRY (drule_all exec_read0_error_transfer >> simp[] >> NO_TAC) >>
+  TRY (drule_all exec_gas_error_transfer >> simp[] >> NO_TAC) >>
   TRY (drule_all exec_read1_error_transfer >> simp[] >> NO_TAC) >>
   TRY (drule_all exec_write2_error_transfer >> simp[] >> NO_TAC) >>
   (* Remaining inline opcode clauses. *)
   rpt (qpat_x_assum `_ = Error err` mp_tac) >>
   simp[exec_pure1_def, exec_pure2_def, exec_pure3_def,
-       exec_read0_def, exec_read1_def, exec_write2_def,
+       exec_read0_def, exec_gas_def, exec_read1_def, exec_write2_def,
        exec_alloca_def, eval_operands_def] >>
   rpt strip_tac >>
   (fn (asl,g) => let
@@ -4049,7 +4058,7 @@ Proof
     Cases_on `inst.inst_opcode` >>
     simp[is_terminator_def, is_ext_call_op_def,
          exec_pure1_def, exec_pure2_def, exec_pure3_def,
-         exec_read0_def, exec_read1_def, exec_write2_def,
+         exec_read0_def, exec_gas_def, exec_read1_def, exec_write2_def,
          exec_alloca_def, eval_operands_def] >>
     rpt strip_tac >> gvs[AllCaseEqs()] >>
     rpt (BasicProvers.FULL_CASE_TAC >> gvs[])) >>
@@ -5168,7 +5177,7 @@ Resume run_block_preserves_remap[halt_case]:
   Cases_on `inst'.inst_opcode` >>
   gvs[is_terminator_def, is_ext_call_op_def] >>
   simp[exec_pure1_def, exec_pure2_def, exec_pure3_def,
-       exec_read0_def, exec_read1_def, exec_write2_def,
+       exec_read0_def, exec_gas_def, exec_read1_def, exec_write2_def,
        exec_alloca_def, eval_operands_def] >>
   rpt strip_tac >> gvs[AllCaseEqs()]
   *)
@@ -5193,7 +5202,7 @@ Resume run_block_preserves_remap[intret_case]:
   Cases_on `inst'.inst_opcode` >>
   gvs[is_terminator_def, is_ext_call_op_def] >>
   simp[exec_pure1_def, exec_pure2_def, exec_pure3_def,
-       exec_read0_def, exec_read1_def, exec_write2_def,
+       exec_read0_def, exec_gas_def, exec_read1_def, exec_write2_def,
        exec_alloca_def, eval_operands_def] >>
   rpt strip_tac >> gvs[AllCaseEqs()]
   *)

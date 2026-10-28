@@ -262,7 +262,7 @@ Triviality dft_exec_helpers_result_shape:
 Proof
   rpt conj_tac >>
   simp[exec_pure1_def, exec_pure2_def, exec_pure3_def,
-       exec_read0_def, exec_read1_def, exec_write2_def, AllCaseEqs()]
+       exec_read0_def, exec_gas_def, exec_read1_def, exec_write2_def, AllCaseEqs()]
 QED
 
 (* Pre-compute: non-terminator non-INVOKE opcodes never produce Halt/IntRet.
@@ -283,7 +283,7 @@ local
 
   val exec_helper_defs = [
     exec_pure1_def, exec_pure2_def, exec_pure3_def,
-    exec_read0_def, exec_read1_def, exec_write2_def,
+    exec_read0_def, exec_gas_def, exec_read1_def, exec_write2_def,
     exec_alloca_def, exec_ext_call_def, exec_create_def,
     exec_delegatecall_def, LET_THM, AllCaseEqs()];
 
@@ -455,7 +455,7 @@ local
   ) non_abort_ops;
   val exec_helper_defs = [
     exec_pure1_def, exec_pure2_def, exec_pure3_def,
-    exec_read0_def, exec_read1_def, exec_write2_def,
+    exec_read0_def, exec_gas_def, exec_read1_def, exec_write2_def,
     exec_alloca_def, exec_ext_call_def, exec_create_def,
     exec_delegatecall_def, LET_THM, AllCaseEqs()];
   val per_op_no_abort = map (fn (op_tm, clause) =>

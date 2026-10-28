@@ -1507,7 +1507,7 @@ fun prove_fdom_group opcode_list = prove(
   qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
   step_inst_base_opcode_tac >>
   simp[exec_pure2_def, exec_pure1_def, exec_pure3_def,
-      exec_read0_def, exec_read1_def, exec_write2_def,
+      exec_read0_def, exec_gas_def, exec_read1_def, exec_write2_def,
       exec_alloca_def,
       istore_def, mstore_def, mstore8_def, sstore_def, tstore_def] >>
   BasicProvers.every_case_tac >> rpt strip_tac >>

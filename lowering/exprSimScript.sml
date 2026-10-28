@@ -726,7 +726,7 @@ Proof
   gvs[compile_env_var_def, evaluate_builtin_def] >>
   drule emit_op_frag >> disch_then irule >>
   simp[is_terminator_def] >> rpt strip_tac >>
-  simp[step_inst_base_opcode_eqs, exec_read0_def, venomInstTheory.mk_inst_def] >>
+  simp[step_inst_base_opcode_eqs, exec_read0_def, exec_gas_def, venomInstTheory.mk_inst_def] >>
   fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def,
      val_to_w256_address, val_to_w256_def, integer_wordTheory.i2w_def]
 QED

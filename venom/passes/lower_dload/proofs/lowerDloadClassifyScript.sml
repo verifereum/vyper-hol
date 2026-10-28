@@ -166,6 +166,20 @@ Proof
   irule ld_ok_update_var >> simp[]
 QED
 
+Theorem exec_gas_ld_ok[local]:
+  !inst s1 s2 vars s1'.
+    ld_ok vars s1 s2 /\
+    exec_gas inst s1 = OK s1' ==>
+    ?s2'. exec_gas inst s2 = OK s2' /\ ld_ok vars s1' s2'
+Proof
+  rpt strip_tac >>
+  `s1.vs_gas_readings = s2.vs_gas_readings` by
+    fs[ld_ok_def, ld_frame_def, venom_state_component_equality] >>
+  gvs[exec_gas_def, AllCaseEqs()] >>
+  irule ld_ok_update_var >>
+  fs[ld_ok_def, ld_frame_def, lookup_var_def, venom_state_component_equality]
+QED
+
 Theorem exec_read1_ld_ok[local]:
   !f inst s1 s2 vars s1'.
     ld_ok vars s1 s2 /\
@@ -237,6 +251,9 @@ val ld_classify_one_tac =
   (* exec_read0: state-read, no operands *)
   TRY (
     irule exec_read0_ld_ok >> rpt (first_assum (irule_at Any)) >>
+    gvs[ld_ok_def] >> NO_TAC) >>
+  TRY (
+    irule exec_gas_ld_ok >> rpt (first_assum (irule_at Any)) >>
     gvs[ld_ok_def] >> NO_TAC) >>
   (* exec_read1: state-read with 1 operand *)
   TRY (
@@ -488,7 +505,7 @@ Triviality exec_result_helpers_no_halt_abort_ld[simp]:
   (!inst s alloc_size a s'. exec_alloca inst s alloc_size <> Abort a s')
 Proof
   rw[exec_pure1_def, exec_pure2_def, exec_pure3_def,
-     exec_read0_def, exec_read1_def, exec_write2_def,
+     exec_read0_def, exec_gas_def, exec_read1_def, exec_write2_def,
      exec_alloca_def] >>
   gvs[AllCaseEqs()]
 QED
@@ -503,7 +520,7 @@ Triviality exec_result_helpers_not_intret_ld[simp]:
   (!inst s alloc_size vs s'. exec_alloca inst s alloc_size <> IntRet vs s')
 Proof
   rw[exec_pure1_def, exec_pure2_def, exec_pure3_def,
-     exec_read0_def, exec_read1_def, exec_write2_def,
+     exec_read0_def, exec_gas_def, exec_read1_def, exec_write2_def,
      exec_alloca_def] >>
   gvs[AllCaseEqs()]
 QED

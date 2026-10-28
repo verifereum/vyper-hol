@@ -1880,7 +1880,7 @@ Proof
   qspecl_then [`CALLVALUE`, `λs. s.vs_call_ctx.cc_callvalue`,
                `st`, `v`, `st'`, `ss`] mp_tac emit_op_read0_correct >>
   simp[] >> disch_then irule >>
-  rw[step_inst_base_def, exec_read0_def, mk_inst_def]
+  rw[step_inst_base_def, exec_read0_def, exec_gas_def, mk_inst_def]
 QED
 
 (* Instantiation: CALLDATASIZE *)
@@ -1904,7 +1904,7 @@ Proof
                `λs. n2w (LENGTH s.vs_call_ctx.cc_calldata)`,
                `st`, `v`, `st'`, `ss`] mp_tac emit_op_read0_correct >>
   simp[] >> disch_then irule >>
-  rw[step_inst_base_def, exec_read0_def, mk_inst_def]
+  rw[step_inst_base_def, exec_read0_def, exec_gas_def, mk_inst_def]
 QED
 
 (* ===== Generic: emit_op for 1-operand pure opcode ===== *)

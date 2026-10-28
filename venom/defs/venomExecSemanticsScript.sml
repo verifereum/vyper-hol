@@ -276,6 +276,25 @@ Definition exec_read0_def:
     | _ => Error "read0 requires single output"
 End
 
+(* GAS pops the frame's next gas reading, exactly as assembly does
+   (asm_gas): an exhausted list reads 0w. *)
+Definition exec_gas_def:
+  exec_gas inst s =
+    case inst.inst_outputs of
+      [out] =>
+        (case s.vs_gas_readings of
+           [] => OK (update_var out 0w s)
+         | r :: rest => OK (update_var out r (s with vs_gas_readings := rest)))
+    | _ => Error "read0 requires single output"
+End
+
+Theorem exec_gas_not_terminal[simp]:
+  exec_gas inst s <> Halt s' /\ exec_gas inst s <> Abort a s' /\
+  exec_gas inst s <> IntRet vals s'
+Proof
+  rw[exec_gas_def, AllCaseEqs()]
+QED
+
 (* State-read 1-operand: eval operand, read from state, update output *)
 Definition exec_read1_def:
   exec_read1 f inst s =
@@ -826,7 +845,7 @@ Definition step_inst_base_def:
     | CALLER => exec_read0 (\s. w2w s.vs_call_ctx.cc_caller) inst s
     | ADDRESS => exec_read0 (\s. w2w s.vs_call_ctx.cc_address) inst s
     | CALLVALUE => exec_read0 (\s. s.vs_call_ctx.cc_callvalue) inst s
-    | GAS => exec_read0 (\s. n2w s.vs_call_ctx.cc_gas) inst s
+    | GAS => exec_gas inst s
 
     (* Environment - Transaction context *)
     | ORIGIN => exec_read0 (\s. w2w s.vs_tx_ctx.tc_origin) inst s
@@ -1244,7 +1263,7 @@ val preserves_idx_result = prove (
    dispatch cases in the goal; never simplify the whole assumption context. *)
 val preserves_idx_projection_rewrites = let
   val defs = [exec_pure1_def, exec_pure2_def, exec_pure3_def,
-    exec_read0_def, exec_read1_def, exec_ext_call_def,
+    exec_read0_def, exec_gas_def, exec_read1_def, exec_ext_call_def,
     consume_call_outcome_eq, exec_delegatecall_def, exec_create_def,
     extract_venom_result_def, exec_write2_def, exec_alloca_def,
     step_inst_base_def]
@@ -1288,7 +1307,7 @@ fun preserves_idx_cases_tac ss =
 
 val value_preserves_idx_ss = preserves_idx_ss ++ rewrites
   [exec_pure1_def, exec_pure2_def, exec_pure3_def,
-   exec_read0_def, exec_read1_def];
+   exec_read0_def, exec_read1_def, exec_gas_def];
 
 (* Value-producing helpers only update variables, regardless of computation. *)
 Theorem exec_value_preserves_inst_idx:
@@ -1296,7 +1315,8 @@ Theorem exec_value_preserves_inst_idx:
   (exec_pure2 f2 inst s = OK s' ==> s'.vs_inst_idx = s.vs_inst_idx) /\
   (exec_pure3 f3 inst s = OK s' ==> s'.vs_inst_idx = s.vs_inst_idx) /\
   (exec_read0 r0 inst s = OK s' ==> s'.vs_inst_idx = s.vs_inst_idx) /\
-  (exec_read1 r1 inst s = OK s' ==> s'.vs_inst_idx = s.vs_inst_idx)
+  (exec_read1 r1 inst s = OK s' ==> s'.vs_inst_idx = s.vs_inst_idx) /\
+  (exec_gas inst s = OK s' ==> s'.vs_inst_idx = s.vs_inst_idx)
 Proof
   rpt conj_tac >> preserves_idx_cases_tac value_preserves_idx_ss
 QED
@@ -1399,7 +1419,8 @@ End
 (* Merge callee's side effects back into caller after INVOKE.
    Internal function calls share the same contract, so mutable state
    (memory, transient storage, accounts, returndata, logs, immutables,
-   remaining outcomes and recorded requests) propagates from callee to caller.
+   remaining outcomes, recorded requests and remaining gas readings)
+   propagates from callee to caller.
    The allocation frame is the caller's: vs_allocas and vs_alloca_next stay
    as they were at the call, so the callee's allocations are reclaimed and the
    next call reuses their regions.  Memory returns go through a buffer the
@@ -1415,6 +1436,7 @@ Definition merge_callee_state_def:
       vs_logs       := callee.vs_logs;
       vs_outcomes   := callee.vs_outcomes;
       vs_requests   := callee.vs_requests;
+      vs_gas_readings := callee.vs_gas_readings;
       vs_immutables := callee.vs_immutables
     |>
 End
