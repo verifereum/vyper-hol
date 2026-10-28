@@ -14,7 +14,8 @@ Ancestors
 (* ===== Shared state and frame projections ===== *)
 
 (* Setup inherits mutable shared state and read-only execution context.
-   Merge copies only mutable shared state; it keeps caller-local context. *)
+   Merge copies only mutable shared state; it keeps caller-local context,
+   including the caller's allocation frame (vs_allocas, vs_alloca_next). *)
 
 Theorem setup_callee_shared_fields:
   setup_callee fn args caller = SOME callee ==>
@@ -43,8 +44,7 @@ Theorem merge_callee_shared_fields[simp]:
   (merge_callee_state caller callee).vs_accounts = callee.vs_accounts /\
   (merge_callee_state caller callee).vs_returndata = callee.vs_returndata /\
   (merge_callee_state caller callee).vs_logs = callee.vs_logs /\
-  (merge_callee_state caller callee).vs_immutables = callee.vs_immutables /\
-  (merge_callee_state caller callee).vs_alloca_next = callee.vs_alloca_next
+  (merge_callee_state caller callee).vs_immutables = callee.vs_immutables
 Proof
   simp[merge_callee_state_def]
 QED
@@ -58,6 +58,7 @@ Theorem merge_callee_local_fields[simp]:
   (merge_callee_state caller callee).vs_inst_idx = caller.vs_inst_idx /\
   (merge_callee_state caller callee).vs_halted = caller.vs_halted /\
   (merge_callee_state caller callee).vs_allocas = caller.vs_allocas /\
+  (merge_callee_state caller callee).vs_alloca_next = caller.vs_alloca_next /\
   (merge_callee_state caller callee).vs_call_ctx = caller.vs_call_ctx /\
   (merge_callee_state caller callee).vs_tx_ctx = caller.vs_tx_ctx /\
   (merge_callee_state caller callee).vs_block_ctx = caller.vs_block_ctx /\

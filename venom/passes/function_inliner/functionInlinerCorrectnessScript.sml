@@ -10,7 +10,7 @@ Theorem function_inliner_pass_correct:
     EVERY alloca_pointer_confined ctx.ctx_functions ⇒
     let ctx' = function_inliner_ctx threshold ctx in
     ∃fuel'.
-      result_equiv {}
+      observable_result_equiv
         (run_context fuel ctx s)
         (run_context fuel' ctx' s)
 Proof

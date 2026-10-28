@@ -7,9 +7,14 @@
  * (reason_prefix, a definedness certificate for its instructions).
  *
  * TOP-LEVEL:
- *   compile_bytelike_revert_frag   — the encoder and the REVERT, an exit
+ *   compile_revert_reason_frag     — the encoder and the REVERT, an exit,
+ *                                    for an operand reason_vv hands out
+ *   compile_bytelike_revert_frag   — the same for a string literal
  *   compile_raise_reason_lit_frag  — raise with a string literal reason
  *   compile_assert_reason_lit_frag — assert with a string literal reason
+ *
+ * Helper: reason_known, reason_operand, reason_step, reason_prefix,
+ *   reason_vv, unwrap_value_reason_vv, compile_revert_reason_certificate
  *)
 
 Theory stmtSimReason
@@ -270,7 +275,50 @@ Proof
   Induct >> simp[reason_prefix_def] >> metis_tac[reason_step_simple]
 QED
 
-Theorem compile_revert_reason_certificate[local]:
+(* The operand a reason's value_vv hands to the encoder with no code of
+   unwrap_value's own: a stack operand, or the pointer of a value in memory
+   of a type that is not a word type (a string). *)
+Definition reason_vv_def:
+  reason_vv (StackValue t op) = SOME op /\
+  reason_vv (LocatedValue t p) =
+    if ~is_word_type t /\ p.ptr_location = LocMemory then SOME p.ptr_operand
+    else NONE
+End
+
+Theorem unwrap_value_reason_vv:
+  !cenv vv op st. reason_vv vv = SOME op ==> unwrap_value cenv vv st = (op, st)
+Proof
+  Cases_on `vv` >> rw[reason_vv_def, unwrap_value_def, comp_return_def]
+QED
+
+Theorem compile_revert_reason_certificate:
+  !cenv msg_vv op msg_type msg_size sa sb ds.
+    reason_vv msg_vv = SOME op /\ reason_operand ds op /\
+    compile_revert_with_reason cenv msg_vv msg_type msg_size sa = ((), sb) ==>
+    ?prefix es id off len.
+      emitted_insts sa sb = prefix ++ [mk_inst id REVERT [off; len] []] /\
+      reason_prefix ds prefix es /\ reason_operand es off /\
+      reason_operand es len /\
+      sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
+      same_blocks sa sb
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule unwrap_value_reason_vv >> strip_tac >>
+  gvs[compile_revert_with_reason_def,
+      contextTheory.compile_alloc_buffer_def, emit_op_def, emit_void_def,
+      emit_inst_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
+      fresh_var_def, fresh_id_def, emit_def] >>
+  qmatch_goalsub_abbrev_tac `sa.cs_current_insts ++ code` >>
+  simp[emitted_insts_def, DROP_APPEND1, same_blocks_def] >>
+  qexists `TAKE 31 code` >>
+  simp[Abbr `code`, TAKE_def] >>
+  simp[reason_prefix_def, venomInstTheory.mk_inst_def] >>
+  rpt conj_tac >>
+  simp[reason_step_def, venomInstTheory.mk_inst_def, reason_operand_def] >>
+  Cases_on `op` >> gvs[reason_operand_def]
+QED
+
+Theorem compile_revert_reason_buf_certificate[local]:
   !cenv msg_ty buf msg_type msg_size sa sb ds.
     ~is_word_type msg_ty /\ reason_operand ds buf.buf_operand /\
     compile_revert_with_reason cenv (LocatedValue msg_ty (base_ptr buf))
@@ -282,19 +330,10 @@ Theorem compile_revert_reason_certificate[local]:
       sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
       same_blocks sa sb
 Proof
-  rpt gen_tac >> strip_tac >>
-  gvs[compile_revert_with_reason_def, unwrap_value_def, contextTheory.base_ptr_def,
-      contextTheory.compile_alloc_buffer_def, emit_op_def, emit_void_def,
-      emit_inst_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
-      fresh_var_def, fresh_id_def, emit_def] >>
-  qmatch_goalsub_abbrev_tac `sa.cs_current_insts ++ code` >>
-  simp[emitted_insts_def, DROP_APPEND1, same_blocks_def] >>
-  qexists `TAKE 31 code` >>
-  simp[Abbr `code`, TAKE_def] >>
-  simp[reason_prefix_def, venomInstTheory.mk_inst_def] >>
-  rpt conj_tac >>
-  simp[reason_step_def, venomInstTheory.mk_inst_def, reason_operand_def] >>
-  Cases_on `buf.buf_operand` >> gvs[reason_operand_def]
+  rpt strip_tac >> irule compile_revert_reason_certificate >>
+  qexistsl [`cenv`, `msg_size`, `msg_type`,
+            `LocatedValue msg_ty (base_ptr buf)`, `buf.buf_operand`] >>
+  simp[reason_vv_def, contextTheory.base_ptr_def]
 QED
 
 Theorem reason_prefix_revert_run[local]:
@@ -330,7 +369,7 @@ Theorem compile_revert_reason_run[local]:
         t.vs_labels = s.vs_labels
 Proof
   rpt strip_tac >>
-  drule_all compile_revert_reason_certificate >> strip_tac >> simp[] >>
+  drule_all compile_revert_reason_buf_certificate >> strip_tac >> simp[] >>
   irule reason_prefix_revert_run >> metis_tac[]
 QED
 
@@ -365,7 +404,7 @@ Proof
       qexists `0` >> simp[step_inst_non_invoke, venomInstTheory.mk_inst_def] >>
       irule_at Any step_revert_behavior >> simp[])
 QED
-Theorem compile_revert_reason_frag[local]:
+Theorem compile_revert_reason_buf_frag[local]:
   !ctx cenv msg_ty buf msg_type msg_size sa sb ds R.
     ~is_word_type msg_ty /\ reason_operand ds buf.buf_operand /\
     compile_revert_with_reason cenv (LocatedValue msg_ty (base_ptr buf))
@@ -373,8 +412,25 @@ Theorem compile_revert_reason_frag[local]:
     (!t. R (Abort Revert_abort t)) ==>
     frag_exec ctx sa sb (reason_known ds) (\s. F) R
 Proof
-  rpt strip_tac >> drule_all compile_revert_reason_certificate >> strip_tac >>
+  rpt strip_tac >> drule_all compile_revert_reason_buf_certificate >> strip_tac >>
   irule reason_prefix_revert_frag >> simp[] >> metis_tac[]
+QED
+
+(* The encoder and its REVERT, for a message operand that reason_vv hands
+   out, from any state where the variables of ds are defined. *)
+Theorem compile_revert_reason_frag:
+  !ctx cenv msg_vv op msg_type msg_size sa sb ds R.
+    reason_vv msg_vv = SOME op /\ reason_operand ds op /\
+    compile_revert_with_reason cenv msg_vv msg_type msg_size sa = ((), sb) /\
+    (!t. R (Abort Revert_abort t)) ==>
+    frag_exec ctx sa sb (reason_known ds) (\s. F) R /\ cs_extends sa sb
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all compile_revert_reason_certificate >> strip_tac >>
+  conj_tac
+  >- (irule reason_prefix_revert_frag >> simp[] >> metis_tac[]) >>
+  simp[cs_extends_def] >> qexists `[]` >> gvs[same_blocks_def] >>
+  metis_tac[IS_PREFIX_APPEND3, APPEND_ASSOC]
 QED
 
 Theorem compile_store_byte_chunks_simple[local]:
@@ -453,7 +509,7 @@ Theorem compile_bytelike_revert_frag:
 Proof
   rpt strip_tac >> drule compile_bytelike_literal_simple >> strip_tac >>
   `reason_operand [x] buf.buf_operand` by simp[reason_operand_def] >>
-  drule_all compile_revert_reason_certificate >> strip_tac >>
+  drule_all compile_revert_reason_buf_certificate >> strip_tac >>
   `sm.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sm /\
    same_blocks sa sm` by
     (drule compile_bytelike_literal_run >>
@@ -468,7 +524,7 @@ Proof
       drule compile_bytelike_literal_run >>
       disch_then (qspec_then `s` strip_assume_tac) >> qexists `t` >>
       gvs[reason_known_def, eval_operand_def, lookup_var_def]) >>
-  irule compile_revert_reason_frag >> metis_tac[]
+  irule compile_revert_reason_buf_frag >> metis_tac[]
 QED
 
 (* raise and assert with a string literal as the reason: the literal's
@@ -532,7 +588,7 @@ Proof
   rpt strip_tac >>
   drule compile_bytelike_literal_simple >> strip_tac >>
   `reason_operand [x] buf.buf_operand` by simp[reason_operand_def] >>
-  drule_all compile_revert_reason_certificate >> strip_tac >>
+  drule_all compile_revert_reason_buf_certificate >> strip_tac >>
   drule compile_bytelike_literal_run >>
   disch_then (qspec_then `ARB` strip_assume_tac) >>
   simp[cs_extends_def] >> qexists `[]` >>
@@ -651,8 +707,9 @@ Resume compile_assert_reason_lit_frag[abort]:
   impl_tac >- simp[jump_to_def] >> strip_tac >>
   qpat_x_assum `!fuel. (!e. run_from fuel ctx func (jump_to _ s) <> Error e) ==> _`
     (qspec_then `fuel` mp_tac) >>
-  impl_tac >- metis_tac[exit_result_not_error] >> strip_tac >>
-  qexists_tac `fuel'` >> gvs[]
+  impl_tac >- metis_tac[exit_result_not_error] >>
+  disch_then (qx_choose_then `f0` strip_assume_tac) >>
+  qexists_tac `f0` >> gvs[]
 QED
 
 Finalise compile_assert_reason_lit_frag

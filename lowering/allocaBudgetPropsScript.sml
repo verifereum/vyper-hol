@@ -1,5 +1,5 @@
-(* Static allocation accounting within a single frame.  Calls can increase
-   the frontier without adding entries to the caller's allocation map. *)
+(* Static allocation accounting within a single frame.  Calls leave the
+   caller's frontier and allocation map as they were. *)
 Theory allocaBudgetProps
 Ancestors
   vyperCompiler venomMemProps venomExecSemantics venomState venomInst

@@ -270,20 +270,23 @@ val conversion_check = vyperCheckContractLib.check_contract
    address = zero_address, modules = conversion_modules}
 val () = assert_some conversion_check
 
-(* len() requires sized-type classification to compute. *)
-val sized_modules =
-  ``([(NONE,
-       [FunctionDecl External Pure F F "array_len"
-          [("xs", ArrayT (BaseT AddressT) (Dynamic 4))] []
-          (BaseT (UintT 256))
-          [Return (SOME
-             (Builtin (BaseT (UintT 256)) Len
-               [Name (ArrayT (BaseT AddressT) (Dynamic 4)) "xs"]))]])]
-      : (num option # toplevel list) list)``
-val sized_check = vyperCheckContractLib.check_contract
-  {in_deploy = false, layouts = empty_layouts,
-   address = zero_address, modules = sized_modules}
-val () = assert_some sized_check
+(* len() requires sized-type classification to compute. Like Vyper, it takes
+   String, Bytes and DynArray, but not fixed-size arrays or bytesM. *)
+fun len_check ty = vyperCheckContractLib.check_contract_conv
+  (vyperCheckContractLib.mk_check_contract
+  {in_deploy = false, layouts = empty_layouts, address = zero_address,
+   modules =
+     ``([(NONE,
+          [FunctionDecl External Pure F F "len_of" [("xs", ^ty)] []
+             (BaseT (UintT 256))
+             [Return (SOME
+                (Builtin (BaseT (UintT 256)) Len [Name ^ty "xs"]))]])]
+         : (num option # toplevel list) list)``})
+val () = app (assert_some o len_check)
+  [``ArrayT (BaseT AddressT) (Dynamic 4)``, ``BaseT (StringT 10)``,
+   ``BaseT (BytesT (Dynamic 10))``]
+val () = app (assert_none o len_check)
+  [``ArrayT (BaseT AddressT) (Fixed 4)``, ``BaseT (BytesT (Fixed 32))``]
 
 (* The conversion itself computes rejection to NONE. The success-only API must
    fail closed on that result. *)

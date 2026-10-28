@@ -1,19 +1,27 @@
 (*
  * Statement simulation: a word-local declaration (#637)
  *
- * AnnAssign over stmt_frag (stmtSim) for a local whose value is a
- * word_value (not an address or bytesN): the right-hand side's errors
- * exit; on a value the local's ALLOCA runs and the value is stored.
+ * AnnAssign over stmt_frag (stmtSim) for a local held in one word: the
+ * right-hand side's errors exit; on a value the local's ALLOCA runs and the
+ * right-hand side's typed word is stored, which lays the value out
+ * (stmtSimDeclStore's store_lays_out): a word_value, or an address or bytesN
+ * value of the declared type.  Values and errors are those of the forced
+ * right-hand side (eval_expr followed by read_result), including places.
  *
  * TOP-LEVEL:
- *   compile_annassign_word_stmt_frag — a word-local declaration, for every
- *                                      outcome of its right-hand side
+ *   compile_annassign_stmt_frag       — a one-word local's declaration, for
+ *                                       every outcome of its right-hand
+ *                                       side, storing the typed word of the
+ *                                       right-hand side's value
+ *   compile_annassign_word_stmt_frag  — the same for a word_value
+ *   compile_annassign_typed_stmt_frag — the same for a value of the
+ *                                       declared type: address and bytesN
  *)
 
 Theory stmtSimDecl
 Ancestors
   list rich_list finite_map pred_set
-  fragExec localPtrsProps exprSim loweringSlice stmtSim loweringHalt
+  fragExec localPtrsProps exprSim loweringSlice stmtSim stmtSimDeclStore
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
   compileEnv valueEncoding
   vyperInterpreter vyperState vyperValue vyperValueOperation vyperExprNoControl
@@ -96,12 +104,12 @@ Proof
 QED
 
 Theorem annassign_mstore_framed_frag[local]:
-  !w v p val_op ctx func cenv cx es' st st' Pre R keep s0.
+  !w wd p val_op ctx func cenv cx es' st st' Pre R keep s0.
     emit_void MSTORE [Var p; val_op] st = ((), st') /\
     (!s. Pre s ==>
       lookup_var p s = SOME w /\
-      eval_operand val_op s = SOME (val_to_w256 v) /\
-      stmt_state_rel func cenv cx es' (mstore (w2n w) (val_to_w256 v) s) /\
+      eval_operand val_op s = SOME wd /\
+      stmt_state_rel func cenv cx es' (mstore (w2n w) wd s) /\
       (!x. keep x ==> lookup_var x s = lookup_var x s0) /\
       (!aid entry. FLOOKUP s0.vs_allocas aid = SOME entry ==>
                    FLOOKUP s.vs_allocas aid = SOME entry)) ==>
@@ -120,7 +128,7 @@ Proof
   fs[same_blocks_def, IS_PREFIX_APPEND3] >>
   rpt strip_tac >> disj1_tac >> first_x_assum drule >> strip_tac >>
   `step_inst_base (mk_inst st.cs_next_id MSTORE [Var p; val_op] []) s =
-     OK (mstore (w2n w) (val_to_w256 v) s)` by
+     OK (mstore (w2n w) wd s)` by
     (irule step_MSTORE >> simp[eval_operand_def]) >>
   simp[run_inst_seq_def, stmt_state_rel_inst_idx,
        mstore_def, lookup_var_def, LET_THM] >>
@@ -181,12 +189,12 @@ Proof
 QED
 
 Theorem annassign_word_store_run[local]:
-  !ctx func cenv cx es s id p sz w inst v tyv sc rest a op st st'.
+  !ctx func cenv cx es s id p sz w inst v tyv sc rest a op st st' wd.
     emit_void MSTORE [Var p; op] st = ((), st') /\
     fn_has_code st st' func /\ ~s.vs_halted /\
     s.vs_current_bb = st.cs_current_bb /\
     s.vs_inst_idx = LENGTH st.cs_current_insts /\
-    eval_operand op s = SOME (val_to_w256 v) /\
+    eval_operand op s = SOME wd /\
     stmt_state_rel func cenv cx es s /\ fn_inst_ids_distinct func /\
     es.scopes = sc :: rest /\ lookup_scopes id es.scopes = NONE /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
@@ -194,7 +202,9 @@ Theorem annassign_word_store_run[local]:
     MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
     inst.inst_outputs = [p] /\
     FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n w, sz) /\
-    32 <= sz /\ word_value v /\ type_memory_size tyv = 32 ==>
+    32 <= sz /\ type_memory_size tyv = 32 /\
+    val_in_memory tyv v (w2n w) (mstore (w2n w) wd s).vs_memory /\
+    val_wf tyv v ==>
     ?t. stmt_state_rel func cenv cx
           (es with scopes :=
              (sc |+ (id, <|assignable := a; type := tyv; value := v; popped := []|>)) :: rest) t /\
@@ -208,8 +218,8 @@ Theorem annassign_word_store_run[local]:
 Proof
   rpt strip_tac >>
   qmatch_goalsub_abbrev_tac `stmt_state_rel func cenv cx es'` >>
-  `stmt_state_rel func cenv cx es' (mstore (w2n w) (val_to_w256 v) s)` by
-    (simp[Abbr `es'`] >> irule stmt_state_rel_declare_word >> simp[] >>
+  `stmt_state_rel func cenv cx es' (mstore (w2n w) wd s)` by
+    (simp[Abbr `es'`] >> irule stmt_state_rel_declare_store >> simp[] >>
      qexists_tac `inst` >> gvs[]) >>
   `frag_exec ctx st st' (\t. t = s)
      (\t. stmt_state_rel func cenv cx es' t /\
@@ -259,7 +269,7 @@ Theorem annassign_word_store_post_run[local]:
     expr_post func cenv cx e es sa sb s0 es1 v op s /\
     is_word_type (expr_type e) /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME etv /\
-    typed_val_to_w256 etv v = val_to_w256 v /\
+    store_lays_out etv tyv v /\
     emit_void MSTORE [Var p; op] sb = ((), sf) /\ fn_has_code sb sf func /\
     ~s.vs_halted /\ s.vs_current_bb = sb.cs_current_bb /\
     s.vs_inst_idx = LENGTH sb.cs_current_insts /\ fn_inst_ids_distinct func /\
@@ -269,7 +279,7 @@ Theorem annassign_word_store_post_run[local]:
     lookup_var p s0 = SOME w /\
     MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\ inst.inst_outputs = [p] /\
     FLOOKUP s0.vs_allocas inst.inst_id = SOME (w2n w, sz) /\
-    32 <= sz /\ word_value v /\ type_memory_size tyv = 32 ==>
+    32 <= sz ==>
     ?t. stmt_state_rel func cenv cx
           (es1 with scopes :=
              (sc |+ (id, <|assignable := a; type := tyv; value := v; popped := []|>)) :: rest) t /\
@@ -285,10 +295,13 @@ Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[expr_post_def] >> strip_tac >>
-  `eval_operand op s = SOME (val_to_w256 v)` by
+  `eval_operand op s = SOME (typed_val_to_w256 etv v)` by
     (gvs[expr_val_rel_def] >> metis_tac[]) >>
   `lookup_var p s = SOME w` by metis_tac[] >>
   `FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n w, sz)` by metis_tac[] >>
+  `val_in_memory tyv v (w2n w)
+     (mstore (w2n w) (typed_val_to_w256 etv v) s).vs_memory /\
+   val_wf tyv v /\ type_memory_size tyv = 32` by fs[store_lays_out_def] >>
   drule_all annassign_word_store_run >>
   disch_then (qspecl_then [`ctx`, `a`] mp_tac) >> strip_tac >>
   qexists_tac `t` >> simp[] >> metis_tac[]
@@ -346,10 +359,10 @@ QED
 Theorem annassign_word_success_run[local]:
   !ctx func cenv cx id vtyp e es es' etv sa sb sf op p sz s0 w inst.
     eval_stmt cx (AnnAssign id vtyp e) es = (INL (), es') /\
-    (!tyv. evaluate_type (get_tenv cx) vtyp = SOME tyv ==> type_memory_size tyv = 32) /\
     is_word_type (expr_type e) /\ evaluate_type (get_tenv cx) (expr_type e) = SOME etv /\
-    (!v es1. (do result <- eval_expr cx e; read_result cx result od) es = (INL v, es1) ==>
-       word_value v /\ typed_val_to_w256 etv v = val_to_w256 v) /\
+    (!tyv v es1. evaluate_type (get_tenv cx) vtyp = SOME tyv /\
+                 (do result <- eval_expr cx e; read_result cx result od) es = (INL v, es1) ==>
+       store_lays_out etv tyv v) /\
     expr_sim ctx func cenv cx (expr_type e) e es /\
     lower_value compile_expr cenv (expr_type e) e sa = (op, sb) /\
     emit_void MSTORE [Var p; op] sb = ((), sf) /\
@@ -374,8 +387,7 @@ Proof
   ` (do result <- eval_expr cx e; read_result cx result od) es = (INL v, es2)` by
     simp[bind_def] >>
   `es2 = es1` by metis_tac[read_result_state] >> gvs[] >>
-  `word_value v /\ typed_val_to_w256 etv v = val_to_w256 v` by metis_tac[] >>
-  `type_memory_size tyv = 32` by simp[] >>
+  `store_lays_out etv tyv v` by metis_tac[] >>
   `not_local_ptr cenv es1.scopes p` by metis_tac[local_ptrs_reserved_not_live] >>
   qpat_x_assum `expr_sim _ _ _ _ _ _ _` (mp_tac o REWRITE_RULE [expr_sim_def]) >>
   disch_then (qspecl_then [`sa`, `sb`, `op`, `INL v`, `es1`, `s0`] mp_tac) >>
@@ -444,29 +456,28 @@ QED
    The ALLOCA then runs with the relation kept at c (its output is fresh,
    local_ptrs_reserved), and expr_sim at c either exits with expr_exit, an
    Abort that carries back over the ALLOCA, or reaches the MSTORE in
-   expr_post.  materialise and new_variable fail only with type errors,
-   which stmt_res_ok leaves out.  On success cenv'' = c; cenv_top_ext holds
+   expr_post.  read_result failures are expression exits; new_variable
+   fails only with type errors, which stmt_res_ok leaves out.  On success cenv'' = c; cenv_top_ext holds
    since only id changes, a pointer on both sides, and the rest of the
    scopes do not hold it.  The ALLOCA's output is fresh at sa, so the
    lookup_var frame does not speak of it; a second run of the ALLOCA (in a
    loop) keeps its allocation.  compile_annassign_word_frag's post has no
    lookup_var or allocas frame, so the success case re-chains ALLOCA,
    expr_post and MSTORE rather than citing it. *)
-Theorem compile_annassign_word_stmt_frag:
+Theorem compile_annassign_stmt_frag:
   !ctx func cx lctx RetQ cenv ty id vtyp e es res es' etv.
     eval_stmt cx (AnnAssign id vtyp e) es = (res, es') /\
     cenv.ce_alloca_locals /\
     is_word_type vtyp /\ ~has_length_word vtyp /\
     32 <= type_memory_bytes cenv vtyp /\
     type_memory_bytes cenv vtyp < dimword (:256) /\
-    (!tyv. evaluate_type (get_tenv cx) vtyp = SOME tyv ==>
-           type_memory_size tyv = 32) /\
     lookup_scopes id es.scopes = NONE /\
     (!l. FLOOKUP cenv.ce_vars id = SOME l ==> ?q z. l = PtrVar q z) /\
     is_word_type (expr_type e) /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME etv /\
-    (!v es1. (do result <- eval_expr cx e; read_result cx result od) es = (INL v, es1) ==>
-              word_value v) /\
+    (!tyv v es1. evaluate_type (get_tenv cx) vtyp = SOME tyv /\
+                 (do result <- eval_expr cx e; read_result cx result od) es = (INL v, es1) ==>
+                 store_lays_out etv tyv v) /\
     (!st0 c st1. declare_local cenv id vtyp st0 = (c, st1) ==>
        expr_sim ctx func c cx (expr_type e) e es /\
        !sa sb op. lower_value compile_expr c (expr_type e) e sa = (op, sb) ==>
@@ -475,11 +486,6 @@ Theorem compile_annassign_word_stmt_frag:
       (stmt_env cenv lctx ty (AnnAssign id vtyp e)) es res es'
 Proof
   rpt gen_tac >> strip_tac >>
-  `!v es1. (do result <- eval_expr cx e; read_result cx result od) es = (INL v, es1) ==>
-     word_value v /\ typed_val_to_w256 etv v = val_to_w256 v` by
-    (rpt strip_tac >> first_x_assum drule >> strip_tac >>
-     gvs[typed_val_to_w256_word_value]) >>
-  qpat_x_assum `!v es1. _ ==> word_value v` kall_tac >>
   simp[stmt_frag_def] >> rpt gen_tac >> strip_tac >>
   `!st0 c st1. declare_local cenv id vtyp st0 = (c, st1) ==>
      !a b op. lower_value compile_expr c (expr_type e) e a = (op, b) ==>
@@ -532,7 +538,66 @@ Proof
   disj2_tac >> simp[stmt_exit_def] >> metis_tac[]
 QED
 
-(* Integrity gate for forced declaration consumers, including read failures. *)
+Theorem compile_annassign_word_stmt_frag:
+  !ctx func cx lctx RetQ cenv ty id vtyp e es res es' etv.
+    eval_stmt cx (AnnAssign id vtyp e) es = (res, es') /\
+    cenv.ce_alloca_locals /\
+    is_word_type vtyp /\ ~has_length_word vtyp /\
+    32 <= type_memory_bytes cenv vtyp /\
+    type_memory_bytes cenv vtyp < dimword (:256) /\
+    (!tyv. evaluate_type (get_tenv cx) vtyp = SOME tyv ==>
+           type_memory_size tyv = 32) /\
+    lookup_scopes id es.scopes = NONE /\
+    (!l. FLOOKUP cenv.ce_vars id = SOME l ==> ?q z. l = PtrVar q z) /\
+    is_word_type (expr_type e) /\
+    evaluate_type (get_tenv cx) (expr_type e) = SOME etv /\
+    (!v es1. (do result <- eval_expr cx e; read_result cx result od) es = (INL v, es1) ==>
+              word_value v) /\
+    (!st0 c st1. declare_local cenv id vtyp st0 = (c, st1) ==>
+       expr_sim ctx func c cx (expr_type e) e es /\
+       !sa sb op. lower_value compile_expr c (expr_type e) e sa = (op, sb) ==>
+                  cs_extends sa sb) ==>
+    stmt_frag ctx func cx lctx RetQ cenv
+      (stmt_env cenv lctx ty (AnnAssign id vtyp e)) es res es'
+Proof
+  rpt strip_tac >> irule compile_annassign_stmt_frag >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  TRY (qexists_tac `etv` >> simp[]) >> rpt strip_tac >>
+  qpat_x_assum `!v es1. _ ==> word_value v` drule >> strip_tac >>
+  irule store_lays_out_word_value >> metis_tac[]
+QED
+
+(* x: T = e for a word type T, address and bytesN included, where e has
+   type T and its values are of T: the stored word is e's typed word,
+   which lays the value out as val_in_memory does for T. *)
+Theorem compile_annassign_typed_stmt_frag:
+  !ctx func cx lctx RetQ cenv ty id vtyp e es res es' tyv.
+    eval_stmt cx (AnnAssign id vtyp e) es = (res, es') /\
+    cenv.ce_alloca_locals /\
+    is_word_type vtyp /\ ~has_length_word vtyp /\
+    32 <= type_memory_bytes cenv vtyp /\
+    type_memory_bytes cenv vtyp < dimword (:256) /\
+    lookup_scopes id es.scopes = NONE /\
+    (!l. FLOOKUP cenv.ce_vars id = SOME l ==> ?q z. l = PtrVar q z) /\
+    expr_type e = vtyp /\ evaluate_type (get_tenv cx) vtyp = SOME tyv /\
+    (!v es1. (do result <- eval_expr cx e; read_result cx result od) es = (INL v, es1) ==>
+              value_has_type tyv v) /\
+    (!st0 c st1. declare_local cenv id vtyp st0 = (c, st1) ==>
+       expr_sim ctx func c cx (expr_type e) e es /\
+       !sa sb op. lower_value compile_expr c (expr_type e) e sa = (op, sb) ==>
+                  cs_extends sa sb) ==>
+    stmt_frag ctx func cx lctx RetQ cenv
+      (stmt_env cenv lctx ty (AnnAssign id vtyp e)) es res es'
+Proof
+  rpt strip_tac >> gvs[] >> irule compile_annassign_stmt_frag >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  TRY (qexists_tac `tyv` >> gvs[]) >> rpt strip_tac >>
+  qpat_x_assum `!v es1. _ ==> value_has_type _ v` drule >> strip_tac >>
+  irule store_lays_out_typed >> metis_tac[]
+QED
+
+(* Integrity gate for forced declaration consumers, including read failures
+   and the generalized typed store. *)
 val () = List.app (fn th =>
   let val (ors, axs) = Tag.dest_tag (Thm.tag th)
   in if null axs andalso null (Thm.hyp th) andalso
@@ -541,4 +606,5 @@ val () = List.app (fn th =>
      else raise Fail "forced declaration inherited admission"
   end) [eval_annassign_word_error, annassign_word_success_run,
         expr_sim_error_run, annassign_word_top_ext,
-        compile_annassign_word_stmt_frag];
+        compile_annassign_stmt_frag, compile_annassign_word_stmt_frag,
+        compile_annassign_typed_stmt_frag];
