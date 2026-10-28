@@ -108,12 +108,13 @@
  *   - alloc_limits_expr cenv e: every static buffer the lowering allocates
  *     for the expression's nodes is below 2 ** 64 bytes: a bytes or string
  *     literal's, and the type_memory_bytes of a struct literal, a list or
- *     tuple literal and empty(T) of a type that is not a word.  Python's
- *     Context.allocate_buffer (vyper/codegen_venom/context.py) raises
- *     MemoryAllocationException for a buffer of 2 ** 64 bytes or more;
- *     _lower_bytelike allocates its buffer through it, and
- *     _lower_struct_constructor, lower_List, lower_Tuple and lower_empty
- *     through new_temporary_value, which allocates
+ *     tuple literal and empty(T) of a type that is not a word, and a
+ *     calldata slice's output buffer.  Python's Context.allocate_buffer
+ *     (vyper/codegen_venom/context.py) raises MemoryAllocationException
+ *     for a buffer of 2 ** 64 bytes or more; _lower_bytelike allocates its
+ *     buffer through it, and _lower_struct_constructor, lower_List,
+ *     lower_Tuple, lower_empty and _lower_adhoc_slice through
+ *     new_temporary_value, which allocates
  *     typ.memory_bytes_required.  The lowering's ALLOCA takes the size as a
  *     word literal and cannot fail, so a buffer of 2 ** 256 bytes or more
  *     would wrap; evaluate_type admits Bytes[n] and String[n] for any
@@ -270,8 +271,9 @@ End
 
 (* Every static buffer the lowering allocates for a node of the expression
    is below Python's allocation limit, 2 ** 64 bytes: the buffers of bytes
-   and string literals, struct and array literals, and empty(T) of a type
-   that is not a word.  The same recursion as byte_widths_expr. *)
+   and string literals, struct and array literals, empty(T) of a type that
+   is not a word, and the output of a calldata slice.  The same recursion
+   as byte_widths_expr. *)
 Definition alloc_limits_expr_def:
   alloc_limits_expr cenv (Name t _) = T /\
   alloc_limits_expr cenv (TopLevelName t _) = T /\
@@ -291,6 +293,7 @@ Definition alloc_limits_expr_def:
         MakeArray NONE _ =>
           SUM (MAP (type_memory_bytes cenv o expr_type) es) < 2 ** 64
       | MakeArray (SOME _) _ => type_memory_bytes cenv t < 2 ** 64
+      | CalldataSlice n => 32 + 32 * word_size n < 2 ** 64
       | _ => T) /\
      alloc_limits_exprs cenv es) /\
   alloc_limits_expr cenv (TypeBuiltin t tb ty es) =

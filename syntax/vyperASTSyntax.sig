@@ -17,6 +17,7 @@ signature vyperASTSyntax = sig
   val ext_call_kw_ty : hol_type
   val type_builtin_ty : hol_type
   val expr_ty : hol_type
+  val custom_error_ty : hol_type
   val stmt_ty : hol_type
   val assignment_target_ty : hol_type
   val base_assignment_target_ty : hol_type
@@ -199,6 +200,11 @@ signature vyperASTSyntax = sig
   val is_Call : term -> bool
   val mk_Call : term * term * term list * term option -> term
   val dest_Call : term -> term * term * term list * term option
+  val CustomError_tm : term
+  val mk_CustomError_tm : term * term * term -> term
+  val dest_CustomError_tm : term -> term * term * term
+  val is_CustomError : term -> bool
+
 
   val NameTarget_tm : term
   val mk_NameTarget_tm : term -> term
@@ -364,6 +370,10 @@ signature vyperASTSyntax = sig
   val mk_AssertReason_tm : term -> term
   val dest_AssertReason_tm : term -> term
   val is_AssertReason : term -> bool
+  val AssertCustomError_tm : term
+  val mk_AssertCustomError_tm : term -> term
+  val dest_AssertCustomError_tm : term -> term
+  val is_AssertCustomError : term -> bool
 
   val RaiseBare_tm : term
   val is_RaiseBare : term -> bool
@@ -373,6 +383,10 @@ signature vyperASTSyntax = sig
   val mk_RaiseReason_tm : term -> term
   val dest_RaiseReason_tm : term -> term
   val is_RaiseReason : term -> bool
+  val RaiseCustomError_tm : term
+  val mk_RaiseCustomError_tm : term -> term
+  val dest_RaiseCustomError_tm : term -> term
+  val is_RaiseCustomError : term -> bool
 
   val Signed_tm : term
   val mk_Signed_tm : term -> term
@@ -565,6 +579,10 @@ signature vyperASTSyntax = sig
   val mk_EventDecl_tm : term * term -> term
   val dest_EventDecl_tm : term -> term * term
   val is_EventDecl : term -> bool
+  val ErrorDecl_tm : term
+  val mk_ErrorDecl_tm : term * term -> term
+  val dest_ErrorDecl_tm : term -> term * term
+  val is_ErrorDecl : term -> bool
   val FlagDecl_tm : term
   val mk_FlagDecl_tm : term * term -> term
   val dest_FlagDecl_tm : term -> term * term
@@ -595,12 +613,14 @@ signature vyperASTSyntax = sig
       VAssertBareReason
     | VAssertUnreachableReason
     | VAssertReasonExpr of term
+    | VAssertCustomError of term
   val view_assert_reason : term -> assert_reason_view
 
   datatype raise_reason_view =
       VRaiseBareReason
     | VRaiseUnreachableReason
     | VRaiseReasonExpr of term
+    | VRaiseCustomError of term
   val view_raise_reason : term -> raise_reason_view
 
   datatype expr_view =
@@ -653,6 +673,7 @@ signature vyperASTSyntax = sig
     | VHashMapDecl of term * term * term * term * term * term
     | VStructDecl of term * term
     | VEventDecl of term * term
+    | VErrorDecl of term * term
     | VFlagDecl of term * term
     | VInterfaceDecl of term * term
   val view_toplevel : term -> toplevel_view

@@ -61,13 +61,17 @@ End
 Definition supported_assert_exists_def:
   supported_assert_exists p AssertBare = F /\
   supported_assert_exists p AssertUnreachable = F /\
-  supported_assert_exists p (AssertReason e) = supported_expr_exists p e
+  supported_assert_exists p (AssertReason e) = supported_expr_exists p e /\
+  supported_assert_exists p (AssertCustomError err) =
+    EXISTS (supported_expr_exists p) (custom_error_exprs err)
 End
 
 Definition supported_raise_exists_def:
   supported_raise_exists p RaiseBare = F /\
   supported_raise_exists p RaiseUnreachable = F /\
-  supported_raise_exists p (RaiseReason e) = supported_expr_exists p e
+  supported_raise_exists p (RaiseReason e) = supported_expr_exists p e /\
+  supported_raise_exists p (RaiseCustomError err) =
+    EXISTS (supported_expr_exists p) (custom_error_exprs err)
 End
 
 Definition supported_stmt_expr_exists_def:

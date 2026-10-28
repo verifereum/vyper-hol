@@ -643,6 +643,9 @@ Definition toplevel_decl_types_valid_def:
       (JTL_StructDef _ fields) =
     EVERY (arg_type_valid nominal_index all_import_maps type_ctx) fields) ∧
   (toplevel_decl_types_valid nominal_index all_import_maps type_ctx
+      (JTL_ErrorDef _ fields) =
+    EVERY (arg_type_valid nominal_index all_import_maps type_ctx) fields) ∧
+  (toplevel_decl_types_valid nominal_index all_import_maps type_ctx
       (JTL_InterfaceDef _ funcs) =
     EVERY (interface_func_types_valid nominal_index all_import_maps type_ctx)
       funcs) ∧

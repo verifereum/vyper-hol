@@ -7061,11 +7061,8 @@ local
 val shape_dispatch_len_tac =
   `~supported_expr_exists expr_shape_root (HD args)` by
     (irule expr_shape_list_hd >> gvs[builtin_arity_def]) >>
-  Cases_on `is_msg_data (HD args)` >>
   CONV_TAC (LAND_CONV (REWR_CONV (GSYM ETA_AX))) >>
-  simp[compile_builtin_dispatch_body_def] >> CONV_TAC (DEPTH_CONV ETA_CONV)
-  >- (irule shape_step_as_stack_val >>
-      shape_under_tac compile_builtin_calldatasize_shape `\st. T` >> simp[shape_stable_def]) >>
+  simp[compile_builtin_dispatch_body_def] >> CONV_TAC (DEPTH_CONV ETA_CONV) >>
   irule shape_step_uncurry >> qexists_tac `\v st. value_shape_ok st v` >> reverse conj_tac
   >- (first_x_assum irule >> simp[]) >>
   qx_gen_tac `vv` >> simp[] >> irule shape_step_as_stack_val >>
@@ -8224,13 +8221,50 @@ Resume compile_revert_with_reason_shape[finish_encoding]:
 QED
 Finalise compile_revert_with_reason_shape[local]
 
+(* Custom errors are outside the supported subset; compile_stmt's catch-all
+   lowers them to INVALID. *)
+Theorem stmt_invalid_shape[local]:
+  shape_step internal compiler_label (\st. T)
+    (comp_ignore_bind (emit_inst INVALID [] []) (comp_return ())) (\u st. T)
+Proof
+  match_mp_tac shape_step_ignore_bind >> qexists_tac `\x st. T` >>
+  conj_tac
+  >- (mp_tac (Q.SPECL [`internal`, `compiler_label`, `\st. T`,
+                       `INVALID`, `[]`, `[]`] shape_step_emit_inst) >>
+      simp[shape_stable_def, lowered_inst_ok_def, mk_inst_def,
+           raw_opcode_ok_def, inst_shape_ok_def, label_positions_ok_def,
+           inst_jump_labels_ok_def,
+           is_terminator_def, is_param_opcode_def]) >>
+  gen_tac >> irule shape_step_return >> simp[]
+QED
+
+Theorem compile_custom_error_shape[local]:
+  shape_step internal compiler_label P
+    (compile_stmt cenv lctx ty (Raise (RaiseCustomError err))) (\u st. T) /\
+  shape_step internal compiler_label P
+    (compile_stmt cenv lctx ty (Assert e (AssertCustomError err))) (\u st. T)
+Proof
+  `!s. compile_stmt cenv lctx ty s =
+         comp_ignore_bind (emit_inst INVALID [] []) (comp_return ()) ==>
+       shape_step internal compiler_label P (compile_stmt cenv lctx ty s)
+         (\u st. T)` by
+    (rpt strip_tac >> pop_assum SUBST1_TAC >> irule shape_step_conseq >>
+     qexistsl_tac [`compiler_label`, `\st. T`, `\u st. T`] >>
+     simp[stmt_invalid_shape]) >>
+  conj_tac >> first_x_assum irule >>
+  simp[Once compile_stmt_def, FUN_EQ_THM, comp_ignore_bind_def,
+       comp_bind_def, comp_return_def]
+QED
+
 Theorem compile_raise_shape[local]:
   !reason cenv lctx ty internal.
     ~supported_stmt_expr_exists expr_shape_root (Raise reason) ==>
     shape_step internal compiler_label (\st. cenv_shape_ok st cenv)
       (compile_stmt cenv lctx ty (Raise reason)) (\u st. T)
 Proof
-  Cases >> rpt strip_tac >> simp[Once compile_stmt_def]
+  Cases >> rpt strip_tac
+  >~ [`RaiseCustomError _`] >- simp[compile_custom_error_shape] >>
+  simp[Once compile_stmt_def]
   >- (stmt_drop (ho_match_mp_tac stmt_shape_emit_inst >>
       simp[cenv_shape_ok_stable] >> stmt_shape_emit_simp >>
       simp[label_or_plain_def, plain_operand_def, stackPlanTypesTheory.is_label_operand_def]))
@@ -8282,7 +8316,9 @@ Theorem compile_assert_shape[local]:
     shape_step internal compiler_label (\st. cenv_shape_ok st cenv)
       (compile_stmt cenv lctx ty (Assert cond_e reason)) (\u st. T)
 Proof
-  Cases >> rpt strip_tac >> simp[Once compile_stmt_def, stmt_return_bind] >>
+  Cases >> rpt strip_tac
+  >~ [`AssertCustomError _`] >- simp[compile_custom_error_shape] >>
+  simp[Once compile_stmt_def, stmt_return_bind] >>
   stmt_bind `\cond_op st. plain_operand st cond_op /\ cenv_shape_ok st cenv` `cond_op`
     (ho_match_mp_tac stmt_shape_frame >> qexists_tac `\st. cenv_shape_ok st cenv` >>
      simp[cenv_shape_ok_stable] >> irule lower_value_shape >>

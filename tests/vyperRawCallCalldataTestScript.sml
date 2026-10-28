@@ -141,7 +141,7 @@ val () =
 Theorem checkable_raw_call_false_calldata:
   evaluate_type_builtin empty_evaluation_context
     (AbiEncode T (SOME [40w; 43w; 85w; 74w]))
-    (TupleT [BaseT BoolT]) [BoolV F] =
+    (TupleT [BaseT BoolT]) [BaseT BoolT] [BoolV F] =
   INL (BytesV ([40w; 43w; 85w; 74w] ++ REPLICATE 32 0w))
 Proof
   CONV_TAC cv_eval

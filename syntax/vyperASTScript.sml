@@ -1,6 +1,6 @@
 Theory vyperAST
 Ancestors
-  ASCIInumbers string words integer vyperMisc[ignore_grammar]
+  ASCIInumbers string words arithmetic sorting integer vyperMisc[ignore_grammar]
 Libs
   cv_transLib
 
@@ -275,6 +275,14 @@ Datatype:
   | AttributeTarget base_assignment_target identifier
 End
 
+(* A resolved custom-error use retains positional and keyword operands separately.
+   The declaration determines keyword order and the canonical ABI types. *)
+Datatype:
+  custom_error
+  = CustomError nsid (expr list) ((identifier # expr) list)
+End
+
+
 Definition expr_type_def:
   (expr_type (Name ty _) = ty) /\
   (expr_type (TopLevelName ty _) = ty) /\
@@ -311,6 +319,7 @@ Datatype:
   = AssertBare                (* simple assert, no reason *)
   | AssertUnreachable         (* assert UNREACHABLE → INVALID opcode *)
   | AssertReason expr         (* assert with Error(string) reason *)
+  | AssertCustomError custom_error
 End
 
 Datatype:
@@ -318,6 +327,7 @@ Datatype:
   = RaiseBare                 (* bare raise: revert 0,0 *)
   | RaiseUnreachable          (* raise UNREACHABLE → INVALID opcode *)
   | RaiseReason expr          (* raise with Error(string) reason *)
+  | RaiseCustomError custom_error
 End
 
 Datatype:
@@ -379,9 +389,98 @@ Datatype:
   | HashMapDecl variable_visibility bool (* transient? *) identifier type value_type (num option) (* slot *)
   | StructDecl identifier (argument list)
   | EventDecl identifier ((argument # bool) list)  (* bool = indexed *)
+  | ErrorDecl identifier (argument list)
   | FlagDecl identifier (identifier list)
   | InterfaceDecl identifier (interface_func list)
 End
+
+(* Keyword arguments must name the parameters in declaration order: Vyper
+   rejects any other order ("keys are required to be in order",
+   validate_kwargs in vyper/semantics/analysis/utils.py), and duplicates,
+   omissions and unknown names with it. *)
+Definition order_custom_error_kwargs_def:
+  order_custom_error_kwargs [] [] = SOME [] ∧
+  order_custom_error_kwargs ((name,ty)::params) ((key,e)::kwargs) =
+    (if key = name then
+       OPTION_MAP (CONS e) (order_custom_error_kwargs params kwargs)
+     else NONE) ∧
+  order_custom_error_kwargs _ _ = NONE
+End
+
+Definition custom_error_exprs_def:
+  custom_error_exprs (CustomError id positional kwargs) =
+    positional ++ MAP SND kwargs
+End
+
+Theorem order_custom_error_kwargs_SOME:
+  ∀params kwargs es.
+    order_custom_error_kwargs params kwargs = SOME es ⇒ es = MAP SND kwargs
+Proof
+  ho_match_mp_tac order_custom_error_kwargs_ind >>
+  rw[order_custom_error_kwargs_def] >> gvs[]
+QED
+
+Theorem order_custom_error_kwargs_perm:
+  order_custom_error_kwargs params kwargs = SOME es ⇒
+  PERM (MAP SND kwargs) es
+Proof
+  strip_tac >> drule order_custom_error_kwargs_SOME >> simp[]
+QED
+
+Theorem list_size_map_snd_le:
+  ∀kwargs : (identifier # expr) list.
+    list_size (λx. expr_size (SND x)) kwargs ≤
+    list_size (pair_size (list_size char_size) expr_size) kwargs
+Proof
+  Induct_on `kwargs` >- simp[] >>
+  Cases_on `h` >> fs[]
+QED
+
+Theorem custom_error_exprs_size[simp]:
+  list_size expr_size (custom_error_exprs err) < custom_error_size err + 2
+Proof
+  Cases_on `err` >>
+  simp[custom_error_exprs_def, listTheory.list_size_append] >>
+  irule LESS_EQ_LESS_TRANS >>
+  qexists_tac
+    `list_size (pair_size (list_size char_size) expr_size) l0` >>
+  simp[list_size_map_snd_le]
+QED
+Theorem custom_error_exprs_size_with_expr[simp]:
+  list_size expr_size (custom_error_exprs err) <
+    custom_error_size err + (expr_size e + 2)
+Proof
+  irule LESS_LESS_EQ_TRANS >>
+  qexists_tac `custom_error_size err + 2` >>
+  simp[]
+QED
+
+
+
+Definition order_custom_error_args_def:
+  order_custom_error_args params (CustomError id positional kwargs) =
+    if NULL kwargs then
+      if LENGTH positional = LENGTH params then SOME positional else NONE
+    else if NULL positional then order_custom_error_kwargs params kwargs
+    else NONE
+End
+Theorem order_custom_error_args_perm:
+  order_custom_error_args params err = SOME es ⇒
+  PERM (custom_error_exprs err) es
+Proof
+  Cases_on `err` >>
+  Cases_on `l` >>
+  Cases_on `l0`
+  >- simp[order_custom_error_args_def, custom_error_exprs_def]
+  >- (rw[order_custom_error_args_def, custom_error_exprs_def] >>
+      drule order_custom_error_kwargs_perm >> simp[])
+  >- simp[order_custom_error_args_def, custom_error_exprs_def]
+  >- simp[order_custom_error_args_def, custom_error_exprs_def]
+QED
+
+val () = cv_auto_trans custom_error_exprs_def;
+val () = cv_auto_trans order_custom_error_kwargs_def;
+val () = cv_auto_trans order_custom_error_args_def;
 
 (* some helper functions over the AST datatypes *)
 

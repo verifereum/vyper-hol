@@ -87,12 +87,12 @@ QED
 
 Theorem bytes_address_builtin_boundaries_cv:
   evaluate_type_builtin empty_evaluation_context Convert (BaseT AddressT)
-    [BytesV (REPLICATE 32 0w)] = INL (AddressV 0w) ∧
+    [BaseT (BytesT (Fixed 32))] [BytesV (REPLICATE 32 0w)] = INL (AddressV 0w) ∧
   evaluate_type_builtin empty_evaluation_context Convert (BaseT AddressT)
-    [BytesV (REPLICATE 12 0w ++ REPLICATE 20 255w)] =
+    [BaseT (BytesT (Fixed 32))] [BytesV (REPLICATE 12 0w ++ REPLICATE 20 255w)] =
       INL (AddressV 1461501637330902918203684832716283019655932542975w) ∧
   evaluate_type_builtin empty_evaluation_context Convert (BaseT AddressT)
-    [BytesV (REPLICATE 11 0w ++ [1w] ++ REPLICATE 20 0w)] =
+    [BaseT (BytesT (Fixed 32))] [BytesV (REPLICATE 11 0w ++ [1w] ++ REPLICATE 20 0w)] =
       INR (RuntimeError "convert bytes address")
 Proof
   simp[evaluate_type_builtin_def, get_tenv_def,
