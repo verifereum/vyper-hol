@@ -19,27 +19,20 @@
  *                            keeps state_rel with the source after
  *                            adoption, given the locals survive the
  *                            return-buffer write
- *   stmt_state_rel_allocas_frame — state_rel re-established by a step that
- *                            keeps the allocations gives stmt_state_rel
  *   send_call_oracle_step  — send's CALL against eval_send: success binds
  *                            1w with state_rel kept, failure binds 0w
  *
- * Helpers: logs_rel_eq, local_ptrs_rel_oracle_fields,
- *   write_memory_with_expansion_empty_0
+ * Helpers: logs_rel_eq, local_ptrs_rel_oracle_fields
  *
  * What compile_send_sim and compile_extcall_sim (exprSimCalls) still need
- * beyond these steps, as the definitions stand:
- *   - the call context's static flag: CALL asks a static request when the
- *     Venom call context is static (cr_static = is_static \/ cc_static),
- *     while a source send or nonstatic extcall asks a nonstatic one
- *     (IS_NONE value_opt).  state_rel does not relate cc_static, so the
- *     CALL steps take ~cc_static; a STATICCALL needs nothing.
- *   - take_call_outcome raises "call outcome accounts" on a successful
- *     nonstatic outcome whose accounts are not runtime well-typed, while
- *     Venom adopts the outcome and goes on: the lowered code does not
- *     abort there.  The step lemmas speak of a taken outcome (INL);
- *     send_call_oracle_step lists that error as a case of its own.
- *     e2eDefs's call_outcomes_ok rules it out for the outcomes it covers.
+ * beyond these steps: take_call_outcome raises "call outcome accounts" on
+ * a successful nonstatic outcome whose accounts are not runtime
+ * well-typed, while Venom adopts the outcome and goes on, so the lowered
+ * code does not abort there.  The step lemmas speak of a taken outcome
+ * (INL); send_call_oracle_step lists that error as a case of its own.
+ * Ruling it out takes an invariant that the outcomes still to consume are
+ * well typed, as e2eDefs's call_outcomes_ok states for the initial ones;
+ * state_rel carries no such invariant.
  *)
 
 Theory extCallOracleStep
@@ -63,8 +56,11 @@ Theorem venom_call_request_source:
     call_outcome_request target (read_memory (w2n ao) (w2n az) s) value_opt es
 Proof
   rpt strip_tac >>
-  gvs[venom_call_request_def, call_outcome_request_def, accounts_rel_def,
-      call_request_component_equality]
+  drule_then (qspecl_then [`target`, `read_memory (w2n ao) (w2n az) s`,
+                           `value_opt`] strip_assume_tac)
+    accounts_rel_call_request >>
+  simp[venom_call_request_def, call_request_component_equality] >>
+  simp[call_outcome_request_def]
 QED
 
 (* ===== Frames ===== *)
@@ -87,24 +83,6 @@ Theorem local_ptrs_rel_oracle_fields:
     local_ptrs_rel func cenv sc s
 Proof
   simp[local_ptrs_rel_def, local_region_def, local_backed_def, lookup_var_def]
-QED
-
-Theorem write_memory_with_expansion_empty_0:
-  !s. write_memory_with_expansion 0 [] s = s
-Proof
-  gen_tac >> irule write_memory_with_expansion_identity >> simp[]
-QED
-
-Theorem stmt_state_rel_allocas_frame:
-  !func cenv cx es s es' s'.
-    stmt_state_rel func cenv cx es s /\ state_rel func cenv cx es' s' /\
-    s'.vs_allocas = s.vs_allocas /\ s'.vs_alloca_next = s.vs_alloca_next ==>
-    stmt_state_rel func cenv cx es' s'
-Proof
-  rw[stmt_state_rel_def]
-  >- (irule alloca_inv_fields >> qexists_tac `s` >> simp[])
-  >- (irule alloca_room_fields >> qexists_tac `s` >> simp[]) >>
-  gvs[] >> res_tac
 QED
 
 (* ===== The shared step ===== *)
@@ -145,7 +123,7 @@ Theorem exec_ext_call_oracle_step:
     state_rel func cenv cx es s /\ inst.inst_outputs = [out] /\
     w2w aw = target /\
     w2n vw = (case value_opt of NONE => 0 | SOME n => n) /\
-    (stat \/ s.vs_call_ctx.cc_static) = IS_NONE value_opt /\
+    stat = IS_NONE value_opt /\
     take_call_outcome target (read_memory (w2n ao) (w2n az) s) value_opt es =
       (INL (rq, outcome), es1) ==>
     ?s'. exec_ext_call inst s gas aw vw ao az ro rz stat =
@@ -165,8 +143,8 @@ Theorem exec_ext_call_oracle_step:
           state_rel func cenv cx (SND (adopt_call_outcome rq outcome es1)) s')
 Proof
   rpt gen_tac >> strip_tac >>
-  `accounts_rel es s /\ es.outcomes = SOME s.vs_outcomes` by
-    fs[state_rel_def] >>
+  `accounts_rel es s /\ es.outcomes = SOME s.vs_outcomes /\
+   ~s.vs_call_ctx.cc_static` by fs[state_rel_def] >>
   `?rest. rq = venom_call_request s aw vw ao az stat /\
           take_outcome rq s.vs_outcomes = (outcome, rest) /\
           es1 = es with <| outcomes := SOME rest;
@@ -191,16 +169,16 @@ QED
 (* ===== send ===== *)
 
 (* send's CALL [gas; to; value; 0; 0; 0; 0] against eval_send, in oracle
-   mode, outside a static call context.  On success the source returns
-   NoneV, Venom binds 1w, and state_rel holds after both adopt the outcome;
-   on failure the source raises "send failed" and Venom binds 0w, which
-   the ASSERT after the CALL turns into an Abort.  The return buffer is
-   empty at 0, so memory is untouched.  The remaining source result is the
-   accounts check of take_call_outcome, which Venom does not make. *)
+   mode.  On success the source returns NoneV, Venom binds 1w, and
+   state_rel holds after both adopt the outcome; on failure the source
+   raises "send failed" and Venom binds 0w, which the ASSERT after the CALL
+   turns into an Abort.  The return buffer is empty at 0, so memory is
+   untouched.  The remaining source result is the accounts check of
+   take_call_outcome, which Venom does not make. *)
 Theorem send_call_oracle_step:
   !func cenv cx es s inst gas_op addr_op val_op out has_gas to_v amount_v
    gas_vs aw vw res es'.
-    state_rel func cenv cx es s /\ ~s.vs_call_ctx.cc_static /\
+    state_rel func cenv cx es s /\
     inst.inst_opcode = CALL /\ inst.inst_outputs = [out] /\
     inst.inst_operands =
       [gas_op; addr_op; val_op; Lit 0w; Lit 0w; Lit 0w; Lit 0w] /\
@@ -224,7 +202,8 @@ Theorem send_call_oracle_step:
 Proof
   rpt gen_tac >> strip_tac >>
   `es.outcomes = SOME s.vs_outcomes /\
-   local_ptrs_rel func cenv es.scopes s` by fs[state_rel_def] >>
+   local_ptrs_rel func cenv es.scopes s /\ ~s.vs_call_ctx.cc_static` by
+    fs[state_rel_def] >>
   `step_inst_base inst s =
      exec_ext_call inst s (THE (eval_operand gas_op s)) aw vw 0w 0w
        (0w:bytes32) (0w:bytes32) F` by
