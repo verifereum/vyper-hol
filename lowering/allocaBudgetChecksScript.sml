@@ -2,7 +2,7 @@
    Loaded tags preserve oracle dependencies but not upstream axioms. *)
 Theory allocaBudgetChecks
 Ancestors
-  allocaBudgetProps allocaFrontierWitness
+  allocaBudgetProps allocaFrontierWitness allocaFrontierBound
 
 fun check_alloca_theorem thy (name, th) =
   let
@@ -16,4 +16,4 @@ fun check_alloca_theorem thy (name, th) =
 
 val () = List.app
   (fn thy => List.app (check_alloca_theorem thy) (DB.thms thy))
-  ["allocaBudgetProps", "allocaFrontierWitness"];
+  ["allocaBudgetProps", "allocaFrontierWitness", "allocaFrontierBound"];
