@@ -7,6 +7,7 @@ Ancestors
   moduleLoweringProps entryDispatchProps entryDecodeProps
   abiDecodeStaticProps entryDecodeStaticProps entryDecodePlanProps
   entryChecksProps
+  entryStateRel
   loweringSlice
   varsExt exprSim
   exprBopLowering
