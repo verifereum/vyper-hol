@@ -39,6 +39,7 @@ Ancestors
   abiEncoderArrayDynamicTail abiEncoderArraySourceSpine abiEncoderArraySpine
   abiScratchArrayDynamicTail abiScratchArraySpine
   abiEncoderSharedArrayAddress abiEncoderSharedArrayBody abiEncoderSharedArrayRound abiEncoderSharedArraySpine abiEncoderSharedArrayStep abiEncoderSharedArrayTail
+  abiEncoderSharedArrayBody abiEncoderSharedArrayOwner abiEncoderSharedComplex abiEncoderSharedOwner
 
 fun audit_encoder_tag (name, th) =
   let
@@ -417,6 +418,16 @@ val _ = List.app audit_encoder_tag
    ("abi_encoder_open_array_dynamic_step", abi_encoder_open_array_dynamic_step),
    ("abi_encoder_shared_array_tail_reach", abi_encoder_shared_array_tail_reach),
    ("abi_encoder_shared_array_tail_observations", abi_encoder_shared_array_tail_observations),
+   ("abi_encoder_shared_array_dynamic_body", abi_encoder_shared_array_dynamic_body),
+   ("abi_encoder_shared_array_static_body", abi_encoder_shared_array_static_body),
+   ("abi_encoder_shared_array_static_body_owner", abi_encoder_shared_array_static_body_owner),
+   ("abi_encoder_shared_array_dynamic_body_owner", abi_encoder_shared_array_dynamic_body_owner),
+   ("abi_encoder_shared_array_owner_effects", abi_encoder_shared_array_owner_effects),
+   ("abi_encoder_shared_complex_head_length", abi_encoder_shared_complex_head_length),
+   ("abi_encoder_shared_complex_prepare", abi_encoder_shared_complex_prepare),
+   ("abi_encoder_shared_complex_load_finish", abi_encoder_shared_complex_load_finish),
+   ("abi_encoder_shared_input_owner", abi_encoder_shared_input_owner),
+   ("abi_encoder_cursor_owner", abi_encoder_cursor_owner),
    ("abi_scratch_members_correct_cons", abi_scratch_members_correct_cons),
    ("abi_scratch_members_correct_all", abi_scratch_members_correct_all),
    ("abi_encoder_members_inv_nonempty", abi_encoder_members_inv_nonempty),
