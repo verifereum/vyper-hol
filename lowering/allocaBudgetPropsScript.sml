@@ -113,7 +113,7 @@ Proof
   IF_CASES_TAC >> simp[]
 QED
 
-Theorem static_alloca_function_le[local]:
+Theorem static_alloca_function_le:
   MEM func funcs ==>
   SUM (MAP alloca_size (FILTER (\i. i.inst_opcode = ALLOCA) (fn_insts func))) <=
   SUM (MAP alloca_size
