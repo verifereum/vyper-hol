@@ -2927,7 +2927,7 @@ Proof
   simp[is_extcode_def, extcode_addr_expr_def, supported_expr_exists_def] >>
   rpt strip_tac
   >- (rename1 `~p (Attribute ann addr (STRING #"c" (STRING #"o" (STRING #"d" (STRING #"e" tail)))))` >>
-      Cases_on `tail` >> gvs[]) 
+      Cases_on `tail` >> gvs[])
   >- (rename1 `~p (Attribute ann addr (STRING #"c" (STRING #"o" (STRING #"d" tail))))` >>
       Cases_on `tail` >> gvs[] >>
       BasicProvers.FULL_CASE_TAC >> gvs[])
@@ -8717,20 +8717,26 @@ Proof
         `\st. plain_operand st (FST r) /\ plain_operand st (Lit 0w)`, `\u st. T`] >>
       simp[compile_store_at_loc_shape, plain_operand_def,
            stackPlanTypesTheory.is_label_operand_def]) >>
-  stmt_bind `\r st. (plain_operand st (FST r) /\ FST (SND r) <> SOME LocCode) /\
-    cenv_shape_ok st cenv` `r`
+  (* Preserve the RHS value through target evaluation; unwrap only afterwards. *)
+  stmt_bind `\v st. value_shape_ok st v /\ cenv_shape_ok st cenv` `v`
     (ho_match_mp_tac stmt_shape_frame >> qexists_tac `\st. cenv_shape_ok st cenv` >>
-     simp[cenv_shape_ok_stable] >> irule compile_get_target_ptr_shape >> simp[]) >>
+     simp[cenv_shape_ok_stable] >> irule (cj 1 compile_expr_shape) >> simp[]) >>
+  stmt_bind `\r st. (plain_operand st (FST r) /\ FST (SND r) <> SOME LocCode) /\
+    (value_shape_ok st v /\ cenv_shape_ok st cenv)` `r`
+    (ho_match_mp_tac stmt_shape_frame >> qexists_tac `\st. cenv_shape_ok st cenv` >>
+     simp[value_shape_ok_stable, cenv_shape_ok_stable, shape_stable_conj] >>
+     irule compile_get_target_ptr_shape >> simp[]) >>
   simp[stmt_return_bind] >>
   reverse (Cases_on `FST (SND r) <> SOME LocCode`) >- simp[shape_step_def] >> simp[] >>
-  stmt_bind `\v st. plain_operand st (FST v) /\ plain_operand st (FST r)` `v`
-    (ho_match_mp_tac stmt_shape_frame >> qexists_tac `\st. cenv_shape_ok st cenv` >>
-     simp[stmt_shape_stable_plain] >> irule lower_value_with_loc_shape >> simp[]) >>
+  stmt_bind `\op st. plain_operand st op /\ plain_operand st (FST r)` `source_op`
+    (ho_match_mp_tac stmt_shape_frame >>
+     qexists_tac `\st. cenv_shape_ok st cenv /\ value_shape_ok st v` >>
+     simp[stmt_shape_stable_plain, unwrap_value_shape]) >>
   simp[stmt_return_bind] >> Cases_on `FST (SND r)`
   >- (simp[] >> stmt_plain_void_drop) >>
   simp[] >> irule shape_step_conseq >>
   qexistsl_tac [`compiler_label`,
-    `\st. plain_operand st (FST r) /\ plain_operand st (FST v)`, `\u st. T`] >>
+    `\st. plain_operand st (FST r) /\ plain_operand st source_op`, `\u st. T`] >>
   simp[] >> irule compile_assign_value_shape >> gvs[]
 QED
 
@@ -11794,29 +11800,33 @@ Proof
   metis_tac[supported_pure_shape]
 QED
 
+Theorem supported_target_shape[local]:
+  supported_target tops bindings target ==>
+  ~supported_target_exists expr_shape_root target
+Proof
+  Cases_on `target` >>
+  simp[supportedStmtsTheory.supported_target_def, supported_expr_exists_def] >>
+  qmatch_goalsub_rename_tac `supported_target_exists expr_shape_root parent` >>
+  Cases_on `parent` >> simp[supported_expr_exists_def] >>
+  metis_tac[supported_expr_shape]
+QED
+
 Theorem supported_assignment_shape[local]:
   supported_assignment tops bindings target e ==>
   ~supported_assignment_exists expr_shape_root target /\
   ~supported_expr_exists expr_shape_root e
 Proof
-  Cases_on `target` >> simp[supportedStmtsTheory.supported_assignment_def] >>
-  rename1 `BaseTarget bt` >> Cases_on `bt` >>
-  simp[supportedStmtsTheory.supported_assignment_def,
-       supported_assignment_exists_def, supported_expr_exists_def]
-  >- (rpt strip_tac >> metis_tac[supported_expr_shape])
-  >- metis_tac[supported_pure_shape]
-  >- (qmatch_goalsub_rename_tac `supported_target_exists expr_shape_root parent` >> Cases_on `parent` >>
-      simp[supported_expr_exists_def] >> metis_tac[supported_pure_shape]) >>
-  qmatch_goalsub_rename_tac `supported_target_exists expr_shape_root parent` >> Cases_on `parent` >>
-  simp[supported_expr_exists_def] >> metis_tac[supported_pure_shape]
-QED
-
-Theorem supported_aug_target_shape[local]:
-  supported_aug_target tops bindings target ==>
-  ~supported_target_exists expr_shape_root target
-Proof
   Cases_on `target` >>
-  simp[supportedStmtsTheory.supported_aug_target_def, supported_expr_exists_def]
+  simp[supportedStmtsTheory.supported_assignment_def, supported_assignment_exists_def]
+  >- metis_tac[supported_expr_shape, supported_target_shape] >>
+  rename1 `supported_assignments_exists expr_shape_root targets` >>
+  `EVERY (\g. case g of BaseTarget bt => supported_target tops bindings bt
+                        | TupleTarget _ => F) targets ==>
+   ~supported_assignments_exists expr_shape_root targets`
+    suffices_by metis_tac[supported_expr_shape] >>
+  Induct_on `targets` >> simp[supported_assignment_exists_def] >>
+  qx_gen_tac `head` >> Cases_on `head` >>
+  simp[supported_assignment_exists_def] >> metis_tac[supported_target_shape]
 QED
 
 Theorem supported_append_target_shape[local]:
@@ -11890,7 +11900,7 @@ Proof
   rw[supportedStmtsTheory.supported_stmt_def, supported_stmt_expr_exists_def,
      supported_expr_exists_def] >>
   metis_tac[supported_pure_shape, supported_expr_shape,
-    supported_assignment_shape, supported_aug_target_shape,
+    supported_assignment_shape, supported_target_shape,
     supported_append_target_shape, supported_assert_reason_shape,
     supported_raise_reason_shape, supported_log_shape, supported_iterator_shape]
 QED

@@ -1,7 +1,7 @@
-(* Exact PLAN 5.6 statement whitelist. Types/names are syntactic bindings,
-   not source typing. No new effects may occur below the allowed root positions.
+(* Statement whitelist with ordered assignment targets. Types/names are syntactic
+   bindings, not source typing. Effects use supported_expr's existing root forms.
    TOP-LEVEL: supported_stmt, supported_stmts; supported_iterator,
-   supported_assignment, supported_aug_target, supported_append_target,
+   supported_assignment, supported_target, supported_append_target,
    supported_assert_reason, supported_raise_reason, supported_log. *)
 Theory supportedStmts
 Ancestors
@@ -28,30 +28,33 @@ Definition supported_storage_field_write_def:
     | NONE => F
 End
 
-Definition supported_assignment_def:
-  supported_assignment tops bindings target e <=>
+Definition supported_target_def:
+  supported_target tops bindings target <=>
     case target of
-      BaseTarget (NameTarget name) =>
+      NameTarget name =>
         (case ALOOKUP bindings name of
            SOME ty => supported_value_type tops ty
-         | NONE => F) /\ supported_expr tops e
-    | BaseTarget (TopLevelNameTarget id) =>
-        supported_scalar_target tops id /\ supported_pure_expr tops e
-    | BaseTarget (SubscriptTarget (TopLevelNameTarget id) key) =>
-        supported_subscript_base tops id /\ supported_pure_expr tops key /\
-        supported_pure_expr tops e
-    | BaseTarget (AttributeTarget (TopLevelNameTarget id) fname) =>
-        supported_storage_field_write tops id fname /\ supported_pure_expr tops e
+         | NONE => F)
+    | TopLevelNameTarget id => supported_scalar_target tops id
+    | SubscriptTarget (TopLevelNameTarget id) key =>
+        supported_subscript_base tops id /\ supported_expr tops key
+    | AttributeTarget (TopLevelNameTarget id) fname =>
+        supported_storage_field_write tops id fname
     | _ => F
 End
 
-Definition supported_aug_target_def:
-  supported_aug_target tops bindings (NameTarget name) =
-    supported_local_word bindings name /\
-  supported_aug_target tops bindings (TopLevelNameTarget id) =
-    supported_scalar_target tops id /\
-  supported_aug_target tops bindings (SubscriptTarget target key) = F /\
-  supported_aug_target tops bindings (AttributeTarget target fname) = F
+(* Tuple lowering loads all RHS elements, then resolves and stores each flat
+   target in order. Its INVALID branch for nested TupleTargets remains outside
+   the supported compiler domain. *)
+Definition supported_assignment_def:
+  supported_assignment tops bindings target e <=>
+    supported_expr tops e /\
+    case target of
+    | BaseTarget bt => supported_target tops bindings bt
+    | TupleTarget targets =>
+        EVERY (\g. case g of
+          BaseTarget bt => supported_target tops bindings bt
+        | TupleTarget _ => F) targets
 End
 
 Definition supported_append_target_def:
@@ -117,7 +120,7 @@ Definition supported_stmt_def:
   supported_stmt tops bindings (Assign target e) =
     supported_assignment tops bindings target e /\
   supported_stmt tops bindings (AugAssign ty target op e) =
-    (supported_aug_target tops bindings target /\ supported_pure_expr tops e /\
+    (supported_target tops bindings target /\ supported_expr tops e /\
      supported_binop op ty (expr_type e) F (supported_nonnegative_literal e)) /\
   supported_stmt tops bindings (Append target e) =
     (supported_append_target tops target /\ supported_pure_expr tops e) /\
@@ -172,22 +175,9 @@ Proof
   simp[supported_stmt_def]
 QED
 
-Theorem supported_tuple_assignment_rejected:
-  ~supported_stmt tops bindings (Assign (TupleTarget targets) e)
-Proof
-  simp[supported_stmt_def, supported_assignment_def]
-QED
-
-Theorem supported_storage_assignment_pure:
-  supported_stmt tops bindings
-    (Assign (BaseTarget (TopLevelNameTarget id)) e) ==> supported_pure_expr tops e
-Proof
-  simp[supported_stmt_def, supported_assignment_def]
-QED
-
 Theorem supported_augassign_contract:
   supported_stmt tops bindings (AugAssign ty target op e) ==>
-    supported_pure_expr tops e /\
+    supported_expr tops e /\
     (op = Exp ==> supported_integer_type ty /\ supported_nonnegative_literal e)
 Proof
   Cases_on `op` >> simp[supported_stmt_def, supported_binop_def]

@@ -305,3 +305,12 @@ Proof
   Cases_on `0 < rbs` >> gvs[] >>
   qexistsl_tac [`s2`, `ia`, `s3`] >> simp[]
 QED
+
+val () =
+  let val th = compile_call_intcall_shape
+      val (ors, axs) = Tag.dest_tag (Thm.tag th)
+  in if null axs andalso null (Thm.hyp th) andalso
+        List.all (fn s => s = "DISK_THM") ors
+     then print "INTCALL_SHAPE_AUDIT OK\n"
+     else raise Fail "internal call shape inherited admission"
+  end;

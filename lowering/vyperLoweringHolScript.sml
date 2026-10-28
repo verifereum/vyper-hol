@@ -24,6 +24,7 @@ Ancestors
   allocaBudgetChecks
   vyperLoweringCorrect
   configuredE2ECorrectness
+  evalAssignmentOrder
   (* focused internal-frame allocation, cleanup and whitelist regressions *)
   calleeMemoryWitness
   cleanupPromiseWitness

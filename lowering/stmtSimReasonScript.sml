@@ -24,6 +24,7 @@ Ancestors
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
   compileEnv valueEncoding
   vyperInterpreter vyperState vyperValue vyperValueOperation vyperExprNoControl
+  vyperStatePreservation
   venomExecSemantics venomExecProofs venomInst venomState
 Libs
   monadsyntax intLib
@@ -568,7 +569,7 @@ Proof
      >- (qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
          simp[Once evaluate_def, raise_def] >>
          simp[Once evaluate_def, evaluate_literal_def, bind_def, return_def,
-              get_Value_def, lift_option_type_def, dest_StringV_def,
+              read_result_def, lift_option_type_def, dest_StringV_def,
               raise_def] >> strip_tac >> gvs[stmt_exit_def, expr_exit_def]) >>
      goal_assum (drule_at Any) >>
      qexistsl [`MAP (n2w o ORD) str`, `ml`] >>
@@ -652,22 +653,27 @@ Resume compile_assert_reason_lit_frag[control]:
              bb_instructions := s4.cs_current_insts |>` by
     metis_tac[fn_has_code_new_block] >>
   qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
-  simp[Once evaluate_def, bind_def] >>
-  Cases_on `eval_expr cx e es` >> rename1 `eval_expr cx e es = (r1, es1)` >>
+  pure_rewrite_tac[Once evaluate_def, eval_expr_switch_forced] >>
+  Cases_on `(do raw <- eval_expr cx e; read_result cx raw od) es` >>
+  rename1 `_ = (r1,es1)` >> simp[] >>
   strip_tac >> suspend "condition"
 QED
 
 Resume compile_assert_reason_lit_frag[condition]:
   qpat_x_assum `_ = (res, es')` mp_tac >>
   simp[Once evaluate_def, evaluate_literal_def, bind_def, return_def,
-       get_Value_def, lift_option_type_def, dest_StringV_def, raise_def] >>
+       read_result_def, lift_option_type_def, dest_StringV_def, raise_def] >>
   strip_tac >>
-  `expr_res_ok r1 /\ !v. r1 = INL (Value v) ==> ?b. v = BoolV b` by
+  `expr_res_ok r1 /\ !v. r1 = INL v ==> ?b. v = BoolV b` by
     (Cases_on `r1` >> gvs[]
-     >- (rename1 `switch_BoolV tv` >>
-         Cases_on `?b. tv = Value (BoolV b)` >> gvs[expr_res_ok_def] >>
-         `tv <> Value (BoolV T) /\ tv <> Value (BoolV F)` by metis_tac[] >>
-         gvs[switch_BoolV_def, raise_def, stmt_res_ok_def]) >>
+     >- (rename1 `INL plain` >>
+         Cases_on `?b. plain = BoolV b` >> gvs[expr_res_ok_def] >>
+         `plain <> BoolV T /\ plain <> BoolV F` by metis_tac[] >>
+         gvs[raise_def, stmt_res_ok_def]) >>
+     qpat_x_assum `(do raw <- _; _ od) _ = _` mp_tac >>
+     simp[bind_def] >> Cases_on `eval_expr cx e es` >>
+     rename1 `_ = (raw,est)` >> Cases_on `raw` >> simp[] >> strip_tac >>
+     imp_res_tac read_result_no_control >>
      imp_res_tac (cj 1 eval_expr_no_control) >>
      gvs[no_control_exc_def, expr_res_ok_def, stmt_res_ok_def]) >>
   `s3.cs_current_bb = s1.cs_current_bb /\
@@ -682,12 +688,11 @@ Resume compile_assert_reason_lit_frag[condition]:
       suspend "abort") >>
   disj2_tac >> qexists_tac `fuel` >> Cases_on `r1` >> gvs[stmt_exit_def] >>
   disj1_tac >>
-  ONCE_REWRITE_TAC [INST_TYPE [beta |-> ``:toplevel_value``] expr_exit_INR_type] >>
-  first_assum ACCEPT_TAC
+  metis_tac[expr_exit_INR_type]
 QED
 
 Resume compile_assert_reason_lit_frag[abort]:
-  gvs[bind_def, return_def, get_Value_def, dest_StringV_def, raise_def] >>
+  gvs[bind_def, return_def, read_result_def, dest_StringV_def, raise_def] >>
   disj2_tac >>
   `frag_exec ctx s5 s6 (\s. T) (\s. F)
      (stmt_exit RetQ es' (INR (AssertException str)))` by
@@ -708,3 +713,16 @@ Resume compile_assert_reason_lit_frag[abort]:
 QED
 
 Finalise compile_assert_reason_lit_frag
+
+(* Integrity gate for preserved public reason certificates and execution. *)
+val () = List.app (fn th =>
+  let val (ors, axs) = Tag.dest_tag (Thm.tag th)
+  in if null axs andalso null (Thm.hyp th) andalso
+        List.all (fn s => s = "DISK_THM") ors
+     then print "REASON_FORCE_AUDIT OK\n"
+     else raise Fail "reason consumer inherited admission"
+  end) [compile_store_byte_chunks_run, compile_bytelike_literal_run,
+        compile_revert_reason_certificate, compile_revert_reason_run,
+        compile_revert_reason_frag, compile_store_byte_chunks_simple,
+        compile_bytelike_literal_simple, compile_bytelike_revert_frag,
+        compile_raise_reason_lit_frag, compile_assert_reason_lit_frag];

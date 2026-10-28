@@ -390,10 +390,9 @@ Proof
         simp[is_word_type_def])
     >- (rpt gen_tac >> BETA_TAC >> strip_tac >>
         drule emit_op_extends_next_var >> simp[])
-    >- metis_tac[expr_sim_pre_word_value, is_word_type_def]
     >- metis_tac[expr_ok_def, expr_sim_ok_def] >>
     rpt strip_tac >>
-    qspecl_then [`cenv`, `cx`, `env`, `e1`, `es`, `Value v1`, `es1`] mp_tac
+    qspecl_then [`cenv`, `cx`, `env`, `e1`, `es`, `v1`, `es1`] mp_tac
       expr_sim_pre_word_value >>
     simp[is_word_type_def] >> strip_tac >>
     gvs[vyperValueTheory.evaluate_type_def] >>
@@ -438,7 +437,10 @@ Theorem compile_method_id_literal_word_sim:
       (Builtin (BaseT (BytesT (Fixed 4))) MethodId [Literal la l])
 Proof
   rw[expr_sim_ok_def, expr_sim_def, optionTheory.IS_SOME_EXISTS] >>
-  drule_all eval_expr_method_id_literal >> strip_tac >> gvs[] >>
+  Cases_on `eval_expr cx
+    (Builtin (BaseT (BytesT (Fixed 4))) MethodId [Literal la l]) es` >>
+  drule_all eval_expr_method_id_literal >> strip_tac >>
+  gvs[bind_def, read_result_def, return_def] >>
   drule compile_expr_method_id_literal >> strip_tac >>
   gvs[lower_value_def, comp_bind_def, compile_literal_vv_def,
       unwrap_value_def, comp_return_def] >>

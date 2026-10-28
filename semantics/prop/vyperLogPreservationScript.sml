@@ -3,7 +3,7 @@ Theory vyperLogPreservation
 Ancestors
   pair option sum vyperMisc vyperCall vyperStatePreservation vyperCallFrame vyperCallOutcomeFrame
   vyperState[ignore_grammar] vyperInterpreter[ignore_grammar] vyperCallOutcome[ignore_grammar] vyperCallOutcomeProps[ignore_grammar]
-  vyperCreate vyperCreateFrame
+  vyperCreate vyperCreateFrame vyperPlaceFrames
 
 (* Keep existing free statement-list variables when importing oracle grammar. *)
 val _ = hide "body";
@@ -122,52 +122,6 @@ Proof
   metis_tac[log_extends_trans]
 QED
 
-Theorem case_eval_targets_nil_logs[local]:
-  eval_targets cx [] st = (res,st') ==> log_extends st st'
-Proof
-  simp[vyperInterpreterTheory.evaluate_def, vyperStateTheory.return_def, log_extends_refl]
-QED
-
-Theorem case_eval_targets_cons_logs[local]:
-  (!s0 r s1. eval_target cx g s0 = (r,s1) ==> log_extends s0 s1) /\
-  (!s0 gv s1. eval_target cx g s0 = (INL gv,s1) ==>
-     !s2 r s3. eval_targets cx gs s2 = (r,s3) ==> log_extends s2 s3) ==>
-  !st res st'. eval_targets cx (g::gs) st = (res,st') ==>
-    log_extends st st'
-Proof
-  rpt strip_tac >>
-  qpat_x_assum `eval_targets _ _ _ = _` mp_tac >>
-  simp[vyperInterpreterTheory.evaluate_def, vyperStateTheory.bind_def,
-       vyperStateTheory.return_def, AllCaseEqs()] >>
-  rpt strip_tac >> gvs[] >>
-  rpt (first_x_assum drule >> strip_tac >> gvs[]) >>
-  metis_tac[log_extends_trans]
-QED
-
-Theorem case_target_base_logs[local]:
-  (!s0 r s1. eval_base_target cx bt s0 = (r,s1) ==> log_extends s0 s1) ==>
-  !st res st'. eval_target cx (BaseTarget bt) st = (res,st') ==>
-    log_extends st st'
-Proof
-  rpt strip_tac >>
-  qpat_x_assum `eval_target _ _ _ = _` mp_tac >>
-  simp[vyperInterpreterTheory.evaluate_def, vyperStateTheory.bind_def, AllCaseEqs()] >>
-  strip_tac >> gvs[] >>
-  Cases_on `x` >> gvs[vyperStateTheory.return_def] >>
-  first_x_assum drule >> simp[]
-QED
-
-Theorem case_target_tuple_logs[local]:
-  (!s0 r s1. eval_targets cx gs s0 = (r,s1) ==> log_extends s0 s1) ==>
-  !st res st'. eval_target cx (TupleTarget gs) st = (res,st') ==>
-    log_extends st st'
-Proof
-  rpt strip_tac >>
-  qpat_x_assum `eval_target _ _ _ = _` mp_tac >>
-  simp[vyperInterpreterTheory.evaluate_def, vyperStateTheory.bind_def, AllCaseEqs(),
-       vyperStateTheory.return_def] >>
-  metis_tac[]
-QED
 Theorem case_iterator_array_logs[local]:
   (!s0 r s1. eval_expr cx e s0 = (r,s1) ==> log_extends s0 s1) ==>
   !st res st'. eval_iterator cx (Array e) st = (res,st') ==>
@@ -178,7 +132,7 @@ Proof
   simp[vyperInterpreterTheory.evaluate_def, vyperStateTheory.bind_def,
        vyperStateTheory.return_def, AllCaseEqs(), log_extends_def] >>
   rpt strip_tac >> gvs[] >>
-  imp_res_tac materialise_state >>
+  imp_res_tac read_result_state >>
   imp_res_tac lift_option_type_state >> gvs[] >>
   first_x_assum drule >> simp[] >> strip_tac >>
   qpat_x_assum `log_extends _ _` mp_tac >>
@@ -188,7 +142,7 @@ QED
 Theorem case_iterator_range_logs[local]:
   (!s0 tv s1 s2 v s3.
      eval_expr cx e1 s0 = (INL tv,s1) /\
-     get_Value tv s2 = (INL v,s3) ==>
+     read_result cx tv s2 = (INL v,s3) ==>
      !st res st'. eval_expr cx e2 st = (res,st') ==> log_extends st st') /\
   (!s0 r s1. eval_expr cx e1 s0 = (r,s1) ==> log_extends s0 s1) ==>
   !st res st'. eval_iterator cx (Range e1 e2) st = (res,st') ==>
@@ -199,7 +153,7 @@ Proof
   simp[vyperInterpreterTheory.evaluate_def, vyperStateTheory.bind_def,
        vyperStateTheory.return_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[] >>
-  imp_res_tac get_Value_state >> imp_res_tac lift_sum_state >> gvs[] >>
+  imp_res_tac read_result_state >> imp_res_tac lift_sum_state >> gvs[] >>
   rpt (first_x_assum drule >> strip_tac >> gvs[]) >>
   irule log_extends_trans >> goal_assum drule >>
   first_assum MATCH_ACCEPT_TAC
@@ -414,121 +368,49 @@ Proof
 QED
 
 
-Theorem subscript_terminal_logs[local]:
-  (do v2 <- get_Value tv2;
-      tenv <<- get_tenv cx;
-      arr_tv <- lift_option_type (evaluate_type tenv (expr_type e1))
-                   "Subscript array type";
-      check_array_bounds cx tv1 v2;
-      r <- lift_sum (evaluate_subscript tenv arr_tv tv1 v2);
-      case r of
-        INL v => return v
-      | INR (is_transient,slot,tv) => do
-          v <- read_storage_slot cx is_transient slot tv;
-          return (Value v)
-        od
-   od) st = (res,st') ==> st'.logs = st.logs
+Theorem append_place_logs[local]:
+  append_place cx p v st = (res,st') ==> st'.logs = st.logs
 Proof
-  rpt strip_tac >> pop_assum mp_tac >>
-  simp[vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
-       AllCaseEqs()] >>
-  rpt strip_tac >> gvs[] >>
-  imp_res_tac get_Value_state >> imp_res_tac lift_option_type_state >>
-  imp_res_tac check_array_bounds_state >> imp_res_tac lift_sum_state >> gvs[] >>
-  Cases_on `r` >>
-  gvs[vyperStateTheory.bind_def, vyperStateTheory.return_def, AllCaseEqs()] >>
-  PairCases_on `y` >>
-  gvs[vyperStateTheory.bind_def, vyperStateTheory.return_def, AllCaseEqs()] >>
-  rpt strip_tac >> gvs[] >>
-  imp_res_tac read_storage_slot_state >> imp_res_tac return_state >> gvs[]
+  Cases_on `p` >- (
+    rename1 `StoragePlace tr slot tv` >>
+    Cases_on `tv` >> simp[vyperStateTheory.append_place_def] >>
+    TRY (rename1 `ArrayTV et bound` >> Cases_on `bound`) >>
+    simp[vyperStateTheory.append_place_def] >>
+    gvs[vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
+        vyperStateTheory.check_def, vyperStateTheory.assert_def,
+        vyperStateTheory.return_def, vyperStateTheory.raise_def,
+        AllCaseEqs()] >> rpt strip_tac >>
+    imp_res_tac vyperStorageBackendTheory.get_storage_backend_state >>
+    imp_res_tac place_type_value_state >> imp_res_tac read_place_state >>
+    imp_res_tac lift_sum_state >> imp_res_tac write_place_logs >>
+    imp_res_tac write_storage_slot_logs >> gvs[]) >>
+  simp[vyperStateTheory.append_place_def, vyperStateTheory.bind_def,
+       AllCaseEqs()] >> rpt strip_tac >>
+  imp_res_tac place_type_value_state >> imp_res_tac read_place_state >>
+  imp_res_tac lift_sum_state >> imp_res_tac write_place_logs >> gvs[]
 QED
 
-Theorem subscript_terminal_normalized_logs[local]:
-  (do v2 <- get_Value tv2;
-      arr_tv <- lift_option_type
-        (evaluate_type (get_tenv cx) (expr_type e1))
-        "Subscript array type";
-      check_array_bounds cx tv1 v2;
-      r <- lift_sum
-        (evaluate_subscript (get_tenv cx) arr_tv tv1 v2);
-      case r of
-        INL v => return v
-      | INR (is_transient,slot,tv) => do
-          v <- read_storage_slot cx is_transient slot tv;
-          return (Value v)
-        od
-   od) st = (res,st') ==> st'.logs = st.logs
+Theorem pop_place_logs[local]:
+  pop_place cx p st = (res,st') ==> st'.logs = st.logs
 Proof
-  rpt strip_tac >> pop_assum mp_tac >>
-  simp[vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
-       AllCaseEqs()] >>
-  rpt strip_tac >> gvs[] >>
-  imp_res_tac get_Value_state >> imp_res_tac lift_option_type_state >>
-  imp_res_tac check_array_bounds_state >> imp_res_tac lift_sum_state >> gvs[] >>
-  Cases_on `r` >>
-  gvs[vyperStateTheory.bind_def, vyperStateTheory.return_def, AllCaseEqs()] >>
-  PairCases_on `y` >>
-  gvs[vyperStateTheory.bind_def, vyperStateTheory.return_def, AllCaseEqs()] >>
-  rpt strip_tac >> gvs[] >>
-  imp_res_tac read_storage_slot_state >> imp_res_tac return_state >> gvs[]
-QED
-
-
-Theorem subscript_after_e1_logs[local]:
-  (!s0 r s1. eval_expr cx e2 s0 = (r,s1) ==> log_extends s0 s1) /\
-  (do tv2 <- eval_expr cx e2;
-      v2 <- get_Value tv2;
-      tenv <<- get_tenv cx;
-      arr_tv <- lift_option_type (evaluate_type tenv (expr_type e1))
-                   "Subscript array type";
-      check_array_bounds cx tv1 v2;
-      r <- lift_sum (evaluate_subscript tenv arr_tv tv1 v2);
-      case r of
-        INL v => return v
-      | INR (is_transient,slot,tv) => do
-          v <- read_storage_slot cx is_transient slot tv;
-          return (Value v)
-        od
-   od) st = (res,st') ==>
-  log_extends st st'
-Proof
-  rpt strip_tac >>
-  drule bind_log_extends_forward >>
-  disch_then irule >>
-  conj_tac >- metis_tac[] >>
-  rpt strip_tac >> gvs[] >>
-  irule log_extends_eq_logs >>
-  imp_res_tac subscript_terminal_normalized_logs >>
-  sym_tac >> first_assum ACCEPT_TAC
-QED
-
-Theorem subscript_after_e1_logs_forward[local]:
-  (do tv2 <- eval_expr cx e2;
-      v2 <- get_Value tv2;
-      arr_tv <- lift_option_type
-        (evaluate_type (get_tenv cx) (expr_type e1))
-        "Subscript array type";
-      check_array_bounds cx tv1 v2;
-      r <- lift_sum
-        (evaluate_subscript (get_tenv cx) arr_tv tv1 v2);
-      case r of
-        INL v => return v
-      | INR (is_transient,slot,tv) => do
-          v <- read_storage_slot cx is_transient slot tv;
-          return (Value v)
-        od
-   od) st = (res,st') ==>
-  (!s0 r s1. eval_expr cx e2 s0 = (r,s1) ==> log_extends s0 s1) ==>
-  log_extends st st'
-Proof
-  rpt strip_tac >>
-  drule bind_log_extends_forward >>
-  disch_then irule >>
-  conj_tac >- metis_tac[] >>
-  rpt strip_tac >> gvs[] >>
-  irule log_extends_eq_logs >>
-  imp_res_tac subscript_terminal_normalized_logs >>
-  sym_tac >> first_assum ACCEPT_TAC
+  Cases_on `p` >- (
+    rename1 `StoragePlace tr slot tv` >>
+    Cases_on `tv` >> simp[vyperStateTheory.pop_place_def] >>
+    TRY (rename1 `ArrayTV et bound` >> Cases_on `bound`) >>
+    simp[vyperStateTheory.pop_place_def, vyperStateTheory.bind_def,
+         vyperStateTheory.ignore_bind_def, vyperStateTheory.check_def,
+         vyperStateTheory.assert_def, vyperStateTheory.return_def,
+         vyperStateTheory.raise_def, AllCaseEqs()] >> rpt strip_tac >>
+    imp_res_tac vyperStorageBackendTheory.get_storage_backend_state >>
+    imp_res_tac write_storage_slot_logs >> gvs[]) >>
+  simp[vyperStateTheory.pop_place_def, vyperStateTheory.bind_def,
+       vyperStateTheory.ignore_bind_def, vyperStateTheory.get_scopes_def,
+       vyperStateTheory.type_check_def, vyperStateTheory.check_def,
+       vyperStateTheory.assert_def, vyperStateTheory.return_def,
+       vyperStateTheory.raise_def, UNCURRY, AllCaseEqs()] >> rpt strip_tac >>
+  imp_res_tac lift_option_type_state >> imp_res_tac lift_sum_state >>
+  imp_res_tac get_immutables_state >>
+  imp_res_tac set_scopes_logs >> imp_res_tac set_immutable_logs >> gvs[]
 QED
 
 Theorem case_expr_subscript_logs[local]:
@@ -545,13 +427,14 @@ Proof
   strip_tac >>
   drule bind_log_extends_forward >>
   disch_then irule >>
-  conj_tac
-  >- metis_tac[] >>
   rpt strip_tac >> gvs[] >>
-  drule subscript_after_e1_logs_forward >>
-  disch_then irule >>
   qpat_x_assum `!s0 tv1 s1. eval_expr _ e1 s0 = (INL tv1,s1) ==> _` drule >>
-  simp[]
+  strip_tac >>
+  drule bind_log_extends_forward >> disch_then irule >>
+  rpt strip_tac >>
+  gvs[vyperStateTheory.bind_def, AllCaseEqs()] >>
+  imp_res_tac read_result_state >>
+  imp_res_tac select_result_state >> gvs[log_extends_refl]
 QED
 Theorem new_variable_logs[local]:
   new_variable id tv v st = (res,st') ==> st'.logs = st.logs
@@ -569,364 +452,6 @@ Proof
       vyperStateTheory.raise_def]
 QED
 
-Theorem storage_assignment_tail_logs[local]:
-  (do current_val <- read_storage_slot cx tr slot tv;
-      new_val <- lift_sum (assign_subscripts tv current_val subs ao);
-      write_storage_slot cx tr slot tv new_val;
-      assign_result tv ao current_val subs
-   od) st = (res,st') ==> st'.logs = st.logs
-Proof
-  rpt strip_tac >> pop_assum mp_tac >>
-  simp[vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
-       AllCaseEqs()] >>
-  rpt strip_tac >> gvs[] >>
-  imp_res_tac read_storage_slot_state >> imp_res_tac lift_sum_state >> gvs[] >>
-  imp_res_tac write_storage_slot_logs >>
-  imp_res_tac assign_result_state >> gvs[]
-QED
-
-
-Theorem array_pop_tail_logs[local]:
-  (do storage <- get_storage_backend cx is_transient;
-      stored_len <<- w2n (lookup_storage elem_slot storage);
-      check (stored_len > 0) "pop empty storage array";
-      last_idx <<- stored_len - 1;
-      last_slot <<- elem_slot + n2w (1 + last_idx * type_slot_size pop_elem_tv);
-      popped <- read_storage_slot cx is_transient last_slot pop_elem_tv;
-      write_storage_slot cx is_transient elem_slot (BaseTV (UintT 256))
-        (IntV &last_idx);
-      return (SOME popped)
-   od) st = (res,st') ==> st'.logs = st.logs
-Proof
-  rpt strip_tac >> pop_assum mp_tac >>
-  simp[vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
-       AllCaseEqs()] >>
-  rpt strip_tac >> gvs[] >>
-  imp_res_tac vyperStorageBackendTheory.get_storage_backend_state >>
-  imp_res_tac check_state >> imp_res_tac read_storage_slot_state >> gvs[] >>
-  imp_res_tac write_storage_slot_logs >> imp_res_tac return_state >> gvs[]
-QED
-
-Theorem array_append_tail_logs[local]:
-  (do storage <- get_storage_backend cx is_transient;
-      stored_len <<- w2n (lookup_storage elem_slot storage);
-      check (stored_len < n) "append full storage array";
-      new_slot <<- elem_slot + n2w (1 + stored_len * type_slot_size app_elem_tv);
-      write_storage_slot cx is_transient new_slot app_elem_tv v;
-      write_storage_slot cx is_transient elem_slot (BaseTV (UintT 256))
-        (IntV &(stored_len + 1));
-      return NONE
-   od) st = (res,st') ==> st'.logs = st.logs
-Proof
-  rpt strip_tac >> pop_assum mp_tac >>
-  simp[vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
-       AllCaseEqs()] >>
-  rpt strip_tac >> gvs[] >>
-  imp_res_tac vyperStorageBackendTheory.get_storage_backend_state >>
-  imp_res_tac check_state >> imp_res_tac write_storage_slot_logs >>
-  imp_res_tac return_state >> gvs[]
-QED
-
-Theorem arrayref_assignment_suffix_logs[local]:
-  (do (elem_slot,final_tv,remaining_subs) <-
-        resolve_array_element cx is_transient base_slot (ArrayTV elem_tv bd) subs;
-      case (ao,final_tv) of
-        (PopOp,ArrayTV pop_elem_tv (Dynamic n)) => do
-          storage <- get_storage_backend cx is_transient;
-          stored_len <<- w2n (lookup_storage elem_slot storage);
-          check (stored_len > 0) "pop empty storage array";
-          last_idx <<- stored_len - 1;
-          last_slot <<- elem_slot + n2w (1 + last_idx * type_slot_size pop_elem_tv);
-          popped <- read_storage_slot cx is_transient last_slot pop_elem_tv;
-          write_storage_slot cx is_transient elem_slot (BaseTV (UintT 256))
-            (IntV &last_idx);
-          return (SOME popped)
-        od
-      | (AppendOp v,ArrayTV app_elem_tv (Dynamic n)) => do
-          storage <- get_storage_backend cx is_transient;
-          stored_len <<- w2n (lookup_storage elem_slot storage);
-          check (stored_len < n) "append full storage array";
-          new_slot <<- elem_slot + n2w (1 + stored_len * type_slot_size app_elem_tv);
-          write_storage_slot cx is_transient new_slot app_elem_tv v;
-          write_storage_slot cx is_transient elem_slot (BaseTV (UintT 256))
-            (IntV &(stored_len + 1));
-          return NONE
-        od
-      | _ => do
-          current_val <- read_storage_slot cx is_transient elem_slot final_tv;
-          new_val <- lift_sum (assign_subscripts final_tv current_val remaining_subs ao);
-          write_storage_slot cx is_transient elem_slot final_tv new_val;
-          assign_result final_tv ao current_val remaining_subs
-        od
-   od) st = (res,st') ==> st'.logs = st.logs
-Proof
-  rpt strip_tac >> pop_assum mp_tac >>
-  once_rewrite_tac [vyperStateTheory.bind_def] >>
-  qabbrev_tac `rr = resolve_array_element cx is_transient base_slot
-                    (ArrayTV elem_tv bd) subs st` >>
-  PairCases_on `rr` >> Cases_on `rr0` >>
-  qpat_x_assum `Abbrev _` mp_tac >>
-  simp[markerTheory.Abbrev_def] >> strip_tac >> gvs[] >>
-  rpt (pairarg_tac >> gvs[]) >>
-  qpat_x_assum `(_,_) = resolve_array_element _ _ _ _ _ _`
-    (assume_tac o SYM) >>
-  imp_res_tac resolve_array_element_state >> gvs[] >>
-  Cases_on `final_tv` >> gvs[] >>
-  TRY (Cases_on `b` >> gvs[]) >>
-  Cases_on `ao` >> gvs[] >>
-  rpt strip_tac >> gvs[] >>
-  imp_res_tac storage_assignment_tail_logs >>
-  imp_res_tac array_pop_tail_logs >>
-  imp_res_tac array_append_tail_logs >>
-  pop_assum mp_tac >>
-  simp[vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
-       AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
-  imp_res_tac vyperStorageBackendTheory.get_storage_backend_state >>
-  imp_res_tac check_state >> imp_res_tac read_storage_slot_state >> gvs[] >>
-  imp_res_tac write_storage_slot_logs >> imp_res_tac return_state >> gvs[]
-QED
-
-Theorem arrayref_assignment_normal_logs[local]:
-  (do (elem_slot,final_tv,remaining_subs) <-
-        resolve_array_element cx is_transient base_slot (ArrayTV elem_tv bd) subs;
-      case final_tv of
-        BaseTV _ => do
-          current_val <- read_storage_slot cx is_transient elem_slot final_tv;
-          new_val <- lift_sum (assign_subscripts final_tv current_val remaining_subs ao);
-          write_storage_slot cx is_transient elem_slot final_tv new_val;
-          assign_result final_tv ao current_val remaining_subs
-        od
-      | TupleTV _ => do
-          current_val <- read_storage_slot cx is_transient elem_slot final_tv;
-          new_val <- lift_sum (assign_subscripts final_tv current_val remaining_subs ao);
-          write_storage_slot cx is_transient elem_slot final_tv new_val;
-          assign_result final_tv ao current_val remaining_subs
-        od
-      | ArrayTV pop_elem_tv (Fixed _) => do
-          current_val <- read_storage_slot cx is_transient elem_slot final_tv;
-          new_val <- lift_sum (assign_subscripts final_tv current_val remaining_subs ao);
-          write_storage_slot cx is_transient elem_slot final_tv new_val;
-          assign_result final_tv ao current_val remaining_subs
-        od
-      | ArrayTV pop_elem_tv (Dynamic n) =>
-          (case ao of
-             Replace _ => do
-               current_val <- read_storage_slot cx is_transient elem_slot final_tv;
-               new_val <- lift_sum (assign_subscripts final_tv current_val remaining_subs ao);
-               write_storage_slot cx is_transient elem_slot final_tv new_val;
-               assign_result final_tv ao current_val remaining_subs
-             od
-           | Update _ _ _ => do
-               current_val <- read_storage_slot cx is_transient elem_slot final_tv;
-               new_val <- lift_sum (assign_subscripts final_tv current_val remaining_subs ao);
-               write_storage_slot cx is_transient elem_slot final_tv new_val;
-               assign_result final_tv ao current_val remaining_subs
-             od
-           | AppendOp v => do
-               storage <- get_storage_backend cx is_transient;
-               check (w2n (lookup_storage elem_slot storage) < n)
-                 "append full storage array";
-               write_storage_slot cx is_transient
-                 (elem_slot + n2w (type_slot_size pop_elem_tv *
-                                    w2n (lookup_storage elem_slot storage) + 1))
-                 pop_elem_tv v;
-               write_storage_slot cx is_transient elem_slot (BaseTV (UintT 256))
-                 (IntV (&(w2n (lookup_storage elem_slot storage) + 1)));
-               return NONE
-             od
-           | PopOp => do
-               storage <- get_storage_backend cx is_transient;
-               check (w2n (lookup_storage elem_slot storage) > 0)
-                 "pop empty storage array";
-               popped <- read_storage_slot cx is_transient
-                 (elem_slot + n2w (type_slot_size pop_elem_tv *
-                                    (w2n (lookup_storage elem_slot storage) - 1) + 1))
-                 pop_elem_tv;
-               write_storage_slot cx is_transient elem_slot (BaseTV (UintT 256))
-                 (IntV (&(w2n (lookup_storage elem_slot storage) - 1)));
-               return (SOME popped)
-             od)
-      | StructTV _ => do
-          current_val <- read_storage_slot cx is_transient elem_slot final_tv;
-          new_val <- lift_sum (assign_subscripts final_tv current_val remaining_subs ao);
-          write_storage_slot cx is_transient elem_slot final_tv new_val;
-          assign_result final_tv ao current_val remaining_subs
-        od
-      | FlagTV _ => do
-          current_val <- read_storage_slot cx is_transient elem_slot final_tv;
-          new_val <- lift_sum (assign_subscripts final_tv current_val remaining_subs ao);
-          write_storage_slot cx is_transient elem_slot final_tv new_val;
-          assign_result final_tv ao current_val remaining_subs
-        od
-      | NoneTV => do
-          current_val <- read_storage_slot cx is_transient elem_slot final_tv;
-          new_val <- lift_sum (assign_subscripts final_tv current_val remaining_subs ao);
-          write_storage_slot cx is_transient elem_slot final_tv new_val;
-          assign_result final_tv ao current_val remaining_subs
-        od
-   od) st = (res,st') ==> st'.logs = st.logs
-Proof
-  rpt strip_tac >> pop_assum mp_tac >>
-  once_rewrite_tac [vyperStateTheory.bind_def] >>
-  qabbrev_tac `rr = resolve_array_element cx is_transient base_slot
-                    (ArrayTV elem_tv bd) subs st` >>
-  PairCases_on `rr` >> Cases_on `rr0` >>
-  qpat_x_assum `Abbrev _` mp_tac >>
-  simp[markerTheory.Abbrev_def] >> strip_tac >> gvs[] >>
-  rpt (pairarg_tac >> gvs[]) >>
-  qpat_x_assum `(_,_) = resolve_array_element _ _ _ _ _ _`
-    (assume_tac o SYM) >>
-  imp_res_tac resolve_array_element_state >> gvs[] >>
-  Cases_on `final_tv` >> gvs[] >>
-  TRY (Cases_on `b` >> gvs[]) >>
-  Cases_on `ao` >> gvs[] >>
-  rpt strip_tac >> gvs[] >>
-  imp_res_tac storage_assignment_tail_logs >>
-  imp_res_tac array_pop_tail_logs >>
-  imp_res_tac array_append_tail_logs >>
-  pop_assum mp_tac >>
-  simp[vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
-       AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
-  imp_res_tac vyperStorageBackendTheory.get_storage_backend_state >>
-  imp_res_tac check_state >> imp_res_tac read_storage_slot_state >> gvs[] >>
-  imp_res_tac write_storage_slot_logs >> imp_res_tac return_state >> gvs[]
-QED
-
-Theorem assign_target_toplevel_logs[local]:
-  assign_target cx (BaseTargetV (TopLevelVar src id) subs) ao st = (res,st') ==>
-  st'.logs = st.logs
-Proof
-  rpt strip_tac >>
-  Cases_on `lookup_global cx src id st` >>
-  Cases_on `q` >>
-  imp_res_tac lookup_global_state >>
-  pop_assum SUBST_ALL_TAC
-  >- (Cases_on `x`
-      >- (qpat_x_assum `assign_target _ _ _ _ = _` mp_tac >>
-          simp[Once vyperStateTheory.assign_target_def,
-               vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
-               vyperStateTheory.return_def, vyperStateTheory.raise_def,
-               LET_THM, pairTheory.PAIR, AllCaseEqs()] >>
-          rpt strip_tac >> gvs[] >>
-          imp_res_tac lift_option_type_state >> imp_res_tac lift_sum_state >>
-          imp_res_tac set_global_logs >> imp_res_tac assign_result_state >> gvs[])
-      >- (qpat_x_assum `assign_target _ _ _ _ = _` mp_tac >>
-          simp[Once vyperStateTheory.assign_target_def,
-               vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
-               vyperStateTheory.return_def, vyperStateTheory.raise_def,
-               LET_THM, pairTheory.PAIR, AllCaseEqs()] >>
-          rpt strip_tac >> gvs[] >>
-          rpt (pairarg_tac >> gvs[]) >>
-          pop_assum mp_tac >>
-          simp[vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
-               AllCaseEqs()] >>
-          rpt strip_tac >> gvs[] >> rpt (pairarg_tac >> gvs[]) >>
-          pop_assum mp_tac >>
-          simp[vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
-               AllCaseEqs()] >>
-          rpt strip_tac >> gvs[] >>
-          imp_res_tac lift_option_type_state >>
-          imp_res_tac read_storage_slot_state >> imp_res_tac lift_sum_state >>
-          imp_res_tac write_storage_slot_logs >>
-          imp_res_tac assign_result_state >> gvs[])
-      >> (Cases_on `lift_option_type (get_module_code cx src)
-                       "assign_target get_module_code" st` >>
-          Cases_on `q` >>
-          imp_res_tac lift_option_type_state >>
-          pop_assum SUBST_ALL_TAC
-          >- (qpat_x_assum `assign_target _ _ _ _ = _` mp_tac >>
-              simp[Once vyperStateTheory.assign_target_def,
-                   LET_THM, pairTheory.PAIR] >>
-              strip_tac >>
-              pop_assum mp_tac >>
-              once_rewrite_tac [vyperStateTheory.bind_def] >>
-              strip_tac >>
-              gvs[Once vyperStateTheory.bind_def] >>
-              drule arrayref_assignment_normal_logs >>
-              simp[])
-          >> (qpat_x_assum `assign_target _ _ _ _ = _` mp_tac >>
-              simp[Once vyperStateTheory.assign_target_def,
-                   vyperStateTheory.bind_def, vyperStateTheory.return_def,
-                   vyperStateTheory.raise_def, LET_THM, pairTheory.PAIR] >>
-              strip_tac >> gvs[])))
-  >> (qpat_x_assum `assign_target _ _ _ _ = _` mp_tac >>
-      simp[Once vyperStateTheory.assign_target_def,
-           vyperStateTheory.bind_def, vyperStateTheory.return_def,
-           vyperStateTheory.raise_def, LET_THM, pairTheory.PAIR] >>
-      strip_tac >> gvs[])
-QED
-
-Theorem assign_target_logs_mutual[local]:
-  (!cx gv ao st res st'.
-     assign_target cx gv ao st = (res,st') ==> st'.logs = st.logs) /\
-  (!cx gvs vs st res st'.
-     assign_targets cx gvs vs st = (res,st') ==> st'.logs = st.logs)
-Proof
-  ho_match_mp_tac vyperStateTheory.assign_target_ind >> rpt conj_tac >> rpt gen_tac
-  (* ScopedVar *)
-  >- (rpt strip_tac >>
-      gvs[vyperStateTheory.assign_target_def, vyperStateTheory.bind_def,
-          vyperStateTheory.get_scopes_def, vyperStateTheory.return_def,
-          vyperStateTheory.lift_option_def] >>
-      Cases_on `find_containing_scope id st.scopes` >>
-      gvs[vyperStateTheory.return_def, vyperStateTheory.raise_def] >>
-      PairCases_on `x` >>
-      Cases_on `assign_subscripts x2.type x2.value (REVERSE is) ao` >>
-      gvs[vyperStateTheory.return_def, vyperStateTheory.raise_def] >>
-      gvs[vyperStateTheory.assign_target_def, vyperStateTheory.bind_def,
-          vyperStateTheory.ignore_bind_def, vyperStateTheory.return_def,
-          vyperStateTheory.raise_def, vyperStateTheory.lift_option_def,
-          vyperStateTheory.type_check_def, vyperStateTheory.assert_def,
-          vyperStateTheory.lift_sum_def, vyperStateTheory.set_scopes_def,
-          AllCaseEqs()] >>
-      imp_res_tac lift_sum_state >> imp_res_tac assign_result_state >> gvs[])
-  (* TopLevelVar *)
-  >- (rpt strip_tac >> imp_res_tac assign_target_toplevel_logs)
-  (* ImmutableVar *)
-  >- (rpt strip_tac >>
-      qpat_x_assum `assign_target _ _ _ _ = _` mp_tac >>
-      simp[Once vyperStateTheory.assign_target_def,
-           vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
-           vyperStateTheory.return_def, vyperStateTheory.raise_def,
-           AllCaseEqs()] >>
-      rpt strip_tac >> gvs[] >>
-      imp_res_tac get_immutables_state >> imp_res_tac lift_option_type_state >>
-      imp_res_tac lift_sum_state >> gvs[] >>
-      imp_res_tac set_immutable_logs >> imp_res_tac assign_result_state >> gvs[])
-  (* TupleTargetV success *)
-  >- (rpt strip_tac >>
-      qpat_x_assum `assign_target _ _ _ _ = _` mp_tac >>
-      simp[Once vyperStateTheory.assign_target_def,
-           vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
-           vyperStateTheory.return_def, vyperStateTheory.raise_def,
-           AllCaseEqs()] >>
-      rpt strip_tac >> gvs[] >>
-      imp_res_tac type_check_state >> gvs[] >>
-      first_x_assum drule >> imp_res_tac return_state >> gvs[])
-  (* Constructor mismatch, base, cons, and fallback cases. *)
-  >> rpt strip_tac
-  >> pop_assum mp_tac
-  >> simp[Once vyperStateTheory.assign_target_def,
-          vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
-          vyperStateTheory.return_def, vyperStateTheory.raise_def,
-          AllCaseEqs()]
-  >> rpt strip_tac >> gvs[]
-  >> TRY (first_x_assum drule >> gvs[] >> NO_TAC)
-  >> imp_res_tac return_state >> gvs[]
-QED
-
-Theorem assign_target_logs[local]:
-  assign_target cx gv ao st = (res,st') ==> st'.logs = st.logs
-Proof
-  metis_tac[cj 1 assign_target_logs_mutual]
-QED
-
-Theorem assign_targets_logs[local]:
-  assign_targets cx gvs vs st = (res,st') ==> st'.logs = st.logs
-Proof
-  metis_tac[cj 2 assign_target_logs_mutual]
-QED
-
 Theorem case_stmt_annassign_logs[local]:
   (!tenv s0 tyv s1.
      tenv = get_tenv cx /\
@@ -941,130 +466,50 @@ Proof
   simp[Once vyperInterpreterTheory.evaluate_def, vyperStateTheory.bind_def,
        AllCaseEqs()] >>
   rpt strip_tac >> gvs[] >>
-  TRY (imp_res_tac lift_option_type_state >> gvs[log_extends_refl] >> NO_TAC) >>
-  qpat_x_assum `!s0 tyv s1. _`
-    (qspecl_then [`st`, `tyv`, `s''`] mp_tac) >>
-  (impl_tac >- first_assum ACCEPT_TAC) >> disch_tac >>
+  imp_res_tac lift_option_type_state >> gvs[log_extends_refl] >>
+  first_x_assum drule >> strip_tac >>
   qpat_x_assum `!st res st'. eval_expr _ _ _ = _ ==> _` drule >> strip_tac >>
-  imp_res_tac lift_option_type_state >> imp_res_tac materialise_state >> gvs[] >>
+  imp_res_tac lift_option_type_state >> imp_res_tac read_result_state >> gvs[] >>
   imp_res_tac new_variable_logs >> gvs[log_extends_def]
 QED
 
 Theorem case_stmt_append_logs[local]:
-  (!st res st'. eval_base_target cx bt st = (res,st') ==>
+  (!st res st'. eval_target_place cx bt st = (res,st') ==>
      log_extends st st') /\
-  (!s0 loc sbs s1. eval_base_target cx bt s0 = (INL (loc,sbs),s1) ==>
+  (!s0 p s1. eval_target_place cx bt s0 = (INL p,s1) ==>
      !st res st'. eval_expr cx e st = (res,st') ==> log_extends st st') ==>
   !st res st'. eval_stmt cx (Append bt e) st = (res,st') ==>
     log_extends st st'
 Proof
   rpt strip_tac >>
   qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
-  simp[Once vyperInterpreterTheory.evaluate_def] >>
-  pure_rewrite_tac[vyperStateTheory.ignore_bind_def] >>
-  simp[vyperStateTheory.bind_def, vyperStateTheory.return_def,
-       vyperStateTheory.raise_def, AllCaseEqs()] >>
-  rpt strip_tac >> gvs[log_extends_refl] >>
-  imp_res_tac materialise_state >> imp_res_tac assign_target_logs >>
-  imp_res_tac return_state >> gvs[] >>
-  qpat_x_assum `!st res st'. eval_base_target _ _ _ = _ ==> _` drule >>
-  strip_tac >>
-  rpt (pairarg_tac >> gvs[]) >>
-  gvs[vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
-      vyperStateTheory.return_def, vyperStateTheory.raise_def, AllCaseEqs()] >>
-  rpt strip_tac >> gvs[log_extends_refl] >>
-  imp_res_tac materialise_state >> imp_res_tac assign_target_logs >>
-  imp_res_tac return_state >> gvs[] >>
-  TRY (first_assum MATCH_ACCEPT_TAC >> NO_TAC) >>
-  first_x_assum drule >> strip_tac >>
-  qpat_x_assum `!st' res st''. eval_expr _ _ _ = _ ==> _` drule >> strip_tac >>
-  irule log_extends_trans >> goal_assum drule >>
-  irule log_extends_trans >> goal_assum drule >>
-  irule log_extends_eq_logs >> gvs[]
+  simp[Once vyperInterpreterTheory.evaluate_def] >> strip_tac >>
+  drule bind_log_extends_forward >> disch_then irule >>
+  rpt strip_tac >>
+  qpat_x_assum `!s0 p s1. _` drule >> strip_tac >> gvs[] >>
+  qpat_x_assum `eval_target_place _ _ _ = _` kall_tac >>
+  qpat_x_assum `bind (eval_target_place _ _) _ _ = _` kall_tac >>
+  drule bind_log_extends_forward >> disch_then irule >>
+  rpt strip_tac >>
+  gvs[vyperStateTheory.bind_def, AllCaseEqs()] >>
+  imp_res_tac read_result_state >>
+  imp_res_tac append_place_logs >> gvs[log_extends_def]
 QED
 
-Theorem case_stmt_assign_logs[local]:
-  (!st res st'. eval_target cx g st = (res,st') ==> log_extends st st') /\
-  (!s0 gv s1. eval_target cx g s0 = (INL gv,s1) ==>
-     !st res st'. eval_expr cx e st = (res,st') ==> log_extends st st') ==>
-  !st res st'. eval_stmt cx (Assign g e) st = (res,st') ==>
-    log_extends st st'
-Proof
-  rpt strip_tac >>
-  qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
-  simp[Once vyperInterpreterTheory.evaluate_def] >>
-  pure_rewrite_tac[vyperStateTheory.ignore_bind_def] >>
-  simp[vyperStateTheory.bind_def, vyperStateTheory.return_def,
-       vyperStateTheory.raise_def, AllCaseEqs()] >>
-  rpt strip_tac >> gvs[log_extends_refl] >>
-  imp_res_tac materialise_state >> imp_res_tac assign_target_logs >>
-  imp_res_tac return_state >> gvs[] >>
-  qpat_x_assum `!st res st'. eval_target _ _ _ = _ ==> _` drule >>
-  strip_tac >>
-  TRY (first_assum MATCH_ACCEPT_TAC >> NO_TAC) >>
-  first_x_assum drule >> strip_tac >>
-  qpat_x_assum `!st res st'. eval_target _ _ _ = _ ==> _` drule >> strip_tac >>
-  irule log_extends_trans >> goal_assum drule >>
-  irule log_extends_trans >> goal_assum drule >>
-  irule log_extends_eq_logs >> gvs[]
-QED
-
-Theorem case_stmt_augassign_logs[local]:
-  (!st res st'. eval_base_target cx bt st = (res,st') ==>
-     log_extends st st') /\
-  (!s0 loc sbs s1. eval_base_target cx bt s0 = (INL (loc,sbs),s1) ==>
-     !st res st'. eval_expr cx e st = (res,st') ==> log_extends st st') ==>
-  !st res st'. eval_stmt cx (AugAssign ty bt bop e) st = (res,st') ==>
-    log_extends st st'
-Proof
-  rpt strip_tac >>
-  qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
-  simp[Once vyperInterpreterTheory.evaluate_def] >>
-  pure_rewrite_tac[vyperStateTheory.ignore_bind_def] >>
-  simp[vyperStateTheory.bind_def, vyperStateTheory.return_def,
-       vyperStateTheory.raise_def, AllCaseEqs()] >>
-  rpt strip_tac >> gvs[log_extends_refl] >>
-  imp_res_tac get_Value_state >> imp_res_tac assign_target_logs >>
-  imp_res_tac return_state >> gvs[] >>
-  qpat_x_assum `!st res st'. eval_base_target _ _ _ = _ ==> _` drule >>
-  strip_tac >>
-  rpt (pairarg_tac >> gvs[]) >>
-  gvs[vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
-      vyperStateTheory.return_def, vyperStateTheory.raise_def, AllCaseEqs()] >>
-  rpt strip_tac >> gvs[log_extends_refl] >>
-  imp_res_tac get_Value_state >> imp_res_tac assign_target_logs >>
-  imp_res_tac return_state >> gvs[] >>
-  TRY (first_assum MATCH_ACCEPT_TAC >> NO_TAC) >>
-  first_x_assum drule >> strip_tac >>
-  qpat_x_assum `!st' res st''. eval_expr _ _ _ = _ ==> _` drule >> strip_tac >>
-  irule log_extends_trans >> goal_assum drule >>
-  irule log_extends_trans >> goal_assum drule >>
-  irule log_extends_eq_logs >> gvs[]
-QED
 
 
 Theorem case_expr_pop_logs[local]:
-  (!st res st'. eval_base_target cx bt st = (res,st') ==>
+  (!st res st'. eval_target_place cx bt st = (res,st') ==>
      log_extends st st') ==>
   !st res st'. eval_expr cx (Pop ty bt) st = (res,st') ==>
     log_extends st st'
 Proof
   rpt strip_tac >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-  simp[Once vyperInterpreterTheory.evaluate_def] >>
-  simp[vyperStateTheory.bind_def, vyperStateTheory.return_def,
-       vyperStateTheory.raise_def, AllCaseEqs()] >>
-  rpt strip_tac >> gvs[log_extends_refl] >>
-  qpat_x_assum `!st res st'. eval_base_target _ _ _ = _ ==> _` drule >>
-  strip_tac >>
-  rpt (pairarg_tac >> gvs[]) >>
-  gvs[vyperStateTheory.bind_def, vyperStateTheory.return_def,
-      vyperStateTheory.raise_def, AllCaseEqs()] >>
-  rpt strip_tac >> gvs[log_extends_refl] >>
-  imp_res_tac assign_target_logs >> imp_res_tac lift_option_type_state >>
-  imp_res_tac return_state >> gvs[] >>
-  irule log_extends_trans >> goal_assum drule >>
-  irule log_extends_eq_logs >> gvs[]
+  simp[Once vyperInterpreterTheory.evaluate_def] >> strip_tac >>
+  drule bind_log_extends_forward >> disch_then irule >>
+  rpt strip_tac >> gvs[] >>
+  imp_res_tac pop_place_logs >> gvs[log_extends_def]
 QED
 
 Theorem case_expr_builtin_logs[local]:
@@ -1092,7 +537,7 @@ Proof
   Cases_on `bt = Len` >> gvs[] >>
   TRY (gvs[vyperStateTheory.bind_def, vyperStateTheory.return_def,
            vyperStateTheory.raise_def, AllCaseEqs()] >>
-       imp_res_tac toplevel_array_length_state >> gvs[] >>
+       imp_res_tac result_array_length_state >> gvs[] >>
        first_x_assum (qspec_then `st` mp_tac) >>
        simp[vyperStateTheory.check_def, vyperStateTheory.type_check_def,
             vyperStateTheory.assert_def, vyperStateTheory.return_def] >> NO_TAC)
@@ -1119,7 +564,7 @@ Proof
   simp[vyperInterpreterTheory.evaluate_def, vyperStateTheory.bind_def,
        AllCaseEqs()] >>
   rpt strip_tac >> gvs[] >>
-  imp_res_tac get_Value_state >> imp_res_tac materialise_state >>
+  imp_res_tac read_result_state >> imp_res_tac read_result_state >>
   imp_res_tac raise_state >> gvs[] >>
   first_x_assum drule >> simp[]
 QED
@@ -1134,7 +579,7 @@ Proof
   simp[vyperInterpreterTheory.evaluate_def, vyperStateTheory.bind_def,
        vyperStateTheory.ignore_bind_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[] >>
-  imp_res_tac get_Value_state >> imp_res_tac type_check_state >> gvs[] >>
+  imp_res_tac read_result_state >> imp_res_tac type_check_state >> gvs[] >>
   first_x_assum drule >> simp[]
 QED
 
@@ -1146,26 +591,34 @@ Proof
   irule log_extends_eq_logs >> simp[]
 QED
 
-Theorem finally_switch_BoolV_log_extends[local]:
-  finally (switch_BoolV tv f g) pop_scope st = (res,st') ==>
+Theorem switch_BoolV_log_extends[local]:
+  switch_BoolV cx tv f g st = (res,st') ==>
   (!s0 r s1. f s0 = (r,s1) ==> log_extends s0 s1) ==>
   (!s0 r s1. g s0 = (r,s1) ==> log_extends s0 s1) ==>
   log_extends st st'
 Proof
   rpt strip_tac >>
-  qpat_x_assum `finally _ _ _ = _` mp_tac >>
-  simp[vyperStateTheory.finally_def, vyperStateTheory.ignore_bind_def,
-       vyperStateTheory.bind_def, vyperStateTheory.return_def,
-       vyperStateTheory.raise_def, vyperInterpreterTheory.switch_BoolV_def,
-       AllCaseEqs()] >>
-  rpt strip_tac >> gvs[] >>
-  qpat_x_assum `(if _ then _ else _) _ = _` mp_tac >>
-  rpt IF_CASES_TAC >> gvs[vyperStateTheory.raise_def] >>
-  rpt strip_tac >> gvs[] >>
-  imp_res_tac pop_scope_log_extends >>
-  rpt (first_x_assum drule >> strip_tac >> gvs[]) >>
-  TRY (irule log_extends_trans >> goal_assum drule >>
-       first_assum MATCH_ACCEPT_TAC)
+  qpat_x_assum `switch_BoolV cx _ _ _ _ = _` mp_tac >>
+  simp[vyperInterpreterTheory.switch_BoolV_def,
+       vyperStateTheory.bind_def, AllCaseEqs()] >>
+  rpt strip_tac >> imp_res_tac read_result_state >> gvs[log_extends_refl] >>
+  rename1 `read_result cx tv _ = (INL bv,_)` >>
+  Cases_on `bv = BoolV T` >>
+  Cases_on `bv = BoolV F` >>
+  gvs[vyperStateTheory.raise_def, log_extends_refl] >>
+  first_x_assum drule >> simp[]
+QED
+
+Theorem finally_switch_BoolV_log_extends[local]:
+  finally (switch_BoolV cx tv f g) pop_scope st = (res,st') ==>
+  (!s0 r s1. f s0 = (r,s1) ==> log_extends s0 s1) ==>
+  (!s0 r s1. g s0 = (r,s1) ==> log_extends s0 s1) ==>
+  log_extends st st'
+Proof
+  rpt strip_tac >>
+  irule finally_pop_scope_log_extends >>
+  qexistsl [`switch_BoolV cx tv f g`, `res`] >>
+  simp[] >> metis_tac[switch_BoolV_log_extends]
 QED
 
 Theorem case_stmt_if_logs[local]:
@@ -1275,7 +728,7 @@ Proof
   simp[vyperInterpreterTheory.evaluate_def, vyperStateTheory.bind_def,
        vyperStateTheory.raise_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[] >>
-  imp_res_tac get_Value_state >> imp_res_tac lift_option_state >>
+  imp_res_tac read_result_state >> imp_res_tac lift_option_state >>
   imp_res_tac lift_option_type_state >> imp_res_tac raise_state >> gvs[] >>
   TRY (simp[log_extends_refl] >> NO_TAC) >>
   first_x_assum drule >> simp[]
@@ -1290,21 +743,17 @@ Theorem case_stmt_assert_logs[local]:
 Proof
   rpt strip_tac >>
   qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
-  simp[vyperInterpreterTheory.evaluate_def, vyperStateTheory.bind_def,
-       AllCaseEqs()] >>
+  simp[Once vyperInterpreterTheory.evaluate_def] >> strip_tac >>
+  drule bind_log_extends_forward >> disch_then irule >>
   rpt strip_tac >> gvs[] >>
-  imp_res_tac get_Value_state >> gvs[] >>
-  qpat_x_assum `switch_BoolV _ _ _ _ = _` mp_tac >>
-  simp[vyperInterpreterTheory.switch_BoolV_def] >>
-  rpt IF_CASES_TAC >>
-  simp[vyperStateTheory.return_def, vyperStateTheory.raise_def,
-       vyperStateTheory.bind_def, AllCaseEqs()] >>
-  strip_tac >> gvs[] >>
-  TRY (imp_res_tac get_Value_state >> imp_res_tac lift_option_state >>
-       imp_res_tac lift_option_type_state >> imp_res_tac raise_state >> gvs[]) >>
-  rpt (first_x_assum drule >> strip_tac >> gvs[]) >>
-  irule log_extends_trans >> goal_assum drule >>
-  first_assum MATCH_ACCEPT_TAC
+  qpat_x_assum `!s0 tv s1. _` drule >> strip_tac >>
+  drule switch_BoolV_log_extends >> disch_then irule >>
+  conj_tac >- (simp[vyperStateTheory.return_def, log_extends_refl]) >>
+  rpt strip_tac >>
+  gvs[vyperStateTheory.bind_def, vyperStateTheory.raise_def,
+      AllCaseEqs()] >>
+  imp_res_tac read_result_state >> imp_res_tac lift_option_type_state >>
+  gvs[] >> first_x_assum drule >> simp[]
 QED
 
 Theorem case_stmt_assert_bare_logs[local]:
@@ -1314,13 +763,12 @@ Theorem case_stmt_assert_bare_logs[local]:
 Proof
   rpt strip_tac >>
   qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
-  simp[vyperInterpreterTheory.evaluate_def, vyperStateTheory.bind_def,
-       vyperInterpreterTheory.switch_BoolV_def, vyperStateTheory.return_def,
-       vyperStateTheory.raise_def, AllCaseEqs()] >>
-  rpt strip_tac >> gvs[] >> first_x_assum drule >> strip_tac >>
-  Cases_on `tv = Value (BoolV T)` >>
-  Cases_on `tv = Value (BoolV F)` >>
-  gvs[vyperStateTheory.return_def, vyperStateTheory.raise_def]
+  simp[Once vyperInterpreterTheory.evaluate_def] >> strip_tac >>
+  drule bind_log_extends_forward >> disch_then irule >>
+  rpt strip_tac >> gvs[] >>
+  drule switch_BoolV_log_extends >> disch_then irule >>
+  simp[vyperStateTheory.return_def, vyperStateTheory.raise_def,
+       log_extends_refl]
 QED
 
 Theorem case_stmt_assert_unreachable_logs[local]:
@@ -1330,13 +778,12 @@ Theorem case_stmt_assert_unreachable_logs[local]:
 Proof
   rpt strip_tac >>
   qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
-  simp[vyperInterpreterTheory.evaluate_def, vyperStateTheory.bind_def,
-       vyperInterpreterTheory.switch_BoolV_def, vyperStateTheory.return_def,
-       vyperStateTheory.raise_def, AllCaseEqs()] >>
-  rpt strip_tac >> gvs[] >> first_x_assum drule >> strip_tac >>
-  Cases_on `tv = Value (BoolV T)` >>
-  Cases_on `tv = Value (BoolV F)` >>
-  gvs[vyperStateTheory.return_def, vyperStateTheory.raise_def]
+  simp[Once vyperInterpreterTheory.evaluate_def] >> strip_tac >>
+  drule bind_log_extends_forward >> disch_then irule >>
+  rpt strip_tac >> gvs[] >>
+  drule switch_BoolV_log_extends >> disch_then irule >>
+  simp[vyperStateTheory.return_def, vyperStateTheory.raise_def,
+       log_extends_refl]
 QED
 
 Theorem case_stmt_log_logs[local]:
@@ -1357,74 +804,14 @@ Proof
 QED
 
 
-Theorem case_base_target_name_logs[local]:
-  eval_base_target cx (NameTarget id) st = (res,st') ==> log_extends st st'
-Proof
-  strip_tac >>
-  qpat_x_assum `eval_base_target _ _ _ = _` mp_tac >>
-  simp[vyperInterpreterTheory.evaluate_def, vyperStateTheory.bind_def,
-       vyperStateTheory.ignore_bind_def,
-       vyperStateTheory.get_scopes_def, vyperStateTheory.return_def,
-       vyperStateTheory.type_check_def, vyperStateTheory.assert_def,
-       AllCaseEqs()] >>
-  rpt strip_tac >> gvs[log_extends_refl]
-QED
-
-Theorem case_base_target_toplevel_logs[local]:
-  eval_base_target cx (TopLevelNameTarget sid) st = (res,st') ==>
-    log_extends st st'
-Proof
-  PairCases_on `sid` >> strip_tac >>
-  qpat_x_assum `eval_base_target _ _ _ = _` mp_tac >>
-  simp[vyperInterpreterTheory.evaluate_def, vyperStateTheory.bind_def,
-       vyperStateTheory.return_def, AllCaseEqs()] >>
-  rpt strip_tac >> gvs[] >>
-  imp_res_tac lift_option_type_state >> gvs[] >>
-  Cases_on `is_immutable_decl sid1 ts` >>
-  gvs[vyperStateTheory.return_def, log_extends_refl]
-QED
-
-Theorem case_base_target_attribute_logs[local]:
-  (!s0 r s1. eval_base_target cx bt s0 = (r,s1) ==> log_extends s0 s1) ==>
-  !st res st'. eval_base_target cx (AttributeTarget bt id) st = (res,st') ==>
-    log_extends st st'
-Proof
-  rpt strip_tac >>
-  qpat_x_assum `eval_base_target _ _ _ = _` mp_tac >>
-  simp[vyperInterpreterTheory.evaluate_def, vyperStateTheory.bind_def,
-       AllCaseEqs()] >>
-  strip_tac >> gvs[] >>
-  Cases_on `x` >> gvs[vyperStateTheory.return_def] >>
-  first_x_assum drule >> simp[]
-QED
-
-Theorem case_base_target_subscript_logs[local]:
-  (!s0 loc sbs s1.
-     eval_base_target cx bt s0 = (INL (loc,sbs),s1) ==>
-     !s2 r s3. eval_expr cx e s2 = (r,s3) ==> log_extends s2 s3) /\
-  (!s0 r s1. eval_base_target cx bt s0 = (r,s1) ==> log_extends s0 s1) ==>
-  !st res st'. eval_base_target cx (SubscriptTarget bt e) st = (res,st') ==>
-    log_extends st st'
-Proof
-  rpt strip_tac >>
-  qpat_x_assum `eval_base_target _ _ _ = _` mp_tac >>
-  simp[vyperInterpreterTheory.evaluate_def, vyperStateTheory.bind_def,
-       vyperStateTheory.return_def, AllCaseEqs()] >>
-  rpt strip_tac >> gvs[] >>
-  PairCases_on `x` >> gvs[vyperStateTheory.bind_def,
-                           vyperStateTheory.return_def, AllCaseEqs()] >>
-  imp_res_tac get_Value_state >> gvs[] >>
-  rpt (first_x_assum drule >> strip_tac >> gvs[]) >>
-  irule log_extends_trans >> goal_assum drule >>
-  first_assum MATCH_ACCEPT_TAC
-QED
-
 Theorem case_expr_name_logs[local]:
   eval_expr cx (Name ty id) st = (res,st') ==> log_extends st st'
 Proof
   strip_tac >> qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
   simp[vyperInterpreterTheory.evaluate_def, vyperStateTheory.bind_def,
        vyperStateTheory.get_scopes_def, vyperStateTheory.return_def,
+       vyperStateTheory.ignore_bind_def, vyperStateTheory.type_check_def,
+       vyperStateTheory.assert_def, vyperStateTheory.raise_def,
        AllCaseEqs()] >>
   rpt strip_tac >> gvs[] >> imp_res_tac lift_option_type_state >>
   gvs[log_extends_refl]
@@ -1462,19 +849,6 @@ Proof
   metis_tac[lookup_flag_mem_log_extends]
 QED
 
-Theorem switch_BoolV_log_extends[local]:
-  switch_BoolV tv f g st = (res,st') ==>
-  (!s0 r s1. f s0 = (r,s1) ==> log_extends s0 s1) ==>
-  (!s0 r s1. g s0 = (r,s1) ==> log_extends s0 s1) ==>
-  log_extends st st'
-Proof
-  rpt strip_tac >>
-  qpat_x_assum `switch_BoolV _ _ _ _ = _` mp_tac >>
-  simp[vyperInterpreterTheory.switch_BoolV_def] >>
-  rpt IF_CASES_TAC >> simp[vyperStateTheory.raise_def] >>
-  rpt strip_tac >> gvs[log_extends_refl] >>
-  first_x_assum drule >> simp[]
-QED
 
 Theorem case_expr_if_logs[local]:
   (!s0 tv s1. eval_expr cx e1 s0 = (INL tv,s1) ==>
@@ -1487,21 +861,18 @@ Theorem case_expr_if_logs[local]:
 Proof
   rpt strip_tac >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-  simp[vyperInterpreterTheory.evaluate_def, vyperStateTheory.bind_def,
-       AllCaseEqs()] >>
+  simp[Once vyperInterpreterTheory.evaluate_def] >> strip_tac >>
+  drule bind_log_extends_forward >> disch_then irule >>
   rpt strip_tac >> gvs[] >>
-  `!sb rb sb'. eval_expr cx e2 sb = (rb,sb') ==> log_extends sb sb'` by
-    (qpat_x_assum `!s0 tv s1. _ ==> !st res st'. eval_expr _ e2 _ = _ ==> _`
-       drule >> simp[]) >>
-  `!sb rb sb'. eval_expr cx e3 sb = (rb,sb') ==> log_extends sb sb'` by
-    (qpat_x_assum `!s0 tv s1. _ ==> !st res st'. eval_expr _ e3 _ = _ ==> _`
-       drule >> simp[]) >>
-  `log_extends s'' st'` by
-    (drule switch_BoolV_log_extends >>
-     disch_then drule >> disch_then drule >> simp[]) >>
-  `log_extends st s''` by
-    (qpat_x_assum `!s0 r s1. eval_expr _ e1 _ = _ ==> _` drule >> simp[]) >>
-  irule log_extends_trans >> qexists_tac `s''` >> simp[]
+  qpat_x_assum `!s0 tv s1. _ ==> !st res st'. eval_expr _ e2 _ = _ ==> _`
+    drule >> strip_tac >>
+  qpat_x_assum `!s0 tv s1. _ ==> !st res st'. eval_expr _ e3 _ = _ ==> _`
+    drule >> strip_tac >>
+  qpat_x_assum `bind (eval_expr cx e1) _ _ = _` kall_tac >>
+  drule bind_log_extends_forward >> disch_then irule >>
+  rpt strip_tac >> gvs[] >> imp_res_tac conditional_result_state >>
+  gvs[log_extends_refl] >>
+  drule switch_BoolV_log_extends >> disch_then irule >> simp[]
 QED
 
 Theorem case_expr_struct_lit_logs[local]:
@@ -1660,9 +1031,7 @@ Proof
   imp_res_tac set_scopes_log_extends >>
   imp_res_tac release_nonreentrant_lock_log_extends >>
   imp_res_tac return_state >> gvs[] >>
-  TRY (first_assum MATCH_ACCEPT_TAC >> NO_TAC) >>
-  irule log_extends_trans >> goal_assum drule >>
-  first_assum MATCH_ACCEPT_TAC
+  metis_tac[log_extends_trans]
 QED
 
 
@@ -1806,9 +1175,7 @@ Proof
   imp_res_tac set_scopes_log_extends >>
   imp_res_tac release_nonreentrant_lock_log_extends >>
   imp_res_tac return_state >> gvs[log_extends_refl] >>
-  TRY (first_assum MATCH_ACCEPT_TAC >> NO_TAC) >>
-  irule log_extends_trans >> goal_assum drule >>
-  first_assum MATCH_ACCEPT_TAC
+  metis_tac[log_extends_trans]
 QED
 
 
@@ -1987,8 +1354,9 @@ Proof
     (irule log_extends_eq_logs >>
      imp_res_tac push_function_logs >> sym_tac >>
      first_assum MATCH_ACCEPT_TAC) >>
-  TRY (irule log_extends_trans >> goal_assum drule >>
-       first_assum MATCH_ACCEPT_TAC >> NO_TAC) >>
+
+  all_tac >~ [`push_function _ _ _ _ = (INR _,_)`] >-
+    metis_tac[log_extends_trans] >>
   `log_extends s'⁵' s'⁶'` by
     (qpat_x_assum `finally _ _ _ = _` mp_tac >>
      strip_tac >>
@@ -2200,24 +1568,139 @@ Proof
   gvs[vyperStateTheory.get_scopes_def, vyperStateTheory.return_def]
 QED
 
+(* Compositional proof control for the actual activated call clause. *)
+Definition log_monad_def:
+  log_monad f <=> !s r t. f s = (r,t) ==> log_extends s t
+End
+
+Theorem log_monad_bind_guarded[local]:
+  log_monad f /\
+  (!s v t. f s = (INL v,t) ==> log_monad (g v)) ==>
+  log_monad (vyperState$bind f g)
+Proof
+  simp[log_monad_def, vyperStateTheory.bind_def] >> rpt strip_tac >>
+  Cases_on `f s` >> Cases_on `q` >> gvs[] >>
+  first_x_assum drule_all >> strip_tac >>
+  first_x_assum drule_all >> strip_tac >>
+  drule_all log_extends_trans >> simp[]
+QED
+
+Theorem log_monad_primitives[local]:
+  log_monad (return v) /\ log_monad (\s. return (g s) s) /\
+  log_monad (raise e) /\
+  log_monad (type_check b msg) /\ log_monad (check b msg) /\
+  log_monad (lift_option opt msg) /\ log_monad (lift_option_type opt msg) /\
+  log_monad (lift_sum_runtime rs) /\ log_monad get_accounts /\
+  log_monad get_transient_storage /\ log_monad (update_accounts upd) /\
+  log_monad (update_transient upd_t) /\ log_monad (append_logs logs) /\
+  log_monad (adopt_call_outcome rq co)
+Proof
+  simp[log_monad_def, vyperStateTheory.return_def, vyperStateTheory.raise_def,
+       vyperStateTheory.check_def, vyperStateTheory.type_check_def,
+       vyperStateTheory.assert_def, vyperStateTheory.lift_option_def,
+       vyperStateTheory.lift_option_type_def, vyperStateTheory.lift_sum_runtime_def,
+       vyperStateTheory.get_accounts_def, vyperStateTheory.get_transient_storage_def,
+       vyperStateTheory.update_accounts_def, vyperStateTheory.update_transient_def,
+       append_logs_def, adopt_call_outcome_equation] >>
+  rpt strip_tac >> rpt CASE_TAC >>
+  gvs[option_CASE_rator, sum_CASE_rator, AllCaseEqs(),
+      vyperStateTheory.return_def, vyperStateTheory.raise_def,
+      log_extends_def, rich_listTheory.IS_PREFIX_APPEND,
+      rich_listTheory.IS_PREFIX_REFL]
+QED
+
+Theorem log_monad_take[local]:
+  log_monad (take_call_outcome target calldata value_opt)
+Proof
+  simp[log_monad_def] >> rpt strip_tac >>
+  drule take_call_outcome_frame >>
+  simp[evaluation_state_component_equality, log_extends_def,
+       rich_listTheory.IS_PREFIX_REFL]
+QED
+
+(* Index primitive leaves once; never traverse their continuations or the
+   large guarded IHs just to recognise a primitive computation. *)
+val EXTCALL_LOG_MONAD_LEAF_TAC =
+  let
+    val structural = Net.insert
+      (concl log_monad_bind_guarded |> dest_imp |> snd,
+       MATCH_MP_TAC log_monad_bind_guarded >> conj_tac) Net.empty
+    val leaves = List.foldl (fn (th,net) =>
+      Net.insert (concl th, MATCH_ACCEPT_TAC th) net) structural
+      (log_monad_take :: CONJUNCTS log_monad_primitives)
+  in
+    fn (asl,w) => FIRST (Net.match w leaves) (asl,w)
+  end;
+
+(* Reduce exposed applications only, not continuation arguments. *)
+val extcall_log_head_conv =
+  let
+    val reduce = FIRST_CONV
+      [BETA_CONV, REWR_CONV pair_case_thm, REWR_CONV UNCURRY]
+    fun head tm = (reduce ORELSEC RATOR_CONV head) tm
+  in head end;
+
+(* Preserve CASE_TAC branch order without its broad datatype rewrite set.
+   Only fresh branch facts, never guarded IHs, become rewrite rules. *)
+fun EXTCALL_LOG_MONAD_CASE_TAC (g as (old,_)) =
+  let
+    fun simplify (asl,w) =
+      let
+        val fresh = List.filter (fn a => not (is_forall a) andalso
+          not (List.exists (aconv a) old)) asl
+        val rules = map ASSUME fresh
+      in
+        simp_tac bool_ss
+          (optionTheory.option_CLAUSES :: pair_case_thm :: UNCURRY :: rules) >>
+        RULE_ASSUM_TAC (fn th =>
+          if is_forall (concl th) then th else REWRITE_RULE rules th) >>
+        MAP_EVERY assume_tac rules
+      end (asl,w)
+  in
+    (BasicProvers.PURE_CASE_TAC >> simplify) g
+  end;
+
+val EXTCALL_LOG_MONAD_STEP_TAC =
+  FIRST [
+    first_assum ACCEPT_TAC,
+    EXTCALL_LOG_MONAD_LEAF_TAC,
+    CONV_TAC (HO_REWR_CONV FORALL_PROD),
+    CONV_TAC (RAND_CONV extcall_log_head_conv),
+    gen_tac, strip_tac, conj_tac,
+    CONV_TAC (RAND_CONV (REWR_CONV vyperStateTheory.ignore_bind_def)),
+    CONV_TAC (RAND_CONV ETA_CONV),
+    CHANGED_TAC (fn (asl,w) =>
+      simp_tac bool_ss (pair_case_thm :: UNCURRY ::
+        List.map ASSUME (List.filter is_eq asl)) (asl,w)),
+    EXTCALL_LOG_MONAD_CASE_TAC];
+
+val EXTCALL_LOG_MONAD_TAC = rpt EXTCALL_LOG_MONAD_STEP_TAC;
+
+Theorem eval_ext_call_log_monad[local]:
+  log_monad (eval_ext_call cx static skip_check sig opts vs)
+Proof
+  PairCases_on `sig` >> Cases_on `vs` >>
+  simp_tac bool_ss [eval_ext_call_def, eval_ext_call_effects_def, LET_THM] >>
+  EXTCALL_LOG_MONAD_TAC
+QED
+
 Theorem eval_ext_call_log_extends:
   eval_ext_call cx static skip_check sig opts vs st = (res,st') ==>
   log_extends st st'
 Proof
-  PairCases_on `sig` >> Cases_on `vs` >>
-  simp[eval_ext_call_def, bind_def, ignore_bind_def, type_check_def,
-       assert_def, return_def, raise_def, get_accounts_def,
-       get_transient_storage_def, lift_option_def, lift_option_type_def,
-       check_def, lift_sum_runtime_def, update_accounts_def,
-       update_transient_def, append_logs_def, vyperCallOutcomeTheory.take_call_outcome_def,
-       vyperCallOutcomeTheory.adopt_call_outcome_equation, LET_THM, UNCURRY,
-       COND_RATOR, option_CASE_rator, prod_CASE_rator, sum_CASE_rator] >>
-  strip_tac >>
-  gvs[AllCaseEqs(), log_extends_def, rich_listTheory.IS_PREFIX_APPEND]
+  mp_tac (REWRITE_RULE [log_monad_def] eval_ext_call_log_monad) >> simp[]
 QED
 
 Theorem case_expr_ext_call_logs[local]:
-  (!s0 r s1. eval_exprs cx es s0 = (r,s1) ==> log_extends s0 s1) ==>
+  (!s0 r s1. eval_exprs cx (TAKE 1 es) s0 = (r,s1) ==> log_extends s0 s1) /\
+  (!s0 target s1. eval_exprs cx (TAKE 1 es) s0 = (INL target,s1) ==>
+    !st res st'. eval_expr_results cx (TAKE (LENGTH (FST (SND sig))) (DROP 1 es)) st = (res,st') ==>
+      log_extends st st') /\
+  (!s0 target s1 s2 results s3.
+    eval_exprs cx (TAKE 1 es) s0 = (INL target,s1) /\
+    eval_expr_results cx (TAKE (LENGTH (FST (SND sig))) (DROP 1 es)) s2 = (INL results,s3) ==>
+    !st res st'. eval_exprs cx (DROP (1 + LENGTH (FST (SND sig))) es) st = (res,st') ==>
+      log_extends st st') ==>
   !st res st'.
     eval_expr cx (Call ty (ExtCall static skip_check sig opts) es drv) st =
       (res,st') ==> log_extends st st'
@@ -2225,10 +1708,11 @@ Proof
   rpt strip_tac >> qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
   simp[Once evaluate_def, bind_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[] >>
-  first_x_assum drule >> strip_tac >>
-  TRY (gvs[] >> NO_TAC) >>
-  drule eval_ext_call_log_extends >> strip_tac >>
-  drule_all log_extends_trans >> simp[]
+  imp_res_tac read_results_state >> gvs[] >>
+  rpt (qpat_x_assum `!a b c d e f. _` drule_all >> strip_tac) >>
+  rpt (qpat_x_assum `!a b c. _` drule_all >> strip_tac) >>
+  imp_res_tac eval_ext_call_log_extends >>
+  metis_tac[log_extends_trans]
 QED
 
 Theorem raw_call_tail_log_extends[local]:
@@ -2351,7 +1835,7 @@ Proof
   simp[vyperInterpreterTheory.evaluate_def, vyperStateTheory.bind_def,
        vyperStateTheory.return_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[] >>
-  imp_res_tac get_Value_state >> imp_res_tac lift_sum_state >> gvs[] >>
+  imp_res_tac select_result_state >> gvs[log_extends_refl] >>
   first_x_assum drule >> simp[]
 QED
 
@@ -2387,7 +1871,7 @@ Theorem case_eval_exprs_cons_logs[local]:
   (!s0 r s1. eval_expr cx e s0 = (r,s1) ==> log_extends s0 s1) /\
   (!s0 tv s1 s2 v s3.
      eval_expr cx e s0 = (INL tv,s1) /\
-     materialise cx tv s2 = (INL v,s3) ==>
+     read_result cx tv s2 = (INL v,s3) ==>
      !st res st'. eval_exprs cx es st = (res,st') ==> log_extends st st') ==>
   !st res st'. eval_exprs cx (e::es) st = (res,st') ==>
     log_extends st st'
@@ -2397,7 +1881,32 @@ Proof
   simp[vyperInterpreterTheory.evaluate_def, vyperStateTheory.bind_def,
        vyperStateTheory.return_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[] >>
-  imp_res_tac materialise_state >> gvs[] >>
+  imp_res_tac read_result_state >> gvs[] >>
+  rpt (first_x_assum drule >> strip_tac >> gvs[]) >>
+  irule log_extends_trans >> goal_assum drule >>
+  first_assum MATCH_ACCEPT_TAC
+QED
+
+Theorem case_eval_expr_results_nil_logs[local]:
+  eval_expr_results cx [] st = (res,st') ==> log_extends st st'
+Proof
+  simp[vyperInterpreterTheory.evaluate_def, vyperStateTheory.return_def,
+       log_extends_refl]
+QED
+
+Theorem case_eval_expr_results_cons_logs[local]:
+  (!s0 r s1. eval_expr cx e s0 = (r,s1) ==> log_extends s0 s1) /\
+  (!s0 tv s1. eval_expr cx e s0 = (INL tv,s1) ==>
+     !st res st'. eval_expr_results cx es st = (res,st') ==>
+       log_extends st st') ==>
+  !st res st'. eval_expr_results cx (e::es) st = (res,st') ==>
+    log_extends st st'
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `eval_expr_results _ _ _ = _` mp_tac >>
+  simp[vyperInterpreterTheory.evaluate_def, vyperStateTheory.bind_def,
+       vyperStateTheory.return_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
   rpt (first_x_assum drule >> strip_tac >> gvs[]) >>
   irule log_extends_trans >> goal_assum drule >>
   first_assum MATCH_ACCEPT_TAC
@@ -2476,18 +1985,13 @@ in
     APPLY_CASE_HELPER_TAC (CONV_RULE unfold_last_eval_ante_conv th)
   val eval_case_helpers =
     [case_iterator_array_logs, case_iterator_range_logs,
-     case_target_base_logs, case_target_tuple_logs,
-     case_eval_targets_nil_logs, case_eval_targets_cons_logs,
      case_eval_for_nil_logs, case_eval_for_cons_logs,
      case_eval_stmts_nil_logs, case_eval_stmts_cons_logs,
-     case_stmt_annassign_logs, case_stmt_append_logs, case_stmt_assign_logs,
-     case_stmt_augassign_logs, case_stmt_return_some_logs,
+     case_stmt_annassign_logs, case_stmt_append_logs, case_stmt_return_some_logs,
      case_stmt_expr_logs, case_stmt_if_logs, case_stmt_for_logs,
      case_stmt_raise_logs, case_stmt_assert_logs,
      case_stmt_assert_bare_logs, case_stmt_assert_unreachable_logs,
      case_stmt_log_logs,
-     case_base_target_name_logs, case_base_target_toplevel_logs,
-     case_base_target_attribute_logs, case_base_target_subscript_logs,
      case_expr_name_logs, case_expr_toplevel_name_logs,
      case_expr_flag_member_logs, lookup_global_log_extends,
      lookup_flag_mem_log_extends, case_expr_subscript_logs, case_expr_pop_logs,
@@ -2497,7 +2001,8 @@ in
      case_expr_raw_call_logs, case_expr_raw_call_calldata_logs,
      case_expr_raw_log_logs, case_expr_raw_revert_logs,
      case_expr_attribute_logs, case_expr_type_builtin_logs,
-     case_eval_exprs_nil_logs, case_eval_exprs_cons_logs]
+     case_eval_exprs_nil_logs, case_eval_exprs_cons_logs,
+     case_eval_expr_results_nil_logs, case_eval_expr_results_cons_logs]
 end
 
 Theorem conjunction_guard_specialize_probe[local]:
@@ -2510,16 +2015,39 @@ Proof
   first_x_assum (specialize_guard_then 2 MATCH_ACCEPT_TAC)
 QED
 
+val PLACE_LOG_CASE_TAC =
+  rpt strip_tac >>
+  FIRST [qpat_x_assum `eval_stmt _ (Assign _ _) _ = _` mp_tac,
+         qpat_x_assum `eval_stmt _ (AugAssign _ _ _ _) _ = _` mp_tac,
+         qpat_x_assum `eval_base_place _ _ _ = _` mp_tac,
+         qpat_x_assum `eval_target_place _ _ _ = _` mp_tac,
+         qpat_x_assum `assign_tuple_targets _ _ _ _ = _` mp_tac,
+         qpat_x_assum `assign_tuple_target_list _ _ _ _ = _` mp_tac] >>
+  simp[Once vyperInterpreterTheory.evaluate_def, vyperStateTheory.bind_def,
+       vyperStateTheory.ignore_bind_def, AllCaseEqs(),
+       vyperStateTheory.return_def, vyperStateTheory.raise_def,
+       vyperStateTheory.get_scopes_def, vyperStateTheory.check_def,
+       vyperStateTheory.type_check_def, vyperStateTheory.assert_def] >>
+  rpt strip_tac >> gvs[log_extends_refl] >>
+  imp_res_tac lift_option_type_state >> imp_res_tac lift_sum_state >>
+  imp_res_tac read_place_state >> imp_res_tac read_result_state >>
+  imp_res_tac place_type_value_state >> imp_res_tac get_place_state >>
+  imp_res_tac lookup_global_state >> imp_res_tac extend_place_state >>
+  imp_res_tac read_result_state >>
+  imp_res_tac read_result_state >> gvs[log_extends_refl] >>
+  imp_res_tac write_place_logs >>
+  gvs[vyperValueTheory.value_CASE_rator, vyperValueTheory.array_value_CASE_rator, AllCaseEqs(),
+      vyperStateTheory.raise_def, log_extends_refl] >>
+  rpt (PRED_ASSUM
+    (fn tm => let val (_,body) = boolSyntax.strip_forall tm
+                  val (_,tail) = boolSyntax.dest_imp body
+              in boolSyntax.is_forall tail end handle HOL_ERR _ => false)
+    (drule_all_then assume_tac)) >>
+  metis_tac[log_extends_trans, log_extends_eq_logs];
+
 val REST_ATOMIC_DISPATCH_TAC =
   FIRST
-    ([rpt gen_tac >> disch_tac >>
-      ho_match_mp_tac
-        (CONV_RULE commute_outer_ante_conv case_stmt_assign_logs) >>
-      first_assum MATCH_ACCEPT_TAC,
-      rpt gen_tac >> strip_tac >>
-      ho_match_mp_tac case_eval_targets_cons_logs >>
-      rpt conj_tac >> first_assum MATCH_ACCEPT_TAC,
-      rpt gen_tac >> strip_tac >>
+    ([rpt gen_tac >> strip_tac >>
       ho_match_mp_tac case_stmt_append_logs >>
       rpt conj_tac >> first_assum MATCH_ACCEPT_TAC] @
      map APPLY_CASE_HELPER_TAC eval_case_helpers @
@@ -2533,10 +2061,15 @@ val REST_ATOMIC_DISPATCH_TAC =
 Theorem eval_mutual_log_extends[local]:
   (!cx s st res st'. eval_stmt cx s st = (res,st') ==> log_extends st st') /\
   (!cx ss st res st'. eval_stmts cx ss st = (res,st') ==> log_extends st st') /\
-  (!cx bt st res st'. eval_base_target cx bt st = (res,st') ==>
-     log_extends st st') /\
+  (!cx it st res st'. eval_iterator cx it st = (res,st') ==> log_extends st st') /\
+  (!cx ty nm body vs st res st'. eval_for cx ty nm body vs st = (res,st') ==> log_extends st st') /\
   (!cx e st res st'. eval_expr cx e st = (res,st') ==> log_extends st st') /\
-  (!cx es st res st'. eval_exprs cx es st = (res,st') ==> log_extends st st')
+  (!cx es st res st'. eval_exprs cx es st = (res,st') ==> log_extends st st') /\
+  (!cx t st res st'. eval_base_place cx t st = (res,st') ==> log_extends st st') /\
+  (!cx t st res st'. eval_target_place cx t st = (res,st') ==> log_extends st st') /\
+  (!cx g v st res st'. assign_tuple_targets cx g v st = (res,st') ==> log_extends st st') /\
+  (!cx gs vs st res st'. assign_tuple_target_list cx gs vs st = (res,st') ==> log_extends st st') /\
+  (!cx es st res st'. eval_expr_results cx es st = (res,st') ==> log_extends st st')
 Proof
   MP_TAC (CONV_RULE (DEPTH_CONV BETA_CONV)
     (SPECL
@@ -2546,25 +2079,33 @@ Proof
            log_extends st st'``,
        ``\cx it. !st res st'. eval_iterator cx it st = (res,st') ==>
            log_extends st st'``,
-       ``\cx g. !st res st'. eval_target cx g st = (res,st') ==>
-           log_extends st st'``,
-       ``\cx gs. !st res st'. eval_targets cx gs st = (res,st') ==>
-           log_extends st st'``,
-       ``\cx bt. !st res st'. eval_base_target cx bt st = (res,st') ==>
-           log_extends st st'``,
        ``\cx tyv nm body vs. !st res st'.
            eval_for cx tyv nm body vs st = (res,st') ==> log_extends st st'``,
        ``\cx e. !st res st'. eval_expr cx e st = (res,st') ==>
            log_extends st st'``,
        ``\cx es. !st res st'. eval_exprs cx es st = (res,st') ==>
-           log_extends st st'``]
+           log_extends st st'``,
+       ``\cx t. !st res st'. eval_base_place cx t st = (res,st') ==> log_extends st st'``,
+       ``\cx t. !st res st'. eval_target_place cx t st = (res,st') ==> log_extends st st'``,
+       ``\cx g v. !st res st'. assign_tuple_targets cx g v st = (res,st') ==> log_extends st st'``,
+       ``\cx gs vs. !st res st'. assign_tuple_target_list cx gs vs st = (res,st') ==> log_extends st st'``,
+       ``\cx es. !st res st'. eval_expr_results cx es st = (res,st') ==> log_extends st st'``]
       vyperInterpreterTheory.evaluate_ind)) >>
   impl_tac >-
     (rpt conj_tac >> TRY (simp[] >> NO_TAC) >~
        [`_ ==> !st res st'.
+           eval_expr _ (Call _ (ExtCall _ _ _ _) _ _) st = (res,st') ==>
+           log_extends st st'`] >-
+         (rpt gen_tac >> strip_tac >> ho_match_mp_tac case_expr_ext_call_logs >>
+          rpt conj_tac >> metis_tac[]) >~
+       [`_ ==> !st res st'.
            eval_expr _ (Call _ (IntCall _) _ _) st = (res,st') ==>
            log_extends st st'`] >-
          (rpt gen_tac >> strip_tac >>
+          RULE_ASSUM_TAC (SIMP_RULE (srw_ss())
+            [type_check_def, assert_def,
+             get_scopes_def, set_scopes_def, return_def, raise_def,
+             push_function_def]) >>
           rewrite_tac[Once vyperInterpreterTheory.evaluate_def] >>
           rewrite_tac[vyperStateTheory.bind_def,
                       vyperStateTheory.ignore_bind_def] >>
@@ -2596,111 +2137,115 @@ Proof
             (rpt strip_tac >> rpt (qpat_x_assum `!x. _` kall_tac) >>
              imp_res_tac type_check_state >>
              imp_res_tac lift_option_type_state >> gvs[log_extends_refl]) >>
-          pop_assum mp_tac >>
-          first_x_assum $ funpow 2 drule_then drule >>
-          simp[] >> ntac 2 strip_tac >>
-          first_x_assum drule >> strip_tac >>
-          pop_assum $ mk_asm "args_ext" >>
+          imp_res_tac type_check_state >>
+          imp_res_tac lift_option_type_state >>
+          gvs[type_check_def, assert_def, return_def, raise_def] >>
+          unabbrev_all_tac >> gvs[arithmeticTheory.ADD_COMM] >>
+          `!s0 res s1. eval_expr_results cx es s0 = (res,s1) ==>
+            log_extends s0 s1` by
+            (rpt strip_tac >> first_x_assum drule_all >> simp[]) >>
           BasicProvers.TOP_CASE_TAC >>
-          TRY (rename1 `eval_exprs cx es _ = (INR _,_)` >>
-               asm "args_ext" drule >> simp[] >> NO_TAC) >>
-          asm "args_ext" drule >> strip_tac >>
-          pop_assum $ mk_asm "explicit_ext" >>
-          PRED_ASSUM is_guarded_eval_exprs_ih
-            (mk_asm "defaults_guarded") >>
-          PRED_ASSUM is_guarded_eval_stmts_ih (mk_asm "body_guarded") >>
-          asm "body_guarded" mp_tac >>
-          simp[] >> strip_tac >>
-          pop_assum $ mk_asm "body_after_explicit" >>
-          qpat_x_assum `type_check _ "IntCall args length" _ = _` mp_tac >>
-          simp[vyperStateTheory.type_check_def,
-               vyperStateTheory.assert_def] >>
-          strip_tac >>
-          `type_check (~MEM (src_id_opt,fn) cx.stk) "recursion" st =
-             (INL (),r)` by
-            (qpat_x_assum `type_check _ "recursion" st = _` mp_tac >>
-             simp[vyperStateTheory.type_check_def,
-                  vyperStateTheory.assert_def]) >>
-          `type_check
-             (LENGTH es <= LENGTH (FST (SND (SND x''))) /\
-              LENGTH (FST (SND (SND x''))) <=
-                LENGTH es + LENGTH (FST (SND (SND (SND x'')))))
-             "IntCall args length" r' = (INL (),r')` by
-            simp[vyperStateTheory.type_check_def,
-                 vyperStateTheory.assert_def] >>
-          asm "body_after_explicit"
-            (specialize_guard_then 4 (mk_asm "body_callback")) >>
-          Cases_on `q` >~
-            [`eval_exprs cx es _ = (INR _,_)`] >-
-              (simp[] >> rpt strip_tac >>
-               irule log_extends_trans >>
-               qexists `r'³'` >>
-               conj_tac >-
-                 (imp_res_tac type_check_state >>
-                  imp_res_tac lift_option_type_state >>
-                  gvs[log_extends_eq_logs]) >>
-               asm "explicit_ext" mp_tac >> simp[]) >>
-          simp[] >>
-          asm "body_callback"
-            (specialize_guard_then 1 (mk_asm "body_callback6")) >>
-          asm "defaults_guarded" mp_tac >>
-          simp[] >> strip_tac >>
-          pop_assum $ mk_asm "defaults_ext" >>
-          asm "defaults_ext"
-            (specialize_guard_then 5 (mk_asm "defaults_admin")) >>
-          `get_scopes r'⁴' = (INL r'⁴'.scopes,r'⁴')` by
-            simp[vyperStateTheory.get_scopes_def,
-                 vyperStateTheory.return_def] >>
-          `set_scopes [FEMPTY] r'⁴' =
-             (INL (),r'⁴' with scopes := [FEMPTY])` by
-            simp[vyperStateTheory.set_scopes_def,
-                 vyperStateTheory.return_def] >>
-          asm "defaults_admin"
-            (specialize_guard_then 2 (mk_asm "defaults_preserves")) >>
-          asm_x "defaults_guarded" kall_tac >>
-          asm_x "defaults_ext" kall_tac >>
-          asm_x "defaults_admin" kall_tac >>
-          asm_x "body_guarded" kall_tac >>
-          asm_x "body_after_explicit" kall_tac >>
-          asm_x "body_callback" kall_tac >>
-          simp[] >> strip_tac >>
-          pop_assum $ mk_asm "continuation_eq" >>
-          `LENGTH dflts + LENGTH es - LENGTH args =
-           LENGTH dflts - (LENGTH args - LENGTH es)` by decide_tac >>
-          pop_assum $ mk_asm "drop_eq" >>
-          asm_x "continuation_eq" mp_tac >>
-          asm "drop_eq" (once_rewrite_tac o single) >>
-          unabbrev_all_tac >>
-          strip_tac >>
-          pop_assum $ mk_asm "continuation_eq" >>
-          `log_extends r'⁴' st'` by
-            (asm_x "body_callback6" mp_tac >>
-             asm_x "defaults_preserves" mp_tac >>
-             asm_x "continuation_eq" mp_tac >>
-             POP_ASSUM_LIST (K all_tac) >>
-             rpt strip_tac >>
-             drule intcall_guarded_continuation_application_probe >>
-             disch_then drule >>
-             disch_then irule >>
-             rpt strip_tac >>
-             gvs[vyperStateTheory.bind_def,
-                 vyperStateTheory.ignore_bind_def] >>
+          `log_extends r r''` by (first_x_assum drule_all >> simp[]) >>
+          reverse BasicProvers.TOP_CASE_TAC >-
+            (rpt strip_tac >> gvs[]) >>
+          qmatch_asmsub_rename_tac `eval_expr_results cx es r = (INL captured,after_capture)` >>
+          qmatch_goalsub_abbrev_tac `eval_exprs cxd defaults` >>
+          `!s0 res s1. eval_exprs cxd defaults s0 = (res,s1) ==>
+            log_extends s0 s1` by
+            (rpt strip_tac >> unabbrev_all_tac >>
+             PRED_ASSUM is_guarded_eval_exprs_ih drule_all >> simp[]) >>
+          simp_tac std_ss [bind_def, get_scopes_def, return_def] >>
+          BasicProvers.TOP_CASE_TAC >> gvs[] >>
+          BasicProvers.TOP_CASE_TAC >>
+          qmatch_asmsub_rename_tac `finally _ _ after_capture = (default_res,after_defaults)` >>
+          `log_extends after_capture after_defaults` by
+            (drule intcall_defaults_exact_log_extends >>
+             disch_then irule >> first_assum MATCH_ACCEPT_TAC) >>
+          `log_extends r after_capture` by
+            (qpat_x_assum `!s0 res s1. eval_expr_results _ _ _ = _ ==> _` drule >> simp[]) >>
+          reverse BasicProvers.TOP_CASE_TAC >-
+            (rpt strip_tac >> gvs[] >> metis_tac[log_extends_trans]) >>
+          BasicProvers.TOP_CASE_TAC >>
+          imp_res_tac read_results_state >> gvs[] >>
+          reverse BasicProvers.TOP_CASE_TAC >-
+            (rpt strip_tac >> gvs[] >> metis_tac[log_extends_trans]) >>
+          BasicProvers.TOP_CASE_TAC >>
+          imp_res_tac lift_option_type_state >> gvs[] >>
+          reverse BasicProvers.TOP_CASE_TAC >-
+            (rpt strip_tac >> gvs[] >> metis_tac[log_extends_trans]) >>
+          BasicProvers.TOP_CASE_TAC >>
+          imp_res_tac lift_option_type_state >> gvs[] >>
+          reverse BasicProvers.TOP_CASE_TAC >-
+            (rpt strip_tac >> gvs[] >> metis_tac[log_extends_trans]) >>
+          qmatch_goalsub_abbrev_tac `lock after_defaults` >>
+          `!s0 res s1. lock s0 = (res,s1) ==> log_extends s0 s1` by
+            (simp[Abbr `lock`] >> IF_CASES_TAC >>
+             simp[return_def, log_extends_refl] >>
+             Cases_on `cx.nonreentrant_slot` >>
+             simp[raise_def, log_extends_refl] >>
+             rpt strip_tac >> drule acquire_nonreentrant_lock_log_extends >> simp[]) >>
+          BasicProvers.TOP_CASE_TAC >>
+          qmatch_asmsub_rename_tac `lock after_defaults = (lock_res,after_lock)` >>
+          `log_extends after_defaults after_lock` by
+            (qpat_x_assum `!s0 res s1. lock _ = _ ==> _` drule >> simp[]) >>
+          reverse BasicProvers.TOP_CASE_TAC >-
+            (rpt strip_tac >> gvs[] >> metis_tac[log_extends_trans]) >>
+          qmatch_asmsub_rename_tac `lock after_defaults = (INL lock_value,after_lock)` >>
+          Cases_on `lock_value` >>
+          qmatch_asmsub_rename_tac
+            `lift_option_type (lookup_callable_function _ _ _) _ _ = (INL callable,_)` >>
+          `!s0 res s1. eval_stmts cxd (SND (SND (SND (SND (SND callable))))) s0 = (res,s1) ==>
+            log_extends s0 s1` by
+            (rpt strip_tac >> unabbrev_all_tac >>
+             `LENGTH (FST (SND (SND (SND callable)))) -
+                (LENGTH (FST (SND (SND callable))) - LENGTH es) =
+              LENGTH es + LENGTH (FST (SND (SND (SND callable)))) -
+                LENGTH (FST (SND (SND callable)))` by decide_tac >>
+             pop_assum (fn th => RULE_ASSUM_TAC (PURE_REWRITE_RULE [GSYM th])) >>
              PRED_ASSUM is_guarded_eval_stmts_ih
-               (specialize_guard_then 7 MATCH_ACCEPT_TAC)) >>
-          irule log_extends_trans >>
-          qexists `r'³'` >>
-          conj_tac >-
-            (imp_res_tac type_check_state >>
-             imp_res_tac lift_option_type_state >>
-             gvs[log_extends_eq_logs]) >>
-          irule log_extends_trans >>
-          qexists `r'⁴'` >>
-          conj_tac >- asm "explicit_ext" MATCH_ACCEPT_TAC >>
-          first_assum MATCH_ACCEPT_TAC) >~
+               (drule_all o REWRITE_RULE [ignore_bind_def, GSYM CONJ_ASSOC]) >> simp[]) >>
+          PRED_ASSUM is_guarded_eval_stmts_ih kall_tac >>
+          PRED_ASSUM is_guarded_eval_exprs_ih kall_tac >>
+          simp[push_function_def, return_def] >>
+          BasicProvers.TOP_CASE_TAC >>
+          qmatch_asmsub_rename_tac `finally _ _ _ = (body_res,after_body)` >>
+          `log_extends (after_lock with scopes := [x'⁴']) after_body` by
+            (drule intcall_body_finally_exact_log_extends >>
+             disch_then irule >> simp[Abbr `cxd`]) >>
+          Cases_on `body_res` >> simp[] >>
+          rpt BasicProvers.TOP_CASE_TAC >>
+          rpt strip_tac >> imp_res_tac lift_option_type_state >> gvs[] >>
+          `log_extends r after_capture` by
+            (qpat_x_assum `!s0 res s1. eval_expr_results _ _ _ = _ ==> _` drule >> simp[]) >>
+          `log_extends after_defaults after_lock` by
+            (qpat_x_assum `!s0 res s1. lock _ = _ ==> _` drule >> simp[]) >>
+          `log_extends after_lock after_body` by
+            (qpat_x_assum `log_extends (_ with scopes := _) _` mp_tac >>
+             simp[log_extends_def]) >>
+          rpt (qpat_x_assum `!x. _` kall_tac) >>
+          metis_tac[log_extends_trans]) >~
        [`_ ==> !st res st'.
            eval_expr _ (Call _ (CreateTarget _ _ _) _ _) st = (res,st') ==>
            log_extends st st'`] >-
          suspend "CreateTarget" >>
+     all_tac >>~- ([`_ ==> !st res st'.
+       eval_stmt _ (Assign _ _) st = (res,st') ==> log_extends st st'`],
+       PLACE_LOG_CASE_TAC) >>~-
+     ([`_ ==> !st res st'.
+       eval_stmt _ (AugAssign _ _ _ _) st = (res,st') ==> log_extends st st'`],
+       PLACE_LOG_CASE_TAC) >>~-
+     ([`!st res st'. eval_base_place _ _ st = (res,st') ==>
+       log_extends st st'`], PLACE_LOG_CASE_TAC) >>~-
+     ([`_ ==> !st res st'. eval_base_place _ _ st = (res,st') ==>
+       log_extends st st'`], PLACE_LOG_CASE_TAC) >>~-
+     ([`_ ==> !st res st'. eval_target_place _ _ st = (res,st') ==>
+       log_extends st st'`], PLACE_LOG_CASE_TAC) >>~-
+     ([`!st res st'. assign_tuple_target_list _ _ _ st = (res,st') ==>
+       log_extends st st'`], PLACE_LOG_CASE_TAC) >>~-
+     ([`_ ==> !st res st'. assign_tuple_targets _ _ _ st = (res,st') ==>
+       log_extends st st'`], PLACE_LOG_CASE_TAC) >>~-
+     ([`_ ==> !st res st'. assign_tuple_target_list _ _ _ st = (res,st') ==>
+       log_extends st st'`], PLACE_LOG_CASE_TAC) >>
      REST_ATOMIC_DISPATCH_TAC) >>
   strip_tac >> rpt conj_tac >> first_assum MATCH_ACCEPT_TAC
 QED
@@ -2712,12 +2257,20 @@ Resume eval_mutual_log_extends[CreateTarget]:
       vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
       AllCaseEqs()] >>
   imp_res_tac check_create_blueprint_result_state >> gvs[] >>
+  imp_res_tac read_results_state >> gvs[] >>
   res_tac >>
   imp_res_tac eval_create_logs_extend >>
   metis_tac[log_extends_refl, log_extends_trans, log_extends_def]
 QED
 
 Finalise eval_mutual_log_extends
+
+Theorem eval_expr_results_log_extends:
+  eval_expr_results cx es st = (res,st') ==> log_extends st st'
+Proof
+  metis_tac[eval_mutual_log_extends]
+QED
+
 
 Theorem eval_stmt_log_extends:
   !cx s st res st'.
@@ -2996,3 +2549,10 @@ Proof
   simp[vyperInterpreterTheory.call_external_transaction_def] >>
   metis_tac[call_external_log_extends]
 QED
+
+(* Integration audit: all log preservation exports must be kernel closed. *)
+val () = List.app (fn (name,th) =>
+  let val (oracles,_) = Tag.dest_tag (Thm.tag th)
+  in if List.all (fn s => s = "DISK_THM") oracles then ()
+     else raise Fail ("Log preservation oracle debt: " ^ name)
+  end) (DB.thms "vyperLogPreservation");
