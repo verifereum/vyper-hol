@@ -55,8 +55,8 @@ Theorem state_rel_transient_update:
     (tstore key value ss)
 Proof
   rw[state_rel_def, local_ptrs_rel_tstore, storage_rel_def,
-     transient_rel_def, immutables_rel_def, logs_rel_def, call_ctx_rel_def,
-     contract_storage_def, contract_transient_def] >>
+     transient_rel_def, accounts_rel_def, immutables_rel_def, logs_rel_def,
+     call_ctx_rel_def, contract_storage_def, contract_transient_def] >>
   gvs[tstore_def, combinTheory.APPLY_UPDATE_THM] >>
   first_x_assum (drule_all_then strip_assume_tac) >> simp[]
 QED

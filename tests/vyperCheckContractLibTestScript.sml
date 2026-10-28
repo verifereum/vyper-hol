@@ -270,20 +270,23 @@ val conversion_check = vyperCheckContractLib.check_contract
    address = zero_address, modules = conversion_modules}
 val () = assert_some conversion_check
 
-(* len() requires sized-type classification to compute. *)
-val sized_modules =
-  ``([(NONE,
-       [FunctionDecl External Pure F F "array_len"
-          [("xs", ArrayT (BaseT AddressT) (Dynamic 4))] []
-          (BaseT (UintT 256))
-          [Return (SOME
-             (Builtin (BaseT (UintT 256)) Len
-               [Name (ArrayT (BaseT AddressT) (Dynamic 4)) "xs"]))]])]
-      : (num option # toplevel list) list)``
-val sized_check = vyperCheckContractLib.check_contract
-  {in_deploy = false, layouts = empty_layouts,
-   address = zero_address, modules = sized_modules}
-val () = assert_some sized_check
+(* len() requires sized-type classification to compute. Like Vyper, it takes
+   String, Bytes and DynArray, but not fixed-size arrays or bytesM. *)
+fun len_check ty = vyperCheckContractLib.check_contract_conv
+  (vyperCheckContractLib.mk_check_contract
+  {in_deploy = false, layouts = empty_layouts, address = zero_address,
+   modules =
+     ``([(NONE,
+          [FunctionDecl External Pure F F "len_of" [("xs", ^ty)] []
+             (BaseT (UintT 256))
+             [Return (SOME
+                (Builtin (BaseT (UintT 256)) Len [Name ^ty "xs"]))]])]
+         : (num option # toplevel list) list)``})
+val () = app (assert_some o len_check)
+  [``ArrayT (BaseT AddressT) (Dynamic 4)``, ``BaseT (StringT 10)``,
+   ``BaseT (BytesT (Dynamic 10))``]
+val () = app (assert_none o len_check)
+  [``ArrayT (BaseT AddressT) (Fixed 4)``, ``BaseT (BytesT (Fixed 32))``]
 
 (* The conversion itself computes rejection to NONE. The success-only API must
    fail closed on that result. *)
@@ -755,6 +758,156 @@ val () = List.app (fn in_deploy => let
 in assert_some (check p03_constructor_modules);
    assert_none (check p15x_constructor_modules)
 end) [false,true];
+
+(* Implicit bound widening: a String, Bytes or DynArray value with a smaller
+   bound is accepted where Vyper accepts it, as the frontend translates it. *)
+val widen_return_modules =
+  ``[(NONE,
+      [FunctionDecl External Pure F F "f" [] [] (BaseT (StringT 20))
+         [AnnAssign "x" (BaseT (StringT 10))
+            (Literal (BaseT (StringT 10)) (StringL "abc"));
+          Return (SOME (Name (BaseT (StringT 10)) "x"))]])]
+    : (num option # toplevel list) list``
+val () = check_accepts "widen return" false empty_layouts widen_return_modules
+
+(* Narrowing, or widening across base types, is rejected in every position
+   that accepts widening. *)
+fun check_rejects layouts mods = assert_none
+  (vyperCheckContractLib.check_contract_conv
+     ``check_contract F ^layouts ^zero_address ^mods``)
+fun one_fn params ret body =
+  ``[(NONE, [FunctionDecl External Nonpayable F F "f" ^params [] ^ret ^body])]
+    : (num option # toplevel list) list``
+val s10 = ``BaseT (StringT 10)``
+val s20 = ``BaseT (StringT 20)``
+val () = check_rejects empty_layouts
+  (one_fn ``[("s",^s20)]`` s10 ``[Return (SOME (Name ^s20 "s"))]``)
+val () = check_rejects empty_layouts
+  (one_fn ``[("s",^s20)]`` ``NoneT``
+     ``[AnnAssign "x" ^s10 (Name ^s20 "s")]``)
+val () = check_rejects empty_layouts
+  (one_fn ``[("s",^s10)]`` ``NoneT``
+     ``[AnnAssign "x" (BaseT (BytesT (Dynamic 20))) (Name ^s10 "s")]``)
+val () = check_rejects empty_layouts
+  (one_fn ``[("b",BaseT (BytesT (Fixed 10)))]`` ``NoneT``
+     ``[AnnAssign "x" (BaseT (BytesT (Dynamic 20)))
+          (Name (BaseT (BytesT (Fixed 10))) "b")]``)
+val () = check_rejects empty_layouts
+  ``[(NONE,
+      [FunctionDecl Internal Pure F F "_g" [] [] ^s20
+         [Return (SOME (Literal ^s20 (StringL "abc")))];
+       FunctionDecl External Pure F F "f" [] [] ^s10
+         [Return (SOME (Call ^s10 (IntCall (NONE,"_g")) [] NONE))]])]
+    : (num option # toplevel list) list``
+
+val widen_map_layouts =
+  ``([((0w : address), ([((NONE, "m"), 0)] : storage_layout,
+                        [] : storage_layout))]
+      : (address # (storage_layout # storage_layout)) list)``
+val () = check_accepts "widen HashMap leaf" false widen_map_layouts
+  ``[(NONE,
+      [HashMapDecl Public F "m" (BaseT (UintT 8)) (Type (BaseT (StringT 20)))
+         NONE;
+       FunctionDecl External Nonpayable F F "put"
+         [("i",BaseT (UintT 8)); ("s",BaseT (StringT 10))] [] NoneT
+         [Assign
+            (BaseTarget
+               (SubscriptTarget (TopLevelNameTarget (NONE,"m"))
+                  (Name (BaseT (UintT 8)) "i")))
+            (Name (BaseT (StringT 10)) "s")]])]
+    : (num option # toplevel list) list``
+
+val () = check_accepts "widen tuple return" false empty_layouts
+  ``[(NONE,
+      [VariableDecl Private
+         (Constant (Literal (BaseT (StringT 15)) (StringL "Caravan"))) "NAME"
+         (BaseT (StringT 15)) NONE;
+       VariableDecl Private
+         (Constant (Literal (BaseT (StringT 12)) (StringL "1"))) "VERSION"
+         (BaseT (StringT 12)) NONE;
+       FunctionDecl External View F F "domain" [] []
+         (TupleT
+            [BaseT (BytesT (Fixed 1)); BaseT (StringT 50); BaseT (StringT 20);
+             BaseT (UintT 256)])
+         [Return
+            (SOME
+               (Builtin
+                  (TupleT
+                     [BaseT (BytesT (Fixed 1)); BaseT (StringT 15);
+                      BaseT (StringT 12); BaseT (UintT 256)])
+                  (MakeArray NONE (Fixed 4))
+                  [Literal (BaseT (BytesT (Fixed 1))) (BytesL [15w]);
+                   TopLevelName (BaseT (StringT 15)) (NONE,"NAME");
+                   TopLevelName (BaseT (StringT 12)) (NONE,"VERSION");
+                   Builtin (BaseT (UintT 256)) (Env ChainId) []]))]])]
+    : (num option # toplevel list) list``
+
+val () = check_accepts "widen internal call result" false empty_layouts
+  ``[(NONE,
+      [FunctionDecl Internal Pure F F "_single" [("x",BaseT (UintT 256))] []
+         (ArrayT (BaseT (UintT 256)) (Dynamic 1))
+         [Return
+            (SOME
+               (Builtin (ArrayT (BaseT (UintT 256)) (Dynamic 1))
+                  (MakeArray (SOME (BaseT (UintT 256))) (Dynamic 1))
+                  [Name (BaseT (UintT 256)) "x"]))];
+       FunctionDecl Internal Pure F F "_total"
+         [("xs",ArrayT (BaseT (UintT 256)) (Dynamic 128))] []
+         (BaseT (UintT 256))
+         [AnnAssign "t" (BaseT (UintT 256))
+            (Literal (BaseT (UintT 256)) (IntL 0));
+          For "x" (BaseT (UintT 256))
+            (Array (Name (ArrayT (BaseT (UintT 256)) (Dynamic 128)) "xs")) 128
+            [AugAssign (BaseT (UintT 256)) (NameTarget "t") Add
+               (Name (BaseT (UintT 256)) "x")];
+          Return (SOME (Name (BaseT (UintT 256)) "t"))];
+       FunctionDecl External Pure F F "f" [("x",BaseT (UintT 256))] []
+         (BaseT (UintT 256))
+         [Return
+            (SOME
+               (Call (BaseT (UintT 256)) (IntCall (NONE,"_total"))
+                  [Call (ArrayT (BaseT (UintT 256)) (Dynamic 128))
+                     (IntCall (NONE,"_single")) [Name (BaseT (UintT 256)) "x"]
+                     NONE] NONE))]])]
+    : (num option # toplevel list) list``
+
+val () = check_accepts "widen annotated assignment and append" false
+  ``([((0w : address), ([((NONE, "arr"), 0)] : storage_layout,
+                        [] : storage_layout))]
+      : (address # (storage_layout # storage_layout)) list)``
+  ``[(NONE,
+      [VariableDecl Private Storage "arr"
+         (ArrayT (BaseT (StringT 20)) (Dynamic 4)) NONE;
+       FunctionDecl External Nonpayable F F "f"
+         [("s",BaseT (BytesT (Dynamic 10))); ("t",BaseT (StringT 10))] []
+         (BaseT (UintT 256))
+         [AnnAssign "x" (BaseT (BytesT (Dynamic 20)))
+            (Name (BaseT (BytesT (Dynamic 10))) "s");
+          Append (TopLevelNameTarget (NONE,"arr"))
+            (Name (BaseT (StringT 10)) "t");
+          Return (SOME (Literal (BaseT (UintT 256)) (IntL 0)))]])]
+    : (num option # toplevel list) list``
+
+val () = check_rejects widen_map_layouts
+  ``[(NONE,
+      [HashMapDecl Public F "m" (BaseT (UintT 8)) (Type ^s10) NONE;
+       FunctionDecl External Nonpayable F F "put"
+         [("i",BaseT (UintT 8)); ("s",^s20)] [] NoneT
+         [Assign
+            (BaseTarget
+               (SubscriptTarget (TopLevelNameTarget (NONE,"m"))
+                  (Name (BaseT (UintT 8)) "i")))
+            (Name ^s20 "s")]])]
+    : (num option # toplevel list) list``
+val () = check_rejects
+  ``([((0w : address), ([((NONE, "arr"), 0)] : storage_layout,
+                        [] : storage_layout))]
+      : (address # (storage_layout # storage_layout)) list)``
+  ``[(NONE,
+      [VariableDecl Private Storage "arr" (ArrayT ^s10 (Dynamic 4)) NONE;
+       FunctionDecl External Nonpayable F F "f" [("t",^s20)] [] NoneT
+         [Append (TopLevelNameTarget (NONE,"arr")) (Name ^s20 "t")]])]
+    : (num option # toplevel list) list``
 
 (* A main-module constant initialized from an imported module's constant: the
    imports' constants are folded first (constants_order). *)

@@ -1187,10 +1187,14 @@ fun generate_defn_scripts () = let
       "val () = holbuild_extra_deps [\"", jsonp_from_generated,
       "\", \"", jsonp_from_generated, ".provenance\"];\n",
       "val () = make_definitions_for_file (\"", id, "\", \"", jsonp_from_generated, "\");\n"]
-    val out = TextIO.openOut(fname)
-    val () = TextIO.output(out, contents)
-    val () = TextIO.closeOut out
-  in () end) files
+  in
+    (* Committed definitions may include proof boundaries for JSON/CV caching. *)
+    if OS.FileSys.access(fname, []) then () else let
+      val out = TextIO.openOut(fname)
+      val () = TextIO.output(out, contents)
+      val () = TextIO.closeOut out
+    in () end
+  end) files
 in
   ()
 end

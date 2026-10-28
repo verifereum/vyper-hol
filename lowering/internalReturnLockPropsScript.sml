@@ -1,5 +1,5 @@
 (* TOP-LEVEL: explicit internal returns release their mutating transient guard
-   before RET, including bare early returns and single-value returns. *)
+   before RET, including bare early returns and single-word returns. *)
 Theory internalReturnLockProps
 Ancestors
   stmtLowering nonreentrantEquiv transientLockProps
@@ -41,7 +41,21 @@ Proof
   strip_tac >> gvs[DROP_LENGTH_APPEND]
 QED
 
+(* Helper: a single-word type has no tuple/struct members to load. *)
+Theorem word_type_return_elem_types[local]:
+  is_word_type ty ==>
+  (case ty of
+     TupleT tys => tys
+   | StructT nsid =>
+       MAP (FST o SND) (get_struct_fields cenv.ce_struct_fields
+                          (nsid_to_string nsid))
+   | _ => []) = []
+Proof
+  Cases_on `ty` >> simp[is_word_type_def]
+QED
+
 Theorem compile_internal_value_return_unlock_code:
+  is_word_type ty /\
   cenv.ce_return_buf = NONE /\ cenv.ce_returns_count = 1 /\
   cenv.ce_nonreentrant = (T,key,T,F) /\
   compile_internal_return_from_env cenv ty src_ty value rpc st = ((),st') ==>
@@ -52,6 +66,7 @@ Proof
   rpt strip_tac >>
   qpat_x_assum `compile_internal_return_from_env _ _ _ _ _ _ = _` mp_tac >>
   simp[compile_internal_return_from_env_def, compile_internal_return_def,
+       word_type_return_elem_types,
        compile_return_unlock_def, compile_nonreentrant_unlock_def,
        comp_bind_def, comp_ignore_bind_def, comp_return_def,
        emit_void_def, emit_inst_def, fresh_id_def, emit_def,
@@ -130,6 +145,7 @@ Proof
 QED
 
 Theorem compile_internal_value_return_releases:
+  is_word_type ty /\
   cenv.ce_return_buf = NONE /\ cenv.ce_returns_count = 1 /\
   cenv.ce_nonreentrant = (T,key,T,F) /\
   compile_internal_return_from_env cenv ty src_ty value rpc st = ((),st') /\

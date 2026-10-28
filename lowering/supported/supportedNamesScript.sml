@@ -36,11 +36,12 @@ End
 
 (* Lists, not sets: repeated names in different branches/loops must fail.
    Concatenating catches cross-class collisions as well as duplicates.
-   Module variables need no check: compile_env keys them by module_var_key
-   ("self." ++ name), which no local binding can produce. *)
+   No binding contains "." (no Vyper identifier does), so none is a
+   module_var_key ("self." ++ name) and none shadows a module variable. *)
 Definition supported_function_bindings_def:
   supported_function_bindings tops (args : argument list) locals loops <=>
-    ALL_DISTINCT (MAP FST args ++ locals ++ loops)
+    ALL_DISTINCT (MAP FST args ++ locals ++ loops) /\
+    EVERY (\n. ~MEM #"." n) (MAP FST args ++ locals ++ loops)
 End
 
 (* Internal functions use internal_fn_label, not their bare source names.

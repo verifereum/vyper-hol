@@ -297,13 +297,14 @@ Definition compile_internal_return_def:
       case ret_val of
         NONE => emit_inst RET [return_pc] []
       | SOME val_op =>
-          if returns_count = 1 then
+          if elem_types = [] then
             (* Single value: RET val, return_pc *)
             emit_inst RET [val_op; return_pc] []
           else
-            (* Tuple/struct: load each element from memory, pass all on stack.
-               NOTE: returns_count > 1 only for TupleT with all word types
-               (from returns_stack_count), so all elements are 32 bytes. *)
+            (* Tuple/struct, even of one member (Python: tuple_items): load
+               each element from memory, pass all on stack.  A stack return
+               of a tuple-like type has only word members (from
+               returns_stack_count), so all elements are 32 bytes. *)
             do elems <- compile_load_tuple_elements cenv val_op
                           elem_types 0;
                emit_inst RET (elems ++ [return_pc]) []
@@ -802,9 +803,9 @@ End
 (* Bring a local or loop variable into scope at its declaration, returning
    the environment for the rest of its block.  With ce_alloca_locals it gets a
    fresh pointer variable for an allocation of its declared type's size,
-   which emit_local_alloca then emits; else it keeps the MemLoc slot that
-   build_compile_env reserved for its name.  A name re-declared in a disjoint
-   block thus gets that block's allocation, type and capacity.
+   which emit_local_alloca then emits; else it keeps whatever ce_vars holds
+   for its name.  A name re-declared in a disjoint block thus gets that
+   block's allocation, type and capacity.
    Mirrors Python: Context.new_variable, which rebinds the name.  Python keeps
    an If branch's names after the If; dropping them at the end of the block
    is the same for well-typed code, which cannot use them there. *)
