@@ -8,6 +8,8 @@ Ancestors
   abiEncoderCorrectRecursive abiEncoderInput abiEncoderAdmissible
   fragExec compileEnv valueEncoding vyperABI vyperTyping contractABI
   venomState venomExecSemantics words list
+  abiEncoderSourceInvoke abiEncoderVarRestore abiEncoderFragmentFrame
+  abiDecoderLoop venomMemDefs
 
 (* enc_pre allows stale fresh variables: the bridge must preserve that
    generality. Its scratch bounds already imply source/output nonwrapping.
@@ -32,7 +34,26 @@ Theorem compile_abi_encode_to_buf_frag:
              [(w2n dst_w, LENGTH (enc (vyper_to_abi_type env ty) av))] s0 s)
       (\r. F)
 Proof
-  (* Temporary admission while the independent statement check and Alan
-     bridge task establish the source representation and exact frame. *)
-  cheat
+  rpt gen_tac >> strip_tac >>
+  simp_tac bool_ss [frag_exec_def] >> rpt gen_tac >> strip_tac >> gvs[] >>
+  drule_all abi_encoder_source_shared_run >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  drule abi_encoder_shared_restore >> strip_tac >>
+  `lo <= top /\ alloca_inv s0` by
+    (fs[enc_pre_def, enc_scratch_def] >> decide_tac) >>
+  `enc_frame st st' lo top [(w2n dst_w,LENGTH (enc ct rv))] s0 restored` by
+    (drule_all abi_encoder_restored_frame >> simp[]) >>
+  qexists_tac `restored` >> gvs[abi_decode_sim_def]
 QED
+
+(* Kernel-tag audit includes the transitive proof dependencies. *)
+val _ =
+  let
+    val th = compile_abi_encode_to_buf_frag
+    val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
+  in
+    if List.all (fn s => s = "DISK_THM") oracles andalso
+       null axioms andalso null (Thm.hyp th)
+    then ()
+    else raise Fail "encoder fragment admission, axiom or hypothesis"
+  end;
