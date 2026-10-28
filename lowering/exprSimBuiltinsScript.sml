@@ -36,8 +36,6 @@
  *   - compile_blobhash_sim: call_ctx_rel does not relate the blob hashes.
  *   - compile_acc_code_sim, a bare .code: the lowering emits INVALID, as
  *     Python's codegen refuses it; the supported subset leaves it out.
- *   - compile_len_sim: well_typed_builtin_app Len admits fixed arrays and
- *     bytesN, but the lowering always loads the operand's first word.
  *   - compile_keccak256_sim and compile_sha256_sim for a Bytes or String
  *     operand: compile_keccak256_bytes and compile_sha256_bytes read the
  *     bytes from ADD ptr 32, which wraps at 2 ** 256, while val_in_memory

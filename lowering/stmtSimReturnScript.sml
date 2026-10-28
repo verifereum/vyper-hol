@@ -5,13 +5,14 @@
  * that returns one word on the stack: the value's fragment, then RET with
  * the value and the return PC, which ret_pc_ok in stmt_frag keeps defined.
  *
- * A tuple of words returned on the stack (ce_returns_count > 1): the
+ * A tuple of two or more words returned on the stack: the
  * value's fragment leaves a pointer to the tuple in memory, whose words
  * compile_load_tuple_elements loads (an ADD and an MLOAD each) for the RET.
  *
  * TOP-LEVEL:
  *   intret_q                      — the RetQ of such a function: an IntRet
  *                                   in result_rel with the returned value
+ *   intret_vals_match_word        — a word returns as its typed encoding
  *   compile_return_word_int_frag  — return e, for every outcome of e
  *   compile_return_tuple_int_frag — return e of a tuple of words, for every
  *                                   outcome of e
@@ -32,8 +33,8 @@ Ancestors
 (* An internal function's return, related to the source's as result_rel
    (compileEnv) does: an IntRet whose values match v, adopting no free
    memory pointer, with state_rel at the source state without its scopes.
-   intret_vals_match checks the values only for stack returns
-   (ce_returns_count = 1 here); a memory return's are not on the stack. *)
+   intret_vals_match checks the values only for stack returns; a memory
+   return's are not on the stack. *)
 Definition intret_q_def:
   intret_q func cenv cx ret_tv v (es : evaluation_state) r <=>
     ?ir s. r = IntRet ir s /\
@@ -48,6 +49,32 @@ Theorem state_rel_scopes_nil:
 Proof
   rw[state_rel_def, storage_rel_def, transient_rel_def, immutables_rel_def,
      logs_rel_def, local_ptrs_rel_def, local_region_def, lookup_scopes_def]
+QED
+
+(* A word type is not tuple-like, so compile_internal_return_from_env
+   hands compile_internal_return no member types. *)
+Theorem word_type_elem_types:
+  !cenv ty.
+    is_word_type ty ==>
+    (case ty of
+       TupleT tys => tys
+     | StructT nsid =>
+         MAP (FST o SND) (get_struct_fields cenv.ce_struct_fields
+                            (nsid_to_string nsid))
+     | _ => []) = []
+Proof
+  Cases_on `ty` >> simp[is_word_type_def]
+QED
+
+(* A word returns as the one word of its typed encoding. *)
+Theorem intret_vals_match_word:
+  !tenv t tv v.
+    is_word_type t /\ evaluate_type tenv t = SOME tv ==>
+    intret_vals_match tv v [typed_val_to_w256 tv v]
+Proof
+  Cases_on `t` >>
+  simp[is_word_type_def, vyperValueTheory.evaluate_type_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[intret_vals_match_def] >> Cases_on `v` >> simp[]
 QED
 
 (* return e in an internal function whose result, a word, goes back on the
@@ -72,7 +99,8 @@ Proof
   qpat_x_assum `stmt_env _ _ _ _ _ = _` mp_tac >>
   simp[stmt_env_def, declare_stmt_local_def, compile_stmt_def, comp_bind_def,
        comp_ignore_bind_def, comp_return_def,
-       compile_internal_return_from_env_def, compile_internal_return_def] >>
+       compile_internal_return_from_env_def, compile_internal_return_def,
+       word_type_elem_types] >>
   Cases_on `lower_value compile_expr cenv ty e sa` >> rename1 `_ = (op, s1)` >>
   simp[] >>
   Cases_on `emit_inst RET [op; Var rpc] [] s1` >> rename1 `_ = (u, s2)` >>
@@ -124,8 +152,8 @@ Proof
     `state_rel func cenv cx (es' with scopes := []) sv` by
       (irule state_rel_scopes_nil >> fs[stmt_state_rel_def]) >>
     qexists_tac `fuel'` >>
-    simp[exit_result_def, stmt_exit_def, intret_q_def, result_rel_def,
-         intret_vals_match_def]) >>
+    simp[exit_result_def, stmt_exit_def, intret_q_def, result_rel_def] >>
+    metis_tac[intret_vals_match_word]) >>
   qexists_tac `fuel` >> Cases_on `r1` >> gvs[stmt_exit_def] >> disj1_tac >>
   ONCE_REWRITE_TAC [INST_TYPE [beta |-> ``:toplevel_value``]
                       expr_exit_INR_type] >>
@@ -423,6 +451,7 @@ Proof
   rpt gen_tac >> strip_tac >> simp[stmt_frag_def] >> rpt gen_tac >>
   strip_tac >> disj2_tac >>
   `LENGTH tys <> 1 /\ 0 < LENGTH tys` by decide_tac >>
+  `tys <> []` by (strip_tac >> gvs[]) >>
   qpat_x_assum `stmt_env _ _ _ _ _ = _` mp_tac >>
   simp[stmt_env_def, declare_stmt_local_def, compile_stmt_def, comp_bind_def,
        comp_ignore_bind_def, comp_return_def,

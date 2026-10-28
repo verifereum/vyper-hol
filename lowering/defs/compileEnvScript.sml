@@ -1233,13 +1233,9 @@ End
    ret_tv: type_value for the return type — used by typed_val_to_w256
    for correct BytesV encoding (AddressT → PAD_LEFT, BytesT → PAD_RIGHT).
 
-   Internal returns dispatch by returns_count:
-   - returns_count = 1: single stack value, vals = [typed_val_to_w256 v]
-   - returns_count > 1: multi-return (TupleT with all word elements),
-     vals = MAP typed_val_to_w256 (ZIP elem_tvs elem_vals)
-   - returns_count = 0: memory return, value in caller's return buffer.
-     IntRet vals with vals = [] (no stack values), state_rel must show
-     the return value is in memory at the return buffer address.
+   Internal returns: IntRet vals, with vals matching the value as
+   intret_vals_match (below) says.  A memory return has vals = []; its
+   value is in the caller's return buffer.
 
    External returns:
    - Halt: ABI-encoded return data. state_rel on final state.
@@ -1248,20 +1244,23 @@ End
    - AssertException → Abort Revert_abort
    - Error → Abort (any abort type) *)
 (* Helper: check return values match for internal return.
-   Dispatches by number of return values:
-   - Single value: vals = [typed_val_to_w256 ret_tv v]
-   - Multi-return (TupleT): vals = MAP typed_val_to_w256 (ZIP elem_tvs elem_vals)
-   - Memory return: vals = [] (value in return buffer, not on stack) *)
+   Dispatches by the return type, as Python's _lower_internal_return does:
+   - Memory return: vals = [] (value in return buffer, not on stack)
+   - Tuple or struct (tuple-like), returned on the stack: one word per
+     member, vals = MAP typed_val_to_w256 over the members, for any number
+     of members, one included
+   - Any other value: vals = [typed_val_to_w256 ret_tv v] *)
 Definition intret_vals_match_def:
   intret_vals_match ret_tv v vals ⇔
-    case vals of
-      [w] => w = typed_val_to_w256 ret_tv v
-    | [] => T  (* Memory return: value in caller's buffer, not checked here *)
-    | _ => (case (ret_tv, v) of
+    vals = [] ∨
+    vals = (case (ret_tv, v) of
               (TupleTV elem_tvs, ArrayV (TupleV elem_vals)) =>
-                vals = MAP (λ(tv,ev). typed_val_to_w256 tv ev)
-                         (ZIP (elem_tvs, elem_vals))
-            | _ => F)
+                MAP (λ(tv,ev). typed_val_to_w256 tv ev)
+                  (ZIP (elem_tvs, elem_vals))
+            | (StructTV field_tvs, StructV fields) =>
+                MAP (λ(tv,ev). typed_val_to_w256 tv ev)
+                  (ZIP (MAP SND field_tvs, MAP SND fields))
+            | _ => [typed_val_to_w256 ret_tv v])
 End
 
 Definition result_rel_def:
