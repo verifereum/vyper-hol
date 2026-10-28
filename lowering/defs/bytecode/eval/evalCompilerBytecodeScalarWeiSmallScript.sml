@@ -51,10 +51,14 @@ Proof
    simp_tac pure_ss [codegenTheory.finalize_codegen_identity,
      codegenTheory.codegen_assembly_def] >> entry_guard "target_capabilities_wf" >>
    entry_guard "context_target_safe" >> entry_admin >>
-   simp_tac pure_ss [stackPlanGenTheory.generate_context_plan_def,
-     stackPlanGenTheory.generate_context_plan_with_def] >> entry_stage "max_live_eom" >> entry_plan_admin >>
+   simp_tac pure_ss [stackPlanGenTheory.generate_context_plan_def, LET_THM,
+     stackPlanGenTheory.generate_context_plan_with_def] >>
+   entry_stage "fcg_analyze" >> entry_stage "cleanup_growth_table" >>
+   entry_stage "max_live_eom" >> entry_plan_admin >>
    simp_tac pure_ss [Once stackPlanGenTheory.generate_context_regions_def,
-     stackPlanGenTheory.generate_fn_plan_def] >> entry_plan_admin >> entry_analysis_stage "liveness_analyze" >>
+     stackPlanGenTheory.generate_fn_plan_with_cleanup_def] >>
+   entry_stage "cleanup_caller_height" >> entry_plan_admin >>
+   entry_analysis_stage "liveness_analyze" >>
    entry_analysis_stage "dfg_build_function" >> entry_analysis_stage "cfg_analyze" >>
   entry_plan_compact_dfg >> entry_plan_normalize 3 >> entry_plan_normalize 2 >> plan_cache_vars >> plan_cache_transient >>
   plan_cache_halting >> entry_plan_abbrev "plan_live" 0 >> entry_plan_abbrev "plan_dfg" 1 >>

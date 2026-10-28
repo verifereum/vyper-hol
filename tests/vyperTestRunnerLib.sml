@@ -23,6 +23,8 @@ fun is_trace_constant tm =
 val all_traces = List.filter is_trace_constant o constants
 
 fun run_test_on_traces traces_const = let
+  (* Reclaim temporary CV evaluation terms between independent test cases. *)
+  val () = PolyML.fullGC ()
   val {Thy, Name=traces_name, ...} = dest_thy_const traces_const
   val () = if String.isPrefix traces_prefix traces_name then ()
            else raise Fail ("Unexpected trace name: " ^ traces_name)

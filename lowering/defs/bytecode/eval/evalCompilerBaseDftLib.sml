@@ -75,7 +75,7 @@ fun base_dft_input_block i =
   base_dft_input_convert (base_dft_normalize_block i)
 fun base_dft_normalize_field i = let
   val fields = TypeBase.fields_of ``:ir_function``
-  val () = if length fields = 7 andalso i >= 0 andalso i < length fields then ()
+  val () = if i >= 0 andalso i < length fields then ()
     else raise Fail "DFT function field index is out of range"
   val (name,_) = List.nth(fields,i)
 in fn func => let
@@ -84,6 +84,11 @@ in fn func => let
 end
 fun base_dft_input_field i =
   base_dft_input_convert (base_dft_normalize_field i)
+(* Derive normalization coverage from the record, not a stale field count. *)
+fun base_dft_all_fields normalize =
+  EVERY (List.tabulate
+    (length (TypeBase.fields_of ``:ir_function``), normalize))
+val base_dft_input_fields = base_dft_all_fields base_dft_input_field
 fun base_dft_check_function func = let
   val (value,_) = base_dft_field_view ``:ir_function`` "fn_blocks" func
   val blocks = fst (listSyntax.dest_list value)
@@ -112,6 +117,7 @@ fun base_dft_result_block i = CONV_TAC
   (LAND_CONV (base_dft_normalize_block i))
 fun base_dft_result_field i = CONV_TAC
   (LAND_CONV (base_dft_normalize_field i))
+val base_dft_result_fields = base_dft_all_fields base_dft_result_field
 fun base_dft_result_finish g =
   (base_dft_check_function (lhs (snd g)); ALL_TAC g)
 

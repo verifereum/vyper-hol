@@ -31,9 +31,21 @@ fun plan_cache_vars g =
 val plan_cache_transient = entry_plan_cache "cleanup_max_transient" [3]
 val plan_cache_halting = entry_plan_cache "must_halt_labels" [2,3]
 
-(* Rewrite the three summaries explicitly before computing the small guard.
-   This also diagnoses cache mismatches without recomputing a whole-function
-   nub inside a block-cleanup tactic. *)
+(* Regional growth traverses fresh lists and arithmetic, so compute and cache
+   it with the normal compset before using the read-only guard evaluator.
+   Reuse the exact query, including its real callee-growth table. *)
+fun entry_cache_region_growth tm = let
+  fun selected t = let val (head,args) = strip_comb t in
+    is_const head andalso
+    same_const head ``stackPlanGen$cleanup_region_growth`` andalso
+    length args = entry_function_arity (type_of head) end
+  fun cache call =
+    if List.exists (fn th => aconv (lhs (concl th)) call)
+         (!entry_plan_summary_thms) then ()
+    else entry_plan_cache_call "cleanup_region_growth" (snd (strip_comb call))
+in List.app cache (find_terms selected tm) end
+
+(* Rewrite shared summaries explicitly before computing the small guard. *)
 fun entry_cached_cleanup evaluate tm =
   case List.find (fn th => aconv (lhs (concl th)) tm) (!entry_plan_summary_thms) of
     SOME th => th
@@ -41,11 +53,13 @@ fun entry_cached_cleanup evaluate tm =
       val opened = PURE_REWRITE_CONV
         [stackPlanGenTheory.cleanup_elision_safe_def,
          stackPlanGenTheory.cleanup_height_safe_def] tm
+      val () = entry_cache_region_growth (rhs (concl opened))
       val rewritten = (PURE_REWRITE_CONV (!entry_plan_summary_thms)
         (rhs (concl opened)) handle UNCHANGED => REFL (rhs (concl opened)))
       val body = rhs (concl rewritten)
       val pending = List.filter (fn name => entry_has_call [name] body)
-        ["cleanup_frame_vars", "cleanup_max_transient", "must_halt_labels"]
+        ["cleanup_frame_vars", "cleanup_max_transient", "must_halt_labels",
+         "cleanup_region_growth"]
       val () = if List.null pending then () else
         raise Fail ("cleanup summary mismatch: " ^ String.concatWith ", " pending)
       val evaluated = evaluate body

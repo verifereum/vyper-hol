@@ -3,10 +3,30 @@ structure evalCompilerBasePlanLib = struct
 open HolKernel Parse boolLib bossLib
 open evalCompilerBaseLib
 
+fun base_plan_analyzed tm = let
+  val (head,args) = strip_comb tm
+in entry_is_analyzed head andalso
+   length args = entry_function_arity (type_of head) andalso
+   List.null (free_vars tm)
+end
+
+(* Compact one DFG map per boundary, independently of planner arity. *)
+fun base_plan_compact_dfg_map map_type = CONV_TAC (LAND_CONV
+  (base_first_conv base_plan_analyzed (fn tm => let
+    val (_,args) = strip_comb tm
+    fun argument i n convert =
+      if i = n - 1 then RAND_CONV convert
+      else RATOR_CONV (argument i (n - 1) convert)
+    val compact = base_first_conv
+      (fn t => finite_mapSyntax.is_fupdate t andalso type_of t = map_type)
+      entry_compact_maps
+  in argument 1 (length args) compact tm end)))
+
 val base_plan_vars_equation = ref (NONE : thm option)
 fun base_plan_vars_open g = let
-  val target = find_term (flow_call "generate_fn_plan_analyzed") (lhs (snd g))
-  val func = List.nth (snd (strip_comb target),3)
+  val target = find_term base_plan_analyzed (lhs (snd g))
+  val (head,args) = strip_comb target
+  val func = List.nth (args,entry_plan_argument_index head 3)
   val call = mk_comb (``stackPlanGen$cleanup_frame_vars``,func)
   val th = REWR_CONV stackPlanGenTheory.cleanup_frame_vars_def call
 in base_plan_vars_equation := SOME th; ALL_TAC g end

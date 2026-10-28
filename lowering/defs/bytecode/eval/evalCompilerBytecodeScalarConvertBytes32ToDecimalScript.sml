@@ -2,7 +2,7 @@
 
 Theory evalCompilerBytecodeScalarConvertBytes32ToDecimal
 Ancestors evalCompilerBytecodeScalarWordEval evalCompilerSubsetScalars compileVyper concretizeMemLocDefs alist byte integer_word option
-Libs evalCompilerBytecodeLib finite_mapLib computeLib wordsLib
+Libs evalCompilerBytecodeLib evalCompilerCleanupPlanLib finite_mapLib computeLib wordsLib
 
 fun holbuild_extra_deps (_ : string list) = ()
 val () = holbuild_extra_deps [".."]
@@ -93,14 +93,15 @@ val scalar_convert_bytes32_to_decimal_max_eom = optionSyntax.dest_some
   (rhs (concl scalar_convert_bytes32_to_decimal_max_eom_eval))
 val scalar_convert_bytes32_to_decimal_generate_fn_plan = save_thm
   ("scalar_convert_bytes32_to_decimal_generate_fn_plan", prove
-    (``∀spill labels.
-        generate_fn_plan ^scalar_convert_bytes32_to_decimal_fn spill labels =
-        generate_fn_plan_analyzed
+    (``∀ch growth spill labels.
+        generate_fn_plan_with_cleanup ch growth
+          ^scalar_convert_bytes32_to_decimal_fn spill labels =
+        generate_fn_plan_with_cleanup_analyzed
           ^scalar_convert_bytes32_to_decimal_liveness
           ^scalar_convert_bytes32_to_decimal_dfg
-          ^scalar_convert_bytes32_to_decimal_cfg
+          ^scalar_convert_bytes32_to_decimal_cfg ch growth
           ^scalar_convert_bytes32_to_decimal_fn spill labels``,
-     simp[stackPlanGenTheory.generate_fn_plan_def,
+     simp[stackPlanGenTheory.generate_fn_plan_with_cleanup_def,
           scalar_convert_bytes32_to_decimal_liveness_eval,
           scalar_convert_bytes32_to_decimal_dfg_eval,
           scalar_convert_bytes32_to_decimal_cfg_eval]))
@@ -109,28 +110,11 @@ val () = computeLib.upd_compset (computeLib.add_thms
    scalar_convert_bytes32_to_decimal_dfg_eval,
    scalar_convert_bytes32_to_decimal_cfg_eval,
    scalar_convert_bytes32_to_decimal_generate_fn_plan])
-val scalar_convert_bytes32_to_decimal_plan_eval = save_thm
-  ("scalar_convert_bytes32_to_decimal_plan_eval", EVAL
-    ``generate_fn_plan_analyzed
-       ^scalar_convert_bytes32_to_decimal_liveness
-       ^scalar_convert_bytes32_to_decimal_dfg
-       ^scalar_convert_bytes32_to_decimal_cfg
-       ^scalar_convert_bytes32_to_decimal_fn
-       ^scalar_convert_bytes32_to_decimal_max_eom 0``)
-val scalar_convert_bytes32_to_decimal_plan =
-  rhs (concl scalar_convert_bytes32_to_decimal_plan_eval)
-val scalar_convert_bytes32_to_decimal_concrete_fn_plan = save_thm
-  ("scalar_convert_bytes32_to_decimal_concrete_fn_plan", prove
-    (``generate_fn_plan ^scalar_convert_bytes32_to_decimal_fn
-          ^scalar_convert_bytes32_to_decimal_max_eom 0 =
-        ^scalar_convert_bytes32_to_decimal_plan``,
-     simp[scalar_convert_bytes32_to_decimal_generate_fn_plan,
-          scalar_convert_bytes32_to_decimal_plan_eval]))
 val () = computeLib.upd_compset
   (fn cs => cs
-    |> (fn cs' => computeLib.scrub_const cs' ``generate_fn_plan``)
-    |> computeLib.add_thms
-         [scalar_convert_bytes32_to_decimal_concrete_fn_plan])
+    |> (fn cs' => computeLib.scrub_const cs' ``generate_fn_plan_with_cleanup``)
+    |> (fn cs' => computeLib.scrub_const cs' ``generate_fn_plan_with_cleanup_analyzed``)
+    |> computeLib.add_thms [scalar_convert_bytes32_to_decimal_generate_fn_plan])
 val scalar_convert_bytes32_to_decimal_context_plan_step1 =
   SIMP_CONV (srw_ss())
     [stackPlanGenTheory.generate_context_plan_def,
@@ -142,53 +126,10 @@ val scalar_convert_bytes32_to_decimal_context_plan_step1 =
         (^scalar_convert_bytes32_to_decimal_unit).cu_context``
 val scalar_convert_bytes32_to_decimal_context_plan_step2 =
   EVAL (rhs (concl scalar_convert_bytes32_to_decimal_context_plan_step1))
-val scalar_convert_bytes32_to_decimal_actual_plan_call = find_term
-  (can (match_term ``generate_fn_plan f spill labels``))
+(* Cache the cleanup-aware path with the context's real arguments.  Concrete
+   results need no planner-call extraction. *)
+val scalar_convert_bytes32_to_decimal_context_plan_step3 = cleanup_plan_conv
   (rhs (concl scalar_convert_bytes32_to_decimal_context_plan_step2))
-val scalar_convert_bytes32_to_decimal_actual_plan_args =
-  #2 (strip_comb scalar_convert_bytes32_to_decimal_actual_plan_call)
-val scalar_convert_bytes32_to_decimal_actual_fn =
-  hd scalar_convert_bytes32_to_decimal_actual_plan_args
-val scalar_convert_bytes32_to_decimal_actual_liveness_eval =
-  EVAL ``liveness_analyze ^scalar_convert_bytes32_to_decimal_actual_fn``
-val scalar_convert_bytes32_to_decimal_actual_dfg_eval =
-  EVAL ``dfg_build_function ^scalar_convert_bytes32_to_decimal_actual_fn``
-val scalar_convert_bytes32_to_decimal_actual_cfg_eval =
-  EVAL ``cfg_analyze ^scalar_convert_bytes32_to_decimal_actual_fn``
-val scalar_convert_bytes32_to_decimal_actual_liveness =
-  rhs (concl scalar_convert_bytes32_to_decimal_actual_liveness_eval)
-val scalar_convert_bytes32_to_decimal_actual_dfg =
-  rhs (concl scalar_convert_bytes32_to_decimal_actual_dfg_eval)
-val scalar_convert_bytes32_to_decimal_actual_cfg =
-  rhs (concl scalar_convert_bytes32_to_decimal_actual_cfg_eval)
-val scalar_convert_bytes32_to_decimal_actual_plan_eval = EVAL
-  ``generate_fn_plan_analyzed
-      ^scalar_convert_bytes32_to_decimal_actual_liveness
-      ^scalar_convert_bytes32_to_decimal_actual_dfg
-      ^scalar_convert_bytes32_to_decimal_actual_cfg
-      ^scalar_convert_bytes32_to_decimal_actual_fn
-      ^scalar_convert_bytes32_to_decimal_max_eom 0``
-val scalar_convert_bytes32_to_decimal_actual_generate_step1 =
-  REWR_CONV stackPlanGenTheory.generate_fn_plan_def
-    ``generate_fn_plan ^scalar_convert_bytes32_to_decimal_actual_fn
-        ^scalar_convert_bytes32_to_decimal_max_eom 0``
-val scalar_convert_bytes32_to_decimal_actual_generate_step2 =
-  PURE_REWRITE_CONV
-    [scalar_convert_bytes32_to_decimal_actual_liveness_eval,
-     scalar_convert_bytes32_to_decimal_actual_dfg_eval,
-     scalar_convert_bytes32_to_decimal_actual_cfg_eval]
-    (rhs (concl scalar_convert_bytes32_to_decimal_actual_generate_step1))
-val scalar_convert_bytes32_to_decimal_actual_generate_step3 =
-  REWR_CONV scalar_convert_bytes32_to_decimal_actual_plan_eval
-    (rhs (concl scalar_convert_bytes32_to_decimal_actual_generate_step2))
-val scalar_convert_bytes32_to_decimal_actual_generate_fn_plan =
-  TRANS scalar_convert_bytes32_to_decimal_actual_generate_step1
-    (TRANS scalar_convert_bytes32_to_decimal_actual_generate_step2
-      scalar_convert_bytes32_to_decimal_actual_generate_step3)
-val scalar_convert_bytes32_to_decimal_context_plan_step3 =
-  PURE_REWRITE_CONV
-    [scalar_convert_bytes32_to_decimal_actual_generate_fn_plan]
-    (rhs (concl scalar_convert_bytes32_to_decimal_context_plan_step2))
 val scalar_convert_bytes32_to_decimal_context_plan_eval = save_thm
   ("scalar_convert_bytes32_to_decimal_context_plan_eval",
    TRANS scalar_convert_bytes32_to_decimal_context_plan_step1

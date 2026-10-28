@@ -1141,7 +1141,9 @@ fun make_definitions_for_file (id, json_path) = let
   val decode_fails = #failures report
   val () = print_file_coverage json_path report
   val () =
-    case decode_fails of
+    (* Failures are accumulated in reverse order. Report the original error,
+       not a later cascade from a partially constructed decoder constant. *)
+    case List.rev decode_fails of
         [] => ()
       | (name, err)::_ =>
           raise Fail (

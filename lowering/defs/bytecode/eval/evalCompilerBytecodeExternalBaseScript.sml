@@ -257,8 +257,7 @@ Proof
   base_fragment_step (base_bp_finish) >>
   base_fragment_step (base_let) >>
   base_fragment_step (allocation_open) >>
-  base_fragment_step (base_stage
-  "call_frame_allocations") >>
+  base_fragment_step base_alloc_liveness_open >>
   base_fragment_step (entry_ml_open) >>
   base_fragment_step (base_ml_input 6) >>
   base_fragment_step (base_ml_input 1) >>
@@ -347,16 +346,16 @@ Proof
   base_fragment_step (base_stage "ml_compute_livesets") >>
   base_fragment_step (base_stage "ml_mark_stores_live") >>
   base_fragment_step (allocation_finish_open) >>
-  base_fragment_step (base_stage
-  "alloc_liveset_items") >>
+  base_fragment_step (base_stage "ml_ordered_keys") >>
+  base_fragment_step (base_stage "alloc_liveset_items_ordered") >>
   base_fragment_step (base_stage "sort_alloc_liveset_items") >>
   base_fragment_step (base_stage "allocate_with_livesets") >>
-  base_fragment_step (entry_stage "complete_alloc_positions_with_items") >>
+  base_fragment_step (entry_stage "complete_alloc_positions_with_imports") >>
   base_fragment_step (simp_tac
   pure_ss [optionTheory.option_case_def]) >>
   base_fragment_step (entry_stage "mk_concretize_layout") >>
   base_fragment_step (simp_tac pure_ss [optionTheory.option_case_def]) >>
-  base_fragment_step (entry_stage "apply_concretize_layout") >> base_fragment_finish >> base_unshare_one >> base_unshare_one >> base_unshare_one >> base_unshare_one >> base_unshare_one >> base_unshare_one >> base_unshare_one >> base_unshare_one >> base_sharing_finish >> plan_admin >> base_guard_check >> plan_admin >>
+  base_fragment_step (entry_stage "apply_context_concretize_layout") >> base_fragment_finish >> base_unshare_one >> base_unshare_one >> base_unshare_one >> base_unshare_one >> base_unshare_one >> base_unshare_one >> base_unshare_one >> base_unshare_one >> base_sharing_finish >> plan_admin >> base_guard_check >> plan_admin >>
   pass_effects >> pass_calls >> base_supply_guard "ir_supply_extends" >> plan_admin >> base_guard_check >> plan_admin >> base_supply_guard "ir_supply_covers_fn" >> plan_admin >> base_guard_check >> plan_admin >> base_supply_unit_open >> base_supply_unit_part 0 >> base_supply_unit_part 1 >> base_supply_unit_part 2 >> base_supply_unit_part 3 >> plan_admin >> base_guard_check >> plan_admin >> pass_open >> current_function >> plan_admin >> base_guard_check >> plan_admin >> base_fmp_dispatch >> base_fmp_open >> base_fmp_context_open >> base_fmp_context_count >> base_fmp_context_unroll >> base_fmp_context_seed >> base_fmp_context_step >> base_fmp_context_step >> base_fmp_context_step >> base_fmp_context_finish >> plan_admin >> base_fmp_input 1 >> base_fmp_input 3 >> base_share_for "fmp_lower_function_with_info" >>
   base_share_more "fmp_lower_function_with_info" >> base_share_more "fmp_lower_function_with_info" >> base_share_more "fmp_lower_function_with_info" >> base_share_more "fmp_lower_function_with_info" >> base_share_more "fmp_lower_function_with_info" >> base_share_more "fmp_lower_function_with_info" >> base_share_more "fmp_lower_function_with_info" >> base_fragment_open "fmp_lower_function_with_info" >>
   base_fragment_step (base_fmp_body_open) >>
@@ -1206,13 +1205,7 @@ Proof
   base_fragment_step (base_dft_input_block 29) >>
   base_fragment_step (base_dft_input_block 30) >>
   base_fragment_step (base_dft_input_block 31) >>
-  base_fragment_step (base_dft_input_field 0) >>
-  base_fragment_step (base_dft_input_field 1) >>
-  base_fragment_step (base_dft_input_field 2) >>
-  base_fragment_step (base_dft_input_field 3) >>
-  base_fragment_step (base_dft_input_field 4) >>
-  base_fragment_step (base_dft_input_field 5) >>
-  base_fragment_step (base_dft_input_field 6) >>
+  base_fragment_step base_dft_input_fields >>
   base_fragment_step (base_dft_input_finish) >>
   base_fragment_step (base_dft_function_open) >>
   base_fragment_step (base_analysis_stage "cfg_analyze") >>
@@ -1869,13 +1862,7 @@ Proof
   base_fragment_step (base_dft_result_block 29) >>
   base_fragment_step (base_dft_result_block 30) >>
   base_fragment_step (base_dft_result_block 31) >>
-  base_fragment_step (base_dft_result_field 0) >>
-  base_fragment_step (base_dft_result_field 1) >>
-  base_fragment_step (base_dft_result_field 2) >>
-  base_fragment_step (base_dft_result_field 3) >>
-  base_fragment_step (base_dft_result_field 4) >>
-  base_fragment_step (base_dft_result_field 5) >>
-  base_fragment_step (base_dft_result_field 6) >>
+  base_fragment_step base_dft_result_fields >>
   base_fragment_step (base_dft_result_finish) >> base_fragment_finish >> base_unshare_one >> base_unshare_one >> base_unshare_one >> base_unshare_one >> base_unshare_one >> base_unshare_one >> base_unshare_one >> base_unshare_one >> base_sharing_finish >> plan_admin >> base_guard_check >> plan_admin >> pass_effects >> pass_calls >> base_supply_guard "ir_supply_extends" >> plan_admin >> base_guard_check >> plan_admin >> base_supply_guard "ir_supply_covers_fn" >> plan_admin >> base_guard_check >> plan_admin >> base_supply_unit_open >> base_supply_unit_part 0 >> base_supply_unit_part 1 >> base_unit_input 2 0 >> base_unit_input 2 1 >> base_supply_unit_part 2 >> base_supply_unit_part 3 >> plan_admin >> base_guard_check >> plan_admin >> pass_open
   >> current_function >> plan_admin >> base_guard_check >> plan_admin >> execute >> plan_admin >> base_guard_check >> plan_admin >> pass_effects >> pass_calls >> base_supply_guard "ir_supply_extends" >> plan_admin >> base_guard_check >> plan_admin >> base_supply_guard "ir_supply_covers_fn" >> plan_admin >> base_guard_check >> plan_admin >> base_supply_unit_open >> base_supply_unit_part 0 >> base_supply_unit_part 1 >> base_supply_unit_part 2 >> base_supply_unit_part 3 >> plan_admin >> base_guard_check >> plan_admin >> base_empty_pass_fold >> plan_admin >> base_guard_check >> plan_admin >> entry_stage "replace_unique_function" >> plan_admin >> base_guard_check >> plan_admin >> entry_stage "apply_unit_label_map" >> plan_admin >> base_guard_check >> plan_admin >> entry_guard "unit_labels_wf" >> entry_guard
   "list_subset" >> base_supply_unit_open >> base_supply_unit_part 0 >> base_supply_unit_part 1 >> base_supply_unit_part 2 >> base_unit_input 3 0 >> base_unit_input 3 1 >> base_unit_check 3 >> base_supply_unit_part 3 >> plan_admin >> base_guard_check >> plan_admin >> entry_guard "unit_global_inst_ids_distinct" >> plan_admin >> base_guard_check >> plan_admin >> entry_stage "run_pipeline_stages" >> plan_admin >> base_guard_check >> plan_admin >>
@@ -1946,8 +1933,13 @@ Proof
   base_ready_finish >> entry_admin >>
   simp_tac pure_ss [codegenTheory.finalize_codegen_identity,
   codegenTheory.codegen_assembly_def] >> entry_guard "target_capabilities_wf" >> entry_guard "context_target_safe" >> plan_admin >> base_guard_check >> plan_admin >> simp_tac pure_ss
-  [stackPlanGenTheory.generate_context_plan_def, stackPlanGenTheory.generate_context_plan_with_def] >> entry_stage "max_live_eom" >> entry_plan_admin >> simp_tac pure_ss [Once
-  stackPlanGenTheory.generate_context_regions_def, stackPlanGenTheory.generate_fn_plan_def] >> entry_plan_admin >> base_live_input >> base_live_flow_open >> base_analysis_stage "cfg_analyze" >> entry_flow_header >> entry_flow_header_finish >>
+  [stackPlanGenTheory.generate_context_plan_def, LET_THM,
+   stackPlanGenTheory.generate_context_plan_with_def] >>
+  entry_stage "fcg_analyze" >> entry_stage "cleanup_growth_table" >>
+  entry_stage "max_live_eom" >> entry_plan_admin >> simp_tac pure_ss [Once
+  stackPlanGenTheory.generate_context_regions_def,
+  stackPlanGenTheory.generate_fn_plan_with_cleanup_def] >>
+  entry_stage "cleanup_caller_height" >> entry_plan_admin >> base_live_input >> base_live_flow_open >> base_analysis_stage "cfg_analyze" >> entry_flow_header >> entry_flow_header_finish >>
   base_flow_compact >> entry_flow_begin >> entry_flow_step_open >> entry_flow_transfer >> entry_flow_bind >> entry_flow_changed >> entry_flow_select >> entry_flow_resume >>
   base_flow_compact >> entry_flow_begin >> entry_flow_step_open >> entry_flow_transfer >> entry_flow_bind >> entry_flow_changed >> entry_flow_select >> entry_flow_resume >>
   base_flow_compact >> entry_flow_begin >> entry_flow_step_open >> entry_flow_transfer >> entry_flow_bind >> entry_flow_changed >> entry_flow_select >> entry_flow_resume >>
@@ -1986,24 +1978,9 @@ Proof
   base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >>
   base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> base_dfg_tick >> entry_dfg_finish >> entry_plan_unabbrev "dfg_live" >> entry_plan_unabbrev "dfg_cfg" >>
   (* Compact the three DFG maps at separate timed boundaries. *)
-  base_eval_stage (RATOR_CONV (RATOR_CONV (RATOR_CONV (RATOR_CONV
-    (RAND_CONV (base_first_conv
-      (fn tm => finite_mapSyntax.is_fupdate tm andalso
-        type_of tm = ``:(string, instruction list) fmap``)
-      entry_compact_maps))))))
-    "generate_fn_plan_analyzed" >>
-  base_eval_stage (RATOR_CONV (RATOR_CONV (RATOR_CONV (RATOR_CONV
-    (RAND_CONV (base_first_conv
-      (fn tm => finite_mapSyntax.is_fupdate tm andalso
-        type_of tm = ``:(string, instruction) fmap``)
-      entry_compact_maps))))))
-    "generate_fn_plan_analyzed" >>
-  base_eval_stage (RATOR_CONV (RATOR_CONV (RATOR_CONV (RATOR_CONV
-    (RAND_CONV (base_first_conv
-      (fn tm => finite_mapSyntax.is_fupdate tm andalso
-        type_of tm = ``:(num, instruction) fmap``)
-      entry_compact_maps))))))
-    "generate_fn_plan_analyzed" >> entry_plan_normalize 3 >> entry_plan_normalize 2 >> base_plan_vars_open >> base_plan_vars_input >>
+  base_plan_compact_dfg_map ``:(string, instruction list) fmap`` >>
+  base_plan_compact_dfg_map ``:(string, instruction) fmap`` >>
+  base_plan_compact_dfg_map ``:(num, instruction) fmap`` >> entry_plan_normalize 3 >> entry_plan_normalize 2 >> base_plan_vars_open >> base_plan_vars_input >>
   base_plan_vars_tick >> base_plan_vars_tick >> base_plan_vars_tick >> base_plan_vars_tick >> base_plan_vars_tick >> base_plan_vars_tick >> base_plan_vars_tick >> base_plan_vars_tick >> base_plan_vars_tick >> base_plan_vars_tick >> base_plan_vars_tick >> base_plan_vars_tick >> base_plan_vars_tick >> base_plan_vars_tick >> base_plan_vars_tick >> base_plan_vars_tick >>
   base_plan_vars_tick >> base_plan_vars_tick >> base_plan_vars_tick >> base_plan_vars_tick >> base_plan_vars_tick >> base_plan_vars_tick >> base_plan_vars_tick >> base_plan_vars_tick >> base_plan_vars_tick >> base_plan_vars_tick >> base_plan_vars_tick >> base_plan_vars_tick >> base_plan_vars_tick >> base_plan_vars_tick >> base_plan_vars_tick >> base_plan_vars_tick >> base_plan_vars_finish >> plan_cache_transient >>
   plan_cache_halting >> entry_plan_abbrev "plan_live" 0 >> entry_plan_abbrev "plan_dfg" 1 >>
