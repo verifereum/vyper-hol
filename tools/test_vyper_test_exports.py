@@ -62,6 +62,25 @@ class ExportProvenanceTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "inputs differs"):
             self.exports.check(self.path)
 
+    def test_regression_source_changes_invalidate_replay_and_cache(self) -> None:
+        source = self.repo / "tests/vyper-regression/test_regression.py"
+        source.parent.mkdir(parents=True, exist_ok=True)
+        previous_key = self.exports.cache_key()
+        source.write_text("def test_regression():\n    assert True\n")
+        self.assertNotEqual(previous_key, self.exports.cache_key())
+        provenance = json.loads(self.sidecar.read_text())
+        provenance["inputs"] = self.exports.inputs()
+        self.sidecar.write_text(json.dumps(provenance))
+        self.exports.check(self.path)
+        previous_key = self.exports.cache_key()
+        source.write_text("def test_regression():\n    assert False\n")
+        self.assertNotEqual(previous_key, self.exports.cache_key())
+        with self.assertRaisesRegex(ValueError, "inputs differs"):
+            self.exports.check(self.path)
+        source.unlink()
+        with self.assertRaisesRegex(ValueError, "inputs differs"):
+            self.exports.check(self.path)
+
     def test_changed_fixture_sources_require_regeneration(self) -> None:
         source = self.repo / "test_source.py"
         source.write_text("original")

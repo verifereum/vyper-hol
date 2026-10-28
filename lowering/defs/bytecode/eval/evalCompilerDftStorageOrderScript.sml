@@ -4,9 +4,7 @@ Ancestors compileVyper supportedProgram concretizeMemLocDefs codegenReadyCompute
 Libs memoryStoreWitnessLib vyperCheckContractFrontendLib jsonASTLib evalCompilerBytecodeLib finite_mapLib computeLib wordsLib supportedEvalLib
 
 fun holbuild_extra_deps (_ : string list) = ()
-val () = holbuild_extra_deps
-  ["../external-calls/oracle/m10c_iface_storage_main.json",
-   "../external-calls/oracle/m10c_iface_storage_main.hex"]
+val () = holbuild_extra_deps ["../external-calls"]
 val () = supportedEvalLib.configure ()
 val () = computeLib.upd_compset add_finite_map_compset
 val () = computeLib.upd_compset (computeLib.add_thms

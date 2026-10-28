@@ -39,13 +39,15 @@
  *   declare_local_ptr              — a local declared through a pointer
  *
  * The other statements: If, Raise and Assert in stmtSimIf; For over a
- * range in stmtSimFor (its blocks in stmtSimForParts, the loop in
- * stmtSimForLoop); Return of a word from an internal function in
- * stmtSimReturn; AnnAssign of a local whose value is a word_value in
- * stmtSimDecl; Raise and Assert with a string literal reason in
- * stmtSimReason.  Not covered yet: Assign/AugAssign (#550), Append and For
- * over an array (#559), Log (#570), and the other returns, declarations
- * and reasons.
+ * range with literal ends in stmtSimFor (its blocks in stmtSimForParts,
+ * the loop in stmtSimForLoop), and with other ends in stmtSimForRange;
+ * Return of a word or of a tuple of words from an internal function in
+ * stmtSimReturn; AnnAssign of a local held in one word (a word_value, an
+ * address, a bytesN) in stmtSimDecl; Raise and Assert with a string literal
+ * reason in stmtSimReason, and with another reason held on the stack or in
+ * memory in stmtSimReasonExpr.  Not covered yet: Assign/AugAssign (#550),
+ * Append and For over an array (#559), Log (#570), memory-backed
+ * declarations and returns, and reasons read from storage.
  *)
 
 Theory stmtSim

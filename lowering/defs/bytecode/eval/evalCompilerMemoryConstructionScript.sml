@@ -4,31 +4,7 @@ Ancestors compileVyper supportedProgram concretizeMemLocDefs codegenReadyCompute
 Libs memoryStoreWitnessLib vyperCheckContractFrontendLib jsonASTLib evalCompilerBytecodeLib finite_mapLib computeLib wordsLib supportedEvalLib
 
 fun holbuild_extra_deps (_ : string list) = ()
-val () = holbuild_extra_deps
-  ["../memory-stores/oracle/tup_nested_ret.json",
-   "../memory-stores/oracle/tup_nested_ret.hex",
-   "../memory-stores/oracle/st_nested_lit.json",
-   "../memory-stores/oracle/st_nested_lit.hex",
-   "../memory-stores/oracle/st_forward_ref_lit.json",
-   "../memory-stores/oracle/st_forward_ref_lit.hex",
-   "../memory-stores/oracle/arr_dyn_lit_word.json",
-   "../memory-stores/oracle/arr_dyn_lit_word.hex",
-   "../memory-stores/oracle/b20_dynarr_lit.json",
-   "../memory-stores/oracle/b20_dynarr_lit.hex",
-   "../memory-stores/oracle/empty_string_ret.json",
-   "../memory-stores/oracle/empty_string_ret.hex",
-   "../memory-stores/oracle/empty_dynarr_local.json",
-   "../memory-stores/oracle/empty_dynarr_local.hex",
-   "../memory-stores/oracle/arr_local_elem_assign.json",
-   "../memory-stores/oracle/arr_local_elem_assign.hex",
-   "../memory-stores/oracle/st_empty_ret.json",
-   "../memory-stores/oracle/st_empty_ret.hex",
-   "../memory-stores/oracle/c10_assign_empty_struct.json",
-   "../memory-stores/oracle/c10_assign_empty_struct.hex",
-   "../memory-stores/oracle/c11_annassign_empty_fixed_array.json",
-   "../memory-stores/oracle/c11_annassign_empty_fixed_array.hex",
-   "../memory-stores/oracle/c05_assign_empty_builtin_string.json",
-   "../memory-stores/oracle/c05_assign_empty_builtin_string.hex"]
+val () = holbuild_extra_deps ["../memory-stores"]
 val () = supportedEvalLib.configure ()
 val () = computeLib.upd_compset add_finite_map_compset
 val () = computeLib.upd_compset (computeLib.add_thms

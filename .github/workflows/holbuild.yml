@@ -2,30 +2,22 @@ name: holbuild
 
 on:
   workflow_dispatch:
-    inputs:
-      uncached:
-        description: 'Build without restoring any cache'
-        type: boolean
-        default: false
-  schedule:
-    - cron: '0 3 * * 6'
   pull_request:
     # Only ready PRs into main from branches of this repository run jobs:
     # pushing a branch here needs write access, and those runs get the cache
-    # login. Fork and draft PRs run nothing; the merge queue tests them. A PR
-    # stacked on another branch runs once it is retargeted to main (edited with
-    # a base change). ready_for_review starts CI when a draft is marked ready;
-    # converted_to_draft cancels the run of a PR turned back into a draft.
+    # login. Fork and draft PRs run nothing; the merge queue tests them.
+    # ready_for_review starts CI when a draft is marked ready; converted_to_draft
+    # cancels the run of a PR turned back into a draft. Edits are not listed: a
+    # run whose jobs all skip would replace the PR's required checks, so a PR
+    # retargeted to main runs on its next push.
     branches: [main]
-    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft, edited]
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
   merge_group:
   push:
     branches: [main]
 
 concurrency:
-  # An edit that leaves the base alone (title, description) runs no jobs, so its
-  # run gets a group of its own rather than cancelling the PR's real run.
-  group: ${{ github.workflow }}-${{ (github.event.action == 'edited' && !github.event.changes.base) && github.run_id || github.event.pull_request.number || (github.event_name == 'push' && github.sha) || github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || (github.event_name == 'push' && github.sha) || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
@@ -34,10 +26,6 @@ permissions:
 env:
   HBX_BASENAME: vyper-hol
   HBX_ARTEFACT_NAME: vyper-hol-hbx-${{ github.sha }}
-  # Uncached runs check that main still builds from source. Every cache key gets
-  # this run's id, so no other run's entry is restored and no other run reads
-  # what this one saves, and the remote cache login is withheld.
-  CACHE_KEY_SUFFIX: ${{ (github.event_name == 'schedule' || inputs.uncached) && format('-uncached-{0}-{1}', github.run_id, github.run_attempt) || '' }}
 
 jobs:
   toolchain:
@@ -47,7 +35,7 @@ jobs:
     # carry it, this job builds it once for build, compiler and test-deps. With
     # the remote login, holbuild restores the published HOL toolchain instead of
     # building a new one, so keys stay those of earlier runs.
-    if: (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository)) && (github.event.action != 'edited' || github.event.changes.base)
+    if: (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository))
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 60
     environment: ${{ ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'merge_group' && github.event.merge_group.base_ref == 'refs/heads/main') || github.event_name == 'pull_request') && 'bazel-cache' || '' }}
@@ -61,7 +49,6 @@ jobs:
       - uses: ./.github/actions/setup-holbuild-project
         id: project
         with:
-          cache-key-suffix: ${{ env.CACHE_KEY_SUFFIX }}
           lookup-only: true
 
       - name: Compute holbuild toolchain snapshot key
@@ -72,7 +59,7 @@ jobs:
         if: ${{ steps.project.outputs.project-snapshot-key == '' }}
         uses: ./.github/actions/setup-remote-cache
         with:
-          curl-config: ${{ !env.CACHE_KEY_SUFFIX && secrets.HOLBUILD_REMOTE_CACHE_CURL_CONFIG || '' }}
+          curl-config: ${{ secrets.HOLBUILD_REMOTE_CACHE_CURL_CONFIG }}
 
       - name: Build schema-2 HOL toolchain
         if: ${{ steps.project.outputs.project-snapshot-key == '' }}
@@ -86,10 +73,7 @@ jobs:
           key: ${{ steps.cache-key.outputs.snapshot-key }}
 
   build:
-    # A skipped job passes a required check; a no-op edit's skipped run must not
-    # report under the required name over the PR's real result.
-    name: ${{ (github.event.action == 'edited' && !github.event.changes.base) && 'build (no-op edit)' || 'build' }}
-    if: (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository)) && (github.event.action != 'edited' || github.event.changes.base)
+    if: (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository))
     needs: toolchain
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 240
@@ -106,7 +90,6 @@ jobs:
       - uses: ./.github/actions/setup-holbuild-project
         id: project
         with:
-          cache-key-suffix: ${{ env.CACHE_KEY_SUFFIX }}
           toolchain-snapshot-key: ${{ needs.toolchain.outputs.snapshot-key }}
 
       - name: Compute holbuild snapshot key
@@ -116,7 +99,7 @@ jobs:
       - name: Configure remote cache
         uses: ./.github/actions/setup-remote-cache
         with:
-          curl-config: ${{ !env.CACHE_KEY_SUFFIX && secrets.HOLBUILD_REMOTE_CACHE_CURL_CONFIG || '' }}
+          curl-config: ${{ secrets.HOLBUILD_REMOTE_CACHE_CURL_CONFIG }}
 
       - name: Build schema-2 HOL toolchain
         run: holbuild buildhol
@@ -155,7 +138,7 @@ jobs:
   compiler:
     # Builds what the witnesses load besides each other, once for all
     # witness groups.
-    if: (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository)) && (github.event.action != 'edited' || github.event.changes.base)
+    if: (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository))
     needs: toolchain
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 240
@@ -172,7 +155,6 @@ jobs:
       - uses: ./.github/actions/setup-holbuild-project
         id: project
         with:
-          cache-key-suffix: ${{ env.CACHE_KEY_SUFFIX }}
           toolchain-snapshot-key: ${{ needs.toolchain.outputs.snapshot-key }}
 
       - name: Compute holbuild snapshot key
@@ -182,7 +164,7 @@ jobs:
       - name: Configure remote cache
         uses: ./.github/actions/setup-remote-cache
         with:
-          curl-config: ${{ !env.CACHE_KEY_SUFFIX && secrets.HOLBUILD_REMOTE_CACHE_CURL_CONFIG || '' }}
+          curl-config: ${{ secrets.HOLBUILD_REMOTE_CACHE_CURL_CONFIG }}
 
       - name: Build schema-2 HOL toolchain
         run: holbuild buildhol
@@ -202,7 +184,7 @@ jobs:
           key: ${{ steps.cache-key.outputs.snapshot-key }}
 
   witnesses:
-    if: (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository)) && (github.event.action != 'edited' || github.event.changes.base)
+    if: (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository))
     needs: compiler
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 90
@@ -220,13 +202,12 @@ jobs:
 
       - uses: ./.github/actions/setup-holbuild-project
         with:
-          cache-key-suffix: ${{ env.CACHE_KEY_SUFFIX }}
           snapshot-key: ${{ needs.compiler.outputs.holbuild-cache-key }}
 
       - name: Configure remote cache
         uses: ./.github/actions/setup-remote-cache
         with:
-          curl-config: ${{ !env.CACHE_KEY_SUFFIX && secrets.HOLBUILD_REMOTE_CACHE_CURL_CONFIG || '' }}
+          curl-config: ${{ secrets.HOLBUILD_REMOTE_CACHE_CURL_CONFIG }}
 
       - name: Build witness group ${{ matrix.group }}
         id: witnesses
@@ -264,7 +245,7 @@ jobs:
   build-rollup:
     # Adds the witness groups to build's snapshot, builds the witness rollup
     # and exports the HBX of the whole project.
-    if: (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository)) && (github.event.action != 'edited' || github.event.changes.base)
+    if: (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository))
     needs: [build, witnesses]
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 240
@@ -278,7 +259,6 @@ jobs:
 
       - uses: ./.github/actions/setup-holbuild-project
         with:
-          cache-key-suffix: ${{ env.CACHE_KEY_SUFFIX }}
           snapshot-key: ${{ needs.build.outputs.holbuild-cache-key }}
 
       - name: Download witness group HBXs
@@ -297,7 +277,7 @@ jobs:
       - name: Configure remote cache
         uses: ./.github/actions/setup-remote-cache
         with:
-          curl-config: ${{ !env.CACHE_KEY_SUFFIX && secrets.HOLBUILD_REMOTE_CACHE_CURL_CONFIG || '' }}
+          curl-config: ${{ secrets.HOLBUILD_REMOTE_CACHE_CURL_CONFIG }}
 
       - name: Build project with holbuild
         env:
@@ -362,7 +342,7 @@ jobs:
     # Builds only what the test groups load besides their own theories, so they
     # start long before build finishes.
     needs: [toolchain, tested]
-    if: ${{ !cancelled() && needs.toolchain.result == 'success' && needs.tested.outputs.merge-group-passed != 'true' && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository)) && (github.event.action != 'edited' || github.event.changes.base) }}
+    if: ${{ !cancelled() && needs.toolchain.result == 'success' && needs.tested.outputs.merge-group-passed != 'true' && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository)) }}
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 240
     # The cache login is a secret of the bazel-cache environment, which main,
@@ -378,7 +358,6 @@ jobs:
       - uses: ./.github/actions/setup-holbuild-project
         id: project
         with:
-          cache-key-suffix: ${{ env.CACHE_KEY_SUFFIX }}
           toolchain-snapshot-key: ${{ needs.toolchain.outputs.snapshot-key }}
 
       - name: Compute holbuild snapshot key
@@ -388,7 +367,7 @@ jobs:
       - name: Configure remote cache
         uses: ./.github/actions/setup-remote-cache
         with:
-          curl-config: ${{ !env.CACHE_KEY_SUFFIX && secrets.HOLBUILD_REMOTE_CACHE_CURL_CONFIG || '' }}
+          curl-config: ${{ secrets.HOLBUILD_REMOTE_CACHE_CURL_CONFIG }}
 
       - name: Build schema-2 HOL toolchain
         run: holbuild buildhol
@@ -409,7 +388,7 @@ jobs:
 
   python-o1-oracle:
     needs: tested
-    if: ${{ !cancelled() && needs.tested.outputs.merge-group-passed != 'true' && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository)) && (github.event.action != 'edited' || github.event.changes.base) }}
+    if: ${{ !cancelled() && needs.tested.outputs.merge-group-passed != 'true' && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository)) }}
     runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v7
@@ -431,7 +410,7 @@ jobs:
 
   export-vyper-tests:
     needs: tested
-    if: ${{ !cancelled() && needs.tested.outputs.merge-group-passed != 'true' && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository)) && (github.event.action != 'edited' || github.event.changes.base) }}
+    if: ${{ !cancelled() && needs.tested.outputs.merge-group-passed != 'true' && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository)) }}
     runs-on: ubuntu-24.04-arm
     outputs:
       export-cache-key: ${{ steps.exports.outputs.export-cache-key }}
@@ -441,13 +420,11 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/setup-vyper-test-exports
         id: exports
-        with:
-          cache-key-suffix: ${{ env.CACHE_KEY_SUFFIX }}
 
   vyper-tests:
     # tested, skipped on other events than push, would skip this job through
     # the implicit success(); the result checks stand in for it.
-    if: ${{ !cancelled() && needs.test-deps.result == 'success' && needs.export-vyper-tests.result == 'success' && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository)) && (github.event.action != 'edited' || github.event.changes.base) }}
+    if: ${{ !cancelled() && needs.test-deps.result == 'success' && needs.export-vyper-tests.result == 'success' && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository)) }}
     needs: [test-deps, export-vyper-tests]
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 90
@@ -465,7 +442,6 @@ jobs:
 
       - uses: ./.github/actions/setup-holbuild-project
         with:
-          cache-key-suffix: ${{ env.CACHE_KEY_SUFFIX }}
           snapshot-key: ${{ needs.test-deps.outputs.holbuild-cache-key }}
 
       - name: Restore Vyper test exports
@@ -478,7 +454,15 @@ jobs:
       - name: Configure remote cache
         uses: ./.github/actions/setup-remote-cache
         with:
-          curl-config: ${{ !env.CACHE_KEY_SUFFIX && secrets.HOLBUILD_REMOTE_CACHE_CURL_CONFIG || '' }}
+          curl-config: ${{ secrets.HOLBUILD_REMOTE_CACHE_CURL_CONFIG }}
+
+      - name: Generate test theories from pinned exports
+        run: |
+          holbuild build --skip-checkpoints --skip-proof-steps vyperTestLib
+          generator=$(mktemp --suffix=.sml)
+          trap 'rm -f "$generator"' EXIT
+          printf '%s\n' 'vyperTestLib.generate_tests ();' > "$generator"
+          (cd tests && holbuild run --noconfig vyperTestLib "$generator")
 
       - name: Build Vyper test coverage baseline
         if: matrix.group == 0
@@ -507,9 +491,7 @@ jobs:
           fi
 
   holbuild-success:
-    # Renamed on a no-op edit, as build is.
-    name: ${{ (github.event.action == 'edited' && !github.event.changes.base) && 'holbuild-success (no-op edit)' || 'holbuild-success' }}
-    if: always() && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository)) && (github.event.action != 'edited' || github.event.changes.base)
+    if: always() && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository))
     runs-on: ubuntu-24.04-arm
     needs: [toolchain, build, compiler, witnesses, build-rollup, tested, test-deps, python-o1-oracle, export-vyper-tests, vyper-tests]
     steps:

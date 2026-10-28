@@ -13,19 +13,7 @@ Ancestors compileVyper supportedProgram concretizeMemLocDefs codegenReadyCompute
 Libs memoryStoreWitnessLib vyperCheckContractFrontendLib jsonASTLib evalCompilerBytecodeLib finite_mapLib computeLib wordsLib supportedEvalLib
 
 fun holbuild_extra_deps (_ : string list) = ()
-val () = holbuild_extra_deps
-  ["../phi-pointers/oracle/uint2str_arg.json",
-   "../phi-pointers/oracle/uint2str_arg.hex",
-   "../phi-pointers/oracle/ifexp_dynarray.json",
-   "../phi-pointers/oracle/ifexp_dynarray.hex",
-   "../phi-pointers/oracle/ifexp_bytes20.json",
-   "../phi-pointers/oracle/ifexp_bytes20.hex",
-   "../phi-pointers/oracle/ifexp_flag.json",
-   "../phi-pointers/oracle/ifexp_flag.hex",
-   "../phi-pointers/oracle/ifexp_decimal.json",
-   "../phi-pointers/oracle/ifexp_decimal.hex",
-   "../phi-pointers/oracle/ctl_sarray_assign.json",
-   "../phi-pointers/oracle/ctl_sarray_assign.hex"]
+val () = holbuild_extra_deps ["../phi-pointers"]
 val () = supportedEvalLib.configure ()
 val () = computeLib.upd_compset add_finite_map_compset
 val () = computeLib.upd_compset (computeLib.add_thms

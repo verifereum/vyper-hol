@@ -8,21 +8,7 @@ Ancestors compileVyper supportedProgram concretizeMemLocDefs codegenReadyCompute
 Libs memoryStoreWitnessLib finite_mapLib computeLib wordsLib supportedEvalLib
 
 fun holbuild_extra_deps (_ : string list) = ()
-val () = holbuild_extra_deps
-  ["../internal-frames/oracle/p06_int_for_range.json",
-   "../internal-frames/oracle/p06_int_for_range.hex",
-   "../internal-frames/oracle/p09_int_chain.json",
-   "../internal-frames/oracle/p09_int_chain.hex",
-   "../internal-frames/oracle/p39_int_local_clobber.json",
-   "../internal-frames/oracle/p39_int_local_clobber.hex",
-   "../internal-frames/oracle/p40_int_for_clobber.json",
-   "../internal-frames/oracle/p40_int_for_clobber.hex",
-   "../internal-frames/oracle/p41_int_local_and_call.json",
-   "../internal-frames/oracle/p41_int_local_and_call.hex",
-   "../internal-frames/oracle/p02_int_local_string.json",
-   "../internal-frames/oracle/p02_int_local_string.hex",
-   "../internal-frames/oracle/p47_len_of_string_call.json",
-   "../internal-frames/oracle/p47_len_of_string_call.hex"]
+val () = holbuild_extra_deps ["../internal-frames"]
 val () = supportedEvalLib.configure ()
 val () = computeLib.upd_compset add_finite_map_compset
 val () = computeLib.upd_compset (computeLib.add_thms [fmap_to_alist_FEMPTY, integer_wordTheory.i2w_pos])

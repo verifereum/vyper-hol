@@ -4,13 +4,7 @@ Ancestors compileVyper supportedProgram concretizeMemLocDefs codegenReadyCompute
 Libs memoryStoreWitnessLib vyperCheckContractFrontendLib jsonASTLib evalCompilerBytecodeLib finite_mapLib computeLib wordsLib supportedEvalLib
 
 fun holbuild_extra_deps (_ : string list) = ()
-val () = holbuild_extra_deps
-  ["../memory-stores/oracle/c01_ctrl_str_local_decl.json",
-   "../memory-stores/oracle/c01_ctrl_str_local_decl.hex",
-   "../memory-stores/oracle/c07_annassign_str_same_len.json",
-   "../memory-stores/oracle/c07_annassign_str_same_len.hex",
-   "../memory-stores/oracle/c12_annassign_empty_bytes_ret.json",
-   "../memory-stores/oracle/c12_annassign_empty_bytes_ret.hex"]
+val () = holbuild_extra_deps ["../memory-stores"]
 val () = supportedEvalLib.configure ()
 val () = computeLib.upd_compset add_finite_map_compset
 val () = computeLib.upd_compset (computeLib.add_thms
