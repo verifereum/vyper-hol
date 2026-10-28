@@ -32,9 +32,9 @@ Theorem supported_all_effect_root_positions:
   EVERY (\e. supported_stmts expr_test_tops stmt_test_bindings
     [Expr e; Return (SOME e)])
     [expr_test_internal; expr_test_pop;
-     Call NoneT Send [expr_test_address;expr_test_uint] NONE;
+     Call NoneT (Send F) [expr_test_address;expr_test_uint] NONE;
      Call (BaseT (UintT 256))
-       (ExtCall T F ("remote",[BaseT (UintT 256)],BaseT (UintT 256)))
+       (ExtCall T F ("remote",[BaseT (UintT 256)],BaseT (UintT 256)) [])
        [expr_test_address;expr_test_uint] NONE]
 Proof
   EVAL_TAC
@@ -63,8 +63,6 @@ QED
 Theorem supported_target_exclusions:
   EVERY (\s. ~supported_stmt expr_test_tops stmt_test_bindings s)
     [Assign (BaseTarget (NameTarget "missing")) expr_test_uint;
-     Assign (BaseTarget (NameTarget "aggregate")) expr_test_uint;
-     Assign (BaseTarget (NameTarget "array")) expr_test_uint;
      Assign (TupleTarget [BaseTarget (NameTarget "word")]) expr_test_uint;
      Assign (BaseTarget (TopLevelNameTarget (NONE,"fixed"))) expr_test_uint;
      Assign (BaseTarget (TopLevelNameTarget (NONE,"record"))) expr_test_uint;

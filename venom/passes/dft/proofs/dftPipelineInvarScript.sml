@@ -170,6 +170,15 @@ Proof
   metis_tac[]
 QED
 
+Theorem nub_first_map_agree[local]:
+  MAP f xs = MAP f ys /\
+  INJ f (set xs) UNIV /\
+  INJ f (set ys) UNIV ==>
+  MAP f (nub_first xs) = MAP f (nub_first ys)
+Proof
+  metis_tac[nub_first_MAP_INJ]
+QED
+
 (* producing_inst returns unique objects: same inst_id implies same object,
    because producing_inst scans the list and returns the first match,
    and under unique_defs + ALL_DISTINCT inst_ids, the match is unique. *)
@@ -341,12 +350,12 @@ Proof
        (MAP THE (FILTER IS_SOME (MAP (producing_inst insts1) order))))` by
     (qspecl_then [`\d. d.inst_id`, `\x. x <> inst.inst_id`]
        mp_tac filter_map_agree >> simp[]) >>
-  irule nub_map_agree >> rpt conj_tac
+  irule nub_first_map_agree >> rpt conj_tac
   >- (Cases_on `is_terminator inst.inst_opcode` >> gvs[MAP_APPEND])
   >- (mp_tac (Q.SPECL [`insts2`, `order`, `inst`] deps_list_inj) >>
-      simp[LET_THM, LIST_TO_SET_APPEND])
+      simp[LET_THM, LIST_TO_SET_APPEND, pred_setTheory.UNION_COMM])
   >> mp_tac (Q.SPECL [`insts1`, `order`, `inst`] deps_list_inj) >>
-  simp[LET_THM, LIST_TO_SET_APPEND]
+  simp[LET_THM, LIST_TO_SET_APPEND, pred_setTheory.UNION_COMM]
 QED
 
 (* ================================================================
@@ -371,7 +380,7 @@ Triviality compute_effect_deps_eff_free:
 Proof
   rpt strip_tac >>
   simp[compute_effect_deps_def, LET_THM, effects_to_list_def,
-       FILTER_EQ_NIL, EVERY_MEM, MEM]
+       FILTER_EQ_NIL, EVERY_MEM, MEM, nub_first_def]
 QED
 
 (* ================================================================

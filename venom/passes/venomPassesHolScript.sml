@@ -1,9 +1,7 @@
 (* Roll-up theory for all venom compiler passes *)
 Theory venomPassesHol
 Ancestors
-  venomPassSchedule venomPassDispatcherProps
-  (* shared pass infrastructure *)
-  passSharedDefs passSharedProps passSharedFrame
+  venomPassDispatcherProps
   (* phi elimination *)
   phiElim
   (* revert-to-assert *)
@@ -13,7 +11,7 @@ Ancestors
   overflowElim
   literalsCodesize
   removeUnused
-  concretizeMemLoc staticLayoutWf
+  concretizeMemLoc
   (* lower dload/dloadbytes *)
   lowerDload
   (* branch optimization *)
@@ -43,11 +41,10 @@ Ancestors
   sccp
   (* interprocedural *)
   functionInliner
+  (* configured pipeline runner structural guarantees *)
+  venomPipelineRunnerProps
   (* dead function traversal *)
   venomDft
   (* invoke copy forwarding *)
   internalReturnCopyFwdProofs
   readonlyInvokeCopyFwdProofs
-
-  (* FMP lowering structural postconditions *)
-  fmpLowerProps

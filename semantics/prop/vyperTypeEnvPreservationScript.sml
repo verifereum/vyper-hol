@@ -290,7 +290,8 @@ Proof
   rpt strip_tac >> gvs[] >>
   irule extend_local_env_consistent_weaken >> simp[] >>
   qexists_tac `T` >> qexists_tac `s''` >>
-  qexists_tac `expr_type e` >>
+  rename1 `assignable_type env.type_defs annty` >>
+  qexists_tac `annty` >>
   gvs[extend_local_def, FLOOKUP_UPDATE] >>
   first_x_assum irule >> simp[FLOOKUP_DEF]
 QED
@@ -707,42 +708,6 @@ Theorem env_consistent_outcome_updates[local]:
 Proof
   REWRITE_TAC [env_consistent_def, env_scopes_consistent_def,
                env_immutables_consistent_def] >> simp_tac (srw_ss()) []
-QED
-
-(* Environment consistency observes scopes/immutables, not adopted accounts.
-   Continuation preservation is the evaluator IH owned by TASK032/033. *)
-Theorem ExtCall_outcome_preserves_ec:
-  env_consistent env cx st /\
-  (!bs s res t. env_consistent env cx s /\ k bs s = (res,t) ==>
-                env_consistent env cx t) /\
-  (do
-    accounts <- get_accounts;
-    (if ret_type = NoneT then
-       check (~NULL (lookup_account target accounts).code) "ExtCall target has no code"
-     else return ());
-    (rq,outcome) <- take_call_outcome target calldata value_opt;
-    check outcome.co_success "ExtCall reverted";
-    adopt_call_outcome rq outcome;
-    k outcome.co_returnData
-  od) st = (res,st') ==> env_consistent env cx st'
-Proof
-  rpt strip_tac >>
-  `!s t u. (env_consistent env cx s ==> env_consistent env cx t) /\
-            (env_consistent env cx t ==> env_consistent env cx u) ==>
-            (env_consistent env cx s ==> env_consistent env cx u)` by metis_tac[] >>
-  `!bs s res t. k bs s = (res,t) ==>
-      (env_consistent env cx s ==> env_consistent env cx t)` by metis_tac[] >>
-  `!s. env_consistent env cx s ==> env_consistent env cx s` by simp[] >>
-  `!s os rqs. env_consistent env cx s ==>
-     env_consistent env cx (s with <|outcomes := os; requests := rqs|>)` by
-    simp_tac (srw_ss()) [env_consistent_outcome_updates] >>
-  `!s accounts transient logs. env_consistent env cx s ==>
-     env_consistent env cx (s with <|accounts := accounts; tStorage := transient;
-                                    logs := s.logs ++ logs|>)` by
-    simp_tac (srw_ss()) [env_consistent_outcome_updates] >>
-  drule_all (ExtCall_outcome_transport |> Q.INST
-    [`R` |-> `\s t. env_consistent env cx s ==> env_consistent env cx t`]
-    |> BETA_RULE) >> simp[]
 QED
 
 Theorem Send_outcome_preserves_ec:

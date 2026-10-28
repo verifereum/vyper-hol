@@ -5,8 +5,9 @@
  *   compile_abi_int_clamp_correct       — int clamping either accepts or reverts on out-of-range
  *   compile_abi_bytes_clamp_correct   — bytes clamping either accepts or reverts on dirty high bits
  *   compile_abi_encode_static_correct — static type writes word to dst
- *   compile_abi_decode_static_correct — static type reads + clamps
  *   compile_abi_encode_to_buf_correct — recursive ABI encode correctness (single-block)
+ *   compile_abi_encode_frag           — recursive ABI encode correctness over frag_exec,
+ *                                       for an encoding plan abi_enc_plan
  *   compile_get_element_ptr_zero       — zero-offset pointer ADD preserves value
  *   compile_get_element_ptr_correct   — get_element_ptr adds offset to parent pointer
  *   val_in_memory_prim_enc            — primitive val_in_memory matches ABI encoding
@@ -23,7 +24,7 @@ Ancestors
   abiEncoder compileEnv
   venomExecSemantics venomState venomInst venomMemProps
   valueEncoding valueEncodingProps
-  vyperABI vyperTyping contractABI
+  vyperABI vyperTyping contractABI fragExec
 Libs
   dep_rewrite wordsLib
 
@@ -258,32 +259,9 @@ Proof
   gvs[Abbr`rng`]
 QED
 
-(* Static ABI decoding: MLOAD + clamp *)
-Theorem compile_abi_decode_static_correct:
-  ∀ src_op dst_op load_opc clamp_fn ss st st' src_w.
-    compile_abi_decode_static src_op dst_op load_opc clamp_fn st = ((), st') ∧
-    eval_operand src_op ss = SOME src_w ∧
-    fresh_vars_wrt st ss ∧
-    (* clamp_fn: either succeeds preserving operands & freshness, or reverts *)
-    (∀ val_op st0 st0' ss0 v.
-       clamp_fn val_op st0 = ((), st0') ∧
-       eval_operand val_op ss0 = SOME v ∧
-       fresh_vars_wrt st0 ss0 ⇒
-       (∃ ss0'.
-         run_inst_seq (emitted_insts st0 st0') ss0 = OK ss0' ∧
-         fresh_vars_wrt st0' ss0' ∧
-         (∀ op w. eval_operand op ss0 = SOME w ⇒
-                  eval_operand op ss0' = SOME w)) ∨
-       (∃ ss0'.
-         run_inst_seq (emitted_insts st0 st0') ss0 =
-           Abort Revert_abort ss0'))
-    ⇒
-    ∃ ss'.
-      run_inst_seq (emitted_insts st st') ss = OK ss' ∨
-      run_inst_seq (emitted_insts st st') ss = Abort Revert_abort ss'
-Proof
-  cheat
-QED
+(* Static ABI decoding (load, clamp, MSTORE) is in abiDecodeStaticProps:
+   compile_abi_decode_static_run and compile_abi_decode_static_correct,
+   which give the value in memory at the destination. *)
 
 (* ===== ABI Encoding / Memory Correspondence ===== *)
 
@@ -737,6 +715,279 @@ Resume compile_abi_encode_to_buf_correct[dyn_loop]:
 QED
 
 Finalise compile_abi_encode_to_buf_correct
+
+(* ===== Encoding plans ===== *)
+
+(* abi_enc_plan env ty ei: ei is a right plan for encoding a value of type
+   ty, in type environment env.  It fixes what the encoder takes on trust
+   from its abi_enc_info: an AbiCopy size is the value's memory size, an
+   element's head size, memory size and dynamic flag are those of its
+   type, and an aggregate's elements are its components, in order (for a
+   struct, typed in env \\ nsid, as vyper_to_abi_type does).  AbiComplex
+   is for dynamic aggregates only: a static one is an AbiCopy, which is what
+   the static-element loop of a dynamic array handles.  type_to_abi_enc_info
+   builds such plans, except AbiComplex [] for NoneT, which has none (a
+   return of no value doesn't encode). *)
+Inductive abi_enc_plan:
+[~prim:]
+  is_word_type ty ==> abi_enc_plan env ty AbiPrimWord
+[~bytes:]
+  abi_enc_plan env (BaseT (BytesT (Dynamic n))) (AbiBytestring n)
+[~string:]
+  abi_enc_plan env (BaseT (StringT n)) (AbiBytestring n)
+[~copy:]
+  ~is_dynamic (vyper_to_abi_type env ty) /\
+  evaluate_type env ty = SOME tv ==>
+  abi_enc_plan env ty (AbiCopy (type_memory_size tv))
+[~dynarray:]
+  evaluate_type env t = SOME tv /\ abi_enc_plan env t ei ==>
+  abi_enc_plan env (ArrayT t (Dynamic n))
+    (AbiDynArray ei
+       (if is_dynamic (vyper_to_abi_type env t) then 32
+        else static_length (vyper_to_abi_type env t))
+       (type_memory_size tv) (is_dynamic (vyper_to_abi_type env t)))
+[~tuple:]
+  is_dynamic (vyper_to_abi_type env (TupleT ts)) /\
+  abi_enc_plans env ts elems ==>
+  abi_enc_plan env (TupleT ts) (AbiComplex elems)
+[~sarray:]
+  is_dynamic (vyper_to_abi_type env t) /\
+  abi_enc_plans env (REPLICATE n t) elems ==>
+  abi_enc_plan env (ArrayT t (Fixed n)) (AbiComplex elems)
+[~struct:]
+  FLOOKUP env nsid = SOME (StructArgs args) /\
+  is_dynamic (vyper_to_abi_type env (StructT nsid)) /\
+  abi_enc_plans (env \\ nsid) (MAP SND args) elems ==>
+  abi_enc_plan env (StructT nsid) (AbiComplex elems)
+[~nil:]
+  abi_enc_plans env [] []
+[~cons:]
+  evaluate_type env t = SOME tv /\ abi_enc_plan env t ei /\
+  abi_enc_plans env ts elems ==>
+  abi_enc_plans env (t::ts)
+    ((ei,
+      (if is_dynamic (vyper_to_abi_type env t) then 32
+       else static_length (vyper_to_abi_type env t)),
+      type_memory_size tv, is_dynamic (vyper_to_abi_type env t)) :: elems)
+End
+
+(* ===== Scratch cells and frames ===== *)
+
+(* The instruction ids a compiled fragment emits. *)
+Definition frag_ids_def:
+  frag_ids (st : compile_state) (st' : compile_state) =
+    {i | st.cs_next_id <= i /\ i < st'.cs_next_id}
+End
+
+(* The encoder's scratch cells (its ALLOCAs of 32 bytes) at ids in ids:
+   each one already run lies at or above lo, and running the rest keeps
+   the alloca frontier at or below top, which is below 2 ** 256, so no
+   pointer wraps.  An encoder in a loop body runs again with its cells of
+   the last iteration allocated, which ALLOCA then returns again. *)
+Definition enc_scratch_def:
+  enc_scratch ids lo top (s : venom_state) <=>
+    alloca_inv s /\ lo <= s.vs_alloca_next /\ top < dimword (:256) /\
+    (!i b sz. i IN ids /\ FLOOKUP s.vs_allocas i = SOME (b, sz) ==>
+              lo <= b /\ sz = 32) /\
+    s.vs_alloca_next +
+      32 * CARD {i | i IN ids /\ FLOOKUP s.vs_allocas i = NONE} <= top
+End
+
+(* What running encoder code from st to st' changes from s0 to s: the
+   memory only in the output regions outs and in the fragment's own
+   scratch cells; the allocas only at the fragment's ids, keeping those
+   already run; no variable bound before st; none of the effects. *)
+Definition enc_frame_def:
+  enc_frame st st' lo top outs (s0 : venom_state) (s : venom_state) <=>
+    (!x w. not_fresh_at st x /\ lookup_var x s0 = SOME w ==>
+           lookup_var x s = SOME w) /\
+    (!a. EVERY (\(b, n). a < b \/ b + n <= a) outs /\
+         (!i b sz. i IN frag_ids st st' /\
+                   FLOOKUP s.vs_allocas i = SOME (b, sz) ==>
+                   a < b \/ b + sz <= a) ==>
+         mem_bytes_at a 1 s.vs_memory = mem_bytes_at a 1 s0.vs_memory) /\
+    (!i. i NOTIN frag_ids st st' ==>
+         FLOOKUP s.vs_allocas i = FLOOKUP s0.vs_allocas i) /\
+    (!i r. FLOOKUP s0.vs_allocas i = SOME r ==>
+           FLOOKUP s.vs_allocas i = SOME r) /\
+    enc_scratch (frag_ids st st') lo top s /\
+    s.vs_accounts = s0.vs_accounts /\ s.vs_transient = s0.vs_transient /\
+    s.vs_logs = s0.vs_logs /\ s.vs_requests = s0.vs_requests
+End
+
+(* The encoder's inputs at s0: its operands are bound before st, the
+   source value of type tv is in memory at src below lo, each output
+   region lies below lo and misses the source, and the scratch cells are
+   as enc_scratch says. *)
+Definition enc_pre_def:
+  enc_pre st st' ops lo top tv v src outs (s0 : venom_state) <=>
+    (!y. MEM (Var y) ops ==> not_fresh_at st y) /\
+    val_in_memory tv v src s0.vs_memory /\
+    src + type_memory_size tv <= lo /\
+    EVERY (\(b, n). b + n <= lo /\
+                    regions_disjoint (src, type_memory_size tv) (b, n)) outs /\
+    enc_scratch (frag_ids st st') lo top s0
+End
+
+(* ===== Recursive ABI encode correctness ===== *)
+
+(* Mutual induction over compile_abi_encode_child / _to_buf /
+   _complex_elems / _dyn_loop.  Each clause runs its fragment from s0 to
+   its end (it never exits: R is F), and gives the frame of enc_frame.
+   With E the encoding enc (vyper_to_abi_type env ty) av:
+   - to_buf writes E at dst and returns its length;
+   - child writes E at dst + static_ofst for a static child; for a
+     dynamic one it writes E at dst + d, where d is the dynamic offset in
+     the cell at c (a scratch cell of the caller, at or above lo), and
+     puts d in the head slot at dst + static_ofst and d + LENGTH E back in
+     the cell;
+   - complex_elems writes the element heads from dst + head_offset and the
+     tails of the dynamic elements from dst + d, which together are
+     enc_tuple d 0 of the elements (the heads' offsets count from d), and
+     moves the cell, if there are dynamic elements, past the tails;
+   - dyn_loop writes a dynamic array's encoding after its length word at
+     dst and returns the encoding's whole length. *)
+Theorem compile_abi_encode_frag:
+  (!dst child_ptr ei is_dyn static_ofst dyn_ptr st op st' ctx env ty tv v
+    av s0 dst_w src_w lo top.
+     compile_abi_encode_child dst child_ptr ei is_dyn static_ofst dyn_ptr st =
+       (op, st') /\
+     abi_enc_plan env ty ei /\
+     is_dyn = is_dynamic (vyper_to_abi_type env ty) /\
+     evaluate_type env ty = SOME tv /\ value_has_type tv v /\
+     vyper_to_abi env ty v = SOME av /\
+     eval_operand dst s0 = SOME dst_w /\
+     eval_operand child_ptr s0 = SOME src_w ==>
+     if ~is_dyn then
+       enc_pre st st' [dst; child_ptr] lo top tv v (w2n src_w)
+         [(w2n dst_w + static_ofst,
+           LENGTH (enc (vyper_to_abi_type env ty) av))] s0 ==>
+       frag_exec ctx st st' (\s. s = s0)
+         (\s. mem_bytes_at (w2n dst_w + static_ofst)
+                (LENGTH (enc (vyper_to_abi_type env ty) av)) s.vs_memory =
+              enc (vyper_to_abi_type env ty) av /\
+              eval_operand op s =
+                SOME (n2w (LENGTH (enc (vyper_to_abi_type env ty) av))) /\
+              enc_frame st st' lo top
+                [(w2n dst_w + static_ofst,
+                  LENGTH (enc (vyper_to_abi_type env ty) av))] s0 s)
+         (\r. F)
+     else
+       !c d j.
+         eval_operand dyn_ptr s0 = SOME (n2w c) /\
+         mem_word_at c s0.vs_memory = n2w d /\
+         j NOTIN frag_ids st st' /\
+         FLOOKUP s0.vs_allocas j = SOME (c, 32) /\ lo <= c /\
+         static_ofst + 32 <= d /\
+         enc_pre st st' [dst; child_ptr; dyn_ptr] lo top tv v (w2n src_w)
+           [(w2n dst_w + static_ofst, 32);
+            (w2n dst_w + d,
+             LENGTH (enc (vyper_to_abi_type env ty) av))] s0 ==>
+         frag_exec ctx st st' (\s. s = s0)
+           (\s. mem_bytes_at (w2n dst_w + d)
+                  (LENGTH (enc (vyper_to_abi_type env ty) av)) s.vs_memory =
+                enc (vyper_to_abi_type env ty) av /\
+                mem_word_at (w2n dst_w + static_ofst) s.vs_memory = n2w d /\
+                mem_word_at c s.vs_memory =
+                  n2w (d + LENGTH (enc (vyper_to_abi_type env ty) av)) /\
+                eval_operand op s =
+                  SOME (n2w (LENGTH (enc (vyper_to_abi_type env ty) av))) /\
+                enc_frame st st' lo top
+                  [(w2n dst_w + static_ofst, 32);
+                   (w2n dst_w + d,
+                    LENGTH (enc (vyper_to_abi_type env ty) av));
+                   (c, 32)] s0 s)
+           (\r. F)) /\
+  (!dst src ei st op st' ctx env ty tv v av s0 dst_w src_w lo top.
+     compile_abi_encode_to_buf dst src ei st = (op, st') /\
+     abi_enc_plan env ty ei /\
+     evaluate_type env ty = SOME tv /\ value_has_type tv v /\
+     vyper_to_abi env ty v = SOME av /\
+     eval_operand dst s0 = SOME dst_w /\ eval_operand src s0 = SOME src_w /\
+     enc_pre st st' [dst; src] lo top tv v (w2n src_w)
+       [(w2n dst_w, LENGTH (enc (vyper_to_abi_type env ty) av))] s0 ==>
+     frag_exec ctx st st' (\s. s = s0)
+       (\s. mem_bytes_at (w2n dst_w)
+              (LENGTH (enc (vyper_to_abi_type env ty) av)) s.vs_memory =
+            enc (vyper_to_abi_type env ty) av /\
+            eval_operand op s =
+              SOME (n2w (LENGTH (enc (vyper_to_abi_type env ty) av))) /\
+            enc_frame st st' lo top
+              [(w2n dst_w, LENGTH (enc (vyper_to_abi_type env ty) av))] s0 s)
+       (\r. F)) /\
+  (!dst src elems src_offset head_offset dyn_ptr st op st' ctx env ts tvs vs
+    avs s0 dst_w src_w lo top c d.
+     compile_abi_encode_complex_elems dst src elems src_offset head_offset
+       dyn_ptr st = (op, st') /\
+     abi_enc_plans env ts elems /\
+     LIST_REL (\t tv. evaluate_type env t = SOME tv) ts tvs /\
+     LIST_REL value_has_type tvs vs /\
+     vyper_to_abi_list env ts vs = SOME avs /\
+     eval_operand dst s0 = SOME dst_w /\ eval_operand src s0 = SOME src_w /\
+     (EXISTS (\(_, _, _, is_dyn). is_dyn) elems ==>
+        eval_operand dyn_ptr s0 = SOME (n2w c) /\
+        mem_word_at c s0.vs_memory = n2w d /\
+        (?j. j NOTIN frag_ids st st' /\
+             FLOOKUP s0.vs_allocas j = SOME (c, 32)) /\ lo <= c /\
+        head_offset + SUM (MAP (\(_, abi_sz, _, _). abi_sz) elems) <= d) /\
+     enc_pre st st' [dst; src; dyn_ptr] lo top (TupleTV tvs)
+       (ArrayV (TupleV vs)) (w2n src_w + src_offset)
+       [(w2n dst_w + head_offset, SUM (MAP (\(_, abi_sz, _, _). abi_sz) elems));
+        (w2n dst_w + d,
+         LENGTH (enc_tuple d 0 (vyper_to_abi_types env ts) avs [] []) -
+         SUM (MAP (\(_, abi_sz, _, _). abi_sz) elems))] s0 ==>
+     frag_exec ctx st st' (\s. s = s0)
+       (\s. mem_bytes_at (w2n dst_w + head_offset)
+              (SUM (MAP (\(_, abi_sz, _, _). abi_sz) elems)) s.vs_memory ++
+            mem_bytes_at (w2n dst_w + d)
+              (LENGTH (enc_tuple d 0 (vyper_to_abi_types env ts) avs [] []) -
+               SUM (MAP (\(_, abi_sz, _, _). abi_sz) elems)) s.vs_memory =
+            enc_tuple d 0 (vyper_to_abi_types env ts) avs [] [] /\
+            (EXISTS (\(_, _, _, is_dyn). is_dyn) elems ==>
+             mem_word_at c s.vs_memory =
+               n2w (d +
+                 LENGTH (enc_tuple d 0 (vyper_to_abi_types env ts) avs [] []) -
+                 SUM (MAP (\(_, abi_sz, _, _). abi_sz) elems))) /\
+            enc_frame st st' lo top
+              [(w2n dst_w + head_offset,
+                SUM (MAP (\(_, abi_sz, _, _). abi_sz) elems));
+               (w2n dst_w + d,
+                LENGTH (enc_tuple d 0 (vyper_to_abi_types env ts) avs [] []) -
+                SUM (MAP (\(_, abi_sz, _, _). abi_sz) elems));
+               (c, 32)] s0 s)
+       (\r. F)) /\
+  (!dst src ei asz msz len_op st op st' ctx env t n tv vs av s0 dst_w src_w
+    lo top.
+     compile_abi_encode_dyn_loop dst src ei asz msz len_op st = (op, st') /\
+     abi_enc_plan env (ArrayT t (Dynamic n))
+       (AbiDynArray ei asz msz T) /\
+     evaluate_type env (ArrayT t (Dynamic n)) = SOME tv /\
+     value_has_type tv (ArrayV (DynArrayV vs)) /\
+     vyper_to_abi env (ArrayT t (Dynamic n)) (ArrayV (DynArrayV vs)) =
+       SOME av /\
+     eval_operand dst s0 = SOME dst_w /\ eval_operand src s0 = SOME src_w /\
+     eval_operand len_op s0 = SOME (n2w (LENGTH vs)) /\
+     enc_pre st st' [dst; src; len_op] lo top tv (ArrayV (DynArrayV vs))
+       (w2n src_w)
+       [(w2n dst_w,
+         LENGTH (enc (vyper_to_abi_type env (ArrayT t (Dynamic n))) av) - 32)]
+       s0 ==>
+     frag_exec ctx st st' (\s. s = s0)
+       (\s. mem_bytes_at (w2n dst_w)
+              (LENGTH (enc (vyper_to_abi_type env (ArrayT t (Dynamic n))) av) -
+               32) s.vs_memory =
+            DROP 32 (enc (vyper_to_abi_type env (ArrayT t (Dynamic n))) av) /\
+            eval_operand op s =
+              SOME (n2w (LENGTH
+                (enc (vyper_to_abi_type env (ArrayT t (Dynamic n))) av))) /\
+            enc_frame st st' lo top
+              [(w2n dst_w,
+                LENGTH (enc (vyper_to_abi_type env (ArrayT t (Dynamic n))) av) -
+                32)] s0 s)
+       (\r. F))
+Proof
+  cheat
+QED
 
 (* ===== Element Pointer ===== *)
 

@@ -64,18 +64,18 @@ QED
    account. Its type annotation and address width are the fixture's ones. *)
 Theorem codehash_builtin_cv_boundaries:
   evaluate_builtin empty_evaluation_context (K empty_account_state)
-    (BaseT (BytesT (Fixed 32))) (Acc Codehash) [BytesV (REPLICATE 20 0w)] =
+    (BaseT (BytesT (Fixed 32))) (Acc Codehash) tys [BytesV (REPLICATE 20 0w)] =
     INL (BytesV (REPLICATE 32 0w)) /\
   evaluate_builtin empty_evaluation_context (K (codehash_test_account 1 0 []))
-    (BaseT (BytesT (Fixed 32))) (Acc Codehash) [BytesV (REPLICATE 20 0w)] =
+    (BaseT (BytesT (Fixed 32))) (Acc Codehash) tys [BytesV (REPLICATE 20 0w)] =
     INL (BytesV (word_to_bytes_be
       (0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470w:bytes32))) /\
   evaluate_builtin empty_evaluation_context (K (codehash_test_account 0 1 []))
-    (BaseT (BytesT (Fixed 32))) (Acc Codehash) [BytesV (REPLICATE 20 0w)] =
+    (BaseT (BytesT (Fixed 32))) (Acc Codehash) tys [BytesV (REPLICATE 20 0w)] =
     INL (BytesV (word_to_bytes_be
       (0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470w:bytes32))) /\
   evaluate_builtin empty_evaluation_context (K (codehash_test_account 0 0 [0w]))
-    (BaseT (BytesT (Fixed 32))) (Acc Codehash) [BytesV (REPLICATE 20 0w)] =
+    (BaseT (BytesT (Fixed 32))) (Acc Codehash) tys [BytesV (REPLICATE 20 0w)] =
     INL (BytesV (word_to_bytes_be
       (0xbc36789e7a1e281436464229828f817d6612f7b477d66591ff96a9e064bcc98aw:bytes32)))
 Proof

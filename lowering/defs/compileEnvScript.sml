@@ -4,6 +4,8 @@
  * TOP-LEVEL:
  *   compile_env      — maps Vyper vars to Venom locations
  *   compile_state    — monad state for code generation
+ *   cs_extends       — a compile state only appended to another;
+ *                      cs_extends_* for the monad primitives
  *   state_rel        — cross-level simulation relation
  *   result_rel       — maps Vyper exceptions to Venom exec_result
  *   is_word_type     — type fits in single EVM word (calling convention)
@@ -12,7 +14,10 @@
  *   type_bounds      — (lo, hi) word256 bounds for type
  *   struct_field_offset — byte offset of struct field
  *   nsid_to_string   — namespace ID to lookup string
+ *   internal_fn_label — Venom label of an internal function (Vyper's spelling)
  *   local_ptrs_rel   — live locals held through pointer variables match memory
+ *   accounts_rel     — every address's accounts and transient storage match,
+ *                      no pending deletions
  *   compile_state_ok — well-formedness: bound labels disjoint from future fresh labels
  *   label_external   — label not bound and not in future fresh-label co-domain
  *
@@ -31,7 +36,7 @@ Theory compileEnv
 Ancestors
   valueEncoding venomExecSemantics venomInst venomPolicyTypes
   vyperState vyperContext vyperValue vyperABI contractABI
-  byte keccak finite_map pred_set
+  byte keccak finite_map pred_set list rich_list
 Libs
   monadsyntax
 
@@ -156,6 +161,112 @@ Definition nsid_to_string_def:
   nsid_to_string (NONE, name) = name ∧
   nsid_to_string (SOME (n:num), name) = (toString n) ++ "." ++ name
 End
+
+(* ===== Internal Function Labels ===== *)
+(* Vyper's str(typ), used only to spell internal function labels.
+   Mirrors Python (vyper/semantics/types/): primitives.py (int/uint, bytesM),
+   bytestrings.py (Bytes[n]/String[n]), subscriptable.py (SArray, DynArray,
+   tuple), user.py (flag, struct). An interface-typed parameter is
+   BaseT AddressT here and prints as address, where Python prints the
+   interface name; labels never reach the bytecode. *)
+Definition vyper_type_str_def:
+  vyper_type_str (BaseT (UintT n)) = "uint" ++ toString n ∧
+  vyper_type_str (BaseT (IntT n)) = "int" ++ toString n ∧
+  vyper_type_str (BaseT BoolT) = "bool" ∧
+  vyper_type_str (BaseT DecimalT) = "decimal" ∧
+  vyper_type_str (BaseT AddressT) = "address" ∧
+  vyper_type_str (BaseT (BytesT (Fixed m))) = "bytes" ++ toString m ∧
+  vyper_type_str (BaseT (BytesT (Dynamic n))) =
+    "Bytes[" ++ toString n ++ "]" ∧
+  vyper_type_str (BaseT (StringT n)) = "String[" ++ toString n ++ "]" ∧
+  vyper_type_str (ArrayT t (Fixed n)) =
+    vyper_type_str t ++ "[" ++ toString n ++ "]" ∧
+  vyper_type_str (ArrayT t (Dynamic n)) =
+    "DynArray[" ++ vyper_type_str t ++ ", " ++ toString n ++ "]" ∧
+  vyper_type_str (TupleT [t]) = "(" ++ vyper_type_str t ++ ",)" ∧
+  vyper_type_str (TupleT ts) = "(" ++ vyper_type_strs ", " ts ++ ")" ∧
+  vyper_type_str (StructT id) = SND id ∧
+  vyper_type_str (FlagT id) = SND id ∧
+  vyper_type_str NoneT = "" ∧
+  vyper_type_strs sep [] = "" ∧
+  vyper_type_strs sep [t] = vyper_type_str t ∧
+  vyper_type_strs sep (t :: ts) =
+    vyper_type_str t ++ sep ++ vyper_type_strs sep ts
+Termination
+  WF_REL_TAC `measure (\x. case x of
+                              INL t => type_size t
+                            | INR (_, ts) => list_size type_size ts)`
+End
+
+(* Venom label of an internal function, from its function id, its lookup
+   name (nsid_to_string of its nsid) and declared parameter types,
+   defaulted ones included. The space keeps it apart from every source
+   identifier, external entry label ("fn_" ++ name), unit entry
+   ("__entry"/"__deploy"), codegen label ("revert", "code_end") and fresh
+   label ("@..."); the id, a decimal followed by a space, keeps the labels
+   of differently numbered functions apart whatever their names.
+   Mirrors Python: codegen_venom/module.py _generate_internal_function and
+   codegen_venom/expr.py lower_Call (internal calls). *)
+Definition internal_fn_label_def:
+  internal_fn_label (fn_id : num) (name : string) (arg_tys : type list)
+                    (is_ctor : bool) =
+    "internal " ++ toString fn_id ++ " " ++ name ++ "(" ++
+    vyper_type_strs "," arg_tys ++ ")" ++
+    (if is_ctor then "_deploy" else "_runtime")
+End
+
+Theorem internal_fn_label_prefix:
+  !fn_id name arg_tys is_ctor.
+    isPREFIX "internal " (internal_fn_label fn_id name arg_tys is_ctor)
+Proof
+  simp[internal_fn_label_def]
+QED
+
+Theorem toString_no_space[local]:
+  !n : num. ~MEM #" " (toString n)
+Proof
+  gen_tac >> strip_tac >>
+  qspec_then `n` mp_tac ASCIInumbersTheory.EVERY_isDigit_num_to_dec_string >>
+  REWRITE_TAC [listTheory.EVERY_MEM] >>
+  disch_then drule >> EVAL_TAC
+QED
+
+Theorem APPEND_sep_11[local]:
+  !s1 s2 c r1 r2.
+    ~MEM c s1 /\ ~MEM c s2 /\ s1 ++ ([c] ++ r1) = s2 ++ ([c] ++ r2) ==>
+    s1 = s2
+Proof
+  Induct >> Cases_on `s2` >> rw[] >>
+  first_x_assum irule >> metis_tac[listTheory.APPEND_ASSOC]
+QED
+
+(* Equal labels have equal function ids. *)
+Theorem internal_fn_label_id_11:
+  !i1 i2 n1 n2 tys1 tys2 c1 c2.
+    internal_fn_label i1 n1 tys1 c1 = internal_fn_label i2 n2 tys2 c2 ==>
+    i1 = i2
+Proof
+  rpt gen_tac >>
+  REWRITE_TAC [internal_fn_label_def, GSYM listTheory.APPEND_ASSOC,
+               listTheory.APPEND_11] >>
+  strip_tac >> drule_at Any APPEND_sep_11 >> simp[toString_no_space]
+QED
+
+(* Equal labels name the same function, for names without "(" (source
+   identifiers and nsid_to_string values). *)
+Theorem internal_fn_label_11:
+  !i1 i2 n1 n2 tys1 tys2 c1 c2.
+    ~MEM #"(" n1 /\ ~MEM #"(" n2 /\
+    internal_fn_label i1 n1 tys1 c1 = internal_fn_label i2 n2 tys2 c2 ==>
+    n1 = n2
+Proof
+  rpt gen_tac >> strip_tac >>
+  `i1 = i2` by metis_tac[internal_fn_label_id_11] >>
+  qpat_x_assum `internal_fn_label _ _ _ _ = _` mp_tac >>
+  ASM_REWRITE_TAC [internal_fn_label_def, GSYM listTheory.APPEND_ASSOC,
+               listTheory.APPEND_11] >>
+  strip_tac >> drule_at Any APPEND_sep_11 >> gs[]
+QED
 
 (* Key of a module-level variable (storage, transient, HashMap, immutable) in
    the name-keyed compile_env tables. Arguments and locals use their plain
@@ -363,6 +474,14 @@ Datatype:
        pass_via_stack: per-arg T=stack, F=memory. Order matches func_t.arguments.
        Mirrors Python: calling_convention.py pass_via_stack + returns_stack_count *)
     ce_func_info : string -> (num # num # bool list);
+    (* Internal function declared parameter types, defaulted ones included:
+       func_name → arg types. Spells the INVOKE target (internal_fn_label).
+       Mirrors Python: func_t.arguments in expr.py lower_Call *)
+    ce_func_param_types : string -> type list;
+    (* Internal function ids: func_name → id. Spells the INVOKE target
+       (internal_fn_label).
+       Mirrors Python: func_t._function_id in expr.py lower_Call *)
+    ce_func_ids : string -> num;
     (* Nonreentrant lock info for explicit return statements:
        (is_nonreentrant, nkey, use_transient, is_view).
        Python: stmt.py _lower_external_return calls emit_nonreentrant_unlock.
@@ -371,7 +490,12 @@ Datatype:
     (* Raw return: T for @raw_return decorated functions (proxy patterns).
        Bypasses ABI encoding, returns bytes directly.
        Mirrors Python: func_t.do_raw_return *)
-    ce_raw_return : bool
+    ce_raw_return : bool;
+    (* T when each local and loop variable gets a fresh ALLOCA at its
+       declaration, as in every body build_compile_env sets up; F when it
+       keeps whatever ce_vars already holds for its name.
+       Mirrors Python: Context.new_variable -> allocate_buffer -> alloca *)
+    ce_alloca_locals : bool
   |>
 End
 
@@ -538,6 +662,78 @@ Definition emit_data_item_def:
           (sec with ds_items := sec.ds_items ++ [item]) :: rest)
 End
 
+(* ===== The compile monad only appends ===== *)
+
+(* st' only appended to st: new finished blocks go in front (cs_blocks is
+   newest first), the oldest of them is st's current block, and the current
+   instructions only grow. *)
+Definition cs_extends_def:
+  cs_extends (st : compile_state) (st' : compile_state) <=>
+    ?new. st'.cs_blocks = new ++ st.cs_blocks /\
+      if new = [] then
+        st'.cs_current_bb = st.cs_current_bb /\
+        isPREFIX st.cs_current_insts st'.cs_current_insts
+      else
+        (LAST new).bb_label = st.cs_current_bb /\
+        isPREFIX st.cs_current_insts (LAST new).bb_instructions
+End
+
+Theorem cs_extends_refl:
+  !st. cs_extends st st
+Proof
+  rw[cs_extends_def] >> qexists_tac `[]` >> simp[]
+QED
+
+Theorem cs_extends_trans:
+  !st1 st2 st3. cs_extends st1 st2 /\ cs_extends st2 st3 ==> cs_extends st1 st3
+Proof
+  rw[cs_extends_def] >> qexists_tac `new' ++ new` >> simp[] >>
+  Cases_on `new = []` >> Cases_on `new' = []` >> gvs[LAST_APPEND_NOT_NIL] >>
+  metis_tac[isPREFIX_TRANS]
+QED
+
+Theorem cs_extends_same_block:
+  !st st'.
+    st'.cs_blocks = st.cs_blocks /\ st'.cs_current_bb = st.cs_current_bb /\
+    isPREFIX st.cs_current_insts st'.cs_current_insts ==>
+    cs_extends st st'
+Proof
+  rw[cs_extends_def] >> qexists_tac `[]` >> simp[]
+QED
+
+Theorem cs_extends_emit:
+  !inst st x st'. emit inst st = (x, st') ==> cs_extends st st'
+Proof
+  rw[emit_def] >> irule cs_extends_same_block >> simp[]
+QED
+
+Theorem cs_extends_new_block:
+  !lbl st x st'. new_block lbl st = (x, st') ==> cs_extends st st'
+Proof
+  rw[new_block_def, cs_extends_def] >>
+  qexists_tac `[<| bb_label := st.cs_current_bb;
+                   bb_instructions := st.cs_current_insts |>]` >>
+  simp[]
+QED
+
+Theorem cs_extends_fresh_var:
+  !st x st'. fresh_var st = (x, st') ==> cs_extends st st'
+Proof
+  rw[fresh_var_def] >> irule cs_extends_same_block >> simp[]
+QED
+
+Theorem cs_extends_fresh_label:
+  !sfx st x st'. fresh_label sfx st = (x, st') ==> cs_extends st st'
+Proof
+  rw[fresh_label_def] >> irule cs_extends_same_block >> simp[]
+QED
+
+Theorem cs_extends_fresh_id:
+  !st x st'. fresh_id st = (x, st') ==> cs_extends st st'
+Proof
+  rw[fresh_id_def] >> irule cs_extends_same_block >> simp[]
+QED
+
 (* ===== State Relation ===== *)
 
 (* ===== Well-Formedness ===== *)
@@ -582,6 +778,13 @@ Definition fresh_vars_wrt_def:
   fresh_vars_wrt (st:compile_state) (ss:venom_state) ⇔
     ∀ n. n ≥ st.cs_next_var ⇒
       STRING #"%" (toString n) ∉ FDOM ss.vs_vars
+End
+
+(* x is no compiler variable fresh at st, so the code compiled from st on
+   never assigns it. *)
+Definition not_fresh_at_def:
+  not_fresh_at (st:compile_state) x ⇔
+    ∀n. st.cs_next_var ≤ n ⇒ x ≠ STRING #"%" (toString n)
 End
 
 (* ===== Label-Space Invariants =====
@@ -641,27 +844,11 @@ Definition well_formed_cenv_def:
        FLOOKUP cenv.ce_vars n = SOME (MemLoc off sz) ⇒ sz > 0 ∧ (sz MOD 32 = 0))
 End
 
-(* Local variables in Vyper scopes match Venom memory.
-   Only handles MemLoc (local memory variables) because:
-   - StorageLoc variables (self.x) are covered by storage_rel
-   - TransientLoc/ImmutableLoc are similar global state
-   - Scopes only contain local (stack-like) variables *)
-Definition vars_rel_def:
-  vars_rel cenv scopes ss =
-    ∀ name entry offset size.
-      lookup_scopes name scopes = SOME entry ∧
-      FLOOKUP cenv.ce_vars name = SOME (MemLoc offset size)
-      ⇒
-      (* entry.type from scope provides correct type for val_in_memory dispatch
-         (e.g., AddressT → right-aligned BytesV encoding). *)
-      val_in_memory entry.type entry.value offset ss.vs_memory
-End
-
 (* ===== Locals held through allocations ===== *)
-(* After function lowering a local is PtrVar (Var p) sz: the ALLOCA emitted at
-   its declaration binds p to the base of a fresh region (emit_local_alloca,
-   compile_alloc_buffer), so the address depends on vs_allocas and
-   vs_alloca_next at run time.  vars_rel only covers MemLoc entries.
+(* After its declaration in an external or fallback body a local is
+   PtrVar (Var p) sz: the ALLOCA emitted at its declaration binds p to the base
+   of a fresh region (emit_local_alloca, compile_alloc_buffer), so the address
+   depends on vs_allocas and vs_alloca_next at run time, not on a fixed offset.
    Parameters of internal functions are PtrVar (Var p) sz too
    (materialize_internal_params): a stack-passed one is copied into an ALLOCA
    of the callee, a memory-passed one is the PARAM output p pointing into the
@@ -684,6 +871,27 @@ Definition not_local_ptr_def:
     ∀name entry sz.
       lookup_scopes name scopes = SOME entry ⇒
       FLOOKUP cenv.ce_vars name ≠ SOME (PtrVar (Var x) sz)
+End
+
+(* The locals of cenv are held through pointer variables that were handed out
+   before st (declare_local, compile_register_positional_args), one per
+   local:
+   - no variable sits at a fixed MemLoc offset: state_rel does not relate
+     those (the parameters build_compile_env places, until the code that
+     registers them rebinds them, and default arguments, which
+     compile_register_kwarg_vars keeps at MemLoc), and a store to one could
+     hit a live local's region;
+   - no compiler variable fresh at st is a local's pointer, so a temporary of
+     the code compiled from st on never overwrites one;
+   - distinct locals have distinct pointers, so declaring a local leaves the
+     others' pointers alone. *)
+Definition local_ptrs_reserved_def:
+  local_ptrs_reserved cenv (st:compile_state) ⇔
+    (∀name off sz. FLOOKUP cenv.ce_vars name ≠ SOME (MemLoc off sz)) ∧
+    ∀n1 n2 p sz1 sz2.
+      FLOOKUP cenv.ce_vars n1 = SOME (PtrVar (Var p) sz1) ⇒
+      not_fresh_at st p ∧
+      (FLOOKUP cenv.ce_vars n2 = SOME (PtrVar (Var p) sz2) ⇒ n1 = n2)
 End
 
 (* What backs a live local's region [base, base + sz) in the current frame
@@ -759,6 +967,21 @@ Definition transient_rel_def:
     (vs.tStorage addr = contract_transient ss)
 End
 
+(* The accounts and the transient storage of every address are identical,
+   and the source has no pending deletions.  Other addresses' accounts and
+   transient storage change during a body only through the call oracle,
+   whose outcome both sides adopt the same way (adopt_outcome).  Pending
+   deletions come only from create runs, which the supported subset leaves
+   out; a transaction starts with none, as call_external empties them on
+   success.  Venom has no pending deletions, so the success case of the
+   external result relation, which compares the accounts after the source
+   processes its deletions, needs them empty. *)
+Definition accounts_rel_def:
+  accounts_rel vs ss ⇔
+    vs.accounts = ss.vs_accounts ∧ vs.tStorage = ss.vs_transient ∧
+    vs.pending_deletions = []
+End
+
 (* ===== Immutables Relation ===== *)
 (* Interpreter immutables ↔ Venom code/data section.
    During constructor: interpreter writes to st.immutables, Venom uses ISTORE/ILOAD.
@@ -804,9 +1027,17 @@ End
 (* Per-variable mapping between interpreter layout slots and cenv StorageLoc.
    The interpreter uses lookup_var_slot_from_layout to get a slot number,
    then read_storage_slot/write_storage_slot to access it.
-   The lowering uses FLOOKUP ce_vars (module_var_key (ce_module, name))
-   → StorageLoc slot → SLOAD/SSTORE.
-   This relation ensures both reference the same storage slot.
+   The lowering uses FLOOKUP ce_vars (module_var_key nsid), with the
+   reference's own nsid, → StorageLoc slot → SLOAD/SSTORE.
+   This relation ensures both reference the same storage slot, both ways:
+   - every StorageLoc entry of the current module has the layout's slot;
+   - every storage variable or hashmap the source reads through
+     lookup_global, in any module, has an entry with that slot, as Python
+     takes each reference's slot from its varinfo
+     (vyper/codegen_venom/expr.py lower_Attribute).  build_compile_env has
+     entries for the main module only, so this direction holds only when
+     no other module has a variable with a layout slot, as when
+     source_deployment_rel limits the sources to [(NONE, tops)].
 
    cx.layouts : (address, (layout # layout)) alist
      where layout = ((num option # string), bytes32) alist
@@ -815,25 +1046,46 @@ End
      Maps module_var_key (ce_module, var_name) → StorageLoc slot.
    cenv.ce_storage_layout : (string, bytes32) fmap
      Maps var_name → slot (redundant with ce_vars for StorageLoc). *)
+
+(* Whether a declaration found by find_var_decl_by_name is transient. *)
+Definition var_decl_transient_def:
+  var_decl_transient (StorageVarDecl is_transient _) = is_transient ∧
+  var_decl_transient (HashMapVarDecl is_transient _ _) = is_transient
+End
+
 Definition storage_vars_rel_def:
   storage_vars_rel cenv (cx:evaluation_context) ⇔
-    ∀ name (slot:bytes32).
-      FLOOKUP cenv.ce_vars (module_var_key (cenv.ce_module, name)) =
-        SOME (StorageLoc slot) ⇒
-      (* Interpreter layout maps (src_id_opt, name) → slot_num : num.
-         Compile env stores slot as bytes32. Relation: n2w slot_num = slot. *)
-      ∃ slot_num. lookup_var_slot_from_layout cx F cenv.ce_module name = SOME slot_num ∧
-                  n2w slot_num = slot
+    (∀ name (slot:bytes32).
+       FLOOKUP cenv.ce_vars (module_var_key (cenv.ce_module, name)) =
+         SOME (StorageLoc slot) ⇒
+       (* Interpreter layout maps (src_id_opt, name) → slot_num : num.
+          Compile env stores slot as bytes32. Relation: n2w slot_num = slot. *)
+       ∃ slot_num. lookup_var_slot_from_layout cx F cenv.ce_module name = SOME slot_num ∧
+                   n2w slot_num = slot) ∧
+    (∀ src ts name d id slot_num.
+       get_module_code cx src = SOME ts ∧
+       find_var_decl_by_name name ts = SOME (d, id) ∧
+       ¬var_decl_transient d ∧
+       lookup_var_slot_from_layout cx F src id = SOME slot_num ⇒
+       FLOOKUP cenv.ce_vars (module_var_key (src, name)) =
+         SOME (StorageLoc (n2w slot_num)))
 End
 
 (* Transient storage variables: same as storage_vars_rel but for transient. *)
 Definition transient_vars_rel_def:
   transient_vars_rel cenv (cx:evaluation_context) ⇔
-    ∀ name (slot:bytes32).
-      FLOOKUP cenv.ce_vars (module_var_key (cenv.ce_module, name)) =
-        SOME (TransientLoc slot) ⇒
-      ∃ slot_num. lookup_var_slot_from_layout cx T cenv.ce_module name = SOME slot_num ∧
-                  n2w slot_num = slot
+    (∀ name (slot:bytes32).
+       FLOOKUP cenv.ce_vars (module_var_key (cenv.ce_module, name)) =
+         SOME (TransientLoc slot) ⇒
+       ∃ slot_num. lookup_var_slot_from_layout cx T cenv.ce_module name = SOME slot_num ∧
+                   n2w slot_num = slot) ∧
+    (∀ src ts name d id slot_num.
+       get_module_code cx src = SOME ts ∧
+       find_var_decl_by_name name ts = SOME (d, id) ∧
+       var_decl_transient d ∧
+       lookup_var_slot_from_layout cx T src id = SOME slot_num ⇒
+       FLOOKUP cenv.ce_vars (module_var_key (src, name)) =
+         SOME (TransientLoc (n2w slot_num)))
 End
 
 (* Check if a type is a bytestring (dynamic Bytes or String).
@@ -926,6 +1178,7 @@ Definition call_ctx_rel_def:
     (cc.cc_caller = txn.sender ∧
      cc.cc_address = txn.target ∧
      cc.cc_callvalue = n2w txn.value ∧
+     cc.cc_calldata = txn.calldata ∧
      tc.tc_origin = txn.origin ∧
      tc.tc_gasprice = n2w txn.gas_price ∧
      tc.tc_chainid = n2w txn.chain_id ∧
@@ -938,16 +1191,35 @@ Definition call_ctx_rel_def:
      bc.bc_blobbasefee = n2w txn.blob_base_fee)
 End
 
-(* Top-level oracle-mode state relation (PLAN 5.7).
-   Ties together all sub-relations and exactly the current oracle suffix and
-   request prefix. NONE-mode compatibility does not satisfy this relation. *)
+(* Top-level oracle-mode source/Venom state relation for the statement and
+   expression simulation, in func, the function running.  It ties together
+   the sub-relations below and exactly the current oracle suffix and request
+   prefix; NONE-mode compatibility does not satisfy it.
+   - local_ptrs_rel: locals in scope, held in memory through their pointer
+     variables (PtrVar).  MemLoc variables at fixed offsets are not
+     related.
+   - storage_rel, storage_vars_rel: storage, and the slots of storage
+     variables.
+   - transient_rel, transient_vars_rel: transient storage, and the slots of
+     transient variables.
+   - accounts_rel: the accounts and transient storage of every address, and
+     no pending deletions, which the success case of the external result
+     relation compares (storage_rel and transient_rel are its case for the
+     running contract).
+   - immutables_rel: immutables (vs_immutables in a constructor, the data
+     section at runtime).
+   - logs_rel: emitted logs.
+   - call_ctx_rel: transaction, call and block context.
+   - outcomes and requests: the oracle outcomes still to consume and the
+     requests recorded so far, as in the result relation. *)
 Definition state_rel_def:
-  state_rel cenv cx vs ss =
-    (vars_rel cenv vs.scopes ss ∧
+  state_rel func cenv cx vs ss =
+    (local_ptrs_rel func cenv vs.scopes ss ∧
      storage_rel cx.txn.target vs ss ∧
      storage_vars_rel cenv cx ∧
      transient_rel cx.txn.target vs ss ∧
      transient_vars_rel cenv cx ∧
+     accounts_rel vs ss ∧
      immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor vs ss ∧
      logs_rel cenv cx.txn.target vs ss ∧
      call_ctx_rel cx.txn ss.vs_call_ctx ss.vs_tx_ctx ss.vs_block_ctx ∧
@@ -961,13 +1233,9 @@ End
    ret_tv: type_value for the return type — used by typed_val_to_w256
    for correct BytesV encoding (AddressT → PAD_LEFT, BytesT → PAD_RIGHT).
 
-   Internal returns dispatch by returns_count:
-   - returns_count = 1: single stack value, vals = [typed_val_to_w256 v]
-   - returns_count > 1: multi-return (TupleT with all word elements),
-     vals = MAP typed_val_to_w256 (ZIP elem_tvs elem_vals)
-   - returns_count = 0: memory return, value in caller's return buffer.
-     IntRet vals with vals = [] (no stack values), state_rel must show
-     the return value is in memory at the return buffer address.
+   Internal returns: IntRet vals, with vals matching the value as
+   intret_vals_match (below) says.  A memory return has vals = []; its
+   value is in the caller's return buffer.
 
    External returns:
    - Halt: ABI-encoded return data. state_rel on final state.
@@ -976,44 +1244,47 @@ End
    - AssertException → Abort Revert_abort
    - Error → Abort (any abort type) *)
 (* Helper: check return values match for internal return.
-   Dispatches by number of return values:
-   - Single value: vals = [typed_val_to_w256 ret_tv v]
-   - Multi-return (TupleT): vals = MAP typed_val_to_w256 (ZIP elem_tvs elem_vals)
-   - Memory return: vals = [] (value in return buffer, not on stack) *)
+   Dispatches by the return type, as Python's _lower_internal_return does:
+   - Memory return: vals = [] (value in return buffer, not on stack)
+   - Tuple or struct (tuple-like), returned on the stack: one word per
+     member, vals = MAP typed_val_to_w256 over the members, for any number
+     of members, one included
+   - Any other value: vals = [typed_val_to_w256 ret_tv v] *)
 Definition intret_vals_match_def:
   intret_vals_match ret_tv v vals ⇔
-    case vals of
-      [w] => w = typed_val_to_w256 ret_tv v
-    | [] => T  (* Memory return: value in caller's buffer, not checked here *)
-    | _ => (case (ret_tv, v) of
+    vals = [] ∨
+    vals = (case (ret_tv, v) of
               (TupleTV elem_tvs, ArrayV (TupleV elem_vals)) =>
-                vals = MAP (λ(tv,ev). typed_val_to_w256 tv ev)
-                         (ZIP (elem_tvs, elem_vals))
-            | _ => F)
+                MAP (λ(tv,ev). typed_val_to_w256 tv ev)
+                  (ZIP (elem_tvs, elem_vals))
+            | (StructTV field_tvs, StructV fields) =>
+                MAP (λ(tv,ev). typed_val_to_w256 tv ev)
+                  (ZIP (MAP SND field_tvs, MAP SND fields))
+            | _ => [typed_val_to_w256 ret_tv v])
 End
 
 Definition result_rel_def:
   (* Normal completion — no return value *)
-  (result_rel ret_tv cenv cx (INL (), vs') (OK ss') =
-    state_rel cenv cx vs' ss') ∧
+  (result_rel func ret_tv cenv cx (INL (), vs') (OK ss') =
+    state_rel func cenv cx vs' ss') ∧
   (* Internal return: state + return values *)
-  (result_rel ret_tv cenv cx (INR (ReturnException v), vs') (IntRet ir ss') =
-    (state_rel cenv cx vs' ss' ∧
+  (result_rel func ret_tv cenv cx (INR (ReturnException v), vs') (IntRet ir ss') =
+    (state_rel func cenv cx vs' ss' ∧
      intret_vals_match ret_tv v ir.iret_values ∧
      ir.iret_adopt_fmp = NONE)) ∧
   (* External return → Halt with ABI-encoded data *)
-  (result_rel ret_tv cenv cx (INR (ReturnException v), vs') (Halt ss') =
-    state_rel cenv cx vs' ss') ∧
+  (result_rel func ret_tv cenv cx (INR (ReturnException v), vs') (Halt ss') =
+    state_rel func cenv cx vs' ss') ∧
   (* Every reason may REVERT, including an ordinary raise "UNREACHABLE".
      Only the distinguished UNREACHABLE exception may map to ExHalt_abort. *)
-  (result_rel ret_tv cenv cx (INR (AssertException s), vs') (Abort Revert_abort ss') =
+  (result_rel func ret_tv cenv cx (INR (AssertException s), vs') (Abort Revert_abort ss') =
     T) ∧
-  (result_rel ret_tv cenv cx (INR (AssertException s), vs') (Abort ExHalt_abort ss') =
+  (result_rel func ret_tv cenv cx (INR (AssertException s), vs') (Abort ExHalt_abort ss') =
     (s = "UNREACHABLE")) ∧
   (* Error → Abort (any type) *)
-  (result_rel ret_tv cenv cx (INR (Error _), vs') (Abort _ ss') = T) ∧
+  (result_rel func ret_tv cenv cx (INR (Error _), vs') (Abort _ ss') = T) ∧
   (* Everything else: no relation *)
-  (result_rel _ _ _ _ _ = F)
+  (result_rel _ _ _ _ _ _ = F)
 End
 
 (* ===== Type Classification ===== *)
@@ -1092,6 +1363,12 @@ Definition compute_pass_via_stack_def:
     else
       F :: compute_pass_via_stack rest stack_items
 End
+
+Theorem LENGTH_compute_pass_via_stack:
+  !tys n. LENGTH (compute_pass_via_stack tys n) = LENGTH tys
+Proof
+  Induct >> rw[compute_pass_via_stack_def]
+QED
 
 (* Compute calling convention for an internal function.
    returns_count: number of stack-returned values (0 = memory return).

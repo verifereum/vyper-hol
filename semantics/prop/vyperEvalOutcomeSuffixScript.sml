@@ -3,7 +3,7 @@
 Theory vyperEvalOutcomeSuffix
 Ancestors
   list pair option vyperMisc vyperState vyperInterpreter vyperCreate
-  vyperStatePreservation vyperCallFrame vyperStorageBackend vyperCallOutcome
+  vyperStatePreservation vyperCallFrame vyperStorageBackend vyperCallOutcome vyperCallOutcomeProps
 Libs monadsyntax pairLib
 
 Definition outcomes_frame_def:
@@ -513,20 +513,42 @@ val outcomes_suffix_fact_index =
   List.map (fn th => (outcomes_fact_key (concl (SPEC_ALL th)),th))
     outcomes_suffix_frame_simps;
 
-val outcomes_suffix_net = outcomes_frame_net
-  (outcomes_suffix_read :: outcomes_suffix_take :: outcomes_suffix_frame_simps)
-  [outcomes_suffix_bind_guarded, outcomes_suffix_finally, outcomes_suffix_try];
+fun outcomes_suffix_step facts =
+  let
+    val net = outcomes_frame_net facts
+      [outcomes_suffix_bind_guarded, outcomes_suffix_finally, outcomes_suffix_try]
+  in
+    FIRST [
+      CONV_TAC (HO_REWR_CONV FORALL_PROD), gen_tac,
+      first_assum ACCEPT_TAC,
+      (fn g as (_,w) => FIRST (Net.match w net) g),
+      CONV_TAC (RAND_CONV (CHANGED_CONV outcomes_head_conv)),
+      CONV_TAC (RAND_CONV (REWR_CONV ignore_bind_def)),
+      CONV_TAC (RAND_CONV (REWR_CONV switch_BoolV_def)),
+      strip_tac, conj_tac, OUTCOMES_CASE_TAC]
+  end;
 
-val OUTCOMES_SUFFIX_STEP = FIRST [
-  CONV_TAC (HO_REWR_CONV FORALL_PROD), gen_tac,
-  first_assum ACCEPT_TAC,
-  (fn g as (_,w) => FIRST (Net.match w outcomes_suffix_net) g),
-  CONV_TAC (RAND_CONV (CHANGED_CONV outcomes_head_conv)),
-  CONV_TAC (RAND_CONV (REWR_CONV ignore_bind_def)),
-  CONV_TAC (RAND_CONV (REWR_CONV switch_BoolV_def)),
-  strip_tac, conj_tac, OUTCOMES_CASE_TAC];
+val outcomes_suffix_base_facts =
+  outcomes_suffix_read :: outcomes_suffix_take :: outcomes_suffix_frame_simps;
 
-val OUTCOMES_SUFFIX_TAC = rpt OUTCOMES_SUFFIX_STEP;
+Theorem outcomes_suffix_ext_call:
+  outcomes_suffix (eval_ext_call cx static skip_check sig opts vs)
+Proof
+  PairCases_on `sig` >> Cases_on `vs` >>
+  simp_tac bool_ss [eval_ext_call_def, LET_THM] >>
+  rpt (outcomes_suffix_step outcomes_suffix_base_facts)
+QED
+
+Theorem outcomes_suffix_send:
+  outcomes_suffix (eval_send cx has_gas vs)
+Proof
+  Cases_on `vs` >> TRY (Cases_on `t`) >>
+  simp_tac bool_ss [eval_send_def, LET_THM] >>
+  rpt (outcomes_suffix_step outcomes_suffix_base_facts)
+QED
+
+val OUTCOMES_SUFFIX_TAC = rpt (outcomes_suffix_step
+  (outcomes_suffix_ext_call :: outcomes_suffix_send :: outcomes_suffix_base_facts));
 
 (* Give each evaluator equation its own proof fragment and timeout budget. *)
 fun OUTCOMES_SUSPEND_CASE (g as (_,w)) =
@@ -596,7 +618,7 @@ Proof
 QED
 
 Resume eval_outcomes_suffix_mutual[ExtCall]:
-  simp[Once evaluate_def] >> OUTCOMES_SUFFIX_TAC >> OUTCOMES_FINISH_TAC
+  simp[Once evaluate_def] >> OUTCOMES_SUFFIX_TAC >> OUTCOMES_FRAME_TAC >> OUTCOMES_FINISH_TAC
 QED
 
 Resume eval_outcomes_suffix_mutual[eval_stmt_Pass]:
