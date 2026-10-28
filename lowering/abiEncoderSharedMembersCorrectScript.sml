@@ -28,7 +28,8 @@ Proof
   `LIST_REL abi_encoder_structural_valid tys avs` by
     (simp[LIST_REL_EL_EQN] >> rpt strip_tac >> rename1 `n < LENGTH avs` >>
      first_x_assum (qspec_then `n` mp_tac) >> simp[] >>
-     Cases_on `EL n infos` >> PairCases_on `r` >>
+     Cases_on `EL n infos` >> rename1 `EL n infos = (child, fields)` >>
+     PairCases_on `fields` >>
      metis_tac[abi_encoder_open_input_valid]) >>
   `enc at (ListV avs) = enc (Tuple tys) (ListV avs)` by
     (gvs[abi_encoder_tuple_type_def] >> simp[Once enc_def, LET_THM]) >>
