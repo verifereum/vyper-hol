@@ -431,12 +431,12 @@ Theorem eval_expr_bound_builtin:
     eval_expr cx (TypeBuiltin ann tb t args) es = (res, es') /\
     expr_res_ok res /\ MEM tb [MaxValue; MinValue; Epsilon] ==>
     es' = es /\ args = [] /\
-    ?v. res = INL (Value v) /\ evaluate_type_builtin cx tb t [] = INL v
+    ?v. res = INL (Value v) /\ evaluate_type_builtin cx tb t [] [] = INL v
 Proof
   rpt gen_tac >> strip_tac >>
   `!n. type_builtin_args_length_ok tb n <=> n = 0` by
     (Cases_on `tb` >> gvs[type_builtin_args_length_ok_def]) >>
-  `!y. evaluate_type_builtin cx tb t [] = INR y ==> ?m. y = TypeError m` by
+  `!y. evaluate_type_builtin cx tb t [] [] = INR y ==> ?m. y = TypeError m` by
     (Cases_on `tb` >> gvs[evaluate_type_builtin_def, AllCaseEqs()] >>
      Cases_on `t` >> gvs[evaluate_max_value_def, evaluate_min_value_def] >>
      rename1 `BaseT bt` >> Cases_on `bt` >>
@@ -446,7 +446,7 @@ Proof
        assert_def, return_def, raise_def, lift_sum_def] >>
   Cases_on `args` >> simp[raise_def] >>
   simp[Once evaluate_def, return_def] >>
-  Cases_on `evaluate_type_builtin cx tb t []` >>
+  Cases_on `evaluate_type_builtin cx tb t [] []` >>
   simp[return_def, raise_def] >> rw[] >> gvs[expr_res_ok_def]
 QED
 

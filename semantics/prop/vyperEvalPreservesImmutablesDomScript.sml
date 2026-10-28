@@ -1656,7 +1656,7 @@ Proof
   simp[bind_def, AllCaseEqs(), return_def, raise_def,
        check_def, type_check_def, assert_def, lift_sum_def] >>
   rpt strip_tac >> gvs[preserves_immutables_dom_refl] >>
-  TRY (Cases_on `evaluate_type_builtin cx tb typ vs` >>
+  TRY (Cases_on `evaluate_type_builtin cx tb typ (MAP expr_type es) vs` >>
        gvs[return_def, raise_def]) >>
   first_x_assum (qspec_then `st` mp_tac) >>
   simp[check_def, type_check_def, assert_def, return_def]

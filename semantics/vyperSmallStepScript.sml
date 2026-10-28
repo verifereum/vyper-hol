@@ -60,7 +60,7 @@ Datatype:
   | AttributeK identifier eval_continuation
   | BuiltinK type builtin (type list) eval_continuation
   | LenK eval_continuation
-  | TypeBuiltinK type_builtin type eval_continuation
+  | TypeBuiltinK type_builtin type (type list) eval_continuation
   | CallSendK bool eval_continuation
   | ExtCallK bool bool ext_call_sig ext_call_opts eval_continuation
   (* Chain interaction builtin continuations *)
@@ -176,7 +176,7 @@ Definition eval_expr_cps_def:
     (case type_check (type_builtin_args_length_ok tb (LENGTH es))
             "TypeBuiltin args" st of
         (INR ex, st) => AK cx8 (ApplyExc ex) st k
-      | (INL tv, st) => eval_exprs_cps cx8 es st (TypeBuiltinK tb typ k)) ∧
+      | (INL tv, st) => eval_exprs_cps cx8 es st (TypeBuiltinK tb typ (MAP expr_type es) k)) ∧
   eval_expr_cps cx9 (Call _ (Send has_gas) es _) st k =
     (case type_check (LENGTH es = if has_gas then 3 else 2) "Send args" st of
        (INR ex, st) => AK cx9 (ApplyExc ex) st k
@@ -433,7 +433,7 @@ Definition apply_exc_def:
   apply_exc cx ex st (PopK k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (BuiltinK _ _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (LenK k) = AK cx (ApplyExc ex) st k ∧
-  apply_exc cx ex st (TypeBuiltinK _ _ k) = AK cx (ApplyExc ex) st k ∧
+  apply_exc cx ex st (TypeBuiltinK _ _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (CallSendK _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (ExtCallK _ _ _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (RawCallK _ _ k) = AK cx (ApplyExc ex) st k ∧
@@ -683,9 +683,9 @@ Definition apply_vals_def:
       v <- lift_sum $ evaluate_builtin cx acc ty bt tys vs;
       return $ Value v
     od st) k ∧
-  apply_vals cx vs st (TypeBuiltinK tb typ k) =
+  apply_vals cx vs st (TypeBuiltinK tb typ tys k) =
     liftk cx ApplyTv (do
-      v <- lift_sum $ evaluate_type_builtin cx tb typ vs;
+      v <- lift_sum $ evaluate_type_builtin cx tb typ tys vs;
       return $ Value v
     od st) k ∧
   apply_vals cx vs st (LogK id k) =
