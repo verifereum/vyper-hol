@@ -1,5 +1,6 @@
 Theory vyperTestLibTest
-Libs vyperTestLib
+Ancestors vyperTestRunner
+Libs vyperTestLib vyperTestRunnerLib cv_transLib
 
 fun source code = JSON.OBJECT [("source_code", JSON.STRING code)];
 
@@ -17,3 +18,41 @@ val _ = expect "explicit gas retained" (SOME "unsupported source pattern: gas=")
   [source "raw_call(target, msg.data, gas=1000)"];
 val _ = expect "negative missing source" (SOME "missing source_code") [];
 val _ = expect "blank source" (SOME "blank source_code") [source " \n"];
+
+(* The runner must handle word-bearing traces without changing its saved
+   proposition, and must still reject failures with the original test name. *)
+Definition traces_runner_words_def:
+  traces_runner_words =
+    [Call <| sender := 1w; target := 2w; callData := [3w]; value := 0;
+             timeStamp := 0; blockNumber := 0; blockHashes := [4w];
+             blobHashes := []; blobBaseFee := 0; gasLimit := 0;
+             gasPrice := 0; chainId := 0; static := F; expectedOutput := NONE |>]
+End
+
+val () = cv_trans traces_runner_words_def;
+val () = run_test_on_traces ``traces_runner_words``;
+val () =
+  if aconv (concl (DB.fetch "-" "result_runner_words"))
+           ``ISL (run_test traces_runner_words)`` then ()
+  else raise Fail "runner changed the saved proposition";
+
+Definition traces_runner_failure_def:
+  traces_runner_failure =
+    [Call <| sender := 1w; target := 2w; callData := [3w]; value := 0;
+             timeStamp := 0; blockNumber := 0; blockHashes := [4w];
+             blobHashes := []; blobBaseFee := 0; gasLimit := 0;
+             gasPrice := 0; chainId := 0; static := F;
+             expectedOutput := SOME [] |>]
+End
+
+Definition name_runner_failure_def:
+  name_runner_failure = "runner negative regression"
+End
+
+val () = cv_trans traces_runner_failure_def;
+val rejected =
+  (run_test_on_traces ``traces_runner_failure``; false)
+  handle Fail message =>
+    String.isSubstring "Failure in test result_runner_failure:" message andalso
+    String.isSubstring "runner negative regression" message;
+val () = if rejected then () else raise Fail "runner accepted a failing trace";

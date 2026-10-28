@@ -964,7 +964,8 @@ Proof
       env mid s1 f0 mr /\ mat_frame st s s1 /\
       s1.vs_alloca_next = s.vs_alloca_next + sz` by
     (irule mat_inv_stack_bind >> simp[] >> conj_tac
-     >- (first_assum ACCEPT_TAC) >>
+     >- (simp[Abbr `s1`, mstore_def, update_var_def] >>
+         first_assum ACCEPT_TAC) >>
      qexists_tac `a` >> simp[Abbr `s1`]) >>
   qexists_tac `s1` >> simp[] >> irule mat_pending_stack_bind >>
   simp[] >> qexists_tac `a` >> qexistsl_tac [`s`, `st`] >> simp[Abbr `s1`]
