@@ -16,7 +16,7 @@ Ancestors
 Definition log_prefix_ready_def:
   log_prefix_ready env cx cenv func ids reserved requests final_cut suffix cs es ss credit prefix ptvs pvs <=>
     runtime_consistent env cx es /\
-    env_scopes_consistent env cx es /\ state_well_typed es /\ state_rel cenv cx es ss /\
+    env_scopes_consistent env cx es /\ state_well_typed es /\ state_rel_simple cenv cx es ss /\
     local_ptrs_rel func cenv es.scopes ss /\ source_alloca_floor cenv es.scopes ids ss /\
     (!name entry p region_size. lookup_scopes name es.scopes = SOME entry /\
       FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) region_size) ==> abi_operand_before cs.cs_next_var (Var p)) /\
@@ -36,7 +36,7 @@ Definition log_argument_load_certificate_def:
     loaded.vs_halted = before.vs_halted /\
     lowered_value_rel (lowered_value_type cenv e) tv v src loaded /\ abi_operand_before load_cut.cs_next_var src /\
     runtime_consistent env cx es1 /\ env_scopes_consistent env cx es1 /\ state_well_typed es1 /\
-    state_rel cenv cx es1 loaded /\ local_ptrs_rel func cenv es1.scopes loaded /\
+    state_rel_simple cenv cx es1 loaded /\ local_ptrs_rel func cenv es1.scopes loaded /\
     alloca_inv loaded /\ allocation_growth before loaded /\ cs.cs_next_var <= load_cut.cs_next_var /\
     (fresh_vars_wrt cs before ==> fresh_vars_wrt load_cut loaded) /\ compiler_id_history load_cut /\
     (!arg_op. abi_operand_before cs.cs_next_var arg_op ==> eval_operand arg_op loaded = eval_operand arg_op before) /\

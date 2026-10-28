@@ -79,7 +79,7 @@ Proof
     (mp_tac (Q.SPECL [`cenv`, `args`, `cs`] compile_log_eval_all_ci_mono) >>
      simp[]) >>
   `isPREFIX cs.cs_current_insts cs'.cs_current_insts` by
-    gvs[ci_mono_def, same_blocks_def] >>
+    gvs[ci_mono_def, same_blocks_def, cs_extends_def, APPEND_EQ_SELF] >>
   gvs[GSYM prefix_drop_equiv, emitted_insts_def]
 QED
 
@@ -172,7 +172,7 @@ Proof
     (mp_tac (Q.SPECL [`cenv`, `lctx`, `ty`, `event_id`, `args`, `cs`]
       compile_log_stmt_ci_mono) >> simp[]) >>
   `isPREFIX cs.cs_current_insts cs'.cs_current_insts` by
-    gvs[ci_mono_def, same_blocks_def] >>
+    gvs[ci_mono_def, same_blocks_def, cs_extends_def, APPEND_EQ_SELF] >>
   gvs[GSYM prefix_drop_equiv, emitted_insts_def]
 QED
 

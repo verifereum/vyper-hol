@@ -31,7 +31,7 @@ Theorem checked_compile_native_log_stmt_data_state:
     LENGTH flags = LENGTH args /\ LIST_REL event_arg_compatible fts (MAP SND args) /\
     LIST_REL (\fty tv. evaluate_type (type_env tops) fty = SOME tv) fts ftvs /\
     LIST_REL (\arg tv. evaluate_type (type_env tops) (SND arg) = SOME tv) args atvs /\
-    state_well_typed es /\ state_rel cenv cx es ss /\ local_ptrs_rel func cenv es.scopes ss /\
+    state_well_typed es /\ state_rel_simple cenv cx es ss /\ local_ptrs_rel func cenv es.scopes ss /\
     vyper_to_abi_list (type_env tops) data_types (select_log_args F flags values) = SOME avs /\
     source_alloca_floor cenv es.scopes (topic_cut.cs_next_id::packed_cut.cs_next_id::compiler_alloca_ids encode_cut cs') ss /\
     (!name entry p region_size. lookup_scopes name es.scopes = SOME entry /\
@@ -52,7 +52,7 @@ Theorem checked_compile_native_log_stmt_data_state:
       out.vs_current_bb = cs'.cs_current_bb /\ out.vs_inst_idx = LENGTH cs'.cs_current_insts /\ ~out.vs_halted /\
       out.vs_logs = ss.vs_logs ++ [<|logger := w2w ss.vs_call_ctx.cc_address; topics := topics;
         data := enc (Tuple (MAP (vyper_to_abi_type (type_env tops)) data_types)) (ListV avs)|>] /\
-      state_rel cenv cx (es with logs := es.logs ++ [<|logger := w2w ss.vs_call_ctx.cc_address; topics := topics;
+      state_rel_simple cenv cx (es with logs := es.logs ++ [<|logger := w2w ss.vs_call_ctx.cc_address; topics := topics;
         data := enc (Tuple (MAP (vyper_to_abi_type (type_env tops)) data_types)) (ListV avs)|>]) out /\
       local_ptrs_rel func cenv es.scopes out /\ allocation_growth ss out /\
       read_memory (w2n (memory_snapshot_addr packed_cut.cs_next_id

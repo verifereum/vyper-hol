@@ -11,8 +11,8 @@ Theorem abi_allocated_window_subwindow:
 Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `abi_allocated_window _ _ _ _` (strip_assume_tac o REWRITE_RULE [abi_allocated_window_def]) >>
-  rename1 `FLOOKUP ss.vs_allocas id = SOME (allocation_base,allocation_size)` >>
-  simp_tac bool_ss [abi_allocated_window_def] >> qexistsl_tac [`allocation_base`, `allocation_size`] >>
+  rename1 `FLOOKUP ss.vs_allocas id = SOME (window_base,window_size)` >>
+  simp_tac bool_ss [abi_allocated_window_def] >> qexistsl_tac [`window_base`, `window_size`] >>
   simp[] >> decide_tac
 QED
 

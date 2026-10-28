@@ -77,7 +77,7 @@ Proof
 QED
 
 Theorem built_struct_fields_types:
-  MAP (FST o SND) (build_struct_fields_one sft args) = MAP SND args
+  MAP (FST o SND) (build_struct_fields_one tenv args) = MAP SND args
 Proof
   simp[build_struct_fields_one_def, MAP_MAP_o, o_DEF] >>
   irule MAP_CONG >> simp[FORALL_PROD]
@@ -87,7 +87,7 @@ QED
    or is inherited from its input map. Field sizes need not be guessed. *)
 Theorem built_struct_fields_origin:
   !tops sf name fields.
-  FLOOKUP (build_struct_fields_map tops sf) name = SOME fields ==>
+  FLOOKUP (build_struct_fields_map tenv tops sf) name = SOME fields ==>
   FLOOKUP sf name = SOME fields \/
   ?args. MEM (StructDecl name args) tops /\
          MAP (FST o SND) fields = MAP SND args
@@ -115,9 +115,8 @@ Theorem make_struct_fields_origin:
     FLOOKUP (make_struct_fields_map tops) name = SOME fields ==>
     ?args. MEM (StructDecl name args) tops /\ MAP (FST o SND) fields = MAP SND args
 Proof
-  rpt gen_tac >> simp[make_struct_fields_map_def, FLOOKUP_o_f, AllCaseEqs()] >>
-  rpt strip_tac >> gvs[] >> drule built_struct_fields_origin >>
-  simp[resolve_struct_field_sizes_types]
+  rpt gen_tac >> simp[make_struct_fields_map_def] >>
+  rpt strip_tac >> drule built_struct_fields_origin >> simp[]
 QED
 
 (* This is a source-namespace premise, not an environment premise. A typed
@@ -181,12 +180,12 @@ Theorem built_struct_fields_every:
   FEVERY (λ(name,fields). EVERY (P o FST o SND) fields) sf /\
   (!name args. MEM (StructDecl name args) tops ==> EVERY (P o SND) args) ==>
   FEVERY (λ(name,fields). EVERY (P o FST o SND) fields)
-    (build_struct_fields_map tops sf)
+    (build_struct_fields_map tenv tops sf)
 Proof
   simp[FEVERY_DEF] >> rpt strip_tac >>
-  rename1 `name IN FDOM (build_struct_fields_map tops sf)` >>
-  `FLOOKUP (build_struct_fields_map tops sf) name =
-   SOME ((build_struct_fields_map tops sf) ' name)` by simp[FLOOKUP_DEF] >>
+  rename1 `name IN FDOM (build_struct_fields_map tenv tops sf)` >>
+  `FLOOKUP (build_struct_fields_map tenv tops sf) name =
+   SOME ((build_struct_fields_map tenv tops sf) ' name)` by simp[FLOOKUP_DEF] >>
   drule built_struct_fields_origin >> strip_tac
   >- (fs[FLOOKUP_DEF] >>
       qpat_x_assum `sf ' name = _` (SUBST1_TAC o SYM) >>
@@ -205,7 +204,7 @@ Theorem make_struct_fields_map_acyclic:
   acyclic_struct_metadata (make_struct_fields_map tops)
 Proof
   strip_tac >> irule shallow_copy_metadata_acyclic >>
-  simp[make_struct_fields_map_def, resolve_struct_field_sizes_metadata_every] >>
+  simp[make_struct_fields_map_def] >>
   irule built_struct_fields_every >>
   simp[FEVERY_FEMPTY] >> rpt strip_tac >>
   `EVERY (supported_value_type tops o SND) args` by

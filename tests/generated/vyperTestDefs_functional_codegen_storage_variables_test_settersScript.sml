@@ -1,5 +1,5 @@
 Theory vyperTestDefs_functional_codegen_storage_variables_test_setters[no_sig_docs]
 Ancestors jsonToVyper
 Libs vyperTestLib
-val () = holbuild_extra_deps ["../vyper-test-exports/functional/codegen/storage_variables/test_setters.json"];
+val () = holbuild_extra_deps ["../vyper-test-exports/functional/codegen/storage_variables/test_setters.json", "../vyper-test-exports/functional/codegen/storage_variables/test_setters.json.provenance"];
 val () = make_definitions_for_file ("functional_codegen_storage_variables_test_setters", "../vyper-test-exports/functional/codegen/storage_variables/test_setters.json");

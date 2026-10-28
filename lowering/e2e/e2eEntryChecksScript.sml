@@ -93,11 +93,11 @@ Proof
   simp[entry_venom_state_def, blockhash_rel_def, w2n_n2w]
 QED
 
-(* Calldata is the frame's actual canonical ABI buffer; no unrelated new
-   call_ctx_rel calldata equation or source outcomes field is invented. *)
+(* Calldata is the frame's actual canonical ABI buffer; no source outcomes
+   field is invented. *)
 Theorem entry_canonical_abi_buffer:
   es.contexts = (ctxt, rb) :: rest /\
-  valid_vyper_call tops tx ctxt.msgParams.data ret ==>
+  valid_vyper_call tops tx (buffer_to_list ctxt.msgParams.data) ret ==>
   valid_vyper_call tops tx
     (entry_venom_state prog cp es).vs_call_ctx.cc_calldata ret /\
   (entry_venom_state prog cp es).vs_call_ctx.cc_gas = 0

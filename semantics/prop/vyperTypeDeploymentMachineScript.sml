@@ -515,9 +515,11 @@ Theorem evaluate_all_constants_preserves_machine_static_components:
   am_c.sources = am.sources /\ am_c.exports = am.exports /\
   am_c.layouts = am.layouts
 Proof
-  qid_spec_tac `am_c` >> qid_spec_tac `am` >> Induct_on `mods`
-  >- rw[evaluate_all_constants_def] >>
-  rpt gen_tac >> PairCases_on `h` >> rw[evaluate_all_constants_def] >>
+  simp[evaluate_all_constants_def] >>
+  qid_spec_tac `am_c` >> qid_spec_tac `am` >>
+  qspec_tac (`constants_order mods`, `mods`) >> Induct
+  >- rw[evaluate_module_constants_def] >>
+  rpt gen_tac >> PairCases_on `h` >> rw[evaluate_module_constants_def] >>
   gvs[AllCaseEqs()] >> first_x_assum drule >>
   simp[merge_constants_def]
 QED

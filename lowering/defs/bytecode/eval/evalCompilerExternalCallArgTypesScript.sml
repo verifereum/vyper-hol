@@ -1,0 +1,53 @@
+(* Independent checked-frontend bytecode witnesses for external-call
+   arguments whose type is narrower than the declared parameter type: the
+   argument buffer is laid out with the call-site types. *)
+Theory evalCompilerExternalCallArgTypes
+Ancestors compileVyper supportedProgram concretizeMemLocDefs codegenReadyCompute alist byte integer_word option
+Libs memoryStoreWitnessLib vyperCheckContractFrontendLib jsonASTLib evalCompilerBytecodeLib finite_mapLib computeLib wordsLib
+
+fun holbuild_extra_deps (_ : string list) = ()
+val () = holbuild_extra_deps ["../external-calls"]
+val () = computeLib.upd_compset add_finite_map_compset
+val () = computeLib.upd_compset (computeLib.add_thms
+  [fmap_to_alist_FEMPTY, i2w_pos, byteTheory.set_byte_bit_field_insert])
+val fixture_root = "../external-calls/oracle"
+
+val e25_arg_strlit_short = memoryStoreWitnessLib.evaluate fixture_root "e25_arg_strlit_short"
+Theorem e25_arg_strlit_short_matches_python_oracle:
+  ^(#term e25_arg_strlit_short) =
+    SOME ^(memoryStoreWitnessLib.oracle fixture_root "e25_arg_strlit_short")
+Proof
+  CONV_TAC (LAND_CONV (K (#evaluation e25_arg_strlit_short))) >> EVAL_TAC
+QED
+
+val e36_arg_bytes_literal = memoryStoreWitnessLib.evaluate fixture_root "e36_arg_bytes_literal"
+Theorem e36_arg_bytes_literal_matches_python_oracle:
+  ^(#term e36_arg_bytes_literal) =
+    SOME ^(memoryStoreWitnessLib.oracle fixture_root "e36_arg_bytes_literal")
+Proof
+  CONV_TAC (LAND_CONV (K (#evaluation e36_arg_bytes_literal))) >> EVAL_TAC
+QED
+
+val e26_arg_str_smaller = memoryStoreWitnessLib.evaluate fixture_root "e26_arg_str_smaller"
+Theorem e26_arg_str_smaller_matches_python_oracle:
+  ^(#term e26_arg_str_smaller) =
+    SOME ^(memoryStoreWitnessLib.oracle fixture_root "e26_arg_str_smaller")
+Proof
+  CONV_TAC (LAND_CONV (K (#evaluation e26_arg_str_smaller))) >> EVAL_TAC
+QED
+
+val e27_arg_dyn_smaller = memoryStoreWitnessLib.evaluate fixture_root "e27_arg_dyn_smaller"
+Theorem e27_arg_dyn_smaller_matches_python_oracle:
+  ^(#term e27_arg_dyn_smaller) =
+    SOME ^(memoryStoreWitnessLib.oracle fixture_root "e27_arg_dyn_smaller")
+Proof
+  CONV_TAC (LAND_CONV (K (#evaluation e27_arg_dyn_smaller))) >> EVAL_TAC
+QED
+
+val e46_arg_storage_str = memoryStoreWitnessLib.evaluate fixture_root "e46_arg_storage_str"
+Theorem e46_arg_storage_str_matches_python_oracle:
+  ^(#term e46_arg_storage_str) =
+    SOME ^(memoryStoreWitnessLib.oracle fixture_root "e46_arg_storage_str")
+Proof
+  CONV_TAC (LAND_CONV (K (#evaluation e46_arg_storage_str))) >> EVAL_TAC
+QED

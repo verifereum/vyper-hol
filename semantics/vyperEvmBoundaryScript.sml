@@ -1,7 +1,7 @@
 (*
  * Shared Verifereum boundary plumbing.
  *
- * TOP-LEVEL:
+ * Main definitions:
  *   make_evm_tx           — a `transaction` for one Verifereum sub-message
  *   vyper_to_tx_params    — transaction_parameters from a Vyper call_txn
  *   default_evm_gas_limit — effectively infinite gas for EVM sub-execution

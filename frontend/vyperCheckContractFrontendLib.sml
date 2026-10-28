@@ -56,11 +56,29 @@ fun annotated_ast_imports annotated_ast =
   | _ => raise Fail
       "vyperCheckContractFrontendLib: expected JAnnotatedAST term"
 
-fun imported_module_path import_tm =
+fun imported_module_fields import_tm =
   case strip_comb import_tm of
-    (_, [_, path, _, _, _]) => stringSyntax.fromHOLstring path
+    (_, fields as [_, _, _, _, _]) => fields
   | _ => raise Fail
       "vyperCheckContractFrontendLib: malformed imported module"
+
+fun imported_module_path import_tm =
+  stringSyntax.fromHOLstring (List.nth (imported_module_fields import_tm, 1))
+
+(* Mirrors jsonToVyper's remove_repeated_imports, so that the remaining
+   imports line up with the translated imported sources. *)
+fun remove_repeated_imports imports = let
+  fun identity import_tm = case imported_module_fields import_tm of
+      [src_id, _, resolved_path, nr_default, body] =>
+        [src_id, resolved_path, nr_default, body]
+    | _ => raise Fail
+        "vyperCheckContractFrontendLib: malformed imported module"
+  fun same a b = ListPair.allEq (uncurry aconv) (identity a, identity b)
+  fun keep seen [] = []
+    | keep seen (import_tm::rest) =
+        if List.exists (same import_tm) seen then keep seen rest
+        else import_tm :: keep (import_tm::seen) rest
+in keep [] imports end
 
 (* Multiple import paths can translate to the same module. Preserve the first
    occurrence, but never choose between different definitions of one identity. *)
@@ -93,6 +111,7 @@ fun remove_interface_sources annotated_ast translated = let
   val _ = normalize_sources sources
   val (source_entries, source_ty) = listSyntax.dest_list sources
   val (imports, _) = listSyntax.dest_list (annotated_ast_imports annotated_ast)
+  val imports = remove_repeated_imports imports
   val (main_source, imported_sources) = case source_entries of
       main::others => (main, others)
     | [] => raise Fail

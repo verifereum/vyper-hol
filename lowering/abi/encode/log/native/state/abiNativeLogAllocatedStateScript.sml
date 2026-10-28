@@ -12,7 +12,7 @@ Ancestors
 
 Theorem compile_abi_native_allocated_log_state:
   !tenv sfields cenv tys tvs values avs ctx func cx es capacity cs buf cut cs' src topic_ops topics ss src_addr span source_id.
-    state_well_typed es /\ state_rel cenv cx es ss /\ local_ptrs_rel func cenv es.scopes ss /\
+    state_well_typed es /\ state_rel_simple cenv cx es ss /\ local_ptrs_rel func cenv es.scopes ss /\
     compile_alloc_buffer capacity cs = (buf,cut) /\
     compile_log_abi_emit buf.buf_operand src (type_to_abi_enc_info sfields cenv (TupleT tys)) topic_ops cut = ((),cs') /\
     fn_has_code cs cut func /\ fn_has_code cut cs' func /\ fn_inst_ids_distinct func /\ compiler_id_history cs /\
@@ -37,7 +37,7 @@ Theorem compile_abi_native_allocated_log_state:
       out.vs_current_bb = cs'.cs_current_bb /\ out.vs_inst_idx = LENGTH cs'.cs_current_insts /\ ~out.vs_halted /\
       out.vs_logs = ss.vs_logs ++ [<|logger := w2w ss.vs_call_ctx.cc_address;
         topics := topics; data := enc (Tuple (MAP (vyper_to_abi_type tenv) tys)) (ListV avs)|>] /\
-      state_rel cenv cx (es with logs := es.logs ++ [<|logger := w2w ss.vs_call_ctx.cc_address;
+      state_rel_simple cenv cx (es with logs := es.logs ++ [<|logger := w2w ss.vs_call_ctx.cc_address;
         topics := topics; data := enc (Tuple (MAP (vyper_to_abi_type tenv) tys)) (ListV avs)|>]) out /\
       local_ptrs_rel func cenv es.scopes out /\ allocation_growth ss out /\
       read_memory (w2n (memory_snapshot_addr cs.cs_next_id ss))

@@ -47,7 +47,7 @@ Theorem checked_compile_native_packed_log_state:
       (type_to_abi_enc_info cenv.ce_struct_fields cenv (TupleT (log_non_indexed_types flags fts))) topic_ops encode_cut = ((),cs') /\
     fn_has_code cs packed_cut func /\ fn_has_code packed_cut encode_cut func /\ fn_has_code encode_cut cs' func /\
     fn_inst_ids_distinct func /\ compiler_id_history packed_cut /\
-    state_well_typed es /\ state_rel cenv cx es ss /\ local_ptrs_rel func cenv es.scopes ss /\
+    state_well_typed es /\ state_rel_simple cenv cx es ss /\ local_ptrs_rel func cenv es.scopes ss /\
     vyper_to_abi_list (type_env tops) (log_non_indexed_types flags fts) (select_log_args F flags values) = SOME avs /\
     source_memory_separated cenv es.scopes ss (w2n root_addr) (type_memory_size (TupleTV (select_log_args F flags ftvs))) /\
     source_alloca_floor cenv es.scopes (packed_cut.cs_next_id::compiler_alloca_ids encode_cut cs') ss /\
@@ -70,7 +70,7 @@ Theorem checked_compile_native_packed_log_state:
       out.vs_current_bb = cs'.cs_current_bb /\ out.vs_inst_idx = LENGTH cs'.cs_current_insts /\ ~out.vs_halted /\
       out.vs_logs = ss.vs_logs ++ [<|logger := w2w ss.vs_call_ctx.cc_address; topics := topics;
         data := enc (Tuple (MAP (vyper_to_abi_type (type_env tops)) (log_non_indexed_types flags fts))) (ListV avs)|>] /\
-      state_rel cenv cx (es with logs := es.logs ++ [<|logger := w2w ss.vs_call_ctx.cc_address; topics := topics;
+      state_rel_simple cenv cx (es with logs := es.logs ++ [<|logger := w2w ss.vs_call_ctx.cc_address; topics := topics;
         data := enc (Tuple (MAP (vyper_to_abi_type (type_env tops)) (log_non_indexed_types flags fts))) (ListV avs)|>]) out /\
       local_ptrs_rel func cenv es.scopes out /\ allocation_growth ss out /\
       read_memory (w2n (memory_snapshot_addr packed_cut.cs_next_id ss))
@@ -106,7 +106,7 @@ Proof
     mp_tac compile_abi_native_allocated_log_state >> impl_tac >- (fs[] >> rpt conj_tac >> first_assum MATCH_ACCEPT_TAC) >>
   disch_then (qx_choose_then `out` strip_assume_tac) >> drule copy_state_frame_external >> DISCH_TAC >>
   qspecl_then [`ss`, `packed`] mp_tac abi_state_frame_observables >> impl_tac >- simp[] >> strip_tac >>
-  qpat_x_assum `state_rel cenv cx (es with logs := _) out` mp_tac >> asm_simp_tac bool_ss [] >> DISCH_TAC >>
+  qpat_x_assum `state_rel_simple cenv cx (es with logs := _) out` mp_tac >> asm_simp_tac bool_ss [] >> DISCH_TAC >>
   `fragment_path ctx func ss out` by (irule fragment_path_trans >> qexists_tac `packed` >> simp[]) >>
   `allocation_growth ss out` by (irule allocation_growth_trans >> qexists_tac `packed` >> simp[]) >>
   `!arg_op. abi_operand_before cs.cs_next_var arg_op ==> eval_operand arg_op out = eval_operand arg_op ss` by

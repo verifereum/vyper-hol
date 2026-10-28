@@ -47,17 +47,6 @@ Ancestors
   pointerConfinedDefs
   venomExecSemantics
 
-(* ===== Context-Level Pass Correctness ===== *)
-
-(* A context-level pass: transforms a context, preserves semantics.
-   R_ok/R_term are the per-state relations for OK/terminal results. *)
-Definition ctx_pass_correct_def:
-  ctx_pass_correct (p : venom_context -> venom_context) R_ok R_term ctx s <=>
-    pass_correct R_ok R_term R_term
-      (\fuel. run_context fuel ctx s)
-      (\fuel. run_context fuel (p ctx) s)
-End
-
 (* ===== Composition Infrastructure ===== *)
 
 (* pass_correct is transitive when relations compose.

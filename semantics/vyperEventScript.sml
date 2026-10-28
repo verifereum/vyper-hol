@@ -1,7 +1,7 @@
 (*
  * Concrete EVM event encoding for the Vyper semantics.
  *
- * TOP-LEVEL:
+ * Main definitions:
  *   event_metadata             -- resolved declaration encoding information
  *   lookup_event_metadata      -- resolve an event directly from loaded sources
  *   encode_vyper_event_metadata -- encode already-resolved metadata

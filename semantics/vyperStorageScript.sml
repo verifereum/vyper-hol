@@ -95,9 +95,7 @@ val () = cv_auto_trans truncate_signed_def;
 (* decode_base_from_slot masks values to their declared type's range.
    This ensures decoded values always satisfy value_has_type, even
    when reading adversarial/corrupt storage. For well-formed storage
-   (written by Vyper's encoder), the masking is a no-op.
-   FIX for counterexample: decode_value (λn. 1000w) 0 (BaseTV (UintT 8))
-   previously returned IntV 1000, violating value_has_type. *)
+   (written by Vyper's encoder), the masking is a no-op. *)
 Definition decode_base_from_slot_def:
   decode_base_from_slot (slot : bytes32) (BaseTV (UintT n)) =
     IntV (&(truncate_unsigned n slot)) /\

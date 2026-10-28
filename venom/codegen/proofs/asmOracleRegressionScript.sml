@@ -43,6 +43,31 @@ val gas_eval_tac =
        assert_def, inc_pc_or_jump_def, is_call_def, opcode_def,
        static_gas_def, LET_THM, FLOOKUP_UPDATE];
 
+Theorem gas_step_stack[local]:
+  (FST (HD (SND (step gas_counter_evm)).contexts)).stack = [98w]
+Proof
+  simp[gas_counter_evm_def, gas_counter_asm_def, asm_oracle_initial_def,
+       make_asm_call_state_def, empty_call_context_def, empty_tx_context_def,
+       empty_block_context_def, asm_to_tx_params_def, make_sub_tx_def,
+       make_rollback_def, initial_context_def, initial_msg_params_def,
+       transfer_value_def, empty_return_destination_def] >>
+  gas_eval_tac
+QED
+
+Theorem gas_step_unrelated[local]:
+  ~asm_evm_rel [AsmOp "GAS"]
+    (asm_next (gas_counter_asm with as_stack := [0w]))
+    (SND (step gas_counter_evm))
+Proof
+  mp_tac gas_step_stack >>
+  Cases_on `(SND (step gas_counter_evm)).contexts` >>
+  simp[asm_evm_rel_def] >>
+  qmatch_asmsub_rename_tac `(SND (step gas_counter_evm)).contexts = ctxt_rb :: rest` >>
+  PairCases_on `ctxt_rb` >>
+  simp[asm_next_def, gas_counter_asm_def, asm_oracle_initial_def] >>
+  wordsLib.WORD_DECIDE_TAC
+QED
+
 (* The old step theorem admitted GAS because it fell through to AsmError.
  * With GAS active, its existing pre-relation ignores readings; empty asm
  * readings push 0, whereas the concrete EVM pushes 98, without an exception.
@@ -65,6 +90,7 @@ Proof
   conj_tac >- (
     rw[asm_encoding_wf_def, compute_label_offsets_def,
        asm_inst_size_def] >> EVAL_TAC) >>
+  simp[gas_step_unrelated] >>
   simp[asm_evm_rel_def, gas_counter_asm_def, gas_counter_evm_def,
        asm_oracle_initial_def, make_asm_call_state_def,
        empty_call_context_def, empty_tx_context_def, empty_block_context_def,
@@ -77,8 +103,7 @@ Proof
        asm_step_compare_def, asm_step_bitwise_def, asm_step_memory_def,
        asm_step_control_def, asm_step_extcall_def, asm_step_copy_def,
        asm_step_context_def, asm_gas_def, asm_push_val_def, asm_next_def] >>
-  rpt conj_tac >| [suspend "step_success", suspend "step_stack",
-                   suspend "step_unrelated"]
+  conj_tac >- suspend "step_success" >> suspend "step_stack"
 QED
 
 Resume gas_existing_relation_counterexample[step_success]:
@@ -86,10 +111,6 @@ Resume gas_existing_relation_counterexample[step_success]:
 QED
 Resume gas_existing_relation_counterexample[step_stack]:
   gas_eval_tac
-QED
-Resume gas_existing_relation_counterexample[step_unrelated]:
-  gas_eval_tac >>
-  simp[wordsTheory.dimword_def, fcpLib.INDEX_CONV ``dimindex(:256)``]
 QED
 Finalise gas_existing_relation_counterexample
 

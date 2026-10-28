@@ -77,9 +77,11 @@ Theorem evaluate_all_constants_preserves_accounts:
   evaluate_all_constants cx am addr mods = SOME am_c ==>
   am_c.accounts = am.accounts
 Proof
-  qid_spec_tac `am_c` >> qid_spec_tac `am` >> Induct_on `mods`
-  >- rw[evaluate_all_constants_def] >>
-  rpt gen_tac >> PairCases_on `h` >> rw[evaluate_all_constants_def] >>
+  simp[evaluate_all_constants_def] >>
+  qid_spec_tac `am_c` >> qid_spec_tac `am` >>
+  qspec_tac (`constants_order mods`, `mods`) >> Induct
+  >- rw[evaluate_module_constants_def] >>
+  rpt gen_tac >> PairCases_on `h` >> rw[evaluate_module_constants_def] >>
   gvs[AllCaseEqs()] >>
   first_x_assum drule >> simp[merge_constants_def]
 QED

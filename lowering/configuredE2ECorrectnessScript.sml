@@ -101,7 +101,7 @@ Theorem e2e_vyper_to_evm_O1:
     asm_pc_to_offset prog off = 0 /\
     es.contexts = (ctxt, rb) :: rest /\
     call_state_rel_legacy tops runtime_bc am tx tenv ctxt rb es.txParams /\
-    valid_vyper_call_legacy am tx tenv ctxt.msgParams.data ret /\
+    valid_vyper_call_legacy am tx tenv (buffer_to_list ctxt.msgParams.data) ret /\
     cenv.ce_type_env = tenv /\
     cenv.ce_event_info = compiled_event_info tops /\
     checked_unit_transform_correct_legacy

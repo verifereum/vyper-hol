@@ -56,7 +56,7 @@ Theorem calldata_len_selector_and_trailing_test:
   evaluate_builtin
     (cx with txn := cx.txn with calldata :=
       [a; b; c; d] ++ abi_bytes ++ trailing_bytes)
-    acc (BaseT (UintT 256)) CalldataLen [] =
+    acc (BaseT (UintT 256)) CalldataLen tys [] =
   INL (IntV &(4 + LENGTH abi_bytes + LENGTH trailing_bytes))
 Proof
   simp[evaluate_builtin_def]
@@ -64,13 +64,13 @@ QED
 
 Theorem calldata_len_empty_test:
   evaluate_builtin (cx with txn := cx.txn with calldata := [])
-    acc (BaseT (UintT 256)) CalldataLen [] = INL (IntV 0)
+    acc (BaseT (UintT 256)) CalldataLen tys [] = INL (IntV 0)
 Proof
   simp[evaluate_builtin_def]
 QED
 
 Theorem calldata_len_malformed_values_test:
-  evaluate_builtin cx acc ty CalldataLen (v::vs) =
+  evaluate_builtin cx acc ty CalldataLen tys (v::vs) =
     INR (TypeError "builtin")
 Proof
   simp[evaluate_builtin_def]

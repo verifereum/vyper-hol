@@ -484,6 +484,42 @@ Proof
   Cases_on `k <= 16` >> simp[prefix_end_len_def, stack_op_wf_def]
 QED
 
+Theorem prefix_wf_append_iff[local]:
+  !xs ys lo n.
+    prefix_wf lo n (xs ++ ys) <=>
+    prefix_wf lo n xs /\ prefix_wf lo (prefix_end_len lo n xs) ys
+Proof
+  Induct >> simp[prefix_wf_def, prefix_end_len_def] >>
+  rpt gen_tac >> pairarg_tac >> simp[] >> metis_tac[]
+QED
+
+Theorem flat_map_singleton[local]:
+  !f xs. FLAT (MAP (\x. [f x]) xs) = MAP f xs
+Proof
+  Induct_on `xs` >> simp[]
+QED
+
+Theorem prefix_wf_indexed_restores[local]:
+  !idxs f lo n.
+    prefix_wf lo n (MAP (\i. SORestore (f i)) idxs) /\
+    prefix_end_len lo n (MAP (\i. SORestore (f i)) idxs) = n + LENGTH idxs
+Proof
+  Induct >> simp[] >> rpt gen_tac >>
+  simp[prefix_wf_def, prefix_end_len_def, stack_op_wf_def]
+QED
+
+Theorem prefix_wf_indexed_restore_swaps[local]:
+  !idxs f lo n.
+    0 < n ==>
+    prefix_wf lo n (FLAT (MAP (\i. [SORestore (f i); SOSwap 1]) idxs)) /\
+    prefix_end_len lo n (FLAT (MAP (\i. [SORestore (f i); SOSwap 1]) idxs)) =
+      n + LENGTH idxs
+Proof
+  Induct >> simp[] >> rpt gen_tac >> strip_tac >>
+  first_x_assum (qspecl_then [`f`, `lo`, `n + 1`] mp_tac) >>
+  simp[prefix_wf_def, prefix_end_len_def, stack_op_wf_def]
+QED
+
 Theorem do_dup_wf_len:
   !dist ps lo.
     dist < LENGTH ps.ps_stack ==>
@@ -500,7 +536,7 @@ Proof
   (* The prefix spill leaves at least sixteen reachable stack items. *)
   `0 < dist - 15 /\ dist - 15 + 16 <= LENGTH ps.ps_stack /\
    dist - 15 <= LENGTH ps.ps_stack` by decide_tac >>
-  simp[do_dup_def] >>
+  simp[do_dup_def, top_n_def] >>
   qabbrev_tac `items = TAKE (dist - 15) (REVERSE ps.ps_stack)` >>
   qabbrev_tac `fres = FOLDL
     (\(ops,offs,al) (item:operand).

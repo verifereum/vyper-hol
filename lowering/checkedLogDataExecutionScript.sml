@@ -55,7 +55,7 @@ Theorem checked_compile_log_data_execution:
       eval_stmt cx (Log event_id exprs) es = (INL (),es' with logs := es'.logs ++ [ev]) /\
       fragment_path ctx func before out /\
       out.vs_current_bb = cs'.cs_current_bb /\ out.vs_inst_idx = LENGTH cs'.cs_current_insts /\ ~out.vs_halted /\
-      state_rel cenv cx (es' with logs := es'.logs ++ [ev]) out /\
+      state_rel_simple cenv cx (es' with logs := es'.logs ++ [ev]) out /\
       local_ptrs_rel func cenv es'.scopes out
 Proof
   rpt gen_tac >> disch_then (REPEAT_TCL CONJUNCTS_THEN ASSUME_TAC) >>

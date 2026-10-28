@@ -7,11 +7,11 @@ Ancestors
   compileEnv valueEncoding exprLoweringProps instIdxIndep abiFieldOperands
   venomState venomExecSemantics
 
-Theorem state_rel_inst_idx[simp]:
+Theorem state_rel_simple_inst_idx[simp]:
   !cenv cx es ss index.
-    state_rel cenv cx es (ss with vs_inst_idx := index) = state_rel cenv cx es ss
+    state_rel_simple cenv cx es (ss with vs_inst_idx := index) = state_rel_simple cenv cx es ss
 Proof
-  simp[state_rel_def, vars_rel_def, storage_rel_def, transient_rel_def,
+  simp[state_rel_simple_def, vars_rel_def, storage_rel_def, transient_rel_def,
     immutables_rel_def, logs_rel_def, call_ctx_rel_def,
     contract_storage_def, contract_transient_def]
 QED
@@ -69,13 +69,13 @@ Proof
   FIRST [first_assum MATCH_ACCEPT_TAC, simp[] >> rpt strip_tac >> gvs[]]
 QED
 
-Theorem state_rel_assignment_index_frame:
+Theorem state_rel_simple_assignment_index_frame:
   !cenv cx es before after index.
-    state_rel cenv cx es before /\
+    state_rel_simple cenv cx es before /\
     after with vs_vars := before.vs_vars = before with vs_inst_idx := index ==>
-    state_rel cenv cx es after
+    state_rel_simple cenv cx es after
 Proof
-  rpt gen_tac >> strip_tac >> irule state_rel_assignment_frame >>
+  rpt gen_tac >> strip_tac >> irule state_rel_simple_assignment_frame >>
   qexists_tac `before with vs_inst_idx := index` >> simp[]
 QED
 

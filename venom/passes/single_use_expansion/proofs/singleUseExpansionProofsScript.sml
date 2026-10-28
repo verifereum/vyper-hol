@@ -16,7 +16,7 @@ Ancestors
   analysisSimDefs finite_map pred_set list
   indexedLists instIdxIndep
 Libs
-  pairLib
+  pairLib stepInstBaseLib
 
 (* ===== Helper: sue_expand_function is a function_map_transform ===== *)
 
@@ -921,10 +921,8 @@ end;
    sue_assigns_error_implies_inst_error because sue_expand_ops produces
    no assigns for 0-operand instructions. *)
 local
-  (* Pre-expand inst_wf and step_inst_base for each opcode *)
+  (* Pre-expand inst_wf; specialize it and step_inst_base per opcode *)
   val inst_wf_expanded = REWRITE_CONV [inst_wf_def] ``inst_wf inst``;
-  val step_inst_base_expanded =
-    REWRITE_CONV [step_inst_base_def] ``step_inst_base inst st``;
 
   fun inst_wf_for_opc opc = let
     val asm = ASSUME (mk_eq(``inst.inst_opcode``, opc))
@@ -932,7 +930,9 @@ local
 
   fun step_inst_base_for_opc opc = let
     val asm = ASSUME (mk_eq(``inst.inst_opcode``, opc))
-  in SIMP_RULE (srw_ss()) [asm] step_inst_base_expanded end;
+    val arm = MP (SPECL [``inst:instruction``, ``st:venom_state``]
+                    (opcode_clause opc)) asm
+  in CONV_RULE (RAND_CONV (QCONV (SIMP_CONV (srw_ss()) [asm]))) arm end;
 
   val inst_wf_log_extract = prove(
     ``inst_wf inst /\ inst.inst_opcode = LOG ==>

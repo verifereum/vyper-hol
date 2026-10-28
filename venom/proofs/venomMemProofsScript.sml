@@ -1041,8 +1041,7 @@ QED
 
 Theorem merge_callee_inv[local]:
   !caller callee.
-    alloca_inv caller /\
-    caller.vs_alloca_next <= callee.vs_alloca_next ==>
+    alloca_inv caller ==>
     alloca_inv (merge_callee_state caller callee)
 Proof
   rw[alloca_inv_def, allocas_non_overlapping_def,

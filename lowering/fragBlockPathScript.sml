@@ -119,6 +119,25 @@ Proof
   drule_all fragment_step_continue >> simp[]
 QED
 
+Theorem fragment_step_not_halted:
+  !ctx func ss out.
+    fragment_step ctx func ss out /\ ~ss.vs_halted ==> ~out.vs_halted
+Proof
+  rpt gen_tac >> simp[fragment_step_def] >> strip_tac
+  >- (fs[fragment_jump_def] >> drule_all exec_block_OK_not_halted >> simp[]) >>
+  fs[fragment_prefix_def] >>
+  drule_all run_inst_seq_preserves_halted >> simp[]
+QED
+
+Theorem fragment_path_not_halted:
+  !ctx func ss out.
+    fragment_path ctx func ss out ==> ~ss.vs_halted ==> ~out.vs_halted
+Proof
+  gen_tac >> gen_tac >> rewrite_tac[fragment_path_def] >>
+  ho_match_mp_tac RTC_INDUCT >> simp[] >>
+  metis_tac[fragment_step_not_halted]
+QED
+
 Theorem frag_exec_fragment_path:
   !ctx cs cs' P Q R.
     (!func ss.
@@ -134,6 +153,7 @@ Proof
   MAP_EVERY qx_gen_tac [`func`, `ss`] >> strip_tac >>
   qpat_x_assum `!func ss. _` (qspecl_then [`func`, `ss`] mp_tac) >>
   impl_tac >- simp[] >> strip_tac >>
+  `~out.vs_halted` by (drule_all fragment_path_not_halted >> simp[]) >>
   disj1_tac >> goal_assum drule >> simp[] >>
   rpt gen_tac >> strip_tac >>
   mp_tac (Q.SPECL [`ctx`, `func`, `ss`, `out`] fragment_path_continue) >>

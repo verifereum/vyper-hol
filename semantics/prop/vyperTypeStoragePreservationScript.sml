@@ -1524,8 +1524,8 @@ QED
    Delegate code can write arbitrary proxy slots, so it needs its own premise. *)
 Definition protected_storage_calls_preserve_def:
   protected_storage_calls_preserve cx <=>
-    (!callee calldata value_opt st txp success returndata accounts' tStorage' emitted_logs.
-       run_ext_call cx.txn.target callee calldata value_opt
+    (!callee calldata value_opt gas st txp success returndata accounts' tStorage' emitted_logs.
+       run_ext_call cx.txn.target callee calldata value_opt gas
          st.accounts st.tStorage txp =
          SOME (success,returndata,accounts',tStorage',emitted_logs) /\
        contract_storage_well_formed cx st ==>
@@ -1541,7 +1541,7 @@ End
 
 Theorem protected_storage_calls_preserve_run_ext_call:
   protected_storage_calls_preserve cx /\
-  run_ext_call cx.txn.target callee calldata value_opt
+  run_ext_call cx.txn.target callee calldata value_opt gas
     st.accounts st.tStorage txp =
     SOME (success,returndata,accounts',tStorage',emitted_logs) /\
   contract_storage_well_formed cx st ==>
@@ -1577,7 +1577,7 @@ QED
 
 Theorem protected_storage_calls_preserve_success:
   protected_storage_calls_preserve cx /\
-  run_ext_call cx.txn.target callee calldata value_opt
+  run_ext_call cx.txn.target callee calldata value_opt gas
     st.accounts st.tStorage txp =
     SOME (T,returndata,accounts',tStorage',emitted_logs) /\
   contract_storage_well_formed cx st ==>
@@ -1589,7 +1589,7 @@ QED
 
 Theorem protected_storage_calls_preserve_revert:
   protected_storage_calls_preserve cx /\
-  run_ext_call cx.txn.target callee calldata value_opt
+  run_ext_call cx.txn.target callee calldata value_opt gas
     st.accounts st.tStorage txp =
     SOME (F,returndata,accounts',tStorage',emitted_logs) /\
   contract_storage_well_formed cx st ==>
@@ -1653,7 +1653,7 @@ QED
 
 Theorem protected_storage_call_output_persistent_region:
   protected_storage_calls_preserve cx /\
-  run_ext_call cx.txn.target callee calldata value_opt
+  run_ext_call cx.txn.target callee calldata value_opt gas
     st.accounts st.tStorage txp =
     SOME (success,returndata,accounts',tStorage',emitted_logs) /\
   contract_storage_well_formed cx st /\
@@ -1669,7 +1669,7 @@ QED
 
 Theorem protected_storage_call_output_transient_region:
   protected_storage_calls_preserve cx /\
-  run_ext_call cx.txn.target callee calldata value_opt
+  run_ext_call cx.txn.target callee calldata value_opt gas
     st.accounts st.tStorage txp =
     SOME (success,returndata,accounts',tStorage',emitted_logs) /\
   contract_storage_well_formed cx st /\

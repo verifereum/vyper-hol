@@ -44,4 +44,3 @@ val _ = List.app (fn thy => List.app (fn (name,th) =>
  ["vyperTypeSoundness", "vyperTypeContractSoundness", "vyperTypeInitialState",
   "vyperTypeStmtSoundness", "vyperTypeCallSoundness", "vyperEventSoundness",
   "e2eDefs", "checkedLogEmptyExecution", "checkedLogDataExecution"];
-

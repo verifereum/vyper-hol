@@ -21,7 +21,7 @@ Theorem fn_sig_argument_bounds:
   LENGTH args <= LENGTH sig.param_types /\
   LENGTH sig.param_types - sig.num_defaults <= LENGTH args /\
   MAP expr_type args = TAKE (LENGTH args) sig.param_types /\
-  ty = sig.ret_ty
+  type_widens_to env.type_defs sig.ret_ty ty
 Proof
   rw[well_typed_expr_def] >> gvs[]
 QED
@@ -129,14 +129,14 @@ Proof
 QED
 
 Theorem external_call_no_type_error:
-  well_typed_expr env (Call ty (ExtCall stat skip_check fsig) args drv) /\
+  well_typed_expr env (Call ty (ExtCall stat skip_check fsig opts) args drv) /\
   env_consistent env cx st /\ state_well_typed st /\
   context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
-  call_evaluation_safe cx (int_calls_expr (Call ty (ExtCall stat skip_check fsig) args drv)) ==>
-  no_type_error_eval (eval_expr cx (Call ty (ExtCall stat skip_check fsig) args drv) st)
+  call_evaluation_safe cx (int_calls_expr (Call ty (ExtCall stat skip_check fsig opts) args drv)) ==>
+  no_type_error_eval (eval_expr cx (Call ty (ExtCall stat skip_check fsig opts) args drv) st)
 Proof
   strip_tac >>
-  Cases_on `eval_expr cx (Call ty (ExtCall stat skip_check fsig) args drv) st` >>
+  Cases_on `eval_expr cx (Call ty (ExtCall stat skip_check fsig opts) args drv) st` >>
   simp[no_type_error_eval_def, no_type_error_result_def] >>
   drule_at(Pat`eval_expr`)(cj 8 eval_all_type_sound_mutual) >>
   disch_then drule >> simp[] >>
@@ -145,7 +145,7 @@ QED
 
 Theorem special_call_no_type_error:
   well_typed_expr env (Call ty target args drv) /\
-  target <> IntCall (src,fn) /\ (!stat skip_check fsig. target <> ExtCall stat skip_check fsig) /\
+  target <> IntCall (src,fn) /\ (!stat skip_check fsig opts. target <> ExtCall stat skip_check fsig opts) /\
   env_consistent env cx st /\ state_well_typed st /\
   context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
   call_evaluation_safe cx (int_calls_expr (Call ty target args drv)) ==>

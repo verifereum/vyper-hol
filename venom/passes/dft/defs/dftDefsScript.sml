@@ -69,7 +69,8 @@ Definition inst_data_deps_def:
       then FILTER (\d. d.inst_id <> inst.inst_id)
              (MAP THE (FILTER IS_SOME (MAP (producing_inst block_insts) order)))
       else [] in
-    nub (var_deps ++ order_deps)
+    (* Python inserts terminator stack-order dependencies before operands. *)
+    nub_first (order_deps ++ var_deps)
 End
 
 (* ===== Effect Dependency Analysis (EDA) ===== *)
@@ -104,7 +105,7 @@ Definition compute_effect_deps_def:
     let w_effs = effects_to_list (write_effects inst.inst_opcode) in
     let r_effs = effects_to_list (read_effects inst.inst_opcode) in
     (* Python interleaves WAR + WAW per write effect (not all WAR then all WAW).
-       This affects dep ordering in nub → EDA list → children → tiebreaker. *)
+       First-occurrence order propagates through EDA and stable child sorting. *)
     let write_deps = FLAT (MAP (\weff.
       let war = et_get_reads et weff in
       let waw = case FLOOKUP et.et_last_write weff of
@@ -116,7 +117,7 @@ Definition compute_effect_deps_def:
         SOME writer => if writer.inst_id <> inst.inst_id
                        then SOME writer else NONE
       | NONE => NONE) r_effs)) in
-    let deps = nub (write_deps ++ raw_deps) in
+    let deps = nub_first (write_deps ++ raw_deps) in
     (* Update tracking state *)
     let et' = FOLDL (\acc weff.
       acc with <|
@@ -254,7 +255,7 @@ Definition inst_all_deps_def:
     let dda = inst_data_deps block_insts order inst in
     let eda_deps = case FLOOKUP eda inst.inst_id of
                      NONE => [] | SOME ds => ds in
-    nub (dda ++ eda_deps)
+    nub_first (dda ++ eda_deps)
 End
 
 (* ===== Data Offspring (transitive closure of DDA) ===== *)
@@ -655,3 +656,25 @@ Definition dft_ctx_def:
   dft_ctx ctx =
     ctx with ctx_functions := MAP dft_fn ctx.ctx_functions
 End
+
+(* Concrete ordering regressions: terminator order precedes operand order,
+   and a repeated memory writer must not move behind a storage writer. *)
+Theorem inst_data_deps_first_order_probe[local]:
+  MAP (\i. i.inst_id)
+    (inst_data_deps
+      [mk_inst 1 ASSIGN [] ["a"]; mk_inst 2 ASSIGN [] ["b"]]
+      ["a"; "b"] (mk_inst 3 RETURN [Var "b"; Var "a"] [])) = [1;2]
+Proof
+  EVAL_TAC
+QED
+
+Theorem compute_effect_deps_first_order_probe[local]:
+  MAP (\i. i.inst_id)
+    (FST (compute_effect_deps
+      <| et_last_write := FEMPTY |+ (Eff_MEMORY, mk_inst 1 MCOPY [] [])
+                                |+ (Eff_STORAGE, mk_inst 2 SSTORE [] []);
+         et_all_reads := FEMPTY |+ (Eff_MEMORY, [mk_inst 1 MCOPY [] []]) |>
+      (mk_inst 3 STATICCALL [] []))) = [1;2]
+Proof
+  EVAL_TAC
+QED

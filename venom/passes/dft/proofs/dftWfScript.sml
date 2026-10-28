@@ -1415,7 +1415,7 @@ Proof
   rpt strip_tac >>
   gvs[MEM_nub, MEM_APPEND]
   (* data deps case *)
-  >- (fs[inst_data_deps_def, LET_THM, MEM_nub] >>
+  >- (reverse (fs[inst_data_deps_def, LET_THM, MEM_nub]) >>
       gvs[MEM_APPEND, MEM_MAP, MEM_FILTER]
       >- ((* var_deps case *)
         rename1 `MEM op inst.inst_operands` >>
@@ -1492,7 +1492,7 @@ Proof
   rpt strip_tac >>
   gvs[MEM_nub, MEM_APPEND]
   (* data deps case *)
-  >- (fs[inst_data_deps_def, LET_THM, MEM_nub] >>
+  >- (reverse (fs[inst_data_deps_def, LET_THM, MEM_nub]) >>
       gvs[MEM_APPEND, MEM_MAP, MEM_FILTER]
       >- ((* var_deps case *)
         rename1 `MEM op inst.inst_operands` >>
@@ -1538,7 +1538,7 @@ Proof
   simp[eda_topo_compatible_def, inst_all_deps_def, LET_THM] >>
   rpt strip_tac >>
   gvs[MEM_nub, MEM_APPEND]
-  >- (fs[inst_data_deps_def, LET_THM, MEM_nub] >>
+  >- (reverse (fs[inst_data_deps_def, LET_THM, MEM_nub]) >>
       gvs[MEM_APPEND, MEM_MAP, MEM_FILTER]
       >- (rename1 `MEM op inst.inst_operands` >>
           Cases_on `op` >> gvs[operand_producer_def] >>

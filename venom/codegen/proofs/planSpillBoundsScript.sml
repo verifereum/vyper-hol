@@ -400,7 +400,7 @@ Theorem do_dup_slots_bounded:
     plan_slots_bounded base ps' /\
     ops_spill_bounded base ps'.ps_alloc.sa_next_offset ops
 Proof
-  rpt gen_tac >> simp[do_dup_def] >>
+  rpt gen_tac >> simp[do_dup_def, top_n_def] >>
   IF_CASES_TAC >> gvs[]
   >- (rpt strip_tac >> gvs[] >>
       simp[plan_slots_bounded_def, ops_spill_bounded_def])

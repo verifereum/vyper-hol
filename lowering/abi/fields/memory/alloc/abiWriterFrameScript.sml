@@ -89,10 +89,11 @@ Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `abi_allocated_window _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [abi_allocated_window_def]) >>
-  `abi_window_separated read_offset read_len allocation_base allocation_size` by
+  rename1 `FLOOKUP ss.vs_allocas id = SOME (window_base,window_size)` >>
+  `abi_window_separated read_offset read_len window_base window_size` by
     (qpat_x_assum `abi_writer_separated _ _ _ _`
        (mp_tac o REWRITE_RULE [abi_writer_separated_def]) >>
-     disch_then (qspecl_then [`id`, `allocation_base`, `allocation_size`] mp_tac) >> simp[]) >>
+     disch_then (qspecl_then [`id`, `window_base`, `window_size`] mp_tac) >> simp[]) >>
   drule_all abi_window_separated_subwindow >> simp[]
 QED
 
@@ -123,7 +124,8 @@ Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `abi_allocated_window _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [abi_allocated_window_def]) >>
-  simp_tac bool_ss [abi_allocated_window_def] >> qexistsl_tac [`allocation_base`, `allocation_size`] >>
+  rename1 `FLOOKUP before.vs_allocas id = SOME (window_base,window_size)` >>
+  simp_tac bool_ss [abi_allocated_window_def] >> qexistsl_tac [`window_base`, `window_size`] >>
   rpt conj_tac >> TRY (first_assum MATCH_ACCEPT_TAC) >> drule_all allocation_growth_old >> simp[]
 QED
 

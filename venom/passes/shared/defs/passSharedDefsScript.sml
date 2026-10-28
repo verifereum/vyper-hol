@@ -26,7 +26,42 @@
 
 Theory passSharedDefs
 Ancestors
-  venomInst venomEffects memLocDefs While
+  venomInst venomEffects memLocDefs While list
+
+(* ===== Ordered list deduplication ===== *)
+
+(* Keep the first occurrence, as in insertion-ordered dependency sets. *)
+Definition nub_first_def:
+  nub_first xs = REVERSE (nub (REVERSE xs))
+End
+
+Theorem MEM_nub_first[simp]:
+  MEM x (nub_first xs) <=> MEM x xs
+Proof
+  simp[nub_first_def, MEM_nub]
+QED
+
+Theorem ALL_DISTINCT_nub_first[simp]:
+  ALL_DISTINCT (nub_first xs)
+Proof
+  simp[nub_first_def, all_distinct_nub]
+QED
+
+Theorem nub_first_MAP_INJ:
+  INJ f (set xs) UNIV ==>
+  nub_first (MAP f xs) = MAP f (nub_first xs)
+Proof
+  strip_tac >> simp[nub_first_def, MAP_REVERSE] >>
+  `INJ f (set (REVERSE xs)) UNIV` by simp[] >>
+  drule nub_MAP_INJ >> simp[MAP_REVERSE]
+QED
+
+Theorem nub_first_order_probe[local]:
+  nub_first [0n;1;0] = [0;1] /\
+  nub_first [0n;0;1;0] = [0;1]
+Proof
+  EVAL_TAC
+QED
 
 (* ===== Removability ===== *)
 

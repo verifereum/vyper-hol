@@ -20,10 +20,8 @@ Ancestors
 
 (* ===== Allocation and Pointer Types ===== *)
 
-(* An allocation is identified by the alloca instruction that created it *)
-Datatype:
-  allocation = Allocation num   (* inst_id *)
-End
+(* Allocation identities are defined with the IR in venomInst, so static
+   layout metadata and alias analysis share the same instruction identity. *)
 
 (* ===== Memory Location ===== *)
 

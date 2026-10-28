@@ -2,7 +2,7 @@
    These are finite interface regressions, not a general reachability proof. *)
 Theory contextReachabilityChecks
 Ancestors
-  contextCodegenRelProps contextCodegenRel venomExecSemantics venomInst
+  contextRawReachable contextCodegenRelProps contextCodegenRel venomExecSemantics venomInst
   venomState list finite_map words integer_word
 Libs wordsLib
 
@@ -145,6 +145,22 @@ Theorem package_false_normal_entry:
       <| vs_prev_bb := SOME "stale"; vs_current_bb := "stale"; vs_inst_idx := 99 |>)
 Proof
   strip_tac >> drule package_initialized_entry >> simp[]
+QED
+
+(* The raw-reachable package is non-vacuous: from a stale initial position it
+   reaches the post-PHI STOP through an ordinary step and a block entry. *)
+Theorem raw_reachable_post_phi:
+  raw_reachable
+    (check_start with
+      <| vs_prev_bb := SOME "stale"; vs_current_bb := "stale"; vs_inst_idx := 99 |>)
+    check_ctx check_fn check_stop check_post_phi
+Proof
+  irule closed_jump_post_phi >> simp[raw_reachable_closed] >>
+  irule closed_assign_postincrement >> simp[raw_reachable_closed] >>
+  irule package_initialized_entry >>
+  simp[raw_reachable_package_iff, check_ctx_def, mk_venom_context_def,
+       lookup_function_def, FIND_thm, check_fn_def, mk_raw_function_def,
+       fn_entry_label_def, entry_block_def]
 QED
 
 Theorem run_context_initialization_and_phi:

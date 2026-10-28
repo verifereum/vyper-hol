@@ -55,14 +55,14 @@ Proof
   fs[fresh_vars_wrt_def, lookup_var_def]
 QED
 
-Theorem state_rel_append_event:
+Theorem state_rel_simple_append_event:
   !cenv cx es ss ev.
-    state_rel cenv cx es ss ==>
-    state_rel cenv cx (es with logs := es.logs ++ [ev])
+    state_rel_simple cenv cx es ss ==>
+    state_rel_simple cenv cx (es with logs := es.logs ++ [ev])
       (ss with vs_logs := ss.vs_logs ++ [ev])
 Proof
   rpt gen_tac >> strip_tac >>
-  fs[state_rel_def, vars_rel_def, storage_rel_def, transient_rel_def,
+  fs[state_rel_simple_def, vars_rel_def, storage_rel_def, transient_rel_def,
     immutables_rel_def, logs_rel_def, log_entry_equiv_def,
     LIST_REL_APPEND_suff, contract_storage_def, contract_transient_def] >>
   first_assum ACCEPT_TAC

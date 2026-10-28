@@ -55,7 +55,7 @@ Theorem boundary_live_and_fresh:
     es.contexts = (ctxt,rb)::rest /\
     ~ctxt.msgParams.static /\ ctxt.jumpDest = NONE /\
     ctxt.pc = 0 /\ ctxt.stack = [] /\ ctxt.logs = [] /\
-    ctxt.memory = [] /\ ctxt.returnData = [] /\
+    buffer_to_list ctxt.memory = [] /\ ctxt.returnData = [] /\
     ctxt.msgParams.code = code /\
     ctxt.msgParams.parsed = parse_code 0 FEMPTY code /\ LENGTH code <= 24576
 Proof

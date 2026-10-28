@@ -114,25 +114,25 @@ QED
 
 Theorem source_relations_abi_memory_frame:
   !func cenv cx es before after writes bound.
-    state_well_typed es /\ state_rel cenv cx es before /\ local_ptrs_rel func cenv es.scopes before /\
+    state_well_typed es /\ state_rel_simple cenv cx es before /\ local_ptrs_rel func cenv es.scopes before /\
     abi_state_frame before after /\ allocation_growth before after /\
     source_writes_separated cenv es.scopes before writes /\ abi_memory_frame writes before after /\
     (!name entry p region_size. lookup_scopes name es.scopes = SOME entry /\
       FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) region_size) ==> abi_operand_before bound (Var p)) /\
     (!arg. abi_operand_before bound arg ==> eval_operand arg after = eval_operand arg before) ==>
-    state_rel cenv cx es after /\ local_ptrs_rel func cenv es.scopes after
+    state_rel_simple cenv cx es after /\ local_ptrs_rel func cenv es.scopes after
 Proof
   rpt gen_tac >> strip_tac >>
-  `EVERY scope_well_typed es.scopes /\ vars_rel cenv es.scopes before` by fs[state_well_typed_def, state_rel_def] >>
+  `EVERY scope_well_typed es.scopes /\ vars_rel cenv es.scopes before` by fs[state_well_typed_def, state_rel_simple_def] >>
   `vars_rel cenv es.scopes after` by (drule_all vars_rel_abi_memory_frame >> simp[]) >>
-  conj_tac >- (drule_all state_rel_external_vars_frame >> simp[]) >>
+  conj_tac >- (drule_all state_rel_simple_external_vars_frame >> simp[]) >>
   mp_tac (Q.SPECL [`func`, `cenv`, `es.scopes`, `before`, `after`, `writes`, `bound`] local_ptrs_rel_abi_memory_frame) >>
   impl_tac >- (rpt conj_tac >> first_assum MATCH_ACCEPT_TAC) >> simp[]
 QED
 
 Theorem source_relations_native_log_frame:
   !ctx func cenv cx es before after writes events bound.
-    state_well_typed es /\ state_rel cenv cx es before /\ local_ptrs_rel func cenv es.scopes before /\
+    state_well_typed es /\ state_rel_simple cenv cx es before /\ local_ptrs_rel func cenv es.scopes before /\
     alloca_inv before /\ fragment_path ctx func before after /\
     abi_state_frame before (after with vs_logs := before.vs_logs) /\
     source_writes_separated cenv es.scopes before writes /\ abi_memory_frame writes before after /\
@@ -140,12 +140,12 @@ Theorem source_relations_native_log_frame:
     (!name entry p region_size. lookup_scopes name es.scopes = SOME entry /\
       FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) region_size) ==> abi_operand_before bound (Var p)) /\
     (!arg. abi_operand_before bound arg ==> eval_operand arg after = eval_operand arg before) ==>
-    state_rel cenv cx (es with logs := es.logs ++ events) after /\ local_ptrs_rel func cenv es.scopes after
+    state_rel_simple cenv cx (es with logs := es.logs ++ events) after /\ local_ptrs_rel func cenv es.scopes after
 Proof
   rpt gen_tac >> strip_tac >> drule_all fragment_path_allocation_growth >> DISCH_TAC >>
-  `EVERY scope_well_typed es.scopes /\ vars_rel cenv es.scopes before` by fs[state_well_typed_def, state_rel_def] >>
+  `EVERY scope_well_typed es.scopes /\ vars_rel cenv es.scopes before` by fs[state_well_typed_def, state_rel_simple_def] >>
   `vars_rel cenv es.scopes after` by (drule_all vars_rel_abi_memory_frame >> simp[]) >>
-  conj_tac >- (drule_all state_rel_log_frame >> simp[]) >>
+  conj_tac >- (drule_all state_rel_simple_log_frame >> simp[]) >>
   mp_tac (Q.SPECL [`func`, `cenv`, `es.scopes`, `before`, `after`, `writes`, `bound`] local_ptrs_rel_abi_memory_frame) >>
   impl_tac >- (rpt conj_tac >> first_assum MATCH_ACCEPT_TAC) >> simp[]
 QED

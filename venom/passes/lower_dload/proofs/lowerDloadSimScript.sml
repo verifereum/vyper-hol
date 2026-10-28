@@ -13,7 +13,7 @@ Ancestors
   venomInstProps analysisSimDefs instIdxIndep
   finite_map words list rich_list pred_set arithmetic
 Libs
-  BasicProvers lowerDloadFrameLib
+  BasicProvers lowerDloadFrameLib stepInstBaseLib
 
 val _ = augment_srw_ss [lowerDloadFrameLib.frame_ss];
 
@@ -350,7 +350,7 @@ QED
 val term_idx_tac =
   rpt strip_tac >>
   qpat_x_assum `step_inst_base inst s = OK v` mp_tac >>
-  simp[step_inst_base_def, jump_to_def] >>
+  with_opcode_clause (fn ths => simp (ths @ [jump_to_def])) >>
   gvs[AllCaseEqs(), PULL_EXISTS] >> rw[] >> gvs[] >>
   TRY (pairarg_tac >> pairarg_tac >> gvs[]);
 

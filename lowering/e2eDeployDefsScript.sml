@@ -89,10 +89,10 @@ Definition deploy_state_rel_def:
       ctxt.msgParams.outputTo = Code tx.target /\
       ctxt.msgParams.code = deploy_bc ++ args_bytes /\
       ctxt.msgParams.parsed = parse_code 0 FEMPTY (deploy_bc ++ args_bytes) /\
-      ctxt.msgParams.data = [] /\
+      buffer_to_list ctxt.msgParams.data = [] /\
       constructor_args_encode tops tx args_bytes /\
       ctxt.pc = 0 /\ ctxt.stack = [] /\ ctxt.logs = [] /\
-      ctxt.returnData = [] /\ ctxt.memory = [] /\
+      ctxt.returnData = [] /\ buffer_to_list ctxt.memory = [] /\
       value_transfer_ok tx am.accounts /\
       es.rollback.accounts = accounts_after_transfer tx am.accounts /\
       es.rollback.tStorage = am.tStorage /\ am.logs = [] /\

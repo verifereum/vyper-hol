@@ -805,3 +805,208 @@ Proof
   >> gvs[]
   >> simp[static_position_wf_def]
 QED
+
+(* Completion needs only inclusion of preserved intervals in its occupancy;
+   imported intervals need not be mutually disjoint. *)
+Theorem prepared_import_completion_certificate[local]:
+  static_alloca_items fn = SOME items /\
+  ALL_DISTINCT (MAP FST items) /\
+  candidate_alloc_keys_valid (MAP FST items) merged /\
+  checked_preserved_intervals items merged reserved = SOME added /\
+  complete_alloc_positions_aux (fn_insts fn) merged
+    (reserved ++ added ++ imported) = SOME completed ==>
+  (!alloc pos. FLOOKUP merged alloc = SOME pos ==>
+     FLOOKUP completed alloc = SOME pos) /\
+  (!inst alloc sz. MEM inst (fn_insts fn) /\
+     exact_static_alloca inst = SOME (alloc,sz) ==>
+     ?pos. FLOOKUP completed alloc = SOME pos /\
+           pos + sz < dimword (:256)) /\
+  candidate_alloc_keys_valid (MAP FST items) completed
+Proof
+  strip_tac >>
+  `!inst item. MEM inst (fn_insts fn) /\
+     exact_static_alloca inst = SOME item ==> MEM item items` by
+    metis_tac[static_alloca_items_exact_MEM] >>
+  `!alloc sz pos. MEM (alloc,sz) items /\
+     FLOOKUP merged alloc = SOME pos ==>
+     pos + sz < dimword (:256) /\
+     (0 < sz ==> MEM (pos,sz) (reserved ++ added ++ imported))` by
+    (drule checked_preserved_intervals_invariant >> simp[] >> metis_tac[]) >>
+  drule_all complete_alloc_positions_aux_success >> strip_tac >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  irule complete_alloc_positions_aux_keys_valid >>
+  goal_assum (drule_at Any) >> simp[] >>
+  metis_tac[item_key_MEM_MAP]
+QED
+
+Theorem prepared_import_completion_reserved_disjoint[local]:
+  static_alloca_items fn = SOME items /\
+  ALL_DISTINCT (MAP FST items) /\
+  checked_preserved_intervals items merged reserved = SOME added /\
+  complete_alloc_positions_aux (fn_insts fn) merged
+    (reserved ++ added ++ imported) = SOME completed ==>
+  !a sz p r. MEM (a,sz) items /\ FLOOKUP completed a = SOME p /\
+    0 < sz /\ MEM r reserved ==>
+    reserved_intervals_disjoint (p,sz) r
+Proof
+  strip_tac >>
+  `!inst item. MEM inst (fn_insts fn) /\
+     exact_static_alloca inst = SOME item ==> MEM item items` by
+    metis_tac[static_alloca_items_exact_MEM] >>
+  drule checked_preserved_intervals_reserved_disjoint >> strip_tac >>
+  `!r. MEM r reserved ==> MEM r (reserved ++ added ++ imported)` by simp[] >>
+  MATCH_MP_TAC complete_alloc_positions_aux_reserved_disjoint >>
+  qexistsl [`fn_insts fn`, `merged`, `reserved ++ added ++ imported`] >>
+  simp[] >> conj_tac >> first_assum ACCEPT_TAC
+QED
+
+Theorem complete_alloc_positions_with_imports_success:
+  static_alloca_items fn = SOME items /\
+  complete_alloc_positions_with_imports items forced reserved imported fn positions =
+    SOME completed ==>
+  (!alloc pos. FLOOKUP positions alloc = SOME pos ==>
+     FLOOKUP completed alloc = SOME pos) /\
+  (!inst alloc sz. MEM inst (fn_insts fn) /\
+     exact_static_alloca inst = SOME (alloc,sz) ==>
+     ?pos. FLOOKUP completed alloc = SOME pos /\
+           pos + sz < dimword (:256)) /\
+  (!alloc pos. FLOOKUP completed alloc = SOME pos ==>
+     ?inst sz. MEM inst (fn_insts fn) /\
+       exact_static_alloca inst = SOME (alloc,sz) /\
+       pos + sz < dimword (:256) /\
+       (0 < sz ==> EVERY (reserved_intervals_disjoint (pos,sz)) reserved)) /\
+  static_fn_positions_wf reserved completed fn
+Proof
+  simp[complete_alloc_positions_with_imports_def, AllCaseEqs()] >>
+  strip_tac >>
+  `ALL_DISTINCT (MAP FST items)` by
+    metis_tac[static_alloca_items_ALL_DISTINCT] >>
+  rename1 `merge_forced_positions items forced positions = SOME merged` >>
+  `candidate_alloc_keys_valid (MAP FST items) merged` by
+    (MATCH_MP_TAC (INST_TYPE [``:'a`` |-> ``:num``]
+       merge_forced_positions_keys_valid) >>
+     qexistsl [`items`, `forced`, `positions`] >> simp[] >>
+     rpt strip_tac >> PairCases_on `item` >>
+     simp[MEM_MAP] >> qexists `(item0,item1)` >> simp[]) >>
+  drule_all prepared_import_completion_certificate >> strip_tac >>
+  MATCH_MP_TAC complete_alloc_positions_package >>
+  ntac 5 (conj_tac >- first_assum ACCEPT_TAC) >>
+  MATCH_MP_TAC (Q.GEN `added` prepared_import_completion_reserved_disjoint) >>
+  qexists `occupied` >> simp[]
+QED
+
+Theorem complete_alloc_positions_with_imports_keys_valid:
+  static_alloca_items fn = SOME items /\
+  complete_alloc_positions_with_imports items forced reserved imported fn positions =
+    SOME completed ==>
+  candidate_alloc_keys_valid (MAP FST items) completed
+Proof
+  strip_tac >>
+  drule_all complete_alloc_positions_with_imports_success >> strip_tac >>
+  simp[candidate_alloc_keys_valid_def, pred_setTheory.SUBSET_DEF,
+       FLOOKUP_DEF] >>
+  rpt strip_tac >>
+  `FLOOKUP completed x = SOME (completed ' x)` by simp[FLOOKUP_DEF] >>
+  qpat_x_assum `!alloc pos. FLOOKUP completed alloc = SOME pos ==> _`
+    drule >> strip_tac >>
+  drule_all static_alloca_items_exact_MEM >>
+  metis_tac[item_key_MEM_MAP]
+QED
+
+Theorem complete_alloc_positions_with_imports_forced:
+  complete_alloc_positions_with_imports items forced reserved imported fn positions =
+    SOME completed /\
+  static_alloca_items fn = SOME items /\
+  FLOOKUP forced aid = SOME pos /\
+  MEM (Allocation aid) (MAP FST items) ==>
+  FLOOKUP completed (Allocation aid) = SOME pos
+Proof
+  simp[complete_alloc_positions_with_imports_def, AllCaseEqs()] >> strip_tac >>
+  rename1 `merge_forced_positions items forced positions = SOME merged` >>
+  `FLOOKUP merged (Allocation aid) = SOME pos` by
+    (drule merge_forced_positions_forced_aid >> simp[]) >>
+  `ALL_DISTINCT (MAP FST items)` by
+    metis_tac[static_alloca_items_ALL_DISTINCT] >>
+  `candidate_alloc_keys_valid (MAP FST items) merged` by
+    (MATCH_MP_TAC (INST_TYPE [``:'a`` |-> ``:num``]
+       merge_forced_positions_keys_valid) >>
+     qexistsl [`items`, `forced`, `positions`] >> simp[] >>
+     rpt strip_tac >> PairCases_on `item` >>
+     simp[MEM_MAP] >> qexists `(item0,item1)` >> simp[]) >>
+  drule_all prepared_import_completion_certificate >> strip_tac >>
+  first_x_assum irule >> first_assum ACCEPT_TAC
+QED
+
+(* Only selected keys need initially avoid fixed occupancy. This distinguishes
+   newly filled keys from preserved liveness candidates, which may overlap it. *)
+Theorem complete_alloc_positions_aux_selected_disjoint[local]:
+  !insts items positions occupied completed fixed selected.
+    ALL_DISTINCT (MAP FST items) /\
+    (!inst item. MEM inst insts /\ exact_static_alloca inst = SOME item ==>
+       MEM item items) /\
+    (!r. MEM r fixed ==> MEM r occupied) /\
+    (!a sz p r. selected a /\ MEM (a,sz) items /\
+       FLOOKUP positions a = SOME p /\ 0 < sz /\ MEM r fixed ==>
+       reserved_intervals_disjoint (p,sz) r) /\
+    complete_alloc_positions_aux insts positions occupied = SOME completed ==>
+    !a sz p r. selected a /\ MEM (a,sz) items /\
+      FLOOKUP completed a = SOME p /\ 0 < sz /\ MEM r fixed ==>
+      reserved_intervals_disjoint (p,sz) r
+Proof
+  Induct >- (simp[complete_alloc_positions_aux_def] >> metis_tac[]) >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `h.inst_opcode = ALLOCA`
+  >- (Cases_on `exact_static_alloca_size h` >>
+      gvs[complete_alloc_positions_aux_def] >>
+      Cases_on `FLOOKUP positions (Allocation h.inst_id)`
+      >- (Cases_on `checked_first_fit occupied x` >>
+          gvs[complete_alloc_positions_aux_def] >>
+          `MEM (Allocation h.inst_id,x) items` by
+            (qpat_x_assum `!inst item. _`
+               (qspecl_then [`h`,`(Allocation h.inst_id,x)`] mp_tac) >>
+             simp[exact_static_alloca_def]) >>
+          first_x_assum MATCH_MP_TAC >>
+          qexistsl [`positions |+ (Allocation h.inst_id,x')`,
+                    `if x = 0 then occupied else (x',x)::occupied`] >>
+          simp[] >> conj_tac >- metis_tac[] >>
+          conj_tac
+          >- (rpt strip_tac >> Cases_on `x = 0` >> gvs[]) >>
+          rpt gen_tac >> strip_tac >>
+          Cases_on `a = Allocation h.inst_id`
+          >- (`sz = x` by metis_tac[all_distinct_item_key_unique] >>
+              gvs[FLOOKUP_UPDATE] >>
+              drule checked_first_fit_SOME >>
+              simp[EVERY_MEM] >> metis_tac[]) >>
+          gvs[FLOOKUP_UPDATE] >> metis_tac[]) >>
+      gvs[] >> first_x_assum MATCH_MP_TAC >>
+      qexistsl [`positions`, `occupied`] >> simp[] >>
+      conj_tac >- metis_tac[] >> first_assum ACCEPT_TAC) >>
+  gvs[complete_alloc_positions_aux_def, exact_static_alloca_def,
+      exact_static_alloca_size_def] >>
+  first_x_assum MATCH_MP_TAC >>
+  qexistsl [`positions`, `occupied`] >> simp[] >>
+  conj_tac >- metis_tac[] >> first_assum ACCEPT_TAC
+QED
+
+Theorem complete_alloc_positions_with_imports_fresh_disjoint:
+  static_alloca_items fn = SOME items /\
+  complete_alloc_positions_with_imports items forced reserved imported fn positions =
+    SOME completed /\
+  merge_forced_positions items forced positions = SOME merged ==>
+  !a sz p r. FLOOKUP merged a = NONE /\ MEM (a,sz) items /\
+    FLOOKUP completed a = SOME p /\ 0 < sz /\ MEM r imported ==>
+    reserved_intervals_disjoint (p,sz) r
+Proof
+  simp[complete_alloc_positions_with_imports_def, AllCaseEqs()] >> strip_tac >>
+  `ALL_DISTINCT (MAP FST items)` by
+    metis_tac[static_alloca_items_ALL_DISTINCT] >>
+  `!inst item. MEM inst (fn_insts fn) /\
+     exact_static_alloca inst = SOME item ==> MEM item items` by
+    metis_tac[static_alloca_items_exact_MEM] >>
+  gvs[] >>
+  ho_match_mp_tac complete_alloc_positions_aux_selected_disjoint >>
+  qexistsl [`fn_insts fn`, `merged`, `reserved ++ occupied ++ imported`] >>
+  simp[] >> conj_tac >- first_assum ACCEPT_TAC >>
+  rpt strip_tac >> gvs[]
+QED

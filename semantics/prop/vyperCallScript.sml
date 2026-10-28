@@ -24,7 +24,7 @@ Definition extcall_call_def:
     case build_ext_calldata (get_tenv cx) func_name arg_types arg_vals of
     | NONE => NONE
     | SOME calldata =>
-    case run_ext_call cx.txn.target target_addr calldata value_opt
+    case run_ext_call cx.txn.target target_addr calldata value_opt default_evm_gas_limit
                       accounts tStorage (vyper_to_tx_params cx.txn) of
     | NONE => NONE
     | SOME (success, returnData, accounts', tStorage', emitted_logs) =>
@@ -57,6 +57,63 @@ Proof
   simp[]
 QED
 
+(* eval_expr's IntCall case, unfolded for a call that gives every parameter
+   an argument (so no defaults are evaluated) to a callee without a
+   reentrancy lock: the body runs in the callee's scope, the caller's
+   scopes come back, and the result is handle_function's value, cast. *)
+Theorem eval_expr_intcall_unfold:
+  ∀cx ty src fn es drv st ts mut args dflts ret body vs st1 env rtv.
+    ¬MEM (src, fn) cx.stk ∧
+    get_module_code cx src = SOME ts ∧
+    lookup_callable_function cx.in_deploy fn ts =
+      SOME (mut, F, args, dflts, ret, body) ∧
+    LENGTH es = LENGTH args ∧
+    eval_exprs cx es st = (INL vs, st1) ∧
+    bind_arguments (get_tenv cx) args vs = SOME env ∧
+    evaluate_type (get_tenv cx) ret = SOME rtv ⇒
+    eval_expr cx (Call ty (IntCall (src, fn)) es drv) st =
+    case eval_stmts (cx with stk updated_by CONS (src, fn)) body
+           (st1 with scopes := [env]) of
+      (INL _, st2) =>
+        (do crv <- lift_option_type (safe_cast rtv NoneV) "IntCall cast ret";
+            return (Value crv)
+         od) (st2 with scopes := st1.scopes)
+    | (INR e, st2) =>
+        (do rv <- handle_function e;
+            crv <- lift_option_type (safe_cast rtv rv) "IntCall cast ret";
+            return (Value crv)
+         od) (st2 with scopes := st1.scopes)
+Proof
+  rpt strip_tac >>
+  CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [evaluate_def])) >>
+  simp[bind_def, ignore_bind_def, type_check_def, assert_def, return_def,
+       get_scopes_def, set_scopes_def, finally_def, try_def,
+       push_function_def, pop_function_def, evaluate_def] >>
+  Cases_on `eval_stmts (cx with stk updated_by CONS (src,fn)) body
+              (st1 with scopes := [env])` >>
+  rename1 `_ = (res, st2)` >> Cases_on `res` >>
+  simp[bind_def, ignore_bind_def, return_def, set_scopes_def] >>
+  rename1 `handle_function exc` >> Cases_on `exc` >>
+  simp[handle_function_def, raise_def, return_def]
+QED
+
+(* The same call when an argument raises: the call raises it, from the
+   arguments' final state. *)
+Theorem eval_expr_intcall_args_raise:
+  ∀cx ty src fn es drv st ts mut nr args dflts ret body e st1.
+    ¬MEM (src, fn) cx.stk ∧
+    get_module_code cx src = SOME ts ∧
+    lookup_callable_function cx.in_deploy fn ts =
+      SOME (mut, nr, args, dflts, ret, body) ∧
+    LENGTH es = LENGTH args ∧
+    eval_exprs cx es st = (INR e, st1) ⇒
+    eval_expr cx (Call ty (IntCall (src, fn)) es drv) st = (INR e, st1)
+Proof
+  rpt strip_tac >>
+  CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [evaluate_def])) >>
+  simp[bind_def, ignore_bind_def, type_check_def, assert_def, return_def]
+QED
+
 Theorem bind_arguments_length:
   ∀tenv args vs env.
     bind_arguments tenv args vs = SOME env ⇒ LENGTH args = LENGTH vs
@@ -69,6 +126,18 @@ Proof
   Cases_on `safe_cast x h` >> simp[] >>
   Cases_on `bind_arguments tenv args t` >> simp[] >>
   strip_tac >> res_tac
+QED
+
+(* The arguments' scope binds exactly the parameter names. *)
+Theorem bind_arguments_fdom:
+  ∀tenv args vs env.
+    bind_arguments tenv args vs = SOME env ⇒ FDOM env = set (MAP FST args)
+Proof
+  Induct_on `args` >> simp[bind_arguments_def] >>
+  Cases_on `vs` >> simp[bind_arguments_def] >>
+  rpt gen_tac >> PairCases_on `h'` >>
+  simp[bind_arguments_def, AllCaseEqs(), PULL_EXISTS] >>
+  rpt strip_tac >> res_tac >> simp[]
 QED
 
 (* ===== Log Lifecycle Boundaries (issue #439) ===== *)

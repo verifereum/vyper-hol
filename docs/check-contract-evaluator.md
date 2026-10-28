@@ -94,8 +94,9 @@ the shared compset should contain only dependencies of the general checker.
 
 `check_contract` evaluates every constant initializer, through
 `contract_constants_ok`, in the order deployment does
-(`evaluate_all_constants`): modules in list order, declarations in source
-order. A contract whose initializer fails (division by zero, an out-of-bounds
+(`evaluate_all_constants`): imported modules first, in the frontend's
+dependency order, then the main module (`constants_order`); declarations in
+source order. A contract whose initializer fails (division by zero, an out-of-bounds
 result) or reads a constant that has not been folded yet checks to `NONE`.
 The shared compset therefore includes the value operations the constant
 builtins reach: integer, decimal and bitwise arithmetic, and the
@@ -129,6 +130,23 @@ val checked = vyperCheckContractFrontendLib.check_contract_file
 The frontend uses the shared canonical AST translation and storage-layout
 extraction. Interface (`.vyi`) units remain available during translation for
 nominal types and signatures but are excluded from the runtime module list.
+
+Translation also repairs three things the compiler output leaves implicit:
+
+- The compiler names an inferred struct or flag type by its bare name, with no
+  declaring source. Translation gives it the source of the one module that
+  declares a struct (or flag) of that name; a name declared in several modules
+  keeps no source and is read in the current module, as before.
+- A module reached along several import paths is listed once per path under
+  one source ID and resolved path. Identical listings are kept once under that
+  source ID; differing ones are kept, and source normalization reports the
+  conflict.
+- The storage layout nests a module's variables under the alias its
+  initializing module gives it. Layout keys keep the dotted alias path
+  (`token.ownable`), and the translation's import map resolves each path along
+  the `initializes:` declarations. A module initialized through an attribute
+  (`initializes: token.ownable` in the main module) is keyed by its last
+  alias, `ownable`, under its initializer's path.
 
 Call `check_contract_result` when the caller also needs the prepared terms:
 
@@ -195,6 +213,13 @@ python3 tests/sanitize_check_contract_json.py \
 Use a temporary output when sanitizing a file in place, since input is read
 before output is written. Add `--forbid` for the local checkout root, generating
 username, or other machine-specific values not covered by the defaults.
+
+`interface_struct/`, `nested_initializes/`, `attribute_initializes/` and
+`relative_uses/` reproduce the three cases above. Their JSON was generated at
+`VYPER_PIN` from `tests/fixtures/check_contract` with
+`vyper -f annotated_ast,layout` on each directory's `main.vy` (for
+`relative_uses/`, `pkg/mocks/main.vy`), then sanitized with
+`--replace "$PWD/="`.
 
 The Flex Daddy example and its exact provenance are in
 `tests/fixtures/check_contract/third_party/flex/`. It is checked in both

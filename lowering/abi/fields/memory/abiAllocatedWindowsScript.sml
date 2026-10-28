@@ -27,8 +27,8 @@ Theorem abi_allocated_window_sequence:
 Proof
   rpt gen_tac >> DISCH_TAC >>
   qpat_x_assum `abi_allocated_window _ _ _ _` (strip_assume_tac o REWRITE_RULE [abi_allocated_window_def]) >>
-  rename1 `FLOOKUP ss.vs_allocas id = SOME (allocation_base,allocation_size)` >>
-  simp_tac bool_ss [abi_allocated_window_def] >> qexistsl_tac [`allocation_base`, `allocation_size`] >>
+  rename1 `FLOOKUP ss.vs_allocas id = SOME (window_base,window_size)` >>
+  simp_tac bool_ss [abi_allocated_window_def] >> qexistsl_tac [`window_base`, `window_size`] >>
   rpt conj_tac >> TRY (first_assum MATCH_ACCEPT_TAC) >>
   irule abi_allocation_sequence_lookup_old >> first_assum MATCH_ACCEPT_TAC
 QED
@@ -40,8 +40,8 @@ Theorem abi_allocated_window_shrink:
 Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `abi_allocated_window _ _ _ _` (strip_assume_tac o REWRITE_RULE [abi_allocated_window_def]) >>
-  rename1 `FLOOKUP ss.vs_allocas id = SOME (allocation_base,allocation_size)` >>
-  simp_tac bool_ss [abi_allocated_window_def] >> qexistsl_tac [`allocation_base`, `allocation_size`] >>
+  rename1 `FLOOKUP ss.vs_allocas id = SOME (window_base,window_size)` >>
+  simp_tac bool_ss [abi_allocated_window_def] >> qexistsl_tac [`window_base`, `window_size`] >>
   simp[] >> decide_tac
 QED
 
@@ -52,9 +52,9 @@ Theorem abi_allocated_window_frontier:
 Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `abi_allocated_window _ _ _ _` (strip_assume_tac o REWRITE_RULE [abi_allocated_window_def]) >>
-  rename1 `FLOOKUP ss.vs_allocas id = SOME (allocation_base,allocation_size)` >>
+  rename1 `FLOOKUP ss.vs_allocas id = SOME (window_base,window_size)` >>
   qpat_x_assum `alloca_next_valid ss` (mp_tac o REWRITE_RULE [alloca_next_valid_def]) >>
-  disch_then (qspecl_then [`id`, `allocation_base`, `allocation_size`] mp_tac) >>
+  disch_then (qspecl_then [`id`, `window_base`, `window_size`] mp_tac) >>
   impl_tac >- first_assum MATCH_ACCEPT_TAC >> decide_tac
 QED
 

@@ -9,7 +9,8 @@
 
 Theory functionInlinerProof
 Ancestors
-  functionInlinerDefs stateEquiv venomExecSemantics pointerConfinedDefs
+  functionInlinerDefs stateEquiv stateEquivProps venomExecSemantics
+  pointerConfinedDefs
 
 (* Inlining preserves execution semantics.
  * For any fuel where the original context terminates, there exists
@@ -21,6 +22,9 @@ Ancestors
  *   - alloca_pointer_confined (all functions): inlining merges callee alloca
  *     space into caller, changing alloca layout. Pointer confinement ensures
  *     this doesn't affect observable output.
+ *
+ * The results agree only observably: the inlined run keeps the callee's
+ * renamed variables, its cloned vs_allocas entries and a higher frontier.
  *)
 Theorem function_inliner_correct:
   ∀ctx s fuel threshold.
@@ -28,7 +32,7 @@ Theorem function_inliner_correct:
     EVERY alloca_pointer_confined ctx.ctx_functions ⇒
     let ctx' = function_inliner_ctx threshold ctx in
     ∃fuel'.
-      result_equiv {}
+      observable_result_equiv
         (run_context fuel ctx s)
         (run_context fuel' ctx' s)
 Proof

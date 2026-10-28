@@ -3,11 +3,17 @@
  *
  * TOP-LEVEL:
  *   read_hex_bytes -- read pinned-Python deploy/runtime oracle bytes into a term
+ *   weak_eval -- checked evaluation preserving unused function-valued fields
  *)
 
 structure evalCompilerBytecodeLib = struct
 
 open HolKernel
+
+(* Package and environment results contain functions that compilation applies
+   later. Avoid expanding their unused lambda bodies when saving a stage. *)
+fun weak_eval tm =
+  computeLib.WEAK_CBV_CONV (computeLib.the_compset ()) tm
 
 fun read_all path =
   let

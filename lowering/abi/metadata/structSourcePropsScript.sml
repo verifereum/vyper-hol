@@ -7,12 +7,12 @@ Ancestors
   vyperContext vyperAST vyperValue vyperTypeContract finite_map pred_set list option pair
 
 Theorem build_struct_fields_map_domain:
-  !tops sf name.
-    name IN FDOM (build_struct_fields_map tops sf) <=>
+  !tops tenv sf name.
+    name IN FDOM (build_struct_fields_map tenv tops sf) <=>
       name IN FDOM sf \/ ?args. MEM (StructDecl name args) tops
 Proof
   Induct_on `tops` >- simp[build_struct_fields_map_def] >>
-  rpt gen_tac >> qmatch_goalsub_rename_tac `build_struct_fields_map (top_decl::rest_tops) _` >>
+  rpt gen_tac >> qmatch_goalsub_rename_tac `build_struct_fields_map _ (top_decl::rest_tops) _` >>
   Cases_on `top_decl` >> simp[build_struct_fields_map_def] >> metis_tac[]
 QED
 
@@ -33,9 +33,9 @@ Theorem make_struct_fields_lookup_exists:
     ?fields. FLOOKUP (make_struct_fields_map tops) name = SOME fields
 Proof
   rpt strip_tac >>
-  `name IN FDOM (build_struct_fields_map tops FEMPTY)` by
+  `name IN FDOM (build_struct_fields_map (type_env tops) tops FEMPTY)` by
     (simp[build_struct_fields_map_domain] >> goal_assum drule) >>
-  simp[make_struct_fields_map_def, FLOOKUP_o_f, FLOOKUP_DEF]
+  simp[make_struct_fields_map_def, FLOOKUP_DEF]
 QED
 
 Theorem make_struct_fields_source_types:

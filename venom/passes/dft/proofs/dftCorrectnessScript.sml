@@ -6555,7 +6555,9 @@ Proof
   Cases_on `a.inst_opcode` >> gvs[is_pseudo_def]
   >- gvs[Once step_inst_base_def]
   >- (gvs[Once step_inst_base_def] >> gvs[AllCaseEqs()] >> metis_tac[])
-  >- (gvs[Once step_inst_base_def] >> gvs[AllCaseEqs()] >> metis_tac[])
+  >- (qpat_x_assum `step_inst_base a s = OK sa` mp_tac >>
+      simp[Once step_inst_base_def] >>
+      simp[AllCaseEqs()] >> metis_tac[])
   >- (gvs[Once step_inst_base_def] >> gvs[AllCaseEqs()] >> metis_tac[])
 QED
 

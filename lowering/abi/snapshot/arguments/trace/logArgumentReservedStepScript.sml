@@ -28,7 +28,7 @@ Theorem checked_log_argument_reserved_step:
     loaded.vs_halted = before.vs_halted /\
     lowered_value_rel (lowered_value_type cenv e) tv v src loaded /\ abi_operand_before load_cut.cs_next_var src /\
     env_scopes_consistent env cx es /\ env_scopes_consistent env cx es1 /\
-    state_well_typed es1 /\ state_rel cenv cx es1 loaded /\ local_ptrs_rel func cenv es1.scopes loaded /\
+    state_well_typed es1 /\ state_rel_simple cenv cx es1 loaded /\ local_ptrs_rel func cenv es1.scopes loaded /\
     local_ptrs_rel func cenv es.scopes before /\ source_alloca_floor cenv es.scopes ids before /\
     (!name entry p region_size. lookup_scopes name es.scopes = SOME entry /\
       FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) region_size) ==> abi_operand_before cs.cs_next_var (Var p)) /\
@@ -55,7 +55,7 @@ Theorem checked_log_argument_reserved_step:
       fragment_path ctx func before out /\
       out.vs_current_bb = save_cut.cs_current_bb /\ out.vs_inst_idx = LENGTH save_cut.cs_current_insts /\
       out.vs_halted = before.vs_halted /\ lowered_value_rel (lowered_value_type cenv e) tv v saved out /\
-      state_rel cenv cx es1 out /\ local_ptrs_rel func cenv es1.scopes out /\
+      state_rel_simple cenv cx es1 out /\ local_ptrs_rel func cenv es1.scopes out /\
       source_alloca_floor cenv es1.scopes ids out /\
       log_args_rel (prefix ++ [(saved,lowered_value_type cenv e)]) (ptvs ++ [tv]) (pvs ++ [v]) out /\
       EVERY (\arg. abi_operand_before save_cut.cs_next_var (FST arg)) (prefix ++ [(saved,lowered_value_type cenv e)]) /\

@@ -29,4 +29,3 @@ Definition probe_creation_state_def:
        pc := 0; stack := []; memory := []; logs := []; returnData := [];
        jumpDest := NONE; gasUsed := 0|>, ARB)]
 End
-

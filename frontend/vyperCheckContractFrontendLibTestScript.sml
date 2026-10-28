@@ -1,6 +1,7 @@
 Theory vyperCheckContractFrontendLibTest
 Ancestors
   jsonToVyper jsonToVyperExpr jsonAST vyperAST vyperTypeContract
+  jsonNominalSources
 Libs
   vyperCheckContractFrontendLib
 
@@ -25,18 +26,18 @@ fun call_attr base name tc =
 val lib_name = call_name ``"lib"`` ``SOME "module"``;
 val self_name = call_name ``"self"`` ``SOME "module"``;
 val local_name = call_name ``"xs"`` ``NONE : string option``;
-fun check_call_with ctx source_ref label func ret_ty pop_idx expected = let
+fun check_call_with ctx source_ref label func ret_ty pop_target expected = let
   val translated = bossLib.EVAL
     ``translate_call ^ctx ^func [^call_arg] [] ^ret_ty
-        ^source_ref ^pop_idx``
+        ^source_ref ^pop_target``
 in
   if aconv (rhs (concl translated)) expected then ()
   else raise Fail ("translate_call dispatch: " ^ label)
 end;
-fun check_call label func ret_ty pop_idx expected =
-  check_call_with call_ctx ``JMissingSource`` label func ret_ty pop_idx expected;
+fun check_call label func ret_ty pop_target expected =
+  check_call_with call_ctx ``JMissingSource`` label func ret_ty pop_target expected;
 fun check_bool_call label func expected =
-  check_call label func ``JT_Named NONE "bool"`` ``NONE : expr option`` expected;
+  check_call label func ``JT_Named NONE "bool"`` ``NONE : base_assignment_target option`` expected;
 fun internal_call nsid name =
   ``Call (BaseT BoolT) (IntCall (^nsid, ^name)) [^call_arg] NONE``;
 val override_call_ctx =
@@ -48,7 +49,7 @@ val override_call_ctx =
 val _ = check_call_with override_call_ctx ``JExplicitSource 0``
   "abstract call links to concrete override"
   (call_attr self_name ``"compute"`` ``NONE : string option``)
-  ``JT_Named NONE "bool"`` ``NONE : expr option``
+  ``JT_Named NONE "bool"`` ``NONE : base_assignment_target option``
   (internal_call ``NONE : num option`` ``"compute"``);
 val _ = check_bool_call "interface before builtin"
   (call_name ``"len"`` ``SOME "interface"``) iface_result;
@@ -65,26 +66,44 @@ val _ = check_bool_call "near shortcut name"
   (call_attr self_name ``"__at"`` ``SOME "interface"``)
   (internal_call ``SOME 9`` ``"__at"``);
 fun pop_call base = call_attr base ``"pop"`` ``SOME "interface"``;
-val _ = check_bool_call "pop before interface"
-  (pop_call local_name) ``Pop (BaseT BoolT) (NameTarget "xs")``;
-val _ = check_bool_call "pop self before module"
-  (pop_call (call_attr self_name ``"xs"`` ``NONE : string option``))
-  ``Pop (BaseT BoolT) (TopLevelNameTarget (NONE, "xs"))``;
-val _ = check_bool_call "pop module uses raw source, not alias"
-  (pop_call (call_attr lib_name ``"xs"`` ``NONE : string option``))
-  ``Pop (BaseT BoolT) (TopLevelNameTarget (SOME 3, "xs"))``;
-val _ = app (fn tc => check_bool_call "pop ordinary attribute negative tag/name"
-  (pop_call (call_attr (call_name ``"selfish"`` tc) ``"xs"`` ``NONE : string option``))
+fun check_pop label base expected = let
+  val func = pop_call base
+  val translated = bossLib.EVAL
+    ``translate_expr ^call_ctx
+        (JE_Call ^func [JE_Bool T] [] (JT_Named NONE "bool") JMissingSource)``
+in
+  if aconv (rhs (concl translated)) expected then ()
+  else raise Fail ("pop receiver translation: " ^ label)
+end;
+val _ = check_pop "pop before interface"
+  local_name ``Pop (BaseT BoolT) (NameTarget "xs")``;
+val _ = check_pop "pop self uses current module"
+  (call_attr self_name ``"xs"`` ``NONE : string option``)
+  ``Pop (BaseT BoolT) (TopLevelNameTarget (SOME 9, "xs"))``;
+val _ = check_pop "pop module uses canonical alias"
+  (call_attr lib_name ``"xs"`` ``NONE : string option``)
+  ``Pop (BaseT BoolT) (TopLevelNameTarget (SOME 7, "xs"))``;
+val _ = app (fn tc => check_pop "pop ordinary attribute negative tag/name"
+  (call_attr (call_name ``"selfish"`` tc) ``"xs"`` ``NONE : string option``)
   ``Pop (BaseT BoolT) (AttributeTarget (NameTarget "selfish") "xs")``)
   [``NONE : string option``, ``SOME "modules"``];
-val subscript_base = ``JE_Subscript ^local_name (JE_Int 7 JT_None) JT_None``;
-val _ = check_bool_call "pop subscript missing index" (pop_call subscript_base)
-  ``Pop (BaseT BoolT) (SubscriptTarget (NameTarget "xs") ^call_arg)``;
-val _ = check_call "pop subscript translated index" (pop_call subscript_base)
-  ``JT_Named NONE "bool"`` ``SOME (Literal (BaseT (UintT 256)) (IntL 7))``
-  ``Pop (BaseT BoolT) (SubscriptTarget (NameTarget "xs")
-      (Literal (BaseT (UintT 256)) (IntL 7)))``;
-val _ = check_bool_call "pop fallback" (pop_call ``JE_Bool T``)
+val subscript_base =
+  ``JE_Subscript ^local_name (JE_Int 7 (JT_Integer 256 F)) JT_None``;
+val subscript_target =
+  ``SubscriptTarget (NameTarget "xs") (Literal (BaseT (UintT 256)) (IntL 7))``;
+val _ = check_call "pop translated target" (pop_call subscript_base)
+  ``JT_Named NONE "bool"`` ``SOME ^subscript_target``
+  ``Pop (BaseT BoolT) ^subscript_target``;
+val _ = check_pop "pop translates subscript index" subscript_base
+  ``Pop (BaseT BoolT) ^subscript_target``;
+val _ = check_pop "pop nested subscript"
+  ``JE_Subscript ^subscript_base (JE_Int 2 (JT_Integer 256 F)) JT_None``
+  ``Pop (BaseT BoolT) (SubscriptTarget ^subscript_target
+      (Literal (BaseT (UintT 256)) (IntL 2)))``;
+val _ = check_pop "pop attribute of subscript"
+  (call_attr subscript_base ``"items"`` ``NONE : string option``)
+  ``Pop (BaseT BoolT) (AttributeTarget ^subscript_target "items")``;
+val _ = check_pop "pop fallback" ``JE_Bool T``
   (internal_call ``NONE : num option`` ``"pop"``);
 val _ = check_bool_call "self call before interface fallback"
   (call_attr self_name ``"foo"`` ``SOME "interface"``)
@@ -110,15 +129,15 @@ val _ = check_bool_call "non-attribute fallback" ``JE_Bool T``
   (internal_call ``SOME 9`` ``""``);
 val _ = check_call "module struct constructor source recovery"
   (call_attr lib_name ``"Record"`` ``NONE : string option``)
-  ``JT_Struct NONE "Record"`` ``NONE : expr option``
+  ``JT_Struct NONE "Record"`` ``NONE : base_assignment_target option``
   ``StructLit (StructT (SOME 3, "Record")) (SOME 3, "Record") []``;
 val _ = check_call "module struct constructor explicit source"
   (call_attr lib_name ``"Record"`` ``NONE : string option``)
-  ``JT_Struct (SOME 2) "Record"`` ``NONE : expr option``
+  ``JT_Struct (SOME 2) "Record"`` ``NONE : base_assignment_target option``
   ``StructLit (StructT (SOME 4, "Record")) (SOME 4, "Record") []``;
 val _ = check_call "module function returning struct"
   (call_attr lib_name ``"foo"`` ``NONE : string option``)
-  ``JT_Struct NONE "Record"`` ``NONE : expr option``
+  ``JT_Struct NONE "Record"`` ``NONE : base_assignment_target option``
   ``Call (StructT (SOME 9, "Record")) (IntCall (SOME 7, "foo")) [^call_arg] NONE``;
 
 (* Abstract functions are compile-time holes. Translation must link calls to
@@ -373,14 +392,16 @@ val duplicate_translation = optionSyntax.dest_some
 val (duplicate_sources, duplicate_rest) = pairSyntax.dest_pair duplicate_translation;
 val (_, duplicate_import_map) = pairSyntax.dest_pair duplicate_rest;
 val (duplicate_entries, duplicate_source_ty) = listSyntax.dest_list duplicate_sources;
-val expected_duplicate_sources = case duplicate_entries of
-    [main, first, second, pinger] =>
-      if aconv first second then
-        listSyntax.mk_list ([main, first, pinger], duplicate_source_ty)
-      else raise Fail "duplicate interface fixture did not reproduce equal sources"
-  | _ => raise Fail "duplicate interface fixture has unexpected source count";
+(* Translation keeps one listing of the repeated interface, in import order. *)
+val duplicate_ids = listSyntax.mk_list
+  (map (fst o pairSyntax.dest_pair) duplicate_entries,
+   fst (pairSyntax.dest_prod duplicate_source_ty));
+val expected_duplicate_sources =
+  if aconv duplicate_ids ``[NONE; SOME 3; SOME 4]`` then duplicate_sources
+  else raise Fail ("duplicate interface fixture has unexpected sources " ^
+    term_to_string duplicate_ids);
 val duplicate_input = prepare_ast duplicate_ast;
-val _ = assert_modules "annotated repro preserves import order"
+val _ = assert_modules "annotated repro keeps one listing per module"
   expected_duplicate_sources duplicate_input;
 val duplicate_translated_input =
   vyperCheckContractFrontendLib.prepare_translated_input
@@ -407,6 +428,9 @@ val _ = check_fixture true "address_bytes20.json";
 val _ = check_fixture false "storage.json";
 val _ = check_fixture false "imported_struct/main.json";
 val _ = check_fixture false "imported_flag/main.json";
+(* lib2 reads lib1's constant and main reads lib2's. *)
+val _ = check_fixture false "imported_constants/main.json";
+val _ = check_fixture true "imported_constants/main.json";
 val _ = check_fixture false "imported_interface/main.json";
 val _ = check_fixture false "duplicate_interface/main/c.json";
 val _ = check_fixture false "multimodule_storage/main.json";
@@ -420,6 +444,69 @@ val _ = check_fixture false "third_party/flex/daddy/daddy.json";
 val _ = check_fixture true "third_party/flex/daddy/daddy.json";
 val _ = check_fixture false "interface_struct_return/main.json";
 val _ = check_fixture false "abi_encode/main.json";
+(* Struct and flag declared in an interface and used as I.S / I.Mode in
+   storage, HashMap values, empty(), literals and returns. *)
+val _ = check_fixture false "interface_struct/main.json";
+(* main initializes token, which initializes ownable; main has its own owner. *)
+val _ = check_fixture false "nested_initializes/main.json";
+val _ = check_fixture true "nested_initializes/main.json";
+(* lib_a is reached as `..lib_a` from main and `.lib_a` from lib_b. *)
+val _ = check_fixture false "relative_uses/pkg/mocks/main.json";
+val _ = check_fixture true "relative_uses/pkg/mocks/main.json";
+(* main initializes token and, as `token.ownable`, the module token imports;
+   ownable has a variable named `slot`. *)
+val _ = check_fixture false "attribute_initializes/main.json";
+val _ = check_fixture true "attribute_initializes/main.json";
+
+(* An inferred struct name declared in two modules keeps no source. *)
+Theorem nominal_source_needs_one_declaration:
+  resolve_json_type [((StructKind, "S"), 1); ((StructKind, "S"), 1)]
+    (JT_Struct NONE "S") = JT_Struct (SOME 1) "S" ∧
+  resolve_json_type [((StructKind, "S"), 0); ((StructKind, "S"), 1)]
+    (JT_Struct NONE "S") = JT_Struct NONE "S" ∧
+  resolve_json_type [((StructKind, "S"), 1)]
+    (JT_Flag NONE "S") = JT_Flag NONE "S"
+Proof
+  EVAL_TAC
+QED
+
+fun fixture_input path = vyperCheckContractFrontendLib.prepare_check_input
+  {in_deploy = false, address = address,
+   annotated_ast = JSONDecode.decodeFile jsonASTLib.annotated_ast
+     (fixture_dir ^ path),
+   storage_layout = JSONDecode.decodeFile jsonASTLib.storage_layout
+     (fixture_dir ^ path)};
+
+(* token (source 1) nests ownable (source 2) under its own alias; the
+   main module's owner keeps its own key. *)
+val expected_nested_layout =
+  ``[(0w : address,
+      ([((NONE, "owner"), 2); ((SOME 4, "owner"), 0);
+        ((SOME 3, "supply"), 1)] : storage_layout,
+       [] : storage_layout))]``;
+val _ = if aconv (#layouts (fixture_input "nested_initializes/main.json"))
+                 expected_nested_layout then ()
+  else raise Fail "nested storage layout did not resolve the module path";
+
+(* ownable is initialized by main as `token.ownable`, so its variables sit at
+   the top of the layout under `ownable`. *)
+val attribute_layout = #layouts (fixture_input "attribute_initializes/main.json");
+val _ = if aconv attribute_layout
+  ``[(0w : address,
+      ([((SOME 4, "owner"), 1); ((SOME 4, "slot"), 2); ((NONE, "owner"), 3);
+        ((SOME 3, "supply"), 0)] : storage_layout,
+       [] : storage_layout))]`` then ()
+  else raise Fail ("attribute initializes layout: " ^
+    term_to_string attribute_layout);
+
+(* lib_a keeps its source ID 1 (module 3) and is listed once. *)
+val relative_uses_modules = #modules (fixture_input "relative_uses/pkg/mocks/main.json");
+val _ = if aconv (listSyntax.mk_list
+                   (map (fst o pairSyntax.dest_pair)
+                     (fst (listSyntax.dest_list relative_uses_modules)),
+                    ``:num option``))
+                 ``[NONE; SOME 3; SOME 4]`` then ()
+  else raise Fail "repeated relative import changed module identity";
 
 val multimodule_path = fixture_dir ^ "multimodule_storage/main.json";
 val multimodule_input = vyperCheckContractFrontendLib.prepare_check_input

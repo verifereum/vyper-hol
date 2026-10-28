@@ -113,7 +113,7 @@ QED
 
 Theorem compile_buffer_source_state:
   !ctx func cenv cx es ss capacity cs buf cut.
-    state_rel cenv cx es ss /\ local_ptrs_rel func cenv es.scopes ss /\ alloca_inv ss /\ fn_inst_ids_distinct func /\
+    state_rel_simple cenv cx es ss /\ local_ptrs_rel func cenv es.scopes ss /\ alloca_inv ss /\ fn_inst_ids_distinct func /\
     compile_alloc_buffer capacity cs = (buf,cut) /\ fn_has_code cs cut func /\
     abi_alloca_request_ok cs.cs_next_id capacity ss /\ ss.vs_alloca_next + capacity < dimword(:256) /\
     (!name entry p region_size. lookup_scopes name es.scopes = SOME entry /\
@@ -124,7 +124,7 @@ Theorem compile_buffer_source_state:
     ss.vs_current_bb = cs.cs_current_bb /\ ss.vs_inst_idx = LENGTH cs.cs_current_insts /\ ~ss.vs_halted ==>
     ?out. fragment_path ctx func ss out /\
       out.vs_current_bb = cut.cs_current_bb /\ out.vs_inst_idx = LENGTH cut.cs_current_insts /\ ~out.vs_halted /\
-      state_rel cenv cx es out /\ local_ptrs_rel func cenv es.scopes out /\
+      state_rel_simple cenv cx es out /\ local_ptrs_rel func cenv es.scopes out /\
       eval_operand buf.buf_operand out = SOME (memory_snapshot_addr cs.cs_next_id ss) /\
       abi_operand_before cut.cs_next_var buf.buf_operand /\
       abi_allocated_window out cs.cs_next_id (w2n (memory_snapshot_addr cs.cs_next_id ss)) capacity /\

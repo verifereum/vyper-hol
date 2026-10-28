@@ -36,8 +36,7 @@ Definition frame_outcome_def:
             parent'.logs =
               parent.logs ++ (if exc = NONE then ctxt.logs ++ lgs else []) /\
             parent'.memory =
-              TAKE mr.offset parent.memory ++ TAKE mr.size out ++
-              DROP (mr.offset + LENGTH (TAKE mr.size out)) parent.memory /\
+              buffer_write mr.offset (TAKE mr.size out) parent.memory /\
             (exc <> NONE ==> es'.rollback = rb)
 End
 

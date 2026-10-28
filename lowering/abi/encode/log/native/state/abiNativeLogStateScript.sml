@@ -12,7 +12,7 @@ Ancestors
 
 Theorem native_log_source_state_frame:
   !ctx func cenv cx es dst src info topic_ops topics cs cs' bound before after dst_addr payload.
-    state_well_typed es /\ state_rel cenv cx es before /\ local_ptrs_rel func cenv es.scopes before /\
+    state_well_typed es /\ state_rel_simple cenv cx es before /\ local_ptrs_rel func cenv es.scopes before /\
     alloca_inv before /\ fn_inst_ids_distinct func /\
     compile_log_abi_emit dst src info topic_ops cs = ((),cs') /\ fn_has_code cs cs' func /\
     source_alloca_floor cenv es.scopes (compiler_alloca_ids cs cs') before /\
@@ -26,7 +26,7 @@ Theorem native_log_source_state_frame:
     (!arg_op. abi_operand_before bound arg_op ==> eval_operand arg_op after = eval_operand arg_op before) /\
     abi_state_frame before (after with vs_logs := before.vs_logs) ==>
     allocation_growth before after /\
-    state_rel cenv cx (es with logs := es.logs ++
+    state_rel_simple cenv cx (es with logs := es.logs ++
       [<|logger := w2w before.vs_call_ctx.cc_address; topics := topics; data := payload|>]) after /\
     local_ptrs_rel func cenv es.scopes after
 Proof
@@ -55,7 +55,7 @@ QED
 Theorem compile_abi_typed_tuple_log_state:
   !env sfields cenv tys tvs values avs ctx func cx es dst src topic_ops topics cs cs' ss
     dst_addr src_addr span source_id target_id.
-    state_well_typed es /\ state_rel cenv cx es ss /\ local_ptrs_rel func cenv es.scopes ss /\
+    state_well_typed es /\ state_rel_simple cenv cx es ss /\ local_ptrs_rel func cenv es.scopes ss /\
     abi_memory_env_rel env cenv /\ abi_struct_env_rel env sfields /\
     LIST_REL (\ty tv. evaluate_type env ty = SOME tv) tys tvs /\
     memory_tuple_rel tvs values (w2n src_addr) ss.vs_memory /\ values_have_types tvs values /\
@@ -78,7 +78,7 @@ Theorem compile_abi_typed_tuple_log_state:
       out.vs_current_bb = cs'.cs_current_bb /\ out.vs_inst_idx = LENGTH cs'.cs_current_insts /\ ~out.vs_halted /\
       out.vs_logs = ss.vs_logs ++ [<|logger := w2w ss.vs_call_ctx.cc_address; topics := topics;
         data := enc (Tuple (MAP (vyper_to_abi_type env) tys)) (ListV avs)|>] /\
-      state_rel cenv cx (es with logs := es.logs ++ [<|logger := w2w ss.vs_call_ctx.cc_address; topics := topics;
+      state_rel_simple cenv cx (es with logs := es.logs ++ [<|logger := w2w ss.vs_call_ctx.cc_address; topics := topics;
         data := enc (Tuple (MAP (vyper_to_abi_type env) tys)) (ListV avs)|>]) out /\
       local_ptrs_rel func cenv es.scopes out /\ allocation_growth ss out /\
       read_memory (w2n dst_addr) (LENGTH (enc (Tuple (MAP (vyper_to_abi_type env) tys)) (ListV avs))) out =

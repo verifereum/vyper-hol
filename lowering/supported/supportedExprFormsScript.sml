@@ -124,13 +124,16 @@ Definition supported_builtin_form_def:
     | (ECAdd, [a; b]) => T
     | (ECMul, [a; b]) => T
     | (MakeArray NONE (Fixed n), args) => supported_value_type tops ty
+    | (MakeArray (SOME elem_ty) bnd, args) => supported_value_type tops ty
+    | (Uint2Str n, [a]) => supported_unsigned_type (expr_type a)
+    | (CalldataSlice n, [a]) => T
     | _ => F
 End
 
 Definition supported_type_builtin_form_def:
-  supported_type_builtin_form ty blt target es <=>
+  supported_type_builtin_form tops ty blt target es <=>
     case (blt, es) of
-      (Empty, []) => ty = target /\ supported_word_type ty
+      (Empty, []) => ty = target /\ supported_value_type tops ty
     | (MaxValue, []) => ty = target /\ supported_numeric_type ty
     | (MinValue, []) => ty = target /\ supported_numeric_type ty
     | (Epsilon, []) => ty = target /\ ty = BaseT DecimalT

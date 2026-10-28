@@ -33,6 +33,9 @@
  *
  * Helper:
  *   local_backed_frame            — local_backed under allocation growth
+ *   local_ptrs_rel_inst_idx       — moving the instruction index keeps it
+ *   alloca_inv_fields             — alloca_inv reads only vs_allocas and
+ *                                   vs_alloca_next
  *)
 
 Theory localPtrsProps
@@ -182,6 +185,14 @@ Proof
   rw[] >> fs[not_local_ptr_def] >> res_tac >> fs[]
 QED
 
+Theorem local_ptrs_rel_inst_idx:
+  !func cenv sc s n.
+    local_ptrs_rel func cenv sc (s with vs_inst_idx := n) <=>
+    local_ptrs_rel func cenv sc s
+Proof
+  simp[local_ptrs_rel_def, local_region_def, local_backed_def, lookup_var_def]
+QED
+
 (* A variable the compiler has not handed out yet is unbound in Venom, so it
    is no live local's pointer. *)
 Theorem local_ptrs_rel_fresh_not_local_ptr:
@@ -281,6 +292,15 @@ Proof
   fs[alloca_inv_def, allocas_non_overlapping_def, alloca_next_valid_def,
      update_var_def, FLOOKUP_UPDATE] >>
   rw[] >> res_tac >> fs[]
+QED
+
+Theorem alloca_inv_fields:
+  !s s'.
+    alloca_inv s /\ s'.vs_allocas = s.vs_allocas /\
+    s'.vs_alloca_next = s.vs_alloca_next ==> alloca_inv s'
+Proof
+  rw[alloca_inv_def, allocas_non_overlapping_def, alloca_next_valid_def] >>
+  metis_tac[]
 QED
 
 (* Instruction ids of a function name its instructions. *)

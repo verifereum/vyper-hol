@@ -290,7 +290,7 @@ QED
 Theorem compile_name_topic_value_correct:
   !env cenv cx func ty ann id es ss cs op cs' p region_size.
     well_typed_expr env (Name ann id) /\ env_consistent env cx es /\
-    state_well_typed es /\ state_rel cenv cx es ss /\
+    state_well_typed es /\ state_rel_simple cenv cx es ss /\
     local_ptrs_rel func cenv es.scopes ss /\ event_indexable_type ann /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) region_size) /\
     (is_bytestring_type ann ==> ss.vs_alloca_next <= dimword(:256)) /\
@@ -301,7 +301,7 @@ Theorem compile_name_topic_value_correct:
       run_inst_seq (emitted_insts cs cs') ss = OK out /\
       topic_value_rel env.type_defs (op,ann) v out /\
       same_blocks cs cs' /\ fresh_vars_wrt cs' out /\
-      state_rel cenv cx es out /\ local_ptrs_rel func cenv es.scopes out /\
+      state_rel_simple cenv cx es out /\ local_ptrs_rel func cenv es.scopes out /\
       (!old w. eval_operand old ss = SOME w ==> eval_operand old out = SOME w) /\
       out with vs_vars := ss.vs_vars = ss
 Proof
@@ -316,7 +316,7 @@ Proof
   impl_tac >- simp[] >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts cs cs') ss = OK final` >>
   qexistsl_tac [`entry.value`, `final`] >> simp[] >> conj_tac >>
-  FIRST [irule state_rel_assignment_frame >> qexists_tac `ss` >> simp[],
+  FIRST [irule state_rel_simple_assignment_frame >> qexists_tac `ss` >> simp[],
          irule local_ptrs_rel_assignment_frame >> qexists_tac `ss` >> simp[]]
 QED
 

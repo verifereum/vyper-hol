@@ -54,10 +54,16 @@ End
 
 (* ===== Swap/Dup with Deep Stack Support ===== *)
 
-(* Get top N items from stack (TOS first) *)
+(* Get top N items from stack, in bottom-to-top order. *)
 Definition top_n_def:
   top_n n stk = REVERSE (TAKE n (REVERSE stk))
 End
+
+Theorem reverse_top_n:
+  REVERSE (top_n n stk) = TAKE n (REVERSE stk)
+Proof
+  simp[top_n_def]
+QED
 
 (* Swap at distance from TOS (0-based). Returns (ops, updated state).
    dist=0: noop. dist 1..16: SWAP{dist}. dist>16: bulk spill/restore.
@@ -78,7 +84,9 @@ Definition do_swap_def:
           (ops ++ [SOSpill off], SNOC off offs, al'))
         ([], [] : num list, ps.ps_alloc) items in
       let base_stack = TAKE (LENGTH ps.ps_stack - chunk) ps.ps_stack in
-      (* Desired order (bottom→top): swap first and last, keep middle *)
+      (* offsets are in spill order (TOS first). desired swaps the endpoints.
+         It also describes bottom-to-top item indices because
+         desired[chunk-1-j] = chunk-1-desired[j]. *)
       let desired = [chunk - 1] ++
         GENLIST (λi. i + 1) (chunk - 2) ++ [0] in
       (* Restore in reverse desired order: last pushed = TOS *)
@@ -119,6 +127,29 @@ Proof
   Cases_on `REVERSE (GENLIST I prefix_len)` >> gvs[]
 QED
 
+(* Compatibility with the explicit Python index schedule, also used by
+   spill-map/frame proofs.  The reusable schedule remains the definition. *)
+Theorem dup_restore_indices_explicit:
+  !k. 0 < k ==>
+    dup_restore_indices k =
+      if k <= 16 then GENLIST (\i. k - 2 - i) (k - 1) ++ [k - 1]
+      else GENLIST (\i. k - 1 - i) k
+Proof
+  rpt gen_tac >> strip_tac >>
+  rw[dup_restore_indices_def, REVERSE_GENLIST, combinTheory.I_THM,
+     PRE_SUB1] >>
+  Cases_on `k` >> gvs[] >>
+  simp[TL_GENLIST, GENLIST_CONS, combinTheory.o_DEF] >>
+  AP_THM_TAC >> AP_TERM_TAC >>
+  simp[FUN_EQ_THM] >> decide_tac
+QED
+
+Theorem dup_restore_indices_boundary[simp]:
+  dup_restore_indices 1 = [0] /\ dup_restore_indices 2 = [0;1]
+Proof
+  EVAL_TAC
+QED
+
 (* Dup at distance from TOS (0-based). Returns (ops, updated state).
    Spill the inaccessible prefix, use DUP16, then restore the prefix while
    keeping the duplicate on top. Mirrors pinned StackSpiller.dup. *)
@@ -129,7 +160,8 @@ Definition do_dup_def:
        ps with ps_stack := stack_dup dist ps.ps_stack)
     else
       let chunk = dist - 15 in
-      let items = TAKE chunk (REVERSE ps.ps_stack) in
+      (* Python spill_ops: TOS first; equivalently TAKE chunk (REVERSE ...). *)
+      let items = REVERSE (top_n chunk ps.ps_stack) in
       let (spill_ops, offsets, alloc') =
         FOLDL (λ(ops, offs, al) item.
           let (off, al') = alloc_spill_slot al in

@@ -35,7 +35,10 @@ Datatype:
     ps_stack : operand list;
     ps_spilled : (operand, num) fmap;
     ps_alloc : spill_alloc;
-    ps_label_counter : num
+    ps_label_counter : num;
+    ps_cleanup_height : num option;
+    ps_cleanup_growth : (string # num option) list;
+    ps_cleanup_promised : bool
   |>
 End
 
@@ -147,7 +150,10 @@ Definition init_plan_state_def:
     ps_stack := [];
     ps_spilled := FEMPTY;
     ps_alloc := init_spill_alloc spill_base;
-    ps_label_counter := 0
+    ps_label_counter := 0;
+    ps_cleanup_height := NONE;
+    ps_cleanup_growth := [];
+    ps_cleanup_promised := F
   |>
 End
 

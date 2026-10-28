@@ -22,7 +22,7 @@ Theorem checked_log_packing_source_state:
       (log_non_indexed_types flags fts) buf 0 cs = (ret,packed_cut) /\
     compile_alloc_buffer capacity packed_cut = (abi_buf,encode_cut) /\
     fn_has_code cs packed_cut func /\ fn_has_code packed_cut encode_cut func /\
-    state_well_typed es /\ state_rel cenv cx es ss /\ local_ptrs_rel func cenv es.scopes ss /\
+    state_well_typed es /\ state_rel_simple cenv cx es ss /\ local_ptrs_rel func cenv es.scopes ss /\
     source_memory_separated cenv es.scopes ss (w2n root_addr)
       (type_memory_size (TupleTV (select_log_args F flags ftvs))) /\
     (!name entry p region_size. lookup_scopes name es.scopes = SOME entry /\
@@ -35,7 +35,7 @@ Theorem checked_log_packing_source_state:
     ss.vs_current_bb = cs.cs_current_bb /\ ss.vs_inst_idx = LENGTH cs.cs_current_insts /\ ~ss.vs_halted ==>
     ?out. fragment_path ctx func ss out /\ copy_state_frame ss out /\ allocation_growth ss out /\
       out.vs_current_bb = packed_cut.cs_current_bb /\ out.vs_inst_idx = LENGTH packed_cut.cs_current_insts /\ ~out.vs_halted /\
-      state_rel cenv cx es out /\ local_ptrs_rel func cenv es.scopes out /\
+      state_rel_simple cenv cx es out /\ local_ptrs_rel func cenv es.scopes out /\
       values_have_types (select_log_args F flags ftvs) (select_log_args F flags values) /\
       memory_tuple_rel (select_log_args F flags ftvs) (select_log_args F flags values) (w2n root_addr) out.vs_memory /\
       log_args_rel args atvs values out /\

@@ -1,6 +1,6 @@
 (* TOP-LEVEL: actual struct metadata preserves declarations and assigns each
    evaluable field its source footprint, including forward references.
-   Helpers expose the shape-preserving size-resolution pass. *)
+   Helpers cover both the direct builder and the legacy size-resolution pass. *)
 Theory structLayoutProps
 Ancestors
   compileVyper compileEnv vyperContext vyperValue finite_map list pair combin
@@ -62,6 +62,37 @@ Proof
   first_x_assum drule >> simp[resolve_struct_field_sizes_def]
 QED
 
+(* The direct builder keeps whole declaration lists, including when a later
+   declaration replaces an earlier one. No namespace uniqueness is needed. *)
+Theorem build_struct_fields_map_origin:
+  !tops tenv sf name fields.
+    FLOOKUP (build_struct_fields_map tenv tops sf) name = SOME fields ==>
+    FLOOKUP sf name = SOME fields \/
+    ?args. MEM (StructDecl name args) tops /\
+           fields = build_struct_fields_one tenv args
+Proof
+  Induct_on `tops` >> simp[build_struct_fields_map_def] >> rpt gen_tac >>
+  Cases_on `h` >> simp[build_struct_fields_map_def] >> strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  gvs[FLOOKUP_UPDATE, AllCaseEqs()] >> metis_tac[]
+QED
+
+Theorem build_struct_fields_one_typed:
+  !args tvs tenv.
+    LIST_REL (\ty tv. evaluate_type tenv ty = SOME tv)
+      (MAP (FST o SND) (build_struct_fields_one tenv args)) tvs ==>
+    MAP (SND o SND) (build_struct_fields_one tenv args) =
+      MAP type_memory_size tvs
+Proof
+  Induct_on `args`
+  >- (Cases_on `tvs` >> simp[build_struct_fields_one_def]) >>
+  rpt gen_tac >>
+  qmatch_goalsub_rename_tac `build_struct_fields_one _ (arg_entry::rest_args)` >>
+  PairCases_on `arg_entry` >> Cases_on `tvs` >>
+  simp[build_struct_fields_one_def] >> rpt strip_tac >>
+  fs[build_struct_fields_one_def, field_mem_bytes_def]
+QED
+
 Theorem make_struct_fields_map_sizes:
   !tops struct_name fields tvs.
     FLOOKUP (make_struct_fields_map tops) struct_name = SOME fields /\
@@ -69,9 +100,9 @@ Theorem make_struct_fields_map_sizes:
       (MAP (FST o SND) fields) tvs ==>
     MAP (SND o SND) fields = MAP type_memory_size tvs
 Proof
-  rpt gen_tac >> simp[make_struct_fields_map_def, FLOOKUP_o_f, AllCaseEqs()] >>
-  rpt strip_tac >> gvs[resolve_struct_field_sizes_types] >>
-  drule_all resolve_struct_field_sizes_typed >> simp[]
+  rpt gen_tac >> simp[make_struct_fields_map_def] >> strip_tac >>
+  drule build_struct_fields_map_origin >> simp[] >> strip_tac >> gvs[] >>
+  drule_all build_struct_fields_one_typed >> simp[]
 QED
 
 Theorem make_struct_fields_map_field_size:
@@ -80,8 +111,9 @@ Theorem make_struct_fields_map_field_size:
     MEM (field_name,ty,byte_count) fields /\
     evaluate_type (type_env tops) ty = SOME tv ==> byte_count = type_memory_size tv
 Proof
-  rpt gen_tac >> simp[make_struct_fields_map_def, FLOOKUP_o_f, AllCaseEqs()] >>
-  rpt strip_tac >> gvs[] >> drule_all resolve_struct_field_size >> simp[]
+  rpt gen_tac >> simp[make_struct_fields_map_def] >> strip_tac >>
+  drule build_struct_fields_map_origin >> simp[] >> strip_tac >>
+  gvs[build_struct_fields_one_def, MEM_MAP, EXISTS_PROD, field_mem_bytes_def]
 QED
 
 Theorem build_compile_env_struct_field_size:

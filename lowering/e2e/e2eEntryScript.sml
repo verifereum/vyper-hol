@@ -17,7 +17,7 @@ Definition entry_venom_state_def:
         vs_accounts := es.rollback.accounts;
         vs_transient := es.rollback.tStorage;
         vs_call_ctx := <| cc_caller := mp.caller; cc_address := mp.callee;
-                          cc_callvalue := n2w mp.value; cc_calldata := mp.data;
+                          cc_callvalue := n2w mp.value; cc_calldata := buffer_to_list mp.data;
                           cc_gas := 0; cc_static := mp.static |>;
         vs_tx_ctx := <| tc_origin := tp.origin; tc_gasprice := n2w tp.gasPrice;
                        tc_chainid := n2w tp.chainId;

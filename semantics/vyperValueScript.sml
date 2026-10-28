@@ -49,8 +49,10 @@ val () = cv_auto_trans type_slot_size_def;
 Definition evaluate_type_def:
   evaluate_type tenv (BaseT bt) =
     (case bt of
-     | IntT m => if 1 < m ∧ m ≤ 256 then SOME (BaseTV bt) else NONE
-     | UintT m => if 0 < m ∧ m ≤ 256 then SOME (BaseTV bt) else NONE
+     | IntT m =>
+       if 1 < m ∧ m ≤ 256 ∧ m MOD 8 = 0 then SOME (BaseTV bt) else NONE
+     | UintT m =>
+       if 0 < m ∧ m ≤ 256 ∧ m MOD 8 = 0 then SOME (BaseTV bt) else NONE
      | BytesT (Fixed n) => if n ≤ 32 then SOME (BaseTV bt) else NONE
      | BytesT (Dynamic n) =>
        let tv = BaseTV bt in
@@ -316,6 +318,20 @@ Definition within_int_bound_def:
   )
 End
 
+(* A Vyper decimal is stored as its value times decimal_scale (ten decimal
+   places), within decimal_bound. *)
+Definition decimal_scale_def[simp]:
+  decimal_scale = 10000000000i
+End
+
+val () = cv_trans decimal_scale_def;
+
+Definition decimal_bound_def[simp]:
+  decimal_bound = Signed 168
+End
+
+val () = cv_trans decimal_bound_def;
+
 (* value destructors *)
 
 Definition dest_NumV_def:
@@ -367,12 +383,11 @@ Definition is_bytestring_tv_def[simp]:
   is_bytestring_tv _ = F
 End
 
-(* TOP-LEVEL: raw_return_bytes
-   Returndata of a call to a @raw_return function: the value's own bytes, with no
+(* Returndata of a call to a @raw_return function: the value's own bytes, with no
    length word and no padding, since ABI encoding is bypassed.  NONE when the
    value has no bytestring representation, which a safe_cast to a bytestring
    return type rules out; see safe_cast_bytestring_raw_return_bytes. *)
-Definition raw_return_bytes_def:
+Definition raw_return_bytes_def[simp]:
   raw_return_bytes (BytesV bs) = SOME bs ∧
   raw_return_bytes (StringV s) = SOME (MAP ((n2w:num->word8) o ORD) s) ∧
   raw_return_bytes _ = NONE
@@ -380,19 +395,7 @@ End
 
 val () = cv_auto_trans raw_return_bytes_def;
 
-Theorem raw_return_bytes_BytesV[simp]:
-  raw_return_bytes (BytesV bs) = SOME bs
-Proof
-  simp[raw_return_bytes_def]
-QED
-
-Theorem raw_return_bytes_StringV[simp]:
-  raw_return_bytes (StringV s) = SOME (MAP ((n2w:num->word8) o ORD) s)
-Proof
-  simp[raw_return_bytes_def]
-QED
-
-(* KEY LEMMA: raw_return_bytes succeeds exactly on the bytestring values. *)
+(* raw_return_bytes succeeds exactly on the bytestring values. *)
 Theorem raw_return_bytes_SOME_iff:
   ∀v bs. raw_return_bytes v = SOME bs ⇔
     (∃bs'. v = BytesV bs' ∧ bs' = bs) ∨
@@ -401,7 +404,7 @@ Proof
   Cases_on `v` >> simp[raw_return_bytes_def] >> metis_tac[]
 QED
 
-(* KEY LEMMA: bytestring values are exactly those that have raw bytes. *)
+(* Bytestring values are exactly those that have raw bytes. *)
 Theorem is_bytestring_v_raw_return_bytes:
   ∀v. (∃bs. raw_return_bytes v = SOME bs) ⇔
     (∃bs. v = BytesV bs) ∨ (∃s. v = StringV s)

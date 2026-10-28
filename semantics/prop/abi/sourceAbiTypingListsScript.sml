@@ -2,7 +2,7 @@
    and sparse lists, including implicit default elements of fixed arrays. *)
 Theory sourceAbiTypingLists
 Ancestors
-  sourceAbiTypingDefs vyperABI vyperValue vyperTyping vyperTypeDefaults
+  sourceAbiTypingDefs vyperABI vyperABIRoundtrip vyperValue vyperTyping vyperTypeDefaults
   contractABI list rich_list option pair arithmetic alist
 
 Theorem source_abi_types_map:

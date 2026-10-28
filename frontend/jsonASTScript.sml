@@ -255,9 +255,10 @@ Datatype:
 End
 
 (* Complete storage layout for a contract *)
-(* Storage keys are (module_alias_opt, var_name):
+(* Storage keys are (module_path_opt, var_name):
    - (NONE, "counter") for main module variables
-   - (SOME "lib1", "counter") for module lib1's variables *)
+   - (SOME "lib1", "counter") for the variables of the module initialized as
+     lib1, and (SOME "lib2.lib1", "counter") when lib2 initializes it *)
 Datatype:
   json_storage_layout = <|
     storage : ((string option # string) # storage_slot_info) list;

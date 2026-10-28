@@ -13,7 +13,7 @@ Ancestors
 
 Theorem compile_log_arena_source_state:
   !ctx func cenv cx es ss capacity cs buf cut args atvs values ftv topic_ops topics.
-    state_rel cenv cx es ss /\ local_ptrs_rel func cenv es.scopes ss /\
+    state_rel_simple cenv cx es ss /\ local_ptrs_rel func cenv es.scopes ss /\
     alloca_inv ss /\ fn_inst_ids_distinct func /\
     compile_alloc_buffer capacity cs = (buf,cut) /\ fn_has_code cs cut func /\
     abi_alloca_request_ok cs.cs_next_id capacity ss /\ ss.vs_alloca_next + capacity < dimword(:256) /\
@@ -32,7 +32,7 @@ Theorem compile_log_arena_source_state:
       out = (memory_snapshot_allocated cs.cs_next_id cs.cs_next_var capacity ss
         with vs_inst_idx := LENGTH cut.cs_current_insts) /\
       out.vs_current_bb = cut.cs_current_bb /\ out.vs_inst_idx = LENGTH cut.cs_current_insts /\ ~out.vs_halted /\
-      state_rel cenv cx es out /\ local_ptrs_rel func cenv es.scopes out /\
+      state_rel_simple cenv cx es out /\ local_ptrs_rel func cenv es.scopes out /\
       eval_operand buf.buf_operand out = SOME (memory_snapshot_addr cs.cs_next_id ss) /\
       abi_operand_before cut.cs_next_var buf.buf_operand /\
       abi_allocated_window out cs.cs_next_id (w2n (memory_snapshot_addr cs.cs_next_id ss)) (type_memory_size ftv) /\

@@ -1,0 +1,4 @@
+# Validated with #551 in isolation; pending its integration into this checkout.
+# Not added to the frozen corpus yet.
+# arr_fixed_of_dyn
+# arr_dyn_of_dyn

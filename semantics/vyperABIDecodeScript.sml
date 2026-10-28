@@ -8,13 +8,13 @@ Libs
 
 (* ===== Vyper-specific ABI decoding =====
 
-   TOP-LEVEL (API):
+   Main definitions:
      vyper_abi_dec          decode an abi_value at a buffer offset
      vyper_abi_valid_enc    acceptance gate for vyper_abi_dec (Vyper clamps)
      vyper_abi_dec_fast / vyper_abi_valid_enc_fast
                            recursive copies with sequential numeric
                            scalar-array fast paths
-     vyper_abi_dec_eq_fast / vyper_abi_valid_enc_eq_fast
+     vyper_abi_dec_fast_eq / vyper_abi_valid_enc_fast_eq
                            unconditional implementation equivalence
 
    Helper (internal):
@@ -47,7 +47,7 @@ End
 
 val () = cv_auto_trans vyper_abi_head_target_def;
 
-(* TOP-LEVEL: Vyper's ABI decoding.  Mirrors contractABI's dec, threading the
+(* Vyper's ABI decoding.  Mirrors contractABI's dec, threading the
    whole buffer and the offset of the current value instead of suffixes. *)
 Definition vyper_abi_dec_def:
   vyper_abi_dec (Tuple ts) bs off = vyper_abi_dec_tuple ts bs off off [] ∧
@@ -125,7 +125,7 @@ Proof
   \\ ASM_SIMP_TAC abi_pre_ss []
 QED
 
-(* TOP-LEVEL: the acceptance gate for vyper_abi_dec.  Mirrors contractABI's
+(* The acceptance gate for vyper_abi_dec.  Mirrors contractABI's
    valid_enc with the same wrap-around head arithmetic as vyper_abi_dec. *)
 Definition vyper_abi_valid_enc_def:
   vyper_abi_valid_enc (Tuple ts) bs off =
@@ -321,13 +321,6 @@ Proof
     Once vyper_abi_valid_enc_def]
 QED
 
-Theorem vyper_abi_drop_suffix:
-  ∀b bs a. DROP a (DROP b bs) = DROP (b + a) bs
-Proof
-  Induct_on `b` >> simp[]
-  >> Cases_on `bs` >> simp[ADD_CLAUSES]
-QED
-
 (* Helper: suffix invariant; no validity or in-range assumption needed. *)
 Theorem vyper_abi_dec_array_scalars:
   ∀n t bs boff hoff acc. vyper_abi_scalar t ⇒
@@ -338,7 +331,7 @@ Proof
   >- simp[Once vyper_abi_dec_def, vyper_abi_dec_scalars_def]
   >> drule vyper_abi_scalar_properties >> strip_tac
   >> simp[Once vyper_abi_dec_def, vyper_abi_dec_scalars_def,
-          vyper_abi_drop_suffix, ADD_COMM]
+          DROP_DROP_T, ADD_COMM]
 QED
 
 Theorem vyper_abi_valid_array_scalars:
@@ -350,7 +343,7 @@ Proof
   >- simp[Once vyper_abi_valid_enc_def, vyper_abi_valid_scalars_def]
   >> drule vyper_abi_scalar_properties >> strip_tac
   >> simp[Once vyper_abi_valid_enc_def, vyper_abi_valid_scalars_def,
-          vyper_abi_drop_suffix, LENGTH_DROP, SUB_SUB, ADD_COMM]
+          DROP_DROP_T, LENGTH_DROP, SUB_SUB, ADD_COMM]
   >> Cases_on `hoff + 32 ≤ LENGTH bs` >> fs[] >> decide_tac
 QED
 
@@ -360,7 +353,7 @@ Theorem vyper_abi_dec_scalar_array_eq:
 Proof
   strip_tac >> drule vyper_abi_scalar_properties >> strip_tac
   >> simp[Once vyper_abi_dec_def, vyper_abi_dec_scalar_array_def,
-          vyper_abi_dec_array_scalars, vyper_abi_drop_suffix, ADD_COMM]
+          vyper_abi_dec_array_scalars, DROP_DROP_T, ADD_COMM]
 QED
 
 Theorem vyper_abi_valid_scalar_array_eq:
@@ -370,12 +363,12 @@ Theorem vyper_abi_valid_scalar_array_eq:
 Proof
   strip_tac >> drule vyper_abi_scalar_properties >> strip_tac
   >> simp[Once vyper_abi_valid_enc_def, vyper_abi_valid_scalar_array_def,
-          vyper_abi_valid_array_scalars, vyper_abi_drop_suffix, ADD_COMM]
+          vyper_abi_valid_array_scalars, DROP_DROP_T, ADD_COMM]
 QED
 
 (* ===== Recursive fast paths ===== *)
 
-(* TOP-LEVEL: the original decoder with every numeric scalar array, static or
+(* The original decoder with every numeric scalar array, static or
    dynamic and at any nesting depth, decoded by advancing a suffix instead of
    repeatedly dropping from the whole buffer.  Everything else, including the
    wrapping head arithmetic against the whole buffer, mirrors vyper_abi_dec. *)
@@ -445,7 +438,7 @@ Proof
   \\ ASM_SIMP_TAC abi_pre_ss []
 QED
 
-(* TOP-LEVEL: the acceptance gate with the same recursive fast paths. *)
+(* The acceptance gate with the same recursive fast paths. *)
 Definition vyper_abi_valid_enc_fast_def:
   vyper_abi_valid_enc_fast (Tuple ts) bs off =
     (LENGTH ts < dimword (:256) ∧
@@ -555,7 +548,7 @@ Proof
   >> simp[Once vyper_abi_valid_enc_def, vyper_abi_valid_array_scalars]
 QED
 
-(* KEY LEMMA: the fast decoder is the original one, unconditionally. *)
+(* The fast decoder is the original one, unconditionally. *)
 Theorem vyper_abi_dec_fast_eq:
   (∀t bs off. vyper_abi_dec_fast t bs off = vyper_abi_dec t bs off) ∧
   (∀n lt t bs boff hoff acc.
@@ -584,18 +577,4 @@ Proof
   >> simp[Once vyper_abi_valid_enc_fast_def] >> rw[]
   >> gvs[vyper_abi_valid_static_scalar_array_eq, vyper_abi_valid_scalar_array_eq]
   >> simp[Once vyper_abi_valid_enc_def]
-QED
-
-(* TOP-LEVEL: unconditional equations, including malformed/truncated
-   encodings and wrapped heads. Used before CV translation, not as axioms. *)
-Theorem vyper_abi_dec_eq_fast:
-  ∀ty bs off. vyper_abi_dec ty bs off = vyper_abi_dec_fast ty bs off
-Proof
-  simp[vyper_abi_dec_fast_eq]
-QED
-
-Theorem vyper_abi_valid_enc_eq_fast:
-  ∀ty bs off. vyper_abi_valid_enc ty bs off = vyper_abi_valid_enc_fast ty bs off
-Proof
-  simp[vyper_abi_valid_enc_fast_eq]
 QED

@@ -55,7 +55,7 @@ Proof
     (mp_tac (Q.SPECL [`arg_op`, `flag`, `cs`] compile_encode_log_topic_ci_mono) >>
      simp[]) >>
   `isPREFIX cs.cs_current_insts cs'.cs_current_insts` by
-    gvs[ci_mono_def, same_blocks_def] >>
+    gvs[ci_mono_def, same_blocks_def, cs_extends_def, APPEND_EQ_SELF] >>
   gvs[GSYM prefix_drop_equiv, emitted_insts_def]
 QED
 
@@ -68,7 +68,7 @@ Proof
   `ci_mono cs cs'` by
     (mp_tac (Q.SPECL [`args`, `cs`] compile_log_topic_ops_ci_mono) >> simp[]) >>
   `isPREFIX cs.cs_current_insts cs'.cs_current_insts` by
-    gvs[ci_mono_def, same_blocks_def] >>
+    gvs[ci_mono_def, same_blocks_def, cs_extends_def, APPEND_EQ_SELF] >>
   gvs[GSYM prefix_drop_equiv, emitted_insts_def]
 QED
 
@@ -186,7 +186,7 @@ QED
 Theorem compile_name_topic_correct:
   !env cenv cx func ty ann id es ss cs arg_op mid topic_op cs' p region_size.
     well_typed_expr env (Name ann id) /\ env_consistent env cx es /\
-    state_well_typed es /\ state_rel cenv cx es ss /\
+    state_well_typed es /\ state_rel_simple cenv cx es ss /\
     local_ptrs_rel func cenv es.scopes ss /\ event_indexable_type ann /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) region_size) /\
     (is_bytestring_type ann ==> ss.vs_alloca_next <= dimword(:256)) /\
@@ -198,7 +198,7 @@ Theorem compile_name_topic_correct:
       run_inst_seq (emitted_insts cs cs') ss = OK out /\
       eval_operand topic_op out = encode_event_topic ann v /\
       same_blocks cs cs' /\ fresh_vars_wrt cs' out /\
-      state_rel cenv cx es out /\ local_ptrs_rel func cenv es.scopes out /\
+      state_rel_simple cenv cx es out /\ local_ptrs_rel func cenv es.scopes out /\
       (!old w. eval_operand old ss = SOME w ==> eval_operand old out = SOME w) /\
       out with vs_vars := ss.vs_vars = ss
 Proof
@@ -217,7 +217,7 @@ Proof
   mp_tac (Q.SPECL [`cs`, `mid`, `cs'`, `ss`, `ss_mid`, `final`]
     assignment_execution_compose) >> simp[] >> strip_tac >>
   conj_tac >>
-  FIRST [irule state_rel_assignment_frame >> qexists_tac `ss_mid` >> simp[],
+  FIRST [irule state_rel_simple_assignment_frame >> qexists_tac `ss_mid` >> simp[],
          irule local_ptrs_rel_assignment_frame >> qexists_tac `ss_mid` >> simp[]]
 QED
 

@@ -12,7 +12,10 @@
  *
  * The multi-block statements are stated with frag_exec (fragExecTheory):
  * the compiled fragment runs inside any function containing the code, and
- * reaches the end of the fragment or exits.
+ * reaches the end of the fragment or exits.  compile_stmt_correct and
+ * compile_stmts_correct are cheated and cover success only; the statement
+ * judgment for every outcome is stmt_frag (stmtSim and the theories after
+ * it).
  *
  * Source: vyperInterpreterScript.sml (eval_stmt/eval_stmts)
  * Target: venomExecSemanticsScript.sml (run_block/run_function)
@@ -81,28 +84,51 @@ QED
 
 (* ===== Main Statement Correctness ===== *)
 
+(* The statement lemmas relate states with stmt_state_rel func, where func
+   is the function the fragment runs in.  Their code premises tie func to the
+   fragment:
+   - fn_has_code st st' func: func holds the fragment's code, so the ALLOCA
+     that declares a local is an instruction of func and backs the local
+     (local_backed);
+   - fn_inst_ids_distinct func: with the allocation facts of stmt_state_rel,
+     a re-executed ALLOCA (a loop body, a branch) returns a region no other
+     live local holds;
+   - local_ptrs_reserved cenv st: the locals are the pointer locals reserved
+     before st, so no temporary overwrites a local's pointer and no store
+     goes to a fixed MemLoc offset.
+   stmt_state_rel says nothing of the compiler temporaries, so it holds again
+   where a loop body starts its next iteration with the last one's
+   temporaries still bound.
+   A fresh ALLOCA runs with vs_alloca_next below 2 ** 256, so its pointer
+   does not wrap: stmt_state_rel's alloca_room bounds the frontier plus
+   every allocation func can still make (stmt_state_rel_exec_alloca). *)
+
 (* compile_stmt preserves state_rel: if the Vyper statement
    evaluates successfully, the compiled Venom code reaches the end of the
    fragment in a related state. *)
 Theorem compile_stmt_correct:
-  ∀ cenv cx lctx ty s es st st' es' ctx.
+  ∀ func cenv cx lctx ty s es st st' es' ctx.
     eval_stmt cx s es = (INL (), es') ∧
-    compile_stmt cenv lctx ty s st = ((), st')
+    compile_stmt cenv lctx ty s st = ((), st') ∧
+    fn_has_code st st' func ∧ fn_inst_ids_distinct func ∧
+    local_ptrs_reserved cenv st
     ⇒
-    frag_exec ctx st st' (state_rel cenv cx es) (state_rel cenv cx es')
-      (λr. F)
+    frag_exec ctx st st' (stmt_state_rel func cenv cx es)
+      (stmt_state_rel func cenv cx es') (λr. F)
 Proof
   cheat
 QED
 
 (* compile_stmts preserves state_rel *)
 Theorem compile_stmts_correct:
-  ∀ cenv cx lctx ty stmts es st st' es' ctx.
+  ∀ func cenv cx lctx ty stmts es st st' es' ctx.
     eval_stmts cx stmts es = (INL (), es') ∧
-    compile_stmts cenv lctx ty stmts st = ((), st')
+    compile_stmts cenv lctx ty stmts st = ((), st') ∧
+    fn_has_code st st' func ∧ fn_inst_ids_distinct func ∧
+    local_ptrs_reserved cenv st
     ⇒
-    frag_exec ctx st st' (state_rel cenv cx es) (state_rel cenv cx es')
-      (λr. F)
+    frag_exec ctx st st' (stmt_state_rel func cenv cx es)
+      (stmt_state_rel func cenv cx es') (λr. F)
 Proof
   cheat
 QED
@@ -111,40 +137,44 @@ QED
 
 (* --- Pass: no-op --- *)
 Theorem compile_pass_correct:
-  ∀ cenv cx lctx ty es ss st.
-    state_rel cenv cx es ss ∧
+  ∀ func cenv cx lctx ty es ss st.
+    state_rel func cenv cx es ss ∧
     compile_stmt cenv lctx ty Pass st = ((), st')
     ⇒
     st' = st ∧
-    state_rel cenv cx es ss
+    state_rel func cenv cx es ss
 Proof
   rw[compile_stmt_def, comp_return_def, comp_bind_def, comp_ignore_bind_def]
 QED
 
 (* --- Expr statement: side-effect expression --- *)
 Theorem compile_expr_stmt_correct:
-  ∀ cenv cx lctx ty e es ss st es'.
-    state_rel cenv cx es ss ∧
+  ∀ func cenv cx lctx ty e es ss st es'.
+    stmt_state_rel func cenv cx es ss ∧
     eval_stmt cx (Expr e) es = (INL (), es') ∧
-    compile_stmt cenv lctx ty (Expr e) st = ((), st')
+    compile_stmt cenv lctx ty (Expr e) st = ((), st') ∧
+    fn_has_code st st' func ∧ fn_inst_ids_distinct func ∧
+    local_ptrs_reserved cenv st
     ⇒
     ∃ ss'.
       run_inst_seq (emitted_insts st st') ss = OK ss' ∧
-      state_rel cenv cx es' ss'
+      stmt_state_rel func cenv cx es' ss'
 Proof
   cheat
 QED
 
 (* --- AnnAssign: variable declaration with init --- *)
 Theorem compile_annassign_correct:
-  ∀ cenv cx lctx ty id vtyp e es ss st st' es'.
-    state_rel cenv cx es ss ∧
+  ∀ func cenv cx lctx ty id vtyp e es ss st st' es'.
+    stmt_state_rel func cenv cx es ss ∧
     eval_stmt cx (AnnAssign id vtyp e) es = (INL (), es') ∧
-    compile_stmt cenv lctx ty (AnnAssign id vtyp e) st = ((), st')
+    compile_stmt cenv lctx ty (AnnAssign id vtyp e) st = ((), st') ∧
+    fn_has_code st st' func ∧ fn_inst_ids_distinct func ∧
+    local_ptrs_reserved cenv st
     ⇒
     ∃ ss'.
       run_inst_seq (emitted_insts st st') ss = OK ss' ∧
-      state_rel cenv cx es' ss'
+      stmt_state_rel func cenv cx es' ss'
 Proof
   cheat
 QED
@@ -157,13 +187,15 @@ QED
    ∀ctx statements in this file have the same gap until such a hypothesis
    exists. *)
 Theorem compile_assert_correct_true:
-  ∀ cenv cx lctx ty cond_e msg es st st' es'.
+  ∀ func cenv cx lctx ty cond_e msg es st st' es'.
     eval_expr cx cond_e es = (INL (Value (BoolV T)), es') ∧
-    compile_stmt cenv lctx ty (Assert cond_e msg) st = ((), st')
+    compile_stmt cenv lctx ty (Assert cond_e msg) st = ((), st') ∧
+    fn_has_code st st' func ∧ fn_inst_ids_distinct func ∧
+    local_ptrs_reserved cenv st
     ⇒
     ∃ctx.
-      frag_exec ctx st st' (state_rel cenv cx es) (state_rel cenv cx es')
-        (λr. F)
+      frag_exec ctx st st' (stmt_state_rel func cenv cx es)
+        (stmt_state_rel func cenv cx es') (λr. F)
 Proof
   cheat
 QED
@@ -193,16 +225,17 @@ QED
    The state reverted from is related to es', the source state after the
    condition. *)
 Theorem compile_assert_bare_correct_false:
-  ∀ cenv cx lctx ty cond_e es st st' es' ctx.
+  ∀ func cenv cx lctx ty cond_e es st st' es' ctx.
     supported_expr cond_e ∧
     well_annotated cond_e ∧
     eval_expr cx cond_e es = (INL (Value (BoolV F)), es') ∧
-    compile_stmt cenv lctx ty (Assert cond_e AssertBare) st = ((), st')
+    compile_stmt cenv lctx ty (Assert cond_e AssertBare) st = ((), st') ∧
+    fn_has_code st st' func ∧ fn_inst_ids_distinct func ∧
+    local_ptrs_reserved cenv st
     ⇒
-    frag_exec ctx st st'
-      (λss. state_rel cenv cx es ss ∧ fresh_vars_wrt st ss) (λss. F)
+    frag_exec ctx st st' (stmt_state_rel func cenv cx es) (λss. F)
       (λr. ∃ss. r = Abort Revert_abort (revert_state (set_returndata [] ss)) ∧
-                state_rel cenv cx es' ss)
+                state_rel func cenv cx es' ss)
 Proof
   cheat
 QED
@@ -214,15 +247,17 @@ QED
    ctx is existential for the same reason as in compile_assert_correct_true:
    the condition and the reason may call internal functions. *)
 Theorem compile_assert_reason_correct_false:
-  ∀ cenv cx lctx ty cond_e reason_e es st st' es'.
+  ∀ func cenv cx lctx ty cond_e reason_e es st st' es'.
     eval_expr cx cond_e es = (INL (Value (BoolV F)), es') ∧
-    compile_stmt cenv lctx ty (Assert cond_e (AssertReason reason_e)) st = ((), st')
+    compile_stmt cenv lctx ty (Assert cond_e (AssertReason reason_e)) st = ((), st') ∧
+    fn_has_code st st' func ∧ fn_inst_ids_distinct func ∧
+    local_ptrs_reserved cenv st
     ⇒
     ∃ctx.
-      frag_exec ctx st st' (state_rel cenv cx es) (λss. F)
+      frag_exec ctx st st' (stmt_state_rel func cenv cx es) (λss. F)
         (λr. ∃ss rd.
                r = Abort Revert_abort (revert_state (set_returndata rd ss)) ∧
-               state_rel cenv cx (SND (eval_expr cx reason_e es')) ss)
+               state_rel func cenv cx (SND (eval_expr cx reason_e es')) ss)
 Proof
   cheat
 QED
@@ -255,8 +290,8 @@ QED
 
 (* --- Return (SOME e) external: ABI-encode + RETURN → Halt --- *)
 Theorem compile_return_some_external_correct:
-  ∀ cenv cx lctx ty e es ss st st' v es'.
-    state_rel cenv cx es ss ∧
+  ∀ func cenv cx lctx ty e es ss st st' v es'.
+    state_rel func cenv cx es ss ∧
     cenv.ce_is_external ∧
     eval_expr cx e es = (INL (Value v), es') ∧
     compile_stmt cenv lctx ty (Return (SOME e)) st = ((), st')
@@ -269,8 +304,8 @@ QED
 
 (* --- Return (SOME e) internal: push to stack + RET → IntRet --- *)
 Theorem compile_return_some_internal_correct:
-  ∀ cenv cx lctx ty e es ss st st' v es' rpc_off sz.
-    state_rel cenv cx es ss ∧
+  ∀ func cenv cx lctx ty e es ss st st' v es' rpc_off sz.
+    state_rel func cenv cx es ss ∧
     ¬cenv.ce_is_external ∧
     cenv.ce_return_pc = SOME (MemLoc rpc_off sz) ∧
     eval_expr cx e es = (INL (Value v), es') ∧
@@ -284,26 +319,30 @@ QED
 
 (* --- If: multi-block correctness --- *)
 Theorem compile_if_correct:
-  ∀ cenv cx lctx ty cond_e then_body else_body es st st' es' ctx.
+  ∀ func cenv cx lctx ty cond_e then_body else_body es st st' es' ctx.
     eval_stmt cx (If cond_e then_body else_body) es = (INL (), es') ∧
-    compile_stmt cenv lctx ty (If cond_e then_body else_body) st = ((), st')
+    compile_stmt cenv lctx ty (If cond_e then_body else_body) st = ((), st') ∧
+    fn_has_code st st' func ∧ fn_inst_ids_distinct func ∧
+    local_ptrs_reserved cenv st
     ⇒
-    frag_exec ctx st st' (state_rel cenv cx es) (state_rel cenv cx es')
-      (λr. F)
+    frag_exec ctx st st' (stmt_state_rel func cenv cx es)
+      (stmt_state_rel func cenv cx es') (λr. F)
 Proof
   cheat
 QED
 
 (* --- For range: multi-block loop correctness --- *)
 Theorem compile_for_range_correct:
-  ∀ cenv cx lctx ty id fty start_e end_e bound body es st st' es' ctx.
+  ∀ func cenv cx lctx ty id fty start_e end_e bound body es st st' es' ctx.
     eval_stmt cx (For id fty (Range start_e end_e) bound body) es =
       (INL (), es') ∧
     compile_stmt cenv lctx ty (For id fty (Range start_e end_e) bound body) st =
-      ((), st')
+      ((), st') ∧
+    fn_has_code st st' func ∧ fn_inst_ids_distinct func ∧
+    local_ptrs_reserved cenv st
     ⇒
-    frag_exec ctx st st' (state_rel cenv cx es) (state_rel cenv cx es')
-      (λr. F)
+    frag_exec ctx st st' (stmt_state_rel func cenv cx es)
+      (stmt_state_rel func cenv cx es') (λr. F)
 Proof
   cheat
 QED

@@ -133,7 +133,9 @@ Theorem generate_context_plan_layout_wf:
   generate_context_plan ctx = SOME cp ==> context_plan_layout_wf cp
 Proof
   simp[generate_context_plan_def] >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `generate_context_plan_with gen ctx` >>
   irule (cj 1 generate_context_plan_with_layout) >>
-  qexistsl_tac [`ctx`, `generate_fn_plan`] >> simp[] >>
-  metis_tac[generate_fn_plan_alloc_mono]
+  qexistsl_tac [`ctx`, `gen`] >> simp[] >>
+  simp[Abbr `gen`] >> rpt strip_tac >>
+  drule generate_fn_plan_with_cleanup_alloc_mono >> simp[]
 QED

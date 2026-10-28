@@ -25,7 +25,7 @@ Definition traversal_test_statements_def:
      For "i" NoneT (Range expr_test_uint e) 0 [];
      For "i" NoneT (Array e) 0 [];
      For "i" NoneT (Array expr_test_uint) 0 [If expr_test_uint [] [Expr e]];
-     Expr (Call NoneT Send [expr_test_uint] (SOME e));
+     Expr (Call NoneT (Send F) [expr_test_uint] (SOME e));
      Expr (Pop NoneT (SubscriptTarget (NameTarget "x") e))]
 End
 

@@ -18,7 +18,7 @@ Theorem checked_log_argument_save_state:
     evaluate_type (type_env tops) ty = SOME tv /\
     compile_log_save_arg cenv ty src suffix cs = (op,cs') /\
     lowered_value_rel ty tv v src ss /\ abi_operand_before cs.cs_next_var src /\
-    state_well_typed es /\ state_rel cenv cx es ss /\ local_ptrs_rel func cenv es.scopes ss /\
+    state_well_typed es /\ state_rel_simple cenv cx es ss /\ local_ptrs_rel func cenv es.scopes ss /\
     fn_inst_ids_distinct func /\ source_alloca_floor cenv es.scopes ids ss /\
     (!name entry p region_size. lookup_scopes name es.scopes = SOME entry /\
       FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) region_size) ==>
@@ -35,7 +35,7 @@ Theorem checked_log_argument_save_state:
     ?out. fragment_path ctx func ss out /\
       out.vs_current_bb = cs'.cs_current_bb /\ out.vs_inst_idx = LENGTH cs'.cs_current_insts /\
       out.vs_halted = ss.vs_halted /\ lowered_value_rel ty tv v op out /\
-      state_rel cenv cx es out /\ local_ptrs_rel func cenv es.scopes out /\
+      state_rel_simple cenv cx es out /\ local_ptrs_rel func cenv es.scopes out /\
       source_alloca_floor cenv es.scopes ids out /\
       log_args_rel (prefix ++ [(op,ty)]) (ptvs ++ [tv]) (pvs ++ [v]) out /\
       EVERY (\arg. abi_operand_before cs'.cs_next_var (FST arg)) (prefix ++ [(op,ty)]) /\

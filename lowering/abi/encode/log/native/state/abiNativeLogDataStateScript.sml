@@ -51,7 +51,7 @@ Theorem checked_compile_native_log_data_state:
     fn_has_code cs store_cut func /\ fn_has_code store_cut packed_cut func /\
     fn_has_code packed_cut encode_cut func /\ fn_has_code encode_cut cs' func /\
     fn_inst_ids_distinct func /\ compiler_id_history packed_cut /\
-    state_well_typed es /\ state_rel cenv cx es ss /\ local_ptrs_rel func cenv es.scopes ss /\
+    state_well_typed es /\ state_rel_simple cenv cx es ss /\ local_ptrs_rel func cenv es.scopes ss /\
     vyper_to_abi_list (type_env tops) (log_non_indexed_types flags fts) (select_log_args F flags values) = SOME avs /\
     source_alloca_floor cenv es.scopes (cs.cs_next_id::packed_cut.cs_next_id::compiler_alloca_ids encode_cut cs') ss /\
     (!name entry p region_size. lookup_scopes name es.scopes = SOME entry /\
@@ -73,7 +73,7 @@ Theorem checked_compile_native_log_data_state:
       out.vs_current_bb = cs'.cs_current_bb /\ out.vs_inst_idx = LENGTH cs'.cs_current_insts /\ ~out.vs_halted /\
       out.vs_logs = ss.vs_logs ++ [<|logger := w2w ss.vs_call_ctx.cc_address; topics := topics;
         data := enc (Tuple (MAP (vyper_to_abi_type (type_env tops)) (log_non_indexed_types flags fts))) (ListV avs)|>] /\
-      state_rel cenv cx (es with logs := es.logs ++ [<|logger := w2w ss.vs_call_ctx.cc_address; topics := topics;
+      state_rel_simple cenv cx (es with logs := es.logs ++ [<|logger := w2w ss.vs_call_ctx.cc_address; topics := topics;
         data := enc (Tuple (MAP (vyper_to_abi_type (type_env tops)) (log_non_indexed_types flags fts))) (ListV avs)|>]) out /\
       local_ptrs_rel func cenv es.scopes out /\ allocation_growth ss out /\
       read_memory (w2n (memory_snapshot_addr packed_cut.cs_next_id
@@ -107,7 +107,7 @@ Proof
     `arena`, `memory_snapshot_addr cs.cs_next_id ss`, `cs.cs_next_id`] mp_tac checked_compile_native_packed_log_state >>
   impl_tac >- (rpt conj_tac >> first_assum MATCH_ACCEPT_TAC) >> disch_then (qx_choose_then `out` strip_assume_tac) >>
   qspecl_then [`ss`, `arena`] mp_tac abi_state_frame_observables >> impl_tac >- first_assum MATCH_ACCEPT_TAC >> strip_tac >>
-  qpat_x_assum `state_rel cenv cx (es with logs := _) out` mp_tac >> asm_simp_tac bool_ss [] >> DISCH_TAC >>
+  qpat_x_assum `state_rel_simple cenv cx (es with logs := _) out` mp_tac >> asm_simp_tac bool_ss [] >> DISCH_TAC >>
   `fragment_path ctx func ss out` by (irule fragment_path_trans >> qexists_tac `arena` >> simp[]) >>
   `allocation_growth ss out` by (irule allocation_growth_trans >> qexists_tac `arena` >> simp[]) >>
   `!arg_op. abi_operand_before cs.cs_next_var arg_op ==> eval_operand arg_op out = eval_operand arg_op ss` by

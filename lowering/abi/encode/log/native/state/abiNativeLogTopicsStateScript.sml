@@ -17,7 +17,7 @@ Theorem compile_saved_log_topics_source_state:
     LIST_REL (\flag ty. flag ==> event_indexable_type ty) flags fts /\
     LIST_REL (\arg tv. evaluate_type tenv (SND arg) = SOME tv) args atvs /\
     log_args_rel args atvs values ss /\ log_args_safe args atvs ss dst byte_count /\
-    state_rel cenv cx es ss /\ local_ptrs_rel func cenv es.scopes ss /\
+    state_rel_simple cenv cx es ss /\ local_ptrs_rel func cenv es.scopes ss /\
     (!name entry p region_size. lookup_scopes name es.scopes = SOME entry /\
       FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) region_size) ==> abi_operand_before cs.cs_next_var (Var p)) /\
     compile_log_topic_ops (FST (split_log_ops args flags)) cs = (ops,cs') /\
@@ -28,7 +28,7 @@ Theorem compile_saved_log_topics_source_state:
       eval_operands ops out = SOME topics /\ encode_indexed_event_topics flags fts values = SOME topics /\
       EVERY (abi_operand_before cs'.cs_next_var) ops /\ cs.cs_next_var <= cs'.cs_next_var /\
       copy_state_frame ss out /\ out.vs_memory = ss.vs_memory /\ allocation_growth ss out /\
-      state_rel cenv cx es out /\ local_ptrs_rel func cenv es.scopes out /\
+      state_rel_simple cenv cx es out /\ local_ptrs_rel func cenv es.scopes out /\
       (!name entry p region_size. lookup_scopes name es.scopes = SOME entry /\
         FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) region_size) ==> abi_operand_before cs'.cs_next_var (Var p)) /\
       log_args_rel args atvs values out /\ log_args_safe args atvs out dst byte_count /\
@@ -67,7 +67,7 @@ Theorem checked_compile_native_log_stmt_topics_state:
     LIST_REL (\flag fty. flag ==> event_indexable_type fty) flags fts /\
     LIST_REL (\fty tv. evaluate_type (type_env tops) fty = SOME tv) fts ftvs /\
     LIST_REL (\arg tv. evaluate_type (type_env tops) (SND arg) = SOME tv) args atvs /\
-    state_well_typed es /\ state_rel cenv cx es ss /\ local_ptrs_rel func cenv es.scopes ss /\
+    state_well_typed es /\ state_rel_simple cenv cx es ss /\ local_ptrs_rel func cenv es.scopes ss /\
     vyper_to_abi_list (type_env tops) data_types (select_log_args F flags values) = SOME avs /\
     source_alloca_floor cenv es.scopes (topic_cut.cs_next_id::packed_cut.cs_next_id::compiler_alloca_ids encode_cut cs') ss /\
     (!name entry p region_size. lookup_scopes name es.scopes = SOME entry /\
@@ -90,7 +90,7 @@ Theorem checked_compile_native_log_stmt_topics_state:
       out.vs_current_bb = cs'.cs_current_bb /\ out.vs_inst_idx = LENGTH cs'.cs_current_insts /\ ~out.vs_halted /\
       out.vs_logs = ss.vs_logs ++ [<|logger := w2w ss.vs_call_ctx.cc_address; topics := n2w sig_hash::topics;
         data := enc (Tuple (MAP (vyper_to_abi_type (type_env tops)) data_types)) (ListV avs)|>] /\
-      state_rel cenv cx (es with logs := es.logs ++ [<|logger := w2w ss.vs_call_ctx.cc_address; topics := n2w sig_hash::topics;
+      state_rel_simple cenv cx (es with logs := es.logs ++ [<|logger := w2w ss.vs_call_ctx.cc_address; topics := n2w sig_hash::topics;
         data := enc (Tuple (MAP (vyper_to_abi_type (type_env tops)) data_types)) (ListV avs)|>]) out /\
       local_ptrs_rel func cenv es.scopes out /\ allocation_growth ss out /\
       read_memory (w2n (memory_snapshot_addr packed_cut.cs_next_id
@@ -128,7 +128,7 @@ Proof
     mp_tac event_metadata_encoding >> impl_tac >- (rpt conj_tac >> first_assum MATCH_ACCEPT_TAC) >> DISCH_TAC >>
   drule copy_state_frame_external >> DISCH_TAC >>
   qspecl_then [`ss`, `middle`] mp_tac abi_state_frame_observables >> impl_tac >- first_assum MATCH_ACCEPT_TAC >> strip_tac >>
-  qpat_x_assum `state_rel cenv cx (es with logs := _) out` mp_tac >> asm_simp_tac bool_ss [] >> DISCH_TAC >>
+  qpat_x_assum `state_rel_simple cenv cx (es with logs := _) out` mp_tac >> asm_simp_tac bool_ss [] >> DISCH_TAC >>
   `fragment_path ctx func ss out` by (irule fragment_path_trans >> qexists_tac `middle` >> simp[]) >>
   `allocation_growth ss out` by (irule allocation_growth_trans >> qexists_tac `middle` >> simp[]) >>
   `!arg_op. abi_operand_before eval_cut.cs_next_var arg_op ==> eval_operand arg_op out = eval_operand arg_op ss` by

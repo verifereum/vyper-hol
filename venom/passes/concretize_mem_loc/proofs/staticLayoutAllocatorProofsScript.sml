@@ -4,6 +4,52 @@ Theory staticLayoutAllocatorProofs
 Ancestors
   concretizeMemLocDefs staticLayoutDefs list finite_map
 
+(* Ordering is a separate interface from the canonical liveset map. *)
+Theorem ml_complete_order_priority_witness:
+  ml_complete_order [Allocation 2; Allocation 1; Allocation 2]
+    [Allocation 1; Allocation 2; Allocation 3]
+    (FEMPTY |+ (Allocation 1,[]) |+ (Allocation 2,[]) |+ (Allocation 3,[])) =
+  [Allocation 2; Allocation 1; Allocation 3]
+Proof
+  EVAL_TAC
+QED
+
+Theorem ml_complete_order_distinct:
+  !raw localkeys ls. ALL_DISTINCT (ml_complete_order raw localkeys ls)
+Proof
+  simp[ml_complete_order_def]
+QED
+
+Theorem ml_complete_order_mem:
+  !raw localkeys ls a.
+    MEM a (ml_complete_order raw localkeys ls) <=>
+    MEM a localkeys /\ IS_SOME (FLOOKUP ls a)
+Proof
+  simp[ml_complete_order_def, MEM_FILTER] >> metis_tac[]
+QED
+
+Theorem alloc_liveset_items_ordered_lookup:
+  !raw fn ls a live.
+    MEM (a,live) (alloc_liveset_items_ordered raw fn ls) ==>
+    FLOOKUP ls a = SOME live
+Proof
+  rw[alloc_liveset_items_ordered_def, MEM_MAP, ml_complete_order_mem] >>
+  qmatch_asmsub_abbrev_tac `IS_SOME entry` >>
+  Cases_on `entry` >> gvs[]
+QED
+
+Theorem alloc_liveset_items_ordered_coverage:
+  !raw fn ls a live.
+    MEM a (MAP (\inst. Allocation inst.inst_id)
+      (FILTER (\inst. is_alloca_op inst.inst_opcode) (fn_insts fn))) /\
+    FLOOKUP ls a = SOME live ==>
+    MEM (a,live) (alloc_liveset_items_ordered raw fn ls)
+Proof
+  rpt strip_tac >>
+  simp[alloc_liveset_items_ordered_def, MEM_MAP, ml_complete_order_mem] >>
+  qpat_x_assum `MEM a (MAP _ _)` mp_tac >> simp[MEM_MAP]
+QED
+
 Definition reserved_positions_sorted_def:
   reserved_positions_sorted [] = T /\
   reserved_positions_sorted (((pos : num),size)::rs) =
@@ -122,7 +168,7 @@ QED
 Theorem checked_first_fit_scan_SOME[local]:
   !rs sz start pos.
     reserved_positions_sorted rs /\
-    reserved_intervals_wf rs /\
+    EVERY reserved_interval_wf rs /\
     checked_first_fit_scan rs sz start = SOME pos ==>
     start <= pos /\
     pos + sz < dimword (:256) /\
@@ -157,7 +203,7 @@ Theorem checked_first_fit_SOME:
     checked_first_fit occupied sz = SOME pos ==>
     pos + sz < dimword (:256) /\
     EVERY (reserved_intervals_disjoint (pos,sz)) occupied /\
-    (0 < sz ==> reserved_intervals_wf ((pos,sz)::occupied))
+    (0 < sz ==> reserved_interval_wf (pos,sz))
 Proof
   rpt gen_tac >> strip_tac >>
   gvs[checked_first_fit_def] >>
@@ -165,7 +211,7 @@ Proof
    EVERY (reserved_intervals_disjoint (pos,sz))
      (sort_reserved_by_pos occupied)` by
     (irule checked_first_fit_scan_SOME >>
-     simp[sort_reserved_by_pos_sorted, sort_reserved_by_pos_wf]) >>
+     simp[sort_reserved_by_pos_sorted, EVERY_sort_reserved_by_pos]) >>
   gvs[EVERY_sort_reserved_by_pos, reserved_intervals_wf_def,
       reserved_interval_wf_def]
 QED
@@ -382,4 +428,32 @@ Theorem merge_forced_positions_forced_aid:
 Proof
   strip_tac >> rpt gen_tac >> strip_tac >>
   drule merge_forced_positions_forced >> simp[allocation_id_def]
+QED
+
+(* Occupied intervals may overlap when their allocations have disjoint
+   lifetimes. A dead allocation filled afterwards must avoid their union. *)
+Theorem checked_first_fit_overlapping_regressions:
+  checked_first_fit [(0,32); (0,32)] 32 = SOME 32 /\
+  checked_first_fit [(32,32); (0,96); (16,16)] 32 = SOME 96 /\
+  checked_first_fit [(64,32); (0,32); (0,32)] 32 = SOME 32
+Proof
+  EVAL_TAC >> simp[wordsTheory.dimword_def, fcpLib.INDEX_CONV ``dimindex (:256)``]
+QED
+
+Theorem checked_first_fit_invalid_regressions:
+  checked_first_fit [(0,0)] 32 = NONE /\
+  checked_first_fit [(dimword (:256) - 16,32)] 32 = NONE /\
+  checked_first_fit [] (dimword (:256)) = NONE
+Proof
+  EVAL_TAC >> simp[wordsTheory.dimword_def, fcpLib.INDEX_CONV ``dimindex (:256)``]
+QED
+
+Theorem complete_dead_alloca_overlapping_regression:
+  complete_alloc_positions_aux
+    [<| inst_id := 3; inst_opcode := ALLOCA;
+        inst_operands := [Lit 32w]; inst_outputs := ["dead"] |>]
+    (FEMPTY |+ (Allocation 1,0) |+ (Allocation 2,0)) [(0,32); (0,32)] =
+  SOME (FEMPTY |+ (Allocation 1,0) |+ (Allocation 2,0) |+ (Allocation 3,32))
+Proof
+  EVAL_TAC >> simp[wordsTheory.dimword_def, fcpLib.INDEX_CONV ``dimindex (:256)``]
 QED

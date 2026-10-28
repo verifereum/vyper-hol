@@ -4,7 +4,7 @@ Theory vyperCallOutcomeTest
 Ancestors
   arithmetic list option pair sum words
   vfmState vfmTypes extCallOracle vyperRuntimeAccounts
-  vyperAST vyperValue vyperState vyperCallOutcome vyperCallOutcomeBranches
+  vyperAST vyperValue vyperState vyperCallOutcome vyperCallOutcomeProps vyperCallOutcomeBranches
 Libs cv_transLib wordsLib monadsyntax
 
 Definition outcome_test_state_def:

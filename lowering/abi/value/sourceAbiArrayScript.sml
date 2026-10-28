@@ -3,7 +3,7 @@
    Helpers: optional mapping over a final element and accumulator flattening. *)
 Theory sourceAbiArray
 Ancestors
-  vyperABI vyperValueOperation vyperValue vyperMisc contractABI
+  vyperABI vyperABIRoundtrip vyperValueOperation vyperValue vyperMisc contractABI
   list rich_list option alist arithmetic
 
 Theorem OPT_MMAP_SNOC:

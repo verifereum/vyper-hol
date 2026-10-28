@@ -86,10 +86,10 @@ QED
 
 Theorem decimal_mul_builtin_boundaries_cv:
   evaluate_builtin empty_evaluation_context accounts (BaseT DecimalT)
-    (Bop Mul) [DecimalV (-&(2 ** 167)); DecimalV 10000000000] =
+    (Bop Mul) tys [DecimalV (-&(2 ** 167)); DecimalV 10000000000] =
     INL (DecimalV (-&(2 ** 167))) /\
   evaluate_builtin empty_evaluation_context accounts (BaseT DecimalT)
-    (Bop Mul) [DecimalV (-&(2 ** 167)); DecimalV (-10000000000)] =
+    (Bop Mul) tys [DecimalV (-&(2 ** 167)); DecimalV (-10000000000)] =
     INR (RuntimeError "Decimal Mul bound")
 Proof
   simp[evaluate_builtin_def, get_tenv_def, empty_evaluation_context_def,

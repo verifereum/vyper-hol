@@ -61,13 +61,19 @@ Proof
   EVAL_TAC
 QED
 
-Theorem supported_internal_context_rejections:
-  EVERY (\stmts. ~supported_program [program_test_internal stmts])
+Theorem supported_internal_locals_and_loops:
+  EVERY (\stmts. supported_program [program_test_internal stmts])
     [[AnnAssign "local" (BaseT (UintT 256)) expr_test_uint];
      [If expr_test_uint [] [AnnAssign "local" (BaseT (UintT 256)) expr_test_uint]];
      [program_test_range []];
-     [If expr_test_uint [program_test_range []] []];
-     [Expr expr_test_internal];
+     [If expr_test_uint [program_test_range []] []]]
+Proof
+  EVAL_TAC
+QED
+
+Theorem supported_internal_context_rejections:
+  EVERY (\stmts. ~supported_program [program_test_internal stmts])
+    [[Expr expr_test_internal];
      [Return (SOME expr_test_internal)];
      [Assign (BaseTarget (NameTarget "arg")) expr_test_internal];
      [If expr_test_uint [] [Expr expr_test_internal]]]
@@ -80,13 +86,13 @@ QED
 Theorem supported_other_effects_in_internal_and_loop:
   supported_function_body expr_test_tops Internal []
     [Expr expr_test_pop;
-     Expr (Call NoneT Send [expr_test_address; expr_test_uint] NONE);
+     Expr (Call NoneT (Send F) [expr_test_address; expr_test_uint] NONE);
      Expr (Call (BaseT (UintT 256))
-       (ExtCall T F ("remote",[BaseT (UintT 256)],BaseT (UintT 256)))
+       (ExtCall T F ("remote",[BaseT (UintT 256)],BaseT (UintT 256)) [])
        [expr_test_address; expr_test_uint] NONE)] /\
   supported_stmt expr_test_tops []
     (program_test_range
-      [Expr expr_test_pop; Expr (Call NoneT Send [expr_test_address; expr_test_uint] NONE)])
+      [Expr expr_test_pop; Expr (Call NoneT (Send F) [expr_test_address; expr_test_uint] NONE)])
 Proof
   EVAL_TAC
 QED
@@ -173,10 +179,6 @@ Theorem supported_declaration_exclusions_assembled:
     [FunctionDecl Deploy Nonpayable T F "__init__" [] [] NoneT [];
      FunctionDecl Deploy Nonpayable F T "__init__" [] [] NoneT [];
      FunctionDecl Deploy Nonpayable F F "__init__" [] [expr_test_uint] NoneT [];
-     FunctionDecl Internal Pure F F "revert" [] [] NoneT [];
-     FunctionDecl Internal Pure F F "return_label_bad" [] [] NoneT [];
-     FunctionDecl Internal Pure F F "code_end" [] [] NoneT [];
-     FunctionDecl Internal Pure F F "reachable_bad" [] [] NoneT [];
      VariableDecl Private Immutable "x" (BaseT (UintT 256)) (SOME 0);
      VariableDecl Private (Constant expr_test_uint) "x" (BaseT (UintT 256)) NONE;
      VariableDecl Public Storage "x" (BaseT (UintT 256)) (SOME 0);

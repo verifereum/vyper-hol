@@ -264,7 +264,22 @@ Proof
        assert_reason_runtime_pipeline_def,
        assert_reason_deploy_compile_def,
        checked_unit_pipeline_def] >>
-  rpt CASE_TAC >> gvs[]
+  Cases_on `resolve_o1_policy (o1_policy all_capabilities)` >> gvs[] >>
+  rename1 `lower_vyper_runtime_unit tops policy` >>
+  Cases_on `lower_vyper_runtime_unit tops policy` >> gvs[] >>
+  rename1 `run_venom_pipeline (K T) (K T) (K T) policy o1_pipeline_spec unit` >>
+  Cases_on `run_venom_pipeline (K T) (K T) (K T) policy o1_pipeline_spec unit` >>
+  gvs[] >> IF_CASES_TAC >> gvs[] >>
+  qmatch_goalsub_rename_tac `finalize_codegen (K SOME) policy output_unit` >>
+  Cases_on `finalize_codegen (K SOME) policy output_unit` >> gvs[] >>
+  qmatch_goalsub_rename_tac `lower_vyper_deploy_unit tops policy runtime` >>
+  Cases_on `lower_vyper_deploy_unit tops policy runtime` >> gvs[] >>
+  qmatch_goalsub_rename_tac
+    `run_venom_pipeline (K T) (K T) (K T) policy o1_pipeline_spec deploy_unit` >>
+  Cases_on `run_venom_pipeline (K T) (K T) (K T) policy o1_pipeline_spec deploy_unit` >>
+  gvs[] >> IF_CASES_TAC >> gvs[] >>
+  qmatch_goalsub_rename_tac `finalize_codegen (K SOME) policy deploy_output` >>
+  Cases_on `finalize_codegen (K SOME) policy deploy_output` >> gvs[]
 QED
 
 val () = evalCompilerBytecodeLib.add_staged_compile_eval
