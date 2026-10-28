@@ -28,6 +28,7 @@ Ancestors
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
   compileEnv
   vyperInterpreter vyperState vyperValue vyperExprNoControl
+  vyperStatePreservation
   venomExecSemantics venomInst venomState
 Libs
   monadsyntax
@@ -88,15 +89,18 @@ Proof
   metis_tac[cs_extends_trans]
 QED
 
-(* The reason's fragment, then the encoder and its REVERT: an exit, the
-   reason's own as expr_exit allows, or the REVERT. *)
+(* The forced reason may fail either while evaluating or while reading a
+   captured place.  compile_expr's judgment remains at the raw boundary;
+   its successful postcondition supplies the encoder's defined operand.
+   A failed read is still covered by the statement's revert exit. *)
 Theorem reason_expr_revert_frag:
   !ctx func cenv cx r es res1 es1 sa vv sm rty msz sb s0 R.
     compile_expr cenv (expr_type r) r sa = (vv, sm) /\
     compile_revert_with_reason cenv vv rty msz sm = ((), sb) /\
     reason_vv_ok vv /\
     expr_vv_sim ctx func cenv cx (expr_type r) r es /\
-    eval_expr cx r es = (res1, es1) /\ expr_vv_res_ok res1 /\
+    (do raw <- eval_expr cx r; read_result cx raw od) es = (res1, es1) /\
+    expr_res_ok res1 /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sa /\
     (!rr. expr_exit res1 rr ==> R rr) /\ (!t. R (Abort Revert_abort t)) ==>
@@ -111,9 +115,25 @@ Proof
                `reason_ds op`, `R`] mp_tac compile_revert_reason_frag >>
   impl_tac >- simp[] >> strip_tac >>
   `fn_has_code sa sm func` by metis_tac[fn_has_code_split] >>
+  Cases_on `eval_expr cx r es` >> rename1 `_ = (raw, est)` >>
+  `est = es1` by
+    (qpat_x_assum `(do raw <- _; _ od) _ = _` mp_tac >>
+     simp[bind_def] >> Cases_on `raw` >> simp[] >> strip_tac >>
+     metis_tac[read_result_state]) >> gvs[] >>
+  `expr_vv_res_ok raw` by
+    (qpat_x_assum `(do raw <- _; _ od) _ = _` mp_tac >>
+     simp[bind_def] >> Cases_on `raw` >> simp[] >> strip_tac >>
+     gvs[expr_vv_res_ok_def, expr_res_ok_def] >>
+     rename1 `read_result cx captured es1` >> Cases_on `captured` >>
+     gvs[expr_vv_res_ok_def, read_result_def, raise_def, expr_res_ok_def]) >>
+  `!rr. expr_exit raw rr ==> R rr` by
+    (rpt strip_tac >> Cases_on `raw` >> gvs[] >>
+     qpat_x_assum `(do raw <- _; _ od) _ = _` mp_tac >>
+     simp[bind_def] >> strip_tac >> gvs[] >>
+     metis_tac[expr_exit_exception_transport]) >>
   qpat_x_assum `expr_vv_sim _ _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [expr_vv_sim_def]) >>
-  disch_then (qspecl_then [`sa`, `sm`, `vv`, `res1`, `es1`, `s0`] mp_tac) >>
+  disch_then (qspecl_then [`sa`, `sm`, `vv`, `raw`, `es1`, `s0`] mp_tac) >>
   simp[] >> strip_tac >>
   irule frag_exec_seq >> qexistsl [`reason_known (reason_ds op)`, `sm`] >>
   simp[] >>
@@ -126,34 +146,48 @@ QED
 
 (* ===== The source ===== *)
 
-(* raise with a reason, for the outcomes stmt_frag speaks of: the reason's
-   error, or a string, which the statement raises. *)
+(* Raise inspects the forced result, not the captured expression result:
+   a value or PlaceR may read as a string, and either evaluation or the
+   read may fail.  Type errors remain outside stmt_frag's outcomes. *)
 Theorem eval_raise_reason_cases:
   !cx r es res es' lctx.
     eval_stmt cx (Raise (RaiseReason r)) es = (res, es') /\
     stmt_res_ok lctx res ==>
-    ?r1. eval_expr cx r es = (r1, es') /\ expr_vv_res_ok r1 /\
-         ((?str. r1 = INL (Value (StringV str)) /\
+    ?r1. (do raw <- eval_expr cx r; read_result cx raw od) es = (r1, es') /\
+         expr_res_ok r1 /\
+         ((?str. r1 = INL (StringV str) /\
                  res = INR (AssertException str)) \/
           (?ex. r1 = INR ex /\ res = INR ex))
 Proof
-  rpt gen_tac >> simp[Once evaluate_def, bind_def] >>
-  Cases_on `eval_expr cx r es` >> rename1 `_ = (r1, es1)` >>
+  rpt gen_tac >>
+  `eval_stmt cx (Raise (RaiseReason r)) es =
+   bind (do raw <- eval_expr cx r; read_result cx raw od)
+     (\v. do str <- lift_option_type (dest_StringV v) "not StringV";
+             raise (AssertException str) od) es` by
+    (simp[Once evaluate_def, bind_def] >>
+     Cases_on `eval_expr cx r es` >> rename1 `_ = (raw, est)` >>
+     Cases_on `raw` >> simp[] >>
+     rename1 `read_result cx captured est` >>
+     Cases_on `read_result cx captured est` >>
+     rename1 `_ = (forced, esf)` >> Cases_on `forced` >> simp[]) >>
+  pop_assum SUBST1_TAC >>
+  Cases_on `(do raw <- eval_expr cx r; read_result cx raw od) es` >>
+  rename1 `_ = (r1, es1)` >> simp[bind_def] >>
   Cases_on `r1` >> simp[]
-  >- (rename1 `get_Value tv` >> Cases_on `tv` >>
-      simp[raise_def, return_def, stmt_res_ok_def] >>
-      rename1 `dest_StringV v` >> Cases_on `v` >>
+  >- (rename1 `dest_StringV v` >> Cases_on `v` >>
       simp[dest_StringV_def, lift_option_type_def, raise_def, return_def,
-           stmt_res_ok_def] >>
-      rw[expr_vv_res_ok_def, expr_res_ok_def]) >>
+           stmt_res_ok_def] >> rw[expr_res_ok_def]) >>
   strip_tac >> gvs[] >>
+  qpat_x_assum `(do raw <- _; _ od) _ = _` mp_tac >>
+  simp[bind_def] >> Cases_on `eval_expr cx r es` >>
+  rename1 `_ = (raw, est)` >> Cases_on `raw` >> simp[] >> strip_tac >>
+  imp_res_tac read_result_no_control >>
   imp_res_tac (cj 1 eval_expr_no_control) >>
-  gvs[no_control_exc_def, expr_vv_res_ok_def, expr_res_ok_def,
-      stmt_res_ok_def]
+  gvs[no_control_exc_def, expr_res_ok_def, stmt_res_ok_def]
 QED
 
 Theorem expr_res_ok_revert[local]:
-  !ex t. expr_res_ok (INR ex : toplevel_value + exception) ==>
+  !ex t. expr_res_ok (INR ex : value + exception) ==>
          expr_exit (INR ex : unit + exception) (Abort Revert_abort t)
 Proof
   rw[expr_res_ok_def] >> simp[expr_exit_def]
@@ -162,18 +196,17 @@ QED
 (* The exits of a raise with a reason, as the reason's outcome gives them. *)
 Theorem raise_reason_exits[local]:
   !r1 res RetQ es'.
-    expr_vv_res_ok r1 /\
-    ((?str. r1 = INL (Value (StringV str)) /\
+    expr_res_ok r1 /\
+    ((?str. r1 = INL (StringV str) /\
             res = INR (AssertException str)) \/
      (?ex. r1 = INR ex /\ res = INR ex)) ==>
     (!rr. expr_exit r1 rr ==> stmt_exit RetQ es' res rr) /\
     (!t. stmt_exit RetQ es' res (Abort Revert_abort t))
 Proof
   rpt gen_tac >> strip_tac >> gvs[stmt_exit_def, expr_exit_def] >>
-  `expr_res_ok (INR ex : toplevel_value + exception)` by
-    gvs[expr_vv_res_ok_def] >>
+  `expr_res_ok (INR ex : value + exception)` by simp[] >>
   simp[expr_res_ok_revert] >> rpt strip_tac >> disj1_tac >>
-  ONCE_REWRITE_TAC [INST_TYPE [beta |-> ``:toplevel_value``]
+  ONCE_REWRITE_TAC [INST_TYPE [beta |-> ``:value``]
                       expr_exit_INR_type] >>
   first_assum ACCEPT_TAC
 QED
@@ -225,12 +258,13 @@ QED
    the condition. *)
 Theorem eval_assert_reason_false[local]:
   !cx e r es es1.
-    eval_expr cx e es = (INL (Value (BoolV F)), es1) ==>
+    (do raw <- eval_expr cx e; read_result cx raw od) es =
+      (INL (BoolV F), es1) ==>
     eval_stmt cx (Assert e (AssertReason r)) es =
     eval_stmt cx (Raise (RaiseReason r)) es1
 Proof
   rpt strip_tac >> ONCE_REWRITE_TAC [evaluate_def] >>
-  simp[bind_def, switch_BoolV_def]
+  simp[eval_expr_switch_forced]
 QED
 
 (* assert e, r for a reason r as compile_raise_reason_frag has it: the
@@ -243,7 +277,8 @@ Theorem compile_assert_reason_frag:
     (!ml str. r <> Literal (BaseT (StringT ml)) (StringL str)) /\
     expr_type e = BaseT BoolT /\
     expr_sim ctx func cenv cx (BaseT BoolT) e es /\
-    (!es1. eval_expr cx e es = (INL (Value (BoolV F)), es1) ==>
+    (!es1. (do raw <- eval_expr cx e; read_result cx raw od) es =
+             (INL (BoolV F), es1) ==>
            expr_vv_sim ctx func cenv cx (expr_type r) r es1) /\
     (!sa vv sb. compile_expr cenv (expr_type r) r sa = (vv, sb) ==>
                 reason_vv_ok vv) ==>
@@ -296,27 +331,29 @@ Resume compile_assert_reason_frag[control]:
     metis_tac[fn_has_code_new_block] >>
   `local_ptrs_reserved cenv s5` by
     (irule local_ptrs_reserved_next_var >> qexists `sa` >> simp[]) >>
-  `!es1. eval_expr cx e es = (INL (Value (BoolV F)), es1) ==>
+  `!es1. (do raw <- eval_expr cx e; read_result cx raw od) es =
+           (INL (BoolV F), es1) ==>
          eval_stmt cx (Raise (RaiseReason r)) es1 = (res, es')` by
     metis_tac[eval_assert_reason_false] >>
   qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
-  simp[Once evaluate_def, bind_def] >>
-  Cases_on `eval_expr cx e es` >> rename1 `eval_expr cx e es = (r1, es1)` >>
-  strip_tac >>
-  `expr_res_ok r1 /\ !v. r1 = INL (Value v) ==> ?b. v = BoolV b` by
+  pure_rewrite_tac[Once evaluate_def, eval_expr_switch_forced] >>
+  Cases_on `(do raw <- eval_expr cx e; read_result cx raw od) es` >>
+  rename1 `_ = (r1, es1)` >> simp[] >> strip_tac >>
+  `expr_res_ok r1 /\ !v. r1 = INL v ==> ?b. v = BoolV b` by
     (Cases_on `r1` >> gvs[]
-     >- (rename1 `switch_BoolV tv` >>
-         Cases_on `?b. tv = Value (BoolV b)` >> gvs[expr_res_ok_def] >>
-         `tv <> Value (BoolV T) /\ tv <> Value (BoolV F)` by metis_tac[] >>
-         gvs[switch_BoolV_def, raise_def, stmt_res_ok_def]) >>
+     >- (rename1 `INL plain` >>
+         Cases_on `?b. plain = BoolV b` >> gvs[expr_res_ok_def] >>
+         `plain <> BoolV T /\ plain <> BoolV F` by metis_tac[] >>
+         gvs[raise_def, stmt_res_ok_def]) >>
+     qpat_x_assum `(do raw <- _; _ od) _ = _` mp_tac >>
+     simp[bind_def] >> Cases_on `eval_expr cx e es` >>
+     rename1 `_ = (raw, est)` >> Cases_on `raw` >> simp[] >> strip_tac >>
+     imp_res_tac read_result_no_control >>
      imp_res_tac (cj 1 eval_expr_no_control) >>
      gvs[no_control_exc_def, expr_res_ok_def, stmt_res_ok_def]) >>
   `s3.cs_current_bb = s1.cs_current_bb /\
    s3.cs_current_insts = s1.cs_current_insts` by metis_tac[] >>
-  qspecl_then [`ctx`, `func`, `cx`, `cenv`, `e`, `es`, `r1`, `es1`, `sa`,
-               `op`, `s1`, `s3`, `s4`, `ok`, `fl`, `s0`] mp_tac
-    cond_jump_frag >>
-  impl_tac >- fs[] >> strip_tac
+  drule_all cond_jump_frag >> strip_tac
   >- (Cases_on `b` >> gvs[switch_BoolV_def, return_def, raise_def]
       >- (disj1_tac >> rename1 `stmt_state_rel func cenv cx es' sv` >>
           qexists_tac `jump_to s7.cs_current_bb sv` >>
@@ -326,8 +363,7 @@ Resume compile_assert_reason_frag[control]:
       suspend "abort") >>
   disj2_tac >> qexists_tac `fuel` >> Cases_on `r1` >> gvs[stmt_exit_def] >>
   disj1_tac >>
-  ONCE_REWRITE_TAC [INST_TYPE [beta |-> ``:toplevel_value``] expr_exit_INR_type] >>
-  first_assum ACCEPT_TAC
+  metis_tac[expr_exit_INR_type]
 QED
 
 Resume compile_assert_reason_frag[abort]:
@@ -355,3 +391,14 @@ Resume compile_assert_reason_frag[abort]:
 QED
 
 Finalise compile_assert_reason_frag
+
+(* Check the public forced boundary and both reason-expression consumers. *)
+val () = List.app (fn th =>
+  let val (ors, axs) = Tag.dest_tag (Thm.tag th)
+  in if null axs andalso null (Thm.hyp th) andalso
+        List.all (fn s => s = "DISK_THM") ors
+     then print "REASON_EXPR_FORCE_AUDIT OK\n"
+     else raise Fail "reason expression inherited admission"
+  end) [compile_reason_message_expr, reason_expr_revert_extends,
+        reason_expr_revert_frag, eval_raise_reason_cases,
+        compile_raise_reason_frag, compile_assert_reason_frag];

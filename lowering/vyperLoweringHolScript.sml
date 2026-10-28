@@ -27,6 +27,7 @@ Ancestors
   evalCompilerMemoryStores
   evalCompilerExternalCalls
   evalCompilerNameCollisions
+  evalAssignmentOrder
   evalCompilerCtorLocals
   evalCompilerInternalLabels
   evalCompilerSliceBuffers

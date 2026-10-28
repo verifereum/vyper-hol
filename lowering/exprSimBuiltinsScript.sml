@@ -330,7 +330,10 @@ Theorem compile_method_id_literal_word_sim:
       (Builtin (BaseT (BytesT (Fixed 4))) MethodId [Literal la l])
 Proof
   rw[expr_sim_ok_def, expr_sim_def, optionTheory.IS_SOME_EXISTS] >>
-  drule_all eval_expr_method_id_literal >> strip_tac >> gvs[] >>
+  Cases_on `eval_expr cx
+    (Builtin (BaseT (BytesT (Fixed 4))) MethodId [Literal la l]) es` >>
+  drule_all eval_expr_method_id_literal >> strip_tac >>
+  gvs[bind_def, read_result_def, return_def] >>
   drule compile_expr_method_id_literal >> strip_tac >>
   gvs[lower_value_def, comp_bind_def, compile_literal_vv_def,
       unwrap_value_def, comp_return_def] >>

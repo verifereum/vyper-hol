@@ -179,13 +179,13 @@ Proof
   >- simp[evaluate_defaults_def] >>
   gen_tac >> rpt strip_tac >>
   gvs[well_typed_expr_def, evaluate_defaults_def, AllCaseEqs()] >>
-  Cases_on `eval_expr cx h (initial_state am [FEMPTY])` >> gvs[] >>
+  Cases_on `(do result <- eval_expr cx h; read_result cx result od)
+    (initial_state am [FEMPTY])` >> gvs[] >>
   `accounts_well_typed (initial_state am [FEMPTY]).accounts` by
     simp[initial_state_def] >>
   `call_evaluation_safe cx (int_calls_expr h)` by metis_tac[] >>
-  drule_all (cj 8 eval_all_type_sound_mutual) >>
-  simp[expr_result_typed_def, expr_runtime_typed_def,
-       toplevel_value_typed_Value]
+  drule_all eval_expr_read_type_sound >>
+  simp[value_runtime_typed_def]
 QED
 
 Theorem checked_defaults_ready_success:
@@ -336,4 +336,3 @@ Theorem checked_call_inputs_ready_components:
 Proof
   simp[checked_call_inputs_ready_def]
 QED
-

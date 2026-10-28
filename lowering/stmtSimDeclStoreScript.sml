@@ -42,12 +42,12 @@ Theorem stmt_state_rel_declare_store:
     val_wf tyv v ==>
     stmt_state_rel func cenv cx
       (es with scopes :=
-         (sc |+ (id, <| assignable := a; type := tyv; value := v |>)) :: rest)
+         (sc |+ (id, <| assignable := a; type := tyv; value := v; popped := [] |>)) :: rest)
       (mstore (w2n w) x s)
 Proof
   rpt strip_tac >>
   qabbrev_tac `s' = mstore (w2n w) x s` >>
-  qabbrev_tac `entry = <| assignable := a; type := tyv; value := v |>` >>
+  qabbrev_tac `entry = <| assignable := a; type := tyv; value := v; popped := [] |>` >>
   qabbrev_tac `scs' = (sc |+ (id, entry)) :: rest` >>
   `s'.vs_vars = s.vs_vars /\ s'.vs_allocas = s.vs_allocas /\
    s'.vs_alloca_next = s.vs_alloca_next /\

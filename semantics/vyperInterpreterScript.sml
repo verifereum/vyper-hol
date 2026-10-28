@@ -1,13 +1,14 @@
 Theory vyperInterpreter
 Ancestors
   vyperCallOutcome[ignore_grammar]
+  vyperCallOutcomeFrame[ignore_grammar]
   arithmetic alist combin option list finite_map pair
   rich_list sorting cv cv_std vfmState vfmContext vfmCompute[ignore_grammar]
   vfmExecution[ignore_grammar] vyperAST vyperABI
   vyperMisc vyperNsidFmap vyperValue vyperValueOperation vyperStorage vyperContext vyperState
   vyperEvent vyperEvmBoundary vyperCreate vyperRuntimeAccounts
 Libs
-  cv_transLib wordsLib monadsyntax
+  cv_transLib wordsLib intLib monadsyntax
 
 (* Import only the two outcome selectors used here, without EVM/crypto
    grammar shadowing source operations in existing proof consumers. *)
@@ -240,7 +241,7 @@ Definition bind_arguments_def:
     (case evaluate_type tenv typ of NONE => NONE | SOME tv =>
      case safe_cast tv v of NONE => NONE | SOME v =>
       OPTION_MAP (λm. m |+ (id,
-        <| assignable := T; type := tv; value := v |>))
+        <| assignable := T; type := tv; value := v; popped := [] |>))
         (bind_arguments tenv params vs)) ∧
   bind_arguments _ _ _ = NONE
 End
@@ -458,6 +459,14 @@ Theorem exprs_bound_slices_lt[simp]:
 Proof
   mp_tac (Q.SPECL [`ts`, `n`, `es`] exprs_bound_TAKE) >>
   mp_tac (Q.SPECL [`ts`, `n`, `es`] exprs_bound_DROP) >> simp[]
+QED
+
+Theorem exprs_bound_TAKE_DROP:
+  exprs_bound ts (TAKE n (DROP k es)) <= exprs_bound ts es
+Proof
+  irule LESS_EQ_TRANS >>
+  qexists_tac `exprs_bound ts (DROP k es)` >>
+  simp[exprs_bound_TAKE, exprs_bound_DROP]
 QED
 
 (* Extract callable functions - for termination proof *)
@@ -717,10 +726,12 @@ val () = handle_loop_exception_def
   |> cv_auto_trans;
 
 Definition switch_BoolV_def:
-  switch_BoolV v f g =
-  if v = Value $ BoolV T then f
-  else if v = Value $ BoolV F then g
-  else raise $ Error (TypeError (if is_Value v then "not BoolV" else "not Value"))
+  switch_BoolV cx res f g = do
+    v <- read_result cx res;
+    if v = BoolV T then f
+    else if v = BoolV F then g
+    else raise (Error (TypeError "not BoolV"))
+  od
 End
 
 Definition exactly_one_option_def:
@@ -741,14 +752,6 @@ Definition is_immutable_decl_def:
 End
 
 val () = cv_auto_trans is_immutable_decl_def;
-
-Definition immutable_target_def:
-  immutable_target (imms: string |-> (type_value # value)) src_id_opt id n =
-  case FLOOKUP imms n of SOME _ => SOME $ ImmutableVar src_id_opt id
-     | _ => NONE
-End
-
-val () = cv_auto_trans immutable_target_def;
 
 Definition get_range_limits_def:
   get_range_limits (IntV n1) (IntV n2) =
@@ -1078,6 +1081,45 @@ val () = cv_auto_trans ext_call_opts_ok_def;
    call fails, and checks EXTCODESIZE again on the default_return_value path,
    unless skip_contract_check.  The outcome comes from the external-call
    oracle when st.outcomes is SOME, otherwise from running the callee. *)
+(* Call effects after calldata and keyword evaluation; the account snapshot
+   is the one used by the caller's preceding code-presence check. *)
+Definition eval_ext_call_effects_def:
+  eval_ext_call_effects cx target_addr calldata value_opt gas accounts = do
+    outcomes <- (λst. return st.outcomes st);
+    case outcomes of
+      | SOME _ => do
+          (rq, outcome) <- vyperCallOutcome$take_call_outcome target_addr calldata value_opt;
+          (if call_outcome_success outcome then return ()
+           else raise $ Error $ RevertData $ call_outcome_return_data outcome);
+          vyperCallOutcome$adopt_call_outcome rq outcome;
+          return (call_outcome_return_data outcome)
+        od
+      | NONE => do
+          tStorage <- get_transient_storage;
+          result <- lift_option
+            (run_ext_call cx.txn.target target_addr calldata value_opt
+                          gas
+                          accounts tStorage (vyper_to_tx_params cx.txn))
+            "ExtCall run failed";
+          success <<- FST result; result1 <<- SND result;
+          returnData <<- FST result1; result2 <<- SND result1;
+          accounts' <<- FST result2; result3 <<- SND result2;
+          tStorage' <<- FST result3; emitted_logs <<- SND result3;
+          (if success then return () else raise $ Error $ RevertData returnData);
+          update_accounts (K accounts');
+          update_transient (K tStorage');
+          append_logs emitted_logs;
+          return returnData
+        od
+  od
+End
+
+val () = eval_ext_call_effects_def
+  |> SRULE [FUN_EQ_THM, bind_def, ignore_bind_def, LET_RATOR, COND_RATOR,
+            prod_CASE_rator, sum_CASE_rator, option_CASE_rator, UNCURRY,
+            lift_option_def, check_def, assert_def]
+  |> cv_auto_trans;
+
 Definition eval_ext_call_def:
   eval_ext_call cx is_static skip_check (func_name, arg_types, ret_type) opts [] =
     raise (Error (TypeError "ExtCall operands")) ∧
@@ -1103,32 +1145,8 @@ Definition eval_ext_call_def:
     accounts <- get_accounts;
     check (ext_call_precheck_ok skip_check ret_type target_addr accounts)
           "ExtCall target has no code";
-    outcomes <- (λst. return st.outcomes st);
-    returnData <- (case outcomes of
-      | SOME _ => do
-          (rq, outcome) <- vyperCallOutcome$take_call_outcome target_addr calldata value_opt;
-          (if call_outcome_success outcome then return ()
-           else raise $ Error $ RevertData $ call_outcome_return_data outcome);
-          vyperCallOutcome$adopt_call_outcome rq outcome;
-          return (call_outcome_return_data outcome)
-        od
-      | NONE => do
-          tStorage <- get_transient_storage;
-          result <- lift_option
-            (run_ext_call cx.txn.target target_addr calldata value_opt
-                          (forwarded_gas default_evm_gas_limit gas_opt)
-                          accounts tStorage (vyper_to_tx_params cx.txn))
-            "ExtCall run failed";
-          success <<- FST result; result1 <<- SND result;
-          returnData <<- FST result1; result2 <<- SND result1;
-          accounts' <<- FST result2; result3 <<- SND result2;
-          tStorage' <<- FST result3; emitted_logs <<- SND result3;
-          (if success then return () else raise $ Error $ RevertData returnData);
-          update_accounts (K accounts');
-          update_transient (K tStorage');
-          append_logs emitted_logs;
-          return returnData
-        od);
+    returnData <- eval_ext_call_effects cx target_addr calldata value_opt
+      (forwarded_gas default_evm_gas_limit gas_opt) accounts;
     case (if returnData = [] then default_opt else NONE) of
     | SOME default_v => do
         accounts' <- get_accounts;
@@ -1197,63 +1215,48 @@ val () = eval_send_def
             lift_option_type_def, type_check_def, check_def, assert_def]
   |> cv_auto_trans;
 
-Theorem take_call_outcome_non_accounts[local]:
-  (SND (vyperCallOutcome$take_call_outcome target calldata value_opt st)).scopes = st.scopes /\
-  (SND (vyperCallOutcome$take_call_outcome target calldata value_opt st)).immutables = st.immutables
+(* Compose local-state frames without expanding the external-call oracle. *)
+Theorem append_logs_locals[local]:
+  vyperCallOutcomeFrame$state_rel_frame
+    (\s t. t.scopes = s.scopes /\ t.immutables = s.immutables) (append_logs logs)
 Proof
-  Cases_on `vyperCallOutcome$take_call_outcome target calldata value_opt st` >>
-  simp[] >> drule vyperCallOutcomeTheory.take_call_outcome_frame >>
-  disch_then (fn th => once_rewrite_tac[th]) >> simp[]
+  simp[state_rel_frame_def, append_logs_def, return_def]
 QED
 
-Theorem adopt_call_outcome_non_accounts[local]:
-  (SND (vyperCallOutcome$adopt_call_outcome rq outcome st)).scopes = st.scopes /\
-  (SND (vyperCallOutcome$adopt_call_outcome rq outcome st)).immutables = st.immutables
-Proof
-  Cases_on `vyperCallOutcome$adopt_call_outcome rq outcome st` >>
-  simp[] >> drule vyperCallOutcomeTheory.adopt_call_outcome_frame >>
-  strip_tac >> pop_assum (fn th => once_rewrite_tac[th]) >> simp[]
-QED
+val call_locals_relation =
+  ``\s:evaluation_state t. t.scopes = s.scopes /\ t.immutables = s.immutables``;
+val call_locals_primitives =
+  state_rel_frame_locals_primitives |> Q.INST [`R` |-> [ANTIQUOTE call_locals_relation]] |> SRULE [];
+val call_locals_take =
+  state_rel_frame_locals_take |> Q.INST [`R` |-> [ANTIQUOTE call_locals_relation]] |> SRULE [];
+val call_locals_bind =
+  state_rel_frame_bind_guarded |> Q.INST [`R` |-> [ANTIQUOTE call_locals_relation]] |> SRULE [];
 
-(* Keep the result type independent of the case scrutinee's type variables. *)
-val ext_frame_projection_rewrites = let
-  val shapes = [``:'a option``, ``:'a + 'b``, ``:'a # 'b``]
-  val tests = [``SND : 'result # evaluation_state -> evaluation_state``,
-               ``\s:evaluation_state. s.scopes``,
-               ``\s:evaluation_state. s.immutables``]
-  fun project test ty = BETA_RULE (ISPEC test (TypeBase.case_rand_of ty))
-  fun constant ty = Prim_rec.prove_case_const_thm
-    {case_def = TypeBase.case_def_of ty,
-     nchotomy = TypeBase.nchotomy_of ty}
-in List.concat (map (fn test => map (project test) shapes @
-     [BETA_RULE (PART_MATCH (rator o lhs) COND_RAND test)]) tests) @
-   map constant shapes end;
+val CALL_LOCALS_STEP = FIRST [
+  FIRST (map MATCH_ACCEPT_TAC (CONJUNCTS call_locals_primitives)),
+  MATCH_ACCEPT_TAC call_locals_take,
+  MATCH_ACCEPT_TAC append_logs_locals,
+  MATCH_MP_TAC call_locals_bind >> conj_tac,
+  gen_tac, strip_tac,
+  CHANGED_TAC (simp_tac bool_ss
+    [FORALL_PROD, LET_THM, ignore_bind_def, UNCURRY, pair_case_thm]),
+  BasicProvers.TOP_CASE_TAC];
 
-Theorem eval_ext_call_non_accounts[local]:
-  (SND (eval_ext_call cx static skip_check sig opts vs st)).scopes = st.scopes /\
-  (SND (eval_ext_call cx static skip_check sig opts vs st)).immutables = st.immutables
+Theorem eval_ext_call_locals[local]:
+  vyperCallOutcomeFrame$state_rel_frame
+    (\s t. t.scopes = s.scopes /\ t.immutables = s.immutables)
+    (eval_ext_call cx static skip_check sig opts vs)
 Proof
   PairCases_on `sig` >> Cases_on `vs` >>
-  simp[eval_ext_call_def, bind_def, ignore_bind_def, type_check_def,
-       assert_def, return_def, raise_def, get_accounts_def,
-       get_transient_storage_def, lift_option_def, lift_option_type_def,
-       check_def, lift_sum_runtime_def, update_accounts_def,
-       update_transient_def, append_logs_def, LET_THM, UNCURRY,
-       COND_RATOR, option_CASE_rator, prod_CASE_rator, sum_CASE_rator] >>
-  simp ext_frame_projection_rewrites >>
-  simp_tac (pure_ss ++ boolSimps.BOOL_ss)
-    ([pairTheory.pair_CASE_def, pairTheory.FST, pairTheory.SND,
-      evaluation_state_accfupds, combinTheory.K_THM,
-      take_call_outcome_non_accounts, adopt_call_outcome_non_accounts] @
-     ext_frame_projection_rewrites)
+  simp_tac bool_ss [eval_ext_call_def, eval_ext_call_effects_def, LET_THM] >>
+  rpt CALL_LOCALS_STEP
 QED
 
 Theorem eval_ext_call_preserves_non_accounts:
   eval_ext_call cx static skip_check sig opts vs st = (res, st') ==>
   st'.scopes = st.scopes /\ st'.immutables = st.immutables
 Proof
-  strip_tac >>
-  mp_tac eval_ext_call_non_accounts >> asm_rewrite_tac[] >> simp[]
+  mp_tac (REWRITE_RULE [state_rel_frame_result] eval_ext_call_locals) >> simp[]
 QED
 
 Theorem eval_send_preserves_non_accounts:
@@ -1271,21 +1274,6 @@ Proof
        COND_RATOR, option_CASE_rator, prod_CASE_rator, sum_CASE_rator] >>
   strip_tac >> gvs[AllCaseEqs()]
 QED
-
-(* Dynamic array bounds check: reads stored length from storage *)
-Definition check_array_bounds_def:
-  check_array_bounds cx (ArrayRef is_transient base_slot _ (Dynamic _)) (IntV i) = do
-    storage <- get_storage_backend cx is_transient;
-    stored_len <<- w2n (lookup_storage base_slot storage);
-    check (0 ≤ i ∧ Num i < stored_len) "subscript dynamic array oob"
-  od ∧
-  check_array_bounds _ _ _ = return ()
-End
-
-val () = check_array_bounds_def
-  |> SRULE [bind_def, FUN_EQ_THM, LET_THM, check_def,
-            toplevel_value_CASE_rator]
-  |> cv_auto_trans;
 
 (* ===== Reentrancy Lock Helpers ===== *)
 (* Vyper's @nonreentrant uses transient storage (EIP-1153 on Cancun+).
@@ -1344,7 +1332,7 @@ Definition evaluate_def:
   eval_stmt cx (Return NONE) = raise $ ReturnException NoneV ∧
   eval_stmt cx (Return (SOME e)) = do
     tv <- eval_expr cx e;
-    v <- materialise cx tv;
+    v <- read_result cx tv;
     raise $ ReturnException v
   od ∧
   eval_stmt cx (Raise RaiseBare) =
@@ -1353,29 +1341,29 @@ Definition evaluate_def:
     raise $ AssertException "UNREACHABLE" ∧
   eval_stmt cx (Raise (RaiseReason e)) = do
     tv <- eval_expr cx e;
-    v <- get_Value tv;
+    v <- read_result cx tv;
     s <- lift_option_type (dest_StringV v) "not StringV";
     raise $ AssertException s
   od ∧
   eval_stmt cx (Assert e AssertBare) = do
     tv <- eval_expr cx e;
-    switch_BoolV tv
+    switch_BoolV cx tv
       (return ())
       (raise $ AssertException "")
   od ∧
   eval_stmt cx (Assert e AssertUnreachable) = do
     tv <- eval_expr cx e;
-    switch_BoolV tv
+    switch_BoolV cx tv
       (return ())
       (raise $ AssertException "UNREACHABLE")
   od ∧
   eval_stmt cx (Assert e (AssertReason se)) = do
     tv <- eval_expr cx e;
-    switch_BoolV tv
+    switch_BoolV cx tv
       (return ())
       (do
          stv <- eval_expr cx se;
-         sv <- get_Value stv;
+         sv <- read_result cx stv;
          s <- lift_option_type (dest_StringV sv) "not StringV";
          raise $ AssertException s
        od)
@@ -1393,35 +1381,41 @@ Definition evaluate_def:
     tenv <<- get_tenv cx;
     tyv <- lift_option_type (evaluate_type tenv typ) "AnnAssign evaluate_type";
     tv <- eval_expr cx e;
-    v <- materialise cx tv;
+    v <- read_result cx tv;
     new_variable id tyv v
   od ∧
   eval_stmt cx (Append t e) = do
-    (loc, sbs) <- eval_base_target cx t;
+    p <- eval_target_place cx t;
     tv <- eval_expr cx e;
-    v <- materialise cx tv;
-    assign_target cx (BaseTargetV loc sbs) (AppendOp v);
-    return ()
+    v <- read_result cx tv;
+    append_place cx p v
   od ∧
-  eval_stmt cx (Assign g e) = do
-    gv <- eval_target cx g;
+  eval_stmt cx (Assign (BaseTarget t) e) = do
+    pv <- eval_expr cx e;
+    p <- eval_target_place cx t;
+    v <- read_result cx pv;
+    write_place cx p v
+  od ∧
+  eval_stmt cx (Assign (TupleTarget gs) e) = do
     tv <- eval_expr cx e;
-    v <- materialise cx tv;
-    assign_target cx gv (Replace v);
-    return ()
+    v <- read_result cx tv;
+    assign_tuple_targets cx (TupleTarget gs) v
   od ∧
   eval_stmt cx (AugAssign ty t bop e) = do
-    (loc, sbs) <- eval_base_target cx t;
+    p <- eval_target_place cx t;
+    cur <- read_place cx p;
+    ptv <- place_type_value cx p;
     tv <- eval_expr cx e;
-    v <- get_Value tv;
-    assign_target cx (BaseTargetV loc sbs) (Update ty bop v);
-    return ()
+    v <- read_result cx tv;
+    u <<- (case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0);
+    res <- lift_sum (evaluate_binop u ptv bop cur v);
+    write_place cx p res
   od ∧
   eval_stmt cx (If e ss1 ss2) = do
     tv <- eval_expr cx e;
     push_scope;
     finally (
-      switch_BoolV tv
+      switch_BoolV cx tv
         (eval_stmts cx ss1)
         (eval_stmts cx ss2)
     ) pop_scope
@@ -1443,55 +1437,19 @@ Definition evaluate_def:
   od ∧
   eval_iterator cx (Array e) = do
     tv <- eval_expr cx e;
-    v <- materialise cx tv;
+    v <- read_result cx tv;
     arr_tv <- lift_option_type (evaluate_type (get_tenv cx) (expr_type e)) "For array type";
     vs <- lift_option_type (extract_elements arr_tv v) "For not ArrayV";
     return vs
   od ∧
   eval_iterator cx (Range e1 e2) = do
     tv1 <- eval_expr cx e1;
-    v1 <- get_Value tv1;
+    v1 <- read_result cx tv1;
     tv2 <- eval_expr cx e2;
-    v2 <- get_Value tv2;
+    v2 <- read_result cx tv2;
     rl <- lift_sum $ get_range_limits v1 v2;
     n1 <<- FST rl; n2 <<- SND rl;
     return $ GENLIST (λn. IntV (n1 + &n)) n2
-  od ∧
-  eval_target cx (BaseTarget t) = do
-    (loc, sbs) <- eval_base_target cx t;
-    return $ BaseTargetV loc sbs
-  od ∧
-  eval_target cx (TupleTarget gs) = do
-    gvs <- eval_targets cx gs;
-    return $ TupleTargetV gvs
-  od ∧
-  eval_targets cx [] = return [] ∧
-  eval_targets cx (g::gs) = do
-    gv <- eval_target cx g;
-    gvs <- eval_targets cx gs;
-    return $ gv::gvs
-  od ∧
-  eval_base_target cx (NameTarget id) = do
-    sc <- get_scopes;
-    type_check (IS_SOME (lookup_scopes id sc)) "NameTarget not in scope";
-    return $ (ScopedVar id, [])
-  od ∧
-  eval_base_target cx (TopLevelNameTarget (src_id_opt, id)) = do
-    ts <- lift_option_type
-            (get_module_code cx src_id_opt)
-            "TopLevelNameTarget get_module_code";
-    if is_immutable_decl id ts then return $ (ImmutableVar src_id_opt id, [])
-    else return $ (TopLevelVar src_id_opt id, [])
-  od ∧
-  eval_base_target cx (AttributeTarget t id) = do
-    (loc, sbs) <- eval_base_target cx t;
-    return $ (loc, AttrSubscript id :: sbs)
-  od ∧
-  eval_base_target cx (SubscriptTarget t e) = do
-    (loc, sbs) <- eval_base_target cx t;
-    tv <- eval_expr cx e;
-    v <- get_Value tv;
-    return $ (loc, ValueSubscript v :: sbs)
   od ∧
   eval_for cx tyv nm body [] = return () ∧
   eval_for cx tyv nm body (v::vs) = do
@@ -1502,18 +1460,17 @@ Definition evaluate_def:
     if broke then return () else eval_for cx tyv nm body vs
   od ∧
   eval_expr cx (Name _ id) = do
-    env <- get_scopes;
-    v <- lift_option_type (lookup_scopes_val id env) "Name not in scope";
-    return $ Value v
+    sc <- get_scopes;
+    type_check (IS_SOME (lookup_scopes id sc)) "Name not in scope";
+    return (PlaceR (MemoryPlace id []))
   od ∧
   eval_expr cx (TopLevelName _ (src_id_opt, id)) =
     lookup_global cx src_id_opt id ∧
   eval_expr cx (FlagMember _ nsid mid) = lookup_flag_mem cx nsid mid ∧
   eval_expr cx (IfExp _ e1 e2 e3) = do
     tv <- eval_expr cx e1;
-    switch_BoolV tv
-      (eval_expr cx e2)
-      (eval_expr cx e3)
+    res <- switch_BoolV cx tv (eval_expr cx e2) (eval_expr cx e3);
+    conditional_result cx res
   od ∧
   eval_expr cx (Literal _ l) = return $ Value $ evaluate_literal l ∧
   eval_expr cx (StructLit _ (src_id_opt, id) kes) = do
@@ -1525,29 +1482,20 @@ Definition evaluate_def:
     return $ Value $ StructV $ ZIP (ks, vs)
   od ∧
   eval_expr cx (Subscript _ e1 e2) = do
-    tv1 <- eval_expr cx e1;
-    tv2 <- eval_expr cx e2;
-    v2 <- get_Value tv2;
-    tenv <<- get_tenv cx;
-    arr_tv <- lift_option_type (evaluate_type tenv (expr_type e1)) "Subscript array type";
-    check_array_bounds cx tv1 v2;
-    res <- lift_sum $ evaluate_subscript tenv arr_tv tv1 v2;
-    case res of INL v => return v | INR (is_transient, slot, tv) => do
-      v <- read_storage_slot cx is_transient slot tv;
-      return $ Value v
-    od
+    res <- eval_expr cx e1;
+    idx <- eval_expr cx e2;
+    v <- read_result cx idx;
+    select_result cx (expr_type e1) res (ValueSubscript v)
   od ∧
   eval_expr cx (Attribute _ e id) = do
-    tv <- eval_expr cx e;
-    sv <- get_Value tv;
-    v <- lift_sum $ evaluate_attribute sv id;
-    return $ Value $ v
+    res <- eval_expr cx e;
+    select_result cx (expr_type e) res (AttrSubscript id)
   od ∧
   eval_expr cx (Builtin ty bt es) = do
     type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args";
     v <- if bt = Len then do
       tv <- eval_expr cx (HD es);
-      len <- toplevel_array_length cx tv;
+      len <- result_array_length cx tv;
       return $ IntV (&len)
     od else do
       vs <- eval_exprs cx es;
@@ -1557,10 +1505,8 @@ Definition evaluate_def:
     return $ Value v
   od ∧
   eval_expr cx (Pop _ bt) = do
-    (loc, sbs) <- eval_base_target cx bt;
-    popped <- assign_target cx (BaseTargetV loc sbs) PopOp;
-    v <- lift_option_type popped "Pop returned NONE";
-    return $ Value v
+    p <- eval_target_place cx bt;
+    pop_place cx p
   od ∧
   eval_expr cx (TypeBuiltin _ tb typ es) = do
     type_check (type_builtin_args_length_ok tb (LENGTH es)) "TypeBuiltin args";
@@ -1574,8 +1520,12 @@ Definition evaluate_def:
     eval_send cx has_gas vs
   od ∧
   eval_expr cx (Call _ (ExtCall is_static skip_check sig opts) es _) = do
-    vs <- eval_exprs cx es;
-    eval_ext_call cx is_static skip_check sig opts vs
+    target <- eval_exprs cx (TAKE 1 es);
+    nargs <<- LENGTH (FST (SND sig));
+    results <- eval_expr_results cx (TAKE nargs (DROP 1 es));
+    kwargs <- eval_exprs cx (DROP (1 + nargs) es);
+    vs <- read_results cx results;
+    eval_ext_call cx is_static skip_check sig opts (target ++ vs ++ kwargs)
   od ∧
   eval_expr cx (Call _ (IntCall (src_id_opt, fn)) es _) = do
     type_check (¬MEM (src_id_opt, fn) cx.stk) "recursion";
@@ -1588,7 +1538,7 @@ Definition evaluate_def:
     ret <<- FST $ sstup2; body <<- SND $ sstup2;
     type_check (LENGTH es ≤ LENGTH args ∧
            LENGTH args - LENGTH es ≤ LENGTH dflts) "IntCall args length";
-    vs <- eval_exprs cx es;
+    results <- eval_expr_results cx es;
     needed_dflts <<- DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts;
     cxd <<- cx with stk updated_by CONS (src_id_opt, fn);
     prev <- get_scopes;
@@ -1597,6 +1547,7 @@ Definition evaluate_def:
           eval_exprs cxd needed_dflts
        od)
       (set_scopes prev);
+    vs <- read_results cx results;
     (* Use combined type env (may reference types from other modules) *)
     all_tenv <<- get_tenv cx;
     env <- lift_option_type (bind_arguments all_tenv args (vs ++ dflt_vs)) "IntCall bind_arguments";
@@ -1684,9 +1635,20 @@ Definition evaluate_def:
      | CreateFromBlueprint raw_args => do
          prefix <- eval_exprs cx (TAKE (if has_salt then 4 else 3) es);
          code_size <- check_create_blueprint has_salt prefix;
-         suffix <- eval_exprs cx (DROP (if has_salt then 4 else 3) es);
+         results <- eval_expr_results cx (DROP (if has_salt then 4 else 3) es);
+         suffix <- read_results cx results;
          eval_create cx kind has_salt rof (MAP expr_type es)
            (prefix ++ suffix) (SOME code_size)
+       od
+     | RawCreate => do
+         prefix <- eval_exprs cx (TAKE 2 es);
+         ctor_es <<- DROP 2 es;
+         nargs <<- LENGTH ctor_es - (if has_salt then 1 else 0);
+         results <- eval_expr_results cx (TAKE nargs ctor_es);
+         args <- read_results cx results;
+         salt <- eval_exprs cx (DROP nargs ctor_es);
+         eval_create cx kind has_salt rof (MAP expr_type es)
+           (prefix ++ args ++ salt) NONE
        od
      | _ => do
          vs <- eval_exprs cx es;
@@ -1695,28 +1657,64 @@ Definition evaluate_def:
   eval_exprs cx [] = return [] ∧
   eval_exprs cx (e::es) = do
     tv <- eval_expr cx e;
-    v <- materialise cx tv;
+    v <- read_result cx tv;
     vs <- eval_exprs cx es;
     return $ v::vs
+  od ∧
+  eval_base_place cx (NameTarget id) = do
+    sc <- get_scopes;
+    type_check (IS_SOME (lookup_scopes id sc)) "NameTarget not in scope";
+    return (PlaceR (MemoryPlace id []))
+  od ∧
+  eval_base_place cx (TopLevelNameTarget (src,id)) = lookup_global cx src id ∧
+  eval_base_place cx (AttributeTarget t id) = do
+    pv <- eval_base_place cx t;
+    extend_place cx pv (AttrSubscript id)
+  od ∧
+  eval_base_place cx (SubscriptTarget t e) = do
+    pv <- eval_base_place cx t;
+    tv <- eval_expr cx e;
+    v <- read_result cx tv;
+    extend_place cx pv (ValueSubscript v)
+  od ∧
+  eval_target_place cx t = do
+    pv <- eval_base_place cx t;
+    get_place pv
+  od ∧
+  assign_tuple_targets cx (BaseTarget t) v = do
+    p <- eval_target_place cx t;
+    write_place cx p v
+  od ∧
+  assign_tuple_targets cx (TupleTarget gs) v =
+    (case v of
+     | ArrayV (TupleV vs) => assign_tuple_target_list cx gs vs
+     | _ => raise (Error (TypeError "TupleTarget value"))) ∧
+  assign_tuple_target_list cx [] [] = return () ∧
+  assign_tuple_target_list cx (g::gs) (v::vs) = do
+    assign_tuple_targets cx g v;
+    assign_tuple_target_list cx gs vs
+  od ∧
+  assign_tuple_target_list cx gs vs = raise (Error (TypeError "TupleTarget length")) ∧
+  eval_expr_results cx [] = return [] ∧
+  eval_expr_results cx (e::es) = do
+    res <- eval_expr cx e;
+    rest <- eval_expr_results cx es;
+    return (res::rest)
   od
 Termination
-  qexists_tac ‘measure (λx. case x of
-  | INR (INR (INR (INR (INR (INR (INR (INR (cx, es))))))))
-    => exprs_bound (remcode cx) es
-  | INR (INR (INR (INR (INR (INR (INR (INL (cx, e))))))))
-    => expr_bound (remcode cx) e
-  | INR (INR (INR (INR (INR (INR (INL (cx, tyv, nm, body, vs)))))))
-    => 1 + LENGTH vs + (LENGTH vs) * (stmts_bound (remcode cx) body)
-  | INR (INR (INR (INR (INR (INL (cx, t))))))
-    => base_target_bound (remcode cx) t
-  | INR (INR (INR (INR (INL (cx, gs)))))
-    => targets_bound (remcode cx) gs
-  | INR (INR (INR (INL (cx, g))))
-    => target_bound (remcode cx) g
-  | INR (INR (INL (cx, it)))
-    => iterator_bound (remcode cx) it
-  | INR (INL (cx, ss)) => stmts_bound (remcode cx) ss
-  | INL (cx, s) => stmt_bound (remcode cx) s)’
+  qexists_tac `measure (λx. case x of
+    INL (cx,s) => 4 * stmt_bound (remcode cx) s
+  | INR (INL (cx,ss)) => 4 * stmts_bound (remcode cx) ss
+  | INR (INR (INL (cx,it))) => 4 * iterator_bound (remcode cx) it
+  | INR (INR (INR (INL (cx,tyv,nm,body,vs)))) =>
+      4 * (1 + LENGTH vs + LENGTH vs * stmts_bound (remcode cx) body)
+  | INR (INR (INR (INR (INL (cx,e))))) => 4 * expr_bound (remcode cx) e
+  | INR (INR (INR (INR (INR (INL (cx,es)))))) => 4 * exprs_bound (remcode cx) es
+  | INR (INR (INR (INR (INR (INR (INL (cx,t))))))) => 4 * base_target_bound (remcode cx) t
+  | INR (INR (INR (INR (INR (INR (INR (INL (cx,t)))))))) => 4 * base_target_bound (remcode cx) t + 1
+  | INR (INR (INR (INR (INR (INR (INR (INR (INL (cx,g,v))))))))) => 4 * target_bound (remcode cx) g + 2
+  | INR (INR (INR (INR (INR (INR (INR (INR (INR (INL (cx,gs,vs)))))))))) => 4 * targets_bound (remcode cx) gs + 2
+  | INR (INR (INR (INR (INR (INR (INR (INR (INR (INR (cx,es)))))))))) => 4 * exprs_bound (remcode cx) es)`
   \\ conj_tac >- simp[prim_recTheory.WF_measure]
   \\ rpt conj_tac
   \\ simp[prim_recTheory.measure_def, relationTheory.inv_image_def]
@@ -1776,7 +1774,115 @@ Termination
     \\ rw[FILTER_FILTER,UNCURRY,Abbr`k`]
     \\ simp[LAMBDA_PROD])
   ])
+  \\ irule LESS_EQ_LESS_TRANS
+  \\ qexists_tac `exprs_bound (remcode cx) es`
+  \\ simp[exprs_bound_TAKE_DROP, exprs_bound_TAKE, exprs_bound_DROP, DROP_DROP_T]
 End
+
+(* Small checked memory programs exercise the place evaluator independently of
+   contract deployment. The surrounding machine state is deliberately arbitrary. *)
+Definition place_probe_state_def:
+  place_probe_state st = st with scopes :=
+    [FEMPTY |+ ("d", <|assignable := T;
+       type := ArrayTV (BaseTV (UintT 256)) (Dynamic 3);
+       value := ArrayV (DynArrayV [IntV 5]); popped := []|>)
+     |+ ("i", <|assignable := T; type := BaseTV (UintT 256);
+                 value := IntV 0; popped := []|>)
+     |+ ("a", <|assignable := T;
+       type := ArrayTV (BaseTV (UintT 256)) (Dynamic 6);
+       value := ArrayV (DynArrayV (REPLICATE 6 (IntV 0))); popped := []|>)]
+End
+
+Theorem eval_expr_literal_probe[local]:
+  eval_expr cx (Literal (BaseT (UintT 256)) (IntL 7)) st =
+    (INL (Value (IntV 7)), st)
+Proof
+  simp[evaluate_def, evaluate_literal_def, return_def, bind_def]
+QED
+
+Theorem assign_pop_bounds_probe[local]:
+  FST (eval_stmt cx
+    (Assign (BaseTarget (SubscriptTarget (NameTarget "d")
+       (Literal (BaseT (UintT 256)) (IntL 0))))
+       (Pop (BaseT (UintT 256)) (NameTarget "d")))
+    (place_probe_state st)) =
+    INR (Error (RuntimeError "evaluate_subscripts array_index"))
+Proof
+  EVAL_TAC >> simp[]
+QED
+
+Theorem augassign_pop_stale_probe[local]:
+  case eval_stmt cx
+    (AugAssign (BaseT (UintT 256))
+      (SubscriptTarget (NameTarget "d")
+        (Literal (BaseT (UintT 256)) (IntL 0))) Add
+      (Pop (BaseT (UintT 256)) (NameTarget "d")))
+    (place_probe_state st) of
+    (INL (),st') => lookup_scopes_val "d" st'.scopes =
+                      SOME (ArrayV (DynArrayV []))
+  | _ => F
+Proof
+  EVAL_TAC >> simp[integerTheory.INT_LE_REFL] >> EVAL_TAC
+QED
+
+Theorem assign_delayed_pop_read_probe[local]:
+  case eval_stmt cx
+    (Assign (BaseTarget (SubscriptTarget (NameTarget "a")
+       (Pop (BaseT (UintT 256)) (NameTarget "d"))))
+      (Subscript (BaseT (UintT 256))
+        (Name (ArrayT (BaseT (UintT 256)) (Dynamic 3)) "d")
+        (Literal (BaseT (UintT 256)) (IntL 0))))
+    (place_probe_state st) of
+    (INL (),st') => lookup_scopes_val "a" st'.scopes =
+      SOME (ArrayV (DynArrayV [IntV 0; IntV 0; IntV 0; IntV 0; IntV 0; IntV 5]))
+  | _ => F
+Proof
+  EVAL_TAC
+QED
+
+Theorem nested_tuple_order_probe[local]:
+  case assign_tuple_targets cx
+    (TupleTarget [TupleTarget [BaseTarget (NameTarget "i")];
+      BaseTarget (SubscriptTarget (NameTarget "a")
+        (Name (BaseT (UintT 256)) "i"))])
+    (ArrayV (TupleV [ArrayV (TupleV [IntV 5]); IntV 9]))
+    (place_probe_state st) of
+    (INL (),st') => lookup_scopes_val "a" st'.scopes =
+      SOME (ArrayV (DynArrayV [IntV 0; IntV 0; IntV 0; IntV 0; IntV 0; IntV 9]))
+  | _ => F
+Proof
+  EVAL_TAC
+QED
+
+Theorem eager_nested_bounds_probe[local]:
+  SND (eval_expr cx
+    (Subscript (BaseT (UintT 256))
+      (Subscript (BaseT (UintT 256))
+        (Name (ArrayT (BaseT (UintT 256)) (Dynamic 3)) "d")
+        (Literal (BaseT (UintT 256)) (IntL 9)))
+      (Pop (BaseT (UintT 256)) (NameTarget "d")))
+    (place_probe_state st)) = place_probe_state st
+Proof
+  EVAL_TAC
+QED
+
+Theorem eval_target_place_nested_mapping_probe[local]:
+  lookup_global cx NONE "m" st =
+    (INL (HashMapRef F slot (BaseT (UintT 256))
+      (HashMapT (BaseT (UintT 256)) (Type (BaseT (UintT 256))))), st) ==>
+  eval_target_place cx
+    (SubscriptTarget
+      (SubscriptTarget (TopLevelNameTarget (NONE,"m"))
+        (Literal (BaseT (UintT 256)) (IntL 1)))
+      (Literal (BaseT (UintT 256)) (IntL 2))) st =
+    (INL (StoragePlace F
+      (hashmap_slot (hashmap_slot slot (encode_hashmap_key (BaseT (UintT 256)) (IntV 1)))
+        (encode_hashmap_key (BaseT (UintT 256)) (IntV 2))) (BaseTV (UintT 256))), st)
+Proof
+  strip_tac >> simp[evaluate_def, bind_def, return_def, evaluate_literal_def,
+    read_result_def, extend_place_nested_mapping,
+    extend_place_def, lift_option_type_def, evaluate_type_def, get_place_def]
+QED
 
 Theorem eval_exprs_length:
   ∀es cx st vs rt.
@@ -1787,6 +1893,16 @@ Proof
   \\ gvs[CaseEq"prod", CaseEq"sum"]
   \\ first_x_assum irule
   \\ goal_assum drule
+QED
+
+Theorem eval_expr_results_length:
+  !es cx st results rt.
+    eval_expr_results cx es st = (INL results,rt) ==>
+    LENGTH results = LENGTH es
+Proof
+  Induct >> rw[evaluate_def, return_def, bind_def] >>
+  gvs[CaseEq "prod", CaseEq "sum"] >> first_x_assum irule >>
+  goal_assum drule
 QED
 
 (* Semantics of initial state of a contract after deployment *)
@@ -1934,9 +2050,9 @@ Definition constants_env_def:
     (case evaluate_type (get_tenv cx) typ of
      | NONE => NONE
      | SOME tv =>
-       case FST $ eval_expr cx e
+       case FST $ (do res <- eval_expr cx e; read_result cx res od)
          (initial_state (merge_constants addr src_id_opt acc am) [FEMPTY]) of
-       | INL (Value v) => constants_env cx am addr src_id_opt ts $
+       | INL v => constants_env cx am addr src_id_opt ts $
                           acc |+ (id, (tv, v))
        | _ => NONE) ∧
   constants_env cx am addr src_id_opt (t::ts) acc =
@@ -2018,8 +2134,8 @@ val () = send_call_value_def
 Definition evaluate_defaults_def:
   evaluate_defaults cx am [] = SOME [] ∧
   evaluate_defaults cx am (e::es) =
-    (case FST $ eval_expr cx e (initial_state am [FEMPTY]) of
-     | INL (Value v) =>
+    (case FST $ (do res <- eval_expr cx e; read_result cx res od) (initial_state am [FEMPTY]) of
+     | INL v =>
          (case evaluate_defaults cx am es of
           | SOME vs => SOME (v :: vs)
           | NONE => NONE)
@@ -2241,3 +2357,10 @@ Definition load_contract_def:
           | (_, am', rqs) => INL (finalize_pending_deletions
                                     (am' with sources updated_by CONS (addr, mods)), rqs)
 End
+
+(* Keep the evaluator and the checked place-order probes kernel-closed. *)
+val () = List.app (fn (_,th) =>
+  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
+  in if List.all (fn s => s = "DISK_THM") oracles andalso null axioms
+     then () else raise Fail "interpreter has admitted dependencies"
+  end) (DB.thms "vyperInterpreter");

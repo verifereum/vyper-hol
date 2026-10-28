@@ -75,32 +75,35 @@ QED
 Definition convert_result_def:
   convert_result cx t v =
     case evaluate_convert (get_tenv cx) v t of
-      INL v' => INL (Value v')
+      INL v' => INL v'
     | INR e => INR (Error e)
 End
 
 Theorem eval_expr_convert_cases:
   !cx ann t e1 es res es'.
-    eval_expr cx (TypeBuiltin ann Convert t [e1]) es = (res, es') ==>
-    (?exc. eval_expr cx e1 es = (INR exc, es') /\ res = INR exc) \/
-    (?tv1 es1. eval_expr cx e1 es = (INL tv1, es1) /\ !v. tv1 <> Value v) \/
-    ?v1. eval_expr cx e1 es = (INL (Value v1), es') /\
-         res = convert_result cx t v1
+    (do result <- eval_expr cx (TypeBuiltin ann Convert t [e1]);
+        read_result cx result od) es = (res, es') ==>
+    (?exc. (do result <- eval_expr cx e1; read_result cx result od) es =
+             (INR exc, es') /\ res = INR exc) \/
+    ?v1. (do result <- eval_expr cx e1; read_result cx result od) es =
+           (INL v1, es') /\ res = convert_result cx t v1
 Proof
   rpt gen_tac >>
   simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
        assert_def, return_def, raise_def, type_builtin_args_length_ok_def] >>
   simp[Once evaluate_def, bind_def, return_def] >>
-  Cases_on `eval_expr cx e1 es` >> rename1 `_ = (r1, es1)` >>
-  Cases_on `r1` >> simp[] >>
-  rename1 `materialise cx tv1 es1` >>
-  Cases_on `?v. tv1 = Value v` >> gvs[] >>
-  simp[materialise_def, return_def] >>
-  simp[Once evaluate_def, return_def, lift_sum_def, convert_result_def,
-       evaluate_type_builtin_def] >>
-  rename1 `evaluate_convert _ v1 t` >>
+  Cases_on `eval_expr cx e1 es` >> rename1 `_ = (raw1, st1)` >>
+  reverse (Cases_on `raw1`)
+  >- (simp[] >> rw[] >> simp[]) >>
+  rename1 `eval_expr cx e1 es = (INL r1, st1)` >>
+  Cases_on `read_result cx r1 st1` >> rename1 `_ = (res1, es1)` >>
+  reverse (Cases_on `res1`)
+  >- (simp[] >> rw[] >> simp[]) >>
+  rename1 `read_result cx r1 st1 = (INL v1, es1)` >>
+  simp[Once evaluate_def, bind_def, return_def, lift_sum_def,
+       convert_result_def, evaluate_type_builtin_def] >>
   Cases_on `evaluate_convert (get_tenv cx) v1 t` >>
-  simp[return_def, raise_def] >> rw[] >> gvs[]
+  simp[read_result_def, return_def, raise_def] >> rw[] >> gvs[]
 QED
 
 (* ===== The conversion's fragment ===== *)
@@ -121,7 +124,7 @@ Definition convert_frag_def:
       frag_exec ctx sa sb
         (\s. s = s0 /\ stmt_state_rel func cenv cx es0 s /\
              eval_operand x s = SOME (val_to_w256 v1))
-        (\s. ?v. convert_result cx t v1 = INL (Value v) /\ word_value v /\
+        (\s. ?v. convert_result cx t v1 = INL v /\ word_value v /\
                  stmt_state_rel func cenv cx es0 s /\
                  eval_operand op s = SOME (val_to_w256 v) /\
                  (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==>
@@ -174,9 +177,8 @@ Theorem compile_convert_frag_sim:
     (!x sa sb op.
        compile_type_convert x (mk_convert_op (expr_type e1) t) sa = (op, sb) ==>
        cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var) /\
-    (!tv es1. eval_expr cx e1 es = (INL tv, es1) ==> ?v. tv = Value v) /\
     expr_sim ctx func cenv cx (expr_type e1) e1 es /\
-    (!v1 es1. eval_expr cx e1 es = (INL (Value v1), es1) ==>
+    (!v1 es1. (do result <- eval_expr cx e1; read_result cx result od) es = (INL v1, es1) ==>
        word_value v1 /\
        convert_frag ctx func cenv cx (mk_convert_op (expr_type e1) t) t v1 es1) ==>
     expr_sim ctx func cenv cx ty (TypeBuiltin ann Convert t [e1]) es
@@ -209,15 +211,12 @@ Proof
       disch_then (qspecl_then [`\s. s = s0 /\ stmt_state_rel func cenv cx es s`,
                                `\s. F`, `expr_exit res`] mp_tac) >>
       (impl_tac >- gvs[]) >> strip_tac >>
-      irule frag_exec_exit_prefix >> qexists_tac `s1` >> simp[])
-  >- ((* e1 is no value *)
-      qpat_x_assum `!tv es1. eval_expr cx e1 es = (INL tv, es1) ==> _` drule >>
-      simp[]) >>
-  qpat_x_assum `!v1 es1. eval_expr cx e1 es = _ ==> _` drule >>
+      irule frag_exec_exit_prefix >> qexists_tac `s1` >> simp[]) >>
+  qpat_x_assum `!v1 es1. (do result <- eval_expr cx e1; read_result cx result od) es = _ ==> _` drule >>
   strip_tac >>
   qpat_x_assum `expr_sim _ _ _ _ _ e1 _`
     (mp_tac o REWRITE_RULE [expr_sim_def]) >>
-  disch_then (qspecl_then [`sa`, `s1`, `x`, `INL (Value v1)`, `es'`, `s0`]
+  disch_then (qspecl_then [`sa`, `s1`, `x`, `INL v1`, `es'`, `s0`]
                 mp_tac) >>
   (impl_tac >- simp[expr_res_ok_def]) >>
   disch_then (mp_tac o MATCH_MP frag_exec_pre_exit_c) >>
@@ -263,7 +262,7 @@ Theorem convert_frag_straight:
   !ctx func cenv cx conv t v1 es0.
     (!x. straight_fresh (compile_type_convert x conv)) /\
     (expr_res_ok (convert_result cx t v1) ==>
-     (?v. convert_result cx t v1 = INL (Value v) /\ word_value v /\
+     (?v. convert_result cx t v1 = INL v /\ word_value v /\
           !x sa sb op ss.
             compile_type_convert x conv sa = (op, sb) /\
             fresh_vars_wrt sa ss /\
@@ -495,7 +494,7 @@ Theorem compile_convert_int_frag:
     0 < in_b /\ in_b <= 256 /\ 0 < out_b /\ (out_s ==> 1 < out_b) /\
     out_b <= 256 /\
     (within_int_bound (if out_s then Signed out_b else Unsigned out_b) i ==>
-     convert_result cx t v1 = INL (Value (IntV i))) /\
+     convert_result cx t v1 = INL (IntV i)) /\
     (~within_int_bound (if out_s then Signed out_b else Unsigned out_b) i ==>
      ?m. convert_result cx t v1 = INR (Error (RuntimeError m))) ==>
     convert_frag ctx func cenv cx (ConvIntToInt in_s in_b out_s out_b) t v1 es0
@@ -546,7 +545,7 @@ Theorem compile_convert_bool_frag:
     val_to_w256 v1 = i2w i /\
     within_int_bound (if sg then Signed bits else Unsigned bits) i /\
     bits <= 256 /\
-    convert_result cx t v1 = INL (Value (BoolV (i <> 0))) ==>
+    convert_result cx t v1 = INL (BoolV (i <> 0)) ==>
     convert_frag ctx func cenv cx ConvToBool t v1 es0
 Proof
   rpt gen_tac >> strip_tac >> irule convert_frag_straight >>
@@ -697,8 +696,6 @@ Proof
                    `sa`, `op`, `sb`] mp_tac straight_fresh_extends >>
       simp[straight_fresh_convert_pair])
   >- first_assum ACCEPT_TAC
-  >- (rpt strip_tac >> drule_all expr_sim_pre_word_result >> strip_tac >>
-      gvs[])
   >- (rpt gen_tac >> strip_tac >> drule_all expr_sim_pre_word_result >>
       strip_tac >> gvs[] >>
       irule convert_frag_word >> simp[] >>

@@ -339,24 +339,6 @@ Resume fst_lookup_global_set_storage[storage]:
   simp[vyperStateTheory.return_def, vyperStateTheory.raise_def] >>
   rename1 `SOME tv'` >>
   Cases_on `b = b'` >> gvs[]
-  >- (first_x_assum (qspecl_then [`x`, `tv'`] mp_tac) >>
-      simp[storage_var_info_def] >> strip_tac >>
-      qpat_x_assum `FST _ = FST _` mp_tac >>
-      Cases_on `read_storage_slot cx b (n2w x) tv'
-                  (set_storage cx st b storage')` >>
-      Cases_on `read_storage_slot cx b (n2w x) tv' st` >>
-      simp[] >> disch_tac >>
-      Cases_on `tv'` >>
-      gvs[vyperStateTheory.bind_def,
-           vyperStateTheory.return_def, vyperStateTheory.raise_def] >>
-      CASE_TAC >> simp[])
-  >> (* Different backend: b ≠ b' *)
-  Cases_on `tv'` >>
-  simp[vyperStateTheory.bind_def,
-       vyperStateTheory.return_def, vyperStateTheory.raise_def] >>
-  simp[Excl "w2n_n2w", read_storage_slot_eq,
-       get_storage_after_set_other] >>
-  CASE_TAC >> simp[]
 QED
 
 Finalise fst_lookup_global_set_storage
@@ -873,9 +855,8 @@ QED
    
    The theorem below works directly at the write_storage_slot/read_storage_slot
    level with a slot computed by compute_hashmap_slot, bypassing the
-   ref-level API entirely. This is useful because assign_target for hashmaps
-   computes the final slot via compute_hashmap_slot and then calls
-   write_storage_slot directly. *)
+   ref-level API entirely. It applies to a write of a resolved hashmap leaf
+   independently of how its key path was captured. *)
 
 Theorem nested_hashmap_write_preserves_static_read_chain:
   ∀cx st b base_slot all_kts all_subs final_slot t tv

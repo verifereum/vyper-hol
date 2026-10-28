@@ -10,7 +10,7 @@ Ancestors
 Libs cv_transLib wordsLib
 
 Definition send_call_def:
-  send_call target amount = Call NoneT Send
+  send_call target amount = Call NoneT (Send F)
     [Literal (BaseT AddressT) (BytesL (REPLICATE 19 0w ++ [target]));
      Literal (BaseT (UintT 256)) (IntL (&amount))] NONE
 End
@@ -107,14 +107,21 @@ QED
 
 Theorem send_cps_NONE_balance_failure_unchanged:
   send_observe 9w 7 NONE
-    (INR (Error (RuntimeError "transfer_value amount"))) 3 0 [] 2w 4w cpscv_initial_logs
+    (INR (Error (RuntimeError "send failed"))) 3 0 [] 2w 4w cpscv_initial_logs
     send_initial_requests NONE
 Proof
   CONV_TAC cv_eval
 QED
 
-Theorem send_cps_NONE_zero_transfer_unchanged:
-  send_observe 9w 0 NONE (INL (Value NoneV)) 3 0 [] 2w 4w cpscv_initial_logs
+Theorem send_cps_NONE_zero_value_runs_precompile:
+  send_observe 9w 0 NONE (INR (Error (RuntimeError "send failed"))) 3 0 [] 2w 4w cpscv_initial_logs
+    send_initial_requests NONE
+Proof
+  CONV_TAC cv_eval
+QED
+
+Theorem send_cps_NONE_zero_value_empty_code_unchanged:
+  send_observe 0w 0 NONE (INL (Value NoneV)) 3 0 [] 2w 4w cpscv_initial_logs
     send_initial_requests NONE
 Proof
   CONV_TAC cv_eval
@@ -141,7 +148,7 @@ QED
 
 Definition send_prefix_observe_def:
   send_prefix_observe =
-    let e = Call NoneT Send
+    let e = Call NoneT (Send F)
       [cpscv_call F 9w (BaseT AddressT) NONE;
        cpscv_call F 9w (BaseT (UintT 256)) NONE] NONE in
     let r = cpscv_run e (send_state with outcomes := SOME
@@ -165,7 +172,7 @@ Proof
 QED
 
 Theorem send_cps_arity_before_arguments:
-  cpscv_run (Call NoneT Send [Name (BaseT AddressT) "missing"] NONE)
+  cpscv_run (Call NoneT (Send F) [Name (BaseT AddressT) "missing"] NONE)
     (send_state with outcomes := SOME [cpscv_tail]) =
     (INR (Error (TypeError "Send args")),send_state with outcomes := SOME [cpscv_tail])
 Proof
@@ -173,7 +180,7 @@ Proof
 QED
 
 Theorem send_cps_evaluates_all_arguments_before_unwrap:
-  cpscv_run (Call NoneT Send
+  cpscv_run (Call NoneT (Send F)
     [Literal (BaseT (UintT 256)) (IntL 7); Name (BaseT (UintT 256)) "missing"] NONE)
     (send_state with outcomes := SOME [cpscv_tail]) =
     (INR (Error (TypeError "Name not in scope")),send_state with outcomes := SOME [cpscv_tail])
@@ -182,7 +189,7 @@ Proof
 QED
 
 Theorem send_cps_address_unwrap_before_amount:
-  cpscv_run (Call NoneT Send
+  cpscv_run (Call NoneT (Send F)
     [Literal (BaseT (UintT 256)) (IntL 7); Literal (BaseT BoolT) (BoolL T)] NONE)
     (send_state with outcomes := SOME [cpscv_tail]) =
     (INR (Error (TypeError "Send not AddressV")),send_state with outcomes := SOME [cpscv_tail])
@@ -191,7 +198,7 @@ Proof
 QED
 
 Theorem send_cps_amount_unwrap_before_take:
-  cpscv_run (Call NoneT Send
+  cpscv_run (Call NoneT (Send F)
     [Literal (BaseT AddressT) (BytesL (REPLICATE 19 0w ++ [9w]));
      Literal (BaseT BoolT) (BoolL T)] NONE)
     (send_state with outcomes := SOME [cpscv_tail]) =
