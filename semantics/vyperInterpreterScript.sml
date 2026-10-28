@@ -268,27 +268,6 @@ val () = handle_function_def
 (* helpers for the termination argument for the main interpreter definition
 * (evaulate_def below) *)
 
-Theorem expr1_size_map:
-  expr1_size ls = LENGTH ls + SUM (MAP expr2_size ls)
-Proof
-  Induct_on`ls` \\ rw[expr_size_def]
-QED
-
-Theorem expr2_size_map:
-  expr2_size x = 1 + list_size char_size (FST x) + expr_size (SND x)
-Proof
-  Cases_on`x` \\ rw[expr_size_def]
-QED
-
-Theorem SUM_MAP_expr2_size:
-  SUM (MAP expr2_size ls) =
-  LENGTH ls +
-  SUM (MAP (list_size char_size o FST) ls) +
-  SUM (MAP (expr_size o SND) ls)
-Proof
-  Induct_on`ls` \\ rw[expr2_size_map]
-QED
-
 (* Cached helper for the callable-table part of bound_def termination. *)
 Theorem callable_table_measure_ADELKEY_LE[local]:
   !key ts dflts ss.
@@ -431,8 +410,7 @@ Termination
   | INL (ts, s) =>
       SUM (MAP (λ(k, dflts, ss). list_size expr_size dflts + list_size stmt_size ss) ts) +
       stmt_size s)’
-  \\ rw[expr1_size_map, expr2_size_map, SUM_MAP_expr2_size,
-        MAP_MAP_o, list_size_pair_size_map]
+  \\ rw[MAP_MAP_o, list_size_pair_size_map]
   \\ TRY (gvs[] \\ drule callable_table_measure_ADELKEY_LE \\ simp[])
 End
 

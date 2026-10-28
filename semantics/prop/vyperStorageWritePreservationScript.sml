@@ -2275,18 +2275,14 @@ QED
 Theorem zero_slot_size_slots_in_range:
   (!tv storage off.
      type_slot_size tv = 0 ==> slots_in_range storage off tv) /\
-  (!fields storage off.
-     type_slot_size_fields fields = 0 ==>
-     struct_slots_in_range storage off fields) /\
-  (!(p:string # type_value) storage off.
-     type_slot_size (SND p) = 0 ==>
-     slots_in_range storage off (SND p)) /\
-
   (!tvs storage off.
      type_slot_size_list tvs = 0 ==>
-     tuple_slots_in_range storage off tvs)
+     tuple_slots_in_range storage off tvs) /\
+  (!fields storage off.
+     type_slot_size_fields fields = 0 ==>
+     struct_slots_in_range storage off fields)
 Proof
-  ho_match_mp_tac (TypeBase.induction_of ``:type_value``) >>
+  ho_match_mp_tac vyperValueTheory.type_slot_size_ind >>
   simp[vyperValueTheory.type_slot_size_def, slots_in_range_def] >>
   rpt conj_tac >> rpt strip_tac >> simp[] >>
   TRY (rename1 `slots_in_range storage off (BaseTV b)` >>
@@ -2309,7 +2305,9 @@ Proof
        PairCases_on `p` >>
        gvs[vyperValueTheory.type_slot_size_def, slots_in_range_def] >>
        metis_tac[]) >>
-  metis_tac[]
+  gvs[slots_in_range_def] >>
+  qmatch_goalsub_rename_tac `static_slots_in_range _ _ _ len` >>
+  Induct_on `len` >> simp[slots_in_range_def]
 QED
 
 

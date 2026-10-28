@@ -1,6 +1,6 @@
 Theory jsonAST
 Ancestors
-  string words
+  string words integer
 Libs
   cv_transLib
 
