@@ -57,10 +57,13 @@ Definition is_bytes32_type_def[simp]:
   is_bytes32_type _ = F
 End
 
+(* `len` takes String, Bytes and DynArray only
+   (vyper/builtins/functions.py, class Len); fixed-size arrays and bytesM are
+   rejected. *)
 Definition is_sized_type_def[simp]:
-  is_sized_type (ArrayT _ _) = T /\
+  is_sized_type (ArrayT _ (Dynamic _)) = T /\
   is_sized_type (BaseT (StringT _)) = T /\
-  is_sized_type (BaseT (BytesT _)) = T /\
+  is_sized_type (BaseT (BytesT (Dynamic _))) = T /\
   is_sized_type _ = F
 End
 
