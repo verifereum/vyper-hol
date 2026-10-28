@@ -194,11 +194,13 @@ Theorem evaluate_all_constants_preserves_sources[local]:
   evaluate_all_constants cx am addr mods = SOME am_c ==>
   am_c.sources = am.sources
 Proof
+  simp[evaluate_all_constants_def] >>
   qid_spec_tac `am_c` >> qid_spec_tac `am` >>
-  Induct_on `mods` >- rw[evaluate_all_constants_def] >>
-  Cases_on `h` >> rw[evaluate_all_constants_def] >>
-  gvs[AllCaseEqs(), merge_constants_def] >>
-  first_x_assum drule >> simp[]
+  qspec_tac (`constants_order mods`, `mods`) >> Induct
+  >- rw[evaluate_module_constants_def] >>
+  rpt gen_tac >> PairCases_on `h` >> rw[evaluate_module_constants_def] >>
+  gvs[AllCaseEqs()] >>
+  first_x_assum drule >> simp[merge_constants_def]
 QED
 
 (* Shared result-spine simplification, also used by deployment wrappers. *)

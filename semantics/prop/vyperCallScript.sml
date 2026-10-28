@@ -87,7 +87,7 @@ Proof
   rpt strip_tac >>
   CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [evaluate_def])) >>
   simp[bind_def, ignore_bind_def, type_check_def, assert_def, return_def,
-       get_scopes_def, set_scopes_def, finally_def, try_def,
+       get_scopes_def, set_scopes_def, finally_unless_halt_def, finally_def, try_def,
        push_function_def, pop_function_def, evaluate_def] >>
   Cases_on `eval_stmts (cx with stk updated_by CONS (src,fn)) body
               (st1 with scopes := [env])` >>

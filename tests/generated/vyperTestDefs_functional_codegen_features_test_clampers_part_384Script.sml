@@ -1,0 +1,5 @@
+Theory vyperTestDefs_functional_codegen_features_test_clampers_part_384[no_sig_docs]
+Ancestors jsonToVyper
+Libs vyperTestLib
+val () = holbuild_extra_deps ["../vyper-test-exports/functional/codegen/features/test_clampers.json", "../vyper-test-exports/functional/codegen/features/test_clampers.json.provenance"];
+val () = make_definitions_for_file_part ("functional_codegen_features_test_clampers", "../vyper-test-exports/functional/codegen/features/test_clampers.json") {start = 384, count = 64, total = 739};

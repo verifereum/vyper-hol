@@ -1,4 +1,5 @@
 Theory vyperTestLibTest
+Ancestors vyperTestShardLibTest
 Libs vyperTestLib
 
 fun source code = JSON.OBJECT [("source_code", JSON.STRING code)];

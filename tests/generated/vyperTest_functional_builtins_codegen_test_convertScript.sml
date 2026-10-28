@@ -1,4 +1,3 @@
 Theory vyperTest_functional_builtins_codegen_test_convert[no_sig_docs]
-Ancestors vyperTestDefs_functional_builtins_codegen_test_convert
-Libs vyperTestRunnerLib
-val () = List.app run_test_on_traces $ all_traces "vyperTestDefs_functional_builtins_codegen_test_convert";
+Ancestors vyperTest_functional_builtins_codegen_test_convert_part_0
+  vyperTest_functional_builtins_codegen_test_convert_part_64

@@ -1,0 +1,5 @@
+Theory vyperTest_functional_codegen_calling_convention_test_external_contract_calls_part_192[no_sig_docs]
+Ancestors vyperTestDefs_functional_codegen_calling_convention_test_external_contract_calls_part_192
+Libs vyperTestRunnerLib
+val () = if List.length (all_traces "vyperTestDefs_functional_codegen_calling_convention_test_external_contract_calls_part_192") = 29 then () else raise Fail "incomplete test shard";
+val () = List.app run_test_on_traces $ all_traces "vyperTestDefs_functional_codegen_calling_convention_test_external_contract_calls_part_192";

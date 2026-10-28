@@ -1,4 +1,3 @@
 Theory vyperTest_functional_builtins_codegen_test_minmax[no_sig_docs]
-Ancestors vyperTestDefs_functional_builtins_codegen_test_minmax
-Libs vyperTestRunnerLib
-val () = List.app run_test_on_traces $ all_traces "vyperTestDefs_functional_builtins_codegen_test_minmax";
+Ancestors vyperTest_functional_builtins_codegen_test_minmax_part_0
+  vyperTest_functional_builtins_codegen_test_minmax_part_64

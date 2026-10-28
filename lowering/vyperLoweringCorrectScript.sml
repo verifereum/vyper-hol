@@ -819,7 +819,9 @@ QED
 
 (* The same, for the plan and buffer size update_cenv_ret_abi builds from a
    compile env with the program's struct map (as build_compile_env's is), for
-   a return type with no NoneT in it (retAbiPlanProps). *)
+   a return type with no NoneT in it (retAbiPlanProps).  Accounts remain raw
+   at the return; external_call_result_rel processes pending deletions only
+   at the success boundary, as in external_return_abi_result_rel. *)
 Theorem external_return_abi_cenv_result_rel:
   !ctx op nr nkey ut iv st x st' func cenv cenv0 cx es ret tv v0 v
      tops tx srcs exps layouts Q.
@@ -842,8 +844,7 @@ Theorem external_return_abi_cenv_result_rel:
            (!i. i IN frag_ids st st' ==> FLOOKUP s.vs_allocas i = NONE) /\
            s.vs_alloca_next + cenv.ce_max_return_size +
              32 * (st'.cs_next_id - st.cs_next_id) < dimword (:256) /\
-           s.vs_accounts =
-             process_deletions es.pending_deletions es.accounts /\
+           s.vs_accounts = es.accounts /\
            s.vs_transient = es.tStorage)
       Q
       (external_call_result_rel tops ret tx

@@ -1,5 +1,13 @@
 Theory vyperTestDefs_functional_codegen_features_test_clampers[no_sig_docs]
-Ancestors jsonToVyper
-Libs vyperTestLib
-val () = holbuild_extra_deps ["../vyper-test-exports/functional/codegen/features/test_clampers.json", "../vyper-test-exports/functional/codegen/features/test_clampers.json.provenance"];
-val () = make_definitions_for_file ("functional_codegen_features_test_clampers", "../vyper-test-exports/functional/codegen/features/test_clampers.json");
+Ancestors vyperTestDefs_functional_codegen_features_test_clampers_part_0
+  vyperTestDefs_functional_codegen_features_test_clampers_part_64
+  vyperTestDefs_functional_codegen_features_test_clampers_part_128
+  vyperTestDefs_functional_codegen_features_test_clampers_part_192
+  vyperTestDefs_functional_codegen_features_test_clampers_part_256
+  vyperTestDefs_functional_codegen_features_test_clampers_part_320
+  vyperTestDefs_functional_codegen_features_test_clampers_part_384
+  vyperTestDefs_functional_codegen_features_test_clampers_part_448
+  vyperTestDefs_functional_codegen_features_test_clampers_part_512
+  vyperTestDefs_functional_codegen_features_test_clampers_part_576
+  vyperTestDefs_functional_codegen_features_test_clampers_part_640
+  vyperTestDefs_functional_codegen_features_test_clampers_part_704

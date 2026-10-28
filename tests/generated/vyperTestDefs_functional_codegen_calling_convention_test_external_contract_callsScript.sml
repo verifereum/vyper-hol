@@ -1,5 +1,5 @@
 Theory vyperTestDefs_functional_codegen_calling_convention_test_external_contract_calls[no_sig_docs]
-Ancestors jsonToVyper
-Libs vyperTestLib
-val () = holbuild_extra_deps ["../vyper-test-exports/functional/codegen/calling_convention/test_external_contract_calls.json", "../vyper-test-exports/functional/codegen/calling_convention/test_external_contract_calls.json.provenance"];
-val () = make_definitions_for_file ("functional_codegen_calling_convention_test_external_contract_calls", "../vyper-test-exports/functional/codegen/calling_convention/test_external_contract_calls.json");
+Ancestors vyperTestDefs_functional_codegen_calling_convention_test_external_contract_calls_part_0
+  vyperTestDefs_functional_codegen_calling_convention_test_external_contract_calls_part_64
+  vyperTestDefs_functional_codegen_calling_convention_test_external_contract_calls_part_128
+  vyperTestDefs_functional_codegen_calling_convention_test_external_contract_calls_part_192
