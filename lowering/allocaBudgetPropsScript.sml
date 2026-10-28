@@ -1,5 +1,5 @@
-(* Static allocation accounting within a single frame.  Calls can increase
-   the frontier without adding entries to the caller's allocation map. *)
+(* Static allocation accounting within a single frame.  Calls leave the
+   caller's frontier and allocation map as they were. *)
 Theory allocaBudgetProps
 Ancestors
   vyperCompiler venomMemProps venomExecSemantics venomState venomInst
@@ -113,7 +113,7 @@ Proof
   IF_CASES_TAC >> simp[]
 QED
 
-Theorem static_alloca_function_le[local]:
+Theorem static_alloca_function_le:
   MEM func funcs ==>
   SUM (MAP alloca_size (FILTER (\i. i.inst_opcode = ALLOCA) (fn_insts func))) <=
   SUM (MAP alloca_size

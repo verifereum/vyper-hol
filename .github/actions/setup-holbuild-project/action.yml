@@ -65,6 +65,11 @@ runs:
       id: cache-key
       shell: bash
       run: |
+        # Unlike Poly/ML's, these keys leave out the runner image. HOL's
+        # executables take only __libc_start_main, __cxa_finalize and abort
+        # from glibc and the rest from the job's own libpolyml, so a toolchain
+        # built on either image runs on both. Every image then hashes the same
+        # HOL bytes and finds the same remote cache entries.
         tools="${{ runner.os }}-${{ runner.arch }}-${{ steps.polyml.outputs.polyml-rev }}-${{ steps.holbuild.outputs.holbuild-rev }}"
         echo "toolchain-key=holbuild-v3-toolchain-${tools}" >> "$GITHUB_OUTPUT"
         echo "build-prefix=holbuild-v3-build-${tools}" >> "$GITHUB_OUTPUT"
