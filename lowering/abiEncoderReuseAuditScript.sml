@@ -34,6 +34,8 @@ Ancestors
   abiEncoderSharedArrayBackedge abiEncoderSharedArrayCountPrepare abiEncoderSharedArrayCount
   abiEncoderSharedArrayEntry abiEncoderSharedArrayInit abiEncoderSharedArrayParent
   abiEncoderSharedArrayPrepare abiEncoderSharedInputEffect
+  abiEncoderSharedArrayExit abiEncoderSharedArrayIndexInit abiEncoderSharedArrayInitFrame
+  abiEncoderSharedArrayTailInit
 
 fun audit_encoder_tag (name, th) =
   let
@@ -371,6 +373,25 @@ val _ = List.app audit_encoder_tag
    ("abi_encoder_shared_cursor_prepare", abi_encoder_shared_cursor_prepare),
    ("abi_encoder_shared_input_effect", abi_encoder_shared_input_effect),
    ("abi_encoder_shared_input_mono", abi_encoder_shared_input_mono),
+   ("abi_encoder_shared_array_backedge_memory", abi_encoder_shared_array_backedge_memory),
+   ("abi_encoder_array_static_exit_raw_transport", abi_encoder_array_static_exit_raw_transport),
+   ("abi_encoder_array_dynamic_exit_raw_transport", abi_encoder_array_dynamic_exit_raw_transport),
+   ("abi_encoder_array_exit_opcodes", abi_encoder_array_exit_opcodes),
+   ("abi_encoder_array_exit_extend", abi_encoder_array_exit_extend),
+   ("abi_encoder_array_exit_readonly", abi_encoder_array_exit_readonly),
+   ("abi_encoder_array_exit_registered", abi_encoder_array_exit_registered),
+   ("abi_encoder_array_exit_effect", abi_encoder_array_exit_effect),
+   ("abi_encoder_shared_array_exit_source", abi_encoder_shared_array_exit_source),
+   ("abi_encoder_shared_array_index_prepare", abi_encoder_shared_array_index_prepare),
+   ("abi_encoder_shared_array_prefix_scratch", abi_encoder_shared_array_prefix_scratch),
+   ("abi_encoder_open_array_prefix_output_frame", abi_encoder_open_array_prefix_output_frame),
+   ("abi_encoder_array_tail_init_raw_observations", abi_encoder_array_tail_init_raw_observations),
+   ("abi_encoder_array_tail_init_raw_allocated", abi_encoder_array_tail_init_raw_allocated),
+   ("abi_encoder_array_tail_init_raw_transport", abi_encoder_array_tail_init_raw_transport),
+   ("abi_encoder_array_tail_init_raw_extend", abi_encoder_array_tail_init_raw_extend),
+   ("abi_encoder_array_tail_init_raw_registered", abi_encoder_array_tail_init_raw_registered),
+   ("abi_encoder_array_tail_init_raw_reach", abi_encoder_array_tail_init_raw_reach),
+   ("abi_encoder_shared_array_tail_prepare", abi_encoder_shared_array_tail_prepare),
    ("abi_scratch_members_correct_cons", abi_scratch_members_correct_cons),
    ("abi_scratch_members_correct_all", abi_scratch_members_correct_all),
    ("abi_encoder_members_inv_nonempty", abi_encoder_members_inv_nonempty),
