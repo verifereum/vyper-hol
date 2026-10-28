@@ -6,7 +6,7 @@
 Theory supportedStmts
 Ancestors
   supportedStmtTraverse supportedExprs supportedExprForms supportedExprTraverse
-  supportedTypes supportedDecls vyperAST list alist integer
+  supportedTypes supportedDecls supportedTargets exprLowering vyperAST list alist integer
 
 Definition supported_local_word_def:
   supported_local_word bindings name <=>
@@ -31,27 +31,23 @@ End
 Definition supported_assignment_def:
   supported_assignment tops bindings target e <=>
     case target of
-      BaseTarget (NameTarget name) =>
-        (case ALOOKUP bindings name of
-           SOME ty => supported_value_type tops ty
-         | NONE => F) /\ supported_expr tops e
-    | BaseTarget (TopLevelNameTarget id) =>
-        supported_scalar_target tops id /\ supported_pure_expr tops e
-    | BaseTarget (SubscriptTarget (TopLevelNameTarget id) key) =>
-        supported_subscript_base tops id /\ supported_pure_expr tops key /\
-        supported_pure_expr tops e
-    | BaseTarget (AttributeTarget (TopLevelNameTarget id) fname) =>
-        supported_storage_field_write tops id fname /\ supported_pure_expr tops e
+      BaseTarget target_base =>
+        (case supported_target_info tops bindings target_base of
+           SOME (ValPT ty) => supported_place_type tops ty /\
+             supported_copy_types ty (expr_type e)
+         | _ => F) /\
+        (case target_base of
+           NameTarget name => supported_expr tops e
+         | _ => supported_pure_expr tops e /\
+              (supported_target_pure tops target_base \/ supported_uncomputed_rhs e))
     | _ => F
 End
 
 Definition supported_aug_target_def:
-  supported_aug_target tops bindings (NameTarget name) =
-    supported_local_word bindings name /\
-  supported_aug_target tops bindings (TopLevelNameTarget id) =
-    supported_scalar_target tops id /\
-  supported_aug_target tops bindings (SubscriptTarget target key) = F /\
-  supported_aug_target tops bindings (AttributeTarget target fname) = F
+  supported_aug_target tops bindings target <=>
+    case supported_target_info tops bindings target of
+      SOME (ValPT ty) => supported_word_type ty
+    | _ => F
 End
 
 Definition supported_append_target_def:
@@ -96,8 +92,8 @@ End
 Definition supported_iterator_def:
   supported_iterator tops ty (Range a b) n =
     (case (a,b) of
-       (Literal _ (IntL start), Literal _ (IntL finish)) =>
-         supported_integer_type ty /\ start <= finish /\ n = Num (finish - start)
+       (Literal _ (IntL start), Literal _ (IntL range_end)) =>
+         supported_integer_type ty /\ start <= range_end /\ n = Num (range_end - start)
      | _ => supported_pure_expr tops a /\ supported_pure_expr tops b /\ 0 < n) /\
   supported_iterator tops ty (Array e) n =
     (case e of
@@ -113,7 +109,8 @@ Definition supported_stmt_def:
   supported_stmt tops bindings (Return NONE) = T /\
   supported_stmt tops bindings (Return (SOME e)) = supported_expr tops e /\
   supported_stmt tops bindings (AnnAssign name ty e) =
-    (supported_value_type tops ty /\ supported_expr tops e) /\
+    (supported_place_type tops ty /\ supported_copy_types ty (expr_type e) /\
+     supported_expr tops e) /\
   supported_stmt tops bindings (Assign target e) =
     supported_assignment tops bindings target e /\
   supported_stmt tops bindings (AugAssign ty target op e) =
@@ -128,10 +125,10 @@ Definition supported_stmt_def:
     (supported_pure_expr tops c /\ supported_assert_reason tops reason) /\
   supported_stmt tops bindings (Raise reason) = supported_raise_reason tops reason /\
   supported_stmt tops bindings (Log id es) = supported_log tops id es /\
-  supported_stmt tops bindings (For name ty iter n body) =
+  supported_stmt tops bindings (For name ty iter n loop_body) =
     (supported_type_namespace ty /\ supported_iterator tops ty iter n /\
-     supported_stmts tops bindings body /\
-     ~supported_stmts_expr_exists expr_internal_call_root body) /\
+     supported_stmts tops bindings loop_body /\
+     ~supported_stmts_expr_exists expr_internal_call_root loop_body) /\
   supported_stmts tops bindings [] = T /\
   supported_stmts tops bindings (s::ss) =
     (supported_stmt tops bindings s /\ supported_stmts tops bindings ss)
@@ -165,9 +162,9 @@ Proof
 QED
 
 Theorem supported_loop_body_contract:
-  supported_stmt tops bindings (For name ty iter n body) ==>
-    supported_stmts tops bindings body /\
-    ~supported_stmts_expr_exists expr_internal_call_root body
+  supported_stmt tops bindings (For name ty iter n loop_body) ==>
+    supported_stmts tops bindings loop_body /\
+    ~supported_stmts_expr_exists expr_internal_call_root loop_body
 Proof
   simp[supported_stmt_def]
 QED

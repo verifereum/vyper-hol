@@ -1,0 +1,14 @@
+(* Independently checked compiler-stage certificates for Control fixtures. *)
+Theory evalCompilerBytecodeControlStages
+Ancestors
+  evalCompilerBytecodeControlHashmapReadStages
+  evalCompilerBytecodeControlHashmapWriteStages
+  evalCompilerBytecodeControlIfBoolStages
+  evalCompilerBytecodeControlIfJoinStages
+  evalCompilerBytecodeControlForPassStages
+  evalCompilerBytecodeControlForAccumStages
+  evalCompilerBytecodeControlForContinueStages
+  evalCompilerBytecodeControlForBreakStages
+  evalCompilerBytecodeControlInternalCallStages
+  evalCompilerBytecodeControlInternalCallArgStages
+

@@ -1,15 +1,25 @@
 (* Exact Python-oracle bytecode checks for evaluator-small wei/modular fixtures. *)
 
 Theory evalCompilerBytecodeScalarWeiModular
-Ancestors evalCompilerSubsetScalars compileVyper concretizeMemLocDefs alist byte integer_word option
-Libs evalCompilerBytecodeLib finite_mapLib computeLib wordsLib
+Ancestors evalCompilerSubsetScalars compileVyper evalCompilerBytecodeScalarWeiSmallStages
+  evalCompilerBytecodeScalarWeiLargeStages evalCompilerBytecodeScalarModularStages
+  concretizeMemLocDefs alist byte integer_word option
+Libs evalCompilerBytecodeLib compilerPackagingEvalLib finite_mapLib computeLib wordsLib supportedEvalLib
 
 fun holbuild_extra_deps (_ : string list) = ()
-val () = holbuild_extra_deps [".."]
+val () = holbuild_extra_deps
+  ["../python-o1-no-asm-opt/scalar_modular.hex",
+   "../python-o1-no-asm-opt/scalar_wei_large.hex",
+   "../python-o1-no-asm-opt/scalar_wei_small.hex"]
 val () = computeLib.upd_compset add_finite_map_compset
+val () = supportedEvalLib.configure ()
 val () = computeLib.upd_compset (computeLib.add_thms [fmap_to_alist_FEMPTY])
 val () = computeLib.upd_compset (computeLib.add_thms [i2w_pos])
 val () = Globals.max_print_depth := 20
+val () = compilerPackagingEvalLib.configure ()
+val () = evalCompilerBytecodeLib.restore_stage_values "evalCompilerBytecodeScalarWeiSmallPipelineStages"
+val () = evalCompilerBytecodeLib.restore_stage_values "evalCompilerBytecodeScalarWeiSmallRuntimeStages"
+val () = evalCompilerBytecodeLib.restore_stage_values "evalCompilerBytecodeScalarWeiSmallStages"
 
 Theorem scalar_wei_small_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities)
@@ -19,6 +29,10 @@ Proof
   EVAL_TAC
 QED
 
+val () = evalCompilerBytecodeLib.restore_stage_values "evalCompilerBytecodeScalarWeiLargePipelineStages"
+val () = evalCompilerBytecodeLib.restore_stage_values "evalCompilerBytecodeScalarWeiLargeRuntimeStages"
+val () = evalCompilerBytecodeLib.restore_stage_values "evalCompilerBytecodeScalarWeiLargeStages"
+
 Theorem scalar_wei_large_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities)
     scalar_wei_large_program =
@@ -26,6 +40,10 @@ Theorem scalar_wei_large_matches_python_oracle:
 Proof
   EVAL_TAC
 QED
+
+val () = evalCompilerBytecodeLib.restore_stage_values "evalCompilerBytecodeScalarModularPipelineStages"
+val () = evalCompilerBytecodeLib.restore_stage_values "evalCompilerBytecodeScalarModularRuntimeStages"
+val () = evalCompilerBytecodeLib.restore_stage_values "evalCompilerBytecodeScalarModularStages"
 
 val scalar_modular_policy_eval = save_thm
   ("scalar_modular_policy_eval",

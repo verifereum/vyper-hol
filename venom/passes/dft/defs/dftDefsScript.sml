@@ -112,11 +112,15 @@ Definition compute_effect_deps_def:
       war ++ waw) w_effs) in
     (* RAW from reads *)
     let raw_deps = MAP THE (FILTER IS_SOME (MAP (\reff.
-      case FLOOKUP et.et_last_write reff of
+      (* Python has already installed this instruction as the writer for
+         write effects, so those read effects cannot add another RAW edge. *)
+      if MEM reff w_effs then NONE
+      else case FLOOKUP et.et_last_write reff of
         SOME writer => if writer.inst_id <> inst.inst_id
                        then SOME writer else NONE
       | NONE => NONE) r_effs)) in
-    let deps = nub (write_deps ++ raw_deps) in
+    (* OrderedSet retains the first occurrence; HOL nub retains the last. *)
+    let deps = REVERSE (nub (REVERSE (write_deps ++ raw_deps))) in
     (* Update tracking state *)
     let et' = FOLDL (\acc weff.
       acc with <|

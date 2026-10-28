@@ -1,0 +1,9 @@
+# Generated inputs/results. Retained evidence is inventoried in the manifests.
+/oracle/
+/actual/
+/*.tar.gz
+/behaviour*.json
+/matrix.txt
+/diagnostic.txt
+/s20-*.term
+support.tsv

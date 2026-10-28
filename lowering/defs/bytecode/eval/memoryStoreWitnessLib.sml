@@ -4,6 +4,9 @@ structure memoryStoreWitnessLib = struct
 open HolKernel Parse boolLib bossLib
 open compileVyperTheory supportedProgramTheory
 
+(* Use the already checked CV bridge for closed selector computations. *)
+val () = supportedEvalLib.configure ()
+
 fun read path = let val input = TextIO.openIn path in
   TextIO.inputAll input before TextIO.closeIn input end
 
@@ -58,7 +61,16 @@ fun report text =
   (TextIO.output (TextIO.stdErr, text ^ "\n"); TextIO.flushOut TextIO.stdErr)
 
 fun probe root output_root name = let
-  fun status message = report ("WITNESS " ^ name ^ " " ^ message)
+  val () = List.app (fn suffix =>
+    let val path = OS.Path.concat (output_root, name ^ suffix)
+    in if OS.FileSys.access (path, []) then OS.FileSys.remove path else () end)
+    [".hex", ".term", ".residual", ".status"]
+  val stages = ref ([] : string list)
+  fun status message =
+    (stages := !stages @ [message];
+     write (OS.Path.concat (output_root, name ^ ".stages"))
+       (String.concat (map (fn s => s ^ "\n") (!stages)));
+     report ("WITNESS " ^ name ^ " " ^ message))
   val _ = status "FRONTEND"
   val tops = program root name
   val _ = status "ACCEPT/ACCEPT"
@@ -82,5 +94,12 @@ in
     val expected = read (OS.Path.concat (root, name ^ ".hex"))
   in status (if bytes = expected then "MATCH" else "PARITY_DEFECT") end
 end
+
+fun require_match root output_root name =
+  (probe root output_root name;
+   case rev (String.tokens (fn c => c = #"\n")
+       (read (OS.Path.concat (output_root, name ^ ".stages")))) of
+     "MATCH" :: _ => ()
+   | _ => raise Fail ("bytecode parity failed: " ^ name))
 
 end

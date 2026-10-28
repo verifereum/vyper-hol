@@ -2,10 +2,11 @@
 
 Theory evalCompilerBytecodeScalarConvertDecimal
 Ancestors evalCompilerBytecodeScalarWordEval evalCompilerSubsetScalars compileVyper concretizeMemLocDefs alist byte integer_word option
-Libs evalCompilerBytecodeLib finite_mapLib computeLib wordsLib
+Libs evalCompilerBytecodeLib compilerPackagingEvalLib finite_mapLib computeLib wordsLib
 
 fun holbuild_extra_deps (_ : string list) = ()
-val () = holbuild_extra_deps [".."]
+val () = holbuild_extra_deps
+  ["../python-o1-no-asm-opt/scalar_convert_decimal.hex"]
 val () = computeLib.upd_compset add_finite_map_compset
 val () = computeLib.upd_compset (computeLib.add_thms [fmap_to_alist_FEMPTY])
 val () = computeLib.upd_compset (computeLib.add_thms [i2w_pos])
@@ -47,6 +48,7 @@ val () = computeLib.upd_compset
           scalar_mk_convert_decimal_to_int8_eval,
           scalar_compile_convert_decimal_to_int8_eval])
 val () = Globals.max_print_depth := 20
+val () = compilerPackagingEvalLib.configure ()
 
 Definition scalar_convert_decimal_runtime_pipeline_def:
   scalar_convert_decimal_runtime_pipeline tops =
@@ -939,7 +941,7 @@ Proof
        scalar_convert_decimal_runtime_pipeline_def,
        scalar_convert_decimal_deploy_compile_def,
        checked_unit_pipeline_def] >>
-  rpt CASE_TAC >> gvs[]
+  rpt (CASE_TAC >> gvs[])
 QED
 
 val () = evalCompilerBytecodeLib.add_staged_compile_eval

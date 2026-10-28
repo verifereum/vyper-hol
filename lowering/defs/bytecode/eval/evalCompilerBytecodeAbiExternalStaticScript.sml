@@ -1,17 +1,24 @@
 (* Exact Python-oracle bytecode checks for static external ABI fixtures. *)
 
 Theory evalCompilerBytecodeAbiExternalStatic
-Ancestors evalCompilerSubsetAbiExternal compileVyper concretizeMemLocDefs alist byte integer_word option
+Ancestors evalCompilerBytecodeAbiExternalScalarsStages evalCompilerBytecodeAbiExternalStructStages evalCompilerSubsetAbiExternal compileVyper concretizeMemLocDefs alist byte integer_word option
 Libs evalCompilerBytecodeLib finite_mapLib computeLib wordsLib
 
 fun holbuild_extra_deps (_ : string list) = ()
-val () = holbuild_extra_deps [".."]
+val () = holbuild_extra_deps
+  ["../python-o1-no-asm-opt/external_scalars.hex",
+   "../python-o1-no-asm-opt/external_struct.hex"]
 
 val () = computeLib.upd_compset add_finite_map_compset
 val () = computeLib.upd_compset (computeLib.add_thms [fmap_to_alist_FEMPTY])
 val () = computeLib.upd_compset (computeLib.add_thms [i2w_pos])
 
 val () = Globals.max_print_depth := 20
+
+val () = evalCompilerBytecodeLib.restore_stage_values
+  "evalCompilerBytecodeAbiExternalScalarsStages"
+val () = evalCompilerBytecodeLib.restore_stage_values
+  "evalCompilerBytecodeAbiExternalStructStages"
 
 Theorem external_scalars_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities)

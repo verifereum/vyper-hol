@@ -31,13 +31,17 @@ val () = computeLib.upd_compset finite_mapLib.add_finite_map_compset;
 val () = computeLib.upd_compset (computeLib.add_thms
   [alistTheory.fmap_to_alist_FEMPTY, integer_wordTheory.i2w_pos]);
 
-(* C7.1 is a single-fixture interface probe, not the full C7.2 matrix. *)
-val validation_status =
-  (memoryStoreWitnessLib.probe "nested-places/oracle" "nested-places/actual"
-     "storage_struct_second_field";
-   "PROBE_RETURNED: consult per-stage status; no parity claim follows\n")
-  handle exn => "PROBE_ERROR " ^ General.exnMessage exn ^ "\n";
-val () = memoryStoreWitnessLib.write "nested-places/actual/driver-status.txt"
-  validation_status;
-val () = print validation_status;
+val witnesses = List.filter
+  (fn s => s <> "" andalso not (String.isPrefix "#" s))
+  (String.tokens (fn c => c = #"\n")
+    (memoryStoreWitnessLib.read "nested-places/parity-fixtures.txt"));
+fun probe name = let
+  val status =
+    (memoryStoreWitnessLib.probe "nested-places/oracle" "nested-places/actual" name;
+     "PROBE_RETURNED: inspect checker and bytecode statuses\n")
+    handle exn => "PROBE_ERROR " ^ General.exnMessage exn ^ "\n"
+  val () = memoryStoreWitnessLib.write
+    ("nested-places/actual/" ^ name ^ ".status") status
+in print (name ^ " " ^ status) end;
+val () = List.app probe witnesses;
 val () = python_command "archive";

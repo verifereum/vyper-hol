@@ -2,14 +2,19 @@
 
 Theory evalCompilerBytecodeAbiInternalTupleLowering
 Ancestors evalCompilerSubsetAbiInternalCalls compileVyper concretizeMemLocDefs alist byte integer_word option typedCopyDomain
-Libs evalCompilerBytecodeLib finite_mapLib computeLib wordsLib pairLib
+Libs evalCompilerBytecodeLib compilerPackagingEvalLib finite_mapLib computeLib wordsLib pairLib
 
-fun holbuild_extra_deps (_ : string list) = ()
-val () = holbuild_extra_deps [".."]
 val () = computeLib.upd_compset add_finite_map_compset
 val () = computeLib.upd_compset (computeLib.add_thms [fmap_to_alist_FEMPTY])
 val () = computeLib.upd_compset (computeLib.add_thms [i2w_pos])
 val () = Globals.max_print_depth := 20
+
+(* Packaged environments contain a selector function with symbolic arguments.
+   Keep those applications opaque; after application to concrete arguments,
+   the existing checked selector conversion evaluates them. Expanding the
+   symbolic Keccak implementation while packaging the environment exhausts
+   the heap without observing a selector. *)
+val () = compilerPackagingEvalLib.configure ()
 
 val internal_tuple_call_policy_eval = save_thm
   ("internal_tuple_call_policy_eval",

@@ -114,10 +114,14 @@ Theorem supported_local_type_environment:
      Assign (BaseTarget (NameTarget "local")) expr_test_uint;
      program_test_range [Assign (BaseTarget (NameTarget "i")) expr_test_uint]] /\
   supported_function_body [] Deploy [("arg",TupleT [BaseT (UintT 256)])]
-    [Assign (BaseTarget (NameTarget "arg")) expr_test_uint] /\
+    [Assign (BaseTarget (NameTarget "arg"))
+       (Name (TupleT [BaseT (UintT 256)]) "arg")] /\
   supported_function_body [] Deploy []
-    [AnnAssign "local" (ArrayT (BaseT (UintT 256)) (Fixed 2)) expr_test_uint;
-     Assign (BaseTarget (NameTarget "local")) expr_test_uint] /\
+    [AnnAssign "local" (ArrayT (BaseT (UintT 256)) (Fixed 2))
+       (Builtin (ArrayT (BaseT (UintT 256)) (Fixed 2))
+         (MakeArray (SOME (BaseT (UintT 256))) (Fixed 2)) [expr_test_uint;expr_test_uint]);
+     Assign (BaseTarget (NameTarget "local"))
+       (Name (ArrayT (BaseT (UintT 256)) (Fixed 2)) "local")] /\
   ~supported_function_body [] Deploy []
     [Assign (BaseTarget (NameTarget "missing")) expr_test_uint]
 Proof
@@ -200,7 +204,7 @@ QED
 Theorem supported_name_checks_assembled:
   ~supported_program [program_test_internal []; program_test_internal []] /\
   ~supported_program [EventDecl "E" []; EventDecl "E" []] /\
-  ~supported_program
+  supported_program
     [VariableDecl Private Storage "field_name" (BaseT (UintT 256)) (SOME 0);
      StructDecl "S" [("field_name",BaseT (UintT 256))]]
 Proof

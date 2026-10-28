@@ -420,3 +420,16 @@ Proof
   irule expr_child_callback_agrees >> simp[] >>
   drule_all extcode_child_bound >> simp[]
 QED
+
+(* ===== Kernel audit for changed place callbacks ===== *)
+
+val () = List.app (fn (name,theorem) =>
+  let val (oracles,axioms) = Tag.dest_tag (Thm.tag theorem)
+  in
+    if null (Thm.hyp theorem) andalso null axioms andalso
+       List.all (fn label => label = "DISK_THM") oracles then
+      print ("PLACE_CALLBACK_KERNEL_CLOSED " ^ name ^ " hyp=0\n")
+    else raise Fail ("admitted place callback: " ^ name)
+  end)
+  [("compile_subscript_callback_contract",compile_subscript_callback_contract),
+   ("compile_attribute_callback_contract",compile_attribute_callback_contract)]

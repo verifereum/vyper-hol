@@ -390,7 +390,8 @@ Triviality raw_deps_map_f:
                NONE => [] | SOME w => [w])
         (effects_to_list (write_effects i1.inst_opcode))) ++
     MAP THE (FILTER IS_SOME (MAP (\reff.
-        case FLOOKUP et2.et_last_write reff of
+        if MEM reff (effects_to_list (write_effects i1.inst_opcode)) then NONE
+        else case FLOOKUP et2.et_last_write reff of
           NONE => NONE
         | SOME writer =>
             if writer.inst_id <> i1.inst_id then SOME writer else NONE)
@@ -402,7 +403,8 @@ Triviality raw_deps_map_f:
                  NONE => [] | SOME w => [w])
           (effects_to_list (write_effects i1.inst_opcode))) ++
       MAP THE (FILTER IS_SOME (MAP (\reff.
-          case FLOOKUP et1.et_last_write reff of
+          if MEM reff (effects_to_list (write_effects i1.inst_opcode)) then NONE
+          else case FLOOKUP et1.et_last_write reff of
             NONE => NONE
           | SOME writer =>
               if writer.inst_id <> i1.inst_id then SOME writer else NONE)
@@ -427,19 +429,22 @@ Proof
   ) >>
   (* Read part: use filter_some_map_option *)
   sg `MAP THE (FILTER IS_SOME (MAP (\reff.
-      case FLOOKUP et2.et_last_write reff of
+      if MEM reff (effects_to_list (write_effects i1.inst_opcode)) then NONE
+      else case FLOOKUP et2.et_last_write reff of
         NONE => NONE
       | SOME writer =>
           if writer.inst_id <> i1.inst_id then SOME writer else NONE)
       (effects_to_list (read_effects i1.inst_opcode)))) =
     MAP f (MAP THE (FILTER IS_SOME (MAP (\reff.
-      case FLOOKUP et1.et_last_write reff of
+      if MEM reff (effects_to_list (write_effects i1.inst_opcode)) then NONE
+      else case FLOOKUP et1.et_last_write reff of
         NONE => NONE
       | SOME writer =>
           if writer.inst_id <> i1.inst_id then SOME writer else NONE)
       (effects_to_list (read_effects i1.inst_opcode)))))`
   >- (
     irule filter_some_map_option >> rpt strip_tac >> rename1 `MEM reff _` >>
+    Cases_on `MEM reff (effects_to_list (write_effects i1.inst_opcode))` >> simp[] >>
     first_x_assum (qspec_then `reff` mp_tac) >>
     Cases_on `FLOOKUP et1.et_last_write reff` >> simp[] >>
     strip_tac >> gvs[] >>
@@ -481,9 +486,12 @@ Proof
     metis_tac[et_last_write_via]
   >>
   (* Use raw_deps_map_f to rewrite inner_et2 = MAP f inner_et1 *)
+  REWRITE_TAC[GSYM REVERSE_APPEND] >>
   imp_res_tac raw_deps_map_f >>
   pop_assum (qspec_then `i1` (fn th => REWRITE_TAC[th])) >>
-  (* Now: nub(MAP f inner) = MAP f (nub inner) via nub_MAP_INJ *)
+  (* First-occurrence deduplication also commutes with injective maps. *)
+  REWRITE_TAC[MAP_REVERSE] >> AP_TERM_TAC >>
+  REWRITE_TAC[GSYM MAP_REVERSE] >>
   irule nub_MAP_INJ >>
   first_assum (irule o MATCH_MP (DB.fetch "pred_set" "INJ_SUBSET_UNIV"))
 QED

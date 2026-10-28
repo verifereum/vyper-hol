@@ -5,7 +5,8 @@ Ancestors evalCompilerSubsetAbiExternal compileVyper concretizeMemLocDefs alist 
 Libs evalCompilerBytecodeLib finite_mapLib computeLib wordsLib
 
 fun holbuild_extra_deps (_ : string list) = ()
-val () = holbuild_extra_deps [".."]
+val () = holbuild_extra_deps
+  ["../python-o1-no-asm-opt/external_arrays.hex"]
 
 val () = computeLib.upd_compset add_finite_map_compset
 val () = computeLib.upd_compset (computeLib.add_thms [fmap_to_alist_FEMPTY])

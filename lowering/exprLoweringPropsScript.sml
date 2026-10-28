@@ -1297,6 +1297,22 @@ Proof
   >> metis_tac[]
 QED
 
+(* ===== Kernel audit for changed place helpers ===== *)
+
+val () = List.app (fn (name,theorem) =>
+  let val (oracles,axioms) = Tag.dest_tag (Thm.tag theorem)
+  in
+    if null (Thm.hyp theorem) andalso null axioms andalso
+       List.all (fn label => label = "DISK_THM") oracles then
+      print ("PLACE_HELPER_KERNEL_CLOSED " ^ name ^ " hyp=0\n")
+    else raise Fail ("admitted place helper: " ^ name)
+  end)
+  [("ci_mono_compile_subscript_cfn",ci_mono_compile_subscript_cfn),
+   ("ci_mono_compile_attribute_cfn",ci_mono_compile_attribute_cfn),
+   ("ci_mono_compile_mapping_subscript",ci_mono_compile_mapping_subscript),
+   ("ci_mono_compile_keccak256_key",ci_mono_compile_keccak256_key),
+   ("ci_mono_compile_make_array_cfn",ci_mono_compile_make_array_cfn)]
+
 Theorem ci_mono_as_stack_val[local]:
   ∀ ty p sa. SND (as_stack_val ty p) = SND p
 Proof

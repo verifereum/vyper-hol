@@ -5,7 +5,8 @@ Ancestors evalCompilerBytecodeScalarLiteralsBytesPipeline evalCompilerSubsetScal
 Libs evalCompilerBytecodeLib finite_mapLib computeLib wordsLib
 
 fun holbuild_extra_deps (_ : string list) = ()
-val () = holbuild_extra_deps [".."]
+val () = holbuild_extra_deps
+  ["../python-o1-no-asm-opt/scalar_literals_bytes.hex"]
 val () = computeLib.upd_compset add_finite_map_compset
 val () = computeLib.upd_compset (computeLib.add_thms [fmap_to_alist_FEMPTY])
 val () = computeLib.upd_compset (computeLib.add_thms [i2w_pos])
@@ -236,7 +237,7 @@ Proof
        scalar_literals_bytes_runtime_pipeline_def,
        scalar_literals_bytes_deploy_compile_def,
        checked_unit_pipeline_def] >>
-  rpt CASE_TAC >> gvs[]
+  rpt (CASE_TAC >> gvs[])
 QED
 
 val () = evalCompilerBytecodeLib.add_staged_compile_eval

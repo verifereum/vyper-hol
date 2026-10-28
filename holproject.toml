@@ -20,7 +20,8 @@ roots = ["vyperHolScript.sml",
          "tests/vyperRawCallCalldataTestScript.sml",
          "tests/vyperDelegateRawCallTestScript.sml",
          "tests/vyperTupleSubscriptTestScript.sml",
-         "lowering/targetPlaceTestScript.sml"]
+         "lowering/targetPlaceTestScript.sml",
+         "venom/passes/dft/tests/dftEffectOrderTestScript.sml"]
 
 [dependencies.verifereum]
 git = "https://github.com/verifereum/verifereum.git"
@@ -31,4 +32,25 @@ rev = "f5e172ccbf45addef7096feea76428de3ed3dfa8"
 impure = true
 
 [actions.nestedPlaceValidationTheory]
+impure = true
+
+[actions.nestedPlaceBehaviourTheory]
+impure = true
+
+[actions.nestedPlaceMatrixTheory]
+impure = true
+
+[actions.nestedPlaceDiagnosticTheory]
+impure = true
+
+[actions.nestedPlaceTraceTheory]
+impure = true
+
+[actions.nestedPlacePlanTraceTheory]
+impure = true
+
+[actions.nestedPlaceS20Theory]
+impure = true
+
+[actions.nestedPlaceSupportTheory]
 impure = true

@@ -5,7 +5,8 @@ Ancestors evalCompilerBytecodeAbiExternalDynamicPipeline evalCompilerSubsetAbiEx
 Libs evalCompilerBytecodeLib finite_mapLib computeLib wordsLib
 
 fun holbuild_extra_deps (_ : string list) = ()
-val () = holbuild_extra_deps [".."]
+val () = holbuild_extra_deps
+  ["../python-o1-no-asm-opt/external_dynamic.hex"]
 val () = computeLib.upd_compset add_finite_map_compset
 val () = computeLib.upd_compset (computeLib.add_thms [fmap_to_alist_FEMPTY])
 val () = computeLib.upd_compset (computeLib.add_thms [i2w_pos])
@@ -214,6 +215,11 @@ val external_dynamic_raw_asm_eval = EVAL
     data_segment_asm (^external_dynamic_unit).cu_data_segment ++
     [AsmDataHeader "code_end"]``
 val external_dynamic_raw_asm = rhs (concl external_dynamic_raw_asm_eval)
+(* The data projection is simplified before the enclosing append is matched. *)
+val external_dynamic_raw_data_step = PURE_REWRITE_CONV
+  [external_dynamic_data_asm_eval] (lhs (concl external_dynamic_raw_asm_eval))
+val external_dynamic_flat_asm_eval = TRANS
+  (SYM external_dynamic_raw_data_step) external_dynamic_raw_asm_eval
 val external_dynamic_target_wf_eval = EVAL
   ``target_capabilities_wf (^external_dynamic_rpolicy).rpol_target``
 val external_dynamic_context_safe_eval = EVAL
@@ -234,8 +240,9 @@ val external_dynamic_codegen_step1 = SIMP_CONV pure_ss
 val external_dynamic_codegen_step2 = SIMP_CONV pure_ss
   [external_dynamic_execute_context_eval,
    external_dynamic_data_asm_eval,
+   external_dynamic_flat_asm_eval,
    external_dynamic_raw_asm_eval,
-   external_dynamic_assembly_safe_eval]
+   external_dynamic_assembly_safe_eval, COND_CLAUSES]
   (rhs (concl external_dynamic_codegen_step1))
 val external_dynamic_codegen_assembly_eval =
   TRANS external_dynamic_codegen_step1 external_dynamic_codegen_step2
@@ -283,7 +290,7 @@ Proof
        external_dynamic_runtime_pipeline_def,
        external_dynamic_deploy_compile_def,
        checked_unit_pipeline_def] >>
-  rpt CASE_TAC >> gvs[]
+  rpt (CASE_TAC >> gvs[])
 QED
 
 val () = evalCompilerBytecodeLib.add_staged_compile_eval

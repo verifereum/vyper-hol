@@ -659,11 +659,15 @@ Proof
       case FLOOKUP et2.et_last_write weff of NONE => [] | SOME w => [w])
     (effects_to_list (write_effects inst.inst_opcode))` by (
     irule MAP_CONG >> simp[] >> rpt strip_tac >> res_tac >> simp[]) >>
-  `MAP (\reff. case FLOOKUP et1.et_last_write reff of
+  `MAP (\reff.
+      if MEM reff (effects_to_list (write_effects inst.inst_opcode)) then NONE
+      else case FLOOKUP et1.et_last_write reff of
       NONE => NONE | SOME writer =>
         if writer.inst_id <> inst.inst_id then SOME writer else NONE)
     (effects_to_list (read_effects inst.inst_opcode)) =
-   MAP (\reff. case FLOOKUP et2.et_last_write reff of
+   MAP (\reff.
+      if MEM reff (effects_to_list (write_effects inst.inst_opcode)) then NONE
+      else case FLOOKUP et2.et_last_write reff of
       NONE => NONE | SOME writer =>
         if writer.inst_id <> inst.inst_id then SOME writer else NONE)
     (effects_to_list (read_effects inst.inst_opcode))` by (

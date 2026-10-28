@@ -1,16 +1,27 @@
 (* Exact Python-oracle bytecode checks for evaluator-small scalar operator fixtures. *)
 
 Theory evalCompilerBytecodeScalarOperators
-Ancestors evalCompilerSubsetScalars compileVyper concretizeMemLocDefs alist byte integer_word option
+Ancestors evalCompilerBytecodeScalarMinmaxIntStages evalCompilerBytecodeScalarMinmaxUintStages evalCompilerBytecodeScalarCompareOrderIntStages evalCompilerBytecodeScalarCompareOrderUintStages evalCompilerBytecodeScalarCompareEqStages evalCompilerBytecodeScalarShiftsStages evalCompilerBytecodeScalarBitsStages evalCompilerSubsetScalars compileVyper concretizeMemLocDefs alist byte integer_word option
 Libs evalCompilerBytecodeLib finite_mapLib computeLib wordsLib
 
 fun holbuild_extra_deps (_ : string list) = ()
-val () = holbuild_extra_deps [".."]
+val () = holbuild_extra_deps
+  ["../python-o1-no-asm-opt/scalar_bits.hex",
+   "../python-o1-no-asm-opt/scalar_compare_eq.hex",
+   "../python-o1-no-asm-opt/scalar_compare_order_int.hex",
+   "../python-o1-no-asm-opt/scalar_compare_order_uint.hex",
+   "../python-o1-no-asm-opt/scalar_minmax_int.hex",
+   "../python-o1-no-asm-opt/scalar_minmax_uint.hex",
+   "../python-o1-no-asm-opt/scalar_shifts.hex",
+   "../python-o1-no-asm-opt/scalar_unary.hex"]
 val () = computeLib.upd_compset add_finite_map_compset
 val () = computeLib.upd_compset (computeLib.add_thms [fmap_to_alist_FEMPTY])
 val () = computeLib.upd_compset
   (computeLib.add_thms [i2w_pos])
 val () = Globals.max_print_depth := 20
+
+val () = evalCompilerBytecodeLib.restore_stage_values
+  "evalCompilerBytecodeScalarBitsStages"
 
 Theorem scalar_bits_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities) scalar_bits_program =
@@ -19,12 +30,18 @@ Proof
   EVAL_TAC
 QED
 
+val () = evalCompilerBytecodeLib.restore_stage_values
+  "evalCompilerBytecodeScalarShiftsStages"
+
 Theorem scalar_shifts_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities) scalar_shifts_program =
     SOME ^(evalCompilerBytecodeLib.read_hex_bytes "scalar_shifts.hex")
 Proof
   EVAL_TAC
 QED
+
+val () = evalCompilerBytecodeLib.restore_stage_values
+  "evalCompilerBytecodeScalarCompareEqStages"
 
 Theorem scalar_compare_eq_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities)
@@ -34,6 +51,9 @@ Proof
   EVAL_TAC
 QED
 
+val () = evalCompilerBytecodeLib.restore_stage_values
+  "evalCompilerBytecodeScalarCompareOrderUintStages"
+
 Theorem scalar_compare_order_uint_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities)
     scalar_compare_order_uint_program =
@@ -41,6 +61,9 @@ Theorem scalar_compare_order_uint_matches_python_oracle:
 Proof
   EVAL_TAC
 QED
+
+val () = evalCompilerBytecodeLib.restore_stage_values
+  "evalCompilerBytecodeScalarCompareOrderIntStages"
 
 Theorem scalar_compare_order_int_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities)
@@ -50,6 +73,9 @@ Proof
   EVAL_TAC
 QED
 
+val () = evalCompilerBytecodeLib.restore_stage_values
+  "evalCompilerBytecodeScalarMinmaxUintStages"
+
 Theorem scalar_minmax_uint_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities)
     scalar_minmax_uint_program =
@@ -57,6 +83,9 @@ Theorem scalar_minmax_uint_matches_python_oracle:
 Proof
   EVAL_TAC
 QED
+
+val () = evalCompilerBytecodeLib.restore_stage_values
+  "evalCompilerBytecodeScalarMinmaxIntStages"
 
 Theorem scalar_minmax_int_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities)

@@ -5,7 +5,8 @@ Ancestors evalCompilerSubsetControlDeploy compileVyper concretizeMemLocDefs alis
 Libs evalCompilerBytecodeLib finite_mapLib computeLib wordsLib
 
 fun holbuild_extra_deps (_ : string list) = ()
-val () = holbuild_extra_deps [".."]
+val () = holbuild_extra_deps
+  ["../python-o1-no-asm-opt/assert_reason.hex"]
 val () = computeLib.upd_compset add_finite_map_compset
 val () = computeLib.upd_compset (computeLib.add_thms [fmap_to_alist_FEMPTY])
 val () = computeLib.upd_compset (computeLib.add_thms [i2w_pos])
@@ -223,6 +224,9 @@ val assert_reason_codegen_assembly_eval =
 val assert_reason_runtime_accessors =
   CONJUNCTS venomCompilerTypesTheory.pipeline_output_accessors @
   CONJUNCTS venomCompilerTypesTheory.resolved_compiler_policy_accessors
+val assert_reason_raw_asm_expanded_eval = CONV_RULE
+  (Conv.LAND_CONV (PURE_REWRITE_CONV [assert_reason_data_asm_eval]))
+  assert_reason_raw_asm_eval
 Theorem assert_reason_runtime_matches_python_oracle:
   assert_reason_runtime_compile assert_reason_program =
     SOME (SND ^(evalCompilerBytecodeLib.read_hex_bytes "assert_reason.hex"))
@@ -240,6 +244,8 @@ Proof
      assert_reason_runtime_accessors) >>
   PURE_REWRITE_TAC [codegenTheory.finalize_codegen_identity] >>
   PURE_REWRITE_TAC [assert_reason_codegen_assembly_eval] >>
+  PURE_REWRITE_TAC [assert_reason_raw_asm_expanded_eval,
+    assert_reason_assembly_safe_eval, pairTheory.SND] >>
   EVAL_TAC
 QED
 
@@ -264,7 +270,7 @@ Proof
        assert_reason_runtime_pipeline_def,
        assert_reason_deploy_compile_def,
        checked_unit_pipeline_def] >>
-  rpt CASE_TAC >> gvs[]
+  rpt (CASE_TAC >> gvs[])
 QED
 
 val () = evalCompilerBytecodeLib.add_staged_compile_eval
@@ -289,3 +295,14 @@ Theorem assert_reason_matches_python_oracle:
 Proof
   EVAL_TAC
 QED
+
+val () = app (fn (name,theorem) => let
+  val (oracles,axioms) = Tag.dest_tag (Thm.tag theorem)
+in if null (Thm.hyp theorem) andalso null axioms andalso
+      List.all (fn oracle => oracle = "DISK_THM") oracles then
+    print ("ASSERT_REASON_KERNEL_CLOSED " ^ name ^ " hyp=0\n")
+  else raise Fail "reasoned assertion has kernel assumptions or admission tags"
+end) [("assert_reason_runtime_matches_python_oracle",assert_reason_runtime_matches_python_oracle),
+       ("assert_reason_deploy_matches_python_oracle",assert_reason_deploy_matches_python_oracle),
+       ("assert_reason_compile_staged",assert_reason_compile_staged),
+       ("assert_reason_matches_python_oracle",assert_reason_matches_python_oracle)]

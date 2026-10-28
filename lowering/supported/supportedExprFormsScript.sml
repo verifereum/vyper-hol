@@ -6,6 +6,7 @@
 Theory supportedExprForms
 Ancestors
   supportedTypes supportedDecls vyperAST list integer
+  compileVyper exprLowering compileEnv
 
 Definition supported_unsigned_type_def:
   supported_unsigned_type (BaseT (UintT n)) = supported_int_width n /\
@@ -103,6 +104,31 @@ Definition supported_conversion_def:
     (src = BaseT DecimalT /\ supported_integer_type dst)
 End
 
+Definition supported_literal_elements_def:
+  supported_literal_elements tops ty es <=>
+    supported_place_type tops ty /\
+    case ty of
+      ArrayT elem bound => EVERY (supported_copy_types elem o expr_type) es
+    | TupleT tys => supported_tuple_type ty /\
+        LIST_REL supported_copy_types tys (MAP expr_type es)
+    | _ => F
+End
+
+Definition supported_struct_elements_def:
+  supported_struct_elements tops ty fields <=>
+    supported_place_type tops ty /\
+    case ty of
+      StructT id =>
+        (case supported_struct_fields tops id of
+           SOME declared =>
+             EVERY (\(name,e).
+               case ALOOKUP declared name of
+                 SOME dst => supported_copy_types dst (expr_type e)
+               | NONE => F) fields
+         | NONE => F)
+    | _ => F
+End
+
 Definition supported_builtin_form_def:
   supported_builtin_form tops ty blt es <=>
     case (blt, es) of
@@ -123,7 +149,9 @@ Definition supported_builtin_form_def:
     | (ECRecover, [a; b; c; d]) => T
     | (ECAdd, [a; b]) => T
     | (ECMul, [a; b]) => T
-    | (MakeArray NONE (Fixed n), args) => supported_value_type tops ty
+    | (MakeArray NONE (Fixed n), args) => supported_literal_elements tops ty args
+    | (MakeArray (SOME elem) (Fixed n), args) =>
+        ty = ArrayT elem (Fixed n) /\ supported_literal_elements tops ty args
     | _ => F
 End
 
@@ -153,10 +181,21 @@ Definition supported_storage_scalar_def:
     | _ => F
 End
 
+Definition supported_storage_value_def:
+  supported_storage_value tops id ty <=>
+    supported_storage_type tops ty /\
+    case supported_variable_decl tops id of
+      SOME (Private, Storage, declared, SOME slot) => declared = ty
+    | SOME (Private, Transient, declared, SOME slot) => declared = ty
+    | _ => F
+End
+
 Definition supported_storage_array_def:
   supported_storage_array tops id <=>
     case supported_variable_decl tops id of
       SOME (Private, Storage, ArrayT elem bd, SOME slot) =>
+        supported_storage_type tops (ArrayT elem bd)
+    | SOME (Private, Transient, ArrayT elem bd, SOME slot) =>
         supported_storage_type tops (ArrayT elem bd)
     | _ => F
 End
@@ -166,6 +205,8 @@ Definition supported_storage_dynamic_array_def:
     case supported_variable_decl tops id of
       SOME (Private, Storage, ArrayT elem (Dynamic n), SOME slot) =>
         supported_full_word_type elem
+    | SOME (Private, Transient, ArrayT elem (Dynamic n), SOME slot) =>
+        supported_full_word_type elem
     | _ => F
 End
 
@@ -173,8 +214,8 @@ Definition supported_subscript_base_def:
   supported_subscript_base tops id <=>
     supported_storage_array tops id \/
     case supported_hashmap_decl tops id of
-      SOME (Private, F, kt, Type vt, SOME slot) =>
-        supported_hashmap_key_type kt /\ supported_full_word_type vt
+      SOME (Private, transient, kt, vt, SOME slot) =>
+        supported_hashmap_key_type kt /\ supported_hashmap_value tops vt
     | _ => F
 End
 
@@ -184,13 +225,58 @@ Definition supported_storage_fields_def:
       SOME (Private, Storage, StructT sid, SOME slot) =>
         if supported_storage_type tops (StructT sid)
         then supported_struct_fields tops sid else NONE
+    | SOME (Private, Transient, StructT sid, SOME slot) =>
+        if supported_storage_type tops (StructT sid)
+        then supported_struct_fields tops sid else NONE
     | _ => NONE
 End
 
 Definition supported_storage_field_read_def:
   supported_storage_field_read tops id field <=>
     case supported_storage_fields tops id of
-      SOME ((first, ty)::rest) => field = first
+      SOME fields => MEM field (MAP FST fields)
+    | NONE => F
+End
+
+(* Reuse the compiler's descriptor lookup. Only its map table is consulted;
+   all unrelated environment fields stay opaque. *)
+Definition supported_place_info_def:
+  supported_place_info tops e =
+    place_type ((ARB : compile_env) with ce_hashmap_info := build_hashmap_info tops) e
+End
+
+Definition supported_place_root_def:
+  supported_place_root tops id <=>
+    case supported_variable_decl tops id of
+      SOME (Private, Storage, ty, SOME slot) => supported_storage_type tops ty
+    | SOME (Private, Transient, ty, SOME slot) => supported_storage_type tops ty
+    | SOME _ => F
+    | NONE =>
+        (case supported_hashmap_decl tops id of
+           SOME (Private, transient, kt, vt, SOME slot) =>
+             supported_hashmap_key_type kt /\ supported_hashmap_value tops vt
+         | _ => F)
+End
+
+Definition supported_subscript_place_def:
+  supported_subscript_place tops base <=>
+    case supported_place_info tops base of
+      MapPT kt vt => supported_hashmap_key_type kt /\ supported_hashmap_value tops vt
+    | ValPT (ArrayT elem bd) => supported_place_type tops (ArrayT elem bd)
+    | ValPT (TupleT tys) => supported_place_type tops (TupleT tys)
+    | ValPT (StructT id) => supported_place_type tops (StructT id)
+    | ValPT (BaseT _) => F
+    | ValPT (FlagT _) => F
+    | ValPT NoneT => F
+End
+
+Definition supported_field_place_def:
+  supported_field_place tops ty field <=>
+    case ty of
+      StructT id =>
+        (case supported_struct_fields tops id of
+           SOME fields => MEM field (MAP FST fields)
+         | NONE => F)
     | _ => F
 End
 
