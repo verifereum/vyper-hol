@@ -1,0 +1,18 @@
+{
+  "annotated_ast": {
+    "ast": {
+      "ast_type": "Module",
+      "body": [{
+        "ast_type": "FunctionDef", "name": "f",
+        "decorator_list": [{"ast_type": "Name", "id": "external"}, {"ast_type": "Name", "id": "pure"}],
+        "args": {"ast_type": "arguments", "args": [
+          {"ast_type": "arg", "arg": "a", "annotation": {"ast_type": "Subscript", "value": {"ast_type": "Name", "id": "Bytes"}, "slice": {"ast_type": "Int", "value": 4}}},
+          {"ast_type": "arg", "arg": "b", "annotation": {"ast_type": "Subscript", "value": {"ast_type": "Name", "id": "Bytes"}, "slice": {"ast_type": "Int", "value": 4}}}
+        ], "defaults": []},
+        "returns": {"ast_type": "Subscript", "value": {"ast_type": "Name", "id": "Bytes"}, "slice": {"ast_type": "Int", "value": 8}},
+        "body": [{"ast_type": "Return", "value": {"ast_type": "Call", "func": {"ast_type": "Name", "id": "concat"}, "args": [{"ast_type": "Name", "id": "a"}, {"ast_type": "Name", "id": "b"}], "keywords": []}}]
+      }]
+    },
+    "imports": []
+  }
+}

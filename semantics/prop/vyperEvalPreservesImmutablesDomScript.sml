@@ -4,6 +4,7 @@ Ancestors
   vyperLookup vyperScopePreservation vyperStatePreservation
   vyperAssignTarget vyperEvalExprPreservesScopesDom
   vyperImmutablesPreservation vyperCallFrame vyperCallOutcomeFrame
+  vyperAbiFrame vyperAbiMemoryProps
 
 (* ========================================================================
    Preservation of immutables domain through eval_expr / eval_stmts.
@@ -101,7 +102,9 @@ Proof
   rpt CASE_TAC >> gvs[return_def, raise_def, set_scopes_def] >>
   rpt strip_tac >>
   gvs[oneline assign_result_def, return_def, bind_def, lift_sum_def, raise_def,
-      AllCaseEqs(), assign_operation_CASE_rator, sum_CASE_rator]
+      AllCaseEqs(), assign_operation_CASE_rator, sum_CASE_rator] >>
+  imp_res_tac write_abi_memory_frame >>
+  imp_res_tac write_abi_immutables_frame >> gvs[]
 QED
 
 (* Helper: the HashMap do-block in assign_target preserves immutables *)
@@ -209,6 +212,26 @@ Proof
   gvs[]
 QED
 
+Theorem immutable_update_dom[local]:
+  ALOOKUP st.immutables cx.txn.target = SOME imms /\
+  FLOOKUP (get_source_immutables src imms) id = SOME old ==>
+  preserves_immutables_dom cx st
+    (st with immutables updated_by (\al.
+      (cx.txn.target, set_source_immutables src
+        ((get_source_immutables src imms) |+ (id,(tv,v))) imms) ::
+      ADELKEY cx.txn.target al))
+Proof
+  strip_tac >> simp_tac bool_ss [preserves_immutables_dom_def] >> conj_tac
+  >- (rpt strip_tac >> Cases_on `cx.txn.target = tgt` >>
+      gvs[alistTheory.ALOOKUP_ADELKEY]) >>
+  map_every qx_gen_tac [`observed`,`name`,`before`,`after`] >> strip_tac >>
+  gvs[] >> Cases_on `observed = src` >>
+  gvs[get_source_immutables_def, set_source_immutables_def,
+    alistTheory.ALOOKUP_ADELKEY, finite_mapTheory.FLOOKUP_UPDATE] >>
+  Cases_on `name = id` >>
+  gvs[get_source_immutables_def, finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
 Theorem assign_target_imm_dom_ImmutableVar[local]:
   ∀cx src_id_opt id is ao st res st'.
     assign_target cx (BaseTargetV (ImmutableVar src_id_opt id) is) ao st = (res, st') ⇒
@@ -240,6 +263,8 @@ Proof
        lift_option_type_def, lift_option_def, set_address_immutables_def,
        return_def, raise_def, LET_THM,
        AllCaseEqs()] >>
+   imp_res_tac write_abi_immutables_frame >>
+   imp_res_tac assign_result_state >> gvs[] >>
    simp[preserves_immutables_dom_def] >> conj_tac
    >- (rpt strip_tac >>
        Cases_on `cx.txn.target = tgt` >>
@@ -255,7 +280,10 @@ Proof
   gvs[set_immutable_def, bind_def, get_address_immutables_def,
       lift_option_type_def, lift_option_def, set_address_immutables_def,
       return_def, raise_def, LET_THM,
-      AllCaseEqs(), preserves_immutables_dom_refl]
+      AllCaseEqs(), preserves_immutables_dom_refl] >>
+  imp_res_tac write_abi_immutables_frame >> gvs[] >>
+  drule_all (Q.INST [`tv` |-> `x'0`, `v` |-> `x'`] immutable_update_dom) >>
+  simp[preserves_immutables_dom_def]
 QED
 
 Theorem assign_target_imm_dom_TupleV[local]:
@@ -1636,6 +1664,8 @@ Proof
   gvs[return_def, raise_def]
 QED
 
+(* Obsolete eager-only helper retained; the mutual proof below now handles
+   TypeBuiltin with its separate guarded eval_abi_exprs/eval_exprs IHs.
 (* ----- Case: eval_expr (TypeBuiltin tb typ es) ----- *)
 Theorem case_TypeBuiltin_imm_dom[local]:
   ∀cx tb typ es.
@@ -1661,6 +1691,8 @@ Proof
   first_x_assum (qspec_then `st` mp_tac) >>
   simp[check_def, type_check_def, assert_def, return_def]
 QED
+
+*)
 
 Theorem check_same_state[local]:
   check b msg s = (r, s') ⇒ s' = s
@@ -3113,6 +3145,74 @@ Proof
   irule preserves_immutables_dom_eq >> gvs[]
 QED
 
+Theorem imm_abi_relation[local]:
+  (!s t u. preserves_immutables_dom cx s t /\ preserves_immutables_dom cx t u ==>
+    preserves_immutables_dom cx s u) /\
+  (!s mem. preserves_immutables_dom cx s (s with abi_memory := mem)) /\
+  (!s mem. preserves_immutables_dom cx s (s with abi_immutables := mem))
+Proof
+  conj_tac >- metis_tac[preserves_immutables_dom_trans] >>
+  conj_tac >> rpt gen_tac >> irule preserves_immutables_dom_eq >> simp[]
+QED
+
+Theorem imm_abi_pure_frames[local]:
+  state_rel_frame (preserves_immutables_dom cx) (return x) /\
+  state_rel_frame (preserves_immutables_dom cx) (raise e) /\
+  state_rel_frame (preserves_immutables_dom cx) (type_check b msg) /\
+  state_rel_frame (preserves_immutables_dom cx) (check b msg) /\
+  state_rel_frame (preserves_immutables_dom cx) (lift_option opt msg) /\
+  state_rel_frame (preserves_immutables_dom cx) (lift_option_type opt msg) /\
+  state_rel_frame (preserves_immutables_dom cx) (lift_sum rs) /\
+  state_rel_frame (preserves_immutables_dom cx) (get_Value tv) /\
+  state_rel_frame (preserves_immutables_dom cx) (materialise cx tv) /\
+  state_rel_frame (preserves_immutables_dom cx) (assign_target cx target op)
+Proof
+  simp[state_rel_frame_result] >> rpt strip_tac >>
+  FIRST [drule return_state, drule raise_state, drule type_check_state,
+    drule check_state, drule lift_option_state, drule lift_option_type_state,
+    drule lift_sum_state, drule get_Value_state, drule materialise_state,
+    drule (CONJUNCT1 assign_target_imm_dom_any)] >>
+  simp[preserves_immutables_dom_refl]
+QED
+
+local
+  val relation = ``preserves_immutables_dom cx``;
+  fun spec th = ISPEC relation (GEN (first (fn v => fst (dest_var v) = "R")
+    (free_vars (concl th))) th);
+  val result = spec state_rel_frame_result;
+  val bind = spec state_rel_frame_bind_guarded;
+  val finally = spec state_rel_frame_finally;
+  val leaves = CONJUNCT1 imm_abi_relation ::
+    CONJUNCTS (MATCH_MP (spec state_rel_frame_abi_primitives) imm_abi_relation) @
+    CONJUNCTS imm_abi_pure_frames;
+  fun ih (asl,w) =
+    let
+      val norm = SIMP_RULE bool_ss [oneTheory.one, ignore_bind_def];
+      val facts = List.concat (map (CONJUNCTS o norm o ASSUME) asl);
+      fun discharge th = if is_imp (snd (strip_forall (concl th))) then
+        discharge (tryfind (MATCH_MP th) facts) else th;
+    in FIRST (map (fn th => fn g => MATCH_ACCEPT_TAC
+      (discharge (PURE_REWRITE_RULE [GSYM AND_IMP_INTRO] th)) g) facts) (asl,w) end;
+in
+  val IMM_ABI_TAC =
+    rpt (fn g as (_,w) => if is_forall w andalso
+      type_of (#1 (dest_forall w)) <> ``:evaluation_state`` then gen_tac g else NO_TAC g) >>
+    (fn g as (_,w) => if is_imp w then strip_tac g else ALL_TAC g) >>
+    CONV_TAC (REWR_CONV (GSYM result)) >>
+    CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV [evaluate_def])) >>
+    RULE_ASSUM_TAC (PURE_REWRITE_RULE [GSYM result]) >>
+    rpt (FIRST [FIRST (map MATCH_ACCEPT_TAC leaves), ih,
+      MATCH_MP_TAC bind >> conj_tac, MATCH_MP_TAC finally >> conj_tac,
+      CONV_TAC (RAND_CONV BETA_CONV),
+      CONV_TAC (RAND_CONV (REWR_CONV ignore_bind_def)),
+      CONV_TAC (RAND_CONV (REWR_CONV switch_BoolV_def)),
+      CHANGED_TAC (simp_tac bool_ss [pairTheory.UNCURRY, pairTheory.pair_case_thm]),
+      gen_tac, strip_tac, conj_tac,
+      CHANGED_TAC (fn (asl,w) => simp_tac (srw_ss())
+        (map ASSUME (List.filter (not o is_forall) asl)) (asl,w)),
+      BasicProvers.PURE_TOP_CASE_TAC]);
+end;
+
 Theorem immutables_dom_mutual[local]:
   (∀cx s st res st'. eval_stmt cx s st = (res, st') ⇒ preserves_immutables_dom cx st st') ∧
   (∀cx ss st res st'. eval_stmts cx ss st = (res, st') ⇒ preserves_immutables_dom cx st st') ∧
@@ -3122,7 +3222,9 @@ Theorem immutables_dom_mutual[local]:
   (∀cx bt st res st'. eval_base_target cx bt st = (res, st') ⇒ preserves_immutables_dom cx st st') ∧
   (∀cx tyv nm body vs st res st'. eval_for cx tyv nm body vs st = (res, st') ⇒ preserves_immutables_dom cx st st') ∧
   (∀cx e st res st'. eval_expr cx e st = (res, st') ⇒ preserves_immutables_dom cx st st') ∧
-  (∀cx es st res st'. eval_exprs cx es st = (res, st') ⇒ preserves_immutables_dom cx st st')
+  (∀cx es st res st'. eval_exprs cx es st = (res, st') ⇒ preserves_immutables_dom cx st st') ∧
+  (∀cx e st res st'. eval_abi_expr cx e st = (res,st') ⇒ preserves_immutables_dom cx st st') ∧
+  (∀cx es st res st'. eval_abi_exprs cx es st = (res,st') ⇒ preserves_immutables_dom cx st st')
 Proof
   ho_match_mp_tac evaluate_ind >> rpt conj_tac >> rpt strip_tac
   >- gvs[evaluate_def, return_def, preserves_immutables_dom_refl]
@@ -3216,7 +3318,7 @@ Proof
   >- (drule_all case_Attribute_imm_dom >> simp[])
   >- (drule_all case_Builtin_imm_dom >> simp[])
   >- (drule_all case_Pop_imm_dom >> simp[])
-  >- (drule_all case_TypeBuiltin_imm_dom >> simp[])
+  >- suspend "TypeBuiltin"
   >- (drule_all case_Send_imm_dom >> simp[])
   >- (qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
       simp[Once evaluate_def, bind_def, AllCaseEqs()] >>
@@ -3285,8 +3387,19 @@ Proof
       imp_res_tac eval_create_preserves_scopes_immutables >>
       metis_tac[preserves_immutables_dom_trans, preserves_immutables_dom_eq])
   >- gvs[evaluate_def, return_def, preserves_immutables_dom_refl]
-  >- (drule_all case_eval_exprs_cons_imm_dom >> simp[])
+  >- (drule_all case_eval_exprs_cons_imm_dom >> simp[]) >>
+  FIRST [qpat_x_assum `eval_abi_expr _ _ _ = _` mp_tac,
+         qpat_x_assum `eval_abi_exprs _ _ _ = _` mp_tac] >>
+  MAP_EVERY qid_spec_tac [`st'`, `res`, `st`] >> IMM_ABI_TAC
 QED
+
+Resume immutables_dom_mutual[TypeBuiltin]:
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  MAP_EVERY qid_spec_tac [`st'`, `res`, `st`] >>
+  Cases_on `tb` >> gvs[] >> IMM_ABI_TAC
+QED
+
+Finalise immutables_dom_mutual
 
 (* ===== Main theorems ===== *)
 

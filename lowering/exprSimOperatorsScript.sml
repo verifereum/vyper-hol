@@ -8,8 +8,9 @@
  *   compile_bop_case_sim     — a binary operator: on operands of
  *                              word_value_type by compile_bop_word_sim, the
  *                              rest by compile_bop_other_sim
- *   compile_bop_word_sim     — compile_bop_sim (exprSimOps) from the
- *                              operands' expr_sim_ok and binop_frag_typed
+ *   compile_bop_word_with_frag_sim — operator-parametric composition
+ *   compile_power_case_sim   — checked Exp via the audited power fragment
+ *   compile_bop_word_sim     — general dispatch, retaining unrelated cheats
  *   expr_sim_pre_bop         — the operands of a well-typed binary operator
  *                              meet expr_sim_pre
  *   compile_not_sim, compile_abs_sim — not and abs: exprSimUnop's
@@ -22,7 +23,7 @@
  *
  * Cheated, for the later #636 PRs:
  *   binop_frag_typed         — from exprSimBinopFrag, where it rests on
- *                              cheats for ** and pow_mod and narrow or
+ *                              cheats for pow_mod and narrow or
  *                              negative shifts (#572), and >> of narrow
  *                              integers.  Operators rows 2-5.
  *   compile_bop_other_sim    — == and != on address, bytesN and bytestrings
@@ -54,7 +55,7 @@ Theory exprSimOperators
 Ancestors
   list finite_map
   fragExec exprSim exprSimHyps exprSimOps exprSimIfExp exprSimBinopFrag
-  exprSimUnop
+  exprSimUnop powerCheckedProps
   exprBopLowering exprWordOperand
   loweringSlice
   exprLowering compileEnv
@@ -159,14 +160,27 @@ Proof
   metis_tac[expr_sim_ok_def]
 QED
 
-Theorem compile_bop_word_sim:
+Theorem compile_bop_word_with_frag_sim:
   !cenv ann bop e1 e2.
     expr_sim_ok cenv e1 /\ expr_sim_ok cenv e2 /\
-    word_value_type (expr_type e1) /\ word_value_type (expr_type e2) ==>
+    word_value_type (expr_type e1) /\ word_value_type (expr_type e2) /\
+    (!ctx func cx env es es1 es2 v1 v2 tv1 tv2.
+      well_typed_expr env (Builtin ann (Bop bop) [e1;e2]) /\
+      eval_expr cx e1 es = (INL (Value v1),es1) /\
+      eval_expr cx e2 es1 = (INL (Value v2),es2) /\
+      type_bits (expr_type e1) MOD 8 = 0 /\
+      evaluate_type (get_tenv cx) (expr_type e1) = SOME tv1 /\ value_has_type tv1 v1 /\
+      evaluate_type (get_tenv cx) (expr_type e2) = SOME tv2 /\ value_has_type tv2 v2 ==>
+      binop_frag ctx func cenv cx bop (expr_type e1) ann
+        (if bop = Exp then expr_int_literal e1 else NONE)
+        (if bop = Exp then expr_int_literal e2 else NONE)
+        [expr_type e1;expr_type e2] v1 v2 es2) ==>
     expr_sim_ok cenv (Builtin ann (Bop bop) [e1; e2])
 Proof
   rpt strip_tac >> simp[expr_sim_ok_def] >> rpt strip_tac >>
   drule expr_sim_pre_bop >> strip_tac >>
+  `well_typed_expr env (Builtin ann (Bop bop) [e1;e2])`
+    by fs[expr_sim_pre_def] >>
   `expr_sim_inv cenv cx env es` by gvs[expr_sim_pre_def] >>
   `expr_sim_pre cenv cx env e2 es` by (first_assum irule >> simp[]) >>
   `is_word_type (expr_type e1) /\ ~is_ArrayT (expr_type e1) /\
@@ -177,9 +191,11 @@ Proof
   `type_bits (expr_type e1) MOD 8 = 0` by
     (irule byte_widths_expr_type >> gvs[expr_sim_pre_def]) >>
   `is_word_type ann` by (drule_all well_typed_binop_word_result >> simp[]) >>
-  irule compile_bop_sim >> rpt conj_tac
-  >~ [`binop_frag`]
-  >- (rpt gen_tac >> strip_tac >>
+  (* Goal-only matching: the fragment callback also contains binop_frag and
+     eval_expr, so the old >~ selectors match assumptions in every subgoal. *)
+  irule compile_bop_sim >> rpt conj_tac >> FIRST [
+    (qmatch_goalsub_rename_tac `binop_frag` >>
+      rpt gen_tac >> strip_tac >>
       qspecl_then [`cenv`, `cx`, `env`, `e1`, `es`, `INL (Value v1)`, `es1`]
         mp_tac expr_sim_pre_word_result >>
       impl_tac >- gvs[] >> strip_tac >>
@@ -200,26 +216,74 @@ Proof
       impl_tac >- gvs[] >> strip_tac >>
       first_x_assum (qspec_then `Value v2` mp_tac) >> simp[] >>
       strip_tac >> rename1 `value_has_type tv2 v2` >> simp[] >>
-      qspecl_then [`ctx`, `func`, `cenv`, `cx`, `bop`, `ann`, `e1`, `e2`,
-                   `v1`, `v2`, `es2`, `tv1`, `tv2`] mp_tac binop_frag_typed >>
-      impl_tac >- gvs[] >> simp[])
-  >~ [`eval_expr cx e1 es = (INL _, _)`]
-  >- (rpt strip_tac >>
+      qpat_x_assum `!ctx func cx env es es1 es2 v1 v2 tv1 tv2. _`
+        (qspecl_then [`ctx`, `func`, `cx`, `env`, `es`, `es1`, `es2`,
+                      `v1`, `v2`, `tv1`, `tv2`] mp_tac) >>
+      impl_tac >- gvs[] >> simp[]),
+    (qmatch_goalsub_rename_tac `eval_expr cx e1 es = (INL _, _)` >>
+      rpt strip_tac >>
       qspecl_then [`cenv`, `cx`, `env`, `e1`, `es`, `INL tv`, `es1`] mp_tac
         expr_sim_pre_word_result >>
-      impl_tac >- gvs[] >> strip_tac >> gvs[])
-  >~ [`compile_binop`]
-  >- (rpt gen_tac >> strip_tac >> drule compile_binop_shape >> simp[])
-  >~ [`lower_value`]
-  >- (rpt gen_tac >> strip_tac >>
-      drule expr_sim_pre_lower_value_word_shape >> disch_then drule >> simp[])
-  >~ [`lower_value`]
-  >- (rpt gen_tac >> strip_tac >>
-      drule expr_sim_pre_lower_value_word_shape >> disch_then drule >> simp[])
-  >~ [`expr_sim`]
-  >- metis_tac[expr_sim_ok_apply] >>
-  gvs[]
+      impl_tac >- gvs[] >> strip_tac >> gvs[]),
+    (qmatch_goalsub_rename_tac `compile_binop` >>
+      rpt gen_tac >> strip_tac >> drule compile_binop_shape >> simp[]),
+    (qmatch_goalsub_rename_tac `lower_value` >>
+      rpt gen_tac >> strip_tac >>
+      drule expr_sim_pre_lower_value_word_shape >> disch_then drule >> simp[]),
+    (qmatch_goalsub_rename_tac `expr_sim` >> metis_tac[expr_sim_ok_apply]),
+    gvs[]]
 QED
+
+Theorem compile_bop_word_sim:
+  !cenv ann bop e1 e2.
+    expr_sim_ok cenv e1 /\ expr_sim_ok cenv e2 /\
+    word_value_type (expr_type e1) /\ word_value_type (expr_type e2) ==>
+    expr_sim_ok cenv (Builtin ann (Bop bop) [e1;e2])
+Proof
+  rpt strip_tac >> irule compile_bop_word_with_frag_sim >> simp[] >>
+  rpt gen_tac >> strip_tac >>
+  qspecl_then [`ctx`, `func`, `cenv`, `cx`, `bop`, `ann`, `e1`, `e2`,
+               `v1`, `v2`, `es2`, `tv1`, `tv2`, `env`, `es`, `es1`]
+    mp_tac binop_frag_typed >>
+  impl_tac
+  >- (Cases_on `bop = Exp` >> gvs[] >>
+      gvs[Once well_typed_expr_def, well_typed_builtin_app_def]) >> simp[]
+QED
+
+(* Complete Exp case: checking determines both the two-operand shape and
+   integer operand types. It does not use the unrelated other-operator cheat. *)
+Theorem compile_power_case_sim:
+  !cenv ann args.
+    expr_sim_below cenv (list_size expr_size args) ==>
+    expr_sim_ok cenv (Builtin ann (Bop Exp) args)
+Proof
+  rpt gen_tac >> strip_tac >> simp[expr_sim_ok_def] >> rpt strip_tac >>
+  `well_typed_expr env (Builtin ann (Bop Exp) args)` by fs[expr_sim_pre_def] >>
+  drule well_typed_power_arguments >> strip_tac >> gvs[] >>
+  drule power_checked_integer_info >> strip_tac >>
+  `word_value_type (expr_type base_e) /\ word_value_type (expr_type exponent)` by
+    (Cases_on `signed` >> gvs[word_value_type_def]) >>
+  `expr_sim_ok cenv base_e /\ expr_sim_ok cenv exponent` by
+    (conj_tac
+     >- (qspecl_then [`cenv`, `[base_e;exponent]`, `base_e`] mp_tac
+           expr_sim_below_mem >> simp[expr_ok_def]) >>
+     qspecl_then [`cenv`, `[base_e;exponent]`, `exponent`] mp_tac
+       expr_sim_below_mem >> simp[expr_ok_def]) >>
+  `expr_sim_ok cenv (Builtin ann (Bop Exp) [base_e;exponent])` by
+    (irule compile_bop_word_with_frag_sim >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+     simp_tac bool_ss [] >> rpt gen_tac >> strip_tac >>
+     irule binop_frag_pow >> metis_tac[]) >>
+  irule expr_sim_ok_apply >> metis_tac[]
+QED
+
+val () = List.app (fn (name,th) =>
+  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
+  in if null (Thm.hyp th) andalso null axioms andalso
+        List.all (fn s => s = "DISK_THM") oracles then ()
+     else raise Fail ("power case audit: " ^ name) end)
+  [("compile_bop_word_with_frag_sim",compile_bop_word_with_frag_sim),
+   ("compile_power_case_sim",compile_power_case_sim)];
 
 Theorem compile_bop_other_sim:
   !ctx func cenv cx env ty ann bop args es.
@@ -238,7 +302,8 @@ Theorem compile_bop_case_sim:
     expr_sim_below cenv (list_size expr_size args) ==>
     expr_sim_ok cenv (Builtin ann (Bop bop) args)
 Proof
-  rpt strip_tac >>
+  rpt strip_tac >> Cases_on `bop = Exp`
+  >- (gvs[] >> irule compile_power_case_sim >> simp[]) >>
   Cases_on `?e1 e2. args = [e1; e2] /\ word_value_type (expr_type e1) /\
                     word_value_type (expr_type e2)`
   >- (pop_assum strip_assume_tac >> rpt BasicProvers.VAR_EQ_TAC >>

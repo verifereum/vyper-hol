@@ -145,6 +145,45 @@ Proof
   rpt strip_tac >> gvs[]
 QED
 
+(* Power has an operand-domain rule in addition to its type signature.
+   A literal base permits a dynamic exponent or a large nonnegative literal;
+   otherwise the exponent must be a literal bounded by the value-bit count.
+   Negative literal exponents are never valid, even with a literal base. *)
+Definition integer_value_bits_def:
+  integer_value_bits (BaseT (UintT n)) = n /\
+  integer_value_bits (BaseT (IntT n)) = n - 1 /\
+  integer_value_bits _ = 0
+End
+
+Definition integer_literal_expr_def:
+  integer_literal_expr (Literal _ (IntL n)) = T /\
+  integer_literal_expr _ = F
+End
+
+Definition power_exponent_ok_def:
+  power_exponent_ok ty (Literal _ (IntL n)) =
+    (0 <= n /\ Num n <= integer_value_bits ty) /\
+  power_exponent_ok ty _ = F
+End
+
+Definition power_operands_ok_def:
+  power_operands_ok ty base_e exponent =
+    ((integer_literal_expr base_e \/ power_exponent_ok ty exponent) /\
+     case exponent of Literal _ (IntL n) => 0 <= n | _ => T)
+End
+
+Definition builtin_operands_ok_def:
+  builtin_operands_ok ty (Bop Exp) es =
+    (case es of [base_e; exponent] => power_operands_ok ty base_e exponent
+              | _ => F) /\
+  builtin_operands_ok ty _ es = T
+End
+
+Definition augassign_operand_ok_def:
+  augassign_operand_ok ty (bop : binop) rhs =
+    (bop <> Exp \/ power_exponent_ok ty rhs)
+End
+
 Definition env_item_type_def:
   env_item_type Sender = BaseT AddressT /\
   env_item_type SelfAddr = BaseT AddressT /\
@@ -577,6 +616,35 @@ Theorem create_arg_types_ok_compute =
        (CONJUNCTS create_arg_types_ok_def) @
      [GEN_ALL create_arg_types_ok_raw_create])
 
+(* Pinned Vyper local.py:_handle_modification counts direct immutable writes,
+   but explicitly excludes complex (struct/array) projections in constructors.
+   Do not inherit a direct-root ban through projections. Their deploy/runtime
+   permission is already enforced by type_place_target on the parent root. *)
+Definition target_mutable_def:
+  target_mutable env (NameTarget id) =
+    (FLOOKUP env.var_assignable id = SOME T) /\
+  target_mutable env (TopLevelNameTarget nsid) =
+    (FLOOKUP env.bare_globals nsid = NONE /\
+     IS_SOME (FLOOKUP env.toplevel_vtypes nsid)) /\
+  target_mutable env (SubscriptTarget tgt e) = T /\
+  target_mutable env (AttributeTarget tgt id) = T
+End
+
+Theorem target_mutable_static_maps_transfer:
+  !tgt env1 env2.
+    target_mutable env1 tgt /\
+    env2.var_assignable = env1.var_assignable /\
+    (!k vt. FLOOKUP env1.toplevel_vtypes k = SOME vt ==>
+       FLOOKUP env2.toplevel_vtypes k = SOME vt) /\
+    (!k vt. FLOOKUP env1.toplevel_vtypes k = SOME vt /\
+            FLOOKUP env1.bare_globals k = NONE ==>
+       FLOOKUP env2.bare_globals k = NONE) ==>
+    target_mutable env2 tgt
+Proof
+  Induct >> simp[target_mutable_def] >> rpt strip_tac >>
+  gvs[IS_SOME_EXISTS] >> metis_tac[]
+QED
+
 Definition well_typed_expr_def:
   well_typed_expr env (Name ty id) =
     (FLOOKUP env.var_types id = SOME ty) /\
@@ -608,13 +676,13 @@ Definition well_typed_expr_def:
      well_formed_type env.type_defs ty) /\
   well_typed_expr env (Builtin ty blt es) =
     (well_typed_exprs env es /\ well_typed_builtin_app ty blt (MAP expr_type es) /\
-     well_formed_type env.type_defs ty) /\
+     builtin_operands_ok ty blt es /\ well_formed_type env.type_defs ty) /\
   well_typed_expr env (TypeBuiltin ty tb target_ty es) =
     (well_typed_exprs env es /\ well_formed_type env.type_defs ty /\
      type_builtin_result_ok env.type_defs tb ty target_ty (MAP expr_type es) /\
      well_typed_type_builtin_args tb target_ty (MAP expr_type es)) /\
   well_typed_expr env (Pop ty tgt) =
-    (?n. type_place_target env tgt = SOME (Type (ArrayT ty (Dynamic n))) /\
+    (target_mutable env tgt /\ ?n. type_place_target env tgt = SOME (Type (ArrayT ty (Dynamic n))) /\
          assignable_type env.type_defs (ArrayT ty (Dynamic n))) /\
   well_typed_expr env (Call ty (IntCall (src_id_opt, fn_name)) args drv) =
     (well_typed_exprs env args /\ well_typed_opt env drv /\ well_formed_type env.type_defs ty /\
@@ -769,6 +837,70 @@ Definition well_typed_iterator_def:
      is_int_type typ /\ expr_type e1 = typ /\ expr_type e2 = typ)
 End
 
+(* ===== Power-domain inversion from genuine typing ===== *)
+
+Theorem integer_literal_expr_cases:
+  integer_literal_expr e <=> ?ty n. e = Literal ty (IntL n)
+Proof
+  Cases_on `e` >> simp[integer_literal_expr_def] >>
+  rename1 `Literal ty lit` >> Cases_on `lit` >> simp[integer_literal_expr_def]
+QED
+
+Theorem power_exponent_ok_cases:
+  power_exponent_ok ty e <=>
+    ?lit_ty n. e = Literal lit_ty (IntL n) /\
+               0 <= n /\ Num n <= integer_value_bits ty
+Proof
+  Cases_on `e` >> simp[power_exponent_ok_def] >>
+  rename1 `Literal lit_ty lit` >> Cases_on `lit` >> simp[power_exponent_ok_def]
+QED
+
+Theorem well_typed_power_operands:
+  well_typed_expr env (Builtin ty (Bop Exp) [base_e; exponent]) ==>
+  power_operands_ok ty base_e exponent
+Proof
+  simp[Once well_typed_expr_def, builtin_operands_ok_def]
+QED
+
+Theorem well_typed_power_arguments:
+  well_typed_expr env (Builtin ty (Bop Exp) es) ==>
+  ?base_e exponent. es = [base_e; exponent] /\ power_operands_ok ty base_e exponent
+Proof
+  strip_tac >> fs[Once well_typed_expr_def, builtin_operands_ok_def] >>
+  Cases_on `es` >> gvs[] >>
+  rename1 `well_typed_exprs env (first::tail)` >>
+  Cases_on `tail` >> gvs[] >>
+  rename1 `well_typed_exprs env (first::second::rest)` >>
+  Cases_on `rest` >> gvs[]
+QED
+
+Theorem well_typed_power_has_integer_literal:
+  well_typed_expr env (Builtin ty (Bop Exp) [base_e; exponent]) ==>
+  (?lit_ty n. base_e = Literal lit_ty (IntL n)) \/
+  (?lit_ty n. exponent = Literal lit_ty (IntL n))
+Proof
+  strip_tac >> drule well_typed_power_operands >>
+  simp[power_operands_ok_def, integer_literal_expr_cases,
+       power_exponent_ok_cases] >> metis_tac[]
+QED
+
+Theorem well_typed_power_literal_exponent_nonnegative:
+  well_typed_expr env
+    (Builtin ty (Bop Exp) [base_e; Literal lit_ty (IntL n)]) ==> 0 <= n
+Proof
+  strip_tac >> drule well_typed_power_operands >> simp[power_operands_ok_def]
+QED
+
+Theorem well_typed_power_nonliteral_base_exponent:
+  well_typed_expr env (Builtin ty (Bop Exp) [base_e; exponent]) /\
+  ~integer_literal_expr base_e ==>
+  ?lit_ty n. exponent = Literal lit_ty (IntL n) /\
+             0 <= n /\ Num n <= integer_value_bits ty
+Proof
+  strip_tac >> drule well_typed_power_operands >>
+  simp[power_operands_ok_def, power_exponent_ok_cases] >> metis_tac[]
+QED
+
 (* ===== Executable statement typing ===== *)
 
 Definition type_stmt_def:
@@ -802,17 +934,18 @@ Definition type_stmt_def:
   type_stmt env ret_ty (Append bt e) =
     (case type_place_target env bt of
      | SOME (Type (ArrayT elem_ty (Dynamic n))) =>
-         if well_typed_expr env e /\ expr_type e = elem_ty /\
+         if target_mutable env bt /\ well_typed_expr env e /\ expr_type e = elem_ty /\
             assignable_type env.type_defs elem_ty then SOME env else NONE
      | _ => NONE) /\
   type_stmt env ret_ty (Assign tgt e) =
     (if well_typed_atarget env tgt (expr_type e) /\ well_typed_expr env e /\
         assignable_type env.type_defs (expr_type e) then SOME env else NONE) /\
   type_stmt env ret_ty (AugAssign ty bt bop e) =
-    (if well_typed_target env bt ty /\ well_typed_expr env e /\
+    (if target_mutable env bt /\ well_typed_target env bt ty /\ well_typed_expr env e /\
         assignable_type env.type_defs ty /\
         assignable_type env.type_defs (expr_type e) /\
-        well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn
+        well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn /\
+        augassign_operand_ok ty bop e
      then SOME env else NONE) /\
   type_stmt env ret_ty (If e ss1 ss2) =
     (if well_typed_expr env e /\ expr_type e = BaseT BoolT /\
@@ -839,6 +972,45 @@ End
 Definition well_typed_stmts_def:
   well_typed_stmts env ret_ty ss = IS_SOME (type_stmts env ret_ty ss)
 End
+
+(* ===== Mutation-domain inversion ===== *)
+
+Theorem well_typed_pop_target_mutable:
+  well_typed_expr env (Pop ty tgt) ==> target_mutable env tgt
+Proof
+  simp[Once well_typed_expr_def]
+QED
+
+Theorem type_stmt_append_target_mutable:
+  type_stmt env ret_ty (Append tgt e) = SOME env' ==> target_mutable env tgt
+Proof
+  simp[Once type_stmt_def, AllCaseEqs()] >> metis_tac[]
+QED
+
+Theorem type_stmt_augassign_target_mutable:
+  type_stmt env ret_ty (AugAssign ty tgt bop e) = SOME env' ==>
+  target_mutable env tgt
+Proof
+  simp[Once type_stmt_def, AllCaseEqs()] >> metis_tac[]
+QED
+
+Theorem type_stmt_power_augassign_exponent:
+  type_stmt env ret_ty (AugAssign ty target Exp rhs) = SOME env' ==>
+  ?lit_ty n. rhs = Literal lit_ty (IntL n) /\
+             0 <= n /\ Num n <= integer_value_bits ty
+Proof
+  simp[Once type_stmt_def, augassign_operand_ok_def, power_exponent_ok_cases,
+       AllCaseEqs()] >> metis_tac[]
+QED
+
+Theorem well_typed_power_augassign_exponent:
+  well_typed_stmt env ret_ty (AugAssign ty target Exp rhs) ==>
+  ?lit_ty n. rhs = Literal lit_ty (IntL n) /\
+             0 <= n /\ Num n <= integer_value_bits ty
+Proof
+  simp[well_typed_stmt_def, IS_SOME_EXISTS] >>
+  metis_tac[type_stmt_power_augassign_exponent]
+QED
 
 (* Conservative syntactic control-flow predicate for callable bodies.  If this
  * holds for a statement/list, the evaluator should not be able to fall through

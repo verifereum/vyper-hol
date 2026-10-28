@@ -504,8 +504,10 @@ Proof
    s7.cs_current_insts = [] /\ s11.cs_current_insts = [] /\
    st'.cs_current_insts = [] /\ s7.cs_current_bb = tl /\
    s11.cs_current_bb = el /\ st'.cs_current_bb = xl` by
-    (rpt (qpat_x_assum `new_block _ _ = _` mp_tac) >> simp[new_block_def] >>
-     rpt strip_tac >> gvs[]) >>
+    (* Original unfolding proof (too expensive in this compilation client):
+       rpt (qpat_x_assum `new_block _ _ = _` mp_tac) >> simp[new_block_def] >>
+       rpt strip_tac >> gvs[] *)
+    (imp_res_tac new_block_props >> asm_rewrite_tac[]) >>
   `cs_extends s1 s5 /\ cs_extends s7 s11 /\ cs_extends s11 st'` by
     metis_tac[cs_extends_trans] >>
   `cs_extends s1 st'` by metis_tac[cs_extends_trans] >>

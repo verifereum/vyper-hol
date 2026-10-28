@@ -12,7 +12,7 @@ val () = holbuild_extra_deps [
   "fixtures/check_contract/decimal_folding.vy"
 ];
 
-val fixture = vyperCheckContractFrontendLib.check_contract_result
+val fixture = vyperCheckContractFrontendLib.check_contract_result_legacy
   {in_deploy = false, address = ``0w : address``,
    annotated_ast = JSONDecode.decodeFile jsonASTLib.annotated_ast
      "fixtures/check_contract/decimal_folding.json",

@@ -1,0 +1,8 @@
+# Same declarations as interface_struct_return/manager.vyi at VYPER_PIN.
+struct Record:
+    value: uint256
+
+@external
+@view
+def get_record() -> Record:
+    ...

@@ -2509,7 +2509,7 @@ Proof
   >- simp[builtinAbiTheory.compile_create_tuple_in_memory_def, ci_mono_comp_return]
   >> rewrite_tac[builtinAbiTheory.compile_create_tuple_in_memory_def] >> BETA_TAC >>
   ho_match_mp_tac ci_mono_bind >> conj_tac
-  >- (IF_CASES_TAC >> simp[ci_mono_comp_return, ci_mono_emit_op])
+  >- simp[ci_mono_emit_op]
   >> rpt strip_tac >>
   ho_match_mp_tac ci_mono_ignore_bind >> conj_tac
   >- (IF_CASES_TAC >> simp[ci_mono_emit_void])
@@ -3752,12 +3752,14 @@ Theorem ci_mono_lower_abi_encode[local]:
   ci_mono st (SND (lower_abi_encode ensure method_id src info maxlen st))
 Proof
   simp[builtinAbiTheory.lower_abi_encode_def, LET_THM] >>
-  ntac 3 (ho_match_mp_tac ci_mono_bind >> conj_tac
-          >- simp[ci_mono_compile_alloc_buffer, ci_mono_comp_return, ci_mono_emit_op]
+  ntac 2 (ho_match_mp_tac ci_mono_bind >> conj_tac
+          >- simp[ci_mono_compile_alloc_buffer, ci_mono_comp_return]
           >> rpt gen_tac) >>
   ho_match_mp_tac ci_mono_ignore_bind >> conj_tac
   >- (Cases_on `method_id` >> simp[ci_mono_comp_return] >>
       gen_tac >> ho_match_mp_tac ci_mono_bind >> simp[ci_mono_emit_op, ci_mono_emit_void]) >>
+  rpt gen_tac >> ho_match_mp_tac ci_mono_bind >> conj_tac
+  >- simp[ci_mono_emit_op] >>
   rpt gen_tac >> ho_match_mp_tac ci_mono_bind >> conj_tac
   >- simp[ci_mono_compile_abi_encode] >>
   rpt gen_tac >> ho_match_mp_tac ci_mono_ignore_bind >> conj_tac
@@ -3785,18 +3787,50 @@ Proof
   simp[ci_mono_compile_abi_decode, ci_mono_comp_return]
 QED
 
+Theorem ci_mono_compile_abi_encode_input[local]:
+  ci_mono st (SND (compile_abi_encode_input cenv ensure tys ops st))
+Proof
+  simp[builtinAbiTheory.compile_abi_encode_input_def] >>
+  IF_CASES_TAC >> simp[ci_mono_comp_return] >> TRY IF_CASES_TAC >>
+  simp[ci_mono_comp_return] >>
+  (ho_match_mp_tac ci_mono_bind >> conj_tac
+   >- simp[ci_mono_compile_alloc_buffer] >>
+   rpt gen_tac >> ho_match_mp_tac ci_mono_ignore_bind >>
+   simp[ci_mono_emit_void, ci_mono_compile_create_tuple_in_memory,
+        ci_mono_comp_return])
+QED
+
 Theorem ci_mono_type_builtin_abi_encode[local]:
   (∀ce t e s. ci_mono s (SND (f ce t e s))) ⇒
   ci_mono st (SND (compile_type_builtin_dispatch_body f cenv vv_ty ty
     (AbiEncode ensure method_id) ret_ty args st))
 Proof
   strip_tac >> simp[compile_type_builtin_dispatch_body_def, LET_THM] >>
-  IF_CASES_TAC >>
   rpt (irule ci_mono_uncurry >> reverse conj_tac
-       >- simp[ci_mono_lower_value_cfn, ci_mono_compile_alloc_buffer,
-               ci_mono_emit_void, ci_mono_unwrap_value]
+       >- simp[ci_mono_compile_multi_exprs, ci_mono_compile_abi_encode_input]
        >> rpt gen_tac >> BETA_TAC) >>
   simp[ci_mono_as_ptr_val, ci_mono_lower_abi_encode]
+QED
+
+Theorem ci_mono_compile_abi_decode_input[local]:
+  ci_mono st (SND (compile_abi_decode_input ty op st))
+Proof
+  Cases_on `ty` >>
+  TRY (simp[builtinAbiTheory.compile_abi_decode_input_def,
+            ci_mono_comp_return] >> NO_TAC) >>
+  rename1 `BaseT bt` >> Cases_on `bt` >>
+  TRY (simp[builtinAbiTheory.compile_abi_decode_input_def,
+            ci_mono_comp_return] >> NO_TAC) >>
+  rename1 `BytesT bd` >> Cases_on `bd` >>
+  simp[builtinAbiTheory.compile_abi_decode_input_def, ci_mono_comp_return] >>
+  ho_match_mp_tac ci_mono_bind >> conj_tac
+  >- simp[ci_mono_compile_alloc_buffer] >> rpt gen_tac >>
+  ho_match_mp_tac ci_mono_ignore_bind >> conj_tac
+  >- simp[ci_mono_emit_void] >> rpt gen_tac >>
+  ho_match_mp_tac ci_mono_bind >> conj_tac
+  >- simp[ci_mono_emit_op] >> rpt gen_tac >>
+  ho_match_mp_tac ci_mono_ignore_bind >>
+  simp[ci_mono_emit_void, ci_mono_comp_return]
 QED
 
 Theorem ci_mono_type_builtin_abi_decode[local]:
@@ -3806,7 +3840,7 @@ Theorem ci_mono_type_builtin_abi_decode[local]:
 Proof
   strip_tac >> simp[compile_type_builtin_dispatch_body_def, LET_THM] >>
   rpt (irule ci_mono_uncurry >> reverse conj_tac
-       >- simp[ci_mono_unwrap_value]
+       >- simp[ci_mono_unwrap_value, ci_mono_compile_abi_decode_input]
        >> rpt gen_tac >> BETA_TAC) >>
   simp[ci_mono_as_ptr_val, ci_mono_lower_abi_decode]
 QED

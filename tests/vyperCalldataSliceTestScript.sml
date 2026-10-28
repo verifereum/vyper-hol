@@ -60,7 +60,7 @@ Proof
 QED
 
 (* Exported by pinned Vyper cd74ce4f: literal, folded Name, folded BinOp. *)
-val fixture = vyperCheckContractFrontendLib.check_contract_result
+val fixture = vyperCheckContractFrontendLib.check_contract_result_legacy
   {in_deploy = false, address = ``0w : address``,
    annotated_ast = JSONDecode.decodeFile jsonASTLib.annotated_ast
      "fixtures/check_contract/calldata_slice.json",

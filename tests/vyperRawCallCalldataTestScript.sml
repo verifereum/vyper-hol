@@ -33,7 +33,7 @@ val fixture_input =
      "fixtures/check_contract/raw_call_calldata.json",
    storage_layout = JSONDecode.decodeFile jsonASTLib.storage_layout
      "fixtures/check_contract/raw_call_calldata.json"};
-val fixture = vyperCheckContractFrontendLib.check_contract_result fixture_input;
+val fixture = vyperCheckContractFrontendLib.check_contract_result_legacy fixture_input;
 val target_e = ``Name (BaseT AddressT) "target"``;
 val zero_e = ``Literal (BaseT (UintT 256)) (IntL 0)``;
 val expected_calls = [

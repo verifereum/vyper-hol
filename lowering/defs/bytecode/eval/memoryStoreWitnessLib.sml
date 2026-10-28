@@ -12,7 +12,7 @@ fun write path text = let val output = TextIO.openOut path in
 
 fun program root name = let
   val path = OS.Path.concat (root, name ^ ".json")
-  val input = vyperCheckContractFrontendLib.prepare_check_input
+  val input = vyperCheckContractFrontendLib.prepare_check_input_legacy
     {in_deploy = false, address = ``0w : address``,
      annotated_ast = JSONDecode.decodeFile jsonASTLib.annotated_ast path,
      storage_layout = JSONDecode.decodeFile jsonASTLib.storage_layout path}
