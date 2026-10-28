@@ -28,6 +28,7 @@ Ancestors
   abiEncoderOpenPrefix abiEncoderZeroFrame abiEncoderSharedMembersInput
   abiEncoderSharedMembersIndex abiEncoderSharedMembersPrepare
   abiEncoderSharedMembersRequest abiEncoderSharedMembersOutput abiEncoderSharedMembersEndpoint
+  abiEncoderSharedMembersInterpret abiEncoderScratchTransport abiEncoderSharedSuffix
 
 fun audit_encoder_tag (name, th) =
   let
@@ -297,6 +298,19 @@ val _ = List.app audit_encoder_tag
    ("abi_encoder_mem_bytes_singletons", abi_encoder_mem_bytes_singletons),
    ("abi_encoder_footprint_frame_zero_slice", abi_encoder_footprint_frame_zero_slice),
    ("abi_encoder_shared_members_static_endpoint", abi_encoder_shared_members_static_endpoint),
+   ("abi_encoder_child_scratch_allocations", abi_encoder_child_scratch_allocations),
+   ("abi_encoder_address_scratch_disjoint", abi_encoder_address_scratch_disjoint),
+   ("abi_encoder_shared_members_static_exit", abi_encoder_shared_members_static_exit),
+   ("abi_encoder_shared_members_dynamic_endpoint", abi_encoder_shared_members_dynamic_endpoint),
+   ("abi_encoder_shared_members_dynamic_exit", abi_encoder_shared_members_dynamic_exit),
+   ("abi_encoder_shared_members_entry_input", abi_encoder_shared_members_entry_input),
+   ("abi_encoder_shared_members_entry_exit", abi_encoder_shared_members_entry_exit),
+   ("abi_encoder_shared_members_index_cons_shape", abi_encoder_shared_members_index_cons_shape),
+   ("abi_encoder_shared_members_entry_prepare", abi_encoder_shared_members_entry_prepare),
+   ("abi_encoder_shared_members_empty_post", abi_encoder_shared_members_empty_post),
+   ("abi_encoder_shared_members_generate", abi_encoder_shared_members_generate),
+   ("abi_encoder_shared_member_dynamic_output", abi_encoder_shared_member_dynamic_output),
+   ("abi_encoder_shared_suffix_observations", abi_encoder_shared_suffix_observations),
    ("abi_scratch_members_correct_cons", abi_scratch_members_correct_cons),
    ("abi_scratch_members_correct_all", abi_scratch_members_correct_all),
    ("abi_encoder_members_inv_nonempty", abi_encoder_members_inv_nonempty),
