@@ -371,7 +371,7 @@ val () = cv_auto_trans evaluate_abi_decode_def;
 (* Returndata gate, without the upper bound the cap enforces. *)
 Definition vyper_valid_enc_returndata_def:
   vyper_valid_enc_returndata env t bs ⇔
-    (valid_enc (vyper_to_abi_type env t) bs ∧
+    (vyper_decode_valid_enc (vyper_to_abi_type env t) bs ∧
      static_length (vyper_to_abi_type env t) ≤ LENGTH bs)
 End
 

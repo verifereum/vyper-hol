@@ -56,11 +56,11 @@ The semantics is organised into layers:
 
 The logical contract type checker can be evaluated on closed direct inputs, compiler JSON, or deployment traces using a reusable kernel-checked SML API. See the [contract checker evaluator guide](docs/check-contract-evaluator.md) for its trust model, interfaces, examples, and fixture-generation procedure.
 
-Explicit `abi_decode` and calldata argument decoding ignore unused bytes after
-dynamic `Bytes` and `String` values. Length, shape, scalar, fixed-bytes padding,
-and applicable Vyper bounds remain checked. External-call returndata decoding
-is unchanged and retains its stricter padding checks. Canonical ABI encoding
-is unchanged.
+Explicit `abi_decode`, calldata argument decoding, and external-call returndata
+decoding ignore unused bytes after dynamic `Bytes` and `String` values. Length,
+shape, scalar, fixed-bytes padding, and applicable Vyper bounds remain checked.
+Returndata is still capped at the expected type's ABI size bound before decoding.
+Canonical ABI encoding is unchanged.
 
 The interpreter is written in a state-exception monad. Exceptions are used for semantic errors (e.g., looking up a variable that was not bound), legitimate runtime exceptions (e.g., failed assertions), and control flow for internal function calls and loops (`return`, `break`, `continue`).
 
