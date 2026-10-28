@@ -2,6 +2,7 @@
 Theory abiEncoderSharedComplex
 Ancestors
   abiEncoderSharedMembersCorrect abiEncoderSharedMembersInput abiEncoderSharedMembersIndex
+  abiDecoderDynamicLoopSetup abiEncoderMemberPhaseRaw abiDecoderReentryAddress abiEncoderMemberPhaseEffect abiScratchAddress abiEncoderAddressReach emitHelperProps emitHelper venomInst
   abiEncoderSharedArrayPrepare abiEncoderSharedContract abiEncoderComplexLayout
   abiEncoderComplexPrefix abiEncoderOpenInput abiEncoderInput abiEncoderMembersDefs
   abiScratchEffect abiScratchEncoderContract abiEncoderRegisteredEffect abiEncoderExtendSim abiDecoderContract
@@ -53,8 +54,44 @@ Proof
   qexistsl_tac [`ready`,`slot`] >> asm_simp_tac bool_ss []
 QED
 
+Theorem abi_encoder_shared_complex_load_finish:
+  emit_op MLOAD [dp] st = (out,final) /\ fn_has_code st final func /\
+  abi_encoder_shared_members_inv [] [] [] tys avs T dp site slot first last lo st limit_st
+    src dst sb so ho d hl sz b cap initial /\ slot < dimword (:256) /\
+  final.cs_next_var <= limit_st.cs_next_var ==>
+  ?ready.
+    mem_bytes_at d (LENGTH (enc (Tuple tys) (ListV avs))) ready.vs_memory =
+      enc (Tuple tys) (ListV avs) /\
+    eval_operand out ready = SOME (n2w (LENGTH (enc (Tuple tys) (ListV avs)))) /\
+    abi_scratch_effect first last lo final.cs_next_id st.cs_next_var limit_st d sz b cap initial ready /\
+    abi_encoder_registered_effect (abi_decoder_ids lo final.cs_next_id) [(d,sz)] initial ready /\
+    (alloca_inv initial ==> alloca_inv ready) /\
+    ready.vs_current_bb = final.cs_current_bb /\ ready.vs_inst_idx = LENGTH final.cs_current_insts /\
+    ~ready.vs_halted /\ abi_encoder_extend_sim ctx func initial ready
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  drule abi_encoder_shared_members_final_output >> strip_tac >>
+  qpat_x_assum `abi_encoder_shared_members_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_encoder_shared_members_inv_def]) >>
+  qpat_x_assum `abi_encoder_cursor T _ _ _ _ _ _ (LENGTH _) _`
+    (MAP_EVERY assume_tac o CONJUNCTS o REWRITE_RULE [abi_encoder_cursor_def]) >>
+  drule_all abi_encoder_member_load_raw >> disch_then (qx_choose_then `ready` assume_tac) >>
+  drule_all abi_encoder_member_load_transport >> strip_tac >>
+  `abi_scratch_effect first last lo final.cs_next_id st.cs_next_var limit_st d sz b cap initial ready` by
+    (irule abi_scratch_address_effect >> asm_rewrite_tac []) >>
+  drule_all abi_encoder_member_load_registered >>
+  disch_then (qspecl_then [`[(d,sz)]`,`abi_decoder_ids lo final.cs_next_id`] strip_assume_tac) >>
+  drule abi_encoder_emit_address_shape >> strip_tac >>
+  drule inst_extends_emit_op >> strip_tac >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) (emitted_insts st final)` by
+    (drule emitted_insts_emit_op >> strip_tac >> gvs[mk_inst_def,is_terminator_def]) >>
+  drule_all abi_encoder_member_phase_extend_sim >> disch_then (qspec_then `ctx` assume_tac) >>
+  qexists_tac `ready` >> fs[abi_decoder_address_frame_def]
+QED
+
 val _ = List.app (fn th =>
   let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
     if List.all (fn s => s = "DISK_THM") oracles andalso null axioms andalso null (Thm.hyp th)
     then () else raise Fail "shared complex admission, axiom or hypothesis"
-  end) [abi_encoder_shared_complex_head_length,abi_encoder_shared_complex_prepare];
+  end) [abi_encoder_shared_complex_head_length,abi_encoder_shared_complex_prepare,
+    abi_encoder_shared_complex_load_finish];
