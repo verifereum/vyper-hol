@@ -31,6 +31,9 @@ Ancestors
   abiEncoderSharedMembersInterpret abiEncoderScratchTransport abiEncoderSharedSuffix
   abiEncoderSharedMembersCorrect abiEncoderSharedArrayInput abiEncoderSharedArrayIndex
   abiEncoderSharedArrayFinish abiEncoderSharedArrayHeader
+  abiEncoderSharedArrayBackedge abiEncoderSharedArrayCountPrepare abiEncoderSharedArrayCount
+  abiEncoderSharedArrayEntry abiEncoderSharedArrayInit abiEncoderSharedArrayParent
+  abiEncoderSharedArrayPrepare abiEncoderSharedInputEffect
 
 fun audit_encoder_tag (name, th) =
   let
@@ -338,6 +341,36 @@ val _ = List.app audit_encoder_tag
    ("abi_encoder_open_tuple_prefix_complete", abi_encoder_open_tuple_prefix_complete),
    ("abi_encoder_shared_members_final_output", abi_encoder_shared_members_final_output),
    ("abi_encoder_shared_members_correct", abi_encoder_shared_members_correct),
+   ("abi_encoder_array_backedge_extend_state", abi_encoder_array_backedge_extend_state),
+   ("abi_encoder_array_backedge_extend_sim", abi_encoder_array_backedge_extend_sim),
+   ("abi_encoder_array_backedge_registered", abi_encoder_array_backedge_registered),
+   ("abi_encoder_shared_array_backedge_reach", abi_encoder_shared_array_backedge_reach),
+   ("abi_encoder_shared_input_registered_write", abi_encoder_shared_input_registered_write),
+   ("abi_encoder_shared_array_count_prepare", abi_encoder_shared_array_count_prepare),
+   ("abi_encoder_array_count_raw_transport", abi_encoder_array_count_raw_transport),
+   ("abi_encoder_array_count_opcodes", abi_encoder_array_count_opcodes),
+   ("abi_encoder_array_count_registered", abi_encoder_array_count_registered),
+   ("abi_encoder_array_count_extend", abi_encoder_array_count_extend),
+   ("abi_encoder_shared_array_count_effect", abi_encoder_shared_array_count_effect),
+   ("abi_encoder_shared_array_count_input_facts", abi_encoder_shared_array_count_input_facts),
+   ("abi_encoder_shared_array_count_input", abi_encoder_shared_array_count_input),
+   ("abi_encoder_array_jump_extend_state", abi_encoder_array_jump_extend_state),
+   ("abi_encoder_array_loop_entry_extend", abi_encoder_array_loop_entry_extend),
+   ("abi_encoder_shared_array_loop_enter", abi_encoder_shared_array_loop_enter),
+   ("abi_encoder_shared_input_address", abi_encoder_shared_input_address),
+   ("abi_encoder_shared_array_index_address", abi_encoder_shared_array_index_address),
+   ("abi_encoder_shared_array_header_index", abi_encoder_shared_array_header_index),
+   ("abi_encoder_cursor_alloca_observations", abi_encoder_cursor_alloca_observations),
+   ("abi_encoder_complex_prefix_raw_observations", abi_encoder_complex_prefix_raw_observations),
+   ("abi_encoder_complex_prefix_raw_transport", abi_encoder_complex_prefix_raw_transport),
+   ("abi_encoder_complex_prefix_raw_allocated", abi_encoder_complex_prefix_raw_allocated),
+   ("abi_encoder_complex_prefix_raw_registered", abi_encoder_complex_prefix_raw_registered),
+   ("abi_encoder_complex_prefix_raw_extend", abi_encoder_complex_prefix_raw_extend),
+   ("abi_encoder_shared_array_parent_prepare", abi_encoder_shared_array_parent_prepare),
+   ("abi_encoder_complex_prefix_raw_reach", abi_encoder_complex_prefix_raw_reach),
+   ("abi_encoder_shared_cursor_prepare", abi_encoder_shared_cursor_prepare),
+   ("abi_encoder_shared_input_effect", abi_encoder_shared_input_effect),
+   ("abi_encoder_shared_input_mono", abi_encoder_shared_input_mono),
    ("abi_scratch_members_correct_cons", abi_scratch_members_correct_cons),
    ("abi_scratch_members_correct_all", abi_scratch_members_correct_all),
    ("abi_encoder_members_inv_nonempty", abi_encoder_members_inv_nonempty),
