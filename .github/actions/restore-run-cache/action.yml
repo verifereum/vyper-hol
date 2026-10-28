@@ -1,5 +1,5 @@
 name: 'Restore run cache'
-description: 'Restores a cache entry an earlier job of this run saved, trying three times before failing the job'
+description: 'Restores a cache entry an earlier job of this run saved or restored, trying three times before failing the job'
 
 inputs:
   path:
@@ -13,8 +13,9 @@ runs:
   using: 'composite'
   steps:
     # A download from the Actions cache can stall and be aborted, which the
-    # restore reports as a miss. The entry was saved earlier in this run, so a
-    # miss is almost always such an abort, and a second download succeeds.
+    # restore reports as a miss. An earlier job of this run saved or restored
+    # the entry, so a miss is almost always such an abort, and a second
+    # download succeeds.
     - name: Restore cache
       id: attempt-1
       uses: actions/cache/restore@v6
