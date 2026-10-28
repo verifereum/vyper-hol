@@ -132,15 +132,69 @@ Definition compute_immutables_len_def:
      | _ => compute_immutables_len sft rest)
 End
 
-Definition build_is_hashmap_def:
-  build_is_hashmap ([] : toplevel list) = (K F : string -> bool) ∧
-  build_is_hashmap (top :: rest) =
+Definition build_hashmap_info_def:
+  build_hashmap_info ([] : toplevel list) =
+    (K NONE : string -> (bool # type # value_type) option) ∧
+  build_hashmap_info (top :: rest) =
     case top of
-      HashMapDecl _ _ hname _ _ _ =>
-        (λn. if n = module_var_key (NONE, hname) then T
-             else build_is_hashmap rest n)
-    | _ => build_is_hashmap rest
+      HashMapDecl _ tr hname kt vt _ =>
+        (λn. if n = module_var_key (NONE, hname) then SOME (tr, kt, vt)
+             else build_hashmap_info rest n)
+    | _ => build_hashmap_info rest
 End
+
+Theorem build_hashmap_info_head[simp]:
+  build_hashmap_info (HashMapDecl vis tr name kt vt slot :: rest)
+    (module_var_key (NONE, name)) = SOME (tr, kt, vt)
+Proof
+  simp[build_hashmap_info_def]
+QED
+
+Theorem build_hashmap_info_other:
+  n ≠ module_var_key (NONE, name) ⇒
+  build_hashmap_info (HashMapDecl vis tr name kt vt slot :: rest) n =
+    build_hashmap_info rest n
+Proof
+  simp[build_hashmap_info_def]
+QED
+
+Theorem build_hashmap_info_transient:
+  build_hashmap_info [HashMapDecl vis T name kt vt slot]
+    (module_var_key (NONE, name)) = SOME (T, kt, vt)
+Proof
+  simp[build_hashmap_info_def]
+QED
+
+(* The leftmost declaration wins, including when declarations are appended. *)
+Theorem build_hashmap_info_append:
+  !xs ys n. build_hashmap_info (xs ++ ys) n =
+    case build_hashmap_info xs n of
+      NONE => build_hashmap_info ys n
+    | SOME info => SOME info
+Proof
+  Induct >> simp[build_hashmap_info_def] >>
+  Cases_on `h` >> simp[build_hashmap_info_def] >>
+  rpt gen_tac >> IF_CASES_TAC >> simp[]
+QED
+
+Theorem build_hashmap_info_some:
+  !tops n tr kt vt.
+    build_hashmap_info tops n = SOME (tr, kt, vt) ==>
+    ?pre post vis name slot.
+      tops = pre ++ HashMapDecl vis tr name kt vt slot :: post /\
+      n = module_var_key (NONE, name) /\
+      build_hashmap_info pre n = NONE
+Proof
+  Induct >> simp[build_hashmap_info_def] >>
+  Cases_on `h` >> simp[build_hashmap_info_def] >> rpt gen_tac
+  >> TRY (IF_CASES_TAC >> gvs[])
+  >> rpt strip_tac
+  >> TRY (qexists `[]` >> simp[build_hashmap_info_def] >> NO_TAC)
+  >> first_x_assum drule >> strip_tac
+  >> qmatch_goalsub_abbrev_tac `head::tops`
+  >> qexists `head::pre` >> simp[Abbr `head`, build_hashmap_info_def]
+  >> metis_tac[]
+QED
 
 (* ===== Event Info ===== *)
 
@@ -434,7 +488,7 @@ Definition build_compile_env_def:
     let (flag_member_id, flag_n_members) = build_flag_info tops (K (K 0)) (K 0) in
     let storage_layout = extract_layout tops in
     let var_type_map = build_var_type_map tops in
-    let is_hashmap = build_is_hashmap tops in
+    let hashmap_info = build_hashmap_info tops in
     let tenv = type_env tops in
     let event_info =
           build_event_info tenv tops
@@ -471,7 +525,7 @@ Definition build_compile_env_def:
        ce_flag_member_id := flag_member_id;
        ce_flag_n_members := flag_n_members;
        ce_var_type := local_var_type;
-       ce_is_hashmap := is_hashmap;
+       ce_hashmap_info := hashmap_info;
        ce_event_info := event_info;
        ce_type_env := tenv;
        ce_returns_count := rc;

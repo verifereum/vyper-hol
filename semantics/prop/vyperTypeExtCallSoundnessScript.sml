@@ -1573,6 +1573,25 @@ Proof
   disch_then (qspec_then `result4` mp_tac) >> simp[]
 QED
 
+Theorem ext_call_value_opt_return[local]:
+  (!v. ext_call_kwarg EKValue opts kvs = SOME v ==>
+       ?n. dest_NumV v = SOME n) ==>
+  !static. ?value_opt.
+    (if static then return NONE else
+       case ext_call_kwarg EKValue opts kvs of
+       | NONE => return (SOME 0)
+       | SOME v => bind (lift_option_type (dest_NumV v) "ExtCall value not int")
+                        (\n. return (SOME n))) = return value_opt
+Proof
+  strip_tac >> gen_tac >> Cases_on `static`
+  >- (qexists_tac `NONE` >> simp[]) >>
+  Cases_on `ext_call_kwarg EKValue opts kvs`
+  >- (qexists_tac `SOME 0` >> simp[]) >>
+  gvs[] >> rename1 `dest_NumV _ = SOME amount` >>
+  qexists_tac `SOME amount` >>
+  simp[lift_option_type_def, bind_def, return_def, FUN_EQ_THM]
+QED
+
 Theorem eval_ext_call_result_sound:
   runtime_consistent env cx st /\
   exprs_runtime_typed env es vs /\
@@ -1606,13 +1625,18 @@ Proof
        value_has_type ret_tv v` by (
     rpt strip_tac >> drule_all ext_call_kwarg_typed >>
     simp[ext_call_kw_type_def] >> strip_tac >> gvs[]) >>
+  drule ext_call_value_opt_return >>
+  disch_then (qspec_then `static` strip_assume_tac) >>
   qpat_x_assum `eval_ext_call _ _ _ _ _ _ _ = _` mp_tac >>
-  simp[eval_ext_call_def, bind_def, ignore_bind_def, type_check_def,
+  asm_rewrite_tac[eval_ext_call_def, LET_THM] >>
+  simp[bind_def, ignore_bind_def, type_check_def,
        assert_def, check_def, lift_option_type_def, lift_option_def,
        lift_sum_runtime_def, get_accounts_def, get_transient_storage_def,
        update_accounts_def, update_transient_def, append_logs_def,
        return_def, raise_def,
        COND_RATOR, option_CASE_rator, prod_CASE_rator, sum_CASE_rator] >>
+  qpat_x_assum `(if static then return NONE else _) = _` kall_tac >>
+  qpat_x_assum `!v. ext_call_kwarg EKValue _ _ = SOME v ==> _` kall_tac >>
   strip_tac >> gvs[AllCaseEqs()] >>
   gvs[pairTheory.UNCURRY_RATOR, pairTheory.UNCURRY_EQ, combinTheory.C_THM,
       combinTheory.o_THM, AllCaseEqs(), COND_RATOR, bind_def, return_def,

@@ -1665,45 +1665,24 @@ Theorem ci_mono_compile_subscript_cfn[local]:
 Proof
   rpt gen_tac >> strip_tac >>
   rewrite_tac[compile_subscript_def] >> BETA_TAC >>
-  PURE_REWRITE_TAC[LET_THM] >> BETA_TAC >>
-  IF_CASES_TAC >-
-  (* hashmap case *)
-  (irule ci_mono_bind >> conj_tac >-
-   (rpt strip_tac >> BETA_TAC >>
-    irule ci_mono_bind >> conj_tac >-
-    (rpt strip_tac >> BETA_TAC >>
-     irule ci_mono_bind >> conj_tac >-
-     (rpt strip_tac >> simp[ci_mono_comp_return]) >>
-     simp[ci_mono_compile_mapping_subscript]) >>
-    IF_CASES_TAC >>
-    simp[ci_mono_compile_keccak256_key, ci_mono_comp_return]) >>
-   irule ci_mono_lower_value_cfn >> metis_tac[]) >>
-  (* non-hashmap: case on ce_var_type *)
-  qmatch_asmsub_abbrev_tac`¬_(cbe)` >>
-  BasicProvers.TOP_CASE_TAC >> gvs[] >- (
-    irule ci_mono_bind >> gvs[] >> rpt strip_tac >>
-    irule ci_mono_bind >> gvs[ci_mono_comp_return] >> rpt strip_tac >>
-    irule ci_mono_bind >> gvs[] >> rpt gen_tac >>
-    reverse conj_tac >- (
-      rpt gen_tac >>
-      irule ci_mono_lower_value_cfn >>
-      rpt strip_tac >> first_x_assum irule) >>
-    rpt gen_tac >>
-    irule ci_mono_bind >> gvs[ci_mono_compile_array_subscript] >> rpt gen_tac >>
-    simp[ci_mono_comp_return] ) >>
-  BasicProvers.CASE_TAC >> gvs[] >>
-  irule ci_mono_bind >> gvs[] >> rpt strip_tac >>
-  irule ci_mono_bind >> gvs[ci_mono_comp_return] >> rpt strip_tac >>
-  irule ci_mono_bind >> gvs[] >> rpt strip_tac >>
-  TRY (
-    rpt gen_tac >>
-    irule ci_mono_lower_value_cfn >>
-    rpt strip_tac >> first_x_assum irule) >>
-  TRY (
-    irule ci_mono_bind >>
-    gvs[ci_mono_compile_array_subscript] >>
-    rpt gen_tac ) >>
-  simp[ci_mono_comp_return, ci_mono_compile_tuple_subscript]
+  irule ci_mono_bind >> conj_tac
+  >- (rpt gen_tac >> simp[LET_THM] >>
+      Cases_on `place_type cenv base_e` >> simp[]
+      >- (irule ci_mono_bind >> conj_tac
+          >- (rpt gen_tac >> BETA_TAC >> irule ci_mono_bind >> conj_tac
+              >- (rpt gen_tac >> BETA_TAC >> irule ci_mono_bind >>
+                  simp[ci_mono_comp_return, ci_mono_compile_mapping_subscript]) >>
+              IF_CASES_TAC >>
+              simp[ci_mono_compile_keccak256_key, ci_mono_comp_return]) >>
+          irule ci_mono_lower_value_cfn >> metis_tac[]) >>
+      Cases_on `t` >> simp[LET_THM] >>
+      rpt (CHANGED_TAC (
+        rpt gen_tac >>
+        (irule ci_mono_bind >> conj_tac) >>
+        simp[ci_mono_comp_return, ci_mono_compile_tuple_subscript,
+             ci_mono_compile_array_subscript] >>
+        TRY (irule ci_mono_lower_value_cfn >> metis_tac[])))) >>
+  metis_tac[]
 QED
 
 Theorem ci_mono_compile_acc_cfn[local]:
@@ -1746,6 +1725,22 @@ Proof
       rpt gen_tac >> simp[ci_mono_comp_return])
   >> metis_tac[]
 QED
+
+(* ===== Kernel audit for changed place helpers ===== *)
+
+val () = List.app (fn (name,theorem) =>
+  let val (oracles,axioms) = Tag.dest_tag (Thm.tag theorem)
+  in
+    if null (Thm.hyp theorem) andalso null axioms andalso
+       List.all (fn label => label = "DISK_THM") oracles then
+      print ("PLACE_HELPER_KERNEL_CLOSED " ^ name ^ " hyp=0\n")
+    else raise Fail ("admitted place helper: " ^ name)
+  end)
+  [("ci_mono_compile_subscript_cfn",ci_mono_compile_subscript_cfn),
+   ("ci_mono_compile_attribute_cfn",ci_mono_compile_attribute_cfn),
+   ("ci_mono_compile_mapping_subscript",ci_mono_compile_mapping_subscript),
+   ("ci_mono_compile_keccak256_key",ci_mono_compile_keccak256_key),
+   ("ci_mono_compile_make_array_cfn",ci_mono_compile_make_array_cfn)]
 
 Theorem ci_mono_as_stack_val[local]:
   ∀ ty p sa. SND (as_stack_val ty p) = SND p
@@ -2544,7 +2539,6 @@ Theorem ci_mono_compile_return_value_decode:
 Proof
   rpt gen_tac >> once_rewrite_tac[exprLoweringTheory.compile_return_value_decode_def] >> BETA_TAC >> rpt (FIRST [irule ci_mono_bind, irule ci_mono_ignore_bind] >> conj_tac >| [rpt strip_tac >> simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_select], all_tac]) >> simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_select]
 QED
-
 
 (* Reuse ci_mono_typed_memory_family and ci_mono_compile_store_memory above
    for both aggregate construction and external-call default materialization. *)

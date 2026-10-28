@@ -2253,20 +2253,63 @@ Proof
   gvs[vyperStateTheory.get_scopes_def, vyperStateTheory.return_def]
 QED
 
+(* Compose log preservation without expanding the entire external-call tree. *)
+Definition log_monad_def:
+  log_monad f <=> !s r t. f s = (r,t) ==> log_extends s t
+End
+
+Theorem log_monad_bind[local]:
+  log_monad f /\ (!x. log_monad (g x)) ==> log_monad (bind f g)
+Proof
+  simp[log_monad_def, bind_def] >> rpt strip_tac >>
+  Cases_on `f s` >> rename1 `f s = (first_result,first_state)` >>
+  Cases_on `first_result` >> gvs[] >>
+  first_x_assum drule >> strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  drule_all log_extends_trans >> simp[]
+QED
+
+Theorem log_monad_primitives[local]:
+  log_monad (return v) /\ log_monad (raise e) /\
+  log_monad (\s. return (g s) s) /\
+  log_monad (type_check b msg) /\ log_monad (check b msg) /\
+  log_monad (lift_option opt msg) /\ log_monad (lift_option_type opt msg) /\
+  log_monad (lift_sum_runtime rs) /\ log_monad get_accounts /\
+  log_monad get_transient_storage /\ log_monad (update_accounts upd) /\
+  log_monad (update_transient upd_t) /\ log_monad (append_logs logs) /\
+  log_monad (vyperCallOutcome$adopt_call_outcome rq co) /\
+  log_monad (vyperCallOutcome$take_call_outcome target calldata value_opt)
+Proof
+  simp[log_monad_def, return_def, raise_def, check_def, type_check_def,
+       assert_def, lift_option_def, lift_option_type_def, lift_sum_runtime_def,
+       get_accounts_def, get_transient_storage_def, update_accounts_def,
+       update_transient_def, append_logs_def,
+       vyperCallOutcomeTheory.adopt_call_outcome_equation,
+       vyperCallOutcomeTheory.take_call_outcome_def] >>
+  rpt strip_tac >> rpt CASE_TAC >>
+  gvs[option_CASE_rator, sum_CASE_rator, AllCaseEqs(), return_def, raise_def,
+      pairTheory.ELIM_UNCURRY, log_extends_def,
+      rich_listTheory.IS_PREFIX_APPEND, rich_listTheory.IS_PREFIX_REFL]
+QED
+
+val EXTCALL_LOG_STEP_TAC = FIRST (
+  map MATCH_ACCEPT_TAC (CONJUNCTS log_monad_primitives) @
+  [MATCH_MP_TAC log_monad_bind >> conj_tac,
+   CONV_TAC (HO_REWR_CONV FORALL_PROD), gen_tac,
+   CHANGED_TAC (simp_tac bool_ss [ignore_bind_def, pair_case_thm, UNCURRY]),
+   CASE_TAC]);
+
 Theorem eval_ext_call_log_extends:
   eval_ext_call cx static skip_check sig opts vs st = (res,st') ==>
   log_extends st st'
 Proof
-  PairCases_on `sig` >> Cases_on `vs` >>
-  simp[eval_ext_call_def, bind_def, ignore_bind_def, type_check_def,
-       assert_def, return_def, raise_def, get_accounts_def,
-       get_transient_storage_def, lift_option_def, lift_option_type_def,
-       check_def, lift_sum_runtime_def, update_accounts_def,
-       update_transient_def, append_logs_def, vyperCallOutcomeTheory.take_call_outcome_def,
-       vyperCallOutcomeTheory.adopt_call_outcome_equation, LET_THM, UNCURRY,
-       COND_RATOR, option_CASE_rator, prod_CASE_rator, sum_CASE_rator] >>
-  strip_tac >>
-  gvs[AllCaseEqs(), log_extends_def, rich_listTheory.IS_PREFIX_APPEND]
+  `log_monad (eval_ext_call cx static skip_check sig opts vs)`
+    suffices_by simp[log_monad_def] >>
+  PairCases_on `sig` >> Cases_on `vs` >> simp[eval_ext_call_def] >>
+  NTAC 4 (TRY EXTCALL_LOG_STEP_TAC) >>
+  NTAC 4 (TRY EXTCALL_LOG_STEP_TAC) >>
+  NTAC 4 (TRY EXTCALL_LOG_STEP_TAC) >>
+  rpt EXTCALL_LOG_STEP_TAC
 QED
 
 Theorem case_expr_ext_call_logs[local]:

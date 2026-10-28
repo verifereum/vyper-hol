@@ -586,15 +586,31 @@ Theorem eval_ext_call_no_control:
   eval_ext_call cx static skip_check sig opts vs st = (INR exc, st') ==>
   no_control_exc exc
 Proof
-  PairCases_on `sig` >> Cases_on `vs` >>
-  simp[eval_ext_call_def, bind_def, ignore_bind_def, type_check_def,
-       assert_def, return_def, raise_def, get_accounts_def,
-       get_transient_storage_def, lift_option_def, lift_option_type_def,
-       check_def, lift_sum_runtime_def, update_accounts_def,
-       update_transient_def, append_logs_def, take_call_outcome_def,
-       adopt_call_outcome_def, LET_THM, UNCURRY,
-       COND_RATOR, option_CASE_rator, prod_CASE_rator, sum_CASE_rator] >>
-  strip_tac >> gvs[AllCaseEqs(), no_control_exc_def]
+  PairCases_on `sig` >> Cases_on `vs`
+  >- simp[eval_ext_call_def, raise_def, no_control_exc_def] >>
+  strip_tac >> gvs[eval_ext_call_def] >>
+  step_tac >- close_type_check >>
+  step_tac >- close_lift_option_type >>
+  step_tac >- (
+    Cases_on `static` >>
+    gvs[option_CASE_rator, AllCaseEqs(), bind_def, return_def] >>
+    imp_res_tac lift_option_type_no_control) >>
+  step_tac >- close_lift_option_type >>
+  step_tac >- gvs[get_accounts_def, return_def] >>
+  step_tac >- (imp_res_tac check_no_control) >>
+  step_tac >>
+  step_tac >- (
+    gvs[pairTheory.ELIM_UNCURRY] >>
+    gvs[option_CASE_rator, prod_CASE_rator, sum_CASE_rator, COND_RATOR,
+        pairTheory.ELIM_UNCURRY, AllCaseEqs(), bind_def, ignore_bind_def,
+        return_def, raise_def,
+        get_transient_storage_def, lift_option_def, update_accounts_def,
+        update_transient_def, append_logs_def, take_call_outcome_def,
+        adopt_call_outcome_def, no_control_exc_def]) >>
+  gvs[option_CASE_rator, prod_CASE_rator, sum_CASE_rator, AllCaseEqs(),
+      bind_def, ignore_bind_def, return_def, get_accounts_def] >>
+  FIRST [imp_res_tac check_no_control >> NO_TAC,
+         imp_res_tac lift_sum_runtime_no_control >> NO_TAC]
 QED
 
 Theorem eval_send_no_control:

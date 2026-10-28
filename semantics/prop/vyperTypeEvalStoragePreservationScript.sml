@@ -3781,7 +3781,13 @@ Proof
        return_def, raise_def,
        COND_RATOR, vfmTypesTheory.option_CASE_rator,
        vfmTypesTheory.prod_CASE_rator, vfmTypesTheory.sum_CASE_rator] >>
-  strip_tac >> gvs[AllCaseEqs()] >>
+  strip_tac >>
+  BasicProvers.FULL_CASE_TAC >> gvs[] >>
+  BasicProvers.FULL_CASE_TAC >> gvs[] >>
+  BasicProvers.FULL_CASE_TAC >> gvs[] >>
+  BasicProvers.FULL_CASE_TAC >> gvs[] >>
+  BasicProvers.FULL_CASE_TAC >> gvs[] >>
+  gvs[AllCaseEqs()] >>
   gvs[pairTheory.UNCURRY_RATOR, pairTheory.UNCURRY_EQ, combinTheory.C_THM,
       combinTheory.o_THM, AllCaseEqs(), COND_RATOR, bind_def, return_def,
       raise_def, adopt_call_outcome_INR_storage] >>~-
