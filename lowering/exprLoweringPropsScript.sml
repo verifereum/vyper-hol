@@ -20,7 +20,8 @@
  *   state_rel_jump_to, state_rel_push_scope, state_rel_pop_scope,
  *   state_rel_frame, stmt_state_rel_jump_to, stmt_state_rel_inst_idx,
  *   stmt_state_rel_push_scope, stmt_state_rel_pop_scope,
- *   stmt_state_rel_update_var — frames for the state relations
+ *   stmt_state_rel_update_var, stmt_state_rel_allocas_frame — frames for
+ *                              the state relations
  *   local_ptrs_rel_cenv_cong, state_rel_cenv_cong,
  *   stmt_state_rel_cenv_cong — the relations at another compile
  *                              environment that agrees on what they read
@@ -254,6 +255,20 @@ Theorem alloca_room_fields:
     alloca_room func ss'
 Proof
   rw[alloca_room_def, pending_alloca_size_def] >> gvs[]
+QED
+
+(* state_rel re-established by a step that keeps the allocations gives
+   stmt_state_rel back. *)
+Theorem stmt_state_rel_allocas_frame:
+  !func cenv cx es s es' s'.
+    stmt_state_rel func cenv cx es s /\ state_rel func cenv cx es' s' /\
+    s'.vs_allocas = s.vs_allocas /\ s'.vs_alloca_next = s.vs_alloca_next ==>
+    stmt_state_rel func cenv cx es' s'
+Proof
+  rw[stmt_state_rel_def]
+  >- (irule alloca_inv_fields >> qexists_tac `s` >> simp[])
+  >- (irule alloca_room_fields >> qexists_tac `s` >> simp[]) >>
+  gvs[] >> res_tac
 QED
 
 Theorem alloca_room_next_lt:

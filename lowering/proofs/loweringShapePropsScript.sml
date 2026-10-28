@@ -7121,11 +7121,8 @@ local
 val shape_dispatch_len_tac =
   `~supported_expr_exists expr_shape_root (HD args)` by
     (irule expr_shape_list_hd >> gvs[builtin_arity_def]) >>
-  Cases_on `is_msg_data (HD args)` >>
   CONV_TAC (LAND_CONV (REWR_CONV (GSYM ETA_AX))) >>
-  simp[compile_builtin_dispatch_body_def] >> CONV_TAC (DEPTH_CONV ETA_CONV)
-  >- (irule shape_step_as_stack_val >>
-      shape_under_tac compile_builtin_calldatasize_shape `\st. T` >> simp[shape_stable_def]) >>
+  simp[compile_builtin_dispatch_body_def] >> CONV_TAC (DEPTH_CONV ETA_CONV) >>
   irule shape_step_uncurry >> qexists_tac `\v st. value_shape_ok st v` >> reverse conj_tac
   >- (first_x_assum irule >> simp[]) >>
   qx_gen_tac `vv` >> simp[] >> irule shape_step_as_stack_val >>
