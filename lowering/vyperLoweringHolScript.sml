@@ -11,7 +11,7 @@ Ancestors
   loweringSlice
   varsExt exprSim
   exprBopLowering
-  exprSimOps exprSimCompare exprSimArith intBits freshWrites
+  exprSimOps exprSimOperands exprSimCompare exprSimArith intBits freshWrites
   exprSimMain stmtSim stmtSimIf stmtSimFor stmtSimReturn stmtSimDecl
   stmtSimReason stmtSimReasonExpr stmtSimForRange
   valueEncodingProofs
