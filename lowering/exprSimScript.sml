@@ -196,7 +196,7 @@ Proof
 QED
 
 (* A dynamic bytes value's data fits in its rounded-up words. *)
-Theorem le_word_size_mul[local]:
+Theorem le_word_size_mul:
   !n. n <= 32 * word_size n
 Proof
   rw[vfmConstantsTheory.word_size_def] >>
