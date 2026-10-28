@@ -157,7 +157,8 @@ Proof
   Induct_on `ts` >> Cases_on `vs` >>
   simp[LIST_REL_EL_EQN, Once enc_def, LENGTH_FLAT, REV_REVERSE_LEM,
        MAP_REVERSE, SUM_REVERSE, SUM_APPEND] >>
-  rpt strip_tac >> Cases_on `is_dynamic h'` >>
+  rpt strip_tac >> rename1 `is_dynamic head_ty` >>
+  Cases_on `is_dynamic head_ty` >>
   gvs[abi_encoder_layout_valid_def, abi_member_head_size_def,
       abi_member_tail_size_def, LENGTH_word_to_bytes]
 QED

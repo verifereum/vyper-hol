@@ -10,8 +10,8 @@ Theorem abi_encoder_mem_bytes_singletons:
   mem_bytes_at p n m = mem_bytes_at p n m'
 Proof
   strip_tac >> irule LIST_EQ >> simp[LENGTH_mem_bytes_at_proof] >>
-  rpt strip_tac >>
-  first_x_assum (qspec_then `p+x` mp_tac) >> simp[] >>
+  qx_gen_tac `index` >> strip_tac >>
+  first_x_assum (qspec_then `p+index` mp_tac) >> simp[] >>
   disch_then (mp_tac o Q.AP_TERM `EL 0`) >>
   simp[EL_mem_bytes_at]
 QED

@@ -85,8 +85,9 @@ Theorem abi_word_phi_prefix_suffix[local]:
 Proof
   Induct >- simp[phi_prefix_length_def, mk_inst_def] >>
   rpt gen_tac >>
+  rename1 `phi_prefix_length ((inst::rest) ++ _)` >>
   first_x_assum (qspecl_then [`tail`, `tail'`] strip_assume_tac) >>
-  Cases_on `h.inst_opcode = PHI` >>
+  Cases_on `inst.inst_opcode = PHI` >>
   asm_simp_tac std_ss [APPEND, phi_prefix_length_def, TAKE_def] >>
   metis_tac[]
 QED

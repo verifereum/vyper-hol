@@ -66,8 +66,10 @@ Theorem abi_encoder_extract_labels_inputs:
   !ops labels. extract_labels ops = SOME labels ==>
   !x. ~MEM (Var x) ops
 Proof
-  Induct >> simp[extract_labels_def] >>
-  Cases_on `h` >> simp[extract_labels_def, AllCaseEqs()] >>
+  Induct >- simp[extract_labels_def] >>
+  qx_gen_tac `operand` >>
+  simp[extract_labels_def] >>
+  Cases_on `operand` >> simp[extract_labels_def, AllCaseEqs()] >>
   metis_tac[]
 QED
 

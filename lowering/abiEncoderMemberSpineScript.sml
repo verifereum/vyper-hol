@@ -84,7 +84,8 @@ Proof
   strip_tac >> Induct >> rpt gen_tac >>
   PairCases_on `B` >> PairCases_on `q` >> PairCases_on `result`
   >- simp[abi_encoder_member_spine_def] >>
-  PairCases_on `h` >>
+  rename1 `abi_encoder_member_spine _ _ (info::rest) _ _ _ _` >>
+  PairCases_on `info` >>
   simp_tac bool_ss [abi_encoder_member_spine_def] >>
   metis_tac[abi_encoder_spine_child_mono]
 QED

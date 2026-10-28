@@ -102,8 +102,10 @@ QED
 Theorem eval_phis_prefix:
   eval_phis s (TAKE (phi_prefix_length xs) xs) = eval_phis s xs
 Proof
-  Induct_on `xs` >> simp[phi_prefix_length_def, eval_phis_def] >>
-  rpt gen_tac >> Cases_on `h.inst_opcode = PHI` >>
+  Induct_on `xs` >- simp[phi_prefix_length_def, eval_phis_def] >>
+  qx_gen_tac `inst` >>
+  simp[phi_prefix_length_def, eval_phis_def] >>
+  rpt gen_tac >> Cases_on `inst.inst_opcode = PHI` >>
   simp[phi_prefix_length_def, eval_phis_def]
 QED
 
