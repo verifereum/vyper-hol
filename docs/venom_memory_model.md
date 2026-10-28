@@ -262,6 +262,8 @@ alloca_meta_equiv live_ids s1 s2 <=
 
 or a pass-specific variant that allows extra dead cloned alloca entries while preserving raw memory, return values, and logs/accounts/storage. Later ALLOCAs then hand out different addresses in the two runs, so the relation must also hold up to that renaming of alloca regions (pointer confinement).
 
+`function_inliner_correct` therefore concludes `observable_result_equiv`, not `result_equiv {}`: the runs' variables, memory and allocation metadata differ, and only their observable effects agree.
+
 ## IRCF/RICF implications
 
 Copy-forwarding passes should reason about physical regions described by ghost metadata:
