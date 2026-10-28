@@ -140,7 +140,7 @@ target the pin supports), whereas the HOL EVM semantics executes Osaka.
 Metadata need not match for behavioral replay. Bytecode parity is opt-in and
 is not implied by a passing semantics replay.
 
-Use Python 3.11.11 in an isolated environment, then run from this repository:
+Use Python 3.11.17 in an isolated environment, then run from this repository:
 
 ```bash
 git clone --depth 1 https://github.com/vyperlang/vyper.git vyper-src

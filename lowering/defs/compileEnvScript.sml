@@ -1182,6 +1182,7 @@ Definition call_ctx_rel_def:
      tc.tc_origin = txn.origin ∧
      tc.tc_gasprice = n2w txn.gas_price ∧
      tc.tc_chainid = n2w txn.chain_id ∧
+     tc.tc_blobhashes = txn.blob_hashes ∧
      bc.bc_coinbase = txn.coinbase ∧
      bc.bc_timestamp = n2w txn.time_stamp ∧
      bc.bc_number = n2w txn.block_number ∧

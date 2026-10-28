@@ -100,8 +100,9 @@ fixtures, because the witness library compiles single-module exports.
 These sources cover the keyword operands of an external call and `send`
 (#553); `e19_gas_kw` and `s02_send_gas` are the issue's witnesses. All match
 the pinned Vyper bytecode exactly. Each is in `parity-fixtures.txt`, with a
-checked theorem in `evalCompilerExternalCallKwargs`; `e29_default_ret_skip`
-above also has one there.
+checked theorem in `evalCompilerExternalCallKwargs1` or
+`evalCompilerExternalCallKwargs2`; `e29_default_ret_skip` above also has one
+there.
 
 | Source | What it covers | After |
 |---|---|---|
