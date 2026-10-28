@@ -876,26 +876,6 @@ End
 val () = cv_auto_trans subscripts_type_def;
 
 
-(* Classify the first unavailable step of a current traversal. Only a
-   nonnegative, declared-in-bounds dynamic element beyond the live length
-   can have disappeared through pop. Sparse fixed defaults and all other
-   failures are not historical locations. *)
-Definition missing_dynamic_element_def:
-  missing_dynamic_element tv a [] = F /\
-  missing_dynamic_element tv a (sb::rest) =
-    (case (subscript_type tv sb, evaluate_subscripts tv a [sb]) of
-     | (SOME etv, INL v) => missing_dynamic_element etv v rest
-     | (SOME etv, INR err) =>
-         (case (tv,a,sb) of
-          | (ArrayTV _ (Dynamic n), ArrayV (DynArrayV vs),
-             ValueSubscript (IntV i)) =>
-                0 <= i /\ Num i < n /\ LENGTH vs <= Num i
-          | _ => F)
-     | _ => F)
-End
-
-val () = cv_auto_trans missing_dynamic_element_def;
-
 (* Search newest first. A matching popped ancestor may itself lack a later
    suffix, in which case an older, deeper snapshot still supplies that slot. *)
 Definition read_popped_def:
@@ -907,9 +887,7 @@ Definition read_popped_def:
       | SOME ptv =>
           (case evaluate_subscripts ptv v (DROP (LENGTH prefix) path) of
            | INL w => SOME w
-           | INR err =>
-               if missing_dynamic_element ptv v (DROP (LENGTH prefix) path)
-               then read_popped tv path history else NONE)
+           | INR err => read_popped tv path history)
     else read_popped tv path history
 End
 
@@ -939,11 +917,8 @@ Definition replace_popped_def:
                        (Replace replacement) of
                 | INL updated => SOME ((prefix,updated)::history)
                 | INR _ => NONE)
-           | INR _ =>
-               if missing_dynamic_element ptv old (DROP (LENGTH prefix) path)
-               then OPTION_MAP (CONS (prefix,old))
-                 (replace_popped tv path replacement history)
-               else NONE)
+           | INR _ => OPTION_MAP (CONS (prefix,old))
+                 (replace_popped tv path replacement history))
     else OPTION_MAP (CONS (prefix,old))
       (replace_popped tv path replacement history)
 End
@@ -962,11 +937,9 @@ Definition read_memory_path_def:
     case evaluate_subscripts entry.type entry.value path of
     | INL v => INL v
     | INR err =>
-        if missing_dynamic_element entry.type entry.value path then
-          (case read_popped entry.type path entry.popped of
-           | SOME v => INL v
-           | NONE => INR err)
-        else INR err
+        (case read_popped entry.type path entry.popped of
+         | SOME v => INL v
+         | NONE => INR err)
 End
 
 val () = cv_auto_trans read_memory_path_def;

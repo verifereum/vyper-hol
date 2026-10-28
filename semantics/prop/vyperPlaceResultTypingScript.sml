@@ -141,8 +141,6 @@ Proof
   >- metis_tac[evaluate_subscripts_type] >>
   drule_all read_popped_prefix_noninterference >>
   disch_then (qspec_then `old` assume_tac) >>
-  `missing_dynamic_element entry.type entry.value path` by
-    metis_tac[typed_traversal_failure_is_dynamic_absence] >>
   simp[] >> metis_tac[read_popped_type]
 QED
 Theorem record_pop_prefix_split:
@@ -328,22 +326,6 @@ Proof
   drule_all evaluate_subscripts_append >> simp[]
 QED
 
-Theorem typed_snapshot_failure[local]:
-  subscripts_type tv prefix = SOME ptv /\
-  subscripts_type tv path = SOME vtv /\ IS_PREFIX path prefix /\
-  value_has_type ptv saved /\ well_formed_type_value ptv /\
-  evaluate_subscripts ptv saved (DROP (LENGTH prefix) path) = INR err ==>
-  missing_dynamic_element ptv saved (DROP (LENGTH prefix) path)
-Proof
-  simp[rich_listTheory.IS_PREFIX_APPEND] >> rpt strip_tac >> gvs[] >>
-  gvs[rich_listTheory.DROP_LENGTH_APPEND] >>
-  qpat_assum `subscripts_type tv prefix = SOME ptv`
-    (mp_then Any mp_tac subscripts_type_append) >>
-  disch_then (qspec_then `l` assume_tac) >>
-  irule typed_traversal_failure_is_dynamic_absence >>
-  goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> simp[] >>
-  metis_tac[]
-QED
 
 Theorem read_popped_success_extend:
   !fresh tv path ptv v suffix w wtv.
@@ -374,7 +356,7 @@ Proof
   TRY (qexists_tac `z` >> simp[] >> NO_TAC) >>
   rename1 `subscripts_type tv h0 = SOME htv` >>
   Cases_on `evaluate_subscripts htv h1 (DROP (LENGTH h0) (path ++ suffix))` >>
-  simp[] >> metis_tac[typed_snapshot_failure]
+  simp[] >> metis_tac[]
 QED
 
 Theorem memory_history_region_extend:
@@ -715,7 +697,7 @@ Proof
   simp[read_popped_def] >>
   Cases_on `IS_PREFIX path h0` >> simp[] >>
   Cases_on `evaluate_subscripts htv h1 (DROP (LENGTH h0) path)` >> simp[] >>
-  metis_tac[typed_snapshot_failure]
+  metis_tac[]
 QED
 
 Theorem record_pop_preserves_covered:
@@ -834,8 +816,6 @@ Proof
   Cases_on `IS_PREFIX path h0`
   >- (Cases_on `evaluate_subscripts htv h1 (DROP (LENGTH h0) path)`
       >- (gvs[read_popped_def] >> metis_tac[]) >>
-      `missing_dynamic_element htv h1 (DROP (LENGTH h0) path)` by
-        metis_tac[typed_snapshot_failure] >>
       gvs[read_popped_def] >> dsimp[]) >>
   gvs[read_popped_def] >> dsimp[]
 QED
@@ -881,9 +861,7 @@ Proof
   Cases_on `IS_PREFIX popPath h0`
   >- (Cases_on `evaluate_subscripts htv h1 (DROP (LENGTH h0) popPath)`
       >- suspend "Selected"
-      >> (`missing_dynamic_element htv h1 (DROP (LENGTH h0) popPath)` by
-            metis_tac[typed_snapshot_failure] >>
-          suspend "SkippedPrefix")) >>
+      >> suspend "SkippedPrefix") >>
   suspend "SkippedPrefix"
 QED
 

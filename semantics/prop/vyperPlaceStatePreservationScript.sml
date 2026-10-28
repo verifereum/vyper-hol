@@ -116,40 +116,6 @@ Proof
   rpt (BasicProvers.TOP_CASE_TAC >> gvs[])
 QED
 
-Theorem typed_traversal_failure_is_dynamic_absence:
-  !path tv a ptv err.
-    value_has_type tv a /\ well_formed_type_value tv /\
-    subscripts_type tv path = SOME ptv /\
-    evaluate_subscripts tv a path = INR err ==>
-    missing_dynamic_element tv a path
-Proof
-  Induct >> simp[evaluate_subscripts_def] >>
-  rpt gen_tac >> strip_tac >>
-  gvs[subscripts_type_def, AllCaseEqs()] >>
-  drule evaluate_subscripts_cons_typed >>
-  disch_then (qspecl_then [`path`,`a`] assume_tac) >>
-  Cases_on `evaluate_subscripts tv a [h]`
-  >- (gvs[missing_dynamic_element_def] >>
-      `well_formed_type_value etv` by metis_tac[subscript_type_well_formed] >>
-      `subscripts_type tv [h] = SOME etv` by simp[subscripts_type_def] >>
-      `value_has_type etv x` by metis_tac[evaluate_subscripts_type] >>
-      first_x_assum irule >> goal_assum (drule_at Any) >> simp[] >>
-      goal_assum (drule_at Any) >> simp[]) >>
-  gvs[missing_dynamic_element_def] >>
-  Cases_on `h` >>
-  TRY (rename1 `ValueSubscript sv` >> Cases_on `sv` >>
-       gvs[subscript_type_def]) >>
-  Cases_on `tv` >> gvs[subscript_type_def] >>
-  Cases_on `a` >>
-  gvs[value_has_type_def, evaluate_subscripts_def, AllCaseEqs(),
-      vyperValueOperationTheory.array_index_def]
-  >- (drule vyperTypingTheory.values_have_types_length >>
-      gvs[oEL_THM])
-  >- (Cases_on `b` >> gvs[value_has_type_def, oEL_THM]) >>
-  drule struct_has_type_map_fst >>
-  gvs[alistTheory.ALOOKUP_NONE] >>
-  metis_tac[alistTheory.ALOOKUP_MEM, MEM_MAP, pairTheory.FST]
-QED
 
 Theorem oEL_some_bound[local]:
   !ls j v. oEL j ls = SOME v ==> j < LENGTH ls
