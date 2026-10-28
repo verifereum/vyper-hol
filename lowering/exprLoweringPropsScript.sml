@@ -1162,7 +1162,7 @@ Proof
   gvs[ci_mono_def, emit_def]
 QED
 
-Theorem ci_mono_fresh_var[local]:
+Theorem ci_mono_fresh_var:
   ∀ sa. ci_mono sa (SND (fresh_var sa))
 Proof
   gen_tac >> Cases_on `fresh_var sa` >> drule cs_extends_fresh_var >>
@@ -1176,14 +1176,14 @@ Proof
   gvs[ci_mono_def, fresh_id_def]
 QED
 
-Theorem ci_mono_fresh_label[local]:
+Theorem ci_mono_fresh_label:
   ∀ pfx sa. ci_mono sa (SND (fresh_label pfx sa))
 Proof
   rpt gen_tac >> Cases_on `fresh_label pfx sa` >>
   drule cs_extends_fresh_label >> gvs[ci_mono_def, fresh_label_def]
 QED
 
-Theorem ci_mono_new_block[local]:
+Theorem ci_mono_new_block:
   ∀ label sa. ci_mono sa (SND (new_block label sa))
 Proof
   rpt gen_tac >> Cases_on `new_block label sa` >>
@@ -1201,19 +1201,19 @@ val ci_mono_prim_rws =
   [ci_mono_emit, ci_mono_fresh_var, ci_mono_fresh_id, ci_mono_fresh_label,
    ci_mono_new_block];
 
-Theorem ci_mono_emit_op[local]:
+Theorem ci_mono_emit_op:
   ∀ opc ops sa. ci_mono sa (SND (emit_op opc ops sa))
 Proof
   rw[emit_op_def] >> ci_mono_chain_tac ci_mono_prim_rws
 QED
 
-Theorem ci_mono_emit_void[local]:
+Theorem ci_mono_emit_void:
   ∀ opc ops sa. ci_mono sa (SND (emit_void opc ops sa))
 Proof
   rw[emit_void_def] >> ci_mono_chain_tac ci_mono_prim_rws
 QED
 
-Theorem ci_mono_emit_inst[local]:
+Theorem ci_mono_emit_inst:
   ∀ opc ops outs sa. ci_mono sa (SND (emit_inst opc ops outs sa))
 Proof
   rw[emit_inst_def] >> ci_mono_chain_tac ci_mono_prim_rws
@@ -1252,7 +1252,7 @@ Proof
 QED
 
 (* ci_mono for compile_alloc_buffer *)
-Theorem ci_mono_compile_alloc_buffer[local]:
+Theorem ci_mono_compile_alloc_buffer:
   ∀ size sa. ci_mono sa (SND (compile_alloc_buffer size sa))
 Proof
   rw[contextTheory.compile_alloc_buffer_def] >>
@@ -1300,7 +1300,7 @@ Proof
 QED
 
 (* ci_mono for unwrap_value *)
-Theorem ci_mono_unwrap_value[local]:
+Theorem ci_mono_unwrap_value:
   ∀ cenv vv sa. ci_mono sa (SND (unwrap_value cenv vv sa))
 Proof
   rpt gen_tac >> Cases_on `vv` >>
@@ -1318,7 +1318,7 @@ Proof
   >> simp[ci_mono_compile_ensure_in_memory]
 QED
 
-Theorem ci_mono_lower_value_cfn[local]:
+Theorem ci_mono_lower_value_cfn:
   ∀ cfn cenv ty e sa.
     (∀ cenv' ty' e' sa'. ci_mono sa' (SND (cfn cenv' ty' e' sa'))) ⇒
     ci_mono sa (SND (lower_value cfn cenv ty e sa))
@@ -1483,7 +1483,7 @@ Resume ci_mono_typed_memory_family[struct_cons]:
 QED
 Finalise ci_mono_typed_memory_family
 
-Theorem ci_mono_compile_store_memory[local]:
+Theorem ci_mono_compile_store_memory:
   ∀cenv src dst dst_ty src_ty sa.
     ci_mono sa (SND (compile_store_memory cenv src dst dst_ty src_ty sa))
 Proof
@@ -1494,7 +1494,7 @@ Proof
        ci_mono_typed_memory_family, ci_mono_compile_copy_memory]
 QED
 
-Theorem ci_mono_compile_struct_lit_cfn[local]:
+Theorem ci_mono_compile_struct_lit_cfn:
   ∀ cfn cenv ty fields buf_op cur_offset sa.
     (∀ cenv' ty' e' sa'. ci_mono sa' (SND (cfn cenv' ty' e' sa'))) ⇒
     ci_mono sa (SND (compile_struct_lit cfn cenv ty fields buf_op cur_offset sa))
@@ -1509,7 +1509,7 @@ Proof
   first_x_assum irule >> simp[]
 QED
 
-Theorem ci_mono_compile_concat_cfn[local]:
+Theorem ci_mono_compile_concat_cfn:
   ∀ cfn cenv es data_ptr infos offset_op sa.
     (∀ cenv' ty' e' sa'. ci_mono sa' (SND (cfn cenv' ty' e' sa'))) ⇒
     ci_mono sa (SND (compile_concat cfn cenv es data_ptr infos offset_op sa))
@@ -1540,7 +1540,7 @@ Proof
   first_x_assum irule >> simp[]
 QED
 
-Theorem ci_mono_compile_make_array_cfn[local]:
+Theorem ci_mono_compile_make_array_cfn:
   ∀ cfn cenv es elem_ty elem_size has_lw buf_op sa.
     (∀ cenv' ty' e' sa'. ci_mono sa' (SND (cfn cenv' ty' e' sa'))) ⇒
     ci_mono sa (SND (compile_make_array cfn cenv es elem_ty elem_size has_lw buf_op sa))
@@ -1551,7 +1551,7 @@ Proof
   simp[ci_mono_compile_make_array_elems_cfn]
 QED
 
-Theorem ci_mono_compile_zero_words[local]:
+Theorem ci_mono_compile_zero_words:
   ∀base n sa. ci_mono sa (SND (compile_zero_words base n sa))
 Proof
   Induct_on `n` >> simp[builtinSimpleTheory.compile_zero_words_def,
@@ -1763,7 +1763,7 @@ Proof
   rpt gen_tac >> Cases_on `ty` >> simp[compile_invert_def, ci_mono_emit_op]
 QED
 
-Theorem ci_mono_emit_multi_op[local]:
+Theorem ci_mono_emit_multi_op:
   ∀ opc ops n sa. ci_mono sa (SND (emit_multi_op opc ops n sa))
 Proof
   rpt gen_tac >>
@@ -1784,13 +1784,13 @@ irule ci_mono_ignore_bind >>
 simp[ci_mono_emit_inst, ci_mono_comp_return]
 QED
 
-Theorem ci_mono_store_multi_results[local]:
+Theorem ci_mono_store_multi_results:
   ∀ buf_op results offset sa. ci_mono sa (SND (store_multi_results buf_op results offset sa))
 Proof
   Induct_on `results` >- simp[store_multi_results_def, ci_mono_comp_return] >> rpt strip_tac >> once_rewrite_tac[store_multi_results_def] >> ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_emit_op] >> rpt strip_tac >> ho_match_mp_tac ci_mono_ignore_bind >> conj_tac >- simp[ci_mono_emit_void] >> rpt strip_tac >> simp[]
 QED
 
-Theorem ci_mono_compile_store_byte_chunks[local]:
+Theorem ci_mono_compile_store_byte_chunks:
   ∀ data_ptr bs offset sa. ci_mono sa (SND (compile_store_byte_chunks data_ptr bs offset sa))
 Proof
   ho_match_mp_tac compile_store_byte_chunks_ind >> rpt strip_tac >- simp[compile_store_byte_chunks_def, ci_mono_comp_return] >> simp[Once compile_store_byte_chunks_def, LET_THM] >> ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_emit_op] >> rpt strip_tac >> ho_match_mp_tac ci_mono_ignore_bind >> conj_tac >- simp[ci_mono_emit_void] >> rpt strip_tac >> first_x_assum (qspecl_then [`TAKE 32 (v4::v5 ++ REPLICATE 31 0w)`, `word_of_bytes T 0w (TAKE 32 (v4::v5 ++ REPLICATE 31 0w))`] mp_tac) >> simp[]
@@ -2120,7 +2120,7 @@ Proof
   simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_alloc_buffer]
 QED
 
-Theorem ci_mono_compile_method_id_hash[local]:
+Theorem ci_mono_compile_method_id_hash:
   ∀ ty v sa. ci_mono sa (SND (compile_method_id_hash ty v sa))
 Proof
   ho_match_mp_tac builtinHashingTheory.compile_method_id_hash_ind >>
@@ -2214,7 +2214,7 @@ Proof
   rpt gen_tac >> simp[builtinBytesTheory.compile_assert_slice_bounds_def] >> rpt (CHANGED_TAC (rpt (irule ci_mono_bind ORELSE irule ci_mono_ignore_bind ORELSE conj_tac ORELSE gen_tac) >> simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return]))
 QED
 
-Theorem ci_mono_compile_bytestring_src[local]:
+Theorem ci_mono_compile_bytestring_src:
   ∀ src_ptr sa. ci_mono sa (SND (compile_bytestring_src src_ptr sa))
 Proof
   rpt gen_tac >>
@@ -2518,7 +2518,7 @@ Proof
   rpt gen_tac >> simp[exprLoweringTheory.compile_extcodesize_check_def] >> BETA_TAC >> irule ci_mono_bind >> simp[ci_mono_emit_op, ci_mono_emit_void]
 QED
 
-Theorem ci_mono_compile_return_value_decode[local]:
+Theorem ci_mono_compile_return_value_decode:
   ∀ buf_op min_sz max_sz sa.
     ci_mono sa (SND (compile_return_value_decode buf_op min_sz max_sz sa))
 Proof
@@ -2656,7 +2656,7 @@ Proof
   simp[arithmeticTheory.ADD_COMM]
 QED
 
-Theorem ci_mono_compile_abi_encode[local]:
+Theorem ci_mono_compile_abi_encode:
   (∀ dst child_ptr child_info is_dyn static_ofst dyn_ofst_ptr sa.
     ci_mono sa (SND (compile_abi_encode_child dst child_ptr child_info is_dyn static_ofst dyn_ofst_ptr sa))) ∧
   (∀ dst src info sa.
@@ -2839,7 +2839,7 @@ Proof
   simp[ci_mono_emit_void]
 QED
 
-Theorem ci_mono_compile_abi_decode[local]:
+Theorem ci_mono_compile_abi_decode:
   (∀ dst src_op load_opc hi_op info sa.
     ci_mono sa (SND (compile_abi_decode_to_buf dst src_op load_opc hi_op info sa))) ∧
   (∀ dst src_op load_opc hi_op elems abi_offset vyper_offset sa.
@@ -2940,7 +2940,7 @@ Proof
   end
 QED
 
-Theorem ci_mono_compile_default_return_path[local]:
+Theorem ci_mono_compile_default_return_path:
   ∀ cenv return_type default_ty buf_op result_op default_op addr_op skip_check
     min_return_size max_return_size ret_dec_info sa.
     ci_mono sa (SND (compile_default_return_path cenv return_type default_ty
@@ -2971,7 +2971,7 @@ Proof
   simp[ci_mono_comp_return]
 QED
 
-Theorem ci_mono_compile_stage_intcall_args[local]:
+Theorem ci_mono_compile_stage_intcall_args:
   ∀ cenv vals flags tys sa.
     ci_mono sa (SND (compile_stage_intcall_args cenv vals flags tys sa))
 Proof
@@ -3021,7 +3021,7 @@ Proof
       rpt strip_tac >> simp[ci_mono_comp_return])
 QED
 
-Theorem ci_mono_compile_multi_vvs[local]:
+Theorem ci_mono_compile_multi_vvs:
   ∀cfn cenv es sa.
     (∀cenv' ty' e' sa'. ci_mono sa' (SND (cfn cenv' ty' e' sa'))) ⇒
     ci_mono sa (SND (compile_multi_vvs cfn cenv es sa))
@@ -3046,7 +3046,7 @@ Proof
   irule ci_mono_trans >> irule_at (Pos last) ci_mono_emit_op >> fs[]
 QED
 
-Theorem ci_mono_compile_ext_call_kwarg[local]:
+Theorem ci_mono_compile_ext_call_kwarg:
   ∀cfn cenv rt k e sa.
     (∀cenv' ty' e' sa'. ci_mono sa' (SND (cfn cenv' ty' e' sa'))) ⇒
     ci_mono sa (SND (compile_ext_call_kwarg cfn cenv rt k e sa))
@@ -3190,7 +3190,7 @@ irule ci_mono_ignore_bind >> conj_tac
 >> simp[ci_mono_comp_return]
 QED
 
-Theorem ci_mono_compile_msg_data_to_memory[local]:
+Theorem ci_mono_compile_msg_data_to_memory:
   ∀sa. ci_mono sa (SND (compile_msg_data_to_memory sa))
 Proof
   simp[compile_msg_data_to_memory_def, contextTheory.compile_alloc_dynamic_def] >>
@@ -3345,7 +3345,7 @@ Proof
        ci_mono_emit_inst]
 QED
 
-Theorem ci_mono_expr_child_callback[local]:
+Theorem ci_mono_expr_child_callback:
   (∀ce ty e st. expr_size e < bound ⇒
     ci_mono st (SND (f ce ty e st))) ⇒
   (∀ce ty e st.
@@ -3627,7 +3627,7 @@ Proof
   simp[ci_mono_comp_return]
 QED
 
-Theorem ci_mono_compile_make_tuple_cfn[local]:
+Theorem ci_mono_compile_make_tuple_cfn:
   ∀cfn cenv es buf_op cur_offset st.
     (∀ce ty e s. ci_mono s (SND (cfn ce ty e s))) ⇒
     ci_mono st (SND (compile_make_tuple cfn cenv es buf_op cur_offset st))
@@ -3743,7 +3743,7 @@ Proof
 QED
 
 
-Theorem ci_mono_lower_abi_encode[local]:
+Theorem ci_mono_lower_abi_encode:
   ci_mono st (SND (lower_abi_encode ensure method_id src info maxlen st))
 Proof
   simp[builtinAbiTheory.lower_abi_encode_def, LET_THM] >>
@@ -3761,7 +3761,7 @@ Proof
   simp[ci_mono_comp_return]
 QED
 
-Theorem ci_mono_lower_abi_decode[local]:
+Theorem ci_mono_lower_abi_decode:
   ci_mono st (SND (lower_abi_decode data info amin amax outsz st))
 Proof
   simp[builtinAbiTheory.lower_abi_decode_def, LET_THM] >>
@@ -3835,7 +3835,7 @@ QED
    which either recurse on a strictly smaller argument or fall back to
    invalid_expr_call (a single emit). The ci_mono_*_cfn lemmas above take
    ci_mono of an arbitrary callback as a hypothesis. *)
-Theorem compile_expr_ci_mono[local]:
+Theorem compile_expr_ci_mono:
   (∀ cenv ty e st. ci_mono st (SND (compile_expr cenv ty e st))) ∧
   (∀ cenv ret_ty ty bi args st.
     ci_mono st (SND (compile_builtin_dispatch cenv ret_ty ty bi args st))) ∧
