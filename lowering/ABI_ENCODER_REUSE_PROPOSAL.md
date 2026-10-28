@@ -118,8 +118,8 @@ Loaded HOL theory files do not preserve upstream axiom dependencies, so the
 current-session axiom check is not a transitive upstream axiom-freedom claim.
 
 The dedicated `evalCompilerAbiTupleString` fixture is a build root. Its source,
-AST and bytecode remain in the dedicated ABI corpus; only the unmanifested
-copy in the primary oracle source directory was removed.
+AST and bytecode remain in the dedicated ABI corpus. The base branch already
+removed the unmanifested copy in the primary oracle source directory.
 
 [The contract index](ABI_ENCODER_REUSE_API.md) flags every new definition,
 inductive relation and theorem statement. Existing declarations are unchanged;

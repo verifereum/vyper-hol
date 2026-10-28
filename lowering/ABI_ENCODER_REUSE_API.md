@@ -1,7 +1,7 @@
 # ABI encoder contract index
 
 This index flags every definition, inductive relation and theorem statement added
-by the encoder consolidation relative to `63e7c745`. Existing declarations retain
+by the encoder consolidation relative to `95793461`. Existing declarations retain
 their original statements and attributes. Links lead to the defining source;
 the index does not replace those contracts.
 
