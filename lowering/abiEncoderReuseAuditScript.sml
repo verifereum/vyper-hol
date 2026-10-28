@@ -38,6 +38,7 @@ Ancestors
   abiEncoderSharedArrayTailInit
   abiEncoderArrayDynamicTail abiEncoderArraySourceSpine abiEncoderArraySpine
   abiScratchArrayDynamicTail abiScratchArraySpine
+  abiEncoderSharedArrayAddress abiEncoderSharedArrayBody abiEncoderSharedArrayRound abiEncoderSharedArraySpine abiEncoderSharedArrayStep abiEncoderSharedArrayTail
 
 fun audit_encoder_tag (name, th) =
   let
@@ -400,6 +401,22 @@ val _ = List.app audit_encoder_tag
    ("abi_scratch_array_prepare_raw_transport", abi_scratch_array_prepare_raw_transport),
    ("abi_encoder_array_dynamic_tail_reach", abi_encoder_array_dynamic_tail_reach),
    ("abi_scratch_array_dynamic_tail_reach", abi_scratch_array_dynamic_tail_reach),
+   ("abi_encoder_array_address_raw_globals", abi_encoder_array_address_raw_globals),
+   ("abi_encoder_shared_array_address_reach", abi_encoder_shared_array_address_reach),
+   ("abi_encoder_shared_array_body_address", abi_encoder_shared_array_body_address),
+   ("abi_encoder_shared_array_round_finish", abi_encoder_shared_array_round_finish),
+   ("abi_encoder_array_spine_shared_pre", abi_encoder_array_spine_shared_pre),
+   ("abi_encoder_array_spine_cursor_saved", abi_encoder_array_spine_cursor_saved),
+   ("abi_encoder_array_spine_shared_run", abi_encoder_array_spine_shared_run),
+   ("abi_encoder_array_spine_tail_opcodes", abi_encoder_array_spine_tail_opcodes),
+   ("abi_encoder_array_spine_tail_registered", abi_encoder_array_spine_tail_registered),
+   ("abi_encoder_array_spine_tail_extend_sim", abi_encoder_array_spine_tail_extend_sim),
+   ("abi_encoder_array_spine_shared_effects", abi_encoder_array_spine_shared_effects),
+   ("abi_encoder_array_spine_shared_sim", abi_encoder_array_spine_shared_sim),
+   ("abi_encoder_open_array_static_step", abi_encoder_open_array_static_step),
+   ("abi_encoder_open_array_dynamic_step", abi_encoder_open_array_dynamic_step),
+   ("abi_encoder_shared_array_tail_reach", abi_encoder_shared_array_tail_reach),
+   ("abi_encoder_shared_array_tail_observations", abi_encoder_shared_array_tail_observations),
    ("abi_scratch_members_correct_cons", abi_scratch_members_correct_cons),
    ("abi_scratch_members_correct_all", abi_scratch_members_correct_all),
    ("abi_encoder_members_inv_nonempty", abi_encoder_members_inv_nonempty),
