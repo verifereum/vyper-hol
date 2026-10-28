@@ -57,7 +57,7 @@ Proof
   irule eval_integer_constant_sound >> EVAL_TAC
 QED
 
-val checked = vyperCheckContractFrontendLib.check_constant_contract_file
+val checked = vyperCheckContractFrontendLib.check_constant_contract_file_legacy
   {address = ``0w : address``, path = fixture};
 val () = if optionSyntax.is_some (rhs (concl checked)) then ()
   else raise Fail "constant-bound contract rejected by check_contract";
@@ -178,7 +178,7 @@ val translated_shifts = EVAL ``translate_constant_module ^shifts_declarations``;
 val () = if aconv (rhs (concl translated_shifts)) expected_shifts then ()
   else raise Fail "unsigned shift-count translation mismatch";
 Theorem constant_shifts_translation = translated_shifts;
-val checked_shifts = vyperCheckContractFrontendLib.check_constant_contract_file
+val checked_shifts = vyperCheckContractFrontendLib.check_constant_contract_file_legacy
   {address = ``0w : address``, path = shifts_fixture};
 val () = if optionSyntax.is_some (rhs (concl checked_shifts)) then ()
   else raise Fail "signed-shift contract rejected by check_contract";

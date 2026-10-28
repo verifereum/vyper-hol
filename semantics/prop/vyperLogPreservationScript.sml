@@ -3,7 +3,7 @@ Theory vyperLogPreservation
 Ancestors
   pair option sum vyperMisc vyperCall vyperStatePreservation vyperCallFrame vyperCallOutcomeFrame
   vyperState[ignore_grammar] vyperInterpreter[ignore_grammar] vyperCallOutcome[ignore_grammar] vyperCallOutcomeProps[ignore_grammar]
-  vyperCreate vyperCreateFrame
+  vyperCreate vyperCreateFrame vyperAbiFrame vyperAbiMemoryProps
 
 (* Keep existing free statement-list variables when importing oracle grammar. *)
 val _ = hide "body";
@@ -879,7 +879,9 @@ Proof
           vyperStateTheory.type_check_def, vyperStateTheory.assert_def,
           vyperStateTheory.lift_sum_def, vyperStateTheory.set_scopes_def,
           AllCaseEqs()] >>
-      imp_res_tac lift_sum_state >> imp_res_tac assign_result_state >> gvs[])
+      imp_res_tac lift_sum_state >> imp_res_tac assign_result_state >>
+      imp_res_tac write_abi_memory_frame >>
+      imp_res_tac write_abi_immutables_frame >> gvs[])
   (* TopLevelVar *)
   >- (rpt strip_tac >> imp_res_tac assign_target_toplevel_logs)
   (* ImmutableVar *)
@@ -892,7 +894,8 @@ Proof
       rpt strip_tac >> gvs[] >>
       imp_res_tac get_immutables_state >> imp_res_tac lift_option_type_state >>
       imp_res_tac lift_sum_state >> gvs[] >>
-      imp_res_tac set_immutable_logs >> imp_res_tac assign_result_state >> gvs[])
+      imp_res_tac set_immutable_logs >> imp_res_tac assign_result_state >>
+      imp_res_tac write_abi_immutables_frame >> gvs[])
   (* TupleTargetV success *)
   >- (rpt strip_tac >>
       qpat_x_assum `assign_target _ _ _ _ = _` mp_tac >>
@@ -2200,20 +2203,69 @@ Proof
   gvs[vyperStateTheory.get_scopes_def, vyperStateTheory.return_def]
 QED
 
+Theorem log_call_leaves[local]:
+  state_rel_frame log_extends (vyperState$return x) /\
+  state_rel_frame log_extends (vyperState$raise e) /\
+  state_rel_frame log_extends (λs. vyperState$return (g s) s) /\
+  state_rel_frame log_extends (type_check b msg) /\
+  state_rel_frame log_extends (check b msg) /\
+  state_rel_frame log_extends (lift_option opt msg) /\
+  state_rel_frame log_extends (lift_option_type opt msg) /\
+  state_rel_frame log_extends (lift_sum_runtime rs) /\
+  state_rel_frame log_extends get_accounts /\
+  state_rel_frame log_extends get_transient_storage /\
+  state_rel_frame log_extends (update_accounts fa) /\
+  state_rel_frame log_extends (update_transient ft) /\
+  state_rel_frame log_extends (append_logs ls) /\
+  state_rel_frame log_extends (take_call_outcome addr data amount) /\
+  state_rel_frame log_extends (adopt_call_outcome rq co)
+Proof
+  simp[state_rel_frame_def, vyperStateTheory.return_def, vyperStateTheory.raise_def,
+    vyperStateTheory.type_check_def, vyperStateTheory.check_def,
+    vyperStateTheory.assert_def, vyperStateTheory.lift_option_def,
+    vyperStateTheory.lift_option_type_def, vyperStateTheory.lift_sum_runtime_def,
+    vyperStateTheory.get_accounts_def, vyperStateTheory.get_transient_storage_def,
+    vyperStateTheory.update_accounts_def, vyperStateTheory.update_transient_def,
+    vyperStateTheory.append_logs_def, log_extends_def,
+    rich_listTheory.IS_PREFIX_REFL, rich_listTheory.IS_PREFIX_APPEND,
+    vyperCallOutcomeTheory.adopt_call_outcome_equation] >>
+  rpt conj_tac >> rpt gen_tac >>
+  TRY (rpt CASE_TAC >> simp[vyperStateTheory.return_def, vyperStateTheory.raise_def,
+    rich_listTheory.IS_PREFIX_APPEND] >> NO_TAC) >>
+  Cases_on `take_call_outcome addr data amount st` >>
+  drule take_call_outcome_frame >>
+  simp[vyperStateTheory.evaluation_state_component_equality] >>
+  simp[rich_listTheory.IS_PREFIX_REFL]
+QED
+
+local
+  val trans = log_extends_trans |> GEN_ALL;
+  val relation = ``log_extends``;
+  val bind = state_rel_frame_bind_guarded |> Q.INST [`R` |-> `log_extends`]
+    |> SIMP_RULE bool_ss [EQT_INTRO trans];
+  val leaves = CONJUNCTS log_call_leaves;
+  fun branch (g as (old,_)) =
+    (BasicProvers.PURE_TOP_CASE_TAC >> (fn (asl,w) => simp_tac (srw_ss())
+      (map ASSUME (List.filter (fn a => not (is_forall a) andalso
+        not (List.exists (aconv a) old)) asl)) (asl,w))) g;
+in
+  val CALL_LOG_TAC = rpt (FIRST [MATCH_ACCEPT_TAC trans,
+    FIRST (map MATCH_ACCEPT_TAC leaves),
+    MATCH_MP_TAC bind >> conj_tac,
+    CONV_TAC (RAND_CONV BETA_CONV),
+    CONV_TAC (RAND_CONV (REWR_CONV vyperStateTheory.ignore_bind_def)),
+    CHANGED_TAC (simp_tac (srw_ss()) [LET_THM, pairTheory.UNCURRY]),
+    gen_tac, strip_tac, branch]);
+end;
+
 Theorem eval_ext_call_log_extends:
   eval_ext_call cx static skip_check sig opts vs st = (res,st') ==>
   log_extends st st'
 Proof
+  `state_rel_frame log_extends (eval_ext_call cx static skip_check sig opts vs)`
+    suffices_by metis_tac[state_rel_frame_result] >>
   PairCases_on `sig` >> Cases_on `vs` >>
-  simp[eval_ext_call_def, bind_def, ignore_bind_def, type_check_def,
-       assert_def, return_def, raise_def, get_accounts_def,
-       get_transient_storage_def, lift_option_def, lift_option_type_def,
-       check_def, lift_sum_runtime_def, update_accounts_def,
-       update_transient_def, append_logs_def, vyperCallOutcomeTheory.take_call_outcome_def,
-       vyperCallOutcomeTheory.adopt_call_outcome_equation, LET_THM, UNCURRY,
-       COND_RATOR, option_CASE_rator, prod_CASE_rator, sum_CASE_rator] >>
-  strip_tac >>
-  gvs[AllCaseEqs(), log_extends_def, rich_listTheory.IS_PREFIX_APPEND]
+  simp_tac bool_ss [eval_ext_call_def, LET_THM] >> CALL_LOG_TAC
 QED
 
 Theorem case_expr_ext_call_logs[local]:
@@ -2355,6 +2407,8 @@ Proof
   first_x_assum drule >> simp[]
 QED
 
+(* Obsolete eager-only helper retained for reference; TypeBuiltin now uses
+   the guarded ABI/eager IHs in LOG_ABI_TAC below.
 Theorem case_expr_type_builtin_logs[local]:
   (!s0 s1.
      type_check (type_builtin_args_length_ok tb (LENGTH es))
@@ -2375,6 +2429,8 @@ Proof
   first_x_assum drule >> simp[]
 QED
 
+
+*)
 
 Theorem case_eval_exprs_nil_logs[local]:
   eval_exprs cx [] st = (res,st') ==> log_extends st st'
@@ -2496,7 +2552,7 @@ in
      case_expr_ext_call_logs,
      case_expr_raw_call_logs, case_expr_raw_call_calldata_logs,
      case_expr_raw_log_logs, case_expr_raw_revert_logs,
-     case_expr_attribute_logs, case_expr_type_builtin_logs,
+     case_expr_attribute_logs,
      case_eval_exprs_nil_logs, case_eval_exprs_cons_logs]
 end
 
@@ -2510,9 +2566,82 @@ Proof
   first_x_assum (specialize_guard_then 2 MATCH_ACCEPT_TAC)
 QED
 
+Theorem log_abi_relation[local]:
+  (!s t u. log_extends s t /\ log_extends t u ==> log_extends s u) /\
+  (!s mem. log_extends s (s with abi_memory := mem)) /\
+  (!s mem. log_extends s (s with abi_immutables := mem))
+Proof
+  simp[log_extends_def, rich_listTheory.IS_PREFIX_REFL] >>
+  metis_tac[rich_listTheory.IS_PREFIX_TRANS]
+QED
+
+Theorem log_abi_pure_frames[local]:
+  state_rel_frame log_extends (vyperState$return x) /\
+  state_rel_frame log_extends (vyperState$raise e) /\
+  state_rel_frame log_extends (type_check b msg) /\
+  state_rel_frame log_extends (check b msg) /\
+  state_rel_frame log_extends (lift_option opt msg) /\
+  state_rel_frame log_extends (lift_option_type opt msg) /\
+  state_rel_frame log_extends (lift_sum rs) /\
+  state_rel_frame log_extends (get_Value tv) /\
+  state_rel_frame log_extends (materialise cx tv) /\
+  state_rel_frame log_extends (assign_target cx target op)
+Proof
+  simp[state_rel_frame_result] >> rpt strip_tac >>
+  irule log_extends_eq_logs >>
+  FIRST [drule return_state, drule raise_state, drule type_check_state,
+    drule check_state, drule lift_option_state, drule lift_option_type_state,
+    drule lift_sum_state, drule get_Value_state, drule materialise_state,
+    drule assign_target_logs] >> simp[]
+QED
+
+local
+  val relation = ``log_extends``;
+  fun spec th = ISPEC relation (GEN (first (fn v => fst (dest_var v) = "R")
+    (free_vars (concl th))) th);
+  val result = spec state_rel_frame_result;
+  val bind = SIMP_RULE bool_ss [EQT_INTRO (CONJUNCT1 log_abi_relation)]
+    (spec state_rel_frame_bind_guarded);
+  val finally = SIMP_RULE bool_ss [EQT_INTRO (CONJUNCT1 log_abi_relation)]
+    (spec state_rel_frame_finally);
+  val leaves = CONJUNCTS (MATCH_MP (spec state_rel_frame_abi_primitives) log_abi_relation) @
+    CONJUNCTS log_abi_pure_frames;
+  fun ih (asl,w) =
+    let
+      val norm = SIMP_RULE bool_ss [oneTheory.one, vyperStateTheory.ignore_bind_def];
+      val facts = List.concat (map (CONJUNCTS o norm o ASSUME) asl);
+      fun discharge th = if is_imp (snd (strip_forall (concl th))) then
+        discharge (tryfind (MATCH_MP th) facts) else th;
+    in FIRST (map (fn th => fn g => MATCH_ACCEPT_TAC
+      (discharge (PURE_REWRITE_RULE [GSYM AND_IMP_INTRO] th)) g) facts) (asl,w) end;
+in
+  val LOG_ABI_TAC =
+    rpt (fn g as (_,w) => if is_forall w andalso
+      type_of (#1 (dest_forall w)) <> ``:evaluation_state`` then gen_tac g else NO_TAC g) >>
+    (fn g as (_,w) => if is_imp w then strip_tac g else ALL_TAC g) >>
+    CONV_TAC (REWR_CONV (GSYM result)) >>
+    CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV [vyperInterpreterTheory.evaluate_def])) >>
+    RULE_ASSUM_TAC (PURE_REWRITE_RULE [GSYM result]) >>
+    rpt (FIRST [MATCH_ACCEPT_TAC (GEN_ALL log_extends_trans),
+      FIRST (map MATCH_ACCEPT_TAC leaves), ih,
+      MATCH_MP_TAC bind >> conj_tac, MATCH_MP_TAC finally >> conj_tac,
+      CONV_TAC (RAND_CONV BETA_CONV),
+      CONV_TAC (RAND_CONV (REWR_CONV vyperStateTheory.ignore_bind_def)),
+      CONV_TAC (RAND_CONV (REWR_CONV vyperInterpreterTheory.switch_BoolV_def)),
+      CHANGED_TAC (simp_tac bool_ss [pairTheory.UNCURRY, pairTheory.pair_case_thm]),
+      gen_tac, strip_tac,
+      CHANGED_TAC (fn (asl,w) => simp_tac (srw_ss())
+        (map ASSUME (List.filter (not o is_forall) asl)) (asl,w)),
+      BasicProvers.PURE_TOP_CASE_TAC]);
+end;
+
 val REST_ATOMIC_DISPATCH_TAC =
   FIRST
-    ([rpt gen_tac >> disch_tac >>
+    ([LOG_ABI_TAC >> NO_TAC,
+      rpt gen_tac >> strip_tac >>
+      rename1 `eval_expr _ (TypeBuiltin _ tb _ _)` >>
+      Cases_on `tb` >> gvs[] >> LOG_ABI_TAC >> NO_TAC,
+      rpt gen_tac >> disch_tac >>
       ho_match_mp_tac
         (CONV_RULE commute_outer_ante_conv case_stmt_assign_logs) >>
       first_assum MATCH_ACCEPT_TAC,
@@ -2536,7 +2665,9 @@ Theorem eval_mutual_log_extends[local]:
   (!cx bt st res st'. eval_base_target cx bt st = (res,st') ==>
      log_extends st st') /\
   (!cx e st res st'. eval_expr cx e st = (res,st') ==> log_extends st st') /\
-  (!cx es st res st'. eval_exprs cx es st = (res,st') ==> log_extends st st')
+  (!cx es st res st'. eval_exprs cx es st = (res,st') ==> log_extends st st') /\
+  (!cx e st res st'. eval_abi_expr cx e st = (res,st') ==> log_extends st st') /\
+  (!cx es st res st'. eval_abi_exprs cx es st = (res,st') ==> log_extends st st')
 Proof
   MP_TAC (CONV_RULE (DEPTH_CONV BETA_CONV)
     (SPECL
@@ -2557,6 +2688,10 @@ Proof
        ``\cx e. !st res st'. eval_expr cx e st = (res,st') ==>
            log_extends st st'``,
        ``\cx es. !st res st'. eval_exprs cx es st = (res,st') ==>
+           log_extends st st'``,
+       ``\cx e. !st res st'. eval_abi_expr cx e st = (res,st') ==>
+           log_extends st st'``,
+       ``\cx es. !st res st'. eval_abi_exprs cx es st = (res,st') ==>
            log_extends st st'``]
       vyperInterpreterTheory.evaluate_ind)) >>
   impl_tac >-

@@ -110,6 +110,14 @@ Proof
   simp[]
 QED
 
+Theorem target_mutable_static_maps_transfer_env[local]:
+  target_mutable env1 tgt /\ static_maps_transfer_env env1 env2 ==>
+  target_mutable env2 tgt
+Proof
+  rw[static_maps_transfer_env_def] >>
+  drule_all target_mutable_static_maps_transfer >> simp[]
+QED
+
 Theorem type_place_expr_static_maps_transfer_env_reverse_SOME[local]:
   !e env1 env2 vt.
     well_typed_expr env1 e /\
@@ -228,6 +236,7 @@ Proof
   TRY (irule_at Any well_typed_expr_static_maps_transfer_env >> simp[]) >>
   TRY (irule_at Any well_typed_exprs_static_maps_transfer_env >> simp[]) >>
   TRY (irule_at Any type_place_target_static_maps_transfer_env >> simp[]) >>
+  TRY (irule_at Any target_mutable_static_maps_transfer_env >> simp[]) >>
   TRY (irule_at Any type_place_expr_no_hash_static_maps_transfer_env >> simp[]) >>
   TRY (rename1 `?env. static_maps_transfer_env env env2 /\ well_typed_expr env expr` >>
        qexists `env1` >> simp[]) >>
@@ -265,12 +274,14 @@ Proof
        irule well_typed_iterator_static_maps_transfer_env >>
        qexists `env1` >> simp[]) >>
   gvs[static_maps_transfer_env_def] >>
+  TRY (qexists `env1` >> simp[]) >>
   metis_tac[static_maps_transfer_env_extend_local,
             well_typed_expr_static_maps_transfer_env,
             well_typed_exprs_static_maps_transfer_env,
             well_typed_atarget_static_maps_transfer_env,
             well_typed_iterator_static_maps_transfer_env,
             type_place_target_static_maps_transfer_env,
+            target_mutable_static_maps_transfer_env,
             type_place_expr_no_hash_static_maps_transfer_env]
 QED
 

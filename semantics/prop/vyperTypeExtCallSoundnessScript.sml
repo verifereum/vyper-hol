@@ -1573,6 +1573,22 @@ Proof
   disch_then (qspec_then `result4` mp_tac) >> simp[]
 QED
 
+(* Isolate the typed value-keyword read before unfolding the full call. *)
+Theorem ext_call_value_opt_success[local]:
+  !kw_opt static st.
+  (!v. kw_opt = SOME v ==> ?n. dest_NumV v = SOME n) ==>
+  ?value_opt.
+    (if static then return NONE else
+       case kw_opt of
+         NONE => return (SOME 0)
+       | SOME v => bind (lift_option_type (dest_NumV v) "ExtCall value not int")
+                        (\n. return (SOME n))) st = (INL value_opt, st)
+Proof
+  rpt gen_tac >> Cases_on `static` >> simp[return_def] >>
+  Cases_on `kw_opt` >> simp[return_def] >> rpt strip_tac >>
+  gvs[bind_def, lift_option_type_def, return_def]
+QED
+
 Theorem eval_ext_call_result_sound:
   runtime_consistent env cx st /\
   exprs_runtime_typed env es vs /\
@@ -1606,6 +1622,15 @@ Proof
        value_has_type ret_tv v` by (
     rpt strip_tac >> drule_all ext_call_kwarg_typed >>
     simp[ext_call_kw_type_def] >> strip_tac >> gvs[]) >>
+  mp_tac (Q.SPECL
+    [`ext_call_kwarg EKValue opts (DROP (LENGTH (arg_types : type list)) rest)`,
+     `static`, `st`]
+    ext_call_value_opt_success) >>
+  (impl_tac >- asm_rewrite_tac[]) >> strip_tac >>
+  qpat_x_assum `(if static then return NONE else _) st = _`
+    (assume_tac o SIMP_RULE (srw_ss())
+      [bind_def, lift_option_type_def, return_def, raise_def, COND_RATOR,
+       option_CASE_rator, prod_CASE_rator, sum_CASE_rator]) >>
   qpat_x_assum `eval_ext_call _ _ _ _ _ _ _ = _` mp_tac >>
   simp[eval_ext_call_def, bind_def, ignore_bind_def, type_check_def,
        assert_def, check_def, lift_option_type_def, lift_option_def,
@@ -1613,7 +1638,9 @@ Proof
        update_accounts_def, update_transient_def, append_logs_def,
        return_def, raise_def,
        COND_RATOR, option_CASE_rator, prod_CASE_rator, sum_CASE_rator] >>
-  strip_tac >> gvs[AllCaseEqs()] >>
+  strip_tac >>
+  qpat_x_assum `(if static then (INL NONE,st) else _) = _` kall_tac >>
+  gvs[AllCaseEqs()] >>
   gvs[pairTheory.UNCURRY_RATOR, pairTheory.UNCURRY_EQ, combinTheory.C_THM,
       combinTheory.o_THM, AllCaseEqs(), COND_RATOR, bind_def, return_def,
       raise_def, adopt_call_outcome_INR] >>

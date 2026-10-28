@@ -17,7 +17,7 @@ QED
 
 (* The checker accepts both statements, and the translation carries the
    unreachable reasons rather than a name "UNREACHABLE". *)
-val fixture = vyperCheckContractFrontendLib.check_contract_result
+val fixture = vyperCheckContractFrontendLib.check_contract_result_legacy
   {in_deploy = false, address = ``0w : address``,
    annotated_ast = JSONDecode.decodeFile jsonASTLib.annotated_ast
      "fixtures/check_contract/unreachable.json",

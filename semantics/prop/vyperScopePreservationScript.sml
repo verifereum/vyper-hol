@@ -1,7 +1,7 @@
 Theory vyperScopePreservation
 Ancestors
   vyperAST vyperMisc vyperState vyperStorageBackend vyperValue vyperInterpreter vyperImmutablesPreservation
-  vyperStatePreservation
+  vyperStatePreservation vyperAbiMemoryProps
 
 (* ===== Lemmas about scopes preservation ===== *)
 
@@ -448,7 +448,8 @@ Proof
     gvs[assign_target_def, bind_def, get_scopes_def, return_def, raise_def,
         lift_option_def, type_check_def, assert_def, lift_sum_def,
         ignore_bind_def, set_scopes_def, AllCaseEqs(), sum_CASE_rator] >>
-    imp_res_tac assign_result_scopes >> gvs[] >>
+    imp_res_tac assign_result_scopes >>
+    imp_res_tac write_abi_memory_frame >> gvs[] >>
     drule find_containing_scope_map_fdom >> simp[])
   (* TopLevelVar *)
   >> conj_tac >- (
@@ -469,7 +470,8 @@ Proof
           drule find_containing_scope_map_fdom >> simp[] >> NO_TAC)
   >> TRY (first_x_assum drule >> gvs[] >> NO_TAC)
   >> rpt (BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def])
-  >> imp_res_tac assign_result_scopes >> gvs[]
+  >> imp_res_tac assign_result_scopes >>
+     imp_res_tac write_abi_immutables_frame >> gvs[]
 QED
 
 Theorem new_variable_scope_property:

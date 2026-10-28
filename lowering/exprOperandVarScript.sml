@@ -1913,7 +1913,7 @@ Resume compiler_compile_var[expr]:
   Cases_on `e`
   >~ [`IfExp _ _ _ _`] >-
     (strip_tac >> qpat_x_assum `compile_expr_body _ _ _ _ _ _ _ = _`
-       (mp_then Any mp_tac compiler_ifexp_var) >> simp[]) 
+       (mp_then Any mp_tac compiler_ifexp_var) >> simp[])
   >~ [`Builtin _ _ _`] >- suspend "expr_builtin"
   >~ [`TypeBuiltin _ _ _ _`] >-
     (simp[compile_expr_body_def, LET_THM] >> metis_tac[])

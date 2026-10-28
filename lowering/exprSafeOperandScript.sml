@@ -353,7 +353,7 @@ Theorem compile_safe_pow_safe_operand:
   compile_safe_pow x y ty bl el sa = (r,sb) ==> safe_operand sb r
 Proof
   Cases_on `bl` >> Cases_on `el` >> Cases_on `type_bounds ty` >>
-  straight_safe_tac [compile_safe_pow_def, compile_clamp_def]
+  straight_safe_tac [compile_safe_pow_def, clamp_and_return_def, compile_clamp_def]
 QED
 
 Theorem compile_binop_safe_operand:

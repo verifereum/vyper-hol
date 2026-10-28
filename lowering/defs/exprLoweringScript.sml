@@ -55,8 +55,7 @@ Definition lowered_value_type_def:
   lowered_value_type cenv (Literal (BaseT (BytesT (Dynamic _))) (BytesL bs)) =
     BaseT (BytesT (Dynamic (LENGTH bs))) ∧
   lowered_value_type cenv (TypeBuiltin _ (AbiEncode ensure method_id) _ args) =
-    (let enc_ty = if LENGTH args = 1 ∧ ¬ensure then expr_type (HD args)
-                  else TupleT (MAP expr_type args) in
+    (let enc_ty = abi_encode_type ensure (MAP expr_type args) in
      BaseT (BytesT (Dynamic
        (abi_size_bound cenv.ce_struct_fields enc_ty +
         if IS_SOME method_id then 4 else 0)))) ∧
@@ -356,8 +355,9 @@ Definition expr_int_literal_def:
   expr_int_literal _ = NONE
 End
 
-(* Exponentiation with the same literal-derived precondition checks as pinned
-   Python arithmetic.safe_pow.  The final NONE/NONE branch is total fallback
+(* Exponentiation with literal-derived precondition checks from pinned Python
+   arithmetic.safe_pow, repaired for signed endpoints and raw non-byte widths.
+   The final NONE/NONE branch is total fallback
    semantics for malformed input; the pinned frontend rejects that case. *)
 Definition compile_safe_pow_def:
   compile_safe_pow x y ty (base_literal : int option)
@@ -376,7 +376,10 @@ Definition compile_safe_pow_def:
                   od
                 else return (Lit 1w));
              emit_void ASSERT [ok];
-             emit_op Exp [x; y]
+             res <- emit_op Exp [x; y];
+             (* Total lowering also handles IntT 1, where +1 does not fit. *)
+             if is_signed ∧ bits = 1 then clamp_and_return res ty
+             else return res
           od
         else
           let magnitude = Num (ABS base_int) in
@@ -396,13 +399,15 @@ Definition compile_safe_pow_def:
             let exponent = Num exponent_int in
             if exponent = 0 ∨ exponent = 1 then
               do emit_void ASSERT [Lit 1w];
-                 emit_op Exp [x; y]
+                 res <- emit_op Exp [x; y];
+                 if is_signed ∧ bits = 1 then clamp_and_return res ty
+                 else return res
               od
             else
               let upper = largest_pow_base exponent bits is_signed in
               if is_signed then
                 let lower =
-                  if (upper + 1) ** exponent = limit
+                  if ODD exponent ∧ (upper + 1) ** exponent = limit
                   then -&(upper + 1) else -&upper in
                 do below <- emit_op SLT [x; Lit (i2w lower)];
                    ge_lower <- emit_op ISZERO [below];
@@ -2969,34 +2974,31 @@ Definition compile_type_builtin_dispatch_body_def:
           let clamp = mk_extract32_clamp ret_ty in
           as_stack_val vv_ty (compile_clamp_extract32 raw clamp st3))
      | AbiEncode ensure method_id =>
-         (let e1 = HD args in
-          let src_ty = expr_type e1 in
-          let enc_ty = if ensure then TupleT [src_ty] else src_ty in
+         (let arg_tys = MAP expr_type args in
+          let enc_ty = abi_encode_type ensure arg_tys in
           let enc_info = type_to_abi_enc_info cenv.ce_struct_fields cenv enc_ty in
           let maxlen = abi_size_bound cenv.ce_struct_fields enc_ty in
           let method_id_word = OPTION_MAP bytes_method_id_word method_id in
-          if is_word_type src_ty then
-            (* Prim word: stage to temp memory for encoder *)
-            let (v, st1) = lower_value compile_expr cenv src_ty e1 st in
-            let (tmp_alloc, st2) = compile_alloc_buffer 32 st1 in
-            let tmp = tmp_alloc.buf_operand in
-            let (_, st3) = emit_void MSTORE [tmp; v] st2 in
-            as_ptr_val vv_ty LocMemory
-              (lower_abi_encode ensure method_id_word tmp enc_info maxlen st3)
-          else
-            let (src_vv, st1) = compile_expr cenv src_ty e1 st in
-            let (src_op, st2) = unwrap_value cenv src_vv st1 in
-            as_ptr_val vv_ty LocMemory
-              (lower_abi_encode ensure method_id_word src_op enc_info maxlen st2))
-     | AbiDecode _ =>
+          (* Python evaluates and unwraps ALL children before allocating or
+             storing the staging tuple. Do not use compile_make_tuple here:
+             that interleaves evaluation with stores and changes effects. *)
+          let (ops, st1) = compile_multi_exprs compile_expr cenv args st in
+          let (src_op, st2) = compile_abi_encode_input cenv ensure arg_tys ops st1 in
+          as_ptr_val vv_ty LocMemory
+            (lower_abi_encode ensure method_id_word src_op enc_info maxlen st2))
+     | AbiDecode unwrap =>
          (let e1 = HD args in
           let (data_vv, st1) = compile_expr cenv (expr_type e1) e1 st in
           let (data_op, st2) = unwrap_value cenv data_vv st1 in
-          let dec_info = type_to_abi_dec_info cenv.ce_struct_fields cenv ret_ty in
-          let abi_min = abi_static_size cenv.ce_struct_fields ret_ty in
-          let abi_max = abi_size_bound cenv.ce_struct_fields ret_ty in
-          let out_size = type_memory_bytes cenv ret_ty in
-          as_ptr_val vv_ty LocMemory (lower_abi_decode data_op dec_info abi_min abi_max out_size st2)))
+          let (data_ptr, st3) = compile_abi_decode_input (expr_type e1) data_op st2 in
+          (* The ABI wrapper changes offsets and bounds, not the result's
+             Vyper type: its sole element has memory offset zero. *)
+          let dec_ty = abi_decode_type unwrap ret_ty in
+          let dec_info = type_to_abi_dec_info cenv.ce_struct_fields cenv dec_ty in
+          let abi_min = abi_static_size cenv.ce_struct_fields dec_ty in
+          let abi_max = abi_size_bound cenv.ce_struct_fields dec_ty in
+          let out_size = type_memory_bytes cenv dec_ty in
+          as_ptr_val vv_ty LocMemory (lower_abi_decode data_ptr dec_info abi_min abi_max out_size st3)))
 End
 
 Definition compile_expr_raw_def:

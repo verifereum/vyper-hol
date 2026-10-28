@@ -13,7 +13,7 @@
 
 Theory builtinAbi
 Ancestors
-  abiEncoder context compileEnv venomInst
+  abiEncoder context compileEnv venomInst vyperABI
 Libs
   monadsyntax
 
@@ -47,13 +47,44 @@ Definition compile_create_tuple_in_memory_def:
     (_ :num) = return () ∧
   compile_create_tuple_in_memory buf_op
     ((arg_op, is_prim, mem_sz) :: rest) offset =
-    do dst <-
-         (if offset = 0 then return buf_op
-          else emit_op ADD [buf_op; Lit (n2w offset)]);
+    do dst <- emit_op ADD [buf_op; Lit (n2w offset)];
        (if is_prim then emit_void MSTORE [dst; arg_op]
         else emit_void MCOPY [dst; arg_op; Lit (n2w mem_sz)]);
        compile_create_tuple_in_memory buf_op rest (offset + mem_sz)
     od
+End
+
+(* Pinned Vyper cd74ce4: a single argument is wrapped iff ensure_tuple;
+   multiple arguments always form a tuple, even with ensure_tuple=False. *)
+Definition abi_encode_type_def:
+  abi_encode_type ensure tys =
+    if LENGTH tys = 1 ∧ ¬ensure then HD tys else TupleT tys
+End
+
+Definition abi_decode_type_def:
+  abi_decode_type unwrap ty =
+    if unwrap ∧ needs_external_call_wrap ty then TupleT [ty] else ty
+End
+
+(* All arguments have already been evaluated AND unwrapped before this
+   staging step. In particular, later effects happen before complex memory
+   arguments are copied, as in codegen_venom/builtins/abi.py. *)
+Definition compile_abi_encode_input_def:
+  compile_abi_encode_input cenv ensure tys ops =
+    if LENGTH tys = 1 ∧ ¬ensure then
+      if is_word_type (HD tys) then
+        do tmp <- compile_alloc_buffer 32;
+           emit_void MSTORE [tmp.buf_operand; HD ops];
+           return tmp.buf_operand
+        od
+      else return (HD ops)
+    else
+      do buf <- compile_alloc_buffer (SUM (MAP (type_memory_bytes cenv) tys));
+         compile_create_tuple_in_memory buf.buf_operand
+           (MAP (λ(op,ty). (op, is_word_type ty, type_memory_bytes cenv ty))
+                (ZIP (ops,tys))) 0;
+         return buf.buf_operand
+      od
 End
 
 (* ===== abi_encode ===== *)
@@ -64,12 +95,12 @@ End
 Definition lower_abi_encode_def:
   lower_abi_encode ensure_tuple method_id_opt src_op enc_info maxlen =
     let mid_size = (case method_id_opt of SOME _ => 4 | NONE => 0) in
-    let total_size = maxlen + 32 + mid_size in
+    (* Bytes[maxlen + mid_size] reserves rounded payload capacity. *)
+    let total_size = 32 + ((maxlen + mid_size + 31) DIV 32) * 32 in
     let data_offset = 32 + mid_size in
     do (* Allocate output buffer: [32-byte length] | [optional method_id] | [data] *)
        buf_op_alloc <- compile_alloc_buffer total_size;
        buf_op <- return buf_op_alloc.buf_operand;
-       data_ptr <- emit_op ADD [buf_op; Lit (n2w data_offset)];
        (* Optionally store method_id at buf+32 (shifted left 224 bits) *)
        (case method_id_opt of
           SOME mid =>
@@ -77,6 +108,7 @@ Definition lower_abi_encode_def:
                emit_void MSTORE [mid_ptr; Lit (mid << 224)]
             od
         | NONE => return ());
+       data_ptr <- emit_op ADD [buf_op; Lit (n2w data_offset)];
        (* Encode data into buffer, get runtime encoded length *)
        encoded_len <-
          compile_abi_encode_to_buf data_ptr src_op enc_info;
@@ -89,6 +121,23 @@ Definition lower_abi_encode_def:
           emit_void MSTORE [buf_op; encoded_len]);
        return buf_op
     od
+End
+
+(* The formal runtime checker also admits fixed BytesT inputs (unlike the
+   pinned source builtin's Bytes[N] input). Their unwrapped representation is
+   a left-aligned word, not a length-prefixed pointer. Preserve the raw-AST
+   semantics by materializing the bytestring before decoding. *)
+Definition compile_abi_decode_input_def:
+  compile_abi_decode_input ty op =
+    case ty of
+      BaseT (BytesT (Fixed n)) =>
+        do buf <- compile_alloc_buffer 64;
+           emit_void MSTORE [buf.buf_operand; Lit (n2w n)];
+           dst <- emit_op ADD [buf.buf_operand; Lit 32w];
+           emit_void MSTORE [dst; op];
+           return buf.buf_operand
+        od
+    | _ => return op
 End
 
 (* ===== abi_decode ===== *)

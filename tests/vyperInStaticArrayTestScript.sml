@@ -37,7 +37,7 @@ QED
 
 (* Pinned Vyper output for fixtures/check_contract/in_static_array.vy, so the
    array operand's type annotation is the one the frontend produces. *)
-val fixture = vyperCheckContractFrontendLib.check_contract_result
+val fixture = vyperCheckContractFrontendLib.check_contract_result_legacy
   {in_deploy = false, address = ``0w : address``,
    annotated_ast = JSONDecode.decodeFile jsonASTLib.annotated_ast
      "fixtures/check_contract/in_static_array.json",

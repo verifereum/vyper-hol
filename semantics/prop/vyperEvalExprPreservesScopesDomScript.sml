@@ -2,7 +2,7 @@ Theory vyperEvalExprPreservesScopesDom
 Ancestors
   pair sum vyperMisc vyperContext vyperState vyperCreate vyperCreateFrame vyperInterpreter vyperLookup
   vyperScopePreservation vyperStatePreservation vyperCallFrame vyperCallOutcomeFrame
-  vyperCallOutcome[ignore_grammar]
+  vyperAbiFrame vyperCallOutcome[ignore_grammar]
 
 (* ========================================================================
    Utility: eval_exprs preserves scopes dom from per-element IH
@@ -42,6 +42,7 @@ QED
    - P5 (eval_base_target) = domain preservation
    - P7 (eval_expr) = domain preservation
    - P8 (eval_exprs) = domain preservation
+   - P9/P10 (delayed ABI expression/list) = domain preservation
    ======================================================================== *)
 local
   val p0 = ``\(cx:evaluation_context) (s:stmt). T``
@@ -53,7 +54,9 @@ local
   val p6 = ``\(cx:evaluation_context) (tyv:type_value) (nm:string) (body:stmt list) (vs:value list). T``
   val p7 = ``\cx e. !st res st'. eval_expr cx e st = (res, st') ==> MAP FDOM st.scopes = MAP FDOM st'.scopes``
   val p8 = ``\cx es. !st res st'. eval_exprs cx es st = (res, st') ==> MAP FDOM st.scopes = MAP FDOM st'.scopes``
-  val spec_ind = SPECL [p0, p1, p2, p3, p4, p5, p6, p7, p8] evaluate_ind
+  val p9 = ``\cx e. !st res st'. eval_abi_expr cx e st = (res, st') ==> MAP FDOM st.scopes = MAP FDOM st'.scopes``
+  val p10 = ``\cx es. !st res st'. eval_abi_exprs cx es st = (res, st') ==> MAP FDOM st.scopes = MAP FDOM st'.scopes``
+  val spec_ind = SPECL [p0, p1, p2, p3, p4, p5, p6, p7, p8, p9, p10] evaluate_ind
   val spec_ind_beta = CONV_RULE (DEPTH_CONV BETA_CONV) spec_ind
 in
   val scopes_dom_ind = save_thm("scopes_dom_ind", spec_ind_beta)
@@ -265,10 +268,21 @@ QED
 Theorem builtin_dom_frames[local]:
   state_rel_frame (λs t. MAP FDOM s.scopes = MAP FDOM t.scopes) (lift_sum rs) ∧
   state_rel_frame (λs t. MAP FDOM s.scopes = MAP FDOM t.scopes)
-    (toplevel_array_length cx tv)
+    (toplevel_array_length cx tv) ∧
+  state_rel_frame (λs t. MAP FDOM s.scopes = MAP FDOM t.scopes) (get_Value top) ∧
+  state_rel_frame (λs t. MAP FDOM s.scopes = MAP FDOM t.scopes) (materialise cx top)
 Proof
   simp[state_rel_frame_result] >> rpt strip_tac >>
-  FIRST [drule lift_sum_state, drule toplevel_array_length_state] >> simp[]
+  FIRST [drule lift_sum_state, drule toplevel_array_length_state,
+    drule get_Value_state, drule materialise_state] >> simp[]
+QED
+
+Theorem assign_dom_frame[local]:
+  state_rel_frame (λs t. MAP FDOM s.scopes = MAP FDOM t.scopes)
+    (assign_target cx target op)
+Proof
+  simp[state_rel_frame_result] >>
+  metis_tac[assign_target_preserves_scopes_dom]
 QED
 
 local
@@ -278,17 +292,20 @@ local
       (free_vars (concl th))) th) |> SRULE [];
   val result = specialise state_rel_frame_result;
   val bind = specialise state_rel_frame_bind_guarded;
+  val finally = specialise state_rel_frame_finally;
+  val abi = CONJUNCTS (specialise state_rel_frame_abi_primitives);
+  val assign = assign_dom_frame;
   val leaves = List.foldl (fn (th,net) =>
       Net.insert (concl th, MATCH_ACCEPT_TAC th) net) Net.empty
     (CONJUNCTS (specialise state_rel_frame_locals_primitives) @
-     CONJUNCTS builtin_dom_frames);
+     CONJUNCTS builtin_dom_frames @ abi @ [assign]);
   fun leaf (asl,w) = FIRST (Net.match w leaves) (asl,w);
   (* Discharge only the actual success guard; never simplify an IH. *)
   fun ih (asl,w) =
     if not (is_comb w andalso
       List.exists (fn name =>
         total (fst o dest_const o fst o strip_comb o rand) w = SOME name)
-        ["eval_expr", "eval_exprs"]) then NO_TAC (asl,w)
+        ["eval_expr", "eval_exprs", "eval_base_target", "eval_abi_expr", "eval_abi_exprs"]) then NO_TAC (asl,w)
     else let
       val normalise = SIMP_RULE bool_ss [oneTheory.one, ignore_bind_def];
       val facts = List.concat (map (CONJUNCTS o normalise o ASSUME) asl);
@@ -302,16 +319,22 @@ local
     end;
 in
   val BUILTIN_DOM_TAC =
-    rpt gen_tac >> strip_tac >>
+    rpt (fn g as (_,w) =>
+      if is_forall w andalso type_of (#1 (dest_forall w)) <> ``:evaluation_state``
+      then gen_tac g else NO_TAC g) >>
+    (fn g as (_,w) => if is_imp w then strip_tac g else ALL_TAC g) >>
     CONV_TAC (REWR_CONV (GSYM result)) >>
     CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV [evaluate_def])) >>
     RULE_ASSUM_TAC (PURE_REWRITE_RULE [GSYM result]) >>
     rpt (FIRST [leaf, ih,
       MATCH_MP_TAC bind >> conj_tac,
+      MATCH_MP_TAC finally >> conj_tac,
       CONV_TAC (RAND_CONV BETA_CONV),
+      CONV_TAC (RAND_CONV (REWR_CONV switch_BoolV_def)),
+      CHANGED_TAC (simp_tac bool_ss [pairTheory.UNCURRY, pairTheory.pair_case_thm]),
       CONV_TAC (RAND_CONV (REWR_CONV ignore_bind_def)),
       gen_tac, strip_tac,
-      CHANGED_TAC (fn (asl,w) => simp_tac bool_ss
+      CHANGED_TAC (fn (asl,w) => simp_tac (srw_ss())
         (map ASSUME (List.filter (not o is_forall) asl)) (asl,w)),
       BasicProvers.PURE_CASE_TAC]);
 end;
@@ -354,19 +377,8 @@ Proof
   imp_res_tac lift_option_scopes >> imp_res_tac lift_option_type_scopes >> imp_res_tac lift_option_type_scopes >> gvs[]
 QED
 
-(* Goal 15: TypeBuiltin (guarded P8 IH) *)
-Theorem case_TypeBuiltin_dom[local]:
-  ∀cx ty tb typ es.
-    (∀s'' x t.
-       type_check (type_builtin_args_length_ok tb (LENGTH es)) "TypeBuiltin args" s'' = (INL x,t) ⇒
-       ∀st res st'. eval_exprs cx es st = (res,st') ⇒
-         MAP FDOM st.scopes = MAP FDOM st'.scopes) ⇒
-    ∀st res st'.
-      eval_expr cx (TypeBuiltin ty tb typ es) st = (res,st') ⇒
-      MAP FDOM st.scopes = MAP FDOM st'.scopes
-Proof
-  BUILTIN_DOM_TAC
-QED
+(* TypeBuiltin is proved in the mutual induction with separate guarded IHs
+   for AbiEncode's eval_abi_exprs and the eager branch's eval_exprs. *)
 
 Theorem Send_outcome_preserves_locals:
   (do
@@ -548,7 +560,9 @@ QED
 Theorem eval_mutual_preserves_scopes_dom[local]:
   (∀cx bt st res st'. eval_base_target cx bt st = (res, st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes) ∧
   (∀cx e st res st'. eval_expr cx e st = (res, st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes) ∧
-  (∀cx es st res st'. eval_exprs cx es st = (res, st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes)
+  (∀cx es st res st'. eval_exprs cx es st = (res, st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes) ∧
+  (∀cx e st res st'. eval_abi_expr cx e st = (res, st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes) ∧
+  (∀cx es st res st'. eval_abi_exprs cx es st = (res, st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes)
 Proof
   MP_TAC scopes_dom_ind >> impl_tac >- (
     rpt conj_tac >>
@@ -567,7 +581,7 @@ Proof
     ACCEPT_TAC case_Attribute_dom >-
     ACCEPT_TAC case_Builtin_dom >-
     ACCEPT_TAC case_Pop_dom >-
-    ACCEPT_TAC case_TypeBuiltin_dom >-
+    suspend "TypeBuiltin" >-
     ACCEPT_TAC case_Send_dom >-
     ACCEPT_TAC case_ExtCall_dom >-
     suspend "IntCall" >-
@@ -578,9 +592,14 @@ Proof
     ACCEPT_TAC case_SelfDestructTarget_dom >-
     suspend "CreateTarget" >-
     ACCEPT_TAC case_eval_exprs_nil_dom >-
-    ACCEPT_TAC case_eval_exprs_cons_dom
+    ACCEPT_TAC case_eval_exprs_cons_dom >>
+    BUILTIN_DOM_TAC
   ) >>
   simp[]
+QED
+
+Resume eval_mutual_preserves_scopes_dom[TypeBuiltin]:
+  rpt gen_tac >> strip_tac >> Cases_on `tb` >> gvs[] >> BUILTIN_DOM_TAC
 QED
 
 Resume eval_mutual_preserves_scopes_dom[CreateTarget]:
@@ -756,6 +775,18 @@ Finalise eval_mutual_preserves_scopes_dom
 (* ========================================================================
    Main theorems (exported)
    ======================================================================== *)
+
+Theorem eval_abi_expr_preserves_scopes_dom:
+  eval_abi_expr cx e st = (res,rt) ==> MAP FDOM st.scopes = MAP FDOM rt.scopes
+Proof
+  metis_tac[eval_mutual_preserves_scopes_dom]
+QED
+
+Theorem eval_abi_exprs_preserves_scopes_dom:
+  eval_abi_exprs cx es st = (res,rt) ==> MAP FDOM st.scopes = MAP FDOM rt.scopes
+Proof
+  metis_tac[eval_mutual_preserves_scopes_dom]
+QED
 
 Theorem eval_expr_preserves_scopes_dom:
   ∀e cx st res st'.

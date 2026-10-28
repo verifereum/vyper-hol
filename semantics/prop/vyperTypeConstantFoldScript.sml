@@ -127,6 +127,7 @@ Proof
       qspecl_then [`tb`,`cx`,`mods`,`typ`,`vs`] mp_tac
         evaluate_type_builtin_constant_context >>
       simp[] >> strip_tac >>
+      Cases_on `tb` >> gvs[constant_type_builtin_def] >>
       simp[Once evaluate_def, bind_def, ignore_bind_def, return_def,
            type_check_def, assert_def, lift_sum_def])
   >- simp[Once evaluate_def, return_def] >>

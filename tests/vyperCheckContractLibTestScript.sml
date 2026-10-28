@@ -424,6 +424,19 @@ fun builtin_modules mutability params ret_ty result =
          ^ret_ty [Return (SOME ^result)]])]
     : (num option # toplevel list) list``
 
+(* A valid literal signature does not license an unfurled MethodId builtin.
+   Accepted source calls must have become literals in the frontend. *)
+Theorem check_contract_rejects_method_id_eval:
+  check_contract F [] (0w : address)
+    [(NONE,
+      [FunctionDecl External Pure F F "f" [] ([] : expr list)
+        (BaseT (BytesT (Dynamic 4)))
+        [Return (SOME (Builtin (BaseT (BytesT (Dynamic 4))) MethodId
+          [Literal (BaseT (StringT 3)) (StringL "g()")]))]])] = NONE
+Proof
+  EVAL_TAC
+QED
+
 val no_params = ``[] : (string # type) list``
 val u256_params = ``[("a", BaseT (UintT 256)); ("b", BaseT (UintT 256))]``
 val u256x3_params =
@@ -515,9 +528,6 @@ val builtin_cases = [
           [Name (BaseT AddressT) "a"];
         Literal (BaseT (UintT 256)) (IntL 0);
         Literal (BaseT (UintT 256)) (IntL 10)]``),
-  ("MethodId", ``Pure``, no_params, ``BaseT (BytesT (Dynamic 4))``,
-   ``Builtin (BaseT (BytesT (Dynamic 4))) MethodId
-       [Literal (BaseT (StringT 3)) (StringL "g()")]``),
   ("ECRecover", ``View``,
    ``[("h", BaseT (BytesT (Fixed 32))); ("v", BaseT (UintT 256));
       ("r", BaseT (UintT 256)); ("s", BaseT (UintT 256))]``,

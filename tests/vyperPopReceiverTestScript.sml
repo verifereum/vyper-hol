@@ -9,7 +9,7 @@ val () = holbuild_extra_deps
   ["fixtures/check_contract/nested_pop.vy", "fixtures/check_contract/nested_pop.json"]
 
 val fixture_path = "fixtures/check_contract/nested_pop.json"
-val fixture = vyperCheckContractFrontendLib.check_contract_result
+val fixture = vyperCheckContractFrontendLib.check_contract_result_legacy
   {in_deploy = false, address = ``0w : address``,
    annotated_ast = JSONDecode.decodeFile jsonASTLib.annotated_ast fixture_path,
    storage_layout = JSONDecode.decodeFile jsonASTLib.storage_layout fixture_path}

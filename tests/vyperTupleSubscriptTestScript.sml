@@ -171,8 +171,8 @@ val () = if optionSyntax.is_none (rhs (concl
   (check_tuple_index ``Name (BaseT (UintT 256)) "index"``)))
   then () else raise Fail "checker accepted dynamic tuple index";
 
-(* Compiler-folded tuple indices become literals; ordinary array indexing
-   continues to translate the expression rather than its folded metadata. *)
+(* Compiler-folded tuple indices become literals. Foldable array index
+   expressions also consume the compiler's folded_value, like Vyper. *)
 val uint_json =
   "{\"typeclass\":\"integer\",\"bits\":256,\"is_signed\":false}";
 val computed_index_json =
@@ -210,8 +210,11 @@ val folded_array = decode_subscript
   computed_index_json;
 val translated_array = rhs (concl (EVAL
   ``translate_expr (0,NONE,[],[],[],[],[]) ^folded_array``));
-val () = if can (find_term (aconv ``Bop Add``)) translated_array
-  then () else raise Fail "array index expression was unexpectedly folded";
+val () = if aconv translated_array
+  ``Subscript (BaseT (UintT 256))
+      (Name (ArrayT (BaseT (UintT 256)) (Fixed 2)) "xs")
+      (Literal (BaseT (UintT 256)) (IntL 1))``
+  then () else raise Fail "folded array index was not translated as a literal";
 
 (* Optional folded annotations must not erase a known slice type. Keep an
    explicit folded type authoritative, and reject indices with no known type. *)
