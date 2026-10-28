@@ -6,7 +6,8 @@ Ancestors
   abiEncoderRegisteredEffect abiDecoderExecution abiDecoderArrayBackedge
   abiDecoderFootprint abiDecoderAllocation abiDecoderLoop abiDecoderContract
   abiDecoderReentry exprLoweringProps venomState venomExecSemantics venomMemDefs
-  valueEncodingProps words list arithmetic
+  abiEncoderSharedContract abiEncoderOpenInputFrame abiScratchFootprint
+  abiDecoderFrame valueEncodingProps valueEncoding finite_map pred_set words list arithmetic
 
 Theorem abi_encoder_array_backedge_extend_state:
   abi_decoder_vars_extend extras s t ==>
@@ -99,9 +100,33 @@ Proof
   qexists_tac `actual` >> simp[]
 QED
 
+Theorem abi_encoder_shared_input_registered_write:
+  abi_encoder_shared_input (ei,at,av) (st,src,dst) (sb,source_cap) (d,sz) (first,last,b,cap) s /\
+  first <= site /\ site < last /\ FLOOKUP s.vs_allocas site = SOME (slot,32) /\
+  abi_decode_footprint_frame [(slot,32)] s t /\
+  t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
+  (!op. abi_decoder_operand_live st.cs_next_var op ==> eval_operand op t = eval_operand op s) ==>
+  abi_encoder_shared_input (ei,at,av) (st,src,dst) (sb,source_cap) (d,sz) (first,last,b,cap) t
+Proof
+  strip_tac >>
+  qpat_assum `abi_encoder_shared_input _ _ _ _ _ _`
+    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_encoder_shared_input_def]) >>
+  `MEM (slot,32) (abi_decoder_child_scratch (abi_decoder_ids first last) b cap s)` by
+    (irule abi_scratch_registered_member >> simp[abi_decoder_ids_def] >>
+     qexists_tac `site` >> simp[]) >>
+  `abi_footprint_disjoint sb source_cap [(slot,32)]` by
+    (fs[abi_footprint_disjoint_def] >> metis_tac[]) >>
+  `mem_bytes_at sb source_cap s.vs_memory = mem_bytes_at sb source_cap t.vs_memory` by
+    (drule_all abi_decode_footprint_frame_slice >> simp[]) >>
+  `abi_encoder_open_input ei at av sb source_cap t.vs_memory` by
+    (drule_all abi_encoder_open_input_mem_agree >> simp[]) >>
+  simp[abi_encoder_shared_input_def] >> gvs[abi_decoder_child_scratch_def]
+QED
+
 val _ = List.app (fn th =>
   let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
     if List.all (fn s => s = "DISK_THM") oracles andalso null axioms andalso null (Thm.hyp th)
     then () else raise Fail "shared backedge admission, axiom or hypothesis"
   end) [abi_encoder_array_backedge_extend_state, abi_encoder_array_backedge_extend_sim,
-    abi_encoder_array_backedge_registered, abi_encoder_shared_array_backedge_reach];
+    abi_encoder_array_backedge_registered, abi_encoder_shared_array_backedge_reach,
+    abi_encoder_shared_input_registered_write];
