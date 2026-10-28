@@ -29,8 +29,11 @@ Theorem abi_decoder_step_inputs_defined:
 Proof
   strip_tac >> Cases_on `inst.inst_opcode` >>
   gvs[abi_decoder_reentry_opcode_def] >> rw[abi_decoder_inputs_defined_def] >>
-  gvs[Once step_inst_base_def, exec_pure1_def, exec_pure2_def,
-      exec_read1_def, exec_write2_def, AllCaseEqs(), eval_operand_def]
+  qpat_x_assum `step_inst_base inst s = OK u` mp_tac >>
+  PURE_ONCE_REWRITE_TAC [step_inst_base_def] >>
+  asm_rewrite_tac [opcode_case_def] >> strip_tac >>
+  gvs[exec_pure1_def, exec_pure2_def, exec_read1_def, exec_write2_def,
+      AllCaseEqs(), eval_operand_def]
 QED
 
 Theorem abi_decoder_vars_extend_inputs:

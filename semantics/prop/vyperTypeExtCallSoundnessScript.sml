@@ -1613,7 +1613,15 @@ Proof
        update_accounts_def, update_transient_def, append_logs_def,
        return_def, raise_def,
        COND_RATOR, option_CASE_rator, prod_CASE_rator, sum_CASE_rator] >>
-  strip_tac >> gvs[AllCaseEqs()] >>
+  strip_tac >>
+  (* Simplify outer cases before expanding their continuations, in bounded
+     batches to stay within the default tactic timeout. *)
+  NTAC 4 (gvs[Once (AllCaseEqs())]) >>
+  NTAC 4 (gvs[Once (AllCaseEqs())]) >>
+  NTAC 4 (gvs[Once (AllCaseEqs())]) >>
+  NTAC 4 (gvs[Once (AllCaseEqs())]) >>
+  NTAC 4 (gvs[Once (AllCaseEqs())]) >>
+  rpt (CHANGED_TAC (gvs[Once (AllCaseEqs())])) >>
   gvs[pairTheory.UNCURRY_RATOR, pairTheory.UNCURRY_EQ, combinTheory.C_THM,
       combinTheory.o_THM, AllCaseEqs(), COND_RATOR, bind_def, return_def,
       raise_def, adopt_call_outcome_INR] >>
