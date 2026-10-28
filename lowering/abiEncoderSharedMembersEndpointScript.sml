@@ -192,9 +192,52 @@ Proof
   strip_tac >> asm_rewrite_tac []
 QED
 
+Theorem abi_encoder_shared_members_dynamic_exit:
+  abi_encoder_shared_members_index (ctx,func) (origin,initial)
+    (first,last,lo,hi,b,cap,limit_st) (active,dp,site,slot,src,dst,sb,d,hl,sz)
+    target ((ei,az,mz,T)::infos) (p,so,ho) (ty::tys,av::avs,pre,pvs) r /\
+  abi_encoder_shared_input (ei,ty,av) (p,elem_src,dst) (sb+so,mz)
+    (d,sz) (first,last,b,cap) r /\
+  compile_abi_encode_child dst elem_src ei T ho dp p = (len,ce) /\
+  abi_encode_child_prefix dst ho dp p = (ops,prepared) /\
+  fn_has_code p ce func /\
+  (p.cs_blocks = ce.cs_blocks \/
+    !bb. lookup_block ce.cs_current_bb func.fn_blocks = SOME bb ==>
+      phi_prefix_length bb.bb_instructions = 0) /\
+  ce.cs_next_id <= last /\ ce.cs_next_id <= hi /\ hi <= last /\
+  ce.cs_next_var <= limit_st.cs_next_var /\
+  off = hl+LENGTH (FLAT (abi_tuple_tails pre pvs)) /\
+  abi_encoder_spine_child_output
+    (abi_encoder_shared_member_dynamic_post (ctx,func) (ty,av,sb+so,mz,d+off)
+      (first,last,b,cap,limit_st) (FST ops,FST (SND ops),dp,d+ho,off,slot,site))
+    (ei,T,dst,elem_src,ho,dp,p,ce,len) r u ==>
+  abi_encoder_shared_members_index (ctx,func) (origin,initial)
+    (first,last,lo,hi,b,cap,limit_st) (active,dp,site,slot,src,dst,sb,d,hl,sz)
+    target infos (ce,so+mz,ho+az) (tys,avs,pre++[ty],pvs++[av]) u
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  `abi_encoder_shared_members_inv ((ei,az,mz,T)::infos) (ty::tys) (av::avs) pre pvs
+    active dp site slot first last lo p limit_st src dst sb so ho d hl sz b cap r /\
+    lo <= p.cs_next_id /\ fresh_vars_wrt limit_st r` by
+    (PairCases_on `target` >> fs[abi_encoder_shared_members_index_def, abi_encoder_shared_members_inv_def]) >>
+  drule_all abi_encoder_shared_members_dynamic_endpoint >> strip_tac >>
+  `abi_encoder_registered_effect (abi_decoder_ids lo hi) [(d,sz)] r u` by
+    (irule abi_encoder_registered_effect_enlarge >> goal_assum (drule_at Any) >>
+     simp[abi_decoder_ids_def, SUBSET_DEF] >> decide_tac) >>
+  `p.cs_next_var <= ce.cs_next_var` by
+    (drule abi_encoder_child_bounds >> simp[]) >>
+  `abi_decoder_address_frame p.cs_next_var r r` by simp[abi_decoder_address_frame_def] >>
+  `abi_encoder_registered_effect (abi_decoder_ids lo hi) [(d,sz)] r r` by
+    simp[abi_encoder_registered_effect_refl] >>
+  `abi_encoder_extend_sim ctx func r r` by simp[abi_encoder_extend_sim_refl] >>
+  irule abi_encoder_shared_members_index_advance >>
+  asm_rewrite_tac [] >> qexistsl_tac [`T`, `ei`, `p`, `r`, `r`, `p`] >>
+  gvs[Excl "enc_def"]
+QED
+
 val _ = List.app (fn th =>
   let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
     if List.all (fn s => s = "DISK_THM") oracles andalso null axioms andalso null (Thm.hyp th)
     then () else raise Fail "shared endpoint admission, axiom or hypothesis"
   end) [abi_encoder_shared_members_static_endpoint, abi_encoder_shared_members_static_exit,
-    abi_encoder_shared_members_dynamic_endpoint];
+    abi_encoder_shared_members_dynamic_endpoint, abi_encoder_shared_members_dynamic_exit];
