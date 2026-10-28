@@ -175,11 +175,30 @@ fun exercise_definition_preservation () = let
   val stock_aggregate = get (path defs)
   val custom_aggregate = stock_aggregate ^ boundary
   val () = put (path defs) custom_aggregate
-  val () = check_refused "custom aggregate cannot be overwritten" defs
+  val () = check_preserved "matching custom aggregate preserved byte-for-byte"
+    defs custom_aggregate
+  val () = export 66
+  val () = check_preserved "custom aggregate survives counts with the same ancestors"
+    defs custom_aggregate
+  val () = export 65
+  val () = put (path defs)
+    (stock_aggregate ^ "  vyperTestDefs_unexpected\n" ^ boundary)
+  val () = check_refused "custom aggregate cannot add an ancestor" defs
+  val () = put (path defs)
+    (stock_aggregate ^ "\n  " ^ part defs 128 ^ "\n" ^ boundary)
+  val () = check_refused "blank line cannot hide an obsolete ancestor" defs
+  val () = put (path defs)
+    (stock_aggregate ^ "\n(* Continued ancestors. *)\n  " ^
+     part defs 128 ^ "\n" ^ boundary)
+  val () = check_refused "comment cannot hide an obsolete ancestor" defs
+  val () = put (path defs) custom_aggregate
+  val () = export 129
+  val () = check_refused "custom aggregate cannot change its ancestors" defs
   val () = export 64
   val () = check_refused "custom aggregate cannot become whole definitions" defs
   val () = export 65
   val () = put (path defs) stock_aggregate
+  val () = generate_tests ()
   val shard = part defs 64
   val stock_shard = get (path shard)
   val custom_shard = stock_shard ^ boundary

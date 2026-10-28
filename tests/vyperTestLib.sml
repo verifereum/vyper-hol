@@ -1288,11 +1288,31 @@ fun scripts_for_file (id, jsonp) = let
   end
   fun preserve_definition (file, contents) = let
     val name = String.substring (file, 0, String.size file - String.size "Script.sml")
+    fun matching_aggregate text = let
+      val input = ref text
+      fun read _ = !input before input := ""
+      val parsed = HOLSourceParser.parseSML file read
+        (fn _ => fn _ => fn message => raise Fail message)
+        HOLSourceParser.initialScope
+      fun ancestors (HOLSourceAST.HOLAncestors {elems, ...}) =
+            List.map (#2 o #id) elems
+        | ancestors _ = []
+    in
+      case #parseDec parsed () of
+        SOME (HOLSourceAST.HOLTheory {elems, ...}) =>
+          List.concat (List.map ancestors elems) =
+          List.map (fn (start, _) => part_name defsname start) parts
+      | _ => false
+    end
   in
     case existing_script file of
       NONE => (file, contents)
     | SOME old =>
         if stock_definition name old then (file, contents)
+        (* HOL ancestor declarations continue across whitespace and comments. *)
+        else if sharded andalso name = defsname andalso
+          String.isPrefix contents old andalso matching_aggregate old
+        then (file, old)
         else if (not sharded andalso not (String.isSubstring
           ("Ancestors " ^ defsname ^ "_part_") old)) orelse
           List.exists (fn (start, count) =>
