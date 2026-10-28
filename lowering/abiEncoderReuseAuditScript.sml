@@ -44,7 +44,7 @@ Ancestors
   abiEncoderSharedArrayComplete abiEncoderSharedArrayDynamicInit abiEncoderSharedArrayDynamicLoop
   abiEncoderSharedArrayFinishProtected abiEncoderSharedArrayFinishRun abiEncoderSharedArrayLoop
   abiEncoderSharedArrayRun abiEncoderSharedArraySelectedLoop abiEncoderSharedArrayStaticLoop
-  abiEncoderSharedArrayOuter abiEncoderSharedArray
+  abiEncoderSharedArrayOuter abiEncoderSharedArray abiEncoderSharedRecursive
 
 fun audit_encoder_tag (name, th) =
   let
@@ -57,7 +57,12 @@ fun audit_encoder_tag (name, th) =
   end;
 
 val _ = List.app audit_encoder_tag
-  [("abi_scratch_encoder_admissible_mutual", abi_scratch_encoder_admissible_mutual),
+  [("abi_encoder_shared_admissible_mutual", abi_encoder_shared_admissible_mutual),
+   ("abi_encoder_shared_admissible", abi_encoder_shared_admissible),
+   ("abi_encoder_shared_translation", abi_encoder_shared_translation),
+   ("abi_scratch_encoder_admissible", abi_scratch_encoder_admissible),
+   ("abi_encoder_correct_admissible", abi_encoder_correct_admissible),
+   ("abi_scratch_encoder_admissible_mutual", abi_scratch_encoder_admissible_mutual),
    ("abi_scratch_encoder_translation", abi_scratch_encoder_translation),
    ("abi_encoder_correct_admissible_mutual", abi_encoder_correct_admissible_mutual),
    ("abi_encoder_correct_translation", abi_encoder_correct_translation),
