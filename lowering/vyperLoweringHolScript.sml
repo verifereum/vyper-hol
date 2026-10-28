@@ -16,7 +16,7 @@ Ancestors
   valueEncodingProofs
   localPtrsProps
   loweringShapeProps
-  intCallStep intCallLookup intCallCallee
+  intCallStep intCallLookup intCallCallee intCallArgs intCallResult intCallReturnMem valueCopy
   structFieldsProps
   (* compiler + correctness *)
   vyperCompiler
