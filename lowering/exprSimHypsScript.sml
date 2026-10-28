@@ -16,8 +16,8 @@
  *                       that every subexpression keeps: type soundness's
  *                       invariants, the locals of the type environment
  *                       held through pointer variables, and the flag
- *                       member ids and member counts of the compile
- *                       environment
+ *                       member ids, flag member counts and struct fields
+ *                       of the compile environment
  *   expr_sim_pre      — expr_sim_inv, the expression well typed, its
  *                       integer types of whole bytes, its buffers below
  *                       the allocation limit, and no internal call in it
@@ -105,12 +105,16 @@
  *     any width up to 256; the unsafe operators' lowering wraps by whole
  *     bytes, as Python's does, so it does not compute the source's result
  *     at other widths.
- *   - alloc_limits_expr e: every static buffer the lowering allocates for
- *     the expression's nodes, so far a bytes or string literal's, is below
- *     2 ** 64 bytes.  Python's Context.allocate_buffer
- *     (vyper/codegen_venom/context.py) raises MemoryAllocationException
- *     for a buffer of 2 ** 64 bytes or more, and _lower_bytelike allocates
- *     its buffer through it.  The lowering's ALLOCA takes the size as a
+ *   - alloc_limits_expr cenv e: every static buffer the lowering allocates
+ *     for the expression's nodes is below 2 ** 64 bytes: a bytes or string
+ *     literal's, and the type_memory_bytes of a struct literal, a list or
+ *     tuple literal and empty(T) of a type that is not a word.  Python's
+ *     Context.allocate_buffer (vyper/codegen_venom/context.py) raises
+ *     MemoryAllocationException for a buffer of 2 ** 64 bytes or more;
+ *     _lower_bytelike allocates its buffer through it, and
+ *     _lower_struct_constructor, lower_List, lower_Tuple and lower_empty
+ *     through new_temporary_value, which allocates
+ *     typ.memory_bytes_required.  The lowering's ALLOCA takes the size as a
  *     word literal and cannot fail, so a buffer of 2 ** 256 bytes or more
  *     would wrap; evaluate_type admits Bytes[n] and String[n] for any
  *     n < 2 ** 256.  return_buffer_ok is the same limit for an external
@@ -120,11 +124,27 @@
  *     this theorem excludes them, and #638 replaces this conjunct with its
  *     hypothesis on the callees.
  *
+ *   - The struct fields clauses: the compile environment's struct field
+ *     map agrees with the type environment's struct declarations, field
+ *     names and types in declaration order (sfields_tenv_consistent), its
+ *     field names are distinct, and each field's size is the source's
+ *     memory size of its type (type_memory_size), so type_memory_bytes is
+ *     type_memory_size for every type.  Vyper's compiler guarantees these:
+ *     a struct's members are distinct and laid out in declaration order,
+ *     memory_bytes_required each (StructT.tuple_keys,
+ *     _lower_struct_constructor).  build_compile_env's map
+ *     (make_struct_fields_map, structFieldsProps, #727) sizes each field by
+ *     field_mem_bytes, its type_memory_size, and the checker rejects
+ *     repeated members (check_contract_struct_fields_distinct).  As for
+ *     flags, the map holds the main module's structs only, so the theorem
+ *     says nothing about a contract whose type environment holds an
+ *     imported struct.
+ *
  * Not here yet:
- *   - The rest of the compile environment's metadata (struct fields,
- *     dynamic array capacities, method ids) is not related to the source
- *     context.  The cases that read it (StructLit, Attribute, Pop,
- *     method_id, ...) will need a clause each in expr_sim_inv, and
+ *   - The rest of the compile environment's metadata (dynamic array
+ *     capacities, method ids) is not related to the source context.  The
+ *     cases that read it (Attribute, Pop, ...) will need a clause each in
+ *     expr_sim_inv, and
  *     TopLevelName needs every immutable to be in ce_vars (#563); storage
  *     and transient variables are there by storage_vars_rel and
  *     transient_vars_rel.  Each is to match what Vyper's compiler
@@ -160,7 +180,13 @@ Definition expr_sim_inv_def:
        INDEX_OF mid ls = SOME i ==>
        cenv.ce_flag_member_id (nsid_to_string (src, fid)) mid = i) /\
     (!nsid m. FLOOKUP (get_tenv cx) nsid = SOME (FlagArgs m) ==>
-              cenv.ce_flag_n_members (nsid_to_string nsid) = m)
+              cenv.ce_flag_n_members (nsid_to_string nsid) = m) /\
+    sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx) /\
+    (!name fields.
+       FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
+       ALL_DISTINCT (MAP FST fields) /\
+       EVERY (\(fname, fty, sz). !tv. evaluate_type (get_tenv cx) fty = SOME tv ==>
+                                     sz = type_memory_size tv) fields)
 End
 
 (* The types whose values are word_values (loweringSlice): integers,
@@ -236,58 +262,75 @@ Definition literal_alloc_ok_def:
 End
 
 (* Every static buffer the lowering allocates for a node of the expression
-   is below Python's allocation limit, 2 ** 64 bytes: so far the buffer of
-   a bytes or string literal.  The same recursion as byte_widths_expr. *)
+   is below Python's allocation limit, 2 ** 64 bytes: the buffers of bytes
+   and string literals, struct and array literals, and empty(T) of a type
+   that is not a word.  The same recursion as byte_widths_expr. *)
 Definition alloc_limits_expr_def:
-  alloc_limits_expr (Name t _) = T /\
-  alloc_limits_expr (TopLevelName t _) = T /\
-  alloc_limits_expr (FlagMember t _ _) = T /\
-  alloc_limits_expr (IfExp t c x y) =
-    (alloc_limits_expr c /\ alloc_limits_expr x /\ alloc_limits_expr y) /\
-  alloc_limits_expr (Literal t l) = literal_alloc_ok l /\
-  alloc_limits_expr (StructLit t _ kes) = alloc_limits_named_exprs kes /\
-  alloc_limits_expr (Subscript t x y) =
-    (alloc_limits_expr x /\ alloc_limits_expr y) /\
-  alloc_limits_expr (Attribute t x _) = alloc_limits_expr x /\
-  alloc_limits_expr (Builtin t _ es) = alloc_limits_exprs es /\
-  alloc_limits_expr (TypeBuiltin t _ _ es) = alloc_limits_exprs es /\
-  alloc_limits_expr (Pop t tgt) = alloc_limits_target tgt /\
-  alloc_limits_expr (Call t _ es dflt) =
-    (alloc_limits_exprs es /\ alloc_limits_opt dflt) /\
+  alloc_limits_expr cenv (Name t _) = T /\
+  alloc_limits_expr cenv (TopLevelName t _) = T /\
+  alloc_limits_expr cenv (FlagMember t _ _) = T /\
+  alloc_limits_expr cenv (IfExp t c x y) =
+    (alloc_limits_expr cenv c /\ alloc_limits_expr cenv x /\
+     alloc_limits_expr cenv y) /\
+  alloc_limits_expr cenv (Literal t l) = literal_alloc_ok l /\
+  alloc_limits_expr cenv (StructLit t nsid kes) =
+    (type_memory_bytes cenv (StructT nsid) < 2 ** 64 /\
+     alloc_limits_named_exprs cenv kes) /\
+  alloc_limits_expr cenv (Subscript t x y) =
+    (alloc_limits_expr cenv x /\ alloc_limits_expr cenv y) /\
+  alloc_limits_expr cenv (Attribute t x _) = alloc_limits_expr cenv x /\
+  alloc_limits_expr cenv (Builtin t bi es) =
+    ((case bi of
+        MakeArray NONE _ =>
+          SUM (MAP (type_memory_bytes cenv o expr_type) es) < 2 ** 64
+      | MakeArray (SOME _) _ => type_memory_bytes cenv t < 2 ** 64
+      | _ => T) /\
+     alloc_limits_exprs cenv es) /\
+  alloc_limits_expr cenv (TypeBuiltin t tb ty es) =
+    ((tb = Empty /\ ~is_word_type ty ==> type_memory_bytes cenv ty < 2 ** 64) /\
+     alloc_limits_exprs cenv es) /\
+  alloc_limits_expr cenv (Pop t tgt) = alloc_limits_target cenv tgt /\
+  alloc_limits_expr cenv (Call t _ es dflt) =
+    (alloc_limits_exprs cenv es /\ alloc_limits_opt cenv dflt) /\
 
-  alloc_limits_target (NameTarget _) = T /\
-  alloc_limits_target (TopLevelNameTarget _) = T /\
-  alloc_limits_target (SubscriptTarget tgt e) =
-    (alloc_limits_target tgt /\ alloc_limits_expr e) /\
-  alloc_limits_target (AttributeTarget tgt _) = alloc_limits_target tgt /\
+  alloc_limits_target cenv (NameTarget _) = T /\
+  alloc_limits_target cenv (TopLevelNameTarget _) = T /\
+  alloc_limits_target cenv (SubscriptTarget tgt e) =
+    (alloc_limits_target cenv tgt /\ alloc_limits_expr cenv e) /\
+  alloc_limits_target cenv (AttributeTarget tgt _) =
+    alloc_limits_target cenv tgt /\
 
-  alloc_limits_exprs [] = T /\
-  alloc_limits_exprs (e::es) = (alloc_limits_expr e /\ alloc_limits_exprs es) /\
+  alloc_limits_exprs cenv [] = T /\
+  alloc_limits_exprs cenv (e::es) =
+    (alloc_limits_expr cenv e /\ alloc_limits_exprs cenv es) /\
 
-  alloc_limits_opt NONE = T /\
-  alloc_limits_opt (SOME e) = alloc_limits_expr e /\
+  alloc_limits_opt cenv NONE = T /\
+  alloc_limits_opt cenv (SOME e) = alloc_limits_expr cenv e /\
 
-  alloc_limits_named_exprs [] = T /\
-  alloc_limits_named_exprs ((_,e)::kes) =
-    (alloc_limits_expr e /\ alloc_limits_named_exprs kes)
+  alloc_limits_named_exprs cenv [] = T /\
+  alloc_limits_named_exprs cenv ((_,e)::kes) =
+    (alloc_limits_expr cenv e /\ alloc_limits_named_exprs cenv kes)
 Termination
-  qexists_tac `measure (\(x : expr + base_assignment_target + expr list +
-                                      expr option + (identifier # expr) list).
+  qexists_tac `measure (\(x : compile_env # expr + compile_env #
+                              base_assignment_target + compile_env # expr list +
+                              compile_env # expr option +
+                              compile_env # (identifier # expr) list).
     case x of
-    | INL e => expr_size e
-    | INR (INL tgt) => base_assignment_target_size tgt
-    | INR (INR (INL es)) => expr4_size es
-    | INR (INR (INR (INL opt))) => expr3_size opt
-    | INR (INR (INR (INR kes))) => expr1_size kes)` >>
+    | INL (_, e) => expr_size e
+    | INR (INL (_, tgt)) => base_assignment_target_size tgt
+    | INR (INR (INL (_, es))) => expr4_size es
+    | INR (INR (INR (INL (_, opt)))) => expr3_size opt
+    | INR (INR (INR (INR (_, kes)))) => expr1_size kes)` >>
   conj_tac >- MATCH_ACCEPT_TAC prim_recTheory.WF_measure >>
-  PURE_REWRITE_TAC [prim_recTheory.measure_thm, sumTheory.sum_case_def] >>
+  PURE_REWRITE_TAC [prim_recTheory.measure_thm, sumTheory.sum_case_def,
+                    pairTheory.pair_case_def] >>
   simp[expr_size_def]
 End
 
 Definition expr_sim_pre_def:
   expr_sim_pre cenv cx env e es <=>
     expr_sim_inv cenv cx env es /\ well_typed_expr env e /\
-    byte_widths_expr e /\ alloc_limits_expr e /\
+    byte_widths_expr e /\ alloc_limits_expr cenv e /\
     int_calls_expr e = [] /\ call_evaluation_safe cx (int_calls_expr e)
 End
 
@@ -379,7 +422,8 @@ Proof
     (cj 8 eval_all_type_sound_mutual) >>
   impl_tac >- gvs[] >> disch_then (mp_tac o CONJUNCT1) >>
   impl_tac >- gvs[] >>
-  Cases_on `res` >> rpt strip_tac >> gvs[]
+  Cases_on `res` >> rpt strip_tac >> gvs[] >>
+  qpat_x_assum `!name fields. _` drule >> simp[]
 QED
 
 Theorem expr_sim_pre_res_ok:
@@ -449,9 +493,10 @@ Proof
 QED
 
 Theorem alloc_limits_exprs_mem:
-  !args e. alloc_limits_exprs args /\ MEM e args ==> alloc_limits_expr e
+  !cenv args e. alloc_limits_exprs cenv args /\ MEM e args ==>
+               alloc_limits_expr cenv e
 Proof
-  Induct >> rw[alloc_limits_expr_def] >> gvs[]
+  gen_tac >> Induct >> rw[alloc_limits_expr_def] >> gvs[]
 QED
 
 Theorem byte_widths_expr_type:

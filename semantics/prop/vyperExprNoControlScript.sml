@@ -594,7 +594,15 @@ Proof
        update_transient_def, append_logs_def, take_call_outcome_def,
        adopt_call_outcome_def, LET_THM, UNCURRY,
        COND_RATOR, option_CASE_rator, prod_CASE_rator, sum_CASE_rator] >>
-  strip_tac >> gvs[AllCaseEqs(), no_control_exc_def]
+  strip_tac >>
+  (* Simplify each outer case before expanding its continuation; bounded
+     batches keep this within the default tactic timeout. *)
+  NTAC 4 (gvs[Once (AllCaseEqs()), no_control_exc_def]) >>
+  NTAC 4 (gvs[Once (AllCaseEqs()), no_control_exc_def]) >>
+  NTAC 4 (gvs[Once (AllCaseEqs()), no_control_exc_def]) >>
+  NTAC 4 (gvs[Once (AllCaseEqs()), no_control_exc_def]) >>
+  NTAC 4 (gvs[Once (AllCaseEqs()), no_control_exc_def]) >>
+  rpt (CHANGED_TAC (gvs[Once (AllCaseEqs()), no_control_exc_def]))
 QED
 
 Theorem eval_send_no_control:
