@@ -2,9 +2,10 @@
  * Expression simulation: the builtins (#636, Builtins)
  *
  * The case lemmas of compile_expr_sim (exprSimMain) for the builtins that
- * are neither operators nor aggregates.  Row 3's word builtins but ceil are
- * proved, in exprSimWordBuiltins, and rows 2 and 7 on exprSimHash's
- * machinery; the rest are cheated, for the later #636 PRs.  Each #636
+ * are neither operators nor aggregates.  Row 3's word builtins but ceil
+ * (in exprSimWordBuiltins), rows 2 and 7 on exprSimHash's machinery, row 5
+ * (here) and row 6's account reads but .code (in exprSimAccounts) are
+ * proved; the rest are cheated, for the later #636 PRs.  Each #636
  * Builtins row is:
  *   1 len, len(msg.data), msg.data slices: compile_len_sim,
  *     compile_calldata_len_sim, compile_calldata_slice_sim
@@ -17,8 +18,9 @@
  *     on names, which compile_expr lowers itself (names_builtin)
  *   4 concat, slice, extract32 (#566), uint2str (#561): compile_concat_sim,
  *     compile_slice_sim, compile_extract32_sim, compile_uint2str_sim
- *   5 blobhash: compile_blobhash_sim (blockhash, compile_blockhash_sim, is
- *     #636 Leaves row 5, with block.prevhash)
+ *   5 blobhash: compile_blobhash_sim, proved: BLOBHASH on the index, whose
+ *     blob hashes call_ctx_rel relates to the transaction's (blockhash,
+ *     compile_blockhash_sim, is #636 Leaves row 5, with block.prevhash)
  *   6 account reads: compile_acc_sim; all but .code by exprSimAccounts'
  *     compile_acc_read_sim, .code in compile_acc_code_sim (unprovable for
  *     now, below)
@@ -33,7 +35,6 @@
  *   - compile_blockhash_sim: the source raises a RuntimeError where
  *     BLOCKHASH returns 0 (#671), and call_ctx_rel does not relate the block
  *     hashes.
- *   - compile_blobhash_sim: call_ctx_rel does not relate the blob hashes.
  *   - compile_acc_code_sim, a bare .code: the lowering emits INVALID, as
  *     Python's codegen refuses it; the supported subset leaves it out.
  *
@@ -58,10 +59,12 @@
 
 Theory exprSimBuiltins
 Ancestors
-  list exprSim exprSimHyps vyperAST exprSimWordBuiltins exprSimWordArgs
-  exprSimHash vyperTypeSystem
-  exprLowering compileEnv valueEncoding fragExec vyperInterpreter
-  vyperState vyperContext vyperValueOperation venomState exprSimAccounts
+  list rich_list exprSim exprSimHyps vyperAST exprSimWordBuiltins
+  exprSimWordArgs exprSimHash vyperTypeSystem exprLowering compileEnv
+  valueEncoding fragExec vyperInterpreter vyperState vyperContext
+  vyperValueOperation venomState exprSimAccounts exprSimUnop
+  exprSimOperators exprBopLowering builtinMisc venomExecSemantics venomInst
+  vyperValue exprLoweringProps vyperTyping
 
 (* ===== Lengths and calldata ===== *)
 
@@ -287,12 +290,117 @@ Proof
   cheat
 QED
 
+(* blobhash(n): BLOBHASH reads the transaction's blob hashes, which
+   call_ctx_rel makes the source's, with the same 0 past their end. *)
+Theorem lower_value_blobhash:
+  !cenv ty ann e sa op sb.
+    lower_value compile_expr cenv ty (Builtin ann BlobHash [e]) sa =
+      (op, sb) ==>
+    ?x s1. lower_value compile_expr cenv ty e sa = (x, s1) /\
+           emit_op BLOBHASH [x] s1 = (op, sb)
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `lower_value _ _ _ _ _ = _` mp_tac >>
+  simp[Once lower_value_def, comp_bind_def, compile_expr_unary_builtin] >>
+  simp[Once (CONJUNCT1 (CONJUNCT2 compile_expr_raw_def)),
+       compile_builtin_dispatch_body_def, compile_blobhash_def] >>
+  CONV_TAC (DEPTH_CONV ETA_CONV) >>
+  simp[lower_value_child_call, vyperASTTheory.expr_size_def,
+       listTheory.list_size_def] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  rw[] >> gvs[as_stack_val_pair, unwrap_value_def, comp_return_def]
+QED
+
+Theorem names_builtin_blobhash[local]:
+  !args. ~names_builtin BlobHash args
+Proof
+  `!bt args. names_builtin bt args ==> bt <> BlobHash` suffices_by
+    metis_tac[] >>
+  ho_match_mp_tac names_builtin_ind >> simp[names_builtin_def]
+QED
+
+Theorem compile_blobhash_stack:
+  !cenv ty ann args sa.
+    ?t op sb. compile_expr cenv ty (Builtin ann BlobHash args) sa =
+              (StackValue t op, sb)
+Proof
+  rpt gen_tac >>
+  simp[compile_expr_builtin_dispatch, names_builtin_blobhash] >>
+  simp[Once (CONJUNCT1 (CONJUNCT2 compile_expr_raw_def)),
+       compile_builtin_dispatch_body_def, as_stack_val_pair] >>
+  simp[pairTheory.UNCURRY]
+QED
+
+Theorem compile_blobhash_frag:
+  !ctx func cenv cx i es0.
+    0 <= i /\ i < 2 ** 256 ==>
+    unop_frag ctx func cenv cx (\x. emit_op BLOBHASH [x])
+      (typed_val_to_w256 (BaseTV (UintT 256)) (IntV i))
+      (BaseT (BytesT (Fixed 32)))
+      (unop_result cx (BaseT (BytesT (Fixed 32))) BlobHash
+         [BaseT (UintT 256)] (IntV i) es0) es0
+Proof
+  rpt strip_tac >>
+  simp[unop_result_def, evaluate_builtin_def, evaluate_blob_hash_def] >>
+  irule unop_frag_read >>
+  simp[vyperValueTheory.evaluate_type_def, is_word_type_def,
+       is_terminator_def, typed_val_to_w256_def, PAD_RIGHT,
+       length_word_to_bytes_be, word_of_bytes_be_to_bytes] >>
+  rpt strip_tac >>
+  gvs[step_inst_base_opcode_eqs, mk_inst_def, exec_read1_def,
+      stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
+  `?n. i = &n` by metis_tac[integerTheory.NUM_POSINT_EXISTS] >>
+  gvs[val_to_w256_def, integer_wordTheory.i2w_pos, wordsTheory.dimword_def]
+QED
+
 Theorem compile_blobhash_sim:
   !cenv ann args.
     expr_sim_below cenv (list_size expr_size args) ==>
     expr_vv_ok cenv (Builtin ann BlobHash args)
 Proof
-  cheat
+  rpt strip_tac >>
+  `expr_ok cenv (Builtin ann BlobHash args)` suffices_by
+    simp[expr_ok_def] >>
+  irule expr_ok_stack >> rpt conj_tac
+  >- metis_tac[eval_expr_builtin_value]
+  >- simp[compile_blobhash_stack] >>
+  rw[expr_sim_ok_def] >>
+  `?e1. args = [e1] /\ ann = BaseT (BytesT (Fixed 32)) /\
+        expr_type e1 = BaseT (UintT 256)` by
+    (gvs[expr_sim_pre_def, well_typed_expr_def, well_typed_builtin_app_def] >>
+     Cases_on `args` >> gvs[] >> rename1 `h::t` >> Cases_on `t` >> gvs[]) >>
+  gvs[] >>
+  `expr_ok cenv e1` by
+    (fs[expr_sim_below_def] >> first_x_assum irule >> simp[]) >>
+  `expr_sim_pre cenv cx env e1 es` by
+    (drule expr_sim_pre_builtin_arg >> disch_then irule >>
+     gvs[expr_sim_pre_def]) >>
+  qspecl_then [`ctx`, `func`, `cenv`, `cx`, `ty`, `BaseT (BytesT (Fixed 32))`,
+               `BlobHash`, `e1`, `ty`, `\x. emit_op BLOBHASH [x]`, `es`]
+    mp_tac compile_unop_sim >>
+  impl_tac >- (
+    rpt conj_tac
+    >- simp[]
+    >- simp[builtin_args_length_ok_def]
+    >- simp[is_word_type_def]
+    >- simp[is_word_type_def]
+    >- (rpt strip_tac >> drule lower_value_blobhash >> simp[])
+    >- (rpt gen_tac >> strip_tac >>
+        drule expr_sim_pre_lower_value_word_shape >> disch_then drule >>
+        simp[is_word_type_def])
+    >- (rpt gen_tac >> BETA_TAC >> strip_tac >>
+        drule emit_op_extends_next_var >> simp[])
+    >- metis_tac[expr_sim_pre_word_value, is_word_type_def]
+    >- metis_tac[expr_ok_def, expr_sim_ok_def] >>
+    rpt strip_tac >>
+    qspecl_then [`cenv`, `cx`, `env`, `e1`, `es`, `Value v1`, `es1`] mp_tac
+      expr_sim_pre_word_value >>
+    simp[is_word_type_def] >> strip_tac >>
+    gvs[vyperValueTheory.evaluate_type_def] >>
+    Cases_on `v1` >> gvs[value_has_type_def] >>
+    irule compile_blobhash_frag >>
+    `?n. i = &n` by metis_tac[integerTheory.NUM_POSINT_EXISTS] >> gvs[]) >>
+  simp[]
 QED
 
 (* A bare .code: the lowering emits INVALID (compile_acc), where the source
