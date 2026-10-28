@@ -80,7 +80,7 @@ Ancestors
   list rich_list finite_map
   fragExec loweringSlice
   stmtLowering moduleLowering context emitHelper emitHelperProps compileEnv
-  abiEncoder abiEncoderProps
+  abiEncoder abiEncoderProps abiEncoderFragment
   valueEncoding valueEncodingProps
   e2eDefs vyperABI contractABI vyperInterpreter vyperState vyperValue
   vyperValueOperation vfmExecution
@@ -1085,7 +1085,7 @@ Theorem compile_abi_encode_return_frag:
     frag_exec ctx sa sf (\s. s = s1) Q R
 Proof
   rpt strip_tac >>
-  drule_all (cj 2 compile_abi_encode_frag) >>
+  drule_all compile_abi_encode_to_buf_frag >>
   disch_then (qspec_then `ctx` assume_tac) >>
   drule compile_abi_encode_to_buf_extends >> strip_tac >>
   drule emit_inst_metadata >> strip_tac >>

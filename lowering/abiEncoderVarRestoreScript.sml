@@ -1,4 +1,4 @@
-(* Observations and instruction updates for encoder variable restoration. *)
+(* Restore original variables at a shared encoder endpoint. *)
 Theory abiEncoderVarRestore
 Ancestors
   abiEncoderEntry abiEncoderSharedContract abiEncoderExtendSim abiScratchEffect
@@ -19,25 +19,6 @@ Proof
     (u.vs_memory,u.vs_allocas,u.vs_alloca_next,
      u.vs_accounts,u.vs_transient,u.vs_logs,u.vs_requests,
      u.vs_current_bb,u.vs_inst_idx,u.vs_halted)``) >> simp[]
-QED
-
-Theorem abi_encoder_and_vars_extend:
-  abi_decoder_vars_extend extras s t /\ inst.inst_opcode = AND /\
-  step_inst_base inst s = OK u ==>
-  ?v. step_inst_base inst t = OK v /\ abi_decoder_vars_extend extras u v
-Proof
-  strip_tac >>
-  `abi_decoder_inputs_defined inst s` by
-    (irule abi_decoder_pure2_inputs >>
-     qpat_x_assum `step_inst_base inst s = OK u` mp_tac >>
-     simp[step_inst_base_def] >> metis_tac[]) >>
-  drule abi_decoder_vars_extend_inputs >> disch_then drule >> strip_tac >>
-  mp_tac (Q.SPECL [`abi_decoder_vars_extend extras`,
-    `\s t. vsr_term_frame s = vsr_term_frame t`, `0`, `ARB`, `inst`, `s`, `t`]
-    step_inst_preserves_R) >>
-  (impl_tac >- simp[abi_decoder_vars_extend_valid]) >>
-  asm_simp_tac (srw_ss()) [step_inst_non_invoke] >>
-  Cases_on `step_inst_base inst t` >> simp[lift_result_def] >> metis_tac[]
 QED
 
 Theorem abi_encoder_shared_restore:
