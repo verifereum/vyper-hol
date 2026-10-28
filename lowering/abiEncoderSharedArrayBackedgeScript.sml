@@ -6,7 +6,9 @@ Ancestors
   abiEncoderRegisteredEffect abiDecoderExecution abiDecoderArrayBackedge
   abiDecoderFootprint abiDecoderAllocation abiDecoderLoop abiDecoderContract
   abiDecoderReentry exprLoweringProps venomState venomExecSemantics venomMemDefs
-  abiEncoderSharedContract abiEncoderOpenInputFrame abiScratchFootprint
+  abiEncoderSharedContract abiEncoderOpenInput abiEncoderOpenInputFrame abiScratchFootprint
+  abiEncoderSharedArrayInput abiEncoderSharedArrayIndex abiEncoderSharedInputEffect abiScratchEffect abiScratchCursor
+  abiEncoderArrayCursor abiEncoderArrayFrame abiEncoderArrayPrefix abiEncoderMembersDefs
   abiDecoderFrame valueEncodingProps valueEncoding finite_map pred_set words list arithmetic
 
 Theorem abi_encoder_array_backedge_extend_state:
@@ -123,10 +125,81 @@ Proof
   simp[abi_encoder_shared_input_def] >> gvs[abi_decoder_child_scratch_def]
 QED
 
+Theorem abi_encoder_shared_array_backedge_memory:
+  lookup_block initial.vs_current_bb func.fn_blocks = SOME bb /\
+  bb.bb_instructions = prefix ++ abi_decode_backedge_insts id iv
+    (STRING #"%" (toString next)) ip hdr /\
+  lookup_block hdr func.fn_blocks = SOME hdr_bb /\ phi_prefix_length hdr_bb.bb_instructions = 0 /\
+  initial.vs_inst_idx = LENGTH prefix /\ ~initial.vs_halted /\
+  eval_operand (Var iv) initial = SOME (n2w j) /\
+  j < LENGTH avs /\ next < limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
+  abi_encoder_shared_input (AbiDynArray ei asz msz active,Array NONE ty,ListV avs)
+    (owner_st,src,dst) (sb,source_cap) (d,sz) (first,last,b,cap) initial /\
+  abi_encoder_array_prefix ty avs k d initial.vs_memory /\
+  abi_encoder_cursor T ip site slot first site owner_st j initial /\
+  abi_encoder_cursor active dp cursor_site cursor_slot first site owner_st off initial /\
+  (active ==> site < cursor_site /\ cursor_site < last) /\
+  owner_st.cs_next_var <= next /\ owner_st.cs_next_id <= last /\
+  site < last /\ abi_decoder_budget first last b cap initial ==>
+  ?actual. abi_encoder_shared_input (AbiDynArray ei asz msz active,Array NONE ty,ListV avs)
+      (owner_st,src,dst) (sb,source_cap) (d,sz) (first,last,b,cap) actual /\
+    abi_encoder_array_prefix ty avs k d actual.vs_memory /\
+    abi_encoder_cursor T ip site slot first site owner_st (SUC j) actual /\
+    abi_encoder_cursor active dp cursor_site cursor_slot first site owner_st off actual /\
+    abi_scratch_effect first last site (site+1) owner_st.cs_next_var limit_st d sz b cap initial actual /\
+    abi_encoder_registered_effect (abi_decoder_ids site (site+1)) [(d,sz)] initial actual /\
+    (alloca_inv initial ==> alloca_inv actual) /\ abi_encoder_extend_sim ctx func initial actual /\
+    actual.vs_current_bb = hdr /\ actual.vs_inst_idx = 0 /\ ~actual.vs_halted
+Proof
+  strip_tac >> drule abi_encoder_shared_array_input_facts >> strip_tac >>
+  qpat_x_assum `asz = abi_member_head_size ty` kall_tac >>
+  qpat_x_assum `active = is_dynamic ty` kall_tac >>
+  qpat_assum `abi_encoder_cursor T ip _ _ _ _ _ _ _`
+    (MAP_EVERY assume_tac o CONJUNCTS o SIMP_RULE bool_ss [abi_encoder_cursor_def]) >>
+  qpat_assum `abi_encoder_shared_input _ _ _ _ _ _`
+    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_encoder_shared_input_def]) >>
+  `abi_decoder_operand_live next ip` by
+    (irule abi_decoder_operand_live_mono >> qexists_tac `owner_st.cs_next_var` >> simp[]) >>
+  `slot < dimword (:256)` by
+    (drule_all abi_encoder_cursor_bounds >> simp[]) >>
+  `site IN abi_decoder_ids site (site+1)` by simp[abi_decoder_ids_def] >>
+  drule_all abi_encoder_shared_array_backedge_reach >>
+  disch_then (qspecl_then [`[(d,sz)]`,`ctx`] (qx_choose_then `actual` strip_assume_tac)) >>
+  qpat_x_assum `actual = _` kall_tac >>
+  `abi_scratch_effect first last site (site+1) owner_st.cs_next_var limit_st d sz b cap initial actual` by
+    (irule abi_scratch_single_write >> asm_simp_tac bool_ss [] >>
+     conj_tac >- (rpt strip_tac >>
+       `abi_decoder_operand_live next op` by
+         (irule abi_decoder_operand_live_mono >> qexists_tac `owner_st.cs_next_var` >> simp[]) >>
+       metis_tac[]) >>
+     qexistsl_tac [`site`,`slot`] >> simp[]) >>
+  `abi_encoder_shared_input (AbiDynArray ei asz msz active,Array NONE ty,ListV avs)
+    (owner_st,src,dst) (sb,source_cap) (d,sz) (first,last,b,cap) actual` by
+    (irule abi_encoder_shared_input_effect >> asm_simp_tac bool_ss [] >>
+     qexistsl_tac [`site+1`,`initial`,`limit_st`,`site`,`owner_st.cs_next_var`] >> simp[]) >>
+  `MEM (slot,32) (abi_decoder_child_scratch (abi_decoder_ids first last) b cap initial)` by
+    (irule abi_scratch_registered_member >> simp[abi_decoder_ids_def] >>
+     qexists_tac `site` >> simp[]) >>
+  `abi_footprint_disjoint d sz [(slot,32)]` by
+    (fs[abi_footprint_disjoint_def] >> metis_tac[]) >>
+  `abi_encoder_array_prefix ty avs k d actual.vs_memory` by
+    (irule abi_encoder_open_array_prefix_output_frame >>
+     conj_tac >- (irule abi_encoder_structural_list_layout >> simp[]) >>
+     qexistsl_tac [`[(slot,32)]`,`initial`,`sz`] >> asm_simp_tac bool_ss []) >>
+  `abi_encoder_cursor T ip site slot first site owner_st (SUC j) actual` by
+    (simp[abi_encoder_cursor_def]) >>
+  `abi_encoder_cursor active dp cursor_site cursor_slot first site owner_st off actual` by
+    (reverse (Cases_on `active`) >- simp[abi_encoder_cursor_def] >>
+     irule abi_scratch_cursor_protected >>
+     goal_assum (drule_at Any) >> asm_simp_tac bool_ss [] >>
+     simp[] >> fs[] >> decide_tac) >>
+  qexists_tac `actual` >> asm_simp_tac bool_ss []
+QED
+
 val _ = List.app (fn th =>
   let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
     if List.all (fn s => s = "DISK_THM") oracles andalso null axioms andalso null (Thm.hyp th)
     then () else raise Fail "shared backedge admission, axiom or hypothesis"
   end) [abi_encoder_array_backedge_extend_state, abi_encoder_array_backedge_extend_sim,
     abi_encoder_array_backedge_registered, abi_encoder_shared_array_backedge_reach,
-    abi_encoder_shared_input_registered_write];
+    abi_encoder_shared_input_registered_write, abi_encoder_shared_array_backedge_memory];

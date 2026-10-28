@@ -2,7 +2,7 @@
 Theory abiEncoderSharedArrayInput
 Ancestors
   abiEncoderSharedContract abiEncoderOpenInput abiEncoderOpenInputFrame
-  abiEncoderArrayFrame abiEncoderInput abiDecoderFootprint abiDecoderContract
+  abiEncoderArrayFrame abiEncoderArrayLayout abiEncoderInput abiDecoderFootprint abiDecoderContract
   abiDecoderReentry abiCanonicalWindows abiDecodeRanges
   abiCanonicalArrays abiEncoderSharedMembersCorrect abiEncoderArrayPrefix
   abiEncoderTuple abiEncoderMemory
@@ -91,9 +91,43 @@ Proof
   irule abi_encoder_memory_append >> asm_simp_tac (srw_ss()) [LENGTH_enc_number, Excl "enc_def"]
 QED
 
+Theorem abi_encoder_open_array_prefix_output_frame:
+  LIST_REL abi_encoder_layout_valid (REPLICATE (LENGTH avs) ty) avs /\
+  LENGTH (enc (Array NONE ty) (ListV avs)) <= output_size /\
+  abi_encoder_array_prefix ty avs j d initial.vs_memory /\
+  abi_decode_footprint_frame fp initial actual /\ abi_footprint_disjoint d output_size fp ==>
+  abi_encoder_array_prefix ty avs j d actual.vs_memory
+Proof
+  strip_tac >>
+  `j <= LENGTH avs` by fs[abi_encoder_array_prefix_def] >>
+  `LIST_REL abi_encoder_layout_valid (REPLICATE j ty) (TAKE j avs)` by
+    (gvs[LIST_REL_EL_EQN, LENGTH_TAKE, EL_REPLICATE, EL_TAKE] >> metis_tac[]) >>
+  `LENGTH (FLAT (abi_tuple_heads (LENGTH avs*abi_member_head_size ty) 0 (REPLICATE j ty) (TAKE j avs))) =
+     j*abi_member_head_size ty` by
+    (simp[abi_encoder_open_heads_length] >>
+     mp_tac (Q.SPECL [`TAKE j avs`,`ty`] abi_encoder_uniform_sizes) >> simp[]) >>
+  `LENGTH (FLAT (abi_tuple_tails (REPLICATE j ty) (TAKE j avs))) =
+     SUM (MAP (abi_member_tail_size ty) (TAKE j avs))` by
+    (simp[abi_tuple_tails_length] >>
+     mp_tac (Q.SPECL [`TAKE j avs`,`ty`] abi_encoder_uniform_sizes) >> simp[]) >>
+  `SUM (MAP (abi_member_tail_size ty) (TAKE j avs)) <=
+     SUM (MAP (abi_member_tail_size ty) avs)` by
+    (Cases_on `j = LENGTH avs` >- simp[] >>
+     mp_tac (Q.ISPECL [`abi_member_tail_size ty`,`avs:abi_value list`,`j:num`]
+       abi_encoder_prefix_sum_bound) >>
+     impl_tac >- decide_tac >> decide_tac) >>
+  `j*abi_member_head_size ty <= LENGTH avs*abi_member_head_size ty` by simp[] >>
+  drule abi_encoder_open_array_length >> disch_tac >>
+  full_simp_tac bool_ss [] >>
+  irule abi_encoder_array_prefix_frame >> qexistsl_tac [`fp`,`initial`] >>
+  asm_simp_tac bool_ss [] >> rpt conj_tac >>
+  irule abi_footprint_disjoint_subwindow >> qexistsl_tac [`d`,`output_size`] >>
+  asm_simp_tac bool_ss [] >> decide_tac
+QED
+
 val _ = List.app (fn th => let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
     if List.all (fn s => s = "DISK_THM") oracles andalso null axioms andalso null (Thm.hyp th)
     then () else raise Fail "shared array input admission, axiom or hypothesis"
   end) [abi_encoder_open_array_iff, abi_encoder_shared_array_input_facts,
     abi_encoder_shared_array_selected_input, abi_encoder_open_array_length,
-    abi_encoder_open_array_prefix_complete];
+    abi_encoder_open_array_prefix_complete, abi_encoder_open_array_prefix_output_frame];
