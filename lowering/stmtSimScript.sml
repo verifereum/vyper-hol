@@ -19,8 +19,9 @@
  *     the return sequence for an external one (#640).
  * stmt_state_rel speaks of the current frame's locals and variables, so an
  * internal-function body reuses the judgment with its own RetQ.  The
- * allocation frontier vs_alloca_next is shared by every frame; alloca_room
- * assumes INVOKE gives the caller its frontier back (#641).
+ * allocation frontier vs_alloca_next is the current frame's: a callee
+ * allocates above its caller's, and INVOKE gives the caller its frontier
+ * back (merge_callee_state), so alloca_room survives a call.
  *
  * A list's declarations extend the compile environment its later
  * statements see; the relation at a list's end is at the extended cenv',
@@ -39,13 +40,15 @@
  *   declare_local_ptr              — a local declared through a pointer
  *
  * The other statements: If, Raise and Assert in stmtSimIf; For over a
- * range in stmtSimFor (its blocks in stmtSimForParts, the loop in
- * stmtSimForLoop); Return of a word from an internal function in
- * stmtSimReturn; AnnAssign of a local whose value is a word_value in
- * stmtSimDecl; Raise and Assert with a string literal reason in
- * stmtSimReason.  Not covered yet: Assign/AugAssign (#550), Append and For
- * over an array (#559), Log (#570), and the other returns, declarations
- * and reasons.
+ * range with literal ends in stmtSimFor (its blocks in stmtSimForParts,
+ * the loop in stmtSimForLoop), and with other ends in stmtSimForRange;
+ * Return of a word or of a tuple of words from an internal function in
+ * stmtSimReturn; AnnAssign of a local held in one word (a word_value, an
+ * address, a bytesN) in stmtSimDecl; Raise and Assert with a string literal
+ * reason in stmtSimReason, and with another reason held on the stack or in
+ * memory in stmtSimReasonExpr.  Not covered yet: Assign/AugAssign (#550),
+ * Append and For over an array (#559), Log (#570), memory-backed
+ * declarations and returns, and reasons read from storage.
  *)
 
 Theory stmtSim

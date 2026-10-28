@@ -54,6 +54,14 @@ Proof
   EVAL_TAC
 QED
 
+Theorem supported_dotted_binding_reject:
+  ~supported_function_bindings [] [("self.x", BaseT BoolT)] [] [] /\
+  ~supported_function_bindings [] [] ["self.x"] [] /\
+  ~supported_function_bindings [] [] [] ["self.x"]
+Proof
+  EVAL_TAC
+QED
+
 Theorem supported_fallback_header_names_contract:
   supported_function_header_names []
     (FunctionDecl External Payable F F "__default__" [] [] NoneT []) /\
