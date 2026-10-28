@@ -41,6 +41,11 @@ Ancestors
   abiEncoderSharedArrayAddress abiEncoderSharedArrayBody abiEncoderSharedArrayRound abiEncoderSharedArraySpine abiEncoderSharedArrayStep abiEncoderSharedArrayTail
   abiEncoderSharedArrayBody abiEncoderSharedArrayOwner abiEncoderSharedComplex abiEncoderSharedOwner
 
+  abiEncoderSharedArrayComplete abiEncoderSharedArrayDynamicInit abiEncoderSharedArrayDynamicLoop
+  abiEncoderSharedArrayFinishProtected abiEncoderSharedArrayFinishRun abiEncoderSharedArrayLoop
+  abiEncoderSharedArrayRun abiEncoderSharedArraySelectedLoop abiEncoderSharedArrayStaticLoop
+  abiEncoderSharedArrayOuter abiEncoderSharedArray
+
 fun audit_encoder_tag (name, th) =
   let
     val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
@@ -434,6 +439,25 @@ val _ = List.app audit_encoder_tag
    ("abi_encoder_shared_complex", abi_encoder_shared_complex),
    ("abi_encoder_shared_input_owner", abi_encoder_shared_input_owner),
    ("abi_encoder_cursor_owner", abi_encoder_cursor_owner),
+   ("abi_encoder_shared_array_exit_run", abi_encoder_shared_array_exit_run),
+   ("abi_encoder_shared_array_index_exit_run", abi_encoder_shared_array_index_exit_run),
+   ("abi_encoder_shared_array_index_complete", abi_encoder_shared_array_index_complete),
+   ("abi_encoder_shared_array_dynamic_init", abi_encoder_shared_array_dynamic_init),
+   ("abi_encoder_shared_array_dynamic_loop", abi_encoder_shared_array_dynamic_loop),
+   ("abi_encoder_shared_array_finish_protected", abi_encoder_shared_array_finish_protected),
+   ("abi_encoder_shared_array_finish_run", abi_encoder_shared_array_finish_run),
+   ("abi_encoder_shared_array_loop_header", abi_encoder_shared_array_loop_header),
+   ("abi_encoder_shared_array_loop_round_finish", abi_encoder_shared_array_loop_round_finish),
+   ("abi_encoder_shared_array_loop_static_step", abi_encoder_shared_array_loop_static_step),
+   ("abi_encoder_shared_array_loop_dynamic_step", abi_encoder_shared_array_loop_dynamic_step),
+   ("abi_encoder_shared_array_loop_finite", abi_encoder_shared_array_loop_finite),
+   ("abi_encoder_shared_array_loop_run", abi_encoder_shared_array_loop_run),
+   ("abi_encoder_shared_array_prepared_run", abi_encoder_shared_array_prepared_run),
+   ("abi_encoder_shared_array_prepared_complete", abi_encoder_shared_array_prepared_complete),
+   ("abi_encoder_shared_array_selected_loop", abi_encoder_shared_array_selected_loop),
+   ("abi_encoder_shared_array_static_loop", abi_encoder_shared_array_static_loop),
+   ("abi_encoder_shared_array_outer", abi_encoder_shared_array_outer),
+   ("abi_encoder_shared_array", abi_encoder_shared_array),
    ("abi_scratch_members_correct_cons", abi_scratch_members_correct_cons),
    ("abi_scratch_members_correct_all", abi_scratch_members_correct_all),
    ("abi_encoder_members_inv_nonempty", abi_encoder_members_inv_nonempty),
