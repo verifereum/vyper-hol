@@ -8,7 +8,7 @@ Ancestors
   abiEncoderSharedContract abiEncoderArrayCursor abiEncoderMembersDefs abiScratchEffect
   abiEncoderArrayFrame abiEncoderOpenInputFrame abiDecodeRanges venomMemDefs
   abiScratchEncoderContract abiScratchChild abiEncoderChildSuffixReach abiScratchSubset
-  abiEncoderMemberSourceAdapter
+  abiEncoderMemberSourceAdapter abiEncoderAdmissible
   abiEncoderOpenInput abiEncoderInput abiEncoderMemberSpine abiScratchFootprint
   abiDecoderDynamicLoopSetup abiDecoderAllocation abiDecoderFootprint abiDecoderReentry
   abiDecoderFrame abiEncoderSharedMemberContract abiEncoderMemberSpineCompat
@@ -579,9 +579,17 @@ Resume abi_encoder_shared_array_dynamic_body[actual_callback]:
      full_simp_tac bool_ss [abi_member_head_size_def] >>
      qpat_assum `is_dynamic ty` (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th])) >>
      asm_simp_tac (srw_ss()) [MULT_CLAUSES] >>
-     rpt conj_tac >> FIRST [decide_tac,
-       (rename1 `abi_footprint_disjoint _ _ []` >> simp[abi_footprint_disjoint_def]),
-       first_x_assum irule >> decide_tac]) >>
+     rpt conj_tac
+     >- decide_tac
+     >- simp[abi_footprint_disjoint_def]
+     >- (qpat_assum `!p n. _ ==> abi_footprint_disjoint p n _` irule >> decide_tac)
+     >- decide_tac
+     >- simp[abi_footprint_disjoint_def]
+     >- (qpat_assum `!p n. _ ==> abi_footprint_disjoint p n _` irule >> decide_tac)
+     >- decide_tac
+     >- decide_tac
+     >- simp[abi_footprint_disjoint_def]
+     >> qpat_assum `!p n. _ ==> abi_footprint_disjoint p n _` irule >> decide_tac) >>
   `eval_operand (FST (FST coords)) actual = SOME (n2w j)` by
     (qpat_assum `abi_scratch_effect _ _ cursor_site _ _ _ _ _ _ _ address_ready actual`
        (mp_then Any irule abi_scratch_effect_operand) >>
@@ -608,3 +616,190 @@ val _ = List.app (fn th =>
     if List.all (fn s => s = "DISK_THM") oracles andalso null axioms andalso null (Thm.hyp th)
     then () else raise Fail "shared dynamic body admission, axiom or hypothesis"
   end) [abi_encoder_shared_array_dynamic_body];
+
+Theorem abi_encoder_shared_array_static_body:
+  abi_encoder_shared ei /\ abi_encoder_static_leaf ei /\
+  abi_encode_array_static_body ip src dst ei asz msz st = (out,en) /\
+  fn_has_code st en func /\
+  abi_encoder_shared_input (AbiDynArray ei asz msz F,Array NONE ty,ListV avs)
+    (st,src,dst) (sb,source_cap) (d,sz) (first,last,b,cap) initial /\
+  abi_encoder_array_prefix ty avs j d initial.vs_memory /\
+  abi_encoder_cursor T ip site slot first site st j initial /\
+  abi_encoder_cursor F dp cursor_site cursor_slot first site st
+    (LENGTH avs*abi_member_head_size ty+
+      SUM (MAP (abi_member_tail_size ty) (TAKE j avs))) initial /\
+  j < LENGTH avs /\ en.cs_next_id <= last /\
+  en.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
+  abi_decoder_budget first last b cap initial /\
+  ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
+  initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  ?actual.
+    abi_encoder_shared_input (AbiDynArray ei asz msz F,Array NONE ty,ListV avs)
+      (st,src,dst) (sb,source_cap) (d,sz) (first,last,b,cap) actual /\
+    abi_encoder_array_prefix ty avs (SUC j) d actual.vs_memory /\
+    abi_encoder_cursor T ip site slot first site st j actual /\
+    abi_encoder_cursor F dp cursor_site cursor_slot first site st
+      (LENGTH avs*abi_member_head_size ty+
+        SUM (MAP (abi_member_tail_size ty) (TAKE (SUC j) avs))) actual /\
+    eval_operand out actual = SOME (n2w j) /\
+    abi_scratch_effect first last site en.cs_next_id st.cs_next_var limit_st
+      d sz b cap initial actual /\
+    abi_encoder_registered_effect (abi_decoder_ids site en.cs_next_id) [(d,sz)] initial actual /\
+    (alloca_inv initial ==> alloca_inv actual) /\
+    abi_encoder_extend_sim ctx func initial actual /\
+    actual.vs_current_bb = en.cs_current_bb /\
+    actual.vs_inst_idx = LENGTH en.cs_current_insts /\ ~actual.vs_halted
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  drule_all abi_encode_array_static_body_context >>
+  disch_then (qx_choose_then `coords` (qx_choose_then `addressed`
+    (qx_choose_then `ignored` strip_assume_tac))) >>
+  `addressed.cs_next_var <= limit_st.cs_next_var /\ st.cs_next_id <= last` by decide_tac >>
+  drule_all abi_encoder_shared_array_body_address >>
+  disch_then (qspecl_then [`[(d,sz)]`,`abi_decoder_ids first last`,`ctx`]
+    (qx_choose_then `address_ready` strip_assume_tac)) >>
+  qpat_x_assum `abi_encode_array_static_body _ _ _ _ _ _ _ = _` kall_tac >>
+  drule abi_encoder_shared_array_input_facts >> strip_tac >>
+  `~is_dynamic ty` by metis_tac[] >>
+  `LIST_REL abi_encoder_layout_valid (REPLICATE (LENGTH avs) ty) avs` by
+    (drule abi_encoder_structural_list_layout >> simp[]) >>
+  `32+LENGTH avs*abi_member_head_size ty+
+     SUM (MAP (abi_member_tail_size ty) avs) <= sz` by
+    (drule abi_encoder_open_array_length >> fs[abi_encoder_shared_input_def]) >>
+  `abi_encoder_layout_valid ty (EL j avs)` by
+    (fs[LIST_REL_EL_EQN,EL_REPLICATE]) >>
+  `LENGTH (enc ty (EL j avs)) = abi_member_head_size ty` by
+    fs[abi_encoder_layout_valid_def,abi_member_head_size_def] >>
+  `j*asz+LENGTH (enc ty (EL j avs)) <= LENGTH avs*asz` by
+    (`SUC j*asz <= LENGTH avs*asz` by simp[] >>
+     qpat_x_assum `SUC j*asz <= _` mp_tac >>
+     asm_simp_tac bool_ss [MULT_CLAUSES,ADD_COMM]) >>
+  `abi_encoder_shared_input (ei,ty,EL j avs)
+     (addressed,SND (FST coords),SND (SND coords)) (sb+32+j*msz,msz)
+     (d+32+j*asz,LENGTH (enc ty (EL j avs))) (first,last,b,cap) address_ready` by
+    (irule abi_encoder_shared_array_body_child_input >>
+     asm_simp_tac bool_ss [] >> (conj_tac >- simp[]) >>
+     goal_assum (drule_at Any) >> qpat_x_assum `asz = _` SUBST_ALL_TAC >>
+     full_simp_tac bool_ss [] >> decide_tac) >>
+  qpat_assum `abi_encoder_static_leaf ei` (fn th =>
+    qpat_assum `compile_abi_encode_static_info _ _ _ _ = _`
+      (assume_tac o PURE_REWRITE_RULE [MATCH_MP abi_encode_static_info_agrees th])) >>
+  `first <= addressed.cs_next_id` by
+    (qpat_assum `abi_encoder_cursor T ip _ _ _ _ _ _ initial` mp_tac >>
+     simp_tac bool_ss [abi_encoder_cursor_def] >> strip_tac >> decide_tac) >>
+  `?actual. abi_encoder_shared_endpoint (ctx,func) (addressed,en,ignored,limit_st)
+     (first,last,b,cap) (ty,EL j avs,d+32+j*asz) address_ready actual` by
+    (qpat_assum `abi_encoder_shared ei` (irule o PURE_REWRITE_RULE [abi_encoder_shared_def]) >>
+     goal_assum (drule_at Any) >> asm_simp_tac bool_ss [] >>
+     goal_assum (drule_at Any) >> simp[] >>
+     qexistsl_tac [`sb+32+j*msz`,`msz`] >>
+     qpat_x_assum `asz = _` SUBST_ALL_TAC >>
+     qpat_assum `abi_encoder_shared_input (ei,ty,_) _ _ _ _ address_ready` mp_tac >>
+     qpat_assum `LENGTH (enc ty (EL j avs)) = _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp_tac bool_ss [AC ADD_ASSOC ADD_COMM]) >>
+  rename1 `abi_encoder_shared_endpoint (ctx,func) _ _ _ address_ready actual` >>
+  suspend "static_finish"
+QED
+
+Resume abi_encoder_shared_array_static_body[static_finish]:
+  qpat_assum `abi_encoder_shared_endpoint _ _ _ _ address_ready actual`
+    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_encoder_shared_endpoint_def]) >>
+  `site <= st.cs_next_id /\ first <= site` by fs[abi_encoder_cursor_def] >>
+  `d+32+j*asz+LENGTH (enc ty (EL j avs)) <= d+sz` by
+    (qpat_x_assum `asz = _` SUBST_ALL_TAC >> full_simp_tac bool_ss [] >> decide_tac) >>
+  `abi_encoder_extend_sim ctx func initial actual` by
+    (irule abi_encoder_extend_sim_trans >> qexists_tac `address_ready` >> simp[]) >>
+  `abi_scratch_effect first last site en.cs_next_id st.cs_next_var limit_st
+     d sz b cap initial actual` by
+    (irule abi_scratch_effect_after_address >>
+     qpat_assum `abi_scratch_effect _ _ addressed.cs_next_id _ _ _ _ _ _ _ address_ready actual`
+       (irule_at Any) >>
+     goal_assum (drule_at Any) >> asm_simp_tac bool_ss [] >> decide_tac) >>
+  `abi_encoder_registered_effect (abi_decoder_ids site en.cs_next_id) [(d,sz)]
+     initial address_ready` by
+    fs[abi_encoder_registered_effect_def,abi_decoder_address_frame_def] >>
+  `abi_encoder_registered_effect (abi_decoder_ids site en.cs_next_id) [(d,sz)]
+     address_ready actual` by
+    (irule abi_encoder_registered_effect_enlarge >>
+     goal_assum (drule_at Any) >>
+     simp[pred_setTheory.SUBSET_DEF,abi_decoder_ids_def] >>
+     qpat_x_assum `asz = _` SUBST_ALL_TAC >> full_simp_tac bool_ss [] >> decide_tac) >>
+  `abi_encoder_registered_effect (abi_decoder_ids site en.cs_next_id) [(d,sz)]
+     initial actual` by
+    (irule abi_encoder_registered_effect_trans >> qexists_tac `address_ready` >> simp[]) >>
+  `abi_encoder_shared_input (AbiDynArray ei asz msz F,Array NONE ty,ListV avs)
+     (st,src,dst) (sb,source_cap) (d,sz) (first,last,b,cap) actual` by
+    (irule abi_encoder_shared_input_effect >>
+     qpat_assum `abi_scratch_effect _ _ site _ _ _ d sz _ _ initial actual` (irule_at Any) >>
+     qpat_assum `abi_encoder_shared_input _ _ _ _ _ initial` (irule_at Any) >>
+     simp[]) >>
+  `alloca_inv initial ==> alloca_inv actual` by metis_tac[] >>
+  `abi_encoder_cursor T ip site slot first site st j actual` by
+    (irule abi_scratch_cursor_protected >>
+     qpat_assum `abi_scratch_effect _ _ addressed.cs_next_id _ _ _ _ _ _ _ address_ready actual`
+       (irule_at Any) >>
+     qpat_assum `abi_encoder_cursor T ip _ _ _ _ _ _ address_ready` (irule_at Any) >>
+     asm_simp_tac bool_ss [] >>
+     fs[abi_encoder_shared_input_def] >>
+     qpat_x_assum `asz = _` SUBST_ALL_TAC >>
+     fs[MULT_COMM,abi_encoder_cursor_def] >>
+     qpat_assum `abi_footprint_disjoint (d + _) (LENGTH (enc ty (EL j avs))) _` mp_tac >>
+     qpat_assum `LENGTH (enc ty (EL j avs)) = _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> simp[AC ADD_ASSOC ADD_COMM]) >>
+  `eval_operand out actual = SOME (n2w j)` by
+    (qpat_assum `abi_scratch_effect _ _ addressed.cs_next_id _ _ _ _ _ _ _ address_ready actual`
+       (mp_then Any irule abi_scratch_effect_operand) >> gvs[]) >>
+  suspend "static_prefix"
+QED
+
+Resume abi_encoder_shared_array_static_body[static_prefix]:
+  `abi_decode_footprint_frame
+     ((d+32+j*asz,LENGTH (enc ty (EL j avs)))::
+       abi_decoder_child_scratch (abi_decoder_ids first last) b cap address_ready)
+     address_ready actual` by
+    (qpat_assum `abi_scratch_effect _ _ addressed.cs_next_id _ _ _ _ _ _ _ address_ready actual`
+       (mp_then Any mp_tac abi_scratch_effect_frame) >> simp[]) >>
+  `!p n. d <= p /\ p+n <= d+sz ==>
+     abi_footprint_disjoint p n
+       (abi_decoder_child_scratch (abi_decoder_ids first last) b cap address_ready)` by
+    (rpt strip_tac >> irule abi_footprint_disjoint_subwindow >>
+     qexistsl_tac [`d`,`sz`] >> fs[abi_encoder_shared_input_def]) >>
+  `!xs. SUM (MAP (abi_member_tail_size ty) xs) = 0` by
+    (Induct >> simp[abi_member_tail_size_def]) >>
+  `abi_encoder_array_prefix ty avs (SUC j) d actual.vs_memory` by
+    (irule abi_encoder_open_array_static_step >>
+     qpat_assum `abi_decode_footprint_frame _ address_ready actual` (irule_at Any) >>
+     qpat_assum `abi_encoder_array_prefix _ _ _ _ address_ready.vs_memory` (irule_at Any) >>
+     asm_simp_tac bool_ss [] >>
+     (conj_tac >-
+       (qpat_assum `mem_bytes_at _ _ actual.vs_memory = _` mp_tac >>
+        qpat_x_assum `asz = _` SUBST_ALL_TAC >>
+        qpat_assum `LENGTH (enc ty (EL j avs)) = _` mp_tac >>
+        POP_ASSUM_LIST (K all_tac) >> simp[AC ADD_ASSOC ADD_COMM])) >>
+     simp_tac bool_ss [abi_scratch_disjoint_cons] >>
+     rpt conj_tac
+     >- decide_tac
+     >- (qpat_assum `!p n. _ ==> abi_footprint_disjoint p n _` irule >> decide_tac)
+     >- decide_tac
+     >- (qpat_assum `!p n. _ ==> abi_footprint_disjoint p n _` irule >>
+         qpat_x_assum `asz = _` SUBST_ALL_TAC >>
+         qpat_assum `32+LENGTH avs*abi_member_head_size ty+_ <= sz` mp_tac >>
+         asm_simp_tac bool_ss [] >> decide_tac)
+     >> simp[abi_footprint_disjoint_def] >>
+     `SUC j * abi_member_head_size ty <= LENGTH avs * abi_member_head_size ty` by simp[] >>
+     qpat_x_assum `SUC j * abi_member_head_size ty <= _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp_tac bool_ss [MULT_CLAUSES] >> decide_tac) >>
+  qexists_tac `actual` >> simp[abi_encoder_cursor_def]
+QED
+
+Finalise abi_encoder_shared_array_static_body
+
+val _ =
+  let val th = abi_encoder_shared_array_static_body
+      val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
+  in
+    if List.all (fn s => s = "DISK_THM") oracles andalso null axioms andalso null (Thm.hyp th)
+    then () else raise Fail "shared array static body admission, axiom or hypothesis"
+  end;
