@@ -88,7 +88,7 @@ Theorem abi_encoder_shared_array_backedge_reach:
 Proof
   strip_tac >>
   drule_all (Q.INST [`fuel` |-> `0:num`] abi_encoder_array_backedge_execute) >>
-  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  disch_then (qspec_then `ctx` (qx_choose_then `actual` strip_assume_tac)) >>
   `ip <> Var (STRING #"%" (toString next))` by
     (irule abi_decoder_live_excludes_output >> goal_assum (drule_at Any) >> simp[]) >>
   `abi_encoder_extend_sim ctx func s actual` by
