@@ -1,12 +1,11 @@
 (* Exact staged Python-oracle bytecode check for static ABI encode/decode. *)
 
 Theory evalCompilerBytecodeAbiStatic
-Ancestors evalCompilerBytecodeAbiStaticPrefix evalCompilerSubsetAbiBuiltins compileVyper concretizeMemLocDefs stackPlanGenCompute alist byte integer_word option cv_std
-Libs evalCompilerBytecodeLib compilerPackagingEvalLib finite_mapLib computeLib wordsLib
+Ancestors evalCompilerSubsetAbiBuiltins compileVyper concretizeMemLocDefs stackPlanGenCompute alist byte integer_word option cv_std
+Libs evalCompilerBytecodeLib finite_mapLib computeLib wordsLib
 
 fun holbuild_extra_deps (_ : string list) = ()
-val () = holbuild_extra_deps
-  ["../python-o1-no-asm-opt/abi_static.hex"]
+val () = holbuild_extra_deps [".."]
 val () = computeLib.upd_compset add_finite_map_compset
 val () = computeLib.upd_compset (computeLib.add_thms [fmap_to_alist_FEMPTY])
 val () = computeLib.upd_compset (computeLib.add_thms [i2w_pos])
@@ -18,9 +17,6 @@ val () = computeLib.upd_compset
     |> computeLib.add_thms
          [reduce_depth_plan_compute, generate_block_insts_plan_compute])
 val () = Globals.max_print_depth := 20
-val () = compilerPackagingEvalLib.configure ()
-val () = evalCompilerBytecodeLib.restore_stage_values
-  "evalCompilerBytecodeAbiStaticPrefix"
 
 val abi_static_policy_eval = save_thm
   ("abi_static_policy_eval",

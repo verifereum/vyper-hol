@@ -5,8 +5,7 @@ Ancestors evalCompilerBytecodeAbiEventsPipeline evalCompilerBytecodeAbiEventsLow
 Libs evalCompilerBytecodeLib finite_mapLib computeLib wordsLib
 
 fun holbuild_extra_deps (_ : string list) = ()
-val () = holbuild_extra_deps
-  ["../python-o1-no-asm-opt/mixed_event_types.hex"]
+val () = holbuild_extra_deps [".."]
 val () = computeLib.upd_compset add_finite_map_compset
 val () = computeLib.upd_compset (computeLib.add_thms [fmap_to_alist_FEMPTY])
 val () = computeLib.upd_compset (computeLib.add_thms [i2w_pos])
@@ -260,8 +259,6 @@ Proof
      mixed_event_types_runtime_accessors) >>
   PURE_REWRITE_TAC [codegenTheory.finalize_codegen_identity] >>
   PURE_REWRITE_TAC [mixed_event_types_codegen_assembly_eval] >>
-  simp_tac pure_ss [listTheory.APPEND,
-    mixed_event_types_assembly_safe_eval, COND_CLAUSES] >>
   EVAL_TAC
 QED
 
@@ -286,7 +283,7 @@ Proof
        mixed_event_types_runtime_pipeline_def,
        mixed_event_types_deploy_compile_def,
        checked_unit_pipeline_def] >>
-  rpt (CASE_TAC >> gvs[])
+  rpt CASE_TAC >> gvs[]
 QED
 
 val () = evalCompilerBytecodeLib.add_staged_compile_eval

@@ -1,21 +1,11 @@
 (* Exact Python-oracle bytecode checks for evaluator-small scalar arithmetic fixtures. *)
 
 Theory evalCompilerBytecodeScalarArithmetic
-Ancestors evalCompilerBytecodeScalarArithUnsafeIntStages evalCompilerBytecodeScalarArithUnsafeUintStages evalCompilerBytecodeScalarArithDecimalDivStages evalCompilerBytecodeScalarArithDecimalMulStages evalCompilerBytecodeScalarArithDecimalSubStages evalCompilerBytecodeScalarArithDecimalStages evalCompilerBytecodeScalarArithIntStages evalCompilerBytecodeScalarArithPowBaseStages evalCompilerBytecodeScalarArithPowStages evalCompilerBytecodeScalarArithUintStages evalCompilerBytecodeScalarWordEval evalCompilerSubsetScalars compileVyper concretizeMemLocDefs alist byte integer_word option
+Ancestors evalCompilerBytecodeScalarWordEval evalCompilerSubsetScalars compileVyper concretizeMemLocDefs alist byte integer_word option
 Libs evalCompilerBytecodeLib finite_mapLib computeLib wordsLib
 
 fun holbuild_extra_deps (_ : string list) = ()
-val () = holbuild_extra_deps
-  ["../python-o1-no-asm-opt/scalar_arith_decimal.hex",
-   "../python-o1-no-asm-opt/scalar_arith_decimal_div.hex",
-   "../python-o1-no-asm-opt/scalar_arith_decimal_mul.hex",
-   "../python-o1-no-asm-opt/scalar_arith_decimal_sub.hex",
-   "../python-o1-no-asm-opt/scalar_arith_int.hex",
-   "../python-o1-no-asm-opt/scalar_arith_pow.hex",
-   "../python-o1-no-asm-opt/scalar_arith_pow_base.hex",
-   "../python-o1-no-asm-opt/scalar_arith_uint.hex",
-   "../python-o1-no-asm-opt/scalar_arith_unsafe_int.hex",
-   "../python-o1-no-asm-opt/scalar_arith_unsafe_uint.hex"]
+val () = holbuild_extra_deps [".."]
 val () = computeLib.upd_compset add_finite_map_compset
 val () = computeLib.upd_compset (computeLib.add_thms [fmap_to_alist_FEMPTY])
 val () = computeLib.upd_compset
@@ -52,9 +42,6 @@ val () = computeLib.upd_compset
      w2n_scalar_decimal_lo_word_eval,
      w2n_scalar_decimal_hi_word_eval])
 
-val () = evalCompilerBytecodeLib.restore_stage_values
-  "evalCompilerBytecodeScalarArithUintStages"
-
 Theorem scalar_arith_uint_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities)
     scalar_arith_uint_program =
@@ -62,9 +49,6 @@ Theorem scalar_arith_uint_matches_python_oracle:
 Proof
   EVAL_TAC
 QED
-
-val () = evalCompilerBytecodeLib.restore_stage_values
-  "evalCompilerBytecodeScalarArithPowStages"
 
 Theorem scalar_arith_pow_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities)
@@ -74,9 +58,6 @@ Proof
   EVAL_TAC
 QED
 
-val () = evalCompilerBytecodeLib.restore_stage_values
-  "evalCompilerBytecodeScalarArithPowBaseStages"
-
 Theorem scalar_arith_pow_base_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities)
     scalar_arith_pow_base_program =
@@ -84,9 +65,6 @@ Theorem scalar_arith_pow_base_matches_python_oracle:
 Proof
   EVAL_TAC
 QED
-
-val () = evalCompilerBytecodeLib.restore_stage_values
-  "evalCompilerBytecodeScalarArithIntStages"
 
 Theorem scalar_arith_int_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities)
@@ -96,9 +74,6 @@ Proof
   EVAL_TAC
 QED
 
-val () = evalCompilerBytecodeLib.restore_stage_values
-  "evalCompilerBytecodeScalarArithDecimalStages"
-
 Theorem scalar_arith_decimal_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities)
     scalar_arith_decimal_program =
@@ -106,9 +81,6 @@ Theorem scalar_arith_decimal_matches_python_oracle:
 Proof
   EVAL_TAC
 QED
-
-val () = evalCompilerBytecodeLib.restore_stage_values
-  "evalCompilerBytecodeScalarArithDecimalSubStages"
 
 Theorem scalar_arith_decimal_sub_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities)
@@ -118,9 +90,6 @@ Proof
   EVAL_TAC
 QED
 
-val () = evalCompilerBytecodeLib.restore_stage_values
-  "evalCompilerBytecodeScalarArithDecimalMulStages"
-
 Theorem scalar_arith_decimal_mul_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities)
     scalar_arith_decimal_mul_program =
@@ -128,9 +97,6 @@ Theorem scalar_arith_decimal_mul_matches_python_oracle:
 Proof
   EVAL_TAC
 QED
-
-val () = evalCompilerBytecodeLib.restore_stage_values
-  "evalCompilerBytecodeScalarArithDecimalDivStages"
 
 Theorem scalar_arith_decimal_div_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities)
@@ -140,9 +106,6 @@ Proof
   EVAL_TAC
 QED
 
-val () = evalCompilerBytecodeLib.restore_stage_values
-  "evalCompilerBytecodeScalarArithUnsafeUintStages"
-
 Theorem scalar_arith_unsafe_uint_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities)
     scalar_arith_unsafe_uint_program =
@@ -150,9 +113,6 @@ Theorem scalar_arith_unsafe_uint_matches_python_oracle:
 Proof
   EVAL_TAC
 QED
-
-val () = evalCompilerBytecodeLib.restore_stage_values
-  "evalCompilerBytecodeScalarArithUnsafeIntStages"
 
 Theorem scalar_arith_unsafe_int_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities)

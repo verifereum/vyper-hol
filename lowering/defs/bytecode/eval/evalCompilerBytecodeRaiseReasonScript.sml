@@ -5,8 +5,7 @@ Ancestors evalCompilerSubsetControlDeploy compileVyper concretizeMemLocDefs alis
 Libs evalCompilerBytecodeLib finite_mapLib computeLib wordsLib
 
 fun holbuild_extra_deps (_ : string list) = ()
-val () = holbuild_extra_deps
-  ["../python-o1-no-asm-opt/raise_reason.hex"]
+val () = holbuild_extra_deps [".."]
 val () = computeLib.upd_compset add_finite_map_compset
 val () = computeLib.upd_compset (computeLib.add_thms [fmap_to_alist_FEMPTY])
 val () = computeLib.upd_compset (computeLib.add_thms [i2w_pos])
@@ -241,9 +240,6 @@ Proof
      raise_reason_runtime_accessors) >>
   PURE_REWRITE_TAC [codegenTheory.finalize_codegen_identity] >>
   PURE_REWRITE_TAC [raise_reason_codegen_assembly_eval] >>
-  CONV_TAC (RAND_CONV EVAL) >>
-  CONV_TAC (LAND_CONV (RAND_CONV EVAL)) >>
-  CONV_TAC (LAND_CONV EVAL) >>
   EVAL_TAC
 QED
 
@@ -268,7 +264,7 @@ Proof
        raise_reason_runtime_pipeline_def,
        raise_reason_deploy_compile_def,
        checked_unit_pipeline_def] >>
-  rpt (CASE_TAC >> gvs[])
+  rpt CASE_TAC >> gvs[]
 QED
 
 val () = evalCompilerBytecodeLib.add_staged_compile_eval

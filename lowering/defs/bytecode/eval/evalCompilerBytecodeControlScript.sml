@@ -4,41 +4,17 @@
  *)
 
 Theory evalCompilerBytecodeControl
-Ancestors evalCompiler compileVyper evalCompilerBytecodeMixedEventStages
-  evalCompilerBytecodeControlStages concretizeMemLocDefs alist byte integer_word option
+Ancestors evalCompiler compileVyper concretizeMemLocDefs alist byte integer_word option
 Libs evalCompilerBytecodeLib finite_mapLib computeLib wordsLib
 
 fun holbuild_extra_deps (_ : string list) = ()
-val () = holbuild_extra_deps
-  ["../python-o1-no-asm-opt/for_accum.hex",
-   "../python-o1-no-asm-opt/for_break.hex",
-   "../python-o1-no-asm-opt/for_continue.hex",
-   "../python-o1-no-asm-opt/for_pass.hex",
-   "../python-o1-no-asm-opt/hashmap_read.hex",
-   "../python-o1-no-asm-opt/hashmap_write.hex",
-   "../python-o1-no-asm-opt/if_bool.hex",
-   "../python-o1-no-asm-opt/if_join.hex",
-   "../python-o1-no-asm-opt/internal_call.hex",
-   "../python-o1-no-asm-opt/internal_call_arg.hex",
-   "../python-o1-no-asm-opt/mixed_event_log.hex"]
+val () = holbuild_extra_deps [".."]
 
 val () = computeLib.upd_compset add_finite_map_compset
 val () = computeLib.upd_compset (computeLib.add_thms [fmap_to_alist_FEMPTY])
 val () = computeLib.upd_compset (computeLib.add_thms [i2w_pos])
 
 val () = Globals.max_print_depth := 20
-val () = evalCompilerBytecodeLib.restore_stage_values "evalCompilerBytecodeMixedEventStages"
-val () = app evalCompilerBytecodeLib.restore_stage_values
-  ["evalCompilerBytecodeControlHashmapReadStages",
-   "evalCompilerBytecodeControlHashmapWriteStages",
-   "evalCompilerBytecodeControlIfBoolStages",
-   "evalCompilerBytecodeControlIfJoinStages",
-   "evalCompilerBytecodeControlForPassStages",
-   "evalCompilerBytecodeControlForAccumStages",
-   "evalCompilerBytecodeControlForContinueStages",
-   "evalCompilerBytecodeControlForBreakStages",
-   "evalCompilerBytecodeControlInternalCallStages",
-   "evalCompilerBytecodeControlInternalCallArgStages"]
 
 Theorem mixed_event_log_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities)

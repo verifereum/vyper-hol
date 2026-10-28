@@ -1,14 +1,11 @@
 (* Exact Python-oracle bytecode checks for supported internal-call returns. *)
 
 Theory evalCompilerBytecodeAbiInternalCalls
-Ancestors evalCompilerBytecodeAbiInternalStructStages evalCompilerBytecodeAbiInternalTuplePipeline compileVyper concretizeMemLocDefs alist byte integer_word option
-Libs evalCompilerBytecodeLib compilerPackagingEvalLib finite_mapLib computeLib wordsLib
+Ancestors evalCompilerBytecodeAbiInternalTuplePipeline compileVyper concretizeMemLocDefs alist byte integer_word option
+Libs evalCompilerBytecodeLib finite_mapLib computeLib wordsLib
 
 fun holbuild_extra_deps (_ : string list) = ()
-val () = holbuild_extra_deps
-  ["../python-o1-no-asm-opt/internal_bytes_call.hex",
-   "../python-o1-no-asm-opt/internal_struct_call.hex",
-   "../python-o1-no-asm-opt/internal_tuple_call.hex"]
+val () = holbuild_extra_deps [".."]
 
 val () = computeLib.upd_compset add_finite_map_compset
 val () = computeLib.upd_compset (computeLib.add_thms [fmap_to_alist_FEMPTY])
@@ -24,9 +21,6 @@ val () = computeLib.upd_compset
   (computeLib.add_thms [internal_bytes_i2w_neg_num])
 
 val () = Globals.max_print_depth := 20
-val () = compilerPackagingEvalLib.configure ()
-val () = evalCompilerBytecodeLib.restore_stage_values
-  "evalCompilerBytecodeAbiInternalStructStages"
 
 val internal_tuple_call_compile_term =
   ``compile_vyper (K SOME) (o1_policy all_capabilities)

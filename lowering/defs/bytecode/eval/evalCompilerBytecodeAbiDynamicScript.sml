@@ -5,27 +5,11 @@
    No compiler stage depends on the independent Python bytecode oracle. *)
 
 Theory evalCompilerBytecodeAbiDynamic
-Ancestors
-  evalCompilerBytecodeAbiDynamicAnalysis
-  evalCompilerBytecodeAbiDynamicAvailable00
-  evalCompilerBytecodeAbiDynamicAvailable01
-  evalCompilerBytecodeAbiDynamicAvailable02
-  evalCompilerBytecodeAbiDynamicAvailable03
-  evalCompilerBytecodeAbiDynamicAvailable04
-  evalCompilerBytecodeAbiDynamicAvailable05
-  evalCompilerBytecodeAbiDynamicAvailable06
-  evalCompilerBytecodeAbiDynamicAvailable07
-  evalCompilerBytecodeAbiDynamicAvailable08
-  evalCompilerBytecodeAbiDynamicAvailable09
-  evalCompilerBytecodeAbiDynamicAvailable10
-  evalCompilerBytecodeAbiDynamicAvailable11
-  evalCompilerBytecodeAbiDynamicAvailable12
-  evalCompilerSubsetAbiBuiltins compileVyper concretizeMemLocDefs codegenReadyCompute stackPlanGenCompute alist byte integer_word option cv_std
-Libs evalCompilerBytecodeLib compilerAbiDynamicAvailabilityEvalLib finite_mapLib computeLib wordsLib
+Ancestors evalCompilerSubsetAbiBuiltins compileVyper concretizeMemLocDefs codegenReadyCompute stackPlanGenCompute alist byte integer_word option cv_std
+Libs evalCompilerBytecodeLib finite_mapLib computeLib wordsLib
 
 fun holbuild_extra_deps (_ : string list) = ()
-val () = holbuild_extra_deps
-  ["../python-o1-no-asm-opt/abi_dynamic.hex"]
+val () = holbuild_extra_deps [".."]
 val () = computeLib.upd_compset add_finite_map_compset
 val () = computeLib.upd_compset (computeLib.add_thms [fmap_to_alist_FEMPTY])
 val () = computeLib.upd_compset
@@ -39,20 +23,124 @@ val () = computeLib.upd_compset
          [reduce_depth_plan_compute, generate_block_insts_plan_compute])
 val () = Globals.max_print_depth := 20
 
-(* Recover semantic terms from the imported, kernel-checked analysis.
-   The literal query expansion is reconstructed below; availability proofs
-   are imported from all thirteen independently checked slices. *)
+val abi_dynamic_policy_eval = save_thm
+  ("abi_dynamic_policy_eval",
+   EVAL ``resolve_o1_policy (o1_policy all_capabilities)``)
 val abi_dynamic_rpolicy = optionSyntax.dest_some
   (rhs (concl abi_dynamic_policy_eval))
+val abi_dynamic_lower_runtime_eval = save_thm
+  ("abi_dynamic_lower_runtime_eval",
+   EVAL ``lower_vyper_runtime_unit task090_abi_dynamic_program
+       ^abi_dynamic_rpolicy``)
 val abi_dynamic_runtime_unit = optionSyntax.dest_some
   (rhs (concl abi_dynamic_lower_runtime_eval))
-val abi_dynamic_final_checked_unit = #1 (pairSyntax.dest_pair
-  (optionSyntax.dest_some (rhs (concl abi_dynamic_post_walk_eval))))
+Theorem abi_dynamic_lower_runtime_computed: T
+Proof
+  simp[]
+QED
+val abi_dynamic_pre_walk_eval = save_thm
+  ("abi_dynamic_pre_walk_eval",
+   EVAL ``run_pipeline_stages ^abi_dynamic_rpolicy
+       o1_pipeline_spec.ps_pre_walk_stages ^abi_dynamic_runtime_unit
+       (init_ir_supply ^abi_dynamic_runtime_unit)``)
+Theorem abi_dynamic_pre_walk_computed: T
+Proof
+  simp[]
+QED
+val abi_dynamic_pre_pair = optionSyntax.dest_some
+  (rhs (concl abi_dynamic_pre_walk_eval))
+val abi_dynamic_pre_unit = #1 (pairSyntax.dest_pair abi_dynamic_pre_pair)
+val abi_dynamic_pre_supply = #2 (pairSyntax.dest_pair abi_dynamic_pre_pair)
+val abi_dynamic_fcg_eval = EVAL
+  ``fcg_analyze (^abi_dynamic_pre_unit).cu_context``
+val abi_dynamic_walk_unit_eval = EVAL
+  ``prune_unit_fcg_unreachable ^abi_dynamic_pre_unit
+      ^(rhs (concl abi_dynamic_fcg_eval))``
+val abi_dynamic_walk_unit = rhs (concl abi_dynamic_walk_unit_eval)
+val abi_dynamic_entry_eval = EVAL
+  ``(^abi_dynamic_pre_unit).cu_context.ctx_entry``
+val abi_dynamic_entry = optionSyntax.dest_some
+  (rhs (concl abi_dynamic_entry_eval))
+val abi_dynamic_order_eval = EVAL
+  ``fcg_postorder ^(rhs (concl abi_dynamic_fcg_eval)) ^abi_dynamic_entry``
+val abi_dynamic_walk_eval = save_thm
+  ("abi_dynamic_walk_eval",
+   EVAL ``run_callee_first ^abi_dynamic_rpolicy o1_fn_passes
+       ^(rhs (concl abi_dynamic_order_eval)) ^abi_dynamic_walk_unit
+       ^abi_dynamic_pre_supply``)
+Theorem abi_dynamic_walk_computed: T
+Proof
+  simp[]
+QED
+val abi_dynamic_walk_pair = optionSyntax.dest_some
+  (rhs (concl abi_dynamic_walk_eval))
+val abi_dynamic_walked_unit = #1 (pairSyntax.dest_pair abi_dynamic_walk_pair)
+val abi_dynamic_walked_supply = #2 (pairSyntax.dest_pair abi_dynamic_walk_pair)
+val abi_dynamic_post_walk_eval = save_thm
+  ("abi_dynamic_post_walk_eval",
+   EVAL ``run_pipeline_stages ^abi_dynamic_rpolicy
+       o1_pipeline_spec.ps_post_walk_stages ^abi_dynamic_walked_unit
+       ^abi_dynamic_walked_supply``)
+Theorem abi_dynamic_post_walk_computed: T
+Proof
+  simp[]
+QED
+val abi_dynamic_post_pair = optionSyntax.dest_some
+  (rhs (concl abi_dynamic_post_walk_eval))
+val abi_dynamic_final_checked_unit = #1 (pairSyntax.dest_pair abi_dynamic_post_pair)
+val abi_dynamic_final_supply = #2 (pairSyntax.dest_pair abi_dynamic_post_pair)
+val abi_dynamic_initial_checks_eval = EVAL
+  ``pipeline_spec_wf ^abi_dynamic_rpolicy o1_pipeline_spec /\
+    unit_wf ^abi_dynamic_runtime_unit /\
+    raw_static_inputs_wf (^abi_dynamic_runtime_unit).cu_context``
+val abi_dynamic_pre_acyclic_eval = EVAL
+  ``reachable_fcg_acyclic (^abi_dynamic_pre_unit).cu_context
+      ^(rhs (concl abi_dynamic_fcg_eval))``
+val abi_dynamic_final_unit_wf = save_thm
+  ("abi_dynamic_final_unit_wf", EQT_ELIM
+    (EVAL ``unit_wf ^abi_dynamic_final_checked_unit``))
+val abi_dynamic_final_labels_wf = save_thm
+  ("abi_dynamic_final_labels_wf", EQT_ELIM
+    (EVAL ``unit_labels_wf ^abi_dynamic_final_checked_unit``))
+val abi_dynamic_final_target_safe = save_thm
+  ("abi_dynamic_final_target_safe", EQT_ELIM
+    (EVAL ``context_target_safe (^abi_dynamic_rpolicy).rpol_target
+      (^abi_dynamic_final_checked_unit).cu_context``))
+val abi_dynamic_final_layout_wf = save_thm
+  ("abi_dynamic_final_layout_wf", EQT_ELIM
+    (EVAL ``concretized_static_layouts_wf
+      (^abi_dynamic_final_checked_unit).cu_context``))
+val abi_dynamic_final_fmp_wf = save_thm
+  ("abi_dynamic_final_fmp_wf", EQT_ELIM
+    (EVAL ``fmp_lowered_context_wf
+      (^abi_dynamic_final_checked_unit).cu_context``))
+val abi_dynamic_final_acyclic = save_thm
+  ("abi_dynamic_final_acyclic", EQT_ELIM
+    (EVAL ``reachable_fcg_acyclic
+      (^abi_dynamic_final_checked_unit).cu_context
+      (fcg_analyze (^abi_dynamic_final_checked_unit).cu_context)``))
+val abi_dynamic_ready_fn_eval = save_thm
+  ("abi_dynamic_ready_fn_eval",
+   EVAL ``HD (^abi_dynamic_final_checked_unit).cu_context.ctx_functions``)
 val abi_dynamic_ready_fn = rhs (concl abi_dynamic_ready_fn_eval)
-
-(* Reconstruct the original literal query expansion only in this consumer.
-   These are the same EVAL and kernel alias computations used by the analysis;
-   all 495 named proofs must transport back to these exact literal calls. *)
+val abi_dynamic_ready_canonical_eval = EVAL
+  ``canonical_param_prefix ^abi_dynamic_ready_fn``
+val abi_dynamic_ready_wf_fn_eval = EVAL
+  ``wf_function ^abi_dynamic_ready_fn``
+val abi_dynamic_ready_inst_wf_eval = EVAL
+  ``fn_inst_wf ^abi_dynamic_ready_fn``
+val abi_dynamic_ready_ssa_eval = EVAL
+  ``ssa_form ^abi_dynamic_ready_fn``
+val abi_dynamic_ready_cfg_eval = save_thm
+  ("abi_dynamic_ready_cfg_eval", EVAL ``cfg_analyze ^abi_dynamic_ready_fn``)
+val abi_dynamic_ready_dom_analysis_eval = save_thm
+  ("abi_dynamic_ready_dom_analysis_eval",
+   EVAL ``dom_analyze ^(rhs (concl abi_dynamic_ready_cfg_eval))
+      ^abi_dynamic_ready_fn``)
+val abi_dynamic_ready_dom_exec_step1 = SIMP_CONV pure_ss
+  [codegenReadyComputeTheory.def_dominates_uses_exec_def,
+   abi_dynamic_ready_cfg_eval, abi_dynamic_ready_dom_analysis_eval, LET_THM]
+  ``def_dominates_uses_exec ^abi_dynamic_ready_fn``
 val () = computeLib.upd_compset
   (fn cs => computeLib.scrub_const cs ``def_available_at_exec``)
 val abi_dynamic_ready_dom_exec_step2 = save_thm
@@ -61,44 +149,91 @@ val abi_dynamic_ready_dom_exec_step2 = save_thm
 val abi_dynamic_ready_available_terms = find_terms
   (can (match_term ``def_available_at_exec cfg dom fn bb use_opt v``))
   (rhs (concl abi_dynamic_ready_dom_exec_step2))
-val () = if length abi_dynamic_ready_available_terms = 495 then ()
-  else raise Fail "expected all 495 original literal availability calls"
+val () =
+  if length abi_dynamic_ready_available_terms = 495 then ()
+  else raise Fail "expected 495 ABI-dynamic availability calls"
 val () = computeLib.upd_compset (computeLib.add_thms
   [codegenReadyComputeTheory.def_available_at_exec_compute])
-val abi_dynamic_available_input_aliases = map SYM
-  [abi_dynamic_available_cfg_def,abi_dynamic_available_dom_def,
-   abi_dynamic_available_function_def]
-val abi_dynamic_available_block_aliases = map SYM
-  (CONJUNCTS abi_dynamic_available_block_evals)
-fun abi_dynamic_name_available_call call = let
-  val (head,args) = strip_comb call
-  val () = if same_const head ``def_available_at_exec`` andalso length args = 6
-    then () else raise Fail "unexpected availability call"
-  val block = List.nth (args,3)
-  val block_alias = case List.find
-      (fn equation => aconv block (lhs (concl equation)))
-      abi_dynamic_available_block_aliases of
-    SOME equation => equation
-  | NONE => raise Fail "availability block missing from shared inputs"
-  val equations = abi_dynamic_available_input_aliases @
-    [block_alias,REFL (List.nth (args,4)),REFL (List.nth (args,5))]
-  val () = if List.all (fn (argument,equation) =>
-      aconv argument (lhs (concl equation))) (ListPair.zip (args,equations))
-    then () else raise Fail "availability input alias mismatch"
-in List.foldl (fn (equation,prefix) => MK_COMB (prefix,equation))
-     (REFL head) equations
-end
-val abi_dynamic_available_call_aliases =
-  map abi_dynamic_name_available_call abi_dynamic_ready_available_terms
-val abi_dynamic_ready_named_available_terms =
-  map (rhs o concl) abi_dynamic_available_call_aliases
+fun abi_dynamic_take_chunk _ [] = ([],[])
+  | abi_dynamic_take_chunk 0 xs = ([],xs)
+  | abi_dynamic_take_chunk n (x::xs) = let
+      val (front,rest) = abi_dynamic_take_chunk (n - 1) xs
+    in (x::front,rest) end
+(* Each conjunction is a useful, kernel-checked stage: all concrete use
+   sites in this slice have an available definition.  Unlike the former
+   top-level map EVAL, these computations are timed and independently
+   checkpointed by holbuild. *)
+fun abi_dynamic_available_slice n =
+  list_mk_conj (#1 (abi_dynamic_take_chunk 40
+    (List.drop (abi_dynamic_ready_available_terms, 40 * n))))
 
+Theorem abi_dynamic_available_00:
+  ^(abi_dynamic_available_slice 0)
+Proof
+  rpt conj_tac >> EVAL_TAC
+QED
+Theorem abi_dynamic_available_01:
+  ^(abi_dynamic_available_slice 1)
+Proof
+  rpt conj_tac >> EVAL_TAC
+QED
+Theorem abi_dynamic_available_02:
+  ^(abi_dynamic_available_slice 2)
+Proof
+  rpt conj_tac >> EVAL_TAC
+QED
+Theorem abi_dynamic_available_03:
+  ^(abi_dynamic_available_slice 3)
+Proof
+  rpt conj_tac >> EVAL_TAC
+QED
+Theorem abi_dynamic_available_04:
+  ^(abi_dynamic_available_slice 4)
+Proof
+  rpt conj_tac >> EVAL_TAC
+QED
+Theorem abi_dynamic_available_05:
+  ^(abi_dynamic_available_slice 5)
+Proof
+  rpt conj_tac >> EVAL_TAC
+QED
+Theorem abi_dynamic_available_06:
+  ^(abi_dynamic_available_slice 6)
+Proof
+  rpt conj_tac >> EVAL_TAC
+QED
+Theorem abi_dynamic_available_07:
+  ^(abi_dynamic_available_slice 7)
+Proof
+  rpt conj_tac >> EVAL_TAC
+QED
+Theorem abi_dynamic_available_08:
+  ^(abi_dynamic_available_slice 8)
+Proof
+  rpt conj_tac >> EVAL_TAC
+QED
+Theorem abi_dynamic_available_09:
+  ^(abi_dynamic_available_slice 9)
+Proof
+  rpt conj_tac >> EVAL_TAC
+QED
+Theorem abi_dynamic_available_10:
+  ^(abi_dynamic_available_slice 10)
+Proof
+  rpt conj_tac >> EVAL_TAC
+QED
+Theorem abi_dynamic_available_11:
+  ^(abi_dynamic_available_slice 11)
+Proof
+  rpt conj_tac >> EVAL_TAC
+QED
+Theorem abi_dynamic_available_12:
+  ^(abi_dynamic_available_slice 12)
+Proof
+  rpt conj_tac >> EVAL_TAC
+QED
 
-fun abi_dynamic_ready_phase name =
-  if OS.Process.getEnv "VYPER_HOL_EVAL_PROFILE" = SOME "1" then
-    print ("ABI_READY_PHASE " ^ name ^ "\n") else ()
-val () = abi_dynamic_ready_phase "collect availability"
-val abi_dynamic_ready_named_available_evals = map EQT_INTRO
+val abi_dynamic_ready_available_evals = map EQT_INTRO
   (List.concat (map CONJUNCTS
     [abi_dynamic_available_00, abi_dynamic_available_01,
      abi_dynamic_available_02, abi_dynamic_available_03,
@@ -107,29 +242,9 @@ val abi_dynamic_ready_named_available_evals = map EQT_INTRO
      abi_dynamic_available_08, abi_dynamic_available_09,
      abi_dynamic_available_10, abi_dynamic_available_11,
      abi_dynamic_available_12]))
-val abi_dynamic_ready_named_available_index = List.foldl
-  (fn (equation,index) => Redblackmap.insert
-    (index,lhs (concl equation),equation))
-  (Redblackmap.mkDict Term.compare) abi_dynamic_ready_named_available_evals
-val abi_dynamic_ready_available_evals = map (fn alias =>
-  case Redblackmap.peek
-      (abi_dynamic_ready_named_available_index,rhs (concl alias)) of
-    SOME equation => TRANS alias equation
-  | NONE => raise Fail "original availability call lacks its checked named proof")
-  abi_dynamic_available_call_aliases
-val () = abi_dynamic_ready_phase "combine availability"
-val abi_dynamic_ready_available_index = List.foldl
-  (fn (equation,index) => Redblackmap.insert
-    (index,lhs(concl equation),equation))
-  (Redblackmap.mkDict Term.compare) abi_dynamic_ready_available_evals
-fun abi_dynamic_available_conv tm =
-  case Redblackmap.peek (abi_dynamic_ready_available_index,tm) of
-    SOME equation => equation
-  | NONE => raise Conv.UNCHANGED
-(* Replace proved calls before visiting their repeated function payloads. *)
-val abi_dynamic_ready_dom_exec_step3 = TOP_DEPTH_CONV abi_dynamic_available_conv
+val abi_dynamic_ready_dom_exec_step3 = PURE_REWRITE_CONV
+  abi_dynamic_ready_available_evals
   (rhs (concl abi_dynamic_ready_dom_exec_step2))
-val () = abi_dynamic_ready_phase "reduce dominance"
 val abi_dynamic_ready_dom_exec_eval =
   TRANS abi_dynamic_ready_dom_exec_step1
     (TRANS abi_dynamic_ready_dom_exec_step2
@@ -139,7 +254,6 @@ val abi_dynamic_ready_dom_eval = prove
   (``def_dominates_uses ^abi_dynamic_ready_fn``,
    simp[codegenReadyComputeTheory.def_dominates_uses_compute,
         abi_dynamic_ready_wf_fn_eval, abi_dynamic_ready_dom_exec_eval])
-val () = abi_dynamic_ready_phase "single use"
 val abi_dynamic_ready_sue_eval = EVAL
   ``single_use_form ^abi_dynamic_ready_fn``
 val abi_dynamic_ready_cfg_norm_eval = EVAL
@@ -320,7 +434,6 @@ val abi_dynamic_plan_initial_state_eval = EVAL
   ``(init_plan_state ^abi_dynamic_max_eom) with ps_label_counter := 0``
 val abi_dynamic_plan_initial_state =
   rhs (concl abi_dynamic_plan_initial_state_eval)
-val () = PolyML.fullGC ()
 val abi_dynamic_plan_aux_fuel_step1 = save_thm
   ("abi_dynamic_plan_aux_fuel_step1",
    EVAL ``generate_fn_plan_aux_fuel 30
@@ -473,24 +586,24 @@ QED
    remain certified computations in the script and in holbuild checkpoints.
    The local compset registrations above do not export a compile result. *)
 val () = List.app Theory.delete_binding
-  ["abi_dynamic_ready_dom_exec_step2",
-   "abi_dynamic_i2w_neg_num",
-   "abi_dynamic_final_codegen_ready",
-   "abi_dynamic_final_checks_eval",
-   "abi_dynamic_final_checks_computed",
-   "abi_dynamic_run_pipeline_eval",
-   "abi_dynamic_pipeline_computed",
-   "abi_dynamic_max_eom_eval",
-   "abi_dynamic_plan_live_eval",
-   "abi_dynamic_plan_aux_fuel_step1",
+  ["abi_dynamic_policy_eval",
+   "abi_dynamic_lower_runtime_eval", "abi_dynamic_lower_runtime_computed",
+   "abi_dynamic_pre_walk_eval", "abi_dynamic_pre_walk_computed",
+   "abi_dynamic_walk_eval", "abi_dynamic_walk_computed",
+   "abi_dynamic_post_walk_eval", "abi_dynamic_post_walk_computed",
+   "abi_dynamic_final_unit_wf", "abi_dynamic_final_labels_wf",
+   "abi_dynamic_final_target_safe", "abi_dynamic_final_layout_wf",
+   "abi_dynamic_final_fmp_wf", "abi_dynamic_final_acyclic",
+   "abi_dynamic_ready_fn_eval", "abi_dynamic_ready_cfg_eval",
+   "abi_dynamic_ready_dom_analysis_eval",
+   "abi_dynamic_ready_dom_exec_step2", "abi_dynamic_i2w_neg_num",
+   "abi_dynamic_final_codegen_ready", "abi_dynamic_final_checks_eval",
+   "abi_dynamic_final_checks_computed", "abi_dynamic_run_pipeline_eval",
+   "abi_dynamic_pipeline_computed", "abi_dynamic_max_eom_eval",
+   "abi_dynamic_plan_live_eval", "abi_dynamic_plan_aux_fuel_step1",
    "abi_dynamic_plan_aux_fuel_step1_computed",
-   "abi_dynamic_plan_analyzed_eval",
-   "abi_dynamic_fn_plan_eval",
-   "abi_dynamic_fn_plan_computed",
-   "abi_dynamic_context_plan_eval",
-   "abi_dynamic_execute_plan_eval",
-   "abi_dynamic_codegen_eval",
-   "abi_dynamic_finalize_eval",
-   "abi_dynamic_lower_deploy_eval",
-   "abi_dynamic_deploy_pipeline_eval",
-   "abi_dynamic_finalize_deploy_eval"]
+   "abi_dynamic_plan_analyzed_eval", "abi_dynamic_fn_plan_eval",
+   "abi_dynamic_fn_plan_computed", "abi_dynamic_context_plan_eval",
+   "abi_dynamic_execute_plan_eval", "abi_dynamic_codegen_eval",
+   "abi_dynamic_finalize_eval", "abi_dynamic_lower_deploy_eval",
+   "abi_dynamic_deploy_pipeline_eval", "abi_dynamic_finalize_deploy_eval"]

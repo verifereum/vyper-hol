@@ -1,4 +1,4 @@
-# Generated inputs/results. Retained evidence is inventoried in the manifests.
+# Generated oracle inputs and probe results, including older local diagnostics.
 /oracle/
 /actual/
 /*.tar.gz
@@ -6,4 +6,4 @@
 /matrix.txt
 /diagnostic.txt
 /s20-*.term
-support.tsv
+/support.tsv
