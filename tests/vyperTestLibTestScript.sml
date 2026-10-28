@@ -56,3 +56,19 @@ val rejected =
     String.isSubstring "Failure in test result_runner_failure:" message andalso
     String.isSubstring "runner negative regression" message;
 val () = if rejected then () else raise Fail "runner accepted a failing trace";
+
+(* Both APIs must coexist: batching retains word-bearing trace support and
+   reports every failing entry, including failures after a successful entry. *)
+val () = run_tests_on_traces [];
+val () = run_tests_on_traces [``traces_runner_words``];
+val () = run_tests_on_traces
+  [``traces_runner_words``, ``traces_runner_words``];
+val batch_rejected =
+  (run_tests_on_traces
+     [``traces_runner_words``, ``traces_runner_failure``,
+      ``traces_runner_words``, ``traces_runner_failure``]; false)
+  handle Fail message =>
+    String.isSubstring "2 of 4 tests failed in " message andalso
+    String.isSubstring "runner negative regression" message;
+val () = if batch_rejected then ()
+         else raise Fail "batch runner lost failures or their test names";

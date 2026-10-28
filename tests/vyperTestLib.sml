@@ -55,7 +55,30 @@ val booltm = JSONDecode.map mk_bool bool
 val negbooltm = JSONDecode.map (mk_bool o not) bool
 
 val address : term decoder = JSONDecode.map address_from_hex string
-val bytes : term decoder = JSONDecode.map cached_flat_bytes_from_hex string
+
+(* byteStringCacheLib splits a value into shared 8 KiB chunks only above
+   64 KiB, and caches smaller values whole. test_lists sends 256 calls whose
+   8 KiB calldata differ only in the last bytes, so each was imported in full.
+   Values from 8 to 64 KiB are split here into 8 KiB chunks, which the cache
+   shares when equal. Sizes count hex characters, twice the bytes. *)
+val shared_chunk_hex = 2 * 8 * 1024
+val cache_chunked_hex = 2 * 64 * 1024
+
+fun flat_bytes_from_hex str = let
+  val hex = if String.isPrefix "0x" str
+            then String.extract(str, 2, NONE) else str
+  val size = String.size hex
+  fun chunks offset =
+    if offset >= size then []
+    else String.substring(hex, offset, Int.min(shared_chunk_hex, size - offset))
+         :: chunks (offset + shared_chunk_hex)
+in
+  if size <= shared_chunk_hex orelse cache_chunked_hex < size
+  then cached_flat_bytes_from_hex hex
+  else mk_flat (mk_list(List.map cached_bytes_from_hex (chunks 0), bytes_ty))
+end
+
+val bytes : term decoder = JSONDecode.map flat_bytes_from_hex string
 
 val Call_tm = prim_mk_const{Thy="vyperTestRunner",Name="Call"}
 val call_trace_ty = #1 $ dom_rng $ type_of Call_tm
@@ -478,7 +501,7 @@ val raw_deployment : term decoder =
     tuple2 (
       tuple4 (field "initcode" bytes,
               field "calldata" $
-                JSONDecode.map (cached_flat_bytes_from_hex o theoptstring)
+                JSONDecode.map (flat_bytes_from_hex o theoptstring)
                   (nullable string),
               tuple4 (field "env" $ field "tx" $ field "origin" address,
                       field "env" $ field "block" $ field "timestamp" numtm,
@@ -498,7 +521,7 @@ val raw_deployment : term decoder =
                 case bc of
                   SOME "" => optionSyntax.mk_none bytes_ty
                 | SOME hex => from_term_option bytes_ty
-                                (SOME (cached_flat_bytes_from_hex hex))
+                                (SOME (flat_bytes_from_hex hex))
                 | NONE => optionSyntax.mk_none bytes_ty) $
                nullable string)))
 
@@ -541,7 +564,7 @@ val deployment : term decoder =
                                    field "deployed_address" address,
                                    field "env" $ field "tx" $ field "gas_price" numtm),
                            tuple4 (field "calldata" $
-                                   JSONDecode.map (cached_flat_bytes_from_hex o theoptstring)
+                                   JSONDecode.map (flat_bytes_from_hex o theoptstring)
                                      (nullable string),
                                    field "env" $ field "block" $ field "number" numtm,
                                    field "env" $ field "block" $ field "blob_basefee" numtm,
@@ -1208,8 +1231,8 @@ fun generate_test_scripts () = let
     val fname = OS.Path.concat(gen_dir, String.concat[thyname, "Script.sml"])
     val contents = String.concat [
       "Theory ", thyname, "[no_sig_docs]\nAncestors ", defsname,
-      "\nLibs vyperTestRunnerLib\nval () = List.app ",
-      "run_test_on_traces $ all_traces \"", defsname, "\";\n"]
+      "\nLibs vyperTestRunnerLib\nval () = ",
+      "run_tests_on_traces $ all_traces \"", defsname, "\";\n"]
     val out = TextIO.openOut(fname)
     val () = TextIO.output(out, contents)
     val () = TextIO.closeOut out

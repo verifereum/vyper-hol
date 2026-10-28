@@ -60,7 +60,7 @@ Proof
   pop_assum SUBST1_TAC >> simp[w2w_w2w, WORD_ALL_BITS]
 QED
 
-Theorem emit_op_extends_next_var[local]:
+Theorem emit_op_extends_next_var:
   !opc ops sa v sb.
     emit_op opc ops sa = (v, sb) ==>
     cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var
@@ -82,7 +82,7 @@ Theorem unop_frag_read_then:
     (!tv. evaluate_type (get_tenv cx) t = SOME tv ==>
           w = typed_val_to_w256 tv v) /\
     (!x ss n out.
-       eval_operand x ss = SOME w1 /\ ss.vs_accounts = es0.accounts ==>
+       eval_operand x ss = SOME w1 /\ stmt_state_rel func cenv cx es0 ss ==>
        step_inst_base (mk_inst n opc [x] [out]) ss =
          OK (update_var out r ss)) /\
     (!c sa sb op ss.
@@ -125,8 +125,7 @@ Proof
     mp_tac emit_op_frag >>
   impl_tac
   >- (asm_rewrite_tac[] >> strip_tac >> gen_tac >>
-      qpat_x_assum `!x ss n out. _` irule >>
-      gvs[stmt_state_rel_def, state_rel_def, accounts_rel_def]) >>
+      qpat_x_assum `!x ss n out. _` irule >> asm_rewrite_tac[]) >>
   disch_then (fn th => irule (MATCH_MP frag_exec_then (SPEC_ALL th))) >>
   asm_rewrite_tac[] >> BETA_TAC >> rpt strip_tac >>
   rename1 `eval_operand c u = SOME r` >>
@@ -158,7 +157,7 @@ Theorem unop_frag_read:
     (!tv. evaluate_type (get_tenv cx) t = SOME tv ==>
           r = typed_val_to_w256 tv v) /\
     (!x ss n out.
-       eval_operand x ss = SOME w1 /\ ss.vs_accounts = es0.accounts ==>
+       eval_operand x ss = SOME w1 /\ stmt_state_rel func cenv cx es0 ss ==>
        step_inst_base (mk_inst n opc [x] [out]) ss =
          OK (update_var out r ss)) ==>
     unop_frag ctx func cenv cx (\x. emit_op opc [x]) w1 t (INL (Value v)) es0
@@ -214,8 +213,10 @@ Proof
       qexists_tac `n2w (LENGTH a.code)` >>
       rpt strip_tac
       >~ [`step_inst_base`]
-      >- gvs[step_inst_base_opcode_eqs, mk_inst_def, exec_read1_def,
-             typed_val_to_w256_def, Abbr `a`] >>
+      >- (`ss.vs_accounts = es0.accounts` by
+            fs[stmt_state_rel_def, state_rel_def, accounts_rel_def] >>
+          gvs[step_inst_base_opcode_eqs, mk_inst_def, exec_read1_def,
+              typed_val_to_w256_def, Abbr `a`]) >>
       drule emit_op_GT_correct >>
       disch_then (qspecl_then [`n2w (LENGTH a.code)`, `0w`, `ss`] mp_tac) >>
       impl_tac >- gvs[eval_operand_def] >>
@@ -226,6 +227,8 @@ Proof
   simp[account_item_type_def, vyperValueTheory.evaluate_type_def,
        evaluate_account_op_def, is_word_type_def, is_terminator_def] >>
   rpt strip_tac >>
+  `ss.vs_accounts = es0.accounts` by
+    fs[stmt_state_rel_def, state_rel_def, accounts_rel_def] >>
   gvs[step_inst_base_opcode_eqs, mk_inst_def, exec_read1_def, Abbr `a`] >>
   simp[typed_val_to_w256_def, val_to_w256_def, i2w_def] >>
   rw[PAD_RIGHT, LENGTH_Keccak_256_w64, word_of_bytes_be_def,

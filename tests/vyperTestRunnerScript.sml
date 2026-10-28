@@ -523,3 +523,9 @@ Definition run_test_def:
 End
 
 val () = cv_auto_trans run_test_def;
+
+Definition run_tests_def:
+  run_tests ts = MAP run_test ts
+End
+
+val () = cv_auto_trans run_tests_def;
