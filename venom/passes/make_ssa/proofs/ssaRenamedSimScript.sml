@@ -130,7 +130,6 @@ Proof
     fs[ssa_sim_def, ssaFrameTheory.ssa_frame_def, venom_state_component_equality] >>
   gvs[exec_gas_def, AllCaseEqs()] >>
   Cases_on `inst2.inst_outputs` >> gvs[] >>
-  Cases_on `t` >> gvs[] >>
   irule ssa_sim_update_var >>
   gvs[ssa_sim_def, ssaFrameTheory.ssa_frame_def, lookup_var_def,
       venom_state_component_equality]
