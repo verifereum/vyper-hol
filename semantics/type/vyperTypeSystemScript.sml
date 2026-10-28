@@ -800,6 +800,12 @@ Definition well_typed_iterator_def:
      is_int_type typ /\ expr_type e1 = typ /\ expr_type e2 = typ)
 End
 
+Definition well_typed_custom_error_def:
+  well_typed_custom_error env err =
+    well_typed_exprs env (custom_error_exprs err)
+End
+
+
 (* ===== Executable statement typing ===== *)
 
 Definition type_stmt_def:
@@ -817,6 +823,8 @@ Definition type_stmt_def:
   type_stmt env ret_ty (Raise RaiseUnreachable) = SOME env /\
   type_stmt env ret_ty (Raise (RaiseReason e)) =
     (if well_typed_expr env e /\ (?n. expr_type e = BaseT (StringT n)) then SOME env else NONE) /\
+  type_stmt env ret_ty (Raise (RaiseCustomError err)) =
+    (if well_typed_custom_error env err then SOME env else NONE) /\
   type_stmt env ret_ty (Assert e AssertBare) =
     (if well_typed_expr env e /\ expr_type e = BaseT BoolT then SOME env else NONE) /\
   type_stmt env ret_ty (Assert e AssertUnreachable) =
@@ -824,6 +832,9 @@ Definition type_stmt_def:
   type_stmt env ret_ty (Assert e (AssertReason se)) =
     (if well_typed_expr env e /\ well_typed_expr env se /\ expr_type e = BaseT BoolT /\
         (?n. expr_type se = BaseT (StringT n)) then SOME env else NONE) /\
+  type_stmt env ret_ty (Assert e (AssertCustomError err)) =
+    (if well_typed_expr env e ∧ expr_type e = BaseT BoolT ∧
+        well_typed_custom_error env err then SOME env else NONE) /\
   type_stmt env ret_ty (Log id es) =
     (if well_typed_exprs env es then SOME env else NONE) /\
   type_stmt env ret_ty (AnnAssign id typ e) =

@@ -90,6 +90,14 @@ Proof
   simp[]
 QED
 
+Theorem well_typed_custom_error_static_maps_transfer_env[local]:
+  well_typed_custom_error env1 err /\ static_maps_transfer_env env1 env2 ==>
+  well_typed_custom_error env2 err
+Proof
+  simp[well_typed_custom_error_def] >>
+  metis_tac[well_typed_exprs_static_maps_transfer_env]
+QED
+
 Theorem type_place_expr_static_maps_transfer_env[local]:
   type_place_expr env1 e = SOME vt /\ static_maps_transfer_env env1 env2 ==>
   type_place_expr env2 e = SOME vt
@@ -227,6 +235,7 @@ Proof
   TRY (irule_at Any static_maps_transfer_env_extend_local >> simp[]) >>
   TRY (irule_at Any well_typed_expr_static_maps_transfer_env >> simp[]) >>
   TRY (irule_at Any well_typed_exprs_static_maps_transfer_env >> simp[]) >>
+  TRY (irule_at Any well_typed_custom_error_static_maps_transfer_env >> simp[]) >>
   TRY (irule_at Any type_place_target_static_maps_transfer_env >> simp[]) >>
   TRY (irule_at Any type_place_expr_no_hash_static_maps_transfer_env >> simp[]) >>
   TRY (rename1 `?env. static_maps_transfer_env env env2 /\ well_typed_expr env expr` >>
@@ -264,14 +273,13 @@ Proof
   TRY (rename1 `well_typed_iterator env2 typ it` >>
        irule well_typed_iterator_static_maps_transfer_env >>
        qexists `env1` >> simp[]) >>
-  gvs[static_maps_transfer_env_def] >>
-  metis_tac[static_maps_transfer_env_extend_local,
-            well_typed_expr_static_maps_transfer_env,
-            well_typed_exprs_static_maps_transfer_env,
-            well_typed_atarget_static_maps_transfer_env,
-            well_typed_iterator_static_maps_transfer_env,
-            type_place_target_static_maps_transfer_env,
-            type_place_expr_no_hash_static_maps_transfer_env]
+  TRY (rename1
+         `?env. static_maps_transfer_env env env2 /\
+                well_typed_custom_error env err` >>
+       qexists `env1` >> simp[] >>
+       irule well_typed_custom_error_static_maps_transfer_env >>
+       simp[] >> NO_TAC) >>
+  gvs[static_maps_transfer_env_def]
 QED
 
 

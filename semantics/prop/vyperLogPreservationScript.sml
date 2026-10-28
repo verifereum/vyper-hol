@@ -1281,6 +1281,28 @@ Proof
   first_x_assum drule >> simp[]
 QED
 
+Theorem case_stmt_raise_custom_error_logs[local]:
+  (!id positional kwargs tops params es.
+     err = CustomError id positional kwargs /\
+     get_module_code cx (FST id) = SOME tops /\
+     lookup_custom_error_args_in (SND id) tops = SOME params /\
+     order_custom_error_args params err = SOME es ==>
+     !s0 r s1. eval_exprs cx es s0 = (r,s1) ==> log_extends s0 s1) ==>
+  !st res st'. eval_stmt cx (Raise (RaiseCustomError err)) st = (res,st') ==>
+    log_extends st st'
+Proof
+  Cases_on `err` >> rpt strip_tac >>
+  qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+  simp[vyperInterpreterTheory.evaluate_def, vyperStateTheory.bind_def,
+       vyperStateTheory.raise_def, AllCaseEqs()] >>
+  rpt CASE_TAC >> rpt strip_tac >>
+  gvs[vyperStateTheory.bind_def, vyperStateTheory.raise_def, AllCaseEqs(),
+      log_extends_refl] >>
+  imp_res_tac lift_option_state >>
+  imp_res_tac lift_option_type_state >> imp_res_tac raise_state >> gvs[] >>
+  first_x_assum drule_all >> simp[]
+QED
+
 Theorem case_stmt_assert_logs[local]:
   (!s0 tv s1. eval_expr cx e s0 = (INL tv,s1) ==>
      !st res st'. eval_expr cx se st = (res,st') ==> log_extends st st') /\
@@ -1307,6 +1329,37 @@ Proof
   first_assum MATCH_ACCEPT_TAC
 QED
 
+Theorem case_stmt_assert_custom_error_logs[local]:
+  (!s0 r s1. eval_expr cx e s0 = (r,s1) ==> log_extends s0 s1) /\
+  (!s0 tv s1 id positional kwargs tops params es.
+     eval_expr cx e s0 = (INL tv,s1) /\
+     err = CustomError id positional kwargs /\
+     get_module_code cx (FST id) = SOME tops /\
+     lookup_custom_error_args_in (SND id) tops = SOME params /\
+     order_custom_error_args params err = SOME es ==>
+     !st res st'. eval_exprs cx es st = (res,st') ==> log_extends st st') ==>
+  !st res st'. eval_stmt cx (Assert e (AssertCustomError err)) st = (res,st') ==>
+    log_extends st st'
+Proof
+  Cases_on `err` >> rpt strip_tac >>
+  qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+  simp[vyperInterpreterTheory.evaluate_def, vyperStateTheory.bind_def,
+       AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  qpat_x_assum `switch_BoolV _ _ _ _ = _` mp_tac >>
+  simp[vyperInterpreterTheory.switch_BoolV_def] >>
+  rpt IF_CASES_TAC >>
+  simp[vyperStateTheory.return_def, vyperStateTheory.raise_def,
+       vyperStateTheory.bind_def, AllCaseEqs()] >>
+  rpt CASE_TAC >> rpt strip_tac >>
+  gvs[vyperStateTheory.return_def, vyperStateTheory.raise_def,
+      vyperStateTheory.bind_def, AllCaseEqs()] >>
+  TRY (imp_res_tac lift_option_state >>
+       imp_res_tac lift_option_type_state >> imp_res_tac raise_state >> gvs[]) >>
+  rpt (first_x_assum drule_all >> strip_tac >> gvs[]) >>
+  irule log_extends_trans >> goal_assum drule >>
+  first_assum MATCH_ACCEPT_TAC
+QED
 Theorem case_stmt_assert_bare_logs[local]:
   (!s0 r s1. eval_expr cx e s0 = (r,s1) ==> log_extends s0 s1) ==>
   !st res st'. eval_stmt cx (Assert e AssertBare) st = (res,st') ==>
@@ -2483,7 +2536,8 @@ in
      case_stmt_annassign_logs, case_stmt_append_logs, case_stmt_assign_logs,
      case_stmt_augassign_logs, case_stmt_return_some_logs,
      case_stmt_expr_logs, case_stmt_if_logs, case_stmt_for_logs,
-     case_stmt_raise_logs, case_stmt_assert_logs,
+     case_stmt_raise_logs, case_stmt_raise_custom_error_logs,
+     case_stmt_assert_logs, case_stmt_assert_custom_error_logs,
      case_stmt_assert_bare_logs, case_stmt_assert_unreachable_logs,
      case_stmt_log_logs,
      case_base_target_name_logs, case_base_target_toplevel_logs,

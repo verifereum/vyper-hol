@@ -10,7 +10,7 @@
 
 Theory vyperTypeEvalSoundness
 Ancestors
-  list rich_list pred_set prim_rec arithmetic finite_map option pair sum
+  list rich_list sorting pred_set prim_rec arithmetic finite_map option pair sum
   vyperAST vyperValue vyperValueOperation vyperMisc vyperABI
   vyperCreate vyperCreateFrame vyperInterpreter vyperState vyperContext vyperStorage vyperTyping vyperLookup
   vyperEncodeDecode vyperArith vyperTypeSystem vyperTypeInvariants vyperTypeValues
@@ -31,6 +31,37 @@ Theorem lift_option_type_INL_eq[local]:
 Proof
   Cases_on `opt` >> simp[lift_option_type_def, return_def, raise_def] >>
   metis_tac[]
+
+QED
+Theorem well_typed_exprs_EVERY[local]:
+  well_typed_exprs env es ⇔ EVERY (well_typed_expr env) es
+Proof
+  Induct_on `es` >> simp[well_typed_expr_def]
+QED
+
+Theorem well_typed_exprs_perm:
+  PERM xs ys ⇒
+  (well_typed_exprs env xs ⇔ well_typed_exprs env ys)
+Proof
+  simp[well_typed_exprs_EVERY] >> metis_tac[PERM_EVERY]
+QED
+
+Theorem MEM_int_calls_exprs[local]:
+  MEM call (int_calls_exprs es) ⇔
+  ∃e. MEM e es ∧ MEM call (int_calls_expr e)
+Proof
+  Induct_on `es` >> simp[int_calls_expr_def] >> metis_tac[]
+QED
+
+Theorem call_evaluation_safe_exprs_perm:
+  ∀cx xs ys.
+    PERM xs ys ∧ call_evaluation_safe cx (int_calls_exprs xs) ⇒
+    call_evaluation_safe cx (int_calls_exprs ys)
+Proof
+  rpt gen_tac >> strip_tac >> irule call_evaluation_safe_mono >>
+  qexists_tac `int_calls_exprs xs` >>
+  simp[MEM_int_calls_exprs] >>
+  metis_tac[PERM_MEM_EQ]
 QED
 
 Theorem fn_sigs_consistent_FLOOKUP[local]:
@@ -748,7 +779,10 @@ Proof
   TRY (rename1 `eval_stmt cx (Raise reason) st <> _` >>
        Cases_on `reason` >>
        gvs[evaluate_def, bind_def, return_def, raise_def,
-           pairTheory.UNCURRY, AllCaseEqs()]) >>
+           pairTheory.UNCURRY, AllCaseEqs()] >>
+       rpt CASE_TAC >>
+       gvs[bind_def, return_def, raise_def, pairTheory.UNCURRY,
+           AllCaseEqs()]) >>
   TRY (rename1 `eval_stmt cx (Return opt_e) st <> _` >>
        Cases_on `opt_e` >>
        gvs[evaluate_def, bind_def, return_def, raise_def,
@@ -805,6 +839,7 @@ Theorem eval_stmt_assert_no_loop_control[local]:
     exn <> BreakException /\ exn <> ContinueException
 Proof
   Cases >>
+  TRY (rename1 `eval_stmt cx (Assert e (AssertCustomError err)) st = _`) >>
   rw[Once evaluate_def, bind_def, switch_BoolV_def, return_def, raise_def,
      AllCaseEqs(), no_control_exc_def] >>
   TRY (drule (cj 1 eval_expr_no_control) >>
@@ -818,7 +853,24 @@ Proof
        TRY (imp_res_tac lift_option_type_no_control >> gvs[no_control_exc_def] >> NO_TAC) >>
        TRY (drule (cj 1 eval_expr_no_control) >>
             metis_tac[no_control_exc_no_loop_control]) >>
-       NO_TAC)
+       NO_TAC) >>
+  rename1 `(if tv = Value (BoolV T) then _ else _) _ = _` >>
+  Cases_on `tv = Value (BoolV T)` >>
+  gvs[bind_def, return_def, raise_def, AllCaseEqs(), no_control_exc_def] >>
+  Cases_on `tv = Value (BoolV F)` >>
+  gvs[bind_def, return_def, raise_def, AllCaseEqs(), no_control_exc_def] >>
+  rename1 `err:custom_error` >>
+  Cases_on `err` >>
+  qpat_x_assum `(case get_module_code _ _ of _ => _) _ = _` mp_tac >>
+  simp[bind_def, return_def, raise_def, AllCaseEqs(), no_control_exc_def] >>
+  rpt CASE_TAC >> rpt strip_tac >>
+  gvs[bind_def, return_def, raise_def, AllCaseEqs(), no_control_exc_def] >>
+  TRY (imp_res_tac lift_option_no_control >>
+       gvs[no_control_exc_def] >> NO_TAC) >>
+  TRY (imp_res_tac lift_option_type_no_control >>
+       gvs[no_control_exc_def] >> NO_TAC) >>
+  TRY (drule (cj 2 eval_expr_no_control) >>
+       metis_tac[no_control_exc_no_loop_control])
 QED
 Theorem eval_stmt_raise_no_loop_control[local]:
   !r cx st exn st'.
@@ -831,6 +883,18 @@ Proof
   TRY (imp_res_tac get_Value_no_control >> gvs[no_control_exc_def] >> NO_TAC) >>
   TRY (imp_res_tac lift_option_type_no_control >> gvs[no_control_exc_def] >> NO_TAC) >>
   TRY (drule (cj 1 eval_expr_no_control) >>
+       metis_tac[no_control_exc_no_loop_control] >> NO_TAC) >>
+  rename1 `err:custom_error` >>
+  Cases_on `err` >>
+  qpat_x_assum `(case get_module_code _ _ of _ => _) _ = _` mp_tac >>
+  simp[bind_def, return_def, raise_def, AllCaseEqs(), no_control_exc_def] >>
+  rpt CASE_TAC >> rpt strip_tac >>
+  gvs[bind_def, return_def, raise_def, AllCaseEqs(), no_control_exc_def] >>
+  TRY (imp_res_tac lift_option_no_control >>
+       gvs[no_control_exc_def] >> NO_TAC) >>
+  TRY (imp_res_tac lift_option_type_no_control >>
+       gvs[no_control_exc_def] >> NO_TAC) >>
+  TRY (drule (cj 2 eval_expr_no_control) >>
        metis_tac[no_control_exc_no_loop_control])
 QED
 
@@ -1941,9 +2005,11 @@ Proof
   TRY(rename1 `Raise RaiseBare` >> suspend "RaiseBare") >>
   TRY(rename1 `Raise RaiseUnreachable` >> suspend "RaiseUnreachable") >>
   TRY(rename1 `Raise (RaiseReason _)` >> suspend "RaiseReason") >>
+  TRY(rename1 `Raise (RaiseCustomError _)` >> suspend "RaiseCustomError") >>
   TRY(rename1 `AssertBare` >> suspend "AssertBare") >>
   TRY(rename1 `AssertUnreachable` >> suspend "AssertUnreachable") >>
   TRY(rename1 `AssertReason` >> suspend "AssertReason") >>
+  TRY(rename1 `Assert _ (AssertCustomError _)` >> suspend "AssertCustomError") >>
   TRY(rename1 `Log` >> suspend "Log") >>
   TRY(rename1 `AnnAssign` >> suspend "AnnAssign") >>
   TRY(rename1 `Append` >> suspend "Append") >>
@@ -2088,6 +2154,96 @@ Resume eval_all_type_sound_mutual[RaiseReason]:
   imp_res_tac raise_state >> gvs[]
 QED
 
+Resume eval_all_type_sound_mutual[RaiseCustomError]:
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum
+    `call_evaluation_safe cx
+       (int_calls_stmt (Raise (RaiseCustomError err)))` mp_tac >>
+  pure_rewrite_tac[int_calls_stmt_def, int_calls_raise_reason_def] >>
+  strip_tac >>
+  qhdtm_x_assum `type_stmt` mp_tac >>
+  simp_tac(srw_ss())[type_stmt_def, well_typed_custom_error_def] >>
+  strip_tac >> BasicProvers.VAR_EQ_TAC >>
+  Cases_on `err` >>
+  Cases_on `get_module_code cx (FST p)`
+  >- gvs[evaluate_def, raise_def, no_type_error_result_def,
+          return_exception_typed_def] >>
+  rename1 `get_module_code cx (FST p) = SOME tops` >>
+  Cases_on `lookup_custom_error_args_in (SND p) tops`
+  >- gvs[evaluate_def, raise_def, no_type_error_result_def,
+          return_exception_typed_def] >>
+  rename1 `lookup_custom_error_args_in (SND p) tops = SOME params` >>
+  Cases_on `order_custom_error_args params (CustomError p l l0)`
+  >- gvs[evaluate_def, raise_def, no_type_error_result_def,
+          return_exception_typed_def] >>
+  rename1
+    `order_custom_error_args params (CustomError p positional kwargs) =
+       SOME es` >>
+  (fn g as (asl,_) =>
+     let
+       val ih_tm = valOf (List.find
+         (fn tm => can dest_forall tm andalso
+           String.isSubstring "order_custom_error_args" (term_to_string tm))
+         asl)
+       val ih = Q.SPECL
+         [`p`, `positional`, `kwargs`, `tops`, `params`, `es`]
+         (ASSUME ih_tm)
+     in
+       mp_tac ih g
+     end) >>
+  impl_tac >- simp[] >>
+  strip_tac >>
+  qhdtm_x_assum `eval_stmt` mp_tac >>
+  simp_tac(srw_ss())[evaluate_def, bind_def] >>
+  `PERM (custom_error_exprs (CustomError p positional kwargs)) es` by
+    (drule order_custom_error_args_perm >> simp[]) >>
+  `well_typed_exprs env es` by
+    (drule well_typed_exprs_perm >>
+     disch_then (qspec_then `env` mp_tac) >>
+     simp[custom_error_exprs_def]) >>
+  `call_evaluation_safe cx
+      (int_calls_exprs (custom_error_exprs
+        (CustomError p positional kwargs)))` by
+    simp[custom_error_exprs_def] >>
+  `call_evaluation_safe cx (int_calls_exprs es)` by
+    (qspecl_then
+       [`cx`, `custom_error_exprs (CustomError p positional kwargs)`, `es`]
+       mp_tac call_evaluation_safe_exprs_perm >>
+     simp[custom_error_exprs_def]) >>
+  simp[bind_def] >>
+  Cases_on `eval_exprs cx es st` >>
+  rename1 `eval_exprs cx es st = (exprs_res,st1)` >>
+  (fn g as (asl,_) =>
+     let
+       val ih_tm = valOf (List.find
+         (fn tm => can dest_forall tm andalso
+           String.isSubstring "eval_exprs cx es st" (term_to_string tm) andalso
+           not (String.isSubstring "order_custom_error_args"
+             (term_to_string tm)))
+         asl)
+       val ih = Q.SPECL [`env`, `st`, `exprs_res`, `st1`] (ASSUME ih_tm)
+     in
+       mp_tac ih g
+     end) >>
+  impl_tac >- simp[] >>
+  strip_tac >>
+  Cases_on `exprs_res`
+  >- (
+    Cases_on
+      `build_custom_error_data (get_tenv cx) (SND p)
+         (MAP SND params) x` >>
+    gvs[no_type_error_result_def, lift_option_def, return_def, raise_def,
+        return_exception_typed_def] >>
+    rpt strip_tac >>
+    gvs[no_type_error_result_def, lift_option_def, return_def, raise_def,
+        return_exception_typed_def]) >>
+  rpt strip_tac >>
+  gvs[no_type_error_result_def, bind_def, return_exception_typed_def] >>
+  drule_all eval_exprs_exception_return_typed >>
+  disch_then (qspecl_then [`ret_ty`, `env`] mp_tac) >>
+  simp[return_exception_typed_def]
+QED
+
 Resume eval_all_type_sound_mutual[AssertBare]:
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `call_evaluation_safe cx (int_calls_stmt (Assert e AssertBare))` mp_tac >>
@@ -2200,6 +2356,157 @@ Resume eval_all_type_sound_mutual[AssertReason]:
   qpat_x_assum `!vt. _` kall_tac >>
   gvs[no_type_error_result_def] >>
   drule_all eval_expr_exception_return_typed >> simp[]
+QED
+
+Resume eval_all_type_sound_mutual[AssertCustomError]:
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum
+    `call_evaluation_safe cx
+       (int_calls_stmt (Assert e (AssertCustomError err)))` mp_tac >>
+  pure_rewrite_tac[int_calls_stmt_def, int_calls_assert_reason_def] >>
+  strip_tac >>
+  `call_evaluation_safe cx (int_calls_expr e)` by
+    (irule call_evaluation_safe_append_left >>
+     qexists_tac `int_calls_exprs (custom_error_exprs err)` >> simp[]) >>
+  `call_evaluation_safe cx
+      (int_calls_exprs (custom_error_exprs err))` by
+    (irule call_evaluation_safe_append_right >>
+     qexists_tac `int_calls_expr e` >> simp[]) >>
+  qhdtm_x_assum `type_stmt` mp_tac >>
+  simp_tac(srw_ss())
+    [type_stmt_def, well_typed_custom_error_def] >>
+  strip_tac >> BasicProvers.VAR_EQ_TAC >>
+  qhdtm_x_assum `eval_stmt` mp_tac >>
+  simp_tac(srw_ss())
+    [evaluate_def, bind_def, return_def, raise_def, AllCaseEqs(),
+     PULL_EXISTS] >>
+  Cases_on `eval_expr cx e st` >>
+  rename1 `eval_expr cx e st = (expr_res,st1)` >>
+  first_x_assum drule_all >> strip_tac >>
+  qpat_x_assum `well_typed_expr env e ==> _`
+    (drule_then strip_assume_tac) >>
+  Cases_on `expr_res` >> rewrite_tac[no_type_error_result_def]
+  >- (
+    `expr_result_typed env e x` by
+      (qpat_x_assum
+         `case INL x of
+          | INL tv => expr_result_typed env e tv
+          | INR v1 => T` mp_tac >>
+       simp[]) >>
+    qhdtm_x_assum `expr_result_typed` mp_tac >>
+    asm_rewrite_tac[expr_result_typed_def, expr_runtime_typed_def] >>
+    rewrite_tac[Once evaluate_type_def] >> strip_tac >>
+    `tv = BaseTV BoolT` by
+      (qpat_x_assum `_ = SOME tv` mp_tac >>
+       rewrite_tac[Once evaluate_type_def] >> simp[]) >>
+    qpat_x_assum `tv = BaseTV BoolT` SUBST_ALL_TAC >>
+    drule toplevel_value_typed_BoolTV >> strip_tac >>
+    qpat_x_assum `x = Value (BoolV b)` SUBST_ALL_TAC >>
+    Cases_on `b` >> rewrite_tac[switch_BoolV_def, return_def]
+    >- (
+      qpat_x_assum `!s'' tv t. _` kall_tac >>
+      qpat_x_assum `!vt. _` kall_tac >>
+      rpt strip_tac >>
+      gvs[return_def, no_type_error_result_def]) >>
+    Cases_on `err` >>
+    Cases_on `get_module_code cx (FST p)`
+    >- (rpt strip_tac >>
+        gvs[raise_def, no_type_error_result_def,
+            return_exception_typed_def]) >>
+    rename1 `get_module_code cx (FST p) = SOME tops` >>
+    Cases_on `lookup_custom_error_args_in (SND p) tops`
+    >- (rpt strip_tac >>
+        gvs[raise_def, no_type_error_result_def,
+            return_exception_typed_def]) >>
+    rename1 `lookup_custom_error_args_in (SND p) tops = SOME params` >>
+    Cases_on `order_custom_error_args params (CustomError p l l0)`
+    >- (rpt strip_tac >>
+        gvs[raise_def, no_type_error_result_def,
+            return_exception_typed_def]) >>
+    rename1
+      `order_custom_error_args params
+         (CustomError p positional kwargs) = SOME es` >>
+    (fn g as (asl,_) =>
+       let
+         val ih_tm = valOf (List.find
+           (fn tm => can dest_forall tm andalso
+             String.isSubstring "order_custom_error_args" (term_to_string tm))
+           asl)
+         val ih = Q.SPECL
+           [`st`, `Value (BoolV F)`, `st1`, `p`, `positional`, `kwargs`,
+            `tops`, `params`, `es`]
+           (ASSUME ih_tm)
+       in
+         mp_tac ih g
+       end) >>
+    impl_tac >- suspend "AssertCustomIH" >>
+    strip_tac >>
+    `PERM (custom_error_exprs (CustomError p positional kwargs)) es` by
+      (drule order_custom_error_args_perm >> simp[]) >>
+    `well_typed_exprs env es` by
+      (drule well_typed_exprs_perm >>
+       disch_then (qspec_then `env` mp_tac) >>
+       simp[custom_error_exprs_def]) >>
+    `call_evaluation_safe cx
+        (int_calls_exprs (custom_error_exprs
+          (CustomError p positional kwargs)))` by
+      simp[custom_error_exprs_def] >>
+    `call_evaluation_safe cx (int_calls_exprs es)` by
+      (qspecl_then
+         [`cx`, `custom_error_exprs (CustomError p positional kwargs)`, `es`]
+         mp_tac call_evaluation_safe_exprs_perm >>
+       simp[custom_error_exprs_def]) >>
+    Cases_on `eval_exprs cx es st1` >>
+    rename1 `eval_exprs cx es st1 = (args_res,st2)` >>
+    (fn g as (asl,_) =>
+       let
+         val ih_tm = valOf (List.find
+           (fn tm => can dest_forall tm andalso
+             String.isSubstring "eval_exprs cx es st" (term_to_string tm) andalso
+             not (String.isSubstring "order_custom_error_args"
+               (term_to_string tm)))
+           asl)
+         val ih = Q.SPECL [`env`, `st1`, `args_res`, `st2`] (ASSUME ih_tm)
+       in
+         mp_tac ih g
+       end) >>
+    impl_tac >- suspend "AssertCustomExprsIH" >>
+    strip_tac >>
+    Cases_on `args_res`
+    >- suspend "AssertCustomArgsSuccess" >>
+    rpt strip_tac >>
+    gvs[no_type_error_result_def, bind_def, return_exception_typed_def] >>
+    drule_all eval_exprs_exception_return_typed >>
+    disch_then (qspecl_then [`ret_ty`, `env`] mp_tac) >>
+    simp[return_exception_typed_def]) >>
+  rpt strip_tac >>
+  qpat_x_assum `!s'' tv t. _` kall_tac >>
+  qpat_x_assum `!vt. _` kall_tac >>
+  gvs[no_type_error_result_def] >>
+  drule_all eval_expr_exception_return_typed >> simp[]
+QED
+
+Resume eval_all_type_sound_mutual[AssertCustomIH]:
+  gvs[]
+QED
+
+Resume eval_all_type_sound_mutual[AssertCustomExprsIH]:
+  gvs[]
+QED
+
+Resume eval_all_type_sound_mutual[AssertCustomArgsSuccess]:
+  rpt gen_tac >> strip_tac >>
+  gvs[bind_def, return_def, raise_def, AllCaseEqs(),
+      no_type_error_result_def, return_exception_typed_def] >>
+  imp_res_tac lift_option_state >>
+  BasicProvers.VAR_EQ_TAC >>
+  qpat_x_assum `lift_option _ _ _ = _` mp_tac >>
+  Cases_on
+    `build_custom_error_data (get_tenv cx) (SND p)
+       (MAP SND params) vs` >>
+  simp[lift_option_def, return_def, raise_def] >>
+  strip_tac >>
+  gvs[no_type_error_result_def, return_exception_typed_def]
 QED
 
 Resume eval_all_type_sound_mutual[Log]:

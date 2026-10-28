@@ -72,13 +72,15 @@ End
 Definition supported_assert_reason_def:
   supported_assert_reason tops AssertBare = T /\
   supported_assert_reason tops AssertUnreachable = T /\
-  supported_assert_reason tops (AssertReason e) = supported_string_reason tops e
+  supported_assert_reason tops (AssertReason e) = supported_string_reason tops e /\
+  supported_assert_reason tops (AssertCustomError err) = F
 End
 
 Definition supported_raise_reason_def:
   supported_raise_reason tops RaiseBare = T /\
   supported_raise_reason tops RaiseUnreachable = T /\
-  supported_raise_reason tops (RaiseReason e) = supported_string_reason tops e
+  supported_raise_reason tops (RaiseReason e) = supported_string_reason tops e /\
+  supported_raise_reason tops (RaiseCustomError err) = F
 End
 
 Definition supported_log_def:

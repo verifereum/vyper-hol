@@ -14,7 +14,7 @@ Theory vyperTypeContract
 Ancestors
   list rich_list arithmetic finite_map option pair
   vyperAST vyperValue vyperMisc vyperContext vyperState vyperInterpreter
-  vyperTypeSystem vyperTypeCallGraph
+  vyperEvent vyperTypeSystem vyperTypeCallGraph
 Libs
   wordsLib
 
@@ -26,7 +26,7 @@ Datatype:
     cta_bare_globals             : (nsid |-> type);
     cta_bare_global_assignable   : (nsid |-> type);
     cta_toplevel_vtypes          : (nsid |-> value_type);
-    cta_flag_members    : (nsid |-> string list)
+    cta_flag_members             : (nsid |-> string list)
   |>
 End
 
@@ -138,6 +138,11 @@ Definition flag_member_keys_toplevel_def:
   flag_member_keys_toplevel _ _ = []
 End
 
+Definition error_sig_keys_toplevel_def:
+  error_sig_keys_toplevel src (ErrorDecl id _) = [(src,id)] /\
+  error_sig_keys_toplevel _ _ = []
+End
+
 Definition type_def_keys_toplevel_def:
   type_def_keys_toplevel src (StructDecl id _) = [(src,id)] /\
   type_def_keys_toplevel src (FlagDecl id _) = [(src,id)] /\
@@ -155,8 +160,58 @@ Definition contract_namespaces_ok_def:
     ALL_DISTINCT (contract_keys (fn_sig_keys_toplevel in_deploy) mods) /\
     ALL_DISTINCT (contract_keys toplevel_vtype_keys_toplevel mods) /\
     ALL_DISTINCT (contract_keys flag_member_keys_toplevel mods) /\
+    ALL_DISTINCT (contract_keys error_sig_keys_toplevel mods) /\
     ALL_DISTINCT (contract_keys type_def_keys_toplevel mods)
 End
+
+Definition custom_error_resolved_def:
+  custom_error_resolved mods (CustomError (src,name) positional kwargs) =
+    case ALOOKUP mods src of
+    | NONE => F
+    | SOME tops =>
+        case lookup_custom_error_args_in name tops of
+        | NONE => F
+        | SOME params =>
+            case order_custom_error_args params
+                   (CustomError (src,name) positional kwargs) of
+            | NONE => F
+            | SOME es => MAP expr_type es = MAP SND params
+End
+
+Definition custom_errors_stmt_ok_def:
+  custom_errors_stmt_ok mods (Raise (RaiseCustomError err)) =
+    custom_error_resolved mods err ∧
+  custom_errors_stmt_ok mods (Assert e (AssertCustomError err)) =
+    custom_error_resolved mods err ∧
+  custom_errors_stmt_ok mods (If e yes no) =
+    (custom_errors_stmts_ok mods yes ∧ custom_errors_stmts_ok mods no) ∧
+  custom_errors_stmt_ok mods (For id ty it n body) =
+    custom_errors_stmts_ok mods body ∧
+  custom_errors_stmt_ok mods (Raise RaiseBare) = T ∧
+  custom_errors_stmt_ok mods (Raise RaiseUnreachable) = T ∧
+  custom_errors_stmt_ok mods (Raise (RaiseReason e)) = T ∧
+  custom_errors_stmt_ok mods (Assert e AssertBare) = T ∧
+  custom_errors_stmt_ok mods (Assert e AssertUnreachable) = T ∧
+  custom_errors_stmt_ok mods (Assert e (AssertReason r)) = T ∧
+  custom_errors_stmt_ok mods Pass = T ∧
+  custom_errors_stmt_ok mods Continue = T ∧
+  custom_errors_stmt_ok mods Break = T ∧
+  custom_errors_stmt_ok mods (Expr e) = T ∧
+  custom_errors_stmt_ok mods (Log id es) = T ∧
+  custom_errors_stmt_ok mods (Return eo) = T ∧
+  custom_errors_stmt_ok mods (Assign tgt e) = T ∧
+  custom_errors_stmt_ok mods (AugAssign ty tgt bop e) = T ∧
+  custom_errors_stmt_ok mods (Append tgt e) = T ∧
+  custom_errors_stmt_ok mods (AnnAssign id ty e) = T ∧
+  custom_errors_stmts_ok mods [] = T ∧
+  custom_errors_stmts_ok mods (stmt::rest) =
+    (custom_errors_stmt_ok mods stmt ∧ custom_errors_stmts_ok mods rest)
+Termination
+  WF_REL_TAC `measure (λx.
+    case x of INL(_,stmt) => stmt_size stmt
+            | INR(_,stmts) => list_size stmt_size stmts)` >> simp[]
+End
+
 
 Definition params_ok_def:
   params_ok tenv args <=>
@@ -502,6 +557,7 @@ Definition check_toplevel_decl_def:
           params_ok tenv args /\ well_formed_type tenv ret) funcs
     | EventDecl id fields =>
         EVERY (\((_,ty),indexed). assignable_type tenv ty) fields
+    | ErrorDecl id args => params_ok tenv args
     | FunctionDecl vis _ _ _ _ args dflts ret _ =>
         params_ok tenv args /\ well_formed_type tenv ret /\
         (* Vyper: "Constructor may not use default arguments" *)
@@ -518,6 +574,7 @@ Definition check_function_body_def:
       (nr ==> IS_SOME (lookup_nonreentrant_slot layouts addr)) /\
       IS_SOME (evaluate_type tenv ret) /\
       IS_SOME (type_stmts env ret body) /\
+      custom_errors_stmts_ok mods body /\
       (ret = NoneT \/ stmts_no_fallthrough body) /\
       stmts_no_control_escape body /\
       well_typed_exprs (defaults_env env) dflts /\
