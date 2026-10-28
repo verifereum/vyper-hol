@@ -1,0 +1,124 @@
+name: 'Setup holbuild project'
+description: 'Sets up Poly/ML and holbuild, and restores a holbuild cache snapshot for this project'
+
+inputs:
+  snapshot-key:
+    description: 'Exact key of a snapshot an earlier job of this run saved; empty restores the latest compatible snapshot'
+    required: false
+    default: ''
+  toolchain-snapshot-key:
+    description: 'Exact key of a HOL toolchain an earlier job of this run saved; restored instead of any project snapshot'
+    required: false
+    default: ''
+  lookup-only:
+    description: 'true checks for a compatible project snapshot without restoring it'
+    required: false
+    default: 'false'
+
+outputs:
+  toolchain-key:
+    description: 'Cache key of the HOL toolchain'
+    value: ${{ steps.cache-key.outputs.toolchain-key }}
+  build-prefix:
+    description: 'Key prefix of the project snapshots later runs restore'
+    value: ${{ steps.cache-key.outputs.build-prefix }}
+  stage-prefix:
+    description: 'Key prefix of the snapshots a job hands to later jobs of the same run'
+    value: ${{ steps.cache-key.outputs.stage-prefix }}
+  project-snapshot-key:
+    description: 'Key of the compatible project snapshot found; empty on a miss'
+    value: ${{ steps.cache-holbuild-project.outputs.cache-matched-key }}
+
+runs:
+  using: 'composite'
+  steps:
+    - uses: ./.github/actions/setup-polyml
+      id: polyml
+
+    - name: Get minimum holbuild version from holproject.toml
+      id: holbuild-version
+      shell: bash
+      run: |
+        holbuild_ref="$(python3 - <<'PY'
+        import tomllib
+        with open("holproject.toml", "rb") as f:
+            data = tomllib.load(f)
+        print("v" + data["holbuild"]["minimum_version"])
+        PY
+        )"
+        echo "ref=$holbuild_ref" >> "$GITHUB_OUTPUT"
+
+    - uses: ./.github/actions/setup-holbuild
+      id: holbuild
+      with:
+        holbuild-ref: ${{ steps.holbuild-version.outputs.ref }}
+
+    - name: Report selected holbuild version
+      shell: bash
+      run: holbuild --version
+
+    - name: Configure holbuild cache
+      shell: bash
+      run: echo "HOLBUILD_CACHE=$HOME/.cache/holbuild" >> "$GITHUB_ENV"
+
+    - name: Compute holbuild cache keys
+      id: cache-key
+      shell: bash
+      run: |
+        # Unlike Poly/ML's, these keys leave out the runner image. HOL's
+        # executables take only __libc_start_main, __cxa_finalize and abort
+        # from glibc and the rest from the job's own libpolyml, so a toolchain
+        # built on either image runs on both. Every image then hashes the same
+        # HOL bytes and finds the same remote cache entries.
+        tools="${{ runner.os }}-${{ runner.arch }}-${{ steps.polyml.outputs.polyml-rev }}-${{ steps.holbuild.outputs.holbuild-rev }}"
+        echo "toolchain-key=holbuild-v3-toolchain-${tools}" >> "$GITHUB_OUTPUT"
+        echo "build-prefix=holbuild-v3-build-${tools}" >> "$GITHUB_OUTPUT"
+        # Outside build-prefix, so no later run restores a partial snapshot.
+        echo "stage-prefix=holbuild-v3-stage-${tools}" >> "$GITHUB_OUTPUT"
+
+    - name: Restore project snapshot from this run
+      if: ${{ inputs.snapshot-key != '' }}
+      uses: actions/cache/restore@v6
+      with:
+        path: ~/.cache/holbuild
+        key: ${{ inputs.snapshot-key }}
+        fail-on-cache-miss: true
+
+    - name: Restore HOL toolchain from this run
+      if: ${{ inputs.snapshot-key == '' && inputs.toolchain-snapshot-key != '' }}
+      uses: actions/cache/restore@v6
+      with:
+        path: ~/.cache/holbuild
+        key: ${{ inputs.toolchain-snapshot-key }}
+        fail-on-cache-miss: true
+
+    - name: Restore latest compatible project snapshot
+      id: cache-holbuild-project
+      if: ${{ inputs.snapshot-key == '' && inputs.toolchain-snapshot-key == '' }}
+      uses: actions/cache/restore@v6
+      with:
+        path: ~/.cache/holbuild
+        key: ${{ steps.cache-key.outputs.build-prefix }}-${{ github.sha }}
+        restore-keys: |
+          ${{ steps.cache-key.outputs.build-prefix }}-
+        lookup-only: ${{ inputs.lookup-only }}
+
+    - name: Restore holbuild toolchain cache on project snapshot miss
+      id: cache-holbuild-toolchain
+      if: ${{ inputs.snapshot-key == '' && inputs.toolchain-snapshot-key == '' && steps.cache-holbuild-project.outputs.cache-matched-key == '' }}
+      uses: actions/cache/restore@v6
+      with:
+        path: ~/.cache/holbuild
+        key: ${{ steps.cache-key.outputs.toolchain-key }}
+
+    - name: Report restored holbuild cache
+      if: ${{ inputs.snapshot-key == '' && inputs.toolchain-snapshot-key == '' }}
+      shell: bash
+      env:
+        PROJECT_CACHE_KEY: ${{ steps.cache-holbuild-project.outputs.cache-matched-key }}
+        TOOLCHAIN_CACHE_HIT: ${{ steps.cache-holbuild-toolchain.outputs.cache-hit }}
+        TOOLCHAIN_CACHE_KEY: ${{ steps.cache-holbuild-toolchain.outputs.cache-matched-key }}
+      run: |
+        echo "project cache key: ${PROJECT_CACHE_KEY:-<none>}"
+        echo "toolchain cache hit: ${TOOLCHAIN_CACHE_HIT:-false}"
+        echo "toolchain cache key: ${TOOLCHAIN_CACHE_KEY:-<none>}"
