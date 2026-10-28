@@ -29,7 +29,7 @@
 
 Theory compileEnv
 Ancestors
-  valueEncoding venomExecSemantics venomInst venomPolicyTypes
+  valueEncoding memoryValueDefs venomExecSemantics venomInst venomPolicyTypes
   vyperState vyperContext vyperValue vyperABI vyperEvent contractABI
   byte keccak finite_map pred_set
 Libs
@@ -652,9 +652,9 @@ Definition vars_rel_def:
       lookup_scopes name scopes = SOME entry ∧
       FLOOKUP cenv.ce_vars name = SOME (MemLoc offset size)
       ⇒
-      (* entry.type from scope provides correct type for val_in_memory dispatch
-         (e.g., AddressT → right-aligned BytesV encoding). *)
-      val_in_memory entry.type entry.value offset ss.vs_memory
+      (* The complete layout includes defaults omitted by sparse fixed arrays;
+         entry.type also selects the correct address/fixed-bytes alignment. *)
+      memory_value_rel entry.type entry.value offset ss.vs_memory
 End
 
 (* ===== Locals held through allocations ===== *)
@@ -716,7 +716,7 @@ End
      it;
    - the value fits the region and is well formed (val_wf), which is what
      lets a write outside the region leave it unchanged;
-   - val_in_memory holds at the base.
+   - the complete typed memory layout holds at the base.
    And the regions of distinct live locals are disjoint, so writing one
    local leaves the others unchanged.
    Bump allocation alone gives this for ALLOCA, so it does not depend on the
@@ -735,7 +735,7 @@ Definition local_ptrs_rel_def:
          w2n w + sz ≤ ss.vs_alloca_next ∧
          type_memory_size entry.type ≤ sz ∧
          val_wf entry.type entry.value ∧
-         val_in_memory entry.type entry.value (w2n w) ss.vs_memory) ∧
+          memory_value_rel entry.type entry.value (w2n w) ss.vs_memory) ∧
     (∀n1 n2 b1 sz1 b2 sz2.
        n1 ≠ n2 ∧
        local_region cenv scopes ss n1 b1 sz1 ∧

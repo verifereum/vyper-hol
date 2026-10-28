@@ -166,18 +166,11 @@ Theorem do_dup_stack_length[local]:
     do_dup dist ps = (ops, ps') ==>
     LENGTH ps'.ps_stack = LENGTH ps.ps_stack + 1
 Proof
-  rpt gen_tac >>
-  simp[do_dup_def] >>
-  IF_CASES_TAC
-  >- (strip_tac >> gvs[stack_dup_def]) >>
-  CONV_TAC (DEPTH_CONV PairRules.PBETA_CONV) >>
-  qabbrev_tac `fres = FOLDL
-    (\(ops,offs,al) item.
-      let (off,al') = alloc_spill_slot al in
-        (ops ++ [SOSpill off], SNOC off offs, al'))
-    ([],[],ps.ps_alloc) (top_n (dist + 1) ps.ps_stack)` >>
-  PairCases_on `fres` >> simp[] >>
-  strip_tac >> gvs[]
+  rpt strip_tac >>
+  `ps'.ps_stack = stack_dup dist ps.ps_stack` by
+    (mp_tac (Q.SPECL [`dist`,`ps`] do_dup_stack) >>
+     asm_simp_tac std_ss []) >>
+  simp[stack_dup_def]
 QED
 
 Theorem do_restore_stack_length[local]:

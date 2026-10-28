@@ -70,9 +70,22 @@ Definition build_struct_fields_map_def:
     | _ => build_struct_fields_map rest sft
 End
 
-Definition make_struct_fields_map_def:
-  make_struct_fields_map tops = build_struct_fields_map tops FEMPTY
+(* Field declarations may refer to structs appearing later in the module.
+   Resolve footprints after collecting the complete source type environment. *)
+Definition resolve_struct_field_sizes_def:
+  resolve_struct_field_sizes tenv fields =
+    MAP (\(name,ty,old_size).
+      (name,ty,case evaluate_type tenv ty of
+        SOME tv => type_memory_size tv | NONE => old_size)) fields
 End
+
+Definition make_struct_fields_map_def:
+  make_struct_fields_map tops =
+    resolve_struct_field_sizes (type_env tops) o_f (build_struct_fields_map tops FEMPTY)
+End
+
+val () = computeLib.add_persistent_funs
+  ["finite_map.o_f_FEMPTY", "finite_map.o_f_FUPDATE"];
 
 (* ===== Simple AST Extractors ===== *)
 

@@ -118,6 +118,43 @@ Proof
   qexists `r` >> simp[]
 QED
 
+(* The local allocator may grow within its context-owned region.  Every
+   source read still avoids the whole local spill interval. *)
+Theorem context_source_memory_reads_disjoint_local:
+  !cp inst vs r alloc.
+    source_memory_reads_disjoint cp inst vs /\
+    MEM r cp.cp_regions /\
+    r.sr_spill_base <= alloc.sa_spill_base /\
+    alloc.sa_next_offset <= r.sr_spill_end ==>
+    !i. source_memory_read_byte inst vs i ==>
+        ~(alloc.sa_spill_base <= i /\ i < alloc.sa_next_offset)
+Proof
+  rpt strip_tac >>
+  `~context_spill_byte cp i` by
+    (fs[source_memory_reads_disjoint_def]) >>
+  qpat_x_assum `~context_spill_byte cp i` mp_tac >>
+  simp[context_spill_byte_def] >> qexists_tac `r` >>
+  asm_simp_tac (srw_ss()) [] >> decide_tac
+QED
+
+Theorem codegen_memory_obligations_local_reads:
+  codegen_memory_obligations Inv ctx cp /\
+  Inv ctx fn inst vs /\ MEM fn ctx.ctx_functions /\
+  MEM inst (fn_insts fn) /\ MEM r cp.cp_regions /\
+  r.sr_spill_base <= alloc.sa_spill_base /\
+  alloc.sa_next_offset <= r.sr_spill_end ==>
+  !i. source_memory_read_byte inst vs i ==>
+      ~(alloc.sa_spill_base <= i /\ i < alloc.sa_next_offset)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `source_memory_reads_disjoint cp inst vs` by
+    (fs[codegen_memory_obligations_def] >> metis_tac[]) >>
+  mp_tac (Q.ISPECL [`cp:context_plan`,`inst:instruction`,`vs:venom_state`,
+    `r:spill_region`,`alloc:spill_alloc`]
+    context_source_memory_reads_disjoint_local) >>
+  (impl_tac >- asm_rewrite_tac []) >> simp[]
+QED
+
 Theorem local_memory_rel_context:
   MEM r cp.cp_regions /\
   memory_rel
@@ -241,3 +278,14 @@ Proof
   first_x_assum drule >>
   PairCases_on `e` >> simp[] >> metis_tac[]
 QED
+
+val () = List.app (fn (name,th) =>
+  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
+  in if null axioms andalso null (Thm.hyp th) andalso
+      List.all (fn s => s = "DISK_THM") oracles
+    then () else raise Fail ("unclosed local read-safety proof: " ^ name)
+  end)
+  [("context_source_memory_reads_disjoint_local",
+    context_source_memory_reads_disjoint_local),
+   ("codegen_memory_obligations_local_reads",
+    codegen_memory_obligations_local_reads)]

@@ -14,7 +14,7 @@
 
 Theory stackPlanOps
 Ancestors
-  stackPlanTypes dfgDefs sorting
+  stackPlanTypes dfgDefs sorting list rich_list arithmetic
 
 (* ===== Basic Spill/Restore Operations ===== *)
 
@@ -92,35 +92,68 @@ Definition do_swap_def:
                   ps_alloc := alloc'' |>)
 End
 
+(* Load order for rebuilding a prefix around the duplicate. *)
+Definition dup_restore_indices_def:
+  dup_restore_indices prefix_len =
+    let indices = REVERSE (GENLIST I prefix_len) in
+    if prefix_len ≤ 16 then TL indices ++ TAKE 1 indices else indices
+End
+
+Theorem dup_restore_indices_length:
+  0 < prefix_len ==> LENGTH (dup_restore_indices prefix_len) = prefix_len
+Proof
+  strip_tac >>
+  `LENGTH (REVERSE (GENLIST I prefix_len)) = prefix_len` by simp[] >>
+  rw[dup_restore_indices_def] >>
+  Cases_on `REVERSE (GENLIST I prefix_len)` >> gvs[]
+QED
+
+Theorem dup_restore_indices_bound:
+  0 < prefix_len ==>
+  EVERY (\i. i < prefix_len) (dup_restore_indices prefix_len)
+Proof
+  strip_tac >>
+  `EVERY (\i. i < prefix_len) (REVERSE (GENLIST I prefix_len))` by
+    simp[EVERY_REVERSE, EVERY_GENLIST] >>
+  rw[dup_restore_indices_def] >>
+  Cases_on `REVERSE (GENLIST I prefix_len)` >> gvs[]
+QED
+
 (* Dup at distance from TOS (0-based). Returns (ops, updated state).
-   dist≤15: DUP{dist+1}. dist>15: bulk spill/restore with dup. *)
+   Spill the inaccessible prefix, use DUP16, then restore the prefix while
+   keeping the duplicate on top. Mirrors pinned StackSpiller.dup. *)
 Definition do_dup_def:
   do_dup dist ps =
     if dist ≤ 15 then
       ([SODup (dist + 1)],
        ps with ps_stack := stack_dup dist ps.ps_stack)
     else
-      let chunk = dist + 1 in
-      let items = top_n chunk ps.ps_stack in
+      let chunk = dist - 15 in
+      let items = TAKE chunk (REVERSE ps.ps_stack) in
       let (spill_ops, offsets, alloc') =
         FOLDL (λ(ops, offs, al) item.
           let (off, al') = alloc_spill_slot al in
           (ops ++ [SOSpill off], SNOC off offs, al'))
         ([], [] : num list, ps.ps_alloc) items in
-      let base_stack = TAKE (LENGTH ps.ps_stack - chunk) ps.ps_stack in
-      (* Desired order (bottom→top): all original ++ [first] (duplicates deepest) *)
-      let desired = GENLIST I chunk ++ [0] in
-      (* Restore in reverse desired order: last pushed = TOS *)
-      let restore_ops =
-        MAP (λidx. SORestore (EL idx offsets)) (REVERSE desired) in
-      (* Free all offsets once — dup has repeated index, don't double-free *)
+      let single_swap = (chunk ≤ 16) in
+      let restore_indices = dup_restore_indices chunk in
+      let restore_ops = FLAT (MAP (λidx.
+        [SORestore (EL idx offsets)] ++
+        if single_swap then [] else [SOSwap 1]) restore_indices) in
+      let finish_ops = if single_swap then [SOSwap chunk] else [] in
       let alloc'' =
         FOLDL (λal off. free_spill_slot off al) alloc' offsets in
-      let restored = MAP (λidx. EL idx items) desired in
-      (spill_ops ++ restore_ops,
-       ps with <| ps_stack := base_stack ++ restored;
+      (spill_ops ++ [SODup 16] ++ restore_ops ++ finish_ops,
+       ps with <| ps_stack := stack_dup dist ps.ps_stack;
                   ps_alloc := alloc'' |>)
 End
+
+Theorem do_dup_stack[simp]:
+  !dist ps. (SND (do_dup dist ps)).ps_stack = stack_dup dist ps.ps_stack
+Proof
+  rpt gen_tac >> simp[do_dup_def, LET_THM] >>
+  IF_CASES_TAC >> gvs[] >> rpt (pairarg_tac >> gvs[])
+QED
 
 (* ===== Reduce Depth via Selective Spilling ===== *)
 

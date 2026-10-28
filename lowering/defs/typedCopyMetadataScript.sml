@@ -3,7 +3,7 @@
    TOP-LEVEL: shallow_copy_type, shallow_copy_metadata_acyclic. *)
 Theory typedCopyMetadata
 Ancestors
-  typedCopyDomain compileVyper compileEnv supportedTypes supportedDecls
+  typedCopyDomain compileVyper compileEnv structLayoutProps supportedTypes supportedDecls
   vyperAST finite_map list pair combin arithmetic pred_set
 
 Definition shallow_copy_type_def:
@@ -110,6 +110,16 @@ Proof
   rpt (IF_CASES_TAC >> simp[]) >> metis_tac[]
 QED
 
+Theorem make_struct_fields_origin:
+  !tops name fields.
+    FLOOKUP (make_struct_fields_map tops) name = SOME fields ==>
+    ?args. MEM (StructDecl name args) tops /\ MAP (FST o SND) fields = MAP SND args
+Proof
+  rpt gen_tac >> simp[make_struct_fields_map_def, FLOOKUP_o_f, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >> drule built_struct_fields_origin >>
+  simp[resolve_struct_field_sizes_types]
+QED
+
 (* This is a source-namespace premise, not an environment premise. A typed
    contract's distinct type-definition keys imply it (including all flags
    and interfaces); duplicate struct names are NOT assumed harmless. *)
@@ -155,7 +165,7 @@ Proof
   rename1 `MEM triple (get_struct_fields (make_struct_fields_map tops) name)` >>
   Cases_on `FLOOKUP (make_struct_fields_map tops) name` >>
   gvs[get_struct_fields_def] >>
-  fs[make_struct_fields_map_def] >> drule built_struct_fields_origin >>
+  drule make_struct_fields_origin >>
   strip_tac >> gvs[] >>
   fs[struct_args_unique_def] >>
   rename1 `MEM (StructDecl name found_args) tops` >>
@@ -195,7 +205,8 @@ Theorem make_struct_fields_map_acyclic:
   acyclic_struct_metadata (make_struct_fields_map tops)
 Proof
   strip_tac >> irule shallow_copy_metadata_acyclic >>
-  simp[make_struct_fields_map_def] >> irule built_struct_fields_every >>
+  simp[make_struct_fields_map_def, resolve_struct_field_sizes_metadata_every] >>
+  irule built_struct_fields_every >>
   simp[FEVERY_FEMPTY] >> rpt strip_tac >>
   `EVERY (supported_value_type tops o SND) args` by
     (fs[supported_declaration_headers_def, EVERY_MEM] >>
@@ -213,3 +224,10 @@ Proof
   simp[build_compile_env_ce_struct_fields] >> strip_tac >>
   irule make_struct_fields_map_acyclic >> simp[]
 QED
+
+val () = List.app (fn (name,th) =>
+  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
+  in if null axioms andalso null (Thm.hyp th) andalso
+      List.all (fn s => s = "DISK_THM") oracles
+    then () else raise Fail ("unclosed typed-copy metadata theorem: " ^ name)
+  end) (DB.thms "typedCopyMetadata")

@@ -274,6 +274,17 @@ Proof
   metis_tac[step_inst_preserves_alloca_state]
 QED
 
+(* Successful internal calls also retain the caller's allocation frontier.
+   The joint native invariant already includes this monotonicity property. *)
+Theorem step_inst_alloca_frontier:
+  !fuel ctx inst ss out.
+    alloca_inv ss /\ step_inst fuel ctx inst ss = OK out ==>
+    ss.vs_alloca_next <= out.vs_alloca_next
+Proof
+  metis_tac[venomMemProofsTheory.alloca_inv_joint,
+    venomMemProofsTheory.result_alloca_inv_def]
+QED
+
 Theorem allocas_non_overlapping_step_inst:
   ∀fuel ctx inst s s'.
     step_inst fuel ctx inst s = OK s' ∧

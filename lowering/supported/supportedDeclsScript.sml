@@ -30,8 +30,7 @@ Definition supported_declaration_header_def:
         supported_hashmap_key_type kt /\ supported_full_word_type vt
     | StructDecl name fields =>
         EVERY (supported_value_type tops o SND) fields
-    | EventDecl name fields =>
-        EVERY (supported_scalar_type o SND o FST) fields
+    | EventDecl name fields => T
     | InterfaceDecl name methods =>
         EVERY (supported_interface_signature tops) methods
     | _ => F

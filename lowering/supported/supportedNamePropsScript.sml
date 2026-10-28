@@ -117,8 +117,9 @@ Proof
   EVAL_TAC
 QED
 
-Theorem supported_event_name_duplicates_reject:
-  ~supported_declaration_names
+(* Event uniqueness is enforced by check_contract, not the whitelist. *)
+Theorem supported_event_name_duplicates_checker_owned:
+  supported_declaration_names
     [EventDecl "E" [(("a", BaseT BoolT), F)]; EventDecl "E" []]
 Proof
   EVAL_TAC

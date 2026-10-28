@@ -1093,7 +1093,7 @@ Proof
 QED
 
 (* Joint induction: step_inst/exec_block/run_blocks preserve alloca_inv *)
-Theorem alloca_inv_joint[local]:
+Theorem alloca_inv_joint:
   (!fuel ctx inst s.
      alloca_inv s ==>
      result_alloca_inv s.vs_alloca_next (step_inst fuel ctx inst s)) /\

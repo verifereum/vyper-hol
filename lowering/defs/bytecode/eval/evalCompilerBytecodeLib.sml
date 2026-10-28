@@ -108,18 +108,19 @@ fun hex_bytes_tm hex =
     listSyntax.mk_list (bytes 0 [], byte_ty)
   end
 
-fun read_hex_bytes filename =
+fun read_hex_bytes_from path =
   let
-    val path = resolve_bytecode_fixture filename
     val entries =
       List.mapPartial fixture_line
         (String.tokens (fn c => c = #"\n" orelse c = #"\r")
            (read_all path))
-    val deploy = bytecode_fixture_value filename entries "deploy"
-    val runtime = bytecode_fixture_value filename entries "runtime"
+    val deploy = bytecode_fixture_value path entries "deploy"
+    val runtime = bytecode_fixture_value path entries "runtime"
   in
     pairSyntax.mk_pair (hex_bytes_tm deploy, hex_bytes_tm runtime)
   end
+
+fun read_hex_bytes filename = read_hex_bytes_from (resolve_bytecode_fixture filename)
 
 (* Kernel-checked staged evaluation certificates only. Neither rewrite list
    may contain an oracle equality: oracle bytes are read solely in the final

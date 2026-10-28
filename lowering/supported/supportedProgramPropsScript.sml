@@ -199,7 +199,7 @@ QED
 
 Theorem supported_name_checks_assembled:
   ~supported_program [program_test_internal []; program_test_internal []] /\
-  ~supported_program [EventDecl "E" []; EventDecl "E" []] /\
+  supported_program [EventDecl "E" []; EventDecl "E" []] /\
   ~supported_program
     [VariableDecl Private Storage "field_name" (BaseT (UintT 256)) (SOME 0);
      StructDecl "S" [("field_name",BaseT (UintT 256))]]

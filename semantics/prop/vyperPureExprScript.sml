@@ -1,27 +1,9 @@
 Theory vyperPureExpr
 Ancestors
-  vyperMisc vyperContext vyperState vyperStorageBackend vyperInterpreter vyperLookup vyperStatePreservation
+  vyperExprEffects vyperMisc vyperContext vyperState vyperStorageBackend vyperInterpreter vyperLookup vyperStatePreservation
 
-(* Pure expressions: expressions that do not modify state. *)
-Definition pure_expr_def:
-  pure_expr (Name _ _) = T ∧
-  pure_expr (TopLevelName _ _) = T ∧
-  pure_expr (FlagMember _ _ _) = T ∧
-  pure_expr (Literal _ _) = T ∧
-  pure_expr (IfExp _ e1 e2 e3) = (pure_expr e1 ∧ pure_expr e2 ∧ pure_expr e3) ∧
-  pure_expr (StructLit _ _ kes) = EVERY pure_expr (MAP SND kes) ∧
-  pure_expr (Subscript _ e1 e2) = (pure_expr e1 ∧ pure_expr e2) ∧
-  pure_expr (Attribute _ e _) = pure_expr e ∧
-  pure_expr (Builtin _ _ es) = EVERY pure_expr es ∧
-  pure_expr (TypeBuiltin _ _ _ es) = EVERY pure_expr es ∧
-  pure_expr _ = F
-Termination
-  WF_REL_TAC `measure expr_size` >>
-  rw[] >>
-  Induct_on `kes` >> rw[] >>
-  PairCases_on `h` >> rw[] >>
-  res_tac >> simp[]
-End
+(* Re-export the shared syntax definition for existing proof clients. *)
+Theorem pure_expr_def = vyperExprEffectsTheory.pure_expr_def;
 
 (* ------------------------------------------------------------------------
    Individual Case Lemmas

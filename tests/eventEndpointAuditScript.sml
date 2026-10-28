@@ -2,6 +2,7 @@
 Theory eventEndpointAudit
 Ancestors
   e2eCorrectness e2eDefs vyperTypeSoundness vyperEventSoundness
+  checkedLogEmptyExecution checkedLogDataExecution
 
 fun report (thy,name) =
   let val th = DB.fetch thy name
@@ -30,7 +31,7 @@ val _ = List.app (fn thy => List.app (fn (n,_) => report (thy,n))
   (DB.theorems thy))
  ["vyperTypeSoundness", "vyperTypeContractSoundness", "vyperTypeInitialState",
   "vyperTypeStmtSoundness", "vyperTypeCallSoundness", "vyperEventSoundness",
-  "e2eDefs"];
+  "e2eDefs", "checkedLogEmptyExecution", "checkedLogDataExecution"];
 
 (* These selected event/type endpoints really are closed, not just buildable.
    The broader compiler endpoints above intentionally remain report-only. *)
@@ -42,5 +43,5 @@ val _ = List.app (fn thy => List.app (fn (name,th) =>
   end) (DB.theorems thy))
  ["vyperTypeSoundness", "vyperTypeContractSoundness", "vyperTypeInitialState",
   "vyperTypeStmtSoundness", "vyperTypeCallSoundness", "vyperEventSoundness",
-  "e2eDefs"];
+  "e2eDefs", "checkedLogEmptyExecution", "checkedLogDataExecution"];
 
