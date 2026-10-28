@@ -65,8 +65,8 @@ val () = cv_auto_trans integration_machine_snapshot_def;
 Definition integration_call_observe_def:
   integration_call_observe fresh os result balance persistent transient logs requests =
     let (r,am,rqs) = if fresh then
-      call_external_transaction os integration_machine (integration_tx "calls")
-      else call_external os integration_machine (integration_tx "calls") in
+      call_external_transaction os [] integration_machine (integration_tx "calls")
+      else call_external os [] integration_machine (integration_tx "calls") in
     r = result /\ integration_machine_snapshot balance persistent transient logs am /\
     integration_request_fields rqs = requests
 End
@@ -112,10 +112,10 @@ Definition integration_load_observe_def:
     let mods = [(NONE,integration_program)] in
     let tx = integration_tx "__init__" in
     let failed = load_contract
-      (SOME [send_outcome T [] 17; send_outcome F [] 23]) integration_machine tx mods [] in
-    let exhausted = load_contract (SOME []) integration_machine tx mods [] in
+      (SOME [send_outcome T [] 17; send_outcome F [] 23]) [] integration_machine tx mods [] in
+    let exhausted = load_contract (SOME []) [] integration_machine tx mods [] in
     let loaded = load_contract
-      (SOME [send_outcome T [] 17; send_outcome T [] 23]) integration_machine tx mods [] in
+      (SOME [send_outcome T [] 17; send_outcome T [] 23]) [] integration_machine tx mods [] in
       failed = INR (Error (RuntimeError "send failed")) /\
       exhausted = INR (Error (RuntimeError "send failed")) /\
       (case loaded of INR _ => F | INL (am,rqs) =>
@@ -134,12 +134,12 @@ QED
 
 Definition integration_defaults_constants_observe_def:
   integration_defaults_constants_observe =
-    let (r,am,rqs) = call_external (SOME [send_outcome T [] 17])
+    let (r,am,rqs) = call_external (SOME [send_outcome T [] 17]) []
       integration_machine (integration_tx "defaults") in
     let mods = [(NONE,
       [VariableDecl Private (Constant (send_call 9w 0)) "c" NoneT NONE;
        FunctionDecl Deploy Payable F F "__init__" [] [] NoneT [Expr (send_call 10w 7)]])] in
-    let loaded = load_contract (SOME [send_outcome T [] 17])
+    let loaded = load_contract (SOME [send_outcome T [] 17]) []
       integration_machine (integration_tx "__init__") mods [] in
     r = INL NoneV /\
     integration_request_fields rqs = [(10w,7,[],F,3,2w,4w)] /\
@@ -160,10 +160,9 @@ Definition integration_raw_call_observe_def:
   integration_raw_call_observe target expected os =
     let e = Call NoneT (RawCallTarget
       <|rcf_is_static := T; rcf_is_delegate := F;
-        rcf_revert_on_failure := T; rcf_max_outsize := 0|>)
+        rcf_revert_on_failure := T; rcf_max_outsize := 0; rcf_kws := []|>)
       [Literal (BaseT AddressT) (BytesL (REPLICATE 19 0w ++ [target]));
-       Literal (BaseT (BytesT (Dynamic 1))) (BytesL []);
-       Literal (BaseT (UintT 256)) (IntL 0)] NONE in
+       Literal (BaseT (BytesT (Dynamic 1))) (BytesL [])] NONE in
     let r = cpscv_run e (send_state with outcomes := os) in
       FST r = expected /\
       OPTION_MAP LENGTH (SND r).outcomes = OPTION_MAP LENGTH os /\
@@ -187,7 +186,7 @@ QED
 (* The complete rollback equality is certified separately from computable
    snapshots; CV does not decide equality of function-valued account maps. *)
 Theorem public_failure_whole_machine_rollback:
-  call_external orc integration_machine tx = (INR exc,am,rqs) ==>
+  call_external orc gobs integration_machine tx = (INR exc,am,rqs) ==>
   am = integration_machine
 Proof
   metis_tac[call_external_error_rollback]

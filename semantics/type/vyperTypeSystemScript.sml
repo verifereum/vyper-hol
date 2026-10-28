@@ -220,7 +220,7 @@ Definition well_typed_builtin_app_def:
   well_typed_builtin_app ty BlockHash ts = (ts = [BaseT (UintT 256)] /\ ty = BaseT (BytesT (Fixed 32))) /\
   well_typed_builtin_app ty BlobHash ts = (ts = [BaseT (UintT 256)] /\ ty = BaseT (BytesT (Fixed 32))) /\
   well_typed_builtin_app ty (Env item) ts =
-    (ts = [] /\ ty = env_item_type item /\ item <> MsgGas) /\
+    (ts = [] /\ ty = env_item_type item) /\
   well_typed_builtin_app ty (Acc item) ts =
     (LENGTH ts = 1 /\ HD ts = BaseT AddressT /\ ty = account_item_type item) /\
   well_typed_builtin_app ty MethodId ts =
@@ -524,6 +524,16 @@ Definition ext_call_kw_type_def:
   ext_call_kw_type ret_ty EKGas = BaseT (UintT 256)
 End
 
+(* The value=/gas= operands of a raw_call: each at most once and a uint256.
+   Vyper rejects value= on a static or delegate call, even value=0. *)
+Definition raw_call_kws_ok_def:
+  raw_call_kws_ok flags kw_args <=>
+    ALL_DISTINCT flags.rcf_kws /\ ~MEM EKDefault flags.rcf_kws /\
+    MAP expr_type kw_args = MAP (ext_call_kw_type NoneT) flags.rcf_kws /\
+    ((flags.rcf_is_delegate \/ flags.rcf_is_static) ==>
+     ~MEM EKValue flags.rcf_kws)
+End
+
 (* An external-call argument of type t fits a parameter declared as u, as in
    Vyper's compare_type (validate_expected_type in fetch_call_return): a
    bytestring or dynamic array may have a smaller bound, elementwise, and
@@ -659,19 +669,18 @@ Definition well_typed_expr_def:
   well_typed_expr env (Call ty (RawCallTarget flags) args drv) =
     (well_typed_exprs env args /\ drv = NONE /\ ty = raw_call_return_type flags /\
      flags.rcf_max_outsize < dimword(:256) /\
-     ~(flags.rcf_is_delegate /\ flags.rcf_is_static) /\ LENGTH args = 3 /\
-     ((flags.rcf_is_delegate \/ flags.rcf_is_static) ==>
-       EL 2 args = Literal (BaseT (UintT 256)) (IntL 0)) /\
+     ~(flags.rcf_is_delegate /\ flags.rcf_is_static) /\
+     LENGTH args = 2 + LENGTH flags.rcf_kws /\
+     raw_call_kws_ok flags (DROP 2 args) /\
      EL 0 (MAP expr_type args) = BaseT AddressT /\
-     (?bd. EL 1 (MAP expr_type args) = BaseT (BytesT bd)) /\
-     EL 2 (MAP expr_type args) = BaseT (UintT 256)) /\
+     (?bd. EL 1 (MAP expr_type args) = BaseT (BytesT bd))) /\
   well_typed_expr env (Call ty (RawCallCalldataTarget flags) args drv) =
     (well_typed_exprs env args /\ drv = NONE /\ ty = raw_call_return_type flags /\
      flags.rcf_max_outsize < dimword(:256) /\
      ~(flags.rcf_is_delegate /\ flags.rcf_is_static) /\
-     ((flags.rcf_is_delegate \/ flags.rcf_is_static) ==>
-       EL 1 args = Literal (BaseT (UintT 256)) (IntL 0)) /\
-     MAP expr_type args = [BaseT AddressT; BaseT (UintT 256)]) /\
+     LENGTH args = 1 + LENGTH flags.rcf_kws /\
+     raw_call_kws_ok flags (DROP 1 args) /\
+     EL 0 (MAP expr_type args) = BaseT AddressT) /\
   well_typed_expr env (Call ty RawLog args drv) =
     (well_typed_exprs env args /\ drv = NONE /\ ty = NoneT /\ LENGTH args = 2 /\
      (?bd. EL 0 (MAP expr_type args) = ArrayT (BaseT (BytesT (Fixed 32))) bd /\

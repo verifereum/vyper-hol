@@ -690,13 +690,9 @@ Proof
 QED
 
 Resume compiler_call_var[rawcalldata]:
-  namedCases_on `args` ["", "addr_e rest"] >-
+  namedCases_on `args` ["", "addr_e kw_es"] >-
     (simp[compile_call_def] >> pairarg_tac >> rpt strip_tac >>
      gvs[contextTheory.vv_operand_def]) >>
-  namedCases_on `rest` ["", "value_e remaining"] >-
-    (simp[compile_call_def] >> pairarg_tac >> rpt strip_tac >>
-     gvs[contextTheory.vv_operand_def]) >>
-  Cases_on `remaining` >>
   simp[compile_call_def, LET_THM, contextTheory.vv_operand_def] >>
   rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >>
   gvs[contextTheory.vv_operand_def] >>
@@ -1469,27 +1465,25 @@ Theorem compiler_raw_call_calldata_reserved_cong:
   compile_call g ce rt ty (RawCallCalldataTarget rcf) args dr sa
 Proof
   strip_tac >> Cases_on `args` >- simp[compile_call_def] >>
-  rename1 `addr_e::args` >> Cases_on `args` >- simp[compile_call_def] >>
-  rename1 `addr_e::value_e::tail` >> Cases_on `tail`
-  >- (`lower_value f ce (BaseT AddressT) addr_e sa =
-       lower_value g ce (BaseT AddressT) addr_e sa` by
-        (irule compiler_lower_value_reserved_cong >> simp[]) >>
-      Cases_on `lower_value f ce (BaseT AddressT) addr_e sa` >>
-      rename1 `lower_value f _ _ _ _ = (addr,sb)` >>
-      `local_ptrs_reserved ce sb` by
-        (irule compiler_ci_mono_reserved >> qexists `sa` >>
-         metis_tac[ci_mono_lower_value_cfn, pairTheory.SND]) >>
-      Cases_on `compile_msg_data_to_memory sb` >>
-      rename1 `compile_msg_data_to_memory sb = (data,sc)` >>
-      `local_ptrs_reserved ce sc` by
-        (irule compiler_ci_mono_reserved >> qexists `sb` >>
-         metis_tac[ci_mono_compile_msg_data_to_memory, pairTheory.SND]) >>
-      `lower_value f ce (BaseT (UintT 256)) value_e sc =
-       lower_value g ce (BaseT (UintT 256)) value_e sc` by
-        (irule compiler_lower_value_reserved_cong >> simp[]) >>
-      qpat_x_assum `(addr,sb) = _` (assume_tac o SYM) >>
-      Cases_on `data` >> simp[compile_call_def]) >>
-  simp[compile_call_def]
+  rename1 `addr_e::kw_es` >>
+  `lower_value f ce (BaseT AddressT) addr_e sa =
+   lower_value g ce (BaseT AddressT) addr_e sa` by
+    (irule compiler_lower_value_reserved_cong >> simp[]) >>
+  Cases_on `lower_value f ce (BaseT AddressT) addr_e sa` >>
+  rename1 `lower_value f _ _ _ _ = (addr,sb)` >>
+  `local_ptrs_reserved ce sb` by
+    (irule compiler_ci_mono_reserved >> qexists `sa` >>
+     metis_tac[ci_mono_lower_value_cfn, pairTheory.SND]) >>
+  Cases_on `compile_msg_data_to_memory sb` >>
+  rename1 `compile_msg_data_to_memory sb = (data,sc)` >>
+  `local_ptrs_reserved ce sc` by
+    (irule compiler_ci_mono_reserved >> qexists `sb` >>
+     metis_tac[ci_mono_compile_msg_data_to_memory, pairTheory.SND]) >>
+  `compile_ext_call_kwargs f ce NoneT rcf.rcf_kws kw_es sc =
+   compile_ext_call_kwargs g ce NoneT rcf.rcf_kws kw_es sc` by
+    (irule compiler_ext_call_kwargs_reserved_cong >> simp[]) >>
+  qpat_x_assum `(addr,sb) = _` (assume_tac o SYM) >>
+  Cases_on `data` >> simp[compile_call_def]
 QED
 
 Theorem compiler_call_reserved_cong:

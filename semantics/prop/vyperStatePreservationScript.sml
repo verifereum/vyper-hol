@@ -47,6 +47,22 @@ Proof
   rw[lift_sum_def] >> Cases_on `x` >> fs[return_def, raise_def]
 QED
 
+(* msg.gas is evaluated by next_gas_reading, never by evaluate_builtin. *)
+Theorem evaluate_builtin_MsgGas:
+  evaluate_builtin cx acc ty (Env MsgGas) ts vs = INR (TypeError "builtin")
+Proof
+  Cases_on `vs` >> simp[vyperContextTheory.evaluate_builtin_def]
+QED
+
+(* msg.gas consumes a reading and changes nothing else. *)
+Theorem next_gas_reading_state:
+  !st res st'. next_gas_reading st = (res, st') ==>
+    ?gobs. st' = st with gas_obs := gobs
+Proof
+  rw[next_gas_reading_def] >> Cases_on `st.gas_obs` >>
+  gvs[return_def, raise_def, evaluation_state_component_equality]
+QED
+
 Theorem get_Value_state:
   !tv st res st'. get_Value tv st = (res, st') ==> st' = st
 Proof

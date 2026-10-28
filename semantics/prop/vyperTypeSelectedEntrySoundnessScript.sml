@@ -36,8 +36,8 @@ val _ = Parse.hide "body";
 (* call_external_function from the bound scope on, with the deployment
    constants step not taken (am_c = am). *)
 Definition call_external_body_def:
-  call_external_body orc am cx nr mut all_tenv env body ret =
-   let st = initial_state am [env] with <| outcomes := orc; requests := [] |> in
+  call_external_body orc gobs am cx nr mut all_tenv env body ret =
+   let st = initial_state am [env] with <| outcomes := orc; requests := []; gas_obs := gobs |> in
    let srcs = am.sources in
    let exps = am.exports in
    let layouts = am.layouts in
@@ -78,12 +78,13 @@ Theorem call_external_function_body:
   ~cx.in_deploy /\
   LENGTH vals <= LENGTH args /\
   LENGTH args - LENGTH vals <= LENGTH dflts /\
-  evaluate_defaults cx am
-    (DROP (LENGTH dflts - (LENGTH args - LENGTH vals)) dflts) = SOME dflt_vs /\
+  evaluate_defaults cx am gobs
+    (DROP (LENGTH dflts - (LENGTH args - LENGTH vals)) dflts) =
+    SOME (dflt_vs, gobs') /\
   bind_arguments (type_env_all_modules mods) args (vals ++ dflt_vs) =
     SOME env ==>
-  call_external_function orc am cx nr mut ts mods args dflts vals body ret =
-    call_external_body orc am cx nr mut (type_env_all_modules mods) env body
+  call_external_function orc gobs am cx nr mut ts mods args dflts vals body ret =
+    call_external_body orc gobs' am cx nr mut (type_env_all_modules mods) env body
       ret
 Proof
   strip_tac >>
@@ -98,13 +99,13 @@ Theorem call_external_selected_entry_body[local]:
   cx = initial_evaluation_context am.sources am.layouts tx src /\
   LENGTH tx.args <= LENGTH args /\
   LENGTH args - LENGTH tx.args <= LENGTH dflts /\
-  evaluate_defaults cx am
+  evaluate_defaults cx am gobs
     (DROP (LENGTH dflts - (LENGTH args - LENGTH tx.args)) dflts) =
-    SOME dflt_vs /\
+    SOME (dflt_vs, gobs') /\
   bind_arguments (type_env_all_modules mods) args (tx.args ++ dflt_vs) =
     SOME scope ==>
-  call_external orc am tx =
-    case call_external_body orc am cx nr mut (type_env_all_modules mods)
+  call_external orc gobs am tx =
+    case call_external_body orc gobs' am cx nr mut (type_env_all_modules mods)
            scope body ret of
       (INL value, am', rqs) => (INL value, finalize_pending_deletions am', rqs)
     | failure => failure
@@ -114,8 +115,8 @@ Proof
   drule_all selected_entry_module_code >> strip_tac >>
   drule_all call_external_selected_entry >>
   disch_then (fn th => rewrite_tac[th]) >>
-  `call_external_function orc am cx nr mut ts mods args dflts tx.args body ret =
-   call_external_body orc am cx nr mut (type_env_all_modules mods) scope body
+  `call_external_function orc gobs am cx nr mut ts mods args dflts tx.args body ret =
+   call_external_body orc gobs' am cx nr mut (type_env_all_modules mods) scope body
      ret` by
     (irule call_external_function_body >> metis_tac[]) >>
   pop_assum (fn th => rewrite_tac[th])
@@ -127,9 +128,9 @@ Theorem call_external_selected_entry_defaults_fail[local]:
   cx = initial_evaluation_context am.sources am.layouts tx src /\
   LENGTH tx.args <= LENGTH args /\
   LENGTH args - LENGTH tx.args <= LENGTH dflts /\
-  evaluate_defaults cx am
+  evaluate_defaults cx am gobs
     (DROP (LENGTH dflts - (LENGTH args - LENGTH tx.args)) dflts) = NONE ==>
-  ?msg. call_external orc am tx = (INR (Error (RuntimeError msg)), am, [])
+  ?msg. call_external orc gobs am tx = (INR (Error (RuntimeError msg)), am, [])
 Proof
   strip_tac >>
   drule_all selected_entry_module_code >> strip_tac >>
@@ -164,59 +165,62 @@ Theorem checked_selected_entry_no_static_error:
   LENGTH tx.args <= LENGTH args /\
   LENGTH args - LENGTH tx.args <= LENGTH dflts /\
   provided_args_typed (type_env_all_modules mods) args tx.args ==>
-  (evaluate_defaults cx am
+  (evaluate_defaults cx am gobs
      (DROP (LENGTH dflts - (LENGTH args - LENGTH tx.args)) dflts) = NONE /\
-   (?pre e post.
+   (?pre e post g.
       DROP (LENGTH dflts - (LENGTH args - LENGTH tx.args)) dflts =
         pre ++ e::post /\
-      EVERY (\e'. ?v. FST (eval_expr cx e' (initial_state am [FEMPTY])) =
+      EVERY (\e'. ?g' v. FST (eval_expr cx e'
+                         (initial_state am [FEMPTY] with gas_obs := g')) =
                         INL (Value v)) pre /\
-      ?err. FST (eval_expr cx e (initial_state am [FEMPTY])) = INR err /\
+      ?err. FST (eval_expr cx e (initial_state am [FEMPTY] with gas_obs := g)) =
+              INR err /\
             no_type_error_result (INR err : toplevel_value + exception)) /\
-   ?msg. call_external orc am tx = (INR (Error (RuntimeError msg)), am, [])) \/
-  (?dflt_vs scope.
-     evaluate_defaults cx am
+   ?msg. call_external orc gobs am tx = (INR (Error (RuntimeError msg)), am, [])) \/
+  (?dflt_vs gobs' scope.
+     evaluate_defaults cx am gobs
        (DROP (LENGTH dflts - (LENGTH args - LENGTH tx.args)) dflts) =
-       SOME dflt_vs /\
+       SOME (dflt_vs, gobs') /\
      args_values_typed (type_env_all_modules mods) args (tx.args ++ dflt_vs) /\
      bind_arguments (type_env_all_modules mods) args (tx.args ++ dflt_vs) =
        SOME scope /\
-     call_external orc am tx =
-       (case call_external_body orc am cx nr mut (type_env_all_modules mods)
+     call_external orc gobs am tx =
+       (case call_external_body orc gobs' am cx nr mut (type_env_all_modules mods)
                scope body ret of
           (INL value, am', rqs) =>
             (INL value, finalize_pending_deletions am', rqs)
         | failure => failure) /\
      no_type_error_result
-       (FST (call_external_body orc am cx nr mut (type_env_all_modules mods)
+       (FST (call_external_body orc gobs' am cx nr mut (type_env_all_modules mods)
                scope body ret)) /\
      !exc.
-       FST (call_external_body orc am cx nr mut (type_env_all_modules mods)
+       FST (call_external_body orc gobs' am cx nr mut (type_env_all_modules mods)
               scope body ret) = INR exc ==>
        exc <> BreakException /\ exc <> ContinueException)
 Proof
   strip_tac >>
-  `!orc. no_type_error_result (FST (call_external orc am tx)) /\
-         !exc. FST (call_external orc am tx) = INR exc ==>
+  `!orc. no_type_error_result (FST (call_external orc gobs am tx)) /\
+         !exc. FST (call_external orc gobs am tx) = INR exc ==>
                exc <> BreakException /\ exc <> ContinueException` by
-    (gen_tac >> Cases_on `call_external orc am tx` >>
-     rename1 `call_external orc am tx = (res,rest)` >>
+    (gen_tac >> Cases_on `call_external orc gobs am tx` >>
+     rename1 `call_external orc gobs am tx = (res,rest)` >>
      PairCases_on `rest` >> simp[] >>
      conj_tac >- (drule_all checked_call_external_no_type_error >> simp[]) >>
      rpt gen_tac >> strip_tac >> gvs[] >>
      drule_all checked_call_external_no_loop_control >> simp[]) >>
   `lookup_exported_function cx am tx.function_name =
      SOME (mut,nr,args,dflts,ret,body)` by gvs[selected_entry_def] >>
-  drule_all checked_selected_entry_defaults_cases >> strip_tac
+  drule_all checked_selected_entry_defaults_cases >>
+  disch_then (qspec_then `gobs` strip_assume_tac)
   >- (disj2_tac >>
       drule_all checked_selected_entry_bind_arguments >> strip_tac >>
       drule_all call_external_selected_entry_body >> strip_tac >>
-      qexistsl [`vs`, `scope`] >>
+      qexistsl [`vs`, `gobs'`, `scope`] >>
       qpat_x_assum `cx = _` kall_tac >> qpat_x_assum `src = _` kall_tac >>
       fs[finalize_case_FST] >> metis_tac[]) >>
   disj1_tac >>
   drule_all call_external_selected_entry_defaults_fail >> strip_tac >>
   (conj_tac >- first_assum ACCEPT_TAC >>
-   conj_tac >- (qexistsl [`pre`, `e`, `post`] >> gvs[]) >>
+   conj_tac >- (qexistsl [`pre`, `e`, `post`, `g`] >> gvs[]) >>
    metis_tac[])
 QED

@@ -1597,7 +1597,7 @@ Theorem case_Builtin_imm_dom[local]:
   ∀cx ty bt es.
     (∀s'' x t.
        type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' =
-       (INL x,t) ∧ bt ≠ Len ⇒
+       (INL x,t) ∧ bt ≠ Len ∧ bt ≠ Env MsgGas ⇒
        ∀st res st'.
          eval_exprs cx es st = (res,st') ⇒
          preserves_immutables_dom cx st st') ∧
@@ -1612,6 +1612,13 @@ Theorem case_Builtin_imm_dom[local]:
       preserves_immutables_dom cx st st'
 Proof
   rpt strip_tac >>
+  Cases_on `bt = Env MsgGas`
+  >- (qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
+           assert_def, return_def, raise_def, AllCaseEqs()] >>
+      rpt strip_tac >> gvs[preserves_immutables_dom_refl] >>
+      drule next_gas_reading_state >> strip_tac >>
+      rw[preserves_immutables_dom_def] >> gvs[]) >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
   simp[Once evaluate_def] >>
   PURE_REWRITE_TAC [ignore_bind_def] >>

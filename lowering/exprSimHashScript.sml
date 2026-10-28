@@ -1850,7 +1850,9 @@ Theorem eval_expr_unary_builtin_cases:
   ?v. eval_expr cx e es = (INL (Value v),es') /\
     res = builtin_result cx es'.accounts ann bt [expr_type e] [v]
 Proof
-  strip_tac >> drule_at (Pos last) eval_expr_builtin_cases >> simp[] >> strip_tac >>
+  strip_tac >>
+  `bt <> Env MsgGas` by (strip_tac >> gvs[builtin_args_length_ok_def]) >>
+  drule_at (Pos last) eval_expr_builtin_cases >> simp[] >> strip_tac >>
   drule eval_exprs_cons_cases >> strip_tac >> gvs[eval_exprs_nil] >>
   metis_tac[]
 QED

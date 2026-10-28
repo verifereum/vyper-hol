@@ -20,7 +20,7 @@
  *   compile_literal_word_sim — bool, integer and decimal literals
  *   compile_name_word_sim  — a word local
  *   compile_env_sim        — environment reads (msg.sender, block.number,
- *                            ...), all but block.prevhash
+ *                            ...), all but block.prevhash and msg.gas
  *   expr_val_rel_mem_agree — a non-word operand's value survives code that
  *                            keeps its type_memory_size bytes
  *   val_footprint, val_footprint_le, val_in_memory_footprint_agree,
@@ -55,15 +55,14 @@
  *     block number is 0 or the hash list is too short, while Venom's
  *     BLOCKHASH is total, so the lowered code does not abort there; and
  *     call_ctx_rel does not relate bc_blockhash to the transaction's block
- *     hashes.  expr_sim is unprovable for it as things stand.
+ *     hashes.  expr_sim is unprovable for it as things stand;
+ *   - msg.gas: the source reads the next of the state's gas readings
+ *     (gas_obs), while the lowering emits GAS, and call_ctx_rel does not
+ *     relate the two.
  * Nor does the memory frame in expr_post follow from stmt_state_rel for an
  * expression whose lowering writes a DALLOCA buffer (raw_call of msg.data,
  * the create copy and blueprint lowerings): DALLOCA allocates at vs_fmp,
  * which stmt_state_rel does not relate to the ALLOCA allocations.
- * compile_env_sim holds for msg.gas only because the source raises a
- * TypeError for it (vyperContext's evaluate_builtin), which expr_sim
- * leaves out, while the lowering emits GAS: the two do not agree on
- * msg.gas.
  *)
 
 Theory exprSim
@@ -660,7 +659,7 @@ QED
 Theorem eval_expr_env:
   !cx ann item es res es'.
     eval_expr cx (Builtin ann (Env item) []) es = (res, es') /\
-    expr_res_ok res /\ item <> PrevHash ==>
+    expr_res_ok res /\ item <> PrevHash /\ item <> MsgGas ==>
     es' = es /\
     ?v. res = INL (Value v) /\
         evaluate_builtin cx es.accounts ann (Env item) [] [] = INL v
@@ -688,12 +687,11 @@ Proof
 QED
 
 (* An environment read (msg.sender, block.timestamp, ...) annotated with
-   its type, but block.prevhash, for which expr_sim does not hold (see the
-   header).  msg.gas holds vacuously: the source raises a TypeError for
-   it. *)
+   its type, but block.prevhash and msg.gas, for which expr_sim does not
+   hold (see the header). *)
 Theorem compile_env_sim:
   !ctx func cenv cx ty ann item es.
-    item <> PrevHash /\ ann = env_item_type item ==>
+    item <> PrevHash /\ item <> MsgGas /\ ann = env_item_type item ==>
     expr_sim ctx func cenv cx ty (Builtin ann (Env item) []) es
 Proof
   rpt strip_tac >> irule expr_sim_values >>

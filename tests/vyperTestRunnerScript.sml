@@ -1,7 +1,7 @@
 Theory vyperTestRunner
 Ancestors
   contractABI vyperABIDecode vyperABI vyperInterpreter vyperSmallStep jsonAST
-  jsonToVyper vfmContext vfmExecution vfmTransaction
+  jsonToVyper vfmContext vfmExecution vfmTransaction vfmDecreasesGas
 Libs
   cv_transLib wordsLib
 
@@ -44,6 +44,7 @@ Datatype:
   ; runtimeBytecode: byte list
   ; storageLayout: json_storage_layout
   ; isBlueprint: bool
+  ; readsGas: bool (* the source reads msg.gas, so calls need GAS readings *)
   |>
 End
 
@@ -208,7 +209,7 @@ Definition run_deployment_def:
           ; base_fee := 0
           ; prev_randao := 0
           ; origin := dt.deployer |>;
-    in case load_contract NONE (increment_account_nonce dt.deployedAddress am)
+    in case load_contract NONE [] (increment_account_nonce dt.deployedAddress am)
                           tx all_mods dt.sourceExports of
          INL (am', _) => INL am'
        | INR ex => INR ex
@@ -242,8 +243,107 @@ End
 
 val () = cv_auto_trans call_trace_txn_def;
 
+(* One step of the transaction's frame: the word a depth-1 GAS step pushed. *)
+Definition frame_gas_reading_def:
+  frame_gas_reading acc s (r', s') =
+    case (s.contexts, s'.contexts) of
+    | ([(c, _)], [(c', _)]) =>
+        if c.pc < LENGTH c.msgParams.code ∧
+           FLOOKUP c.msgParams.parsed c.pc = SOME Gas ∧ ISL r'
+        then (case c'.stack of w :: _ => w :: acc | [] => acc)
+        else acc
+    | _ => acc
+End
+
+(* The words the GAS steps of the transaction's own frame push, in execution
+   order.  These are what msg.gas reads in that frame only when every GAS
+   step there is a msg.gas: the lowering also emits GAS for a call without
+   gas=, a raw_call without gas= and a precompile call, which consume no
+   reading in the source semantics. *)
+Definition frame_gas_readings_def:
+  frame_gas_readings acc (r, s) =
+    case r of
+    | INR _ => REVERSE acc
+    | INL _ =>
+        let rs' = step s in
+        frame_gas_readings (frame_gas_reading acc s rs') rs'
+Termination
+  WF_REL_TAC `inv_image ($< LEX ($< LEX $<)) (λ(acc, r, s).
+    if ISR r then ((0:num), (0, 0))
+    else (1, contexts_weight 0 s.contexts))`
+  \\ rpt gen_tac
+  \\ mp_tac (Q.SPEC `s` (REWRITE_RULE [decreases_gas_cred_def]
+             decreases_gas_cred_step))
+  \\ IF_CASES_TAC >- (
+    rw [contexts_weight_def, vfmExecutionPropTheory.unused_gas_def]
+    \\ gvs [step_def, handle_def, get_current_context_def, bind_def, fail_def]
+    \\ gvs [handle_step_def, reraise_def])
+  \\ rw []
+  \\ fs[pairTheory.LEX_DEF, pairTheory.UNCURRY]
+  \\ metis_tac[sumTheory.sum_CASES, sumTheory.ISL, sumTheory.ISR]
+End
+
+(* The frame's GAS readings when the call trace runs as a transaction on the
+   EVM: same accounts and transient storage, tx gas (capped as for raw
+   deployments), intrinsic gas charged.  [] when the transaction is invalid. *)
+Definition call_gas_readings_def:
+  call_gas_readings am ct =
+    let tx = <| from := ct.sender
+              ; to := SOME ct.target
+              ; data := ct.callData
+              ; nonce := (lookup_account ct.sender am.accounts).nonce
+              ; value := ct.value
+              ; gasLimit := MIN ct.gasLimit (2 ** 24)
+              ; gasPrice := ct.gasPrice
+              ; accessList := []
+              ; blobVersionedHashes := []
+              ; maxFeePerBlobGas := NONE
+              ; maxFeePerGas := NONE
+              ; authorizationList := []
+              |> in
+    let blk = <| baseFeePerGas := 0
+               ; excessBlobGas := ct.blobBaseFee
+               ; gasUsed := 0
+               ; blobGasUsed := 0
+               ; number := ct.blockNumber
+               ; timeStamp := ct.timeStamp
+               ; coinBase := 0w
+               ; gasLimit := tx.gasLimit
+               ; prevRandao := 0w
+               ; hash := 0w
+               ; parentBeaconBlockRoot := 0w
+               ; requestsHash := 0w
+               ; stateRoot := 0w
+               ; withdrawalsRoot := 0w
+               ; rlpSize := 0
+               ; transactions := []
+               ; withdrawals := []
+               |> in
+    case run_create (Collect empty_domain) F ct.chainId ct.blockHashes blk
+                    am.accounts tx of
+    | SOME (INR (_, s, NONE)) =>
+        frame_gas_readings [] (set_tStorage am.tStorage s)
+    | _ => []
+End
+
+val () = cv_auto_trans frame_gas_reading_def;
+
+val frame_gas_readings_pre_def =
+  cv_trans_pre "frame_gas_readings_pre" frame_gas_readings_def;
+
+Theorem frame_gas_readings_pre[cv_pre]:
+  !acc x. frame_gas_readings_pre acc x
+Proof
+  simp[pairTheory.FORALL_PROD]
+  \\ recInduct frame_gas_readings_ind
+  \\ rw[]
+  \\ rw[Once frame_gas_readings_pre_def]
+QED
+
+val () = cv_auto_trans call_gas_readings_def;
+
 Definition run_call_def:
-  run_call sns am ct = let
+  run_call reads_gas sns am ct = let
     sel = TAKE 4 ct.callData;
     fna = case ALOOKUP sns sel of SOME fna => fna
              | NONE => ("__default__", [], []);
@@ -290,8 +390,9 @@ Definition run_call_def:
     (* Whether the callee returns raw bytes or an ABI encoding, and hence how
        its EVM returndata must be read back, is decided by the interpreter
        (call_external_raw_return) from the declaration call_external runs. *)
-    is_raw = call_external_raw_return am tx
-  in (let (res, am', _) = call_external NONE am tx in (res, am'),
+    is_raw = call_external_raw_return am tx;
+    gobs = if reads_gas then call_gas_readings am ct else []
+  in (let (res, am', _) = call_external NONE gobs am tx in (res, am'),
       (retTys, (retTypes, (tenv, is_raw))))
 End
 
@@ -435,7 +536,7 @@ Definition run_trace_def:
             (update_account dt.deployedAddress
               ((lookup_account dt.deployedAddress am.accounts)
                 with <| code := dt.runtimeBytecode; nonce := 1 |>)) in
-      ((dt.deployedAddress,[])::snss, INL (increment_account_nonce dt.deployer am'))
+      ((dt.deployedAddress,(F,[]))::snss, INL (increment_account_nonce dt.deployer am'))
     else let
       (s_layout, t_layout) = extract_storage_layout dt.importMap dt.storageLayout;
       am_with_layout = am with layouts updated_by CONS (dt.deployedAddress, (s_layout, t_layout));
@@ -455,7 +556,7 @@ Definition run_trace_def:
       res = case res of
               INL am' => INL (increment_account_nonce dt.deployer am')
             | INR e => INR e;
-      snss = (dt.deployedAddress,sns)::snss;
+      snss = (dt.deployedAddress,(dt.readsGas,sns))::snss;
     in
       (snss, res)
    | RawDeployment dt =>
@@ -484,8 +585,8 @@ Definition run_trace_def:
                            else INR (Error $ RuntimeError "output mismatch"))
                 else if IS_NONE ct.expectedOutput then INL am
                 else INR (Error $ TypeError "sns not found")
-      | SOME sns => let
-        cr = run_call sns am ct;
+      | SOME (reads_gas, sns) => let
+        cr = run_call reads_gas sns am ct;
         call_res = FST cr;
         am = SND call_res in
        case FST call_res

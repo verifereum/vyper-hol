@@ -265,10 +265,13 @@ QED
 Theorem builtin_dom_frames[local]:
   state_rel_frame (λs t. MAP FDOM s.scopes = MAP FDOM t.scopes) (lift_sum rs) ∧
   state_rel_frame (λs t. MAP FDOM s.scopes = MAP FDOM t.scopes)
-    (toplevel_array_length cx tv)
+    (toplevel_array_length cx tv) ∧
+  state_rel_frame (λs t. MAP FDOM s.scopes = MAP FDOM t.scopes)
+    next_gas_reading
 Proof
   simp[state_rel_frame_result] >> rpt strip_tac >>
-  FIRST [drule lift_sum_state, drule toplevel_array_length_state] >> simp[]
+  FIRST [drule lift_sum_state, drule toplevel_array_length_state,
+         drule next_gas_reading_state] >> rw[] >> simp[]
 QED
 
 local
@@ -321,7 +324,7 @@ Theorem case_Builtin_dom[local]:
   ∀cx ty bt es.
     (∀s'' x t.
        type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' = (INL x,t) ∧
-       bt ≠ Len ⇒
+       bt ≠ Len ∧ bt ≠ Env MsgGas ⇒
        ∀st res st'. eval_exprs cx es st = (res,st') ⇒
          MAP FDOM st.scopes = MAP FDOM st'.scopes) ∧
     (∀s'' x t.
@@ -333,6 +336,11 @@ Theorem case_Builtin_dom[local]:
       eval_expr cx (Builtin ty bt es) st = (res,st') ⇒
       MAP FDOM st.scopes = MAP FDOM st'.scopes
 Proof
+  rpt gen_tac >> Cases_on `bt = Env MsgGas`
+  >- (rpt strip_tac >>
+      gvs[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
+          assert_def, return_def, raise_def, AllCaseEqs()] >>
+      imp_res_tac next_gas_reading_state >> gvs[]) >>
   BUILTIN_DOM_TAC
 QED
 

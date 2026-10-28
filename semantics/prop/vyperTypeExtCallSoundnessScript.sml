@@ -178,7 +178,7 @@ QED
 
 Theorem run_delegate_call_accounts_well_typed:
   accounts_well_typed accounts /\
-  run_delegate_call cx target_addr calldata accounts tStorage =
+  run_delegate_call cx target_addr calldata gas accounts tStorage =
     SOME (success,retData,accounts',tStorage',emitted_logs) ==>
   accounts_well_typed accounts'
 Proof
@@ -192,7 +192,7 @@ QED
 
 Theorem run_raw_call_accounts_well_typed:
   accounts_well_typed accounts /\
-  run_raw_call cx flags target_addr calldata amount accounts tStorage =
+  run_raw_call cx flags target_addr calldata amount gas accounts tStorage =
     SOME (success,retData,accounts',tStorage',emitted_logs) ==>
   accounts_well_typed accounts'
 Proof
@@ -595,63 +595,36 @@ QED
 
 Theorem raw_call_args_runtime_typed_dest:
   exprs_runtime_typed env es vs /\
-  LENGTH es = 3 /\
+  2 <= LENGTH es /\
   EL 0 (MAP expr_type es) = BaseT AddressT /\
-  EL 1 (MAP expr_type es) = BaseT (BytesT bd) /\
-  EL 2 (MAP expr_type es) = BaseT (UintT 256) ==>
-  ?target_addr data amount. dest_AddressV (HD vs) = SOME target_addr /\
-                            dest_BytesV (EL 1 vs) = SOME data /\
-                            dest_NumV (EL 2 vs) = SOME amount
+  EL 1 (MAP expr_type es) = BaseT (BytesT bd) ==>
+  ?target_addr data. LENGTH vs = LENGTH es /\
+                     dest_AddressV (HD vs) = SOME target_addr /\
+                     dest_BytesV (EL 1 vs) = SOME data
 Proof
   rw[exprs_runtime_typed_def] >>
+  imp_res_tac listTheory.LIST_REL_LENGTH >>
   Cases_on `es` >> gvs[] >>
-  Cases_on `t` >> gvs[] >>
-  Cases_on `t'` >> gvs[] >>
+  Cases_on `t` >> gvs[listTheory.LIST_REL_CONS1] >>
   gvs[evaluate_type_def] >>
   Cases_on `bd` >> gvs[] >>
   rename1 `value_has_type (BaseTV AddressT) v_addr` >>
   rename1 `value_has_type (BaseTV (BytesT bd_data)) v_data` >>
-  rename1 `value_has_type (BaseTV (UintT 256)) v_amt` >>
   Cases_on `v_addr` >> gvs[value_has_type_def, dest_AddressV_def] >>
-  Cases_on `v_data` >> gvs[value_has_type_def, dest_BytesV_def] >>
-  Cases_on `v_amt` >> gvs[value_has_type_def, dest_NumV_def] >>
-  rename1 `0 <= i` >>
-  `~(i < 0:int)` by intLib.ARITH_TAC >>
-  qexists_tac `Num i` >> simp[]
+  Cases_on `v_data` >> gvs[value_has_type_def, dest_BytesV_def]
 QED
 
 Theorem raw_call_calldata_args_runtime_typed_dest:
-  exprs_runtime_typed env es vs /\
-  MAP expr_type es = [BaseT AddressT; BaseT (UintT 256)] ==>
-  ?target_addr amount. LENGTH vs = 2 /\
-    dest_AddressV (HD vs) = SOME target_addr /\
-    dest_NumV (EL 1 vs) = SOME amount
+  exprs_runtime_typed env es vs /\ es <> [] /\
+  EL 0 (MAP expr_type es) = BaseT AddressT ==>
+  ?target_addr. LENGTH vs = LENGTH es /\
+    dest_AddressV (HD vs) = SOME target_addr
 Proof
   rw[exprs_runtime_typed_def] >>
-  Cases_on `es` >> gvs[evaluate_type_def] >>
+  imp_res_tac listTheory.LIST_REL_LENGTH >>
+  Cases_on `es` >> gvs[listTheory.LIST_REL_CONS1, evaluate_type_def] >>
   rename1 `value_has_type (BaseTV AddressT) v_addr` >>
-  rename1 `value_has_type (BaseTV (UintT 256)) v_amt` >>
-  Cases_on `v_addr` >> gvs[value_has_type_def, dest_AddressV_def] >>
-  Cases_on `v_amt` >> gvs[value_has_type_def, dest_NumV_def] >>
-  rename1 `0 <= i` >>
-  `~(i < 0:int)` by intLib.ARITH_TAC >> qexists_tac `Num i` >> simp[]
-QED
-
-(* Literal operands have their stated value even when earlier operands change
-   the state. This discharges the zero-value restriction on delegate/static calls. *)
-Theorem eval_exprs_EL_literal:
-  !es st vs st' n ty l.
-    eval_exprs cx es st = (INL vs,st') /\
-    n < LENGTH es /\ EL n es = Literal ty l ==>
-    EL n vs = evaluate_literal l
-Proof
-  Induct >> simp[] >>
-  rpt gen_tac >> strip_tac >>
-  qpat_x_assum `eval_exprs _ _ _ = _` mp_tac >>
-  simp[Once evaluate_def, bind_def, return_def, AllCaseEqs()] >>
-  Cases_on `n` >> simp[] >> rpt strip_tac >>
-  gvs[evaluate_def, return_def, materialise_def] >>
-  first_x_assum drule_all >> simp[]
+  Cases_on `v_addr` >> gvs[value_has_type_def, dest_AddressV_def]
 QED
 
 (* Shared execution is independent of how the input bytes were obtained. *)
@@ -660,15 +633,15 @@ Theorem eval_raw_call_result_sound:
   ~(flags.rcf_is_delegate /\ flags.rcf_is_static) /\
   ((flags.rcf_is_delegate \/ flags.rcf_is_static) ==> amount = 0) /\
   flags.rcf_max_outsize < dimword(:256) /\
-  eval_raw_call cx flags target_addr calldata amount st = (res,st') ==>
+  eval_raw_call cx flags target_addr calldata amount gas st = (res,st') ==>
   runtime_consistent env cx st' /\ no_type_error_result res /\
   (!tv e. res = INL tv /\ expr_type e = raw_call_return_type flags ==>
     expr_result_typed env e tv)
 Proof
-  strip_tac >> qpat_x_assum `eval_raw_call _ _ _ _ _ _ = _` mp_tac >>
+  strip_tac >> qpat_x_assum `eval_raw_call _ _ _ _ _ _ _ = _` mp_tac >>
   fs[eval_raw_call_def, type_check_def, assert_def, bind_def, ignore_bind_def,
        return_def, get_accounts_def, get_transient_storage_def] >>
-  Cases_on `run_raw_call cx flags target_addr calldata amount
+  Cases_on `run_raw_call cx flags target_addr calldata amount gas
     st.accounts st.tStorage` >>
   simp[lift_option_def, bind_def, return_def, raise_def] >>
   TRY (strip_tac >> gvs[no_type_error_result_def] >> NO_TAC) >>
@@ -1526,6 +1499,40 @@ Proof
   rpt gen_tac >> Cases_on `kvs` >> simp[ext_call_kwarg_def] >>
   rw[listTheory.LIST_REL_CONS1] >> gvs[] >>
   metis_tac[]
+QED
+
+Theorem exprs_runtime_typed_DROP:
+  exprs_runtime_typed env es vs ==>
+  exprs_runtime_typed env (DROP n es) (DROP n vs)
+Proof
+  rw[exprs_runtime_typed_def] >> qexists_tac `DROP n tvs` >>
+  metis_tac[rich_listTheory.LIST_REL_DROP]
+QED
+
+Theorem ext_call_kwarg_not_mem:
+  !ks vs. ~MEM k ks ==> ext_call_kwarg k ks vs = NONE
+Proof
+  Induct >> rpt gen_tac >> Cases_on `vs` >> simp[ext_call_kwarg_def]
+QED
+
+(* A well-typed raw_call's value= is a uint256, and absent (so 0) on a
+   delegate or static call. *)
+Theorem raw_call_value_typed:
+  exprs_runtime_typed env kw_args kvs /\ raw_call_kws_ok flags kw_args ==>
+  ?amount. raw_call_value flags.rcf_kws kvs = SOME amount /\
+    ((flags.rcf_is_delegate \/ flags.rcf_is_static) ==> amount = 0)
+Proof
+  rw[raw_call_value_def, raw_call_kws_ok_def, exprs_runtime_typed_def] >>
+  Cases_on `ext_call_kwarg EKValue flags.rcf_kws kvs` >> simp[] >>
+  `MEM EKValue flags.rcf_kws` by (CCONTR_TAC >> gvs[ext_call_kwarg_not_mem]) >>
+  `LIST_REL (\ty tv. evaluate_type env.type_defs ty = SOME tv)
+     (MAP (ext_call_kw_type NoneT) flags.rcf_kws) tvs` by
+    (qpat_x_assum `MAP expr_type _ = _` (SUBST1_TAC o SYM) >>
+     gvs[listTheory.LIST_REL_MAP1, combinTheory.o_DEF]) >>
+  drule_all ext_call_kwarg_typed >>
+  rw[ext_call_kw_type_def, evaluate_type_def] >>
+  Cases_on `x` >> gvs[value_has_type_def, dest_NumV_def] >>
+  rename1 `0 <= i` >> `~(i < 0:int)` by intLib.ARITH_TAC >> gvs[]
 QED
 
 Theorem extcall_value_result_typed[local]:

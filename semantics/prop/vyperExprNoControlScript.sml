@@ -520,7 +520,15 @@ Proof
   simp[no_control_exc_def]
 QED
 
+Theorem next_gas_reading_no_control:
+  next_gas_reading s = (INR exc, s') ==> no_control_exc exc
+Proof
+  simp[next_gas_reading_def] >> Cases_on `s.gas_obs` >>
+  rw[return_def, raise_def, no_control_exc_def]
+QED
+
 val helpers = [eval_create_no_control, check_create_blueprint_no_control,
+               next_gas_reading_no_control,
                check_no_control, type_check_no_control,
                lift_option_no_control, lift_option_type_no_control,
                lift_sum_no_control, lift_sum_runtime_no_control,
@@ -736,7 +744,7 @@ Proof
 QED
 
 Theorem eval_raw_call_no_control:
-  eval_raw_call cx flags target_addr calldata amount st = (INR exc, st') ==>
+  eval_raw_call cx flags target_addr calldata amount gas st = (INR exc, st') ==>
   no_control_exc exc
 Proof
   Cases_on `~(flags.rcf_is_delegate /\ flags.rcf_is_static) /\
@@ -744,10 +752,10 @@ Proof
   fs[eval_raw_call_def, bind_def, ignore_bind_def, type_check_def,
        assert_def, return_def, raise_def, get_accounts_def,
        get_transient_storage_def, no_control_exc_def] >>
-  Cases_on `run_raw_call cx flags target_addr calldata amount
+  Cases_on `run_raw_call cx flags target_addr calldata amount gas
     st.accounts st.tStorage` >>
   simp[lift_option_def, bind_def, return_def, raise_def, no_control_exc_def] >>
-  rename1 `run_raw_call _ _ _ _ _ _ _ = SOME call_result` >>
+  rename1 `run_raw_call _ _ _ _ _ _ _ _ = SOME call_result` >>
   PairCases_on `call_result` >>
   Cases_on `flags.rcf_revert_on_failure` >> Cases_on `call_result0` >>
   Cases_on `flags.rcf_max_outsize = 0` >>

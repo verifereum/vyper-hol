@@ -119,6 +119,7 @@ Proof
       qspecl_then [`bt`,`cx`,`mods`,`st.accounts`,`ty`,`MAP expr_type es`,`vs`] mp_tac
         evaluate_builtin_constant_context >>
       simp[] >> strip_tac >>
+      `bt <> Env MsgGas` by (strip_tac >> gvs[evaluate_builtin_def, AllCaseEqs()]) >>
       simp[Once evaluate_def, bind_def, ignore_bind_def, return_def,
            type_check_def, assert_def, get_accounts_def, lift_sum_def])
   >~ [`TypeBuiltin`]

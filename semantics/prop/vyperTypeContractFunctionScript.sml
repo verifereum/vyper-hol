@@ -974,7 +974,7 @@ Theorem checked_explicit_external_entry_establishes_type_soundness_preconditions
   bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
   args_values_typed (type_env_all_modules mods) args vals ==>
   ?env_body env_after st.
-    st = (initial_state am [scope] with <|outcomes := orc; requests := rqs|>) /\
+    st = (initial_state am [scope] with <|outcomes := orc; requests := rqs; gas_obs := gobs|>) /\
     functions_well_typed
       ((initial_evaluation_context am.sources am.layouts tx src) with stk := [(src,fn)]) /\
     accounts_well_typed st.accounts /\
@@ -1031,7 +1031,7 @@ Theorem check_contract_explicit_external_entry_no_type_error:
     (eval_stmts
       ((initial_evaluation_context am.sources am.layouts tx src) with stk := [(src,fn)])
       body
-      (initial_state am [scope] with <|outcomes := orc; requests := rqs|>))
+      (initial_state am [scope] with <|outcomes := orc; requests := rqs; gas_obs := gobs|>))
 Proof
   metis_tac[
     checked_explicit_external_entry_establishes_type_soundness_preconditions,

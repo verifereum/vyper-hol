@@ -775,7 +775,7 @@ Theorem compile_typed_word_builtin_sim:
   !ctx func cenv cx env ty ann bt args es arg_ty code.
     expr_sim_pre cenv cx env (Builtin ann bt args) es /\
     EVERY (\e. word_value_type (expr_type e) /\ expr_sim_ok cenv e) args /\
-    bt <> Len /\ builtin_args_length_ok bt (LENGTH args) /\ is_word_type ann /\
+    bt <> Len /\ bt <> Env MsgGas /\ builtin_args_length_ok bt (LENGTH args) /\ is_word_type ann /\
     (!sa sb op. lower_value compile_expr cenv ty (Builtin ann bt args) sa = (op,sb) ==>
       ?xs sm. lower_word_args cenv arg_ty args sa = (xs,sm) /\ code xs sm = (op,sb)) /\
     (!xs. straight_fresh (code xs)) /\

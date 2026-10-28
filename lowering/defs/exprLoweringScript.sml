@@ -2406,11 +2406,16 @@ Definition compile_call_def:
      (StackValue ret_ty (Lit 0w), st')) ∧
   compile_call cfn cenv ret_ty ty (RawCallCalldataTarget rcf) args default_ret st =
     (case args of
-       [addr_e; value_e] =>
+       (addr_e :: kw_es) =>
          let (addr_op, st1) = lower_value cfn cenv (BaseT AddressT) addr_e st in
          let ((data_ptr, data_len), st2) = compile_msg_data_to_memory st1 in
-         let (value_op, st3) = lower_value cfn cenv (BaseT (UintT 256)) value_e st2 in
-         let (gas_op, st4) = emit_op GAS [] st3 in
+         (* Python lowers value= and gas= in source order, then reads GAS
+            when there is no gas= *)
+         let ((value_opt, gas_opt, _), st3) =
+           compile_ext_call_kwargs cfn cenv NoneT rcf.rcf_kws kw_es st2 in
+         let value_op = (case value_opt of SOME v => v | NONE => Lit 0w) in
+         let (gas_op, st4) =
+           (case gas_opt of SOME g => (g, st3) | NONE => emit_op GAS [] st3) in
          let call_ty = if rcf.rcf_is_delegate then DelegateCall
                        else if rcf.rcf_is_static then StaticCall
                        else RegularCall in

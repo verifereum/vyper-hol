@@ -286,7 +286,7 @@ QED
 
 (* ===== Result cases: success REQUESTS, not remaining OUTCOMES ===== *)
 Theorem success_requires_requests_and_effects:
-  call_external (SOME (MAP SND (call_trace es))) am tx = (INL v,am',rqs) ==>
+  call_external (SOME (MAP SND (call_trace es))) [] am tx = (INL v,am',rqs) ==>
   (call_result_rel tops ret am tx es r es' <=>
     ?out lgs. frame_outcome es r es' NONE out lgs /\
       return_bytes tops ret v out /\
@@ -298,7 +298,7 @@ Proof
 QED
 
 Theorem assert_result_does_not_compare_requests:
-  call_external (SOME (MAP SND (call_trace es))) am tx =
+  call_external (SOME (MAP SND (call_trace es))) [] am tx =
     (INR (AssertException s),am',rqs) ==>
   (call_result_rel tops ret am tx es r es' <=>
     ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs /\
@@ -308,7 +308,7 @@ Proof
 QED
 
 Theorem error_result_only_exact_exemption_or_failure:
-  call_external (SOME (MAP SND (call_trace es))) am tx = (INR (Error e),am',rqs) ==>
+  call_external (SOME (MAP SND (call_trace es))) [] am tx = (INR (Error e),am',rqs) ==>
   (call_result_rel tops ret am tx es r es' <=>
     decode_strictness_exempt tops e \/
     ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs)
@@ -317,13 +317,13 @@ Proof
 QED
 
 Theorem escaped_control_is_not_related:
-  (call_external (SOME (MAP SND (call_trace es))) am tx =
+  (call_external (SOME (MAP SND (call_trace es))) [] am tx =
      (INR BreakException,am',rqs) ==>
      ~call_result_rel tops ret am tx es r es') /\
-  (call_external (SOME (MAP SND (call_trace es))) am tx =
+  (call_external (SOME (MAP SND (call_trace es))) [] am tx =
      (INR ContinueException,am',rqs) ==>
      ~call_result_rel tops ret am tx es r es') /\
-  (call_external (SOME (MAP SND (call_trace es))) am tx =
+  (call_external (SOME (MAP SND (call_trace es))) [] am tx =
      (INR (ReturnException v),am',rqs) ==>
      ~call_result_rel tops ret am tx es r es')
 Proof

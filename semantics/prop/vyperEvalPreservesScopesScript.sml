@@ -1196,6 +1196,12 @@ Proof
   simp[preserves_tv_def]
 QED
 
+Theorem preserves_tv_gas_obs[simp]:
+  ∀cx st g. preserves_tv cx st (st with gas_obs := g)
+Proof
+  simp[preserves_tv_def]
+QED
+
 Theorem preserves_tv_txn_eq:
   ∀cx cx' st st'.
     cx.txn = cx'.txn ⇒
@@ -1857,7 +1863,8 @@ Proof
     imp_res_tac type_check_state >>
     imp_res_tac lift_sum_state >>
     imp_res_tac materialise_state >>
-    imp_res_tac toplevel_array_length_state >> gvs[] >>
+    imp_res_tac toplevel_array_length_state >>
+    imp_res_tac next_gas_reading_state >> gvs[] >>
     rpt(first_x_assum drule >> rw[]) >>
     gvs[get_accounts_def, return_def]) >>
   (* Pop *)

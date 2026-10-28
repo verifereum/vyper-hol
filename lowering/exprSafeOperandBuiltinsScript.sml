@@ -274,9 +274,7 @@ Resume compile_call_word_result_ok[external]:
 QED
 
 Resume compile_call_word_result_ok[raw]:
-  Cases_on `args` >> gvs[word_result_ok_def] >> rename1 `list_CASE args1 _ _` >>
-  Cases_on `args1` >> gvs[word_result_ok_def] >> rename1 `list_CASE args2 _ _` >>
-  Cases_on `args2` >> gvs[word_result_ok_def] >>
+  Cases_on `args` >> gvs[word_result_ok_def] >>
   rpt (pairarg_tac >> gvs[]) >>
   Cases_on `r.rcf_max_outsize = 0` >> gvs[word_result_ok_def] >>
   metis_tac[compile_raw_call_zero_safe_operand]

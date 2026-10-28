@@ -62,7 +62,7 @@ QED
 
 Definition range_fixture_source_result_def:
   range_fixture_source_result tops fname args =
-    FST (call_external NONE
+    FST (call_external NONE []
       (initial_machine_state with
         <| sources := [(0w, [(NONE, tops)])];
            layouts := [(0w, ([((NONE, "counter"), 0)], []))] |>)

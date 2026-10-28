@@ -135,12 +135,12 @@ End
    and a failed call returns the machine it was given. *)
 Theorem call_external_transaction_pending_deletions:
   !orc am tx r am' rqs.
-    call_external_transaction orc am tx = (r, am', rqs) /\
+    call_external_transaction orc gobs am tx = (r, am', rqs) /\
     am.pending_deletions = [] ==>
     am'.pending_deletions = []
 Proof
   rw[call_external_transaction_def] >> Cases_on `r`
-  >- (qpat_x_assum `call_external _ _ _ = _` mp_tac >>
+  >- (qpat_x_assum `call_external _ _ _ _ = _` mp_tac >>
       simp[call_external_def] >> rpt (BasicProvers.TOP_CASE_TAC >> simp[]) >>
       rw[] >> simp[])
   >> drule call_external_error_rollback >> simp[clear_machine_logs_def]
@@ -148,7 +148,7 @@ QED
 
 Theorem load_contract_pending_deletions:
   !orc am tx mods exps am' rqs.
-    load_contract orc am tx mods exps = INL (am', rqs) ==>
+    load_contract orc gobs am tx mods exps = INL (am', rqs) ==>
     am'.pending_deletions = []
 Proof
   rw[load_contract_def] >> gvs[AllCaseEqs()]
@@ -373,7 +373,7 @@ End
 Definition call_result_rel_def:
   call_result_rel tops ret am tx es r es' <=>
     let trace = call_trace es in
-    case call_external (SOME (MAP SND trace)) am tx of
+    case call_external (SOME (MAP SND trace)) [] am tx of
       (INL v, am', rqs) =>
         ?out lgs.
           frame_outcome es r es' NONE out lgs /\

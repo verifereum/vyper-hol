@@ -129,6 +129,7 @@ Datatype:
   ; pending_deletions: address list
   ; outcomes: extCallOracle$call_outcome list option
   ; requests: extCallOracle$call_request list
+  ; gas_obs: bytes32 list
   |>
 End
 
@@ -141,7 +142,8 @@ Definition empty_state_def:
     tStorage := empty_transient_storage;
     pending_deletions := [];
     outcomes := NONE;
-    requests := []
+    requests := [];
+    gas_obs := []
   |>
 End
 

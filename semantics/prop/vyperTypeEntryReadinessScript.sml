@@ -126,18 +126,18 @@ End
  * its successful result is derived from checked-function expression soundness,
  * rather than included as an input premise. *)
 Definition checked_defaults_ready_def:
-  checked_defaults_ready cx am (args:argument list) dflts vals <=>
+  checked_defaults_ready cx am gobs (args:argument list) dflts vals <=>
     LENGTH vals <= LENGTH args /\
     LENGTH args - LENGTH vals <= LENGTH dflts /\
     IS_SOME
-      (evaluate_defaults cx am
+      (evaluate_defaults cx am gobs
         (DROP (LENGTH dflts - (LENGTH args - LENGTH vals)) dflts))
 End
 
 Definition checked_call_inputs_ready_def:
-  checked_call_inputs_ready tenv cx am args dflts vals <=>
+  checked_call_inputs_ready tenv cx am gobs args dflts vals <=>
     provided_args_typed tenv args vals /\
-    checked_defaults_ready cx am args dflts vals
+    checked_defaults_ready cx am gobs args dflts vals
 End
 
 (* Public-call wrapper: resolve the selected external entry exactly as
@@ -145,7 +145,7 @@ End
  * defaults. Lookup failures need no input readiness because they return the
  * original machine without executing a body. *)
 Definition checked_external_call_inputs_ready_def:
-  checked_external_call_inputs_ready (am:abstract_machine) (tx:call_txn) <=>
+  checked_external_call_inputs_ready (am:abstract_machine) gobs (tx:call_txn) <=>
     let src = find_function_module am tx.target tx.function_name in
     let cx = initial_evaluation_context am.sources am.layouts tx src in
     case ALOOKUP am.sources tx.target of
@@ -155,13 +155,15 @@ Definition checked_external_call_inputs_ready_def:
           lookup_exported_function cx am tx.function_name =
             SOME (mut,nr,params,dflts,ret,stmts) ==>
           checked_call_inputs_ready
-            (type_env_all_modules mods) cx am params dflts tx.args
+            (type_env_all_modules mods) cx am gobs params dflts tx.args
 End
 
 (* Successful evaluation of a well-typed default list returns values of the
- * defaults' expression types.  Each default is evaluated from the same entry
- * machine state by evaluate_defaults. *)
+ * defaults' expression types.  Each default is evaluated from the entry
+ * machine state by evaluate_defaults, with the gas readings left by the
+ * defaults before it. *)
 Theorem evaluate_defaults_success_values_typed:
+  !es gobs vs gobs'.
   well_typed_exprs env es /\
   env_consistent env cx (initial_state am [FEMPTY]) /\
   state_well_typed (initial_state am [FEMPTY]) /\
@@ -169,39 +171,44 @@ Theorem evaluate_defaults_success_values_typed:
   accounts_well_typed am.accounts /\
   functions_well_typed cx /\
   (!e. MEM e es ==> call_evaluation_safe cx (int_calls_expr e)) /\
-  evaluate_defaults cx am es = SOME vs ==>
+  evaluate_defaults cx am gobs es = SOME (vs, gobs') ==>
   LIST_REL
     (\v e. ?tv. evaluate_type env.type_defs (expr_type e) = SOME tv /\
                   value_has_type tv v)
     vs es
 Proof
-  qid_spec_tac `vs` >> Induct_on `es`
+  Induct
   >- simp[evaluate_defaults_def] >>
-  gen_tac >> rpt strip_tac >>
+  rpt gen_tac >> strip_tac >>
   gvs[well_typed_expr_def, evaluate_defaults_def, AllCaseEqs()] >>
-  Cases_on `eval_expr cx h (initial_state am [FEMPTY])` >> gvs[] >>
-  `accounts_well_typed (initial_state am [FEMPTY]).accounts` by
+  `accounts_well_typed (initial_state am [FEMPTY] with gas_obs := gobs).accounts` by
     simp[initial_state_def] >>
+  `env_consistent env cx (initial_state am [FEMPTY] with gas_obs := gobs) /\
+   state_well_typed (initial_state am [FEMPTY] with gas_obs := gobs)` by
+    simp[] >>
   `call_evaluation_safe cx (int_calls_expr h)` by metis_tac[] >>
   drule_all (cj 8 eval_all_type_sound_mutual) >>
   simp[expr_result_typed_def, expr_runtime_typed_def,
-       toplevel_value_typed_Value]
+       toplevel_value_typed_Value] >>
+  strip_tac >>
+  first_x_assum (drule_at (Pat `evaluate_defaults _ _ _ _ = _`)) >>
+  simp[] >> metis_tac[]
 QED
 
 Theorem checked_defaults_ready_success:
-  checked_defaults_ready cx am args dflts vals ==>
+  checked_defaults_ready cx am gobs args dflts vals ==>
   LENGTH vals <= LENGTH args /\
   LENGTH args - LENGTH vals <= LENGTH dflts /\
-  ?dflt_vs.
-    evaluate_defaults cx am
+  ?dflt_vs gobs'.
+    evaluate_defaults cx am gobs
       (DROP (LENGTH dflts - (LENGTH args - LENGTH vals)) dflts) =
-      SOME dflt_vs
+      SOME (dflt_vs, gobs')
 Proof
-  rw[checked_defaults_ready_def, IS_SOME_EXISTS]
+  rw[checked_defaults_ready_def, IS_SOME_EXISTS, EXISTS_PROD]
 QED
 
 Theorem checked_defaults_ready_values_typed:
-  checked_defaults_ready cx am args dflts vals /\
+  checked_defaults_ready cx am gobs args dflts vals /\
   well_typed_exprs env
     (DROP (LENGTH dflts - (LENGTH args - LENGTH vals)) dflts) /\
   env_consistent env cx (initial_state am [FEMPTY]) /\
@@ -212,17 +219,17 @@ Theorem checked_defaults_ready_values_typed:
   (!e.
     MEM e (DROP (LENGTH dflts - (LENGTH args - LENGTH vals)) dflts) ==>
     call_evaluation_safe cx (int_calls_expr e)) ==>
-  ?dflt_vs.
-    evaluate_defaults cx am
+  ?dflt_vs gobs'.
+    evaluate_defaults cx am gobs
       (DROP (LENGTH dflts - (LENGTH args - LENGTH vals)) dflts) =
-      SOME dflt_vs /\
+      SOME (dflt_vs, gobs') /\
     LIST_REL
       (\v e. ?tv. evaluate_type env.type_defs (expr_type e) = SOME tv /\
                     value_has_type tv v)
       dflt_vs
       (DROP (LENGTH dflts - (LENGTH args - LENGTH vals)) dflts)
 Proof
-  rw[checked_defaults_ready_def, IS_SOME_EXISTS] >>
+  rw[checked_defaults_ready_def, IS_SOME_EXISTS, EXISTS_PROD] >>
   `LENGTH dflts - (LENGTH args - LENGTH vals) =
    LENGTH vals + LENGTH dflts - LENGTH args` by decide_tac >>
   gvs[] >>
@@ -275,20 +282,20 @@ Proof
 QED
 
 Theorem checked_external_call_inputs_ready_selected:
-  checked_external_call_inputs_ready am tx /\
+  checked_external_call_inputs_ready am gobs tx /\
   ALOOKUP am.sources tx.target = SOME mods /\
   src = find_function_module am tx.target tx.function_name /\
   cx = initial_evaluation_context am.sources am.layouts tx src /\
   lookup_exported_function cx am tx.function_name =
     SOME (mut,nr,params,dflts,ret,stmts) ==>
   checked_call_inputs_ready
-    (type_env_all_modules mods) cx am params dflts tx.args
+    (type_env_all_modules mods) cx am gobs params dflts tx.args
 Proof
   rw[checked_external_call_inputs_ready_def] >> gvs[]
 QED
 
 Theorem checked_call_inputs_ready_bind_arguments:
-  checked_call_inputs_ready tenv cx am params dflts vals /\
+  checked_call_inputs_ready tenv cx am gobs params dflts vals /\
   env.type_defs = tenv /\
   well_typed_exprs env
     (DROP (LENGTH dflts - (LENGTH params - LENGTH vals)) dflts) /\
@@ -302,10 +309,10 @@ Theorem checked_call_inputs_ready_bind_arguments:
   (!arg. MEM arg params ==> ?tv. evaluate_type tenv (SND arg) = SOME tv) /\
   MAP expr_type dflts =
     MAP SND (DROP (LENGTH params - LENGTH dflts) params) ==>
-  ?dflt_vs scope.
-    evaluate_defaults cx am
+  ?dflt_vs gobs' scope.
+    evaluate_defaults cx am gobs
       (DROP (LENGTH dflts - (LENGTH params - LENGTH vals)) dflts) =
-      SOME dflt_vs /\
+      SOME (dflt_vs, gobs') /\
     bind_arguments tenv params (vals ++ dflt_vs) = SOME scope /\
     args_values_typed tenv params (vals ++ dflt_vs)
 Proof
@@ -326,13 +333,13 @@ Proof
   `LENGTH vals + LENGTH needed = LENGTH params` by
     (simp[Abbr`needed`, listTheory.LENGTH_DROP] >> decide_tac) >>
   drule_all provided_args_defaults_bind_arguments >> strip_tac >>
-  qexistsl [`dflt_vs`, `scope`] >> simp[Abbr`needed`]
+  qexistsl [`dflt_vs`, `gobs'`, `scope`] >> simp[Abbr`needed`]
 QED
 
 Theorem checked_call_inputs_ready_components:
-  checked_call_inputs_ready tenv cx am args dflts vals ==>
+  checked_call_inputs_ready tenv cx am gobs args dflts vals ==>
   provided_args_typed tenv args vals /\
-  checked_defaults_ready cx am args dflts vals
+  checked_defaults_ready cx am gobs args dflts vals
 Proof
   simp[checked_call_inputs_ready_def]
 QED

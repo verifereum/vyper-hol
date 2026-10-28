@@ -5474,12 +5474,26 @@ Resume eval_all_type_sound_mutual[Expr_Builtin]:
                     Cases_on `t` >> gvs[well_typed_expr_def])) >>
       strip_tac >> strip_tac >> gvs[]) >>
   qpat_assum `bt <> Len` (fn th => rewrite_tac[th]) >>
+  Cases_on `bt = Env MsgGas`
+  >- (qpat_x_assum `bt = Env MsgGas` SUBST_ALL_TAC >>
+      simp_tac(srw_ss())[next_gas_reading_def, bind_def, ignore_bind_def,
+                         assert_def, return_def, raise_def] >>
+      Cases_on `st.gas_obs` >> simp_tac(srw_ss())[return_def, raise_def] >>
+      strip_tac >> gvs[no_type_error_result_def, expr_result_typed_def,
+                       expr_runtime_typed_def, expr_type_def,
+                       toplevel_value_typed_Value] >>
+      gvs[well_typed_builtin_app_def, env_item_type_def, evaluate_type_def,
+          value_has_type_def] >>
+      rename1 `w2n (w:bytes32)` >>
+      qspec_then `w` assume_tac wordsTheory.w2n_lt >>
+      fs[wordsTheory.dimword_def]) >>
+  qpat_assum `bt <> Env MsgGas` (fn th => rewrite_tac[th]) >>
   qpat_assum `builtin_args_length_ok bt (LENGTH es)` (fn th => rewrite_tac[th]) >>
   simp_tac(srw_ss())[bind_def, ignore_bind_def, return_def, raise_def,
                      type_check_def, assert_def, get_accounts_def, lift_sum_def] >>
   Cases_on `eval_exprs cx es st` >>
   rename1 `eval_exprs cx es st = (args_res,args_st)` >>
-  qpat_x_assum `!s'' x t. _ /\ bt <> Len ==> _`
+  qpat_x_assum `!s'' x t. _ /\ bt <> Len /\ bt <> Env MsgGas ==> _`
     (qspecl_then [`st`,`()`,`st`] mp_tac) >>
   (impl_tac >- (simp[type_check_def, assert_def] >> metis_tac[])) >> strip_tac >>
   qpat_x_assum `!env st res st'. _`
@@ -5515,8 +5529,7 @@ Resume eval_all_type_sound_mutual[Expr_Builtin]:
       strip_tac >>
       gvs[nested_raise_error_case, no_type_error_result_def] >>
       strip_tac >> spose_not_then assume_tac >> gvs[] >>
-      `!item. bt = Env item ==> item <> MsgGas` by
-        (rpt strip_tac >> gvs[well_typed_builtin_app_def]) >>
+      `!item. bt = Env item ==> item <> MsgGas` by (rpt strip_tac >> gvs[]) >>
       drule_all well_typed_builtin_app_no_type_error >>
       disch_then (qspec_then `msg` mp_tac) >> gvs[]]) >>
   strip_tac >> gvs[eval_exprs_failure_builtin_case, no_type_error_result_def]
@@ -9522,17 +9535,13 @@ Resume eval_all_type_sound_mutual[Expr_Call_RawCallTarget]:
       mp_tac raw_call_args_runtime_typed_dest >>
       impl_tac >- simp[] >>
       strip_tac >> gvs[] >>
-      `LENGTH vs = 3` by (gvs[exprs_runtime_typed_def] >> metis_tac[listTheory.LIST_REL_LENGTH]) >>
-      `((flags.rcf_is_delegate \/ flags.rcf_is_static) ==> amount = 0)` by (
-        strip_tac >>
-        `EL 2 es = Literal (BaseT (UintT 256)) (IntL 0)` by simp[] >>
-        `2 < LENGTH es` by simp[] >>
-        drule_all eval_exprs_EL_literal >> strip_tac >>
-        gvs[evaluate_literal_def, dest_NumV_def]) >>
+      drule_then (qspec_then `2` assume_tac) exprs_runtime_typed_DROP >>
+      drule_all raw_call_value_typed >> strip_tac >>
+      TRY (qpat_x_assum `_ = (res,st')` mp_tac) >>
       simp[bind_def, return_def] >> strip_tac >>
       `runtime_consistent env cx args_st` by simp[runtime_consistent_def] >>
-      mp_tac (Q.INST [`st` |-> `args_st`, `calldata` |-> `data`]
-        eval_raw_call_result_sound) >>
+      drule_at (Pat `eval_raw_call _ _ _ _ _ _ _ = _`) eval_raw_call_result_sound >>
+      disch_then (qspec_then `env` mp_tac) >>
       impl_tac >- simp[] >> strip_tac >>
       Cases_on `res` >>
       gvs[runtime_consistent_def, no_type_error_result_def, expr_type_def]),
@@ -9557,20 +9566,16 @@ Resume eval_all_type_sound_mutual[Expr_Call_RawCallCalldataTarget]:
     first_x_assum drule_all >> strip_tac >>
     Cases_on `args_res` >> gvs[no_type_error_result_def]
     >> FIRST [(
-      drule_all raw_call_calldata_args_runtime_typed_dest >> strip_tac >>
-      `((flags.rcf_is_delegate \/ flags.rcf_is_static) ==> amount = 0)` by (
-        strip_tac >>
-        `EL 1 es = Literal (BaseT (UintT 256)) (IntL 0)` by simp[] >>
-        `1 < LENGTH es` by (
-          Cases_on `es` >> gvs[] >>
-          rename1 `MAP expr_type rest = [_]` >>
-          Cases_on `rest` >> gvs[]) >>
-        drule_all eval_exprs_EL_literal >> strip_tac >>
-        gvs[evaluate_literal_def, dest_NumV_def]) >>
-      gvs[bind_def, return_def] >> strip_tac >>
+      rename1 `exprs_runtime_typed env es vs` >>
+      mp_tac raw_call_calldata_args_runtime_typed_dest >>
+      impl_tac >- (Cases_on `es` >> gvs[]) >> strip_tac >>
+      drule_then (qspec_then `1` assume_tac) exprs_runtime_typed_DROP >>
+      drule_all raw_call_value_typed >> strip_tac >>
+      TRY (qpat_x_assum `_ = (res,st')` mp_tac) >>
+      simp[bind_def, return_def] >> strip_tac >>
       `runtime_consistent env cx args_st` by simp[runtime_consistent_def] >>
-      mp_tac (Q.INST [`st` |-> `args_st`, `calldata` |-> `cx.txn.calldata`]
-        eval_raw_call_result_sound) >>
+      drule_at (Pat `eval_raw_call _ _ _ _ _ _ _ = _`) eval_raw_call_result_sound >>
+      disch_then (qspec_then `env` mp_tac) >>
       impl_tac >- simp[] >> strip_tac >>
       Cases_on `res` >>
       gvs[runtime_consistent_def, no_type_error_result_def, expr_type_def]),

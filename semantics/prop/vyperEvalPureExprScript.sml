@@ -220,6 +220,9 @@ Proof
   (* Builtin *)
   >- (rpt gen_tac >>
       simp[Once eval_pure_expr_def] >> strip_tac >>
+      `bt <> Env MsgGas` by
+        (strip_tac >>
+         gvs[AllCaseEqs(), vyperStatePreservationTheory.evaluate_builtin_MsgGas]) >>
       simp[Once vyperInterpreterTheory.evaluate_def] >>
       simp monadic_defs >>
       simp[vyperStateTheory.type_check_def, vyperStateTheory.assert_def] >>

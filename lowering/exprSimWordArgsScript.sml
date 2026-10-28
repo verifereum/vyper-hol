@@ -52,7 +52,7 @@ End
 
 Theorem eval_expr_builtin_cases:
   !cx ann bt args es res es'.
-    bt <> Len /\ builtin_args_length_ok bt (LENGTH args) /\
+    bt <> Len /\ bt <> Env MsgGas /\ builtin_args_length_ok bt (LENGTH args) /\
     eval_expr cx (Builtin ann bt args) es = (res, es') ==>
     (?exc. eval_exprs cx args es = (INR exc, es') /\ res = INR exc) \/
     ?vs. eval_exprs cx args es = (INL vs, es') /\
@@ -555,7 +555,7 @@ QED
 
 Theorem compile_word_builtin_sim:
   !ctx func cenv cx ty ann bt args arg_ty Inv es code.
-    bt <> Len /\ builtin_args_length_ok bt (LENGTH args) /\ is_word_type ann /\
+    bt <> Len /\ bt <> Env MsgGas /\ builtin_args_length_ok bt (LENGTH args) /\ is_word_type ann /\
     wb_args_ready ctx func cenv cx arg_ty Inv args /\ Inv es /\
     wb_args_shape cenv arg_ty args /\
     (!sa sb op. lower_value compile_expr cenv ty (Builtin ann bt args) sa = (op,sb) ==>

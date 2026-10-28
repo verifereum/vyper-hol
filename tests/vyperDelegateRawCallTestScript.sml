@@ -18,7 +18,8 @@ val () = cv_auto_trans delegate_context_def;
 Definition delegate_flags_def:
   delegate_flags outsize revert =
     <|rcf_max_outsize := outsize; rcf_is_delegate := T;
-      rcf_is_static := F; rcf_revert_on_failure := revert|>
+      rcf_is_static := F; rcf_revert_on_failure := revert;
+      rcf_kws := [EKValue]|>
 End
 val () = cv_auto_trans delegate_flags_def;
 
@@ -99,7 +100,8 @@ Definition delegate_observe_def:
     let r = if cps then vyperSmallStep$fromtvk (vyperSmallStep$cont
         (vyperSmallStep$eval_expr_cps delegate_context
           (delegate_expression calldata_form flags amount) st vyperSmallStep$DoneK))
-      else eval_raw_call delegate_context flags 42w delegate_context.txn.calldata amount st in
+      else eval_raw_call delegate_context flags 42w delegate_context.txn.calldata amount
+        default_evm_gas_limit st in
     FST r = expected /\
     let final = SND r in
     MAP (\a. let acc = lookup_account a final.accounts in
@@ -226,7 +228,8 @@ Theorem delegate_designation_executes_implementation_in_proxy_context:
           (delegate_expression (SND mode) (delegate_flags 128 T) 0)
           delegate_designation_state vyperSmallStep$DoneK))
       else eval_raw_call delegate_context (delegate_flags 128 T) 42w
-        delegate_context.txn.calldata 0 delegate_designation_state in
+        delegate_context.txn.calldata 0 default_evm_gas_limit
+        delegate_designation_state in
     FST r = INL (Value (BytesV delegate_words)) /\
     let final = SND r in
     MAP (\slot. lookup_storage slot (lookup_account 41w final.accounts).storage)
