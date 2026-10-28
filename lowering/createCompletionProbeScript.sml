@@ -28,7 +28,8 @@ Theorem create_probe_entry_expanded:
            baseFeePerBlobGas := 0; blockNumber := 0; blockTimeStamp := 0;
            blockCoinBase := 0w; blockGasLimit := 0; prevRandao := 0w;
            prevHashes := []; blobHashes := []; chainId := 0; authRefund := 0|>;
-         rollback := rb; msdomain := Collect empty_domain|>
+         rollback := rb; originalAccounts := rb.accounts;
+         msdomain := Collect empty_domain|>
 Proof
   simp[create_probe_entry_def, make_venom_create_state_def,
        create_probe_state_def, init_venom_state_def, venom_to_tx_params_def,

@@ -9,7 +9,7 @@
 Theory callTrace
 Ancestors
   arithmetic list option pair sum relation finite_map words byte
-  extCallOracle vfmTypes vfmState vfmContext vfmExecution
+  extCallOracle vfmTypes vfmBuffer vfmState vfmContext vfmExecution
   vfmExecutionProp vfmDecreasesGas
 Libs
   BasicProvers
@@ -52,8 +52,8 @@ Definition request_of_def:
             cr_data_len := w2n (EL 2 c.stack);
             cr_target := 0w;
             cr_value := w2n (HD c.stack);
-            cr_data := take_pad_0 (w2n (EL 2 c.stack))
-                         (DROP (w2n (EL 1 c.stack)) c.memory);
+            cr_data := buffer_read (w2n (EL 1 c.stack))
+                         (w2n (EL 2 c.stack)) c.memory;
             cr_static := F;
             cr_accounts := s.rollback.accounts;
             cr_tStorage := s.rollback.tStorage |>
@@ -61,9 +61,8 @@ Definition request_of_def:
           cr_data_len := w2n (EL (3 + valueOffset) c.stack);
           cr_target := w2w (EL 1 c.stack);
           cr_value := if valueOffset = 1 then w2n (EL 2 c.stack) else 0;
-          cr_data := take_pad_0 (w2n (EL (3 + valueOffset) c.stack))
-                       (DROP (w2n (EL (2 + valueOffset) c.stack))
-                         (buffer_to_list c.memory));
+          cr_data := buffer_read (w2n (EL (2 + valueOffset) c.stack))
+                       (w2n (EL (3 + valueOffset) c.stack)) c.memory;
           cr_static := (next_opcode c = SOME StaticCall \/ c.msgParams.static);
           cr_accounts := s.rollback.accounts;
           cr_tStorage := s.rollback.tStorage |>
@@ -178,9 +177,9 @@ Theorem request_of_create:
        cr_data_len := w2n (EL 2 (FST (HD s.contexts)).stack);
        cr_target := 0w;
        cr_value := w2n (HD (FST (HD s.contexts)).stack);
-       cr_data := take_pad_0 (w2n (EL 2 (FST (HD s.contexts)).stack))
-         (DROP (w2n (EL 1 (FST (HD s.contexts)).stack))
-           (FST (HD s.contexts)).memory);
+       cr_data := buffer_read (w2n (EL 1 (FST (HD s.contexts)).stack))
+         (w2n (EL 2 (FST (HD s.contexts)).stack))
+         (FST (HD s.contexts)).memory;
        cr_static := F; cr_accounts := s.rollback.accounts;
        cr_tStorage := s.rollback.tStorage |>
 Proof
@@ -194,9 +193,9 @@ Theorem request_of_create2:
   (request_of s).cr_value = w2n (HD (FST (HD s.contexts)).stack) /\
   (request_of s).cr_data_len = w2n (EL 2 (FST (HD s.contexts)).stack) /\
   (request_of s).cr_data =
-    take_pad_0 (w2n (EL 2 (FST (HD s.contexts)).stack))
-      (DROP (w2n (EL 1 (FST (HD s.contexts)).stack))
-        (FST (HD s.contexts)).memory) /\
+    buffer_read (w2n (EL 1 (FST (HD s.contexts)).stack))
+      (w2n (EL 2 (FST (HD s.contexts)).stack))
+      (FST (HD s.contexts)).memory /\
   ~(request_of s).cr_static /\ (request_of s).cr_gas = NONE
 Proof
   simp[request_of_def]
@@ -315,14 +314,14 @@ QED
 Theorem create2_request_padding_probe:
   next_opcode (FST (HD s.contexts)) = SOME Create2 /\
   (FST (HD s.contexts)).stack = [7w; 1w; 3w; 42w] /\
-  (FST (HD s.contexts)).memory = [9w; 8w] ==>
+  (FST (HD s.contexts)).memory = buffer_of_list [9w; 8w] ==>
   observable_call (FST (HD s.contexts)) /\
   (request_of s).cr_kind = Create2Call 42w /\
   (request_of s).cr_value = 7 /\
   (request_of s).cr_data = [8w; 0w; 0w] /\
   (request_of s).cr_data_len = 3
 Proof
-  simp[observable_call_def, request_of_def, take_pad_0_def,
+  simp[observable_call_def, request_of_def, buffer_read_to_list, take_pad_0_def,
        dimword_def, trace_dimindex_256] >> EVAL_TAC
 QED
 

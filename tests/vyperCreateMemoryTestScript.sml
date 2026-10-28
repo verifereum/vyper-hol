@@ -4,7 +4,7 @@ Theory vyperCreateMemoryTest
 Ancestors
   vyperCreateOracleTest vyperCreateSelfdestruct vyperCreate vyperCallOutcome
   vyperState vyperContext vyperEvmBoundary extCallOracle callTrace
-  vfmCompute vfmContext vfmState vfmExecution finite_map finite_set list
+  vfmCompute vfmContext vfmState vfmExecution vfmBuffer finite_map finite_set list
   createProxyCompileTest createCopyCompileTest
   createBlueprintCompileTest createRawCompileTest
 Libs
@@ -51,6 +51,7 @@ Definition create_memory_vm_def:
       empty_return_destination
       (make_evm_tx 43w 41w 0 (create_memory_calldata kind) 1000000) in
     <|contexts := [(ctxt,rb)]; rollback := rb;
+      originalAccounts := create_memory_accounts kind;
       txParams := vyper_to_tx_params blueprint_test_context.txn;
       msdomain := Collect empty_domain|>
 End
@@ -79,10 +80,10 @@ Definition create_memory_fields_def:
     case es.contexts of [] => NONE | (ctxt,rb)::rest =>
       case (next_opcode ctxt,ctxt.stack) of
         (SOME Create,v::off::sz::tail) =>
-          SOME (CreateCall,w2n v,take_pad_0 (w2n sz) (DROP (w2n off) ctxt.memory))
+          SOME (CreateCall,w2n v,buffer_read (w2n off) (w2n sz) ctxt.memory)
       | (SOME Create2,v::off::sz::salt::tail) =>
           SOME (Create2Call salt,w2n v,
-                take_pad_0 (w2n sz) (DROP (w2n off) ctxt.memory))
+                buffer_read (w2n off) (w2n sz) ctxt.memory)
       | _ => NONE
 End
 val () = cv_auto_trans create_memory_fields_def;

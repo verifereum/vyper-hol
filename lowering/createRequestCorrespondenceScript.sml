@@ -3,7 +3,7 @@
 Theory createRequestCorrespondence
 Ancestors
   createOracleExecution vyperCallOutcome callTrace venomCallOracleDefs
-  venomState vyperState extCallOracle
+  venomState vyperState extCallOracle vfmBuffer
 
 Definition create_world_rel_def:
   create_world_rel st s <=>
@@ -90,27 +90,29 @@ QED
 Theorem venom_observed_create_request:
   (FST (HD es.contexts)).stack = value::off::sz::tail /\
   next_opcode (FST (HD es.contexts)) = SOME Create /\
-  (FST (HD es.contexts)).memory = s.vs_memory /\
+  buffer_to_list (FST (HD es.contexts)).memory = s.vs_memory /\
   es.rollback.accounts = s.vs_accounts /\
   es.rollback.tStorage = s.vs_transient ==>
   request_of es = venom_create_request s value off sz NONE
 Proof
   strip_tac >>
   simp[request_of_def, venom_create_request_def,
-       create_read_memory_padding, vfmTypesTheory.LENGTH_take_pad_0]
+       create_read_memory_padding, buffer_read_to_list,
+       vfmTypesTheory.LENGTH_take_pad_0]
 QED
 
 Theorem venom_observed_create2_request:
   (FST (HD es.contexts)).stack = value::off::sz::salt::tail /\
   next_opcode (FST (HD es.contexts)) = SOME Create2 /\
-  (FST (HD es.contexts)).memory = s.vs_memory /\
+  buffer_to_list (FST (HD es.contexts)).memory = s.vs_memory /\
   es.rollback.accounts = s.vs_accounts /\
   es.rollback.tStorage = s.vs_transient ==>
   request_of es = venom_create_request s value off sz (SOME salt)
 Proof
   strip_tac >>
   simp[request_of_def, venom_create_request_def,
-       create_read_memory_padding, vfmTypesTheory.LENGTH_take_pad_0]
+       create_read_memory_padding, buffer_read_to_list,
+       vfmTypesTheory.LENGTH_take_pad_0]
 QED
 
 
@@ -121,7 +123,7 @@ Theorem source_observed_create_request:
     (case salt of NONE => tail | SOME x => x::tail) /\
   next_opcode (FST (HD es.contexts)) =
     SOME (case salt of NONE => Create | SOME x => Create2) /\
-  (FST (HD es.contexts)).memory = s.vs_memory /\
+  buffer_to_list (FST (HD es.contexts)).memory = s.vs_memory /\
   es.rollback.accounts = s.vs_accounts /\
   es.rollback.tStorage = s.vs_transient ==>
   request_of es = create_outcome_request

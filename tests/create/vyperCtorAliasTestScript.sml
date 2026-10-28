@@ -98,6 +98,7 @@ Definition ctor_alias_vm_def:
       empty_return_destination
       (make_evm_tx 43w 41w 0 (create_memory_calldata RawCreate) 1000000) in
     <|contexts := [(ctxt,rb)]; rollback := rb;
+      originalAccounts := ctor_alias_accounts runtime;
       txParams := vyper_to_tx_params blueprint_test_context.txn;
       msdomain := Collect empty_domain|>
 End
