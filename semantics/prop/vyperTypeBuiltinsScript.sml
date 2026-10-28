@@ -3323,10 +3323,12 @@ Proof
   intLib.ARITH_TAC
 QED
 
-Theorem return_INL_value[local]:
-  return x st = (INL y, st') ==> y = x
+Theorem is_sized_type_cases[local]:
+  is_sized_type t ⇔
+    (∃elem n. t = ArrayT elem (Dynamic n)) ∨ (∃n. t = BaseT (StringT n)) ∨
+    (∃n. t = BaseT (BytesT (Dynamic n)))
 Proof
-  simp[vyperStateTheory.return_def, pairTheory.PAIR_EQ, sumTheory.INL_11]
+  simp[oneline is_sized_type_def] >> rpt CASE_TAC >> simp[]
 QED
 
 Theorem Len_result_fits_uint256:
@@ -3337,63 +3339,19 @@ Theorem Len_result_fits_uint256:
   toplevel_array_length cx arg_tv st = (INL n, st') ==>
   n < dimword(:256)
 Proof
-  strip_tac >> gvs[well_typed_builtin_app_def] >>
-  Cases_on `arg_ty` >> gvs[is_sized_type_def, evaluate_type_def]
-  >- (
-    rename1 `BaseT bt` >> Cases_on `bt` >>
-    gvs[is_sized_type_def, evaluate_type_def, AllCaseEqs(), LET_THM]
-    >- (
-      rename1 `StringT max` >>
-      Cases_on `arg_tv` >>
-      gvs[toplevel_value_typed_def, oneline toplevel_array_length_def,
-          raise_def, value_has_type_def, AllCaseEqs(), bind_def,
-          get_storage_backend_def, get_accounts_def, value_CASE_rator,
-          get_transient_storage_def] >>
-      drule return_INL_value >> strip_tac >> gvs[] >>
-      irule LESS_EQ_LESS_TRANS >>
-      qexists `max` >> simp[]) >>
-    gvs[evaluate_type_def, compatible_bound_def, AllCaseEqs(), LET_THM] >>
-    Cases_on `arg_tv` >>
-    gvs[toplevel_value_typed_def, oneline toplevel_array_length_def,
-        return_def, raise_def, value_has_type_def, AllCaseEqs(), bind_def,
-        get_storage_backend_def, get_accounts_def, get_transient_storage_def,
-        value_CASE_rator] >>
-    TRY (drule return_INL_value >> strip_tac >> gvs[] >> decide_tac >> NO_TAC) >>
-    gvs[well_formed_type_value_def]
-  ) >>
-  gvs[AllCaseEqs()] >>
+  strip_tac >>
+  gvs[well_typed_builtin_app_def, is_sized_type_cases] >>
+  gvs[evaluate_type_def, AllCaseEqs(), LET_THM] >>
   Cases_on `arg_tv` >>
-  gvs[toplevel_value_typed_def, oneline toplevel_array_length_def, return_def,
-      raise_def, value_has_type_def, AllCaseEqs(), bind_def,
-      ignore_bind_def, value_CASE_rator, array_value_CASE_rator,
-      get_storage_backend_def, get_accounts_def, get_transient_storage_def,
-      well_formed_type_value_def, type_slot_size_def] >>
-  qmatch_asmsub_rename_tac`ArrayTV _ bd` >> Cases_on`bd` >>
-  gvs[value_has_type_def, vyperStateTheory.return_def, type_slot_size_def]
-  >- (
-    qmatch_asmsub_rename_tac`sparse_has_type tv len sparse` >>
-    qmatch_assum_abbrev_tac`len * slot < bound` >>
-    `LENGTH sparse <= len` by metis_tac[sparse_has_type_length] >>
-    `len <= len * slot` by gvs[] >>
-    irule LESS_EQ_LESS_TRANS >>
-    qexists `len` >> simp[] >>
-    irule LESS_EQ_LESS_TRANS >>
-    qexists `len * slot` >> simp[Abbr`bound`]
-  ) >>
-  gvs[vyperStateTheory.bind_def, AllCaseEqs(), vyperStateTheory.return_def] >>
-  TRY (drule return_INL_value >> strip_tac >> gvs[] >>
-       qmatch_assum_abbrev_tac`len * slot < bound` >>
-       `len <= len * slot` by gvs[] >>
-       irule LESS_EQ_LESS_TRANS >>
-       qexists `len * slot` >> simp[Abbr`bound`] >> NO_TAC) >>
-  TRY (qmatch_assum_abbrev_tac`n * slot < bound` >>
-       `n <= n * slot` by gvs[] >>
-       irule LESS_EQ_LESS_TRANS >>
-       qexists `n * slot` >> simp[Abbr`bound`] >> NO_TAC) >>
-  TRY (qmatch_asmsub_abbrev_tac`w2n w` >>
-       Q.ISPEC_THEN`w`mp_tac w2n_lt >> simp[] >> NO_TAC) >>
-  qmatch_goalsub_abbrev_tac`w2n w` >>
-  Q.ISPEC_THEN`w`mp_tac w2n_lt >>
+  gvs[toplevel_value_typed_def, oneline toplevel_array_length_def,
+      vyperStateTheory.return_def, vyperStateTheory.bind_def, raise_def,
+      value_has_type_def, AllCaseEqs(), value_CASE_rator,
+      array_value_CASE_rator, well_formed_type_value_def] >>
+  rename1 `get_storage_backend cx transient` >> Cases_on `transient` >>
+  gvs[get_storage_backend_def, vyperStateTheory.bind_def,
+      vyperStateTheory.return_def, vyperStateTheory.get_transient_storage_def,
+      vyperStateTheory.get_accounts_def, AllCaseEqs()] >>
+  qmatch_goalsub_abbrev_tac `w2n w` >> Q.ISPEC_THEN `w` mp_tac w2n_lt >>
   simp[]
 QED
 
@@ -3405,37 +3363,18 @@ Theorem Len_toplevel_array_length_no_type_error:
   toplevel_array_length cx arg_tv st = (INR (Error (TypeError err)), st') ==>
   F
 Proof
-  strip_tac >> gvs[well_typed_builtin_app_def] >>
-  Cases_on `arg_ty` >> gvs[is_sized_type_def, evaluate_type_def]
-  >- (
-    rename1 `BaseT bt` >> Cases_on `bt` >>
-    gvs[is_sized_type_def, evaluate_type_def, AllCaseEqs(), LET_THM]
-    >- (
-      Cases_on `arg_tv` >>
-      gvs[toplevel_value_typed_def, oneline toplevel_array_length_def,
-          vyperStateTheory.return_def, raise_def, value_has_type_def,
-          AllCaseEqs(), bind_def, get_storage_backend_def, get_accounts_def,
-          value_CASE_rator, get_transient_storage_def]) >>
-    gvs[evaluate_type_def, compatible_bound_def, AllCaseEqs(), LET_THM] >>
-    Cases_on `arg_tv` >>
-    gvs[toplevel_value_typed_def, oneline toplevel_array_length_def,
-        vyperStateTheory.return_def, raise_def, value_has_type_def,
-        AllCaseEqs(), bind_def, get_storage_backend_def, get_accounts_def,
-        get_transient_storage_def, value_CASE_rator, well_formed_type_value_def]
-  ) >>
-  gvs[AllCaseEqs()] >>
+  strip_tac >>
+  gvs[well_typed_builtin_app_def, is_sized_type_cases] >>
+  gvs[evaluate_type_def, AllCaseEqs(), LET_THM] >>
   Cases_on `arg_tv` >>
   gvs[toplevel_value_typed_def, oneline toplevel_array_length_def,
-      vyperStateTheory.return_def, raise_def, value_has_type_def, AllCaseEqs(),
-      bind_def, ignore_bind_def, value_CASE_rator, array_value_CASE_rator,
-      get_storage_backend_def, get_accounts_def, get_transient_storage_def,
-      well_formed_type_value_def, type_slot_size_def] >>
-  Cases_on `b` >>
-  gvs[vyperStateTheory.return_def, bind_def, bind_apply, get_storage_backend_def,
-      vyperStateTheory.get_transient_storage_def, vyperStateTheory.get_accounts_def] >>
-  Cases_on `b'` >>
-  gvs[vyperStateTheory.return_def, bind_def, bind_apply, get_storage_backend_def,
-      vyperStateTheory.get_transient_storage_def, vyperStateTheory.get_accounts_def]
+      vyperStateTheory.return_def, vyperStateTheory.bind_def, raise_def,
+      value_has_type_def, AllCaseEqs(), value_CASE_rator,
+      array_value_CASE_rator, well_formed_type_value_def] >>
+  rename1 `get_storage_backend cx transient` >> Cases_on `transient` >>
+  gvs[get_storage_backend_def, vyperStateTheory.bind_def,
+      vyperStateTheory.return_def, vyperStateTheory.get_transient_storage_def,
+      vyperStateTheory.get_accounts_def, AllCaseEqs()]
 QED
 
 Theorem Len_builtin_sound:

@@ -242,9 +242,16 @@ jobs:
         with:
           curl-config: ${{ secrets.HOLBUILD_REMOTE_CACHE_CURL_CONFIG }}
 
-      - name: Check generated Vyper script inventory
+      - name: Generate test theories from pinned exports
         run: |
           holbuild --max-heap 4096 build --skip-checkpoints --skip-proof-steps vyperTestLibTestTheory
+          generator=$(mktemp --suffix=.sml)
+          trap 'rm -f "$generator"' EXIT
+          printf '%s\n' 'vyperTestLib.generate_tests ();' > "$generator"
+          (cd tests && holbuild --max-heap 4096 run --noconfig vyperTestLib "$generator")
+
+      - name: Check generated Vyper script inventory
+        run: |
           holbuild --max-heap 4096 run --noconfig tests/checkGeneratedScripts.sml
 
       - name: Build Vyper test coverage baseline

@@ -17,6 +17,7 @@
  *   compile_fallback_body_entry — the fallback's entry part: with a
  *     nonpayable fallback, the CALLVALUE check falls through when no value
  *     is sent and reverts otherwise; then the guarded body
+ *   payable_check_frag — that CALLVALUE check on its own
  *
  * Helpers: function_selector_length, calldata_method_id_append,
  *   calldata_method_id_lt, linear_dispatch_target_distinct,
@@ -304,7 +305,10 @@ Proof
   gvs[not_fresh_at_def, finite_mapTheory.FLOOKUP_UPDATE]
 QED
 
-Theorem fallback_check_frag[local]:
+(* The payable check (CALLVALUE is zero) on its own, as
+   compile_payable_check_ok_or_revert has it, for the fallback and for
+   compile_entry_checks. *)
+Theorem payable_check_frag:
   emit_op CALLVALUE [] st0 = (cv, st1) /\
   emit_op ISZERO [cv] st1 = (nv, st2) /\
   emit_void ASSERT [nv] st2 = ((), st3) /\
@@ -355,7 +359,7 @@ Proof
   rename1 `emit_void ASSERT [nv] st2 = (u, st3)` >>
   Cases_on `u` >> simp[] >> strip_tac >>
   goal_assum $ drule_at Any >> rpt strip_tac >>
-  irule fallback_check_frag >> goal_assum $ drule_at Any >>
+  irule payable_check_frag >> goal_assum $ drule_at Any >>
   goal_assum $ drule_at Any >> simp[]
 QED
 

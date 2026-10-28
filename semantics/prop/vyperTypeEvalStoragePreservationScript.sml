@@ -9,7 +9,7 @@ Ancestors
   vyperTypeBuiltins vyperTypeExprResult vyperTypeExprSoundness vyperTypeEvalSoundness
   vyperTypeExtCallSoundness vyperTypeABI vyperTypeEnvPreservation vyperTypeStatePreservation
   vyperTypeStmtSoundness vyperTypeAssignContext vyperTypeStoragePreservation
-  vyperTypeBindArguments vyperEvalOutcomeSuffix vyperCallOutcomeStorage
+  vyperTypeBindArguments vyperEvalOutcomeSuffix vyperCallOutcomeStorage vyperTypeArgFits
   vyperCallOutcome[ignore_grammar]
 Libs
   wordsLib markerLib
@@ -2053,6 +2053,9 @@ Resume eval_all_storage_preservation_mutual[Assign]:
   qpat_x_assum `type_stmt _ _ _ = _` mp_tac >>
   simp_tac(srw_ss())[Once type_stmt_def] >> strip_tac >>
   BasicProvers.VAR_EQ_TAC >>
+  `?tty. well_typed_atarget env tgt tty /\ type_widens_to env.type_defs (expr_type e) tty /\
+         assignable_type env.type_defs tty` by
+    metis_tac[atarget_accepts_well_typed_atarget] >>
   qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
   simp_tac(srw_ss())[Once evaluate_def, bind_def] >>
   Cases_on `eval_target cx tgt st` >>
@@ -2070,7 +2073,7 @@ Resume eval_all_storage_preservation_mutual[Assign]:
       metis_tac[runtime_storage_consistent_intro,
                 runtime_storage_consistent_layout] >>
     ORACLE_STORAGE_TAC >>
-    `target_runtime_typed env cx st1 tgt (expr_type e) gv` by (
+    `target_runtime_typed env cx st1 tgt tty gv` by (
       irule eval_target_success_runtime_typed >> simp[] >>
       metis_tac[runtime_storage_consistent_runtime]) >>
     Cases_on `eval_expr cx e st1` >>
@@ -2094,17 +2097,18 @@ Resume eval_all_storage_preservation_mutual[Assign]:
         rename1 `materialise cx tvl st2 = (INL v,st2)` >>
         Cases_on `assign_target cx gv (Replace v) st2` >>
         rename1 `assign_target cx gv (Replace v) st2 = (assign_res,st4)` >>
-        `?tv. evaluate_type env.type_defs (expr_type e) = SOME tv` by (
-          drule assignable_type_well_formed >>
-          simp[well_formed_type_def, optionTheory.IS_SOME_EXISTS]) >>
+        `?tv. evaluate_type env.type_defs (expr_type e) = SOME tv` by
+          gvs[expr_result_typed_def, expr_runtime_typed_def] >>
         `value_has_type tv v` by
           metis_tac[expr_result_typed_materialise_preserves_value_type,
                     runtime_consistent_def] >>
-        `value_runtime_typed env (expr_type e) v` by
-          (simp[value_runtime_typed_def] >> qexists_tac `tv` >> simp[]) >>
-        `target_runtime_typed env cx st2 tgt (expr_type e) gv` by
+        `?ttv. evaluate_type env.type_defs tty = SOME ttv /\ value_has_type ttv v` by
+          metis_tac[type_widens_to_value_has_type] >>
+        `value_runtime_typed env tty v` by
+          (simp[value_runtime_typed_def] >> qexists_tac `ttv` >> simp[]) >>
+        `target_runtime_typed env cx st2 tgt tty gv` by
           metis_tac[target_runtime_typed_rebuild, runtime_consistent_def] >>
-        `assign_operation_runtime_typed env (expr_type e) (Replace v)` by
+        `assign_operation_runtime_typed env tty (Replace v)` by
           simp[assign_operation_runtime_typed_def] >>
         `assign_operation_matches_target_shape gv (Replace v)` by
           metis_tac[assign_operation_matches_target_shape_Replace_from_typed] >>
@@ -2148,7 +2152,6 @@ Resume eval_all_storage_preservation_mutual[Append]:
   rename1 `type_place_target env bt = SOME (Type (ArrayT elem_ty (Dynamic n)))` >>
   strip_tac >>
   qpat_x_assum `env = env'` (SUBST_ALL_TAC o SYM) >>
-  qpat_x_assum `expr_type e = elem_ty` (SUBST_ALL_TAC o SYM) >>
   qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
   simp_tac(srw_ss())[Once evaluate_def, bind_def] >>
   Cases_on `eval_base_target cx bt st` >>
@@ -2168,7 +2171,7 @@ Resume eval_all_storage_preservation_mutual[Append]:
     rename1 `eval_base_target cx bt st = (INL (loc,sbs),st1)` >>
     ORACLE_STORAGE_TAC >>
     `target_runtime_typed env cx st1 (BaseTarget bt)
-       (ArrayT (expr_type e) (Dynamic n)) (BaseTargetV loc sbs)` by (
+       (ArrayT elem_ty (Dynamic n)) (BaseTargetV loc sbs)` by (
       irule eval_base_target_success_runtime_typed >> simp[] >>
       metis_tac[runtime_storage_consistent_runtime]) >>
     Cases_on `eval_expr cx e st1` >>
@@ -2193,24 +2196,28 @@ Resume eval_all_storage_preservation_mutual[Append]:
         Cases_on `assign_target cx (BaseTargetV loc sbs) (AppendOp v) st2` >>
         rename1 `assign_target cx (BaseTargetV loc sbs) (AppendOp v) st2 =
                    (assign_res,st4)` >>
-        `?elem_tv. evaluate_type env.type_defs (expr_type e) = SOME elem_tv` by (
+        `?elem_tv. evaluate_type env.type_defs elem_ty = SOME elem_tv` by (
           drule assignable_type_well_formed >>
           simp[well_formed_type_def, optionTheory.IS_SOME_EXISTS]) >>
-        `value_has_type elem_tv v` by
+        `?etv. evaluate_type env.type_defs (expr_type e) = SOME etv` by
+          gvs[expr_result_typed_def, expr_runtime_typed_def] >>
+        `value_has_type etv v` by
           metis_tac[expr_result_typed_materialise_preserves_value_type,
                     runtime_consistent_def] >>
+        `value_has_type elem_tv v` by (
+          drule_all type_widens_to_value_has_type >> rw[] >> gvs[]) >>
         `target_runtime_typed env cx st2 (BaseTarget bt)
-           (ArrayT (expr_type e) (Dynamic n)) (BaseTargetV loc sbs)` by
+           (ArrayT elem_ty (Dynamic n)) (BaseTargetV loc sbs)` by
           metis_tac[target_runtime_typed_rebuild, runtime_consistent_def] >>
         `assign_operation_runtime_typed env
-           (ArrayT (expr_type e) (Dynamic n)) (AppendOp v)` by
+           (ArrayT elem_ty (Dynamic n)) (AppendOp v)` by
           metis_tac[stmt_assign_operation_runtime_typed_Append_from_value_has_type] >>
         `assign_operation_matches_target_shape (BaseTargetV loc sbs) (AppendOp v)` by
           simp[stmt_assign_operation_matches_target_shape_Append_BaseTargetV] >>
         `assign_target_assignable_context cx (BaseTargetV loc sbs) st2` by
           metis_tac[target_runtime_typed_imp_assignable_context,
                     runtime_consistent_def] >>
-        `assignable_type env.type_defs (ArrayT (expr_type e) (Dynamic n))` by (
+        `assignable_type env.type_defs (ArrayT elem_ty (Dynamic n))` by (
           simp[assignable_type_def, well_formed_type_def] >>
           drule_at(Pat`target_runtime_typed`) target_runtime_typed_place_leaf_typed >>
           simp[] >> strip_tac >>

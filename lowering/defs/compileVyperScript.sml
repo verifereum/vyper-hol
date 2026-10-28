@@ -261,24 +261,8 @@ Definition allocate_args_def:
       (vars |+ (name, MemLoc offset sz))
 End
 
-(* Like allocate_args, but for collect_locals' declarations: a name declared
-   again (in a disjoint block) moves to a new region only when it needs more
-   room, so its final region fits each of its declarations. *)
-Definition allocate_locals_def:
-  allocate_locals sft [] (offset : num) vars = (vars, offset) ∧
-  allocate_locals sft ((name, ty) :: rest) offset vars =
-    let sz = type_mem_bytes sft ty in
-    case FLOOKUP vars name of
-      SOME (MemLoc _ sz') =>
-        if sz ≤ sz' then allocate_locals sft rest offset vars
-        else allocate_locals sft rest (offset + sz)
-               (vars |+ (name, MemLoc offset sz))
-    | _ => allocate_locals sft rest (offset + sz)
-             (vars |+ (name, MemLoc offset sz))
-End
-
 (* Slots of an internal function's return buffer pointer (if it has one) and
-   return PC, after its locals. They go to ce_return_buf / ce_return_pc, not
+   return PC, after its parameters. They go to ce_return_buf / ce_return_pc, not
    ce_vars, so they cannot collide with user identifiers. *)
 Definition allocate_internal_special_vars_def:
   allocate_internal_special_vars has_return_buf offset =
@@ -461,14 +445,12 @@ Definition build_compile_env_def:
     let module_vars = add_module_var_locations tops FEMPTY in
     let (arg_vars, args_end) = allocate_args sft_fn args 0 module_vars in
     let locals = collect_locals body in
-    (* External and fallback bodies allocate each local at its declaration
-       (declare_local), so only the others reserve slots here. *)
-    let (local_vars, locals_end) =
-      if is_external then (arg_vars, args_end)
-      else allocate_locals sft_fn locals args_end arg_vars in
+    (* Every body allocates each local at its declaration (declare_local), so
+       locals get no slot here.
+       Mirrors Python: Context.new_variable -> allocate_buffer -> alloca *)
     let (ret_buf, ret_pc) =
       if is_external then (NONE, NONE)
-      else allocate_internal_special_vars has_return_buf locals_end in
+      else allocate_internal_special_vars has_return_buf args_end in
     let all_decls = collect_module_vars tops ++ args ++ locals in
     let dynarray_cap = build_dynarray_capacity all_decls in
     let func_info = build_func_info sft_fn tops in
@@ -477,7 +459,7 @@ Definition build_compile_env_def:
             SOME ty => SOME ty
           | NONE => var_type_map n) in
     <| ce_target := all_capabilities;
-       ce_vars := local_vars;
+       ce_vars := arg_vars;
        ce_storage_layout := storage_layout;
        (* TODO: NONE = main module. For multi-module (imports), should
           be SOME src_id. Currently single-module only. *)
@@ -507,7 +489,7 @@ Definition build_compile_env_def:
        ce_nonreentrant := (F, 0n, use_transient_locks, mut = View);
        (* Default: overridden by package_*_fn from FunctionDecl raw_return field *)
        ce_raw_return := F;
-       ce_alloca_locals := is_external
+       ce_alloca_locals := T
     |> : compile_env
 End
 
@@ -635,6 +617,79 @@ Proof
   rpt strip_tac
   >> simp[build_compile_env_def]
   >> rpt (pairarg_tac >> gvs[])
+QED
+
+(* allocate_args places each argument at a MemLoc slot and leaves every
+   other name as vars has it. *)
+Theorem allocate_args_FLOOKUP_other:
+  !sft args off vars vars' off' n.
+    allocate_args sft args off vars = (vars', off') /\
+    ~MEM n (MAP FST args) ==>
+    FLOOKUP vars' n = FLOOKUP vars n
+Proof
+  gen_tac >> Induct >> simp[allocate_args_def] >>
+  Cases_on `h` >> rw[allocate_args_def] >>
+  first_x_assum drule >> simp[finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
+Theorem allocate_args_FLOOKUP_arg:
+  !sft args off vars vars' off' n.
+    allocate_args sft args off vars = (vars', off') /\
+    MEM n (MAP FST args) ==>
+    ?moff sz. FLOOKUP vars' n = SOME (MemLoc moff sz)
+Proof
+  gen_tac >> Induct >> simp[allocate_args_def] >>
+  Cases_on `h` >> simp[allocate_args_def] >>
+  rpt gen_tac >> disch_then (CONJUNCTS_THEN assume_tac) >>
+  Cases_on `MEM n (MAP FST args)`
+  >- (first_x_assum drule_all >> simp[]) >>
+  gvs[] >> drule_all allocate_args_FLOOKUP_other >>
+  simp[finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
+Theorem add_module_var_locations_FLOOKUP:
+  !tops vars n loc.
+    FLOOKUP (add_module_var_locations tops vars) n = SOME loc ==>
+    FLOOKUP vars n = SOME loc \/
+    ?slot. loc = StorageLoc slot \/ loc = TransientLoc slot
+Proof
+  Induct >> simp[add_module_var_locations_def] >>
+  rpt gen_tac >> simp[Once add_module_var_locations_def] >>
+  strip_tac >> first_x_assum drule >>
+  Cases_on `h` >> simp[] >> rpt (CASE_TAC >> simp[]) >>
+  rw[finite_mapTheory.FLOOKUP_UPDATE] >> simp[]
+QED
+
+(* build_compile_env holds the parameters at MemLoc slots and module
+   variables at storage slots: no other MemLoc variable and no PtrVar. *)
+Theorem build_compile_env_vars:
+  !tops vis mut func_name args ret_type (body : stmt list) use_trans.
+    (!n. MEM n (MAP FST args) ==>
+         ?off sz.
+           FLOOKUP (build_compile_env tops vis mut func_name args ret_type
+                      body use_trans).ce_vars n = SOME (MemLoc off sz)) /\
+    (!n off sz.
+       FLOOKUP (build_compile_env tops vis mut func_name args ret_type
+                  body use_trans).ce_vars n = SOME (MemLoc off sz) ==>
+       MEM n (MAP FST args)) /\
+    (!n p sz.
+       FLOOKUP (build_compile_env tops vis mut func_name args ret_type
+                  body use_trans).ce_vars n <> SOME (PtrVar p sz))
+Proof
+  rpt gen_tac >> simp[build_compile_env_def] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  `!n. MEM n (MAP FST args) ==>
+       ?off sz. FLOOKUP arg_vars n = SOME (MemLoc off sz)`
+    by (rpt strip_tac >> drule_all allocate_args_FLOOKUP_arg >> simp[]) >>
+  `!n loc. FLOOKUP arg_vars n = SOME loc /\ ~MEM n (MAP FST args) ==>
+           ?slot. loc = StorageLoc slot \/ loc = TransientLoc slot`
+    by (rpt strip_tac >> drule_all allocate_args_FLOOKUP_other >>
+        strip_tac >> gvs[] >>
+        drule add_module_var_locations_FLOOKUP >> simp[]) >>
+  rw[] >> spose_not_then assume_tac >>
+  Cases_on `MEM n (MAP FST args)` >> gvs[]
+  >- (first_x_assum drule >> strip_tac >> gvs[])
+  >> first_x_assum drule_all >> strip_tac >> gvs[]
 QED
 
 
