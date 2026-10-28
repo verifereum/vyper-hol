@@ -2030,8 +2030,8 @@ QED
 
 
 (* Helper: ECRecover arg types imply ecrecover_arg_to_num returns SOME *)
-Theorem ecrecover_arg_Uint256_not_none[local]:
-  !v. value_has_type (BaseTV (UintT 256)) v ⇒ ecrecover_arg_to_num v ≠ NONE
+Theorem ecrecover_arg_Uint_not_none[local]:
+  !n v. value_has_type (BaseTV (UintT n)) v ⇒ ecrecover_arg_to_num v ≠ NONE
 Proof
   rpt strip_tac >> Cases_on `v` >> fs[value_has_type_def, ecrecover_arg_to_num_def]
 QED
@@ -2074,26 +2074,30 @@ Theorem ecrecover_value_list_no_type_error[local]:
   LENGTH vs = 4 ∧
   value_has_type (BaseTV (BytesT (Fixed 32))) (EL 0 vs) ∧
   (!i. 0 < i ∧ i < 4 ⇒
+       value_has_type (BaseTV (UintT 8)) (EL i vs) ∨
        value_has_type (BaseTV (UintT 256)) (EL i vs) ∨
        value_has_type (BaseTV (BytesT (Fixed 32))) (EL i vs)) ==>
   !msg. evaluate_builtin cx acc (BaseT AddressT) ECRecover tys vs <> INR (TypeError msg)
 Proof
   strip_tac >> gen_tac >>
   `ecrecover_arg_to_num (EL 1 vs) ≠ NONE` by (
-    `value_has_type (BaseTV (UintT 256)) (EL 1 vs) ∨
+    `value_has_type (BaseTV (UintT 8)) (EL 1 vs) ∨
+     value_has_type (BaseTV (UintT 256)) (EL 1 vs) ∨
      value_has_type (BaseTV (BytesT (Fixed 32))) (EL 1 vs)` by (
       qpat_assum `!i. 0 < i ∧ i < 4 ⇒ _` (qspec_then `1` mp_tac) >> simp[]) >>
-    metis_tac[ecrecover_arg_Uint256_not_none, ecrecover_arg_BytesT32_not_none]) >>
+    metis_tac[ecrecover_arg_Uint_not_none, ecrecover_arg_BytesT32_not_none]) >>
   `ecrecover_arg_to_num (EL 2 vs) ≠ NONE` by (
-    `value_has_type (BaseTV (UintT 256)) (EL 2 vs) ∨
+    `value_has_type (BaseTV (UintT 8)) (EL 2 vs) ∨
+     value_has_type (BaseTV (UintT 256)) (EL 2 vs) ∨
      value_has_type (BaseTV (BytesT (Fixed 32))) (EL 2 vs)` by (
       qpat_assum `!i. 0 < i ∧ i < 4 ⇒ _` (qspec_then `2` mp_tac) >> simp[]) >>
-    metis_tac[ecrecover_arg_Uint256_not_none, ecrecover_arg_BytesT32_not_none]) >>
+    metis_tac[ecrecover_arg_Uint_not_none, ecrecover_arg_BytesT32_not_none]) >>
   `ecrecover_arg_to_num (EL 3 vs) ≠ NONE` by (
-    `value_has_type (BaseTV (UintT 256)) (EL 3 vs) ∨
+    `value_has_type (BaseTV (UintT 8)) (EL 3 vs) ∨
+     value_has_type (BaseTV (UintT 256)) (EL 3 vs) ∨
      value_has_type (BaseTV (BytesT (Fixed 32))) (EL 3 vs)` by (
       qpat_assum `!i. 0 < i ∧ i < 4 ⇒ _` (qspec_then `3` mp_tac) >> simp[]) >>
-    metis_tac[ecrecover_arg_Uint256_not_none, ecrecover_arg_BytesT32_not_none]) >>
+    metis_tac[ecrecover_arg_Uint_not_none, ecrecover_arg_BytesT32_not_none]) >>
   `?v0 v1 v2 v3. vs = [v0; v1; v2; v3]` by (
     map_every qexists [`EL 0 vs`, `EL 1 vs`, `EL 2 vs`, `EL 3 vs`] >>
     simp[list_el_decomp_4]) >>
@@ -2137,96 +2141,8 @@ QED
 
 
 
-(* Helper: ECRecover with well-typed args never produces TypeError.
-   Uses extraction and runtime boundary lemmas; no fragile list destruct. *)
-Theorem ecrecover_no_type_error[local]:
-  LENGTH ts = 4 ∧ ty = BaseT AddressT ∧
-  HD ts = BaseT (BytesT (Fixed 32)) ∧
-  EVERY (λt. t = BaseT (UintT 256) ∨ t = BaseT (BytesT (Fixed 32))) (TL ts) ∧
-  MAP (evaluate_type (get_tenv cx)) ts = MAP SOME tvs ∧
-  LIST_REL value_has_type tvs vs ==>
-  !msg. evaluate_builtin cx acc ty ECRecover ts vs ≠ INR (TypeError msg)
-Proof
-  rpt strip_tac >>
-  `LENGTH tvs = 4` by metis_tac[LENGTH_MAP, LIST_REL_LENGTH] >>
-  `LENGTH vs = 4` by metis_tac[LIST_REL_LENGTH] >>
-  fs[evaluate_builtin_def] >>
-  (* Pre-derive per-element value typing facts *)
-  `!i. i < 4:num ==> value_has_type (EL i tvs) (EL i vs)` by metis_tac[LIST_REL_EL_EQN] >>
-  `!i. i < 4:num ==> evaluate_type (get_tenv cx) (EL i ts) = SOME (EL i tvs)` by (
-    rpt strip_tac >> metis_tac[EL_MAP]) >>
-  `EL 0 tvs = BaseTV (BytesT (Fixed 32))` by (
-    `0 < 4:num` by decide_tac >>
-    `evaluate_type (get_tenv cx) (EL 0 ts) = SOME (EL 0 tvs)` by metis_tac[] >>
-    `EL 0 ts = HD ts` by simp[EL] >>
-    metis_tac[evaluate_type_BaseT_SOME]) >>
-  (* Remaining ts elements are Uint256 or BytesT32 *)
-  `!i. 0 < i ∧ i < 4:num ⇒
-    (EL i ts = BaseT (UintT 256) ∨ EL i ts = BaseT (BytesT (Fixed 32)))` by (
-    rpt strip_tac >>
-    `i - 1 < LENGTH (TL ts)` by (
-      `LENGTH (TL ts) = 3` by (Cases_on `ts` >> fs[]) >> decide_tac) >>
-    `EL (i - 1) (TL ts) = BaseT (UintT 256) ∨ EL (i - 1) (TL ts) = BaseT (BytesT (Fixed 32))` by (
-      fs[EVERY_EL] >> first_assum (qspec_then `i - 1` mp_tac) >> simp[]) >>
-    `EL i ts = EL (i - 1) (TL ts)` by (Cases_on `i` >> fs[EL]) >>
-    metis_tac[]) >>
-  (* So remaining tvs elements are BaseTV of Uint256 or BytesT32 *)
-  `!i. 0 < i ∧ i < 4:num ⇒
-    (EL i tvs = BaseTV (UintT 256) ∨ EL i tvs = BaseTV (BytesT (Fixed 32)))` by (
-    rpt strip_tac >>
-    `EL i ts = BaseT (UintT 256) ∨ EL i ts = BaseT (BytesT (Fixed 32))` by metis_tac[] >>
-    Cases_on `EL i ts` >> fs[] >>
-    `EL i tvs = BaseTV b` by (
-      `evaluate_type (get_tenv cx) (BaseT b) = SOME (EL i tvs)` by metis_tac[] >>
-      metis_tac[evaluate_type_BaseT_SOME]) >>
-    metis_tac[]) >>
-  (* Converter non-NONE for elements 1-3 *)
-  `!i. 0 < i ∧ i < 4:num ⇒ ecrecover_arg_to_num (EL i vs) ≠ NONE` by (
-    rpt strip_tac >>
-    `value_has_type (EL i tvs) (EL i vs)` by (`i < 4:num` by decide_tac >> res_tac) >>
-    `EL i tvs = BaseTV (UintT 256) ∨ EL i tvs = BaseTV (BytesT (Fixed 32))` by simp[] >>
-    metis_tac[ecrecover_arg_Uint256_not_none, ecrecover_arg_BytesT32_not_none]) >>
-  (* value_has_type for element 0: metis needs 0<4 explicitly since it can't do arithmetic *)
-  `value_has_type (BaseTV (BytesT (Fixed 32))) (EL 0 vs)` by (
-    `0 < 4:num` by decide_tac >>
-    metis_tac[]) >>
-  (* Derive specific converter non-NONE facts before list decomposition.
-     After vs = [v0;v1;v2;v3], fs[EL] will simplify EL k vs to vk automatically. *)
-  `ecrecover_arg_to_num (EL 1 vs) ≠ NONE` by (
-    `0 < 1:num` by decide_tac >>
-    `1 < 4:num` by decide_tac >>
-    `value_has_type (EL 1 tvs) (EL 1 vs)` by metis_tac[] >>
-    `EL 1 tvs = BaseTV (UintT 256) ∨ EL 1 tvs = BaseTV (BytesT (Fixed 32))` by metis_tac[] >>
-    metis_tac[ecrecover_arg_Uint256_not_none, ecrecover_arg_BytesT32_not_none]) >>
-  `ecrecover_arg_to_num (EL 2 vs) ≠ NONE` by (
-    `0 < 2:num` by decide_tac >>
-    `2 < 4:num` by decide_tac >>
-    `value_has_type (EL 2 tvs) (EL 2 vs)` by metis_tac[] >>
-    `EL 2 tvs = BaseTV (UintT 256) ∨ EL 2 tvs = BaseTV (BytesT (Fixed 32))` by metis_tac[] >>
-    metis_tac[ecrecover_arg_Uint256_not_none, ecrecover_arg_BytesT32_not_none]) >>
-  `ecrecover_arg_to_num (EL 3 vs) ≠ NONE` by (
-    `0 < 3:num` by decide_tac >>
-    `3 < 4:num` by decide_tac >>
-    `value_has_type (EL 3 tvs) (EL 3 vs)` by metis_tac[] >>
-    `EL 3 tvs = BaseTV (UintT 256) ∨ EL 3 tvs = BaseTV (BytesT (Fixed 32))` by metis_tac[] >>
-    metis_tac[ecrecover_arg_Uint256_not_none, ecrecover_arg_BytesT32_not_none]) >>
-  (* Remove assumptions that would conflict with list decomposition or fs[EL] *)
-  qpat_x_assum `LIST_REL value_has_type tvs vs` kall_tac >>
-  qpat_x_assum `MAP (evaluate_type (get_tenv cx)) ts = MAP SOME tvs` kall_tac >>
-  qpat_x_assum `EVERY _ _` kall_tac >>
-  qpat_x_assum `HD ts = _` kall_tac >>
-  (* Decompose vs into 4 named elements using list_el_decomp_4 *)
-  `?v0 v1 v2 v3. vs = [v0; v1; v2; v3]` by (
-    map_every qexists [`EL 0 vs`, `EL 1 vs`, `EL 2 vs`, `EL 3 vs`] >>
-    simp[list_el_decomp_4]) >>
-  (* Simplify all EL references using concrete list positions *)
-  fs[EL] >>
-  Cases_on `v0` >> fs[vht_BaseTV_BytesT_Fixed] >>
-  metis_tac[evaluate_ecrecover_no_type_error]
-QED
-
 Theorem ecrecover_dispatch_no_type_error[local]:
-  (a = BaseT (UintT 256) ∨ a = BaseT (BytesT (Fixed 32))) ∧
+  (a = BaseT (UintT 8) ∨ a = BaseT (UintT 256) ∨ a = BaseT (BytesT (Fixed 32))) ∧
   (b = BaseT (UintT 256) ∨ b = BaseT (BytesT (Fixed 32))) ∧
   (c = BaseT (UintT 256) ∨ c = BaseT (BytesT (Fixed 32))) ∧
   [evaluate_type (get_tenv cx) (BaseT (BytesT (Fixed 32)));
@@ -3400,10 +3316,12 @@ Proof
   intLib.ARITH_TAC
 QED
 
-Theorem return_INL_value[local]:
-  return x st = (INL y, st') ==> y = x
+Theorem is_sized_type_cases[local]:
+  is_sized_type t ⇔
+    (∃elem n. t = ArrayT elem (Dynamic n)) ∨ (∃n. t = BaseT (StringT n)) ∨
+    (∃n. t = BaseT (BytesT (Dynamic n)))
 Proof
-  simp[vyperStateTheory.return_def, pairTheory.PAIR_EQ, sumTheory.INL_11]
+  simp[oneline is_sized_type_def] >> rpt CASE_TAC >> simp[]
 QED
 
 Theorem Len_result_fits_uint256:
@@ -3414,63 +3332,19 @@ Theorem Len_result_fits_uint256:
   toplevel_array_length cx arg_tv st = (INL n, st') ==>
   n < dimword(:256)
 Proof
-  strip_tac >> gvs[well_typed_builtin_app_def] >>
-  Cases_on `arg_ty` >> gvs[is_sized_type_def, evaluate_type_def]
-  >- (
-    rename1 `BaseT bt` >> Cases_on `bt` >>
-    gvs[is_sized_type_def, evaluate_type_def, AllCaseEqs(), LET_THM]
-    >- (
-      rename1 `StringT max` >>
-      Cases_on `arg_tv` >>
-      gvs[toplevel_value_typed_def, oneline toplevel_array_length_def,
-          raise_def, value_has_type_def, AllCaseEqs(), bind_def,
-          get_storage_backend_def, get_accounts_def, value_CASE_rator,
-          get_transient_storage_def] >>
-      drule return_INL_value >> strip_tac >> gvs[] >>
-      irule LESS_EQ_LESS_TRANS >>
-      qexists `max` >> simp[]) >>
-    gvs[evaluate_type_def, compatible_bound_def, AllCaseEqs(), LET_THM] >>
-    Cases_on `arg_tv` >>
-    gvs[toplevel_value_typed_def, oneline toplevel_array_length_def,
-        return_def, raise_def, value_has_type_def, AllCaseEqs(), bind_def,
-        get_storage_backend_def, get_accounts_def, get_transient_storage_def,
-        value_CASE_rator] >>
-    TRY (drule return_INL_value >> strip_tac >> gvs[] >> decide_tac >> NO_TAC) >>
-    gvs[well_formed_type_value_def]
-  ) >>
-  gvs[AllCaseEqs()] >>
+  strip_tac >>
+  gvs[well_typed_builtin_app_def, is_sized_type_cases] >>
+  gvs[evaluate_type_def, AllCaseEqs(), LET_THM] >>
   Cases_on `arg_tv` >>
-  gvs[toplevel_value_typed_def, oneline toplevel_array_length_def, return_def,
-      raise_def, value_has_type_def, AllCaseEqs(), bind_def,
-      ignore_bind_def, value_CASE_rator, array_value_CASE_rator,
-      get_storage_backend_def, get_accounts_def, get_transient_storage_def,
-      well_formed_type_value_def, type_slot_size_def] >>
-  qmatch_asmsub_rename_tac`ArrayTV _ bd` >> Cases_on`bd` >>
-  gvs[value_has_type_def, vyperStateTheory.return_def, type_slot_size_def]
-  >- (
-    qmatch_asmsub_rename_tac`sparse_has_type tv len sparse` >>
-    qmatch_assum_abbrev_tac`len * slot < bound` >>
-    `LENGTH sparse <= len` by metis_tac[sparse_has_type_length] >>
-    `len <= len * slot` by gvs[] >>
-    irule LESS_EQ_LESS_TRANS >>
-    qexists `len` >> simp[] >>
-    irule LESS_EQ_LESS_TRANS >>
-    qexists `len * slot` >> simp[Abbr`bound`]
-  ) >>
-  gvs[vyperStateTheory.bind_def, AllCaseEqs(), vyperStateTheory.return_def] >>
-  TRY (drule return_INL_value >> strip_tac >> gvs[] >>
-       qmatch_assum_abbrev_tac`len * slot < bound` >>
-       `len <= len * slot` by gvs[] >>
-       irule LESS_EQ_LESS_TRANS >>
-       qexists `len * slot` >> simp[Abbr`bound`] >> NO_TAC) >>
-  TRY (qmatch_assum_abbrev_tac`n * slot < bound` >>
-       `n <= n * slot` by gvs[] >>
-       irule LESS_EQ_LESS_TRANS >>
-       qexists `n * slot` >> simp[Abbr`bound`] >> NO_TAC) >>
-  TRY (qmatch_asmsub_abbrev_tac`w2n w` >>
-       Q.ISPEC_THEN`w`mp_tac w2n_lt >> simp[] >> NO_TAC) >>
-  qmatch_goalsub_abbrev_tac`w2n w` >>
-  Q.ISPEC_THEN`w`mp_tac w2n_lt >>
+  gvs[toplevel_value_typed_def, oneline toplevel_array_length_def,
+      vyperStateTheory.return_def, vyperStateTheory.bind_def, raise_def,
+      value_has_type_def, AllCaseEqs(), value_CASE_rator,
+      array_value_CASE_rator, well_formed_type_value_def] >>
+  rename1 `get_storage_backend cx transient` >> Cases_on `transient` >>
+  gvs[get_storage_backend_def, vyperStateTheory.bind_def,
+      vyperStateTheory.return_def, vyperStateTheory.get_transient_storage_def,
+      vyperStateTheory.get_accounts_def, AllCaseEqs()] >>
+  qmatch_goalsub_abbrev_tac `w2n w` >> Q.ISPEC_THEN `w` mp_tac w2n_lt >>
   simp[]
 QED
 
@@ -3482,37 +3356,18 @@ Theorem Len_toplevel_array_length_no_type_error:
   toplevel_array_length cx arg_tv st = (INR (Error (TypeError err)), st') ==>
   F
 Proof
-  strip_tac >> gvs[well_typed_builtin_app_def] >>
-  Cases_on `arg_ty` >> gvs[is_sized_type_def, evaluate_type_def]
-  >- (
-    rename1 `BaseT bt` >> Cases_on `bt` >>
-    gvs[is_sized_type_def, evaluate_type_def, AllCaseEqs(), LET_THM]
-    >- (
-      Cases_on `arg_tv` >>
-      gvs[toplevel_value_typed_def, oneline toplevel_array_length_def,
-          vyperStateTheory.return_def, raise_def, value_has_type_def,
-          AllCaseEqs(), bind_def, get_storage_backend_def, get_accounts_def,
-          value_CASE_rator, get_transient_storage_def]) >>
-    gvs[evaluate_type_def, compatible_bound_def, AllCaseEqs(), LET_THM] >>
-    Cases_on `arg_tv` >>
-    gvs[toplevel_value_typed_def, oneline toplevel_array_length_def,
-        vyperStateTheory.return_def, raise_def, value_has_type_def,
-        AllCaseEqs(), bind_def, get_storage_backend_def, get_accounts_def,
-        get_transient_storage_def, value_CASE_rator, well_formed_type_value_def]
-  ) >>
-  gvs[AllCaseEqs()] >>
+  strip_tac >>
+  gvs[well_typed_builtin_app_def, is_sized_type_cases] >>
+  gvs[evaluate_type_def, AllCaseEqs(), LET_THM] >>
   Cases_on `arg_tv` >>
   gvs[toplevel_value_typed_def, oneline toplevel_array_length_def,
-      vyperStateTheory.return_def, raise_def, value_has_type_def, AllCaseEqs(),
-      bind_def, ignore_bind_def, value_CASE_rator, array_value_CASE_rator,
-      get_storage_backend_def, get_accounts_def, get_transient_storage_def,
-      well_formed_type_value_def, type_slot_size_def] >>
-  Cases_on `b` >>
-  gvs[vyperStateTheory.return_def, bind_def, bind_apply, get_storage_backend_def,
-      vyperStateTheory.get_transient_storage_def, vyperStateTheory.get_accounts_def] >>
-  Cases_on `b'` >>
-  gvs[vyperStateTheory.return_def, bind_def, bind_apply, get_storage_backend_def,
-      vyperStateTheory.get_transient_storage_def, vyperStateTheory.get_accounts_def]
+      vyperStateTheory.return_def, vyperStateTheory.bind_def, raise_def,
+      value_has_type_def, AllCaseEqs(), value_CASE_rator,
+      array_value_CASE_rator, well_formed_type_value_def] >>
+  rename1 `get_storage_backend cx transient` >> Cases_on `transient` >>
+  gvs[get_storage_backend_def, vyperStateTheory.bind_def,
+      vyperStateTheory.return_def, vyperStateTheory.get_transient_storage_def,
+      vyperStateTheory.get_accounts_def, AllCaseEqs()]
 QED
 
 Theorem Len_builtin_sound:

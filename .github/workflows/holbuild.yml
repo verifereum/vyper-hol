@@ -3,6 +3,15 @@ name: holbuild
 on:
   workflow_dispatch:
   pull_request:
+    # Only ready PRs into main from branches of this repository run jobs:
+    # pushing a branch here needs write access, and those runs get the cache
+    # login. Fork and draft PRs run nothing; the merge queue tests them.
+    # ready_for_review starts CI when a draft is marked ready; converted_to_draft
+    # cancels the run of a PR turned back into a draft. Edits are not listed: a
+    # run whose jobs all skip would replace the PR's required checks, so a PR
+    # retargeted to main runs on its next push.
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
   merge_group:
   push:
     branches: [main]
@@ -19,10 +28,58 @@ env:
   HBX_ARTEFACT_NAME: vyper-hol-hbx-${{ github.sha }}
 
 jobs:
-  build:
+  toolchain:
+    # holbuild hashes the HOL toolchain's bytes into every action key, and two
+    # HOL builds differ, so build-rollup finds the witness groups' actions only
+    # if build and compiler share one toolchain. Without a project snapshot to
+    # carry it, this job builds it once for build, compiler and test-deps. With
+    # the remote login, holbuild restores the published HOL toolchain instead of
+    # building a new one, so keys stay those of earlier runs.
+    if: (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository))
     runs-on: ubuntu-latest
-    # The cache login is an environment secret that only trusted main runs can read.
-    environment: ${{ ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'merge_group' && github.event.merge_group.base_ref == 'refs/heads/main')) && 'bazel-cache' || '' }}
+    timeout-minutes: 60
+    environment: ${{ ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'merge_group' && github.event.merge_group.base_ref == 'refs/heads/main') || github.event_name == 'pull_request') && 'bazel-cache' || '' }}
+    outputs:
+      snapshot-key: ${{ steps.project.outputs.project-snapshot-key == '' && steps.cache-key.outputs.snapshot-key || '' }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup-holbuild-project
+        id: project
+        with:
+          lookup-only: true
+
+      - name: Compute holbuild toolchain snapshot key
+        id: cache-key
+        run: echo "snapshot-key=${{ steps.project.outputs.stage-prefix }}-toolchain-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}" >> "$GITHUB_OUTPUT"
+
+      - name: Configure remote cache
+        if: ${{ steps.project.outputs.project-snapshot-key == '' }}
+        uses: ./.github/actions/setup-remote-cache
+        with:
+          curl-config: ${{ secrets.HOLBUILD_REMOTE_CACHE_CURL_CONFIG }}
+
+      - name: Build schema-2 HOL toolchain
+        if: ${{ steps.project.outputs.project-snapshot-key == '' }}
+        run: holbuild buildhol
+
+      - name: Save HOL toolchain snapshot
+        if: ${{ steps.project.outputs.project-snapshot-key == '' }}
+        uses: actions/cache/save@v6
+        with:
+          path: ~/.cache/holbuild
+          key: ${{ steps.cache-key.outputs.snapshot-key }}
+
+  build:
+    if: (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository))
+    needs: toolchain
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    # The cache login is a secret of the bazel-cache environment, which main,
+    # merge-queue and pull request refs may deploy to.
+    environment: ${{ ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'merge_group' && github.event.merge_group.base_ref == 'refs/heads/main') || github.event_name == 'pull_request') && 'bazel-cache' || '' }}
     outputs:
       holbuild-cache-key: ${{ steps.cache-key.outputs.snapshot-key }}
     steps:
@@ -30,71 +87,14 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: ./.github/actions/setup-polyml
-        id: polyml
-
-      - name: Get minimum holbuild version from holproject.toml
-        id: holbuild-version
-        run: |
-          holbuild_ref="$(python3 - <<'PY'
-          import tomllib
-          with open("holproject.toml", "rb") as f:
-              data = tomllib.load(f)
-          print("v" + data["holbuild"]["minimum_version"])
-          PY
-          )"
-          echo "ref=$holbuild_ref" >> "$GITHUB_OUTPUT"
-
-      - uses: ./.github/actions/setup-holbuild
-        id: holbuild
+      - uses: ./.github/actions/setup-holbuild-project
+        id: project
         with:
-          holbuild-ref: ${{ steps.holbuild-version.outputs.ref }}
+          toolchain-snapshot-key: ${{ needs.toolchain.outputs.snapshot-key }}
 
-      - name: Report selected holbuild version
-        run: holbuild --version
-
-      - name: Configure holbuild cache
-        run: echo "HOLBUILD_CACHE=$HOME/.cache/holbuild" >> "$GITHUB_ENV"
-
-      - name: Compute holbuild cache keys
+      - name: Compute holbuild snapshot key
         id: cache-key
-        run: |
-          toolchain_key="holbuild-v3-toolchain-${{ runner.os }}-${{ runner.arch }}-${{ steps.polyml.outputs.polyml-rev }}-${{ steps.holbuild.outputs.holbuild-rev }}"
-          compatibility_hash="${{ hashFiles('holproject.toml', 'VYPER_PIN') }}"
-          build_prefix="holbuild-v3-build-${{ runner.os }}-${{ runner.arch }}-${{ steps.polyml.outputs.polyml-rev }}-${{ steps.holbuild.outputs.holbuild-rev }}-${compatibility_hash}"
-          snapshot_key="${build_prefix}-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}"
-          echo "toolchain-key=${toolchain_key}" >> "$GITHUB_OUTPUT"
-          echo "build-prefix=${build_prefix}" >> "$GITHUB_OUTPUT"
-          echo "snapshot-key=${snapshot_key}" >> "$GITHUB_OUTPUT"
-
-      - name: Restore latest compatible project snapshot
-        id: cache-holbuild-project
-        uses: actions/cache/restore@v6
-        with:
-          path: ~/.cache/holbuild
-          key: ${{ steps.cache-key.outputs.snapshot-key }}
-          restore-keys: |
-            ${{ steps.cache-key.outputs.build-prefix }}-
-
-      - name: Restore holbuild toolchain cache on project snapshot miss
-        id: cache-holbuild-toolchain
-        if: ${{ steps.cache-holbuild-project.outputs.cache-matched-key == '' }}
-        uses: actions/cache/restore@v6
-        with:
-          path: ~/.cache/holbuild
-          key: ${{ steps.cache-key.outputs.toolchain-key }}
-
-      - name: Report restored holbuild cache
-        env:
-          PROJECT_CACHE_HIT: ${{ steps.cache-holbuild-project.outputs.cache-hit }}
-          PROJECT_CACHE_KEY: ${{ steps.cache-holbuild-project.outputs.cache-matched-key }}
-          TOOLCHAIN_CACHE_HIT: ${{ steps.cache-holbuild-toolchain.outputs.cache-hit }}
-          TOOLCHAIN_CACHE_KEY: ${{ steps.cache-holbuild-toolchain.outputs.cache-matched-key }}
-        run: |
-          echo "project cache hit: ${PROJECT_CACHE_HIT:-false}"
-          echo "project cache key: ${PROJECT_CACHE_KEY:-<none>}"
-          echo "toolchain cache hit: ${TOOLCHAIN_CACHE_HIT:-false}"
-          echo "toolchain cache key: ${TOOLCHAIN_CACHE_KEY:-<none>}"
+        run: echo "snapshot-key=${{ steps.project.outputs.build-prefix }}-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}" >> "$GITHUB_OUTPUT"
 
       - name: Configure remote cache
         uses: ./.github/actions/setup-remote-cache
@@ -105,11 +105,179 @@ jobs:
         run: holbuild buildhol
 
       - name: Save holbuild toolchain cache after buildhol
+        # Every branch can restore main's entries, so other branches' copies
+        # only fill the 10 GB cache.
+        if: ${{ github.event_name == 'push' }}
         uses: actions/cache/save@v6
         continue-on-error: true
         with:
           path: ~/.cache/holbuild
-          key: ${{ steps.cache-key.outputs.toolchain-key }}
+          key: ${{ steps.project.outputs.toolchain-key }}
+
+      - name: Build project except the witnesses
+        env:
+          TMPDIR: ${{ runner.temp }}
+        run: |
+          # The witnesses build in the witnesses jobs; build-rollup adds them.
+          holbuild --verbose -j"$(nproc)" build --skip-checkpoints --skip-proof-steps $(python3 tools/ci_targets.py build-roots)
+
+      - name: Save holbuild project snapshot
+        uses: actions/cache/save@v6
+        with:
+          path: ~/.cache/holbuild
+          key: ${{ steps.cache-key.outputs.snapshot-key }}
+
+      - name: Verify no successful-build checkpoints remain
+        run: |
+          if find .holbuild/checkpoints \( -name '*.save' -o -name '*.save.ok' \) 2>/dev/null | grep -q .; then
+            echo "checkpoint files remained after holbuild run" >&2
+            find .holbuild/checkpoints \( -name '*.save' -o -name '*.save.ok' \) 2>/dev/null | head -50 >&2
+            exit 1
+          fi
+
+  compiler:
+    # Builds what the witnesses load besides each other, once for all
+    # witness groups.
+    if: (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository))
+    needs: toolchain
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    # The cache login is a secret of the bazel-cache environment, which main,
+    # merge-queue and pull request refs may deploy to.
+    environment: ${{ ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'merge_group' && github.event.merge_group.base_ref == 'refs/heads/main') || github.event_name == 'pull_request') && 'bazel-cache' || '' }}
+    outputs:
+      holbuild-cache-key: ${{ steps.cache-key.outputs.snapshot-key }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup-holbuild-project
+        id: project
+        with:
+          toolchain-snapshot-key: ${{ needs.toolchain.outputs.snapshot-key }}
+
+      - name: Compute holbuild snapshot key
+        id: cache-key
+        run: echo "snapshot-key=${{ steps.project.outputs.stage-prefix }}-compiler-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}" >> "$GITHUB_OUTPUT"
+
+      - name: Configure remote cache
+        uses: ./.github/actions/setup-remote-cache
+        with:
+          curl-config: ${{ secrets.HOLBUILD_REMOTE_CACHE_CURL_CONFIG }}
+
+      - name: Build schema-2 HOL toolchain
+        run: holbuild buildhol
+
+      - name: Build witness dependencies
+        env:
+          TMPDIR: ${{ runner.temp }}
+        run: |
+          targets=$(python3 tools/ci_targets.py compiler)
+          echo "Building: $targets"
+          holbuild --verbose -j"$(nproc)" build --skip-checkpoints --skip-proof-steps $targets
+
+      - name: Save holbuild compiler snapshot
+        uses: actions/cache/save@v6
+        with:
+          path: ~/.cache/holbuild
+          key: ${{ steps.cache-key.outputs.snapshot-key }}
+
+  witnesses:
+    if: (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository))
+    needs: compiler
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    # The cache login is a secret of the bazel-cache environment, which main,
+    # merge-queue and pull request refs may deploy to.
+    environment: ${{ ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'merge_group' && github.event.merge_group.base_ref == 'refs/heads/main') || github.event_name == 'pull_request') && 'bazel-cache' || '' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        group: [0, 1, 2, 3]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup-holbuild-project
+        with:
+          snapshot-key: ${{ needs.compiler.outputs.holbuild-cache-key }}
+
+      - name: Configure remote cache
+        uses: ./.github/actions/setup-remote-cache
+        with:
+          curl-config: ${{ secrets.HOLBUILD_REMOTE_CACHE_CURL_CONFIG }}
+
+      - name: Build witness group ${{ matrix.group }}
+        id: witnesses
+        env:
+          TMPDIR: ${{ runner.temp }}
+        run: |
+          # Groups are balanced by .github/witness-times.txt, scaled by each
+          # witness's fixture count; rerun `tools/ci_targets.py witness-times`
+          # when witness times drift.
+          targets=$(python3 tools/ci_targets.py witnesses --group ${{ matrix.group }} --groups ${{ strategy.job-total }})
+          echo "Building: $targets"
+          echo "targets=$targets" >> "$GITHUB_OUTPUT"
+          holbuild --verbose -j"$(nproc)" build --skip-checkpoints --skip-proof-steps $targets
+
+      - name: Verify no successful-build checkpoints remain
+        run: |
+          if find .holbuild/checkpoints \( -name '*.save' -o -name '*.save.ok' \) 2>/dev/null | grep -q .; then
+            echo "checkpoint files remained after holbuild witness run" >&2
+            find .holbuild/checkpoints \( -name '*.save' -o -name '*.save.ok' \) 2>/dev/null | head -50 >&2
+            exit 1
+          fi
+
+      - name: Export witness group HBX
+        run: holbuild export -o witnesses-${{ matrix.group }}.hbx ${{ steps.witnesses.outputs.targets }}
+
+      - name: Upload witness group HBX
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: witnesses-${{ github.sha }}-${{ matrix.group }}
+          path: witnesses-${{ matrix.group }}.hbx
+          if-no-files-found: error
+          retention-days: 1
+          overwrite: true
+
+  build-rollup:
+    # Adds the witness groups to build's snapshot, builds the witness rollup
+    # and exports the HBX of the whole project.
+    if: (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository))
+    needs: [build, witnesses]
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    # The cache login is a secret of the bazel-cache environment, which main,
+    # merge-queue and pull request refs may deploy to.
+    environment: ${{ ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'merge_group' && github.event.merge_group.base_ref == 'refs/heads/main') || github.event_name == 'pull_request') && 'bazel-cache' || '' }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup-holbuild-project
+        with:
+          snapshot-key: ${{ needs.build.outputs.holbuild-cache-key }}
+
+      - name: Download witness group HBXs
+        uses: actions/download-artifact@v8.0.1
+        with:
+          pattern: witnesses-${{ github.sha }}-*
+          path: witness-hbx
+          merge-multiple: true
+
+      - name: Import witness group HBXs
+        run: |
+          for archive in witness-hbx/*.hbx; do
+            holbuild import "$archive"
+          done
+
+      - name: Configure remote cache
+        uses: ./.github/actions/setup-remote-cache
+        with:
+          curl-config: ${{ secrets.HOLBUILD_REMOTE_CACHE_CURL_CONFIG }}
 
       - name: Build project with holbuild
         env:
@@ -121,7 +289,7 @@ jobs:
         uses: actions/cache/save@v6
         with:
           path: ~/.cache/holbuild
-          key: ${{ steps.cache-key.outputs.snapshot-key }}
+          key: ${{ needs.build.outputs.holbuild-cache-key }}-rollup
 
       - name: Verify no successful-build checkpoints remain
         run: |
@@ -150,7 +318,77 @@ jobs:
           if-no-files-found: error
           retention-days: 90
 
+  tested:
+    # On a push to main, whether a merge-group run already passed this commit:
+    # the merge queue fast-forwards main to the commit it tested, so the push
+    # run skips the tests and oracle and builds only to save main's snapshot.
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+    outputs:
+      merge-group-passed: ${{ steps.runs.outputs.merge-group-passed }}
+    steps:
+      - name: Find a successful merge-group run of this commit
+        id: runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          count=$(gh api "repos/${{ github.repository }}/actions/workflows/holbuild.yml/runs?head_sha=${{ github.sha }}&event=merge_group&status=success" -q .total_count)
+          echo "successful merge-group runs: $count"
+          echo "merge-group-passed=$([ "$count" -gt 0 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
+  test-deps:
+    # Builds only what the test groups load besides their own theories, so they
+    # start long before build finishes.
+    needs: [toolchain, tested]
+    if: ${{ !cancelled() && needs.toolchain.result == 'success' && needs.tested.outputs.merge-group-passed != 'true' && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository)) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    # The cache login is a secret of the bazel-cache environment, which main,
+    # merge-queue and pull request refs may deploy to.
+    environment: ${{ ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'merge_group' && github.event.merge_group.base_ref == 'refs/heads/main') || github.event_name == 'pull_request') && 'bazel-cache' || '' }}
+    outputs:
+      holbuild-cache-key: ${{ steps.cache-key.outputs.snapshot-key }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup-holbuild-project
+        id: project
+        with:
+          toolchain-snapshot-key: ${{ needs.toolchain.outputs.snapshot-key }}
+
+      - name: Compute holbuild snapshot key
+        id: cache-key
+        run: echo "snapshot-key=${{ steps.project.outputs.stage-prefix }}-test-deps-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}" >> "$GITHUB_OUTPUT"
+
+      - name: Configure remote cache
+        uses: ./.github/actions/setup-remote-cache
+        with:
+          curl-config: ${{ secrets.HOLBUILD_REMOTE_CACHE_CURL_CONFIG }}
+
+      - name: Build schema-2 HOL toolchain
+        run: holbuild buildhol
+
+      - name: Build test dependencies
+        env:
+          TMPDIR: ${{ runner.temp }}
+        run: |
+          targets=$(python3 tools/ci_targets.py test-deps)
+          echo "Building: $targets"
+          holbuild --verbose -j"$(nproc)" build --skip-checkpoints --skip-proof-steps $targets
+
+      - name: Save holbuild test dependency snapshot
+        uses: actions/cache/save@v6
+        with:
+          path: ~/.cache/holbuild
+          key: ${{ steps.cache-key.outputs.snapshot-key }}
+
   python-o1-oracle:
+    needs: tested
+    if: ${{ !cancelled() && needs.tested.outputs.merge-group-passed != 'true' && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository)) }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -159,7 +397,7 @@ jobs:
 
       - uses: actions/setup-python@v6
         with:
-          python-version: '3.11.11'
+          python-version: '3.11.17'
 
       - name: Check independent pinned-Python O1/no-assembly-opt bytecode oracle
         run: |
@@ -171,6 +409,8 @@ jobs:
             --vyper-repo vyper-src
 
   export-vyper-tests:
+    needs: tested
+    if: ${{ !cancelled() && needs.tested.outputs.merge-group-passed != 'true' && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository)) }}
     runs-on: ubuntu-latest
     outputs:
       export-cache-key: ${{ steps.exports.outputs.export-cache-key }}
@@ -182,48 +422,27 @@ jobs:
         id: exports
 
   vyper-tests:
-    needs: [build, export-vyper-tests]
+    # tested, skipped on other events than push, would skip this job through
+    # the implicit success(); the result checks stand in for it.
+    if: ${{ !cancelled() && needs.test-deps.result == 'success' && needs.export-vyper-tests.result == 'success' && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository)) }}
+    needs: [test-deps, export-vyper-tests]
     runs-on: ubuntu-latest
-    # The cache login is an environment secret that only trusted main runs can read.
-    environment: ${{ ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'merge_group' && github.event.merge_group.base_ref == 'refs/heads/main')) && 'bazel-cache' || '' }}
+    timeout-minutes: 90
+    # The cache login is a secret of the bazel-cache environment, which main,
+    # merge-queue and pull request refs may deploy to.
+    environment: ${{ ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'merge_group' && github.event.merge_group.base_ref == 'refs/heads/main') || github.event_name == 'pull_request') && 'bazel-cache' || '' }}
     strategy:
       fail-fast: false
       matrix:
-        group: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+        group: [0, 1, 2, 3, 4, 5]
     steps:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
 
-      - uses: ./.github/actions/setup-polyml
-        id: polyml
-
-      - name: Get minimum holbuild version from holproject.toml
-        id: holbuild-version
-        run: |
-          holbuild_ref="$(python3 - <<'PY'
-          import tomllib
-          with open("holproject.toml", "rb") as f:
-              data = tomllib.load(f)
-          print("v" + data["holbuild"]["minimum_version"])
-          PY
-          )"
-          echo "ref=$holbuild_ref" >> "$GITHUB_OUTPUT"
-
-      - uses: ./.github/actions/setup-holbuild
-        id: holbuild
+      - uses: ./.github/actions/setup-holbuild-project
         with:
-          holbuild-ref: ${{ steps.holbuild-version.outputs.ref }}
-
-      - name: Configure holbuild cache
-        run: echo "HOLBUILD_CACHE=$HOME/.cache/holbuild" >> "$GITHUB_ENV"
-
-      - name: Restore holbuild global cache
-        uses: actions/cache/restore@v6
-        with:
-          path: ~/.cache/holbuild
-          key: ${{ needs.build.outputs.holbuild-cache-key }}
-          fail-on-cache-miss: true
+          snapshot-key: ${{ needs.test-deps.outputs.holbuild-cache-key }}
 
       - name: Restore Vyper test exports
         uses: actions/cache/restore@v6
@@ -237,6 +456,14 @@ jobs:
         with:
           curl-config: ${{ secrets.HOLBUILD_REMOTE_CACHE_CURL_CONFIG }}
 
+      - name: Generate test theories from pinned exports
+        run: |
+          holbuild build --skip-checkpoints --skip-proof-steps vyperTestLib
+          generator=$(mktemp --suffix=.sml)
+          trap 'rm -f "$generator"' EXIT
+          printf '%s\n' 'vyperTestLib.generate_tests ();' > "$generator"
+          (cd tests && holbuild run --noconfig vyperTestLib "$generator")
+
       - name: Build Vyper test coverage baseline
         if: matrix.group == 0
         run: holbuild build --skip-checkpoints --skip-proof-steps vyperTestCoverageReportTheory
@@ -249,19 +476,9 @@ jobs:
         env:
           TMPDIR: ${{ runner.temp }}
         run: |
-          tests=$(find tests/generated -maxdepth 1 -type f -name 'vyperTest_*Script.sml' -printf '%f\n' | sort -V)
-          total=$(printf "%s\n" "$tests" | sed '/^$/d' | wc -l)
-          if [ "$total" -eq 0 ]; then
-            echo "No vyperTest_* scripts found in tests/generated/."
-            exit 1
-          fi
-          splits=10
-          group=${{ matrix.group }}
-          per_group=$(( (total + splits - 1) / splits ))
-          start=$(( group * per_group ))
-
-          echo "Group $group: tests $start to $((start + per_group - 1)) of $total"
-          targets=$(echo "$tests" | tail -n +$((start + 1)) | head -n "$per_group" | sed 's/Script\.sml$/Theory/' | tr '\n' ' ')
+          # Groups come from .github/vyper-test-groups.txt, balanced by measured
+          # build time; rerun `tools/vyper_test_groups.py plan` when tests change.
+          targets=$(python3 tools/vyper_test_groups.py targets --group ${{ matrix.group }} --groups ${{ strategy.job-total }})
           echo "Building: $targets"
           holbuild --verbose -j"$(nproc)" build --skip-checkpoints --skip-proof-steps $targets
 
@@ -274,10 +491,19 @@ jobs:
           fi
 
   holbuild-success:
-    if: always()
+    if: always() && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository))
     runs-on: ubuntu-latest
-    needs: [build, python-o1-oracle, export-vyper-tests, vyper-tests]
+    needs: [toolchain, build, compiler, witnesses, build-rollup, tested, test-deps, python-o1-oracle, export-vyper-tests, vyper-tests]
     steps:
       - name: Check all jobs succeeded
-        if: ${{ needs.build.result != 'success' || needs.python-o1-oracle.result != 'success' || needs.export-vyper-tests.result != 'success' || needs.vyper-tests.result != 'success' }}
-        run: exit 1
+        env:
+          BUILD_RESULTS: ${{ needs.toolchain.result }} ${{ needs.build.result }} ${{ needs.compiler.result }} ${{ needs.witnesses.result }} ${{ needs.build-rollup.result }}
+          TEST_RESULTS: ${{ needs.test-deps.result }} ${{ needs.python-o1-oracle.result }} ${{ needs.export-vyper-tests.result }} ${{ needs.vyper-tests.result }}
+          MERGE_GROUP_PASSED: ${{ needs.tested.outputs.merge-group-passed }}
+        run: |
+          for result in $BUILD_RESULTS; do
+            [ "$result" = success ] || exit 1
+          done
+          for result in $TEST_RESULTS; do
+            [ "$result" = success ] || { [ "$result" = skipped ] && [ "$MERGE_GROUP_PASSED" = true ]; } || exit 1
+          done

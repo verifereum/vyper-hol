@@ -1,6 +1,6 @@
 Theory sourceOrdinaryClaims
 Ancestors
-  sourceSyntax jsonAST list pair
+  sourceSyntax jsonAST jsonNominalSources list pair
 
 (* Syntax/claim pairing ONLY: neither constant evaluation, residual policy nor
    source typing. Children follow source order, including call designators and

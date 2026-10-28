@@ -8,7 +8,7 @@ Its call traces therefore carry the outputs Vyper's EVM produced, which is
 what the replay in `tests/vyperInStaticArrayTestScript.sml` checks the
 interpreter against.
 
-To regenerate, prepare the pinned Python 3.11.11 test environment described in
+To regenerate, prepare the pinned Python 3.11.17 test environment described in
 the repository README, then run from the vyper-hol root:
 
 ```sh

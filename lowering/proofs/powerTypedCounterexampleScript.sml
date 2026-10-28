@@ -1,5 +1,6 @@
 (* Regression for the repaired signed literal-exponent lower bound.
-   IntT 9 remains in the raw checked domain: (-16)^2 must overflow. *)
+   Raw width 9 arithmetic overflows at (-16)^2, but IntT 9 is not a valid
+   byte-aligned source type. IntT 16 supplies the checked (-182)^2 witness. *)
 Theory powerTypedCounterexample
 Ancestors
   powerBoundProps exprLowering compileEnv emitHelper vyperTypeSystem
@@ -16,10 +17,7 @@ Proof
   decide_tac
 QED
 
-Theorem power_int9_square_typed_overflow:
-  FLOOKUP env.var_types "x" = SOME (BaseT (IntT 9)) ==>
-  well_typed_expr env (Builtin (BaseT (IntT 9)) (Bop Exp)
-    [Name (BaseT (IntT 9)) "x"; Literal (BaseT (IntT 9)) (IntL 2)]) /\
+Theorem power_int9_square_overflow:
   within_int_bound (Signed 9) (-16) /\
   evaluate_binop (Signed 9) tv Exp (IntV (-16)) (IntV 2) =
     INR (RuntimeError "bounded_int_op bound")
@@ -32,12 +30,51 @@ Proof
        integerTheory.INT_EXP_CALCULATE] >> simp[arithmeticTheory.NUMERAL_DEF]
 QED
 
+(* IntT 9 is rejected regardless of the variable environment. *)
+Theorem power_int9_square_rejected_type:
+  ~well_formed_type env.type_defs (BaseT (IntT 9)) /\
+  ~well_typed_expr env (Builtin (BaseT (IntT 9)) (Bop Exp)
+    [Name (BaseT (IntT 9)) "x"; Literal (BaseT (IntT 9)) (IntL 2)])
+Proof
+  simp[well_typed_expr_def, well_formed_type_def, evaluate_type_def]
+QED
+
+Theorem power_int16_square_bound:
+  largest_pow_base 2 16 T = 181
+Proof
+  `181 <= largest_pow_base 2 16 T` by simp[largest_pow_base_characterisation] >>
+  `~(182 <= largest_pow_base 2 16 T)` by simp[largest_pow_base_characterisation] >>
+  decide_tac
+QED
+
+(* A valid byte-aligned checked expression, with an in-range base, whose
+   square exceeds signed16's upper bound: 33124 > 32767. *)
+Theorem power_int16_square_typed_overflow:
+  FLOOKUP env.var_types "x" = SOME (BaseT (IntT 16)) ==>
+  well_typed_expr env (Builtin (BaseT (IntT 16)) (Bop Exp)
+    [Name (BaseT (IntT 16)) "x"; Literal (BaseT (IntT 16)) (IntL 2)]) /\
+  within_int_bound (Signed 16) (-182) /\
+  evaluate_binop (Signed 16) tv Exp (IntV (-182)) (IntV 2) =
+    INR (RuntimeError "bounded_int_op bound")
+Proof
+  `(-182 : int) ** 2 = 33124` by
+    (CONV_TAC (LAND_CONV (RAND_CONV
+       (numLib.num_CONV THENC RAND_CONV numLib.num_CONV))) >>
+     simp[integerTheory.int_exp]) >>
+  simp[well_typed_expr_def, well_typed_literal_def, well_formed_type_def,
+       evaluate_type_def, well_typed_builtin_app_def, well_typed_binop_def,
+       builtin_operands_ok_def, power_operands_ok_def, power_exponent_ok_def,
+       integer_literal_expr_def, integer_value_bits_def, expr_type_def,
+       within_int_bound_def, evaluate_binop_def, bounded_int_op_def]
+QED
+
 Definition power_probe_state_def:
   power_probe_state = (ARB : compile_state) with
     <|cs_current_insts := []; cs_next_id := 0; cs_next_var := 0|>
 End
 
-(* The literal options are exactly those extracted from the checked AST. *)
+(* Raw compiler regression: the total compiler accepts this annotation even
+   though the source checker rejects it. Literal options come from this AST. *)
 Definition power_int9_compilation_def:
   power_int9_compilation =
     compile_binop Exp (Lit (i2w (-16))) (Lit 2w) (BaseT (IntT 9))
@@ -55,6 +92,31 @@ Proof
   simp[power_int9_compilation_def, compile_binop_def, compile_safe_pow_def,
        expr_int_literal_def, type_bits_def, is_signed_type_def,
        power_int9_square_bound, power_probe_state_def,
+       comp_bind_def, comp_ignore_bind_def, emit_op_def, emit_void_def,
+       fresh_var_def, fresh_id_def, emit_def, comp_return_def,
+       i2w_def] >>
+  EVAL_TAC >> CONV_TAC (RAND_CONV (REWR_CONV (GSYM ETA_THM))) >>
+  simp[FLOOKUP_UPDATE]
+QED
+
+(* The same lowering path, now with a valid byte-aligned source annotation. *)
+Definition power_int16_compilation_def:
+  power_int16_compilation =
+    compile_binop Exp (Lit (i2w (-182))) (Lit 2w) (BaseT (IntT 16))
+      (expr_int_literal (Name (BaseT (IntT 16)) "x"))
+      (expr_int_literal (Literal (BaseT (IntT 16)) (IntL 2))) power_probe_state
+End
+
+Theorem power_int16_square_generated_block_reverts:
+  let (out, st') = power_int16_compilation in
+  let bb = <|bb_label := "power";
+             bb_instructions := st'.cs_current_insts ++
+               [mk_inst 7 JMP [Label "done"] []]|> in
+  ?ss'. run_block fuel ctx bb (init_venom_state "power") = Abort Revert_abort ss'
+Proof
+  simp[power_int16_compilation_def, compile_binop_def, compile_safe_pow_def,
+       expr_int_literal_def, type_bits_def, is_signed_type_def,
+       power_int16_square_bound, power_probe_state_def,
        comp_bind_def, comp_ignore_bind_def, emit_op_def, emit_void_def,
        fresh_var_def, fresh_id_def, emit_def, comp_return_def,
        i2w_def] >>
@@ -123,7 +185,7 @@ Proof
   simp[FLOOKUP_UPDATE]
 QED
 
-(* Explicit 0**0 witness: +1, not zero, in every checked signed/unsigned width,
+(* Explicit 0**0 witness: +1, not zero, in every raw arithmetic width below,
    using both literal selections and the actual generated Venom block. *)
 Theorem power_zero_zero_generated_blocks:
   (if signed then 1 < bits else 0 < bits) ==>
@@ -208,7 +270,7 @@ Proof
   (impl_tac >- fs[]) >> Cases_on `n = 0` >> simp[i2w_pos]
 QED
 
-(* IntT 1 is rejected even by raw checking. The total compiler nevertheless
+(* IntT 1 is rejected by the source checker. The total compiler nevertheless
    rejects its out-of-range +1 result; no checker restriction is added here. *)
 Theorem power_int1_zero_exponent_rejected_type:
   ~well_typed_expr env (Builtin (BaseT (IntT 1)) (Bop Exp)

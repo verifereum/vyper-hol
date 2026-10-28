@@ -2,6 +2,8 @@
 """Pin acceptance and genuine pre-erasure captures of the ordinary fixture universe.
 
 Run with the pinned checkout on PYTHONPATH; --generate refreshes both sides.
+CASES is the retained HOL gate; PIN_ONLY_CASES audits newer upstream fixtures
+without claiming source elaboration, kernel checking, or backend coverage.
 The inherited ID table is explicit trust, not inferred by pairing similar ASTs.
 Compiler and pre-erasure capture receive the SAME pinned source and source ID.
 Stale version pragmas are reported separately and adapted copies retain ALL
@@ -34,6 +36,21 @@ CASES = {
 }
 
 
+# New upstream checker fixtures are pin/capture audits only, not additions to
+# sourceOrdinaryAcceptanceLib.rows or the 26-case ordinary HOL inventory.
+PIN_ONLY_CASES = {
+    **{n: [(('main',), n + '/main.vy'), (('ownable',), n + '/ownable.vy'),
+            (('token',), n + '/token.vy')]
+       for n in ['attribute_initializes', 'nested_initializes']},
+    'imported_constants': [(('main',), 'imported_constants/main.vy'),
+        (('lib1',), 'imported_constants/lib1.vy'), (('lib2',), 'imported_constants/lib2.vy')],
+    'interface_struct': [(('main',), 'interface_struct/main.vy'), (('I',), 'interface_struct/I.vyi')],
+    'relative_uses': [(('pkg', 'mocks', 'main'), 'relative_uses/pkg/mocks/main.vy'),
+        (('pkg', 'lib_a'), 'relative_uses/pkg/lib_a.vy'),
+        (('pkg', 'lib_b'), 'relative_uses/pkg/lib_b.vy')],
+}
+
+
 # Inherited legacy module IDs are source IDs + 2 (main is NONE). These
 # declarations are independent of compiler traversal order and body syntax.
 INHERITED_SOURCE_IDS = {
@@ -41,9 +58,41 @@ INHERITED_SOURCE_IDS = {
        ['scoped_locals', 'imported_flag', 'imported_struct', 'imported_deploy', 'multimodule_storage']},
     'imported_interface': {('main',): 0, ('oracle',): 1},
     'interface_struct_return': {('main',): 0, ('manager',): 1},
-    'duplicate_interface': {('main', 'c'): 0, ('utils', 'interfaces', 'IPing'): 3,
+    'duplicate_interface': {('main', 'c'): 0, ('utils', 'interfaces', 'IPing'): 1,
                             ('utils', 'pinger'): 2},
+    **{n: {('main',): 0, ('ownable',): 2, ('token',): 1}
+       for n in ['attribute_initializes', 'nested_initializes']},
+    'imported_constants': {('main',): 0, ('lib1',): 2, ('lib2',): 1},
+    'interface_struct': {('main',): 0, ('I',): 1},
+    'relative_uses': {('pkg', 'mocks', 'main'): 0, ('pkg', 'lib_a'): 1, ('pkg', 'lib_b'): 2},
 }
+
+
+def check_inventory(base):
+    ordinary = {str(p.with_suffix('.vy').relative_to(base)) for p in base.rglob('*.json')
+        if p.with_suffix('.vy').exists() and not any(part.startswith('source_') for part in p.relative_to(base).parts)}
+    assert not CASES.keys() & PIN_ONLY_CASES.keys(), 'overlapping HOL/pin-only inventories'
+    expected = {entries[0][1] for entries in {**CASES, **PIN_ONLY_CASES}.values()}
+    assert ordinary == expected, ('ordinary fixture inventory drift',
+        {'unlisted': sorted(ordinary - expected), 'missing': sorted(expected - ordinary)})
+    assert len(CASES) == 26
+    assert len(PIN_ONLY_CASES) == 5
+
+
+def check_inherited_ids(annotated, entries, ids):
+    """Check explicit IDs against independent retained legacy fixture evidence.
+
+    Do not infer a trust map from compiler output or pair similar module bodies.
+    Equal aliases may repeat a path; conflicting IDs or extra imports fail.
+    """
+    expected = {path: ids[key] for key, path in entries}
+    found = {}
+    for module in [annotated['ast']] + annotated['imports']:
+        path, source_id = module['resolved_path'], module['source_id']
+        assert path in expected, ('unexpected legacy import', path)
+        assert source_id == expected[path], ('legacy source ID disagrees with explicit trust', path)
+        found[path] = source_id
+    assert found == expected, 'missing legacy import'
 
 
 def align_imports(annotated, identities):
@@ -78,20 +127,25 @@ def main(generate):
     for path in Path(vyper.__file__).resolve().parent.rglob('*.py'):
         relative = path.relative_to(Path(vyper.__file__).resolve().parent)
         assert str(relative) == 'version.py' or path.read_bytes() == (checkout/'vyper'/relative).read_bytes(), relative
-    ordinary = {str(p.with_suffix('.vy').relative_to(BASE)) for p in BASE.rglob('*.json')
-        if p.with_suffix('.vy').exists() and not any(part.startswith('source_') for part in p.relative_to(BASE).parts)}
-    assert ordinary == {entries[0][1] for entries in CASES.values()}, 'ordinary fixture inventory drift'
-    assert len(CASES) == 26
+    check_inventory(BASE)
     capture = runpy.run_path(str(ROOT / 'tools/source_module_loader.py'))['capture']
     OUT.mkdir(exist_ok=True)
     rows = []
-    for name, entries in CASES.items():
-        row = {'name':name, 'sources':[p for _,p in entries]}
+    for name, entries in {**CASES, **PIN_ONLY_CASES}.items():
+        pin_only = name in PIN_ONLY_CASES
+        output = OUT/'pin_only' if pin_only else OUT
+        row = {'name':name, 'scope':'pin-only' if pin_only else 'retained-HOL-gate',
+               'sources':[p for _,p in entries]}
+        ids = INHERITED_SOURCE_IDS.get(name, {entries[0][0]: 0})
+        # These upstream fixtures retain path/ID metadata. Some older,
+        # hand-authored ordinary oracles do not carry that provenance.
+        if pin_only or name == 'duplicate_interface':
+            legacy = json.loads((BASE/entries[0][1]).with_suffix('.json').read_text())
+            check_inherited_ids(legacy.get('annotated_ast', legacy), entries, ids)
         paths = [BASE/p for _,p in entries]
         row['original_sha256'] = {str(p.relative_to(ROOT)): hashlib.sha256(p.read_bytes()).hexdigest() for p in paths}
         search = [paths[0].parent, BASE/'duplicate_interface']
         def manifest_for(ps):
-            ids = INHERITED_SOURCE_IDS.get(name, {entries[0][0]: 0})
             return [{'key': list(key), 'path': str(p.resolve()), 'source_id': ids[key]}
                     for (key, _), p in zip(entries, ps)]
         def compile_paths(ps):
@@ -145,8 +199,8 @@ def main(generate):
                 {**e, 'source_sha256': p['source_sha256'],
                  'module_id': None if i == 0 else e['source_id'] + 2}
                 for i, (e, p) in enumerate(zip(manifest, captured['provenance']))]
-            for dest, value in [(OUT/(name+'.json'), captured),
-                                (OUT/'annotated'/(name+'.json'), annotated)]:
+            for dest, value in [(output/(name+'.json'), captured),
+                                (output/'annotated'/(name+'.json'), annotated)]:
                 text = json.dumps(value,sort_keys=True,separators=(',',':')) + '\n'
                 if generate:
                     dest.parent.mkdir(parents=True, exist_ok=True)

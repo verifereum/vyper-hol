@@ -74,7 +74,8 @@ Proof
   drule source_meaning_globals_transport >>
   disch_then (qspecl_then [`NONE`,`am`,`cx.txn.target`,`FEMPTY`] mp_tac) >>
   simp[source_meaning_set_current_tenv] >> strip_tac >>
-  simp[evaluate_all_constants_def, source_meaning_install_def] >>
+  simp[evaluate_all_constants_def, constants_order_def,
+    evaluate_module_constants_def, source_meaning_install_def] >>
   Cases_on `source_meaning_globals (get_tenv cx) meanings FEMPTY` >> simp[]
 QED
 

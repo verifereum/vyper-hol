@@ -144,7 +144,10 @@ fun declaration_decoder () : term decoder = let
       [terms import_ty (List.map (fn (n,a) => if from then
         construct "SI_FromImport" [text (#1 prefix),#2 prefix,text n,option stringSyntax.string_ty (Option.map text a)]
         else construct "SI_Import" [text n,option stringSyntax.string_ty (Option.map text a)]) aliases)])
-    (tuple2 (if from then tuple2 (required "module" string,required "level" natural)
+    (* A prefixless relative import is "" in Python AST captures and null
+       in annotated Vyper ASTs. The field remains required and typed. *)
+    (tuple2 (if from then tuple2 (JSONDecode.map (fn NONE => "" | SOME s => s)
+               (required "module" (nullable string)),required "level" natural)
              else succeed ("",numSyntax.zero_tm),required "names" (array import_alias)))
 in dispatch (fn
     "VariableDecl" => JSONDecode.map (fn (n,a,e) => construct "SD_Variable" [text n,a,e])

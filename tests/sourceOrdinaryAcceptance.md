@@ -13,7 +13,7 @@ paths plus explicit inherited claims. Annotated-only compatibility is available
 under explicit `*_legacy` names. There is no Source-failure → legacy retry.
 `Source.*` remains a separate full-Source interface, not the ordinary bridge.
 
-`sourceOrdinaryProgramInventoryTestTheory` audits **all 26 ordinary cases**:
+`sourceOrdinaryProgramInventoryTestTheory` audits **26 retained ordinary cases**:
 complete expected ASTs, independent checker artifacts, fold deletion/poisoning,
 pairing/source/phase/deployment equations and selected record/scalar/two-file
 wrapper agreements. See [the detailed inventory](sourceOrdinaryProgramInventory.md).
@@ -39,14 +39,21 @@ not a global green build.
 
 ## Pinned captures and reproduction
 
-`sourceOrdinaryPin.py` inventories 26 main cases and 35 source modules including
-imports. Separate `source_syntax` and `source_loader` suites are not substitutes.
+`sourceOrdinaryPin.py` inventories 31 main cases and 49 source modules including
+imports: the 26 retained HOL cases (35 modules), plus five pin/capture-only
+upstream cases (14 modules): `attribute_initializes`, `nested_initializes`,
+`imported_constants`, `interface_struct`, and `relative_uses`. The latter pairs
+live under `fixtures/check_contract/source_ordinary/pin_only/`; they are **not**
+additional source elaboration, kernel-checking, or backend certificates.
+The audit rejects missing or newly unlisted upstream fixtures rather than
+silently excluding them. Separate `source_syntax` and `source_loader` suites
+are not substitutes.
 
 ```sh
 PYTHONPATH=.agent-files/folded-value-validation/vyper-src \
   .agent-files/folded-value-validation/venv/bin/python tests/sourceOrdinaryPin.py --generate
 python tests/sourceOrdinaryPinTest.py
-holbuild -j1 --maxheap 6000 build sourceOrdinaryProgramInventoryTestTheory \
+holbuild -j1 --max-heap 6000 build sourceOrdinaryProgramInventoryTestTheory \
   --tactic-timeout 2.5 --skip-checkpoints
 ```
 
@@ -54,11 +61,22 @@ Omit `--generate` to verify retained pairs without rewriting. The generator
 requires the authoritative `VYPER_PIN` and checks imported compiler implementation
 bytes. Original captures precede `get_node`, analysis, folding and qualifier
 erasure; annotated claims are generated from the same input bytes/ID registry.
-Independent fixture expectations are not rewritten. Regenerated pairs match all
-26 cases; `.agent-files/source-ordinary-pin.json` retains source hashes/results.
+Independent legacy fixture ASTs are not rewritten. Regenerated pairs match all
+31 cases; `.agent-files/source-ordinary-pin.json` retains source hashes/results
+and labels retained-HOL-gate versus pin-only scope.
+
+The duplicate-interface upstream fixture retains source ID **1**, including both
+identical aliases, so its explicit inherited HOL module identity is **SOME 3**
+(source ID + 2), not the old `SOME 5`. The independent SML oracle, source capture,
+and annotated pair agree on that identity. The generator checks the explicit ID
+map against retained legacy evidence for this case and the new upstream cases;
+it never derives the trust map from its own compiler run. Duplicate aliases still
+require identical full module claims at the same path/hash/ID; divergent aliases
+are rejected.
 
 At pin `cd74ce4f57e3771aeeab8f061fa3be45bfe8a29c`, decimals enabled,
-23 originals accept. `abi_encode`, `interface_struct_return` and `daddy` have
+23 retained originals and all five pin-only originals accept. `abi_encode`,
+`interface_struct_return` and `daddy` have
 original `VersionException`; pragma-only `0.5.0a3` → `0.5.0a4` adaptations accept.
 Adapted acceptance is not acceptance of the original source.
 

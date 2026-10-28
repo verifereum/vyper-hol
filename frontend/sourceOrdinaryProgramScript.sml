@@ -2,7 +2,7 @@ Theory sourceOrdinaryProgram
 Ancestors
   sourceOrdinaryDecl sourceOrdinaryClaims sourceModuleElaborate sourceModuleOverride
   sourceModuleDefs sourceModuleEnv sourceSyntax jsonToVyper jsonToVyperExpr
-  jsonAST vyperTypeContract list pair option alist
+  jsonAST jsonNominalSources vyperTypeContract list pair option alist
 
 (* Explicit inherited runtime type/import/dispatch contexts. No runtime bodies
    or folded values enter via these contexts. Source declaration types and
@@ -117,7 +117,7 @@ QED
    inference. Callers explicitly opt into this remaining trust. *)
 Definition source_ordinary_legacy_contexts_def:
   source_ordinary_legacy_contexts identities ast =
-    case canonicalize_annotated_ast_imports ast of
+    case resolve_nominal_sources (canonicalize_annotated_ast_imports ast) of
       JAnnotatedAST (JModule main nr tops) imports =>
       let indexes = build_import_compact_indexes imports;
           maps = build_import_maps_from_indexes indexes;

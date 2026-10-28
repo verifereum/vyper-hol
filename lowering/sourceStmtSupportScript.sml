@@ -104,8 +104,11 @@ Termination
   simp[stmt_size_def, supported_stmt_list_size]
 End
 
+(* Acceptance may widen the assigned value. The whitelist equivalence only
+   needs typing of the RHS and any subscript key, not equality of value and
+   target types. *)
 Theorem checked_assignment_remainder:
-  well_typed_atarget env target (expr_type e) /\ well_typed_expr env e ==>
+  atarget_accepts env target ty /\ well_typed_expr env e ==>
   (source_assignment_remainder tops bindings target e <=>
    supported_assignment tops bindings target e)
 Proof
@@ -115,8 +118,10 @@ Proof
   simp[source_assignment_remainder_def, supported_assignment_def] >>
   rename1 `BaseTarget bt` >> Cases_on `bt` >> simp[] >>
   rpt (BasicProvers.TOP_CASE_TAC >> simp[]) >>
-  fs[well_typed_atarget_def, well_typed_target_def, Once well_typed_expr_def,
+  fs[atarget_accepts_def, Once well_typed_expr_def,
      AllCaseEqs()] >>
+  qmatch_goalsub_rename_tac `source_pure_expr_remainder tops key` >>
+  Cases_on `well_typed_expr env key` >> gvs[] >>
   imp_res_tac checked_pure_remainder >> simp[]
 QED
 

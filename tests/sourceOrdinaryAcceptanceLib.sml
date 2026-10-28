@@ -28,8 +28,10 @@ fun inherited path = vyperCheckContractFrontendLib.prepare_check_input_legacy
   {in_deploy=true,address=address,
    annotated_ast=JSONDecode.decodeFile jsonASTLib.annotated_ast (base ^ path),
    storage_layout=JSONDecode.decodeFile jsonASTLib.storage_layout (base ^ path)};
+(* Explicit legacy evidence: duplicate IPing aliases share original source ID 1,
+   hence module SOME 3; an alias must not allocate a fresh module identity. *)
 fun ids name = if name = "duplicate_interface" then
-    ``[(["main";"c"],NONE);(["utils";"interfaces";"IPing"],SOME 5);(["utils";"pinger"],SOME 4)]``
+    ``[(["main";"c"],NONE);(["utils";"interfaces";"IPing"],SOME 3);(["utils";"pinger"],SOME 4)]``
   else if name = "imported_interface" then ``[(["main"],NONE);(["oracle"],SOME 3)]``
   else if name = "interface_struct_return" then ``[(["main"],NONE);(["manager"],SOME 3)]``
   else if List.exists (fn n => n = name) ["scoped_locals","imported_flag","imported_struct",

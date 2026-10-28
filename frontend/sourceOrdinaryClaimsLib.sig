@@ -21,6 +21,22 @@ signature sourceOrdinaryClaimsLib = sig
      compiler. Source projection keeps those ORIGINAL wrappers, never flags.
      Program root paths use source-field ordinal/array-index steps; nested
      expression paths use source_claims_at, hence equal syntax at different
-     occurrences may carry different legacy types/dispatch claims. *)
+     occurrences may carry different legacy types/dispatch claims.
+     Program claims resolve inferred struct/flag types against all paired
+     top-level declarations, including imports, using jsonNominalSources.
+     With no imported nominal declarations, import identity validation is
+     skipped; main-only nominal declarations still repair main claims.
+     Otherwise, import source IDs shared across distinct known resolved_paths
+     use the inherited HOL build_module_identity_map/lookup_module_identity policy.
+     Every import participates, including those with no nominal declarations.
+     In this collision mode ALL imports must have source_id and resolved_path,
+     and every resolved_path must be unique; repeated paths raise JSONError
+     even for identical aliases. This is fail-closed: the inherited frontend
+     deduplicates full legacy bodies before allocating IDs, which this source
+     route deliberately does not decode or approximate. With no cross-path
+     collision the existing raw-ID policy is unchanged, including repeated
+     aliases and synthetic imports lacking resolved_path.
+     Ambiguous names and explicit type origins are retained unchanged;
+     pair_expression alone has no program declaration context. *)
   val pair_program : sourceModuleLoaderLib.loaded -> JSON.value -> JSON.value -> paired
 end

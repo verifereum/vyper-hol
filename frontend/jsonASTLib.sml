@@ -1641,33 +1641,39 @@ fun decode_object_alist (decoder : term decoder) : (string * term) list decoder 
 (* Decode storage layout, handling arbitrarily nested module structures.
    Flat: {"counter": {"slot": 0, ...}} -> [(NONE, "counter", info)]
    Nested: {"lib1": {"counter": {"slot": 0, ...}}} -> [(SOME "lib1", "counter", info)]
-   Deep: {"lib2": {"lib1": {"counter": {...}}}} -> [(SOME "lib1", "counter", info)]
-   
-   The innermost module name is used as the alias - this corresponds to the
-   source_id in the AST. The outer nesting reflects initialization hierarchy
-   but the variable is "owned" by the innermost module.
-   
-   Returns (module_alias_opt, var_name, slot_info) triples. *)
+   Deep: {"lib2": {"lib1": {"counter": {...}}}} -> [(SOME "lib2.lib1", "counter", info)]
+
+   The compiler nests a module's layout under the alias its initializing
+   module gives it (`initializes:`), so a key is the dotted alias path from
+   the main module.  An inner alias alone is ambiguous: it is resolved in its
+   parent's namespace, not the main module's.  jsonToVyper resolves the path.
+
+   Returns (module_path_opt, var_name, slot_info) triples. *)
 fun decode_storage_layout_nested (slot_decoder : term decoder)
     : (string option * string * term) list decoder =
   andThen rawObject (fn pairs =>
     let
-      (* Check if a value looks like a slot info (has "slot" field) or is nested (module) *)
+      (* A slot info has a numeric "slot"; a nested module maps its variables,
+         including one that may be named "slot", to objects. *)
       fun is_slot_info (JSON.OBJECT fields) =
-            List.exists (fn (k,_) => k = "slot") fields
+            List.exists (fn (k,v) => k = "slot" andalso
+              (case v of JSON.INT _ => true | _ => false)) fields
         | is_slot_info _ = false
 
-      (* Recursively decode, tracking the innermost module name seen *)
-      fun decode_entry innermost_module_opt (name, value) =
+      fun module_path [] = NONE
+        | module_path aliases = SOME (String.concatWith "." (List.rev aliases))
+
+      (* Recursively decode, tracking the alias path, innermost first *)
+      fun decode_entry aliases (name, value) =
         if is_slot_info value
-        then [(innermost_module_opt, name, decode slot_decoder value)]
-        else (* Nested module - recurse, updating innermost module to current name *)
+        then [(module_path aliases, name, decode slot_decoder value)]
+        else
           case value of
             JSON.OBJECT nested_fields =>
-              List.concat (List.map (decode_entry (SOME name)) nested_fields)
+              List.concat (List.map (decode_entry (name :: aliases)) nested_fields)
           | _ => []
     in
-      succeed (List.concat (List.map (decode_entry NONE) pairs))
+      succeed (List.concat (List.map (decode_entry []) pairs))
     end)
 
 (* Helper to make storage key term: (module_alias_opt, var_name) *)

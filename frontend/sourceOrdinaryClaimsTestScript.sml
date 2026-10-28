@@ -1,6 +1,7 @@
 Theory sourceOrdinaryClaimsTest
 Ancestors
-  sourceOrdinaryClaims sourceSyntax sourceConstAnnotation jsonAST
+  sourceOrdinaryClaims sourceOrdinaryProgram sourceSyntax sourceConstAnnotation
+  jsonAST jsonToVyperExpr jsonToVyper jsonNominalSources vyperAST
 Libs
   sourceOrdinaryClaimsLib
 
@@ -281,12 +282,211 @@ val () = rejects "import spelling replacement" (fn () => ignore
   (sourceOrdinaryClaimsLib.pair_program (loaded import_program) import_program
     (program [import_json "package.other"])));
 
+(* Prefixless relative imports have two pin serializations, not two source
+   meanings. Only null/"" are equivalent; missing, malformed, duplicate or
+   changed prefixes still fail, regardless of folds or import metadata. *)
+fun relative_import prefix = ast "ImportFrom" [("module",prefix),("level",JSON.INT 2),
+  ("names",arr [ast "alias" [("name",str "lib"),("asname",JSON.NULL)]])];
+val relative_source = program [relative_import (str "")];
+val relative_annotated = program [relative_import JSON.NULL];
+val relative_pair = sourceOrdinaryClaimsLib.pair_program (loaded relative_source)
+  relative_source relative_annotated;
+Theorem nullable_relative_import_source_projection = #projection relative_pair;
+Theorem nullable_relative_import_source_match = #source_match relative_pair;
+Theorem nullable_relative_import_mirror_shape = #shape relative_pair;
+Theorem nullable_relative_import_keeps_empty_prefix = checked "empty relative prefix"
+  ``source_program_claims_source ^(#claims relative_pair) =
+    SourceProgram (SourceModule [SD_Import [SI_FromImport "" 2 "lib" NONE]]) []``;
+val () = app (fn (source,annotated) => let
+  val original = loaded source
+  val expected = #claims (sourceOrdinaryClaimsLib.pair_program original source source)
+  val actual = #claims (sourceOrdinaryClaimsLib.pair_program original source annotated)
+  in if aconv expected actual then no_folds actual
+     else raise Fail "relative import serialization changed claims" end)
+  [(relative_source,relative_annotated),(relative_annotated,relative_source),
+   (relative_source,fold_everywhere (str "bad") relative_annotated),
+   (fold_everywhere JSON.NULL relative_annotated,relative_source)];
+val relative_fields = [("level",JSON.INT 2),("names",arr [])];
+val () = app (fn bad => rejects "malformed relative prefix" (fn () => ignore
+    (sourceOrdinaryClaimsLib.pair_program (loaded relative_source) relative_source
+      (program [bad]))))
+  [ast "ImportFrom" relative_fields,
+   ast "ImportFrom" (("module",JSON.BOOL false)::relative_fields),
+   ast "ImportFrom" (("module",JSON.INT 0)::relative_fields),
+   ast "ImportFrom" (("module",str "")::("module",JSON.NULL)::relative_fields)];
+val () = app (fn prefix => rejects "relative prefix replacement" (fn () => ignore
+  (sourceOrdinaryClaimsLib.pair_program (loaded (program [relative_import prefix]))
+    (program [relative_import prefix])
+    (fold_everywhere (str "bad") relative_annotated)))) [str "package",str "."];
+val () = rejects "null is not an import name" (fn () => ignore
+  (loaded (program [ast "Import" [("names",arr [ast "alias"
+    [("name",JSON.NULL),("asname",JSON.NULL)]])]])));
+
+(* Whole-program nominal repair must reach every occurrence and the extra
+   Call claim below an external wrapper, without needing func_type metadata. *)
+fun nominal_type k n = obj [("name",str n),("typeclass",str k)];
+val struct_type = nominal_type "struct" "S";
+val flag_type = nominal_type "flag" "Mode";
+val nominal_import = put "source_id" (JSON.INT 7) (module_json
+  [ast "StructDef" [("name",str "S"),("body",arr [])],
+   ast "FlagDef" [("name",str "Mode"),("body",arr
+     [ast "Expr" [("value",name "A")]])]]);
+fun nominal_program imports expression = put "imports" (arr imports)
+  (program [put "body" (arr [ast "Return" [("value",expression)]]) (function_json "f" [])]);
+fun nominal_pair imports expression = let
+  val annotated = nominal_program imports expression
+  (* Types are metadata, so the source grammar is identical. *)
+  val source = nominal_program imports expression
+in sourceOrdinaryClaimsLib.pair_program (loaded source) source annotated end;
+val nested_nominal_type = obj [("typeclass",str "tuple"),("member_types",arr
+  [obj [("typeclass",str "static_array"),("value_type",struct_type),("length",JSON.INT 2)],
+   obj [("typeclass",str "hashmap"),("key_type",uint),("value_type",flag_type)]])];
+val nominal_signature = put "argument_types" (arr [struct_type])
+  (put "return_type" flag_type external_signature);
+val nominal_external = typed flag_type (ast "ExtCall" [("value",typed flag_type
+  (call (typed nominal_signature external_callee) [typed struct_type (name "x")] []))]);
+val nominal_expression = ast "Tuple" [("elements",arr
+  [typed nested_nominal_type (name "nested"),nominal_external])];
+val nominal_paired = nominal_pair [nominal_import] nominal_expression;
+val nominal_claims = #claims nominal_paired;
+Theorem nominal_program_original_projection = #projection nominal_paired;
+Theorem nominal_program_original_match = #source_match nominal_paired;
+Theorem nominal_program_mirror_shape = #shape nominal_paired;
+val () = if contains ``JT_Struct (SOME 7) "S"`` nominal_claims andalso
+    contains ``JT_Flag (SOME 7) "Mode"`` nominal_claims andalso
+    not (contains ``JT_Struct NONE "S"`` nominal_claims) andalso
+    not (contains ``JT_Flag NONE "Mode"`` nominal_claims)
+  then no_folds nominal_claims else raise Fail "incomplete nominal claim repair";
+val () = app (fn poison => let
+  val source = nominal_program [nominal_import] nominal_expression
+  val changed = sourceOrdinaryClaimsLib.pair_program (loaded source) source
+    (fold_everywhere poison source)
+  in if aconv nominal_claims (#claims changed) then ()
+     else raise Fail "nominal claims depend on folds" end)
+  [str "not an AST",typed struct_type (name "invented"),JSON.NULL];
+(* Repeated aliases of one origin are not ambiguity; different origins are.
+   Kinds remain separate, and explicit origins are never overwritten. *)
+val () = app (fn (imports,ty,expected) => let
+  val claims = #claims (nominal_pair imports (typed ty (name "x")))
+  in if contains expected claims then () else raise Fail "nominal origin policy" end)
+  [([nominal_import,nominal_import],struct_type,``JT_Struct (SOME 7) "S"``),
+   ([nominal_import,put "source_id" (JSON.INT 8) nominal_import],struct_type,
+      ``JT_Struct NONE "S"``),
+   ([nominal_import],nominal_type "flag" "S",``JT_Flag NONE "S"``),
+   ([nominal_import],put "type_decl_node" (obj [("source_id",JSON.INT 42)]) struct_type,
+      ``JT_Struct (SOME 42) "S"``)];
+val () = rejects "nominal declarations cannot be invented by annotations" (fn () => let
+  val source = nominal_program [] (typed struct_type (name "x"))
+  in ignore (sourceOrdinaryClaimsLib.pair_program (loaded source) source
+    (nominal_program [nominal_import] (typed struct_type (name "x")))) end);
+
+(* Collision repair must use the inherited canonical identity, not raw -2.
+   The first empty import sets the maximum, and the second empty import still
+   consumes a fresh-ID position. Neither may be filtered out for lacking S. *)
+fun located_import sid path body = put "source_id" (JSON.INT sid)
+  (put "path" (str path) (put "resolved_path" (str path) (module_json body)));
+val empty_high_import = located_import 40 "high.vyi" [];
+val empty_shared_import = located_import (~2) "first.vyi" [];
+val shared_struct_import = located_import (~2) "second.vyi"
+  [ast "StructDef" [("name",str "S"),("body",arr [])]];
+val collision_imports = [empty_high_import,empty_shared_import,shared_struct_import];
+(* Without imported nominals, colliding IDs and repeated paths must not invoke
+   canonical identity validation, even when the main module needs repair. *)
+val no_nominal_collision_imports = [empty_high_import,empty_shared_import,
+  located_import (~2) "second.vyi" [],empty_shared_import];
+val no_nominal_collision_pair = nominal_pair no_nominal_collision_imports (typed uint (name "x"));
+Theorem no_imported_nominals_collision_source_projection = #projection no_nominal_collision_pair;
+Theorem no_imported_nominals_collision_source_match = #source_match no_nominal_collision_pair;
+Theorem no_imported_nominals_collision_mirror_shape = #shape no_nominal_collision_pair;
+val () = if contains ``JT_Integer 256 F`` (#claims no_nominal_collision_pair) then
+  no_folds (#claims no_nominal_collision_pair) else raise Fail "lost nonnominal claim";
+val main_only_nominal_source = obj
+  [("ast",put "source_id" (JSON.INT 9) (module_json
+    [ast "StructDef" [("name",str "S"),("body",arr [])],
+     put "body" (arr [ast "Return" [("value",typed struct_type (name "x"))]])
+       (function_json "f" [])])),
+   ("imports",arr no_nominal_collision_imports)];
+val main_only_nominal_pair = sourceOrdinaryClaimsLib.pair_program
+  (loaded main_only_nominal_source) main_only_nominal_source main_only_nominal_source;
+Theorem main_only_nominal_collision_source_projection = #projection main_only_nominal_pair;
+Theorem main_only_nominal_collision_source_match = #source_match main_only_nominal_pair;
+Theorem main_only_nominal_collision_mirror_shape = #shape main_only_nominal_pair;
+val () = if contains ``JT_Struct (SOME 9) "S"`` (#claims main_only_nominal_pair) andalso
+    not (contains ``JT_Struct NONE "S"`` (#claims main_only_nominal_pair)) then
+  no_folds (#claims main_only_nominal_pair) else raise Fail "lost main-only nominal repair";
+val canonical_unique_pair = nominal_pair collision_imports (typed struct_type (name "x"));
+val canonical_unique_claims = #claims canonical_unique_pair;
+val inherited_unique_type = rhs (concl (EVAL
+  ``case canonicalize_annotated_ast_imports
+      (JAnnotatedAST (JModule (-1) F [])
+        [JImportedModule 40 "high.vyi" "high.vyi" F [];
+         JImportedModule (-2) "first.vyi" "first.vyi" F [];
+         JImportedModule (-2) "second.vyi" "second.vyi" F [JTL_StructDef "S" []]]) of
+    JAnnotatedAST _ imports =>
+      resolve_json_type (json_imported_nominal_decls imports) (JT_Struct NONE "S")``));
+Theorem canonical_unique_source_projection = #projection canonical_unique_pair;
+Theorem canonical_unique_source_match = #source_match canonical_unique_pair;
+Theorem canonical_unique_mirror_shape = #shape canonical_unique_pair;
+Theorem canonical_unique_matches_inherited = checked "inherited canonical S"
+  ``^inherited_unique_type = JT_Struct (SOME 43) "S"``;
+val () = if contains inherited_unique_type canonical_unique_claims andalso
+    not (contains ``JT_Struct (SOME (-2)) "S"`` canonical_unique_claims) andalso
+    not (contains ``JT_Struct NONE "S"`` canonical_unique_claims)
+  then no_folds canonical_unique_claims else raise Fail "canonical S differs from inherited identity";
+(* The same raw ID must NOT collapse two declarations into one nominal origin. *)
+val duplicate_shared_import = put "resolved_path" (str "first.vyi")
+  (put "path" (str "first.vyi") shared_struct_import);
+val canonical_duplicate_claims = #claims (nominal_pair
+  [empty_high_import,duplicate_shared_import,shared_struct_import] (typed struct_type (name "x")));
+val () = if contains ``JT_Struct NONE "S"`` canonical_duplicate_claims andalso
+    not (contains ``JT_Struct (SOME (-2)) "S"`` canonical_duplicate_claims) andalso
+    not (contains ``JT_Struct (SOME 42) "S"`` canonical_duplicate_claims) andalso
+    not (contains ``JT_Struct (SOME 43) "S"`` canonical_duplicate_claims)
+  then no_folds canonical_duplicate_claims else raise Fail "colliding duplicate S was resolved";
+(* When imported nominal repair is needed, repeated paths anywhere in collision
+   mode are rejected, even on empty imports: do not approximate legacy body dedup. *)
+val () = app (fn imports => rejects "repeated resolved_path in collision mode"
+    (fn () => ignore (nominal_pair imports (typed struct_type (name "x")))))
+  [collision_imports @ [empty_high_import],
+   collision_imports @ [put "path" (str "alias.vyi") shared_struct_import],
+   collision_imports @ [put "body" (arr []) shared_struct_import]];
+val () = rejects "missing resolved_path in collision mode" (fn () => ignore
+  (nominal_pair (collision_imports @ [nominal_import]) (typed struct_type (name "x"))));
+(* Without collisions, located aliases and pathless synthetic imports retain
+   the old raw-ID policy. The existing nominal_import tests cover pathless aliases. *)
+val () = let
+  val imported = put "source_id" (JSON.INT 7) shared_struct_import
+  val claims = #claims (nominal_pair [imported,put "path" (str "alias.vyi") imported]
+    (typed struct_type (name "x")))
+  in if contains ``JT_Struct (SOME 7) "S"`` claims then ()
+     else raise Fail "noncolliding aliases changed nominal identity" end;
+
+(* Inherited top-level runtime types use the same repair as the main legacy
+   frontend, including nested types, before their contexts are constructed. *)
+Theorem ordinary_inherited_nominal_types:
+  let ast = JAnnotatedAST (JModule 0 F
+        [JTL_VariableDecl "s" (JT_Struct NONE "S") JTA_None F F F NONE;
+         JTL_VariableDecl "m" (JT_Tuple [JT_Flag NONE "Mode"])
+           JTA_None F F F NONE])
+        [JImportedModule 7 "I" "I.vyi" F
+          [JTL_StructDef "S" []; JTL_FlagDef "Mode" ["A"]]];
+      types = [((NONE,"s"),StructT (SOME 9,"S"));
+               ((NONE,"m"),TupleT [FlagT (SOME 9,"Mode")])]
+  in OPTION_MAP (MAP (\(owner,ctx). (owner,expr_toplevel_types ctx)))
+       (source_ordinary_legacy_contexts [(["main"],NONE);(["I"],SOME 9)] ast) =
+     SOME [(["main"],types);(["I"],types)]
+Proof
+  EVAL_TAC
+QED
+
 (* Real #543 syntax/legacy pairs: no evaluator, body-typing or #135 gate. *)
 fun holbuild_extra_deps (_ : string list) = ();
 val () = holbuild_extra_deps ["../lowering/defs/bytecode/folded-value-witnesses.txt",
   "../tests/fixtures/check_contract/source_syntax","../lowering/defs/bytecode/folded-value-oracle",
   "../tests/fixtures/check_contract/source_ordinary/calldata_slice.json",
   "../tests/fixtures/check_contract/source_ordinary/raw_call_calldata.json",
+  "../tests/fixtures/check_contract/source_ordinary/pin_only",
+  "../tests/fixtures/check_contract/source_ordinary/pin_only/annotated",
   "../tests/fixtures/check_contract/calldata_slice.json",
   "../tests/fixtures/check_contract/raw_call_calldata.json"];
 val manifest = TextIO.openIn "../lowering/defs/bytecode/folded-value-witnesses.txt";
@@ -320,6 +520,62 @@ val () = app (fn n => let
     [sourceOrdinaryClaimsLib.without_folds annotated,
      fold_everywhere (str "not an AST") annotated]
   in () end) ["calldata_slice","raw_call_calldata"];
+(* Merge regressions for real pinned loader captures and their annotated mates.
+   This tests pairing only: no source elaboration, body typing or contract check.
+   Nominal origins here are parser source_ids, NOT canonical loader module IDs;
+   in particular, SOME 1 below must not be read as a canonical-collision test. *)
+val pin_only_dir = "../tests/fixtures/check_contract/source_ordinary/pin_only/";
+fun pin_certificate label expected th =
+  if null (hyp th) andalso aconv (concl th) expected then th
+  else raise Fail (label ^ " certificate mismatch");
+val () = app (fn n => let
+  val capture_path = pin_only_dir ^ n ^ ".json"
+  val original = sourceModuleLoaderLib.load_file capture_path
+  val source = JSONDecode.decodeFile (JSONDecode.field "annotated_ast" JSONDecode.raw)
+    capture_path
+  val annotated = JSONDecode.decodeFile JSONDecode.raw
+    (pin_only_dir ^ "annotated/" ^ n ^ ".json")
+  val paired = sourceOrdinaryClaimsLib.pair_program original source annotated
+  val claims = #claims paired
+  val source_program = #program original
+  val () = no_folds claims
+  val _ = save_thm ("pin_only_" ^ n ^ "_exact_source_projection",
+    pin_certificate n ``source_program_claims_source ^claims = ^source_program``
+      (#projection paired))
+  val _ = save_thm ("pin_only_" ^ n ^ "_source_match",
+    pin_certificate n ``^source_program = ^source_program`` (#source_match paired))
+  val _ = save_thm ("pin_only_" ^ n ^ "_mirror_shape",
+    pin_certificate n ``source_program_claims_shape ^claims`` (#shape paired))
+  val _ = save_thm ("pin_only_" ^ n ^ "_retained_source", checked n
+    ``retained_source ^(#retained paired) = ^source_program``)
+  fun unchanged (changed_source,changed_annotated) = let
+    val changed = sourceOrdinaryClaimsLib.pair_program original
+      changed_source changed_annotated
+    val () = no_folds (#claims changed)
+    in if aconv claims (#claims changed) andalso
+        aconv (#retained paired) (#retained changed) then ()
+       else raise Fail (n ^ " pin-only pairing depends on folds") end
+  val clean_source = sourceOrdinaryClaimsLib.without_folds source
+  val clean_annotated = sourceOrdinaryClaimsLib.without_folds annotated
+  val () = app unchanged [(source,clean_annotated),(clean_source,annotated),
+    (clean_source,clean_annotated)]
+  val () = app (fn poison => app unchanged
+    [(source,fold_everywhere poison annotated),
+     (fold_everywhere poison source,annotated),
+     (fold_everywhere poison source,fold_everywhere poison annotated)])
+    [integer 314159,JSON.NULL,str "not an AST",ast "Unsupported" []]
+  (* These names are S and Mode in I.vyi. Their inherited type metadata has
+     no type_decl_node; repair must infer the unique parser origin, including
+     nested HashMap types, and leave no unresolved occurrence in the claims. *)
+  val () = if n <> "interface_struct" then () else
+    if contains ``JT_Struct (SOME 1) "S"`` claims andalso
+       contains ``JT_Flag (SOME 1) "Mode"`` claims andalso
+       not (contains ``JT_Struct NONE "S"`` claims) andalso
+       not (contains ``JT_Flag NONE "Mode"`` claims) then ()
+    else raise Fail "pin-only interface struct/flag origin repair"
+  in () end)
+  ["imported_constants","relative_uses","nested_initializes",
+   "attribute_initializes","interface_struct"];
 val () = app (fn theory => app (fn (n,th) =>
   if null (List.filter (fn oracle => oracle <> "DISK_THM")
     (#1 (Tag.dest_tag (Thm.tag th)))) then () else raise Fail (theory ^ "." ^ n ^ " has an oracle"))

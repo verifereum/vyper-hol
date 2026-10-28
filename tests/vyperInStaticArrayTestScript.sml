@@ -123,4 +123,4 @@ val () = make_definitions_for_file
   ("in_static_array", "fixtures/exports/in_static_array/test_in_static_array.json");
 val traces = all_traces "-";
 val () = if List.null traces then raise Fail "in_static_array: no traces replayed"
-         else List.app run_test_on_traces traces;
+         else run_tests_on_traces traces;

@@ -58,7 +58,12 @@ fun fields k = case k of
 fun nullable_field k key = List.exists (fn p => p = (k,key))
   [("Return","value"),("Raise","exc"),("Assert","msg"),("AnnAssign","value"),
    ("VariableDecl","value"),("arg","annotation"),("FunctionDef","returns"),("alias","asname")]
-fun source_field k key json = if nullable_field k key then
+(* Python serializes a prefixless relative ImportFrom as "", whereas the
+   annotated Vyper AST uses null. Both denote the same REQUIRED empty prefix;
+   do not generalize this equivalence to other source strings or absence. *)
+fun source_field k key json = if k = "ImportFrom" andalso key = "module" then
+    (case get key json of JSON.NULL => JSON.STRING "" | value => value)
+  else if nullable_field k key then
     (case optional key raw json of NONE => JSON.NULL | SOME v => v)
   else get key json
 fun qualifier json = if kind json <> "Call" then NONE else let
@@ -259,7 +264,7 @@ fun decoded_children expr_ty term = let
     else if carries expr_ty (type_of tm) then
       List.concat (List.map collect (snd (strip_comb tm))) else []
 in List.concat (List.map collect (snd (strip_comb term))) end
-fun tree_from source json = let
+fun tree_from resolve source json = let
   fun build syntax legacy node = let
     val () = validate_node syntax node
     val nodes = expression_children node
@@ -267,15 +272,15 @@ fun tree_from source json = let
     (* Legacy external wrappers omit their original Call/Attribute nodes.
        Decode that distinct source Call once too, to retain its own claims. *)
     val legacies = if kind node = "ExtCall" orelse kind node = "StaticCall" then
-      [JSONDecode.decode jsonASTLib.json_expr (get "value" node)]
+      [resolve (JSONDecode.decode jsonASTLib.json_expr (get "value" node))]
       else decoded_children legacy_expr_ty legacy
     val () = if length nodes = length sources andalso length nodes = length legacies
       then () else fail_at [] "decoded child coverage mismatch"
     val children = ListPair.map (fn (j,(s,l)) => build s l j)
       (nodes,ListPair.zip (sources,legacies))
   in construct "SourceClaims" [syntax,legacy,list claims_ty children] end
-in build source (JSONDecode.decode jsonASTLib.json_expr json) json end
-fun tree json = tree_from (decode_source json) json
+in build source (resolve (JSONDecode.decode jsonASTLib.json_expr json)) json end
+fun tree resolve json = tree_from resolve (decode_source json) json
 fun project claims = mk_comb (prim_mk_const
   {Thy="sourceOrdinaryClaims",Name="source_claims_source"},claims)
 fun pair_expression original annotated = let
@@ -284,7 +289,7 @@ fun pair_expression original annotated = let
   val _ = decode_source clean (* fail before using legacy metadata *)
   val matched = zip [] false (without_folds original) clean
   val source_match = equation "expression" (decode_source matched) source
-  val claims = tree_from source matched
+  val claims = tree_from I source matched
 in {claims=claims,source_match=source_match,
     projection=REWRITE_CONV [source_claims_source_def] (project claims),
     shape=checked "expression" (construct "source_claims_shape" [claims])}
@@ -298,12 +303,86 @@ fun number n = numSyntax.mk_numeral (Arbnum.fromInt n)
 fun mapi f xs = let fun go _ [] = []
   | go i (x::rest) = f (i,x) :: go (i+1) rest
   in go 0 xs end
-fun roots path json = case json of
+(* Read only declaration names and their paired module origins. A full legacy
+   program decoder would also require inherited function/variable metadata on
+   declarations which the source route deliberately elaborates independently.
+   The upstream resolver still decides uniqueness, kind and recursive types. *)
+fun module_source_id json =
+  case optional "source_id" intInf json of SOME n => n | NONE => ~1
+fun source_id_term n = intSyntax.term_of_int (Arbint.fromLargeInt n)
+(* The inherited frontend removes repeated import bodies BEFORE allocating
+   identities. Do not approximate that equality with source syntax: in collision
+   mode require unique resolved paths, so no body deduplication is needed.
+   Empty bodies below are identity-only skeletons, not legacy declarations. *)
+fun nominal_import_sources main imports = let
+  fun resolved json = case optional "resolved_path" raw json of
+      NONE => NONE | SOME JSON.NULL => NONE
+    | SOME value => SOME (JSONDecode.decode string value)
+  val infos = List.map (fn j => (module_source_id j,resolved j)) imports
+  val collision = List.exists (fn (sid,path) => Option.isSome path andalso
+    List.exists (fn (other,other_path) => sid = other andalso
+      Option.isSome other_path andalso path <> other_path) infos) infos
+in if not collision then List.map (source_id_term o module_source_id) imports
+  else let
+    fun require_path j = case resolved j of SOME path => path
+      | NONE => fail_at ["imports"]
+          "canonical nominal identity repair requires resolved_path on every import when source IDs collide"
+    val paths = List.map require_path imports
+    fun unique [] = ()
+      | unique (path::rest) = if List.exists (fn p => p = path) rest then
+          fail_at ["imports"]
+            ("canonical nominal identity repair rejects repeated resolved_path when source IDs collide: " ^ path)
+        else unique rest
+    val () = unique paths
+    fun skeleton (j,path) = let
+      val src = source_id_term (JSONDecode.decode (required "source_id" intInf) j)
+      val resolved = stringSyntax.fromMLstring path
+    in ``jsonAST$JImportedModule ^src "" ^resolved F []`` end
+    (* ALL imports contribute to both the maximum and allocation position,
+       including modules with no nominal declarations. *)
+    val modules = list ``:jsonAST$json_imported_module``
+      (ListPair.map skeleton (imports,paths))
+    val main_src = source_id_term (module_source_id main)
+    val identities = rhs (concl ((REWRITE_CONV
+      [jsonToVyperTheory.build_module_identity_map_def] THENC EVAL)
+      ``jsonToVyper$build_module_identity_map ^main_src ^modules``))
+    fun lookup path = let
+      val resolved = stringSyntax.fromMLstring path
+      val result = rhs (concl (EVAL
+        ``jsonToVyper$lookup_module_identity ^resolved ^identities``))
+    in if optionSyntax.is_some result then optionSyntax.dest_some result
+       else fail_at ["imports"] "canonical nominal identity lookup failed" end
+  in List.map lookup paths end
+end
+fun nominal_declarations json = let
+  fun declarations (module_json,src) = let
+    fun declaration node = let
+      val nominal = case kind node of
+          "StructDef" => SOME ``jsonToVyperType$StructKind``
+        | "FlagDef" => SOME ``jsonToVyperType$FlagKind``
+        | _ => NONE
+    in Option.map (fn k => pairSyntax.mk_pair
+      (pairSyntax.mk_pair (k,stringSyntax.fromMLstring
+        (JSONDecode.decode string (get "name" node))),src)) nominal end
+  in List.mapPartial declaration (array "body" module_json) end
+  val imports = case optional "imports" (JSONDecode.array raw) json of
+      NONE => [] | SOME xs => xs
+  val raw_import_decls = List.map (fn j =>
+    declarations (j,source_id_term (module_source_id j))) imports
+  (* Canonical import identities matter only for imported nominals. Preserve
+     the ordinary path policy otherwise, including main-only nominal repair. *)
+  val import_decls = if List.all List.null raw_import_decls then [] else
+    List.concat (ListPair.map declarations
+      (imports,nominal_import_sources (get "ast" json) imports))
+in list ``:(jsonToVyperType$nominal_kind # string) # int``
+  (declarations (get "ast" json,source_id_term (module_source_id (get "ast" json))) @
+   import_decls) end
+fun roots resolve path json = case json of
     JSON.OBJECT _ => let val k = kind json in
-      if expression_kind k then [(path,tree json)] else
-      List.concat (mapi (fn (i,key) => roots (path @ [i]) (source_field k key json)) (fields k))
+      if expression_kind k then [(path,tree resolve json)] else
+      List.concat (mapi (fn (i,key) => roots resolve (path @ [i]) (source_field k key json)) (fields k))
     end
-  | JSON.ARRAY xs => List.concat (mapi (fn (i,j) => roots (path @ [i]) j) xs)
+  | JSON.ARRAY xs => List.concat (mapi (fn (i,j) => roots resolve (path @ [i]) j) xs)
   | _ => []
 fun pair_program original original_json annotated = let
   val _ = sourceModuleLoaderLib.policies original
@@ -318,7 +397,11 @@ fun pair_program original original_json annotated = let
   val matched = JSON.OBJECT [("ast",main),("imports",imports)]
   val decoded = JSONDecode.decode sourceSyntaxLib.annotated_ast_with_provenance matched
   val source_match = equation "program" (#syntax decoded) (#program original)
-  val entries = roots [0] main @ roots [1] imports
+  val decls = nominal_declarations matched
+  val no_nominals = List.null (fst (listSyntax.dest_list decls))
+  fun resolve legacy = if no_nominals then legacy else rhs (concl (EVAL
+    ``jsonNominalSources$resolve_json_expr ^decls ^legacy``))
+  val entries = roots resolve [0] main @ roots resolve [1] imports
   val entry_ty = pairSyntax.mk_prod (listSyntax.mk_list_type numSyntax.num,claims_ty)
   val claims = construct "SourceProgramClaims" [#program original,list entry_ty
     (List.map (fn (path,c) => pairSyntax.mk_pair (list numSyntax.num (List.map number path),c)) entries)]
