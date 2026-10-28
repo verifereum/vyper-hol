@@ -22,7 +22,16 @@ fun is_trace_constant tm =
 
 val all_traces = List.filter is_trace_constant o constants
 
+val tests_run = ref 0
+
 fun run_test_on_traces traces_const = let
+  (* Checkpoint-free CI has not compacted the loaded trace theories. Share
+     their repeated terms once, then collect temporary CV interpreters between
+     small batches rather than relying on host-sized automatic heap limits. *)
+  val () = if !tests_run = 0
+           then PolyML.shareCommonData PolyML.rootFunction else ()
+  val () = if !tests_run mod 8 = 0 then PolyML.fullGC () else ()
+  val () = tests_run := !tests_run + 1
   val {Thy, Name=traces_name, ...} = dest_thy_const traces_const
   val () = if String.isPrefix traces_prefix traces_name then ()
            else raise Fail ("Unexpected trace name: " ^ traces_name)

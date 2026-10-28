@@ -16,6 +16,8 @@
  *   nsid_to_string   — namespace ID to lookup string
  *   internal_fn_label — Venom label of an internal function (Vyper's spelling)
  *   local_ptrs_rel   — live locals held through pointer variables match memory
+ *   accounts_rel     — every address's accounts and transient storage match,
+ *                      no pending deletions
  *   compile_state_ok — well-formedness: bound labels disjoint from future fresh labels
  *   label_external   — label not bound and not in future fresh-label co-domain
  *
@@ -490,9 +492,8 @@ Datatype:
        Mirrors Python: func_t.do_raw_return *)
     ce_raw_return : bool;
     (* T when each local and loop variable gets a fresh ALLOCA at its
-       declaration (external and fallback bodies); F when it keeps the MemLoc
-       slot build_compile_env reserved for its name (internal functions and
-       the constructor body).
+       declaration, as in every body build_compile_env sets up; F when it
+       keeps whatever ce_vars already holds for its name.
        Mirrors Python: Context.new_variable -> allocate_buffer -> alloca *)
     ce_alloca_locals : bool
   |>
@@ -876,9 +877,10 @@ End
    before st (declare_local, compile_register_positional_args), one per
    local:
    - no variable sits at a fixed MemLoc offset: state_rel does not relate
-     those (the locals of internal bodies and of the constructor, and
-     default arguments, which compile_register_kwarg_vars keeps at MemLoc),
-     and a store to one could hit a live local's region;
+     those (the parameters build_compile_env places, until the code that
+     registers them rebinds them, and default arguments, which
+     compile_register_kwarg_vars keeps at MemLoc), and a store to one could
+     hit a live local's region;
    - no compiler variable fresh at st is a local's pointer, so a temporary of
      the code compiled from st on never overwrites one;
    - distinct locals have distinct pointers, so declaring a local leaves the
@@ -963,6 +965,21 @@ End
 Definition transient_rel_def:
   transient_rel (addr:address) vs ss ⇔
     (vs.tStorage addr = contract_transient ss)
+End
+
+(* The accounts and the transient storage of every address are identical,
+   and the source has no pending deletions.  Other addresses' accounts and
+   transient storage change during a body only through the call oracle,
+   whose outcome both sides adopt the same way (adopt_outcome).  Pending
+   deletions come only from create runs, which the supported subset leaves
+   out; a transaction starts with none, as call_external empties them on
+   success.  Venom has no pending deletions, so the success case of the
+   external result relation, which compares the accounts after the source
+   processes its deletions, needs them empty. *)
+Definition accounts_rel_def:
+  accounts_rel vs ss ⇔
+    vs.accounts = ss.vs_accounts ∧ vs.tStorage = ss.vs_transient ∧
+    vs.pending_deletions = []
 End
 
 (* ===== Immutables Relation ===== *)
@@ -1179,12 +1196,16 @@ End
    the sub-relations below and exactly the current oracle suffix and request
    prefix; NONE-mode compatibility does not satisfy it.
    - local_ptrs_rel: locals in scope, held in memory through their pointer
-     variables (PtrVar).  MemLoc locals at fixed offsets, which the internal
-     function bodies still use until #545, are not related.
+     variables (PtrVar).  MemLoc variables at fixed offsets are not
+     related.
    - storage_rel, storage_vars_rel: storage, and the slots of storage
      variables.
    - transient_rel, transient_vars_rel: transient storage, and the slots of
      transient variables.
+   - accounts_rel: the accounts and transient storage of every address, and
+     no pending deletions, which the success case of the external result
+     relation compares (storage_rel and transient_rel are its case for the
+     running contract).
    - immutables_rel: immutables (vs_immutables in a constructor, the data
      section at runtime).
    - logs_rel: emitted logs.
@@ -1198,6 +1219,7 @@ Definition state_rel_def:
      storage_vars_rel cenv cx ∧
      transient_rel cx.txn.target vs ss ∧
      transient_vars_rel cenv cx ∧
+     accounts_rel vs ss ∧
      immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor vs ss ∧
      logs_rel cenv cx.txn.target vs ss ∧
      call_ctx_rel cx.txn ss.vs_call_ctx ss.vs_tx_ctx ss.vs_block_ctx ∧
@@ -1211,13 +1233,9 @@ End
    ret_tv: type_value for the return type — used by typed_val_to_w256
    for correct BytesV encoding (AddressT → PAD_LEFT, BytesT → PAD_RIGHT).
 
-   Internal returns dispatch by returns_count:
-   - returns_count = 1: single stack value, vals = [typed_val_to_w256 v]
-   - returns_count > 1: multi-return (TupleT with all word elements),
-     vals = MAP typed_val_to_w256 (ZIP elem_tvs elem_vals)
-   - returns_count = 0: memory return, value in caller's return buffer.
-     IntRet vals with vals = [] (no stack values), state_rel must show
-     the return value is in memory at the return buffer address.
+   Internal returns: IntRet vals, with vals matching the value as
+   intret_vals_match (below) says.  A memory return has vals = []; its
+   value is in the caller's return buffer.
 
    External returns:
    - Halt: ABI-encoded return data. state_rel on final state.
@@ -1226,20 +1244,23 @@ End
    - AssertException → Abort Revert_abort
    - Error → Abort (any abort type) *)
 (* Helper: check return values match for internal return.
-   Dispatches by number of return values:
-   - Single value: vals = [typed_val_to_w256 ret_tv v]
-   - Multi-return (TupleT): vals = MAP typed_val_to_w256 (ZIP elem_tvs elem_vals)
-   - Memory return: vals = [] (value in return buffer, not on stack) *)
+   Dispatches by the return type, as Python's _lower_internal_return does:
+   - Memory return: vals = [] (value in return buffer, not on stack)
+   - Tuple or struct (tuple-like), returned on the stack: one word per
+     member, vals = MAP typed_val_to_w256 over the members, for any number
+     of members, one included
+   - Any other value: vals = [typed_val_to_w256 ret_tv v] *)
 Definition intret_vals_match_def:
   intret_vals_match ret_tv v vals ⇔
-    case vals of
-      [w] => w = typed_val_to_w256 ret_tv v
-    | [] => T  (* Memory return: value in caller's buffer, not checked here *)
-    | _ => (case (ret_tv, v) of
+    vals = [] ∨
+    vals = (case (ret_tv, v) of
               (TupleTV elem_tvs, ArrayV (TupleV elem_vals)) =>
-                vals = MAP (λ(tv,ev). typed_val_to_w256 tv ev)
-                         (ZIP (elem_tvs, elem_vals))
-            | _ => F)
+                MAP (λ(tv,ev). typed_val_to_w256 tv ev)
+                  (ZIP (elem_tvs, elem_vals))
+            | (StructTV field_tvs, StructV fields) =>
+                MAP (λ(tv,ev). typed_val_to_w256 tv ev)
+                  (ZIP (MAP SND field_tvs, MAP SND fields))
+            | _ => [typed_val_to_w256 ret_tv v])
 End
 
 Definition result_rel_def:
@@ -1342,6 +1363,12 @@ Definition compute_pass_via_stack_def:
     else
       F :: compute_pass_via_stack rest stack_items
 End
+
+Theorem LENGTH_compute_pass_via_stack:
+  !tys n. LENGTH (compute_pass_via_stack tys n) = LENGTH tys
+Proof
+  Induct >> rw[compute_pass_via_stack_def]
+QED
 
 (* Compute calling convention for an internal function.
    returns_count: number of stack-returned values (0 = memory return).

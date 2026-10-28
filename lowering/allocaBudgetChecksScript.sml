@@ -1,5 +1,5 @@
-(* Check saved proof dependencies, including the counterexample's reachability
-   argument. Loaded tags preserve oracle dependencies but not upstream axioms. *)
+(* Check saved proof dependencies, including the frontier witness.
+   Loaded tags preserve oracle dependencies but not upstream axioms. *)
 Theory allocaBudgetChecks
 Ancestors
   allocaBudgetProps allocaFrontierWitness

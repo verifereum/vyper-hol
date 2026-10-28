@@ -69,16 +69,15 @@
  * SSTORE lock of pre-Cancun targets.  They are stated over the compiler's
  * lock key nkey; that it is the source's cx.nonreentrant_slot is not
  * shown here (the lowering does not use transient locks yet, #564).
- * state_rel relates only the contract's own storage and
- * transient storage, so the accounts and the transient storage of every
- * address are hypotheses at the return: the success case compares all of
- * them (#625's relation leaves them out; #665 tracks deriving them).
+ * The success case compares the accounts and the transient storage of
+ * every address; state_rel relates them through accounts_rel, which also
+ * leaves the source no pending deletions to process (#665).
  *)
 
 Theory loweringHalt
 Ancestors
   list rich_list finite_map
-  fragExec loweringSlice
+  fragExec loweringSlice accountsRelProps
   stmtLowering moduleLowering context emitHelper emitHelperProps compileEnv
   abiEncoder abiEncoderProps abiEncoderFragment
   valueEncoding valueEncodingProps
@@ -1604,8 +1603,6 @@ QED
 Theorem external_halt_success_unlock:
   !func cenv cx es es' s ss nr nkey iv tops tx srcs exps layouts.
     state_rel func cenv cx es s /\
-    s.vs_accounts = process_deletions es.pending_deletions es.accounts /\
-    s.vs_transient = es.tStorage /\
     (if nr /\ ~iv then release_nonreentrant_lock cx.txn.target nkey
      else vyperState$return ()) es = (INL (), es') /\
     ss.vs_accounts = s.vs_accounts /\
@@ -1626,6 +1623,7 @@ Theorem external_halt_success_unlock:
     ss.vs_requests = es'.requests
 Proof
   rpt gen_tac >> strip_tac >>
+  drule state_rel_accounts >> strip_tac >>
   `es' = es with tStorage := ss.vs_transient` by
     (Cases_on `nr` >> Cases_on `iv` >>
      gvs[release_nonreentrant_lock_def, vyperStateTheory.bind_def,
@@ -1648,8 +1646,6 @@ QED
 Theorem external_halt_success:
   !func cenv cx es s ss tops tx srcs exps layouts.
     state_rel func cenv cx es s /\
-    s.vs_accounts = process_deletions es.pending_deletions es.accounts /\
-    s.vs_transient = es.tStorage /\
     ss.vs_accounts = s.vs_accounts /\ ss.vs_transient = s.vs_transient /\
     ss.vs_logs = s.vs_logs /\ ss.vs_requests = s.vs_requests ==>
     ss.vs_accounts =
