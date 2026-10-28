@@ -1060,9 +1060,8 @@ Resume compiler_builtin_var[calldata]:
   builtin_ptr_var_tac >> metis_tac[compiler_slice_var]
 QED
 Resume compiler_builtin_var[len]:
-  IF_CASES_TAC >> builtin_stack_var_tac >>
+  builtin_stack_var_tac >>
   metis_tac[exprSafeOperandBuiltinsTheory.compile_builtin_len_safe_operand,
-            exprSafeOperandBuiltinsTheory.compile_builtin_calldatasize_safe_operand,
             exprSafeOperandTheory.safe_operand_def]
 QED
 Resume compiler_builtin_var[ecadd]:
