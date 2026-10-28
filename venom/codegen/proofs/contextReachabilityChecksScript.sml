@@ -2,7 +2,8 @@
    These are finite interface regressions, not a general reachability proof. *)
 Theory contextReachabilityChecks
 Ancestors
-  contextRawReachable contextCodegenRelProps contextCodegenRel venomExecSemantics venomInst
+  contextReachability contextRawReachable contextCodegenRelProps contextCodegenRel
+  venomExecSemantics venomInst
   venomState list finite_map words integer_word
 Libs wordsLib
 
