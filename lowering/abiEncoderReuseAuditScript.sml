@@ -36,6 +36,8 @@ Ancestors
   abiEncoderSharedArrayPrepare abiEncoderSharedInputEffect
   abiEncoderSharedArrayExit abiEncoderSharedArrayIndexInit abiEncoderSharedArrayInitFrame
   abiEncoderSharedArrayTailInit
+  abiEncoderArrayDynamicTail abiEncoderArraySourceSpine abiEncoderArraySpine
+  abiScratchArrayDynamicTail abiScratchArraySpine
 
 fun audit_encoder_tag (name, th) =
   let
@@ -392,6 +394,12 @@ val _ = List.app audit_encoder_tag
    ("abi_encoder_array_tail_init_raw_registered", abi_encoder_array_tail_init_raw_registered),
    ("abi_encoder_array_tail_init_raw_reach", abi_encoder_array_tail_init_raw_reach),
    ("abi_encoder_shared_array_tail_prepare", abi_encoder_shared_array_tail_prepare),
+   ("abi_encoder_array_prepare_raw_transport", abi_encoder_array_prepare_raw_transport),
+   ("abi_encoder_array_tail_raw_control", abi_encoder_array_tail_raw_control),
+   ("abi_encoder_array_spine_dynamic_run", abi_encoder_array_spine_dynamic_run),
+   ("abi_scratch_array_prepare_raw_transport", abi_scratch_array_prepare_raw_transport),
+   ("abi_encoder_array_dynamic_tail_reach", abi_encoder_array_dynamic_tail_reach),
+   ("abi_scratch_array_dynamic_tail_reach", abi_scratch_array_dynamic_tail_reach),
    ("abi_scratch_members_correct_cons", abi_scratch_members_correct_cons),
    ("abi_scratch_members_correct_all", abi_scratch_members_correct_all),
    ("abi_encoder_members_inv_nonempty", abi_encoder_members_inv_nonempty),
