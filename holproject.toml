@@ -7,6 +7,7 @@ version = "0.2.3"
 
 [build]
 roots = ["vyperHolScript.sml",
+         "lowering/evalCompilerWitnessesScript.sml",
          "tests/vyperCheckContractLibTestScript.sml",
          "tests/vyperStringScopeTestScript.sml",
          "frontend/vyperCheckContractFrontendLibTestScript.sml",
@@ -38,7 +39,8 @@ roots = ["vyperHolScript.sml",
          "lowering/supported/supportedExprPropsScript.sml",
          "lowering/supported/supportedStmtPropsScript.sml",
          "lowering/supported/supportedStmtTraversePropsScript.sml",
-         "lowering/supported/supportedProgramPropsScript.sml"]
+         "lowering/supported/supportedProgramPropsScript.sml",
+         "venom/codegen/proofs/contextReachabilityChecksScript.sml"]
 
 [dependencies.verifereum]
 git = "https://github.com/verifereum/verifereum.git"

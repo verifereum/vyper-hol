@@ -6,4 +6,4 @@ Libs vyperTestRunnerLib
    Former whole-file replay:
 val () = List.app run_test_on_traces $ all_traces "vyperTestDefs_functional_builtins_codegen_test_abi_decode";
 *)
-val () = List.app run_test_on_traces $ all_traces "vyperTestDefs_functional_builtins_codegen_test_abi_decode";
+val () = run_tests_on_traces $ all_traces "vyperTestDefs_functional_builtins_codegen_test_abi_decode";

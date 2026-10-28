@@ -6,4 +6,4 @@ Libs vyperTestRunnerLib
    Former whole-file replay:
 val () = List.app run_test_on_traces $ all_traces "vyperTestDefs_functional_codegen_types_numbers_test_unsigned_ints";
 *)
-val () = List.app run_test_on_traces $ all_traces "vyperTestDefs_functional_codegen_types_numbers_test_unsigned_ints";
+val () = run_tests_on_traces $ all_traces "vyperTestDefs_functional_codegen_types_numbers_test_unsigned_ints";

@@ -6,4 +6,4 @@ Libs vyperTestRunnerLib
    Former whole-file replay:
 val () = List.app run_test_on_traces $ all_traces "vyperTestDefs_functional_codegen_types_test_dynamic_array";
 *)
-val () = List.app run_test_on_traces $ all_traces "vyperTestDefs_functional_codegen_types_test_dynamic_array_batch_001";
+val () = run_tests_on_traces $ all_traces "vyperTestDefs_functional_codegen_types_test_dynamic_array_batch_001";
