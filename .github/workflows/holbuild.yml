@@ -115,7 +115,8 @@ jobs:
         env:
           TMPDIR: ${{ runner.temp }}
         run: |
-          holbuild --verbose -j"$(nproc)" build --skip-checkpoints --skip-proof-steps
+          # HOL children are memory-heavy; CPU count alone overcommits runners.
+          holbuild --verbose -j2 build --skip-checkpoints --skip-proof-steps
 
       - name: Save holbuild project snapshot
         uses: actions/cache/save@v6
@@ -271,7 +272,10 @@ jobs:
           echo "Group $group: tests $start to $((start + per_group - 1)) of $total"
           targets=$(echo "$tests" | tail -n +$((start + 1)) | head -n "$per_group" | sed 's/Script\.sml$/Theory/' | tr '\n' ' ')
           echo "Building: $targets"
-          holbuild --verbose -j"$(nproc)" build --skip-checkpoints --skip-proof-steps $targets
+          # Chunking bounds suites, not individual cases. Run large singletons
+          # alone with a 10 GiB child heap to leave room on 16 GiB runners.
+          # --max-heap reaches HOL children; --maxheap caps holbuild itself.
+          holbuild --verbose --max-heap 10240 -j1 build --skip-checkpoints --skip-proof-steps $targets
 
       - name: Verify no successful-build checkpoints remain
         run: |
