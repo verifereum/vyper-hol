@@ -21,6 +21,7 @@
  *   external_return_word_result_rel, external_return_prim_result_rel,
  *   external_return_static_result_rel, external_return_abi_result_rel,
  *   external_return_static_cenv_result_rel,
+ *   external_return_abi_cenv_result_rel,
  *   external_return_none_result_rel,
  *   external_fallthrough_result_rel -- S1 halt bridge (#640) for the
  *     return sequences loweringHalt covers, and their _unlock versions,
@@ -54,7 +55,7 @@ Ancestors
   venomState
   compileEnv e2eDefs supportedProgram compileVyper
   unitTransformDefs unitShapeDefs
-  fragExec loweringHalt loweringShapeProps
+  fragExec loweringHalt loweringShapeProps retAbiPlanProps
 
 (* TASK056 RETIRED SOURCE ARCHIVE: old NONE-mode helpers, replaced by the
    exact oracle-mode boundary below. Original text retained without bridges.
@@ -121,7 +122,6 @@ Definition venom_env_rel_def:
   venom_env_rel tx vs <=>
     compileEnv$call_ctx_rel tx vs.vs_call_ctx vs.vs_tx_ctx vs.vs_block_ctx /\
     ~vs.vs_call_ctx.cc_static /\
-    vs.vs_tx_ctx.tc_blobhashes = tx.blob_hashes /\
     vs.vs_prev_hashes = tx.block_hashes /\
     (!n. vs.vs_block_ctx.bc_blockhash n =
          let idx = tx.block_number - n - 1 in
@@ -135,6 +135,7 @@ Definition initial_venom_state_rel_def:
     value_transfer_ok tx am.accounts /\
     vs.vs_accounts = accounts_after_transfer tx am.accounts /\
     vs.vs_transient = am.tStorage /\ am.logs = [] /\ vs.vs_logs = [] /\
+    am.pending_deletions = [] /\
     tx_env_ok tx /\ venom_env_rel tx vs /\
     vs.vs_vars = FEMPTY /\ ~vs.vs_halted /\ vs.vs_memory = [] /\
     vs.vs_allocas = FEMPTY /\ vs.vs_alloca_next = 0 /\
@@ -192,8 +193,8 @@ End
 (* ===== S1 halt bridge (#640) ===== *)
 
 (* An external function's return sequences, run from state_rel at the
-   return with every address's accounts and transient storage as in the
-   source (#665 tracks deriving those from the relation), halt in the
+   return (whose accounts_rel gives every address's accounts and transient
+   storage as in the source, with no pending deletions), halt in the
    success case of external_call_result_rel.  The source result is the one
    call_external_function builds: the returned value cast to the return
    type (NoneV when the body returns without a value or falls off its
@@ -227,10 +228,7 @@ Theorem external_return_prim_unlock_result_rel:
     is_word_type ret ==>
     frag_exec ctx st st'
       (\s. state_rel func cenv cx es s /\
-           eval_operand op s = SOME (typed_val_to_w256 tv v0) /\
-           s.vs_accounts =
-             process_deletions es.pending_deletions es.accounts /\
-           s.vs_transient = es.tStorage)
+           eval_operand op s = SOME (typed_val_to_w256 tv v0))
       Q
       (external_call_result_rel tops ret tx
          (INL v, finalize_pending_deletions
@@ -265,10 +263,7 @@ Theorem external_return_word_unlock_result_rel:
     word_value v0 ==>
     frag_exec ctx st st'
       (\s. state_rel func cenv cx es s /\
-           eval_operand op s = SOME (val_to_w256 v0) /\
-           s.vs_accounts =
-             process_deletions es.pending_deletions es.accounts /\
-           s.vs_transient = es.tStorage)
+           eval_operand op s = SOME (val_to_w256 v0))
       Q
       (external_call_result_rel tops ret tx
          (INL v, finalize_pending_deletions
@@ -295,10 +290,7 @@ Theorem external_return_none_unlock_result_rel:
     (if nr /\ ~iv then release_nonreentrant_lock cx.txn.target nkey
      else vyperState$return ()) es = (INL (), es') ==>
     frag_exec ctx st st'
-      (\s. state_rel func cenv cx es s /\
-           s.vs_accounts =
-             process_deletions es.pending_deletions es.accounts /\
-           s.vs_transient = es.tStorage)
+      (\s. state_rel func cenv cx es s)
       Q
       (external_call_result_rel tops NoneT tx
          (INL NoneV, finalize_pending_deletions
@@ -330,10 +322,7 @@ Theorem external_fallthrough_unlock_result_rel:
     (if nr /\ ~iv then release_nonreentrant_lock cx.txn.target nkey
      else vyperState$return ()) es = (INL (), es') ==>
     frag_exec ctx sb st'
-      (\s. state_rel func cenv cx es s /\
-           s.vs_accounts =
-             process_deletions es.pending_deletions es.accounts /\
-           s.vs_transient = es.tStorage)
+      (\s. state_rel func cenv cx es s)
       Q
       (external_call_result_rel tops NoneT tx
          (INL NoneV, finalize_pending_deletions
@@ -363,10 +352,7 @@ Theorem external_return_prim_result_rel:
     is_word_type ret ==>
     frag_exec ctx st st'
       (\s. state_rel func cenv cx es s /\
-           eval_operand op s = SOME (typed_val_to_w256 tv v0) /\
-           s.vs_accounts =
-             process_deletions es.pending_deletions es.accounts /\
-           s.vs_transient = es.tStorage)
+           eval_operand op s = SOME (typed_val_to_w256 tv v0))
       Q
       (external_call_result_rel tops ret tx
          (INL v, finalize_pending_deletions
@@ -393,10 +379,7 @@ Theorem external_return_word_result_rel:
     word_value v0 ==>
     frag_exec ctx st st'
       (\s. state_rel func cenv cx es s /\
-           eval_operand op s = SOME (val_to_w256 v0) /\
-           s.vs_accounts =
-             process_deletions es.pending_deletions es.accounts /\
-           s.vs_transient = es.tStorage)
+           eval_operand op s = SOME (val_to_w256 v0))
       Q
       (external_call_result_rel tops ret tx
          (INL v, finalize_pending_deletions
@@ -420,10 +403,7 @@ Theorem external_return_none_result_rel:
     cenv.ce_return_pc = NONE /\
     cenv.ce_nonreentrant = (nr, nkey, ut, iv) /\ (nr ==> iv) ==>
     frag_exec ctx st st'
-      (\s. state_rel func cenv cx es s /\
-           s.vs_accounts =
-             process_deletions es.pending_deletions es.accounts /\
-           s.vs_transient = es.tStorage)
+      (\s. state_rel func cenv cx es s)
       Q
       (external_call_result_rel tops NoneT tx
          (INL NoneV, finalize_pending_deletions
@@ -450,10 +430,7 @@ Theorem external_fallthrough_result_rel:
     compile_stmts cenv NoLoop (BaseT BoolT) stmts sa = ((), sb) /\
     ~block_is_terminated sb ==>
     frag_exec ctx sb st'
-      (\s. state_rel func cenv cx es s /\
-           s.vs_accounts =
-             process_deletions es.pending_deletions es.accounts /\
-           s.vs_transient = es.tStorage)
+      (\s. state_rel func cenv cx es s)
       Q
       (external_call_result_rel tops NoneT tx
          (INL NoneV, finalize_pending_deletions
@@ -490,10 +467,7 @@ Theorem external_return_static_unlock_result_rel:
     frag_exec ctx st st'
       (\s. state_rel func cenv cx es s /\
            (?p. eval_operand op s = SOME p /\
-                val_in_memory tv v0 (w2n p) s.vs_memory) /\
-           s.vs_accounts =
-             process_deletions es.pending_deletions es.accounts /\
-           s.vs_transient = es.tStorage)
+                val_in_memory tv v0 (w2n p) s.vs_memory))
       Q
       (external_call_result_rel tops ret tx
          (INL v, finalize_pending_deletions
@@ -528,10 +502,7 @@ Theorem external_return_static_result_rel:
     frag_exec ctx st st'
       (\s. state_rel func cenv cx es s /\
            (?p. eval_operand op s = SOME p /\
-                val_in_memory tv v0 (w2n p) s.vs_memory) /\
-           s.vs_accounts =
-             process_deletions es.pending_deletions es.accounts /\
-           s.vs_transient = es.tStorage)
+                val_in_memory tv v0 (w2n p) s.vs_memory))
       Q
       (external_call_result_rel tops ret tx
          (INL v, finalize_pending_deletions
@@ -568,10 +539,7 @@ Theorem external_return_static_cenv_unlock_result_rel:
     frag_exec ctx st st'
       (\s. state_rel func cenv cx es s /\
            (?p. eval_operand op s = SOME p /\
-                val_in_memory tv v0 (w2n p) s.vs_memory) /\
-           s.vs_accounts =
-             process_deletions es.pending_deletions es.accounts /\
-           s.vs_transient = es.tStorage)
+                val_in_memory tv v0 (w2n p) s.vs_memory))
       Q
       (external_call_result_rel tops ret tx
          (INL v, finalize_pending_deletions
@@ -605,10 +573,7 @@ Theorem external_return_static_cenv_result_rel:
     frag_exec ctx st st'
       (\s. state_rel func cenv cx es s /\
            (?p. eval_operand op s = SOME p /\
-                val_in_memory tv v0 (w2n p) s.vs_memory) /\
-           s.vs_accounts =
-             process_deletions es.pending_deletions es.accounts /\
-           s.vs_transient = es.tStorage)
+                val_in_memory tv v0 (w2n p) s.vs_memory))
       Q
       (external_call_result_rel tops ret tx
          (INL v, finalize_pending_deletions
@@ -715,11 +680,9 @@ QED
    bound.  None of the return sequence's
    ALLOCAs has run, and the frontier stays below 2 ** 256 while they run;
    nothing in the lowering bounds it (vyper rejects allocations of 2^64
-   bytes or more).  Not proved yet: that the ei and msz update_cenv_ret_abi
-   builds meet the plan and the bound.  That needs the compile env's
-   sizes and flags (type_memory_bytes, abi_embedded_static_size,
-   is_abi_dynamic, abi_size_bound over ce_struct_fields) to agree with
-   type_memory_size, static_length, is_dynamic and vyper_abi_size_bound. *)
+   bytes or more).  For the case with no release,
+   external_return_abi_cenv_result_rel discharges the plan and the bound
+   for the ei and msz update_cenv_ret_abi builds. *)
 Theorem external_return_abi_unlock_result_rel:
   !ctx op ei msz nr nkey ut iv st x st' func cenv cx es es' ret tv v0 v
      tops tx srcs exps layouts Q.
@@ -745,10 +708,7 @@ Theorem external_return_abi_unlock_result_rel:
            alloca_inv s /\
            (!i. i IN frag_ids st st' ==> FLOOKUP s.vs_allocas i = NONE) /\
            s.vs_alloca_next + msz + 32 * (st'.cs_next_id - st.cs_next_id) <
-             dimword (:256) /\
-           s.vs_accounts =
-             process_deletions es.pending_deletions es.accounts /\
-           s.vs_transient = es.tStorage)
+             dimword (:256))
       Q
       (external_call_result_rel tops ret tx
          (INL v, finalize_pending_deletions
@@ -805,10 +765,7 @@ Theorem external_return_abi_result_rel:
            alloca_inv s /\
            (!i. i IN frag_ids st st' ==> FLOOKUP s.vs_allocas i = NONE) /\
            s.vs_alloca_next + msz + 32 * (st'.cs_next_id - st.cs_next_id) <
-             dimword (:256) /\
-           s.vs_accounts =
-             process_deletions es.pending_deletions es.accounts /\
-           s.vs_transient = es.tStorage)
+             dimword (:256))
       Q
       (external_call_result_rel tops ret tx
          (INL v, finalize_pending_deletions
@@ -823,6 +780,46 @@ Proof
   impl_tac
   >- (Cases_on `nr` >> Cases_on `iv` >> gvs[vyperStateTheory.return_def]) >>
   simp[]
+QED
+
+(* The same, for the plan and buffer size update_cenv_ret_abi builds from a
+   compile env with the program's struct map (as build_compile_env's is), for
+   a return type with no NoneT in it (retAbiPlanProps). *)
+Theorem external_return_abi_cenv_result_rel:
+  !ctx op nr nkey ut iv st x st' func cenv cenv0 cx es ret tv v0 v
+     tops tx srcs exps layouts Q.
+    compile_external_return (SOME op) F F cenv.ce_ret_enc_info
+      cenv.ce_max_return_size nr nkey ut iv st = (x, st') /\
+    cenv.ce_ret_enc_info = (update_cenv_ret_abi cenv0 ret).ce_ret_enc_info /\
+    cenv.ce_max_return_size =
+      (update_cenv_ret_abi cenv0 ret).ce_max_return_size /\
+    cenv0.ce_struct_fields = make_struct_fields_map tops /\
+    ALL_DISTINCT (FLAT (MAP (type_def_keys_toplevel (NONE:num option)) tops)) /\
+    assignable_type (type_env tops) ret /\
+    (nr ==> iv) /\ (!y. op = Var y ==> not_fresh_at st y) /\
+    evaluate_type (type_env tops) ret = SOME tv /\ safe_cast tv v0 = SOME v ==>
+    frag_exec ctx st st'
+      (\s. state_rel func cenv cx es s /\
+           (?p. eval_operand op s = SOME p /\
+                val_in_memory tv v0 (w2n p) s.vs_memory /\
+                w2n p + type_memory_size tv <= s.vs_alloca_next) /\
+           alloca_inv s /\
+           (!i. i IN frag_ids st st' ==> FLOOKUP s.vs_allocas i = NONE) /\
+           s.vs_alloca_next + cenv.ce_max_return_size +
+             32 * (st'.cs_next_id - st.cs_next_id) < dimword (:256))
+      Q
+      (external_call_result_rel tops ret tx
+         (INL v, finalize_pending_deletions
+                   (abstract_machine_from_state srcs exps layouts es),
+          es.requests))
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all update_cenv_ret_abi_plan >> strip_tac >>
+  irule external_return_abi_result_rel >>
+  reverse (rpt conj_tac)
+  >- (qexistsl [`cenv.ce_ret_enc_info`, `iv`, `nkey`, `nr`, `ut`, `x`] >>
+      gvs[]) >>
+  gvs[]
 QED
 
 (* ===== Label-space invariant at the start of lowering ===== *)

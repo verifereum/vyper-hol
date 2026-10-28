@@ -55,7 +55,30 @@ val booltm = JSONDecode.map mk_bool bool
 val negbooltm = JSONDecode.map (mk_bool o not) bool
 
 val address : term decoder = JSONDecode.map address_from_hex string
-val bytes : term decoder = JSONDecode.map cached_flat_bytes_from_hex string
+
+(* byteStringCacheLib splits a value into shared 8 KiB chunks only above
+   64 KiB, and caches smaller values whole. test_lists sends 256 calls whose
+   8 KiB calldata differ only in the last bytes, so each was imported in full.
+   Values from 8 to 64 KiB are split here into 8 KiB chunks, which the cache
+   shares when equal. Sizes count hex characters, twice the bytes. *)
+val shared_chunk_hex = 2 * 8 * 1024
+val cache_chunked_hex = 2 * 64 * 1024
+
+fun flat_bytes_from_hex str = let
+  val hex = if String.isPrefix "0x" str
+            then String.extract(str, 2, NONE) else str
+  val size = String.size hex
+  fun chunks offset =
+    if offset >= size then []
+    else String.substring(hex, offset, Int.min(shared_chunk_hex, size - offset))
+         :: chunks (offset + shared_chunk_hex)
+in
+  if size <= shared_chunk_hex orelse cache_chunked_hex < size
+  then cached_flat_bytes_from_hex hex
+  else mk_flat (mk_list(List.map cached_bytes_from_hex (chunks 0), bytes_ty))
+end
+
+val bytes : term decoder = JSONDecode.map flat_bytes_from_hex string
 
 val Call_tm = prim_mk_const{Thy="vyperTestRunner",Name="Call"}
 val call_trace_ty = #1 $ dom_rng $ type_of Call_tm
@@ -354,11 +377,7 @@ val excluded_test_names = [
      TODO: add shift builtin support *)
   "test_uint256_mulmod_complex",
   (* Out-of-gas test - we don't model gas *)
-  "test_ecrecover_oog_handling",
-  (* The exports use the legacy codegen, which evaluates default_return_value
-     after the call; the semantics follows the experimental codegen, which
-     evaluates it before the call (the test expects 7 there, 99 here). *)
-  "test_default_return_value_reads_storage_before_empty_returndata_call"
+  "test_ecrecover_oog_handling"
 ]
 
 fun glob_match pat str =
@@ -482,7 +501,7 @@ val raw_deployment : term decoder =
     tuple2 (
       tuple4 (field "initcode" bytes,
               field "calldata" $
-                JSONDecode.map (cached_flat_bytes_from_hex o theoptstring)
+                JSONDecode.map (flat_bytes_from_hex o theoptstring)
                   (nullable string),
               tuple4 (field "env" $ field "tx" $ field "origin" address,
                       field "env" $ field "block" $ field "timestamp" numtm,
@@ -502,7 +521,7 @@ val raw_deployment : term decoder =
                 case bc of
                   SOME "" => optionSyntax.mk_none bytes_ty
                 | SOME hex => from_term_option bytes_ty
-                                (SOME (cached_flat_bytes_from_hex hex))
+                                (SOME (flat_bytes_from_hex hex))
                 | NONE => optionSyntax.mk_none bytes_ty) $
                nullable string)))
 
@@ -545,7 +564,7 @@ val deployment : term decoder =
                                    field "deployed_address" address,
                                    field "env" $ field "tx" $ field "gas_price" numtm),
                            tuple4 (field "calldata" $
-                                   JSONDecode.map (cached_flat_bytes_from_hex o theoptstring)
+                                   JSONDecode.map (flat_bytes_from_hex o theoptstring)
                                      (nullable string),
                                    field "env" $ field "block" $ field "number" numtm,
                                    field "env" $ field "block" $ field "blob_basefee" numtm,
@@ -720,6 +739,14 @@ end
 
 fun holbuild_extra_deps (_ : string list) = ()
 fun holbuild_extra_outputs (_ : string list) = ()
+
+val () = holbuild_extra_deps [
+  "../VYPER_PIN", "semantics-profile.json", "semantics-test-constraints.txt",
+  "semantics-build-constraints.txt",
+  "../tools/vyper_test_exports.py",
+  "../tools/vyper_test_export_plugin.py",
+  "../.github/actions/setup-vyper-test-exports/action.yml"
+];
 
 fun print_file_coverage json_path report = let
   val tests = #selected report
@@ -1112,7 +1139,26 @@ in
   handle e => (TextIO.closeOut output; raise e)
 end
 
+fun check_export_provenance json_path = let
+  fun find_repo dir =
+    if OS.FileSys.access (OS.Path.concat (dir, "holproject.toml"), []) andalso
+       OS.FileSys.access
+         (OS.Path.concat (dir, "tools/vyper_test_exports.py"), []) then dir
+    else let val parent = OS.Path.getParent dir in
+      if parent = dir then raise Fail "cannot find project root for export validation"
+      else find_repo parent
+    end
+  val repo = find_repo (OS.FileSys.getDir ())
+  val script = OS.Path.concat (repo, "tools/vyper_test_exports.py")
+  val command = String.concat ["python3 ", Systeml.protect script,
+                              " check ", Systeml.protect json_path]
+in
+  if OS.Process.isSuccess (OS.Process.system command) then ()
+  else raise Fail ("invalid export provenance: " ^ json_path)
+end
+
 fun make_definitions_for_file (id, json_path) = let
+  val () = check_export_provenance json_path
   val report = read_test_json json_path
   val tests = #selected report
   val decode_fails = #failures report
@@ -1159,12 +1205,17 @@ fun generate_defn_scripts () = let
     val jsonp_from_generated = OS.Path.concat("..", jsonp)
     val contents = String.concat [
       "Theory ", thyname, "[no_sig_docs]\nAncestors jsonToVyper\nLibs vyperTestLib\n",
-      "val () = holbuild_extra_deps [\"", jsonp_from_generated, "\"];\n",
+      "val () = holbuild_extra_deps [\"", jsonp_from_generated,
+      "\", \"", jsonp_from_generated, ".provenance\"];\n",
       "val () = make_definitions_for_file (\"", id, "\", \"", jsonp_from_generated, "\");\n"]
-    val out = TextIO.openOut(fname)
-    val () = TextIO.output(out, contents)
-    val () = TextIO.closeOut out
-  in () end) files
+  in
+    (* Committed definitions may include proof boundaries for JSON/CV caching. *)
+    if OS.FileSys.access(fname, []) then () else let
+      val out = TextIO.openOut(fname)
+      val () = TextIO.output(out, contents)
+      val () = TextIO.closeOut out
+    in () end
+  end) files
 in
   ()
 end
@@ -1180,8 +1231,8 @@ fun generate_test_scripts () = let
     val fname = OS.Path.concat(gen_dir, String.concat[thyname, "Script.sml"])
     val contents = String.concat [
       "Theory ", thyname, "[no_sig_docs]\nAncestors ", defsname,
-      "\nLibs vyperTestRunnerLib\nval () = List.app ",
-      "run_test_on_traces $ all_traces \"", defsname, "\";\n"]
+      "\nLibs vyperTestRunnerLib\nval () = ",
+      "run_tests_on_traces $ all_traces \"", defsname, "\";\n"]
     val out = TextIO.openOut(fname)
     val () = TextIO.output(out, contents)
     val () = TextIO.closeOut out

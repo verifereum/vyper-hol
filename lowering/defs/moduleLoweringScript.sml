@@ -590,9 +590,8 @@ End
 (* ===== Local Variable Materialization ===== *)
 
 (* Collect lexical memory locals in source order, one entry per declaration.
-   build_compile_env uses the list to assign abstract MemLoc regions in
-   internal functions and the constructor; external and fallback bodies
-   instead give each declaration its own ALLOCA (declare_local), matching
+   build_compile_env uses the list for the locals' types and dynamic array
+   capacities; each declaration gets its own ALLOCA (declare_local), matching
    Python Context.new_variable. *)
 Definition collect_locals_def:
   collect_locals ([] : stmt list) = ([] : (string # type) list) /\
@@ -717,7 +716,9 @@ Definition compile_internal_function_def:
           compile_nonreentrant_lock nkey use_transient is_view
         else return ());
        (* Compile body *)
-       compile_stmts cenv2 NoLoop
+       (* Declaration-site ALLOCAs apply in both runtime and constructor
+          internal functions; Deploy visibility does not imply an external body. *)
+       compile_stmts (cenv2 with ce_alloca_locals := T) NoLoop
          (case ret_type of SOME t => t | NONE => BaseT BoolT) body;
        cs <- comp_get;
        (if block_is_terminated cs then return ()
@@ -916,3 +917,19 @@ Definition compile_external_entry_points_def:
                                       common_label
     od
 End
+
+(* Regression boundary for internal bodies, including constructor callees:
+   declaration reserves a pointer; emission at that declaration binds it to
+   an ALLOCA rather than a literal slot. *)
+Theorem internal_declaration_alloca:
+  MAP (\inst. inst.inst_opcode)
+    (SND ((do env <- declare_local (cenv with ce_alloca_locals := T)
+                       id (BaseT (UintT 256));
+              emit_local_alloca env id od) cs)).cs_current_insts =
+  MAP (\inst. inst.inst_opcode) cs.cs_current_insts ++ [ALLOCA]
+Proof
+  simp[declare_local_def, emit_local_alloca_def, type_memory_bytes_def,
+       finite_mapTheory.FLOOKUP_UPDATE, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def, fresh_var_def, emitHelperTheory.emit_inst_def, fresh_id_def,
+       emit_def, mk_inst_def, listTheory.MAP_APPEND]
+QED

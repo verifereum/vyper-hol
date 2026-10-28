@@ -4,25 +4,27 @@ Ancestors
   (* definitions *)
   moduleLowering
   (* property statements and proofs *)
-  moduleLoweringProps entryDispatchProps
+  moduleLoweringProps entryDispatchProps entryDecodeProps
+  abiDecodeStaticProps entryDecodeStaticProps entryDecodePlanProps
+  entryChecksProps
+  entryStateRel
   loweringSlice
   varsExt exprSim
   exprBopLowering
   exprSimOps exprSimCompare exprSimArith intBits freshWrites
-  exprSimMain
+  exprSimMain stmtSim stmtSimIf stmtSimFor stmtSimReturn stmtSimDecl
+  stmtSimReason stmtSimReasonExpr stmtSimForRange
   valueEncodingProofs
   localPtrsProps
   loweringShapeProps
+  intCallStep intCallLookup intCallCallee intCallArgs intCallResult intCallReturnMem valueCopy
   structFieldsProps
   (* compiler + correctness *)
   vyperCompiler
   allocaBudgetChecks
   vyperLoweringCorrect
   configuredE2ECorrectness
-  evalCompilerMemoryStores
-  evalCompilerExternalCalls
-  evalCompilerNameCollisions
-  evalCompilerInternalLabels
-  evalCompilerSliceBuffers
-  evalCompilerPhiPointers
-  evalCompilerAllocationLimit
+  (* focused internal-frame allocation, cleanup and whitelist regressions *)
+  calleeMemoryWitness
+  cleanupPromiseWitness
+  internalFrameWhitelistDiagnostic

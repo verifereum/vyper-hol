@@ -12,15 +12,17 @@ runs:
     - name: Setup Python
       uses: actions/setup-python@v6
       with:
-        python-version: '3.11'
+        python-version: '3.11.17'
 
     - name: Get Vyper revision
       id: vyper-rev
       shell: bash
       run: |
+        python3 -m unittest discover -s tools -p test_vyper_test_exports.py
         sha=$(tr -d '[:space:]' < VYPER_PIN)
         echo "sha=$sha" >> "$GITHUB_OUTPUT"
-        echo "cache-key=vyper-tests-${{ runner.os }}-$sha" >> "$GITHUB_OUTPUT"
+        profile=$(python3 tools/vyper_test_exports.py cache-key)
+        echo "cache-key=vyper-tests-${{ runner.os }}-$sha-$profile" >> "$GITHUB_OUTPUT"
 
     - name: Cache exported Vyper tests
       id: cache-vyper-tests
@@ -37,5 +39,14 @@ runs:
         cd vyper-src
         git fetch --unshallow --tags
         git checkout --detach ${{ steps.vyper-rev.outputs.sha }}
-        pip install . --group test
-        pytest -s -n0 --export ../tests/vyper-test-exports -m "not fuzzing" tests/functional
+        git config core.abbrev 8
+        SETUPTOOLS_SCM_PRETEND_VERSION_FOR_VYPER=0.5.0a4+cd74ce4f \
+          PIP_CONSTRAINT="../tests/semantics-test-constraints.txt ../tests/semantics-build-constraints.txt" \
+          pip install . --group test
+        cd ..
+        python3 tools/vyper_test_exports.py generate \
+          --vyper-repo vyper-src --output tests/vyper-test-exports
+
+    - name: Verify export provenance
+      shell: bash
+      run: python3 tools/vyper_test_exports.py check tests/vyper-test-exports

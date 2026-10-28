@@ -1,0 +1,11 @@
+struct S:
+    a: uint256
+
+flag Mode:
+    ON
+    OFF
+
+@external
+@view
+def f() -> uint256:
+    ...

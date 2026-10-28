@@ -2,9 +2,11 @@
  * Expression simulation: the builtins (#636, Builtins)
  *
  * The case lemmas of compile_expr_sim (exprSimMain) for the builtins that
- * are neither operators nor aggregates.  Row 3's word builtins but ceil are
- * proved, in exprSimWordBuiltins; the rest are cheated, for the later #636
- * PRs.  Each #636 Builtins row is:
+ * are neither operators nor aggregates.  Row 3's word builtins but ceil
+ * (in exprSimWordBuiltins), rows 2 and 7 on exprSimHash's machinery, row 5
+ * (here) and row 6's account reads but .code (in exprSimAccounts) are
+ * proved; the rest are cheated, for the later #636 PRs.  Each #636
+ * Builtins row is:
  *   1 len, len(msg.data), msg.data slices: compile_len_sim,
  *     compile_calldata_len_sim, compile_calldata_slice_sim
  *   2 keccak256, sha256: compile_keccak256_sim, compile_sha256_sim
@@ -16,10 +18,15 @@
  *     on names, which compile_expr lowers itself (names_builtin)
  *   4 concat, slice, extract32 (#566), uint2str (#561): compile_concat_sim,
  *     compile_slice_sim, compile_extract32_sim, compile_uint2str_sim
- *   5 blobhash: compile_blobhash_sim (blockhash, compile_blockhash_sim, is
- *     #636 Leaves row 5, with block.prevhash)
- *   6 account reads: compile_acc_sim
- *   7 method_id: compile_method_id_sim
+ *   5 blobhash: compile_blobhash_sim, proved: BLOBHASH on the index, whose
+ *     blob hashes call_ctx_rel relates to the transaction's (blockhash,
+ *     compile_blockhash_sim, is #636 Leaves row 5, with block.prevhash)
+ *   6 account reads: compile_acc_sim; all but .code by exprSimAccounts'
+ *     compile_acc_read_sim, .code in compile_acc_code_sim (unprovable for
+ *     now, below)
+ *   7 method_id: compile_method_id_sim; a literal signature with
+ *     output_type=bytes4 by compile_method_id_literal_word_sim (the folded
+ *     selector, a word literal), the rest in compile_method_id_other_sim
  *   8 ecrecover, ecadd, ecmul: compile_ecrecover_sim, compile_ecadd_sim,
  *     compile_ecmul_sim
  *
@@ -28,29 +35,22 @@
  *   - compile_blockhash_sim: the source raises a RuntimeError where
  *     BLOCKHASH returns 0 (#671), and call_ctx_rel does not relate the block
  *     hashes.
- *   - compile_blobhash_sim, and compile_acc_sim for balance, codesize,
- *     codehash and is_contract: call_ctx_rel does not relate the blob
- *     hashes, and nothing relates the accounts.
- *   - compile_acc_sim for .code: the lowering emits INVALID.
- *   - compile_len_sim: well_typed_builtin_app Len admits fixed arrays and
- *     bytesN, but the lowering always loads the operand's first word.
- *   - compile_keccak256_sim and compile_sha256_sim for a Bytes or String
- *     operand: compile_keccak256_bytes and compile_sha256_bytes read the
- *     bytes from ADD ptr 32, which wraps at 2 ** 256, while val_in_memory
- *     reads them at w2n ptr + 32, and nothing in stmt_state_rel or
- *     expr_val_at keeps a memory value below 2 ** 256 (exec_alloca's
- *     vs_alloca_next is unbounded).  They wait for S3's alloca-frontier
- *     invariant, vs_alloca_next < dimword (:256) along a run
- *     (raw_unit_memory_ok), to reach the judgment (stmtLoweringProps notes
- *     it as still unstated there), which gives the bound at the hash.  The
- *     bound can't go in stmt_state_rel: INVOKE copies the callee's frontier
- *     back, so a loop around an internal call keeps raising it.
+ *   - compile_acc_code_sim, a bare .code: the lowering emits INVALID, as
+ *     Python's codegen refuses it; the supported subset leaves it out.
+ *
+ * The hashes and method_id read a bytestring operand at ADD ptr 32 and
+ * allocate buffers of their own.  Neither wraps at 2 ** 256:
+ * stmt_state_rel's alloca_room keeps the frontier below 2 ** 256, every
+ * allocation ends below the frontier (alloca_inv) and so does every live
+ * local region (local_ptrs_rel), and
+ * expr_val_at puts the operand's value inside one of them
+ * (exprSimLiteralBuffer proves a buffer leaf the same way).
  *
  * The STATICCALLs of sha256, ecrecover, ecadd and ecmul go to computed
  * precompiles: take_outcome answers them with precompile_result and leaves
  * the outcomes and requests alone (extCallOracle), as the source does.
  *
- * len, the hashes of a bytestring and slice read their operand's value_vv
+ * len and slice read their operand's value_vv
  * (compile_expr without unwrap_value), which the induction hypothesis's
  * expr_vv_ok of the operand describes.  A msg.data or .code operand is
  * never evaluated as a value, so for those the hypothesis says nothing and
@@ -59,7 +59,12 @@
 
 Theory exprSimBuiltins
 Ancestors
-  list exprSim exprSimHyps vyperAST exprSimWordBuiltins
+  list rich_list exprSim exprSimHyps vyperAST exprSimWordBuiltins
+  exprSimWordArgs exprSimHash vyperTypeSystem exprLowering compileEnv
+  valueEncoding fragExec vyperInterpreter vyperState vyperContext
+  vyperValueOperation venomState exprSimAccounts exprSimUnop
+  exprSimOperators exprBopLowering builtinMisc venomExecSemantics venomInst
+  vyperValue exprLoweringProps vyperTyping
 
 (* ===== Lengths and calldata ===== *)
 
@@ -89,12 +94,41 @@ QED
 
 (* ===== Hashes ===== *)
 
+(* keccak256 and sha256 of a Bytes[n], String[n] or bytesN operand
+   (well_typed_builtin_app; the word branch of the lowering is not
+   reached), a bytes32 result on the stack:
+   - Bytes or String: lower_value hands out a pointer to the operand's
+     value, length word then data (val_in_memory); MLOAD reads the length,
+     ADD ptr 32 the data's address, unwrapped since the value lies inside
+     an allocation or a local region, below 2 ** 256.  SHA3 hashes those
+     bytes, the source's Keccak_256_w64; sha256 hands them to the precompile
+     at 2 by STATICCALL, which take_outcome answers with the SHA-256 digest
+     (precompile_result_sha256) and no change to the outcomes, requests,
+     accounts or logs, written to an ALLOCA'd 32-byte buffer and loaded.
+   - bytesN: the operand is the left-aligned word; it is MSTOREd to an
+     ALLOCA'd 32-byte buffer and its first N bytes, the value's bytes, are
+     hashed.
+   The buffers are fresh allocations, so the stores keep stmt_state_rel and
+   the memory expr_post's frame asks for (as exprSimLiteralBuffer's
+   literal_mstore_state_rel). *)
 Theorem compile_keccak256_sim:
   !cenv ann args.
     expr_sim_below cenv (list_size expr_size args) ==>
     expr_vv_ok cenv (Builtin ann Keccak256 args)
 Proof
-  cheat
+  rw[expr_vv_ok_def] >>
+  `well_typed_builtin_app ann Keccak256 (MAP expr_type args)` by
+    gvs[expr_sim_pre_def, well_typed_expr_def] >>
+  mp_tac (Q.INST [`b` |-> `Keccak256`, `ty` |-> `ann`,
+    `ts` |-> `MAP expr_type args`] hash_builtin_types) >>
+  simp[] >> strip_tac >> gvs[] >>
+  rename1 `Builtin _ Keccak256 [e]` >>
+  irule compile_keccak256_typed_vv_sim >> simp[] >>
+  conj_tac
+  >- (qpat_x_assum `expr_sim_below _ _` mp_tac >>
+      simp[expr_sim_below_def] >>
+      disch_then (qspec_then `e` mp_tac) >> simp[expr_ok_def]) >>
+  metis_tac[]
 QED
 
 Theorem compile_sha256_sim:
@@ -102,7 +136,19 @@ Theorem compile_sha256_sim:
     expr_sim_below cenv (list_size expr_size args) ==>
     expr_vv_ok cenv (Builtin ann Sha256 args)
 Proof
-  cheat
+  rw[expr_vv_ok_def] >>
+  `well_typed_builtin_app ann Sha256 (MAP expr_type args)` by
+    gvs[expr_sim_pre_def, well_typed_expr_def] >>
+  mp_tac (Q.INST [`b` |-> `Sha256`, `ty` |-> `ann`,
+    `ts` |-> `MAP expr_type args`] hash_builtin_types) >>
+  simp[] >> strip_tac >> gvs[] >>
+  rename1 `Builtin _ Sha256 [e]` >>
+  irule compile_sha256_typed_vv_sim >> simp[] >>
+  conj_tac
+  >- (qpat_x_assum `expr_sim_below _ _` mp_tac >>
+      simp[expr_sim_below_def] >>
+      disch_then (qspec_then `e` mp_tac) >> simp[expr_ok_def]) >>
+  metis_tac[]
 QED
 
 (* ===== Arithmetic builtins ===== *)
@@ -244,10 +290,130 @@ Proof
   cheat
 QED
 
+(* blobhash(n): BLOBHASH reads the transaction's blob hashes, which
+   call_ctx_rel makes the source's, with the same 0 past their end. *)
+Theorem lower_value_blobhash:
+  !cenv ty ann e sa op sb.
+    lower_value compile_expr cenv ty (Builtin ann BlobHash [e]) sa =
+      (op, sb) ==>
+    ?x s1. lower_value compile_expr cenv ty e sa = (x, s1) /\
+           emit_op BLOBHASH [x] s1 = (op, sb)
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `lower_value _ _ _ _ _ = _` mp_tac >>
+  simp[Once lower_value_def, comp_bind_def, compile_expr_unary_builtin] >>
+  simp[Once (CONJUNCT1 (CONJUNCT2 compile_expr_raw_def)),
+       compile_builtin_dispatch_body_def, compile_blobhash_def] >>
+  CONV_TAC (DEPTH_CONV ETA_CONV) >>
+  simp[lower_value_child_call, vyperASTTheory.expr_size_def,
+       listTheory.list_size_def] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  rw[] >> gvs[as_stack_val_pair, unwrap_value_def, comp_return_def]
+QED
+
+Theorem names_builtin_blobhash[local]:
+  !args. ~names_builtin BlobHash args
+Proof
+  `!bt args. names_builtin bt args ==> bt <> BlobHash` suffices_by
+    metis_tac[] >>
+  ho_match_mp_tac names_builtin_ind >> simp[names_builtin_def]
+QED
+
+Theorem compile_blobhash_stack:
+  !cenv ty ann args sa.
+    ?t op sb. compile_expr cenv ty (Builtin ann BlobHash args) sa =
+              (StackValue t op, sb)
+Proof
+  rpt gen_tac >>
+  simp[compile_expr_builtin_dispatch, names_builtin_blobhash] >>
+  simp[Once (CONJUNCT1 (CONJUNCT2 compile_expr_raw_def)),
+       compile_builtin_dispatch_body_def, as_stack_val_pair] >>
+  simp[pairTheory.UNCURRY]
+QED
+
+Theorem compile_blobhash_frag:
+  !ctx func cenv cx i es0.
+    0 <= i /\ i < 2 ** 256 ==>
+    unop_frag ctx func cenv cx (\x. emit_op BLOBHASH [x])
+      (typed_val_to_w256 (BaseTV (UintT 256)) (IntV i))
+      (BaseT (BytesT (Fixed 32)))
+      (unop_result cx (BaseT (BytesT (Fixed 32))) BlobHash
+         [BaseT (UintT 256)] (IntV i) es0) es0
+Proof
+  rpt strip_tac >>
+  simp[unop_result_def, evaluate_builtin_def, evaluate_blob_hash_def] >>
+  irule unop_frag_read >>
+  simp[vyperValueTheory.evaluate_type_def, is_word_type_def,
+       is_terminator_def, typed_val_to_w256_def, PAD_RIGHT,
+       length_word_to_bytes_be, word_of_bytes_be_to_bytes] >>
+  rpt strip_tac >>
+  gvs[step_inst_base_opcode_eqs, mk_inst_def, exec_read1_def,
+      stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
+  `?n. i = &n` by metis_tac[integerTheory.NUM_POSINT_EXISTS] >>
+  gvs[val_to_w256_def, integer_wordTheory.i2w_pos, wordsTheory.dimword_def]
+QED
+
 Theorem compile_blobhash_sim:
   !cenv ann args.
     expr_sim_below cenv (list_size expr_size args) ==>
     expr_vv_ok cenv (Builtin ann BlobHash args)
+Proof
+  rpt strip_tac >>
+  `expr_ok cenv (Builtin ann BlobHash args)` suffices_by
+    simp[expr_ok_def] >>
+  irule expr_ok_stack >> rpt conj_tac
+  >- metis_tac[eval_expr_builtin_value]
+  >- simp[compile_blobhash_stack] >>
+  rw[expr_sim_ok_def] >>
+  `?e1. args = [e1] /\ ann = BaseT (BytesT (Fixed 32)) /\
+        expr_type e1 = BaseT (UintT 256)` by
+    (gvs[expr_sim_pre_def, well_typed_expr_def, well_typed_builtin_app_def] >>
+     Cases_on `args` >> gvs[] >> rename1 `h::t` >> Cases_on `t` >> gvs[]) >>
+  gvs[] >>
+  `expr_ok cenv e1` by
+    (fs[expr_sim_below_def] >> first_x_assum irule >> simp[]) >>
+  `expr_sim_pre cenv cx env e1 es` by
+    (drule expr_sim_pre_builtin_arg >> disch_then irule >>
+     gvs[expr_sim_pre_def]) >>
+  qspecl_then [`ctx`, `func`, `cenv`, `cx`, `ty`, `BaseT (BytesT (Fixed 32))`,
+               `BlobHash`, `e1`, `ty`, `\x. emit_op BLOBHASH [x]`, `es`]
+    mp_tac compile_unop_sim >>
+  impl_tac >- (
+    rpt conj_tac
+    >- simp[]
+    >- simp[builtin_args_length_ok_def]
+    >- simp[is_word_type_def]
+    >- simp[is_word_type_def]
+    >- (rpt strip_tac >> drule lower_value_blobhash >> simp[])
+    >- (rpt gen_tac >> strip_tac >>
+        drule expr_sim_pre_lower_value_word_shape >> disch_then drule >>
+        simp[is_word_type_def])
+    >- (rpt gen_tac >> BETA_TAC >> strip_tac >>
+        drule emit_op_extends_next_var >> simp[])
+    >- metis_tac[expr_sim_pre_word_value, is_word_type_def]
+    >- metis_tac[expr_ok_def, expr_sim_ok_def] >>
+    rpt strip_tac >>
+    qspecl_then [`cenv`, `cx`, `env`, `e1`, `es`, `Value v1`, `es1`] mp_tac
+      expr_sim_pre_word_value >>
+    simp[is_word_type_def] >> strip_tac >>
+    gvs[vyperValueTheory.evaluate_type_def] >>
+    Cases_on `v1` >> gvs[value_has_type_def] >>
+    irule compile_blobhash_frag >>
+    `?n. i = &n` by metis_tac[integerTheory.NUM_POSINT_EXISTS] >> gvs[]) >>
+  simp[]
+QED
+
+(* A bare .code: the lowering emits INVALID (compile_acc), where the source
+   reads the account's code, so this does not hold as the definitions
+   stand.  Python's codegen rejects it too (CompilerPanic ".code requires
+   slice() context", codegen_venom/expr.py): x.code is only lowered as
+   slice's first argument, with EXTCODECOPY.  The supported subset leaves
+   it out (supported_builtin_form), so expr_sim_pre needs that exclusion
+   for this case to go. *)
+Theorem compile_acc_code_sim:
+  !cenv ann args.
+    expr_sim_below cenv (list_size expr_size args) ==>
+    expr_vv_ok cenv (Builtin ann (Acc Code) args)
 Proof
   cheat
 QED
@@ -257,7 +423,79 @@ Theorem compile_acc_sim:
     expr_sim_below cenv (list_size expr_size args) ==>
     expr_vv_ok cenv (Builtin ann (Acc item) args)
 Proof
-  cheat
+  rpt strip_tac >> Cases_on `item = Code`
+  >- (gvs[] >> irule compile_acc_code_sim >> simp[]) >>
+  irule compile_acc_read_sim >> simp[]
+QED
+
+
+(* method_id of a literal signature with output_type=bytes4: the folded
+   selector as a word literal, no code. *)
+Theorem compile_method_id_literal_word_sim:
+  !cenv la l.
+    IS_SOME (method_id_literal (Literal la l)) ==>
+    expr_sim_ok cenv
+      (Builtin (BaseT (BytesT (Fixed 4))) MethodId [Literal la l])
+Proof
+  rw[expr_sim_ok_def, expr_sim_def, optionTheory.IS_SOME_EXISTS] >>
+  drule_all eval_expr_method_id_literal >> strip_tac >> gvs[] >>
+  drule compile_expr_method_id_literal >> strip_tac >>
+  gvs[lower_value_def, comp_bind_def, compile_literal_vv_def,
+      unwrap_value_def, comp_return_def] >>
+  irule frag_exec_refl >>
+  simp[expr_post_def, expr_val_rel_def, expr_val_at_def,
+       vyperASTTheory.expr_type_def, eval_operand_def, is_word_type_def,
+       vyperValueTheory.evaluate_type_def]
+QED
+
+Theorem compile_method_id_literal_word_case_sim:
+  !cenv la l.
+    IS_SOME (method_id_literal (Literal la l)) ==>
+    expr_ok cenv
+      (Builtin (BaseT (BytesT (Fixed 4))) MethodId [Literal la l])
+Proof
+  rpt strip_tac >> irule expr_ok_stack >> rpt conj_tac
+  >~ [`eval_expr`] >- metis_tac[eval_expr_builtin_value]
+  >~ [`expr_sim_ok`] >- simp[compile_method_id_literal_word_sim] >>
+  gvs[optionTheory.IS_SOME_EXISTS] >> rpt gen_tac >>
+  drule compile_expr_method_id_literal >>
+  simp[compile_literal_vv_def, comp_return_def]
+QED
+
+(* The other method_ids:
+   - a literal signature with the default Bytes[4] output: compile_expr
+     emits what it emits for the literal Bytes[4] the source evaluates it to
+     (compile_expr_method_id_literal, eval_expr_method_id_literal), a buffer
+     holding the length 4 and the selector, which
+     exprSimLiteralBuffer's compile_literal_other_vv_sim simulates;
+   - a signature that is not a literal, hashed at run time
+     (compile_method_id_runtime): keccak256 of its bytes as in
+     compile_keccak256_sim, SHR then SHL by 224 keeping the first 4 bytes
+     left-aligned, the typed encoding of the bytes4 selector; for Bytes[4]
+     that word goes after the length 4 in an ALLOCA'd 64-byte buffer. *)
+Theorem compile_method_id_other_sim:
+  !cenv ann args.
+    expr_sim_below cenv (list_size expr_size args) /\
+    ~(ann = BaseT (BytesT (Fixed 4)) /\
+      ?la l. args = [Literal la l] /\
+             IS_SOME (method_id_literal (Literal la l))) ==>
+    expr_vv_ok cenv (Builtin ann MethodId args)
+Proof
+  rw[expr_vv_ok_def] >>
+  `well_typed_builtin_app ann MethodId (MAP expr_type args)` by
+    gvs[expr_sim_pre_def, well_typed_expr_def] >>
+  mp_tac (Q.INST [`b` |-> `MethodId`, `ty` |-> `ann`,
+    `ts` |-> `MAP expr_type args`] hash_builtin_types) >>
+  simp[] >>
+  disch_then (qx_choose_then `t` (mp_tac o CONJUNCT1)) >>
+  simp[] >> strip_tac >> gvs[] >>
+  rename1 `Builtin _ MethodId [e]` >>
+  irule compile_method_id_other_typed_vv_sim >> simp[] >>
+  conj_tac
+  >- (qpat_x_assum `expr_sim_below _ _` mp_tac >>
+      simp[expr_sim_below_def] >>
+      disch_then (qspec_then `e` mp_tac) >> simp[expr_ok_def]) >>
+  metis_tac[]
 QED
 
 Theorem compile_method_id_sim:
@@ -265,7 +503,12 @@ Theorem compile_method_id_sim:
     expr_sim_below cenv (list_size expr_size args) ==>
     expr_vv_ok cenv (Builtin ann MethodId args)
 Proof
-  cheat
+  rpt strip_tac >>
+  Cases_on `ann = BaseT (BytesT (Fixed 4)) /\
+            ?la l. args = [Literal la l] /\
+                   IS_SOME (method_id_literal (Literal la l))`
+  >- (gvs[] >> metis_tac[compile_method_id_literal_word_case_sim, expr_ok_def]) >>
+  irule compile_method_id_other_sim >> asm_rewrite_tac[]
 QED
 
 (* ===== Precompiles ===== *)
@@ -293,3 +536,4 @@ Theorem compile_ecmul_sim:
 Proof
   cheat
 QED
+

@@ -69,16 +69,15 @@
  * SSTORE lock of pre-Cancun targets.  They are stated over the compiler's
  * lock key nkey; that it is the source's cx.nonreentrant_slot is not
  * shown here (the lowering does not use transient locks yet, #564).
- * state_rel relates only the contract's own storage and
- * transient storage, so the accounts and the transient storage of every
- * address are hypotheses at the return: the success case compares all of
- * them (#625's relation leaves them out; #665 tracks deriving them).
+ * The success case compares the accounts and the transient storage of
+ * every address; state_rel relates them through accounts_rel, which also
+ * leaves the source no pending deletions to process (#665).
  *)
 
 Theory loweringHalt
 Ancestors
   list rich_list finite_map
-  fragExec loweringSlice
+  fragExec loweringSlice accountsRelProps
   stmtLowering moduleLowering context emitHelper emitHelperProps compileEnv
   abiEncoder abiEncoderProps
   valueEncoding valueEncodingProps
@@ -893,6 +892,46 @@ Proof
   qexists_tac `s1` >> gvs[mk_inst_def]
 QED
 
+(* compile_alloc_buffer emits exactly one ALLOCA of n bytes into the current
+   block, and its buffer operand is that ALLOCA's output. *)
+Theorem compile_alloc_buffer_insts:
+  !n st buf st'.
+    compile_alloc_buffer n st = (buf, st') ==>
+    buf.buf_operand = Var (STRING #"%" (toString st.cs_next_var)) /\
+    buf.buf_size = n /\
+    st'.cs_blocks = st.cs_blocks /\ st'.cs_current_bb = st.cs_current_bb /\
+    st'.cs_current_insts =
+      st.cs_current_insts ++
+      [mk_inst st.cs_next_id ALLOCA [Lit (n2w n)]
+         [STRING #"%" (toString st.cs_next_var)]]
+Proof
+  simp[compile_alloc_buffer_def, emit_op_def, comp_bind_def,
+       comp_ignore_bind_def, comp_return_def, fresh_id_def, fresh_var_def,
+       emit_def] >>
+  rpt strip_tac >> gvs[]
+QED
+
+(* In a frame that has not run this ALLOCA yet, compile_alloc_buffer binds
+   the buffer operand to a new region of n bytes at vs_alloca_next. *)
+Theorem compile_alloc_buffer_fresh_frag:
+  !ctx n st buf st' P Q R.
+    compile_alloc_buffer n st = (buf, st') /\ n < dimword (:256) /\
+    (!s. P s ==>
+       FLOOKUP s.vs_allocas st.cs_next_id = NONE /\
+       Q ((update_var (STRING #"%" (toString st.cs_next_var))
+             (n2w s.vs_alloca_next)
+             (s with <| vs_allocas := s.vs_allocas |+
+                          (st.cs_next_id, (s.vs_alloca_next, n));
+                        vs_alloca_next := s.vs_alloca_next + n |>))
+          with vs_inst_idx := LENGTH st'.cs_current_insts)) ==>
+    frag_exec ctx st st' P Q R
+Proof
+  rpt strip_tac >> irule compile_alloc_buffer_frag >>
+  qexistsl_tac [`buf`, `n`] >> simp[] >> rpt strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  gvs[step_alloca_fresh, arithmeticTheory.ADD_COMM]
+QED
+
 Theorem enc_frame_var:
   !st st' lo top outs s0 s name w.
     enc_frame st st' lo top outs s0 s /\ not_fresh_at st name /\
@@ -1564,8 +1603,6 @@ QED
 Theorem external_halt_success_unlock:
   !func cenv cx es es' s ss nr nkey iv tops tx srcs exps layouts.
     state_rel func cenv cx es s /\
-    s.vs_accounts = process_deletions es.pending_deletions es.accounts /\
-    s.vs_transient = es.tStorage /\
     (if nr /\ ~iv then release_nonreentrant_lock cx.txn.target nkey
      else vyperState$return ()) es = (INL (), es') /\
     ss.vs_accounts = s.vs_accounts /\
@@ -1586,6 +1623,7 @@ Theorem external_halt_success_unlock:
     ss.vs_requests = es'.requests
 Proof
   rpt gen_tac >> strip_tac >>
+  drule state_rel_accounts >> strip_tac >>
   `es' = es with tStorage := ss.vs_transient` by
     (Cases_on `nr` >> Cases_on `iv` >>
      gvs[release_nonreentrant_lock_def, vyperStateTheory.bind_def,
@@ -1608,8 +1646,6 @@ QED
 Theorem external_halt_success:
   !func cenv cx es s ss tops tx srcs exps layouts.
     state_rel func cenv cx es s /\
-    s.vs_accounts = process_deletions es.pending_deletions es.accounts /\
-    s.vs_transient = es.tStorage /\
     ss.vs_accounts = s.vs_accounts /\ ss.vs_transient = s.vs_transient /\
     ss.vs_logs = s.vs_logs /\ ss.vs_requests = s.vs_requests ==>
     ss.vs_accounts =

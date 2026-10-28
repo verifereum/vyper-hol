@@ -155,6 +155,13 @@ Datatype:
   |>
 End
 
+(* Allocation identity is the ALLOCA instruction's context-wide inst_id.
+   Kept with the IR so concretized functions can retain transitive memory
+   usage without depending on the alias/liveness analyses. *)
+Datatype:
+  allocation = Allocation num
+End
+
 Datatype:
   ir_function = <|
     fn_name : string;
@@ -163,6 +170,7 @@ Datatype:
     fn_noinline : bool;
     fn_forced_alloc_positions : (num,num) fmap;
     fn_eom : num option;
+    fn_mems_used : (allocation # num # num) list;
     fn_fmp_signature : fmp_signature option
   |>
 End
@@ -182,6 +190,7 @@ Definition mk_raw_function_def:
     fn_noinline := F;
     fn_forced_alloc_positions := FEMPTY;
     fn_eom := NONE;
+    fn_mems_used := [];
     fn_fmp_signature := NONE
   |>
 End

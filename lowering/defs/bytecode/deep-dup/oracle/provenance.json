@@ -1,0 +1,30 @@
+{
+  "producer": "pinned Python Vyper",
+  "vyper_commit": "cd74ce4f57e3771aeeab8f061fa3be45bfe8a29c",
+  "vyper_version": "0.5.0a4+cd74ce4f+commit.cd74ce4f",
+  "python_version": "3.11.11",
+  "dependencies": {
+    "cbor2": "5.9.0",
+    "immutables": "0.21",
+    "lark": "1.1.9",
+    "packaging": "26.3",
+    "pycryptodome": "3.23.0",
+    "wheel": "0.48.0"
+  },
+  "settings": {
+    "experimental_codegen": true,
+    "optimization_level": "NONE",
+    "evm_version": "prague",
+    "bytecode_metadata": false
+  },
+  "sources": {
+    "arr_dyn_of_dyn.vy": "c9b6dd40f5c47730fd971496dffba8aee45fbe6c0aadbc915fee5666c0c8f395",
+    "arr_fixed_of_dyn.vy": "30ff3b14c97f78f333ac3b4021c38aca329e30d0107b5873641e530c89f0462c"
+  },
+  "outputs": {
+    "arr_dyn_of_dyn.hex": "b23bcf612a1153a19d225065a97ca9286f9ff7df9e3d3176320a9eeb2033b6ce",
+    "arr_dyn_of_dyn.json": "33542b9f4152eafebd5b4b7d01e091fe53cdf93ebec9e65a24b48cd7cb54548b",
+    "arr_fixed_of_dyn.hex": "037f5edb44424364e0c95003baea3ae2367b47f273d3bf93158353a79d86f9ba",
+    "arr_fixed_of_dyn.json": "ba7a25109cc553aa815d7dd24498d30aac2bbbd3eca8db30f399e09dd848a78d"
+  }
+}
