@@ -37,7 +37,7 @@
 
 Theory exprLoweringProps
 Ancestors
-  exprLowering emitHelper compileEnv builtinSystem
+  exprLowering emitHelper compileEnv accountsRelProps builtinSystem
   venomExecSemantics venomState venomInst venomInstProps
   vyperInterpreter vyperContext
   vyperState vyperValueOperation
@@ -138,8 +138,9 @@ End
 (* Room in func's frame: the frontier plus every allocation func can still
    make stays below 2 ** 256, so no ALLOCA of func hands out a wrapped
    pointer.  A fresh ALLOCA of func moves its size from the pending sizes to
-   the frontier; a step that leaves the allocations alone keeps it.  An
-   INVOKE does not: the callee's allocations move the frontier too (#638). *)
+   the frontier; a step that leaves the allocations alone keeps it, and so
+   does an INVOKE, which gives the caller its frontier back
+   (merge_callee_state). *)
 Definition alloca_room_def:
   alloca_room func (ss:venom_state) <=>
     ss.vs_alloca_next + pending_alloca_size func ss < dimword (:256)
@@ -469,8 +470,8 @@ Theorem state_rel_frame:
 Proof
   rpt strip_tac >>
   qpat_x_assum `es' = _` SUBST1_TAC >>
-  fs[state_rel_def, storage_rel_def, transient_rel_def, immutables_rel_def,
-     logs_rel_def, call_ctx_rel_def, contract_storage_def,
+  fs[state_rel_def, storage_rel_def, transient_rel_def, accounts_rel_def,
+     immutables_rel_def, logs_rel_def, call_ctx_rel_def, contract_storage_def,
      contract_transient_def]
 QED
 
