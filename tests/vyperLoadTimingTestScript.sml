@@ -30,6 +30,9 @@ val (pop_program, pop_context) = load_fixture "pop_refill";
 val (conditional_program, conditional_context) = load_fixture "conditional_snapshot";
 val (memory_view_program, memory_view_context) = load_fixture "conditional_memory_view";
 val (nested_pop_program, nested_pop_context) = load_fixture "nested_retained_pop";
+val (call_storage_program, call_storage_context) = load_fixture "call_storage_read";
+val (call_memory_program, call_memory_context) = load_fixture "call_memory_pop";
+val (builtin_eager_program, builtin_eager_context) = load_fixture "builtin_eager_read";
 
 Definition pop_refill_program_def:
   pop_refill_program = ^pop_program
@@ -70,6 +73,36 @@ Definition nested_retained_pop_context_def:
   nested_retained_pop_context = ^nested_pop_context
 End
 val () = cv_auto_trans nested_retained_pop_context_def;
+
+Definition call_storage_read_program_def:
+  call_storage_read_program = ^call_storage_program
+End
+val () = cv_auto_trans call_storage_read_program_def;
+
+Definition call_storage_read_context_def:
+  call_storage_read_context = ^call_storage_context
+End
+val () = cv_auto_trans call_storage_read_context_def;
+
+Definition call_memory_pop_program_def:
+  call_memory_pop_program = ^call_memory_program
+End
+val () = cv_auto_trans call_memory_pop_program_def;
+
+Definition call_memory_pop_context_def:
+  call_memory_pop_context = ^call_memory_context
+End
+val () = cv_auto_trans call_memory_pop_context_def;
+
+Definition builtin_eager_read_program_def:
+  builtin_eager_read_program = ^builtin_eager_program
+End
+val () = cv_auto_trans builtin_eager_read_program_def;
+
+Definition builtin_eager_read_context_def:
+  builtin_eager_read_context = ^builtin_eager_context
+End
+val () = cv_auto_trans builtin_eager_read_context_def;
 
 Theorem load_timing_cont_pre[cv_pre]:
   cont_pre (eval_stmts_cps cx ss st DoneK)
@@ -126,6 +159,27 @@ QED
 Theorem nested_pop_uses_retained_inner_location:
   FST (load_timing_run nested_retained_pop_context
     nested_retained_pop_program [] empty_state) = INL (IntV 5)
+Proof
+  CONV_TAC cv_eval
+QED
+
+Theorem call_storage_argument_reads_after_later_argument:
+  FST (load_timing_run call_storage_read_context
+    call_storage_read_program [] empty_state) = INL (IntV 10)
+Proof
+  CONV_TAC cv_eval
+QED
+
+Theorem call_memory_argument_reads_after_later_pop:
+  FST (load_timing_run call_memory_pop_context
+    call_memory_pop_program [] empty_state) = INL (IntV 1)
+Proof
+  CONV_TAC cv_eval
+QED
+
+Theorem builtin_storage_argument_reads_before_later_argument:
+  FST (load_timing_run builtin_eager_read_context
+    builtin_eager_read_program [] empty_state) = INL (IntV 0)
 Proof
   CONV_TAC cv_eval
 QED

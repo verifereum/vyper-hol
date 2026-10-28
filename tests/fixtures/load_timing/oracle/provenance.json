@@ -8,6 +8,27 @@
     "wheel": "0.48.0"
   },
   "fixtures": {
+    "builtin_eager_read": {
+      "deploy_sha256": "1dda681873c41106e92f4811d96bfc3f02bbe6f7bbde6d4798a2720b9e11b3b7",
+      "frontend_sha256": "2becd347365a63bcb33c43e7b88bdc2c11c2d3723805c708fbab8199ebffdf78",
+      "runtime_sha256": "cd4e9cf8ae447ef46a1e2b4df70bc3da01317459f87f0d931276f60f692cbf13",
+      "source": "sources/builtin_eager_read.vy",
+      "source_sha256": "eaa09b5ff8841cb17d20c4ce68b849a56e96c30aea675717002126a8199b8b45"
+    },
+    "call_memory_pop": {
+      "deploy_sha256": "617342b1c4dfd146df0b4f9d07df8c073da118255678b53ccbd77570f241c475",
+      "frontend_sha256": "43a067808924e8d164ef6c7d9b1a40d23419ea2cc1cd8035ef805032803710e2",
+      "runtime_sha256": "6e5c5463b66f466fcc973b5ebaa8d1030b93780a7285688deacdeaef39ee1f2a",
+      "source": "sources/call_memory_pop.vy",
+      "source_sha256": "a61eaaf9dd7ce9b820a8c9a169ea248473a94177dda0e8dfcc83ad032d45cec2"
+    },
+    "call_storage_read": {
+      "deploy_sha256": "5be6c5691eabe7d9c328f4ba7d8c19232d364685266abab366aa577b5f22848e",
+      "frontend_sha256": "1015b3e33e31464ac8ddfd750656755594ae146ca6e03f8142141e34a17c65fe",
+      "runtime_sha256": "4fb0fa0ba355c7b0f8480d34738e59bf8340512a5e535f342c84c93eb45be443",
+      "source": "sources/call_storage_read.vy",
+      "source_sha256": "20612d051cb43abe4e8c42a3a392831f78db413f6e90aa49b537194e5bb43407"
+    },
     "conditional_memory_view": {
       "deploy_sha256": "837a72a9280b4e2e930e70085842b350ee158f63307532275b9554f32b45a7f5",
       "frontend_sha256": "7c066642536f02761237e922f73a771a83b83ad578a922aa8e081f22e98aa4b8",

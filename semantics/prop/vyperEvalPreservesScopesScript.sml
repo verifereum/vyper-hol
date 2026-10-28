@@ -171,7 +171,8 @@ Proof
    (!cx g v st res st'. assign_tuple_targets cx g v st = (res,st') ==>
       MAP FDOM st.scopes = MAP FDOM st'.scopes) /\
    (!cx gs vs st res st'. assign_tuple_target_list cx gs vs st = (res,st') ==>
-      MAP FDOM st.scopes = MAP FDOM st'.scopes)` suffices_by metis_tac[] >>
+      MAP FDOM st.scopes = MAP FDOM st'.scopes) /\
+   (!(cx:evaluation_context) (es:expr list). T)` suffices_by metis_tac[] >>
   ho_match_mp_tac evaluate_ind >> simp[] >> rpt conj_tac
   >- (rpt strip_tac >>
       qpat_x_assum `assign_tuple_targets _ (BaseTarget _) _ _ = _` mp_tac >>
@@ -640,7 +641,8 @@ Theorem scopes_dom_extended[local]:
   (!cx bt st res st'. eval_base_place cx bt st = (res,st') ==> MAP FDOM st.scopes = MAP FDOM st'.scopes) /\
   (!cx bt st res st'. eval_target_place cx bt st = (res,st') ==> MAP FDOM st.scopes = MAP FDOM st'.scopes) /\
   (!cx g v st res st'. assign_tuple_targets cx g v st = (res,st') ==> MAP FDOM st.scopes = MAP FDOM st'.scopes) /\
-  (!cx gs vs st res st'. assign_tuple_target_list cx gs vs st = (res,st') ==> MAP FDOM st.scopes = MAP FDOM st'.scopes)
+  (!cx gs vs st res st'. assign_tuple_target_list cx gs vs st = (res,st') ==> MAP FDOM st.scopes = MAP FDOM st'.scopes) /\
+  (!cx es st res st'. eval_expr_results cx es st = (res,st') ==> MAP FDOM st.scopes = MAP FDOM st'.scopes)
 Proof
   ho_match_mp_tac evaluate_ind >> rpt conj_tac >> rpt strip_tac
   (* === Statement cases === *)
@@ -723,7 +725,10 @@ Proof
   >- metis_tac[place_evaluators_scopes_dom]
   >- metis_tac[place_evaluators_scopes_dom]
   >- metis_tac[place_evaluators_scopes_dom]
-  >> metis_tac[place_evaluators_scopes_dom]
+  >- metis_tac[place_evaluators_scopes_dom]
+  >- gvs[Once evaluate_def, raise_def]
+  >- gvs[Once evaluate_def, raise_def]
+  >> metis_tac[eval_expr_results_preserves_scopes_dom]
 QED
 
 (* ------------------------------------------------------------------------
@@ -827,7 +832,8 @@ Theorem new_in_head_extended[local]:
   (!(cx:evaluation_context) (bt:base_assignment_target). T) /\
   (!(cx:evaluation_context) (bt:base_assignment_target). T) /\
   (!(cx:evaluation_context) (g:assignment_target) (v:value). T) /\
-  (!(cx:evaluation_context) (gs:assignment_target list) (vs:value list). T)
+  (!(cx:evaluation_context) (gs:assignment_target list) (vs:value list). T) /\
+  (!(cx:evaluation_context) (es:expr list). T)
 Proof
   ho_match_mp_tac evaluate_ind
   >> conj_tac >- (rpt strip_tac >> gvs[evaluate_def, return_def]) (* Pass *)
@@ -1517,7 +1523,7 @@ val PLACE_TV_TAC =
   rpt (first_x_assum drule_all >> strip_tac >> gvs[]) >>
   metis_tac[preserves_tv_trans];
 
-Theorem eval_preserves_tv_extended:
+Theorem eval_preserves_tv_with_results:
   (∀cx s st res st'. eval_stmt cx s st = (res, st') ⇒
      preserves_tv cx st st') ∧
   (∀cx ss st res st'. eval_stmts cx ss st = (res, st') ⇒
@@ -1533,7 +1539,8 @@ Theorem eval_preserves_tv_extended:
   (!cx t st res st'. eval_base_place cx t st = (res,st') ==> preserves_tv cx st st') /\
   (!cx t st res st'. eval_target_place cx t st = (res,st') ==> preserves_tv cx st st') /\
   (!cx g v st res st'. assign_tuple_targets cx g v st = (res,st') ==> preserves_tv cx st st') /\
-  (!cx gs vs st res st'. assign_tuple_target_list cx gs vs st = (res,st') ==> preserves_tv cx st st')
+  (!cx gs vs st res st'. assign_tuple_target_list cx gs vs st = (res,st') ==> preserves_tv cx st st') /\
+  (!cx es st res st'. eval_expr_results cx es st = (res,st') ==> preserves_tv cx st st')
 Proof
   ho_match_mp_tac evaluate_ind >>
   conj_tac >- rw[evaluate_def, return_def] >>
@@ -1839,8 +1846,12 @@ Proof
   conj_tac >- (
     rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
     gvs[Once evaluate_def, bind_apply, AllCaseEqs(), return_def] >>
-    imp_res_tac eval_ext_call_preserves_non_accounts >> gvs[] >>
-    first_x_assum drule >> rw[] >> gvs[preserves_tv_def]) >>
+    imp_res_tac eval_ext_call_preserves_non_accounts >>
+    imp_res_tac read_results_state >> gvs[] >>
+    rpt (qpat_x_assum `∀a b c d e f. _` drule_all >> strip_tac) >>
+    rpt (qpat_x_assum `∀a b c. _` drule_all >> strip_tac) >>
+    imp_res_tac preserves_tv_eq >>
+    metis_tac[preserves_tv_trans]) >>
   (* IntCall *)
   conj_tac >- (
     rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
@@ -1953,7 +1964,8 @@ Proof
     rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
     Cases_on `kind` >> gvs[] >>
     gvs[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs()] >>
-    imp_res_tac check_create_blueprint_result_state >> gvs[] >>
+    imp_res_tac check_create_blueprint_result_state >>
+    imp_res_tac read_results_state >> gvs[] >>
     res_tac >>
     imp_res_tac eval_create_preserves_scopes_immutables >>
     metis_tac[preserves_tv_trans, preserves_tv_eq]) >>
@@ -2105,51 +2117,6 @@ Proof
   simp[]
 QED
 
-Theorem intcall_body_ih_resume_point[local]:
-  (!s6 vs t4 s7 s8 dflt_vs t6 s9 env t7 s10 rtv t8 s11 t9 st res st'.
-     ((eval_exprs cx es s6 = (INL vs,t4) /\
-       (case eval_exprs (cx with stk updated_by CONS (src_id_opt,fn)) needed_dflts
-              (s8 with scopes := [FEMPTY]) of
-          (INL x,s'') => (INL x,s'' with scopes := s7.scopes)
-        | (INR e,s'') => (INR e,s'' with scopes := s7.scopes)) = (INL dflt_vs,t6) /\
-       lift_option_type (bind_arguments (get_tenv cx) args (vs ++ dflt_vs))
-         "IntCall bind_arguments" s9 = (INL env,t7) /\
-       lift_option_type (evaluate_type (get_tenv cx) ret)
-         "IntCall eval ret" s10 = (INL rtv,t8) /\
-       (if nr then
-          case cx.nonreentrant_slot of
-            NONE => raise (Error (TypeError "nonreentrant slot missing"))
-          | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (mut = View \/ mut = Pure)
-        else return ()) s11 = (INL (),t9)) /\
-      eval_stmts (cx with stk updated_by CONS (src_id_opt,fn)) body' st = (res,st')) ==>
-     preserves_tv (cx with stk updated_by CONS (src_id_opt,fn)) st st') ==>
-  eval_exprs cx es r = (INL vs0,r1) ==>
-  eval_exprs (cx with stk updated_by CONS (src_id_opt,fn)) needed_dflts
-    (r1 with scopes := [FEMPTY]) = (INL dflt_vs0,r2) ==>
-  lift_option_type (bind_arguments (get_tenv cx) args (vs0 ++ dflt_vs0))
-    "IntCall bind_arguments" (r2 with scopes := r1.scopes) =
-    (INL env0,r2 with scopes := r1.scopes) ==>
-  lift_option_type (evaluate_type (get_tenv cx) ret)
-    "IntCall eval ret" (r2 with scopes := r1.scopes) =
-    (INL rtv0,r2 with scopes := r1.scopes) ==>
-  (if nr then
-     case cx.nonreentrant_slot of
-       NONE => raise (Error (TypeError "nonreentrant slot missing"))
-     | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (mut = View \/ mut = Pure)
-   else return ()) (r2 with scopes := r1.scopes) = (INL (),r_lock) ==>
-  eval_stmts (cx with stk updated_by CONS (src_id_opt,fn)) body' st = (res,st') ==>
-  preserves_tv (cx with stk updated_by CONS (src_id_opt,fn)) st st'
-Proof
-  rpt strip_tac >>
-  qpat_assum `!s6 vs t4 s7 s8 dflt_vs t6 s9 env t7 s10 rtv t8 s11 t9 st0 res0 st1.
-    _ ==> preserves_tv (cx with stk updated_by CONS (src_id_opt,fn)) st0 st1`
-    (qspecl_then [`r`, `vs0`, `r1`, `r1`, `r1`, `dflt_vs0`,
-      `r2 with scopes := r1.scopes`, `r2 with scopes := r1.scopes`, `env0`,
-      `r2 with scopes := r1.scopes`, `r2 with scopes := r1.scopes`, `rtv0`,
-      `r2 with scopes := r1.scopes`, `r2 with scopes := r1.scopes`, `r_lock`,
-      `st`, `res`, `st'`] mp_tac) >>
-  simp[]
-QED
 
 (* Standalone lemma: preserves_tv through the IntCall finally+safe_cast chain.
    Abstracts away variable names so we can prove it with hol_state_at. *)
@@ -2220,7 +2187,7 @@ Proof
   simp[]
 QED
 
-Resume eval_preserves_tv_extended[IntCall_ptv]:
+Resume eval_preserves_tv_with_results[IntCall_ptv]:
   markerLib.RESUME_TAC >- (
     strip_tac >> gvs[] >>
     irule preserves_tv_trans >> first_assum (irule_at Any) >> simp[]) >>
@@ -2228,6 +2195,12 @@ Resume eval_preserves_tv_extended[IntCall_ptv]:
   (* Unfold the do...od assumption *)
   qpat_x_assum `do _ od _ = _` mp_tac >>
   simp_tac std_ss [bind_apply, get_scopes_def, return_def] >>
+  BasicProvers.TOP_CASE_TAC >>
+  imp_res_tac read_results_state >>
+  imp_res_tac lift_option_type_state >> BasicProvers.VAR_EQ_TAC >>
+  reverse BasicProvers.TOP_CASE_TAC >- (
+    strip_tac >> gvs[] >>
+    irule preserves_tv_trans >> first_assum (irule_at Any) >> simp[]) >>
   BasicProvers.TOP_CASE_TAC >>
   imp_res_tac lift_option_type_state >> BasicProvers.VAR_EQ_TAC >>
   reverse BasicProvers.TOP_CASE_TAC >- (
@@ -2260,9 +2233,17 @@ Resume eval_preserves_tv_extended[IntCall_ptv]:
      eval_stmts (cx with stk updated_by CONS (src_id_opt, fn)) body' st = (res,st') ==>
      preserves_tv (cx with stk updated_by CONS (src_id_opt, fn)) st st'` by (
     rpt strip_tac >>
-    drule_all intcall_body_ih_resume_point >>
-    simp[]
+    qpat_x_assum `!a b c d e f. _`
+      (qspecl_then [`r`, `x'4'`, `r'`, `r'`, `r'`] mp_tac) >>
+    simp[] >> disch_then drule_all >> simp[]
   ) >>
+  qpat_x_assum `!a b c d e f. _` kall_tac >>
+  qmatch_asmsub_rename_tac
+    `lift_option_type (bind_arguments _ _ _) _ _ = (INL call_env,_)` >>
+  qmatch_asmsub_rename_tac
+    `lift_option_type (evaluate_type _ _) _ _ = (INL runtime_ret,_)` >>
+  qmatch_asmsub_rename_tac
+    `(if nr then _ else _) _ = (INL (),lockst)` >>
   irule intcall_ptv_chain >>
   qexistsl_tac [`body'`,
     `if nr /\ mut <> View /\ mut <> Pure then
@@ -2270,7 +2251,7 @@ Resume eval_preserves_tv_extended[IntCall_ptv]:
        | SOME slot => release_nonreentrant_lock cx.txn.target slot
      else return ()`,
     `cx with stk updated_by CONS (src_id_opt, fn)`,
-    `x'3'`, `"IntCall cast ret"`, `r'5'`, `r'' with scopes := r'.scopes`, `res`, `x'5'`] >>
+    `call_env`, `"IntCall cast ret"`, `lockst`, `r'' with scopes := r'.scopes`, `res`, `runtime_ret`] >>
   simp[] >> conj_tac >- (
     rpt gen_tac >>
     IF_CASES_TAC >> simp[return_def] >>
@@ -2286,7 +2267,34 @@ Resume eval_preserves_tv_extended[IntCall_ptv]:
   irule preserves_tv_trans >> qexists_tac `r'` >> simp[]
 QED
 
-Finalise eval_preserves_tv_extended
+Finalise eval_preserves_tv_with_results
+
+Theorem eval_preserves_tv_extended:
+  (∀cx s st res st'. eval_stmt cx s st = (res, st') ⇒
+     preserves_tv cx st st') ∧
+  (∀cx ss st res st'. eval_stmts cx ss st = (res, st') ⇒
+     preserves_tv cx st st') ∧
+  (∀cx it st res st'. eval_iterator cx it st = (res, st') ⇒
+     preserves_tv cx st st') ∧
+  (∀cx tyv nm body vs st res st'. eval_for cx tyv nm body vs st = (res, st') ⇒
+     preserves_tv cx st st') ∧
+  (∀cx e st res st'. eval_expr cx e st = (res, st') ⇒
+     preserves_tv cx st st') ∧
+  (∀cx es st res st'. eval_exprs cx es st = (res, st') ⇒
+     preserves_tv cx st st') /\
+  (!cx t st res st'. eval_base_place cx t st = (res,st') ==> preserves_tv cx st st') /\
+  (!cx t st res st'. eval_target_place cx t st = (res,st') ==> preserves_tv cx st st') /\
+  (!cx g v st res st'. assign_tuple_targets cx g v st = (res,st') ==> preserves_tv cx st st') /\
+  (!cx gs vs st res st'. assign_tuple_target_list cx gs vs st = (res,st') ==> preserves_tv cx st st')
+Proof
+  metis_tac[eval_preserves_tv_with_results]
+QED
+
+Theorem eval_expr_results_preserves_tv:
+  eval_expr_results cx es st = (res,st') ==> preserves_tv cx st st'
+Proof
+  metis_tac[eval_preserves_tv_with_results]
+QED
 
 Theorem eval_preserves_tv:
   (!cx s st res st'. eval_stmt cx s st = (res,st') ==> preserves_tv cx st st') /\

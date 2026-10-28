@@ -29,7 +29,7 @@ Proof
   >- (first_assum (qspec_then `h` mp_tac) >> simp[] >> disch_then drule >> simp[])
 QED
 
-(* Domain preservation follows the canonical ten-function induction.
+(* Domain preservation follows the evaluator's mutual induction.
    Statements are deliberately unconstrained: declarations add locals. *)
 Theorem Send_outcome_preserves_locals:
   (do
@@ -60,7 +60,9 @@ Theorem eval_mutual_preserves_scopes_dom[local]:
   (!cx bt st res st'. eval_target_place cx bt st = (res,st') ==>
     MAP FDOM st.scopes = MAP FDOM st'.scopes) /\
   (!cx:evaluation_context. !g:assignment_target. !v:value. T) /\
-  (!cx:evaluation_context. !gs:assignment_target list. !vs:value list. T)
+  (!cx:evaluation_context. !gs:assignment_target list. !vs:value list. T) /\
+  (!cx es st res st'. eval_expr_results cx es st = (res,st') ==>
+    MAP FDOM st.scopes = MAP FDOM st'.scopes)
 Proof
   ho_match_mp_tac evaluate_ind >> rpt conj_tac >> simp[]
   >- (rpt strip_tac >>
@@ -123,7 +125,11 @@ Proof
       qpat_x_assum `eval_expr cx (Call _ (ExtCall _ _ _ _) _ _) _ = _` mp_tac >>
       simp[Once evaluate_def, bind_def, AllCaseEqs(), return_def] >>
       strip_tac >> imp_res_tac eval_ext_call_preserves_non_accounts >>
-      gvs[] >> metis_tac[])
+      imp_res_tac read_results_state >>
+      gvs[] >>
+      rpt (qpat_x_assum `∀a b c d e f. _` drule_all >> strip_tac) >>
+      rpt (qpat_x_assum `∀a b c. _` drule_all >> strip_tac) >>
+      metis_tac[])
   >- suspend "IntCall"
   >- (rpt strip_tac >> qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
       simp[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(), return_def,
@@ -171,10 +177,15 @@ Proof
       simp[Once evaluate_def, bind_def, AllCaseEqs()] >> strip_tac >>
       imp_res_tac read_result_state >> imp_res_tac extend_place_state >>
       gvs[] >> metis_tac[])
-  >> rpt strip_tac >>
+  >- (rpt strip_tac >>
   qpat_x_assum `eval_target_place cx _ _ = _` mp_tac >>
   simp[Once evaluate_def, bind_def, AllCaseEqs()] >> strip_tac >>
-  imp_res_tac get_place_state >> gvs[] >> metis_tac[]
+  imp_res_tac get_place_state >> gvs[] >> metis_tac[])
+  >- simp[Once evaluate_def, return_def]
+  >> rpt strip_tac >>
+  qpat_x_assum `eval_expr_results cx (_::_) _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, AllCaseEqs(), return_def] >>
+  strip_tac >> metis_tac[]
 QED
 
 Resume eval_mutual_preserves_scopes_dom[CreateTarget]:
@@ -182,6 +193,7 @@ Resume eval_mutual_preserves_scopes_dom[CreateTarget]:
   Cases_on `kind` >> gvs[] >>
   gvs[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs()] >>
   imp_res_tac check_create_blueprint_result_state >> gvs[] >>
+  imp_res_tac read_results_state >> gvs[] >>
   res_tac >>
   imp_res_tac eval_create_preserves_scopes_immutables >> gvs[] >>
   metis_tac[]
@@ -236,7 +248,7 @@ Resume eval_mutual_preserves_scopes_dom[IntCall]:
   rpt gen_tac >> strip_tac >>
   qpat_x_assum
     `!s t s1 ts t1 s2 tup t2 s3 t3. _ ==>
-       !st res st'. eval_exprs cx es st = (res,st') ==> _`
+       !st res st'. eval_expr_results cx es st = (res,st') ==> _`
     (mp_tac o SRULE [type_check_def, assert_def, lift_option_type_def,
                      option_CASE_rator, return_def, raise_def, AllCaseEqs()]) >>
   disch_then assume_tac >>
@@ -278,6 +290,7 @@ Resume eval_mutual_preserves_scopes_dom[IntCall]:
   simp[pop_function_def, push_function_def, return_def, AllCaseEqs()] >>
   rpt strip_tac >>
   imp_res_tac lift_option_type_scopes >>
+  imp_res_tac read_results_state >>
   imp_res_tac lock_acquire_cond_scopes_dom >>
   imp_res_tac finally_intcall_handler_scopes >>
   gvs[]
@@ -341,6 +354,13 @@ QED
 Theorem eval_exprs_preserves_scopes_dom:
   ∀es cx st res st'.
     eval_exprs cx es st = (res, st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes
+Proof
+  metis_tac[eval_mutual_preserves_scopes_dom]
+QED
+
+Theorem eval_expr_results_preserves_scopes_dom:
+  eval_expr_results cx es st = (res,st') ==>
+    MAP FDOM st.scopes = MAP FDOM st'.scopes
 Proof
   metis_tac[eval_mutual_preserves_scopes_dom]
 QED

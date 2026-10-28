@@ -23,7 +23,7 @@ Termination
   res_tac >> simp[]
 End
 
-(* Specialize the canonical ten-function induction theorem. Only expression
+(* Specialize the canonical evaluator induction theorem. Only expression
    and expression-list evaluation carry whole-state preservation obligations. *)
 local
   val p0 = ``\(cx:evaluation_context) (s:stmt). T``
@@ -36,10 +36,11 @@ local
   val p7 = p6
   val p8 = ``\(cx:evaluation_context) (g:assignment_target) (v:value). T``
   val p9 = ``\(cx:evaluation_context) (gs:assignment_target list) (vs:value list). T``
+  val p10 = ``\(cx:evaluation_context) (es:expr list). T``
 in
   val expr_state_ind_principle =
     CONV_RULE (DEPTH_CONV BETA_CONV)
-      (SPECL [p0,p1,p2,p3,p4,p5,p6,p7,p8,p9] evaluate_ind)
+      (SPECL [p0,p1,p2,p3,p4,p5,p6,p7,p8,p9,p10] evaluate_ind)
 end
 
 Theorem canonical_observations_state[local]:

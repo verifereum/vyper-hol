@@ -1054,6 +1054,26 @@ End
 
 val () = read_result_def |> SRULE [FUN_EQ_THM] |> cv_auto_trans;
 
+(* Read staged call arguments in their source order. *)
+Definition read_results_def:
+  read_results cx [] = return [] /\
+  read_results cx (res::rest) = do
+    v <- read_result cx res;
+    vs <- read_results cx rest;
+    return (v::vs)
+  od
+End
+
+val read_results_pre_def = read_results_def
+  |> SRULE [FUN_EQ_THM, bind_def, prod_CASE_rator, sum_CASE_rator]
+  |> cv_auto_trans_pre "read_results_pre";
+
+Theorem read_results_pre[cv_pre]:
+  !cx results st. read_results_pre cx results st
+Proof
+  gen_tac >> Induct >> rpt gen_tac >> simp[Once read_results_pre_def]
+QED
+
 (* A conditional loads primitive words and copies non-memory aggregates.
    Memory aggregates, including dynamic bytes and strings, retain their view. *)
 Definition conditional_result_def:
@@ -1402,6 +1422,23 @@ Theorem read_result_state:
 Proof
   Cases_on `res` >> simp[read_result_def, return_def, raise_def] >>
   metis_tac[read_place_state]
+QED
+
+Theorem read_results_state:
+  !results st r st'. read_results cx results st = (r,st') ==> st' = st
+Proof
+  Induct >> simp[read_results_def, return_def] >>
+  rpt gen_tac >> simp[bind_def, AllCaseEqs()] >> rpt strip_tac >>
+  imp_res_tac read_result_state >> gvs[return_def] >> metis_tac[]
+QED
+
+Theorem read_results_length:
+  !results st vs st'.
+    read_results cx results st = (INL vs,st') ==> LENGTH vs = LENGTH results
+Proof
+  Induct >> simp[read_results_def, return_def] >>
+  rpt gen_tac >> simp[bind_def, AllCaseEqs()] >> rpt strip_tac >>
+  gvs[return_def] >> first_x_assum drule >> simp[]
 QED
 
 Theorem place_nested_pop_sequence[local]:

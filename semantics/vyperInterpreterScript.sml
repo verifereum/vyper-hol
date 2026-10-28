@@ -461,6 +461,14 @@ Proof
   mp_tac (Q.SPECL [`ts`, `n`, `es`] exprs_bound_DROP) >> simp[]
 QED
 
+Theorem exprs_bound_TAKE_DROP:
+  exprs_bound ts (TAKE n (DROP k es)) <= exprs_bound ts es
+Proof
+  irule LESS_EQ_TRANS >>
+  qexists_tac `exprs_bound ts (DROP k es)` >>
+  simp[exprs_bound_TAKE, exprs_bound_DROP]
+QED
+
 (* Extract callable functions - for termination proof *)
 (* Internal and Deploy are separate so we can order Internal before Deploy *)
 Definition dest_Internal_Fn_def:
@@ -1512,8 +1520,12 @@ Definition evaluate_def:
     eval_send cx has_gas vs
   od ∧
   eval_expr cx (Call _ (ExtCall is_static skip_check sig opts) es _) = do
-    vs <- eval_exprs cx es;
-    eval_ext_call cx is_static skip_check sig opts vs
+    target <- eval_exprs cx (TAKE 1 es);
+    nargs <<- LENGTH (FST (SND sig));
+    results <- eval_expr_results cx (TAKE nargs (DROP 1 es));
+    kwargs <- eval_exprs cx (DROP (1 + nargs) es);
+    vs <- read_results cx results;
+    eval_ext_call cx is_static skip_check sig opts (target ++ vs ++ kwargs)
   od ∧
   eval_expr cx (Call _ (IntCall (src_id_opt, fn)) es _) = do
     type_check (¬MEM (src_id_opt, fn) cx.stk) "recursion";
@@ -1526,7 +1538,7 @@ Definition evaluate_def:
     ret <<- FST $ sstup2; body <<- SND $ sstup2;
     type_check (LENGTH es ≤ LENGTH args ∧
            LENGTH args - LENGTH es ≤ LENGTH dflts) "IntCall args length";
-    vs <- eval_exprs cx es;
+    results <- eval_expr_results cx es;
     needed_dflts <<- DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts;
     cxd <<- cx with stk updated_by CONS (src_id_opt, fn);
     prev <- get_scopes;
@@ -1535,6 +1547,7 @@ Definition evaluate_def:
           eval_exprs cxd needed_dflts
        od)
       (set_scopes prev);
+    vs <- read_results cx results;
     (* Use combined type env (may reference types from other modules) *)
     all_tenv <<- get_tenv cx;
     env <- lift_option_type (bind_arguments all_tenv args (vs ++ dflt_vs)) "IntCall bind_arguments";
@@ -1622,9 +1635,20 @@ Definition evaluate_def:
      | CreateFromBlueprint raw_args => do
          prefix <- eval_exprs cx (TAKE (if has_salt then 4 else 3) es);
          code_size <- check_create_blueprint has_salt prefix;
-         suffix <- eval_exprs cx (DROP (if has_salt then 4 else 3) es);
+         results <- eval_expr_results cx (DROP (if has_salt then 4 else 3) es);
+         suffix <- read_results cx results;
          eval_create cx kind has_salt rof (MAP expr_type es)
            (prefix ++ suffix) (SOME code_size)
+       od
+     | RawCreate => do
+         prefix <- eval_exprs cx (TAKE 2 es);
+         ctor_es <<- DROP 2 es;
+         nargs <<- LENGTH ctor_es - (if has_salt then 1 else 0);
+         results <- eval_expr_results cx (TAKE nargs ctor_es);
+         args <- read_results cx results;
+         salt <- eval_exprs cx (DROP nargs ctor_es);
+         eval_create cx kind has_salt rof (MAP expr_type es)
+           (prefix ++ args ++ salt) NONE
        od
      | _ => do
          vs <- eval_exprs cx es;
@@ -1670,7 +1694,13 @@ Definition evaluate_def:
     assign_tuple_targets cx g v;
     assign_tuple_target_list cx gs vs
   od ∧
-  assign_tuple_target_list cx gs vs = raise (Error (TypeError "TupleTarget length"))
+  assign_tuple_target_list cx gs vs = raise (Error (TypeError "TupleTarget length")) ∧
+  eval_expr_results cx [] = return [] ∧
+  eval_expr_results cx (e::es) = do
+    res <- eval_expr cx e;
+    rest <- eval_expr_results cx es;
+    return (res::rest)
+  od
 Termination
   qexists_tac `measure (λx. case x of
     INL (cx,s) => 4 * stmt_bound (remcode cx) s
@@ -1683,7 +1713,8 @@ Termination
   | INR (INR (INR (INR (INR (INR (INL (cx,t))))))) => 4 * base_target_bound (remcode cx) t
   | INR (INR (INR (INR (INR (INR (INR (INL (cx,t)))))))) => 4 * base_target_bound (remcode cx) t + 1
   | INR (INR (INR (INR (INR (INR (INR (INR (INL (cx,g,v))))))))) => 4 * target_bound (remcode cx) g + 2
-  | INR (INR (INR (INR (INR (INR (INR (INR (INR (cx,gs,vs))))))))) => 4 * targets_bound (remcode cx) gs + 2)`
+  | INR (INR (INR (INR (INR (INR (INR (INR (INR (INL (cx,gs,vs)))))))))) => 4 * targets_bound (remcode cx) gs + 2
+  | INR (INR (INR (INR (INR (INR (INR (INR (INR (INR (cx,es)))))))))) => 4 * exprs_bound (remcode cx) es)`
   \\ conj_tac >- simp[prim_recTheory.WF_measure]
   \\ rpt conj_tac
   \\ simp[prim_recTheory.measure_def, relationTheory.inv_image_def]
@@ -1743,6 +1774,9 @@ Termination
     \\ rw[FILTER_FILTER,UNCURRY,Abbr`k`]
     \\ simp[LAMBDA_PROD])
   ])
+  \\ irule LESS_EQ_LESS_TRANS
+  \\ qexists_tac `exprs_bound (remcode cx) es`
+  \\ simp[exprs_bound_TAKE_DROP, exprs_bound_TAKE, exprs_bound_DROP, DROP_DROP_T]
 End
 
 (* Small checked memory programs exercise the place evaluator independently of
@@ -1859,6 +1893,16 @@ Proof
   \\ gvs[CaseEq"prod", CaseEq"sum"]
   \\ first_x_assum irule
   \\ goal_assum drule
+QED
+
+Theorem eval_expr_results_length:
+  !es cx st results rt.
+    eval_expr_results cx es st = (INL results,rt) ==>
+    LENGTH results = LENGTH es
+Proof
+  Induct >> rw[evaluate_def, return_def, bind_def] >>
+  gvs[CaseEq "prod", CaseEq "sum"] >> first_x_assum irule >>
+  goal_assum drule
 QED
 
 (* Semantics of initial state of a contract after deployment *)

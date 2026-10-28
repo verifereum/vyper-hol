@@ -1804,7 +1804,33 @@ Proof
   metis_tac[finally_pop_function_then_scopes]
 QED
 
-Theorem eval_mutual_scope_pop_effect:
+Theorem read_results_scope_pop_effect[local,simp]:
+  scope_pop_effect (read_results cx results)
+Proof
+  irule scope_pop_effect_identity >> rpt strip_tac >>
+  drule read_results_state >> simp[]
+QED
+
+Theorem eval_expr_results_empty_scope_effect[local]:
+  scope_pop_effect (eval_expr_results cx [])
+Proof
+  simp[Once evaluate_def]
+QED
+
+Theorem eval_expr_results_scope_effect[local]:
+  scope_pop_effect (eval_expr cx e) /\
+  (!st pv middle. eval_expr cx e st = (INL pv,middle) ==>
+    scope_pop_effect (eval_expr_results cx es)) ==>
+  scope_pop_effect (eval_expr_results cx (e::es))
+Proof
+  strip_tac >> rewrite_tac[Once evaluate_def] >>
+  ho_match_mp_tac scope_pop_effect_bind_guarded >> conj_tac >- simp[] >>
+  rpt gen_tac >> strip_tac >>
+  ho_match_mp_tac scope_pop_effect_bind >> conj_tac
+  >- (first_x_assum irule >> goal_assum (drule_at Any)) >> simp[]
+QED
+
+Theorem eval_mutual_scope_pop_effect_results[local]:
   (!(cx:evaluation_context) (s:stmt). T) /\
   (!(cx:evaluation_context) (ss:stmt list). T) /\
   (!(cx:evaluation_context) (it:iterator). T) /\
@@ -1814,42 +1840,56 @@ Theorem eval_mutual_scope_pop_effect:
   (!cx bt. scope_pop_effect (eval_base_place cx bt)) /\
   (!cx bt. scope_pop_effect (eval_target_place cx bt)) /\
   (!(cx:evaluation_context) (g:assignment_target) (v:value). T) /\
-  (!(cx:evaluation_context) (gs:assignment_target list) (vs:value list). T)
+  (!(cx:evaluation_context) (gs:assignment_target list) (vs:value list). T) /\
+  (!cx es. scope_pop_effect (eval_expr_results cx es))
 Proof
   ho_match_mp_tac evaluate_ind >> rpt conj_tac >>
-  TRY (simp[] >> NO_TAC) >> rpt gen_tac >> rpt strip_tac >>
-  TRY (FIRST (map (fn th => FIRST
+  rpt gen_tac >> rpt strip_tac >~
+  [`scope_pop_effect (eval_expr _ (Call _ (ExtCall _ _ _ _) _ _))`] >-
+    suspend "ExtCall" >~
+  [`scope_pop_effect (eval_expr _ (Call _ (CreateTarget kind has_salt rof) _ _))`] >-
+    suspend "Create" >~
+  [`scope_pop_effect (eval_expr _ (Call _ (IntCall _) _ _))`] >-
+    suspend "IntCall" >>
+  FIRST ((simp[] >> NO_TAC) :: map (fn th => FIRST
     [MATCH_ACCEPT_TAC (GEN_ALL th),
      match_mp_tac (GEN_ALL th) >> rpt conj_tac >> first_assum ACCEPT_TAC] >> NO_TAC)
     [eval_name_scope_effect, eval_toplevel_scope_effect, eval_flag_scope_effect,
      eval_literal_scope_effect, eval_structlit_scope_effect,
      eval_pop_scope_effect, eval_attribute_scope_effect, eval_ifexp_scope_effect,
      eval_exprs_empty_scope_effect, eval_exprs_cons_scope_effect,
+     eval_expr_results_empty_scope_effect, eval_expr_results_scope_effect,
      eval_name_place_scope_effect, eval_toplevel_place_scope_effect,
      eval_attribute_base_place_scope_effect, eval_target_place_scope_effect,
      eval_subscript_base_place_scope_effect, eval_subscript_scope_effect,
      eval_builtin_scope_effect, eval_typebuiltin_scope_effect,
      eval_raw_call_scope_effect, eval_raw_calldata_scope_effect,
       eval_raw_revert_scope_effect,
-     eval_selfdestruct_scope_effect, eval_raw_log_scope_effect, eval_send_scope_effect])) >>
-  TRY (rename1 `scope_pop_effect (eval_expr _ (Call _ (ExtCall _ _ _ _) _ _))` >>
-           suspend "ExtCall")
-   >> TRY (rename1 `scope_pop_effect (eval_expr _ (Call _ (CreateTarget kind has_salt rof) _ _))` >>
-           suspend "Create")
-   >> suspend "IntCall"
+     eval_selfdestruct_scope_effect, eval_raw_log_scope_effect, eval_send_scope_effect])
 QED
 
-Resume eval_mutual_scope_pop_effect[ExtCall]:
+Resume eval_mutual_scope_pop_effect_results[ExtCall]:
   rewrite_tac[Once evaluate_def] >>
-  ho_match_mp_tac scope_pop_effect_bind >> simp[]
-QED
-
-Resume eval_mutual_scope_pop_effect[Create]:
-  Cases_on `kind` >> gvs[] >> simp_tac (srw_ss()) [Once evaluate_def] >>
+  ho_match_mp_tac scope_pop_effect_bind_guarded >> conj_tac >- simp[] >>
+  rpt gen_tac >> strip_tac >> pure_rewrite_tac[LET_THM] >> BETA_TAC >>
   rpt POP_EFFECT_BIND_STEP
 QED
 
-Resume eval_mutual_scope_pop_effect[IntCall]:
+Resume eval_mutual_scope_pop_effect_results[Create]:
+  Cases_on `kind` >> Cases_on `has_salt` >> gvs[] >>
+  `TAKE (LENGTH es - 2) (DROP 2 es) = DROP 2 es` by
+    metis_tac[LENGTH_DROP, TAKE_LENGTH_ID] >>
+  pop_assum (fn th => RULE_ASSUM_TAC (PURE_REWRITE_RULE [th])) >>
+  `DROP (LENGTH es - 2) (DROP 2 es) = []` by
+    metis_tac[LENGTH_DROP, DROP_LENGTH_NIL] >>
+  pop_assum (fn th => RULE_ASSUM_TAC (PURE_REWRITE_RULE [th])) >>
+  simp_tac (srw_ss()) [Once evaluate_def] >>
+  rpt POP_EFFECT_BIND_STEP >>
+  simp_tac (srw_ss()) [LET_THM, LENGTH_DROP, GSYM arithmeticTheory.SUB_PLUS] >>
+  rpt POP_EFFECT_BIND_STEP
+QED
+
+Resume eval_mutual_scope_pop_effect_results[IntCall]:
   rewrite_tac[Once evaluate_def, ignore_bind_def] >>
   ntac 3 (ho_match_mp_tac scope_pop_effect_bind_guarded >>
           conj_tac >- simp[] >> rpt gen_tac >> strip_tac) >>
@@ -1864,6 +1904,7 @@ Resume eval_mutual_scope_pop_effect[IntCall]:
   rpt (qpat_x_assum `!a. _` kall_tac) >>
   gvs[bind_def, AllCaseEqs(), return_def] >>
   imp_res_tac finally_set_scopes >>
+  imp_res_tac read_results_state >>
   imp_res_tac lift_option_type_scopes >>
   imp_res_tac (SRULE[ignore_bind_def] finally_conditional_lock_scopes) >>
   gvs[] >>
@@ -1875,7 +1916,22 @@ Resume eval_mutual_scope_pop_effect[IntCall]:
   drule acquire_nonreentrant_lock_scopes >> simp[]
 QED
 
-Finalise eval_mutual_scope_pop_effect
+Finalise eval_mutual_scope_pop_effect_results
+
+Theorem eval_mutual_scope_pop_effect:
+  (!(cx:evaluation_context) (s:stmt). T) /\
+  (!(cx:evaluation_context) (ss:stmt list). T) /\
+  (!(cx:evaluation_context) (it:iterator). T) /\
+  (!(cx:evaluation_context) (tyv:type_value) (nm:string) (body:stmt list) (vs:value list). T) /\
+  (!cx e. scope_pop_effect (eval_expr cx e)) /\
+  (!cx es. scope_pop_effect (eval_exprs cx es)) /\
+  (!cx bt. scope_pop_effect (eval_base_place cx bt)) /\
+  (!cx bt. scope_pop_effect (eval_target_place cx bt)) /\
+  (!(cx:evaluation_context) (g:assignment_target) (v:value). T) /\
+  (!(cx:evaluation_context) (gs:assignment_target list) (vs:value list). T)
+Proof
+  metis_tac[eval_mutual_scope_pop_effect_results]
+QED
 
 Theorem entry_events_valid:
   !events id. EVERY (\ev. entry_pop_event_valid (SND ev)) events ==>

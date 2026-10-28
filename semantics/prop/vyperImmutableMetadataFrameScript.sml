@@ -155,6 +155,7 @@ QED
 
 Theorem metadata_frame_reads[local]:
   state_rel_frame immutable_metadata_frame (read_result cx tv) /\
+  state_rel_frame immutable_metadata_frame (read_results cx results) /\
   state_rel_frame immutable_metadata_frame (select_result cx ann tv sb) /\
   state_rel_frame immutable_metadata_frame (conditional_result cx tv) /\
   state_rel_frame immutable_metadata_frame (lookup_global cx src id) /\
@@ -171,7 +172,8 @@ Theorem metadata_frame_reads[local]:
   state_rel_frame immutable_metadata_frame (resolve_array_element cx b slot ty subs)
 Proof
   rpt conj_tac >> irule metadata_frame_state >> rpt strip_tac >>
-  FIRST [drule_all read_result_state, drule_all select_result_state,
+  FIRST [drule_all read_result_state, drule_all read_results_state,
+    drule_all select_result_state,
     drule_all conditional_result_state,
     drule_all lookup_global_state, drule_all lookup_flag_mem_state,
     drule_all read_storage_slot_state,
@@ -398,7 +400,7 @@ val METADATA_EVAL_STEP = FIRST [
   CHANGED_TAC (CONV_TAC (RAND_CONV (DEPTH_CONV BETA_CONV))),
   METADATA_FRAME_STEP];
 
-Theorem eval_metadata_frame_mutual:
+Theorem eval_metadata_frame_with_results:
   (!cx s st res st'. eval_stmt cx s st = (res,st') ==> immutable_metadata_frame st st') /\
   (!cx ss st res st'. eval_stmts cx ss st = (res,st') ==> immutable_metadata_frame st st') /\
   (!cx it st res st'. eval_iterator cx it st = (res,st') ==> immutable_metadata_frame st st') /\
@@ -408,7 +410,8 @@ Theorem eval_metadata_frame_mutual:
   (!cx t st res st'. eval_base_place cx t st = (res,st') ==> immutable_metadata_frame st st') /\
   (!cx t st res st'. eval_target_place cx t st = (res,st') ==> immutable_metadata_frame st st') /\
   (!cx g v st res st'. assign_tuple_targets cx g v st = (res,st') ==> immutable_metadata_frame st st') /\
-  (!cx gs vs st res st'. assign_tuple_target_list cx gs vs st = (res,st') ==> immutable_metadata_frame st st')
+  (!cx gs vs st res st'. assign_tuple_target_list cx gs vs st = (res,st') ==> immutable_metadata_frame st st') /\
+  (!cx es st res st'. eval_expr_results cx es st = (res,st') ==> immutable_metadata_frame st st')
 Proof
   ho_match_mp_tac evaluate_ind >> rpt conj_tac >> rpt strip_tac >>
   qpat_assum `_ = (res,st')` (fn th =>
@@ -426,7 +429,7 @@ Proof
   rpt METADATA_EVAL_STEP >> suspend "IntCallFrames"
 QED
 
-Resume eval_metadata_frame_mutual[IntCallFrames]:
+Resume eval_metadata_frame_with_results[IntCallFrames]:
   markerLib.RESUME_TAC >>
   (fn g as (asl,w) =>
     let
@@ -448,7 +451,28 @@ Resume eval_metadata_frame_mutual[IntCallFrames]:
     qexistsl [`args`,`dflts`] >> simp[SF SFY_ss]]
 QED
 
-Finalise eval_metadata_frame_mutual
+Finalise eval_metadata_frame_with_results
+
+Theorem eval_metadata_frame_mutual:
+  (!cx s st res st'. eval_stmt cx s st = (res,st') ==> immutable_metadata_frame st st') /\
+  (!cx ss st res st'. eval_stmts cx ss st = (res,st') ==> immutable_metadata_frame st st') /\
+  (!cx it st res st'. eval_iterator cx it st = (res,st') ==> immutable_metadata_frame st st') /\
+  (!cx tyv nm body vs st res st'. eval_for cx tyv nm body vs st = (res,st') ==> immutable_metadata_frame st st') /\
+  (!cx e st res st'. eval_expr cx e st = (res,st') ==> immutable_metadata_frame st st') /\
+  (!cx es st res st'. eval_exprs cx es st = (res,st') ==> immutable_metadata_frame st st') /\
+  (!cx t st res st'. eval_base_place cx t st = (res,st') ==> immutable_metadata_frame st st') /\
+  (!cx t st res st'. eval_target_place cx t st = (res,st') ==> immutable_metadata_frame st st') /\
+  (!cx g v st res st'. assign_tuple_targets cx g v st = (res,st') ==> immutable_metadata_frame st st') /\
+  (!cx gs vs st res st'. assign_tuple_target_list cx gs vs st = (res,st') ==> immutable_metadata_frame st st')
+Proof
+  metis_tac[eval_metadata_frame_with_results]
+QED
+
+Theorem eval_expr_results_immutable_metadata_frame:
+  eval_expr_results cx es st = (res,st') ==> immutable_metadata_frame st st'
+Proof
+  metis_tac[eval_metadata_frame_with_results]
+QED
 
 Theorem eval_expr_immutable_metadata_frame:
   eval_expr cx e st = (res,st') ==> immutable_metadata_frame st st'
