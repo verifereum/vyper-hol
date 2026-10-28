@@ -1220,6 +1220,16 @@ in
       ["selection failure in ", json_path, ": ", name, " - ", exnMessage err])
 end
 
+fun existing_script name = let
+  val path = OS.Path.concat (generated_dir, name)
+in
+  if not (OS.FileSys.access (path, [])) then NONE
+  else let val input = TextIO.openIn path in
+    SOME (TextIO.inputAll input before TextIO.closeIn input)
+    handle e => (TextIO.closeIn input; raise e)
+  end
+end
+
 fun scripts_for_file (id, jsonp) = let
   val total = List.length (selected_test_names_for_file jsonp)
   val parts = test_parts total
@@ -1240,10 +1250,57 @@ fun scripts_for_file (id, jsonp) = let
     "val () = List.app run_test_on_traces $ all_traces \"", defs, "\";\n"])
   fun aggregate name ancestors = script name (String.concat [
     header name, String.concatWith "\n  " ancestors, "\n"])
-  fun part_def (start, count) = definitions (part_name defsname start)
-    (String.concat ["make_definitions_for_file_part", args,
+  val whole_call = "make_definitions_for_file" ^ args
+  fun part_call (start, count, total) =
+    String.concat ["make_definitions_for_file_part", args,
       " {start = ", Int.toString start, ", count = ", Int.toString count,
-      ", total = ", Int.toString total, "}"])
+      ", total = ", Int.toString total, "}"]
+  fun part_def (start, count) = definitions (part_name defsname start)
+    (part_call (start, count, total))
+  (* Only replace exact stock templates. Committed definitions may contain
+     proof boundaries for JSON/CV caching; preserve those byte-for-byte.
+     Stock shards/aggregates must still refresh when the selection changes.
+     Refuse incompatible custom layouts before cleanup rather than overwrite
+     proof code or silently bypass the per-theory memory bound. *)
+  fun stock_definition name text = let
+    val (_, suffix) = Substring.position "{start = " (Substring.full text)
+    val fields = String.tokens (not o Char.isAlphaNum) (Substring.string suffix)
+    val stock_part = case fields of
+      ["start", s, "count", c, "total", t] =>
+        (case (Int.fromString s, Int.fromString c, Int.fromString t) of
+           (SOME start, SOME count, SOME total) =>
+             text = #2 (definitions name (part_call (start, count, total)))
+         | _ => false)
+    | _ => false
+    val prefix = header name
+    val ancestors = if String.isPrefix prefix text then
+      String.tokens Char.isSpace (String.extract (text, String.size prefix, NONE))
+      else []
+    val part_prefix = defsname ^ "_part_"
+    fun is_part ancestor = String.isPrefix part_prefix ancestor andalso
+      (case Int.fromString (String.extract (ancestor, String.size part_prefix, NONE)) of
+         SOME start => ancestor = part_name defsname start
+       | NONE => false)
+  in
+    text = #2 (definitions name whole_call) orelse stock_part orelse
+    (not (List.null ancestors) andalso List.all is_part ancestors andalso
+     text = #2 (aggregate name ancestors))
+  end
+  fun preserve_definition (file, contents) = let
+    val name = String.substring (file, 0, String.size file - String.size "Script.sml")
+  in
+    case existing_script file of
+      NONE => (file, contents)
+    | SOME old =>
+        if stock_definition name old then (file, contents)
+        else if (not sharded andalso not (String.isSubstring
+          ("Ancestors " ^ defsname ^ "_part_") old)) orelse
+          List.exists (fn (start, count) =>
+          name = part_name defsname start andalso
+          String.isSubstring (part_call (start, count, total)) old) parts
+        then (file, old)
+        else raise Fail ("custom test definitions require manual resharding: " ^ file)
+  end
   fun part_test (start, count) = let
     val defs = part_name defsname start
     val check = String.concat [
@@ -1252,14 +1309,14 @@ fun scripts_for_file (id, jsonp) = let
   in execution (part_name testname start) defs check end
 in
   if sharded then
-    {definitions = aggregate defsname
+    {definitions = List.map preserve_definition (aggregate defsname
        (List.map (fn (start, _) => part_name defsname start) parts) ::
-       List.map part_def parts,
+       List.map part_def parts),
      tests = aggregate testname
        (List.map (fn (start, _) => part_name testname start) parts) ::
        List.map part_test parts}
   else
-    {definitions = [definitions defsname ("make_definitions_for_file" ^ args)],
+    {definitions = [preserve_definition (definitions defsname whole_call)],
      tests = [execution testname defsname ""]}
 end
 
@@ -1275,12 +1332,12 @@ in
   {definitions = definitions, tests = tests}
 end
 
-fun write_scripts scripts = List.app (fn (name, contents) => let
-  val out = TextIO.openOut (OS.Path.concat (generated_dir, name))
-in
-  (TextIO.output (out, contents) before TextIO.closeOut out)
-  handle e => (TextIO.closeOut out; raise e)
-end) scripts
+fun write_scripts scripts = List.app (fn (name, contents) =>
+  if existing_script name = SOME contents then ()
+  else let val out = TextIO.openOut (OS.Path.concat (generated_dir, name)) in
+    (TextIO.output (out, contents) before TextIO.closeOut out)
+    handle e => (TextIO.closeOut out; raise e)
+  end) scripts
 
 fun generate_defn_scripts () = write_scripts (#definitions (generation_plan ()))
 fun generate_test_scripts () = write_scripts (#tests (generation_plan ()))

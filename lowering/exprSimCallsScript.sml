@@ -21,6 +21,10 @@
  *     stmt_state_rel does not relate to the ALLOCA allocations, so
  *     expr_post's memory frame does not follow (#668, #636 Infrastructure
  *     row 2).
+ *   - compile_create_sim, once the create lowerings are wired in, for a
+ *     second reason: a create stores its run's pending deletions in the
+ *     source (eval_create), which state_rel's accounts_rel requires empty,
+ *     while Venom's create result (extract_venom_result) drops them.
  *
  * RawCallTarget, RawLog and SelfDestructTarget are wired into compile_call.
  * Their case lemmas remain admitted.  For SelfDestructTarget, expr_exit

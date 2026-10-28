@@ -187,6 +187,21 @@ Proof
   metis_tac[well_typed_expr_static_maps_transfer_env]
 QED
 
+Theorem atarget_accepts_static_maps_transfer_env[local]:
+  !env1 env2 tgt ty.
+    static_maps_transfer_env env1 env2 /\ atarget_accepts env1 tgt ty ==>
+    atarget_accepts env2 tgt ty
+Proof
+  Cases_on `tgt` >> simp[atarget_accepts_def] >> rpt strip_tac
+  >- (
+    Cases_on `type_place_target env1 b` >> gvs[] >>
+    rename1 `type_place_target env1 b = SOME pt` >>
+    Cases_on `pt` >> gvs[] >>
+    drule_all type_place_target_static_maps_transfer_env >>
+    gvs[static_maps_transfer_env_def]) >>
+  metis_tac[well_typed_atarget_static_maps_transfer_env]
+QED
+
 Theorem type_stmt_static_maps_transfer_mutual[local]:
   (!env1 ret s env1'.
      type_stmt env1 ret s = SOME env1' ==>
@@ -228,6 +243,11 @@ Proof
        gvs[static_maps_transfer_env_def]) >>
   TRY (rename1 `type_place_target env1 bt = SOME (Type (ArrayT ty (Dynamic n)))` >>
        qexistsl [`n`,`env1`,`env1`] >> simp[static_maps_transfer_env_def]) >>
+  TRY (rename1 `atarget_accepts env2 tgt _` >>
+       irule atarget_accepts_static_maps_transfer_env >>
+       qexists `env1` >> simp[]) >>
+  TRY (rename1 `type_widens_to env2.type_defs _ _` >>
+       gvs[static_maps_transfer_env_def]) >>
   TRY (rename1 `well_typed_atarget env1 tgt (expr_type e)` >>
        irule well_typed_atarget_static_maps_transfer_env >>
        qexists `env1` >> simp[]) >>

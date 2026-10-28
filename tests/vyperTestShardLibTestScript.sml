@@ -88,6 +88,14 @@ fun exercise_generator () = let
   val () = generate_tests ()
   val () = assert "shrinking removes obsolete shards"
     (not (exists (part defs 128)) andalso not (exists (part tests 128)))
+  val () = List.app (fn (start, count) =>
+    contains "stock shards refresh their counts and selected total"
+      (get (path (part defs start))) (String.concat
+        ["{start = ", Int.toString start, ", count = ", Int.toString count,
+         ", total = 65}"])) [(0, 64), (64, 1)]
+  val () = assert "stock aggregates drop obsolete ancestors"
+    (not (String.isSubstring (part defs 128) (get (path defs))) andalso
+     not (String.isSubstring (part tests 128) (get (path tests))))
   val () = export 64
   val () = generate_tests ()
   val () = assert "threshold keeps original targets" (exists defs andalso exists tests)
@@ -102,6 +110,97 @@ in
   assert "removed suite cleans up both targets" (not (exists defs) andalso not (exists tests))
 end;
 
-val () = ((exercise_generator () before OS.FileSys.chDir original_dir)
+(* Custom definition scripts carry proof/CV boundaries; generation must not
+   discard them, even when invoked only to refresh execution scripts. *)
+fun exercise_definition_preservation () = let
+  val json = "vyper-test-exports/functional/codegen/test_preservation.json"
+  val id = "functional_codegen_test_preservation"
+  val defs = "vyperTestDefs_" ^ id
+  val tests = "vyperTest_" ^ id
+  fun path thy = "generated/" ^ thy ^ "Script.sml"
+  fun part thy start = thy ^ "_part_" ^ Int.toString start
+  fun export total = put json (String.concat ["{",
+    String.concatWith "," (List.tabulate (total, fn i => String.concat
+      ["\"case_", Int.toString i,
+       "\":{\"item_type\":\"test\",\"deps\":[],\"source_code\":\"pass\",",
+       "\"traces\":[{\"trace_type\":\"not_decodable\"}]}"])), "}"])
+  val generators = [("combined", generate_tests),
+    ("definitions", generate_defn_scripts), ("execution", generate_test_scripts)]
+  val boundary = "\n(* Custom JSON/CV proof boundary. *)\nval () = ();\n"
+  fun check_preserved label thy custom = List.app (fn (api, generate) => (
+    generate ();
+    assert (label ^ " via " ^ api) (get (path thy) = custom))) generators
+  (* Snapshot every generated file, including deliberately stale targets, so a
+     rejected plan cannot silently write outputs or run destructive cleanup. *)
+  fun snapshot () = let
+    val dir = OS.FileSys.openDir "generated"
+    fun loop acc = case OS.FileSys.readDir dir of
+        NONE => acc
+      | SOME entry => loop ((entry, get ("generated/" ^ entry)) :: acc)
+  in loop [] before OS.FileSys.closeDir dir end
+  fun check_refused label thy = let
+    val stale = "generated/vyperTestDefs_obsoleteScript.sml"
+    val () = put stale "stale target must survive a rejected plan\n"
+    val before_files = snapshot ()
+    fun check (api, generate) = let
+      val failure = (generate (); NONE) handle Fail message => SOME message
+    in
+      assert (label ^ " reports manual resharding via " ^ api)
+        (failure = SOME ("custom test definitions require manual resharding: " ^
+          thy ^ "Script.sml"));
+      assert (label ^ " leaves every output untouched via " ^ api)
+        (List.length (snapshot ()) = List.length before_files andalso
+         List.all (fn (file, text) =>
+           OS.FileSys.access ("generated/" ^ file, []) andalso
+           get ("generated/" ^ file) = text) before_files)
+    end
+  in List.app check generators; OS.FileSys.remove stale end
+  val () = export 64
+  val () = generate_tests ()
+  val stock_whole = get (path defs)
+  val custom_whole = stock_whole ^ boundary
+  val () = put (path defs) custom_whole
+  val () = check_preserved "custom whole definitions preserved byte-for-byte"
+    defs custom_whole
+  (* Execution refresh is independent of the customized definitions. *)
+  val () = put (path tests) "stale execution script\n"
+  val () = generate_test_scripts ()
+  val () = assert "custom definitions do not prevent stock execution refresh"
+    (get (path defs) = custom_whole andalso
+     String.isSubstring ("all_traces \"" ^ defs ^ "\"") (get (path tests)))
+  val () = export 65
+  val () = check_refused "custom whole cannot become an aggregate" defs
+  val () = put (path defs) stock_whole
+  val () = generate_tests ()
+  val stock_aggregate = get (path defs)
+  val custom_aggregate = stock_aggregate ^ boundary
+  val () = put (path defs) custom_aggregate
+  val () = check_refused "custom aggregate cannot be overwritten" defs
+  val () = export 64
+  val () = check_refused "custom aggregate cannot become whole definitions" defs
+  val () = export 65
+  val () = put (path defs) stock_aggregate
+  val shard = part defs 64
+  val stock_shard = get (path shard)
+  val custom_shard = stock_shard ^ boundary
+  val () = put (path shard) custom_shard
+  val () = check_preserved "matching custom shard preserved byte-for-byte"
+    shard custom_shard
+  val () = export 66
+  val () = check_refused "custom shard cannot change its count/total" shard
+  val () = put (path shard) stock_shard
+  val () = generate_tests ()
+  (* Even a full-sized shard needs resharding when only the total changes. *)
+  val full_shard = part defs 0
+  val stock_full_shard = get (path full_shard)
+  val () = put (path full_shard) (stock_full_shard ^ boundary)
+  val () = export 67
+  val () = check_refused "custom full shard cannot retain a stale total" full_shard
+in
+  OS.FileSys.remove json
+end;
+
+val () = (((exercise_generator (); exercise_definition_preservation ())
+    before OS.FileSys.chDir original_dir)
   handle e => (OS.FileSys.chDir original_dir; remove_tree scratch; raise e));
 val () = remove_tree scratch;

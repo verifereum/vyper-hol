@@ -2087,15 +2087,16 @@ Proof
      <|vs_memory := v.vs_memory; vs_transient := v.vs_transient;
        vs_prev_bb := p; vs_returndata := v.vs_returndata;
        vs_accounts := v.vs_accounts; vs_logs := v.vs_logs;
-       vs_outcomes := v.vs_outcomes; vs_requests := v.vs_requests; vs_pending_deletions := v.vs_pending_deletions;
-       vs_immutables := v.vs_immutables;
-       vs_alloca_next := v.vs_alloca_next|> =
+       vs_outcomes := v.vs_outcomes; vs_requests := v.vs_requests;
+       vs_pending_deletions := v.vs_pending_deletions;
+       vs_immutables := v.vs_immutables|> =
    (s with
      <|vs_memory := v.vs_memory; vs_transient := v.vs_transient;
        vs_returndata := v.vs_returndata; vs_accounts := v.vs_accounts;
        vs_logs := v.vs_logs; vs_outcomes := v.vs_outcomes;
-       vs_requests := v.vs_requests; vs_pending_deletions := v.vs_pending_deletions; vs_immutables := v.vs_immutables;
-       vs_alloca_next := v.vs_alloca_next|>) with vs_prev_bb := p` by simp[] >>
+       vs_requests := v.vs_requests;
+       vs_pending_deletions := v.vs_pending_deletions;
+       vs_immutables := v.vs_immutables|>) with vs_prev_bb := p` by simp[] >>
   pop_assum (fn th => REWRITE_TAC[th]) >>
   simp[adopt_return_fmp_prev_bb, foldl_update_var_prev_bb]
 QED
@@ -2737,13 +2738,15 @@ Proof
   (`s with <|vs_memory := v.vs_memory; vs_transient := v.vs_transient;
      vs_prev_bb := p; vs_returndata := v.vs_returndata;
      vs_accounts := v.vs_accounts; vs_logs := v.vs_logs;
-     vs_outcomes := v.vs_outcomes; vs_requests := v.vs_requests; vs_pending_deletions := v.vs_pending_deletions;
-     vs_immutables := v.vs_immutables; vs_alloca_next := v.vs_alloca_next|> =
+     vs_outcomes := v.vs_outcomes; vs_requests := v.vs_requests;
+     vs_pending_deletions := v.vs_pending_deletions;
+     vs_immutables := v.vs_immutables|> =
    (s with <|vs_memory := v.vs_memory; vs_transient := v.vs_transient;
      vs_returndata := v.vs_returndata; vs_accounts := v.vs_accounts;
      vs_logs := v.vs_logs; vs_outcomes := v.vs_outcomes;
-     vs_requests := v.vs_requests; vs_pending_deletions := v.vs_pending_deletions; vs_immutables := v.vs_immutables;
-     vs_alloca_next := v.vs_alloca_next|>) with vs_prev_bb := p`
+     vs_requests := v.vs_requests;
+     vs_pending_deletions := v.vs_pending_deletions;
+     vs_immutables := v.vs_immutables|>) with vs_prev_bb := p`
     by simp[venomStateTheory.venom_state_component_equality]) >>
   pop_assum (fn eq => REWRITE_TAC[eq]) >>
   simp[adopt_return_fmp_prev_bb, foldl_update_var_prev_bb]
