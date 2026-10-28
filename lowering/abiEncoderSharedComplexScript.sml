@@ -4,7 +4,7 @@ Ancestors
   abiEncoderSharedMembersCorrect abiEncoderSharedMembersInput abiEncoderSharedMembersIndex
   abiDecoderDynamicLoopSetup abiEncoderMemberPhaseRaw abiDecoderReentryAddress abiEncoderMemberPhaseEffect abiScratchAddress abiEncoderAddressReach emitHelperProps emitHelper venomInst
   abiEncoderSharedArrayPrepare abiEncoderSharedContract abiEncoderComplexLayout
-  abiEncoderComplexPrefix abiEncoderOpenInput abiEncoderInput abiEncoderMembersDefs
+  abiEncoderComplexCode abiEncoderComplexPrefix abiEncoderMemberCode abiEncoderOpenInput abiEncoderInput abiEncoderMembersDefs
   abiScratchEffect abiScratchEncoderContract abiEncoderRegisteredEffect abiEncoderExtendSim abiDecoderContract
   abiDecodeRanges abiDecoderReentry compileEnv valueEncoding contractABI venomState words list arithmetic
 
@@ -89,9 +89,96 @@ Proof
   qexists_tac `ready` >> fs[abi_decoder_address_frame_def]
 QED
 
+Theorem abi_encoder_shared_complex_static_length:
+  abi_encoder_shared_members_pre infos tys avs st src dst sb so d sz first last b cap s /\
+  LIST_REL abi_encoder_structural_valid tys avs /\
+  ~EXISTS (\(_,_,_,dyn). dyn) infos ==>
+  LENGTH (enc (Tuple tys) (ListV avs)) = SUM (MAP (\(_,asz,_,_). asz) infos)
+Proof
+  strip_tac >> drule abi_encoder_shared_complex_head_length >> disch_tac >>
+  drule abi_encoder_structural_list_layout >> disch_tac >>
+  qpat_x_assum `abi_encoder_shared_members_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (mp_tac o CONJUNCT1 o PURE_REWRITE_RULE [abi_encoder_shared_members_pre_def]) >>
+  disch_then (qx_choose_then `layout` (qx_choose_then `values` strip_assume_tac) o
+    REWRITE_RULE [abi_encoder_open_complex_iff]) >>
+  gvs[abi_encoder_tuple_type_def] >> rename1 `head_lengths tys 0` >>
+  `MAP (\(_,_,_,dyn). dyn) infos = MAP is_dynamic tys` by
+    (irule (cj 2 abi_encoder_members_metadata) >> asm_simp_tac bool_ss [] >>
+     rpt strip_tac >> first_x_assum drule_all >> simp[]) >>
+  `~any_dynamic tys` by
+    (qpat_x_assum `MAP (\(_,_,_,dyn). dyn) infos = _`
+       (mp_tac o AP_TERM ``EXISTS I:bool list -> bool``) >>
+     simp_tac bool_ss [EXISTS_MAP, ETA_AX] >>
+     fs[GSYM abi_encoder_any_dynamic, EXISTS_MEM, EVERY_MEM, combinTheory.o_DEF] >>
+     metis_tac[]) >>
+  drule abi_encoder_static_tuple_tails >> disch_then (qspec_then `avs` assume_tac) >>
+  drule abi_encoder_open_tuple_length >> simp[head_lengths_acc]
+QED
+
+Theorem abi_encoder_shared_complex_static_run:
+  EVERY (\(ei,_,_,_). abi_encoder_shared ei) infos /\
+  compile_abi_encode_complex_elems dst src infos 0 0 (Lit 0w) st = (ignored,final) /\
+  fn_has_code st final func /\
+  (st.cs_blocks = final.cs_blocks \/
+    !bb. lookup_block final.cs_current_bb func.fn_blocks = SOME bb ==>
+      phi_prefix_length bb.bb_instructions = 0) /\
+  abi_encoder_shared_members_inv infos tys avs [] [] F (Lit 0w) 0 0 first last st.cs_next_id
+    st limit_st src dst sb 0 0 d hl (LENGTH (enc (Tuple tys) (ListV avs))) b cap initial /\
+  final.cs_next_id <= last /\ final.cs_next_var <= limit_st.cs_next_var /\
+  LENGTH (enc (Tuple tys) (ListV avs)) = SUM (MAP (\(_,asz,_,_). asz) infos) ==>
+  ?actual. abi_encoder_shared_endpoint (ctx,func)
+    (st,final,Lit (n2w (SUM (MAP (\(_,asz,_,_). asz) infos))),limit_st)
+    (first,last,b,cap) (Tuple tys,ListV avs,d) initial actual
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  drule_all abi_encoder_shared_members_correct >>
+  disch_then (qspec_then `ctx` (qx_choose_then `actual` strip_assume_tac)) >>
+  qpat_assum `abi_encoder_shared_members_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (assume_tac o SIMP_RULE bool_ss [APPEND, ADD_CLAUSES]) >>
+  drule abi_encoder_shared_members_final_output >> strip_tac >>
+  qpat_x_assum `abi_encoder_shared_members_inv [] [] [] _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_encoder_shared_members_inv_def]) >>
+  qexists_tac `actual` >>
+  asm_simp_tac (srw_ss()) [abi_encoder_shared_endpoint_def, eval_operand_def, Excl "enc_def"]
+QED
+
+Theorem abi_encoder_shared_complex_static:
+  EVERY (\(ei,_,_,_). abi_encoder_shared ei) infos /\
+  ~EXISTS (\(_,_,_,dyn). dyn) infos ==>
+  abi_encoder_shared (AbiComplex infos)
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  simp_tac bool_ss [abi_encoder_shared_def] >> rpt gen_tac >>
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  `?tys avs. av = ListV avs /\ abi_encoder_tuple_type at tys` by
+    (qpat_x_assum `abi_encoder_shared_input _ _ _ _ _ _`
+       (mp_tac o CONJUNCT1 o PURE_REWRITE_RULE [abi_encoder_shared_input_def]) >>
+     simp_tac bool_ss [abi_encoder_open_complex_iff] >> metis_tac[]) >>
+  qpat_x_assum `av = ListV avs` SUBST_ALL_TAC >>
+  drule_all abi_encoder_shared_members_root_pre >> strip_tac >>
+  qpat_x_assum `enc at (ListV avs) = _`
+    (fn th => RULE_ASSUM_TAC (PURE_REWRITE_RULE [th]) >> assume_tac th) >>
+  drule_all abi_encoder_shared_complex_static_length >> disch_tac >>
+  drule_all abi_encoder_complex_static_trace >> strip_tac >>
+  drule abi_encoder_members_bounds >> strip_tac >>
+  `EVERY (\(_,_,_,dyn). ~dyn) infos` by
+    (fs[EVERY_MEM, EXISTS_MEM, Excl "enc_def"] >> rpt strip_tac >> PairCases_on `e` >>
+     qpat_x_assum `!e. MEM e infos ==> ~_`
+       (qspec_then `(e0,e1,e2,e3)` mp_tac) >> simp[]) >>
+  `abi_encoder_shared_members_inv infos tys avs [] [] F (Lit 0w) 0 0 first last start.cs_next_id
+    start limit_st src dst sb 0 0 d (head_lengths tys 0)
+    (LENGTH (enc (Tuple tys) (ListV avs))) b cap initial` by
+    (irule abi_encoder_shared_members_initial_inv >>
+     asm_simp_tac (srw_ss()) [abi_encoder_cursor_def, Excl "enc_def"] >> decide_tac) >>
+  drule_all abi_encoder_shared_complex_static_run >>
+  disch_then (qspec_then `ctx` (qx_choose_then `actual` assume_tac)) >>
+  qexists_tac `actual` >> gvs[abi_encoder_shared_endpoint_def, Excl "enc_def"]
+QED
+
 val _ = List.app (fn th =>
   let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
     if List.all (fn s => s = "DISK_THM") oracles andalso null axioms andalso null (Thm.hyp th)
     then () else raise Fail "shared complex admission, axiom or hypothesis"
   end) [abi_encoder_shared_complex_head_length,abi_encoder_shared_complex_prepare,
-    abi_encoder_shared_complex_load_finish];
+    abi_encoder_shared_complex_load_finish, abi_encoder_shared_complex_static_length,
+    abi_encoder_shared_complex_static_run, abi_encoder_shared_complex_static];
