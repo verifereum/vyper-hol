@@ -27,7 +27,7 @@ Datatype:
   deployment_trace = <|
     sourceAst: (num option, toplevel list) alist
   ; sourceExports: (string # num) list
-  ; importMap: (string # num) list  (* alias -> source_id, for storage layout key transform *)
+  ; importMap: (string # num) list  (* alias or layout module path -> source_id, for storage layout key transform *)
   ; contractAbi: abi_entry list
   ; deployedAddress: address
   ; deployer: address
@@ -384,6 +384,7 @@ Definition make_create_block_def:
      ; requestsHash := 0w
      ; stateRoot := 0w
      ; withdrawalsRoot := 0w
+     ; rlpSize := 0
      ; transactions := []
      ; withdrawals := []
      |>

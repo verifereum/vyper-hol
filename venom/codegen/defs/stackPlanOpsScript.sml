@@ -54,7 +54,7 @@ End
 
 (* ===== Swap/Dup with Deep Stack Support ===== *)
 
-(* Get top N items from stack (TOS first) *)
+(* Get top N items from stack, in bottom-to-top order. *)
 Definition top_n_def:
   top_n n stk = REVERSE (TAKE n (REVERSE stk))
 End
@@ -78,7 +78,9 @@ Definition do_swap_def:
           (ops ++ [SOSpill off], SNOC off offs, al'))
         ([], [] : num list, ps.ps_alloc) items in
       let base_stack = TAKE (LENGTH ps.ps_stack - chunk) ps.ps_stack in
-      (* Desired order (bottom→top): swap first and last, keep middle *)
+      (* offsets are in spill order (TOS first). desired swaps the endpoints.
+         It also describes bottom-to-top item indices because
+         desired[chunk-1-j] = chunk-1-desired[j]. *)
       let desired = [chunk - 1] ++
         GENLIST (λi. i + 1) (chunk - 2) ++ [0] in
       (* Restore in reverse desired order: last pushed = TOS *)
@@ -100,25 +102,25 @@ Definition do_dup_def:
       ([SODup (dist + 1)],
        ps with ps_stack := stack_dup dist ps.ps_stack)
     else
-      let chunk = dist + 1 in
-      let items = top_n chunk ps.ps_stack in
+      let k = dist - 15 in
+      (* Python spill_ops: TOS first *)
+      let items = REVERSE (top_n k ps.ps_stack) in
       let (spill_ops, offsets, alloc') =
         FOLDL (λ(ops, offs, al) item.
           let (off, al') = alloc_spill_slot al in
           (ops ++ [SOSpill off], SNOC off offs, al'))
         ([], [] : num list, ps.ps_alloc) items in
-      let base_stack = TAKE (LENGTH ps.ps_stack - chunk) ps.ps_stack in
-      (* Desired order (bottom→top): all original ++ [first] (duplicates deepest) *)
-      let desired = GENLIST I chunk ++ [0] in
-      (* Restore in reverse desired order: last pushed = TOS *)
+      let restore_idx =
+        if k ≤ 16 then GENLIST (λi. k - 2 - i) (k - 1) ++ [k - 1]
+        else GENLIST (λi. k - 1 - i) k in
       let restore_ops =
-        MAP (λidx. SORestore (EL idx offsets)) (REVERSE desired) in
-      (* Free all offsets once — dup has repeated index, don't double-free *)
+        FLAT (MAP (λidx. SORestore (EL idx offsets) ::
+                         (if k ≤ 16 then [] else [SOSwap 1])) restore_idx) in
       let alloc'' =
         FOLDL (λal off. free_spill_slot off al) alloc' offsets in
-      let restored = MAP (λidx. EL idx items) desired in
-      (spill_ops ++ restore_ops,
-       ps with <| ps_stack := base_stack ++ restored;
+      (spill_ops ++ [SODup 16] ++ restore_ops ++
+         (if k ≤ 16 then [SOSwap k] else []),
+       ps with <| ps_stack := stack_dup dist ps.ps_stack;
                   ps_alloc := alloc'' |>)
 End
 

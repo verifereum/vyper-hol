@@ -1,5 +1,5 @@
 [holbuild]
-minimum_version = "0.11.3"
+minimum_version = "0.11.5"
 
 [project]
 name = "vyper-hol"
@@ -34,8 +34,9 @@ roots = ["vyperHolScript.sml",
          "lowering/supported/supportedExprPropsScript.sml",
          "lowering/supported/supportedStmtPropsScript.sml",
          "lowering/supported/supportedStmtTraversePropsScript.sml",
-         "lowering/supported/supportedProgramPropsScript.sml"]
+         "lowering/supported/supportedProgramPropsScript.sml",
+         "venom/codegen/proofs/contextReachabilityChecksScript.sml"]
 
 [dependencies.verifereum]
 git = "https://github.com/verifereum/verifereum.git"
-rev = "f5e172ccbf45addef7096feea76428de3ed3dfa8"
+rev = "0c5c2524c67c88d7d58d41b353a211024d0a7a5d"

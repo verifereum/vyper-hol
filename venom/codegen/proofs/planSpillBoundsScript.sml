@@ -388,15 +388,15 @@ Proof
        (ops ++ [SOSpill (FST (alloc_spill_slot al))],
         SNOC (FST (alloc_spill_slot al)) offs,
         SND (alloc_spill_slot al)))
-    ([],[],ps.ps_alloc) (top_n (dist + 1) ps.ps_stack)` >>
+    ([],[],ps.ps_alloc) (REVERSE (top_n (dist - 15) ps.ps_stack))` >>
   PairCases_on `res` >> gvs[] >>
-  qspecl_then [`top_n (dist + 1) ps.ps_stack`, `[]`, `[]`,
+  qspecl_then [`REVERSE (top_n (dist - 15) ps.ps_stack)`, `[]`, `[]`,
                `ps.ps_alloc`, `base'`] mp_tac foldl_alloc_slots_bounded >>
   simp[] >>
   (impl_tac >- gvs[plan_slots_bounded_def]) >>
   strip_tac >>
-  `LENGTH res1 = dist + 1` by
-    (qspecl_then [`top_n (dist + 1) ps.ps_stack`, `[]`, `[]`,
+  `LENGTH res1 = dist - 15` by
+    (qspecl_then [`REVERSE (top_n (dist - 15) ps.ps_stack)`, `[]`, `[]`,
                   `ps.ps_alloc`] mp_tac foldl_alloc_offsets_length >>
      simp[] >>
      simp[top_n_def, LENGTH_TAKE] >> decide_tac) >>
@@ -412,18 +412,24 @@ Proof
      qpat_x_assum `plan_slots_bounded base' ps` mp_tac >>
      simp[plan_slots_bounded_def] >> strip_tac >>
      first_x_assum drule >> strip_tac >> decide_tac) >>
-  `EVERY (\i. i < LENGTH res1)
-     (REVERSE (GENLIST I (dist + 1) ++ [0]))` by
-    (simp[EVERY_REVERSE, EVERY_APPEND, EVERY_GENLIST]) >>
+  qabbrev_tac `idxs = if dist - 15 <= 16 then
+    GENLIST (\i. dist - 15 - 2 - i) (dist - 15 - 1) ++ [dist - 15 - 1]
+    else GENLIST (\i. dist - 15 - 1 - i) (dist - 15)` >>
+  `EVERY (\i. i < LENGTH res1) idxs` by
+    (simp[Abbr `idxs`] >> IF_CASES_TAC >>
+     simp[EVERY_APPEND, EVERY_GENLIST] >> rpt strip_tac >> decide_tac) >>
   `ops_spill_bounded base' res2.sa_next_offset
-     (MAP (\i. SORestore (EL i res1))
-       (REVERSE (GENLIST I (dist + 1) ++ [0])))` by
-    (irule ops_spill_bounded_map_restore >> simp[]) >>
-  gvs[Abbr `final_al`, ops_spill_bounded_append] >>
-  qpat_x_assum `ops_spill_bounded _ _
-    (MAP _ (REVERSE (_ ++ [0])))` mp_tac >>
-  simp[REVERSE_APPEND, MAP_APPEND, ops_spill_bounded_append,
-       ops_spill_bounded_def] >> metis_tac[]
+     (FLAT (MAP (\idx. SORestore (EL idx res1) ::
+       (if dist - 15 <= 16 then [] else [SOSwap 1])) idxs))` by
+    (gvs[ops_spill_bounded_def, MEM_FLAT, MEM_MAP, EVERY_MEM] >>
+     rpt strip_tac >> gvs[] >>
+     Cases_on `dist <= 31` >> gvs[] >>
+     first_x_assum drule >> strip_tac >>
+     `MEM (EL idx res1) res1` by (irule EL_MEM >> simp[]) >>
+     first_x_assum drule >> simp[]) >>
+  gvs[Abbr `final_al`, Abbr `idxs`, ops_spill_bounded_append,
+      ops_spill_bounded_def, plan_slots_bounded_def] >>
+  Cases_on `dist <= 31` >> gvs[] >> metis_tac[]
 QED
 
 Theorem reduce_depth_plan_slots_bounded:

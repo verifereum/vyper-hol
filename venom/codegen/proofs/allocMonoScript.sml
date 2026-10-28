@@ -242,7 +242,7 @@ Proof
   >> CONV_TAC (DEPTH_CONV PairRules.PBETA_CONV) >>
   strip_tac >> gvs[] >>
   simp[foldl_free_next_offset] >>
-  qspecl_then [`top_n (dist + 1) ps.ps_stack`,
+  qspecl_then [`REVERSE (top_n (dist - 15) ps.ps_stack)`,
                `([],[],ps.ps_alloc)`]
     mp_tac foldl_alloc_next_offset >> simp[]
 QED
@@ -1185,4 +1185,34 @@ Proof
   every_case_tac >> gvs[] >> strip_tac >> gvs[] >>
   imp_res_tac (cj 1 fn_plan_aux_fuel_alloc_mono) >>
   gvs[init_plan_state_def, init_spill_alloc_def]
+QED
+
+(* Cleanup configuration does not participate in allocation. *)
+Theorem generate_fn_plan_with_cleanup_alloc_mono:
+  !ch growth fn spill_base lbl_ctr ops ps_final.
+    generate_fn_plan_with_cleanup ch growth fn spill_base lbl_ctr =
+      SOME (ops, ps_final) ==>
+    ps_final.ps_alloc.sa_spill_base = spill_base /\
+    spill_base <= ps_final.ps_alloc.sa_next_offset
+Proof
+  rpt gen_tac >>
+  simp[generate_fn_plan_with_cleanup_def,
+       generate_fn_plan_with_cleanup_analyzed_def] >>
+  every_case_tac >> gvs[] >> strip_tac >> gvs[] >>
+  imp_res_tac (cj 1 fn_plan_aux_alloc_mono) >>
+  gvs[init_cleanup_plan_state_def, init_plan_state_def, init_spill_alloc_def]
+QED
+
+Theorem generate_fn_plan_with_cleanup_fuel_alloc_mono:
+  !fuel ch growth fn spill_base lbl_ctr ops ps_final.
+    generate_fn_plan_with_cleanup_fuel fuel ch growth fn spill_base lbl_ctr =
+      SOME (ops, ps_final) ==>
+    ps_final.ps_alloc.sa_spill_base = spill_base /\
+    spill_base <= ps_final.ps_alloc.sa_next_offset
+Proof
+  rpt gen_tac >>
+  simp[generate_fn_plan_with_cleanup_fuel_def] >>
+  every_case_tac >> gvs[] >> strip_tac >> gvs[] >>
+  imp_res_tac (cj 1 fn_plan_aux_fuel_alloc_mono) >>
+  gvs[init_cleanup_plan_state_def, init_plan_state_def, init_spill_alloc_def]
 QED

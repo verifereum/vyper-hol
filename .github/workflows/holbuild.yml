@@ -21,6 +21,8 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # The cache login is an environment secret that only trusted main runs can read.
+    environment: ${{ ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'merge_group' && github.event.merge_group.base_ref == 'refs/heads/main')) && 'bazel-cache' || '' }}
     outputs:
       holbuild-cache-key: ${{ steps.cache-key.outputs.snapshot-key }}
     steps:
@@ -93,6 +95,11 @@ jobs:
           echo "project cache key: ${PROJECT_CACHE_KEY:-<none>}"
           echo "toolchain cache hit: ${TOOLCHAIN_CACHE_HIT:-false}"
           echo "toolchain cache key: ${TOOLCHAIN_CACHE_KEY:-<none>}"
+
+      - name: Configure remote cache
+        uses: ./.github/actions/setup-remote-cache
+        with:
+          curl-config: ${{ secrets.HOLBUILD_REMOTE_CACHE_CURL_CONFIG }}
 
       - name: Build schema-2 HOL toolchain
         run: holbuild buildhol
@@ -177,6 +184,8 @@ jobs:
   vyper-tests:
     needs: [build, export-vyper-tests]
     runs-on: ubuntu-latest
+    # The cache login is an environment secret that only trusted main runs can read.
+    environment: ${{ ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'merge_group' && github.event.merge_group.base_ref == 'refs/heads/main')) && 'bazel-cache' || '' }}
     strategy:
       fail-fast: false
       matrix:
@@ -222,6 +231,19 @@ jobs:
           path: tests/vyper-test-exports
           key: ${{ needs.export-vyper-tests.outputs.export-cache-key }}
           fail-on-cache-miss: true
+
+      - name: Configure remote cache
+        uses: ./.github/actions/setup-remote-cache
+        with:
+          curl-config: ${{ secrets.HOLBUILD_REMOTE_CACHE_CURL_CONFIG }}
+
+      - name: Generate test theories from pinned exports
+        run: |
+          holbuild build --skip-checkpoints --skip-proof-steps vyperTestLib
+          generator=$(mktemp --suffix=.sml)
+          trap 'rm -f "$generator"' EXIT
+          printf '%s\n' 'vyperTestLib.generate_tests ();' > "$generator"
+          (cd tests && holbuild run --noconfig vyperTestLib "$generator")
 
       - name: Build Vyper test coverage baseline
         if: matrix.group == 0
