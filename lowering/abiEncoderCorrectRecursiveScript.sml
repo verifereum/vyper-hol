@@ -1,18 +1,19 @@
 (* Structural closure removes the child-correctness premises for actual translated descriptors. *)
 Theory abiEncoderCorrectRecursive
 Ancestors
-  abiEncoderCorrectArray abiEncoderCorrectComplex abiEncoderCorrectLeaves abiEncoderCorrect
+  abiEncoderSharedRecursive abiEncoderEnvelopeAdapter
   abiEncoderAdmissible abiEncoder exprLowering compileEnv list pair
 
 Theorem abi_encoder_correct_admissible_mutual:
   (!ei. abi_encoder_admissible ei ==> abi_encoder_correct ei) /\
   (!infos. abi_encoder_members_admissible infos ==> EVERY (\(ei,_,_,_). abi_encoder_correct ei) infos)
 Proof
-  ho_match_mp_tac abi_encoder_admissible_ind >>
-  rw[abi_encoder_admissible_def, EVERY_DEF, abi_encoder_correct_word,
-    abi_encoder_correct_copy, abi_encoder_correct_bytes] >> gvs[] >>
-  FIRST [irule abi_encoder_correct_array >> asm_simp_tac (srw_ss()) [],
-    irule abi_encoder_correct_complex >> asm_simp_tac bool_ss []]
+  conj_tac
+  >- (metis_tac[abi_encoder_shared_admissible, abi_encoder_shared_correct]) >>
+  rpt strip_tac >>
+  drule (cj 2 abi_encoder_shared_admissible_mutual) >>
+  simp_tac (srw_ss()) [EVERY_MEM, FORALL_PROD] >>
+  metis_tac[abi_encoder_shared_correct]
 QED
 
 Theorem abi_encoder_correct_admissible:

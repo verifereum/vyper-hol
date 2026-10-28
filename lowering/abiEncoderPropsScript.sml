@@ -14,7 +14,7 @@
  *   val_in_memory_flag_enc            — flag val_in_memory matches ABI encoding
  *
  * LEGACY SCAFFOLD (active, CHEAT oracle inherited from main):
- *   compile_abi_encode_frag           — frag_exec encoding-plan API used by loweringHalt
+ *   compile_abi_encode_frag           — legacy admitted encoding-plan scaffold
  *
  * Source: abi/abi_encoder.py, abi/abi_decoder.py
  * Lowering: abiEncoderScript.sml
@@ -912,9 +912,9 @@ End
      moves the cell, if there are dynamic elements, past the tails;
    - dyn_loop writes a dynamic array's encoding after its length word at
      dst and returns the encoding's whole length. *)
-(* Legacy main-branch scaffold, retained for loweringHalt's frag_exec API.
-   Unlike compile_abi_encode_to_buf_correct, this interface remains admitted;
-   the proved translated-descriptor API is not a drop-in replacement. *)
+(* Legacy main-branch scaffold with its original statement. It remains admitted;
+   its dynamic-loop clause describes the older payload-base helper convention.
+   External returns use abiEncoderFragment's proved standalone to-buffer API. *)
 Theorem compile_abi_encode_frag:
   (!dst child_ptr ei is_dyn static_ofst dyn_ptr st op st' ctx env ty tv v
     av s0 dst_w src_w lo top.

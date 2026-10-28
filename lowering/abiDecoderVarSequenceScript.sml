@@ -21,19 +21,62 @@ Proof
   rw[abi_decoder_reentry_opcode_def]
 QED
 
+Theorem abi_decoder_pure1_inputs:
+  exec_pure1 f inst s = OK u ==> abi_decoder_inputs_defined inst s
+Proof
+  rw[exec_pure1_def, abi_decoder_inputs_defined_def] >>
+  gvs[AllCaseEqs()] >> gvs[eval_operand_def]
+QED
+
+Theorem abi_decoder_pure2_inputs:
+  exec_pure2 f inst s = OK u ==> abi_decoder_inputs_defined inst s
+Proof
+  rw[exec_pure2_def, abi_decoder_inputs_defined_def] >>
+  gvs[AllCaseEqs()] >> gvs[eval_operand_def]
+QED
+
+Theorem abi_decoder_read1_inputs:
+  exec_read1 f inst s = OK u ==> abi_decoder_inputs_defined inst s
+Proof
+  rw[exec_read1_def, abi_decoder_inputs_defined_def] >>
+  gvs[AllCaseEqs()] >> gvs[eval_operand_def]
+QED
+
+Theorem abi_decoder_write2_inputs:
+  exec_write2 f inst s = OK u ==> abi_decoder_inputs_defined inst s
+Proof
+  rw[exec_write2_def, abi_decoder_inputs_defined_def] >>
+  gvs[AllCaseEqs()] >> gvs[eval_operand_def]
+QED
+
+Theorem abi_decoder_inline_inputs:
+  MEM inst.inst_opcode [MCOPY; CALLDATACOPY; DLOADBYTES; ASSERT; ALLOCA; JMP; JNZ] /\
+  step_inst_base inst s = OK u ==> abi_decoder_inputs_defined inst s
+Proof
+  strip_tac >> Cases_on `inst.inst_opcode` >> gvs[] >>
+  qpat_x_assum `step_inst_base inst s = OK u` mp_tac >>
+  pure_rewrite_tac[step_inst_base_def] >> asm_rewrite_tac[] >>
+  pure_rewrite_tac[opcode_case_def] >>
+  rw[abi_decoder_inputs_defined_def] >>
+  gvs[AllCaseEqs()] >> gvs[eval_operand_def]
+QED
+
 (* The premise is actual successful execution, not an assumed read set. The
    ALLOCA, JMP and JNZ cases also check their literal/label operand envelopes. *)
 Theorem abi_decoder_step_inputs_defined:
   abi_decoder_reentry_opcode inst.inst_opcode /\ step_inst_base inst s = OK u ==>
   abi_decoder_inputs_defined inst s
 Proof
-  strip_tac >> Cases_on `inst.inst_opcode` >>
-  gvs[abi_decoder_reentry_opcode_def] >> rw[abi_decoder_inputs_defined_def] >>
+  strip_tac >>
+  Cases_on `MEM inst.inst_opcode
+    [MCOPY; CALLDATACOPY; DLOADBYTES; ASSERT; ALLOCA; JMP; JNZ]`
+  >- (irule abi_decoder_inline_inputs >> simp[] >> metis_tac[]) >>
+  Cases_on `inst.inst_opcode` >> gvs[abi_decoder_reentry_opcode_def] >>
   qpat_x_assum `step_inst_base inst s = OK u` mp_tac >>
-  PURE_ONCE_REWRITE_TAC [step_inst_base_def] >>
-  asm_rewrite_tac [opcode_case_def] >> strip_tac >>
-  gvs[exec_pure1_def, exec_pure2_def, exec_read1_def, exec_write2_def,
-      AllCaseEqs(), eval_operand_def]
+  pure_rewrite_tac[step_inst_base_def] >> asm_rewrite_tac[] >>
+  pure_rewrite_tac[opcode_case_def] >>
+  metis_tac[abi_decoder_pure1_inputs, abi_decoder_pure2_inputs,
+            abi_decoder_read1_inputs, abi_decoder_write2_inputs]
 QED
 
 Theorem abi_decoder_vars_extend_inputs:
