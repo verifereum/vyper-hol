@@ -37,6 +37,7 @@
  *   write_memory_with_expansion_vs_allocas — memory writes preserve alloca map
  *   write_memory_with_expansion_vs_alloca_next — memory writes preserve next alloca offset
  *   write_memory_with_expansion_identity — memory write is identity when bytes already match
+ *   write_memory_with_expansion_empty_0 — the empty write at 0 is the identity
  *   write_memory_with_expansion_read_self — reading back the just-written bytes
  *   write_memory_with_expansion_disjoint_read — disjoint write/read independence
  *   write_memory_with_expansion_regions_disjoint_read — regions_disjoint variant
@@ -389,6 +390,12 @@ Proof
   `DROP (LENGTH data) (DROP dst s.vs_memory) = DROP (dst + LENGTH data) s.vs_memory`
     by simp[rich_listTheory.DROP_DROP_T, arithmeticTheory.ADD_COMM] >>
   metis_tac[TAKE_DROP, APPEND_ASSOC]
+QED
+
+Theorem write_memory_with_expansion_empty_0:
+  ∀s. write_memory_with_expansion 0 [] s = s
+Proof
+  gen_tac >> irule write_memory_with_expansion_identity >> simp[]
 QED
 
 Triviality take_drop_splice[local]:
