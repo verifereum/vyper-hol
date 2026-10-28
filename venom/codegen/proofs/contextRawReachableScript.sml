@@ -11,6 +11,7 @@
  *   raw_reachable              - inductive raw-reachable states
  *   raw_reachable_closed       - raw_reachable satisfies reachability_closed
  *   raw_reachable_package      - codegen_reachability_package for it
+ *   raw_reachable_package_iff  - it is packaged iff the entry resolves
  *   raw_reachable_least        - every packaged invariant contains it
  *)
 
