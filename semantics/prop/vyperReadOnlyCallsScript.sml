@@ -10,8 +10,8 @@ val () = monadsyntax.enable_monad "vyper_evaluation";
 Theorem run_raw_call_static_frame:
   flags.rcf_is_static /\ ~flags.rcf_is_delegate /\
   run_raw_call cx flags addr data amount accounts transient =
-    SOME (ok,ret,accounts',transient',logs') ==>
-  accounts' = accounts /\ transient' = transient /\ logs' = []
+    SOME (ok,ret,accounts',transient',logs',deletions) ==>
+  accounts' = accounts /\ transient' = transient /\ logs' = [] /\ deletions = []
 Proof
   simp[run_raw_call_def] >> metis_tac[run_ext_call_static_frame]
 QED
@@ -83,11 +83,13 @@ Theorem static_concrete_tail_frame:
     success <<- FST result; result1 <<- SND result;
     returnData <<- FST result1; result2 <<- SND result1;
     accounts' <<- FST result2; result3 <<- SND result2;
-    tStorage' <<- FST result3; emitted_logs <<- SND result3;
+    tStorage' <<- FST result3; result4 <<- SND result3;
+    emitted_logs <<- FST result4; deletions <<- SND result4;
     (if success then return () else raise $ Error $ RevertData returnData);
     update_accounts (K accounts');
     update_transient (K tStorage');
     append_logs emitted_logs;
+    update_pending_deletions (APPEND deletions);
     return returnData
   od) st = (res,st') ==>
   machine_frame st st'
