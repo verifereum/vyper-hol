@@ -171,40 +171,39 @@ Old counterexamples/proof history are retained in the
 The four original clean structural public schemas remain preserved; their
 names/receipts are in the dated audit, not replacement correctness certificates.
 
-## Optional checked-power expression simulation
+## Checked-power expression simulation
 
-The local expression-simulation API has a separate, explicit proof boundary:
-`exprSimOperators$power_sim_ok cenv` is the checked `Exp` induction step.
-`compile_bop_case_sim` and `compile_bop_ok` consume it only for `Exp`;
-`exprSimMain`'s `compile_expr_sim_mutual`, `compile_expr_sim` and
-`compile_expr_vv_sim` expose `!cenv. power_sim_ok cenv`. This is a proposition
-in theorem antecedents, not an axiom, a checker restriction, or an established
-execution certificate. The operator-parametric
-`compile_bop_word_with_frag_sim` remains available. The typed word-fragment
-interfaces (`binop_frag_word_typed`, `binop_frag_typed`,
-`compile_bop_word_sim`) explicitly exclude `Exp`.
+[`powerCheckedProps.checked_power_run`](../lowering/proofs/powerCheckedPropsScript.sml)
+certifies execution of the emitted checked `Exp` fragment: nonnegative,
+in-range powers return the encoded integer result; negative exponents and
+overflow revert. Its premises tie literal options to the same well-typed
+expression and sequential operand evaluations, with typed operand bounds and
+fresh target variables. Arbitrary literal options alone are not a sound
+interface.
 
-Typing and arbitrary literal options alone do not supply the provenance needed
-for checked exponentiation. No admitted `binop_frag_pow` substitutes for these
-certificates. Existing unrelated ExpMod/shift and #636 admissions remain
-admissions. Importing the
-expression theory is not evidence that this optional premise is discharged,
-nor that the S1 stage above is proved.
+[`exprSimBinopFrag.binop_frag_pow`](../lowering/exprSimBinopFragScript.sml)
+lifts this execution certificate through `powerFragProps.binop_frag_power_run`.
+[`exprSimOperators.compile_power_case_sim`](../lowering/exprSimOperatorsScript.sml)
+then supplies the checked `Exp` induction step from simulation of smaller
+expressions. `compile_bop_case_sim` and `compile_bop_ok` discharge that case;
+[`exprSimMain`](../lowering/exprSimMainScript.sml)'s `compile_expr_sim_mutual`,
+`compile_expr_sim` and `compile_expr_vv_sim` have no extra `power_sim_ok`
+premise. The latter two retain their ordinary `expr_sim_pre` boundary.
+`binop_frag_word_typed` excludes `Exp`, while `binop_frag_typed` handles it
+using checked-expression/evaluation provenance, and `compile_bop_word_sim`
+passes that provenance through `compile_bop_word_with_frag_sim`.
 
-The `issue-543-checked-power-proofs` feature branch provides the execution
-certificates and `tests/powerLoweringPin.py`, discharging this premise for the
-unconditional expression API.
+The checked-power execution and case certificates are audited for closed,
+axiom-free, admission-free proofs. They do not remove unrelated ExpMod/shift
+and #636 admissions or establish S1 above.
 `powerDomainProps`, `vyperPowerDomainTest`, support-gate redundancy and folded
-constant-power regressions remain independent core/domain checks, not execution
-certificates. No source acceptance, checker or runtime semantics is relaxed.
+constant-power regressions are independent domain/acceptance checks, not
+execution certificates. No source acceptance or runtime semantics is relaxed.
 
-The arithmetic repairs remain separate from those optional proofs: negative
-signed endpoints such as `(-2)**255 : int256`, the odd-exponent guard on the
-signed literal lower bound, and raw `IntT 1` post-EXP clamps are retained.
-The latter two protect total lowering at raw widths (e.g. signed-9
-`(-16)**2 = 256` must be rejected); `evaluate_type` rejects non-byte widths
-such as `IntT 1` and `IntT 9`. These repairs do not introduce new source legality
-rules.
+Signed negative endpoints such as `(-2)**255 : int256`, the odd-exponent guard
+on the signed literal lower bound, and raw `IntT 1` post-EXP clamps remain
+covered. Raw-width lowering guards do not introduce source legality rules:
+`evaluate_type` rejects non-byte widths such as `IntT 1` and `IntT 9`.
 
 ## Validation boundary
 
