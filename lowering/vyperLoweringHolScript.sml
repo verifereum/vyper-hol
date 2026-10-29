@@ -13,7 +13,8 @@ Ancestors
   exprBopLowering
   exprSimOps exprSimOperands exprSimCompare exprSimArith intBits freshWrites
   exprSimMain stmtSim stmtSimIf stmtSimFor stmtSimReturn stmtSimDecl
-  stmtSimReason stmtSimReasonExpr stmtSimForRange
+  stmtSimReason stmtSimReasonExpr stmtSimReasonStorage stmtSimForRange
+  stmtSimDeclMem exprSimStorageCopy
   valueEncodingProofs
   localPtrsProps
   loweringShapeProps
