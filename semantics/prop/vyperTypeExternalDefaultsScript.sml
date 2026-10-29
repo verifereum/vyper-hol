@@ -26,7 +26,10 @@ Theorem immutables_ready_preserved_by_frame:
 Proof
   rw[immutables_ready_def]
   >- metis_tac[]
-  >> TRY (metis_tac[] >> NO_TAC)
+  >~ [`find_var_decl_by_name _ _ = SOME (StorageVarDecl _ _,_)`]
+  >- metis_tac[]
+  >~ [`find_var_decl_by_name _ _ = SOME (HashMapVarDecl _ _ _,_)`]
+  >- metis_tac[]
   >> `IS_SOME (FLOOKUP (get_source_immutables src
         (case ALOOKUP st.immutables cx.txn.target of SOME m => m | NONE => [])) id)` by
        metis_tac[IS_SOME_EXISTS]
