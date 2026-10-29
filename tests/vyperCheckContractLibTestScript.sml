@@ -1022,13 +1022,197 @@ val () = check_accepts "constant chain through two imports" false
          (BaseT (UintT 256)) NONE])]
     : (num option # toplevel list) list``
 
+(* ===== Function mutability =====
+
+   Each case gives a body for function f, the weakest mutability Vyper
+   accepts it at and a stronger one Vyper rejects it at (checked with Vyper
+   at VYPER_PIN), so a rejection here is the mutability rule, not a typing
+   failure.  f takes (a : address, n : uint256). *)
+
+val mutability_layouts =
+  ``([((0w : address),
+       ([((NONE, "x"), 0); ((NONE, "arr"), 1)] : storage_layout,
+        [((NONE, "t"), 0); ((NONE, "$.nonreentrant_key"), 1)]
+          : storage_layout))]
+      : (address # (storage_layout # storage_layout)) list)``
+
+val u256 = ``BaseT (UintT 256)``
+fun uint n = ``Literal (BaseT (UintT 256)) (IntL ^(intSyntax.term_of_int (Arbint.fromInt n)))``
+val arg_a = ``Name (BaseT AddressT) "a"``
+val empty_bytes = ``Literal (BaseT (BytesT (Dynamic 0))) (BytesL [])``
+fun helper mut name =
+  ``FunctionDecl Internal ^mut F F ^(stringSyntax.fromMLstring name) [] []
+      (BaseT (UintT 256)) [Return (SOME ^(uint 1))]``
+
+fun mutability_modules vis mut nr dflts ret body =
+  ``[(NONE,
+      [VariableDecl Private Storage "x" (BaseT (UintT 256)) NONE;
+       VariableDecl Private Transient "t" (BaseT (UintT 256)) NONE;
+       VariableDecl Private Storage "arr"
+         (ArrayT (BaseT (UintT 256)) (Dynamic 4)) NONE;
+       VariableDecl Private Immutable "imm" (BaseT (UintT 256)) NONE;
+       VariableDecl Private (Constant ^(uint 3)) "C" (BaseT (UintT 256)) NONE;
+       EventDecl "E" [];
+       ^(helper ``Pure`` "pure_h"); ^(helper ``View`` "view_h");
+       ^(helper ``Nonpayable`` "np_h"); ^(helper ``Payable`` "pay_h");
+       FunctionDecl ^vis ^mut ^nr F "f"
+         [("a", BaseT AddressT); ("n", BaseT (UintT 256))] ^dflts ^ret
+         ^body])] : (num option # toplevel list) list``
+
+fun check_mutability vis mut nr dflts ret body =
+  rhs (concl (vyperCheckContractLib.check_contract_conv
+    ``check_contract F ^mutability_layouts ^zero_address
+        ^(mutability_modules vis mut nr dflts ret body)``))
+
+val no_dflts = ``[] : expr list``
+
+fun mutability_case (label, vis, nr, dflts, ret, body, ok_muts, bad_muts) = let
+  fun run m = check_mutability vis m nr dflts ret body
+in
+  List.app (fn m =>
+    if optionSyntax.is_some (run m) then ()
+    else raise Fail ("mutability: expected acceptance: " ^ label ^ " at " ^
+                     term_to_string m)) ok_muts;
+  List.app (fn m =>
+    if optionSyntax.is_none (run m) then ()
+    else raise Fail ("mutability: expected rejection: " ^ label ^ " at " ^
+                     term_to_string m)) bad_muts
+end
+
+fun body_case label ret body ok bad =
+  mutability_case (label, ``External``, ``F``, no_dflts, ret, body, ok, bad)
+fun return_case label ty e ok bad =
+  body_case label ty ``[Return (SOME ^e)]`` ok bad
+fun expr_case label e ok bad = body_case label ``NoneT`` ``[Expr ^e]`` ok bad
+
+val raw_call_flags =
+  ``<| rcf_max_outsize := 0; rcf_is_delegate := F; rcf_is_static := F;
+       rcf_revert_on_failure := T |>``
+val static_raw_call_flags = ``^raw_call_flags with rcf_is_static := T``
+fun int_call name =
+  ``Call (BaseT (UintT 256)) (IntCall (NONE, ^(stringSyntax.fromMLstring name)))
+      [] NONE``
+fun toplevel name =
+  ``TopLevelName (BaseT (UintT 256)) (NONE, ^(stringSyntax.fromMLstring name))``
+
+(* Writes, logs and state-changing builtins need a nonpayable function. *)
+val () = body_case "storage write" ``NoneT``
+  ``[Assign (BaseTarget (TopLevelNameTarget (NONE, "x"))) ^(uint 1)]``
+  [``Nonpayable``] [``View``, ``Pure``]
+val () = body_case "storage subscript write" ``NoneT``
+  ``[Assign (BaseTarget (SubscriptTarget (TopLevelNameTarget (NONE, "arr"))
+                           ^(uint 0))) ^(uint 1)]``
+  [``Nonpayable``] [``View``, ``Pure``]
+val () = body_case "storage augmented assignment" ``NoneT``
+  ``[AugAssign (BaseT (UintT 256)) (TopLevelNameTarget (NONE, "x")) Add
+       ^(uint 1)]``
+  [``Nonpayable``] [``View``]
+val () = body_case "transient write" ``NoneT``
+  ``[Assign (BaseTarget (TopLevelNameTarget (NONE, "t"))) ^(uint 1)]``
+  [``Nonpayable``] [``View``]
+val () = body_case "write inside a tuple target" ``NoneT``
+  ``[Assign (TupleTarget [BaseTarget (NameTarget "a");
+                          BaseTarget (TopLevelNameTarget (NONE, "x"))])
+       (Builtin (TupleT [BaseT AddressT; BaseT (UintT 256)])
+          (MakeArray NONE (Fixed 2)) [^arg_a; ^(uint 1)])]``
+  [``Nonpayable``] [``View``]
+val () = body_case "storage append" ``NoneT``
+  ``[Append (TopLevelNameTarget (NONE, "arr")) ^(uint 1)]``
+  [``Nonpayable``] [``View``]
+val () = return_case "storage pop" u256
+  ``Pop (BaseT (UintT 256)) (TopLevelNameTarget (NONE, "arr"))``
+  [``Nonpayable``] [``View``]
+val () = body_case "log" ``NoneT`` ``[Log (NONE, "E") []]``
+  [``Nonpayable``] [``View``, ``Pure``]
+val () = expr_case "raw_log"
+  ``Call NoneT RawLog
+      [Builtin (ArrayT (BaseT (BytesT (Fixed 32))) (Dynamic 0))
+         (MakeArray (SOME (BaseT (BytesT (Fixed 32)))) (Dynamic 0)) [];
+       ^empty_bytes] NONE``
+  [``Nonpayable``] [``View``]
+val () = expr_case "send" ``Call NoneT (Send F) [^arg_a; ^(uint 1)] NONE``
+  [``Nonpayable``] [``View``]
+val () = expr_case "selfdestruct" ``Call NoneT SelfDestructTarget [^arg_a] NONE``
+  [``Nonpayable``] [``View``]
+val () = return_case "create_minimal_proxy_to" ``BaseT AddressT``
+  ``Call (BaseT AddressT) (CreateTarget CreateMinimalProxy F T)
+      [^arg_a; ^(uint 0)] NONE``
+  [``Nonpayable``] [``View``]
+
+(* Calls: extcall and non-static raw_call are nonpayable, static raw_call is
+   view.  staticcall's callee may be view or pure, which ExtCall does not
+   record, so it is accepted from pure functions too. *)
+val () = expr_case "extcall"
+  ``Call NoneT (ExtCall F F ("poke", [], NoneT) []) [^arg_a] NONE``
+  [``Nonpayable``] [``View``, ``Pure``]
+val () = return_case "staticcall" u256
+  ``Call (BaseT (UintT 256)) (ExtCall T F ("price", [], BaseT (UintT 256)) [])
+      [^arg_a] NONE``
+  [``Pure``, ``View``] []
+val () = expr_case "raw_call"
+  ``Call NoneT (RawCallTarget ^raw_call_flags)
+      [^arg_a; ^empty_bytes; ^(uint 0)] NONE``
+  [``Nonpayable``] [``View``]
+val () = expr_case "raw_call with msg.data"
+  ``Call NoneT (RawCallCalldataTarget ^raw_call_flags) [^arg_a; ^(uint 0)] NONE``
+  [``Nonpayable``] [``View``]
+val () = expr_case "static raw_call"
+  ``Call NoneT (RawCallTarget ^static_raw_call_flags)
+      [^arg_a; ^empty_bytes; ^(uint 0)] NONE``
+  [``View``] [``Pure``]
+
+(* Internal calls need the callee's declared mutability or a weaker caller;
+   nonpayable callers may call payable functions. *)
+val () = return_case "call nonpayable" u256 (int_call "np_h")
+  [``Nonpayable``] [``View``]
+val () = return_case "call view" u256 (int_call "view_h")
+  [``View``] [``Pure``]
+val () = return_case "call pure" u256 (int_call "pure_h") [``Pure``] []
+val () = return_case "call payable" u256 (int_call "pay_h")
+  [``Nonpayable``] [``View``]
+
+(* msg.value only in payable functions, defaults included. *)
+val () = return_case "msg.value" u256 ``Builtin (BaseT (UintT 256)) (Env ValueSent) []``
+  [``Payable``] [``Nonpayable``, ``View``]
+val () = mutability_case ("msg.value default", ``External``, ``F``,
+  ``[Builtin (BaseT (UintT 256)) (Env ValueSent) []]``, ``NoneT``, ``[Pass]``,
+  [``Payable``], [``Nonpayable``])
+
+(* Pure functions read no state, environment or address members; constants
+   and .address are fine. *)
+val () = return_case "storage read" u256 (toplevel "x") [``View``] [``Pure``]
+val () = return_case "immutable read" u256 (toplevel "imm") [``View``] [``Pure``]
+val () = return_case "constant read" u256 (toplevel "C") [``Pure``] []
+val () = return_case "block.number" u256
+  ``Builtin (BaseT (UintT 256)) (Env BlockNumber) []`` [``View``] [``Pure``]
+val () = return_case "self" ``BaseT AddressT``
+  ``Builtin (BaseT AddressT) (Env SelfAddr) []`` [``View``] [``Pure``]
+val () = return_case "address balance" u256
+  ``Builtin (BaseT (UintT 256)) (Acc Balance) [^arg_a]`` [``View``] [``Pure``]
+val () = return_case "address of an address" ``BaseT AddressT``
+  ``Builtin (BaseT AddressT) (Acc Address) [^arg_a]`` [``Pure``] []
+val () = return_case "blockhash" ``BaseT (BytesT (Fixed 32))``
+  ``Builtin (BaseT (BytesT (Fixed 32))) BlockHash [^(uint 1)]``
+  [``View``] [``Pure``]
+val () = return_case "len(msg.data)" u256
+  ``Builtin (BaseT (UintT 256)) CalldataLen []`` [``View``] [``Pure``]
+val () = mutability_case ("block.number default", ``External``, ``F``,
+  ``[Builtin (BaseT (UintT 256)) (Env BlockNumber) []]``, ``NoneT``, ``[Pass]``,
+  [``View``], [``Pure``])
+
+(* Declarations: no pure or view constructor, no nonreentrant pure function. *)
+val () = mutability_case ("constructor", ``Deploy``, ``F``, no_dflts, ``NoneT``,
+  ``[Pass]``, [``Nonpayable``, ``Payable``], [``View``, ``Pure``])
+val () = mutability_case ("nonreentrant", ``External``, ``T``, no_dflts,
+  ``NoneT``, ``[Pass]``, [``View``], [``Pure``])
+
 (* A module that nothing initializes has no storage in the layout.  Its
    functions that no live function calls are not checked, so get_x and the
    external set_x need no slot for x; a live function that reaches x is
    rejected. *)
 fun uninit_modules main_callee mid_callee =
   ``[(NONE,
-      [FunctionDecl External Pure F F "f" [("a", BaseT (UintT 256))] []
+      [FunctionDecl External View F F "f" [("a", BaseT (UintT 256))] []
          (BaseT (UintT 256))
          [Return (SOME (Call (BaseT (UintT 256)) (IntCall ^main_callee)
                           [Name (BaseT (UintT 256)) "a"] NONE))]]);
