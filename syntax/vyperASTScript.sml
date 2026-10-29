@@ -488,6 +488,10 @@ Theorem bound_CASE_rator =
   DatatypeSimps.mk_case_rator_thm_tyinfo
     (Option.valOf (TypeBase.read {Thy="vyperAST",Tyop="bound"}));
 
+Theorem base_type_CASE_rator =
+  DatatypeSimps.mk_case_rator_thm_tyinfo
+    (Option.valOf (TypeBase.read {Thy="vyperAST",Tyop="base_type"}));
+
 Definition is_Constant_def[simp]:
   is_Constant (Constant _) = T ∧
   is_Constant _ = F

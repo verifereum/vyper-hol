@@ -270,7 +270,7 @@ Theorem bind_arguments_lookup_index:
     ALL_DISTINCT (MAP FST args) /\ i < LENGTH args ==>
     ?tv. evaluate_type tenv (SND (EL i args)) = SOME tv /\
          FLOOKUP env (FST (EL i args)) =
-           SOME <| assignable := T; type := tv; value := EL i vals |>
+           SOME <| assignable := T; type := tv; value := EL i vals; popped := [] |>
 Proof
   Induct_on `args` >- simp[] >>
   qx_gen_tac `arg` >> Cases_on `arg` >>
@@ -947,7 +947,7 @@ Proof
           eval_operand_def] >>
      gvs[]) >>
   `lookup_scopes (FST (EL i args)) [env] =
-     SOME <| assignable := T; type := tv; value := EL i vals |>` by
+     SOME <| assignable := T; type := tv; value := EL i vals; popped := [] |>` by
     simp[lookup_scopes_def] >>
   `!p sz. FLOOKUP cenv.ce_vars (FST (EL i args)) <>
      SOME (PtrVar (Var p) sz)` by (rpt gen_tac >>

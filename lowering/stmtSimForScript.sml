@@ -75,18 +75,18 @@ Theorem compile_for_range_frag:
        eval_stmts cx stmts
          (ei with scopes :=
             (FEMPTY |+ (id, <| assignable := F; type := tyv;
-                               value := IntV (n1 + &j) |>)) :: ei.scopes) = (r2, es2) ==>
+                               value := IntV (n1 + &j); popped := [] |>)) :: ei.scopes) = (r2, es2) ==>
        stmt_frag ctx func cx (InLoop ex inc) RetQ c
          (stmts_env c (InLoop ex inc) ty stmts)
          (ei with scopes :=
             (FEMPTY |+ (id, <| assignable := F; type := tyv;
-                               value := IntV (n1 + &j) |>)) :: ei.scopes) r2 es2) /\
+                               value := IntV (n1 + &j); popped := [] |>)) :: ei.scopes) r2 es2) /\
     (!ei j r2 es2 sc rest.
        P ei /\ lookup_scopes id ei.scopes = NONE /\ j < Num (n2 - n1) /\
        eval_stmts cx stmts
          (ei with scopes :=
             (FEMPTY |+ (id, <| assignable := F; type := tyv;
-                               value := IntV (n1 + &j) |>)) :: ei.scopes) = (r2, es2) /\
+                               value := IntV (n1 + &j); popped := [] |>)) :: ei.scopes) = (r2, es2) /\
        (r2 = INL () \/ r2 = INR ContinueException) /\
        es2.scopes = sc :: rest ==>
        P (es2 with scopes := rest)) ==>
@@ -269,18 +269,18 @@ Theorem compile_for_range_lit_frag:
        eval_stmts cx stmts
          (ei with scopes :=
             (FEMPTY |+ (id, <| assignable := F; type := tyv;
-                               value := IntV (n1 + &j) |>)) :: ei.scopes) = (r2, es2) ==>
+                               value := IntV (n1 + &j); popped := [] |>)) :: ei.scopes) = (r2, es2) ==>
        stmt_frag ctx func cx (InLoop ex inc) RetQ c
          (stmts_env c (InLoop ex inc) ty stmts)
          (ei with scopes :=
             (FEMPTY |+ (id, <| assignable := F; type := tyv;
-                               value := IntV (n1 + &j) |>)) :: ei.scopes) r2 es2) /\
+                               value := IntV (n1 + &j); popped := [] |>)) :: ei.scopes) r2 es2) /\
     (!ei j r2 es2 sc rest.
        P ei /\ lookup_scopes id ei.scopes = NONE /\ j < Num (n2 - n1) /\
        eval_stmts cx stmts
          (ei with scopes :=
             (FEMPTY |+ (id, <| assignable := F; type := tyv;
-                               value := IntV (n1 + &j) |>)) :: ei.scopes) = (r2, es2) /\
+                               value := IntV (n1 + &j); popped := [] |>)) :: ei.scopes) = (r2, es2) /\
        (r2 = INL () \/ r2 = INR ContinueException) /\
        es2.scopes = sc :: rest ==>
        P (es2 with scopes := rest)) ==>
@@ -332,3 +332,14 @@ Proof
   >- (qpat_x_assum `!c lc sa sb. _` drule >> simp[]) >>
   qpat_x_assum `!st0 c st1 ex inc es1 r2 es2. _` irule >> metis_tac[]
 QED
+
+(* Integrity gate for the preserved public literal-range guarantees. *)
+val () = List.app (fn th =>
+  let val (ors, axs) = Tag.dest_tag (Thm.tag th)
+  in if null axs andalso null (Thm.hyp th) andalso
+        List.all (fn s => s = "DISK_THM") ors
+     then print "FOR_FORCE_AUDIT OK\n"
+     else raise Fail "range consumer inherited admission"
+  end) [compile_for_range_parts, compile_for_range_lit_parts,
+        compile_for_range_frag, compile_for_range_lit_frag,
+        compile_for_range_lit_frag_simple];

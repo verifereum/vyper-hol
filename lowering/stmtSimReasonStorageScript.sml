@@ -174,6 +174,43 @@ Proof
   simp[] >> metis_tac[]
 QED
 
+Theorem reason_storage_expr_revert_forced_frag[local]:
+  !ctx func cenv cx r es res1 es1 sa vv sm rty msz sb s0 R.
+    compile_expr cenv (expr_type r) r sa = (vv, sm) /\
+    compile_revert_with_reason cenv vv rty msz sm = ((), sb) /\
+    reason_storage_vv vv /\
+    expr_vv_sim ctx func cenv cx (expr_type r) r es /\
+    (do raw <- eval_expr cx r; read_result cx raw od) es = (res1, es1) /\
+    expr_res_ok res1 /\
+    fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+    local_ptrs_reserved cenv sa /\
+    (!rr. expr_exit res1 rr ==> R rr) /\ (!t. R (Abort Revert_abort t)) ==>
+    frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel func cenv cx es s)
+      (\s. F) R
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `eval_expr cx r es` >> rename1 `_ = (raw, est)` >>
+  `est = es1` by
+    (qpat_x_assum `(do raw <- _; _ od) _ = _` mp_tac >>
+     simp[bind_def] >> Cases_on `raw` >> simp[] >> strip_tac >>
+     metis_tac[read_result_state]) >> gvs[] >>
+  `expr_vv_res_ok raw` by
+    (qpat_x_assum `(do raw <- _; _ od) _ = _` mp_tac >>
+     simp[bind_def] >> Cases_on `raw` >> simp[] >> strip_tac >>
+     gvs[expr_vv_res_ok_def, expr_res_ok_def] >>
+     rename1 `read_result cx captured es1` >> Cases_on `captured` >>
+     gvs[expr_vv_res_ok_def, read_result_def, raise_def, expr_res_ok_def]) >>
+  `!rr. expr_exit raw rr ==> R rr` by
+    (rpt strip_tac >> Cases_on `raw` >> gvs[] >>
+     qpat_x_assum `(do raw <- _; _ od) _ = _` mp_tac >>
+     simp[bind_def] >> strip_tac >> gvs[] >>
+     metis_tac[expr_exit_exception_transport]) >>
+  irule reason_storage_expr_revert_frag >> simp[] >>
+  goal_assum (drule_at (Pat `eval_expr _ _ _ = _`)) >>
+  goal_assum (drule_at (Pat `compile_expr _ _ _ _ = _`)) >> simp[] >>
+  metis_tac[]
+QED
+
 (* raise r, for a reason r that is not a string literal and whose value
    compile_expr hands out as a pointer into storage or transient storage:
    r's fragment, whose errors exit, then the Error(string) encoder, whose
@@ -221,7 +258,7 @@ Proof
   impl_tac >- fs[] >> strip_tac >>
   `frag_exec ctx sa sfin (\s. s = s0 /\ stmt_state_rel func cenv cx es s)
       (\s. F) (stmt_exit RetQ es' res)` by
-    (irule (INST_TYPE [alpha |-> ``:type``] reason_storage_expr_revert_frag) >> simp[] >>
+    (irule (INST_TYPE [alpha |-> ``:type``] reason_storage_expr_revert_forced_frag) >> simp[] >>
      goal_assum (drule_at (Pat `compile_expr _ _ _ _ = _`)) >>
      qexistsl_tac [`es'`, `type_memory_bytes cenv (expr_type r)`, `r1`, `expr_type r`] >>
      simp[] >> metis_tac[]) >>
@@ -239,7 +276,8 @@ Theorem compile_assert_storage_reason_frag:
     (!ml str. r <> Literal (BaseT (StringT ml)) (StringL str)) /\
     expr_type e = BaseT BoolT /\
     expr_sim ctx func cenv cx (BaseT BoolT) e es /\
-    (!es1. eval_expr cx e es = (INL (Value (BoolV F)), es1) ==>
+    (!es1. (do raw <- eval_expr cx e; read_result cx raw od) es =
+         (INL (BoolV F), es1) ==>
            expr_vv_sim ctx func cenv cx (expr_type r) r es1) /\
     (!sa vv sb. compile_expr cenv (expr_type r) r sa = (vv, sb) ==>
                 reason_storage_vv vv) ==>
@@ -254,7 +292,7 @@ Proof
   disch_then (qx_choose_then `rr` assume_tac) >>
   qspecl_then [`rr`, `res`, `RetQ`, `es'`] mp_tac raise_reason_exits >>
   impl_tac >- fs[] >> strip_tac >>
-  irule (INST_TYPE [alpha |-> ``:type``] reason_storage_expr_revert_frag) >> simp[] >>
+  irule (INST_TYPE [alpha |-> ``:type``] reason_storage_expr_revert_forced_frag) >> simp[] >>
   goal_assum (drule_at (Pat `compile_expr _ _ _ _ = _`)) >> simp[] >>
   qexistsl_tac [`type_memory_bytes cenv (expr_type r)`, `expr_type r`] >>
   simp[] >> first_x_assum irule >> goal_assum (drule_at Any)
