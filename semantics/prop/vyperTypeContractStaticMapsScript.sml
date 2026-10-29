@@ -2050,10 +2050,8 @@ Theorem contract_namespaces_ok_module_toplevel_vtype_keys:
   contract_namespaces_ok F mods /\ MEM (src,tls) mods ==>
   ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel src) tls))
 Proof
-  rw[contract_namespaces_ok_def, contract_keys_def] >>
-  qpat_x_assum `ALL_DISTINCT (FLAT (MAP _ mods))` mp_tac >>
-  Induct_on `mods` >- rw[] >>
-  gen_tac >> PairCases_on `h` >> rw[] >> gvs[ALL_DISTINCT_APPEND]
+  strip_tac >> irule contract_keys_module_distinct >>
+  qexists_tac `mods` >> gvs[contract_namespaces_ok_def]
 QED
 
 

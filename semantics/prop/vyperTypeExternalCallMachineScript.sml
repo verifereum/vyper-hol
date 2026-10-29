@@ -417,7 +417,8 @@ Theorem checked_getter_initial_body_components:
     (initial_state am [scope] with <|outcomes := orc; requests := rqs|>) = (res,st') ==>
   check_contract F am.layouts tx.target mods = SOME art /\
   checked_contract_runtime_ready art mods am tx /\ machine_well_typed am /\
-  ALOOKUP mods src = SOME ts /\ MEM decl ts /\
+  ALOOKUP mods src = SOME ts /\
+  module_allocated am.layouts tx.target src ts /\ MEM decl ts /\
   is_public_getter_decl tx.function_name decl /\
   external_getter_tuple src decl = SOME (mut,nr,args,(dflts : expr list),ret,body) /\
   bind_arguments (type_env_all_modules mods) args vals = SOME scope ==>
