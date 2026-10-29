@@ -345,8 +345,14 @@ fun arena_finish (g as (asl,w)) =
       if is_imp (snd (strip_forall (concl th))) then
         discharge (tryfind (MATCH_MP (CONV_RULE guard_conv th)) (TRUTH :: facts))
       else base th;
-    fun finish tm = MATCH_ACCEPT_TAC
-      (discharge (PURE_REWRITE_RULE [GSYM AND_IMP_INTRO] (norm (ASSUME tm))));
+    fun finish tm g =
+      let
+        (* Specialise constructor guards before using branch equalities as
+           rewrites: lookup guards must still match the original SOME facts. *)
+        val ih = SIMP_RULE bool_ss [vyperASTTheory.custom_error_11] (ASSUME tm);
+        fun close th g = MATCH_ACCEPT_TAC
+          (discharge (PURE_REWRITE_RULE [GSYM AND_IMP_INTRO] th)) g;
+      in FIRST [close ih, close (norm (ASSUME tm))] g end;
   in FIRST (map (fn tm => fn g => finish tm g) candidates) g end;
 
 val ARENA_FINISH_TAC = simp_tac bool_ss [FST, SND] >> arena_finish;

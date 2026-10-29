@@ -25,8 +25,9 @@ Definition source_builtin_remainder_def:
     | (ECRecover, [a; b; c; d]) => T
     | (ECAdd, [a; b]) => T
     | (ECMul, [a; b]) => T
-    | (MakeArray NONE (Fixed n), args) => supported_value_type tops ty
-    | (MakeArray (SOME elem_ty) bnd, args) => supported_value_type tops ty
+    | (MakeArray NONE (Fixed n), args) => supported_literal_elements tops ty args
+    | (MakeArray (SOME elem_ty) bnd, args) =>
+        ty = ArrayT elem_ty bnd /\ supported_literal_elements tops ty args
     | (Uint2Str n, [a]) => supported_unsigned_type (expr_type a)
     | (CalldataSlice n, [a]) => T
     | _ => F

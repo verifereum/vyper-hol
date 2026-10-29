@@ -74,6 +74,13 @@ The lower-level operations are:
 does not inherit the ambient `"compute"` theorem set or simplifier state. Its
 behavior therefore does not depend on unrelated theories loaded by a caller.
 
+Changes to the general checker must update `checker_defs` and, for new
+datatypes, `checker_datatypes` in `semantics/type/vyperCheckContractLib.sml`.
+Custom-error checking includes declaration-name uniqueness, module-qualified
+resolution, positional/keyword argument validation, and argument typing.
+Missing reduction rules leave computation partial, even for otherwise valid
+contracts, and the API rejects the unreduced result.
+
 Callers can functionally copy and extend it without changing the shared value:
 
 ```sml

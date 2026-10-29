@@ -91,13 +91,17 @@ End
 Definition int_calls_assert_reason_def:
   int_calls_assert_reason AssertBare = [] /\
   int_calls_assert_reason AssertUnreachable = [] /\
-  int_calls_assert_reason (AssertReason e) = int_calls_expr e
+  int_calls_assert_reason (AssertReason e) = int_calls_expr e ∧
+  int_calls_assert_reason (AssertCustomError err) =
+    int_calls_exprs (custom_error_exprs err)
 End
 
 Definition int_calls_raise_reason_def:
   int_calls_raise_reason RaiseBare = [] /\
   int_calls_raise_reason RaiseUnreachable = [] /\
-  int_calls_raise_reason (RaiseReason e) = int_calls_expr e
+  int_calls_raise_reason (RaiseReason e) = int_calls_expr e ∧
+  int_calls_raise_reason (RaiseCustomError err) =
+    int_calls_exprs (custom_error_exprs err)
 End
 
 Definition int_calls_stmt_def:

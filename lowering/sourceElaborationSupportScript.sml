@@ -1,13 +1,14 @@
 (* #543 support boundary. TOP-LEVEL: checked_source_builtin_support,
    source_expr_method_id_erased, source_expr_power_supported,
-   source_expr_local_tuple_index. No global whitelist is weakened.
-   The tuple constructor boundary below is deliberately recorded: a literal
-   index is NOT enough to make a local tuple read supported_program. *)
+   source_expr_local_tuple_index, supported_local_tuple_read,
+   checked_local_tuple_read_support. No global whitelist is weakened.
+   Local tuple reads use the main nested-place support rules; checking supplies
+   the literal-index gate, while supported place types remain required. *)
 Theory sourceElaborationSupport
 Ancestors
   sourceExprProps sourceExprElaborate sourceExprDefs sourceSyntax
-  supportedExprForms supportedExprs vyperTypeSystem vyperAST list integer
-  sourceBuiltinSupport
+  supportedExprForms supportedExprs supportedTypes exprLowering
+  vyperTypeSystem vyperAST list integer sourceBuiltinSupport
 
 (* Exactly the builtin-form remainder after discharging residual MethodId
    and the Exp literal-operand gate. All other operations, widths, effects,
@@ -35,8 +36,9 @@ Definition source_builtin_support_remainder_def:
     | (ECRecover, [a; b; c; d]) => T
     | (ECAdd, [a; b]) => T
     | (ECMul, [a; b]) => T
-    | (MakeArray NONE (Fixed n), args) => supported_value_type tops ty
-    | (MakeArray (SOME elem_ty) bnd, args) => supported_value_type tops ty
+    | (MakeArray NONE (Fixed n), args) => supported_literal_elements tops ty args
+    | (MakeArray (SOME elem_ty) bnd, args) =>
+        ty = ArrayT elem_ty bnd /\ supported_literal_elements tops ty args
     | (Uint2Str n, [a]) => supported_unsigned_type (expr_type a)
     | (CalldataSlice n, [a]) => T
     | _ => F
@@ -151,27 +153,42 @@ Proof
   drule well_typed_local_tuple_index >> simp[]
 QED
 
-(* This remaining base-shape exclusion is independent of the index gate.
-   Thus the two builtin clauses above cannot be advertised as discharging
-   the local tuple-read constructor of the unchanged supported_program. *)
-Theorem supported_local_tuple_read_rejected:
-  ~supported_expr tops (Subscript ty (Name (TupleT ts) name) index)
+(* Both pure and effectful index branches retain the same place-type gates.
+   In particular, the tuple base may itself contain nested supported places;
+   support is not restricted to the flat supported_tuple_type class. *)
+Theorem supported_local_tuple_read:
+  supported_expr tops (Subscript ty (Name (TupleT ts) name) index) <=>
+  supported_place_type tops ty /\ supported_place_type tops (TupleT ts) /\
+  supported_expr tops index
 Proof
-  simp[supported_expr_def, supported_pure_expr_def, supported_effect_expr_def]
+  simp[supported_expr_def, supported_pure_expr_def, supported_effect_expr_def,
+       supported_subscript_place_def, supported_place_info_def, place_type_name] >>
+  metis_tac[]
 QED
 
-Theorem checked_tuple_read_still_rejected:
+(* The checker supplies a literal index, hence a pure supported expression.
+   It does not discharge the independent type/width/layout support gates. *)
+Theorem checked_local_tuple_read_support:
+  well_typed_expr env (Subscript ty (Name (TupleT ts) name) index) ==>
+  (supported_expr tops (Subscript ty (Name (TupleT ts) name) index) <=>
+   supported_place_type tops ty /\ supported_place_type tops (TupleT ts))
+Proof
+  strip_tac >> drule well_typed_local_tuple_index >> strip_tac >>
+  gvs[supported_local_tuple_read, supported_expr_def, supported_pure_expr_def]
+QED
+
+Theorem checked_tuple_read_supported:
   well_typed_expr env (Name (TupleT [BaseT BoolT; BaseT (UintT 256)]) "t") ==>
   well_typed_expr env
     (Subscript (BaseT (UintT 256))
       (Name (TupleT [BaseT BoolT; BaseT (UintT 256)]) "t")
       (Literal (BaseT (UintT 256)) (IntL 1))) /\
-  ~supported_expr tops
+  supported_expr tops
     (Subscript (BaseT (UintT 256))
       (Name (TupleT [BaseT BoolT; BaseT (UintT 256)]) "t")
       (Literal (BaseT (UintT 256)) (IntL 1)))
 Proof
-  simp[supported_local_tuple_read_rejected] >> EVAL_TAC >> simp[]
+  simp[supported_local_tuple_read] >> EVAL_TAC >> simp[]
 QED
 
 val () = List.app (fn (name,th) => let

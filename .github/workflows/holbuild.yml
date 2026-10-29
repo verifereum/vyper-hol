@@ -445,11 +445,10 @@ jobs:
           snapshot-key: ${{ needs.test-deps.outputs.holbuild-cache-key }}
 
       - name: Restore Vyper test exports
-        uses: actions/cache/restore@v6
+        uses: ./.github/actions/restore-run-cache
         with:
           path: tests/vyper-test-exports
           key: ${{ needs.export-vyper-tests.outputs.export-cache-key }}
-          fail-on-cache-miss: true
 
       - name: Configure remote cache
         uses: ./.github/actions/setup-remote-cache

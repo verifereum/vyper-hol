@@ -45,7 +45,8 @@ QED
 
 Theorem encode_multiple_runtime_bytes:
   evaluate_type_builtin cx (AbiEncode ensure NONE)
-    (TupleT [BaseT BoolT; BaseT BoolT]) [BoolV T; BoolV F] =
+    (TupleT [BaseT BoolT; BaseT BoolT]) [BaseT BoolT; BaseT BoolT]
+    [BoolV T; BoolV F] =
     INL (BytesV (REPLICATE 31 0w ++ [1w] ++ REPLICATE 32 0w))
 Proof
   Cases_on `ensure` >> EVAL_TAC >> simp[dimindex_256] >> EVAL_TAC
@@ -53,7 +54,7 @@ QED
 
 Theorem decode_wrapped_dynamic_runtime_bytes:
   evaluate_type_builtin cx (AbiDecode T) (BaseT (BytesT (Dynamic 3)))
-    [BytesV (REPLICATE 31 0w ++ [32w] ++
+    [BaseT (BytesT (Dynamic 96))] [BytesV (REPLICATE 31 0w ++ [32w] ++
              REPLICATE 31 0w ++ [1w; 88w] ++ REPLICATE 31 0w)] =
     INL (BytesV [88w])
 Proof
@@ -62,7 +63,7 @@ QED
 
 Theorem decode_unwrapped_dynamic_runtime_bytes:
   evaluate_type_builtin cx (AbiDecode F) (BaseT (BytesT (Dynamic 3)))
-    [BytesV (REPLICATE 31 0w ++ [1w; 88w] ++ REPLICATE 31 0w)] =
+    [BaseT (BytesT (Dynamic 64))] [BytesV (REPLICATE 31 0w ++ [1w; 88w] ++ REPLICATE 31 0w)] =
     INL (BytesV [88w])
 Proof
   EVAL_TAC

@@ -1686,7 +1686,7 @@ Proof
   simp[bind_def, AllCaseEqs(), return_def, raise_def,
        check_def, type_check_def, assert_def, lift_sum_def] >>
   rpt strip_tac >> gvs[preserves_immutables_dom_refl] >>
-  TRY (Cases_on `evaluate_type_builtin cx tb typ vs` >>
+  TRY (Cases_on `evaluate_type_builtin cx tb typ (MAP expr_type es) vs` >>
        gvs[return_def, raise_def]) >>
   first_x_assum (qspec_then `st` mp_tac) >>
   simp[check_def, type_check_def, assert_def, return_def]
@@ -3241,6 +3241,15 @@ Proof
       simp[Once evaluate_def, bind_def, AllCaseEqs(), raise_def, return_def] >>
       rpt strip_tac >> gvs[preserves_immutables_dom_refl] >>
       imp_res_tac get_Value_state >> imp_res_tac lift_option_type_state >> gvs[])
+  (* Raise (RaiseCustomError err): only eval_exprs changes state *)
+  >- (Cases_on `err` >>
+      qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def, AllCaseEqs(), raise_def, return_def] >>
+      rpt CASE_TAC >> rpt strip_tac >>
+      gvs[bind_def, raise_def, AllCaseEqs(), preserves_immutables_dom_refl] >>
+      imp_res_tac lift_option_state >>
+      imp_res_tac lift_option_type_state >> gvs[] >>
+      first_x_assum drule_all >> simp[])
   (* Assert e AssertBare / AssertUnreachable: only eval_expr changes state *)
   >- (qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
       simp[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
@@ -3269,6 +3278,30 @@ Proof
       irule preserves_immutables_dom_trans >> first_assum (irule_at Any) >>
       first_x_assum drule_all >> strip_tac >>
       first_x_assum drule >> simp[])
+  (* Assert e (AssertCustomError err): chain condition and argument evaluation *)
+  >- (Cases_on `err` >>
+      qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+      rpt strip_tac >> gvs[preserves_immutables_dom_refl] >>
+      imp_res_tac get_Value_state >> gvs[] >>
+      qpat_x_assum `switch_BoolV _ _ _ _ = _` mp_tac >>
+      simp[switch_BoolV_def, return_def, raise_def] >>
+      rpt IF_CASES_TAC >> simp[return_def, raise_def, bind_def, AllCaseEqs()] >>
+      rpt CASE_TAC >> rpt strip_tac >>
+      gvs[return_def, raise_def, bind_def, AllCaseEqs(),
+          preserves_immutables_dom_refl] >>
+      TRY (imp_res_tac lift_option_state >>
+           imp_res_tac lift_option_type_state >> gvs[]) >>
+      qpat_x_assum
+        `∀s0 tv0 s1. eval_expr cx e s0 = (INL tv0,s1) ⇒
+          ∀s2 r s3. eval_exprs cx _ s2 = (r,s3) ⇒
+            preserves_immutables_dom cx s2 s3`
+        (drule_all_then assume_tac) >>
+      qpat_x_assum
+        `∀s0 r s1. eval_expr cx e s0 = (r,s1) ⇒
+          preserves_immutables_dom cx s0 s1`
+        (drule_all_then assume_tac) >>
+      metis_tac[preserves_immutables_dom_trans])
   >- (drule_all case_Log_imm_dom >> simp[])
   >- (drule_all case_AnnAssign_imm_dom >> simp[])
   >- (drule_all case_Append_imm_dom >> simp[])

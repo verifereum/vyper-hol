@@ -104,7 +104,7 @@ Definition source_location_eval_def:
       finally (do args <- source_location_abis cx ms;
         stage_abi_operands cx args od) (release_abi_captures mark)
       od | _ => source_location_evals cx ms);
-    v <- lift_sum (evaluate_type_builtin cx b t vs);
+    v <- lift_sum (evaluate_type_builtin cx b t (MAP source_location_type ms) vs);
     return (Value v)
   od /\
   source_location_eval cx (SML_Revert ty m) = do

@@ -27,6 +27,7 @@ Datatype:
   = ReturnK eval_continuation
   | AssertK assert_reason eval_continuation
   | RaiseK eval_continuation
+  | CustomErrorK identifier (type list) eval_continuation
   | LogK nsid eval_continuation
   | PopK eval_continuation
   | AppendK expr eval_continuation
@@ -60,7 +61,7 @@ Datatype:
   | AttributeK identifier eval_continuation
   | BuiltinK type builtin (type list) eval_continuation
   | LenK eval_continuation
-  | TypeBuiltinK type_builtin type eval_continuation
+  | TypeBuiltinK type_builtin type (type list) eval_continuation
   | AbiIfK expr expr eval_continuation
   | AbiUnwrapK eval_continuation
   | AbiSubscriptK type expr eval_continuation
@@ -194,8 +195,9 @@ Definition eval_expr_cps_def:
           | AbiEncode _ _ =>
               eval_abi_exprs_cps cx8 es st
                 (AbiStageK (AbiReleaseK (LENGTH st.abi_memory) (LENGTH st.abi_immutables)
-                  (TypeBuiltinK tb typ k)))
-          | _ => eval_exprs_cps cx8 es st (TypeBuiltinK tb typ k)) ∧
+                  (TypeBuiltinK tb typ (MAP expr_type es) k)))
+          | _ => eval_exprs_cps cx8 es st
+              (TypeBuiltinK tb typ (MAP expr_type es) k)) ∧
   eval_expr_cps cx9 (Call _ (Send has_gas) es _) st k =
     (case type_check (LENGTH es = if has_gas then 3 else 2) "Send args" st of
        (INR ex, st) => AK cx9 (ApplyExc ex) st k
@@ -384,6 +386,22 @@ Definition eval_stmt_cps_def:
     AK cx (ApplyExc (AssertException "UNREACHABLE")) st k ∧
   eval_stmt_cps cx (Raise (RaiseReason se)) st k =
     eval_expr_cps cx se st (RaiseK k) ∧
+  eval_stmt_cps cx (Raise (RaiseCustomError err)) st k =
+    (case err of CustomError id positional kwargs =>
+       case get_module_code cx (FST id) of
+       | NONE => AK cx
+           (ApplyExc $ Error (RuntimeError "custom error declaration")) st k
+       | SOME tops =>
+           case lookup_custom_error_args_in (SND id) tops of
+           | NONE => AK cx
+               (ApplyExc $ Error (RuntimeError "custom error declaration")) st k
+           | SOME params =>
+               case order_custom_error_args params err of
+               | NONE => AK cx
+                   (ApplyExc $ Error (RuntimeError "custom error arguments")) st k
+               | SOME es =>
+                   eval_exprs_cps cx es st
+                     (CustomErrorK (SND id) (MAP SND params) k)) ∧
   eval_stmt_cps cx (Assert e reason) st k =
     eval_expr_cps cx e st (AssertK reason k) ∧
   eval_stmt_cps cx (Log id es) st k = eval_exprs_cps cx es st (LogK id k) ∧
@@ -468,6 +486,7 @@ Definition apply_exc_def:
   apply_exc cx ex st (ReturnK k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (AssertK _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (RaiseK k) = AK cx (ApplyExc ex) st k ∧
+  apply_exc cx ex st (CustomErrorK _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (LogK _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (AppendK _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (AppendK1 _ k) = AK cx (ApplyExc ex) st k ∧
@@ -509,7 +528,7 @@ Definition apply_exc_def:
   apply_exc cx ex st (PopK k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (BuiltinK _ _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (LenK k) = AK cx (ApplyExc ex) st k ∧
-  apply_exc cx ex st (TypeBuiltinK _ _ k) = AK cx (ApplyExc ex) st k ∧
+  apply_exc cx ex st (TypeBuiltinK _ _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (AbiIfK _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (AbiUnwrapK k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (AbiSubscriptK _ _ k) = AK cx (ApplyExc ex) st k ∧
@@ -693,10 +712,26 @@ Definition apply_val_def:
     (case v of
        BoolV T => apply cx st k
      | BoolV F =>
-         (case r of
-            AssertBare => apply_exc cx (AssertException "") st k
-          | AssertUnreachable => apply_exc cx (AssertException "UNREACHABLE") st k
-          | AssertReason se => eval_expr_cps cx se st (RaiseK k))
+        (case r of
+           AssertBare => apply_exc cx (AssertException "") st k
+         | AssertUnreachable => apply_exc cx (AssertException "UNREACHABLE") st k
+         | AssertReason se => eval_expr_cps cx se st (RaiseK k)
+         | AssertCustomError err =>
+             (case err of CustomError id positional kwargs =>
+                case get_module_code cx (FST id) of
+                | NONE => apply_exc cx
+                    (Error (RuntimeError "custom error declaration")) st k
+                | SOME tops =>
+                    case lookup_custom_error_args_in (SND id) tops of
+                    | NONE => apply_exc cx
+                        (Error (RuntimeError "custom error declaration")) st k
+                    | SOME params =>
+                        case order_custom_error_args params err of
+                        | NONE => apply_exc cx
+                            (Error (RuntimeError "custom error arguments")) st k
+                        | SOME es =>
+                            eval_exprs_cps cx es st
+                              (CustomErrorK (SND id) (MAP SND params) k)))
      | _ => apply_exc cx (Error (TypeError "not BoolV")) st k) ∧
   apply_val cx v st (RaiseK k) =
     (case v of
@@ -766,9 +801,9 @@ Definition apply_vals_def:
     od st) k ∧
   apply_vals cx vs st (AbiReleaseK mark imm_mark k) =
     liftk cx (K (ApplyVals vs)) (release_abi_captures (mark,imm_mark) st) k ∧
-  apply_vals cx vs st (TypeBuiltinK tb typ k) =
+  apply_vals cx vs st (TypeBuiltinK tb typ tys k) =
     liftk cx ApplyTv (do
-      v <- lift_sum $ evaluate_type_builtin cx tb typ vs;
+      v <- lift_sum $ evaluate_type_builtin cx tb typ tys vs;
       return $ Value v
     od st) k ∧
   apply_vals cx vs st (LogK id k) =
@@ -778,6 +813,10 @@ Definition apply_vals_def:
         "Log encode event";
       push_log event
     od st) k ∧
+  apply_vals cx vs st (CustomErrorK error_name arg_types k) =
+    (case build_custom_error_data (get_tenv cx) error_name arg_types vs of
+     | NONE => apply_exc cx (Error (RuntimeError "custom error encoding")) st k
+     | SOME data => apply_exc cx (Error (RevertData data)) st k) ∧
   apply_vals cx vs st (CallSendK has_gas k) =
     liftk cx ApplyTv (eval_send cx has_gas vs st) k ∧
   apply_vals cx vs st (ExtCallK is_static skip_check sig opts k) =
@@ -1189,6 +1228,25 @@ Proof
             raise_def, apply_val_def, apply_exc_def]
     \\ rw[Once OWHILE_THM, SimpRHS, stepk_def] \\ gvs[]
     \\ rw[apply_exc_def] \\ rw[Once OWHILE_THM] )
+  \\ conj_tac >- ( (* Raise (RaiseCustomError err) *)
+    Cases_on `err`
+    \\ rw[eval_stmt_cps_def, evaluate_def]
+    \\ CASE_TAC
+    >- rw[raise_def, cont_def]
+    \\ CASE_TAC
+    >- rw[raise_def, cont_def]
+    \\ CASE_TAC
+    >- rw[raise_def, cont_def]
+    \\ rw[bind_def]
+    \\ CASE_TAC \\ rw[cont_def] \\ reverse CASE_TAC
+    >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
+    \\ rw[Once OWHILE_THM, stepk_def, apply_vals_def]
+    \\ CASE_TAC
+    \\ gvs[lift_option_def, lift_option_type_def, return_def, raise_def,
+           apply_exc_owhile_eq, apply_exc_def, stepk_def]
+    \\ Cases_on `k = DoneK`
+    \\ gvs[apply_exc_def]
+    \\ rw[Once OWHILE_THM] )
   \\ conj_tac >- ( (* Assert e AssertBare *)
     rw[eval_stmt_cps_def, evaluate_def, bind_def]
     \\ CASE_TAC \\ rw[cont_def] \\ reverse CASE_TAC
@@ -1271,6 +1329,55 @@ Proof
               return_def, raise_def, apply_val_def, apply_exc_def]
       \\ rw[Once OWHILE_THM, SimpRHS, stepk_def] \\ gvs[]
       \\ rw[apply_exc_def] \\ rw[Once OWHILE_THM, stepk_def] )
+    \\ Cases_on`v` \\ gvs[]
+    \\ rw[Once OWHILE_THM, stepk_def, apply_val_def]
+    \\ rw[Once OWHILE_THM, SimpRHS, stepk_def] \\ gvs[]
+    \\ rw[apply_exc_def] \\ rw[Once OWHILE_THM, stepk_def] )
+  \\ conj_tac >- ( (* Assert e (AssertCustomError err) *)
+    Cases_on `err`
+    \\ rw[eval_stmt_cps_def, evaluate_def, bind_def]
+    \\ CASE_TAC \\ rw[cont_def] \\ reverse CASE_TAC
+    >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
+    \\ rw[Once OWHILE_THM, stepk_def, apply_tv_def, liftk1]
+    \\ qmatch_goalsub_rename_tac`get_Value tv`
+    \\ reverse $ Cases_on`tv` \\ rw[return_def, raise_def, get_Value_def]
+    >- (rw[switch_BoolV_def, raise_def]
+        \\ rw[Once OWHILE_THM, stepk_def, apply_exc_def])
+    >- (rw[switch_BoolV_def, raise_def]
+        \\ rw[Once OWHILE_THM, stepk_def, apply_exc_def])
+    \\ simp[switch_BoolV_def] \\ rw[return_def, raise_def]
+    >- (
+      rw[Once OWHILE_THM, stepk_def, apply_val_def]
+      \\ rw[Once OWHILE_THM, SimpRHS, stepk_def] \\ gvs[]
+      \\ rw[Once OWHILE_THM, stepk_def, apply_def] )
+    >- (
+      rw[Once OWHILE_THM, stepk_def, apply_val_def]
+      \\ CASE_TAC
+      >- (gvs[raise_def] \\
+          gvs[apply_exc_owhile_eq, apply_exc_def, stepk_def] \\
+          Cases_on `k = DoneK` \\ gvs[apply_exc_def] \\
+          rw[Once OWHILE_THM])
+      \\ CASE_TAC
+      >- (gvs[raise_def] \\
+          gvs[apply_exc_owhile_eq, apply_exc_def, stepk_def] \\
+          Cases_on `k = DoneK` \\ gvs[apply_exc_def] \\
+          rw[Once OWHILE_THM])
+      \\ CASE_TAC
+      >- (gvs[raise_def] \\
+          gvs[apply_exc_owhile_eq, apply_exc_def, stepk_def] \\
+          Cases_on `k = DoneK` \\ gvs[apply_exc_def] \\
+          rw[Once OWHILE_THM])
+      \\ first_x_assum drule \\ rw[cont_def]
+      \\ rw[bind_def]
+      \\ CASE_TAC \\ reverse CASE_TAC
+      >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
+      \\ rw[Once OWHILE_THM, stepk_def, apply_vals_def]
+      \\ CASE_TAC
+      \\ gvs[lift_option_def, lift_option_type_def, return_def, raise_def,
+             apply_exc_owhile_eq, apply_exc_def, stepk_def]
+      \\ Cases_on `k = DoneK`
+      \\ gvs[apply_exc_def]
+      \\ rw[Once OWHILE_THM] )
     \\ Cases_on`v` \\ gvs[]
     \\ rw[Once OWHILE_THM, stepk_def, apply_val_def]
     \\ rw[Once OWHILE_THM, SimpRHS, stepk_def] \\ gvs[]
@@ -1762,30 +1869,31 @@ Proof
       simp[return_def, ignore_bind_def, bind_def] >>
       AP_TERM_TAC >>
       gvs[push_function_def, return_def] >>
-      (* chains are pure computation; dead assumptions only slow simp down *)
+      (* Split only the scrutinee: CASE_TAC's global datatype rewrites
+         traverse the large continuation datatype unnecessarily here. *)
       POP_ASSUM_LIST (K ALL_TAC) >>
-      CASE_TAC >> simp[] >>
-      CASE_TAC >> simp[] >>
-      CASE_TAC >> simp[return_def, raise_def] >>
-      CASE_TAC >> simp[] >>
-      CASE_TAC >> simp[] >>
-      CASE_TAC >> simp[] >>
-      CASE_TAC >> simp[] >>
-      CASE_TAC >> simp[] >>
-      CASE_TAC >> simp[] )
+      BasicProvers.PURE_CASE_TAC >> simp[] >>
+      BasicProvers.PURE_CASE_TAC >> simp[] >>
+      BasicProvers.PURE_CASE_TAC >> simp[return_def, raise_def] >>
+      BasicProvers.PURE_CASE_TAC >> simp[] >>
+      BasicProvers.PURE_CASE_TAC >> simp[] >>
+      BasicProvers.PURE_CASE_TAC >> simp[] >>
+      BasicProvers.PURE_CASE_TAC >> simp[] >>
+      BasicProvers.PURE_CASE_TAC >> simp[] >>
+      BasicProvers.PURE_CASE_TAC >> simp[] )
     >> simp[Once OWHILE_THM, stepk_def, apply_def, liftk1]
     >> simp[bind_def, return_def, ignore_bind_def]
     >> gvs[push_function_def, return_def]
     >> AP_TERM_TAC >>
       POP_ASSUM_LIST (K ALL_TAC) >>
-      CASE_TAC >> simp[] >>
-      CASE_TAC >> simp[] >>
-      CASE_TAC >> simp[return_def, raise_def] >>
-      CASE_TAC >> simp[] >>
-      CASE_TAC >> simp[] >>
-      ALL_TAC >| [CASE_TAC, CASE_TAC, CASE_TAC, CASE_TAC, CASE_TAC] >> simp[] >>
-      ALL_TAC >| [CASE_TAC, CASE_TAC, CASE_TAC, CASE_TAC, CASE_TAC, CASE_TAC] >> simp[] >>
-      ALL_TAC >| [CASE_TAC, CASE_TAC, CASE_TAC, CASE_TAC] >> simp[])
+      BasicProvers.PURE_CASE_TAC >> simp[] >>
+      BasicProvers.PURE_CASE_TAC >> simp[] >>
+      BasicProvers.PURE_CASE_TAC >> simp[return_def, raise_def] >>
+      BasicProvers.PURE_CASE_TAC >> simp[] >>
+      BasicProvers.PURE_CASE_TAC >> simp[] >>
+      BasicProvers.PURE_CASE_TAC >> simp[] >>
+      BasicProvers.PURE_CASE_TAC >> simp[] >>
+      BasicProvers.PURE_CASE_TAC >> simp[])
   (* ===== Chain interaction builtins ===== *)
   (* All 5 new cases: CPS eval_exprs then continuation matches big-step body.
      Pattern: unfold both sides, use IH for eval_exprs, match continuation bodies. *)
@@ -2110,5 +2218,14 @@ Proof
   \\ Cases_on `eval_expr cx e st`
   \\ rename1 `eval_expr cx e st = (res,rt)`
   \\ Cases_on `res` \\ gvs[]
+  \\ rw[Once OWHILE_THM]
+QED
+Theorem cont_pre_eval_stmts_cps[cv_pre]:
+  cont_pre (eval_stmts_cps cx ss st DoneK)
+Proof
+  rw[cont_pre_IS_SOME_cont]
+  \\ qspecl_then[`cx`,`ss`,`st`,`DoneK`]mp_tac $ cj 2 eval_cps_eq
+  \\ rw[cont_def]
+  \\ CASE_TAC \\ CASE_TAC \\ gvs[]
   \\ rw[Once OWHILE_THM]
 QED

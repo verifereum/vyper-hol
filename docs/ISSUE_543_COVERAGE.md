@@ -23,7 +23,10 @@ check_contract T layouts address mods = SOME art /\ MEM (src,tops) mods
 `source_program_remainder` is transparent, not an opaque readiness predicate.
 It removes **only** the MethodId/Exp builtin gates and the Exp AugAssign literal
 operand gate. Integer-width restrictions, all other operators, ABI forms,
-headers/names, binding/loop/effect/storage restrictions remain unchanged.
+headers/names, binding/loop/effect/storage restrictions and declared return-layout
+compatibility remain unchanged. Custom-error declarations remain excluded by
+the shared declaration-header gate; the remainder also rejects their bodies
+explicitly.
 The old `supported_program` definition is not deleted: the new checked wrapper
 no longer asks its caller to supply these redundant #543 gates independently.
 
@@ -37,11 +40,15 @@ no longer asks its caller to supply these redundant #543 gates independently.
 | Clean ordinary checker/compiler boundary | `sourceOrdinarySupport.source_ordinary_checked_remainder`, `source_ordinary_checked_supported_program`, and `source_ordinary_compiled_supported_program` apply the replacement to the actual normalized ordinary modules, without admissions. |
 | Public source wrapper instead of caller-supplied `supported_program` | `sourceModuleCompile.source_module_checked_supported_program` takes successful policy-aware `source_module_check`, exact `retained_executable = [(NONE,tops)]`, and `source_program_remainder tops`. `source_module_checked_runtime_correct` composes it with existing lowering correctness, retaining every unrelated semantic premise and its inherited CHEAT provenance. |
 
-Nonvacuity and retained-exclusion tests are
-`sourceProgramSupportTest.power_program_supported_by_replacement`,
-`recursive_aug_program_supported_by_replacement`,
-`remainder_local_tuple_still_rejected`, and
-`remainder_program_tuple_still_rejected`.
+Power nonvacuity tests are
+`sourceProgramSupportTest.power_program_supported_by_replacement` and
+`recursive_aug_program_supported_by_replacement`. The former local-tuple
+rejection tests no longer describe the main nested-place whitelist and must
+not be used as retained-exclusion evidence. The refreshed
+`sourceProgramSupportTest` build validates checked local-tuple program admission,
+nested local-place expression support, unsupported tuple-component rejection,
+and retained return-layout/custom-error exclusions. This build alone does not
+refresh the separate elaboration contracts below.
 `sourceProgramIntegrationTest.source_support_power_public_replacement` starts
 from original source and uses the public replacement lemma, not direct
 `supported_program` evaluation. Receipt: `.agent-files/source-support-final.log`;
@@ -53,13 +60,17 @@ not a fresh proof run.
 * **Tuple #571:** `sourceElaborationSupport.source_expr_local_tuple_index` and
   `well_typed_local_tuple_index` derive a literal integer index, nonnegativity,
   `Num n < LENGTH ts`, and the selected element type. This is **not** a tuple
-  base-lowering proof. `source_pure_expr_remainder` still accepts `Subscript`
-  only with `TopLevelName bt id` and `supported_subscript_base tops id` (private
-  slotted storage arrays or qualifying nontransient maps). Local `Name (TupleT
-  ts) name` bases remain rejected for every index, even a checked literal.
-  `supported_local_tuple_read_rejected` and the two remainder tests above make
-  this distinction explicit. Source body transport does cover the fixed tuple
-  bodies; it does not remove this backend restriction.
+  base-lowering proof. The main expression whitelist and transparent remainder
+  now traverse nested places, including local tuple bases.
+  `sourceElaborationSupport.supported_local_tuple_read` characterizes both pure
+  and effectful index branches: the result and tuple base must satisfy
+  `supported_place_type`, and the index must satisfy `supported_expr`.
+  `checked_local_tuple_read_support` discharges the index-support gate from
+  genuine checking; `checked_tuple_read_supported` gives a checked positive
+  example. Nested supported place types are allowed, not just flat scalar
+  tuples. These contracts replace the obsolete blanket local-tuple rejection
+  claims without weakening the global support predicate. Type/width/layout
+  restrictions, program-level gates and backend correctness obligations remain.
 * **ABI #551:** `supported_type_builtin_form` is copied unchanged: encode only
   `(AbiEncode F (SOME mid),[a])`, `LENGTH mid = 4`, and
   `target = TupleT [t]` with `supported_tuple_type t`; decode only

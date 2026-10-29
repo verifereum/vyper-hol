@@ -1,25 +1,24 @@
-(* #543: exact statement whitelist remainder. Only recursive expressions and
-   the redundant Exp AugAssign literal gate are replaced. *)
+(* #543: exact statement whitelist remainder. Recursive expressions and
+   the redundant Exp AugAssign literal gate are replaced. Nested target-place,
+   copy-layout and evaluation-order gates are shared with supportedStmts. *)
 Theory sourceStmtSupport
 Ancestors
-  sourceExprSupport supportedStmts supportedStmtTraverse supportedExprs
+  sourceExprSupport supportedStmts supportedTargets supportedStmtTraverse supportedExprs
   supportedExprForms supportedTypes supportedDecls vyperTypeSystem vyperAST
   list alist integer option
 
 Definition source_assignment_remainder_def:
   source_assignment_remainder tops bindings target e <=>
     case target of
-      BaseTarget (NameTarget name) =>
-        (case ALOOKUP bindings name of
-           SOME ty => supported_value_type tops ty
-         | NONE => F) /\ source_expr_remainder tops e
-    | BaseTarget (TopLevelNameTarget id) =>
-        supported_scalar_target tops id /\ source_pure_expr_remainder tops e
-    | BaseTarget (SubscriptTarget (TopLevelNameTarget id) key) =>
-        supported_subscript_base tops id /\ source_pure_expr_remainder tops key /\
-        source_pure_expr_remainder tops e
-    | BaseTarget (AttributeTarget (TopLevelNameTarget id) fname) =>
-        supported_storage_field_write tops id fname /\ source_pure_expr_remainder tops e
+      BaseTarget target_base =>
+        (case supported_target_info tops bindings target_base of
+           SOME (ValPT ty) => supported_place_type tops ty /\
+             supported_copy_types ty (expr_type e)
+         | _ => F) /\
+        (case target_base of
+           NameTarget name => source_expr_remainder tops e
+         | _ => source_pure_expr_remainder tops e /\
+              (supported_target_pure tops target_base \/ supported_uncomputed_rhs e))
     | _ => F
 End
 
@@ -33,13 +32,15 @@ End
 Definition source_assert_reason_remainder_def:
   source_assert_reason_remainder tops AssertBare = T /\
   source_assert_reason_remainder tops AssertUnreachable = T /\
-  source_assert_reason_remainder tops (AssertReason e) = source_string_reason_remainder tops e
+  source_assert_reason_remainder tops (AssertReason e) = source_string_reason_remainder tops e /\
+  source_assert_reason_remainder tops (AssertCustomError err) = F
 End
 
 Definition source_raise_reason_remainder_def:
   source_raise_reason_remainder tops RaiseBare = T /\
   source_raise_reason_remainder tops RaiseUnreachable = T /\
-  source_raise_reason_remainder tops (RaiseReason e) = source_string_reason_remainder tops e
+  source_raise_reason_remainder tops (RaiseReason e) = source_string_reason_remainder tops e /\
+  source_raise_reason_remainder tops (RaiseCustomError err) = F
 End
 
 Definition source_log_remainder_def:
@@ -53,8 +54,8 @@ End
 Definition source_iterator_remainder_def:
   source_iterator_remainder tops ty (Range a b) n =
     (case (a,b) of
-       (Literal _ (IntL start), Literal _ (IntL finish)) =>
-         supported_integer_type ty /\ start <= finish /\ n = Num (finish - start)
+       (Literal _ (IntL start), Literal _ (IntL finish_n)) =>
+         supported_integer_type ty /\ start <= finish_n /\ n = Num (finish_n - start)
      | _ => source_pure_expr_remainder tops a /\ source_pure_expr_remainder tops b /\ 0 < n) /\
   source_iterator_remainder tops ty (Array e) n =
     (case e of
@@ -76,7 +77,8 @@ Definition source_stmt_remainder_def:
   source_stmt_remainder tops bindings (Return NONE) = T /\
   source_stmt_remainder tops bindings (Return (SOME e)) = source_expr_remainder tops e /\
   source_stmt_remainder tops bindings (AnnAssign name ty e) =
-    (supported_value_type tops ty /\ source_expr_remainder tops e) /\
+    (supported_place_type tops ty /\ supported_copy_types ty (expr_type e) /\
+     source_expr_remainder tops e) /\
   source_stmt_remainder tops bindings (Assign target e) =
     source_assignment_remainder tops bindings target e /\
   source_stmt_remainder tops bindings (AugAssign ty target op e) =
@@ -104,9 +106,9 @@ Termination
   simp[stmt_size_def, supported_stmt_list_size]
 End
 
-(* Acceptance may widen the assigned value. The whitelist equivalence only
-   needs typing of the RHS and any subscript key, not equality of value and
-   target types. *)
+(* Acceptance may widen the assigned value. Place/copy/order restrictions,
+   including nested target keys, are shared unchanged with main support;
+   only RHS typing is needed to replace its expression remainder. *)
 Theorem checked_assignment_remainder:
   atarget_accepts env target ty /\ well_typed_expr env e ==>
   (source_assignment_remainder tops bindings target e <=>
@@ -115,14 +117,7 @@ Proof
   strip_tac >> imp_res_tac checked_expr_remainder >>
   imp_res_tac checked_pure_remainder >>
   Cases_on `target` >>
-  simp[source_assignment_remainder_def, supported_assignment_def] >>
-  rename1 `BaseTarget bt` >> Cases_on `bt` >> simp[] >>
-  rpt (BasicProvers.TOP_CASE_TAC >> simp[]) >>
-  fs[atarget_accepts_def, Once well_typed_expr_def,
-     AllCaseEqs()] >>
-  qmatch_goalsub_rename_tac `source_pure_expr_remainder tops key` >>
-  Cases_on `well_typed_expr env key` >> gvs[] >>
-  imp_res_tac checked_pure_remainder >> simp[]
+  simp[source_assignment_remainder_def, supported_assignment_def]
 QED
 
 Theorem checked_string_reason_remainder:

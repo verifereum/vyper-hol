@@ -114,7 +114,7 @@ Definition eval_pure_expr_def:
                   | _ => NONE))
           | _ => eval_pure_exprs cx st es) of
         | SOME vs =>
-          (case evaluate_type_builtin cx tb typ vs of
+          (case evaluate_type_builtin cx tb typ (MAP expr_type es) vs of
            | INL v => SOME (Value v)
            | INR _ => NONE)
         | NONE => NONE)

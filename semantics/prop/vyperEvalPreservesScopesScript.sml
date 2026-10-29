@@ -92,43 +92,90 @@ Proof
 QED
 
 Theorem case_Raise_dom[local]:
-  ∀cx reason.
-    (∀e. reason = RaiseReason e ⇒
-       ∀st res st'. eval_expr cx e st = (res, st') ⇒
-         MAP FDOM st.scopes = MAP FDOM st'.scopes) ⇒
+  ∀cx e.
+    (∀st res st'. eval_expr cx e st = (res, st') ⇒
+       MAP FDOM st.scopes = MAP FDOM st'.scopes) ⇒
     ∀st res st'.
-      eval_stmt cx (Raise reason) st = (res, st') ⇒ preserves_scopes_dom st st'
+      eval_stmt cx (Raise (RaiseReason e)) st = (res, st') ⇒
+      preserves_scopes_dom st st'
 Proof
-  rpt gen_tac >> strip_tac >> Cases_on `reason` >>
   rpt strip_tac >> irule map_fdom_eq_preserves_dom >>
   gvs[evaluate_def, bind_def, AllCaseEqs(), raise_def] >>
   imp_res_tac get_Value_scopes >>
-  imp_res_tac lift_option_scopes >> imp_res_tac lift_option_type_scopes >> imp_res_tac lift_option_type_scopes >>
+  imp_res_tac lift_option_scopes >> imp_res_tac lift_option_type_scopes >>
   imp_res_tac raise_scopes >> gvs[]
 QED
 
 Theorem case_Assert_dom[local]:
   ∀cx e reason.
+    (reason = AssertBare ∨ reason = AssertUnreachable) ⇒
     (∀st res st'. eval_expr cx e st = (res, st') ⇒
-       MAP FDOM st.scopes = MAP FDOM st'.scopes) ∧
-    (∀se. reason = AssertReason se ⇒
-       ∀st res st'. eval_expr cx se st = (res, st') ⇒
-         MAP FDOM st.scopes = MAP FDOM st'.scopes) ⇒
+       MAP FDOM st.scopes = MAP FDOM st'.scopes) ⇒
     ∀st res st'.
-      eval_stmt cx (Assert e reason) st = (res, st') ⇒ preserves_scopes_dom st st'
+      eval_stmt cx (Assert e reason) st = (res, st') ⇒
+      preserves_scopes_dom st st'
 Proof
-  rpt gen_tac >> strip_tac >> Cases_on `reason` >>
+  rpt gen_tac >> strip_tac >> strip_tac >> Cases_on `reason` >>
   rpt strip_tac >> irule map_fdom_eq_preserves_dom >>
   gvs[evaluate_def, bind_def, AllCaseEqs()] >>
-  (* All cases: eval_expr produces the first state change *)
   imp_res_tac get_Value_scopes >> gvs[] >>
   qpat_x_assum `switch_BoolV _ _ _ _ = _` mp_tac >>
   simp[switch_BoolV_def] >>
   rpt IF_CASES_TAC >> simp[return_def, raise_def, bind_def, AllCaseEqs()] >>
   strip_tac >> gvs[] >>
-  TRY (imp_res_tac get_Value_scopes >> imp_res_tac lift_option_scopes >> imp_res_tac lift_option_type_scopes >> gvs[]) >>
-  (* AssertReason: chain eval_expr IH for e then e' *)
   rpt (first_x_assum drule >> strip_tac >> gvs[])
+QED
+
+Theorem case_RaiseCustom_map_fdom[local]:
+  ∀cx err st res st'.
+    eval_stmt cx (Raise (RaiseCustomError err)) st = (res, st') ⇒
+    MAP FDOM st.scopes = MAP FDOM st'.scopes
+Proof
+  rpt strip_tac >> Cases_on `err` >>
+  qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, raise_def, AllCaseEqs()] >>
+  rpt CASE_TAC >> rpt strip_tac >>
+  gvs[bind_def, raise_def, AllCaseEqs()] >>
+  imp_res_tac lift_option_scopes >> imp_res_tac lift_option_type_scopes >>
+  imp_res_tac raise_scopes >>
+  imp_res_tac eval_exprs_preserves_scopes_dom >> gvs[]
+QED
+
+Theorem case_RaiseCustom_dom[local]:
+  ∀cx err st res st'.
+    eval_stmt cx (Raise (RaiseCustomError err)) st = (res, st') ⇒
+    preserves_scopes_dom st st'
+Proof
+  metis_tac[map_fdom_eq_preserves_dom, case_RaiseCustom_map_fdom]
+QED
+
+Theorem case_AssertCustom_map_fdom[local]:
+  ∀cx e err st res st'.
+    eval_stmt cx (Assert e (AssertCustomError err)) st = (res, st') ⇒
+    MAP FDOM st.scopes = MAP FDOM st'.scopes
+Proof
+  rpt strip_tac >> Cases_on `err` >>
+  qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  imp_res_tac eval_expr_preserves_scopes_dom >>
+  qpat_x_assum `switch_BoolV _ _ _ _ = _` mp_tac >>
+  simp[switch_BoolV_def] >>
+  rpt IF_CASES_TAC >> simp[return_def, raise_def, bind_def, AllCaseEqs()] >>
+  rpt CASE_TAC >> rpt strip_tac >>
+  gvs[return_def, raise_def, bind_def, AllCaseEqs()] >>
+  TRY (imp_res_tac lift_option_scopes >>
+       imp_res_tac lift_option_type_scopes >> imp_res_tac raise_scopes >>
+       gvs[]) >>
+  imp_res_tac eval_exprs_preserves_scopes_dom >> gvs[]
+QED
+
+Theorem case_AssertCustom_dom[local]:
+  ∀cx e err st res st'.
+    eval_stmt cx (Assert e (AssertCustomError err)) st = (res, st') ⇒
+    preserves_scopes_dom st st'
+Proof
+  metis_tac[map_fdom_eq_preserves_dom, case_AssertCustom_map_fdom]
 QED
 
 Theorem case_Log_dom[local]:
@@ -676,9 +723,16 @@ Proof
   (* Return (SOME e) *) >- (drule_all case_Return_SOME_dom >> gvs[])
   (* Raise RaiseBare *) >- gvs[evaluate_def, raise_def, preserves_scopes_dom_def]
   (* Raise RaiseUnreachable *) >- gvs[evaluate_def, raise_def, preserves_scopes_dom_def]
-  (* Raise (RaiseReason e) *) >- (irule case_Raise_dom >> first_assum $ irule_at (Pos last) >> simp[])
-  (* Assert AssertBare *) >- (irule case_Assert_dom >> first_assum $ irule_at (Pos last) >> simp[])
-  (* Assert AssertUnreachable *) >- (irule case_Assert_dom >> first_assum $ irule_at (Pos last) >> simp[])
+  (* Raise (RaiseReason e) *) >-
+    (irule case_Raise_dom >> metis_tac[eval_expr_preserves_scopes_dom])
+  (* Raise (RaiseCustomError err) *) >-
+    metis_tac[case_RaiseCustom_dom]
+  (* Assert AssertBare *) >-
+    (irule case_Assert_dom >> simp[] >>
+     metis_tac[eval_expr_preserves_scopes_dom])
+  (* Assert AssertUnreachable *) >-
+    (irule case_Assert_dom >> simp[] >>
+     metis_tac[eval_expr_preserves_scopes_dom])
   (* Assert (AssertReason se) *) >-
     (irule map_fdom_eq_preserves_dom >>
      qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
@@ -692,6 +746,8 @@ Proof
      TRY (imp_res_tac get_Value_scopes >> imp_res_tac lift_option_scopes >>
           imp_res_tac lift_option_type_scopes >> gvs[]) >>
      rpt (first_x_assum drule >> strip_tac >> gvs[]))
+  (* Assert (AssertCustomError err) *) >-
+    metis_tac[case_AssertCustom_dom]
   (* Log *) >- (drule_all case_Log_dom >> gvs[])
   (* AnnAssign *) >- (drule case_AnnAssign_dom >> simp[])
   (* Append *) >- (drule case_Append_dom >> rpt strip_tac >> metis_tac[eval_expr_preserves_scopes_dom])
@@ -914,6 +970,11 @@ Proof
       imp_res_tac lift_option_type_state >> gvs[] >>
       drule eval_expr_preserves_scopes_dom >> rw[]) >>
     Cases_on`st.scopes` >> Cases_on`st'.scopes` >> gvs[])
+  >> conj_tac >- ( (* Raise custom error *)
+    rpt strip_tac >>
+    `MAP FDOM st.scopes = MAP FDOM st'.scopes` by
+      metis_tac[case_RaiseCustom_map_fdom] >>
+    Cases_on`st.scopes` >> Cases_on`st'.scopes` >> gvs[])
   >> conj_tac >- (
     rw[evaluate_def, bind_apply] >>
     `MAP FDOM st.scopes = MAP FDOM st'.scopes` by (
@@ -934,6 +995,11 @@ Proof
       imp_res_tac get_Value_state >>
       imp_res_tac lift_option_type_state >> gvs[] >>
       imp_res_tac eval_expr_preserves_scopes_dom >> rw[]) >>
+    Cases_on`st.scopes` >> Cases_on`st'.scopes` >> gvs[])
+  >> conj_tac >- ( (* Assert custom error *)
+    rpt strip_tac >>
+    `MAP FDOM st.scopes = MAP FDOM st'.scopes` by
+      metis_tac[case_AssertCustom_map_fdom] >>
     Cases_on`st.scopes` >> Cases_on`st'.scopes` >> gvs[])
   >> conj_tac >- ( (* Log *)
     rpt strip_tac >>
@@ -1628,6 +1694,15 @@ Proof
     first_x_assum drule_all >>
     first_x_assum drule_all >> rw[] >>
     metis_tac[preserves_tv_trans] ) >>
+  conj_tac >- ( (* Raise custom error *)
+    Cases_on `err` >> rpt strip_tac >>
+    qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+    simp[Once evaluate_def, bind_def, raise_def, AllCaseEqs()] >>
+    rpt CASE_TAC >> rpt strip_tac >>
+    gvs[bind_def, raise_def, AllCaseEqs()] >>
+    imp_res_tac lift_option_state >>
+    imp_res_tac lift_option_type_state >> gvs[] >>
+    first_x_assum drule_all >> rw[] ) >>
   conj_tac >- (
     rw[evaluate_def] >>
     gvs[bind_apply, switch_BoolV_def, COND_RATOR, return_def,
@@ -1650,6 +1725,20 @@ Proof
     rw[evaluate_def] >>
     gvs[bind_apply, switch_BoolV_def, COND_RATOR, return_def,
         raise_def, AllCaseEqs()] >>
+    imp_res_tac lift_option_type_state >>
+    imp_res_tac get_Value_state >> gvs[] >>
+    first_x_assum drule_all >>
+    first_x_assum drule_all >> rw[] >>
+    metis_tac[preserves_tv_trans] ) >>
+  conj_tac >- ( (* Assert custom error *)
+    Cases_on `err` >> rpt strip_tac >>
+    qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+    simp[Once evaluate_def, bind_def, switch_BoolV_def, COND_RATOR,
+         return_def, raise_def, AllCaseEqs()] >>
+    rpt CASE_TAC >> rpt strip_tac >>
+    gvs[bind_def, switch_BoolV_def, COND_RATOR, return_def, raise_def,
+        AllCaseEqs()] >>
+    imp_res_tac lift_option_state >>
     imp_res_tac lift_option_type_state >>
     imp_res_tac get_Value_state >> gvs[] >>
     first_x_assum drule_all >>
@@ -2396,4 +2485,3 @@ Resume eval_preserves_tv[IntCall_ptv]:
 QED
 
 Finalise eval_preserves_tv
-

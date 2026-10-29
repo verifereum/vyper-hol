@@ -1,7 +1,7 @@
 (* #543 TOP-LEVEL: source_program_remainder, checked_program_remainder.
    This transparent whitelist differs ONLY in MethodId/Exp expression gates
    and Exp AugAssign's literal gate. All headers, names, effects, widths,
-   tuple base-shapes, loop and binding restrictions are retained. Defaults
+   nested-place types, return layouts, loop and binding restrictions are retained. Defaults
    are still excluded by the unchanged declaration headers; their checked
    typing/remainder fact is nevertheless exposed below.
    This is a gate-redundancy certificate only. checked_power_run and
@@ -28,13 +28,15 @@ End
 
 Definition source_declaration_body_remainder_def:
   source_declaration_body_remainder tops (FunctionDecl vis mut nr rr name args defaults ret stmts) =
-    source_function_body_remainder tops vis args stmts /\
+    (source_function_body_remainder tops vis args stmts /\
+     supported_return_layouts ret stmts) /\
   source_declaration_body_remainder tops (VariableDecl vis mut name ty slot) = T /\
   source_declaration_body_remainder tops (HashMapDecl vis trans name kt vt slot) = T /\
   source_declaration_body_remainder tops (StructDecl name fields) = T /\
   source_declaration_body_remainder tops (EventDecl name fields) = T /\
   source_declaration_body_remainder tops (InterfaceDecl name methods) = T /\
-  source_declaration_body_remainder tops (FlagDecl name members) = F
+  source_declaration_body_remainder tops (FlagDecl name members) = F /\
+  source_declaration_body_remainder tops (ErrorDecl name fields) = F
 End
 
 Definition source_program_remainder_def:
@@ -82,13 +84,18 @@ Proof
   simp[source_function_body_remainder_def, supported_function_body_def]
 QED
 
+(* Restrict this body-only comparison to admitted headers. In particular,
+   ErrorDecl is rejected by both program predicates' shared header gate;
+   supported_declaration_body has no equation for that constructor. *)
 Theorem checked_declaration_body_remainder:
   check_contract T layouts address mods = SOME art /\
-  MEM (src,tops) mods /\ MEM top tops ==>
+  MEM (src,tops) mods /\ MEM top tops /\
+  supported_declaration_header tops top ==>
   (source_declaration_body_remainder tops top <=> supported_declaration_body tops top)
 Proof
   Cases_on `top` >>
-  simp[source_declaration_body_remainder_def, supported_declaration_body_def] >>
+  simp[source_declaration_body_remainder_def, supported_declaration_body_def,
+       supported_declaration_header_def] >>
   strip_tac >> drule_all checked_function_body_and_defaults >> strip_tac >>
   drule checked_function_body_remainder >> simp[]
 QED
@@ -98,8 +105,9 @@ Theorem checked_program_remainder:
   (source_program_remainder tops <=> supported_program tops)
 Proof
   strip_tac >>
-  simp[source_program_remainder_def, supported_program_def, EVERY_MEM] >>
-  `!top. MEM top tops ==>
+  simp[source_program_remainder_def, supported_program_def,
+       supported_declaration_headers_def, EVERY_MEM] >>
+  `!top. MEM top tops /\ supported_declaration_header tops top ==>
     (source_declaration_body_remainder tops top <=> supported_declaration_body tops top)`
     by (rpt strip_tac >> irule checked_declaration_body_remainder >>
         metis_tac[]) >>

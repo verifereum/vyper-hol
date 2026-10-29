@@ -275,6 +275,7 @@ val JTL_FunctionDef_tm = jastk "JTL_FunctionDef"
 val JTL_VariableDecl_tm = jastk "JTL_VariableDecl"
 val JTL_HashMapDecl_tm = jastk "JTL_HashMapDecl"
 val JTL_EventDef_tm = jastk "JTL_EventDef"
+val JTL_ErrorDef_tm = jastk "JTL_ErrorDef"
 val JTL_StructDef_tm = jastk "JTL_StructDef"
 val JTL_FlagDef_tm = jastk "JTL_FlagDef"
 val JInterfaceFunc_tm = jastk "JInterfaceFunc"
@@ -316,6 +317,8 @@ fun mk_JTL_HashMapDecl (name, kt, vt, is_public, is_transient) =
 val event_arg_ty = pairSyntax.mk_prod(json_arg_ty, Type.bool)
 fun mk_JTL_EventDef (name, args) =
   list_mk_comb(JTL_EventDef_tm, [fromMLstring name, mk_list(args, event_arg_ty)])
+fun mk_JTL_ErrorDef (name, args) =
+  list_mk_comb(JTL_ErrorDef_tm, [fromMLstring name, mk_list(args, json_arg_ty)])
 fun mk_JTL_StructDef (name, args) =
   list_mk_comb(JTL_StructDef_tm, [fromMLstring name, mk_list(args, json_arg_ty)])
 fun mk_JTL_FlagDef (name, members) =
@@ -1480,6 +1483,15 @@ val json_toplevel : term decoder = achoose "toplevel" [
               array json_event_arg,
               sub 0 (check_ast_type "Pass" (succeed []))))
   end,
+
+  (* ErrorDef has the same annotated member shape as StructDef.  Vyper emits
+     one Pass node for a zero-argument declaration. *)
+  check_ast_type "ErrorDef" $
+    JSONDecode.map (fn (name, args) => mk_JTL_ErrorDef(name, args)) $
+    tuple2 (field "name" string,
+            field "body" $ orElse(
+              array json_arg,
+              sub 0 (check_ast_type "Pass" (succeed [])))),
 
   (* StructDef *)
   check_ast_type "StructDef" $

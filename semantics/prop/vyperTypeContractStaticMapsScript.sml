@@ -1322,6 +1322,7 @@ Proof
   qpat_x_assum `ALL_DISTINCT (contract_keys (fn_sig_keys_toplevel F) mods)` kall_tac >>
   qpat_x_assum `ALL_DISTINCT (contract_keys toplevel_vtype_keys_toplevel mods)` kall_tac >>
   qpat_x_assum `ALL_DISTINCT (contract_keys flag_member_keys_toplevel mods)` kall_tac >>
+  qpat_x_assum `ALL_DISTINCT (contract_keys error_sig_keys_toplevel mods)` kall_tac >>
   qpat_x_assum `MEM (FlagDecl fid members) ts` mp_tac >>
   qpat_x_assum `ALOOKUP mods src = SOME ts` mp_tac >>
   qpat_x_assum `ALL_DISTINCT (MAP FST mods)` mp_tac >>

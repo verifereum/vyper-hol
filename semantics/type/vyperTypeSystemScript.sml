@@ -464,8 +464,9 @@ Definition valid_conversion_def:
   valid_conversion (BaseT (IntT _)) (BaseT (UintT _)) = T /\
   valid_conversion (BaseT (IntT _)) (BaseT (IntT _)) = T /\
   valid_conversion (BaseT AddressT) (BaseT (UintT _)) = T /\
-  (* Wider bytes require left padding for addresses, unlike BytesV conversion. *)
-  valid_conversion (BaseT AddressT) (BaseT (BytesT bd)) = (bd = Fixed 20) /\
+  (* Vyper's to_bytes_m needs 160 <= 8 * m; evaluate_convert_from left-pads. *)
+  valid_conversion (BaseT AddressT) (BaseT (BytesT (Fixed m))) =
+    (20 <= m /\ m <= 32) /\
   valid_conversion (BaseT (UintT _)) (BaseT AddressT) = T /\
   valid_conversion (BaseT (IntT _)) (BaseT AddressT) = T /\
   valid_conversion (FlagT _) (BaseT (IntT _)) = T /\
@@ -930,6 +931,11 @@ Proof
   simp[power_operands_ok_def, power_exponent_ok_cases] >> metis_tac[]
 QED
 
+Definition well_typed_custom_error_def:
+  well_typed_custom_error env err =
+    well_typed_exprs env (custom_error_exprs err)
+End
+
 (* ===== Executable statement typing ===== *)
 
 Definition type_stmt_def:
@@ -947,6 +953,8 @@ Definition type_stmt_def:
   type_stmt env ret_ty (Raise RaiseUnreachable) = SOME env /\
   type_stmt env ret_ty (Raise (RaiseReason e)) =
     (if well_typed_expr env e /\ (?n. expr_type e = BaseT (StringT n)) then SOME env else NONE) /\
+  type_stmt env ret_ty (Raise (RaiseCustomError err)) =
+    (if well_typed_custom_error env err then SOME env else NONE) /\
   type_stmt env ret_ty (Assert e AssertBare) =
     (if well_typed_expr env e /\ expr_type e = BaseT BoolT then SOME env else NONE) /\
   type_stmt env ret_ty (Assert e AssertUnreachable) =
@@ -954,6 +962,9 @@ Definition type_stmt_def:
   type_stmt env ret_ty (Assert e (AssertReason se)) =
     (if well_typed_expr env e /\ well_typed_expr env se /\ expr_type e = BaseT BoolT /\
         (?n. expr_type se = BaseT (StringT n)) then SOME env else NONE) /\
+  type_stmt env ret_ty (Assert e (AssertCustomError err)) =
+    (if well_typed_expr env e ∧ expr_type e = BaseT BoolT ∧
+        well_typed_custom_error env err then SOME env else NONE) /\
   type_stmt env ret_ty (Log id es) =
     (if well_typed_exprs env es then SOME env else NONE) /\
   type_stmt env ret_ty (AnnAssign id typ e) =

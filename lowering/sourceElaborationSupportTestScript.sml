@@ -1,9 +1,10 @@
-(* A source-derived, genuinely checked tuple read at the unchanged whitelist
-   boundary. This is not an unsupported runtime-op enabling theorem. *)
+(* A source-derived, genuinely checked local tuple read admitted by main's
+   nested-place whitelist, with the independent type boundary retained. *)
 Theory sourceElaborationSupportTest
 Ancestors
   sourceElaborationSupport supportedProgram supportedStmts exprLowering
-  sourceExprElaborate vyperTypeSystem integer
+  sourceExprElaborate supportedExprs supportedTypes supportedDecls supportedNames
+  supportedStmtTraverse supportedExprTraverse compileVyper vyperTypeSystem integer
   sourceModuleElaborate sourceModuleDefs
   sourceModuleEnv sourceSyntax sourceConstAnnotation sourceConstAST
   vyperTypeContract vyperAST vyperContext finite_map
@@ -21,14 +22,13 @@ Proof
   gvs[literal_int_index_def, integerTheory.INT_ABS]
 QED
 
-Theorem supported_program_local_tuple_return_rejected:
-  ~supported_program
-    [FunctionDecl External mut nr rr name args defaults ret
-      [Return (SOME (Subscript ty (Name (TupleT ts) local_name) index))]]
+(* Checking removes the index gate, not unsupported tuple component types. *)
+Theorem checked_local_tuple_unsupported_base_rejected:
+  well_typed_expr env (Subscript ty (Name (TupleT ts) name) index) /\
+  ~supported_place_type tops (TupleT ts) ==>
+  ~supported_expr tops (Subscript ty (Name (TupleT ts) name) index)
 Proof
-  simp[supported_program_def, supported_declaration_body_def,
-       supported_function_body_def, supported_stmt_def,
-       supported_local_tuple_read_rejected]
+  strip_tac >> drule checked_local_tuple_read_support >> simp[]
 QED
 
 Definition source_support_tuple_program_def:
@@ -74,22 +74,46 @@ Proof
   EVAL_TAC
 QED
 
-Theorem source_support_tuple_not_supported:
-  ~supported_program source_support_tuple_tops
+Theorem source_support_tuple_supported:
+  supported_program source_support_tuple_tops
 Proof
-  simp[source_support_tuple_tops_def, supported_program_local_tuple_return_rejected]
+  simp[source_support_tuple_tops_def, supported_program_def] >>
+  conj_tac
+  >- (simp[supported_declaration_headers_def, supported_declaration_header_def,
+           supported_function_argument_def, supported_function_return_def,
+           supported_place_type_def] >>
+      simp[supported_nested_type_def, supported_scalar_type_def,
+           supported_word_type_def, supported_string_type_def,
+           supported_int_width_def]) >>
+  conj_tac
+  >- (simp[supported_declaration_names_def, supported_function_names_def,
+           supported_event_names_def, supported_function_header_names_def,
+           supported_function_bindings_def] >>
+      simp[supported_selectors_distinct_def, classify_functions_def,
+           classify_function_def, build_selectors_def]) >>
+  simp[supported_declaration_body_def, supported_function_body_def,
+       supported_stmt_bindings_def, supported_function_bindings_def,
+       supported_return_layout_def, supported_copy_types_def, expr_type_def] >>
+  conj_tac
+  >- (simp[supported_stmt_def, supported_local_tuple_read] >>
+      simp[supported_place_type_def, supported_nested_type_def,
+           supported_scalar_type_def, supported_word_type_def,
+           supported_string_type_def, supported_int_width_def,
+           supported_expr_def, supported_pure_expr_def]) >>
+  simp[supported_stmt_expr_exists_def, supported_expr_exists_def,
+       expr_nonmain_type_root_def, supported_type_namespace_def, expr_type_def]
 QED
 
-Theorem source_support_tuple_checked_but_not_supported:
+Theorem source_support_tuple_checked_and_supported:
   source_module_elaborate 30 source_support_tuple_trust
     [(["main"],SourceModulePolicy F F)] [["main"]] source_support_tuple_program =
     SM_Ok (SourceRetained source_support_tuple_program [(NONE,source_support_tuple_tops)]) /\
   (?art. check_contract T
     [(0w:address,([]:storage_layout,[]:storage_layout))] (0w:address)
     [(NONE,source_support_tuple_tops)] = SOME art) /\
-  ~supported_program source_support_tuple_tops
+  supported_program source_support_tuple_tops
 Proof
-  simp[source_support_tuple_elaboration, source_support_tuple_not_supported] >>
+  simp[source_support_tuple_elaboration, source_support_tuple_supported] >>
   simp[source_support_tuple_tops_def, tuple_checking]
 QED
 

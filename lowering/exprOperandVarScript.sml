@@ -534,18 +534,14 @@ Theorem compiler_subscript_var:
   compile_subscript cfn cenv rt ty e idx sa = (vv,sb) ==>
   !x. vv_operand vv = Var x ==> not_fresh_at sb x
 Proof
-  simp[compile_subscript_def, LET_THM] >>
-  qmatch_goalsub_abbrev_tac `cenv.ce_is_hashmap name` >>
-  Cases_on `cenv.ce_is_hashmap name` >> simp[comp_bind_def, comp_return_def]
-  >- (rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >>
+  Cases_on `place_type cenv e`
+  >- (simp[compile_subscript_def, LET_THM,
+           comp_bind_def, comp_return_def] >>
+      rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >>
       gvs[contextTheory.vv_operand_def, contextTheory.mk_ptr_def] >>
       metis_tac[compiler_subscript_ops_var]) >>
-  Cases_on `cenv.ce_var_type name` >> simp[comp_bind_def, comp_return_def]
-  >- (rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >>
-      gvs[contextTheory.vv_operand_def, contextTheory.mk_ptr_def] >>
-      metis_tac[compiler_subscript_ops_var]) >>
-  rename1 `cenv.ce_var_type name = SOME vt` >> Cases_on `vt` >>
-  simp[comp_bind_def, comp_return_def] >>
+  rename1 `place_type cenv e = ValPT bt` >> Cases_on `bt` >>
+  simp[compile_subscript_def, LET_THM, comp_bind_def, comp_return_def] >>
   rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >>
   gvs[contextTheory.vv_operand_def, contextTheory.mk_ptr_def] >>
   metis_tac[compiler_subscript_ops_var]
@@ -1060,9 +1056,8 @@ Resume compiler_builtin_var[calldata]:
   builtin_ptr_var_tac >> metis_tac[compiler_slice_var]
 QED
 Resume compiler_builtin_var[len]:
-  IF_CASES_TAC >> builtin_stack_var_tac >>
+  builtin_stack_var_tac >>
   metis_tac[exprSafeOperandBuiltinsTheory.compile_builtin_len_safe_operand,
-            exprSafeOperandBuiltinsTheory.compile_builtin_calldatasize_safe_operand,
             exprSafeOperandTheory.safe_operand_def]
 QED
 Resume compiler_builtin_var[ecadd]:
@@ -1335,20 +1330,20 @@ Theorem compiler_subscript_reserved_cong:
   compile_subscript g ce rt ty base_e idx sa
 Proof
   strip_tac >> simp[compile_subscript_def] >>
-  qmatch_goalsub_abbrev_tac `ce.ce_is_hashmap vn` >>
-  IF_CASES_TAC >> simp[]
-  >- (irule compiler_reserved_bind_cong >> simp[ci_mono_lower_value_cfn] >>
-      qexists `ce` >> simp[compiler_lower_value_reserved_cong]) >>
-  Cases_on `ce.ce_var_type vn` >> simp[]
-  >- (irule compiler_reserved_bind_cong >> simp[] >> qexists `ce` >> simp[] >>
-      rpt gen_tac >> strip_tac >>
-      simp[comp_bind_def, comp_return_def] >>
-      AP_TERM_TAC >> irule compiler_lower_value_reserved_cong >> simp[]) >>
-  rename1 `SOME bty` >> Cases_on `bty` >> simp[] >>
-  irule compiler_reserved_bind_cong >> simp[] >> qexists `ce` >> simp[] >>
+  irule compiler_reserved_bind_cong >> simp[] >>
+  qexists `ce` >> simp[] >>
   rpt gen_tac >> strip_tac >>
-  simp[comp_bind_def, comp_return_def] >>
-  AP_TERM_TAC >> irule compiler_lower_value_reserved_cong >> simp[]
+  Cases_on `place_type ce base_e` >> simp[LET_THM]
+  >- (irule compiler_reserved_bind_cong >>
+      simp[ci_mono_lower_value_cfn] >>
+      qexists `ce` >>
+      simp[compiler_lower_value_reserved_cong]) >>
+  rename1 `ValPT base_ty` >>
+  Cases_on `base_ty` >> simp[LET_THM] >>
+  irule compiler_reserved_bind_cong >>
+  simp[ci_mono_lower_value_cfn] >>
+  qexists `ce` >>
+  simp[compiler_lower_value_reserved_cong]
 QED
 
 Theorem compiler_ext_call_kwarg_reserved_cong:
@@ -1526,7 +1521,8 @@ Proof
         (irule compiler_ci_mono_reserved >> qexists `sa` >>
          metis_tac[ci_mono_lower_value_cfn, pairTheory.SND]) >>
       AP_TERM_TAC >> irule compiler_lower_value_reserved_cong >> simp[]) >>
-  simp[]
+  (* ABI encode lowers every argument, transporting reservation between them. *)
+  AP_TERM_TAC >> irule compiler_multi_exprs_reserved_cong >> simp[]
 QED
 
 (* Advance one explicit callback let, transporting reservation from its
