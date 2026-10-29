@@ -552,8 +552,9 @@ val _ =
      if String.isSubstring "check_contract returned NONE" message then ()
      else raise Fail message);
 
-(* Fold metadata is consumed only at the runtime-expression boundary. Use the
-   public module decoder so these checks also exercise its recursive decoders. *)
+(* Do not expand legacy folded-value consumption (#135). Operator/call nodes
+   decode identically with absent, poisoned or malformed replacements. Exercise
+   the recursive module decoder, not only a standalone expression decoder. *)
 fun fold_obj kind fields = JSON.OBJECT (("ast_type", JSON.STRING kind)::fields);
 val fold_one = fold_obj "Int" [("value", JSON.INT 1)];
 val fold_true = fold_obj "NameConstant" [("value", JSON.BOOL true)];
@@ -562,7 +563,7 @@ fun check_fold_decode value expected = let
     [fold_obj "ExportsDecl" [("annotation", value)]])])];
   val actual = JSONDecode.decode jsonASTLib.annotated_ast input;
   val want = ``JAnnotatedAST (JModule (~1) F [JTL_ExportsDecl ^expected]) []``
-in if aconv actual want then () else (print (term_to_string actual ^ "\nEXPECTED: " ^ term_to_string want ^ "\n"); raise Fail "folded expression decoding") end;
+in if aconv actual want then () else (print (term_to_string actual ^ "\nEXPECTED: " ^ term_to_string want ^ "\n"); raise Fail "legacy expression syntax changed") end;
 val fold_cases = [
   (fold_obj "BinOp" [("left", fold_one), ("op", fold_obj "Add" []),
      ("right", fold_one)], ``JE_BinOp (JE_Int 1 JT_None) JBop_Add (JE_Int 1 JT_None) JT_None``),
@@ -578,12 +579,14 @@ val fold_cases = [
 val () = app (fn (original, expected) => (
   check_fold_decode original expected;
   case original of JSON.OBJECT fields =>
-    check_fold_decode (JSON.OBJECT (("folded_value", fold_one)::fields))
-      ``JE_Folded ^expected (JE_Int 1 JT_None)``
+    app (fn replacement => check_fold_decode
+      (JSON.OBJECT (("folded_value", replacement)::fields)) expected)
+      [fold_one, fold_obj "Int" [("value", JSON.INT 777)],
+       JSON.NULL, JSON.STRING "not an AST", fold_obj "Unsupported" []]
   | _ => raise Fail "test node is not an object")) fold_cases;
 
-(* Folded Decimal.value is the original source text at VYPER_PIN. Never
-   reinterpret an expression (or a numeric prefix) as a decimal literal. *)
+(* Even plausible Decimal replacements and source-text serialization quirks
+   are irrelevant: no folded Decimal parser is needed on these legacy nodes. *)
 val () = app (fn (JSON.OBJECT fields, original) =>
     app (fn text => check_fold_decode
       (JSON.OBJECT (("folded_value",
@@ -593,13 +596,15 @@ val () = app (fn (JSON.OBJECT fields, original) =>
        "_1", "-_1", "_1e1", "1_.5", "1._5", "1__5"]
   | _ => raise Fail "test node is not an object") fold_cases;
 
-Theorem nested_folded_integer_probe:
+Theorem nested_folded_integer_ignored:
   json_expr_int_opt (JE_Folded (JE_Bool F)
-    (JE_Folded (JE_Bool T) (JE_Int (~3) JT_None))) = SOME (~3)
+    (JE_Folded (JE_Bool T) (JE_Int (~3) JT_None))) = NONE
 Proof
   EVAL_TAC
 QED
 
+(* Existing legacy JE_Folded translation is unchanged, not a new decoder
+   capability. The ordinary source route strips/ignores replacements instead. *)
 Theorem folded_translation_boundary:
   translate_expr ctx (JE_Folded original (JE_Folded other folded)) =
   translate_expr ctx folded
@@ -607,7 +612,8 @@ Proof
   simp[translate_expr_def]
 QED
 
-(* Each folded literal kind passes through both the decoder and translator. *)
+(* Genuine literal syntax still decodes/translates. The same literal used as
+   replacement metadata cannot replace an operator's original syntax. *)
 val fold_literals = [
   (fold_one, ``JE_Int 1 JT_None``),
   (fold_obj "Decimal" [("value", JSON.STRING "1.5")], ``JE_Decimal "1.5"``),
@@ -629,35 +635,35 @@ val fold_literals = [
   (fold_obj "Str" [("value", JSON.STRING "abc"),
      ("type", JSON.OBJECT [("generic", JSON.STRING "string")])], ``JE_GenericStr "abc"``),
   (fold_true, ``JE_Bool T``)];
-val () = app (fn (literal, expected) =>
-  case hd fold_cases of (JSON.OBJECT fields, original) =>
-    check_fold_decode (JSON.OBJECT (("folded_value", literal)::fields))
-      ``JE_Folded ^original ^expected``
-  | _ => raise Fail "test node is not an object") fold_literals;
+val () = app (fn (literal, expected) => (
+  check_fold_decode literal expected;
+  app (fn (JSON.OBJECT fields, original) =>
+      check_fold_decode (JSON.OBJECT (("folded_value", literal)::fields)) original
+    | _ => raise Fail "test node is not an object") fold_cases)) fold_literals;
 
-Theorem folded_literal_kinds_probe:
-  translate_expr ctx (JE_Folded original (JE_Decimal "1.5")) =
+Theorem literal_kinds_probe:
+  translate_expr ctx (JE_Decimal "1.5") =
     Literal (BaseT DecimalT) (DecimalL 15000000000) /\
-  translate_expr ctx (JE_Folded original (JE_Hex "0xdeadbeef" (JT_BytesM 4))) =
+  translate_expr ctx (JE_Hex "0xdeadbeef" (JT_BytesM 4)) =
     Literal (BaseT (BytesT (Fixed 4))) (BytesL [222w; 173w; 190w; 239w]) /\
-  translate_expr ctx (JE_Folded original (JE_Hex "0x01" (JT_Named NONE "address"))) =
+  translate_expr ctx (JE_Hex "0x01" (JT_Named NONE "address")) =
     Literal (BaseT AddressT) (BytesL [1w]) /\
-  translate_expr ctx (JE_Folded original (JE_Bytes 4 "0xdeadbeef")) =
+  translate_expr ctx (JE_Bytes 4 "0xdeadbeef") =
     Literal (BaseT (BytesT (Dynamic 4))) (BytesL [222w; 173w; 190w; 239w]) /\
-  translate_expr ctx (JE_Folded original (JE_Str 3 "abc")) =
+  translate_expr ctx (JE_Str 3 "abc") =
     Literal (BaseT (StringT 3)) (StringL "abc") /\
-  translate_expr ctx (JE_Folded original (JE_GenericStr "abc")) =
+  translate_expr ctx (JE_GenericStr "abc") =
     Literal (BaseT (StringT 3)) (StringL "abc") /\
-  translate_expr ctx (JE_Folded original (JE_Bool T)) =
+  translate_expr ctx (JE_Bool T) =
     Literal (BaseT BoolT) (BoolL T)
 Proof
   EVAL_TAC
 QED
 
-Theorem folded_range_bounds_probe:
-  range_bound_of_args [JE_Folded (JE_Bool F) (JE_Int 3 JT_None)] = SOME 3 /\
+Theorem folded_range_bounds_ignored:
+  range_bound_of_args [JE_Folded (JE_Bool F) (JE_Int 3 JT_None)] = NONE /\
   range_bound_of_args [JE_Folded (JE_Bool F) (JE_Int (~2) JT_None);
-    JE_Folded (JE_Bool T) (JE_Int 3 JT_None)] = SOME 5
+    JE_Folded (JE_Bool T) (JE_Int 3 JT_None)] = NONE
 Proof
   EVAL_TAC
 QED
@@ -668,8 +674,8 @@ val () = app (fn th =>
   if null (List.filter (fn name => name <> "DISK_THM")
     (#1 (Tag.dest_tag (Thm.tag th)))) then ()
   else raise Fail "fold boundary probe depends on an oracle")
-  [nested_folded_integer_probe, folded_translation_boundary,
-   folded_literal_kinds_probe, folded_range_bounds_probe];
+  [nested_folded_integer_ignored, folded_translation_boundary,
+   literal_kinds_probe, folded_range_bounds_ignored];
 
 
 (* ABI keyword extraction must not turn malformed present values into defaults. *)

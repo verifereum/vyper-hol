@@ -59,9 +59,6 @@ fun functions modules = let
       (#1 (listSyntax.dest_list tops)),``:toplevel``)) end
   in List.filter (fn entry => not (null (#1 (listSyntax.dest_list (#2 (pairSyntax.dest_pair entry))))))
     (map one (#1 (listSyntax.dest_list modules))) end;
-(* Independent decimal observations are also pinned by
-   vyperDecimalFrontendTest. The ordinary JSON's folded Decimal.value contains
-   source text, so its legacy AST intentionally keeps arithmetic here. *)
 fun canonical_interface_addresses tm = let val (head,args) = strip_comb tm in
   if is_const head andalso #Name (dest_thy_const head) = "Builtin" andalso length args = 3
      andalso aconv (List.nth (args,0)) ``BaseT AddressT``
@@ -71,7 +68,24 @@ fun canonical_interface_addresses tm = let val (head,args) = strip_comb tm in
   else if is_comb tm then let val (f,x) = dest_comb tm in
     mk_comb (canonical_interface_addresses f,canonical_interface_addresses x) end
   else tm end;
-fun expected_functions name modules = if name <> "decimal_folding" then
+(* Pin literal membership directly from in_static_array.vy, independently of
+   legacy folds and the source elaborator. Keep every signature and all other
+   functions unchanged. Decimal/integer minmax and arithmetic observations are
+   independently pinned too (see vyperDecimalFrontendTest); legacy expression
+   bodies are not a normalized-AST oracle for these results. *)
+fun expected_functions name modules = if name = "in_static_array" then let
+  val values = [("zero_in_literal",``T``),("zero_not_in_literal",``F``),
+    ("one_in_literal",``F``)]
+  fun entry e = let val (src,tops) = pairSyntax.dest_pair e
+    fun body tl = let val (ctor,args) = strip_comb tl
+      val id = stringSyntax.fromHOLstring (List.nth (args,4))
+      in case List.find (fn (n,_) => n = id) values of NONE => tl | SOME (_,value) =>
+        list_mk_comb (ctor,List.take (args,8) @
+          [``[Return (SOME (Literal (BaseT BoolT) (BoolL ^value)))]``]) end
+    in pairSyntax.mk_pair (src,listSyntax.mk_list
+      (map body (#1 (listSyntax.dest_list tops)),``:toplevel``)) end
+  in map entry (functions modules) end
+  else if name <> "decimal_folding" then
   map canonical_interface_addresses (functions modules) else let
   val values = [("minmax","582231230000000"),("integer_minmax","83"),
     ("arithmetic","92500000000"),("negative","-37500000000"),("scientific","125000002")]

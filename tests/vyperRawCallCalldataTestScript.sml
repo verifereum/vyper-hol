@@ -54,9 +54,9 @@ val () = app (fn expected =>
   if not (null (find_terms (aconv expected) (#modules fixture))) then ()
   else raise Fail "pinned raw_call calldata operands/flags were not preserved") expected_calls;
 
-(* General expression folding applies to target, value and gas in both call
-   forms. The specialized calldata decoder additionally preserves compile-time
-   flag metadata, including the nested max_outsize fold wrapper. *)
+(* Freeze the legacy boundary: only the specialized calldata decoder consumes
+   compile-time flag metadata. Folded replacements must not alter target,
+   value or gas, or the ordinary bytes-input call's expression syntax. *)
 val runtime_json = "{\"ast_type\":\"BinOp\",\"left\":{\"ast_type\":\"Int\",\"value\":2},\"op\":{\"ast_type\":\"Add\"},\"right\":{\"ast_type\":\"Int\",\"value\":2},\"folded_value\":{\"ast_type\":\"Int\",\"value\":4}}";
 val data_json = "{\"ast_type\":\"Attribute\",\"value\":{\"ast_type\":\"Name\",\"id\":\"msg\"},\"attr\":\"data\"}";
 val bool_json = "{\"ast_type\":\"NameConstant\",\"value\":true,\"folded_value\":{\"ast_type\":\"NameConstant\",\"value\":false}}";
@@ -90,8 +90,7 @@ fun decode_raw_call data extra = decode_call
    "{\"arg\":\"value\",\"value\":" ^ runtime_json ^ "}," ^
    "{\"arg\":\"gas\",\"value\":" ^ runtime_json ^ "}," ^
    "{\"arg\":\"revert_on_failure\",\"value\":" ^ bool_json ^ "}]}");
-val runtime_original = ``JE_BinOp (JE_Int 2 JT_None) JBop_Add (JE_Int 2 JT_None) JT_None``;
-val runtime_e = ``JE_Folded ^runtime_original (JE_Int 4 JT_None)``;
+val runtime_e = ``JE_BinOp (JE_Int 2 JT_None) JBop_Add (JE_Int 2 JT_None) JT_None``;
 val source_data_e = ``JE_Attribute (JE_Name "msg" NONE JMissingSource JT_None)
   "data" NONE NONE NONE JMissingSource JT_None``;
 val plain_kwargs = ``[JKeyword "max_outsize" ^runtime_e;
@@ -104,7 +103,7 @@ fun expected_decoded args kwargs = ``JE_Call
   (JE_Name "raw_call" NONE JMissingSource JT_None) ^args ^kwargs JT_None JMissingSource``;
 val () = app (fn (actual, expected) =>
   if aconv actual expected then ()
-  else raise Fail "raw_call decoder lost general expression folds or specialized flag metadata")
+  else raise Fail "raw_call decoder changed runtime syntax or lost specialized flag metadata")
   [(decode_raw_call data_json "", expected_decoded ``[^runtime_e; ^source_data_e]`` folded_kwargs),
    (decode_raw_call runtime_json "", expected_decoded ``[^runtime_e; ^runtime_e]`` plain_kwargs),
    (decode_raw_call data_json ("," ^ runtime_json),

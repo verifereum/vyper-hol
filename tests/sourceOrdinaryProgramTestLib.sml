@@ -91,7 +91,8 @@ in () end;
 (* The older full-Source oracle erases interface Acc Address identities.
    Ordinary residual calls intentionally retain those legacy constructors.
    Take their expected function bodies directly from the independent legacy
-   fixture, never by rewriting/normalizing the actual bridge output. *)
+   fixture, except for independently pinned decimal and literal-membership
+   results; never rewrite/normalize the actual bridge output. *)
 fun expected_modules name identities slots modules = let
   val expected = sourceOrdinaryAcceptanceLib.expected_modules name identities slots modules
   val legacy = map pairSyntax.dest_pair (#1 (listSyntax.dest_list modules))
@@ -100,7 +101,8 @@ fun expected_modules name identities slots modules = let
     val old = case List.find (fn (s,_) => aconv s src) legacy of
       NONE => [] | SOME (_,ts) => #1 (listSyntax.dest_list ts)
     fun body tl = let val (ctor,args) = strip_comb tl in
-      if name <> "decimal_folding" andalso #Name (dest_thy_const ctor) = "FunctionDecl" then
+      if name <> "decimal_folding" andalso name <> "in_static_array" andalso
+          #Name (dest_thy_const ctor) = "FunctionDecl" then
         valOf (List.find (fn candidate => let val (head,cs) = strip_comb candidate in
           #Name (dest_thy_const head) = "FunctionDecl" andalso
           aconv (List.nth (args,4)) (List.nth (cs,4)) end) old)

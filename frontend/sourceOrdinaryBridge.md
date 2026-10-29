@@ -53,6 +53,13 @@ pop and call dispatch shapes are preserved. Invalid, unsupported or exhausted
 source evaluation is not retried through trusted folds or legacy translation.
 Nonmigrated runtime typing/import/layout claims remain explicitly inherited.
 
+The legacy trust boundary is frozen at pre-branch behavior: branch-added generic
+`with_folded` wrappers on `BinOp`, `Compare`, `BoolOp`, `UnaryOp` and `Call` in
+`jsonASTLib`, and the folded-following rule in `json_expr_int_opt`, are removed
+in favor of the HOL source evaluator. Older remaining metadata consumers are
+not eliminated; fail-closed ABI checks remain. Legacy APIs do not acquire the
+source route's normalization guarantees.
+
 The public result retains pairing, phase, original-source, linking and genuine
 `check_contract T` equations for the exact normalized modules, including
 deployment bodies. `source_ordinary_compile_equations` and `compile_checked`
@@ -71,6 +78,17 @@ that every checked program compiles or that its bytecode is semantically correct
 | `check_constant_contract_file` | Strict source adapter using the common evaluator; no legacy retry. |
 
 ## Recorded finite validation
+
+Post-removal checks pass: both 26-case ordinary inventories, all 36 valid retained
+programs, poisoned-fold rejection tests and all nine ordinary parity certificates.
+The focused and integration runs are recorded in
+`.agent-files/issue135-remove-wrappers-{build,source4}.log`; all 12 requested
+targets' build logs have no CHEAT warnings. See the
+[implementation status](../docs/ISSUE_543_IMPLEMENTATION_STATUS.md) for interrupted
+attempts and the final two-worker run.
+
+The older receipts below predate the legacy trust-boundary follow-up above and do
+not themselves validate that change.
 
 - **26/26 ordinary cases:** exact complete AST, independent checker artifact,
   fold deletion/poisoning and kernel-closed equations. Aggregate:

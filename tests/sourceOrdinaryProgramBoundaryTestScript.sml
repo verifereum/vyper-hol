@@ -60,12 +60,16 @@ fun program expr defaults ret = obj [("ast",ast "Module" [("body",arr
     ("returns",ret),("body",arr [ast "Return" [("value",expr)]])]])]),("imports",arr [])];
 fun rejected label source annotated = let
   val original = sourceOrdinaryProgramTestLib.standalone source
-  val p = sourceOrdinaryClaimsLib.pair_program original source annotated
-  val result = (ignore (vyperCheckContractFrontendLib.check_contract_result
-      {fuel=sourceOrdinaryProgramTestLib.fuel,paired=p,address=sourceOrdinaryProgramTestLib.address,
-       inherited={trust=trust,layouts=layouts,contexts= #contexts (#inherited input)}}); false)
-    handle Fail _ => true | HOL_ERR _ => true
-  in if result then print ("BRIDGE_REJECT " ^ label ^ "\n") else raise Fail ("accepted " ^ label) end;
+  fun check claims = let
+    val p = sourceOrdinaryClaimsLib.pair_program original source claims
+    val result = (ignore (vyperCheckContractFrontendLib.check_contract_result
+        {fuel=sourceOrdinaryProgramTestLib.fuel,paired=p,address=sourceOrdinaryProgramTestLib.address,
+         inherited={trust=trust,layouts=layouts,contexts= #contexts (#inherited input)}}); false)
+      handle Fail _ => true | HOL_ERR _ => true
+    in if result then () else raise Fail ("accepted " ^ label) end
+  (* A plausible replacement literal must never rescue an invalid original. *)
+  val () = app check [annotated, sourceOrdinaryProgramTestLib.poison annotated]
+  in print ("BRIDGE_REJECT " ^ label ^ " folds=original/poison\n") end;
 val dynamic_method = program (call (name "method_id") [name "missing"] []) [] (name "uint256");
 val () = rejected "standalone-dynamic-method-id" dynamic_method dynamic_method;
 val invalid_child = ast "BinOp" [("left",integer 1),("op",ast "FloorDiv" []),("right",integer 0)];

@@ -642,49 +642,10 @@ fun normalize_interface_return (func_src, ret_ty, result_ty) =
           then NONE
   else SOME ret_ty
 
-(* Recognize the whole decimal token; parsing a numeric prefix or filtering
-   characters out of an expression would silently change its value. In
-   particular, an identifier such as _1 is not an underscored number. *)
-fun is_decimal_literal s = let
-  fun unsigned s =
-    if String.isPrefix "-" s orelse String.isPrefix "+" s
-    then String.extract (s, 1, NONE) else s
-  fun digit_tail [] = true
-    | digit_tail (#"_"::c::cs) = Char.isDigit c andalso digit_tail cs
-    | digit_tail (c::cs) = Char.isDigit c andalso digit_tail cs
-  fun digits s = case String.explode s of
-      [] => false
-    | c::cs => Char.isDigit c andalso digit_tail cs
-  fun mantissa s =
-    case String.fields (fn c => c = #".") (unsigned s) of
-      [whole] => digits whole
-    | [whole, frac] =>
-        (digits whole andalso (frac = "" orelse digits frac)) orelse
-        (whole = "" andalso digits frac)
-    | _ => false
-in
-  case String.fields (fn c => c = #"e" orelse c = #"E") s of
-    [base] => mantissa base
-  | [base, exponent] => mantissa base andalso digits (unsigned exponent)
-  | _ => false
-end
-
-fun d_json_expr () : term decoder = let
-  (* Keep source syntax for declaration consumers, but lower node.reduced()
-     when its serialized value is usable. The pinned compiler's Decimal
-     to_dict writes node_source_code into value, so a folded Decimal can
-     contain e.g. "min(3.0, 5.0)" rather than the computed number. Require a
-     decimal literal there, otherwise evaluate the original expression. *)
-  fun with_folded (d : term decoder) : term decoder =
-    JSONDecode.map (fn (original, folded_opt) =>
-      case folded_opt of NONE => original
-                       | SOME folded => mk_JE_Folded (original, folded)) $
-    tuple2 (d, try (field "folded_value" $
-      check raw (fn json =>
-        decode (field "ast_type" string) json <> "Decimal" orelse
-        is_decimal_literal (decode (field "value" string) json))
-        "folded Decimal contains source text" (delay d_json_expr)))
-  in achoose "expr" [
+(* Do not extend the legacy folded-value trust boundary here. Operators and
+   calls retain their original syntax; the ordinary source frontend computes
+   compile-time values independently in HOL (#135). *)
+fun d_json_expr () : term decoder = achoose "expr" [
   (* Int literal - type may be absent for array indices/sizes *)
   check_ast_type "Int" $
     JSONDecode.map (fn (v, ty) => mk_JE_Int(v, ty)) $
@@ -799,7 +760,7 @@ fun d_json_expr () : term decoder = let
     tuple2 (field "target" (delay d_json_expr), field "value" (delay d_json_expr)),
 
   (* BinOp *)
-  check_ast_type "BinOp" $ with_folded $
+  check_ast_type "BinOp" $
     JSONDecode.map (fn ((l, op_tm, r), ty) => mk_JE_BinOp(l, op_tm, r, ty)) $
     tuple2 (tuple3 (field "left" (delay d_json_expr),
             field "op" json_binop,
@@ -807,20 +768,20 @@ fun d_json_expr () : term decoder = let
             orElse(field "type" json_type, succeed JT_None_tm)),
 
   (* Compare *)
-  check_ast_type "Compare" $ with_folded $
+  check_ast_type "Compare" $
     JSONDecode.map (fn (l, op_tm, r) => mk_JE_Compare(l, op_tm, r)) $
     tuple3 (field "left" (delay d_json_expr),
             field "op" json_binop,
             field "right" (delay d_json_expr)),
 
   (* BoolOp *)
-  check_ast_type "BoolOp" $ with_folded $
+  check_ast_type "BoolOp" $
     JSONDecode.map (fn (op_tm, es) => mk_JE_BoolOp(op_tm, es)) $
     tuple2 (field "op" json_boolop,
             field "values" (array (delay d_json_expr))),
 
   (* UnaryOp *)
-  check_ast_type "UnaryOp" $ with_folded $
+  check_ast_type "UnaryOp" $
     JSONDecode.map (fn ((op_tm, e), ty) => mk_JE_UnaryOp(op_tm, e, ty)) $
     tuple2 (tuple2 (field "op" json_unaryop,
             field "operand" (delay d_json_expr)),
@@ -846,7 +807,7 @@ fun d_json_expr () : term decoder = let
 
   (* Call - preserve any explicit declaration source ID from the function
      metadata; jsonToVyper interprets source IDs. *)
-  check_ast_type "Call" $ with_folded $
+  check_ast_type "Call" $
     JSONDecode.map (fn ((func, args, kwargs), (ty, src_id_opt)) => mk_JE_Call(func, args, kwargs, ty, src_id_opt)) $
     tuple2 (tuple3 (field "func" (delay d_json_expr),
                     achoose "call arguments" [
@@ -947,7 +908,7 @@ fun d_json_expr () : term decoder = let
             else succeed (mk_JE_StaticCall
               (func_name, func_src, arg_types, effective_ret, target, args, keywords))
         | NONE => fail "legacy interface return type disagrees with callsite")
-] end
+]
 and d_json_keyword () : term decoder = achoose "keyword" [
   (* ABI method IDs are compile-time constants. Preserve the compiler-validated
      four-byte folded value so jsonToVyper can attach it to AbiEncode. *)

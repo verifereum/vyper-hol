@@ -47,6 +47,25 @@ The relevant proof and boundary ledger is in
 The ordinary API and remaining trust are documented in
 [frontend/sourceOrdinaryBridge.md](../frontend/sourceOrdinaryBridge.md).
 
+## Legacy trust boundary follow-up
+
+The legacy trust boundary is frozen at pre-branch behavior. Branch-added generic
+`with_folded` wrappers on `BinOp`, `Compare`, `BoolOp`, `UnaryOp` and `Call` in
+`jsonASTLib`, and the folded-following rule in `json_expr_int_opt`, are removed
+in favor of the HOL source evaluator. This does not eliminate older remaining
+metadata consumers. Fail-closed ABI checks remain. Legacy APIs do not acquire
+source-normalization guarantees by trusting additional compiler replacements.
+
+Post-removal validation passes at tactic timeout **2.5**, without skipping
+goalfrag: five focused decoder/iterator/claims targets
+(`.agent-files/issue135-remove-wrappers-build.log`) and seven integration targets
+(`.agent-files/issue135-remove-wrappers-source4.log`). These cover both 26-case
+ordinary acceptance inventories, all 36 valid retained programs, invalid originals
+with poisoned folds, and nine exact deploy/runtime parity certificates. The 12
+requested targets' build logs contain no CHEAT warnings. The unrestricted parallel
+attempt was killed; the serial retry was stopped after successful targets to
+continue with two workers. Neither interrupted command is a whole-command success.
+
 ## Necessary semantic/proof repairs
 
 HOL follows pinned ABI aliasing: complex local arguments retain locations until
@@ -82,6 +101,9 @@ remain. In particular `source_module_checked_runtime_correct` inherits an old
 lowering admission and is **not** a new cheat-free compiler correctness theorem.
 
 ## Final validation receipts
+
+These historical receipts predate the legacy trust-boundary follow-up above;
+they do not validate that change. Current follow-up validation is recorded above.
 
 Use `.agent-files/.holbuild-toolchain/bin/holbuild` (0.11.7), tactic timeout
 **2.5**, without skipping goalfrag.
