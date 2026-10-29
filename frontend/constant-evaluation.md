@@ -107,19 +107,24 @@ terms. They do not prove the ML decoder, capture tool or source-file authenticit
 
 ## Other entry points and legacy isolation
 
-The base exposes only the ordinary paired route and explicit legacy routes.
-The independent full-Source body frontend, its strict JSON adapters and aliases,
-and the optional Meaning tower have been extracted. The facade does not load
-those developments. See [sourceModule.md](sourceModule.md) for the retained
-signature/context interfaces and [sourceModuleLoader.md](sourceModuleLoader.md)
-for the pre-erasure protocol still used by ordinary pairing.
+The facade exposes the ordinary paired route and explicit legacy routes, not
+an independent source-only body checker. See [sourceModule.md](sourceModule.md)
+for the shared signature/context interfaces and
+[sourceModuleLoader.md](sourceModuleLoader.md) for the pre-erasure protocol used
+by ordinary pairing.
 
 Explicit `*_legacy` ordinary APIs retain annotated-only translation and its
 older metadata consumers, including some Name, annotation, range and specialized
 keyword handling. `check_constant_contract_file_legacy` retains the old bounded
 integer evaluator. These are distinct compatibility interfaces, never automatic
-fallbacks. Legacy/source whole-module AST equality is not promised: the legacy
-initializer may retain arithmetic where the source route emits its value.
+fallbacks. Legacy/source whole-module AST equality and legacy pinned byte parity
+are not promised: annotated-only legacy translation may retain arithmetic where
+the ordinary source route emits its value, or reject an exponent that needs
+normalization before checking. Compatibility regressions assert explicit
+accept/reject and compilation outcomes; pinned-byte comparisons use the
+normalized ordinary route. Neither establishes legacy semantic correctness.
+See the [regression guide](../tests/sourceOrdinaryAcceptance.md) for the fixture
+contracts and reproduction commands.
 
 Do not extend legacy trust with generic operator/call folded-value wrappers or
 make `json_expr_int_opt` follow compiler replacements. Missing constant support
@@ -128,11 +133,10 @@ from an invalid present value instead of silently choosing a default.
 
 ## Semantic and compiler guarantees
 
-Retention, checking and compilation equations are not definitions of source
-meaning. This base does not include the independent full-program/call/location
-Meaning relations or an artifact-semantic adapter. Restoring the optional
-feature requires reversing its extraction commit; no semantic conclusion is
-silently substituted for it here.
+Retention, checking and compilation equations certify computations on decoded
+terms, not independent whole-program source semantics. Local value-reification
+and original-expression validation theorems retain their stated typing,
+representation and environment assumptions.
 
 At the checked ordinary boundary,
 `sourceOrdinarySupport.source_ordinary_checked_remainder` and
@@ -141,7 +145,7 @@ redundant MethodId/Exp/Exp-AugAssign source-domain gates. The underlying
 `sourceProgramSupport.checked_program_remainder` states that successful
 checking makes `source_program_remainder tops` equivalent to
 `supported_program tops` for a member module. All unrelated lowering restrictions
-remain. Existing lowering admissions are not discharged by this extraction;
+remain. These certificates do not discharge existing lowering admissions;
 exact compiler equations are not an unrestricted, admission-free bytecode
 correctness theorem.
 

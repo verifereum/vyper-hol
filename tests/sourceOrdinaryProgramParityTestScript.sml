@@ -7,7 +7,8 @@ Ancestors
 Libs
   sourceBytecodeFixtureLib wordsLib finite_mapLib cv_transLib
 fun holbuild_extra_deps (_:string list) = ();
-val () = holbuild_extra_deps ["../lowering/defs/bytecode/folded-value-oracle",
+val () = holbuild_extra_deps ["../lowering/defs/bytecode/folded-value-sources",
+  "../lowering/defs/bytecode/folded-value-oracle",
   "../lowering/defs/bytecode/folded-value-parity-fixtures.txt",
   "../lowering/defs/bytecode/folded-value-witnesses.txt"];
 val () = computeLib.upd_compset finite_mapLib.add_finite_map_compset;
@@ -28,7 +29,8 @@ val () = app (fn name => let
   val backend = EVAL ``compile_vyper (K SOME) (o1_policy all_capabilities) ^tops``
   val comparison = EVAL (mk_eq (rhs (concl backend),optionSyntax.mk_some expected))
   val () = if aconv (rhs (concl comparison)) T then () else raise Fail ("ordinary bytecode parity: " ^ name)
-  val exact = TRANS backend (EQT_ELIM comparison)
+  val exact = save_thm (name ^ "_exact_checked_backend",
+    TRANS backend (EQT_ELIM comparison))
   val compiler = ``\(modules : (num option # toplevel list) list). case modules of [(NONE,tops)] =>
     compile_vyper (K SOME) (o1_policy all_capabilities) tops | _ => NONE``
   val application = List.foldl (fn (arg,f) => mk_icomb (f,arg))
