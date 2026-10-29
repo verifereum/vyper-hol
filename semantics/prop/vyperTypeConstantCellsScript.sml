@@ -155,16 +155,6 @@ Proof
             module_immutable_constant_names_distinct]
 QED
 
-Theorem checked_initial_immutables_constant_cells_typed:
-  check_contract mode layouts addr mods = SOME artifact /\
-  initial_immutables tenv mods = SOME imms ==>
-  deployment_constant_cells_typed tenv addr mods
-    (am with immutables updated_by CONS (addr,imms))
-Proof
-  rw[deployment_constant_cells_typed_def] >>
-  drule_all checked_initial_immutables_constant_absent >> simp[]
-QED
-
 Theorem merge_constants_preserves_constant_cells_typed:
   contract_namespaces_ok F mods /\ ALOOKUP mods src = SOME ts /\
   deployment_constant_cells_typed tenv addr mods am /\
