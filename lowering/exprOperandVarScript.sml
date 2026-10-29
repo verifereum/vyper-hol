@@ -82,18 +82,22 @@ QED
 
 Theorem compiler_counter_ptr_load:
   s.cs_next_var <=
-    (SND (compile_ptr_load ctor loc ptr_op s)).cs_next_var
+    (SND (compile_ptr_load ctor imm loc ptr_op s)).cs_next_var
 Proof
-  Cases_on `ctor` >> Cases_on `loc` >>
-  simp[contextTheory.compile_ptr_load_def, compiler_counter_emit]
+  Cases_on `ctor` >> Cases_on `loc` >> Cases_on `imm` >>
+  simp[contextTheory.compile_ptr_load_def, contextTheory.compile_imm_load_word_def,
+       compiler_counter_emit] >>
+  irule compiler_counter_bind >> simp[compiler_counter_emit]
 QED
 
 Theorem compiler_counter_ptr_store:
   s.cs_next_var <=
-    (SND (compile_ptr_store ctor loc ptr_op v s)).cs_next_var
+    (SND (compile_ptr_store ctor imm loc ptr_op v s)).cs_next_var
 Proof
-  Cases_on `ctor` >> Cases_on `loc` >>
-  simp[contextTheory.compile_ptr_store_def, compiler_counter_emit]
+  Cases_on `ctor` >> Cases_on `loc` >> Cases_on `imm` >>
+  simp[contextTheory.compile_ptr_store_def, contextTheory.compile_imm_store_word_def,
+       compiler_counter_emit] >>
+  irule compiler_counter_bind >> simp[compiler_counter_emit]
 QED
 
 Theorem compiler_counter_word_copy:
