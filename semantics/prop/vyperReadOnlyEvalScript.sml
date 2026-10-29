@@ -571,8 +571,11 @@ Proof
   simp[FUN_EQ_THM, finally_unless_halt_def] >> qx_gen_tac `st` >>
   Cases_on `f st` >> rename1 `(answer,st')` >> Cases_on `answer` >>
   simp[ignore_bind_def, bind_def, return_def] >>
+  (* Replaced: qpat_x_assum `f st = (INR ex,st')` kall_tac >>
+     Cases_on `y` >> simp[raise_def] *)
+  rename1 `f st = (INR ex,st')` >>
   qpat_x_assum `f st = (INR ex,st')` kall_tac >>
-  Cases_on `y` >> simp[raise_def]
+  Cases_on `ex` >> simp[raise_def]
 QED
 
 Resume evaluate_read_only[intcall_after_lock]:
