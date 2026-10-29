@@ -34,6 +34,12 @@ fun base_reclaim_measure label tac g = let
 in (let val result = tac g in report "ok"; result end)
    handle e => (report "failed"; raise e)
 end
+val base_reclaim_bases = base_reclaim_measure "reclaim-bases"
+  (base_reclaim_named (computeLib.WEAK_CBV_CONV base_fmp_reclaim_cs)
+    "fmp_base_analyze")
+val base_reclaim_live = base_reclaim_measure "reclaim-live"
+  (base_reclaim_named (computeLib.WEAK_CBV_CONV base_fmp_reclaim_cs)
+    "liveness_analyze")
 val base_reclaim_states = base_reclaim_measure "reclaim-states"
   (base_reclaim_named (computeLib.WEAK_CBV_CONV base_fmp_reclaim_cs)
     "fmp_reclaim_analyze_fuel")
@@ -56,7 +62,7 @@ fun base_reclaim_candidate_analysis name g = let
     (computeLib.WEAK_CBV_CONV base_fmp_reclaim_cs) (rhs (concl th)))
 in base_reclaim_candidate_equation := SOME next; ALL_TAC g end
 val base_reclaim_candidate_live = base_reclaim_candidate_analysis "liveness_analyze"
-val base_reclaim_candidate_cfg = base_reclaim_candidate_analysis "cfg_analyze"
+val base_reclaim_candidate_bases = base_reclaim_candidate_analysis "fmp_base_analyze"
 fun base_reclaim_candidates_finish g = let
   val th = valOf (!base_reclaim_candidate_equation)
   val evaluated = computeLib.WEAK_CBV_CONV base_fmp_reclaim_cs (rhs (concl th))

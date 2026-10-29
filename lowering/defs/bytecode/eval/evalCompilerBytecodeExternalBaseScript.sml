@@ -374,13 +374,17 @@ Proof
   base_fragment_step (base_reclaim_open) >>
   base_fragment_step (base_reclaim_guard) >>
   base_fragment_step (base_reclaim_states_open) >>
+  base_fragment_step (base_reclaim_bases) >>
+  base_fragment_step (base_reclaim_bind) >>
+  base_fragment_step (base_reclaim_live) >>
+  base_fragment_step (base_reclaim_bind) >>
   base_fragment_step (base_reclaim_states) >>
   base_fragment_step (base_reclaim_resume) >>
   base_fragment_step (base_reclaim_states) >>
   base_fragment_step (base_reclaim_resume) >>
   base_fragment_step (base_reclaim_candidates_open) >>
   base_fragment_step (base_reclaim_candidate_live) >>
-  base_fragment_step (base_reclaim_candidate_cfg) >>
+  base_fragment_step (base_reclaim_candidate_bases) >>
   base_fragment_step (base_reclaim_candidates_finish) >>
   base_fragment_step (base_reclaim_bind) >>
   base_fragment_step (base_reclaim_plan_check) >>
