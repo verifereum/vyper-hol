@@ -22,7 +22,7 @@ WORKERS = 1
 BUILT = re.compile(r"^\S+Z (vyperTest(?:Defs)?_\S+)Theory built in ([\d.]+)s$")
 ANCESTOR = re.compile(r"^Ancestors (vyperTestDefs_\S+)$", re.MULTILINE)
 CHUNK = re.compile(r"^(.*)_chunk\d+$")
-BATCH = re.compile(r"^(.*)_batch_\d+$")
+PART = re.compile(r"^(.*)_part\d+$")
 
 
 @dataclass(frozen=True)
@@ -58,22 +58,22 @@ class BuildTimes:
                 if match:
                     samples.setdefault(match[1], []).append(float(match[2]))
         self.seconds = {name: statistics.median(s) for name, s in samples.items()}
-        self.estimate_new_batches(tests)
+        self.estimate_new_parts(tests)
         self.estimate_new_chunks(tests)
 
-    def estimate_new_batches(self, tests: list[Test]) -> None:
-        """Estimate independent replay AND definitions batches from whole-file times.
+    def estimate_new_parts(self, tests: list[Test]) -> None:
+        """Estimate independent replay AND definitions parts from whole-file times.
 
-        Batch zero keeps the unsuffixed name. Until any suffixed batch has a
-        measurement, divide the old whole-file time among all batches, including
-        zero. Once siblings have measurements, keep them (and batch zero) intact
+        Part zero keeps the unsuffixed name. Until any suffixed part has a
+        measurement, divide the old whole-file time among all parts, including
+        zero. Once siblings have measurements, keep them (and part zero) intact
         and use their median for missing siblings. These equal-share estimates
-        are only a bootstrap; fresh batched CI measurements should replace them.
+        are only a bootstrap; fresh partitioned CI measurements should replace them.
         """
         families: dict[str, set[str]] = {}
         names = {name for test in tests for name in (test.name, test.defs)}
         for name in sorted(names):
-            match = BATCH.match(name)
+            match = PART.match(name)
             if match:
                 families.setdefault(match[1], set()).add(name)
         for whole, siblings in families.items():
@@ -143,7 +143,7 @@ class BuildTimes:
         A test goes to the group whose build ends earliest with it; on a tie,
         to the group with the least work, so a long test running alone does
         not leave its runner's other workers idle while another group queues.
-        Trace chunks sharing definitions and independent batches of one file
+        Trace chunks sharing definitions and independent parts of one file
         go to different groups while there are groups left, so their replays
         run in parallel without introducing sibling dependencies.
         """
@@ -151,9 +151,9 @@ class BuildTimes:
             raise ValueError("groups must be positive")
         assigned: list[list[Test]] = [[] for _ in range(groups)]
         for test in self.by_cost(tests):
-            family = BATCH.sub(r"\1", test.defs)
+            family = PART.sub(r"\1", test.defs)
             apart = [group for group in assigned
-                     if all(BATCH.sub(r"\1", other.defs) != family for other in group)] or assigned
+                     if all(PART.sub(r"\1", other.defs) != family for other in group)] or assigned
             def rank(group: list[Test]) -> tuple[float, float]:
                 return self.makespan(self.by_cost(group + [test])), sum(map(self.cost, group))
             min(apart, key=rank).append(test)

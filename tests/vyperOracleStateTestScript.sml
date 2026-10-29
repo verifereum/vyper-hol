@@ -89,7 +89,7 @@ Theorem oracle_state_observations_pre[cv_pre]:
 Proof
   rw[oracle_state_observations_pre_def, cont_pre_IS_SOME_cont] >>
   qmatch_goalsub_abbrev_tac `eval_expr_cps cx ee ss DoneK` >>
-  qspecl_then [`cx`, `ee`, `ss`, `DoneK`] mp_tac (cj 8 eval_cps_eq) >>
+  qspecl_then [`cx`, `ee`, `ss`, `DoneK`] mp_tac (cj 5 eval_cps_eq) >>
   Cases_on `eval_expr cx ee ss` >>
   rename1 `eval_expr cx ee ss = (res, st1)` >> Cases_on `res` >> simp[] >>
   disch_then (fn th => REWRITE_TAC [th]) >>
@@ -279,7 +279,7 @@ Theorem oracle_zero_send_inert:
     (INL (Value NoneV), st)
 Proof
   strip_tac >>
-  simp[evaluate_def, evaluate_literal_def, materialise_def,
+  simp[evaluate_def, evaluate_literal_def, read_result_def,
        type_check_def, assert_def, bind_def, ignore_bind_def, return_def] >>
   simp[eval_send_def, oracle_zero_send_operands, ext_call_kwarg_def,
        forwarded_gas_def, lift_option_type_def, get_accounts_def,
@@ -297,7 +297,8 @@ Theorem oracle_empty_extcall_inert:
     (Call ty (ExtCall static_call skip_check (name, args, ret) opts) [] dflt) st =
     (INR (Error (TypeError "ExtCall operands")), st)
 Proof
-  simp[evaluate_def, eval_ext_call_def, bind_def, return_def, raise_def]
+  simp[evaluate_def, read_results_def, eval_ext_call_def,
+       bind_def, return_def, raise_def]
 QED
 
 Theorem oracle_state_inert_eval:

@@ -44,11 +44,19 @@
  * the loop in stmtSimForLoop), and with other ends in stmtSimForRange;
  * Return of a word or of a tuple of words from an internal function in
  * stmtSimReturn; AnnAssign of a local held in one word (a word_value, an
- * address, a bytesN) in stmtSimDecl; Raise and Assert with a string literal
- * reason in stmtSimReason, and with another reason held on the stack or in
- * memory in stmtSimReasonExpr.  Not covered yet: Assign/AugAssign (#550),
- * Append and For over an array (#559), Log (#570), memory-backed
- * declarations and returns, and reasons read from storage.
+ * address, a bytesN) in stmtSimDecl, and of a memory-backed local whose
+ * value is lowered at the declared type in stmtSimDeclMem; Raise and Assert
+ * with a string literal reason in stmtSimReason, with another reason held on
+ * the stack or in memory in stmtSimReasonExpr, and with a reason read from
+ * storage or transient storage in stmtSimReasonStorage; AugAssign to a
+ * local held in one word in stmtSimAugAssign; Assign to a local held in one
+ * word in stmtSimAssign, to a memory-backed local in stmtSimAssignMem, and
+ * to a tuple of locals each held in one word in stmtSimAssignTuple.  Not
+ * covered yet: Assign and AugAssign to other targets (#550), Append and For
+ * over an array (#559), Log (#570), the other memory-backed declarations
+ * (empty values, bytestring literals of another length, initialisations that
+ * widen the value), reasons held in code (immutables) or calldata, and
+ * memory-backed returns.
  *)
 
 Theory stmtSim
@@ -632,7 +640,5 @@ Proof
       simp[stmt_lands_def, cenv_top_ext_refl] >> metis_tac[]) >>
   disj2_tac >> qexists_tac `fuel` >> gvs[stmt_exit_def] >>
   Cases_on `r1` >> gvs[] >> disj1_tac >>
-  ONCE_REWRITE_TAC [INST_TYPE [beta |-> ``:toplevel_value``]
-                      expr_exit_INR_type] >>
-  first_assum ACCEPT_TAC
+  metis_tac[expr_exit_INR_type]
 QED

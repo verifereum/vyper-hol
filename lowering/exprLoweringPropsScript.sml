@@ -20,7 +20,8 @@
  *   state_rel_jump_to, state_rel_push_scope, state_rel_pop_scope,
  *   state_rel_frame, stmt_state_rel_jump_to, stmt_state_rel_inst_idx,
  *   stmt_state_rel_push_scope, stmt_state_rel_pop_scope,
- *   stmt_state_rel_update_var — frames for the state relations
+ *   stmt_state_rel_update_var, stmt_state_rel_allocas_frame — frames for
+ *                              the state relations
  *   local_ptrs_rel_cenv_cong, state_rel_cenv_cong,
  *   stmt_state_rel_cenv_cong — the relations at another compile
  *                              environment that agrees on what they read
@@ -45,7 +46,7 @@ Ancestors
   valueEncoding valueEncodingProofs localPtrsProps venomMemDefs
   vyperAST vyperTyping
 Libs
-  pairLib BasicProvers
+  pairLib BasicProvers monadsyntax
 
 (* ===== Instruction Sequence Execution ===== *)
 
@@ -177,6 +178,20 @@ Proof
   rw[alloca_room_def, pending_alloca_size_def] >> gvs[]
 QED
 
+(* state_rel re-established by a step that keeps the allocations gives
+   stmt_state_rel back. *)
+Theorem stmt_state_rel_allocas_frame:
+  !func cenv cx es s es' s'.
+    stmt_state_rel func cenv cx es s /\ state_rel func cenv cx es' s' /\
+    s'.vs_allocas = s.vs_allocas /\ s'.vs_alloca_next = s.vs_alloca_next ==>
+    stmt_state_rel func cenv cx es' s'
+Proof
+  rw[stmt_state_rel_def]
+  >- (irule alloca_inv_fields >> qexists_tac `s` >> simp[])
+  >- (irule alloca_room_fields >> qexists_tac `s` >> simp[]) >>
+  gvs[] >> res_tac
+QED
+
 Theorem alloca_room_next_lt:
   !func ss. alloca_room func ss ==> ss.vs_alloca_next < dimword (:256)
 Proof
@@ -236,7 +251,8 @@ Theorem compile_expr_correct:
     stmt_state_rel func cenv cx es ss ∧
     supported_expr e ∧
     well_annotated e ∧
-    eval_expr cx e es = (INL (Value v), es') ∧
+    (do result <- eval_expr cx e; read_result cx result od) es =
+      (INL v, es') ∧
     lower_value compile_expr cenv ty e st = (op, st') ∧
     (∀i. MEM i (emitted_insts st st') ⇒ MEM i (fn_insts func)) ∧
     fn_inst_ids_distinct func ∧ local_ptrs_reserved cenv st
@@ -723,7 +739,8 @@ QED
 Theorem compile_name_correct:
   ∀ func cenv cx ty ann id es ss st op st' v es' p size entry.
     state_rel func cenv cx es ss ∧
-    eval_expr cx (Name ann id) es = (INL (Value v), es') ∧
+    (do result <- eval_expr cx (Name ann id); read_result cx result od) es =
+      (INL v, es') ∧
     lower_value compile_expr cenv ty (Name ann id) st = (op, st') ∧
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) size) ∧
     lookup_scopes id es.scopes = SOME entry ∧
@@ -741,10 +758,10 @@ Theorem compile_name_correct:
 Proof
   rpt gen_tac >> strip_tac >>
   `es' = es` by
-    (qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+    (qpat_x_assum `(do result <- eval_expr _ _; read_result _ result od) _ = _` mp_tac >>
      simp[Once evaluate_def, bind_def, get_scopes_def, return_def,
-          lift_option_def, lift_option_type_def] >>
-     Cases_on `lookup_scopes_val id es.scopes` >> simp[return_def, raise_def]) >>
+          type_check_def, assert_def, check_def, ignore_bind_def] >>
+     metis_tac[read_result_state]) >>
   qpat_x_assum `lower_value _ _ _ _ _ = _` mp_tac >>
   simp[lower_value_def, compile_expr_def, expr_type_def, compile_name_vv_def,
        unwrap_value_def, contextTheory.mk_ptr_def,
@@ -780,7 +797,9 @@ Theorem compile_binop_correct:
     stmt_state_rel func cenv cx es ss ∧
     (∀u. type_to_int_bound ann = SOME u ⇒
          type_to_int_bound (expr_type e1) = SOME u) ∧
-    eval_expr cx (Builtin ann (Bop bop) [e1; e2]) es = (INL (Value v), es') ∧
+    (do result <- eval_expr cx (Builtin ann (Bop bop) [e1; e2]);
+        read_result cx result od) es =
+      (INL v, es') ∧
     lower_value compile_expr cenv ty (Builtin ann (Bop bop) [e1; e2]) st = (op, st') ∧
     (∀i. MEM i (emitted_insts st st') ⇒ MEM i (fn_insts func)) ∧
     fn_inst_ids_distinct func ∧ local_ptrs_reserved cenv st
@@ -854,7 +873,8 @@ QED
 Theorem compile_neg_correct:
   ∀ func cenv cx ty ann e es ss st op st' v es' n.
     stmt_state_rel func cenv cx es ss ∧
-    eval_expr cx (Builtin ann Neg [e]) es = (INL (Value v), es') ∧
+    (do result <- eval_expr cx (Builtin ann Neg [e]); read_result cx result od) es =
+      (INL v, es') ∧
     ann = BaseT (IntT n) ∧
     type_to_int_bound ann = type_to_int_bound (expr_type e) ∧
     lower_value compile_expr cenv ty (Builtin ann Neg [e]) st = (op, st') ∧
@@ -1107,7 +1127,7 @@ Proof
 QED
 
 (* ci_mono composes through monad_bind (= comp_bind) *)
-Theorem ci_mono_bind[local]:
+Theorem ci_mono_bind:
   ∀ (mf : compile_state -> 'a # compile_state)
     (mg : 'a -> compile_state -> 'b # compile_state) s0.
     (∀ sa. ci_mono sa (SND (mf sa))) ∧
@@ -1124,7 +1144,7 @@ Proof
 QED
 
 (* ci_mono composes through comp_ignore_bind *)
-Theorem ci_mono_ignore_bind[local]:
+Theorem ci_mono_ignore_bind:
   ∀ (mf : compile_state -> 'a # compile_state)
     (mg : compile_state -> 'b # compile_state) s0.
     (∀ sa. ci_mono sa (SND (mf sa))) ∧
@@ -1150,7 +1170,7 @@ Proof
 QED
 
 (* ci_mono for primitives *)
-Theorem ci_mono_comp_return[local]:
+Theorem ci_mono_comp_return:
   ∀ x sa. ci_mono sa (SND (comp_return x sa))
 Proof
   simp[comp_return_def, ci_mono_refl]
@@ -1366,7 +1386,7 @@ Proof
   simp[ci_mono_comp_return, ci_mono_emit_void]
 QED
 
-Theorem ci_mono_compile_copy_memory_dynamic[local]:
+Theorem ci_mono_compile_copy_memory_dynamic:
   ∀ dst src len_op sa. ci_mono sa (SND (compile_copy_memory_dynamic dst src len_op sa))
 Proof
   rpt gen_tac >>
@@ -1651,45 +1671,24 @@ Theorem ci_mono_compile_subscript_cfn[local]:
 Proof
   rpt gen_tac >> strip_tac >>
   rewrite_tac[compile_subscript_def] >> BETA_TAC >>
-  PURE_REWRITE_TAC[LET_THM] >> BETA_TAC >>
-  IF_CASES_TAC >-
-  (* hashmap case *)
-  (irule ci_mono_bind >> conj_tac >-
-   (rpt strip_tac >> BETA_TAC >>
-    irule ci_mono_bind >> conj_tac >-
-    (rpt strip_tac >> BETA_TAC >>
-     irule ci_mono_bind >> conj_tac >-
-     (rpt strip_tac >> simp[ci_mono_comp_return]) >>
-     simp[ci_mono_compile_mapping_subscript]) >>
-    IF_CASES_TAC >>
-    simp[ci_mono_compile_keccak256_key, ci_mono_comp_return]) >>
-   irule ci_mono_lower_value_cfn >> metis_tac[]) >>
-  (* non-hashmap: case on ce_var_type *)
-  qmatch_asmsub_abbrev_tac`¬_(cbe)` >>
-  BasicProvers.TOP_CASE_TAC >> gvs[] >- (
-    irule ci_mono_bind >> gvs[] >> rpt strip_tac >>
-    irule ci_mono_bind >> gvs[ci_mono_comp_return] >> rpt strip_tac >>
-    irule ci_mono_bind >> gvs[] >> rpt gen_tac >>
-    reverse conj_tac >- (
-      rpt gen_tac >>
-      irule ci_mono_lower_value_cfn >>
-      rpt strip_tac >> first_x_assum irule) >>
-    rpt gen_tac >>
-    irule ci_mono_bind >> gvs[ci_mono_compile_array_subscript] >> rpt gen_tac >>
-    simp[ci_mono_comp_return] ) >>
-  BasicProvers.CASE_TAC >> gvs[] >>
-  irule ci_mono_bind >> gvs[] >> rpt strip_tac >>
-  irule ci_mono_bind >> gvs[ci_mono_comp_return] >> rpt strip_tac >>
-  irule ci_mono_bind >> gvs[] >> rpt strip_tac >>
-  TRY (
-    rpt gen_tac >>
-    irule ci_mono_lower_value_cfn >>
-    rpt strip_tac >> first_x_assum irule) >>
-  TRY (
-    irule ci_mono_bind >>
-    gvs[ci_mono_compile_array_subscript] >>
-    rpt gen_tac ) >>
-  simp[ci_mono_comp_return, ci_mono_compile_tuple_subscript]
+  irule ci_mono_bind >> conj_tac
+  >- (rpt gen_tac >> simp[LET_THM] >>
+      Cases_on `place_type cenv base_e` >> simp[]
+      >- (irule ci_mono_bind >> conj_tac
+          >- (rpt gen_tac >> BETA_TAC >> irule ci_mono_bind >> conj_tac
+              >- (rpt gen_tac >> BETA_TAC >> irule ci_mono_bind >>
+                  simp[ci_mono_comp_return, ci_mono_compile_mapping_subscript]) >>
+              IF_CASES_TAC >>
+              simp[ci_mono_compile_keccak256_key, ci_mono_comp_return]) >>
+          irule ci_mono_lower_value_cfn >> metis_tac[]) >>
+      Cases_on `t` >> simp[LET_THM] >>
+      rpt (CHANGED_TAC (
+        rpt gen_tac >>
+        (irule ci_mono_bind >> conj_tac) >>
+        simp[ci_mono_comp_return, ci_mono_compile_tuple_subscript,
+             ci_mono_compile_array_subscript] >>
+        TRY (irule ci_mono_lower_value_cfn >> metis_tac[])))) >>
+  metis_tac[]
 QED
 
 Theorem ci_mono_compile_acc_cfn[local]:
@@ -1732,6 +1731,22 @@ Proof
       rpt gen_tac >> simp[ci_mono_comp_return])
   >> metis_tac[]
 QED
+
+(* ===== Kernel audit for changed place helpers ===== *)
+
+val () = List.app (fn (name,theorem) =>
+  let val (oracles,axioms) = Tag.dest_tag (Thm.tag theorem)
+  in
+    if null (Thm.hyp theorem) andalso null axioms andalso
+       List.all (fn label => label = "DISK_THM") oracles then
+      print ("PLACE_HELPER_KERNEL_CLOSED " ^ name ^ " hyp=0\n")
+    else raise Fail ("admitted place helper: " ^ name)
+  end)
+  [("ci_mono_compile_subscript_cfn",ci_mono_compile_subscript_cfn),
+   ("ci_mono_compile_attribute_cfn",ci_mono_compile_attribute_cfn),
+   ("ci_mono_compile_mapping_subscript",ci_mono_compile_mapping_subscript),
+   ("ci_mono_compile_keccak256_key",ci_mono_compile_keccak256_key),
+   ("ci_mono_compile_make_array_cfn",ci_mono_compile_make_array_cfn)]
 
 Theorem ci_mono_as_stack_val[local]:
   ∀ ty p sa. SND (as_stack_val ty p) = SND p
@@ -2531,7 +2546,6 @@ Proof
   rpt gen_tac >> once_rewrite_tac[exprLoweringTheory.compile_return_value_decode_def] >> BETA_TAC >> rpt (FIRST [irule ci_mono_bind, irule ci_mono_ignore_bind] >> conj_tac >| [rpt strip_tac >> simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_select], all_tac]) >> simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_select]
 QED
 
-
 (* Reuse ci_mono_typed_memory_family and ci_mono_compile_store_memory above
    for both aggregate construction and external-call default materialization. *)
 Theorem ci_mono_compile_materialize_vv[local]:
@@ -3281,7 +3295,7 @@ Proof
   ci_mono_create_tac [ci_mono_compile_check_create_result]
 QED
 
-Theorem ci_mono_compile_create_proxy_buf[local]:
+Theorem ci_mono_compile_create_proxy_buf:
   ∀target sa. ci_mono sa (SND (compile_create_proxy_buf target sa))
 Proof
   rpt gen_tac >> simp[compile_create_proxy_buf_def] >> ci_mono_create_tac []
@@ -3295,7 +3309,7 @@ Proof
   ci_mono_create_tac [ci_mono_compile_check_create_result]
 QED
 
-Theorem ci_mono_compile_create_blueprint_check[local]:
+Theorem ci_mono_compile_create_blueprint_check:
   ∀target offset sa.
     ci_mono sa (SND (compile_create_blueprint_check target offset sa))
 Proof
@@ -3311,7 +3325,7 @@ Proof
   ci_mono_create_tac [ci_mono_compile_check_create_result]
 QED
 
-Theorem ci_mono_compile_create_salt[local]:
+Theorem ci_mono_compile_create_salt:
   ∀cfn cenv salt sa.
     (∀ce ty e st. ci_mono st (SND (cfn ce ty e st))) ⇒
     ci_mono sa (SND (compile_create_salt cfn cenv salt sa))
@@ -3320,7 +3334,7 @@ Proof
   simp[compile_create_salt_def] >> ci_mono_create_tac []
 QED
 
-Theorem ci_mono_compile_create_ctor_tuple[local]:
+Theorem ci_mono_compile_create_ctor_tuple:
   ∀cfn cenv args sa.
     (∀ce ty e st. ci_mono st (SND (cfn ce ty e st))) ⇒
     ci_mono sa (SND (compile_create_ctor_tuple cfn cenv args sa))
@@ -3329,7 +3343,7 @@ Proof
   ci_mono_create_tac []
 QED
 
-Theorem ci_mono_compile_create_blueprint_args[local]:
+Theorem ci_mono_compile_create_blueprint_args:
   ∀cfn cenv raw args sa.
     (∀ce ty e st. ci_mono st (SND (cfn ce ty e st))) ⇒
     ci_mono sa (SND (compile_create_blueprint_args cfn cenv raw args sa))
@@ -3338,7 +3352,7 @@ Proof
   ci_mono_create_tac [ci_mono_compile_create_ctor_tuple]
 QED
 
-Theorem ci_mono_compile_create_snapshot[local]:
+Theorem ci_mono_compile_create_snapshot:
   ∀cenv vv ty sa. ci_mono sa (SND (compile_create_snapshot cenv vv ty sa))
 Proof
   rpt gen_tac >> simp[compile_create_snapshot_def, compile_slot_to_memory_def] >>
@@ -4312,3 +4326,18 @@ val () = List.app (fn th =>
    exprLoweringTheory.compile_struct_lit_word_order,
    exprLoweringTheory.compile_make_array_empty_full_capacity,
    exprLoweringTheory.compile_make_array_typed_tuple_order];
+
+(* Retained general compiler admissions and their existing structural corollary
+   are excluded; all other exported proofs must be closed.
+   compile_expr_extends_insts inherits compile_expr_ci_mono's admission. *)
+val () = List.app
+  (fn (name,th) =>
+    if List.exists (fn allowed => name = allowed)
+      ["compile_expr_correct", "compile_binop_correct", "compile_neg_correct",
+       "compile_expr_ci_mono", "compile_expr_extends_insts"] then ()
+    else let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
+      if null (Thm.hyp th) andalso null axioms andalso
+         List.all (fn oracle => oracle = "DISK_THM") oracles then ()
+      else raise Fail ("expression lowering proof is not closed: " ^ name)
+    end)
+  (DB.thms "exprLoweringProps");

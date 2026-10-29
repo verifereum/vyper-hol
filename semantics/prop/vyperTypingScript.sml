@@ -301,14 +301,16 @@ QED
 
 Theorem default_value_has_type[local]:
   (∀tv. well_formed_type_value tv ⇒ value_has_type tv (default_value tv)) ∧
+  (∀tvs. EVERY well_formed_type_value tvs ⇒
+    values_have_types tvs (MAP default_value tvs)) ∧
   (∀ftypes. EVERY (well_formed_type_value o SND) ftypes ⇒
     struct_has_type ftypes (MAP (λ(id,t). (id, default_value t)) ftypes)) ∧
   (∀p : string # type_value. well_formed_type_value (SND p) ⇒
-    value_has_type (SND p) (default_value (SND p))) ∧
-  (∀tvs. EVERY well_formed_type_value tvs ⇒
-    values_have_types tvs (MAP default_value tvs))
+    value_has_type (SND p) (default_value (SND p)))
 Proof
-  ho_match_mp_tac (TypeBase.induction_of ``:type_value``) >>
+  ho_match_mp_tac
+    (legacyInduction.mutual_ind_from_ops
+       (TypeBase.induction_of ``:type_value``)) >>
   simp[default_value_def, default_value_tuple_MAP,
        default_value_struct_MAP, value_has_type_def,
        well_formed_type_value_def, within_int_bound_def] >>
@@ -481,9 +483,10 @@ Proof
   rpt strip_tac >> gvs[type_value_size_def] >> res_tac >> simp[]
 QED
 
-Theorem type_value1_size_MEM:
+Theorem type_value_fields_size_MEM:
   !fields nm tv. MEM (nm,tv) fields ==>
-    type_value_size tv < type_value1_size fields
+    type_value_size tv <
+      list_size (pair_size (list_size char_size) type_value_size) fields
 Proof
   Induct >> simp[] >> Cases >> simp[type_value_size_def] >>
   rpt strip_tac >> gvs[] >> res_tac >> simp[]
@@ -494,7 +497,12 @@ Theorem MEM_type_value_size_StructTV:
     type_value_size tv < type_value_size (StructTV fields)
 Proof
   rpt strip_tac >> simp[type_value_size_def] >>
-  imp_res_tac type_value1_size_MEM >> simp[]
+  imp_res_tac type_value_fields_size_MEM >>
+  `(λx. pair_size (list_size char_size) (λx. x)
+      ((I ## type_value_size) x)) =
+    pair_size (list_size char_size) type_value_size`
+    by simp[FUN_EQ_THM, pairTheory.FORALL_PROD, basicSizeTheory.pair_size_def] >>
+  simp[]
 QED
 
 Theorem ArrayTV_type_value_size:

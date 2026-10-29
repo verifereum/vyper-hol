@@ -11,37 +11,58 @@ val empty_modules =
   ``([(NONE, [])] : (num option # toplevel list) list)``
 val zero_address = ``(0w : address)``
 
-(* AddressV is represented as twenty bytes. Wider destinations need different
-   padding from ordinary byte strings and deliberately remain unsupported. *)
+(* AddressV is twenty bytes, like a bytes20 or Bytes[20] value, but Vyper
+   converts an address to bytesM (20 <= M <= 32) as an integer, left-padding
+   it, while byte strings are right-padded. *)
 Theorem address_bytes_conversion_boundary:
-  valid_conversion (BaseT AddressT) (BaseT (BytesT bd)) <=> bd = Fixed 20
+  valid_conversion (BaseT AddressT) (BaseT (BytesT bd)) <=>
+  ?m. bd = Fixed m /\ 20 <= m /\ m <= 32
 Proof
   Cases_on `bd` >> simp[valid_conversion_def]
 QED
 
-Theorem address_bytes20_preserves_value:
-  value_has_type (BaseTV AddressT) v ==>
-  evaluate_convert tenv v (BaseT (BytesT (Fixed 20))) = INL v
+Theorem address_bytes_left_padded:
+  value_has_type (BaseTV AddressT) (BytesV bs) /\ 20 <= m ==>
+  evaluate_type_builtin cx Convert (BaseT (BytesT (Fixed m)))
+    [BaseT AddressT] [BytesV bs] =
+  INL (BytesV (REPLICATE (m - 20) 0w ++ bs))
 Proof
-  Cases_on `v` >>
-  simp[value_has_type_def, evaluate_convert_def, listTheory.PAD_RIGHT] >>
-  strip_tac >> gvs[]
+  simp[value_has_type_def, evaluate_type_builtin_def,
+       evaluate_convert_from_def, listTheory.PAD_LEFT,
+       rich_listTheory.REPLICATE_GENLIST]
 QED
 
-Theorem address_bytes20_values_eval:
-  evaluate_convert FEMPTY (AddressV 0w) (BaseT (BytesT (Fixed 20))) =
-    INL (BytesV (REPLICATE 20 0w)) /\
-  evaluate_convert FEMPTY (AddressV 1w) (BaseT (BytesT (Fixed 20))) =
+Theorem address_bytes_values_eval:
+  evaluate_type_builtin empty_evaluation_context Convert
+    (BaseT (BytesT (Fixed 20))) [BaseT AddressT] [AddressV 1w] =
     INL (BytesV (REPLICATE 19 0w ++ [1w])) /\
-  evaluate_convert FEMPTY (AddressV 1461501637330902918203684832716283019655932542975w)
-    (BaseT (BytesT (Fixed 20))) = INL (BytesV (REPLICATE 20 255w))
+  evaluate_type_builtin empty_evaluation_context Convert
+    (BaseT (BytesT (Fixed 21))) [BaseT AddressT] [AddressV 1w] =
+    INL (BytesV (REPLICATE 20 0w ++ [1w])) /\
+  evaluate_type_builtin empty_evaluation_context Convert
+    (BaseT (BytesT (Fixed 32))) [BaseT AddressT] [AddressV 0w] =
+    INL (BytesV (REPLICATE 32 0w)) /\
+  evaluate_type_builtin empty_evaluation_context Convert
+    (BaseT (BytesT (Fixed 32))) [BaseT AddressT] [AddressV 1w] =
+    INL (BytesV (REPLICATE 31 0w ++ [1w])) /\
+  evaluate_type_builtin empty_evaluation_context Convert
+    (BaseT (BytesT (Fixed 32))) [BaseT AddressT]
+    [AddressV 1461501637330902918203684832716283019655932542975w] =
+    INL (BytesV (REPLICATE 12 0w ++ REPLICATE 20 255w)) /\
+  (* Byte-string sources of the same twenty bytes are right-padded. *)
+  evaluate_type_builtin empty_evaluation_context Convert
+    (BaseT (BytesT (Fixed 32))) [BaseT (BytesT (Fixed 20))] [AddressV 1w] =
+    INL (BytesV (REPLICATE 19 0w ++ [1w] ++ REPLICATE 12 0w)) /\
+  evaluate_type_builtin empty_evaluation_context Convert
+    (BaseT (BytesT (Fixed 32))) [BaseT (BytesT (Dynamic 20))] [AddressV 1w] =
+    INL (BytesV (REPLICATE 19 0w ++ [1w] ++ REPLICATE 12 0w))
 Proof
   EVAL_TAC
 QED
 
 Theorem address_bytes_conversion_widths_eval:
   EVERY (λn. valid_conversion (BaseT AddressT) (BaseT (BytesT (Fixed n))) =
-             (n = 20)) (GENLIST SUC 32) /\
+             (20 <= n)) (GENLIST SUC 32) /\
   ¬valid_conversion (BaseT AddressT) (BaseT (BytesT (Dynamic 20))) /\
   ¬valid_conversion (BaseT AddressT) (BaseT (BytesT (Dynamic 32)))
 Proof
@@ -124,6 +145,7 @@ Definition abi_encode_wrapping_cases_ok_def:
   abi_encode_wrapping_cases_ok = EVERY (λ(ensure, method_id, n).
     case evaluate_type_builtin empty_evaluation_context (AbiEncode ensure method_id)
       (TupleT [TupleT [BaseT (StringT 16); BaseT (BytesT (Dynamic 16))]])
+      [TupleT [BaseT (StringT 16); BaseT (BytesT (Dynamic 16))]]
       [ArrayV (TupleV [StringV "abcdefghijklmnop"; BytesV (REPLICATE 16 1w)])] of
       INL (BytesV bs) => LENGTH bs = n
     | _ => F)
@@ -200,10 +222,10 @@ in
 end
 
 val () = List.app (fn in_deploy =>
-  (assert_some (check_address_bytes ``Fixed 20`` in_deploy);
+  (List.app (fn bd => assert_some (check_address_bytes bd in_deploy))
+     [``Fixed 20``, ``Fixed 21``, ``Fixed 32``];
    List.app (fn bd => assert_none (check_address_bytes bd in_deploy))
-     [``Fixed 19``, ``Fixed 21``, ``Fixed 32``,
-      ``Dynamic 20``, ``Dynamic 32``])) [false, true]
+     [``Fixed 19``, ``Dynamic 20``, ``Dynamic 32``])) [false, true]
 
 (* Basic API and ML-Boolean construction. *)
 val empty_check = vyperCheckContractLib.check_contract
@@ -726,6 +748,62 @@ val () = List.app (assert_some o check_constants)
     tdecl ``BaseT BoolT`` "E"
       ``Builtin (BaseT BoolT) (Bop Eq) [^(tname b32 "K"); ^(tname b32 "K")]``]]
 
+(* The sealed evaluator must resolve and type-check custom errors, not just
+   evaluate contracts that never mention them. Keywords must follow
+   declaration order, as in Vyper; the argument types deliberately differ. *)
+val custom_error_decl =
+  ``ErrorDecl "Problem" [("a", ^u256); ("b", BaseT BoolT)]``
+val custom_error_flag = ``Literal (BaseT BoolT) (BoolL T)``
+val custom_error_positional =
+  ``CustomError (NONE, "Problem") [^(const_lit 1); ^custom_error_flag] []``
+val custom_error_keywords =
+  ``CustomError (NONE, "Problem") []
+      [("a", ^(const_lit 1)); ("b", ^custom_error_flag)]``
+fun check_custom_errors decls body =
+  vyperCheckContractLib.check_contract_conv
+    ``check_contract F ^empty_layouts ^zero_address
+        [(NONE, FunctionDecl External Pure F F "f" [] [] NoneT ^body ::
+           ^(listSyntax.mk_list (decls, ``:toplevel``)))]``
+
+val () = assert_some (check_custom_errors [custom_error_decl]
+  ``[Raise (RaiseCustomError ^custom_error_positional)]``)
+val () = assert_some (check_custom_errors [custom_error_decl]
+  ``[Assert ^custom_error_flag (AssertCustomError ^custom_error_keywords)]``)
+val () = assert_none (check_custom_errors []
+  ``[Raise (RaiseCustomError ^custom_error_positional)]``)
+val () = assert_none (check_custom_errors [custom_error_decl, custom_error_decl]
+  ``[Raise (RaiseCustomError ^custom_error_positional)]``)
+val () = assert_none (check_custom_errors [custom_error_decl]
+  ``[Raise (RaiseCustomError
+      (CustomError (NONE, "Problem") [^custom_error_flag; ^(const_lit 1)] []))]``)
+val () = assert_none (check_custom_errors [custom_error_decl]
+  ``[Assert ^custom_error_flag (AssertCustomError
+      (CustomError (NONE, "Problem") []
+        [("a", ^(const_lit 1)); ("a", ^(const_lit 2))]))]``)
+val () = assert_none (check_custom_errors [custom_error_decl]
+  ``[Assert ^custom_error_flag (AssertCustomError
+      (CustomError (NONE, "Problem") []
+        [("b", ^custom_error_flag); ("a", ^(const_lit 1))]))]``)
+val () = assert_none (check_custom_errors [custom_error_decl]
+  ``[Assert ^custom_error_flag (AssertCustomError
+      (CustomError (NONE, "Problem") [] [("a", ^(const_lit 1))]))]``)
+val () = assert_none (check_custom_errors [custom_error_decl]
+  ``[Assert ^custom_error_flag (AssertCustomError
+      (CustomError (NONE, "Problem") []
+        [("a", ^(const_lit 1)); ("c", ^custom_error_flag)]))]``)
+
+(* An error declared in an imported module resolves through its source id. *)
+fun check_imported_error decl_src =
+  vyperCheckContractLib.check_contract_conv
+    ``check_contract F ^empty_layouts ^zero_address
+        [(NONE, [FunctionDecl External Pure F F "f" [] [] NoneT
+                   [Raise (RaiseCustomError
+                     (CustomError (SOME 1, "Problem")
+                       [^(const_lit 1); ^custom_error_flag] []))]]);
+         (^decl_src, [^custom_error_decl])]``
+val () = assert_some (check_imported_error ``SOME 1 : num option``)
+val () = assert_none (check_imported_error ``SOME 2 : num option``)
+
 (* Implicit bound widening: a String, Bytes or DynArray value with a smaller
    bound is accepted where Vyper accepts it, as the frontend translates it. *)
 val widen_return_modules =
@@ -911,3 +989,144 @@ val () = check_accepts "constant chain through two imports" false
          (Constant (TopLevelName (BaseT (UintT 256)) (SOME 1,"M"))) "N"
          (BaseT (UintT 256)) NONE])]
     : (num option # toplevel list) list``
+
+(* A module that nothing initializes has no storage in the layout.  Its
+   functions that no live function calls are not checked, so get_x and the
+   external set_x need no slot for x; a live function that reaches x is
+   rejected. *)
+fun uninit_modules main_callee mid_callee =
+  ``[(NONE,
+      [FunctionDecl External Pure F F "f" [("a", BaseT (UintT 256))] []
+         (BaseT (UintT 256))
+         [Return (SOME (Call (BaseT (UintT 256)) (IntCall ^main_callee)
+                          [Name (BaseT (UintT 256)) "a"] NONE))]]);
+     (SOME 1,
+      [VariableDecl Private Storage "x" (BaseT (UintT 256)) NONE;
+       FunctionDecl Internal View F F "get_x" [("a", BaseT (UintT 256))] []
+         (BaseT (UintT 256))
+         [Return (SOME (TopLevelName (BaseT (UintT 256)) (SOME 1, "x")))];
+       FunctionDecl External Nonpayable F F "set_x" [("a", BaseT (UintT 256))]
+         [] NoneT
+         [Assign (BaseTarget (TopLevelNameTarget (SOME 1, "x")))
+            (Name (BaseT (UintT 256)) "a")];
+       FunctionDecl Internal Pure F F "double" [("a", BaseT (UintT 256))] []
+         (BaseT (UintT 256))
+         [Return (SOME (Builtin (BaseT (UintT 256)) (Bop Mul)
+                          [Literal (BaseT (UintT 256)) (IntL 2);
+                           Name (BaseT (UintT 256)) "a"]))]]);
+     (SOME 2,
+      [FunctionDecl Internal Pure F F "quad" [("a", BaseT (UintT 256))] []
+         (BaseT (UintT 256))
+         [Return (SOME (Call (BaseT (UintT 256)) (IntCall ^mid_callee)
+                          [Name (BaseT (UintT 256)) "a"] NONE))]])]
+    : (num option # toplevel list) list``
+val lib_double = ``(SOME 1, "double") : num option # string``
+val lib_get_x = ``(SOME 1, "get_x") : num option # string``
+val mid_quad = ``(SOME 2, "quad") : num option # string``
+val lib_x_layouts =
+  ``([((0w : address),
+       ([((SOME 1, "x"), 0)] : storage_layout, [] : storage_layout))]
+      : (address # (storage_layout # storage_layout)) list)``
+
+val () = check_accepts "uninitialized module, pure helper" false
+  empty_layouts (uninit_modules lib_double lib_double)
+val () = check_accepts "uninitialized module, pure helper (deploy)" true
+  empty_layouts (uninit_modules lib_double lib_double)
+val () = check_rejects empty_layouts (uninit_modules lib_get_x lib_double)
+val () = check_accepts "initialized module, state read" false
+  lib_x_layouts (uninit_modules lib_get_x lib_double)
+(* Through a stateless module: main calls quad, which calls into lib. *)
+val () = check_accepts "uninitialized module behind a stateless one" false
+  empty_layouts (uninit_modules mid_quad lib_double)
+val () = check_rejects empty_layouts (uninit_modules mid_quad lib_get_x)
+
+(* The transient and HashMap arms: lib's only state is t or m, and read
+   reaches it.  Without a slot lib is not allocated, so its external set is
+   not checked; with one, set is checked and read is accepted. *)
+fun uninit_state_modules decls read_expr set_stmt callee = let
+  val lib = listSyntax.mk_list (decls @
+    [``FunctionDecl Internal View F F "read" [("a", BaseT (UintT 256))] []
+         (BaseT (UintT 256)) [Return (SOME ^read_expr)]``,
+     ``FunctionDecl External Nonpayable F F "set" [("a", BaseT (UintT 256))]
+         [] NoneT [^set_stmt]``,
+     ``FunctionDecl Internal Pure F F "double" [("a", BaseT (UintT 256))] []
+         (BaseT (UintT 256))
+         [Return (SOME (Builtin (BaseT (UintT 256)) (Bop Mul)
+                          [Literal (BaseT (UintT 256)) (IntL 2);
+                           Name (BaseT (UintT 256)) "a"]))]``], ``:toplevel``)
+in
+  ``[(NONE,
+      [FunctionDecl External View F F "f" [("a", BaseT (UintT 256))] []
+         (BaseT (UintT 256))
+         [Return (SOME (Call (BaseT (UintT 256)) (IntCall (SOME 1, ^callee))
+                          [Name (BaseT (UintT 256)) "a"] NONE))]]);
+     (SOME 1, ^lib)]
+    : (num option # toplevel list) list``
+end
+fun check_rejects_in in_deploy layouts mods = assert_none
+  (vyperCheckContractLib.check_contract_conv
+     ``check_contract ^in_deploy ^layouts ^zero_address ^mods``)
+fun check_state_arm label decl read_expr set_stmt slot_layouts = let
+  val mods = uninit_state_modules decl read_expr set_stmt
+in
+  check_accepts (label ^ ", pure helper") false empty_layouts
+    (mods ``"double"``);
+  check_accepts (label ^ ", pure helper (deploy)") true empty_layouts
+    (mods ``"double"``);
+  check_rejects_in ``F`` empty_layouts (mods ``"read"``);
+  check_rejects_in ``T`` empty_layouts (mods ``"read"``);
+  check_accepts (label ^ ", allocated") false slot_layouts (mods ``"read"``)
+end
+val () = check_state_arm "uninitialized transient"
+  [``VariableDecl Private Transient "t" (BaseT (UintT 256)) NONE``]
+  ``TopLevelName (BaseT (UintT 256)) (SOME 1, "t")``
+  ``Assign (BaseTarget (TopLevelNameTarget (SOME 1, "t")))
+      (Name (BaseT (UintT 256)) "a")``
+  ``([((0w : address),
+       ([] : storage_layout, [((SOME 1, "t"), 0)] : storage_layout))]
+      : (address # (storage_layout # storage_layout)) list)``
+val () = check_state_arm "uninitialized HashMap"
+  [``HashMapDecl Private F "m" (BaseT (UintT 256)) (Type (BaseT (UintT 256)))
+      NONE``]
+  ``Subscript (BaseT (UintT 256)) (TopLevelName NoneT (SOME 1, "m"))
+      (Name (BaseT (UintT 256)) "a")``
+  ``Assign (BaseTarget (SubscriptTarget (TopLevelNameTarget (SOME 1, "m"))
+                         (Name (BaseT (UintT 256)) "a")))
+      (Name (BaseT (UintT 256)) "a")``
+  ``([((0w : address),
+       ([((SOME 1, "m"), 0)] : storage_layout, [] : storage_layout))]
+      : (address # (storage_layout # storage_layout)) list)``
+
+(* A module with a slot for x but not for y is not allocated: set, which
+   writes y, is not checked. *)
+val () = check_accepts "partially allocated module" false
+  ``([((0w : address),
+       ([((SOME 1, "x"), 0)] : storage_layout, [] : storage_layout))]
+      : (address # (storage_layout # storage_layout)) list)``
+  (uninit_state_modules
+     [``VariableDecl Private Storage "x" (BaseT (UintT 256)) NONE``,
+      ``VariableDecl Private Storage "y" (BaseT (UintT 256)) NONE``]
+     ``TopLevelName (BaseT (UintT 256)) (SOME 1, "x")``
+     ``Assign (BaseTarget (TopLevelNameTarget (SOME 1, "y")))
+         (Name (BaseT (UintT 256)) "a")``
+     ``"double"``)
+
+(* The main module's storage must have slots. *)
+val () = check_rejects empty_layouts
+  ``[(NONE,
+      [VariableDecl Private Storage "x" (BaseT (UintT 256)) NONE;
+       FunctionDecl External Pure F F "f" [] [] (BaseT (UintT 256))
+         [Return (SOME (Literal (BaseT (UintT 256)) (IntL 1)))]])]
+    : (num option # toplevel list) list``
+
+(* Exports may name only functions of allocated modules. *)
+Theorem exports_ok_uninitialized_module:
+  ~exports_ok ^empty_layouts ^zero_address
+     ^(uninit_modules lib_double lib_double) [("set_x", 1)] /\
+  exports_ok ^lib_x_layouts ^zero_address
+     ^(uninit_modules lib_double lib_double) [("set_x", 1)] /\
+  exports_ok ^empty_layouts ^zero_address
+     ^(uninit_modules lib_double lib_double) [("quad", 2)]
+Proof
+  CONV_TAC vyperCheckContractLib.check_contract_conv
+QED

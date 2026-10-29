@@ -2,13 +2,8 @@ Theory vyperTestDefs_functional_codegen_types_test_dynamic_array[no_sig_docs]
 Ancestors jsonToVyper
 Libs vyperTestLib
 val () = holbuild_extra_deps ["../vyper-test-exports/functional/codegen/types/test_dynamic_array.json", "../vyper-test-exports/functional/codegen/types/test_dynamic_array.json.provenance"];
-(* Independent batch: global test indices 0..99 of 174.
-   Former whole-file invocation (replaced by bounded batches):
-val () = make_definitions_for_file ("functional_codegen_types_test_dynamic_array", "../vyper-test-exports/functional/codegen/types/test_dynamic_array.json");
-*)
-val () = make_definitions_for_partition ("functional_codegen_types_test_dynamic_array", "../vyper-test-exports/functional/codegen/types/test_dynamic_array.json", 0, 100, 174);
+val () = make_definitions_for_file_range ("functional_codegen_types_test_dynamic_array", "../vyper-test-exports/functional/codegen/types/test_dynamic_array.json", 0, 48);
 
-(* ===== Local regression proofs ===== *)
 (* A proof boundary lets holbuild retain the expensive JSON/CV generation
    across infrastructure deadlines, without changing test selection. *)
 Theorem dynamic_array_trace_nonempty:

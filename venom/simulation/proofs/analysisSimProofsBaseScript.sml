@@ -51,7 +51,7 @@ Proof
   rw[run_insts_def] >> CASE_TAC >> simp[run_insts_def]
 QED
 
-Triviality run_insts_append:
+Theorem run_insts_append:
   !xs ys fuel ctx s.
     run_insts fuel ctx (xs ++ ys) s =
     case run_insts fuel ctx xs s of

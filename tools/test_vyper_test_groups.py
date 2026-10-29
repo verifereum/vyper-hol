@@ -16,8 +16,8 @@ def log(seconds: dict[str, float]) -> str:
 
 CHUNKS = [Test(f"vyperTest_slow_chunk{k}", "vyperTestDefs_slow") for k in range(4)]
 SMALL = [Test(f"vyperTest_small{k}", f"vyperTestDefs_small{k}") for k in range(8)]
-BATCHES = [Test("vyperTest_slow", "vyperTestDefs_slow")] + [
-    Test(f"vyperTest_slow_batch_{k:03}", f"vyperTestDefs_slow_batch_{k:03}")
+PARTS = [Test("vyperTest_slow", "vyperTestDefs_slow")] + [
+    Test(f"vyperTest_slow_part{k}", f"vyperTestDefs_slow_part{k}")
     for k in range(1, 4)
 ]
 TIMES = {"vyperTest_slow": 400.0, "vyperTestDefs_slow": 100.0}
@@ -67,52 +67,52 @@ class TestBuildTimes(unittest.TestCase):
         self.assertCountEqual([t for g in groups for t in g], CHUNKS + SMALL)
 
 
-class TestIndependentBatches(unittest.TestCase):
-    """Batch zero retains the old name; every sibling has its own definitions."""
+class TestIndependentParts(unittest.TestCase):
+    """Part zero retains the old name; every sibling has its own definitions."""
 
-    def test_whole_file_time_is_shared_including_batch_zero_and_definitions(self) -> None:
-        times = BuildTimes([log(TIMES)], BATCHES)
-        self.assertEqual(times.missing(BATCHES), [])
-        self.assertEqual([times.seconds[t.name] for t in BATCHES], [100.0] * 4)
-        self.assertEqual([times.seconds[t.defs] for t in BATCHES], [25.0] * 4)
-        self.assertEqual(sum(map(times.cost, BATCHES)), 500.0)
-        self.assertEqual(times.makespan(BATCHES), 500.0)
+    def test_whole_file_time_is_shared_including_part_zero_and_definitions(self) -> None:
+        times = BuildTimes([log(TIMES)], PARTS)
+        self.assertEqual(times.missing(PARTS), [])
+        self.assertEqual([times.seconds[t.name] for t in PARTS], [100.0] * 4)
+        self.assertEqual([times.seconds[t.defs] for t in PARTS], [25.0] * 4)
+        self.assertEqual(sum(map(times.cost, PARTS)), 500.0)
+        self.assertEqual(times.makespan(PARTS), 500.0)
 
-    def test_measured_batches_including_zero_are_not_rescaled(self) -> None:
-        measured = {BATCHES[0].name: 80.0, BATCHES[0].defs: 20.0,
-                    BATCHES[1].name: 120.0, BATCHES[1].defs: 30.0}
-        times = BuildTimes([log(measured)], BATCHES)
+    def test_measured_parts_including_zero_are_not_rescaled(self) -> None:
+        measured = {PARTS[0].name: 80.0, PARTS[0].defs: 20.0,
+                    PARTS[1].name: 120.0, PARTS[1].defs: 30.0}
+        times = BuildTimes([log(measured)], PARTS)
         for name, seconds in measured.items():
             self.assertEqual(times.seconds[name], seconds)
-        self.assertEqual(times.cost(BATCHES[2]), 125.0)
+        self.assertEqual(times.cost(PARTS[2]), 125.0)
 
-    def test_sibling_measurements_work_without_batch_zero(self) -> None:
-        times = BuildTimes([log({BATCHES[1].name: 10.0, BATCHES[1].defs: 5.0})], BATCHES)
-        self.assertEqual(times.missing(BATCHES), [])
-        self.assertEqual([times.cost(test) for test in BATCHES], [15.0] * 4)
+    def test_sibling_measurements_work_without_part_zero(self) -> None:
+        times = BuildTimes([log({PARTS[1].name: 10.0, PARTS[1].defs: 5.0})], PARTS)
+        self.assertEqual(times.missing(PARTS), [])
+        self.assertEqual([times.cost(test) for test in PARTS], [15.0] * 4)
 
     def test_unmeasured_families_stay_missing(self) -> None:
-        times = BuildTimes([], BATCHES)
-        self.assertEqual(len(times.missing(BATCHES)), 8)
+        times = BuildTimes([], PARTS)
+        self.assertEqual(len(times.missing(PARTS)), 8)
 
-    def test_independent_batches_go_to_different_groups(self) -> None:
-        times = BuildTimes([log(TIMES)], BATCHES + SMALL)
-        groups = times.plan(BATCHES + SMALL, 4)
-        self.assertEqual(sorted(sum(t in g for t in BATCHES) for g in groups), [1] * 4)
-        self.assertCountEqual([t for g in groups for t in g], BATCHES + SMALL)
+    def test_independent_parts_go_to_different_groups(self) -> None:
+        times = BuildTimes([log(TIMES)], PARTS + SMALL)
+        groups = times.plan(PARTS + SMALL, 4)
+        self.assertEqual(sorted(sum(t in g for t in PARTS) for g in groups), [1] * 4)
+        self.assertCountEqual([t for g in groups for t in g], PARTS + SMALL)
 
-    def test_generated_headers_keep_each_batch_independent(self) -> None:
+    def test_generated_headers_keep_each_part_independent(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            for test in BATCHES:
+            for test in PARTS:
                 (root / f"{test.name}Script.sml").write_text(
                     f"Theory {test.name}[no_sig_docs]\nAncestors {test.defs}\nLibs vyperTestRunnerLib\n")
                 (root / f"{test.defs}Script.sml").write_text(f"Theory {test.defs}\nAncestors jsonToVyper\n")
-            self.assertEqual(generated_tests(root), BATCHES)
+            self.assertEqual(generated_tests(root), PARTS)
 
     def test_plan_manifest_round_trip(self) -> None:
-        times = BuildTimes([log(TIMES)], BATCHES + SMALL, workers=2)
-        assigned = times.plan(BATCHES + SMALL, 6)
+        times = BuildTimes([log(TIMES)], PARTS + SMALL, workers=2)
+        assigned = times.plan(PARTS + SMALL, 6)
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "groups.txt"
             text = format_groups(assigned, times)
@@ -120,7 +120,7 @@ class TestIndependentBatches(unittest.TestCase):
             path.write_text(text)
             mapped = read_groups(path)
         for group, tests in enumerate(assigned):
-            self.assertEqual(group_targets(BATCHES + SMALL, mapped, group, 6),
+            self.assertEqual(group_targets(PARTS + SMALL, mapped, group, 6),
                              [test.name for test in tests])
 
 
@@ -136,12 +136,22 @@ class TestGroupTargets(unittest.TestCase):
         self.assertEqual(group_targets(SMALL[:1], {"vyperTest_gone": 0, SMALL[0].name: 0}, 0, 1),
                          [SMALL[0].name])
 
-    def test_checked_in_manifest_covers_every_generated_batch_once(self) -> None:
+    def test_checked_in_manifest_covers_every_generated_part_once(self) -> None:
         root = Path(__file__).resolve().parents[1]
         tests = generated_tests(root / "tests/generated")
         path = root / ".github/vyper-test-groups.txt"
         mapped = read_groups(path)
-        self.assertEqual(set(mapped), {test.name for test in tests})
+        names = {test.name for test in tests}
+        regression_root = root / "tests/vyper-regression"
+        regression_names = {
+            "vyperTest_functional_codegen_vyper_hol_regression_" +
+            "_".join(source.relative_to(regression_root).with_suffix("").parts)
+            for source in regression_root.rglob("test_*.py")
+        }
+        # Regression wrappers are generated in CI and intentionally uncommitted.
+        # Only suites backed by a regression source may have a reserved mapping.
+        absent_regressions = regression_names - names
+        self.assertEqual(set(mapped) - absent_regressions, names)
         self.assertEqual(len(mapped), sum(bool(line and not line.startswith("#"))
                                           for line in path.read_text().splitlines()))
         assigned = [name for group in range(6)

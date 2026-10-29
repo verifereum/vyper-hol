@@ -643,6 +643,9 @@ Definition toplevel_decl_types_valid_def:
       (JTL_StructDef _ fields) =
     EVERY (arg_type_valid nominal_index all_import_maps type_ctx) fields) ∧
   (toplevel_decl_types_valid nominal_index all_import_maps type_ctx
+      (JTL_ErrorDef _ fields) =
+    EVERY (arg_type_valid nominal_index all_import_maps type_ctx) fields) ∧
+  (toplevel_decl_types_valid nominal_index all_import_maps type_ctx
       (JTL_InterfaceDef _ funcs) =
     EVERY (interface_func_types_valid nominal_index all_import_maps type_ctx)
       funcs) ∧
@@ -1125,7 +1128,7 @@ Definition initialized_chains_def:
   initialized_chains [] = [] ∧
   initialized_chains (JTL_InitializesDecl target :: rest) =
     (case initialized_chain (initializes_target target) of
-     | SOME chain => chain :: initialized_chains rest
+     | SOME alias => alias :: initialized_chains rest
      | NONE => initialized_chains rest) ∧
   initialized_chains (_ :: rest) = initialized_chains rest
 End

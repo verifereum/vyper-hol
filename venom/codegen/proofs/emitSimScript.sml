@@ -70,7 +70,7 @@ Proof
 QED
 
 (* =========================================================================
-   BUMP boundary
+   Plain-add BUMP boundary
    ========================================================================= *)
 
 Theorem dimindex_256[local,simp]:
@@ -78,6 +78,7 @@ Theorem dimindex_256[local,simp]:
 Proof
   CONV_TAC fcpLib.INDEX_CONV
 QED
+
 
 Theorem word_of_bytes_encode_num_bytes_256[local]:
   !n. n < dimword (:256) ==>
@@ -102,17 +103,16 @@ Theorem bump_emit_ops_asm_trace:
 Proof
   rpt strip_tac >>
   fs[bump_emit_ops_def, execute_plan_def, exec_stack_op_def,
-     asm_block_at_cons] >>
+     asm_block_at_cons, dup_name_def] >>
   `2 = SUC 1` by decide_tac >> pop_assum SUBST1_TAC >>
   simp[Once asm_steps_def, asm_step_def, asm_step_op_def,
        asm_step_arith_def, asm_step_compare_def, asm_step_bitwise_def,
        asm_step_memory_def, asm_step_control_def, asm_step_extcall_def,
        asm_step_copy_def, asm_step_context_def, asm_dup_def, asm_next_def,
-       dup_table_def, dup_name_def, swap_table_def, log_table_def] >>
+       dup_table_def, swap_table_def, log_table_def] >>
   `1 = SUC 0` by decide_tac >> pop_assum SUBST1_TAC >>
-  simp[Once asm_steps_def, asm_steps_def, asm_step_def, asm_step_op_def,
-       asm_step_arith_def, asm_binop_def, asm_next_def,
-       wordsTheory.WORD_ADD_COMM]
+  simp[asm_steps_def, asm_step_def, asm_step_op_def,
+       asm_step_arith_def, asm_binop_def, asm_next_def]
 QED
 
 
@@ -387,20 +387,20 @@ Theorem bump_emit_sim_from_stack:
        case op of Var x => x <> ptr_out /\ x <> next_out | _ => T) /\
     asm_block_at prog as.as_pc (execute_plan initial_fmp bump_emit_ops) ==>
     ?as'.
-       asm_steps lo o2pc prog 2 as = AsmOK as' /\
+      asm_steps lo o2pc prog 2 as = AsmOK as' /\
       venom_asm_rel lo
         (ps with ps_stack :=
            stack_push (Var next_out)
              (stack_push (Var ptr_out) (stack_pop 2 ps.ps_stack)))
-         (update_var next_out (base_val + sz)
+        (update_var next_out (base_val + sz)
           (update_var ptr_out base_val vs)) as' /\
-       as'.as_pc = as.as_pc + 2
+      as'.as_pc = as.as_pc + 2
 Proof
   rpt gen_tac >> strip_tac >>
   qexists_tac
     `as with <| as_stack :=
-        base_val + sz :: base_val :: rest;
-        as_pc := as.as_pc + 2 |>` >>
+       base_val + sz :: base_val :: rest;
+       as_pc := as.as_pc + 2 |>` >>
   conj_tac
   >- metis_tac[bump_emit_ops_asm_trace] >>
   conj_tac
@@ -430,7 +430,7 @@ Proof
           mp_tac plan_stack_rel_push >>
          simp[stack_push_def, operand_val_update_var_eq]) >>
       `plan_stack_rel lo
-          (update_var next_out (base_val + sz)
+         (update_var next_out (base_val + sz)
            (update_var ptr_out base_val vs))
          (stack_push (Var ptr_out) (stack_pop 2 ps.ps_stack))
          (base_val :: rest)` by
@@ -444,17 +444,17 @@ Proof
              Cases_on `e` >> gvs[] >> res_tac >> gvs[])
          >- first_assum ACCEPT_TAC) >>
       `plan_stack_rel lo
-          (update_var next_out (base_val + sz)
+         (update_var next_out (base_val + sz)
            (update_var ptr_out base_val vs))
          (stack_push (Var next_out)
            (stack_push (Var ptr_out) (stack_pop 2 ps.ps_stack)))
-          (base_val + sz :: base_val :: rest)` by
+         (base_val + sz :: base_val :: rest)` by
         (qspecl_then [`lo`,
-           `update_var next_out (base_val + sz)
+          `update_var next_out (base_val + sz)
              (update_var ptr_out base_val vs)`,
           `stack_push (Var ptr_out) (stack_pop 2 ps.ps_stack)`,
           `base_val :: rest`, `Var next_out`,
-           `base_val + sz`]
+          `base_val + sz`]
           mp_tac plan_stack_rel_push >>
          simp[stack_push_def, operand_val_update_var_eq]) >>
       qpat_x_assum `venom_asm_rel _ _ _ _`
@@ -472,12 +472,12 @@ Proof
                  Cases_on `op` >> gvs[])) >>
          simp[]) >>
       `plan_spill_rel lo
-          (update_var next_out (base_val + sz)
+         (update_var next_out (base_val + sz)
            (update_var ptr_out base_val vs))
          ps.ps_spilled as.as_memory` by
         (qspecl_then [`lo`, `update_var ptr_out base_val vs`,
           `ps.ps_spilled`, `as.as_memory`, `next_out`,
-           `base_val + sz`]
+          `base_val + sz`]
           mp_tac plan_spill_rel_update_var >>
          impl_tac
          >- (conj_tac
@@ -487,7 +487,7 @@ Proof
                    (qspec_then `op` mp_tac) >>
                  Cases_on `op` >> gvs[])) >>
          simp[]) >>
-       simp[venom_asm_rel_def] >>
+      simp[venom_asm_rel_def] >>
       conj_tac >- simp[update_var_def] >>
       simp[update_var_def]) >>
   simp[]
@@ -509,14 +509,14 @@ Theorem bump_emit_sim:
        case op of Var x => x <> ptr_out /\ x <> next_out | _ => T) /\
     asm_block_at prog as.as_pc (execute_plan initial_fmp bump_emit_ops) ==>
     ?as'.
-       asm_steps lo o2pc prog 2 as = AsmOK as' /\
+      asm_steps lo o2pc prog 2 as = AsmOK as' /\
       venom_asm_rel lo
         (ps with ps_stack :=
            stack_push (Var next_out)
              (stack_push (Var ptr_out) (stack_pop 2 ps.ps_stack)))
-         (update_var next_out (base_val + sz)
+        (update_var next_out (base_val + sz)
           (update_var ptr_out base_val vs)) as' /\
-       as'.as_pc = as.as_pc + 2
+      as'.as_pc = as.as_pc + 2
 Proof
   rpt gen_tac >> strip_tac >>
   `?rest. as.as_stack = sz :: base_val :: rest` by

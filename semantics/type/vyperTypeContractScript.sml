@@ -12,9 +12,9 @@
 
 Theory vyperTypeContract
 Ancestors
-  list rich_list arithmetic finite_map option pair
+  list rich_list arithmetic finite_map option pair pred_set
   vyperAST vyperValue vyperMisc vyperContext vyperState vyperInterpreter
-  vyperTypeSystem vyperTypeCallGraph
+  vyperEvent vyperTypeSystem vyperTypeCallGraph
 Libs
   wordsLib
 
@@ -26,7 +26,7 @@ Datatype:
     cta_bare_globals             : (nsid |-> type);
     cta_bare_global_assignable   : (nsid |-> type);
     cta_toplevel_vtypes          : (nsid |-> value_type);
-    cta_flag_members    : (nsid |-> string list)
+    cta_flag_members             : (nsid |-> string list)
   |>
 End
 
@@ -138,6 +138,11 @@ Definition flag_member_keys_toplevel_def:
   flag_member_keys_toplevel _ _ = []
 End
 
+Definition error_sig_keys_toplevel_def:
+  error_sig_keys_toplevel src (ErrorDecl id _) = [(src,id)] /\
+  error_sig_keys_toplevel _ _ = []
+End
+
 Definition type_def_keys_toplevel_def:
   type_def_keys_toplevel src (StructDecl id _) = [(src,id)] /\
   type_def_keys_toplevel src (FlagDecl id _) = [(src,id)] /\
@@ -155,8 +160,58 @@ Definition contract_namespaces_ok_def:
     ALL_DISTINCT (contract_keys (fn_sig_keys_toplevel in_deploy) mods) /\
     ALL_DISTINCT (contract_keys toplevel_vtype_keys_toplevel mods) /\
     ALL_DISTINCT (contract_keys flag_member_keys_toplevel mods) /\
+    ALL_DISTINCT (contract_keys error_sig_keys_toplevel mods) /\
     ALL_DISTINCT (contract_keys type_def_keys_toplevel mods)
 End
+
+Definition custom_error_resolved_def:
+  custom_error_resolved mods (CustomError (src,name) positional kwargs) =
+    case ALOOKUP mods src of
+    | NONE => F
+    | SOME tops =>
+        case lookup_custom_error_args_in name tops of
+        | NONE => F
+        | SOME params =>
+            case order_custom_error_args params
+                   (CustomError (src,name) positional kwargs) of
+            | NONE => F
+            | SOME es => MAP expr_type es = MAP SND params
+End
+
+Definition custom_errors_stmt_ok_def:
+  custom_errors_stmt_ok mods (Raise (RaiseCustomError err)) =
+    custom_error_resolved mods err ∧
+  custom_errors_stmt_ok mods (Assert e (AssertCustomError err)) =
+    custom_error_resolved mods err ∧
+  custom_errors_stmt_ok mods (If e yes no) =
+    (custom_errors_stmts_ok mods yes ∧ custom_errors_stmts_ok mods no) ∧
+  custom_errors_stmt_ok mods (For id ty it n body) =
+    custom_errors_stmts_ok mods body ∧
+  custom_errors_stmt_ok mods (Raise RaiseBare) = T ∧
+  custom_errors_stmt_ok mods (Raise RaiseUnreachable) = T ∧
+  custom_errors_stmt_ok mods (Raise (RaiseReason e)) = T ∧
+  custom_errors_stmt_ok mods (Assert e AssertBare) = T ∧
+  custom_errors_stmt_ok mods (Assert e AssertUnreachable) = T ∧
+  custom_errors_stmt_ok mods (Assert e (AssertReason r)) = T ∧
+  custom_errors_stmt_ok mods Pass = T ∧
+  custom_errors_stmt_ok mods Continue = T ∧
+  custom_errors_stmt_ok mods Break = T ∧
+  custom_errors_stmt_ok mods (Expr e) = T ∧
+  custom_errors_stmt_ok mods (Log id es) = T ∧
+  custom_errors_stmt_ok mods (Return eo) = T ∧
+  custom_errors_stmt_ok mods (Assign tgt e) = T ∧
+  custom_errors_stmt_ok mods (AugAssign ty tgt bop e) = T ∧
+  custom_errors_stmt_ok mods (Append tgt e) = T ∧
+  custom_errors_stmt_ok mods (AnnAssign id ty e) = T ∧
+  custom_errors_stmts_ok mods [] = T ∧
+  custom_errors_stmts_ok mods (stmt::rest) =
+    (custom_errors_stmt_ok mods stmt ∧ custom_errors_stmts_ok mods rest)
+Termination
+  WF_REL_TAC `measure (λx.
+    case x of INL(_,stmt) => stmt_size stmt
+            | INR(_,stmts) => list_size stmt_size stmts)` >> simp[]
+End
+
 
 Definition params_ok_def:
   params_ok tenv args <=>
@@ -295,10 +350,9 @@ Definition constant_value_def:
          (case evaluate_type (type_env_all_modules mods) (expr_type e1) of
           | NONE => NONE
           | SOME arr_tv =>
-              case evaluate_subscript (type_env_all_modules mods) arr_tv
-                     (Value v1) v2 of
-              | INL (INL (Value v)) => SOME v
-              | _ => NONE)
+              case evaluate_subscripts arr_tv v1 [ValueSubscript v2] of
+              | INL v => SOME v
+              | INR _ => NONE)
      | _ => NONE) /\
   constant_value mods imms (Attribute _ e id) =
     (case constant_value mods imms e of
@@ -329,7 +383,7 @@ Definition constant_value_def:
        case constant_values mods imms es of
        | NONE => NONE
        | SOME vs =>
-           case evaluate_type_builtin (constant_context mods) tb typ vs of
+           case evaluate_type_builtin (constant_context mods) tb typ (MAP expr_type es) vs of
            | INL v => SOME v
            | INR _ => NONE) /\
   constant_value mods imms _ = NONE /\
@@ -465,6 +519,136 @@ Definition lookup_var_slot_in_layouts_def:
         ALOOKUP (if is_transient then transient_lay else storage_lay) (src,var_name)
 End
 
+(* ===== Allocated storage and live functions ===== *)
+
+(* Vyper allocates storage only for the modules a compilation initializes;
+   the layout shows which.  A function is live if its module is allocated,
+   or if a live function calls it. *)
+Definition toplevel_allocated_def:
+  toplevel_allocated layouts addr src (VariableDecl _ Storage id _ _) =
+    IS_SOME (lookup_var_slot_in_layouts layouts addr F src id) /\
+  toplevel_allocated layouts addr src (VariableDecl _ Transient id _ _) =
+    IS_SOME (lookup_var_slot_in_layouts layouts addr T src id) /\
+  toplevel_allocated layouts addr src (HashMapDecl _ is_transient id _ _ _) =
+    IS_SOME (lookup_var_slot_in_layouts layouts addr is_transient src id) /\
+  toplevel_allocated _ _ _ _ = T
+End
+
+Definition module_allocated_def:
+  module_allocated layouts addr src tls <=>
+    EVERY (toplevel_allocated layouts addr src) tls
+End
+
+Definition main_module_allocated_def:
+  main_module_allocated layouts addr mods <=>
+    case ALOOKUP mods NONE of
+    | NONE => T
+    | SOME tls => module_allocated layouts addr NONE tls
+End
+
+(* A storage, transient or HashMap variable with a slot; T for any other
+   name. *)
+Definition var_allocated_def:
+  var_allocated layouts addr mods (src,id) =
+    case ALOOKUP mods src of
+    | NONE => T
+    | SOME tls =>
+        case find_var_decl_by_name id tls of
+        | NONE => T
+        | SOME (StorageVarDecl is_transient _, vid) =>
+            IS_SOME (lookup_var_slot_in_layouts layouts addr is_transient src vid)
+        | SOME (HashMapVarDecl is_transient _ _, vid) =>
+            IS_SOME (lookup_var_slot_in_layouts layouts addr is_transient src vid)
+End
+
+Definition toplevel_function_keys_def:
+  toplevel_function_keys src (FunctionDecl _ _ _ _ fn _ _ _ _) = [(src,fn)] /\
+  toplevel_function_keys _ _ = []
+End
+
+Definition live_roots_def:
+  live_roots layouts addr mods =
+    FLAT (MAP (\(src,tls).
+                 if module_allocated layouts addr src tls
+                 then FLAT (MAP (toplevel_function_keys src) tls) else [])
+              mods)
+End
+
+(* Worklist closure of todo under the call edges.  Each step consumes one
+   item, and only a newly seen node adds items (its out-edges), so
+   LENGTH todo + LENGTH edges steps reach the fixpoint. *)
+Definition call_closure_def:
+  call_closure edges 0 seen todo = seen /\
+  call_closure edges (SUC n) seen [] = seen /\
+  call_closure edges (SUC n) seen (k::todo) =
+    if MEM k seen then call_closure edges n seen todo
+    else call_closure edges n (k::seen) (direct_callees edges k ++ todo)
+End
+
+Definition live_functions_def:
+  live_functions layouts addr mods =
+    let edges = contract_call_edges mods in
+    let roots = live_roots layouts addr mods in
+      call_closure edges (LENGTH roots + LENGTH edges) [] roots
+End
+
+(* live is live_functions layouts addr mods, computed once.  Soundness needs
+   no fact about it: a function in an allocated module is live by the first
+   disjunct, and a checked body can only call a function in fn_sigs. *)
+Definition function_live_def:
+  function_live layouts addr mods live (src,fn) <=>
+    (case ALOOKUP mods src of
+     | NONE => F
+     | SOME tls => module_allocated layouts addr src tls) \/
+    MEM (src,fn) live
+End
+
+Definition context_function_live_def:
+  context_function_live cx k <=>
+    case ALOOKUP cx.sources cx.txn.target of
+    | NONE => F
+    | SOME mods =>
+        function_live cx.layouts cx.txn.target mods
+          (live_functions cx.layouts cx.txn.target mods) k
+End
+
+Definition live_artifact_def:
+  live_artifact layouts addr mods live art =
+    art with <| cta_fn_sigs :=
+                  DRESTRICT art.cta_fn_sigs (function_live layouts addr mods live);
+                cta_toplevel_vtypes :=
+                  DRESTRICT art.cta_toplevel_vtypes (var_allocated layouts addr mods) |>
+End
+
+Theorem live_artifact_fields[simp]:
+  (live_artifact layouts addr mods live art).cta_fn_sigs =
+    DRESTRICT art.cta_fn_sigs (function_live layouts addr mods live) /\
+  (live_artifact layouts addr mods live art).cta_toplevel_vtypes =
+    DRESTRICT art.cta_toplevel_vtypes (var_allocated layouts addr mods) /\
+  (live_artifact layouts addr mods live art).cta_bare_globals =
+    art.cta_bare_globals /\
+  (live_artifact layouts addr mods live art).cta_bare_global_assignable =
+    art.cta_bare_global_assignable /\
+  (live_artifact layouts addr mods live art).cta_flag_members =
+    art.cta_flag_members
+Proof
+  simp[live_artifact_def]
+QED
+
+(* Membership in the two restriction sets, for evaluation. *)
+Theorem IN_function_live[simp]:
+  k IN function_live layouts addr mods live <=>
+  function_live layouts addr mods live k
+Proof
+  simp[IN_DEF]
+QED
+
+Theorem IN_var_allocated[simp]:
+  k IN var_allocated layouts addr mods <=> var_allocated layouts addr mods k
+Proof
+  simp[IN_DEF]
+QED
+
 Definition check_value_type_def:
   check_value_type tenv (Type ty) = assignable_type tenv ty /\
   check_value_type tenv (HashMapT kt vt) =
@@ -475,24 +659,21 @@ Termination
 End
 
 Definition check_toplevel_decl_def:
-  check_toplevel_decl layouts addr mods art src tl =
+  check_toplevel_decl mods art src tl =
     let tenv = type_env_all_modules mods in
     let env = artifact_env art mods src in
     case tl of
     | VariableDecl _ Storage id typ _ =>
-        assignable_type tenv typ /\
-        IS_SOME (lookup_var_slot_in_layouts layouts addr F src id)
+        assignable_type tenv typ
     | VariableDecl _ Transient id typ _ =>
-        assignable_type tenv typ /\
-        IS_SOME (lookup_var_slot_in_layouts layouts addr T src id)
+        assignable_type tenv typ
     | VariableDecl _ Immutable id typ _ =>
         assignable_type tenv typ
     | VariableDecl _ (Constant e) id typ _ =>
         assignable_type tenv typ /\ well_typed_expr env e /\ expr_type e = typ /\
         constant_expr mods e
     | HashMapDecl _ is_transient id kt vt _ =>
-        well_formed_type tenv kt /\ hashmap_key_type kt /\ check_value_type tenv vt /\
-        IS_SOME (lookup_var_slot_in_layouts layouts addr is_transient src id)
+        well_formed_type tenv kt /\ hashmap_key_type kt /\ check_value_type tenv vt
     | StructDecl id fields =>
         ALL_DISTINCT (MAP FST fields) /\
         EVERY (\(_,ty). assignable_type tenv ty) fields
@@ -502,6 +683,7 @@ Definition check_toplevel_decl_def:
           params_ok tenv args /\ well_formed_type tenv ret) funcs
     | EventDecl id fields =>
         EVERY (\((_,ty),indexed). assignable_type tenv ty) fields
+    | ErrorDecl id args => params_ok tenv args
     | FunctionDecl vis _ _ _ _ args dflts ret _ =>
         params_ok tenv args /\ well_formed_type tenv ret /\
         (* Vyper: "Constructor may not use default arguments" *)
@@ -518,6 +700,7 @@ Definition check_function_body_def:
       (nr ==> IS_SOME (lookup_nonreentrant_slot layouts addr)) /\
       IS_SOME (evaluate_type tenv ret) /\
       IS_SOME (type_stmts env ret body) /\
+      custom_errors_stmts_ok mods body /\
       (ret = NoneT \/ stmts_no_fallthrough body) /\
       stmts_no_control_escape body /\
       well_typed_exprs (defaults_env env) dflts /\
@@ -531,28 +714,59 @@ Definition check_function_body_in_mode_def:
 End
 
 Definition check_toplevel_body_def:
-  check_toplevel_body in_deploy layouts addr mods art src tl =
+  check_toplevel_body in_deploy layouts addr mods live art src tl =
     case tl of
-    | FunctionDecl vis mut nr _ _ args dflts ret body =>
+    | FunctionDecl vis mut nr _ fn args dflts ret body =>
+        function_live layouts addr mods live (src,fn) /\
         check_function_body_in_mode in_deploy vis ==>
         check_function_body layouts addr mods art src mut nr args dflts ret body
     | _ => T
 End
 
 Definition check_module_def:
-  check_module in_deploy layouts addr mods art (src,tls) =
-    (EVERY (check_toplevel_decl layouts addr mods art src) tls /\
-     EVERY (check_toplevel_body in_deploy layouts addr mods art src) tls)
+  check_module in_deploy layouts addr mods live art (src,tls) =
+    (EVERY (check_toplevel_decl mods art src) tls /\
+     EVERY (check_toplevel_body in_deploy layouts addr mods live art src) tls)
 End
 
+(* Only live functions are checked, and the typing environment holds only the
+   live functions and the storage variables that have a slot.  So a checked
+   body that reads a variable without a slot, or calls a function that isn't
+   checked, is ill-typed.  The main module must be allocated, so every
+   function of it is checked.
+
+   Vyper type-checks every function body (analyze_functions in
+   vyper/semantics/analysis/local.py).  Here a function of an uninitialized
+   module that no live function calls is not checked at all, so such dead
+   code is accepted even when Vyper would reject it.
+
+   Two more differences from Vyper.  A live function may read an immutable
+   of an uninitialized module, which Vyper rejects without `uses:`; its
+   value is the default.  And exports_ok rejects exporting any function of
+   an uninitialized module, while Vyper accepts exporting one that uses no
+   state. *)
 Definition check_contract_def:
   check_contract in_deploy layouts addr mods =
-    let art = build_contract_type_artifact in_deploy mods in
+    let live = live_functions layouts addr mods in
+    let art = live_artifact layouts addr mods live
+                (build_contract_type_artifact in_deploy mods) in
       if contract_namespaces_ok in_deploy mods /\
          contract_call_graph_acyclic mods /\
-         EVERY (check_module in_deploy layouts addr mods art) mods /\
+         main_module_allocated layouts addr mods /\
+         EVERY (check_module in_deploy layouts addr mods live art) mods /\
          contract_constants_ok mods
       then SOME art else NONE
+End
+
+(* The exports map of load_contract names only functions of allocated
+   modules.  An external function is never an internal callee, so it is live
+   exactly when its module is allocated. *)
+Definition exports_ok_def:
+  exports_ok layouts addr mods exps <=>
+    EVERY (\(fn,src).
+             case ALOOKUP mods (SOME src) of
+             | NONE => T
+             | SOME tls => module_allocated layouts addr (SOME src) tls) exps
 End
 
 (* TOP-LEVEL: Successful checking guarantees distinct member names for every
@@ -564,13 +778,10 @@ Theorem check_contract_struct_fields_distinct:
   ALL_DISTINCT (MAP FST fields)
 Proof
   strip_tac >>
-  gvs[check_contract_def] >>
-  `check_module in_deploy layouts addr mods
-     (build_contract_type_artifact in_deploy mods) (src,tls)`
-    by fs[EVERY_MEM] >>
-  fs[check_module_def, EVERY_MEM] >>
-  `check_toplevel_decl layouts addr mods
-     (build_contract_type_artifact in_deploy mods) src (StructDecl id fields)`
-    by metis_tac[] >>
-  gvs[check_toplevel_decl_def]
+  qpat_x_assum `check_contract _ _ _ _ = _` mp_tac >>
+  simp[check_contract_def, EVERY_MEM] >> strip_tac >>
+  qpat_x_assum `!x. MEM x mods ==> check_module _ _ _ _ _ _ x` drule >>
+  simp[check_module_def, EVERY_MEM] >> strip_tac >>
+  qpat_x_assum `!x. MEM x tls ==> check_toplevel_decl _ _ _ x` drule >>
+  simp[check_toplevel_decl_def]
 QED

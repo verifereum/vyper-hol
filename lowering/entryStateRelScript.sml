@@ -117,8 +117,7 @@ Proof
   simp[RIGHT_AND_OVER_OR, EXISTS_OR_THM] >> metis_tac[]
 QED
 
-(* The supported declarations of storage and transient variables carry
-   their slots, and hashmaps are in storage. *)
+(* Supported storage/transient variables and hashmaps carry their slots. *)
 Theorem supported_storage_decl_slot:
   !tops vis mut name ty a.
     supported_declaration_headers tops /\
@@ -135,7 +134,7 @@ Theorem supported_hashmap_decl_slot:
   !tops vis tr name kt vt a.
     supported_declaration_headers tops /\
     MEM (HashMapDecl vis tr name kt vt a) tops ==>
-    ~tr /\ ?n. a = SOME n
+    ?n. a = SOME n
 Proof
   rpt gen_tac >> simp[supported_declaration_headers_def, EVERY_MEM] >>
   strip_tac >> first_x_assum drule >>
@@ -161,13 +160,14 @@ Theorem layouts_agree_lookup:
                    lookup_var_slot_from_layout cx F NONE id = SOME n) /\
     (!vis id ty n. MEM (VariableDecl vis Transient id ty (SOME n)) tops ==>
                    lookup_var_slot_from_layout cx T NONE id = SOME n) /\
-    (!vis id kt vt n. MEM (HashMapDecl vis F id kt vt (SOME n)) tops ==>
-                      lookup_var_slot_from_layout cx F NONE id = SOME n)
+    (!vis tr id kt vt n. MEM (HashMapDecl vis tr id kt vt (SOME n)) tops ==>
+                         lookup_var_slot_from_layout cx tr NONE id = SOME n)
 Proof
   rpt gen_tac >> strip_tac >>
   fs[layouts_agree_def, lookup_var_slot_from_layout_def] >>
   Cases_on `ALOOKUP am.layouts tx.target` >> gvs[] >>
-  rename1 `SOME p` >> PairCases_on `p` >> gvs[] >> metis_tac[]
+  rename1 `SOME p` >> PairCases_on `p` >> gvs[] >>
+  rpt conj_tac >> rpt gen_tac >> TRY (Cases_on `tr`) >> simp[] >> metis_tac[]
 QED
 
 (* ===== storage_vars_rel and transient_vars_rel ===== *)
@@ -200,12 +200,11 @@ Proof
   >~ [`FLOOKUP _ _ = SOME (StorageLoc slot)`]
   >- (drule add_module_var_locations_cases >> rw[] >>
       gvs[module_var_key_none_11] >> res_tac >> simp[] >>
-      drule_all supported_hashmap_decl_slot >> strip_tac >> gvs[] >>
-      res_tac >> simp[])
+      Cases_on `tr` >> gvs[] >> res_tac >> simp[])
   >~ [`FLOOKUP _ _ = SOME (TransientLoc slot)`]
   >- (drule add_module_var_locations_cases >> rw[] >>
       gvs[module_var_key_none_11] >> res_tac >> simp[] >>
-      drule_all supported_hashmap_decl_slot >> strip_tac >> gvs[]) >>
+      Cases_on `tr` >> gvs[] >> res_tac >> simp[]) >>
   first_x_assum drule >> strip_tac >> gvs[] >>
   drule find_var_decl_by_name_mem >> strip_tac >>
   gvs[var_decl_transient_def]
@@ -230,7 +229,13 @@ Proof
       asm_simp_tac (srw_ss())
         [toplevel_vtype_keys_toplevel_def, add_module_var_locations_def,
          LET_THM, FLOOKUP_UPDATE]) >>
-  drule_all supported_hashmap_decl_slot >> simp[]
+  drule_all supported_hashmap_decl_slot >> strip_tac >> gvs[] >>
+  res_tac >> gvs[] >>
+  drule_then (qspecl_then [`FEMPTY`, `HashMapDecl vis T id kt vt (SOME n)`, `id`] mp_tac)
+    add_module_var_locations_mem >>
+  asm_simp_tac (srw_ss())
+    [toplevel_vtype_keys_toplevel_def, add_module_var_locations_def,
+     LET_THM, FLOOKUP_UPDATE]
 QED
 
 (* ===== The source's body-start state ===== *)
@@ -439,6 +444,7 @@ Proof
   disch_then (qspec_then `tops` mp_tac) >>
   impl_tac >- fs[supported_declaration_headers_def] >> strip_tac >>
   fs[source_typing_ok_def] >>
+  drule check_contract_main_module_allocated >> simp[] >> strip_tac >>
   drule check_contract_runtime_function_body_MEM >>
   disch_then (qspecl_then [`External`, `tops`, `NONE`, `ret`, `raw`, `nr`,
     `mut`, `tx.function_name`, `[]`, `fbody`, `fargs`] mp_tac) >>

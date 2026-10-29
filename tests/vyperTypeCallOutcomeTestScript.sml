@@ -49,7 +49,12 @@ Theorem Send_errors_exclude_type_and_control:
   exc <> BreakException /\ exc <> ContinueException /\
   (!v. exc <> ReturnException v)
 Proof
-  rpt gen_tac >> strip_tac >> drule Send_outcome_runtime_error >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `take_call_outcome target [] (SOME amount) st` >>
+  rename1 `take_call_outcome target [] (SOME amount) st = (taken,mid)` >>
+  drule Send_outcome_continue >> strip_tac >> gvs[] >>
+  Cases_on `taken` >> gvs[AllCaseEqs(), no_control_exc_def] >>
+  drule vyperCallOutcomePropsTheory.take_call_outcome_error >>
   rw[no_control_exc_def]
 QED
 
@@ -85,7 +90,8 @@ QED
 (* Skip the code guard to isolate the post-adoption decoder. No default is
    supplied: malformed bytes really run the decoder, even on empty data. *)
 val extcall_boundary_simps =
-  [eval_ext_call_def, ext_call_opts_ok_def, ext_call_kwarg_def,
+  [eval_ext_call_def, eval_ext_call_effects_def,
+   ext_call_opts_ok_def, ext_call_kwarg_def,
    ext_call_precheck_ok_def, bind_def, ignore_bind_def, return_def, raise_def,
    type_check_def, check_def, assert_def, lift_option_type_def,
    lift_sum_runtime_def, get_accounts_def];
@@ -159,4 +165,37 @@ Theorem decode_failure_is_runtime_and_unchanged:
       return (Value v) od) st = (INR (Error (RuntimeError msg)),st)
 Proof
   simp[lift_sum_runtime_def, bind_def, raise_def]
+QED
+
+Theorem ExtCall_typed_errors_exclude_type_and_control:
+  runtime_consistent env cx st /\ exprs_runtime_typed env es vs /\
+  MAP expr_type es =
+    BaseT AddressT :: call_types ++ MAP (ext_call_kw_type ret_type) opts /\
+  arg_types_fit call_types arg_types /\
+  EVERY (well_formed_type env.type_defs) arg_types /\
+  ext_call_opts_ok stat opts /\
+  evaluate_type env.type_defs ret_type = SOME ret_tv /\
+  eval_ext_call cx stat skc (func_name,arg_types,ret_type) opts vs st = (INR exc,st') ==>
+  no_control_exc exc /\ (!msg. exc <> Error (TypeError msg)) /\
+  exc <> BreakException /\ exc <> ContinueException /\
+  (!v. exc <> ReturnException v)
+Proof
+  strip_tac >> drule_all eval_ext_call_result_sound >> strip_tac >>
+  drule eval_ext_call_no_control >>
+  rw[no_type_error_result_def, no_control_exc_def] >>
+  gvs[no_type_error_result_def]
+QED
+
+Theorem checked_continuation_runs_after_adoption:
+  take_call_outcome target data value st = (INL (rq,outcome),st1) /\
+  outcome.co_success /\ adopt_call_outcome rq outcome st1 = (INL (),st2) ==>
+  (do
+    (rq,outcome) <- take_call_outcome target data value;
+    check outcome.co_success msg;
+    adopt_call_outcome rq outcome;
+    k outcome.co_returnData
+  od) st = k outcome.co_returnData st2
+Proof
+  rpt strip_tac >>
+  simp[bind_def, ignore_bind_def, check_def, assert_def, return_def]
 QED

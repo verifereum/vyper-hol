@@ -46,6 +46,9 @@ Definition nested_pop_result_def:
   nested_pop_result = eval_stmts nested_pop_context ^roundtrip_body empty_state
 End
 
+(* Original precondition translation/proof retained. The now-registered
+   cont_pre_eval_stmts_cps closes the termination obligation during
+   translation, so cv_auto_trans_pre correctly reports no precondition.
 val nested_pop_result_pre_def = nested_pop_result_def
   |> SRULE [eval_stmts_eq_cont_cps]
   |> cv_auto_trans_pre "nested_pop_result_pre";
@@ -63,6 +66,9 @@ Proof
   >> rw[Abbr `k`, cont_def]
   >> rw[Once WhileTheory.OWHILE_THM]
 QED
+*)
+val () = nested_pop_result_def
+  |> SRULE [eval_stmts_eq_cont_cps] |> cv_auto_trans;
 
 Theorem hashmap_pop_returns_old_last_element:
   FST nested_pop_result = INR (ReturnException (IntV 23))

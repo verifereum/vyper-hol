@@ -11,19 +11,22 @@ Ancestors
   loweringSlice
   varsExt exprSim
   exprBopLowering
-  exprSimOps exprSimCompare exprSimArith intBits freshWrites
+  exprSimOps exprSimOperands exprSimCompare exprSimArith intBits freshWrites
   exprSimMain stmtSim stmtSimIf stmtSimFor stmtSimReturn stmtSimDecl
-  stmtSimReason stmtSimReasonExpr stmtSimForRange
+  stmtSimReason stmtSimReasonExpr stmtSimReasonStorage stmtSimForRange
+  stmtSimDeclMem exprSimStorageCopy stmtSimAssignStore stmtSimAugAssign
+  stmtSimAssign stmtSimAssignMem stmtSimAssignTuple
   valueEncodingProofs
   localPtrsProps
   loweringShapeProps
-  intCallStep intCallLookup intCallCallee intCallArgs intCallResult intCallReturnMem valueCopy
+  intCallStep extCallOracleStep intCallLookup intCallCallee intCallArgs intCallResult intCallReturnMem intCallFrame intCallReturn valueCopy
   structFieldsProps
   (* compiler + correctness *)
   vyperCompiler
   allocaBudgetChecks
   vyperLoweringCorrect
   configuredE2ECorrectness
+  evalAssignmentOrder
   (* focused internal-frame allocation, cleanup and whitelist regressions *)
   calleeMemoryWitness
   cleanupPromiseWitness

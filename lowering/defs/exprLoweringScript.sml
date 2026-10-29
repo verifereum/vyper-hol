@@ -47,6 +47,113 @@ Libs
    Type helpers (is_signed_type, is_decimal_type, decimal_divisor,
    type_bits, type_bounds) in compileEnv. *)
 
+(* A map place retains the declaration's value-type tree, which is not
+   representable by an expression type annotation. Locations remain attached
+   to compiled values rather than to this purely structural descriptor. *)
+Datatype:
+  place_ty = MapPT type value_type | ValPT type
+End
+
+Definition value_type_place_def:
+  value_type_place (Type ty) = ValPT ty ∧
+  value_type_place (HashMapT kt vt) = MapPT kt vt
+End
+
+Definition place_type_def:
+  place_type cenv (TopLevelName ty nsid) =
+    (case cenv.ce_hashmap_info (module_var_key nsid) of
+       SOME (tr, kt, vt) => MapPT kt vt
+     | NONE => ValPT ty) ∧
+  place_type cenv (Subscript ty base_e idx) =
+    (case place_type cenv base_e of
+       MapPT kt vt => value_type_place vt
+     | ValPT _ => ValPT ty) ∧
+  place_type cenv e = ValPT (expr_type e)
+End
+
+Theorem place_type_name[simp]:
+  place_type cenv (Name ty id) = ValPT ty
+Proof
+  simp[place_type_def, expr_type_def]
+QED
+
+Theorem place_type_module_map:
+  cenv.ce_hashmap_info (module_var_key nsid) = SOME (tr, kt, vt) ⇒
+  place_type cenv (TopLevelName ty nsid) = MapPT kt vt
+Proof
+  simp[place_type_def]
+QED
+
+Theorem place_type_subscript_map:
+  place_type cenv base_e = MapPT kt vt ⇒
+  place_type cenv (Subscript ty base_e idx) = value_type_place vt
+Proof
+  simp[place_type_def]
+QED
+
+Theorem place_type_subscript_value:
+  place_type cenv base_e = ValPT bt ⇒
+  place_type cenv (Subscript ty base_e idx) = ValPT ty
+Proof
+  simp[place_type_def]
+QED
+
+Theorem place_type_nested_map:
+  cenv.ce_hashmap_info (module_var_key nsid) =
+    SOME (tr, kt, HashMapT kt' (Type vt)) ⇒
+  place_type cenv
+    (Subscript vt (Subscript NoneT (TopLevelName NoneT nsid) k1) k2) =
+    ValPT vt
+Proof
+  simp[place_type_def, value_type_place_def]
+QED
+
+Theorem place_type_map_array:
+  cenv.ce_hashmap_info (module_var_key nsid) =
+    SOME (tr, kt, Type (ArrayT et bound)) ⇒
+  place_type cenv (Subscript NoneT (TopLevelName NoneT nsid) k) =
+    ValPT (ArrayT et bound)
+Proof
+  simp[place_type_def, value_type_place_def]
+QED
+
+Theorem place_type_map_struct:
+  cenv.ce_hashmap_info (module_var_key nsid) =
+    SOME (tr, kt, Type (StructT sid)) ⇒
+  place_type cenv (Subscript NoneT (TopLevelName NoneT nsid) k) =
+    ValPT (StructT sid)
+Proof
+  simp[place_type_def, value_type_place_def]
+QED
+
+(* Only the map table influences structural place resolution. Local-variable
+   allocation and local type updates cannot turn a local into a module map. *)
+Theorem place_type_env_cong:
+  !e cenv cenv'. cenv.ce_hashmap_info = cenv'.ce_hashmap_info ==>
+    place_type cenv e = place_type cenv' e
+Proof
+  (* `Induct` on `expr` fails on the pinned HOL (HOL-Theorem-Prover/HOL#2115),
+     so use the datatype's own principle, discharging the mutual
+     `base_assignment_target` part as `λ_. T`.  Revert with #2115's fix. *)
+  ho_match_mp_tac
+    (expr_induction |> Q.SPEC `P` |> Q.SPEC `λ_. T` |> SIMP_RULE (srw_ss()) []) >>
+  simp[place_type_def] >> metis_tac[]
+QED
+
+Theorem place_type_local_updates[simp]:
+  place_type (cenv with <| ce_vars := vars; ce_var_type := tys |>) e =
+  place_type cenv e
+Proof
+  irule place_type_env_cong >> simp[]
+QED
+
+Theorem place_type_module_value:
+  cenv.ce_hashmap_info (module_var_key nsid) = NONE ==>
+  place_type cenv (TopLevelName ty nsid) = ValPT ty
+Proof
+  simp[place_type_def]
+QED
+
 (* Bytelike literals and ABI encoding results carry their produced bound,
    independently of the annotated destination bound. *)
 Definition lowered_value_type_def:
@@ -2082,78 +2189,60 @@ Proof
 QED
 
 (* Compile subscript access: array[index], mapping[key], tuple[N].
-   Dispatches on base type. HashMap (mapping) dispatched via ce_is_hashmap.
+   Dispatches on base type. HashMap (mapping) dispatched via ce_hashmap_info.
    Mirrors Python: expr.py _lower_subscript *)
 Definition compile_subscript_def:
   compile_subscript cfn cenv ret_ty ty base_e idx_e =
-    let var_name = (case base_e of
-                      Name _ id => id
-                    | TopLevelName _ nsid => module_var_key nsid
-                    | _ => "") in
-    if cenv.ce_is_hashmap var_name then
-      let base_slot = (case FLOOKUP cenv.ce_vars var_name of
-                         SOME (StorageLoc slot) => Lit slot
-                       | _ => Lit 0w) in
-      let idx_ty = expr_type idx_e in
-      do key_op <- lower_value cfn cenv idx_ty idx_e;
-         hashed_key <- (if is_bytestring_type idx_ty
-                        then compile_keccak256_key key_op F
-                        else return key_op);
-         slot <- compile_mapping_subscript base_slot hashed_key;
-         return (LocatedValue ret_ty (mk_ptr slot LocStorage))
-      od
-    else
-    let base_type = cenv.ce_var_type var_name in
-    case base_type of
-      SOME (TupleT tys) =>
-        let idx = literal_int_index idx_e in
-        do base_vv <- cfn cenv ty base_e;
-           base_op <- return (vv_operand base_vv);
-           base_loc <- return (case vv_location base_vv of
-                                 SOME l => l | NONE => LocMemory);
-           p <- compile_tuple_subscript base_op
-                  (SUM (TAKE idx (MAP (elem_size_in_location cenv base_loc) tys)));
-           return (LocatedValue ret_ty (mk_ptr p base_loc))
-        od
-    | SOME (StructT nsid) =>
-        let idx = literal_int_index idx_e in
-        let fld_info = get_struct_fields cenv.ce_struct_fields (nsid_to_string nsid) in
-        do base_vv <- cfn cenv ty base_e;
-           base_op <- return (vv_operand base_vv);
-           base_loc <- return (case vv_location base_vv of
-                                 SOME l => l | NONE => LocMemory);
-           p <- compile_tuple_subscript base_op
-                  (SUM (TAKE idx
-                    (MAP (λ(name, fty, sz). if is_slot_addressed base_loc
-                                           then (sz + 31) DIV 32 else sz)
-                         fld_info)));
-           return (LocatedValue ret_ty (mk_ptr p base_loc))
-        od
-    | _ =>
-      let loc = infer_array_location cenv base_e in
-      let is_dynamic = infer_array_is_dynamic cenv base_e in
-      let elem_ty = (case base_type of
-                       SOME (ArrayT t _) => t
-                     | _ => BaseT (UintT 256)) in
-      let static_count = (case base_type of
-                            SOME (ArrayT _ (Fixed n)) => n
-                          | _ => 0) in
-      let ws = word_scale loc in
-      let elem_size = elem_size_in_location cenv loc elem_ty in
-      let load_opc = (case loc of
-                        LocStorage => SLOAD
-                      | LocTransient => TLOAD
-                      | LocCalldata => CALLDATALOAD
-                      | _ => MLOAD) in
-      let is_signed_idx = is_signed_type (expr_type idx_e) in
-      do base_vv <- cfn cenv ty base_e;
-         base_op <- return (vv_operand base_vv);
-         idx_op <- lower_value cfn cenv ty idx_e;
-         elem_ptr <-
-           compile_array_subscript base_op idx_op is_dynamic static_count
-                                        ws elem_size is_signed_idx load_opc;
-         return (LocatedValue ret_ty (mk_ptr elem_ptr loc))
-      od
+    do base_vv <- cfn cenv ty base_e;
+       let base_op = vv_operand base_vv in
+       let loc = (case vv_location base_vv of
+                     SOME l => l | NONE => LocMemory) in
+       case place_type cenv base_e of
+         MapPT kt vt =>
+           do key_op <- lower_value cfn cenv (expr_type idx_e) idx_e;
+              hashed_key <- (if is_bytestring_type kt
+                             then compile_keccak256_key key_op F
+                             else return key_op);
+              slot <- compile_mapping_subscript base_op hashed_key;
+              return (LocatedValue ret_ty (mk_ptr slot loc))
+           od
+       | ValPT (TupleT tys) =>
+           let idx = literal_int_index idx_e in
+           do p <- compile_tuple_subscript base_op
+                     (SUM (TAKE idx (MAP (elem_size_in_location cenv loc) tys)));
+              return (LocatedValue ret_ty (mk_ptr p loc))
+           od
+       | ValPT (StructT nsid) =>
+           let idx = literal_int_index idx_e in
+           let fld_info = get_struct_fields cenv.ce_struct_fields (nsid_to_string nsid) in
+           do p <- compile_tuple_subscript base_op
+                     (SUM (TAKE idx
+                       (MAP (λ(name, fty, sz). if is_slot_addressed loc
+                                              then (sz + 31) DIV 32 else sz)
+                            fld_info)));
+              return (LocatedValue ret_ty (mk_ptr p loc))
+           od
+       | ValPT base_type =>
+           let is_dynamic = (case base_type of ArrayT _ (Fixed _) => F | _ => T) in
+           let elem_ty = (case base_type of
+                            ArrayT t _ => t | _ => BaseT (UintT 256)) in
+           let static_count = (case base_type of
+                                 ArrayT _ (Fixed n) => n | _ => 0) in
+           let ws = word_scale loc in
+           let elem_size = elem_size_in_location cenv loc elem_ty in
+           let load_opc = (case loc of
+                             LocStorage => SLOAD
+                           | LocTransient => TLOAD
+                           | LocCalldata => CALLDATALOAD
+                           | _ => MLOAD) in
+           let is_signed_idx = is_signed_type (expr_type idx_e) in
+           do idx_op <- lower_value cfn cenv ty idx_e;
+              elem_ptr <-
+                compile_array_subscript base_op idx_op is_dynamic static_count
+                                         ws elem_size is_signed_idx load_opc;
+              return (LocatedValue ret_ty (mk_ptr elem_ptr loc))
+           od
+    od
 End
 
 (* Compile attribute access. Returns VyperValue with correct location.
@@ -2165,10 +2254,8 @@ Definition compile_attribute_def:
        let base_op = vv_operand base_vv in
        let base_loc = (case vv_location base_vv of
                          SOME l => l | NONE => LocMemory) in
-       let struct_name = (case base_e of
-                            Name _ id => (case cenv.ce_var_type id of
-                                            SOME (StructT sn) => nsid_to_string sn
-                                          | _ => "")
+       let struct_name = (case expr_type base_e of
+                            StructT sn => nsid_to_string sn
                           | _ => "") in
        let is_storage_loc = (case base_loc of
                                LocStorage => T
@@ -2904,16 +2991,12 @@ Definition compile_builtin_dispatch_body_def:
             (compile_slice_calldata start_op (Lit (n2w n))
                (type_memory_bytes cenv ret_ty) st1))
      | Len =>
-         (let e1 = HD args in
-          if is_msg_data e1 then
-            as_stack_val ret_ty (compile_builtin_calldatasize st)
-          else
-            (* Len needs the raw ptr to read length word *)
-            let (vv, st1) = compile_expr cenv ty e1 st in
-            let v = vv_operand vv in
-            let loc = (case vv_location vv of
-                         SOME l => l | NONE => LocMemory) in
-            as_stack_val ret_ty (compile_builtin_len cenv.ce_is_ctor v loc st1))
+         (* Len needs the raw ptr to read length word *)
+         (let (vv, st1) = compile_expr cenv ty (HD args) st in
+          let v = vv_operand vv in
+          let loc = (case vv_location vv of
+                       SOME l => l | NONE => LocMemory) in
+          as_stack_val ret_ty (compile_builtin_len cenv.ce_is_ctor v loc st1))
      | BlockHash =>
          (let e1 = HD args in
           let (v, st1) = lower_value compile_expr cenv ty e1 st in

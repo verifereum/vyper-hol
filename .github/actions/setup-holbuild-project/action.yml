@@ -78,19 +78,17 @@ runs:
 
     - name: Restore project snapshot from this run
       if: ${{ inputs.snapshot-key != '' }}
-      uses: actions/cache/restore@v6
+      uses: ./.github/actions/restore-run-cache
       with:
         path: ~/.cache/holbuild
         key: ${{ inputs.snapshot-key }}
-        fail-on-cache-miss: true
 
     - name: Restore HOL toolchain from this run
       if: ${{ inputs.snapshot-key == '' && inputs.toolchain-snapshot-key != '' }}
-      uses: actions/cache/restore@v6
+      uses: ./.github/actions/restore-run-cache
       with:
         path: ~/.cache/holbuild
         key: ${{ inputs.toolchain-snapshot-key }}
-        fail-on-cache-miss: true
 
     - name: Restore latest compatible project snapshot
       id: cache-holbuild-project

@@ -219,7 +219,7 @@ Theorem push_scope_with_var_env_consistent:
   evaluate_type (get_tenv cx) typ = SOME tyv /\
   nm NOTIN FDOM env.var_types ==>
   env_consistent (extend_local env nm typ F) cx
-    (st with scopes updated_by CONS (FEMPTY |+ (nm, <| assignable := F; type := tyv; value := v |>)))
+    (st with scopes updated_by CONS (FEMPTY |+ (nm, <| assignable := F; type := tyv; value := v; popped := [] |>)))
 Proof
   simp[env_consistent_def, env_context_consistent_def, env_scopes_consistent_def,
        env_immutables_consistent_def, extend_local_def, FLOOKUP_UPDATE] >>
@@ -232,7 +232,7 @@ Proof
     FULL_SIMP_TAC std_ss [lookup_scopes_def, FLOOKUP_UPDATE, FLOOKUP_DEF,
                           FDOM_FEMPTY, NOT_IN_EMPTY] >>
     TRY (qpat_x_assum
-           `<|assignable := F; type := tyv; value := v|> = entry`
+           `<|assignable := F; type := tyv; value := v; popped := []|> = entry`
            (SUBST_ALL_TAC o SYM) >> simp[]) >>
     res_tac >>
     TRY (qpat_x_assum `env.var_types ' id = ty`
@@ -511,7 +511,7 @@ Proof
     `lookup_scopes id (x0 ++ x1::x3) = SOME x2` by
       metis_tac[lookup_scopes_append_cons] >>
     gvs[] >>
-    qexists_tac `entry with value := v` >>
+    qexists_tac `entry with <|value := v; popped := []|>` >>
     simp[lookup_scopes_update]) >>
   qexists_tac `entry` >>
   simp[lookup_scopes_append_fupdate_other]
@@ -534,119 +534,14 @@ Proof
   first_x_assum drule >> simp[]
 QED
 
-Theorem assign_target_scoped_preserves_assignable_lookup:
-  assign_target cx (BaseTargetV (ScopedVar nm) sbs) ao st = (res, st') ==>
-  preserves_assignable_lookup st st'
-Proof
-  simp[preserves_assignable_lookup_def] >> rpt strip_tac >>
-  qpat_x_assum `assign_target _ _ _ _ = _` mp_tac >>
-  simp[Once assign_target_def, bind_def, get_scopes_def, return_def,
-       lift_option_def, lift_sum_def, type_check_def, assert_def,
-       ignore_bind_def, set_scopes_def, AllCaseEqs()] >>
-  Cases_on `find_containing_scope nm st.scopes` >> simp[return_def, raise_def] >- metis_tac[] >>
-  PairCases_on `x` >> simp[] >>
-  Cases_on `assign_subscripts x2.type x2.value (REVERSE sbs) ao` >>
-  simp[return_def, raise_def] >>
-  Cases_on `x2.assignable` >> simp[return_def, raise_def] >>
-  gvs[bind_def, assert_def, set_scopes_def, return_def, raise_def, AllCaseEqs()] >>
-  rpt strip_tac >> gvs[] >>
-  imp_res_tac assign_result_state >> gvs[] >>
-  drule find_containing_scope_structure >>
-  drule find_containing_scope_pre_none >>
-  rpt strip_tac >> gvs[] >>
-  Cases_on `id = nm` >- (
-    `lookup_scopes id x0 = NONE` by gvs[] >>
-    `lookup_scopes id (x0 ++ x1::x3) = SOME x2` by
-      metis_tac[lookup_scopes_append_cons] >>
-    gvs[] >>
-    qexists_tac `entry with value := x` >>
-    simp[lookup_scopes_update]) >>
-  qexists_tac `entry` >>
-  simp[lookup_scopes_append_fupdate_other]
-QED
-
-Theorem assign_target_toplevel_preserves_assignable_lookup:
-  assign_target cx (BaseTargetV (TopLevelVar src_id_opt nm) sbs) ao st = (res, st') ==>
-  preserves_assignable_lookup st st'
-Proof
-  rpt strip_tac >>
-  irule preserves_assignable_lookup_scopes_eq >>
-  drule assign_target_toplevel_scopes_immutables >> simp[]
-QED
-
-Theorem assign_target_immutable_preserves_assignable_lookup:
-  assign_target cx (BaseTargetV (ImmutableVar src_id_opt nm) sbs) ao st = (res, st') ==>
-  preserves_assignable_lookup st st'
-Proof
-  rpt strip_tac >>
-  irule preserves_assignable_lookup_scopes_eq >>
-  qpat_x_assum `assign_target _ _ _ _ = _` mp_tac >>
-  simp[Once assign_target_def, bind_def, return_def, raise_def,
-       get_immutables_def, get_address_immutables_def, set_immutable_def,
-       set_address_immutables_def, lift_option_def, lift_option_type_def,
-       lift_sum_def, ignore_bind_def] >>
-  Cases_on `ALOOKUP st.immutables cx.txn.target` >> simp[return_def, raise_def] >>
-  Cases_on `FLOOKUP (get_source_immutables src_id_opt x) nm` >>
-  simp[return_def, raise_def] >>
-  PairCases_on `x'` >> simp[] >>
-  Cases_on `assign_subscripts x'0 x'1 (REVERSE sbs) ao` >> simp[return_def, raise_def] >>
-  Cases_on `ALOOKUP st.immutables cx.txn.target` >> simp[return_def, raise_def] >>
-  strip_tac >> gvs[] >>
-  imp_res_tac assign_result_state >> gvs[]
-QED
-
-(* Helper: expression base-target evaluation preserves assignability of any
-   previously visible assignable local.  This is separated because expression
-   evaluation invokes base-target evaluation in several cases. *)
-Theorem assign_target_preserves_assignable_lookup:
-  (∀cx gv ao st res st'.
-     assign_target cx gv ao st = (res, st') ⇒
-     preserves_assignable_lookup st st') ∧
-  (∀cx gvs vs st res st'.
-     assign_targets cx gvs vs st = (res, st') ⇒
-     preserves_assignable_lookup st st')
-Proof
-  ho_match_mp_tac assign_target_ind >>
-  rpt strip_tac >>
-  simp[Once assign_target_def]
-  >- metis_tac[assign_target_scoped_preserves_assignable_lookup]
-  >- metis_tac[assign_target_toplevel_preserves_assignable_lookup]
-  >- metis_tac[assign_target_immutable_preserves_assignable_lookup]
-  >- (
-    qpat_x_assum `assign_target _ _ _ _ = _` mp_tac >>
-    simp[Once assign_target_def, bind_def, ignore_bind_def, type_check_def,
-         assert_def, return_def, raise_def] >>
-    Cases_on `LENGTH gvs = LENGTH vs` >> simp[return_def, raise_def] >>
-    Cases_on `assign_targets cx gvs vs st` >> simp[return_def, raise_def] >>
-    Cases_on `q` >> simp[return_def, raise_def] >>
-    strip_tac >> gvs[] >>
-    first_x_assum drule >> strip_tac >>
-    irule preserves_assignable_lookup_trans >>
-    qexists_tac `st'` >> simp[preserves_assignable_lookup_refl])
-  >> gvs[Once assign_target_def, return_def, raise_def,
-         preserves_assignable_lookup_refl]
-  >- (
-    qpat_x_assum `do assign_target _ _ _; _ od _ = _` mp_tac >>
-    simp[bind_def, ignore_bind_def, return_def, raise_def] >>
-    Cases_on `assign_target cx gv (Replace v) st` >> simp[return_def, raise_def] >>
-    Cases_on `q` >> simp[return_def, raise_def] >>
-    Cases_on `assign_targets cx gvs vs r` >> simp[return_def, raise_def] >>
-    Cases_on `q` >> simp[return_def, raise_def] >>
-    strip_tac >> fs[bind_def, ignore_bind_def, return_def, raise_def] >>
-    gvs[] >>
-    first_x_assum drule >> strip_tac >>
-    irule preserves_assignable_lookup_trans >>
-    qexists_tac `r` >> simp[])
-QED
-
-Theorem eval_base_target_preserves_assignable_lookup:
-  eval_base_target cx bt st = (res, st') /\
+Theorem eval_base_place_preserves_assignable_lookup:
+  eval_base_place cx bt st = (res, st') /\
   lookup_scopes id st.scopes = SOME entry /\ entry.assignable ==>
   ?entry'. lookup_scopes id st'.scopes = SOME entry' /\ entry'.assignable
 Proof
   rpt strip_tac >>
-  drule (cj 6 eval_preserves_tv) >> strip_tac >>
-  drule eval_base_target_preserves_scopes_dom >> simp[] >> strip_tac >>
+  drule eval_base_place_preserves_tv >> strip_tac >>
+  drule eval_base_place_preserves_scopes_dom >> simp[] >> strip_tac >>
   `MAP FDOM st'.scopes = MAP FDOM st.scopes` by simp[] >>
   drule_all lookup_scopes_assignable_preserved_under_preserves_tv >> simp[]
 QED
@@ -657,7 +552,7 @@ Theorem eval_expr_preserves_assignable_lookup:
   ?entry'. lookup_scopes id st'.scopes = SOME entry' /\ entry'.assignable
 Proof
   rpt strip_tac >>
-  drule (cj 8 eval_preserves_tv) >> strip_tac >>
+  drule eval_expr_preserves_tv >> strip_tac >>
   drule eval_expr_preserves_scopes_dom >> simp[] >> strip_tac >>
   `MAP FDOM st'.scopes = MAP FDOM st.scopes` by simp[] >>
   drule_all lookup_scopes_assignable_preserved_under_preserves_tv >> simp[]
@@ -670,7 +565,7 @@ Theorem eval_exprs_preserves_assignable_lookup:
 Proof
   rpt strip_tac >>
   drule eval_exprs_preserves_scopes_dom >> simp[] >> strip_tac >>
-  drule (cj 9 eval_preserves_tv) >> strip_tac >>
+  drule eval_exprs_preserves_tv >> strip_tac >>
   `MAP FDOM st'.scopes = MAP FDOM st.scopes` by simp[] >>
   drule_all lookup_scopes_assignable_preserved_under_preserves_tv >> simp[]
 QED
@@ -684,7 +579,7 @@ Proof
   rpt strip_tac >>
   irule env_consistent_preserved_by_frame >>
   qexists_tac `st` >> simp[] >>
-  drule (cj 8 eval_preserves_tv) >> simp[] >> strip_tac >>
+  drule eval_expr_preserves_tv >> simp[] >> strip_tac >>
   drule eval_expr_preserves_scopes_dom >> simp[] >> strip_tac >>
   `!id entry. lookup_scopes id st'.scopes = SOME entry ==>
       ?entry'. lookup_scopes id st.scopes = SOME entry' /\ entry.type = entry'.type` by
@@ -767,7 +662,7 @@ Proof
   rpt strip_tac >>
   irule env_consistent_preserved_by_frame >>
   qexists_tac `st` >> simp[] >>
-  drule (cj 9 eval_preserves_tv) >> simp[] >> strip_tac >>
+  drule eval_exprs_preserves_tv >> simp[] >> strip_tac >>
   drule eval_exprs_preserves_scopes_dom >> simp[] >> strip_tac >>
   `!id entry. lookup_scopes id st'.scopes = SOME entry ==>
       ?entry'. lookup_scopes id st.scopes = SOME entry' /\ entry.type = entry'.type` by

@@ -422,7 +422,6 @@ Proof
   simp[assign_subscripts_array_replace, array_set_index_INL]
 QED
 
-(* assign_subscripts with Update — computes everything inline, no existentials *)
 val assign_subscripts_int_sub_clause = cj 5 assign_subscripts_def;
 val assign_subscripts_update_clause = cj 2 assign_subscripts_def;
 
@@ -431,34 +430,6 @@ val assign_subscripts_update_ss =
   boolSimps.bool_ss ++ optionSimps.OPTION_ss ++ sumSimps.SUM_ss ++
   rewrites (LET_THM :: #rewrs (TypeBase.simpls_of ``:value``));
 
-Theorem assign_subscripts_update_INL:
-  ∀tv a k ty bop v.
-    array_is_mutable a ∧ valid_index tv a k ∧
-    IS_SOME (type_to_int_bound ty) ∧
-    ISL (evaluate_binop (THE (type_to_int_bound ty))
-           (case tv of ArrayTV t _ => t | _ => NoneTV) bop
-           (THE (array_index tv a k)) v) ⇒
-    assign_subscripts tv (ArrayV a) [ValueSubscript (IntV k)] (Update ty bop v) =
-    INL (ArrayV (array_set tv a k
-           (OUTL (evaluate_binop (THE (type_to_int_bound ty))
-                    (case tv of ArrayTV t _ => t | _ => NoneTV) bop
-                    (THE (array_index tv a k)) v))))
-Proof
-  rpt strip_tac >>
-  `IS_SOME (array_index tv a k)` by simp[array_index_valid] >>
-  Cases_on `array_index tv a k` >>
-  full_simp_tac assign_subscripts_update_ss [] >>
-  rename1 `array_index tv a k = SOME elem` >>
-  Cases_on `type_to_int_bound ty` >>
-  full_simp_tac assign_subscripts_update_ss [] >>
-  rename1 `type_to_int_bound ty = SOME bound` >>
-  Cases_on `evaluate_binop bound
-    (case tv of ArrayTV t _ => t | _ => NoneTV) bop elem v` >>
-  full_simp_tac assign_subscripts_update_ss [] >>
-  ONCE_REWRITE_TAC [assign_subscripts_int_sub_clause] >>
-  asm_simp_tac assign_subscripts_update_ss
-    [assign_subscripts_update_clause, array_set_index_INL]
-QED
 
 (* ============================================================
    make_array_value properties — abstract characterization
@@ -495,12 +466,12 @@ Proof
          AllCaseEqs()]
 QED
 
-Theorem evaluate_subscript_array_bounds:
-  ∀tenv tv av i x.
-    evaluate_subscript tenv tv (Value (ArrayV av)) (IntV i) = INL x ∧
+Theorem evaluate_subscripts_array_bounds:
+  ∀tv av i x.
+    evaluate_subscripts tv (ArrayV av) [ValueSubscript (IntV i)] = INL x ∧
     (∀al. av = SArrayV al ⇒ ∃t n. tv = ArrayTV t (Fixed n)) ⇒
     valid_index tv av i
 Proof
-  rw[evaluate_subscript_def, AllCaseEqs()]
+  rw[evaluate_subscripts_def, AllCaseEqs()]
   >> drule_all array_index_bounds >> simp[]
 QED

@@ -1201,6 +1201,32 @@ Definition translate_iter_def:
 End
 
 
+(* Error constructors are only meaningful as assert/raise reasons.  Preserve
+   argument spelling here; declaration lookup validates and orders them later. *)
+Definition custom_error_target_def:
+  custom_error_target ctx (JE_Name name (SOME "error") src ty) =
+    SOME (resolve_source_ref ctx src, name) ∧
+  custom_error_target ctx
+      (JE_Attribute base name (SOME "error") base_name base_tc src ty) =
+    SOME
+      (resolve_func_module_ref ctx
+        (JE_Attribute base name (SOME "error") base_name base_tc src ty) src,
+       name) /\
+  custom_error_target ctx _ = NONE
+End
+
+Definition translate_custom_error_def:
+  translate_custom_error ctx (JE_Call func args kwargs ty src) =
+    (case custom_error_target ctx func of
+     | NONE => NONE
+     | SOME id =>
+         SOME (CustomError id
+           (MAP (translate_expr ctx) args)
+           (translate_kwargs ctx kwargs))) ∧
+  translate_custom_error ctx _ = NONE
+End
+
+
 (* ===== Statement Translation ===== *)
 
 (* Vyper reads the name `UNREACHABLE` as an assert's message or a raise's
@@ -1223,13 +1249,19 @@ Definition translate_stmt_def:
   (translate_stmt nominal_index all_import_maps ctx (JS_Raise NONE) = Raise RaiseBare) /\
   (translate_stmt nominal_index all_import_maps ctx (JS_Raise (SOME e)) =
     if is_unreachable e then Raise RaiseUnreachable
-    else Raise (RaiseReason (translate_expr ctx e))) /\
+    else
+      case translate_custom_error ctx e of
+      | SOME err => Raise (RaiseCustomError err)
+      | NONE => Raise (RaiseReason (translate_expr ctx e))) /\
   (translate_stmt nominal_index all_import_maps ctx (JS_Assert test NONE) =
     Assert (translate_expr ctx test) AssertBare) /\
   (translate_stmt nominal_index all_import_maps ctx (JS_Assert test (SOME msg)) =
     Assert (translate_expr ctx test)
       (if is_unreachable msg then AssertUnreachable
-       else AssertReason (translate_expr ctx msg))) /\
+       else
+         case translate_custom_error ctx msg of
+         | SOME err => AssertCustomError err
+         | NONE => AssertReason (translate_expr ctx msg))) /\
   (translate_stmt nominal_index all_import_maps ctx (JS_Log (alias_opt, src, name) args) =
     let nsid =
       case alias_opt of
@@ -1282,4 +1314,3 @@ End
 
 
 (* ===== Top-level Translation ===== *)
-
