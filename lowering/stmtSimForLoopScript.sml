@@ -15,16 +15,52 @@
 
 Theory stmtSimForLoop
 Ancestors
-  stmtSim stmtSimForParts
+  stmtSim stmtSimForParts stmtSimDeclStore
   list rich_list finite_map pred_set
   fragExec localPtrsProps exprSim loweringSlice
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
-  compileEnv valueEncoding
+  compileEnv valueEncoding valueEncodingProps
   vyperInterpreter vyperState vyperValue vyperEvalPreservesScopes
   vyperExprNoControl vyperValueOperation
   venomExecSemantics venomExecProofs venomInst venomState integer_word
 Libs
   monadsyntax intLib
+
+Theorem stmt_state_rel_declare_word_alloca[local]:
+  !func cenv cx es s id p sz w inst v tyv sc rest a.
+    stmt_state_rel func cenv cx es s /\ fn_inst_ids_distinct func /\
+    es.scopes = sc :: rest /\ lookup_scopes id es.scopes = NONE /\
+    FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
+    not_local_ptr cenv es.scopes p /\ lookup_var p s = SOME w /\
+    MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+    inst.inst_outputs = [p] /\
+    FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n w, sz) /\
+    32 <= sz /\ word_value v /\ type_memory_size tyv = 32 ==>
+    stmt_state_rel func cenv cx
+      (es with scopes :=
+         (sc |+ (id, <| assignable := a; type := tyv; value := v; popped := [] |>)) :: rest)
+      (mstore (w2n w) (val_to_w256 v) s)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `local_ptrs_rel func cenv es.scopes s /\
+   immutable_alloca_sep func cenv cx es s /\
+   immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es s` by
+    fs[stmt_state_rel_def, state_rel_def] >>
+  `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es
+     (mstore (w2n w) (val_to_w256 v) s)` by
+    (irule immutables_rel_mstore_alloca >>
+     simp[] >> qexistsl_tac [`w2n w`, `func`, `inst`, `sz`] >> simp[]) >>
+  irule stmt_state_rel_declare_memory >>
+  simp[word_value_wf] >> qexistsl_tac [`inst`, `s`, `w`] >>
+  simp[word_value_in_memory] >> conj_tac
+  >- (rpt strip_tac >>
+      `regions_disjoint (w2n w) sz b sz'` by
+        (irule local_ptrs_rel_alloca_disjoint >>
+         qexistsl_tac [`cenv`, `func`, `inst`, `n`, `p`, `es.scopes`, `s`] >> fs[stmt_state_rel_def]) >>
+      irule EQ_SYM >> irule mstore_mem_bytes_at_disjoint >>
+      fs[regions_disjoint_def] >> decide_tac) >>
+  simp[mstore_def, lookup_var_def, LET_THM] >> metis_tac[]
+QED
 
 (* ===== The range loop ===== *)
 
@@ -33,9 +69,9 @@ Libs
    counter into the loop variable.  The relation then holds at the body's
    environment bc, for the source state with the loop variable's scope
    pushed. *)
-Theorem for_body_entry:
+Theorem for_body_entry_alloca[local]:
   !ctx func cenv bc cx esk cc id tyv p sz w ainst cv ev dv n1 n2 k
-   cond_lbl exit_lbl body_lbl j1 j2 j3 bbb cap.
+   cond_lbl exit_lbl body_lbl j1 j2 j3 bbb.
     lookup_block cond_lbl func.fn_blocks =
       SOME <| bb_label := cond_lbl;
               bb_instructions :=
@@ -58,9 +94,7 @@ Theorem for_body_entry:
     not_local_ptr bc (FEMPTY :: esk.scopes) p /\ dv <> p /\ dv <> cv /\
     MEM ainst (fn_insts func) /\ ainst.inst_opcode = ALLOCA /\
     ainst.inst_outputs = [p] /\ fn_inst_ids_distinct func /\
-    32 <= sz /\ type_memory_size tyv = 32 /\ cap <= w2n w /\
-    (cenv.ce_is_ctor ==>
-       immutable_prefix_bound cenv cx.txn.target cenv.ce_module esk cap) ==>
+    32 <= sz /\ type_memory_size tyv = 32 ==>
     ?s2. s2.vs_current_bb = body_lbl /\ s2.vs_inst_idx = 1 /\
          ~s2.vs_halted /\
          stmt_state_rel func bc cx
@@ -107,27 +141,69 @@ Proof
     (irule stmt_state_rel_cenv_cong >> qexists_tac `cenv` >> simp[] >>
      rpt strip_tac >> Cases_on `n = id` >> gvs[lookup_scopes_def] >>
      res_tac >> gvs[]) >>
-  `(bc.ce_is_ctor ==>
-      immutable_prefix_bound bc cx.txn.target bc.ce_module
-        (esk with scopes := FEMPTY :: esk.scopes) cap)` by
-    (strip_tac >>
-     qspecl_then [`cenv`, `bc`, `id`, `Var p`, `sz`, `cx.txn.target`,
-                  `cenv.ce_module`, `esk`, `cap`]
-       mp_tac immutable_prefix_bound_local_entry >>
-     impl_tac >- fs[] >> simp[]) >>
-  qspecl_then [`func`, `bc`, `cx`, `esk with scopes := FEMPTY :: esk.scopes`,
-               `s1`, `id`, `p`, `sz`, `w`, `ainst`, `IntV (n1 + &k)`, `tyv`,
-               `FEMPTY`, `esk.scopes`, `cap`, `F`]
-    mp_tac stmt_state_rel_declare_word >>
-  impl_tac >- simp[lookup_scopes_def, word_value_def] >>
-  simp[val_to_w256_def] >> strip_tac >>
+  `stmt_state_rel func bc cx
+     (esk with scopes :=
+       (FEMPTY |+ (id, <| assignable := F; type := tyv;
+                          value := IntV (n1 + &k); popped := [] |>)) :: esk.scopes)
+     (mstore (w2n w) (i2w (n1 + &k)) s1)` by
+    (rewrite_tac[GSYM val_to_w256_def] >>
+     irule (SRULE [] (Q.SPECL [`func`, `bc`, `cx`,
+       `esk with scopes := FEMPTY :: esk.scopes`] stmt_state_rel_declare_word_alloca)) >>
+     simp[lookup_scopes_def, word_value_def] >>
+     qexists_tac `ainst` >> simp[]) >>
   qexists_tac `s2` >>
-  simp[Abbr `s2`, stmt_state_rel_inst_idx] >> rpt conj_tac >>
-  TRY (simp[mstore_def, LET_THM] >> NO_TAC) >>
-  TRY (rpt strip_tac >> fs[mstore_def, LET_THM, lookup_var_def] >> NO_TAC) >>
+  simp[Abbr `s2`, stmt_state_rel_inst_idx] >>
+  rpt conj_tac
+  >- simp[mstore_def, LET_THM]
+  >- simp[mstore_def, LET_THM]
+  >- (rpt strip_tac >> fs[mstore_def, LET_THM, lookup_var_def])
+  >- simp[mstore_def, LET_THM] >>
   metis_tac[]
 QED
 
+
+Theorem for_body_entry:
+  !ctx func cenv bc cx esk cc id tyv p sz w ainst cv ev dv n1 n2 k
+   cond_lbl exit_lbl body_lbl j1 j2 j3 bbb cap.
+    lookup_block cond_lbl func.fn_blocks =
+      SOME <| bb_label := cond_lbl;
+              bb_instructions :=
+                [mk_inst j1 EQ [Var cv; Var ev] [dv];
+                 mk_inst j2 JNZ [Var dv; Label exit_lbl; Label body_lbl] []] |> /\
+    lookup_block body_lbl func.fn_blocks = SOME bbb /\
+    get_instruction bbb 0 = SOME (mk_inst j3 MSTORE [Var p; Var cv] []) /\
+    cc.vs_current_bb = cond_lbl /\ cc.vs_inst_idx = 0 /\ ~cc.vs_halted /\
+    stmt_state_rel func cenv cx esk cc /\
+    lookup_var cv cc = SOME (i2w (n1 + &k)) /\
+    lookup_var ev cc = SOME (i2w n2) /\ lookup_var p cc = SOME w /\
+    FLOOKUP cc.vs_allocas ainst.inst_id = SOME (w2n w, sz) /\
+    n1 <= n2 /\ k < Num (n2 - n1) /\ Num (n2 - n1) < dimword (:256) /\
+    lookup_scopes id esk.scopes = NONE /\
+    (!l. FLOOKUP cenv.ce_vars id = SOME l ==> ?q z. l = PtrVar q z) /\
+    FLOOKUP bc.ce_vars id = SOME (PtrVar (Var p) sz) /\
+    (!n. n <> id ==> FLOOKUP bc.ce_vars n = FLOOKUP cenv.ce_vars n) /\
+    bc.ce_module = cenv.ce_module /\ bc.ce_is_ctor = cenv.ce_is_ctor /\
+    not_local_ptr cenv esk.scopes dv /\
+    not_local_ptr bc (FEMPTY :: esk.scopes) p /\ dv <> p /\ dv <> cv /\
+    MEM ainst (fn_insts func) /\ ainst.inst_opcode = ALLOCA /\
+    ainst.inst_outputs = [p] /\ fn_inst_ids_distinct func /\
+    32 <= sz /\ type_memory_size tyv = 32 /\ cap <= w2n w /\
+    (cenv.ce_is_ctor ==>
+       immutable_prefix_bound cenv cx.txn.target cenv.ce_module esk cap) ==>
+    ?s2. s2.vs_current_bb = body_lbl /\ s2.vs_inst_idx = 1 /\
+         ~s2.vs_halted /\
+         stmt_state_rel func bc cx
+           (esk with scopes :=
+              (FEMPTY |+ (id, <| assignable := F; type := tyv;
+                                 value := IntV (n1 + &k); popped := [] |>)) :: esk.scopes)
+           s2 /\
+         (!x. x <> dv ==> lookup_var x s2 = lookup_var x cc) /\
+         s2.vs_allocas = cc.vs_allocas /\
+         !fuel rr. run_from fuel ctx func s2 = rr /\ (!e. rr <> Error e) ==>
+                   ?fuel'. run_from fuel' ctx func cc = rr
+Proof
+  rpt gen_tac >> strip_tac >> drule_all for_body_entry_alloca >> simp[]
+QED
 (* Every non-Error result from a is one from b, and from b one from c:
    then from a one from c. *)
 Theorem run_from_results_trans[local]:
