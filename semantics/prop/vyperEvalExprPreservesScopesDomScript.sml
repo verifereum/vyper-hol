@@ -148,10 +148,16 @@ Proof
            raise_def, check_def, type_check_def, assert_def, lift_option_def,
            lift_option_type_def, push_log_def, option_CASE_rator] >>
       strip_tac >> gvs[AllCaseEqs(), return_def, raise_def] >> metis_tac[])
+  (* Original RawRevert proof (retained; option-case state was opaque):
   >- (rpt strip_tac >>
       gvs[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(), return_def,
           raise_def, check_def, type_check_def, assert_def,
           lift_option_type_def] >> metis_tac[])
+  *)
+  >- (rpt strip_tac >>
+      gvs[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(), return_def,
+          raise_def, check_def, type_check_def, assert_def,
+          lift_option_type_def, option_CASE_rator] >> metis_tac[])
   >- (rpt strip_tac >> qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
       simp[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(), return_def,
            raise_def, check_def, type_check_def, assert_def, lift_option_def,
