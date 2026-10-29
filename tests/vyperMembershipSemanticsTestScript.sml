@@ -4,6 +4,22 @@ Ancestors
   vyperValueOperation vyperValue vyperTypeContract vyperEvalPureExpr vyperLookup
   vyperTypeSystem compileEnv
 
+Theorem read_local_value[local]:
+  lookup_scopes_val id st.scopes = SOME v ==>
+  read_result cx (PlaceR (MemoryPlace id [])) st = (INL v, st)
+Proof
+  simp[lookup_scopes_val_SOME] >> strip_tac >>
+  simp[read_result_def, read_place_def, get_scopes_def, bind_def,
+       lift_option_type_def, lift_option_def, return_def, lift_sum_def,
+       read_memory_path_def, evaluate_subscripts_def]
+QED
+
+Theorem lookup_local_exists[local]:
+  lookup_scopes_val id sc = SOME v ==> IS_SOME (lookup_scopes id sc)
+Proof
+  simp[lookup_scopes_val_SOME] >> strip_tac >> simp[]
+QED
+
 (* The symbolic scope assumption fixes x=0 without requiring a whole contract. *)
 Theorem literal_membership_eval_test:
   lookup_scopes_val "x" st.scopes = SOME (IntV 0) ==>
@@ -15,11 +31,14 @@ Theorem literal_membership_eval_test:
           Literal (BaseT (UintT 256)) (IntL 1)]]) st =
   (INL (Value (BoolV (~is_notin))),st)
 Proof
-  strip_tac >> Cases_on `is_notin` >>
+  strip_tac >>
+  imp_res_tac lookup_local_exists >>
+  imp_res_tac read_local_value >>
+  Cases_on `is_notin` >>
   simp[evaluate_def, builtin_args_length_ok_def, type_check_def, check_def,
        assert_def, bind_def, ignore_bind_def, return_def, raise_def,
        get_scopes_def, get_accounts_def, lift_option_type_def,
-       lift_sum_def, materialise_def, evaluate_literal_def,
+       lift_sum_def, read_local_value, cj 1 read_result_def, evaluate_literal_def,
        evaluate_builtin_def, evaluate_type_def, expr_type_def,
        evaluate_membership_def, evaluate_in_array_def,
        vyperValueTheory.make_array_value_def,
@@ -42,10 +61,13 @@ Theorem local_array_membership_eval_test:
        Name (ArrayT (BaseT (UintT 256)) (Fixed 3)) "a"]) st =
   (INL (Value (BoolV (~is_notin))),st)
 Proof
-  strip_tac >> Cases_on `is_notin` >>
+  strip_tac >>
+  imp_res_tac lookup_local_exists >>
+  imp_res_tac read_local_value >>
+  Cases_on `is_notin` >>
   simp[evaluate_def, builtin_args_length_ok_def, type_check_def, check_def,
        assert_def, bind_def, ignore_bind_def, return_def, raise_def,
-       get_scopes_def, lift_option_type_def, lift_sum_def, materialise_def,
+       get_scopes_def, lift_option_type_def, lift_sum_def, cj 1 read_result_def,
        evaluate_type_def, expr_type_def, evaluate_membership_def,
        evaluate_in_array_def, default_value_def, type_slot_size_def,
        wordsTheory.dimword_def] >>
@@ -111,8 +133,11 @@ Theorem membership_pure_defaults_test:
        Name (ArrayT (BaseT (UintT 256)) (Fixed 3)) "a"]) =
   SOME (Value (BoolV (~is_notin)))
 Proof
-  strip_tac >> Cases_on `is_notin` >>
-  simp[eval_pure_expr_def, lookup_name_def, builtin_args_length_ok_def, materialise_def,
+  strip_tac >>
+  imp_res_tac lookup_local_exists >>
+  imp_res_tac read_local_value >>
+  Cases_on `is_notin` >>
+  simp[eval_pure_expr_def, lookup_name_def, builtin_args_length_ok_def, read_result_def,
        bind_def, return_def, evaluate_type_def, expr_type_def,
        evaluate_membership_def, evaluate_in_array_def, default_value_def,
        type_slot_size_def, wordsTheory.dimword_def] >>
@@ -130,7 +155,7 @@ Theorem membership_pure_failure_test:
     [Literal (BaseT (UintT 256)) (IntL 0)]) = NONE
 Proof
   strip_tac >>
-  simp[eval_pure_expr_def, builtin_args_length_ok_def, materialise_def,
+  simp[eval_pure_expr_def, builtin_args_length_ok_def, read_result_def,
        bind_def, return_def, evaluate_literal_def, expr_type_def] >>
   EVAL_TAC
 QED
