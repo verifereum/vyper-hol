@@ -16,8 +16,7 @@
  *   nsid_to_string   — namespace ID to lookup string
  *   internal_fn_label — Venom label of an internal function (Vyper's spelling)
  *   local_ptrs_rel   — live locals held through pointer variables match memory
- *   accounts_rel     — every address's accounts and transient storage match,
- *                      no pending deletions
+ *   accounts_rel     — every address's raw accounts and transient storage match
  *   compile_state_ok — well-formedness: bound labels disjoint from future fresh labels
  *   label_external   — label not bound and not in future fresh-label co-domain
  *
@@ -968,18 +967,15 @@ Definition transient_rel_def:
 End
 
 (* The raw accounts and the transient storage of every address are
-   identical, and the source has no pending deletions.  Other addresses'
+   identical. Other addresses'
    accounts and transient storage change during a body only through the
    call oracle, whose outcome both sides adopt the same way (adopt_outcome).
-   The supported subset excludes create runs and starts with no pending
-   deletions; successful external calls finalize them.  Venom also carries
-   vs_pending_deletions: state_rel separately equates it to the source's
-   pending_deletions, so both lists are empty in this subset.  accounts_rel
-   itself matches raw accounts, not accounts after processing deletions. *)
+   Both sides accumulate pending deletions during execution; state_rel
+   separately equates their lists. The external success relation compares
+   accounts after finalizing those lists at the transaction boundary. *)
 Definition accounts_rel_def:
   accounts_rel vs ss ⇔
-    vs.accounts = ss.vs_accounts ∧ vs.tStorage = ss.vs_transient ∧
-    vs.pending_deletions = []
+    vs.accounts = ss.vs_accounts ∧ vs.tStorage = ss.vs_transient
 End
 
 (* ===== Immutables Relation ===== *)
@@ -1203,10 +1199,8 @@ End
      variables.
    - transient_rel, transient_vars_rel: transient storage, and the slots of
      transient variables.
-   - accounts_rel: the accounts and transient storage of every address, and
-     no pending deletions, which the success case of the external result
-     relation compares (storage_rel and transient_rel are its case for the
-     running contract).
+   - accounts_rel: the raw accounts and transient storage of every address
+     (storage_rel and transient_rel are its case for the running contract).
    - immutables_rel: immutables (vs_immutables in a constructor, the data
      section at runtime).
    - logs_rel: emitted logs.
@@ -1216,9 +1210,8 @@ End
      asks a static request exactly when the source does.
    - outcomes and requests: the oracle outcomes still to consume and the
      requests recorded so far, as in the result relation.
-   - pending_deletions: raw equality with vs_pending_deletions; accounts_rel
-     additionally requires the source list (hence both lists) to be empty
-     in the supported subset. *)
+   - pending_deletions: equality with vs_pending_deletions, including effects
+     accumulated from adopted external-call outcomes. *)
 Definition state_rel_def:
   state_rel func cenv cx vs ss =
     (local_ptrs_rel func cenv vs.scopes ss ∧
