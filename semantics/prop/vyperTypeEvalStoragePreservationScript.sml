@@ -3919,6 +3919,9 @@ Resume eval_scc_storage_preservation_results_mutual[intcall_storage]:
     `env_consistent env cx args_st` by
       qpat_assum `runtime_consistent env cx args_st` (fn th =>
         ACCEPT_TAC (cj 1 (REWRITE_RULE [runtime_consistent_def] th))) >>
+    `IS_SOME (FLOOKUP env.fn_sigs (src_id_opt,fn))` by
+      (qpat_x_assum `FLOOKUP env.fn_sigs (src_id_opt,fn) = SOME _`
+         (fn th => simp[th])) >>
     mp_tac (Q.INST [`st` |-> `args_st`, `ts` |-> `x'`,
                     `fm` |-> `x''0`, `nr` |-> `x''1`,
                     `args` |-> `x''2`, `dflts` |-> `x''3`,

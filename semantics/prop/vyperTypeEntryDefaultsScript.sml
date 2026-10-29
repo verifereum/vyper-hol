@@ -237,6 +237,7 @@ Theorem checked_explicit_external_defaults_call_evaluation_safe[local]:
   check_contract F am.layouts tx.target mods = SOME art /\
   ALOOKUP am.sources tx.target = SOME mods /\
   ALOOKUP mods src = SOME ts /\
+  module_allocated am.layouts tx.target src ts /\
   MEM (FunctionDecl External mut nr raw tx.function_name args dflts ret body) ts /\
   MEM e dflts ==>
   call_evaluation_safe
@@ -267,6 +268,7 @@ Theorem checked_explicit_external_defaults_typed[local]:
   check_contract F am.layouts tx.target mods = SOME art /\
   ALOOKUP am.sources tx.target = SOME mods /\
   ALOOKUP mods src = SOME ts /\
+  module_allocated am.layouts tx.target src ts /\
   MEM (FunctionDecl External mut nr raw tx.function_name args dflts ret body) ts ==>
   well_typed_exprs (artifact_env art mods src) dflts /\
   EVERY (runtime_constant_expr mods) dflts /\
@@ -325,7 +327,7 @@ Theorem checked_public_getter_args_well_formed:
   !arg. MEM arg args ==> well_formed_type (type_env_all_modules mods) (SND arg)
 Proof
   strip_tac >>
-  `check_toplevel_decl layouts addr mods art src decl` by
+  `check_toplevel_decl mods art src decl` by
     metis_tac[check_contract_toplevel_decl_MEM] >>
   Cases_on `decl` >> gvs[external_getter_tuple_def]
   >~ [`VariableDecl vis vmut id typ init`]
@@ -388,6 +390,8 @@ Proof
   drule_all lookup_exported_function_initial_module_code >> strip_tac >>
   `ALOOKUP mods src = SOME ts` by
     gvs[get_module_code_def, initial_evaluation_context_def] >>
+  `module_allocated am.layouts tx.target src ts` by
+    metis_tac[checked_contract_runtime_ready_module_allocated] >>
   drule_all lookup_exported_function_checked_cases_current >> strip_tac
   >- (drule_all checked_explicit_external_defaults_typed >> strip_tac >>
       simp[] >> rpt strip_tac
