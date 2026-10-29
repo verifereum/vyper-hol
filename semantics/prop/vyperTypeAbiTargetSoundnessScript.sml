@@ -44,8 +44,8 @@ Theorem base_target_value_shape_nonbare:
   base_target_value_shape env bt (TopLevelVar src id) subs ==>
   FLOOKUP env.bare_globals (src,id) = NONE
 Proof
-  Induct >> simp[base_target_value_shape_def] >> rpt strip_tac >> gvs[] >>
-  first_x_assum drule >> simp[]
+  Induct_on `subs` >> rpt gen_tac >> Cases_on `bt` >>
+  simp[base_target_value_shape_def] >> metis_tac[]
 QED
 
 Theorem pop_immutable_target_projected:

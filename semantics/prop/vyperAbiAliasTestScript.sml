@@ -3,12 +3,24 @@
 Theory vyperAbiAliasTest
 Ancestors
   vyperInterpreter vyperAbiOperand vyperContext vyperState vyperAST
-  vyperValue vyperStorage finite_map list
+  vyperValue vyperStorage vfmState words finite_map list
 Libs
   monadsyntax wordsLib intLib
 
 val () = computeLib.add_funs
   [wordsTheory.dimword_def, fcpLib.INDEX_CONV ``dimindex(:256)``];
+
+(* Local memory uses the slot codec's word offsets and left-aligned fixed
+   bytes. Keep its concrete roundtrip with the delayed ABI memory regressions. *)
+Theorem memory_fixed_bytes_roundtrip:
+  encode_value (BaseTV (BytesT (Fixed 2))) (BytesV [18w;52w]) =
+    SOME [(0, (0x1234w:256 word) << 240)] ∧
+  decode_value
+    (apply_writes 0w [(0, (0x1234w:256 word) << 240)] empty_storage)
+    0 (BaseTV (BytesT (Fixed 2))) = SOME (BytesV [18w;52w])
+Proof
+  EVAL_TAC
+QED
 
 Definition alias_array_type_def:
   alias_array_type = ArrayT (BaseT BoolT) (Dynamic 2)
