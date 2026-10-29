@@ -434,6 +434,33 @@ QED
 
 Finalise compile_store_memory_run_size_bound_capacity
 
+Theorem compile_store_memory_run_size_bound_with_capacity:
+  !cenv src dst ty sa sb s tenv tv v sw dw.
+    compile_store_memory cenv src dst ty ty sa = ((),sb) /\
+    (!x. src = Var x ==> not_fresh_at sa x) /\
+    (!x. dst = Var x ==> not_fresh_at sa x) /\
+    eval_operand src s = SOME sw /\ eval_operand dst s = SOME dw /\
+    evaluate_type tenv ty = SOME tv /\ value_has_type tv v /\ val_wf tv v /\
+    type_memory_bytes cenv ty = type_memory_size tv /\
+    (if is_word_type ty then sw = typed_val_to_w256 tv v
+     else val_in_memory tv v (w2n sw) s.vs_memory) /\
+    type_memory_size tv + 64 < dimword (:256) ==>
+    sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
+    same_blocks sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
+    sa.cs_next_id <= sb.cs_next_id /\
+    EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+      (emitted_insts sa sb) /\
+    ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
+      val_in_memory tv v (w2n dw) t.vs_memory /\
+      (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s /\
+      (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+      (!a len. a + len <= w2n dw \/ w2n dw + type_memory_size tv <= a ==>
+         mem_bytes_at a len t.vs_memory = mem_bytes_at a len s.vs_memory) /\
+      LENGTH s.vs_memory <= LENGTH t.vs_memory
+Proof
+  ACCEPT_TAC compile_store_memory_run_size_bound_capacity
+QED
+
 Theorem compile_store_memory_run_size_bound:
   !cenv src dst ty sa sb s tenv tv v sw dw.
     compile_store_memory cenv src dst ty ty sa = ((),sb) /\

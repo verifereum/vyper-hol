@@ -95,8 +95,21 @@ Proof
   `alloca_room func t` by
     (irule alloca_room_fields >> qexists_tac `s` >> fs[stmt_state_rel_def]) >>
   `immutable_alloca_sep func cenv cx (es with scopes := scs') t` by
-    (irule immutable_alloca_sep_fields >>
-     qexistsl_tac [`s`, `es`] >> fs[stmt_state_rel_def]) >>
+    (qpat_assum `stmt_state_rel _ _ _ _ _` mp_tac >>
+     pure_rewrite_tac[stmt_state_rel_def, immutable_alloca_sep_def] >>
+     strip_tac >> simp[immutable_alloca_sep_def] >>
+     rpt strip_tac >>
+     qpat_x_assum `cenv.ce_is_ctor ==> _` drule >>
+     disch_then drule_all >> strip_tac >> simp[]
+     >- metis_tac[] >>
+     rpt strip_tac >>
+     rename1 `local_region cenv scs' t j b len` >>
+     Cases_on `j = id`
+     >- (gvs[local_region_def] >>
+         qpat_x_assum `!inst b sz. MEM inst _ /\ _ ==> _` drule_all >> simp[]) >>
+     `local_region cenv (sc :: rest) s j b len` by
+       (gvs[local_region_def] >> metis_tac[]) >>
+     metis_tac[]) >>
   fs[stmt_state_rel_def] >> metis_tac[]
 QED
 
