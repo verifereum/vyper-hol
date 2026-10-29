@@ -970,7 +970,7 @@ Definition exports_ok_def:
              | SOME tls => module_allocated layouts addr (SOME src) tls) exps
 End
 
-(* TOP-LEVEL: Successful checking guarantees distinct member names for every
+(* Successful checking guarantees distinct member names for every
    actual struct declaration, including declarations in imported modules. *)
 Theorem check_contract_struct_fields_distinct:
   check_contract in_deploy layouts addr mods = SOME art /\
