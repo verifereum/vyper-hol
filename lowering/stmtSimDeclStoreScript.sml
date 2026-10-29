@@ -51,10 +51,10 @@ Theorem stmt_state_rel_declare_memory:
     val_in_memory tyv v (w2n w) t.vs_memory ==>
     stmt_state_rel func cenv cx
       (es with scopes :=
-         (sc |+ (id, <| assignable := a; type := tyv; value := v |>)) :: rest) t
+         (sc |+ (id, <| assignable := a; type := tyv; value := v; popped := [] |>)) :: rest) t
 Proof
   rpt gen_tac >> strip_tac >> gs[] >>
-  qabbrev_tac `entry = <| assignable := a; type := tyv; value := v |>` >>
+  qabbrev_tac `entry = <| assignable := a; type := tyv; value := v; popped := [] |>` >>
   qabbrev_tac `scs' = (sc |+ (id, entry)) :: rest` >>
   `local_ptrs_rel func cenv (sc :: rest) s /\ alloca_inv s` by
     fs[stmt_state_rel_def, state_rel_def] >>
@@ -112,7 +112,7 @@ Theorem stmt_state_rel_declare_store:
     val_wf tyv v ==>
     stmt_state_rel func cenv cx
       (es with scopes :=
-         (sc |+ (id, <| assignable := a; type := tyv; value := v |>)) :: rest)
+         (sc |+ (id, <| assignable := a; type := tyv; value := v; popped := [] |>)) :: rest)
       (mstore (w2n w) x s)
 Proof
   rpt strip_tac >>

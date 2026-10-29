@@ -64,7 +64,7 @@ Theorem for_body_entry:
          stmt_state_rel func bc cx
            (esk with scopes :=
               (FEMPTY |+ (id, <| assignable := F; type := tyv;
-                                 value := IntV (n1 + &k) |>)) :: esk.scopes)
+                                 value := IntV (n1 + &k); popped := [] |>)) :: esk.scopes)
            s2 /\
          (!x. x <> dv ==> lookup_var x s2 = lookup_var x cc) /\
          s2.vs_allocas = cc.vs_allocas /\
@@ -244,13 +244,13 @@ Theorem for_iteration:
     eval_stmts cx stmts
       (esk with scopes :=
          (FEMPTY |+ (id, <| assignable := F; type := tyv;
-                            value := IntV (n1 + &k) |>)) :: esk.scopes) =
+                            value := IntV (n1 + &k); popped := [] |>)) :: esk.scopes) =
       (r2, es2) /\
     stmt_frag ctx func cx (InLoop exit_lbl incr_lbl) RetQ bc
       (stmts_env bc (InLoop exit_lbl incr_lbl) ty stmts)
       (esk with scopes :=
          (FEMPTY |+ (id, <| assignable := F; type := tyv;
-                            value := IntV (n1 + &k) |>)) :: esk.scopes)
+                            value := IntV (n1 + &k); popped := [] |>)) :: esk.scopes)
       r2 es2 /\
     stmt_res_ok (InLoop exit_lbl incr_lbl) r2 /\
     es2.scopes = sc :: rest /\
@@ -314,7 +314,7 @@ Proof
     rename1 `stmt_state_rel func c3 cx es2 s3` >>
     qabbrev_tac `esA = esk with scopes :=
            (FEMPTY |+ (id, <| assignable := F; type := tyv;
-                              value := IntV (n1 + &k) |>)) :: esk.scopes` >>
+                              value := IntV (n1 + &k); popped := [] |>)) :: esk.scopes` >>
     `cenv_top_ext cenv bc esA.scopes` by
       (simp[cenv_top_ext_def, Abbr `esA`] >> rpt strip_tac >>
        Cases_on `n = id` >> gvs[]) >>
@@ -401,19 +401,19 @@ Theorem for_loop:
        eval_stmts cx stmts
          (ei with scopes :=
             (FEMPTY |+ (id, <| assignable := F; type := tyv;
-                               value := IntV (n1 + &j) |>)) :: ei.scopes) = (r2, es2) ==>
+                               value := IntV (n1 + &j); popped := [] |>)) :: ei.scopes) = (r2, es2) ==>
        stmt_frag ctx func cx (InLoop exit_lbl incr_lbl) RetQ bc
          (stmts_env bc (InLoop exit_lbl incr_lbl) ty stmts)
          (ei with scopes :=
             (FEMPTY |+ (id, <| assignable := F; type := tyv;
-                               value := IntV (n1 + &j) |>)) :: ei.scopes) r2 es2) /\
+                               value := IntV (n1 + &j); popped := [] |>)) :: ei.scopes) r2 es2) /\
     (* P holds again after an iteration that goes on *)
     (!ei j r2 es2 sc rest.
        P ei /\ lookup_scopes id ei.scopes = NONE /\ j < Num (n2 - n1) /\
        eval_stmts cx stmts
          (ei with scopes :=
             (FEMPTY |+ (id, <| assignable := F; type := tyv;
-                               value := IntV (n1 + &j) |>)) :: ei.scopes) = (r2, es2) /\
+                               value := IntV (n1 + &j); popped := [] |>)) :: ei.scopes) = (r2, es2) /\
        (r2 = INL () \/ r2 = INR ContinueException) /\
        es2.scopes = sc :: rest ==>
        P (es2 with scopes := rest)) /\

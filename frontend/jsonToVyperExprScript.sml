@@ -1281,4 +1281,3 @@ End
 
 
 (* ===== Top-level Translation ===== *)
-

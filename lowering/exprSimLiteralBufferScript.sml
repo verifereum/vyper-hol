@@ -819,7 +819,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   simp[vv_post_def, exprLoweringPropsTheory.stmt_state_rel_inst_idx,
        vv_holds_def, vv_at_def, contextTheory.base_ptr_def,
-       materialise_def, return_def, eval_operand_def, lookup_var_def] >>
+       read_result_def, return_def, eval_operand_def, lookup_var_def] >>
   `eval_operand buf.buf_operand (t with vs_inst_idx := LENGTH sb.cs_current_insts) = SOME w` by
     (Cases_on `buf.buf_operand` >> gvs[eval_operand_def, lookup_var_def]) >>
   conj_tac >- metis_tac[] >>

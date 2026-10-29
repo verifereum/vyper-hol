@@ -93,7 +93,8 @@ Theorem decimal_mul_builtin_boundaries_cv:
     INR (RuntimeError "Decimal Mul bound")
 Proof
   simp[evaluate_builtin_def, get_tenv_def, empty_evaluation_context_def,
-       type_to_int_bound_def, evaluate_type_def] >> CONV_TAC cv_eval
+       type_to_int_bound_def, evaluate_type_def, decimal_mul_signed_result] >>
+  CONV_TAC cv_eval
 QED
 
 (* The unchanged compiler fixture remains well typed in both checker modes.

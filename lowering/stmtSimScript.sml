@@ -636,7 +636,5 @@ Proof
       simp[stmt_lands_def, cenv_top_ext_refl] >> metis_tac[]) >>
   disj2_tac >> qexists_tac `fuel` >> gvs[stmt_exit_def] >>
   Cases_on `r1` >> gvs[] >> disj1_tac >>
-  ONCE_REWRITE_TAC [INST_TYPE [beta |-> ``:toplevel_value``]
-                      expr_exit_INR_type] >>
-  first_assum ACCEPT_TAC
+  metis_tac[expr_exit_INR_type]
 QED

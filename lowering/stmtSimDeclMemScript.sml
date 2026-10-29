@@ -285,7 +285,7 @@ Theorem stmt_state_rel_declare_store_frame[local]:
     val_in_memory tyv v (w2n w) t.vs_memory ==>
     stmt_state_rel func cenv cx
       (es with scopes :=
-        (sc |+ (id, <|assignable := a; type := tyv; value := v|>)) :: rest) t
+        (sc |+ (id, <|assignable := a; type := tyv; value := v; popped := []|>)) :: rest) t
 Proof
   rpt gen_tac >> strip_tac >>
   `!q. q = p \/ ~not_local_ptr cenv es.scopes q ==>
@@ -331,7 +331,7 @@ Theorem annassign_memory_store_run[local]:
     s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
     ?t. stmt_state_rel func cenv cx
           (es with scopes :=
-            (sc |+ (id, <|assignable := a; type := tyv; value := v|>)) :: rest) t /\
+            (sc |+ (id, <|assignable := a; type := tyv; value := v; popped := []|>)) :: rest) t /\
         ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
         t.vs_inst_idx = LENGTH sb.cs_current_insts /\
         (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
@@ -444,7 +444,7 @@ Theorem annassign_memory_assign_run[local]:
     s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
     ?t. stmt_state_rel func cenv cx
           (es with scopes :=
-            (sc |+ (id, <|assignable := a; type := tyv; value := v|>)) :: rest) t /\
+            (sc |+ (id, <|assignable := a; type := tyv; value := v; popped := []|>)) :: rest) t /\
         ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
         t.vs_inst_idx = LENGTH sb.cs_current_insts /\
         (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
@@ -526,7 +526,7 @@ Theorem annassign_memory_store_post_run[local]:
     FLOOKUP s0.vs_allocas inst.inst_id = SOME (w2n w,sz) ==>
     ?t. stmt_state_rel func cenv cx
           (es1 with scopes :=
-             (sc |+ (id, <|assignable := a; type := tyv; value := v|>)) :: rest) t /\
+             (sc |+ (id, <|assignable := a; type := tyv; value := v; popped := []|>)) :: rest) t /\
         ~t.vs_halted /\ t.vs_current_bb = sf.cs_current_bb /\
         t.vs_inst_idx = LENGTH sf.cs_current_insts /\
         (!x u. not_fresh_at sa x /\ lookup_var x s0 = SOME u ==>
@@ -594,11 +594,11 @@ Proof
   rpt gen_tac >> strip_tac >>
   drule eval_stmt_annassign_value >> strip_tac >>
   qpat_x_assum `!tv es1. _ ==> _` drule >> strip_tac >>
-  gvs[materialise_def, return_def] >>
+  gvs[read_result_def, return_def] >>
   `not_local_ptr cenv es1.scopes p` by metis_tac[local_ptrs_reserved_not_live] >>
   qpat_x_assum `expr_sim _ _ _ _ _ _ _` (mp_tac o REWRITE_RULE [expr_sim_def]) >>
-  disch_then (qspecl_then [`sa`, `sb`, `op`, `INL (Value v)`, `es1`, `s0`] mp_tac) >>
-  impl_tac >- simp[expr_res_ok_def] >>
+  disch_then (qspecl_then [`sa`, `sb`, `op`, `INL v`, `es1`, `s0`] mp_tac) >>
+  impl_tac >- simp[expr_res_ok_def, bind_def, read_result_def, return_def] >>
   simp[frag_exec_def] >> disch_then (qspec_then `func` mp_tac) >>
   impl_tac >- simp[] >> simp[] >> strip_tac >>
   `lookup_scopes id es1.scopes = NONE` by gvs[] >>
@@ -719,8 +719,8 @@ Proof
   disch_then (qx_choosel_then [`salloc`, `w`] strip_assume_tac) >>
   Cases_on `res`
   >- suspend "success" >>
-  `eval_expr cx e es = (INR y,es') /\
-   expr_res_ok (INR y : toplevel_value + exception)` by
+  `(do raw <- eval_expr cx e; read_result cx raw od) es = (INR y,es') /\
+   expr_res_ok (INR y : value + exception)` by
     (drule eval_annassign_word_error >> simp[] >>
      disch_then (qspec_then `lctx` mp_tac) >> simp[] >> metis_tac[]) >>
   drule_all expr_sim_error_run >> strip_tac >>
