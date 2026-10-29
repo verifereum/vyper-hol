@@ -4985,11 +4985,12 @@ val shape_subscript_array_tac =
   qexists_tac `\v st. (cenv_shape_ok st cenv /\ value_shape_ok st base_vv) /\ plain_operand st v` >> conj_tac
   >- (shape_under_tac lower_value_callback_shape `\st. cenv_shape_ok st cenv /\ value_shape_ok st base_vv` >> simp[]) >>
   qx_gen_tac `idx_op` >> simp[] >>
-  match_mp_tac shape_step_bind >> qexists_tac `\v st. value_shape_ok st base_vv /\ plain_operand st v` >> conj_tac
-  >- (shape_under_tac compile_array_subscript_shape_framed `\st. value_shape_ok st base_vv` >>
+  match_mp_tac shape_step_bind >>
+  qexists_tac `\v st. (cenv_shape_ok st cenv /\ value_shape_ok st base_vv) /\ plain_operand st v` >> conj_tac
+  >- (shape_under_tac compile_array_subscript_shape_framed
+        `\st. cenv_shape_ok st cenv /\ value_shape_ok st base_vv` >>
       simp[compile_ptr_load_shape] >> conj_tac
-      >- (Cases_on `vv_location base_vv` >> simp[] >>
-          rename1 `SOME loc` >> Cases_on `loc` >> simp[]) >>
+      >- (Cases_on `base_vv` >> simp[value_shape_ok_def, vv_location_def]) >>
       Cases_on `base_vv` >> simp[value_shape_ok_def, vv_operand_def]) >>
   gen_tac >> simp[] >> irule shape_step_return >> Cases_on `base_vv` >>
   simp[value_shape_ok_def, vv_location_def, mk_ptr_def];
@@ -7071,7 +7072,13 @@ val shape_dispatch_len_tac =
   `~supported_expr_exists expr_shape_root (HD args)` by
     (irule expr_shape_list_hd >> gvs[builtin_arity_def]) >>
   CONV_TAC (LAND_CONV (REWR_CONV (GSYM ETA_AX))) >>
-  simp[compile_builtin_dispatch_body_def] >> CONV_TAC (DEPTH_CONV ETA_CONV) >>
+  simp[compile_builtin_dispatch_body_def] >>
+  Cases_on `is_msg_data (HD args)` >> simp[]
+  >- (CONV_TAC (DEPTH_CONV ETA_CONV) >>
+      irule shape_step_as_stack_val >>
+      shape_under_tac compile_builtin_calldatasize_shape `\st. T` >>
+      simp[shape_stable_def]) >>
+  CONV_TAC (DEPTH_CONV ETA_CONV) >>
   irule shape_step_uncurry >> qexists_tac `\v st. value_shape_ok st v` >> reverse conj_tac
   >- (first_x_assum irule >> simp[]) >>
   qx_gen_tac `vv` >> simp[] >> irule shape_step_as_stack_val >>
