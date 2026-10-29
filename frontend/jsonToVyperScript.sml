@@ -493,21 +493,15 @@ Definition collect_imported_nominal_decls_def:
     collect_imported_nominal_decls rest
 End
 
-Definition list_prefix_def:
-  list_prefix [] ys = T ∧
-  list_prefix (x::xs) [] = F ∧
-  list_prefix (x::xs) (y::ys) = (x = y ∧ list_prefix xs ys)
-End
-
 Definition is_interface_path_def:
   is_interface_path path =
-    (list_prefix (REVERSE ".vyi") (REVERSE path) ∨
-     list_prefix (REVERSE ".json") (REVERSE path))
+    (is_prefix (REVERSE ".vyi") (REVERSE path) ∨
+     is_prefix (REVERSE ".json") (REVERSE path))
 End
 
 Definition interface_path_name_def:
   interface_path_name path =
-    let extension_length = if list_prefix (REVERSE ".json") (REVERSE path)
+    let extension_length = if is_prefix (REVERSE ".json") (REVERSE path)
                            then 5 else 4 in
     let without_ext = TAKE (LENGTH path - extension_length) path in
     REVERSE (PREFIX (λc. c ≠ #"/") (REVERSE without_ext))
@@ -527,7 +521,7 @@ End
 Definition qualified_interface_name_def:
   qualified_interface_name name qualified_name =
     (qualified_name = name ∨
-     list_prefix (REVERSE ("." ++ name)) (REVERSE qualified_name))
+     is_prefix (REVERSE ("." ++ name)) (REVERSE qualified_name))
 End
 
 Definition is_interface_import_def:
@@ -542,7 +536,7 @@ Definition collect_interface_alias_infos_def:
   collect_interface_alias_infos interface_refs nsid
       (JImportInfo alias src_id qualified_name path :: rest) =
     if is_interface_import interface_refs src_id qualified_name ∨
-       list_prefix (REVERSE ".json") (REVERSE path)
+       is_prefix (REVERSE ".json") (REVERSE path)
     then ((nsid, alias), InterfaceKind) ::
       collect_interface_alias_infos interface_refs nsid rest
     else collect_interface_alias_infos interface_refs nsid rest
