@@ -21,7 +21,7 @@ Ancestors
   vyperTypeContract vyperTypeConstantCells vyperTypeInvariants
   vyperTypeSystem vyperTypeValues vyperTypeExprSoundness
   vyperTypeInitialState vyperTyping vyperMisc vyperPlaceResultTyping
-  vyperTypeContractStaticMaps
+  vyperTypeContractStaticMaps vyperTypeBuiltins
 
 (* ===== Context independence of constant builtins ===== *)
 
@@ -679,8 +679,8 @@ Proof
     first_x_assum (qspecl_then [`cx`,`am`] mp_tac) >>
     simp[] >> disch_then drule_all >> disch_then (qspec_then `sc` strip_assume_tac) >>
     `get_tenv cx = type_env_all_modules mods` by metis_tac[get_tenv_sources] >>
-    gvs[]
-    >- (
+    gvs[] >>
+    (all_tac >>~- ([`constant_length _ = SOME _`],
       drule_all constant_result_length >> strip_tac >>
       gvs[value_runtime_typed_def] >>
       `evaluate_type (artifact_env artifact mods current_src).type_defs ty = SOME (BaseTV (UintT 256))` by
@@ -691,7 +691,21 @@ Proof
       simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
            assert_def, return_def, expr_type_def,
            eval_result_typed_def, read_result_def, constant_result_shape_def,
-           value_runtime_typed_def]) >>
+           value_runtime_typed_def])) >>
+    (all_tac >>~- ([`evaluate_membership _ _ _ _ = INL _`],
+      gvs[value_runtime_typed_def] >>
+      `!t. evaluate_type (artifact_env artifact mods current_src).type_defs t =
+           evaluate_type (type_env_all_modules mods) t` by simp[artifact_env_def] >>
+      gvs[] >>
+      drule typed_membership_success >>
+      simp[] >> disch_then drule_all >> strip_tac >> gvs[] >>
+      qexists `Value (BoolV b)` >>
+      simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
+           assert_def, return_def, raise_def, lift_sum_def,
+           lift_option_type_def, lift_option_def, expr_type_def,
+           eval_result_typed_def, read_result_def, constant_result_shape_def,
+           value_runtime_typed_def, artifact_env_def, evaluate_type_def,
+           value_has_type_def])) >>
     `exprs_runtime_typed (artifact_env artifact mods current_src) es vs` by
       metis_tac[constant_values_runtime_types] >>
     gvs[exprs_runtime_typed_def] >>
@@ -1011,6 +1025,18 @@ Resume constant_eval_expr_fold_agreement[builtin]:
        !v. read_result cx pv (initial_state am sc) = (INL v,initial_state am sc) ==>
          constant_value mods (constant_machine_immutables am cx.txn.target) e = SOME v` by
       (fs[EVERY_MEM] >> metis_tac[constant_exprs_MEM_typed]) >>
+    Cases_on `bt = Bop In \/ bt = Bop NotIn`
+    >- (qpat_x_assum `eval_expr _ (Builtin _ _ _) _ = _` mp_tac >>
+        simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
+             assert_def, lift_sum_def, lift_option_type_def, lift_option_def,
+             return_def, raise_def] >> strip_tac >>
+        gvs[sum_CASE_rator, AllCaseEqs()] >>
+        drule_all constant_eval_exprs_fold_lift >> strip_tac >>
+        gvs[return_def, raise_def, constant_result_shape_def, read_result_def] >>
+        `get_tenv cx = type_env_all_modules mods` by simp[get_tenv_def] >>
+        gvs[LENGTH_EQ_NUM_compute, constant_value_def] >>
+        Cases_on `evaluate_type (type_env_all_modules mods) (expr_type (EL 1 es))` >>
+        gvs[return_def, raise_def]) >>
     qpat_x_assum `eval_expr _ (Builtin _ _ _) _ = _` mp_tac >>
     simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def, assert_def,
          lift_sum_def, get_accounts_def, return_def] >> strip_tac >>
