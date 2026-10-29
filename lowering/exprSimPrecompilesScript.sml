@@ -1319,8 +1319,8 @@ Proof
   rpt strip_tac >> gvs[]
 QED
 
-(* The operands of any expression whose operands meet expr_sim_pre wherever
-   expr_sim_inv holds. *)
+(* typed_args_ready and wb_args_shape of word operands that each meet
+   expr_sim_pre wherever expr_sim_inv holds. *)
 Theorem typed_stack_args_ready:
   (!e s. MEM e args /\ expr_sim_inv cenv cx env s ==>
          expr_sim_pre cenv cx env e s) /\
