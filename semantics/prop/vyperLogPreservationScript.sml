@@ -2333,7 +2333,8 @@ Proof
           PRED_ASSUM is_guarded_eval_exprs_ih kall_tac >>
           simp[push_function_def, return_def] >>
           BasicProvers.TOP_CASE_TAC >>
-          qmatch_asmsub_rename_tac `finally _ _ _ = (body_res,after_body)` >>
+          (* Original: qmatch_asmsub_rename_tac `finally _ _ _ = (body_res,after_body)` >> *)
+          qmatch_asmsub_rename_tac `finally_unless_halt _ _ _ = (body_res,after_body)` >>
           `log_extends (after_lock with scopes := [x'⁴']) after_body` by
             (drule intcall_body_finally_exact_log_extends >>
              disch_then irule >> simp[Abbr `cxd`]) >>
