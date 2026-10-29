@@ -60,13 +60,17 @@ Proof
   cheat
 QED
 
-(* The base evaluates to a local's place whose popped history holds a
-   snapshot exactly at the field (exprSimAttribute's attr_popped_clash).
-   Cheated: read_popped reads that snapshot where memory holds the base's
-   field.  record_pop only records snapshots at array elements, so the case
-   never arises, but expr_sim_inv has no clause saying so. *)
+(* The base evaluates to a local's place that memory no longer holds (a
+   popped element), whose popped history holds a snapshot exactly at the
+   field (exprSimAttribute's attr_popped_clash).  Cheated, and false as
+   stated: read_popped reads the newest matching snapshot, so where that
+   snapshot is newer than the one the base reads, it reads that snapshot's
+   value while memory at the field's pointer holds the base's field.
+   record_pop only records snapshots at array elements, so the case never
+   arises, but expr_sim_inv has no clause saying so. *)
 Theorem compile_attribute_popped_clash_sim:
   !ctx func cenv cx env ty ann obj fld es.
+    expr_vv_ok cenv obj /\
     expr_sim_pre cenv cx env (Attribute ann obj fld) es /\
     attr_popped_clash cx obj fld es ==>
     expr_vv_sim ctx func cenv cx ty (Attribute ann obj fld) es

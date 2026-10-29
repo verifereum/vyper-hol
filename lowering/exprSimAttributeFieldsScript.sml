@@ -15,14 +15,16 @@
  *   read_storage_slot_field      — a field of a struct read from storage
  *   popped_at_field, select_attr_read — the source's selection
  *
- * Helpers: type_memory_size_slots, struct_field_slot_alookup,
- *   decode_value_n2w, decode_struct_field, evaluate_subscripts_snoc_attr,
- *   evaluate_subscripts_append_err, read_popped_snoc_attr,
- *   read_memory_path_snoc_attr
+ * Helpers: type_memory_size_slots, slot_count_of_memory_size,
+ *   fields_layout_zip, read_slots_n2w, decode_value_n2w, decode_struct_field,
+ *   evaluate_subscripts_snoc_attr, evaluate_subscripts_append_err,
+ *   read_popped_snoc_attr, read_memory_path_snoc_attr,
+ *   select_attr_read_immutable
  *
- * select_attr_read leaves out a local's place whose popped history has a
- * snapshot at the field itself (popped_at_field): read_popped reads the
- * snapshot there, not the field of the struct read at the place.
+ * select_attr_read leaves out a local's place that memory no longer holds
+ * and whose popped history has a snapshot at the field itself
+ * (popped_at_field): read_popped may read the snapshot there, not the field
+ * of the struct read at the place.
  *)
 
 Theory exprSimAttributeFields
@@ -158,15 +160,6 @@ Proof
   Cases_on `h0 = id` >> gvs[slot_count_of_memory_size] >>
   rename1 `struct_field_slot t id = SOME z` >> PairCases_on `z` >> gvs[] >>
   first_x_assum drule_all >> simp[]
-QED
-
-Theorem struct_field_slot_alookup:
-  !fs id off ftv.
-    struct_field_slot fs id = SOME (off, ftv) ==> ALOOKUP fs id = SOME ftv
-Proof
-  Induct >> simp[struct_field_slot_def] >> PairCases >>
-  rw[struct_field_slot_def] >> gvs[] >>
-  rename1 `struct_field_slot fs id = SOME z` >> PairCases_on `z` >> gvs[]
 QED
 
 (* ===== A struct field in storage ===== *)
@@ -322,7 +315,8 @@ Theorem read_memory_path_snoc_attr:
   !entry path vals id fv.
     read_memory_path entry path = INL (StructV vals) /\
     ALOOKUP vals id = SOME fv /\
-    (!v'. ~MEM (path ++ [AttrSubscript id], v') entry.popped) ==>
+    (!err v'. evaluate_subscripts entry.type entry.value path = INR err ==>
+              ~MEM (path ++ [AttrSubscript id], v') entry.popped) ==>
     read_memory_path entry (path ++ [AttrSubscript id]) = INL fv
 Proof
   rpt gen_tac >> simp[read_memory_path_def] >>
@@ -334,12 +328,15 @@ Proof
   drule_all read_popped_snoc_attr >> simp[]
 QED
 
-(* The base's result is a local's place and the local's popped history has
-   a snapshot exactly at the field: read_popped reads the snapshot there. *)
+(* The base's result is a local's place that memory no longer holds, so
+   read_memory_path reads the field from the popped history, and that
+   history has a snapshot exactly at the field: read_popped may read the
+   snapshot there. *)
 Definition popped_at_field_def:
   popped_at_field (PlaceR (MemoryPlace x path)) id (es:evaluation_state) =
-    (?entry v'. lookup_scopes x es.scopes = SOME entry /\
-                MEM (path ++ [AttrSubscript id], v') entry.popped) /\
+    (?entry err v'. lookup_scopes x es.scopes = SOME entry /\
+                    evaluate_subscripts entry.type entry.value path = INR err /\
+                    MEM (path ++ [AttrSubscript id], v') entry.popped) /\
   popped_at_field _ _ _ = F
 End
 

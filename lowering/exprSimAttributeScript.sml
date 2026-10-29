@@ -8,23 +8,26 @@
  * read is the field of the base's value (exprSimAttributeFields).
  *
  * TOP-LEVEL:
- *   attr_popped_clash         — the base's result is a local's place with a
- *                               popped snapshot at the field
+ *   attr_popped_clash         — the base's result is a local's place memory
+ *                               no longer holds, with a popped snapshot at
+ *                               the field
  *   compile_attribute_loc_sim — expr_vv_sim of Attribute, for a base not in
  *                               code and no attr_popped_clash
  *
  * Helpers: vv_loc, attr_offset, compile_expr_attribute,
  *   eval_expr_attribute, attr_pre_base, attr_add_post, attr_add_frag,
- *   stmt_state_rel_region_lt, base_vv_holds_struct, base_vv_at_struct,
- *   attr_field_type, attr_vv_at_field, attr_vv_post
+ *   attr_extends, stmt_state_rel_region_lt, struct_value_shape,
+ *   base_vv_holds_struct, base_vv_at_struct, field_ptr_w2n,
+ *   attr_vv_at_field, attr_vv_post
  *
  * Not covered, cheated in exprSimPlaces:
  *   - a base in code (an immutable, LocCode): immutable_holds asks the
  *     pointer to be an immutable's own data offset, which a field's is not;
- *   - attr_popped_clash: read_popped would read the snapshot where memory
- *     holds the base's field.  Pops record their snapshots at array
- *     elements only (record_pop), so this never happens, but expr_sim_inv
- *     does not say so.
+ *   - attr_popped_clash: the base is a local's place memory no longer holds
+ *     (a popped element), and read_popped may read a snapshot at the field
+ *     rather than the field of the base's snapshot.  Pops record their
+ *     snapshots at array elements only (record_pop), so this never happens,
+ *     but expr_sim_inv does not say so.
  *)
 
 Theory exprSimAttribute
@@ -35,6 +38,7 @@ Ancestors
   exprLowering exprLoweringProps emitHelper emitHelperProps compileEnv context
   valueEncoding vyperAST vyperInterpreter vyperState vyperStorage vyperValue
   vyperTyping vyperTypeSystem vyperTypeExprSoundness vyperTypeInvariants
+  vyperPlaceResultTyping
   venomState venomInst venomMemDefs
 Libs
   pairLib
@@ -237,12 +241,6 @@ Proof
   TRY (first_x_assum drule_all >> strip_tac >> gvs[]) >> metis_tac[]
 QED
 
-Theorem w2n_add_n2w_lt[local]:
-  !(w:bytes32) k. w2n w + k < dimword (:256) ==> w2n (w + n2w k) = w2n w + k
-Proof
-  Cases >> simp[wordsTheory.word_add_n2w, wordsTheory.w2n_n2w]
-QED
-
 (* A field's pointer does not wrap: the struct's bytes end below 2 ** 256,
    or it has none and the field is at offset 0. *)
 Theorem field_ptr_w2n[local]:
@@ -250,39 +248,8 @@ Theorem field_ptr_w2n[local]:
     off + fsz <= tsz /\ (tsz = 0 \/ w2n w + tsz < dimword (:256)) ==>
     w2n (w + n2w off) = w2n w + off
 Proof
-  rpt strip_tac >- gvs[] >> irule w2n_add_n2w_lt >> DECIDE_TAC
-QED
-
-Theorem struct_field_slot_of_alookup[local]:
-  !fs id ftv. ALOOKUP fs id = SOME ftv ==>
-              ?off. struct_field_slot fs id = SOME (off, ftv)
-Proof
-  Induct >> simp[struct_field_slot_def] >> PairCases >>
-  rw[struct_field_slot_def] >> first_x_assum drule >> strip_tac >> simp[]
-QED
-
-Theorem alookup_zip_eval[local]:
-  !args tvs fld t.
-    OPT_MMAP f (MAP SND args) = SOME tvs /\ ALOOKUP args fld = SOME t ==>
-    ?tv. ALOOKUP (ZIP (MAP FST args, tvs)) fld = SOME tv /\ f t = SOME tv
-Proof
-  Induct >> simp[] >> PairCases >> rpt gen_tac >> strip_tac >>
-  gvs[] >> Cases_on `h0 = fld` >> gvs[]
-QED
-
-(* The annotated type of a field is the field's evaluated type. *)
-Theorem attr_field_type[local]:
-  !tenv sid fld ann fs.
-    attribute_type tenv (StructT sid) fld = SOME ann /\
-    evaluate_type tenv (StructT sid) = SOME (StructTV fs) ==>
-    ?ftv. ALOOKUP fs fld = SOME ftv /\ evaluate_type tenv ann = SOME ftv
-Proof
-  rpt gen_tac >>
-  simp[attribute_type_def, vyperValueTheory.evaluate_type_def,
-       AllCaseEqs()] >> strip_tac >> gvs[] >>
-  gvs[vyperValueTheory.evaluate_types_OPT_MMAP] >>
-  drule_all alookup_zip_eval >> strip_tac >> simp[] >>
-  irule (cj 1 evaluate_type_mono) >> metis_tac[]
+  rpt strip_tac >- gvs[] >> irule buffer_offset_no_wrap >>
+  qexists_tac `tsz` >> DECIDE_TAC
 QED
 
 (* The field's placement in memory, from the base's. *)
@@ -362,10 +329,9 @@ Proof
   `value_has_type ftv fv` by
     (drule_all vyperAssignPreservesTypeTheory.struct_field_has_type >>
      strip_tac >> gvs[]) >>
-  rewrite_tac[vv_post_def] >> rpt conj_tac >>
-  TRY (first_assum ACCEPT_TAC)
-  >- ((* vv_holds *)
-      simp[vv_holds_def, mk_ptr_def, expr_type_def] >>
+  rewrite_tac[vv_post_def] >> rpt conj_tac
+  >~ [`vv_holds _ _ _ _ (LocatedValue _ _) _ _`]
+  >- (simp[vv_holds_def, mk_ptr_def, expr_type_def] >>
       gvs[attr_offset_def] >>
       qabbrev_tac `fields =
         get_struct_fields cenv.ce_struct_fields (nsid_to_string sid)` >>
@@ -392,18 +358,20 @@ Proof
                        `w2n w + struct_field_offset fields fld`, `q.vs_memory`]
             mp_tac val_in_memory_word_type >>
           simp[wordsTheory.WORD_ADD_0]) >>
-      drule struct_field_slot_of_alookup >> strip_tac >>
+      drule struct_field_slot_exists >> strip_tac >>
       drule_all read_storage_slot_field >> strip_tac >> gvs[] >>
       drule_all struct_field_offset_slots_eq >> strip_tac >>
-      gvs[storage_holds_def]) >>
-  simp[expr_type_def] >> irule attr_vv_at_field >> simp[] >>
-  metis_tac[]
+      gvs[storage_holds_def])
+  >~ [`vv_at _ _ _ _ _ _ _ (LocatedValue _ _) _`]
+  >- (simp[expr_type_def] >> irule attr_vv_at_field >> simp[] >>
+      metis_tac[]) >>
+  first_assum ACCEPT_TAC
 QED
 
 (* ===== The simulation ===== *)
 
-(* The base evaluates to a local's place with a popped snapshot at the
-   field (popped_at_field): left to exprSimPlaces. *)
+(* The base evaluates to a local's place memory no longer holds, with a
+   popped snapshot at the field (popped_at_field): left to exprSimPlaces. *)
 Definition attr_popped_clash_def:
   attr_popped_clash cx obj fld es <=>
     ?r es1. eval_expr cx obj es = (INL r, es1) /\ popped_at_field r fld es1
@@ -441,7 +409,7 @@ Proof
       drule_all expr_sim_pre_runtime_typed >> strip_tac >> gvs[] >>
       `expr_sim_inv cenv cx env es` by fs[expr_sim_pre_def] >>
       drule_all struct_fields_layout >> strip_tac >> gvs[] >>
-      drule_all attr_field_type >> strip_tac >>
+      drule_all attribute_type_evaluates >> strip_tac >>
       `~popped_at_field btv fld es1` by
         (fs[attr_popped_clash_def] >> metis_tac[]) >>
       `!m. res <> INR (Error (TypeError m))` by
