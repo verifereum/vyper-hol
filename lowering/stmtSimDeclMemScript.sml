@@ -52,7 +52,7 @@ Proof
   gen_tac >> simp[oneline lowered_value_type_def]
 QED
 
-Theorem compile_assign_memory_appends[local]:
+Theorem compile_assign_memory_appends:
   !cenv dst src loc ty info sz.
     cs_appends (compile_assign_value cenv dst LocMemory src F loc ty ty info sz)
 Proof
@@ -227,7 +227,7 @@ Proof
   simp[mcopy_def, write_memory_with_expansion_def, LET_THM, lookup_var_def]
 QED
 
-Theorem alloc_copy_memory_framed_run[local]:
+Theorem alloc_copy_memory_framed_run:
   !ctx func cenv cx es sa sm sb s0 p src sz sw tv v.
     emit_inst ALLOCA [Lit (n2w sz)] [p] sa = ((), sm) /\
     emit_void MCOPY [Var p; src; Lit (n2w sz)] sm = ((), sb) /\
@@ -368,7 +368,7 @@ QED
 
 (* Split the overlap-safe assignment into its allocation, flat copy and
    typed store. The allocation output is fresh at the assignment entry. *)
-Theorem annassign_staged_memory_parts[local]:
+Theorem annassign_staged_memory_parts:
   !cenv dst src ty info bytes sa sb func.
     compile_assign_value cenv dst LocMemory src F (SOME LocMemory)
       ty ty info bytes sa = ((),sb) /\
@@ -607,7 +607,7 @@ Proof
   qexists_tac `t` >> simp[] >> metis_tac[]
 QED
 
-Theorem emit_void_nonterminator_open[local]:
+Theorem emit_void_nonterminator_open:
   !opc args sa sb.
     emit_void opc args sa = ((),sb) /\ ~is_terminator opc ==>
     ~block_is_terminated sb
@@ -638,7 +638,7 @@ Proof
   drule emit_void_nonterminator_open >> simp[is_terminator_def]
 QED
 
-Theorem compile_assign_value_memory_same_open[local]:
+Theorem compile_assign_value_memory_same_open:
   !cenv dst src loc ty info bytes sa sb.
     0 < type_memory_bytes cenv ty /\
     compile_assign_value cenv dst LocMemory src F loc ty ty info bytes sa = ((),sb) ==>

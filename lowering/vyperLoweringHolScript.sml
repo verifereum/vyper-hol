@@ -9,12 +9,14 @@ Ancestors
   entryChecksProps
   entryStateRel
   loweringSlice
+  memSafeRun fragExecMem
   varsExt exprSim
   exprBopLowering
   exprSimOps exprSimOperands exprSimCompare exprSimArith intBits freshWrites
   exprSimMain stmtSim stmtSimIf stmtSimFor stmtSimReturn stmtSimDecl
   stmtSimReason stmtSimReasonExpr stmtSimReasonStorage stmtSimForRange
   stmtSimDeclMem exprSimStorageCopy stmtSimAssignStore stmtSimAugAssign
+  stmtSimAssign stmtSimAssignMem stmtSimAssignTuple
   valueEncodingProofs
   localPtrsProps
   loweringShapeProps

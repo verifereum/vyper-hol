@@ -7,6 +7,7 @@ Ancestors
   vyperABIRoundtrip
   vyperTypeDeploymentMachine
   vyperTypeSelectedEntry
+  vyperViewFrame
   vyperTypeEntryDefaults
   vyperTypeSelectedEntrySoundness
   vyperTypeDeploymentSoundness
