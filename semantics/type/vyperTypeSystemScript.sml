@@ -79,6 +79,19 @@ Definition is_comparable_type_def[simp]:
   is_comparable_type _ = F
 End
 
+(* Membership lowering compares single EVM words, not aggregate pointers.
+   See docs/membership-element-consistency.md for the execution matrix. *)
+Definition is_prim_word_type_def:
+  is_prim_word_type (BaseT (UintT _)) = T /\
+  is_prim_word_type (BaseT (IntT _)) = T /\
+  is_prim_word_type (BaseT BoolT) = T /\
+  is_prim_word_type (BaseT AddressT) = T /\
+  is_prim_word_type (BaseT DecimalT) = T /\
+  is_prim_word_type (BaseT (BytesT (Fixed m))) = (m <= 32) /\
+  is_prim_word_type (FlagT _) = T /\
+  is_prim_word_type _ = F
+End
+
 (* ===== Literals, binops, builtins ===== *)
 
 Definition well_typed_literal_def:
@@ -134,11 +147,25 @@ Definition well_typed_binop_def:
   well_typed_binop ty Max t1 t2 = (t1 = ty /\ t2 = ty /\ is_numeric_type ty) /\
   well_typed_binop ty In t1 t2 =
     (ty = BaseT BoolT /\ ((?fid. t1 = FlagT fid /\ t2 = FlagT fid) \/
-                          (?bd. t2 = ArrayT t1 bd))) /\
+                          (is_prim_word_type t1 /\ ?bd. t2 = ArrayT t1 bd))) /\
   well_typed_binop ty NotIn t1 t2 =
     (ty = BaseT BoolT /\ ((?fid. t1 = FlagT fid /\ t2 = FlagT fid) \/
-                          (?bd. t2 = ArrayT t1 bd)))
+                          (is_prim_word_type t1 /\ ?bd. t2 = ArrayT t1 bd)))
 End
+
+Theorem well_typed_membership_array_element:
+  (bop = In \/ bop = NotIn) /\
+  well_typed_binop ty bop t1 (ArrayT elem bd) ==>
+  ty = BaseT BoolT /\ t1 = elem /\ is_prim_word_type elem
+Proof
+  strip_tac >> gvs[well_typed_binop_def]
+QED
+
+Theorem well_typed_membership_flag:
+  well_typed_binop ty In (FlagT fid) (FlagT fid) <=> ty = BaseT BoolT
+Proof
+  simp[well_typed_binop_def]
+QED
 
 Theorem well_typed_binop_not_In_second_type:
   well_typed_binop ty bop ty t2 /\ bop <> In /\ bop <> NotIn ==>

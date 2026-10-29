@@ -171,29 +171,71 @@ Proof
   strip_tac >> rpt (pairarg_tac >> gvs[]) >> metis_tac[emit_op_safe_operand]
 QED
 
+(* Equality results stay safe while the remaining comparisons are emitted.
+   Both folds preserve a safe accumulator, including their empty case. *)
+Theorem emit_membership_eqs_safe_operand:
+  !xs needle sa cs sb.
+    emit_membership_eqs needle xs sa = (cs,sb) ==>
+    EVERY (safe_operand sb) cs
+Proof
+  Induct >> simp[emit_membership_eqs_def, comp_bind_def, comp_return_def] >>
+  rpt gen_tac >> strip_tac >> rpt (pairarg_tac >> gvs[]) >>
+  qmatch_asmsub_rename_tac `emit_membership_eqs needle xs st = (cs,sb)` >>
+  qspecl_then [`xs`, `needle`, `st`] mp_tac ci_mono_emit_membership_eqs >>
+  simp[ci_mono_def] >> strip_tac >>
+  qpat_x_assum `!needle sa cs sb. _` drule_all >> strip_tac >> simp[] >>
+  drule emit_op_safe_operand >> strip_tac >>
+  irule safe_operand_mono >> qexists_tac `st` >> simp[]
+QED
+
+Theorem fold_membership_or_safe_operand:
+  !xs acc sa r sb.
+    safe_operand sa acc /\ fold_membership_or acc xs sa = (r,sb) ==>
+    safe_operand sb r
+Proof
+  Induct >> simp[fold_membership_or_def, comp_bind_def, comp_return_def] >>
+  rpt gen_tac >> strip_tac >> rpt (pairarg_tac >> gvs[]) >>
+  metis_tac[emit_op_safe_operand]
+QED
+
+Theorem fold_membership_and_safe_operand:
+  !xs acc sa r sb.
+    safe_operand sa acc /\ fold_membership_and acc xs sa = (r,sb) ==>
+    safe_operand sb r
+Proof
+  Induct >> simp[fold_membership_and_def, comp_bind_def, comp_return_def] >>
+  rpt gen_tac >> strip_tac >> rpt (pairarg_tac >> gvs[]) >>
+  metis_tac[emit_op_safe_operand]
+QED
+
 Theorem compile_list_membership_in_safe_operand:
   compile_list_membership_in needle xs sa = (r,sb) ==> safe_operand sb r
 Proof
-  Cases_on `xs` >- simp[compile_list_membership_in_def, comp_return_def] >>
-  rename1 `_ :: rest` >> Cases_on `rest` >>
   simp[compile_list_membership_in_def, comp_bind_def] >>
-  strip_tac >> rpt (pairarg_tac >> gvs[]) >> metis_tac[emit_op_safe_operand]
+  strip_tac >> rpt (pairarg_tac >> gvs[]) >>
+  drule emit_membership_eqs_safe_operand >> strip_tac >>
+  qmatch_assum_rename_tac `EVERY (safe_operand st) cs` >>
+  Cases_on `cs` >> gvs[comp_return_def] >>
+  drule_all fold_membership_or_safe_operand >> simp[]
 QED
 
 Theorem compile_list_membership_notin_safe_operand:
   compile_list_membership_notin needle xs sa = (r,sb) ==> safe_operand sb r
 Proof
-  Cases_on `xs` >- simp[compile_list_membership_notin_def, comp_return_def] >>
-  rename1 `_ :: rest` >> Cases_on `rest` >>
   simp[compile_list_membership_notin_def, comp_bind_def] >>
-  strip_tac >> rpt (pairarg_tac >> gvs[]) >> metis_tac[emit_op_safe_operand]
+  strip_tac >> rpt (pairarg_tac >> gvs[]) >>
+  qmatch_asmsub_rename_tac `emit_membership_eqs needle xs sa = (cs,st)` >>
+  Cases_on `cs` >> gvs[comp_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  drule emit_op_safe_operand >> strip_tac >>
+  drule_all fold_membership_and_safe_operand >> simp[]
 QED
 
 Theorem compile_array_membership_loop_safe_operand:
-  compile_array_membership_loop needle arr len sz off opc isin sa = (r,sb) ==>
+  compile_array_membership_loop needle arr len sz off opc bound isin sa = (r,sb) ==>
   safe_operand sb r
 Proof
-  Cases_on `isin` >> Cases_on `off > 0` >>
+  Cases_on `bound` >> Cases_on `isin` >> Cases_on `off > 0` >>
   simp[compile_array_membership_loop_def, emit_op_def, emit_inst_def,
        fresh_label_def, new_block_def, comp_bind_def, comp_ignore_bind_def,
        comp_return_def, fresh_id_def, fresh_var_def, emit_def] >>
@@ -210,6 +252,19 @@ Proof
   strip_tac >> rpt (pairarg_tac >> gvs[]) >>
   metis_tac[compile_array_membership_loop_safe_operand]
 QED
+
+(* Keep the membership safety interface closed under the HOL kernel. *)
+val () = List.app (fn th =>
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
+  in if null axioms andalso null (Thm.hyp th) andalso
+        List.all (fn name => name = "DISK_THM") oracles then ()
+     else raise Fail "admitted membership operand-safety theorem"
+  end)
+  [emit_membership_eqs_safe_operand, fold_membership_or_safe_operand,
+   fold_membership_and_safe_operand, compile_list_membership_in_safe_operand,
+   compile_list_membership_notin_safe_operand,
+   compile_array_membership_loop_safe_operand,
+   compile_var_array_membership_safe_operand];
 
 (* ===== Calls, names, subscripts and literals ===== *)
 
