@@ -1585,12 +1585,12 @@ Proof
          no_type_error_result_def] >>
   rename1 `run_ext_call _ _ _ _ _ _ _ _ = SOME result` >>
   PairCases_on `result` >>
-  rename1 `run_ext_call _ _ _ _ _ _ _ _ = SOME (success,data,accounts_out,transient_out,logs)` >>
+  rename1 `run_ext_call _ _ _ _ _ _ _ _ = SOME (success,data,accounts_out,transient_out,logs,deletions)` >>
   Cases_on `success` >>
   gvs[eval_ext_call_effects_def, bind_def, ignore_bind_def,
       get_transient_storage_def, lift_option_def, return_def, raise_def,
       update_accounts_def, update_transient_def, append_logs_def,
-      no_type_error_result_def] >>
+      update_pending_deletions_def, no_type_error_result_def] >>
   drule_all run_ext_call_update_runtime_consistent >> simp[]
 QED
 

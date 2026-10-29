@@ -1666,12 +1666,13 @@ Theorem eval_selfdestruct_scope_effect[local]:
   scope_pop_effect (eval_exprs cx es) ==>
   scope_pop_effect (eval_expr cx (Call ty SelfDestructTarget es drv))
 Proof
-  strip_tac >> rewrite_tac[Once evaluate_def, ignore_bind_def] >>
+  strip_tac >> rewrite_tac[Once evaluate_def] >>
   ho_match_mp_tac scope_pop_effect_bind >> conj_tac >- simp[] >> gen_tac >>
-  ho_match_mp_tac scope_pop_effect_bind >> conj_tac >- simp[] >> gen_tac >>
-  ho_match_mp_tac scope_pop_effect_bind >> conj_tac >- simp[] >> gen_tac >>
-  ho_match_mp_tac scope_pop_effect_bind >> conj_tac >- simp[] >> gen_tac >>
-  simp[LET_THM] >> ho_match_mp_tac scope_pop_effect_bind >> simp[]
+  irule scope_pop_effect_identity >>
+  rw[ignore_bind_def, bind_def, type_check_def, assert_def,
+     lift_option_type_def, get_accounts_def, update_accounts_def,
+     update_pending_deletions_def, return_def, raise_def,
+     COND_RATOR, AllCaseEqs()]
 QED
 
 Theorem eval_raw_log_scope_effect[local]:

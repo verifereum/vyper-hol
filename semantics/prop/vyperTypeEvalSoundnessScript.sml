@@ -8325,7 +8325,8 @@ fun trace_result_tac label g = let val suspend = trace_result_tac in
   qpat_x_assum `get_accounts _ = _` mp_tac >>
   simp[NoAsms, get_accounts_def, return_def] >> strip_tac >>
   rpt BasicProvers.VAR_EQ_TAC >>
-  imp_res_tac transfer_value_scopes >>
+  gvs[update_accounts_def, update_pending_deletions_def, bind_def,
+      ignore_bind_def, return_def, raise_def, COND_RATOR, AllCaseEqs()] >>
   rpt (first_x_assum (fn th => if is_forall (concl th) then kall_tac th else NO_TAC)) >>
   qmatch_asmsub_rename_tac `eval_exprs cx es st = (INL vs,mid)` >>
   irule typed_scope_transition_trans >> qexists_tac `mid` >>

@@ -154,9 +154,12 @@ Proof
   >- (rpt strip_tac >> qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
       simp[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(), return_def,
            raise_def, check_def, type_check_def, assert_def, lift_option_def,
-           lift_option_type_def, get_accounts_def, option_CASE_rator] >>
-      strip_tac >> gvs[AllCaseEqs(), return_def, raise_def] >>
-      imp_res_tac transfer_value_scopes >> gvs[] >> metis_tac[])
+           lift_option_type_def, get_accounts_def, update_accounts_def,
+           update_pending_deletions_def, option_CASE_rator] >>
+      strip_tac >>
+      gvs[update_accounts_def, update_pending_deletions_def, bind_def,
+          ignore_bind_def, return_def, raise_def, COND_RATOR, AllCaseEqs()] >>
+      metis_tac[])
   >- suspend "CreateTarget"
   >- simp[Once evaluate_def, return_def]
   >- (rpt strip_tac >>

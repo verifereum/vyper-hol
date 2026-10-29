@@ -658,20 +658,6 @@ val NO_CONTROL_MONAD_TAC =
 
 (* ===== Case 18: ExtCall and Send ===== *)
 
-val CALL_NO_CONTROL_STEP = FIRST [
-  step_tac,
-  qpat_x_assum `append_logs _ _ = (INR _,_)`
-    (ACCEPT_TAC o MATCH_MP append_logs_no_control),
-  qpat_x_assum `take_call_outcome _ _ _ _ = (INR _,_)`
-    (fn th => mp_tac (MATCH_MP take_call_outcome_error th)) >>
-    simp[no_control_exc_def] >> strip_tac >> gvs[no_control_exc_def],
-  qpat_x_assum `adopt_call_outcome _ _ _ = (INR _,_)` mp_tac >>
-    simp[adopt_call_outcome_equation],
-  helper_close,
-  CHANGED_TAC (gvs[LET_THM, UNCURRY]),
-  qpat_x_assum `_ = (INR _,_)` mp_tac >>
-    BasicProvers.TOP_CASE_TAC >> simp[] >> strip_tac];
-
 Theorem eval_ext_call_no_control:
   eval_ext_call cx static skip_check sig opts vs st = (INR exc, st') ==>
   no_control_exc exc
@@ -679,8 +665,8 @@ Proof
   `no_control_monad (eval_ext_call cx static skip_check sig opts vs)` suffices_by
     metis_tac[no_control_monad_def] >>
   PairCases_on `sig` >> Cases_on `vs` >>
-  simp_tac bool_ss [eval_ext_call_def, eval_ext_call_effects_def, LET_THM] >> strip_tac >>
-  rpt CALL_NO_CONTROL_STEP
+  simp_tac bool_ss [eval_ext_call_def, eval_ext_call_effects_def, LET_THM] >>
+  NO_CONTROL_MONAD_TAC
 QED
 
 Theorem eval_send_no_control:
