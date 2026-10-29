@@ -96,6 +96,8 @@ Theorem state_rel_adopt_consume[local]:
     state_rel func cenv cx es s /\
     take_outcome rq s.vs_outcomes = (outcome, rest) /\
     local_ptrs_rel func cenv es.scopes
+      (SND (consume_call_outcome rq ro rz s)) /\
+    immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es
       (SND (consume_call_outcome rq ro rz s)) ==>
     state_rel func cenv cx
       (SND (adopt_call_outcome rq outcome
@@ -108,8 +110,9 @@ Proof
       logs_rel_eq] >>
   Cases_on `outcome.co_success /\ ~rq.cr_static` >>
   gvs[storage_rel_def, transient_rel_def, accounts_rel_def,
-      immutables_rel_def, call_ctx_rel_def, contract_storage_def,
-      contract_transient_def]
+      call_ctx_rel_def, contract_storage_def, contract_transient_def] >>
+  qpat_x_assum `immutables_rel _ _ _ _ es t` mp_tac >>
+  simp[immutables_rel_def]
 QED
 
 (* TOP-LEVEL: CALL or STATICCALL in oracle mode.  Given the source took
@@ -140,7 +143,8 @@ Theorem exec_ext_call_oracle_step:
            (write_memory_with_expansion (w2n ro)
               (TAKE (w2n rz) outcome.co_returnData) s).vs_memory /\
          s'.vs_returndata = outcome.co_returnData /\
-         (local_ptrs_rel func cenv es.scopes s' ==>
+         (local_ptrs_rel func cenv es.scopes s' /\
+          immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es s' ==>
           state_rel func cenv cx (SND (adopt_call_outcome rq outcome es1)) s')
 Proof
   rpt gen_tac >> strip_tac >>
@@ -236,6 +240,12 @@ Proof
       `local_ptrs_rel func cenv es.scopes s'` by
         (qpat_x_assum `s' = _` (fn th => ONCE_REWRITE_TAC [th]) >>
          simp[local_ptrs_rel_oracle_fields] >> first_assum ACCEPT_TAC) >>
+      `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es s'` by
+        (`immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es s`
+           by fs[state_rel_def] >>
+         qpat_x_assum `immutables_rel _ _ _ _ es s` mp_tac >>
+         qpat_x_assum `s' = _` (fn th => ONCE_REWRITE_TAC [th]) >>
+         simp[immutables_rel_def]) >>
       qexists_tac `s'` >> conj_tac
       >- (qpat_x_assum `s' = _` (fn th => ONCE_REWRITE_TAC [th]) >>
           simp[venom_state_component_equality]) >>
