@@ -403,9 +403,31 @@ Definition accounts_well_typed_def:
     !addr. account_well_typed (lookup_account addr acc)
 End
 
-Definition toplevel_value_typed_def:
-  (toplevel_value_typed (Value v) tyv <=> value_has_type tyv v) /\
-  (toplevel_value_typed (ArrayRef _ _ elem_tv bd) tyv <=> tyv = ArrayTV elem_tv bd) /\
-  (toplevel_value_typed (HashMapRef _ _ _ _) tyv <=> tyv = NoneTV)
+(* Captured places carry declared metadata, independently of live lengths. *)
+Definition runtime_place_typed_def:
+  runtime_place_typed cx st p tv <=>
+    well_formed_type_value tv /\
+    place_type_value cx p st = (INL tv,st)
 End
 
+(* Operations that compute a value, such as external-call decoding, expose
+   this stronger result shape rather than a deferred location. *)
+Definition value_result_typed_def:
+  value_result_typed res tv <=>
+    ?v. res = Value v /\ value_has_type tv v
+End
+
+(* Values, locations and mapping roots share one result-typing boundary.
+   The state is needed only to recover local and immutable place metadata. *)
+Definition eval_result_typed_def:
+  eval_result_typed (env,cx,st) res vt <=>
+    case vt of
+    | Type ty =>
+        ?tv. evaluate_type env.type_defs ty = SOME tv /\
+          (case res of
+           | Value v => value_has_type tv v
+           | PlaceR p => runtime_place_typed cx st p tv
+           | HashMapRef _ _ _ _ => F)
+    | HashMapT kt value_ty =>
+        ?tr slot. res = HashMapRef tr slot kt value_ty
+End

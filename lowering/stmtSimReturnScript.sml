@@ -28,7 +28,10 @@ Ancestors
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
   compileEnv valueEncoding venomMemDefs
   vyperInterpreter vyperState vyperValue vyperTyping vyperExprNoControl
+  vyperStatePreservation
   venomExecSemantics venomInst venomState
+Libs
+  monadsyntax
 
 (* An internal function's return, related to the source's as result_rel
    (compileEnv) does: an IntRet whose values match v, adopting no free
@@ -49,6 +52,18 @@ Theorem state_rel_scopes_nil:
 Proof
   rw[state_rel_def, storage_rel_def, transient_rel_def, immutables_rel_def,
      logs_rel_def, local_ptrs_rel_def, local_region_def, lookup_scopes_def]
+QED
+
+(* Reassociate source return evaluation at the forced-value boundary. *)
+Theorem eval_return_forced[local]:
+  !cx e es.
+    eval_stmt cx (Return (SOME e)) es =
+    bind (do raw <- eval_expr cx e; read_result cx raw od)
+      (\v. raise (ReturnException v)) es
+Proof
+  rpt gen_tac >> simp[Once evaluate_def, bind_def] >>
+  Cases_on `eval_expr cx e es` >> rename1 `_ = (raw,est)` >>
+  Cases_on `raw` >> simp[]
 QED
 
 (* A word type is not tuple-like, so compile_internal_return_from_env
@@ -87,7 +102,6 @@ Theorem compile_return_word_int_frag:
     cenv.ce_returns_count = 1 /\ cenv.ce_return_buf = NONE /\
     expr_type e = ty /\ is_word_type ty /\
     evaluate_type (get_tenv cx) ty = SOME ret_tv /\
-    (!tv es1. eval_expr cx e es = (INL tv, es1) ==> ?v. tv = Value v) /\
     expr_sim ctx func cenv cx ty e es /\
     (!sa op sb. lower_value compile_expr cenv ty e sa = (op, sb) ==>
                 cs_extends sa sb) ==>
@@ -118,14 +132,18 @@ Proof
     (qpat_x_assum `!i. _` (qspec_then `0` mp_tac) >> simp[]) >>
   (* the source *)
   qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
-  simp[Once evaluate_def, bind_def, raise_def] >>
-  Cases_on `eval_expr cx e es` >> rename1 `eval_expr cx e es = (r1, es1)` >>
-  strip_tac >>
+  pure_rewrite_tac[eval_return_forced] >>
+  Cases_on `(do raw <- eval_expr cx e; read_result cx raw od) es` >>
+  rename1 `_ = (r1, es1)` >> simp[Once bind_def, raise_def] >> strip_tac >>
   `expr_res_ok r1` by (
     Cases_on `r1`
     >- gvs[expr_res_ok_def] >>
+    qpat_x_assum `(do raw <- _; _ od) _ = _` mp_tac >>
+    simp[bind_def] >> Cases_on `eval_expr cx e es` >>
+    rename1 `_ = (raw,est)` >> Cases_on `raw` >> simp[] >> strip_tac >>
+    imp_res_tac read_result_no_control >>
     imp_res_tac (cj 1 eval_expr_no_control) >>
-    gvs[] >> rename1 `no_control_exc y` >> Cases_on `y` >> gvs[no_control_exc_def, expr_res_ok_def, stmt_res_ok_def]) >>
+    gvs[no_control_exc_def, expr_res_ok_def, stmt_res_ok_def]) >>
   qpat_x_assum `expr_sim _ _ _ _ _ _ _` (mp_tac o REWRITE_RULE [expr_sim_def]) >>
   disch_then (qspecl_then [`sa`, `s1`, `op`, `r1`, `es1`, `s0`] mp_tac) >>
   impl_tac >- fs[] >>
@@ -133,7 +151,7 @@ Proof
   disch_then (qspec_then `func` mp_tac) >> impl_tac >- fs[] >> strip_tac
   >- (
     (* the value: RET with it and the return PC *)
-    gvs[expr_post_def, materialise_def, return_def] >>
+    gvs[expr_post_def, return_def] >>
     qpat_x_assum `expr_val_rel _ _ _ _ _`
       (strip_assume_tac o REWRITE_RULE [expr_val_rel_def]) >>
     rename1 `eval_operand op sv = SOME w` >>
@@ -155,10 +173,17 @@ Proof
     simp[exit_result_def, stmt_exit_def, intret_q_def, result_rel_def] >>
     metis_tac[intret_vals_match_word]) >>
   qexists_tac `fuel` >> Cases_on `r1` >> gvs[stmt_exit_def] >> disj1_tac >>
-  ONCE_REWRITE_TAC [INST_TYPE [beta |-> ``:toplevel_value``]
-                      expr_exit_INR_type] >>
-  first_assum ACCEPT_TAC
+  metis_tac[expr_exit_INR_type]
 QED
+
+(* Integrity gate for the forced return boundary and RET consumer. *)
+val () = List.app (fn th =>
+  let val (ors, axs) = Tag.dest_tag (Thm.tag th)
+  in if null axs andalso null (Thm.hyp th) andalso
+        List.all (fn s => s = "DISK_THM") ors
+     then print "RETURN_FORCE_AUDIT OK\n"
+     else raise Fail "forced return inherited admission"
+  end) [eval_return_forced, state_rel_scopes_nil, compile_return_word_int_frag];
 
 (* ===== A tuple of words on the stack ===== *)
 
@@ -430,7 +455,8 @@ QED
    whose errors exit, leaves a pointer to the tuple in memory; its words
    are loaded and returned with the return PC.  The pointer's variable, if
    any, was handed out before the loads (a local's is, by
-   local_ptrs_reserved), so they do not overwrite it. *)
+   local_ptrs_reserved), so they do not overwrite it.  Typing is required
+   of the value after read_result, including results read from places. *)
 Theorem compile_return_tuple_int_frag:
   !ctx func cx lctx cenv e es res es' rpc rsz tys ret_tv.
     eval_stmt cx (Return (SOME e)) es = (res, es') /\
@@ -439,8 +465,8 @@ Theorem compile_return_tuple_int_frag:
     cenv.ce_return_buf = NONE /\
     expr_type e = TupleT tys /\ EVERY is_word_type tys /\
     evaluate_type (get_tenv cx) (TupleT tys) = SOME ret_tv /\
-    (!tv es1. eval_expr cx e es = (INL tv, es1) ==>
-              ?v. tv = Value v /\ value_has_type ret_tv v) /\
+    (!v es1. (do raw <- eval_expr cx e; read_result cx raw od) es =
+               (INL v, es1) ==> value_has_type ret_tv v) /\
     expr_sim ctx func cenv cx (TupleT tys) e es /\
     (!sa op sb. local_ptrs_reserved cenv sa /\
                 lower_value compile_expr cenv (TupleT tys) e sa = (op, sb) ==>
@@ -476,14 +502,17 @@ Resume compile_return_tuple_int_frag[code]:
   `fn_has_code s1 s2 func /\ fn_has_code s2 s3 func` by
     metis_tac[fn_has_code_split] >>
   qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
-  simp[Once evaluate_def, bind_def, raise_def] >>
-  Cases_on `eval_expr cx e es` >> rename1 `eval_expr cx e es = (r1, es1)` >>
-  strip_tac >>
+  pure_rewrite_tac[eval_return_forced] >>
+  Cases_on `(do raw <- eval_expr cx e; read_result cx raw od) es` >>
+  rename1 `_ = (r1, es1)` >> simp[Once bind_def, raise_def] >> strip_tac >>
   `expr_res_ok r1` by (
     Cases_on `r1`
-    >- (gvs[expr_res_ok_def] >> metis_tac[]) >>
+    >- gvs[expr_res_ok_def] >>
+    qpat_x_assum `(do raw <- _; _ od) _ = _` mp_tac >>
+    simp[bind_def] >> Cases_on `eval_expr cx e es` >>
+    rename1 `_ = (raw,est)` >> Cases_on `raw` >> simp[] >> strip_tac >>
+    imp_res_tac read_result_no_control >>
     imp_res_tac (cj 1 eval_expr_no_control) >>
-    gvs[] >> rename1 `no_control_exc y` >> Cases_on `y` >>
     gvs[no_control_exc_def, expr_res_ok_def, stmt_res_ok_def]) >>
   qpat_x_assum `expr_sim _ _ _ _ _ _ _` (mp_tac o REWRITE_RULE [expr_sim_def]) >>
   disch_then (qspecl_then [`sa`, `s1`, `op`, `r1`, `es1`, `s0`] mp_tac) >>
@@ -492,18 +521,16 @@ Resume compile_return_tuple_int_frag[code]:
   disch_then (qspec_then `func` mp_tac) >> impl_tac >- fs[] >> strip_tac
   >- suspend "value" >>
   qexists_tac `fuel` >> Cases_on `r1` >> gvs[stmt_exit_def] >> disj1_tac >>
-  ONCE_REWRITE_TAC [INST_TYPE [beta |-> ``:toplevel_value``]
-                      expr_exit_INR_type] >>
-  first_assum ACCEPT_TAC
+  metis_tac[expr_exit_INR_type]
 QED
 
 Resume compile_return_tuple_int_frag[value]:
   rename1 `expr_post func cenv cx e es sa s1 s0 es1 v op sv` >>
   `value_has_type ret_tv v` by
-    (qpat_x_assum `!tv es1. _ ==> _` (qspecl_then [`Value v`, `es1`] mp_tac) >>
+    (qpat_x_assum `!v es1. _ ==> _` (qspecl_then [`v`, `es1`] mp_tac) >>
      simp[]) >>
   drule_all tuple_type_value >> strip_tac >>
-  gvs[expr_post_def, materialise_def, return_def] >>
+  gvs[expr_post_def, return_def] >>
   `~is_word_type (TupleT tys)` by simp[is_word_type_def] >>
   qpat_x_assum `expr_val_rel _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [expr_val_rel_def]) >>
@@ -577,3 +604,13 @@ Resume compile_return_tuple_int_frag[loads]:
 QED
 
 Finalise compile_return_tuple_int_frag
+
+(* Check that the tuple consumer, including every resumed path, is closed. *)
+val () =
+  let val th = compile_return_tuple_int_frag
+      val (ors, axs) = Tag.dest_tag (Thm.tag th)
+  in if null axs andalso null (Thm.hyp th) andalso
+        List.all (fn s => s = "DISK_THM") ors
+     then print "RETURN_FORCE_AUDIT tuple OK\n"
+     else raise Fail "forced tuple return inherited admission"
+  end;

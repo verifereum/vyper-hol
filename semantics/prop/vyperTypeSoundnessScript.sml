@@ -65,9 +65,8 @@ Proof
   strip_tac >>
   Cases_on `eval_expr cx e st` >>
   simp[no_type_error_eval_def, no_type_error_result_def] >>
-  drule_at(Pat`eval_expr`)(cj 8 eval_all_type_sound_mutual) >>
-  disch_then drule >> simp[] >>
-  rpt strip_tac >> gvs[no_type_error_result_def]
+  drule_all typed_expr_evaluation_sound >>
+  simp[no_type_error_result_def]
 QED
 
 Theorem typed_expr_success_preserves_type:
@@ -75,12 +74,33 @@ Theorem typed_expr_success_preserves_type:
   context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
   call_evaluation_safe cx (int_calls_expr e) /\
   eval_expr cx e st = (INL tvl, st') ==>
-  state_well_typed st' /\ expr_runtime_typed env e tvl
+  state_well_typed st' /\ eval_result_typed (env,cx,st') tvl (Type (expr_type e))
 Proof
   strip_tac >>
-  drule_all (cj 8 eval_all_type_sound_mutual) >>
-  strip_tac >> gvs[] >>
-  metis_tac[expr_result_typed_runtime_typed]
+  drule_all typed_expr_evaluation_sound >>
+  strip_tac >> gvs[]
+QED
+
+Theorem typed_expr_read_no_type_error:
+  well_typed_expr env e /\ env_consistent env cx st /\ state_well_typed st /\
+  context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
+  call_evaluation_safe cx (int_calls_expr e) ==>
+  no_type_error_eval ((do result <- eval_expr cx e; read_result cx result od) st)
+Proof
+  strip_tac >>
+  Cases_on `(do result <- eval_expr cx e; read_result cx result od) st` >>
+  simp[no_type_error_eval_def] >>
+  metis_tac[eval_expr_read_type_sound]
+QED
+
+Theorem typed_expr_read_success_preserves_type:
+  well_typed_expr env e /\ env_consistent env cx st /\ state_well_typed st /\
+  context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
+  call_evaluation_safe cx (int_calls_expr e) /\
+  (do result <- eval_expr cx e; read_result cx result od) st = (INL v, st') ==>
+  state_well_typed st' /\ value_runtime_typed env (expr_type e) v
+Proof
+  strip_tac >> drule_all eval_expr_read_type_sound >> simp[]
 QED
 
 (* ===== Callable-function theorem shape ===== *)
@@ -127,7 +147,7 @@ Proof
   `contract_storage_well_formed cx st'` by
     metis_tac[eval_stmt_preserves_contract_storage_well_formed] >>
   fs[runtime_storage_consistent_def, runtime_consistent_def] >>
-  drule_all (cj 1 eval_all_type_sound_mutual) >>
+  drule_all (cj 1 eval_scc_type_sound_mutual) >>
   Cases_on `res` >>
   gvs[runtime_storage_consistent_def, runtime_consistent_def]
 QED
@@ -153,7 +173,7 @@ Proof
   `contract_storage_well_formed cx st'` by
     metis_tac[eval_stmts_preserves_contract_storage_well_formed] >>
   fs[runtime_storage_consistent_def, runtime_consistent_def] >>
-  drule_all (cj 2 eval_all_type_sound_mutual) >>
+  drule_all (cj 2 eval_scc_type_sound_mutual) >>
   Cases_on `res` >>
   gvs[runtime_storage_consistent_def, runtime_consistent_def] >>
   metis_tac[]
@@ -171,14 +191,14 @@ Theorem typed_expr_preserves_runtime_storage:
   runtime_storage_consistent env cx st' /\
   no_type_error_result res /\
   case res of
-  | INL tv => expr_result_typed env e tv
+  | INL tv => eval_result_typed (env,cx,st') tv (Type (expr_type e))
   | INR _ => T
 Proof
   rpt strip_tac >>
   `contract_storage_well_formed cx st'` by
     metis_tac[eval_expr_preserves_contract_storage_well_formed] >>
   fs[runtime_storage_consistent_def, runtime_consistent_def] >>
-  drule_all (cj 8 eval_all_type_sound_mutual) >>
+  drule_all typed_expr_evaluation_sound >>
   gvs[runtime_storage_consistent_def, runtime_consistent_def]
 QED
 
@@ -201,6 +221,19 @@ Proof
   `contract_storage_well_formed cx st'` by
     metis_tac[eval_exprs_preserves_contract_storage_well_formed] >>
   fs[runtime_storage_consistent_def, runtime_consistent_def] >>
-  drule_all (cj 9 eval_all_type_sound_mutual) >>
+  drule_all (CONJUNCT1 (SPEC_ALL (cj 6 eval_scc_type_sound_mutual))) >>
   gvs[runtime_storage_consistent_def, runtime_consistent_def]
 QED
+
+(* Public soundness exports and their mutual foundations are kernel-closed. *)
+val () = List.app
+  (fn (name,th) =>
+    let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
+      if null (Thm.hyp th) andalso null axioms andalso
+         List.all (fn oracle => oracle = "DISK_THM") oracles then ()
+      else raise Fail ("public soundness proof is not closed: " ^ name)
+    end)
+  (DB.thms "vyperTypeSoundness" @ DB.thms "vyperTypeCallSoundness" @
+   [("eval_scc_type_sound_mutual",eval_scc_type_sound_mutual),
+    ("eval_scc_storage_preservation_mutual",eval_scc_storage_preservation_mutual),
+    ("eval_expr_read_type_sound",eval_expr_read_type_sound)]);

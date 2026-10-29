@@ -61,7 +61,7 @@ Proof
 QED
 
 (* The recursive resolver is extensionally the same computation as the pair of
-   helpers used by assign_target: split the nested map type, compute the slot,
+   helper functions: split the nested map type, compute the slot,
    then evaluate the final source type. *)
 Theorem resolve_hashmap_leaf_agrees:
   !tenv base vt subs slot tv.
@@ -100,8 +100,8 @@ Proof
   qexistsl [`final_type`, `key_types`] >> simp[]
 QED
 
-(* Exact assign_target-facing form: split the value type after the first key
-   and prepend the declaration's key type, exactly as the interpreter does. *)
+(* Split the value type after the first key and prepend the declaration's
+   key type to recover the complete declared region. *)
 Theorem declared_hashmap_leaf_agrees_assign_target:
   get_module_code cx mid = SOME code /\
   find_var_decl_by_name n code = SOME (HashMapVarDecl b kt vt,id) /\

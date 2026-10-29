@@ -30,12 +30,41 @@ QED
 
 Theorem supported_all_effect_root_positions:
   EVERY (\e. supported_stmts expr_test_tops stmt_test_bindings
-    [Expr e; Return (SOME e)])
+    [Expr e; Return (SOME e);
+     Assign (BaseTarget (NameTarget "word")) e;
+     Assign (TupleTarget [BaseTarget (NameTarget "word")]) e;
+     Assign (BaseTarget (TopLevelNameTarget (NONE,"scalar"))) e;
+     Assign (BaseTarget (SubscriptTarget (TopLevelNameTarget (NONE,"map"))
+       expr_test_address)) e;
+     Assign (BaseTarget (AttributeTarget (TopLevelNameTarget (NONE,"record"))
+       "second")) e;
+     AugAssign (BaseT (UintT 256)) (NameTarget "word") Add e;
+     AugAssign (BaseT (UintT 256)) (TopLevelNameTarget (NONE,"scalar")) Add e;
+     AugAssign (BaseT (UintT 256))
+       (SubscriptTarget (TopLevelNameTarget (NONE,"fixed")) expr_test_uint) Add e;
+     AugAssign (BaseT (IntT 256))
+       (AttributeTarget (TopLevelNameTarget (NONE,"record")) "second") Add e])
     [expr_test_internal; expr_test_pop;
      Call NoneT (Send F) [expr_test_address;expr_test_uint] NONE;
      Call (BaseT (UintT 256))
        (ExtCall T F ("remote",[BaseT (UintT 256)],BaseT (UintT 256)) [])
        [expr_test_address;expr_test_uint] NONE]
+Proof
+  EVAL_TAC
+QED
+
+(* Declaration copies retain their layout guard: uint-valued effect roots
+   are accepted, whereas Send produces NoneT rather than a uint value. *)
+Theorem supported_effect_declaration_rows:
+  EVERY (\e. supported_stmt expr_test_tops stmt_test_bindings
+    (AnnAssign "new" (BaseT (UintT 256)) e))
+    [expr_test_internal; expr_test_pop;
+     Call (BaseT (UintT 256))
+       (ExtCall T F ("remote",[BaseT (UintT 256)],BaseT (UintT 256)) [])
+       [expr_test_address;expr_test_uint] NONE] /\
+  ~supported_stmt expr_test_tops stmt_test_bindings
+    (AnnAssign "new" (BaseT (UintT 256))
+      (Call NoneT (Send F) [expr_test_address;expr_test_uint] NONE))
 Proof
   EVAL_TAC
 QED
@@ -60,10 +89,36 @@ Proof
   EVAL_TAC
 QED
 
+(* Assignment admission is syntactic: RHS shape/type compatibility is a
+   separate typing obligation, including the singleton scalar-RHS check. *)
+Theorem supported_tuple_assignment_rows:
+  supported_stmts expr_test_tops stmt_test_bindings
+    [Assign (TupleTarget []) expr_test_uint;
+     Assign (TupleTarget [BaseTarget (NameTarget "word")]) expr_test_uint;
+     Assign (TupleTarget [BaseTarget (NameTarget "word");
+       BaseTarget (NameTarget "narrow")])
+       (Builtin (TupleT [BaseT (UintT 256); BaseT (UintT 8)])
+         (MakeArray NONE (Fixed 2)) [expr_test_uint; expr_test_uint]);
+     Assign (TupleTarget [BaseTarget (NameTarget "word");
+       BaseTarget (TopLevelNameTarget (NONE,"scalar"));
+       BaseTarget (SubscriptTarget (TopLevelNameTarget (NONE,"fixed")) expr_test_internal);
+       BaseTarget (AttributeTarget (TopLevelNameTarget (NONE,"record")) "second");
+       BaseTarget (NameTarget "word")]) expr_test_internal;
+     Assign (BaseTarget (NameTarget "aggregate")) expr_test_uint;
+     Assign (BaseTarget (NameTarget "array")) expr_test_uint]
+Proof
+  EVAL_TAC
+QED
+
 Theorem supported_target_exclusions:
   EVERY (\s. ~supported_stmt expr_test_tops stmt_test_bindings s)
     [Assign (BaseTarget (NameTarget "missing")) expr_test_uint;
-     Assign (TupleTarget [BaseTarget (NameTarget "word")]) expr_test_uint;
+     Assign (TupleTarget [TupleTarget []]) expr_test_uint;
+     Assign (TupleTarget [BaseTarget (NameTarget "word");
+       TupleTarget [BaseTarget (NameTarget "narrow")]]) expr_test_uint;
+     Assign (TupleTarget [BaseTarget (NameTarget "missing")]) expr_test_uint;
+     Assign (TupleTarget [BaseTarget (NameTarget "word");
+       BaseTarget (TopLevelNameTarget (NONE,"fixed"))]) expr_test_internal;
      Assign (BaseTarget (TopLevelNameTarget (NONE,"fixed"))) expr_test_uint;
      Assign (BaseTarget (TopLevelNameTarget (NONE,"record"))) expr_test_uint;
      Assign (BaseTarget (TopLevelNameTarget (NONE,"map"))) expr_test_uint;
@@ -82,8 +137,8 @@ Proof
   EVAL_TAC
 QED
 
-Theorem supported_storage_effects_rejected:
-  EVERY (\s. ~supported_stmt expr_test_tops stmt_test_bindings s)
+Theorem supported_storage_effect_statement_rows:
+  supported_stmts expr_test_tops stmt_test_bindings
     [Assign (BaseTarget (TopLevelNameTarget (NONE,"scalar"))) expr_test_internal;
      Assign (BaseTarget (SubscriptTarget (TopLevelNameTarget (NONE,"map"))
        expr_test_address)) expr_test_internal;
@@ -92,8 +147,34 @@ Theorem supported_storage_effects_rejected:
        (Builtin (BaseT (UintT 256)) (Bop Add) [expr_test_uint;expr_test_uint]);
      Assign (BaseTarget (AttributeTarget (TopLevelNameTarget (NONE,"record"))
        "second")) expr_test_internal;
+     Assign (BaseTarget (SubscriptTarget (TopLevelNameTarget (NONE,"dynamic"))
+       expr_test_pop)) expr_test_internal;
+     AugAssign (BaseT (UintT 256))
+       (SubscriptTarget (TopLevelNameTarget (NONE,"fixed")) expr_test_internal)
+       Add expr_test_pop]
+Proof
+  EVAL_TAC
+QED
+
+(* Effect roots are allowed for assignment RHSs and subscript targets, but
+   nested expression effects and effectful append values remain excluded. *)
+Theorem supported_storage_effects_rejected:
+  EVERY (\s. ~supported_stmt expr_test_tops stmt_test_bindings s)
+    [Assign (BaseTarget (TopLevelNameTarget (NONE,"scalar")))
+       (Builtin (BaseT (UintT 256)) (Bop Add) [expr_test_internal; expr_test_uint]);
+     Assign (TupleTarget [BaseTarget (NameTarget "word")])
+       (Builtin (TupleT [BaseT (UintT 256)]) (MakeArray NONE (Fixed 1))
+         [expr_test_internal]);
+     Assign (BaseTarget (SubscriptTarget (TopLevelNameTarget (NONE,"fixed"))
+       (Builtin (BaseT (UintT 256)) (Bop Add) [expr_test_pop; expr_test_uint])))
+       expr_test_uint;
+     AugAssign (BaseT (UintT 256)) (NameTarget "word") Add
+       (Builtin (BaseT (UintT 256)) (Bop Add) [expr_test_internal; expr_test_uint]);
+     AugAssign (BaseT (UintT 256))
+       (SubscriptTarget (TopLevelNameTarget (NONE,"fixed"))
+         (Builtin (BaseT (UintT 256)) (Bop Add) [expr_test_internal; expr_test_uint]))
+       Add expr_test_uint;
      Append (TopLevelNameTarget (NONE,"dynamic")) expr_test_pop;
-     AugAssign (BaseT (UintT 256)) (NameTarget "word") Add expr_test_internal;
      AnnAssign "bad" NoneT expr_test_uint;
      AnnAssign "bad" (ArrayT (BaseT (UintT 256)) (Fixed 0)) expr_test_uint]
 Proof
@@ -108,10 +189,14 @@ Theorem supported_augmented_statement_row:
      AugAssign (BaseT (UintT 256)) (NameTarget "word") Exp
        (Literal (BaseT (UintT 256)) (IntL 0));
      AugAssign (BaseT (UintT 256)) (NameTarget "word") ShL expr_test_uint;
+     AugAssign (BaseT (UintT 256)) (NameTarget "word") Add expr_test_internal;
+     AugAssign (BaseT (UintT 256)) (NameTarget "aggregate") Add expr_test_uint;
      AugAssign (BaseT (UintT 256))
        (SubscriptTarget (TopLevelNameTarget (NONE,"fixed")) expr_test_uint) Add expr_test_uint;
      AugAssign (BaseT (UintT 256))
-       (AttributeTarget (TopLevelNameTarget (NONE,"record")) "first") Add expr_test_uint] /\
+       (AttributeTarget (TopLevelNameTarget (NONE,"record")) "first") Add expr_test_uint;
+     AugAssign (BaseT (UintT 256))
+       (SubscriptTarget (NameTarget "array") expr_test_uint) Add expr_test_uint] /\
   EVERY (\s. ~supported_stmt expr_test_tops stmt_test_bindings s)
     [AugAssign (BaseT (UintT 256)) (NameTarget "word") Exp
        (Literal (BaseT (IntT 256)) (IntL (~1)));
@@ -121,8 +206,12 @@ Theorem supported_augmented_statement_row:
      AugAssign (BaseT (UintT 256)) (NameTarget "word") ShR expr_test_int;
      AugAssign (BaseT (UintT 256)) (NameTarget "word") ExpMod expr_test_uint;
      AugAssign (BaseT (UintT 256)) (NameTarget "word") In expr_test_uint;
-     AugAssign (BaseT (UintT 256)) (NameTarget "aggregate") Add expr_test_uint;
-     AugAssign (BaseT (UintT 256)) (TopLevelNameTarget (NONE,"fixed")) Add expr_test_uint]
+     AugAssign (BaseT (UintT 256)) (NameTarget "missing") Add expr_test_uint;
+     AugAssign (BaseT (UintT 256)) (TopLevelNameTarget (NONE,"fixed")) Add expr_test_uint;
+     AugAssign (BaseT (UintT 256))
+       (SubscriptTarget (TopLevelNameTarget (SOME 0,"fixed")) expr_test_uint) Add expr_test_uint;
+     AugAssign (BaseT (UintT 256))
+       (AttributeTarget (TopLevelNameTarget (NONE,"record")) "absent") Add expr_test_uint]
 Proof
   EVAL_TAC
 QED
@@ -144,8 +233,8 @@ Proof
   EVAL_TAC
 QED
 
-(* Nested map keys may call internal functions in base-first order. The RHS
-   computation-order defect #550 remains excluded independently. *)
+(* Nested map keys may call internal functions in base-first order. Ordered
+   assignment also permits computed RHSs without the obsolete #550 fence. *)
 Theorem supported_nested_target_rows:
   supported_stmts expr_test_tops
     (("map",ArrayT (BaseT (UintT 256)) (Fixed 2))::stmt_test_bindings)
@@ -160,12 +249,12 @@ Theorem supported_nested_target_rows:
        (SubscriptTarget (TopLevelNameTarget (NONE,"recordmap")) expr_test_uint)
        "second")) expr_test_int;
      Assign (BaseTarget (SubscriptTarget (NameTarget "map") expr_test_uint)) expr_test_uint] /\
-  ~supported_stmt expr_test_tops stmt_test_bindings
+  supported_stmt expr_test_tops stmt_test_bindings
     (Assign (BaseTarget (SubscriptTarget
        (SubscriptTarget (TopLevelNameTarget (NONE,"nested")) expr_test_internal)
        expr_test_internal))
        (Builtin (BaseT (UintT 256)) (Bop Add) [expr_test_uint;expr_test_uint])) /\
-  ~supported_stmt expr_test_tops stmt_test_bindings
+  supported_stmt expr_test_tops stmt_test_bindings
     (Assign (BaseTarget (SubscriptTarget (TopLevelNameTarget (NONE,"nested"))
        expr_test_uint)) expr_test_uint)
 Proof

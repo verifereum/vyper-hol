@@ -40,7 +40,7 @@ Theorem eval_iterator_range:
 Proof
   rpt strip_tac >>
   simp[Once evaluate_def, bind_def, ignore_bind_def, LET_THM, return_def] >>
-  simp[get_range_limits_def, lift_sum_def, return_def]
+  simp[read_result_def, bind_def, get_range_limits_def, lift_sum_def, return_def]
 QED
 
 Theorem eval_expr_int_lit:
@@ -105,7 +105,7 @@ Theorem eval_for_cons_cases:
     ?r2 es2 sc rest.
       eval_stmts cx stmts
         (es with scopes :=
-           (FEMPTY |+ (nm, <| assignable := F; type := tyv; value := v |>)) ::
+           (FEMPTY |+ (nm, <| assignable := F; type := tyv; value := v; popped := [] |>)) ::
            es.scopes) = (r2, es2) /\
       es2.scopes = sc :: rest /\ MAP FDOM rest = MAP FDOM es.scopes /\
       (!n. n IN FDOM sc ==> lookup_scopes n rest = NONE) /\
@@ -121,14 +121,14 @@ Proof
   simp[Once evaluate_def, bind_def, ignore_bind_def, push_scope_with_var_def,
        finally_def, try_def, return_def] >>
   `!x. x with scopes updated_by
-         CONS (FEMPTY |+ (nm, <| assignable := F; type := tyv; value := v |>)) =
+         CONS (FEMPTY |+ (nm, <| assignable := F; type := tyv; value := v; popped := [] |>)) =
        x with scopes :=
-         (FEMPTY |+ (nm, <| assignable := F; type := tyv; value := v |>)) ::
+         (FEMPTY |+ (nm, <| assignable := F; type := tyv; value := v; popped := [] |>)) ::
          x.scopes` by
     simp[evaluation_state_component_equality] >>
   simp[] >>
   qabbrev_tac `esA = es with scopes :=
-     (FEMPTY |+ (nm, <| assignable := F; type := tyv; value := v |>)) ::
+     (FEMPTY |+ (nm, <| assignable := F; type := tyv; value := v; popped := [] |>)) ::
      es.scopes` >>
   Cases_on `eval_stmts cx stmts esA` >> rename1 `_ = (r2, es2)` >>
   `es2.scopes <> [] /\ MAP FDOM (TL es2.scopes) = MAP FDOM es.scopes` by
