@@ -97,6 +97,7 @@ Proof
    t.vs_call_ctx = s.vs_call_ctx /\ t.vs_tx_ctx = s.vs_tx_ctx /\
    t.vs_block_ctx = s.vs_block_ctx /\ t.vs_logs = s.vs_logs /\
    t.vs_outcomes = s.vs_outcomes /\ t.vs_requests = s.vs_requests /\
+   t.vs_pending_deletions = s.vs_pending_deletions /\
    t.vs_immutables = s.vs_immutables /\
    t.vs_data_section = s.vs_data_section` by
     (qpat_x_assum `t with <|vs_vars := _; vs_memory := _|> = s` mp_tac >>
