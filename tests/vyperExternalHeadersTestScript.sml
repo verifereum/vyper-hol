@@ -94,7 +94,8 @@ val () = both "nested_nonreentrant_calls" true (mutate external_f 2 ``T``);
 val () = both "internal_raw_return_bytes" true (mutate internal_h 3 ``T``);
 val () = both "private_x_function_name" true (mutate burn 4 ``"x"``);
 val () = both "internal_external_same_name" true (mutate pure_fn 4 ``"h"``);
-val () = both "constructor_view_guard" true
+(* Constructor mutability is checked in both runtime and deployment modes. *)
+val () = both "constructor_view_guard" false
   (subst [ctor |-> ``FunctionDecl Deploy View T F "__init__"
     [] [] NoneT [Pass]``] base_dom1);
 val () = both "internal_fallback_name" true
