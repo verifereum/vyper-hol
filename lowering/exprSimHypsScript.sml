@@ -160,8 +160,8 @@
  * Not here yet:
  *   - The rest of the compile environment's metadata (dynamic array
  *     capacities, method ids) is not related to the source context.  The
- *     cases that read it (Attribute, Pop, ...) will need a clause each in
- *     expr_sim_inv, and
+ *     cases that read it (Attribute, ...) will need a clause each in
+ *     expr_sim_inv, as pop has the local types clause, and
  *     TopLevelName needs every immutable to be in ce_vars (#563); storage
  *     and transient variables are there by storage_vars_rel and
  *     transient_vars_rel.  Each is to match what Vyper's compiler

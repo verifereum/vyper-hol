@@ -18,7 +18,7 @@
  * Helpers:
  *   elems_val_wf_EL, elems_val_wf_FRONT, elems_in_memory_FRONT,
  *     elems_in_memory_mstore_before — the array's layout
- *   lookup_scopes_update_other, eval_base_target_name, eval_pop_name — the
+ *   lookup_scopes_set_other, eval_base_target_name, eval_pop_name — the
  *     source side
  *   compile_expr_pop_name, dynarray_pop_mem_shape, dynarray_pop_mem_run_empty,
  *     dynarray_pop_mem_run — the lowering and its run
@@ -68,23 +68,14 @@ Theorem elems_in_memory_mstore_before:
     a + 32 <= off ==>
     elems_in_memory vs off tv (mstore a w s).vs_memory
 Proof
-  Induct >> simp[val_in_memory_def, val_wf_def] >> rpt strip_tac
-  >- (irule val_in_memory_mem_agree >> simp[] >>
-      qexistsl_tac [`type_memory_size tv`, `s.vs_memory`] >>
-      simp[mstore_mem_bytes_at_disjoint]) >>
-  first_x_assum irule >> simp[]
+  rpt strip_tac >>
+  `mstore a w s = mstore a w (s with vs_memory := s.vs_memory)` by
+    simp[mstore_def] >>
+  pop_assum SUBST1_TAC >>
+  irule (el 3 (CONJUNCTS mstore_preserves_val_in_memory)) >> simp[]
 QED
 
 (* ===== The source side ===== *)
-
-Theorem lookup_scopes_update_other:
-  !pre n id env v rest.
-    n <> id ==>
-    lookup_scopes n (pre ++ env |+ (id, v) :: rest) =
-    lookup_scopes n (pre ++ env :: rest)
-Proof
-  Induct >> rw[lookup_scopes_def, FLOOKUP_UPDATE]
-QED
 
 (* Setting the entry find_containing_scope found leaves every other name. *)
 Theorem lookup_scopes_set_other:
@@ -94,7 +85,7 @@ Theorem lookup_scopes_set_other:
 Proof
   rpt strip_tac >> drule find_containing_scope_structure >> strip_tac >>
   qpat_x_assum `sc = _` (fn th => REWRITE_TAC [th, GSYM APPEND_ASSOC, APPEND]) >>
-  irule lookup_scopes_update_other >> first_assum ACCEPT_TAC
+  irule lookup_scopes_update_other >> first_assum (ACCEPT_TAC o GSYM)
 QED
 
 Theorem eval_base_target_name:
@@ -482,7 +473,13 @@ Proof
   irule local_ptrs_rel_write_local >>
   qexistsl_tac [`entry with value := ArrayV (DynArrayV (FRONT vs))`, `id`,
                 `p`, `es.scopes`, `s0`, `sz`, `w`] >>
-  rpt conj_tac
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
+  >~ [`lookup_scopes _ _ = SOME (_ with value := _)`]
+  >- (irule lookup_scopes_update >> first_assum ACCEPT_TAC)
+  >~ [`lookup_scopes _ _ = lookup_scopes _ _`]
+  >- (rpt strip_tac >> irule lookup_scopes_set_other >> metis_tac[])
+  >~ [`lookup_scopes _ _ = SOME _ /\ FLOOKUP _ _ = _`]
+  >- (rpt strip_tac >> first_x_assum irule >> metis_tac[])
   >~ [`mem_bytes_at`]
   >- (rpt strip_tac >>
       `regions_disjoint (w2n w) sz b sz'` by
@@ -493,19 +490,13 @@ Proof
          rpt (pop_assum kall_tac) >>
          simp[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
       qpat_x_assum `u.vs_memory = _` SUBST1_TAC >> irule EQ_SYM >>
-      irule mstore_mem_bytes_at_disjoint >> fs[]) >>
-  FIRST [
-    first_assum ACCEPT_TAC,
-    decide_tac,
-    irule lookup_scopes_update >> first_assum ACCEPT_TAC,
-    rpt strip_tac >> irule lookup_scopes_set_other >> metis_tac[],
-    fs[type_memory_size_def] >> NO_TAC,
-    rpt strip_tac >> gvs[] >> NO_TAC,
-    rpt strip_tac >> first_x_assum irule >> fs[] >> metis_tac[],
-    fs[val_wf_def, LENGTH_FRONT, elems_val_wf_FRONT] >> NO_TAC,
-    fs[val_in_memory_def, mstore_mem_word_at_same, elems_in_memory_FRONT,
-       elems_in_memory_mstore_before] >> NO_TAC,
-    metis_tac[]]
+      irule mstore_mem_bytes_at_disjoint >> fs[])
+  >~ [`type_memory_size _ <= _`] >- fs[type_memory_size_def]
+  >~ [`val_wf`] >- fs[val_wf_def, LENGTH_FRONT, elems_val_wf_FRONT]
+  >~ [`val_in_memory`]
+  >- fs[val_in_memory_def, mstore_mem_word_at_same, elems_in_memory_FRONT,
+        elems_in_memory_mstore_before] >>
+  rpt strip_tac >> gvs[]
 QED
 
 (* stmt_state_rel after the pop: the source changed only the scopes, Venom
@@ -527,15 +518,15 @@ Proof
    u.vs_data_section = s0.vs_data_section /\
    u.vs_allocas = s0.vs_allocas /\ u.vs_alloca_next = s0.vs_alloca_next` by
     (qpat_x_assum `u = _` (fn th => ONCE_REWRITE_TAC [th]) >> simp[]) >>
-  qpat_x_assum `stmt_state_rel _ _ _ _ _` mp_tac >>
-  rewrite_tac[stmt_state_rel_def] >> strip_tac >> rpt conj_tac
+  `state_rel func cenv cx es s0` by fs[stmt_state_rel_def] >>
+  irule stmt_state_rel_allocas_frame >>
+  qpat_assum `stmt_state_rel _ _ _ _ _` (irule_at Any) >>
+  rpt conj_tac
   >- (irule state_rel_frame >>
       qpat_assum `local_ptrs_rel _ _ _ _` (irule_at Any) >>
       qexistsl_tac [`s0`, `es`] >>
-      rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, simp[]])
-  >- (irule alloca_inv_fields >> qexists_tac `s0` >> simp[])
-  >- (irule alloca_room_fields >> qexists_tac `s0` >> simp[]) >>
-  metis_tac[]
+      rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, simp[]]) >>
+  first_assum ACCEPT_TAC
 QED
 
 Theorem pop_stmt_state_rel_scopes:
@@ -646,22 +637,21 @@ Proof
         (irule pop_elem_fits >> metis_tac[val_footprint_le]) >>
       simp[] >> disj2_tac >> disj1_tac >>
       qexistsl_tac [`id`, `w2n w`, `sz`] >> fs[]) >>
+  (* the variables and allocations clauses simplified away; the memory
+     frame is left *)
   `32 <= sz` by (qpat_x_assum `32 + _ <= sz` mp_tac >> simp[]) >>
-  FIRST [
-    rpt strip_tac >>
-      `regions_disjoint off sz' (w2n w) sz` by
-        (first_x_assum (qspecl_then [`id`, `w2n w`, `sz`] mp_tac) >>
-         simp[local_region_def, compileEnvTheory.regions_disjoint_def] >>
-         metis_tac[]) >>
-      `off + sz' <= w2n w \/ w2n w + 32 <= off` by
-        (qpat_x_assum `32 <= sz` mp_tac >>
-         qpat_x_assum `regions_disjoint off _ _ _` mp_tac >>
-         rpt (pop_assum kall_tac) >>
-         simp[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
-      simp[] >> qpat_x_assum `u.vs_memory = _` SUBST1_TAC >>
-      irule mstore_mem_bytes_at_disjoint >> fs[],
-    rpt strip_tac >> fs[] >> NO_TAC,
-    rpt strip_tac >> fs[lookup_var_inst_idx] >> metis_tac[]]
+  rpt strip_tac >>
+  `regions_disjoint off sz' (w2n w) sz` by
+    (first_x_assum (qspecl_then [`id`, `w2n w`, `sz`] mp_tac) >>
+     simp[local_region_def, compileEnvTheory.regions_disjoint_def] >>
+     metis_tac[]) >>
+  `off + sz' <= w2n w \/ w2n w + 32 <= off` by
+    (qpat_x_assum `32 <= sz` mp_tac >>
+     qpat_x_assum `regions_disjoint off _ _ _` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     simp[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+  simp[] >> qpat_x_assum `u.vs_memory = _` SUBST1_TAC >>
+  irule mstore_mem_bytes_at_disjoint >> fs[]
 QED
 
 (* TOP-LEVEL *)

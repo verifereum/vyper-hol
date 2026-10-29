@@ -3,7 +3,8 @@
  *
  * The case lemmas of compile_expr_sim (exprSimMain) for the call targets
  * but internal calls.  Proved: send (compile_send_sim, by exprSimSend's
- * compile_send_case_sim).  Cheated, for the later #636 PRs:
+ * compile_send_case_sim, row 2 of #636's Calls table).  Cheated, for the
+ * later #636 PRs, by row of that table:
  *   1 extcall/staticcall in SOME oracle mode, including reverts and
  *     default_return_value (#553): compile_extcall_sim
  *   3 raw_call (#554): compile_raw_call_sim; raw_call of msg.data:

@@ -24,8 +24,8 @@
  *     take_call_outcome_typed,
  *     eval_send_outcome_typed, address_typed_dest, uint256_typed_dest — the
  *     source side
- *   expr_sim_pre_send_arg, send_pre_types, typed_stack_args_ready_gen,
- *     typed_args_ready_inv — the operands
+ *   expr_sim_pre_send_arg, send_pre_types, typed_args_ready_inv — the
+ *     operands
  *   send_tail_shape, send_tail_frag, expr_post_none_intro — the CALL and
  *     the ASSERT
  *)
@@ -262,35 +262,6 @@ Proof
   Cases_on `has_gas` >> rw[] >> simp[is_word_type_def]
 QED
 
-(* exprSimPrecompiles's typed_stack_args_ready for any expression whose
-   operands meet expr_sim_pre wherever expr_sim_inv holds. *)
-Theorem typed_stack_args_ready_gen:
-  (!e s. MEM e args /\ expr_sim_inv cenv cx env s ==>
-         expr_sim_pre cenv cx env e s) /\
-  expr_sim_inv cenv cx env es /\
-  EVERY (\e. is_word_type (expr_type e) /\ expr_sim_ok cenv e) args ==>
-  typed_args_ready ctx func cenv cx arg_ty (expr_sim_inv cenv cx env) args /\
-  wb_args_shape cenv arg_ty args
-Proof
-  strip_tac >> conj_tac
-  >- (simp[typed_args_ready_def] >> rpt strip_tac >>
-      rename1 `expr_sim_inv cenv cx env es_arg` >>
-      `is_word_type (expr_type e) /\ expr_sim_ok cenv e` by
-        (gvs[EVERY_MEM] >> first_x_assum drule >> simp[]) >>
-      `expr_sim_pre cenv cx env e es_arg` by metis_tac[] >>
-      simp[] >> rpt conj_tac
-      >- metis_tac[expr_sim_ok_def]
-      >- metis_tac[well_typed_expr_type_evaluates]
-      >- (rpt strip_tac >> drule_all expr_sim_pre_stack_result >> simp[]) >>
-      rpt strip_tac >> drule_all expr_sim_pre_stack_result >>
-      simp[] >> metis_tac[]) >>
-  simp[wb_args_shape_def] >> rpt gen_tac >> strip_tac >>
-  `is_word_type (expr_type e)` by
-    (gvs[EVERY_MEM] >> first_x_assum drule >> simp[]) >>
-  `expr_sim_pre cenv cx env e es` by metis_tac[] >>
-  drule expr_sim_pre_lower_value_word_shape >> disch_then drule >> simp[]
-QED
-
 (* The invariant of typed_args_ready holds after all the operands. *)
 Theorem typed_args_ready_inv:
   !args es vs es'.
@@ -317,21 +288,6 @@ Proof
        eval_operand_def, vyperValueTheory.evaluate_type_def,
        is_word_type_def, val_in_memory_def, val_wf_def, val_footprint_def,
        type_memory_size_def] >>
-  metis_tac[]
-QED
-
-(* The oracle CALL only touches the fields stmt_state_rel's allocation
-   clauses do not read. *)
-Theorem stmt_state_rel_oracle_step:
-  stmt_state_rel func cenv cx es t /\ state_rel func cenv cx es' s' /\
-  s'.vs_allocas = t.vs_allocas /\ s'.vs_alloca_next = t.vs_alloca_next /\
-  s'.vs_memory = t.vs_memory ==>
-  stmt_state_rel func cenv cx es' s'
-Proof
-  rewrite_tac[stmt_state_rel_def] >> strip_tac >> rpt conj_tac
-  >- first_assum ACCEPT_TAC
-  >- (irule alloca_inv_fields >> qexists_tac `t` >> simp[])
-  >- (irule alloca_room_fields >> qexists_tac `t` >> simp[]) >>
   metis_tac[]
 QED
 
@@ -393,7 +349,7 @@ Proof
   impl_tac >- simp[mk_inst_def] >>
   `es1.outcomes = SOME t.vs_outcomes` by fs[state_rel_def] >>
   `res <> INR (Error (RuntimeError "call outcome accounts"))` by
-    (irule eval_send_outcome_typed >> simp[] >> metis_tac[]) >>
+    (drule_all eval_send_outcome_typed >> simp[]) >>
   simp[] >> strip_tac >>
   `s'.vs_allocas = t.vs_allocas /\ s'.vs_alloca_next = t.vs_alloca_next /\
    s'.vs_memory = t.vs_memory /\ s'.vs_vars = t.vs_vars` by
@@ -406,9 +362,9 @@ Proof
   gvs[run_inst_seq_def, send_assert_ok] >>
   irule expr_post_none_intro >> simp[stmt_state_rel_inst_idx] >>
   conj_tac
-  >- (irule stmt_state_rel_update_var >> rpt conj_tac >>
-      FIRST [irule fresh_not_local_ptr >> qexists_tac `sm` >> fs[],
-             irule stmt_state_rel_oracle_step >> simp[] >> metis_tac[]]) >>
+  >- (irule stmt_state_rel_update_var >> conj_tac
+      >- (irule fresh_not_local_ptr >> qexists_tac `sm` >> fs[]) >>
+      irule stmt_state_rel_allocas_frame >> simp[] >> metis_tac[]) >>
   irule wb_frame_readonly_tail >>
   qexists_tac `sm` >>
   qpat_assum `wb_frame _ _ _ _ _` (irule_at Any) >>
@@ -443,7 +399,7 @@ Proof
   `!e s. MEM e args /\ expr_sim_inv cenv cx env s ==>
          expr_sim_pre cenv cx env e s` by
     metis_tac[expr_sim_pre_send_arg] >>
-  drule_all typed_stack_args_ready_gen >>
+  drule_all typed_stack_args_ready >>
   disch_then (qspecl_then [`func`, `ctx`, `expr_type`] strip_assume_tac) >>
   rewrite_tac[expr_sim_def] >> rpt gen_tac >> strip_tac >>
   reverse (Cases_on `stmt_state_rel func cenv cx es s0`)
@@ -480,9 +436,8 @@ Proof
     (Cases_on `has_gas` >> gvs[LENGTH_EQ_NUM_compute]) >>
   gvs[vyperValueTheory.evaluate_type_def] >>
   `accounts_runtime_well_typed es1.accounts` by
-    gvs[expr_sim_inv_def, accounts_runtime_well_typed_def,
-        account_runtime_well_typed_def, accounts_well_typed_def,
-        account_well_typed_def] >>
+    fs[expr_sim_inv_def,
+       vyperTypeExtCallCoreTheory.accounts_runtime_well_typed_accounts_well_typed] >>
   `outcomes_accounts_typed es1.outcomes` by gvs[expr_sim_inv_def] >>
   irule send_tail_frag >> simp[expr_type_def] >>
   qpat_assum `eval_send _ _ _ _ = _` (irule_at Any) >>
