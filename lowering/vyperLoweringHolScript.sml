@@ -17,7 +17,11 @@ Ancestors
   stmtSimDeclMem exprSimStorageCopy
   valueEncodingProofs
   localPtrsProps
-  loweringShapeProps
+  externalEntryProps constructorGuardProps
+  nonreentrantEntryEquiv internalReturnLockProps
+  transientLockFrameProps
+  selectorCompilerProps checkedSelectorTableProps
+  loweringShapeDefs loweringShapeProps
   intCallStep extCallOracleStep intCallLookup intCallCallee intCallArgs intCallResult intCallReturnMem intCallFrame intCallReturn valueCopy
   structFieldsProps
   (* compiler + correctness *)

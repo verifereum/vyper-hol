@@ -1171,7 +1171,9 @@ fun read_definition_tests decode_test_traces select_tests json_path = let
   val report = read_test_json decode_test_traces json_path
   val decode_fails = #failures report
   val () =
-    case decode_fails of
+    (* Failures are accumulated in reverse order. Report the original error,
+       not a later cascade from a partially constructed decoder constant. *)
+    case List.rev decode_fails of
         [] => ()
       | (name, err)::_ =>
           raise Fail (

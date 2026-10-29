@@ -5,7 +5,8 @@
    TOP-LEVEL: allocation_limit_return_rejected,
               allocation_limit_raise_return_buffer_ok,
               allocation_limit_boundary_ok,
-              allocation_limit_boundary_rejected. *)
+              allocation_limit_boundary_rejected,
+              allocation_limit_defaults_return_rejected. *)
 Theory evalCompilerAllocationLimit
 Ancestors compileVyper
 
@@ -32,6 +33,29 @@ Theorem allocation_limit_return_rejected:
     lower_vyper_runtime_unit allocation_limit_return_program rpolicy = NONE
 Proof
   gen_tac >> ACCEPT_TAC allocation_limit_return_eval
+QED
+
+(* Default arguments use grouped lowering, but must not bypass the same
+   return-buffer allocation limit as ordinary external entries. *)
+Definition allocation_limit_defaults_return_program_def:
+  allocation_limit_defaults_return_program =
+    [FunctionDecl External Nonpayable F F "f"
+       [("x", BaseT (BytesT (Dynamic 1))); ("n", BaseT (UintT 256))]
+       [Literal (BaseT (UintT 256)) (IntL 0)]
+       (BaseT (BytesT (Dynamic (2 ** 64))))
+       [Return (SOME (Name (BaseT (BytesT (Dynamic (2 ** 64)))) "x"))]]
+End
+
+val allocation_limit_defaults_return_eval =
+  EVAL ``lower_vyper_runtime_unit
+           allocation_limit_defaults_return_program rpolicy``
+
+Theorem allocation_limit_defaults_return_rejected:
+  !rpolicy.
+    lower_vyper_runtime_unit
+      allocation_limit_defaults_return_program rpolicy = NONE
+Proof
+  gen_tac >> ACCEPT_TAC allocation_limit_defaults_return_eval
 QED
 
 val allocation_limit_raise_eval =

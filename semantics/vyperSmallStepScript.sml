@@ -1997,50 +1997,55 @@ Proof
   \\ rw[Once OWHILE_THM]
 QED
 
-val evaluate_defaults_pre_def = evaluate_defaults_def
-  |> SRULE [bind_def, eval_expr_eq_cont_cps]
-  |> cv_auto_trans_pre "evaluate_defaults_pre";
+Definition fromvalsk_def:
+  fromvalsk x =
+    case x of
+      (SOME (AK cx (ApplyVals vs) st DoneK)) => (INL vs, st)
+    | (SOME (AK cx (ApplyExc ex) st DoneK)) => (INR ex, st)
+    | _ => (INR $ Error (TypeError "fromvalsk"), empty_state)
+End
 
-Theorem evaluate_defaults_pre[cv_pre]:
-  ∀cx am v. evaluate_defaults_pre cx am v
+val () = cv_auto_trans fromvalsk_def;
+
+Theorem eval_exprs_eq_cont_cps:
+  eval_exprs cx es st = fromvalsk $ cont (eval_exprs_cps cx es st DoneK)
 Proof
-  ntac 2 gen_tac
-  \\ Induct \\ rw[]
-  \\ rw[Once evaluate_defaults_pre_def]
-  \\ gs[bind_def, eval_expr_eq_cont_cps]
-  \\ rw[cont_pre_IS_SOME_cont]
-  \\ qmatch_goalsub_rename_tac`eval_expr_cps ec ee es DoneK`
-  \\ qspecl_then[`ec`,`ee`,`es`,`DoneK`]mp_tac $ cj 5 eval_cps_eq
-  \\ rw[cont_def]
-  \\ CASE_TAC
-  \\ CASE_TAC \\ gvs[]
-  \\ rw[Once OWHILE_THM]
+  Cases_on `eval_exprs cx es st` >>
+  qmatch_goalsub_rename_tac `res,st1` >>
+  qspecl_then [`cx`,`es`,`st`,`DoneK`] mp_tac (cj 6 eval_cps_eq) >>
+  simp[cont_def] >> strip_tac >>
+  simp[Once OWHILE_THM] >> IF_CASES_TAC >>
+  Cases_on `res` >> gvs[] >> simp[fromvalsk_def]
+QED
+
+Theorem cont_pre_eval_exprs_cps[cv_pre]:
+  cont_pre (eval_exprs_cps cx es st DoneK)
+Proof
+  rw[cont_pre_IS_SOME_cont] >>
+  qspecl_then [`cx`,`es`,`st`,`DoneK`] mp_tac (cj 6 eval_cps_eq) >>
+  rw[cont_def] >> CASE_TAC >> CASE_TAC >> gvs[] >>
+  rw[Once OWHILE_THM]
+QED
+
+Theorem cont_pre_eval_stmts_cps[cv_pre]:
+  cont_pre (eval_stmts_cps cx ss st DoneK)
+Proof
+  rw[cont_pre_IS_SOME_cont] >>
+  qspecl_then [`cx`,`ss`,`st`,`DoneK`] mp_tac (cj 2 eval_cps_eq) >>
+  rw[cont_def] >> CASE_TAC >> CASE_TAC >> gvs[] >>
+  rw[Once OWHILE_THM]
 QED
 
 val () = cv_auto_trans evaluate_all_constants_def;
 
-val call_external_function_pre_def = call_external_function_def
-     |> SRULE [eval_stmts_eq_cont_cps,
+val () = call_external_function_def
+     |> SRULE [eval_external_defaults_run, eval_exprs_eq_cont_cps,
+               eval_stmts_eq_cont_cps, set_scopes_def,
                vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
                vyperStateTheory.return_def, vyperStateTheory.raise_def,
                LET_THM, COND_RATOR, option_CASE_rator,
                get_transient_storage_def, update_transient_def]
-     |> cv_auto_trans_pre "call_external_function_pre";
-
-Theorem call_external_function_pre[cv_pre]:
-  call_external_function_pre orc am cx nr mut ts all_mods args dflts vals
-    (bod:stmt list) ret
-Proof
-  rw[call_external_function_pre_def]
-  \\ rw[cont_pre_IS_SOME_cont]
-  \\ qmatch_goalsub_abbrev_tac`eval_stmts_cps cx ss st k`
-  \\ qspecl_then[`cx`,`ss`,`st`,`k`]mp_tac $ cj 2 eval_cps_eq
-  \\ rw[]
-  \\ CASE_TAC
-  \\ CASE_TAC
-  \\ rw[Abbr`k`, cont_def]
-  \\ rw[Once OWHILE_THM]
-QED
+     |> cv_auto_trans;
 
 val () = cv_auto_trans call_external_def;
 val () = cv_auto_trans clear_machine_logs_def;
@@ -2060,15 +2065,7 @@ Proof
   \\ CASE_TAC \\ CASE_TAC \\ gvs[]
   \\ rw[Once OWHILE_THM]
 QED
-Theorem cont_pre_eval_stmts_cps[cv_pre]:
-  cont_pre (eval_stmts_cps cx ss st DoneK)
-Proof
-  rw[cont_pre_IS_SOME_cont]
-  \\ qspecl_then[`cx`,`ss`,`st`,`DoneK`]mp_tac $ cj 2 eval_cps_eq
-  \\ rw[cont_def]
-  \\ CASE_TAC \\ CASE_TAC \\ gvs[]
-  \\ rw[Once OWHILE_THM]
-QED
+
 
 
 (* Integration audit: required CPS equivalences must be kernel closed. *)

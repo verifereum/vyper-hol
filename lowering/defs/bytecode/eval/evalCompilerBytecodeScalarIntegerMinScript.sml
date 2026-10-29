@@ -2,7 +2,7 @@
 
 Theory evalCompilerBytecodeScalarIntegerMin
 Ancestors evalCompilerBytecodeScalarWordEval evalCompilerSubsetScalars compileVyper concretizeMemLocDefs alist byte integer_word option
-Libs evalCompilerBytecodeLib finite_mapLib computeLib wordsLib
+Libs evalCompilerBytecodeLib evalCompilerCleanupPlanLib finite_mapLib computeLib wordsLib
 
 fun holbuild_extra_deps (_ : string list) = ()
 val () = holbuild_extra_deps [".."]
@@ -84,12 +84,13 @@ val scalar_integer_min_int256_max_eom = optionSyntax.dest_some
   (rhs (concl scalar_integer_min_int256_max_eom_eval))
 val scalar_integer_min_int256_generate_fn_plan = save_thm
   ("scalar_integer_min_int256_generate_fn_plan", prove
-    (``∀spill labels.
-        generate_fn_plan ^scalar_integer_min_int256_fn spill labels =
-        generate_fn_plan_analyzed ^scalar_integer_min_int256_liveness
-          ^scalar_integer_min_int256_dfg ^scalar_integer_min_int256_cfg
+    (``∀ch growth spill labels.
+        generate_fn_plan_with_cleanup ch growth
+          ^scalar_integer_min_int256_fn spill labels =
+        generate_fn_plan_with_cleanup_analyzed ^scalar_integer_min_int256_liveness
+          ^scalar_integer_min_int256_dfg ^scalar_integer_min_int256_cfg ch growth
           ^scalar_integer_min_int256_fn spill labels``,
-     simp[stackPlanGenTheory.generate_fn_plan_def,
+     simp[stackPlanGenTheory.generate_fn_plan_with_cleanup_def,
           scalar_integer_min_int256_liveness_eval,
           scalar_integer_min_int256_dfg_eval,
           scalar_integer_min_int256_cfg_eval]))
@@ -98,24 +99,11 @@ val () = computeLib.upd_compset (computeLib.add_thms
    scalar_integer_min_int256_dfg_eval,
    scalar_integer_min_int256_cfg_eval,
    scalar_integer_min_int256_generate_fn_plan])
-val scalar_integer_min_int256_plan_eval = save_thm
-  ("scalar_integer_min_int256_plan_eval", EVAL
-    ``generate_fn_plan_analyzed ^scalar_integer_min_int256_liveness
-       ^scalar_integer_min_int256_dfg ^scalar_integer_min_int256_cfg
-       ^scalar_integer_min_int256_fn ^scalar_integer_min_int256_max_eom 0``)
-val scalar_integer_min_int256_plan =
-  rhs (concl scalar_integer_min_int256_plan_eval)
-val scalar_integer_min_int256_concrete_fn_plan = save_thm
-  ("scalar_integer_min_int256_concrete_fn_plan", prove
-    (``generate_fn_plan ^scalar_integer_min_int256_fn
-          ^scalar_integer_min_int256_max_eom 0 =
-        ^scalar_integer_min_int256_plan``,
-     simp[scalar_integer_min_int256_generate_fn_plan,
-          scalar_integer_min_int256_plan_eval]))
 val () = computeLib.upd_compset
   (fn cs => cs
-    |> (fn cs' => computeLib.scrub_const cs' ``generate_fn_plan``)
-    |> computeLib.add_thms [scalar_integer_min_int256_concrete_fn_plan])
+    |> (fn cs' => computeLib.scrub_const cs' ``generate_fn_plan_with_cleanup``)
+    |> (fn cs' => computeLib.scrub_const cs' ``generate_fn_plan_with_cleanup_analyzed``)
+    |> computeLib.add_thms [scalar_integer_min_int256_generate_fn_plan])
 val scalar_integer_min_int256_context_plan_step1 = SIMP_CONV (srw_ss())
   [stackPlanGenTheory.generate_context_plan_def,
    stackPlanGenTheory.generate_context_plan_with_def,
@@ -125,49 +113,9 @@ val scalar_integer_min_int256_context_plan_step1 = SIMP_CONV (srw_ss())
   ``generate_context_plan (^scalar_integer_min_int256_unit).cu_context``
 val scalar_integer_min_int256_context_plan_step2 =
   EVAL (rhs (concl scalar_integer_min_int256_context_plan_step1))
-val scalar_integer_min_int256_actual_plan_call = find_term
-  (can (match_term ``generate_fn_plan f spill labels``))
-  (rhs (concl scalar_integer_min_int256_context_plan_step2))
-val scalar_integer_min_int256_actual_plan_args =
-  #2 (strip_comb scalar_integer_min_int256_actual_plan_call)
-val scalar_integer_min_int256_actual_fn =
-  hd scalar_integer_min_int256_actual_plan_args
-val scalar_integer_min_int256_actual_liveness_eval =
-  EVAL ``liveness_analyze ^scalar_integer_min_int256_actual_fn``
-val scalar_integer_min_int256_actual_dfg_eval =
-  EVAL ``dfg_build_function ^scalar_integer_min_int256_actual_fn``
-val scalar_integer_min_int256_actual_cfg_eval =
-  EVAL ``cfg_analyze ^scalar_integer_min_int256_actual_fn``
-val scalar_integer_min_int256_actual_liveness =
-  rhs (concl scalar_integer_min_int256_actual_liveness_eval)
-val scalar_integer_min_int256_actual_dfg =
-  rhs (concl scalar_integer_min_int256_actual_dfg_eval)
-val scalar_integer_min_int256_actual_cfg =
-  rhs (concl scalar_integer_min_int256_actual_cfg_eval)
-val scalar_integer_min_int256_actual_plan_eval = EVAL
-  ``generate_fn_plan_analyzed ^scalar_integer_min_int256_actual_liveness
-      ^scalar_integer_min_int256_actual_dfg
-      ^scalar_integer_min_int256_actual_cfg
-      ^scalar_integer_min_int256_actual_fn
-      ^scalar_integer_min_int256_max_eom 0``
-val scalar_integer_min_int256_actual_generate_step1 =
-  REWR_CONV stackPlanGenTheory.generate_fn_plan_def
-    ``generate_fn_plan ^scalar_integer_min_int256_actual_fn
-        ^scalar_integer_min_int256_max_eom 0``
-val scalar_integer_min_int256_actual_generate_step2 = PURE_REWRITE_CONV
-  [scalar_integer_min_int256_actual_liveness_eval,
-   scalar_integer_min_int256_actual_dfg_eval,
-   scalar_integer_min_int256_actual_cfg_eval]
-  (rhs (concl scalar_integer_min_int256_actual_generate_step1))
-val scalar_integer_min_int256_actual_generate_step3 =
-  REWR_CONV scalar_integer_min_int256_actual_plan_eval
-    (rhs (concl scalar_integer_min_int256_actual_generate_step2))
-val scalar_integer_min_int256_actual_generate_fn_plan =
-  TRANS scalar_integer_min_int256_actual_generate_step1
-    (TRANS scalar_integer_min_int256_actual_generate_step2
-      scalar_integer_min_int256_actual_generate_step3)
-val scalar_integer_min_int256_context_plan_step3 = PURE_REWRITE_CONV
-  [scalar_integer_min_int256_actual_generate_fn_plan]
+(* Cache the cleanup-aware path with the context's real arguments.  Concrete
+   results need no planner-call extraction. *)
+val scalar_integer_min_int256_context_plan_step3 = cleanup_plan_conv
   (rhs (concl scalar_integer_min_int256_context_plan_step2))
 val scalar_integer_min_int256_context_plan_eval = save_thm
   ("scalar_integer_min_int256_context_plan_eval",

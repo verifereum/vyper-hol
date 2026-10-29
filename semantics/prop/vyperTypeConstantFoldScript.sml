@@ -6,6 +6,7 @@
  * - constants_fold_evaluate_module_constants
  * - check_contract_evaluate_all_constants
  * - contract_namespaces_ok_constants_order
+ * - type_env_all_modules_PERM, type_env_all_modules_constants_order
  *
  * Helper:
  * - get_tenv_constant_context, get_tenv_sources
@@ -1193,6 +1194,53 @@ Proof
   simp[EVERY_MEM, MEM_constants_order] >> disch_then drule_all >> metis_tac[]
 QED
 
+(* ===== Namespace preservation under module reordering ===== *)
+
+Theorem type_env_for_module_other_source[local]:
+  src <> src' ==>
+  FLOOKUP (type_env_for_module src ts) (src',id) = NONE
+Proof
+  Induct_on `ts` >- simp[type_env_for_module_def] >>
+  Cases_on `h` >> simp[type_env_for_module_def, FLOOKUP_UPDATE]
+QED
+
+Theorem FLOOKUP_type_env_all_modules:
+  !mods src id.
+  ALL_DISTINCT (MAP FST mods) ==>
+  FLOOKUP (type_env_all_modules mods) (src,id) =
+    case ALOOKUP mods src of
+      NONE => NONE
+    | SOME ts => FLOOKUP (type_env_for_module src ts) (src,id)
+Proof
+  Induct >- simp[type_env_all_modules_def] >>
+  gen_tac >> PairCases_on `h` >> rpt gen_tac >> strip_tac >>
+  Cases_on `h0 = src` >>
+  gvs[type_env_all_modules_def, FLOOKUP_FUNION, GSYM ALOOKUP_NONE,
+      type_env_for_module_other_source] >>
+  CASE_TAC >> simp[]
+QED
+
+Theorem type_env_all_modules_PERM:
+  PERM mods mods' /\ ALL_DISTINCT (MAP FST mods) ==>
+  type_env_all_modules mods = type_env_all_modules mods'
+Proof
+  strip_tac >>
+  `ALL_DISTINCT (MAP FST mods')` by
+    metis_tac[ALL_DISTINCT_PERM, PERM_MAP] >>
+  `ALOOKUP mods = ALOOKUP mods'` by
+    (drule_all alist_to_fmap_PERM >> strip_tac >>
+     metis_tac[ALOOKUP_EQ_FLOOKUP]) >>
+  simp[fmap_eq_flookup, FORALL_PROD, FLOOKUP_type_env_all_modules]
+QED
+
+Theorem type_env_all_modules_constants_order:
+  ALL_DISTINCT (MAP FST mods) ==>
+  type_env_all_modules (constants_order mods) = type_env_all_modules mods
+Proof
+  strip_tac >> irule EQ_SYM >> irule type_env_all_modules_PERM >>
+  simp[] >> once_rewrite_tac[PERM_SYM] >> simp[PERM_constants_order]
+QED
+
 Theorem ALL_DISTINCT_contract_keys_constants_order[local]:
   ALL_DISTINCT (contract_keys f (constants_order mods)) <=>
   ALL_DISTINCT (contract_keys f mods)
@@ -1206,5 +1254,8 @@ Theorem contract_namespaces_ok_constants_order:
 Proof
   `ALL_DISTINCT (MAP FST (constants_order mods)) <=> ALL_DISTINCT (MAP FST mods)` by (
     irule ALL_DISTINCT_PERM >> irule PERM_MAP >> simp[PERM_constants_order]) >>
-  simp[contract_namespaces_ok_def, ALL_DISTINCT_contract_keys_constants_order]
+  Cases_on `ALL_DISTINCT (MAP FST mods)` >>
+  simp[contract_namespaces_ok_def, ALL_DISTINCT_contract_keys_constants_order,
+       type_env_all_modules_constants_order,
+       MATCH_MP PERM_EVERY (SPEC_ALL PERM_constants_order)]
 QED

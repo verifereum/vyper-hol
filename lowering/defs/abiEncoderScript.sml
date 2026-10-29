@@ -396,13 +396,19 @@ Definition compile_abi_decode_dyn_elem_ptr_def:
   compile_abi_decode_dyn_elem_ptr load_opc elem_src src_data hi_op elem_abi_sz =
     do off_val <- emit_op load_opc [elem_src];
        ptr <- emit_op ADD [src_data; off_val];
-       bad <- emit_op LT [ptr; src_data];
-       ok <- emit_op ISZERO [bad];
-       emit_void ASSERT [ok];
-       eend <- emit_op ADD [ptr; Lit (n2w elem_abi_sz)];
-       oob <- emit_op GT [eend; hi_op];
-       ok2 <- emit_op ISZERO [oob];
-       emit_void ASSERT [ok2];
+       (* Python abi_decoder._decode_dyn_array: NONE means immutable
+          calldata/code. Both no-wrap and footprint checks are MEMORY-only.
+          Lit 0w is the compile-time NONE sentinel, not a runtime zero bound. *)
+       (if hi_op = Lit 0w then return ()
+        else
+          do bad <- emit_op LT [ptr; src_data];
+             ok <- emit_op ISZERO [bad];
+             emit_void ASSERT [ok];
+             eend <- emit_op ADD [ptr; Lit (n2w elem_abi_sz)];
+             oob <- emit_op GT [eend; hi_op];
+             ok2 <- emit_op ISZERO [oob];
+             emit_void ASSERT [ok2]
+          od);
        return ptr
     od
 End

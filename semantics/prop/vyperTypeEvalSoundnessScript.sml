@@ -7452,7 +7452,7 @@ Resume eval_scc_type_sound_results_mutual[Expr_Call_Send]:
        rw[]) >>
     qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
     asm_simp_tac bool_ss [Once evaluate_def, bind_def, ignore_bind_def,
-                           type_check_def, assert_def, return_def] >>
+                          type_check_def, assert_def, return_def] >>
     Cases_on `eval_exprs cx es st` >>
     rename1 `eval_exprs cx es st = (args_res,args_st)` >>
     qpat_x_assum `!s'' x t. type_check _ "Send args" s'' = (INL x,t) ==> _`

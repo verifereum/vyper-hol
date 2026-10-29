@@ -712,6 +712,40 @@ Proof
   metis_tac[lowering_context_ok_static_integrity]
 QED
 
+(* Additive checked boundary for grouped, shortest-prefix-first dispatch. *)
+Definition run_grouped_lowering_def:
+  run_grouped_lowering groups internal_fns fallback_fn
+                       (rpolicy : resolved_compiler_policy)
+                       (entry_label : string) : compilation_unit option =
+    if lowering_policy_ok rpolicy /\ rpolicy.rpol_frontend_dispatch = Linear then
+      let st0 = initial_compile_state entry_label in
+      let ((), st1) =
+        compile_generate_grouped_runtime groups internal_fns fallback_fn st0 in
+      case extract_context_with_internals entry_label internal_fns st1 of
+        NONE => NONE
+      | SOME (ctx, data) =>
+          if lowering_context_ok ctx then
+            SOME <| cu_context := ctx; cu_data_segment := data |>
+          else NONE
+    else NONE
+End
+
+Theorem run_grouped_lowering_policy:
+  run_grouped_lowering groups internal_fns fallback_fn rpolicy entry = SOME u ==>
+  lowering_policy_ok rpolicy /\ rpolicy.rpol_frontend_dispatch = Linear
+Proof
+  simp[run_grouped_lowering_def] >>
+  IF_CASES_TAC >> simp[]
+QED
+
+Theorem run_grouped_lowering_context:
+  run_grouped_lowering groups internal_fns fallback_fn rpolicy entry = SOME u ==>
+  lowering_context_ok u.cu_context
+Proof
+  simp[run_grouped_lowering_def] >>
+  pairarg_tac >> gvs[AllCaseEqs()] >> rpt strip_tac >> gvs[]
+QED
+
 Theorem run_deploy_lowering_static_integrity:
   run_deploy_lowering has_constructor rpolicy runtime_bytecode immutables_len
     constructor_args data_size ctor_internal_fns cenv (ctor_stmts : stmt list) is_payable

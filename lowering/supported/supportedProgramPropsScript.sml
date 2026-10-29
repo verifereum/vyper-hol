@@ -3,7 +3,8 @@
 Theory supportedProgramProps
 Ancestors
   supportedProgram supportedStmts supportedStmtTraverse supportedNames
-  supportedExprTraverse supportedExprProps supportedExprFormProps vyperAST list integer
+  supportedExprTraverse supportedExprProps supportedExprFormProps
+  vyperTypeContract vyperAST list integer
 Libs
   intLib
 
@@ -180,9 +181,7 @@ QED
 
 Theorem supported_declaration_exclusions_assembled:
   EVERY (\top. ~supported_program [top])
-    [FunctionDecl Deploy Nonpayable T F "__init__" [] [] NoneT [];
-     FunctionDecl Deploy Nonpayable F T "__init__" [] [] NoneT [];
-     FunctionDecl Deploy Nonpayable F F "__init__" [] [expr_test_uint] NoneT [];
+    [FunctionDecl Deploy Nonpayable F T "__init__" [] [] NoneT [];
      VariableDecl Private Immutable "x" (BaseT (UintT 256)) (SOME 0);
      VariableDecl Private (Constant expr_test_uint) "x" (BaseT (UintT 256)) NONE;
      VariableDecl Public Storage "x" (BaseT (UintT 256)) (SOME 0);
@@ -195,20 +194,56 @@ Proof
   EVAL_TAC
 QED
 
+(* Entry/header validity is checked by check_contract, not the whitelist. *)
+Theorem supported_entry_header_context:
+  supported_program [FunctionDecl Deploy Nonpayable T F "__init__" [] [] NoneT []] /\
+  supported_program [FunctionDecl Deploy Nonpayable F F "__init__" [] [expr_test_uint] NoneT []] /\
+  ~function_header_ok Deploy Nonpayable F F "__init__" [] [expr_test_uint] NoneT
+Proof
+  EVAL_TAC
+QED
+
 Theorem supported_fallback_context:
   supported_program [FunctionDecl External Payable F F "__default__" [] [] NoneT [Pass]] /\
-  ~supported_program [FunctionDecl External Payable F F "__default__"
-    [("arg",BaseT (UintT 256))] [] NoneT []]
+  supported_program [FunctionDecl External Payable F F "__default__"
+    [("arg",BaseT (UintT 256))] [] NoneT []] /\
+  ~function_header_ok External Payable F F "__default__"
+    [("arg",BaseT (UintT 256))] [] NoneT
 Proof
   EVAL_TAC
 QED
 
 Theorem supported_name_checks_assembled:
   ~supported_program [program_test_internal []; program_test_internal []] /\
+  ~contract_namespaces_ok F
+    [(NONE,[program_test_internal []; program_test_internal []])] /\
   ~supported_program [EventDecl "E" []; EventDecl "E" []] /\
   supported_program
     [VariableDecl Private Storage "field_name" (BaseT (UintT 256)) (SOME 0);
      StructDecl "S" [("field_name",BaseT (UintT 256))]]
+Proof
+  EVAL_TAC
+QED
+
+(* Source-shape uniqueness is internal-only, not a global namespace check. *)
+Theorem supported_function_name_sharing:
+  supported_program
+    [FunctionDecl External Pure F F "helper" [] [] NoneT [];
+     program_test_internal []] /\
+  supported_program [program_test_deploy []; program_test_deploy []]
+Proof
+  EVAL_TAC
+QED
+
+Theorem supported_default_expression_checks:
+  supported_program
+    [FunctionDecl External Pure F F "answer" [("x",BaseT (UintT 256))]
+       [expr_test_uint] NoneT []] /\
+  EVERY (\e. ~supported_program
+    [FunctionDecl Deploy Nonpayable F F "__init__" [] [e] NoneT []])
+    [Builtin (BaseT (UintT 256)) (Env MsgGas) [];
+     Builtin (BaseT (UintT 256)) (Bop Add) [];
+     Name (StructT (SOME 0,"S")) "x"]
 Proof
   EVAL_TAC
 QED
