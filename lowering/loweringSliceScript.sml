@@ -389,7 +389,7 @@ Proof
   fs[stmt_state_rel_def] >> metis_tac[]
 QED
 
-Theorem emit_inst_unit[local]:
+Theorem emit_inst_unit:
   !opc ops outs st x st'.
     emit_inst opc ops outs st = (x, st') ==>
     emit_inst opc ops outs st = ((), st')
