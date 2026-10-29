@@ -394,6 +394,9 @@ Datatype:
   | InterfaceDecl identifier (interface_func list)
 End
 
+(* Contexts and ABI entries must share one encoding of declarations. *)
+val _ = cv_typeLib.rec_define_from_to “:toplevel”;
+
 (* Keyword arguments must name the parameters in declaration order: Vyper
    rejects any other order ("keys are required to be in order",
    validate_kwargs in vyper/semantics/analysis/utils.py), and duplicates,
