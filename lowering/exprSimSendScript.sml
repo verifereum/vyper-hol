@@ -332,6 +332,45 @@ Proof
        finite_mapTheory.FLOOKUP_UPDATE]
 QED
 
+Theorem send_call_read_step[local]:
+  stmt_state_rel func cenv cx es1 t /\
+  outcomes_accounts_typed es1.outcomes /\
+  accounts_runtime_well_typed es1.accounts /\
+  IS_SOME (eval_operand gas_op t) /\
+  eval_operand addr_op t = SOME aw /\ dest_AddressV to_v = SOME (w2w aw) /\
+  eval_operand val_op t = SOME vw /\ dest_NumV amount_v = SOME (w2n vw) /\
+  LENGTH gas_vs = (if has_gas then 1 else 0) /\
+  (do tv <- eval_send cx has_gas (to_v :: amount_v :: gas_vs);
+      read_result cx tv od) es1 = (res, es') ==>
+  ?t'. t' = t with <| vs_outcomes := t'.vs_outcomes;
+                       vs_requests := t'.vs_requests;
+                       vs_accounts := t'.vs_accounts;
+                       vs_transient := t'.vs_transient;
+                       vs_logs := t'.vs_logs;
+                       vs_pending_deletions := t'.vs_pending_deletions;
+                       vs_returndata := t'.vs_returndata |> /\
+    ((res = INL NoneV /\
+      step_inst_base (mk_inst id CALL
+        [gas_op;addr_op;val_op;Lit 0w;Lit 0w;Lit 0w;Lit 0w] [out]) t =
+        OK (update_var out 1w t') /\ state_rel func cenv cx es' t') \/
+     (res = INR (Error (RuntimeError "send failed")) /\
+      step_inst_base (mk_inst id CALL
+        [gas_op;addr_op;val_op;Lit 0w;Lit 0w;Lit 0w;Lit 0w] [out]) t =
+        OK (update_var out 0w t')))
+Proof
+  strip_tac >> drule eval_send_read >> strip_tac >>
+  `state_rel func cenv cx es1 t` by fs[stmt_state_rel_def] >>
+  `es1.outcomes = SOME t.vs_outcomes` by fs[state_rel_def] >>
+  `r <> INR (Error (RuntimeError "call outcome accounts"))` by
+    (drule_all eval_send_outcome_typed >> simp[]) >>
+  drule_all (send_call_oracle_step |> SPEC_ALL |>
+    Q.INST [`inst` |-> `mk_inst id CALL
+      [gas_op;addr_op;val_op;Lit 0w;Lit 0w;Lit 0w;Lit 0w] [out]`] |>
+    SRULE [mk_inst_def]) >>
+  disch_then (qspecl_then [`out`, `id`] strip_assume_tac) >>
+  gvs[mk_inst_def] >> metis_tac[]
+QED
+
 Theorem send_tail_frag:
   emit_op CALL [gas_op; addr_op; val_op; Lit 0w; Lit 0w; Lit 0w; Lit 0w]
     sm = (success, s3) /\
@@ -353,13 +392,15 @@ Theorem send_tail_frag:
     (expr_exit res)
 Proof
   strip_tac >> drule_all send_tail_shape >> strip_tac >>
-  qpat_x_assum `bind _ _ _ = _` (strip_assume_tac o MATCH_MP eval_send_read) >>
   `~not_fresh_at sm out` by gvs[not_fresh_at_def] >>
   `emitted_insts sm sb =
      [mk_inst sm.cs_next_id CALL
         [gas_op; addr_op; val_op; Lit 0w; Lit 0w; Lit 0w; Lit 0w] [out];
       mk_inst (sm.cs_next_id + 1) ASSERT [Var out] []]` by
     fs[emitted_insts_def, rich_listTheory.DROP_LENGTH_APPEND] >>
+  (* Replaced failed specialization (raw evaluation was first obtained by
+     qpat_x_assum `bind _ _ _ = _`
+       (strip_assume_tac o MATCH_MP eval_send_read)):
   `state_rel func cenv cx es1 t` by fs[stmt_state_rel_def] >>
   qspecl_then [`func`, `cenv`, `cx`, `es1`, `t`,
                `mk_inst sm.cs_next_id CALL
@@ -371,16 +412,26 @@ Proof
   `es1.outcomes = SOME t.vs_outcomes` by fs[state_rel_def] >>
   `r <> INR (Error (RuntimeError "call outcome accounts"))` by
     (drule_all eval_send_outcome_typed >> simp[]) >>
-  simp[] >> strip_tac >>
+  simp[] >> strip_tac >> *)
+  drule_all send_call_read_step >>
+  disch_then (qspecl_then [`out`, `sm.cs_next_id`] strip_assume_tac) >>
+  rename1 `s' = t with <| vs_outcomes := _; vs_requests := _;
+    vs_accounts := _; vs_transient := _; vs_logs := _;
+    vs_pending_deletions := _; vs_returndata := _ |>` >>
   `s'.vs_allocas = t.vs_allocas /\ s'.vs_alloca_next = t.vs_alloca_next /\
    s'.vs_memory = t.vs_memory /\ s'.vs_vars = t.vs_vars` by
     (qpat_x_assum `s' = _` (fn th => ONCE_REWRITE_TAC [th]) >> simp[]) >>
+  (* Replaced branch search:
   irule frag_exec_run_inst_seq >> rpt conj_tac >>
   TRY (fs[rich_listTheory.IS_PREFIX_APPEND, mk_inst_def, is_terminator_def] >>
-       NO_TAC) >>
-  rpt strip_tac >>
+       NO_TAC) >> rpt strip_tac >>
   TRY (gvs[run_inst_seq_def, send_assert_fail, expr_exit_def] >> NO_TAC) >>
-  gvs[run_inst_seq_def, send_assert_ok] >>
+  gvs[run_inst_seq_def, send_assert_ok] >> *)
+  irule frag_exec_run_inst_seq >>
+  simp[rich_listTheory.IS_PREFIX_APPEND, mk_inst_def, is_terminator_def] >>
+  rpt strip_tac >>
+  gvs[run_inst_seq_def, SRULE [mk_inst_def] send_assert_ok,
+      SRULE [mk_inst_def] send_assert_fail, expr_exit_def, mk_inst_def] >>
   irule expr_post_none_intro >> simp[stmt_state_rel_inst_idx] >>
   conj_tac
   >- (irule stmt_state_rel_update_var >> conj_tac
@@ -435,13 +486,19 @@ Proof
   `fn_has_code sa sm func /\ fn_has_code sm sb func` by
     metis_tac[fn_has_code_mid, cs_extends_refl] >>
   drule_all eval_expr_send_cases >> strip_tac
-  >- (gvs[] >> drule_all lower_typed_args_sim >>
+  >- (gvs[] >>
+      (* Replaced: gvs[] >> drule_all lower_typed_args_sim. *)
+      `(\s. expr_sim_inv cenv cx env s /\ source_supply s) es` by simp[] >>
+      drule_all lower_typed_args_sim >>
       disch_then (qspec_then `s0` mp_tac) >> simp[wb_args_exit_def] >>
       strip_tac >> irule frag_exec_exit_prefix >>
       goal_assum (drule_at Any) >> simp[]) >>
   `local_ptrs_reserved cenv sm` by metis_tac[local_ptrs_reserved_next_var] >>
+  (* Present the paired invariant explicitly for argument transport;
+     replaced: ... by metis_tac[typed_args_ready_inv]. *)
+  `(\s. expr_sim_inv cenv cx env s /\ source_supply s) es` by simp[] >>
   `expr_sim_inv cenv cx env es1 /\ source_supply es1` by
-    metis_tac[typed_args_ready_inv] >>
+    (drule_all typed_args_ready_inv >> simp[]) >>
   `LIST_REL (\e v. ?tv. evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
                         value_has_type tv v) args vs` by
     (drule_at (Pat `eval_exprs _ _ _ = _`) stack_args_values_typed >>
@@ -468,12 +525,18 @@ Proof
   qpat_assum `emit_void _ _ _ = _` (irule_at Any) >>
   qpat_assum `eval_operand addr_op _ = _` (irule_at Any) >>
   qpat_assum `eval_operand val_op _ = _` (irule_at Any) >>
+  (* Replaced undirected dispatch:
   rpt conj_tac >>
   FIRST [first_assum ACCEPT_TAC,
          irule address_typed_dest >> first_assum ACCEPT_TAC,
          irule uint256_typed_dest >> first_assum ACCEPT_TAC,
          Cases_on `has_gas` >> gvs[eval_operand_def] >> NO_TAC,
-         fs[] >> NO_TAC]
+         fs[] >> NO_TAC] *)
+  simp[] >> conj_tac
+  >- (Cases_on `has_gas` >> gvs[eval_operand_def]) >>
+  conj_tac
+  >- (irule address_typed_dest >> simp[]) >>
+  irule uint256_typed_dest >> simp[]
 QED
 
 (* TOP-LEVEL *)
