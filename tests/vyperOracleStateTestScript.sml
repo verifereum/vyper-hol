@@ -229,7 +229,10 @@ Proof
   strip_tac >> gvs[] >>
   simp[oracle_state_smoke_def, oracle_initial_state_concrete_send,
        empty_state_def, oracle_state_empty_concrete_call] >>
-  simp[evaluate_def, eval_ext_call_def, bind_def, return_def, raise_def]
+  (* Previous tail omitted the captured-argument read:
+     simp[evaluate_def, eval_ext_call_def, bind_def, return_def, raise_def] *)
+  simp[evaluate_def, read_results_def, eval_ext_call_def,
+       bind_def, return_def, raise_def]
 QED
 
 Theorem oracle_state_none_cv:

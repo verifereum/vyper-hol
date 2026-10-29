@@ -135,5 +135,8 @@ Proof
   simp_tac pure_ss [LET_THM] >> conj_tac
   >- (strip_tac >> gvs[] >>
       simp[oracle_initial_state_concrete_send, initial_state_def]) >>
-  simp[evaluate_def, eval_ext_call_def, bind_def, return_def, raise_def]
+  (* Previous tail omitted the captured-argument read:
+     simp[evaluate_def, eval_ext_call_def, bind_def, return_def, raise_def] *)
+  simp[evaluate_def, read_results_def, eval_ext_call_def,
+       bind_def, return_def, raise_def]
 QED
