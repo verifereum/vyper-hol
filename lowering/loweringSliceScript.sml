@@ -470,6 +470,40 @@ Proof
   metis_tac[]
 QED
 
+(* A declaration adds a tracked allocation region; all other live regions
+   are transported through their preserved pointer variables. *)
+Theorem immutable_alloca_sep_declare_local[local]:
+  !func cenv cx es s es' t id entry p sz w inst.
+    immutable_alloca_sep func cenv cx es s /\
+    es'.immutables = es.immutables /\
+    t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
+    lookup_scopes id es'.scopes = SOME entry /\
+    (!n. n <> id ==> lookup_scopes n es'.scopes = lookup_scopes n es.scopes) /\
+    FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
+    lookup_var p t = SOME w /\
+    (!q. ~not_local_ptr cenv es.scopes q ==> lookup_var q t = lookup_var q s) /\
+    MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+    FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n w,sz) ==>
+    immutable_alloca_sep func cenv cx es' t
+Proof
+  rpt gen_tac >> strip_tac >>
+  fs[immutable_alloca_sep_def] >>
+  disch_tac >> rpt gen_tac >> strip_tac >>
+  first_x_assum drule_all >> strip_tac >> simp[] >>
+  conj_tac >- metis_tac[] >>
+  rpt strip_tac >>
+  rename1 `local_region cenv es'.scopes t n b z` >>
+  Cases_on `n = id`
+  >- (gvs[local_region_def] >> metis_tac[]) >>
+  `local_region cenv es.scopes s n b z` by
+    (fs[local_region_def] >>
+     rename1 `FLOOKUP cenv.ce_vars n = SOME (PtrVar (Var q) z)` >>
+     `~not_local_ptr cenv es.scopes q` by
+       (simp[not_local_ptr_def] >> metis_tac[]) >>
+     metis_tac[]) >>
+  metis_tac[]
+QED
+
 (* Storing a word into a new local's region, whose ALLOCA ran, binds the
    local in the innermost scope, assignable (a declaration) or not (a loop
    variable). *)
@@ -551,8 +585,9 @@ Proof
   `alloca_room func s'` by
     (irule alloca_room_fields >> qexists_tac `s` >> fs[stmt_state_rel_def]) >>
   `immutable_alloca_sep func cenv cx (es with scopes := scs') s'` by
-    (irule immutable_alloca_sep_fields >> qexistsl_tac [`s`, `es`] >>
-     fs[stmt_state_rel_def]) >>
+    (irule immutable_alloca_sep_declare_local >>
+     qexistsl_tac [`entry`, `es`, `id`, `inst`, `p`, `s`, `sz`, `w`] >>
+     simp[] >> fs[stmt_state_rel_def, lookup_var_def]) >>
   fs[stmt_state_rel_def] >> metis_tac[]
 QED
 
