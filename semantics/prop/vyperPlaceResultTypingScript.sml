@@ -1653,15 +1653,32 @@ Proof
   ho_match_mp_tac scope_pop_effect_bind >> simp[]
 QED
 
+(* Original eval_raw_revert_scope_effect proof:
+  strip_tac >> rewrite_tac[Once evaluate_def, ignore_bind_def] >>
+  ho_match_mp_tac scope_pop_effect_bind >> conj_tac >- simp[] >> gen_tac >>
+  ho_match_mp_tac scope_pop_effect_bind >> simp[]
+*)
 Theorem eval_raw_revert_scope_effect[local]:
   scope_pop_effect (eval_exprs cx es) ==>
   scope_pop_effect (eval_expr cx (Call ty RawRevert es drv))
 Proof
   strip_tac >> rewrite_tac[Once evaluate_def, ignore_bind_def] >>
   ho_match_mp_tac scope_pop_effect_bind >> conj_tac >- simp[] >> gen_tac >>
-  ho_match_mp_tac scope_pop_effect_bind >> simp[]
+  ho_match_mp_tac scope_pop_effect_bind >> conj_tac >- simp[] >> gen_tac >>
+  irule scope_pop_effect_identity >>
+  Cases_on `dest_BytesV (HD vs)` >>
+  simp[bind_def, lift_option_type_def, raise_def, return_def]
 QED
 
+(* Original eval_selfdestruct_scope_effect proof:
+  strip_tac >> rewrite_tac[Once evaluate_def] >>
+  ho_match_mp_tac scope_pop_effect_bind >> conj_tac >- simp[] >> gen_tac >>
+  irule scope_pop_effect_identity >>
+  rw[ignore_bind_def, bind_def, type_check_def, assert_def,
+     lift_option_type_def, get_accounts_def, update_accounts_def,
+     update_pending_deletions_def, return_def, raise_def,
+     COND_RATOR, AllCaseEqs()]
+*)
 Theorem eval_selfdestruct_scope_effect[local]:
   scope_pop_effect (eval_exprs cx es) ==>
   scope_pop_effect (eval_expr cx (Call ty SelfDestructTarget es drv))
@@ -1672,7 +1689,8 @@ Proof
   rw[ignore_bind_def, bind_def, type_check_def, assert_def,
      lift_option_type_def, get_accounts_def, update_accounts_def,
      update_pending_deletions_def, return_def, raise_def,
-     COND_RATOR, AllCaseEqs()]
+     COND_RATOR, AllCaseEqs()] >>
+  Cases_on `dest_AddressV (HD vs)` >> gvs[raise_def, return_def]
 QED
 
 Theorem eval_raw_log_scope_effect[local]:
@@ -1783,6 +1801,31 @@ Proof
   metis_tac[finally_pop_function_then_scopes]
 QED
 
+Theorem finally_unless_halt_pop_function_scopes[local]:
+  !f g prev st res st'.
+  finally_unless_halt (finally f (pop_function prev)) g st = (res,st') /\
+  (!s r s'. g s = (r,s') ==> s'.scopes = s.scopes) ==>
+  st'.scopes = prev
+Proof
+  rw[finally_unless_halt_def, ignore_bind_def, bind_def,
+     return_def, raise_def, AllCaseEqs()] >>
+  imp_res_tac finally_pop_function_scopes >> gvs[] >> metis_tac[]
+QED
+
+Theorem finally_unless_halt_conditional_lock_scopes[local]:
+  finally_unless_halt (finally f (pop_function prev))
+    (if guard then case slot of NONE => return ()
+       | SOME s => release_nonreentrant_lock addr s else return ())
+    st = (res,st') ==> st'.scopes = prev
+Proof
+  `!s r s'. (if guard then case slot of NONE => return ()
+      | SOME k => release_nonreentrant_lock addr k else return ()) s = (r,s')
+      ==> s'.scopes = s.scopes` by
+    (Cases_on `guard` >> Cases_on `slot` >> simp[return_def] >>
+     metis_tac[release_nonreentrant_lock_scopes]) >>
+  metis_tac[finally_unless_halt_pop_function_scopes]
+QED
+
 Theorem read_results_scope_pop_effect[local,simp]:
   scope_pop_effect (read_results cx results)
 Proof
@@ -1885,7 +1928,8 @@ Resume eval_mutual_scope_pop_effect_results[IntCall]:
   imp_res_tac finally_set_scopes >>
   imp_res_tac read_results_state >>
   imp_res_tac lift_option_type_scopes >>
-  imp_res_tac (SRULE[ignore_bind_def] finally_conditional_lock_scopes) >>
+  (* Original: imp_res_tac (SRULE[ignore_bind_def] finally_conditional_lock_scopes) >> *)
+  imp_res_tac finally_unless_halt_conditional_lock_scopes >>
   gvs[] >>
   gvs[push_function_def, return_def, AllCaseEqs()] >>
   imp_res_tac acquire_nonreentrant_lock_scopes >>
