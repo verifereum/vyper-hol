@@ -83,6 +83,7 @@ Theorem stmt_state_rel_write_local:
     (!q. ~not_local_ptr cenv es.scopes q ==> lookup_var q t = lookup_var q s) /\
     (!b n. b + n <= w2n w \/ w2n w + type_memory_size entry.type <= b ==>
            mem_bytes_at b n t.vs_memory = mem_bytes_at b n s.vs_memory) /\
+    immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es t /\
     val_wf entry.type v /\ val_in_memory entry.type v (w2n w) t.vs_memory ==>
     stmt_state_rel func cenv cx
       (es with scopes :=
@@ -140,8 +141,7 @@ Proof
   `local_ptrs_rel func cenv scs' t` by
     (irule local_ptrs_rel_write_local >>
      qexistsl_tac [`entry'`, `id`, `p`, `es.scopes`, `s`, `sz`, `w`] >>
-     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-     rpt strip_tac >> gvs[]) >>
+     rpt conj_tac >> asm_rewrite_tac[] >> rpt strip_tac >> gvs[]) >>
   `state_rel func cenv cx (es with scopes := scs') t` by
     (irule state_rel_frame >> conj_tac >- simp[] >>
      qexists_tac `es` >> qexists_tac `s` >>
@@ -150,10 +150,39 @@ Proof
   `alloca_inv t` by (irule alloca_inv_fields >> qexists_tac `s` >> simp[]) >>
   `alloca_room func t` by
     (irule alloca_room_fields >> qexists_tac `s` >> fs[stmt_state_rel_def]) >>
+  `immutable_alloca_sep func cenv cx (es with scopes := scs') t` by
+    (irule immutable_alloca_sep_fields >> qexistsl_tac [`s`, `es`] >>
+     simp[] >> reverse conj_tac >- fs[stmt_state_rel_def] >>
+     rpt strip_tac >> qexists_tac `id'` >>
+     gvs[local_region_def] >>
+     qpat_x_assum `!n e q sq. _ ==> lookup_var q t = _` drule_all >>
+     strip_tac >> Cases_on `id' = id` >> gvs[] >> metis_tac[]) >>
   fs[stmt_state_rel_def] >> metis_tac[]
 QED
 
 (* One MSTORE of a word that lays v out at the local's base. *)
+Theorem local_mstore_immutables[local]:
+  stmt_state_rel func cenv cx es s /\
+  local_region cenv es.scopes s id b sz /\ 32 <= sz ==>
+  immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es
+    (mstore b wd s)
+Proof
+  strip_tac >> irule immutables_rel_mem_agree >> qexists_tac `s` >>
+  conj_tac
+  >- simp[immutableMemoryFrameTheory.immutable_mstore_capacity,
+          arithmeticTheory.MAX_DEF] >>
+  conj_tac >- simp[mstore_def] >>
+  reverse conj_tac >- gvs[stmt_state_rel_def, state_rel_def] >>
+  rpt strip_tac >>
+  `regions_disjoint off (type_memory_size tv) b sz` by
+    (qpat_x_assum `stmt_state_rel _ _ _ _ _` mp_tac >>
+     pure_rewrite_tac[stmt_state_rel_def, immutable_alloca_sep_def] >>
+     strip_tac >> qpat_x_assum `cenv.ce_is_ctor ==> _` drule >>
+     disch_then drule_all >> strip_tac >> metis_tac[]) >>
+  irule mstore_mem_bytes_at_disjoint >>
+  gvs[compileEnvTheory.regions_disjoint_def] >> decide_tac
+QED
+
 Theorem stmt_state_rel_write_local_word:
   !func cenv cx es s id p sz w pre env entry rest v wd.
     stmt_state_rel func cenv cx es s /\
@@ -178,11 +207,17 @@ Proof
          mem_bytes_at b n (mstore (w2n w) wd s).vs_memory =
          mem_bytes_at b n s.vs_memory` by
     (rpt strip_tac >> irule mstore_mem_bytes_at_disjoint >> gvs[]) >>
-  qspecl_then [`func`, `cenv`, `cx`, `es`, `s`, `mstore (w2n w) wd s`, `id`,
-               `p`, `sz`, `w`, `pre`, `env`, `entry`, `rest`, `v`]
-    mp_tac stmt_state_rel_write_local >>
-  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  simp[]
+  `lookup_scopes id es.scopes = SOME entry` by
+    metis_tac[find_containing_scope_lookup] >>
+  `local_region cenv es.scopes s id (w2n w) sz` by simp[local_region_def] >>
+  `32 <= sz` by
+    (fs[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def] >>
+     first_x_assum drule_all >> simp[]) >>
+  `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es
+     (mstore (w2n w) wd s)` by (drule_all local_mstore_immutables >> simp[]) >>
+  irule stmt_state_rel_write_local >> asm_rewrite_tac[] >>
+  qexistsl_tac [`p`, `s`, `sz`, `w`] >> asm_rewrite_tac[] >>
+  rpt strip_tac >> irule mstore_mem_bytes_at_disjoint >> simp[]
 QED
 
 (* The typed word of a value of the local's type that the store lays out
