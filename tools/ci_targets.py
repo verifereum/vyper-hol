@@ -141,6 +141,8 @@ def test_dependencies(project: Project) -> list[str]:
     """
     headers = [Header.read(script) for script in sorted(project.root.joinpath(GENERATED_TESTS).glob("*Script.sml"))]
     headers.append(Header.read(project.root / TEST_COVERAGE_REPORT))
+    # The test-deps job runs before wrappers are generated on a fresh checkout.
+    headers.append(Header("", ("jsonToVyper",), ("vyperTestLib", "vyperTestRunnerLib")))
     generated = {header.name for header in headers}
     return project.targets((name for header in headers for name in header.ancestors if name not in generated),
                            (name for header in headers for name in header.libs))

@@ -332,8 +332,8 @@ val generated_dir = "generated"
 fun check_generate_dirs () = (
   if OS.FileSys.isDir test_exports_root then ()
   else raise Fail "vyper-test-exports not found - run from tests/ directory";
-  if OS.FileSys.isDir generated_dir then ()
-  else raise Fail "generated/ not found - run from tests/ directory"
+  if OS.FileSys.access(generated_dir, []) then ()
+  else OS.FileSys.mkDir generated_dir
 )
 
 (* Directory-level allowlist plus small explicit allowlist. *)

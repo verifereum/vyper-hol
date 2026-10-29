@@ -48,6 +48,14 @@ class TestHeader(ProjectTestCase):
 class TestTestDependencies(ProjectTestCase):
     """What the test groups load besides the generated test theories."""
 
+    def test_fresh_checkout_needs_no_generated_wrappers(self) -> None:
+        self.write("tests/vyperTestCoverageReportScript.sml", "Theory vyperTestCoverageReport\nLibs vyperTestLib\n")
+        self.write("frontend/jsonToVyperScript.sml", "Theory jsonToVyper\n")
+        self.write("tests/vyperTestLib.sml")
+        self.write("tests/vyperTestRunnerLib.sml")
+        self.assertEqual(test_dependencies(Project(self.root)),
+                         ["jsonToVyperTheory", "vyperTestLib", "vyperTestRunnerLib"])
+
     def test_generated_theories_and_hol_names_are_left_out(self) -> None:
         self.write("tests/generated/vyperTestDefs_aScript.sml", "Theory vyperTestDefs_a\nAncestors jsonToVyper list\nLibs vyperTestLib\n")
         self.write("tests/generated/vyperTest_aScript.sml", "Theory vyperTest_a\nAncestors vyperTestDefs_a\nLibs vyperTestRunnerLib computeLib\n")

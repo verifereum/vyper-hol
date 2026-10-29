@@ -1,5 +1,0 @@
-Theory vyperTestDefs_functional_codegen_types_test_struct[no_sig_docs]
-Ancestors jsonToVyper
-Libs vyperTestLib
-val () = holbuild_extra_deps ["../vyper-test-exports/functional/codegen/types/test_struct.json", "../vyper-test-exports/functional/codegen/types/test_struct.json.provenance"];
-val () = make_definitions_for_file ("functional_codegen_types_test_struct", "../vyper-test-exports/functional/codegen/types/test_struct.json");

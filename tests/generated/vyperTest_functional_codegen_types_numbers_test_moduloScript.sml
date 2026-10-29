@@ -1,4 +1,0 @@
-Theory vyperTest_functional_codegen_types_numbers_test_modulo[no_sig_docs]
-Ancestors vyperTestDefs_functional_codegen_types_numbers_test_modulo
-Libs vyperTestRunnerLib
-val () = run_tests_on_traces $ all_traces "vyperTestDefs_functional_codegen_types_numbers_test_modulo";

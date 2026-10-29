@@ -1,4 +1,0 @@
-Theory vyperTest_functional_codegen_types_test_string_part3[no_sig_docs]
-Ancestors vyperTestDefs_functional_codegen_types_test_string_part3
-Libs vyperTestRunnerLib
-val () = List.app run_test_on_traces $ all_traces "vyperTestDefs_functional_codegen_types_test_string_part3";

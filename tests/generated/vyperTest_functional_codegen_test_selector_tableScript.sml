@@ -1,4 +1,0 @@
-Theory vyperTest_functional_codegen_test_selector_table[no_sig_docs]
-Ancestors vyperTestDefs_functional_codegen_test_selector_table
-Libs vyperTestRunnerLib
-val () = run_tests_on_traces $ all_traces "vyperTestDefs_functional_codegen_test_selector_table";

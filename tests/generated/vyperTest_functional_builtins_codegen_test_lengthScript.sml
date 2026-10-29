@@ -1,4 +1,0 @@
-Theory vyperTest_functional_builtins_codegen_test_length[no_sig_docs]
-Ancestors vyperTestDefs_functional_builtins_codegen_test_length
-Libs vyperTestRunnerLib
-val () = run_tests_on_traces $ all_traces "vyperTestDefs_functional_builtins_codegen_test_length";

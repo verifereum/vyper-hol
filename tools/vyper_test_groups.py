@@ -21,7 +21,7 @@ WORKERS = 4
 
 BUILT = re.compile(r"^\S+Z (vyperTest(?:Defs)?_\S+)Theory built in ([\d.]+)s$")
 ANCESTOR = re.compile(r"^Ancestors (vyperTestDefs_\S+)$", re.MULTILINE)
-CHUNK = re.compile(r"^(.*)_chunk\d+$")
+CHUNK = re.compile(r"^(.*)_part\d+$")
 
 
 @dataclass(frozen=True)
@@ -62,11 +62,12 @@ class BuildTimes:
         A test split into trace chunks has CI times only for the unsplit
         test until the chunks have run.
         """
-        chunks: dict[str, list[str]] = {}
+        chunks: dict[str, set[str]] = {}
         for test in tests:
-            match = CHUNK.match(test.name)
-            if match:
-                chunks.setdefault(match[1], []).append(test.name)
+            for name in (test.name, test.defs):
+                match = CHUNK.match(name)
+                if match:
+                    chunks.setdefault(match[1], set()).add(name)
         for whole, names in chunks.items():
             if whole in self.seconds:
                 for name in names:
@@ -144,7 +145,8 @@ class CiLogs:
         """Logs of the run's successful test-group jobs."""
         jobs = self.gh("api", f"repos/{self.repo}/actions/runs/{run}/jobs", "--paginate", "-q",
                        '.jobs[]|select((.name|startswith("vyper-tests")) and .conclusion=="success")|.id')
-        return [self.gh("api", f"repos/{self.repo}/actions/jobs/{job}/logs") for job in jobs.split()]
+        return [self.gh("api", "--allow-escape-sequences", f"repos/{self.repo}/actions/jobs/{job}/logs")
+                for job in jobs.split()]
 
     def gh(self, *args: str) -> str:
         """Run `gh` and return its output."""

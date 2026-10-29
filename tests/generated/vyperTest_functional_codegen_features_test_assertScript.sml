@@ -1,4 +1,0 @@
-Theory vyperTest_functional_codegen_features_test_assert[no_sig_docs]
-Ancestors vyperTestDefs_functional_codegen_features_test_assert
-Libs vyperTestRunnerLib
-val () = run_tests_on_traces $ all_traces "vyperTestDefs_functional_codegen_features_test_assert";
