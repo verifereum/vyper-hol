@@ -18,7 +18,7 @@
  * Helpers:
  *   elems_val_wf_EL, elems_val_wf_FRONT, elems_in_memory_FRONT,
  *     elems_in_memory_mstore_before — the array's layout
- *   lookup_scopes_update_other, eval_base_target_name, eval_pop_name — the
+ *   lookup_scopes_update_other, eval_target_place_name, eval_pop_name — the
  *     source side
  *   compile_expr_pop_name, dynarray_pop_mem_shape, dynarray_pop_mem_run_empty,
  *     dynarray_pop_mem_run — the lowering and its run
@@ -97,26 +97,34 @@ Proof
   irule lookup_scopes_update_other >> first_assum ACCEPT_TAC
 QED
 
-Theorem eval_base_target_name:
+Theorem eval_target_place_name:
   !cx id es.
     IS_SOME (lookup_scopes id es.scopes) ==>
-    eval_base_target cx (NameTarget id) es = (INL (ScopedVar id, []), es)
+    eval_target_place cx (NameTarget id) es = (INL (MemoryPlace id []), es)
 Proof
+  simp[Once evaluate_def, bind_def, get_place_def] >>
   simp[Once evaluate_def, bind_def, ignore_bind_def, get_scopes_def,
-       type_check_def, assert_def, return_def]
+       type_check_def, assert_def, return_def, get_place_def]
 QED
 
+(* The popped element's place: the last index of x, past its new length,
+   where the entry's popped history keeps the element. *)
 Theorem eval_pop_name:
   !cx ann id es res es' entry vs.
     lookup_scopes id es.scopes = SOME entry /\ entry.assignable /\
     entry.value = ArrayV (DynArrayV vs) /\
     eval_expr cx (Pop ann (NameTarget id)) es = (res, es') ==>
-    (vs = [] /\ res = INR (Error (RuntimeError "pop empty"))) \/
-    (vs <> [] /\ res = INL (Value (LAST vs)) /\
+    (vs = [] /\ res = INR (Error (RuntimeError "pop empty memory array"))) \/
+    (vs <> [] /\
+     res = INL (PlaceR (MemoryPlace id
+                          [ValueSubscript (IntV &(LENGTH vs - 1))])) /\
      ?pre env rest.
        find_containing_scope id es.scopes = SOME (pre, env, entry, rest) /\
        es' = es with scopes :=
-         pre ++ env |+ (id, entry with value := ArrayV (DynArrayV (FRONT vs)))
+         pre ++ env |+ (id, entry with
+           <| value := ArrayV (DynArrayV (FRONT vs));
+              popped := ([ValueSubscript (IntV &(LENGTH vs - 1))], LAST vs)
+                          :: entry.popped |>)
            :: rest)
 Proof
   rpt gen_tac >> strip_tac >>
@@ -124,12 +132,12 @@ Proof
   `IS_SOME (lookup_scopes id es.scopes)` by simp[] >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
   simp[Once evaluate_def, bind_def] >>
-  drule_then (qspec_then `cx` SUBST1_TAC) eval_base_target_name >>
-  fs[assign_target_def, bind_def, ignore_bind_def, get_scopes_def,
-       lift_option_def, type_check_def, assert_def, return_def, raise_def,
-       lift_sum_def, assign_subscripts_def, pop_element_def, set_scopes_def,
-       assign_result_def, evaluate_subscripts_def, popped_value_def,
-       lift_option_type_def] >>
+  drule_then (qspec_then `cx` SUBST1_TAC) eval_target_place_name >>
+  simp[pop_place_def, bind_def, ignore_bind_def, get_scopes_def,
+       lift_option_type_def, type_check_def, check_def, assert_def,
+       return_def, raise_def, lift_sum_def, read_memory_path_def,
+       evaluate_subscripts_def, assign_subscripts_def, pop_element_def,
+       popped_value_def, record_pop_def, set_scopes_def, LET_THM] >>
   Cases_on `vs = []` >> simp[raise_def, return_def, bind_def] >>
   rw[] >> gvs[]
 QED
@@ -447,7 +455,7 @@ QED
 (* The local after the pop: its region holds the shortened array, and the
    other live locals' regions are untouched by the store of the length. *)
 Theorem pop_local_ptrs_rel:
-  !func cenv es s0 u id pre env entry rest p sz w etv n vs.
+  !func cenv es s0 u id pre env entry rest p sz w etv n vs hist.
     local_ptrs_rel func cenv es.scopes s0 /\
     find_containing_scope id es.scopes = SOME (pre, env, entry, rest) /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
@@ -462,7 +470,8 @@ Theorem pop_local_ptrs_rel:
     (!q n' sq. FLOOKUP cenv.ce_vars n' = SOME (PtrVar (Var q) sq) ==>
                lookup_var q u = lookup_var q s0) ==>
     local_ptrs_rel func cenv
-      (pre ++ env |+ (id, entry with value := ArrayV (DynArrayV (FRONT vs)))
+      (pre ++ env |+ (id, entry with
+         <| value := ArrayV (DynArrayV (FRONT vs)); popped := hist |>)
          :: rest) u
 Proof
   rpt strip_tac >>
@@ -480,7 +489,8 @@ Proof
     (`0 < LENGTH vs` by (Cases_on `vs` >> gvs[]) >>
      simp[LENGTH_FRONT, GSYM wordsTheory.n2w_sub, arithmeticTheory.PRE_SUB1]) >>
   irule local_ptrs_rel_write_local >>
-  qexistsl_tac [`entry with value := ArrayV (DynArrayV (FRONT vs))`, `id`,
+  qexistsl_tac [`entry with <| value := ArrayV (DynArrayV (FRONT vs));
+                              popped := hist |>`, `id`,
                 `p`, `es.scopes`, `s0`, `sz`, `w`] >>
   rpt conj_tac
   >~ [`mem_bytes_at`]
@@ -572,6 +582,39 @@ Proof
   simp[LAST_EL, arithmeticTheory.PRE_SUB1]
 QED
 
+(* Reading the popped place after the pop: the index is past the new
+   length, so the popped history supplies the element. *)
+Theorem read_pop_name:
+  !cx es pre envs entry rest id etv n vs.
+    find_containing_scope id es.scopes = SOME (pre, envs, entry, rest) /\
+    entry.type = ArrayTV etv (Dynamic n) /\ vs <> [] /\ LENGTH vs <= n ==>
+    read_result cx
+      (PlaceR (MemoryPlace id [ValueSubscript (IntV &(LENGTH vs - 1))]))
+      (es with scopes :=
+         pre ++ envs |+ (id, entry with
+           <| value := ArrayV (DynArrayV (FRONT vs));
+              popped := ([ValueSubscript (IntV &(LENGTH vs - 1))], LAST vs)
+                          :: entry.popped |>)
+           :: rest) =
+    (INL (LAST vs),
+     es with scopes :=
+       pre ++ envs |+ (id, entry with
+         <| value := ArrayV (DynArrayV (FRONT vs));
+            popped := ([ValueSubscript (IntV &(LENGTH vs - 1))], LAST vs)
+                        :: entry.popped |>)
+         :: rest)
+Proof
+  rpt strip_tac >>
+  drule find_containing_scope_pre_none >> strip_tac >>
+  `oEL (LENGTH vs - 1) (FRONT vs) = NONE` by simp[oEL_THM, LENGTH_FRONT] >>
+  `0 < LENGTH vs` by (Cases_on `vs` >> gvs[]) >>
+  simp[read_result_def, read_place_def, bind_def, get_scopes_def,
+       return_def, lift_option_type_def, lift_sum_def, lookup_scopes_update,
+       read_memory_path_def, evaluate_subscripts_def, array_index_def,
+       read_popped_def, subscripts_type_def, subscript_type_def,
+       bound_length_def]
+QED
+
 Theorem pop_vv_post:
   !func cenv cx ann id es sa sb s0 u k pre envs entry rest p sz w etv n vs x6.
     stmt_state_rel func cenv cx es s0 /\
@@ -595,15 +638,22 @@ Theorem pop_vv_post:
     evaluate_type (get_tenv cx) ann = SOME etv ==>
     vv_post func cenv cx (Pop ann (NameTarget id)) es sa sb s0
       (es with scopes :=
-         pre ++ envs |+ (id, entry with value := ArrayV (DynArrayV (FRONT vs)))
+         pre ++ envs |+ (id, entry with
+           <| value := ArrayV (DynArrayV (FRONT vs));
+              popped := ([ValueSubscript (IntV &(LENGTH vs - 1))], LAST vs)
+                          :: entry.popped |>)
            :: rest)
-      (Value (LAST vs)) (LocatedValue ann (mk_ptr (Var x6) LocMemory))
+      (PlaceR (MemoryPlace id [ValueSubscript (IntV &(LENGTH vs - 1))]))
+      (LocatedValue ann (mk_ptr (Var x6) LocMemory))
       (u with vs_inst_idx := k)
 Proof
   rpt gen_tac >> strip_tac >>
   `u.vs_allocas = s0.vs_allocas /\ u.vs_alloca_next = s0.vs_alloca_next` by
     (qpat_x_assum `u = _` (fn th => ONCE_REWRITE_TAC [th]) >> simp[]) >>
-  drule_all pop_local_ptrs_rel >> strip_tac >>
+  drule_all pop_local_ptrs_rel >>
+  disch_then (qspec_then
+    `([ValueSubscript (IntV &(LENGTH vs - 1))], LAST vs) :: entry.popped`
+    assume_tac) >>
   `s0.vs_alloca_next < dimword (:256)` by
     (irule alloca_room_next_lt >> fs[stmt_state_rel_def] >> metis_tac[]) >>
   `0 < LENGTH vs` by (Cases_on `vs` >> gvs[]) >>
@@ -614,19 +664,24 @@ Proof
   `lookup_scopes id es.scopes = SOME entry` by
     metis_tac[find_containing_scope_lookup] >>
   drule find_containing_scope_pre_none >> strip_tac >>
-  `local_region cenv (pre ++ envs |+
-      (id, entry with value := ArrayV (DynArrayV (FRONT vs))) :: rest)
-     (u with vs_inst_idx := k) id (w2n w) sz` by
-    (simp[local_region_def, lookup_scopes_update, lookup_var_inst_idx] >>
+  qmatch_goalsub_abbrev_tac `vv_post _ _ _ _ _ _ _ _ es1 _ _ _` >>
+  `read_result cx
+     (PlaceR (MemoryPlace id [ValueSubscript (IntV &(LENGTH vs - 1))])) es1 =
+   (INL (LAST vs), es1)` by
+    (simp[Abbr `es1`] >> irule read_pop_name >> simp[] >> metis_tac[]) >>
+  `local_region cenv es1.scopes (u with vs_inst_idx := k) id (w2n w) sz` by
+    (simp[Abbr `es1`, local_region_def, lookup_scopes_update,
+          lookup_var_inst_idx] >>
      metis_tac[]) >>
   `LENGTH vs - 1 < LENGTH vs` by decide_tac >>
+  unabbrev_all_tac >>
   simp[vv_post_def, expr_type_def, stmt_state_rel_inst_idx, lookup_var_inst_idx] >>
   rpt conj_tac
   >- (irule pop_stmt_state_rel_scopes >> conj_tac
       >- first_assum ACCEPT_TAC >>
       qexists_tac `s0` >> rpt conj_tac >> first_assum ACCEPT_TAC)
   >- (simp[vv_holds_def, contextTheory.mk_ptr_def, eval_operand_def,
-           lookup_var_inst_idx, materialise_def, return_def] >>
+           lookup_var_inst_idx, return_def] >>
       `val_in_memory etv (LAST vs)
          (w2n w + 32 + (LENGTH vs - 1) * type_memory_size etv) u.vs_memory` by
         (irule pop_elem_in_memory >> simp[] >> metis_tac[]) >>
@@ -638,7 +693,7 @@ Proof
       >- gvs[EVERY_EL, LAST_EL, arithmeticTheory.PRE_SUB1] >>
       qpat_x_assum `val_in_memory etv (LAST vs) _ _` mp_tac >> simp[])
   >- (simp[vv_at_def, contextTheory.mk_ptr_def, eval_operand_def,
-           lookup_var_inst_idx, materialise_def, return_def] >>
+           lookup_var_inst_idx, return_def] >>
       `val_wf etv (LAST vs)` by
         gvs[LAST_EL, arithmeticTheory.PRE_SUB1, elems_val_wf_EL] >>
       `w2n w + 32 + (LENGTH vs - 1) * type_memory_size etv +

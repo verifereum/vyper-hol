@@ -20,14 +20,14 @@
  * Helpers:
  *   compile_expr_call, compile_expr_send, compile_expr_send_stack — the
  *     compile side
- *   eval_expr_send_cases, eval_send_value, eval_expr_send_value,
- *     take_call_outcome_typed,
+ *   eval_expr_send_cases, eval_send_value, eval_send_read_cases,
+ *     eval_expr_send_value, take_call_outcome_typed,
  *     eval_send_outcome_typed, address_typed_dest, uint256_typed_dest — the
  *     source side
  *   expr_sim_pre_send_arg, send_pre_types, typed_stack_args_ready_gen,
  *     typed_args_ready_inv — the operands
- *   send_tail_shape, send_tail_frag, expr_post_none_intro — the CALL and
- *     the ASSERT
+ *   send_tail_shape, send_tail_frag, send_tail_frag_read,
+ *     expr_post_none_intro — the CALL and the ASSERT
  *)
 
 Theory exprSimSend
@@ -123,18 +123,20 @@ QED
 Theorem eval_expr_send_cases:
   !cx ann has_gas args dflt es res es'.
     LENGTH args = (if has_gas then 3 else 2) /\
-    eval_expr cx (Call ann (Send has_gas) args dflt) es = (res, es') ==>
+    (do r <- eval_expr cx (Call ann (Send has_gas) args dflt);
+        read_result cx r od) es = (res, es') ==>
     (?exc. eval_exprs cx args es = (INR exc, es') /\ res = INR exc) \/
     ?vs es1. eval_exprs cx args es = (INL vs, es1) /\
-             eval_send cx has_gas vs es1 = (res, es')
+             (do r <- eval_send cx has_gas vs; read_result cx r od) es1 =
+               (res, es')
 Proof
   rpt gen_tac >> strip_tac >>
-  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  qpat_x_assum `bind _ _ _ = _` mp_tac >>
   simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
        assert_def, return_def, raise_def] >>
   Cases_on `eval_exprs cx args es` >>
   rename1 `eval_exprs cx args es = (rr, es1)` >>
-  Cases_on `rr` >> simp[]
+  Cases_on `rr` >> simp[] >> rw[] >> gvs[]
 QED
 
 Theorem eval_send_value:
@@ -151,6 +153,24 @@ Proof
        vyperCallOutcomeTheory.adopt_call_outcome_def, LET_THM, UNCURRY,
        COND_RATOR, option_CASE_rator, prod_CASE_rator, sum_CASE_rator] >>
   rpt strip_tac >> gvs[AllCaseEqs()]
+QED
+
+(* send's result read back: eval_send's value, unchanged state. *)
+Theorem eval_send_read_cases:
+  !cx has_gas vs st res st'.
+    (do r <- eval_send cx has_gas vs; read_result cx r od) st = (res, st') ==>
+    ?r. eval_send cx has_gas vs st = (r, st') /\
+        (!v. r = INL (Value v) ==> res = INL v) /\
+        (!exc. r = INR exc ==> res = INR exc) /\
+        ((?v. r = INL (Value v)) \/ (?exc. r = INR exc))
+Proof
+  rpt gen_tac >> simp[bind_def] >>
+  Cases_on `eval_send cx has_gas vs st` >>
+  rename1 `eval_send _ _ _ _ = (res0, st1)` >>
+  Cases_on `res0` >> simp[] >> strip_tac
+  >- (drule eval_send_value >> strip_tac >>
+      gvs[read_result_def, return_def]) >>
+  gvs[]
 QED
 
 Theorem eval_expr_send_value:
@@ -273,7 +293,8 @@ Theorem typed_stack_args_ready_gen:
   wb_args_shape cenv arg_ty args
 Proof
   strip_tac >> conj_tac
-  >- (simp[typed_args_ready_def] >> rpt strip_tac >>
+  >- (pure_rewrite_tac[typed_args_ready_def] >> rpt gen_tac >>
+      disch_then strip_assume_tac >>
       rename1 `expr_sim_inv cenv cx env es_arg` >>
       `is_word_type (expr_type e) /\ expr_sim_ok cenv e` by
         (gvs[EVERY_MEM] >> first_x_assum drule >> simp[]) >>
@@ -393,7 +414,8 @@ Proof
   impl_tac >- simp[mk_inst_def] >>
   `es1.outcomes = SOME t.vs_outcomes` by fs[state_rel_def] >>
   `res <> INR (Error (RuntimeError "call outcome accounts"))` by
-    (irule eval_send_outcome_typed >> simp[] >> metis_tac[]) >>
+    (drule_at (Pat `eval_send _ _ _ _ = _`) eval_send_outcome_typed >>
+     disch_then irule >> simp[]) >>
   simp[] >> strip_tac >>
   `s'.vs_allocas = t.vs_allocas /\ s'.vs_alloca_next = t.vs_alloca_next /\
    s'.vs_memory = t.vs_memory /\ s'.vs_vars = t.vs_vars` by
@@ -414,6 +436,42 @@ Proof
   qpat_assum `wb_frame _ _ _ _ _` (irule_at Any) >>
   simp[update_var_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
   rw[] >> gvs[not_fresh_at_def] >> metis_tac[]
+QED
+
+(* As stmtSim's expr_exit_INR_type, which is downstream of this theory. *)
+Theorem expr_exit_INR_any[local]:
+  !ex rr. expr_exit (INR ex : 'a + exception) rr =
+          expr_exit (INR ex : 'b + exception) rr
+Proof
+  rpt gen_tac >> Cases_on `rr` >> Cases_on `ex` >> simp[expr_exit_def] >>
+  TRY (rename1 `Error err` >> Cases_on `err` >> simp[expr_exit_def])
+QED
+
+(* send_tail_frag on send's result read back, as expr_sim takes it. *)
+Theorem send_tail_frag_read:
+  emit_op CALL [gas_op; addr_op; val_op; Lit 0w; Lit 0w; Lit 0w; Lit 0w]
+    sm = (success, s3) /\
+  emit_void ASSERT [success] s3 = (u, sb) /\
+  local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
+  stmt_state_rel func cenv cx es1 t /\ wb_frame cenv es sa s0 t /\
+  outcomes_accounts_typed es1.outcomes /\
+  accounts_runtime_well_typed es1.accounts /\
+  IS_SOME (eval_operand gas_op t) /\
+  eval_operand addr_op t = SOME aw /\ dest_AddressV to_v = SOME (w2w aw) /\
+  eval_operand val_op t = SOME vw /\ dest_NumV amount_v = SOME (w2n vw) /\
+  LENGTH gas_vs = (if has_gas then 1 else 0) /\
+  (do r <- eval_send cx has_gas (to_v :: amount_v :: gas_vs);
+      read_result cx r od) es1 = (res, es') /\
+  expr_type e = NoneT ==>
+  frag_exec ctx sm sb (\s. s = t)
+    (\s. ?v. res = INL v /\
+             expr_post func cenv cx e es sa sb s0 es' v (Lit 0w) s)
+    (expr_exit res)
+Proof
+  strip_tac >> drule eval_send_read_cases >> strip_tac >>
+  drule_all send_tail_frag >> strip_tac >>
+  irule frag_exec_conseq >> first_assum (irule_at Any) >> simp[] >>
+  rpt strip_tac >> gvs[] >> metis_tac[expr_exit_INR_any]
 QED
 
 (* ===== send ===== *)
@@ -484,8 +542,8 @@ Proof
         account_runtime_well_typed_def, accounts_well_typed_def,
         account_well_typed_def] >>
   `outcomes_accounts_typed es1.outcomes` by gvs[expr_sim_inv_def] >>
-  irule send_tail_frag >> simp[expr_type_def] >>
-  qpat_assum `eval_send _ _ _ _ = _` (irule_at Any) >>
+  irule send_tail_frag_read >> simp[expr_type_def] >>
+  qpat_assum `bind (eval_send _ _ _) _ _ = _` (irule_at Any) >>
   qpat_assum `emit_op _ _ _ = _` (irule_at Any) >>
   qpat_assum `emit_void _ _ _ = _` (irule_at Any) >>
   qpat_assum `eval_operand addr_op _ = _` (irule_at Any) >>
