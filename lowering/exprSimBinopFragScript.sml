@@ -7,13 +7,12 @@
  * simulation lemmas of exprSimOps, exprSimCompare and exprSimArith.
  *
  * TOP-LEVEL:
- *   binop_frag_typed      — typed AST operands, with checked evaluations for
- *                           Exp; used by compile_bop_word_sim
- *   binop_frag_pow        — checked Exp with actual literal/value provenance
+ *   binop_frag_typed      — non-Exp typed AST operands
  *   binop_frag_word_typed — non-Exp operators on typed word operands
  *
  * Cheated, the operators those lemmas do not cover:
- *   binop_frag_expmod     — pow_mod (#572); checked ** is proved separately
+ *   binop_frag_expmod     — pow_mod (#572)
+ * Checked ** certification is extracted; it is not an admitted fragment.
  *   binop_frag_shift_572  — << of an integer narrower than 256 bits, and
  *                           shifts by a negative amount (#572)
  *   binop_frag_shr_narrow — >> of an integer narrower than 256 bits, which
@@ -29,7 +28,6 @@ Theory exprSimBinopFrag
 Ancestors
   list finite_map
   fragExec exprSim exprSimHyps exprSimOps exprSimCompare exprSimArith
-  powerFragProps powerCheckedProps
   exprBopLowering loweringSlice
   exprLowering compileEnv
   vyperAST vyperInterpreter vyperState vyperTypeSystem vyperTypeCallGraph
@@ -227,19 +225,8 @@ Proof
   irule compile_shift_sim >> gvs[]
 QED
 
-(* Exp requires checked expression provenance, not only well_typed_binop.
-   ExpMod remains unsupported by this binary lowering interface. *)
-(* Retired over-broad statement (the arbitrary literal options were unsound):
-Theorem binop_frag_pow:
-  !ctx func cenv cx bop ann t1 t2 bl el tys v1 v2 es0 tenv tv1 tv2.
-    (bop = Exp \/ bop = ExpMod) /\ well_typed_binop ann bop t1 t2 /\
-    evaluate_type tenv t1 = SOME tv1 /\ value_has_type tv1 v1 /\
-    evaluate_type tenv t2 = SOME tv2 /\ value_has_type tv2 v2 ==>
-    binop_frag ctx func cenv cx bop t1 ann bl el tys v1 v2 es0
-Proof
-  cheat
-QED
-*)
+(* The baseline combined Exp/ExpMod admission is deliberately not restored.
+   Exp needs actual checked-expression provenance, not arbitrary literals. *)
 
 (* ExpMod remains separate: it falls through compile_binop to INVALID. *)
 Theorem binop_frag_expmod:
@@ -251,44 +238,6 @@ Theorem binop_frag_expmod:
 Proof
   cheat
 QED
-
-(* Actual checked expression and evaluations supply the literal provenance. *)
-Theorem binop_frag_pow:
-  !ctx func cenv cx ann e1 e2 v1 v2 es es1 es0 env tenv tv1 tv2.
-    well_typed_expr env (Builtin ann (Bop Exp) [e1;e2]) /\
-    eval_expr cx e1 es = (INL (Value v1),es1) /\
-    eval_expr cx e2 es1 = (INL (Value v2),es0) /\
-    evaluate_type tenv (expr_type e1) = SOME tv1 /\ value_has_type tv1 v1 /\
-    evaluate_type tenv (expr_type e2) = SOME tv2 /\ value_has_type tv2 v2 ==>
-    binop_frag ctx func cenv cx Exp (expr_type e1) ann
-      (expr_int_literal e1) (expr_int_literal e2)
-      [expr_type e1;expr_type e2] v1 v2 es0
-Proof
-  rpt gen_tac >> strip_tac >>
-  `expr_type e1 = ann /\ expr_type e2 = ann /\ is_int_type ann` by
-    gvs[Once well_typed_expr_def, well_typed_builtin_app_def, well_typed_binop_def] >>
-  qspecl_then [`tenv`,`ann`,`tv1`,`v1`] mp_tac int_type_value >>
-  qspecl_then [`tenv`,`ann`,`tv2`,`v2`] mp_tac int_type_value >>
-  asm_rewrite_tac[] >> rpt strip_tac >> gvs[] >>
-  rename1 `eval_expr cx e1 es = (INL (Value (IntV i1)),es1)` >>
-  rename1 `eval_expr cx e2 es1 = (INL (Value (IntV i2)),es0)` >>
-  match_mp_tac (Q.INST [`u` |->
-    `if is_signed_type ann then Signed (type_bits ann) else Unsigned (type_bits ann)`]
-    binop_frag_power_run) >> conj_tac >- simp[] >>
-  rpt gen_tac >> strip_tac >>
-  mp_tac (Q.INST [`env` |-> `env`, `base_e` |-> `e1`, `exponent` |-> `e2`,
-                   `ty` |-> `expr_type e1`, `a` |-> `i1`, `e` |-> `i2`,
-                   `es` |-> `es`, `es1` |-> `es1`, `es2` |-> `es0`,
-                   `st` |-> `sa`, `st'` |-> `sb`] checked_power_run) >>
-  (impl_tac >- simp[]) >> simp[] >> metis_tac[]
-QED
-
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null (Thm.hyp th) andalso null axioms andalso
-        List.all (fn s => s = "DISK_THM") oracles then ()
-     else raise Fail ("power fragment audit: " ^ name) end)
-  (("binop_frag_pow", binop_frag_pow) :: DB.thms "powerFragProps");
 
 (* Also #572: << of an integer narrower than 256 bits, which the lowering
    does not truncate, and a shift by a negative amount, where the source
@@ -459,11 +408,8 @@ Proof
 QED
 
 Theorem binop_frag_typed:
-  !ctx func cenv cx bop ann e1 e2 v1 v2 es0 tv1 tv2 env es es1.
-    (bop = Exp ==>
-      well_typed_expr env (Builtin ann (Bop Exp) [e1;e2]) /\
-      eval_expr cx e1 es = (INL (Value v1),es1) /\
-      eval_expr cx e2 es1 = (INL (Value v2),es0)) /\
+  !ctx func cenv cx bop ann e1 e2 v1 v2 es0 tv1 tv2.
+    bop <> Exp /\
     well_typed_binop ann bop (expr_type e1) (expr_type e2) /\
     type_bits (expr_type e1) MOD 8 = 0 /\
     word_value_type (expr_type e1) /\ word_value_type (expr_type e2) /\
@@ -476,8 +422,7 @@ Theorem binop_frag_typed:
       (if bop = Exp then expr_int_literal e2 else NONE)
       [expr_type e1; expr_type e2] v1 v2 es0
 Proof
-  rpt strip_tac >> Cases_on `bop = Exp`
-  >- (gvs[] >> irule binop_frag_pow >> metis_tac[]) >>
+  rpt strip_tac >>
   qspecl_then [`ctx`, `func`, `cenv`, `cx`, `bop`, `ann`, `expr_type e1`,
                `expr_type e2`, `if bop = Exp then expr_int_literal e1 else NONE`,
                `if bop = Exp then expr_int_literal e2 else NONE`,

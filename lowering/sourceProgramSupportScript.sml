@@ -4,8 +4,8 @@
    nested-place types, return layouts, loop and binding restrictions are retained. Defaults
    are still excluded by the unchanged declaration headers; their checked
    typing/remainder fact is nevertheless exposed below.
-   This is a gate-redundancy certificate only. checked_power_run and
-   binop_frag_pow separately certify checked Exp execution; the existing
+   This is a gate-redundancy certificate only, independent of the extracted
+   optional checked-Exp execution/simulation certificates. The existing
    whole-compiler wrapper still inherits lower_vyper_runtime_unit_correct's
    unrelated admissions and is not a new compiler-semantics theorem. *)
 Theory sourceProgramSupport

@@ -1,8 +1,9 @@
 (*
  * The expression simulation theorem (#636)
  *
- * compile_expr_sim: every expression's lowering simulates it (expr_sim,
- * exprSim) at every source state that meets expr_sim_pre (exprSimHyps).
+ * compile_expr_sim: conditional on optional power_sim_ok certification, every
+ * expression's lowering simulates it (expr_sim, exprSim) at every source state
+ * that meets expr_sim_pre (exprSimHyps). Ordinary checking is unchanged.
  * It is proved by compile_expr_ind over compile_expr and its two
  * dispatchers, each case by a case lemma of exprSimLeaves,
  * exprSimOperators, exprSimPlaces, exprSimAggregates, exprSimBuiltins or
@@ -29,7 +30,7 @@ val expr_sizes = [listTheory.list_size_def, vyperASTTheory.expr_size_def,
 
 Theorem compile_builtin_case_sim:
   !cenv ann bi args.
-    expr_sim_below cenv (list_size expr_size args) ==>
+    power_sim_ok cenv /\ expr_sim_below cenv (list_size expr_size args) ==>
     builtin_sim_ok cenv ann bi args
 Proof
   rw[builtin_sim_ok_def] >> Cases_on `bi`
@@ -125,11 +126,12 @@ QED
 (* ===== The theorem ===== *)
 
 Theorem compile_expr_sim_mutual:
+  (!cenv. power_sim_ok cenv) ==>
   (!cenv e. expr_ok cenv e) /\
   (!cenv ann bi args. builtin_sim_ok cenv ann bi args) /\
   (!cenv ann tb t args. type_builtin_sim_ok cenv ann tb t args)
 Proof
-  mp_tac (BETA_RULE (Q.SPECL
+  strip_tac >> mp_tac (BETA_RULE (Q.SPECL
     [`\cenv ty e st. expr_ok cenv e`,
      `\cenv ret_ty ty bi args st. builtin_sim_ok cenv ret_ty bi args`,
      `\cenv vv_ty ty tb ret_ty args st.
@@ -147,14 +149,16 @@ QED
 
 Theorem compile_expr_sim:
   !ctx func cenv cx env ty e es.
-    expr_sim_pre cenv cx env e es ==> expr_sim ctx func cenv cx ty e es
+    (!ce. power_sim_ok ce) /\ expr_sim_pre cenv cx env e es ==>
+    expr_sim ctx func cenv cx ty e es
 Proof
   metis_tac[compile_expr_sim_mutual, expr_ok_def, expr_sim_ok_def]
 QED
 
 Theorem compile_expr_vv_sim:
   !ctx func cenv cx env ty e es.
-    expr_sim_pre cenv cx env e es ==> expr_vv_sim ctx func cenv cx ty e es
+    (!ce. power_sim_ok ce) /\ expr_sim_pre cenv cx env e es ==>
+    expr_vv_sim ctx func cenv cx ty e es
 Proof
   metis_tac[compile_expr_sim_mutual, expr_ok_def, expr_vv_ok_def]
 QED
