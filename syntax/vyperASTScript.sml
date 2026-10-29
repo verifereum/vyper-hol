@@ -1,6 +1,6 @@
 Theory vyperAST
 Ancestors
-  ASCIInumbers string words arithmetic sorting vyperMisc[ignore_grammar]
+  ASCIInumbers string words arithmetic sorting integer vyperMisc[ignore_grammar]
 Libs
   cv_transLib
 

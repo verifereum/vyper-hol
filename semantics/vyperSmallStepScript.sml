@@ -267,7 +267,7 @@ Termination
     | INR (INL (cx,es,st,k)) => 2 * list_size expr_size es
     | INR (INR (INL (cx,e,st,k))) => 2 * expr_size e + 1
     | INR (INR (INR (cx,es,st,k))) => 2 * list_size expr_size es + 1)’
-  \\ rw[expr1_size_map, SUM_MAP_expr2_size, list_size_SUM_MAP, MAP_MAP_o,
+  \\ rw[list_size_SUM_MAP, MAP_MAP_o, ETA_AX,
         list_size_pair_size_map, builtin_args_length_ok_def, check_def, type_check_def,
         assert_def, LENGTH_EQ_NUM_compute] \\ rw[]
   \\ qmatch_goalsub_abbrev_tac `TAKE n es`
