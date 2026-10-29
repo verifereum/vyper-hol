@@ -152,7 +152,9 @@ Proof
       qexists_tac `s` >> simp[mstore_def]) >>
   conj_tac
   >- (irule exprLoweringPropsTheory.immutable_alloca_sep_fields >>
-      qexistsl_tac [`s`, `es`] >> simp[mstore_def]) >>
+      qexistsl_tac [`s`, `es`] >> simp[mstore_def] >>
+      rpt strip_tac >> qexists_tac `id` >>
+      fs[local_region_def, lookup_var_def]) >>
   simp[mstore_def] >> metis_tac[]
 QED
 
@@ -514,7 +516,9 @@ Proof
   `immutable_alloca_sep func cenv cx es t` by
     (irule exprLoweringPropsTheory.immutable_alloca_sep_fields >>
      qexistsl_tac [`s`, `es`] >>
-     gvs[exprLoweringPropsTheory.stmt_state_rel_def]) >>
+     gvs[exprLoweringPropsTheory.stmt_state_rel_def] >>
+     rpt strip_tac >> qexists_tac `id` >>
+     fs[local_region_def] >> metis_tac[]) >>
   rewrite_tac[exprLoweringPropsTheory.stmt_state_rel_def] >>
   conj_tac
   >- (irule exprLoweringPropsTheory.state_rel_frame >>
@@ -702,7 +706,8 @@ Resume literal_bytelike_run[frame]:
           simp[exprLoweringPropsTheory.stmt_state_rel_def,
                exprLoweringPropsTheory.immutable_alloca_sep_def] >>
           strip_tac >> first_x_assum drule_all >> strip_tac >>
-          first_x_assum irule >> goal_assum (drule_at Any) >>
+          qpat_x_assum `!inst b sz. MEM inst _ /\ _ ==> regions_disjoint _ _ b sz` irule >>
+          goal_assum (drule_at Any) >>
           simp[venomInstTheory.mk_inst_def]) >>
        qpat_x_assum `!a len. _ ==> mem_bytes_at _ _ final.vs_memory = _` irule >>
        gvs[regions_disjoint_def] >> decide_tac) >> simp[]) >>
