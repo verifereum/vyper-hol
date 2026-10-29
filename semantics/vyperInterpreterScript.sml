@@ -5,7 +5,7 @@ Ancestors
   rich_list sorting cv cv_std vfmState vfmContext vfmCompute[ignore_grammar]
   vfmExecution[ignore_grammar] vyperAST vyperABI
   vyperMisc vyperNsidFmap vyperValue vyperValueOperation vyperStorage vyperContext vyperState
-  vyperEvent vyperEvmBoundary vyperCreate vyperRuntimeAccounts
+  vyperEvent vyperEvmBoundary vyperCreate vyperRuntimeAccounts vyperAbiOperand
 Libs
   cv_transLib wordsLib monadsyntax
 
@@ -1610,7 +1610,15 @@ Definition evaluate_def:
   od ∧
   eval_expr cx (TypeBuiltin _ tb typ es) = do
     type_check (type_builtin_args_length_ok tb (LENGTH es)) "TypeBuiltin args";
-    vs <- eval_exprs cx es;
+    vs <- (case tb of
+      | AbiEncode _ _ => do
+          mark <- mark_abi_captures;
+          finally (do
+            args <- eval_abi_exprs cx es;
+            stage_abi_operands cx args
+          od) (release_abi_captures mark)
+        od
+      | _ => eval_exprs cx es);
     v <- lift_sum $ evaluate_type_builtin cx tb typ (MAP expr_type es) vs;
     return $ Value v
   od ∧
@@ -1744,10 +1752,54 @@ Definition evaluate_def:
     v <- materialise cx tv;
     vs <- eval_exprs cx es;
     return $ v::vs
+  od ∧
+  (* ABI lowering evaluates locations exactly once.  Primitive operands and
+     storage copies are unwrapped before the next argument; complex memory
+     remains an address until the separate staging phase. *)
+  eval_abi_expr cx (Name _ id) = lookup_abi_local cx id ∧
+  eval_abi_expr cx (TopLevelName _ (src,id)) = lookup_abi_global cx src id ∧
+  eval_abi_expr cx (IfExp _ cond yes no) = do
+    test <- eval_expr cx cond;
+    arg <- switch_BoolV test (eval_abi_expr cx yes) (eval_abi_expr cx no);
+    unwrap_abi_operand cx arg
+  od ∧
+  eval_abi_expr cx (Subscript _ base index) = do
+    arg <- eval_abi_expr cx base;
+    index <- eval_expr cx index;
+    index <- get_Value index;
+    tv <- lift_option_type (evaluate_type (get_tenv cx) (expr_type base)) "Subscript array type";
+    subscript_abi_operand cx tv arg index
+  od ∧
+  eval_abi_expr cx (Attribute _ base id) = do
+    arg <- eval_abi_expr cx base;
+    attribute_abi_operand cx arg id
+  od ∧
+  eval_abi_expr cx (Pop ty target) = do
+    (loc,subs) <- eval_base_target cx target;
+    arg <- abi_target_operand cx loc subs;
+    ptr <- abi_pop_pointer cx arg;
+    popped <- assign_target cx (BaseTargetV loc subs) PopOp;
+    return ptr
+  od ∧
+  eval_abi_expr cx e = do
+    tv <- eval_expr cx e;
+    v <- materialise cx tv;
+    return (AbiSnapshot v)
+  od ∧
+  eval_abi_exprs cx [] = return [] ∧
+  eval_abi_exprs cx (e::es) = do
+    arg <- eval_abi_expr cx e;
+    arg <- unwrap_abi_operand cx arg;
+    args <- eval_abi_exprs cx es;
+    return (arg::args)
   od
 Termination
-  qexists_tac ‘measure (λx. case x of
-  | INR (INR (INR (INR (INR (INR (INR (INR (cx, es))))))))
+  qexists_tac ‘measure (λx. 2 * (case x of
+  | INR (INR (INR (INR (INR (INR (INR (INR (INR (INR (cx, es))))))))))
+    => exprs_bound (remcode cx) es
+  | INR (INR (INR (INR (INR (INR (INR (INR (INR (INL (cx, e))))))))))
+    => expr_bound (remcode cx) e
+  | INR (INR (INR (INR (INR (INR (INR (INR (INL (cx, es)))))))))
     => exprs_bound (remcode cx) es
   | INR (INR (INR (INR (INR (INR (INR (INL (cx, e))))))))
     => expr_bound (remcode cx) e
@@ -1762,7 +1814,10 @@ Termination
   | INR (INR (INL (cx, it)))
     => iterator_bound (remcode cx) it
   | INR (INL (cx, ss)) => stmts_bound (remcode cx) ss
-  | INL (cx, s) => stmt_bound (remcode cx) s)’
+  | INL (cx, s) => stmt_bound (remcode cx) s) +
+    (case x of
+     | INR (INR (INR (INR (INR (INR (INR (INR (INR (INL _))))))))) => 1
+     | _ => 0))’
   \\ conj_tac >- simp[prim_recTheory.WF_measure]
   \\ rpt conj_tac
   \\ TRY (MATCH_ACCEPT_TAC custom_error_exprs_size)
@@ -1940,6 +1995,8 @@ Definition initial_state_def:
    ; pending_deletions := am.pending_deletions
    ; outcomes := NONE
    ; requests := []
+   ; abi_memory := []
+   ; abi_immutables := []
    |>
 End
 

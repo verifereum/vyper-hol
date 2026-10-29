@@ -1,7 +1,7 @@
 Theory vyperLookup
 Ancestors
   vyperMisc vyperContext vyperState vyperStorage vyperInterpreter vyperValue
-  vyperValueOperation vyperTyping vyperEncodeDecode
+  vyperValueOperation vyperTyping vyperEncodeDecode vyperAbiMemoryProps
 Libs
   wordsLib
 
@@ -522,15 +522,31 @@ Proof
   rw[] >> CCONTR_TAC >> gs[]
 QED
 
-Theorem assign_target_name_replace:
-  ∀cx st n v.
-    var_assignable st n ⇒
-      assign_target cx (BaseTargetV (ScopedVar n) []) (Replace v) st =
-      (INL NONE, update_name st n v)
+Theorem lookup_name_write_abi_memory[simp]:
+  lookup_name (SND (write_abi_memory cx id tv v subs ao st)) n = lookup_name st n
 Proof
-  rw[var_assignable_def, lookup_name_typed_def] >>
+  simp[lookup_name_def]
+QED
+
+Theorem update_name_abi_memory[simp]:
+  (update_name st n v).abi_memory = st.abi_memory
+Proof
+  Cases_on `find_containing_scope n st.scopes` >>
+  simp[update_name_def] >- (Cases_on `st.scopes` >> simp[]) >>
+  PairCases_on `x` >> simp[]
+QED
+
+(* Exact continuation: scope replacement happens even if ABI mirroring fails. *)
+Theorem assign_target_name_replace:
+  ∀cx st n v entry.
+    lookup_name_typed st n = SOME entry ∧ entry.assignable ⇒
+      assign_target cx (BaseTargetV (ScopedVar n) []) (Replace v) st =
+      (do write_abi_memory cx n entry.type v [] (Replace v);
+          return NONE od) (update_name st n v)
+Proof
+  rw[lookup_name_typed_def] >>
   `IS_SOME (find_containing_scope n st.scopes)`
-    by metis_tac[lookup_scopes_find_containing, optionTheory.IS_SOME_EXISTS] >>
+    by (irule lookup_scopes_find_containing >> simp[]) >>
   Cases_on `find_containing_scope n st.scopes` >- gvs[] >>
   PairCases_on `x` >> gvs[] >>
   drule find_containing_scope_lookup >> strip_tac >> gvs[] >>
@@ -540,13 +556,35 @@ Proof
        assign_result_def,type_check_def,assert_def]
 QED
 
+Theorem assign_target_name_replace_irrelevant_memory:
+  ∀cx st n v.
+    var_assignable st n ∧
+    ¬EXISTS (λ(key,mem). key = (cx.stk,n)) st.abi_memory ⇒
+    assign_target cx (BaseTargetV (ScopedVar n) []) (Replace v) st =
+      (INL NONE, update_name st n v)
+Proof
+  rw[var_assignable_def] >>
+  mp_tac (Q.SPECL [`cx`,`st`,`n`,`v`,`entry`] assign_target_name_replace) >>
+  simp[write_abi_memory_def, bind_def, ignore_bind_def, return_def]
+QED
+
+Theorem assign_target_name_replace_empty_memory:
+  ∀cx st n v.
+    var_assignable st n ∧ st.abi_memory = [] ⇒
+    assign_target cx (BaseTargetV (ScopedVar n) []) (Replace v) st =
+      (INL NONE, update_name st n v)
+Proof
+  rpt strip_tac >> irule assign_target_name_replace_irrelevant_memory >> simp[]
+QED
+
 Theorem assign_target_name_update:
-  ∀cx st n ty bop v v'.
+  ∀cx st n ty bop v'.
     lookup_name_typed st n = SOME entry ∧ var_assignable st n ∧
     evaluate_binop (case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0)
                    entry.type bop entry.value v' = INL new_v ⇒
     assign_target cx (BaseTargetV (ScopedVar n) []) (Update ty bop v') st =
-    (INL NONE, update_name st n new_v)
+    (do write_abi_memory cx n entry.type new_v [] (Update ty bop v');
+        return NONE od) (update_name st n new_v)
 Proof
   rw[var_assignable_def] >>
   gvs[lookup_name_typed_def] >>
@@ -561,12 +599,14 @@ Proof
        assign_result_def, type_check_def, assert_def]
 QED
 
-Theorem assign_target_name_subscripts_state:
+Theorem assign_target_name_subscripts:
   ∀cx st n sbs ao entry a'.
     lookup_name_typed st n = SOME entry ∧ entry.assignable ∧
     assign_subscripts entry.type entry.value (REVERSE sbs) ao = INL a' ⇒
-    SND (assign_target cx (BaseTargetV (ScopedVar n) sbs) ao st) =
-      update_name st n a'
+    assign_target cx (BaseTargetV (ScopedVar n) sbs) ao st =
+      (do write_abi_memory cx n entry.type a' (REVERSE sbs) ao;
+          assign_result entry.type ao entry.value (REVERSE sbs)
+       od) (update_name st n a')
 Proof
   rpt gen_tac >> strip_tac >>
   gvs[lookup_name_typed_def] >>
@@ -578,8 +618,24 @@ Proof
   simp[Once assign_target_def, bind_def, get_scopes_def, return_def,
        lift_option_def, lift_option_type_def, lift_sum_def, assign_result_def,
        ignore_bind_def, set_scopes_def, update_name_def,
-       type_check_def, assert_def] >>
-  Cases_on `ao` >> simp[assign_result_def, return_def, bind_def, lift_sum_def] >>
+       type_check_def, assert_def]
+QED
+
+Theorem assign_target_name_subscripts_state:
+  ∀cx st n sbs ao entry a'.
+    lookup_name_typed st n = SOME entry ∧ entry.assignable ∧
+    assign_subscripts entry.type entry.value (REVERSE sbs) ao = INL a' ⇒
+    SND (assign_target cx (BaseTargetV (ScopedVar n) sbs) ao st) =
+      SND (write_abi_memory cx n entry.type a' (REVERSE sbs) ao
+             (update_name st n a'))
+Proof
+  rpt strip_tac >> drule_all assign_target_name_subscripts >>
+  disch_then (qspec_then `cx` SUBST1_TAC) >>
+  Cases_on `write_abi_memory cx n entry.type a' (REVERSE sbs) ao
+               (update_name st n a')` >>
+  Cases_on `q` >> simp[ignore_bind_def, bind_def] >>
+  Cases_on `ao` >>
+  simp[assign_result_def, bind_def, return_def, lift_sum_def] >>
   rpt (CASE_TAC >> gvs[return_def, raise_def])
 QED
 
@@ -612,19 +668,15 @@ Theorem assign_target_name_subscripts_valid:
   ∀cx st n sbs ao entry a'.
     lookup_name_typed st n = SOME entry ∧ entry.assignable ∧
     assign_subscripts entry.type entry.value (REVERSE sbs) ao = INL a' ⇒
-    ISL (FST (assign_target cx (BaseTargetV (ScopedVar n) sbs) ao st))
+    (ISL (FST (assign_target cx (BaseTargetV (ScopedVar n) sbs) ao st)) ⇔
+     ISL (FST (write_abi_memory cx n entry.type a' (REVERSE sbs) ao
+                 (update_name st n a'))))
 Proof
-  rpt gen_tac >> strip_tac >>
-  gvs[lookup_name_typed_def] >>
-  `IS_SOME (find_containing_scope n st.scopes)`
-    by (irule lookup_scopes_find_containing >> simp[]) >>
-  Cases_on `find_containing_scope n st.scopes` >- gvs[] >>
-  PairCases_on `x` >> gvs[] >>
-  drule find_containing_scope_lookup >> strip_tac >> gvs[] >>
-  simp[Once assign_target_def, bind_def, get_scopes_def, return_def,
-       lift_option_def, lift_option_type_def, lift_sum_def,
-       ignore_bind_def, set_scopes_def, update_name_def,
-       type_check_def, assert_def] >>
+  rpt strip_tac >> drule_all assign_target_name_subscripts >>
+  disch_then (qspec_then `cx` SUBST1_TAC) >>
+  Cases_on `write_abi_memory cx n entry.type a' (REVERSE sbs) ao
+               (update_name st n a')` >>
+  Cases_on `q` >> simp[ignore_bind_def, bind_def] >>
   Cases_on `ao` >> simp[assign_result_def, return_def, bind_def, lift_sum_def]
   >> drule assign_subscripts_PopOp_assign_result >> strip_tac >>
      gvs[return_def, raise_def] >>

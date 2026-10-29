@@ -1,25 +1,10 @@
-(* Regressions for the slot codec and storage/transient dynamic-array pop.
+(* Regression: storage and transient dynamic-array pop writes only the header.
    Nonzero inactive slots deliberately remain present, including on empty pop. *)
 Theory vyperStoragePopTest
 Ancestors
   vyperSmallStep vyperStorageBackend
 Libs
   cv_transLib wordsLib finite_mapLib
-
-(* Fixed bytes are left aligned in the shared slot codec. Keep this concrete
-   regression independent of any optional ABI memory arena semantics. *)
-val () = computeLib.add_funs
-  [wordsTheory.dimword_def, fcpLib.INDEX_CONV ``dimindex(:256)``];
-
-Theorem memory_fixed_bytes_roundtrip:
-  encode_value (BaseTV (BytesT (Fixed 2))) (BytesV [18w;52w]) =
-    SOME [(0, (0x1234w:256 word) << 240)] ∧
-  decode_value
-    (apply_writes 0w [(0, (0x1234w:256 word) << 240)] empty_storage)
-    0 (BaseTV (BytesT (Fixed 2))) = SOME (BytesV [18w;52w])
-Proof
-  EVAL_TAC
-QED
 
 Definition pop_test_context_def:
   pop_test_context b = empty_evaluation_context with

@@ -9,6 +9,7 @@ Ancestors
   vyperInterpreter vyperState vyperContext vyperStorage vyperTyping
   vyperStorageBackend vyperLookup vyperEncodeDecode vyperArith vyperAssignPreservesType
   vyperTypeSystem vyperTypeInvariants vyperTypeValues vyperTypeDefaults
+  vyperAbiDecodeTyping vyperAbiMemoryProps vyperAbiStateTyping vyperAbiWriteTyping
   vyperScopePreservation vyperImmutablesPreservation vyperLookupStorage
   vyperStatePreservation vyperTypeEnv vyperTypeEnvPreservation vyperTypeABI vyperTypeBuiltins vyperTypeExprSoundness vyperEvalPreservesScopes
 Libs
@@ -106,115 +107,17 @@ QED
 
 (* ===== Leaf helpers needed by assignment/materialisation preservation ===== *)
 
-Theorem decode_base_from_slot_well_typed:
-  !slot tv. well_formed_type_value tv /\
-    (!n. tv <> BaseTV (StringT n)) /\
-    (!n. tv <> BaseTV (BytesT (Dynamic n))) /\
-    (!tvs. tv <> TupleTV tvs) /\
-    (!tv0 b. tv <> ArrayTV tv0 b) /\
-    (!fs. tv <> StructTV fs) ==>
-    value_has_type tv (decode_base_from_slot slot tv)
-Proof
-  ho_match_mp_tac decode_base_from_slot_ind >>
-  simp[decode_base_from_slot_def, value_has_type_inv,
-       well_formed_type_value_def,
-       truncate_unsigned_range,
-       word_to_bytes_be_def, LENGTH_word_to_bytes,
-       LENGTH_TAKE_EQ, MIN_DEF] >>
-  rw[] >> TRY (irule truncate_signed_range >> simp[])
-QED
-
-Theorem slots_to_bytes_length:
-  !n slots. LENGTH (slots_to_bytes n slots) <= n
-Proof
-  ho_match_mp_tac slots_to_bytes_ind >>
-  rw[slots_to_bytes_def, word_to_bytes_be_def, LENGTH_word_to_bytes,
-     LET_THM, LENGTH_TAKE_EQ, MIN_DEF, LENGTH_APPEND]
-QED
-
-Theorem decode_dyn_bytes_length:
-  !storage offset max bs.
-    decode_dyn_bytes storage offset max = SOME bs ==> LENGTH bs <= max
-Proof
-  simp[decode_dyn_bytes_def, LET_THM] >> rpt strip_tac >>
-  irule LESS_EQ_TRANS >> qexists_tac `w2n (lookup_storage (n2w offset) storage)` >>
-  simp[slots_to_bytes_length]
-QED
-
-Theorem enumerate_static_array_sparse_has_type:
-  !tv vs n.
-    all_have_type tv vs ==>
-    sparse_has_type tv (n + LENGTH vs)
-      (enumerate_static_array (default_value tv) n vs)
-Proof
-  Induct_on `vs` >>
-  simp[enumerate_static_array_def, value_has_type_def, LET_THM] >>
-  rpt strip_tac >>
-  IF_CASES_TAC >> gvs[value_has_type_def, ADD1]
-  >- (first_x_assum $ qspecl_then [`tv`, `SUC n`] mp_tac >> simp[ADD1]) >>
-  simp[] >>
-  first_x_assum $ qspecl_then [`tv`, `SUC n`] mp_tac >> simp[ADD1]
-QED
-
-Theorem decode_static_array_length:
-  !storage offset tv n vs.
-    decode_static_array storage offset tv n = SOME vs ==>
-    LENGTH vs = n
-Proof
-  Induct_on `n` >>
-  simp[Once decode_value_def, AllCaseEqs()] >>
-  rpt strip_tac >> gvs[] >> res_tac
-QED
-
-Theorem decode_dyn_array_length:
-  !storage offset tv n vs.
-    decode_dyn_array storage offset tv n = SOME vs ==>
-    LENGTH vs = n
-Proof
-  Induct_on `n` >>
-  simp[Once decode_value_def, AllCaseEqs()] >>
-  rpt strip_tac >> gvs[] >> res_tac
-QED
-
-Theorem decode_value_well_typed:
-  (!storage offset tv v.
-     decode_value storage offset tv = SOME v /\
-     well_formed_type_value tv ==> value_has_type tv v) /\
-  (!storage offset tvs vs.
-     decode_tuple storage offset tvs = SOME vs /\
-     EVERY well_formed_type_value tvs ==> values_have_types tvs vs) /\
-  (!storage offset tv n vs.
-     decode_static_array storage offset tv n = SOME vs /\
-     well_formed_type_value tv ==> all_have_type tv vs) /\
-  (!storage offset tv n vs.
-     decode_dyn_array storage offset tv n = SOME vs /\
-     well_formed_type_value tv ==> all_have_type tv vs) /\
-  (!storage offset ftypes fields.
-     decode_struct storage offset ftypes = SOME fields /\
-     EVERY (well_formed_type_value o SND) ftypes ==>
-     struct_has_type ftypes fields)
-Proof
-  ho_match_mp_tac decode_value_ind >> rpt conj_tac >>
-  simp[decode_value_def, AllCaseEqs(), value_has_type_inv,
-       well_formed_type_value_def, value_has_type_def, PULL_EXISTS,
-       decode_base_from_slot_well_typed] >>
-  rpt strip_tac >> gvs[]
-  >- (metis_tac[decode_dyn_bytes_length])
-  >- (metis_tac[decode_dyn_bytes_length])
-  >- (first_x_assum irule >> gvs[EVERY_MEM])
-  >- simp[enumerate_static_array_sorted]
-  >- (qpat_x_assum `decode_static_array _ _ _ _ = _`
-        (ASSUME_TAC o MATCH_MP decode_static_array_length) >>
-      gvs[] >>
-      irule (enumerate_static_array_sparse_has_type
-             |> Q.SPECL [`tv`,`vs`,`0`]
-             |> SIMP_RULE (srw_ss()) []) >>
-      simp[])
-  >- (qpat_x_assum `decode_dyn_array _ _ _ _ = _`
-        (ASSUME_TAC o MATCH_MP decode_dyn_array_length) >>
-      gvs[MIN_DEF])
-  >> (first_x_assum irule >> gvs[EVERY_MEM])
-QED
+(* Preserve the established exports. Decoder proofs are independent of the
+   evaluator preservation stack, so ABI staging can use them without a cycle. *)
+Theorem decode_base_from_slot_well_typed =
+  vyperAbiDecodeTypingTheory.decode_base_from_slot_well_typed
+Theorem slots_to_bytes_length = vyperAbiDecodeTypingTheory.slots_to_bytes_length
+Theorem decode_dyn_bytes_length = vyperAbiDecodeTypingTheory.decode_dyn_bytes_length
+Theorem enumerate_static_array_sparse_has_type =
+  vyperAbiDecodeTypingTheory.enumerate_static_array_sparse_has_type
+Theorem decode_static_array_length = vyperAbiDecodeTypingTheory.decode_static_array_length
+Theorem decode_dyn_array_length = vyperAbiDecodeTypingTheory.decode_dyn_array_length
+Theorem decode_value_well_typed = vyperAbiDecodeTypingTheory.decode_value_well_typed
 
 Theorem read_storage_slot_success_type:
   well_formed_type_value tv /\
@@ -424,38 +327,8 @@ Proof
 QED
 
 
-Theorem evaluate_subscripts_leaf_well_typed:
-  !subs tv a v.
-    evaluate_subscripts tv a subs = INL v /\
-    value_has_type tv a /\
-    well_formed_type_value tv /\
-    leaf_type tv subs <> NoneTV ==>
-    value_has_type (leaf_type tv subs) v /\
-    well_formed_type_value (leaf_type tv subs)
-Proof
-  Induct >> simp[evaluate_subscripts_def, leaf_type_def] >>
-  gen_tac >> Cases_on `h` >>
-  simp[evaluate_subscripts_def, leaf_type_def] >>
-  rpt gen_tac >> strip_tac
-  >- (
-    Cases_on `v` >> gvs[evaluate_subscripts_def, AllCaseEqs()] >>
-    Cases_on `tv` >> gvs[leaf_type_def, value_has_type_def, well_formed_type_value_def] >>
-    drule array_index_has_type >> simp[] >> strip_tac >>
-    first_x_assum drule_all >> simp[]) >>
-  Cases_on `a` >> gvs[evaluate_subscripts_def, AllCaseEqs()] >>
-  Cases_on `tv` >>
-  gvs[evaluate_subscripts_def, leaf_type_def, AllCaseEqs(), value_has_type_def] >>
-  rename1 `StructTV ftypes` >>
-  Cases_on `ALOOKUP ftypes s` >> gvs[] >>
-  rename1 `ALOOKUP ftypes s = SOME ftv` >>
-  `value_has_type ftv v'` by
-    (drule struct_field_has_type >> disch_then drule >> strip_tac >> gvs[]) >>
-  `well_formed_type_value ftv` by
-    (gvs[well_formed_type_value_def, EVERY_MEM, MEM_MAP] >>
-     drule alistTheory.ALOOKUP_MEM >> strip_tac >>
-     first_x_assum (qspec_then `(s, ftv)` mp_tac) >> simp[]) >>
-  first_x_assum drule_all >> simp[]
-QED
+Theorem evaluate_subscripts_leaf_well_typed =
+  vyperAbiWriteTypingTheory.evaluate_subscripts_leaf_well_typed
 
 Theorem popped_value_well_typed:
   !arr v elem_tv n.
@@ -1180,15 +1053,16 @@ Resume assign_target_preserves_state_well_typed_mutual[ScopedVar]:
   drule find_containing_scope_pre_none >> strip_tac >> gvs[] >>
   simp[set_scopes_def, return_def, raise_def] >>
   strip_tac >>
-  drule assign_result_preserves_state >>
-  strip_tac >> gvs[] >>
+  gvs[bind_apply, AllCaseEqs()] >>
+  imp_res_tac assign_result_preserves_state >>
+  imp_res_tac write_abi_memory_typing_frame >>
   gvs[runtime_consistent_def] >>
   gvs[get_scopes_def, return_def, set_scopes_def] >>
-  conj_tac >- (
-    irule env_consistent_update_existing_scope_value >> simp[] >>
-    irule env_consistent_record_update_same_scopes >> simp[] ) >>
-  gvs[state_well_typed_def, EVERY_APPEND] >>
-  irule scope_well_typed_update_value >> simp[]
+  (conj_tac >- (
+     irule env_consistent_update_existing_scope_value >> simp[] >>
+     irule env_consistent_record_update_same_scopes >> simp[]) >>
+   gvs[state_well_typed_def, EVERY_APPEND] >>
+   irule scope_well_typed_update_value >> simp[])
 QED
 
 Resume assign_target_preserves_state_well_typed_mutual[TopLevelVar]:
@@ -1288,7 +1162,8 @@ Resume assign_target_preserves_state_well_typed_mutual[ImmutableVar]:
       conj_tac >- metis_tac[assign_operation_leaf_type_update] >>
       metis_tac[assign_operation_leaf_type_append]) >>
     simp[]) >>
-  imp_res_tac assign_result_preserves_state >> gvs[] >>
+  imp_res_tac assign_result_preserves_state >>
+  imp_res_tac write_abi_immutables_typing_frame >> gvs[] >>
   conj_tac >- (
     irule set_immutable_preserves_env_consistent >>
     qexists_tac `id` >> qexists_tac `INL ()` >> qexists_tac `src_id_opt` >>
@@ -1307,6 +1182,26 @@ Resume assign_target_preserves_state_well_typed_mutual[ImmutableVar]:
            lift_option_type_def, lift_option_def, set_address_immutables_def,
            return_def,
            raise_def, AllCaseEqs(), LET_THM] >>
+      strip_tac >> gvs[] >>
+      qpat_x_assum `(case ALOOKUP _ _ of NONE => _ | SOME _ => _) _ = _` mp_tac >>
+      Cases_on `ALOOKUP s''.immutables cx.txn.target` >>
+      gvs[return_def, raise_def] >> strip_tac >> gvs[])
+  >- (irule set_immutable_preserves_env_consistent >>
+      qexists_tac `id` >> qexists_tac `INL ()` >> qexists_tac `src_id_opt` >>
+      qexists_tac `s''` >> qexists_tac `tv` >> qexists_tac `ty'` >>
+      qexists_tac `a'` >>
+      gvs[env_consistent_def, env_context_consistent_def] >>
+      rpt strip_tac >> first_x_assum drule_all >> simp[])
+  >- (conj_tac >- (
+        irule set_immutable_preserves_state_well_typed >>
+        qexists_tac `cx` >> qexists_tac `id` >>
+        qexists_tac `INL ()` >> qexists_tac `src_id_opt` >>
+        qexists_tac `s''` >> qexists_tac `tv` >> qexists_tac `a'` >>
+        simp[]) >>
+      qpat_x_assum `set_immutable _ _ _ _ _ _ = _` mp_tac >>
+      simp[set_immutable_def, get_address_immutables_def, bind_def,
+           lift_option_type_def, lift_option_def, set_address_immutables_def,
+           return_def, raise_def, AllCaseEqs(), LET_THM] >>
       strip_tac >> gvs[] >>
       qpat_x_assum `(case ALOOKUP _ _ of NONE => _ | SOME _ => _) _ = _` mp_tac >>
       Cases_on `ALOOKUP s''.immutables cx.txn.target` >>
@@ -2374,6 +2269,85 @@ Proof
 QED
 
 
+Theorem write_abi_memory_runtime_typed_success:
+  assign_subscripts tv old subs op = INL new /\
+  value_has_type tv old /\ well_formed_type_value tv /\
+  evaluate_type env.type_defs ty = SOME (leaf_type tv subs) /\
+  assignable_type env.type_defs ty /\
+  assign_operation_runtime_typed env ty op ==>
+  ?rt. write_abi_memory cx id tv new subs op st = (INL (),rt)
+Proof
+  strip_tac >>
+  drule_all assign_subscripts_preserves_type_runtime_typed >> strip_tac >>
+  `leaf_type tv subs <> NoneTV` by
+    metis_tac[assignable_type_evaluate_not_NoneTV] >>
+  irule write_abi_memory_typed_success >> simp[] >>
+  conj_tac >- (rpt strip_tac >> gvs[] >>
+    drule_all assign_operation_leaf_type_append >> strip_tac >> gvs[]) >>
+  qexists_tac `old` >> simp[]
+QED
+
+Theorem write_abi_immutables_runtime_typed_success:
+  assign_subscripts tv old subs op = INL new /\
+  value_has_type tv old /\ well_formed_type_value tv /\
+  evaluate_type env.type_defs ty = SOME (leaf_type tv subs) /\
+  assignable_type env.type_defs ty /\
+  assign_operation_runtime_typed env ty op ==>
+  ?rt. write_abi_immutables cx src id tv new subs op st = (INL (),rt)
+Proof
+  strip_tac >>
+  drule_all assign_subscripts_preserves_type_runtime_typed >> strip_tac >>
+  `leaf_type tv subs <> NoneTV` by
+    metis_tac[assignable_type_evaluate_not_NoneTV] >>
+  irule write_abi_immutables_typed_success >> simp[] >>
+  conj_tac >- (rpt strip_tac >> gvs[] >>
+    drule_all assign_operation_leaf_type_append >> strip_tac >> gvs[]) >>
+  qexists_tac `old` >> simp[]
+QED
+
+Theorem assign_target_scoped_continuation:
+  find_containing_scope id st.scopes = SOME (pre,scope,entry,rest) /\
+  entry.assignable ==>
+  assign_target cx (BaseTargetV (ScopedVar id) sbs) op st =
+  (do
+     new <- lift_sum (assign_subscripts entry.type entry.value (REVERSE sbs) op);
+     set_scopes (pre ++ (scope |+ (id,entry with value := new))::rest);
+     write_abi_memory cx id entry.type new (REVERSE sbs) op;
+     assign_result entry.type op entry.value (REVERSE sbs)
+   od) st
+Proof
+  simp[Once assign_target_def, get_scopes_def, lift_option_def, bind_def,
+       ignore_bind_def, return_def, type_check_def, assert_def]
+QED
+
+Theorem scoped_assignment_continuation_no_type_error:
+  value_has_type tv old /\ well_formed_type_value tv /\
+  evaluate_type env.type_defs ty = SOME (leaf_type tv subs) /\
+  assignable_type env.type_defs ty /\
+  assign_operation_runtime_typed env ty op /\
+  (do
+     new <- lift_sum (assign_subscripts tv old subs op);
+     set_scopes (scopes new);
+     write_abi_memory cx id tv new subs op;
+     assign_result tv op old subs
+   od) st = (res,rt) ==>
+  no_type_error_result res
+Proof
+  strip_tac >> Cases_on `assign_subscripts tv old subs op` >>
+  gvs[bind_def, ignore_bind_def, lift_sum_def, return_def, raise_def,
+      set_scopes_def]
+  >- (rename1 `assign_subscripts tv old subs op = INL new` >>
+      drule_all write_abi_memory_runtime_typed_success >>
+      disch_then (qspecl_then [`st with scopes := scopes new`, `id`, `cx`]
+        strip_assume_tac) >>
+      gvs[] >> drule_all assign_result_no_type_error_from_successful_assign >> simp[]) >>
+  rename1 `assign_subscripts tv old subs op = INR err` >>
+  `leaf_type tv subs <> NoneTV` by
+    metis_tac[assignable_type_evaluate_not_NoneTV] >>
+  Cases_on `err` >> gvs[no_type_error_result_def] >>
+  drule_all assign_subscripts_no_type_error_runtime_typed >> simp[]
+QED
+
 Theorem assign_target_sound_mutual:
   (!cx gv op st res st'.
     assign_target cx gv op st = (res, st') ==>
@@ -2424,42 +2398,25 @@ Resume assign_target_sound_mutual[sound_ScopedVar]:
     goal_assum drule_all >> simp[]) >>
   rename1 `assign_target cx (BaseTargetV (ScopedVar id) sbs) op st = (res, st')` >>
   gvs[assign_target_assignable_context_def, assign_target_assignable_def] >>
-  reverse $
-  gvs[Once assign_target_def, bind_def, ignore_bind_def, return_def, raise_def,
-      lift_option_def, lift_option_type_def, lift_sum_def, type_check_def,
-      assert_def, check_def, AllCaseEqs(), option_CASE_rator, get_scopes_def,
-      no_type_error_result_def, sum_CASE_rator, set_scopes_def]
-  >- (
-    rpt strip_tac >>
-    gvs[target_runtime_typed_def, target_value_shape_def, location_runtime_typed_def] >>
-    gvs[runtime_consistent_def] >>
-    drule find_containing_scope_lookup >> strip_tac >> gvs[] >>
-    `runtime_consistent env cx s''` by simp[runtime_consistent_def] >>
-    `?vt final_tv. location_runtime_typed env cx s'' (ScopedVar id) vt /\
-                   target_path_type env vt sbs (Type ty) /\
-                   place_leaf_typed env vt sbs ty final_tv` by
-      metis_tac[target_runtime_typed_place_leaf_typed] >>
-    gvs[location_runtime_typed_def] >>
-    `value_has_type entry.type entry.value /\ well_formed_type_value entry.type` by (
-      irule scope_well_typed_lookup_scopes >>
-      gvs[state_well_typed_def] >>
-      goal_assum drule >> simp[]) >>
-    gvs[place_leaf_typed_def, place_leaf_path_typed_def] >>
-    Cases_on `REVERSE sbs = []` >- (
-      gvs[leaf_type_def] >>
-      qspecl_then [`env`,`ty`,`op`,`entry.type`,`entry.value`,`msg`]
-        mp_tac assign_operation_runtime_typed_leaf_no_type_error >>
-      simp[]) >>
-    qspecl_then [`entry.type`,`entry.value`,`REVERSE sbs`,`op`,`env`,`ty`,`msg`]
-      mp_tac assign_subscripts_no_type_error_runtime_typed >>
-    impl_tac >- (
-      simp[] >>
-      drule_all assignable_type_evaluate_not_NoneTV >> simp[]) >>
-    simp[]) >>
-  rpt strip_tac >> gvs[] >>
-  drule assign_result_no_type_error_from_successful_assign >>
-  disch_then drule >>
-  simp[no_type_error_result_def]
+  rename1 `find_containing_scope id st.scopes = SOME (pre,scope,entry,rest)` >>
+  drule find_containing_scope_lookup >> strip_tac >>
+  `?vt final_tv. location_runtime_typed env cx st (ScopedVar id) vt /\
+                 target_path_type env vt sbs (Type ty) /\
+                 place_leaf_typed env vt sbs ty final_tv` by
+    metis_tac[target_runtime_typed_place_leaf_typed] >>
+  gvs[location_runtime_typed_def, place_leaf_typed_def,
+      place_leaf_path_typed_def] >>
+  `value_has_type entry.type entry.value /\ well_formed_type_value entry.type` by
+    (irule scope_well_typed_lookup_scopes >>
+     gvs[runtime_consistent_def, state_well_typed_def] >>
+     goal_assum drule >> simp[]) >>
+  drule_all assign_target_scoped_continuation >> strip_tac >> gvs[] >>
+  irule scoped_assignment_continuation_no_type_error >>
+  goal_assum (drule_at Any) >> simp[] >>
+  goal_assum (drule_at Any) >> simp[] >>
+  qexistsl_tac [`cx`, `env`, `id`, `op`, `st'`,
+    `λnew. pre ++ (scope |+ (id,entry with value := new))::rest`,
+    `st`, `REVERSE sbs`, `ty`] >> simp[]
 QED
 
 Theorem lookup_global_HashMapVarDecl_returns_HashMapRef:
@@ -3533,9 +3490,14 @@ Resume assign_target_sound_mutual[sound_ImmutableVar]:
     impl_tac >- simp[] >>
     simp[]) >>
   rpt strip_tac >> gvs[] >>
-  drule assign_result_no_type_error_from_successful_assign >>
-  disch_then drule >>
-  simp[no_type_error_result_def]
+  FIRST [
+    drule assign_result_no_type_error_from_successful_assign >>
+    disch_then drule >> simp[no_type_error_result_def],
+    qmatch_asmsub_abbrev_tac
+      `write_abi_immutables cx src_id_opt id tv a' (REVERSE is) op ws` >>
+    drule_all write_abi_immutables_runtime_typed_success >>
+    disch_then (qspecl_then [`ws`, `src_id_opt`, `id`, `cx`] mp_tac) >>
+    simp[]]
 QED
 
 Theorem assign_target_assignable_context_rebuild_EVERY[local]:

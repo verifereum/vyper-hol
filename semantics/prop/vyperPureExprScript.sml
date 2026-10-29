@@ -1,6 +1,7 @@
 Theory vyperPureExpr
 Ancestors
   vyperMisc vyperContext vyperState vyperStorageBackend vyperInterpreter vyperLookup vyperStatePreservation
+  vyperAbiOperand vyperAbiFrame vyperAbiReadOnly vyperAbiAppendFrame vyperCallOutcomeFrame
 
 (* Pure expressions: expressions that do not modify state. *)
 Definition pure_expr_def:
@@ -211,6 +212,8 @@ Proof
   rw[pure_expr_def]
 QED
 
+(* Obsolete eager-only helper retained. The mutual TypeBuiltin proof below
+   now uses allocation-only framing for delayed ABI operands.
 Theorem case_TypeBuiltin[local]:
   ∀cx ty tb typ es.
     (∀s'' x t.
@@ -228,6 +231,8 @@ Proof
        gvs[return_def, raise_def]) >>
   first_x_assum drule >> gvs[ETA_THM]
 QED
+
+*)
 
 (* All Call cases are vacuously true since pure_expr (Call _ _ _) = F *)
 Theorem case_Call[local]:
@@ -268,14 +273,14 @@ QED
    Main Mutual Induction Theorem
 
    Assembles individual case lemmas into the full mutual induction.
-   The key insight is that we prove the same scopes-preserving property
-   for ALL evaluate functions (including statements), but for statements
-   we get it for free since we set their predicates to T (trivially true).
+   Ordinary pure expressions preserve the complete state. Delayed pure ABI
+   operands may append local/immutable captures, but preserve all existing cells
+   and all other fields. The outer AbiEncode releases both suffixes on errors too.
 
    We use a specialized version of evaluate_ind with:
    - P0-P6 (statement predicates) = λcx args. T
-   - P7 (eval_expr predicate) = scopes preservation with pure_expr
-   - P8 (eval_exprs predicate) = scopes preservation with EVERY pure_expr
+   - P7/P8 = complete state preservation under purity
+   - P9/P10 = allocation-only ABI framing under purity
    ------------------------------------------------------------------------ *)
 
 (* Derive specialized induction principle for expr_state_mutual.
@@ -290,7 +295,9 @@ local
   val p6 = ``\(cx:evaluation_context) (tyv:type_value) (nm:string) (body:stmt list) (vs:value list). T``
   val p7 = ``\cx e. !st res st'. eval_expr cx e st = (res, st') ==> pure_expr e ==> st = st'``
   val p8 = ``\cx es. !st res st'. eval_exprs cx es st = (res, st') ==> EVERY pure_expr es ==> st = st'``
-  val spec_ind = SPECL [p0, p1, p2, p3, p4, p5, p6, p7, p8] evaluate_ind
+  val p9 = ``\cx e. !st res st'. eval_abi_expr cx e st = (res,st') ==> pure_expr e ==> abi_append st st'``
+  val p10 = ``\cx es. !st res st'. eval_abi_exprs cx es st = (res,st') ==> EVERY pure_expr es ==> abi_append st st'``
+  val spec_ind = SPECL [p0, p1, p2, p3, p4, p5, p6, p7, p8, p9, p10] evaluate_ind
   val spec_ind_beta = CONV_RULE (DEPTH_CONV BETA_CONV) spec_ind
 in
   val expr_state_ind_principle = save_thm("expr_state_ind_principle", spec_ind_beta)
@@ -301,7 +308,9 @@ Theorem expr_state_mutual[local]:
   (∀cx e st res st'.
      eval_expr cx e st = (res, st') ⇒ pure_expr e ⇒ st = st') ∧
   (∀cx es st res st'.
-     eval_exprs cx es st = (res, st') ⇒ EVERY pure_expr es ⇒ st = st')
+     eval_exprs cx es st = (res, st') ⇒ EVERY pure_expr es ⇒ st = st') ∧
+  (∀cx e st res st'. eval_abi_expr cx e st = (res,st') ⇒ pure_expr e ⇒ abi_append st st') ∧
+  (∀cx es st res st'. eval_abi_exprs cx es st = (res,st') ⇒ EVERY pure_expr es ⇒ abi_append st st')
 Proof
   MP_TAC expr_state_ind_principle >> impl_tac >- (
     rpt conj_tac >>
@@ -322,12 +331,50 @@ Proof
     ACCEPT_TAC case_Subscript >-
     ACCEPT_TAC case_Attribute >-
     ACCEPT_TAC case_Builtin >-
-    ACCEPT_TAC case_TypeBuiltin >-
+    suspend "TypeBuiltin" >-
     metis_tac[case_eval_exprs_nil] >-
-    ACCEPT_TAC case_eval_exprs_cons
+    ACCEPT_TAC case_eval_exprs_cons >>
+    rpt strip_tac >>
+    FIRST [qpat_x_assum `eval_abi_expr _ _ _ = _` mp_tac,
+           qpat_x_assum `eval_abi_exprs _ _ _ = _` mp_tac] >>
+    simp[Once evaluate_def, bind_def, ignore_bind_def,
+      return_def, raise_def, AllCaseEqs(), switch_BoolV_def] >>
+    rpt strip_tac >> gvs[pure_expr_def] >>
+    imp_res_tac abi_readonly_states >> imp_res_tac get_Value_state >>
+    imp_res_tac lift_option_type_state >> imp_res_tac materialise_state >> gvs[] >>
+    TRY (FIRST [drule (lookup_abi_local_append |> SRULE [state_rel_frame_result]),
+      drule (lookup_abi_global_append |> SRULE [state_rel_frame_result])] >>
+      simp[] >> NO_TAC) >>
+    res_tac >> gvs[] >>
+    TRY (qpat_x_assum `(if _ then _ else _) _ = _` mp_tac >>
+      rpt IF_CASES_TAC >> simp[raise_def] >> strip_tac >> gvs[]) >>
+    res_tac >> gvs[] >>
+    TRY (irule abi_append_trans >> first_assum (irule_at Any) >> first_assum ACCEPT_TAC) >>
+    qpat_x_assum `∀st res rt. eval_abi_expr _ _ st = (res,rt) ⇒ _` drule >>
+    strip_tac >> drule_all abi_append_trans >> simp[]
   ) >>
   simp[]
 QED
+
+Resume expr_state_mutual[TypeBuiltin]:
+  rpt gen_tac >> strip_tac >> Cases_on `tb` >> gvs[] >>
+  rpt strip_tac >>
+  gvs[pure_expr_def, Once evaluate_def, bind_def, ignore_bind_def,
+    type_check_def, assert_def, return_def, raise_def, AllCaseEqs(),
+    mark_abi_captures_def, ETA_THM] >>
+  imp_res_tac lift_sum_state >> gvs[] >> res_tac >> gvs[] >>
+  `state_rel_frame abi_append (eval_abi_exprs cx es)` by
+    (simp[state_rel_frame_result] >> first_assum MATCH_ACCEPT_TAC) >>
+  `!args. state_rel_frame abi_append (stage_abi_operands cx args)` by
+    (gen_tac >> irule abi_append_readonly >> simp[abi_readonly_primitives]) >>
+  `state_rel_frame abi_append
+     (do args <- eval_abi_exprs cx es; stage_abi_operands cx args od)` by
+    (irule state_rel_frame_bind_guarded >> simp[] >>
+     metis_tac[abi_append_trans]) >>
+  drule_all abi_append_finally_state >> simp[]
+QED
+
+Finalise expr_state_mutual
 
 (* ------------------------------------------------------------------------
    Main Theorems
