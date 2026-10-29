@@ -804,6 +804,18 @@ Proof
   rw[finite_mapTheory.FLOOKUP_UPDATE] >> simp[]
 QED
 
+Theorem add_immutable_locations_FLOOKUP:
+  !sft tops off vars n loc.
+    FLOOKUP (add_immutable_locations sft tops off vars) n = SOME loc ==>
+    FLOOKUP vars n = SOME loc \/ ?imm_off. loc = ImmutableLoc imm_off
+Proof
+  gen_tac >> Induct >> simp[add_immutable_locations_def] >>
+  rpt gen_tac >> Cases_on `h` >>
+  simp[add_immutable_locations_def] >> rpt (CASE_TAC >> simp[]) >>
+  strip_tac >> first_x_assum drule >>
+  rw[finite_mapTheory.FLOOKUP_UPDATE] >> simp[]
+QED
+
 (* build_compile_env holds the parameters at MemLoc slots and module
    variables at storage slots: no other MemLoc variable and no PtrVar. *)
 Theorem build_compile_env_vars:
@@ -826,10 +838,12 @@ Proof
        ?off sz. FLOOKUP arg_vars n = SOME (MemLoc off sz)`
     by (rpt strip_tac >> drule_all allocate_args_FLOOKUP_arg >> simp[]) >>
   `!n loc. FLOOKUP arg_vars n = SOME loc /\ ~MEM n (MAP FST args) ==>
-           ?slot. loc = StorageLoc slot \/ loc = TransientLoc slot`
+           ?slot. loc = StorageLoc slot \/ loc = TransientLoc slot \/
+                  loc = ImmutableLoc slot`
     by (rpt strip_tac >> drule_all allocate_args_FLOOKUP_other >>
         strip_tac >> gvs[] >>
-        drule add_module_var_locations_FLOOKUP >> simp[]) >>
+        drule add_immutable_locations_FLOOKUP >> strip_tac
+        >- (drule add_module_var_locations_FLOOKUP >> simp[]) >> simp[]) >>
   rw[] >> spose_not_then assume_tac >>
   Cases_on `MEM n (MAP FST args)` >> gvs[]
   >- (first_x_assum drule >> strip_tac >> gvs[])

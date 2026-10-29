@@ -12023,21 +12023,6 @@ Proof
   metis_tac[]
 QED
 
-Theorem allocate_locals_static:
-  !sft locals off vars.
-    (!n loc. FLOOKUP vars n = SOME loc ==> static_loc loc) ==>
-    !n loc. FLOOKUP (FST (allocate_locals sft locals off vars)) n = SOME loc ==>
-      static_loc loc
-Proof
-  gen_tac >> Induct >> simp[allocate_locals_def] >>
-  Cases_on `h` >> rpt gen_tac >> strip_tac >>
-  simp[Once allocate_locals_def] >>
-  rpt (CASE_TAC >> simp[]) >> first_x_assum match_mp_tac >>
-  rpt strip_tac >>
-  gvs[finite_mapTheory.FLOOKUP_UPDATE, AllCaseEqs(), static_loc_def] >>
-  metis_tac[]
-QED
-
 Theorem add_immutable_locations_identity:
   !sft tops off vars.
     immutable_free_program tops ==>
