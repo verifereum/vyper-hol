@@ -1012,13 +1012,23 @@ Resume canonical_eval_no_control_with_results[RawLog]:
   imp_res_tac push_log_no_control >> res_tac
 QED
 
+(* Original RawRevert proof:
 Resume canonical_eval_no_control_with_results[RawRevert]:
   rpt strip_tac >> pop_assum mp_tac >>
   simp[Once evaluate_def, bind_def, ignore_bind_def, return_def,
     raise_def, AllCaseEqs()] >> rpt strip_tac >> gvs[no_control_exc_def] >>
   metis_tac[type_check_no_control, no_control_exc_def]
 QED
+*)
+Resume canonical_eval_no_control_with_results[RawRevert]:
+  rpt strip_tac >> pop_assum mp_tac >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def, return_def,
+    lift_option_type_def, option_CASE_rator,
+    raise_def, AllCaseEqs()] >> rpt strip_tac >> gvs[no_control_exc_def] >>
+  metis_tac[type_check_no_control, no_control_exc_def]
+QED
 
+(* Original SelfDestruct proof:
 Resume canonical_eval_no_control_with_results[SelfDestruct]:
   rpt strip_tac >> pop_assum mp_tac >>
   simp[Once evaluate_def, bind_def, ignore_bind_def, return_def,
@@ -1027,6 +1037,18 @@ Resume canonical_eval_no_control_with_results[SelfDestruct]:
   imp_res_tac type_check_no_control >>
   imp_res_tac lift_option_type_no_control >>
   res_tac
+QED
+*)
+Resume canonical_eval_no_control_with_results[SelfDestruct]:
+  rpt strip_tac >> pop_assum mp_tac >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def, return_def,
+    get_accounts_def, update_accounts_def, update_pending_deletions_def,
+    raise_def, AllCaseEqs()] >> rpt strip_tac >>
+  gvs[no_control_exc_def, COND_RATOR, AllCaseEqs(),
+    update_accounts_def, update_pending_deletions_def, bind_def, return_def] >>
+  imp_res_tac type_check_no_control >>
+  imp_res_tac lift_option_type_no_control >>
+  gvs[no_control_exc_def] >> res_tac >> gvs[]
 QED
 
 Resume canonical_eval_no_control_with_results[Create]:
