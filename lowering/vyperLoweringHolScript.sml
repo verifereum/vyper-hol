@@ -13,11 +13,12 @@ Ancestors
   exprBopLowering
   exprSimOps exprSimOperands exprSimCompare exprSimArith intBits freshWrites
   exprSimMain stmtSim stmtSimIf stmtSimFor stmtSimReturn stmtSimDecl
-  stmtSimReason stmtSimReasonExpr stmtSimForRange
+  stmtSimReason stmtSimReasonExpr stmtSimReasonStorage stmtSimForRange
+  stmtSimDeclMem exprSimStorageCopy
   valueEncodingProofs
   localPtrsProps
   loweringShapeProps
-  intCallStep extCallOracleStep intCallLookup intCallCallee intCallArgs intCallResult intCallReturnMem valueCopy
+  intCallStep extCallOracleStep intCallLookup intCallCallee intCallArgs intCallResult intCallReturnMem intCallFrame valueCopy
   structFieldsProps
   (* compiler + correctness *)
   vyperCompiler

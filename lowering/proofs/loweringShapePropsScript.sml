@@ -2852,11 +2852,32 @@ Resume compile_dynarray_append_shape[store_element]:
 QED
 Finalise compile_dynarray_append_shape[local]
 
+(* Workaround for HOL-Theorem-Prover/HOL#2115.  `Induct` reads the datatype
+   package's mutual principle for the AST, whose hypothesis for a constructor
+   argument that reaches the type under a container is one folded disjunction,
+   and that shape leaves it no subgoals; state the target type's own one-step
+   principle instead.  Once #2115 is fixed, drop this lemma and the
+   `recInduct base_assignment_target_induct` steps below and go back to plain
+   `Induct`. *)
+Theorem base_assignment_target_induct[local]:
+  !P. (!id. P (NameTarget id)) ∧ (!nsid. P (TopLevelNameTarget nsid)) ∧
+      (!bt e. P bt ==> P (SubscriptTarget bt e)) ∧
+      (!bt s. P bt ==> P (AttributeTarget bt s)) ==> !bt. P bt
+Proof
+  rpt strip_tac >>
+  `(∀e:expr. T) ∧ ∀bt. P bt` suffices_by simp[] >>
+  ho_match_mp_tac (TypeBase.induction_of ``:base_assignment_target``) >>
+  simp[]
+QED
+
 Theorem compile_target_base_shape[local]:
   !bt cenv st. cenv_shape_ok st cenv ==>
     plain_operand st (compile_target_base cenv bt)
 Proof
-  Induct >> simp[compile_target_base_def] >> rpt strip_tac >>
+  (* BETA_TAC and the `rpt strip_tac`s put the goal back in the shape plain
+     `Induct` produced; they go with the induction lemma above. *)
+  recInduct base_assignment_target_induct >> rpt conj_tac >> BETA_TAC >>
+  simp[compile_target_base_def] >> rpt strip_tac >>
   BasicProvers.TOP_CASE_TAC >> simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def] >>
   rename1 `FLOOKUP _ _ = SOME vloc` >>
   `loc_shape_ok st vloc` by metis_tac[cenv_shape_ok_lookup] >>
@@ -7857,7 +7878,11 @@ Theorem compile_get_target_ptr_shape:
       (compile_get_target_ptr cenv bt)
       (\r st. plain_operand st (FST r) /\ FST (SND r) <> SOME LocCode)
 Proof
-  Induct >> rpt gen_tac >> simp[supported_expr_exists_def, Once compile_get_target_ptr_def]
+  (* as in `compile_target_base_shape`: these steps only reproduce the goal
+     shape plain `Induct` produced, and go with the induction lemma. *)
+  recInduct base_assignment_target_induct >> rpt conj_tac >> BETA_TAC >>
+  rpt gen_tac >> TRY (DISCH_THEN ASSUME_TAC) >> rpt gen_tac >>
+  simp[supported_expr_exists_def, Once compile_get_target_ptr_def]
   >- suspend "name"
   >- suspend "toplevel"
   >- suspend "subscript"
@@ -11911,7 +11936,10 @@ Theorem supported_target_info_shape[local]:
     supported_target_info tops bindings target <> NONE ==>
     ~supported_target_exists expr_shape_root target
 Proof
-  Induct >> simp[supported_target_info_def, supported_expr_exists_def] >>
+  (* as in `compile_target_base_shape`: `Induct` on `base_assignment_target`
+     fails on the pinned HOL (#2115), so use the one-step principle above *)
+  recInduct base_assignment_target_induct >> rpt conj_tac >> BETA_TAC >>
+  simp[supported_target_info_def, supported_expr_exists_def] >>
   rpt gen_tac >> strip_tac >> gvs[AllCaseEqs()] >>
   metis_tac[supported_expr_shape]
 QED
