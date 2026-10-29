@@ -204,7 +204,17 @@ Proof
       type_check_def, assert_def, return_def, raise_def,
       get_accounts_def, lift_sum_def, AllCaseEqs()] >>
   gvs[get_accounts_def, ETA_THM, return_def, raise_def,
-      sum_CASE_rator, AllCaseEqs()] >> metis_tac[]
+      sum_CASE_rator, AllCaseEqs()] >>
+  Cases_on `bt = Bop In \/ bt = Bop NotIn` >>
+  gvs[bind_def, ignore_bind_def, assert_def, return_def, raise_def,
+      lift_option_type_def, lift_option_def, get_accounts_def,
+      AllCaseEqs()] >>
+  gvs[sum_CASE_rator, AllCaseEqs(), return_def, raise_def] >>
+  Cases_on `evaluate_type (get_tenv cx) (expr_type (EL 1 es))` >>
+  gvs[return_def, raise_def, sum_CASE_rator, AllCaseEqs()] >>
+  qpat_x_assum `sum_CASE _ _ _ _ = _` mp_tac >>
+  qmatch_goalsub_abbrev_tac `sum_CASE ans` >>
+  Cases_on `ans` >> gvs[return_def, raise_def] >> metis_tac[]
 QED
 
 Theorem case_Pop[local]:
@@ -324,7 +334,7 @@ Proof
             | "StructLit" => metis_tac[case_StructLit]
             | "Subscript" => ACCEPT_TAC case_Subscript
             | "Attribute" => ACCEPT_TAC case_Attribute
-            | "Builtin" => ACCEPT_TAC case_Builtin
+            | "Builtin" => suspend "builtin"
             | "TypeBuiltin" => ACCEPT_TAC case_TypeBuiltin
             | "Pop" => metis_tac[case_Pop]
             | "Call" =>
@@ -339,6 +349,15 @@ Proof
     (impl_tac >- (rpt conj_tac >> dispatch)) >> simp[]
   end
 QED
+
+Resume expr_state_mutual[builtin]:
+  rpt gen_tac >> strip_tac >>
+  qspecl_then [`cx`, `ty`, `bt`, `es`] mp_tac case_Builtin >>
+  (impl_tac >- (Cases_on `bt = Bop In \/ bt = Bop NotIn` >> gvs[] >> metis_tac[])) >>
+  simp[]
+QED
+
+Finalise expr_state_mutual
 
 (* ------------------------------------------------------------------------
    Main Theorems
