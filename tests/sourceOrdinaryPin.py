@@ -37,7 +37,7 @@ CASES = {
 
 
 # New upstream checker fixtures are pin/capture audits only, not additions to
-# sourceOrdinaryFixtureLib.rows or the 26-case ordinary HOL inventory.
+# sourceOrdinaryAcceptanceLib.rows or the 26-case ordinary HOL inventory.
 PIN_ONLY_CASES = {
     **{n: [(('main',), n + '/main.vy'), (('ownable',), n + '/ownable.vy'),
             (('token',), n + '/token.vy')]

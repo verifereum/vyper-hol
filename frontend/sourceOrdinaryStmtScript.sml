@@ -1,7 +1,7 @@
 Theory sourceOrdinaryStmt
 Ancestors
   sourceOrdinaryClaims sourceOrdinaryExprElaborate sourceOrdinaryExprDefs
-  sourceModuleSignature sourceModuleDefs sourceExprDefs sourceExprElaborate
+  sourceModuleStmt sourceModuleDecl sourceModuleDefs sourceExprDefs sourceExprElaborate
   sourceResolve sourceSyntax jsonAST jsonToVyperExpr vyperAST
   sourceConstAST sourceConstEval list option pair alist
 Libs

@@ -1,6 +1,6 @@
 Theory sourceModuleLink
 Ancestors
-  sourceModuleSignature sourceModuleEnv sourceModuleDefs sourceExprDefs sourceResolveModules
+  sourceModuleDecl sourceModuleEnv sourceModuleDefs sourceExprDefs sourceResolveModules
   sourceResolve sourceSyntax sourceConstAnnotation sourceConstAST sourceTypeDefs jsonToVyper jsonAST vyperAST alist list
 Libs
   intLib

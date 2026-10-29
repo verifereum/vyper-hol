@@ -10,7 +10,7 @@ acceptance, independent inference or unrestricted backend correctness.
 ## Regression purpose
 
 `sourceOrdinaryProgramInventoryTestTheory` exercises the 26 retained cases in
-`sourceOrdinaryFixtureLib.rows` through the ordinary public API:
+`sourceOrdinaryAcceptanceLib.rows` through the ordinary public API:
 
 - Complete runtime ASTs and checker artifacts are compared with independent
   legacy-fixture expectations, including decimal, initializer and interface cases.
@@ -26,18 +26,12 @@ original and annotated paths plus explicit inherited claims. Annotated-only
 compatibility uses explicit `*_legacy` names. There is no Source-failure retry
 through legacy translation.
 
-The independent full-Source acceptance/semantic suites are extracted with the
-optional feature. Shared inventory, trust and expected-AST utilities live in
-`sourceOrdinaryFixtureLib`; ordinary tests do not load a full-Source library.
-Whole-program witnesses compare exact modules against independent legacy
-signature/statement skeletons plus the explicit expected expressions in
-`sourceExprWitnessDefs.source_expr_witnesses` (including separately pinned
-constructor folds), check those expected modules, and retain delete/poison
-invariance. Raw legacy residual MethodId is not claimed to pass checking.
-`sourceOrdinaryProgramParityTest` compares nine checked deploy/runtime byte
-pairs, including the two Boolean-chain witnesses, against pinned Python output.
-`sourceBytecodeFixtureLib` supplies only common fixtures/layouts/trust/expected
-bytes and kernel-audit utilities, not full-Source phase certificates.
+`sourceOrdinaryAcceptanceTestTheory` separately checks the same cases through
+`Source.check_loaded_contract_result`, with explicit full-source body and
+signature expectations. This is not the hybrid bridge's residual-body oracle.
+Whole-program witnesses compare ordinary ASTs/artifacts with Source results;
+`sourceOrdinaryProgramMeaningTest` links body and compile/body certificates.
+Their supported-body scope and context premises still apply.
 
 ## Fixture provenance
 
@@ -84,13 +78,12 @@ PYTHONPATH=.agent-files/folded-value-validation/vyper-src \
   .agent-files/folded-value-validation/venv/bin/python tests/sourceOrdinaryPin.py
 python tests/sourceOrdinaryPinTest.py
 holbuild -j1 --maxheap 6000 build \
-  sourceOrdinaryProgramInventoryTestTheory sourceOrdinaryProgramParityTestTheory \
+  sourceOrdinaryProgramInventoryTestTheory sourceOrdinaryAcceptanceTestTheory \
   --tactic-timeout 2.5 --skip-checkpoints
 ```
 
 Add `--generate` to the pin command only when intentionally refreshing retained
 pairs. The generator checks imported compiler implementation bytes against
 `VYPER_PIN` and checks the explicit identity map against independent legacy
-evidence. Bytecode parity uses retained `lowering/defs/bytecode/folded-value-oracle`
-fixtures and the unchanged backend. Exact computation on this finite inventory
-is not universal compiler correctness.
+evidence. See [source-module parity](sourceModuleParity.md) for the separate
+bytecode comparison workflow.

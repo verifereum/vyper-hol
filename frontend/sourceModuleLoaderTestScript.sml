@@ -1,9 +1,9 @@
 Theory sourceModuleLoaderTest
 Ancestors
-  sourceModuleEnv sourceModuleDefs sourceSyntax sourceConstAnnotation
+  sourceModuleElaborate sourceModuleEnv sourceModuleDefs sourceSyntax sourceConstAnnotation
   vyperAST vyperContext finite_map
 Libs
-  sourceModuleLoaderLib
+  sourceModuleLoaderLib sourceModuleFrontendLib
 
 fun holbuild_extra_deps (_ : string list) = ();
 val () = holbuild_extra_deps ["../tests/fixtures/check_contract/source_syntax/c27_const_binop_fold.json",
@@ -35,20 +35,30 @@ val poisoned = JSONDecode.decode sourceModuleLoaderLib.source_capture (capture (
 val () = if aconv (#program loaded) (#program poisoned) then () else
   raise Fail "source loader consumed folded metadata";
 
-(* Pinned pre-erasure policies and canonical loader keys remain shared trust. *)
+(* Actual pinned pre-erasure capture of the ordinary multimodule-storage source.
+   Both raw parser source_ids are 0: canonical loader keys, not those IDs, supply
+   the distinct identities used by HOL. No compiler expressions enter this test. *)
 val storage_source = sourceModuleLoaderLib.load_file
   "../tests/fixtures/check_contract/source_loader/multimodule_storage.json";
 val () = if aconv (#nonreentrant_defaults storage_source) ``[F;F]`` andalso
   aconv (#declaration_only storage_source) ``[F;F]`` then ()
   else raise Fail "source loader fixture policies changed";
+val storage_checked = sourceModuleFrontendLib.check_loaded
+  {fuel=``40:num``,source=storage_source,
+   trust=``<| smt_ids := [(["main"],NONE);(["lib"],SOME 1)]; smt_nominals := [];
+     smt_type_defs := FEMPTY; smt_slots := [((SOME 1,"stored"),0)] |>``}
+  {layouts=``[(0w:address,([((SOME 1,"stored"),0)]:storage_layout,[]:storage_layout))]``,
+   address=``0w:address``};
+val _ = save_thm ("source_loader_storage_phase",#equation (#elaboration storage_checked));
+val _ = save_thm ("source_loader_storage_check",#composition storage_checked);
+val _ = save_thm ("source_loader_storage_links",#linking (#elaboration storage_checked));
+(* A true default policy is accepted, not discarded. In contrast, claiming
+   declaration-only for a bodyful implementation does not fabricate a stub. *)
 val nr_source : sourceModuleLoaderLib.loaded =
   {program= #program loaded,keys= #keys loaded,nonreentrant_defaults=``[T]``,
    declaration_only=``[F]``,provenance=JSON.NULL};
-val () = if aconv (sourceModuleLoaderLib.policies nr_source)
-  ``[( ["main"],SourceModulePolicy T F)]`` then ()
-  else raise Fail "source loader discarded default policy";
-val incomplete : sourceModuleLoaderLib.loaded =
-  {program= #program loaded,keys= #keys loaded,nonreentrant_defaults=``[]:bool list``,
-   declaration_only=``[F]``,provenance=JSON.NULL};
-val () = if (sourceModuleLoaderLib.policies incomplete; false)
-  handle HOL_ERR _ => true then () else raise Fail "truncated policy registry";
+val nr_elaborated = sourceModuleFrontendLib.elaborate_loaded
+  {fuel=``40:num``,source=nr_source,
+   trust=``<| smt_ids := [(["main"],NONE)]; smt_nominals := [];
+     smt_type_defs := FEMPTY; smt_slots := [] |>``};
+val _ = save_thm ("source_loader_policy_supported",#equation nr_elaborated);

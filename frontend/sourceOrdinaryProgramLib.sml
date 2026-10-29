@@ -29,7 +29,8 @@ fun evaluate_uncached tm = let
     |> computeLib.add_conv (boolSyntax.existential,1,vyperCheckContractLib.check_contract_conv)
   val cs = computeLib.set_skip cs boolSyntax.conditional (SOME 1)
   fun refresh ((_,thy),rules) cs =
-    if String.isPrefix "source" thy orelse thy = "vyperTypeSystem" then
+    if (String.isPrefix "source" thy andalso not (String.isPrefix "sourceMeaning" thy))
+        orelse thy = "vyperTypeSystem" then
       List.foldr (fn (clauses.RRules ths,cs) => computeLib.add_thms (rev ths) cs
         | (_,cs) => cs) cs rules else cs
   val cs = List.foldl (fn (item,cs) => refresh item cs) cs (computeLib.listItems global)
@@ -66,7 +67,7 @@ fun elaborate input : elaborated = let
   val retained = successful equation
   val modules = rhs (concl (evaluated (mk_icomb (``retained_executable``,retained))))
   val linking = evaluated (List.foldl (fn (arg,f) => mk_icomb (f,arg))
-    ``sourceModuleContext$source_module_link_program``
+    ``sourceModuleElaborate$source_module_link_program``
     [List.nth (args,1),List.nth (args,2),List.nth (args,3),List.nth (args,5)])
 in {retained=retained, modules=modules,equation=equation,
     original=MATCH_MP source_ordinary_program_retains_source equation,linking=linking} end

@@ -1,6 +1,6 @@
 Theory sourceModuleOverride
 Ancestors
-  sourceModuleLink sourceModuleSignature sourceModuleDefs sourceModuleEnv sourceExprDefs
+  sourceModuleLink sourceModuleDecl sourceModuleDefs sourceModuleEnv sourceExprDefs
   sourceSyntax sourceResolve sourceResolveModules sourceConstAST sourceConstAnnotation
   sourceTypeDefs vyperTypeSystem vyperAST
   alist list

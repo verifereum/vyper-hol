@@ -1,4 +1,4 @@
-"""Explicitly trusted pre-erasure source loader for ordinary source pairing.
+"""Explicitly trusted pre-erasure source loader for the sourceModule frontend.
 
 Run with the pinned Vyper checkout on PYTHONPATH and its supported Python.
 The manifest supplies canonical namespace keys in main, dependency-first order:

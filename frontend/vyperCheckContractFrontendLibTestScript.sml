@@ -2,7 +2,11 @@ Theory vyperCheckContractFrontendLibTest
 Ancestors
   jsonToVyper jsonToVyperExpr jsonAST vyperAST vyperTypeContract
   jsonNominalSources
-  finite_map sourceConstBuiltinCompute sourceConstBuiltinTest
+  sourceModuleElaborate sourceModuleDefs sourceSyntax sourceConstAST
+  sourceConstAnnotation finite_map sourceModuleLinkTest sourceModuleFrontendLibTest
+  sourceConstBuiltinCompute sourceConstBuiltinTest
+  sourceMeaningCallTest sourceMeaningCallExampleDefs sourceMeaningCompile
+  sourceMeaningCallDefs vyperInterpreter vyperState vyperValue
 Libs
   vyperCheckContractFrontendLib cv_transLib
 
@@ -774,5 +778,329 @@ val () = app (fn th =>
    abi_keyword_decode_valid_control, abi_keyword_invalid_method_id_rejected,
    abi_keyword_invalid_ensure_tuple_rejected, abi_keyword_invalid_unwrap_tuple_rejected];
 
-(* Independent full-Source API/semantic tests are extracted with that feature.
-   Ordinary paired-source acceptance and parity live in sourceOrdinaryProgram*Test. *)
+(* ===== Public source path: originals, exact equations and shared checker ===== *)
+val source_layouts = ``[(0w:address,([]:storage_layout,[]:storage_layout))]``;
+val source_trust = ``<| smt_ids := [(["main"],NONE)]; smt_nominals := [];
+  smt_type_defs := FEMPTY; smt_slots := [] |>``;
+fun source_input program : vyperCheckContractFrontendLib.source_input =
+  {fuel=``80:num``,trust=source_trust,keys=``[["main"]]``,program=program,
+   layouts=source_layouts,address=address};
+fun audit_source_thm th = let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
+  in if null (hyp th) andalso null axioms andalso
+    List.all (fn s => s = "DISK_THM") oracles then ()
+    else raise Fail "public source frontend equation is not kernel-closed" end;
+fun exact_equation label lhs_tm rhs_tm th =
+  if aconv (concl th) (mk_eq (lhs_tm,rhs_tm)) then audit_source_thm th
+  else raise Fail ("public source frontend equation mismatch: " ^ label);
+fun save_source_result label (src:vyperCheckContractFrontendLib.source_input)
+    (checked:vyperCheckContractFrontendLib.source_checked_result) = let
+  val elab = #elaboration checked
+  val modules = #modules elab
+  val retained = #retained elab
+  val artifact = #artifact checked
+  val {fuel,trust,keys,program,layouts,address} = src
+  val phase_args = #2 (strip_comb (lhs (concl (#equation elab))))
+  val phase = if length phase_args = 4 then
+      ``source_module_elaborate_simple ^fuel ^trust ^keys ^program``
+    else let val policies = List.nth (phase_args,2) in
+      ``source_module_elaborate ^fuel ^trust ^policies ^keys ^program`` end
+  val composition = if length phase_args = 4 then
+      ``source_module_check_simple ^fuel ^trust ^keys ^program ^layouts ^address``
+    else let val policies = List.nth (phase_args,2) in
+      ``source_module_check ^fuel ^trust ^policies ^keys ^program ^layouts ^address`` end
+  val () = exact_equation "phase" phase ``SM_Ok ^retained`` (#equation elab)
+  val () = exact_equation "retained original"
+    ``retained_source ^retained`` program (#original elab)
+  val () = exact_equation "checker artifact"
+    ``check_contract T ^layouts ^address ^modules`` ``SOME ^artifact`` (#checking checked)
+  val () = exact_equation "composition artifact" composition
+    ``SM_Ok (^retained,^artifact)`` (#composition checked)
+  val () = if #in_deploy (#input checked) andalso
+      aconv (#modules (#input checked)) modules andalso
+      aconv (#layouts (#input checked)) layouts andalso
+      aconv (#address (#input checked)) address then ()
+    else raise Fail "public source frontend checked different input"
+  val () = app audit_source_thm [#linking elab,#equation elab,#original elab,
+    #checking checked,#composition checked]
+  val _ = save_thm (label ^ "_phase",#equation elab)
+  val _ = save_thm (label ^ "_source",#original elab)
+  val _ = save_thm (label ^ "_links",#linking elab)
+  val _ = save_thm (label ^ "_check",#checking checked)
+  val _ = save_thm (label ^ "_composition",#composition checked)
+in () end;
+
+(* Strict #135 bound input uses the SAME general source phase. Only the
+   explicitly named _legacy entry retains the compatibility evaluator. *)
+val strict_src = vyperCheckContractFrontendLib.prepare_constant_source_file
+  {address=address,path=fixture_dir ^ "constant_bound.json"};
+val strict_checked = vyperCheckContractFrontendLib.Source.check_contract_result strict_src;
+val () = save_source_result "public_constant_bound" strict_src strict_checked;
+val strict_expected = ``[(NONE,[
+  VariableDecl Private (Constant (Literal (BaseT (UintT 256)) (IntL 3)))
+    "N" (BaseT (UintT 256)) NONE;
+  FunctionDecl External Pure F F "power"
+    [("x",BaseT (UintT 256));("values",ArrayT (BaseT (UintT 256)) (Fixed 3))] []
+    (BaseT (UintT 256)) [Return (SOME (Builtin (BaseT (UintT 256)) (Bop Exp)
+      [Name (BaseT (UintT 256)) "x";Literal (BaseT (UintT 256)) (IntL 3)]))]])]
+    : (num option # toplevel list) list``;
+val () = if aconv (#modules (#elaboration strict_checked)) strict_expected then ()
+  else raise Fail "public source constant array/exponent AST mismatch";
+val () = exact_equation "strict adapter uses shared pipeline"
+  (lhs (concl (#checking strict_checked))) (rhs (concl (#checking strict_checked)))
+  (vyperCheckContractFrontendLib.Source.check_constant_contract_file
+    {address=address,path=fixture_dir ^ "constant_bound.json"});
+
+fun metadata_variant replacement (JSON.OBJECT fields) = JSON.OBJECT
+    ((case replacement of NONE => [] | SOME value =>
+      List.map (fn key => (key,value)) ["folded_value","type","is_constant","is_immutable"]) @
+     List.map (fn (key,v) => (key,metadata_variant replacement v))
+       (List.filter (fn (key,_) => not (List.exists (fn k => k = key)
+         ["folded_value","type","is_constant","is_immutable"])) fields))
+  | metadata_variant replacement (JSON.ARRAY values) =
+      JSON.ARRAY (List.map (metadata_variant replacement) values)
+  | metadata_variant _ value = value;
+val source_path = fixture_dir ^ "source_syntax/c27_const_binop_fold.json";
+val source_json = JSONDecode.decodeFile JSONDecode.raw source_path;
+val source_program = JSONDecode.decode sourceSyntaxLib.annotated_ast source_json;
+val public_source = vyperCheckContractFrontendLib.Source.check_contract_result
+  (source_input source_program);
+val () = save_source_result "public_source_original" (source_input source_program) public_source;
+val () = app (fn variant => let
+    val program = JSONDecode.decode sourceSyntaxLib.annotated_ast variant
+    val () = if aconv program source_program then ()
+      else raise Fail "public source decoder consumed metadata"
+    val checked = vyperCheckContractFrontendLib.Source.check_contract_result (source_input program)
+  in if aconv (concl (#checking checked)) (concl (#checking public_source)) andalso
+    aconv (concl (#composition checked)) (concl (#composition public_source)) then ()
+    else raise Fail "metadata changed source equation/artifact" end)
+  [metadata_variant NONE source_json,
+   metadata_variant (SOME (JSON.STRING "poisoned metadata")) source_json];
+val () = exact_equation "source file entry point"
+  (lhs (concl (#checking public_source))) (rhs (concl (#checking public_source)))
+  (vyperCheckContractFrontendLib.check_source_contract_file
+    {fuel=``80:num``,trust=source_trust,keys=``[["main"]]``,layouts=source_layouts,
+     address=address,path=source_path});
+
+(* Exercise extended internal/imported/export and external source call paths
+   through the actual public API, not the legacy translator. *)
+val linked_src : vyperCheckContractFrontendLib.source_input =
+  {fuel=``30:num``,trust=``source_module_link_trust``,keys=``[["main"];["lib"]]``,
+   program=``source_module_link_fixture``,layouts=source_layouts,address=address};
+val linked_public = vyperCheckContractFrontendLib.Source.check_contract_result linked_src;
+val () = save_source_result "public_imported_call" linked_src linked_public;
+val () = if aconv
+  (rhs (concl (EVAL (rhs (concl source_module_link_call_exact)))))
+  (rhs (concl (#equation (#elaboration linked_public)))) then ()
+  else raise Fail "public source imported-call exact AST mismatch";
+
+val external_src : vyperCheckContractFrontendLib.source_input =
+  {fuel=``40:num``,keys=``[["main"]]``,program=``source_module_external_fixture``,
+   layouts=source_layouts,address=address,
+   trust=``<| smt_ids := [(["main"],NONE)]; smt_nominals := [(["main";"I"],STI_Interface)];
+     smt_type_defs := FEMPTY |+ ((NONE,"I"),InterfaceArgs
+       [("read",[],BaseT (UintT 256),View)]); smt_slots := [] |>``};
+val external_public = vyperCheckContractFrontendLib.Source.check_contract_result external_src;
+val () = save_source_result "public_external_call" external_src external_public;
+val () = if aconv (#modules (#elaboration external_public))
+  (lhs (concl source_module_external_ast_exact)) then ()
+  else raise Fail "public source external-call AST mismatch";
+
+(* The captured pre-erasure version of an ORDINARY legacy fixture. Reuse the
+   inherited canonical ID/layout, not the parser's colliding source_id claims. *)
+val ordinary_loaded = sourceModuleLoaderLib.load_file
+  (fixture_dir ^ "source_loader/multimodule_storage.json");
+val ordinary_trust = ``<| smt_ids := [(["main"],NONE);(["lib"],SOME 3)];
+  smt_nominals := []; smt_type_defs := FEMPTY; smt_slots := [((SOME 3,"stored"),0)] |>``;
+val ordinary_public = vyperCheckContractFrontendLib.check_loaded_source_contract_result
+  {fuel=``40:num``,trust=ordinary_trust,source=ordinary_loaded,
+   layouts= #layouts multimodule_input,address=address};
+val () = save_source_result "public_ordinary_multimodule"
+  {fuel=``40:num``,trust=ordinary_trust,keys= #keys ordinary_loaded,
+   program= #program ordinary_loaded,layouts= #layouts multimodule_input,address=address}
+  ordinary_public;
+(* Source explicitly annotates the imported storage slot inherited from the
+   supplied layout. Legacy leaves this imported declaration's slot as NONE.
+   Pin the actual source AST instead of asserting false legacy AST equality. *)
+val ordinary_expected = ``[(NONE,[
+  FunctionDecl External Nonpayable F F "set_value" [("x",BaseT (UintT 256))] [] NoneT
+    [Expr (Call NoneT (IntCall (SOME 3,"set_value"))
+      [Name (BaseT (UintT 256)) "x"] NONE)]]);
+  (SOME 3,[VariableDecl Private Storage "stored" (BaseT (UintT 256)) (SOME 0);
+    FunctionDecl Internal Nonpayable F F "set_value" [("x",BaseT (UintT 256))] [] NoneT
+      [Assign (BaseTarget (TopLevelNameTarget (SOME 3,"stored")))
+        (Name (BaseT (UintT 256)) "x")]])]``;
+val () = if aconv (#modules (#elaboration ordinary_public)) ordinary_expected
+  then () else raise Fail "ordinary pre-erasure source AST mismatch";
+val ordinary_legacy_checked = vyperCheckContractLib.check_contract
+  {in_deploy=true,address=address,modules= #modules multimodule_input,
+   layouts= #layouts multimodule_input};
+val () = audit_source_thm ordinary_legacy_checked;
+val () = if aconv (rhs (concl ordinary_legacy_checked))
+  (rhs (concl (#checking ordinary_public))) then ()
+  else raise Fail "ordinary source/legacy checker artifacts differ";
+val _ = save_thm ("public_ordinary_legacy_check",ordinary_legacy_checked);
+
+fun source_rejects label src =
+  if (vyperCheckContractFrontendLib.Source.check_contract src; false)
+    handle HOL_ERR _ => true then ()
+  else raise Fail ("public source frontend retried/accepted " ^ label);
+val () = source_rejects "fuel exhaustion"
+  {fuel=``0:num``,trust=source_trust,keys=``[["main"]]``,program=source_program,
+   layouts=source_layouts,address=address};
+val () = source_rejects "unknown source name" (source_input
+  ``SourceProgram (SourceModule [SD_Function "f" [SX_Name "external"] [] []
+    (SOME (SCA_Name ["uint256"])) [SS_Return (SOME (SX_Name "missing"))]]) []``);
+
+(* The pin-valid #135 gate preserves BOTH old successes, but the public name
+   must now be exactly Source, including deployment checking. A true original
+   pre-erasure capture must produce the same AST/equations as the strict adapter.
+   Legacy constant initializers remain unfurled (and are pinned in its own
+   witness theory); Source reifies them. Checker artifacts agree, not whole
+   legacy ASTs. The separate shift test pins exact function-AST agreement.
+   This does not promote the adapter's qualifier flags to source provenance. *)
+val () = app (fn name => let
+  val file = {address=address,path=fixture_dir ^ name ^ ".json"}
+  val src = vyperCheckContractFrontendLib.prepare_constant_source_file file
+  val checked = vyperCheckContractFrontendLib.Source.check_contract_result src
+  val legacy = vyperCheckContractFrontendLib.check_constant_contract_file_legacy file
+  val public = vyperCheckContractFrontendLib.check_constant_contract_file file
+  val strict = vyperCheckContractFrontendLib.Source.check_constant_contract_file file
+  val original = JSONDecode.decodeFile sourceSyntaxLib.annotated_ast
+    ("../tests/sourceShiftCountFixtures/" ^ name ^ ".json")
+  val same = vyperCheckContractFrontendLib.Source.check_contract_result
+    {fuel= #fuel src,trust= #trust src,keys= #keys src,program=original,
+     layouts= #layouts src,address=address}
+  val () = app audit_source_thm [legacy,public,strict,#checking same,#composition same]
+  val () = if aconv (concl public) (concl strict) andalso
+      aconv (concl public) (concl (#checking checked)) andalso
+      aconv (concl public) (concl (#checking same)) andalso
+      aconv (rhs (concl public)) (rhs (concl legacy)) then ()
+    else raise Fail ("strict public/source/legacy AST mismatch: " ^ name)
+  val () = save_source_result ("public_strict_" ^ name) src checked
+  val _ = save_thm ("public_strict_" ^ name ^ "_legacy",legacy)
+in () end) ["constant_bound","constant_shifts"];
+
+(* Genuine public loader entry: the trusted capture protocol, not ordinary
+   annotated JSON with qualifiers reconstructed from erased metadata. *)
+val loader_file = {fuel=``40:num``,trust=ordinary_trust,
+  layouts= #layouts multimodule_input,address=address,
+  path=fixture_dir ^ "source_loader/multimodule_storage.json"};
+val loader_checked = vyperCheckContractFrontendLib.Source.check_contract_file_result loader_file;
+val () = exact_equation "public pre-erasure loader"
+  (lhs (concl (#composition ordinary_public))) (rhs (concl (#composition ordinary_public)))
+  (#composition loader_checked);
+val () = exact_equation "public pre-erasure file checker"
+  (lhs (concl (#checking ordinary_public))) (rhs (concl (#checking ordinary_public)))
+  (vyperCheckContractFrontendLib.Source.check_contract_file loader_file);
+val () = ((vyperCheckContractFrontendLib.Source.check_contract_file
+    {fuel=``40:num``,trust=ordinary_trust,layouts= #layouts multimodule_input,
+     address=address,path=multimodule_path};
+    raise Fail "public loader accepted ordinary post-erasure JSON")
+  handle JSONDecode.JSONError _ => ());
+
+(* Preserved policies are now supported. Applying declaration-only to a real
+   implementation is still rejected: its body is not an interface signature. *)
+val nr_source : sourceModuleLoaderLib.loaded =
+  {program= #program ordinary_loaded,keys= #keys ordinary_loaded,
+   nonreentrant_defaults=``[T;F]``,declaration_only=``[F;F]``,provenance=JSON.NULL};
+val nr_lock_name = stringSyntax.fromMLstring "$.nonreentrant_key";
+val nr_layouts = ``[(^address,([((SOME 3,"stored"),0)],
+  [((NONE,^nr_lock_name),0)]))] : (address # (storage_layout # storage_layout)) list``;
+val nr_checked = vyperCheckContractFrontendLib.Source.check_loaded_contract_result
+  {fuel=``40:num``,trust=ordinary_trust,source=nr_source,
+   layouts=nr_layouts,address=address};
+val () = audit_source_thm (#composition nr_checked);
+val _ = save_thm ("public_loader_nonreentrant_policy",#composition nr_checked);
+val false_interface : sourceModuleLoaderLib.loaded =
+  {program= #program ordinary_loaded,keys= #keys ordinary_loaded,
+   nonreentrant_defaults=``[F;F]``,declaration_only=``[F;T]``,provenance=JSON.NULL};
+val () = if (vyperCheckContractFrontendLib.Source.check_loaded_contract_result
+  {fuel=``40:num``,trust=ordinary_trust,source=false_interface,
+   layouts= #layouts multimodule_input,address=address}; false)
+  handle HOL_ERR _ => true then () else
+  raise Fail "public loader fabricated an interface from implementation bodies";
+
+(* Source defaults and full call/load semantic extraction for the actual checked
+   artifact. Raw backend success, independent source derivations and nominal
+   environment agreement remain visible; no bytecode theorem is asserted. *)
+val meaning_src : vyperCheckContractFrontendLib.source_input =
+  {fuel=``12:num``,trust=``source_meaning_call_trust``,keys=``[["main"]]``,
+   program=``SourceProgram source_meaning_call_syntax []``,
+   layouts=source_layouts,address=address};
+val meaning_checked = vyperCheckContractFrontendLib.Source.check_contract_result meaning_src;
+val () = save_source_result "public_meaning_defaults" meaning_src meaning_checked;
+val meaning_artifact = vyperCheckContractFrontendLib.Source.artifact_semantics meaning_checked;
+val () = audit_source_thm meaning_artifact;
+val _ = save_thm ("public_meaning_artifact",meaning_artifact);
+val (_,meaning_body) = strip_forall (concl meaning_artifact);
+val (compiler_premise,_) = dest_imp meaning_body;
+val (raw_compile,raw_bytes) = dest_eq compiler_premise;
+val (raw_head,raw_args) = strip_comb raw_compile;
+val meaning_tops = snd (pairSyntax.dest_pair
+  (hd (#1 (listSyntax.dest_list (#modules (#elaboration meaning_checked))))));
+val () = if same_const raw_head ``compile_vyper`` andalso length raw_args = 3 andalso
+  aconv (List.last raw_args) meaning_tops andalso optionSyntax.is_some raw_bytes then ()
+  else raise Fail "public semantics lost exact raw compiler premise";
+val () = ((vyperCheckContractFrontendLib.Source.artifact_semantics ordinary_public;
+  raise Fail "public semantics silently flattened imported modules")
+  handle Fail message => if message = "source artifact semantics: backend-module-linking"
+    then () else raise Fail message);
+val () = app (fn constant =>
+  if List.exists (same_const constant) (find_terms is_const (concl meaning_artifact)) then ()
+  else raise Fail "public artifact lost independent call/load semantics")
+  [``source_meaning_call``,``source_meaning_load``,``source_meaning_module``];
+Theorem public_meaning_default_call:
+  FST (call_external NONE source_meaning_call_machine
+    (empty_call_txn with function_name := "f")) = INL (IntV 6)
+Proof
+  ACCEPT_TAC source_meaning_call_runtime_return
+QED
+
+(* Re-run every retained whole source through the PUBLIC full checker, not a
+   certificate-only/translation-only test. All 36 pin-valid cases must succeed;
+   method_id_var alone is pin-invalid. Metadata variants decode identically.
+   This 37-row inventory does NOT cover the ordinary legacy fixture universe. *)
+val () = app (fn s => let
+  val bytes = listSyntax.mk_list (List.map (fn c => numSyntax.term_of_int (Char.ord c))
+    (String.explode s),numSyntax.num)
+  val th = cv_eval (mk_comb (``source_const_keccak``,bytes))
+in computeLib.add_funs [th] end)
+  ["hello","transfer(address,uint256)","foo()","f(uint256)","E(uint256)","x"];
+val inventory_stream = TextIO.openIn "../lowering/defs/bytecode/folded-value-witnesses.txt";
+val inventory_names = String.tokens Char.isSpace (TextIO.inputAll inventory_stream);
+val () = TextIO.closeIn inventory_stream;
+val () = if length inventory_names = 37 then () else raise Fail "public source inventory changed";
+val () = app (fn name => let
+  val raw = JSONDecode.decodeFile JSONDecode.raw
+    (fixture_dir ^ "source_syntax/" ^ name ^ ".json")
+  val program = JSONDecode.decode sourceSyntaxLib.annotated_ast raw
+  val slots = if name = "method_id_storage" then ``[((NONE,"m"),0:num)]:storage_layout``
+    else if name = "i12_immut_with_storage" then ``[((NONE,"s"),0:num)]:storage_layout``
+    else ``[]:storage_layout``
+  val src : vyperCheckContractFrontendLib.source_input =
+    {fuel=``80:num``,keys=``[["main"]]``,program=program,address=address,
+     trust=``<| smt_ids := [(["main"],NONE)]; smt_nominals := [];
+       smt_type_defs := FEMPTY; smt_slots := ^slots |>``,
+     layouts=``[(^address,(^slots,[]:storage_layout))]``}
+  val () = app (fn variant =>
+    if aconv program (JSONDecode.decode sourceSyntaxLib.annotated_ast variant) then ()
+    else raise Fail ("public source consumed metadata: " ^ name))
+    [metadata_variant NONE raw,metadata_variant (SOME (JSON.STRING "poison")) raw]
+in if name = "method_id_var" then let
+    val phase = EVAL ``source_module_elaborate_simple ^(#fuel src) ^(#trust src) ^(#keys src) ^program``
+    val () = exact_equation "pin-invalid source domain rejection"
+      ``source_module_elaborate_simple ^(#fuel src) ^(#trust src) ^(#keys src) ^program``
+      ``SM_Error (SME_Constant SCErr_Domain) :
+        (num option # toplevel list) list source_retained source_module_result`` phase
+    val () = source_rejects name src
+    val _ = save_thm ("public_inventory_method_id_var_reject",phase)
+  in () end else let
+    val checked = vyperCheckContractFrontendLib.Source.check_contract_result src
+    val () = save_source_result ("public_inventory_" ^ name) src checked
+    val expected = DB.fetch "sourceModuleFrontendLibTest" ("source_module_" ^ name ^ "_composition")
+    val () = if aconv (concl (#composition checked)) (concl expected) then ()
+      else raise Fail ("public source inventory artifact changed: " ^ name)
+  in print ("PUBLIC_SOURCE_ACCEPT_CHECK " ^ name ^ "\n") end
+end) inventory_names;
+val () = app (fn (_,th) => audit_source_thm th)
+  (DB.thms "vyperCheckContractFrontendLibTest");

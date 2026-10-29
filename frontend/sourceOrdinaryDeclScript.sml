@@ -1,6 +1,6 @@
 Theory sourceOrdinaryDecl
 Ancestors
-  sourceOrdinaryStmt sourceModuleContext sourceModuleSignature sourceModuleEnv
+  sourceOrdinaryStmt sourceModuleElaborate sourceModuleDecl sourceModuleEnv
   sourceModuleDefs sourceSyntax sourceOrdinaryClaims jsonToVyperExpr vyperAST list pair
 
 (* Signature phase resolves ORIGINAL annotations/bounds and validates source

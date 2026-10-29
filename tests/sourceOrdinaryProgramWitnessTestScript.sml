@@ -1,6 +1,6 @@
 Theory sourceOrdinaryProgramWitnessTest
 Ancestors
-  sourceOrdinaryProgram sourceModuleContext sourceModuleEnv vyperTypeContract vyperAST
+  sourceOrdinaryProgram sourceModuleElaborate sourceModuleEnv vyperTypeContract vyperAST
 Libs
   sourceOrdinaryProgramTestLib
 fun holbuild_extra_deps (_:string list) = ();

@@ -85,6 +85,14 @@ Definition source_module_expression_def:
       ctx.sm_constants ctx.sm_bindings ty e)
 End
 
+Definition source_module_infer_def:
+  source_module_infer fuel ctx e =
+    case source_expr_infer fuel ctx.sm_env ctx.sm_scopes ctx.sm_table
+      ctx.sm_constants ctx.sm_bindings e of
+      NONE => SM_Error (SME_Declaration "expression-type")
+    | SOME ty => source_module_expression fuel ctx ty e
+End
+
 Definition source_module_bound_expr_def:
   source_module_bound_expr ctx e =
     case source_resolve_expr ctx.sm_scopes ctx.sm_table F e of

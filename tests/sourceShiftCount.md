@@ -17,12 +17,12 @@ constants; a convenient final value alone is insufficient.
 
 - `sourceShiftCountTestTheory`: typed expressions, canonical count coercion,
   required bounds and negative cases.
-- `sourceOrdinaryProgramCoreTestTheory`: paired `constant_bound.vy` and
-  `constant_shifts.vy`, exact modules, deployment checking, independent artifacts
-  and delete/poison invariance.
-- `sourceShiftCountFrontendTestTheory`: strict JSON compatibility successes via
-  the explicit legacy API. Independent full-Source checks are extracted with
-  that optional feature; no translation fallback is introduced.
+- `sourceShiftCountModuleTestTheory`: pre-erasure equivalents of
+  `constant_bound.vy` and `constant_shifts.vy`, exact emitted modules, deployment
+  checking and composition.
+- `sourceShiftCountFrontendTestTheory`: strict JSON fixtures through legacy and
+  `Source.check_constant_contract_file`, compared with pre-erasure equivalents.
+  This retains the legacy dependency chain, without a translation fallback.
 - `sourceShiftCountAudit.sml`: exported theorem-object audit rejecting hypotheses,
   axioms and oracle tags except the normal `DISK_THM` storage marker.
 
@@ -33,7 +33,7 @@ Run from the repository root with isolated environments for `VYPER_PIN`:
 ```sh
 .agent-files/folded-value-validation/venv/bin/python -I tests/sourceShiftCountPin.py oracle
 .agent-files/folded-value-validation/evm-venv/bin/python -I tests/sourceShiftCountPin.py execute
-holbuild build sourceShiftCountTestTheory sourceOrdinaryProgramCoreTestTheory \
+holbuild build sourceShiftCountTestTheory sourceShiftCountModuleTestTheory \
   sourceShiftCountFrontendTestTheory --tactic-timeout 2.5
 holbuild run tests/sourceShiftCountAudit.sml
 ```

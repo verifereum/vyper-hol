@@ -34,11 +34,16 @@ Output fields:
 * `provenance`: diagnostic paths and source hashes
 
 `sourceModuleLoaderLib.load_file` exposes syntax, namespace and policies
-separately. The ordinary route pairs that record with original and annotated
-JSON using `sourceOrdinaryClaimsLib.pair_program`. Public two-file wrappers
-perform this pairing and pass preserved policies to the shared HOL linkage and
-signature machinery. See [sourceModule.md](sourceModule.md) and the ordinary
-record/file API examples in [constant-evaluation.md](constant-evaluation.md).
+separately. `sourceModuleFrontendLib.elaborate_loaded` / `check_loaded` pass both
+policies explicitly to HOL:
+
+```sml
+val source = sourceModuleLoaderLib.load_file "source.json";
+val checked = sourceModuleFrontendLib.check_loaded
+  {fuel=fuel, trust=trust, source=source} {layouts=layouts, address=address};
+val source_equation = #equation (#elaboration checked);
+val linking_equation = #linking (#elaboration checked);
+```
 
 ## Trust and policy contracts
 
@@ -63,18 +68,16 @@ Default nonreentrancy applies only to non-pure external functions unless
 `(NONE,"$.nonreentrant_key")`; missing slots reject. The loader does not fabricate
 layouts or disable locking.
 
-There is no independent full-Source body/semantic/compiler API in this base.
-Neither capture nor a checking equation proves universal source semantics or
-bytecode behavior.
+The policy-free semantic/compiler API is explicitly `*_simple`. Neither capture
+nor a checking equation proves universal source semantics or bytecode behavior.
 
 ## Reproduction
 
 ```sh
-holbuild build sourceModuleLoaderTestTheory sourceModulePolicyTestTheory \
-  sourceOrdinaryProgramPolicyTestTheory
+holbuild build sourceModulePolicyTestTheory
 ```
 
-These roots exercise capture syntax/policy validation, shared policy legality,
-and ordinary paired imported-interface/nonreentrancy cases. Loader policy claims
-remain trust inputs, not authenticated metadata. Executable full-Source tests
-are extracted with the optional feature.
+This root exercises captures of imported interfaces, struct returns,
+interface-typed overrides, imported constructors and nonreentrancy pragmas through
+`Source.check_loaded_contract_result`. Loader policy claims remain trust inputs,
+not authenticated metadata.
