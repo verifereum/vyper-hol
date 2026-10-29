@@ -6,6 +6,13 @@ open sourceSyntaxTheory sourceConstAnnotationTheory sourceConstASTTheory vyperTy
 open vyperContextTheory vyperASTTheory vyperValueTheory finite_mapTheory
 open sourceOrdinaryFixtureLib
 
+(* Keep the original full-Source domain when the shared hybrid inventory gains
+   address_bytes32: wide convert is not a supported full-Source expression.
+   The shared ordinary/core tests still exercise that additional fixture. *)
+val rows = List.filter (fn (name,_) => name <> "address_bytes32")
+  sourceOrdinaryFixtureLib.rows;
+val () = if length rows = 26 then () else raise Fail "full-Source inventory drift";
+
 (* Full-Source interface expressions erase the legacy Acc Address wrapper;
    ordinary residual normalization deliberately preserves it. Adapt only the
    independent expected functions, never the elaborator's actual output. *)

@@ -151,15 +151,29 @@ fun standalone json : sourceModuleLoaderLib.loaded =
    the legacy declaration/statement skeleton. Pin constructor folds separately. *)
 fun witness_expected name slots modules = let
   val label = stringSyntax.fromMLstring name
-  val expression = optionSyntax.dest_some (ev
-    ``case ALOOKUP (MAP (\(n,r,c,t,oexpr,result). (n,result)) source_expr_witnesses) ^label of
-        SOME (SC_Value e) => SOME e | _ => NONE``)
+  val expected = ev
+    ``case ALOOKUP (MAP (\(n,r,c,t,oexpr,result). (n,result))
+        sourceExprWitnessDefs$source_expr_witnesses) ^label of
+        SOME (SC_Value e) => SOME e | _ => NONE``
+  val expression = optionSyntax.dest_some expected
+    handle HOL_ERR _ => raise Fail
+      ("missing independent expression expectation: " ^ name ^ " = " ^ term_to_string expected)
   fun replacement statement value = let val (ctor,args) = strip_comb statement in
     case #Name (dest_thy_const ctor) of
       "Return" => ``Return (SOME ^value)``
     | "Expr" => ``Expr ^value``
     | "Assign" => list_mk_comb (ctor,[hd args,value])
-    | _ => raise Fail ("unexpected witness statement: " ^ name) end
+    (* rr03 keeps the independent legacy guard and empty else branch; only
+       the nested raw_revert expression comes from the witness table. *)
+    | "If" => (case args of [guard,yes,no] =>
+        (case (#1 (listSyntax.dest_list yes),#1 (listSyntax.dest_list no)) of
+          ([inner],[]) => list_mk_comb (ctor,[guard,
+            listSyntax.mk_list ([replacement inner value],``:stmt``),no])
+        | _ => raise Fail ("unexpected witness branches: " ^ name ^
+            " = " ^ term_to_string statement))
+      | _ => raise Fail ("unexpected witness If: " ^ name))
+    | _ => raise Fail ("unexpected witness statement: " ^ name ^
+        " = " ^ term_to_string statement) end
   fun declaration tl = let val (ctor,args) = strip_comb tl in
     if #Name (dest_thy_const ctor) <> "FunctionDecl" then tl else let
       val id = stringSyntax.fromHOLstring (List.nth (args,4))
