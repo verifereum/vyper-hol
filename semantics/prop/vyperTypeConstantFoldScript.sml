@@ -360,13 +360,8 @@ Proof
         (irule ALOOKUP_ALL_DISTINCT_MEM >> gvs[contract_namespaces_ok_def]) >>
       `assignable_type (type_env_all_modules mods) ty` by
         metis_tac[checked_constant_decl_typed] >>
-      `toplevel_vtypes_complete artifact.cta_toplevel_vtypes
-          (initial_evaluation_context cx.sources cx.layouts cx.txn p0)` by
-        (irule check_contract_toplevel_vtypes_complete_checked >> metis_tac[]) >>
       `FLOOKUP artifact.cta_toplevel_vtypes (p0,p1) = SOME (Type ty)` by
-        (gvs[toplevel_vtypes_complete_def] >>
-         first_x_assum irule >>
-         simp[get_module_code_def, initial_evaluation_context_def] >> metis_tac[]) >>
+        (irule check_contract_bare_global_toplevel_vtype >> metis_tac[]) >>
       gvs[artifact_env_def, vtype_annotation_ok_def, well_typed_expr_def] >>
       Cases_on `t` >> gvs[assignable_type_def] >>
       Cases_on `FLOOKUP (type_env_all_modules mods) p` >>

@@ -116,13 +116,35 @@ Proof
   simp[]
 QED
 
+(* The exports of tx.target name only functions of allocated modules
+   (exports_ok); check_contract checks only the live functions. *)
 Definition checked_contract_runtime_ready_def:
   checked_contract_runtime_ready art mods am tx <=>
     ALOOKUP am.sources tx.target = SOME mods /\
+    exports_ok am.layouts tx.target mods
+      (case ALOOKUP am.exports tx.target of NONE => [] | SOME exps => exps) /\
     immutables_ready art.cta_bare_globals art.cta_toplevel_vtypes
       (initial_evaluation_context am.sources am.layouts tx NONE)
       am.immutables
 End
+
+(* The module call_external selects is allocated. *)
+Theorem checked_contract_runtime_ready_module_allocated:
+  check_contract F am.layouts tx.target mods = SOME art /\
+  checked_contract_runtime_ready art mods am tx /\
+  ALOOKUP mods (find_function_module am tx.target fn) = SOME ts ==>
+  module_allocated am.layouts tx.target (find_function_module am tx.target fn) ts
+Proof
+  rw[checked_contract_runtime_ready_def, find_function_module_def] >>
+  Cases_on `ALOOKUP am.exports tx.target` >> gvs[]
+  >- metis_tac[check_contract_main_module_allocated] >>
+  rename1 `ALOOKUP am.exports tx.target = SOME exps` >>
+  Cases_on `ALOOKUP exps fn` >> gvs[]
+  >- metis_tac[check_contract_main_module_allocated] >>
+  gvs[exports_ok_def, EVERY_MEM] >>
+  drule ALOOKUP_MEM >> strip_tac >>
+  first_x_assum drule >> simp[]
+QED
 
 Theorem checked_contract_initial_context_functions_follow_call_graph[local]:
   check_contract F am.layouts tx.target mods = SOME art /\
@@ -146,6 +168,7 @@ Theorem checked_explicit_external_body_call_evaluation_safe[local]:
   check_contract F am.layouts tx.target mods = SOME art /\
   ALOOKUP am.sources tx.target = SOME mods /\
   ALOOKUP mods src = SOME ts /\
+  module_allocated am.layouts tx.target src ts /\
   MEM (FunctionDecl External mut nr raw tx.function_name args dflts ret body) ts ==>
   call_evaluation_safe
     (initial_evaluation_context am.sources am.layouts tx src)
@@ -760,7 +783,7 @@ Proof
          (merge_constants cx.txn.target src acc am)` by
         (irule merge_constants_preserves_constant_cells_typed >> simp[] >>
          metis_tac[]) >>
-      `check_toplevel_decl cx.layouts cx.txn.target mods artifact src
+      `check_toplevel_decl mods artifact src
          (VariableDecl v (Constant e) s t o')` by
         metis_tac[check_contract_toplevel_decl_MEM] >>
       gvs[check_toplevel_decl_def] >>
@@ -1633,6 +1656,7 @@ Theorem call_lock_send_eval_prefix_no_type_error_c53[local]:
   checked_contract_runtime_ready art mods am tx /\
   machine_well_typed am /\ call_tx_well_typed tx /\
   ALOOKUP mods src = SOME ts /\
+  module_allocated am.layouts tx.target src ts /\
   MEM (FunctionDecl External mut nr raw tx.function_name args dflts ret body) ts /\
   bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
   cx = initial_evaluation_context am.sources am.layouts tx src ==>
@@ -1722,6 +1746,7 @@ Theorem call_lock_send_eval_return_typed_c53[local]:
   checked_contract_runtime_ready art mods am tx /\
   machine_well_typed am /\ call_tx_well_typed tx /\
   ALOOKUP mods src = SOME ts /\
+  module_allocated am.layouts tx.target src ts /\
   MEM (FunctionDecl External mut nr raw tx.function_name args dflts ret body) ts /\
   bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
   (do
@@ -1805,6 +1830,7 @@ Theorem call_lock_send_eval_return_typed_case_c53[local]:
   checked_contract_runtime_ready art mods am tx /\
   machine_well_typed am /\ call_tx_well_typed tx /\
   ALOOKUP mods src = SOME ts /\
+  module_allocated am.layouts tx.target src ts /\
   MEM (FunctionDecl External mut nr raw tx.function_name args dflts ret body) ts /\
   bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
   (case (if nr then
@@ -1824,7 +1850,10 @@ Theorem call_lock_send_eval_return_typed_case_c53[local]:
 Proof
   strip_tac >>
   irule call_lock_send_eval_return_typed_c53 >>
-  simp[bind_def, ignore_bind_def] >> metis_tac[]
+  simp[bind_def, ignore_bind_def] >>
+  qexistsl [`am`, `args`, `art`, `body`, `dflts`, `mut`, `nr`, `orc`, `raw`,
+            `rqs`, `scope`, `src`, `st'`, `ts`, `tx`, `vals`] >>
+  asm_rewrite_tac[]
 QED
 
 Theorem call_external_function_exact_selected_no_type_error_c53[local]:
@@ -1832,6 +1861,7 @@ Theorem call_external_function_exact_selected_no_type_error_c53[local]:
   checked_contract_runtime_ready art mods am tx /\
   machine_well_typed am /\ call_tx_well_typed tx /\
   ALOOKUP mods src = SOME ts /\
+  module_allocated am.layouts tx.target src ts /\
   MEM (FunctionDecl External mut nr raw tx.function_name args dflts ret body) ts /\
   bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
   cx = initial_evaluation_context am.sources am.layouts tx src /\
@@ -1922,6 +1952,7 @@ Theorem checked_explicit_external_entry_no_type_error_selected[local]:
   checked_contract_runtime_ready art mods am tx /\
   machine_well_typed am /\ call_tx_well_typed tx /\
   ALOOKUP mods src = SOME ts /\
+  module_allocated am.layouts tx.target src ts /\
   MEM (FunctionDecl External mut nr raw tx.function_name args dflts ret body) ts /\
   bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
   call_external_function orc am (initial_evaluation_context am.sources am.layouts tx src)
@@ -2634,14 +2665,55 @@ Proof
      simp[]
 QED
 
+Theorem evaluate_all_constants_preserves_exports[local]:
+  evaluate_all_constants cx am addr mods = SOME am_c ==>
+  am_c.exports = am.exports
+Proof
+  simp[evaluate_all_constants_def] >>
+  qid_spec_tac `am_c` >> qid_spec_tac `am` >>
+  qspec_tac (`constants_order mods`, `mods`) >>
+  Induct >- rw[evaluate_module_constants_def] >>
+  Cases_on `h` >>
+  rw[evaluate_module_constants_def] >>
+  gvs[AllCaseEqs(), merge_constants_def] >>
+  first_x_assum drule >> simp[]
+QED
+
+Theorem call_external_function_deploy_success_preserves_exports[local]:
+  cx.in_deploy /\
+  call_external_function orc am cx nr mut ts all_mods args dflts vals body ret =
+    (INL v, am_out, rqs) ==>
+  am_out.exports = am.exports
+Proof
+  strip_tac >>
+  drule_all call_external_function_deploy_success_evaluate_all_constants >>
+  strip_tac >>
+  drule_all call_external_function_deploy_success_cases >>
+  drule evaluate_all_constants_preserves_exports >>
+  strip_tac >> strip_tac >>
+  gvs[abstract_machine_from_state_def]
+QED
+
+Theorem load_contract_deployed_exports:
+  load_contract orc am deploy_tx mods exps = INL (am_deployed,rqs) ==>
+  ALOOKUP am_deployed.exports deploy_tx.target = SOME exps
+Proof
+  strip_tac >>
+  drule load_contract_success_cases >> strip_tac >>
+  drule_at (Pos (el 2)) call_external_function_deploy_success_preserves_exports >>
+  simp[]
+QED
+
 Theorem load_contract_establishes_checked_contract_runtime_ready:
   load_contract orc am deploy_tx mods exps = INL (am_deployed,rqs) /\
   check_contract F am_deployed.layouts call_tx.target mods = SOME art /\
+  exports_ok am_deployed.layouts call_tx.target mods exps /\
   call_tx.target = deploy_tx.target ==>
   checked_contract_runtime_ready art mods am_deployed call_tx
 Proof
   rw[checked_contract_runtime_ready_def]
   >- (drule load_contract_success_cases >> strip_tac >> gvs[])
+  >- (drule load_contract_deployed_exports >> gvs[])
   >> irule load_contract_establishes_immutables_ready
   >> qexistsl [`am`, `deploy_tx`, `exps`, `mods`, `orc`, `rqs`]
   >> simp[]
@@ -2983,6 +3055,7 @@ QED
 
 Theorem fn_sigs_declared_complete_context_cong[local]:
   (!src. get_module_code cx1 src = get_module_code cx2 src) /\
+  (!k. context_function_live cx1 k = context_function_live cx2 k) /\
   cx1.in_deploy = cx2.in_deploy ==>
   (fn_sigs_declared_complete sigs cx1 <=>
    fn_sigs_declared_complete sigs cx2)
@@ -2991,7 +3064,9 @@ Proof
 QED
 
 Theorem toplevel_vtypes_complete_context_cong[local]:
-  (!src. get_module_code cx1 src = get_module_code cx2 src) ==>
+  (!src. get_module_code cx1 src = get_module_code cx2 src) /\
+  (!tr src id. lookup_var_slot_from_layout cx1 tr src id =
+               lookup_var_slot_from_layout cx2 tr src id) ==>
   (toplevel_vtypes_complete vtypes cx1 <=>
    toplevel_vtypes_complete vtypes cx2)
 Proof
@@ -3027,6 +3102,7 @@ Theorem env_context_consistent_context_cong[local]:
   current_module cx1 = current_module cx2 /\
   cx1.in_deploy = cx2.in_deploy /\
   (!src. get_module_code cx1 src = get_module_code cx2 src) /\
+  (!k. context_function_live cx1 k = context_function_live cx2 k) /\
   (!tr src id. lookup_var_slot_from_layout cx1 tr src id =
                lookup_var_slot_from_layout cx2 tr src id) ==>
   (env_context_consistent env cx1 <=> env_context_consistent env cx2)
@@ -3050,7 +3126,7 @@ Proof
   `flag_members_complete env.flag_members cx1 <=>
    flag_members_complete env.flag_members cx2` by
     (irule flag_members_complete_context_cong >> simp[]) >>
-  simp[env_context_consistent_def]
+  simp[env_context_consistent_def, fn_sigs_live_def]
 QED
 
 Theorem initial_env_context_consistent_empty_tx[local]:
@@ -3069,7 +3145,7 @@ Proof
     (irule env_context_consistent_context_cong >>
      simp[get_tenv_def, current_module_def, get_module_code_def,
           lookup_var_slot_from_layout_def, initial_evaluation_context_def,
-          empty_call_txn_def]) >>
+          context_function_live_def, empty_call_txn_def]) >>
   metis_tac[]
 QED
 
@@ -3157,7 +3233,8 @@ Theorem checked_public_getter_post_prefix_body_setup_selected:
   check_contract F am.layouts tx.target mods = SOME art /\
   checked_contract_runtime_ready art mods am tx /\
   machine_well_typed am /\
-  ALOOKUP mods src = SOME ts /\ MEM decl ts /\
+  ALOOKUP mods src = SOME ts /\
+  module_allocated am.layouts tx.target src ts /\ MEM decl ts /\
   is_public_getter_decl tx.function_name decl /\
   external_getter_tuple src decl = SOME (mut,nr,args,dflts,ret,body) /\
   bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
@@ -3184,6 +3261,7 @@ Theorem checked_public_getter_post_prefix_body_setup_selected:
 Proof
   rpt strip_tac >>
   drule checked_public_getter_body_typing_package >>
+  disch_then drule >>
   disch_then drule >>
   disch_then drule >>
   disch_then drule >>
@@ -3255,7 +3333,8 @@ Theorem checked_public_getter_post_prefix_body_execution_selected:
   check_contract F am.layouts tx.target mods = SOME art /\
   checked_contract_runtime_ready art mods am tx /\
   machine_well_typed am /\
-  ALOOKUP mods src = SOME ts /\ MEM decl ts /\
+  ALOOKUP mods src = SOME ts /\
+  module_allocated am.layouts tx.target src ts /\ MEM decl ts /\
   is_public_getter_decl tx.function_name decl /\
   external_getter_tuple src decl = SOME (mut,nr,args,dflts,ret,body) /\
   bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
@@ -3326,7 +3405,8 @@ Theorem checked_public_getter_body_preserves_machine_components:
   check_contract F am.layouts tx.target mods = SOME art /\
   checked_contract_runtime_ready art mods am tx /\
   machine_well_typed am /\
-  ALOOKUP mods src = SOME ts /\ MEM decl ts /\
+  ALOOKUP mods src = SOME ts /\
+  module_allocated am.layouts tx.target src ts /\ MEM decl ts /\
   is_public_getter_decl tx.function_name decl /\
   external_getter_tuple src decl = SOME (mut,nr,args,dflts,ret,body) /\
   bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
@@ -3376,7 +3456,8 @@ Theorem checked_public_getter_post_prefix_body_return_typed_selected:
   check_contract F am.layouts tx.target mods = SOME art /\
   checked_contract_runtime_ready art mods am tx /\
   machine_well_typed am /\
-  ALOOKUP mods src = SOME ts /\ MEM decl ts /\
+  ALOOKUP mods src = SOME ts /\
+  module_allocated am.layouts tx.target src ts /\ MEM decl ts /\
   is_public_getter_decl tx.function_name decl /\
   external_getter_tuple src decl = SOME (mut,nr,args,dflts,ret,body) /\
   bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
@@ -3396,7 +3477,8 @@ Theorem checked_public_getter_initial_body_execution_selected:
   check_contract F am.layouts tx.target mods = SOME art /\
   checked_contract_runtime_ready art mods am tx /\
   machine_well_typed am /\
-  ALOOKUP mods src = SOME ts /\ MEM decl ts /\
+  ALOOKUP mods src = SOME ts /\
+  module_allocated am.layouts tx.target src ts /\ MEM decl ts /\
   is_public_getter_decl tx.function_name decl /\
   external_getter_tuple src decl = SOME (mut,nr,args,dflts,ret,body) /\
   bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
@@ -3431,6 +3513,7 @@ Theorem call_external_function_exact_selected_getter_no_type_error_c53[local]:
   checked_contract_runtime_ready art mods am tx /\
   machine_well_typed am /\
   ALOOKUP mods src = SOME ts /\
+  module_allocated am.layouts tx.target src ts /\
   MEM decl ts /\
   is_public_getter_decl tx.function_name decl /\
   external_getter_tuple src decl = SOME (mut,nr,args,dflts,ret,body) /\
@@ -3541,6 +3624,7 @@ QED
 Theorem checked_explicit_external_body_no_control_escape_selected:
   check_contract F am.layouts tx.target mods = SOME art /\
   ALOOKUP mods src = SOME ts /\
+  module_allocated am.layouts tx.target src ts /\
   MEM (FunctionDecl External mut nr raw tx.function_name args dflts ret body) ts ==>
   stmts_no_control_escape body
 Proof
@@ -3554,6 +3638,7 @@ QED
 Theorem checked_public_getter_body_no_control_escape_selected:
   check_contract F am.layouts tx.target mods = SOME art /\
   ALOOKUP mods src = SOME ts /\
+  module_allocated am.layouts tx.target src ts /\
   MEM decl ts /\
   is_public_getter_decl tx.function_name decl /\
   external_getter_tuple src decl = SOME (mut,nr,args,dflts,ret,body) ==>
@@ -3651,6 +3736,7 @@ Theorem checked_explicit_external_body_setup:
   checked_contract_runtime_ready art mods am tx /\
   machine_well_typed am /\ call_tx_well_typed tx /\
   ALOOKUP mods src = SOME ts /\
+  module_allocated am.layouts tx.target src ts /\
   MEM (FunctionDecl External mut nr raw tx.function_name args dflts ret body) ts /\
   cx = initial_evaluation_context am.sources am.layouts tx src /\
   bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
@@ -3707,6 +3793,7 @@ Theorem checked_explicit_external_body_no_type_error_selected[local]:
   checked_contract_runtime_ready art mods am tx /\
   machine_well_typed am /\ call_tx_well_typed tx /\
   ALOOKUP mods src = SOME ts /\
+  module_allocated am.layouts tx.target src ts /\
   MEM (FunctionDecl External mut nr raw tx.function_name args dflts ret body) ts /\
   cx = initial_evaluation_context am.sources am.layouts tx src /\
   bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
@@ -3735,6 +3822,7 @@ Theorem checked_explicit_external_body_preserves_machine_components:
   checked_contract_runtime_ready art mods am tx /\
   machine_well_typed am /\ call_tx_well_typed tx /\
   ALOOKUP mods src = SOME ts /\
+  module_allocated am.layouts tx.target src ts /\
   MEM (FunctionDecl External mut nr raw tx.function_name args dflts ret body) ts /\
   cx = initial_evaluation_context am.sources am.layouts tx src /\
   bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
@@ -3763,6 +3851,7 @@ Theorem call_external_function_selected_explicit_raw_args_no_type_error_c53[loca
   checked_contract_runtime_ready art mods am tx /\
   machine_well_typed am /\ call_tx_well_typed tx /\
   ALOOKUP mods src = SOME ts /\
+  module_allocated am.layouts tx.target src ts /\
   MEM (FunctionDecl External mut nr raw tx.function_name args dflts ret body) ts /\
   cx = initial_evaluation_context am.sources am.layouts tx src /\
   call_external_function orc am cx nr mut ts mods args dflts tx.args body ret = (res,am',rqs) ==>
@@ -3795,6 +3884,7 @@ Theorem call_external_function_selected_getter_raw_args_no_type_error_c53[local]
   checked_contract_runtime_ready art mods am tx /\
   machine_well_typed am /\
   ALOOKUP mods src = SOME ts /\
+  module_allocated am.layouts tx.target src ts /\
   MEM decl ts /\
   is_public_getter_decl tx.function_name decl /\
   external_getter_tuple src decl = SOME (mut,nr,args,dflts,ret,body) /\
@@ -3836,6 +3926,10 @@ Theorem checked_call_external_no_type_error:
   no_type_error_result res
 Proof
   rpt strip_tac >>
+  `!ts. ALOOKUP mods (find_function_module am tx.target tx.function_name) = SOME ts ==>
+        module_allocated am.layouts tx.target
+          (find_function_module am tx.target tx.function_name) ts` by
+    metis_tac[checked_contract_runtime_ready_module_allocated] >>
   qpat_x_assum `call_external orc am tx = (res,am',rqs)` mp_tac >>
   simp[Once call_external_def,
        vyperTypeExprSoundnessTheory.no_type_error_result_def] >>
@@ -3881,6 +3975,10 @@ Theorem checked_call_external_no_loop_control:
   exc <> BreakException /\ exc <> ContinueException
 Proof
   rpt gen_tac >> strip_tac >>
+  `!ts. ALOOKUP mods (find_function_module am tx.target tx.function_name) = SOME ts ==>
+        module_allocated am.layouts tx.target
+          (find_function_module am tx.target tx.function_name) ts` by
+    metis_tac[checked_contract_runtime_ready_module_allocated] >>
   qpat_x_assum `call_external orc am tx = (INR exc,am',rqs)` mp_tac >>
   simp[Once call_external_def] >>
   gvs[AllCaseEqs()] >>

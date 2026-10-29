@@ -680,9 +680,17 @@ Proof
   drule eval_expr_exception_return_typed >> rw[]
 QED
 
+Theorem well_typed_intcall_sig:
+  well_typed_expr env (Call ty (IntCall (src,fn)) es drv) ==>
+  IS_SOME (FLOOKUP env.fn_sigs (src,fn))
+Proof
+  simp[well_typed_expr_def] >> rw[] >> simp[]
+QED
+
 Theorem callable_body_typing_from_env_consistent:
   functions_well_typed cx /\
   env_consistent env cx st /\
+  IS_SOME (FLOOKUP env.fn_sigs (src_id_opt,fn)) /\
   get_module_code cx src_id_opt = SOME ts /\
   lookup_callable_function cx.in_deploy fn ts =
     SOME (fm,nr,args,dflts,ret,fn_body) ==>
@@ -711,6 +719,8 @@ Theorem callable_body_typing_from_env_consistent:
 Proof
   rw[env_consistent_def, env_context_consistent_def, env_immutables_consistent_def,
      functions_well_typed_def] >>
+  `context_function_live cx (src_id_opt,fn)` by
+    (gvs[IS_SOME_EXISTS] >> metis_tac[fn_sigs_live_def]) >>
   first_x_assum
     (qspecl_then [`env.fn_sigs`, `env.bare_globals`,
                   `env.bare_global_assignable`,
@@ -7244,6 +7254,9 @@ Resume eval_scc_type_sound_results_mutual[Expr_Call_IntCall]:
     (mp_tac o MATCH_MP (iffLR lift_option_type_INL_eq)) >> strip_tac >>
   PairCases_on `x''` >>
   RULE_ASSUM_TAC (BETA_RULE o SIMP_RULE (pure_ss ++ pairSimps.PAIR_ss) []) >>
+  `IS_SOME (FLOOKUP env.fn_sigs (src_id_opt,fn))` by
+    (qpat_x_assum `FLOOKUP env.fn_sigs (src_id_opt,fn) = SOME _`
+       (fn th => simp[th])) >>
   drule_all callable_body_typing_from_env_consistent >>
   disch_then (CONJUNCTS_THEN2 assume_tac
     (qx_choose_then `env_body` (qx_choose_then `ret_tv` (qx_choose_then `env_after`
