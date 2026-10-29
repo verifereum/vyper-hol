@@ -46,7 +46,8 @@ Ancestors
 (* Every signed integer type inside a type value is a whole number of bytes
    wide, as Vyper's int8 ... int256 are.  The decoder's clamp for intN
    sign-extends from byte N DIV 8 - 1, so it accepts every intN value only
-   for those widths; evaluate_type does not rule other widths out. *)
+   for those widths.  evaluate_type admits only such widths
+   (evaluate_type_int_byte_widths in entryStateRel). *)
 Definition int_byte_widths_def:
   int_byte_widths (BaseTV (IntT m)) = (m MOD 8 = 0) /\
   int_byte_widths (TupleTV tvs) = EVERY int_byte_widths tvs /\
