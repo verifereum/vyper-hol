@@ -17,8 +17,8 @@
  *                            same target, value, calldata and static flag
  *   exec_ext_call_oracle_step — CALL/STATICCALL binds the success word and
  *                            keeps state_rel with the source after
- *                            adoption, given the locals survive the
- *                            return-buffer write
+ *                            adoption, given locals and immutable bytes
+ *                            survive the return-buffer write
  *   send_call_oracle_step  — send's CALL against eval_send: success binds
  *                            1w with state_rel kept, failure binds 0w
  *
@@ -89,8 +89,9 @@ QED
 (* ===== The shared step ===== *)
 
 (* The adopted source state against Venom's state after consuming the
-   outcome: everything but the locals follows from state_rel before the
-   call, as both sides take, record and adopt the same outcome. *)
+   outcome: locals and immutable bytes need output preservation; other
+   fields follow from state_rel before the call, as both sides take,
+   record and adopt the same outcome. *)
 Theorem state_rel_adopt_consume[local]:
   !func cenv cx es s rq outcome rest ro rz.
     state_rel func cenv cx es s /\
@@ -118,8 +119,8 @@ QED
 (* TOP-LEVEL: CALL or STATICCALL in oracle mode.  Given the source took
    outcome for the request the operands describe, Venom binds the success
    word, consumes the same outcome and writes the return buffer; once the
-   locals survive that write, state_rel holds with the source after it
-   adopts the outcome (on failure adoption changes nothing, so this is the
+   locals and immutable bytes survive that write, state_rel holds with the
+   source after it adopts the outcome (on failure adoption changes nothing, so this is the
    source state as taken). *)
 Theorem exec_ext_call_oracle_step:
   !func cenv cx es s inst gas aw vw ao az ro rz stat out target
