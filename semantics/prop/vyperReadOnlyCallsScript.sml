@@ -32,8 +32,11 @@ Proof
   drule_all run_raw_call_static_frame >> strip_tac >> gvs[] >>
   Cases_on `flags.rcf_revert_on_failure` >> Cases_on `call_result0` >>
   Cases_on `flags.rcf_max_outsize = 0` >>
+  (* Replaced: gvs[update_accounts_def, update_transient_def, append_logs_def,
+      bind_def, ignore_bind_def, return_def, raise_def, machine_frame_def] *)
   gvs[update_accounts_def, update_transient_def, append_logs_def,
-      bind_def, ignore_bind_def, return_def, raise_def, machine_frame_def]
+      update_pending_deletions_def, bind_def, ignore_bind_def, return_def,
+      raise_def, machine_frame_def]
 QED
 
 Theorem machine_frame_raw_call:
@@ -100,8 +103,11 @@ Proof
   rename1 `run_ext_call _ _ _ _ _ _ _ _ = SOME call_result` >>
   PairCases_on `call_result` >> drule run_ext_call_static_frame >>
   strip_tac >> gvs[] >> Cases_on `call_result0` >>
+  (* Replaced: gvs[ignore_bind_def, bind_def, update_accounts_def, update_transient_def,
+      append_logs_def, return_def, raise_def, machine_frame_def] *)
   gvs[ignore_bind_def, bind_def, update_accounts_def, update_transient_def,
-      append_logs_def, return_def, raise_def, machine_frame_def]
+      append_logs_def, update_pending_deletions_def, return_def, raise_def,
+      machine_frame_def]
 QED
 
 Theorem ext_call_decode_frame[local]:
