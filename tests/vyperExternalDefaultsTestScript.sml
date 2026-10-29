@@ -10,7 +10,8 @@ Theorem external_default_empty_scope_test:
 Proof
   simp[eval_external_defaults_run, evaluate_def, get_scopes_def,
        lookup_scopes_val_def, lookup_scopes_def, lift_option_type_def,
-       lift_option_def, bind_def, ignore_bind_def, return_def, raise_def]
+       lift_option_def, type_check_def, assert_def,
+       bind_def, ignore_bind_def, return_def, raise_def]
 QED
 
 (* The original error is propagated, rather than replaced with the old generic
@@ -21,7 +22,7 @@ Theorem external_default_exception_test:
     (INR (Error (RuntimeError "raw_revert")), st)
 Proof
   simp[eval_external_defaults_run, evaluate_def, evaluate_literal_def,
-       materialise_def, type_check_def, assert_def, bind_def,
+       read_result_def, type_check_def, assert_def, bind_def,
        ignore_bind_def, return_def, raise_def]
 QED
 
@@ -34,7 +35,7 @@ Theorem external_default_balance_test:
     (INL [IntV &(lookup_account (word_of_bytes_be bs) st.accounts).balance], st)
 Proof
   simp[eval_external_defaults_run, evaluate_def, evaluate_literal_def,
-       materialise_def, builtin_args_length_ok_def,
+       read_result_def, builtin_args_length_ok_def,
        evaluate_builtin_def, evaluate_account_op_def,
        type_check_def, assert_def, get_accounts_def,
        lift_sum_def, bind_def, ignore_bind_def, return_def, raise_def]
@@ -65,7 +66,7 @@ Theorem external_defaults_state_threading_test:
 Proof
   strip_tac >>
   simp[eval_external_defaults_cons, evaluate_def, evaluate_literal_def,
-       materialise_def, builtin_args_length_ok_def,
+       read_result_def, builtin_args_length_ok_def,
        evaluate_builtin_def, evaluate_account_op_def,
        type_check_def, assert_def, get_accounts_def,
        lift_sum_def, bind_def, ignore_bind_def, return_def, raise_def]
