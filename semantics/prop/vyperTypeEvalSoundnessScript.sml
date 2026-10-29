@@ -5336,6 +5336,14 @@ Proof
   simp_tac(srw_ss())[] >> strip_tac >> gvs[no_type_error_result_def]
 QED
 
+Theorem guarded_cases[local]:
+  (!s x t. type_check ok msg s = (INL x,t) /\ d /\ ~b ==> p) ==>
+  (!s x t. type_check ok msg s = (INL x,t) /\ d /\ b ==> p) ==>
+  ok /\ d ==> p
+Proof
+  simp[type_check_def, assert_def, return_def] >> metis_tac[]
+QED
+
 Resume eval_scc_type_sound_results_mutual[Expr_Builtin]:
   rpt gen_tac >> strip_tac >>
   `call_evaluation_safe cx (int_calls_exprs es)` by (
@@ -5408,14 +5416,14 @@ Resume eval_scc_type_sound_results_mutual[Expr_Builtin]:
                      type_check_def, assert_def, get_accounts_def, lift_sum_def] >>
   Cases_on `eval_exprs cx es st` >>
   rename1 `eval_exprs cx es st = (args_res,args_st)` >>
-  qpat_x_assum `!s'' x t. _ /\ bt <> Len ==> _`
-    (qspecl_then [`st`,`()`,`st`] mp_tac) >>
-  (impl_tac >- (simp[type_check_def, assert_def] >> metis_tac[])) >> strip_tac >>
+  qpat_x_assum `!s'' x t. _ /\ bt = Len ==> _` kall_tac >>
+  drule guarded_cases >> disch_then drule >>
+  (impl_tac >- simp[]) >> strip_tac >>
   qpat_x_assum `!env st res st'. _ ==> _ /\ _ /\ _ /\ _ /\ case res of INL vs => exprs_runtime_typed env es vs | INR _ => T`
     (qspecl_then [`env`,`st`,`args_res`,`args_st`] mp_tac) >>
   (impl_tac >- simp[]) >> strip_tac >>
   rpt (qpat_x_assum `!env st res st'. _` kall_tac) >>
-  qpat_x_assum `!s'' x t. _` kall_tac >>
+  ntac 2 (qpat_x_assum `!s'' x t. _` kall_tac) >>
   Cases_on `args_res`
   >- (
     rename1 `eval_exprs cx es st = (INL vs,args_st)` >>
@@ -5427,6 +5435,21 @@ Resume eval_scc_type_sound_results_mutual[Expr_Builtin]:
       (gvs[LIST_REL_EL_EQN, LIST_EQ_REWRITE, EL_MAP]) >>
     `?ret_tv. evaluate_type (get_tenv cx) ty = SOME ret_tv` by
       (gvs[well_formed_type_def, IS_SOME_EXISTS]) >>
+    Cases_on `bt = Bop In \/ bt = Bop NotIn`
+    >- (drule_all well_typed_membership_dispatch >> strip_tac >>
+        `LENGTH es = 2` by
+          (gvs[LIST_REL_EL_EQN]) >>
+        qpat_x_assum `evaluate_type _ (EL 1 (MAP expr_type es)) = SOME ht`
+          mp_tac >> simp[EL_MAP] >> disch_tac >>
+        qpat_x_assum `evaluate_membership _ _ _ _ = _`
+          (assume_tac o SRULE []) >>
+        asm_simp_tac (srw_ss())
+          [bind_def, assert_def, lift_option_type_def, lift_option_def,
+           return_def, raise_def] >>
+        strip_tac >> gvs[no_type_error_result_def, expr_type_def,
+                         eval_result_typed_def, value_result_typed_Value,
+                         evaluate_type_def, value_has_type_def]) >>
+    simp[bind_def, ignore_bind_def, get_accounts_def, return_def] >>
     Cases_on `evaluate_builtin cx args_st.accounts ty bt (MAP expr_type es) vs` >>
     rename1 `evaluate_builtin cx args_st.accounts ty bt (MAP expr_type es) vs = builtin_res` >>
     Cases_on `builtin_res` >>
@@ -5450,7 +5473,9 @@ Resume eval_scc_type_sound_results_mutual[Expr_Builtin]:
         (rpt strip_tac >> gvs[well_typed_builtin_app_def]) >>
       drule_all well_typed_builtin_app_no_type_error >>
       disch_then (qspec_then `msg` mp_tac) >> gvs[]]) >>
-  strip_tac >> gvs[eval_exprs_failure_builtin_case, no_type_error_result_def]
+  Cases_on `bt = Bop In \/ bt = Bop NotIn` >>
+  simp[bind_def] >> strip_tac >>
+  gvs[no_type_error_result_def]
 QED
 
 Resume eval_scc_type_sound_results_mutual[Expr_TypeBuiltin]:
@@ -8219,36 +8244,7 @@ fun trace_result_tac label g = let val suspend = trace_result_tac in
   (conj_tac >- (irule typed_scope_transition_scopes >> first_assum ACCEPT_TAC) >>
    first_assum ACCEPT_TAC)
 )
-  | "TraceBuiltin" => (
-  qpat_x_assum `call_evaluation_safe _ _` mp_tac >>
-  pure_rewrite_tac[int_calls_expr_def] >> strip_tac >>
-  qpat_x_assum `well_typed_expr _ _` mp_tac >>
-  simp[NoAsms, Once well_typed_expr_def] >> strip_tac >>
-  `builtin_args_length_ok bt (LENGTH es)` by
-    (drule well_typed_builtin_app_length >> simp[]) >>
-  Cases_on `bt = Len`
-  >- suspend "TraceBuiltinLen" >>
-  qpat_x_assum `!s'' x t. _ /\ bt <> Len ==> _`
-    (qspecl_then [`st`,`()`,`st`] mp_tac) >>
-  (impl_tac >- simp[type_check_def, assert_def]) >> strip_tac >>
-  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-  qpat_assum `builtin_args_length_ok bt (LENGTH es)` (fn th =>
-    simp_tac (srw_ss()) [Once evaluate_def, bind_def, return_def, raise_def,
-      type_check_def, assert_def, th]) >>
-  qpat_assum `bt <> Len` (fn th => rewrite_tac[th]) >>
-  simp[NoAsms, bind_def, ignore_bind_def, assert_def, return_def, raise_def,
-       AllCaseEqs()] >>
-  strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
-  qpat_x_assum `!env st res st'. _ ==> typed_scope_transition _ _`
-    (drule_at (Pat `eval_exprs _ _ _ = _`)) >>
-  disch_then (qspec_then `env` mp_tac) >>
-  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
-  imp_res_tac lift_sum_state >> rpt BasicProvers.VAR_EQ_TAC >>
-  asm_rewrite_tac[] >>
-  qpat_x_assum `get_accounts _ = _` mp_tac >>
-  simp[NoAsms, get_accounts_def, return_def] >> strip_tac >>
-  rpt BasicProvers.VAR_EQ_TAC >> first_assum ACCEPT_TAC
-)
+  | "TraceBuiltin" => bossLib.suspend "TraceBuiltinBody"
   | "TraceBuiltinLen" => (
   `es <> []` by
     (Cases_on `es` >> simp[] >>
@@ -8505,6 +8501,41 @@ Resume eval_scc_type_sound_results_mutual[Trace_Expr_Pop]:
 QED
 Resume eval_scc_type_sound_results_mutual[Trace_Expr_Builtin]:
   RESUME_TAC >> trace_result_tac "Trace_Expr_Builtin"
+QED
+Resume eval_scc_type_sound_results_mutual[TraceBuiltinBody]:
+  RESUME_TAC >>
+  qpat_x_assum `call_evaluation_safe _ _` mp_tac >>
+  pure_rewrite_tac[int_calls_expr_def] >> strip_tac >>
+  qpat_x_assum `well_typed_expr _ _` mp_tac >>
+  simp[NoAsms, Once well_typed_expr_def] >> strip_tac >>
+  `builtin_args_length_ok bt (LENGTH es)` by
+    (drule well_typed_builtin_app_length >> simp[]) >>
+  Cases_on `bt = Len`
+  >- trace_result_tac "TraceBuiltinLen" >>
+  drule guarded_cases >> disch_then drule >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  rpt (qpat_x_assum `!s'' x t. type_check _ _ _ = _ /\ _ ==> _` kall_tac) >>
+  qpat_x_assum `!env st res st'. _ ==> _ /\ _ /\ _ /\ _ /\ _` kall_tac >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  qpat_assum `builtin_args_length_ok bt (LENGTH es)` (fn th =>
+    simp_tac (srw_ss()) [Once evaluate_def, bind_def, return_def, raise_def,
+      type_check_def, assert_def, th]) >>
+  qpat_assum `bt <> Len` (fn th => rewrite_tac[th]) >>
+  Cases_on `bt = Bop In \/ bt = Bop NotIn` >>
+  asm_rewrite_tac[] >>
+  simp[NoAsms, bind_def, ignore_bind_def, assert_def, return_def, raise_def,
+       AllCaseEqs()] >>
+  strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+  qpat_x_assum `!env st res st'. _ ==> typed_scope_transition _ _`
+    (drule_at (Pat `eval_exprs _ _ _ = _`)) >>
+  disch_then (qspec_then `env` mp_tac) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
+  imp_res_tac lift_sum_state >> imp_res_tac type_check_state >>
+  imp_res_tac lift_option_type_state >> rpt BasicProvers.VAR_EQ_TAC >>
+  asm_rewrite_tac[] >>
+  qpat_x_assum `get_accounts _ = _` mp_tac >>
+  simp[NoAsms, get_accounts_def, return_def] >> strip_tac >>
+  rpt BasicProvers.VAR_EQ_TAC >> first_assum ACCEPT_TAC
 QED
 Resume eval_scc_type_sound_results_mutual[Trace_Expr_Attribute]:
   RESUME_TAC >> trace_result_tac "Trace_Expr_Attribute"
