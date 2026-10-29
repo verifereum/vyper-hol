@@ -838,8 +838,8 @@ Proof
        ?off sz. FLOOKUP arg_vars n = SOME (MemLoc off sz)`
     by (rpt strip_tac >> drule_all allocate_args_FLOOKUP_arg >> simp[]) >>
   `!n loc. FLOOKUP arg_vars n = SOME loc /\ ~MEM n (MAP FST args) ==>
-           ?slot. loc = StorageLoc slot \/ loc = TransientLoc slot \/
-                  loc = ImmutableLoc slot`
+           (?slot. loc = StorageLoc slot \/ loc = TransientLoc slot) \/
+           (?imm_off. loc = ImmutableLoc imm_off)`
     by (rpt strip_tac >> drule_all allocate_args_FLOOKUP_other >>
         strip_tac >> gvs[] >>
         drule add_immutable_locations_FLOOKUP >> strip_tac
