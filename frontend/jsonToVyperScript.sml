@@ -1128,7 +1128,7 @@ Definition initialized_chains_def:
   initialized_chains [] = [] ∧
   initialized_chains (JTL_InitializesDecl target :: rest) =
     (case initialized_chain (initializes_target target) of
-     | SOME chain => chain :: initialized_chains rest
+     | SOME alias => alias :: initialized_chains rest
      | NONE => initialized_chains rest) ∧
   initialized_chains (_ :: rest) = initialized_chains rest
 End

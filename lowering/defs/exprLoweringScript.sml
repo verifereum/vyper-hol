@@ -132,7 +132,12 @@ Theorem place_type_env_cong:
   !e cenv cenv'. cenv.ce_hashmap_info = cenv'.ce_hashmap_info ==>
     place_type cenv e = place_type cenv' e
 Proof
-  Induct >> simp[place_type_def] >> metis_tac[]
+  (* `Induct` on `expr` fails on the pinned HOL (HOL-Theorem-Prover/HOL#2115),
+     so use the datatype's own principle, discharging the mutual
+     `base_assignment_target` part as `λ_. T`.  Revert with #2115's fix. *)
+  ho_match_mp_tac
+    (expr_induction |> Q.SPEC `P` |> Q.SPEC `λ_. T` |> SIMP_RULE (srw_ss()) []) >>
+  simp[place_type_def] >> metis_tac[]
 QED
 
 Theorem place_type_local_updates[simp]:

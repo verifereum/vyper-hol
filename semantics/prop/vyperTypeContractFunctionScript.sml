@@ -125,7 +125,8 @@ Theorem type_place_expr_static_maps_transfer_env_reverse_SOME[local]:
     type_place_expr env2 e = SOME vt ==>
     type_place_expr env1 e = SOME vt
 Proof
-  Induct >>
+  ho_match_mp_tac
+    (expr_induction |> Q.SPEC `P` |> Q.SPEC `λ_. T` |> SIMP_RULE (srw_ss()) []) >>
   rw[well_typed_expr_def, static_maps_transfer_env_def, AllCaseEqs()] >>
   gvs[] >>
   TRY (PairCases_on `p` >> gvs[well_typed_expr_def, vtype_annotation_ok_def]) >>
@@ -148,7 +149,13 @@ Proof
        gvs[]) >>
   TRY (rename1 `FLOOKUP env1.bare_globals (src,id) = SOME ty` >>
        qpat_x_assum `!k ty. FLOOKUP env1.bare_globals k = SOME ty ==> FLOOKUP env1.toplevel_vtypes k = SOME (Type ty)` drule >>
-       simp[vtype_annotation_ok_def] >> NO_TAC) >>
+       simp[vtype_annotation_ok_def] >> NO_TAC)
+  (* Subscript: the induction hypothesis has static_maps_transfer_env unfolded *)
+  >~ [`subscript_vtype _ _ = SOME _`]
+  >- (qpat_x_assum `!env1 env2 vt. well_typed_expr env1 e /\ _ ==> _`
+        (qspecl_then [`env1`,`env2`,`vt'`] mp_tac) >>
+      impl_tac >- gvs[static_maps_transfer_env_def] >>
+      metis_tac[]) >>
   metis_tac[]
 QED
 

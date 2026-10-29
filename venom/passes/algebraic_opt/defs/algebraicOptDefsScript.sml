@@ -32,6 +32,8 @@ Ancestors
 Libs
   pred_setTheory integerTheory
 
+val _ = Parse.hide "chain";
+
 (* ===== Utilities ===== *)
 
 Definition ao_fresh_var_def:
