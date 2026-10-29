@@ -1100,10 +1100,7 @@ Resume compiler_builtin_var[calldata]:
   builtin_ptr_var_tac >> metis_tac[compiler_slice_var]
 QED
 Resume compiler_builtin_var[len]:
-  Cases_on `is_msg_data (HD args)` >> gvs[] >> builtin_stack_var_tac
-  >- (gvs[builtinSimpleTheory.compile_builtin_calldatasize_def] >>
-      metis_tac[exprSafeOperandTheory.emit_op_safe_operand,
-                exprSafeOperandTheory.safe_operand_def]) >>
+  builtin_stack_var_tac >>
   qpat_x_assum `_ = compile_builtin_len _ _ _ _ _` (assume_tac o SYM) >>
   drule exprSafeOperandBuiltinsTheory.compile_builtin_len_safe_operand >>
   simp[exprSafeOperandTheory.safe_operand_def]
