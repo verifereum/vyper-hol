@@ -21,7 +21,7 @@ End
 
 Theorem abi_builtin_encode_source_single:
   vyper_to_abi (get_tenv cx) ty v = SOME av ==>
-  evaluate_type_builtin cx (AbiEncode F method_id) (TupleT [ty]) [v] =
+  evaluate_type_builtin cx (AbiEncode F method_id) (TupleT [ty]) arg_tys [v] =
     INL (BytesV (abi_encode_method_id_bytes method_id ++ enc (vyper_to_abi_type (get_tenv cx) ty) av))
 Proof
   simp[evaluate_type_builtin_def, evaluate_abi_encode_bytes_def, needs_external_call_wrap_def, LET_THM]
@@ -29,7 +29,7 @@ QED
 
 Theorem abi_builtin_encode_source_tuple:
   ~(~ensure /\ LENGTH tys <= 1) /\ vyper_to_abi (get_tenv cx) (TupleT tys) (ArrayV (TupleV vs)) = SOME av ==>
-  evaluate_type_builtin cx (AbiEncode ensure method_id) (TupleT tys) vs =
+  evaluate_type_builtin cx (AbiEncode ensure method_id) (TupleT tys) arg_tys vs =
     INL (BytesV (abi_encode_method_id_bytes method_id ++
       enc (vyper_to_abi_type (get_tenv cx) (TupleT tys)) av))
 Proof
@@ -42,7 +42,7 @@ Theorem abi_builtin_encode_source_result:
   tys <> [] /\ LENGTH vs = LENGTH tys /\
   vyper_to_abi (get_tenv cx) (abi_builtin_encode_type ensure tys)
     (abi_builtin_encode_value ensure tys vs) = SOME av ==>
-  evaluate_type_builtin cx (AbiEncode ensure method_id) (TupleT tys) vs =
+  evaluate_type_builtin cx (AbiEncode ensure method_id) (TupleT tys) arg_tys vs =
     INL (BytesV (abi_encode_method_id_bytes method_id ++
       enc (vyper_to_abi_type (get_tenv cx) (abi_builtin_encode_type ensure tys)) av))
 Proof
@@ -132,7 +132,7 @@ Theorem lower_abi_encode_source:
   final.cs_next_id <= last /\ final.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
   ~initial.vs_halted /\ initial.vs_current_bb = start.cs_current_bb /\
   initial.vs_inst_idx = LENGTH start.cs_current_insts ==>
-  ?actual. evaluate_type_builtin cx (AbiEncode ensure method_id) (TupleT tys) vs = INL (BytesV bytes) /\
+  ?actual. evaluate_type_builtin cx (AbiEncode ensure method_id) (TupleT tys) arg_tys vs = INL (BytesV bytes) /\
     eval_operand out actual = SOME (n2w p) /\ mload p actual = n2w (LENGTH bytes) /\
     mem_bytes_at (p+32) (LENGTH bytes) actual.vs_memory = bytes /\
     val_in_memory (BaseTV (BytesT (Dynamic (maxlen+LENGTH (abi_encode_method_id_bytes method_id)))))

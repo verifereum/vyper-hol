@@ -15,7 +15,7 @@ Theorem lower_abi_decode_checked_array_unwrap:
   assignable_type (type_env tops) ty /\
   evaluate_type (type_env tops) ty = SOME (ArrayTV elem_tv (Dynamic maxn)) /\
   ~is_dynamic (vyper_to_abi_type (get_tenv cx) elem_ty) /\
-  evaluate_type_builtin cx (AbiDecode unwrap) ty [vyperValue$BytesV bs] = INL v /\
+  evaluate_type_builtin cx (AbiDecode unwrap) ty arg_tys [vyperValue$BytesV bs] = INL v /\
   lower_abi_decode data (type_to_abi_dec_info ce.ce_struct_fields ce wrapped_ty) min_size max_size
     (type_memory_bytes ce wrapped_ty) start = (out,final) /\ fn_has_code start final func /\
   (start.cs_blocks = final.cs_blocks \/

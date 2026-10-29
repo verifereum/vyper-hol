@@ -15,7 +15,7 @@ Theorem lower_abi_decode_valid_array_unwrap:
       wrapped_ty = if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else ty in
   abi_decoder_coherent ce (get_tenv cx) sf ty (ArrayTV elem_tv (Dynamic maxn)) /\
   ~is_dynamic (vyper_to_abi_type (get_tenv cx) elem_ty) /\
-  evaluate_type_builtin cx (AbiDecode unwrap) ty [vyperValue$BytesV bs] = INL v /\
+  evaluate_type_builtin cx (AbiDecode unwrap) ty arg_tys [vyperValue$BytesV bs] = INL v /\
   lower_abi_decode data (type_to_abi_dec_info sf ce wrapped_ty) min_size max_size
     (type_memory_bytes ce wrapped_ty) start = (out,final) /\ fn_has_code start final func /\
   (start.cs_blocks = final.cs_blocks \/
@@ -39,7 +39,7 @@ Proof
   `type_memory_bytes ce (TupleT [ArrayT elem_ty (Dynamic maxn)]) =
     type_memory_bytes ce (ArrayT elem_ty (Dynamic maxn))` by
     simp[Once type_memory_bytes_def] >>
-  qpat_x_assum `evaluate_type_builtin _ _ _ _ = _`
+  qpat_x_assum `evaluate_type_builtin _ _ _ _ _ = _`
     (assume_tac o PURE_REWRITE_RULE [abi_source_decode_wrapping_iff]) >>
   Cases_on `unwrap` >> RULE_ASSUM_TAC (SIMP_RULE bool_ss [needs_external_call_wrap_def]) >>
   qpat_assum `type_memory_bytes ce (TupleT [ArrayT elem_ty (Dynamic maxn)]) = _`

@@ -13,7 +13,7 @@ Theorem compile_abi_decode_bytes_source_caller:
   let max_size = abi_size_bound ce.ce_struct_fields wrapped_ty in
   (ret_ty = BaseT (BytesT (Dynamic n)) \/ ret_ty = BaseT (StringT n)) /\
   evaluate_type (get_tenv cx) ret_ty = SOME tv /\
-  evaluate_type_builtin cx (AbiDecode unwrap) ret_ty [BytesV bs] = INL v /\
+  evaluate_type_builtin cx (AbiDecode unwrap) ret_ty arg_tys [BytesV bs] = INL v /\
   cfn ce (expr_type (HD args)) (HD args) origin =
     (LocatedValue (BaseT (BytesT (Dynamic input_bound))) srcptr,ready) /\
   srcptr.ptr_location = LocMemory /\

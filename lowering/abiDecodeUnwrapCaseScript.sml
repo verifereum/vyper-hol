@@ -31,7 +31,7 @@ Theorem abi_decode_source_wrapping_success:
   evaluate_abi_decode (get_tenv cx)
     (if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else ty) bs =
   INL (if unwrap /\ needs_external_call_wrap ty then ArrayV (TupleV [v]) else v) ==>
-  evaluate_type_builtin cx (AbiDecode unwrap) ty [BytesV bs] = INL v
+  evaluate_type_builtin cx (AbiDecode unwrap) ty arg_tys [BytesV bs] = INL v
 Proof
   Cases_on `unwrap /\ needs_external_call_wrap ty` >>
   simp_tac bool_ss [] >> strip_tac >> gvs[evaluate_type_builtin_def]
@@ -53,11 +53,11 @@ Theorem abi_decoder_unwrap_case:
       (abi_decoder_post (if wrapped then TupleTV [tv] else tv)
         (if wrapped then ArrayV (TupleV [v]) else v) st' d outsz b cap initial) R ==>
     frag_exec ctx st st' P
-      (\t. evaluate_type_builtin cx (AbiDecode unwrap) ty [BytesV bs] = INL v /\
+      (\t. evaluate_type_builtin cx (AbiDecode unwrap) ty arg_tys [BytesV bs] = INL v /\
            abi_decoder_post tv v st' d outsz b cap initial t) R
 Proof
   pure_rewrite_tac[LET_THM] >> BETA_TAC >> strip_tac >>
-  `evaluate_type_builtin cx (AbiDecode unwrap) ty [BytesV bs] = INL v` by
+  `evaluate_type_builtin cx (AbiDecode unwrap) ty arg_tys [BytesV bs] = INL v` by
     (irule abi_decode_source_wrapping_success >> simp[]) >>
   RULE_ASSUM_TAC (PURE_REWRITE_RULE [abi_decoder_post_unwrap]) >>
   irule frag_exec_conseq >>

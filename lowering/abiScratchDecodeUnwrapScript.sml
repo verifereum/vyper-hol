@@ -11,7 +11,7 @@ Theorem lower_abi_decode_scratch_unwrap:
   let wrapped = (unwrap /\ needs_external_call_wrap ty) in
   let wrapped_ty = if wrapped then TupleT [ty] else ty in
   abi_decoder_coherent ce (get_tenv cx) sf ty tv /\
-  evaluate_type_builtin cx (AbiDecode unwrap) ty [vyperValue$BytesV bs] = INL v /\
+  evaluate_type_builtin cx (AbiDecode unwrap) ty arg_tys [vyperValue$BytesV bs] = INL v /\
   lower_abi_decode data (type_to_abi_dec_info sf ce wrapped_ty) min_size max_size
     (type_memory_bytes ce wrapped_ty) start = (out,final) /\ fn_has_code start final func /\
   (start.cs_blocks = final.cs_blocks \/
@@ -32,7 +32,7 @@ Theorem lower_abi_decode_scratch_unwrap:
     abi_decode_sim ctx func initial actual
 Proof
   simp_tac bool_ss [LET_THM] >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  qpat_x_assum `evaluate_type_builtin _ _ _ _ = _`
+  qpat_x_assum `evaluate_type_builtin _ _ _ _ _ = _`
     (assume_tac o PURE_REWRITE_RULE [abi_source_decode_wrapping_iff]) >>
   mp_tac (Q.INST [`env` |-> `get_tenv cx`,
     `wrapped` |-> `unwrap /\ needs_external_call_wrap ty`]

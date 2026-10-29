@@ -24,7 +24,7 @@ Proof
   drule abi_decoder_dynarray_metadata_shape >> strip_tac >>
   gvs[Excl "enc_def", Excl "dec_def", Excl "valid_enc_def"] >>
   (qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _`
-    (assume_tac o PURE_REWRITE_RULE [Once type_to_abi_dec_info_def]) >>
+    (assume_tac o PURE_REWRITE_RULE [cj 3 type_to_abi_dec_info_def]) >>
   `abi_decode_source_opcode opc` by fs[abi_scratch_decoder_ranges_def] >>
   mp_tac (Q.INST [`st` |-> `start`, `final` |-> `end_st`,
     `ei` |-> `type_to_abi_dec_info (sf:string |-> (string # vyperAST$type # num) list) ce ty`,

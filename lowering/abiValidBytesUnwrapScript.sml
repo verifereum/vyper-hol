@@ -21,7 +21,7 @@ Proof
 QED
 
 Theorem abi_source_decode_wrapping_iff:
-  evaluate_type_builtin cx (AbiDecode unwrap) ty [vyperValue$BytesV bs] = INL v <=>
+  evaluate_type_builtin cx (AbiDecode unwrap) ty arg_tys [vyperValue$BytesV bs] = INL v <=>
   evaluate_abi_decode (get_tenv cx)
     (if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else ty) bs =
   INL (if unwrap /\ needs_external_call_wrap ty then ArrayV (TupleV [v]) else v)
@@ -39,7 +39,7 @@ Theorem lower_abi_decode_valid_bytes_unwrap:
   let wrapped_ty = if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else ty in
   (ty = BaseT (BytesT (Dynamic n)) \/ ty = BaseT (StringT n)) /\
   evaluate_type (get_tenv cx) ty = SOME tv /\
-  evaluate_type_builtin cx (AbiDecode unwrap) ty [vyperValue$BytesV bs] = INL v /\
+  evaluate_type_builtin cx (AbiDecode unwrap) ty arg_tys [vyperValue$BytesV bs] = INL v /\
   lower_abi_decode data (type_to_abi_dec_info sf ce wrapped_ty) min_size max_size
     (type_memory_bytes ce wrapped_ty) st = (out,final) /\ fn_has_code st final func /\
   abi_builtin_valid_bytes_resources n bs st data min_size max_size p d initial /\
@@ -55,7 +55,7 @@ Theorem lower_abi_decode_valid_bytes_unwrap:
 Proof
   simp_tac bool_ss [LET_THM] >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   drule_all abi_valid_bytes_lowering >> strip_tac >>
-  qpat_x_assum `evaluate_type_builtin _ _ _ _ = _`
+  qpat_x_assum `evaluate_type_builtin _ _ _ _ _ = _`
     (assume_tac o PURE_REWRITE_RULE [abi_source_decode_wrapping_iff]) >>
   Cases_on `unwrap` >> gvs[needs_external_call_wrap_def, Excl "dec_def", Excl "valid_enc_def"] >>
   FIRST (List.map (fn th => drule_all th >>

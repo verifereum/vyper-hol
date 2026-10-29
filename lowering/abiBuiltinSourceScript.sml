@@ -90,7 +90,7 @@ Theorem lower_abi_decode_source_canonical:
   final.cs_next_id <= last /\ final.cs_next_var <= limit_st.cs_next_var /\
   fresh_vars_wrt limit_st initial /\ ~initial.vs_halted /\
   initial.vs_current_bb = start.cs_current_bb /\ initial.vs_inst_idx = LENGTH start.cs_current_insts ==>
-  ?actual. evaluate_type_builtin cx (AbiDecode unwrap) ty [BytesV bs] = INL v /\
+  ?actual. evaluate_type_builtin cx (AbiDecode unwrap) ty arg_tys [BytesV bs] = INL v /\
     eval_operand out actual = SOME (n2w d) /\ val_in_memory tv v d actual.vs_memory /\
     abi_builtin_decode_effect first last start final limit_st d (type_memory_bytes ce ty)
       b cap initial actual /\ actual.vs_current_bb = final.cs_current_bb /\

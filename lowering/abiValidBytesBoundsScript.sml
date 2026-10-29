@@ -8,11 +8,11 @@ Ancestors
 Theorem abi_valid_bytes_decode_bounds:
   let wrapped_ty = if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else ty in
   (ty = BaseT (BytesT (Dynamic n)) \/ ty = BaseT (StringT n)) /\
-  evaluate_type_builtin cx (AbiDecode unwrap) ty [vyperValue$BytesV bs] = INL v ==>
+  evaluate_type_builtin cx (AbiDecode unwrap) ty arg_tys [vyperValue$BytesV bs] = INL v ==>
   abi_static_size sf wrapped_ty <= LENGTH bs /\ LENGTH bs <= abi_size_bound sf wrapped_ty
 Proof
   simp_tac bool_ss [LET_THM] >> strip_tac >>
-  qpat_x_assum `evaluate_type_builtin _ _ _ _ = _`
+  qpat_x_assum `evaluate_type_builtin _ _ _ _ _ = _`
     (assume_tac o PURE_REWRITE_RULE [abi_source_decode_wrapping_iff]) >>
   drule_all evaluate_abi_decode_vyper_valid_enc >> strip_tac >>
   drule vyper_valid_enc_length_lower >> strip_tac >>
@@ -31,7 +31,7 @@ Theorem abi_valid_bytes_resources_from_source:
   let min_size = abi_static_size sf wrapped_ty in
   let max_size = abi_size_bound sf wrapped_ty in
   (ty = BaseT (BytesT (Dynamic n)) \/ ty = BaseT (StringT n)) /\
-  evaluate_type_builtin cx (AbiDecode unwrap) ty [vyperValue$BytesV bs] = INL v /\
+  evaluate_type_builtin cx (AbiDecode unwrap) ty arg_tys [vyperValue$BytesV bs] = INL v /\
   val_in_memory (BaseTV (BytesT (Dynamic input_bound))) (vyperValue$BytesV bs) p s.vs_memory /\
   eval_operand data s = SOME (n2w p) /\ abi_decoder_operand_live st.cs_next_var data /\
   max_size < dimword (:256) /\

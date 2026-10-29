@@ -25,11 +25,11 @@ Theorem abi_caller_source_decode_wrapped_bounds:
   get_tenv cx = type_env tops /\
   contract_namespaces_ok in_deploy [((NONE:num option),tops)] /\
   evaluate_type (type_env tops) ty = SOME tv /\
-  evaluate_type_builtin cx (AbiDecode unwrap) ty [BytesV bs] = INL v ==>
+  evaluate_type_builtin cx (AbiDecode unwrap) ty arg_tys [BytesV bs] = INL v ==>
   abi_static_size sf wrapped_ty <= LENGTH bs /\ LENGTH bs <= abi_size_bound sf wrapped_ty
 Proof
   simp_tac bool_ss [LET_THM] >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  qpat_x_assum `evaluate_type_builtin _ _ _ _ = _`
+  qpat_x_assum `evaluate_type_builtin _ _ _ _ _ = _`
     (assume_tac o PURE_REWRITE_RULE [abi_source_decode_wrapping_iff]) >>
   qpat_assum `get_tenv cx = type_env tops`
     (fn th => RULE_ASSUM_TAC (PURE_REWRITE_RULE [th])) >>

@@ -40,7 +40,7 @@ Theorem lower_abi_encode_tuple_source:
   final.cs_next_id <= last /\ final.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
   ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
   initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
-  ?actual. evaluate_type_builtin cx (AbiEncode ensure method_id) (TupleT tys) vs = INL (BytesV bytes) /\
+  ?actual. evaluate_type_builtin cx (AbiEncode ensure method_id) (TupleT tys) arg_tys vs = INL (BytesV bytes) /\
     eval_operand out actual = SOME (n2w p) /\ mload p actual = n2w (LENGTH bytes) /\
     mem_bytes_at (p+32) (LENGTH bytes) actual.vs_memory = bytes /\
     val_in_memory (BaseTV (BytesT (Dynamic (maxlen+LENGTH (abi_encode_method_id_bytes method_id)))))
@@ -113,7 +113,7 @@ Theorem compile_abi_encode_tuple_source:
   final.cs_next_id <= last /\ final.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st prepared /\
   ~prepared.vs_halted /\ prepared.vs_current_bb = arg_st.cs_current_bb /\
   prepared.vs_inst_idx = LENGTH arg_st.cs_current_insts /\ abi_decode_sim ctx func initial prepared ==>
-  ?actual. evaluate_type_builtin cx (AbiEncode ensure method_id) (TupleT tys) vs = INL (BytesV bytes) /\
+  ?actual. evaluate_type_builtin cx (AbiEncode ensure method_id) (TupleT tys) arg_tys vs = INL (BytesV bytes) /\
     vv_location vv = SOME LocMemory /\ eval_operand (vv_operand vv) actual = SOME (n2w p) /\
     mload p actual = n2w (LENGTH bytes) /\ mem_bytes_at (p+32) (LENGTH bytes) actual.vs_memory = bytes /\
     val_in_memory (BaseTV (BytesT (Dynamic (maxlen+LENGTH (abi_encode_method_id_bytes method_id)))))
@@ -203,7 +203,7 @@ Theorem compile_abi_encode_tuple_producer:
   final.cs_next_id <= last /\ final.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st prepared /\
   ~prepared.vs_halted /\ prepared.vs_current_bb = arg_st.cs_current_bb /\
   prepared.vs_inst_idx = LENGTH arg_st.cs_current_insts /\ abi_decode_sim ctx func initial prepared ==>
-  ?actual. evaluate_type_builtin cx (AbiEncode ensure method_id) (TupleT tys) vs = INL (BytesV bytes) /\
+  ?actual. evaluate_type_builtin cx (AbiEncode ensure method_id) (TupleT tys) arg_tys vs = INL (BytesV bytes) /\
     vv_location vv = SOME LocMemory /\ eval_operand (vv_operand vv) actual = SOME (n2w p) /\
     mload p actual = n2w (LENGTH bytes) /\ mem_bytes_at (p+32) (LENGTH bytes) actual.vs_memory = bytes /\
     val_in_memory (BaseTV (BytesT (Dynamic n))) (BytesV bytes) p actual.vs_memory /\
@@ -219,7 +219,8 @@ Theorem compile_abi_encode_tuple_producer:
     ~actual.vs_halted /\ abi_decode_sim ctx func initial actual
 Proof
   simp_tac bool_ss [LET_THM] >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  drule_all (SIMP_RULE bool_ss [LET_THM] compile_abi_encode_tuple_source) >> strip_tac >>
+  drule_all (SIMP_RULE bool_ss [LET_THM] compile_abi_encode_tuple_source) >>
+  disch_then (qspec_then `arg_tys` strip_assume_tac) >>
   rename1 `abi_decode_sim ctx func initial actual` >>
   drule_all (SIMP_RULE bool_ss [] compile_abi_encode_tuple_output_live) >> strip_tac >>
   `alloca_next_valid (abi_builtin_allocate_state arg_st.cs_next_id

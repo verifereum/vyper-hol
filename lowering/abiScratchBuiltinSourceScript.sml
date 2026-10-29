@@ -26,7 +26,7 @@ Theorem lower_abi_encode_scratch_source:
   final.cs_next_id <= last /\ final.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
   ~initial.vs_halted /\ initial.vs_current_bb = start.cs_current_bb /\
   initial.vs_inst_idx = LENGTH start.cs_current_insts ==>
-  ?actual. evaluate_type_builtin cx (AbiEncode ensure method_id) (TupleT tys) vs = INL (BytesV bytes) /\
+  ?actual. evaluate_type_builtin cx (AbiEncode ensure method_id) (TupleT tys) arg_tys vs = INL (BytesV bytes) /\
     eval_operand out actual = SOME (n2w p) /\ mload p actual = n2w (LENGTH bytes) /\
     mem_bytes_at (p+32) (LENGTH bytes) actual.vs_memory = bytes /\
     val_in_memory (BaseTV (BytesT (Dynamic (maxlen+LENGTH (abi_encode_method_id_bytes method_id)))))

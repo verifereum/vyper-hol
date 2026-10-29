@@ -23,7 +23,7 @@ Theorem lower_abi_decode_unwrap_canonical:
   final.cs_next_id <= last /\ final.cs_next_var <= limit_st.cs_next_var /\
   fresh_vars_wrt limit_st initial /\ ~initial.vs_halted /\
   initial.vs_current_bb = start.cs_current_bb /\ initial.vs_inst_idx = LENGTH start.cs_current_insts ==>
-  ?actual. evaluate_type_builtin cx (AbiDecode unwrap) ty [BytesV bs] = INL v /\
+  ?actual. evaluate_type_builtin cx (AbiDecode unwrap) ty arg_tys [BytesV bs] = INL v /\
     eval_operand out actual = SOME (n2w d) /\ val_in_memory tv v d actual.vs_memory /\
     abi_builtin_decode_effect first last start final limit_st d (type_memory_bytes ce ty)
       b cap initial actual /\ actual.vs_current_bb = final.cs_current_bb /\
@@ -31,7 +31,7 @@ Theorem lower_abi_decode_unwrap_canonical:
     ~actual.vs_halted /\ abi_decode_sim ctx func initial actual
 Proof
   simp_tac bool_ss [LET_THM] >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  `evaluate_type_builtin cx (AbiDecode unwrap) ty [BytesV bs] = INL v` by
+  `evaluate_type_builtin cx (AbiDecode unwrap) ty arg_tys [BytesV bs] = INL v` by
     (irule abi_decode_source_wrapping_success >> asm_simp_tac bool_ss []) >>
   mp_tac (Q.INST [`ty` |-> `if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else ty`,
     `tv` |-> `if unwrap /\ needs_external_call_wrap ty then TupleTV [tv] else tv`,

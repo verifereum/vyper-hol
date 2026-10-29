@@ -222,7 +222,7 @@ Theorem compile_abi_encode_word_source:
   fresh_vars_wrt limit_st prepared /\ ~prepared.vs_halted /\
   prepared.vs_current_bb = arg_st.cs_current_bb /\ prepared.vs_inst_idx = LENGTH arg_st.cs_current_insts /\
   abi_decode_sim ctx func initial prepared ==>
-  ?actual. evaluate_type_builtin cx (AbiEncode F method_id) (TupleT [src_ty]) [v] = INL (BytesV bytes) /\
+  ?actual. evaluate_type_builtin cx (AbiEncode F method_id) (TupleT [src_ty]) arg_tys [v] = INL (BytesV bytes) /\
     vv_location vv = SOME LocMemory /\ eval_operand (vv_operand vv) actual = SOME (n2w p) /\
     mload p actual = n2w (LENGTH bytes) /\ mem_bytes_at (p+32) (LENGTH bytes) actual.vs_memory = bytes /\
     val_in_memory (BaseTV (BytesT (Dynamic (maxlen+LENGTH (abi_encode_method_id_bytes method_id)))))

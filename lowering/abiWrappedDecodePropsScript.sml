@@ -55,7 +55,7 @@ Theorem evaluate_type_builtin_abi_decode_wrapped_success:
   unwrap /\ needs_external_call_wrap ty /\
   evaluate_abi_decode (get_tenv cx) (TupleT [ty]) bs =
     INL (ArrayV (TupleV [v])) ==>
-  evaluate_type_builtin cx (AbiDecode unwrap) ty [BytesV bs] = INL v
+  evaluate_type_builtin cx (AbiDecode unwrap) ty arg_tys [BytesV bs] = INL v
 Proof
   strip_tac >> simp[evaluate_type_builtin_def]
 QED
@@ -63,7 +63,7 @@ QED
 Theorem evaluate_type_builtin_abi_decode_unwrapped_success:
   ~(unwrap /\ needs_external_call_wrap ty) /\
   evaluate_abi_decode (get_tenv cx) ty bs = INL v ==>
-  evaluate_type_builtin cx (AbiDecode unwrap) ty [BytesV bs] = INL v
+  evaluate_type_builtin cx (AbiDecode unwrap) ty arg_tys [BytesV bs] = INL v
 Proof
   strip_tac >> simp[evaluate_type_builtin_def]
 QED
@@ -71,7 +71,7 @@ QED
 Theorem evaluate_type_builtin_abi_decode_wrapped_error:
   unwrap /\ needs_external_call_wrap ty /\
   evaluate_abi_decode (get_tenv cx) (TupleT [ty]) bs = INR err ==>
-  evaluate_type_builtin cx (AbiDecode unwrap) ty [BytesV bs] =
+  evaluate_type_builtin cx (AbiDecode unwrap) ty arg_tys [BytesV bs] =
     INR (RuntimeError err)
 Proof
   strip_tac >> simp[evaluate_type_builtin_def]
@@ -80,7 +80,7 @@ QED
 Theorem evaluate_type_builtin_abi_decode_unwrapped_error:
   ~(unwrap /\ needs_external_call_wrap ty) /\
   evaluate_abi_decode (get_tenv cx) ty bs = INR err ==>
-  evaluate_type_builtin cx (AbiDecode unwrap) ty [BytesV bs] =
+  evaluate_type_builtin cx (AbiDecode unwrap) ty arg_tys [BytesV bs] =
     INR (RuntimeError err)
 Proof
   strip_tac >> simp[evaluate_type_builtin_def]
@@ -97,7 +97,7 @@ Theorem evaluate_type_builtin_abi_decode_wrapped_canonical_normalized:
     static_length at <= LENGTH bs /\
     LENGTH bs <= vyper_abi_size_bound (get_tenv cx) (TupleT [ty]) /\
     abi_to_vyper (get_tenv cx) ty av = SOME nv ==>
-    evaluate_type_builtin cx (AbiDecode unwrap) ty [BytesV bs] = INL nv
+    evaluate_type_builtin cx (AbiDecode unwrap) ty arg_tys [BytesV bs] = INL nv
 Proof
   pure_rewrite_tac [LET_THM] >> BETA_TAC >> strip_tac >>
   irule evaluate_type_builtin_abi_decode_wrapped_success >>

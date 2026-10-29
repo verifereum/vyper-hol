@@ -22,7 +22,7 @@ Theorem compile_abi_decode_memory_history_caller:
   get_tenv cx = type_env tops /\
   contract_namespaces_ok in_deploy [((NONE:num option),tops)] /\
   assignable_type (type_env tops) ret_ty /\ evaluate_type (type_env tops) ret_ty = SOME tv /\
-  evaluate_type_builtin cx (AbiDecode unwrap) ret_ty [BytesV bs] = INL v /\
+  evaluate_type_builtin cx (AbiDecode unwrap) ret_ty arg_tys [BytesV bs] = INL v /\
   cfn ce (expr_type (HD args)) (HD args) origin =
     (LocatedValue (BaseT (BytesT (Dynamic n))) srcptr,ready) /\ srcptr.ptr_location = LocMemory /\
   compile_type_builtin_dispatch_body cfn ce vv_ty ty (AbiDecode unwrap) ret_ty args origin =

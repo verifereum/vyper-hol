@@ -66,7 +66,7 @@ Theorem compile_abi_decode_memory_canonical:
   prepared.vs_current_bb = ready.cs_current_bb /\
   prepared.vs_inst_idx = LENGTH ready.cs_current_insts /\
   abi_decode_sim ctx func initial prepared ==>
-  ?actual. evaluate_type_builtin cx (AbiDecode unwrap) ret_ty [BytesV bs] = INL v /\
+  ?actual. evaluate_type_builtin cx (AbiDecode unwrap) ret_ty arg_tys [BytesV bs] = INL v /\
     vv_location vv = SOME LocMemory /\ eval_operand (vv_operand vv) actual = SOME (n2w d) /\
     val_in_memory tv v d actual.vs_memory /\
     abi_builtin_decode_effect first last ready final limit_st d (type_memory_bytes ce ret_ty)
