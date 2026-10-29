@@ -347,7 +347,7 @@ Proof
      disch_then (qspecl_then [`fromAddr`,`toAddr`,`amount`] mp_tac) >> simp[]) >>
   gvs[runtime_consistent_def, no_type_error_result_def,
       expr_result_typed_def, expr_runtime_typed_def, expr_type_def,
-      toplevel_value_typed_def, value_has_type_def, evaluate_type_def,
+      value_result_typed_def, value_has_type_def, evaluate_type_def,
       is_HashMapRef_def] >>
   drule concrete_send_error >> rw[]
 QED
