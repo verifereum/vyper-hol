@@ -14,7 +14,7 @@ Ancestors
   exprSimOps exprSimOperands exprSimCompare exprSimArith intBits freshWrites
   exprSimMain stmtSim stmtSimIf stmtSimFor stmtSimReturn stmtSimDecl
   stmtSimReason stmtSimReasonExpr stmtSimReasonStorage stmtSimForRange
-  stmtSimDeclMem exprSimStorageCopy
+  stmtSimDeclMem exprSimStorageCopy stmtSimAssignStore stmtSimAugAssign
   valueEncodingProofs
   localPtrsProps
   externalEntryProps constructorGuardProps

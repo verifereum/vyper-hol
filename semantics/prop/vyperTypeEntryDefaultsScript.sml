@@ -47,7 +47,7 @@ Theorem checked_public_getter_args_well_formed:
   !arg. MEM arg args ==> well_formed_type (type_env_all_modules mods) (SND arg)
 Proof
   strip_tac >>
-  `check_toplevel_decl layouts addr mods art src decl` by
+  `check_toplevel_decl mods art src decl` by
     metis_tac[check_contract_toplevel_decl_MEM] >>
   Cases_on `decl` >> gvs[external_getter_tuple_def]
   >~ [`VariableDecl vis vmut id typ init`]
