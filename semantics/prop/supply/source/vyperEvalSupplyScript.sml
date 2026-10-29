@@ -133,6 +133,32 @@ Resume eval_source_supply_mutual[eval_stmt_Assert_AssertReason]:
   simp[Once evaluate_def] >> SUPPLY_TAC
 QED
 
+Resume eval_source_supply_mutual[eval_stmt_Raise_RaiseCustomError]:
+  Cases_on `err` >> rename1 `CustomError id positional kwargs` >>
+  simp[Once evaluate_def] >>
+  rename1 `get_module_code cx (FST id)` >>
+  Cases_on `get_module_code cx (FST id)` >> simp[source_supply_action_raise] >>
+  rename1 `lookup_custom_error_args_in (SND id) tops` >>
+  Cases_on `lookup_custom_error_args_in (SND id) tops` >>
+  simp[source_supply_action_raise] >>
+  rename1 `order_custom_error_args params (CustomError id positional kwargs)` >>
+  Cases_on `order_custom_error_args params (CustomError id positional kwargs)` >>
+  simp[source_supply_action_raise] >>
+  `source_supply_action (eval_exprs cx x)` by
+    (first_x_assum irule >> simp[] >> metis_tac[]) >>
+  SUPPLY_TAC
+QED
+
+Resume eval_source_supply_mutual[eval_stmt_Assert_AssertCustomError]:
+  simp[Once evaluate_def] >>
+  irule source_supply_action_bind >> reverse conj_tac >- first_assum ACCEPT_TAC >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `err` >> rename1 `CustomError id positional kwargs` >>
+  Cases_on `get_module_code cx (FST id)` >>
+  simp[] >> rpt SUPPLY_STEP >>
+  first_x_assum irule >> simp[] >> metis_tac[]
+QED
+
 Resume eval_source_supply_mutual[eval_stmt_Log]:
   simp[Once evaluate_def] >> SUPPLY_TAC
 QED
@@ -189,8 +215,11 @@ Resume eval_source_supply_mutual[assign_tuple_targets_BaseTarget]:
   simp[Once evaluate_def] >> SUPPLY_TAC
 QED
 
+(* Previous attempt: simp[Once evaluate_def] >> SUPPLY_TAC *)
 Resume eval_source_supply_mutual[assign_tuple_targets_TupleTarget]:
-  simp[Once evaluate_def] >> SUPPLY_TAC
+  Cases_on `value` >> simp[Once evaluate_def, source_supply_action_raise] >>
+  rename1 `ArrayV av` >> Cases_on `av` >>
+  simp[source_supply_action_raise] >> first_x_assum irule >> simp[]
 QED
 
 Resume eval_source_supply_mutual[assign_tuple_target_list_NIL_NIL]:
