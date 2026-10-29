@@ -87,7 +87,9 @@ Theorem supported_storage_shapes_accept:
     [BaseT (UintT 256); BaseT (IntT 256); BaseT (BytesT (Fixed 32));
      ArrayT (BaseT (UintT 256)) (Fixed 1);
      ArrayT (BaseT (IntT 256)) (Dynamic 0);
-     ArrayT (BaseT (BytesT (Fixed 32))) (Dynamic 4)]
+     ArrayT (BaseT (BytesT (Fixed 32))) (Dynamic 4);
+     ArrayT (ArrayT (BaseT (IntT 256)) (Fixed 1)) (Dynamic 4);
+     TupleT [BaseT (UintT 256)]]
 Proof
   EVAL_TAC
 QED
@@ -99,8 +101,7 @@ Theorem supported_storage_shapes_reject:
      BaseT (StringT 16); BaseT (BytesT (Dynamic 16));
      ArrayT (BaseT (UintT 256)) (Fixed 0);
      ArrayT (BaseT (UintT 8)) (Dynamic 4);
-     ArrayT (ArrayT (BaseT (IntT 256)) (Fixed 1)) (Dynamic 4);
-     TupleT [BaseT (UintT 256)]; NoneT; FlagT (NONE, "Flags")]
+     NoneT; FlagT (NONE, "Flags")]
 Proof
   EVAL_TAC
 QED
@@ -122,10 +123,24 @@ Theorem supported_struct_depth_contract:
   ~supported_storage_type supported_test_structs (StructT (NONE, "Word")) /\
   EVERY (\s. ~supported_value_type supported_test_structs (StructT (NONE, s)) /\
               ~supported_storage_type supported_test_structs (StructT (NONE, s)))
-    ["String"; "Tuple"; "Nested"; "Missing"] /\
+    ["String"; "Tuple"; "Missing"] /\
+  ~supported_value_type supported_test_structs (StructT (NONE,"Nested")) /\
+  supported_storage_type supported_test_structs (StructT (NONE,"Nested")) /\
   ~supported_value_type supported_test_structs (StructT (SOME 0, "Full")) /\
   ~supported_storage_type supported_test_structs (StructT (SOME 0, "Full")) /\
   ~supported_value_type supported_test_structs (TupleT [StructT (NONE, "Full")])
+Proof
+  EVAL_TAC
+QED
+
+Theorem supported_places_preserve_copy_and_cycle_guards:
+  supported_place_type []
+    (ArrayT (ArrayT (BaseT BoolT) (Fixed 2)) (Fixed 2)) /\
+  ~supported_value_type []
+    (ArrayT (ArrayT (BaseT BoolT) (Fixed 2)) (Fixed 2)) /\
+  ~supported_storage_type
+    [StructDecl "Cycle" [("self", StructT (NONE,"Cycle"))]]
+    (StructT (NONE,"Cycle"))
 Proof
   EVAL_TAC
 QED
@@ -144,11 +159,10 @@ QED
 
 Theorem supported_hashmap_keys_contract:
   EVERY supported_hashmap_key_type
-    [BaseT (UintT 8); BaseT (IntT 256); BaseT BoolT; BaseT AddressT] /\
+    [BaseT (UintT 8); BaseT (IntT 256); BaseT BoolT; BaseT AddressT;
+     BaseT (BytesT (Fixed 32)); BaseT (BytesT (Dynamic 32)); BaseT (StringT 32)] /\
   EVERY (\ty. ~supported_hashmap_key_type ty)
-    [BaseT (UintT 9); BaseT DecimalT; BaseT (BytesT (Fixed 32));
-     BaseT (BytesT (Dynamic 32)); BaseT (StringT 32);
-     TupleT [BaseT (UintT 256)]]
+    [BaseT (UintT 9); BaseT DecimalT; TupleT [BaseT (UintT 256)]]
 Proof
   EVAL_TAC
 QED

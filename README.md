@@ -72,6 +72,14 @@ Contract-creation builtins (`raw_create`, `create_copy_of`, `create_from_bluepri
 
 A continuation-passing (small-step) version of the interpreter is also defined and proved equivalent to the big-step version. Its main purpose is to facilitate efficient execution via HOL4's `cv_compute` mechanism.
 
+Custom errors are represented as source-qualified declarations with typed
+parameters.  Raises resolve against the loaded module, order positional or
+keyword arguments by the declaration, evaluate them left-to-right exactly
+once, and revert with the four-byte canonical-signature selector followed by
+the existing ABI tuple encoding.  Recursive and continuation-passing execution
+share the same `RevertData` payload and ordinary transaction rollback path.
+
+
 Properties of the semantics — such as scope preservation and state preservation — are proved in `semantics/prop/`.
 
 ### Tests (`tests/`)
@@ -79,6 +87,16 @@ Properties of the semantics — such as scope preservation and state preservatio
 The test infrastructure defines functions for re-running execution traces from the Vyper test suite using the definitional interpreter. The main entry-point is the `run_test` function defined in `vyperTestRunner`. Machinery for decoding exported JSON test files is defined in the `vyperTestLib` library; the generated test scripts are in `tests/generated/`.
 
 The decoding of JSON into our AST type is somewhat ad-hoc, in part because the JSON format is not fully specified. In future work, we might formalise more of the front-end or elaboration process, including parsing and type-checking, so that we can run source code directly. For now, we rely on an external front-end (e.g., as used in Vyper's test export process) and decode its output to construct terms in our formal syntax. Compiler-folded `method_id` keyword values are retained when decoding `_abi_encode`, preserving selector-prefixed calldata in source replays.
+
+The pinned `functional/codegen/features/test_custom_errors.json` export is part
+of execution replay.  Its 14 trace-bearing items (28 direct traces) cover bare,
+positional, keyword, assertion, and dynamic-string custom errors on both
+backends.  The separate `functional/syntax/test_custom_errors.json` contains
+four compiler/frontend-only items and no execution traces: two expected
+`StructureException` cases for using an error as an expression or log, and two
+accepted declarations whose parameter is named `address`.  They remain outside
+the execution replay harness and are not counted as runtime passes.
+
 
 ## Current Limitations
 

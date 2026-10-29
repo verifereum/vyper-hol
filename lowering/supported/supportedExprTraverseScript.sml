@@ -50,20 +50,12 @@ Termination
   WF_REL_TAC `measure (\x. case x of
       INL (_, e) => expr_size e
     | INR (INL (_, target)) => base_assignment_target_size target
-    | INR (INR (INL (_, es))) => expr4_size es
-    | INR (INR (INR (INL (_, opt)))) => expr3_size opt
-    | INR (INR (INR (INR (_, fields)))) => expr1_size fields)` >>
-  simp[expr_size_def] >>
-  qsuff_tac
-    `(!es. expr4_size es = list_size expr_size es) /\
-     (!opt. expr3_size opt = option_size expr_size opt) /\
-     (!fields. expr1_size fields =
-       list_size (pair_size (list_size char_size) expr_size) fields)`
-  >- (strip_tac >> asm_rewrite_tac[] >> DECIDE_TAC) >>
-  rpt conj_tac >>
-  TRY (Induct >> simp[expr_size_def, listTheory.list_size_def,
-    basicSizeTheory.pair_size_def]) >>
-  Cases >> simp[expr_size_def, basicSizeTheory.option_size_def]
+    | INR (INR (INL (_, es))) => list_size expr_size es
+    | INR (INR (INR (INL (_, opt)))) => option_size expr_size opt
+    | INR (INR (INR (INR (_, fields)))) =>
+        list_size (pair_size (list_size char_size) expr_size) fields)` >>
+  simp[expr_size_def, listTheory.list_size_def,
+       basicSizeTheory.pair_size_def, basicSizeTheory.option_size_def]
 End
 
 Definition expr_effect_root_def:
@@ -150,7 +142,9 @@ Theorem supported_pure_no_effect:
   (!tops es. supported_pure_exprs tops es ==>
       ~supported_exprs_exists expr_effect_root es) /\
   (!tops fields. supported_pure_fields tops fields ==>
-      ~supported_fields_exists expr_effect_root fields)
+      ~supported_fields_exists expr_effect_root fields) /\
+  (!tops e. supported_place_expr tops e ==>
+      ~supported_expr_exists expr_effect_root e)
 Proof
   ho_match_mp_tac supported_pure_expr_ind >>
   simp[supported_pure_expr_def, supported_expr_exists_def, expr_effect_root_def] >>
@@ -167,8 +161,11 @@ Proof
   qexists_tac `tops` >> simp[]
 QED
 
-Theorem supported_effect_root:
-  supported_effect_expr tops e ==> expr_effect_root e
+Theorem supported_effect_shape:
+  supported_effect_expr tops e ==>
+    expr_effect_root e \/
+    (?ty base key. e = Subscript ty base key) \/
+    (?ty base field. e = Attribute ty base field)
 Proof
   Cases_on `e` >> simp[supported_effect_expr_def, expr_effect_root_def] >>
   rename1 `Call ty target args default` >>
@@ -193,13 +190,17 @@ Proof
   metis_tac[supported_pure_expr_effect_free, expr_internal_call_is_effect]
 QED
 
-Theorem supported_effect_expr_has_effect:
-  supported_effect_expr tops e ==> expr_has_effect e
+Theorem supported_effects_have_effect:
+  (!tops e. supported_effect_expr tops e ==> expr_has_effect e) /\
+  (!tops e. supported_effect_place_expr tops e ==> expr_has_effect e)
 Proof
-  strip_tac >> simp[expr_has_effect_def] >>
-  irule supported_expr_exists_root >>
-  drule supported_effect_root >> simp[]
+  ho_match_mp_tac supported_effect_expr_ind >>
+  simp[supported_effect_expr_def, expr_has_effect_def,
+       supported_expr_exists_def, expr_effect_root_def] >>
+  rpt conj_tac >> rpt gen_tac >> simp[] >> metis_tac[]
 QED
+
+Theorem supported_effect_expr_has_effect = CONJUNCT1 supported_effects_have_effect
 
 Theorem supported_effect_classification:
   supported_expr tops e /\ expr_has_effect e <=> supported_effect_expr tops e

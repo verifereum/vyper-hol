@@ -268,27 +268,6 @@ val () = handle_function_def
 (* helpers for the termination argument for the main interpreter definition
 * (evaulate_def below) *)
 
-Theorem expr1_size_map:
-  expr1_size ls = LENGTH ls + SUM (MAP expr2_size ls)
-Proof
-  Induct_on`ls` \\ rw[expr_size_def]
-QED
-
-Theorem expr2_size_map:
-  expr2_size x = 1 + list_size char_size (FST x) + expr_size (SND x)
-Proof
-  Cases_on`x` \\ rw[expr_size_def]
-QED
-
-Theorem SUM_MAP_expr2_size:
-  SUM (MAP expr2_size ls) =
-  LENGTH ls +
-  SUM (MAP (list_size char_size o FST) ls) +
-  SUM (MAP (expr_size o SND) ls)
-Proof
-  Induct_on`ls` \\ rw[expr2_size_map]
-QED
-
 (* Cached helper for the callable-table part of bound_def termination. *)
 Theorem callable_table_measure_ADELKEY_LE[local]:
   !key ts dflts ss.
@@ -317,6 +296,8 @@ Definition bound_def:
   stmt_bound ts (Raise RaiseUnreachable) = 0 ∧
   stmt_bound ts (Raise (RaiseReason e)) =
     1 + expr_bound ts e ∧
+  stmt_bound ts (Raise (RaiseCustomError err)) =
+    1 + exprs_bound ts (custom_error_exprs err) ∧
   stmt_bound ts (Assert e1 AssertBare) =
     1 + expr_bound ts e1 ∧
   stmt_bound ts (Assert e1 AssertUnreachable) =
@@ -324,6 +305,9 @@ Definition bound_def:
   stmt_bound ts (Assert e1 (AssertReason e2)) =
     1 + expr_bound ts e1
       + expr_bound ts e2 ∧
+  stmt_bound ts (Assert e1 (AssertCustomError err)) =
+    1 + expr_bound ts e1
+      + exprs_bound ts (custom_error_exprs err) ∧
   stmt_bound ts (Log _ es) =
     1 + exprs_bound ts es ∧
   stmt_bound ts (AnnAssign _ _ e) =
@@ -431,8 +415,7 @@ Termination
   | INL (ts, s) =>
       SUM (MAP (λ(k, dflts, ss). list_size expr_size dflts + list_size stmt_size ss) ts) +
       stmt_size s)’
-  \\ rw[expr1_size_map, expr2_size_map, SUM_MAP_expr2_size,
-        MAP_MAP_o, list_size_pair_size_map]
+  \\ rw[MAP_MAP_o, list_size_pair_size_map]
   \\ TRY (gvs[] \\ drule callable_table_measure_ADELKEY_LE \\ simp[])
 End
 
@@ -444,6 +427,28 @@ Proof
   \\ qmatch_goalsub_rename_tac`DROP n es`
   \\ first_x_assum(qspecl_then[`ts`,`n`]mp_tac)
   \\ simp[]
+QED
+
+Theorem order_custom_error_kwargs_exprs_bound:
+  ∀params kwargs es ts.
+    order_custom_error_kwargs params kwargs = SOME es ⇒
+    exprs_bound ts es = exprs_bound ts (MAP SND kwargs)
+Proof
+  rpt strip_tac >> drule order_custom_error_kwargs_SOME >> simp[]
+QED
+
+Theorem order_custom_error_args_exprs_bound:
+  order_custom_error_args params err = SOME es ⇒
+  exprs_bound ts es = exprs_bound ts (custom_error_exprs err)
+Proof
+  Cases_on `err` >>
+  Cases_on `l` >>
+  Cases_on `l0`
+  >- simp[order_custom_error_args_def, custom_error_exprs_def]
+  >- (rw[order_custom_error_args_def, custom_error_exprs_def] >>
+      drule order_custom_error_kwargs_exprs_bound >> simp[])
+  >- simp[order_custom_error_args_def, custom_error_exprs_def]
+  >- simp[order_custom_error_args_def, custom_error_exprs_def]
 QED
 
 Theorem exprs_bound_TAKE:
@@ -1357,6 +1362,24 @@ Definition evaluate_def:
     s <- lift_option_type (dest_StringV v) "not StringV";
     raise $ AssertException s
   od ∧
+  eval_stmt cx (Raise (RaiseCustomError err)) =
+    (case err of CustomError id positional kwargs =>
+       case get_module_code cx (FST id) of
+       | NONE => raise $ Error (RuntimeError "custom error declaration")
+       | SOME tops =>
+           case lookup_custom_error_args_in (SND id) tops of
+           | NONE => raise $ Error (RuntimeError "custom error declaration")
+           | SOME params =>
+               case order_custom_error_args params err of
+               | NONE => raise $ Error (RuntimeError "custom error arguments")
+               | SOME es => do
+                   vs <- eval_exprs cx es;
+                   data <- lift_option
+                     (build_custom_error_data (get_tenv cx) (SND id)
+                       (MAP SND params) vs)
+                     "custom error encoding";
+                   raise $ Error (RevertData data)
+                 od) ∧
   eval_stmt cx (Assert e AssertBare) = do
     tv <- eval_expr cx e;
     switch_BoolV tv
@@ -1379,6 +1402,28 @@ Definition evaluate_def:
          s <- lift_option_type (dest_StringV sv) "not StringV";
          raise $ AssertException s
        od)
+  od ∧
+  eval_stmt cx (Assert e (AssertCustomError err)) = do
+    tv <- eval_expr cx e;
+    switch_BoolV tv
+      (return ())
+      (case err of CustomError id positional kwargs =>
+         case get_module_code cx (FST id) of
+         | NONE => raise $ Error (RuntimeError "custom error declaration")
+         | SOME tops =>
+             case lookup_custom_error_args_in (SND id) tops of
+             | NONE => raise $ Error (RuntimeError "custom error declaration")
+             | SOME params =>
+                 case order_custom_error_args params err of
+                 | NONE => raise $ Error (RuntimeError "custom error arguments")
+                 | SOME es => do
+                     vs <- eval_exprs cx es;
+                     data <- lift_option
+                       (build_custom_error_data (get_tenv cx) (SND id)
+                         (MAP SND params) vs)
+                       "custom error encoding";
+                     raise $ Error (RevertData data)
+                   od)
   od ∧
   eval_stmt cx (Log id es) = do
     (* Checked programs guarantee that the declaration exists and that its
@@ -1565,7 +1610,7 @@ Definition evaluate_def:
   eval_expr cx (TypeBuiltin _ tb typ es) = do
     type_check (type_builtin_args_length_ok tb (LENGTH es)) "TypeBuiltin args";
     vs <- eval_exprs cx es;
-    v <- lift_sum $ evaluate_type_builtin cx tb typ vs;
+    v <- lift_sum $ evaluate_type_builtin cx tb typ (MAP expr_type es) vs;
     return $ Value v
   od ∧
   eval_expr cx (Call _ (Send has_gas) es _) = do
@@ -1719,9 +1764,15 @@ Termination
   | INL (cx, s) => stmt_bound (remcode cx) s)’
   \\ conj_tac >- simp[prim_recTheory.WF_measure]
   \\ rpt conj_tac
+  \\ TRY (MATCH_ACCEPT_TAC custom_error_exprs_size)
   \\ simp[prim_recTheory.measure_def, relationTheory.inv_image_def]
-  \\ rw[bound_def, MAX_DEF, MULT, IS_SOME_EXISTS] \\ gvs[]
+  \\ rw[bound_def, MAX_DEF, MULT, IS_SOME_EXISTS] \\ gvs[custom_error_exprs_size]
   \\ rpt (FIRST [
+    (* Custom-error keyword operands are a declaration-order permutation. *)
+    (qmatch_asmsub_rename_tac
+       `order_custom_error_args params err = SOME es`
+    \\ drule_all order_custom_error_args_exprs_bound
+    \\ gvs[]),
     (* Blueprint operand slices are bounded by the original argument list. *)
     (qmatch_goalsub_abbrev_tac `exprs_bound fts (TAKE n es)`
     \\ irule LESS_EQ_LESS_TRANS
@@ -1776,6 +1827,7 @@ Termination
     \\ rw[FILTER_FILTER,UNCURRY,Abbr`k`]
     \\ simp[LAMBDA_PROD])
   ])
+  \\ TRY (MATCH_ACCEPT_TAC custom_error_exprs_size)
 End
 
 Theorem eval_exprs_length:

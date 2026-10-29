@@ -226,7 +226,8 @@ Theorem expr_leq_trans[local]:
   (∀x y z. expr_leq x y ∧ expr_leq y z ⇒ expr_leq x z) ∧
   (∀l1 l2 l3. expr_list_leq l1 l2 ∧ expr_list_leq l2 l3 ⇒ expr_list_leq l1 l3)
 Proof
-  ho_match_mp_tac avail_expr_induction >> rpt conj_tac >| [
+  ho_match_mp_tac (legacyInduction.mutual_ind_from_ops avail_expr_induction) >>
+  rpt conj_tac >| [
     (* ExprVar *)
     Cases_on `y` >> Cases_on `z` >> simp[expr_leq_def] >>
     rw[stringTheory.string_le_def] >>
@@ -300,15 +301,15 @@ val map_qsort_idem = prove(
 Theorem canon_expr_idempotent:
   ∀e. canon_expr (canon_expr e) = canon_expr e
 Proof
-  `(∀e. canon_expr (canon_expr e) = canon_expr e) ∧
-   (∀l. MAP canon_expr (MAP canon_expr l) = MAP canon_expr l)`
-    suffices_by simp[] >>
   ho_match_mp_tac avail_expr_induction >> rpt conj_tac >>
   rw[canon_expr_def] >>
   Cases_on `is_commutative o'` >> simp[canon_expr_def] >| [
+    `MAP canon_expr (MAP canon_expr l) = MAP canon_expr l`
+      by simp[listTheory.MAP_MAP_o, listTheory.MAP_EQ_f, combinTheory.o_DEF] >>
     imp_res_tac (ISPECL [``canon_expr``, ``expr_leq``] map_qsort_idem) >>
     CONV_TAC (DEPTH_CONV ETA_CONV) >> fs[qsort_expr_idem],
-    CONV_TAC (DEPTH_CONV ETA_CONV) >> fs[]
+    CONV_TAC (DEPTH_CONV ETA_CONV) >>
+    simp[listTheory.MAP_MAP_o, listTheory.MAP_EQ_f, combinTheory.o_DEF]
   ]
 QED
 

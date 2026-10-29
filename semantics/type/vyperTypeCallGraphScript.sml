@@ -61,12 +61,16 @@ Termination
     case x of
     | INL e => expr_size e
     | INR (INL tgt) => base_assignment_target_size tgt
-    | INR (INR (INL es)) => expr4_size es
-    | INR (INR (INR (INL opt))) => expr3_size opt
-    | INR (INR (INR (INR kes))) => expr1_size kes)` >>
+    | INR (INR (INL es)) => list_size expr_size es
+    | INR (INR (INR (INL opt))) => option_size expr_size opt
+    | INR (INR (INR (INR kes))) =>
+        list_size (pair_size (list_size char_size) expr_size) kes)` >>
   conj_tac >- MATCH_ACCEPT_TAC prim_recTheory.WF_measure >>
   PURE_REWRITE_TAC [prim_recTheory.measure_thm, sumTheory.sum_case_def] >>
-  simp[expr_size_def]
+  simp[expr_size_def, listTheory.list_size_def,
+       basicSizeTheory.pair_size_def, basicSizeTheory.option_size_def,
+       bnfPrelimsTheory.option_size_map, bnfPrelimsTheory.pair_size_map,
+       listTheory.list_size_map, SF ETA_ss]
 End
 
 (* ===== Internal calls in statements ===== *)
@@ -79,8 +83,8 @@ Definition int_calls_atarget_def:
 Termination
   WF_REL_TAC `measure (\x. case x of
     | INL tgt => assignment_target_size tgt
-    | INR tgts => assignment_target1_size tgts)` >>
-  simp[]
+    | INR tgts => list_size assignment_target_size tgts)` >>
+  simp[assignment_target_size_def, listTheory.list_size_def]
 End
 
 Definition int_calls_iterator_def:
@@ -91,13 +95,17 @@ End
 Definition int_calls_assert_reason_def:
   int_calls_assert_reason AssertBare = [] /\
   int_calls_assert_reason AssertUnreachable = [] /\
-  int_calls_assert_reason (AssertReason e) = int_calls_expr e
+  int_calls_assert_reason (AssertReason e) = int_calls_expr e ∧
+  int_calls_assert_reason (AssertCustomError err) =
+    int_calls_exprs (custom_error_exprs err)
 End
 
 Definition int_calls_raise_reason_def:
   int_calls_raise_reason RaiseBare = [] /\
   int_calls_raise_reason RaiseUnreachable = [] /\
-  int_calls_raise_reason (RaiseReason e) = int_calls_expr e
+  int_calls_raise_reason (RaiseReason e) = int_calls_expr e ∧
+  int_calls_raise_reason (RaiseCustomError err) =
+    int_calls_exprs (custom_error_exprs err)
 End
 
 Definition int_calls_stmt_def:

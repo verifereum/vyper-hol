@@ -104,6 +104,19 @@ Definition needs_clamp_def:
 End
 
 (* ===== Element Pointer Navigation ===== *)
+(* Static aggregates of words also need no ABI validation.  Pinned Python's
+   abi_decoder.needs_clamp recurses through tuple/struct/array members before
+   selecting the dynamic-array bulk-copy path. *)
+Definition abi_dec_needs_clamp_def:
+  abi_dec_needs_clamp (DecPrimWord clamp) = needs_clamp clamp /\
+  abi_dec_needs_clamp (DecBytestring max_len) = T /\
+  abi_dec_needs_clamp (DecDynArray elem abi_sz mem_sz is_dyn count) = T /\
+  abi_dec_needs_clamp (DecComplex is_dyn elems) =
+    (is_dyn \/ EXISTS (λ(info, abi_sz, mem_sz). abi_dec_needs_clamp info) elems)
+Termination
+  WF_REL_TAC `measure abi_dec_info_size`
+End
+
 (* Python _get_element_ptr always materializes the member pointer with ADD,
    including the first member at offset zero. *)
 Definition compile_get_element_ptr_def:
@@ -451,11 +464,7 @@ Definition compile_abi_decode_to_buf_def:
         (* Python reloads the count after clamping. *)
         cnt <- emit_op load_opc [src_op];
         emit_void MSTORE [dst; cnt];
-        let can_bulk_copy =
-          (case elem_info of
-             DecPrimWord clamp =>
-               if elem_is_dyn then F else ¬needs_clamp clamp
-           | _ => F) in
+        let can_bulk_copy = (¬elem_is_dyn ∧ ¬abi_dec_needs_clamp elem_info) in
         if can_bulk_copy then
           do copy_sz <- emit_op MUL [cnt; Lit (n2w elem_mem_sz)];
              src_data <- emit_op ADD [src_op; Lit 32w];

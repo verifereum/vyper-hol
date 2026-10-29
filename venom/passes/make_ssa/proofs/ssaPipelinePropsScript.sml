@@ -17,6 +17,8 @@ Ancestors
   cfgTransformProps venomWf venomExecProofs venomInst
   list rich_list alist string pred_set arithmetic
 
+val _ = Parse.hide "preds";
+
 (* ===== Obligation 4: Entry block has no PHIs ===== *)
 
 (* Entry is not in any dominance frontier when it has no predecessors *)
@@ -1503,7 +1505,7 @@ Triviality rename_blocks_preserves_resolve_phi:
           resolve_phi lbl_a (EL j bb'.bb_instructions).inst_operands =
             resolve_phi lbl_a (EL j bb_b.bb_instructions).inst_operands)
 Proof
-  ho_match_mp_tac dom_tree_induction >> rpt conj_tac
+  ho_match_mp_tac dom_tree_list_induction >> rpt conj_tac
   (* DNode s children *)
   >- (
     rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
@@ -1672,7 +1674,7 @@ Triviality rename_blocks_updates_resolve_phi:
           (FST (rename_block_insts rs_a_entry bb_a.bb_instructions))))
           (resolve_phi lbl_a (EL j bb_b.bb_instructions).inst_operands))
 Proof
-  ho_match_mp_tac dom_tree_induction >> rpt conj_tac
+  ho_match_mp_tac dom_tree_list_induction >> rpt conj_tac
   (* DNode s children *)
   >- (
     rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
@@ -3362,7 +3364,7 @@ Triviality child_entry_stacks:
       lookup_block p bbs = SOME bb_p /\
       SND rs_x = SND (FST (rename_block_insts rs_p bb_p.bb_instructions)))
 Proof
-  ho_match_mp_tac (TypeBase.induction_of ``:dom_tree``) >>
+  ho_match_mp_tac dom_tree_list_induction >>
   conj_tac >> TRY (conj_tac >- simp[]) >|
   [(* dnode case *)
   rpt strip_tac >>
@@ -3489,7 +3491,7 @@ Triviality version_diff_finds_def:
                      MEM v inst.inst_outputs) /\
              cfg_dominates bbs entry D lbl)
 Proof
-  ho_match_mp_tac (TypeBase.induction_of ``:dom_tree``) >>
+  ho_match_mp_tac dom_tree_list_induction >>
   rpt conj_tac
   >- ((* P0: DNode s l *)
     rpt strip_tac >>

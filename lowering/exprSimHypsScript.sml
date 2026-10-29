@@ -108,12 +108,13 @@
  *   - alloc_limits_expr cenv e: every static buffer the lowering allocates
  *     for the expression's nodes is below 2 ** 64 bytes: a bytes or string
  *     literal's, and the type_memory_bytes of a struct literal, a list or
- *     tuple literal and empty(T) of a type that is not a word.  Python's
- *     Context.allocate_buffer (vyper/codegen_venom/context.py) raises
- *     MemoryAllocationException for a buffer of 2 ** 64 bytes or more;
- *     _lower_bytelike allocates its buffer through it, and
- *     _lower_struct_constructor, lower_List, lower_Tuple and lower_empty
- *     through new_temporary_value, which allocates
+ *     tuple literal and empty(T) of a type that is not a word, and a
+ *     calldata slice's output buffer.  Python's Context.allocate_buffer
+ *     (vyper/codegen_venom/context.py) raises MemoryAllocationException
+ *     for a buffer of 2 ** 64 bytes or more; _lower_bytelike allocates its
+ *     buffer through it, and _lower_struct_constructor, lower_List,
+ *     lower_Tuple, lower_empty and _lower_adhoc_slice through
+ *     new_temporary_value, which allocates
  *     typ.memory_bytes_required.  The lowering's ALLOCA takes the size as a
  *     word literal and cannot fail, so a buffer of 2 ** 256 bytes or more
  *     would wrap; evaluate_type admits Bytes[n] and String[n] for any
@@ -237,17 +238,24 @@ Definition byte_widths_expr_def:
   byte_widths_named_exprs ((_,e)::kes) =
     (byte_widths_expr e /\ byte_widths_named_exprs kes)
 Termination
+  (* the measure names the container sizes with `list_size`/`option_size` over
+     `expr_size`, as in `vyperTypeCallGraph`, so that the obligations are
+     arithmetic over one set of size functions. *)
   qexists_tac `measure (\(x : expr + base_assignment_target + expr list +
                                       expr option + (identifier # expr) list).
     case x of
     | INL e => expr_size e
     | INR (INL tgt) => base_assignment_target_size tgt
-    | INR (INR (INL es)) => expr4_size es
-    | INR (INR (INR (INL opt))) => expr3_size opt
-    | INR (INR (INR (INR kes))) => expr1_size kes)` >>
+    | INR (INR (INL es)) => list_size expr_size es
+    | INR (INR (INR (INL opt))) => option_size expr_size opt
+    | INR (INR (INR (INR kes))) =>
+        list_size (pair_size (list_size char_size) expr_size) kes)` >>
   conj_tac >- MATCH_ACCEPT_TAC prim_recTheory.WF_measure >>
   PURE_REWRITE_TAC [prim_recTheory.measure_thm, sumTheory.sum_case_def] >>
-  simp[expr_size_def]
+  simp[expr_size_def, listTheory.list_size_def,
+       basicSizeTheory.pair_size_def, basicSizeTheory.option_size_def,
+       bnfPrelimsTheory.option_size_map, bnfPrelimsTheory.pair_size_map,
+       listTheory.list_size_map, SF ETA_ss]
 End
 
 (* The buffer the lowering allocates for a bytes or string literal, its
@@ -263,8 +271,9 @@ End
 
 (* Every static buffer the lowering allocates for a node of the expression
    is below Python's allocation limit, 2 ** 64 bytes: the buffers of bytes
-   and string literals, struct and array literals, and empty(T) of a type
-   that is not a word.  The same recursion as byte_widths_expr. *)
+   and string literals, struct and array literals, empty(T) of a type that
+   is not a word, and the output of a calldata slice.  The same recursion
+   as byte_widths_expr. *)
 Definition alloc_limits_expr_def:
   alloc_limits_expr cenv (Name t _) = T /\
   alloc_limits_expr cenv (TopLevelName t _) = T /\
@@ -284,6 +293,7 @@ Definition alloc_limits_expr_def:
         MakeArray NONE _ =>
           SUM (MAP (type_memory_bytes cenv o expr_type) es) < 2 ** 64
       | MakeArray (SOME _) _ => type_memory_bytes cenv t < 2 ** 64
+      | CalldataSlice n => 32 + 32 * word_size n < 2 ** 64
       | _ => T) /\
      alloc_limits_exprs cenv es) /\
   alloc_limits_expr cenv (TypeBuiltin t tb ty es) =
@@ -311,6 +321,7 @@ Definition alloc_limits_expr_def:
   alloc_limits_named_exprs cenv ((_,e)::kes) =
     (alloc_limits_expr cenv e /\ alloc_limits_named_exprs cenv kes)
 Termination
+  (* as above: container sizes, not the package's per-instance size functions. *)
   qexists_tac `measure (\(x : compile_env # expr + compile_env #
                               base_assignment_target + compile_env # expr list +
                               compile_env # expr option +
@@ -318,13 +329,17 @@ Termination
     case x of
     | INL (_, e) => expr_size e
     | INR (INL (_, tgt)) => base_assignment_target_size tgt
-    | INR (INR (INL (_, es))) => expr4_size es
-    | INR (INR (INR (INL (_, opt)))) => expr3_size opt
-    | INR (INR (INR (INR (_, kes)))) => expr1_size kes)` >>
+    | INR (INR (INL (_, es))) => list_size expr_size es
+    | INR (INR (INR (INL (_, opt)))) => option_size expr_size opt
+    | INR (INR (INR (INR (_, kes)))) =>
+        list_size (pair_size (list_size char_size) expr_size) kes)` >>
   conj_tac >- MATCH_ACCEPT_TAC prim_recTheory.WF_measure >>
   PURE_REWRITE_TAC [prim_recTheory.measure_thm, sumTheory.sum_case_def,
                     pairTheory.pair_case_def] >>
-  simp[expr_size_def]
+  simp[expr_size_def, listTheory.list_size_def,
+       basicSizeTheory.pair_size_def, basicSizeTheory.option_size_def,
+       bnfPrelimsTheory.option_size_map, bnfPrelimsTheory.pair_size_map,
+       listTheory.list_size_map, SF ETA_ss]
 End
 
 Definition expr_sim_pre_def:

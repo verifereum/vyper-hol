@@ -782,6 +782,21 @@ End
 
 val () = cv_auto_trans build_ext_calldata_def;
 
+(* Custom errors use the function-selector algorithm, but unlike function calls
+   have no default arguments: every declared value must be present exactly once. *)
+Definition build_custom_error_data_def:
+  build_custom_error_data env error_name arg_types arg_vals =
+    if LENGTH arg_types ≠ LENGTH arg_vals then NONE else
+    let abi_types = vyper_to_abi_types env arg_types in
+    let selector = function_selector error_name abi_types in
+    case vyper_to_abi_list env arg_types arg_vals of
+    | SOME abi_vals =>
+        SOME (selector ++ enc (Tuple abi_types) (ListV abi_vals))
+    | NONE => NONE
+End
+
+val () = cv_auto_trans build_custom_error_data_def;
+
 (* ===== External Return Encoding (incl. @raw_return) ===== *)
 
 (* Returndata of an external call that produced value v for declared type typ.

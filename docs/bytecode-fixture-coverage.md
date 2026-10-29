@@ -129,7 +129,7 @@ so this is **not an exhaustive execution census**. The assigned routes include:
 |---|---|
 | Checked compiler entry and `Linear` selector dispatch | All 101 successful checked programs; `resolve_o1_policy` selects `Linear` for `run_lowering`. |
 | `build_struct_fields_map` → `StructDecl` | `storage_struct_program` declares `StructDecl "Pair"`; the external function's compile environment processes it. |
-| `build_is_hashmap` → `HashMapDecl` | `storage_mapping_program` declares `HashMapDecl "balances"`; its compile environment processes it (not a `HashMapT` value type). |
+| `build_hashmap_info` → `HashMapDecl` | `storage_mapping_program` declares `HashMapDecl "balances"`; its compile environment processes it (not a `HashMapT` value type). |
 | Packaged `SOME` fallback and runtime fallback branch | `function_modes_program` declares `__default__`; `empty` witnesses the corresponding `NONE` routes. |
 | `compile_builtin_dispatch` → `AsWeiValue` → eight `denomination_multiplier` equations | `scalar_wei_small_program` has Wei–Gwei; `scalar_wei_large_program` has Szabo–KEther. The three Python-excluded denominations remain unwitnessed. |
 

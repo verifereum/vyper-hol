@@ -427,8 +427,9 @@ Definition valid_conversion_def:
   valid_conversion (BaseT (IntT _)) (BaseT (UintT _)) = T /\
   valid_conversion (BaseT (IntT _)) (BaseT (IntT _)) = T /\
   valid_conversion (BaseT AddressT) (BaseT (UintT _)) = T /\
-  (* Wider bytes require left padding for addresses, unlike BytesV conversion. *)
-  valid_conversion (BaseT AddressT) (BaseT (BytesT bd)) = (bd = Fixed 20) /\
+  (* Vyper's to_bytes_m needs 160 <= 8 * m; evaluate_convert_from left-pads. *)
+  valid_conversion (BaseT AddressT) (BaseT (BytesT (Fixed m))) =
+    (20 <= m /\ m <= 32) /\
   valid_conversion (BaseT (UintT _)) (BaseT AddressT) = T /\
   valid_conversion (BaseT (IntT _)) (BaseT AddressT) = T /\
   valid_conversion (FlagT _) (BaseT (IntT _)) = T /\
@@ -738,21 +739,12 @@ Termination
     | INL (_, e) => expr_size e
     | INR (INL (_, e)) => expr_size e
     | INR (INR (INL (_, tgt))) => base_assignment_target_size tgt
-    | INR (INR (INR (INL (_, es)))) => expr4_size es
-    | INR (INR (INR (INR (INL (_, opt))))) => expr3_size opt
-    | INR (INR (INR (INR (INR (_, kes))))) => expr1_size kes)`
-  \\ simp[expr_size_def]
-  \\ qsuff_tac
-       `(!es. expr4_size es = list_size expr_size es) /\
-        (!drv. expr3_size drv = option_size expr_size drv) /\
-        (!kes. expr1_size kes =
-               list_size (pair_size (list_size char_size) expr_size) kes)`
-  >- (strip_tac \\ asm_rewrite_tac[] \\ DECIDE_TAC)
-  \\ rpt conj_tac
-  \\ TRY (Induct \\ simp[expr_size_def, listTheory.list_size_def,
-            basicSizeTheory.pair_size_def])
-  \\ Cases
-  \\ simp[expr_size_def, basicSizeTheory.option_size_def]
+    | INR (INR (INR (INL (_, es)))) => list_size expr_size es
+    | INR (INR (INR (INR (INL (_, opt))))) => option_size expr_size opt
+    | INR (INR (INR (INR (INR (_, kes))))) =>
+        list_size (pair_size (list_size char_size) expr_size) kes)`
+  \\ simp[expr_size_def, listTheory.list_size_def,
+          basicSizeTheory.pair_size_def, basicSizeTheory.option_size_def]
 End
 
 Theorem exists_some_option_case[local]:
@@ -800,6 +792,12 @@ Definition well_typed_iterator_def:
      is_int_type typ /\ expr_type e1 = typ /\ expr_type e2 = typ)
 End
 
+Definition well_typed_custom_error_def:
+  well_typed_custom_error env err =
+    well_typed_exprs env (custom_error_exprs err)
+End
+
+
 (* ===== Executable statement typing ===== *)
 
 Definition type_stmt_def:
@@ -817,6 +815,8 @@ Definition type_stmt_def:
   type_stmt env ret_ty (Raise RaiseUnreachable) = SOME env /\
   type_stmt env ret_ty (Raise (RaiseReason e)) =
     (if well_typed_expr env e /\ (?n. expr_type e = BaseT (StringT n)) then SOME env else NONE) /\
+  type_stmt env ret_ty (Raise (RaiseCustomError err)) =
+    (if well_typed_custom_error env err then SOME env else NONE) /\
   type_stmt env ret_ty (Assert e AssertBare) =
     (if well_typed_expr env e /\ expr_type e = BaseT BoolT then SOME env else NONE) /\
   type_stmt env ret_ty (Assert e AssertUnreachable) =
@@ -824,6 +824,9 @@ Definition type_stmt_def:
   type_stmt env ret_ty (Assert e (AssertReason se)) =
     (if well_typed_expr env e /\ well_typed_expr env se /\ expr_type e = BaseT BoolT /\
         (?n. expr_type se = BaseT (StringT n)) then SOME env else NONE) /\
+  type_stmt env ret_ty (Assert e (AssertCustomError err)) =
+    (if well_typed_expr env e ∧ expr_type e = BaseT BoolT ∧
+        well_typed_custom_error env err then SOME env else NONE) /\
   type_stmt env ret_ty (Log id es) =
     (if well_typed_exprs env es then SOME env else NONE) /\
   type_stmt env ret_ty (AnnAssign id typ e) =

@@ -41,10 +41,10 @@ Proof
 QED
 
 Theorem evaluate_type_builtin_constant_context:
-  !tb cx mods typ vs.
+  !tb cx mods typ tys vs.
   constant_type_builtin tb /\ get_tenv cx = type_env_all_modules mods ==>
-  evaluate_type_builtin cx tb typ vs =
-  evaluate_type_builtin (constant_context mods) tb typ vs
+  evaluate_type_builtin cx tb typ tys vs =
+  evaluate_type_builtin (constant_context mods) tb typ tys vs
 Proof
   rpt gen_tac >> Cases_on `tb` >> simp[constant_type_builtin_def] >>
   Cases_on `vs` >>
@@ -124,7 +124,7 @@ Proof
   >~ [`TypeBuiltin`]
   >- (first_x_assum drule_all >> strip_tac >>
       rename1 `TypeBuiltin _ tb typ es` >>
-      qspecl_then [`tb`,`cx`,`mods`,`typ`,`vs`] mp_tac
+      qspecl_then [`tb`,`cx`,`mods`,`typ`,`MAP expr_type es`,`vs`] mp_tac
         evaluate_type_builtin_constant_context >>
       simp[] >> strip_tac >>
       simp[Once evaluate_def, bind_def, ignore_bind_def, return_def,
