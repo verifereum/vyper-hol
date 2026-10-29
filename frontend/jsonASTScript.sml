@@ -1,6 +1,6 @@
 Theory jsonAST
 Ancestors
-  string words
+  string words integer
 Libs
   cv_transLib
 
@@ -199,6 +199,7 @@ Datatype:
   | JTL_HashMapDecl string json_type json_value_type bool bool
       (* name, key_type, value_type, is_public, is_transient *)
   | JTL_EventDef string ((json_arg # bool) list)  (* bool = indexed *)
+  | JTL_ErrorDef string (json_arg list)
   | JTL_StructDef string (json_arg list)
   | JTL_FlagDef string (string list)                   (* name, member names *)
   | JTL_InterfaceDef string (json_interface_func list) (* name, function signatures *)
@@ -255,9 +256,10 @@ Datatype:
 End
 
 (* Complete storage layout for a contract *)
-(* Storage keys are (module_alias_opt, var_name):
+(* Storage keys are (module_path_opt, var_name):
    - (NONE, "counter") for main module variables
-   - (SOME "lib1", "counter") for module lib1's variables *)
+   - (SOME "lib1", "counter") for the variables of the module initialized as
+     lib1, and (SOME "lib2.lib1", "counter") when lib2 initializes it *)
 Datatype:
   json_storage_layout = <|
     storage : ((string option # string) # storage_slot_info) list;

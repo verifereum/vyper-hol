@@ -275,6 +275,7 @@ val JTL_FunctionDef_tm = jastk "JTL_FunctionDef"
 val JTL_VariableDecl_tm = jastk "JTL_VariableDecl"
 val JTL_HashMapDecl_tm = jastk "JTL_HashMapDecl"
 val JTL_EventDef_tm = jastk "JTL_EventDef"
+val JTL_ErrorDef_tm = jastk "JTL_ErrorDef"
 val JTL_StructDef_tm = jastk "JTL_StructDef"
 val JTL_FlagDef_tm = jastk "JTL_FlagDef"
 val JInterfaceFunc_tm = jastk "JInterfaceFunc"
@@ -316,6 +317,8 @@ fun mk_JTL_HashMapDecl (name, kt, vt, is_public, is_transient) =
 val event_arg_ty = pairSyntax.mk_prod(json_arg_ty, Type.bool)
 fun mk_JTL_EventDef (name, args) =
   list_mk_comb(JTL_EventDef_tm, [fromMLstring name, mk_list(args, event_arg_ty)])
+fun mk_JTL_ErrorDef (name, args) =
+  list_mk_comb(JTL_ErrorDef_tm, [fromMLstring name, mk_list(args, json_arg_ty)])
 fun mk_JTL_StructDef (name, args) =
   list_mk_comb(JTL_StructDef_tm, [fromMLstring name, mk_list(args, json_arg_ty)])
 fun mk_JTL_FlagDef (name, members) =
@@ -1439,6 +1442,15 @@ val json_toplevel : term decoder = achoose "toplevel" [
               sub 0 (check_ast_type "Pass" (succeed []))))
   end,
 
+  (* ErrorDef has the same annotated member shape as StructDef.  Vyper emits
+     one Pass node for a zero-argument declaration. *)
+  check_ast_type "ErrorDef" $
+    JSONDecode.map (fn (name, args) => mk_JTL_ErrorDef(name, args)) $
+    tuple2 (field "name" string,
+            field "body" $ orElse(
+              array json_arg,
+              sub 0 (check_ast_type "Pass" (succeed [])))),
+
   (* StructDef *)
   check_ast_type "StructDef" $
     JSONDecode.map (fn (name, args) => mk_JTL_StructDef(name, args)) $
@@ -1599,33 +1611,39 @@ fun decode_object_alist (decoder : term decoder) : (string * term) list decoder 
 (* Decode storage layout, handling arbitrarily nested module structures.
    Flat: {"counter": {"slot": 0, ...}} -> [(NONE, "counter", info)]
    Nested: {"lib1": {"counter": {"slot": 0, ...}}} -> [(SOME "lib1", "counter", info)]
-   Deep: {"lib2": {"lib1": {"counter": {...}}}} -> [(SOME "lib1", "counter", info)]
-   
-   The innermost module name is used as the alias - this corresponds to the
-   source_id in the AST. The outer nesting reflects initialization hierarchy
-   but the variable is "owned" by the innermost module.
-   
-   Returns (module_alias_opt, var_name, slot_info) triples. *)
+   Deep: {"lib2": {"lib1": {"counter": {...}}}} -> [(SOME "lib2.lib1", "counter", info)]
+
+   The compiler nests a module's layout under the alias its initializing
+   module gives it (`initializes:`), so a key is the dotted alias path from
+   the main module.  An inner alias alone is ambiguous: it is resolved in its
+   parent's namespace, not the main module's.  jsonToVyper resolves the path.
+
+   Returns (module_path_opt, var_name, slot_info) triples. *)
 fun decode_storage_layout_nested (slot_decoder : term decoder)
     : (string option * string * term) list decoder =
   andThen rawObject (fn pairs =>
     let
-      (* Check if a value looks like a slot info (has "slot" field) or is nested (module) *)
+      (* A slot info has a numeric "slot"; a nested module maps its variables,
+         including one that may be named "slot", to objects. *)
       fun is_slot_info (JSON.OBJECT fields) =
-            List.exists (fn (k,_) => k = "slot") fields
+            List.exists (fn (k,v) => k = "slot" andalso
+              (case v of JSON.INT _ => true | _ => false)) fields
         | is_slot_info _ = false
 
-      (* Recursively decode, tracking the innermost module name seen *)
-      fun decode_entry innermost_module_opt (name, value) =
+      fun module_path [] = NONE
+        | module_path aliases = SOME (String.concatWith "." (List.rev aliases))
+
+      (* Recursively decode, tracking the alias path, innermost first *)
+      fun decode_entry aliases (name, value) =
         if is_slot_info value
-        then [(innermost_module_opt, name, decode slot_decoder value)]
-        else (* Nested module - recurse, updating innermost module to current name *)
+        then [(module_path aliases, name, decode slot_decoder value)]
+        else
           case value of
             JSON.OBJECT nested_fields =>
-              List.concat (List.map (decode_entry (SOME name)) nested_fields)
+              List.concat (List.map (decode_entry (name :: aliases)) nested_fields)
           | _ => []
     in
-      succeed (List.concat (List.map (decode_entry NONE) pairs))
+      succeed (List.concat (List.map (decode_entry []) pairs))
     end)
 
 (* Helper to make storage key term: (module_alias_opt, var_name) *)

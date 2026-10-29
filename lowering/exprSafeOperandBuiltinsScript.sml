@@ -325,14 +325,11 @@ Theorem compile_subscript_word_result_ok:
   is_word_type rt /\ compile_subscript cfn cenv rt ty e idx sa = (vv,sb) ==>
   word_result_ok sb vv
 Proof
-  simp[compile_subscript_def, LET_THM] >>
-  qmatch_goalsub_abbrev_tac `cenv.ce_is_hashmap name` >>
-  Cases_on `cenv.ce_is_hashmap name` >>
-  simp[comp_bind_def, comp_return_def] >-
-    (strip_tac >> rpt (pairarg_tac >> gvs[word_result_ok_def])) >>
-  Cases_on `cenv.ce_var_type name` >> simp[comp_bind_def, comp_return_def] >-
-    (strip_tac >> rpt (pairarg_tac >> gvs[word_result_ok_def])) >>
-  rename1 `cenv.ce_var_type name = SOME vt` >> Cases_on `vt` >> simp[comp_bind_def, comp_return_def] >>
+  reverse (Cases_on `place_type cenv e`)
+  >- (rename1 `place_type cenv e = ValPT bt` >> Cases_on `bt` >>
+      simp[compile_subscript_def, LET_THM, comp_bind_def, comp_return_def] >>
+      strip_tac >> rpt (pairarg_tac >> gvs[word_result_ok_def])) >>
+  simp[compile_subscript_def, LET_THM, comp_bind_def, comp_return_def] >>
   strip_tac >> rpt (pairarg_tac >> gvs[word_result_ok_def])
 QED
 

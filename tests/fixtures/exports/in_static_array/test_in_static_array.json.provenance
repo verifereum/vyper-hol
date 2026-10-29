@@ -4,13 +4,16 @@
     "tests/fixtures/exports/in_static_array/test_in_static_array.py": "9c45365455d50dc2f7ac21e4d3981b82127ad9ca7ebfc5323a6ca423cbf22cee"
   },
   "inputs": {
-    ".github/actions/setup-vyper-test-exports/action.yml": "41a323c6a7925b2377c4e3fd35f431c942ab97befb1f64002d7863312fb27232",
+    ".github/actions/setup-vyper-test-exports/action.yml": "a4b1c34576e820c37ace4c360f75a5193a101cecf02d1f9b7c5eb5df901dbfcc",
     "VYPER_PIN": "9a123fbe3fda20b7ef84343203c21043151277d7175e47ecdc9ec774bf6a6b68",
     "tests/semantics-build-constraints.txt": "5ea17fa1520d1732c4efe2d93b0456c095cc417df4bcd7f1953cec37462a2e65",
-    "tests/semantics-profile.json": "a25b4fc9444a8107f08436d47c70c81adea2874cb89134fd4ac9e77adbfd0954",
+    "tests/semantics-profile.json": "e8d8cab9b9b9fb1a68401314ecb895936519c252540c81527294891d2037dec9",
     "tests/semantics-test-constraints.txt": "21849a5ae9b73cf03c7d864d18683c747ac2dd0b0789e62e148240d35a40a6f4",
+    "tests/vyper-regression/abi/test_dynamic_padding.py": "f68b00935ca6f7361a3d6187ae8792ba943bb24ee41127aab57fbc458fb717bd",
+    "tests/vyper-regression/abi/test_returndata_padding.py": "f39850c325f1af76fb3646c21642ad06a6e982685f67c715b5e1ce787ed46730",
+    "tests/vyper-regression/builtins/test_convert_address_to_bytes_m.py": "a5b3bbe54d258899522329f6a4dbc0652c938bf0b0b77aebd92201ae609d1532",
     "tools/vyper_test_export_plugin.py": "0c39aecaf73d3d2bbc83611720c342f0988da678520f63fdfcbac853e8599ff3",
-    "tools/vyper_test_exports.py": "870ad1f61eeee33b14fd3a86c5bed8a8b1d0900c0eadd67a63a6c6148f20ea75"
+    "tools/vyper_test_exports.py": "a0708d10fda15ef633a8026e46c9a6c7c803b5db3a71f50627bd4c6a0347fd8f"
   },
   "profile": {
     "harness_defaults": {
@@ -27,7 +30,7 @@
       "--evm-backend",
       "revm"
     ],
-    "python_version": "3.11.11",
+    "python_version": "3.11.17",
     "vyper_version": "0.5.0a4+cd74ce4f"
   },
   "resolved_settings": [

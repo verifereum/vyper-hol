@@ -2,10 +2,11 @@
  * Expression simulation: calls (#636, Calls)
  *
  * The case lemmas of compile_expr_sim (exprSimMain) for the call targets
- * but internal calls.  All cheated, for the later #636 PRs:
+ * but internal calls.  Proved: send (compile_send_sim, by exprSimSend's
+ * compile_send_case_sim, row 2 of #636's Calls table).  Cheated, for the
+ * later #636 PRs, by row of that table:
  *   1 extcall/staticcall in SOME oracle mode, including reverts and
  *     default_return_value (#553): compile_extcall_sim
- *   2 send: compile_send_sim
  *   3 raw_call (#554): compile_raw_call_sim; raw_call of msg.data:
  *     compile_raw_call_calldata_sim
  *   4 raw_log, raw_revert, selfdestruct: compile_raw_log_sim,
@@ -22,6 +23,10 @@
  *     stmt_state_rel does not relate to the ALLOCA allocations, so
  *     expr_post's memory frame does not follow (#668, #636 Infrastructure
  *     row 2).
+ *   - compile_create_sim, once the create lowerings are wired in, for a
+ *     second reason: a create stores its run's pending deletions in the
+ *     source (eval_create), which state_rel's accounts_rel requires empty,
+ *     while Venom's create result (extract_venom_result) drops them.
  *
  * Internal calls (row 6) have no lemma: expr_sim_pre excludes them
  * (int_calls_expr e = []) until #638 states the INVOKE hypothesis.
@@ -29,7 +34,7 @@
 
 Theory exprSimCalls
 Ancestors
-  list exprSim exprSimHyps vyperAST
+  list exprSim exprSimHyps exprSimSend vyperAST
 
 Theorem compile_extcall_sim:
   !cenv ann is_static skip sig opts args dflt.
@@ -44,7 +49,7 @@ Theorem compile_send_sim:
     expr_sim_below cenv (expr_size (Call ann (Send has_gas) args dflt)) ==>
     expr_vv_ok cenv (Call ann (Send has_gas) args dflt)
 Proof
-  cheat
+  ACCEPT_TAC compile_send_case_sim
 QED
 
 Theorem compile_raw_call_sim:

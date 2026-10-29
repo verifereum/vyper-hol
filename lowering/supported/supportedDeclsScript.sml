@@ -15,23 +15,36 @@ Definition supported_interface_signature_def:
     supported_return_type tops ret
 End
 
+(* External arguments are decoded into fresh storage of their own type.
+   Internal argument copies retain their separate layout restriction. *)
+Definition supported_function_argument_def:
+  supported_function_argument tops External ty = supported_place_type tops ty /\
+  supported_function_argument tops vis ty = supported_value_type tops ty
+End
+
+Definition supported_function_return_def:
+  supported_function_return tops External ty =
+    (ty = NoneT \/ supported_place_type tops ty) /\
+  supported_function_return tops vis ty = supported_return_type tops ty
+End
+
 Definition supported_declaration_header_def:
   supported_declaration_header tops top <=>
     case top of
       FunctionDecl vis mut nr rr name args defaults ret body =>
         ~nr /\ ~rr /\ NULL defaults /\
-        EVERY (supported_value_type tops o SND) args /\
-        supported_return_type tops ret
+        EVERY (supported_function_argument tops vis o SND) args /\
+        supported_function_return tops vis ret
     | VariableDecl Private Storage name ty (SOME slot) =>
         supported_storage_type tops ty
     | VariableDecl Private Transient name ty (SOME slot) =>
-        supported_full_word_type ty
+        supported_storage_type tops ty
     | VariableDecl Private Immutable name ty NONE =>
         supported_value_type tops ty
-    | HashMapDecl Private F name kt (Type vt) (SOME slot) =>
-        supported_hashmap_key_type kt /\ supported_full_word_type vt
+    | HashMapDecl Private transient name kt vt (SOME slot) =>
+        supported_hashmap_key_type kt /\ supported_hashmap_value tops vt
     | StructDecl name fields =>
-        EVERY (supported_value_type tops o SND) fields
+        EVERY (supported_place_type tops o SND) fields
     | EventDecl name fields =>
         EVERY (supported_scalar_type o SND o FST) fields
     | InterfaceDecl name methods =>
@@ -106,8 +119,8 @@ Theorem supported_function_header_contract:
   supported_declaration_header tops
     (FunctionDecl vis mut nr rr name args defaults ret body) <=>
   ~nr /\ ~rr /\ NULL defaults /\
-  EVERY (supported_value_type tops o SND) args /\
-  supported_return_type tops ret
+  EVERY (supported_function_argument tops vis o SND) args /\
+  supported_function_return tops vis ret
 Proof
   simp[supported_declaration_header_def]
 QED
@@ -132,17 +145,18 @@ QED
 Theorem supported_transient_header_contract:
   supported_declaration_header tops
     (VariableDecl Private Transient name ty (SOME slot)) <=>
-  supported_full_word_type ty
+  supported_storage_type tops ty
 Proof
   simp[supported_declaration_header_def]
 QED
 
 Theorem supported_hashmap_header_contract:
   supported_declaration_header tops
-    (HashMapDecl Private F name kt (Type vt) (SOME slot)) <=>
-  supported_hashmap_key_type kt /\ supported_full_word_type vt
+    (HashMapDecl vis transient name kt vt slot) <=>
+  vis = Private /\ IS_SOME slot /\
+  supported_hashmap_key_type kt /\ supported_hashmap_value tops vt
 Proof
-  simp[supported_declaration_header_def]
+  Cases_on `vis` >> Cases_on `slot` >> simp[supported_declaration_header_def]
 QED
 
 Theorem supported_immutable_header_contract:
@@ -176,14 +190,11 @@ Proof
   simp[supported_declaration_header_def]
 QED
 
-Theorem supported_transient_nested_maps_rejected:
-  ~supported_declaration_header tops
-    (HashMapDecl vis T name kt vt slot) /\
-  ~supported_declaration_header tops
-    (HashMapDecl vis transient name kt (HashMapT kt2 vt2) slot)
+Theorem supported_hashmap_location_independent:
+  supported_declaration_header tops (HashMapDecl vis T name kt vt slot) <=>
+  supported_declaration_header tops (HashMapDecl vis F name kt vt slot)
 Proof
-  Cases_on `vis` >> Cases_on `transient` >> Cases_on `vt` >>
-  Cases_on `slot` >> simp[supported_declaration_header_def]
+  simp[supported_hashmap_header_contract]
 QED
 
 Theorem supported_flags_rejected:

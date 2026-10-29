@@ -19,7 +19,7 @@ The current executable semantics models `ALLOCA` with:
 
 ```sml
 vs_allocas     : (num, num # num) fmap   (* inst_id -> (offset, size), current frame *)
-vs_alloca_next : num                     (* global concrete bump frontier *)
+vs_alloca_next : num                     (* concrete bump frontier; INVOKE restores the caller's *)
 ```
 
 This deliberately backs `ALLOCA` by physical EVM memory: values remain raw words, and memory operations do not need semantic pointer provenance to decide what memory space to access.
@@ -231,7 +231,7 @@ Original execution:
 caller frame invokes callee frame
 callee ALLOCAs record metadata in callee frame
 callee writes raw memory and advances physical frontier
-return restores caller vs_allocas but keeps raw memory effects/frontier
+return restores caller vs_allocas and frontier but keeps raw memory effects
 ```
 
 Inlined execution:
@@ -239,27 +239,30 @@ Inlined execution:
 ```text
 caller executes cloned callee body
 cloned ALLOCAs record metadata in caller frame
-raw memory effects/frontier should match the original call behavior
+raw memory effects should match the original call behavior
+the frontier stays where the cloned ALLOCAs left it, at or above the original's
 return is rewritten to assignments + jump
 ```
 
 The observable behavior can match even when allocation metadata differs:
 
 ```text
-original:    caller vs_allocas only
-transformed: caller vs_allocas plus dead cloned-callee entries
+original:    caller vs_allocas only, caller's frontier
+transformed: caller vs_allocas plus dead cloned-callee entries, frontier past them
 ```
 
 So function inliner should use a relation such as:
 
 ```sml
 alloca_meta_equiv live_ids s1 s2 <=
-  s1.vs_alloca_next = s2.vs_alloca_next /\
+  s1.vs_alloca_next <= s2.vs_alloca_next /\
   (!aid. aid IN live_ids ==>
     FLOOKUP s1.vs_allocas aid = FLOOKUP s2.vs_allocas aid)
 ```
 
-or a pass-specific variant that allows extra dead cloned alloca entries while preserving raw memory, return values, logs/accounts/storage, and future allocator behavior.
+or a pass-specific variant that allows extra dead cloned alloca entries while preserving raw memory, return values, and logs/accounts/storage. Later ALLOCAs then hand out different addresses in the two runs, so the relation must also hold up to that renaming of alloca regions (pointer confinement).
+
+`function_inliner_correct` therefore concludes `observable_result_equiv`, not `result_equiv {}`: the runs' variables, memory and allocation metadata differ, and only their observable effects agree.
 
 ## IRCF/RICF implications
 

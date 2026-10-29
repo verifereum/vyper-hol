@@ -16,8 +16,8 @@
  *                       that every subexpression keeps: type soundness's
  *                       invariants, the locals of the type environment
  *                       held through pointer variables, and the flag
- *                       member ids and member counts of the compile
- *                       environment
+ *                       member ids, flag member counts and struct fields
+ *                       of the compile environment
  *   expr_sim_pre      — expr_sim_inv, the expression well typed, its
  *                       integer types of whole bytes, its buffers below
  *                       the allocation limit, and no internal call in it
@@ -54,7 +54,7 @@
  *   - well_typed_expr, env_consistent, state_well_typed,
  *     accounts_well_typed, context_well_typed, functions_well_typed and
  *     call_evaluation_safe are exactly the premises of type soundness
- *     (vyperTypeEvalSoundness's eval_all_type_sound_mutual, the expression
+ *     (vyperTypeEvalSoundness's eval_scc_type_sound_mutual, the expression
  *     conjunct).  The lowering trusts the annotations: an operator picks its
  *     bounds from the operand's annotated type, a literal is emitted at its
  *     annotated type.  So an expression whose values do not have their
@@ -74,6 +74,13 @@
  *     internal functions and the constructor, are MemLoc
  *     (compile_register_kwarg_vars, local_ptrs_reserved), so the theorem
  *     says nothing yet about expressions there.
+ *   - The local types clause: the compile environment's type of a local
+ *     is its type in the type environment.  pop reads the element type of
+ *     the array it pops from ce_var_type (elem_size_in_location), as
+ *     Python's _lower_dynarray_pop reads the target's typ.value_type.  The
+ *     statement lowering records each declared local's type there
+ *     (ce_var_type updated_by (id =+ SOME ty)), and build_compile_env the
+ *     parameters' (local_var_type).
  *   - The flag members clause: the compile environment's id of a flag
  *     member is its index in its flag's declaration, the bit
  *     lookup_flag_mem sets.  Vyper's compiler guarantees this:
@@ -105,26 +112,56 @@
  *     any width up to 256; the unsafe operators' lowering wraps by whole
  *     bytes, as Python's does, so it does not compute the source's result
  *     at other widths.
- *   - alloc_limits_expr e: every static buffer the lowering allocates for
- *     the expression's nodes, so far a bytes or string literal's, is below
- *     2 ** 64 bytes.  Python's Context.allocate_buffer
+ *   - alloc_limits_expr cenv e: every static buffer the lowering allocates
+ *     for the expression's nodes is below 2 ** 64 bytes: a bytes or string
+ *     literal's, and the type_memory_bytes of a struct literal, a list or
+ *     tuple literal and empty(T) of a type that is not a word, and a
+ *     calldata slice's output buffer.  Python's Context.allocate_buffer
  *     (vyper/codegen_venom/context.py) raises MemoryAllocationException
- *     for a buffer of 2 ** 64 bytes or more, and _lower_bytelike allocates
- *     its buffer through it.  The lowering's ALLOCA takes the size as a
+ *     for a buffer of 2 ** 64 bytes or more; _lower_bytelike allocates its
+ *     buffer through it, and _lower_struct_constructor, lower_List,
+ *     lower_Tuple, lower_empty and _lower_adhoc_slice through
+ *     new_temporary_value, which allocates
+ *     typ.memory_bytes_required.  The lowering's ALLOCA takes the size as a
  *     word literal and cannot fail, so a buffer of 2 ** 256 bytes or more
  *     would wrap; evaluate_type admits Bytes[n] and String[n] for any
  *     n < 2 ** 256.  return_buffer_ok is the same limit for an external
  *     function's return buffer.
+ *   - The outcomes clause (outcomes_accounts_typed): every successful call
+ *     outcome still to consume adopts runtime well-typed accounts.
+ *     take_call_outcome raises "call outcome accounts" on a successful
+ *     nonstatic outcome whose accounts are not, while Venom's CALL adopts
+ *     it and goes on, so without the clause send and extcall do not
+ *     simulate.  The outcomes are the environment's answers, not the
+ *     contract's: e2eDefs's call_outcomes_ok asks this of the initial ones,
+ *     and the evaluator only drops outcomes from the front
+ *     (eval_outcome_suffix_mutual), so expr_sim_pre_eval carries it on.
  *   - int_calls_expr e = []: no internal call.  An internal call lowers to
  *     INVOKE, whose simulation is #638's call step; until that is stated
  *     this theorem excludes them, and #638 replaces this conjunct with its
  *     hypothesis on the callees.
  *
+ *   - The struct fields clauses: the compile environment's struct field
+ *     map agrees with the type environment's struct declarations, field
+ *     names and types in declaration order (sfields_tenv_consistent), its
+ *     field names are distinct, and each field's size is the source's
+ *     memory size of its type (type_memory_size), so type_memory_bytes is
+ *     type_memory_size for every type.  Vyper's compiler guarantees these:
+ *     a struct's members are distinct and laid out in declaration order,
+ *     memory_bytes_required each (StructT.tuple_keys,
+ *     _lower_struct_constructor).  build_compile_env's map
+ *     (make_struct_fields_map, structFieldsProps, #727) sizes each field by
+ *     field_mem_bytes, its type_memory_size, and the checker rejects
+ *     repeated members (check_contract_struct_fields_distinct).  As for
+ *     flags, the map holds the main module's structs only, so the theorem
+ *     says nothing about a contract whose type environment holds an
+ *     imported struct.
+ *
  * Not here yet:
- *   - The rest of the compile environment's metadata (struct fields,
- *     dynamic array capacities, method ids) is not related to the source
- *     context.  The cases that read it (StructLit, Attribute, Pop,
- *     method_id, ...) will need a clause each in expr_sim_inv, and
+ *   - The rest of the compile environment's metadata (dynamic array
+ *     capacities, method ids) is not related to the source context.  The
+ *     cases that read it (Attribute, ...) will need a clause each in
+ *     expr_sim_inv, as pop has the local types clause, and
  *     TopLevelName needs every immutable to be in ce_vars (#563); storage
  *     and transient variables are there by storage_vars_rel and
  *     transient_vars_rel.  Each is to match what Vyper's compiler
@@ -143,10 +180,22 @@ Ancestors
   vyperTypeInvariants vyperTypeExprSoundness vyperTypeCallStackSoundness
   vyperTypeExprResult vyperTypeEvalSoundness vyperTypeBuiltins
   vyperExprNoControl loweringSlice exprSimUnwrap exprSafeOperand
+  vyperEvalOutcomeSuffix vyperRuntimeAccounts
 Libs
   pairLib
 
 (* ===== The hypotheses ===== *)
+
+(* Every successful outcome still to consume adopts accounts that are
+   runtime well typed, as e2eDefs's call_outcomes_ok asks of the initial
+   ones.  The evaluator only drops outcomes from the front
+   (vyperEvalOutcomeSuffix), so this carries from one operand to the next. *)
+Definition outcomes_accounts_typed_def:
+  outcomes_accounts_typed (oos : call_outcome list option) <=>
+    !os. oos = SOME os ==>
+         EVERY (\oc. oc.co_success ==>
+                     accounts_runtime_well_typed oc.co_accounts) os
+End
 
 Definition expr_sim_inv_def:
   expr_sim_inv cenv cx env (es:evaluation_state) <=>
@@ -155,12 +204,21 @@ Definition expr_sim_inv_def:
     context_well_typed cx /\ functions_well_typed cx /\
     (!id ty. FLOOKUP env.var_types id = SOME ty ==>
              ?p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz)) /\
+    (!id ty. FLOOKUP env.var_types id = SOME ty ==>
+             cenv.ce_var_type id = SOME ty) /\
     (!src fid ts ls mid i.
        get_module_code cx src = SOME ts /\ lookup_flag fid ts = SOME ls /\
        INDEX_OF mid ls = SOME i ==>
        cenv.ce_flag_member_id (nsid_to_string (src, fid)) mid = i) /\
     (!nsid m. FLOOKUP (get_tenv cx) nsid = SOME (FlagArgs m) ==>
-              cenv.ce_flag_n_members (nsid_to_string nsid) = m)
+              cenv.ce_flag_n_members (nsid_to_string nsid) = m) /\
+    sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx) /\
+    (!name fields.
+       FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
+       ALL_DISTINCT (MAP FST fields) /\
+       EVERY (\(fname, fty, sz). !tv. evaluate_type (get_tenv cx) fty = SOME tv ==>
+                                     sz = type_memory_size tv) fields) /\
+    outcomes_accounts_typed es.outcomes
 End
 
 (* The types whose values are word_values (loweringSlice): integers,
@@ -211,17 +269,24 @@ Definition byte_widths_expr_def:
   byte_widths_named_exprs ((_,e)::kes) =
     (byte_widths_expr e /\ byte_widths_named_exprs kes)
 Termination
+  (* the measure names the container sizes with `list_size`/`option_size` over
+     `expr_size`, as in `vyperTypeCallGraph`, so that the obligations are
+     arithmetic over one set of size functions. *)
   qexists_tac `measure (\(x : expr + base_assignment_target + expr list +
                                       expr option + (identifier # expr) list).
     case x of
     | INL e => expr_size e
     | INR (INL tgt) => base_assignment_target_size tgt
-    | INR (INR (INL es)) => expr4_size es
-    | INR (INR (INR (INL opt))) => expr3_size opt
-    | INR (INR (INR (INR kes))) => expr1_size kes)` >>
+    | INR (INR (INL es)) => list_size expr_size es
+    | INR (INR (INR (INL opt))) => option_size expr_size opt
+    | INR (INR (INR (INR kes))) =>
+        list_size (pair_size (list_size char_size) expr_size) kes)` >>
   conj_tac >- MATCH_ACCEPT_TAC prim_recTheory.WF_measure >>
   PURE_REWRITE_TAC [prim_recTheory.measure_thm, sumTheory.sum_case_def] >>
-  simp[expr_size_def]
+  simp[expr_size_def, listTheory.list_size_def,
+       basicSizeTheory.pair_size_def, basicSizeTheory.option_size_def,
+       bnfPrelimsTheory.option_size_map, bnfPrelimsTheory.pair_size_map,
+       listTheory.list_size_map, SF ETA_ss]
 End
 
 (* The buffer the lowering allocates for a bytes or string literal, its
@@ -236,58 +301,82 @@ Definition literal_alloc_ok_def:
 End
 
 (* Every static buffer the lowering allocates for a node of the expression
-   is below Python's allocation limit, 2 ** 64 bytes: so far the buffer of
-   a bytes or string literal.  The same recursion as byte_widths_expr. *)
+   is below Python's allocation limit, 2 ** 64 bytes: the buffers of bytes
+   and string literals, struct and array literals, empty(T) of a type that
+   is not a word, and the output of a calldata slice.  The same recursion
+   as byte_widths_expr. *)
 Definition alloc_limits_expr_def:
-  alloc_limits_expr (Name t _) = T /\
-  alloc_limits_expr (TopLevelName t _) = T /\
-  alloc_limits_expr (FlagMember t _ _) = T /\
-  alloc_limits_expr (IfExp t c x y) =
-    (alloc_limits_expr c /\ alloc_limits_expr x /\ alloc_limits_expr y) /\
-  alloc_limits_expr (Literal t l) = literal_alloc_ok l /\
-  alloc_limits_expr (StructLit t _ kes) = alloc_limits_named_exprs kes /\
-  alloc_limits_expr (Subscript t x y) =
-    (alloc_limits_expr x /\ alloc_limits_expr y) /\
-  alloc_limits_expr (Attribute t x _) = alloc_limits_expr x /\
-  alloc_limits_expr (Builtin t _ es) = alloc_limits_exprs es /\
-  alloc_limits_expr (TypeBuiltin t _ _ es) = alloc_limits_exprs es /\
-  alloc_limits_expr (Pop t tgt) = alloc_limits_target tgt /\
-  alloc_limits_expr (Call t _ es dflt) =
-    (alloc_limits_exprs es /\ alloc_limits_opt dflt) /\
+  alloc_limits_expr cenv (Name t _) = T /\
+  alloc_limits_expr cenv (TopLevelName t _) = T /\
+  alloc_limits_expr cenv (FlagMember t _ _) = T /\
+  alloc_limits_expr cenv (IfExp t c x y) =
+    (alloc_limits_expr cenv c /\ alloc_limits_expr cenv x /\
+     alloc_limits_expr cenv y) /\
+  alloc_limits_expr cenv (Literal t l) = literal_alloc_ok l /\
+  alloc_limits_expr cenv (StructLit t nsid kes) =
+    (type_memory_bytes cenv (StructT nsid) < 2 ** 64 /\
+     alloc_limits_named_exprs cenv kes) /\
+  alloc_limits_expr cenv (Subscript t x y) =
+    (alloc_limits_expr cenv x /\ alloc_limits_expr cenv y) /\
+  alloc_limits_expr cenv (Attribute t x _) = alloc_limits_expr cenv x /\
+  alloc_limits_expr cenv (Builtin t bi es) =
+    ((case bi of
+        MakeArray NONE _ =>
+          SUM (MAP (type_memory_bytes cenv o expr_type) es) < 2 ** 64
+      | MakeArray (SOME _) _ => type_memory_bytes cenv t < 2 ** 64
+      | CalldataSlice n => 32 + 32 * word_size n < 2 ** 64
+      | _ => T) /\
+     alloc_limits_exprs cenv es) /\
+  alloc_limits_expr cenv (TypeBuiltin t tb ty es) =
+    ((tb = Empty /\ ~is_word_type ty ==> type_memory_bytes cenv ty < 2 ** 64) /\
+     alloc_limits_exprs cenv es) /\
+  alloc_limits_expr cenv (Pop t tgt) = alloc_limits_target cenv tgt /\
+  alloc_limits_expr cenv (Call t _ es dflt) =
+    (alloc_limits_exprs cenv es /\ alloc_limits_opt cenv dflt) /\
 
-  alloc_limits_target (NameTarget _) = T /\
-  alloc_limits_target (TopLevelNameTarget _) = T /\
-  alloc_limits_target (SubscriptTarget tgt e) =
-    (alloc_limits_target tgt /\ alloc_limits_expr e) /\
-  alloc_limits_target (AttributeTarget tgt _) = alloc_limits_target tgt /\
+  alloc_limits_target cenv (NameTarget _) = T /\
+  alloc_limits_target cenv (TopLevelNameTarget _) = T /\
+  alloc_limits_target cenv (SubscriptTarget tgt e) =
+    (alloc_limits_target cenv tgt /\ alloc_limits_expr cenv e) /\
+  alloc_limits_target cenv (AttributeTarget tgt _) =
+    alloc_limits_target cenv tgt /\
 
-  alloc_limits_exprs [] = T /\
-  alloc_limits_exprs (e::es) = (alloc_limits_expr e /\ alloc_limits_exprs es) /\
+  alloc_limits_exprs cenv [] = T /\
+  alloc_limits_exprs cenv (e::es) =
+    (alloc_limits_expr cenv e /\ alloc_limits_exprs cenv es) /\
 
-  alloc_limits_opt NONE = T /\
-  alloc_limits_opt (SOME e) = alloc_limits_expr e /\
+  alloc_limits_opt cenv NONE = T /\
+  alloc_limits_opt cenv (SOME e) = alloc_limits_expr cenv e /\
 
-  alloc_limits_named_exprs [] = T /\
-  alloc_limits_named_exprs ((_,e)::kes) =
-    (alloc_limits_expr e /\ alloc_limits_named_exprs kes)
+  alloc_limits_named_exprs cenv [] = T /\
+  alloc_limits_named_exprs cenv ((_,e)::kes) =
+    (alloc_limits_expr cenv e /\ alloc_limits_named_exprs cenv kes)
 Termination
-  qexists_tac `measure (\(x : expr + base_assignment_target + expr list +
-                                      expr option + (identifier # expr) list).
+  (* as above: container sizes, not the package's per-instance size functions. *)
+  qexists_tac `measure (\(x : compile_env # expr + compile_env #
+                              base_assignment_target + compile_env # expr list +
+                              compile_env # expr option +
+                              compile_env # (identifier # expr) list).
     case x of
-    | INL e => expr_size e
-    | INR (INL tgt) => base_assignment_target_size tgt
-    | INR (INR (INL es)) => expr4_size es
-    | INR (INR (INR (INL opt))) => expr3_size opt
-    | INR (INR (INR (INR kes))) => expr1_size kes)` >>
+    | INL (_, e) => expr_size e
+    | INR (INL (_, tgt)) => base_assignment_target_size tgt
+    | INR (INR (INL (_, es))) => list_size expr_size es
+    | INR (INR (INR (INL (_, opt)))) => option_size expr_size opt
+    | INR (INR (INR (INR (_, kes)))) =>
+        list_size (pair_size (list_size char_size) expr_size) kes)` >>
   conj_tac >- MATCH_ACCEPT_TAC prim_recTheory.WF_measure >>
-  PURE_REWRITE_TAC [prim_recTheory.measure_thm, sumTheory.sum_case_def] >>
-  simp[expr_size_def]
+  PURE_REWRITE_TAC [prim_recTheory.measure_thm, sumTheory.sum_case_def,
+                    pairTheory.pair_case_def] >>
+  simp[expr_size_def, listTheory.list_size_def,
+       basicSizeTheory.pair_size_def, basicSizeTheory.option_size_def,
+       bnfPrelimsTheory.option_size_map, bnfPrelimsTheory.pair_size_map,
+       listTheory.list_size_map, SF ETA_ss]
 End
 
 Definition expr_sim_pre_def:
   expr_sim_pre cenv cx env e es <=>
     expr_sim_inv cenv cx env es /\ well_typed_expr env e /\
-    byte_widths_expr e /\ alloc_limits_expr e /\
+    byte_widths_expr e /\ alloc_limits_expr cenv e /\
     int_calls_expr e = [] /\ call_evaluation_safe cx (int_calls_expr e)
 End
 
@@ -368,40 +457,85 @@ QED
 
 (* ===== Type soundness ===== *)
 
-Theorem expr_sim_pre_eval:
+Theorem expr_sim_pre_eval_result:
   !cenv cx env e es res es'.
     expr_sim_pre cenv cx env e es /\ eval_expr cx e es = (res, es') ==>
     expr_sim_inv cenv cx env es' /\ no_type_error_result res /\
-    !tv. res = INL tv ==> expr_result_typed env e tv
+    !tv. res = INL tv ==>
+         eval_result_typed (env,cx,es') tv (Type (expr_type e))
 Proof
   rpt gen_tac >> simp[expr_sim_pre_def, expr_sim_inv_def] >> strip_tac >>
-  qspecl_then [`cx`, `e`, `env`, `es`, `res`, `es'`] mp_tac
-    (cj 8 eval_all_type_sound_mutual) >>
-  impl_tac >- gvs[] >> disch_then (mp_tac o CONJUNCT1) >>
+  qspecl_then [`cx`, `e`] (mp_tac o CONJUNCT1)
+    (cj 5 eval_scc_type_sound_mutual) >>
+  disch_then (qspecl_then [`env`, `es`, `res`, `es'`] mp_tac) >>
+  impl_tac >- gvs[] >> strip_tac >>
+  qpat_x_assum `well_typed_expr env e ==> _` mp_tac >>
   impl_tac >- gvs[] >>
-  Cases_on `res` >> rpt strip_tac >> gvs[]
+  `outcomes_accounts_typed es'.outcomes` by
+    (rw[outcomes_accounts_typed_def] >>
+     drule (cj 5 eval_outcome_suffix_mutual) >> strip_tac >>
+     drule_then irule outcome_suffix_EVERY >>
+     gvs[outcomes_accounts_typed_def]) >>
+  Cases_on `res` >> gvs[] >>
+  rpt strip_tac >> first_x_assum drule >> simp[]
+QED
+
+Theorem expr_sim_pre_eval:
+  !cenv cx env e es res es'.
+    expr_sim_pre cenv cx env e es /\ (do result <- eval_expr cx e; read_result cx result od) es = (res, es') ==>
+    expr_sim_inv cenv cx env es' /\ no_type_error_result res /\
+    !v. res = INL v ==> expr_result_typed env e (Value v)
+Proof
+  rpt strip_tac >>
+  `state_well_typed es' /\ no_type_error_result res /\
+   (case res of INL v => value_runtime_typed env (expr_type e) v | INR _ => T)` by
+    (drule_at (Pat `bind _ _ _ = _`) eval_expr_read_type_sound >>
+     disch_then (qspec_then `env` mp_tac) >>
+     gvs[expr_sim_pre_def, expr_sim_inv_def]) >>
+  qpat_x_assum `(do result <- eval_expr _ _; read_result _ result od) _ = _` mp_tac >>
+  simp[NoAsms, bind_def, AllCaseEqs()] >> strip_tac >>
+  imp_res_tac read_result_state >> gvs[] >>
+  drule_all expr_sim_pre_eval_result >> strip_tac >> simp[] >>
+  gvs[expr_result_typed_def, expr_runtime_typed_def, value_runtime_typed_def,
+      value_result_typed_def, is_HashMapRef_def]
 QED
 
 Theorem expr_sim_pre_res_ok:
   !cenv cx env e es res es'.
-    expr_sim_pre cenv cx env e es /\ eval_expr cx e es = (res, es') /\
-    (!tv. res = INL tv ==> is_Value tv) ==>
+    expr_sim_pre cenv cx env e es /\ (do result <- eval_expr cx e; read_result cx result od) es = (res, es') ==>
     expr_res_ok res
 Proof
   rpt strip_tac >> drule_all expr_sim_pre_eval >> strip_tac >>
-  Cases_on `res` >> gvs[expr_res_ok_def]
-  >- (rename1 `is_Value tv` >> Cases_on `tv` >> gvs[]) >>
-  drule (cj 1 eval_expr_no_control) >>
+  Cases_on `res` >> gvs[expr_res_ok_def] >>
   rename1 `INR exc` >>
+  `no_control_exc exc` by
+    (qpat_x_assum `(do result <- eval_expr _ _; read_result _ result od) _ = _` mp_tac >>
+     simp[NoAsms, bind_def, AllCaseEqs()] >> strip_tac >>
+     metis_tac[cj 1 eval_expr_no_control, read_result_no_control]) >>
   Cases_on `exc` >> gvs[no_control_exc_def, no_type_error_result_def] >>
+  rename1 `Error err` >> Cases_on `err` >> gvs[]
+QED
+
+Theorem expr_sim_pre_vv_res_ok:
+  !cenv cx env e es res es'.
+    expr_sim_pre cenv cx env e es /\ eval_expr cx e es = (res, es') ==>
+    expr_vv_res_ok res
+Proof
+  rpt strip_tac >> drule_all expr_sim_pre_eval_result >> strip_tac >>
+  Cases_on `res` >> gvs[expr_vv_res_ok_def]
+  >- (rename1 `eval_result_typed _ tv _` >> Cases_on `tv` >>
+      gvs[eval_result_typed_def]) >>
+  drule (cj 1 eval_expr_no_control) >>
+  rename1 `INR exc` >> Cases_on `exc` >>
+  gvs[no_control_exc_def, no_type_error_result_def] >>
   rename1 `Error err` >> Cases_on `err` >> gvs[]
 QED
 
 Theorem word_value_type_typed:
   !t tenv tyv x.
     word_value_type t /\ evaluate_type tenv t = SOME tyv /\
-    toplevel_value_typed x tyv ==>
-    ?v. x = Value v /\ word_value v /\ value_has_type tyv v
+    value_has_type tyv x ==>
+    word_value x /\ value_has_type tyv x
 Proof
   rpt strip_tac >>
   `(?n. t = BaseT (UintT n)) \/ (?n. t = BaseT (IntT n)) \/
@@ -409,27 +543,26 @@ Proof
     (Cases_on `t` >> fs[word_value_type_def] >>
      rename1 `BaseT bt` >> Cases_on `bt` >> fs[is_int_type_def]) >>
   gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs()] >>
-  Cases_on `x` >> gvs[toplevel_value_typed_def] >>
-  rename1 `value_has_type _ v` >> Cases_on `v` >>
+  Cases_on `x` >>
   gvs[vyperTypingTheory.value_has_type_def, word_value_def]
 QED
 
 Theorem expr_sim_pre_word_result:
   !cenv cx env e es res es'.
     expr_sim_pre cenv cx env e es /\ word_value_type (expr_type e) /\
-    eval_expr cx e es = (res, es') ==>
+    (do result <- eval_expr cx e; read_result cx result od) es = (res, es') ==>
     expr_sim_inv cenv cx env es' /\ expr_res_ok res /\
     !tv. res = INL tv ==>
-         ?v tyv. tv = Value v /\ word_value v /\
+         ?tyv. word_value tv /\
                  evaluate_type (get_tenv cx) (expr_type e) = SOME tyv /\
-                 value_has_type tyv v
+                 value_has_type tyv tv
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all expr_sim_pre_eval >> strip_tac >>
   `env.type_defs = get_tenv cx` by
     gvs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
   Cases_on `res` >> gvs[]
-  >- (gvs[expr_result_typed_def, expr_runtime_typed_def] >>
+  >- (gvs[expr_result_typed_def, expr_runtime_typed_def, value_result_typed_def] >>
       drule_all word_value_type_typed >> strip_tac >> gvs[expr_res_ok_def]) >>
   irule expr_sim_pre_res_ok >> simp[] >> metis_tac[]
 QED
@@ -449,9 +582,10 @@ Proof
 QED
 
 Theorem alloc_limits_exprs_mem:
-  !args e. alloc_limits_exprs args /\ MEM e args ==> alloc_limits_expr e
+  !cenv args e. alloc_limits_exprs cenv args /\ MEM e args ==>
+               alloc_limits_expr cenv e
 Proof
-  Induct >> rw[alloc_limits_expr_def] >> gvs[]
+  gen_tac >> Induct >> rw[alloc_limits_expr_def] >> gvs[]
 QED
 
 Theorem byte_widths_expr_type:

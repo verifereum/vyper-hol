@@ -24,7 +24,8 @@ Definition supported_type_namespace_def:
     (supported_type_namespace ty /\ supported_types_namespace ts)
 Termination
   WF_REL_TAC `measure (\x. case x of
-    INL ty => type_size ty | INR ts => type1_size ts)` >> simp[type_size_def]
+    INL ty => type_size ty | INR ts => list_size type_size ts)` >>
+  simp[type_size_def, list_size_def]
 End
 
 Definition expr_nonmain_type_root_def:
@@ -34,12 +35,6 @@ Definition expr_nonmain_type_root_def:
       TypeBuiltin ty blt target es => ~supported_type_namespace target
     | _ => F
 End
-
-Theorem supported_stmt_list_size:
-  stmt1_size ss = list_size stmt_size ss
-Proof
-  Induct_on `ss` >> simp[stmt_size_def, list_size_def]
-QED
 
 Definition supported_assignment_exists_def:
   supported_assignment_exists p (BaseTarget target) =
@@ -53,8 +48,8 @@ Definition supported_assignment_exists_def:
 Termination
   WF_REL_TAC `measure (\x. case x of
     INL (_,t) => assignment_target_size t
-  | INR (_,ts) => assignment_target1_size ts)` >>
-  simp[assignment_target_size_def]
+  | INR (_,ts) => list_size assignment_target_size ts)` >>
+  simp[assignment_target_size_def, list_size_def]
 End
 
 Definition supported_iterator_exists_def:
@@ -66,13 +61,17 @@ End
 Definition supported_assert_exists_def:
   supported_assert_exists p AssertBare = F /\
   supported_assert_exists p AssertUnreachable = F /\
-  supported_assert_exists p (AssertReason e) = supported_expr_exists p e
+  supported_assert_exists p (AssertReason e) = supported_expr_exists p e /\
+  supported_assert_exists p (AssertCustomError err) =
+    EXISTS (supported_expr_exists p) (custom_error_exprs err)
 End
 
 Definition supported_raise_exists_def:
   supported_raise_exists p RaiseBare = F /\
   supported_raise_exists p RaiseUnreachable = F /\
-  supported_raise_exists p (RaiseReason e) = supported_expr_exists p e
+  supported_raise_exists p (RaiseReason e) = supported_expr_exists p e /\
+  supported_raise_exists p (RaiseCustomError err) =
+    EXISTS (supported_expr_exists p) (custom_error_exprs err)
 End
 
 Definition supported_stmt_expr_exists_def:
@@ -102,8 +101,8 @@ Definition supported_stmt_expr_exists_def:
     (supported_stmt_expr_exists p s \/ supported_stmts_expr_exists p ss)
 Termination
   WF_REL_TAC `measure (\x. case x of
-    INL (_,s) => stmt_size s | INR (_,ss) => stmt1_size ss)` >>
-  simp[stmt_size_def]
+    INL (_,s) => stmt_size s | INR (_,ss) => list_size stmt_size ss)` >>
+  simp[stmt_size_def, list_size_def]
 End
 
 (* keep duplicates, all branches and nesting, and their declared types;
@@ -132,8 +131,8 @@ Definition supported_stmt_bindings_def:
     supported_stmt_bindings locals s ++ supported_stmts_bindings locals ss
 Termination
   WF_REL_TAC `measure (\x. case x of
-    INL (_,s) => stmt_size s | INR (_,ss) => stmt1_size ss)` >>
-  simp[stmt_size_def]
+    INL (_,s) => stmt_size s | INR (_,ss) => list_size stmt_size ss)` >>
+  simp[stmt_size_def, list_size_def]
 End
 
 Definition supported_internal_stmt_shape_def:
@@ -157,7 +156,8 @@ Definition supported_internal_stmt_shape_def:
     (supported_internal_stmt_shape s /\ supported_internal_stmts_shape ss)
 Termination
   WF_REL_TAC `measure (\x. case x of
-    INL s => stmt_size s | INR ss => stmt1_size ss)` >> simp[stmt_size_def]
+    INL s => stmt_size s | INR ss => list_size stmt_size ss)` >>
+  simp[stmt_size_def, list_size_def]
 End
 
 (* Exact structural restriction, including declarations in either If arm. *)
@@ -167,7 +167,7 @@ Theorem supported_internal_shape_bindings:
   (!ss. supported_internal_stmts_shape ss <=>
         supported_stmts_bindings T ss = [] /\ supported_stmts_bindings F ss = [])
 Proof
-  ho_match_mp_tac stmt_induction >>
+  ho_match_mp_tac supported_internal_stmt_shape_ind >>
   simp[supported_internal_stmt_shape_def, supported_stmt_bindings_def] >>
   metis_tac[]
 QED

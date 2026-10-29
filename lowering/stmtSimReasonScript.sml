@@ -7,9 +7,18 @@
  * (reason_prefix, a definedness certificate for its instructions).
  *
  * TOP-LEVEL:
- *   compile_bytelike_revert_frag   — the encoder and the REVERT, an exit
+ *   compile_revert_reason_frag     — the encoder and the REVERT, an exit,
+ *                                    for an operand reason_vv hands out
+ *   compile_bytelike_revert_frag   — the same for a string literal
  *   compile_raise_reason_lit_frag  — raise with a string literal reason
  *   compile_assert_reason_lit_frag — assert with a string literal reason
+ *
+ * Helper: reason_known, reason_operand, reason_step, reason_prefix,
+ *   reason_vv, unwrap_value_reason_vv, compile_revert_reason_certificate,
+ *   compile_revert_reason_split_certificate (the encoder's code split at
+ *   its unwrap_value, for reasons that unwrap_value copies),
+ *   reason_prefix_sound, reason_head_frag, reason_prefix_revert_frag,
+ *   reason_operand_mono, reason_prefix_append, reason_prefix_append_known
  *)
 
 Theory stmtSimReason
@@ -19,6 +28,7 @@ Ancestors
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
   compileEnv valueEncoding
   vyperInterpreter vyperState vyperValue vyperValueOperation vyperExprNoControl
+  vyperStatePreservation
   venomExecSemantics venomExecProofs venomInst venomState
 Libs
   monadsyntax intLib
@@ -247,13 +257,50 @@ Proof
   gvs[reason_known_def, mcopy_def, write_memory_with_expansion_def] >> metis_tac[]
 QED
 
-Theorem reason_prefix_sound[local]:
+Theorem reason_step_known_frame[local]:
+  !ds i s t. reason_step ds i /\ reason_known ds s /\
+    step_inst_base i s = OK t ==>
+    !x. ~MEM x i.inst_outputs ==> lookup_var x t = lookup_var x s
+Proof
+  rw[reason_step_def]
+  >- (qspecl_then [`id`, `sz`, `out`, `s`] strip_assume_tac step_alloca_frame >>
+      gvs[venomInstTheory.mk_inst_def]) >>
+  imp_res_tac reason_operand_defined >> gvs[]
+  >~ [`step_inst_base (mk_inst _ ADD _ _) _`] >-
+    (`?v. step_inst_base (mk_inst id ADD [a;b] [out]) s =
+             OK (update_var out v s)` by
+       (irule_at Any emitHelperPropsTheory.step_ADD >> simp[] >> metis_tac[]) >>
+     gvs[venomInstTheory.mk_inst_def, lookup_var_update_var])
+  >~ [`step_inst_base (mk_inst _ AND _ _) _`] >-
+    (`?v. step_inst_base (mk_inst id AND [a;b] [out]) s =
+             OK (update_var out v s)` by
+       (irule_at Any emitHelperPropsTheory.step_AND >> simp[] >> metis_tac[]) >>
+     gvs[venomInstTheory.mk_inst_def, lookup_var_update_var])
+  >~ [`step_inst_base (mk_inst _ MLOAD _ _) _`] >-
+    (drule_all step_MLOAD >>
+     disch_then (qspecl_then [`id`, `out`] assume_tac) >>
+     gvs[venomInstTheory.mk_inst_def, lookup_var_update_var])
+  >~ [`step_inst_base (mk_inst _ MSTORE _ _) _`] >-
+    (`?d v. step_inst_base (mk_inst id MSTORE [a;b] []) s =
+               OK (mstore d v s)` by
+       (irule_at Any emitHelperPropsTheory.step_MSTORE >> metis_tac[]) >>
+     gvs[lookup_var_mstore]) >>
+  `?d src n. step_inst_base (mk_inst id MCOPY [a;b;c] []) s =
+               OK (mcopy d src n s)` by
+    (irule_at Any step_MCOPY_defined >> metis_tac[]) >> gvs[]
+QED
+
+Theorem reason_prefix_sound:
   !is ds es s. reason_prefix ds is es /\ reason_known ds s ==>
-    ?t. run_inst_seq is s = OK t /\ reason_known es t /\ t.vs_labels = s.vs_labels
+    ?t. run_inst_seq is s = OK t /\ reason_known es t /\
+        t.vs_labels = s.vs_labels /\
+        (!x. ~MEM x (FLAT (MAP (\i. i.inst_outputs) is)) ==>
+             lookup_var x t = lookup_var x s)
 Proof
   Induct >> simp[reason_prefix_def, run_inst_seq_def] >> rpt strip_tac >>
   drule_all reason_step_sound >> strip_tac >>
-  first_x_assum drule >> disch_then drule >> strip_tac >> simp[] >> metis_tac[]
+  first_x_assum drule >> disch_then drule >> strip_tac >> simp[] >>
+  metis_tac[reason_step_known_frame]
 QED
 
 Theorem reason_step_simple[local]:
@@ -269,7 +316,156 @@ Proof
   Induct >> simp[reason_prefix_def] >> metis_tac[reason_step_simple]
 QED
 
-Theorem compile_revert_reason_certificate[local]:
+Theorem reason_head_frag:
+  !ctx sa sm h hs sbase R.
+    same_blocks sa sm /\
+    sm.cs_current_insts = sa.cs_current_insts ++ h /\
+    reason_prefix [] h hs /\
+    EVERY (\i. EVERY (\x. ~not_fresh_at sa x) i.inst_outputs) h ==>
+    frag_exec ctx sa sm (\s. s = sbase)
+      (\s. reason_known hs s /\
+           (!x. not_fresh_at sa x ==> lookup_var x s = lookup_var x sbase) /\
+           s.vs_labels = sbase.vs_labels) R
+Proof
+  rpt strip_tac >> gvs[same_blocks_def] >>
+  irule frag_exec_run_inst_seq >>
+  simp[emitted_insts_def, DROP_APPEND1] >>
+  reverse conj_tac >- metis_tac[reason_prefix_simple] >>
+  rpt strip_tac >> disj1_tac >>
+  `reason_known [] sbase` by simp[reason_known_def] >>
+  drule_all reason_prefix_sound >> strip_tac >> qexists `t` >>
+  conj_tac >- simp[] >>
+  conj_tac >- gvs[reason_known_def, lookup_var_def] >>
+  simp[lookup_var_def] >> rpt strip_tac >>
+  `~MEM x (FLAT (MAP (\i. i.inst_outputs) h))` by
+    (gvs[EVERY_MEM, MEM_FLAT, MEM_MAP] >> metis_tac[]) >>
+  metis_tac[lookup_var_def]
+QED
+
+Theorem reason_operand_mono:
+  !ds es op. (!x. MEM x ds ==> MEM x es) /\ reason_operand ds op ==>
+    reason_operand es op
+Proof
+  Cases_on `op` >> simp[reason_operand_def]
+QED
+
+Theorem reason_step_mono[local]:
+  !ds es i. (!x. MEM x ds ==> MEM x es) /\ reason_step ds i ==>
+    reason_step es i
+Proof
+  rpt strip_tac >> gvs[reason_step_def] >>
+  metis_tac[reason_operand_mono]
+QED
+
+Theorem reason_prefix_append_known:
+  !is ds es extra. reason_prefix ds is es ==>
+    reason_prefix (ds ++ extra) is (es ++ extra)
+Proof
+  Induct >> simp[reason_prefix_def] >> rpt strip_tac >>
+  irule reason_step_mono >> qexists_tac `ds` >> simp[]
+QED
+
+Theorem reason_prefix_append:
+  !is js ds es fs.
+    reason_prefix ds is es /\ reason_prefix es js fs ==>
+    reason_prefix ds (is ++ js) fs
+Proof
+  Induct >> simp[reason_prefix_def] >> metis_tac[]
+QED
+
+(* The operand a reason's value_vv hands to the encoder with no code of
+   unwrap_value's own: a stack operand, or the pointer of a value in memory
+   of a type that is not a word type (a string). *)
+Definition reason_vv_def:
+  reason_vv (StackValue t op) = SOME op /\
+  reason_vv (LocatedValue t p) =
+    if ~is_word_type t /\ p.ptr_location = LocMemory then SOME p.ptr_operand
+    else NONE
+End
+
+Theorem unwrap_value_reason_vv:
+  !cenv vv op st. reason_vv vv = SOME op ==> unwrap_value cenv vv st = (op, st)
+Proof
+  Cases_on `vv` >> rw[reason_vv_def, unwrap_value_def, comp_return_def]
+QED
+
+Theorem compile_revert_reason_split_certificate:
+  !cenv vv mt ms sa sb.
+    compile_revert_with_reason cenv vv mt ms sa = ((),sb) ==>
+    ?sm sn op h hs k id off len.
+      unwrap_value cenv vv sm = (op,sn) /\
+      same_blocks sa sm /\ sm.cs_current_insts = sa.cs_current_insts ++ h /\
+      reason_prefix [] h hs /\ EVERY (not_fresh_at sm) hs /\
+      EVERY (\i. EVERY (\x. ~not_fresh_at sa x) i.inst_outputs) h /\
+      sa.cs_next_var <= sm.cs_next_var /\
+      cs_extends sa sm /\ cs_extends sn sb /\
+      same_blocks sn sb /\
+      sb.cs_current_insts = sn.cs_current_insts ++
+        (k ++ [mk_inst id REVERT [off;len] []]) /\
+      (!ds. (!x. MEM x hs ==> MEM x ds) /\ reason_operand ds op ==>
+        ?es. reason_prefix ds k es /\ reason_operand es off /\ reason_operand es len)
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `compile_revert_with_reason _ _ _ _ _ = _` mp_tac >>
+  simp[compile_revert_with_reason_def, contextTheory.compile_alloc_buffer_def,
+       emit_op_def, emit_void_def, emit_inst_def, comp_bind_def,
+       comp_ignore_bind_def, comp_return_def, fresh_var_def, fresh_id_def, emit_def] >>
+  qmatch_goalsub_abbrev_tac `unwrap_value cenv vv sm` >>
+  pairarg_tac >> rename1 `unwrap_value cenv vv sm = (op,sn)` >>
+  simp[] >> rewrite_tac[GSYM APPEND_ASSOC] >>
+  qmatch_goalsub_abbrev_tac `sn.cs_current_insts ++ tail` >> strip_tac >>
+  qexistsl_tac [`sm`, `sn`, `op`, `emitted_insts sa sm`,
+    `[STRING #"%" (toString (sa.cs_next_var + 2));
+      STRING #"%" (toString (sa.cs_next_var + 1));
+      STRING #"%" (toString sa.cs_next_var)]`, `TAKE 27 tail`,
+    `sn.cs_next_id + 27`, `Var (STRING #"%" (toString (sn.cs_next_var + 19)))`,
+    `Var (STRING #"%" (toString (sn.cs_next_var + 20)))`] >>
+  asm_rewrite_tac[] >>
+  simp[same_blocks_def, Abbr `sm`, emitted_insts_def, DROP_APPEND1,
+       reason_prefix_def, venomInstTheory.mk_inst_def, not_fresh_at_def] >>
+  gvs[] >> simp[reason_step_def, venomInstTheory.mk_inst_def, reason_operand_def] >>
+  conj_tac
+  >- (simp[cs_extends_def] >> rewrite_tac[GSYM APPEND_ASSOC] >> simp[]) >>
+  conj_tac >- simp[cs_extends_def] >>
+  conj_tac >- simp[Abbr `tail`, TAKE_def, venomInstTheory.mk_inst_def] >>
+  rpt strip_tac >>
+  simp[Abbr `tail`, TAKE_def, reason_prefix_def, venomInstTheory.mk_inst_def] >>
+  rpt conj_tac >>
+  simp[reason_step_def, venomInstTheory.mk_inst_def, reason_operand_def] >>
+  Cases_on `op` >> gvs[reason_operand_def]
+QED
+
+Theorem compile_revert_reason_certificate:
+  !cenv msg_vv op msg_type msg_size sa sb ds.
+    reason_vv msg_vv = SOME op /\ reason_operand ds op /\
+    compile_revert_with_reason cenv msg_vv msg_type msg_size sa = ((), sb) ==>
+    ?prefix es id off len.
+      emitted_insts sa sb = prefix ++ [mk_inst id REVERT [off; len] []] /\
+      reason_prefix ds prefix es /\ reason_operand es off /\
+      reason_operand es len /\
+      sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
+      same_blocks sa sb
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule compile_revert_reason_split_certificate >> strip_tac >>
+  rename1 `unwrap_value cenv msg_vv sm = (mop,sn)` >>
+  `mop = op /\ sn = sm` by metis_tac[unwrap_value_reason_vv, pairTheory.PAIR_EQ] >>
+  gvs[] >> rename1 `reason_vv msg_vv = SOME op` >>
+  rename1 `reason_prefix [] h hs` >>
+  `reason_prefix ds h (hs ++ ds)` by
+    metis_tac[reason_prefix_append_known, APPEND] >>
+  `reason_operand (hs ++ ds) op` by
+    (irule reason_operand_mono >> qexists_tac `ds` >> simp[]) >>
+  first_x_assum (qspec_then `hs ++ ds` mp_tac) >> simp[] >> strip_tac >>
+  rename1 `reason_prefix (hs ++ ds) k es` >>
+  qexistsl_tac [`h ++ k`, `es`, `id`, `off`, `len`] >>
+  conj_tac >- simp[emitted_insts_def, DROP_APPEND1, APPEND_ASSOC] >>
+  conj_tac >- metis_tac[reason_prefix_append] >>
+  simp[emitted_insts_def, DROP_APPEND1, APPEND_ASSOC] >>
+  gvs[same_blocks_def]
+QED
+
+Theorem compile_revert_reason_buf_certificate[local]:
   !cenv msg_ty buf msg_type msg_size sa sb ds.
     ~is_word_type msg_ty /\ reason_operand ds buf.buf_operand /\
     compile_revert_with_reason cenv (LocatedValue msg_ty (base_ptr buf))
@@ -281,19 +477,10 @@ Theorem compile_revert_reason_certificate[local]:
       sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
       same_blocks sa sb
 Proof
-  rpt gen_tac >> strip_tac >>
-  gvs[compile_revert_with_reason_def, unwrap_value_def, contextTheory.base_ptr_def,
-      contextTheory.compile_alloc_buffer_def, emit_op_def, emit_void_def,
-      emit_inst_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
-      fresh_var_def, fresh_id_def, emit_def] >>
-  qmatch_goalsub_abbrev_tac `sa.cs_current_insts ++ code` >>
-  simp[emitted_insts_def, DROP_APPEND1, same_blocks_def] >>
-  qexists `TAKE 31 code` >>
-  simp[Abbr `code`, TAKE_def] >>
-  simp[reason_prefix_def, venomInstTheory.mk_inst_def] >>
-  rpt conj_tac >>
-  simp[reason_step_def, venomInstTheory.mk_inst_def, reason_operand_def] >>
-  Cases_on `buf.buf_operand` >> gvs[reason_operand_def]
+  rpt strip_tac >> irule compile_revert_reason_certificate >>
+  qexistsl [`cenv`, `msg_size`, `msg_type`,
+            `LocatedValue msg_ty (base_ptr buf)`, `buf.buf_operand`] >>
+  simp[reason_vv_def, contextTheory.base_ptr_def]
 QED
 
 Theorem reason_prefix_revert_run[local]:
@@ -329,11 +516,11 @@ Theorem compile_revert_reason_run[local]:
         t.vs_labels = s.vs_labels
 Proof
   rpt strip_tac >>
-  drule_all compile_revert_reason_certificate >> strip_tac >> simp[] >>
+  drule_all compile_revert_reason_buf_certificate >> strip_tac >> simp[] >>
   irule reason_prefix_revert_run >> metis_tac[]
 QED
 
-Theorem reason_prefix_revert_frag[local]:
+Theorem reason_prefix_revert_frag:
   !ctx sa sb ds es is id off len R.
     same_blocks sa sb /\
     sb.cs_current_insts = sa.cs_current_insts ++
@@ -364,7 +551,8 @@ Proof
       qexists `0` >> simp[step_inst_non_invoke, venomInstTheory.mk_inst_def] >>
       irule_at Any step_revert_behavior >> simp[])
 QED
-Theorem compile_revert_reason_frag[local]:
+
+Theorem compile_revert_reason_buf_frag[local]:
   !ctx cenv msg_ty buf msg_type msg_size sa sb ds R.
     ~is_word_type msg_ty /\ reason_operand ds buf.buf_operand /\
     compile_revert_with_reason cenv (LocatedValue msg_ty (base_ptr buf))
@@ -372,8 +560,25 @@ Theorem compile_revert_reason_frag[local]:
     (!t. R (Abort Revert_abort t)) ==>
     frag_exec ctx sa sb (reason_known ds) (\s. F) R
 Proof
-  rpt strip_tac >> drule_all compile_revert_reason_certificate >> strip_tac >>
+  rpt strip_tac >> drule_all compile_revert_reason_buf_certificate >> strip_tac >>
   irule reason_prefix_revert_frag >> simp[] >> metis_tac[]
+QED
+
+(* The encoder and its REVERT, for a message operand that reason_vv hands
+   out, from any state where the variables of ds are defined. *)
+Theorem compile_revert_reason_frag:
+  !ctx cenv msg_vv op msg_type msg_size sa sb ds R.
+    reason_vv msg_vv = SOME op /\ reason_operand ds op /\
+    compile_revert_with_reason cenv msg_vv msg_type msg_size sa = ((), sb) /\
+    (!t. R (Abort Revert_abort t)) ==>
+    frag_exec ctx sa sb (reason_known ds) (\s. F) R /\ cs_extends sa sb
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all compile_revert_reason_certificate >> strip_tac >>
+  conj_tac
+  >- (irule reason_prefix_revert_frag >> simp[] >> metis_tac[]) >>
+  simp[cs_extends_def] >> qexists `[]` >> gvs[same_blocks_def] >>
+  metis_tac[IS_PREFIX_APPEND3, APPEND_ASSOC]
 QED
 
 Theorem compile_store_byte_chunks_simple[local]:
@@ -452,7 +657,7 @@ Theorem compile_bytelike_revert_frag:
 Proof
   rpt strip_tac >> drule compile_bytelike_literal_simple >> strip_tac >>
   `reason_operand [x] buf.buf_operand` by simp[reason_operand_def] >>
-  drule_all compile_revert_reason_certificate >> strip_tac >>
+  drule_all compile_revert_reason_buf_certificate >> strip_tac >>
   `sm.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sm /\
    same_blocks sa sm` by
     (drule compile_bytelike_literal_run >>
@@ -467,7 +672,7 @@ Proof
       drule compile_bytelike_literal_run >>
       disch_then (qspec_then `s` strip_assume_tac) >> qexists `t` >>
       gvs[reason_known_def, eval_operand_def, lookup_var_def]) >>
-  irule compile_revert_reason_frag >> metis_tac[]
+  irule compile_revert_reason_buf_frag >> metis_tac[]
 QED
 
 (* raise and assert with a string literal as the reason: the literal's
@@ -512,7 +717,7 @@ Proof
      >- (qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
          simp[Once evaluate_def, raise_def] >>
          simp[Once evaluate_def, evaluate_literal_def, bind_def, return_def,
-              get_Value_def, lift_option_type_def, dest_StringV_def,
+              read_result_def, lift_option_type_def, dest_StringV_def,
               raise_def] >> strip_tac >> gvs[stmt_exit_def, expr_exit_def]) >>
      goal_assum (drule_at Any) >>
      qexistsl [`MAP (n2w o ORD) str`, `ml`] >>
@@ -531,7 +736,7 @@ Proof
   rpt strip_tac >>
   drule compile_bytelike_literal_simple >> strip_tac >>
   `reason_operand [x] buf.buf_operand` by simp[reason_operand_def] >>
-  drule_all compile_revert_reason_certificate >> strip_tac >>
+  drule_all compile_revert_reason_buf_certificate >> strip_tac >>
   drule compile_bytelike_literal_run >>
   disch_then (qspec_then `ARB` strip_assume_tac) >>
   simp[cs_extends_def] >> qexists `[]` >>
@@ -596,22 +801,27 @@ Resume compile_assert_reason_lit_frag[control]:
              bb_instructions := s4.cs_current_insts |>` by
     metis_tac[fn_has_code_new_block] >>
   qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
-  simp[Once evaluate_def, bind_def] >>
-  Cases_on `eval_expr cx e es` >> rename1 `eval_expr cx e es = (r1, es1)` >>
+  pure_rewrite_tac[Once evaluate_def, eval_expr_switch_forced] >>
+  Cases_on `(do raw <- eval_expr cx e; read_result cx raw od) es` >>
+  rename1 `_ = (r1,es1)` >> simp[] >>
   strip_tac >> suspend "condition"
 QED
 
 Resume compile_assert_reason_lit_frag[condition]:
   qpat_x_assum `_ = (res, es')` mp_tac >>
   simp[Once evaluate_def, evaluate_literal_def, bind_def, return_def,
-       get_Value_def, lift_option_type_def, dest_StringV_def, raise_def] >>
+       read_result_def, lift_option_type_def, dest_StringV_def, raise_def] >>
   strip_tac >>
-  `expr_res_ok r1 /\ !v. r1 = INL (Value v) ==> ?b. v = BoolV b` by
+  `expr_res_ok r1 /\ !v. r1 = INL v ==> ?b. v = BoolV b` by
     (Cases_on `r1` >> gvs[]
-     >- (rename1 `switch_BoolV tv` >>
-         Cases_on `?b. tv = Value (BoolV b)` >> gvs[expr_res_ok_def] >>
-         `tv <> Value (BoolV T) /\ tv <> Value (BoolV F)` by metis_tac[] >>
-         gvs[switch_BoolV_def, raise_def, stmt_res_ok_def]) >>
+     >- (rename1 `INL plain` >>
+         Cases_on `?b. plain = BoolV b` >> gvs[expr_res_ok_def] >>
+         `plain <> BoolV T /\ plain <> BoolV F` by metis_tac[] >>
+         gvs[raise_def, stmt_res_ok_def]) >>
+     qpat_x_assum `(do raw <- _; _ od) _ = _` mp_tac >>
+     simp[bind_def] >> Cases_on `eval_expr cx e es` >>
+     rename1 `_ = (raw,est)` >> Cases_on `raw` >> simp[] >> strip_tac >>
+     imp_res_tac read_result_no_control >>
      imp_res_tac (cj 1 eval_expr_no_control) >>
      gvs[no_control_exc_def, expr_res_ok_def, stmt_res_ok_def]) >>
   `s3.cs_current_bb = s1.cs_current_bb /\
@@ -626,12 +836,11 @@ Resume compile_assert_reason_lit_frag[condition]:
       suspend "abort") >>
   disj2_tac >> qexists_tac `fuel` >> Cases_on `r1` >> gvs[stmt_exit_def] >>
   disj1_tac >>
-  ONCE_REWRITE_TAC [INST_TYPE [beta |-> ``:toplevel_value``] expr_exit_INR_type] >>
-  first_assum ACCEPT_TAC
+  metis_tac[expr_exit_INR_type]
 QED
 
 Resume compile_assert_reason_lit_frag[abort]:
-  gvs[bind_def, return_def, get_Value_def, dest_StringV_def, raise_def] >>
+  gvs[bind_def, return_def, read_result_def, dest_StringV_def, raise_def] >>
   disj2_tac >>
   `frag_exec ctx s5 s6 (\s. T) (\s. F)
      (stmt_exit RetQ es' (INR (AssertException str)))` by
@@ -646,8 +855,22 @@ Resume compile_assert_reason_lit_frag[abort]:
   impl_tac >- simp[jump_to_def] >> strip_tac >>
   qpat_x_assum `!fuel. (!e. run_from fuel ctx func (jump_to _ s) <> Error e) ==> _`
     (qspec_then `fuel` mp_tac) >>
-  impl_tac >- metis_tac[exit_result_not_error] >> strip_tac >>
-  qexists_tac `fuel'` >> gvs[]
+  impl_tac >- metis_tac[exit_result_not_error] >>
+  disch_then (qx_choose_then `f0` strip_assume_tac) >>
+  qexists_tac `f0` >> gvs[]
 QED
 
 Finalise compile_assert_reason_lit_frag
+
+(* Integrity gate for preserved public reason certificates and execution. *)
+val () = List.app (fn th =>
+  let val (ors, axs) = Tag.dest_tag (Thm.tag th)
+  in if null axs andalso null (Thm.hyp th) andalso
+        List.all (fn s => s = "DISK_THM") ors
+     then print "REASON_FORCE_AUDIT OK\n"
+     else raise Fail "reason consumer inherited admission"
+  end) [compile_store_byte_chunks_run, compile_bytelike_literal_run,
+        compile_revert_reason_certificate, compile_revert_reason_run,
+        compile_revert_reason_frag, compile_store_byte_chunks_simple,
+        compile_bytelike_literal_simple, compile_bytelike_revert_frag,
+        compile_raise_reason_lit_frag, compile_assert_reason_lit_frag];

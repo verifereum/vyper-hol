@@ -590,9 +590,8 @@ End
 (* ===== Local Variable Materialization ===== *)
 
 (* Collect lexical memory locals in source order, one entry per declaration.
-   build_compile_env uses the list to assign abstract MemLoc regions in
-   internal functions and the constructor; external and fallback bodies
-   instead give each declaration its own ALLOCA (declare_local), matching
+   build_compile_env uses the list for the locals' types and dynamic array
+   capacities; each declaration gets its own ALLOCA (declare_local), matching
    Python Context.new_variable. *)
 Definition collect_locals_def:
   collect_locals ([] : stmt list) = ([] : (string # type) list) /\

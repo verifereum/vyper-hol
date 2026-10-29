@@ -141,7 +141,7 @@ val () =
 Theorem checkable_raw_call_false_calldata:
   evaluate_type_builtin empty_evaluation_context
     (AbiEncode T (SOME [40w; 43w; 85w; 74w]))
-    (TupleT [BaseT BoolT]) [BoolV F] =
+    (TupleT [BaseT BoolT]) [BaseT BoolT] [BoolV F] =
   INL (BytesV ([40w; 43w; 85w; 74w] ++ REPLICATE 32 0w))
 Proof
   CONV_TAC cv_eval
@@ -191,8 +191,8 @@ Theorem raw_call_calldata_operand_order_test:
 Proof
   rpt strip_tac >>
   simp[Once evaluate_def, bind_def] >>
-  simp[Once evaluate_def, bind_def, materialise_def, return_def] >>
-  simp[Once evaluate_def, bind_def, materialise_def, return_def] >>
+  simp[Once evaluate_def, bind_def, read_result_def, return_def] >>
+  simp[Once evaluate_def, bind_def, read_result_def, return_def] >>
   simp[Once evaluate_def, return_def, bind_def, ignore_bind_def,
        type_check_def, assert_def, lift_option_type_def]
 QED
@@ -206,9 +206,9 @@ Theorem raw_call_bytes_operand_order_test:
     eval_raw_call cx flags to data amount value_st
 Proof
   rpt strip_tac >> simp[Once evaluate_def, bind_def] >>
-  simp[Once evaluate_def, bind_def, materialise_def, return_def] >>
-  simp[Once evaluate_def, bind_def, materialise_def, return_def] >>
-  simp[Once evaluate_def, bind_def, materialise_def, return_def] >>
+  simp[Once evaluate_def, bind_def, read_result_def, return_def] >>
+  simp[Once evaluate_def, bind_def, read_result_def, return_def] >>
+  simp[Once evaluate_def, bind_def, read_result_def, return_def] >>
   simp[Once evaluate_def, return_def, bind_def, ignore_bind_def,
        type_check_def, assert_def, lift_option_type_def, dest_BytesV_def]
 QED

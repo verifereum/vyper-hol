@@ -104,7 +104,7 @@ Proof
   metis_tac[literal_chunk_quotient_step]
 QED
 
-Theorem literal_buffer_range[local]:
+Theorem literal_buffer_range:
   !n b off lim. b + off + 32 * word_size n < lim ==>
     b + off + n < lim /\ (n <> 0 ==> b + off + 32 < lim)
 Proof
@@ -116,7 +116,7 @@ Proof
   intLib.ARITH_TAC
 QED
 
-Theorem literal_mstore_state_rel[local]:
+Theorem literal_mstore_state_rel:
   !func cenv cx es s a (w:bytes32) inst b sz.
     stmt_state_rel func cenv cx es s /\ b <= a /\ a + 32 <= b + sz /\
     MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
@@ -156,7 +156,7 @@ Proof
   simp[mstore_def] >> metis_tac[]
 QED
 
-Theorem literal_emit_mstore_run[local]:
+Theorem literal_emit_mstore_run:
   !sa sb pop value s addr w.
     emit_void MSTORE [pop; value] sa = ((), sb) /\
     eval_operand pop s = SOME addr /\ eval_operand value s = SOME w ==>
@@ -233,7 +233,7 @@ Proof
   goal_assum drule >> simp[] >> metis_tac[]
 QED
 
-Theorem literal_alloc_buffer_run[local]:
+Theorem literal_alloc_buffer_run:
   !func cenv cx es sa sm buf sz s.
     compile_alloc_buffer sz sa = (buf,sm) /\
     stmt_state_rel func cenv cx es s /\ fn_inst_ids_distinct func /\
@@ -346,7 +346,7 @@ Proof
   rpt strip_tac >> gvs[not_fresh_at_def]
 QED
 
-Theorem literal_operand_frame[local]:
+Theorem literal_operand_frame:
   !op sa s t.
     (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
@@ -466,7 +466,7 @@ QED
 
 Finalise literal_chunks_run
 
-Theorem literal_state_memory_frame[local]:
+Theorem literal_state_memory_frame:
   !func cenv cx es s t.
     stmt_state_rel func cenv cx es s /\
     (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s /\
@@ -879,7 +879,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   simp[vv_post_def, exprLoweringPropsTheory.stmt_state_rel_inst_idx,
        vv_holds_def, vv_at_def, contextTheory.base_ptr_def,
-       materialise_def, return_def, eval_operand_def, lookup_var_def] >>
+       read_result_def, return_def, eval_operand_def, lookup_var_def] >>
   `eval_operand buf.buf_operand (t with vs_inst_idx := LENGTH sb.cs_current_insts) = SOME w` by
     (Cases_on `buf.buf_operand` >> gvs[eval_operand_def, lookup_var_def]) >>
   conj_tac >- metis_tac[] >>

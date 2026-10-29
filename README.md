@@ -56,6 +56,12 @@ The semantics is organised into layers:
 
 The logical contract type checker can be evaluated on closed direct inputs, compiler JSON, or deployment traces using a reusable kernel-checked SML API. See the [contract checker evaluator guide](docs/check-contract-evaluator.md) for its trust model, interfaces, examples, and fixture-generation procedure.
 
+Explicit `abi_decode`, calldata argument decoding, and external-call returndata
+decoding ignore unused bytes after dynamic `Bytes` and `String` values. Length,
+shape, scalar, fixed-bytes padding, and applicable Vyper bounds remain checked.
+Returndata is still capped at the expected type's ABI size bound before decoding.
+Canonical ABI encoding is unchanged.
+
 The interpreter is written in a state-exception monad. Exceptions are used for semantic errors (e.g., looking up a variable that was not bound), legitimate runtime exceptions (e.g., failed assertions), and control flow for internal function calls and loops (`return`, `break`, `continue`).
 
 Termination is proved for the interpreter, validating Vyper's design as a total language (this does not rely on gas consumption, which is invisible at the Vyper source level). The termination argument uses the facts that internal function calls cannot recurse (even indirectly) and that all loops have an explicit (syntactic) bound.
@@ -66,6 +72,14 @@ Contract-creation builtins (`raw_create`, `create_copy_of`, `create_from_bluepri
 
 A continuation-passing (small-step) version of the interpreter is also defined and proved equivalent to the big-step version. Its main purpose is to facilitate efficient execution via HOL4's `cv_compute` mechanism.
 
+Custom errors are represented as source-qualified declarations with typed
+parameters.  Raises resolve against the loaded module, order positional or
+keyword arguments by the declaration, evaluate them left-to-right exactly
+once, and revert with the four-byte canonical-signature selector followed by
+the existing ABI tuple encoding.  Recursive and continuation-passing execution
+share the same `RevertData` payload and ordinary transaction rollback path.
+
+
 Properties of the semantics — such as scope preservation and state preservation — are proved in `semantics/prop/`.
 
 ### Tests (`tests/`)
@@ -73,6 +87,16 @@ Properties of the semantics — such as scope preservation and state preservatio
 The test infrastructure defines functions for re-running execution traces from the Vyper test suite using the definitional interpreter. The main entry-point is the `run_test` function defined in `vyperTestRunner`. Machinery for decoding exported JSON test files is defined in the `vyperTestLib` library; the generated test scripts are in `tests/generated/`.
 
 The decoding of JSON into our AST type is somewhat ad-hoc, in part because the JSON format is not fully specified. In future work, we might formalise more of the front-end or elaboration process, including parsing and type-checking, so that we can run source code directly. For now, we rely on an external front-end (e.g., as used in Vyper's test export process) and decode its output to construct terms in our formal syntax. Compiler-folded `method_id` keyword values are retained when decoding `_abi_encode`, preserving selector-prefixed calldata in source replays.
+
+The pinned `functional/codegen/features/test_custom_errors.json` export is part
+of execution replay.  Its 14 trace-bearing items (28 direct traces) cover bare,
+positional, keyword, assertion, and dynamic-string custom errors on both
+backends.  The separate `functional/syntax/test_custom_errors.json` contains
+four compiler/frontend-only items and no execution traces: two expected
+`StructureException` cases for using an error as an expression or log, and two
+accepted declarations whose parameter is named `address`.  They remain outside
+the execution replay harness and are not counted as runtime passes.
+
 
 ## Current Limitations
 
@@ -96,7 +120,7 @@ This work is developed in the [HOL4 theorem prover](https://hol-theorem-prover.o
 
 The project is built with [`holbuild`](https://github.com/charles-cooper/holbuild). The repository's `holproject.toml` is the source of truth for the project configuration and pinned HOL dependencies, including the compatible [Verifereum](https://github.com/verifereum/verifereum) revision. Vyper functional tests are generated from the upstream commit pinned in [`VYPER_PIN`](VYPER_PIN). The CI workflow (`.github/workflows/holbuild.yml`) is the recommended reference for the exact automated build.
 
-For a local build, install `holbuild` v0.10.0 or newer and run:
+For a local build, install `holbuild` v0.12.0 or newer and run:
 
 ```bash
 holbuild buildhol
@@ -140,7 +164,7 @@ target the pin supports), whereas the HOL EVM semantics executes Osaka.
 Metadata need not match for behavioral replay. Bytecode parity is opt-in and
 is not implied by a passing semantics replay.
 
-Use Python 3.11.11 in an isolated environment, then run from this repository:
+Use Python 3.11.17 in an isolated environment, then run from this repository:
 
 ```bash
 git clone --depth 1 https://github.com/vyperlang/vyper.git vyper-src
@@ -160,10 +184,23 @@ The generator requires a clean pinned checkout, checks Python/package versions,
 and refuses an existing output directory so an incremental export cannot leave
 stale tests behind. Use repeated `--test tests/.../test_file.py::test_name`
 arguments for focused exports. It writes provenance only after pytest succeeds.
+Default full-suite exports temporarily include `tests/vyper-regression` in the
+upstream harness; focused `--test`/`--fixture` exports do not. Regression Python
+sources participate in both cache invalidation and provenance checks.
 Replay checks each file's hash and provenance against the pin, profile,
 constraints, generator and setup action; CI's export cache key covers those
 same inputs. A profile or generator change requires regeneration, including
 the committed exports under `tests/fixtures/exports`. Keep their sidecars.
+
+From the Vyper-HOL repository root, generate the HOL test wrappers from those exports:
+
+```bash
+holbuild build vyperTestLib
+generator=$(mktemp --suffix=.sml)
+trap 'rm -f "$generator"' EXIT
+printf '%s\n' 'vyperTestLib.generate_tests ();' > "$generator"
+(cd tests && holbuild run --noconfig vyperTestLib "$generator")
+```
 
 Then run individual generated test theories with `holbuild`, for example:
 
@@ -172,5 +209,11 @@ holbuild -j"$(nproc)" build vyperTest_functional_builtins_codegen_test_abi_decod
 ```
 
 The CI workflow runs the generated tests in parallel groups; see `.github/workflows/holbuild.yml` for that full setup.
+
+Local semantic regressions live as behavior-named pytests in
+[`tests/vyper-regression`](tests/vyper-regression/README.md). The pinned export
+includes them in the same cache and CI matrix as the upstream tests; exported
+traces and local generated wrappers are not versioned. Each enabled regression
+lands with the fix that makes it pass.
 
 The `vyperTestCoverageReportTheory` target derives `tests/vyper-coverage-report.txt` from the raw exported JSON; CI builds the target and prints the report. Its per-file and aggregate `[vyper-coverage]` summaries report exported items, fixtures and other non-test items, selected tests, direct and fixture-expanded trace counts, name and source-pattern exclusions, items with no exported traces, traceful items whose source is missing or supplied only by fixtures, unreferenced traced fixtures, malformed items, and files with no selected tests. It deliberately does not decode traces into HOL terms. Generated definitions theories additionally report successfully decoded traces and decode failures while performing their normal builds. Individual exclusion lines record the test name and selection reason. All these messages are reporting only: existing selection rules and decode-failure enforcement are unchanged.

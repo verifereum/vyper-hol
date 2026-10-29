@@ -55,7 +55,30 @@ val booltm = JSONDecode.map mk_bool bool
 val negbooltm = JSONDecode.map (mk_bool o not) bool
 
 val address : term decoder = JSONDecode.map address_from_hex string
-val bytes : term decoder = JSONDecode.map cached_flat_bytes_from_hex string
+
+(* byteStringCacheLib splits a value into shared 8 KiB chunks only above
+   64 KiB, and caches smaller values whole. test_lists sends 256 calls whose
+   8 KiB calldata differ only in the last bytes, so each was imported in full.
+   Values from 8 to 64 KiB are split here into 8 KiB chunks, which the cache
+   shares when equal. Sizes count hex characters, twice the bytes. *)
+val shared_chunk_hex = 2 * 8 * 1024
+val cache_chunked_hex = 2 * 64 * 1024
+
+fun flat_bytes_from_hex str = let
+  val hex = if String.isPrefix "0x" str
+            then String.extract(str, 2, NONE) else str
+  val size = String.size hex
+  fun chunks offset =
+    if offset >= size then []
+    else String.substring(hex, offset, Int.min(shared_chunk_hex, size - offset))
+         :: chunks (offset + shared_chunk_hex)
+in
+  if size <= shared_chunk_hex orelse cache_chunked_hex < size
+  then cached_flat_bytes_from_hex hex
+  else mk_flat (mk_list(List.map cached_bytes_from_hex (chunks 0), bytes_ty))
+end
+
+val bytes : term decoder = JSONDecode.map flat_bytes_from_hex string
 
 val Call_tm = prim_mk_const{Thy="vyperTestRunner",Name="Call"}
 val call_trace_ty = #1 $ dom_rng $ type_of Call_tm
@@ -164,6 +187,7 @@ val abiMutability : term decoder =
 
 val Function_tm = prim_mk_const{Thy="vyperTestRunner",Name="Function"}
 val Event_tm = prim_mk_const{Thy="vyperTestRunner",Name="Event"}
+val Error_tm = prim_mk_const{Thy="vyperTestRunner",Name="Error"}
 val (abi_function_ty, abi_entry_ty) = dom_rng $ type_of $ Function_tm
 val abi_arg_ty = mk_prod(string_ty, abi_type_ty)
 
@@ -174,6 +198,9 @@ fun mk_Function (n,is,os,m) =
                ("inputs", mk_list(is, abi_arg_ty)),
                ("outputs", mk_list(os, abi_arg_ty)),
                ("mutability", m)]))
+fun mk_Error (name, inputs) =
+  list_mk_comb(Error_tm, [name, mk_list(inputs, abi_arg_ty)])
+
 
 (* Only the pinned JSON-ABI exporter emits function entries without
    stateMutability. Normalize those entries before the canonical decoder;
@@ -220,7 +247,11 @@ val canonicalAbiEntry : term decoder = achoose "abiEntry" [
               field "stateMutability" abiMutability),
     check_field "type" "event" $
     JSONDecode.map (fn s => mk_comb(Event_tm, s)) $
-    field "name" stringtm
+    field "name" stringtm,
+    check_field "type" "error" $
+    JSONDecode.map mk_Error $
+      tuple2 (field "name" stringtm,
+              field "inputs" (array abiArg))
   ]
 
 val abiEntry : term decoder =
@@ -320,11 +351,6 @@ val allowed_test_patterns = [
 
 (* Path exclusions carry reportable reasons and tracking issues. *)
 val excluded_test_file_rules = [
-  (* The clean export contains a top-level ErrorDef, for which
-     frontend/jsonASTLib.sml's json_toplevel decoder has no branch. *)
-  ("vyper-test-exports/functional/codegen/features/test_custom_errors.json",
-   "custom errors",
-   "https://github.com/verifereum/vyper-hol/issues/488")
 ]
 
 val outside_admitted_suites_reason = "outside currently admitted test suites"
@@ -478,7 +504,7 @@ val raw_deployment : term decoder =
     tuple2 (
       tuple4 (field "initcode" bytes,
               field "calldata" $
-                JSONDecode.map (cached_flat_bytes_from_hex o theoptstring)
+                JSONDecode.map (flat_bytes_from_hex o theoptstring)
                   (nullable string),
               tuple4 (field "env" $ field "tx" $ field "origin" address,
                       field "env" $ field "block" $ field "timestamp" numtm,
@@ -498,7 +524,7 @@ val raw_deployment : term decoder =
                 case bc of
                   SOME "" => optionSyntax.mk_none bytes_ty
                 | SOME hex => from_term_option bytes_ty
-                                (SOME (cached_flat_bytes_from_hex hex))
+                                (SOME (flat_bytes_from_hex hex))
                 | NONE => optionSyntax.mk_none bytes_ty) $
                nullable string)))
 
@@ -541,7 +567,7 @@ val deployment : term decoder =
                                    field "deployed_address" address,
                                    field "env" $ field "tx" $ field "gas_price" numtm),
                            tuple4 (field "calldata" $
-                                   JSONDecode.map (cached_flat_bytes_from_hex o theoptstring)
+                                   JSONDecode.map (flat_bytes_from_hex o theoptstring)
                                      (nullable string),
                                    field "env" $ field "block" $ field "number" numtm,
                                    field "env" $ field "block" $ field "blob_basefee" numtm,
@@ -615,7 +641,7 @@ fun collect_fixture ((name, json), acc) =
 
 (* Pass 2: decode test items, resolving the directly listed (already flattened)
    deps by prepending fixture traces in their declared order. *)
-fun trydecode_with_fixtures fixtures
+fun trydecode_with_fixtures decode_test_traces fixtures
       ((name,json),(selected,failures,name_skips,source_skips,non_tests)) =
   if decode (field "item_type" string) json <> "test"
   then (selected,failures,name_skips,source_skips,non_tests + 1)
@@ -634,7 +660,7 @@ fun trydecode_with_fixtures fixtures
       List.map (fn (_, fixture_json, _) => fixture_json) resolved
     val source_reason = unsupported_source_reason_for (fixture_jsons @ [json])
     fun select () = let
-      val (_, test_traces) = decode test_with_deps_decoder json
+      val test_traces = decode_test_traces json
       val fixture_traces =
         List.concat (List.map (fn (_, _, traces) => traces) resolved)
     in
@@ -657,11 +683,12 @@ fun trydecode_with_fixtures fixtures
               ::failures,
             name_skips,source_skips,non_tests)
 
-fun read_test_json json_path = let
+fun read_test_json decode_test_traces json_path = let
   val test_jsons = decodeFile rawObject json_path
   val fixtures = List.foldl collect_fixture [] test_jsons
   val (selected,failures,name_skips,source_skips,non_tests) =
-    List.foldl (trydecode_with_fixtures fixtures) ([],[],[],[],0) test_jsons
+    List.foldl (trydecode_with_fixtures decode_test_traces fixtures)
+      ([],[],[],[],0) test_jsons
 in
   {selected = selected,
    failures = failures,
@@ -1134,12 +1161,15 @@ in
   else raise Fail ("invalid export provenance: " ^ json_path)
 end
 
-fun make_definitions_for_file (id, json_path) = let
+fun decode_test_traces json = #2 (decode test_with_deps_decoder json)
+
+(* Eligibility and dependency checks traverse every item; the callback decides
+   which admitted tests to HOL-decode. Fixtures are still decoded in pass 1.
+   Recorded errors must fail before slicing, never disappear with placeholders. *)
+fun read_definition_tests decode_test_traces select_tests json_path = let
   val () = check_export_provenance json_path
-  val report = read_test_json json_path
-  val tests = #selected report
+  val report = read_test_json decode_test_traces json_path
   val decode_fails = #failures report
-  val () = print_file_coverage json_path report
   val () =
     case decode_fails of
         [] => ()
@@ -1149,6 +1179,17 @@ fun make_definitions_for_file (id, json_path) = let
                            " - ", exnMessage err, " (",
                            Int.toString (List.length decode_fails),
                            " tests failed to decode)"])
+  val tests = select_tests (#selected report)
+  val () = print_file_coverage json_path
+    {selected = tests, failures = decode_fails,
+     name_skips = #name_skips report, source_skips = #source_skips report,
+     total_items = #total_items report, fixtures = #fixtures report,
+     non_tests = #non_tests report}
+in
+  tests
+end
+
+fun define_file_tests (id, json_path, start, tests) = let
   val path_vn = String.concat["json_path_", id]
   val path_def = new_definition(path_vn ^ "_def",
                    mk_eq(mk_var(path_vn, string_ty),
@@ -1157,7 +1198,7 @@ fun make_definitions_for_file (id, json_path) = let
   val test_name_prefix = String.concat ["name_", id, "_"]
   fun define_traces i (name, traces) = let
     val trs = mk_list(traces, trace_ty)
-    val tn = Int.toString i
+    val tn = Int.toString (start + i)
     val vn = traces_prefix ^ tn
     val var = mk_var(vn, traces_ty)
     val def = new_definition(vn ^ "_def", mk_eq(var, trs))
@@ -1170,46 +1211,198 @@ in
   Lib.appi define_traces tests
 end
 
+fun make_definitions_for_file (id, json_path) =
+  define_file_tests
+    (id, json_path, 0, read_definition_tests decode_test_traces I json_path)
+
+fun make_definitions_for_file_range (id, json_path, start, count) = let
+  val total = #selected (read_coverage_json json_path)
+  val () =
+    if start >= 0 andalso count >= 0 andalso start <= total andalso
+       count <= total - start then ()
+    else raise Fail ("test range out of bounds in " ^ json_path)
+  val remaining = ref total
+  (* foldl conses selected tests, reversing traversal order: the first eligible
+     item has global index total - 1, the last has index 0.
+     Filter BEFORE decoding: byteStringCache creates persistent HOL definitions
+     even for discarded traces, defeating chunk memory bounds. Each owner chunk
+     validates its own traces; unowned test traces are not HOL-decoded here. *)
+  fun decode_owned json = let
+    val index = !remaining - 1
+    val () = remaining := index
+  in
+    if start <= index andalso index < start + count
+    then decode_test_traces json else []
+  end
+  fun select_tests tests =
+    if List.length tests = total andalso !remaining = 0
+    then List.take (List.drop (tests, start), count)
+    else raise Fail ("selected-count mismatch in " ^ json_path)
+  val tests = read_definition_tests decode_owned select_tests json_path
+in
+  define_file_tests (id, json_path, start, tests)
+end
+
+(* Bound saved CV data per theory by both case count and raw binary payload:
+   at most 100 cases and 262144 hex characters, except that an oversized case
+   gets its own chunk (never dropped). Sibling chunks never import one another.
+   Chunk IDs name theories only; constants retain the original suite ID and
+   global indices. Keep chunk 0 even for an empty suite, as before. *)
+type test_chunk = {id : string, start : int, count : int}
+
+fun test_chunks (id, weights) : test_chunk list = let
+  val limit = 262144
+  fun chunk part start count =
+    {id = if part = 0 then id else id ^ "_part" ^ Int.toString part,
+     start = start, count = count}
+  fun chunks part start count payload remaining acc =
+    case remaining of
+      [] => List.rev
+        (if count > 0 orelse List.null acc then chunk part start count :: acc
+         else acc)
+    | weight::rest =>
+        if count > 0 andalso
+           (count = 100 orelse weight > limit - payload)
+        then chunks (part + 1) (start + count) 0 0 remaining
+               (chunk part start count :: acc)
+        else if weight > limit then
+          chunks (part + 1) (start + 1) 0 0 rest
+            (chunk part start 1 :: acc)
+        else chunks part start (count + 1) (payload + weight) rest acc
+in
+  if List.exists (fn weight => weight < 0) weights
+  then raise Fail "negative selected test weight"
+  else chunks 0 0 0 0 weights []
+end
+
+(* Count only binary payload strings, including nested call_args.calldata.
+   Skip annotated_ast metadata even if it contains payload-like keys; source
+   text is not a payload field. No hex decoding or HOL bytecache definitions
+   may occur while planning. This does not filter any tests or traces. *)
+fun raw_payload_weight (JSON.OBJECT fields) =
+      List.foldl (fn ((key,value),total) => total +
+        (if key = "annotated_ast" then 0 else
+         case value of
+           JSON.STRING s =>
+             if List.exists (fn field => field = key)
+                  ["calldata", "initcode", "runtime_bytecode", "output"]
+             then String.size s else 0
+         | _ => raw_payload_weight value)) 0 fields
+  | raw_payload_weight (JSON.ARRAY values) =
+      List.foldl (fn (value,total) => total + raw_payload_weight value) 0 values
+  | raw_payload_weight _ = 0
+
+fun read_test_weights json_path = let
+  val items = decodeFile rawObject json_path
+  (* Raw fixtures, NOT collect_fixture: its trace decoder creates HOL terms.
+     Reuse the executable reader's exact eligibility/dependency logic and its
+     foldl/cons order. Each selected entry contains fixture JSONs then test JSON. *)
+  val fixtures = List.foldl (fn ((name,json),acc) =>
+    if decode (field "item_type" string) json = "fixture"
+    then (name,json,[json]) :: acc else acc) [] items
+  val (selected,failures,_,_,_) =
+    List.foldl (trydecode_with_fixtures (fn json => [json]) fixtures)
+      ([],[],[],[],0) items
+  val () = case failures of
+      [] => ()
+    | (name,err)::_ => raise Fail (String.concat
+        ["raw selection failure in ", json_path, ": ", name, " - ", exnMessage err])
+  val () =
+    if List.length selected = #selected (read_coverage_json json_path) then ()
+    else raise Fail ("selected-count mismatch in " ^ json_path)
+in
+  List.map (fn (_,jsons) =>
+    List.foldl (fn (json,total) => total + raw_payload_weight json) 0 jsons)
+    selected
+end
+
+fun generated_test_plan () =
+  List.concat (List.map (fn (id, path) => let
+    val chunks = test_chunks (id, read_test_weights path)
+    val chunked = List.length chunks > 1
+  in
+    List.map (fn chunk => (chunk, id, path, chunked)) chunks
+  end) (test_files ()))
+
+fun cleanup_test_plan plan =
+  cleanup_generated_scripts
+    (List.map (fn (chunk : test_chunk, _, path, _) => (#id chunk, path)) plan)
+
+(* Replace only the generated call, retaining custom proofs/annotations. A
+   nonstandard large-suite wrapper needs manual attention, not deletion. *)
+fun rewrite_definition_call call contents = let
+  val lines = String.fields (fn c => c = #"\n") contents
+  fun is_call line =
+    String.isPrefix "val () = make_definitions_for_file (" line orelse
+    String.isPrefix "val () = make_definitions_for_file_range (" line
+in
+  if List.length (List.filter is_call lines) <> 1 then
+    raise Fail "cannot safely update custom Defs script: expected one generated call"
+  else String.concatWith "\n"
+    (List.map (fn line => if is_call line then call else line) lines)
+end
+
 fun generate_defn_scripts () = let
   val () = check_generate_dirs ()
-  val files = test_files ()
+  val plan = generated_test_plan ()
   val gen_dir = generated_dir
-  val () = cleanup_generated_scripts files
-  val () = List.app (fn (id, jsonp) => let
+  val () = cleanup_test_plan plan
+  val () = List.app (fn (chunk : test_chunk, suite_id, jsonp, chunked) => let
+    val id = #id chunk
     val thyname = String.concat["vyperTestDefs_", id]
     val fname = OS.Path.concat(gen_dir, String.concat[thyname, "Script.sml"])
     (* Path is relative to tests/generated/, so prepend ../ to reach tests/vyper-test-exports *)
     val jsonp_from_generated = OS.Path.concat("..", jsonp)
+    val call = String.concat
+      ["val () = make_definitions_for_file", if chunked then "_range" else "",
+       " (\"", suite_id, "\", \"", jsonp_from_generated, "\"",
+       if chunked then ", " ^ Int.toString (#start chunk) ^ ", " ^
+         Int.toString (#count chunk) else "", ");"]
     val contents = String.concat [
       "Theory ", thyname, "[no_sig_docs]\nAncestors jsonToVyper\nLibs vyperTestLib\n",
       "val () = holbuild_extra_deps [\"", jsonp_from_generated,
-      "\", \"", jsonp_from_generated, ".provenance\"];\n",
-      "val () = make_definitions_for_file (\"", id, "\", \"", jsonp_from_generated, "\");\n"]
-    val out = TextIO.openOut(fname)
-    val () = TextIO.output(out, contents)
-    val () = TextIO.closeOut out
-  in () end) files
+      "\", \"", jsonp_from_generated, ".provenance\"];\n", call, "\n"]
+    val existing =
+      if OS.FileSys.access(fname, []) then let
+        val input = TextIO.openIn fname
+      in SOME (TextIO.inputAll input before TextIO.closeIn input) end
+      else NONE
+    val contents = case existing of
+        NONE => contents
+      | SOME old =>
+          if chunked orelse
+             String.isSubstring "val () = make_definitions_for_file_range (" old
+          then rewrite_definition_call call old
+          else old (* Small custom scripts remain byte-for-byte unchanged. *)
+  in
+    if existing = SOME contents then () else let
+      val out = TextIO.openOut(fname)
+      val () = TextIO.output(out, contents)
+      val () = TextIO.closeOut out
+    in () end
+  end) plan
 in
   ()
 end
 
 fun generate_test_scripts () = let
   val () = check_generate_dirs ()
-  val files = test_files ()
+  val plan = generated_test_plan ()
   val gen_dir = generated_dir
-  val () = cleanup_generated_scripts files
-  val () = List.app (fn (id, _) => let
+  val () = cleanup_test_plan plan
+  val () = List.app (fn (chunk : test_chunk, _, _, _) => let
+    val id = #id chunk
     val thyname = String.concat["vyperTest_", id]
     val defsname = String.concat["vyperTestDefs_", id]
     val fname = OS.Path.concat(gen_dir, String.concat[thyname, "Script.sml"])
     val contents = String.concat [
       "Theory ", thyname, "[no_sig_docs]\nAncestors ", defsname,
-      "\nLibs vyperTestRunnerLib\nval () = List.app ",
-      "run_test_on_traces $ all_traces \"", defsname, "\";\n"]
+      "\nLibs vyperTestRunnerLib\nval () = ",
+      "run_tests_on_traces $ all_traces \"", defsname, "\";\n"]
     val out = TextIO.openOut(fname)
     val () = TextIO.output(out, contents)
     val () = TextIO.closeOut out
-  in () end) files
+  in () end) plan
 in
   ()
 end

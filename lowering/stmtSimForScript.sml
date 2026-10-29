@@ -1,11 +1,13 @@
 (*
- * Statement simulation: For over a literal range (#637)
+ * Statement simulation: For over a range with constant ends (#637)
  *
  * TOP-LEVEL:
- *   compile_for_range_frag        — For over a range with literal ends,
- *                                   under a loop invariant
- *   compile_for_range_frag_simple — the same with the body's judgment at
- *                                   every source state
+ *   compile_for_range_frag            — For over a range whose ends lower
+ *                                       to words without code, under a
+ *                                       loop invariant
+ *   compile_for_range_lit_frag        — the same for literal ends
+ *   compile_for_range_lit_frag_simple — the same with the body's judgment
+ *                                       at every source state
  *)
 
 Theory stmtSimFor
@@ -21,9 +23,9 @@ Ancestors
 Libs
   monadsyntax intLib
 
-(* ===== For over a literal range ===== *)
+(* ===== For over a range with constant ends ===== *)
 
-Theorem reserved_fresh_not_local[local]:
+Theorem reserved_fresh_not_local:
   !cenv st n scs.
     local_ptrs_reserved cenv st /\ st.cs_next_var <= n ==>
     not_local_ptr cenv scs (STRING #"%" (toString n))
@@ -36,7 +38,9 @@ Proof
   simp[] >> qexists_tac `n` >> simp[]
 QED
 
-(* For over a range with literal ends: the loop variable's ALLOCA, the
+(* For over a range whose ends evaluate to integers without changing the
+   state and lower to their words without emitting code (literals,
+   max_value and the like): the loop variable's ALLOCA, the
    entry block, then the loop from the first counter value; on a normal
    finish the code ends at the start of the exit block.  The body's
    judgment is assumed for the environment declare_local gives, at the
@@ -47,19 +51,15 @@ QED
    over the evaluator's recursion, which gives the body only at the visited
    (state, counter) pairs.  Only for n1 <= n2 (not the source's "no range"
    error), a loop variable of one word, and ce_alloca_locals, which the
-   lowering sets for external functions only.
-   The entry frame reserves cap against fresh and replayed ALLOCAs.  P must
-   bound initialized constructor immutables at every iteration (including
-   those initialized by earlier iterations).  The fixed loop allocation's
-   base stays above cap by stmt_frag's pointer/allocation frames; the body
-   need not preserve a frontier bound.  Runtime code uses cap = 0 and
-   stmt_framed_frag_zero, with no additional layout requirement. *)
+   lowering sets for external functions only. *)
 Theorem compile_for_range_frag:
-  !P ctx func cx lctx RetQ cenv ty id fty a1 n1 a2 n2 bound stmts es res es'
-   tyv cap.
-    eval_stmt cx
-      (For id fty (Range (Literal a1 (IntL n1)) (Literal a2 (IntL n2)))
-         bound stmts) es = (res, es') /\
+  !P ctx func cx lctx RetQ cenv ty id fty e1 n1 e2 n2 bound stmts es res es'
+   tyv.
+    eval_stmt cx (For id fty (Range e1 e2) bound stmts) es = (res, es') /\
+    eval_expr cx e1 es = (INL (Value (IntV n1)), es) /\
+    eval_expr cx e2 es = (INL (Value (IntV n2)), es) /\
+    (!s. lower_value compile_expr cenv fty e1 s = (Lit (i2w n1), s)) /\
+    (!s. lower_value compile_expr cenv fty e2 s = (Lit (i2w n2), s)) /\
     evaluate_type (get_tenv cx) fty = SOME tyv /\ type_memory_size tyv = 32 /\
     32 <= type_memory_bytes cenv fty /\
     type_memory_bytes cenv fty < dimword (:256) /\
@@ -69,51 +69,46 @@ Theorem compile_for_range_frag:
     (!c lc sa sb. compile_stmts c lc ty stmts sa = ((), sb) ==>
                   cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var) /\
     P es /\
-    (!ei. P ei /\ cenv.ce_is_ctor ==>
-       immutable_prefix_bound cenv cx.txn.target cenv.ce_module ei cap) /\
     (!st0 c st1 ex inc ei j r2 es2.
        declare_local cenv id fty st0 = (c, st1) /\
        P ei /\ lookup_scopes id ei.scopes = NONE /\ j < Num (n2 - n1) /\
        eval_stmts cx stmts
          (ei with scopes :=
             (FEMPTY |+ (id, <| assignable := F; type := tyv;
-                               value := IntV (n1 + &j) |>)) :: ei.scopes) = (r2, es2) ==>
+                               value := IntV (n1 + &j); popped := [] |>)) :: ei.scopes) = (r2, es2) ==>
        stmt_frag ctx func cx (InLoop ex inc) RetQ c
          (stmts_env c (InLoop ex inc) ty stmts)
          (ei with scopes :=
             (FEMPTY |+ (id, <| assignable := F; type := tyv;
-                               value := IntV (n1 + &j) |>)) :: ei.scopes) r2 es2) /\
+                               value := IntV (n1 + &j); popped := [] |>)) :: ei.scopes) r2 es2) /\
     (!ei j r2 es2 sc rest.
        P ei /\ lookup_scopes id ei.scopes = NONE /\ j < Num (n2 - n1) /\
        eval_stmts cx stmts
          (ei with scopes :=
             (FEMPTY |+ (id, <| assignable := F; type := tyv;
-                               value := IntV (n1 + &j) |>)) :: ei.scopes) = (r2, es2) /\
+                               value := IntV (n1 + &j); popped := [] |>)) :: ei.scopes) = (r2, es2) /\
        (r2 = INL () \/ r2 = INR ContinueException) /\
        es2.scopes = sc :: rest ==>
        P (es2 with scopes := rest)) ==>
-    stmt_framed_frag (alloca_prefix cap) ctx func cx lctx RetQ cenv
-      (stmt_env cenv lctx ty
-         (For id fty (Range (Literal a1 (IntL n1)) (Literal a2 (IntL n2)))
-            bound stmts)) es res es'
+    stmt_frag ctx func cx lctx RetQ cenv
+      (stmt_env cenv lctx ty (For id fty (Range e1 e2) bound stmts)) es res es'
 Proof
-  rpt gen_tac >> strip_tac >> REWRITE_TAC [stmt_framed_frag_def] >>
+  rpt gen_tac >> strip_tac >> REWRITE_TAC [stmt_frag_def] >>
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `stmt_env _ _ _ _ _ = _` mp_tac >>
   simp[stmt_env_def, declare_stmt_local_def, comp_bind_def,
        comp_ignore_bind_def, comp_return_def] >>
-  Cases_on `compile_stmt cenv lctx ty
-              (For id fty (Range (Literal a1 (IntL n1)) (Literal a2 (IntL n2)))
-                 bound stmts) sa` >>
+  Cases_on `compile_stmt cenv lctx ty (For id fty (Range e1 e2) bound stmts)
+              sa` >>
   simp[] >> strip_tac >> gvs[] >>
   rename1 `compile_stmt _ _ _ _ sa = (uu, sb)` >>
   `uu = ()` by simp[oneTheory.one] >> gvs[] >>
   (* the code and the source loop *)
-  qspecl_then [`cenv`, `lctx`, `ty`, `id`, `fty`, `a1`, `n1`, `a2`, `n2`,
-               `bound`, `stmts`, `sa`, `sb`, `func`]
+  qspecl_then [`cenv`, `lctx`, `ty`, `id`, `fty`, `e1`, `i2w n1`, `e2`,
+               `i2w n2`, `bound`, `stmts`, `sa`, `sb`, `func`]
     mp_tac compile_for_range_parts >>
   impl_tac >- (simp[] >> metis_tac[]) >> strip_tac >>
-  drule_all eval_stmt_for_range_lit >> strip_tac >>
+  drule_all eval_stmt_for_range >> strip_tac >>
   drule_all declare_local_ptr >> strip_tac >>
   (* the loop variable's ALLOCA *)
   qabbrev_tac `sz = type_memory_bytes cenv fty` >>
@@ -138,10 +133,6 @@ Proof
   qspecl_then [`func`, `cenv`, `cx`, `es`, `s0`, `A`, `p`,
                `n2w sz : bytes32`, `s1`] mp_tac stmt_state_rel_exec_alloca >>
   impl_tac >- fs[] >> strip_tac >>
-  `cap <= w2n w` by
-    (qspecl_then [`func`, `cenv`, `cx`, `es`, `A`, `s0`,
-                  `n2w sz : bytes32`, `s1`, `p`, `w`, `cap`]
-       MATCH_MP_TAC exec_alloca_prefix_base >> simp[]) >>
   `s1.vs_current_bb = s0.vs_current_bb /\ s1.vs_inst_idx = s0.vs_inst_idx /\
    ~s1.vs_halted /\ (!x. x <> p ==> lookup_var x s1 = lookup_var x s0) /\
    (!a b. FLOOKUP s0.vs_allocas a = SOME b ==>
@@ -231,7 +222,7 @@ Proof
                `incr_lbl`, `sa.cs_next_id + 5`, `sa.cs_next_id + 6`,
                `sa.cs_next_id + 7`, `bbb`, `sj.cs_next_id`, `sj.cs_next_id + 1`,
                `sj.cs_next_id + 2`, `sb0`, `sb1`, `sj`, `sa`, `0`, `es`, `cc`,
-               `w`, `res`, `es'`, `cap`] mp_tac for_loop >>
+               `w`, `res`, `es'`] mp_tac for_loop >>
   impl_tac
   >- (REWRITE_TAC [for_code_def] >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
       TRY (simp[block_is_terminated_def, venomInstTheory.mk_inst_def,
@@ -256,12 +247,10 @@ Proof
   drule exit_result_not_error >> strip_tac >> metis_tac[]
 QED
 
-(* The same with the body's judgment at every source state.  Rather than
-   an arbitrary P, use the immutable prefix bound as the source invariant;
-   the body must preserve it.  For runtime code this obligation is trivial. *)
-Theorem compile_for_range_frag_simple:
-  !ctx func cx lctx RetQ cenv ty id fty a1 n1 a2 n2 bound stmts es res es'
-   tyv cap.
+(* The literal-ends case. *)
+Theorem compile_for_range_lit_frag:
+  !P ctx func cx lctx RetQ cenv ty id fty a1 n1 a2 n2 bound stmts es res es'
+   tyv.
     eval_stmt cx
       (For id fty (Range (Literal a1 (IntL n1)) (Literal a2 (IntL n2)))
          bound stmts) es = (res, es') /\
@@ -273,32 +262,84 @@ Theorem compile_for_range_frag_simple:
     (!l. FLOOKUP cenv.ce_vars id = SOME l ==> ?q z. l = PtrVar q z) /\
     (!c lc sa sb. compile_stmts c lc ty stmts sa = ((), sb) ==>
                   cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var) /\
-    (cenv.ce_is_ctor ==>
-       immutable_prefix_bound cenv cx.txn.target cenv.ce_module es cap) /\
-    (!ei r2 es2.
-       eval_stmts cx stmts ei = (r2, es2) /\
-       (cenv.ce_is_ctor ==>
-          immutable_prefix_bound cenv cx.txn.target cenv.ce_module ei cap) ==>
-       (cenv.ce_is_ctor ==>
-          immutable_prefix_bound cenv cx.txn.target cenv.ce_module es2 cap)) /\
-    (!st0 c st1 ex inc es1 r2 es2.
+    P es /\
+    (!st0 c st1 ex inc ei j r2 es2.
        declare_local cenv id fty st0 = (c, st1) /\
-       eval_stmts cx stmts es1 = (r2, es2) ==>
+       P ei /\ lookup_scopes id ei.scopes = NONE /\ j < Num (n2 - n1) /\
+       eval_stmts cx stmts
+         (ei with scopes :=
+            (FEMPTY |+ (id, <| assignable := F; type := tyv;
+                               value := IntV (n1 + &j); popped := [] |>)) :: ei.scopes) = (r2, es2) ==>
        stmt_frag ctx func cx (InLoop ex inc) RetQ c
-         (stmts_env c (InLoop ex inc) ty stmts) es1 r2 es2) ==>
-    stmt_framed_frag (alloca_prefix cap) ctx func cx lctx RetQ cenv
+         (stmts_env c (InLoop ex inc) ty stmts)
+         (ei with scopes :=
+            (FEMPTY |+ (id, <| assignable := F; type := tyv;
+                               value := IntV (n1 + &j); popped := [] |>)) :: ei.scopes) r2 es2) /\
+    (!ei j r2 es2 sc rest.
+       P ei /\ lookup_scopes id ei.scopes = NONE /\ j < Num (n2 - n1) /\
+       eval_stmts cx stmts
+         (ei with scopes :=
+            (FEMPTY |+ (id, <| assignable := F; type := tyv;
+                               value := IntV (n1 + &j); popped := [] |>)) :: ei.scopes) = (r2, es2) /\
+       (r2 = INL () \/ r2 = INR ContinueException) /\
+       es2.scopes = sc :: rest ==>
+       P (es2 with scopes := rest)) ==>
+    stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ty
          (For id fty (Range (Literal a1 (IntL n1)) (Literal a2 (IntL n2)))
             bound stmts)) es res es'
 Proof
   rpt strip_tac >>
-  MATCH_MP_TAC (BETA_RULE (Q.SPEC
-    `\ei. cenv.ce_is_ctor ==>
-       immutable_prefix_bound cenv cx.txn.target cenv.ce_module ei cap`
-    compile_for_range_frag)) >>
+  qspecl_then [`P`, `ctx`, `func`, `cx`, `lctx`, `RetQ`, `cenv`, `ty`, `id`,
+               `fty`, `Literal a1 (IntL n1)`, `n1`, `Literal a2 (IntL n2)`,
+               `n2`, `bound`, `stmts`, `es`, `res`, `es'`, `tyv`]
+    mp_tac compile_for_range_frag >>
+  impl_tac
+  >- (rpt conj_tac >> simp[eval_expr_int_lit, lower_value_int_lit] >>
+      first_assum ACCEPT_TAC) >>
+  simp[]
+QED
+
+(* The same with the body's judgment at every source state. *)
+Theorem compile_for_range_lit_frag_simple:
+  !ctx func cx lctx RetQ cenv ty id fty a1 n1 a2 n2 bound stmts es res es'
+   tyv.
+    eval_stmt cx
+      (For id fty (Range (Literal a1 (IntL n1)) (Literal a2 (IntL n2)))
+         bound stmts) es = (res, es') /\
+    evaluate_type (get_tenv cx) fty = SOME tyv /\ type_memory_size tyv = 32 /\
+    32 <= type_memory_bytes cenv fty /\
+    type_memory_bytes cenv fty < dimword (:256) /\
+    n1 <= n2 /\ Num (n2 - n1) <= bound /\ Num (n2 - n1) < dimword (:256) /\
+    cenv.ce_alloca_locals /\ lookup_scopes id es.scopes = NONE /\
+    (!l. FLOOKUP cenv.ce_vars id = SOME l ==> ?q z. l = PtrVar q z) /\
+    (!c lc sa sb. compile_stmts c lc ty stmts sa = ((), sb) ==>
+                  cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var) /\
+    (!st0 c st1 ex inc es1 r2 es2.
+       declare_local cenv id fty st0 = (c, st1) /\
+       eval_stmts cx stmts es1 = (r2, es2) ==>
+       stmt_frag ctx func cx (InLoop ex inc) RetQ c
+         (stmts_env c (InLoop ex inc) ty stmts) es1 r2 es2) ==>
+    stmt_frag ctx func cx lctx RetQ cenv
+      (stmt_env cenv lctx ty
+         (For id fty (Range (Literal a1 (IntL n1)) (Literal a2 (IntL n2)))
+            bound stmts)) es res es'
+Proof
+  rpt strip_tac >>
+  MATCH_MP_TAC (BETA_RULE (Q.SPEC `\e. T` compile_for_range_lit_frag)) >>
   qexists_tac `tyv` >> simp[] >> rpt strip_tac
   >- (qpat_x_assum `!c lc sa sb. _` drule >> simp[])
-  >- (qpat_x_assum `!c lc sa sb. _` drule >> simp[])
-  >- (qpat_x_assum `!st0 c st1 ex inc es1 r2 es2. _` irule >> metis_tac[]) >>
-  qpat_x_assum `!ei r2 es2. _` drule >> simp[]
+  >- (qpat_x_assum `!c lc sa sb. _` drule >> simp[]) >>
+  qpat_x_assum `!st0 c st1 ex inc es1 r2 es2. _` irule >> metis_tac[]
 QED
+
+(* Integrity gate for the preserved public literal-range guarantees. *)
+val () = List.app (fn th =>
+  let val (ors, axs) = Tag.dest_tag (Thm.tag th)
+  in if null axs andalso null (Thm.hyp th) andalso
+        List.all (fn s => s = "DISK_THM") ors
+     then print "FOR_FORCE_AUDIT OK\n"
+     else raise Fail "range consumer inherited admission"
+  end) [compile_for_range_parts, compile_for_range_lit_parts,
+        compile_for_range_frag, compile_for_range_lit_frag,
+        compile_for_range_lit_frag_simple];

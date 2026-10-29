@@ -189,7 +189,7 @@ case "$mode" in
                   evalCompilerBytecodeBuiltinsEnvBlockTheory \
                   evalCompilerBytecodeBuiltinsAccountHashTheory \
                   evalCompilerBytecodeBuiltinsEcTheory; do
-      (cd "$repo_dir" && holbuild --maxheap "${HOL_PARITY_MAXHEAP:-12000}" \
+      (cd "$repo_dir" && holbuild --max-heap "${HOL_PARITY_MAXHEAP:-12000}" \
         build --tactic-timeout "${HOL_PARITY_TACTIC_TIMEOUT:-600}" "$target")
     done
     echo "all $source_count HOL evaluations match the pinned Python O1/no-assembly-opt oracle"

@@ -3323,126 +3323,56 @@ Proof
   intLib.ARITH_TAC
 QED
 
-Theorem return_INL_value[local]:
-  return x st = (INL y, st') ==> y = x
+Theorem is_sized_type_cases[local]:
+  is_sized_type t ⇔
+    (∃elem n. t = ArrayT elem (Dynamic n)) ∨ (∃n. t = BaseT (StringT n)) ∨
+    (∃n. t = BaseT (BytesT (Dynamic n)))
 Proof
-  simp[vyperStateTheory.return_def, pairTheory.PAIR_EQ, sumTheory.INL_11]
+  simp[oneline is_sized_type_def] >> rpt CASE_TAC >> simp[]
 QED
 
+(* Len consumes a forced Value, so only the sized value cases are needed. *)
 Theorem Len_result_fits_uint256:
   well_typed_builtin_app ty Len [arg_ty] ∧
   evaluate_type tenv arg_ty = SOME arg_runtime_tv ∧
   well_formed_type_value arg_runtime_tv ∧
-  toplevel_value_typed arg_tv arg_runtime_tv ∧
-  toplevel_array_length cx arg_tv st = (INL n, st') ==>
+  value_result_typed arg_tv arg_runtime_tv ∧
+  result_array_length cx arg_tv st = (INL n, st') ==>
   n < dimword(:256)
 Proof
-  strip_tac >> gvs[well_typed_builtin_app_def] >>
-  Cases_on `arg_ty` >> gvs[is_sized_type_def, evaluate_type_def]
-  >- (
-    rename1 `BaseT bt` >> Cases_on `bt` >>
-    gvs[is_sized_type_def, evaluate_type_def, AllCaseEqs(), LET_THM]
-    >- (
-      rename1 `StringT max` >>
-      Cases_on `arg_tv` >>
-      gvs[toplevel_value_typed_def, oneline toplevel_array_length_def,
-          raise_def, value_has_type_def, AllCaseEqs(), bind_def,
-          get_storage_backend_def, get_accounts_def, value_CASE_rator,
-          get_transient_storage_def] >>
-      drule return_INL_value >> strip_tac >> gvs[] >>
-      irule LESS_EQ_LESS_TRANS >>
-      qexists `max` >> simp[]) >>
-    gvs[evaluate_type_def, compatible_bound_def, AllCaseEqs(), LET_THM] >>
-    Cases_on `arg_tv` >>
-    gvs[toplevel_value_typed_def, oneline toplevel_array_length_def,
-        return_def, raise_def, value_has_type_def, AllCaseEqs(), bind_def,
-        get_storage_backend_def, get_accounts_def, get_transient_storage_def,
-        value_CASE_rator] >>
-    TRY (drule return_INL_value >> strip_tac >> gvs[] >> decide_tac >> NO_TAC) >>
-    gvs[well_formed_type_value_def]
-  ) >>
-  gvs[AllCaseEqs()] >>
+  strip_tac >>
+  gvs[well_typed_builtin_app_def, is_sized_type_cases] >>
+  gvs[evaluate_type_def, AllCaseEqs(), LET_THM] >>
   Cases_on `arg_tv` >>
-  gvs[toplevel_value_typed_def, oneline toplevel_array_length_def, return_def,
-      raise_def, value_has_type_def, AllCaseEqs(), bind_def,
-      ignore_bind_def, value_CASE_rator, array_value_CASE_rator,
-      get_storage_backend_def, get_accounts_def, get_transient_storage_def,
-      well_formed_type_value_def, type_slot_size_def] >>
-  qmatch_asmsub_rename_tac`ArrayTV _ bd` >> Cases_on`bd` >>
-  gvs[value_has_type_def, vyperStateTheory.return_def, type_slot_size_def]
-  >- (
-    qmatch_asmsub_rename_tac`sparse_has_type tv len sparse` >>
-    qmatch_assum_abbrev_tac`len * slot < bound` >>
-    `LENGTH sparse <= len` by metis_tac[sparse_has_type_length] >>
-    `len <= len * slot` by gvs[] >>
-    irule LESS_EQ_LESS_TRANS >>
-    qexists `len` >> simp[] >>
-    irule LESS_EQ_LESS_TRANS >>
-    qexists `len * slot` >> simp[Abbr`bound`]
-  ) >>
-  gvs[vyperStateTheory.bind_def, AllCaseEqs(), vyperStateTheory.return_def] >>
-  TRY (drule return_INL_value >> strip_tac >> gvs[] >>
-       qmatch_assum_abbrev_tac`len * slot < bound` >>
-       `len <= len * slot` by gvs[] >>
-       irule LESS_EQ_LESS_TRANS >>
-       qexists `len * slot` >> simp[Abbr`bound`] >> NO_TAC) >>
-  TRY (qmatch_assum_abbrev_tac`n * slot < bound` >>
-       `n <= n * slot` by gvs[] >>
-       irule LESS_EQ_LESS_TRANS >>
-       qexists `n * slot` >> simp[Abbr`bound`] >> NO_TAC) >>
-  TRY (qmatch_asmsub_abbrev_tac`w2n w` >>
-       Q.ISPEC_THEN`w`mp_tac w2n_lt >> simp[] >> NO_TAC) >>
-  qmatch_goalsub_abbrev_tac`w2n w` >>
-  Q.ISPEC_THEN`w`mp_tac w2n_lt >>
-  simp[]
+  gvs[value_result_typed_def, oneline result_array_length_def, read_result_def,
+      vyperStateTheory.return_def, vyperStateTheory.bind_def, raise_def,
+      value_has_type_def, AllCaseEqs(), value_CASE_rator,
+      array_value_CASE_rator, well_formed_type_value_def]
 QED
 
-Theorem Len_toplevel_array_length_no_type_error:
+Theorem Len_result_array_length_no_type_error:
   well_typed_builtin_app ty Len [arg_ty] ∧
   evaluate_type tenv arg_ty = SOME arg_runtime_tv ∧
   well_formed_type_value arg_runtime_tv ∧
-  toplevel_value_typed arg_tv arg_runtime_tv ∧
-  toplevel_array_length cx arg_tv st = (INR (Error (TypeError err)), st') ==>
+  value_result_typed arg_tv arg_runtime_tv ∧
+  result_array_length cx arg_tv st = (INR (Error (TypeError err)), st') ==>
   F
 Proof
-  strip_tac >> gvs[well_typed_builtin_app_def] >>
-  Cases_on `arg_ty` >> gvs[is_sized_type_def, evaluate_type_def]
-  >- (
-    rename1 `BaseT bt` >> Cases_on `bt` >>
-    gvs[is_sized_type_def, evaluate_type_def, AllCaseEqs(), LET_THM]
-    >- (
-      Cases_on `arg_tv` >>
-      gvs[toplevel_value_typed_def, oneline toplevel_array_length_def,
-          vyperStateTheory.return_def, raise_def, value_has_type_def,
-          AllCaseEqs(), bind_def, get_storage_backend_def, get_accounts_def,
-          value_CASE_rator, get_transient_storage_def]) >>
-    gvs[evaluate_type_def, compatible_bound_def, AllCaseEqs(), LET_THM] >>
-    Cases_on `arg_tv` >>
-    gvs[toplevel_value_typed_def, oneline toplevel_array_length_def,
-        vyperStateTheory.return_def, raise_def, value_has_type_def,
-        AllCaseEqs(), bind_def, get_storage_backend_def, get_accounts_def,
-        get_transient_storage_def, value_CASE_rator, well_formed_type_value_def]
-  ) >>
-  gvs[AllCaseEqs()] >>
+  strip_tac >>
+  gvs[well_typed_builtin_app_def, is_sized_type_cases] >>
+  gvs[evaluate_type_def, AllCaseEqs(), LET_THM] >>
   Cases_on `arg_tv` >>
-  gvs[toplevel_value_typed_def, oneline toplevel_array_length_def,
-      vyperStateTheory.return_def, raise_def, value_has_type_def, AllCaseEqs(),
-      bind_def, ignore_bind_def, value_CASE_rator, array_value_CASE_rator,
-      get_storage_backend_def, get_accounts_def, get_transient_storage_def,
-      well_formed_type_value_def, type_slot_size_def] >>
-  Cases_on `b` >>
-  gvs[vyperStateTheory.return_def, bind_def, bind_apply, get_storage_backend_def,
-      vyperStateTheory.get_transient_storage_def, vyperStateTheory.get_accounts_def] >>
-  Cases_on `b'` >>
-  gvs[vyperStateTheory.return_def, bind_def, bind_apply, get_storage_backend_def,
-      vyperStateTheory.get_transient_storage_def, vyperStateTheory.get_accounts_def]
+  gvs[value_result_typed_def, oneline result_array_length_def, read_result_def,
+      vyperStateTheory.return_def, vyperStateTheory.bind_def, raise_def,
+      value_has_type_def, AllCaseEqs(), value_CASE_rator,
+      array_value_CASE_rator, well_formed_type_value_def]
 QED
 
 Theorem Len_builtin_sound:
   well_typed_builtin_app ty Len [arg_ty] ∧
   evaluate_type tenv ty = SOME tv ∧ evaluate_type tenv arg_ty = SOME arg_runtime_tv ∧
-  toplevel_value_typed arg_tv arg_runtime_tv ∧
-  toplevel_array_length cx arg_tv st = (INL n, st') ==>
+  value_result_typed arg_tv arg_runtime_tv ∧
+  result_array_length cx arg_tv st = (INL n, st') ==>
   value_has_type tv (IntV (&n))
 Proof
   strip_tac >>
@@ -3486,7 +3416,7 @@ Theorem evaluate_extract32_supported_no_type_error[local]:
   is_int_type idx_ty ∧
   evaluate_type (get_tenv cx) idx_ty = SOME idx_tv ∧
   value_has_type idx_tv idx_v ==>
-  evaluate_type_builtin cx Extract32 (BaseT bt) [bytes_v; idx_v] <> INR (TypeError msg)
+  evaluate_type_builtin cx Extract32 (BaseT bt) tys [bytes_v; idx_v] <> INR (TypeError msg)
 Proof
   rpt strip_tac >>
   drule_all typed_bytes_value_is_BytesV >> strip_tac >> gvs[] >>
@@ -3499,7 +3429,7 @@ QED
 Theorem evaluate_abi_decode_no_type_error[local]:
   evaluate_type (get_tenv cx) (BaseT (BytesT bd)) = SOME bytes_tv ∧
   value_has_type bytes_tv bytes_v ==>
-  evaluate_type_builtin cx (AbiDecode b) result_ty [bytes_v] <> INR (TypeError msg)
+  evaluate_type_builtin cx (AbiDecode b) result_ty tys [bytes_v] <> INR (TypeError msg)
 Proof
   rpt strip_tac >>
   drule_all typed_bytes_value_is_BytesV >> strip_tac >> gvs[] >>
@@ -3519,10 +3449,10 @@ Theorem evaluate_convert_no_type_error[local]:
   evaluate_type (get_tenv cx) from_ty = SOME from_tv /\
   evaluate_type (get_tenv cx) to_ty = SOME to_tv /\
   value_has_type from_tv v ==>
-  !msg. evaluate_convert (get_tenv cx) v to_ty <> INR (TypeError msg)
+  !msg. evaluate_convert_from (get_tenv cx) from_ty v to_ty <> INR (TypeError msg)
 Proof
   rpt strip_tac >>
-  `evaluate_type_builtin cx Convert to_ty [v] <> INR (TypeError msg)`
+  `evaluate_type_builtin cx Convert to_ty [from_ty] [v] <> INR (TypeError msg)`
     by (drule_all valid_conversion_no_type_error >> simp[]) >>
   fs[Once evaluate_type_builtin_def]
 QED
@@ -3533,7 +3463,7 @@ Theorem well_typed_type_builtin_no_type_error:
   MAP (evaluate_type (get_tenv cx)) ts = MAP SOME tvs ∧
   evaluate_type (get_tenv cx) result_ty = SOME result_tv ∧
   LIST_REL value_has_type tvs vs ∧ context_well_typed cx ==>
-  !msg. evaluate_type_builtin cx tb target_ty vs <> INR (TypeError msg)
+  !msg. evaluate_type_builtin cx tb target_ty ts vs <> INR (TypeError msg)
 Proof
   Cases_on `tb` >>
   rw[type_builtin_result_ok_def, well_typed_type_builtin_args_def,
@@ -3577,11 +3507,11 @@ Theorem well_typed_convert_success[local]:
   evaluate_type (get_tenv cx) from_ty = SOME from_tv /\
   evaluate_type (get_tenv cx) to_ty = SOME to_tv /\
   value_has_type from_tv v_in /\
-  evaluate_convert (get_tenv cx) v_in to_ty = INL v_out ==>
+  evaluate_convert_from (get_tenv cx) from_ty v_in to_ty = INL v_out ==>
   value_has_type to_tv v_out
 Proof
   rpt strip_tac >>
-  `evaluate_type_builtin cx Convert to_ty [v_in] = INL v_out` by
+  `evaluate_type_builtin cx Convert to_ty [from_ty] [v_in] = INL v_out` by
     (simp[Once evaluate_type_builtin_def]) >>
   drule_all valid_conversion_success_type >> simp[]
 QED
@@ -3665,7 +3595,7 @@ Theorem well_typed_type_builtin_success_type:
   MAP (evaluate_type (get_tenv cx)) ts = MAP SOME tvs ∧
   evaluate_type (get_tenv cx) result_ty = SOME result_tv ∧
   LIST_REL value_has_type tvs vs ∧ context_well_typed cx ∧
-  evaluate_type_builtin cx tb target_ty vs = INL v ==>
+  evaluate_type_builtin cx tb target_ty ts vs = INL v ==>
   value_has_type result_tv v
 Proof
   Cases_on `tb` >>

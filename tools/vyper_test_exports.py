@@ -71,7 +71,7 @@ class Exports:
         return json.loads((self.repo / "tests/semantics-profile.json").read_text())
 
     def inputs(self) -> dict[str, str]:
-        return {
+        inputs = {
             name: digest(self.repo / name)
             for name in (
                 "VYPER_PIN", "tests/semantics-profile.json",
@@ -80,6 +80,11 @@ class Exports:
                 ".github/actions/setup-vyper-test-exports/action.yml",
             )
         }
+        inputs.update({
+            path.relative_to(self.repo).as_posix(): digest(path)
+            for path in sorted((self.repo / "tests/vyper-regression").rglob("*.py"))
+        })
+        return inputs
 
     def cache_key(self) -> str:
         return hashlib.sha256(json.dumps(self.inputs(), sort_keys=True).encode()).hexdigest()
@@ -145,11 +150,18 @@ class Exports:
         fixture_root = args.vyper_repo / "tests/hol_fixtures"
         if args.fixture and fixture_root.exists():
             raise ValueError(f"temporary fixture directory already exists: {fixture_root}")
+        regression_sources = self.repo / "tests/vyper-regression"
+        regression_root = args.vyper_repo / "tests/functional/codegen/vyper_hol_regression"
+        include_regressions = not args.test and not args.fixture and regression_sources.is_dir()
+        if include_regressions and regression_root.exists():
+            raise ValueError(f"temporary regression directory already exists: {regression_root}")
         fixture_sources = {}
         selections = list(args.test) if args.test or args.fixture else ["tests/functional"]
         if any(not test.startswith("tests/") for test in selections):
             raise ValueError("test selections must be paths below tests/")
         try:
+            if include_regressions:
+                shutil.copytree(regression_sources, regression_root)
             for source in args.fixture:
                 source = source.resolve()
                 relative = source.relative_to(self.repo).as_posix()
@@ -171,6 +183,8 @@ class Exports:
         finally:
             if fixture_sources:
                 shutil.rmtree(fixture_root)
+            if include_regressions and regression_root.exists():
+                shutil.rmtree(regression_root)
         files = sorted(output.rglob("*.json"))
         if not files:
             raise ValueError(f"no exports produced in {output}")

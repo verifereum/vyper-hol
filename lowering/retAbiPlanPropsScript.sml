@@ -14,6 +14,8 @@
  * TOP-LEVEL:
  *   update_cenv_ret_abi_plan -- the plan and size of a return type
  *   build_compile_env_ret_abi_plan -- the same at package_external_fn's env
+ *   supported_return_type_assignable -- a supported, well-formed return type
+ *     other than NoneT is assignable, as the two above assume
  * Helpers:
  *   vyper_to_abi_type_submap -- evaluation and ABI type in a larger env
  *   sfields_tenv_consistent_domsub -- struct map and env drop a struct
@@ -23,12 +25,15 @@
  *     -- plans for static types, mapped and replicated element lists
  *   type_to_abi_enc_info_plan -- type_to_abi_enc_info builds a plan
  *   external_return_needs_wrap_eq -- the compiler's wrap is the ABI's
+ *   supported_struct_fields_type_env, supported_word_type_assignable,
+ *   supported_scalar_type_assignable -- the cases of
+ *     supported_return_type_assignable
  *)
 
 Theory retAbiPlanProps
 Ancestors
   compileVyper compileEnv exprLowering abiEncoderProps structFieldsProps
-  typedCopyProducer
+  typedCopyProducer supportedTypes
   vyperTypeSystem vyperContext vyperValue vyperABI contractABI
   valueEncoding finite_map list rich_list option pair combin
 
@@ -532,4 +537,73 @@ Theorem build_compile_env_ret_abi_plan:
 Proof
   rpt gen_tac >> strip_tac >> irule update_cenv_ret_abi_plan >>
   simp[build_compile_env_ce_struct_fields]
+QED
+
+(* ===== Supported return types are assignable ===== *)
+
+(* supported_struct_fields finds the struct type_env has: both take the
+   first type declaration of the name. *)
+Theorem supported_struct_fields_type_env:
+  !tops id fields.
+    supported_struct_fields tops id = SOME fields ==>
+    FLOOKUP (type_env tops) id = SOME (StructArgs fields)
+Proof
+  simp[type_env_def] >> Induct >- simp[supported_struct_fields_def] >>
+  rpt gen_tac >> PairCases_on `id` >>
+  simp[supported_struct_fields_def] >> rw[] >>
+  Cases_on `h` >> gvs[type_env_for_module_def, FLOOKUP_UPDATE] >>
+  rw[] >> gvs[]
+QED
+
+Theorem supported_word_type_assignable:
+  !tenv ty. supported_word_type ty ==> assignable_type tenv ty
+Proof
+  Cases_on `ty` >> simp[supported_word_type_def] >>
+  rename1 `BaseT bt` >> Cases_on `bt` >>
+  simp[supported_word_type_def, assignable_type_def, well_formed_type_def,
+       evaluate_type_def, supported_int_width_def] >>
+  rename1 `BytesT bd` >> Cases_on `bd` >>
+  simp[supported_word_type_def, evaluate_type_def]
+QED
+
+Theorem supported_scalar_type_assignable:
+  !tenv ty.
+    supported_scalar_type ty /\ well_formed_type tenv ty ==>
+    assignable_type tenv ty
+Proof
+  rw[supported_scalar_type_def] >- simp[supported_word_type_assignable] >>
+  Cases_on `ty` >> gvs[supported_string_type_def, assignable_type_def]
+QED
+
+(* A supported return type other than NoneT is assignable where it is well
+   formed, as the source checker requires of a function's return type
+   (check_toplevel_decl).  supported_return_type alone does not give it: it
+   bounds neither a bytestring's nor a dynamic array's length, so it admits
+   Bytes[2 ** 256], which does not evaluate. *)
+Theorem supported_return_type_assignable:
+  !tops ret.
+    supported_return_type tops ret /\ ret <> NoneT /\
+    well_formed_type (type_env tops) ret ==>
+    assignable_type (type_env tops) ret
+Proof
+  rw[supported_return_type_def, supported_value_type_def]
+  >- (irule supported_scalar_type_assignable >> simp[]) >>
+  Cases_on `ret` >> gvs[]
+  >~ [`TupleT ts`]
+  >- (simp[assignable_type_def] >>
+      gvs[well_formed_type_def, evaluate_type_def, AllCaseEqs(),
+          evaluate_types_OPT_MMAP] >>
+      `EVERY IS_SOME (MAP (evaluate_type (type_env tops)) ts)` by
+        (simp[GSYM IS_SOME_OPT_MMAP] >>
+         Cases_on `OPT_MMAP (evaluate_type (type_env tops)) ts` >> gvs[]) >>
+      gvs[EVERY_MEM, MEM_MAP, PULL_EXISTS] >> rpt strip_tac >>
+      irule supported_scalar_type_assignable >>
+      gvs[well_formed_type_def])
+  >~ [`ArrayT elem bd`]
+  >- (Cases_on `bd` >> gvs[assignable_type_def, supported_word_type_assignable])
+  >~ [`StructT id`] >>
+  Cases_on `supported_struct_fields tops id` >> gvs[] >>
+  drule supported_struct_fields_type_env >>
+  simp[assignable_type_def] >> strip_tac >>
+  gvs[EVERY_MEM, supported_word_type_assignable]
 QED

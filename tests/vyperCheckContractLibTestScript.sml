@@ -11,37 +11,58 @@ val empty_modules =
   ``([(NONE, [])] : (num option # toplevel list) list)``
 val zero_address = ``(0w : address)``
 
-(* AddressV is represented as twenty bytes. Wider destinations need different
-   padding from ordinary byte strings and deliberately remain unsupported. *)
+(* AddressV is twenty bytes, like a bytes20 or Bytes[20] value, but Vyper
+   converts an address to bytesM (20 <= M <= 32) as an integer, left-padding
+   it, while byte strings are right-padded. *)
 Theorem address_bytes_conversion_boundary:
-  valid_conversion (BaseT AddressT) (BaseT (BytesT bd)) <=> bd = Fixed 20
+  valid_conversion (BaseT AddressT) (BaseT (BytesT bd)) <=>
+  ?m. bd = Fixed m /\ 20 <= m /\ m <= 32
 Proof
   Cases_on `bd` >> simp[valid_conversion_def]
 QED
 
-Theorem address_bytes20_preserves_value:
-  value_has_type (BaseTV AddressT) v ==>
-  evaluate_convert tenv v (BaseT (BytesT (Fixed 20))) = INL v
+Theorem address_bytes_left_padded:
+  value_has_type (BaseTV AddressT) (BytesV bs) /\ 20 <= m ==>
+  evaluate_type_builtin cx Convert (BaseT (BytesT (Fixed m)))
+    [BaseT AddressT] [BytesV bs] =
+  INL (BytesV (REPLICATE (m - 20) 0w ++ bs))
 Proof
-  Cases_on `v` >>
-  simp[value_has_type_def, evaluate_convert_def, listTheory.PAD_RIGHT] >>
-  strip_tac >> gvs[]
+  simp[value_has_type_def, evaluate_type_builtin_def,
+       evaluate_convert_from_def, listTheory.PAD_LEFT,
+       rich_listTheory.REPLICATE_GENLIST]
 QED
 
-Theorem address_bytes20_values_eval:
-  evaluate_convert FEMPTY (AddressV 0w) (BaseT (BytesT (Fixed 20))) =
-    INL (BytesV (REPLICATE 20 0w)) /\
-  evaluate_convert FEMPTY (AddressV 1w) (BaseT (BytesT (Fixed 20))) =
+Theorem address_bytes_values_eval:
+  evaluate_type_builtin empty_evaluation_context Convert
+    (BaseT (BytesT (Fixed 20))) [BaseT AddressT] [AddressV 1w] =
     INL (BytesV (REPLICATE 19 0w ++ [1w])) /\
-  evaluate_convert FEMPTY (AddressV 1461501637330902918203684832716283019655932542975w)
-    (BaseT (BytesT (Fixed 20))) = INL (BytesV (REPLICATE 20 255w))
+  evaluate_type_builtin empty_evaluation_context Convert
+    (BaseT (BytesT (Fixed 21))) [BaseT AddressT] [AddressV 1w] =
+    INL (BytesV (REPLICATE 20 0w ++ [1w])) /\
+  evaluate_type_builtin empty_evaluation_context Convert
+    (BaseT (BytesT (Fixed 32))) [BaseT AddressT] [AddressV 0w] =
+    INL (BytesV (REPLICATE 32 0w)) /\
+  evaluate_type_builtin empty_evaluation_context Convert
+    (BaseT (BytesT (Fixed 32))) [BaseT AddressT] [AddressV 1w] =
+    INL (BytesV (REPLICATE 31 0w ++ [1w])) /\
+  evaluate_type_builtin empty_evaluation_context Convert
+    (BaseT (BytesT (Fixed 32))) [BaseT AddressT]
+    [AddressV 1461501637330902918203684832716283019655932542975w] =
+    INL (BytesV (REPLICATE 12 0w ++ REPLICATE 20 255w)) /\
+  (* Byte-string sources of the same twenty bytes are right-padded. *)
+  evaluate_type_builtin empty_evaluation_context Convert
+    (BaseT (BytesT (Fixed 32))) [BaseT (BytesT (Fixed 20))] [AddressV 1w] =
+    INL (BytesV (REPLICATE 19 0w ++ [1w] ++ REPLICATE 12 0w)) /\
+  evaluate_type_builtin empty_evaluation_context Convert
+    (BaseT (BytesT (Fixed 32))) [BaseT (BytesT (Dynamic 20))] [AddressV 1w] =
+    INL (BytesV (REPLICATE 19 0w ++ [1w] ++ REPLICATE 12 0w))
 Proof
   EVAL_TAC
 QED
 
 Theorem address_bytes_conversion_widths_eval:
   EVERY (λn. valid_conversion (BaseT AddressT) (BaseT (BytesT (Fixed n))) =
-             (n = 20)) (GENLIST SUC 32) /\
+             (20 <= n)) (GENLIST SUC 32) /\
   ¬valid_conversion (BaseT AddressT) (BaseT (BytesT (Dynamic 20))) /\
   ¬valid_conversion (BaseT AddressT) (BaseT (BytesT (Dynamic 32)))
 Proof
@@ -124,6 +145,7 @@ Definition abi_encode_wrapping_cases_ok_def:
   abi_encode_wrapping_cases_ok = EVERY (λ(ensure, method_id, n).
     case evaluate_type_builtin empty_evaluation_context (AbiEncode ensure method_id)
       (TupleT [TupleT [BaseT (StringT 16); BaseT (BytesT (Dynamic 16))]])
+      [TupleT [BaseT (StringT 16); BaseT (BytesT (Dynamic 16))]]
       [ArrayV (TupleV [StringV "abcdefghijklmnop"; BytesV (REPLICATE 16 1w)])] of
       INL (BytesV bs) => LENGTH bs = n
     | _ => F)
@@ -200,10 +222,10 @@ in
 end
 
 val () = List.app (fn in_deploy =>
-  (assert_some (check_address_bytes ``Fixed 20`` in_deploy);
+  (List.app (fn bd => assert_some (check_address_bytes bd in_deploy))
+     [``Fixed 20``, ``Fixed 21``, ``Fixed 32``];
    List.app (fn bd => assert_none (check_address_bytes bd in_deploy))
-     [``Fixed 19``, ``Fixed 21``, ``Fixed 32``,
-      ``Dynamic 20``, ``Dynamic 32``])) [false, true]
+     [``Fixed 19``, ``Dynamic 20``, ``Dynamic 32``])) [false, true]
 
 (* Basic API and ML-Boolean construction. *)
 val empty_check = vyperCheckContractLib.check_contract
@@ -270,20 +292,23 @@ val conversion_check = vyperCheckContractLib.check_contract
    address = zero_address, modules = conversion_modules}
 val () = assert_some conversion_check
 
-(* len() requires sized-type classification to compute. *)
-val sized_modules =
-  ``([(NONE,
-       [FunctionDecl External Pure F F "array_len"
-          [("xs", ArrayT (BaseT AddressT) (Dynamic 4))] []
-          (BaseT (UintT 256))
-          [Return (SOME
-             (Builtin (BaseT (UintT 256)) Len
-               [Name (ArrayT (BaseT AddressT) (Dynamic 4)) "xs"]))]])]
-      : (num option # toplevel list) list)``
-val sized_check = vyperCheckContractLib.check_contract
-  {in_deploy = false, layouts = empty_layouts,
-   address = zero_address, modules = sized_modules}
-val () = assert_some sized_check
+(* len() requires sized-type classification to compute. Like Vyper, it takes
+   String, Bytes and DynArray, but not fixed-size arrays or bytesM. *)
+fun len_check ty = vyperCheckContractLib.check_contract_conv
+  (vyperCheckContractLib.mk_check_contract
+  {in_deploy = false, layouts = empty_layouts, address = zero_address,
+   modules =
+     ``([(NONE,
+          [FunctionDecl External Pure F F "len_of" [("xs", ^ty)] []
+             (BaseT (UintT 256))
+             [Return (SOME
+                (Builtin (BaseT (UintT 256)) Len [Name ^ty "xs"]))]])]
+         : (num option # toplevel list) list)``})
+val () = app (assert_some o len_check)
+  [``ArrayT (BaseT AddressT) (Dynamic 4)``, ``BaseT (StringT 10)``,
+   ``BaseT (BytesT (Dynamic 10))``]
+val () = app (assert_none o len_check)
+  [``ArrayT (BaseT AddressT) (Fixed 4)``, ``BaseT (BytesT (Fixed 32))``]
 
 (* The conversion itself computes rejection to NONE. The success-only API must
    fail closed on that result. *)
@@ -722,6 +747,62 @@ val () = List.app (assert_some o check_constants)
    [tdecl b32 "K" keccak_a,
     tdecl ``BaseT BoolT`` "E"
       ``Builtin (BaseT BoolT) (Bop Eq) [^(tname b32 "K"); ^(tname b32 "K")]``]]
+
+(* The sealed evaluator must resolve and type-check custom errors, not just
+   evaluate contracts that never mention them. Keywords must follow
+   declaration order, as in Vyper; the argument types deliberately differ. *)
+val custom_error_decl =
+  ``ErrorDecl "Problem" [("a", ^u256); ("b", BaseT BoolT)]``
+val custom_error_flag = ``Literal (BaseT BoolT) (BoolL T)``
+val custom_error_positional =
+  ``CustomError (NONE, "Problem") [^(const_lit 1); ^custom_error_flag] []``
+val custom_error_keywords =
+  ``CustomError (NONE, "Problem") []
+      [("a", ^(const_lit 1)); ("b", ^custom_error_flag)]``
+fun check_custom_errors decls body =
+  vyperCheckContractLib.check_contract_conv
+    ``check_contract F ^empty_layouts ^zero_address
+        [(NONE, FunctionDecl External Pure F F "f" [] [] NoneT ^body ::
+           ^(listSyntax.mk_list (decls, ``:toplevel``)))]``
+
+val () = assert_some (check_custom_errors [custom_error_decl]
+  ``[Raise (RaiseCustomError ^custom_error_positional)]``)
+val () = assert_some (check_custom_errors [custom_error_decl]
+  ``[Assert ^custom_error_flag (AssertCustomError ^custom_error_keywords)]``)
+val () = assert_none (check_custom_errors []
+  ``[Raise (RaiseCustomError ^custom_error_positional)]``)
+val () = assert_none (check_custom_errors [custom_error_decl, custom_error_decl]
+  ``[Raise (RaiseCustomError ^custom_error_positional)]``)
+val () = assert_none (check_custom_errors [custom_error_decl]
+  ``[Raise (RaiseCustomError
+      (CustomError (NONE, "Problem") [^custom_error_flag; ^(const_lit 1)] []))]``)
+val () = assert_none (check_custom_errors [custom_error_decl]
+  ``[Assert ^custom_error_flag (AssertCustomError
+      (CustomError (NONE, "Problem") []
+        [("a", ^(const_lit 1)); ("a", ^(const_lit 2))]))]``)
+val () = assert_none (check_custom_errors [custom_error_decl]
+  ``[Assert ^custom_error_flag (AssertCustomError
+      (CustomError (NONE, "Problem") []
+        [("b", ^custom_error_flag); ("a", ^(const_lit 1))]))]``)
+val () = assert_none (check_custom_errors [custom_error_decl]
+  ``[Assert ^custom_error_flag (AssertCustomError
+      (CustomError (NONE, "Problem") [] [("a", ^(const_lit 1))]))]``)
+val () = assert_none (check_custom_errors [custom_error_decl]
+  ``[Assert ^custom_error_flag (AssertCustomError
+      (CustomError (NONE, "Problem") []
+        [("a", ^(const_lit 1)); ("c", ^custom_error_flag)]))]``)
+
+(* An error declared in an imported module resolves through its source id. *)
+fun check_imported_error decl_src =
+  vyperCheckContractLib.check_contract_conv
+    ``check_contract F ^empty_layouts ^zero_address
+        [(NONE, [FunctionDecl External Pure F F "f" [] [] NoneT
+                   [Raise (RaiseCustomError
+                     (CustomError (SOME 1, "Problem")
+                       [^(const_lit 1); ^custom_error_flag] []))]]);
+         (^decl_src, [^custom_error_decl])]``
+val () = assert_some (check_imported_error ``SOME 1 : num option``)
+val () = assert_none (check_imported_error ``SOME 2 : num option``)
 
 (* Implicit bound widening: a String, Bytes or DynArray value with a smaller
    bound is accepted where Vyper accepts it, as the frontend translates it. *)
