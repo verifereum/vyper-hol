@@ -4922,7 +4922,7 @@ Theorem gen_inst_bump_ok_sim:
    liveness dfg cfg fn inst next_liveness is_halting
    next_is_term bb_label base ps vs as ops ps'.
     inst.inst_opcode = BUMP /\
-    inst.inst_opcode <> INVOKE /\
+    inst.inst_opcode <> INVOKE /\ 
     generated_plan_state_wf base ps /\ codegen_ready_fn fn /\
     MEM inst (fn_insts fn) /\ inst_wf inst /\
     LENGTH (compute_operands inst) <= 16 /\

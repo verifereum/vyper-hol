@@ -18,8 +18,9 @@ val rows =
   map (fn n => (n,n ^ "/main.json")) ["scoped_locals","imported_flag","imported_struct",
     "imported_deploy","multimodule_storage","defaults_control","deployment","nonreentrant",
     "transient_storage","abi_encode","imported_interface","interface_struct_return"] @
-  [("duplicate_interface","duplicate_interface/main/c.json"),("daddy","third_party/flex/daddy/daddy.json")];
-val () = if length rows = 26 then () else raise Fail "ordinary source inventory drift";
+  [("duplicate_interface","duplicate_interface/main/c.json"),("daddy","third_party/flex/daddy/daddy.json"),
+   ("address_bytes32","address_bytes32.json")];
+val () = if length rows = 27 then () else raise Fail "ordinary source inventory drift";
 fun audit th = let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
   if null (hyp th) andalso null axioms andalso List.all (fn s => s = "DISK_THM") oracles
   then () else raise Fail "non-kernel source ordinary certificate" end;
@@ -66,7 +67,24 @@ fun functions modules = let
    functions unchanged. Decimal/integer minmax and arithmetic observations are
    independently pinned too (see vyperDecimalFrontendTest); legacy expression
    bodies are not a normalized-AST oracle for these results. *)
-fun expected_functions name modules = if name = "in_static_array" then let
+(* The new conversion row pins all three complete runtime parents explicitly.
+   These are ordinary inherited conversions, not an expansion of the separate
+   full-Source address/hex conversion slice. *)
+fun expected_functions name modules = if name = "address_bytes32" then
+  [``(NONE:num option,[
+    FunctionDecl External Pure F F "to_bytes32" [("a",BaseT AddressT)] []
+      (BaseT (BytesT (Fixed 32)))
+      [Return (SOME (TypeBuiltin (BaseT (BytesT (Fixed 32))) Convert
+        (BaseT (BytesT (Fixed 32))) [Name (BaseT AddressT) "a"]))];
+    FunctionDecl External Pure F F "to_bytes21" [("a",BaseT AddressT)] []
+      (BaseT (BytesT (Fixed 21)))
+      [Return (SOME (TypeBuiltin (BaseT (BytesT (Fixed 21))) Convert
+        (BaseT (BytesT (Fixed 21))) [Name (BaseT AddressT) "a"]))];
+    FunctionDecl External Pure F F "bytes20_to_bytes32"
+      [("b",BaseT (BytesT (Fixed 20)))] [] (BaseT (BytesT (Fixed 32)))
+      [Return (SOME (TypeBuiltin (BaseT (BytesT (Fixed 32))) Convert
+        (BaseT (BytesT (Fixed 32))) [Name (BaseT (BytesT (Fixed 20))) "b"]))]])``]
+  else if name = "in_static_array" then let
   val values = [("zero_in_literal",``T``),("zero_not_in_literal",``F``),
     ("one_in_literal",``F``)]
   fun entry e = let val (src,tops) = pairSyntax.dest_pair e

@@ -33,11 +33,12 @@ CASES = {
         (('utils','interfaces','IPing'), 'duplicate_interface/utils/interfaces/IPing.vyi'),
         (('utils','pinger'), 'duplicate_interface/utils/pinger.vy')],
     'daddy': [(('main',), 'third_party/flex/daddy/daddy.vy')],
+    'address_bytes32': [(('main',), 'address_bytes32.vy')],
 }
 
 
 # New upstream checker fixtures are pin/capture audits only, not additions to
-# sourceOrdinaryFixtureLib.rows or the 26-case ordinary HOL inventory.
+# sourceOrdinaryFixtureLib.rows or the 27-case ordinary HOL inventory.
 PIN_ONLY_CASES = {
     **{n: [(('main',), n + '/main.vy'), (('ownable',), n + '/ownable.vy'),
             (('token',), n + '/token.vy')]
@@ -54,6 +55,7 @@ PIN_ONLY_CASES = {
 # Inherited legacy module IDs are source IDs + 2 (main is NONE). These
 # declarations are independent of compiler traversal order and body syntax.
 INHERITED_SOURCE_IDS = {
+    'address_bytes32': {('main',): 0},
     **{n: {('main',): 0, ('lib',): 1} for n in
        ['scoped_locals', 'imported_flag', 'imported_struct', 'imported_deploy', 'multimodule_storage']},
     'imported_interface': {('main',): 0, ('oracle',): 1},
@@ -75,8 +77,9 @@ def check_inventory(base):
     expected = {entries[0][1] for entries in {**CASES, **PIN_ONLY_CASES}.values()}
     assert ordinary == expected, ('ordinary fixture inventory drift',
         {'unlisted': sorted(ordinary - expected), 'missing': sorted(expected - ordinary)})
-    assert len(CASES) == 26
+    assert len(CASES) == 27
     assert len(PIN_ONLY_CASES) == 5
+    assert len(ordinary) == 32  # original 31 plus the covered address_bytes32 case
 
 
 def check_inherited_ids(annotated, entries, ids):
@@ -84,11 +87,14 @@ def check_inherited_ids(annotated, entries, ids):
 
     Do not infer a trust map from compiler output or pair similar module bodies.
     Equal aliases may repeat a path; conflicting IDs or extra imports fail.
+    Sanitized newer legacy fixtures retain the explicit repository prefix;
+    older fixtures use paths relative to BASE. No basename matching is used.
     """
     expected = {path: ids[key] for key, path in entries}
     found = {}
     for module in [annotated['ast']] + annotated['imports']:
-        path, source_id = module['resolved_path'], module['source_id']
+        path = module['resolved_path'].removeprefix('./tests/fixtures/check_contract/')
+        source_id = module['source_id']
         assert path in expected, ('unexpected legacy import', path)
         assert source_id == expected[path], ('legacy source ID disagrees with explicit trust', path)
         found[path] = source_id
@@ -139,7 +145,7 @@ def main(generate):
         ids = INHERITED_SOURCE_IDS.get(name, {entries[0][0]: 0})
         # These upstream fixtures retain path/ID metadata. Some older,
         # hand-authored ordinary oracles do not carry that provenance.
-        if pin_only or name == 'duplicate_interface':
+        if pin_only or name in {'duplicate_interface', 'address_bytes32'}:
             legacy = json.loads((BASE/entries[0][1]).with_suffix('.json').read_text())
             check_inherited_ids(legacy.get('annotated_ast', legacy), entries, ids)
         paths = [BASE/p for _,p in entries]

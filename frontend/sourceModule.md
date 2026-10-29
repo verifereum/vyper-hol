@@ -1,10 +1,8 @@
 # Shared source-module signatures and contexts
 
-The base frontend retains source legality, resolution, signatures and module
-contexts for the [ordinary paired frontend](constant-evaluation.md). It does
-not provide an independent source-body frontend or program/call/location
-Meaning development. Those optional layers are extracted separately and can
-be restored by reversing the extraction commit.
+These theories provide source legality, resolution, signatures and module
+contexts for the [ordinary paired frontend](constant-evaluation.md), without
+independent source-body inference.
 
 ## Interfaces
 
