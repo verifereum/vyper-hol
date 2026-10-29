@@ -2849,10 +2849,7 @@ Definition compile_builtin_dispatch_body_def:
                (type_memory_bytes cenv ret_ty) st1))
      | Len =>
          (let e1 = HD args in
-          if is_msg_data e1 then
-            as_stack_val ret_ty (compile_builtin_calldatasize st)
-          else
-            (* Len needs the raw ptr to read length word *)
+          (* Len needs the raw ptr to read length word *)
             let (vv, st1) = compile_expr cenv ty e1 st in
             let v = vv_operand vv in
             let loc = (case vv_location vv of
