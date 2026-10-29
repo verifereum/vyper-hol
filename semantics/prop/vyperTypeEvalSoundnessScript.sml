@@ -978,7 +978,16 @@ Proof
     then (rename1 `Return opt_e` >> Cases_on `opt_e`) g
     else all_tac g) >>
   gvs[evaluate_def, bind_def, return_def, raise_def,
-      pairTheory.UNCURRY, COND_RATOR, AllCaseEqs()] >>
+      pairTheory.UNCURRY, COND_RATOR, AllCaseEqs()]
+  (* Previous integration tail:
+  Cases_on `c` >> simp[] >>
+  BasicProvers.TOP_CASE_TAC >- simp[raise_def] >>
+  BasicProvers.TOP_CASE_TAC >- simp[raise_def] >>
+  BasicProvers.TOP_CASE_TAC >- simp[raise_def] >>
+  simp[bind_def, raise_def, lift_option_def, return_def,
+       pairTheory.UNCURRY, AllCaseEqs()]
+  *)
+  >- metis_tac[expr_no_fallthrough_no_success] >>
   Cases_on `c` >> simp[] >>
   BasicProvers.TOP_CASE_TAC >- simp[raise_def] >>
   BasicProvers.TOP_CASE_TAC >- simp[raise_def] >>
@@ -3478,6 +3487,9 @@ Resume eval_scc_type_sound_results_mutual[Append]:
     (drule_then strip_assume_tac) >>
   Cases_on `eval_expr cx e st1` >>
   rename1 `eval_expr cx e st1 = (expr_res,st2)` >>
+  (* The original composition applied the expression IH here without
+     forwarding source_supply across eval_target_place. *)
+  vyperSourceSupplyLib.forward >>
   qpat_x_assum `!env st res st'. _ ==> _ /\ !vt. _`
     (drule_all_then strip_assume_tac) >>
   qpat_x_assum `well_typed_expr env e ==> _` (drule_then strip_assume_tac) >>
@@ -4365,6 +4377,8 @@ Resume eval_scc_type_sound_results_mutual[Iterator_Range]:
       strip_tac >> gvs[return_def, no_type_error_result_def] >> metis_tac[]) >>
     qpat_x_assum `!s'' tv1 t s''' s t'. _` kall_tac >>
     strip_tac >> gvs[no_type_error_result_def]) >>
+  (* Previous tail used iterator_range_expr_error_eq after evaluate_def
+     had already expanded the iterator equation:
   strip_tac >>
   drule_all iterator_range_expr_error_eq >> strip_tac >>
   qpat_x_assum `res = INR y` SUBST_ALL_TAC >>
@@ -4372,6 +4386,12 @@ Resume eval_scc_type_sound_results_mutual[Iterator_Range]:
   qpat_x_assum `!s'' tv1 t s''' s t'. _` kall_tac >>
   qpat_x_assum `no_type_error_result (INR y)` mp_tac >>
   simp[no_type_error_result_def]
+  *)
+  qpat_x_assum `!s'' tv1 t s''' s t'. _` kall_tac >>
+  qpat_x_assum `!env st res st'. _ ==> typed_scope_transition _ _` kall_tac >>
+  qpat_x_assum `!env st res st'. _ ==> case res of INL pv => live_memory_result _ _ | INR _ => T` kall_tac >>
+  pure_rewrite_tac[sumTheory.sum_case_def, pairTheory.UNCURRY] >>
+  strip_tac >> gvs[no_type_error_result_def]
 QED
 
 (* Legacy wrappers have their own, disconnected structural induction. *)
@@ -4658,17 +4678,19 @@ Resume eval_scc_type_sound_results_mutual[Expr_IfExp]:
   >- (asm_x "true_branch" kall_tac >> asm_x "false_branch" kall_tac >>
       qpat_x_assum `eval_expr _ (IfExp _ _ _ _) _ = _` mp_tac >>
       simp[Once evaluate_def, bind_def] >> strip_tac >> gvs[]) >>
-  rename1 `eval_expr cx e st = (INL cp,st1)` >>
+  (* Previously: rename1 `eval_expr cx e st = (INL cp,st1)`;
+     cp is a constant in the integrated grammar. *)
+  rename1 `eval_expr cx e st = (INL cond_pv,st1)` >>
   qpat_x_assum `!env st res st'. _ ==> case res of INL pv => live_memory_result _ pv | INR _ => T`
-    (qspecl_then [`env`,`st`,`INL cp`,`st1`] mp_tac) >>
+    (qspecl_then [`env`,`st`,`INL cond_pv`,`st1`] mp_tac) >>
   (impl_tac >- simp[]) >> simp_tac bool_ss [] >> disch_tac >>
   asm_x "true_branch" mp_tac >>
-  disch_then (qspecl_then [`st`,`cp`,`st1`] mp_tac) >>
+  disch_then (qspecl_then [`st`,`cond_pv`,`st1`] mp_tac) >>
   (impl_tac >- simp[]) >> strip_tac >>
   asm_x "false_branch" mp_tac >>
-  disch_then (qspecl_then [`st`,`cp`,`st1`] mp_tac) >>
+  disch_then (qspecl_then [`st`,`cond_pv`,`st1`] mp_tac) >>
   (impl_tac >- simp[]) >> strip_tac >>
-  Cases_on `switch_BoolV cx cp (eval_expr cx e') (eval_expr cx e'') st1` >>
+  Cases_on `switch_BoolV cx cond_pv (eval_expr cx e') (eval_expr cx e'') st1` >>
   rename1 `switch_BoolV _ _ _ _ _ = (br,st2)` >>
   `state_well_typed st2 /\ env_consistent env cx st2 /\
    accounts_well_typed st2.accounts /\ no_type_error_result br /\
@@ -7172,6 +7194,10 @@ Proof
 QED
 
 
+(* Local adapter updated for its sole SCC consumer: source_supply dflt_st
+   is forwarded from the public entry domain. The old continuation was
+   finally handled_body (do pop_function args_st.scopes; release od);
+   scope restoration must run on Halt, but release must not. *)
 Theorem intcall_post_read_continuation_sound[local]:
   !cx env loc res st' src_id_opt fn es extra env_body args_st dflt_st lock_st
     call_env fm nr ret body env_after ret_tv lock_res.
@@ -7200,7 +7226,8 @@ Theorem intcall_post_read_continuation_sound[local]:
   (ret = NoneT \/ stmts_no_fallthrough body) /\ stmts_no_control_escape body /\
   env_consistent env cx args_st /\ state_well_typed args_st /\
   env_consistent env cx dflt_st /\ state_well_typed dflt_st /\
-  context_well_typed cx /\ accounts_well_typed dflt_st.accounts /\ functions_well_typed cx /\
+  context_well_typed cx /\ accounts_well_typed dflt_st.accounts /\ source_supply dflt_st /\
+  functions_well_typed cx /\
   call_evaluation_safe (cx with stk updated_by CONS (env_body.current_src,fn))
     (int_calls_stmts body) /\
   env_body.type_defs = get_tenv cx /\ env_body.fn_sigs = env.fn_sigs /\
@@ -7218,14 +7245,15 @@ Theorem intcall_post_read_continuation_sound[local]:
    else return ()) dflt_st = (lock_res,lock_st) /\
   (case lock_res of
    | INL _ =>
-       (do rv <- finally
-             (try (do eval_stmts (cx with stk updated_by CONS (env_body.current_src,fn)) body;
-                      return NoneV od) handle_function)
-             (do pop_function args_st.scopes;
-                 if nr /\ ~(fm = View \/ fm = Pure) then
-                   case cx.nonreentrant_slot of NONE => return ()
-                   | SOME slot => release_nonreentrant_lock cx.txn.target slot
-                 else return () od);
+       (do rv <- finally_unless_halt
+             (finally
+               (try (do eval_stmts (cx with stk updated_by CONS (env_body.current_src,fn)) body;
+                        return NoneV od) handle_function)
+               (pop_function args_st.scopes))
+             (if nr /\ ~(fm = View \/ fm = Pure) then
+                case cx.nonreentrant_slot of NONE => return ()
+                | SOME slot => release_nonreentrant_lock cx.txn.target slot
+              else return ());
            crv <- lift_option_type (safe_cast ret_tv rv) "IntCall cast ret";
            return (Value crv) od) (lock_st with scopes := [call_env])
    | INR exn => (INR exn,lock_st)) = (res,st') ==>
@@ -8601,7 +8629,28 @@ Resume eval_scc_type_sound_results_mutual[Trace_Expr_Call_CreateTarget]:
   RESUME_TAC >> trace_result_tac "Trace_Expr_Call_CreateTarget"
 QED
 Resume eval_scc_type_sound_results_mutual[Trace_Expr_Call_SelfDestructTarget]:
-  RESUME_TAC >> trace_result_tac "Trace_Expr_Call_SelfDestructTarget"
+  (* Previously: RESUME_TAC >> trace_result_tac "Trace_Expr_Call_SelfDestructTarget" *)
+  RESUME_TAC >> trace_value_start_tac >>
+  drule selfdestruct_call_evaluation_safe_args >> strip_tac >>
+  qpat_x_assum `well_typed_expr _ _` mp_tac >>
+  rewrite_tac[Once well_typed_expr_def] >> strip_tac >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[NoAsms, Once evaluate_def, bind_def, ignore_bind_def, return_def,
+       raise_def, AllCaseEqs()] >> strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+  qpat_x_assum `!env st res st'. _ ==> typed_scope_transition _ _`
+    (drule_at (Pat `eval_exprs _ _ _ = _`)) >>
+  disch_then (qspec_then `env` mp_tac) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
+  imp_res_tac type_check_state >> imp_res_tac lift_option_type_state >>
+  rpt BasicProvers.VAR_EQ_TAC >>
+  asm_rewrite_tac[] >>
+  rpt (qpat_x_assum `!env st res st'. _` kall_tac) >>
+  gvs[get_accounts_def, update_accounts_def, update_pending_deletions_def,
+      bind_def, ignore_bind_def, return_def, raise_def, COND_RATOR, AllCaseEqs()] >>
+  qmatch_asmsub_rename_tac `eval_exprs cx es st = (INL vs,mid)` >>
+  irule typed_scope_transition_trans >> qexists_tac `mid` >>
+  (conj_tac >- (irule typed_scope_transition_scopes >> simp[]) >>
+   first_assum ACCEPT_TAC)
 QED
 Resume eval_scc_type_sound_results_mutual[Trace_Expr_Call_RawRevert]:
   RESUME_TAC >> trace_result_tac "Trace_Expr_Call_RawRevert"
@@ -8691,11 +8740,15 @@ Resume eval_scc_type_sound_results_mutual[Trace_IntCall_Operands]:
   rpt (first_x_assum (fn th => if is_forall (concl th) then kall_tac th else NO_TAC)) >>
   imp_res_tac read_results_state >>
   imp_res_tac finally_set_scopes >>
-  imp_res_tac (SRULE[ignore_bind_def] finally_conditional_lock_scopes) >>
+  (* Previously the old finalizer equation matched the lock frame directly. *)
+  RULE_ASSUM_TAC (PURE_REWRITE_RULE [GSYM DE_MORGAN_THM]) >>
+  imp_res_tac finally_unless_halt_pop_release_cases >>
+  imp_res_tac finally_conditional_lock_scopes >>
   qpat_assum `typed_scope_transition _ _`
     (mp_then Any irule typed_scope_transition_trans) >>
   irule typed_scope_transition_scopes >>
-  asm_rewrite_tac[] >>
+  (* Previously: asm_rewrite_tac[] (loops on reflexive state equations). *)
+  simp[] >>
   gvs[push_function_def, return_def, AllCaseEqs()] >>
   Cases_on `FST (SND tup)` >> gvs[return_def] >>
   Cases_on `cx.nonreentrant_slot` >> gvs[raise_def] >>
@@ -9089,6 +9142,8 @@ Resume eval_scc_type_sound_results_mutual[Assign_Base_sequence]:
   simp_tac (srw_ss()) [] >>
   Cases_on `eval_target_place cx bt rhs_st` >>
   rename1 `eval_target_place cx bt rhs_st = (target_res,target_st)` >>
+  (* Previously the target IH was invoked without forwarding RHS supply. *)
+  vyperSourceSupplyLib.forward >>
   qpat_assum `!env ty st res st'. _ ==> state_well_typed _ /\ _`
     (drule_all_then strip_assume_tac) >>
   qpat_assum `!env ty st res st'. _ ==> (case _ of INL p => writable_place_result _ _ _ | INR _ => T)`
@@ -9406,6 +9461,8 @@ Resume eval_scc_type_sound_results_mutual[WritableRootBase_SubscriptTarget]:
     (drule_all_then strip_assume_tac) >>
   qpat_assum `!env vt st res st'. _ ==> (case _ of INL pv => writable_place_result _ _ _ | INR _ => T)`
     (drule_all_then strip_assume_tac) >>
+  (* Forward base-place supply before the index expression IH. *)
+  vyperSourceSupplyLib.forward >>
   qpat_x_assum `!env st res st'. _ ==> _ /\ !vt. _`
     (drule_all_then strip_assume_tac) >>
   qpat_x_assum `well_typed_expr env e ==> _` (drule_then strip_assume_tac) >>
@@ -9694,7 +9751,8 @@ Proof
        update_accounts_def, update_transient_def, append_logs_def] >>
   rpt (IF_CASES_TAC >>
     simp[bind_apply, ignore_bind_apply, return_def, raise_def]) >>
-  rpt strip_tac >> gvs[]
+  (* Previously: rpt strip_tac >> gvs[]; pending deletions now also update. *)
+  rpt strip_tac >> gvs[update_pending_deletions_def, bind_apply, return_def]
 QED
 
 Resume eval_scc_type_sound_results_mutual[Live_RawCall_Returned_Result]:
