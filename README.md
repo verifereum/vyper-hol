@@ -56,6 +56,12 @@ The semantics is organised into layers:
 
 The logical contract type checker can be evaluated on closed direct inputs, compiler JSON, or deployment traces using a reusable kernel-checked SML API. See the [contract checker evaluator guide](docs/check-contract-evaluator.md) for its trust model, interfaces, examples, and fixture-generation procedure.
 
+Explicit `abi_decode`, calldata argument decoding, and external-call returndata
+decoding ignore unused bytes after dynamic `Bytes` and `String` values. Length,
+shape, scalar, fixed-bytes padding, and applicable Vyper bounds remain checked.
+Returndata is still capped at the expected type's ABI size bound before decoding.
+Canonical ABI encoding is unchanged.
+
 The interpreter is written in a state-exception monad. Exceptions are used for semantic errors (e.g., looking up a variable that was not bound), legitimate runtime exceptions (e.g., failed assertions), and control flow for internal function calls and loops (`return`, `break`, `continue`).
 
 Termination is proved for the interpreter, validating Vyper's design as a total language (this does not rely on gas consumption, which is invisible at the Vyper source level). The termination argument uses the facts that internal function calls cannot recurse (even indirectly) and that all loops have an explicit (syntactic) bound.
@@ -114,7 +120,7 @@ This work is developed in the [HOL4 theorem prover](https://hol-theorem-prover.o
 
 The project is built with [`holbuild`](https://github.com/charles-cooper/holbuild). The repository's `holproject.toml` is the source of truth for the project configuration and pinned HOL dependencies, including the compatible [Verifereum](https://github.com/verifereum/verifereum) revision. Vyper functional tests are generated from the upstream commit pinned in [`VYPER_PIN`](VYPER_PIN). The CI workflow (`.github/workflows/holbuild.yml`) is the recommended reference for the exact automated build.
 
-For a local build, install `holbuild` v0.10.0 or newer and run:
+For a local build, install `holbuild` v0.12.0 or newer and run:
 
 ```bash
 holbuild buildhol
