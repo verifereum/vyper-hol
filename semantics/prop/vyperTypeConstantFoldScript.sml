@@ -1056,25 +1056,6 @@ Proof
   drule read_result_state >> strip_tac >> gvs[]
 QED
 
-Theorem constant_eval_exprs_fold_agreement:
-  check_contract F cx.layouts cx.txn.target mods = SOME artifact /\
-  ALOOKUP cx.sources cx.txn.target = SOME mods /\
-  deployment_constant_cells_typed (type_env_all_modules mods) cx.txn.target mods am /\
-  well_typed_exprs (artifact_env artifact mods current_src) es /\
-  EVERY (constant_expr mods) es /\
-  eval_exprs cx es (initial_state am sc) = (INL vs,st') ==>
-  st' = initial_state am sc /\
-  constant_values mods (constant_machine_immutables am cx.txn.target) es = SOME vs
-Proof
-  strip_tac >> irule constant_eval_exprs_fold_lift >> qexists `cx` >>
-  conj_tac >- (rpt strip_tac >>
-    `constant_expr mods e /\
-     well_typed_expr (artifact_env artifact mods current_src) e` by
-      metis_tac[EVERY_MEM, constant_exprs_MEM_typed] >>
-    drule_all constant_eval_expr_fold_agreement >> simp[]) >>
-  first_assum ACCEPT_TAC
-QED
-
 Theorem constant_eval_expr_read_typed:
   check_contract F cx.layouts cx.txn.target mods = SOME artifact /\
   ALOOKUP cx.sources cx.txn.target = SOME mods /\
