@@ -1345,6 +1345,37 @@ Proof
   metis_tac[]
 QED
 
+Theorem call_external_function_result_preserves_exports[local]:
+  exps = am.exports /\
+  (\(res,am_out,rqs). (res,am_out,rqs))
+    (case body_res of
+       (INL (), st) =>
+         (case unlock st of
+            (INL u, st') => (INL NoneV, abstract_machine_from_state srcs exps layouts st', st'.requests)
+          | (INR e, st') => (INR e, am, st'.requests))
+     | (INR (ReturnException v_ret), st) =>
+         (case unlock st of
+            (INL u, st') =>
+              (case evaluate_type tenv ret of
+                 NONE => (INR (Error (TypeError "eval ret")), am, st'.requests)
+               | SOME tv =>
+                   case safe_cast tv v_ret of
+                     NONE => (INR (Error (TypeError "ext cast ret")), am, st'.requests)
+                   | SOME v_cast =>
+                       (INL v_cast, abstract_machine_from_state srcs exps layouts st', st'.requests))
+          | (INR e, st') => (INR e, am, st'.requests))
+     | (INR HaltException, st) =>
+         (INR HaltException, abstract_machine_from_state srcs exps layouts st, st.requests)
+     | (INR e, st) => (INR e, am, st.requests)) = (result, am_out, rqs) ==>
+  am_out.exports = am.exports
+Proof
+  PairCases_on `body_res` >>
+  Cases_on `body_res0` >>
+  simp[abstract_machine_from_state_def] >>
+  rpt (BasicProvers.TOP_CASE_TAC >> gvs[abstract_machine_from_state_def]) >>
+  rw[] >> simp[]
+QED
+
 Theorem call_external_function_deploy_success_cases:
   cx.in_deploy /\
   call_external_function orc am cx nr mut ts all_mods args dflts vals body ret =
@@ -2812,14 +2843,39 @@ Proof
   gvs[abstract_machine_from_state_def]
 QED
 
+Theorem call_external_function_preserves_exports[local]:
+  call_external_function orc am cx nr mut ts all_mods args dflts vals body ret =
+    (result, am_out, rqs) ==>
+  am_out.exports = am.exports
+Proof
+  (* Initial simplification left the result-case expression opaque:
+  simp[call_external_function_def, LET_THM] >>
+  Cases_on `cx.in_deploy` >>
+  gvs[AllCaseEqs(), abstract_machine_from_state_def] >>
+  metis_tac[evaluate_all_constants_preserves_exports] *)
+  (* Previous traversal entered concrete evaluator/lock cases and timed out:
+  rw[call_external_function_def] >>
+  gvs[AllCaseEqs()] >>
+  qpat_x_assum `_ = (result,am_out,rqs)` mp_tac >>
+  rpt (BasicProvers.TOP_CASE_TAC >> gvs[abstract_machine_from_state_def]) >>
+  metis_tac[evaluate_all_constants_preserves_exports] *)
+  rw[call_external_function_def] >>
+  gvs[AllCaseEqs()] >>
+  drule_at (Pos (el 2)) call_external_function_result_preserves_exports >>
+  (impl_tac >- metis_tac[evaluate_all_constants_preserves_exports]) >>
+  simp[]
+QED
+
 Theorem load_contract_deployed_exports:
   load_contract orc am deploy_tx mods exps = INL (am_deployed,rqs) ==>
   ALOOKUP am_deployed.exports deploy_tx.target = SOME exps
 Proof
   strip_tac >>
   drule load_contract_success_cases >> strip_tac >>
+  (* Previous INL-only boundary missed committed Halt:
   drule_at (Pos (el 2)) call_external_function_deploy_success_preserves_exports >>
-  simp[]
+  simp[] *)
+  drule call_external_function_preserves_exports >> simp[]
 QED
 
 Theorem load_contract_establishes_checked_contract_runtime_ready:
