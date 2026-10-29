@@ -510,6 +510,28 @@ Proof
   simp[emitted_insts_def, rich_listTheory.DROP_APPEND1, same_blocks_def]
 QED
 
+Theorem ecrecover_lookup_generated_update[local]:
+  not_fresh_at sa x /\ sa.cs_next_var <= k ==>
+  lookup_var x (update_var (STRING #"%" (toString k)) z t) = lookup_var x t
+Proof
+  simp[not_fresh_at_def, emitHelperPropsTheory.lookup_var_update_var] >>
+  metis_tac[]
+QED
+
+Theorem ecrecover_operand_generated_update[local]:
+  (!x. q = Var x ==> not_fresh_at sa x) /\ sa.cs_next_var <= k ==>
+  eval_operand q (update_var (STRING #"%" (toString k)) z t) = eval_operand q t
+Proof
+  Cases_on `q` >> simp[eval_operand_def] >>
+  metis_tac[ecrecover_lookup_generated_update]
+QED
+
+Theorem ecrecover_operand_mstore[local]:
+  eval_operand q (mstore a z t) = eval_operand q t
+Proof
+  Cases_on `q` >> simp[eval_operand_def, mstore_def, lookup_var_def]
+QED
+
 Theorem ecrecover_input_stores_run[local]:
   (do emit_void MSTORE [base_op; h];
       p1 <- emit_op ADD [base_op; Lit 32w];
@@ -535,14 +557,8 @@ Proof
   `!q k z t. MEM q [base_op;h;v;r;sig] /\ sa.cs_next_var <= k ==>
      eval_operand q (update_var (STRING #"%" (toString k)) z t) =
      eval_operand q t` by
-    (rpt gen_tac >> strip_tac >> Cases_on `q` >>
-     simp[eval_operand_def, emitHelperPropsTheory.lookup_var_update_var] >>
-     IF_CASES_TAC >> gvs[] >>
-     qpat_x_assum `!x. _ ==> not_fresh_at sa x`
-       (qspec_then `STRING #"%" (toString k)` mp_tac) >>
-     simp[not_fresh_at_def]) >>
-  `!q a z t. eval_operand q (mstore a z t) = eval_operand q t` by
-    (Cases >> simp[eval_operand_def, mstore_def, lookup_var_def]) >>
+    (rpt strip_tac >> irule ecrecover_operand_generated_update >>
+     simp[] >> metis_tac[]) >>
   qpat_x_assum `_ sa = ((),sb)` mp_tac >>
   simp[emitHelperTheory.emit_op_def, emitHelperTheory.emit_void_def,
        comp_bind_def, comp_ignore_bind_def, comp_return_def,
@@ -552,7 +568,7 @@ Proof
        exec_write2_def] >>
   simp[Once run_inst_seq_def, step_inst_base_def, mk_inst_def,
        exec_pure2_def, bind_outputs_def, eval_operand_def,
-       emitHelperPropsTheory.eval_operand_mstore] >>
+       ecrecover_operand_mstore] >>
   simp[Once run_inst_seq_def, step_inst_base_def, exec_write2_def,
        eval_operand_def, emitHelperPropsTheory.lookup_var_update_var] >>
   simp[Once run_inst_seq_def, step_inst_base_def, exec_pure2_def,
@@ -570,7 +586,6 @@ Proof
     (rpt conj_tac >> irule abiDecodeStaticPropsTheory.w2n_add_n2w_lt >>
      decide_tac) >>
   qpat_x_assum `!q k z t. _` kall_tac >>
-  qpat_x_assum `!q a z t. _` kall_tac >>
   simp[GSYM dftCommutationTheory.update_var_mstore_commute] >>
   `!a z t m vs. (mstore a z t) with <|vs_memory := m; vs_vars := vs|> =
      t with <|vs_memory := m; vs_vars := vs|>` by simp[mstore_def] >>
