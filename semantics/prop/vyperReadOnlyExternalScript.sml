@@ -31,6 +31,9 @@ QED
 
 Theorem call_external_function_read_only:
   ~cx.in_deploy /\
+  state_rel_frame machine_frame
+    (eval_external_defaults cx
+      (DROP (LENGTH dflts + LENGTH vals - LENGTH args) dflts)) /\
   state_rel_frame machine_frame (eval_stmts cx body) /\
   (mut = View \/ mut = Pure) /\
   call_external_function orc am cx nr mut ts mods args dflts vals body ret =
