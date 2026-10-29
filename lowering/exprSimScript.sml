@@ -150,7 +150,9 @@ End
    (val_wf), and its val_footprint bytes lie inside
    - an allocation of one of the expression's own ALLOCAs (instruction id
      in [sa.cs_next_id, sb.cs_next_id)), or
-   - the region of a live local at es.
+   - the region of a live local at es,
+   or it occupies no bytes (a NoneV, the result of send, has
+   val_footprint 0 and sits nowhere: the lowering hands out Lit 0w).
    An operator's proof needs this to keep a first operand's value through
    the second operand's fragment: an allocation of the first is below the
    second's start counter, and expr_post keeps such allocations' bytes. *)
@@ -163,7 +165,8 @@ Definition expr_val_at_def:
                        sa.cs_next_id <= aid /\ aid < sb.cs_next_id /\
                        b <= w2n w /\ w2n w + val_footprint tv v <= b + sz) \/
            (?n b sz. local_region cenv es.scopes s n b sz /\
-                     b <= w2n w /\ w2n w + val_footprint tv v <= b + sz))
+                     b <= w2n w /\ w2n w + val_footprint tv v <= b + sz) \/
+           val_footprint tv v = 0)
 End
 
 (* Operand composition: the value of a non-word operand survives code that
@@ -413,7 +416,7 @@ End
 (* Where a value in memory sits, as expr_val_at says for expr_post: for a
    StackValue, expr_val_at itself; for a pointer into memory, the value's
    bytes inside one of the expression's own allocations or a live local's
-   region, word types included. *)
+   region, word types included, unless it occupies none. *)
 Definition vv_at_def:
   (vv_at cenv cx t sa sb es tv (StackValue t' op) s <=>
      !v. tv = Value v ==> expr_val_at cenv cx t sa sb es v op s) /\
@@ -427,7 +430,8 @@ Definition vv_at_def:
                         sa.cs_next_id <= aid /\ aid < sb.cs_next_id /\
                         b <= w2n w /\ w2n w + val_footprint tvt v <= b + sz) \/
             (?n b sz. local_region cenv es.scopes s n b sz /\
-                      b <= w2n w /\ w2n w + val_footprint tvt v <= b + sz)))
+                      b <= w2n w /\ w2n w + val_footprint tvt v <= b + sz) \/
+            val_footprint tvt v = 0))
 End
 
 (* expr_post with a value_vv in place of an operand. *)

@@ -98,7 +98,8 @@ Theorem expr_val_at_footprint:
       sa.cs_next_id <= aid /\ aid < sb.cs_next_id /\
       b <= w2n w /\ w2n w + val_footprint tv v <= b + sz) \/
    (?n b sz. local_region cenv es.scopes s n b sz /\
-      b <= w2n w /\ w2n w + val_footprint tv v <= b + sz))
+      b <= w2n w /\ w2n w + val_footprint tv v <= b + sz) \/
+   val_footprint tv v = 0)
 Proof
   strip_tac >>
   qpat_x_assum `expr_val_at _ _ _ _ _ _ _ _ _` mp_tac >>
@@ -1443,10 +1444,12 @@ Theorem hash_post_footprint_bound:
   w2n p + val_footprint tv v < dimword (:256)
 Proof
   strip_tac >>
+  Cases_on `val_footprint tv v = 0` >- simp[wordsTheory.w2n_lt] >>
   `stmt_state_rel func cenv cx es' s /\
    expr_val_at cenv cx (expr_type e) sa sm es' v op s` by
     gvs[expr_post_def] >>
   drule_all expr_val_at_footprint >> strip_tac >>
+  TRY (gvs[] >> NO_TAC) >>
   irule hash_live_footprint_bound >> goal_assum (drule_at Any) >>
   metis_tac[]
 QED

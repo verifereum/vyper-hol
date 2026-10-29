@@ -28,10 +28,8 @@
 
 Theory dominatorDefs
 Ancestors
-  list finite_map pred_set
+  list finite_map pred_set pair
   venomInst cfgDefs dfAnalyzeDefs dfHelperDefs
-Libs
-  listTheory finite_mapTheory pred_setTheory pairTheory
 
 (* ==========================================================================
    Result type
