@@ -1,5 +1,5 @@
 (* Permanent PLAN 5.6 statement-row acceptance/rejection checks.
-   All concrete checks use plain EVAL_TAC (10s build contract). *)
+   Concrete checks use the normal EVAL_TAC budget. *)
 Theory supportedStmtProps
 Ancestors
   supportedStmts supportedStmtTraverse supportedProgram supportedExprProps
@@ -20,7 +20,8 @@ Theorem supported_simple_statement_rows:
      Expr expr_test_pop; Return NONE; Return (SOME expr_test_uint);
      Return (SOME expr_test_internal);
      AnnAssign "new" (BaseT (UintT 256)) expr_test_internal;
-     AnnAssign "tuple" (TupleT [BaseT (UintT 256)]) expr_test_uint;
+     AnnAssign "tuple" (TupleT [BaseT (UintT 256)])
+       (Builtin (TupleT [BaseT (UintT 256)]) (MakeArray NONE (Fixed 1)) [expr_test_uint]);
      Assign (BaseTarget (NameTarget "word")) expr_test_internal;
      Assign (BaseTarget (NameTarget "narrow")) expr_test_uint]
 Proof
@@ -29,8 +30,7 @@ QED
 
 Theorem supported_all_effect_root_positions:
   EVERY (\e. supported_stmts expr_test_tops stmt_test_bindings
-    [Expr e; Return (SOME e); AnnAssign "new" (BaseT (UintT 256)) e;
-     Assign (BaseTarget (NameTarget "word")) e])
+    [Expr e; Return (SOME e)])
     [expr_test_internal; expr_test_pop;
      Call NoneT (Send F) [expr_test_address;expr_test_uint] NONE;
      Call (BaseT (UintT 256))
@@ -54,6 +54,7 @@ Theorem supported_storage_statement_rows:
        "first")) expr_test_uint;
      Assign (BaseTarget (AttributeTarget (TopLevelNameTarget (NONE,"record"))
        "second")) expr_test_int;
+     Assign (BaseTarget (SubscriptTarget (NameTarget "array") expr_test_uint)) expr_test_uint;
      Append (TopLevelNameTarget (NONE,"dynamic")) expr_test_int]
 Proof
   EVAL_TAC
@@ -67,7 +68,6 @@ Theorem supported_target_exclusions:
      Assign (BaseTarget (TopLevelNameTarget (NONE,"record"))) expr_test_uint;
      Assign (BaseTarget (TopLevelNameTarget (NONE,"map"))) expr_test_uint;
      Assign (BaseTarget (TopLevelNameTarget (SOME 0,"scalar"))) expr_test_uint;
-     Assign (BaseTarget (SubscriptTarget (NameTarget "array") expr_test_uint)) expr_test_uint;
      Assign (BaseTarget (SubscriptTarget
        (SubscriptTarget (TopLevelNameTarget (NONE,"map")) expr_test_uint)
        expr_test_uint)) expr_test_uint;
@@ -88,7 +88,8 @@ Theorem supported_storage_effects_rejected:
      Assign (BaseTarget (SubscriptTarget (TopLevelNameTarget (NONE,"map"))
        expr_test_address)) expr_test_internal;
      Assign (BaseTarget (SubscriptTarget (TopLevelNameTarget (NONE,"fixed"))
-       expr_test_internal)) expr_test_uint;
+       expr_test_internal))
+       (Builtin (BaseT (UintT 256)) (Bop Add) [expr_test_uint;expr_test_uint]);
      Assign (BaseTarget (AttributeTarget (TopLevelNameTarget (NONE,"record"))
        "second")) expr_test_internal;
      Append (TopLevelNameTarget (NONE,"dynamic")) expr_test_pop;
@@ -106,7 +107,11 @@ Theorem supported_augmented_statement_row:
      AugAssign (BaseT (IntT 256)) (TopLevelNameTarget (NONE,"transient")) Sub expr_test_int;
      AugAssign (BaseT (UintT 256)) (NameTarget "word") Exp
        (Literal (BaseT (UintT 256)) (IntL 0));
-     AugAssign (BaseT (UintT 256)) (NameTarget "word") ShL expr_test_uint] /\
+     AugAssign (BaseT (UintT 256)) (NameTarget "word") ShL expr_test_uint;
+     AugAssign (BaseT (UintT 256))
+       (SubscriptTarget (TopLevelNameTarget (NONE,"fixed")) expr_test_uint) Add expr_test_uint;
+     AugAssign (BaseT (UintT 256))
+       (AttributeTarget (TopLevelNameTarget (NONE,"record")) "first") Add expr_test_uint] /\
   EVERY (\s. ~supported_stmt expr_test_tops stmt_test_bindings s)
     [AugAssign (BaseT (UintT 256)) (NameTarget "word") Exp
        (Literal (BaseT (IntT 256)) (IntL (~1)));
@@ -117,11 +122,7 @@ Theorem supported_augmented_statement_row:
      AugAssign (BaseT (UintT 256)) (NameTarget "word") ExpMod expr_test_uint;
      AugAssign (BaseT (UintT 256)) (NameTarget "word") In expr_test_uint;
      AugAssign (BaseT (UintT 256)) (NameTarget "aggregate") Add expr_test_uint;
-     AugAssign (BaseT (UintT 256)) (TopLevelNameTarget (NONE,"fixed")) Add expr_test_uint;
-     AugAssign (BaseT (UintT 256))
-       (SubscriptTarget (TopLevelNameTarget (NONE,"fixed")) expr_test_uint) Add expr_test_uint;
-     AugAssign (BaseT (UintT 256))
-       (AttributeTarget (TopLevelNameTarget (NONE,"record")) "first") Add expr_test_uint]
+     AugAssign (BaseT (UintT 256)) (TopLevelNameTarget (NONE,"fixed")) Add expr_test_uint]
 Proof
   EVAL_TAC
 QED
@@ -131,6 +132,7 @@ Theorem supported_control_reason_rows:
     [If expr_test_uint [Expr expr_test_internal] [Return (SOME expr_test_pop)];
      Assert expr_test_uint AssertBare; Assert expr_test_uint AssertUnreachable;
      Assert expr_test_uint (AssertReason (Literal (BaseT (StringT 16)) (StringL "why")));
+     Assert expr_test_uint (AssertReason (Name (BaseT (StringT 16)) "reason"));
      Raise RaiseBare; Raise RaiseUnreachable;
      Raise (RaiseReason (Literal (BaseT (StringT 16)) (StringL "UNREACHABLE")))] /\
   EVERY (\s. ~supported_stmt expr_test_tops stmt_test_bindings s)
@@ -138,6 +140,63 @@ Theorem supported_control_reason_rows:
      Assert expr_test_uint (AssertReason expr_test_internal);
      Raise (RaiseReason expr_test_uint);
      Raise (RaiseReason (Builtin (BaseT (StringT 16)) (Concat 16) []))]
+Proof
+  EVAL_TAC
+QED
+
+(* Nested map keys may call internal functions in base-first order. The RHS
+   computation-order defect #550 remains excluded independently. *)
+Theorem supported_nested_target_rows:
+  supported_stmts expr_test_tops
+    (("map",ArrayT (BaseT (UintT 256)) (Fixed 2))::stmt_test_bindings)
+    [Assign (BaseTarget (SubscriptTarget
+       (SubscriptTarget (TopLevelNameTarget (NONE,"nested")) expr_test_internal)
+       expr_test_internal)) expr_test_uint;
+     AugAssign (BaseT (UintT 256))
+       (SubscriptTarget
+         (SubscriptTarget (TopLevelNameTarget (NONE,"nested")) expr_test_internal)
+         expr_test_internal) Sub expr_test_uint;
+     Assign (BaseTarget (AttributeTarget
+       (SubscriptTarget (TopLevelNameTarget (NONE,"recordmap")) expr_test_uint)
+       "second")) expr_test_int;
+     Assign (BaseTarget (SubscriptTarget (NameTarget "map") expr_test_uint)) expr_test_uint] /\
+  ~supported_stmt expr_test_tops stmt_test_bindings
+    (Assign (BaseTarget (SubscriptTarget
+       (SubscriptTarget (TopLevelNameTarget (NONE,"nested")) expr_test_internal)
+       expr_test_internal))
+       (Builtin (BaseT (UintT 256)) (Bop Add) [expr_test_uint;expr_test_uint])) /\
+  ~supported_stmt expr_test_tops stmt_test_bindings
+    (Assign (BaseTarget (SubscriptTarget (TopLevelNameTarget (NONE,"nested"))
+       expr_test_uint)) expr_test_uint)
+Proof
+  EVAL_TAC
+QED
+
+Definition stmt_test_matrix_type_def:
+  stmt_test_matrix_type =
+    ArrayT (ArrayT (BaseT (UintT 256)) (Fixed 2)) (Fixed 2)
+End
+
+Theorem supported_nested_literal_layout:
+  supported_stmt [] []
+    (AnnAssign "matrix" stmt_test_matrix_type
+      (Builtin stmt_test_matrix_type
+        (MakeArray (SOME (ArrayT (BaseT (UintT 256)) (Fixed 2))) (Fixed 2))
+        [Builtin (ArrayT (BaseT (UintT 256)) (Fixed 2))
+           (MakeArray (SOME (BaseT (UintT 256))) (Fixed 2))
+           [expr_test_uint;expr_test_uint];
+         Builtin (ArrayT (BaseT (UintT 256)) (Fixed 2))
+           (MakeArray (SOME (BaseT (UintT 256))) (Fixed 2))
+           [expr_test_uint;expr_test_uint]])) /\
+  ~supported_stmt [] []
+    (AnnAssign "matrix" stmt_test_matrix_type
+      (Name (ArrayT (ArrayT (BaseT (UintT 256)) (Fixed 1)) (Fixed 2)) "other")) /\
+  ~supported_return_layouts stmt_test_matrix_type
+    [If expr_test_uint [Pass]
+       [Return (SOME
+         (Name (ArrayT (ArrayT (BaseT (UintT 256)) (Fixed 1)) (Fixed 2)) "other"))]] /\
+  supported_return_layouts stmt_test_matrix_type
+    [Return (SOME (Name stmt_test_matrix_type "matrix"))]
 Proof
   EVAL_TAC
 QED

@@ -433,7 +433,7 @@ Datatype:
        Needed because HashMapT is a value_type, not type, so ce_var_type
        cannot represent it. Used by compile_subscript for dispatch.
        Mirrors Python: isinstance(base_typ, HashMapT) *)
-    ce_is_hashmap : string -> bool;
+    ce_hashmap_info : string -> (bool # type # value_type) option;
     (* Event metadata: event_nsid → SOME (event_hash, arg_types, indexed_flags).
        NONE means the event is not declared in this compilation unit. Keeping
        absence explicit prevents unknown events from silently compiling/logging
@@ -1202,6 +1202,7 @@ Definition call_ctx_rel_def:
      tc.tc_origin = txn.origin ∧
      tc.tc_gasprice = n2w txn.gas_price ∧
      tc.tc_chainid = n2w txn.chain_id ∧
+     tc.tc_blobhashes = txn.blob_hashes ∧
      bc.bc_coinbase = txn.coinbase ∧
      bc.bc_timestamp = n2w txn.time_stamp ∧
      bc.bc_number = n2w txn.block_number ∧
@@ -1230,6 +1231,9 @@ End
      section at runtime).
    - logs_rel: emitted logs.
    - call_ctx_rel: transaction, call and block context.
+   - the call context is not static: the entry relation (venom_env_rel)
+     assumes it and the lowered code never writes cc_static, so a CALL
+     asks a static request exactly when the source does.
    - outcomes and requests: the oracle outcomes still to consume and the
      requests recorded so far, as in the result relation. *)
 Definition state_rel_def:
@@ -1243,6 +1247,7 @@ Definition state_rel_def:
      immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor vs ss ∧
      logs_rel cenv cx.txn.target vs ss ∧
      call_ctx_rel cx.txn ss.vs_call_ctx ss.vs_tx_ctx ss.vs_block_ctx ∧
+     ¬ss.vs_call_ctx.cc_static ∧
      vs.outcomes = SOME ss.vs_outcomes ∧
      vs.requests = ss.vs_requests)
 End

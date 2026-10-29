@@ -29,8 +29,8 @@ Definition layouts_agree_def:
                      ALOOKUP sl (NONE, id) = SOME n) /\
       (!vis id ty n. MEM (VariableDecl vis Transient id ty (SOME n)) tops ==>
                      ALOOKUP tl (NONE, id) = SOME n) /\
-      (!vis id kt vt n. MEM (HashMapDecl vis F id kt vt (SOME n)) tops ==>
-                        ALOOKUP sl (NONE, id) = SOME n)
+      (!vis tr id kt vt n. MEM (HashMapDecl vis tr id kt vt (SOME n)) tops ==>
+                           ALOOKUP (if tr then tl else sl) (NONE, id) = SOME n)
 End
 
 Definition source_deployment_rel_def:

@@ -1,8 +1,9 @@
 # PHI-merged memory pointer witnesses (#561)
 
 Exact bytecode comparisons for programs whose result is a PHI of memory
-pointers, checked in `eval/evalCompilerPhiPointersScript.sml` (part of the
-default lowering rollup). The base-pointer analysis keeps the allocation behind
+pointers, checked in `eval/evalCompilerPhiPointers1Script.sml` and
+`eval/evalCompilerPhiPointers2Script.sml` (part of the default lowering
+rollup). The base-pointer analysis keeps the allocation behind
 such a PHI live (a14-01), MakeSSA orders the PHIs of one block as Python does
 (a14-02), `uint2str` sizes its buffer as Python does (a07-06), and a non-word
 ternary is a memory pointer value (a10-04).

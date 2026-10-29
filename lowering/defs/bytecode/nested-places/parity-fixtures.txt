@@ -1,0 +1,12 @@
+storage_struct_second_field
+transient_struct_field
+struct_field_named_like_storage
+storage_2d_array
+storage_nested_map
+storage_struct_array_field
+transient_hashmap
+s13_storage_map_of_array_elem
+s14_storage_map_of_struct_field
+s15_storage_map_string_key_assign
+s17_transient_map_assign
+x06_local_array_named_like_hashmap

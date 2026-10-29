@@ -77,8 +77,9 @@ The permanent normative checked-frontend equalities cover:
 * p01, p02, p03, p04, p06, p09, p10, p21, p39, p40, p41, p47, p74, p76, p92;
 * `ctl_local_internal` and `nm_local_return_buf` in the name-collision group.
 
-`evalCompilerInternalFrames` reaches the diamond and external-call child theories;
-`vyperLoweringHol` now reaches it and already reaches `evalCompilerNameCollisions`.
+`evalCompilerInternalFrames` reaches the diamond, external-call and two halves'
+child theories (`evalCompilerInternalFrames1` and `evalCompilerInternalFrames2`);
+the `evalCompilerWitnesses` root reaches it and `evalCompilerNameCollisions`.
 No old full-parity rollup is needed for focused validation.
 
 **Concrete expectation changes:** no existing pinned expectation changed. New

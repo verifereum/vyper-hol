@@ -1,5 +1,5 @@
 {
-  "python_version": "3.11.11",
+  "python_version": "3.11.17",
   "vyper_version": "0.5.0a4+cd74ce4f",
   "pytest_args": ["--experimental-codegen", "--optimize", "none", "--evm-version", "prague", "--evm-backend", "revm"],
   "harness_defaults": {

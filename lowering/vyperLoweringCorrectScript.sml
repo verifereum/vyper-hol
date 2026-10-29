@@ -122,7 +122,6 @@ Definition venom_env_rel_def:
   venom_env_rel tx vs <=>
     compileEnv$call_ctx_rel tx vs.vs_call_ctx vs.vs_tx_ctx vs.vs_block_ctx /\
     ~vs.vs_call_ctx.cc_static /\
-    vs.vs_tx_ctx.tc_blobhashes = tx.blob_hashes /\
     vs.vs_prev_hashes = tx.block_hashes /\
     (!n. vs.vs_block_ctx.bc_blockhash n =
          let idx = tx.block_number - n - 1 in

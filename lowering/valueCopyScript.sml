@@ -112,7 +112,7 @@ Proof
   simp[mem_bytes_at_def, mcopy_padded_read]
 QED
 
-Theorem mem_bytes_at_write_disjoint[local]:
+Theorem mem_bytes_at_write_disjoint:
   !a len d bytes s.
     a + len <= d \/ d + LENGTH bytes <= a ==>
     mem_bytes_at a len (write_memory_with_expansion d bytes s).vs_memory =

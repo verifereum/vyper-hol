@@ -71,6 +71,17 @@ Definition lookup_event_metadata_def:
         | SOME tops => lookup_event_metadata_in tenv ename tops
 End
 
+Definition lookup_custom_error_args_in_def:
+  lookup_custom_error_args_in _ [] = NONE ∧
+  lookup_custom_error_args_in error_name (top :: rest) =
+    case top of
+    | ErrorDecl name args =>
+        if name = error_name then SOME args
+        else lookup_custom_error_args_in error_name rest
+    | _ => lookup_custom_error_args_in error_name rest
+End
+
+
 (* A name resolves to at most one event declaration shape in a module. *)
 Definition event_decl_unique_def:
   event_decl_unique ename tops ⇔

@@ -79,15 +79,31 @@ Proof
   gvs[evaluate_type_def, AllCaseEqs()] >> metis_tac[]
 QED
 
+Theorem evaluate_convert_from_address_bytes:
+  value_has_type (BaseTV AddressT) v /\ 20 <= m ==>
+  ?bs. v = BytesV bs /\
+       evaluate_convert_from tenv (BaseT AddressT) v (BaseT (BytesT (Fixed m))) =
+       INL (BytesV (PAD_LEFT 0w m bs)) /\
+       LENGTH (PAD_LEFT 0w m bs) = m
+Proof
+  Cases_on `v` >> rw[value_has_type_def, evaluate_convert_from_def] >>
+  simp[listTheory.PAD_LEFT]
+QED
+
 Theorem valid_conversion_no_type_error:
   valid_conversion from_ty to_ty /\
   evaluate_type (get_tenv cx) from_ty = SOME from_tv /\
   evaluate_type (get_tenv cx) to_ty = SOME to_tv /\
   value_has_type from_tv v ==>
-  !msg. evaluate_type_builtin cx Convert to_ty [v] <> INR (TypeError msg)
+  !msg. evaluate_type_builtin cx Convert to_ty [from_ty] [v] <> INR (TypeError msg)
 Proof
   rpt strip_tac >>
   gvs[evaluate_type_builtin_def] >>
+  Cases_on `from_ty = BaseT AddressT /\ ?m. to_ty = BaseT (BytesT (Fixed m))`
+  >- (gvs[valid_conversion_def, evaluate_type_def] >>
+      drule_all evaluate_convert_from_address_bytes >>
+      disch_then (qspec_then `get_tenv cx` strip_assume_tac) >> gvs[]) >>
+  gvs[evaluate_convert_from_not_address_bytes] >>
   Cases_on`from_ty` >> Cases_on`to_ty` >>
   gvs[valid_conversion_def] >>
   imp_res_tac evaluate_type_BaseT_SOME >>
@@ -178,9 +194,15 @@ Theorem valid_conversion_success_type:
   evaluate_type (get_tenv cx) from_ty = SOME from_tv /\
   evaluate_type (get_tenv cx) to_ty = SOME to_tv /\
   value_has_type from_tv v /\
-  evaluate_type_builtin cx Convert to_ty [v] = INL v' ==>
+  evaluate_type_builtin cx Convert to_ty [from_ty] [v] = INL v' ==>
   value_has_type to_tv v'
 Proof
   rw[evaluate_type_builtin_def] >>
+  Cases_on `from_ty = BaseT AddressT /\ ?m. to_ty = BaseT (BytesT (Fixed m))`
+  >- (gvs[valid_conversion_def, evaluate_type_def] >>
+      drule_all evaluate_convert_from_address_bytes >>
+      disch_then (qspec_then `get_tenv cx` strip_assume_tac) >>
+      gvs[value_has_type_def]) >>
+  gvs[evaluate_convert_from_not_address_bytes] >>
   drule_all evaluate_convert_well_typed >> simp[]
 QED

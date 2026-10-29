@@ -263,6 +263,7 @@ Theorem blueprint_invalid_source_precedes_constructor_effects:
 Proof
   simp[vyperSmallStepTheory.eval_expr_eq_cont_cps,
        GSYM blueprint_test_run_def, listTheory.EVERY_DEF] >>
+  conj_tac >- CONV_TAC cv_eval >>
   CONV_TAC cv_eval
 QED
 
@@ -326,5 +327,15 @@ Theorem blueprint_size_is_captured_before_constructor_changes_source:
 Proof
   simp[vyperSmallStepTheory.eval_expr_eq_cont_cps,
        GSYM blueprint_test_run_def] >>
+  conj_tac >- CONV_TAC cv_eval >>
+  conj_tac >- CONV_TAC cv_eval >>
+  conj_tac >- CONV_TAC cv_eval >>
+  conj_tac >- CONV_TAC cv_eval >>
+  conj_tac >- CONV_TAC cv_eval >>
+  conj_tac >- CONV_TAC cv_eval >>
+  conj_tac >- CONV_TAC cv_eval >>
+  conj_tac >- CONV_TAC cv_eval >>
+  conj_tac >- CONV_TAC cv_eval >>
+  conj_tac >- CONV_TAC cv_eval >>
   CONV_TAC cv_eval
 QED

@@ -32,6 +32,22 @@ Proof
   >> simp[fmp_inst_invokes_def]
 QED
 
+Theorem fmp_lower_indexed_invokes:
+  fmp_lower_indexed infos ctx runner label k s restores insts =
+    SOME (out,leftover,s') /\
+  MEM out_inst out /\ fmp_inst_invokes target out_inst ==>
+  ?inst. MEM inst insts /\ fmp_inst_invokes target inst
+Proof
+  map_every qid_spec_tac [`s'`,`leftover`,`out`,`restores`,`s`,`k`] >>
+  Induct_on `insts`
+  >- simp[fmp_lower_indexed_def] >>
+  rpt gen_tac >>
+  Cases_on `fmp_select_point_restores (label,k) restores` >>
+  simp[fmp_lower_indexed_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[listTheory.MEM_APPEND] >>
+  metis_tac[fmp_lower_inst_invokes, fmp_emit_restores_not_invokes]
+QED
+
 Theorem fmp_lower_blocks_invokes:
   fmp_lower_blocks infos ctx runner s restores bbs =
     SOME (FmpBlocksResult out leftover s') /\
@@ -43,14 +59,10 @@ Theorem fmp_lower_blocks_invokes:
             fmp_inst_invokes target inst
 Proof
   map_every qid_spec_tac [`s'`,`leftover`,`out`,`restores`,`s`] >>
-  Induct_on `bbs`
-  >- simp[fmp_lower_blocks_def]
-  >> rpt gen_tac
-  >> Cases_on `fmp_select_point_restores
-        (h.bb_label,LENGTH h.bb_instructions) restores`
-  >> simp[fmp_lower_blocks_def, AllCaseEqs()]
-  >> rpt strip_tac >> gvs[listTheory.MEM_APPEND]
-  >> metis_tac[fmp_lower_insts_invokes, fmp_emit_restores_not_invokes]
+  Induct_on `bbs` >>
+  simp[fmp_lower_blocks_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  metis_tac[fmp_lower_indexed_invokes]
 QED
 
 

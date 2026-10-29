@@ -21,6 +21,7 @@ Datatype:
   abi_entry
   = Function abi_function
   | Event string (* TODO(test-semantics): determine whether event argument metadata is needed. *)
+  | Error string ((string # abi_type) list)
 End
 
 Datatype:
@@ -523,3 +524,9 @@ Definition run_test_def:
 End
 
 val () = cv_auto_trans run_test_def;
+
+Definition run_tests_def:
+  run_tests ts = MAP run_test ts
+End
+
+val () = cv_auto_trans run_tests_def;

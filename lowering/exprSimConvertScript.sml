@@ -71,7 +71,8 @@ QED
 (* ===== Evaluating convert ===== *)
 
 (* The source result of convert on a value, as eval_expr gives it for
-   TypeBuiltin ann Convert t [e1] once e1 is evaluated to v. *)
+   TypeBuiltin ann Convert t [e1] once e1 is evaluated to v, unless e1 is
+   an address and t a bytesM (evaluate_convert_from). *)
 Definition convert_result_def:
   convert_result cx t v =
     case evaluate_convert (get_tenv cx) v t of
@@ -81,13 +82,20 @@ End
 
 Theorem eval_expr_convert_cases:
   !cx ann t e1 es res es'.
-    eval_expr cx (TypeBuiltin ann Convert t [e1]) es = (res, es') ==>
+    eval_expr cx (TypeBuiltin ann Convert t [e1]) es = (res, es') /\
+    ~(expr_type e1 = BaseT AddressT /\ ?m. t = BaseT (BytesT (Fixed m))) ==>
     (?exc. eval_expr cx e1 es = (INR exc, es') /\ res = INR exc) \/
     (?tv1 es1. eval_expr cx e1 es = (INL tv1, es1) /\ !v. tv1 <> Value v) \/
     ?v1. eval_expr cx e1 es = (INL (Value v1), es') /\
          res = convert_result cx t v1
 Proof
   rpt gen_tac >>
+  Cases_on `expr_type e1 = BaseT AddressT /\ ?m. t = BaseT (BytesT (Fixed m))`
+  >- metis_tac[] >>
+  `!v. evaluate_convert_from (get_tenv cx) (expr_type e1) v t =
+       evaluate_convert (get_tenv cx) v t` by
+    metis_tac[evaluate_convert_from_not_address_bytes] >>
+  pop_assum (fn conv_eq =>
   simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
        assert_def, return_def, raise_def, type_builtin_args_length_ok_def] >>
   simp[Once evaluate_def, bind_def, return_def] >>
@@ -97,10 +105,10 @@ Proof
   Cases_on `?v. tv1 = Value v` >> gvs[] >>
   simp[materialise_def, return_def] >>
   simp[Once evaluate_def, return_def, lift_sum_def, convert_result_def,
-       evaluate_type_builtin_def] >>
+       evaluate_type_builtin_def, conv_eq] >>
   rename1 `evaluate_convert _ v1 t` >>
   Cases_on `evaluate_convert (get_tenv cx) v1 t` >>
-  simp[return_def, raise_def] >> rw[] >> gvs[]
+  simp[return_def, raise_def] >> rw[] >> gvs[])
 QED
 
 (* ===== The conversion's fragment ===== *)
@@ -165,6 +173,7 @@ Theorem compile_convert_frag_sim:
   !ctx func cenv cx ty ann t e1 es.
     (!n. t <> FlagT n) /\ is_word_type ann /\
     is_word_type (expr_type e1) /\
+    ~(expr_type e1 = BaseT AddressT /\ ?m. t = BaseT (BytesT (Fixed m))) /\
     IS_SOME (evaluate_type (get_tenv cx) (expr_type e1)) /\
     (!sa sb op.
        lower_value compile_expr cenv (expr_type e1) e1 sa = (op, sb) ==>
@@ -198,7 +207,7 @@ Proof
   `local_ptrs_reserved cenv s1` by
     (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >>
      asm_rewrite_tac[]) >>
-  drule eval_expr_convert_cases >> strip_tac
+  drule_all eval_expr_convert_cases >> strip_tac
   >- ((* e1 raises *)
       qpat_x_assum `expr_sim _ _ _ _ _ e1 _`
         (mp_tac o REWRITE_RULE [expr_sim_def]) >>
@@ -683,6 +692,7 @@ Proof
     (fs[expr_sim_below_def] >> first_x_assum irule >> simp[]) >>
   fs[expr_ok_def] >>
   `word_value_type (expr_type e1) /\ is_word_type (expr_type e1) /\
+   ~(expr_type e1 = BaseT AddressT /\ ?m. ann = BaseT (BytesT (Fixed m))) /\
    is_word_type ann /\ !n. ann <> FlagT n` by
     gvs[int_convert_pair_def, word_value_type_def, is_word_type_def,
         is_numeric_type_def, is_bool_type_def, is_int_type_def] >>

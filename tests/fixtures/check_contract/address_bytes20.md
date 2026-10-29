@@ -8,8 +8,5 @@ python3 tests/sanitize_check_contract_json.py compiler-output.jsonl \
   tests/fixtures/check_contract/address_bytes20.json --replace "$PWD/=./"
 ```
 
-The frontend test checks both runtime and deployment modes. Vyper also accepts
-address-to-bytes21 through bytes32, but those require left padding; the current
-evaluator shares the address and byte-string representation and right-pads byte
-strings. The checker tests therefore require exactly bytes20 and reject wider
-and dynamic byte destinations.
+The frontend test checks both runtime and deployment modes. Wider
+destinations are in `address_bytes32.vy`.

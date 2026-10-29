@@ -268,22 +268,22 @@ End
 val () = cv_auto_trans evaluate_extract32_def;
 
 Definition evaluate_type_builtin_def:
-  evaluate_type_builtin cx Empty typ vs =
+  evaluate_type_builtin cx Empty typ tys vs =
   (case evaluate_type (get_tenv cx) typ
    of SOME tv => INL $ default_value tv
     | NONE => INR (TypeError "Empty evaluate_type")) ∧
-  evaluate_type_builtin cx MaxValue typ vs =
+  evaluate_type_builtin cx MaxValue typ tys vs =
     evaluate_max_value typ ∧
-  evaluate_type_builtin cx MinValue typ vs =
+  evaluate_type_builtin cx MinValue typ tys vs =
     evaluate_min_value typ ∧
-  evaluate_type_builtin cx Convert typ [v] =
-    evaluate_convert (get_tenv cx) v typ ∧
-  evaluate_type_builtin cx Epsilon typ [] =
+  evaluate_type_builtin cx Convert typ [from_ty] [v] =
+    evaluate_convert_from (get_tenv cx) from_ty v typ ∧
+  evaluate_type_builtin cx Epsilon typ tys [] =
     (if typ = BaseT DecimalT then INL $ DecimalV 1
      else INR (TypeError "Epsilon: not decimal")) ∧
-  evaluate_type_builtin cx Extract32 (BaseT bt) [BytesV bs; IntV i] =
+  evaluate_type_builtin cx Extract32 (BaseT bt) tys [BytesV bs; IntV i] =
     evaluate_extract32 bs (Num i) bt ∧
-  evaluate_type_builtin cx (AbiDecode unwrap) typ [BytesV bs] =
+  evaluate_type_builtin cx (AbiDecode unwrap) typ tys [BytesV bs] =
     (let tenv = get_tenv cx in
      if unwrap ∧ needs_external_call_wrap typ then
        case evaluate_abi_decode tenv (TupleT [typ]) bs of
@@ -294,9 +294,9 @@ Definition evaluate_type_builtin_def:
        case evaluate_abi_decode tenv typ bs of
          INL v => INL v
        | INR str => INR (RuntimeError str)) ∧
-  evaluate_type_builtin _ (AbiDecode _) _ _ =
+  evaluate_type_builtin _ (AbiDecode _) _ _ _ =
     INR (TypeError "abi_decode args") ∧
-  evaluate_type_builtin cx (AbiEncode ensure method_id) typ vs =
+  evaluate_type_builtin cx (AbiEncode ensure method_id) typ tys vs =
     (let tenv = get_tenv cx in
      let unwrap = (¬ensure ∧ needs_external_call_wrap typ) in
      let encoded =
@@ -309,7 +309,7 @@ Definition evaluate_type_builtin_def:
        INL bs =>
          INL (BytesV (abi_encode_method_id_bytes method_id ++ bs))
      | INR str => INR (RuntimeError str)) ∧
-  evaluate_type_builtin _ _ _ _ =
+  evaluate_type_builtin _ _ _ _ _ =
     INR (TypeError "evaluate_type_builtin")
 End
 

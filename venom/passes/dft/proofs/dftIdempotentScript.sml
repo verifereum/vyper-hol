@@ -390,7 +390,8 @@ Triviality raw_deps_map_f:
                NONE => [] | SOME w => [w])
         (effects_to_list (write_effects i1.inst_opcode))) ++
     MAP THE (FILTER IS_SOME (MAP (\reff.
-        case FLOOKUP et2.et_last_write reff of
+        if MEM reff (effects_to_list (write_effects i1.inst_opcode)) then NONE
+        else case FLOOKUP et2.et_last_write reff of
           NONE => NONE
         | SOME writer =>
             if writer.inst_id <> i1.inst_id then SOME writer else NONE)
@@ -402,7 +403,8 @@ Triviality raw_deps_map_f:
                  NONE => [] | SOME w => [w])
           (effects_to_list (write_effects i1.inst_opcode))) ++
       MAP THE (FILTER IS_SOME (MAP (\reff.
-          case FLOOKUP et1.et_last_write reff of
+          if MEM reff (effects_to_list (write_effects i1.inst_opcode)) then NONE
+          else case FLOOKUP et1.et_last_write reff of
             NONE => NONE
           | SOME writer =>
               if writer.inst_id <> i1.inst_id then SOME writer else NONE)
@@ -427,19 +429,22 @@ Proof
   ) >>
   (* Read part: use filter_some_map_option *)
   sg `MAP THE (FILTER IS_SOME (MAP (\reff.
-      case FLOOKUP et2.et_last_write reff of
+      if MEM reff (effects_to_list (write_effects i1.inst_opcode)) then NONE
+      else case FLOOKUP et2.et_last_write reff of
         NONE => NONE
       | SOME writer =>
           if writer.inst_id <> i1.inst_id then SOME writer else NONE)
       (effects_to_list (read_effects i1.inst_opcode)))) =
     MAP f (MAP THE (FILTER IS_SOME (MAP (\reff.
-      case FLOOKUP et1.et_last_write reff of
+      if MEM reff (effects_to_list (write_effects i1.inst_opcode)) then NONE
+      else case FLOOKUP et1.et_last_write reff of
         NONE => NONE
       | SOME writer =>
           if writer.inst_id <> i1.inst_id then SOME writer else NONE)
       (effects_to_list (read_effects i1.inst_opcode)))))`
   >- (
     irule filter_some_map_option >> rpt strip_tac >> rename1 `MEM reff _` >>
+    Cases_on `MEM reff (effects_to_list (write_effects i1.inst_opcode))` >> simp[] >>
     first_x_assum (qspec_then `reff` mp_tac) >>
     Cases_on `FLOOKUP et1.et_last_write reff` >> simp[] >>
     strip_tac >> gvs[] >>

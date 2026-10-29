@@ -25,13 +25,16 @@ runs:
           exit 1
         fi
         echo "polyml-rev=$rev" >> "$GITHUB_OUTPUT"
+        # A Poly/ML built on a newer image needs that image's glibc, and
+        # ubuntu-latest hands out more than one image, so each gets its own.
+        echo "cache-key=polyml-${{ runner.os }}-${{ runner.arch }}-${ImageOS:-unknown-image}-$rev" >> "$GITHUB_OUTPUT"
 
     - name: Restore Poly/ML cache
       uses: actions/cache/restore@v6
       id: cache-polyml
       with:
         path: ~/polyml-install
-        key: polyml-${{ runner.os }}-${{ runner.arch }}-${{ steps.version.outputs.polyml-rev }}
+        key: ${{ steps.version.outputs.cache-key }}
 
     - name: Build Poly/ML
       if: steps.cache-polyml.outputs.cache-hit != 'true'
@@ -50,7 +53,7 @@ runs:
       continue-on-error: true
       with:
         path: ~/polyml-install
-        key: polyml-${{ runner.os }}-${{ runner.arch }}-${{ steps.version.outputs.polyml-rev }}
+        key: ${{ steps.version.outputs.cache-key }}
 
     - name: Add Poly/ML to PATH
       shell: bash
