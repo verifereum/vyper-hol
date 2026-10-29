@@ -22,7 +22,7 @@ Theorem source_supply_reads:
   source_supply_action (read_place cx place) /\
   source_supply_action (place_type_value cx place) /\
   source_supply_action (extend_place cx tv subscript) /\
-  source_supply_action (select_result cx ty tv subscript) /\
+  source_supply_action (select_result cx ann tv subscript) /\
   source_supply_action (conditional_result cx tv) /\
   source_supply_action (lookup_global cx src name) /\
   source_supply_action (lookup_flag_mem cx nsid flag_member) /\

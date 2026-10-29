@@ -37,8 +37,8 @@ Theorem source_supply_assignment:
 Proof
   conj_tac >- metis_tac[source_supply_action_write_place] >>
   rpt conj_tac >> rpt gen_tac >> Cases_on `p` >>
-  simp_tac bool_ss [Once append_place_def,
-                   Once pop_place_def, FORALL_PROD, LET_THM] >>
+  simp_tac bool_ss [Once (oneline append_place_def),
+                   Once (oneline pop_place_def), FORALL_PROD, LET_THM] >>
   rpt strip_tac >> rpt (vyperSupplyProofLib.step place_net)
 QED
 
