@@ -9,8 +9,8 @@
  *                              word_value_type by compile_bop_word_sim, the
  *                              rest by compile_bop_other_sim
  *   compile_bop_word_with_frag_sim — operator-parametric composition
- *   power_sim_ok            — explicit optional checked-Exp obligation
- *   compile_bop_word_sim     — non-Exp dispatch, retaining unrelated cheats
+ *   compile_power_case_sim   — checked Exp via the audited power fragment
+ *   compile_bop_word_sim     — general dispatch, retaining unrelated cheats
  *   compile_bop_other_sim    — == and != on address and bytesN by
  *                              compile_bop_bytes_eq_sim, the rest by
  *                              compile_bop_rest_sim
@@ -61,7 +61,7 @@ Theory exprSimOperators
 Ancestors
   list finite_map
   fragExec exprSim exprSimHyps exprSimOps exprSimIfExp exprSimBinopFrag
-  exprSimUnop exprSimCompare
+  exprSimUnop powerCheckedProps exprSimCompare
   exprBopLowering exprWordOperand
   loweringSlice
   exprLowering compileEnv
@@ -275,35 +275,54 @@ QED
 
 Theorem compile_bop_word_sim:
   !cenv ann bop e1 e2.
-    bop <> Exp /\ expr_sim_ok cenv e1 /\ expr_sim_ok cenv e2 /\
+    expr_sim_ok cenv e1 /\ expr_sim_ok cenv e2 /\
     word_value_type (expr_type e1) /\ word_value_type (expr_type e2) ==>
     expr_sim_ok cenv (Builtin ann (Bop bop) [e1;e2])
 Proof
   rpt strip_tac >> irule compile_bop_word_with_frag_sim >> simp[] >>
   rpt gen_tac >> strip_tac >>
   qspecl_then [`ctx`, `func`, `cenv`, `cx`, `bop`, `ann`, `e1`, `e2`,
-               `v1`, `v2`, `es2`, `tv1`, `tv2`]
+               `v1`, `v2`, `es2`, `tv1`, `tv2`, `env`, `es`, `es1`]
     mp_tac binop_frag_typed >>
   impl_tac
-  >- gvs[Once well_typed_expr_def, well_typed_builtin_app_def] >> simp[]
+  >- (Cases_on `bop = Exp` >> gvs[] >>
+      gvs[Once well_typed_expr_def, well_typed_builtin_app_def]) >> simp[]
 QED
 
-(* Keep the independent composition proof's no-admission audit. *)
-val () =
-  let val th = compile_bop_word_with_frag_sim
-      val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
+(* Complete Exp case: checking determines both the two-operand shape and
+   integer operand types. It does not use the unrelated other-operator cheat. *)
+Theorem compile_power_case_sim:
+  !cenv ann args.
+    expr_sim_below cenv (list_size expr_size args) ==>
+    expr_sim_ok cenv (Builtin ann (Bop Exp) args)
+Proof
+  rpt gen_tac >> strip_tac >> simp[expr_sim_ok_def] >> rpt strip_tac >>
+  `well_typed_expr env (Builtin ann (Bop Exp) args)` by fs[expr_sim_pre_def] >>
+  drule well_typed_power_arguments >> strip_tac >> gvs[] >>
+  drule power_checked_integer_info >> strip_tac >>
+  `word_value_type (expr_type base_e) /\ word_value_type (expr_type exponent)` by
+    (Cases_on `signed` >> gvs[word_value_type_def]) >>
+  `expr_sim_ok cenv base_e /\ expr_sim_ok cenv exponent` by
+    (conj_tac
+     >- (qspecl_then [`cenv`, `[base_e;exponent]`, `base_e`] mp_tac
+           expr_sim_below_mem >> simp[expr_ok_def]) >>
+     qspecl_then [`cenv`, `[base_e;exponent]`, `exponent`] mp_tac
+       expr_sim_below_mem >> simp[expr_ok_def]) >>
+  `expr_sim_ok cenv (Builtin ann (Bop Exp) [base_e;exponent])` by
+    (irule compile_bop_word_with_frag_sim >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+     simp_tac bool_ss [] >> rpt gen_tac >> strip_tac >>
+     irule binop_frag_pow >> metis_tac[]) >>
+  irule expr_sim_ok_apply >> metis_tac[]
+QED
+
+val () = List.app (fn (name,th) =>
+  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
   in if null (Thm.hyp th) andalso null axioms andalso
         List.all (fn s => s = "DISK_THM") oracles then ()
-     else raise Fail "operator-parametric composition audit" end;
-
-(* Optional certification boundary, not a checker restriction or an axiom.
-   The extracted compile_power_case_sim discharges precisely this proposition.
-   Restoring main's binop_frag_pow would instead reintroduce its admission. *)
-Definition power_sim_ok_def:
-  power_sim_ok cenv =
-    (!ann args. expr_sim_below cenv (list_size expr_size args) ==>
-      expr_sim_ok cenv (Builtin ann (Bop Exp) args))
-End
+     else raise Fail ("power case audit: " ^ name) end)
+  [("compile_bop_word_with_frag_sim",compile_bop_word_with_frag_sim),
+   ("compile_power_case_sim",compile_power_case_sim)];
 
 (* ===== Equality on address and bytesN ===== *)
 
@@ -445,12 +464,11 @@ QED
 
 Theorem compile_bop_case_sim:
   !cenv ann bop args.
-    (bop = Exp ==> power_sim_ok cenv) /\
     expr_sim_below cenv (list_size expr_size args) ==>
     expr_sim_ok cenv (Builtin ann (Bop bop) args)
 Proof
   rpt strip_tac >> Cases_on `bop = Exp`
-  >- fs[power_sim_ok_def] >>
+  >- (gvs[] >> irule compile_power_case_sim >> simp[]) >>
   Cases_on `?e1 e2. args = [e1; e2] /\ word_value_type (expr_type e1) /\
                     word_value_type (expr_type e2)`
   >- (pop_assum strip_assume_tac >> rpt BasicProvers.VAR_EQ_TAC >>
@@ -479,7 +497,6 @@ QED
 
 Theorem compile_bop_ok:
   !cenv ann bop args.
-    (bop = Exp ==> power_sim_ok cenv) /\
     expr_sim_below cenv (list_size expr_size args) ==>
     expr_ok cenv (Builtin ann (Bop bop) args)
 Proof

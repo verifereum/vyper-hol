@@ -3,11 +3,14 @@
    TOP-LEVEL: well_typed_power_lowering_literal/no_dynamic_fallback,
    well_typed_power_supported_operands/form, checked exponent bounds for
    expressions and AugAssign, and checker counterexamples for shifts.
-   This theory has no execution/simulation certificate dependency. Whole-program
-   simulation now states its optional power certification premise explicitly. *)
+   Audits the arithmetic, emitted-sequence and real-block certificates,
+   including signed literal bases and repaired IntT 9 overflow regressions.
+   Complete checked-AST power execution is certified by checked_power_run
+   (powerCheckedProps); whole-program correctness retains unrelated admissions. *)
 Theory powerDomainProps
 Ancestors
-  vyperTypeSystem exprLowering supportedExprForms
+  vyperTypeSystem exprLowering powerBoundProps powerRunProps supportedExprForms
+  powerBlockProps powerSignedRunProps powerTypedCounterexample powerCheckedProps
   vyperValueOperation vyperValue vyperAST words integer_word intBits
 Libs
   wordsLib
@@ -127,6 +130,34 @@ Proof
   Cases_on `0 < bits /\ bits <= 256` >> simp[]
 QED
 
+(* Integration at the real binary lowering interface: the literal options
+   are extracted from the SAME checked AST, and the operand type/width comes
+   from checking, not the supported-program whitelist. *)
+Theorem well_typed_unsigned_power_exponent_correct:
+  well_typed_expr env (Builtin (BaseT (UintT bits)) (Bop Exp) [base_e; exponent]) /\
+  expr_int_literal base_e = NONE /\ expr_int_literal exponent = SOME (&n) /\ 2 <= n /\
+  compile_binop Exp x y (expr_type base_e)
+    (expr_int_literal base_e) (expr_int_literal exponent) st = (op, st') /\
+  a < dimword (:256) /\
+  eval_operand x ss = SOME (n2w a) /\ eval_operand y ss = SOME (n2w n) /\
+  fresh_vars_wrt st ss ==>
+  (?r ss'. evaluate_binop (Unsigned bits) tv Exp (IntV (&a)) (IntV (&n)) = INL (IntV r) /\
+            run_inst_seq (emitted_insts st st') ss = OK ss' /\
+            eval_operand op ss' = SOME (i2w r)) \/
+  (?m ss'. evaluate_binop (Unsigned bits) tv Exp (IntV (&a)) (IntV (&n)) =
+              INR (RuntimeError m) /\
+            run_inst_seq (emitted_insts st st') ss = Abort Revert_abort ss')
+Proof
+  strip_tac >> drule well_typed_unsigned_power_info >> strip_tac >>
+  drule_all well_typed_power_lowering_bounded_exponent >> strip_tac >>
+  gvs[integer_value_bits_def, compile_binop_def] >>
+  `n < dimword (:256)` by
+    (simp[dimword_def, EVAL ``dimindex (:256)``] >> decide_tac) >>
+  mp_tac (Q.INST [`ty` |-> `BaseT (UintT bits)`]
+    compile_safe_pow_unsigned_exponent_correct) >>
+  simp[compileEnvTheory.type_bits_def, compileEnvTheory.is_signed_type_def]
+QED
+
 (* Checking constrains a dynamic signed exponent's TYPE, not its value.
    In particular, it cannot justify a nonnegative runtime premise. *)
 Theorem checker_admits_negative_runtime_power:
@@ -159,7 +190,9 @@ Proof
   rw[] >> simp[expr_int_literal_def]
 QED
 
-(* Audit only these independent domain/gate certificates. *)
+(* Check the exact exported proof closure, including the runtime helpers.
+   Existing admitted general simulations are deliberately not imported as
+   certificates: any accidental use of one makes this audit fail. *)
 val () = List.app (fn thy =>
   List.app (fn (name, th) =>
     let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
@@ -168,4 +201,5 @@ val () = List.app (fn thy =>
          List.all (fn s => s = "DISK_THM") oracles then ()
       else raise Fail ("power proof audit failed: " ^ thy ^ "." ^ name)
     end) (DB.thms thy))
-  ["powerDomainProps"];
+  ["powerBoundProps", "powerRunProps", "powerBlockProps", "powerSignedRunProps",
+   "powerTypedCounterexample", "powerDomainProps"];
