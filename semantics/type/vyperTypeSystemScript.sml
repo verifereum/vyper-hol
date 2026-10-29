@@ -658,8 +658,8 @@ Theorem target_mutable_static_maps_transfer:
        FLOOKUP env2.bare_globals k = NONE) ==>
     target_mutable env2 tgt
 Proof
-  Induct >> simp[target_mutable_def] >> rpt strip_tac >>
-  gvs[IS_SOME_EXISTS] >> metis_tac[]
+  gen_tac >> Cases_on `tgt` >> simp[target_mutable_def] >>
+  rpt strip_tac >> gvs[IS_SOME_EXISTS] >> metis_tac[]
 QED
 
 Definition well_typed_expr_def:

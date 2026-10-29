@@ -3,7 +3,7 @@ Ancestors
   arithmetic alist combin option list finite_map pair rich_list
   cv cv_std cv_string_fmap vfmTypes vfmState vfmContext vfmExecution[ignore_grammar]
   vyperAST vyperMisc vyperNsidFmap vyperValue vyperValueOperation
-  vyperStorage vyperMemory vyperContext extCallOracle[ignore_grammar]
+  vyperStorage vyperContext extCallOracle[ignore_grammar]
 Libs
   cv_transLib wordsLib monadsyntax
 

@@ -1573,22 +1573,6 @@ Proof
   disch_then (qspec_then `result4` mp_tac) >> simp[]
 QED
 
-(* Isolate the typed value-keyword read before unfolding the full call. *)
-Theorem ext_call_value_opt_success[local]:
-  !kw_opt static st.
-  (!v. kw_opt = SOME v ==> ?n. dest_NumV v = SOME n) ==>
-  ?value_opt.
-    (if static then return NONE else
-       case kw_opt of
-         NONE => return (SOME 0)
-       | SOME v => bind (lift_option_type (dest_NumV v) "ExtCall value not int")
-                        (\n. return (SOME n))) st = (INL value_opt, st)
-Proof
-  rpt gen_tac >> Cases_on `static` >> simp[return_def] >>
-  Cases_on `kw_opt` >> simp[return_def] >> rpt strip_tac >>
-  gvs[bind_def, lift_option_type_def, return_def]
-QED
-
 Theorem ext_call_value_opt_return[local]:
   (!v. ext_call_kwarg EKValue opts kvs = SOME v ==>
        ?n. dest_NumV v = SOME n) ==>
