@@ -96,7 +96,7 @@ Proof
     (irule alloca_room_fields >> qexists_tac `s` >> fs[stmt_state_rel_def]) >>
   `immutable_alloca_sep func cenv cx (es with scopes := scs') t` by
     (irule immutable_alloca_sep_fields >>
-     qexistsl_tac [`es`, `s`] >> fs[stmt_state_rel_def]) >>
+     qexistsl_tac [`s`, `es`] >> fs[stmt_state_rel_def]) >>
   fs[stmt_state_rel_def] >> metis_tac[]
 QED
 
@@ -131,6 +131,12 @@ Proof
      `b + sz' <= w2n w \/ w2n w + 32 <= b` by
        (fs[regions_disjoint_def] >> DECIDE_TAC) >>
      irule EQ_SYM >> irule mstore_mem_bytes_at_disjoint >> simp[]) >>
+  `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es
+     (mstore (w2n w) x s)` by
+    (irule immutables_rel_mstore_alloca >>
+     reverse conj_tac >- fs[stmt_state_rel_def, state_rel_def] >>
+     qexistsl_tac [`w2n w`, `func`, `inst`, `sz`] >>
+     fs[stmt_state_rel_def, state_rel_def]) >>
   irule stmt_state_rel_declare_memory >> simp[] >>
   qexistsl_tac [`inst`, `s`, `w`] >>
   fs[mstore_def, LET_THM, lookup_var_def] >> gs[] >> first_assum ACCEPT_TAC
