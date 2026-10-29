@@ -129,7 +129,7 @@ Proof
        venomInstTheory.mk_inst_def]
 QED
 
-Theorem annassign_mstore_framed_frag[local]:
+Theorem annassign_mstore_framed_frag:
   !w wd p val_op ctx func cenv cx es' st st' Pre R keep s0.
     emit_void MSTORE [Var p; val_op] st = ((), st') /\
     (!s. Pre s ==>
