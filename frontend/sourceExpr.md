@@ -1,10 +1,9 @@
-# Opt-in recursive source expression elaboration
+# Recursive source expression elaboration
 
 `sourceExprDefs`, `sourceExprElaborate` and `sourceExprProps` implement the
-source-preserving expression path. `sourceExprWitnessDefs` holds the 37 retained
-expression inputs; `sourceExprTest` checks their exact outcomes and additional
-boundary cases. This API never calls the old JSON translator, reads folded
-metadata, or retries a failed expression through the legacy frontend.
+source-preserving expression path. This API never calls the old JSON translator,
+reads folded metadata, or retries a failed expression through the legacy frontend.
+See [constant evaluation](constant-evaluation.md) for pipeline and trust boundaries.
 
 ## API and validation
 
@@ -18,9 +17,10 @@ consumers reject it. Fuel exhaustion is explicit Unsupported.
   spelling does not acquire builtin behavior.
 * `constants` is an independently constructed resolved constant environment.
   `bindings` maps resolved identities to runtime code, types, intrinsics and
-  source-derived function/interface signatures. Runtime bindings preserve local `Name`, storage or
-  immutable `TopLevelName`, and environment `Builtin` distinctions; correctness
-  of these independently supplied bindings is not inferred from typing.
+  source-derived function/interface signatures. Runtime bindings preserve local
+  `Name`, storage or immutable `TopLevelName`, and environment `Builtin`
+  distinctions; correctness of these independently supplied bindings is not
+  inferred from typing.
 * `env` is the runtime typing environment; `ty` is a contextual expected type.
   `source_expr_annotated` obtains it through `source_type_resolve`, rejecting
   qualifiers and HashMap value types in expression positions.
@@ -58,25 +58,25 @@ Errors are eager even below False Boolean heads or beside dynamic operands.
   This is not general raw-call keyword coverage.
 * `sourceExprCall` additionally constructs internal calls and interface-based
   external/static calls from resolved source signatures, including original
-  `skip_contract_check` constants and typed external-call keywords. This newer
-  call path is not covered by the 37-expression inventory below.
+  `skip_contract_check` constants and typed external-call keywords. This
+  call path has separate tests in
+  [sourceModuleLinkTestScript.sml](sourceModuleLinkTestScript.sml).
 
 `source_expr_flag`, `source_expr_index`, and `source_expr_range_bound` share
 original resolution/evaluation evidence. Indices check the supplied count;
 range bounds require `0 < n < 2^256`. Present invalid/dynamic flags never become
 defaults. These helpers are not complete statement/range elaborators.
 
-## Exact retained coverage and limits
+## Theorem contracts and limits
 
-`source_expr_all_retained_witness_bodies` proves exact original-body/initializer
-outcomes for **all 37** retained #543 witnesses, with a separate exact name
-inventory theorem. **36 succeed**; `method_id_var` returns the intended domain
-error, matching the authoritative pin
-`cd74ce4f57e3771aeeab8f061fa3be45bfe8a29c`. Additional theorems cover constructor
-assignments, tuple initializers, environment reads, ABI invalid-present flags,
-resolved aliases/shadowing, storage argument order, and dynamic array indices.
-Power witnesses retain literal exponent 3 for `x ** (1 + 2)` and literal base
--2 for `(0 - 2) ** y`.
+`sourceExprProps` proves runtime typing, original constant/operator validation,
+required-constant provenance and local constant replacement with represented
+values and unchanged states. It does not prove a universal structural
+source-to-runtime simulation. [sourceMeaning](sourceMeaning.md) supplies
+independent staged relations, and
+[sourceMeaningLocation](sourceMeaningLocation.md) handles location-sensitive
+forms. These retain explicit derivation and context-agreement premises; neither
+asserts that every accepted expression has an independent semantic derivation.
 
 This is a contextual fragment, not a complete source typer. Mixed-sign
 comparisons, context-polymorphic negative boundaries, structs, many builtin/call
@@ -86,33 +86,17 @@ arithmetic can be accepted in a mathematical annotation bound. Unsupported is
 not a claim of language rejection, and no compiler replacement is a fallback.
 
 Expression AST/typing witnesses are not whole-program parity certificates.
-The separate opt-in `sourceModule` path now consumes this API; ordinary public
-frontend integration is **not** claimed complete. See
-[the source-module results](../docs/SOURCE_MODULE_PARITY_RESULTS.md) for actual
-whole-program checks, byte comparisons and remaining backend failures.
+[sourceModule](sourceModule.md) consumes this API; declaration/type/environment
+transport, effects and module/compiler composition have separate contracts.
+No supported-program restriction is removed here.
 
-`sourceExprProps` proves runtime typing, original constant/operator validation,
-required-constant provenance and local constant replacement with represented
-values and unchanged states. It does not prove a universal structural
-source-to-runtime simulation. [sourceMeaning](sourceMeaning.md) supplies an
-independent staged semantic bridge for a smaller fragment (not dynamic Boolean
-chains, ABI encode/decode, or general calls). Declaration/type/environment
-transport, effects and module/compiler composition are separate obligations;
-no supported-program restriction is removed here.
+## Regressions
 
-## Validation
-
-From the repository root:
-
-```sh
-.agent-files/.holbuild-toolchain/bin/holbuild sourceExprTestTheory \
-  sourceMeaningTestTheory --tactic-timeout 2.5 --allow-cache-timeout-discrepancy
-```
-
-The final expression kernel audit covers the expression implementation,
-call-construction dependency and split test theories, rejecting open
-hypotheses, axioms and non-`DISK_THM` oracle tags. The new witness-input theory
-keeps each expression source file at approximately 500 lines or fewer.
-Cache timeout discrepancy is for unchanged dependencies; changed proofs are
-checked freshly at 2.5 seconds. Whole-module byte probes are separate tests,
-not a consequence of the expression audit.
+[sourceExprWitnessDefsScript.sml](sourceExprWitnessDefsScript.sml) holds original
+expression inputs; [sourceExprTestScript.sml](sourceExprTestScript.sml) proves their
+exact body/initializer outcomes with `source_expr_all_retained_witness_bodies`.
+Regressions include rejection of dynamic `method_id` inputs, constructor
+assignments, tuple initializers, environment reads, ABI invalid-present flags,
+resolved aliases/shadowing, storage argument order and dynamic array indices.
+Power witnesses retain literal exponent 3 for `x ** (1 + 2)` and literal base
+-2 for `(0 - 2) ** y`.

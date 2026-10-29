@@ -1,14 +1,12 @@
-# Opt-in source constant core
+# Source constant core
 
-## Status and semantic sources
+## Semantic sources
 
-These theories are **not wired into the existing frontend**. They are a pure,
-partial source evaluator, not completion of #543, source typing, reification,
-module resolution, or whitelist removal. Only `SC_Value` satisfies a required
-constant position; never fall back to compiler-folded metadata after failure.
+A pure, partial source evaluator. Only `SC_Value` satisfies a required constant
+position; failure must not fall back to compiler-folded metadata. See
+[constant evaluation](constant-evaluation.md) for pipeline and trust boundaries.
 
-Semantic reference: `/home/lukasz/vyper`, revision
-`cd74ce4f57e3771aeeab8f061fa3be45bfe8a29c` (VYPER_PIN).
+Semantic reference: the repository's `VYPER_PIN`, especially these modules:
 
 - `vyper/semantics/analysis/constant_folding.py`: eager child visitation;
   `visit_BinOp`, `visit_Compare`, `visit_Subscript`, literal-kind restrictions,
@@ -22,12 +20,9 @@ Semantic reference: `/home/lukasz/vyper`, revision
   is separate from folding. Computing a value does not prove that the original
   expression was legal for its eventual type, signedness or width.
 
-This is not the full witness/consumer inventory required by the overall plan.
-Builtin rules now cover the retained witness inventory; see
-[sourceConstBuiltin.md](sourceConstBuiltin.md) for their domains, resolved-identity
-requirements and Keccak computation proofs. Other builtin groups remain
-explicitly unsupported. The core must remain opt-in until its remaining
-coverage, original-expression typing and integration obligations are discharged.
+See [sourceConstBuiltin.md](sourceConstBuiltin.md) for supported builtin domains,
+resolved-identity requirements and Keccak computation proofs. Other builtin
+groups remain explicitly unsupported. Evaluation is not source typing.
 
 ## Decoder/resolver interface
 
@@ -46,10 +41,10 @@ no inferred types, widths, compiler-folded replacements or runtime state.
   Hex is never silently converted to Bytes. A decoder must also establish the
   original token's lexical validity.
 - Lists, nonempty tuples and nominal structs retain distinct structural kinds.
-  Struct expressions/reification are not implemented; structural validity does
-  not establish homogeneous/nominal source typing.
+  The core does not construct struct expressions or reify values; structural
+  validity does not establish homogeneous/nominal source typing.
 - Environments map canonical name paths to `SC_Constant value` or
-  `SC_DynamicBinding`. `ALOOKUP` is first-match. A later resolver must establish
+  `SC_DynamicBinding`. `ALOOKUP` is first-match. The caller/resolver must establish
   identity, uniqueness, shadowing and dependency correctness. A missing binding
   is `SCS_UnresolvedName`, not a genuinely dynamic expression.
 - `SCE_Builtin` contains a resolved identity, never just a spelling. `SCE_Call`
@@ -177,38 +172,8 @@ all pinned diagnostic messages or their ordering.
   empty/mixed/nested lists, invalid index domains, power fast paths/bounds,
   Decimal signed/truncated operations, per-operation quantization, precision-78
   ties, quantization overflow and negative-division context recomputation.
-- An audit of **every export in all three core theories**: no open hypotheses,
-  axioms or oracle tags other than DISK_THM bookkeeping.
 
-Local reference checks used the pinned Python operator methods and folder.
-Additionally, 3000 deterministic Decimal differential probes (seed 543; +, -, *,
-/, %; varied signed coefficients up to 114 digits) agreed with the integer
-rounding algorithm. These checks are regression evidence, not a formal theorem
-connecting HOL definitions to Python or proof of complete source coverage.
-
-The primitive value-to-runtime reification bridge is now proved separately in
-[sourceConstValue.md](sourceConstValue.md). It is not an original-expression
-legality or replacement-equivalence theorem. Aggregate reification, full source
-typing, program transport and compiler composition remain unproved.
-
-## Build validation boundary
-
-Normal project builds are now supported by **holbuild 0.11.7** at
-`.agent-files/.holbuild-toolchain/bin/holbuild`; the previous 0.11.4 manifest
-version blocker no longer applies. Neither project nor dependency manifests
-need a version bypass. The normal project command is:
-
-```sh
-.agent-files/.holbuild-toolchain/bin/holbuild \
-  sourceConstASTTheory sourceConstEvalTheory sourceConstEvalPropsTheory \
-  --force=theory --skip-checkpoints --no-cache --tactic-timeout 2.5
-```
-
-The command above passed after these changes in **24.485 seconds**, with no
-CHEAT warnings. The kernel audit reported 192 AST exports, 49 evaluator exports
-and 62 property exports, all closed. A separate clean isolated build also
-passed in 23.231 seconds with the same 2.5-second tactic timeout.
-
-This checks the opt-in theories in the ordinary dependency context, not frontend
-integration or completion of #543. The pinned HOL revision remains
-`652d1f0aad5cd537ed1e5d470ba3444e70ba470e`.
+These are local HOL evaluator properties and regressions, not a formal theorem
+connecting the definitions to Python or proof of complete source coverage.
+The separate [value-to-runtime bridges](sourceConstValue.md) certify reification
+of computed values; they do not certify original-expression legality.

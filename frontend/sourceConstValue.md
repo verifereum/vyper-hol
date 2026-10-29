@@ -1,9 +1,8 @@
 # Local typed source-value / runtime bridge
 
-`sourceConstValueTheory`, `sourceConstValuePropsTheory`, and
-`sourceConstValueTestTheory` are opt-in. Their regression/audit theories are
-registered as build roots. No public frontend, checker, lowering rule or ABI
-whitelist is changed by this local bridge.
+`sourceConstValueTheory` defines primitive reification;
+`sourceConstValuePropsTheory` proves its certificates. See
+[constant evaluation](constant-evaluation.md) for pipeline and trust boundaries.
 
 ## Interface
 
@@ -68,10 +67,10 @@ needed because literal evaluation reads neither context nor state.
 
 `sourceConstValueStructured$source_const_reify nominal tenv ty sv` supports
 primitive values, homogeneous `SCV_List` arrays, heterogeneous `SCV_Tuple`
-values, and `SCV_Struct` values, recursively. The original three-argument
-`sourceConstValue$source_const_reify` and its context-free theorem API remain
-unchanged for `sourceExpr`. `source_const_reify_primitive_agrees` proves that
-primitive success also succeeds in the structured API; the original stronger
+values, and `SCV_Struct` values, recursively. The three-argument
+`sourceConstValue$source_const_reify` has a context-free theorem API used by
+`sourceExpr`. `source_const_reify_primitive_agrees` proves that
+primitive success also succeeds in the structured API; the context-free primitive
 soundness theorem is re-exported as `source_const_reify_primitive_sound`.
 
 The structured bridge checks source-value validity, expected-type
@@ -99,11 +98,6 @@ their element type. No runtime state invariant is assumed. The corresponding
 `source_const_reify_sound` theorem accepts a standalone `tenv` and explicitly
 requires `get_tenv cx = tenv`.
 
-These theories remain opt-in and do not extend source-expression acceptance.
-The structured regression theory is imported by the existing value-test root;
-it also audits all new exported definitions/theorems for hypotheses, axioms,
-and non-kernel oracle tags.
-
 ## Exact scope / non-claims
 
 This is a theorem about an already-computed mathematical source **value** and
@@ -115,26 +109,19 @@ legality, and context-sensitive source conversion rules are not recovered
 from a value. Successful source constant evaluation alone is not a source
 legality certificate; successful reification does not change that boundary.
 
-There is no compiler/Venom simulation theorem here. In particular the ABI
-alias/effect blocker in `docs/ISSUE_551_ABI_DISPATCH.md` remains unchanged.
-These theories do not remove a whitelist or introduce an assumed frontend
-invariant to bypass it.
+There is no compiler/Venom simulation theorem here and no assumed frontend
+invariant to bypass supported-program restrictions.
 
-## Validation
+## Regressions
 
-From the project root:
-
-```sh
-.agent-files/.holbuild-toolchain/bin/holbuild frontend/sourceConstValueTestScript.sml
-```
-
-The test theory imports both definitions and proofs. Kernel computation tests
-cover all six primitive constructors, signed/unsigned/decimal endpoints,
-ill-formed widths, type mismatch, ASCII rejection, byte/octet and length
+[sourceConstValueTestScript.sml](sourceConstValueTestScript.sml) contains kernel
+computation tests for all six primitive constructors, signed/unsigned/decimal
+endpoints, ill-formed widths, type mismatch, ASCII rejection, byte/octet and length
 bounds, leading-zero and mixed-case hex decoding, malformed hex, Address
 length, descriptor rejection, aggregate rejection, and unchanged-state
-literal execution. The imported `sourceConstValueStructuredTestTheory` adds
-nested tuple/array construction, sparse logical length, bound/arity/child
+literal execution.
+[sourceConstValueStructuredTestScript.sml](sourceConstValueStructuredTestScript.sml)
+adds nested tuple/array construction, sparse logical length, bound/arity/child
 rejection, resolved nominal aliases and module identity, field order,
 duplicate fields, and missing definitions. These are local bridge regressions,
 not source-acceptance or ABI parity tests.

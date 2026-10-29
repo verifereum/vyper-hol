@@ -1,208 +1,190 @@
-# Source evaluation and public frontend integration (#135)
+# Source constant evaluation and frontend boundaries
 
-## Public source path and compatibility boundary
+The source frontend computes compile-time values from original expressions,
+rather than trusting the compiler's `folded_value` or `folded_literal` fields.
+This is the constant-evaluation boundary tracked by #135, not a claim of complete
+source parsing, independent type inference or compiler correctness.
 
-`vyperCheckContractFrontendLib.Source.check_contract` (also
-`check_source_contract`) is the general source-facing checker. Its required
-input is `{fuel, trust, keys, program, layouts, address}`:
+## Phase structure
 
-* `program` is ORIGINAL **pre-erasure** `sourceSyntax` syntax. Constants,
-  qualifier calls, annotation bounds, defaults and executable children remain
-  intact. Ordinary compiler annotated JSON has already erased qualifiers and
-  is not an adequate substitute. No flags reconstruct them in this API.
-* `trust` supplies the inherited canonical module IDs, nominal identities,
-  nominal environment and storage slots; `keys` supplies the corresponding
-  source registry. `layouts` and `address` are explicit inherited checker
-  inputs. Neither a constant value nor a resolved bound comes from trust.
-* This policy-free record API calls `sourceModuleFrontendLib.check_simple`,
-  and therefore `source_module_elaborate_simple` / `source_module_check_simple`, checking constructors with
-  `check_contract T`. An error, Unsupported, exhausted fuel, unresolved name or
-  failed checker is terminal: **no old translator/evaluator retry**.
+1. **Retain syntax.** Capture the program before qualifier erasure and semantic
+   analysis. Keep constant initializers, annotation bounds, defaults, decorators,
+   executable children and module identities in `sourceSyntax`.
+2. **Resolve identities and dependencies.** Resolve lexical/module names and
+   builtin identities before evaluation. Compute constant dependencies, including
+   forward and imported references; reject duplicates, cycles and unresolved
+   names rather than treating them as dynamic values.
+3. **Evaluate source constants.** The partial HOL evaluator distinguishes
+   `SC_Value`, `SC_NotConstant`, `SC_Invalid` and `SC_Unsupported`. Only a value
+   satisfies a required constant position. Compile-time child evaluation is
+   eager: a dynamic sibling or runtime short-circuit cannot conceal an invalid
+   constant child.
+4. **Resolve types and reify executable values.** Resolve original annotation
+   bounds using mathematical values. Validate supported source domains and
+   runtime representability before emitting typed literals. A computed value
+   alone does not establish that its original expression was legal.
+5. **Check exact modules.** Retain `SourceRetained original modules`, and apply
+   `check_contract T` to those same modules, including deployment bodies.
+   Compilation, when requested, must consume precisely the checked modules.
 
-`Source.check_contract_result` / `check_source_contract_result` returns the
-retained source, exact executable modules, phase equation, original-retention
-and linking equations, actual checker input, artifact, checker equation and
-composition equation. `check_source_contract_file` decodes a caller-supplied
-pre-erasure syntax file with explicit keys/trust/layouts; it does not authenticate
-that file's origin or infer erased qualifiers. The public
-`Source.check_contract_file_result` / `Source.check_contract_file` instead load
-**the genuine pre-erasure capture protocol**, produced by
-`tools/source_module_loader.py` before `get_node`. They preserve captured keys
-and pass captured nonreentrancy/declaration-only policies explicitly to HOL.
-The policy-free record API uses the preserved `_simple` equations. Already loaded
-captures use `Source.check_loaded_contract_result` (also
-`check_loaded_source_contract_result`). Ordinary post-erasure JSON is rejected,
-not retried or reconstructed. Protocol labels, hashes and parsing correctness
-remain explicit loader trust, not HOL authenticity proofs.
-See [the loader protocol](sourceModuleLoader.md).
+Source arithmetic is distinct from bounded runtime arithmetic. For example,
+`uint256[((1 << 256) >> 255) + 1]` has bound 3; intermediate annotation values do
+not wrap at 256 bits. Executable expressions retain their width/domain checks.
+Normalizing `x ** (1 + 2)` produces a literal exponent 3 before runtime lowering,
+while preserving the original addition in the retained source. Likewise,
+`method_id` and literal-required ABI options are computed before their syntax is
+erased into runtime literals or builtin parameters.
+
+Decimal rounding, the conservative host-logarithm power boundary, supported
+builtin domains and value-reification assumptions are specified in
+[sourceConstCore.md](sourceConstCore.md),
+[sourceConstBuiltin.md](sourceConstBuiltin.md) and
+[sourceConstValue.md](sourceConstValue.md). These are local HOL specifications;
+they do not themselves prove equivalence to the Python implementation.
+
+## Ordinary public route: paired hybrid normalization
+
+The ordinary `vyperCheckContractFrontendLib` APIs use
+`sourceOrdinaryProgramLib`. Their input is
+`{fuel, paired, inherited, address}`:
+
+- `paired` comes from `sourceOrdinaryClaimsLib.pair_program`: a pre-erasure
+  loader record, its original JSON and matching annotated JSON.
+- `inherited` supplies module/nominal trust, runtime translation `contexts` and
+  storage `layouts`. It supplies neither replacement constant values nor
+  executable bodies.
+- Module trust fixes canonical runtime IDs, nominal identities/definitions and
+  storage slots. Registry keys must agree with those identities; runtime IDs are
+  unique and the main module has ID `NONE`. This is explicit inherited trust,
+  not independently established source identity or layout inference.
+
+Pairing removes folded fields recursively before decoding annotated claims. It
+checks source constructors, spelling, values, child/keyword/declaration order
+and origin identities, retaining original qualifier wrappers despite compiler
+erasure. Malformed present claims and source mismatches reject. Two narrow
+serialization exceptions remain explicit: matched Decimal spellings may differ
+only with exact value equality and valid precision, retaining the original
+precision/token; `Bytes[INF]` is confined to original `msg.data` syntax. Imported
+nominal claims use inherited canonical qualified identities.
+
+Normalization traverses original declarations, statements and expression
+children. Constants, declaration bounds, initializers, defaults, range limits,
+tuple indices, ABI flags/selectors and standalone `method_id` use the common
+source evaluator. Nonmigrated runtime forms are rebuilt with inherited
+type/import/dispatch claims. This **hybrid route is not independent general
+source type inference**.
+
+Residual classification occurs before evaluation. Unsupported residual parents
+still normalize their executable children; only a genuinely nonconstant outcome
+permits residual expression recursion. Invalid, unsupported or exhausted source
+evaluation is never retried using compiler folds or whole-program legacy
+translation.
 
 ```sml
-val checked = vyperCheckContractFrontendLib.Source.check_contract_result
-  {fuel = ``80:num``, trust = inherited_source_trust, keys = canonical_keys,
-   program = original_source_program, layouts = inherited_layouts,
+val checked = vyperCheckContractFrontendLib.check_contract_result
+  {fuel = ``80:num``, paired = paired_program,
+   inherited = {trust = module_trust, contexts = runtime_claims,
+                layouts = storage_layouts},
    address = ``0w:address``};
 val phase = #equation (#elaboration checked);
-val checker = #checking checked;
+val checking = #theorem checked;
 val composition = #composition checked;
 ```
 
-The old successful top-level names `prepare_check_input`, `check_contract`,
-`check_contract_result` and `check_contract_file` are deliberately **unchanged**.
-Their explicit `_legacy` aliases label the metadata-consuming frontend; local
-ordinary fixture callers use those aliases. They are compatibility entry points,
-not a source API with fallback. Changing their input type or routing them to an
-incomplete source evaluator would regress currently valid contracts.
+Public entry points:
 
-**The ordinary switch is NOT achieved by adding this source API.** The gate is
-full ordinary acceptance coverage, not just opt-in witnesses. Before making the
-short top-level names source-facing, supply pre-erasure captures and explicit
-trust/layouts for every successful ordinary caller/fixture, close the gaps below,
-and require exact emitted-module/checker-artifact equations (plus backend parity
-where compilation is claimed). Then migrate callers explicitly and leave the
-old path under `_legacy`; never use success/error-based automatic routing.
+- `prepare_check_input` returns the pairing, elaboration and actual checker input.
+- `check_contract_result` returns those equations, the exact modules and checker
+  artifact; `check_contract` returns the checker theorem.
+- `check_contract_file_result` / `check_contract_file` take `original_path`,
+  `annotated_path`, `fuel`, `inherited` and `address`, and use the same route.
+- `compile_checked` and `source_ordinary_compile_equations` expose a successful
+  backend callback's equation for exactly those checked modules. They do not
+  assert that compilation succeeds for every checked program.
 
-## Strict integer-bound compatibility adapter
+Pairing/projection and phase equations certify computations on decoded HOL
+terms. They do not prove the ML decoder, capture tool or source-file authenticity.
 
-`prepare_constant_source_file` decodes the original integer syntax accepted by
-`jsonConstASTLib` and constructs a `SourceProgram`; it performs **no arithmetic
-or type evaluation**. `Source.check_constant_contract_file` (also
-`check_constant_source_contract_file`) feeds that program into the very same
-source checker above. For supported strict #135 bound cases this is one pipeline,
-not a second evaluator. A constant such as `N = 1 + 2` gives array bound 3 and a
-literal exponent 3; the original addition remains in `retained_source` even
-though the emitted constant initializer is a literal 3.
+## Other entry points and legacy isolation
 
-This adapter is explicitly a **legacy JSON syntax compatibility boundary**:
-`jsonConstASTLib` reads `is_constant`/`is_public` to identify its restricted
-non-public constant declarations, because those fixtures are post-erasure.
-Those qualifier assertions are trusted, not recovered source or a source parsing
-proof. Original expressions/bounds never use `folded_value` or inferred `type`.
-General source callers must supply actual pre-erasure syntax instead.
+`Source.check_contract_result` (also `check_source_contract_result`) is a
+separate source-elaboration API with input
+`{fuel, trust, keys, program, layouts, address}`. It elaborates bodies using the
+source phase rather than the ordinary bridge's inherited residual claims.
+Its supported inference domain is not interchangeable with the hybrid route.
 
-The preserved `check_constant_contract_file_legacy` alone uses
-`translate_constant_module` and bounded runtime integer evaluation. The top-level
-`check_constant_contract_file` is now an alias of the same source route as
-`Source.check_constant_contract_file`: both existing pin-valid strict fixtures,
-`constant_bound.json` and `constant_shifts.json`, pass. Signed shifted operands,
-unsigned/narrow dynamic counts and source-validated canonical literal arithmetic
-are covered by [the shift regressions](../tests/sourceShiftCount.md). Signed
-runtime count names remain rejected, as at the pin. There is no per-input retry.
+`Source.check_contract_file_result` / `Source.check_contract_file` load the
+pre-erasure protocol emitted by `tools/source_module_loader.py`, preserving
+captured keys, nonreentrancy policies and declaration-only interface policies.
+`Source.check_loaded_contract_result` accepts an already loaded capture. The
+record API uses the policy-free `_simple` equations; it does not infer captured
+policies. The lower-level `check_source_contract_file` decodes caller-supplied
+source syntax with explicit keys/trust/layouts, without capture authentication.
+See [sourceModuleLoader.md](sourceModuleLoader.md) and
+[sourceModule.md](sourceModule.md) for the protocol and phase contracts.
 
-Tests preserve explicit legacy acceptance and its checker artifact, and compare
-exact function ASTs. Whole legacy/source module ASTs are deliberately **not**
-asserted equal: the old constant initializer remains an unfurled runtime
-expression, whereas Source reifies its mathematical value. Strict-adapter Source
-and true pre-erasure Source must give exactly the same checked module/artifact.
-This gate is not complete #135 typing or authorization for the ordinary switch.
+`prepare_constant_source_file` adapts the restricted `jsonConstASTLib` integer
+syntax into an original `SourceProgram`, without evaluating arithmetic in ML.
+`check_constant_contract_file`, `check_constant_source_contract_file` and
+`Source.check_constant_contract_file` use that same source evaluator. This
+adapter trusts legacy `is_constant`/`is_public` qualifier assertions because its
+input is post-erasure; it is not genuine pre-erasure source provenance. Its
+original expressions and bounds do not use folded values or inferred types.
 
-The source route also intentionally improves mathematical annotation arithmetic:
-`((1 << 256) >> 255) + 1` resolves to 3 in a bound. The bounded legacy evaluator
-rejects that expression rather than wrapping it to length 1. These are different
-specified frontends, not interchangeable implementations; tests/documentation
-must not present changed behavior as exact legacy equivalence.
+Explicit `*_legacy` ordinary APIs retain annotated-only translation and its
+older metadata consumers, including some Name, annotation, range and specialized
+keyword handling. `check_constant_contract_file_legacy` retains the old bounded
+integer evaluator. These are distinct compatibility interfaces, never automatic
+fallbacks. Legacy/source whole-module AST equality is not promised: the legacy
+initializer may retain arithmetic where the source route emits its value.
 
-## Ordinary integration prerequisite inventory
+Do not extend legacy trust with generic operator/call folded-value wrappers or
+make `json_expr_int_opt` follow compiler replacements. Missing constant support
+belongs in source evaluation. ABI keyword extraction must distinguish absence
+from an invalid present value instead of silently choosing a default.
 
-This compares current implementations, including **extended** `sourceExprCall`,
-`sourceModuleLink` and `sourceModuleOverride`, rather than the older expression-only
-inventory. "Implemented" does not mean the entire legacy family has parity.
+## Semantic and compiler guarantees
 
-| Ordinary legacy surface | Current source path / remaining switch requirement |
-| --- | --- |
-| Original constants, bounds, defaults, local annotations, constructor bodies | Implemented recursively; forward/imported dependencies, duplicates, cycles and unresolved names handled independently of folded fields. All retained pin-valid whole-source witnesses check, but this is not the ordinary fixture corpus. |
-| Internal/self/imported calls and omitted internal defaults | Source-derived signatures and canonical linked IDs now implemented; imported-call/public export witness checks exact AST. Do not list *all calls* as missing. General inference/nominal operands still constrain these calls. |
-| External/static calls, inline interface constructors, interface-typed locals/parameters | Implemented with source signatures, receiver/argument/keyword order, typed gas/value/default-return operands, independently constant skip flag and mutability checks. Genuine imported `.vyi` policies and nominal struct field reads now have public-path captures. Omitted external default arguments remain a gap. |
-| Exports, transitive `__interface__`, initializes/uses, abstract overrides | Source linkage now implemented, with initialized targets, unique links/cycles, canonical original structural defaults, and abstract-body removal. `implements` linkage is not independent full interface-obligation checking. |
-| Ordinary multi-module storage | Public loader capture checks with inherited canonical IDs/layout and an independently specified complete Source AST. Source explicitly annotates imported storage slot SOME 0; legacy leaves that declaration's slot NONE. Checker artifacts agree; whole AST equality is not claimed. This one fixture is not broad ordinary coverage. |
-| Imported `.vyi` / JSON ABI and repeated/builtin interface identities | Genuine source-loader `.vyi` policies now elaborate signature-only call bindings, retain nominal declarations and emit no executable stubs. `sourceModulePolicyTest` covers imported interfaces/struct returns/deployment and nonreentrancy through public Source. JSON ABI, repeated/builtin interface identities and unbounded ABI callsite bounds remain broader legacy coverage gaps. |
-| Nonreentrancy-by-default and explicit decorators | Captured policy now reaches signatures and bodies: non-pure external functions default to nonreentrant, `@reentrant` opts out, and internal/deploy functions retain explicit policy. The genuine pragma regression pins all these cases through public Source. |
-| Storage/transient/immutable/HashMap declarations, nominal structs/flags/events | Source declaration/signature support exists with inherited nominal definitions and slots. Runtime struct construction/ordinary field access, flag members and their general call/assignment use do not have full legacy coverage. Nominal identity/duplicate normalization behavior must remain tested. |
-| Basic control flow, ranges, array iteration, nested assignment | Pass/break/continue/return/if/assert/raise/local/for/log and basic assignment paths exist. Tuple/destructuring assignment, append/pop, general attribute targets/inference, and `UNREACHABLE` assert/raise markers remain gaps. Range bounds require original constant evidence; check legacy zero/dynamic endpoint cases explicitly. |
-| Operators and literal inference | Dynamic Boolean chains/IfExp, contextual lists/tuples, ordinary array and constant tuple indices, basic arithmetic/comparisons exist. Mixed-sign/context-polymorphic boundaries, membership, fixed-byte operations, address literals/checksums remain incomplete. Signed shifted operands and unsigned/narrow counts now have explicit pin-valid regressions; signed runtime count names reject. Executable intermediates remain bounded; annotation math is separate. |
-| ABI encode/decode/method ID and selected builtins | Implemented with original constant flags, duplicate/unknown keyword rejection, independent type operands and selectors. Len/Keccak/Abs/Min/Max/PowMod/AddMod/MulMod are present. This does **not** cover legacy concat/slice/sha256/floor/ceil/convert/empty/min/max-value/epsilon/unsafe ops/extract32/uint2str/as_wei_value/EC/chain builtins. |
-| Raw calls and chain interaction | Only no-keyword `raw_call(target,data)` zero-output and `raw_revert(data)` subset is implemented. General raw-call flags/output/gas/value, raw_log, send, selfdestruct, creation builtins and dedicated calldata len/slice/raw-call forms remain gaps. Environment bindings are not general account-attribute coverage. |
-| Backend compilation | Module checking is distinct from compilation. `source_module_compile` currently rejects multi-module backend linking and has known single-module backend failures; exact phase/check equations alone are not byte parity or source/runtime simulation. |
+Retention, checking and compilation equations are not definitions of source
+meaning. The separate [sourceMeaning.md](sourceMeaning.md) and
+[sourceMeaningLocation.md](sourceMeaningLocation.md) relations derive staged
+computations from original syntax, then relate them to emitted code. Their
+binding, type-environment, layout and independent-derivation hypotheses remain
+explicit; shared scalar/runtime primitives and incomplete language coverage are
+not independent full-language semantics or parser verification.
 
-The ordinary regression list in `vyperCheckContractFrontendLibTestScript.sml`
-continues to run explicitly through `_legacy`: scoped locals, simple/address,
-storage/transient, imported struct/flag/interface, duplicate interfaces,
-multi-module storage, defaults/control, nonreentrancy, deployment/imported deploy,
-third-party flex/daddy, interface struct returns and ABI encode. No claim is made
-that this list has all been ported to pre-erasure source. In particular the
-import/interface, nominal-expression, policy and builtin rows above prevent a
-safe ordinary switch today.
+`Source.artifact_semantics` uses `source_meaning_compile_program` for the same
+checked single-main-module artifact. Raw `compile_vyper` success remains an
+antecedent, not an existence claim. Complete call/load transport also retains
+independent module derivation and agreement with the inherited nominal
+environment. The source compiler wrapper rejects unsupported multi-module
+backend linking instead of flattening identities.
 
-An additional **actual pre-erasure ordinary-source** probe uses the pinned
-loader and public `Source.check_contract_file_result`, not post-erasure flags:
-`simple`, `storage`, `deployment`, `defaults_control`, explicit `nonreentrant`
-and `transient_storage` pass the full checker and have identical legacy ASTs.
-`address_bytes20` rejects with `SME_Constant SCErr_Type`; this is a concrete
-remaining ordinary coverage failure, not a legacy fallback. The `abi_encode`
-source capture itself rejects its stale `#pragma version 0.5.0a3` at the current
-0.5.0a4 pin; that is not counted as HOL source rejection or acceptance.
-Reproducible scripts/receipts are `.agent-files/public-source-ordinary-generate.py`,
-`.agent-files/.public-source-ordinary.sml` and
-`.agent-files/public-source-ordinary-{capture,results}.log`.
-See [module coverage](sourceModule.md),
-[expression coverage](sourceExpr.md) and
-[whole-program parity results](../docs/SOURCE_MODULE_PARITY_RESULTS.md).
+At the checked ordinary boundary,
+`sourceOrdinarySupport.source_ordinary_checked_remainder` and
+`source_ordinary_compiled_supported_program` use genuine checking to discharge
+redundant MethodId/Exp/Exp-AugAssign source-domain gates. The underlying
+`sourceProgramSupport.checked_program_remainder` states that successful
+checking makes `source_program_remainder tops` equivalent to
+`supported_program tops` for a member module. All unrelated lowering restrictions
+remain. In particular, `source_module_checked_runtime_correct` inherits existing
+lowering admissions; neither that composition nor exact compiler equations are
+an unrestricted, admission-free bytecode correctness theorem.
 
-## Guarantees and validation
+## Further reference and regression entry points
 
-The source pipeline retains originals, resolves source declarations and constants,
-elaborates/checks modules and exports exact computation equations. Its local
-source expression/type/constant theorems are documented in the linked phase docs.
-`Source.artifact_semantics checked` extracts a kernel theorem using
-`source_meaning_compile_program` for the **same checked single-main-module
-artifact**. Its universally quantified raw `compile_vyper` success remains an
-antecedent; it does not assert compilation exists. The independent original-source
-module derivation and equality with the inherited nominal environment remain
-explicit for complete interpreter call/load transport, including defaults and
-constructor installation. Imported backend modules reject rather than being
-flattened. See [independent source meaning](sourceMeaning.md) for exact coverage.
-This is not universal accepted-program semantics, parsing authenticity, bytecode
-execution correctness, or removal of backend hypotheses. Inherited parser/loader,
-nominal/layout trust remains explicit.
+- Syntax and identities: [sourceSyntax.md](sourceSyntax.md),
+  [sourceResolve.md](sourceResolve.md), [sourceConstEnv.md](sourceConstEnv.md).
+- Type and expression contracts: [sourceType.md](sourceType.md),
+  [sourceExpr.md](sourceExpr.md).
+- Public regression and fixture-generation workflow:
+  [ordinary frontend tests](../tests/sourceOrdinaryAcceptance.md).
+- Independent bytecode reproduction and comparison:
+  [source-module parity tests](../tests/sourceModuleParity.md).
 
-`vyperCheckContractFrontendLibTestTheory` checks the public phase, original,
-linking, checking and composition equations (including the exact artifact),
-metadata deletion/poison invariance, exact array/exponent AST, imported/exported
-and external calls, genuine public loader/policy rejection, and ordinary
-multi-module Source AST/checker artifacts. It exercises **all 37 retained whole
-source programs through the public full deployment checker**: all 36 pin-valid
-programs must pass; only pin-invalid `method_id_var` proves the exact source domain
-rejection. Resource failures are not acceptance. The same checked original
-`N=1+2; f(x=N): return x+N` artifact supplies the semantic extraction regression;
-actual full runtime dispatch returns 6. Source failures stay failures. New equation
-receipts are audited for hypotheses, axioms and non-`DISK_THM` oracle tags.
-
-`jsonConstEvalWitnessTheory` remains the separate legacy bounded-evaluator
-regression: exact old initializer ASTs, arithmetic/width/shift failures, metadata
-independence and successful signed shifts. `eval_integer_constant_sound`,
-`evaluate_constant_sound`, `evaluate_constant_literal_equivalent` and
-`resolved_array_bound_sound` describe that old evaluator, not all sourceModule
-arithmetic.
-
-```sh
-holbuild vyperCheckContractFrontendLibTestTheory sourceShiftCountFrontendTestTheory \
-  jsonConstEvalWitnessTheory sourceModuleParityInputTheory \
-  --tactic-timeout 2.5 --skip-checkpoints --allow-cache-timeout-discrepancy
-```
-
-Current integration validation **passes at 2.5 seconds**, after the shared
-pure-expression ancestor repair. The isolated `/tmp/public-source-check` build
-has byte-identical public frontend, source shift/module and sourceMeaningCompile
-inputs to the working tree. All four targets above pass. The public frontend
-script's full legacy-plus-source computation matrix took 379.463 seconds;
-the final incremental four-root recheck took 0.264 seconds. Receipts:
-`.agent-files/public-source-validation3.log` and
-`.agent-files/public-source-final.log`.
-
-The independent exported-object audit accepts **391 theorems** across the public,
-strict-shift, legacy, source-matrix and call/compile transport frontiers, with no
-open hypotheses, axioms or non-`DISK_THM` oracles and no CHEAT warnings:
-`.agent-files/public-source-exported-audit.log`. Fresh pin checks reproduce all
-13 shift acceptance rows and seven Prague executions, including narrow-count
-intermediate-overflow revert (`.agent-files/public-source-pin.log`). The strict
-constant alias is switched; ordinary switching remains gated by the concrete
-coverage inventory above.
+Regression assertions should compare complete normalized modules, checker
+artifacts and equations under deleted and well-formed poisoned folding metadata.
+Invalid originals must remain rejected even with plausible replacements. Exact
+backend equations, execution checks and semantic transport are separate
+obligations; finite examples and old build outputs do not establish universal
+coverage or validate a changed checkout.

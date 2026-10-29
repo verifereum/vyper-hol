@@ -6,7 +6,7 @@ Ancestors
 (* Small feasibility kernel for the ordinary bridge, NOT a program frontend.
    A residual node is selected BEFORE elaboration. Its children carry original
    syntax and normalization results, not compiler replacement JSON literals.
-   See sourceOrdinaryBridge.md for the remaining whole-program boundary. *)
+   See constant-evaluation.md for the whole-program trust boundary. *)
 
 (* Only original named/qualified designators are admitted by this adapter.
    In particular JE_Folded is NOT a designator and cannot affect dispatch.

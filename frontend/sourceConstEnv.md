@@ -1,4 +1,4 @@
-# Opt-in resolved source constant environments
+# Resolved source constant environments
 
 `sourceConstEnvTheory.source_const_resolve seed declarations` consumes:
 
@@ -13,10 +13,10 @@ represented by their own resolved identities with `SC_DynamicBinding`, or by
 `SCE_Dynamic`; they must not be seeded as constants merely because their
 initializer is constant. The seed's constant provenance is a caller obligation.
 
-This API is module-independent and opt-in. It neither implements JSON
-import/alias canonicalization nor changes the ordinary frontend. It does not
-prove source typing, reification, checker/deployment agreement or module type
-environment preservation.
+This API is module-independent: it does not implement JSON import/alias
+canonicalization. Its contracts concern resolved environments, not source typing,
+reification, checker/deployment agreement or module type-environment preservation.
+See [constant evaluation](constant-evaluation.md) for pipeline integration.
 
 ## Processing and outcomes
 
@@ -44,11 +44,11 @@ point. Error constructors do not expose a successful partial environment.
 Validation and first-ready declaration order determine diagnostic precedence;
 this is not a claim of exact pinned compiler diagnostic ordering.
 
-## Local invariants and tests
+## Theorem contracts and regressions
 
-`sourceConstEnvPropsScript.sml` establishes the picker length/decomposition and
-blocked-dependency contracts, append-only resolution, preservation of every seed
-lookup (including dynamic bindings), validated result bindings, and unique
+[sourceConstEnvPropsScript.sml](sourceConstEnvPropsScript.sml) establishes picker
+length/decomposition and blocked-dependency contracts, append-only resolution,
+preservation of every seed lookup (including dynamic bindings), validated result bindings, and unique
 canonical keys with exactly the seed/declaration domain. Added entries are only
 constants; every dynamic result binding originates in the seed. Evaluation of
 already-bound expressions is invariant under successful extension. Every resolved
@@ -56,16 +56,9 @@ declaration's value agrees with its original initializer evaluated in the final
 environment (`source_const_resolve_initializer_values`). No leaf-spelling lookup
 or joined-string comparison occurs.
 
-`sourceConstEnvTestScript.sml` contains kernel-computed regression theorems for
-forward/backward and cross-module resolved references, nested component paths,
+[sourceConstEnvTestScript.sml](sourceConstEnvTestScript.sml) contains
+kernel-computed regression theorems for forward/backward and cross-module
+resolved references, nested component paths,
 same-leaf/dotted-path separation, missing paths, cycles and their dependents,
 duplicates, bad seeds/identities, runtime shadowing/immutables, eager failures,
-keywords/callees, type operands, decimals and aggregates. The test theory audits
-every export of all three new theories for open hypotheses, nonstandard axioms
-and oracle tags other than `DISK_THM`.
-
-Build explicitly (no existing build-root files are changed):
-
-```
-.agent-files/.holbuild-toolchain/bin/holbuild frontend/sourceConstEnvTestScript.sml --tactic-timeout 2.5
-```
+keywords/callees, type operands, decimals and aggregates.
