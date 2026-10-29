@@ -695,7 +695,8 @@ Resume eval_outcomes_suffix_with_results[c36]:
   OUTCOMES_CONSTRUCTOR_TAC
 QED
 Resume eval_outcomes_suffix_with_results[c37]:
-  OUTCOMES_CONSTRUCTOR_TAC
+  rpt strip_tac >> simp_tac bool_ss [Once evaluate_def] >>
+  OUTCOMES_SUFFIX_TAC >> metis_tac[]
 QED
 Resume eval_outcomes_suffix_with_results[c38]:
   OUTCOMES_CONSTRUCTOR_TAC
