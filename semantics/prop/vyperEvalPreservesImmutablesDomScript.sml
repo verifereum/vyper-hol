@@ -32,6 +32,23 @@ Definition preserves_immutables_dom_def:
         IS_SOME (FLOOKUP (get_source_immutables src imms') n)))
 End
 
+Theorem preserves_immutables_dom_eq[local]:
+  s.immutables = t.immutables ==> preserves_immutables_dom cx s t
+Proof
+  rw[preserves_immutables_dom_def] >> gvs[]
+QED
+
+Theorem preserves_immutables_dom_trans[local]:
+  preserves_immutables_dom cx s t /\ preserves_immutables_dom cx t u ==>
+  preserves_immutables_dom cx s u
+Proof
+  rw[preserves_immutables_dom_def] >>
+  `IS_SOME (ALOOKUP t.immutables cx.txn.target)` by
+    metis_tac[optionTheory.IS_SOME_DEF] >>
+  Cases_on `ALOOKUP t.immutables cx.txn.target` >> gvs[] >>
+  metis_tac[]
+QED
+
 Theorem immutable_metadata_frame_preserves_dom[local]:
   immutable_metadata_frame st st' ==> preserves_immutables_dom cx st st'
 Proof
