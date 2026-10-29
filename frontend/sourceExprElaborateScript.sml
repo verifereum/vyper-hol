@@ -478,22 +478,17 @@ End
 (* Executable required constants share resolution, independent original-tree
    validation and the mathematical evaluator, not runtime literal inspection.
    Annotation bounds remain a distinct source_type_resolve context. *)
-Definition source_expr_constant_def:
-  source_expr_constant fuel env scopes table constants bindings ty original =
-    source_expr_required fuel env.type_defs scopes table constants ty original
-End
-
 Definition source_expr_flag_def:
   source_expr_flag fuel env scopes table constants bindings original =
     source_const_then
-      (source_expr_constant fuel env scopes table constants bindings (BaseT BoolT) original)
+      (source_expr_required fuel env.type_defs scopes table constants (BaseT BoolT) original)
       (\v. case v of SCV_Bool b => SC_Value b | _ => SC_Invalid SCErr_Type)
 End
 
 Definition source_expr_index_def:
   source_expr_index fuel env scopes table constants bindings count original =
     source_const_then
-      (source_expr_constant fuel env scopes table constants bindings (BaseT (UintT 256)) original)
+      (source_expr_required fuel env.type_defs scopes table constants (BaseT (UintT 256)) original)
       (\v. case v of SCV_Int i =>
               if 0 <= i /\ Num i < count then SC_Value (Num i) else SC_Invalid SCErr_Index
             | _ => SC_Invalid SCErr_Type)
@@ -502,7 +497,7 @@ End
 Definition source_expr_range_bound_def:
   source_expr_range_bound fuel env scopes table constants bindings original =
     source_const_then
-      (source_expr_constant fuel env scopes table constants bindings (BaseT (UintT 256)) original)
+      (source_expr_required fuel env.type_defs scopes table constants (BaseT (UintT 256)) original)
       (\v. case v of SCV_Int i =>
               if 0 < i /\ i < &(2 ** 256) then SC_Value (Num i) else SC_Invalid SCErr_Domain
             | _ => SC_Invalid SCErr_Type)

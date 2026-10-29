@@ -175,29 +175,17 @@ Proof
   drule source_expr_required_from_original >> strip_tac >> gvs[]
 QED
 
-Theorem source_expr_constant_from_original:
-  source_expr_constant fuel env scopes table constants variables ty original = SC_Value sv ==>
-  ?resolved.
-    source_resolve_candidate scopes table original = SOME resolved /\
-    source_const_eval constants resolved = SC_Value sv /\
-    source_expr_original fuel env.type_defs constants T ty resolved /\
-    source_expr_fits env.type_defs ty sv
-Proof
-  simp[source_expr_constant_def, source_expr_required_def, AllCaseEqs()] >>
-  rpt strip_tac >> gvs[]
-QED
-
 Theorem source_expr_flag_from_original:
   source_expr_flag fuel env scopes table constants variables original = SC_Value flag ==>
   ?resolved. source_resolve_candidate scopes table original = SOME resolved /\
     source_const_eval constants resolved = SC_Value (SCV_Bool flag)
 Proof
   simp[source_expr_flag_def] >>
-  Cases_on `source_expr_constant fuel env scopes table constants variables (BaseT BoolT) original` >>
+  Cases_on `source_expr_required fuel env.type_defs scopes table constants (BaseT BoolT) original` >>
   simp[source_const_then_def] >>
-  rename1 `source_expr_constant fuel env scopes table constants variables (BaseT BoolT) original = SC_Value sv` >>
+  rename1 `source_expr_required fuel env.type_defs scopes table constants (BaseT BoolT) original = SC_Value sv` >>
   Cases_on `sv` >> simp[] >> strip_tac >>
-  drule source_expr_constant_from_original >> strip_tac >> gvs[AllCaseEqs()] >> metis_tac[]
+  drule source_expr_required_from_original >> strip_tac >> gvs[AllCaseEqs()] >> metis_tac[]
 QED
 
 Theorem source_expr_index_from_original:
@@ -208,11 +196,11 @@ Theorem source_expr_index_from_original:
     0 <= i /\ index = Num i
 Proof
   simp[source_expr_index_def] >>
-  Cases_on `source_expr_constant fuel env scopes table constants variables (BaseT (UintT 256)) original` >>
+  Cases_on `source_expr_required fuel env.type_defs scopes table constants (BaseT (UintT 256)) original` >>
   simp[source_const_then_def] >>
-  rename1 `source_expr_constant fuel env scopes table constants variables (BaseT (UintT 256)) original = SC_Value sv` >>
+  rename1 `source_expr_required fuel env.type_defs scopes table constants (BaseT (UintT 256)) original = SC_Value sv` >>
   Cases_on `sv` >> simp[] >> strip_tac >>
-  drule source_expr_constant_from_original >> strip_tac >> gvs[AllCaseEqs()] >> metis_tac[]
+  drule source_expr_required_from_original >> strip_tac >> gvs[AllCaseEqs()] >> metis_tac[]
 QED
 
 Theorem source_expr_range_bound_from_original:
@@ -222,9 +210,9 @@ Theorem source_expr_range_bound_from_original:
     0 < i /\ i < &(2 ** 256) /\ bound = Num i
 Proof
   simp[source_expr_range_bound_def] >>
-  Cases_on `source_expr_constant fuel env scopes table constants variables (BaseT (UintT 256)) original` >>
+  Cases_on `source_expr_required fuel env.type_defs scopes table constants (BaseT (UintT 256)) original` >>
   simp[source_const_then_def] >>
-  rename1 `source_expr_constant fuel env scopes table constants variables (BaseT (UintT 256)) original = SC_Value sv` >>
+  rename1 `source_expr_required fuel env.type_defs scopes table constants (BaseT (UintT 256)) original = SC_Value sv` >>
   Cases_on `sv` >> simp[] >> strip_tac >>
-  drule source_expr_constant_from_original >> strip_tac >> gvs[AllCaseEqs()] >> metis_tac[]
+  drule source_expr_required_from_original >> strip_tac >> gvs[AllCaseEqs()] >> metis_tac[]
 QED

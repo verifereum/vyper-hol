@@ -75,7 +75,7 @@ Theorem ordinary_bridge_verified_child_in_residual_call:
     ordinary_bridge_concat_designator
     [(SX_Name "a", SC_Value (ordinary_bridge_dynamic "a"));
      (ordinary_bridge_method_source,
-      source_ordinary_verified 6
+      source_expr_elaborate 6
         (source_expr_test_env env (BaseT (BytesT (Dynamic 4))))
         source_expr_test_scopes source_expr_test_table []
         (source_expr_test_variables (BaseT (BytesT (Dynamic 4))))
@@ -85,7 +85,7 @@ Theorem ordinary_bridge_verified_child_in_residual_call:
     [Name (BaseT (BytesT (Dynamic 4))) "a";
      Literal (BaseT (BytesT (Dynamic 4))) (BytesL [194w;152w;85w;120w])])
 Proof
-  simp[source_ordinary_verified_def, ordinary_bridge_method_source_def,
+  simp[ordinary_bridge_method_source_def,
        GSYM source_expr_test_elaborate_def, source_expr_method_id_original_string] >>
   EVAL_TAC
 QED
@@ -112,7 +112,7 @@ Theorem ordinary_bridge_invalid_source_child:
     (SX_Call (SX_Name "concat") [SX_Name "a"; bad] [])
     ordinary_bridge_concat_designator
     [(SX_Name "a", SC_Value (ordinary_bridge_dynamic "a"));
-     (bad, source_ordinary_verified 6
+     (bad, source_expr_elaborate 6
        (source_expr_test_env env (BaseT (UintT 256)))
        source_expr_test_scopes source_expr_test_table []
        (source_expr_test_variables (BaseT (UintT 256))) (BaseT (UintT 256)) bad)]

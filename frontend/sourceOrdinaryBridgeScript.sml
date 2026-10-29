@@ -20,13 +20,6 @@ Definition source_ordinary_designator_def:
   source_ordinary_designator _ _ = F
 End
 
-(* The common strict expression route, reused unchanged. No runtime expression
-   supplied by JSON is substituted for the result of this computation. *)
-Definition source_ordinary_verified_def:
-  source_ordinary_verified fuel env scopes table constants bindings ty original =
-    source_expr_elaborate fuel env scopes table constants bindings ty original
-End
-
 (* A one-layer residual adapter for ordinary calls with no pop receiver or
    calldata shortcut. It consumes RUNTIME child ASTs directly via the existing
    legacy translate_call helper. It does NOT implement a new builtin rule.
@@ -49,21 +42,6 @@ Definition source_ordinary_call_layer_def:
         else SC_Invalid SCErr_Domain
     | _ => SC_Invalid SCErr_Domain
 End
-
-Theorem source_ordinary_verified_equation:
-  source_ordinary_verified fuel env scopes table constants bindings ty original =
-  source_expr_elaborate fuel env scopes table constants bindings ty original
-Proof
-  simp[source_ordinary_verified_def]
-QED
-
-Theorem source_ordinary_verified_typed:
-  source_ordinary_verified fuel env scopes table constants bindings ty original = SC_Value e ==>
-  expr_type e = ty /\ well_typed_expr env e
-Proof
-  simp[source_ordinary_verified_def] >>
-  MATCH_ACCEPT_TAC source_expr_elaborate_typed
-QED
 
 Theorem source_ordinary_call_layer_original_mismatch:
   source_args <> MAP FST arguments ==>

@@ -16,32 +16,7 @@ Ancestors
    is only a builtin-form predicate, NOT a program whitelist replacement. *)
 Definition source_builtin_support_remainder_def:
   source_builtin_support_remainder tops ty blt es <=>
-    case (blt, es) of
-      (Bop op, [a; b]) =>
-        if op = Exp then supported_integer_type (expr_type a)
-        else supported_binop op (expr_type a) (expr_type b)
-          (supported_integer_literal a) (supported_nonnegative_literal b)
-    | (MethodId, args) => T
-    | (Not, [a]) => ty = BaseT BoolT \/ ty = BaseT (UintT 256)
-    | (Neg, [a]) => supported_signed_type ty \/ ty = BaseT DecimalT
-    | (Abs, [a]) => ty = BaseT (IntT 256)
-    | (AsWeiValue d, [a]) => supported_unsigned_type (expr_type a)
-    | (AddMod, [a; b; c]) => EVERY (supported_unsigned_type o expr_type) es
-    | (MulMod, [a; b; c]) => EVERY (supported_unsigned_type o expr_type) es
-    | (PowMod256, [a; b]) => EVERY (supported_unsigned_type o expr_type) es
-    | (Env item, []) => item <> MsgGas
-    | (Acc item, [a]) => item <> Code
-    | (BlockHash, [a]) => T
-    | (BlobHash, [a]) => T
-    | (ECRecover, [a; b; c; d]) => T
-    | (ECAdd, [a; b]) => T
-    | (ECMul, [a; b]) => T
-    | (MakeArray NONE (Fixed n), args) => supported_literal_elements tops ty args
-    | (MakeArray (SOME elem_ty) bnd, args) =>
-        ty = ArrayT elem_ty bnd /\ supported_literal_elements tops ty args
-    | (Uint2Str n, [a]) => supported_unsigned_type (expr_type a)
-    | (CalldataSlice n, [a]) => T
-    | _ => F
+    source_builtin_remainder tops ty blt es
 End
 
 (* The whole-program checker-only core is the same transparent builtin
@@ -50,49 +25,7 @@ Theorem source_builtin_support_remainder_eq:
   source_builtin_support_remainder tops ty blt es <=>
   source_builtin_remainder tops ty blt es
 Proof
-  Cases_on `blt` >>
-  simp[source_builtin_support_remainder_def, source_builtin_remainder_def]
-QED
-
-Theorem well_typed_method_id_rejected:
-  ~well_typed_expr env (Builtin ty MethodId es)
-Proof
-  simp[Once well_typed_expr_def, well_typed_builtin_app_def]
-QED
-
-Theorem source_builtin_support_other:
-  blt <> MethodId /\ blt <> Bop Exp ==>
-  (source_builtin_support_remainder tops ty blt es <=>
-   supported_builtin_form tops ty blt es)
-Proof
-  Cases_on `blt` >>
-  simp[source_builtin_support_remainder_def, supported_builtin_form_def]
-QED
-
-Theorem checked_power_support:
-  well_typed_expr env (Builtin ty (Bop Exp) [base_e; exponent]) ==>
-  (supported_builtin_form tops ty (Bop Exp) [base_e; exponent] <=>
-   supported_integer_type (expr_type base_e))
-Proof
-  strip_tac >> drule well_typed_power_operands >>
-  simp[power_operands_ok_def, integer_literal_expr_cases,
-       power_exponent_ok_cases] >>
-  rw[] >> simp[supported_builtin_form_def, supported_binop_def,
-                supported_integer_literal_def, supported_nonnegative_literal_def]
-QED
-
-Theorem checked_builtin_support:
-  well_typed_expr env (Builtin ty blt es) ==>
-  (source_builtin_support_remainder tops ty blt es <=>
-   supported_builtin_form tops ty blt es)
-Proof
-  strip_tac >> Cases_on `blt = MethodId`
-  >- gvs[well_typed_method_id_rejected] >>
-  Cases_on `blt = Bop Exp`
-  >- (gvs[] >> drule well_typed_power_arguments >> strip_tac >> gvs[] >>
-      drule checked_power_support >>
-      simp[source_builtin_support_remainder_def]) >>
-  irule source_builtin_support_other >> simp[]
+  simp[source_builtin_support_remainder_def]
 QED
 
 (* The original-source API supplies the genuine typing premise; there is no
@@ -104,7 +37,7 @@ Theorem checked_source_builtin_support:
    supported_builtin_form tops ty blt es)
 Proof
   strip_tac >> drule source_expr_elaborate_typed >> strip_tac >>
-  drule checked_builtin_support >> simp[]
+  drule typed_builtin_remainder >> simp[source_builtin_support_remainder_def]
 QED
 
 Theorem source_expr_method_id_erased:
@@ -112,7 +45,7 @@ Theorem source_expr_method_id_erased:
     SC_Value (Builtin ret MethodId es)
 Proof
   strip_tac >> drule source_expr_elaborate_typed >>
-  simp[well_typed_method_id_rejected]
+  simp[typed_method_id_rejected]
 QED
 
 Theorem source_expr_power_supported:
@@ -122,7 +55,7 @@ Theorem source_expr_power_supported:
    supported_integer_type (expr_type base_e))
 Proof
   strip_tac >> drule source_expr_elaborate_typed >> strip_tac >>
-  drule checked_power_support >> simp[]
+  drule typed_power_support >> simp[]
 QED
 
 (* The checker already requires a literal tuple index, not merely an integer
