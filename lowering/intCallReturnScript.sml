@@ -202,6 +202,20 @@ QED
    - FRAME: the callee changed no byte below the caller's frontier
      outside the exempt regions excl, which miss the caller's live
      regions (step_inst_invoke_live_regions's premises). *)
+Theorem immutables_rel_env_transport[local]:
+  immutables_rel cenv' addr src ctor es ss /\
+  (!n off. FLOOKUP cenv.ce_vars (module_var_key (src,n)) =
+             SOME (ImmutableLoc off) ==>
+           FLOOKUP cenv'.ce_vars (module_var_key (src,n)) =
+             SOME (ImmutableLoc off)) ==>
+  immutables_rel cenv addr src ctor es ss
+Proof
+  simp_tac bool_ss [immutables_rel_def, LET_THM] >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  first_x_assum drule >> disch_then assume_tac >>
+  first_x_assum irule >> qexists_tac `name` >> simp[]
+QED
+
 Theorem invoke_intret_state_rel:
   !fuel ctx inst s name arg_ops callee args cs ret cs'
    func cenv cenv' cx cx' es es2 tv v excl.
@@ -215,6 +229,7 @@ Theorem invoke_intret_state_rel:
     ALL_DISTINCT inst.inst_outputs /\
     EVERY (not_local_ptr cenv es.scopes) inst.inst_outputs /\
     stmt_state_rel func cenv cx es s /\
+    immutable_alloca_sep func cenv cx es2 s /\
     intret_q callee cenv' cx' tv v (es2 with scopes := []) (IntRet ret cs') /\
     cx'.txn = cx.txn /\
     cenv'.ce_module = cenv.ce_module /\ cenv'.ce_is_ctor = cenv.ce_is_ctor /\
@@ -248,19 +263,27 @@ Proof
   gvs[intret_q_def, result_rel_def, adopt_return_fmp_def] >>
   `cs.vs_data_section = s.vs_data_section` by gvs[setup_callee_def] >>
   drule run_blocks_intret_data_section >> strip_tac >>
+  `immutables_rel cenv' cx.txn.target cenv.ce_module cenv.ce_is_ctor es2 cs'` by
+    (fs[state_rel_def] >>
+     qpat_x_assum `immutables_rel _ _ _ _ _ _` mp_tac >>
+     simp[immutables_rel_def]) >>
+  `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es2 cs'` by
+    (irule immutables_rel_env_transport >> qexists_tac `cenv'` >> simp[]) >>
   gvs[merge_callee_state_def, lookup_var_def] >>
   irule stmt_state_rel_allocas_frame >>
+  conj_tac
+  >- (irule immutable_alloca_sep_fields >>
+      qexistsl_tac [`s`, `es2`] >> simp[]) >>
   reverse conj_tac >- (qexistsl_tac [`es`, `s`] >> simp[]) >>
   qpat_x_assum `stmt_state_rel _ _ _ _ _` mp_tac >>
   qpat_x_assum `state_rel _ _ _ _ cs'` mp_tac >>
   simp[stmt_state_rel_def, state_rel_def, storage_rel_def, transient_rel_def,
-       accounts_rel_def, immutables_rel_def, logs_rel_def, call_ctx_rel_def,
+       accounts_rel_def, logs_rel_def, call_ctx_rel_def,
        contract_storage_def, contract_transient_def, log_entry_equiv_def] >>
   rpt strip_tac >> gvs[]
-  >~ [`ImmutableLoc`]
-  >- (Cases_on `cenv.ce_is_ctor` >> gvs[] >> rpt strip_tac >> metis_tac[])
-  >~ [`log_entry_equiv`]
-  >- (irule LIST_REL_mono >>
-      qexists_tac `log_entry_equiv cenv' cx.txn.target` >>
-      simp[log_entry_equiv_def])
+  >- (qpat_x_assum `immutables_rel cenv _ _ _ es2 cs'` mp_tac >>
+      simp[immutables_rel_def]) >>
+  irule LIST_REL_mono >>
+  qexists_tac `log_entry_equiv cenv' cx.txn.target` >>
+  simp[log_entry_equiv_def]
 QED
