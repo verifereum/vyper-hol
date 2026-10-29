@@ -23,6 +23,9 @@ Theorem address_hex_source_categories:
     (SCL_Hex "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd") (BaseT AddressT) /\
   source_expr_literal_domain
     (SCL_Hex "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd") (BaseT (BytesT (Fixed 20))) /\
+  source_expr_literal_domain
+    (SCL_Hex "0xABCDEFABCDEFABCDEFABCDEFABCDEFABCDEFABCD") (BaseT (BytesT (Fixed 20))) /\
+  ~source_expr_literal_domain (SCL_Hex "0x1234") (BaseT AddressT) /\
   ~source_expr_literal_domain (SCL_Hex "0x1234") (BaseT (BytesT (Fixed 20)))
 Proof
   EVAL_TAC
@@ -51,6 +54,8 @@ Theorem address_hex_dynamic_conversion_exact:
     SC_Value (TypeBuiltin (BaseT AddressT) Convert (BaseT AddressT)
       [Name (BaseT (BytesT (Fixed 20))) "a"]) /\
   address_hex_dynamic env (BaseT AddressT) (BaseT AddressT) "address" = SC_Invalid SCErr_Type /\
+  address_hex_dynamic env (BaseT (BytesT (Fixed 20))) (BaseT (BytesT (Fixed 20))) "bytes20" =
+    SC_Invalid SCErr_Type /\
   address_hex_dynamic env (BaseT AddressT) (BaseT AddressT) "bytes20" = SC_Invalid SCErr_Type
 Proof
   EVAL_TAC
@@ -68,6 +73,26 @@ Theorem address_hex_declared_constant_type:
   source_expr_hex_argument_type [[("C",["C"])]] [(["C"],SR_Constant)]
     [(["C"],SC_Constant (SCV_Hex "0x0000000000000000000000000000000000000000"))] []
     (SX_Name "C") = NONE
+Proof
+  EVAL_TAC
+QED
+
+(* Constant declaration types, not the default category of an all-zero token,
+   must also reject same-type conversion. No full-Source body API is required. *)
+Definition address_hex_constant_conversion_def:
+  address_hex_constant_conversion env ty target =
+    source_expr_elaborate 12 env
+      [[("C",["C"]);("convert",["builtin";"convert"]);(target,["target"])]]
+      [(["C"],SR_Constant);(["builtin";"convert"],SR_Builtin SCB_Convert);
+       (["target"],SR_Type)]
+      [(["C"],SC_Constant (SCV_Hex "0x0000000000000000000000000000000000000000"))]
+      [(["C"],SE_Runtime (TopLevelName ty (NONE,"C")));(["target"],SE_Type ty)]
+      ty (SX_Call (SX_Name "convert") [SX_Name "C";SX_Name target] [])
+End
+
+Theorem address_hex_same_type_constant_rejected:
+  address_hex_constant_conversion env (BaseT AddressT) "address" = SC_Invalid SCErr_Type /\
+  address_hex_constant_conversion env (BaseT (BytesT (Fixed 20))) "bytes20" = SC_Invalid SCErr_Type
 Proof
   EVAL_TAC
 QED

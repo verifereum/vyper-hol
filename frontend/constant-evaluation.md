@@ -107,29 +107,12 @@ terms. They do not prove the ML decoder, capture tool or source-file authenticit
 
 ## Other entry points and legacy isolation
 
-`Source.check_contract_result` (also `check_source_contract_result`) is a
-separate source-elaboration API with input
-`{fuel, trust, keys, program, layouts, address}`. It elaborates bodies using the
-source phase rather than the ordinary bridge's inherited residual claims.
-Its supported inference domain is not interchangeable with the hybrid route.
-
-`Source.check_contract_file_result` / `Source.check_contract_file` load the
-pre-erasure protocol emitted by `tools/source_module_loader.py`, preserving
-captured keys, nonreentrancy policies and declaration-only interface policies.
-`Source.check_loaded_contract_result` accepts an already loaded capture. The
-record API uses the policy-free `_simple` equations; it does not infer captured
-policies. The lower-level `check_source_contract_file` decodes caller-supplied
-source syntax with explicit keys/trust/layouts, without capture authentication.
-See [sourceModuleLoader.md](sourceModuleLoader.md) and
-[sourceModule.md](sourceModule.md) for the protocol and phase contracts.
-
-`prepare_constant_source_file` adapts the restricted `jsonConstASTLib` integer
-syntax into an original `SourceProgram`, without evaluating arithmetic in ML.
-`check_constant_contract_file`, `check_constant_source_contract_file` and
-`Source.check_constant_contract_file` use that same source evaluator. This
-adapter trusts legacy `is_constant`/`is_public` qualifier assertions because its
-input is post-erasure; it is not genuine pre-erasure source provenance. Its
-original expressions and bounds do not use folded values or inferred types.
+The base exposes only the ordinary paired route and explicit legacy routes.
+The independent full-Source body frontend, its strict JSON adapters and aliases,
+and the optional Meaning tower have been extracted. The facade does not load
+those developments. See [sourceModule.md](sourceModule.md) for the retained
+signature/context interfaces and [sourceModuleLoader.md](sourceModuleLoader.md)
+for the pre-erasure protocol still used by ordinary pairing.
 
 Explicit `*_legacy` ordinary APIs retain annotated-only translation and its
 older metadata consumers, including some Name, annotation, range and specialized
@@ -146,19 +129,10 @@ from an invalid present value instead of silently choosing a default.
 ## Semantic and compiler guarantees
 
 Retention, checking and compilation equations are not definitions of source
-meaning. The separate [sourceMeaning.md](sourceMeaning.md) and
-[sourceMeaningLocation.md](sourceMeaningLocation.md) relations derive staged
-computations from original syntax, then relate them to emitted code. Their
-binding, type-environment, layout and independent-derivation hypotheses remain
-explicit; shared scalar/runtime primitives and incomplete language coverage are
-not independent full-language semantics or parser verification.
-
-`Source.artifact_semantics` uses `source_meaning_compile_program` for the same
-checked single-main-module artifact. Raw `compile_vyper` success remains an
-antecedent, not an existence claim. Complete call/load transport also retains
-independent module derivation and agreement with the inherited nominal
-environment. The source compiler wrapper rejects unsupported multi-module
-backend linking instead of flattening identities.
+meaning. This base does not include the independent full-program/call/location
+Meaning relations or an artifact-semantic adapter. Restoring the optional
+feature requires reversing its extraction commit; no semantic conclusion is
+silently substituted for it here.
 
 At the checked ordinary boundary,
 `sourceOrdinarySupport.source_ordinary_checked_remainder` and
@@ -167,9 +141,9 @@ redundant MethodId/Exp/Exp-AugAssign source-domain gates. The underlying
 `sourceProgramSupport.checked_program_remainder` states that successful
 checking makes `source_program_remainder tops` equivalent to
 `supported_program tops` for a member module. All unrelated lowering restrictions
-remain. In particular, `source_module_checked_runtime_correct` inherits existing
-lowering admissions; neither that composition nor exact compiler equations are
-an unrestricted, admission-free bytecode correctness theorem.
+remain. Existing lowering admissions are not discharged by this extraction;
+exact compiler equations are not an unrestricted, admission-free bytecode
+correctness theorem.
 
 ## Further reference and regression entry points
 
@@ -179,8 +153,8 @@ an unrestricted, admission-free bytecode correctness theorem.
   [sourceExpr.md](sourceExpr.md).
 - Public regression and fixture-generation workflow:
   [ordinary frontend tests](../tests/sourceOrdinaryAcceptance.md).
-- Independent bytecode reproduction and comparison:
-  [source-module parity tests](../tests/sourceModuleParity.md).
+- Ordinary bytecode comparison: `sourceOrdinaryProgramParityTest` uses the
+  retained `sourceBytecodeFixtureLib` pinned deploy/runtime fixtures.
 
 Regression assertions should compare complete normalized modules, checker
 artifacts and equations under deleted and well-formed poisoned folding metadata.

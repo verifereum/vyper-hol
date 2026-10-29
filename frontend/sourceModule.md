@@ -1,96 +1,51 @@
-# Source program/module elaboration
+# Shared source-module signatures and contexts
 
-Executable module APIs for pre-erasure `sourceSyntax` programs. See
-[constant evaluation](constant-evaluation.md) for the canonical pipeline and
-inherited trust boundary; [sourceModuleLoader](sourceModuleLoader.md) documents
-source capture before qualifier erasure.
+The base frontend retains source legality, resolution, signatures and module
+contexts for the [ordinary paired frontend](constant-evaluation.md). It does
+not provide an independent source-body frontend or program/call/location
+Meaning development. Those optional layers are extracted separately and can
+be restored by reversing the extraction commit.
 
-## API and equations
+## Interfaces
 
-`source_module_elaborate fuel trust policies keys program` returns
-`SM_Ok (SourceRetained program modules)` or an explicit `SM_Error`. It retains
-the untouched source beside runtime modules. Exhaustion and unsupported syntax
-are errors; no old JSON translator or metadata-backed retry is reachable.
+- `sourceModuleDefs`: error/result types, policies, bind/collect, annotation and
+  type resolution, argument/local bindings, strict expression validation.
+- `sourceModuleEnv`: canonical module IDs, nominal identities/definitions and
+  slot trust; builtin scopes, runtime/event bindings and policy contexts.
+- `sourceModuleSignature`: decorators, visibility/mutability, variables/events/
+  interfaces, `source_module_signature`, `source_module_signatures`,
+  `source_module_policy_signature`, `source_module_policy_signatures`, and
+  `source_module_function_context`. Private signature FunctionDecls carry empty
+  bodies and default-arity placeholders; these are not executable output.
+- `sourceModuleLink`: structural uses/initializes/exports/implements checks,
+  dependency ordering, export expansion and original-default identity.
+- `sourceModuleOverride`: nominal/parameter/default compatibility, policy-aware
+  override linkage, transitive call-target rewriting and cycle rejection.
+- `sourceModuleContext`: `source_module_policy_signature_modules`,
+  `source_module_signature_context`, `source_module_policy_signature_context`,
+  `source_module_link_program` and `source_module_link_program_equations`;
+  shared bind-success/retention lemmas. Context construction never translates
+  statements or executable function bodies.
 
-`policies` is the key-aligned registry of
-`SourceModulePolicy nr_default declaration_only`. Missing/misaligned entries
-reject; no policy is guessed. The policy-free helpers are
-`source_module_elaborate_simple`/`check_simple` and
-`sourceModuleFrontendLib.elaborate_simple`/`check_simple`.
+`sourceOrdinaryProgram` consumes these shared interfaces. It checks nominal
+signature-environment agreement, traverses original bodies with paired
+occurrence claims, retains exact source/modules and calls `check_contract T` on
+those modules. Its compile callback receives the same checked modules, including
+deployment bodies. No multi-module flattening is introduced.
 
-`source_module_check` applies `check_contract T` to exactly the elaborated
-modules, including constructors. `source_module_check_equations` exposes the
-phase, source-retention and checking equations.
+## Trust and limits
 
-`source_module_link_program` and `source_module_link_program_equations` expose
-the registry, constant dependency result, exports and override links.
-`sourceModuleFrontendLib.elaborate` returns a `linking` theorem;
-`sourceModuleFrontendLib.check` returns the equations, actual checker input and
-artifact. `elaborate_file` uses `sourceSyntaxLib`;
-`elaborate_loaded`/`check_loaded` preserve both module policies. Inputs must be
-pre-erasure source JSON: compiler `is_constant`/`is_immutable` flags do not repair
-qualifiers lost from post-erasure annotated JSON.
+Canonical IDs, nominal environment, storage slots/layouts and residual runtime
+contexts remain explicitly inherited. Loader provenance is not authenticated;
+see [sourceModuleLoader.md](sourceModuleLoader.md). Constant values and original
+bounds/defaults are computed, not inherited folded metadata.
 
-`source_module_compile` invokes the actual `compile_vyper` on the same checked
-`tops` only when modules are exactly `[(NONE,tops)]`.
-`source_module_compile_equations` exposes that equality and the actual compiler
-result. The raw compiler has no module-registry input, so multiple modules
-produce `backend-module-linking`, never flattened namespace identities. This
-backend limitation does not restrict module elaboration/checking.
+`sourceExprElaborate` remains the strict contextual expression validator needed
+by ordinary folding and signature constants. It is not a general independent
+body typer. There are no base `source_module_elaborate`, `source_module_check`,
+`source_module_compile`, `Source` facade or artifact-semantic adapters.
 
-## Resolution and source-sensitive rules
-
-Constants resolve together, including forward/imported references. Annotations
-and original bounds are canonicalized before `source_type_resolve`, including
-bound-expression names. Constructor and qualifier spellings are checked in
-source scope; unknown names are not dynamic names. Lexical parameters/locals
-shadow module and builtin bindings. ABI intrinsics use `SE_Intrinsic`, type
-arguments use `SE_Type`, and runtime variables use `SE_Runtime` identities.
-Mathematical annotation bounds are not wrapped runtime arithmetic:
-`((1 << 256) >> 255) + 1` is 3.
-
-Linkage resolves exports (including transitive `__interface__`), module
-dependencies and override targets before body emission. Export expansion reuses
-syntax-only compact index algorithms, not the old expression translator.
-Overrides require initialized targets, unique links, compatible source
-signatures and structural defaults; cycles reject. Default compatibility
-compares canonical original trees, not evaluated values. Original declarations,
-defaults and imports remain in `SourceRetained`; abstract bodies never become
-executable.
-
-Internal calls use source-derived signatures and linked targets. External/static
-calls use source interface declarations, retain receiver/argument and keyword
-evaluation order, and independently validate constant flags. Inline interface
-casts and interface-annotated parameters/locals retain source interface
-descriptors even though their runtime type is address.
-
-Preserved `.vyi` policy turns source function signatures into interface call
-bindings, not executable stubs. Structs and other nominal declarations remain in
-the imported module. Bodies must be original ellipsis syntax; none is fabricated.
-Default nonreentrancy applies to external non-pure functions, with `@reentrant`
-opt-out; internal/deploy functions retain explicit policy.
-
-## Limits and regressions
-
-JSON ABI interfaces and omitted external default arguments are not connected to
-elaboration. `implements` establishes namespace linkage, not full independent
-source interface-obligation checking. Some assignment/iterator and expression
-forms remain unsupported. The ordinary frontend uses the separate hybrid
-normalizer described in [constant-evaluation.md](constant-evaluation.md), not
-this API's source-only body elaboration.
-
-These executable-phase and compiler-composition equations do not identify source
-meaning with whatever the elaborator emits. They are not a universal
-source/runtime equivalence theorem.
-
-- [sourceModuleFrontendLibTestScript.sml](sourceModuleFrontendLibTestScript.sml):
-  exact AST/check/composition equations for original source fixtures, deployment
-  checks, and independence from deleted/poisoned folding fields.
-- [sourceModuleBoundaryTestScript.sml](sourceModuleBoundaryTestScript.sml):
-  imported forward references, source bounds/ranges and unknown-name rejection.
-- [sourceModuleLinkTestScript.sml](sourceModuleLinkTestScript.sml): calls, exports,
-  initialized abstract overrides and rejection of structurally different defaults
-  with equal folded values.
-- [sourceModulePolicyTestScript.sml](sourceModulePolicyTestScript.sml): imported
-  interfaces, struct returns, interface-typed overrides, imported deployment and
-  nonreentrancy.
+Shared link/policy/loader tests remain in `sourceModuleLinkTest`,
+`sourceModulePolicyTest` and `sourceModuleLoaderTest`. Ordinary complete-module,
+artifact, metadata-invariance and backend comparisons are described in
+[ordinary frontend regressions](../tests/sourceOrdinaryAcceptance.md).

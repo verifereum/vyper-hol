@@ -59,8 +59,8 @@ Errors are eager even below False Boolean heads or beside dynamic operands.
 * `sourceExprCall` additionally constructs internal calls and interface-based
   external/static calls from resolved source signatures, including original
   `skip_contract_check` constants and typed external-call keywords. This
-  call path has separate tests in
-  [sourceModuleLinkTestScript.sml](sourceModuleLinkTestScript.sml).
+  call path shares signature/context infrastructure with the ordinary frontend;
+  independent full-Source body tests are extracted with that optional feature.
 
 `source_expr_flag`, `source_expr_index`, and `source_expr_range_bound` share
 original resolution/evaluation evidence. Indices check the supplied count;
@@ -72,11 +72,9 @@ defaults. These helpers are not complete statement/range elaborators.
 `sourceExprProps` proves runtime typing, original constant/operator validation,
 required-constant provenance and local constant replacement with represented
 values and unchanged states. It does not prove a universal structural
-source-to-runtime simulation. [sourceMeaning](sourceMeaning.md) supplies
-independent staged relations, and
-[sourceMeaningLocation](sourceMeaningLocation.md) handles location-sensitive
-forms. These retain explicit derivation and context-agreement premises; neither
-asserts that every accepted expression has an independent semantic derivation.
+source-to-runtime simulation. Independent staged program/call/location Meaning
+relations are not included in this base; no claim that every accepted expression
+has an independent semantic derivation is made here.
 
 This is a contextual fragment, not a complete source typer. Mixed-sign
 comparisons, context-polymorphic negative boundaries, structs, many builtin/call
@@ -86,8 +84,8 @@ arithmetic can be accepted in a mathematical annotation bound. Unsupported is
 not a claim of language rejection, and no compiler replacement is a fallback.
 
 Expression AST/typing witnesses are not whole-program parity certificates.
-[sourceModule](sourceModule.md) consumes this API; declaration/type/environment
-transport, effects and module/compiler composition have separate contracts.
+[Shared module signatures](sourceModule.md) and ordinary folding consume this
+API; retained-source/checking/backend equations have separate contracts.
 No supported-program restriction is removed here.
 
 ## Regressions

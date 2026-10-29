@@ -3,7 +3,6 @@ structure vyperCheckContractFrontendLib :> vyperCheckContractFrontendLib = struc
 open HolKernel boolLib
 open jsonToVyperTheory
 open jsonConstEvalTheory
-open sourceModuleDefsTheory
 
  type frontend_input =
   {in_deploy : bool,
@@ -187,7 +186,7 @@ fun check_contract_file {in_deploy, address, path} =
      annotated_ast = JSONDecode.decodeFile jsonASTLib.annotated_ast path,
      storage_layout = JSONDecode.decodeFile jsonASTLib.storage_layout path}
 
-(* Preserved compatibility evaluator; never called by the source path. *)
+(* Preserved compatibility evaluator; never called by the ordinary source path. *)
 fun check_constant_contract_file_legacy {address, path} = let
   val declarations = JSONDecode.decodeFile jsonConstASTLib.annotated_ast path
   val translation = eval_closed "constant module translation"
@@ -204,164 +203,12 @@ in
      layouts = listSyntax.mk_list ([entry], type_of entry)}
 end
 
-(* Raw annotated-only compatibility route. Clean names are rebound below to
-   the paired original/claims normalizer; there is no failure retry. *)
+(* Raw annotated-only compatibility route. Clean names below use the paired
+   original/claims normalizer; there is no failure retry. *)
 val prepare_check_input_legacy = prepare_check_input
 val check_contract_result_legacy = check_contract_result
 val check_contract_legacy = check_contract
 val check_contract_file_legacy = check_contract_file
-
-type source_input =
-  {fuel:term, trust:term, keys:term, program:term, layouts:term, address:term}
-type source_checked_result = sourceModuleFrontendLib.checked
-
-fun check_source_contract_result
-    {fuel, trust, keys, program, layouts, address} : source_checked_result = let
-  val () = app (fn (label,tm) => require_closed label tm)
-    [("source fuel",fuel),("source trust",trust),("source keys",keys),
-     ("original source program",program),("source layouts",layouts),("address",address)]
-in
-  sourceModuleFrontendLib.check_simple
-    {fuel=fuel,trust=trust,keys=keys,program=program}
-    {layouts=layouts,address=address}
-end
-
-fun check_loaded_source_contract_result {fuel,trust,source,layouts,address} = let
-  val () = app (fn (label,tm) => require_closed label tm)
-    [("source fuel",fuel),("source trust",trust),("source layouts",layouts),("address",address),
-     ("original source program",#program (source:sourceModuleLoaderLib.loaded)),
-     ("source keys",#keys source)]
-in sourceModuleFrontendLib.check_loaded {fuel=fuel,trust=trust,source=source}
-  {layouts=layouts,address=address} end
-
-fun check_source_contract input = #checking (check_source_contract_result input)
-fun check_source_contract_file {fuel,trust,keys,layouts,address,path} =
-  check_source_contract {fuel=fuel,trust=trust,keys=keys,layouts=layouts,address=address,
-    program=JSONDecode.decodeFile sourceSyntaxLib.annotated_ast path}
-
-(* Compatibility adapter for the strict #135 JSON fragment. This constructs
-   ORIGINAL syntax only; there is no constant arithmetic/type evaluation here.
-   jsonConstASTLib's is_constant/is_public assertions are inherited legacy
-   qualifier trust. General source callers must supply pre-erasure syntax. *)
-fun source_node thy name args =
-  list_mk_comb (prim_mk_const {Thy=thy,Name=name},args)
-fun sx name args = source_node "sourceSyntax" name args
-fun sca name args = source_node "sourceConstAnnotation" name args
-fun source_list name entries = listSyntax.mk_list
-  (entries,mk_thy_type {Thy="sourceSyntax",Tyop=name,Args=[]})
-fun strict_expression tm =
-  case strip_comb tm of
-    (ctor,[value,_]) =>
-      if same_const ctor (prim_mk_const {Thy="jsonAST",Name="JE_Int"}) then
-        sx "SX_Literal" [source_node "sourceConstAST" "SCL_Int" [value]]
-      else raise Fail "strict source adapter: unexpected expression"
-  | (ctor,[first,second,third,_]) =>
-      if same_const ctor (prim_mk_const {Thy="jsonAST",Name="JE_Name"}) then
-        sx "SX_Name" [first]
-      else if same_const ctor (prim_mk_const {Thy="jsonAST",Name="JE_BinOp"}) then let
-        val suffix = String.extract (#Name (dest_thy_const second),5,NONE)
-        val source_op = if suffix = "Mult" then "Mul" else suffix
-      in sx "SX_Binary"
-        [source_node "sourceConstAST" ("SCB_" ^ source_op) [],
-         strict_expression first,strict_expression third] end
-      else raise Fail "strict source adapter: unexpected expression"
-  | _ => raise Fail "strict source adapter: unexpected expression"
-fun strict_annotation tm =
-  case strip_comb tm of
-    (ctor,[first,second]) =>
-      if same_const ctor (prim_mk_const {Thy="jsonConstAST",Name="CA_Integer"}) then
-        sca "SCA_Name" [listSyntax.mk_list
-          ([stringSyntax.fromMLstring
-            ((if aconv second boolSyntax.T then "int" else "uint") ^
-             Arbnum.toString (numSyntax.dest_numeral first))],stringSyntax.string_ty)]
-      else sca "SCA_StaticArray" [strict_annotation first,
-        source_node "sourceSyntax" "source_constant_candidate" [strict_expression second]]
-  | _ => raise Fail "strict source adapter: unexpected annotation"
-fun strict_declaration tm =
-  case strip_comb tm of
-    (_, [name,ann,value]) => sx "SD_Variable"
-      [name,sca "SCA_Qualified"
-        [source_node "sourceConstAnnotation" "SCQ_Constant" [],strict_annotation ann],
-       optionSyntax.mk_some (strict_expression value)]
-  | (_, [name,args,ret,body]) => let
-      val (params,_) = listSyntax.dest_list args
-      fun argument pair = let val (id,ann) = pairSyntax.dest_pair pair
-        in sx "SourceArg" [id,optionSyntax.mk_some (strict_annotation ann)] end
-    in sx "SD_Function" [name,
-      source_list "source_expr" (List.map (fn s => sx "SX_Name"
-        [stringSyntax.fromMLstring s]) ["external","pure"]),
-      source_list "source_arg" (List.map argument params),source_list "source_expr" [],
-      optionSyntax.mk_some (strict_annotation ret),
-      source_list "source_stmt" [sx "SS_Return" [optionSyntax.mk_some (strict_expression body)]]]
-    end
-  | _ => raise Fail "strict source adapter: unexpected declaration"
-
-fun prepare_constant_source_file {address,path} : source_input = let
-  val declarations = JSONDecode.decodeFile jsonConstASTLib.annotated_ast path
-  val (decls,_) = listSyntax.dest_list declarations
-  val program = sx "SourceProgram"
-    [sx "SourceModule" [source_list "source_decl" (List.map strict_declaration decls)],
-     source_list "source_module" []]
-  val trust = Parse.Term [QUOTE
-    "<| smt_ids := [([\"main\"],NONE)]; smt_nominals := []; smt_type_defs := FEMPTY; smt_slots := [] |> : source_module_trust"]
-  val layout = ``([] : storage_layout, [] : storage_layout)``
-  val entry = pairSyntax.mk_pair (address,layout)
-in
-  {fuel=``80:num``,trust=trust,keys=``[["main"]]``,program=program,
-   layouts=listSyntax.mk_list ([entry],type_of entry),address=address}
-end
-
-fun check_constant_source_contract_file input =
-  check_source_contract (prepare_constant_source_file input)
-
-(* Extract only kernel consequences of the checked artifact. Compilation is
-   an explicit antecedent, not an unchecked promise or a bytecode theorem.
-   source_meaning_compile_program retains its independent source-module and
-   nominal-environment premises for full interpreter call/load transport. *)
-fun source_artifact_semantics (checked:source_checked_result) = let
-  val elab = #elaboration checked
-  val modules = #modules elab
-  val tops = case #1 (listSyntax.dest_list modules) of
-      [entry] => let val (owner,tops) = pairSyntax.dest_pair entry in
-        if optionSyntax.is_none owner then tops else raise Fail
-          "source artifact semantics: expected main module" end
-    | _ => raise Fail "source artifact semantics: backend-module-linking"
-  val (phase,args) = strip_comb (lhs (concl (#equation elab)))
-  val () = if same_const phase ``sourceModuleElaborate$source_module_elaborate_simple`` then ()
-    else raise Fail "source artifact semantics: preserved-policy semantic transport"
-  val (fuel,trust,keys,program) = case args of
-      [fuel,trust,keys,program] => (fuel,trust,keys,program)
-    | _ => raise Fail "source artifact semantics: malformed simple phase"
-  val {layouts,address,...} = #input checked
-  val raw = ``compileVyper$compile_vyper finalizer policy ^tops = SOME bytes``
-  val wrapper = ``sourceModuleCompile$source_module_compile ^fuel ^trust ^keys ^program ^layouts ^address
-    finalizer policy``
-  val compilation = simpLib.SIMP_CONV (bossLib.srw_ss())
-    [sourceModuleCompileTheory.source_module_compile_def,
-     #composition checked, source_module_bind_def, sourceSyntaxTheory.retained_executable_def,
-     ASSUME raw] wrapper
-  val meaning = GENL (free_vars raw) (DISCH raw
-    (MATCH_MP sourceMeaningCompileTheory.source_meaning_compile_program compilation))
-  val (oracles,axioms) = Tag.dest_tag (Thm.tag meaning)
-  val () = if null (hyp meaning) andalso null axioms andalso
-    List.all (fn tag => tag = "DISK_THM") oracles then ()
-    else raise Fail "source artifact semantics: non-kernel certificate"
-in meaning end
-
-structure Source = struct
-  val check_contract_result = check_source_contract_result
-  val check_contract = check_source_contract
-  val check_loaded_contract_result = check_loaded_source_contract_result
-  fun check_contract_file_result {fuel,trust,layouts,address,path} =
-    check_loaded_contract_result
-      {fuel=fuel,trust=trust,layouts=layouts,address=address,
-       source=sourceModuleLoaderLib.load_file path}
-  fun check_contract_file input = #checking (check_contract_file_result input)
-  val artifact_semantics = source_artifact_semantics
-  val check_constant_contract_file = check_constant_source_contract_file
-end
-
-val check_constant_contract_file = check_constant_source_contract_file
 
 (* Ordinary public route: original loader provenance + occurrence claims and
    explicitly inherited runtime type/import/layout contexts. All entry points
