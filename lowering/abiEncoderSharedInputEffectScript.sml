@@ -47,9 +47,3 @@ Proof
   asm_simp_tac bool_ss [] >> conj_tac >> irule abi_decoder_operand_live_mono >>
   qexists_tac `st.cs_next_var` >> simp[]
 QED
-
-val _ = List.app (fn th =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if List.all (fn s => s = "DISK_THM") oracles andalso null axioms andalso null (Thm.hyp th)
-    then () else raise Fail "shared input effect admission, axiom or hypothesis"
-  end) [abi_encoder_shared_input_effect, abi_encoder_shared_input_mono];

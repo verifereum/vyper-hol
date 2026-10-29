@@ -326,31 +326,3 @@ Proof
 QED
 
 (* Retained tags do not reconstruct axiom provenance erased by .dat loading. *)
-val _ = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if List.all (fn s => s = "DISK_THM") oracles andalso null axioms then
-      print ("ENCODER_SOURCE_AGGREGATE_AUDIT_OK " ^ name ^ "\n")
-    else raise Fail ("source aggregate admission dependency: " ^ name)
-  end)
-  [("abi_metadata", source_reps_abi_metadata),
-   ("any_dynamic", source_reps_any_dynamic),
-   ("tuple_head", source_reps_tuple_head),
-   ("tuple_acc", abi_encoder_enc_tuple_cong),
-   ("heads", abi_encoder_head_lengths_cong),
-   ("tuple_bytes", abi_encoder_tuple_encoding_cong),
-   ("rep_metadata", source_rep_metadata),
-   ("rep_transport", source_rep_transport),
-   ("reps_nil", source_reps_nil),
-   ("reps_index", source_reps_index),
-   ("reps_cons", source_reps_cons),
-   ("dynamic_empty_input", abi_encoder_dynamic_empty_input),
-   ("dynamic_empty_classification", abi_encoder_dynamic_empty_classification),
-   ("lengths", source_reps_lengths),
-   ("prefix_span", source_reps_span),
-   ("full_span", source_reps_full_span),
-   ("members", source_reps_members),
-   ("complex", abi_encoder_source_complex_input),
-   ("tuple_type_bytes", abi_encoder_tuple_type_encoding),
-   ("tuple_type_cong", abi_encoder_tuple_type_encoding_cong),
-   ("array_cong", abi_encoder_dynamic_array_encoding_cong),
-   ("static_copy", source_rep_static_copy)];

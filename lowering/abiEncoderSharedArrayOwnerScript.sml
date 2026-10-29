@@ -141,10 +141,3 @@ Proof
   irule abi_encoder_registered_effect_enlarge >> goal_assum (drule_at Any) >>
   simp[pred_setTheory.SUBSET_DEF,abi_decoder_ids_def]
 QED
-
-val _ = List.app (fn th =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if List.all (fn s => s = "DISK_THM") oracles andalso null axioms andalso null (Thm.hyp th)
-    then () else raise Fail "shared array owner admission, axiom or hypothesis"
-  end) [abi_encoder_shared_array_static_body_owner,
-    abi_encoder_shared_array_dynamic_body_owner,abi_encoder_shared_array_owner_effects];

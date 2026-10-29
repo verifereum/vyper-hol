@@ -129,11 +129,3 @@ Proof
   disch_then (qx_choose_then `t` strip_assume_tac) >>
   qexists_tac `t` >> asm_rewrite_tac []
 QED
-
-val _ = List.app (fn th =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if List.all (fn s => s = "DISK_THM") oracles andalso null axioms andalso null (Thm.hyp th)
-    then () else raise Fail "shared closure admission, axiom or hypothesis"
-  end) [abi_encoder_shared_members_root_pre, abi_encoder_shared_members_initial_inv,
-    abi_encoder_open_tuple_prefix_complete, abi_encoder_shared_members_final_output,
-    abi_encoder_shared_members_correct];

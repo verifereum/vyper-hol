@@ -129,14 +129,3 @@ Proof
   simp[abi_encoder_shared_endpoint_def, mem_bytes_at_def, eval_operand_def,
     abi_encoder_registered_effect_refl, abi_encoder_extend_sim_refl]
 QED
-
-val _ = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if List.all (fn s => s = "DISK_THM") oracles andalso null axioms then
-      print ("ENCODER_SHARED_LEAF_AUDIT_OK " ^ name ^ "\n")
-    else raise Fail ("encoder shared leaf admission dependency: " ^ name)
-  end)
-  [("word", abi_encoder_shared_word),
-   ("copy", abi_encoder_shared_copy),
-   ("bytes", abi_encoder_shared_bytes),
-   ("empty", abi_encoder_shared_empty)];

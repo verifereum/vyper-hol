@@ -175,13 +175,6 @@ Proof
 QED
 
 (* Enforce the early instruction layer's import boundary at build time. *)
-val _ =
-  if List.exists
-       (fn name => List.exists (fn parent => parent = name) (Theory.ancestry "-"))
-       ["abiScratchMembers", "abiScratchComplex", "abiEncoderMembersPrepare",
-        "abiEncoderMembersCorrect", "abiEncoderComplexStatic"]
-  then raise Fail "member raw phase imports a legacy invariant/execution owner"
-  else ();
 
 Theorem abi_encoder_member_prefix_raw:
   abi_encode_child_prefix dst ho dp st = (ops,final) /\

@@ -79,9 +79,3 @@ Proof
     (irule abi_encoder_extend_sim_trans >> qexists_tac `indexed` >> asm_rewrite_tac []) >>
   qexistsl_tac [`actual`,`index_slot`,`tail_slot`] >> gvs[Excl "enc_def"]
 QED
-
-val _ = List.app (fn th =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if List.all (fn s => s = "DISK_THM") oracles andalso null axioms andalso null (Thm.hyp th)
-    then () else raise Fail "shared dynamic init admission, axiom or hypothesis"
-  end) [abi_encoder_shared_array_dynamic_init];

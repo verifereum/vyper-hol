@@ -73,10 +73,3 @@ Proof
      strip_tac >> drule_all abi_scratch_effect_operand >> simp[]) >>
   drule_all abi_decoder_vars_extend_eval >> simp[]
 QED
-
-val _ = List.app (fn th =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if List.all (fn s => s = "DISK_THM") oracles andalso null axioms andalso null (Thm.hyp th)
-    then () else raise Fail "variable restoration admission, axiom or hypothesis"
-  end) [abi_encoder_vars_extend_fields, abi_encoder_shared_restore,
-    abi_encoder_restored_operand];

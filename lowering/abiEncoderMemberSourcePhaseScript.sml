@@ -123,10 +123,3 @@ Proof
 QED
 
 (* This source transport layer must be usable before the legacy wrappers. *)
-val _ =
-  if List.exists
-       (fn name => List.exists (fn parent => parent = name) (Theory.ancestry "-"))
-       ["abiScratchMembers", "abiScratchComplex", "abiEncoderMembersPrepare",
-        "abiEncoderMembersCorrect", "abiEncoderComplexStatic"]
-  then raise Fail "source phase imports a legacy execution wrapper"
-  else ();

@@ -57,12 +57,12 @@ the index does not replace those contracts.
 - [abi_encoder_spine_call_def](abiEncoderMemberSpineScript.sml#L8)
 - [abi_encoder_spine_child_def](abiEncoderMemberSpineScript.sml#L14)
 - [abi_encoder_member_spine_def](abiEncoderMemberSpineScript.sml#L30)
-- [abi_encoder_spine_core_code_def](abiEncoderMemberSpineScript.sml#L103)
-- [abi_encoder_spine_cursor_input_def](abiEncoderMemberSpineScript.sml#L139)
-- [abi_encoder_spine_child_input_def](abiEncoderMemberSpineScript.sml#L250)
-- [abi_encoder_spine_child_output_def](abiEncoderMemberSpineScript.sml#L276)
-- [abi_encoder_spine_code_def](abiEncoderMemberSpineScript.sml#L311)
-- [abi_encoder_spine_cons_layout_def](abiEncoderMemberSpineScript.sml#L322)
+- [abi_encoder_spine_core_code_def](abiEncoderMemberSpineScript.sml#L93)
+- [abi_encoder_spine_cursor_input_def](abiEncoderMemberSpineScript.sml#L129)
+- [abi_encoder_spine_child_input_def](abiEncoderMemberSpineScript.sml#L240)
+- [abi_encoder_spine_child_output_def](abiEncoderMemberSpineScript.sml#L266)
+- [abi_encoder_spine_code_def](abiEncoderMemberSpineScript.sml#L301)
+- [abi_encoder_spine_cons_layout_def](abiEncoderMemberSpineScript.sml#L312)
 
 ### abiEncoderObserverCode
 
@@ -135,7 +135,7 @@ the index does not replace those contracts.
 
 - [abi_encoder_source_members_child_pre_def](abiEncoderSourceMembersInterpretScript.sml#L8)
 - [abi_encoder_source_members_child_post_def](abiEncoderSourceMembersInterpretScript.sml#L14)
-- [abi_encoder_source_members_entry_def](abiEncoderSourceMembersInterpretScript.sml#L48)
+- [abi_encoder_source_members_entry_def](abiEncoderSourceMembersInterpretScript.sml#L47)
 
 ### abiEncoderVarTransport
 
@@ -363,12 +363,12 @@ are preserved; their replacement proof bodies are not restatements.
 
 - [abi_encoder_member_binary_registered](abiEncoderMemberPhaseEffectScript.sml#L9)
 - [abi_encoder_member_load_registered](abiEncoderMemberPhaseEffectScript.sml#L24)
-- [abi_encoder_member_step_globals](abiEncoderMemberPhaseEffectScript.sml#L48)
-- [abi_encoder_member_phase_globals](abiEncoderMemberPhaseEffectScript.sml#L59)
-- [abi_encoder_member_suffix_opcodes](abiEncoderMemberPhaseEffectScript.sml#L79)
-- [abi_encoder_member_cursor_registered](abiEncoderMemberPhaseEffectScript.sml#L91)
-- [abi_encoder_member_prefix_opcodes](abiEncoderMemberPhaseEffectScript.sml#L120)
-- [abi_encoder_member_prefix_registered](abiEncoderMemberPhaseEffectScript.sml#L132)
+- [abi_encoder_member_step_globals](abiEncoderMemberPhaseEffectScript.sml#L40)
+- [abi_encoder_member_phase_globals](abiEncoderMemberPhaseEffectScript.sml#L51)
+- [abi_encoder_member_suffix_opcodes](abiEncoderMemberPhaseEffectScript.sml#L71)
+- [abi_encoder_member_cursor_registered](abiEncoderMemberPhaseEffectScript.sml#L83)
+- [abi_encoder_member_prefix_opcodes](abiEncoderMemberPhaseEffectScript.sml#L112)
+- [abi_encoder_member_prefix_registered](abiEncoderMemberPhaseEffectScript.sml#L124)
 
 ### abiEncoderMemberPhaseExec
 
@@ -389,23 +389,23 @@ are preserved; their replacement proof bodies are not restatements.
 - [abi_encoder_member_tail_transport](abiEncoderMemberPhaseRawScript.sml#L129)
 - [abi_encoder_member_phase_extend_sim](abiEncoderMemberPhaseRawScript.sml#L146)
 - [abi_encoder_member_binary_raw_sim](abiEncoderMemberPhaseRawScript.sml#L158)
-- [abi_encoder_member_prefix_raw](abiEncoderMemberPhaseRawScript.sml#L186)
-- [abi_encoder_member_prefix_transport](abiEncoderMemberPhaseRawScript.sml#L201)
-- [abi_encoder_member_prefix_control](abiEncoderMemberPhaseRawScript.sml#L219)
-- [abi_encoder_member_cursor_bytes](abiEncoderMemberPhaseRawScript.sml#L245)
+- [abi_encoder_member_prefix_raw](abiEncoderMemberPhaseRawScript.sml#L179)
+- [abi_encoder_member_prefix_transport](abiEncoderMemberPhaseRawScript.sml#L194)
+- [abi_encoder_member_prefix_control](abiEncoderMemberPhaseRawScript.sml#L212)
+- [abi_encoder_member_cursor_bytes](abiEncoderMemberPhaseRawScript.sml#L238)
 
 ### abiEncoderMemberSourceAdapter
 
 - [abi_encoder_static_child_spine_reach](abiEncoderMemberSourceAdapterScript.sml#L14)
-- [abi_encoder_source_suffix_raw_post](abiEncoderMemberSourceAdapterScript.sml#L61)
-- [abi_encoder_source_suffix_raw_sim](abiEncoderMemberSourceAdapterScript.sml#L75)
-- [abi_encoder_source_suffix_raw_control](abiEncoderMemberSourceAdapterScript.sml#L89)
-- [abi_encoder_source_dynamic_finish_transport](abiEncoderMemberSourceAdapterScript.sml#L112)
-- [abi_encoder_source_dynamic_prepare_transport](abiEncoderMemberSourceAdapterScript.sml#L169)
-- [abi_encoder_source_dynamic_core_run](abiEncoderMemberSourceAdapterScript.sml#L209)
-- [abi_encoder_member_source_dynamic_input](abiEncoderMemberSourceAdapterScript.sml#L248)
-- [abi_encoder_member_source_dynamic_output](abiEncoderMemberSourceAdapterScript.sml#L301)
-- [abi_encoder_dynamic_child_spine_reach](abiEncoderMemberSourceAdapterScript.sml#L378)
+- [abi_encoder_source_suffix_raw_post](abiEncoderMemberSourceAdapterScript.sml#L45)
+- [abi_encoder_source_suffix_raw_sim](abiEncoderMemberSourceAdapterScript.sml#L59)
+- [abi_encoder_source_suffix_raw_control](abiEncoderMemberSourceAdapterScript.sml#L73)
+- [abi_encoder_source_dynamic_finish_transport](abiEncoderMemberSourceAdapterScript.sml#L96)
+- [abi_encoder_source_dynamic_prepare_transport](abiEncoderMemberSourceAdapterScript.sml#L142)
+- [abi_encoder_source_dynamic_core_run](abiEncoderMemberSourceAdapterScript.sml#L182)
+- [abi_encoder_member_source_dynamic_input](abiEncoderMemberSourceAdapterScript.sml#L221)
+- [abi_encoder_member_source_dynamic_output](abiEncoderMemberSourceAdapterScript.sml#L274)
+- [abi_encoder_dynamic_child_spine_reach](abiEncoderMemberSourceAdapterScript.sml#L351)
 
 ### abiEncoderMemberSourceContract
 
@@ -433,14 +433,14 @@ are preserved; their replacement proof bodies are not restatements.
 - [abi_encoder_spine_shared_core_run](abiEncoderMemberSpineCompatScript.sml#L39)
 - [abi_encoder_spine_shared_input_address](abiEncoderMemberSpineCompatScript.sml#L51)
 - [abi_encoder_spine_static_shared_pre](abiEncoderMemberSpineCompatScript.sml#L82)
-- [abi_encoder_spine_static_shared_transport](abiEncoderMemberSpineCompatScript.sml#L124)
-- [abi_encoder_spine_dynamic_shared_pre](abiEncoderMemberSpineCompatScript.sml#L181)
-- [abi_encoder_spine_cursor_post](abiEncoderMemberSpineCompatScript.sml#L223)
-- [abi_encoder_spine_prefix_extend_sim](abiEncoderMemberSpineCompatScript.sml#L245)
-- [abi_encoder_spine_suffix_extend_sim](abiEncoderMemberSpineCompatScript.sml#L258)
-- [abi_encoder_spine_dynamic_shared_sim](abiEncoderMemberSpineCompatScript.sml#L271)
-- [abi_encoder_spine_shared_registered_window](abiEncoderMemberSpineCompatScript.sml#L295)
-- [abi_encoder_spine_dynamic_shared_effects](abiEncoderMemberSpineCompatScript.sml#L324)
+- [abi_encoder_spine_static_shared_transport](abiEncoderMemberSpineCompatScript.sml#L114)
+- [abi_encoder_spine_dynamic_shared_pre](abiEncoderMemberSpineCompatScript.sml#L163)
+- [abi_encoder_spine_cursor_post](abiEncoderMemberSpineCompatScript.sml#L197)
+- [abi_encoder_spine_prefix_extend_sim](abiEncoderMemberSpineCompatScript.sml#L211)
+- [abi_encoder_spine_suffix_extend_sim](abiEncoderMemberSpineCompatScript.sml#L224)
+- [abi_encoder_spine_dynamic_shared_sim](abiEncoderMemberSpineCompatScript.sml#L237)
+- [abi_encoder_spine_shared_registered_window](abiEncoderMemberSpineCompatScript.sml#L261)
+- [abi_encoder_spine_dynamic_shared_effects](abiEncoderMemberSpineCompatScript.sml#L279)
 
 ### abiEncoderMemberSpine
 
@@ -448,14 +448,14 @@ are preserved; their replacement proof bodies are not restatements.
 - [abi_encoder_member_spine_compile](abiEncoderMemberSpineScript.sml#L54)
 - [abi_encoder_spine_child_mono](abiEncoderMemberSpineScript.sml#L69)
 - [abi_encoder_member_spine_mono](abiEncoderMemberSpineScript.sml#L78)
-- [abi_encoder_spine_static_run](abiEncoderMemberSpineScript.sml#L114)
-- [abi_encoder_spine_cursor_run](abiEncoderMemberSpineScript.sml#L149)
-- [abi_encoder_spine_dynamic_run](abiEncoderMemberSpineScript.sml#L160)
-- [abi_encoder_member_spine_fold](abiEncoderMemberSpineScript.sml#L195)
-- [abi_encoder_spine_cons_code](abiEncoderMemberSpineScript.sml#L221)
-- [abi_encoder_spine_child_generate](abiEncoderMemberSpineScript.sml#L292)
-- [abi_encoder_spine_cons_layout](abiEncoderMemberSpineScript.sml#L341)
-- [abi_encoder_member_spine_generate](abiEncoderMemberSpineScript.sml#L361)
+- [abi_encoder_spine_static_run](abiEncoderMemberSpineScript.sml#L104)
+- [abi_encoder_spine_cursor_run](abiEncoderMemberSpineScript.sml#L139)
+- [abi_encoder_spine_dynamic_run](abiEncoderMemberSpineScript.sml#L150)
+- [abi_encoder_member_spine_fold](abiEncoderMemberSpineScript.sml#L185)
+- [abi_encoder_spine_cons_code](abiEncoderMemberSpineScript.sml#L211)
+- [abi_encoder_spine_child_generate](abiEncoderMemberSpineScript.sml#L282)
+- [abi_encoder_spine_cons_layout](abiEncoderMemberSpineScript.sml#L331)
+- [abi_encoder_member_spine_generate](abiEncoderMemberSpineScript.sml#L351)
 
 ### abiEncoderMembersCorrect
 
@@ -621,10 +621,10 @@ are preserved; their replacement proof bodies are not restatements.
 
 - [abi_encoder_shared_array_body_address](abiEncoderSharedArrayBodyScript.sml#L18)
 - [abi_encoder_shared_array_body_child_input](abiEncoderSharedArrayBodyScript.sml#L87) (local)
-- [abi_encoder_shared_array_dynamic_body_run_retained](abiEncoderSharedArrayBodyScript.sml#L128) (local)
-- [abi_encoder_shared_array_dynamic_body_run](abiEncoderSharedArrayBodyScript.sml#L287) (local)
-- [abi_encoder_shared_array_dynamic_body](abiEncoderSharedArrayBodyScript.sml#L370)
-- [abi_encoder_shared_array_static_body](abiEncoderSharedArrayBodyScript.sml#L620)
+- [abi_encoder_shared_array_dynamic_body_run_retained](abiEncoderSharedArrayBodyScript.sml#L122) (local)
+- [abi_encoder_shared_array_dynamic_body_run](abiEncoderSharedArrayBodyScript.sml#L281) (local)
+- [abi_encoder_shared_array_dynamic_body](abiEncoderSharedArrayBodyScript.sml#L351)
+- [abi_encoder_shared_array_static_body](abiEncoderSharedArrayBodyScript.sml#L595)
 
 ### abiEncoderSharedArrayComplete
 
@@ -814,7 +814,7 @@ are preserved; their replacement proof bodies are not restatements.
 ### abiEncoderSharedArrayTail
 
 - [abi_encoder_shared_array_tail_reach](abiEncoderSharedArrayTailScript.sml#L11)
-- [abi_encoder_shared_array_tail_observations](abiEncoderSharedArrayTailScript.sml#L75)
+- [abi_encoder_shared_array_tail_observations](abiEncoderSharedArrayTailScript.sml#L69)
 
 ### abiEncoderSharedComplex
 
@@ -1017,13 +1017,13 @@ are preserved; their replacement proof bodies are not restatements.
 ### abiEncoderSourceMembersInterpret
 
 - [abi_encoder_source_members_child_dispatch](abiEncoderSourceMembersInterpretScript.sml#L19)
-- [abi_encoder_source_members_child_run](abiEncoderSourceMembersInterpretScript.sml#L34)
-- [abi_encoder_source_members_entry_input](abiEncoderSourceMembersInterpretScript.sml#L72)
-- [abi_encoder_source_members_entry_exit](abiEncoderSourceMembersInterpretScript.sml#L99)
-- [abi_encoder_source_members_layout_bound](abiEncoderSourceMembersInterpretScript.sml#L130) (local)
-- [abi_encoder_source_members_entry_prepare](abiEncoderSourceMembersInterpretScript.sml#L141)
-- [abi_encoder_source_members_empty_post](abiEncoderSourceMembersInterpretScript.sml#L177)
-- [abi_encoder_source_members_generate](abiEncoderSourceMembersInterpretScript.sml#L197)
+- [abi_encoder_source_members_child_run](abiEncoderSourceMembersInterpretScript.sml#L33)
+- [abi_encoder_source_members_entry_input](abiEncoderSourceMembersInterpretScript.sml#L71)
+- [abi_encoder_source_members_entry_exit](abiEncoderSourceMembersInterpretScript.sml#L98)
+- [abi_encoder_source_members_layout_bound](abiEncoderSourceMembersInterpretScript.sml#L129) (local)
+- [abi_encoder_source_members_entry_prepare](abiEncoderSourceMembersInterpretScript.sml#L140)
+- [abi_encoder_source_members_empty_post](abiEncoderSourceMembersInterpretScript.sml#L176)
+- [abi_encoder_source_members_generate](abiEncoderSourceMembersInterpretScript.sml#L195)
 
 ### abiEncoderSourcePrimitive
 

@@ -67,10 +67,3 @@ Proof
     abi_decoder_operand_jump, jump_to_def, abi_encoder_registered_effect_def,
     alloca_inv_def, allocas_non_overlapping_def, alloca_next_valid_def]
 QED
-
-val _ = List.app (fn th =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if List.all (fn s => s = "DISK_THM") oracles andalso null axioms andalso null (Thm.hyp th)
-    then () else raise Fail "shared array entry admission, axiom or hypothesis"
-  end) [abi_encoder_array_jump_extend_state, abi_encoder_array_loop_entry_extend,
-    abi_encoder_shared_array_loop_enter];

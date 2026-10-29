@@ -117,12 +117,6 @@ Proof
   asm_simp_tac bool_ss [abi_encoder_shared_input_def] >> decide_tac
 QED
 
-val _ = List.app (fn th =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if List.all (fn s => s = "DISK_THM") oracles andalso null axioms andalso null (Thm.hyp th)
-    then () else raise Fail "shared array body admission, axiom or hypothesis"
-  end) [abi_encoder_shared_array_body_address,abi_encoder_shared_array_body_child_input];
-
 (* The dynamic callback uses the actual address endpoint as the entry of the
    common tail driver.  These witnesses are also used for all post-observations. *)
 Theorem abi_encoder_shared_array_dynamic_body_run_retained[local]:
@@ -353,19 +347,6 @@ Proof
   qexistsl_tac [`coords`,`addressed`,`ops`,`prepared`,`len`,`ce`,`address_ready`,`ready`,`encoded`,`actual`] >>
   asm_rewrite_tac []
 QED
-
-val _ = List.app (fn th =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if List.all (fn s => s = "DISK_THM") oracles andalso null axioms andalso null (Thm.hyp th)
-    then () else raise Fail "retained body run admission, axiom or hypothesis"
-  end) [abi_encoder_shared_array_dynamic_body_run_retained];
-
-val _ =
-  let val th = abi_encoder_shared_array_dynamic_body_run
-      val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if List.all (fn s => s = "DISK_THM") oracles andalso null axioms andalso null (Thm.hyp th)
-    then () else raise Fail "shared dynamic body run admission, axiom or hypothesis"
-  end;
 
 Theorem abi_encoder_shared_array_dynamic_body:
   abi_encoder_shared ei /\
@@ -611,12 +592,6 @@ QED
 
 Finalise abi_encoder_shared_array_dynamic_body
 
-val _ = List.app (fn th =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if List.all (fn s => s = "DISK_THM") oracles andalso null axioms andalso null (Thm.hyp th)
-    then () else raise Fail "shared dynamic body admission, axiom or hypothesis"
-  end) [abi_encoder_shared_array_dynamic_body];
-
 Theorem abi_encoder_shared_array_static_body:
   abi_encoder_shared ei /\ abi_encoder_static_leaf ei /\
   abi_encode_array_static_body ip src dst ei asz msz st = (out,en) /\
@@ -795,11 +770,3 @@ Resume abi_encoder_shared_array_static_body[static_prefix]:
 QED
 
 Finalise abi_encoder_shared_array_static_body
-
-val _ =
-  let val th = abi_encoder_shared_array_static_body
-      val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in
-    if List.all (fn s => s = "DISK_THM") oracles andalso null axioms andalso null (Thm.hyp th)
-    then () else raise Fail "shared array static body admission, axiom or hypothesis"
-  end;

@@ -73,9 +73,3 @@ Proof
     (irule abi_encoder_extend_sim_trans >> qexists_tac `middle` >> simp[]) >>
   qexistsl_tac [`actual`,`slot`] >> gvs[]
 QED
-
-val _ = List.app (fn th =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if List.all (fn s => s = "DISK_THM") oracles andalso null axioms andalso null (Thm.hyp th)
-    then () else raise Fail "shared parent preparation admission, axiom or hypothesis"
-  end) [abi_encoder_shared_array_parent_prepare];

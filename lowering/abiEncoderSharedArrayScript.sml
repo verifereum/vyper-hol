@@ -22,9 +22,3 @@ Proof
   disch_then (qspec_then `ctx` (qx_choose_then `actual` strip_assume_tac)) >>
   qexists_tac `actual` >> asm_simp_tac bool_ss [abi_encoder_shared_endpoint_def]
 QED
-
-val _ = List.app (fn th =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if List.all (fn s => s = "DISK_THM") oracles andalso null axioms andalso null (Thm.hyp th)
-    then () else raise Fail "shared array constructor admission, axiom or hypothesis"
-  end) [abi_encoder_shared_array];

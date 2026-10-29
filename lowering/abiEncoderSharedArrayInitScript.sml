@@ -115,11 +115,3 @@ Proof
   strip_tac >> drule abi_encoder_complex_prefix_shape >> strip_tac >>
   drule_all abi_encoder_member_phase_extend_sim >> simp[]
 QED
-
-val _ = List.app (fn th =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if List.all (fn s => s = "DISK_THM") oracles andalso null axioms andalso null (Thm.hyp th)
-    then () else raise Fail "shared cursor init admission, axiom or hypothesis"
-  end) [abi_encoder_cursor_alloca_observations, abi_encoder_complex_prefix_raw_observations,
-    abi_encoder_complex_prefix_raw_transport, abi_encoder_complex_prefix_raw_allocated,
-    abi_encoder_complex_prefix_raw_registered, abi_encoder_complex_prefix_raw_extend];

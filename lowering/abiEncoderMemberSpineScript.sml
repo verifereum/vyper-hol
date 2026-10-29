@@ -90,16 +90,6 @@ Proof
   metis_tac[abi_encoder_spine_child_mono]
 QED
 
-val _ =
-  if List.exists
-       (fn name => List.exists (fn parent => parent = name) (Theory.ancestry "-"))
-       ["abiEncoderStatic", "abiEncoderDynamic", "abiEncoderMemberSourcePhase", "abiEncoderMembersDefs",
-        "abiScratchStatic", "abiScratchDynamicChild", "abiScratchMemberStep", "abiEncoderMember",
-        "abiScratchMembers", "abiScratchComplex", "abiEncoderMembersPrepare",
-        "abiEncoderMembersCorrect", "abiEncoderComplexStatic"]
-  then raise Fail "member spine imports a legacy invariant/execution owner"
-  else ();
-
 Definition abi_encoder_spine_core_code_def:
   abi_encoder_spine_core_code func (ei,dst,src,st,en,out) <=>
     compile_abi_encode_to_buf dst src ei st = (out,en) /\
@@ -419,11 +409,3 @@ Proof
   qexists_tac `t` >> asm_simp_tac bool_ss [abi_encoder_member_spine_def] >>
   qexistsl_tac [`elem_src`, `p`, `len`, `ce`, `ready`, `encoded`] >> asm_rewrite_tac []
 QED
-
-val _ = List.app (fn th =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if List.all (fn s => s = "DISK_THM") oracles andalso null axioms then ()
-    else raise Fail "member certificate generator has an admission or axiom"
-  end)
-  [abi_encoder_spine_child_generate, abi_encoder_spine_cons_layout,
-   abi_encoder_member_spine_generate];

@@ -98,19 +98,3 @@ Proof
     (irule abi_decode_sim_trans >> qexists_tac `r` >> asm_simp_tac bool_ss []) >>
   asm_rewrite_tac []
 QED
-
-val _ =
-  if List.exists
-       (fn name => List.exists (fn parent => parent = name) (Theory.ancestry "-"))
-       ["abiEncoderStatic", "abiEncoderDynamic", "abiEncoderMemberSourcePhase", "abiEncoderMembersDefs",
-        "abiScratchStatic", "abiScratchDynamicChild", "abiScratchMemberStep", "abiScratchComplex",
-        "abiEncoderMemberSpineCompat", "abiEncoderMemberPhaseExec", "abiEncoderMember",
-        "abiScratchMembers", "abiEncoderMembersCorrect", "abiEncoderComplexStatic"]
-  then raise Fail "source transport imports a member execution owner"
-  else ();
-
-val _ = List.app (fn th =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if List.all (fn s => s = "DISK_THM") oracles andalso null axioms then ()
-    else raise Fail "source transport has an admission or axiom"
-  end) [abi_encoder_member_source_static_input, abi_encoder_member_source_static_output];

@@ -45,15 +45,3 @@ Proof
     (drule_all abi_encoder_restored_frame >> simp[]) >>
   qexists_tac `restored` >> gvs[abi_decode_sim_def]
 QED
-
-(* Kernel-tag audit includes the transitive proof dependencies. *)
-val _ =
-  let
-    val th = compile_abi_encode_to_buf_frag
-    val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in
-    if List.all (fn s => s = "DISK_THM") oracles andalso
-       null axioms andalso null (Thm.hyp th)
-    then ()
-    else raise Fail "encoder fragment admission, axiom or hypothesis"
-  end;

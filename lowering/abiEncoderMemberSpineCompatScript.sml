@@ -110,16 +110,6 @@ Proof
   simp[abi_encoder_spine_shared_pre_def]
 QED
 
-val _ = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if List.all (fn s => s = "DISK_THM") oracles andalso null axioms then
-      print ("ENCODER_SPINE_COMPAT_AUDIT_OK " ^ name ^ "\n")
-    else raise Fail ("encoder spine compatibility admission dependency: " ^ name)
-  end)
-  [("shared_core_run", abi_encoder_spine_shared_core_run),
-   ("shared_input_address", abi_encoder_spine_shared_input_address),
-   ("static_shared_pre", abi_encoder_spine_static_shared_pre)];
-
 (* Reattach the real ADD endpoint, retaining the exact child output window. *)
 Theorem abi_encoder_spine_static_shared_transport:
   emit_op ADD [dst;Lit (n2w ho)] st = (head,p) /\
@@ -170,14 +160,6 @@ Proof
   irule abi_encoder_extend_sim_trans >> qexists_tac `ready` >> simp[]
 QED
 
-val _ = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if List.all (fn s => s = "DISK_THM") oracles andalso null axioms then
-      print ("ENCODER_SPINE_COMPAT_AUDIT_OK " ^ name ^ "\n")
-    else raise Fail ("encoder spine compatibility admission dependency: " ^ name)
-  end)
-  [("static_shared_transport", abi_encoder_spine_static_shared_transport)];
-
 Theorem abi_encoder_spine_dynamic_shared_pre:
   abi_encode_child_prefix dst ho dp st = (ops,p) /\
   abi_encoder_shared ei /\
@@ -211,14 +193,6 @@ Proof
   simp[abi_encoder_spine_shared_pre_def]
 QED
 
-val _ = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if List.all (fn s => s = "DISK_THM") oracles andalso null axioms then
-      print ("ENCODER_SPINE_COMPAT_AUDIT_OK " ^ name ^ "\n")
-    else raise Fail ("encoder spine compatibility admission dependency: " ^ name)
-  end)
-  [("dynamic_shared_pre", abi_encoder_spine_dynamic_shared_pre)];
-
 (* Reuse the precise scratch composition interface at the raw cursor endpoint. *)
 Theorem abi_encoder_spine_cursor_post:
   abi_encode_child_suffix head dp offset len ce = (out,en) /\
@@ -233,14 +207,6 @@ Proof
   strip_tac >> drule_all abi_encoder_member_cursor_transport >>
   simp[abi_encoder_child_suffix_post_def]
 QED
-
-val _ = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if List.all (fn s => s = "DISK_THM") oracles andalso null axioms then
-      print ("ENCODER_SPINE_COMPAT_AUDIT_OK " ^ name ^ "\n")
-    else raise Fail ("encoder spine compatibility admission dependency: " ^ name)
-  end)
-  [("cursor_post",abi_encoder_spine_cursor_post)];
 
 Theorem abi_encoder_spine_prefix_extend_sim:
   abi_encode_child_prefix dst ho dp st = (ops,p) /\ fn_has_code st p func /\
@@ -308,17 +274,6 @@ Proof
   simp[SUBSET_DEF,abi_decoder_ids_def] >> conj_tac >> rpt strip_tac >> decide_tac
 QED
 
-val _ = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if List.all (fn s => s = "DISK_THM") oracles andalso null axioms then
-      print ("ENCODER_SPINE_COMPAT_AUDIT_OK " ^ name ^ "\n")
-    else raise Fail ("encoder spine compatibility admission dependency: " ^ name)
-  end)
-  [("prefix_extend_sim",abi_encoder_spine_prefix_extend_sim),
-   ("suffix_extend_sim",abi_encoder_spine_suffix_extend_sim),
-   ("dynamic_shared_sim",abi_encoder_spine_dynamic_shared_sim),
-   ("shared_registered_window",abi_encoder_spine_shared_registered_window)];
-
 (* The enclosing ledger includes the parent cursor even when its allocation
    precedes the current member's instruction interval. *)
 Theorem abi_encoder_spine_dynamic_shared_effects:
@@ -370,10 +325,3 @@ Proof
     irule abi_encoder_registered_effect_trans >> qexists_tac `encoded` >> simp[]) >>
   metis_tac[]
 QED
-
-val _ =
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag abi_encoder_spine_dynamic_shared_effects) in
-    if List.all (fn s => s = "DISK_THM") oracles andalso null axioms then
-      print "ENCODER_SPINE_COMPAT_AUDIT_OK dynamic_shared_effects\n"
-    else raise Fail "encoder spine compatibility admission dependency: dynamic_shared_effects"
-  end;

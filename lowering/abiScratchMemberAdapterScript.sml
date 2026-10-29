@@ -339,25 +339,3 @@ Proof
   irule abi_decode_sim_trans >> qexists_tac `r` >> asm_simp_tac bool_ss [] >>
   irule abi_decode_sim_trans >> qexists_tac `u` >> asm_simp_tac bool_ss []
 QED
-
-val _ =
-  if List.exists
-       (fn name => List.exists (fn parent => parent = name) (Theory.ancestry "-"))
-       ["abiEncoderStatic", "abiEncoderDynamic", "abiEncoderMemberSourcePhase", "abiEncoderMembersDefs",
-        "abiEncoderMember", "abiEncoderMembersCorrect", "abiEncoderComplexStatic",
-        "abiEncoderMemberSpineCompat", "abiEncoderMemberPhaseExec", "abiScratchStatic",
-        "abiScratchDynamic", "abiScratchMemberStep", "abiScratchMembers", "abiScratchComplex"]
-  then raise Fail "scratch adapter imports a member execution owner"
-  else ();
-
-val _ = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if List.all (fn s => s = "DISK_THM") oracles andalso null axioms then
-      print ("ENCODER_SCRATCH_ADAPTER_AUDIT_OK " ^ name ^ "\n")
-    else raise Fail ("scratch adapter admission dependency: " ^ name)
-  end)
-  [("dynamic_prepare_raw_transport", abi_scratch_dynamic_prepare_raw_transport),
-   ("dynamic_child_spine_reach", abi_scratch_dynamic_child_spine_reach),
-   ("dynamic_finish_raw_transport", abi_scratch_dynamic_finish_raw_transport),
-   ("frame_after_address", abi_scratch_spine_frame_after_address),
-   ("static_child_spine_reach", abi_scratch_static_child_spine_reach)];

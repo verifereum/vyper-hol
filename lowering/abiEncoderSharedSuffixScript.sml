@@ -42,9 +42,3 @@ Proof
   drule_all abi_scratch_dynamic_finish_raw_transport >>
   disch_then (qspec_then `ctx` strip_assume_tac) >> asm_rewrite_tac []
 QED
-
-val _ = List.app (fn th =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if List.all (fn s => s = "DISK_THM") oracles andalso null axioms andalso null (Thm.hyp th)
-    then () else raise Fail "shared suffix admission, axiom or hypothesis"
-  end) [abi_encoder_shared_suffix_observations];

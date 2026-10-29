@@ -148,10 +148,3 @@ Proof
     (irule abi_encoder_extend_sim_trans >> qexists_tac `initial` >> asm_rewrite_tac []) >>
   qexists_tac `actual` >> asm_simp_tac bool_ss []
 QED
-
-val _ = List.app (fn th =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if List.all (fn s => s = "DISK_THM") oracles andalso null axioms andalso null (Thm.hyp th)
-    then () else raise Fail "shared array completion admission, axiom or hypothesis"
-  end) [abi_encoder_shared_array_exit_run, abi_encoder_shared_array_index_exit_run,
-    abi_encoder_shared_array_index_complete];

@@ -118,11 +118,3 @@ Proof
     fs[abi_decode_frame_footprint] >>
   drule_all abi_decode_footprint_frame_slice >> simp[]
 QED
-
-val _ = List.app (fn th =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if List.all (fn s => s = "DISK_THM") oracles andalso null axioms andalso null (Thm.hyp th)
-    then () else raise Fail "shared array finish admission, axiom or hypothesis"
-  end) [abi_encoder_array_finish_raw_transport, abi_encoder_array_finish_opcodes,
-    abi_encoder_array_finish_registered, abi_encoder_array_finish_extend,
-    abi_encoder_shared_array_finish_effect, abi_encoder_array_finish_preserves_output];

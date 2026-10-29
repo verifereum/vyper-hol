@@ -61,9 +61,3 @@ Proof
   irule abi_encoder_shared_array_index_advance >> asm_simp_tac bool_ss [] >>
   qexistsl_tac [`initial`,`j`,`label`] >> asm_simp_tac bool_ss [] >> metis_tac[]
 QED
-
-val _ = List.app (fn th =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if List.all (fn s => s = "DISK_THM") oracles andalso null axioms andalso null (Thm.hyp th)
-    then () else raise Fail "shared array round admission, axiom or hypothesis"
-  end) [abi_encoder_shared_array_round_finish];

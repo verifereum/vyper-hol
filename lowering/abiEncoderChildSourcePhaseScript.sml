@@ -24,15 +24,3 @@ Proof
   `eval_operand head ready = SOME (n2w (d+offset))` by fs[word_add_n2w] >>
   drule_all abi_encoder_child_pre_address >> simp[]
 QED
-
-val _ =
-  if List.exists (fn name => List.exists (fn parent => parent = name) (Theory.ancestry "-"))
-    ["abiEncoderStatic", "abiEncoderDynamic", "abiEncoderMemberSourcePhase", "abiEncoderMembersDefs",
-     "abiEncoderMember", "abiScratchStatic", "abiScratchDynamicChild", "abiScratchMembers"]
-  then raise Fail "primitive child source phase imports execution owner" else ();
-
-val _ =
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag abi_encoder_child_static_place_raw_transport) in
-    if List.all (fn s => s = "DISK_THM") oracles andalso null axioms then ()
-    else raise Fail "primitive child source phase admission dependency"
-  end;

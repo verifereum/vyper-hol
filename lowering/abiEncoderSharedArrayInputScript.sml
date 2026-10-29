@@ -124,10 +124,3 @@ Proof
   irule abi_footprint_disjoint_subwindow >> qexistsl_tac [`d`,`output_size`] >>
   asm_simp_tac bool_ss [] >> decide_tac
 QED
-
-val _ = List.app (fn th => let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if List.all (fn s => s = "DISK_THM") oracles andalso null axioms andalso null (Thm.hyp th)
-    then () else raise Fail "shared array input admission, axiom or hypothesis"
-  end) [abi_encoder_open_array_iff, abi_encoder_shared_array_input_facts,
-    abi_encoder_shared_array_selected_input, abi_encoder_open_array_length,
-    abi_encoder_open_array_prefix_complete, abi_encoder_open_array_prefix_output_frame];

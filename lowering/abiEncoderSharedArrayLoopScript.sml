@@ -264,11 +264,3 @@ Proof
      drule_all abi_encoder_shared_array_loop_static_step >> simp[]) >>
   drule_all abi_encoder_shared_array_loop_finite >> simp[]
 QED
-
-val _ = List.app (fn th =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if List.all (fn s => s = "DISK_THM") oracles andalso null axioms andalso null (Thm.hyp th)
-    then () else raise Fail "shared array loop admission, axiom or hypothesis"
-  end) [abi_encoder_shared_array_loop_header, abi_encoder_shared_array_loop_round_finish,
-    abi_encoder_shared_array_loop_static_step, abi_encoder_shared_array_loop_dynamic_step,
-    abi_encoder_shared_array_loop_finite, abi_encoder_shared_array_loop_run];

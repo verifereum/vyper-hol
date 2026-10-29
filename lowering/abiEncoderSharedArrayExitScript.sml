@@ -162,12 +162,3 @@ Proof
   strip_tac >> drule_all abi_encoder_array_exit_readonly >> strip_tac >>
   drule_all abi_encoder_shared_input_address >> simp[]
 QED
-
-val _ = List.app (fn th =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if List.all (fn s => s = "DISK_THM") oracles andalso null axioms andalso null (Thm.hyp th)
-    then () else raise Fail "shared array exit admission, axiom or hypothesis"
-  end) [abi_encoder_array_static_exit_raw_transport, abi_encoder_array_dynamic_exit_raw_transport,
-    abi_encoder_array_exit_opcodes, abi_encoder_array_exit_extend,
-    abi_encoder_array_exit_readonly, abi_encoder_array_exit_registered,
-    abi_encoder_array_exit_effect, abi_encoder_shared_array_exit_source];

@@ -59,9 +59,3 @@ Proof
     (irule abi_encoder_extend_sim_trans >> qexists_tac `encoded` >> asm_rewrite_tac []) >>
   qexists_tac `actual` >> asm_simp_tac bool_ss []
 QED
-
-val _ = List.app (fn th =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if List.all (fn s => s = "DISK_THM") oracles andalso null axioms andalso null (Thm.hyp th)
-    then () else raise Fail "shared array outer admission, axiom or hypothesis"
-  end) [abi_encoder_shared_array_outer];

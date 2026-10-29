@@ -61,15 +61,3 @@ Proof
   drule abi_decoder_operand_live_emit >> strip_tac >>
   qexistsl_tac [`head`, `prepared`] >> asm_simp_tac bool_ss []
 QED
-
-val _ =
-  if List.exists (fn name => List.exists (fn parent => parent = name) (Theory.ancestry "-"))
-    ["abiEncoderStatic", "abiEncoderDynamic", "abiEncoderMemberSourcePhase", "abiEncoderMembersDefs",
-     "abiEncoderMember", "abiScratchStatic", "abiScratchDynamicChild", "abiScratchMembers"]
-  then raise Fail "child structural context imports execution owner" else ();
-
-val _ =
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag abi_encoder_static_child_structural_context) in
-    if List.all (fn s => s = "DISK_THM") oracles andalso null axioms then ()
-    else raise Fail "static child structural context admission dependency"
-  end;

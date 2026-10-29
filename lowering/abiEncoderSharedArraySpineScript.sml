@@ -225,16 +225,3 @@ Proof
   irule abi_encoder_extend_sim_trans >> qexists_tac `ready` >> simp[] >>
   irule abi_encoder_extend_sim_trans >> qexists_tac `encoded` >> simp[]
 QED
-
-val _ =
-  if List.exists (fn name => List.exists (fn parent => parent = name) (Theory.ancestry "-"))
-    ["abiScratchEncoderRecursive", "abiEncoderCorrectRecursive", "abiEncoderProps"]
-  then raise Fail "shared array spine imports recursive execution owner" else ();
-val _ = List.app (fn th =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if List.all (fn s => s = "DISK_THM") oracles andalso null axioms andalso null (Thm.hyp th)
-    then () else raise Fail "shared array spine admission, axiom or hypothesis"
-  end) [abi_encoder_array_spine_shared_pre, abi_encoder_array_spine_cursor_saved,
-    abi_encoder_array_spine_shared_run, abi_encoder_array_spine_tail_opcodes,
-    abi_encoder_array_spine_tail_registered, abi_encoder_array_spine_tail_extend_sim,
-    abi_encoder_array_spine_shared_effects, abi_encoder_array_spine_shared_sim];

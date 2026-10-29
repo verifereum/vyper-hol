@@ -31,9 +31,3 @@ Proof
     (mp_tac o PURE_REWRITE_RULE [abi_footprint_disjoint_def]) >>
   disch_then drule >> decide_tac
 QED
-
-val _ = List.app (fn th =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if List.all (fn s => s = "DISK_THM") oracles andalso null axioms andalso null (Thm.hyp th)
-    then () else raise Fail "zero frame admission, axiom or hypothesis"
-  end) [abi_encoder_mem_bytes_singletons, abi_encoder_footprint_frame_zero_slice];

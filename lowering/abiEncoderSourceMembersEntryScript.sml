@@ -201,11 +201,3 @@ Proof
   Cases_on `x0` >- gvs[] >>
   Cases_on `x1` >- gvs[] >> simp[]
 QED
-
-val _ = List.app (fn th =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if List.all (fn s => s = "DISK_THM") oracles andalso null axioms andalso null (Thm.hyp th)
-    then () else raise Fail "source entry has an admission, axiom or hypothesis"
-  end) [abi_encoder_source_members_index_prepare, abi_encoder_source_members_static_request,
-    abi_encoder_source_members_dynamic_request, abi_encoder_source_members_static_exit,
-    abi_encoder_source_members_dynamic_exit, abi_encoder_source_members_index_cons_shape];

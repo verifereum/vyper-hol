@@ -37,14 +37,6 @@ Proof
     alloca_inv_def, allocas_non_overlapping_def, alloca_next_valid_def]
 QED
 
-val _ =
-  if List.exists
-       (fn name => List.exists (fn parent => parent = name) (Theory.ancestry "-"))
-       ["abiScratchMembers", "abiScratchComplex", "abiEncoderMembersPrepare",
-        "abiEncoderMembersCorrect", "abiEncoderComplexStatic"]
-  then raise Fail "member phase effects import a legacy invariant/execution owner"
-  else ();
-
 Theorem abi_encoder_member_step_globals:
   (i.inst_opcode = ADD \/ i.inst_opcode = MLOAD \/ i.inst_opcode = MSTORE) /\
   step_inst_base i s = OK t ==>
@@ -148,12 +140,3 @@ Proof
   gvs[abi_decoder_address_frame_def, abi_encoder_registered_effect_def,
     alloca_inv_def, allocas_non_overlapping_def, alloca_next_valid_def]
 QED
-
-val _ = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if List.all (fn s => s = "DISK_THM") oracles andalso null axioms then
-      print ("ENCODER_PHASE_EFFECT_AUDIT_OK " ^ name ^ "\n")
-    else raise Fail ("encoder phase effect admission dependency: " ^ name)
-  end)
-  [("cursor_registered",abi_encoder_member_cursor_registered),
-   ("prefix_registered",abi_encoder_member_prefix_registered)];

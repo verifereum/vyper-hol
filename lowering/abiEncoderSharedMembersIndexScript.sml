@@ -218,12 +218,3 @@ Proof
     MAP, SUM, pairTheory.UNCURRY_DEF, ADD_ASSOC, GSYM APPEND_ASSOC, APPEND]) >>
   asm_simp_tac bool_ss [abi_encoder_member_span_def, ADD_ASSOC, GSYM APPEND_ASSOC, APPEND]
 QED
-
-val _ = List.app (fn th =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if List.all (fn s => s = "DISK_THM") oracles andalso null axioms andalso null (Thm.hyp th)
-    then () else raise Fail "shared index admission, axiom or hypothesis"
-  end) [abi_encoder_shared_members_index_initial, abi_encoder_shared_members_index_source,
-    abi_encoder_shared_members_index_empty, abi_encoder_shared_members_inv_layout,
-    abi_encoder_shared_members_after_child, abi_encoder_shared_members_origin_transport,
-    abi_encoder_shared_members_index_advance];

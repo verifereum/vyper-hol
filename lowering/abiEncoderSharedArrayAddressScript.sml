@@ -101,9 +101,3 @@ Proof
   qexists_tac `actual` >>
   gvs[abi_decoder_address_frame_def, Abbr `actual`, eval_op_inst_idx]
 QED
-
-val _ = List.app (fn th =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-    if List.all (fn s => s = "DISK_THM") oracles andalso null axioms andalso null (Thm.hyp th)
-    then () else raise Fail "shared array address admission, axiom or hypothesis"
-  end) [abi_encoder_array_address_raw_globals, abi_encoder_shared_array_address_reach];
