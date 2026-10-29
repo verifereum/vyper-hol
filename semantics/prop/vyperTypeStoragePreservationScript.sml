@@ -24,7 +24,7 @@ Theory vyperTypeStoragePreservation
 Ancestors
   vyperTypeStatePreservation vyperHashMapPreservation vyperStorageFrame
   vyperStorageLayoutSafety vyperStorageReadSoundness vyperState
-  vyperStorageBackend vyperCreate vyperInterpreter vyperAbiMemoryProps
+  vyperStorageBackend vyperCreate vyperInterpreter
 Libs
   wordsLib markerLib
 
@@ -152,9 +152,8 @@ Proof
   simp[return_def, raise_def, bind_def, assert_def, set_scopes_def,
        AllCaseEqs()] >>
   rpt strip_tac >> gvs[] >>
-  imp_res_tac assign_result_preserves_state >>
-  imp_res_tac write_abi_memory_frame >> gvs[] >>
-  Cases_on `b` >> simp[get_storage_def]
+  imp_res_tac assign_result_preserves_state >> gvs[] >>
+  simp[get_storage_scopes]
 QED
 
 Theorem assign_target_scoped_preserves_contract_storage_well_formed:
@@ -201,11 +200,8 @@ Proof
   Cases_on `assign_subscripts (FST tva) (SND tva) (REVERSE sbs) op` >>
   simp[return_def, raise_def, bind_def, CaseEq "prod", CaseEq "sum"] >>
   rpt strip_tac >> gvs[] >>
-  imp_res_tac assign_result_preserves_state >>
-  imp_res_tac write_abi_immutables_frame >> gvs[] >>
-  drule set_immutable_storage_frame >>
-  disch_then (qspec_then `b` mp_tac) >>
-  Cases_on `b` >> simp[get_storage_def]
+  imp_res_tac assign_result_preserves_state >> gvs[] >>
+  drule set_immutable_storage_frame >> simp[]
 QED
 
 Theorem assign_target_immutable_preserves_contract_storage_well_formed:

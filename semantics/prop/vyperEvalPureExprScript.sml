@@ -1,10 +1,7 @@
 Theory vyperEvalPureExpr
 
 Ancestors
-  vyperPureExpr vyperLookup vyperAbiOperand vyperAbiAppendFrame
-  vyperAbiReadOnly vyperCallOutcomeFrame
-Libs
-  monadsyntax
+  vyperPureExpr vyperLookup
 
 (* ===== eval_pure_expr / eval_pure_exprs ===== *)
 (*
@@ -102,17 +99,7 @@ Definition eval_pure_expr_def:
   (* General type builtins *)
   eval_pure_expr cx st (TypeBuiltin _ tb typ es) =
     (if type_builtin_args_length_ok tb (LENGTH es) then
-       (case (case tb of
-          | AbiEncode _ _ =>
-              (case eval_pure_abi_exprs cx st es of
-               | NONE => NONE
-               | SOME (args,rt) =>
-                 (case (finally (stage_abi_operands cx args)
-                   (release_abi_captures
-                     (LENGTH st.abi_memory, LENGTH st.abi_immutables))) rt of
-                  | (INL vs,_) => SOME vs
-                  | _ => NONE))
-          | _ => eval_pure_exprs cx st es) of
+       (case eval_pure_exprs cx st es of
         | SOME vs =>
           (case evaluate_type_builtin cx tb typ (MAP expr_type es) vs of
            | INL v => SOME (Value v)
@@ -135,72 +122,12 @@ Definition eval_pure_expr_def:
            | SOME vs => SOME (v::vs)
            | NONE => NONE)
         | _ => NONE)
-     | NONE => NONE) ∧
-
-  (* ABI options carry the capture state, not just a materialised value.
-     Only the outer encoding releases the captured arena suffixes. *)
-  eval_pure_abi_expr cx st (Name _ id) =
-    (case lookup_abi_local cx id st of
-     | (INL arg,rt) => SOME (arg,rt) | _ => NONE) ∧
-  eval_pure_abi_expr cx st (TopLevelName _ (src,id)) =
-    (case lookup_abi_global cx src id st of
-     | (INL arg,rt) => SOME (arg,rt) | _ => NONE) ∧
-  eval_pure_abi_expr cx st (IfExp _ cond yes no) =
-    (case eval_pure_expr cx st cond of
-     | SOME (Value (BoolV b)) =>
-       (case (if b then eval_pure_abi_expr cx st yes
-              else eval_pure_abi_expr cx st no) of
-        | SOME (arg,rt) =>
-          (case unwrap_abi_operand cx arg rt of
-           | (INL arg',rt') => SOME (arg',rt') | _ => NONE)
-        | NONE => NONE)
-     | _ => NONE) ∧
-  eval_pure_abi_expr cx st (Subscript _ base index) =
-    (case eval_pure_abi_expr cx st base of
-     | SOME (arg,rt) =>
-       (case eval_pure_expr cx rt index of
-        | SOME (Value v) =>
-          (case evaluate_type (get_tenv cx) (expr_type base) of
-           | SOME tv =>
-             (case subscript_abi_operand cx tv arg v rt of
-              | (INL child,rt') => SOME (child,rt') | _ => NONE)
-           | NONE => NONE)
-        | _ => NONE)
-     | NONE => NONE) ∧
-  eval_pure_abi_expr cx st (Attribute _ base id) =
-    (case eval_pure_abi_expr cx st base of
-     | SOME (arg,rt) =>
-       (case attribute_abi_operand cx arg id rt of
-        | (INL child,rt') => SOME (child,rt') | _ => NONE)
-     | NONE => NONE) ∧
-  eval_pure_abi_expr cx st (Pop _ _) = NONE ∧
-  eval_pure_abi_expr cx st e =
-    (case eval_pure_expr cx st e of
-     | SOME tv =>
-       (case materialise cx tv st of
-        | (INL v,rt) => SOME (AbiSnapshot v,rt) | _ => NONE)
-     | NONE => NONE) ∧
-  eval_pure_abi_exprs cx st [] = SOME ([],st) ∧
-  eval_pure_abi_exprs cx st (e::es) =
-    (case eval_pure_abi_expr cx st e of
-     | SOME (arg,rt) =>
-       (case unwrap_abi_operand cx arg rt of
-        | (INL arg',rt') =>
-          (case eval_pure_abi_exprs cx rt' es of
-           | SOME (args,rt'') => SOME (arg'::args,rt'')
-           | NONE => NONE)
-        | _ => NONE)
      | NONE => NONE)
 Termination
   WF_REL_TAC `measure (sum_size
-    (\(cx:evaluation_context, st:evaluation_state, e). 2 * expr_size e)
-    (sum_size
-      (\(cx:evaluation_context, st:evaluation_state, es).
-         2 * list_size expr_size es)
-      (sum_size
-        (\(cx:evaluation_context, st:evaluation_state, e). 2 * expr_size e + 1)
-        (\(cx:evaluation_context, st:evaluation_state, es).
-           2 * list_size expr_size es + 1))))` >>
+    (\(cx:evaluation_context, st:evaluation_state, e). expr_size e)
+    (\(cx:evaluation_context, st:evaluation_state, es).
+       list_size expr_size es))` >>
   rpt gen_tac >>
   Induct_on `kes` >>
   simp[pairTheory.FORALL_PROD, basicSizeTheory.pair_size_def]
@@ -222,13 +149,6 @@ val monadic_defs =
    vyperStateTheory.return_def, vyperStateTheory.get_Value_def,
    vyperStateTheory.lift_sum_def];
 
-Theorem pure_get_Value_success[local]:
-  get_Value tv st = (INL v,rt) ⇔ tv = Value v ∧ rt = st
-Proof
-  Cases_on `tv` >> simp[vyperStateTheory.get_Value_def,
-    vyperStateTheory.return_def, vyperStateTheory.raise_def] >> metis_tac[]
-QED
-
 (* ===== Forward direction: eval_pure_expr/exprs SOME ⇒ eval_expr/exprs INL ===== *)
 
 Theorem eval_pure_to_eval_mutual:
@@ -237,13 +157,7 @@ Theorem eval_pure_to_eval_mutual:
     eval_expr cx e st = (INL v, st)) ∧
   (∀cx st es vs.
     eval_pure_exprs cx st es = SOME vs ⇒
-    eval_exprs cx es st = (INL vs, st)) ∧
-  (∀cx st e arg rt.
-    eval_pure_abi_expr cx st e = SOME (arg,rt) ⇒
-    eval_abi_expr cx e st = (INL arg,rt) ∧ abi_append st rt) ∧
-  (∀cx st es args rt.
-    eval_pure_abi_exprs cx st es = SOME (args,rt) ⇒
-    eval_abi_exprs cx es st = (INL args,rt) ∧ abi_append st rt)
+    eval_exprs cx es st = (INL vs, st))
 Proof
   ho_match_mp_tac eval_pure_expr_ind >>
   rpt conj_tac >> rpt gen_tac >> strip_tac
@@ -315,8 +229,14 @@ Proof
            simp[vyperContextTheory.builtin_args_length_ok_def]) >>
       simp[vyperStateTheory.get_accounts_def] >>
       simp monadic_defs)
-  (* TypeBuiltin: staged operands retain their captures until finally. *)
-  >- suspend "forward_type_builtin"
+  (* TypeBuiltin *)
+  >- (rpt gen_tac >>
+      simp[Once eval_pure_expr_def] >> strip_tac >>
+      gvs[AllCaseEqs()] >>
+      simp[Once vyperInterpreterTheory.evaluate_def] >>
+      simp monadic_defs >>
+      simp[vyperStateTheory.type_check_def, vyperStateTheory.assert_def] >>
+      simp monadic_defs)
   (* Pop - impossible *)
   >- fs[eval_pure_expr_def]
   (* Call - impossible *)
@@ -330,41 +250,8 @@ Proof
       gvs[AllCaseEqs()] >>
       simp[Once vyperInterpreterTheory.evaluate_def] >>
       simp monadic_defs >>
-      drule vyperStatePreservationTheory.materialise_state >> simp[]) >>
-  rpt gen_tac >> simp[Once eval_pure_expr_def] >> strip_tac >>
-  gvs[AllCaseEqs()] >>
-  simp[Once vyperInterpreterTheory.evaluate_def] >>
-  simp monadic_defs >>
-  imp_res_tac abi_readonly_states >>
-  imp_res_tac vyperStatePreservationTheory.materialise_state >>
-  gvs[] >> res_tac >> gvs[] >>
-  TRY (FIRST [drule (lookup_abi_local_append |> SRULE [state_rel_frame_result]),
-              drule (lookup_abi_global_append |> SRULE [state_rel_frame_result])] >> simp[] >> NO_TAC) >>
-  TRY (drule_all abi_append_trans >> simp[] >> NO_TAC) >>
-  simp[vyperInterpreterTheory.switch_BoolV_def,
-    vyperStateTheory.lift_option_type_def, vyperStateTheory.lift_option_def,
-    vyperStateTheory.return_def, vyperStateTheory.bind_def] >>
-  fs[Once eval_pure_expr_def] >> gvs[AllCaseEqs()] >>
-  FIRST [drule (lookup_abi_local_append |> SRULE [state_rel_frame_result]),
-         drule (lookup_abi_global_append |> SRULE [state_rel_frame_result])] >> simp[]
+      drule vyperStatePreservationTheory.materialise_state >> simp[])
 QED
-
-Resume eval_pure_to_eval_mutual[forward_type_builtin]:
-  rpt gen_tac >> simp[Once eval_pure_expr_def] >> strip_tac >>
-  Cases_on `tb` >> gvs[AllCaseEqs()] >>
-  simp[Once vyperInterpreterTheory.evaluate_def] >>
-  simp (vyperStateTheory.type_check_def :: vyperStateTheory.assert_def :: monadic_defs) >>
-  gvs[AllCaseEqs()] >>
-  imp_res_tac abi_readonly_states >> gvs[] >>
-  imp_res_tac abi_append_release >>
-  gvs[vyperStateTheory.finally_def, vyperStateTheory.ignore_bind_def,
-    vyperStateTheory.bind_def, vyperStateTheory.return_def,
-    vyperStateTheory.raise_def, mark_abi_captures_def, AllCaseEqs()] >>
-  imp_res_tac abi_readonly_states >> gvs[] >>
-  imp_res_tac abi_append_release >> gvs[]
-QED
-
-Finalise eval_pure_to_eval_mutual
 
 Theorem eval_pure_expr_to_eval_expr_some:
   ∀cx st e v.
@@ -393,13 +280,7 @@ Theorem eval_to_eval_pure_mutual:
     eval_pure_expr cx st e = SOME v) ∧
   (∀cx st es. ∀st' vs.
     EVERY pure_expr es ∧ eval_exprs cx es st = (INL vs, st') ⇒
-    eval_pure_exprs cx st es = SOME vs) ∧
-  (∀cx st e. ∀st' arg.
-    pure_expr e ∧ eval_abi_expr cx e st = (INL arg,st') ⇒
-    eval_pure_abi_expr cx st e = SOME (arg,st')) ∧
-  (∀cx st es. ∀st' args.
-    EVERY pure_expr es ∧ eval_abi_exprs cx es st = (INL args,st') ⇒
-    eval_pure_abi_exprs cx st es = SOME (args,st'))
+    eval_pure_exprs cx st es = SOME vs)
 Proof
   ho_match_mp_tac eval_pure_expr_ind >>
   rpt conj_tac
@@ -556,7 +437,22 @@ Proof
           Cases_on `evaluate_builtin cx st.accounts ty bt (MAP expr_type es) vs` >>
           gvs[vyperStateTheory.return_def, vyperStateTheory.raise_def]))
   (* TypeBuiltin *)
-  >- suspend "reverse_type_builtin"
+  >- (rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+      simp[Once eval_pure_expr_def] >>
+      gvs[pure_expr_def] >>
+      qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+      simp[Once vyperInterpreterTheory.evaluate_def] >>
+      simp monadic_defs >>
+      simp[vyperStateTheory.type_check_def, vyperStateTheory.assert_def] >>
+      simp[vyperStateTheory.bind_def] >>
+      strip_tac >> gvs[AllCaseEqs()] >>
+      `EVERY pure_expr es` by gvs[listTheory.EVERY_EL] >>
+      rename1 `eval_exprs cx es st = (INL vs, s1)` >>
+      `eval_pure_exprs cx st es = SOME vs` by metis_tac[] >>
+      simp[] >>
+      Cases_on `evaluate_type_builtin cx tb typ (MAP expr_type es) vs` >>
+      gvs[vyperStateTheory.lift_sum_def, vyperStateTheory.return_def,
+          vyperStateTheory.raise_def])
   (* Pop - impossible *)
   >- simp[pure_expr_def]
   (* Call - impossible *)
@@ -579,46 +475,8 @@ Proof
       `s2 = st` by
         metis_tac[vyperStatePreservationTheory.materialise_state] >>
       pop_assum SUBST_ALL_TAC >>
-      gvs[]) >>
-  rpt strip_tac >> gvs[pure_expr_def] >>
-  FIRST [qpat_x_assum `eval_abi_expr _ _ _ = _` mp_tac,
-         qpat_x_assum `eval_abi_exprs _ _ _ = _` mp_tac] >>
-  simp[Once vyperInterpreterTheory.evaluate_def] >>
-  simp (vyperInterpreterTheory.switch_BoolV_def ::
-    vyperStateTheory.raise_def :: monadic_defs) >>
-  strip_tac >> gvs[AllCaseEqs()] >>
-  imp_res_tac eval_expr_preserves_state >>
-  imp_res_tac vyperStatePreservationTheory.get_Value_state >>
-  imp_res_tac vyperStatePreservationTheory.materialise_state >>
-  imp_res_tac vyperStatePreservationTheory.lift_option_type_state >>
-  imp_res_tac abi_readonly_states >> gvs[] >>
-  res_tac >> gvs[] >> simp[Once eval_pure_expr_def] >>
-  gvs[vyperStateTheory.get_Value_def, vyperStateTheory.return_def,
-    vyperStateTheory.raise_def, vyperStateTheory.lift_option_type_def,
-    vyperStateTheory.lift_option_def, AllCaseEqs()] >>
-  gvs[pure_expr_def, ETA_THM, COND_RATOR,
-    vyperMiscTheory.option_CASE_rator, vyperStateTheory.return_def,
-    vyperStateTheory.raise_def, AllCaseEqs()] >>
-  res_tac >> gvs[pure_get_Value_success]
+      gvs[])
 QED
-
-Resume eval_to_eval_pure_mutual[reverse_type_builtin]:
-  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
-  Cases_on `tb` >> gvs[pure_expr_def] >>
-  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-  simp[Once vyperInterpreterTheory.evaluate_def] >>
-  simp (vyperStateTheory.type_check_def :: vyperStateTheory.assert_def ::
-    vyperStateTheory.finally_def :: mark_abi_captures_def ::
-    vyperStateTheory.raise_def :: monadic_defs) >>
-  strip_tac >> gvs[AllCaseEqs(), ETA_THM, vyperMiscTheory.sum_CASE_rator,
-    vyperStateTheory.return_def, vyperStateTheory.raise_def] >> res_tac >>
-  simp[Once eval_pure_expr_def] >>
-  gvs[vyperStateTheory.finally_def, vyperStateTheory.bind_def,
-    vyperStateTheory.ignore_bind_def, vyperStateTheory.return_def,
-    vyperStateTheory.raise_def, vyperStateTheory.lift_sum_def, AllCaseEqs()]
-QED
-
-Finalise eval_to_eval_pure_mutual
 
 Theorem eval_expr_to_eval_pure_expr_some:
   ∀cx st st' e v.

@@ -457,8 +457,8 @@ Proof
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
   simp[Once evaluate_def, bind_def, ignore_bind_def, return_def, raise_def,
        lift_sum_def, type_check_def, assert_def] >>
-  rw[AllCaseEqs()] >>
-  gvs[return_def, raise_def, vyperMiscTheory.sum_CASE_rator, AllCaseEqs()]
+  rpt (CASE_TAC >> gvs[return_def, raise_def, runtime_constant_builtin_def]) >>
+  rw[] >> gvs[return_def, raise_def]
 QED
 
 (* Constants and immutables of a checked contract are bare globals of every

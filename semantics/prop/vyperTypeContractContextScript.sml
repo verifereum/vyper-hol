@@ -232,22 +232,6 @@ Proof
   simp[check_toplevel_body_def]
 QED
 
-(* Runtime bodies never gain constructor immutable-write permission, including
-   when check_contract is invoked in deploy mode. *)
-Theorem check_contract_runtime_function_body_readonly_MEM:
-  check_contract in_deploy layouts addr mods = SOME art /\
-  ALOOKUP mods src = SOME ts /\
-  MEM (FunctionDecl vis mut nr raw fn args dflts ret body) ts /\
-  vis <> Deploy ==>
-  check_function_body layouts addr mods
-    (art with cta_bare_global_assignable := FEMPTY)
-    src mut nr args dflts ret body
-Proof
-  rw[] >>
-  drule_all check_contract_toplevel_body_MEM >>
-  simp[check_toplevel_body_def, check_function_body_in_mode_def]
-QED
-
 Theorem check_contract_runtime_function_body_MEM:
   check_contract F layouts addr mods = SOME art /\
   ALOOKUP mods src = SOME ts /\
@@ -662,5 +646,5 @@ Proof
   TRY (qexists_tac `sig` >>
        qpat_x_assum `!k sig. FLOOKUP env1.fn_sigs k = SOME sig ==> _` drule >>
        simp[] >> NO_TAC) >>
-  metis_tac[target_mutable_static_maps_transfer]
+  metis_tac[]
 QED

@@ -633,35 +633,6 @@ Theorem create_arg_types_ok_compute =
        (CONJUNCTS create_arg_types_ok_def) @
      [GEN_ALL create_arg_types_ok_raw_create])
 
-(* Pinned Vyper local.py:_handle_modification counts direct immutable writes,
-   but explicitly excludes complex (struct/array) projections in constructors.
-   Do not inherit a direct-root ban through projections. Their deploy/runtime
-   permission is already enforced by type_place_target on the parent root. *)
-Definition target_mutable_def:
-  target_mutable env (NameTarget id) =
-    (FLOOKUP env.var_assignable id = SOME T) /\
-  target_mutable env (TopLevelNameTarget nsid) =
-    (FLOOKUP env.bare_globals nsid = NONE /\
-     IS_SOME (FLOOKUP env.toplevel_vtypes nsid)) /\
-  target_mutable env (SubscriptTarget tgt e) = T /\
-  target_mutable env (AttributeTarget tgt id) = T
-End
-
-Theorem target_mutable_static_maps_transfer:
-  !tgt env1 env2.
-    target_mutable env1 tgt /\
-    env2.var_assignable = env1.var_assignable /\
-    (!k vt. FLOOKUP env1.toplevel_vtypes k = SOME vt ==>
-       FLOOKUP env2.toplevel_vtypes k = SOME vt) /\
-    (!k vt. FLOOKUP env1.toplevel_vtypes k = SOME vt /\
-            FLOOKUP env1.bare_globals k = NONE ==>
-       FLOOKUP env2.bare_globals k = NONE) ==>
-    target_mutable env2 tgt
-Proof
-  Induct >> simp[target_mutable_def] >> rpt strip_tac >>
-  gvs[IS_SOME_EXISTS] >> metis_tac[]
-QED
-
 Definition well_typed_expr_def:
   well_typed_expr env (Name ty id) =
     (FLOOKUP env.var_types id = SOME ty) /\
@@ -699,7 +670,7 @@ Definition well_typed_expr_def:
      type_builtin_result_ok env.type_defs tb ty target_ty (MAP expr_type es) /\
      well_typed_type_builtin_args tb target_ty (MAP expr_type es)) /\
   well_typed_expr env (Pop ty tgt) =
-    (target_mutable env tgt /\ ?n. type_place_target env tgt = SOME (Type (ArrayT ty (Dynamic n))) /\
+    (?n. type_place_target env tgt = SOME (Type (ArrayT ty (Dynamic n))) /\
          assignable_type env.type_defs (ArrayT ty (Dynamic n))) /\
   well_typed_expr env (Call ty (IntCall (src_id_opt, fn_name)) args drv) =
     (well_typed_exprs env args /\ well_typed_opt env drv /\ well_formed_type env.type_defs ty /\
@@ -927,6 +898,7 @@ Definition well_typed_custom_error_def:
     well_typed_exprs env (custom_error_exprs err)
 End
 
+
 (* ===== Executable statement typing ===== *)
 
 Definition type_stmt_def:
@@ -966,15 +938,14 @@ Definition type_stmt_def:
   type_stmt env ret_ty (Append bt e) =
     (case type_place_target env bt of
      | SOME (Type (ArrayT elem_ty (Dynamic n))) =>
-         if target_mutable env bt /\ well_typed_expr env e /\
-            type_widens_to env.type_defs (expr_type e) elem_ty /\
+         if well_typed_expr env e /\ type_widens_to env.type_defs (expr_type e) elem_ty /\
             assignable_type env.type_defs elem_ty then SOME env else NONE
      | _ => NONE) /\
   type_stmt env ret_ty (Assign tgt e) =
     (if atarget_accepts env tgt (expr_type e) /\ well_typed_expr env e /\
         assignable_type env.type_defs (expr_type e) then SOME env else NONE) /\
   type_stmt env ret_ty (AugAssign ty bt bop e) =
-    (if target_mutable env bt /\ well_typed_target env bt ty /\ well_typed_expr env e /\
+    (if well_typed_target env bt ty /\ well_typed_expr env e /\
         assignable_type env.type_defs ty /\
         assignable_type env.type_defs (expr_type e) /\
         well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn /\
@@ -1006,26 +977,7 @@ Definition well_typed_stmts_def:
   well_typed_stmts env ret_ty ss = IS_SOME (type_stmts env ret_ty ss)
 End
 
-(* ===== Mutation-domain inversion ===== *)
-
-Theorem well_typed_pop_target_mutable:
-  well_typed_expr env (Pop ty tgt) ==> target_mutable env tgt
-Proof
-  simp[Once well_typed_expr_def]
-QED
-
-Theorem type_stmt_append_target_mutable:
-  type_stmt env ret_ty (Append tgt e) = SOME env' ==> target_mutable env tgt
-Proof
-  simp[Once type_stmt_def, AllCaseEqs()] >> metis_tac[]
-QED
-
-Theorem type_stmt_augassign_target_mutable:
-  type_stmt env ret_ty (AugAssign ty tgt bop e) = SOME env' ==>
-  target_mutable env tgt
-Proof
-  simp[Once type_stmt_def, AllCaseEqs()] >> metis_tac[]
-QED
+(* ===== Power-domain statement inversion ===== *)
 
 Theorem type_stmt_power_augassign_exponent:
   type_stmt env ret_ty (AugAssign ty target Exp rhs) = SOME env' ==>

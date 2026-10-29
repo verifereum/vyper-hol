@@ -102,7 +102,6 @@ val checker_defs =
    hashmap_key_type_def,
    defaults_env_def,
    extend_local_def,
-   target_mutable_def,
    well_typed_expr_compute,
    well_typed_target_def,
    well_typed_atarget_def,

@@ -1,6 +1,6 @@
 Theory vyperUpdateTarget
 Ancestors
-  vyperMisc vyperContext vyperState vyperStatePreservation vyperStorageBackend vyperInterpreter vyperLookup vyperLookupStorage vyperAssignTarget vyperAbiMemoryProps
+  vyperMisc vyperContext vyperState vyperStatePreservation vyperStorageBackend vyperInterpreter vyperLookup vyperLookupStorage vyperAssignTarget
 
 Definition update_target_def:
   update_target cx st av ao = SND (assign_target cx av ao st)
@@ -11,24 +11,15 @@ Definition valid_target_def:
 End
 
 Theorem update_target_name_replace:
-  ∀cx st n v entry.
-    lookup_name_typed st n = SOME entry ∧ entry.assignable ⇒
-    update_target cx st (BaseTargetV (ScopedVar n) []) (Replace v) =
-    SND (write_abi_memory cx n entry.type v [] (Replace v) (update_name st n v))
-Proof
-  rpt strip_tac >> simp[update_target_def] >>
-  mp_tac (Q.SPECL [`cx`,`st`,`n`,`[]`,`Replace v`,`entry`,`v`]
-    assign_target_name_subscripts_state) >> simp[assign_subscripts_def]
-QED
-
-Theorem update_target_name_replace_irrelevant_memory:
   ∀cx st n v.
-    var_assignable st n ∧
-    ¬EXISTS (λ(key,mem). key = (cx.stk,n)) st.abi_memory ⇒
+    var_assignable st n ⇒
     update_target cx st (BaseTargetV (ScopedVar n) []) (Replace v) =
     update_name st n v
 Proof
-  simp[update_target_def, assign_target_name_replace_irrelevant_memory]
+  rw[update_target_def] >>
+  imp_res_tac assign_target_name_replace >>
+  pop_assum (qspecl_then [`v`, `cx`] strip_assume_tac) >>
+  simp[]
 QED
 
 Theorem update_target_name_update:
@@ -37,13 +28,10 @@ Theorem update_target_name_update:
                    entry.type bop entry.value v2 = INL v ∧
     lookup_name_typed st n = SOME entry ∧ var_assignable st n ⇒
     update_target cx st (BaseTargetV (ScopedVar n) []) (Update ty bop v2) =
-    SND (write_abi_memory cx n entry.type v [] (Update ty bop v2)
-           (update_name st n v))
+    update_name st n v
 Proof
-  rpt strip_tac >> simp[update_target_def] >>
-  mp_tac (Q.SPECL [`cx`,`st`,`n`,`[]`,`Update ty bop v2`,`entry`,`v`]
-    assign_target_name_subscripts_state) >>
-  gvs[var_assignable_def, assign_subscripts_def]
+  rw[update_target_def] >>
+  imp_res_tac assign_target_name_update >> simp[]
 QED
 
 Theorem valid_target_name_implies_var_in_scope:
@@ -54,24 +42,10 @@ Proof
 QED
 
 Theorem valid_target_name_replace:
-  ∀cx st n v entry.
-    lookup_name_typed st n = SOME entry ∧ entry.assignable ⇒
-    (valid_target cx st (BaseTargetV (ScopedVar n) []) (Replace v) ⇔
-     ISL (FST (write_abi_memory cx n entry.type v [] (Replace v)
-                 (update_name st n v))))
+  ∀cx st n v. var_assignable st n ⇒ valid_target cx st (BaseTargetV (ScopedVar n) []) (Replace v)
 Proof
-  rpt strip_tac >> simp[valid_target_def] >>
-  mp_tac (Q.SPECL [`cx`,`st`,`n`,`[]`,`Replace v`,`entry`,`v`]
-    assign_target_name_subscripts_valid) >> simp[assign_subscripts_def]
-QED
-
-Theorem valid_target_name_replace_irrelevant_memory:
-  ∀cx st n v.
-    var_assignable st n ∧
-    ¬EXISTS (λ(key,mem). key = (cx.stk,n)) st.abi_memory ⇒
-    valid_target cx st (BaseTargetV (ScopedVar n) []) (Replace v)
-Proof
-  simp[valid_target_def, assign_target_name_replace_irrelevant_memory]
+  rw[valid_target_def] >>
+  imp_res_tac assign_target_name_replace >> simp[]
 QED
 
 Theorem valid_target_name_update:
@@ -79,23 +53,17 @@ Theorem valid_target_name_update:
     lookup_name_typed st n = SOME entry ∧ var_assignable st n ∧
     evaluate_binop (case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0)
                    entry.type bop entry.value v2 = INL v ⇒
-    (valid_target cx st (BaseTargetV (ScopedVar n) []) (Update ty bop v2) ⇔
-     ISL (FST (write_abi_memory cx n entry.type v [] (Update ty bop v2)
-                 (update_name st n v))))
+    valid_target cx st (BaseTargetV (ScopedVar n) []) (Update ty bop v2)
 Proof
-  rpt strip_tac >> simp[valid_target_def] >>
-  mp_tac (Q.SPECL [`cx`,`st`,`n`,`[]`,`Update ty bop v2`,`entry`,`v`]
-    assign_target_name_subscripts_valid) >>
-  gvs[var_assignable_def, assign_subscripts_def]
+  rw[valid_target_def] >>
+  drule_all assign_target_name_update >> strip_tac >> simp[]
 QED
 
 Theorem update_target_name_subscripts:
   ∀cx st n sbs ao entry a'.
     lookup_name_typed st n = SOME entry ∧ entry.assignable ∧
     assign_subscripts entry.type entry.value (REVERSE sbs) ao = INL a' ⇒
-    update_target cx st (BaseTargetV (ScopedVar n) sbs) ao =
-      SND (write_abi_memory cx n entry.type a' (REVERSE sbs) ao
-             (update_name st n a'))
+    update_target cx st (BaseTargetV (ScopedVar n) sbs) ao = update_name st n a'
 Proof
   rw[update_target_def] >>
   imp_res_tac assign_target_name_subscripts_state >> simp[]
@@ -105,9 +73,7 @@ Theorem valid_target_name_subscripts:
   ∀cx st n sbs ao entry a'.
     lookup_name_typed st n = SOME entry ∧ entry.assignable ∧
     assign_subscripts entry.type entry.value (REVERSE sbs) ao = INL a' ⇒
-    (valid_target cx st (BaseTargetV (ScopedVar n) sbs) ao ⇔
-     ISL (FST (write_abi_memory cx n entry.type a' (REVERSE sbs) ao
-                 (update_name st n a'))))
+    valid_target cx st (BaseTargetV (ScopedVar n) sbs) ao
 Proof
   rw[valid_target_def] >>
   imp_res_tac assign_target_name_subscripts_valid >> simp[]
@@ -206,10 +172,7 @@ Proof
        check_def, type_check_def, assert_def, ignore_bind_def, raise_def] >>
   Cases_on `IS_SOME (lookup_scopes n st.scopes)` >>
   gvs[return_def, raise_def] >> strip_tac >> gvs[] >>
-  fs[var_assignable_def] >>
-  drule_all update_target_name_replace >>
-  disch_then (qspecl_then [`cx`,`v`] SUBST1_TAC) >>
-  simp[lookup_after_update]
+  simp[update_target_name_replace, lookup_after_update]
 QED
 
 Theorem name_lookup_after_update_target_update:
@@ -228,8 +191,9 @@ Proof
        check_def, type_check_def, assert_def, ignore_bind_def, raise_def] >>
   Cases_on `IS_SOME (lookup_scopes n st.scopes)` >>
   gvs[return_def, raise_def] >> strip_tac >> gvs[] >>
-  drule_all update_target_name_update >>
-  disch_then (qspec_then `cx` SUBST1_TAC) >>
+  simp[update_target_def] >>
+  `assign_target cx (BaseTargetV (ScopedVar n) []) (Update ty bop v2) st =
+   (INL NONE, update_name st n v)` by (drule assign_target_name_update >> simp[]) >>
   simp[lookup_after_update]
 QED
 
@@ -245,19 +209,19 @@ Proof
 QED
 
 Theorem lookup_name_target_is_valid_target_Replace:
-  ∀cx st n av v entry.
-    lookup_name_target cx st n = SOME av ∧
-    lookup_name_typed st n = SOME entry ∧ entry.assignable ⇒
-    (valid_target cx st av (Replace v) ⇔
-     ISL (FST (write_abi_memory cx n entry.type v [] (Replace v)
-                 (update_name st n v))))
+  ∀cx st n av v.
+    lookup_name_target cx st n = SOME av ∧ var_assignable st n ⇒
+    valid_target cx st av (Replace v)
 Proof
   rpt strip_tac >>
-  `var_in_scope st n` by simp[var_in_scope_iff_lookup_name_typed] >>
-  `av = BaseTargetV (ScopedVar n) []` by
-    (mp_tac (Q.SPECL [`cx`,`st`,`n`] var_in_scope_implies_name_target) >> simp[]) >>
-  gvs[] >>
-  mp_tac (Q.SPECL [`cx`,`st`,`n`,`v`,`entry`] valid_target_name_replace) >> simp[]
+  gvs[lookup_name_target_def, lookup_base_target_def] >>
+  qpat_x_assum `_ = SOME _` mp_tac >>
+  simp[Once evaluate_def, bind_def, get_scopes_def, return_def,
+       check_def, type_check_def, assert_def, ignore_bind_def, raise_def] >>
+  Cases_on `IS_SOME (lookup_scopes n st.scopes)` >>
+  gvs[return_def, raise_def] >> strip_tac >> gvs[] >>
+  `var_in_scope st n` by simp[var_in_scope_iff_lookup_name_typed, lookup_name_typed_def] >>
+  simp[valid_target_name_replace]
 QED
 
 Theorem valid_target_toplevel_subscripts:

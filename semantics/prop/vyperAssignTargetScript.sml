@@ -4,7 +4,7 @@ Ancestors
   vyperScopePreservation vyperStatePreservation
   vyperLookup vyperLookupStorage
   vyperImmutablesPreservation vyperStorageBackend
-  vyperHashMap vyperHashMapStorage vyperAbiMemoryProps
+  vyperHashMap vyperHashMapStorage
 
 (*********************************************************************************)
 (* Helper lemmas for immutables preservation *)
@@ -108,8 +108,7 @@ Proof
    gvs[bind_def, type_check_def, assert_def, sum_CASE_rator, AllCaseEqs(), return_def, raise_def, set_scopes_def] >>
    Cases_on `assign_subscripts fcs_result2.type fcs_result2.value (REVERSE is) ao` >>
    gvs[return_def, raise_def] >> rw[] >> gvs[] >>
-   imp_res_tac assign_result_state >>
-   imp_res_tac write_abi_memory_frame >> gvs[] >> rw[] >> gvs[]) >-
+   imp_res_tac assign_result_state >> gvs[] >> rw[] >> gvs[]) >-
   (* TopLevelVar case: storage operations don't touch immutables *)
    (strip_tac >>
     gvs[Once assign_target_def, AllCaseEqs(), return_def, raise_def,
@@ -155,8 +154,7 @@ Proof
     simp[ignore_bind_def, bind_def, set_immutable_def, get_address_immutables_def,
          set_address_immutables_def, lift_option_def, lift_option_type_def, return_def, LET_THM] >>
     strip_tac >> gvs[] >>
-    gvs[AllCaseEqs()] >> imp_res_tac assign_result_state >>
-    imp_res_tac write_abi_immutables_frame >> gvs[] >>
+    imp_res_tac assign_result_state >> gvs[] >>
     conj_tac >-
     (rpt strip_tac >> Cases_on `cx.txn.target = tgt` >> simp[alistTheory.ALOOKUP_ADELKEY]) >>
     simp[get_source_immutables_def, set_source_immutables_def,
@@ -281,8 +279,7 @@ Proof
    gvs[bind_def, type_check_def, assert_def, sum_CASE_rator, AllCaseEqs(), return_def, raise_def, set_scopes_def] >>
    Cases_on `assign_subscripts fcs_result2.type fcs_result2.value (REVERSE is) ao` >>
    gvs[return_def, raise_def] >>
-   imp_res_tac assign_result_state >>
-   imp_res_tac write_abi_memory_frame >> gvs[]) >-
+   imp_res_tac assign_result_state >> gvs[]) >-
   (* TopLevelVar case: storage operations don't touch immutables *)
   (strip_tac >>
    gvs[Once assign_target_def, AllCaseEqs(), return_def, raise_def,

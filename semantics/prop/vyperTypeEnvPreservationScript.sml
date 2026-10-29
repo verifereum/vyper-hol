@@ -9,7 +9,7 @@ Ancestors
   vyperContext vyperStorage vyperTyping vyperTypeSystem vyperTypeInvariants vyperTypeValues
   vyperLookup vyperStatePreservation vyperStorageBackend vyperTypeEnv vyperTypeEnvExtension
   vyperEvalPreservesScopes vyperScopePreservation vyperEvalExprPreservesScopesDom
-  vyperEvalPreservesImmutablesDom vyperCallOutcomeFrame vyperAbiMemoryProps
+  vyperEvalPreservesImmutablesDom vyperCallOutcomeFrame
 Libs
   wordsLib
 
@@ -550,22 +550,19 @@ Proof
   Cases_on `x2.assignable` >> simp[return_def, raise_def] >>
   gvs[bind_def, assert_def, set_scopes_def, return_def, raise_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[] >>
-  imp_res_tac assign_result_state >>
-  imp_res_tac write_abi_memory_frame >> gvs[] >>
+  imp_res_tac assign_result_state >> gvs[] >>
   drule find_containing_scope_structure >>
   drule find_containing_scope_pre_none >>
   rpt strip_tac >> gvs[] >>
-  (Cases_on `id = nm` >- (
+  Cases_on `id = nm` >- (
     `lookup_scopes id x0 = NONE` by gvs[] >>
     `lookup_scopes id (x0 ++ x1::x3) = SOME x2` by
       metis_tac[lookup_scopes_append_cons] >>
     gvs[] >>
     qexists_tac `entry with value := x` >>
-    ASM_SIMP_TAC std_ss [GSYM APPEND_ASSOC, APPEND, lookup_scopes_update] >>
-    simp[]) >>
+    simp[lookup_scopes_update]) >>
   qexists_tac `entry` >>
-  ASM_SIMP_TAC std_ss [GSYM APPEND_ASSOC, APPEND,
-    lookup_scopes_append_fupdate_other])
+  simp[lookup_scopes_append_fupdate_other]
 QED
 
 Theorem assign_target_toplevel_preserves_assignable_lookup:
@@ -595,13 +592,7 @@ Proof
   Cases_on `assign_subscripts x'0 x'1 (REVERSE sbs) ao` >> simp[return_def, raise_def] >>
   Cases_on `ALOOKUP st.immutables cx.txn.target` >> simp[return_def, raise_def] >>
   strip_tac >> gvs[] >>
-  qmatch_asmsub_abbrev_tac `write_abi_immutables cx src_id_opt nm tv value subs ao ws` >>
-  Cases_on `write_abi_immutables cx src_id_opt nm tv value subs ao ws` >>
-  rename1 `write_abi_immutables _ _ _ _ _ _ _ _ = (wr,rt)` >>
-  `rt.scopes = ws.scopes` by
-    metis_tac[write_abi_immutables_scopes, pairTheory.SND] >>
-  Cases_on `wr` >> gvs[] >>
-  imp_res_tac assign_result_state >> gvs[Abbr`ws`]
+  imp_res_tac assign_result_state >> gvs[]
 QED
 
 (* Helper: expression base-target evaluation preserves assignability of any

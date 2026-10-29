@@ -5,7 +5,6 @@ Ancestors
   vyperState vyperCreate vyperCreateFrame vyperInterpreter vyperLookup
   vyperEvalExprPreservesScopesDom vyperScopePreservation
   vyperMisc vyperImmutablesPreservation vyperStatePreservation
-  vyperAbiFrame vyperAbiMemoryProps
 
 (* Preserve the existing statement-list free variables against crypto's body. *)
 val _ = hide "body";
@@ -710,9 +709,7 @@ Theorem scopes_dom_mutual[local]:
   (∀cx e st res st'. eval_expr cx e st = (res, st') ⇒
      MAP FDOM st.scopes = MAP FDOM st'.scopes) ∧
   (∀cx es st res st'. eval_exprs cx es st = (res, st') ⇒
-     MAP FDOM st.scopes = MAP FDOM st'.scopes) ∧
-  (∀cx e st res st'. eval_abi_expr cx e st = (res,st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes) ∧
-  (∀cx es st res st'. eval_abi_exprs cx es st = (res,st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes)
+     MAP FDOM st.scopes = MAP FDOM st'.scopes)
 Proof
   ho_match_mp_tac evaluate_ind >> rpt conj_tac >> rpt strip_tac
   (* === Statement cases === *)
@@ -807,9 +804,7 @@ Proof
   >- drule_all_then ACCEPT_TAC eval_expr_preserves_scopes_dom
   >- drule_all_then ACCEPT_TAC eval_expr_preserves_scopes_dom
   >- drule_all_then ACCEPT_TAC eval_exprs_preserves_scopes_dom
-  >- (drule eval_exprs_preserves_scopes_dom >> gvs[]) >>
-  FIRST [drule_all_then ACCEPT_TAC eval_abi_expr_preserves_scopes_dom,
-         drule_all_then ACCEPT_TAC eval_abi_exprs_preserves_scopes_dom]
+  >- (drule eval_exprs_preserves_scopes_dom >> gvs[])
 QED
 
 (* ------------------------------------------------------------------------
@@ -911,9 +906,7 @@ Theorem new_in_head_mutual[local]:
     !id. id IN FDOM (HD st'.scopes) /\ id NOTIN FDOM (HD st.scopes) ==>
          lookup_scopes id (TL st'.scopes) = NONE) /\
   (!cx e st res st'. eval_expr cx e st = (res, st') ==> T) /\
-  (!cx es st res st'. eval_exprs cx es st = (res, st') ==> T) /\
-  (!cx e st res st'. eval_abi_expr cx e st = (res,st') ==> MAP FDOM st.scopes = MAP FDOM st'.scopes) /\
-  (!cx es st res st'. eval_abi_exprs cx es st = (res,st') ==> MAP FDOM st.scopes = MAP FDOM st'.scopes)
+  (!cx es st res st'. eval_exprs cx es st = (res, st') ==> T)
 Proof
   ho_match_mp_tac evaluate_ind
   >> conj_tac >- (rpt strip_tac >> gvs[evaluate_def, return_def]) (* Pass *)
@@ -1180,10 +1173,7 @@ Proof
   >> conj_tac >- simp[] (* SelfDestructTarget: T *)
   >> conj_tac >- simp[] (* CreateTarget: T *)
   >> conj_tac >- simp[] (* exprs []: T *)
-  >> conj_tac >- simp[] (* exprs e::es: T *)
-  >> rpt conj_tac >> rpt strip_tac >>
-  FIRST [drule_all_then ACCEPT_TAC eval_abi_expr_preserves_scopes_dom,
-         drule_all_then ACCEPT_TAC eval_abi_exprs_preserves_scopes_dom]
+  >> simp[] (* exprs e::es: T *)
 QED
 
 Theorem eval_stmts_new_in_head_not_in_tail:
@@ -1404,8 +1394,7 @@ Proof
     gvs[type_check_def, assert_def, sum_CASE_rator,
        lift_sum_def, set_scopes_def, bind_def, ignore_bind_def,
        return_def, raise_def, AllCaseEqs()] >>
-    imp_res_tac assign_result_state >> imp_res_tac write_abi_memory_frame >>
-    imp_res_tac write_abi_immutables_frame >> gvs[] >>
+    imp_res_tac assign_result_state >> gvs[] >>
     gvs[preserves_tv_def] >> rpt gen_tac >> strip_tac >>
     Cases_on`i < LENGTH pre` \\ gvs[rich_listTheory.EL_APPEND1] >>
     Cases_on`i > LENGTH pre` \\
@@ -1432,8 +1421,7 @@ Proof
         vyperStateTheory.set_address_immutables_def,
         AllCaseEqs()] >>
     rpt strip_tac >> gvs[] >>
-    imp_res_tac assign_result_state >>
-    imp_res_tac write_abi_immutables_frame >> gvs[] >>
+    imp_res_tac assign_result_state >> gvs[] >>
     gvs[AllCaseEqs(),raise_def,return_def,preserves_tv_def,
         option_CASE_rator, sum_CASE_rator] >>
     gvs[get_source_immutables_def,set_source_immutables_def] >>
@@ -1575,71 +1563,6 @@ Proof
   res_tac >> fs[]
 QED
 
-Theorem ptv_abi_relation[local]:
-  (!s t u. preserves_tv cx s t /\ preserves_tv cx t u ==> preserves_tv cx s u) /\
-  (!s mem. preserves_tv cx s (s with abi_memory := mem)) /\
-  (!s mem. preserves_tv cx s (s with abi_immutables := mem))
-Proof
-  conj_tac >- metis_tac[preserves_tv_trans] >> simp[preserves_tv_def]
-QED
-
-Theorem ptv_abi_pure_frames[local]:
-  state_rel_frame (preserves_tv cx) (return x) /\
-  state_rel_frame (preserves_tv cx) (raise e) /\
-  state_rel_frame (preserves_tv cx) (type_check b msg) /\
-  state_rel_frame (preserves_tv cx) (check b msg) /\
-  state_rel_frame (preserves_tv cx) (lift_option opt msg) /\
-  state_rel_frame (preserves_tv cx) (lift_option_type opt msg) /\
-  state_rel_frame (preserves_tv cx) (lift_sum rs) /\
-  state_rel_frame (preserves_tv cx) (get_Value tv) /\
-  state_rel_frame (preserves_tv cx) (materialise cx tv) /\
-  state_rel_frame (preserves_tv cx) (assign_target cx target op)
-Proof
-  simp[state_rel_frame_result] >> rpt strip_tac >>
-  FIRST [drule return_state, drule raise_state, drule type_check_state,
-    drule check_state, drule lift_option_state, drule lift_option_type_state,
-    drule lift_sum_state, drule get_Value_state, drule materialise_state,
-    drule (CONJUNCT1 assign_target_preserves_tv)] >> simp[]
-QED
-
-local
-  val relation = ``preserves_tv cx``;
-  fun spec th = ISPEC relation (GEN (first (fn v => fst (dest_var v) = "R")
-    (free_vars (concl th))) th);
-  val result = spec state_rel_frame_result;
-  val bind = spec state_rel_frame_bind_guarded;
-  val finally = spec state_rel_frame_finally;
-  val leaves = CONJUNCT1 ptv_abi_relation ::
-    CONJUNCTS (MATCH_MP (spec state_rel_frame_abi_primitives) ptv_abi_relation) @
-    CONJUNCTS ptv_abi_pure_frames;
-  fun ih (asl,w) =
-    let
-      val norm = SIMP_RULE bool_ss [oneTheory.one, ignore_bind_def];
-      val facts = List.concat (map (CONJUNCTS o norm o ASSUME) asl);
-      fun discharge th = if is_imp (snd (strip_forall (concl th))) then
-        discharge (tryfind (MATCH_MP th) facts) else th;
-    in FIRST (map (fn th => fn g => MATCH_ACCEPT_TAC
-      (discharge (PURE_REWRITE_RULE [GSYM AND_IMP_INTRO] th)) g) facts) (asl,w) end;
-in
-  val PTV_ABI_TAC =
-    rpt (fn g as (_,w) => if is_forall w andalso
-      type_of (#1 (dest_forall w)) <> ``:evaluation_state`` then gen_tac g else NO_TAC g) >>
-    (fn g as (_,w) => if is_imp w then strip_tac g else ALL_TAC g) >>
-    CONV_TAC (REWR_CONV (GSYM result)) >>
-    CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV [evaluate_def])) >>
-    RULE_ASSUM_TAC (PURE_REWRITE_RULE [GSYM result]) >>
-    rpt (FIRST [FIRST (map MATCH_ACCEPT_TAC leaves), ih,
-      MATCH_MP_TAC bind >> conj_tac, MATCH_MP_TAC finally >> conj_tac,
-      CONV_TAC (RAND_CONV BETA_CONV),
-      CONV_TAC (RAND_CONV (REWR_CONV ignore_bind_def)),
-      CONV_TAC (RAND_CONV (REWR_CONV switch_BoolV_def)),
-      CHANGED_TAC (simp_tac bool_ss [pairTheory.UNCURRY, pairTheory.pair_case_thm]),
-      gen_tac, strip_tac, conj_tac,
-      CHANGED_TAC (fn (asl,w) => simp_tac (srw_ss())
-        (map ASSUME (List.filter (not o is_forall) asl)) (asl,w)),
-      BasicProvers.PURE_TOP_CASE_TAC]);
-end;
-
 Theorem eval_preserves_tv:
   (∀cx s st res st'. eval_stmt cx s st = (res, st') ⇒
      preserves_tv cx st st') ∧
@@ -1658,9 +1581,7 @@ Theorem eval_preserves_tv:
   (∀cx e st res st'. eval_expr cx e st = (res, st') ⇒
      preserves_tv cx st st') ∧
   (∀cx es st res st'. eval_exprs cx es st = (res, st') ⇒
-     preserves_tv cx st st') ∧
-  (∀cx e st res st'. eval_abi_expr cx e st = (res,st') ⇒ preserves_tv cx st st') ∧
-  (∀cx es st res st'. eval_abi_exprs cx es st = (res,st') ⇒ preserves_tv cx st st')
+     preserves_tv cx st st')
 Proof
   ho_match_mp_tac evaluate_ind >>
   conj_tac >- rw[evaluate_def, return_def] >>
@@ -2040,8 +1961,14 @@ Proof
     imp_res_tac assign_target_preserves_tv >> gvs[] >>
     first_x_assum drule_all >> strip_tac >>
     irule preserves_tv_trans >> first_assum (irule_at Any) >> simp[]) >>
-  (* TypeBuiltin: guarded eager and delayed ABI induction hypotheses. *)
-  conj_tac >- suspend "TypeBuiltin_ptv" >>
+  (* TypeBuiltin *)
+  conj_tac >- (
+    rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+    gvs[Once evaluate_def, bind_apply, AllCaseEqs(),
+        ignore_bind_apply, return_def] >>
+    imp_res_tac type_check_state >>
+    imp_res_tac lift_sum_state >> gvs[] >>
+    first_x_assum drule_all >> rw[]) >>
   (* Send and ExtCall: operands, then eval_send / eval_ext_call, which
      preserve scopes and immutables. *)
   conj_tac >- (
@@ -2176,19 +2103,14 @@ Proof
   (* eval_exprs [] *)
   conj_tac >- rw[evaluate_def, return_def] >>
   (* eval_exprs e::es *)
-  conj_tac >- (rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  (rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
    gvs[Once evaluate_def, bind_apply, AllCaseEqs()] >>
    imp_res_tac materialise_state >> gvs[] >>
    TRY (first_x_assum drule >> rw[] >> NO_TAC) >>
    first_x_assum drule_all >> strip_tac >>
    first_x_assum drule_all >> strip_tac >>
    irule preserves_tv_trans >> first_assum (irule_at Any) >>
-   gvs[return_def]) >>
-  rpt conj_tac >> PTV_ABI_TAC
-QED
-
-Resume eval_preserves_tv[TypeBuiltin_ptv]:
-  rpt gen_tac >> strip_tac >> Cases_on `tb` >> gvs[] >> PTV_ABI_TAC
+   gvs[return_def])
 QED
 
 Theorem try_handle_function_state[local]:

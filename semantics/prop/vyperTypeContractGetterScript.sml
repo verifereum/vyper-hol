@@ -1505,8 +1505,7 @@ Proof
             `<|immutables := am.immutables; logs := am.logs; scopes := [scope];
                accounts := am.accounts; tStorage := am.tStorage;
                pending_deletions := am.pending_deletions;
-               outcomes := orc; requests := rqs;
-               abi_memory := []; abi_immutables := []|>`, `st2`, `vt`] >>
+               outcomes := orc; requests := rqs|>`, `st2`, `vt`] >>
   simp[]
 QED
 
@@ -2361,8 +2360,7 @@ Proof
               <|immutables := am.immutables; logs := am.logs; scopes := [scope];
                 accounts := am.accounts; tStorage := am.tStorage;
                 pending_deletions := am.pending_deletions;
-                outcomes := orc; requests := rqs;
-                abi_memory := []; abi_immutables := []|>` >>
+                outcomes := orc; requests := rqs|>` >>
   rename1 `check_array_bounds _ _ _ _ = (bounds_res,bounds_st)` >>
   Cases_on `bounds_res` >> simp[bind_def, return_def, raise_def]
   >- (Cases_on `evaluate_subscript (get_tenv cx) (ArrayTV (ArrayTV inner_tv inner_bd) bd)
@@ -2428,8 +2426,7 @@ Proof
               <|immutables := am.immutables; logs := am.logs; scopes := [scope];
                 accounts := am.accounts; tStorage := am.tStorage;
                 pending_deletions := am.pending_deletions;
-                outcomes := orc; requests := rqs;
-                abi_memory := []; abi_immutables := []|>` >>
+                outcomes := orc; requests := rqs|>` >>
   rename1 `check_array_bounds _ _ _ _ = (bounds_res,bounds_st)` >>
   Cases_on `bounds_res`
   >- (Cases_on `evaluate_subscript (get_tenv cx) (ArrayTV (ArrayTV inner_tv inner_bd) bd)
@@ -2627,8 +2624,7 @@ Proof
                     <|immutables := am.immutables; logs := am.logs; scopes := [scope];
                       accounts := am.accounts; tStorage := am.tStorage;
                       pending_deletions := am.pending_deletions;
-                      outcomes := orc; requests := rqs;
-                      abi_memory := []; abi_immutables := []|>` >>
+                      outcomes := orc; requests := rqs|>` >>
       Cases_on `q` >>
       gvs[bind_def, ignore_bind_def, return_def, raise_def,
           lift_sum_def, evaluate_subscript_def, AllCaseEqs()] >>
@@ -2638,8 +2634,7 @@ Proof
                     <|immutables := am.immutables; logs := am.logs; scopes := [scope];
                       accounts := am.accounts; tStorage := am.tStorage;
                       pending_deletions := am.pending_deletions;
-                      outcomes := orc; requests := rqs;
-                      abi_memory := []; abi_immutables := []|>` >>
+                      outcomes := orc; requests := rqs|>` >>
   Cases_on `q` >>
   gvs[bind_def, ignore_bind_def, return_def, raise_def, lift_sum_def] >>
   Cases_on `evaluate_subscript (get_tenv cx) NoneTV
@@ -2798,8 +2793,7 @@ Proof
                     <|immutables := am.immutables; logs := am.logs; scopes := [scope];
                       accounts := am.accounts; tStorage := am.tStorage;
                       pending_deletions := am.pending_deletions;
-                      outcomes := orc; requests := rqs;
-                      abi_memory := []; abi_immutables := []|>` >>
+                      outcomes := orc; requests := rqs|>` >>
       Cases_on `q` >>
       gvs[bind_def, ignore_bind_def, return_def, raise_def, lift_sum_def] >>
       Cases_on `evaluate_subscript (get_tenv cx) NoneTV (Value (ArrayV av)) (IntV i)` >>
@@ -2815,8 +2809,7 @@ Proof
                     <|immutables := am.immutables; logs := am.logs; scopes := [scope];
                       accounts := am.accounts; tStorage := am.tStorage;
                       pending_deletions := am.pending_deletions;
-                      outcomes := orc; requests := rqs;
-                      abi_memory := []; abi_immutables := []|>` >>
+                      outcomes := orc; requests := rqs|>` >>
   Cases_on `q` >>
   gvs[bind_def, ignore_bind_def, return_def, raise_def, lift_sum_def] >>
   Cases_on `evaluate_subscript (get_tenv cx) NoneTV
