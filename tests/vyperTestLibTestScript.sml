@@ -18,6 +18,101 @@ val _ = expect "explicit gas retained" (SOME "unsupported source pattern: gas=")
 val _ = expect "negative missing source" (SOME "missing source_code") [];
 val _ = expect "blank source" (SOME "blank source_code") [source " \n"];
 
+val () = load "JsonTraceDecodeFn";
+
+structure TraceDecode = JsonTraceDecodeFn (
+  structure B = JsonImportHol
+  structure AST = jsonASTLib
+  fun translate_annotated_ast jsonast =
+    rhs (concl (EVAL (mk_comb (
+      prim_mk_const {Thy="jsonToVyper", Name="translate_annotated_ast"},
+      jsonast))))
+);
+
+(* The portable ABI grammar is a compatibility copy, not a stricter parser.
+   Compare terms and acceptance with the pinned implementation. *)
+datatype abi_outcome = Parsed of term | Rejected;
+fun abi_outcome parse text =
+  Parsed (parse text) handle _ => Rejected;
+fun check_abi_parity accepted text = let
+  val reference = abi_outcome contractABISyntax.parse_abi_type text
+  val portable = abi_outcome TraceDecode.parse_abi_type text
+  val matches =
+    case (reference, portable) of
+      (Parsed x, Parsed y) => accepted andalso aconv x y
+    | (Rejected, Rejected) => not accepted
+    | _ => false
+in
+  if matches then () else raise Fail ("ABI parser parity: " ^ text)
+end;
+val () = List.app (check_abi_parity true)
+  ["bool", "address", "string", "bytes", "bytes1", "bytes32",
+   "uint8", "uint256", "int8", "int256",
+   "(uint256,bool)", "(address,(bytes32,string),int128)",
+   "uint256[]", "bytes32[2]", "uint8[2][][3]",
+   "(uint8,bool)[2][]", "(uint8[],(address,bool)[3])[]",
+   (* Preserve inherited numeric-prefix parsing and absent-bound leniency. *)
+   "uint7", "uint8suffix", "bytesoops", "uint8[xyz]"];
+val () = List.app (check_abi_parity false)
+  ["", "uint", "int", "fixed128x18", "tuple", "bool[", "()",
+   "(uint8,)", "(uint8,(bool,address)[][2])"];
+
+fun assert_fixture label ok =
+  if ok then () else raise Fail ("fixture resolution: " ^ label);
+val fixture_metadata = source "return 1";
+val fixture_table =
+  [("first", fixture_metadata, [1, 2]),
+   ("second", source "return 2", [3]),
+   ("first", source "return 99", [99])];
+val resolved = TraceDecode.resolve_fixtures fixture_table
+  ["export/file.json/second", "first", "elsewhere/second"];
+val () = assert_fixture "declared order, repeated deps, and lookup precedence"
+  (List.map (fn (name, _, _) => name) resolved =
+     ["second", "first", "second"] andalso
+   List.concat (List.map (fn (_, _, traces) => traces) resolved) = [3, 1, 2, 3]);
+val resolved_metadata = List.map (fn (_, json, _) => json) resolved;
+val () = expect "source retained from resolved fixtures" NONE resolved_metadata;
+val () = expect "blank test still ineligible with fixture source"
+  (SOME "blank source_code") (resolved_metadata @ [source " "]);
+val () = assert_fixture "empty dependencies"
+  (List.null (TraceDecode.resolve_fixtures fixture_table []));
+val () = assert_fixture "unresolved dependency retains complete path"
+  ((TraceDecode.resolve_fixtures fixture_table
+      ["first", "export/file.json/missing"]; false)
+   handle Fail message =>
+     String.isSubstring "export/file.json/missing" message);
+
+fun balance_trace amount = JSON.OBJECT
+  [("trace_type", JSON.STRING "set_balance"),
+   ("address", JSON.STRING "0x0000000000000000000000000000000000000001"),
+   ("value", JSON.INT (IntInf.fromInt amount))];
+fun trace_item kind deps traces = JSON.OBJECT
+  [("item_type", JSON.STRING kind),
+   ("deps", JSON.ARRAY (List.map JSON.STRING deps)),
+   ("traces", JSON.ARRAY (List.map balance_trace traces))];
+val exported_cases = JSON.OBJECT
+  [("test_b", trace_item "test" ["path/second", "path/first", "path/second"] [4]),
+   ("first", trace_item "fixture" ["ignored/already_flattened"] [1, 2]),
+   ("test_a", trace_item "test" [] [5]),
+   ("second", trace_item "fixture" [] [3])];
+val cases = TraceDecode.decode_cases exported_cases;
+val () = assert_fixture "test item order"
+  (List.map #1 cases = ["test_b", "test_a"]);
+fun assert_trace_order ((_, actual), amounts) = let
+  val expected =
+    #2 (List.hd (TraceDecode.decode_cases
+      (JSON.ARRAY (List.map balance_trace amounts))))
+in
+  assert_fixture "setup precedes test, without recursive expansion"
+    (ListPair.allEq (fn (x,y) => aconv x y) (actual, expected))
+end;
+val () = ListPair.appEq assert_trace_order (cases, [[3, 1, 2, 3, 4], [5]]);
+val () = assert_fixture "exported missing fixture is a JSON decode error"
+  ((TraceDecode.decode_cases (JSON.OBJECT
+      [("missing_dep_test", trace_item "test" ["path/missing"] [])]); false)
+   handle JSONDecode.JSONError (Fail _, _) => true
+        | _ => false);
+
 (* Chunk partitioning is pure: no JSON decoding, HOL definitions, or generated files. *)
 fun check_weighted_chunks (weights, counts) = let
   val total = List.length weights

@@ -1,3 +1,5 @@
+val () = load "jsonImportTerm";
+val () = load "JsonTraceDecodeFn";
 structure vyperTestLib :> vyperTestLib = struct
 
 open HolKernel boolLib bossLib cv_transLib wordsLib intLib
@@ -8,264 +10,16 @@ open HolKernel boolLib bossLib cv_transLib wordsLib intLib
      jsonASTLib jsonToVyperTheory
 open JSONDecode
 
-(* ===== jsonAST Translation Pipeline ===== *)
-(* Parse JSON to jsonAST, then translate to vyperAST using EVAL *)
-
-val translate_annotated_ast_tm =
-  prim_mk_const{Thy="jsonToVyper",Name="translate_annotated_ast"}
-
-fun translate_jsonast_to_vyper jsonast_tm = let
-  val app = mk_comb(translate_annotated_ast_tm, jsonast_tm)
-  val thm = EVAL app
-  val rhs = rhs (concl thm)
-in
-  (* translate_annotated_ast returns SOME (...) or NONE if imports not topsorted *)
-  if optionSyntax.is_some rhs then optionSyntax.dest_some rhs
-  else raise JSONError (Fail "imports not topologically sorted", JSON.OBJECT [])
-end
-
-(* Decoder that uses the jsonAST pipeline with full module support *)
-val toplevels_via_jsonast : term decoder =
-  JSONDecode.map translate_jsonast_to_vyper wrapped_annotated_ast
-
-fun from_term_option ty = lift_option (mk_option ty) I
-
-fun check cd pred err d =
-  andThen cd (fn x => if pred x then d else fail err)
-
-fun check_field lab req =
-  check (field lab string) (equal req) (lab ^ " not " ^ req)
-
-fun check_trace_type req = check_field "trace_type" req
-
-fun check_ast_type req = check_field "ast_type" req
-
-val numOfLargeInt =
-  intSyntax.dest_injected o
-  intSyntax.term_of_int o
-  Arbint.fromLargeInt
-
-fun achoose err ls = orElse(choose ls, fail err)
-
-fun triml n s = String.extract(s,n,NONE)
-
-val numtm = JSONDecode.map numOfLargeInt intInf
-val stringtm = JSONDecode.map fromMLstring string
-val booltm = JSONDecode.map mk_bool bool
-val negbooltm = JSONDecode.map (mk_bool o not) bool
-
-val address : term decoder = JSONDecode.map address_from_hex string
-
-(* byteStringCacheLib splits a value into shared 8 KiB chunks only above
-   64 KiB, and caches smaller values whole. test_lists sends 256 calls whose
-   8 KiB calldata differ only in the last bytes, so each was imported in full.
-   Values from 8 to 64 KiB are split here into 8 KiB chunks, which the cache
-   shares when equal. Sizes count hex characters, twice the bytes. *)
-val shared_chunk_hex = 2 * 8 * 1024
-val cache_chunked_hex = 2 * 64 * 1024
-
-fun flat_bytes_from_hex str = let
-  val hex = if String.isPrefix "0x" str
-            then String.extract(str, 2, NONE) else str
-  val size = String.size hex
-  fun chunks offset =
-    if offset >= size then []
-    else String.substring(hex, offset, Int.min(shared_chunk_hex, size - offset))
-         :: chunks (offset + shared_chunk_hex)
-in
-  if size <= shared_chunk_hex orelse cache_chunked_hex < size
-  then cached_flat_bytes_from_hex hex
-  else mk_flat (mk_list(List.map cached_bytes_from_hex (chunks 0), bytes_ty))
-end
-
-val bytes : term decoder = JSONDecode.map flat_bytes_from_hex string
-
-val Call_tm = prim_mk_const{Thy="vyperTestRunner",Name="Call"}
-val call_trace_ty = #1 $ dom_rng $ type_of Call_tm
-
-local
-  fun descending [] = true
-    | descending [x] = true
-    | descending (x::y::ls) = (x-1 = y) andalso descending (y::ls)
-
-  fun ensure_not_empty s = if String.size s = 0 then "0" else s
-
-  fun descending_key (k1, _) (k2, _) = k2 < k1
-in
-val blockHashes : term decoder =
-  JSONDecode.map (fn ls => let
-    fun f (k,v) = (Option.valOf (Int.fromString k),
-                   decode (JSONDecode.map (bytes32_from_hex o ensure_not_empty) string) v)
-    val ls = List.map f ls
-    val ls = Lib.sort descending_key ls
-    val true = descending (List.map #1 ls)
-  in mk_list(List.map #2 ls, bytes32_ty) end) $ rawObject
-val blobHashes : term decoder =
-  JSONDecode.map (fn ls => mk_list(ls, bytes32_ty)) $
-    array (JSONDecode.map (bytes32_from_hex o ensure_not_empty) string)
-end
-
-val call : term decoder =
-  check_trace_type "call" $
-  JSONDecode.map (fn ((a,c,v,t),(p,g,s,(h,bh)),(m,bn,bf,e)) =>
-              TypeBase.mk_record (call_trace_ty, [
-                ("sender", s),
-                ("target", t),
-                ("callData", c),
-                ("value", v),
-                ("timeStamp", m),
-                ("blockNumber", bn),
-                ("blockHashes", h),
-                ("blobHashes", bh),
-                ("blobBaseFee", bf),
-                ("gasLimit", g),
-                ("gasPrice", p),
-                ("chainId", numSyntax.term_of_int 1),
-                ("static", a),
-                ("expectedOutput", e)]))
-          (tuple3 (
-            field "call_args" $
-              tuple4 (field "is_modifying" negbooltm,
-                      field "calldata" bytes,
-                      field "value" numtm,
-                      field "to" address),
-            field "env" $
-              tuple4 (field "tx" $ field "gas_price" numtm,
-                      field "tx" $ field "gas" numtm,
-                      field "tx" $ field "origin" address,
-                      tuple2 (field "block" $ field "block_hashes" blockHashes,
-                              field "tx" $ field "blob_hashes" blobHashes)),
-            tuple4 (
-              field "env" $ field "block" $ field "timestamp" numtm,
-              field "env" $ field "block" $ field "number" numtm,
-              field "env" $ field "block" $ field "blob_basefee" numtm,
-              field "output" (JSONDecode.map (from_term_option bytes_ty) $
-                              nullable bytes))))
-
-fun theoptstring NONE = "" | theoptstring (SOME s) = s
-
-val abiBaseType : term decoder =
-  JSONDecode.map parse_abi_type string
-
-fun tuple_brackets s =
-  if Substring.isSuffix "]" s then let
-    val (ps, ns) = Substring.splitr (not o equal #"[") s
-    val bt = parse_optnum_ss ns
-    val s = Substring.trimr 1 ps
-    val a = mk_comb(contractABISyntax.Array_tm, bt)
-  in
-    curry mk_comb a o tuple_brackets s
-  end else if Substring.isEmpty s
-  then I else raise Fail "not brackets"
-
-fun d_abiType () : term decoder = achoose "abiType" [
-  check (field "type" string)
-        (String.isPrefix "tuple")
-        "not tuple" $
-    JSONDecode.map (fn (t, ls) =>
-      (tuple_brackets $
-       Substring.extract
-         (t, String.size "tuple", NONE)) $
-      mk_comb(contractABISyntax.Tuple_tm, mk_list (ls, abi_type_ty))) $
-    tuple2 (field "type" string,
-            field "components" $ array $ delay d_abiType),
-  field "type" abiBaseType
-]
-val abiType = delay d_abiType
-
-val abiArg : term decoder =
-  JSONDecode.map mk_pair $
-  tuple2 (field "name" stringtm, abiType)
-
-val abiMutability : term decoder =
-  andThen string (fn s =>
-    if s = "nonpayable" then succeed Nonpayable_tm else
-    if s = "view" then succeed View_tm else
-    if s = "payable" then succeed Payable_tm else
-    if s = "pure" then succeed Pure_tm else
-    fail ("abiMutability: " ^ s))
-
-val Function_tm = prim_mk_const{Thy="vyperTestRunner",Name="Function"}
-val Event_tm = prim_mk_const{Thy="vyperTestRunner",Name="Event"}
-val Error_tm = prim_mk_const{Thy="vyperTestRunner",Name="Error"}
-val (abi_function_ty, abi_entry_ty) = dom_rng $ type_of $ Function_tm
-val abi_arg_ty = mk_prod(string_ty, abi_type_ty)
-
-fun mk_Function (n,is,os,m) =
-  mk_comb(Function_tm,
-             TypeBase.mk_record (abi_function_ty, [
-               ("name", n),
-               ("inputs", mk_list(is, abi_arg_ty)),
-               ("outputs", mk_list(os, abi_arg_ty)),
-               ("mutability", m)]))
-fun mk_Error (name, inputs) =
-  list_mk_comb(Error_tm, [name, mk_list(inputs, abi_arg_ty)])
-
-
-(* Only the pinned JSON-ABI exporter emits function entries without
-   stateMutability. Normalize those entries before the canonical decoder;
-   entries already carrying stateMutability follow the existing path. *)
-fun normalize_abi_entry (kvs as (_, _) :: _) = let
-  fun lookup key = Option.map #2 (List.find (fn (k, _) => k = key) kvs)
-  val original = JSON.OBJECT kvs
-  fun invalid msg = raise JSONError (Fail ("legacy ABI: " ^ msg), original)
-in
-  case (lookup "stateMutability", lookup "constant", lookup "payable") of
-    (SOME _, _, _) => original
-  | (NONE, NONE, NONE) => original
-  | (NONE, SOME (JSON.BOOL constant), SOME (JSON.BOOL payable)) =>
-      (case lookup "type" of
-         SOME (JSON.STRING "function") =>
-           if constant andalso payable then invalid "constant and payable both true"
-           else JSON.OBJECT
-             (("stateMutability", JSON.STRING
-                (if payable then "payable"
-                 else if constant then "view" else "nonpayable")) :: kvs)
-       | _ => invalid "constant/payable only supported on functions")
-  | _ => invalid "constant and payable must both be booleans"
-end
-  | normalize_abi_entry [] = JSON.OBJECT []
-
-val canonicalAbiEntry : term decoder = achoose "abiEntry" [
-    check_field "type" "function" $
-    JSONDecode.map mk_Function $
-      tuple4 (field "name" stringtm,
-              field "inputs" (array abiArg),
-              field "outputs" (array abiArg),
-              field "stateMutability" abiMutability),
-    check_field "type" "constructor" $
-    JSONDecode.map mk_Function $
-      tuple4 (succeed $ fromMLstring "__init__",
-              field "inputs" (array abiArg),
-              field "outputs" (array abiArg),
-              field "stateMutability" abiMutability),
-    check_field "type" "fallback" $
-    JSONDecode.map mk_Function $
-      tuple4 (succeed $ fromMLstring "__default__",
-              succeed $ [],
-              succeed $ [],
-              field "stateMutability" abiMutability),
-    check_field "type" "event" $
-    JSONDecode.map (fn s => mk_comb(Event_tm, s)) $
-    field "name" stringtm,
-    check_field "type" "error" $
-    JSONDecode.map mk_Error $
-      tuple2 (field "name" stringtm,
-              field "inputs" (array abiArg))
-  ]
-
-val abiEntry : term decoder =
-  JSONDecode.map (decode canonicalAbiEntry o normalize_abi_entry) rawObject
-
-val Deployment_tm = prim_mk_const{Thy="vyperTestRunner",Name="Deployment"}
-val deployment_trace_ty = #1 $ dom_rng $ type_of Deployment_tm
-
-val RawDeployment_tm = prim_mk_const{Thy="vyperTestRunner",Name="RawDeployment"}
-val raw_deployment_trace_ty = #1 $ dom_rng $ type_of RawDeployment_tm
-
-val SetBalance_tm = prim_mk_const{Thy="vyperTestRunner",Name="SetBalance"}
-val ClearTransientStorage_tm =
-  prim_mk_const{Thy="vyperTestRunner",Name="ClearTransientStorage"}
+(* Decode exported traces through the same portable implementation used by the
+   standalone entrypoint; only logical AST translation is HOL-specific. *)
+structure TraceDecode = JsonTraceDecodeFn (
+  structure B = JsonImportHol
+  structure AST = jsonASTLib
+  fun translate_annotated_ast jsonast =
+    rhs (concl (EVAL (mk_comb (
+      prim_mk_const {Thy="jsonToVyper", Name="translate_annotated_ast"},
+      jsonast))))
+)
 
 val unsupported_code = [
 ]
@@ -477,163 +231,13 @@ in
   if String.size collapsed = 0 then "empty" else collapsed
 end
 
-val raw_deployment : term decoder =
-  check_trace_type "deployment" $
-  check (field "deployment_type" string)
-        (fn s => s = "raw_bytecode" orelse s = "ir")
-        "deployment_type not raw" $
-  JSONDecode.map (fn (((i,d,(s,m,a,g),(gl,bn,bf,v)),(h,bh)),(e,bc)) =>
-    TypeBase.mk_record (raw_deployment_trace_ty, [
-      ("deployer", s),
-      ("expectedAddress", a),
-      ("expectedSuccess", e),
-      ("value", v),
-      ("timeStamp", m),
-      ("blockNumber", bn),
-      ("blockHashes", h),
-      ("blobHashes", bh),
-      ("blobBaseFee", bf),
-      ("gasLimit", gl),
-      ("gasPrice", g),
-      ("chainId", numSyntax.term_of_int 1),
-      ("initcode", i),
-      ("callData", d),
-      ("expectedRuntimeBytecode", bc)
-    ])) $
-  tuple2 (
-    tuple2 (
-      tuple4 (field "initcode" bytes,
-              field "calldata" $
-                JSONDecode.map (flat_bytes_from_hex o theoptstring)
-                  (nullable string),
-              tuple4 (field "env" $ field "tx" $ field "origin" address,
-                      field "env" $ field "block" $ field "timestamp" numtm,
-                      field "deployed_address" address,
-                      field "env" $ field "tx" $ field "gas_price" numtm),
-              tuple4 (field "env" $ field "tx" $ field "gas" numtm,
-                      field "env" $ field "block" $ field "number" numtm,
-                      field "env" $ field "block" $ field "blob_basefee" numtm,
-                      field "value" numtm)),
-      tuple2 (field "env" $ field "block" $ field "block_hashes" blockHashes,
-              field "env" $ field "tx" $ field "blob_hashes" blobHashes)),
-    tuple2 (field "deployment_succeeded" booltm,
-            (* Raw exports sometimes report "" even when initcode deposits
-               nonempty code; only nonempty exports are bytecode assertions. *)
-            field "runtime_bytecode"
-              (JSONDecode.map (fn bc =>
-                case bc of
-                  SOME "" => optionSyntax.mk_none bytes_ty
-                | SOME hex => from_term_option bytes_ty
-                                (SOME (flat_bytes_from_hex hex))
-                | NONE => optionSyntax.mk_none bytes_ty) $
-               nullable string)))
-
-val deployment : term decoder =
-  check_trace_type "deployment" $
-  JSONDecode.map (fn (((((srcs_exps_imap,(i,h,bh),(s,m,a,g),(d,bn,bf,v)),e),bc),sl),bp) =>
-             (* translate_annotated_ast returns (sources, exports, import_map) *)
-             let val (srcs, exps_import_map) = pairSyntax.dest_pair srcs_exps_imap
-                 val (exps, import_map) = pairSyntax.dest_pair exps_import_map in
-             TypeBase.mk_record (deployment_trace_ty, [
-               ("sourceAst", srcs),
-               ("sourceExports", exps),
-               ("importMap", import_map),
-               ("contractAbi", mk_list(i, abi_entry_ty)),
-               ("deployedAddress", a),
-               ("deployer", s),
-               ("deploymentSuccess", e),
-               ("value", v),
-               ("timeStamp", m),
-               ("blockNumber", bn),
-               ("blockHashes", h),
-               ("blobHashes", bh),
-               ("blobBaseFee", bf),
-               ("gasPrice", g),
-               ("chainId", numSyntax.term_of_int 1),
-               ("callData", d),
-               ("runtimeBytecode", bc),
-               ("storageLayout", sl),
-               ("isBlueprint", bp)
-             ]) end)
-          (tuple2 (tuple2 (tuple2 (tuple2 (tuple4 (toplevels_via_jsonast,
-                           tuple3 (
-                             field "contract_abi" (array abiEntry),
-                             field "env" $ field "block" $
-                               field "block_hashes" blockHashes,
-                             field "env" $ field "tx" $
-                               field "blob_hashes" blobHashes),
-                           tuple4 (field "env" $ field "tx" $ field "origin" address,
-                                   field "env" $ field "block" $ field "timestamp" numtm,
-                                   field "deployed_address" address,
-                                   field "env" $ field "tx" $ field "gas_price" numtm),
-                           tuple4 (field "calldata" $
-                                   JSONDecode.map (flat_bytes_from_hex o theoptstring)
-                                     (nullable string),
-                                   field "env" $ field "block" $ field "number" numtm,
-                                   field "env" $ field "block" $ field "blob_basefee" numtm,
-                                   field "value" numtm)),
-                   field "deployment_succeeded" booltm),
-                  field "runtime_bytecode" bytes),
-                 field "storage_layout" storage_layout),
-                JSONDecode.map (fn s => mk_bool (s = "blueprint"))
-                  (field "deployment_type" string)))
-
-val trace : term decoder =
-  andThen (field "trace_type" string) (fn kind =>
-    case kind of
-      "call" => JSONDecode.map (curry mk_comb Call_tm) call
-    | "deployment" =>
-        andThen (field "deployment_type" string) (fn deployment_kind =>
-          if deployment_kind = "raw_bytecode" orelse deployment_kind = "ir"
-          then JSONDecode.map (curry mk_comb RawDeployment_tm) raw_deployment
-          else JSONDecode.map (curry mk_comb Deployment_tm) deployment)
-    | "clear_transient_storage" => succeed ClearTransientStorage_tm
-    | "set_balance" =>
-        JSONDecode.map (fn (a,b) => list_mk_comb(SetBalance_tm, [a,b])) $
-          tuple2 (field "address" address, field "value" numtm)
-    | _ => fail ("unknown trace type: " ^ kind))
-
-(* ===== Fixture / dependency support ===== *)
-(* Fixtures are shared setup items (item_type = "fixture") that tests depend
-   on via their "deps" field. We resolve deps by prepending fixture traces
-   to the test's own traces, so each test runs from a clean state with
-   the fixture setup applied first. All current deps are same-file. *)
-
-val indexed_traces =
-  JSONDecode.map (fn jsons =>
-    let
-      fun go _ [] = []
-        | go i (json::rest) =
-            (decode trace json
-             handle e => raise Fail ("trace " ^ Int.toString i ^
-               ": " ^ exnMessage e)) :: go (i + 1) rest
-    in go 0 jsons end)
-    (array (JSONDecode.map JSON.OBJECT rawObject))
-
-val fixture_decoder =
-  check_field "item_type" "fixture" $
-  field "traces" (array trace)
-
-(* Decoder for test items with deps: reads both "deps" and "traces" fields. *)
-val test_with_deps_decoder =
-  check_field "item_type" "test" $
-  tuple2 (field "deps" (array string),
-          field "traces" indexed_traces)
-
-(* Extract fixture name from a dep string.
-   Dep format: "tests/export/functional/.../test_file.json/fixture_name"
-   We take the part after the last '/' as the fixture name. *)
-fun fixture_name_of_dep dep =
-  case String.fields (fn c => c = #"/") dep of
-    [] => ""
-  | parts => List.last parts
 
 (* Pass 1: collect fixtures from JSON items into a lookup dictionary.
    Keep the raw JSON for source eligibility checks as well as the decoded traces. *)
 fun collect_fixture ((name, json), acc) =
   if decode (field "item_type" string) json = "fixture"
   then let
-    val traces = decode fixture_decoder json
+    val traces = decode TraceDecode.fixture_decoder json
   in
     (name, json, traces) :: acc
   end
@@ -649,13 +253,7 @@ fun trydecode_with_fixtures decode_test_traces fixtures
   then (selected,failures,name::name_skips,source_skips,non_tests)
   else let
     val dep_names = decode (field "deps" (array string)) json
-    fun resolve dn =
-      case List.find
-        (fn (fixture_name, _, _) => fixture_name = fixture_name_of_dep dn)
-        fixtures of
-        NONE => raise Fail ("unresolved fixture dependency: " ^ dn)
-      | SOME fixture => fixture
-    val resolved = List.map resolve dep_names
+    val resolved = TraceDecode.resolve_fixtures fixtures dep_names
     val fixture_jsons =
       List.map (fn (_, fixture_json, _) => fixture_json) resolved
     val source_reason = unsupported_source_reason_for (fixture_jsons @ [json])
@@ -849,7 +447,8 @@ fun read_coverage_json json_path = let
     then SOME (name,json) else NONE) items
   fun deps json = Option.getOpt (raw_string_array_field "deps" json,[])
   fun fixture_for dep =
-    List.find (fn (name,_) => name = fixture_name_of_dep dep) fixtures
+    List.find
+      (fn (name,_) => name = TraceDecode.fixture_name_of_dep dep) fixtures
   fun fixture_trace_count dep =
     case fixture_for dep of
       NONE => 0
@@ -858,7 +457,7 @@ fun read_coverage_json json_path = let
     List.concat (List.map (fn (_,json) => deps json) items)
   val unreferenced_traced_fixtures = List.mapPartial (fn (name,json) =>
     if Option.getOpt (raw_array_length_field "traces" json,0) > 0 andalso
-       not (List.exists (fn dep => fixture_name_of_dep dep = name)
+       not (List.exists (fn dep => TraceDecode.fixture_name_of_dep dep = name)
          referenced_fixtures)
     then SOME name else NONE) fixtures
   fun classify ((name,json),
@@ -1161,7 +760,8 @@ in
   else raise Fail ("invalid export provenance: " ^ json_path)
 end
 
-fun decode_test_traces json = #2 (decode test_with_deps_decoder json)
+fun decode_test_traces json =
+  #2 (decode TraceDecode.test_with_deps_decoder json)
 
 (* Eligibility and dependency checks traverse every item; the callback decides
    which admitted tests to HOL-decode. Fixtures are still decoded in pass 1.

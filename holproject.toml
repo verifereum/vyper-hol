@@ -42,3 +42,13 @@ roots = ["vyperHolScript.sml",
 [dependencies.verifereum]
 git = "https://github.com/verifereum/verifereum.git"
 rev = "6991326b80f0b603fc79d2681f19aa1205c2015c"
+
+# Functor parameter signatures are not inferred by HOL's module scanner.
+[actions.JsonASTDecodeFn]
+loads = ["jsonImportTerm"]
+
+[actions.JsonTraceDecodeFn]
+loads = ["jsonImportTerm"]
+
+[actions.JsonImportHol]
+loads = ["jsonImportTerm"]

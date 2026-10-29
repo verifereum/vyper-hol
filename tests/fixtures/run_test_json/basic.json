@@ -1,0 +1,691 @@
+{
+  "setup": {
+    "item_type": "fixture",
+    "traces": [
+      {
+        "annotated_ast": {
+          "ast": {
+            "ast_type": "Module",
+            "body": [
+              {
+                "args": {
+                  "args": [
+                    {
+                      "annotation": {
+                        "ast_type": "Name",
+                        "col_offset": 11,
+                        "end_col_offset": 17,
+                        "end_lineno": 3,
+                        "id": "int128",
+                        "lineno": 3,
+                        "node_id": 4,
+                        "src": "22:6:-1"
+                      },
+                      "arg": "x",
+                      "ast_type": "arg",
+                      "col_offset": 8,
+                      "end_col_offset": 17,
+                      "end_lineno": 3,
+                      "lineno": 3,
+                      "node_id": 3,
+                      "src": "19:9:-1"
+                    }
+                  ],
+                  "ast_type": "arguments",
+                  "col_offset": 0,
+                  "default": null,
+                  "defaults": [],
+                  "end_col_offset": 16,
+                  "end_lineno": 4,
+                  "lineno": 3,
+                  "node_id": 2,
+                  "src": "11:46:-1"
+                },
+                "ast_type": "FunctionDef",
+                "body": [
+                  {
+                    "ast_type": "Return",
+                    "col_offset": 4,
+                    "end_col_offset": 16,
+                    "end_lineno": 4,
+                    "lineno": 4,
+                    "node_id": 6,
+                    "src": "45:12:-1",
+                    "value": {
+                      "ast_type": "BinOp",
+                      "col_offset": 11,
+                      "end_col_offset": 16,
+                      "end_lineno": 4,
+                      "left": {
+                        "ast_type": "Name",
+                        "col_offset": 11,
+                        "end_col_offset": 12,
+                        "end_lineno": 4,
+                        "id": "x",
+                        "lineno": 4,
+                        "node_id": 8,
+                        "src": "52:1:-1",
+                        "type": {
+                          "bits": 128,
+                          "is_signed": true,
+                          "name": "int128",
+                          "typeclass": "integer"
+                        },
+                        "variable_reads": [
+                          {
+                            "access_path": [],
+                            "decl_node": {
+                              "node_id": 3,
+                              "source_id": -1
+                            },
+                            "name": "x"
+                          }
+                        ]
+                      },
+                      "lineno": 4,
+                      "node_id": 7,
+                      "op": {
+                        "ast_type": "Mult",
+                        "col_offset": 11,
+                        "end_col_offset": 16,
+                        "end_lineno": 4,
+                        "lineno": 4,
+                        "node_id": 10,
+                        "src": "52:5:-1"
+                      },
+                      "right": {
+                        "ast_type": "Int",
+                        "col_offset": 15,
+                        "end_col_offset": 16,
+                        "end_lineno": 4,
+                        "folded_value": {
+                          "ast_type": "Int",
+                          "col_offset": 15,
+                          "end_col_offset": 16,
+                          "end_lineno": 4,
+                          "lineno": 4,
+                          "node_id": 11,
+                          "src": "56:1:-1",
+                          "type": {
+                            "bits": 128,
+                            "is_signed": true,
+                            "name": "int128",
+                            "typeclass": "integer"
+                          },
+                          "value": 2
+                        },
+                        "lineno": 4,
+                        "node_id": 11,
+                        "src": "56:1:-1",
+                        "type": {
+                          "bits": 128,
+                          "is_signed": true,
+                          "name": "int128",
+                          "typeclass": "integer"
+                        },
+                        "value": 2
+                      },
+                      "src": "52:5:-1",
+                      "type": {
+                        "bits": 128,
+                        "is_signed": true,
+                        "name": "int128",
+                        "typeclass": "integer"
+                      }
+                    }
+                  }
+                ],
+                "col_offset": 0,
+                "decorator_list": [
+                  {
+                    "ast_type": "Name",
+                    "col_offset": 1,
+                    "end_col_offset": 9,
+                    "end_lineno": 2,
+                    "id": "external",
+                    "lineno": 2,
+                    "node_id": 12,
+                    "src": "2:8:-1"
+                  }
+                ],
+                "doc_string": null,
+                "end_col_offset": 16,
+                "end_lineno": 4,
+                "func_type": {
+                  "argument_types": [
+                    {
+                      "bits": 128,
+                      "is_signed": true,
+                      "name": "int128",
+                      "typeclass": "integer"
+                    }
+                  ],
+                  "name": "foo",
+                  "return_type": {
+                    "bits": 128,
+                    "is_signed": true,
+                    "name": "int128",
+                    "typeclass": "integer"
+                  },
+                  "type_decl_node": {
+                    "node_id": 1,
+                    "source_id": -1
+                  },
+                  "typeclass": "contract_function"
+                },
+                "lineno": 3,
+                "name": "foo",
+                "node_id": 1,
+                "returns": {
+                  "ast_type": "Name",
+                  "col_offset": 22,
+                  "end_col_offset": 28,
+                  "end_lineno": 3,
+                  "id": "int128",
+                  "lineno": 3,
+                  "node_id": 14,
+                  "src": "33:6:-1"
+                },
+                "src": "11:46:-1"
+              }
+            ],
+            "col_offset": 0,
+            "doc_string": null,
+            "end_col_offset": 4,
+            "end_lineno": 6,
+            "is_interface": false,
+            "lineno": 1,
+            "name": null,
+            "node_id": 0,
+            "path": "/home/s1nn105/hol4test/vyper-src/unknown_5124.vy",
+            "resolved_path": "/home/s1nn105/hol4test/vyper-src/unknown_5124.vy",
+            "settings": {},
+            "source_id": -1,
+            "source_sha256sum": "ac1dae8e171175c6b4b97702ccdfc0fd65daa81b1f433660e1d22b68aefab1bf",
+            "src": "0:63:-1",
+            "type": {
+              "name": "/home/s1nn105/hol4test/vyper-src/unknown_5124.vy",
+              "type_decl_node": {
+                "node_id": 0,
+                "source_id": -1
+              },
+              "typeclass": "module"
+            }
+          },
+          "contract_name": "/home/s1nn105/hol4test/vyper-src/unknown_5124.vy",
+          "imports": []
+        },
+        "blueprint_initcode_prefix": null,
+        "calldata": null,
+        "compiler_settings": {
+          "debug": false,
+          "enable_decimals": true,
+          "evm_version": "prague",
+          "experimental_codegen": false,
+          "optimize": "gas"
+        },
+        "contract_abi": [
+          {
+            "gas": 756,
+            "inputs": [
+              {
+                "name": "x",
+                "type": "int128"
+              }
+            ],
+            "name": "foo",
+            "outputs": [
+              {
+                "name": "",
+                "type": "int128"
+              }
+            ],
+            "stateMutability": "nonpayable",
+            "type": "function"
+          }
+        ],
+        "deployed_address": "0xED4efEAEd8057C619a6D7aACC0459874Eaf3C166",
+        "deployment_succeeded": true,
+        "deployment_type": "source",
+        "env": {
+          "block": {
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "044852b2a670ade5407e78fb2863c51de9fcb96542a07186fe3aeda6bb8a116d"
+            },
+            "excess_blob_gas": 0,
+            "gas_limit": 10000000000,
+            "number": 1,
+            "timestamp": 1
+          },
+          "tx": {
+            "blob_hashes": [],
+            "gas": 10000000000,
+            "gas_price": 0,
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1"
+          }
+        },
+        "function_name": "constructor",
+        "initcode": "604d61000b5f39604d5ff35f3560e01c63d98ffe118118610045576024361034176100495760043580600f0b8118610049576040526040518060011b80600f0b811861004957905060605260206060f35b5f5ffd5b5f80fd855820466124996e7fa15449a2daf9e747e9dc82d169bf4053ce1c69d7cd17327f0318184d8000a1657679706572830005000034",
+        "python_args": {
+          "args": [],
+          "kwargs": {}
+        },
+        "raw_ir": null,
+        "runtime_bytecode": "5f3560e01c63d98ffe118118610045576024361034176100495760043580600f0b8118610049576040526040518060011b80600f0b811861004957905060605260206060f35b5f5ffd5b5f80fd",
+        "solc_json": {
+          "compiler_version": "v0.5.0a4+commit.88aea818",
+          "integrity": "466124996e7fa15449a2daf9e747e9dc82d169bf4053ce1c69d7cd17327f0318",
+          "language": "Vyper",
+          "settings": {
+            "debug": false,
+            "evmVersion": "prague",
+            "experimentalCodegen": false,
+            "optimize": "gas",
+            "outputSelection": {
+              "unknown_5124.vy": [
+                "*"
+              ]
+            },
+            "search_paths": [
+              "."
+            ]
+          },
+          "sources": {
+            "unknown_5124.vy": {
+              "content": "\n@external\ndef foo(x: int128) -> int128:\n    return x * 2\n\n    ",
+              "sha256sum": "ac1dae8e171175c6b4b97702ccdfc0fd65daa81b1f433660e1d22b68aefab1bf"
+            }
+          }
+        },
+        "source_code": "\n@external\ndef foo(x: int128) -> int128:\n    return x * 2\n\n    ",
+        "storage_layout": {},
+        "trace_type": "deployment",
+        "value": 0
+      }
+    ]
+  },
+  "test_basic_code": {
+    "item_type": "test",
+    "deps": [
+      "fixture/setup"
+    ],
+    "traces": [
+      {
+        "call_args": {
+          "calldata": "d98ffe110000000000000000000000000000000000000000000000000000000000000009",
+          "is_modifying": true,
+          "to": "0xED4efEAEd8057C619a6D7aACC0459874Eaf3C166",
+          "value": 0
+        },
+        "call_succeeded": true,
+        "env": {
+          "block": {
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "044852b2a670ade5407e78fb2863c51de9fcb96542a07186fe3aeda6bb8a116d"
+            },
+            "excess_blob_gas": 0,
+            "gas_limit": 10000000000,
+            "number": 1,
+            "timestamp": 1
+          },
+          "tx": {
+            "blob_hashes": [],
+            "gas": 10000000000,
+            "gas_price": 0,
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1"
+          }
+        },
+        "function_name": "foo",
+        "output": "0000000000000000000000000000000000000000000000000000000000000012",
+        "python_args": {
+          "args": [
+            9
+          ],
+          "kwargs": {}
+        },
+        "trace_type": "call"
+      }
+    ]
+  },
+  "test_output_mismatch": {
+    "item_type": "test",
+    "deps": [
+      "fixture/setup"
+    ],
+    "traces": [
+      {
+        "call_args": {
+          "calldata": "d98ffe110000000000000000000000000000000000000000000000000000000000000009",
+          "is_modifying": true,
+          "to": "0xED4efEAEd8057C619a6D7aACC0459874Eaf3C166",
+          "value": 0
+        },
+        "call_succeeded": true,
+        "env": {
+          "block": {
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "044852b2a670ade5407e78fb2863c51de9fcb96542a07186fe3aeda6bb8a116d"
+            },
+            "excess_blob_gas": 0,
+            "gas_limit": 10000000000,
+            "number": 1,
+            "timestamp": 1
+          },
+          "tx": {
+            "blob_hashes": [],
+            "gas": 10000000000,
+            "gas_price": 0,
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1"
+          }
+        },
+        "function_name": "foo",
+        "output": "0001f",
+        "python_args": {
+          "args": [
+            9
+          ],
+          "kwargs": {}
+        },
+        "trace_type": "call"
+      }
+    ]
+  },
+  "test_expected_revert": {
+    "item_type": "test",
+    "deps": [
+      "fixture/setup"
+    ],
+    "traces": [
+      {
+        "call_args": {
+          "calldata": "d98ffe11000000000000000000000000000000007fffffffffffffffffffffffffffffff",
+          "is_modifying": true,
+          "to": "0xED4efEAEd8057C619a6D7aACC0459874Eaf3C166",
+          "value": 0
+        },
+        "call_succeeded": true,
+        "env": {
+          "block": {
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "044852b2a670ade5407e78fb2863c51de9fcb96542a07186fe3aeda6bb8a116d"
+            },
+            "excess_blob_gas": 0,
+            "gas_limit": 10000000000,
+            "number": 1,
+            "timestamp": 1
+          },
+          "tx": {
+            "blob_hashes": [],
+            "gas": 10000000000,
+            "gas_price": 0,
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1"
+          }
+        },
+        "function_name": "foo",
+        "output": null,
+        "python_args": {
+          "args": [
+            9
+          ],
+          "kwargs": {}
+        },
+        "trace_type": "call"
+      }
+    ]
+  },
+  "test_unexpected_revert": {
+    "item_type": "test",
+    "deps": [
+      "fixture/setup"
+    ],
+    "traces": [
+      {
+        "call_args": {
+          "calldata": "d98ffe11000000000000000000000000000000007fffffffffffffffffffffffffffffff",
+          "is_modifying": true,
+          "to": "0xED4efEAEd8057C619a6D7aACC0459874Eaf3C166",
+          "value": 0
+        },
+        "call_succeeded": true,
+        "env": {
+          "block": {
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "044852b2a670ade5407e78fb2863c51de9fcb96542a07186fe3aeda6bb8a116d"
+            },
+            "excess_blob_gas": 0,
+            "gas_limit": 10000000000,
+            "number": 1,
+            "timestamp": 1
+          },
+          "tx": {
+            "blob_hashes": [],
+            "gas": 10000000000,
+            "gas_price": 0,
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1"
+          }
+        },
+        "function_name": "foo",
+        "output": "0000000000000000000000000000000000000000000000000000000000000012",
+        "python_args": {
+          "args": [
+            9
+          ],
+          "kwargs": {}
+        },
+        "trace_type": "call"
+      }
+    ]
+  },
+  "test_null_code": {
+    "deps": [],
+    "item_type": "test",
+    "traces": [
+      {
+        "annotated_ast": {
+          "ast": {
+            "ast_type": "Module",
+            "body": [
+              {
+                "args": {
+                  "args": [],
+                  "ast_type": "arguments",
+                  "col_offset": 0,
+                  "default": null,
+                  "defaults": [],
+                  "end_col_offset": 8,
+                  "end_lineno": 4,
+                  "lineno": 3,
+                  "node_id": 2,
+                  "src": "11:19:-1"
+                },
+                "ast_type": "FunctionDef",
+                "body": [
+                  {
+                    "ast_type": "Pass",
+                    "col_offset": 4,
+                    "end_col_offset": 8,
+                    "end_lineno": 4,
+                    "lineno": 4,
+                    "node_id": 3,
+                    "src": "26:4:-1"
+                  }
+                ],
+                "col_offset": 0,
+                "decorator_list": [
+                  {
+                    "ast_type": "Name",
+                    "col_offset": 1,
+                    "end_col_offset": 9,
+                    "end_lineno": 2,
+                    "id": "external",
+                    "lineno": 2,
+                    "node_id": 4,
+                    "src": "2:8:-1"
+                  }
+                ],
+                "doc_string": null,
+                "end_col_offset": 8,
+                "end_lineno": 4,
+                "func_type": {
+                  "argument_types": [],
+                  "name": "foo",
+                  "return_type": null,
+                  "type_decl_node": {
+                    "node_id": 1,
+                    "source_id": -1
+                  },
+                  "typeclass": "contract_function"
+                },
+                "lineno": 3,
+                "name": "foo",
+                "node_id": 1,
+                "returns": null,
+                "src": "11:19:-1"
+              }
+            ],
+            "col_offset": 0,
+            "doc_string": null,
+            "end_col_offset": 4,
+            "end_lineno": 5,
+            "is_interface": false,
+            "lineno": 1,
+            "name": null,
+            "node_id": 0,
+            "path": "/home/s1nn105/hol4test/vyper-src/unknown_5123.vy",
+            "resolved_path": "/home/s1nn105/hol4test/vyper-src/unknown_5123.vy",
+            "settings": {},
+            "source_id": -1,
+            "source_sha256sum": "6055a9484bebe93c7750e1856f6a0a935f26a491e6457d00bc5be3947dab1264",
+            "src": "0:35:-1",
+            "type": {
+              "name": "/home/s1nn105/hol4test/vyper-src/unknown_5123.vy",
+              "type_decl_node": {
+                "node_id": 0,
+                "source_id": -1
+              },
+              "typeclass": "module"
+            }
+          },
+          "contract_name": "/home/s1nn105/hol4test/vyper-src/unknown_5123.vy",
+          "imports": []
+        },
+        "blueprint_initcode_prefix": null,
+        "calldata": null,
+        "compiler_settings": {
+          "debug": false,
+          "enable_decimals": true,
+          "evm_version": "prague",
+          "experimental_codegen": false,
+          "optimize": "gas"
+        },
+        "contract_abi": [
+          {
+            "gas": 227,
+            "inputs": [],
+            "name": "foo",
+            "outputs": [],
+            "stateMutability": "nonpayable",
+            "type": "function"
+          }
+        ],
+        "deployed_address": "0xED4efEAEd8057C619a6D7aACC0459874Eaf3C166",
+        "deployment_succeeded": true,
+        "deployment_type": "source",
+        "env": {
+          "block": {
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "044852b2a670ade5407e78fb2863c51de9fcb96542a07186fe3aeda6bb8a116d"
+            },
+            "excess_blob_gas": 0,
+            "gas_limit": 10000000000,
+            "number": 1,
+            "timestamp": 1
+          },
+          "tx": {
+            "blob_hashes": [],
+            "gas": 10000000000,
+            "gas_price": 0,
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1"
+          }
+        },
+        "function_name": "constructor",
+        "initcode": "601e61000b5f39601e5ff35f3560e01c63c29855788118610016573461001a57005b5f5ffd5b5f80fd855820adca6681bcd264e2f1bcb6c79fddcfbcdcf047a4b5b5b6bf84937de51c13f732181e8000a1657679706572830005000034",
+        "python_args": {
+          "args": [],
+          "kwargs": {}
+        },
+        "raw_ir": null,
+        "runtime_bytecode": "5f3560e01c63c29855788118610016573461001a57005b5f5ffd5b5f80fd",
+        "solc_json": {
+          "compiler_version": "v0.5.0a4+commit.88aea818",
+          "integrity": "adca6681bcd264e2f1bcb6c79fddcfbcdcf047a4b5b5b6bf84937de51c13f732",
+          "language": "Vyper",
+          "settings": {
+            "debug": false,
+            "evmVersion": "prague",
+            "experimentalCodegen": false,
+            "optimize": "gas",
+            "outputSelection": {
+              "unknown_5123.vy": [
+                "*"
+              ]
+            },
+            "search_paths": [
+              "."
+            ]
+          },
+          "sources": {
+            "unknown_5123.vy": {
+              "content": "\n@external\ndef foo():\n    pass\n    ",
+              "sha256sum": "6055a9484bebe93c7750e1856f6a0a935f26a491e6457d00bc5be3947dab1264"
+            }
+          }
+        },
+        "source_code": "\n@external\ndef foo():\n    pass\n    ",
+        "storage_layout": {},
+        "trace_type": "deployment",
+        "value": 0
+      },
+      {
+        "call_args": {
+          "calldata": "c2985578",
+          "is_modifying": true,
+          "to": "0xED4efEAEd8057C619a6D7aACC0459874Eaf3C166",
+          "value": 0
+        },
+        "call_succeeded": true,
+        "env": {
+          "block": {
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "044852b2a670ade5407e78fb2863c51de9fcb96542a07186fe3aeda6bb8a116d"
+            },
+            "excess_blob_gas": 0,
+            "gas_limit": 10000000000,
+            "number": 1,
+            "timestamp": 1
+          },
+          "tx": {
+            "blob_hashes": [],
+            "gas": 10000000000,
+            "gas_price": 0,
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1"
+          }
+        },
+        "function_name": "foo",
+        "output": "",
+        "python_args": {
+          "args": [],
+          "kwargs": {}
+        },
+        "trace_type": "call"
+      }
+    ]
+  }
+}

@@ -114,7 +114,7 @@ This work is developed in the [HOL4 theorem prover](https://hol-theorem-prover.o
 
 The project is built with [`holbuild`](https://github.com/charles-cooper/holbuild). The repository's `holproject.toml` is the source of truth for the project configuration and pinned HOL dependencies, including the compatible [Verifereum](https://github.com/verifereum/verifereum) revision. Vyper functional tests are generated from the upstream commit pinned in [`VYPER_PIN`](VYPER_PIN). The CI workflow (`.github/workflows/holbuild.yml`) is the recommended reference for the exact automated build.
 
-For a local build, install `holbuild` v0.10.0 or newer and run:
+For a local build, install `holbuild` v0.11.5 or newer and run:
 
 ```bash
 holbuild buildhol
@@ -124,6 +124,57 @@ holbuild -j"$(nproc)" build
 `holbuild buildhol` builds and caches the HOL toolchain and project dependencies specified by `holproject.toml`.
 
 Release instructions, including the prebuilt holbuild archive artefact, are in [docs/release.md](docs/release.md).
+### Native JSON semantics runner
+
+The EmitML runner executes the existing CV-translated Vyper semantics on
+exported JSON deployment/call traces. Native execution is a trusted regression
+check, not a kernel proof; `vyperJsonReplayLib` provides kernel-checked replay.
+
+With `holbuild` v0.11.5 or newer, MLton, and Python 3 on `PATH`, run:
+
+```bash
+./tools/demo_run_test.sh
+```
+
+The script builds `tests/.emit/run-test`, checks its encoded inputs and results
+against HOL kernel replay, and demonstrates both supported input forms:
+
+```bash
+# Exporter JSON containing named tests and their setup fixtures:
+tests/.emit/run-test tests/fixtures/run_test_json/basic.json
+
+# A JSON array of deployment/call traces, read from stdin:
+tests/.emit/run-test < traces.json
+```
+
+The bundled export has three passing cases and two intentional failures (an
+output mismatch and an unexpected revert). The demo handles its expected exit
+status of 1, then pipes a passing deployment/call trace array into the runner.
+Each case produces one JSON line with `name`, `status`, and, on failure, `error`.
+The runner exits 0 when every case passes, or 1 on a failed case or import error.
+
+To build without running the demo, use `python3 tools/emit_run_test.py`.
+Add `--smoke` to check native/HOL parity. The executable accepts
+`--dump-input [export.json]` for diagnostic CV input/result encodings; normal
+operation takes JSON, not CV trees. The native executable is not itself a kernel
+proof; `vyperJsonReplayLib.replay_file` provides kernel-checked replay.
+The CV frontend retains defined-input preconditions; the native executable does
+not discharge them for each input.
+
+The smoke check compares exact encoded inputs and results for all five bundled
+cases, not just pass/fail status. Import errors are reported on stderr; `{}` is
+rejected because it contains no tests, while `[]` runs the empty trace successfully.
+
+The build first emits HOL-derived SML, then invokes MLton. Native compilation can
+take substantially longer than emission. The emitter normalizes word dimensions
+with a progress-checked conversion: plain `EVAL` leaves `dimindex (:8)` unchanged
+and can loop indefinitely when used inside `DEPTH_CONV`.
+
+The shared JSON importers retain the current frontend's override aliases,
+custom errors, folded metadata and nested storage paths. The CV frontend uses
+proved first-order equations for lexical statement traversal, override defaults,
+datatype sizes, initialized paths and nominal-source resolution; it does not
+replace those operations with a separate semantics implementation.
 
 ### Running the Vyper test suite
 
