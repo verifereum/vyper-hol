@@ -251,7 +251,7 @@ QED
 
 (* ===== The operands ===== *)
 
-Theorem expr_sim_pre_send_arg:
+Theorem expr_sim_pre_send_arg[local]:
   !cenv cx env ann has_gas args dflt e es es'.
     expr_sim_pre cenv cx env (Call ann (Send has_gas) args dflt) es /\
     MEM e args /\ expr_sim_inv cenv cx env es' /\ source_supply es' ==>

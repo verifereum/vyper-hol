@@ -457,7 +457,7 @@ QED
 Theorem eval_expr_results_preserves_runtime_consistent_from_eval[local]:
   eval_expr_results cx es st = (res,st') /\
   well_typed_exprs env es /\ runtime_consistent env cx st /\
-  functions_well_typed cx /\
+  source_supply st /\ functions_well_typed cx /\
   call_evaluation_safe cx (int_calls_exprs es) ==>
   runtime_consistent env cx st'
 Proof
@@ -468,7 +468,7 @@ QED
 Theorem eval_expr_results_success_typed[local]:
   eval_expr_results cx es st = (INL results,st') /\
   well_typed_exprs env es /\ runtime_consistent env cx st /\
-  functions_well_typed cx /\
+  source_supply st /\ functions_well_typed cx /\
   call_evaluation_safe cx (int_calls_exprs es) ==>
   expr_results_typed (env,cx,st') es results
 Proof
@@ -1099,7 +1099,7 @@ QED
 
 Theorem eval_expr_place_preserves_runtime_consistent[local]:
   (well_typed_expr env e \/ ?vt. type_place_expr env e = SOME vt) /\
-  runtime_consistent env cx st /\ functions_well_typed cx /\
+  runtime_consistent env cx st /\ source_supply st /\ functions_well_typed cx /\
   call_evaluation_safe cx (int_calls_expr e) /\
   eval_expr cx e st = (res,st') ==>
   runtime_consistent env cx st'
@@ -1110,7 +1110,7 @@ QED
 
 Theorem eval_base_place_preserves_runtime_consistent[local]:
   type_place_target env bt = SOME vt /\ runtime_consistent env cx st /\
-  functions_well_typed cx /\ call_evaluation_safe cx (int_calls_target bt) /\
+  source_supply st /\ functions_well_typed cx /\ call_evaluation_safe cx (int_calls_target bt) /\
   eval_base_place cx bt st = (res,st') ==>
   runtime_consistent env cx st'
 Proof
@@ -1120,7 +1120,7 @@ QED
 
 Theorem eval_target_place_preserves_runtime_consistent[local]:
   well_typed_target env bt ty /\ runtime_consistent env cx st /\
-  functions_well_typed cx /\ call_evaluation_safe cx (int_calls_target bt) /\
+  source_supply st /\ functions_well_typed cx /\ call_evaluation_safe cx (int_calls_target bt) /\
   eval_target_place cx bt st = (res,st') ==>
   runtime_consistent env cx st'
 Proof
@@ -1130,7 +1130,7 @@ QED
 
 Theorem eval_target_place_success_storage_type[local]:
   well_typed_target env bt ty /\ runtime_consistent env cx st /\
-  functions_well_typed cx /\ call_evaluation_safe cx (int_calls_target bt) /\
+  source_supply st /\ functions_well_typed cx /\ call_evaluation_safe cx (int_calls_target bt) /\
   eval_target_place cx bt st = (INL p,st') ==>
   eval_result_typed (env,cx,st') (PlaceR p) (Type ty)
 Proof
@@ -1151,7 +1151,7 @@ QED
 
 Theorem assign_tuple_targets_preserves_runtime_consistent[local]:
   well_typed_atarget env tgt ty /\ value_runtime_typed env ty v /\
-  runtime_consistent env cx st /\ functions_well_typed cx /\
+  runtime_consistent env cx st /\ source_supply st /\ functions_well_typed cx /\
   call_evaluation_safe cx (int_calls_atarget tgt) /\
   assign_tuple_targets cx tgt v st = (res,st') ==>
   runtime_consistent env cx st'
@@ -1161,7 +1161,7 @@ QED
 
 Theorem eval_expr_success_storage_facts[local]:
   well_typed_expr env e /\ runtime_consistent env cx st /\
-  functions_well_typed cx /\ call_evaluation_safe cx (int_calls_expr e) /\
+  source_supply st /\ functions_well_typed cx /\ call_evaluation_safe cx (int_calls_expr e) /\
   eval_expr cx e st = (INL pv,st') ==>
   runtime_consistent env cx st' /\
   eval_result_typed (env,cx,st') pv (Type (expr_type e)) /\
@@ -1180,7 +1180,7 @@ QED
 
 Theorem eval_target_place_storage_trace[local]:
   well_typed_target env bt ty /\ runtime_consistent env cx st /\
-  functions_well_typed cx /\ call_evaluation_safe cx (int_calls_target bt) /\
+  source_supply st /\ functions_well_typed cx /\ call_evaluation_safe cx (int_calls_target bt) /\
   eval_target_place cx bt st = (res,st') ==>
   typed_scope_transition st st'
 Proof
@@ -1190,7 +1190,7 @@ QED
 
 Theorem eval_target_place_success_storage_facts[local]:
   well_typed_target env bt ty /\ runtime_consistent env cx st /\
-  functions_well_typed cx /\ call_evaluation_safe cx (int_calls_target bt) /\
+  source_supply st /\ functions_well_typed cx /\ call_evaluation_safe cx (int_calls_target bt) /\
   eval_target_place cx bt st = (INL p,st') ==>
   eval_result_typed (env,cx,st') (PlaceR p) (Type ty) /\
   live_memory_result st' (PlaceR p)
@@ -1205,7 +1205,7 @@ QED
 
 Theorem eval_expr_storage_trace[local]:
   well_typed_expr env e /\ runtime_consistent env cx st /\
-  functions_well_typed cx /\ call_evaluation_safe cx (int_calls_expr e) /\
+  source_supply st /\ functions_well_typed cx /\ call_evaluation_safe cx (int_calls_expr e) /\
   eval_expr cx e st = (res,st') ==>
   typed_scope_transition st st'
 Proof
@@ -1217,7 +1217,7 @@ QED
 
 Theorem eval_expr_place_success_result_typed[local]:
   type_place_expr env e = SOME vt /\ runtime_consistent env cx st /\
-  functions_well_typed cx /\ call_evaluation_safe cx (int_calls_expr e) /\
+  source_supply st /\ functions_well_typed cx /\ call_evaluation_safe cx (int_calls_expr e) /\
   eval_expr cx e st = (INL pv,st') ==>
   eval_result_typed (env,cx,st') pv vt
 Proof
@@ -1227,7 +1227,7 @@ QED
 
 Theorem eval_base_place_success_storage_type[local]:
   type_place_target env bt = SOME vt /\ runtime_consistent env cx st /\
-  functions_well_typed cx /\ call_evaluation_safe cx (int_calls_target bt) /\
+  source_supply st /\ functions_well_typed cx /\ call_evaluation_safe cx (int_calls_target bt) /\
   eval_base_place cx bt st = (INL pv,st') ==>
   eval_result_typed (env,cx,st') pv vt
 Proof
@@ -1237,7 +1237,7 @@ QED
 
 Theorem eval_base_place_storage_trace[local]:
   type_place_target env bt = SOME vt /\ runtime_consistent env cx st /\
-  functions_well_typed cx /\ call_evaluation_safe cx (int_calls_target bt) /\
+  source_supply st /\ functions_well_typed cx /\ call_evaluation_safe cx (int_calls_target bt) /\
   eval_base_place cx bt st = (res,st') ==>
   typed_scope_transition st st'
 Proof
@@ -1247,7 +1247,7 @@ QED
 
 Theorem eval_base_place_success_live[local]:
   type_place_target env bt = SOME vt /\ runtime_consistent env cx st /\
-  functions_well_typed cx /\ call_evaluation_safe cx (int_calls_target bt) /\
+  source_supply st /\ functions_well_typed cx /\ call_evaluation_safe cx (int_calls_target bt) /\
   eval_base_place cx bt st = (INL pv,st') ==>
   live_memory_result st' pv
 Proof
@@ -1257,7 +1257,7 @@ QED
 
 Theorem eval_base_place_success_writable[local]:
   type_place_target env bt = SOME vt /\ runtime_consistent env cx st /\
-  functions_well_typed cx /\ call_evaluation_safe cx (int_calls_target bt) /\
+  source_supply st /\ functions_well_typed cx /\ call_evaluation_safe cx (int_calls_target bt) /\
   eval_base_place cx bt st = (INL pv,st') ==>
   writable_place_result cx st' pv
 Proof
@@ -1267,7 +1267,7 @@ QED
 
 Theorem eval_target_place_success_writable[local]:
   well_typed_target env bt ty /\ runtime_consistent env cx st /\
-  functions_well_typed cx /\ call_evaluation_safe cx (int_calls_target bt) /\
+  source_supply st /\ functions_well_typed cx /\ call_evaluation_safe cx (int_calls_target bt) /\
   eval_target_place cx bt st = (INL p,st') ==>
   writable_place_result cx st' (PlaceR p)
 Proof

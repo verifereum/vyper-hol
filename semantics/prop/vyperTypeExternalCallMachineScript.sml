@@ -261,11 +261,12 @@ Proof
 QED
 
 
-Theorem checked_getter_call_run_components:
+Theorem checked_getter_call_run_components[local]:
   check_contract F am.layouts tx.target mods = SOME art /\
   checked_contract_runtime_ready art mods am tx /\
   machine_well_typed am /\ machine_supply am orc /\
   ALOOKUP mods src = SOME ts /\
+  module_allocated am.layouts tx.target src ts /\
   MEM decl ts /\ is_public_getter_decl tx.function_name decl /\
   external_getter_tuple src decl = SOME (mut,nr,args,(dflts : expr list),ret,body) /\
   cx = initial_evaluation_context am.sources am.layouts tx src /\
@@ -525,6 +526,7 @@ Theorem call_external_function_selected_explicit_halt_machine_well_typed[local]:
   checked_contract_runtime_ready art mods am tx /\
   machine_well_typed am /\ machine_supply am orc /\ call_tx_well_typed tx /\
   ALOOKUP mods src = SOME ts /\
+  module_allocated am.layouts tx.target src ts /\
   MEM (FunctionDecl External mut nr raw tx.function_name args dflts ret body) ts /\
   cx = initial_evaluation_context am.sources am.layouts tx src /\
   LENGTH vals <= LENGTH args /\ LENGTH args - LENGTH vals <= LENGTH dflts /\
@@ -625,7 +627,8 @@ QED
 Theorem call_external_function_selected_getter_halt_machine_well_typed[local]:
   check_contract F am.layouts tx.target mods = SOME art /\
   checked_contract_runtime_ready art mods am tx /\ machine_well_typed am /\ machine_supply am orc /\
-  ALOOKUP mods src = SOME ts /\ MEM decl ts /\
+  ALOOKUP mods src = SOME ts /\
+  module_allocated am.layouts tx.target src ts /\ MEM decl ts /\
   is_public_getter_decl tx.function_name decl /\
   external_getter_tuple src decl = SOME (mut,nr,args,dflts,ret,body) /\
   cx = initial_evaluation_context am.sources am.layouts tx src /\
@@ -749,6 +752,10 @@ Theorem checked_call_external_halt_preserves_machine_well_typed:
   machine_well_typed am'
 Proof
   rpt strip_tac >>
+  `!ts. ALOOKUP mods (find_function_module am tx.target tx.function_name) = SOME ts ==>
+        module_allocated am.layouts tx.target
+          (find_function_module am tx.target tx.function_name) ts` by
+    metis_tac[checked_contract_runtime_ready_module_allocated] >>
   qpat_x_assum `call_external orc am tx = _` mp_tac >>
   simp[Once call_external_def] >>
   gvs[AllCaseEqs()] >> strip_tac >>
