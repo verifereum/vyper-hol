@@ -41,12 +41,12 @@ QED
 
 Theorem functions_well_typed_body:
   functions_well_typed cx /\ fn_sigs_consistent fn_sigs cx /\
-  fn_sigs_declared_complete fn_sigs cx /\
+  fn_sigs_live fn_sigs cx /\ fn_sigs_declared_complete fn_sigs cx /\
   toplevel_vtypes_complete toplevel_vtypes cx /\
   bare_globals_complete bare_globals cx /\
   bare_global_assignable_complete bare_global_assignable cx /\
   flag_members_complete flag_members cx /\
-  get_module_code cx src = SOME ts /\
+  get_module_code cx src = SOME ts /\ context_function_live cx (src,fn) /\
   lookup_callable_function cx.in_deploy fn ts = SOME (fm,nr,args,dflts,ret,fn_body) /\
   (* Concrete maps supplied by caller must satisfy the consistency side-condition. *)
   (!src id ty. FLOOKUP bare_globals (src,id) = SOME ty ==>

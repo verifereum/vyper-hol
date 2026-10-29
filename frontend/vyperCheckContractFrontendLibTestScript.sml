@@ -459,6 +459,10 @@ val _ = check_fixture true "relative_uses/pkg/mocks/main.json";
    ownable has a variable named `slot`. *)
 val _ = check_fixture false "attribute_initializes/main.json";
 val _ = check_fixture true "attribute_initializes/main.json";
+(* Nothing initializes lib, so it has no storage in the layout; main calls
+   its pure helper directly and through mid, which main initializes. *)
+val _ = check_fixture false "uninitialized_import/main.json";
+val _ = check_fixture true "uninitialized_import/main.json";
 
 (* An inferred struct name declared in two modules keeps no source. *)
 Theorem nominal_source_needs_one_declaration:

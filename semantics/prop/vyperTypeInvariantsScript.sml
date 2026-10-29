@@ -11,7 +11,7 @@ Ancestors
   list rich_list pred_set prim_rec arithmetic finite_map option pair
   vyperAST vyperValue vyperValueOperation vyperMisc vyperABI
   vyperInterpreter vyperState vyperContext vyperStorage
-  vyperTyping vyperEncodeDecode vyperArith vyperTypeSystem
+  vyperTyping vyperEncodeDecode vyperArith vyperTypeSystem vyperTypeContract
 Libs
   wordsLib
 
@@ -50,10 +50,44 @@ Definition fn_sigs_consistent_def:
         sig.num_defaults = LENGTH dflts
 End
 
+(* Every key of fn_sigs is a live function: check_contract checks the bodies of
+   live functions only. *)
+Definition fn_sigs_live_def:
+  fn_sigs_live fn_sigs cx <=>
+    !k sig. FLOOKUP fn_sigs k = SOME sig ==> context_function_live cx k
+End
+
+Theorem context_function_live_context[simp]:
+  context_function_live (cx with stk updated_by f) k =
+    context_function_live cx k /\
+  context_function_live (cx with stk := stk) k = context_function_live cx k /\
+  context_function_live (cx with in_deploy := b) k = context_function_live cx k
+Proof
+  simp[context_function_live_def]
+QED
+
+Theorem lookup_var_slot_from_layout_context[simp]:
+  lookup_var_slot_from_layout (cx with stk updated_by f) is_transient src id =
+    lookup_var_slot_from_layout cx is_transient src id /\
+  lookup_var_slot_from_layout (cx with in_deploy := b) is_transient src id =
+    lookup_var_slot_from_layout cx is_transient src id
+Proof
+  simp[lookup_var_slot_from_layout_def]
+QED
+
+Theorem fn_sigs_live_context[simp]:
+  fn_sigs_live sigs (cx with stk updated_by f) = fn_sigs_live sigs cx /\
+  fn_sigs_live sigs (cx with stk := stk) = fn_sigs_live sigs cx /\
+  fn_sigs_live sigs (cx with in_deploy := b) = fn_sigs_live sigs cx
+Proof
+  simp[fn_sigs_live_def]
+QED
+
 Definition fn_sigs_complete_def:
   fn_sigs_complete fn_sigs cx <=>
     !src_id_opt fn ts fm nr params dflts ret body.
       get_module_code cx src_id_opt = SOME ts /\
+      context_function_live cx (src_id_opt,fn) /\
       lookup_callable_function cx.in_deploy fn ts =
         SOME (fm, nr, params, dflts, ret, body) ==>
       FLOOKUP fn_sigs (src_id_opt, fn) =
@@ -72,6 +106,7 @@ Definition fn_sigs_declared_complete_def:
       get_module_code cx src = SOME ts /\
       MEM (FunctionDecl vis fm nr raw fn args dflts ret body) ts /\
       (vis = Internal \/ (cx.in_deploy /\ vis = Deploy)) /\
+      context_function_live cx (src,fn) /\
       lookup_callable_function cx.in_deploy fn ts =
         SOME (fm,nr,args,dflts,ret,body) ==>
       FLOOKUP fn_sigs (src,fn) =
@@ -103,15 +138,20 @@ Proof
   >- (first_x_assum drule_all >> simp[])
 QED
 
+(* Storage, transient and HashMap variables are required only when they have
+   a slot: an uninitialized module's state is not in the layout. *)
 Definition toplevel_vtypes_complete_def:
   toplevel_vtypes_complete toplevel_vtypes cx <=>
     (!src ts vis mut id ty init.
        get_module_code cx src = SOME ts /\
-       MEM (VariableDecl vis mut id ty init) ts ==>
+       MEM (VariableDecl vis mut id ty init) ts /\
+       (mut = Storage ==> IS_SOME (lookup_var_slot_from_layout cx F src id)) /\
+       (mut = Transient ==> IS_SOME (lookup_var_slot_from_layout cx T src id)) ==>
        FLOOKUP toplevel_vtypes (src,id) = SOME (Type ty)) /\
     (!src ts vis is_transient id kt vt init.
        get_module_code cx src = SOME ts /\
-       MEM (HashMapDecl vis is_transient id kt vt init) ts ==>
+       MEM (HashMapDecl vis is_transient id kt vt init) ts /\
+       IS_SOME (lookup_var_slot_from_layout cx is_transient src id) ==>
        FLOOKUP toplevel_vtypes (src,id) = SOME (HashMapT kt vt))
 End
 
@@ -166,6 +206,7 @@ Definition env_context_consistent_def:
     env.type_defs = get_tenv cx /\
     env.current_src = current_module cx /\
     fn_sigs_consistent env.fn_sigs cx /\
+    fn_sigs_live env.fn_sigs cx /\
     fn_sigs_declared_complete env.fn_sigs cx /\
     toplevel_vtypes_complete env.toplevel_vtypes cx /\
     bare_globals_complete env.bare_globals cx /\
@@ -319,6 +360,7 @@ Definition functions_well_typed_def:
   functions_well_typed cx <=>
     !fn_sigs bare_globals bare_global_assignable toplevel_vtypes flag_members.
       fn_sigs_consistent fn_sigs cx /\
+      fn_sigs_live fn_sigs cx /\
       fn_sigs_declared_complete fn_sigs cx /\
       toplevel_vtypes_complete toplevel_vtypes cx /\
       bare_globals_complete bare_globals cx /\
@@ -354,6 +396,7 @@ Definition functions_well_typed_def:
               FLOOKUP (get_tenv cx) (src,fid) = SOME (FlagArgs (LENGTH ls))) ==>
       !src_id_opt fn ts fm nr args dflts ret body.
         get_module_code cx src_id_opt = SOME ts /\
+        context_function_live cx (src_id_opt,fn) /\
         lookup_callable_function cx.in_deploy fn ts = SOME (fm,nr,args,dflts,ret,body) ==>
         (nr ==> cx.nonreentrant_slot <> NONE) /\
         ?env_body ret_tv env_after.
