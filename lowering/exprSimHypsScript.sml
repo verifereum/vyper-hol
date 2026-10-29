@@ -74,6 +74,13 @@
  *     internal functions and the constructor, are MemLoc
  *     (compile_register_kwarg_vars, local_ptrs_reserved), so the theorem
  *     says nothing yet about expressions there.
+ *   - The local types clause: the compile environment's type of a local
+ *     is its type in the type environment.  pop reads the element type of
+ *     the array it pops from ce_var_type (elem_size_in_location), as
+ *     Python's _lower_dynarray_pop reads the target's typ.value_type.  The
+ *     statement lowering records each declared local's type there
+ *     (ce_var_type updated_by (id =+ SOME ty)), and build_compile_env the
+ *     parameters' (local_var_type).
  *   - The flag members clause: the compile environment's id of a flag
  *     member is its index in its flag's declaration, the bit
  *     lookup_flag_mem sets.  Vyper's compiler guarantees this:
@@ -120,6 +127,15 @@
  *     would wrap; evaluate_type admits Bytes[n] and String[n] for any
  *     n < 2 ** 256.  return_buffer_ok is the same limit for an external
  *     function's return buffer.
+ *   - The outcomes clause (outcomes_accounts_typed): every successful call
+ *     outcome still to consume adopts runtime well-typed accounts.
+ *     take_call_outcome raises "call outcome accounts" on a successful
+ *     nonstatic outcome whose accounts are not, while Venom's CALL adopts
+ *     it and goes on, so without the clause send and extcall do not
+ *     simulate.  The outcomes are the environment's answers, not the
+ *     contract's: e2eDefs's call_outcomes_ok asks this of the initial ones,
+ *     and the evaluator only drops outcomes from the front
+ *     (eval_outcome_suffix_mutual), so expr_sim_pre_eval carries it on.
  *   - int_calls_expr e = []: no internal call.  An internal call lowers to
  *     INVOKE, whose simulation is #638's call step; until that is stated
  *     this theorem excludes them, and #638 replaces this conjunct with its
@@ -144,8 +160,8 @@
  * Not here yet:
  *   - The rest of the compile environment's metadata (dynamic array
  *     capacities, method ids) is not related to the source context.  The
- *     cases that read it (Attribute, Pop, ...) will need a clause each in
- *     expr_sim_inv, and
+ *     cases that read it (Attribute, ...) will need a clause each in
+ *     expr_sim_inv, as pop has the local types clause, and
  *     TopLevelName needs every immutable to be in ce_vars (#563); storage
  *     and transient variables are there by storage_vars_rel and
  *     transient_vars_rel.  Each is to match what Vyper's compiler
@@ -164,10 +180,22 @@ Ancestors
   vyperTypeInvariants vyperTypeExprSoundness vyperTypeCallStackSoundness
   vyperTypeExprResult vyperTypeEvalSoundness vyperTypeBuiltins
   vyperExprNoControl loweringSlice exprSimUnwrap exprSafeOperand
+  vyperEvalOutcomeSuffix vyperRuntimeAccounts
 Libs
   pairLib
 
 (* ===== The hypotheses ===== *)
+
+(* Every successful outcome still to consume adopts accounts that are
+   runtime well typed, as e2eDefs's call_outcomes_ok asks of the initial
+   ones.  The evaluator only drops outcomes from the front
+   (vyperEvalOutcomeSuffix), so this carries from one operand to the next. *)
+Definition outcomes_accounts_typed_def:
+  outcomes_accounts_typed (oos : call_outcome list option) <=>
+    !os. oos = SOME os ==>
+         EVERY (\oc. oc.co_success ==>
+                     accounts_runtime_well_typed oc.co_accounts) os
+End
 
 Definition expr_sim_inv_def:
   expr_sim_inv cenv cx env (es:evaluation_state) <=>
@@ -176,6 +204,8 @@ Definition expr_sim_inv_def:
     context_well_typed cx /\ functions_well_typed cx /\
     (!id ty. FLOOKUP env.var_types id = SOME ty ==>
              ?p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz)) /\
+    (!id ty. FLOOKUP env.var_types id = SOME ty ==>
+             cenv.ce_var_type id = SOME ty) /\
     (!src fid ts ls mid i.
        get_module_code cx src = SOME ts /\ lookup_flag fid ts = SOME ls /\
        INDEX_OF mid ls = SOME i ==>
@@ -187,7 +217,8 @@ Definition expr_sim_inv_def:
        FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
        ALL_DISTINCT (MAP FST fields) /\
        EVERY (\(fname, fty, sz). !tv. evaluate_type (get_tenv cx) fty = SOME tv ==>
-                                     sz = type_memory_size tv) fields)
+                                     sz = type_memory_size tv) fields) /\
+    outcomes_accounts_typed es.outcomes
 End
 
 (* The types whose values are word_values (loweringSlice): integers,
@@ -439,7 +470,13 @@ Proof
   disch_then (qspecl_then [`env`, `es`, `res`, `es'`] mp_tac) >>
   impl_tac >- gvs[] >> strip_tac >>
   qpat_x_assum `well_typed_expr env e ==> _` mp_tac >>
-  impl_tac >- gvs[] >> Cases_on `res` >> gvs[] >>
+  impl_tac >- gvs[] >>
+  `outcomes_accounts_typed es'.outcomes` by
+    (rw[outcomes_accounts_typed_def] >>
+     drule (cj 5 eval_outcome_suffix_mutual) >> strip_tac >>
+     drule_then irule outcome_suffix_EVERY >>
+     gvs[outcomes_accounts_typed_def]) >>
+  Cases_on `res` >> gvs[] >>
   rpt strip_tac >> first_x_assum drule >> simp[]
 QED
 

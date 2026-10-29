@@ -176,8 +176,9 @@ Proof
       simp[expr_val_at_def, eval_operand_def] >> rpt strip_tac >>
       first_x_assum drule_all >> strip_tac
       >- (disj1_tac >> qexists_tac `aid` >> first_assum (irule_at Any) >>
-          simp[] >> fs[] >> decide_tac) >>
-      disj2_tac >> qexists_tac `n` >>
+          simp[] >> fs[] >> decide_tac)
+      >> TRY (disj2_tac >> disj2_tac >> first_assum ACCEPT_TAC >> NO_TAC) >>
+      disj2_tac >> disj1_tac >> qexists_tac `n` >>
   `local_region cenv es'.scopes ss n b sz` by
     (qpat_x_assum `local_region _ _ u _ _ _` mp_tac >>
      simp[local_region_def] >> strip_tac >>
@@ -240,7 +241,8 @@ Proof
   rw[expr_post_def, vv_post_def] >>
   gvs[vv_holds_def, vv_at_def, contextTheory.mk_ptr_def, read_result_def,
       return_def] >>
-  fs[expr_val_rel_def, expr_val_at_def] >> metis_tac[]
+  fs[expr_val_rel_def, expr_val_at_def] >>
+  rpt strip_tac >> res_tac >> gvs[] >> metis_tac[]
 QED
 
 (* One arm of an IfExp, lowered to eop between bs and bm, then assigned to

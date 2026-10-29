@@ -1318,8 +1318,12 @@ Proof
   rpt strip_tac >> gvs[]
 QED
 
+(* typed_args_ready and wb_args_shape of word operands that each meet
+   expr_sim_pre wherever expr_sim_inv holds. *)
 Theorem typed_stack_args_ready:
-  expr_sim_pre cenv cx env (Builtin ann bt args) es /\
+  (!e s. MEM e args /\ expr_sim_inv cenv cx env s ==>
+         expr_sim_pre cenv cx env e s) /\
+  expr_sim_inv cenv cx env es /\
   EVERY (\e. is_word_type (expr_type e) /\ expr_sim_ok cenv e) args ==>
   typed_args_ready ctx func cenv cx arg_ty (expr_sim_inv cenv cx env) args /\
   wb_args_shape cenv arg_ty args
@@ -1330,8 +1334,7 @@ Proof
       rename1 `expr_sim_inv cenv cx env es_arg` >>
       `is_word_type (expr_type e) /\ expr_sim_ok cenv e` by
         (gvs[EVERY_MEM] >> first_x_assum drule >> simp[]) >>
-      `expr_sim_pre cenv cx env e es_arg` by
-        (drule_all expr_sim_pre_builtin_arg >> simp[]) >>
+      `expr_sim_pre cenv cx env e es_arg` by metis_tac[] >>
       simp[] >> rpt conj_tac
       >- metis_tac[expr_sim_ok_def]
       >- metis_tac[well_typed_expr_type_evaluates]
@@ -1341,9 +1344,7 @@ Proof
   simp[wb_args_shape_def] >> rpt gen_tac >> strip_tac >>
   `is_word_type (expr_type e)` by
     (gvs[EVERY_MEM] >> first_x_assum drule >> simp[]) >>
-  `expr_sim_pre cenv cx env e es` by
-    (drule expr_sim_pre_builtin_arg >> disch_then irule >>
-     gvs[expr_sim_pre_def]) >>
+  `expr_sim_pre cenv cx env e es` by metis_tac[] >>
   drule expr_sim_pre_lower_value_word_shape >> disch_then drule >> simp[]
 QED
 
@@ -1547,6 +1548,10 @@ Proof
   strip_tac >> drule ecrecover_pre_types >> strip_tac >>
   `EVERY (\e. is_word_type (expr_type e) /\ expr_sim_ok cenv e) args` by
     gvs[EVERY_MEM] >>
+  `expr_sim_inv cenv cx env es` by gvs[expr_sim_pre_def] >>
+  `!e s. MEM e args /\ expr_sim_inv cenv cx env s ==>
+         expr_sim_pre cenv cx env e s` by
+    metis_tac[expr_sim_pre_builtin_arg] >>
   drule_all typed_stack_args_ready >>
   disch_then (qspecl_then [`func`, `ctx`, `\e. ty`] strip_assume_tac) >>
   rewrite_tac[expr_sim_def] >> rpt gen_tac >> strip_tac >>

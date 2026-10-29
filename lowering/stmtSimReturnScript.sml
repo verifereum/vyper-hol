@@ -347,6 +347,7 @@ Theorem expr_val_at_bound:
 Proof
   rw[expr_val_at_def] >> first_x_assum (qspec_then `tv` mp_tac) >>
   simp[] >> strip_tac >> gvs[] >>
+  TRY (simp[wordsTheory.w2n_lt] >> NO_TAC) >>
   `s.vs_alloca_next < dimword (:256)` by
     (irule alloca_room_next_lt >> fs[stmt_state_rel_def] >> metis_tac[])
   >- (fs[stmt_state_rel_def, alloca_inv_def, alloca_next_valid_def] >>
