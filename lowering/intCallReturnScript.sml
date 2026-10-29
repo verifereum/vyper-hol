@@ -229,7 +229,7 @@ Theorem invoke_intret_state_rel:
     ALL_DISTINCT inst.inst_outputs /\
     EVERY (not_local_ptr cenv es.scopes) inst.inst_outputs /\
     stmt_state_rel func cenv cx es s /\
-    immutable_alloca_sep func cenv cx es2 s /\
+    immutable_alloca_sep func cenv cx (es2 with scopes := es.scopes) s /\
     intret_q callee cenv' cx' tv v (es2 with scopes := []) (IntRet ret cs') /\
     cx'.txn = cx.txn /\
     cenv'.ce_module = cenv.ce_module /\ cenv'.ce_is_ctor = cenv.ce_is_ctor /\
@@ -273,7 +273,14 @@ Proof
   irule stmt_state_rel_allocas_frame >>
   conj_tac
   >- (irule immutable_alloca_sep_fields >>
-      qexistsl_tac [`s`, `es2`] >> simp[]) >>
+      qexistsl_tac [`s`, `es2 with scopes := es.scopes`] >> simp[] >>
+      rpt strip_tac >> qexists_tac `id` >>
+      gvs[local_region_def] >>
+      rename1 `FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz)` >>
+      `~MEM p inst.inst_outputs` by
+        (gvs[EVERY_MEM, not_local_ptr_def] >> metis_tac[]) >>
+      qpat_x_assum `!x. ~MEM x inst.inst_outputs ==> _` drule >>
+      gvs[lookup_var_def]) >>
   reverse conj_tac >- (qexistsl_tac [`es`, `s`] >> simp[]) >>
   qpat_x_assum `stmt_state_rel _ _ _ _ _` mp_tac >>
   qpat_x_assum `state_rel _ _ _ _ cs'` mp_tac >>
