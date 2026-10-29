@@ -340,7 +340,8 @@ Theorem result_state_memory_frame:
        FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) ==>
        lookup_var p t = lookup_var p s) /\
     (!name b sz. local_region cenv es.scopes s name b sz ==>
-       mem_bytes_at b sz t.vs_memory = mem_bytes_at b sz s.vs_memory) ==>
+       mem_bytes_at b sz t.vs_memory = mem_bytes_at b sz s.vs_memory) /\
+    immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es t ==>
     stmt_state_rel func cenv cx es t
 Proof
   rpt strip_tac >>
@@ -362,6 +363,10 @@ Proof
     (irule alloca_inv_fields >> qexists_tac `s` >> gvs[stmt_state_rel_def]) >>
   `alloca_room func t` by
     (irule alloca_room_fields >> qexists_tac `s` >> gvs[stmt_state_rel_def]) >>
+  `immutable_alloca_sep func cenv cx es t` by
+    (irule immutable_alloca_sep_fields >> qexistsl_tac [`s`, `es`] >>
+     gvs[stmt_state_rel_def] >> rpt strip_tac >> qexists_tac `id` >>
+     fs[local_region_def] >> metis_tac[]) >>
   rewrite_tac[stmt_state_rel_def] >>
   conj_tac
   >- (irule state_rel_frame >>

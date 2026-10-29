@@ -378,6 +378,23 @@ Proof
   strip_tac >> gvs[]
 QED
 
+Theorem local_region_exec_alloca[local]:
+  !cenv scopes inst p s n t id b sz.
+    inst.inst_outputs = [p] /\ not_local_ptr cenv scopes p /\
+    exec_alloca inst s n = OK t /\ local_region cenv scopes t id b sz ==>
+    local_region cenv scopes s id b sz
+Proof
+  rpt strip_tac >>
+  `!q. q <> p ==> lookup_var q t = lookup_var q s` by
+    (Cases_on `FLOOKUP s.vs_allocas inst.inst_id`
+     >- gvs[exec_alloca_def, LET_THM, lookup_var_def, update_var_def,
+            FLOOKUP_UPDATE] >>
+     rename1 `FLOOKUP _ _ = SOME pr` >> Cases_on `pr` >>
+     gvs[exec_alloca_def, LET_THM, lookup_var_def, update_var_def,
+         FLOOKUP_UPDATE]) >>
+  fs[local_region_def, not_local_ptr_def] >> metis_tac[]
+QED
+
 (* An ALLOCA of func whose output is no live local's pointer, run fresh or
    again, keeps stmt_state_rel and holds its region's base in its output.
    alloca_room keeps the base from wrapping. *)
@@ -408,7 +425,9 @@ Proof
      qexists_tac `s` >> simp[update_var_def]) >>
   `immutable_alloca_sep func cenv cx es s1` by
     (irule immutable_alloca_sep_exec_alloca >>
-     qexistsl_tac [`inst`, `n`, `s`] >> fs[stmt_state_rel_def]) >>
+     qexistsl_tac [`inst`, `n`, `s`] >> fs[stmt_state_rel_def] >>
+     rpt strip_tac >> qexists_tac `id` >>
+     drule_all local_region_exec_alloca >> simp[]) >>
   `local_ptrs_rel func cenv es.scopes s1` by
     (qspecl_then [`func`, `cenv`, `es.scopes`, `s`, `s1`, `inst`, `p`, `n`]
        mp_tac local_ptrs_rel_exec_alloca >>
