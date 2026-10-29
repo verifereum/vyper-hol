@@ -400,7 +400,8 @@ Theorem compiler_type_convert_label_var[local]:
   !x. op = Var x ==> not_fresh_at sb x
 Proof
   Cases_on `conv` >>
-  simp[compile_type_convert_def, load_bytestring_as_word_def,
+  simp[compile_type_convert_def, compile_int_clamp_def,
+       load_bytestring_as_word_def,
        contextTheory.compile_alloc_buffer_def, emit_op_def, emit_void_def,
        comp_bind_def, comp_ignore_bind_def, comp_return_def,
        fresh_id_def, fresh_var_def, emit_def, LET_THM] >>

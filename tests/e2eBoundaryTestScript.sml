@@ -245,13 +245,14 @@ Definition dynamic_decode_program_def:
 End
 
 Theorem decoding_exemption_exact:
-  (decode_strictness_exempt dynamic_decode_program e <=>
-    e = RuntimeError "abi_decode invalid") /\
-  ~decode_strictness_exempt [] (RuntimeError "abi_decode invalid") /\
-  ~decode_strictness_exempt dynamic_decode_program (RuntimeError "abi_decode conversion") /\
-  ~decode_strictness_exempt dynamic_decode_program (TypeError "abi_decode invalid")
+  (unspecified_behaviour_exempt dynamic_decode_program e <=>
+    e = RuntimeError "abi_decode invalid" \/
+    e = RuntimeError "convert empty bytes to signed") /\
+  ~unspecified_behaviour_exempt [] (RuntimeError "abi_decode invalid") /\
+  ~unspecified_behaviour_exempt dynamic_decode_program (RuntimeError "abi_decode conversion") /\
+  ~unspecified_behaviour_exempt dynamic_decode_program (TypeError "abi_decode invalid")
 Proof
-  simp[decode_strictness_exempt_def, occurs_abi_decode_target_def,
+  simp[unspecified_behaviour_exempt_def, occurs_abi_decode_target_def,
     declaration_abi_decode_target_def, dynamic_decode_program_def,
     supportedStmtTraverseTheory.supported_stmt_expr_exists_def,
     supportedExprTraverseTheory.supported_expr_exists_def,
@@ -260,13 +261,13 @@ Proof
 QED
 
 Theorem static_decode_does_not_exempt_invalid:
-  ~decode_strictness_exempt
+  ~unspecified_behaviour_exempt
     [FunctionDecl External View F F "decode" [] [] NoneT
       [Expr (TypeBuiltin (BaseT (UintT 256)) (AbiDecode F)
         (BaseT (UintT 256)) [Literal (BaseT (BytesT (Dynamic 32))) (BytesL [])])]]
     (RuntimeError "abi_decode invalid")
 Proof
-  simp[decode_strictness_exempt_def, occurs_abi_decode_target_def,
+  simp[unspecified_behaviour_exempt_def, occurs_abi_decode_target_def,
     declaration_abi_decode_target_def,
     supportedStmtTraverseTheory.supported_stmt_expr_exists_def,
     supportedExprTraverseTheory.supported_expr_exists_def,
@@ -274,7 +275,7 @@ Proof
 QED
 
 Theorem source_exemption_triple:
-  (source_exempt tops (INR (Error e),am,rqs) <=> decode_strictness_exempt tops e) /\
+  (source_exempt tops (INR (Error e),am,rqs) <=> unspecified_behaviour_exempt tops e) /\
   ~source_exempt tops (INL v,am,rqs) /\
   ~source_exempt tops (INR (AssertException s),am,rqs) /\
   ~source_exempt tops (INR BreakException,am,rqs) /\
@@ -310,10 +311,27 @@ QED
 Theorem error_result_only_exact_exemption_or_failure:
   call_external (SOME (MAP SND (call_trace es))) am tx = (INR (Error e),am',rqs) ==>
   (call_result_rel tops ret am tx es r es' <=>
-    decode_strictness_exempt tops e \/
+    unspecified_behaviour_exempt tops e \/
     ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs)
 Proof
   simp[call_result_rel_def]
+QED
+
+Theorem empty_signed_conversion_accepts_any_outcome:
+  call_external (SOME (MAP SND (call_trace es))) am tx =
+    (INR (Error (RuntimeError "convert empty bytes to signed")),am',rqs) ==>
+  call_result_rel tops ret am tx es r es'
+Proof
+  simp[call_result_rel_def, unspecified_behaviour_exempt_def]
+QED
+
+Theorem empty_signed_conversion_exemption_exact:
+  unspecified_behaviour_exempt [] (RuntimeError "convert empty bytes to signed") /\
+  ~unspecified_behaviour_exempt [] (RuntimeError "convert BytesV int bound") /\
+  ~unspecified_behaviour_exempt [] (RuntimeError "convert BytesV decimal bound") /\
+  ~unspecified_behaviour_exempt [] (TypeError "convert empty bytes to signed")
+Proof
+  simp[unspecified_behaviour_exempt_def, occurs_abi_decode_target_def]
 QED
 
 Theorem escaped_control_is_not_related:
@@ -329,3 +347,11 @@ Theorem escaped_control_is_not_related:
 Proof
   simp[call_result_rel_def]
 QED
+
+(* Boundary regressions must be kernel-closed, not inherited admissions. *)
+val _ = List.app (fn (name, th) =>
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th) in
+    if null (Thm.hyp th) andalso null axioms andalso
+       List.all (fn tag => tag = "DISK_THM") oracles then ()
+    else raise Fail ("non-clean result boundary check: " ^ name)
+  end) (DB.thms "e2eBoundaryTest");

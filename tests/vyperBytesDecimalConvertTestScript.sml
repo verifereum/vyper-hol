@@ -10,14 +10,16 @@ Libs
 
 Theorem bytes_decimal_conversion_boundary:
   evaluate_convert tenv (BytesV bs) (BaseT DecimalT) =
-    bounded_decimal_op (w2i
+    (if bs = [] then INR (RuntimeError "convert empty bytes to signed")
+     else bounded_decimal_op (w2i
       ((word_of_bytes_be (PAD_RIGHT 0w 32 bs) : bytes32) >>
-       (8 * (32 - LENGTH bs))))
+       (8 * (32 - LENGTH bs)))))
 Proof
   simp[evaluate_convert_def]
 QED
 
 Theorem bytes_decimal_conversion_valid:
+  (!k. bd = Dynamic k ==> k <= 32) ==>
   valid_conversion (BaseT (BytesT bd)) (BaseT DecimalT)
 Proof
   Cases_on `bd` >> simp[valid_conversion_def]
@@ -27,7 +29,7 @@ QED
    the input type or byte length is needed for successful-result typing. *)
 Theorem bytes_decimal_success_iff:
   evaluate_convert tenv (BytesV bs) (BaseT DecimalT) = INL (DecimalV i) <=>
-  i = w2i ((word_of_bytes_be (PAD_RIGHT 0w 32 bs) : bytes32) >>
+  bs <> [] /\ i = w2i ((word_of_bytes_be (PAD_RIGHT 0w 32 bs) : bytes32) >>
            (8 * (32 - LENGTH bs))) /\ within_int_bound (Signed 168) i
 Proof
   rw[evaluate_convert_def, bounded_decimal_op_def] >>
@@ -36,7 +38,7 @@ QED
 
 Definition bytes_decimal_cases_def:
   bytes_decimal_cases =
-  [(([] : word8 list), INL (DecimalV 0));
+  [(([] : word8 list), INR (RuntimeError "convert empty bytes to signed"));
    ([0w], INL (DecimalV 0));
    ([1w], INL (DecimalV 1));
    ([127w], INL (DecimalV 127));

@@ -37,6 +37,7 @@ Proof
 QED
 
 Theorem fixed_bytes_conversion_valid:
+  (!k. bd = Dynamic k ==> k <= n) ==>
   valid_conversion (BaseT (BytesT bd)) (BaseT (BytesT (Fixed n)))
 Proof
   Cases_on `bd` >> simp[valid_conversion_def]
@@ -144,4 +145,44 @@ Theorem fixed_bytes_fixture_deployment_checked:
 Proof
   simp[scalar_convert_bytes32_to_bytes4_program_def, scalar_convert_fn_def] >>
   CONV_TAC (RAND_CONV vyperCheckContractLib.check_contract_conv) >> simp[]
+QED
+
+(* Integer encodings select the low bytes; strings pad on the right. *)
+Theorem convert_alignment_regressions:
+  evaluate_convert FEMPTY (IntV 5) (BaseT (BytesT (Fixed 1))) =
+    INL (BytesV [5w]) /\
+  evaluate_convert FEMPTY (IntV 0x1234) (BaseT (BytesT (Fixed 20))) =
+    INL (BytesV (REPLICATE 18 0w ++ [0x12w; 0x34w])) /\
+  evaluate_convert FEMPTY (StringV "ab") (BaseT (BytesT (Fixed 4))) =
+    INL (BytesV [97w; 98w; 0w; 0w])
+Proof
+  EVAL_TAC
+QED
+
+(* Sign extension uses the runtime input width, not the target width. *)
+Theorem convert_signed_bytes_regressions:
+  evaluate_convert FEMPTY (BytesV [255w]) (BaseT (IntT 8)) =
+    INL (IntV (-1)) /\
+  evaluate_convert FEMPTY (BytesV [255w; 255w; 255w; 255w])
+    (BaseT (IntT 256)) = INL (IntV (-1)) /\
+  evaluate_convert FEMPTY (BytesV (REPLICATE 16 255w)) (BaseT (IntT 64)) =
+    INL (IntV (-1)) /\
+  evaluate_convert FEMPTY (BytesV [128w]) (BaseT (IntT 256)) =
+    INL (IntV (-128)) /\
+  evaluate_convert FEMPTY (BytesV (REPLICATE 32 255w)) (BaseT (IntT 256)) =
+    INL (IntV (-1)) /\
+  evaluate_convert FEMPTY (BytesV [255w]) (BaseT DecimalT) =
+    INL (DecimalV (-1))
+Proof
+  EVAL_TAC
+QED
+
+Theorem convert_empty_bytes_regressions:
+  evaluate_convert FEMPTY (BytesV []) (BaseT (IntT 8)) =
+    INR (RuntimeError "convert empty bytes to signed") /\
+  evaluate_convert FEMPTY (BytesV []) (BaseT DecimalT) =
+    INR (RuntimeError "convert empty bytes to signed") /\
+  evaluate_convert FEMPTY (BytesV []) (BaseT (UintT 8)) = INL (IntV 0)
+Proof
+  EVAL_TAC
 QED

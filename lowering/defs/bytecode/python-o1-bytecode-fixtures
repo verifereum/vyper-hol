@@ -137,7 +137,7 @@ fi
 }
 
 if [ "$mode" != update ]; then
-  for corpus in memory-stores external-calls internal-frames name-collisions; do
+  for corpus in memory-stores external-calls internal-frames name-collisions conversions; do
     env -u PYTHONPATH -u PYTHONHOME -u PYTHONSTARTUP \
       PATH="$venv/bin:$PATH" PYTHONSAFEPATH=1 \
       "$venv/bin/python" -I "$script_dir/memory_store_witnesses.py" prepare \
@@ -145,6 +145,10 @@ if [ "$mode" != update ]; then
       --repo "$repo_dir" --fixtures "$stage/$corpus" --check
     echo "$corpus Python oracle fixtures reproduce from VYPER_PIN"
   done
+  env -u PYTHONPATH -u PYTHONHOME -u PYTHONSTARTUP \
+    PATH="$venv/bin:$PATH" PYTHONSAFEPATH=1 \
+    "$venv/bin/python" -I "$script_dir/conversion_witnesses.py" \
+    --repo "$repo_dir" --output "$stage/conversion-checker" --check
 fi
 
 case "$mode" in

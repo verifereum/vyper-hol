@@ -186,10 +186,12 @@ StackOverflow, valid computed-precompile failure, or `call_result_rel`.
 On success the result relates canonical wrapped return bytes, accounts,
 transient storage, ordered concrete logs and the **entire request sequence**.
 Failed-run requests, leftover terminal outcomes, revert data/reason and general
-abort kind are not compared. The sole exemption is exact
+abort kind are not compared. `unspecified_behaviour_exempt` covers exact
 `RuntimeError "abi_decode invalid"` with a dynamic ABI target occurring in a
 function body; it may also cover a callee-return rejection with that exact
-message, not arbitrary ReturnReject/conversion/static decode failure.
+message, not arbitrary ReturnReject/conversion/static decode failure. It also
+covers exact `RuntimeError "convert empty bytes to signed"` for
+stale-memory-dependent conversion to signed integers or decimals.
 Callee/reentrant execution is absorbed into an outcome, not certified as
 source-equivalent. Full nested-run decomposition and repeated-entry/transaction
 corollaries remain Milestone 7.
@@ -211,7 +213,7 @@ planned. Source owners below are durable; private PLAN line numbers are not.
 | D6 | SOME send requests a real call outcome, not pure transfer | Source Send uses empty-data nonstatic request and requires success; NONE retains concrete transfer behavior. | 6 |
 | D7 | Restrict ExtCall syntax, not reorder source evaluation | `supportedExprs`/`supportedExprForms`: effect-free operands, word arguments/returns, exact interface/count, distinct `value=`/`gas=`/`default_return_value=` operands evaluated in source order (#553); SOME code check follows return-kind policy and `skip_contract_check`. `NoneT` ExtCall is **not admitted**, despite a general helper branch. | 6 |
 | D8 | Runtime failure requires Abort/failing frame, not anything/fuel0 | `external_call_result_rel` rejects OK/IntRet and other Errors, relates a failed external call's `RevertData` to a Revert abort, and requires terminating run; `call_result_rel` failure clause. TypeError is excluded by typing, not treated as source success. | 6 |
-| D9 | Dynamic strict-decode exemption, not weakened source padding check | `decode_strictness_exempt`, `occurs_abi_decode_target` inspect function bodies. Exact message also admits matching return rejection in such a program; not arbitrary ReturnReject. | 6 |
+| D9 | Exact unspecified-behaviour exemptions, not weakened source checks | `unspecified_behaviour_exempt`, `occurs_abi_decode_target` inspect function bodies for dynamic decoding. Exact decode message also admits matching return rejection in such a program; not arbitrary ReturnReject. The separate exact error `convert empty bytes to signed` exempts stale-memory-dependent signed integer/decimal conversion. | 6 |
 | D10 | Typing separate from plain-EVAL syntax | `source_typing_ok` contains checker/readiness/machine/tx; `supported_program` depends on tops alone. Partial readiness producers are not the whole premise. | 7 |
 | D11 | Whitelist, not open-ended exclusions | `supportedProgram` combines headers/names/body predicates; 101 named fixture membership proofs. No universal membership/compile-success witness. | 6 / 7 |
 | D12 | Ten source/type corrections, not remove fixtures | Invalid EC RuntimeError; Pop length-only storage update; empty codehash zero; decimal bound-before-truncate; bytes->address/decimal/narrow-zero-tail conversions; UnsafeDiv0 zero; minimum decimal Mul; abi_encode size rule. Actual owners `vyperContext`, `vyperState`, `vyperValueOperation`, `vyperTypeSystem`; historical source checkpoint retained. | 6 comparison proof |
@@ -259,8 +261,9 @@ S1 is actual `lower_vyper_runtime_unit_correct`, replacing the retired
 source deployment, exact valid call, `initial_venom_state_rel` and outcome
 guards. Its existential fuel must give a terminating raw result; runtime
 failure is Abort, not Error/fuel0. Success relates canonical return bytes and
-whole effects/requests. UNREACHABLE permits ExHalt; dynamic strict decoding has
-the precise D9 exemption. Proving this contract belongs to Milestone 6.
+whole effects/requests. UNREACHABLE permits ExHalt; dynamic strict decoding and
+empty-byte signed conversion have the precise D9 exemptions. Proving this
+contract belongs to Milestone 6.
 
 ### 1.4 Pipeline statement
 
@@ -569,12 +572,12 @@ unit simulation by themselves.
 | Not/Neg/Abs | Simple builtin/literal op paths | Not bool/uint256, Neg signed/decimal, Abs int256; excluded narrow/unsigned cases stay excluded. |
 | AddMod/MulMod/PowMod256/AsWeiValue | Math/misc builtins | Same modular/scaled results and matched checks for admitted forms. |
 | IfExp/literals, Empty/MaxValue/MinValue/Epsilon | Branch/literals/`typed_val_to_w256` | Word Empty only; correct typed byte literal encoding, fixed evaluation order. |
-| `evaluate_convert` | `compile_type_convert` | Only supported conversion list; corrected bound-before-truncate and bytes->address/decimal/narrow-zero-tail D12d–g. No claim for intN->decimal N>=135 mismatch outside subset. |
+| `evaluate_convert` | `compile_type_convert` | Conversions admitted by `valid_conversion`; compare integer/decimal clamps and scaling, bound-before-truncate, bytes->address/decimal/narrow-zero-tail D12d–g, and bytestring length/shift paths. Empty-byte signed integer/decimal conversion has the exact D9 exemption. |
 | Env, account, BlockHash/BlobHash | `compile_env_var`, BALANCE/EXTCODEHASH/size, builtin block paths | Full env/typed-account ties, corrected empty-account codehash; real nonzero block/window bounds D22. |
 | ECRecover/SHA256/ECAdd/ECMul | Value-zero STATICCALL1/2/6/7 + ASSERT/buffer read | H21-pure bridge and starvation alternative; invalid EC now source RuntimeError D12a, invalid recovery succeeds empty. Pure source builtins remain pure. |
 | Tuple/struct/aggregate args/tuple locals | Aggregate expression and buffer paths | Same evaluation order and value-memory layout; fixed-memory/name/internal-call restrictions matter. |
 | `evaluate_abi_encode` | Builtin encode/ABI buffer path | Supported single-argument/flag form and corrected typed size rule D12j; same bytes incl dynamic multiblock encoding. |
-| Static `evaluate_abi_decode` | `lower_abi_decode`/clamps | Prove exactly same acceptance/value for static targets; conversion errors **not exempt**. |
+| Static `evaluate_abi_decode` | `lower_abi_decode`/clamps | Prove exactly same acceptance/value for static targets; `"abi_decode conversion"` errors **not exempt**. |
 | Dynamic ABI tuple String/Bytes | Dynamic decoder offsets/end/padding | For source-accepted bytes same value. Source rejects nonzero padding that lowering accepts; raw Venom wraparound reads can survive where EVM starves. Test overlapping/out-of-order/head/trailing/short/overbound tails; exact D9 exemption, no blanket decoder correctness. |
 | Storage scalar read/write | SLOAD/SSTORE/TLOAD/TSTORE | Full-word types only; actual initial/successful-outcome storage validity. Narrow stored masking differs outside subset. |
 | Fixed/dynamic arrays, Append/Pop | `compile_array_subscript`, dynamic append/pop | Signed/unsigned bounds, effect-free index/RHS; storage length invariant and corrected length-only Pop D12b. |
@@ -598,6 +601,7 @@ unit simulation by themselves.
 | Arithmetic/conversion/bounds/runtime checks | Each H6-compare path must end in Abort on non-exempt RuntimeError, never Error/fuel exhaustion/OK/IntRet. |
 | Oracle exhausted/failed/ill-typed successful accounts | Failed call -> ASSERT/REVERT; ill-typed accounts excluded by `call_outcomes_ok`, whose storage guard remains separate. |
 | Exact `"abi_decode invalid"` | Dynamic target occurrence in **function bodies** gives D9 program-wide exemption; includes identical return-decode rejection. Static-only decoding, arbitrary ReturnReject and `"abi_decode conversion"` do not. Even exemption needs an actual EVM run; S3 safety is not claimed there. |
+| Exact `"convert empty bytes to signed"` | D9 also exempts empty-byte conversion to signed integers or decimals, whose lowering may depend on stale memory. No dynamic ABI target occurrence is required; an actual EVM run is still required, and S3 safety is not claimed. |
 
 Comparison work of the 2026-10-01 plan (including finite8-bit arithmetic and
 boundary samples) is not a kernel stage proof. Future owners must recheck

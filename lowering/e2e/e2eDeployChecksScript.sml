@@ -203,7 +203,7 @@ QED
 
 Theorem deploy_error_case:
   deploy_result_rel tops bc tx es r es' (INR (Error e)) <=>
-  decode_strictness_exempt tops e \/
+  unspecified_behaviour_exempt tops e \/
   ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs
 Proof
   simp[deploy_result_rel_def]
@@ -213,7 +213,7 @@ Theorem deploy_failure_not_success:
   es.contexts = [(ctxt,rb)] ==>
   ~deploy_result_rel tops bc tx es (INR NONE) es' (INR (AssertException s)) /\
   (deploy_result_rel tops bc tx es (INR NONE) es' (INR (Error e)) <=>
-   decode_strictness_exempt tops e)
+   unspecified_behaviour_exempt tops e)
 Proof
   simp[deploy_result_rel_def, frame_outcome_def]
 QED
@@ -227,12 +227,13 @@ Proof
 QED
 
 Theorem deploy_exemption_exact:
-  decode_strictness_exempt tops e <=>
-  e = RuntimeError "abi_decode invalid" /\
-  ?ty. occurs_abi_decode_target ty tops /\
-       is_dynamic (vyper_to_abi_type (type_env tops) ty)
+  unspecified_behaviour_exempt tops e <=>
+  (e = RuntimeError "abi_decode invalid" /\
+   ?ty. occurs_abi_decode_target ty tops /\
+        is_dynamic (vyper_to_abi_type (type_env tops) ty)) \/
+  e = RuntimeError "convert empty bytes to signed"
 Proof
-  simp[decode_strictness_exempt_def]
+  simp[unspecified_behaviour_exempt_def]
 QED
 
 Theorem deploy_prefix_guard:

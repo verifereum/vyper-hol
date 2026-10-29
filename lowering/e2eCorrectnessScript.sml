@@ -884,7 +884,7 @@ Theorem e2e_deploy_correctness:
            ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs /\
                          (exc = Reverted \/ s = "UNREACHABLE")
        | INR (Error e) =>
-           decode_strictness_exempt tops e \/
+           unspecified_behaviour_exempt tops e \/
            ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs
        | INR BreakException => F
        | INR ContinueException => F

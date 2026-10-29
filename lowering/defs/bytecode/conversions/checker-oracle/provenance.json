@@ -1,0 +1,43 @@
+{
+  "producer": "pinned Python Vyper",
+  "vyper_commit": "cd74ce4f57e3771aeeab8f061fa3be45bfe8a29c",
+  "vyper_version": "0.5.0a4+cd74ce4f+commit.cd74ce4f",
+  "outputs": [
+    "annotated_ast",
+    "layout"
+  ],
+  "sources": {
+    "b4_to_bys.vy": "85c9dedb317cd3abb2ee085f7cba63f7bb84a46cbf615c218505ed35681db5e8",
+    "b4_to_bys2.vy": "be479986fc32f3b03f3f8fccb19c8ea3e151bcfb9ddbb0d62a5d68ac75cc0f44",
+    "b4_to_str.vy": "37df6cc22548eb38ab3b007f717ac1a5788a923430afd82253261638b58b38d6",
+    "bys33_to_bool.vy": "30751e127c9844ea9373cb811177c240ee18183559b3a2fa6a43526b126c7ff6",
+    "bys64_to_u256.vy": "756c54f2c7b5283dd7cd50a16f0f8e36779259cbf81bf0b7e296bb3cec374a25",
+    "bys8_to_b4.vy": "a34a011a98ec80ba1798e5c3b2cc4ed4c0f0b211ba7ce04f42d0504155433411",
+    "i256_to_addr.vy": "426cf9e1c7197cb73607ad99fc6389896d412a04711479c062d200d128dbd326",
+    "i8_to_addr.vy": "4b921433408c0e8c87df5651c10a74f167bf504e97138885533c26e1dffb3ae5",
+    "lit_300_to_u8.vy": "34f280c90a201bfeafc16425affe776aad15bb8f6ff961d7e048c8280faffc65",
+    "lit_bys_narrow.vy": "2d64fe07a4b708a83614fe1f0bbc33bab7869227bea3c9384581517c83d471d6",
+    "lit_neg_to_u256.vy": "2936c6f19f33f77274593e6ff6b1be4a771e3aa14616fcd20d3e5d1f489dde59",
+    "str8_to_b4.vy": "978f2bab376d9373d731c52b37ad55aab94d5e21746eded0903ccd1fa94c5f85",
+    "u256_to_b4.vy": "95d854122f93222a6c13e276ad7d5d3bd23888777a3f34d299d95235619485b4",
+    "u256_to_bys.vy": "73fb5889ea66f176a4cb8d6fe5a8821489b17c14f077ac109d9a0bf08c4e616a",
+    "u256_to_bys16.vy": "e2a1eef604a3561391f2668de246e73bfd52aa70bccb25fe47c480472c3fdd21"
+  },
+  "inputs": {
+    "b4_to_bys.json": "e5c0319c8ab754c089860fb5b634cba7bb228f5716072e583c5ef231b06428c6",
+    "b4_to_bys2.json": "53942507b516feabb8a4601197b7644450d6ec566eba1d2b784adb181191e6bf",
+    "b4_to_str.json": "76bd4428facadbd1700f7c1e31a4027db7d7ea4e47f0fbd94ca55d3edd91fef0",
+    "bys33_to_bool.json": "ea062ac488e09c340a67274aee696f453e314db31999deba57bc21a9cfef4895",
+    "bys64_to_u256.json": "0bc5b911701780599fe26356298b6c6f74051b5baf027bc9397fb9a7b98fc8c3",
+    "bys8_to_b4.json": "ce7f5181d7bf2713faf0552f3974c302cdfcba7d78ebd599e53d3844b727f8ee",
+    "i256_to_addr.json": "e5d8ec78dc8feeef93616455db629cb68f5d9b364cf839568cfa4f5e47a73769",
+    "i8_to_addr.json": "1f0728b61d54711ab95f953ecce3ea7b061df075aa043bb06c795bee6da86dee",
+    "lit_300_to_u8.json": "f126caf1f8caec82bdc34c097f1e4a6e7cb912cb3c84d8220348fe6c2c3d5fab",
+    "lit_bys_narrow.json": "8fc23fe9062f98d27fedd64bbb2b8bf4086ec19cb43deb0443ec209c6e496b26",
+    "lit_neg_to_u256.json": "c1455a17970c771eb3bf73b1ff37cb0d869daf2630ddbbeb8e343c26ef1850f4",
+    "str8_to_b4.json": "95fe5362369f0b2560f439d68859a33d40d52f297bc9da24801b2894d949bba4",
+    "u256_to_b4.json": "bc7a8637b92dc2fbae5fad2b143eab991add130503386671228b878cbb5ee5fe",
+    "u256_to_bys.json": "342b1df5080779cf46c25f5b7f3968b32fb6824b5275737823dc4eb33162bd60",
+    "u256_to_bys16.json": "092bc6865b7ae88f93acfe170e85a1fc62884b100747a3d08bb1e0efbf54a49b"
+  }
+}

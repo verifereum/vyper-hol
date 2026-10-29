@@ -412,16 +412,24 @@ End
 (* ===== Type builtin/conversion checks ===== *)
 
 Definition valid_conversion_def:
-  valid_conversion (BaseT (BytesT _)) (BaseT BoolT) = T /\
+  valid_conversion (BaseT (BytesT (Fixed m))) (BaseT BoolT) = T /\
+  valid_conversion (BaseT (BytesT (Dynamic n))) (BaseT BoolT) = (n <= 32) /\
   valid_conversion (BaseT (UintT _)) (BaseT BoolT) = T /\
   valid_conversion (BaseT (IntT _)) (BaseT BoolT) = T /\
   valid_conversion (BaseT BoolT) (BaseT (IntT _)) = T /\
   valid_conversion (BaseT BoolT) (BaseT (UintT _)) = T /\
-  valid_conversion (BaseT (BytesT _)) (BaseT (BytesT _)) = T /\
-  valid_conversion (BaseT (BytesT _)) (BaseT (UintT _)) = T /\
-  valid_conversion (BaseT (BytesT _)) (BaseT (IntT _)) = T /\
-  valid_conversion (BaseT (BytesT _)) (BaseT AddressT) = T /\
-  valid_conversion (BaseT (BytesT _)) (BaseT DecimalT) = T /\
+  valid_conversion (BaseT (BytesT (Fixed m))) (BaseT (BytesT (Fixed k))) = T /\
+  valid_conversion (BaseT (BytesT (Fixed m))) (BaseT (BytesT (Dynamic n))) = (m <= n) /\
+  valid_conversion (BaseT (BytesT (Dynamic n))) (BaseT (BytesT (Fixed m))) = (n <= m) /\
+  valid_conversion (BaseT (BytesT (Dynamic n))) (BaseT (BytesT (Dynamic k))) = T /\
+  valid_conversion (BaseT (BytesT (Fixed m))) (BaseT (UintT _)) = T /\
+  valid_conversion (BaseT (BytesT (Dynamic n))) (BaseT (UintT _)) = (n <= 32) /\
+  valid_conversion (BaseT (BytesT (Fixed m))) (BaseT (IntT _)) = T /\
+  valid_conversion (BaseT (BytesT (Dynamic n))) (BaseT (IntT _)) = (n <= 32) /\
+  valid_conversion (BaseT (BytesT (Fixed m))) (BaseT AddressT) = T /\
+  valid_conversion (BaseT (BytesT (Dynamic n))) (BaseT AddressT) = (n <= 32) /\
+  valid_conversion (BaseT (BytesT (Fixed m))) (BaseT DecimalT) = T /\
+  valid_conversion (BaseT (BytesT (Dynamic n))) (BaseT DecimalT) = (n <= 32) /\
   valid_conversion (BaseT (UintT _)) (BaseT (UintT _)) = T /\
   valid_conversion (BaseT (UintT _)) (BaseT (IntT _)) = T /\
   valid_conversion (BaseT (IntT _)) (BaseT (UintT _)) = T /\
@@ -437,11 +445,15 @@ Definition valid_conversion_def:
   valid_conversion (FlagT _) (BaseT (BytesT bd)) = (bd = Fixed 32) /\
   valid_conversion (BaseT (UintT _)) (FlagT _) = T /\
   valid_conversion (BaseT (IntT _)) (FlagT _) = T /\
-  valid_conversion (BaseT (UintT _)) (BaseT (BytesT _)) = T /\
-  valid_conversion (BaseT (IntT _)) (BaseT (BytesT _)) = T /\
-  valid_conversion (BaseT (BytesT _)) (BaseT (StringT _)) = T /\
+  valid_conversion (BaseT (UintT n)) (BaseT (BytesT (Fixed m))) = (n <= 8 * m) /\
+  valid_conversion (BaseT (UintT _)) (BaseT (BytesT (Dynamic n))) = (32 <= n) /\
+  valid_conversion (BaseT (IntT n)) (BaseT (BytesT (Fixed m))) = (n <= 8 * m) /\
+  valid_conversion (BaseT (IntT _)) (BaseT (BytesT (Dynamic n))) = (32 <= n) /\
+  valid_conversion (BaseT (BytesT (Fixed m))) (BaseT (StringT n)) = (m <= n) /\
+  valid_conversion (BaseT (BytesT (Dynamic n))) (BaseT (StringT _)) = T /\
   valid_conversion (BaseT (StringT _)) (BaseT (StringT _)) = T /\
-  valid_conversion (BaseT (StringT _)) (BaseT (BytesT _)) = T /\
+  valid_conversion (BaseT (StringT n)) (BaseT (BytesT (Fixed m))) = (n <= m) /\
+  valid_conversion (BaseT (StringT _)) (BaseT (BytesT (Dynamic n))) = T /\
   valid_conversion (BaseT (UintT _)) (BaseT DecimalT) = T /\
   valid_conversion (BaseT (IntT _)) (BaseT DecimalT) = T /\
   valid_conversion (BaseT DecimalT) (BaseT (IntT _)) = T /\

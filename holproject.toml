@@ -9,6 +9,7 @@ version = "0.2.3"
 roots = ["vyperHolScript.sml",
          "lowering/evalCompilerWitnessesScript.sml",
          "tests/vyperCheckContractLibTestScript.sml",
+         "tests/conversionProofAuditScript.sml",
          "tests/vyperStringScopeTestScript.sml",
          "frontend/vyperCheckContractFrontendLibTestScript.sml",
          "frontend/jsonConstEvalWitnessScript.sml",

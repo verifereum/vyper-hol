@@ -1,0 +1,14 @@
+# Required issue-548 parity fixtures; no equality claim until validated.
+bool_to_i8
+lit_int_to_addr
+flag_to_b32
+u256_to_flag
+bys1_to_u8
+bys32_to_u8
+bys32_to_i8
+bys20_to_addr
+bys16_to_dec
+bys4_to_b4
+str_to_bys
+u160_to_b20
+b4_to_i256
