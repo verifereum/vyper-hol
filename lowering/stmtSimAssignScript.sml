@@ -206,7 +206,7 @@ Proof
   drule_all assign_local_word_code_parts >> strip_tac >>
   rename1 `lower_value _ _ _ _ sa = (op, sB)` >> gvs[] >>
   Cases_on `res`
-  >- (Cases_on `x` >>
+  >- (rename1 `eval_stmt _ _ _ = (INL u, _)` >> Cases_on `u` >>
       drule_all assign_local_word_success_run >> strip_tac >>
       disj1_tac >> qexistsl [`t`, `cenv`] >>
       simp[stmt_lands_def, cenv_top_ext_refl] >>
@@ -216,6 +216,7 @@ Proof
       strip_tac >> Cases_on `sB.cs_current_insts` >>
       gvs[block_is_terminated_def, LAST_APPEND, LAST_CONS_cond,
           venomInstTheory.mk_inst_def, is_terminator_def]) >>
+  rename1 `eval_stmt _ _ _ = (INR y, _)` >>
   `(do result <- eval_expr cx e; read_result cx result od) es = (INR y, es') /\
    expr_res_ok (INR y : value + exception)` by
     (drule eval_assign_local_error >> disch_then drule >> simp[]) >>

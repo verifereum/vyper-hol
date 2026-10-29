@@ -337,7 +337,7 @@ Proof
   qpat_x_assum `cenv' = cenv` SUBST_ALL_TAC >>
   rename1 `unwrap_value _ _ _ = (op, sB)` >>
   Cases_on `res`
-  >- (Cases_on `x` >>
+  >- (rename1 `eval_stmt _ _ _ = (INL u, _)` >> Cases_on `u` >>
       drule_all assign_local_memory_success_run >> strip_tac >>
       disj1_tac >> qexistsl [`t`, `cenv`] >>
       simp[stmt_lands_def, cenv_top_ext_refl] >>
@@ -346,6 +346,7 @@ Proof
       rpt strip_tac >>
       qpat_x_assum `!fuel r. run_from fuel ctx func t = r /\ _ ==> _`
         (qspec_then `fuel` mp_tac) >> simp[]) >>
+  rename1 `eval_stmt _ _ _ = (INR y, _)` >>
   `(do result <- eval_expr cx e; read_result cx result od) es = (INR y, es') /\
    expr_res_ok (INR y : value + exception)` by
     (drule eval_assign_local_error >> disch_then drule >> simp[]) >>
