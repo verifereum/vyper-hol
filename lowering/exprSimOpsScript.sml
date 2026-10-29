@@ -126,7 +126,7 @@ Theorem eval_expr_bop_cases:
             res = bop_result cx ann bop [expr_type e1; expr_type e2] v1 v2 es')
 Proof
   rpt gen_tac >>
-  Cases_on `bop = In \/ bop = NotIn` >>
+  Cases_on `bop = In \/ bop = NotIn` >> (
   simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
        assert_def, return_def, raise_def, builtin_args_length_ok_def] >>
   simp[Once evaluate_def, bind_def, return_def] >>
@@ -151,7 +151,7 @@ Proof
        lift_sum_def, lift_option_type_def, type_check_def, assert_def,
        bop_result_def] >>
   BasicProvers.every_case_tac >>
-  gvs[bind_def, return_def, raise_def, read_result_def] >> rw[] >> gvs[]
+  gvs[bind_def, return_def, raise_def, read_result_def] >> rw[] >> gvs[])
 QED
 
 (* A straight-line operator fragment from its run facts: when the source

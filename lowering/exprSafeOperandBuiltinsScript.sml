@@ -231,16 +231,62 @@ Proof
   drule_all fold_membership_and_safe_operand >> simp[]
 QED
 
+Theorem fresh_var_counter_mono[local]:
+  fresh_var sa = (v,sb) ==> sa.cs_next_var <= sb.cs_next_var
+Proof
+  strip_tac >> qspec_then `sa` mp_tac ci_mono_fresh_var >>
+  simp[ci_mono_def]
+QED
+
+Theorem fresh_label_counter_mono[local]:
+  fresh_label prefix sa = (v,sb) ==> sa.cs_next_var <= sb.cs_next_var
+Proof
+  strip_tac >> qspecl_then [`prefix`, `sa`] mp_tac ci_mono_fresh_label >>
+  simp[ci_mono_def]
+QED
+
+Theorem new_block_counter_mono[local]:
+  new_block label sa = (v,sb) ==> sa.cs_next_var <= sb.cs_next_var
+Proof
+  strip_tac >> qspecl_then [`label`, `sa`] mp_tac ci_mono_new_block >>
+  simp[ci_mono_def]
+QED
+
+Theorem emit_inst_counter_mono[local]:
+  emit_inst opc args outs sa = (v,sb) ==> sa.cs_next_var <= sb.cs_next_var
+Proof
+  strip_tac >> qspecl_then [`opc`, `args`, `outs`, `sa`] mp_tac ci_mono_emit_inst >>
+  simp[ci_mono_def]
+QED
+
+Theorem emit_op_counter_mono[local]:
+  emit_op opc args sa = (v,sb) ==> sa.cs_next_var <= sb.cs_next_var
+Proof
+  strip_tac >> qspecl_then [`opc`, `args`, `sa`] mp_tac ci_mono_emit_op >>
+  simp[ci_mono_def]
+QED
+
 Theorem compile_array_membership_loop_safe_operand:
   compile_array_membership_loop needle arr len sz off opc bound isin sa = (r,sb) ==>
   safe_operand sb r
 Proof
   Cases_on `bound` >> Cases_on `isin` >> Cases_on `off > 0` >>
-  simp[compile_array_membership_loop_def, emit_op_def, emit_inst_def,
-       fresh_label_def, new_block_def, comp_bind_def, comp_ignore_bind_def,
-       comp_return_def, fresh_id_def, fresh_var_def, emit_def] >>
-  strip_tac >> gvs[] >>
-  simp[safe_operand_def, not_fresh_at_def, ASCIInumbersTheory.toString_11]
+  simp[compile_array_membership_loop_def, comp_bind_def,
+       comp_ignore_bind_def, comp_return_def] >>
+  strip_tac >>
+  ntac 8 (pairarg_tac >> gvs[]) >>
+  ntac 8 (pairarg_tac >> gvs[]) >>
+  ntac 8 (pairarg_tac >> gvs[]) >>
+  rpt (pairarg_tac >> gvs[]) >>
+  imp_res_tac emit_op_safe_operand >>
+  imp_res_tac fresh_var_safe_operand >>
+  imp_res_tac fresh_var_counter_mono >>
+  imp_res_tac fresh_label_counter_mono >>
+  imp_res_tac new_block_counter_mono >>
+  imp_res_tac emit_inst_counter_mono >>
+  imp_res_tac emit_op_counter_mono >>
+  irule safe_operand_mono >>
+  goal_assum (drule_at (Pat `safe_operand _ _`)) >> decide_tac
 QED
 
 Theorem compile_var_array_membership_safe_operand:
