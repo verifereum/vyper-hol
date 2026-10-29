@@ -71,12 +71,12 @@ or placeholder. A header theorem is not a program/body acceptance theorem.
   Internal function names are unrestricted: their Venom labels come from
   `internal_fn_label`, which no other label can equal. External fallback
   argument checks belong to `function_header_ok` in `check_contract`.
-- `supported_struct_field_names tops top`: no field/module-variable/map collision.
 - `supported_selectors_distinct tops`: uses **the actual compiler**
   `build_selectors (type_env tops) (FST (classify_functions tops))`; excludes
   fallback, Internal, Deploy; does not approximate selector uniqueness by names.
 - `supported_declaration_names tops`: distinct event names plus argument-name
-  and field-collision checks. `check_contract` separately checks external
+  checks. Struct fields may share names with module variables or maps.
+  `check_contract` separately checks external
   names and all ABI-prefix/public-getter selectors; the selector helper above
   is not a whitelist precondition. It does not inspect locals/loops:
   TASK_021 must additionally call `supported_function_bindings` on its collected
