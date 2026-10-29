@@ -9787,8 +9787,10 @@ Resume eval_all_type_sound_mutual[Expr_Call_Send]:
       (qpat_x_assum `MAP expr_type es = _` (mp_tac o Q.AP_TERM `LENGTH`) >>
        rw[]) >>
     qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-    asm_simp_tac(srw_ss())[Once evaluate_def, bind_def, ignore_bind_def,
-                           type_check_def, assert_def, return_def] >>
+    qpat_x_assum `LENGTH es = _` (fn len_th =>
+      assume_tac len_th >>
+      simp_tac(srw_ss())[Once evaluate_def, bind_def, ignore_bind_def,
+                         type_check_def, assert_def, return_def, len_th]) >>
     Cases_on `eval_exprs cx es st` >>
     rename1 `eval_exprs cx es st = (args_res,args_st)` >>
     qpat_x_assum `!s'' x t. type_check _ "Send args" s'' = (INL x,t) ==> _`

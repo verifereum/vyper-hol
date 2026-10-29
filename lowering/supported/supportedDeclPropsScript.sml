@@ -52,6 +52,18 @@ Proof
   EVAL_TAC
 QED
 
+Theorem supported_external_nested_places:
+  supported_declaration_header supported_test_declarations
+    (FunctionDecl External Pure F F "f"
+       [("x",ArrayT (StructT (NONE,"S")) (Dynamic 3))] []
+       (ArrayT (ArrayT (BaseT (UintT 256)) (Fixed 2)) (Fixed 2)) []) /\
+  ~supported_declaration_header supported_test_declarations
+    (FunctionDecl Internal Pure F F "f"
+       [("x",ArrayT (StructT (NONE,"S")) (Dynamic 3))] [] NoneT [])
+Proof
+  EVAL_TAC
+QED
+
 Theorem supported_storage_declarations_reject:
   EVERY (\top. ~supported_declaration_header [] top)
     [VariableDecl Public Storage "x" (BaseT (UintT 256)) (SOME 0);
@@ -63,8 +75,7 @@ Theorem supported_storage_declarations_reject:
      VariableDecl Private Storage "x" (BaseT (UintT 8)) (SOME 0);
      VariableDecl Private Storage "x" (BaseT (StringT 16)) (SOME 0);
      VariableDecl Private Storage "x" (BaseT (BytesT (Dynamic 16))) (SOME 0);
-     VariableDecl Private Storage "x" (ArrayT (BaseT (UintT 256)) (Fixed 0)) (SOME 0);
-     VariableDecl Private Transient "x" (ArrayT (BaseT (UintT 256)) (Dynamic 4)) (SOME 0)]
+     VariableDecl Private Storage "x" (ArrayT (BaseT (UintT 256)) (Fixed 0)) (SOME 0)]
 Proof
   EVAL_TAC
 QED
@@ -73,14 +84,29 @@ Theorem supported_hashmap_declarations_reject:
   EVERY (\top. ~supported_declaration_header [] top)
     [HashMapDecl Public F "m" (BaseT BoolT) (Type (BaseT (UintT 256))) (SOME 0);
      HashMapDecl Private F "m" (BaseT BoolT) (Type (BaseT (UintT 256))) NONE;
-     HashMapDecl Private T "m" (BaseT BoolT) (Type (BaseT (UintT 256))) (SOME 0);
-     HashMapDecl Private F "m" (BaseT (BytesT (Fixed 32)))
-       (Type (BaseT (UintT 256))) (SOME 0);
      HashMapDecl Private F "m" (BaseT DecimalT) (Type (BaseT (UintT 256))) (SOME 0);
-     HashMapDecl Private F "m" (BaseT AddressT) (Type (BaseT BoolT)) (SOME 0);
-     HashMapDecl Private F "m" (BaseT AddressT)
+     HashMapDecl Private F "m" (BaseT AddressT) (Type (BaseT BoolT)) (SOME 0)]
+Proof
+  EVAL_TAC
+QED
+
+Theorem supported_nested_map_and_transient_headers:
+  EVERY (supported_declaration_header supported_test_declarations)
+    [VariableDecl Private Transient "a"
+       (ArrayT (BaseT (UintT 256)) (Dynamic 4)) (SOME 0);
+     VariableDecl Private Transient "s" (StructT (NONE,"S")) (SOME 4);
+     HashMapDecl Private T "t" (BaseT BoolT) (Type (BaseT (UintT 256))) (SOME 0);
+     HashMapDecl Private F "b32" (BaseT (BytesT (Fixed 32)))
+       (Type (BaseT (UintT 256))) (SOME 0);
+     HashMapDecl Private F "bytes" (BaseT (BytesT (Dynamic 40)))
+       (Type (BaseT (UintT 256))) (SOME 0);
+     HashMapDecl Private F "string" (BaseT (StringT 10))
+       (Type (BaseT (UintT 256))) (SOME 0);
+     HashMapDecl Private F "array" (BaseT AddressT)
        (Type (ArrayT (BaseT (UintT 256)) (Fixed 1))) (SOME 0);
-     HashMapDecl Private F "m" (BaseT AddressT)
+     HashMapDecl Private F "struct" (BaseT AddressT)
+       (Type (StructT (NONE,"S"))) (SOME 0);
+     HashMapDecl Private F "nested" (BaseT AddressT)
        (HashMapT (BaseT BoolT) (Type (BaseT (UintT 256)))) (SOME 0)]
 Proof
   EVAL_TAC

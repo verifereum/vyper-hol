@@ -16,6 +16,10 @@ Definition expr_test_tops_def:
      StructDecl "Pair" [("first", BaseT (UintT 256)); ("second", BaseT (IntT 256))];
      VariableDecl Private Storage "record" (StructT (NONE,"Pair")) (SOME 9);
      HashMapDecl Private F "map" (BaseT AddressT) (Type (BaseT (UintT 256))) (SOME 11);
+     HashMapDecl Private F "nested" (BaseT (UintT 256))
+       (HashMapT (BaseT (UintT 256)) (Type (BaseT (UintT 256)))) (SOME 12);
+     HashMapDecl Private F "recordmap" (BaseT (UintT 256))
+       (Type (StructT (NONE,"Pair"))) (SOME 13);
      FunctionDecl Internal Pure F F "helper" [("u",BaseT (UintT 256))] []
        (BaseT (UintT 256)) [];
      InterfaceDecl "I" [("remote", [("u",BaseT (UintT 256))], BaseT (UintT 256), View)]]
@@ -46,6 +50,8 @@ Theorem supported_pure_expression_rows:
     [expr_test_uint; Literal (BaseT (IntT 8)) (IntL (~1));
      TopLevelName (BaseT (UintT 256)) (NONE,"scalar");
      TopLevelName (BaseT (IntT 256)) (NONE,"transient");
+     TopLevelName (ArrayT (BaseT (UintT 256)) (Fixed 2)) (NONE,"fixed");
+     TopLevelName (StructT (NONE,"Pair")) (NONE,"record");
      IfExp (BaseT (UintT 256)) (Name (BaseT BoolT) "c") expr_test_uint expr_test_uint;
      IfExp (BaseT (StringT 10)) (Name (BaseT BoolT) "c")
        (Name (BaseT (StringT 10)) "s") (Name (BaseT (StringT 10)) "t");
@@ -62,8 +68,16 @@ Theorem supported_pure_expression_rows:
        (TopLevelName (ArrayT (BaseT (UintT 256)) (Fixed 2)) (NONE,"fixed")) expr_test_uint;
      Subscript (BaseT (IntT 256))
        (TopLevelName (ArrayT (BaseT (IntT 256)) (Dynamic 4)) (NONE,"dynamic")) expr_test_uint;
+     Subscript (BaseT (UintT 256))
+       (Name (ArrayT (BaseT (UintT 256)) (Fixed 2)) "fixed") expr_test_uint;
+     Subscript (BaseT (UintT 256))
+       (Subscript NoneT (TopLevelName NoneT (NONE,"nested")) expr_test_uint) expr_test_uint;
      Attribute (BaseT (UintT 256))
        (TopLevelName (StructT (NONE,"Pair")) (NONE,"record")) "first";
+     Attribute (BaseT (IntT 256))
+       (TopLevelName (StructT (NONE,"Pair")) (NONE,"record")) "second";
+     Attribute (BaseT (UintT 256))
+       (Name (StructT (NONE,"Pair")) "record") "first";
      Builtin (BaseT (UintT 256)) (Bop Add) [expr_test_uint; expr_test_uint];
      TypeBuiltin (BaseT (IntT 8)) Convert (BaseT (IntT 8)) [expr_test_uint];
      expr_test_decode]
@@ -73,21 +87,15 @@ QED
 
 Theorem supported_storage_base_exclusions:
   EVERY (\e. ~supported_expr expr_test_tops e)
-    [TopLevelName (ArrayT (BaseT (UintT 256)) (Fixed 2)) (NONE,"fixed");
-     TopLevelName (StructT (NONE,"Pair")) (NONE,"record");
-     TopLevelName (BaseT (UintT 256)) (NONE,"missing");
+    [TopLevelName (BaseT (UintT 256)) (NONE,"missing");
      TopLevelName (BaseT (UintT 256)) (SOME 0,"scalar");
      TopLevelName (BaseT (IntT 256)) (NONE,"scalar");
-     Subscript (BaseT (UintT 256))
-       (Name (ArrayT (BaseT (UintT 256)) (Fixed 2)) "fixed") expr_test_uint;
      Subscript (BaseT (UintT 256))
        (Subscript (ArrayT (BaseT (UintT 256)) (Fixed 2))
          (TopLevelName NoneT (NONE,"map")) expr_test_uint) expr_test_uint;
      Subscript (BaseT (UintT 256)) (TopLevelName NoneT (SOME 0,"map")) expr_test_uint;
      Attribute (BaseT (IntT 256))
-       (TopLevelName (StructT (NONE,"Pair")) (NONE,"record")) "second";
-     Attribute (BaseT (UintT 256))
-       (Name (StructT (NONE,"Pair")) "record") "first";
+       (TopLevelName (StructT (NONE,"Pair")) (NONE,"record")) "missing";
      Attribute (BaseT (UintT 256))
        (TopLevelName (StructT (NONE,"Pair")) (SOME 0,"record")) "first";
      IfExp (TupleT [BaseT (UintT 256)]) (Name (BaseT BoolT) "c") expr_test_uint expr_test_uint;
@@ -99,23 +107,11 @@ QED
 
 Theorem supported_bad_storage_declarations_excluded:
   ~supported_subscript_base
-    [VariableDecl Private Transient "a" (ArrayT (BaseT (UintT 256)) (Fixed 2)) (SOME 0)]
-    (NONE,"a") /\
-  ~supported_subscript_base
     [VariableDecl Private Storage "a" (ArrayT (BaseT (UintT 8)) (Fixed 2)) (SOME 0)]
     (NONE,"a") /\
   ~supported_subscript_base
     [VariableDecl Private Storage "a" (ArrayT (BaseT (UintT 256)) (Fixed 0)) (SOME 0)]
     (NONE,"a") /\
-  ~supported_subscript_base
-    [HashMapDecl Private T "a" (BaseT AddressT) (Type (BaseT (UintT 256))) (SOME 0)]
-    (NONE,"a") /\
-  ~supported_subscript_base
-    [HashMapDecl Private F "a" (BaseT (BytesT (Fixed 32)))
-       (Type (BaseT (UintT 256))) (SOME 0)] (NONE,"a") /\
-  ~supported_subscript_base
-    [HashMapDecl Private F "a" (BaseT AddressT)
-       (HashMapT (BaseT AddressT) (Type (BaseT (UintT 256)))) (SOME 0)] (NONE,"a") /\
   ~supported_storage_scalar
     [VariableDecl Private Storage "a" (BaseT (UintT 256)) NONE]
     (NONE,"a") (BaseT (UintT 256)) /\
@@ -128,6 +124,23 @@ Theorem supported_bad_storage_declarations_excluded:
   ~supported_storage_scalar
     [VariableDecl Public Storage "a" (BaseT (UintT 256)) (SOME 0)]
     (NONE,"a") (BaseT (UintT 256))
+Proof
+  EVAL_TAC
+QED
+
+Theorem supported_nested_map_transient_and_bytes_roots:
+  supported_subscript_base
+    [VariableDecl Private Transient "a" (ArrayT (BaseT (UintT 256)) (Fixed 2)) (SOME 0)]
+    (NONE,"a") /\
+  supported_subscript_base
+    [HashMapDecl Private T "a" (BaseT AddressT) (Type (BaseT (UintT 256))) (SOME 0)]
+    (NONE,"a") /\
+  supported_subscript_base
+    [HashMapDecl Private F "a" (BaseT (BytesT (Fixed 32)))
+       (Type (BaseT (UintT 256))) (SOME 0)] (NONE,"a") /\
+  supported_subscript_base
+    [HashMapDecl Private F "a" (BaseT AddressT)
+       (HashMapT (BaseT AddressT) (Type (BaseT (UintT 256)))) (SOME 0)] (NONE,"a")
 Proof
   EVAL_TAC
 QED
@@ -156,6 +169,23 @@ Theorem supported_internal_send_pop_rows:
   ~supported_expr expr_test_tops (Pop (BaseT (IntT 256)) (TopLevelNameTarget (SOME 0,"dynamic"))) /\
   ~supported_expr expr_test_tops
     (Pop (BaseT (IntT 256)) (SubscriptTarget (TopLevelNameTarget (NONE,"dynamic")) expr_test_uint))
+Proof
+  EVAL_TAC
+QED
+
+(* Effects may occur in place keys while P retains its effect-free meaning. *)
+Theorem supported_effectful_place_reads:
+  EVERY (\e. supported_expr expr_test_tops e /\
+             ~supported_pure_expr expr_test_tops e /\ expr_has_internal_call e)
+    [Subscript (BaseT (UintT 256))
+       (Subscript NoneT (TopLevelName NoneT (NONE,"nested")) expr_test_internal)
+       expr_test_uint;
+     Subscript (BaseT (UintT 256))
+       (Subscript NoneT (TopLevelName NoneT (NONE,"nested")) expr_test_uint)
+       expr_test_internal;
+     Attribute (BaseT (IntT 256))
+       (Subscript (StructT (NONE,"Pair"))
+         (TopLevelName NoneT (NONE,"recordmap")) expr_test_internal) "second"]
 Proof
   EVAL_TAC
 QED
@@ -257,8 +287,8 @@ Theorem supported_external_declaration_independent:
 Proof
   EVAL_TAC
 QED
-(* No effectful child may hide in a P constructor or an E argument. This
-   rejects the argument-location and external evaluation-order witnesses. *)
+(* Effectful place keys have their own E cases. Other effectful children and
+   call arguments retain the independent evaluation-order restrictions. *)
 Theorem supported_effect_nesting_counterexamples:
   EVERY (\e. ~supported_expr expr_test_tops e)
     [Builtin (BaseT (UintT 256)) (Bop Add) [expr_test_internal; expr_test_uint];
@@ -268,7 +298,6 @@ Theorem supported_effect_nesting_counterexamples:
      StructLit (StructT (NONE,"Pair")) (NONE,"Pair") [("first",expr_test_internal)];
      Builtin (TupleT [BaseT (UintT 256)]) (MakeArray NONE (Fixed 1)) [expr_test_internal];
      TypeBuiltin (BaseT (IntT 256)) Convert (BaseT (IntT 256)) [expr_test_internal];
-     Subscript (BaseT (UintT 256)) (TopLevelName NoneT (NONE,"map")) expr_test_internal;
      Call (BaseT (UintT 256)) (IntCall (NONE,"helper")) [expr_test_pop] NONE;
      Call (BaseT (UintT 256)) (IntCall (NONE,"helper")) [expr_test_internal] NONE;
      Call (BaseT (UintT 256)) (ExtCall T F ("remote",[BaseT (UintT 256)],BaseT (UintT 256)) [])

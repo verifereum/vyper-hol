@@ -40,6 +40,8 @@ Ancestors
   compileEnv exprSimOps freshWrites fragExec varsExt exprLoweringProps
   venomExecSemantics venomState emitHelper emitHelperProps venomInst
   builtinProps
+Libs
+  stepInstBaseLib
 
 (* ===== Operand types and the lowering of the five ===== *)
 
@@ -571,11 +573,11 @@ Proof
   simp[Once step_inst_base_def, mk_inst_def, exec_pure1_def] >>
   simp[] >>
   simp[Once run_inst_seq_def] >>
-  simp[Once step_inst_base_def, mk_inst_def, exec_pure2_def,
+  simp[stepInstBaseLib.simp_opcode_clause ``OR``, mk_inst_def, exec_pure2_def,
        eval_operand_def, lookup_var_update_var] >>
   simp[Once run_inst_seq_def] >>
-  simp[Once step_inst_base_def, mk_inst_def, eval_operand_def,
-       lookup_var_update_var] >>
+  simp[stepInstBaseLib.simp_opcode_clause ``ASSERT``, mk_inst_def,
+       eval_operand_def, lookup_var_update_var] >>
   Cases_on `va = 0w` >>
   Cases_on `safe_div (va * n2w m) va = n2w m` >>
   gvs[bool_to_word_def, WORD_OR_CLAUSES, run_inst_seq_def, lookup_var_update_var]

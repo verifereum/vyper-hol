@@ -1,0 +1,9 @@
+# Generated oracle inputs and probe results, including older local diagnostics.
+/oracle/
+/actual/
+/*.tar.gz
+/behaviour*.json
+/matrix.txt
+/diagnostic.txt
+/s20-*.term
+/support.tsv
