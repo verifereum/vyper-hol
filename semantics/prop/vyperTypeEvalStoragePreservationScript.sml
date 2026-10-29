@@ -1937,7 +1937,9 @@ Proof
        assert_def, return_def, raise_def, get_accounts_def, get_transient_storage_def]
   >- (strip_tac >> gvs[]) >>
   fs[] >>
-  (Cases_on `run_raw_call cx flags target_addr calldata amount
+  (* Integration repair: the previous `(Cases_on` opened an unmatched
+     tactic parenthesis extending through QED. *)
+  Cases_on `run_raw_call cx flags target_addr calldata amount
     st.accounts st.tStorage` >>
   simp[lift_option_def, bind_def, return_def, raise_def] >>
   TRY (strip_tac >> gvs[] >> NO_TAC) >>
@@ -3649,6 +3651,14 @@ Proof
        COND_RATOR, vfmTypesTheory.option_CASE_rator,
        vfmTypesTheory.prod_CASE_rator, vfmTypesTheory.sum_CASE_rator] >>
   strip_tac >> gvs[AllCaseEqs()] >>
+  (* Previous composition attempted drule_all directly while the effects
+     evaluation was still beneath the calldata/precheck monadic binds:
+     drule_all eval_ext_call_effects_storage_preserved >> simp[] *)
+  gvs[bind_def, ignore_bind_def, return_def, raise_def,
+      get_accounts_def, assert_def, AllCaseEqs()] >>
+  gvs[COND_RATOR, vfmTypesTheory.option_CASE_rator,
+      vfmTypesTheory.sum_CASE_rator, bind_def, ignore_bind_def,
+      return_def, raise_def, get_accounts_def, assert_def, AllCaseEqs()] >>
   drule_all eval_ext_call_effects_storage_preserved >> simp[]
 QED
 
