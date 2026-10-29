@@ -247,11 +247,17 @@ Proof
     gvs[source_const_names_def, EVERY_FLAT, EVERY_MAP] >> metis_tac[]]
 QED
 
-(* Specialize the generated mutual induction to the usual EVERY interface. *)
+Triviality source_resolve_keyword_induction_every:
+  (!expr. (?kw. expr = SND kw /\ MEM kw kws) ==> P expr) <=>
+  EVERY (\kw. P (SND kw)) kws
+Proof
+  simp[EVERY_MEM] >> metis_tac[]
+QED
+
+(* Normalize the generated nested induction to the usual EVERY interface. *)
 val source_resolve_induction = source_const_expr_induction
-  |> Q.SPECL [`P`, `EVERY (\kw. P (SND kw))`, `\kw. P (SND kw)`, `EVERY P`]
-  |> SIMP_RULE (srw_ss()) [FORALL_PROD]
-  |> UNDISCH |> CONJUNCT1 |> DISCH_ALL |> GEN_ALL;
+  |> SIMP_RULE (srw_ss())
+       [setSND_def, source_resolve_keyword_induction_every, GSYM EVERY_MEM];
 
 Theorem source_resolve_expr_names:
   !expr scopes table pos resolved.

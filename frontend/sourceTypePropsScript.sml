@@ -139,6 +139,15 @@ Proof
   simp[] >> metis_tac[]
 QED
 
+(* The resolver's mutual induction retains the annotation/list interface even
+   when the datatype package generates a single nested induction predicate. *)
+val source_type_annotation_induction = save_thm
+  ("source_type_annotation_induction",
+   source_type_resolve_ind
+   |> Q.SPECL [`\tenv names env annotation. P annotation`,
+               `\tenv names env annotations. Q annotations`]
+   |> SIMP_RULE (srw_ss()) []);
+
 Theorem source_type_resolve_ok:
   (!annotation r.
     source_type_resolve tenv names env annotation = ST_Ok r ==>
@@ -147,7 +156,7 @@ Theorem source_type_resolve_ok:
     source_type_resolve_list tenv names env annotations = ST_Ok rs ==>
     EVERY (source_type_resolution_ok tenv env) rs)
 Proof
-  ho_match_mp_tac source_const_annotation_induction >>
+  ho_match_mp_tac source_type_annotation_induction >>
   rw[source_type_resolve_def, source_type_require_constructor_def,
      source_type_bind_success] >>
   gvs[AllCaseEqs(), source_type_bind_success]

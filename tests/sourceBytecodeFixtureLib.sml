@@ -10,10 +10,36 @@ fun read path = let val s = TextIO.openIn path in
   TextIO.inputAll s before TextIO.closeIn s end;
 val names = String.tokens Char.isSpace (read (base ^ "/folded-value-witnesses.txt"));
 val seven = String.tokens Char.isSpace (read (base ^ "/folded-value-parity-fixtures.txt"));
+(* Independent expected checker outcomes for raw annotated-only inputs.
+   #135 removed folded-value trust: x ** (1 + 2) must first normalize. *)
+val legacy_outcomes =
+  [("fold_add",true), ("pow_folded_exp",false), ("fold_cmp",true),
+   ("enc_mid_const",true), ("fold_powmod",true), ("fold_addmod",true),
+   ("fold_abs",true)];
+val legacy_accepted = map #1 (List.filter #2 legacy_outcomes);
 val booleans = ["fold_not", "boolop_and3"];
 val certified = seven @ booleans;
-val () = if length names = 37 andalso length seven = 7 then ()
-  else raise Fail "source parity inventory changed";
+(* Maintained inventory: source captures are local preparation, not oracles. *)
+val () = if length names = 37 andalso length (Lib.mk_set names) = 37 then ()
+  else raise Fail "fold validation manifest must enumerate 37 distinct witnesses";
+val () = if length seven = 7 andalso Lib.set_eq seven
+    ["fold_add", "pow_folded_exp", "fold_cmp", "enc_mid_const",
+     "fold_powmod", "fold_addmod", "fold_abs"] andalso
+    List.all (fn name => Lib.mem name names) seven then ()
+  else raise Fail "required seven compatibility fixture sources are not prepared";
+val () = if Lib.set_eq seven (map #1 legacy_outcomes) andalso
+    length legacy_outcomes = 7 andalso length legacy_accepted = 6 then ()
+  else raise Fail "legacy expected-outcome coverage differs from seven fixtures";
+val source_dir = OS.FileSys.openDir (base ^ "/folded-value-sources");
+fun entries dir = case OS.FileSys.readDir dir of
+    NONE => [] | SOME s => s :: entries dir;
+val source_files = entries source_dir before OS.FileSys.closeDir source_dir;
+val () = if Lib.set_eq source_files (map (fn s => s ^ ".vy") names) then ()
+  else raise Fail "fold validation source inventory differs from manifest";
+val () = app (fn name =>
+  if String.isSubstring "@external"
+      (read (base ^ "/folded-value-sources/" ^ name ^ ".vy")) then ()
+  else raise Fail ("missing external witness entry point: " ^ name)) names;
 val address = ``0w:address``;
 val keys = ``[["main"]]``;
 fun slots name = if name = "method_id_storage" then ``[((NONE,"m"),0:num)]:storage_layout``
@@ -36,6 +62,15 @@ fun expected name = let
       wordsSyntax.mk_wordii (16 * digit (String.sub (hex,i)) + digit (String.sub (hex,i+1)),8) :: loop (i+2)
     in listSyntax.mk_list (loop 0,type_of (wordsSyntax.mk_wordii (0,8))) end
   in pairSyntax.mk_pair (bytes "deploy",bytes "runtime") end;
+(* Reject NONE, residual computations and symbolic byte lists alike. *)
+fun require_actual_byte_pair result = let
+  val (deploy,runtime) = pairSyntax.dest_pair (optionSyntax.dest_some result)
+  fun bytes tm = let
+    val (items,ty) = listSyntax.dest_list tm
+    in not (null items) andalso ty = type_of (wordsSyntax.mk_wordii (0,8))
+      andalso List.all (fn item => can wordsSyntax.dest_word_literal item) items end
+  in if null (free_vars result) andalso bytes deploy andalso bytes runtime then ()
+    else raise Fail "expected SOME closed nonempty deployment/runtime byte lists" end;
 fun program name = JSONDecode.decodeFile sourceSyntaxLib.annotated_ast
   ("fixtures/check_contract/source_syntax/" ^ name ^ ".json");
 fun audit thy = app (fn (name,th) => let

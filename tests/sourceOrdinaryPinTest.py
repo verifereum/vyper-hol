@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Identity/order/duplicate regressions for the ordinary paired-fixture generator."""
 import copy
+import hashlib
 import json
 import tempfile
 import unittest
@@ -66,6 +67,57 @@ class InheritedIdentityTest(unittest.TestCase):
         annotated = json.loads((BASE/'source_ordinary'/'annotated'/f'{name}.json').read_text())
         self.assertEqual(annotated['imports'][0]['source_id'], 1)
 
+    def test_address_bytes32_retains_source_identity_and_all_conversions(self):
+        name = 'address_bytes32'
+        entries, ids = CASES[name], INHERITED_SOURCE_IDS[name]
+        legacy = json.loads((BASE/'address_bytes32.json').read_text())
+        check_inherited_ids(legacy, entries, ids)
+        wrong_id = copy.deepcopy(legacy)
+        wrong_id['ast']['source_id'] = 1
+        with self.assertRaises(AssertionError):
+            check_inherited_ids(wrong_id, entries, ids)
+        wrong_path = copy.deepcopy(legacy)
+        wrong_path['ast']['resolved_path'] = './other/address_bytes32.vy'
+        with self.assertRaises(AssertionError):
+            check_inherited_ids(wrong_path, entries, ids)
+        capture = json.loads((BASE/'source_ordinary'/f'{name}.json').read_text())
+        annotated = json.loads((BASE/'source_ordinary'/'annotated'/f'{name}.json').read_text())
+        digest = hashlib.sha256((BASE/'address_bytes32.vy').read_bytes()).hexdigest()
+        origin, = capture['inherited_origins']
+        self.assertEqual((origin['key'], origin['source_id'], origin['module_id']),
+                         (['main'], 0, None))
+        self.assertEqual(origin['source_sha256'], digest)
+        self.assertEqual(capture['phase'], 'annotate_python_ast-before-get_node')
+        expected = [('to_bytes32', 'a', 'address', 'bytes32', 1),
+                    ('to_bytes21', 'a', 'address', 'bytes21', 20),
+                    ('bytes20_to_bytes32', 'b', 'bytes20', 'bytes32', 39)]
+        for tree in [capture['annotated_ast'], annotated, legacy]:
+            self.assertEqual(tree['imports'], [])
+            self.assertEqual(tree['ast']['source_id'], 0)
+            self.assertEqual(tree['ast']['source_sha256sum'], digest)
+            self.assertEqual(len(tree['ast']['body']), 3)
+            for function, (label, arg, src, dst, node_id) in zip(tree['ast']['body'], expected):
+                with self.subTest(function=label):
+                    self.assertEqual((function['name'], function['node_id']), (label, node_id))
+                    parameter, = function['args']['args']
+                    self.assertEqual((parameter['arg'], parameter['annotation']['id']), (arg, src))
+                    self.assertEqual(function['returns']['id'], dst)
+                    statement, = function['body']
+                    self.assertEqual(statement['ast_type'], 'Return')
+                    call = statement['value']
+                    self.assertEqual((call['ast_type'], call['func']['id']), ('Call', 'convert'))
+                    self.assertEqual([a['id'] for a in call['args']], [arg, dst])
+                    self.assertEqual(call['keywords'], [])
+        def untyped(value):
+            if isinstance(value, dict):
+                self.assertTrue({'type', 'func_type', 'folded_value', 'folded_literal'}.isdisjoint(value))
+                for child in value.values():
+                    untyped(child)
+            elif isinstance(value, list):
+                for child in value:
+                    untyped(child)
+        untyped(capture['annotated_ast'])
+
     def test_new_upstream_explicit_ids_match_legacy_evidence(self):
         for name, entries in PIN_ONLY_CASES.items():
             with self.subTest(name=name):
@@ -87,7 +139,17 @@ class FixtureInventoryTest(unittest.TestCase):
     def test_exact_inventory_and_scope(self):
         check_inventory(self.base)
         check_inventory(BASE)
-        self.assertEqual(len(CASES), 26)
+        self.assertEqual(len(CASES), 27)
+        # Preserve every original ordinary case, not a replacement/skip.
+        self.assertEqual(set(CASES) - {'address_bytes32'}, {
+            'simple', 'storage', 'address_bytes20', 'constant_bound', 'constant_shifts',
+            'constant_shift_overflow', 'calldata_slice', 'in_static_array', 'nested_pop',
+            'decimal_folding', 'raw_call_calldata', 'unreachable', 'scoped_locals',
+            'imported_flag', 'imported_struct', 'imported_deploy', 'multimodule_storage',
+            'defaults_control', 'deployment', 'nonreentrant', 'transient_storage',
+            'abi_encode', 'imported_interface', 'interface_struct_return', 'duplicate_interface',
+            'daddy'})
+        self.assertEqual(len(CASES) + len(PIN_ONLY_CASES), 32)
         self.assertEqual(set(PIN_ONLY_CASES), {'attribute_initializes', 'nested_initializes',
             'imported_constants', 'interface_struct', 'relative_uses'})
 
@@ -100,6 +162,11 @@ class FixtureInventoryTest(unittest.TestCase):
     def test_missing_retained_fixture_reject(self):
         (self.base/CASES['simple'][0][1]).with_suffix('.json').unlink()
         with self.assertRaisesRegex(AssertionError, "'missing': \\['simple.vy'\\]"):
+            check_inventory(self.base)
+
+    def test_missing_address_bytes32_reject(self):
+        (self.base/'address_bytes32.json').unlink()
+        with self.assertRaisesRegex(AssertionError, "'missing': \\['address_bytes32.vy'\\]"):
             check_inventory(self.base)
 
     def test_source_captures_do_not_expand_upstream_inventory(self):

@@ -16,7 +16,7 @@ Theorem source_meaning_call_original_constants:
   source_resolve_registry_constants source_meaning_call_registry =
     SOME (SCEnv_Resolved source_meaning_call_constants)
 Proof
-  EVAL_TAC
+  conj_tac >> EVAL_TAC
 QED
 
 Theorem source_meaning_call_constant:

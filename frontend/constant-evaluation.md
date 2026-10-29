@@ -135,8 +135,14 @@ Explicit `*_legacy` ordinary APIs retain annotated-only translation and its
 older metadata consumers, including some Name, annotation, range and specialized
 keyword handling. `check_constant_contract_file_legacy` retains the old bounded
 integer evaluator. These are distinct compatibility interfaces, never automatic
-fallbacks. Legacy/source whole-module AST equality is not promised: the legacy
-initializer may retain arithmetic where the source route emits its value.
+fallbacks. Legacy/source whole-module AST equality and legacy pinned byte parity
+are not promised: annotated-only legacy translation may retain arithmetic where
+the ordinary source route emits its value, or reject an exponent that needs
+normalization before checking. Compatibility regressions assert explicit
+accept/reject and compilation outcomes; pinned-byte comparisons use the
+normalized ordinary route. Neither establishes legacy semantic correctness.
+See the [regression guide](../tests/sourceOrdinaryAcceptance.md) for the fixture
+contracts and reproduction commands.
 
 Do not extend legacy trust with generic operator/call folded-value wrappers or
 make `json_expr_int_opt` follow compiler replacements. Missing constant support

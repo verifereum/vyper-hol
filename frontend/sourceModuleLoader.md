@@ -68,8 +68,9 @@ Default nonreentrancy applies only to non-pure external functions unless
 `(NONE,"$.nonreentrant_key")`; missing slots reject. The loader does not fabricate
 layouts or disable locking.
 
-The policy-free semantic/compiler API is explicitly `*_simple`. Neither capture
-nor a checking equation proves universal source semantics or bytecode behavior.
+Loading does not elaborate executable bodies. The policy-free semantic/compiler
+API is explicitly `*_simple`. Neither capture nor a checking equation proves
+universal source semantics or bytecode behavior.
 
 ## Reproduction
 

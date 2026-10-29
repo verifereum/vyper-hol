@@ -66,7 +66,10 @@ Proof
   >- (EVAL_TAC >> simp[] >> EVAL_TAC)
   >- (rewrite_tac [source_meaning_example_yctx_fields, source_meaning_example_fctx_fields,
         source_meaning_example_ctx_fields] >> EVAL_TAC >> simp[] >> EVAL_TAC)
-  >- (irule source_meaning_example_names >> EVAL_TAC) >>
+  >- (irule source_meaning_example_names >>
+      rewrite_tac [source_meaning_example_yctx_fields,
+        source_meaning_example_fctx_fields, source_meaning_example_ctx_fields] >>
+      EVAL_TAC) >>
   simp[source_meaning_example_N]
 QED
 
@@ -108,7 +111,10 @@ Proof
   irule sourceMeaningStmtDefsTheory.cons >>
   qexistsl_tac [`source_meaning_example_yctx`,`source_meaning_example_ytypes`] >> reverse conj_tac
   >- (irule sourceMeaningStmtDefsTheory.return_value >>
-      irule source_meaning_example_names >> EVAL_TAC) >>
+      irule source_meaning_example_names >>
+      rewrite_tac [source_meaning_example_yctx_fields,
+        source_meaning_example_fctx_fields, source_meaning_example_ctx_fields] >>
+      EVAL_TAC) >>
   irule sourceMeaningStmtDefsTheory.empty
 QED
 

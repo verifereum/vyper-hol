@@ -74,7 +74,7 @@ Theorem source_type_resolve_original_bounds:
     MAP (\r. MAP FST (source_type_bounds r)) rs =
     MAP source_type_annotation_bounds annotations)
 Proof
-  ho_match_mp_tac source_const_annotation_induction >>
+  ho_match_mp_tac source_type_annotation_induction >>
   rw[source_type_resolve_def, source_type_require_constructor_def,
      source_type_annotation_bounds_def, source_type_bind_success] >>
   gvs[AllCaseEqs(), source_type_bind_success]

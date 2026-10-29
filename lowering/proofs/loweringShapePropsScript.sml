@@ -12086,8 +12086,8 @@ Proof
   rpt gen_tac >> strip_tac >>
   simp[Once add_module_var_locations_def] >>
   first_x_assum match_mp_tac >>
-  Cases_on `h` >> simp[] >>
-  rpt (CASE_TAC >> simp[]) >>
+  Cases_on `h` >> fs[] >>
+  rpt (CASE_TAC >> fs[]) >>
   rpt strip_tac >> gvs[finite_mapTheory.FLOOKUP_UPDATE, AllCaseEqs(), static_loc_def] >>
   metis_tac[]
 QED
