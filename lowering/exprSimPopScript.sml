@@ -5,12 +5,14 @@
  * compile_dynarray_pop on x's pointer variable p, in memory: an MLOAD of the
  * length word at p, an ASSERT that it is not 0, an MSTORE of the length less
  * one, and the address p + 32 + (len - 1) * type_memory_bytes T of the
- * popped element, handed out as a pointer into memory.  The source pops the
- * last element of x's value (pop_element), raising "pop empty" on an empty
- * array, where the ASSERT aborts.  The lowering does not clear the popped
- * element, so it stays in x's region, past the new length, and the pointer
- * holds the source result there; x's region holds the shortened array, so
- * the locals stay related (local_ptrs_rel_write_local).
+ * popped element, handed out as a pointer into memory.  The source
+ * (pop_place) shortens x's value, records the popped element in x's pop
+ * history, and returns the place of the popped index, which reads back
+ * through that history (pop_name_entry); it raises a runtime error on an
+ * empty array, where the ASSERT aborts.  The lowering does not clear the
+ * popped element, so it stays in x's region, past the new length, and the
+ * pointer holds the value read from the place there; x's region holds the
+ * shortened array, so the locals stay related (local_ptrs_rel_write_local).
  *
  * TOP-LEVEL:
  *   compile_pop_name_sim — expr_vv_sim of x.pop() on a local
@@ -18,8 +20,8 @@
  * Helpers:
  *   elems_val_wf_EL, elems_val_wf_FRONT, elems_in_memory_FRONT,
  *     elems_in_memory_mstore_before — the array's layout
- *   lookup_scopes_set_other, eval_base_target_name, eval_pop_name — the
- *     source side
+ *   lookup_scopes_set_other, eval_target_place_name, eval_pop_name,
+ *     read_result_pop_name — the source side
  *   compile_expr_pop_name, dynarray_pop_mem_shape, dynarray_pop_mem_run_empty,
  *     dynarray_pop_mem_run — the lowering and its run
  *   pop_name_facts, pop_ptr_w2n, pop_elem_fits, pop_vv_post — the parts
@@ -88,41 +90,71 @@ Proof
   irule lookup_scopes_update_other >> first_assum (ACCEPT_TAC o GSYM)
 QED
 
-Theorem eval_base_target_name:
+Theorem eval_target_place_name:
   !cx id es.
     IS_SOME (lookup_scopes id es.scopes) ==>
-    eval_base_target cx (NameTarget id) es = (INL (ScopedVar id, []), es)
+    eval_target_place cx (NameTarget id) es = (INL (MemoryPlace id []), es)
 Proof
+  rpt strip_tac >> simp[Once evaluate_def, bind_def] >>
   simp[Once evaluate_def, bind_def, ignore_bind_def, get_scopes_def,
-       type_check_def, assert_def, return_def]
+       type_check_def, assert_def, return_def, get_place_def]
 QED
+
+(* The entry after a pop on the variable itself: the shortened array, and the
+   popped element on top of its pop history. *)
+Definition pop_name_entry_def:
+  pop_name_entry entry vs =
+    entry with <| value := ArrayV (DynArrayV (FRONT vs));
+                  popped := ([ValueSubscript (IntV &(LENGTH vs - 1))], LAST vs)
+                            :: entry.popped |>
+End
 
 Theorem eval_pop_name:
   !cx ann id es res es' entry vs.
     lookup_scopes id es.scopes = SOME entry /\ entry.assignable /\
     entry.value = ArrayV (DynArrayV vs) /\
     eval_expr cx (Pop ann (NameTarget id)) es = (res, es') ==>
-    (vs = [] /\ res = INR (Error (RuntimeError "pop empty"))) \/
-    (vs <> [] /\ res = INL (Value (LAST vs)) /\
+    (vs = [] /\ res = INR (Error (RuntimeError "pop empty memory array"))) \/
+    (vs <> [] /\
+     res = INL (PlaceR (MemoryPlace id
+                          [ValueSubscript (IntV &(LENGTH vs - 1))])) /\
      ?pre env rest.
        find_containing_scope id es.scopes = SOME (pre, env, entry, rest) /\
        es' = es with scopes :=
-         pre ++ env |+ (id, entry with value := ArrayV (DynArrayV (FRONT vs)))
-           :: rest)
+         pre ++ env |+ (id, pop_name_entry entry vs) :: rest)
 Proof
   rpt gen_tac >> strip_tac >>
   drule lookup_scopes_find_containing_scope >> strip_tac >>
   `IS_SOME (lookup_scopes id es.scopes)` by simp[] >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
   simp[Once evaluate_def, bind_def] >>
-  drule_then (qspec_then `cx` SUBST1_TAC) eval_base_target_name >>
-  fs[assign_target_def, bind_def, ignore_bind_def, get_scopes_def,
-       lift_option_def, type_check_def, assert_def, return_def, raise_def,
-       lift_sum_def, assign_subscripts_def, pop_element_def, set_scopes_def,
-       assign_result_def, evaluate_subscripts_def, popped_value_def,
-       lift_option_type_def] >>
+  drule_then (qspec_then `cx` SUBST1_TAC) eval_target_place_name >>
+  simp[pop_place_def, bind_def, ignore_bind_def, get_scopes_def,
+       lift_option_type_def, type_check_def, assert_def, return_def,
+       raise_def, lift_sum_def, read_memory_path_def, evaluate_subscripts_def,
+       check_def, popped_value_def, pop_element_def, assign_subscripts_def,
+       set_scopes_def, record_pop_def, pop_name_entry_def] >>
   Cases_on `vs = []` >> simp[raise_def, return_def, bind_def] >>
   rw[] >> gvs[]
+QED
+
+(* Reading the popped element's place after the pop: the shortened array
+   has no element there, so the read falls back to the pop history. *)
+Theorem read_result_pop_name:
+  !cx id st entry vs etv n.
+    lookup_scopes id st.scopes = SOME (pop_name_entry entry vs) /\
+    entry.type = ArrayTV etv (Dynamic n) /\ vs <> [] /\ LENGTH vs <= n ==>
+    read_result cx
+      (PlaceR (MemoryPlace id [ValueSubscript (IntV &(LENGTH vs - 1))])) st =
+      (INL (LAST vs), st)
+Proof
+  rpt strip_tac >>
+  `0 < LENGTH vs` by (Cases_on `vs` >> gvs[]) >>
+  simp[read_result_def, read_place_def, bind_def, get_scopes_def,
+       lift_option_type_def, return_def, lift_sum_def, read_memory_path_def,
+       pop_name_entry_def, evaluate_subscripts_def, array_index_def,
+       read_popped_def, subscripts_type_def, subscript_type_def,
+       bound_length_def, listTheory.oEL_THM, LENGTH_FRONT]
 QED
 
 (* ===== The lowering ===== *)
@@ -453,7 +485,7 @@ Theorem pop_local_ptrs_rel:
     (!q n' sq. FLOOKUP cenv.ce_vars n' = SOME (PtrVar (Var q) sq) ==>
                lookup_var q u = lookup_var q s0) ==>
     local_ptrs_rel func cenv
-      (pre ++ env |+ (id, entry with value := ArrayV (DynArrayV (FRONT vs)))
+      (pre ++ env |+ (id, pop_name_entry entry vs)
          :: rest) u
 Proof
   rpt strip_tac >>
@@ -471,10 +503,10 @@ Proof
     (`0 < LENGTH vs` by (Cases_on `vs` >> gvs[]) >>
      simp[LENGTH_FRONT, GSYM wordsTheory.n2w_sub, arithmeticTheory.PRE_SUB1]) >>
   irule local_ptrs_rel_write_local >>
-  qexistsl_tac [`entry with value := ArrayV (DynArrayV (FRONT vs))`, `id`,
+  qexistsl_tac [`pop_name_entry entry vs`, `id`,
                 `p`, `es.scopes`, `s0`, `sz`, `w`] >>
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
-  >~ [`lookup_scopes _ _ = SOME (_ with value := _)`]
+  >~ [`lookup_scopes _ _ = SOME (pop_name_entry _ _)`]
   >- (irule lookup_scopes_update >> first_assum ACCEPT_TAC)
   >~ [`lookup_scopes _ _ = lookup_scopes _ _`]
   >- (rpt strip_tac >> irule lookup_scopes_set_other >> metis_tac[])
@@ -491,11 +523,12 @@ Proof
          simp[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
       qpat_x_assum `u.vs_memory = _` SUBST1_TAC >> irule EQ_SYM >>
       irule mstore_mem_bytes_at_disjoint >> fs[])
-  >~ [`type_memory_size _ <= _`] >- fs[type_memory_size_def]
-  >~ [`val_wf`] >- fs[val_wf_def, LENGTH_FRONT, elems_val_wf_FRONT]
+  >~ [`type_memory_size _ <= _`] >- fs[type_memory_size_def, pop_name_entry_def]
+  >~ [`val_wf`]
+  >- fs[val_wf_def, LENGTH_FRONT, elems_val_wf_FRONT, pop_name_entry_def]
   >~ [`val_in_memory`]
   >- fs[val_in_memory_def, mstore_mem_word_at_same, elems_in_memory_FRONT,
-        elems_in_memory_mstore_before] >>
+        elems_in_memory_mstore_before, pop_name_entry_def] >>
   rpt strip_tac >> gvs[]
 QED
 
@@ -586,9 +619,10 @@ Theorem pop_vv_post:
     evaluate_type (get_tenv cx) ann = SOME etv ==>
     vv_post func cenv cx (Pop ann (NameTarget id)) es sa sb s0
       (es with scopes :=
-         pre ++ envs |+ (id, entry with value := ArrayV (DynArrayV (FRONT vs)))
+         pre ++ envs |+ (id, pop_name_entry entry vs)
            :: rest)
-      (Value (LAST vs)) (LocatedValue ann (mk_ptr (Var x6) LocMemory))
+      (PlaceR (MemoryPlace id [ValueSubscript (IntV &(LENGTH vs - 1))]))
+      (LocatedValue ann (mk_ptr (Var x6) LocMemory))
       (u with vs_inst_idx := k)
 Proof
   rpt gen_tac >> strip_tac >>
@@ -606,18 +640,25 @@ Proof
     metis_tac[find_containing_scope_lookup] >>
   drule find_containing_scope_pre_none >> strip_tac >>
   `local_region cenv (pre ++ envs |+
-      (id, entry with value := ArrayV (DynArrayV (FRONT vs))) :: rest)
+      (id, pop_name_entry entry vs) :: rest)
      (u with vs_inst_idx := k) id (w2n w) sz` by
     (simp[local_region_def, lookup_scopes_update, lookup_var_inst_idx] >>
      metis_tac[]) >>
   `LENGTH vs - 1 < LENGTH vs` by decide_tac >>
+  `read_result cx
+     (PlaceR (MemoryPlace id [ValueSubscript (IntV &(LENGTH vs - 1))]))
+     (es with scopes := pre ++ envs |+ (id, pop_name_entry entry vs) :: rest) =
+   (INL (LAST vs),
+    es with scopes := pre ++ envs |+ (id, pop_name_entry entry vs) :: rest)` by
+    (irule read_result_pop_name >> fs[lookup_scopes_update] >> metis_tac[]) >>
   simp[vv_post_def, expr_type_def, stmt_state_rel_inst_idx, lookup_var_inst_idx] >>
   rpt conj_tac
   >- (irule pop_stmt_state_rel_scopes >> conj_tac
       >- first_assum ACCEPT_TAC >>
       qexists_tac `s0` >> rpt conj_tac >> first_assum ACCEPT_TAC)
-  >- (simp[vv_holds_def, contextTheory.mk_ptr_def, eval_operand_def,
-           lookup_var_inst_idx, materialise_def, return_def] >>
+  >- (qpat_assum `read_result _ _ _ = _` (fn th =>
+        simp[vv_holds_def, contextTheory.mk_ptr_def, eval_operand_def,
+             lookup_var_inst_idx, th]) >>
       `val_in_memory etv (LAST vs)
          (w2n w + 32 + (LENGTH vs - 1) * type_memory_size etv) u.vs_memory` by
         (irule pop_elem_in_memory >> simp[] >> metis_tac[]) >>
@@ -628,8 +669,9 @@ Proof
       >- metis_tac[]
       >- gvs[EVERY_EL, LAST_EL, arithmeticTheory.PRE_SUB1] >>
       qpat_x_assum `val_in_memory etv (LAST vs) _ _` mp_tac >> simp[])
-  >- (simp[vv_at_def, contextTheory.mk_ptr_def, eval_operand_def,
-           lookup_var_inst_idx, materialise_def, return_def] >>
+  >- (qpat_assum `read_result _ _ _ = _` (fn th =>
+        simp[vv_at_def, contextTheory.mk_ptr_def, eval_operand_def,
+             lookup_var_inst_idx, th]) >>
       `val_wf etv (LAST vs)` by
         gvs[LAST_EL, arithmeticTheory.PRE_SUB1, elems_val_wf_EL] >>
       `w2n w + 32 + (LENGTH vs - 1) * type_memory_size etv +

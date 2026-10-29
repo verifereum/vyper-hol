@@ -20,7 +20,8 @@
  * Helpers:
  *   compile_expr_call, compile_expr_send, compile_expr_send_stack — the
  *     compile side
- *   eval_expr_send_cases, eval_send_value, eval_expr_send_value,
+ *   eval_expr_send_cases, eval_send_value, eval_send_read,
+ *     eval_expr_send_value,
  *     take_call_outcome_typed,
  *     eval_send_outcome_typed, address_typed_dest, uint256_typed_dest — the
  *     source side
@@ -123,13 +124,15 @@ QED
 Theorem eval_expr_send_cases:
   !cx ann has_gas args dflt es res es'.
     LENGTH args = (if has_gas then 3 else 2) /\
-    eval_expr cx (Call ann (Send has_gas) args dflt) es = (res, es') ==>
+    (do r <- eval_expr cx (Call ann (Send has_gas) args dflt);
+        read_result cx r od) es = (res, es') ==>
     (?exc. eval_exprs cx args es = (INR exc, es') /\ res = INR exc) \/
     ?vs es1. eval_exprs cx args es = (INL vs, es1) /\
-             eval_send cx has_gas vs es1 = (res, es')
+             (do tv <- eval_send cx has_gas vs; read_result cx tv od) es1 =
+               (res, es')
 Proof
   rpt gen_tac >> strip_tac >>
-  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  qpat_x_assum `bind _ _ _ = _` mp_tac >>
   simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
        assert_def, return_def, raise_def] >>
   Cases_on `eval_exprs cx args es` >>
@@ -151,6 +154,22 @@ Proof
        vyperCallOutcomeTheory.adopt_call_outcome_def, LET_THM, UNCURRY,
        COND_RATOR, option_CASE_rator, prod_CASE_rator, sum_CASE_rator] >>
   rpt strip_tac >> gvs[AllCaseEqs()]
+QED
+
+(* Reading send's result: send returns a value, which reads as itself. *)
+Theorem eval_send_read:
+  !cx has_gas vs st res st'.
+    (do tv <- eval_send cx has_gas vs; read_result cx tv od) st =
+      (res, st') ==>
+    ?r. eval_send cx has_gas vs st = (r, st') /\
+        (!v. r = INL (Value v) ==> res = INL v) /\
+        (!exc. r = INR exc ==> res = INR exc)
+Proof
+  rpt gen_tac >>
+  Cases_on `eval_send cx has_gas vs st` >>
+  rename1 `eval_send _ _ _ _ = (rr, st1)` >>
+  Cases_on `rr` >> simp[bind_def] >> strip_tac >> gvs[] >>
+  drule eval_send_value >> strip_tac >> gvs[read_result_def, return_def]
 QED
 
 Theorem eval_expr_send_value:
@@ -325,14 +344,16 @@ Theorem send_tail_frag:
   eval_operand addr_op t = SOME aw /\ dest_AddressV to_v = SOME (w2w aw) /\
   eval_operand val_op t = SOME vw /\ dest_NumV amount_v = SOME (w2n vw) /\
   LENGTH gas_vs = (if has_gas then 1 else 0) /\
-  eval_send cx has_gas (to_v :: amount_v :: gas_vs) es1 = (res, es') /\
+  (do tv <- eval_send cx has_gas (to_v :: amount_v :: gas_vs);
+      read_result cx tv od) es1 = (res, es') /\
   expr_type e = NoneT ==>
   frag_exec ctx sm sb (\s. s = t)
-    (\s. ?v. res = INL (Value v) /\
+    (\s. ?v. res = INL v /\
              expr_post func cenv cx e es sa sb s0 es' v (Lit 0w) s)
     (expr_exit res)
 Proof
   strip_tac >> drule_all send_tail_shape >> strip_tac >>
+  qpat_x_assum `bind _ _ _ = _` (strip_assume_tac o MATCH_MP eval_send_read) >>
   `~not_fresh_at sm out` by gvs[not_fresh_at_def] >>
   `emitted_insts sm sb =
      [mk_inst sm.cs_next_id CALL
@@ -344,11 +365,11 @@ Proof
                `mk_inst sm.cs_next_id CALL
                   [gas_op; addr_op; val_op; Lit 0w; Lit 0w; Lit 0w; Lit 0w] [out]`,
                `gas_op`, `addr_op`, `val_op`, `out`, `has_gas`, `to_v`,
-               `amount_v`, `gas_vs`, `aw`, `vw`, `res`, `es'`]
+               `amount_v`, `gas_vs`, `aw`, `vw`, `r`, `es'`]
     mp_tac send_call_oracle_step >>
   impl_tac >- simp[mk_inst_def] >>
   `es1.outcomes = SOME t.vs_outcomes` by fs[state_rel_def] >>
-  `res <> INR (Error (RuntimeError "call outcome accounts"))` by
+  `r <> INR (Error (RuntimeError "call outcome accounts"))` by
     (drule_all eval_send_outcome_typed >> simp[]) >>
   simp[] >> strip_tac >>
   `s'.vs_allocas = t.vs_allocas /\ s'.vs_alloca_next = t.vs_alloca_next /\
@@ -440,7 +461,7 @@ Proof
        vyperTypeExtCallCoreTheory.accounts_runtime_well_typed_accounts_well_typed] >>
   `outcomes_accounts_typed es1.outcomes` by gvs[expr_sim_inv_def] >>
   irule send_tail_frag >> simp[expr_type_def] >>
-  qpat_assum `eval_send _ _ _ _ = _` (irule_at Any) >>
+  qpat_assum `bind (eval_send _ _ _) _ _ = _` (irule_at Any) >>
   qpat_assum `emit_op _ _ _ = _` (irule_at Any) >>
   qpat_assum `emit_void _ _ _ = _` (irule_at Any) >>
   qpat_assum `eval_operand addr_op _ = _` (irule_at Any) >>
