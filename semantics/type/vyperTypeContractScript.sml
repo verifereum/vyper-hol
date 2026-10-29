@@ -823,16 +823,13 @@ Theorem check_contract_function_header:
   MEM (FunctionDecl vis mut nr rr name args dflts ret body) tls ==>
   function_header_ok vis mut nr rr name args dflts ret
 Proof
-  strip_tac >> gvs[check_contract_def] >>
-  `check_module in_deploy layouts addr mods
-     (build_contract_type_artifact in_deploy mods) (src,tls)`
-    by fs[EVERY_MEM] >>
-  fs[check_module_def, EVERY_MEM] >>
-  `check_toplevel_decl layouts addr mods
-     (build_contract_type_artifact in_deploy mods) src
-     (FunctionDecl vis mut nr rr name args dflts ret body)`
-    by metis_tac[] >>
-  gvs[check_toplevel_decl_def]
+  strip_tac >>
+  qpat_x_assum `check_contract _ _ _ _ = _` mp_tac >>
+  simp[check_contract_def, EVERY_MEM] >> strip_tac >>
+  qpat_x_assum `!x. MEM x mods ==> check_module _ _ _ _ _ _ x` drule >>
+  simp[check_module_def, EVERY_MEM] >> strip_tac >>
+  qpat_x_assum `!x. MEM x tls ==> check_toplevel_decl _ _ _ x` drule >>
+  simp[check_toplevel_decl_def]
 QED
 
 Theorem check_contract_external_method_ids_distinct:
