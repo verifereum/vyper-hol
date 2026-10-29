@@ -43,6 +43,7 @@ Theorem stmt_state_rel_declare_memory:
     t.vs_block_ctx = s.vs_block_ctx /\ t.vs_logs = s.vs_logs /\
     t.vs_outcomes = s.vs_outcomes /\ t.vs_requests = s.vs_requests /\
     t.vs_immutables = s.vs_immutables /\ t.vs_data_section = s.vs_data_section /\
+    immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es t /\
     (!q. q = p \/ ~not_local_ptr cenv es.scopes q ==>
          lookup_var q t = lookup_var q s) /\
     (!n b sz'. n <> id /\ local_region cenv es.scopes s n b sz' ==>
@@ -93,6 +94,9 @@ Proof
   `alloca_inv t` by (irule alloca_inv_fields >> qexists_tac `s` >> simp[]) >>
   `alloca_room func t` by
     (irule alloca_room_fields >> qexists_tac `s` >> fs[stmt_state_rel_def]) >>
+  `immutable_alloca_sep func cenv cx (es with scopes := scs') t` by
+    (irule immutable_alloca_sep_fields >>
+     qexistsl_tac [`es`, `s`] >> fs[stmt_state_rel_def]) >>
   fs[stmt_state_rel_def] >> metis_tac[]
 QED
 

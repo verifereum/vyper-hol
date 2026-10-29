@@ -243,6 +243,7 @@ QED
 Theorem stmt_state_rel_allocas_frame:
   !func cenv cx es s es' s'.
     stmt_state_rel func cenv cx es s /\ state_rel func cenv cx es' s' /\
+    immutable_alloca_sep func cenv cx es' s' /\
     s'.vs_allocas = s.vs_allocas /\ s'.vs_alloca_next = s.vs_alloca_next ==>
     stmt_state_rel func cenv cx es' s'
 Proof
