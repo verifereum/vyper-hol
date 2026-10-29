@@ -343,7 +343,10 @@ Proof
      qexistsl_tac [`buf.buf_operand`, `val_op`] >> simp[]) >>
   `stmt_state_rel func cenv cx es (mstore (w2n addr) w allocated)` by
     (irule literal_mstore_state_rel >> simp[] >>
-     qexistsl_tac [`w2n addr`, `32`] >> simp[] >> rpt strip_tac >>
+     qexistsl_tac [`w2n addr`,
+       `mk_inst sa.cs_next_id ALLOCA [Lit 32w]
+          [STRING #"%" (toString sa.cs_next_var)]`, `32`] >>
+     simp[mk_inst_def] >> rpt strip_tac >>
      first_x_assum drule >> simp[regions_disjoint_def]) >>
   suspend "compose"
 QED
@@ -522,11 +525,19 @@ Proof
        fcpTheory.index_one, fcpTheory.finite_one]
 QED
 
+Theorem hash_returndata_immutable_alloca_sep[local]:
+  immutable_alloca_sep func cenv cx es (s with vs_returndata := data) <=>
+  immutable_alloca_sep func cenv cx es s
+Proof
+  simp[immutable_alloca_sep_def]
+QED
+
 Theorem hash_returndata_state_rel:
   stmt_state_rel func cenv cx es (s with vs_returndata := data) <=>
   stmt_state_rel func cenv cx es s
 Proof
   simp[stmt_state_rel_def, state_rel_def,
+       hash_returndata_immutable_alloca_sep,
        local_ptrs_rel_def, local_region_def, local_backed_def,
        lookup_var_def, storage_rel_def, transient_rel_def, immutables_rel_def,
        logs_rel_def, call_ctx_rel_def, accounts_rel_def,
