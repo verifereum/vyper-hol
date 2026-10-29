@@ -1794,12 +1794,14 @@ Proof
               simp[ci_mono_compile_keccak256_key, ci_mono_comp_return]) >>
           irule ci_mono_lower_value_cfn >> metis_tac[]) >>
       Cases_on `t` >> simp[LET_THM] >>
-      rpt (CHANGED_TAC (
-        rpt gen_tac >>
-        (irule ci_mono_bind >> conj_tac) >>
-        simp[ci_mono_comp_return, ci_mono_compile_tuple_subscript,
-             ci_mono_compile_array_subscript, ci_mono_compile_ptr_load] >>
-        TRY (irule ci_mono_lower_value_cfn)))) >>
+      irule ci_mono_bind >> conj_tac >>
+      simp[ci_mono_comp_return, ci_mono_compile_tuple_subscript]
+      >> rpt gen_tac >> BETA_TAC
+      >>~- ([`lower_value`],
+            irule ci_mono_lower_value_cfn >> simp[]) >>
+      irule ci_mono_bind >> conj_tac >>
+      simp[ci_mono_comp_return, ci_mono_compile_array_subscript,
+           ci_mono_compile_ptr_load]) >>
   metis_tac[]
 QED
 
