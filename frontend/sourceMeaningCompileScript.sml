@@ -2,7 +2,7 @@ Theory sourceMeaningCompile
 Ancestors
   sourceMeaningDispatch sourceMeaningDecl sourceMeaningCall sourceMeaningCallDefs
   sourceMeaningProgram sourceMeaningProgramDefs sourceModuleCompile sourceModuleElaborate
-  sourceModuleDecl sourceModuleEnv sourceModuleDefs sourceResolveModules sourceSyntax
+  sourceModuleContext sourceModuleDecl sourceModuleEnv sourceModuleDefs sourceResolveModules sourceSyntax
   vyperTypeContract vyperInterpreter vyperState vyperContext compileVyper alist list
 
 (* Original-source compiler composition. The independent module derivation is
@@ -23,7 +23,7 @@ Theorem source_meaning_compile_program:
     source_meaning_constants registry constants /\
     !owner syntax. MEM (owner,syntax) registry ==>
     ?bindings ctx.
-      ctx = ((source_module_body_context trust registry constants signatures owner syntax)
+      ctx = ((source_module_signature_context trust registry constants signatures owner syntax)
         with sm_bindings := bindings) /\
       source_module_bodies fuel ctx trust.smt_slots syntax = SM_Ok tops /\
       !meanings. source_meaning_module ctx syntax meanings ==>

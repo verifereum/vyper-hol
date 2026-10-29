@@ -14,7 +14,8 @@ fun inst_apply (argument,function) = let
   val instantiated = Term.inst (Type.match_type domain (type_of argument)) function
 in mk_comb (instantiated,argument) end
 fun application name args = List.foldl inst_apply
-  (prim_mk_const {Thy="sourceModuleElaborate",Name=name}) args
+  (prim_mk_const {Thy=if name = "source_module_link_program" then
+    "sourceModuleContext" else "sourceModuleElaborate",Name=name}) args
 fun arguments ({fuel,trust,policies,keys,program}:input) = [fuel,trust,policies,keys,program]
 fun simple_arguments ({fuel,trust,keys,program}:simple_input) = [fuel,trust,keys,program]
 fun closed tm = if null (free_vars tm) then () else

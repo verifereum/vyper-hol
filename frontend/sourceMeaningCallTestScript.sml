@@ -3,7 +3,7 @@ Ancestors
   sourceMeaningCallExampleDefs sourceMeaningCompile sourceMeaningDispatch sourceMeaningDecl
   sourceMeaningCall sourceMeaningCallDefs sourceMeaningProgram sourceMeaningProgramDefs
   sourceMeaningStmt sourceMeaningStmtDefs sourceMeaningDefs sourceMeaningConst sourceMeaningRuntime
-  sourceModuleElaborate sourceModuleEnv sourceModuleDecl sourceModuleDefs sourceSyntax
+  sourceModuleContext sourceModuleSignature sourceModuleElaborate sourceModuleEnv sourceModuleDecl sourceModuleDefs sourceSyntax
   sourceResolveModules sourceResolve sourceExprDefs sourceTypeDefs sourceConstAST sourceConstAnnotation
   sourceConstEval sourceConstValue sourceConstEnv vyperInterpreter vyperState vyperContext
   vyperAST vyperValue finite_map alist list
@@ -36,7 +36,7 @@ Theorem source_meaning_call_ctx_fields:
   source_meaning_call_ctx.sm_constants = source_meaning_call_constants /\
   source_meaning_call_ctx.sm_owner = ["main"]
 Proof
-  simp[source_meaning_call_ctx_def, source_module_body_context_def, source_module_context_def]
+  simp[source_meaning_call_ctx_def, source_module_signature_context_def, source_module_context_def]
 QED
 
 Theorem source_meaning_call_fctx_fields:

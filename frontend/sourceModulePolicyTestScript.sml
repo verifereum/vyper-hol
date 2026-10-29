@@ -1,6 +1,6 @@
 Theory sourceModulePolicyTest
 Ancestors
-  sourceModuleElaborate sourceModuleDecl sourceModuleLink sourceModuleEnv sourceModuleDefs
+  sourceModuleContext sourceModuleSignature sourceModuleElaborate sourceModuleDecl sourceModuleLink sourceModuleEnv sourceModuleDefs
   sourceSyntax sourceTypeDefs sourceConstAST sourceConstAnnotation vyperAST vyperContext finite_map
   sourceMeaningCompile sourceModuleCompile
 Libs

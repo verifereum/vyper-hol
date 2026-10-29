@@ -1,12 +1,12 @@
 Theory sourceModuleElaborate
 Ancestors
-  sourceModuleDecl sourceModuleLink sourceModuleOverride sourceModuleEnv sourceModuleDefs sourceResolveModules
+  sourceModuleContext sourceModuleSignature sourceModuleDecl sourceModuleLink sourceModuleOverride sourceModuleEnv sourceModuleDefs sourceResolveModules
   sourceConstEnv sourceSyntax sourceExprDefs sourceTypeDefs vyperTypeContract vyperContext vyperAST list alist
 Libs
   intLib
 
 (* Policy-free helpers keep their original equations for the independent source
-   meaning development. The public phase below has explicit preserved policies. *)
+   meaning development. Shared contexts/signatures also serve the ordinary path. *)
 Definition source_module_signature_modules_def:
   source_module_signature_modules fuel trust registry constants =
     source_module_collect (MAP (\(owner,syntax).
@@ -16,27 +16,13 @@ Definition source_module_signature_modules_def:
            NONE => SM_Error SME_Resolution | SOME src => SM_Ok (src,tls))) registry)
 End
 
-Definition source_module_body_context_def:
-  source_module_body_context trust registry constants signatures owner syntax =
-    let ctx = source_module_context trust registry constants owner syntax in
-    let art = build_contract_type_artifact T signatures in
-    ctx with <| sm_env := artifact_env art signatures ctx.sm_env.current_src;
-      sm_bindings := FLAT (MAP (\(key,src).
-        source_module_runtime_bindings trust.smt_ids key
-          (case ALOOKUP signatures src of SOME tls => tls | NONE => [])) trust.smt_ids) ++
-        ctx.sm_bindings;
-      sm_events := FLAT (MAP (\(key,src).
-        source_module_event_bindings trust.smt_ids key
-          (case ALOOKUP signatures src of SOME tls => tls | NONE => [])) trust.smt_ids) |>
-End
-
 Definition source_module_elaborate_registry_def:
   source_module_elaborate_registry fuel trust registry constants links =
     source_module_bind (source_module_signature_modules fuel trust registry constants) (\signatures.
       if type_env_all_modules signatures <> trust.smt_type_defs then
         SM_Error (SME_Declaration "nominal-environment") else
       source_module_collect (MAP (\(owner,syntax).
-        let ctx = source_module_body_context trust registry constants signatures owner syntax in
+        let ctx = source_module_signature_context trust registry constants signatures owner syntax in
         case source_module_override_bindings trust links ctx.sm_bindings of
           NONE => SM_Error (SME_Declaration "override-cycle")
         | SOME bindings => source_module_bind (source_module_bodies fuel
@@ -80,13 +66,6 @@ Proof
   simp[source_module_link_program_simple_def, AllCaseEqs()] >> rw[] >> gvs[]
 QED
 
-Theorem source_module_bind_success:
-  source_module_bind result f = SM_Ok y ==>
-  ?x. result = SM_Ok x /\ f x = SM_Ok y
-Proof
-  Cases_on `result` >> simp[source_module_bind_def]
-QED
-
 Theorem source_module_elaborate_simple_linkage:
   source_module_elaborate_simple fuel trust keys program = SM_Ok retained ==>
   ?registry constants exports links.
@@ -108,13 +87,6 @@ Definition source_module_check_simple_def:
         NONE => SM_Error SME_Check
       | SOME art => SM_Ok (retained,art))
 End
-
-Theorem source_module_bind_retains_source:
-  source_module_bind result (\modules. SM_Ok (SourceRetained program modules)) =
-    SM_Ok retained ==> retained_source retained = program
-Proof
-  Cases_on `result` >> simp[source_module_bind_def] >> rw[] >> simp[retained_source_def]
-QED
 
 Theorem source_module_elaborate_simple_retains_source:
   source_module_elaborate_simple fuel trust keys program = SM_Ok retained ==>
@@ -140,30 +112,6 @@ Proof
 QED
 
 (* ===== Explicit preserved policies ===== *)
-Definition source_module_policy_signature_modules_def:
-  source_module_policy_signature_modules fuel trust policies registry constants =
-    source_module_collect (MAP (\(owner,syntax).
-      source_module_bind (source_module_policy_signatures fuel
-        (source_module_policy_context trust policies registry constants owner syntax)
-        trust.smt_slots (source_module_policy_for policies owner) syntax)
-        (\tls. case ALOOKUP trust.smt_ids owner of NONE => SM_Error SME_Resolution
-         | SOME src => SM_Ok (src,tls))) registry)
-End
-
-Definition source_module_policy_body_context_def:
-  source_module_policy_body_context trust policies registry constants signatures owner syntax =
-    let ctx = source_module_body_context trust registry constants signatures owner syntax in
-    let annotations = source_module_policy_context trust policies registry constants owner syntax in
-    ctx with <| sm_names := annotations.sm_names;
-      sm_bindings := FLAT (MAP (\(key,p).
-        if source_module_declaration_only p then
-          case ALOOKUP trust.smt_ids key of NONE => [] | SOME src =>
-            [(key,SE_Interface (FLAT (MAP (\tl. case tl of
-              FunctionDecl vis mut nr raw name params defaults ret body => [(name,params,ret,mut)]
-              | _ => []) (case ALOOKUP signatures src of SOME tls => tls | NONE => []))))]
-        else []) policies) ++ ctx.sm_bindings |>
-End
-
 Definition source_module_policy_elaborate_registry_def:
   source_module_policy_elaborate_registry fuel trust policies registry constants links =
     source_module_bind (source_module_policy_signature_modules fuel trust policies registry constants)
@@ -171,7 +119,7 @@ Definition source_module_policy_elaborate_registry_def:
       if type_env_all_modules signatures <> trust.smt_type_defs then
         SM_Error (SME_Declaration "nominal-environment") else
       source_module_collect (MAP (\(owner,syntax).
-        let ctx = source_module_policy_body_context trust policies registry constants signatures owner syntax in
+        let ctx = source_module_policy_signature_context trust policies registry constants signatures owner syntax in
         case source_module_override_bindings trust links ctx.sm_bindings of
           NONE => SM_Error (SME_Declaration "override-cycle")
         | SOME bindings => source_module_bind (source_module_policy_bodies fuel
@@ -181,26 +129,6 @@ Definition source_module_policy_elaborate_registry_def:
             | SOME src => SM_Ok (src,tls))) registry))
 End
 
-Definition source_module_link_program_def:
-  source_module_link_program trust policies keys program =
-    if MAP FST policies <> keys then SM_Error (SME_Declaration "policy-registry") else
-    case source_resolve_program_registry program keys of
-      NONE => SM_Error SME_Resolution
-    | SOME registry =>
-        if ~source_module_trust_ok registry trust then SM_Error SME_Resolution else
-        case source_resolve_registry_constants registry of
-          SOME (SCEnv_Resolved constants) =>
-            (case (source_module_link trust registry constants,
-                   source_module_policy_overrides trust policies registry constants) of
-               (SOME exports,SOME links) =>
-                 if source_module_policy_link_ok trust policies exports then
-                   SM_Ok (registry,constants,exports,links)
-                 else SM_Error (SME_Declaration "interface-export")
-             | _ => SM_Error (SME_Declaration "source-linkage"))
-        | SOME err => SM_Error (SME_Dependencies err)
-        | NONE => SM_Error SME_Resolution
-End
-
 Definition source_module_elaborate_def:
   source_module_elaborate fuel trust policies keys program =
     source_module_bind (source_module_link_program trust policies keys program)
@@ -208,19 +136,6 @@ Definition source_module_elaborate_def:
         source_module_bind (source_module_policy_elaborate_registry fuel trust policies registry constants links)
           (\modules. SM_Ok (SourceRetained program modules)))
 End
-
-Theorem source_module_link_program_equations:
-  source_module_link_program trust policies keys program = SM_Ok (registry,constants,exports,links) ==>
-  MAP FST policies = keys /\
-  source_resolve_program_registry program keys = SOME registry /\
-  source_module_trust_ok registry trust /\
-  source_resolve_registry_constants registry = SOME (SCEnv_Resolved constants) /\
-  source_module_link trust registry constants = SOME exports /\
-  source_module_policy_overrides trust policies registry constants = SOME links /\
-  source_module_policy_link_ok trust policies exports
-Proof
-  simp[source_module_link_program_def, AllCaseEqs()] >> rw[] >> gvs[]
-QED
 
 Theorem source_module_elaborate_linkage:
   source_module_elaborate fuel trust policies keys program = SM_Ok retained ==>

@@ -19,7 +19,7 @@ fun audit th = let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
 fun check_fixture name = let
   val path = fixtures ^ name ^ ".json"
   val legacy = vyperCheckContractFrontendLib.check_constant_contract_file_legacy {address=address,path=path}
-  val input = vyperCheckContractFrontendLib.prepare_constant_source_file {address=address,path=path}
+  val input = vyperCheckContractFrontendLib.Source.prepare_constant_file {address=address,path=path}
   val checked = vyperCheckContractFrontendLib.Source.check_contract_result input
   val strict = vyperCheckContractFrontendLib.Source.check_constant_contract_file {address=address,path=path}
   val original = JSONDecode.decodeFile sourceSyntaxLib.annotated_ast

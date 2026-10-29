@@ -2,7 +2,7 @@ Theory sourceMeaningProgram
 Ancestors
   sourceMeaningProgramDefs sourceMeaningStmt sourceMeaningStmtDefs sourceMeaningConst
   sourceMeaningRuntime sourceMeaningEnv sourceMeaningDefs sourceModuleCompile sourceModuleElaborate sourceModuleDecl
-  sourceModuleStmt sourceModuleEnv sourceModuleDefs sourceResolveModules sourceResolve
+  sourceModuleContext sourceModuleSignature sourceModuleStmt sourceModuleEnv sourceModuleDefs sourceResolveModules sourceResolve
   sourceConstEnvProps sourceConstEnv sourceSyntax vyperInterpreter vyperState
   vyperContext vyperAST vyperTypeContract compileVyper alist list pair
 
@@ -112,10 +112,10 @@ Theorem source_meaning_elaborate_member:
     !owner syntax. MEM (owner,syntax) registry ==>
     ?bindings src tops.
       source_module_override_bindings trust links
-        (source_module_body_context trust registry constants signatures owner syntax).sm_bindings =
+        (source_module_signature_context trust registry constants signatures owner syntax).sm_bindings =
           SOME bindings /\
       source_module_bodies fuel
-        ((source_module_body_context trust registry constants signatures owner syntax)
+        ((source_module_signature_context trust registry constants signatures owner syntax)
           with sm_bindings := bindings) trust.smt_slots syntax = SM_Ok tops /\
       MEM (src,tops) (retained_executable retained)
 Proof
@@ -150,7 +150,7 @@ Theorem source_meaning_compile_entry:
       MEM (owner,syntax) registry /\
       MEM declaration (source_module_declarations syntax) ==>
       ?bindings src tops emitted.
-        let ctx = (source_module_body_context trust registry constants signatures owner syntax)
+        let ctx = (source_module_signature_context trust registry constants signatures owner syntax)
           with sm_bindings := bindings in
         source_module_body fuel ctx trust.smt_slots declaration = SM_Ok emitted /\
         MEM (src,tops) (retained_executable retained) /\

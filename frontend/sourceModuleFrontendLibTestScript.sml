@@ -120,4 +120,5 @@ fun audit thy = app (fn (name,th) => let
     List.all (fn s => s = "DISK_THM") oracles then ()
     else raise Fail ("source module kernel audit: " ^ thy ^ "." ^ name) end) (DB.thms thy);
 val () = app audit ["sourceModuleDefs","sourceModuleEnv","sourceModuleStmt",
-  "sourceModuleDecl","sourceModuleElaborate","sourceModuleFrontendLibTest"];
+  "sourceModuleSignature","sourceModuleContext","sourceModuleDecl",
+  "sourceModuleElaborate","sourceModuleFrontendLibTest"];

@@ -67,7 +67,7 @@ fun elaborate input : elaborated = let
   val retained = successful equation
   val modules = rhs (concl (evaluated (mk_icomb (``retained_executable``,retained))))
   val linking = evaluated (List.foldl (fn (arg,f) => mk_icomb (f,arg))
-    ``sourceModuleElaborate$source_module_link_program``
+    ``sourceModuleContext$source_module_link_program``
     [List.nth (args,1),List.nth (args,2),List.nth (args,3),List.nth (args,5)])
 in {retained=retained, modules=modules,equation=equation,
     original=MATCH_MP source_ordinary_program_retains_source equation,linking=linking} end

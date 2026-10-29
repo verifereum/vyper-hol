@@ -3,7 +3,7 @@ Ancestors
   sourceMeaningCall sourceMeaningCallDefs sourceMeaningProgram sourceMeaningProgramDefs
   sourceMeaningStmt sourceMeaningStmtDefs sourceMeaningRuntime sourceMeaningDefs
   sourceMeaningValue sourceMeaningElaborate sourceMeaningCode sourceExprProps sourceExprDefs
-  sourceModuleDecl sourceModuleDefs sourceTypeDefs sourceSyntax
+  sourceModuleSignature sourceModuleDecl sourceModuleDefs sourceTypeDefs sourceSyntax
   vyperInterpreter vyperState vyperContext vyperAST vyperValue
   vyperTypeSystem finite_map alist list rich_list pair
 

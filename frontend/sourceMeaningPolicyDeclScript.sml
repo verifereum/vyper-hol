@@ -1,7 +1,7 @@
 Theory sourceMeaningPolicyDecl
 Ancestors
   sourceMeaningDecl sourceMeaningStmt sourceMeaningCall sourceMeaningCallDefs sourceMeaningDefs
-  sourceMeaningPolicy sourceMeaningProgram sourceModuleElaborate sourceModuleDecl sourceModuleDefs sourceSyntax vyperAST list
+  sourceMeaningPolicy sourceMeaningProgram sourceModuleContext sourceModuleSignature sourceModuleElaborate sourceModuleDecl sourceModuleDefs sourceSyntax vyperAST list
 
 (* Preserved parser policy acts on SOURCE declaration meanings. Pure functions
    have no lock; external ordinary functions inherit the explicitly supplied
@@ -69,7 +69,7 @@ Theorem source_meaning_policy_program_transport:
       MEM (owner,syntax) registry /\
       MEM declaration (source_module_declarations syntax) ==>
       ?bindings src tops emitted.
-        let ctx = (source_module_policy_body_context trust policies registry constants signatures
+        let ctx = (source_module_policy_signature_context trust policies registry constants signatures
           owner syntax) with sm_bindings := bindings in
         source_module_policy_body fuel ctx trust.smt_slots
           (source_module_policy_for policies owner) declaration = SM_Ok emitted /\

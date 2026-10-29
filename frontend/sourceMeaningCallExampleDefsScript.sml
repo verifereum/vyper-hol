@@ -2,7 +2,7 @@ Theory sourceMeaningCallExampleDefs
 Ancestors
   sourceMeaningCompile sourceMeaningDispatch sourceMeaningDecl sourceMeaningCall
   sourceMeaningCallDefs sourceMeaningStmtDefs sourceMeaningDefs sourceModuleElaborate
-  sourceModuleEnv sourceModuleDecl sourceModuleDefs sourceSyntax sourceConstAST
+  sourceModuleContext sourceModuleEnv sourceModuleDecl sourceModuleDefs sourceSyntax sourceConstAST
   sourceConstAnnotation sourceConstEnv vyperAST vyperValue vyperState vyperContext finite_map
 
 Definition source_meaning_call_uint_def:
@@ -44,7 +44,7 @@ Definition source_meaning_call_signature_def:
        [Literal NoneT (IntL 0)] source_meaning_call_uint []]
 End
 Definition source_meaning_call_ctx_def:
-  source_meaning_call_ctx = source_module_body_context source_meaning_call_trust
+  source_meaning_call_ctx = source_module_signature_context source_meaning_call_trust
     source_meaning_call_registry source_meaning_call_constants
     [(NONE,source_meaning_call_signature)] ["main"] source_meaning_call_syntax
 End

@@ -1,9 +1,9 @@
 Theory sourceOrdinaryProgramCoreTest
 Ancestors
-  sourceOrdinaryProgram sourceModuleElaborate sourceModuleEnv vyperTypeContract vyperAST
+  sourceOrdinaryProgram sourceModuleContext sourceModuleEnv vyperTypeContract vyperAST
 Libs
   sourceOrdinaryProgramTestLib
 fun holbuild_extra_deps (_:string list) = ();
 val () = holbuild_extra_deps ["fixtures/check_contract","../lowering/defs/bytecode"];
 val () = app sourceOrdinaryProgramTestLib.ordinary
-  (List.take (sourceOrdinaryAcceptanceLib.rows,6));
+  (List.take (sourceOrdinaryFixtureLib.rows,6));

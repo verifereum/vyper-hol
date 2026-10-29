@@ -3,6 +3,7 @@ open HolKernel Parse boolLib bossLib
 open sourceOrdinaryProgramTheory sourceModuleDefsTheory sourceModuleEnvTheory
 open sourceSyntaxTheory sourceTypeDefsTheory vyperASTTheory vyperTypeContractTheory
 open finite_mapTheory sourceConstBuiltinTheory sourceConstBuiltinComputeTheory cv_transLib
+open sourceExprWitnessDefsTheory
 (* Reuse the existing verified Keccak conversion; these are kernel equations
    from original strings, never compiler selectors or folded metadata. *)
 val () = app (fn s => let
@@ -20,7 +21,7 @@ fun get key json = JSONDecode.decode (JSONDecode.field key JSONDecode.raw) json;
 fun unwrap json = case JSONDecode.decode (sourceConstASTLib.optional_field "annotated_ast" JSONDecode.raw) json of
   SOME j => j | NONE => json;
 fun ev tm = rhs (concl (EVAL tm));
-val audit = sourceOrdinaryAcceptanceLib.audit;
+val audit = sourceOrdinaryFixtureLib.audit;
 fun poison (JSON.OBJECT fs) = JSON.OBJECT (("folded_value",JSON.OBJECT
     [("ast_type",JSON.STRING "Int"),("value",JSON.INT 777),
      ("type",JSON.OBJECT [("typeclass",JSON.STRING "integer"),
@@ -88,34 +89,15 @@ fun save name checked = let
   val _ = save_thm (name ^ "_ordinary_original",#original elab)
   val _ = save_thm (name ^ "_ordinary_check",#composition checked)
 in () end;
-(* The older full-Source oracle erases interface Acc Address identities.
-   Ordinary residual calls intentionally retain those legacy constructors.
-   Take their expected function bodies directly from the independent legacy
-   fixture, except for independently pinned decimal and literal-membership
-   results; never rewrite/normalize the actual bridge output. *)
-fun expected_modules name identities slots modules = let
-  val expected = sourceOrdinaryAcceptanceLib.expected_modules name identities slots modules
-  val legacy = map pairSyntax.dest_pair (#1 (listSyntax.dest_list modules))
-  fun one entry = let
-    val (src,tops) = pairSyntax.dest_pair entry
-    val old = case List.find (fn (s,_) => aconv s src) legacy of
-      NONE => [] | SOME (_,ts) => #1 (listSyntax.dest_list ts)
-    fun body tl = let val (ctor,args) = strip_comb tl in
-      if name <> "decimal_folding" andalso name <> "in_static_array" andalso
-          #Name (dest_thy_const ctor) = "FunctionDecl" then
-        valOf (List.find (fn candidate => let val (head,cs) = strip_comb candidate in
-          #Name (dest_thy_const head) = "FunctionDecl" andalso
-          aconv (List.nth (args,4)) (List.nth (cs,4)) end) old)
-      else tl end
-    in pairSyntax.mk_pair (src,listSyntax.mk_list
-      (map body (#1 (listSyntax.dest_list tops)),``:toplevel``)) end
-in listSyntax.mk_list (map one (#1 (listSyntax.dest_list expected)),``:num option # toplevel list``) end;
+(* Expected bodies preserve legacy interface constructors except independently
+   pinned decimal/literal-membership results. Actual bridge output is untouched. *)
+val expected_modules = sourceOrdinaryFixtureLib.expected_modules;
 fun ordinary (name,path) = let
   val () = print ("BRIDGE_START " ^ name ^ "\n")
-  val old = sourceOrdinaryAcceptanceLib.inherited path
-  val identities = sourceOrdinaryAcceptanceLib.ids name
+  val old = sourceOrdinaryFixtureLib.inherited path
+  val identities = sourceOrdinaryFixtureLib.ids name
   val modules = #modules old
-  val nominals = sourceOrdinaryAcceptanceLib.nominal_names identities modules
+  val nominals = sourceOrdinaryFixtureLib.nominal_names identities modules
   val tenv = ev ``type_env_all_modules ^modules``
   val layouts = #layouts old
   val slots = ev ``FLAT (MAP (\(a,s,t). s ++ t) ^layouts)``
@@ -164,6 +146,43 @@ in () end;
 fun standalone json : sourceModuleLoaderLib.loaded =
   {program=JSONDecode.decode sourceSyntaxLib.annotated_ast json,keys=``[["main"]]``,
    nonreentrant_defaults=``[F]``,declaration_only=``[F]``,provenance=json};
+(* The retained expression-witness table states expected ASTs independently of
+   either frontend. Use its DATA, not its elaborator, to pin folded subtrees in
+   the legacy declaration/statement skeleton. Pin constructor folds separately. *)
+fun witness_expected name slots modules = let
+  val label = stringSyntax.fromMLstring name
+  val expression = optionSyntax.dest_some (ev
+    ``case ALOOKUP (MAP (\(n,r,c,t,oexpr,result). (n,result)) source_expr_witnesses) ^label of
+        SOME (SC_Value e) => SOME e | _ => NONE``)
+  fun replacement statement value = let val (ctor,args) = strip_comb statement in
+    case #Name (dest_thy_const ctor) of
+      "Return" => ``Return (SOME ^value)``
+    | "Expr" => ``Expr ^value``
+    | "Assign" => list_mk_comb (ctor,[hd args,value])
+    | _ => raise Fail ("unexpected witness statement: " ^ name) end
+  fun declaration tl = let val (ctor,args) = strip_comb tl in
+    if #Name (dest_thy_const ctor) <> "FunctionDecl" then tl else let
+      val id = stringSyntax.fromHOLstring (List.nth (args,4))
+      val body = #1 (listSyntax.dest_list (List.nth (args,8)))
+      val body = if id = "__init__" then
+        if name = "i12_immut_with_storage" then
+          replacement (hd body) ``Literal (BaseT (UintT 256)) (IntL 20)`` :: List.tl body
+        else if name = "p29_imm_multi" then
+          List.take (body,length body - 1) @ [replacement (List.last body)
+            ``Literal (BaseT (BytesT (Fixed 32)))
+              (BytesL [117w;33w;209w;202w;219w;207w;169w;30w;236w;101w;170w;22w;113w;91w;148w;255w;
+                193w;201w;101w;75w;165w;126w;162w;239w;26w;33w;39w;188w;161w;18w;122w;131w])``]
+        else raise Fail ("unlisted witness constructor: " ^ name)
+      else if name <> "p29_imm_multi" orelse id = "h" then
+        List.take (body,length body - 1) @ [replacement (List.last body) expression]
+      else body
+    in list_mk_comb (ctor,List.take (args,8) @ [listSyntax.mk_list (body,``:stmt``)]) end end
+  val skeleton = expected_modules name ``[(["main"],NONE:num option)]`` slots modules
+  val entries = map (fn entry => let val (src,tops) = pairSyntax.dest_pair entry in
+    pairSyntax.mk_pair (src,listSyntax.mk_list
+      (map declaration (#1 (listSyntax.dest_list tops)),``:toplevel``)) end)
+    (#1 (listSyntax.dest_list skeleton))
+in listSyntax.mk_list (entries,``:num option # toplevel list``) end;
 fun witness name = let
   val () = print ("BRIDGE_WITNESS_START " ^ name ^ "\n")
   val original_json = raw ("fixtures/check_contract/source_syntax/" ^ name ^ ".json")
@@ -179,11 +198,23 @@ fun witness name = let
   val inp = input p trust layouts
   val checked = vyperCheckContractFrontendLib.check_contract_result inp
   val () = save name checked
-  val source = sourceModuleFrontendLib.check_simple
-    {fuel=fuel,trust=trust,keys= #keys original,program= #program original}
-    {layouts=layouts,address=address}
-  val () = if aconv (#modules checked) (#modules (#elaboration source)) andalso
-      aconv (#artifact checked) (#artifact source) then () else raise Fail ("witness AST/artifact: " ^ name)
+  (* Independent fixture supplies the declaration/statement skeleton only.
+     Raw legacy residual MethodId is intentionally uncheckable. Expected folds
+     come from the retained expression-witness table, never a Source frontend. *)
+  val legacy = vyperCheckContractFrontendLib.prepare_check_input_legacy
+    {in_deploy=true,address=address,
+     annotated_ast=JSONDecode.decode jsonASTLib.annotated_ast annotated,
+     storage_layout=JSONDecode.decodeFile jsonASTLib.storage_layout
+       ("../lowering/defs/bytecode/folded-value-oracle/" ^ name ^ ".json")}
+  val expected = witness_expected name slots (#modules legacy)
+  val expected_check = vyperCheckContractLib.check_contract
+    {in_deploy=true,address=address,modules=expected,layouts=layouts}
+  val () = audit expected_check
+  val () = if aconv (#modules checked) expected andalso
+      aconv (optionSyntax.mk_some (#artifact checked)) (rhs (concl expected_check))
+    then () else raise Fail ("witness independent AST/artifact: " ^ name)
+  val _ = save_thm (name ^ "_ordinary_expected_ast",REFL expected)
+  val _ = save_thm (name ^ "_ordinary_expected_artifact",expected_check)
   val () = invariant original original_json annotated inp checked
   val () = print ("BRIDGE_WITNESS_PASS " ^ name ^ "\n")
 in () end;

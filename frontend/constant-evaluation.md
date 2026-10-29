@@ -107,7 +107,7 @@ terms. They do not prove the ML decoder, capture tool or source-file authenticit
 
 ## Other entry points and legacy isolation
 
-`Source.check_contract_result` (also `check_source_contract_result`) is a
+`Source.check_contract_result` is a
 separate source-elaboration API with input
 `{fuel, trust, keys, program, layouts, address}`. It elaborates bodies using the
 source phase rather than the ordinary bridge's inherited residual claims.
@@ -118,15 +118,15 @@ pre-erasure protocol emitted by `tools/source_module_loader.py`, preserving
 captured keys, nonreentrancy policies and declaration-only interface policies.
 `Source.check_loaded_contract_result` accepts an already loaded capture. The
 record API uses the policy-free `_simple` equations; it does not infer captured
-policies. The lower-level `check_source_contract_file` decodes caller-supplied
-source syntax with explicit keys/trust/layouts, without capture authentication.
+policies. Caller-supplied source syntax can be decoded with `sourceSyntaxLib`
+and passed to `Source.check_contract_result` with explicit keys/trust/layouts,
+without capture authentication.
 See [sourceModuleLoader.md](sourceModuleLoader.md) and
 [sourceModule.md](sourceModule.md) for the protocol and phase contracts.
 
-`prepare_constant_source_file` adapts the restricted `jsonConstASTLib` integer
+`Source.prepare_constant_file` adapts the restricted `jsonConstASTLib` integer
 syntax into an original `SourceProgram`, without evaluating arithmetic in ML.
-`check_constant_contract_file`, `check_constant_source_contract_file` and
-`Source.check_constant_contract_file` use that same source evaluator. This
+`Source.check_constant_contract_file` checks it using that same source evaluator. This
 adapter trusts legacy `is_constant`/`is_public` qualifier assertions because its
 input is post-erasure; it is not genuine pre-erasure source provenance. Its
 original expressions and bounds do not use folded values or inferred types.

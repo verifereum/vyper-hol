@@ -2,7 +2,7 @@ Theory sourceMeaningPolicy
 Ancestors
   sourceMeaningProgram sourceMeaningProgramDefs sourceMeaningRuntime sourceMeaningDefs
   sourceMeaningConst sourceMeaningValue sourceMeaningStmt sourceMeaningStmtDefs
-  sourceModuleStmt sourceModuleElaborate
+  sourceModuleContext sourceModuleStmt sourceModuleElaborate
   sourceModuleDecl sourceModuleDefs sourceResolveModules sourceResolve sourceSyntax
   sourceConstEnv sourceExprDefs vyperInterpreter vyperState vyperContext vyperAST alist list pair
 
@@ -28,10 +28,10 @@ Theorem source_meaning_policy_elaborate_member:
     !owner syntax. MEM (owner,syntax) registry ==>
     ?bindings src tops.
       source_module_override_bindings trust links
-        (source_module_policy_body_context trust policies registry constants signatures owner syntax).sm_bindings =
+        (source_module_policy_signature_context trust policies registry constants signatures owner syntax).sm_bindings =
           SOME bindings /\
       source_module_policy_bodies fuel
-        ((source_module_policy_body_context trust policies registry constants signatures owner syntax)
+        ((source_module_policy_signature_context trust policies registry constants signatures owner syntax)
           with sm_bindings := bindings) trust.smt_slots
         (source_module_policy_for policies owner) syntax = SM_Ok tops /\
       MEM (src,tops) (retained_executable retained)

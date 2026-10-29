@@ -1,6 +1,6 @@
 Theory sourceOrdinaryProgram
 Ancestors
-  sourceOrdinaryDecl sourceOrdinaryClaims sourceModuleElaborate sourceModuleOverride
+  sourceOrdinaryDecl sourceOrdinaryClaims sourceModuleContext sourceModuleOverride
   sourceModuleDefs sourceModuleEnv sourceSyntax jsonToVyper jsonToVyperExpr
   jsonAST jsonNominalSources vyperTypeContract list pair option alist
 
@@ -14,7 +14,7 @@ Definition source_ordinary_registry_def:
       if type_env_all_modules signatures <> trust.smt_type_defs then
         SM_Error (SME_Declaration "nominal-environment") else
       source_module_collect (MAP (\(i,(owner,syntax)).
-        let ctx = source_module_policy_body_context trust policies registry constants signatures owner syntax;
+        let ctx = source_module_policy_signature_context trust policies registry constants signatures owner syntax;
             path = if i = 0 then [0] else [1;i-1] in
         case (source_module_override_bindings trust links ctx.sm_bindings,ALOOKUP contexts owner) of
           (SOME bindings,SOME legacy) => source_module_bind

@@ -38,6 +38,15 @@ result. The raw compiler has no module-registry input, so multiple modules
 produce `backend-module-linking`, never flattened namespace identities. This
 backend limitation does not restrict module elaboration/checking.
 
+## Shared interfaces
+
+`sourceModuleSignature` owns declaration signatures and function contexts;
+`sourceModuleContext` owns runtime signature contexts and policy-aware linkage.
+Both the ordinary bridge and full-Source elaborator use these same constants.
+`sourceModuleDecl` adds only body production, and `sourceModuleElaborate` composes
+it with the shared contexts. The independent meaning theories use those same
+shared contexts rather than redeclaring them.
+
 ## Resolution and source-sensitive rules
 
 Constants resolve together, including forward/imported references. Annotations

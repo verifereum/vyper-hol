@@ -234,11 +234,6 @@ fun check_loaded_source_contract_result {fuel,trust,source,layouts,address} = le
 in sourceModuleFrontendLib.check_loaded {fuel=fuel,trust=trust,source=source}
   {layouts=layouts,address=address} end
 
-fun check_source_contract input = #checking (check_source_contract_result input)
-fun check_source_contract_file {fuel,trust,keys,layouts,address,path} =
-  check_source_contract {fuel=fuel,trust=trust,keys=keys,layouts=layouts,address=address,
-    program=JSONDecode.decodeFile sourceSyntaxLib.annotated_ast path}
-
 (* Compatibility adapter for the strict #135 JSON fragment. This constructs
    ORIGINAL syntax only; there is no constant arithmetic/type evaluation here.
    jsonConstASTLib's is_constant/is_public assertions are inherited legacy
@@ -311,9 +306,6 @@ in
    layouts=listSyntax.mk_list ([entry],type_of entry),address=address}
 end
 
-fun check_constant_source_contract_file input =
-  check_source_contract (prepare_constant_source_file input)
-
 (* Extract only kernel consequences of the checked artifact. Compilation is
    an explicit antecedent, not an unchecked promise or a bytecode theorem.
    source_meaning_compile_program retains its independent source-module and
@@ -350,7 +342,7 @@ in meaning end
 
 structure Source = struct
   val check_contract_result = check_source_contract_result
-  val check_contract = check_source_contract
+  fun check_contract input = #checking (check_contract_result input)
   val check_loaded_contract_result = check_loaded_source_contract_result
   fun check_contract_file_result {fuel,trust,layouts,address,path} =
     check_loaded_contract_result
@@ -358,10 +350,9 @@ structure Source = struct
        source=sourceModuleLoaderLib.load_file path}
   fun check_contract_file input = #checking (check_contract_file_result input)
   val artifact_semantics = source_artifact_semantics
-  val check_constant_contract_file = check_constant_source_contract_file
+  val prepare_constant_file = prepare_constant_source_file
+  fun check_constant_contract_file input = check_contract (prepare_constant_file input)
 end
-
-val check_constant_contract_file = check_constant_source_contract_file
 
 (* Ordinary public route: original loader provenance + occurrence claims and
    explicitly inherited runtime type/import/layout contexts. All entry points

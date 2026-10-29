@@ -831,7 +831,7 @@ in () end;
 
 (* Strict #135 bound input uses the SAME general source phase. Only the
    explicitly named _legacy entry retains the compatibility evaluator. *)
-val strict_src = vyperCheckContractFrontendLib.prepare_constant_source_file
+val strict_src = vyperCheckContractFrontendLib.Source.prepare_constant_file
   {address=address,path=fixture_dir ^ "constant_bound.json"};
 val strict_checked = vyperCheckContractFrontendLib.Source.check_contract_result strict_src;
 val () = save_source_result "public_constant_bound" strict_src strict_checked;
@@ -875,11 +875,10 @@ val () = app (fn variant => let
     else raise Fail "metadata changed source equation/artifact" end)
   [metadata_variant NONE source_json,
    metadata_variant (SOME (JSON.STRING "poisoned metadata")) source_json];
-val () = exact_equation "source file entry point"
+val () = exact_equation "decoded source syntax input"
   (lhs (concl (#checking public_source))) (rhs (concl (#checking public_source)))
-  (vyperCheckContractFrontendLib.check_source_contract_file
-    {fuel=``80:num``,trust=source_trust,keys=``[["main"]]``,layouts=source_layouts,
-     address=address,path=source_path});
+  (vyperCheckContractFrontendLib.Source.check_contract (source_input
+    (JSONDecode.decodeFile sourceSyntaxLib.annotated_ast source_path)));
 
 (* Exercise extended internal/imported/export and external source call paths
    through the actual public API, not the legacy translator. *)
@@ -911,7 +910,7 @@ val ordinary_loaded = sourceModuleLoaderLib.load_file
   (fixture_dir ^ "source_loader/multimodule_storage.json");
 val ordinary_trust = ``<| smt_ids := [(["main"],NONE);(["lib"],SOME 3)];
   smt_nominals := []; smt_type_defs := FEMPTY; smt_slots := [((SOME 3,"stored"),0)] |>``;
-val ordinary_public = vyperCheckContractFrontendLib.check_loaded_source_contract_result
+val ordinary_public = vyperCheckContractFrontendLib.Source.check_loaded_contract_result
   {fuel=``40:num``,trust=ordinary_trust,source=ordinary_loaded,
    layouts= #layouts multimodule_input,address=address};
 val () = save_source_result "public_ordinary_multimodule"
@@ -960,21 +959,19 @@ val () = source_rejects "unknown source name" (source_input
    This does not promote the adapter's qualifier flags to source provenance. *)
 val () = app (fn name => let
   val file = {address=address,path=fixture_dir ^ name ^ ".json"}
-  val src = vyperCheckContractFrontendLib.prepare_constant_source_file file
+  val src = vyperCheckContractFrontendLib.Source.prepare_constant_file file
   val checked = vyperCheckContractFrontendLib.Source.check_contract_result src
   val legacy = vyperCheckContractFrontendLib.check_constant_contract_file_legacy file
-  val public = vyperCheckContractFrontendLib.check_constant_contract_file file
   val strict = vyperCheckContractFrontendLib.Source.check_constant_contract_file file
   val original = JSONDecode.decodeFile sourceSyntaxLib.annotated_ast
     ("../tests/sourceShiftCountFixtures/" ^ name ^ ".json")
   val same = vyperCheckContractFrontendLib.Source.check_contract_result
     {fuel= #fuel src,trust= #trust src,keys= #keys src,program=original,
      layouts= #layouts src,address=address}
-  val () = app audit_source_thm [legacy,public,strict,#checking same,#composition same]
-  val () = if aconv (concl public) (concl strict) andalso
-      aconv (concl public) (concl (#checking checked)) andalso
-      aconv (concl public) (concl (#checking same)) andalso
-      aconv (rhs (concl public)) (rhs (concl legacy)) then ()
+  val () = app audit_source_thm [legacy,strict,#checking same,#composition same]
+  val () = if aconv (concl strict) (concl (#checking checked)) andalso
+      aconv (concl strict) (concl (#checking same)) andalso
+      aconv (rhs (concl strict)) (rhs (concl legacy)) then ()
     else raise Fail ("strict public/source/legacy AST mismatch: " ^ name)
   val () = save_source_result ("public_strict_" ^ name) src checked
   val _ = save_thm ("public_strict_" ^ name ^ "_legacy",legacy)
