@@ -382,7 +382,7 @@ Proof
   simp[step_inst_base_def, venomInstTheory.mk_inst_def]
 QED
 
-Theorem compile_load_tuple_elements_extends[local]:
+Theorem compile_load_tuple_elements_extends:
   !tys cenv base off sa elems sb.
     compile_load_tuple_elements cenv base tys off sa = (elems, sb) ==>
     cs_extends sa sb
@@ -402,7 +402,7 @@ Proof
   Cases_on `h` >> simp[eval_operand_def, lookup_var_def]
 QED
 
-Theorem eval_operands_vars_inst_idx[local]:
+Theorem eval_operands_vars_inst_idx:
   !ops s v n.
     eval_operands ops (s with <| vs_vars := v; vs_inst_idx := n |>) =
     eval_operands ops (s with vs_vars := v)
@@ -413,7 +413,7 @@ Proof
   simp[]
 QED
 
-Theorem word_tuple_size[local]:
+Theorem word_tuple_size:
   !tys tvs tenv.
     LIST_REL (\t tv. evaluate_type tenv t = SOME tv) tys tvs /\
     EVERY is_word_type tys ==>
@@ -436,7 +436,7 @@ Proof
 QED
 
 (* A typed tuple: its type's element types and its elements. *)
-Theorem tuple_type_value[local]:
+Theorem tuple_type_value:
   !tenv tys ret_tv v.
     evaluate_type tenv (TupleT tys) = SOME ret_tv /\
     value_has_type ret_tv v ==>
