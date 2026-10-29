@@ -119,13 +119,6 @@ Proof
   EVAL_TAC
 QED
 
-(* TASK032: original proof moved unchanged below the oracle integration. *)
-Theorem accounts_runtime_well_typed_accounts_well_typed:
-  !acc. accounts_runtime_well_typed acc <=> accounts_well_typed acc
-Proof
-  ACCEPT_TAC vyperTypeExtCallCoreTheory.accounts_runtime_well_typed_accounts_well_typed
-QED
-
 Theorem ext_call_success_accounts_ok_imp_extract_premise:
   !outcome.
     ext_call_success_accounts_ok outcome ==>
@@ -136,7 +129,7 @@ Proof
   Cases >> rename1 `(result, final_state)` >>
   Cases_on `result` >>
   simp[ext_call_success_accounts_ok_def, ext_call_success_accounts_ok_aux_def,
-       accounts_runtime_well_typed_accounts_well_typed] >>
+       vyperTypeExtCallCoreTheory.accounts_runtime_well_typed_accounts_well_typed] >>
   Cases_on `y` >> simp[]
 QED
 
@@ -219,7 +212,7 @@ Proof
   Cases >> rename1 `(result, final_state)` >>
   Cases_on `result` >>
   simp[create_accounts_runtime_well_typed_aux_def,
-       accounts_runtime_well_typed_accounts_well_typed] >>
+       vyperTypeExtCallCoreTheory.accounts_runtime_well_typed_accounts_well_typed] >>
   Cases_on `y` >> simp[]
 QED
 
@@ -256,22 +249,6 @@ Proof
   first_x_assum (qspec_then `addr` mp_tac) >> decide_tac
 QED
 
-
-Theorem guarded_make_ext_call_state_accounts_well_typed:
-  !caller callee code calldata value_opt gas accounts tStorage txParams.
-    accounts_well_typed accounts /\
-    ext_call_value_transfer_ok caller callee value_opt accounts ==>
-    accounts_well_typed
-      (make_ext_call_state caller callee code calldata value_opt gas
-         accounts tStorage txParams).rollback.accounts
-Proof
-  rw[make_ext_call_state_def, ext_call_value_transfer_ok_def] >>
-  Cases_on `value_opt` >> gvs[]
-  >- simp[vfmExecutionTheory.transfer_value_def] >>
-  irule vfm_transfer_value_accounts_well_typed >>
-  simp[] >>
-  decide_tac
-QED
 
 Theorem transfer_value_no_type_error:
   !from to amount st s.
@@ -324,15 +301,6 @@ Proof
   simp[]
 QED
 
-Theorem evaluate_abi_decode_return_well_typed:
-  !tenv ret_type bs v tv.
-    evaluate_abi_decode_return tenv ret_type bs = INL v /\
-    evaluate_type tenv ret_type = SOME tv ==>
-    value_has_type tv v
-Proof
-  ACCEPT_TAC vyperTypeExtCallCoreTheory.evaluate_abi_decode_return_well_typed
-QED
-
 Theorem update_accounts_transient_runtime_consistent:
   runtime_consistent env cx st /\ accounts_well_typed accounts' ==>
   runtime_consistent env cx (st with <| accounts := accounts'; tStorage := tStorage' |>)
@@ -343,24 +311,6 @@ Proof
 QED
 
 
-(* Decoder-only boundary shared by concrete and oracle tails. Invalid bytes
-   are RuntimeError, never source TypeError or control transfer. *)
-Theorem extcall_decode_return_sound:
-  runtime_consistent env cx st /\
-  evaluate_type env.type_defs ret_type = SOME ret_tv /\
-  (do
-    v <- lift_sum_runtime (evaluate_abi_decode_return env.type_defs ret_type bs);
-    return (Value v)
-  od) st = (res,st') ==>
-  state_well_typed st' /\ env_consistent env cx st' /\
-  accounts_well_typed st'.accounts /\ no_type_error_result res /\
-  case res of
-  | INL tv => expr_result_typed env (Call ret_type (ExtCall stat skc fsig opts) es drv) tv
-  | INR _ => T
-Proof
-  ACCEPT_TAC vyperTypeExtCallCoreTheory.extcall_decode_return_sound
-QED
-
 Theorem runtime_consistent_logs_append:
   !env cx st ls.
     runtime_consistent env cx st ==>
@@ -369,39 +319,6 @@ Proof
   rw[runtime_consistent_def, env_consistent_def, env_scopes_consistent_def,
      env_immutables_consistent_def, state_well_typed_def] >>
   metis_tac[]
-QED
-
-Theorem append_logs_runtime_consistent:
-  !env cx logs st res st'.
-    runtime_consistent env cx st /\
-    append_logs logs st = (res,st') ==>
-    runtime_consistent env cx st'
-Proof
-  rw[append_logs_def, return_def] >>
-  metis_tac[runtime_consistent_logs_append]
-QED
-
-Theorem env_consistent_get_tenv:
-  env_consistent env cx st ==> get_tenv cx = env.type_defs
-Proof
-  rw[env_consistent_def, env_context_consistent_def]
-QED
-
-Theorem runtime_consistent_get_tenv:
-  runtime_consistent env cx st ==> get_tenv cx = env.type_defs
-Proof
-  ACCEPT_TAC vyperTypeExtCallCoreTheory.runtime_consistent_get_tenv
-QED
-
-Theorem extcall_static_args_runtime_typed_dest:
-  exprs_runtime_typed env args vs /\
-  MAP expr_type args = BaseT AddressT :: arg_tys ==>
-  ?target_addr. dest_AddressV (HD vs) = SOME target_addr
-Proof
-  rw[exprs_runtime_typed_def] >>
-  Cases_on `args` >> gvs[evaluate_type_def] >>
-  rename1 `value_has_type (BaseTV AddressT) v_addr` >>
-  Cases_on `v_addr` >> gvs[value_has_type_def, dest_AddressV_def]
 QED
 
 Theorem values_have_types_LIST_REL_extcall[local]:
@@ -418,108 +335,7 @@ Proof
   Induct >> Cases_on `tvs` >> simp[]
 QED
 
-Theorem extcall_static_args_runtime_typed_tail:
-  exprs_runtime_typed env args vs /\
-  MAP expr_type args = BaseT AddressT :: arg_tys ==>
-  ?tvs.
-    LIST_REL (\ty tv. evaluate_type env.type_defs ty = SOME tv) arg_tys tvs /\
-    values_have_types tvs (TL vs)
-Proof
-  rw[exprs_runtime_typed_def] >>
-  Cases_on `args` >> Cases_on `vs` >>
-  gvs[values_have_types_LIST_REL_extcall] >>
-  metis_tac[LIST_REL_evaluate_expr_types]
-QED
 
-Theorem extcall_static_args_runtime_typed_nonempty:
-  exprs_runtime_typed env args vs /\
-  MAP expr_type args = BaseT AddressT :: arg_tys ==>
-  vs <> []
-Proof
-  rw[exprs_runtime_typed_def] >>
-  Cases_on `vs` >> gvs[listTheory.LIST_REL_EL_EQN]
-QED
-
-Theorem extcall_nonstatic_args_runtime_typed_dest:
-  exprs_runtime_typed env args vs /\
-  MAP expr_type args = BaseT AddressT :: BaseT (UintT 256) :: arg_tys ==>
-  ?target_addr amount. dest_AddressV (HD vs) = SOME target_addr /\
-                       dest_NumV (HD (TL vs)) = SOME amount
-Proof
-  rw[exprs_runtime_typed_def] >>
-  Cases_on `args` >> gvs[] >>
-  Cases_on `t` >> gvs[evaluate_type_def] >>
-  rename1 `value_has_type (BaseTV AddressT) v_addr` >>
-  rename1 `value_has_type (BaseTV (UintT 256)) v_amt` >>
-  Cases_on `v_addr` >> gvs[value_has_type_def, dest_AddressV_def] >>
-  Cases_on `v_amt` >> gvs[value_has_type_def, dest_NumV_def] >>
-  rename1 `0 <= i` >>
-  `~(i < 0:int)` by intLib.ARITH_TAC >>
-  qexists_tac `Num i` >> simp[]
-QED
-
-
-Theorem extcall_nonstatic_args_runtime_typed_tail:
-  exprs_runtime_typed env args vs /\
-  MAP expr_type args = BaseT AddressT :: BaseT (UintT 256) :: arg_tys ==>
-  ?tvs.
-    LIST_REL (\ty tv. evaluate_type env.type_defs ty = SOME tv) arg_tys tvs /\
-    values_have_types tvs (TL (TL vs))
-Proof
-  rw[exprs_runtime_typed_def] >>
-  Cases_on `args` >> Cases_on `vs` >>
-  gvs[values_have_types_LIST_REL_extcall] >>
-  Cases_on `t` >> Cases_on `t'` >>
-  gvs[values_have_types_LIST_REL_extcall] >>
-  metis_tac[LIST_REL_evaluate_expr_types]
-QED
-
-Theorem extcall_nonstatic_args_runtime_typed_nonempty:
-  exprs_runtime_typed env args vs /\
-  MAP expr_type args = BaseT AddressT :: BaseT (UintT 256) :: arg_tys ==>
-  vs <> [] /\ TL vs <> []
-Proof
-  rw[exprs_runtime_typed_def] >>
-  Cases_on `args` >> gvs[] >>
-  Cases_on `t` >> gvs[] >>
-  Cases_on `vs` >> gvs[listTheory.LIST_REL_EL_EQN] >>
-  Cases_on `t` >> gvs[listTheory.LIST_REL_EL_EQN]
-QED
-
-
-(* Actual dispatch boundary: the prefix has already evaluated its arguments.
-   The oracle default IH is applied only at the guarded adopted state. *)
-Theorem well_typed_opt_THE:
-  !env drv. well_typed_opt env drv /\ IS_SOME drv ==> well_typed_expr env (THE drv)
-Proof
-  rpt strip_tac >>
-  Cases_on `drv` >- gvs[optionTheory.IS_SOME_EXISTS] >>
-  rename1 `SOME drv_expr` >>
-  qpat_x_assum `well_typed_opt env (SOME drv_expr)` mp_tac >>
-  rewrite_tac[Once well_typed_expr_def] >>
-  simp[]
-QED
-
-Theorem send_args_runtime_typed_dest:
-  exprs_runtime_typed env es vs /\
-  LENGTH es = 2 /\
-  HD (MAP expr_type es) = BaseT AddressT /\
-  EL 1 (MAP expr_type es) = BaseT (UintT 256) ==>
-  ?toAddr amount. dest_AddressV (HD vs) = SOME toAddr /\
-                  dest_NumV (EL 1 vs) = SOME amount
-Proof
-  rw[exprs_runtime_typed_def] >>
-  Cases_on `es` >> gvs[] >>
-  Cases_on `t` >> gvs[] >>
-  gvs[evaluate_type_def] >>
-  rename1 `value_has_type (BaseTV AddressT) v_addr` >>
-  rename1 `value_has_type (BaseTV (UintT 256)) v_amt` >>
-  Cases_on `v_addr` >> gvs[value_has_type_def, dest_AddressV_def] >>
-  Cases_on `v_amt` >> gvs[value_has_type_def, dest_NumV_def] >>
-  rename1 `0 <= i` >>
-  `~(i < 0:int)` by intLib.ARITH_TAC >>
-  qexists_tac `Num i` >> simp[]
-QED
 
 Theorem selfdestruct_args_runtime_typed_dest:
   exprs_runtime_typed env es vs /\
@@ -533,42 +349,6 @@ Proof
   gvs[evaluate_type_def] >>
   rename1 `value_has_type (BaseTV AddressT) v_addr` >>
   Cases_on `v_addr` >> gvs[value_has_type_def, dest_AddressV_def]
-QED
-
-Theorem create_args_runtime_typed_dest:
-  exprs_runtime_typed env es vs /\
-  LENGTH es >= 2 /\
-  HD (MAP expr_type es) = BaseT AddressT /\
-  LAST (MAP expr_type es) = BaseT (UintT 256) ==>
-  ?target_addr amount. vs <> [] /\
-                       dest_AddressV (HD vs) = SOME target_addr /\
-                       dest_NumV (LAST vs) = SOME amount
-Proof
-  rw[exprs_runtime_typed_def] >>
-  `LENGTH vs = LENGTH es` by metis_tac[LIST_REL_LENGTH] >>
-  `es <> [] /\ vs <> [] /\ tvs <> []` by (Cases_on `es` >> gvs[] >> metis_tac[LIST_REL_LENGTH]) >>
-  gvs[LIST_REL_EL_EQN] >>
-  `HD tvs = BaseTV AddressT` by (
-    qpat_x_assum `!n. n < LENGTH tvs ==> evaluate_type _ _ = SOME _`
-      (qspec_then `0` mp_tac) >>
-    Cases_on `es` >> Cases_on `tvs` >> gvs[evaluate_type_def]) >>
-  `value_has_type (HD tvs) (HD vs)` by (
-    qpat_x_assum `!n. n < LENGTH tvs ==> value_has_type _ _`
-      (qspec_then `0` mp_tac) >>
-    Cases_on `tvs` >> Cases_on `vs` >> gvs[]) >>
-  `LAST tvs = BaseTV (UintT 256)` by (
-    qpat_x_assum `!n. n < LENGTH tvs ==> evaluate_type _ _ = SOME _`
-      (qspec_then `PRE (LENGTH tvs)` mp_tac) >>
-    Cases_on `es` >> Cases_on `tvs` >> gvs[LAST_MAP, LAST_EL, evaluate_type_def]) >>
-  `value_has_type (LAST tvs) (LAST vs)` by (
-    qpat_x_assum `!n. n < LENGTH tvs ==> value_has_type _ _`
-      (qspec_then `PRE (LENGTH tvs)` mp_tac) >>
-    Cases_on `tvs` >> Cases_on `vs` >> gvs[LAST_EL]) >>
-  Cases_on `HD vs` >> gvs[value_has_type_def, dest_AddressV_def] >>
-  Cases_on `LAST vs` >> gvs[value_has_type_def, dest_NumV_def] >>
-  rename1 `0 <= i` >>
-  `~(i < 0:int)` by intLib.ARITH_TAC >>
-  qexists_tac `Num i` >> simp[]
 QED
 
 Theorem raw_call_bytes_slot_size_bound:
@@ -734,36 +514,6 @@ QED
 
 
 
-Theorem runtime_consistent_increment_nonce:
-  !env cx st addr.
-    runtime_consistent env cx st ==>
-    runtime_consistent env cx (SND (update_accounts (vfmExecution$increment_nonce addr) st))
-Proof
-  rw[update_accounts_def, return_def, runtime_consistent_def,
-     env_consistent_def, env_scopes_consistent_def,
-     env_immutables_consistent_def, state_well_typed_def] >>
-  metis_tac[accounts_well_typed_increment_nonce]
-QED
-
-Theorem runtime_consistent_logs_updated_by:
-  !env cx st f.
-    runtime_consistent env cx st ==>
-    runtime_consistent env cx (st with logs updated_by f)
-Proof
-  rw[runtime_consistent_def, env_consistent_def, env_scopes_consistent_def,
-     env_immutables_consistent_def, state_well_typed_def] >>
-  metis_tac[]
-QED
-
-Theorem runtime_consistent_logs_cons:
-  !env cx st l.
-    runtime_consistent env cx st ==>
-    runtime_consistent env cx (st with logs updated_by CONS l)
-Proof
-  rw[runtime_consistent_def, env_consistent_def, env_scopes_consistent_def,
-     env_immutables_consistent_def, state_well_typed_def] >>
-  metis_tac[]
-QED
 Theorem state_well_typed_logs_append:
   !st ls. state_well_typed st ==>
           state_well_typed (st with logs := st.logs ++ ls)
@@ -780,15 +530,6 @@ Proof
   metis_tac[]
 QED
 
-
-Theorem push_log_runtime_consistent:
-  !env cx l st.
-    runtime_consistent env cx st ==>
-    runtime_consistent env cx (SND (push_log l st))
-Proof
-  rw[push_log_def, return_def] >>
-  metis_tac[runtime_consistent_logs_updated_by]
-QED
 
 Theorem selfdestruct_tail_sound:
   !env cx es vs st.
@@ -1221,7 +962,7 @@ Theorem create_tail_result_sound_simp:
      | INR _ => T)
 Proof
   rpt gen_tac >> strip_tac >>
-  `get_tenv cx = env.type_defs` by metis_tac[runtime_consistent_get_tenv] >>
+  `get_tenv cx = env.type_defs` by metis_tac[vyperTypeExtCallCoreTheory.runtime_consistent_get_tenv] >>
   drule exprs_runtime_typed_LIST_REL_source_value >> strip_tac >>
   drule_all create_args_runtime_typed_decode >> strip_tac >>
   `?code_info.
@@ -1313,87 +1054,6 @@ Theorem raw_revert_tail_sound:
 Proof
   rw[bind_def, ignore_bind_def, type_check_def, check_def, assert_def,
      raise_def, return_def] >>
-  gvs[runtime_consistent_def]
-QED
-
-Theorem raw_log_tail_sound:
-  !env cx es vs st bd bd'.
-    runtime_consistent env cx st /\
-    exprs_runtime_typed env es vs /\
-    LENGTH es = 2 /\
-    EL 0 (MAP expr_type es) = ArrayT (BaseT (BytesT (Fixed 32))) bd /\
-    EL 1 (MAP expr_type es) = BaseT (BytesT bd') /\
-    bound_at_most bd 4 ==>
-    runtime_consistent env cx
-      (SND ((do
-               type_check (LENGTH vs = 2) "raw_log args";
-               topics <- lift_option_type (dest_ArrayV (EL 0 vs)) "raw_log topics";
-               data <- lift_option_type (dest_BytesV (EL 1 vs)) "raw_log data";
-               topic_vals <<- (case topics of
-                  TupleV vs => vs | DynArrayV vs => vs | _ => []);
-               type_check (LENGTH topic_vals <= 4) "raw_log too many topics";
-               push_log (encode_raw_event_values cx.txn.target topic_vals data);
-               return (Value NoneV)
-             od) st)) /\
-    (!s. FST ((do
-                 type_check (LENGTH vs = 2) "raw_log args";
-                 topics <- lift_option_type (dest_ArrayV (EL 0 vs)) "raw_log topics";
-                 data <- lift_option_type (dest_BytesV (EL 1 vs)) "raw_log data";
-                 topic_vals <<- (case topics of
-                    TupleV vs => vs | DynArrayV vs => vs | _ => []);
-                 type_check (LENGTH topic_vals <= 4) "raw_log too many topics";
-                 push_log (encode_raw_event_values cx.txn.target topic_vals data);
-                 return (Value NoneV)
-               od) st) <> INR (Error (TypeError s)))
-Proof
-  rpt strip_tac >>
-  drule_all raw_log_args_runtime_typed_dest >> strip_tac >> gvs[] >>
-  Cases_on `topics` >>
-  rw[bind_def, ignore_bind_def, type_check_def, check_def, assert_def,
-     raise_def, return_def, lift_option_type_def, push_log_def] >>
-  TRY (irule runtime_consistent_logs_append >> simp[]) >>
-  qpat_x_assum `FST _ = INR (Error (TypeError s))` mp_tac >>
-  rw[bind_def, ignore_bind_def, type_check_def, check_def, assert_def,
-     raise_def, return_def, lift_option_type_def, push_log_def]
-QED
-
-Theorem raw_log_tail_result_sound:
-  !env cx es vs st res st' bd bd'.
-    runtime_consistent env cx st /\
-    exprs_runtime_typed env es vs /\
-    LENGTH es = 2 /\
-    EL 0 (MAP expr_type es) = ArrayT (BaseT (BytesT (Fixed 32))) bd /\
-    EL 1 (MAP expr_type es) = BaseT (BytesT bd') /\
-    bound_at_most bd 4 /\
-    ((do
-        type_check (LENGTH vs = 2) "raw_log args";
-        topics <- lift_option_type (dest_ArrayV (EL 0 vs)) "raw_log topics";
-        data <- lift_option_type (dest_BytesV (EL 1 vs)) "raw_log data";
-        topic_vals <<- (case topics of
-           TupleV vs => vs | DynArrayV vs => vs | _ => []);
-        type_check (LENGTH topic_vals <= 4) "raw_log too many topics";
-        push_log (encode_raw_event_values cx.txn.target topic_vals data);
-        return (Value NoneV)
-      od) st = (res, st')) ==>
-    state_well_typed st' /\ env_consistent env cx st' /\ accounts_well_typed st'.accounts /\
-    (!msg. res <> INR (Error (TypeError msg))) /\
-    (case res of
-     | INL tv => expr_result_typed env (Call NoneT RawLog es NONE) tv
-     | INR _ => T)
-Proof
-  rpt strip_tac >>
-  qspecl_then [`env`, `cx`, `es`, `vs`, `st`, `bd`, `bd'`]
-    mp_tac raw_log_tail_sound >>
-  simp[] >> strip_tac >>
-  qpat_x_assum `(do _ od) _ = _` mp_tac >>
-  drule_all raw_log_args_runtime_typed_dest >> strip_tac >> gvs[] >>
-  Cases_on `topics` >>
-  rw[bind_def, ignore_bind_def, type_check_def, check_def, assert_def,
-     raise_def, return_def, lift_option_type_def, push_log_def,
-     no_type_error_result_def,
-     expr_result_typed_def, expr_runtime_typed_def,
-     expr_type_def, value_result_typed_def, value_has_type_def,
-     evaluate_type_def, is_HashMapRef_def] >>
   gvs[runtime_consistent_def]
 QED
 
@@ -1537,18 +1197,6 @@ Proof
        value_result_typed_def, is_HashMapRef_def]
 QED
 
-Theorem extcall_decode_return_INL_typed[local]:
-  runtime_consistent env cx st /\
-  evaluate_type env.type_defs ret_type = SOME ret_tv /\
-  evaluate_abi_decode_return env.type_defs ret_type bs = INL v ==>
-  !stat skc fsig opts es drv.
-    expr_result_typed env (Call ret_type (ExtCall stat skc fsig opts) es drv) (Value v)
-Proof
-  rpt strip_tac >>
-  mp_tac (extcall_decode_return_sound |> Q.INST [`res` |-> `INL (Value v)`, `st'` |-> `st`]) >>
-  asm_simp_tac (srw_ss()) [bind_def, lift_sum_runtime_def, return_def]
-QED
-
 Theorem adopt_call_outcome_INR[local]:
   (adopt_call_outcome rq co s = (INR e,s')) <=> F
 Proof
@@ -1662,7 +1310,7 @@ Proof
   gvs[bind_def, ignore_bind_def, get_accounts_def, check_def, assert_def,
       lift_sum_runtime_def, return_def, raise_def, COND_RATOR,
       option_CASE_rator, sum_CASE_rator, prod_CASE_rator, AllCaseEqs()] >>
-  imp_res_tac evaluate_abi_decode_return_well_typed >>
+  imp_res_tac vyperTypeExtCallCoreTheory.evaluate_abi_decode_return_well_typed >>
   imp_res_tac extcall_value_result_typed >>
   gvs[no_type_error_result_def]
 QED
@@ -1690,7 +1338,7 @@ Proof
   `state_well_typed st /\ env_consistent env cx st /\ accounts_well_typed st.accounts`
     by fs[runtime_consistent_def] >>
   drule_all ext_call_operands_fit_typed >> strip_tac >> gvs[] >>
-  `get_tenv cx = env.type_defs` by metis_tac[runtime_consistent_get_tenv] >>
+  `get_tenv cx = env.type_defs` by metis_tac[vyperTypeExtCallCoreTheory.runtime_consistent_get_tenv] >>
   drule_all build_ext_calldata_typed >>
   disch_then (qspec_then `func_name` strip_assume_tac) >>
   `!v. ext_call_kwarg EKValue opts (DROP (LENGTH arg_types) rest) = SOME v ==>

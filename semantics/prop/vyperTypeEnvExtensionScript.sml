@@ -25,14 +25,6 @@ Proof
   rw[env_consistent_def, env_context_consistent_def, env_scopes_consistent_def, env_immutables_consistent_def, env_maps_wf_def]
 QED
 
-Theorem env_maps_wf_no_stale_assignable_T:
-  env_maps_wf env /\ id NOTIN FDOM env.var_types ==>
-  FLOOKUP env.var_assignable id <> SOME T
-Proof
-  rw[env_maps_wf_def, TO_FLOOKUP] >>
-  first_x_assum (qspec_then `id` mp_tac) >> simp[]
-QED
-
 Theorem extend_local_env_maps_wf:
   env_maps_wf env ==> env_maps_wf (extend_local env id ty assignable)
 Proof
@@ -41,18 +33,6 @@ Proof
 QED
 
 (* ===== Static-field preservation for executable statement typing ===== *)
-
-Theorem extend_local_preserves_static:
-  (extend_local env id ty assignable).type_defs = env.type_defs /\
-  (extend_local env id ty assignable).current_src = env.current_src /\
-  (extend_local env id ty assignable).fn_sigs = env.fn_sigs /\
-  (extend_local env id ty assignable).bare_globals = env.bare_globals /\
-  (extend_local env id ty assignable).bare_global_assignable = env.bare_global_assignable /\
-  (extend_local env id ty assignable).toplevel_vtypes = env.toplevel_vtypes /\
-  (extend_local env id ty assignable).flag_members = env.flag_members
-Proof
-  simp[extend_local_def]
-QED
 
 Theorem type_stmt_preserve_nonlocal_fields:
   type_stmt env ret_ty s = SOME env' ==>
@@ -106,26 +86,6 @@ Proof
   metis_tac[type_stmts_preserve_nonlocal_fields]
 QED
 
-Theorem type_stmt_env_consistent_preserved_static:
-  type_stmt env ret_ty s = SOME env' /\ env_consistent env cx st ==>
-  env'.type_defs = env.type_defs /\ env'.current_src = env.current_src /\
-  env'.fn_sigs = env.fn_sigs /\ env'.bare_globals = env.bare_globals /\
-  env'.bare_global_assignable = env.bare_global_assignable /\
-  env'.toplevel_vtypes = env.toplevel_vtypes /\ env'.flag_members = env.flag_members
-Proof
-  metis_tac[type_stmt_env_preserved_static]
-QED
-
-Theorem type_stmts_env_consistent_preserved_static:
-  type_stmts env ret_ty ss = SOME env' /\ env_consistent env cx st ==>
-  env'.type_defs = env.type_defs /\ env'.current_src = env.current_src /\
-  env'.fn_sigs = env.fn_sigs /\ env'.bare_globals = env.bare_globals /\
-  env'.bare_global_assignable = env.bare_global_assignable /\
-  env'.toplevel_vtypes = env.toplevel_vtypes /\ env'.flag_members = env.flag_members
-Proof
-  metis_tac[type_stmts_env_preserved_static]
-QED
-
 (* ===== Variable-map preservation for executable statement typing ===== *)
 
 Theorem type_stmt_env_maps_wf:
@@ -139,26 +99,6 @@ Proof
   TRY (rw[env_maps_wf_def, extend_local_def, FLOOKUP_UPDATE] >>
        Cases_on `s'' = id` >> gvs[FLOOKUP_UPDATE]) >>
   strip_tac >> gvs[]
-QED
-
-Theorem type_stmts_env_maps_wf:
-  env_maps_wf env /\ type_stmts env ret_ty ss = SOME env' ==>
-  env_maps_wf env'
-Proof
-  MAP_EVERY qid_spec_tac [`env`, `env'`] >>
-  Induct_on `ss` >> gvs[type_stmt_def, AllCaseEqs()] >>
-  metis_tac[type_stmt_env_maps_wf]
-QED
-
-Theorem type_stmt_var_types_mono:
-  type_stmt env ret_ty s = SOME env' /\ FLOOKUP env'.var_types id = NONE ==>
-  FLOOKUP env.var_types id = NONE
-Proof
-  Cases_on `s` >> gvs[type_stmt_def, AllCaseEqs(), extend_local_def, FLOOKUP_UPDATE] >>
-  TRY (rename1 `Assert e a` >> Cases_on `a` >> gvs[type_stmt_def]) >>
-  TRY (rename1 `Raise r` >> Cases_on `r` >> gvs[type_stmt_def]) >>
-  TRY (rename1 `Return r` >> Cases_on `r` >> gvs[type_stmt_def]) >>
-  rw[] >> gvs[FLOOKUP_UPDATE]
 QED
 
 Theorem type_stmt_var_types_preserve:
@@ -181,15 +121,6 @@ Proof
   MAP_EVERY qid_spec_tac [`env`, `env'`] >>
   Induct_on `ss` >> gvs[type_stmt_def, AllCaseEqs()] >>
   metis_tac[type_stmt_var_types_preserve]
-QED
-
-Theorem type_stmts_var_types_mono:
-  type_stmts env ret_ty ss = SOME env' /\ FLOOKUP env'.var_types id = NONE ==>
-  FLOOKUP env.var_types id = NONE
-Proof
-  MAP_EVERY qid_spec_tac [`env`, `env'`] >>
-  Induct_on `ss` >> gvs[type_stmt_def, AllCaseEqs()] >>
-  metis_tac[type_stmt_var_types_mono]
 QED
 
 Theorem type_stmt_var_assignable_T_preserve:

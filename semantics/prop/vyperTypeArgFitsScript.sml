@@ -110,30 +110,10 @@ Proof
   gvs[] >> metis_tac[arg_type_fits_value_has_type]
 QED
 
-Theorem type_widens_to_values_have_types:
-  !ts us tvs vs.
-    LIST_REL (type_widens_to tenv) ts us /\
-    LIST_REL (\t tv. evaluate_type tenv t = SOME tv) ts tvs /\
-    LIST_REL value_has_type tvs vs ==>
-    ?tus. LIST_REL (\t tv. evaluate_type tenv t = SOME tv) us tus /\
-          LIST_REL value_has_type tus vs
-Proof
-  Induct >> simp[] >> rpt strip_tac >> gvs[LIST_REL_CONS1] >>
-  drule_all type_widens_to_value_has_type >> strip_tac >>
-  first_x_assum drule_all >> strip_tac >>
-  qexists_tac `tu::tus` >> simp[]
-QED
-
 Theorem type_widens_to_NoneT[simp]:
   type_widens_to tenv NoneT u <=> u = NoneT
 Proof
   Cases_on `u` >> rw[type_widens_to_def, arg_type_fits_def]
-QED
-
-Theorem type_widens_to_not_NoneT:
-  type_widens_to tenv t u /\ u <> NoneT ==> t <> NoneT
-Proof
-  rpt strip_tac >> gvs[]
 QED
 
 Theorem well_formed_type_ArrayT_elem[local]:
