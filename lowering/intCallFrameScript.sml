@@ -8,8 +8,15 @@
  * with no allocations, so every allocation the callee makes, its own and
  * its callees', is at or above it.  The caller's live regions therefore
  * survive the call when the callee changes no byte below that frontier
- * outside the buffers the caller hands it (the return buffer of a memory
- * return); the callee's own regions, all above the frontier, are free.
+ * outside the buffers the caller hands it: the return buffer of a memory
+ * return, and the staging buffers of memory-passed arguments, which a
+ * callee may write since Vyper makes internal parameters modifiable.  The
+ * callee's own regions, all above the frontier, are free.
+ *
+ * allocas_above covers ALLOCA only.  A DALLOCA writes at vs_fmp, which
+ * setup_callee passes on from the caller; nothing yet relates vs_fmp to
+ * vs_alloca_next, so a callee that uses one (raw_call of msg.data) needs
+ * that relation before it can discharge callee_writes_above.
  *
  * TOP-LEVEL:
  *   allocas_above, result_allocas_above — every allocation, and the
@@ -27,7 +34,9 @@
  *   callee_writes_above         — memory below a bound is kept outside some
  *                                 exempt regions
  *   callee_writes_above_refl, callee_writes_above_trans,
- *   callee_writes_above_mstore  — building it up over the callee's steps
+ *   callee_writes_above_mstore,
+ *   callee_writes_above_weaken  — building it up over the callee's steps,
+ *                                 a nested call's included
  *   callee_writes_above_live    — it keeps the bytes of every live region
  *                                 of the caller
  *   invoke_return_frame         — what the INVOKE's return keeps of the
@@ -38,8 +47,9 @@
  *                                 caller's live locals and its frame
  *
  * Helpers:
- *   allocas_above_fields, exec_alloca_allocas_above,
- *   result_allocas_above_mono, foldl_update_var_frame
+ *   exec_alloca_allocas_above,
+ *   result_allocas_above_mono, foldl_update_var_frame,
+ *   local_region_below_frontier
  *)
 
 Theory intCallFrame
@@ -63,14 +73,6 @@ Definition result_allocas_above_def:
   result_allocas_above lo (Abort a s) = allocas_above lo s ∧
   result_allocas_above lo (Error e) = T
 End
-
-Theorem allocas_above_fields:
-  ∀lo s s'.
-    s'.vs_allocas = s.vs_allocas ∧ s'.vs_alloca_next = s.vs_alloca_next ⇒
-    (allocas_above lo s' ⇔ allocas_above lo s)
-Proof
-  simp[allocas_above_def]
-QED
 
 Theorem result_allocas_above_mono:
   ∀lo lo' r. lo ≤ lo' ∧ result_allocas_above lo' r ⇒ result_allocas_above lo r
@@ -248,7 +250,9 @@ QED
 
 (* ===== The callee's writes ===== *)
 
-(* m' keeps the bytes of m below lo, outside the exempt regions excl. *)
+(* m' keeps the bytes of m below lo, outside the exempt regions excl: the
+   buffers the caller hands the callee (a memory return's buffer, the
+   staging buffers of memory-passed arguments). *)
 Definition callee_writes_above_def:
   callee_writes_above lo excl m m' ⇔
     ∀b sz. b + sz ≤ lo ∧
@@ -284,6 +288,29 @@ Proof
   gvs[EVERY_MEM] >> res_tac >> gvs[regions_disjoint_def] >> decide_tac
 QED
 
+(* A nested call's obligation, at its own frontier lo' ≥ lo with exempt
+   buffers at or above lo (the callee's own ALLOCAs), gives the outer one. *)
+Theorem callee_writes_above_weaken:
+  ∀lo lo' excl excl' m m'.
+    callee_writes_above lo' excl' m m' ∧ lo ≤ lo' ∧
+    EVERY (λ(eb,esz). lo ≤ eb) excl' ⇒
+    callee_writes_above lo excl m m'
+Proof
+  rw[callee_writes_above_def] >> first_x_assum irule >>
+  gvs[EVERY_MEM, pairTheory.FORALL_PROD, regions_disjoint_def] >>
+  rpt strip_tac >> res_tac >> decide_tac
+QED
+
+(* A live local's region lies below the frontier. *)
+Theorem local_region_below_frontier[local]:
+  ∀func cenv scopes s n lo sz.
+    local_ptrs_rel func cenv scopes s ∧ local_region cenv scopes s n lo sz ⇒
+    lo + sz ≤ s.vs_alloca_next
+Proof
+  rw[local_ptrs_rel_def, local_region_def] >>
+  first_x_assum drule_all >> strip_tac >> gvs[]
+QED
+
 (* The caller's live regions lie below its frontier; those that miss the
    exempt regions keep their bytes. *)
 Theorem callee_writes_above_live:
@@ -296,8 +323,7 @@ Theorem callee_writes_above_live:
       mem_bytes_at lo sz s.vs_memory = mem_bytes_at lo sz m'
 Proof
   rpt strip_tac >>
-  `lo + sz ≤ s.vs_alloca_next` by
-    (gvs[local_region_def, local_ptrs_rel_def] >> res_tac >> gvs[]) >>
+  `lo + sz ≤ s.vs_alloca_next` by metis_tac[local_region_below_frontier] >>
   gvs[callee_writes_above_def] >> metis_tac[]
 QED
 
@@ -345,7 +371,7 @@ Theorem step_inst_invoke_live_regions:
     local_ptrs_rel func cenv scopes s ∧
     EVERY (not_local_ptr cenv scopes) inst.inst_outputs ∧
     callee_writes_above s.vs_alloca_next excl s.vs_memory cs'.vs_memory ∧
-    (∀name lo sz. local_region cenv scopes s name lo sz ⇒
+    (∀n lo sz. local_region cenv scopes s n lo sz ⇒
        EVERY (λ(eb,esz). regions_disjoint lo sz eb esz) excl) ⇒
     ∃s'. step_inst fuel ctx inst s = OK s' ∧
          local_ptrs_rel func cenv scopes s' ∧
