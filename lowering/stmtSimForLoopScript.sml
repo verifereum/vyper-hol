@@ -310,10 +310,10 @@ End
    n1 + k + 1, related at the source state after the iteration (the
    loop variable's scope popped); on a break it reaches the exit block; on
    any other outcome it exits as the body does. *)
-Theorem for_iteration:
+Theorem for_iteration_alloca[local]:
   !ctx func cenv bc cx RetQ ty stmts esk cc id tyv p sz w ainst cv ev dv nv
    n1 n2 k cond_lbl exit_lbl body_lbl incr_lbl j1 j2 j3 bbb i1 i2 i3
-   sb0 sb1 sj st r2 es2 sc rest cap.
+   sb0 sb1 sj st r2 es2 sc rest.
     (* the code and the variables *)
     for_code func cenv bc ty stmts id tyv p sz ainst cv ev dv nv
       cond_lbl exit_lbl body_lbl incr_lbl j1 j2 j3 bbb i1 i2 i3 sb0 sb1 sj /\
@@ -328,9 +328,6 @@ Theorem for_iteration:
     lookup_var cv cc = SOME (i2w (n1 + &k)) /\
     lookup_var ev cc = SOME (i2w n2) /\ lookup_var p cc = SOME w /\
     FLOOKUP cc.vs_allocas ainst.inst_id = SOME (w2n w, sz) /\
-    cap <= w2n w /\
-    (cenv.ce_is_ctor ==>
-       immutable_prefix_bound cenv cx.txn.target cenv.ce_module esk cap) /\
     eval_stmts cx stmts
       (esk with scopes :=
          (FEMPTY |+ (id, <| assignable := F; type := tyv;
@@ -372,12 +369,8 @@ Proof
   rpt gen_tac >> REWRITE_TAC [for_code_def] >> strip_tac >>
   `bc.ce_module = cenv.ce_module /\ bc.ce_is_ctor = cenv.ce_is_ctor` by
     (qpat_assum `_ = cenv` (fn th => ONCE_REWRITE_TAC [SYM th]) >> simp[]) >>
-  qspecl_then [`ctx`, `func`, `cenv`, `bc`, `cx`, `esk`, `cc`, `id`, `tyv`,
-               `p`, `sz`, `w`, `ainst`, `cv`, `ev`, `dv`, `n1`, `n2`, `k`,
-               `cond_lbl`, `exit_lbl`, `body_lbl`, `j1`, `j2`, `j3`, `bbb`,
-               `cap`]
-    mp_tac for_body_entry >>
-  impl_tac >- fs[] >> strip_tac >>
+  `not_local_ptr cenv esk.scopes dv` by metis_tac[] >>
+  drule_all for_body_entry_alloca >> disch_then (qspec_then `ctx` strip_assume_tac) >>
   `ret_pc_ok bc sb0 s2` by
     (qspecl_then [`cenv`, `bc`, `st`, `sb0`, `cc`, `s2`] mp_tac
        ret_pc_ok_frame >>
@@ -471,14 +464,74 @@ Proof
   gvs[stmt_exit_def]
 QED
 
+Theorem for_iteration:
+  !ctx func cenv bc cx RetQ ty stmts esk cc id tyv p sz w ainst cv ev dv nv
+   n1 n2 k cond_lbl exit_lbl body_lbl incr_lbl j1 j2 j3 bbb i1 i2 i3
+   sb0 sb1 sj st r2 es2 sc rest cap.
+    for_code func cenv bc ty stmts id tyv p sz ainst cv ev dv nv
+      cond_lbl exit_lbl body_lbl incr_lbl j1 j2 j3 bbb i1 i2 i3 sb0 sb1 sj /\
+    not_local_ptr bc (FEMPTY :: esk.scopes) p /\
+    st.cs_next_var <= sb0.cs_next_var /\ ret_pc_ok cenv st cc /\
+    (!x. not_fresh_at st x ==> x <> dv /\ x <> cv /\ x <> nv) /\
+    n1 <= n2 /\ k < Num (n2 - n1) /\ Num (n2 - n1) < dimword (:256) /\
+    cc.vs_current_bb = cond_lbl /\ cc.vs_inst_idx = 0 /\ ~cc.vs_halted /\
+    stmt_state_rel func cenv cx esk cc /\
+    lookup_scopes id esk.scopes = NONE /\
+    lookup_var cv cc = SOME (i2w (n1 + &k)) /\
+    lookup_var ev cc = SOME (i2w n2) /\ lookup_var p cc = SOME w /\
+    FLOOKUP cc.vs_allocas ainst.inst_id = SOME (w2n w, sz) /\
+    cap <= w2n w /\
+    (cenv.ce_is_ctor ==>
+       immutable_prefix_bound cenv cx.txn.target cenv.ce_module esk cap) /\
+    eval_stmts cx stmts
+      (esk with scopes :=
+         (FEMPTY |+ (id, <| assignable := F; type := tyv;
+                            value := IntV (n1 + &k); popped := [] |>)) :: esk.scopes) =
+      (r2, es2) /\
+    stmt_frag ctx func cx (InLoop exit_lbl incr_lbl) RetQ bc
+      (stmts_env bc (InLoop exit_lbl incr_lbl) ty stmts)
+      (esk with scopes :=
+         (FEMPTY |+ (id, <| assignable := F; type := tyv;
+                            value := IntV (n1 + &k); popped := [] |>)) :: esk.scopes)
+      r2 es2 /\
+    stmt_res_ok (InLoop exit_lbl incr_lbl) r2 /\
+    es2.scopes = sc :: rest /\
+    (!n. n IN FDOM sc ==> lookup_scopes n rest = NONE) ==>
+    ((r2 = INL () \/ r2 = INR ContinueException) /\
+     ?cc'. cc'.vs_current_bb = cond_lbl /\ cc'.vs_inst_idx = 0 /\
+           ~cc'.vs_halted /\
+           stmt_state_rel func cenv cx (es2 with scopes := rest) cc' /\
+           lookup_var cv cc' = SOME (i2w (n1 + &(k + 1))) /\
+           lookup_var ev cc' = SOME (i2w n2) /\ lookup_var p cc' = SOME w /\
+           (!x v. not_fresh_at st x /\ lookup_var x cc = SOME v ==>
+                  lookup_var x cc' = SOME v) /\
+           (!a b. FLOOKUP cc.vs_allocas a = SOME b ==>
+                  FLOOKUP cc'.vs_allocas a = SOME b) /\
+           !fuel rr. run_from fuel ctx func cc' = rr /\ (!e. rr <> Error e) ==>
+                     ?fuel'. run_from fuel' ctx func cc = rr) \/
+    (r2 = INR BreakException /\
+     ?s. s.vs_current_bb = exit_lbl /\ s.vs_inst_idx = 0 /\ ~s.vs_halted /\
+         stmt_state_rel func cenv cx (es2 with scopes := rest) s /\
+         (!x v. not_fresh_at st x /\ lookup_var x cc = SOME v ==>
+                lookup_var x s = SOME v) /\
+         (!a b. FLOOKUP cc.vs_allocas a = SOME b ==>
+                FLOOKUP s.vs_allocas a = SOME b) /\
+         !fuel rr. run_from fuel ctx func s = rr /\ (!e. rr <> Error e) ==>
+                   ?fuel'. run_from fuel' ctx func cc = rr) \/
+    (?fuel rr. run_from fuel ctx func cc = rr /\ exit_result rr /\
+               stmt_exit RetQ (es2 with scopes := rest) r2 rr)
+Proof
+  rpt gen_tac >> strip_tac >> drule_all for_iteration_alloca >> simp[]
+QED
+
 (* A range loop from its condition block with the counter at n1 + k and m
    iterations left: it reaches the exit block on the source's normal end
    (a break included), related at the source state after the loop, or
    exits as the source's outcome allows. *)
-Theorem for_loop:
+Theorem for_loop_alloca:
   !m P ctx func cenv bc cx lctx RetQ ty stmts id tyv p sz ainst cv ev dv nv
    n1 n2 cond_lbl exit_lbl body_lbl incr_lbl j1 j2 j3 bbb i1 i2 i3
-   sb0 sb1 sj st k esk cc w res es' cap.
+   sb0 sb1 sj st k esk cc w res es'.
     (* the code and the variables *)
     for_code func cenv bc ty stmts id tyv p sz ainst cv ev dv nv
       cond_lbl exit_lbl body_lbl incr_lbl j1 j2 j3 bbb i1 i2 i3 sb0 sb1 sj /\
@@ -486,11 +539,6 @@ Theorem for_loop:
            not_local_ptr bc (FEMPTY :: scs) p) /\
     st.cs_next_var <= sb0.cs_next_var /\ ret_pc_ok cenv st cc /\
     (!x. not_fresh_at st x ==> x <> dv /\ x <> cv /\ x <> nv) /\
-    (* P bounds every iteration's initialized constructor immutables.
-       Only the loop variable's fixed allocation needs to remain above cap;
-       stmt_frag's pointer/allocation frames keep that witness in the body. *)
-    (!ei. P ei /\ cenv.ce_is_ctor ==>
-       immutable_prefix_bound cenv cx.txn.target cenv.ce_module ei cap) /\
     (* the body, at the iteration states over a source state where P holds *)
     (!ei j r2 es2.
        P ei /\ lookup_scopes id ei.scopes = NONE /\ j < Num (n2 - n1) /\
@@ -524,8 +572,7 @@ Theorem for_loop:
     lookup_scopes id esk.scopes = NONE /\
     lookup_var cv cc = SOME (i2w (n1 + &k)) /\
     lookup_var ev cc = SOME (i2w n2) /\ lookup_var p cc = SOME w /\
-    FLOOKUP cc.vs_allocas ainst.inst_id = SOME (w2n w, sz) /\
-    cap <= w2n w ==>
+    FLOOKUP cc.vs_allocas ainst.inst_id = SOME (w2n w, sz) ==>
     (?s. res = INL () /\ s.vs_current_bb = exit_lbl /\ s.vs_inst_idx = 0 /\
          ~s.vs_halted /\ stmt_state_rel func cenv cx es' s /\
          (!x v. not_fresh_at st x /\ lookup_var x cc = SOME v ==>
@@ -562,7 +609,9 @@ Proof
     >- fs[jump_to_def, update_var_def] >>
     metis_tac[]) >>
   (* an iteration, then the loop from the next counter *)
-  rpt gen_tac >> REWRITE_TAC [for_code_def] >> strip_tac >>
+  pop_assum (mk_asm "loop_ih") >> rpt gen_tac >> strip_tac >>
+  qpat_assum `for_code _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [for_code_def]) >>
   `k < Num (n2 - n1)` by decide_tac >>
   `GENLIST (\j. (IntV (n1 + &(k + j)) : value)) (SUC m) =
    (IntV (n1 + &k) : value) ::
@@ -578,20 +627,16 @@ Proof
   `stmt_res_ok (InLoop exit_lbl incr_lbl) r2` by
     (qpat_assum `_ /\ eval_for _ _ _ _ _ _ = _ \/ _` strip_assume_tac >>
      fs[stmt_res_ok_def]) >>
-  qspecl_then [`ctx`, `func`, `cenv`, `bc`, `cx`, `RetQ`, `ty`, `stmts`, `esk`,
-               `cc`, `id`, `tyv`, `p`, `sz`, `w`, `ainst`, `cv`, `ev`, `dv`,
-               `nv`, `n1`, `n2`, `k`, `cond_lbl`, `exit_lbl`, `body_lbl`,
-               `incr_lbl`, `j1`, `j2`, `j3`, `bbb`, `i1`, `i2`, `i3`, `sb0`,
-               `sb1`, `sj`, `st`, `r2`, `es2`, `sc`, `rest`, `cap`]
-    mp_tac for_iteration >>
-  (impl_tac
-   >- (REWRITE_TAC [for_code_def] >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
-       >- (qpat_assum `!scs. lookup_scopes id scs = NONE ==> _` irule >>
-           first_assum ACCEPT_TAC)
-       >- (strip_tac >>
-           qpat_assum `!ei. P ei /\ cenv.ce_is_ctor ==> _` irule >> simp[]) >>
-       qpat_assum `!ei j r2 es2. P ei /\ _ ==> stmt_frag _ _ _ _ _ _ _ _ _ _`
-         irule >> rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  `not_local_ptr bc (FEMPTY :: esk.scopes) p` by
+    (qpat_assum `!scs. lookup_scopes id scs = NONE ==> _` irule >> simp[]) >>
+  `stmt_frag ctx func cx (InLoop exit_lbl incr_lbl) RetQ bc
+     (stmts_env bc (InLoop exit_lbl incr_lbl) ty stmts)
+     (esk with scopes :=
+       (FEMPTY |+ (id, <| assignable := F; type := tyv;
+                          value := IntV (n1 + &k); popped := [] |>)) :: esk.scopes)
+     r2 es2` by
+    (first_x_assum irule >> simp[]) >>
+  drule_all for_iteration_alloca >>
   (* the iteration's outcome: breaks, exits, or goes on *)
   disch_then (DISJ_CASES_THEN2 (DISJ_CASES_THEN strip_assume_tac)
                 (CONJUNCTS_THEN2 assume_tac strip_assume_tac) o
@@ -620,53 +665,88 @@ Proof
      pop_assum (fn th => REWRITE_TAC [th]) >> simp[]) >>
   (* the loop goes on from the incremented counter, where P holds again *)
   `P (es2 with scopes := rest)` by
-    (qpat_assum `!ei j r2 es2 sc rest. P ei /\ _ ==> P _`
-       (qspecl_then [`esk`, `k`, `r2`, `es2`, `sc`, `rest`] mp_tac) >>
-     impl_tac
-     >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> gvs[]) >>
-     simp[]) >>
+    (qpat_assum `!ei j r2 es2 sc rest. P ei /\ _ ==> P _` drule_all >> simp[]) >>
   `ret_pc_ok cenv st cc'` by
     (qspecl_then [`cenv`, `cenv`, `st`, `st`, `cc`, `cc'`] mp_tac
        ret_pc_ok_frame >>
      impl_tac >- fs[] >> simp[]) >>
-  qpat_x_assum `!P ctx func. _`
-    (qspecl_then [`P`, `ctx`, `func`, `cenv`, `bc`, `cx`, `lctx`, `RetQ`, `ty`,
-                  `stmts`, `id`, `tyv`, `p`, `sz`, `ainst`, `cv`, `ev`, `dv`,
-                  `nv`, `n1`, `n2`, `cond_lbl`, `exit_lbl`, `body_lbl`,
-                  `incr_lbl`, `j1`, `j2`, `j3`, `bbb`, `i1`, `i2`, `i3`, `sb0`,
-                  `sb1`, `sj`, `st`, `k + 1`, `es2 with scopes := rest`, `cc'`,
-                  `w`, `res`, `es'`, `cap`] mp_tac) >>
-  (impl_tac
-   >- (REWRITE_TAC [for_code_def] >> rpt conj_tac >>
-       TRY (first_assum ACCEPT_TAC)
-       >- decide_tac
-       >- (simp[] >> irule lookup_scopes_none_map_fdom >>
-           qexists_tac `esk.scopes` >> fs[]) >>
-       qpat_assum `!a b. FLOOKUP cc.vs_allocas a = SOME b ==> _` irule >>
-       first_assum ACCEPT_TAC)) >>
+  `k + 1 + m = Num (n2 - n1)` by decide_tac >>
+  `lookup_scopes id (es2 with scopes := rest).scopes = NONE` by
+    (simp[] >> irule lookup_scopes_none_map_fdom >>
+     qexists_tac `esk.scopes` >> fs[]) >>
+  `FLOOKUP cc'.vs_allocas ainst.inst_id = SOME (w2n w, sz)` by
+    (first_x_assum irule >> simp[]) >>
+  asm_x "loop_ih" drule_all >>
   (strip_tac
     >- (rename1 `stmt_state_rel func cenv cx es' s9` >> disj1_tac >>
-        qexists_tac `s9` >> rpt conj_tac >>
-        TRY (first_assum ACCEPT_TAC)
-        >- (rpt strip_tac >>
-            qpat_x_assum `!x v. not_fresh_at st x /\ lookup_var x cc' = SOME v ==> _`
-              irule >> fs[] >>
-            qpat_x_assum `!x v. not_fresh_at st x /\ lookup_var x cc = SOME v ==> _`
-              irule >> fs[])
-        >- (rpt strip_tac >>
-            qpat_x_assum `!a b. FLOOKUP cc'.vs_allocas a = SOME b ==> _` irule >>
-            qpat_x_assum `!a b. FLOOKUP cc.vs_allocas a = SOME b ==> _` irule >>
-            fs[]) >>
-        rpt strip_tac >>
+        qexists_tac `s9` >> simp[] >> rpt strip_tac >>
         qpat_x_assum `!fuel rr. run_from fuel ctx func s9 = rr /\ _ ==> _`
-          (qspecl_then [`fuel`, `rr`] mp_tac) >> simp[] >> strip_tac >>
+          (qspec_then `fuel` mp_tac) >> simp[] >> strip_tac >>
         qpat_x_assum `!fuel rr. run_from fuel ctx func cc' = rr /\ _ ==> _`
-          (qspecl_then [`fuel'`, `rr`] mp_tac) >> simp[]) >>
+          (qspec_then `fuel'` mp_tac) >> simp[]) >>
     disj2_tac >> rename1 `run_from f9 ctx func cc' = r9` >>
     drule exit_result_not_error >> strip_tac >>
     qpat_x_assum `!fuel rr. run_from fuel ctx func cc' = rr /\ _ ==> _`
       (qspecl_then [`f9`, `r9`] mp_tac) >> simp[] >> strip_tac >>
     metis_tac[])
+QED
+
+Theorem for_loop:
+  !m P ctx func cenv bc cx lctx RetQ ty stmts id tyv p sz ainst cv ev dv nv
+   n1 n2 cond_lbl exit_lbl body_lbl incr_lbl j1 j2 j3 bbb i1 i2 i3
+   sb0 sb1 sj st k esk cc w res es' cap.
+    for_code func cenv bc ty stmts id tyv p sz ainst cv ev dv nv
+      cond_lbl exit_lbl body_lbl incr_lbl j1 j2 j3 bbb i1 i2 i3 sb0 sb1 sj /\
+    (!scs. lookup_scopes id scs = NONE ==>
+           not_local_ptr bc (FEMPTY :: scs) p) /\
+    st.cs_next_var <= sb0.cs_next_var /\ ret_pc_ok cenv st cc /\
+    (!x. not_fresh_at st x ==> x <> dv /\ x <> cv /\ x <> nv) /\
+    (!ei. P ei /\ cenv.ce_is_ctor ==>
+       immutable_prefix_bound cenv cx.txn.target cenv.ce_module ei cap) /\
+    (!ei j r2 es2.
+       P ei /\ lookup_scopes id ei.scopes = NONE /\ j < Num (n2 - n1) /\
+       eval_stmts cx stmts
+         (ei with scopes :=
+            (FEMPTY |+ (id, <| assignable := F; type := tyv;
+                               value := IntV (n1 + &j); popped := [] |>)) :: ei.scopes) = (r2, es2) ==>
+       stmt_frag ctx func cx (InLoop exit_lbl incr_lbl) RetQ bc
+         (stmts_env bc (InLoop exit_lbl incr_lbl) ty stmts)
+         (ei with scopes :=
+            (FEMPTY |+ (id, <| assignable := F; type := tyv;
+                               value := IntV (n1 + &j); popped := [] |>)) :: ei.scopes) r2 es2) /\
+    (!ei j r2 es2 sc rest.
+       P ei /\ lookup_scopes id ei.scopes = NONE /\ j < Num (n2 - n1) /\
+       eval_stmts cx stmts
+         (ei with scopes :=
+            (FEMPTY |+ (id, <| assignable := F; type := tyv;
+                               value := IntV (n1 + &j); popped := [] |>)) :: ei.scopes) = (r2, es2) /\
+       (r2 = INL () \/ r2 = INR ContinueException) /\
+       es2.scopes = sc :: rest ==>
+       P (es2 with scopes := rest)) /\
+    n1 <= n2 /\ Num (n2 - n1) < dimword (:256) /\
+    k + m = Num (n2 - n1) /\
+    eval_for cx tyv id stmts (GENLIST (\j. IntV (n1 + &(k + j))) m) esk =
+      (res, es') /\
+    stmt_res_ok lctx res /\ P esk /\
+    cc.vs_current_bb = cond_lbl /\ cc.vs_inst_idx = 0 /\ ~cc.vs_halted /\
+    stmt_state_rel func cenv cx esk cc /\
+    lookup_scopes id esk.scopes = NONE /\
+    lookup_var cv cc = SOME (i2w (n1 + &k)) /\
+    lookup_var ev cc = SOME (i2w n2) /\ lookup_var p cc = SOME w /\
+    FLOOKUP cc.vs_allocas ainst.inst_id = SOME (w2n w, sz) /\
+    cap <= w2n w ==>
+    (?s. res = INL () /\ s.vs_current_bb = exit_lbl /\ s.vs_inst_idx = 0 /\
+         ~s.vs_halted /\ stmt_state_rel func cenv cx es' s /\
+         (!x v. not_fresh_at st x /\ lookup_var x cc = SOME v ==>
+                lookup_var x s = SOME v) /\
+         (!a b. FLOOKUP cc.vs_allocas a = SOME b ==>
+                FLOOKUP s.vs_allocas a = SOME b) /\
+         !fuel rr. run_from fuel ctx func s = rr /\ (!e. rr <> Error e) ==>
+                   ?fuel'. run_from fuel' ctx func cc = rr) \/
+    (?fuel rr. run_from fuel ctx func cc = rr /\ exit_result rr /\
+               stmt_exit RetQ es' res rr)
+Proof
+  rpt gen_tac >> strip_tac >> drule_all for_loop_alloca >> simp[]
 QED
 
 (* A pointer variable handed out at or after st is no local's pointer. *)
