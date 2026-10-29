@@ -59,8 +59,7 @@ Errors are eager even below False Boolean heads or beside dynamic operands.
 * `sourceExprCall` additionally constructs internal calls and interface-based
   external/static calls from resolved source signatures, including original
   `skip_contract_check` constants and typed external-call keywords. This
-  call path shares signature/context infrastructure with the ordinary frontend;
-  independent full-Source body tests are extracted with that optional feature.
+  call path shares signature/context infrastructure with the ordinary frontend.
 
 `source_expr_flag`, `source_expr_index`, and `source_expr_range_bound` share
 original resolution/evaluation evidence. Indices check the supplied count;

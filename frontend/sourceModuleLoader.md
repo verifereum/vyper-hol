@@ -63,9 +63,8 @@ Default nonreentrancy applies only to non-pure external functions unless
 `(NONE,"$.nonreentrant_key")`; missing slots reject. The loader does not fabricate
 layouts or disable locking.
 
-There is no independent full-Source body/semantic/compiler API in this base.
-Neither capture nor a checking equation proves universal source semantics or
-bytecode behavior.
+Loading does not elaborate executable bodies. Neither capture nor a checking
+equation proves universal source semantics or bytecode behavior.
 
 ## Reproduction
 
@@ -76,5 +75,4 @@ holbuild build sourceModuleLoaderTestTheory sourceModulePolicyTestTheory \
 
 These roots exercise capture syntax/policy validation, shared policy legality,
 and ordinary paired imported-interface/nonreentrancy cases. Loader policy claims
-remain trust inputs, not authenticated metadata. Executable full-Source tests
-are extracted with the optional feature.
+remain trust inputs, not authenticated metadata.
