@@ -564,4 +564,3 @@ Theorem compile_ecmul_sim:
 Proof
   cheat
 QED
-

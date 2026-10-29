@@ -254,7 +254,7 @@ QED
 Theorem expr_sim_pre_send_arg:
   !cenv cx env ann has_gas args dflt e es es'.
     expr_sim_pre cenv cx env (Call ann (Send has_gas) args dflt) es /\
-    MEM e args /\ expr_sim_inv cenv cx env es' ==>
+    MEM e args /\ expr_sim_inv cenv cx env es' /\ source_supply es' ==>
     expr_sim_pre cenv cx env e es'
 Proof
   rw[expr_sim_pre_def, well_typed_expr_def, int_calls_expr_def,
@@ -415,9 +415,10 @@ Theorem send_expr_sim:
 Proof
   strip_tac >> drule send_pre_types >> strip_tac >>
   `expr_sim_inv cenv cx env es` by gvs[expr_sim_pre_def] >>
+  `source_supply es` by gvs[expr_sim_pre_def] >>
   `EVERY (\e. is_word_type (expr_type e) /\ expr_sim_ok cenv e) args` by
     gvs[EVERY_MEM] >>
-  `!e s. MEM e args /\ expr_sim_inv cenv cx env s ==>
+  `!e s. MEM e args /\ expr_sim_inv cenv cx env s /\ source_supply s ==>
          expr_sim_pre cenv cx env e s` by
     metis_tac[expr_sim_pre_send_arg] >>
   drule_all typed_stack_args_ready >>
@@ -439,7 +440,8 @@ Proof
       strip_tac >> irule frag_exec_exit_prefix >>
       goal_assum (drule_at Any) >> simp[]) >>
   `local_ptrs_reserved cenv sm` by metis_tac[local_ptrs_reserved_next_var] >>
-  `expr_sim_inv cenv cx env es1` by metis_tac[typed_args_ready_inv] >>
+  `expr_sim_inv cenv cx env es1 /\ source_supply es1` by
+    metis_tac[typed_args_ready_inv] >>
   `LIST_REL (\e v. ?tv. evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
                         value_has_type tv v) args vs` by
     (drule_at (Pat `eval_exprs _ _ _ = _`) stack_args_values_typed >>

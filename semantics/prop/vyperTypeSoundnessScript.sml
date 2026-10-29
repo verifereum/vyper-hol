@@ -9,6 +9,7 @@
 
 Theory vyperTypeSoundness
 Ancestors
+  vyperSourceSupplyDefs vyperSourceSupplyFields
   list rich_list pred_set prim_rec arithmetic finite_map option pair
   vyperAST vyperValue vyperValueOperation vyperMisc vyperABI
   vyperInterpreter vyperState vyperContext vyperStorage vyperTyping
@@ -23,7 +24,7 @@ Libs
 (* ===== Main no-TypeError theorem for already-typed statement lists ===== *)
 
 Theorem typed_stmts_no_type_error:
-  functions_well_typed cx /\ context_well_typed cx /\ accounts_well_typed st.accounts /\
+  functions_well_typed cx /\ context_well_typed cx /\ accounts_well_typed st.accounts /\ source_supply st /\
   state_well_typed st /\ env_consistent env cx st /\
   call_evaluation_safe cx (int_calls_stmts ss) /\
   type_stmts env ret_ty ss = SOME env_after ==>
@@ -33,7 +34,7 @@ Proof
 QED
 
 Theorem typed_stmts_success_preserves_state_env:
-  functions_well_typed cx /\ context_well_typed cx /\ accounts_well_typed st.accounts /\
+  functions_well_typed cx /\ context_well_typed cx /\ accounts_well_typed st.accounts /\ source_supply st /\
   state_well_typed st /\ env_consistent env cx st /\
   call_evaluation_safe cx (int_calls_stmts ss) /\
   type_stmts env ret_ty ss = SOME env_after /\
@@ -44,7 +45,7 @@ Proof
 QED
 
 Theorem typed_stmts_exception_preserves_state_and_return_type:
-  functions_well_typed cx /\ context_well_typed cx /\ accounts_well_typed st.accounts /\
+  functions_well_typed cx /\ context_well_typed cx /\ accounts_well_typed st.accounts /\ source_supply st /\
   state_well_typed st /\ env_consistent env cx st /\
   call_evaluation_safe cx (int_calls_stmts ss) /\
   type_stmts env ret_ty ss = SOME env_after /\
@@ -58,7 +59,7 @@ QED
 
 Theorem typed_expr_no_type_error:
   well_typed_expr env e /\ env_consistent env cx st /\ state_well_typed st /\
-  context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
+  context_well_typed cx /\ accounts_well_typed st.accounts /\ source_supply st /\ functions_well_typed cx /\
   call_evaluation_safe cx (int_calls_expr e) ==>
   no_type_error_eval (eval_expr cx e st)
 Proof
@@ -71,7 +72,7 @@ QED
 
 Theorem typed_expr_success_preserves_type:
   well_typed_expr env e /\ env_consistent env cx st /\ state_well_typed st /\
-  context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
+  context_well_typed cx /\ accounts_well_typed st.accounts /\ source_supply st /\ functions_well_typed cx /\
   call_evaluation_safe cx (int_calls_expr e) /\
   eval_expr cx e st = (INL tvl, st') ==>
   state_well_typed st' /\ eval_result_typed (env,cx,st') tvl (Type (expr_type e))
@@ -106,7 +107,7 @@ QED
 (* ===== Callable-function theorem shape ===== *)
 
 Theorem typed_callable_body_no_type_error:
-  functions_well_typed cx /\ context_well_typed cx /\ accounts_well_typed st.accounts /\
+  functions_well_typed cx /\ context_well_typed cx /\ accounts_well_typed st.accounts /\ source_supply st /\
   state_well_typed st /\ env_consistent env_body cx st /\
   get_module_code cx src = SOME ts /\
   lookup_callable_function cx.in_deploy fn ts = SOME (fm,nr,args,dflts,ret,fn_body) /\
@@ -130,7 +131,7 @@ QED
 
 Theorem typed_stmt_preserves_runtime_storage:
   type_stmt env ret_ty s = SOME env' /\
-  runtime_storage_consistent env cx st /\
+  runtime_storage_consistent env cx st /\ source_supply st /\
   functions_well_typed cx /\
   call_evaluation_safe cx (int_calls_stmt s) /\
   protected_storage_calls_preserve cx /\
@@ -154,7 +155,7 @@ QED
 
 Theorem typed_stmts_preserve_runtime_storage:
   type_stmts env ret_ty ss = SOME env' /\
-  runtime_storage_consistent env cx st /\
+  runtime_storage_consistent env cx st /\ source_supply st /\
   functions_well_typed cx /\
   call_evaluation_safe cx (int_calls_stmts ss) /\
   protected_storage_calls_preserve cx /\
@@ -181,7 +182,7 @@ QED
 
 Theorem typed_expr_preserves_runtime_storage:
   well_typed_expr env e /\
-  runtime_storage_consistent env cx st /\
+  runtime_storage_consistent env cx st /\ source_supply st /\
   functions_well_typed cx /\
   call_evaluation_safe cx (int_calls_expr e) /\
   protected_storage_calls_preserve cx /\
@@ -204,7 +205,7 @@ QED
 
 Theorem typed_exprs_preserve_runtime_storage:
   well_typed_exprs env es /\
-  runtime_storage_consistent env cx st /\
+  runtime_storage_consistent env cx st /\ source_supply st /\
   functions_well_typed cx /\
   call_evaluation_safe cx (int_calls_exprs es) /\
   protected_storage_calls_preserve cx /\

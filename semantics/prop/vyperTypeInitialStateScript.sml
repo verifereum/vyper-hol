@@ -13,6 +13,7 @@ Ancestors
   vyperAST vyperValue vyperMisc vyperTyping vyperState vyperInterpreter vyperContext
   vyperTypeSystem vyperTypeInvariants vyperTypeBindArguments
   vyperTypeExprSoundness vyperTypeStmtSoundness
+  vyperSourceSupplyFields
 Libs
   wordsLib
 
@@ -1069,7 +1070,7 @@ Theorem callable_entry_no_type_error:
   call_evaluation_safe cx (int_calls_stmts body) /\
   functions_well_typed cx /\
   context_well_typed cx /\
-  machine_well_typed am /\
+  machine_well_typed am /\ machine_supply am orc /\
   env_context_consistent env_base cx /\
   env_base.current_src = src /\
   immutables_ready env_base.bare_globals env_base.toplevel_vtypes cx am.immutables /\
@@ -1083,7 +1084,7 @@ Theorem callable_entry_no_type_error:
 Proof
   metis_tac[
     callable_entry_establishes_type_soundness_preconditions,
-    eval_stmts_no_type_error]
+    machine_supply_initial_state, eval_stmts_no_type_error]
 QED
 
 (* Explicit non-vacuity corollary: there exists a concrete configuration
@@ -1093,6 +1094,7 @@ Theorem type_soundness_preconditions_satisfiable:
     functions_well_typed cx /\
     context_well_typed cx /\
     machine_well_typed am /\
+    source_supply st /\
     accounts_well_typed st.accounts /\
     state_well_typed st /\
     env_consistent env_body cx st /\
@@ -1119,6 +1121,8 @@ Proof
               fn_sigs := FEMPTY;
               flag_members := FEMPTY |>` >>
   qexists `initial_state initial_machine_state [FEMPTY]` >>
+  `source_supply (initial_state initial_machine_state [FEMPTY])` by
+    simp[initial_machine_state_def, vyperAccountSupplyTheory.accounts_supply_empty] >>
   simp[type_stmt_def, initial_state_def, initial_machine_state_def,
        empty_evaluation_context_def, empty_call_txn_def, get_tenv_def,
        get_module_code_def, current_module_def, functions_well_typed_def,

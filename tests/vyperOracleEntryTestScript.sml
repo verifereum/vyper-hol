@@ -106,14 +106,14 @@ Proof
 QED
 
 Theorem entry_failure_machine_rollback:
-  call_external orc am tx = (INR exc,am',rqs) ==>
+  call_external orc am tx = (INR exc,am',rqs) /\ exc <> HaltException ==>
   am' = am
 Proof
   metis_tac[call_external_error_rollback]
 QED
 
 Theorem entry_transaction_failure_rollback:
-  call_external_transaction orc am tx = (INR exc,am',rqs) ==>
+  call_external_transaction orc am tx = (INR exc,am',rqs) /\ exc <> HaltException ==>
   am' = clear_machine_logs am
 Proof
   simp[call_external_transaction_def] >>

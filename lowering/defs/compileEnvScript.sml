@@ -967,15 +967,15 @@ Definition transient_rel_def:
     (vs.tStorage addr = contract_transient ss)
 End
 
-(* The accounts and the transient storage of every address are identical,
-   and the source has no pending deletions.  Other addresses' accounts and
-   transient storage change during a body only through the call oracle,
-   whose outcome both sides adopt the same way (adopt_outcome).  Pending
-   deletions come only from create runs, which the supported subset leaves
-   out; a transaction starts with none, as call_external empties them on
-   success.  Venom has no pending deletions, so the success case of the
-   external result relation, which compares the accounts after the source
-   processes its deletions, needs them empty. *)
+(* The raw accounts and the transient storage of every address are
+   identical, and the source has no pending deletions.  Other addresses'
+   accounts and transient storage change during a body only through the
+   call oracle, whose outcome both sides adopt the same way (adopt_outcome).
+   The supported subset excludes create runs and starts with no pending
+   deletions; successful external calls finalize them.  Venom also carries
+   vs_pending_deletions: state_rel separately equates it to the source's
+   pending_deletions, so both lists are empty in this subset.  accounts_rel
+   itself matches raw accounts, not accounts after processing deletions. *)
 Definition accounts_rel_def:
   accounts_rel vs ss ⇔
     vs.accounts = ss.vs_accounts ∧ vs.tStorage = ss.vs_transient ∧
@@ -1215,7 +1215,10 @@ End
      assumes it and the lowered code never writes cc_static, so a CALL
      asks a static request exactly when the source does.
    - outcomes and requests: the oracle outcomes still to consume and the
-     requests recorded so far, as in the result relation. *)
+     requests recorded so far, as in the result relation.
+   - pending_deletions: raw equality with vs_pending_deletions; accounts_rel
+     additionally requires the source list (hence both lists) to be empty
+     in the supported subset. *)
 Definition state_rel_def:
   state_rel func cenv cx vs ss =
     (local_ptrs_rel func cenv vs.scopes ss ∧
@@ -1229,7 +1232,8 @@ Definition state_rel_def:
      call_ctx_rel cx.txn ss.vs_call_ctx ss.vs_tx_ctx ss.vs_block_ctx ∧
      ¬ss.vs_call_ctx.cc_static ∧
      vs.outcomes = SOME ss.vs_outcomes ∧
-     vs.requests = ss.vs_requests)
+     vs.requests = ss.vs_requests ∧
+     vs.pending_deletions = ss.vs_pending_deletions)
 End
 
 (* ===== Result Relation ===== *)

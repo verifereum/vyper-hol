@@ -1,10 +1,13 @@
-(* Record migration regressions refreshed for Send activation. Concrete
- * NONE remains inert; ordinary SOME Send now consumes/records an outcome.
- * Original pre-activation claims are retained below. *)
+(* Record migration regressions refreshed for the current call AST. Concrete
+ * NONE with empty accounts remains inert; ordinary SOME Send consumes/records
+ * an outcome. Original pre-activation claims are retained below.
+ * ExtCall opts describe source-ordered keyword operands; these malformed
+ * no-target calls have no keywords and keep Call's final argument NONE. *)
 Theory vyperOracleStateTest
 Ancestors
   arithmetic integer words list option finite_map cv_type While vyperAST vyperValue vyperContext
   vyperState vyperInterpreter vyperSmallStep extCallOracle
+  vyperOracleInitialStateTest
 Libs
   cv_transLib wordsLib
 
@@ -208,33 +211,25 @@ Proof
   EVAL_TAC >> simp[return_def, transfer_value_def]
 QED
 *)
-Theorem oracle_empty_run[local]:
+Theorem oracle_state_empty_concrete_call:
   run_ext_call empty_evaluation_context.txn.target 0w [] (SOME 0) 0
     empty_accounts empty_transient_storage
     (vyper_to_tx_params empty_evaluation_context.txn) =
-  SOME (T, [], empty_accounts, empty_transient_storage, [])
+  SOME (T, [], empty_accounts, empty_transient_storage, [], [])
 Proof
-  EVAL_TAC >>
-  simp[finite_setTheory.MEM_fset_REP, finite_setTheory.fIN_fset_ABS] >>
-  once_rewrite_tac [OWHILE_THM] >>
-  EVAL_TAC >>
-  once_rewrite_tac [OWHILE_THM] >>
-  EVAL_TAC >> simp[]
+  CONV_TAC (LAND_CONV cv_eval) >>
+  simp[FUN_EQ_THM, vfmStateTheory.empty_accounts_def,
+       vfmStateTheory.empty_account_state_def, vfmStateTheory.empty_storage_def,
+       vfmContextTheory.empty_transient_storage_def]
 QED
 
 Theorem oracle_state_inert_eval:
   os = NONE ==> oracle_state_smoke os rqs
 Proof
   strip_tac >> gvs[] >>
-  `word_of_bytes_be (REPLICATE 20 0w) = (0w : address)` by (CONV_TAC cv_eval) >>
-  simp[oracle_state_smoke_def, evaluate_def, bind_def, ignore_bind_def,
-       read_result_def, return_def, eval_ext_call_def, raise_def] >>
-  simp[type_check_def, vyperValueOperationTheory.evaluate_literal_def, eval_send_def,
-       bind_def, ignore_bind_def, return_def, lift_option_type_def,
-       dest_AddressV_def, dest_NumV_def, ext_call_kwarg_def,
-       get_accounts_def, get_transient_storage_def, empty_state_def,
-       forwarded_gas_def, oracle_empty_run, assert_def, lift_option_def,
-       check_def, update_accounts_def, update_transient_def, append_logs_def]
+  simp[oracle_state_smoke_def, oracle_initial_state_concrete_send,
+       empty_state_def, oracle_state_empty_concrete_call] >>
+  simp[evaluate_def, eval_ext_call_def, bind_def, return_def, raise_def]
 QED
 
 Theorem oracle_state_none_cv:

@@ -2380,6 +2380,12 @@ End
    succeeds), but the formal proof needs: well_typed ⇒ safe_cast is identity.
    Also: default argument expansion not performed — frontend must inline defaults
    into the Call AST node before codegen (Python does this). *)
+(* Only literal topic lists are lowered; constant lists are folded by the frontend. *)
+Definition raw_log_topic_exprs_def:
+  raw_log_topic_exprs (Builtin ann (MakeArray elem_ty bnd) es) = es /\
+  raw_log_topic_exprs _ = []
+End
+
 Definition compile_call_def:
   compile_call cfn cenv ret_ty ty (IntCall func_id) args default_ret st =
     (let name = nsid_to_string func_id in
@@ -2508,14 +2514,43 @@ Definition compile_call_def:
      | _ => let (_, st') = emit_inst INVALID [] [] st in
             (StackValue ret_ty (Lit 0w), st')) ∧
   compile_call cfn cenv ret_ty ty RawLog args default_ret st =
-    (let (_, st') = emit_inst INVALID [] [] st in
-     (StackValue ret_ty (Lit 0w), st')) ∧
+    (case args of
+       [topics_e; data_e] =>
+         let topic_es = raw_log_topic_exprs topics_e in
+         let (topic_ops, st1) = compile_multi_exprs cfn cenv topic_es st in
+         let n = LENGTH topic_ops in
+         if expr_type data_e = BaseT (BytesT (Fixed 32)) then
+           let (tmp, st2) = compile_alloc_buffer 32 st1 in
+           let (v, st3) = lower_value cfn cenv (expr_type data_e) data_e st2 in
+           let (_, st4) = emit_void MSTORE [tmp.buf_operand; v] st3 in
+           let (_, st5) = emit_inst LOG
+             (Lit (n2w n) :: REVERSE topic_ops ++ [Lit 32w; tmp.buf_operand]) [] st4 in
+           (StackValue ret_ty (Lit 0w), st5)
+         else
+           let (data, st2) = lower_value cfn cenv (expr_type data_e) data_e st1 in
+           let (data_len, st3) = emit_op MLOAD [data] st2 in
+           let (data_ptr, st4) = emit_op ADD [data; Lit 32w] st3 in
+           let (_, st5) = emit_inst LOG
+             (Lit (n2w n) :: REVERSE topic_ops ++ [data_len; data_ptr]) [] st4 in
+           (StackValue ret_ty (Lit 0w), st5)
+     | _ => let (_, st') = emit_inst INVALID [] [] st in
+            (StackValue ret_ty (Lit 0w), st')) ∧
   compile_call cfn cenv ret_ty ty RawRevert args default_ret st =
-    (let (_, st') = emit_inst INVALID [] [] st in
-     (StackValue ret_ty (Lit 0w), st')) ∧
+    (case args of
+       [data_e] =>
+         let (data, st1) = lower_value cfn cenv (expr_type data_e) data_e st in
+         let (_, st2) = compile_raw_revert data st1 in
+         (StackValue ret_ty (Lit 0w), st2)
+     | _ => let (_, st') = emit_inst INVALID [] [] st in
+            (StackValue ret_ty (Lit 0w), st')) ∧
   compile_call cfn cenv ret_ty ty SelfDestructTarget args default_ret st =
-    (let (_, st') = emit_inst INVALID [] [] st in
-     (StackValue ret_ty (Lit 0w), st')) ∧
+    (case args of
+       [to_e] =>
+         let (to_op, st1) = lower_value cfn cenv (BaseT AddressT) to_e st in
+         let (_, st2) = compile_selfdestruct to_op st1 in
+         (StackValue ret_ty (Lit 0w), st2)
+     | _ => let (_, st') = emit_inst INVALID [] [] st in
+            (StackValue ret_ty (Lit 0w), st')) ∧
   compile_call cfn cenv ret_ty ty (CreateTarget ck has_salt rof) args default_ret st =
     (let (_, st') = emit_inst INVALID [] [] st in
      (StackValue ret_ty (Lit 0w), st'))

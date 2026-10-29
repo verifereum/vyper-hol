@@ -6,7 +6,10 @@
  * either reaches its end with stmt_state_rel at the source state after it
  * and the operand holding its value (expr_post), or, where the source
  * raises an error other than a type error or an assertion, exits with an
- * Abort as result_rel allows.
+ * Abort as result_rel allows.  A source HaltException exits with Halt and
+ * empty returndata, matching SELFDESTRUCT's stop behavior only, not its
+ * full effects.  Like the abort cases, this exit abstracts effects; the
+ * separate loweringHalt/e2e bridge handles terminal successful effects.
  *
  * TOP-LEVEL:
  *   expr_exit, expr_res_ok, expr_val_rel, expr_val_at, expr_post,
@@ -82,12 +85,17 @@ Ancestors
    raw_call) any Abort, an assertion a revert, or an exceptional halt for
    "UNREACHABLE", as result_rel relates them.  external_call_result_rel
    asks a revert for RevertData, but result_rel, which the statement lemmas
-   conclude, allows any Abort. *)
+   conclude, allows any Abort.  HaltException instead requires Halt with
+   empty returndata (SELFDESTRUCT's stop behavior).  This checks only the
+   halt kind and data, not accounts, balances, pending deletions or other
+   effects; terminal successful effects correctness belongs to the separate
+   loweringHalt/e2e bridge. *)
 Definition expr_exit_def:
   (expr_exit (INR (Error (RuntimeError m))) (Abort a s) <=> T) /\
   (expr_exit (INR (Error (RevertData d))) (Abort a s) <=> T) /\
   (expr_exit (INR (AssertException str)) (Abort a s) <=>
      a = Revert_abort \/ (a = ExHalt_abort /\ str = "UNREACHABLE")) /\
+  (expr_exit (INR HaltException) (Halt s) <=> s.vs_returndata = []) /\
   (expr_exit _ _ <=> F)
 End
 
@@ -98,13 +106,15 @@ Proof
 QED
 
 (* The source results the judgment speaks of: a value, an error other than
-   a type error, or an assertion.  Type errors and control exceptions
-   (break, continue, return) are left out. *)
+   a type error, an assertion, or a successful terminal HaltException.
+   Type errors and control exceptions (break, continue, return) are left
+   out.  This extends terminal-result coverage without excluding any
+   additional AST source forms. *)
 Definition expr_res_ok_def:
   expr_res_ok (res : value + exception) <=>
     (?v. res = INL v) \/ (?m. res = INR (Error (RuntimeError m))) \/
     (?d. res = INR (Error (RevertData d))) \/
-    (?str. res = INR (AssertException str))
+    (?str. res = INR (AssertException str)) \/ res = INR HaltException
 End
 
 (* The value v of an expression of type t held by operand op in s: a word
@@ -320,9 +330,10 @@ End
 (* The fragment of e lowered as a value of type ty, run from a state
    related at es, the source state where e is evaluated, under the code
    premises of the statement lemmas.  On a value it reaches its end in
-   expr_post; on an error other than a type error or an assertion it exits
-   as expr_exit allows.  This is expr_frag (loweringSlice) with the failing
-   outcomes added. *)
+   expr_post; on an error other than a type error, an assertion, or a
+   successful terminal HaltException it exits as expr_exit allows.  This
+   extends expr_frag (loweringSlice) with failing and terminal outcomes;
+   expr_exit does not establish their effects correctness. *)
 Definition expr_sim_def:
   expr_sim ctx func cenv cx ty e es <=>
     !sa sb op res es' s0.
@@ -444,7 +455,8 @@ Definition expr_vv_res_ok_def:
     (?v. res = INL (Value v)) \/ (?p. res = INL (PlaceR p)) \/
     (?m. res = INR (Error (RuntimeError m))) \/
     (?d. res = INR (Error (RevertData d))) \/
-    (?str. res = INR (AssertException str))
+    (?str. res = INR (AssertException str)) \/
+    res = INR HaltException
 End
 
 Definition expr_read_res_ok_def:

@@ -1,0 +1,109 @@
+{
+  "date": "2026-10-24",
+  "task": "issue-567: raw_log, raw_revert, selfdestruct and raw_return",
+  "status": "complete within TASK scope",
+  "bytecode_comparison": {
+    "fixtures": 29,
+    "verdicts": {
+      "MATCH": 19,
+      "PARITY_DEFECT": 10,
+      "ERROR": 0
+    },
+    "checker_accepts": 29,
+    "required_fixtures": 13,
+    "required_fixture_verdicts": {
+      "MATCH": 11,
+      "PARITY_DEFECT": 2
+    },
+    "terminus_witnesses": {
+      "rr04_terminus_ret": "MATCH",
+      "sd03_terminus_ret": "MATCH"
+    },
+    "ordinary_return_control": {
+      "xa_bytes_lit_return": "MATCH"
+    },
+    "generated_outputs": "HOL bytecode, probe logs and per-run reports are generated locally and are not versioned.",
+    "independent_oracle": "oracle/provenance.json",
+    "residual_classification": [
+      {
+        "issues": [
+          "#566"
+        ],
+        "fixtures": [
+          "rl05_3topics_concat",
+          "rl07_3topics_concat_nolit",
+          "rr_local",
+          "ctl01_concat",
+          "ctl_concat_local"
+        ],
+        "controls": [
+          "ctl01_concat",
+          "ctl_concat_local"
+        ],
+        "reason": "Concat allocation/offset differences, classified against the TASK validation dependency."
+      },
+      {
+        "issues": [
+          "#543",
+          "#551"
+        ],
+        "fixtures": [
+          "rr03_abi",
+          "ctl03_abi_method_id"
+        ],
+        "controls": [
+          "ctl03_abi_method_id"
+        ],
+        "reason": "ABI encoding with method_id, classified against the TASK validation dependencies."
+      },
+      {
+        "issues": [
+          "#554"
+        ],
+        "fixtures": [
+          "ctor01_rawlog",
+          "ctor02_rawlog_nolit"
+        ],
+        "reason": "Both constructors also call raw_call. Deploy bytecode differs; runtime bytecode matches (70 bytes each)."
+      },
+      {
+        "issues": [
+          "#564"
+        ],
+        "fixtures": [
+          "rr_nr"
+        ],
+        "reason": "Raw return combined with nonreentrant, classified against the TASK validation dependency."
+      }
+    ]
+  },
+  "hol_validation": {
+    "status": "PASS",
+    "command": "holbuild --jobs 4 build --tactic-timeout 2.5 vyperRawSystemProofAuditTheory e2eCorrectnessTheory e2eBoundaryTestTheory cfgNormBaseTheory mem2varBlockSimHelpersTheory asmCallOraclePropsTheory venomCallOracleRegressionTheory asmOracleRegressionTheory compileVyperTheory codegenReadyComputeTheory concretizeMemLocDefsTheory supportedProgramTheory vyperCheckContractFrontendLib jsonASTLib vyperOracleEntryTestTheory vyperOracleIntegrationTestTheory vyperRawCallCalldataTestTheory vyperCallOutcomeTestTheory vyperTypeCallOutcomeTestTheory vyperExtCallCpsCVTestTheory vyperTestRunnerTheory unitTransformChecksTheory e2eCompositionChecksTheory codegenOracleRegressionTheory fnBoundaryRegressionTheory asmCallActivationRegressionTheory",
+    "final_run_seconds": 96.857,
+    "strict_task_audit": "tests/vyperRawSystemProofAuditScript.sml",
+    "saved_public_composition_schema": "e2eCompositionChecksTheory",
+    "semantic_execution": [
+      "vyperSystemHaltTestTheory",
+      "vyperDeletionTransportTestTheory",
+      "vyperExtCallCpsCVTestTheory",
+      "vyperSendCpsCVTestTheory",
+      "vyperOracleIntegrationTestTheory",
+      "vyperRawCallCalldataTestTheory",
+      "vyperTestRunnerTheory"
+    ]
+  },
+  "proof_integrity": {
+    "status": "PASS",
+    "baseline_commit": "e1c0b64e18e24933954f0b5c07a7f6cabcd3bf15",
+    "new_admissions": 0,
+    "new_axiom_or_oracle_constructor_tokens": 0,
+    "notes": "The 128 pre-existing cheat tokens and 2 FAIL_TAC tokens remain baseline Notes. Existing admitted compiler stages are not certified by this task audit."
+  },
+  "scope": {
+    "whitelist": "Unchanged from pre-task commit e1c0b64e; relaxation remains owned by the TASK dependencies.",
+    "source_typing": "The proved conserved-account-supply domain is explicit at entry and on successful oracle replacement. It is proof-only; SELFDESTRUCT has no added runtime overflow guard.",
+    "revert_bytes": "Source and CPS execution carry and test exact RevertData bytes. The established global e2e Error/optimizer abort contract remains unchanged; no global revert completeness theorem is claimed.",
+    "gas": "No gas-model expansion or tactic-timeout increase."
+  }
+}

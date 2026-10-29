@@ -150,16 +150,20 @@ Proof
   pop_assum SUBST1_TAC >> fs[accounts_rel_def]
 QED
 
-(* Venom adopts an outcome with adopt_outcome on its accounts, transient
-   storage and logs (consume_call_outcome), as the source does. *)
+(* Both sides adopt accounts, transient storage, logs and pending deletions
+   with adopt_outcome.  Preserving accounts_rel's supported-subset empty
+   list requires an adopted outcome to add no pending deletions. *)
 Theorem accounts_rel_adopt_call_outcome:
   !rq outcome es es' s s' logs.
     accounts_rel es s /\ adopt_call_outcome rq outcome es = (INL (), es') /\
+    (outcome.co_success /\ ~rq.cr_static ==> outcome.co_toDelete = []) /\
     s'.vs_accounts =
-      FST (adopt_outcome rq outcome (s.vs_accounts, s.vs_transient, logs)) /\
+      FST (adopt_outcome rq outcome
+             (s.vs_accounts, s.vs_transient, logs, s.vs_pending_deletions)) /\
     s'.vs_transient =
       FST (SND (adopt_outcome rq outcome
-                  (s.vs_accounts, s.vs_transient, logs))) ==>
+                  (s.vs_accounts, s.vs_transient, logs,
+                   s.vs_pending_deletions))) ==>
     accounts_rel es' s'
 Proof
   rw[adopt_call_outcome_equation] >>

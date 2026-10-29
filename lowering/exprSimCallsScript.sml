@@ -14,10 +14,9 @@
  *   5 the creates: compile_create_sim
  *
  * Unprovable as the definitions stand:
- *   - compile_raw_call_sim, compile_raw_log_sim, compile_selfdestruct_sim
- *     and compile_create_sim: compile_call lowers RawCallTarget, RawLog,
- *     SelfDestructTarget and CreateTarget to INVALID (builtinCreate's
- *     compile_create_* are not called yet), where the source can succeed.
+ *   - compile_create_sim: compile_call lowers CreateTarget to INVALID
+ *     (builtinCreate's compile_create_* are not called yet), where the
+ *     source can succeed.
  *   - compile_raw_call_calldata_sim, and the create lowerings once they are
  *     wired in: they allocate with DALLOCA, at vs_fmp, which
  *     stmt_state_rel does not relate to the ALLOCA allocations, so
@@ -27,6 +26,12 @@
  *     second reason: a create stores its run's pending deletions in the
  *     source (eval_create), which state_rel's accounts_rel requires empty,
  *     while Venom's create result (extract_venom_result) drops them.
+ *
+ * RawCallTarget, RawLog and SelfDestructTarget are wired into compile_call.
+ * Their case lemmas remain admitted.  For SelfDestructTarget, expr_exit
+ * now covers HaltException by Halt with empty returndata only; full
+ * terminal effects correctness is the separate loweringHalt/e2e bridge's
+ * responsibility.
  *
  * Internal calls (row 6) have no lemma: expr_sim_pre excludes them
  * (int_calls_expr e = []) until #638 states the INVOKE hypothesis.

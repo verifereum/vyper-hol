@@ -208,7 +208,7 @@ Then run individual generated test theories with `holbuild`, for example:
 holbuild -j"$(nproc)" build vyperTest_functional_builtins_codegen_test_abi_decodeTheory
 ```
 
-The CI workflow runs the generated tests in parallel groups; see `.github/workflows/holbuild.yml` for that full setup.
+The CI workflow runs the generated tests in parallel groups; see `.github/workflows/holbuild.yml` for that full setup. Large suites split trace definitions and execution into independent chunks of at most 100 selected tests and 262144 binary-payload hex characters; an oversized case gets its own chunk. Chunks retain the original suite ID and global test indices, validate selection counts and export provenance, and decode only their own traces and fixture dependencies. CI includes every generated chunk.
 
 Local semantic regressions live as behavior-named pytests in
 [`tests/vyper-regression`](tests/vyper-regression/README.md). The pinned export

@@ -544,3 +544,46 @@ val _ =
    handle Fail message =>
      if String.isSubstring "check_contract returned NONE" message then ()
      else raise Fail message);
+
+(* Module-constant raw_log topics arrive as a Name with a folded List.
+   Decode the same List representation as literal topics, retaining both
+   elements and their type. Integer/boolean Name folding must still work. *)
+fun decode_folded_name folded = let
+  val ast = JSONDecode.decodeString jsonASTLib.annotated_ast
+    ("{\"ast\":{\"body\":[{\"ast_type\":\"FunctionDef\",\"name\":\"test\",\"decorator_list\":[]," ^
+     "\"args\":{\"ast_type\":\"arguments\",\"args\":[]},\"func_type\":{\"argument_types\":[],\"return_type\":null}," ^
+     "\"body\":[{\"ast_type\":\"Expr\",\"value\":{\"ast_type\":\"Name\",\"id\":\"TOPICS\",\"folded_value\":" ^
+     folded ^ "}}]}]}}")
+  val folded_head = prim_mk_const {Thy = "jsonAST", Name = "JE_Folded"}
+in
+  case find_terms (fn tm => let val (head, args) = strip_comb tm in
+    aconv head folded_head andalso length args = 2 end) ast of
+    [name] => name
+  | _ => raise Fail "expected one folded Name"
+end;
+val topic_json = "{\"ast_type\":\"Int\",\"value\":";
+val topics_ty_json = "{\"typeclass\":\"dynamic_array\",\"value_type\":{\"typeclass\":\"integer\",\"bits\":256,\"is_signed\":false},\"length\":4}";
+val folded_topics_name = decode_folded_name
+  ("{\"ast_type\":\"List\",\"elements\":[" ^ topic_json ^ "1}," ^ topic_json ^
+   "2}],\"type\":" ^ topics_ty_json ^ "}");
+val folded_topics_value = List.last (#2 (strip_comb folded_topics_name));
+val () = if aconv folded_topics_value
+  ``JE_List [JE_Int 1 JT_None; JE_Int 2 JT_None]
+     (JT_DynArray (JT_Integer 256 F) 4)``
+  then () else raise Fail "folded topics lost List elements or type";
+Theorem folded_topics_translate_test:
+  translate_expr (0,NONE,[],[],[],[],[]) ^folded_topics_name =
+    Builtin (ArrayT (BaseT (UintT 256)) (Dynamic 4))
+      (MakeArray (SOME (BaseT (UintT 256))) (Dynamic 4))
+      [Literal NoneT (IntL 1); Literal NoneT (IntL 2)]
+Proof
+  EVAL_TAC
+QED
+val folded_int_name = decode_folded_name "{\"ast_type\":\"Int\",\"value\":3}";
+val folded_bool_name = decode_folded_name "{\"ast_type\":\"NameConstant\",\"value\":true}";
+val () = if aconv (List.last (#2 (strip_comb folded_int_name))) ``JE_Int 3 JT_None``
+  andalso aconv (List.last (#2 (strip_comb folded_bool_name))) ``JE_Bool T``
+  then () else raise Fail "integer/boolean Name folding regressed";
+val () = if List.all (fn tag => tag = "DISK_THM")
+  (#1 (Tag.dest_tag (Thm.tag folded_topics_translate_test)))
+  then () else raise Fail "folded topics translation test has oracle dependencies";

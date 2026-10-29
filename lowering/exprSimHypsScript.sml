@@ -18,8 +18,8 @@
  *                       held through pointer variables, and the flag
  *                       member ids, flag member counts and struct fields
  *                       of the compile environment
- *   expr_sim_pre      — expr_sim_inv, the expression well typed, its
- *                       integer types of whole bytes, its buffers below
+ *   expr_sim_pre      — expr_sim_inv, source_supply, the expression well typed,
+ *                       its integer types of whole bytes, its buffers below
  *                       the allocation limit, and no internal call in it
  *   byte_widths_expr  — every node's type has a width of whole bytes
  *   alloc_limits_expr, literal_alloc_ok — every static buffer the lowering
@@ -36,12 +36,12 @@
  *                       its dispatcher's
  *   word_value_type   — the types whose values are word_values
  *   expr_sim_pre_eval — type soundness: evaluation keeps expr_sim_inv and
- *                       raises no type error
+ *                       source_supply, and raises no type error
  *   expr_sim_pre_res_ok, expr_sim_pre_word_result — the results of an
  *                       expression are those expr_sim speaks of; a
  *                       word_value_type one's values are word_values
  *   expr_sim_pre_builtin_arg — an argument of a builtin meets expr_sim_pre
- *                       wherever expr_sim_inv holds
+ *                       wherever expr_sim_inv and source_supply hold
  *   byte_widths_expr_type — the expression's own type has whole bytes
  *   expr_sim_pre_var_types_well_formed — the local types are well formed
  *   well_typed_expr_type_evaluates — a well-typed expression's type
@@ -52,9 +52,9 @@
  *
  * Why these hypotheses:
  *   - well_typed_expr, env_consistent, state_well_typed,
- *     accounts_well_typed, context_well_typed, functions_well_typed and
- *     call_evaluation_safe are exactly the premises of type soundness
- *     (vyperTypeEvalSoundness's eval_scc_type_sound_mutual, the expression
+ *     accounts_well_typed, context_well_typed, functions_well_typed,
+ *     source_supply and call_evaluation_safe are exactly the premises of
+ *     type soundness (vyperTypeEvalSoundness's eval_scc_type_sound_mutual, the expression
  *     conjunct).  The lowering trusts the annotations: an operator picks its
  *     bounds from the operand's annotated type, a literal is emitted at its
  *     annotated type.  So an expression whose values do not have their
@@ -64,7 +64,9 @@
  *     env_consistent, state_well_typed and accounts_well_typed to the next
  *     operand; the others are about the context and do not change.  With no
  *     internal call, call_evaluation_safe is call_evaluation_safe cx [], a
- *     fact about the call stack.
+ *     fact about the call stack.  source_supply bounds the accounts and
+ *     the remaining oracle outcomes; eval_source_supply_mutual preserves it
+ *     through evaluation, including exception results.
  *   - The locals clause: every local of the type environment is held
  *     through a pointer variable (PtrVar (Var p)).  This is how the
  *     statement lowering registers the parameters and locals of an external
@@ -179,7 +181,8 @@ Ancestors
   vyperAST vyperInterpreter vyperState vyperTypeSystem vyperTypeCallGraph
   vyperTypeInvariants vyperTypeExprSoundness vyperTypeCallStackSoundness
   vyperTypeExprResult vyperTypeEvalSoundness vyperTypeBuiltins
-  vyperExprNoControl loweringSlice exprSimUnwrap exprSafeOperand
+  vyperExprNoControl vyperSourceSupplyDefs vyperEvalSupply
+  loweringSlice exprSimUnwrap exprSafeOperand
   vyperEvalOutcomeSuffix vyperRuntimeAccounts
 Libs
   pairLib
@@ -375,7 +378,7 @@ End
 
 Definition expr_sim_pre_def:
   expr_sim_pre cenv cx env e es <=>
-    expr_sim_inv cenv cx env es /\ well_typed_expr env e /\
+    expr_sim_inv cenv cx env es /\ source_supply es /\ well_typed_expr env e /\
     byte_widths_expr e /\ alloc_limits_expr cenv e /\
     int_calls_expr e = [] /\ call_evaluation_safe cx (int_calls_expr e)
 End
@@ -460,11 +463,15 @@ QED
 Theorem expr_sim_pre_eval_result:
   !cenv cx env e es res es'.
     expr_sim_pre cenv cx env e es /\ eval_expr cx e es = (res, es') ==>
-    expr_sim_inv cenv cx env es' /\ no_type_error_result res /\
+    expr_sim_inv cenv cx env es' /\ source_supply es' /\ no_type_error_result res /\
     !tv. res = INL tv ==>
          eval_result_typed (env,cx,es') tv (Type (expr_type e))
 Proof
   rpt gen_tac >> simp[expr_sim_pre_def, expr_sim_inv_def] >> strip_tac >>
+  `source_supply es'` by
+    (qspecl_then [`cx`, `e`, `es`] mp_tac
+       (REWRITE_RULE [source_supply_action_def] (cj 5 eval_source_supply_mutual)) >>
+     simp[]) >>
   qspecl_then [`cx`, `e`] (mp_tac o CONJUNCT1)
     (cj 5 eval_scc_type_sound_mutual) >>
   disch_then (qspecl_then [`env`, `es`, `res`, `es'`] mp_tac) >>
@@ -483,7 +490,7 @@ QED
 Theorem expr_sim_pre_eval:
   !cenv cx env e es res es'.
     expr_sim_pre cenv cx env e es /\ (do result <- eval_expr cx e; read_result cx result od) es = (res, es') ==>
-    expr_sim_inv cenv cx env es' /\ no_type_error_result res /\
+    expr_sim_inv cenv cx env es' /\ source_supply es' /\ no_type_error_result res /\
     !v. res = INL v ==> expr_result_typed env e (Value v)
 Proof
   rpt strip_tac >>
@@ -500,6 +507,9 @@ Proof
       value_result_typed_def, is_HashMapRef_def]
 QED
 
+(* Type soundness excludes type errors; eval_expr_no_control leaves only
+   errors, assertions and HaltException.  All are admitted by expr_res_ok,
+   so no source-form restriction (including selfdestruct) is needed. *)
 Theorem expr_sim_pre_res_ok:
   !cenv cx env e es res es'.
     expr_sim_pre cenv cx env e es /\ (do result <- eval_expr cx e; read_result cx result od) es = (res, es') ==>
@@ -551,7 +561,7 @@ Theorem expr_sim_pre_word_result:
   !cenv cx env e es res es'.
     expr_sim_pre cenv cx env e es /\ word_value_type (expr_type e) /\
     (do result <- eval_expr cx e; read_result cx result od) es = (res, es') ==>
-    expr_sim_inv cenv cx env es' /\ expr_res_ok res /\
+    expr_sim_inv cenv cx env es' /\ source_supply es' /\ expr_res_ok res /\
     !tv. res = INL tv ==>
          ?tyv. word_value tv /\
                  evaluate_type (get_tenv cx) (expr_type e) = SOME tyv /\
@@ -597,7 +607,7 @@ QED
 Theorem expr_sim_pre_builtin_arg:
   !cenv cx env ann bi args e es es'.
     expr_sim_pre cenv cx env (Builtin ann bi args) es /\ MEM e args /\
-    expr_sim_inv cenv cx env es' ==>
+    expr_sim_inv cenv cx env es' /\ source_supply es' ==>
     expr_sim_pre cenv cx env e es'
 Proof
   rw[expr_sim_pre_def, well_typed_expr_def, int_calls_expr_def,

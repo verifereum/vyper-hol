@@ -203,16 +203,15 @@ QED
    Uses ≠ form because simp normalizes ¬(A ∨ B) to ¬A ∧ ¬B. *)
 Theorem finally_intcall_handler_scopes[local]:
   ∀f nr mut cx prev s res s'.
-    finally f
-      (bind (set_scopes prev) (λx.
-          if nr ∧ mut ≠ View ∧ mut ≠ Pure then
+    finally_unless_halt (finally f (set_scopes prev))
+      (if nr ∧ mut ≠ View ∧ mut ≠ Pure then
             case cx.nonreentrant_slot of
             | NONE => return ()
             | SOME slot => release_nonreentrant_lock cx.txn.target slot
-          else return ())) s = (res, s') ⇒
+       else return ()) s = (res, s') ⇒
     MAP FDOM s'.scopes = MAP FDOM prev
 Proof
-  rw[finally_def, bind_def, ignore_bind_def,
+  rw[finally_unless_halt_def, finally_def, bind_def, ignore_bind_def,
      set_scopes_def, return_def, raise_def, AllCaseEqs()]
   \\ gvs[]
   \\ Cases_on `cx.nonreentrant_slot` \\ gvs[return_def]

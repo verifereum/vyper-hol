@@ -256,6 +256,8 @@ Proof
   drule_all eval_raise_reason_cases >> disch_then (qx_choose_then `r1` assume_tac) >>
   qspecl_then [`r1`, `res`, `RetQ`, `es'`] mp_tac raise_reason_exits >>
   impl_tac >- fs[] >> strip_tac >>
+  `!t. stmt_exit RetQ es' res (Abort Revert_abort t)` by
+    gvs[expr_res_ok_def, stmt_res_ok_def, stmt_exit_def, expr_exit_def] >>
   `frag_exec ctx sa sfin (\s. s = s0 /\ stmt_state_rel func cenv cx es s)
       (\s. F) (stmt_exit RetQ es' res)` by
     (irule (INST_TYPE [alpha |-> ``:type``] reason_storage_expr_revert_forced_frag) >> simp[] >>
@@ -292,6 +294,8 @@ Proof
   disch_then (qx_choose_then `rr` assume_tac) >>
   qspecl_then [`rr`, `res`, `RetQ`, `es'`] mp_tac raise_reason_exits >>
   impl_tac >- fs[] >> strip_tac >>
+  `!t. stmt_exit RetQ es' res (Abort Revert_abort t)` by
+    gvs[expr_res_ok_def, stmt_res_ok_def, stmt_exit_def, expr_exit_def] >>
   irule (INST_TYPE [alpha |-> ``:type``] reason_storage_expr_revert_forced_frag) >> simp[] >>
   goal_assum (drule_at (Pat `compile_expr _ _ _ _ = _`)) >> simp[] >>
   qexistsl_tac [`type_memory_bytes cenv (expr_type r)`, `expr_type r`] >>

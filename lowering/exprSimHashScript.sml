@@ -1827,7 +1827,7 @@ QED
 Theorem expr_sim_pre_base_result:
   expr_sim_pre cenv cx env e es /\ expr_type e = BaseT bt /\
   (do r <- eval_expr cx e; read_result cx r od) es = (res,es') ==>
-  expr_sim_inv cenv cx env es' /\ expr_res_ok res /\
+  expr_sim_inv cenv cx env es' /\ source_supply es' /\ expr_res_ok res /\
   !v. res = INL v ==> value_has_type (BaseTV bt) v
 Proof
   strip_tac >> drule_all expr_sim_pre_eval >> strip_tac >>
@@ -1881,6 +1881,7 @@ Theorem compile_typed_unary_builtin_vv_sim:
     local_ptrs_reserved cenv sm /\
     (do r <- eval_expr cx e; read_result cx r od) es = (INL v,es') /\
     value_has_type (BaseTV bty) v /\ expr_sim_inv cenv cx env es' /\
+    source_supply es' /\
     expr_res_ok (builtin_result cx es'.accounts ann bt [expr_type e] [v]) /\
     expr_post func cenv cx e es sa sm s0 es' v x s ==>
     frag_exec ctx sm sb (\t. t = s)
@@ -1899,7 +1900,7 @@ Proof
   `cs_appends (code x)` by simp[] >>
   drule_all hash_unary_suffix_cut >> strip_tac >>
   `!ar es1. (do r <- eval_expr cx e; read_result cx r od) es = (ar,es1) ==>
-     expr_sim_inv cenv cx env es1 /\ expr_res_ok ar /\
+     expr_sim_inv cenv cx env es1 /\ source_supply es1 /\ expr_res_ok ar /\
      !v. ar = INL v ==> value_has_type (BaseTV bty) v` by
     (rpt strip_tac >> drule_all expr_sim_pre_base_result >> simp[]) >>
   drule_at (Pos last) eval_expr_unary_builtin_cases >> simp[] >>

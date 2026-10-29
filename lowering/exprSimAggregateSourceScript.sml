@@ -146,7 +146,8 @@ QED
 Theorem expr_sim_pre_struct_field:
   !ce cx env ann nsid fields e es es'.
     expr_sim_pre ce cx env (StructLit ann nsid fields) es /\
-    MEM e (MAP SND fields) /\ expr_sim_inv ce cx env es' ==>
+    MEM e (MAP SND fields) /\ expr_sim_inv ce cx env es' /\
+    source_supply es' ==>
     expr_sim_pre ce cx env e es'
 Proof
   rw[expr_sim_pre_def, well_typed_expr_def, byte_widths_expr_def,

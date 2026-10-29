@@ -259,6 +259,7 @@ Definition handle_function_def:
   handle_function (ReturnException v) = return v ∧
   handle_function (Error e) = raise $ Error e ∧
   handle_function (AssertException str) = raise $ AssertException str ∧
+  handle_function HaltException = raise HaltException ∧
   handle_function _ = raise $ Error (TypeError "handle_function")
 End
 
@@ -611,6 +612,18 @@ Proof
   \\ asm_simp_tac monad_cong_ss []
 QED
 
+Theorem finally_unless_halt_cong[defncong]:
+  (f s = f' s') ∧
+  (∀x t. f' s = (x, t) ⇒ g t = g' t) ∧ (s = s') ⇒
+  finally_unless_halt f g s = finally_unless_halt f' g' s'
+Proof
+  rpt strip_tac >> gvs[] >> Cases_on `f' s` >>
+  rename1 `f' s = (result, st)` >> Cases_on `result` >>
+  TRY (rename1 `INR ex` >> Cases_on `ex`) >>
+  simp[finally_unless_halt_def] >> irule ignore_bind_cong >>
+  asm_simp_tac monad_cong_ss []
+QED
+
 (* lookup_function with Internal finds body via ALOOKUP on dest_Internal_Fn *)
 Theorem lookup_function_Internal_imp_ALOOKUP:
   ∀src_id_opt fn vis ts v nr w x y z.
@@ -819,12 +832,13 @@ Definition extract_call_result_def:
          | INR NONE =>  (* success - no exception *)
              SOME (T, ctxt.returnData,
                    final_state.rollback.accounts,
-                   final_state.rollback.tStorage, ctxt.logs)
+                    final_state.rollback.tStorage, ctxt.logs,
+                    final_state.rollback.toDelete)
          | INR (SOME Reverted) =>  (* revert - discard callee effects *)
-             SOME (F, ctxt.returnData, orig_accounts, orig_tStorage, [])
+              SOME (F, ctxt.returnData, orig_accounts, orig_tStorage, [], [])
          | INR (SOME ex) =>  (* exceptional halt - no return data *)
              if vfmExecution$vfm_abort (SOME ex) then NONE
-             else SOME (F, [], orig_accounts, orig_tStorage, [])
+              else SOME (F, [], orig_accounts, orig_tStorage, [], [])
          | _ => NONE)  (* still running *)
     | _ => NONE  (* shouldn't happen for single-context call *)
 End
@@ -876,10 +890,10 @@ End
    - tStorage: current transient storage
    - txParams: transaction parameters (preserves tx.origin, block info)
 
-   Returns SOME (success, returnData, accounts', tStorage', emitted_logs),
+   Returns SOME (success, returnData, accounts', tStorage', emitted_logs, deletions),
    or NONE on a model/domain failure. Failed calls (a value the caller can't
    pay, REVERT or another exceptional halt) give success = F, the original
-   accounts and transient storage, and an empty emitted-log list. *)
+   accounts and transient storage, and empty log/deletion lists. *)
 Definition run_ext_call_def:
   run_ext_call caller callee calldata value_opt gas
                accounts tStorage txParams =
@@ -905,7 +919,7 @@ Definition run_ext_call_def:
       case value_opt of
       | SOME amount =>
           if (lookup_account caller accounts).balance < amount
-          then SOME (F, [], accounts, tStorage, [])
+          then SOME (F, [], accounts, tStorage, [], [])
           else NONE
       | NONE => NONE
 End
@@ -1013,10 +1027,12 @@ Definition eval_raw_call_def:
     success <<- FST result; result1 <<- SND result;
     returnData <<- FST result1; result2 <<- SND result1;
     accounts' <<- FST result2; result3 <<- SND result2;
-    tStorage' <<- FST result3; emitted_logs <<- SND result3;
+    tStorage' <<- FST result3; result4 <<- SND result3;
+    emitted_logs <<- FST result4; deletions <<- SND result4;
     update_accounts (K accounts');
     update_transient (K tStorage');
     append_logs emitted_logs;
+    update_pending_deletions (APPEND deletions);
     if flags.rcf_revert_on_failure then do
       (* Vyper re-raises the callee's whole returndata (lower_raw_call) *)
       if success then return () else raise $ Error $ RevertData returnData;
@@ -1032,7 +1048,7 @@ End
 val () = eval_raw_call_def
   |> SRULE [FUN_EQ_THM, bind_def, ignore_bind_def, LET_RATOR,
             COND_RATOR, prod_CASE_rator, sum_CASE_rator, lift_option_def,
-            option_CASE_rator, type_check_def, assert_def]
+            option_CASE_rator, type_check_def, assert_def, update_pending_deletions_def]
   |> cv_auto_trans;
 
 Theorem eval_raw_call_preserves_non_accounts:
@@ -1051,7 +1067,7 @@ Proof
   PairCases_on `call_result` >>
   Cases_on `flags.rcf_revert_on_failure` >> Cases_on `call_result0` >>
   Cases_on `flags.rcf_max_outsize = 0` >>
-  simp[update_accounts_def, update_transient_def, append_logs_def,
+  simp[update_accounts_def, update_transient_def, append_logs_def, update_pending_deletions_def,
        check_def, assert_def, bind_def, ignore_bind_def, return_def, raise_def] >>
   rpt strip_tac >> gvs[]
 QED
@@ -1109,11 +1125,13 @@ Definition eval_ext_call_effects_def:
           success <<- FST result; result1 <<- SND result;
           returnData <<- FST result1; result2 <<- SND result1;
           accounts' <<- FST result2; result3 <<- SND result2;
-          tStorage' <<- FST result3; emitted_logs <<- SND result3;
+          tStorage' <<- FST result3; result4 <<- SND result3;
+          emitted_logs <<- FST result4; deletions <<- SND result4;
           (if success then return () else raise $ Error $ RevertData returnData);
           update_accounts (K accounts');
           update_transient (K tStorage');
           append_logs emitted_logs;
+          update_pending_deletions (APPEND deletions);
           return returnData
         od
   od
@@ -1203,11 +1221,13 @@ Definition eval_send_def:
       success <<- FST result; result1 <<- SND result;
       result2 <<- SND result1;
       accounts' <<- FST result2; result3 <<- SND result2;
-      tStorage' <<- FST result3; emitted_logs <<- SND result3;
+      tStorage' <<- FST result3; result4 <<- SND result3;
+      emitted_logs <<- FST result4; deletions <<- SND result4;
       check success "send failed";
       update_accounts (K accounts');
       update_transient (K tStorage');
       append_logs emitted_logs;
+      update_pending_deletions (APPEND deletions);
       return $ Value $ NoneV
     od
   od ∧
@@ -1274,6 +1294,7 @@ Proof
        assert_def, return_def, raise_def, lift_option_type_def, check_def,
        get_accounts_def, update_accounts_def, get_transient_storage_def,
        lift_option_def, update_transient_def, append_logs_def,
+       update_pending_deletions_def,
        vyperCallOutcomeTheory.take_call_outcome_def,
        vyperCallOutcomeTheory.adopt_call_outcome_def, LET_THM, UNCURRY,
        COND_RATOR, option_CASE_rator, prod_CASE_rator, sum_CASE_rator] >>
@@ -1607,10 +1628,11 @@ Definition evaluate_def:
        | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view
      else return ());
     cxf <- push_function (src_id_opt, fn) env cx;
-    rv <- finally
-      (try (do eval_stmts cxf body; return NoneV od) handle_function)
-      (do pop_function prev;
-          (* Release reentrancy lock if nonreentrant and not view *)
+    rv <- finally_unless_halt
+      (finally
+        (try (do eval_stmts cxf body; return NoneV od) handle_function)
+        (pop_function prev))
+      (do (* Release the lock on return and failure; a halt leaves it set. *)
           if nr ∧ ¬is_view then
             case cx.nonreentrant_slot of
             | NONE => return ()
@@ -1655,7 +1677,8 @@ Definition evaluate_def:
   eval_expr cx (Call _ RawRevert es _) = do
     vs <- eval_exprs cx es;
     type_check (LENGTH vs = 1) "raw_revert args";
-    raise $ Error $ RuntimeError "raw_revert"
+    data <- lift_option_type (dest_BytesV (EL 0 vs)) "raw_revert data";
+    raise (Error (RevertData data))
   od ∧
   (* selfdestruct(to) — terminus *)
   eval_expr cx (Call _ SelfDestructTarget es _) = do
@@ -1663,14 +1686,15 @@ Definition evaluate_def:
     type_check (LENGTH vs = 1) "selfdestruct args";
     target_addr <- lift_option_type (dest_AddressV (EL 0 vs)) "selfdestruct target";
     accounts <- get_accounts;
-    self_acct <<- lookup_account cx.txn.target accounts;
-    balance <<- self_acct.balance;
-    (* Transfer all balance to target *)
-    transfer_value cx.txn.target target_addr balance;
-    (* Zero out sender balance (handled by transfer_value if target ≠ self) *)
-    (* Note: post-Cancun, selfdestruct only sends balance, does not delete account
-       unless in same transaction as creation. We model the simple case. *)
-    return $ Value NoneV
+    self <<- cx.txn.target;
+    balance <<- (lookup_account self accounts).balance;
+    update_accounts (vfmExecution$transfer_value self target_addr balance);
+    if cx.txn.created_in_tx then do
+      update_accounts (λacc. update_account self
+        (lookup_account self acc with balance := 0) acc);
+      update_pending_deletions (CONS self)
+    od else return ();
+    raise HaltException
   od ∧
   (* Blueprint validation interrupts the runtime operand layout before ctor
      arguments, retaining the modular copy size even if those arguments deploy
@@ -2247,6 +2271,8 @@ Definition call_external_function_def:
                of NONE => (INR (Error (TypeError "ext cast ret")), am, st.requests)
                 | SOME v => (INL v, am_ret, st.requests))
             | (INR e, st) => (INR e, am, st.requests))
+       | (INR HaltException, st) =>
+           (INR HaltException, abstract_machine_from_state srcs exps layouts st, st.requests)
        | (INR e, st) => (INR e, am, st.requests)) in
     (res, am_out, rqs (* transient storage cleared separately via ClearTransientStorage action *)))
 End
@@ -2350,6 +2376,8 @@ Definition call_external_def:
    | SOME (mut, nr, args, dflts, ret, body) =>
        case call_external_function orc am cx nr mut ts all_mods args dflts tx.args body ret of
          (INL value, am', rqs) => (INL value, finalize_pending_deletions am', rqs)
+       | (INR HaltException, am', rqs) =>
+           (INR HaltException, finalize_pending_deletions am', rqs)
        | failure => failure
 End
 
@@ -2402,10 +2430,13 @@ Definition load_contract_def:
   case lookup_function NONE tx.function_name Deploy ts of
      | NONE => INR $ Error (RuntimeError "no constructor")
      | SOME (mut, nr, args, dflts, ret, body) =>
-       let cx = (initial_evaluation_context ((addr,mods)::am.sources) am.layouts tx NONE)
+       let cx = (initial_evaluation_context ((addr,mods)::am.sources) am.layouts
+                  (tx with created_in_tx := T) NONE)
                 with in_deploy := T in
        case call_external_function orc am cx nr mut ts mods args dflts tx.args body ret
-         of (INR e, _, _) => INR e
+         of (INR HaltException, am', rqs) =>
+              INL (finalize_pending_deletions am', rqs)
+          | (INR e, _, _) => INR e
           | (_, am', rqs) => INL (finalize_pending_deletions
                                     (am' with sources updated_by CONS (addr, mods)), rqs)
 End

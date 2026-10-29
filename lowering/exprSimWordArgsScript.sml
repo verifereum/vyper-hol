@@ -314,7 +314,7 @@ Proof
       qpat_x_assum `!n b sz'. local_region _ es.scopes s0 _ _ _ ==> _` irule >>
       qexists_tac `n` >> irule local_region_frame >>
       conj_tac >- (qexistsl_tac [`cx`, `func`] >> first_assum ACCEPT_TAC) >>
-      qexistsl_tac [`sa`, `es1.scopes`, `t`] >> simp[]) 
+      qexistsl_tac [`sa`, `es1.scopes`, `t`] >> simp[])
   >- (irule arithmeticTheory.LESS_LESS_EQ_TRANS >>
       qexists_tac `sa.cs_next_id` >> simp[]) >>
   qpat_x_assum `!aid b. FLOOKUP s0.vs_allocas aid = _ ==> _` irule >> simp[]

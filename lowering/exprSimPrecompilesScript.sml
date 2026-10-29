@@ -1306,12 +1306,13 @@ QED
 Theorem expr_sim_pre_stack_result:
   expr_sim_pre cenv cx env e es /\ is_word_type (expr_type e) /\
   (do r <- eval_expr cx e; read_result cx r od) es = (res,es') ==>
-  expr_sim_inv cenv cx env es' /\ expr_res_ok res /\
+  expr_sim_inv cenv cx env es' /\ source_supply es' /\ expr_res_ok res /\
   !v. res = INL v ==> ?tv.
     evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\ value_has_type tv v
 Proof
   strip_tac >> drule_all expr_sim_pre_word_type_result >> strip_tac >>
   rpt conj_tac
+  >- first_assum ACCEPT_TAC
   >- first_assum ACCEPT_TAC
   >- (drule_then irule expr_sim_pre_res_ok >> simp[] >>
       rpt strip_tac >> gvs[]) >>
@@ -1319,17 +1320,18 @@ Proof
 QED
 
 (* typed_args_ready and wb_args_shape of word operands that each meet
-   expr_sim_pre wherever expr_sim_inv holds. *)
+   expr_sim_pre wherever expr_sim_inv and source_supply hold. *)
 Theorem typed_stack_args_ready:
-  (!e s. MEM e args /\ expr_sim_inv cenv cx env s ==>
+  (!e s. MEM e args /\ expr_sim_inv cenv cx env s /\ source_supply s ==>
          expr_sim_pre cenv cx env e s) /\
-  expr_sim_inv cenv cx env es /\
+  expr_sim_inv cenv cx env es /\ source_supply es /\
   EVERY (\e. is_word_type (expr_type e) /\ expr_sim_ok cenv e) args ==>
-  typed_args_ready ctx func cenv cx arg_ty (expr_sim_inv cenv cx env) args /\
+  typed_args_ready ctx func cenv cx arg_ty
+    (\s. expr_sim_inv cenv cx env s /\ source_supply s) args /\
   wb_args_shape cenv arg_ty args
 Proof
   strip_tac >> conj_tac
-  >- (pure_rewrite_tac[typed_args_ready_def] >> rpt gen_tac >>
+  >- (pure_rewrite_tac[typed_args_ready_def] >> BETA_TAC >> rpt gen_tac >>
       disch_then strip_assume_tac >>
       rename1 `expr_sim_inv cenv cx env es_arg` >>
       `is_word_type (expr_type e) /\ expr_sim_ok cenv e` by
@@ -1350,9 +1352,10 @@ QED
 
 Theorem stack_args_values_typed:
   !args vs cenv cx env es es'.
-    (!e s. MEM e args /\ expr_sim_inv cenv cx env s ==>
+    (!e s. MEM e args /\ expr_sim_inv cenv cx env s /\ source_supply s ==>
        expr_sim_pre cenv cx env e s /\ is_word_type (expr_type e)) /\
-    expr_sim_inv cenv cx env es /\ eval_exprs cx args es = (INL vs,es') ==>
+    expr_sim_inv cenv cx env es /\ source_supply es /\
+    eval_exprs cx args es = (INL vs,es') ==>
     LIST_REL (\e v. ?tv. evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
                          value_has_type tv v) args vs
 Proof
@@ -1549,7 +1552,8 @@ Proof
   `EVERY (\e. is_word_type (expr_type e) /\ expr_sim_ok cenv e) args` by
     gvs[EVERY_MEM] >>
   `expr_sim_inv cenv cx env es` by gvs[expr_sim_pre_def] >>
-  `!e s. MEM e args /\ expr_sim_inv cenv cx env s ==>
+  `source_supply es` by gvs[expr_sim_pre_def] >>
+  `!e s. MEM e args /\ expr_sim_inv cenv cx env s /\ source_supply s ==>
          expr_sim_pre cenv cx env e s` by
     metis_tac[expr_sim_pre_builtin_arg] >>
   drule_all typed_stack_args_ready >>

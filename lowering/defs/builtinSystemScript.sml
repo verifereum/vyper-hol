@@ -4,7 +4,6 @@
  * TOP-LEVEL:
  *   compile_raw_call    — low-level external call with full control
  *   compile_send        — send ether to address
- *   compile_raw_log     — raw event emission (LOG0-LOG4)
  *   compile_raw_revert  — revert with custom data
  *   compile_selfdestruct — destroy contract
  *
@@ -138,14 +137,6 @@ Definition compile_send_def:
          [gas_op; to_op; value_op; Lit 0w; Lit 0w; Lit 0w; Lit 0w];
        emit_void ASSERT [success]
     od
-End
-
-(* ===== raw_log ===== *)
-(* Mirrors Python: system.py lower_raw_log
-   raw_log(topics, data): LOG with 0-4 topics *)
-Definition compile_raw_log_def:
-  compile_raw_log n_topics data_ptr data_len topic_ops =
-    emit_void LOG (Lit (n2w n_topics) :: data_ptr :: data_len :: topic_ops)
 End
 
 (* ===== raw_revert ===== *)

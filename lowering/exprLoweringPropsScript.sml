@@ -480,15 +480,16 @@ Theorem state_rel_frame:
     s'.vs_call_ctx = s.vs_call_ctx /\ s'.vs_tx_ctx = s.vs_tx_ctx /\
     s'.vs_block_ctx = s.vs_block_ctx /\ s'.vs_logs = s.vs_logs /\
     s'.vs_outcomes = s.vs_outcomes /\ s'.vs_requests = s.vs_requests /\
+    s'.vs_pending_deletions = s.vs_pending_deletions /\
     s'.vs_immutables = s.vs_immutables /\
     s'.vs_data_section = s.vs_data_section ==>
     state_rel func cenv cx es' s'
 Proof
   rpt strip_tac >>
   qpat_x_assum `es' = _` SUBST1_TAC >>
-  fs[state_rel_def, storage_rel_def, transient_rel_def, accounts_rel_def,
-     immutables_rel_def, logs_rel_def, call_ctx_rel_def, contract_storage_def,
-     contract_transient_def]
+  gvs[state_rel_def, storage_rel_def, transient_rel_def, accounts_rel_def,
+      immutables_rel_def, logs_rel_def, call_ctx_rel_def, contract_storage_def,
+      contract_transient_def]
 QED
 
 Theorem stmt_state_rel_jump_to:
@@ -1608,7 +1609,7 @@ val ci_mono_base_thms =
    ci_mono_compile_builtin_empty_complex,
    ci_mono_refl];
 
-Theorem ci_mono_compile_multi_exprs[local]:
+Theorem ci_mono_compile_multi_exprs:
   ∀ cfn cenv es sa.
     (∀ cenv' ty' e' sa'. ci_mono sa' (SND (cfn cenv' ty' e' sa'))) ⇒
     ci_mono sa (SND (compile_multi_exprs cfn cenv es sa))
@@ -3262,18 +3263,81 @@ Proof
   irule ci_mono_lower_value_cfn >> simp[]
 QED
 
+Theorem ci_mono_compile_raw_log[local]:
+  !cfn cenv ret_ty ty args default_ret sa.
+    (!cenv' ty' e' sa'. ci_mono sa' (SND (cfn cenv' ty' e' sa'))) ==>
+    ci_mono sa (SND (compile_call cfn cenv ret_ty ty RawLog args default_ret sa))
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `args` >- simp[compile_call_def, pairTheory.UNCURRY, ci_mono_emit_inst] >>
+  rename1 `topics_e::rest` >> Cases_on `rest`
+  >- simp[compile_call_def, pairTheory.UNCURRY, ci_mono_emit_inst] >>
+  rename1 `topics_e::data_e::tail` >> Cases_on `tail` >>
+  simp[compile_call_def, LET_THM, pairTheory.UNCURRY, ci_mono_emit_inst] >>
+  IF_CASES_TAC >> simp[] >>
+  irule ci_mono_trans >> irule_at (Pos last) ci_mono_emit_inst >>
+  rpt (CHANGED_TAC (
+    (irule ci_mono_trans >> irule_at (Pos last) ci_mono_emit_void) ORELSE
+    (irule ci_mono_trans >> irule_at (Pos last) ci_mono_emit_op) ORELSE
+    (irule ci_mono_trans >> irule_at (Pos last) ci_mono_lower_value_cfn >>
+      (conj_tac >- simp[])) ORELSE
+    (irule ci_mono_trans >> irule_at (Pos last) ci_mono_compile_alloc_buffer))) >>
+  irule ci_mono_compile_multi_exprs >> simp[]
+QED
+
 (* Cache only the INVALID branches: never normalize the large IntCall /
    ExtCall bodies while speculatively closing these primitive cases. *)
 val ci_mono_invalid_call_tac =
   let
     val invalid_calls = map
       (SIMP_RULE pure_ss [LET_THM, pairTheory.UNCURRY, pairTheory.SND])
-      (map (fn n => cj n compile_call_def) [4, 6, 7, 8, 9])
+      (map (fn n => cj n compile_call_def) [4, 7, 8, 9])
   in
     CONV_TAC
       (RAND_CONV (RAND_CONV (FIRST_CONV (map REWR_CONV invalid_calls)))) >>
     REWRITE_TAC [pairTheory.SND] >> irule ci_mono_emit_inst
   end;
+
+Theorem ci_mono_compile_raw_revert[local]:
+  (!cenv' ty' e' sa'. ci_mono sa' (SND (cfn cenv' ty' e' sa'))) ==>
+  ci_mono sa (SND (compile_call cfn cenv ret_ty ty RawRevert args default_ret sa))
+Proof
+  strip_tac >>
+  simp[compile_call_def, LET_THM, pairTheory.UNCURRY] >>
+  Cases_on `args` >> simp[ci_mono_emit_inst] >>
+  Cases_on `t` >> simp[ci_mono_emit_inst, compile_raw_revert_def, comp_bind_def,
+                        LET_THM, pairTheory.UNCURRY] >>
+  irule ci_mono_trans >> irule_at (Pos last) ci_mono_emit_inst >>
+  irule ci_mono_trans >> irule_at (Pos last) ci_mono_emit_op >>
+  irule ci_mono_trans >> irule_at (Pos last) ci_mono_emit_op >>
+  irule ci_mono_lower_value_cfn >> simp[]
+QED
+
+Theorem compile_selfdestruct_terminated:
+  block_is_terminated (SND (compile_selfdestruct to_op st))
+Proof
+  simp[compile_selfdestruct_def, emit_void_def, comp_bind_def,
+       fresh_id_def, emit_def, LET_THM, pairTheory.UNCURRY,
+       block_is_terminated_def, listTheory.LAST_APPEND_CONS,
+       venomInstTheory.mk_inst_def, venomInstTheory.is_terminator_def] >>
+  Cases_on `st.cs_current_insts` >>
+  simp[listTheory.LAST_CONS_cond, listTheory.LAST_APPEND_CONS,
+       venomInstTheory.is_terminator_def]
+QED
+
+Theorem ci_mono_compile_selfdestruct[local]:
+  (!cenv' ty' e' sa'. ci_mono sa' (SND (cfn cenv' ty' e' sa'))) ==>
+  ci_mono sa (SND (compile_call cfn cenv ret_ty ty SelfDestructTarget args default_ret sa))
+Proof
+  strip_tac >>
+  simp[compile_call_def, LET_THM, pairTheory.UNCURRY] >>
+  Cases_on `args` >> simp[ci_mono_emit_inst] >>
+  Cases_on `t` >>
+  simp[ci_mono_emit_inst, compile_selfdestruct_def, comp_bind_def,
+       LET_THM, pairTheory.UNCURRY] >>
+  irule ci_mono_trans >> irule_at (Pos last) ci_mono_emit_void >>
+  irule ci_mono_lower_value_cfn >> simp[]
+QED
 
 Theorem ci_mono_compile_call[local]:
   ∀ cfn cenv ret_ty ty target args default_ret sa.
@@ -3282,7 +3346,10 @@ Theorem ci_mono_compile_call[local]:
 Proof
   rpt gen_tac >> strip_tac >> Cases_on `target` >>
   TRY (ci_mono_invalid_call_tac >> NO_TAC) >>
-  TRY (irule ci_mono_compile_raw_call_calldata >> simp[] >> NO_TAC)
+  TRY (irule ci_mono_compile_raw_call_calldata >> simp[] >> NO_TAC) >>
+  TRY (irule ci_mono_compile_raw_log >> simp[] >> NO_TAC) >>
+  TRY (irule ci_mono_compile_raw_revert >> simp[] >> NO_TAC) >>
+  TRY (irule ci_mono_compile_selfdestruct >> simp[] >> NO_TAC)
   >- ( (* IntCall *)
     simp[compile_call_def, LET_THM, pairTheory.UNCURRY] >>
 rpt IF_CASES_TAC >> gvs[] >>
@@ -4141,6 +4208,15 @@ Proof
     by (irule ci_mono_same_blocks_isPREFIX >> simp[]) >>
   gvs[GSYM prefix_drop_equiv, emitted_insts_def]
 QED
+
+(* RawLog and call monotonicity must remain kernel-closed too. *)
+val () = List.app (fn th =>
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
+  in if null axioms andalso null (Thm.hyp th) andalso
+        List.all (fn name => name = "DISK_THM") oracles then ()
+     else raise Fail "RawLog monotonicity oracle dependency"
+  end)
+  [ci_mono_compile_raw_log, ci_mono_compile_call];
 
 (* Issue #560 integrity gate, including local proof-interface helpers. *)
 val () = List.app (fn th =>

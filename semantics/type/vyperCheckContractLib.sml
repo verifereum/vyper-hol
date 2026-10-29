@@ -112,6 +112,7 @@ val checker_defs =
    well_typed_stmt_def,
    well_typed_stmts_def,
    stmt_no_fallthrough_def,
+   expr_no_fallthrough_def,
    stmt_no_control_escape_def,
    vyperValueTheory.evaluate_type_def,
    vyperValueTheory.type_slot_size_def,
