@@ -5,13 +5,16 @@
  *   compile_abi_int_clamp_correct       — int clamping either accepts or reverts on out-of-range
  *   compile_abi_bytes_clamp_correct   — bytes clamping either accepts or reverts on dirty high bits
  *   compile_abi_encode_static_correct — static type writes word to dst
- *   compile_abi_encode_to_buf_correct — recursive ABI encode correctness (single-block)
- *   compile_abi_encode_frag           — recursive ABI encode correctness over frag_exec,
- *                                       for an encoding plan abi_enc_plan
+ *   compile_abi_decode_static_correct — valid primitive read, clamp and exact word copy
+ *   compile_abi_encode_to_buf_correct — complete recursive encoder CFG correctness
+ *   abi_enc_plan / abi_enc_plans      — typed recursive encoding plans
  *   compile_get_element_ptr_zero       — zero-offset pointer ADD preserves value
  *   compile_get_element_ptr_correct   — get_element_ptr adds offset to parent pointer
  *   val_in_memory_prim_enc            — primitive val_in_memory matches ABI encoding
  *   val_in_memory_flag_enc            — flag val_in_memory matches ABI encoding
+ *
+ * LEGACY SCAFFOLD (active, CHEAT oracle inherited from main):
+ *   compile_abi_encode_frag           — legacy admitted encoding-plan scaffold
  *
  * Source: abi/abi_encoder.py, abi/abi_decoder.py
  * Lowering: abiEncoderScript.sml
@@ -24,6 +27,7 @@ Ancestors
   abiEncoder compileEnv
   venomExecSemantics venomState venomInst venomMemProps
   valueEncoding valueEncodingProps
+  abiEncoderCorrect abiEncoderCorrectRecursive abiDecoderClampedWord
   vyperABI vyperTyping contractABI fragExec
 Libs
   dep_rewrite wordsLib
@@ -235,7 +239,6 @@ Proof
     gvs[Abbr`nv`, fresh_vars_wrt_def]) >>
   conj_tac >- (
     rpt strip_tac >>
-    irule eval_operand_mstore >>
     irule eval_operand_update_fresh >>
     gvs[Abbr`nv`] >>
     goal_assum $ drule_at Any >> rw[] ) >>
@@ -259,9 +262,58 @@ Proof
   gvs[Abbr`rng`]
 QED
 
-(* Static ABI decoding (load, clamp, MSTORE) is in abiDecodeStaticProps:
-   compile_abi_decode_static_run and compile_abi_decode_static_correct,
-   which give the value in memory at the destination. *)
+(* Static ABI decoding: load + clamp + MSTORE.
+   The generalized load-step and typed val_in_memory APIs are also available as
+   abiDecodeStaticPropsTheory.compile_abi_decode_static_run and
+   abiDecodeStaticPropsTheory.compile_abi_decode_static_correct. *)
+(* Retired statement: arbitrary load opcodes, an undefined destination and a
+   callback with no code-extension guarantee do not imply safe decoding.
+   The original unproved statement is retained here for audit history.
+Theorem compile_abi_decode_static_correct:
+  ∀ src_op dst_op load_opc clamp_fn ss st st' src_w.
+    compile_abi_decode_static src_op dst_op load_opc clamp_fn st = ((), st') ∧
+    eval_operand src_op ss = SOME src_w ∧
+    fresh_vars_wrt st ss ∧
+    (* clamp_fn: either succeeds preserving operands & freshness, or reverts *)
+    (∀ val_op st0 st0' ss0 v.
+       clamp_fn val_op st0 = ((), st0') ∧
+       eval_operand val_op ss0 = SOME v ∧
+       fresh_vars_wrt st0 ss0 ⇒
+       (∃ ss0'.
+         run_inst_seq (emitted_insts st0 st0') ss0 = OK ss0' ∧
+         fresh_vars_wrt st0' ss0' ∧
+         (∀ op w. eval_operand op ss0 = SOME w ⇒
+                  eval_operand op ss0' = SOME w)) ∨
+       (∃ ss0'.
+         run_inst_seq (emitted_insts st0 st0') ss0 =
+           Abort Revert_abort ss0'))
+    ⇒
+    ∃ ss'.
+      run_inst_seq (emitted_insts st st') ss = OK ss' ∨
+      run_inst_seq (emitted_insts st st') ss = Abort Revert_abort ss'
+Proof
+  cheat
+QED
+*)
+
+Theorem compile_abi_decode_static_correct:
+  compile_abi_decode_static src dst opc
+    (\v. compile_abi_clamp_basetype v clamp) st = ((),st') /\
+  abi_decode_source_opcode opc /\ eval_operand src s = SOME p /\
+  eval_operand dst s = SOME (n2w d) /\ d < dimword (:256) /\
+  abi_decoder_clamp_valid clamp (abi_decode_load opc p s) /\
+  fresh_vars_wrt st s ==>
+  ?t. run_inst_seq (emitted_insts st st') s = OK t /\
+    mem_word_at d t.vs_memory = abi_decode_load opc p s /\
+    abi_decode_frame d 32 s t /\ fresh_vars_wrt st' t /\
+    (!op w. eval_operand op s = SOME w ==> eval_operand op t = SOME w) /\
+    inst_extends st st'
+Proof
+  strip_tac >>
+  `compile_abi_decode_to_buf dst src opc (Lit 0w) (DecPrimWord clamp) st = ((),st')`
+    by simp[compile_abi_decode_to_buf_def] >>
+  drule_all abi_decoder_clamped_word_sequence >> simp[]
+QED
 
 (* ===== ABI Encoding / Memory Correspondence ===== *)
 
@@ -367,6 +419,14 @@ Definition single_block_enc_info_def:
     EVERY (λ(ei,_,_,_). single_block_enc_info ei) elems
 End
 
+(* ===== Recursive ABI Encode Correctness ===== *)
+
+(* Retired single-block proof attempt, preserved in full. Its original
+   val_in_memory premise observed stored sparse-array keys only, whereas AbiCopy
+   reads every slot. abiEncoderSourceChecks preserves that historical example
+   and now checks that val_in_memory rejects its bad memory. This attempt also
+   lacks source/output separation. The proved replacement below uses complete source
+   windows and covers the actual recursive CFG, including dynamic arrays.
 (* ===== Recursive ABI Encode Correctness (single-block) ===== *)
 
 (* Mutual induction over compile_abi_encode_child / compile_abi_encode_to_buf /
@@ -715,6 +775,11 @@ Resume compile_abi_encode_to_buf_correct[dyn_loop]:
 QED
 
 Finalise compile_abi_encode_to_buf_correct
+*)
+
+Theorem compile_abi_encode_to_buf_correct =
+  SIMP_RULE bool_ss [abiEncoderCorrectTheory.abi_encoder_correct_def]
+    abiEncoderCorrectRecursiveTheory.abi_encoder_correct_translation
 
 (* ===== Encoding plans ===== *)
 
@@ -847,6 +912,9 @@ End
      moves the cell, if there are dynamic elements, past the tails;
    - dyn_loop writes a dynamic array's encoding after its length word at
      dst and returns the encoding's whole length. *)
+(* Legacy main-branch scaffold with its original statement. It remains admitted;
+   its dynamic-loop clause describes the older payload-base helper convention.
+   External returns use abiEncoderFragment's proved standalone to-buffer API. *)
 Theorem compile_abi_encode_frag:
   (!dst child_ptr ei is_dyn static_ofst dyn_ptr st op st' ctx env ty tv v
     av s0 dst_w src_w lo top.
@@ -1032,4 +1100,3 @@ conj_tac >- (
 ) >>
 simp[eval_operand_update_var, wordsTheory.word_add_n2w]
 QED
-

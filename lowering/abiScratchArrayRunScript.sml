@@ -1,0 +1,57 @@
+(* Execute the actual complete array encoder from buffer input.
+   TOP-LEVEL: abi_scratch_array_run composes parent allocation/count copying,
+   the selected real loop, protected parent completion and physical effects. *)
+Theory abiScratchArrayRun
+Ancestors
+  abiScratchArrayParent abiScratchArraySelectedLoop abiScratchArrayFinishProtected
+  abiScratchPhaseCompose abiScratchEncoderContract abiEncoderArrayContext abiEncoderMembersDefs
+  abiDecoderLoop abiDecoderReentry abiDecoderContract compileEnv valueEncoding contractABI
+  venomState words list arithmetic
+
+Theorem abi_scratch_array_run:
+  (if active then abi_scratch_encoder ei else abi_encoder_static_leaf ei) /\
+  compile_abi_encode_to_buf dst src (AbiDynArray ei asz msz active) start = (out,final) /\
+  fn_has_code start final func /\
+  abi_scratch_input (AbiDynArray ei asz msz active) (Array NONE ty) (ListV avs)
+    start src dst sb source_cap d output_size first last b cap initial /\
+  abi_decoder_budget first last b cap initial /\ first <= start.cs_next_id /\ final.cs_next_id <= last /\
+  final.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\ ~initial.vs_halted /\
+  initial.vs_current_bb = start.cs_current_bb /\ initial.vs_inst_idx = LENGTH start.cs_current_insts ==>
+  ?actual. mem_bytes_at d (LENGTH (enc (Array NONE ty) (ListV avs))) actual.vs_memory = enc (Array NONE ty) (ListV avs) /\
+    eval_operand out actual = SOME (n2w (LENGTH (enc (Array NONE ty) (ListV avs)))) /\
+    abi_scratch_effect first last start.cs_next_id final.cs_next_id start.cs_next_var
+      limit_st d output_size b cap initial actual /\
+    actual.vs_current_bb = final.cs_current_bb /\ actual.vs_inst_idx = LENGTH final.cs_current_insts /\
+    ~actual.vs_halted /\ abi_decode_sim ctx func initial actual
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  drule_all abi_encode_array_context >> strip_tac >>
+  `loop_st.cs_next_id <= last /\ loop_end.cs_next_id <= last /\
+   loop_st.cs_next_var <= limit_st.cs_next_var /\ loop_end.cs_next_var <= limit_st.cs_next_var /\
+   start.cs_next_id < loop_st.cs_next_id /\ start.cs_next_id < final.cs_next_id /\
+   first <= loop_st.cs_next_id /\ start.cs_next_var <= loop_st.cs_next_var /\
+   loop_end.cs_next_id <= final.cs_next_id` by decide_tac >>
+  mp_tac (Q.INST [`st` |-> `start`, `hi` |-> `loop_st.cs_next_id`]
+    abi_scratch_array_parent_prepare) >> impl_tac >- asm_simp_tac bool_ss [LESS_EQ_REFL] >> strip_tac >>
+  rename1 `abi_decode_sim ctx func initial ready` >>
+  rename1 `abi_encoder_cursor T (FST ops) start.cs_next_id slot first start.cs_next_id loop_st 0 ready` >>
+  `fresh_vars_wrt limit_st ready /\ abi_decoder_budget first last b cap ready` by fs[abi_scratch_effect_def] >>
+  mp_tac (Q.INST [`count_op` |-> `SND (ops:operand # operand)`, `start` |-> `loop_st`,
+    `out` |-> `size_op`, `final` |-> `loop_end`, `initial` |-> `ready:venom_state`,
+    `hi` |-> `loop_end.cs_next_id`] abi_scratch_array_selected_loop) >>
+  impl_tac >- asm_simp_tac (srw_ss()) [] >> strip_tac >>
+  rename1 `abi_decode_sim ctx func ready encoded` >>
+  qpat_assum `abi_scratch_input _ _ _ loop_st _ _ _ _ _ _ _ _ _ _ ready`
+    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_scratch_input_def]) >>
+  mp_tac (Q.INST [`parent_ptr` |-> `FST (ops:operand # operand)`, `parent_site` |-> `start.cs_next_id`,
+    `parent_slot` |-> `slot:num`, `len` |-> `LENGTH (enc (Array NONE ty) (ListV avs))`,
+    `bytes` |-> `enc (Array NONE ty) (ListV avs)`] abi_scratch_array_finish_protected) >>
+  impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
+  mp_tac (Q.INST [`st` |-> `start`, `prepared` |-> `loop_st`, `middle` |-> `loop_end`,
+    `end_st` |-> `final`, `sz` |-> `output_size:num`] abi_scratch_phase_compose) >>
+  impl_tac >- (asm_simp_tac bool_ss [] >> decide_tac) >> disch_tac >>
+  `abi_decode_sim ctx func initial encoded` by
+    (irule abi_decode_sim_trans >> qexists_tac `ready` >> asm_simp_tac bool_ss []) >>
+  qexists_tac `actual` >> asm_simp_tac bool_ss [] >>
+  irule abi_decode_sim_trans >> qexists_tac `encoded` >> simp[]
+QED

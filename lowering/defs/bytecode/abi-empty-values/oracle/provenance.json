@@ -1,0 +1,33 @@
+{
+  "producer": "pinned Python Vyper",
+  "vyper_commit": "cd74ce4f57e3771aeeab8f061fa3be45bfe8a29c",
+  "vyper_version": "0.5.0a4+commit.cd74ce4f",
+  "python_version": "3.14.4",
+  "dependencies": {
+    "cbor2": "5.9.0",
+    "immutables": "0.21",
+    "lark": "1.3.1",
+    "packaging": "26.3",
+    "pycryptodome": "3.24.1",
+    "wheel": "0.48.0"
+  },
+  "settings": {
+    "experimental_codegen": true,
+    "optimization_level": "NONE",
+    "evm_version": "prague",
+    "bytecode_metadata": false
+  },
+  "sources": {
+    "empty_bytes_encode.vy": "a8f903284debd5b57c1eeb074e58eaef014aab3feb4c8eec6f49cb371640ca79",
+    "empty_fixed_encode.vy": "13f666508705fe959eb1d722a9b2b4fc7af806761490647ce119911539850658",
+    "empty_nested_encode.vy": "69f7a9753e2c469694b0e16933ce82af90a81f4e1093d2314bf5e4a744b852dc"
+  },
+  "outputs": {
+    "empty_bytes_encode.hex": "2f102b0c520e599c55265d23a7bd4ce463cf87ffd776eb13733017516fdf03ee",
+    "empty_bytes_encode.json": "057eb891f5a5b7cc33241d523a8efcd649c0ea3f64b9ab31ccc60734c60d55a6",
+    "empty_fixed_encode.hex": "bb4971636920f2cc8b3c819726750b8fe263d3241b26b3bd092fb39ba7b38eb9",
+    "empty_fixed_encode.json": "00c20c2ade481f56271d82fe8019c89b4a9d8a2e172480f4db679d3bff68a554",
+    "empty_nested_encode.hex": "916c75e53acd705aedcbfb2adbf0c92ae5eb6d5a2d094476fcde914b88178633",
+    "empty_nested_encode.json": "55b8c5d6c4c2a0fdc254eed50d0f39c2ef66c8ef02552b95cc0b4800f7f5749a"
+  }
+}
