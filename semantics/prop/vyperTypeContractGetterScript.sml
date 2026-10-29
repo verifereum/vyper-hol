@@ -19,6 +19,34 @@ Libs
 
 val _ = Parse.hide "body";
 
+(* ===== Allocated-module facts ===== *)
+
+Theorem allocated_toplevel_vtype_VariableDecl[local]:
+  check_contract F (layouts:(address # (storage_layout # storage_layout)) list)
+    (addr:address) mods = SOME art /\
+  ALOOKUP mods src = SOME ts /\
+  module_allocated layouts addr src ts /\
+  MEM (VariableDecl vis mut id ty init) ts ==>
+  FLOOKUP art.cta_toplevel_vtypes (src,id) = SOME (Type ty)
+Proof
+  strip_tac >> drule_all module_allocated_VariableDecl_slots >> strip_tac >>
+  drule check_contract_toplevel_vtype_VariableDecl >>
+  disch_then drule >> disch_then drule >> simp[]
+QED
+
+Theorem allocated_toplevel_vtype_HashMapDecl[local]:
+  check_contract F (layouts:(address # (storage_layout # storage_layout)) list)
+    (addr:address) mods = SOME art /\
+  ALOOKUP mods src = SOME ts /\
+  module_allocated layouts addr src ts /\
+  MEM (HashMapDecl vis is_transient id kt vt init) ts ==>
+  FLOOKUP art.cta_toplevel_vtypes (src,id) = SOME (HashMapT kt vt)
+Proof
+  strip_tac >> drule_all module_allocated_HashMapDecl_slot >> strip_tac >>
+  drule check_contract_toplevel_vtype_HashMapDecl >>
+  disch_then drule >> disch_then drule >> simp[]
+QED
+
 Definition is_public_getter_decl_def:
   is_public_getter_decl fn (VariableDecl Public mut id typ init) = (id = fn) /\
   is_public_getter_decl fn (HashMapDecl Public is_transient id kt vt init) = (id = fn) /\
@@ -104,6 +132,7 @@ Theorem checked_scalar_public_getter_body_typing_package_contradiction[local]:
   check_contract F am.layouts tx.target mods = SOME art /\
   ALOOKUP am.sources tx.target = SOME mods /\
   ALOOKUP mods src = SOME ts /\
+  module_allocated am.layouts tx.target src ts /\
   MEM (VariableDecl Public mut fn typ init) ts /\
   ~is_ArrayT typ ==>
   ~(?env_after.
@@ -112,13 +141,8 @@ Theorem checked_scalar_public_getter_body_typing_package_contradiction[local]:
 Proof
   rw[] >>
   `FLOOKUP art.cta_toplevel_vtypes (src,fn) = SOME (Type typ)` by
-    (`toplevel_vtypes_complete art.cta_toplevel_vtypes
-        (initial_evaluation_context am.sources am.layouts tx src)` by
-       (irule check_contract_toplevel_vtypes_complete_initial >> simp[]) >>
-     gvs[toplevel_vtypes_complete_def, get_module_code_def,
-         initial_evaluation_context_def] >>
-     metis_tac[]) >>
-  `check_toplevel_decl am.layouts tx.target mods art src
+    (drule_all allocated_toplevel_vtype_VariableDecl >> simp[]) >>
+  `check_toplevel_decl mods art src
      (VariableDecl Public mut fn typ init)` by
     metis_tac[check_contract_toplevel_decl_MEM] >>
   `typ <> NoneT` by
@@ -138,6 +162,7 @@ Theorem checked_scalar_public_getter_eval_no_type_error:
   immutables_ready art.cta_bare_globals art.cta_toplevel_vtypes
     (initial_evaluation_context am.sources am.layouts tx src) am.immutables /\
   ALOOKUP mods src = SOME ts /\
+  module_allocated am.layouts tx.target src ts /\
   MEM (VariableDecl Public mut fn typ init) ts /\
   eval_expr (initial_evaluation_context am.sources am.layouts tx src)
     (TopLevelName NoneT (src,fn)) (initial_state am [scope] with <|outcomes := orc; requests := rqs|>) = (res,st') ==>
@@ -147,16 +172,14 @@ Proof
   `get_module_code (initial_evaluation_context am.sources am.layouts tx src) src = SOME ts` by
     simp[get_module_code_def, initial_evaluation_context_def] >>
   `FLOOKUP art.cta_toplevel_vtypes (src,fn) = SOME (Type typ)` by
-    (`toplevel_vtypes_complete art.cta_toplevel_vtypes
-        (initial_evaluation_context am.sources am.layouts tx src)` by
-       (irule check_contract_toplevel_vtypes_complete_initial >> simp[]) >>
-     gvs[toplevel_vtypes_complete_def] >> metis_tac[]) >>
-  `check_toplevel_decl am.layouts tx.target mods art src
+    (drule_all allocated_toplevel_vtype_VariableDecl >> simp[]) >>
+  `check_toplevel_decl mods art src
      (VariableDecl Public mut fn typ init)` by
     metis_tac[check_contract_toplevel_decl_MEM] >>
   `ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel src) ts))` by
     (irule contract_namespaces_ok_module_toplevel_vtype_keys >>
-     gvs[check_contract_def] >> metis_tac[ALOOKUP_MEM]) >>
+     metis_tac[check_contract_namespaces_ok, ALOOKUP_MEM]) >>
+  drule_all module_allocated_VariableDecl_slots >> strip_tac >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
   simp[Once evaluate_def, lookup_global_def, bind_def, lift_option_type_def,
        return_def, raise_def, initial_state_def, initial_evaluation_context_def] >>
@@ -200,7 +223,7 @@ Proof
          SOME (StorageVarDecl T typ,fn)` by
         metis_tac[find_var_decl_by_name_SOME_storage_var_Transient,
                   contract_namespaces_ok_module_toplevel_vtype_keys,
-                  ALOOKUP_MEM, check_contract_def] >>
+                  ALOOKUP_MEM, check_contract_namespaces_ok] >>
       gvs[lookup_var_slot_from_layout_def, lookup_var_slot_in_layouts_def,
           get_tenv_def, initial_evaluation_context_def] >>
       drule assignable_type_well_formed >> simp[well_formed_type_def] >>
@@ -212,7 +235,7 @@ Proof
      SOME (StorageVarDecl F typ,fn)` by
     metis_tac[find_var_decl_by_name_SOME_storage_var_Storage,
               contract_namespaces_ok_module_toplevel_vtype_keys,
-              ALOOKUP_MEM, check_contract_def] >>
+              ALOOKUP_MEM, check_contract_namespaces_ok] >>
   gvs[lookup_var_slot_from_layout_def, lookup_var_slot_in_layouts_def,
       get_tenv_def, initial_evaluation_context_def] >>
   drule assignable_type_well_formed >> simp[well_formed_type_def] >>
@@ -240,6 +263,7 @@ Theorem checked_scalar_public_getter_eval_no_type_error_materialisable:
   immutables_ready art.cta_bare_globals art.cta_toplevel_vtypes
     (initial_evaluation_context am.sources am.layouts tx src) am.immutables /\
   ALOOKUP mods src = SOME ts /\
+  module_allocated am.layouts tx.target src ts /\
   MEM (VariableDecl Public mut fn typ init) ts /\
   eval_expr (initial_evaluation_context am.sources am.layouts tx src)
     (TopLevelName NoneT (src,fn)) (initial_state am [scope] with <|outcomes := orc; requests := rqs|>) = (res,st') ==>
@@ -254,16 +278,14 @@ Proof
   `get_module_code (initial_evaluation_context am.sources am.layouts tx src) src = SOME ts` by
     simp[get_module_code_def, initial_evaluation_context_def] >>
   `FLOOKUP art.cta_toplevel_vtypes (src,fn) = SOME (Type typ)` by
-    (`toplevel_vtypes_complete art.cta_toplevel_vtypes
-        (initial_evaluation_context am.sources am.layouts tx src)` by
-       (irule check_contract_toplevel_vtypes_complete_initial >> simp[]) >>
-     gvs[toplevel_vtypes_complete_def] >> metis_tac[]) >>
-  `check_toplevel_decl am.layouts tx.target mods art src
+    (drule_all allocated_toplevel_vtype_VariableDecl >> simp[]) >>
+  `check_toplevel_decl mods art src
      (VariableDecl Public mut fn typ init)` by
     metis_tac[check_contract_toplevel_decl_MEM] >>
   `ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel src) ts))` by
     (irule contract_namespaces_ok_module_toplevel_vtype_keys >>
-     gvs[check_contract_def] >> metis_tac[ALOOKUP_MEM]) >>
+     metis_tac[check_contract_namespaces_ok, ALOOKUP_MEM]) >>
+  drule_all module_allocated_VariableDecl_slots >> strip_tac >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
   simp[Once evaluate_def, lookup_global_def, bind_def, lift_option_type_def,
        return_def, raise_def, initial_state_def, initial_evaluation_context_def] >>
@@ -317,7 +339,7 @@ Proof
          SOME (StorageVarDecl T typ,fn)` by
         metis_tac[find_var_decl_by_name_SOME_storage_var_Transient,
                   contract_namespaces_ok_module_toplevel_vtype_keys,
-                  ALOOKUP_MEM, check_contract_def] >>
+                  ALOOKUP_MEM, check_contract_namespaces_ok] >>
       gvs[lookup_var_slot_from_layout_def, lookup_var_slot_in_layouts_def,
           get_tenv_def, initial_evaluation_context_def] >>
       drule assignable_type_well_formed >> simp[well_formed_type_def] >>
@@ -329,7 +351,7 @@ Proof
      SOME (StorageVarDecl F typ,fn)` by
     metis_tac[find_var_decl_by_name_SOME_storage_var_Storage,
               contract_namespaces_ok_module_toplevel_vtype_keys,
-              ALOOKUP_MEM, check_contract_def] >>
+              ALOOKUP_MEM, check_contract_namespaces_ok] >>
   gvs[lookup_var_slot_from_layout_def, lookup_var_slot_in_layouts_def,
       get_tenv_def, initial_evaluation_context_def] >>
   drule assignable_type_well_formed >> simp[well_formed_type_def] >>
@@ -345,6 +367,7 @@ Theorem checked_scalar_public_getter_eval_no_type_error_materialisable_post_pref
   immutables_ready art.cta_bare_globals art.cta_toplevel_vtypes
     (initial_evaluation_context am.sources am.layouts tx src) am.immutables /\
   ALOOKUP mods src = SOME ts /\
+  module_allocated am.layouts tx.target src ts /\
   MEM (VariableDecl Public mut fn typ init) ts /\
   st.scopes = [scope] /\ st.immutables = am.immutables /\ state_well_typed st /\
   eval_expr (initial_evaluation_context am.sources am.layouts tx src)
@@ -360,16 +383,14 @@ Proof
     `get_module_code (initial_evaluation_context am.sources am.layouts tx src) src = SOME ts` by
       simp[get_module_code_def, initial_evaluation_context_def] >>
     `FLOOKUP art.cta_toplevel_vtypes (src,fn) = SOME (Type typ)` by
-      (`toplevel_vtypes_complete art.cta_toplevel_vtypes
-          (initial_evaluation_context am.sources am.layouts tx src)` by
-         (irule check_contract_toplevel_vtypes_complete_initial >> simp[]) >>
-       gvs[toplevel_vtypes_complete_def] >> metis_tac[]) >>
-    `check_toplevel_decl am.layouts tx.target mods art src
+      (drule_all allocated_toplevel_vtype_VariableDecl >> simp[]) >>
+    `check_toplevel_decl mods art src
        (VariableDecl Public mut fn typ init)` by
       metis_tac[check_contract_toplevel_decl_MEM] >>
     `ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel src) ts))` by
       (irule contract_namespaces_ok_module_toplevel_vtype_keys >>
-       gvs[check_contract_def] >> metis_tac[ALOOKUP_MEM]) >>
+       metis_tac[check_contract_namespaces_ok, ALOOKUP_MEM]) >>
+    drule_all module_allocated_VariableDecl_slots >> strip_tac >>
     qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
     simp[Once evaluate_def, lookup_global_def, bind_def, lift_option_type_def,
          return_def, raise_def, initial_evaluation_context_def] >>
@@ -413,7 +434,7 @@ Proof
            SOME (StorageVarDecl T typ,fn)` by
           metis_tac[find_var_decl_by_name_SOME_storage_var_Transient,
                     contract_namespaces_ok_module_toplevel_vtype_keys,
-                    ALOOKUP_MEM, check_contract_def] >>
+                    ALOOKUP_MEM, check_contract_namespaces_ok] >>
         gvs[lookup_var_slot_from_layout_def, lookup_var_slot_in_layouts_def,
             get_tenv_def, initial_evaluation_context_def] >>
         drule assignable_type_well_formed >> simp[well_formed_type_def] >>
@@ -426,7 +447,7 @@ Proof
        SOME (StorageVarDecl F typ,fn)` by
       metis_tac[find_var_decl_by_name_SOME_storage_var_Storage,
                 contract_namespaces_ok_module_toplevel_vtype_keys,
-                ALOOKUP_MEM, check_contract_def] >>
+                ALOOKUP_MEM, check_contract_namespaces_ok] >>
     gvs[lookup_var_slot_from_layout_def, lookup_var_slot_in_layouts_def,
         get_tenv_def, initial_evaluation_context_def] >>
     drule assignable_type_well_formed >> simp[well_formed_type_def] >>
@@ -438,16 +459,14 @@ Proof
   `get_module_code (initial_evaluation_context am.sources am.layouts tx src) src = SOME ts` by
     simp[get_module_code_def, initial_evaluation_context_def] >>
   `FLOOKUP art.cta_toplevel_vtypes (src,fn) = SOME (Type typ)` by
-    (`toplevel_vtypes_complete art.cta_toplevel_vtypes
-        (initial_evaluation_context am.sources am.layouts tx src)` by
-       (irule check_contract_toplevel_vtypes_complete_initial >> simp[]) >>
-     gvs[toplevel_vtypes_complete_def] >> metis_tac[]) >>
-  `check_toplevel_decl am.layouts tx.target mods art src
+    (drule_all allocated_toplevel_vtype_VariableDecl >> simp[]) >>
+  `check_toplevel_decl mods art src
      (VariableDecl Public mut fn typ init)` by
     metis_tac[check_contract_toplevel_decl_MEM] >>
   `ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel src) ts))` by
     (irule contract_namespaces_ok_module_toplevel_vtype_keys >>
-     gvs[check_contract_def] >> metis_tac[ALOOKUP_MEM]) >>
+     metis_tac[check_contract_namespaces_ok, ALOOKUP_MEM]) >>
+  drule_all module_allocated_VariableDecl_slots >> strip_tac >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
   simp[Once evaluate_def, lookup_global_def, bind_def, lift_option_type_def,
        return_def, raise_def, initial_evaluation_context_def] >>
@@ -501,7 +520,7 @@ Proof
          SOME (StorageVarDecl T typ,fn)` by
         metis_tac[find_var_decl_by_name_SOME_storage_var_Transient,
                   contract_namespaces_ok_module_toplevel_vtype_keys,
-                  ALOOKUP_MEM, check_contract_def] >>
+                  ALOOKUP_MEM, check_contract_namespaces_ok] >>
       gvs[lookup_var_slot_from_layout_def, lookup_var_slot_in_layouts_def,
           get_tenv_def, initial_evaluation_context_def] >>
       drule assignable_type_well_formed >> simp[well_formed_type_def] >>
@@ -513,7 +532,7 @@ Proof
      SOME (StorageVarDecl F typ,fn)` by
     metis_tac[find_var_decl_by_name_SOME_storage_var_Storage,
               contract_namespaces_ok_module_toplevel_vtype_keys,
-              ALOOKUP_MEM, check_contract_def] >>
+              ALOOKUP_MEM, check_contract_namespaces_ok] >>
   gvs[lookup_var_slot_from_layout_def, lookup_var_slot_in_layouts_def,
       get_tenv_def, initial_evaluation_context_def] >>
   drule assignable_type_well_formed >> simp[well_formed_type_def] >>
@@ -695,7 +714,7 @@ Theorem checked_hashmap_decl_value_type_checked:
   check_value_type (type_env_all_modules mods) vt
 Proof
   rpt strip_tac >>
-  `check_toplevel_decl am.layouts tx.target mods art src
+  `check_toplevel_decl mods art src
      (HashMapDecl Public is_transient id kt vt init)` by
     metis_tac[check_contract_toplevel_decl_MEM] >>
   gvs[check_toplevel_decl_def]
@@ -705,6 +724,7 @@ Theorem checked_public_hashmap_TopLevelName_carrier:
   check_contract F am.layouts tx.target mods = SOME art /\
   ALOOKUP am.sources tx.target = SOME mods /\
   ALOOKUP mods src = SOME ts /\
+  module_allocated am.layouts tx.target src ts /\
   MEM (HashMapDecl Public is_transient id kt vt init) ts /\
   eval_expr (initial_evaluation_context am.sources am.layouts tx src)
     (TopLevelName NoneT (src,id)) (initial_state am [scope] with <|outcomes := orc; requests := rqs|>) = (INL tvl,st') ==>
@@ -713,13 +733,14 @@ Proof
   rpt strip_tac >>
   `ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel src) ts))` by
     (irule contract_namespaces_ok_module_toplevel_vtype_keys >>
-     gvs[check_contract_def] >> metis_tac[ALOOKUP_MEM]) >>
+     metis_tac[check_contract_namespaces_ok, ALOOKUP_MEM]) >>
   `find_var_decl_by_name id ts =
      SOME (HashMapVarDecl is_transient kt vt,id)` by
     metis_tac[find_var_decl_by_name_SOME_hashmap] >>
-  `check_toplevel_decl am.layouts tx.target mods art src
+  `check_toplevel_decl mods art src
      (HashMapDecl Public is_transient id kt vt init)` by
     metis_tac[check_contract_toplevel_decl_MEM] >>
+  drule_all module_allocated_HashMapDecl_slot >> strip_tac >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
   simp[Once evaluate_def, lookup_global_def, get_module_code_def,
        initial_evaluation_context_def, bind_def, lift_option_type_def,
@@ -734,6 +755,7 @@ Theorem checked_public_hashmap_TopLevelName_no_type_error:
   check_contract F am.layouts tx.target mods = SOME art /\
   ALOOKUP am.sources tx.target = SOME mods /\
   ALOOKUP mods src = SOME ts /\
+  module_allocated am.layouts tx.target src ts /\
   MEM (HashMapDecl Public is_transient id kt vt init) ts /\
   eval_expr (initial_evaluation_context am.sources am.layouts tx src)
     (TopLevelName NoneT (src,id)) (initial_state am [scope] with <|outcomes := orc; requests := rqs|>) = (res,st') ==>
@@ -742,13 +764,14 @@ Proof
   rpt strip_tac >>
   `ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel src) ts))` by
     (irule contract_namespaces_ok_module_toplevel_vtype_keys >>
-     gvs[check_contract_def] >> metis_tac[ALOOKUP_MEM]) >>
+     metis_tac[check_contract_namespaces_ok, ALOOKUP_MEM]) >>
   `find_var_decl_by_name id ts =
      SOME (HashMapVarDecl is_transient kt vt,id)` by
     metis_tac[find_var_decl_by_name_SOME_hashmap] >>
-  `check_toplevel_decl am.layouts tx.target mods art src
+  `check_toplevel_decl mods art src
      (HashMapDecl Public is_transient id kt vt init)` by
     metis_tac[check_contract_toplevel_decl_MEM] >>
+  drule_all module_allocated_HashMapDecl_slot >> strip_tac >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
   simp[Once evaluate_def, lookup_global_def, get_module_code_def,
        initial_evaluation_context_def, bind_def, lift_option_type_def,
@@ -765,6 +788,7 @@ Theorem checked_public_hashmap_TopLevelName_carrier_post_prefix:
   check_contract F am.layouts tx.target mods = SOME art /\
   ALOOKUP am.sources tx.target = SOME mods /\
   ALOOKUP mods src = SOME ts /\
+  module_allocated am.layouts tx.target src ts /\
   MEM (HashMapDecl Public is_transient id kt vt init) ts /\
   eval_expr (initial_evaluation_context am.sources am.layouts tx src)
     (TopLevelName NoneT (src,id)) st = (INL tvl,st') ==>
@@ -773,13 +797,14 @@ Proof
   rpt strip_tac >>
   `ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel src) ts))` by
     (irule contract_namespaces_ok_module_toplevel_vtype_keys >>
-     gvs[check_contract_def] >> metis_tac[ALOOKUP_MEM]) >>
+     metis_tac[check_contract_namespaces_ok, ALOOKUP_MEM]) >>
   `find_var_decl_by_name id ts =
      SOME (HashMapVarDecl is_transient kt vt,id)` by
     metis_tac[find_var_decl_by_name_SOME_hashmap] >>
-  `check_toplevel_decl am.layouts tx.target mods art src
+  `check_toplevel_decl mods art src
      (HashMapDecl Public is_transient id kt vt init)` by
     metis_tac[check_contract_toplevel_decl_MEM] >>
+  drule_all module_allocated_HashMapDecl_slot >> strip_tac >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
   simp[Once evaluate_def, lookup_global_def, get_module_code_def,
        initial_evaluation_context_def, bind_def, lift_option_type_def,
@@ -794,6 +819,7 @@ Theorem checked_public_hashmap_TopLevelName_no_type_error_post_prefix[local]:
   check_contract F am.layouts tx.target mods = SOME art /\
   ALOOKUP am.sources tx.target = SOME mods /\
   ALOOKUP mods src = SOME ts /\
+  module_allocated am.layouts tx.target src ts /\
   MEM (HashMapDecl Public is_transient id kt vt init) ts /\
   eval_expr (initial_evaluation_context am.sources am.layouts tx src)
     (TopLevelName NoneT (src,id)) st = (res,st') ==>
@@ -802,13 +828,14 @@ Proof
   rpt strip_tac >>
   `ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel src) ts))` by
     (irule contract_namespaces_ok_module_toplevel_vtype_keys >>
-     gvs[check_contract_def] >> metis_tac[ALOOKUP_MEM]) >>
+     metis_tac[check_contract_namespaces_ok, ALOOKUP_MEM]) >>
   `find_var_decl_by_name id ts =
      SOME (HashMapVarDecl is_transient kt vt,id)` by
     metis_tac[find_var_decl_by_name_SOME_hashmap] >>
-  `check_toplevel_decl am.layouts tx.target mods art src
+  `check_toplevel_decl mods art src
      (HashMapDecl Public is_transient id kt vt init)` by
     metis_tac[check_contract_toplevel_decl_MEM] >>
+  drule_all module_allocated_HashMapDecl_slot >> strip_tac >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
   simp[Once evaluate_def, lookup_global_def, get_module_code_def,
        initial_evaluation_context_def, bind_def, lift_option_type_def,
@@ -1313,23 +1340,12 @@ Proof
   metis_tac[]
 QED
 
-Theorem check_contract_toplevel_vtypes_complete_modules[local]:
-  check_contract F layouts addr mods = SOME art ==>
-  ALOOKUP mods src = SOME ts ==>
-  toplevel_vtypes_complete art.cta_toplevel_vtypes
-    (initial_evaluation_context [(addr,mods)] layouts
-      (empty_call_txn with target := addr) src)
-Proof
-  rpt strip_tac >>
-  irule check_contract_toplevel_vtypes_complete_initial >>
-  simp[]
-QED
-
 Theorem checked_public_getter_body_typing_package:
   check_contract F
     (layouts:(address # (storage_layout # storage_layout)) list)
     (addr:160 word) mods = SOME art ==>
   ALOOKUP mods src = SOME ts ==>
+  module_allocated layouts addr src ts ==>
   MEM decl ts ==>
   is_public_getter_decl fn decl ==>
   external_getter_tuple src decl = SOME (mut,nr,args,dflts,ret,body) ==>
@@ -1350,7 +1366,7 @@ Proof
   simp[is_public_getter_decl_def, external_getter_tuple_def] >>
   Cases_on `v` >>
   simp[is_public_getter_decl_def, external_getter_tuple_def] >>
-  ntac 5 strip_tac
+  ntac 6 strip_tac
   >- (Cases_on `is_ArrayT t`
       >- (gvs[] >>
           `mut = View /\ nr = F /\ dflts = [] /\
@@ -1361,16 +1377,10 @@ Proof
              qexistsl [`o'`, `v0`] >>
              simp[external_getter_tuple_def]) >>
           gvs[] >>
-          `toplevel_vtypes_complete art.cta_toplevel_vtypes
-             (initial_evaluation_context [((addr:160 word),mods)] layouts
-               (empty_call_txn with target := addr) src)` by
-            (irule check_contract_toplevel_vtypes_complete_modules >> simp[]) >>
           `FLOOKUP art.cta_toplevel_vtypes (src,fn) =
              SOME (Type t)` by
-            (gvs[toplevel_vtypes_complete_def, get_module_code_def,
-                 initial_evaluation_context_def] >>
-             metis_tac[]) >>
-          `check_toplevel_decl layouts addr mods art src
+            metis_tac[allocated_toplevel_vtype_VariableDecl] >>
+          `check_toplevel_decl mods art src
              (VariableDecl Public v0 fn t o')` by
             metis_tac[check_contract_toplevel_decl_MEM] >>
           `check_value_type (type_env_all_modules mods) (Type t)` by
@@ -1390,14 +1400,8 @@ Proof
       gvs[] >>
       `FLOOKUP art.cta_toplevel_vtypes (src,fn) =
          SOME (Type ret)` by
-        (`toplevel_vtypes_complete art.cta_toplevel_vtypes
-             (initial_evaluation_context [((addr:160 word),mods)] layouts
-               (empty_call_txn with target := addr) src)` by
-           (irule check_contract_toplevel_vtypes_complete_modules >> simp[]) >>
-         gvs[toplevel_vtypes_complete_def, get_module_code_def,
-             initial_evaluation_context_def] >>
-         metis_tac[]) >>
-      `check_toplevel_decl layouts addr mods art src
+        metis_tac[allocated_toplevel_vtype_VariableDecl] >>
+      `check_toplevel_decl mods art src
          (VariableDecl Public v0 fn ret o')` by
         metis_tac[check_contract_toplevel_decl_MEM] >>
       `well_formed_type (type_env_all_modules mods) ret /\ ret <> NoneT` by
@@ -1413,16 +1417,10 @@ Proof
   drule hashmap_public_getter_tuple_shape >>
   strip_tac >>
   gvs[] >>
-  `toplevel_vtypes_complete art.cta_toplevel_vtypes
-     (initial_evaluation_context [((addr:160 word),mods)] layouts
-       (empty_call_txn with target := addr) src)` by
-    (irule check_contract_toplevel_vtypes_complete_modules >> simp[]) >>
   `FLOOKUP art.cta_toplevel_vtypes (src,fn) =
      SOME (HashMapT t v0)` by
-    (gvs[toplevel_vtypes_complete_def, get_module_code_def,
-         initial_evaluation_context_def] >>
-     metis_tac[]) >>
-  `check_toplevel_decl layouts addr mods art src
+    metis_tac[allocated_toplevel_vtype_HashMapDecl] >>
+  `check_toplevel_decl mods art src
      (HashMapDecl Public b fn t v0 o')` by
     metis_tac[check_contract_toplevel_decl_MEM] >>
   `check_value_type (type_env_all_modules mods) v0` by

@@ -989,3 +989,144 @@ val () = check_accepts "constant chain through two imports" false
          (Constant (TopLevelName (BaseT (UintT 256)) (SOME 1,"M"))) "N"
          (BaseT (UintT 256)) NONE])]
     : (num option # toplevel list) list``
+
+(* A module that nothing initializes has no storage in the layout.  Its
+   functions that no live function calls are not checked, so get_x and the
+   external set_x need no slot for x; a live function that reaches x is
+   rejected. *)
+fun uninit_modules main_callee mid_callee =
+  ``[(NONE,
+      [FunctionDecl External Pure F F "f" [("a", BaseT (UintT 256))] []
+         (BaseT (UintT 256))
+         [Return (SOME (Call (BaseT (UintT 256)) (IntCall ^main_callee)
+                          [Name (BaseT (UintT 256)) "a"] NONE))]]);
+     (SOME 1,
+      [VariableDecl Private Storage "x" (BaseT (UintT 256)) NONE;
+       FunctionDecl Internal View F F "get_x" [("a", BaseT (UintT 256))] []
+         (BaseT (UintT 256))
+         [Return (SOME (TopLevelName (BaseT (UintT 256)) (SOME 1, "x")))];
+       FunctionDecl External Nonpayable F F "set_x" [("a", BaseT (UintT 256))]
+         [] NoneT
+         [Assign (BaseTarget (TopLevelNameTarget (SOME 1, "x")))
+            (Name (BaseT (UintT 256)) "a")];
+       FunctionDecl Internal Pure F F "double" [("a", BaseT (UintT 256))] []
+         (BaseT (UintT 256))
+         [Return (SOME (Builtin (BaseT (UintT 256)) (Bop Mul)
+                          [Literal (BaseT (UintT 256)) (IntL 2);
+                           Name (BaseT (UintT 256)) "a"]))]]);
+     (SOME 2,
+      [FunctionDecl Internal Pure F F "quad" [("a", BaseT (UintT 256))] []
+         (BaseT (UintT 256))
+         [Return (SOME (Call (BaseT (UintT 256)) (IntCall ^mid_callee)
+                          [Name (BaseT (UintT 256)) "a"] NONE))]])]
+    : (num option # toplevel list) list``
+val lib_double = ``(SOME 1, "double") : num option # string``
+val lib_get_x = ``(SOME 1, "get_x") : num option # string``
+val mid_quad = ``(SOME 2, "quad") : num option # string``
+val lib_x_layouts =
+  ``([((0w : address),
+       ([((SOME 1, "x"), 0)] : storage_layout, [] : storage_layout))]
+      : (address # (storage_layout # storage_layout)) list)``
+
+val () = check_accepts "uninitialized module, pure helper" false
+  empty_layouts (uninit_modules lib_double lib_double)
+val () = check_accepts "uninitialized module, pure helper (deploy)" true
+  empty_layouts (uninit_modules lib_double lib_double)
+val () = check_rejects empty_layouts (uninit_modules lib_get_x lib_double)
+val () = check_accepts "initialized module, state read" false
+  lib_x_layouts (uninit_modules lib_get_x lib_double)
+(* Through a stateless module: main calls quad, which calls into lib. *)
+val () = check_accepts "uninitialized module behind a stateless one" false
+  empty_layouts (uninit_modules mid_quad lib_double)
+val () = check_rejects empty_layouts (uninit_modules mid_quad lib_get_x)
+
+(* The transient and HashMap arms: lib's only state is t or m, and read
+   reaches it.  Without a slot lib is not allocated, so its external set is
+   not checked; with one, set is checked and read is accepted. *)
+fun uninit_state_modules decls read_expr set_stmt callee = let
+  val lib = listSyntax.mk_list (decls @
+    [``FunctionDecl Internal View F F "read" [("a", BaseT (UintT 256))] []
+         (BaseT (UintT 256)) [Return (SOME ^read_expr)]``,
+     ``FunctionDecl External Nonpayable F F "set" [("a", BaseT (UintT 256))]
+         [] NoneT [^set_stmt]``,
+     ``FunctionDecl Internal Pure F F "double" [("a", BaseT (UintT 256))] []
+         (BaseT (UintT 256))
+         [Return (SOME (Builtin (BaseT (UintT 256)) (Bop Mul)
+                          [Literal (BaseT (UintT 256)) (IntL 2);
+                           Name (BaseT (UintT 256)) "a"]))]``], ``:toplevel``)
+in
+  ``[(NONE,
+      [FunctionDecl External View F F "f" [("a", BaseT (UintT 256))] []
+         (BaseT (UintT 256))
+         [Return (SOME (Call (BaseT (UintT 256)) (IntCall (SOME 1, ^callee))
+                          [Name (BaseT (UintT 256)) "a"] NONE))]]);
+     (SOME 1, ^lib)]
+    : (num option # toplevel list) list``
+end
+fun check_rejects_in in_deploy layouts mods = assert_none
+  (vyperCheckContractLib.check_contract_conv
+     ``check_contract ^in_deploy ^layouts ^zero_address ^mods``)
+fun check_state_arm label decl read_expr set_stmt slot_layouts = let
+  val mods = uninit_state_modules decl read_expr set_stmt
+in
+  check_accepts (label ^ ", pure helper") false empty_layouts
+    (mods ``"double"``);
+  check_accepts (label ^ ", pure helper (deploy)") true empty_layouts
+    (mods ``"double"``);
+  check_rejects_in ``F`` empty_layouts (mods ``"read"``);
+  check_rejects_in ``T`` empty_layouts (mods ``"read"``);
+  check_accepts (label ^ ", allocated") false slot_layouts (mods ``"read"``)
+end
+val () = check_state_arm "uninitialized transient"
+  [``VariableDecl Private Transient "t" (BaseT (UintT 256)) NONE``]
+  ``TopLevelName (BaseT (UintT 256)) (SOME 1, "t")``
+  ``Assign (BaseTarget (TopLevelNameTarget (SOME 1, "t")))
+      (Name (BaseT (UintT 256)) "a")``
+  ``([((0w : address),
+       ([] : storage_layout, [((SOME 1, "t"), 0)] : storage_layout))]
+      : (address # (storage_layout # storage_layout)) list)``
+val () = check_state_arm "uninitialized HashMap"
+  [``HashMapDecl Private F "m" (BaseT (UintT 256)) (Type (BaseT (UintT 256)))
+      NONE``]
+  ``Subscript (BaseT (UintT 256)) (TopLevelName NoneT (SOME 1, "m"))
+      (Name (BaseT (UintT 256)) "a")``
+  ``Assign (BaseTarget (SubscriptTarget (TopLevelNameTarget (SOME 1, "m"))
+                         (Name (BaseT (UintT 256)) "a")))
+      (Name (BaseT (UintT 256)) "a")``
+  ``([((0w : address),
+       ([((SOME 1, "m"), 0)] : storage_layout, [] : storage_layout))]
+      : (address # (storage_layout # storage_layout)) list)``
+
+(* A module with a slot for x but not for y is not allocated: set, which
+   writes y, is not checked. *)
+val () = check_accepts "partially allocated module" false
+  ``([((0w : address),
+       ([((SOME 1, "x"), 0)] : storage_layout, [] : storage_layout))]
+      : (address # (storage_layout # storage_layout)) list)``
+  (uninit_state_modules
+     [``VariableDecl Private Storage "x" (BaseT (UintT 256)) NONE``,
+      ``VariableDecl Private Storage "y" (BaseT (UintT 256)) NONE``]
+     ``TopLevelName (BaseT (UintT 256)) (SOME 1, "x")``
+     ``Assign (BaseTarget (TopLevelNameTarget (SOME 1, "y")))
+         (Name (BaseT (UintT 256)) "a")``
+     ``"double"``)
+
+(* The main module's storage must have slots. *)
+val () = check_rejects empty_layouts
+  ``[(NONE,
+      [VariableDecl Private Storage "x" (BaseT (UintT 256)) NONE;
+       FunctionDecl External Pure F F "f" [] [] (BaseT (UintT 256))
+         [Return (SOME (Literal (BaseT (UintT 256)) (IntL 1)))]])]
+    : (num option # toplevel list) list``
+
+(* Exports may name only functions of allocated modules. *)
+Theorem exports_ok_uninitialized_module:
+  ~exports_ok ^empty_layouts ^zero_address
+     ^(uninit_modules lib_double lib_double) [("set_x", 1)] /\
+  exports_ok ^lib_x_layouts ^zero_address
+     ^(uninit_modules lib_double lib_double) [("set_x", 1)] /\
+  exports_ok ^empty_layouts ^zero_address
+     ^(uninit_modules lib_double lib_double) [("quad", 2)]
+Proof
+  CONV_TAC vyperCheckContractLib.check_contract_conv
+QED

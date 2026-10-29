@@ -226,14 +226,8 @@ Proof
   `ALOOKUP mods src = SOME ts` by
     (irule alistTheory.ALOOKUP_ALL_DISTINCT_MEM >>
      gvs[contract_namespaces_ok_def]) >>
-  `toplevel_vtypes_complete artifact.cta_toplevel_vtypes
-      (initial_evaluation_context cx.sources cx.layouts cx.txn src)` by
-    (irule check_contract_toplevel_vtypes_complete_checked >> metis_tac[]) >>
   `FLOOKUP artifact.cta_toplevel_vtypes (src,id) = SOME (Type ty)` by
-    (gvs[toplevel_vtypes_complete_def] >>
-     first_x_assum irule >>
-     simp[get_module_code_def, initial_evaluation_context_def] >>
-     metis_tac[]) >>
+    (irule check_contract_bare_global_toplevel_vtype >> metis_tac[]) >>
   gvs[well_typed_expr_def, artifact_env_def] >>
   drule check_contract_bare_globals_consistent_checked >>
   disch_then (qspecl_then [`cx.txn`,`cx.sources`,`cx.layouts`] mp_tac) >> simp[] >>
