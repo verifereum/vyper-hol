@@ -619,17 +619,6 @@ Definition find_keyword_def:
     else find_keyword name rest
 End
 
-
-(* Lemma: if find_keyword returns SOME v, then v is in the keyword list *)
-Theorem find_keyword_MEM:
-  ∀name kws v. find_keyword name kws = SOME v ⇒ ∃k. MEM (JKeyword k v) kws
-Proof
-  Induct_on `kws` >> rw[find_keyword_def] >>
-  Cases_on `h` >> gvs[find_keyword_def] >>
-  Cases_on `s = name` >> gvs[] >>
-  metis_tac[]
-QED
-
 (* Size lemma for termination: keyword value is smaller than keyword list *)
 Theorem find_keyword_size:
   ∀name kws v.
