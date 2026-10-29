@@ -54,6 +54,9 @@ Proof
   `fn_sigs_declared_complete deploy_art.cta_fn_sigs
      (initial_evaluation_context sources layouts tx NONE with in_deploy := T)` by
     (irule check_contract_fn_sigs_declared_complete_deploy >> simp[]) >>
+  `fn_sigs_live deploy_art.cta_fn_sigs
+     (initial_evaluation_context sources layouts tx NONE)` by
+    (irule check_contract_fn_sigs_live_initial >> metis_tac[]) >>
   `deploy_art.cta_bare_globals = runtime_art.cta_bare_globals /\
    deploy_art.cta_bare_global_assignable = runtime_art.cta_bare_global_assignable /\
    deploy_art.cta_toplevel_vtypes = runtime_art.cta_toplevel_vtypes /\

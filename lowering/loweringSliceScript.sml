@@ -41,7 +41,7 @@ Ancestors
   compileEnv valueEncoding valueEncodingProps
   vyperInterpreter vyperState vyperValue vyperValueOperation
   vyperEvalExprPreservesScopesDom
-  vyperEvalPreservesScopes arithmeticProps
+  vyperEvalPreservesScopes vyperStatePreservation arithmeticProps
   venomExecSemantics venomExecProofs venomInst venomInstProofs venomState
 Libs
   monadsyntax
@@ -51,7 +51,7 @@ Libs
 (* The fragment of expression e lowered as a value of type ty, run from a
    state related at es, the source state where e is evaluated: it reaches
    its end related at the source state after e, with the operand holding
-   e's value, and keeps the variables handed out before it and the
+   e's forced value, and keeps the variables handed out before it and the
    allocations made before it.  This is compile_expr_correct's conclusion
    as a frag_exec; getting it from compile_expr_correct through
    frag_exec_run_inst_seq also needs that a run_inst_seq without INVOKE
@@ -61,7 +61,8 @@ Definition expr_frag_def:
   expr_frag ctx func cenv cx ty e es R <=>
     !sa sb op v es' s0.
       lower_value compile_expr cenv ty e sa = (op, sb) /\
-      eval_expr cx e es = (INL (Value v), es') /\
+      (do result <- eval_expr cx e; read_result cx result od) es =
+        (INL v, es') /\
       fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
       local_ptrs_reserved cenv sa ==>
       frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel func cenv cx es s)
@@ -141,17 +142,20 @@ QED
 Theorem eval_name_word:
   !cx ann id es entry.
     lookup_scopes id es.scopes = SOME entry ==>
-    eval_expr cx (Name ann id) es = (INL (Value entry.value), es)
+    (do result <- eval_expr cx (Name ann id); read_result cx result od) es =
+      (INL entry.value, es)
 Proof
   rpt strip_tac >>
   simp[Once evaluate_def, bind_def, get_scopes_def, return_def,
-       lift_option_type_def] >>
-  `lookup_scopes_val id es.scopes = SOME entry.value` by
-    (qpat_x_assum `lookup_scopes _ _ = _` mp_tac >>
-     qspec_tac (`es.scopes`, `scs`) >>
-     Induct >> simp[lookup_scopes_def, lookup_scopes_val_def] >>
-     rpt strip_tac >> Cases_on `FLOOKUP h id` >> gvs[]) >>
-  simp[return_def]
+          type_check_def, assert_def, check_def, read_result_def, read_place_def,
+          read_memory_path_def, evaluate_subscripts_def, lift_sum_def,
+          lift_option_type_def, ignore_bind_def] >>
+     `lookup_scopes_val id es.scopes = SOME entry.value` by
+       (qpat_x_assum `lookup_scopes _ _ = _` mp_tac >>
+        qspec_tac (`es.scopes`, `scs`) >>
+        Induct >> simp[lookup_scopes_def, lookup_scopes_val_def] >>
+        rpt strip_tac >> Cases_on `FLOOKUP h id` >> gvs[]) >>
+     simp[return_def]
 QED
 
 Theorem lower_value_name_word:
@@ -196,7 +200,8 @@ Theorem compile_name_word_frag:
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
     is_word_type ann /\
     lookup_scopes id es.scopes = SOME entry /\ word_value entry.value ==>
-    eval_expr cx (Name ann id) es = (INL (Value entry.value), es) /\
+    (do result <- eval_expr cx (Name ann id); read_result cx result od) es =
+      (INL entry.value, es) /\
     expr_frag ctx func cenv cx ty (Name ann id) es R
 Proof
   rpt gen_tac >> strip_tac >>
@@ -221,10 +226,10 @@ Theorem eval_stmt_annassign_value:
     ?tyv tv es1 v es2 sc rest.
       evaluate_type (get_tenv cx) typ = SOME tyv /\
       eval_expr cx e es = (INL tv, es1) /\
-      materialise cx tv es1 = (INL v, es2) /\
+      read_result cx tv es1 = (INL v, es2) /\
       lookup_scopes id es2.scopes = NONE /\ es2.scopes = sc :: rest /\
       es' = es2 with scopes :=
-              (sc |+ (id, <| assignable := T; type := tyv; value := v |>))
+              (sc |+ (id, <| assignable := T; type := tyv; value := v; popped := [] |>))
               :: rest
 Proof
   rpt gen_tac >>
@@ -236,16 +241,14 @@ Proof
   simp[new_variable_def, bind_def, ignore_bind_def, get_scopes_def,
        type_check_def, assert_def, set_scopes_def, return_def, raise_def] >>
   rw[AllCaseEqs()] >> gvs[] >>
-  rename1 `materialise cx tv es1 = (INL v, es2)` >>
+  rename1 `read_result cx tv es1 = (INL v, es2)` >>
   qpat_x_assum `(case evaluate_type _ _ of NONE => _ | SOME _ => _) _ = _`
     mp_tac >>
   Cases_on `evaluate_type (get_tenv cx) typ` >>
   simp[raise_def, return_def] >> strip_tac >>
   qpat_x_assum `(case es2.scopes of [] => _ | _ => _) _ = _` mp_tac >>
   Cases_on `es2.scopes` >> simp[raise_def, set_scopes_def, return_def] >>
-  strip_tac >> gvs[] >>
-  qexistsl_tac [`tv`, `es1`, `v`, `es2`, `h`, `t`] >>
-  simp[evaluation_state_component_equality]
+  strip_tac >> gvs[]
 QED
 
 (* An ALLOCA of func whose output is no live local's pointer, run fresh or
@@ -328,12 +331,12 @@ Theorem stmt_state_rel_declare_word:
     32 <= sz /\ word_value v /\ type_memory_size tyv = 32 ==>
     stmt_state_rel func cenv cx
       (es with scopes :=
-         (sc |+ (id, <| assignable := a; type := tyv; value := v |>)) :: rest)
+         (sc |+ (id, <| assignable := a; type := tyv; value := v; popped := [] |>)) :: rest)
       (mstore (w2n w) (val_to_w256 v) s)
 Proof
   rpt strip_tac >>
   qabbrev_tac `s' = mstore (w2n w) (val_to_w256 v) s` >>
-  qabbrev_tac `entry = <| assignable := a; type := tyv; value := v |>` >>
+  qabbrev_tac `entry = <| assignable := a; type := tyv; value := v; popped := [] |>` >>
   qabbrev_tac `scs' = (sc |+ (id, entry)) :: rest` >>
   `s'.vs_vars = s.vs_vars /\ s'.vs_allocas = s.vs_allocas /\
    s'.vs_alloca_next = s.vs_alloca_next /\
@@ -389,7 +392,7 @@ Proof
   fs[stmt_state_rel_def] >> metis_tac[]
 QED
 
-Theorem emit_inst_unit[local]:
+Theorem emit_inst_unit:
   !opc ops outs st x st'.
     emit_inst opc ops outs st = (x, st') ==>
     emit_inst opc ops outs st = ((), st')
@@ -525,8 +528,8 @@ Theorem compile_annassign_word_frag:
     32 <= sz /\ sz < dimword (:256) /\
     (!tyv. evaluate_type (get_tenv cx) vtyp = SOME tyv ==>
            type_memory_size tyv = 32) /\
-    (!tv es1. eval_expr cx e es = (INL tv, es1) ==>
-              ?v. tv = Value v /\ word_value v) /\
+    (!v es1. (do result <- eval_expr cx e; read_result cx result od) es =
+               (INL v, es1) ==> word_value v) /\
     (!sa sb op. lower_value compile_expr cenv (expr_type e) e sa = (op, sb) ==>
                 cs_extends sa sb) /\
     expr_frag ctx func cenv cx (expr_type e) e es R ==>
@@ -535,8 +538,10 @@ Theorem compile_annassign_word_frag:
 Proof
   rpt gen_tac >> strip_tac >>
   drule eval_stmt_annassign_value >> strip_tac >>
-  qpat_x_assum `!tv es1. eval_expr _ _ _ = _ ==> _` drule >> strip_tac >>
-  gvs[materialise_def, return_def] >>
+  imp_res_tac read_result_state >> gvs[] >>
+  `(do result <- eval_expr cx e; read_result cx result od) es =
+     (INL v, es1)` by simp[bind_def] >>
+  `word_value v` by metis_tac[] >>
   `type_memory_size tyv = 32` by fs[] >>
   `lookup_scopes id es.scopes = NONE` by
     (irule lookup_scopes_none_map_fdom >> qexists_tac `es1.scopes` >>
@@ -590,7 +595,8 @@ Theorem eval_stmt_if_success:
   !cx c ss1 ss2 es es'.
     eval_stmt cx (If c ss1 ss2) es = (INL (), es') ==>
     ?b es1 es2 sc rest.
-      eval_expr cx c es = (INL (Value (BoolV b)), es1) /\
+      (do result <- eval_expr cx c; read_result cx result od) es =
+        (INL (BoolV b), es1) /\
       eval_stmts cx (if b then ss1 else ss2)
         (es1 with scopes := FEMPTY :: es1.scopes) = (INL (), es2) /\
       es2.scopes = sc :: rest /\ es' = es2 with scopes := rest /\
@@ -604,19 +610,22 @@ Proof
        finally_def, return_def] >>
   Cases_on `eval_expr cx c es` >> rename1 `eval_expr cx c es = (r1, es1)` >>
   Cases_on `r1` >> simp[] >>
-  rename1 `switch_BoolV tv` >>
-  Cases_on `switch_BoolV tv (eval_stmts cx ss1) (eval_stmts cx ss2)
+  rename1 `switch_BoolV cx tv` >>
+  Cases_on `switch_BoolV cx tv (eval_stmts cx ss1) (eval_stmts cx ss2)
               (es1 with scopes := FEMPTY :: es1.scopes)` >>
   rename1 `_ = (r2, es2)` >> Cases_on `r2` >>
   simp[pop_scope_def] >> Cases_on `es2.scopes` >>
   simp[raise_def, return_def] >> strip_tac >> gvs[] >>
-  `!id. id IN FDOM h ==> lookup_scopes id t = NONE` by
-    (rpt strip_tac >>
-     qpat_x_assum `switch_BoolV _ _ _ _ = _` mp_tac >>
-     rw[switch_BoolV_def, raise_def] >>
-     drule eval_stmts_new_in_head_not_in_tail >> simp[]) >>
-  qpat_x_assum `switch_BoolV _ _ _ _ = _` mp_tac >>
-  rw[switch_BoolV_def, raise_def]
+  qpat_x_assum `switch_BoolV _ _ _ _ _ = _` mp_tac >>
+  simp[switch_BoolV_def, bind_def, read_result_empty_scope] >>
+  Cases_on `read_result cx tv es1` >>
+  rename1 `read_result cx tv es1 = (rv, ers)` >>
+  drule read_result_state >> strip_tac >> gvs[] >>
+  Cases_on `rv` >> simp[raise_def] >>
+  rw[] >> gvs[raise_def]
+  >> qpat_x_assum `eval_stmts _ _ _ = _`
+       (mp_then Any mp_tac eval_stmts_new_in_head_not_in_tail) >>
+  simp[]
 QED
 
 Theorem compile_if_parts:
@@ -960,3 +969,13 @@ Proof
   impl_tac >- (simp[result_rel_def] >> metis_tac[]) >>
   simp[]
 QED
+
+(* Every slice is independent of the general compiler admissions. *)
+val () = List.app
+  (fn (name,th) =>
+    let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
+      if null (Thm.hyp th) andalso null axioms andalso
+         List.all (fn oracle => oracle = "DISK_THM") oracles then ()
+      else raise Fail ("lowering slice proof is not closed: " ^ name)
+    end)
+  (DB.thms "loweringSlice");

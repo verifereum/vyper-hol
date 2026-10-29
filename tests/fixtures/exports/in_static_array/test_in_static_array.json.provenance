@@ -9,6 +9,9 @@
     "tests/semantics-build-constraints.txt": "5ea17fa1520d1732c4efe2d93b0456c095cc417df4bcd7f1953cec37462a2e65",
     "tests/semantics-profile.json": "e8d8cab9b9b9fb1a68401314ecb895936519c252540c81527294891d2037dec9",
     "tests/semantics-test-constraints.txt": "21849a5ae9b73cf03c7d864d18683c747ac2dd0b0789e62e148240d35a40a6f4",
+    "tests/vyper-regression/abi/test_dynamic_padding.py": "f68b00935ca6f7361a3d6187ae8792ba943bb24ee41127aab57fbc458fb717bd",
+    "tests/vyper-regression/abi/test_returndata_padding.py": "f39850c325f1af76fb3646c21642ad06a6e982685f67c715b5e1ce787ed46730",
+    "tests/vyper-regression/builtins/test_convert_address_to_bytes_m.py": "a5b3bbe54d258899522329f6a4dbc0652c938bf0b0b77aebd92201ae609d1532",
     "tools/vyper_test_export_plugin.py": "0c39aecaf73d3d2bbc83611720c342f0988da678520f63fdfcbac853e8599ff3",
     "tools/vyper_test_exports.py": "a0708d10fda15ef633a8026e46c9a6c7c803b5db3a71f50627bd4c6a0347fd8f"
   },

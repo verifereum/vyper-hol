@@ -81,6 +81,20 @@ Proof
   CONV_TAC cv_eval
 QED
 
+Theorem send_cps_NONE_zero_value_runs_precompile:
+  send_observe 9w 0 NONE (INR (Error (RuntimeError "send failed"))) 3 0 [] 2w 4w cpscv_initial_logs
+    send_initial_requests NONE
+Proof
+  CONV_TAC cv_eval
+QED
+
+Theorem send_cps_NONE_zero_value_empty_code_unchanged:
+  send_observe 0w 0 NONE (INL (Value NoneV)) 3 0 [] 2w 4w cpscv_initial_logs
+    send_initial_requests NONE
+Proof
+  CONV_TAC cv_eval
+QED
+
 Theorem send_cps_failure_consumes_ignores_bad_payload:
   send_observe 9w 7 (SOME [send_outcome F [] (2 ** 256); cpscv_tail])
     (INR (Error (RuntimeError "send failed"))) 3 0 [] 2w 4w cpscv_initial_logs

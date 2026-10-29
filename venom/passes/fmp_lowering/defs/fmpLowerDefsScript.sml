@@ -118,7 +118,7 @@ Definition fmp_lower_input_def:
     fmp_lower_blocks_shape infos ctx fn.fn_blocks
 End
 
-(* Select restores at one exact endpoint while preserving plan order.  The
+(* Select restores at one exact original instruction point while preserving plan order.  The
    second component is threaded through all blocks and must be empty at the
    outer boundary, so an unlocated analysis result cannot be ignored. *)
 Definition fmp_select_point_restores_def:
@@ -156,21 +156,19 @@ Definition fmp_lower_inst_def:
            (case inst.inst_outputs of
               [old] =>
                 (case fresh_ir_var s of (plus31,s1) =>
-                  case fresh_ir_var s1 of (mask,s2) =>
-                  case fresh_ir_var s2 of (aligned,s3) =>
-                  case fresh_inst_id s3 of (add_id,s4) =>
-                  case fresh_inst_id s4 of (not_id,s5) =>
-                  case fresh_inst_id s5 of (and_id,s6) =>
-                  case fresh_inst_id s6 of (bump_id,s7) =>
+                 case fresh_ir_var s1 of (mask,s1a) =>
+                 case fresh_ir_var s1a of (aligned,s2) =>
+                 case fresh_inst_id s2 of (add_id,s3) =>
+                 case fresh_inst_id s3 of (not_id,s3a) =>
+                 case fresh_inst_id s3a of (and_id,s4) =>
+                 case fresh_inst_id s4 of (bump_id,s5) =>
                    SOME
-                      ([mk_inst add_id ADD [Lit 31w; size_op] [plus31];
-                        mk_inst not_id NOT [Lit 31w] [mask];
-                       mk_inst and_id AND
-                          [Var plus31; Var mask]
-                         [aligned];
+                     ([mk_inst add_id ADD [Lit 31w; size_op] [plus31];
+                       mk_inst not_id NOT [Lit 31w] [mask];
+                       mk_inst and_id AND [Var plus31; Var mask] [aligned];
                        mk_inst bump_id BUMP
                          [Var runner; Var aligned] [old;runner]],
-                       s7))
+                      s5))
             | _ => NONE)
        | _ => NONE)
     else if inst.inst_opcode = DRET then NONE
@@ -231,24 +229,36 @@ Datatype:
     FmpBlocksResult (basic_block list) ((fmp_point # string) list) ir_supply
 End
 
-(* Reclaim points refer to original instruction indices.  Each block selects
-   its exact original endpoint before rewriting; leftovers are returned for the
-   outer checked boundary to reject. *)
+(* Walk only the original list. Restores precede the instruction at (label,k);
+   the empty case deliberately does not select an endpoint restore. Leftovers
+   are threaded across blocks and rejected by the outer checked boundary. *)
+Definition fmp_lower_indexed_def:
+  fmp_lower_indexed infos ctx runner label k s restores [] =
+    SOME ([],restores,s) /\
+  fmp_lower_indexed infos ctx runner label k s restores (inst::insts) =
+    let (bases,later) = fmp_select_point_restores (label,k) restores in
+    case fmp_emit_restores runner s bases of (prefix,s0) =>
+    case fmp_lower_inst infos ctx runner s0 inst of
+      NONE => NONE
+    | SOME (head,s1) =>
+        case fmp_lower_indexed infos ctx runner label (SUC k) s1 later insts of
+          NONE => NONE
+        | SOME (tail,leftover,s2) =>
+            SOME (prefix ++ head ++ tail,leftover,s2)
+End
 Definition fmp_lower_blocks_def:
   fmp_lower_blocks infos ctx runner s restores [] =
     SOME (FmpBlocksResult [] restores s) /\
   fmp_lower_blocks infos ctx runner s restores (bb::bbs) =
-    case fmp_lower_insts infos ctx runner s bb.bb_instructions of
+    case fmp_lower_indexed infos ctx runner bb.bb_label 0 s restores
+           bb.bb_instructions of
       NONE => NONE
-    | SOME (insts,s1) =>
-        let p = (bb.bb_label,LENGTH bb.bb_instructions) in
-        let (bases,later) = fmp_select_point_restores p restores in
-        case fmp_emit_restores runner s1 bases of (restore_insts,s2) =>
+    | SOME (insts,later,s2) =>
         case fmp_lower_blocks infos ctx runner s2 later bbs of
           NONE => NONE
         | SOME (FmpBlocksResult tail leftover s3) =>
             SOME (FmpBlocksResult
-              ((bb with bb_instructions := insts ++ restore_insts)::tail)
+              ((bb with bb_instructions := insts)::tail)
               leftover s3)
 End
 

@@ -85,7 +85,6 @@ End
 Theorem type_to_abi_dec_info_word_plan:
   !tenv sfields cenv ty.
     is_word_type ty /\
-    (!m. ty = BaseT (IntT m) ==> m MOD 8 = 0) /\
     (!nsid m. FLOOKUP tenv nsid = SOME (FlagArgs m) ==>
               cenv.ce_flag_n_members (nsid_to_string nsid) = m) ==>
     abi_dec_plan tenv ty (type_to_abi_dec_info sfields cenv ty)
@@ -201,8 +200,7 @@ QED
 
 Theorem type_to_abi_dec_info_word_plans:
   !tenv sfields cenv ts.
-    EVERY (\t. is_word_type t /\ IS_SOME (evaluate_type tenv t) /\
-               !m. t = BaseT (IntT m) ==> m MOD 8 = 0) ts /\
+    EVERY (\t. is_word_type t /\ IS_SOME (evaluate_type tenv t)) ts /\
     (!nsid m. FLOOKUP tenv nsid = SOME (FlagArgs m) ==>
               cenv.ce_flag_n_members (nsid_to_string nsid) = m) ==>
     abi_dec_plans tenv ts
@@ -235,8 +233,7 @@ QED
    word types is a plan. *)
 Theorem type_to_abi_dec_info_word_tuple_plan:
   !tenv sfields cenv ts.
-    EVERY (\t. is_word_type t /\ IS_SOME (evaluate_type tenv t) /\
-               !m. t = BaseT (IntT m) ==> m MOD 8 = 0) ts /\
+    EVERY (\t. is_word_type t /\ IS_SOME (evaluate_type tenv t)) ts /\
     (!nsid m. FLOOKUP tenv nsid = SOME (FlagArgs m) ==>
               cenv.ce_flag_n_members (nsid_to_string nsid) = m) ==>
     abi_dec_plan tenv (TupleT ts)
@@ -253,7 +250,6 @@ QED
 Theorem type_to_abi_dec_info_word_sarray_plan:
   !tenv sfields cenv t n.
     is_word_type t /\ IS_SOME (evaluate_type tenv t) /\
-    (!m. t = BaseT (IntT m) ==> m MOD 8 = 0) /\
     (!nsid m. FLOOKUP tenv nsid = SOME (FlagArgs m) ==>
               cenv.ce_flag_n_members (nsid_to_string nsid) = m) ==>
     abi_dec_plan tenv (ArrayT t (Fixed n))

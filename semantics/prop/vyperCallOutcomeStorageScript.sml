@@ -28,12 +28,13 @@ Theorem eval_oracle_storage_preserved_mutual:
   (!cx s st res st'. oracle_storage_ok cx st /\ eval_stmt cx s st = (res,st') ==> oracle_storage_ok cx st') /\
   (!cx ss st res st'. oracle_storage_ok cx st /\ eval_stmts cx ss st = (res,st') ==> oracle_storage_ok cx st') /\
   (!cx it st res st'. oracle_storage_ok cx st /\ eval_iterator cx it st = (res,st') ==> oracle_storage_ok cx st') /\
-  (!cx tgt st res st'. oracle_storage_ok cx st /\ eval_target cx tgt st = (res,st') ==> oracle_storage_ok cx st') /\
-  (!cx tgts st res st'. oracle_storage_ok cx st /\ eval_targets cx tgts st = (res,st') ==> oracle_storage_ok cx st') /\
-  (!cx bt st res st'. oracle_storage_ok cx st /\ eval_base_target cx bt st = (res,st') ==> oracle_storage_ok cx st') /\
   (!cx tyv id body vs st res st'. oracle_storage_ok cx st /\ eval_for cx tyv id body vs st = (res,st') ==> oracle_storage_ok cx st') /\
   (!cx e st res st'. oracle_storage_ok cx st /\ eval_expr cx e st = (res,st') ==> oracle_storage_ok cx st') /\
-  (!cx es st res st'. oracle_storage_ok cx st /\ eval_exprs cx es st = (res,st') ==> oracle_storage_ok cx st')
+  (!cx es st res st'. oracle_storage_ok cx st /\ eval_exprs cx es st = (res,st') ==> oracle_storage_ok cx st') /\
+  (!cx bt st res st'. oracle_storage_ok cx st /\ eval_base_place cx bt st = (res,st') ==> oracle_storage_ok cx st') /\
+  (!cx tgt st res st'. oracle_storage_ok cx st /\ eval_target_place cx tgt st = (res,st') ==> oracle_storage_ok cx st') /\
+  (!cx g v st res st'. oracle_storage_ok cx st /\ assign_tuple_targets cx g v st = (res,st') ==> oracle_storage_ok cx st') /\
+  (!cx gs vs st res st'. oracle_storage_ok cx st /\ assign_tuple_target_list cx gs vs st = (res,st') ==> oracle_storage_ok cx st')
 Proof
   rpt conj_tac >> rpt strip_tac >> imp_res_tac eval_outcome_suffix_mutual >>
   drule_all oracle_storage_ok_suffix >> simp[]
@@ -268,7 +269,7 @@ Theorem Send_outcome_storage_suffix:
 Proof
   rpt gen_tac >> strip_tac >>
   mp_tac (checked_call_outcome_storage_suffix |>
-    INST_TYPE [alpha |-> ``:toplevel_value``] |>
+    INST_TYPE [alpha |-> ``:eval_result``] |>
     Q.INST [`k` |-> `\bs. return (Value NoneV)`, `msg` |-> `"send failed"`,
             `calldata` |-> `[]`, `value_opt` |-> `SOME amount`]) >>
   simp[return_def, runtime_storage_consistent_def]
@@ -302,7 +303,7 @@ Theorem ExtCall_outcome_return_storage_suffix:
 Proof
   rpt gen_tac >> strip_tac >>
   mp_tac (ExtCall_outcome_storage_suffix |>
-    INST_TYPE [alpha |-> ``:toplevel_value``] |>
+    INST_TYPE [alpha |-> ``:eval_result``] |>
     Q.INST [`k` |-> `\bs. if bs = [] /\ IS_SOME drv then eval_expr cx (THE drv)
       else do v <- lift_sum_runtime (evaluate_abi_decode_return (get_tenv cx) ret_type bs);
               return (Value v) od`]) >>
@@ -345,7 +346,7 @@ Proof
   `contract_storage_well_formed cx st` by fs[runtime_storage_consistent_def] >>
   Cases_on `take_call_outcome target calldata value_opt st` >>
   rename1 `take_call_outcome target calldata value_opt st = (answer,mid)` >>
-  drule (ExtCall_outcome_continue |> INST_TYPE [alpha |-> ``:toplevel_value``]) >>
+  drule (ExtCall_outcome_continue |> INST_TYPE [alpha |-> ``:eval_result``]) >>
   disch_then (qspecl_then [`ret_type`,
     `\bs. if bs = [] /\ IS_SOME drv then eval_expr cx (THE drv)
      else do v <- lift_sum_runtime (evaluate_abi_decode_return (get_tenv cx) ret_type bs);

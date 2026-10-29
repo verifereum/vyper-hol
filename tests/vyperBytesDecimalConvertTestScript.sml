@@ -115,15 +115,15 @@ QED
 
 Theorem bytes_decimal_builtin_boundaries_cv:
   evaluate_type_builtin empty_evaluation_context Convert (BaseT DecimalT)
-    [BytesV [128w]] = INL (DecimalV (-128)) ∧
+    [BaseT (BytesT (Dynamic 32))] [BytesV [128w]] = INL (DecimalV (-128)) ∧
   evaluate_type_builtin empty_evaluation_context Convert (BaseT DecimalT)
-    [BytesV (REPLICATE 11 0w ++ [127w] ++ REPLICATE 20 255w)] =
+    [BaseT (BytesT (Dynamic 32))] [BytesV (REPLICATE 11 0w ++ [127w] ++ REPLICATE 20 255w)] =
       INL (DecimalV 187072209578355573530071658587684226515959365500927) ∧
   evaluate_type_builtin empty_evaluation_context Convert (BaseT DecimalT)
-    [BytesV (REPLICATE 11 255w ++ [128w] ++ REPLICATE 20 0w)] =
+    [BaseT (BytesT (Dynamic 32))] [BytesV (REPLICATE 11 255w ++ [128w] ++ REPLICATE 20 0w)] =
       INL (DecimalV (-187072209578355573530071658587684226515959365500928)) ∧
   evaluate_type_builtin empty_evaluation_context Convert (BaseT DecimalT)
-    [BytesV (REPLICATE 11 0w ++ [128w] ++ REPLICATE 20 0w)] =
+    [BaseT (BytesT (Dynamic 32))] [BytesV (REPLICATE 11 0w ++ [128w] ++ REPLICATE 20 0w)] =
       INR (RuntimeError "bounded_decimal_op")
 Proof
   simp[evaluate_type_builtin_def, get_tenv_def,

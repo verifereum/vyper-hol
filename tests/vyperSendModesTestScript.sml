@@ -12,7 +12,11 @@ val send_monad_simps = [vyperStateTheory.bind_def,
   vyperStateTheory.ignore_bind_def, vyperStateTheory.return_def,
   vyperStateTheory.raise_def, vyperStateTheory.type_check_def,
   vyperStateTheory.check_def, vyperStateTheory.assert_def,
-  vyperStateTheory.lift_option_type_def, vyperStateTheory.get_Value_def];
+  vyperStateTheory.lift_option_type_def, vyperStateTheory.read_result_def,
+  dest_AddressV_def, dest_NumV_def, ext_call_kwarg_def,
+  byteTheory.word_of_bytes_be_def,
+  (byteTheory.word_of_bytes_word_to_bytes |> INST_TYPE [alpha |-> ``:160``]
+    |> SRULE [dividesTheory.compute_divides])];
 
 (* Independent NONE-mode tail: run the recipient with send's default zero
    forwarded gas, reject a failed call, then adopt its accounts/storage/logs.
@@ -58,7 +62,7 @@ Proof
   Cases_on `st.outcomes` >>
   simp (send_monad_simps @ [send_call_def, evaluate_def,
        evaluate_literal_def, dest_AddressV_def,
-       dest_NumV_def, vyperStateTheory.materialise_def, send_address_literal,
+       dest_NumV_def, vyperStateTheory.read_result_def, send_address_literal,
        eval_send_def, ext_call_kwarg_def, forwarded_gas_def,
        send_concrete_backend_def])
 QED
@@ -84,7 +88,7 @@ Proof
   Cases_on `st.outcomes` >>
   simp (send_monad_simps @ [send_call_def, evaluate_def,
        evaluate_literal_def, dest_AddressV_def, dest_NumV_def,
-       vyperStateTheory.materialise_def, send_zero_address_literal,
+       vyperStateTheory.read_result_def, send_zero_address_literal,
        eval_send_def, ext_call_kwarg_def, forwarded_gas_def,
        send_concrete_backend_def])
 QED
@@ -98,7 +102,7 @@ Theorem send_zero_initial_state_not_inert:
        st with requests := [call_outcome_request 0w [] (SOME 0) st]) /\
     eval_expr empty_evaluation_context (send_call 0w 0) st <> (INL (Value NoneV),st)
 Proof
-  simp (send_monad_simps @ [send_zero_bigstep_after_arguments, initial_state_def,
+  simp (send_monad_simps @ [send_zero_bigstep_after_arguments, eval_send_def, initial_state_def,
        take_call_outcome_def, call_outcome_request_def, take_outcome_def,
        record_request_def, computed_precompile_addresses, failed_outcome_def,
        empty_state_def, UNCURRY])
@@ -112,7 +116,7 @@ Theorem send_bigstep_failure_whole_state:
        requests := send_state.requests ++
          [call_outcome_request 9w [] (SOME 7) send_state]|>)
 Proof
-  simp (send_monad_simps @ [send_bigstep_after_arguments, take_call_outcome_def,
+  simp (send_monad_simps @ [send_bigstep_after_arguments, eval_send_def, take_call_outcome_def,
        call_outcome_request_def, take_outcome_def, record_request_def,
        computed_precompile_addresses, send_outcome_def, cpscv_outcome_def,
        send_state_def, cpscv_state_def, empty_state_def, UNCURRY])
@@ -136,7 +140,7 @@ Theorem send_bigstep_success_whole_state:
         requests := send_state.requests ++
           [call_outcome_request 9w [] (SOME 7) send_state]|>)
 Proof
-  simp (send_monad_simps @ [send_bigstep_after_arguments, take_call_outcome_def,
+  simp (send_monad_simps @ [send_bigstep_after_arguments, eval_send_def, take_call_outcome_def,
        call_outcome_request_def, take_outcome_def, record_request_def,
        computed_precompile_addresses, send_outcome_def, cpscv_outcome_def,
        send_state_def, cpscv_state_def, empty_state_def, UNCURRY,
@@ -145,4 +149,13 @@ Proof
        vyperStateTheory.update_accounts_def, vyperStateTheory.update_transient_def,
        vyperStateTheory.append_logs_def,
        empty_account_state_def])
+QED
+
+Theorem send_none_executes_invalid_recipient:
+  FST (eval_send empty_evaluation_context F [AddressV 0w; IntV 0]
+    (empty_state with accounts := update_account 0w
+      (empty_account_state with code := [254w]) empty_accounts)) =
+  INR (Error (RuntimeError "send failed"))
+Proof
+  CONV_TAC cv_eval
 QED

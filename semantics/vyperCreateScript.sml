@@ -7,7 +7,6 @@
  *   minimal_proxy_initcode — EIP-1167 initcode (54 bytes)
  *   create_address         — CREATE/CREATE2 address selection
  *   eval_create            — shared interpreter/CPS creation semantics
- *   refresh_create_args  — read located constructor args at store time
  *
  * Shared eval_create frame/outcome lemmas live in vyperCreateFrame.
  * Oracle-boundary lemmas remain here beside create_oracle_result.
@@ -22,36 +21,6 @@ Ancestors
   extCallOracle[ignore_grammar] vyperCallOutcome[ignore_grammar]
 Libs
   cv_transLib wordsLib monadsyntax
-
-(* A lowered Name or TopLevelName carries its location until the constructor
-   tuple is stored. Later argument callbacks may update local memory or storage.
-   Reading the saved location at store time reproduces the pinned lowering. *)
-Definition refresh_create_arg_def:
-  refresh_create_arg cx (Name _ id) v st =
-    (case lookup_scopes_val id st.scopes of NONE => v | SOME fresh => fresh) /\
-  refresh_create_arg cx (TopLevelName _ (src,id)) v st =
-    (case lookup_global cx src id st of
-       (INL tv,st') =>
-         (case materialise cx tv st' of
-            (INL fresh,_) => fresh | _ => v)
-     | _ => v) /\
-  refresh_create_arg cx _ v st = v
-End
-val () = cv_auto_trans refresh_create_arg_def;
-
-Definition refresh_create_args_def:
-  refresh_create_args cx [] [] st = [] /\
-  refresh_create_args cx (e::es) (v::vs) st =
-    refresh_create_arg cx e v st :: refresh_create_args cx es vs st /\
-  refresh_create_args cx _ vs st = vs
-End
-val () = cv_auto_trans refresh_create_args_def;
-
-Definition create_arg_snapshot_def:
-  create_arg_snapshot (st:evaluation_state) : evaluation_state evaluation_result =
-    (INL st,st)
-End
-val () = cv_auto_trans create_arg_snapshot_def;
 
 Datatype:
   create_code_source

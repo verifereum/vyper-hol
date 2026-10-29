@@ -7,8 +7,12 @@
  * (here) and row 6's account reads but .code (in exprSimAccounts) are
  * proved; the rest are cheated, for the later #636 PRs.  Each #636
  * Builtins row is:
- *   1 len, len(msg.data), msg.data slices: compile_len_sim,
- *     compile_calldata_len_sim, compile_calldata_slice_sim
+ *   1 len, len(msg.data), msg.data slices: compile_len_sim (by
+ *     exprSimLen's compile_len_loc_sim, and compile_len_code_sim for an
+ *     immutable, unprovable for now, below), compile_calldata_len_sim (by
+ *     exprSimCalldata's compile_calldatasize_sim),
+ *     compile_calldata_slice_sim (by exprSimCalldataSlice's
+ *     compile_calldata_slice_call_sim)
  *   2 keccak256, sha256: compile_keccak256_sim, compile_sha256_sim
  *   3 as_wei_value, ceil, floor (#566), uint256_addmod, uint256_mulmod,
  *     pow_mod256: compile_as_wei_value_sim, compile_ceil_sim,
@@ -27,11 +31,14 @@
  *   7 method_id: compile_method_id_sim; a literal signature with
  *     output_type=bytes4 by compile_method_id_literal_word_sim (the folded
  *     selector, a word literal), the rest in compile_method_id_other_sim
- *   8 ecrecover, ecadd, ecmul: compile_ecrecover_sim, compile_ecadd_sim,
+ *   8 ecrecover, ecadd, ecmul: compile_ecrecover_sim (by
+ *     exprSimPrecompiles' compile_ecrecover_call_sim), compile_ecadd_sim,
  *     compile_ecmul_sim
  *
  * Unprovable as the definitions stand, to be fixed in the lowering or in
  * state_rel before their PRs:
+ *   - compile_len_code_sim, len of an immutable: immutables_rel relates the
+ *     immutable's first word to its whole value, not to its length.
  *   - compile_blockhash_sim: the source raises a RuntimeError where
  *     BLOCKHASH returns 0 (#671), and call_ctx_rel does not relate the block
  *     hashes.
@@ -64,16 +71,35 @@ Ancestors
   valueEncoding fragExec vyperInterpreter vyperState vyperContext
   vyperValueOperation venomState exprSimAccounts exprSimUnop
   exprSimOperators exprBopLowering builtinMisc venomExecSemantics venomInst
+  exprSimCalldata exprSimCalldataSlice exprSimLen exprSimPrecompiles
   vyperValue exprLoweringProps vyperTyping
 
 (* ===== Lengths and calldata ===== *)
+
+(* len of an operand in code, an immutable: the lowering loads the
+   immutable's first word (ILOAD or DLOAD), but immutables_rel relates that
+   word to typed_val_to_w256 of the whole value, not to its length, so this
+   does not hold as the definitions stand. *)
+Theorem compile_len_code_sim:
+  !cenv ann args.
+    expr_sim_below cenv (list_size expr_size args) /\
+    (?ty st. vv_location (FST (compile_expr cenv ty (HD args) st)) =
+             SOME LocCode) ==>
+    expr_vv_ok cenv (Builtin ann Len args)
+Proof
+  cheat
+QED
 
 Theorem compile_len_sim:
   !cenv ann args.
     expr_sim_below cenv (list_size expr_size args) ==>
     expr_vv_ok cenv (Builtin ann Len args)
 Proof
-  cheat
+  rpt strip_tac >>
+  Cases_on `?ty st. vv_location (FST (compile_expr cenv ty (HD args) st)) =
+                    SOME LocCode`
+  >- (irule compile_len_code_sim >> metis_tac[]) >>
+  irule compile_len_loc_sim >> gvs[]
 QED
 
 Theorem compile_calldata_len_sim:
@@ -81,7 +107,7 @@ Theorem compile_calldata_len_sim:
     expr_sim_below cenv (list_size expr_size args) ==>
     expr_vv_ok cenv (Builtin ann CalldataLen args)
 Proof
-  cheat
+  simp[compile_calldatasize_sim]
 QED
 
 Theorem compile_calldata_slice_sim:
@@ -89,7 +115,7 @@ Theorem compile_calldata_slice_sim:
     expr_sim_below cenv (list_size expr_size args) ==>
     expr_vv_ok cenv (Builtin ann (CalldataSlice n) args)
 Proof
-  cheat
+  simp[compile_calldata_slice_call_sim]
 QED
 
 (* ===== Hashes ===== *)
@@ -390,10 +416,9 @@ Proof
         simp[is_word_type_def])
     >- (rpt gen_tac >> BETA_TAC >> strip_tac >>
         drule emit_op_extends_next_var >> simp[])
-    >- metis_tac[expr_sim_pre_word_value, is_word_type_def]
     >- metis_tac[expr_ok_def, expr_sim_ok_def] >>
     rpt strip_tac >>
-    qspecl_then [`cenv`, `cx`, `env`, `e1`, `es`, `Value v1`, `es1`] mp_tac
+    qspecl_then [`cenv`, `cx`, `env`, `e1`, `es`, `v1`, `es1`] mp_tac
       expr_sim_pre_word_value >>
     simp[is_word_type_def] >> strip_tac >>
     gvs[vyperValueTheory.evaluate_type_def] >>
@@ -438,7 +463,10 @@ Theorem compile_method_id_literal_word_sim:
       (Builtin (BaseT (BytesT (Fixed 4))) MethodId [Literal la l])
 Proof
   rw[expr_sim_ok_def, expr_sim_def, optionTheory.IS_SOME_EXISTS] >>
-  drule_all eval_expr_method_id_literal >> strip_tac >> gvs[] >>
+  Cases_on `eval_expr cx
+    (Builtin (BaseT (BytesT (Fixed 4))) MethodId [Literal la l]) es` >>
+  drule_all eval_expr_method_id_literal >> strip_tac >>
+  gvs[bind_def, read_result_def, return_def] >>
   drule compile_expr_method_id_literal >> strip_tac >>
   gvs[lower_value_def, comp_bind_def, compile_literal_vv_def,
       unwrap_value_def, comp_return_def] >>
@@ -518,7 +546,7 @@ Theorem compile_ecrecover_sim:
     expr_sim_below cenv (list_size expr_size args) ==>
     expr_vv_ok cenv (Builtin ann ECRecover args)
 Proof
-  cheat
+  simp[compile_ecrecover_call_sim]
 QED
 
 Theorem compile_ecadd_sim:

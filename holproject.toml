@@ -1,5 +1,5 @@
 [holbuild]
-minimum_version = "0.11.5"
+minimum_version = "0.12.0"
 
 [project]
 name = "vyper-hol"
@@ -28,8 +28,13 @@ roots = ["vyperHolScript.sml",
          "tests/vyperRawCallCalldataTestScript.sml",
          "tests/vyperDelegateRawCallTestScript.sml",
          "tests/vyperTupleSubscriptTestScript.sml",
+         "tests/vyperLoadTimingTestScript.sml",
+         "tests/vyperStoragePopTestScript.sml",
+         "lowering/targetPlaceTestScript.sml",
+         "venom/passes/dft/tests/dftEffectOrderTestScript.sml",
          "tests/vyperExtCallModesTestScript.sml",
          "tests/vyperUnreachableTestScript.sml",
+         "tests/vyperCustomErrorTestScript.sml",
          "tests/vyperECPrecompileTestScript.sml",
          "tests/vyperPopReceiverTestScript.sml",
          "lowering/supported/supportedTypePropsScript.sml",
@@ -44,4 +49,4 @@ roots = ["vyperHolScript.sml",
 
 [dependencies.verifereum]
 git = "https://github.com/verifereum/verifereum.git"
-rev = "0c5c2524c67c88d7d58d41b353a211024d0a7a5d"
+rev = "6991326b80f0b603fc79d2681f19aa1205c2015c"

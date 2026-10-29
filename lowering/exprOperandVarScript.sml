@@ -534,18 +534,14 @@ Theorem compiler_subscript_var:
   compile_subscript cfn cenv rt ty e idx sa = (vv,sb) ==>
   !x. vv_operand vv = Var x ==> not_fresh_at sb x
 Proof
-  simp[compile_subscript_def, LET_THM] >>
-  qmatch_goalsub_abbrev_tac `cenv.ce_is_hashmap name` >>
-  Cases_on `cenv.ce_is_hashmap name` >> simp[comp_bind_def, comp_return_def]
-  >- (rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >>
+  Cases_on `place_type cenv e`
+  >- (simp[compile_subscript_def, LET_THM,
+           comp_bind_def, comp_return_def] >>
+      rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >>
       gvs[contextTheory.vv_operand_def, contextTheory.mk_ptr_def] >>
       metis_tac[compiler_subscript_ops_var]) >>
-  Cases_on `cenv.ce_var_type name` >> simp[comp_bind_def, comp_return_def]
-  >- (rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >>
-      gvs[contextTheory.vv_operand_def, contextTheory.mk_ptr_def] >>
-      metis_tac[compiler_subscript_ops_var]) >>
-  rename1 `cenv.ce_var_type name = SOME vt` >> Cases_on `vt` >>
-  simp[comp_bind_def, comp_return_def] >>
+  rename1 `place_type cenv e = ValPT bt` >> Cases_on `bt` >>
+  simp[compile_subscript_def, LET_THM, comp_bind_def, comp_return_def] >>
   rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >>
   gvs[contextTheory.vv_operand_def, contextTheory.mk_ptr_def] >>
   metis_tac[compiler_subscript_ops_var]
@@ -664,6 +660,17 @@ Proof
   metis_tac[compiler_counter_emit, pairTheory.SND, arithmeticTheory.LESS_EQ_TRANS]
 QED
 
+Theorem compiler_create_call_var[local]:
+  as_stack_val rt (compile_create_call cfn cenv ck salted rof args sa) = (vv,sb) ==>
+  !x. vv_operand vv = Var x ==> not_fresh_at sb x
+Proof
+  Cases_on `compile_create_call cfn cenv ck salted rof args sa` >>
+  simp[as_stack_val_def] >> rpt strip_tac >>
+  gvs[contextTheory.vv_operand_def] >>
+  drule exprSafeOperandBuiltinsTheory.compile_create_call_safe_operand >>
+  simp[exprSafeOperandTheory.safe_operand_def]
+QED
+
 Theorem compiler_call_var:
   compile_call cfn cenv rt ty target args default_ret sa = (vv,sb) ==>
   !x. vv_operand vv = Var x ==> not_fresh_at sb x
@@ -683,7 +690,10 @@ Proof
   >~ [`compile_call _ _ _ _ (RawCallCalldataTarget _) _ _ _`] >-
     suspend "rawcalldata"
   >~ [`compile_call _ _ _ _ (Send _) _ _ _`] >-
-    suspend "send" >>
+    suspend "send"
+  >~ [`compile_call _ _ _ _ (CreateTarget _ _ _ _) _ _ _`] >-
+    (simp[compile_call_def] >>
+     metis_tac[compiler_create_call_var]) >>
   simp[compile_call_def, LET_THM] >>
   rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >>
   gvs[contextTheory.vv_operand_def]
@@ -1060,9 +1070,8 @@ Resume compiler_builtin_var[calldata]:
   builtin_ptr_var_tac >> metis_tac[compiler_slice_var]
 QED
 Resume compiler_builtin_var[len]:
-  IF_CASES_TAC >> builtin_stack_var_tac >>
+  builtin_stack_var_tac >>
   metis_tac[exprSafeOperandBuiltinsTheory.compile_builtin_len_safe_operand,
-            exprSafeOperandBuiltinsTheory.compile_builtin_calldatasize_safe_operand,
             exprSafeOperandTheory.safe_operand_def]
 QED
 Resume compiler_builtin_var[ecadd]:
@@ -1335,20 +1344,20 @@ Theorem compiler_subscript_reserved_cong:
   compile_subscript g ce rt ty base_e idx sa
 Proof
   strip_tac >> simp[compile_subscript_def] >>
-  qmatch_goalsub_abbrev_tac `ce.ce_is_hashmap vn` >>
-  IF_CASES_TAC >> simp[]
-  >- (irule compiler_reserved_bind_cong >> simp[ci_mono_lower_value_cfn] >>
-      qexists `ce` >> simp[compiler_lower_value_reserved_cong]) >>
-  Cases_on `ce.ce_var_type vn` >> simp[]
-  >- (irule compiler_reserved_bind_cong >> simp[] >> qexists `ce` >> simp[] >>
-      rpt gen_tac >> strip_tac >>
-      simp[comp_bind_def, comp_return_def] >>
-      AP_TERM_TAC >> irule compiler_lower_value_reserved_cong >> simp[]) >>
-  rename1 `SOME bty` >> Cases_on `bty` >> simp[] >>
-  irule compiler_reserved_bind_cong >> simp[] >> qexists `ce` >> simp[] >>
+  irule compiler_reserved_bind_cong >> simp[] >>
+  qexists `ce` >> simp[] >>
   rpt gen_tac >> strip_tac >>
-  simp[comp_bind_def, comp_return_def] >>
-  AP_TERM_TAC >> irule compiler_lower_value_reserved_cong >> simp[]
+  Cases_on `place_type ce base_e` >> simp[LET_THM]
+  >- (irule compiler_reserved_bind_cong >>
+      simp[ci_mono_lower_value_cfn] >>
+      qexists `ce` >>
+      simp[compiler_lower_value_reserved_cong]) >>
+  rename1 `ValPT base_ty` >>
+  Cases_on `base_ty` >> simp[LET_THM] >>
+  irule compiler_reserved_bind_cong >>
+  simp[ci_mono_lower_value_cfn] >>
+  qexists `ce` >>
+  simp[compiler_lower_value_reserved_cong]
 QED
 
 Theorem compiler_ext_call_kwarg_reserved_cong:
@@ -1492,6 +1501,201 @@ Proof
   simp[compile_call_def]
 QED
 
+Theorem compiler_create_salt_reserved_cong[local]:
+  (!ce ty e s. ci_mono s (SND (f ce ty e s))) /\
+  (!ty e s. local_ptrs_reserved ce s ==> f ce ty e s = g ce ty e s) /\
+  local_ptrs_reserved ce sa ==>
+  compile_create_salt f ce salt sa = compile_create_salt g ce salt sa
+Proof
+  strip_tac >> Cases_on `salt` >> simp[compile_create_salt_def] >>
+  irule compiler_reserved_bind_cong >> simp[] >>
+  conj_tac >- metis_tac[ci_mono_lower_value_cfn] >>
+  qexists `ce` >> simp[] >>
+  rpt strip_tac >> irule compiler_lower_value_reserved_cong >> simp[]
+QED
+
+Theorem compiler_create_ctor_tuple_reserved_cong[local]:
+  (!ce ty e s. ci_mono s (SND (f ce ty e s))) /\
+  (!ty e s. local_ptrs_reserved ce s ==> f ce ty e s = g ce ty e s) /\
+  local_ptrs_reserved ce sa ==>
+  compile_create_ctor_tuple f ce args sa = compile_create_ctor_tuple g ce args sa
+Proof
+  strip_tac >> simp[compile_create_ctor_tuple_def] >>
+  irule compiler_reserved_bind_cong >> simp[] >>
+  conj_tac >- metis_tac[ci_mono_compile_multi_vvs] >>
+  qexists `ce` >> simp[] >>
+  rpt strip_tac >> irule compiler_multi_vvs_reserved_cong >> simp[]
+QED
+
+Theorem compiler_create_blueprint_args_reserved_cong[local]:
+  (!ce ty e s. ci_mono s (SND (f ce ty e s))) /\
+  (!ty e s. local_ptrs_reserved ce s ==> f ce ty e s = g ce ty e s) /\
+  local_ptrs_reserved ce sa ==>
+  compile_create_blueprint_args f ce raw args sa =
+  compile_create_blueprint_args g ce raw args sa
+Proof
+  strip_tac >> Cases_on `raw`
+  >- (Cases_on `args` >- simp[compile_create_blueprint_args_def] >>
+      rename1 `e::es` >> Cases_on `es` >>
+      simp[compile_create_blueprint_args_def] >>
+      irule compiler_reserved_bind_cong >> simp[] >>
+      conj_tac >- metis_tac[ci_mono_lower_value_cfn] >>
+      qexists `ce` >> simp[] >>
+      rpt strip_tac >> irule compiler_lower_value_reserved_cong >> simp[]) >>
+  Cases_on `args = []` >> simp[compile_create_blueprint_args_def] >>
+  irule compiler_reserved_bind_cong >> simp[ci_mono_compile_alloc_buffer] >>
+  qexists `ce` >> simp[] >> rpt strip_tac >>
+  irule compiler_reserved_bind_cong >> simp[] >>
+  conj_tac >- metis_tac[ci_mono_compile_create_ctor_tuple] >>
+  qexists `ce` >> simp[] >>
+  rpt strip_tac >> irule compiler_create_ctor_tuple_reserved_cong >> simp[]
+QED
+
+Theorem compiler_raw_ctor_sequence_mono[local]:
+  (!ce ty e s. ci_mono s (SND (f ce ty e s))) ==>
+  ci_mono sa (SND ((if args = [] then comp_return (data,len) else
+    do buf <- compile_alloc_buffer n;
+       compile_copy_memory_dynamic buf.buf_operand data len;
+       src <- compile_create_ctor_tuple f ce args;
+       dst <- emit_op ADD [buf.buf_operand;len];
+       args_len <- compile_abi_encode_to_buf dst src enc_info;
+       total <- emit_op ADD [len;args_len];
+       comp_return (buf.buf_operand,total)
+    od) sa))
+Proof
+  strip_tac >> Cases_on `args = []` >> simp[ci_mono_comp_return] >>
+  ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_compile_alloc_buffer] >>
+  rpt gen_tac >> ho_match_mp_tac ci_mono_ignore_bind >> conj_tac
+  >- simp[ci_mono_compile_copy_memory_dynamic] >>
+  gen_tac >> ho_match_mp_tac ci_mono_bind >> conj_tac
+  >- metis_tac[ci_mono_compile_create_ctor_tuple] >>
+  rpt gen_tac >> ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_emit_op] >>
+  rpt gen_tac >> ho_match_mp_tac ci_mono_bind >> conj_tac
+  >- simp[cj 2 ci_mono_compile_abi_encode] >>
+  rpt gen_tac >> ho_match_mp_tac ci_mono_bind >>
+  simp[ci_mono_emit_op, ci_mono_comp_return]
+QED
+
+Theorem compiler_raw_ctor_sequence_reserved_cong[local]:
+  (!ce ty e s. ci_mono s (SND (f ce ty e s))) /\
+  (!ty e s. local_ptrs_reserved ce s ==> f ce ty e s = g ce ty e s) /\
+  local_ptrs_reserved ce sa ==>
+  (if args = [] then comp_return (data,len) else
+    do buf <- compile_alloc_buffer n;
+       compile_copy_memory_dynamic buf.buf_operand data len;
+       src <- compile_create_ctor_tuple f ce args;
+       dst <- emit_op ADD [buf.buf_operand;len];
+       args_len <- compile_abi_encode_to_buf dst src enc_info;
+       total <- emit_op ADD [len;args_len];
+       comp_return (buf.buf_operand,total)
+    od) sa =
+  (if args = [] then comp_return (data,len) else
+    do buf <- compile_alloc_buffer n;
+       compile_copy_memory_dynamic buf.buf_operand data len;
+       src <- compile_create_ctor_tuple g ce args;
+       dst <- emit_op ADD [buf.buf_operand;len];
+       args_len <- compile_abi_encode_to_buf dst src enc_info;
+       total <- emit_op ADD [len;args_len];
+       comp_return (buf.buf_operand,total)
+    od) sa
+Proof
+  strip_tac >> Cases_on `args = []` >> simp[] >>
+  irule compiler_reserved_bind_cong >> simp[ci_mono_compile_alloc_buffer] >>
+  qexists `ce` >> simp[] >> rpt gen_tac >> strip_tac >>
+  irule compiler_reserved_ignore_bind_cong >>
+  simp[ci_mono_compile_copy_memory_dynamic] >>
+  qexists `ce` >> simp[] >> rpt gen_tac >> strip_tac >>
+  irule compiler_reserved_bind_cong >> simp[] >>
+  conj_tac >- metis_tac[ci_mono_compile_create_ctor_tuple] >>
+  qexists `ce` >> simp[] >> rpt strip_tac >>
+  irule compiler_create_ctor_tuple_reserved_cong >> simp[]
+QED
+
+Theorem compiler_raw_create_reserved_cong[local]:
+  (!ce ty e s. ci_mono s (SND (f ce ty e s))) /\
+  (!ty e s. local_ptrs_reserved ce s ==> f ce ty e s = g ce ty e s) /\
+  local_ptrs_reserved ce sa ==>
+  compile_raw_create f ce bytecode value args salt rof sa =
+  compile_raw_create g ce bytecode value args salt rof sa
+Proof
+  strip_tac >> simp[compile_raw_create_def] >>
+  irule compiler_reserved_bind_cong >> simp[] >> qexists `ce` >> simp[] >>
+  rpt gen_tac >> strip_tac >>
+  irule compiler_reserved_bind_cong >> simp[ci_mono_compile_create_snapshot] >>
+  qexists `ce` >> simp[] >> rpt gen_tac >> strip_tac >>
+  irule compiler_reserved_bind_cong >> simp[] >>
+  conj_tac >- metis_tac[ci_mono_lower_value_cfn] >>
+  qexists `ce` >> simp[] >> reverse conj_tac
+  >- (rpt strip_tac >> irule compiler_lower_value_reserved_cong >> simp[]) >>
+  rpt gen_tac >> strip_tac >>
+  irule compiler_reserved_bind_cong >> simp[ci_mono_emit_op] >>
+  qexists `ce` >> simp[] >> rpt gen_tac >> strip_tac >>
+  irule compiler_reserved_bind_cong >> simp[ci_mono_emit_op] >>
+  qexists `ce` >> simp[] >> rpt gen_tac >> strip_tac >>
+  irule compiler_reserved_bind_cong >> simp[] >>
+  conj_tac >- metis_tac[compiler_raw_ctor_sequence_mono] >>
+  qexists `ce` >> simp[] >> conj_tac
+  >- (rpt gen_tac >> strip_tac >> PairCases_on `v` >> simp[] >>
+      irule compiler_reserved_bind_cong >> simp[] >>
+      conj_tac >- metis_tac[ci_mono_compile_create_salt] >>
+      qexists `ce` >> simp[] >> rpt strip_tac >>
+      irule compiler_create_salt_reserved_cong >> simp[]) >>
+  rpt strip_tac >> irule compiler_raw_ctor_sequence_reserved_cong >> simp[]
+QED
+
+Theorem compiler_create_call_reserved_cong[local]:
+  (!ce ty e s. ci_mono s (SND (f ce ty e s))) /\
+  (!ty e s. local_ptrs_reserved ce s ==> f ce ty e s = g ce ty e s) /\
+  local_ptrs_reserved ce sa ==>
+  compile_create_call f ce ck salted rof args sa =
+  compile_create_call g ce ck salted rof args sa
+Proof
+  strip_tac >> Cases_on `args` >- simp[compile_create_call_def] >>
+  rename1 `target_e::es` >> Cases_on `es` >- simp[compile_create_call_def] >>
+  rename1 `target_e::value_e::rest` >>
+  Cases_on `LENGTH rest < (if salted then 1 else 0) +
+    (case ck of CreateFromBlueprint _ => 1 | _ => 0)`
+  >- simp[compile_create_call_def] >>
+  reverse (Cases_on `ck`) >> simp[compile_create_call_def, LET_THM]
+  >- (irule compiler_raw_create_reserved_cong >> simp[]) >>
+  (irule compiler_reserved_bind_cong >> simp[] >>
+   conj_tac >- metis_tac[ci_mono_lower_value_cfn] >>
+   qexists `ce` >> simp[] >> reverse conj_tac
+   >- (rpt strip_tac >> irule compiler_lower_value_reserved_cong >> simp[]) >>
+   rpt gen_tac >> strip_tac >>
+   irule compiler_reserved_bind_cong >> simp[] >>
+   conj_tac >- metis_tac[ci_mono_lower_value_cfn] >>
+   qexists `ce` >> simp[] >> reverse conj_tac
+   >- (rpt strip_tac >> irule compiler_lower_value_reserved_cong >> simp[]) >>
+   rpt gen_tac >> strip_tac)
+  >- (irule compiler_reserved_bind_cong >> simp[] >>
+      conj_tac >- metis_tac[ci_mono_compile_create_salt] >>
+      qexists `ce` >> simp[] >> reverse conj_tac
+      >- (rpt strip_tac >> irule compiler_create_salt_reserved_cong >> simp[]) >>
+      rpt gen_tac >> strip_tac >>
+      irule compiler_reserved_bind_cong >> simp[] >>
+      conj_tac >- metis_tac[ci_mono_lower_value_cfn] >>
+      qexists `ce` >> simp[] >> reverse conj_tac
+      >- (rpt strip_tac >> irule compiler_lower_value_reserved_cong >> simp[]) >>
+      rpt gen_tac >> strip_tac >>
+      irule compiler_reserved_bind_cong >> simp[ci_mono_compile_create_blueprint_check] >>
+      qexists `ce` >> simp[] >> rpt gen_tac >> strip_tac >>
+      irule compiler_reserved_bind_cong >> simp[] >>
+      conj_tac >- metis_tac[ci_mono_compile_create_blueprint_args] >>
+      qexists `ce` >> simp[] >> rpt strip_tac >>
+      irule compiler_create_blueprint_args_reserved_cong >> simp[])
+  >- (irule compiler_reserved_bind_cong >> simp[] >>
+      conj_tac >- metis_tac[ci_mono_compile_create_salt] >>
+      qexists `ce` >> simp[] >> rpt strip_tac >>
+      irule compiler_create_salt_reserved_cong >> simp[]) >>
+  irule compiler_reserved_bind_cong >> simp[ci_mono_compile_create_proxy_buf] >>
+  qexists `ce` >> simp[] >> rpt gen_tac >> strip_tac >>
+  irule compiler_reserved_bind_cong >> simp[] >>
+  conj_tac >- metis_tac[ci_mono_compile_create_salt] >>
+  qexists `ce` >> simp[] >> rpt strip_tac >>
+  irule compiler_create_salt_reserved_cong >> simp[]
+QED
+
 Theorem compiler_call_reserved_cong:
   (!ce ty e s. ci_mono s (SND (f ce ty e s))) /\
   (!ty e s. local_ptrs_reserved ce s ==> f ce ty e s = g ce ty e s) /\
@@ -1505,6 +1709,11 @@ Proof
          irule compiler_raw_call_calldata_reserved_cong >> simp[],
          rename1 `ExtCall _ _ signature _` >> PairCases_on `signature` >>
            irule compiler_extcall_reserved_cong >> simp[],
+         (rename1 `CreateTarget ck salted rof` >>
+          `compile_create_call f ce ck salted rof args sa =
+           compile_create_call g ce ck salted rof args sa` by
+            (irule compiler_create_call_reserved_cong >> simp[]) >>
+          simp[compile_call_def]),
          simp[compile_call_def]]
 QED
 

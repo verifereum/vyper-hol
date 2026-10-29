@@ -861,6 +861,7 @@ Theorem env_context_consistent_empty_static_maps:
   env.toplevel_vtypes = FEMPTY /\
   env.flag_members = FEMPTY /\
   fn_sigs_consistent fn_sigs cx /\
+  fn_sigs_live fn_sigs cx /\
   fn_sigs_declared_complete fn_sigs cx /\
   toplevel_vtypes_complete FEMPTY cx /\
   bare_globals_complete FEMPTY cx /\
@@ -940,7 +941,8 @@ Theorem functions_well_typed_callable_body_env_base:
   env_context_consistent env_base cx /\
   get_module_code cx src = SOME ts /\
   lookup_callable_function cx.in_deploy fn ts =
-    SOME (fm,nr,args,dflts,ret,body) ==>
+    SOME (fm,nr,args,dflts,ret,body) /\
+  context_function_live cx (src,fn) ==>
   ?env_body env_after.
     env_body.current_src = src /\
     env_body.type_defs = env_base.type_defs /\
@@ -1026,6 +1028,7 @@ Theorem callable_entry_establishes_type_soundness_preconditions:
   get_module_code cx src = SOME ts /\
   lookup_callable_function cx.in_deploy fn ts =
     SOME (fm,nr,args,dflts,ret,body) /\
+  context_function_live cx (src,fn) /\
   bind_arguments (get_tenv cx) args vals = SOME scope /\
   args_values_typed (get_tenv cx) args vals ==>
   ?env_body env_after st.
@@ -1076,6 +1079,7 @@ Theorem callable_entry_no_type_error:
   get_module_code cx src = SOME ts /\
   lookup_callable_function cx.in_deploy fn ts =
     SOME (fm,nr,args,dflts,ret,body) /\
+  context_function_live cx (src,fn) /\
   bind_arguments (get_tenv cx) args vals = SOME scope /\
   args_values_typed (get_tenv cx) args vals ==>
   no_type_error_eval (eval_stmts cx body
@@ -1127,7 +1131,7 @@ Proof
        bare_global_assignable_complete_def, flag_members_complete_def,
        env_scopes_consistent_def, env_immutables_consistent_def,
        fn_sigs_consistent_def, fn_sigs_declared_complete_def,
-       state_well_typed_def,
+       fn_sigs_live_def, state_well_typed_def,
        scope_well_typed_def, vyperStateTheory.lookup_scopes_def,
        accounts_well_typed_def, account_well_typed_def, machine_well_typed_def,
        vfmStateTheory.lookup_account_def, vfmStateTheory.empty_accounts_def,

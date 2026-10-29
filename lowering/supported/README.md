@@ -145,6 +145,10 @@ cheat delta is zero.
   positional arguments in source order, each kind at most once, and no
   `value=` on a staticcall. They are pure like every other operand, and both
   the lowering and the semantics evaluate them before the call.
+  The interpreter captures internal argument results before reading them after
+  defaults; external positional arguments are read after keyword evaluation.
+  This deferred-read behavior does not remove the whitelist's pure-operand
+  restriction. Builtin and log arguments remain eager.
 - `supported_expr tops e`: P or E, for later statement expression positions.
   No statement or whole-program placeholder is provided.
 - Symbolic contracts: pure Call/Pop rejection, external-call inversion,
@@ -226,13 +230,21 @@ all `.agent-files` inputs are untouched. Source/proof cheat delta: **zero**.
   global main-module requirement even in Name/Subscript annotations and loop
   types; it does not invoke or reproduce source typing.
 - `supportedStmtsTheory`: `supported_stmt tops bindings`, `supported_stmts`
-  enumerate every constructor. The only E positions are Expr, Return,
-  AnnAssign, and a word-typed local Assign. Storage writes and indices,
-  augmentation, append arguments, conditions and event arguments must be P.
-  Tuple assignment and all other target shapes are rejected.
-- `supported_assignment`, `supported_aug_target`, `supported_append_target`
-  reuse TASK_020's storage-base lookups. Writes may use **any declared field**
-  of a full-word storage struct; the first-field restriction remains read-only.
+  enumerate every constructor. E is admitted at Expr, Return, AnnAssign,
+  Assign/AugAssign RHSs and supported subscript-target indices. Nested effects
+  inside P expressions remain excluded; append values, conditions and event
+  arguments must be P.
+- `supported_assignment`, `supported_target`, `supported_append_target`
+  reuse TASK_020's storage-base lookups. Assignment targets include locals of
+  supported value types, slotted scalar storage/transient variables, one-level
+  storage/map subscripts, and **any declared field** of a full-word storage
+  struct. Flat tuple assignment uses these same targets, including repeats;
+  nested tuple targets remain rejected. The first-field restriction remains
+  read-only. RHS/target type compatibility is a separate typing obligation.
+  Single-target assignment captures the RHS, resolves the target, then reads
+  and stores the RHS; augmentation reads the target before its RHS. These are
+  implemented evaluation orders, not an assignment simulation theorem:
+  [stmtSim](../stmtSimScript.sml) still lists Assign/AugAssign as unproved.
 - `supported_iterator tops ty iter bound`: two IntL endpoints require integer
   loop type, start <= end, and exact `Num(end-start)` (including zero); other
   ranges require two P expressions and a positive bound; arrays require the
@@ -261,7 +273,7 @@ Permanent plain-EVAL checks:
 
 | Boundary | Theory and checks |
 |---|---|
-| Every statement row, E root positions, targets, pure storage ordering, augmentation, append, reasons, exact logs | `supportedStmtProps`: `supported_simple_statement_rows`, `supported_all_effect_root_positions`, `supported_storage_statement_rows`, `supported_target_exclusions`, `supported_storage_effects_rejected`, `supported_augmented_statement_row`, `supported_control_reason_rows`, `supported_log_statement_row` |
+| Every statement row, E root positions, flat tuple/repeated targets, storage effects, augmentation, append, reasons, exact logs | `supportedStmtProps`: `supported_simple_statement_rows`, `supported_all_effect_root_positions`, `supported_storage_statement_rows`, `supported_tuple_assignment_rows`, `supported_target_exclusions`, `supported_storage_effect_statement_rows`, `supported_storage_effects_rejected`, `supported_augmented_statement_row`, `supported_control_reason_rows`, `supported_log_statement_row` |
 | Literal/checked ranges, fixed-array shape/type/bound | `supportedStmtProps`: `supported_literal_range_statement_row`, `supported_checked_range_statement_row`, `supported_fixed_array_iteration_row` |
 | Whole-program acceptance, Internal/loop restrictions, name/type environments, all header/name exclusions, fallback, annotations; typing separate | `supportedProgramProps`: all theorems |
 | Every statement/target occurrence position, exact/dynamic decode API, duplicate-preserving recursive binding collection | `supportedStmtTraverseProps`: all theorems |

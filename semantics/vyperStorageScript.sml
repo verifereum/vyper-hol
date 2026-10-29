@@ -319,15 +319,6 @@ Proof
   \\ ASM_SIMP_TAC storage_pre_ss []
 QED
 
-(* ===== Termination helper lemmas for decode_value ===== *)
-
-Theorem type_value1_size_le[local]:
-  ∀ftypes. type_value1_size ftypes ≤
-    list_size (pair_size (list_size char_size) type_value_size) ftypes
-Proof
-  Induct >> rw[type_value_size_def] >> Cases_on ‘h’ >> rw[type_value_size_def]
-QED
-
 (* ===== Full Value Decoding (First-Order) ===== *)
 
 (* decode_value returns SOME value or NONE
@@ -410,12 +401,10 @@ Termination
     | INR (INL (_, _, tvs)) => list_size type_value_size tvs
     | INR (INR (INL (_, _, tv, n))) => type_value_size tv + n
     | INR (INR (INR (INL (_, _, tv, n)))) => type_value_size tv + n
-    | INR (INR (INR (INR (_, _, ftypes)))) => type_value1_size ftypes)’ >>
+    | INR (INR (INR (INR (_, _, ftypes)))) =>
+        list_size (pair_size (list_size char_size) type_value_size) ftypes)’ >>
   rw[type_value_size_def] >>
-  ‘type_value1_size ftypes ≤
-   list_size (pair_size (list_size char_size) type_value_size) ftypes’
-    by simp[type_value1_size_le] >>
-  simp[MIN_DEF] >> decide_tac
+  simp[MIN_DEF]
 End
 
 val decode_value_pre_def =

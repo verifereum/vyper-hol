@@ -40,6 +40,8 @@ Ancestors
   compileEnv exprSimOps freshWrites fragExec varsExt exprLoweringProps
   venomExecSemantics venomState emitHelper emitHelperProps venomInst
   builtinProps
+Libs
+  stepInstBaseLib
 
 (* ===== Operand types and the lowering of the five ===== *)
 
@@ -571,11 +573,11 @@ Proof
   simp[Once step_inst_base_def, mk_inst_def, exec_pure1_def] >>
   simp[] >>
   simp[Once run_inst_seq_def] >>
-  simp[Once step_inst_base_def, mk_inst_def, exec_pure2_def,
+  simp[stepInstBaseLib.simp_opcode_clause ``OR``, mk_inst_def, exec_pure2_def,
        eval_operand_def, lookup_var_update_var] >>
   simp[Once run_inst_seq_def] >>
-  simp[Once step_inst_base_def, mk_inst_def, eval_operand_def,
-       lookup_var_update_var] >>
+  simp[stepInstBaseLib.simp_opcode_clause ``ASSERT``, mk_inst_def,
+       eval_operand_def, lookup_var_update_var] >>
   Cases_on `va = 0w` >>
   Cases_on `safe_div (va * n2w m) va = n2w m` >>
   gvs[bool_to_word_def, WORD_OR_CLAUSES, run_inst_seq_def, lookup_var_update_var]
@@ -931,11 +933,7 @@ Proof
     gvs[expr_sim_pre_def, expr_sim_inv_def] >>
   drule_all vyperTypeEnvTheory.well_typed_Name_lookup >> strip_tac >>
   `word_value entry.value` by
-    (mp_tac word_value_type_typed >>
-     disch_then (qspec_then `ann` mp_tac) >>
-     disch_then (qspec_then `env.type_defs` mp_tac) >>
-     disch_then (qspecl_then [`tv`, `Value entry.value`] mp_tac) >>
-     simp[vyperTypeInvariantsTheory.toplevel_value_typed_def]) >>
+    (drule_all word_value_type_typed >> simp[]) >>
   irule compile_name_word_sim >>
   gvs[expr_sim_pre_def, expr_sim_inv_def, well_typed_expr_def] >>
   metis_tac[word_value_type_word]

@@ -2,8 +2,7 @@ Theory vyperExprNoControl
 
 Ancestors
   pair vyperCreate vyperCreateFrame vyperInterpreter vyperAST vyperMisc
-  vyperCallFrame vyperCallOutcome vyperCallOutcomeProps
-  vyperCallOutcomeBranches vyperCallOutcomeFrame
+  vyperCallFrame vyperCallOutcome vyperCallOutcomeProps vyperCallOutcomeBranches vyperCallOutcomeFrame
   vyperRuntimeAccounts vyperState
 Libs
   pairLib monadsyntax
@@ -88,16 +87,6 @@ Proof
   >> gvs[AllCaseEqs(), raise_def, return_def] >> res_tac
 QED
 
-Theorem switch_BoolV_no_control:
-  ∀v f g s exc s'.
-  switch_BoolV v f g s = (INR exc, s') ⇒
-  (∀exc' s''. f s = (INR exc', s'') ⇒ no_control_exc exc') ⇒
-  (∀exc' s''. g s = (INR exc', s'') ⇒ no_control_exc exc') ⇒
-  no_control_exc exc
-Proof
-  simp[switch_BoolV_def] >> rw[] >> gvs[raise_def, no_control_exc_def]
-QED
-
 (* ===== Helper function exception lemmas ===== *)
 
 Theorem check_no_control:
@@ -146,13 +135,6 @@ Proof
   >> strip_tac >> gvs[AllCaseEqs(), return_def, raise_def, no_control_exc_def]
 QED
 
-Theorem get_Value_no_control:
-  ∀tv s exc s'.
-  get_Value tv s = (INR exc, s') ⇒ no_control_exc exc
-Proof
-  Cases >> simp[get_Value_def, return_def, raise_def, no_control_exc_def]
-QED
-
 Theorem read_storage_slot_no_control:
   ∀cx is_t slot tv s exc s'.
   read_storage_slot cx is_t slot tv s = (INR exc, s') ⇒ no_control_exc exc
@@ -165,16 +147,6 @@ Proof
   >> (Cases_on `is_t`
       >> fs[get_storage_backend_def, bind_def, get_transient_storage_def,
             get_accounts_def, return_def])
-QED
-
-Theorem materialise_no_control:
-  ∀cx tv s exc s'.
-  materialise cx tv s = (INR exc, s') ⇒ no_control_exc exc
-Proof
-  gen_tac >> Cases >> rpt gen_tac
-  >> simp[materialise_def, bind_def, return_def, raise_def, no_control_exc_def]
-  >> strip_tac >> gvs[AllCaseEqs(), return_def]
-  >> imp_res_tac read_storage_slot_no_control >> gvs[no_control_exc_def]
 QED
 
 Theorem return_not_INR[simp]:
@@ -191,35 +163,6 @@ Proof
 QED
 
 (* ===== Additional helpers for common patterns ===== *)
-
-Theorem toplevel_array_length_no_control:
-  ∀cx tv s exc s'.
-  toplevel_array_length cx tv s = (INR exc, s') ⇒ no_control_exc exc
-Proof
-  ho_match_mp_tac toplevel_array_length_ind >> rpt strip_tac
-  >> gvs[toplevel_array_length_def, return_def, raise_def, no_control_exc_def,
-         bind_def, get_storage_backend_def, get_transient_storage_def,
-         get_accounts_def]
-  >> pop_assum mp_tac
-  >> CASE_TAC >> CASE_TAC
-  >> Cases_on `is_transient`
-  >> gvs[get_storage_backend_def, get_transient_storage_def, get_accounts_def,
-         bind_def, return_def]
-QED
-
-Theorem check_array_bounds_no_control:
-  ∀cx tv v s exc s'.
-  check_array_bounds cx tv v s = (INR exc, s') ⇒ no_control_exc exc
-Proof
-  ho_match_mp_tac check_array_bounds_ind >> rpt strip_tac
-  >> gvs[check_array_bounds_def, return_def, bind_def,
-         get_storage_backend_def, get_transient_storage_def,
-         get_accounts_def, AllCaseEqs()]
-  >> Cases_on `is_transient`
-  >> gvs[get_storage_backend_def, bind_def, get_transient_storage_def,
-         get_accounts_def, return_def]
-  >> imp_res_tac check_no_control
-QED
 
 Theorem transfer_value_no_control:
   ∀from to amt s exc s'.
@@ -256,17 +199,11 @@ Proof
   rpt gen_tac >> strip_tac
   >> pop_assum mp_tac
   >> simp[lookup_global_def, bind_def, prod_CASE_rator, sum_CASE_rator,
-          option_CASE_rator, toplevel_value_CASE_rator, var_decl_info_CASE_rator]
+          option_CASE_rator, eval_result_CASE_rator, var_decl_info_CASE_rator]
   >> strip_tac >> gvs[AllCaseEqs()]
-  >> TRY (imp_res_tac lift_option_type_no_control >> NO_TAC)
-  >> TRY (imp_res_tac read_storage_slot_no_control >> NO_TAC)
-  >> TRY (gvs[AllCaseEqs(), return_def, raise_def, no_control_exc_def]
-      >> TRY (imp_res_tac get_immutables_no_control >> gvs[no_control_exc_def])
-      >> NO_TAC)
-  (* StorageVarDecl remaining: case on tv *)
-  >> Cases_on `tv`
-  >> gvs[bind_def, prod_CASE_rator, sum_CASE_rator, return_def, AllCaseEqs()]
-  >> imp_res_tac read_storage_slot_no_control
+  >> gvs[return_def, raise_def, no_control_exc_def]
+  >> metis_tac[get_immutables_no_control, lift_option_type_no_control,
+               no_control_exc_def]
 QED
 
 Theorem lookup_flag_mem_no_control:
@@ -321,16 +258,6 @@ Proof
   >> imp_res_tac lift_option_type_no_control
 QED
 
-Theorem assign_result_no_control:
-  ∀tv ao old_val subs s exc s'.
-  assign_result tv ao old_val subs s = (INR exc, s') ⇒ no_control_exc exc
-Proof
-  Cases_on `ao` >> simp[assign_result_def, return_def, bind_def,
-    prod_CASE_rator, sum_CASE_rator]
-  >> rpt gen_tac >> strip_tac >> gvs[AllCaseEqs()]
-  >> imp_res_tac lift_sum_no_control
-QED
-
 Theorem set_global_no_control:
   ∀cx src n v s exc s'.
   set_global cx src n v s = (INR exc, s') ⇒ no_control_exc exc
@@ -341,8 +268,8 @@ Proof
           COND_RATOR, LET_THM, var_decl_info_CASE_rator,
           no_control_exc_def]
   >> strip_tac >> gvs[AllCaseEqs()]
-  >> TRY (imp_res_tac lift_option_type_no_control >> gvs[no_control_exc_def] >> NO_TAC)
-  >> TRY (imp_res_tac write_storage_slot_no_control >> gvs[no_control_exc_def] >> NO_TAC)
+  >> metis_tac[lift_option_type_no_control, write_storage_slot_no_control,
+               no_control_exc_def]
 QED
 
 Theorem set_immutable_no_control:
@@ -372,8 +299,9 @@ Proof
       get_storage_backend_def, get_transient_storage_def,
       get_accounts_def]
     >> strip_tac >> gvs[AllCaseEqs()]
-    >> TRY (res_tac >> NO_TAC)
-    >> Cases_on `bd`
+    >- (first_x_assum irule >> goal_assum (drule_at Any))
+    >> qmatch_asmsub_rename_tac `bound_CASE bounds`
+    >> namedCases_on `bounds` ["limit", "capacity"]
     >> gvs[bind_def, return_def, raise_def,
            get_storage_backend_def, get_transient_storage_def,
            get_accounts_def, prod_CASE_rator, sum_CASE_rator, AllCaseEqs()]
@@ -382,129 +310,186 @@ Proof
     >> gvs[get_storage_backend_def, bind_def,
            get_transient_storage_def, get_accounts_def, return_def])
   (* All other cases: non-recursive, simple *)
-  >> (rpt (gen_tac ORELSE disch_then strip_assume_tac)
+  >> (rpt strip_tac
       >> gvs[Once resolve_array_element_def, return_def, raise_def,
              no_control_exc_def])
 QED
 
-val at_helpers = [lift_option_no_control, lift_option_type_no_control,
-  lift_sum_no_control, check_no_control, type_check_no_control,
-  write_storage_slot_no_control, assign_result_no_control,
-  read_storage_slot_no_control, lookup_global_no_control,
-  set_global_no_control, set_immutable_no_control,
-  get_immutables_no_control, resolve_array_element_no_control];
+Theorem read_place_no_control:
+  read_place cx p st = (INR exc,st') ==> no_control_exc exc
+Proof
+  Cases_on `p` >> simp[read_place_def, bind_def, get_scopes_def,
+    return_def, AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+  metis_tac[read_storage_slot_no_control, get_immutables_no_control,
+    lift_option_type_no_control, lift_sum_no_control]
+QED
+
+Theorem read_result_no_control:
+  read_result cx pv st = (INR exc,st') ==> no_control_exc exc
+Proof
+  Cases_on `pv` >> simp[read_result_def, return_def, raise_def,
+    no_control_exc_def] >>
+  metis_tac[read_place_no_control, no_control_exc_def]
+QED
+
+Theorem read_results_no_control:
+  !results cx st exc st'.
+    read_results cx results st = (INR exc,st') ==> no_control_exc exc
+Proof
+  Induct >> simp[read_results_def, bind_def, return_def, AllCaseEqs()] >>
+  rpt strip_tac >> metis_tac[read_result_no_control]
+QED
+
+Theorem switch_BoolV_no_control:
+  ∀v f g s exc s'.
+  switch_BoolV cx v f g s = (INR exc, s') ⇒
+  (∀exc' s''. f s = (INR exc', s'') ⇒ no_control_exc exc') ⇒
+  (∀exc' s''. g s = (INR exc', s'') ⇒ no_control_exc exc') ⇒
+  no_control_exc exc
+Proof
+  rpt gen_tac >> rewrite_tac[switch_BoolV_def] >> strip_tac >> rpt disch_tac >>
+  drule bind_no_control >> disch_then irule >>
+  conj_tac >- metis_tac[read_result_no_control] >>
+  rpt strip_tac >> drule read_result_state >> strip_tac >> gvs[] >>
+  gvs[COND_RATOR, AllCaseEqs(), raise_def, no_control_exc_def] >> metis_tac[]
+QED
+
+Theorem result_array_length_no_control:
+  ∀cx tv s exc s'.
+  result_array_length cx tv s = (INR exc, s') ⇒ no_control_exc exc
+Proof
+  ho_match_mp_tac result_array_length_ind >> rpt gen_tac >>
+  simp[result_array_length_def, bind_def, return_def,
+    prod_CASE_rator, sum_CASE_rator, vyperValueTheory.value_CASE_rator,
+    vyperValueTheory.array_value_CASE_rator, get_storage_backend_def,
+    get_transient_storage_def, get_accounts_def, COND_RATOR] >>
+  rpt strip_tac >> gvs[AllCaseEqs(), return_def, raise_def, no_control_exc_def] >>
+  FIRST [
+    qpat_x_assum `get_storage_backend _ tr _ = _` mp_tac >>
+      Cases_on `tr` >> simp[get_storage_backend_def, bind_def,
+        get_transient_storage_def, get_accounts_def, return_def],
+    metis_tac[read_result_no_control, no_control_exc_def]]
+QED
+
+Theorem place_type_value_no_control:
+  place_type_value cx p st = (INR exc,st') ==> no_control_exc exc
+Proof
+  Cases_on `p` >> simp[place_type_value_def, bind_def, get_scopes_def,
+    return_def, AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+  metis_tac[get_immutables_no_control, lift_option_type_no_control]
+QED
+
+Theorem write_place_no_control:
+  write_place cx p v st = (INR exc,st') ==> no_control_exc exc
+Proof
+  Cases_on `p` >> simp[write_place_def, bind_def, ignore_bind_def,
+    get_scopes_def, set_scopes_def, return_def, prod_CASE_rator, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  gvs[bind_def, ignore_bind_def, set_scopes_def, return_def, AllCaseEqs()] >>
+  metis_tac[write_storage_slot_no_control, get_immutables_no_control,
+    set_immutable_no_control, lift_option_type_no_control,
+    type_check_no_control, lift_sum_no_control]
+QED
+
+Theorem extend_storage_place_no_control:
+  extend_storage_place cx tr slot tv sb st = (INR exc,st') ==> no_control_exc exc
+Proof
+  Cases_on `tv` >> Cases_on `sb` >>
+  simp[extend_storage_place_def, bind_def, return_def, raise_def,
+    no_control_exc_def, AllCaseEqs()] >>
+  TRY (rename1 `ValueSubscript v` >> Cases_on `v` >>
+    gvs[extend_storage_place_def, bind_def, return_def, raise_def,
+      ignore_bind_def, check_def, assert_def, lift_option_type_def,
+      vyperMiscTheory.option_CASE_rator,
+      no_control_exc_def, AllCaseEqs()]) >>
+  rpt strip_tac >> gvs[] >> rpt (pairarg_tac >> gvs[return_def]) >>
+  metis_tac[lift_option_type_no_control, resolve_array_element_no_control,
+    no_control_exc_def]
+QED
+
+Theorem extend_place_no_control:
+  extend_place cx pv sb st = (INR exc,st') ==> no_control_exc exc
+Proof
+  map_every qid_spec_tac [`st'`, `exc`, `st`, `sb`, `pv`, `cx`] >>
+  ho_match_mp_tac extend_place_ind >> rpt gen_tac >>
+  simp[extend_place_def, bind_def, ignore_bind_def, return_def,
+    prod_CASE_rator, sum_CASE_rator, value_type_CASE_rator] >>
+  rpt strip_tac >> gvs[AllCaseEqs(), raise_def, no_control_exc_def] >>
+  metis_tac[extend_storage_place_no_control, place_type_value_no_control,
+    read_place_no_control, lift_option_type_no_control, lift_sum_no_control,
+    no_control_exc_def]
+QED
+
+Theorem get_place_no_control:
+  get_place pv st = (INR exc,st') ==> no_control_exc exc
+Proof
+  Cases_on `pv` >> simp[get_place_def, return_def, raise_def, no_control_exc_def]
+QED
+
+Theorem select_result_no_control:
+  select_result cx ty pv sb st = (INR exc,st') ==> no_control_exc exc
+Proof
+  Cases_on `pv` >> simp[select_result_def, bind_def, return_def,
+    prod_CASE_rator, sum_CASE_rator] >>
+  rpt strip_tac >> gvs[AllCaseEqs()] >>
+  metis_tac[extend_place_no_control, lift_option_type_no_control, lift_sum_no_control]
+QED
+
+Theorem conditional_result_no_control:
+  conditional_result cx pv st = (INR exc,st') ==> no_control_exc exc
+Proof
+  Cases_on `pv` >> simp[conditional_result_def, bind_def, return_def,
+    raise_def, no_control_exc_def, prod_CASE_rator, sum_CASE_rator, COND_RATOR] >>
+  rpt strip_tac >> gvs[AllCaseEqs(), return_def] >>
+  metis_tac[place_type_value_no_control, read_place_no_control, no_control_exc_def]
+QED
+
+Theorem append_place_no_control:
+  append_place cx p v st = (INR exc,st') ==> no_control_exc exc
+Proof
+  map_every qid_spec_tac [`st'`, `exc`, `st`, `v`, `p`, `cx`] >>
+  ho_match_mp_tac append_place_ind >> rpt gen_tac >>
+  simp[append_place_def, bind_def, ignore_bind_def, return_def,
+    prod_CASE_rator, sum_CASE_rator] >>
+  rpt strip_tac >> gvs[AllCaseEqs()] >>
+  FIRST [
+    qpat_x_assum `get_storage_backend _ tr _ = (INR _,_)` mp_tac >>
+      Cases_on `tr` >> simp[get_storage_backend_def, bind_def,
+        get_transient_storage_def, get_accounts_def, return_def],
+    metis_tac[check_no_control, write_storage_slot_no_control,
+      place_type_value_no_control, read_place_no_control, lift_sum_no_control,
+      write_place_no_control]]
+QED
+
+Theorem pop_place_no_control:
+  pop_place cx p st = (INR exc,st') ==> no_control_exc exc
+Proof
+  map_every qid_spec_tac [`st'`, `exc`, `st`, `p`, `cx`] >>
+  ho_match_mp_tac pop_place_ind >> rpt gen_tac >>
+  simp[pop_place_def, bind_def, ignore_bind_def, return_def,
+    prod_CASE_rator, sum_CASE_rator, get_scopes_def, set_scopes_def] >>
+  rpt strip_tac >> gvs[AllCaseEqs(), raise_def, no_control_exc_def] >>
+  rpt (pairarg_tac >> gvs[bind_def, ignore_bind_def, return_def,
+    prod_CASE_rator, sum_CASE_rator, set_scopes_def, AllCaseEqs()]) >>
+  FIRST [
+    qpat_x_assum `get_storage_backend _ tr _ = (INR _,_)` mp_tac >>
+      Cases_on `tr` >> simp[get_storage_backend_def, bind_def,
+        get_transient_storage_def, get_accounts_def, return_def],
+    metis_tac[check_no_control, type_check_no_control, write_storage_slot_no_control,
+      get_immutables_no_control, set_immutable_no_control, lift_option_type_no_control,
+      lift_sum_no_control, no_control_exc_def]]
+QED
 
 val at_mono = [bind_def, ignore_bind_def, return_def, raise_def,
   prod_CASE_rator, sum_CASE_rator, option_CASE_rator,
-  toplevel_value_CASE_rator,
+  eval_result_CASE_rator,
   vyperValueTheory.type_value_CASE_rator,
-  vyperStateTheory.assign_operation_CASE_rator,
   vyperASTTheory.bound_CASE_rator,
   COND_RATOR, LET_THM, get_scopes_def, set_scopes_def,
   no_control_exc_def];
 
-(* Fast resolution for common assign_target branches before the broader search. *)
-val at_resolve_quick = FIRST [
-  qpat_x_assum `assign_result _ _ _ _ _ = (INR _, _)`
-    (mp_tac o MATCH_MP assign_result_no_control) >> gvs[no_control_exc_def] >> NO_TAC,
-  qpat_x_assum `lift_sum _ _ = (INR _, _)`
-    (mp_tac o MATCH_MP lift_sum_no_control) >> gvs[no_control_exc_def] >> NO_TAC,
-  qpat_x_assum `read_storage_slot _ _ _ _ _ = (INR _, _)`
-    (mp_tac o MATCH_MP read_storage_slot_no_control) >> gvs[no_control_exc_def] >> NO_TAC,
-  qpat_x_assum `write_storage_slot _ _ _ _ _ _ = (INR _, _)`
-    (mp_tac o MATCH_MP write_storage_slot_no_control) >> gvs[no_control_exc_def] >> NO_TAC,
-  qpat_x_assum `lift_option_type _ _ _ = (INR _, _)`
-    (mp_tac o MATCH_MP lift_option_type_no_control) >> gvs[no_control_exc_def] >> NO_TAC,
-  qpat_x_assum `lookup_global _ _ _ _ = (INR _, _)`
-    (mp_tac o MATCH_MP lookup_global_no_control) >> gvs[no_control_exc_def] >> NO_TAC
-];
-
-(* Resolution: try each helper, closing the goal completely *)
-val at_resolve = FIRST (
-  map (fn th => imp_res_tac th >> gvs[no_control_exc_def] >> NO_TAC) at_helpers
-  @ [res_tac >> gvs[no_control_exc_def] >> NO_TAC,
-     gvs[no_control_exc_def] >> NO_TAC]);
-
-val assign_target_no_control_tac =
-  let
-    val gsb_contra =
-      qpat_x_assum `get_storage_backend _ _ _ = (INR _, _)`
-        (fn th => let val b = th |> concl |> lhs |> rator |> rand
-          in assume_tac th >> Cases_on [ANTIQUOTE b]
-             >> gvs[get_storage_backend_def, bind_def,
-                    get_transient_storage_def, get_accounts_def, return_def]
-          end)
-    val step =
-      gvs[pairTheory.ELIM_UNCURRY]
-      >> gvs(AllCaseEqs() :: no_control_exc_def :: at_mono)
-      >> TRY at_resolve_quick >> TRY at_resolve >> TRY gsb_contra
-  in
-    rpt gen_tac
-    >> rpt (gen_tac ORELSE disch_then strip_assume_tac)
-    >> pop_assum mp_tac >> PURE_ONCE_REWRITE_TAC[assign_target_def]
-    >> simp at_mono >> strip_tac >> gvs[AllCaseEqs()]
-    >> TRY at_resolve_quick >> TRY at_resolve >> step >> step
-  end;
-
-Theorem assign_target_no_control:
-  (∀cx tv op s exc s'.
-    assign_target cx tv op s = (INR exc, s') ⇒ no_control_exc exc) ∧
-  (∀cx tvs vs s exc s'.
-    assign_targets cx tvs vs s = (INR exc, s') ⇒ no_control_exc exc)
-Proof
-  ho_match_mp_tac assign_target_ind >> rpt conj_tac
-  >- assign_target_no_control_tac
-  >- (
-    rpt gen_tac
-    >> rpt (gen_tac ORELSE disch_then strip_assume_tac)
-    >> pop_assum mp_tac >> PURE_ONCE_REWRITE_TAC[assign_target_def]
-    >> simp at_mono >> strip_tac >> gvs[AllCaseEqs()]
-    >> TRY at_resolve_quick >> TRY at_resolve
-    >> gvs[pairTheory.ELIM_UNCURRY]
-    >> gvs(AllCaseEqs() :: no_control_exc_def :: at_mono)
-    >> TRY at_resolve_quick >> TRY at_resolve
-    >> TRY (qpat_x_assum `get_storage_backend _ _ _ = (INR _, _)`
-        (fn th => let val b = th |> concl |> lhs |> rator |> rand
-          in assume_tac th >> Cases_on [ANTIQUOTE b]
-             >> gvs[get_storage_backend_def, bind_def,
-                    get_transient_storage_def, get_accounts_def, return_def]
-          end))
-    >> gvs[pairTheory.ELIM_UNCURRY]
-    >> gvs(AllCaseEqs() :: no_control_exc_def :: at_mono)
-    >> TRY at_resolve_quick >> TRY at_resolve
-    >> TRY (qpat_x_assum `get_storage_backend _ _ _ = (INR _, _)`
-        (fn th => let val b = th |> concl |> lhs |> rator |> rand
-          in assume_tac th >> Cases_on [ANTIQUOTE b]
-             >> gvs[get_storage_backend_def, bind_def,
-                    get_transient_storage_def, get_accounts_def, return_def]
-          end)))
-  >- assign_target_no_control_tac
-  >- assign_target_no_control_tac
-  >- assign_target_no_control_tac
-  >- assign_target_no_control_tac
-  >- assign_target_no_control_tac
-  >- assign_target_no_control_tac
-  >- assign_target_no_control_tac
-  >- assign_target_no_control_tac
-  >- assign_target_no_control_tac
-  >- assign_target_no_control_tac
-  >- assign_target_no_control_tac
-  >- assign_target_no_control_tac
-  >- assign_target_no_control_tac
-  >- assign_target_no_control_tac
-  >- assign_target_no_control_tac
-  >- assign_target_no_control_tac
-  >- assign_target_no_control_tac
-  >- assign_target_no_control_tac
-  >- assign_target_no_control_tac
-QED
 (* ===== Shared tactic definitions ===== *)
-
-val mono = [bind_def, ignore_bind_def, return_def, raise_def,
-            prod_CASE_rator, sum_CASE_rator, option_CASE_rator,
-             COND_RATOR, LET_THM, create_arg_snapshot_def,
-            get_scopes_def, get_accounts_def, get_transient_storage_def,
-            update_accounts_def, update_transient_def];
 
 Theorem eval_create_no_control[local]:
   eval_create cx kind has_salt rof arg_tys vs blueprint_size st = (INR ex, st') ==>
@@ -525,34 +510,14 @@ val helpers = [eval_create_no_control, check_create_blueprint_no_control,
                check_no_control, type_check_no_control,
                lift_option_no_control, lift_option_type_no_control,
                lift_sum_no_control, lift_sum_runtime_no_control,
-               get_Value_no_control, read_storage_slot_no_control,
-               materialise_no_control, toplevel_array_length_no_control,
-               check_array_bounds_no_control, transfer_value_no_control,
+               read_storage_slot_no_control,
+               result_array_length_no_control, transfer_value_no_control,
                acquire_nonreentrant_lock_no_control,
                handle_function_no_control, push_log_no_control,
                get_immutables_no_control, lookup_global_no_control,
-               lookup_flag_mem_no_control, assign_target_no_control,
-               write_storage_slot_no_control, assign_result_no_control,
+               lookup_flag_mem_no_control,
+               write_storage_slot_no_control,
                try_handle_function_no_control];
-
-val resolve_tac = rpt (FIRST [
-  res_tac >> gvs[no_control_exc_def] >> NO_TAC,
-  gvs[no_control_exc_def] >> NO_TAC,
-  qpat_x_assum `_ = (INL x, _)` (fn th =>
-    Cases_on [ANTIQUOTE (th |> concl |> lhs |> rand |> rator |> rand)]
-    >> gvs[] >> res_tac >> gvs[no_control_exc_def] >> NO_TAC),
-  qpat_x_assum `switch_BoolV _ _ _ _ = (INR _, _)` (fn th =>
-    assume_tac th
-    >> drule switch_BoolV_no_control >> disch_then irule
-    >> rpt strip_tac >> res_tac >> gvs[no_control_exc_def] >> NO_TAC),
-  FIRST (map (fn th => imp_res_tac th >> gvs[no_control_exc_def] >> NO_TAC) helpers)
-]);
-
-fun unfold_tac g = (
-  rpt strip_tac >> pop_assum mp_tac
-  >> PURE_REWRITE_TAC[Once evaluate_def]
-  >> simp mono >> strip_tac
-  >> gvs[AllCaseEqs(), pairTheory.ELIM_UNCURRY] >> resolve_tac) g;
 
 val bind_step_tac =
   qpat_x_assum `bind _ _ _ = (INR _, _)`
@@ -568,8 +533,7 @@ val helper_close = FIRST [
       update_accounts_def, update_transient_def,
       get_scopes_def, push_function_def] >> NO_TAC,
   gvs[no_control_exc_def, return_def, raise_def] >> NO_TAC,
-  FIRST (map (fn th => imp_res_tac th >> gvs[no_control_exc_def] >> NO_TAC)
-    helpers)
+  FIRST (map (fn th => first_assum (ACCEPT_TAC o MATCH_MP th)) helpers)
 ];
 
 (* Direct exception closers avoid the context-wide search performed by
@@ -583,48 +547,27 @@ val close_lift_option_type =
 
 (* ===== Case 18: ExtCall and Send ===== *)
 
-Theorem take_call_outcome_no_control[local]:
-  take_call_outcome target calldata value_opt st = (INR exc, st') ==>
-  no_control_exc exc
-Proof
-  strip_tac >> drule take_call_outcome_error >> rw[no_control_exc_def]
-QED
-
-Theorem adopt_call_outcome_no_INR[local]:
-  adopt_call_outcome rq outcome st <> (INR exc, st')
-Proof
-  simp[adopt_call_outcome_equation]
-QED
+val CALL_NO_CONTROL_STEP = FIRST [
+  step_tac,
+  qpat_x_assum `append_logs _ _ = (INR _,_)`
+    (ACCEPT_TAC o MATCH_MP append_logs_no_control),
+  qpat_x_assum `take_call_outcome _ _ _ _ = (INR _,_)`
+    (fn th => mp_tac (MATCH_MP take_call_outcome_error th)) >>
+    simp[no_control_exc_def] >> strip_tac >> gvs[no_control_exc_def],
+  qpat_x_assum `adopt_call_outcome _ _ _ = (INR _,_)` mp_tac >>
+    simp[adopt_call_outcome_equation],
+  helper_close,
+  CHANGED_TAC (gvs[LET_THM, UNCURRY]),
+  qpat_x_assum `_ = (INR _,_)` mp_tac >>
+    BasicProvers.TOP_CASE_TAC >> simp[] >> strip_tac];
 
 Theorem eval_ext_call_no_control:
   eval_ext_call cx static skip_check sig opts vs st = (INR exc, st') ==>
   no_control_exc exc
 Proof
-  PairCases_on `sig` >> Cases_on `vs`
-  >- simp[eval_ext_call_def, raise_def, no_control_exc_def] >>
-  rename1 `eval_ext_call cx static skip_check _ opts (target_v::rest) st = _` >>
-  simp[eval_ext_call_def, bind_def, ignore_bind_def, type_check_def,
-       assert_def, return_def, raise_def, get_accounts_def,
-       get_transient_storage_def, lift_option_def, lift_option_type_def,
-       check_def, lift_sum_runtime_def, update_accounts_def,
-       update_transient_def, append_logs_def, LET_THM, UNCURRY,
-       COND_RATOR, option_CASE_rator, prod_CASE_rator, sum_CASE_rator] >>
-  Cases_on `LENGTH rest = LENGTH opts + LENGTH sig1 /\ ext_call_opts_ok static opts` >>
-  simp[no_control_exc_def] >>
-  Cases_on `dest_AddressV target_v` >> simp[no_control_exc_def] >>
-  Cases_on `static` >> simp[] >>
-  Cases_on `ext_call_kwarg EKValue opts (DROP (LENGTH sig1) rest)` >> simp[] >>
-  Cases_on `dest_NumV (THE (ext_call_kwarg EKValue opts (DROP (LENGTH sig1) rest)))` >>
-  gvs[no_control_exc_def] >> (
-  Cases_on `build_ext_calldata (get_tenv cx) sig0 sig1 (TAKE (LENGTH sig1) rest)` >>
-  simp[no_control_exc_def] >>
-  qmatch_goalsub_abbrev_tac `take_call_outcome target calldata value_opt st` >>
-  Cases_on `ext_call_precheck_ok skip_check sig2 target st.accounts` >>
-  simp[no_control_exc_def] >>
-  Cases_on `st.outcomes`
-  >- (simp[] >> strip_tac >> gvs[AllCaseEqs(), no_control_exc_def]) >>
-  simp[] >> strip_tac >> gvs[AllCaseEqs(), adopt_call_outcome_no_INR] >>
-  drule take_call_outcome_no_control >> simp[no_control_exc_def])
+  PairCases_on `sig` >> Cases_on `vs` >>
+  simp_tac bool_ss [eval_ext_call_def, eval_ext_call_effects_def, LET_THM] >> strip_tac >>
+  rpt CALL_NO_CONTROL_STEP
 QED
 
 Theorem eval_send_no_control:
@@ -636,23 +579,9 @@ Proof
        return_def, raise_def, get_accounts_def, get_transient_storage_def,
        lift_option_def, lift_option_type_def, check_def, update_accounts_def,
        update_transient_def, append_logs_def,
-       LET_THM, UNCURRY,
+       take_call_outcome_def, adopt_call_outcome_def, LET_THM, UNCURRY,
        COND_RATOR, option_CASE_rator, prod_CASE_rator, sum_CASE_rator] >>
-  strip_tac >> gvs[AllCaseEqs(), adopt_call_outcome_no_INR, no_control_exc_def] >>
-  drule take_call_outcome_no_control >> simp[no_control_exc_def]
-QED
-
-Theorem Send_outcome_runtime_error:
-  (do
-    (rq,outcome) <- take_call_outcome target [] (SOME amount);
-    check outcome.co_success "send failed";
-    adopt_call_outcome rq outcome;
-    return (Value NoneV)
-  od) st = (INR exc,st') ==>
-  ?msg. exc = Error (RuntimeError msg)
-Proof
-  simp[checked_call_outcome_cases, return_def] >> rpt strip_tac
-  >- (drule take_call_outcome_error >> rw[] >> simp[]) >> simp[]
+  strip_tac >> gvs[AllCaseEqs(), no_control_exc_def]
 QED
 
 (* ===== Case 19: IntCall ===== *)
@@ -711,11 +640,9 @@ Proof
         get_scopes_def, push_function_def] >> NO_TAC,
     Cases_on `nr` >> gvs[return_def, raise_def, option_CASE_rator,
       AllCaseEqs(), no_control_exc_def]
-    >> TRY (imp_res_tac acquire_nonreentrant_lock_no_control
-            >> gvs[no_control_exc_def]) >> NO_TAC,
+    >> metis_tac[acquire_nonreentrant_lock_no_control, no_control_exc_def],
     drule finally_no_control >> disch_then irule >> rpt strip_tac
-    >> TRY (imp_res_tac try_handle_function_no_control >> NO_TAC)
-    >> TRY (imp_res_tac int_call_cleanup_no_INR >> NO_TAC)])
+    >> metis_tac[try_handle_function_no_control, int_call_cleanup_no_INR]])
 QED
 
 Theorem int_call_no_control[local]:
@@ -732,7 +659,7 @@ Theorem int_call_no_control[local]:
         LENGTH (FST (SND (SND tup))) ≤
         LENGTH es + LENGTH (FST (SND (SND (SND tup)))))
        "IntCall args length" s'5 = (INL x',t'3) ∧
-     eval_exprs cx es s'6 = (INL vs,t'4) ∧
+     eval_expr_results cx es s'6 = (INL vs,t'4) ∧
      get_scopes s'7 = (INL prev,t'5) ∧
      set_scopes [FEMPTY] s'8 = (INL x'',t'6) ⇒
      ∀s exc st'.
@@ -753,7 +680,7 @@ Theorem int_call_no_control[local]:
         LENGTH (FST (SND (SND tup))) ≤
         LENGTH es + LENGTH (FST (SND (SND (SND tup)))))
        "IntCall args length" s'5 = (INL x',t'3) ⇒
-     ∀s exc st'. eval_exprs cx es s = (INR exc,st') ⇒
+     ∀s exc st'. eval_expr_results cx es s = (INR exc,st') ⇒
        no_control_exc exc) ⇒
   ∀s exc st'.
     eval_expr cx (Call v16 (IntCall (src_id_opt,fn)) es v17) s =
@@ -774,6 +701,7 @@ Proof
     rpt gen_tac >> strip_tac >>
     step_tac >- (gvs at_mono) >>
     metis_tac[])
+  >> step_tac >- metis_tac[read_results_no_control]
   >> pop_assum mp_tac
   >> PURE_ONCE_REWRITE_TAC[GSYM DE_MORGAN_THM]
   >> strip_tac >> drule int_call_tail_no_control >> simp[]
@@ -835,81 +763,235 @@ QED
 
 (* ===== Main theorem ===== *)
 
-val eval_expr_bt_ind = evaluate_ind
-  |> Q.SPECL [`\cx s. T`, `\cx ss. T`, `\cx e. T`, `\cx t. T`,
-              `\cx ts. T`, `P_bt`, `\cx it n ty rng. T`]
-  |> SIMP_RULE std_ss [];
+val canonical_no_control_ind = evaluate_ind
+  |> Q.SPECL [`\cx s. T`, `\cx ss. T`, `\cx it. T`,
+              `\cx ty nm body vs. T`,
+              `\cx e. !s exc st'. eval_expr cx e s = (INR exc,st') ==> no_control_exc exc`,
+              `\cx es. !s exc st'. eval_exprs cx es s = (INR exc,st') ==> no_control_exc exc`,
+              `\cx t. !s exc st'. eval_base_place cx t s = (INR exc,st') ==> no_control_exc exc`,
+              `\cx t. !s exc st'. eval_target_place cx t s = (INR exc,st') ==> no_control_exc exc`,
+              `\cx g v. T`, `\cx gs vs. T`,
+              `\cx es. !s exc st'. eval_expr_results cx es s = (INR exc,st') ==> no_control_exc exc`]
+  |> CONV_RULE (DEPTH_CONV BETA_CONV)
+  |> PURE_REWRITE_RULE [FORALL_SIMP, AND_CLAUSES, IMP_CLAUSES];
 
-Theorem eval_expr_no_control_with_bt:
-  (∀cx bt s exc st'.
-    eval_base_target cx bt s = (INR exc, st') ⇒
-    no_control_exc exc) ∧
-  (∀cx e s exc st'.
-    eval_expr cx e s = (INR exc, st') ⇒
-    no_control_exc exc) ∧
-  (∀cx es s exc st'.
-    eval_exprs cx es s = (INR exc, st') ⇒
-    no_control_exc exc)
+Theorem canonical_eval_no_control_with_results:
+  (!cx e s exc st'. eval_expr cx e s = (INR exc,st') ==> no_control_exc exc) /\
+  (!cx es s exc st'. eval_exprs cx es s = (INR exc,st') ==> no_control_exc exc) /\
+  (!cx t s exc st'. eval_base_place cx t s = (INR exc,st') ==> no_control_exc exc) /\
+  (!cx t s exc st'. eval_target_place cx t s = (INR exc,st') ==> no_control_exc exc) /\
+  (!cx es s exc st'. eval_expr_results cx es s = (INR exc,st') ==> no_control_exc exc)
 Proof
-  ho_match_mp_tac eval_expr_bt_ind >>
-  conj_tac >- unfold_tac >>
-  conj_tac >- unfold_tac >>
-  conj_tac >- unfold_tac >>
-  conj_tac >- (
-    rename1`SubscriptTarget` >>
-    unfold_tac >>
-    PairCases_on`x` >>
-    gvs[bind_def, return_def, AllCaseEqs()] >>
-    resolve_tac) >>
-  conj_tac >- unfold_tac >>
-  conj_tac >- unfold_tac >>
-  conj_tac >- unfold_tac >>
-  conj_tac >- unfold_tac >>
-  conj_tac >- unfold_tac >>
-  conj_tac >- unfold_tac >>
-  conj_tac >- unfold_tac >>
-  conj_tac >- unfold_tac >>
-  conj_tac >- unfold_tac >>
-  conj_tac >- (
-    rename1`Pop` >>
-    unfold_tac >>
-    PairCases_on`x` >>
-    gvs[bind_def, return_def, AllCaseEqs()] >>
-    resolve_tac) >>
-  conj_tac >- unfold_tac >>
-  conj_tac >- (
-    rpt strip_tac >> pop_assum mp_tac >>
-    simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
-         assert_def, return_def, raise_def, AllCaseEqs()] >>
-    rpt strip_tac >> gvs[no_control_exc_def] >>
-    imp_res_tac eval_send_no_control >> gvs[no_control_exc_def] >>
-    first_x_assum (qspecl_then [`s`, `s`] mp_tac) >>
-    simp[type_check_def, assert_def, return_def] >>
-    disch_then drule >> simp[]) >>
-  conj_tac >- (
-    rpt strip_tac >> pop_assum mp_tac >>
-    simp[Once evaluate_def, bind_def, AllCaseEqs()] >>
-    rpt strip_tac >> gvs[] >>
-    imp_res_tac eval_ext_call_no_control >> res_tac) >>
-  conj_tac >- (rpt gen_tac >> strip_tac >>
-    match_mp_tac int_call_no_control >>
-    metis_tac[]) >>
-  conj_tac >- (rpt strip_tac >> drule_all raw_call_no_control >> simp[]) >>
-  conj_tac >- (rpt strip_tac >> drule_all raw_call_calldata_no_control >> simp[]) >>
-  conj_tac >- unfold_tac >>
-  conj_tac >- unfold_tac >>
-  conj_tac >- unfold_tac >>
-  conj_tac >- suspend "CreateTarget" >>
-  rpt conj_tac >> unfold_tac
+  ho_match_mp_tac canonical_no_control_ind >>
+  conj_tac >- (simp[Once evaluate_def, bind_def, ignore_bind_def,
+    get_scopes_def, return_def, type_check_def, assert_def, raise_def,
+    AllCaseEqs(), no_control_exc_def]) >>
+  conj_tac >- (simp[Once evaluate_def] >> metis_tac[lookup_global_no_control]) >>
+  conj_tac >- (simp[Once evaluate_def] >> metis_tac[lookup_flag_mem_no_control]) >>
+  conj_tac >- suspend "IfExp" >>
+  conj_tac >- suspend "Literal" >>
+  conj_tac >- suspend "StructLit" >>
+  conj_tac >- suspend "Subscript" >>
+  conj_tac >- suspend "Attribute" >>
+  conj_tac >- suspend "Builtin" >>
+  conj_tac >- suspend "Pop" >>
+  conj_tac >- suspend "TypeBuiltin" >>
+  conj_tac >- suspend "Send" >>
+  conj_tac >- suspend "ExtCall" >>
+  conj_tac >- suspend "IntCall" >>
+  conj_tac >- suspend "RawCall" >>
+  conj_tac >- suspend "RawCallCalldata" >>
+  conj_tac >- suspend "RawLog" >>
+  conj_tac >- suspend "RawRevert" >>
+  conj_tac >- suspend "SelfDestruct" >>
+  conj_tac >- suspend "Create" >>
+  conj_tac >- suspend "ExprsNil" >>
+  conj_tac >- suspend "ExprsCons" >>
+  conj_tac >- suspend "PlaceName" >>
+  conj_tac >- suspend "PlaceTopName" >>
+  conj_tac >- suspend "PlaceAttribute" >>
+  conj_tac >- suspend "PlaceSubscript" >>
+  conj_tac >- suspend "TargetPlace" >>
+  conj_tac >- simp[Once evaluate_def, return_def] >>
+  rpt strip_tac >> pop_assum mp_tac >>
+  simp[Once evaluate_def, bind_def, return_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >> metis_tac[]
 QED
 
-Resume eval_expr_no_control_with_bt[CreateTarget]:
-  rpt gen_tac >> strip_tac >>
-  Cases_on `kind` >> gvs[] >> unfold_tac >>
-  gvs[create_arg_snapshot_def] >> res_tac
+Resume canonical_eval_no_control_with_results[IfExp]:
+  rpt strip_tac >> pop_assum mp_tac >>
+  simp[Once evaluate_def, bind_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  metis_tac[switch_BoolV_no_control, conditional_result_no_control]
 QED
 
-Finalise eval_expr_no_control_with_bt
+Resume canonical_eval_no_control_with_results[Literal]:
+  simp[Once evaluate_def, return_def]
+QED
+
+Resume canonical_eval_no_control_with_results[StructLit]:
+  rpt strip_tac >> pop_assum mp_tac >>
+  simp[Once evaluate_def, bind_def, return_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >> metis_tac[lift_option_type_no_control]
+QED
+
+Resume canonical_eval_no_control_with_results[Subscript]:
+  rpt strip_tac >> pop_assum mp_tac >>
+  simp[Once evaluate_def, bind_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  metis_tac[read_result_no_control, select_result_no_control]
+QED
+
+Resume canonical_eval_no_control_with_results[Attribute]:
+  rpt strip_tac >> pop_assum mp_tac >>
+  simp[Once evaluate_def, bind_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >> metis_tac[select_result_no_control]
+QED
+
+Resume canonical_eval_no_control_with_results[Builtin]:
+  rpt gen_tac >> strip_tac >> Cases_on `bt = Len` >>
+  rpt strip_tac >> pop_assum mp_tac >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def, return_def,
+    get_accounts_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  metis_tac[type_check_no_control, result_array_length_no_control,
+    lift_sum_no_control]
+QED
+
+Resume canonical_eval_no_control_with_results[Pop]:
+  rpt strip_tac >> pop_assum mp_tac >>
+  simp[Once evaluate_def, bind_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >> metis_tac[pop_place_no_control]
+QED
+
+Resume canonical_eval_no_control_with_results[TypeBuiltin]:
+  rpt strip_tac >> pop_assum mp_tac >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def, return_def,
+    AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+  metis_tac[type_check_no_control, lift_sum_no_control]
+QED
+
+Resume canonical_eval_no_control_with_results[Send]:
+  rpt strip_tac >> pop_assum mp_tac >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def,
+    type_check_def, assert_def, return_def, raise_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[no_control_exc_def] >>
+  imp_res_tac eval_send_no_control >> gvs[no_control_exc_def] >>
+  first_x_assum (qspecl_then [`s`, `s`] mp_tac) >>
+  simp[type_check_def, assert_def, return_def] >>
+  disch_then drule >> simp[]
+QED
+
+Resume canonical_eval_no_control_with_results[ExtCall]:
+  rpt strip_tac >> pop_assum mp_tac >>
+  simp[Once evaluate_def, bind_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >> metis_tac[eval_ext_call_no_control, read_results_no_control]
+QED
+
+Resume canonical_eval_no_control_with_results[IntCall]:
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  match_mp_tac int_call_no_control >> gvs[] >> metis_tac[]
+QED
+
+Resume canonical_eval_no_control_with_results[RawCall]:
+  metis_tac[raw_call_no_control]
+QED
+
+Resume canonical_eval_no_control_with_results[RawCallCalldata]:
+  metis_tac[raw_call_calldata_no_control]
+QED
+
+Resume canonical_eval_no_control_with_results[RawLog]:
+  rpt strip_tac >> pop_assum mp_tac >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def, return_def,
+    AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+  imp_res_tac type_check_no_control >>
+  imp_res_tac lift_option_type_no_control >>
+  imp_res_tac push_log_no_control >> res_tac
+QED
+
+Resume canonical_eval_no_control_with_results[RawRevert]:
+  rpt strip_tac >> pop_assum mp_tac >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def, return_def,
+    raise_def, AllCaseEqs()] >> rpt strip_tac >> gvs[no_control_exc_def] >>
+  metis_tac[type_check_no_control, no_control_exc_def]
+QED
+
+Resume canonical_eval_no_control_with_results[SelfDestruct]:
+  rpt strip_tac >> pop_assum mp_tac >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def, return_def,
+    get_accounts_def, AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+  imp_res_tac type_check_no_control >>
+  imp_res_tac lift_option_type_no_control >>
+  imp_res_tac transfer_value_no_control >> res_tac
+QED
+
+Resume canonical_eval_no_control_with_results[Create]:
+  rpt gen_tac >> strip_tac >> Cases_on `kind` >> gvs[] >>
+  rpt strip_tac >> pop_assum mp_tac >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def, return_def,
+    AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+  imp_res_tac eval_create_no_control >>
+  imp_res_tac check_create_blueprint_no_control >>
+  imp_res_tac read_results_no_control >> res_tac
+QED
+
+Resume canonical_eval_no_control_with_results[ExprsNil]:
+  simp[Once evaluate_def, return_def]
+QED
+
+Resume canonical_eval_no_control_with_results[ExprsCons]:
+  rpt strip_tac >> pop_assum mp_tac >>
+  simp[Once evaluate_def, bind_def, return_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >> metis_tac[read_result_no_control]
+QED
+
+Resume canonical_eval_no_control_with_results[PlaceName]:
+  simp[Once evaluate_def, bind_def, ignore_bind_def,
+    get_scopes_def, return_def, type_check_def, assert_def, raise_def,
+    AllCaseEqs(), no_control_exc_def]
+QED
+
+Resume canonical_eval_no_control_with_results[PlaceTopName]:
+  simp[Once evaluate_def, bind_def, AllCaseEqs()] >>
+  metis_tac[lookup_global_no_control]
+QED
+
+Resume canonical_eval_no_control_with_results[PlaceAttribute]:
+  rpt strip_tac >> pop_assum mp_tac >>
+  simp[Once evaluate_def, bind_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >> metis_tac[extend_place_no_control]
+QED
+
+Resume canonical_eval_no_control_with_results[PlaceSubscript]:
+  rpt strip_tac >> pop_assum mp_tac >>
+  simp[Once evaluate_def, bind_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  metis_tac[read_result_no_control, extend_place_no_control]
+QED
+
+Resume canonical_eval_no_control_with_results[TargetPlace]:
+  rpt strip_tac >> pop_assum mp_tac >>
+  simp[Once evaluate_def, bind_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >> metis_tac[get_place_no_control]
+QED
+
+Finalise canonical_eval_no_control_with_results
+
+Theorem canonical_eval_no_control:
+  (!cx e s exc st'. eval_expr cx e s = (INR exc,st') ==> no_control_exc exc) /\
+  (!cx es s exc st'. eval_exprs cx es s = (INR exc,st') ==> no_control_exc exc) /\
+  (!cx t s exc st'. eval_base_place cx t s = (INR exc,st') ==> no_control_exc exc) /\
+  (!cx t s exc st'. eval_target_place cx t s = (INR exc,st') ==> no_control_exc exc)
+Proof
+  metis_tac[canonical_eval_no_control_with_results]
+QED
+
+Theorem eval_expr_results_no_control:
+  eval_expr_results cx es st = (INR exc,st') ==> no_control_exc exc
+Proof
+  metis_tac[canonical_eval_no_control_with_results]
+QED
 
 Theorem eval_expr_no_control:
   (∀cx e s exc st'.
@@ -919,5 +1001,70 @@ Theorem eval_expr_no_control:
     eval_exprs cx es s = (INR exc, st') ⇒
     no_control_exc exc)
 Proof
-  metis_tac[eval_expr_no_control_with_bt]
+  metis_tac[canonical_eval_no_control]
+QED
+
+Theorem eval_base_place_no_control:
+  !t cx st exc st'. eval_base_place cx t st = (INR exc,st') ==> no_control_exc exc
+Proof
+  metis_tac[canonical_eval_no_control]
+QED
+
+Theorem eval_target_place_no_control:
+  eval_target_place cx t st = (INR exc,st') ==> no_control_exc exc
+Proof
+  simp[Once evaluate_def, bind_def, AllCaseEqs()] >> rpt strip_tac >>
+  metis_tac[eval_base_place_no_control, get_place_no_control]
+QED
+
+val tuple_no_control_ind = evaluate_ind
+  |> Q.SPECL [`\cx s. T`, `\cx ss. T`, `\cx it. T`,
+              `\cx ty nm body vs. T`, `\cx e. T`, `\cx es. T`,
+              `\cx t. T`, `\cx t. T`,
+              `\cx g v. !st exc st'. assign_tuple_targets cx g v st = (INR exc,st') ==> no_control_exc exc`,
+              `\cx gs vs. !st exc st'. assign_tuple_target_list cx gs vs st = (INR exc,st') ==> no_control_exc exc`,
+              `\cx es. T`]
+  |> CONV_RULE (DEPTH_CONV BETA_CONV)
+  |> PURE_REWRITE_RULE [FORALL_SIMP, AND_CLAUSES, IMP_CLAUSES];
+
+Theorem tuple_store_no_control[local]:
+  (!cx g v st exc st'. assign_tuple_targets cx g v st = (INR exc,st') ==>
+    no_control_exc exc) /\
+  (!cx gs vs st exc st'. assign_tuple_target_list cx gs vs st = (INR exc,st') ==>
+    no_control_exc exc)
+Proof
+  ho_match_mp_tac tuple_no_control_ind >> rpt conj_tac >> rpt gen_tac >>
+  rpt strip_tac >> qpat_x_assum `_ = (INR exc,st')` mp_tac >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def,
+    vyperValueTheory.value_CASE_rator, vyperValueTheory.array_value_CASE_rator,
+    return_def, raise_def, AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+  gvs[no_control_exc_def] >>
+  metis_tac[eval_target_place_no_control, write_place_no_control,
+    no_control_exc_def]
+QED
+
+Theorem assign_tuple_targets_no_control:
+  assign_tuple_targets cx g v st = (INR exc,st') ==> no_control_exc exc
+Proof
+  metis_tac[tuple_store_no_control]
+QED
+
+(* Place/control integration audit. *)
+val () = List.app (fn (name,th) =>
+  let val (oracles,_) = Tag.dest_tag (Thm.tag th)
+  in if List.all (fn s => s = "DISK_THM") oracles then ()
+     else raise Fail ("No-control oracle debt: " ^ name)
+  end) (DB.thms "vyperExprNoControl");
+
+Theorem Send_outcome_runtime_error:
+  (do
+    (rq,outcome) <- take_call_outcome target [] (SOME amount);
+    check outcome.co_success "send failed";
+    adopt_call_outcome rq outcome;
+    return (Value NoneV)
+  od) st = (INR exc,st') ==>
+  ?msg. exc = Error (RuntimeError msg)
+Proof
+  simp[checked_call_outcome_cases, return_def] >> rpt strip_tac
+  >- (drule take_call_outcome_error >> rw[] >> simp[]) >> simp[]
 QED

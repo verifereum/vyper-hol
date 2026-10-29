@@ -21,6 +21,7 @@ Datatype:
   abi_entry
   = Function abi_function
   | Event string (* TODO(test-semantics): determine whether event argument metadata is needed. *)
+  | Error string ((string # abi_type) list)
 End
 
 Datatype:

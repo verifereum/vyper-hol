@@ -62,10 +62,10 @@ Definition ctor_alias_source_state_def:
     let local_scope =
       (FEMPTY |+ ("b", <|assignable := F;
                          type := BaseTV (BytesT (Dynamic 1));
-                         value := BytesV [0w]|>))
+                         value := BytesV [0w]; popped := []|>))
              |+ ("xs", <|assignable := T;
                           type := ArrayTV (BaseTV (UintT 256)) (Dynamic 2);
-                          value := ArrayV (DynArrayV [IntV 1; IntV 2])|>) in
+                          value := ArrayV (DynArrayV [IntV 1; IntV 2]); popped := []|>) in
     let st = empty_state with
       <|accounts := ctor_alias_accounts ctor_alias_pinned_runtime;
         scopes := [local_scope]|> in

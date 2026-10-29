@@ -44,10 +44,10 @@ Proof
   Cases_on `v` >> simp[value_has_type_def]
 QED
 
-Theorem toplevel_value_typed_BoolTV:
-  toplevel_value_typed tv (BaseTV BoolT) ==> ?b. tv = Value (BoolV b)
+Theorem value_result_typed_BoolTV:
+  value_result_typed tv (BaseTV BoolT) ==> ?b. tv = Value (BoolV b)
 Proof
-  Cases_on `tv` >> simp[toplevel_value_typed_def] >>
+  Cases_on `tv` >> simp[value_result_typed_def] >>
   metis_tac[value_has_type_BoolTV]
 QED
 
@@ -57,10 +57,10 @@ Proof
   Cases_on `v` >> simp[value_has_type_def]
 QED
 
-Theorem toplevel_value_typed_StringTV:
-  toplevel_value_typed tv (BaseTV (StringT n)) ==> ?s. tv = Value (StringV s)
+Theorem value_result_typed_StringTV:
+  value_result_typed tv (BaseTV (StringT n)) ==> ?s. tv = Value (StringV s)
 Proof
-  Cases_on `tv` >> simp[toplevel_value_typed_def] >>
+  Cases_on `tv` >> simp[value_result_typed_def] >>
   metis_tac[value_has_type_StringTV]
 QED
 
@@ -146,11 +146,11 @@ Proof
   gvs[evaluate_type_def, value_has_type_def, compatible_bound_def]
 QED
 
-Theorem literal_toplevel_value_typed:
+Theorem literal_value_result_typed:
   well_typed_literal ty lit /\ evaluate_type tenv ty = SOME tv ==>
-  toplevel_value_typed (Value (evaluate_literal lit)) tv
+  value_result_typed (Value (evaluate_literal lit)) tv
 Proof
-  rw[toplevel_value_typed_def] >> drule_all well_typed_literal_sound >> simp[]
+  rw[value_result_typed_def] >> drule_all well_typed_literal_sound >> simp[]
 QED
 
 (* ===== Lists ===== *)
@@ -172,22 +172,14 @@ QED
 
 (* ===== Top-level values ===== *)
 
-Theorem toplevel_value_typed_Value:
-  toplevel_value_typed (Value v) tv <=> value_has_type tv v
+Theorem value_result_typed_Value:
+  value_result_typed (Value v) tv <=> value_has_type tv v
 Proof
-  simp[toplevel_value_typed_def]
+  simp[value_result_typed_def]
 QED
 
-Theorem toplevel_value_typed_not_ArrayRef:
-  toplevel_value_typed tv tyv /\ tyv <> NoneTV /\ (!t b. tyv <> ArrayTV t b) ==>
-  ?v. tv = Value v
+Theorem value_result_is_value:
+  value_result_typed res tv ==> ?v. res = Value v
 Proof
-  Cases_on `tv` >> gvs[toplevel_value_typed_def] >>
-  first_x_assum irule >> simp[]
-QED
-
-Theorem toplevel_value_typed_not_hashmap_material:
-  toplevel_value_typed tv tyv /\ is_HashMapRef tv ==> tyv = NoneTV
-Proof
-  Cases_on `tv` >> simp[toplevel_value_typed_def]
+  rw[value_result_typed_def] >> metis_tac[]
 QED

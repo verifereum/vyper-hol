@@ -41,12 +41,12 @@ QED
 
 Theorem functions_well_typed_body:
   functions_well_typed cx /\ fn_sigs_consistent fn_sigs cx /\
-  fn_sigs_declared_complete fn_sigs cx /\
+  fn_sigs_live fn_sigs cx /\ fn_sigs_declared_complete fn_sigs cx /\
   toplevel_vtypes_complete toplevel_vtypes cx /\
   bare_globals_complete bare_globals cx /\
   bare_global_assignable_complete bare_global_assignable cx /\
   flag_members_complete flag_members cx /\
-  get_module_code cx src = SOME ts /\
+  get_module_code cx src = SOME ts /\ context_function_live cx (src,fn) /\
   lookup_callable_function cx.in_deploy fn ts = SOME (fm,nr,args,dflts,ret,fn_body) /\
   (* Concrete maps supplied by caller must satisfy the consistency side-condition. *)
   (!src id ty. FLOOKUP bare_globals (src,id) = SOME ty ==>
@@ -99,6 +99,22 @@ QED
 
 (* ===== Call soundness theorem shapes ===== *)
 
+Theorem typed_expr_evaluation_sound:
+  well_typed_expr env e /\ env_consistent env cx st /\ state_well_typed st /\
+  context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
+  call_evaluation_safe cx (int_calls_expr e) /\
+  eval_expr cx e st = (res,st') ==>
+  state_well_typed st' /\ env_consistent env cx st' /\ accounts_well_typed st'.accounts /\
+  no_type_error_result res /\
+  (case res of INL pv => eval_result_typed (env,cx,st') pv (Type (expr_type e))
+   | INR _ => T)
+Proof
+  strip_tac >>
+  qspecl_then [`cx`,`e`] strip_assume_tac (cj 5 eval_scc_type_sound_mutual) >>
+  qpat_x_assum `!env st res st'. _ ==> (_ /\ _)` drule_all >>
+  simp[]
+QED
+
 Theorem internal_call_no_type_error:
   well_typed_expr env (Call ty (IntCall (src,fn)) args drv) /\
   env_consistent env cx st /\ state_well_typed st /\
@@ -109,9 +125,16 @@ Proof
   strip_tac >>
   Cases_on `eval_expr cx (Call ty (IntCall (src,fn)) args drv) st` >>
   simp[no_type_error_eval_def, no_type_error_result_def] >>
-  drule_at(Pat`eval_expr`)(cj 8 eval_all_type_sound_mutual) >>
-  disch_then drule >> simp[] >>
-  rpt strip_tac >> gvs[no_type_error_result_def]
+  drule_all typed_expr_evaluation_sound >>
+  simp[no_type_error_result_def]
+QED
+
+Theorem internal_call_success_value[local]:
+  eval_expr cx (Call ty (IntCall (src,fn)) args drv) st = (INL pv,st') ==>
+  ?v. pv = Value v
+Proof
+  simp[Once evaluate_def, bind_def, ignore_bind_def, return_def,
+       raise_def, AllCaseEqs()] >> rpt strip_tac >> gvs[]
 QED
 
 Theorem internal_call_type_preservation:
@@ -123,9 +146,10 @@ Theorem internal_call_type_preservation:
   state_well_typed st' /\ expr_runtime_typed env (Call ty (IntCall (src,fn)) args drv) tvl
 Proof
   strip_tac >>
-  drule_all (cj 8 eval_all_type_sound_mutual) >>
-  strip_tac >> gvs[] >>
-  metis_tac[expr_result_typed_runtime_typed]
+  drule_all typed_expr_evaluation_sound >> strip_tac >> gvs[] >>
+  drule internal_call_success_value >> strip_tac >>
+  gvs[eval_result_typed_def, expr_runtime_typed_def,
+      value_result_typed_def]
 QED
 
 Theorem external_call_no_type_error:
@@ -138,9 +162,8 @@ Proof
   strip_tac >>
   Cases_on `eval_expr cx (Call ty (ExtCall stat skip_check fsig opts) args drv) st` >>
   simp[no_type_error_eval_def, no_type_error_result_def] >>
-  drule_at(Pat`eval_expr`)(cj 8 eval_all_type_sound_mutual) >>
-  disch_then drule >> simp[] >>
-  rpt strip_tac >> gvs[no_type_error_result_def]
+  drule_all typed_expr_evaluation_sound >>
+  simp[no_type_error_result_def]
 QED
 
 Theorem special_call_no_type_error:
@@ -154,7 +177,6 @@ Proof
   strip_tac >>
   Cases_on `eval_expr cx (Call ty target args drv) st` >>
   simp[no_type_error_eval_def, no_type_error_result_def] >>
-  drule_at(Pat`eval_expr`)(cj 8 eval_all_type_sound_mutual) >>
-  disch_then drule >> simp[] >>
-  rpt strip_tac >> gvs[no_type_error_result_def]
+  drule_all typed_expr_evaluation_sound >>
+  simp[no_type_error_result_def]
 QED
