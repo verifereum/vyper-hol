@@ -48,11 +48,15 @@
  * value is lowered at the declared type in stmtSimDeclMem; Raise and Assert
  * with a string literal reason in stmtSimReason, with another reason held on
  * the stack or in memory in stmtSimReasonExpr, and with a reason read from
- * storage or transient storage in stmtSimReasonStorage.  Not covered yet:
- * Assign/AugAssign (#550), Append and For over an array (#559), Log (#570),
- * the other memory-backed declarations (empty values, bytestring literals of
- * another length, initialisations that widen the value), reasons held in code
- * (immutables) or calldata, and memory-backed returns.
+ * storage or transient storage in stmtSimReasonStorage; AugAssign to a
+ * local held in one word in stmtSimAugAssign; Assign to a local held in one
+ * word in stmtSimAssign, to a memory-backed local in stmtSimAssignMem, and
+ * to a tuple of locals each held in one word in stmtSimAssignTuple.  Not
+ * covered yet: Assign and AugAssign to other targets (#550), Append and For
+ * over an array (#559), Log (#570), the other memory-backed declarations
+ * (empty values, bytestring literals of another length, initialisations that
+ * widen the value), reasons held in code (immutables) or calldata, and
+ * memory-backed returns.
  *)
 
 Theory stmtSim
