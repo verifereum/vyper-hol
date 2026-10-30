@@ -319,6 +319,8 @@ Proof
   simp[abi_static_size_def, vyper_base_to_abi_type_def, vyper_to_abi_type_def]
 QED
 
+(* Source validation ignores unused dynamic padding. Structural head extents,
+   rather than canonical padding, justify the compiler's minimum guard. *)
 Theorem abi_caller_decode_minimum:
   evaluate_type env ty = SOME tv /\ abi_caller_struct_map sf env /\
   vyper_valid_enc env ty bs ==>
