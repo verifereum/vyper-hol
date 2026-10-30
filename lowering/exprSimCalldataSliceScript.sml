@@ -567,7 +567,10 @@ Theorem slice_calldata_run[local]:
     (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
        FLOOKUP t.vs_allocas aid = SOME entry) /\
     (!aid b len. FLOOKUP s.vs_allocas aid = SOME (b,len) /\ aid < sa.cs_next_id ==>
-       mem_bytes_at b len t.vs_memory = mem_bytes_at b len s.vs_memory)
+       mem_bytes_at b len t.vs_memory = mem_bytes_at b len s.vs_memory) /\
+    locals_kept cenv es s t /\
+    (!nm lb len. local_region cenv es.scopes t nm lb len ==>
+       regions_disjoint (w2n w) (32 + 32 * word_size n) lb len)
 Proof
   rpt gen_tac >> strip_tac >>
   drule slice_calldata_shape >> strip_tac >>
@@ -690,9 +693,30 @@ Proof
       simp[]) >>
   simp[] >> conj_tac
   >- (asm_rewrite_tac[] >> irule calldata_slice_write_encoding >> decide_tac) >>
-  rpt strip_tac >>
-  `b + len <= w2n w \/ w2n w + 32 + n <= b` by
-    (qpat_x_assum `!aid b len. _ ==> regions_disjoint _ _ _ _` drule >>
+  conj_tac
+  >- (rpt strip_tac >>
+      `b + len <= w2n w \/ w2n w + 32 + n <= b` by
+        (qpat_x_assum `!aid b len. _ ==> regions_disjoint _ _ _ _` drule >>
+         simp[regions_disjoint_def] >> decide_tac) >>
+      metis_tac[]) >>
+  reverse conj_tac
+  >- (rpt strip_tac >>
+      `local_region cenv es.scopes t nm lb len` by
+        (irule exprSimOpsTheory.local_region_frame >> conj_tac
+         >- (qexists_tac `func` >> gvs[stmt_state_rel_def, state_rel_def]) >>
+         qexistsl [`sa`, `es.scopes`, `u`] >> simp[] >>
+         rpt strip_tac >>
+         qpat_x_assum `!x. not_fresh_at sa x ==> lookup_var x u = _` drule >>
+         qpat_x_assum `!x. not_fresh_at sa x ==> lookup_var x t = _` drule >> simp[]) >>
+      qpat_x_assum `!name b len. local_region _ _ t _ _ _ ==> _` drule >>
+      pure_rewrite_tac[regions_disjoint_def] >> decide_tac) >>
+  irule locals_kept_regions >> rpt strip_tac >>
+  rename1 `local_region cenv es.scopes s nm b sz` >>
+  `local_region cenv es.scopes t nm b sz` by
+    (irule exprSimOpsTheory.local_region_frame_fwd >>
+     qexistsl [`s`, `sa`, `es.scopes`] >> simp[]) >>
+  `b + sz <= w2n w \/ w2n w + 32 + n <= b` by
+    (qpat_x_assum `!name b len. local_region _ _ _ _ _ _ ==> _` drule >>
      simp[regions_disjoint_def] >> decide_tac) >>
   metis_tac[]
 QED
@@ -710,7 +734,10 @@ Theorem slice_calldata_vv_post[local]:
   (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
     FLOOKUP t.vs_allocas aid = SOME entry) /\
   (!aid b len. FLOOKUP s.vs_allocas aid = SOME (b,len) /\ aid < sa.cs_next_id ==>
-    mem_bytes_at b len t.vs_memory = mem_bytes_at b len s.vs_memory) ==>
+    mem_bytes_at b len t.vs_memory = mem_bytes_at b len s.vs_memory) /\
+  (!nm lb len. local_region cenv es.scopes t nm lb len ==>
+     regions_disjoint (w2n w) (32 + 32 * word_size n) lb len) /\
+  locals_kept cenv es s t ==>
   !k. vv_post func cenv cx e es sa sb s es
     (Value (BytesV (TAKE n (DROP a cx.txn.calldata))))
     (LocatedValue (expr_type e) p) (t with vs_inst_idx := k)
@@ -721,12 +748,15 @@ Proof
     (Cases_on `p.ptr_operand` >> gvs[eval_operand_def, lookup_var_def]) >>
   simp[vv_post_def, stmt_state_rel_inst_idx, vv_holds_def, vv_at_def,
        read_result_def, return_def, evaluate_type_def, is_word_type_def,
-       eval_operand_def, lookup_var_def, val_wf_def, val_footprint_def] >>
+       eval_operand_def, lookup_var_def, val_wf_def, val_footprint_def,
+       locals_kept_inst_idx] >>
   conj_tac
   >- (strip_tac >> conj_tac
       >- simp[type_memory_size_def, word_size_capacity] >>
       disj1_tac >> qexistsl_tac [`sa.cs_next_id`,`w2n w`,`32 + 32 * word_size n`] >>
-      simp[]) >>
+      simp[] >> rpt strip_tac >>
+      qpat_x_assum `!nm lb len. local_region _ _ t _ _ _ ==> _` drule >>
+      simp[regions_disjoint_def] >> decide_tac) >>
   rpt strip_tac >> first_x_assum irule >> qexists_tac `aid` >> simp[]
 QED
 
@@ -781,8 +811,13 @@ Theorem vv_at_start_mono:
   vv_at cenv cx ty sa sb es tv vv u
 Proof
   Cases_on `vv` >> simp[vv_at_def, expr_val_at_def] >>
-  rpt strip_tac >> gvs[] >>
-  metis_tac[arithmeticTheory.LESS_EQ_TRANS]
+  rpt strip_tac >> gvs[]
+  >>~- ([`FLOOKUP u.vs_allocas aid = SOME (b,sz)`],
+        disj1_tac >> qexistsl [`aid`, `b`, `sz`] >> simp[] >>
+        first_assum ACCEPT_TAC)
+  >>~- ([`local_region cenv es.scopes u n b sz`],
+        disj2_tac >> disj1_tac >> qexistsl [`n`, `b`, `sz`] >> simp[])
+  >> metis_tac[]
 QED
 
 Theorem vv_post_prefix_frame:
