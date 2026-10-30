@@ -1401,6 +1401,7 @@ Definition merge_callee_state_def:
       vs_logs       := callee.vs_logs;
       vs_outcomes   := callee.vs_outcomes;
       vs_requests   := callee.vs_requests;
+      vs_toDelete   := callee.vs_toDelete;
       vs_immutables := callee.vs_immutables
     |>
 End
