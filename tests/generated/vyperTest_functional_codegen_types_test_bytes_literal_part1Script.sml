@@ -1,4 +1,4 @@
 Theory vyperTest_functional_codegen_types_test_bytes_literal_part1[no_sig_docs]
 Ancestors vyperTestDefs_functional_codegen_types_test_bytes_literal_part1
 Libs vyperTestRunnerLib
-val () = List.app run_test_on_traces $ all_traces "vyperTestDefs_functional_codegen_types_test_bytes_literal_part1";
+val () = run_tests_on_traces $ all_traces "vyperTestDefs_functional_codegen_types_test_bytes_literal_part1";
