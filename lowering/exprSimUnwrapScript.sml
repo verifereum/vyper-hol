@@ -298,8 +298,11 @@ Proof
   rw[immutable_holds_def, exprLoweringPropsTheory.stmt_state_rel_def,
      state_rel_def, immutables_rel_def, read_result_def, return_def] >>
   gvs[] >> first_x_assum drule_all >> strip_tac >>
-  drule_all immutable_word_mem_word_at >>
-  simp[mem_word_at_def]
+  gvs[sub_layout_def] >> first_x_assum drule >> strip_tac >>
+  `off + k < dimword (:256)` by DECIDE_TAC >>
+  `mem_word_at (off + k) s.vs_data_section = typed_val_to_w256 tvt v` by
+    (irule val_in_memory_word_type >> metis_tac[]) >>
+  gvs[valueEncodingTheory.mem_word_at_def]
 QED
 
 (* A word immutable at runtime: a DLOAD. *)
