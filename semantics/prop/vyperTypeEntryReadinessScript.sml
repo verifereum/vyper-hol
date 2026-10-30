@@ -190,18 +190,6 @@ Proof
   simp[value_runtime_typed_def]
 QED
 
-Theorem checked_defaults_ready_success:
-  checked_defaults_ready cx am args dflts vals ==>
-  LENGTH vals <= LENGTH args /\
-  LENGTH args - LENGTH vals <= LENGTH dflts /\
-  ?dflt_vs.
-    evaluate_defaults cx am
-      (DROP (LENGTH dflts - (LENGTH args - LENGTH vals)) dflts) =
-      SOME dflt_vs
-Proof
-  rw[checked_defaults_ready_def, IS_SOME_EXISTS]
-QED
-
 Theorem checked_defaults_ready_values_typed:
   checked_defaults_ready cx am args dflts vals /\
   well_typed_exprs env
@@ -331,12 +319,4 @@ Proof
     (simp[Abbr`needed`, listTheory.LENGTH_DROP] >> decide_tac) >>
   drule_all provided_args_defaults_bind_arguments >> strip_tac >>
   qexistsl [`dflt_vs`, `scope`] >> simp[Abbr`needed`]
-QED
-
-Theorem checked_call_inputs_ready_components:
-  checked_call_inputs_ready tenv cx am args dflts vals ==>
-  provided_args_typed tenv args vals /\
-  checked_defaults_ready cx am args dflts vals
-Proof
-  simp[checked_call_inputs_ready_def]
 QED

@@ -281,7 +281,6 @@ Proof
   irule log_extends_trans >> qexists_tac `s'³'` >> simp[]
 QED
 
-
 Theorem update_accounts_logs[local]:
   update_accounts f st = (res,st') ==> st'.logs = st.logs
 Proof
@@ -366,7 +365,6 @@ Proof
   imp_res_tac lift_option_type_state >> gvs[] >>
   imp_res_tac write_storage_slot_logs >> gvs[]
 QED
-
 
 Theorem append_place_logs[local]:
   append_place cx p v st = (res,st') ==> st'.logs = st.logs
@@ -495,8 +493,6 @@ Proof
   imp_res_tac read_result_state >>
   imp_res_tac append_place_logs >> gvs[log_extends_def]
 QED
-
-
 
 Theorem case_expr_pop_logs[local]:
   (!st res st'. eval_target_place cx bt st = (res,st') ==>
@@ -717,7 +713,6 @@ Proof
   first_x_assum drule_all >> simp[]
 QED
 
-
 Theorem case_stmt_raise_logs[local]:
   (!s0 r s1. eval_expr cx e s0 = (r,s1) ==> log_extends s0 s1) ==>
   !st res st'. eval_stmt cx (Raise (RaiseReason e)) st = (res,st') ==>
@@ -860,7 +855,6 @@ Proof
   simp[log_extends_append]
 QED
 
-
 Theorem case_expr_name_logs[local]:
   eval_expr cx (Name ty id) st = (res,st') ==> log_extends st st'
 Proof
@@ -906,7 +900,6 @@ Proof
   metis_tac[lookup_flag_mem_log_extends]
 QED
 
-
 Theorem case_expr_if_logs[local]:
   (!s0 tv s1. eval_expr cx e1 s0 = (INL tv,s1) ==>
      !st res st'. eval_expr cx e2 st = (res,st') ==> log_extends st st') /\
@@ -951,15 +944,7 @@ Theorem transfer_value_logs[local]:
   transfer_value fromAddr toAddr amount st = (res,st') ==>
   st'.logs = st.logs
 Proof
-  (* Original local NONE proof retained:
-  rw[vyperInterpreterTheory.transfer_value_def, vyperStateTheory.bind_def,
-     vyperStateTheory.ignore_bind_def, vyperStateTheory.get_accounts_def,
-     vyperStateTheory.update_accounts_def, vyperStateTheory.check_def,
-     vyperStateTheory.type_check_def, vyperStateTheory.assert_def,
-     vyperStateTheory.return_def, vyperStateTheory.raise_def] >>
-  gvs[AllCaseEqs(), vyperStateTheory.return_def,
-      vyperStateTheory.raise_def]
-  *)
+
   strip_tac >> drule concrete_send_step_locals >> simp[]
 QED
 
@@ -1147,7 +1132,6 @@ Proof
   metis_tac[log_extends_trans]
 QED
 
-
 Theorem handle_function_log_extends[local]:
   handle_function ex st = (res,st') ==> log_extends st st'
 Proof
@@ -1193,7 +1177,6 @@ Proof
   qpat_x_assum `log_extends (st with scopes := [FEMPTY]) s''` mp_tac >>
   simp[log_extends_def]
 QED
-
 
 Theorem intcall_defaults_exact_log_extends[local]:
   finally (do x <- set_scopes [FEMPTY];
@@ -1291,7 +1274,6 @@ Proof
   metis_tac[log_extends_trans]
 QED
 
-
 Theorem intcall_try_body_exact_log_extends[local]:
   (try (do x <- eval_stmts cxf body; return NoneV od) handle_function) st =
     (res,st') ==>
@@ -1349,7 +1331,6 @@ Proof
        vyperStateTheory.return_def] >>
   rpt strip_tac >> gvs[]
 QED
-
 
 Theorem intcall_post_defaults_log_extends[local]:
   (do env <- lift_option_type
@@ -1479,7 +1460,6 @@ Proof
      drule intcall_body_finally_exact_log_extends >> simp[]) >>
   metis_tac[log_extends_trans]
 QED
-
 
 Theorem intcall_success_continuation_guarded_log_extends[local]:
   (do prev <- get_scopes;
@@ -1950,7 +1930,6 @@ Proof
   first_x_assum drule >> simp[]
 QED
 
-
 Theorem case_eval_exprs_nil_logs[local]:
   eval_exprs cx [] st = (res,st') ==> log_extends st st'
 Proof
@@ -2002,7 +1981,6 @@ Proof
   irule log_extends_trans >> goal_assum drule >>
   first_assum MATCH_ACCEPT_TAC
 QED
-
 
 local
   fun last_imp_ante tm =
@@ -2397,7 +2375,6 @@ Proof
   metis_tac[eval_mutual_log_extends]
 QED
 
-
 Theorem eval_stmt_log_extends:
   !cx s st res st'.
     eval_stmt cx s st = (res,st') ==> log_extends st st'
@@ -2426,7 +2403,6 @@ Theorem eval_stmts_log_extends:
 Proof
   metis_tac[eval_mutual_log_extends]
 QED
-
 
 Definition machine_log_extends_def:
   machine_log_extends (am:abstract_machine) (am':abstract_machine) <=>
@@ -2526,7 +2502,6 @@ Proof
       vyperStateTheory.return_def, vyperStateTheory.raise_def] >>
   imp_res_tac transfer_value_logs >> gvs[]
 QED
-
 
 Theorem entry_lock_action_logs[local]:
   (if nr then

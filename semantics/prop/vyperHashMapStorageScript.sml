@@ -110,14 +110,6 @@ Proof
   rw[hashmap_slot_for_def]
 QED
 
-Theorem hashmap_read_eq_slot:
-  ∀storage base kt tv kv.
-    hashmap_read storage base kt tv kv =
-    decode_value storage (w2n (hashmap_slot_for base kt kv)) tv
-Proof
-  rw[hashmap_read_def]
-QED
-
 (* ===== Write Success ===== *)
 
 Theorem hashmap_write_some:
@@ -307,15 +299,6 @@ Theorem hashmap_slot_cong:
   ∀base k1 k2. k1 = k2 ⇒ hashmap_slot base k1 = hashmap_slot base k2
 Proof
   simp[]
-QED
-
-(* hashmap_slot unfolds to keccak256 of concatenated bytes *)
-Theorem hashmap_slot_unfold:
-  ∀base k.
-    hashmap_slot base k =
-    word_of_bytes_be (Keccak_256_w64 (word_to_bytes_be base ++ word_to_bytes_be k))
-Proof
-  simp[vyperStorageTheory.hashmap_slot_def]
 QED
 
 (* ===== Canonical selection for HashMaps ===== *)

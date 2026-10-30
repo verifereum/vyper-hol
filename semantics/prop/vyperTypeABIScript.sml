@@ -154,127 +154,6 @@ Proof
   irule DIV_LE_MONOTONE >> simp[]
 QED
 
-Theorem all_have_type_values_have_types_REPLICATE:
-  !tv vs. all_have_type tv vs ==>
-    values_have_types (REPLICATE (LENGTH vs) tv) vs
-Proof
-  Induct_on `vs` >> simp[value_has_type_def]
-QED
-
-Theorem enc_tuple_acc_length_bound[local]:
-  !ts vs hl tl hds tls.
-    has_types ts vs ==>
-    LENGTH (enc_tuple hl tl ts vs hds tls) <=
-      SUM (MAP LENGTH hds) + SUM (MAP LENGTH tls) +
-      SUM (MAP2 (\t v. if is_dynamic t then 32 + LENGTH (enc t v)
-                         else static_length t) ts vs)
-Proof
-  Induct_on `ts` >> Cases_on `vs` >>
-  rw[Once contractABITheory.enc_def, LENGTH_FLAT, REV_REVERSE_LEM,
-     MAP_REVERSE, SUM_REVERSE, SUM_APPEND] >>
-  TRY (
-    first_x_assum drule >>
-    disch_then (qspecl_then
-      [`hl`, `tl + LENGTH (enc h' h)`,
-       `word_to_bytes (n2w (hl + tl) : bytes32) T::hds`,
-       `enc h' h::tls`] mp_tac) >>
-    simp[byteTheory.LENGTH_word_to_bytes] >> decide_tac) >>
-  first_x_assum drule >>
-  disch_then (qspecl_then [`hl`, `tl`, `enc h' h::hds`, `[]::tls`] mp_tac) >>
-  simp[] >>
-  `LENGTH (enc h' h) = static_length h'` by
-    (irule (cj 1 contractABITheory.enc_has_static_length) >> simp[]) >>
-  decide_tac
-QED
-
-Theorem enc_tuple_length_bound[local]:
-  !ts vs.
-    has_types ts vs ==>
-    LENGTH (enc (Tuple ts) (ListV vs)) <=
-      SUM (MAP2 (\t v. if is_dynamic t then 32 + LENGTH (enc t v)
-                         else static_length t) ts vs)
-Proof
-  rw[Once contractABITheory.enc_def] >>
-  qspecl_then [`ts`, `vs`, `head_lengths ts 0`, `0`, `[]`, `[]`] mp_tac
-    enc_tuple_acc_length_bound >>
-  simp[] >> decide_tac
-QED
-
-Theorem SUM_MAP2_REPLICATE_enc_bound[local]:
-  !t vs elem_bound embedded.
-    ((!v. MEM v vs ==> LENGTH (enc t v) <= elem_bound) /\
-     (if is_dynamic t then 32 + elem_bound else static_length t) <= embedded) ==>
-    SUM (MAP2 (\t v. if is_dynamic t then 32 + LENGTH (enc t v)
-                         else static_length t)
-              (REPLICATE (LENGTH vs) t) vs) <= LENGTH vs * embedded
-Proof
-  Induct_on `vs` >> simp[] >>
-  rpt strip_tac >>
-  first_x_assum (qspecl_then [`t`, `elem_bound`, `embedded`] mp_tac) >>
-  impl_tac >- (rw[] >> first_x_assum irule >> simp[]) >>
-  strip_tac >>
-  Cases_on `is_dynamic t` >> gvs[] >>
-  first_x_assum (qspec_then `h` mp_tac) >> simp[] >>
-  strip_tac >> simp[MULT_CLAUSES] >> decide_tac
-QED
-
-Theorem enc_dyn_array_same_length_bound[local]:
-  !t vs elem_bound embedded.
-    have_type t vs /\
-    (!v. MEM v vs ==> LENGTH (enc t v) <= elem_bound) /\
-    (if is_dynamic t then 32 + elem_bound else static_length t) <= embedded ==>
-    LENGTH (enc (Array NONE t) (ListV vs)) <= 32 + LENGTH vs * embedded
-Proof
-  rpt strip_tac >>
-  simp[Once contractABITheory.enc_def, byteTheory.LENGTH_word_to_bytes] >>
-  qmatch_goalsub_abbrev_tac `LENGTH et <= _` >>
-  `LENGTH et <= 32 +
-      SUM (MAP2 (\t v. if is_dynamic t then 32 + LENGTH (enc t v)
-                         else static_length t)
-                (REPLICATE (LENGTH vs) t) vs)` by
-    (qunabbrev_tac `et` >>
-     qspecl_then [`REPLICATE (LENGTH vs) t`, `vs`,
-       `head_lengths (REPLICATE (LENGTH vs) t) 0`, `0`,
-       `[word_to_bytes (n2w (LENGTH vs) : bytes32) T]`, `[]`] mp_tac
-       enc_tuple_acc_length_bound >>
-     simp[GSYM contractABITheory.have_type_has_types_REPLICATE,
-          byteTheory.LENGTH_word_to_bytes, MULT_COMM] >> decide_tac) >>
-  `SUM (MAP2 (\t v. if is_dynamic t then 32 + LENGTH (enc t v)
-                         else static_length t)
-             (REPLICATE (LENGTH vs) t) vs) <= LENGTH vs * embedded` by
-    (qspecl_then [`t`, `vs`, `elem_bound`, `embedded`] mp_tac
-       SUM_MAP2_REPLICATE_enc_bound >> simp[]) >>
-  decide_tac
-QED
-
-Theorem enc_fixed_array_same_length_bound[local]:
-  !n t vs elem_bound embedded.
-    has_type (Array (SOME n) t) (ListV vs) /\
-    (!v. MEM v vs ==> LENGTH (enc t v) <= elem_bound) /\
-    (if is_dynamic t then 32 + elem_bound else static_length t) <= embedded ==>
-    LENGTH (enc (Array (SOME n) t) (ListV vs)) <= n * embedded
-Proof
-  rpt strip_tac >>
-  gvs[contractABITheory.has_type_def, contractABITheory.valid_length_def] >>
-  simp[Once contractABITheory.enc_def] >>
-  qmatch_goalsub_abbrev_tac `LENGTH et <= _` >>
-  `LENGTH et <=
-      SUM (MAP2 (\t v. if is_dynamic t then 32 + LENGTH (enc t v)
-                         else static_length t)
-                (REPLICATE (LENGTH vs) t) vs)` by
-    (qunabbrev_tac `et` >>
-     qspecl_then [`REPLICATE (LENGTH vs) t`, `vs`,
-       `head_lengths (REPLICATE (LENGTH vs) t) 0`, `0`, `[]`, `[]`] mp_tac
-       enc_tuple_acc_length_bound >>
-     simp[]) >>
-  `SUM (MAP2 (\t v. if is_dynamic t then 32 + LENGTH (enc t v)
-                         else static_length t)
-             (REPLICATE (LENGTH vs) t) vs) <= LENGTH vs * embedded` by
-    (qspecl_then [`t`, `vs`, `elem_bound`, `embedded`] mp_tac
-       SUM_MAP2_REPLICATE_enc_bound >> simp[]) >>
-  decide_tac
-QED
-
 Theorem enc_tuple_acc_length_bound_actual[local]:
   !ts vs hl tl hds tls.
     LENGTH (enc_tuple hl tl ts vs hds tls) <=
@@ -508,14 +387,6 @@ Proof
   drule_all vyper_to_abi_static_length_bound >> simp[]
 QED
 
-Theorem vyper_abi_size_bound_le_singleton_tuple[local]:
-  !tenv typ. vyper_abi_size_bound tenv typ <=
-              vyper_abi_size_bound tenv (TupleT [typ])
-Proof
-  simp[vyper_abi_size_bound_def] >> rpt gen_tac >>
-  Cases_on `vyper_is_dynamic tenv typ` >> simp[]
-QED
-
 Theorem enc_fixed_array_replicate_tuple_bound_static_premise[local]:
   !n t v elem_bound embedded.
     (LENGTH (enc t v) <= elem_bound /\
@@ -563,19 +434,6 @@ Definition default_to_abi_elem_bound_rel_def[local]:
      LENGTH (enc (vyper_to_abi_type tenv typ) (default_to_abi tv)) <=
        static_length (vyper_to_abi_type tenv typ))
 End
-
-Theorem default_to_abi_elem_embedded_size_bound[local]:
-  !tenv typ tv.
-    default_to_abi_elem_bound_rel tenv typ tv ==>
-    (if is_dynamic (vyper_to_abi_type tenv typ)
-     then 32 + LENGTH (enc (vyper_to_abi_type tenv typ) (default_to_abi tv))
-     else static_length (vyper_to_abi_type tenv typ)) <=
-    vyper_abi_embedded_size tenv typ
-Proof
-  rw[default_to_abi_elem_bound_rel_def] >>
-  drule_all vyper_to_abi_embedded_head_bound >>
-  Cases_on `is_dynamic (vyper_to_abi_type tenv typ)` >> gvs[] >> decide_tac
-QED
 
 Theorem default_to_abi_tuple_static_premise_from_LIST_REL[local]:
   !tenv ts tvs.
@@ -866,49 +724,8 @@ Proof
   metis_tac[default_to_abi_enc_length_bound_eval]
 QED
 
-Theorem default_to_abi_static_enc_length_bound[local]:
-  !tenv typ tv.
-    evaluate_type tenv typ = SOME tv /\ ~vyper_is_dynamic tenv typ ==>
-    LENGTH (enc (vyper_to_abi_type tenv typ) (default_to_abi tv)) <=
-    static_length (vyper_to_abi_type tenv typ)
-Proof
-  rpt strip_tac >>
-  drule_all default_to_abi_enc_length_bound >> strip_tac >>
-  drule_all vyper_to_abi_static_length_bound >> simp[]
-QED
 
 
-
-
-Theorem enc_string_length_bound[local]:
-  !bs n. LENGTH bs <= n ==>
-    LENGTH (enc String (BytesV bs)) <= ceil32 n + 32
-Proof
-  rpt strip_tac >>
-  simp[Once contractABITheory.enc_def, byteTheory.LENGTH_word_to_bytes] >>
-  `ceil32 (LENGTH bs) <= ceil32 n` by (irule ceil32_mono >> simp[]) >>
-  `LENGTH bs <= ceil32 (LENGTH bs)` by simp[] >>
-  decide_tac
-QED
-
-Theorem enc_dynamic_bytes_length_bound[local]:
-  !bs n. LENGTH bs <= n ==>
-    LENGTH (enc (Bytes NONE) (BytesV bs)) <= ceil32 n + 32
-Proof
-  rpt strip_tac >>
-  simp[Once contractABITheory.enc_def, byteTheory.LENGTH_word_to_bytes] >>
-  `ceil32 (LENGTH bs) <= ceil32 n` by (irule ceil32_mono >> simp[]) >>
-  `LENGTH bs <= ceil32 (LENGTH bs)` by simp[] >>
-  decide_tac
-QED
-
-Theorem enc_fixed_bytes_length_bound[local]:
-  !bs n. LENGTH bs = n /\ n <= 32 ==>
-    LENGTH (enc (Bytes (SOME n)) (BytesV bs)) <= 32
-Proof
-  rpt strip_tac >>
-  simp[Once contractABITheory.enc_def, LENGTH_TAKE_EQ]
-QED
 
 Theorem evaluate_type_BaseT_result[local]:
   evaluate_type tenv (BaseT bt) = SOME tv ==> tv = BaseTV bt

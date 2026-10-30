@@ -52,28 +52,12 @@ Proof
   simp[machine_well_typed_def]
 QED
 
-Theorem machine_well_typed_immutables:
-  machine_well_typed am ==>
-  EVERY (\(addr, imms). imms_well_typed imms) am.immutables
-Proof
-  simp[machine_well_typed_def]
-QED
-
 Theorem abstract_machine_from_state_well_typed:
   state_well_typed st /\ accounts_well_typed st.accounts ==>
   machine_well_typed (abstract_machine_from_state srcs exps layouts st)
 Proof
   simp[machine_well_typed_def, state_well_typed_def,
        abstract_machine_from_state_def]
-QED
-
-Theorem machine_well_typed_metadata_update:
-  machine_well_typed am ==>
-  machine_well_typed
-    (am with <| sources updated_by sf; exports updated_by ef;
-                layouts updated_by lf |>)
-Proof
-  simp[machine_well_typed_def]
 QED
 
 Theorem machine_well_typed_cons_immutables:
@@ -191,24 +175,6 @@ Theorem update_immutable_preserves_other_source:
   get_source_immutables src imms
 Proof
   simp[update_immutable_def, get_source_immutables_set_other]
-QED
-
-Theorem update_immutable_preserves_lookup:
-  (src' = src ==> key <> id) /\
-  FLOOKUP (get_source_immutables src imms) id = SOME x ==>
-  FLOOKUP (get_source_immutables src (update_immutable src' key tv v imms)) id = SOME x
-Proof
-  rw[update_immutable_def] >>
-  Cases_on `src' = src` >>
-  gvs[get_source_immutables_set_same, get_source_immutables_set_other,
-      finite_mapTheory.FLOOKUP_UPDATE]
-QED
-
-Theorem FLOOKUP_FUNION_left_none:
-  FLOOKUP f k = NONE /\ FLOOKUP g k = SOME x ==>
-  FLOOKUP (FUNION f g) k = SOME x
-Proof
-  simp[FLOOKUP_FUNION]
 QED
 
 Theorem initial_target_immutables_lookup:
@@ -550,20 +516,6 @@ Proof
   gvs[]
 QED
 
-Theorem constants_env_no_bare_global_lookup:
-  constants_do_not_clobber_bare_globals mods bare_globals /\
-  ALOOKUP mods src = SOME ts /\
-  constants_env cx am addr src ts FEMPTY = SOME cenv /\
-  FLOOKUP bare_globals (src,id) = SOME ty ==>
-  FLOOKUP cenv id = NONE
-Proof
-  rw[] >>
-  irule constants_env_no_bare_global_lookup_MEM >>
-  simp[] >>
-  metis_tac[alistTheory.ALOOKUP_MEM]
-QED
-
-
 Theorem is_bare_global_decl_cases[local]:
   is_bare_global_decl id ts ==>
   is_immutable_decl id ts \/
@@ -598,6 +550,8 @@ Proof
   strip_tac >>
   gvs[]
 QED
+
+
 Theorem merge_constants_preserves_lookup:
   (src = src_c ==> FLOOKUP cenv id = NONE) /\
   FLOOKUP
@@ -698,27 +652,6 @@ Proof
   goal_assum (drule_at Any) >>
   goal_assum (drule_at Any) >>
   simp[]
-QED
-
-Theorem evaluate_all_constants_preserves_bare_global_type:
-  constants_do_not_clobber_bare_globals mods env_base.bare_globals /\
-  env_context_consistent env_base cx /\
-  ALOOKUP cx.sources cx.txn.target = SOME mods /\
-  ALOOKUP mods src = SOME ts /\
-  FLOOKUP env_base.bare_globals (src,id) = SOME ty /\
-  evaluate_all_constants cx am cx.txn.target mods = SOME am_c /\
-  FLOOKUP
-    (get_source_immutables src
-      (case ALOOKUP am.immutables cx.txn.target of SOME m => m | NONE => []))
-    id = SOME (tv,v) /\
-  evaluate_type (get_tenv cx) ty = SOME tv ==>
-  FLOOKUP
-    (get_source_immutables src
-      (case ALOOKUP am_c.immutables cx.txn.target of SOME m => m | NONE => []))
-    id = SOME (tv,v)
-Proof
-  rw[] >>
-  metis_tac[evaluate_all_constants_preserves_bare_global_lookup_type]
 QED
 
 Theorem deployment_setup_immutables_ready:
@@ -851,35 +784,6 @@ Theorem initial_state_single_scope_well_typed_simple:
 Proof
   mp_tac (Q.INST [`orc` |-> `NONE`, `rqs` |-> `[]`]
     initial_state_single_scope_well_typed) >> simp[]
-QED
-
-Theorem env_context_consistent_empty_static_maps:
-  env.current_src = current_module cx /\
-  env.type_defs = get_tenv cx /\
-  env.fn_sigs = fn_sigs /\
-  env.bare_globals = FEMPTY /\
-  env.bare_global_assignable = FEMPTY /\
-  env.toplevel_vtypes = FEMPTY /\
-  env.flag_members = FEMPTY /\
-  fn_sigs_consistent fn_sigs cx /\
-  fn_sigs_live fn_sigs cx /\
-  fn_sigs_declared_complete fn_sigs cx /\
-  toplevel_vtypes_complete FEMPTY cx /\
-  bare_globals_complete FEMPTY cx /\
-  bare_global_assignable_complete FEMPTY cx /\
-  flag_members_complete FEMPTY cx ==>
-  env_context_consistent env cx
-Proof
-  simp[env_context_consistent_def]
-QED
-
-Theorem env_immutables_consistent_empty_static_maps:
-  env.bare_globals = FEMPTY /\
-  env.bare_global_assignable = FEMPTY /\
-  env.toplevel_vtypes = FEMPTY ==>
-  env_immutables_consistent env cx st
-Proof
-  simp[env_immutables_consistent_def]
 QED
 
 Theorem env_context_consistent_static_maps_function_side_condition:

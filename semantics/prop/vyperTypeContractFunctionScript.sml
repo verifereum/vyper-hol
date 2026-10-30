@@ -584,16 +584,6 @@ Proof
   simp[]
 QED
 
-Theorem fn_sigs_complete_deploy_implies_nondeploy[local]:
-  fn_sigs_complete fs (cx with in_deploy := T) ==>
-  fn_sigs_complete fs (cx with in_deploy := F)
-Proof
-  rw[fn_sigs_complete_def] >>
-  first_x_assum irule >>
-  gvs[lookup_callable_function_def, get_module_code_def, AllCaseEqs()] >>
-  qexistsl [`body`, `fm`, `nr`, `ts`] >> simp[]
-QED
-
 Theorem fn_sigs_declared_complete_deploy_implies_nondeploy[local]:
   fn_sigs_declared_complete fs (cx with in_deploy := T) ==>
   fn_sigs_declared_complete fs (cx with in_deploy := F)
@@ -1111,4 +1101,3 @@ Proof
   rw[immutables_ready_def, get_tenv_def, get_module_code_def,
      initial_evaluation_context_def] >> metis_tac[]
 QED
-

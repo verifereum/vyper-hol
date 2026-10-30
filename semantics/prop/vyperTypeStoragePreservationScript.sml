@@ -108,13 +108,6 @@ Proof
     contract_storage_payload_frame |> Q.INST [`other` |-> `empty_state`]]
 QED
 
-Theorem oracle_storage_ok_frame:
-  oracle_storage_ok cx st /\ st'.outcomes = st.outcomes ==>
-  oracle_storage_ok cx st'
-Proof
-  metis_tac[oracle_storage_ok_outcomes]
-QED
-
 (* Generic storage projection transport, independent of residual fields. *)
 Theorem contract_storage_well_formed_backends_frame:
   contract_storage_well_formed cx st /\
@@ -123,30 +116,6 @@ Theorem contract_storage_well_formed_backends_frame:
 Proof
   rpt strip_tac >> irule contract_storage_well_formed_storage_frame >>
   goal_assum (drule_at Any) >> Cases >> simp[get_storage_def]
-QED
-
-(* Scope updates are transparent to both protected storage backends. *)
-Theorem set_scopes_storage_frame:
-  set_scopes scopes st = (res,st') ==>
-  !b. get_storage cx st' b = get_storage cx st b
-Proof
-  rw[set_scopes_def, return_def] >>
-  simp[get_storage_scopes]
-QED
-
-(* Immutable-map updates change neither protected storage backend. *)
-Theorem set_immutable_storage_frame:
-  set_immutable cx src_id n tv v st = (res,st') ==>
-  !b. get_storage cx st' b = get_storage cx st b
-Proof
-  rpt strip_tac >>
-  qpat_x_assum `set_immutable _ _ _ _ _ _ = _` mp_tac >>
-  simp[set_immutable_def, bind_def, get_address_immutables_def,
-       lift_option_type_def, set_address_immutables_def, return_def, raise_def,
-       AllCaseEqs()] >>
-  Cases_on `ALOOKUP st.immutables cx.txn.target` >>
-  gvs[return_def, raise_def] >>
-  rpt strip_tac >> gvs[] >> Cases_on `b` >> simp[get_storage_def]
 QED
 
 (* A typed zero-width encoding cannot change either storage backend. *)
@@ -172,8 +141,6 @@ Proof
   simp[vyperStorageBackendTheory.get_storage_after_set_other]
 QED
 
-(* Whole-value TopLevelVar writes reach exactly the existing top-level update
-   endpoint; all pre-write errors have the same second projection. *)
 Theorem set_global_preserves_contract_storage_well_formed:
   contract_storage_well_formed cx st /\
   storage_layout_safe cx /\
@@ -189,62 +156,6 @@ Proof
   gvs[] >>
   irule vyperStorageWritePreservationTheory.update_toplevel_name_preserves_contract_storage_well_formed >>
   simp[]
-QED
-
-Theorem storage_var_info_lt_var_in_storage:
-  storage_var_info cx mid n = SOME (b,off,tv) /\
-  well_formed_type_value tv /\
-  off < dimword(:256) ==>
-  var_in_storage cx mid n
-Proof
-  simp[vyperLookupStorageTheory.storage_var_info_def,
-       vyperLookupStorageTheory.var_in_storage_def, AllCaseEqs()] >>
-  rpt strip_tac >> gvs[]
-QED
-Theorem set_global_typed_result_success:
-  get_module_code cx src = SOME code /\
-  find_var_decl_by_name n code = SOME (StorageVarDecl b typ,id) /\
-  lookup_var_slot_from_layout cx b src id = SOME off /\
-  evaluate_type (get_tenv cx) typ = SOME tv /\
-  value_has_type tv v ==>
-  ?st'. set_global cx src n v st = (INL (),st')
-Proof
-  rpt strip_tac >>
-  drule (CONJUNCT1 vyperTypingTheory.value_has_type_equiv) >> strip_tac >>
-  Cases_on `encode_value tv v` >> gvs[] >>
-  qexists `set_storage cx st b
-    (apply_writes (n2w off) x (get_storage cx st b))` >>
-  simp[Once set_global_def, bind_def, lift_option_type_def, return_def, raise_def,
-       vyperStorageBackendTheory.write_storage_slot_eq, AllCaseEqs()]
-QED
-
-
-Theorem write_storage_slot_error_state[local]:
-  write_storage_slot cx b slot tv v st = (INR e,st') ==> st' = st
-Proof
-  simp[vyperStorageBackendTheory.write_storage_slot_eq, AllCaseEqs()]
-QED
-
-Theorem split_hashmap_subscripts_consumed_prefix[local]:
-  !vt subs final_type kts remaining.
-    split_hashmap_subscripts vt subs = SOME (final_type,kts,remaining) ==>
-    split_hashmap_subscripts vt
-      (TAKE (LENGTH subs - LENGTH remaining) subs) =
-      SOME (final_type,kts,[])
-Proof
-  Induct_on `vt`
-  >- simp[split_hashmap_subscripts_def] >>
-  Cases_on `subs` >> simp[split_hashmap_subscripts_def] >>
-  rpt gen_tac >>
-  Cases_on `split_hashmap_subscripts vt t` >> simp[] >>
-  PairCases_on `x` >> simp[] >> strip_tac >> gvs[] >>
-  drule split_hashmap_subscripts_some_imp >> strip_tac >>
-  first_x_assum drule >> strip_tac >>
-  `LENGTH t - LENGTH remaining = LENGTH x1` by decide_tac >>
-  `SUC (LENGTH t) - (LENGTH remaining + 1) = LENGTH x1` by decide_tac >>
-  `TAKE (SUC (LENGTH t) - (LENGTH remaining + 1)) t =
-   TAKE (LENGTH x1) t` by simp[] >>
-  gvs[split_hashmap_subscripts_def]
 QED
 
 Theorem runtime_storage_consistent_declared_region_read_typed:
@@ -274,17 +185,6 @@ Proof
   metis_tac[current_hashmap_leaf_read_typed]
 QED
 
-Theorem runtime_storage_consistent_declared_leaf_read_hashmap_typed:
-  runtime_storage_consistent env cx st /\
-  declared_storage_region cx mid n [ValueSubscript kv] =
-    SOME (b,hashmap_slot_for root_slot kt kv,tv) /\
-  evaluate_type (get_tenv cx) typ = SOME tv ==>
-  ?v. read_hashmap cx st (HashMapRef b root_slot kt (Type typ)) kv = SOME v /\
-      value_has_type tv v
-Proof
-  simp[runtime_storage_consistent_def] >>
-  metis_tac[current_declared_leaf_read_hashmap_typed]
-QED
 
 
 Theorem zero_read_slots_in_range_mutual[local]:
@@ -398,30 +298,6 @@ Proof
   rw[run_raw_call_def] >>
   metis_tac[protected_storage_calls_preserve_run_delegate_call,
             protected_storage_calls_preserve_run_ext_call]
-QED
-
-Theorem protected_storage_calls_preserve_success:
-  protected_storage_calls_preserve cx /\
-  run_ext_call cx.txn.target callee calldata value_opt gas
-    st.accounts st.tStorage txp =
-    SOME (T,returndata,accounts',tStorage',emitted_logs, deletions) /\
-  contract_storage_well_formed cx st ==>
-  contract_storage_well_formed cx
-    (st with <| accounts := accounts'; tStorage := tStorage' |>)
-Proof
-  metis_tac[protected_storage_calls_preserve_run_ext_call]
-QED
-
-Theorem protected_storage_calls_preserve_revert:
-  protected_storage_calls_preserve cx /\
-  run_ext_call cx.txn.target callee calldata value_opt gas
-    st.accounts st.tStorage txp =
-    SOME (F,returndata,accounts',tStorage',emitted_logs, deletions) /\
-  contract_storage_well_formed cx st ==>
-  contract_storage_well_formed cx
-    (st with <| accounts := accounts'; tStorage := tStorage' |>)
-Proof
-  metis_tac[protected_storage_calls_preserve_run_ext_call]
 QED
 
 (* ===== CREATE postulate =====

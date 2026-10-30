@@ -16,10 +16,94 @@ Ancestors
   vyperEncodeDecode vyperArith vyperTypeSystem vyperTypeInvariants vyperTypeValues
   vyperTypeEnv vyperTypeBuiltins vyperTypeExprSoundness
   vyperTypeEvalSoundness vyperTypeStatePreservation vyperTypeStmtSoundness
-  vyperTypeCallSoundness vyperTypeInitialState vyperTypeContractSoundness
+  vyperTypeInitialState vyperTypeContractSoundness
   vyperTypeStoragePreservation vyperTypeEvalStoragePreservation
 Libs
   wordsLib
+
+(* ===== Typed-expression evaluation soundness ===== *)
+
+Theorem typed_expr_evaluation_sound:
+  well_typed_expr env e /\ env_consistent env cx st /\ state_well_typed st /\
+  context_well_typed cx /\ accounts_well_typed st.accounts /\ source_supply st /\ functions_well_typed cx /\
+  call_evaluation_safe cx (int_calls_expr e) /\
+  eval_expr cx e st = (res,st') ==>
+  state_well_typed st' /\ env_consistent env cx st' /\ accounts_well_typed st'.accounts /\
+  no_type_error_result res /\
+  (case res of INL pv => eval_result_typed (env,cx,st') pv (Type (expr_type e))
+   | INR _ => T)
+Proof
+  strip_tac >>
+  qspecl_then [`cx`,`e`] strip_assume_tac (cj 5 eval_scc_type_sound_mutual) >>
+  qpat_x_assum `!env st res st'. _ ==> (_ /\ _)` drule_all >>
+  simp[]
+QED
+
+Theorem internal_call_no_type_error:
+  well_typed_expr env (Call ty (IntCall (src,fn)) args drv) /\
+  env_consistent env cx st /\ state_well_typed st /\
+  context_well_typed cx /\ accounts_well_typed st.accounts /\ source_supply st /\ functions_well_typed cx /\
+  call_evaluation_safe cx (int_calls_expr (Call ty (IntCall (src,fn)) args drv)) ==>
+  no_type_error_eval (eval_expr cx (Call ty (IntCall (src,fn)) args drv) st)
+Proof
+  strip_tac >>
+  Cases_on `eval_expr cx (Call ty (IntCall (src,fn)) args drv) st` >>
+  simp[no_type_error_eval_def, no_type_error_result_def] >>
+  drule_all typed_expr_evaluation_sound >>
+  simp[no_type_error_result_def]
+QED
+
+Theorem internal_call_success_value[local]:
+  eval_expr cx (Call ty (IntCall (src,fn)) args drv) st = (INL pv,st') ==>
+  ?v. pv = Value v
+Proof
+  simp[Once evaluate_def, bind_def, ignore_bind_def, return_def,
+       raise_def, AllCaseEqs()] >> rpt strip_tac >> gvs[]
+QED
+
+Theorem internal_call_type_preservation:
+  well_typed_expr env (Call ty (IntCall (src,fn)) args drv) /\
+  env_consistent env cx st /\ state_well_typed st /\
+  context_well_typed cx /\ accounts_well_typed st.accounts /\ source_supply st /\ functions_well_typed cx /\
+  call_evaluation_safe cx (int_calls_expr (Call ty (IntCall (src,fn)) args drv)) /\
+  eval_expr cx (Call ty (IntCall (src,fn)) args drv) st = (INL tvl, st') ==>
+  state_well_typed st' /\ expr_runtime_typed env (Call ty (IntCall (src,fn)) args drv) tvl
+Proof
+  strip_tac >>
+  drule_all typed_expr_evaluation_sound >> strip_tac >> gvs[] >>
+  drule internal_call_success_value >> strip_tac >>
+  gvs[eval_result_typed_def, expr_runtime_typed_def,
+      value_result_typed_def]
+QED
+
+Theorem external_call_no_type_error:
+  well_typed_expr env (Call ty (ExtCall stat skip_check fsig opts) args drv) /\
+  env_consistent env cx st /\ state_well_typed st /\
+  context_well_typed cx /\ accounts_well_typed st.accounts /\ source_supply st /\ functions_well_typed cx /\
+  call_evaluation_safe cx (int_calls_expr (Call ty (ExtCall stat skip_check fsig opts) args drv)) ==>
+  no_type_error_eval (eval_expr cx (Call ty (ExtCall stat skip_check fsig opts) args drv) st)
+Proof
+  strip_tac >>
+  Cases_on `eval_expr cx (Call ty (ExtCall stat skip_check fsig opts) args drv) st` >>
+  simp[no_type_error_eval_def, no_type_error_result_def] >>
+  drule_all typed_expr_evaluation_sound >>
+  simp[no_type_error_result_def]
+QED
+
+Theorem special_call_no_type_error:
+  well_typed_expr env (Call ty target args drv) /\
+  target <> IntCall (src,fn) /\ (!stat skip_check fsig opts. target <> ExtCall stat skip_check fsig opts) /\
+  env_consistent env cx st /\ state_well_typed st /\
+  context_well_typed cx /\ accounts_well_typed st.accounts /\ source_supply st /\ functions_well_typed cx /\
+  call_evaluation_safe cx (int_calls_expr (Call ty target args drv)) ==>
+  no_type_error_eval (eval_expr cx (Call ty target args drv) st)
+Proof
+  strip_tac >>
+  Cases_on `eval_expr cx (Call ty target args drv) st` >>
+  simp[no_type_error_eval_def, no_type_error_result_def] >>
+  drule_all typed_expr_evaluation_sound >>
+  simp[no_type_error_result_def]
+QED
 
 (* ===== Main no-TypeError theorem for already-typed statement lists ===== *)
 
@@ -84,7 +168,7 @@ QED
 
 Theorem typed_expr_read_no_type_error:
   well_typed_expr env e /\ env_consistent env cx st /\ state_well_typed st /\
-  context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
+  context_well_typed cx /\ accounts_well_typed st.accounts /\ source_supply st /\ functions_well_typed cx /\
   call_evaluation_safe cx (int_calls_expr e) ==>
   no_type_error_eval ((do result <- eval_expr cx e; read_result cx result od) st)
 Proof
@@ -96,7 +180,7 @@ QED
 
 Theorem typed_expr_read_success_preserves_type:
   well_typed_expr env e /\ env_consistent env cx st /\ state_well_typed st /\
-  context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
+  context_well_typed cx /\ accounts_well_typed st.accounts /\ source_supply st /\ functions_well_typed cx /\
   call_evaluation_safe cx (int_calls_expr e) /\
   (do result <- eval_expr cx e; read_result cx result od) st = (INL v, st') ==>
   state_well_typed st' /\ value_runtime_typed env (expr_type e) v
@@ -234,7 +318,7 @@ val () = List.app
          List.all (fn oracle => oracle = "DISK_THM") oracles then ()
       else raise Fail ("public soundness proof is not closed: " ^ name)
     end)
-  (DB.thms "vyperTypeSoundness" @ DB.thms "vyperTypeCallSoundness" @
+  (DB.thms "vyperTypeSoundness" @
    [("eval_scc_type_sound_mutual",eval_scc_type_sound_mutual),
     ("eval_scc_storage_preservation_mutual",eval_scc_storage_preservation_mutual),
     ("eval_expr_read_type_sound",eval_expr_read_type_sound)]);
