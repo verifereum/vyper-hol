@@ -15,8 +15,14 @@
  *   compile_expr_grows, compile_binop_grows — compile_expr, lower_value
  *                              and compile_binop only append (cs_extends)
  *                              and grow the counters
+ *   compile_expr_ci_mono     — the same as ci_mono
  *
  * Helper:
+ *   ci_mono_refl, ci_mono_bind, ci_mono_ignore_bind, ci_mono_comp_return,
+ *   ci_mono_compile_* (copy_memory, word_copy_loop, store_bytestring,
+ *   keccak256_key, mapping_subscript, array_subscript, bytelike_literal),
+ *   ci_mono_typed_memory_family — ci_mono of the monad and of the helpers
+ *                              compile_expr calls, for stmtLoweringMono
  *   state_rel_jump_to, state_rel_push_scope, state_rel_pop_scope,
  *   state_rel_frame, stmt_state_rel_jump_to, stmt_state_rel_inst_idx,
  *   stmt_state_rel_push_scope, stmt_state_rel_pop_scope,
@@ -1112,7 +1118,7 @@ Definition ci_mono_def:
     st.cs_next_id ≤ st'.cs_next_id
 End
 
-Theorem ci_mono_refl[local]:
+Theorem ci_mono_refl:
   ci_mono st st
 Proof
   simp[ci_mono_def, cs_extends_refl]
@@ -1126,7 +1132,7 @@ Proof
 QED
 
 (* ci_mono composes through monad_bind (= comp_bind) *)
-Theorem ci_mono_bind[local]:
+Theorem ci_mono_bind:
   ∀ (mf : compile_state -> 'a # compile_state)
     (mg : 'a -> compile_state -> 'b # compile_state) s0.
     (∀ sa. ci_mono sa (SND (mf sa))) ∧
@@ -1143,7 +1149,7 @@ Proof
 QED
 
 (* ci_mono composes through comp_ignore_bind *)
-Theorem ci_mono_ignore_bind[local]:
+Theorem ci_mono_ignore_bind:
   ∀ (mf : compile_state -> 'a # compile_state)
     (mg : compile_state -> 'b # compile_state) s0.
     (∀ sa. ci_mono sa (SND (mf sa))) ∧
@@ -1169,7 +1175,7 @@ Proof
 QED
 
 (* ci_mono for primitives *)
-Theorem ci_mono_comp_return[local]:
+Theorem ci_mono_comp_return:
   ∀ x sa. ci_mono sa (SND (comp_return x sa))
 Proof
   simp[comp_return_def, ci_mono_refl]
@@ -1263,7 +1269,7 @@ val ci_mono_emit_rws =
    ci_mono_compile_ptr_load, ci_mono_compile_ptr_store];
 
 (* ci_mono for compile_word_copy_loop *)
-Theorem ci_mono_compile_word_copy_loop[local]:
+Theorem ci_mono_compile_word_copy_loop:
   ∀ src dst wc ll sl ic sa.
     ci_mono sa (SND (compile_word_copy_loop src dst wc ll sl ic sa))
 Proof
@@ -1365,7 +1371,7 @@ QED
  * Proved by unfolding definitions and composing ci_mono lemmas.
  *)
 
-Theorem ci_mono_compile_store_bytestring[local]:
+Theorem ci_mono_compile_store_bytestring:
   ∀ val_op dst_op sa.
     ci_mono sa (SND (compile_store_bytestring val_op dst_op sa))
 Proof
@@ -1377,7 +1383,7 @@ Proof
      simp[ci_mono_emit_op, ci_mono_emit_void])))
 QED
 
-Theorem ci_mono_compile_copy_memory[local]:
+Theorem ci_mono_compile_copy_memory:
   ∀ dst src sz sa. ci_mono sa (SND (compile_copy_memory dst src sz sa))
 Proof
   rpt gen_tac >> Cases_on `sz` >>
@@ -1400,7 +1406,7 @@ Proof
   simp[ci_mono_comp_return, ci_mono_emit_op]
 QED
 
-Theorem ci_mono_typed_memory_family[local]:
+Theorem ci_mono_typed_memory_family:
   (∀cenv dst dst_ty src src_ty sa.
     ci_mono sa (SND (compile_store_memory_typed cenv dst dst_ty src src_ty sa))) ∧
   (∀cenv dst src dst_tys src_tys dst_off src_off sa.
@@ -1623,14 +1629,14 @@ Proof
   >> rpt strip_tac >> simp[ci_mono_comp_return]
 QED
 
-Theorem ci_mono_compile_keccak256_key[local]:
+Theorem ci_mono_compile_keccak256_key:
   ∀ key_op is_bytes32 sa.
     ci_mono sa (SND (compile_keccak256_key key_op is_bytes32 sa))
 Proof
   rpt gen_tac >> simp[compile_keccak256_key_def, LET_THM] >> IF_CASES_TAC >> rpt gen_tac >> rpt (irule ci_mono_ignore_bind ORELSE irule ci_mono_bind) >> simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_compile_alloc_buffer, ci_mono_comp_return] >> rpt gen_tac >> rpt (irule ci_mono_ignore_bind ORELSE irule ci_mono_bind) >> simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_compile_alloc_buffer, ci_mono_comp_return]
 QED
 
-Theorem ci_mono_compile_mapping_subscript[local]:
+Theorem ci_mono_compile_mapping_subscript:
   ∀ base_slot key_op sa.
     ci_mono sa (SND (compile_mapping_subscript base_slot key_op sa))
 Proof
@@ -1649,7 +1655,7 @@ Proof
   rpt gen_tac >> Cases_on `offset` >> simp[compile_tuple_subscript_def, ci_mono_emit_op, ci_mono_comp_return]
 QED
 
-Theorem ci_mono_compile_array_subscript[local]:
+Theorem ci_mono_compile_array_subscript:
   ∀ base_op idx_op is_dyn sc ws es is_signed load_opc sa.
     ci_mono sa (SND (compile_array_subscript base_op idx_op is_dyn sc ws es is_signed load_opc sa))
 Proof
@@ -1926,7 +1932,7 @@ Proof
   rpt (irule ci_mono_bind ORELSE irule ci_mono_ignore_bind ORELSE IF_CASES_TAC ORELSE irule ci_mono_wrap_truncate ORELSE irule ci_mono_compile_select ORELSE irule ci_mono_emit_op ORELSE irule ci_mono_emit_inst ORELSE irule ci_mono_emit_void ORELSE irule ci_mono_comp_return ORELSE (conj_tac >> all_tac) ORELSE gen_tac ORELSE strip_tac ORELSE BETA_TAC)
 QED
 
-Theorem ci_mono_compile_bytelike_literal[local]:
+Theorem ci_mono_compile_bytelike_literal:
   ∀ bs max_len sa. ci_mono sa (SND (compile_bytelike_literal bs max_len sa))
 Proof
   rpt gen_tac >>
