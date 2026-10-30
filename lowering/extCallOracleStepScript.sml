@@ -77,10 +77,11 @@ QED
 (* local_ptrs_rel reads none of the fields an oracle call changes but
    memory. *)
 Theorem local_ptrs_rel_oracle_fields:
-  !func cenv sc s os rqs acc ts lg rd.
+  !func cenv sc s os rqs acc ts lg pending rd.
     local_ptrs_rel func cenv sc
       (s with <| vs_outcomes := os; vs_requests := rqs; vs_accounts := acc;
-                 vs_transient := ts; vs_logs := lg; vs_returndata := rd |>) <=>
+                 vs_transient := ts; vs_logs := lg;
+                 vs_toDelete := pending; vs_returndata := rd |>) <=>
     local_ptrs_rel func cenv sc s
 Proof
   simp[local_ptrs_rel_def, local_region_def, local_backed_def, lookup_var_def]
@@ -105,7 +106,7 @@ Theorem state_rel_adopt_consume[local]:
 Proof
   rpt strip_tac >>
   gvs[state_rel_def, adopt_call_outcome_equation, adopt_outcome_def,
-      logs_rel_eq] >>
+      adopt_outcome_deletions_def, logs_rel_eq] >>
   Cases_on `outcome.co_success /\ ~rq.cr_static` >>
   gvs[storage_rel_def, transient_rel_def, accounts_rel_def,
       immutables_rel_def, call_ctx_rel_def, contract_storage_def,
@@ -134,6 +135,7 @@ Theorem exec_ext_call_oracle_step:
                         vs_accounts := s'.vs_accounts;
                         vs_transient := s'.vs_transient;
                         vs_logs := s'.vs_logs;
+                        vs_toDelete := s'.vs_toDelete;
                         vs_returndata := s'.vs_returndata;
                         vs_memory := s'.vs_memory |> /\
          s'.vs_memory =
@@ -194,6 +196,7 @@ Theorem send_call_oracle_step:
                         vs_accounts := s'.vs_accounts;
                         vs_transient := s'.vs_transient;
                         vs_logs := s'.vs_logs;
+                        vs_toDelete := s'.vs_toDelete;
                         vs_returndata := s'.vs_returndata |> /\
          ((res = INL (Value NoneV) /\
            step_inst_base inst s = OK (update_var out 1w s') /\
@@ -229,6 +232,7 @@ Proof
                       vs_accounts := s'.vs_accounts;
                       vs_transient := s'.vs_transient;
                       vs_logs := s'.vs_logs;
+                      vs_toDelete := s'.vs_toDelete;
                       vs_returndata := s'.vs_returndata |>` by
         (qpat_x_assum `s'.vs_memory = _` mp_tac >>
          qpat_x_assum `s' = _` mp_tac >>

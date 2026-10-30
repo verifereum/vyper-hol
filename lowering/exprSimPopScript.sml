@@ -547,6 +547,7 @@ Proof
   `u.vs_accounts = s0.vs_accounts /\ u.vs_transient = s0.vs_transient /\
    u.vs_call_ctx = s0.vs_call_ctx /\ u.vs_tx_ctx = s0.vs_tx_ctx /\
    u.vs_block_ctx = s0.vs_block_ctx /\ u.vs_logs = s0.vs_logs /\
+   u.vs_toDelete = s0.vs_toDelete /\
    u.vs_outcomes = s0.vs_outcomes /\ u.vs_requests = s0.vs_requests /\
    u.vs_immutables = s0.vs_immutables /\
    u.vs_data_section = s0.vs_data_section /\

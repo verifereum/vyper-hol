@@ -481,15 +481,16 @@ Theorem state_rel_frame:
     s'.vs_call_ctx = s.vs_call_ctx /\ s'.vs_tx_ctx = s.vs_tx_ctx /\
     s'.vs_block_ctx = s.vs_block_ctx /\ s'.vs_logs = s.vs_logs /\
     s'.vs_outcomes = s.vs_outcomes /\ s'.vs_requests = s.vs_requests /\
+    s'.vs_toDelete = s.vs_toDelete /\
     s'.vs_immutables = s.vs_immutables /\
     s'.vs_data_section = s.vs_data_section ==>
     state_rel func cenv cx es' s'
 Proof
   rpt strip_tac >>
   qpat_x_assum `es' = _` SUBST1_TAC >>
-  fs[state_rel_def, storage_rel_def, transient_rel_def, accounts_rel_def,
-     immutables_rel_def, logs_rel_def, call_ctx_rel_def, contract_storage_def,
-     contract_transient_def]
+  gvs[state_rel_def, storage_rel_def, transient_rel_def, accounts_rel_def,
+      immutables_rel_def, logs_rel_def, call_ctx_rel_def, contract_storage_def,
+      contract_transient_def]
 QED
 
 Theorem stmt_state_rel_jump_to:

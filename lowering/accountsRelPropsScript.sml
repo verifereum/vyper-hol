@@ -1,12 +1,10 @@
 (*
  * Properties of accounts_rel (#665): the state_rel component that relates
- * every address's accounts and transient storage, with no source pending
- * deletions.
+ * every address's raw accounts and transient storage.
  *
  * TOP-LEVEL:
- *   state_rel_accounts      — state_rel gives the accounts and transient
- *                             storage the success case of the external
- *                             result relation compares
+ *   state_rel_accounts      — state_rel gives equal raw accounts and transient
+ *                             storage before outer deletion finalization
  *   accounts_rel_set_storage, accounts_rel_set_transient — a write of the
  *                             running contract's storage or transient
  *                             storage on both sides keeps accounts_rel
@@ -15,8 +13,7 @@
  *   accounts_rel_take_call_outcome, accounts_rel_adopt_call_outcome — the
  *                             call oracle keeps accounts_rel: taking an
  *                             outcome changes neither side's accounts, and
- *                             both sides adopt it with adopt_outcome,
- *                             provided any adopted deletion snapshot is empty
+ *                             both sides adopt it with adopt_outcome
  *   accounts_rel_call_request — the oracle requests of the two sides carry
  *                             the same accounts and transient storage
  *
@@ -24,8 +21,7 @@
  *   accounts_rel_storage_transient — storage_rel and transient_rel are
  *                             accounts_rel's case for the running contract
  *   accounts_rel_frame, accounts_rel_updates — accounts_rel reads only
- *                             the accounts, transient storage and pending
- *                             deletions
+ *                             the accounts and transient storage
  *)
 
 Theory accountsRelProps
@@ -38,7 +34,7 @@ Ancestors
 Theorem state_rel_accounts:
   !func cenv cx es s.
     state_rel func cenv cx es s ==>
-    s.vs_accounts = process_deletions es.pending_deletions es.accounts /\
+    s.vs_accounts = es.accounts /\
     s.vs_transient = es.tStorage
 Proof
   rw[state_rel_def, accounts_rel_def, process_deletions_def]
@@ -56,9 +52,7 @@ QED
 
 (* ===== Frames ===== *)
 
-(* accounts_rel reads only the accounts, transient storage and pending
-   deletions of the source and the accounts and transient storage of
-   Venom. *)
+(* accounts_rel reads only the accounts and transient storage of both sides. *)
 Theorem accounts_rel_frame:
   !es es' s s'.
     es'.accounts = es.accounts /\ es'.tStorage = es.tStorage /\
@@ -151,17 +145,11 @@ Proof
   pop_assum SUBST1_TAC >> fs[accounts_rel_def]
 QED
 
-(* Venom adopts an outcome with adopt_outcome on its accounts, transient
-   storage and logs (consume_call_outcome), as the source does.
-   accounts_rel requires no source pending deletions: a successful, non-static,
-   non-computed outcome must therefore carry an empty deletion snapshot.
-   Computed precompiles, static calls and failures retain the already-empty
-   source queue, so their outcome snapshots are unrestricted. *)
+(* Both sides adopt raw accounts and transient storage. Pending deletion
+   snapshots are related separately by state_rel until outer finalization. *)
 Theorem accounts_rel_adopt_call_outcome:
   !rq outcome es es' s s' logs.
     accounts_rel es s /\
-    (~computed_precompile rq /\ outcome.co_success /\ ~rq.cr_static ==>
-       outcome.co_toDelete = []) /\
     adopt_call_outcome rq outcome es = (INL (), es') /\
     s'.vs_accounts =
       FST (adopt_outcome rq outcome (s.vs_accounts, s.vs_transient, logs)) /\

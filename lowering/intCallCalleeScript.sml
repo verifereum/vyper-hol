@@ -1593,6 +1593,7 @@ Proof
    s.vs_call_ctx = caller.vs_call_ctx /\ s.vs_tx_ctx = caller.vs_tx_ctx /\
    s.vs_block_ctx = caller.vs_block_ctx /\ s.vs_logs = caller.vs_logs /\
    s.vs_outcomes = caller.vs_outcomes /\ s.vs_requests = caller.vs_requests /\
+   s.vs_toDelete = caller.vs_toDelete /\
    s.vs_immutables = caller.vs_immutables /\ s.vs_data_section = caller.vs_data_section` by
     (fs[mat_frame_def, setup_callee_def, AllCaseEqs()] >>
      qpat_x_assum `s = _` SUBST1_TAC >> gvs[]) >>
