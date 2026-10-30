@@ -17,7 +17,7 @@ Ancestors
   vyperTypeCallGraphSoundness vyperTypeCallStackSoundness
   vyperTypeContractStaticMaps vyperTypeContractContext
   vyperTypeContractFunction vyperTypeContractGetter vyperTypeEntryReadiness
-  vyperTypeStatePreservation vyperTypeConstantFold
+  vyperTypeStatePreservation vyperTypeConstantFold vyperTypeConstantCells
 Libs
   wordsLib
 
@@ -41,38 +41,6 @@ End
 
 (* ===== Checked constant initializers ===== *)
 
-Theorem constant_expr_pure:
-  !mods e. constant_expr mods e ==> pure_expr e
-Proof
-  ho_match_mp_tac constant_expr_ind >>
-  rw[constant_expr_def, pure_expr_def] >>
-  gvs[listTheory.EVERY_MEM, listTheory.MEM_MAP, EXISTS_PROD] >>
-  metis_tac[]
-QED
-
-Theorem checked_constant_initializer_pure:
-  check_contract F layouts addr mods = SOME art /\
-  ALOOKUP mods src = SOME tls /\
-  MEM (VariableDecl vis (Constant e) id ty init) tls ==>
-  pure_expr e
-Proof
-  strip_tac >>
-  drule_all check_contract_toplevel_decl_MEM >>
-  simp[check_toplevel_decl_def] >>
-  metis_tac[constant_expr_pure]
-QED
-
-Theorem checked_constant_initializer_eval_pure:
-  check_contract F layouts addr mods = SOME art /\
-  ALOOKUP mods src = SOME tls /\
-  MEM (VariableDecl vis (Constant e) id ty init) tls /\
-  eval_expr cx e st = (INL v,st') ==>
-  eval_pure_expr cx st e = SOME v
-Proof
-  metis_tac[checked_constant_initializer_pure,
-            eval_expr_to_eval_pure_expr_some]
-QED
-
 Theorem call_tx_well_typed_empty_zero_witness:
   ?tx. tx.args = [] /\ tx.value = 0 /\ call_tx_well_typed tx
 Proof
@@ -88,64 +56,41 @@ Proof
      initial_evaluation_context_def]
 QED
 
-Theorem call_tx_well_typed_initial_context_stk[local]:
-  call_tx_well_typed tx ==>
-  context_well_typed
-    ((initial_evaluation_context sources layouts tx src) with stk := [(src,fn)])
-Proof
-  rw[call_tx_well_typed_def, context_well_typed_def,
-     initial_evaluation_context_def]
-QED
-
-Theorem call_external_args_defaults_bind_typed[local]:
-  evaluate_defaults cx am (DROP (LENGTH dflts + LENGTH vals - LENGTH args) dflts) = SOME dflt_vs /\
-  bind_arguments (type_env_all_modules all_mods) args (vals ++ dflt_vs) = SOME scope /\
-  LIST_REL
-    (\v arg. ?tv. evaluate_type (type_env_all_modules all_mods) (SND arg) = SOME tv /\
-                   value_has_type tv v)
-    (vals ++ dflt_vs) args ==>
-  args_values_typed (type_env_all_modules all_mods) args (vals ++ dflt_vs)
-Proof
-  rw[args_values_typed_def]
-  >- (imp_res_tac LIST_REL_LENGTH >> gvs[LENGTH_APPEND] >> decide_tac) >>
-  imp_res_tac LIST_REL_LENGTH >>
-  qpat_x_assum `LIST_REL _ _ _` mp_tac >>
-  simp[listTheory.LIST_REL_EL_EQN] >>
-  strip_tac >>
-  first_x_assum drule >>
-  simp[]
-QED
-
+(* The exports of tx.target name only functions of allocated modules
+   (exports_ok); check_contract checks only the live functions. *)
 Definition checked_contract_runtime_ready_def:
   checked_contract_runtime_ready art mods am tx <=>
     ALOOKUP am.sources tx.target = SOME mods /\
+    exports_ok am.layouts tx.target mods
+      (case ALOOKUP am.exports tx.target of NONE => [] | SOME exps => exps) /\
     immutables_ready art.cta_bare_globals art.cta_toplevel_vtypes
       (initial_evaluation_context am.sources am.layouts tx NONE)
       am.immutables
 End
 
-Theorem checked_contract_initial_context_functions_follow_call_graph[local]:
+(* The module call_external selects is allocated. *)
+Theorem checked_contract_runtime_ready_module_allocated:
   check_contract F am.layouts tx.target mods = SOME art /\
-  ALOOKUP am.sources tx.target = SOME mods ==>
-  functions_follow_call_graph (contract_call_edges mods)
-    (initial_evaluation_context am.sources am.layouts tx src)
+  checked_contract_runtime_ready art mods am tx /\
+  ALOOKUP mods (find_function_module am tx.target fn) = SOME ts ==>
+  module_allocated am.layouts tx.target (find_function_module am tx.target fn) ts
 Proof
-  rw[functions_follow_call_graph_def, initial_evaluation_context_def] >>
-  gvs[get_module_code_def] >>
-  drule ALOOKUP_MEM >>
-  disch_then assume_tac >>
-  drule lookup_callable_function_SOME_decompose >>
-  strip_tac
-  >- simp[function_int_calls_def, int_calls_expr_def, int_calls_stmt_def] >>
-  rw[EVERY_MEM, call_edge_rel_def] >>
-  irule contract_call_edges_function >>
-  metis_tac[]
+  rw[checked_contract_runtime_ready_def, find_function_module_def] >>
+  Cases_on `ALOOKUP am.exports tx.target` >> gvs[]
+  >- metis_tac[check_contract_main_module_allocated] >>
+  rename1 `ALOOKUP am.exports tx.target = SOME exps` >>
+  Cases_on `ALOOKUP exps fn` >> gvs[]
+  >- metis_tac[check_contract_main_module_allocated] >>
+  gvs[exports_ok_def, EVERY_MEM] >>
+  drule ALOOKUP_MEM >> strip_tac >>
+  first_x_assum drule >> simp[]
 QED
 
 Theorem checked_explicit_external_body_call_evaluation_safe[local]:
   check_contract F am.layouts tx.target mods = SOME art /\
   ALOOKUP am.sources tx.target = SOME mods /\
   ALOOKUP mods src = SOME ts /\
+  module_allocated am.layouts tx.target src ts /\
   MEM (FunctionDecl External mut nr raw tx.function_name args dflts ret body) ts ==>
   call_evaluation_safe
     (initial_evaluation_context am.sources am.layouts tx src)
@@ -213,36 +158,6 @@ Proof
   Cases_on `machine_requests` >> gvs[]
 QED
 
-(* A source-level deployment with no matching explicit constructor takes the
-   ordinary call path using lookup_function's synthetic constructor, rather
-   than the defensive NONE branch of load_contract. *)
-Theorem load_contract_success_no_constructor_decl:
-  load_contract orc am tx mods exps = INL (am_deployed,rqs) /\
-  ~(?fm nr raw args dflts ret body.
-      MEM (FunctionDecl Deploy fm nr raw tx.function_name
-             args dflts ret body)
-        (case ALOOKUP mods NONE of SOME ts => ts | NONE => [])) ==>
-  ?imms ts v am_ctor.
-    initial_immutables (type_env_all_modules mods) mods = SOME imms /\
-    ts = (case ALOOKUP mods NONE of SOME ts => ts | NONE => []) /\
-    lookup_function NONE tx.function_name Deploy ts =
-      SOME (Payable,F,[],[],NoneT,[]) /\
-    call_external_function orc
-      (am with <|immutables updated_by CONS (tx.target,imms);
-                 exports updated_by CONS (tx.target,exps)|>)
-      ((initial_evaluation_context ((tx.target,mods)::am.sources)
-          am.layouts tx NONE) with in_deploy := T)
-      F Payable ts mods [] [] tx.args [] NoneT = (INL v,am_ctor,rqs) /\
-    am_deployed = finalize_pending_deletions
-      (am_ctor with sources updated_by CONS (tx.target,mods))
-Proof
-  strip_tac >>
-  drule lookup_function_Deploy_no_decl >>
-  disch_then (qspec_then `NONE` assume_tac) >>
-  drule load_contract_success_cases >> strip_tac >>
-  gvs[]
-QED
-
 Theorem call_external_function_deploy_success_evaluate_all_constants[local]:
   !orc rqs am cx nr mut ts all_mods args dflts vals body ret v am_out.
   cx.in_deploy /\
@@ -253,29 +168,6 @@ Theorem call_external_function_deploy_success_evaluate_all_constants[local]:
 Proof
   rw[call_external_function_def] >>
   gvs[AllCaseEqs()]
-QED
-
-Theorem deployed_check_contract_bare_globals_consistent[local]:
-  load_contract orc am deploy_tx mods exps = INL (am_deployed,rqs) /\
-  check_contract F am_deployed.layouts call_tx.target mods = SOME call_art /\
-  call_tx.target = deploy_tx.target ==>
-  !src id ty.
-    FLOOKUP call_art.cta_bare_globals (src,id) = SOME ty ==>
-    ?ts.
-      get_module_code
-        (initial_evaluation_context am_deployed.sources am_deployed.layouts call_tx src) src = SOME ts /\
-      FLOOKUP call_art.cta_toplevel_vtypes (src,id) = SOME (Type ty) /\
-      is_bare_global_decl id ts /\
-      find_var_decl_by_name id ts = NONE /\
-      ty <> NoneT
-Proof
-  rw[] >>
-  drule load_contract_success_cases >>
-  strip_tac >> gvs[] >>
-  drule check_contract_bare_globals_consistent_initial >>
-  simp[] >>
-  disch_then (qspecl_then [`src`, `id`, `ty`] mp_tac) >>
-  simp[]
 QED
 
 Theorem constants_env_preserves_lookup_not_key[local]:
@@ -434,44 +326,6 @@ Proof
   simp[]
 QED
 
-Theorem contract_toplevel_vtype_key_MEM_Variable[local]:
-  MEM (src,ts) mods /\ MEM (VariableDecl vis mut id ty init) ts ==>
-  MEM ((src : num option),id)
-    (contract_keys toplevel_vtype_keys_toplevel mods)
-Proof
-  rw[contract_keys_def, MEM_FLAT, MEM_MAP] >>
-  qexists `FLAT (MAP (toplevel_vtype_keys_toplevel src) ts)` >> simp[] >>
-  conj_tac >- (qexists `(src,ts)` >> simp[]) >>
-  metis_tac[module_toplevel_vtype_key_MEM_Variable]
-QED
-Theorem module_toplevel_vtype_key_MEM_Variable_any[local]:
-  MEM (VariableDecl vis mut id ty init) ts ==>
-  MEM (src,id)
-    (FLAT (MAP (toplevel_vtype_keys_toplevel src) ts))
-Proof
-  rw[MEM_FLAT, MEM_MAP] >>
-  qexists `[(src,id)]` >> simp[] >>
-  qexists `VariableDecl vis mut id ty init` >>
-  simp[toplevel_vtype_keys_toplevel_def]
-QED
-
-
-Theorem module_immutable_constant_names_distinct[local]:
-  !src ts visI idI tyI initI visC e idC tyC slotC.
-    ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel src) ts)) /\
-    MEM (VariableDecl visI Immutable idI tyI initI) ts /\
-    MEM (VariableDecl visC (Constant e) idC tyC slotC) ts ==>
-    idI <> idC
-Proof
-  gen_tac >> Induct_on `ts` >- rw[] >>
-  gen_tac >> gen_tac >> gen_tac >> gen_tac >> gen_tac >>
-  gen_tac >> gen_tac >> gen_tac >> gen_tac >> gen_tac >>
-  Cases_on `h` >>
-  rw[toplevel_vtype_keys_toplevel_def, ALL_DISTINCT_APPEND] >>
-  gvs[toplevel_vtype_keys_toplevel_def] >>
-  TRY (first_x_assum irule >> metis_tac[]) >>
-  metis_tac[module_toplevel_vtype_key_MEM_Variable_any]
-QED
 Theorem module_immutable_name_type_unique[local]:
   !src ts visI idI tyI initI visJ idJ tyJ initJ.
     ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel src) ts)) /\
@@ -632,56 +486,6 @@ QED
 
 
 
-Theorem initial_immutables_module_lookup_origin[local]:
-  !tenv init_src ts acc imms query_src id tv v.
-  initial_immutables_module tenv init_src ts acc = SOME imms /\
-  FLOOKUP (get_source_immutables query_src imms) id = SOME (tv,v) ==>
-  FLOOKUP (get_source_immutables query_src acc) id = SOME (tv,v) \/
-  init_src = query_src /\
-  ?vis id_str ty init.
-    MEM (VariableDecl vis Immutable id_str ty init) ts /\
-    id_str = id /\
-    evaluate_type tenv ty = SOME tv
-Proof
-  recInduct initial_immutables_module_ind >>
-  rw[initial_immutables_module_def] >>
-  gvs[AllCaseEqs()] >>
-  first_x_assum drule_all >>
-  strip_tac >>
-  gvs[] >>
-  Cases_on `src_id_opt = query_src` >>
-  gvs[update_immutable_def, get_source_immutables_set_same,
-      get_source_immutables_set_other, FLOOKUP_UPDATE] >>
-  Cases_on `id = id'` >>
-  gvs[update_immutable_def, get_source_immutables_set_same,
-      FLOOKUP_UPDATE] >>
-  metis_tac[]
-QED
-
-
-Theorem initial_immutables_lookup_origin[local]:
-  !tenv mods imms src id tv v.
-  initial_immutables tenv mods = SOME imms /\
-  FLOOKUP (get_source_immutables src imms) id = SOME (tv,v) ==>
-  ?ts vis id_str ty init.
-    MEM (src,ts) mods /\
-    MEM (VariableDecl vis Immutable id_str ty init) ts /\
-    id_str = id /\
-    evaluate_type tenv ty = SOME tv
-Proof
-  gen_tac >> Induct_on `mods`
-  >- simp[initial_immutables_def, empty_immutables_def,
-          get_source_immutables_def] >>
-  rpt gen_tac >> PairCases_on `h` >>
-  rw[initial_immutables_def] >>
-  gvs[AllCaseEqs()] >>
-  drule initial_immutables_module_lookup_origin >>
-  disch_then drule >>
-  strip_tac
-  >- (first_x_assum drule_all >> strip_tac >>
-      qexistsl [`ts`,`vis`,`ty`,`init`] >> gvs[]) >>
-  qexistsl [`h1`,`vis`,`ty`,`init`] >> gvs[]
-QED
 
 (* TOP-LEVEL: The ordinary freshly initialized immutable table satisfies the
  * pre-constant declaration/tag agreement boundary.
@@ -728,19 +532,6 @@ Proof
   metis_tac[module_immutable_constant_names_distinct]
 QED
 
-Definition deployment_constant_cells_typed_def[local]:
-  deployment_constant_cells_typed tenv addr mods (am:abstract_machine) <=>
-    !src ts vis e id ty init tv v.
-      MEM (src,ts) mods /\
-      MEM (VariableDecl vis (Constant e) id ty init) ts /\
-      FLOOKUP
-        (get_source_immutables src
-          (case ALOOKUP am.immutables addr of
-           | SOME imms => imms
-           | NONE => []))
-        id = SOME (tv,v) ==>
-      evaluate_type tenv ty = SOME tv /\ value_has_type tv v
-End
 
 Theorem deployment_constant_cells_typed_initial[local]:
   machine_well_typed am /\
@@ -765,657 +556,7 @@ Proof
   first_x_assum drule_all >> simp[]
 QED
 
-Theorem deployment_constant_cells_typed_lookup[local]:
-  deployment_constant_cells_typed tenv addr mods am /\
-  MEM (src,ts) mods /\
-  MEM (VariableDecl vis (Constant e) id ty init) ts /\
-  FLOOKUP
-    (get_source_immutables src
-      (case ALOOKUP am.immutables addr of
-       | SOME imms => imms
-       | NONE => []))
-    id = SOME (tv,v) ==>
-  evaluate_type tenv ty = SOME tv /\ value_has_type tv v
-Proof
-  metis_tac[deployment_constant_cells_typed_def]
-QED
 
-Theorem constant_top_level_name_pure_typed[local]:
-  check_contract F cx.layouts cx.txn.target mods = SOME artifact /\
-  ALOOKUP cx.sources cx.txn.target = SOME mods /\
-  get_tenv cx = type_env_all_modules mods /\
-  well_typed_expr (artifact_env artifact mods current_src)
-    (TopLevelName ann (src,id)) /\
-  constant_expr mods (TopLevelName ann (src,id)) /\
-  deployment_constant_cells_typed
-    (type_env_all_modules mods) cx.txn.target mods am /\
-  eval_pure_expr cx (initial_state am [FEMPTY])
-    (TopLevelName ann (src,id)) = SOME tvl ==>
-  expr_result_typed (artifact_env artifact mods current_src)
-    (TopLevelName ann (src,id)) tvl /\ ?v. tvl = Value v
-Proof
-  rw[constant_expr_def, declared_constant_def] >>
-  `contract_namespaces_ok F mods` by
-    (qpat_x_assum `check_contract F _ _ _ = _` mp_tac >>
-     rw[check_contract_def] >> gvs[]) >>
-  `ALOOKUP mods src = SOME tls` by
-    (irule alistTheory.ALOOKUP_ALL_DISTINCT_MEM >>
-     gvs[contract_namespaces_ok_def]) >>
-  `get_module_code cx src = SOME tls` by
-    simp[get_module_code_def] >>
-  `find_var_decl_by_name id tls = NONE` by
-    (irule find_var_decl_by_name_NONE_Constant >> simp[] >>
-     metis_tac[contract_namespaces_ok_module_toplevel_vtype_keys]) >>
-  `eval_expr cx (TopLevelName ann (src,id)) (initial_state am [FEMPTY]) =
-     (INL tvl, initial_state am [FEMPTY])` by
-    metis_tac[eval_pure_expr_to_eval_expr_some] >>
-  `lookup_global cx src id (initial_state am [FEMPTY]) =
-     (INL tvl, initial_state am [FEMPTY])` by
-    (qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-     simp[Once evaluate_def]) >>
-  `?stored_tv v.
-      FLOOKUP
-        (get_source_immutables src
-          (case ALOOKUP am.immutables cx.txn.target of
-           | NONE => [] | SOME imms => imms))
-        id = SOME (stored_tv,v) /\
-      tvl = Value v` by
-    (qpat_x_assum `lookup_global _ _ _ _ = _` mp_tac >>
-     simp[lookup_global_def, bind_def, lift_option_type_def,
-          return_def, raise_def] >>
-     Cases_on `get_immutables cx src (initial_state am [FEMPTY])` >>
-     Cases_on `q` >> gvs[bind_def, return_def, raise_def] >>
-     Cases_on `FLOOKUP x id`
-     >- gvs[raise_def] >>
-     gvs[return_def] >> PairCases_on `x'` >> gvs[] >>
-     qpat_x_assum `get_immutables _ _ _ = _` mp_tac >>
-     simp[get_immutables_def, get_address_immutables_def, bind_def,
-          lift_option_type_def, initial_state_def, return_def, raise_def] >>
-     rpt strip_tac >>
-     Cases_on `ALOOKUP am.immutables cx.txn.target` >>
-     gvs[return_def, raise_def, AllCaseEqs()]) >>
-  `evaluate_type (type_env_all_modules mods) ty = SOME stored_tv /\
-   value_has_type stored_tv v` by
-    metis_tac[deployment_constant_cells_typed_lookup] >>
-  `FLOOKUP artifact.cta_toplevel_vtypes (src,id) =
-     SOME (Type ty)` by
-    (`toplevel_vtypes_complete artifact.cta_toplevel_vtypes
-        (initial_evaluation_context cx.sources cx.layouts cx.txn src)` by
-       (irule check_contract_toplevel_vtypes_complete_initial >> simp[]) >>
-     gvs[toplevel_vtypes_complete_def] >>
-     qpat_x_assum `!src ts vis mut id ty init. _` irule >>
-     simp[get_module_code_def, initial_evaluation_context_def] >>
-     metis_tac[]) >>
-  `ann = ty` by
-    (qpat_x_assum `well_typed_expr _ _` mp_tac >>
-     simp[well_typed_expr_def, artifact_env_def] >>
-     strip_tac >> gvs[] >>
-     drule check_contract_bare_globals_consistent_initial >>
-     disch_then drule >>
-     disch_then (qspec_then `cx.txn` mp_tac) >>
-     disch_then (qspec_then `src` mp_tac) >>
-     disch_then (qspec_then `id` mp_tac) >>
-     disch_then (qspec_then `ann` mp_tac) >>
-     simp[] >> strip_tac >> gvs[]) >>
-  gvs[vyperTypeExprResultTheory.expr_result_typed_def,
-      vyperTypeExprSoundnessTheory.expr_runtime_typed_def, expr_type_def,
-      toplevel_value_typed_Value, artifact_env_def]
-QED
-Theorem constant_literal_pure_typed[local]:
-  well_typed_expr env (Literal ty lit) /\
-  eval_pure_expr cx st (Literal ty lit) = SOME tvl ==>
-  expr_result_typed env (Literal ty lit) tvl
-Proof
-  rw[well_typed_expr_def, Once eval_pure_expr_def] >>
-  gvs[well_formed_type_def, IS_SOME_EXISTS,
-      vyperTypeExprResultTheory.expr_result_typed_def,
-      vyperTypeExprSoundnessTheory.expr_runtime_typed_def, expr_type_def] >>
-  metis_tac[literal_toplevel_value_typed]
-QED
-
-Theorem eval_pure_exprs_success_typed[local]:
-  !es env cx st vs.
-    state_well_typed st /\
-    well_typed_exprs env es /\
-    (!e tvl. MEM e es /\ eval_pure_expr cx st e = SOME tvl ==>
-       expr_result_typed env e tvl) /\
-    eval_pure_exprs cx st es = SOME vs ==>
-    exprs_runtime_typed env es vs
-Proof
-  Induct >>
-  rw[vyperTypeExprSoundnessTheory.exprs_runtime_typed_def,
-     Once eval_pure_expr_def, Once well_typed_expr_def, AllCaseEqs()] >>
-  `expr_result_typed env h tv` by metis_tac[] >>
-  `?htv. evaluate_type env.type_defs (expr_type h) = SOME htv /\
-         value_has_type htv v` by
-    (gvs[vyperTypeExprResultTheory.expr_result_typed_def,
-         vyperTypeExprSoundnessTheory.expr_runtime_typed_def] >>
-     metis_tac[materialise_preserves_value_type,
-               evaluate_type_well_formed_type_value]) >>
-  `exprs_runtime_typed env es vs'` by
-    (first_x_assum irule >> simp[] >> metis_tac[]) >>
-  gvs[vyperTypeExprSoundnessTheory.exprs_runtime_typed_def] >>
-  metis_tac[]
-QED
-
-
-Theorem eval_pure_named_exprs_success_typed[local]:
-  !kes env cx st vs.
-    eval_pure_exprs cx st (MAP SND kes) = SOME vs ==>
-    state_well_typed st ==>
-    well_typed_named_exprs env kes ==>
-    (!e tvl. MEM e (MAP SND kes) /\
-       eval_pure_expr cx st e = SOME tvl ==>
-       expr_result_typed env e tvl) ==>
-    exprs_runtime_typed env (MAP SND kes) vs
-Proof
-  Induct >- simp[vyperTypeExprSoundnessTheory.exprs_runtime_typed_def,
-                  Once eval_pure_expr_def] >>
-  gen_tac >> PairCases_on `h` >>
-  rw[vyperTypeExprSoundnessTheory.exprs_runtime_typed_def,
-     Once eval_pure_expr_def, Once well_typed_expr_def, AllCaseEqs()] >>
-  `expr_result_typed env h1 tv` by metis_tac[] >>
-  `?htv. evaluate_type env.type_defs (expr_type h1) = SOME htv /\
-         value_has_type htv v` by
-    (gvs[vyperTypeExprResultTheory.expr_result_typed_def,
-         vyperTypeExprSoundnessTheory.expr_runtime_typed_def] >>
-     metis_tac[materialise_preserves_value_type,
-               evaluate_type_well_formed_type_value]) >>
-  `exprs_runtime_typed env (MAP SND kes) vs'` by
-    (first_x_assum irule >> simp[] >> metis_tac[]) >>
-  gvs[vyperTypeExprSoundnessTheory.exprs_runtime_typed_def] >>
-  metis_tac[]
-QED
-
-Theorem OPT_MMAP_expr_types_from_LIST_REL_local[local]:
-  !tenv kes tvs.
-    LIST_REL (\e tv. evaluate_type tenv (expr_type e) = SOME tv)
-      (MAP SND kes) tvs ==>
-    OPT_MMAP (evaluate_type tenv)
-      (MAP (expr_type o SND) kes) = SOME tvs
-Proof
-  gen_tac >> Induct >> Cases_on `tvs` >>
-  simp[OPT_MMAP_def] >>
-  PairCases_on `h` >> simp[OPT_MMAP_def]
-QED
-
-Theorem OPT_MMAP_evaluate_type_mono_local[local]:
-  !types tenv nid tvs.
-    OPT_MMAP (evaluate_type (tenv \\ nid)) types = SOME tvs ==>
-    OPT_MMAP (evaluate_type tenv) types = SOME tvs
-Proof
-  Induct >> simp[OPT_MMAP_def] >>
-  rpt gen_tac >>
-  Cases_on `evaluate_type (tenv \\ nid) h` >> simp[] >>
-  Cases_on `OPT_MMAP (evaluate_type (tenv \\ nid)) types` >> simp[] >>
-  strip_tac >> gvs[] >>
-  imp_res_tac vyperTypeExprSoundnessTheory.evaluate_type_mono >> simp[] >>
-  first_x_assum (qspecl_then [`tenv`, `nid`] mp_tac) >> simp[]
-QED
-
-Theorem struct_lit_ZIP_length_local[local]:
-  !tenv kes args tvs vs.
-    MAP FST kes = MAP FST args /\
-    LIST_REL (\e tv. evaluate_type tenv (expr_type e) = SOME tv)
-      (MAP SND kes) tvs /\
-    LIST_REL value_has_type tvs vs ==>
-    LENGTH args = LENGTH vs
-Proof
-  rpt strip_tac >>
-  `LENGTH (MAP SND kes) = LENGTH tvs` by
-    metis_tac[listTheory.LIST_REL_LENGTH] >>
-  `LENGTH tvs = LENGTH vs` by
-    metis_tac[listTheory.LIST_REL_LENGTH] >>
-  `LENGTH (MAP FST kes) = LENGTH (MAP FST args)` by metis_tac[] >>
-  gvs[LENGTH_MAP]
-QED
-
-Theorem struct_has_type_ZIP_same_names_local[local]:
-  !names tvs vs.
-    LENGTH names = LENGTH tvs /\
-    LENGTH tvs = LENGTH vs /\
-    LIST_REL value_has_type tvs vs ==>
-    struct_has_type (ZIP (names,tvs)) (ZIP (names,vs))
-Proof
-  Induct >> simp[Once vyperTypingTheory.value_has_type_def] >>
-  rpt gen_tac >> strip_tac >>
-  Cases_on `tvs` >> Cases_on `vs` >>
-  gvs[Once vyperTypingTheory.value_has_type_def]
-QED
-
-Theorem struct_lit_expr_result_typed_local[local]:
-  well_formed_type env.type_defs (StructT sid) /\
-  FLOOKUP env.type_defs sid = SOME (StructArgs args) /\
-  MAP FST kes = MAP FST args /\
-  MAP (expr_type o SND) kes = MAP SND args /\
-  exprs_runtime_typed env (MAP SND kes) vs ==>
-  expr_result_typed env (StructLit (StructT sid) sid kes)
-    (Value (StructV (ZIP (MAP FST args,vs))))
-Proof
-  rw[vyperTypeExprSoundnessTheory.exprs_runtime_typed_def,
-     vyperTypeExprResultTheory.expr_result_typed_def,
-     vyperTypeExprSoundnessTheory.expr_runtime_typed_def,
-     expr_type_def, toplevel_value_typed_def] >>
-  qexists_tac `StructTV (ZIP (MAP FST args,tvs))` >>
-  gvs[well_formed_type_def, IS_SOME_EXISTS] >>
-  qpat_x_assum `evaluate_type _ (StructT _) = SOME _` mp_tac >>
-  simp[Once evaluate_type_def, AllCaseEqs(), evaluate_types_OPT_MMAP] >>
-  strip_tac >> gvs[vyperTypingTheory.value_has_type_def] >>
-  qpat_x_assum `MAP (expr_type o SND) kes = MAP SND args`
-    (assume_tac o GSYM) >>
-  gvs[] >>
-  `OPT_MMAP (evaluate_type env.type_defs)
-      (MAP (expr_type o SND) kes) = SOME tvs` by
-    (irule OPT_MMAP_expr_types_from_LIST_REL_local >> simp[]) >>
-  `OPT_MMAP (evaluate_type env.type_defs)
-      (MAP (expr_type o SND) kes) = SOME tvs'` by
-    metis_tac[OPT_MMAP_evaluate_type_mono_local] >>
-  gvs[] >>
-  irule struct_has_type_ZIP_same_names_local >>
-  imp_res_tac listTheory.LIST_REL_LENGTH >> gvs[LENGTH_MAP] >>
-  metis_tac[LENGTH_MAP]
-QED
-
-Theorem constant_subscript_base_well_typed_local[local]:
-  check_contract F layouts target mods = SOME artifact /\
-  ALOOKUP cx.sources target = SOME mods /\
-  cx.txn.target = target /\ cx.layouts = layouts /\
-  get_tenv cx = type_env_all_modules mods /\
-  constant_expr mods e1 /\
-  well_typed_expr (artifact_env artifact mods current_src)
-    (Subscript ty e1 e2) ==>
-  well_typed_expr (artifact_env artifact mods current_src) e1
-Proof
-  rpt strip_tac >>
-  `!e vt. constant_expr mods e /\
-      type_place_expr (artifact_env artifact mods current_src) e = SOME vt ==>
-      ?ety. vt = Type ety /\
-        well_typed_expr (artifact_env artifact mods current_src) e /\
-        well_formed_type (type_env_all_modules mods) ety` by
-    (ho_match_mp_tac
-       (expr_induction |> Q.SPEC `P` |> Q.SPEC `λ_. T` |>
-        SIMP_RULE (srw_ss()) []) >>
-     rw[constant_expr_def, Once well_typed_expr_def] >>
-     (* the non-place constructors have type_place_expr = NONE *)
-     TRY (qpat_x_assum `type_place_expr _ _ = SOME _`
-            (mp_tac o ONCE_REWRITE_RULE [well_typed_expr_def]) >>
-          simp[] >> NO_TAC)
-     >- (PairCases_on `p` >>
-         gvs[constant_expr_def, declared_constant_def] >>
-         `contract_namespaces_ok F mods` by
-           (qpat_x_assum `check_contract F _ _ _ = _` mp_tac >>
-            rw[check_contract_def] >> gvs[]) >>
-         `ALOOKUP mods p0 = SOME tls` by
-           (irule alistTheory.ALOOKUP_ALL_DISTINCT_MEM >>
-            gvs[contract_namespaces_ok_def]) >>
-         `assignable_type (type_env_all_modules mods) ty'` by
-           metis_tac[checked_constant_decl_typed] >>
-         `FLOOKUP artifact.cta_toplevel_vtypes
-             (p0,p1) = SOME (Type ty')` by
-           (`toplevel_vtypes_complete artifact.cta_toplevel_vtypes
-               (initial_evaluation_context cx.sources cx.layouts cx.txn p0)` by
-              (irule check_contract_toplevel_vtypes_complete_initial >> simp[]) >>
-            gvs[toplevel_vtypes_complete_def] >>
-            qpat_x_assum `!src ts vis mut id ty init. _` irule >>
-            simp[get_module_code_def, initial_evaluation_context_def] >>
-            metis_tac[]) >>
-         gvs[artifact_env_def, vtype_annotation_ok_def,
-             well_typed_expr_def] >>
-         Cases_on `t` >> gvs[assignable_type_def] >>
-         Cases_on `FLOOKUP (type_env_all_modules mods) p` >>
-         gvs[] >> Cases_on `x` >> gvs[])
-     >- (qpat_x_assum `type_place_expr _ (Subscript _ _ _) = SOME _`
-           (mp_tac o ONCE_REWRITE_RULE [well_typed_expr_def]) >>
-         rw[] >>
-         Cases_on
-           `type_place_expr (artifact_env artifact mods current_src) e` >>
-         gvs[] >>
-         Cases_on `ety` >>
-         gvs[subscript_vtype_def, vtype_annotation_ok_def,
-             well_typed_expr_def, subscript_type_ok_def,
-             well_formed_type_def, evaluate_type_def, AllCaseEqs()] >>
-         Cases_on `evaluate_type (type_env_all_modules mods) t` >>
-         gvs[artifact_env_def])) >>
-  qpat_x_assum `well_typed_expr _ (Subscript _ _ _)` mp_tac >>
-  simp[Once well_typed_expr_def] >> metis_tac[]
-QED
-
-Theorem evaluate_subscript_value_selected_typed_local[local]:
-  !tenv arr_tv v1 v2 out ct ie ty.
-    evaluate_subscript tenv arr_tv (Value v1) v2 = INL out /\
-    value_has_type arr_tv v1 /\
-    subscript_type_ok ct ie ty /\
-    subscript_index_matches ct ie v2 /\
-    evaluate_type tenv ct = SOME arr_tv ==>
-    ?rtv v. evaluate_type tenv ty = SOME rtv /\
-             out = INL (Value v) /\ value_has_type rtv v
-Proof
-  rpt gen_tac >> Cases_on `ct` >> simp[subscript_type_ok_def] >>
-  rpt strip_tac >> gvs[] >> Cases_on `v1` >> Cases_on `v2` >>
-  gvs[evaluate_subscript_def,
-      vyperTypeExprResultTheory.subscript_index_matches_def, AllCaseEqs()]
-  >- (drule evaluate_type_TupleT_cases >> strip_tac >> gvs[] >>
-      Cases_on `a` >>
-      gvs[vyperTypingTheory.value_has_type_inv,
-          vyperValueOperationTheory.array_index_def, AllCaseEqs()] >>
-      gvs[oEL_EQ_EL,
-          vyperTypeDefaultsTheory.values_have_types_LIST_REL,
-          LIST_REL_EL_EQN] >>
-      metis_tac[])
-  >> (gvs[Once evaluate_type_def, AllCaseEqs()] >>
-      imp_res_tac (cj 1 vyperTypingTheory.evaluate_type_well_formed) >>
-      irule vyperAssignPreservesTypeTheory.array_index_has_type >>
-      simp[] >> metis_tac[])
-QED
-
-Theorem constant_subscript_value_success_typed_local[local]:
-  state_well_typed st /\
-  well_typed_expr env (Subscript ty e1 e2) /\ well_typed_expr env e1 /\
-  eval_pure_expr cx st e1 = SOME (Value v1) /\
-  eval_pure_expr cx st e2 = SOME (Value v2) /\
-  expr_result_typed env e1 (Value v1) /\
-  expr_result_typed env e2 (Value v2) /\ env.type_defs = get_tenv cx /\
-  eval_pure_expr cx st (Subscript ty e1 e2) = SOME tvl ==>
-  expr_result_typed env (Subscript ty e1 e2) tvl /\ ?v. tvl = Value v
-Proof
-  rpt strip_tac >>
-  `?arr_tv. evaluate_type env.type_defs (expr_type e1) = SOME arr_tv /\
-            value_has_type arr_tv v1` by
-    (gvs[vyperTypeExprResultTheory.expr_result_typed_def,
-         vyperTypeExprSoundnessTheory.expr_runtime_typed_def,
-         toplevel_value_typed_def]) >>
-  `subscript_type_ok (expr_type e1) e2 ty` by
-    (qpat_x_assum `well_typed_expr env (Subscript _ _ _)` mp_tac >>
-     simp[Once well_typed_expr_def] >> strip_tac >>
-     `vtype_annotation_ok vt (expr_type e1)` by
-       (Cases_on `e1` >> simp[expr_type_def] >> rpt strip_tac >>
-        TRY (PairCases_on `p`) >>
-        qpat_x_assum `type_place_expr _ _ = SOME _` mp_tac >>
-        simp[Once well_typed_expr_def, vtype_annotation_ok_def,
-             AllCaseEqs()] >> metis_tac[]) >>
-     Cases_on `vt`
-     >- (Cases_on `expr_type e1` >>
-         gvs[vtype_annotation_ok_def, subscript_vtype_def,
-             subscript_type_ok_def]) >>
-     metis_tac[vyperTypeExprResultTheory.well_typed_expr_not_hashmap_place]) >>
-  `subscript_index_matches (expr_type e1) e2 v2` by
-    (Cases_on `expr_type e1` >>
-     simp[vyperTypeExprResultTheory.subscript_index_matches_def] >>
-     fs[vyperTypeExprResultTheory.subscript_type_ok_tuple] >>
-     gvs[Once eval_pure_expr_def,
-         vyperValueOperationTheory.evaluate_literal_def]) >>
-  qpat_x_assum `eval_pure_expr _ _ (Subscript _ _ _) = _` mp_tac >>
-  simp[Once eval_pure_expr_def] >> gvs[AllCaseEqs()] >> strip_tac >>
-  drule_all evaluate_subscript_value_selected_typed_local >>
-  strip_tac >> gvs[vyperTypeExprResultTheory.expr_result_typed_def,
-                   vyperTypeExprSoundnessTheory.expr_runtime_typed_def,
-                   toplevel_value_typed_def, expr_type_def]
-QED
-
-Theorem evaluate_attribute_value_typed_local[local]:
-  !sv id ftypes field_tv.
-    value_has_type (StructTV ftypes) sv /\
-    ALOOKUP ftypes id = SOME field_tv ==>
-    ?field_v. evaluate_attribute sv id = INL field_v /\
-              value_has_type field_tv field_v
-Proof
-  `!ftypes fields id field_tv.
-      struct_has_type ftypes fields /\
-      ALOOKUP ftypes id = SOME field_tv ==>
-      ?field_v. ALOOKUP fields id = SOME field_v /\
-                value_has_type field_tv field_v` by
-    (Induct >> Cases_on `fields` >>
-     simp[Once vyperTypingTheory.value_has_type_def] >>
-     Cases >> Cases_on `h` >>
-     simp[Once vyperTypingTheory.value_has_type_def] >>
-     rw[] >> gvs[] >> Cases_on `id = q` >> gvs[] >>
-     first_x_assum drule_all >> simp[]) >>
-  Cases >> simp[vyperValueOperationTheory.evaluate_attribute_def,
-                vyperTypingTheory.value_has_type_def] >>
-  rpt strip_tac >> first_x_assum drule_all >> strip_tac >>
-  qexists_tac `field_v` >> simp[]
-QED
-
-Theorem constant_attribute_value_success_typed_local[local]:
-  well_typed_expr env (Attribute ty e id) /\
-  eval_pure_expr cx st e = SOME (Value sv) /\
-  expr_result_typed env e (Value sv) /\ env.type_defs = get_tenv cx /\
-  eval_pure_expr cx st (Attribute ty e id) = SOME tvl ==>
-  expr_result_typed env (Attribute ty e id) tvl /\ ?v. tvl = Value v
-Proof
-  rpt strip_tac >>
-  `attribute_type env.type_defs (expr_type e) id = SOME ty` by
-    (qpat_x_assum `well_typed_expr env (Attribute _ _ _)` mp_tac >>
-     simp[Once well_typed_expr_def, attribute_type_ok_def] >>
-     metis_tac[]) >>
-  qhdtm_x_assum `expr_result_typed` mp_tac >>
-  simp[vyperTypeExprResultTheory.expr_result_typed_def,
-       vyperTypeExprSoundnessTheory.expr_runtime_typed_def] >>
-  strip_tac >>
-  Cases_on `expr_type e` >>
-  gvs[attribute_type_def, evaluate_type_def, AllCaseEqs(),
-      toplevel_value_typed_def] >>
-  `?field_tv. evaluate_type env.type_defs ty = SOME field_tv /\
-              ALOOKUP (ZIP (MAP FST fields,tvs)) id = SOME field_tv` by
-    (qspecl_then [`env.type_defs`,`StructT p`,`id`,`ty`,
-                  `ZIP (MAP FST fields,tvs)`] mp_tac
-       vyperTypeExprSoundnessTheory.attribute_type_evaluates >>
-     simp[attribute_type_def, evaluate_type_def]) >>
-  drule_all evaluate_attribute_value_typed_local >> strip_tac >>
-  qpat_x_assum `eval_pure_expr _ _ (Attribute _ _ _) = _` mp_tac >>
-  simp[Once eval_pure_expr_def] >> gvs[AllCaseEqs()] >>
-  simp[vyperTypeExprResultTheory.expr_result_typed_def,
-       vyperTypeExprSoundnessTheory.expr_runtime_typed_def,
-       toplevel_value_typed_def, expr_type_def] >>
-  strip_tac >> gvs[toplevel_value_typed_def]
-QED
-
-Theorem constant_pure_eval_success_typed_gen_local[local]:
-  !mods e. constant_expr mods e ==>
-    !artifact cx current_src am.
-      check_contract F cx.layouts cx.txn.target mods = SOME artifact /\
-      ALOOKUP cx.sources cx.txn.target = SOME mods /\
-      get_tenv cx = type_env_all_modules mods /\
-      context_well_typed cx /\ machine_well_typed am /\
-      deployment_constant_cells_typed
-        (type_env_all_modules mods) cx.txn.target mods am ==>
-      !tvl.
-        well_typed_expr (artifact_env artifact mods current_src) e /\
-        eval_pure_expr cx (initial_state am [FEMPTY]) e = SOME tvl ==>
-        expr_result_typed (artifact_env artifact mods current_src) e tvl /\
-        ?v. tvl = Value v
-Proof
-  ho_match_mp_tac constant_expr_ind >>
-  rpt gen_tac >> strip_tac >>
-  gvs[constant_expr_def]
-  >- (rpt strip_tac >>
-      `constant_expr mods (TopLevelName v0 (src,id))` by
-        simp[constant_expr_def] >>
-      drule_all constant_top_level_name_pure_typed >> simp[])
-  >> rpt conj_tac
-  >- (rpt strip_tac >>
-      qpat_x_assum `eval_pure_expr _ _ (Literal _ _) = _` mp_tac >>
-      simp[Once eval_pure_expr_def] >> strip_tac >> gvs[] >>
-      irule constant_literal_pure_typed >>
-      simp[Once eval_pure_expr_def])
-  >- (rpt strip_tac >>
-      `?vs. eval_pure_exprs cx (initial_state am [FEMPTY])
-               (MAP SND kes) = SOME vs /\
-             tvl = Value (StructV (ZIP (MAP FST kes,vs)))` by
-        (qpat_x_assum `eval_pure_expr _ _ (StructLit _ _ _) = _` mp_tac >>
-         simp[Once eval_pure_expr_def] >> gvs[AllCaseEqs()] >> metis_tac[]) >>
-      qpat_x_assum `well_typed_expr _ (StructLit _ _ _)` mp_tac >>
-      simp[Once well_typed_expr_def] >> strip_tac >>
-      `state_well_typed (initial_state am [FEMPTY])` by
-        (irule initial_state_single_scope_well_typed_simple >>
-         simp[scope_well_typed_def]) >>
-      `!e. MEM e (MAP SND kes) ==>
-           well_typed_expr (artifact_env artifact mods current_src) e` by
-        (qpat_x_assum `well_typed_named_exprs _ kes` mp_tac >>
-         POP_ASSUM_LIST (K all_tac) >>
-         Induct_on `kes` >> simp[Once well_typed_expr_def] >>
-         gen_tac >> PairCases_on `h` >>
-         simp[Once well_typed_expr_def] >> metis_tac[]) >>
-      `exprs_runtime_typed (artifact_env artifact mods current_src)
-         (MAP SND kes) vs` by
-        (drule eval_pure_named_exprs_success_typed >>
-         disch_then drule >> disch_then drule >> disch_then irule >>
-         rpt strip_tac >>
-         `constant_expr mods e` by gvs[listTheory.EVERY_MEM] >>
-         `well_typed_expr (artifact_env artifact mods current_src) e` by
-           metis_tac[] >>
-         qpat_assum `!e. MEM e (MAP SND kes) ==> _`
-           (qspec_then `e` (fn ih => metis_tac[ih]))) >>
-      gvs[] >> irule struct_lit_expr_result_typed_local >>
-      simp[] >> metis_tac[])
-  >- (rpt strip_tac >>
-      `well_typed_expr (artifact_env artifact mods current_src) e` by
-        (irule constant_subscript_base_well_typed_local >> simp[] >>
-         metis_tac[]) >>
-      `well_typed_expr (artifact_env artifact mods current_src) e'` by
-        (qpat_x_assum `well_typed_expr _ (Subscript _ _ _)` mp_tac >>
-         simp[Once well_typed_expr_def] >> metis_tac[]) >>
-      `state_well_typed (initial_state am [FEMPTY])` by
-        (irule initial_state_single_scope_well_typed_simple >>
-         simp[scope_well_typed_def]) >>
-      `?tv1 v2.
-         eval_pure_expr cx (initial_state am [FEMPTY]) e = SOME tv1 /\
-         eval_pure_expr cx (initial_state am [FEMPTY]) e' =
-           SOME (Value v2)` by
-        (Cases_on `eval_pure_expr cx (initial_state am [FEMPTY]) e` >>
-         gvs[Once eval_pure_expr_def, AllCaseEqs()] >>
-         Cases_on `eval_pure_expr cx (initial_state am [FEMPTY]) e'` >>
-         gvs[Once eval_pure_expr_def, AllCaseEqs()]) >>
-      `expr_result_typed (artifact_env artifact mods current_src) e tv1 /\
-       ?v1. tv1 = Value v1` by metis_tac[] >>
-      `expr_result_typed (artifact_env artifact mods current_src) e'
-         (Value v2)` by metis_tac[] >>
-      gvs[] >>
-      `(artifact_env artifact mods current_src).type_defs = get_tenv cx` by
-        simp[artifact_env_def] >>
-      drule_all constant_subscript_value_success_typed_local >>
-      metis_tac[])
-  >- (rpt strip_tac >>
-      `?sv. eval_pure_expr cx (initial_state am [FEMPTY]) e =
-            SOME (Value sv)` by
-        (Cases_on `eval_pure_expr cx (initial_state am [FEMPTY]) e` >>
-         gvs[Once eval_pure_expr_def, AllCaseEqs()]) >>
-      `well_typed_expr (artifact_env artifact mods current_src) e` by
-        (qpat_x_assum `well_typed_expr _ (Attribute _ _ _)` mp_tac >>
-         simp[Once well_typed_expr_def]) >>
-      `expr_result_typed (artifact_env artifact mods current_src) e
-         (Value sv)` by metis_tac[] >>
-      `(artifact_env artifact mods current_src).type_defs = get_tenv cx` by
-        simp[artifact_env_def] >>
-      drule_all constant_attribute_value_success_typed_local >> metis_tac[])
-  >- (rpt strip_tac >>
-      qpat_x_assum
-        `!e. MEM e es ==> constant_expr mods e ==>
-             !artifact cx current_src am. _`
-        (fn args_ih =>
-          sg `!e tvl. MEM e es /\
-                well_typed_expr (artifact_env artifact mods current_src) e /\
-                eval_pure_expr cx (initial_state am [FEMPTY]) e = SOME tvl ==>
-                expr_result_typed (artifact_env artifact mods current_src) e tvl`
-          >- (rpt strip_tac >>
-              `constant_expr mods e` by gvs[listTheory.EVERY_MEM] >>
-              drule_all args_ih >> simp[])) >>
-      qpat_x_assum `well_typed_expr _ (Builtin _ _ _)` mp_tac >>
-      simp[Once well_typed_expr_def] >> strip_tac >>
-      Cases_on `bt = Len`
-      >- (gvs[] >>
-          qpat_x_assum `eval_pure_expr _ _ (Builtin _ _ _) = _` mp_tac >>
-          simp[Once eval_pure_expr_def] >> gvs[AllCaseEqs()] >>
-          strip_tac >> gvs[] >>
-          `well_typed_expr (artifact_env artifact mods current_src) e` by
-            (qpat_x_assum `well_typed_exprs _ [e]` mp_tac >>
-             simp[Once well_typed_expr_def]) >>
-          `expr_result_typed (artifact_env artifact mods current_src) e tv` by
-            metis_tac[] >>
-          `?arg_tv. evaluate_type
-               (artifact_env artifact mods current_src).type_defs (expr_type e) =
-               SOME arg_tv /\ toplevel_value_typed tv arg_tv` by
-            gvs[vyperTypeExprResultTheory.expr_result_typed_def,
-                vyperTypeExprSoundnessTheory.expr_runtime_typed_def] >>
-          `?ret_tv. evaluate_type
-               (artifact_env artifact mods current_src).type_defs v8 = SOME ret_tv` by
-            gvs[well_formed_type_def, IS_SOME_EXISTS] >>
-          simp[vyperTypeExprResultTheory.expr_result_typed_def,
-               vyperTypeExprSoundnessTheory.expr_runtime_typed_def,
-               expr_type_def, toplevel_value_typed_def] >>
-          metis_tac[vyperTypeBuiltinsTheory.Len_builtin_sound])
-      >- (`?vs v. eval_pure_exprs cx (initial_state am [FEMPTY]) es = SOME vs /\
-             evaluate_builtin cx (initial_state am [FEMPTY]).accounts v8 bt (MAP expr_type es) vs = INL v /\
-             tvl = Value v` by
-           (qpat_x_assum `eval_pure_expr _ _ (Builtin _ _ _) = _` mp_tac >>
-            simp[Once eval_pure_expr_def] >> gvs[AllCaseEqs()] >>
-            strip_tac >> gvs[]) >>
-      `state_well_typed (initial_state am [FEMPTY])` by
-        (irule initial_state_single_scope_well_typed_simple >> simp[scope_well_typed_def]) >>
-      `!e. MEM e es ==>
-         well_typed_expr (artifact_env artifact mods current_src) e` by
-        (qpat_x_assum `well_typed_exprs _ es` mp_tac >>
-         POP_ASSUM_LIST (K all_tac) >>
-         Induct_on `es` >> simp[Once well_typed_expr_def] >> metis_tac[]) >>
-      `!e tvl. MEM e es /\ eval_pure_expr cx (initial_state am [FEMPTY]) e = SOME tvl ==>
-         expr_result_typed (artifact_env artifact mods current_src) e tvl` by
-        metis_tac[] >>
-      `exprs_runtime_typed (artifact_env artifact mods current_src) es vs` by
-        metis_tac[eval_pure_exprs_success_typed] >>
-      `(artifact_env artifact mods current_src).type_defs = get_tenv cx` by
-        simp[artifact_env_def] >>
-      gvs[vyperTypeExprSoundnessTheory.exprs_runtime_typed_def] >>
-      `MAP (evaluate_type (get_tenv cx)) (MAP expr_type es) = MAP SOME tvs` by
-        gvs[LIST_REL_EL_EQN, LIST_EQ_REWRITE, EL_MAP] >>
-      `?ret_tv. evaluate_type (get_tenv cx) v8 = SOME ret_tv` by
-        gvs[well_formed_type_def, IS_SOME_EXISTS] >>
-      simp[vyperTypeExprResultTheory.expr_result_typed_def,
-           vyperTypeExprSoundnessTheory.expr_runtime_typed_def,
-           expr_type_def, toplevel_value_typed_def] >>
-      `accounts_well_typed (initial_state am [FEMPTY]).accounts` by
-        (simp[initial_state_def] >> metis_tac[machine_well_typed_accounts]) >>
-      qexists_tac `ret_tv` >> conj_tac >- metis_tac[] >>
-      irule vyperTypeBuiltinsTheory.well_typed_builtin_app_success_type >>
-      simp[] >> metis_tac[])
-  >- (rpt strip_tac >> gvs[] >>
-      qpat_x_assum `eval_pure_expr _ _ (Builtin _ _ _) = _` mp_tac >>
-      simp[Once eval_pure_expr_def] >>
-      Cases_on `es` >> gvs[AllCaseEqs()] >>
-      Cases_on `t` >> gvs[AllCaseEqs()] >> metis_tac[])
-  >- (rpt strip_tac >>
-      qpat_x_assum `eval_pure_expr _ _ (Builtin _ _ _) = _` mp_tac >>
-      simp[Once eval_pure_expr_def] >> gvs[AllCaseEqs()] >> metis_tac[]))
-  >> (rpt gen_tac >> strip_tac >>
-      Cases_on `tb` >> gvs[constant_type_builtin_def] >>
-      rpt strip_tac >>
-      qpat_x_assum `well_typed_expr _ (TypeBuiltin _ _ _ _)` mp_tac >>
-      simp[Once well_typed_expr_def, well_typed_type_builtin_args_def] >>
-      strip_tac >>
-      qpat_x_assum `eval_pure_expr _ _ (TypeBuiltin _ _ _ _) = _` mp_tac >>
-      simp[Once eval_pure_expr_def] >> gvs[AllCaseEqs()] >>
-      strip_tac >> gvs[Once eval_pure_expr_def] >>
-      `(artifact_env artifact mods current_src).type_defs = get_tenv cx` by
-        simp[artifact_env_def] >>
-      `?ret_tv. evaluate_type (get_tenv cx) v9 = SOME ret_tv` by
-        gvs[well_formed_type_def, IS_SOME_EXISTS] >>
-      simp[vyperTypeExprResultTheory.expr_result_typed_def,
-           vyperTypeExprSoundnessTheory.expr_runtime_typed_def,
-           expr_type_def, toplevel_value_typed_def] >>
-      qexists_tac `ret_tv` >> conj_tac >- metis_tac[] >>
-      gvs[type_builtin_result_ok_def, evaluate_type_builtin_def,
-          AllCaseEqs()]
-      >- (drule vyperTypeDefaultsTheory.default_value_has_type_thm >> simp[])
-      >- (`evaluate_max_value v10 = INL v` by metis_tac[] >>
-          drule_all vyperTypeConversionsTheory.evaluate_max_value_well_typed >> simp[])
-      >- (`evaluate_max_value (BaseT DecimalT) = INL v` by metis_tac[] >>
-          drule_all vyperTypeConversionsTheory.evaluate_max_value_well_typed >> simp[])
-      >- (`evaluate_min_value v10 = INL v` by metis_tac[] >>
-          drule_all vyperTypeConversionsTheory.evaluate_min_value_well_typed >> simp[])
-      >- (`evaluate_min_value (BaseT DecimalT) = INL v` by metis_tac[] >>
-          drule_all vyperTypeConversionsTheory.evaluate_min_value_well_typed >> simp[])
-      >- gvs[evaluate_type_def, vyperTypingTheory.value_has_type_def,
-              within_int_bound_def])
-QED
 Definition constant_fmap_well_typed_def[local]:
   constant_fmap_well_typed (m : (string, type_value # value) fmap) <=>
     !id tv v. FLOOKUP m id = SOME (tv,v) ==>
@@ -1454,83 +595,6 @@ Proof
   first_x_assum drule >> simp[]
 QED
 
-Theorem module_constant_name_type_unique[local]:
-  !src ts visI eI idI tyI initI visJ eJ idJ tyJ initJ.
-    ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel src) ts)) /\
-    MEM (VariableDecl visI (Constant eI) idI tyI initI) ts /\
-    MEM (VariableDecl visJ (Constant eJ) idJ tyJ initJ) ts /\
-    idJ = idI ==>
-    tyJ = tyI
-Proof
-  gen_tac >> Induct_on `ts` >- rw[] >> rpt gen_tac >>
-  Cases_on `h` >>
-  rw[toplevel_vtype_keys_toplevel_def, ALL_DISTINCT_APPEND] >>
-  gvs[toplevel_vtype_keys_toplevel_def] >>
-  TRY (first_x_assum irule >> metis_tac[]) >>
-  metis_tac[module_toplevel_vtype_key_MEM_Variable_any]
-QED
-
-Definition constant_fmap_declared_typed_def[local]:
-  constant_fmap_declared_typed tenv ts
-      (m : (string, type_value # value) fmap) <=>
-    !id tv v. FLOOKUP m id = SOME (tv,v) ==>
-      ?vis e id_str ty init.
-        MEM (VariableDecl vis (Constant e) id_str ty init) ts /\
-        id_str = id /\
-        evaluate_type tenv ty = SOME tv /\ value_has_type tv v
-End
-
-Theorem constant_fmap_declared_typed_lookup[local]:
-  constant_fmap_declared_typed tenv ts m /\
-  FLOOKUP m id = SOME (tv,v) ==>
-  ?vis e id_str ty init.
-    MEM (VariableDecl vis (Constant e) id_str ty init) ts /\
-    id_str = id /\
-    evaluate_type tenv ty = SOME tv /\ value_has_type tv v
-Proof
-  metis_tac[constant_fmap_declared_typed_def]
-QED
-
-Theorem merge_constants_preserves_constant_cells_typed[local]:
-  contract_namespaces_ok F mods /\ ALOOKUP mods src = SOME ts /\
-  deployment_constant_cells_typed tenv addr mods am /\
-  constant_fmap_declared_typed tenv ts cenv ==>
-  deployment_constant_cells_typed tenv addr mods
-    (merge_constants addr src cenv am)
-Proof
-  strip_tac >>
-  qpat_assum `deployment_constant_cells_typed tenv addr mods am`
-    (fn th => assume_tac th) >>
-  simp[deployment_constant_cells_typed_def, merge_constants_def] >>
-  rpt gen_tac >> strip_tac >>
-  Cases_on `src' = src` >>
-  gvs[get_source_immutables_set_same, get_source_immutables_set_other,
-      FLOOKUP_FUNION]
-  >- (Cases_on `FLOOKUP cenv id` >> gvs[]
-      >- (gvs[empty_immutables_def] >>
-          drule_all deployment_constant_cells_typed_lookup >> simp[]) >>
-      drule_all constant_fmap_declared_typed_lookup >> strip_tac >>
-      `ts' = ts` by
-        (`MEM (src,ts') mods` by metis_tac[] >>
-         `ALOOKUP mods src = SOME ts'` by
-           (irule alistTheory.ALOOKUP_ALL_DISTINCT_MEM >>
-            gvs[contract_namespaces_ok_def]) >>
-         gvs[]) >>
-      `ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel src) ts))` by
-        metis_tac[contract_namespaces_ok_module_toplevel_vtype_keys] >>
-      `ty' = ty` by
-        (gvs[] >> qspecl_then
-           [`src`,`ts`,`vis`,`e`,`id`,`ty`,`init`,
-            `vis'`,`e'`,`id`,`ty'`,`init'`] mp_tac
-           module_constant_name_type_unique >> simp[]) >>
-      gvs[]) >>
-  gvs[empty_immutables_def] >>
-  qpat_x_assum `deployment_constant_cells_typed tenv addr mods am` mp_tac >>
-  simp[deployment_constant_cells_typed_def] >> strip_tac >>
-  last_x_assum
-    (qspecl_then [`src'`,`ts'`,`vis`,`e`,`id`,`ty`,`init`,`tv`,`v`] mp_tac) >>
-  simp[]
-QED
 
 Theorem checked_constants_env_output_invariants[local]:
   !work acc cenv.
@@ -1559,13 +623,15 @@ Proof
           Cases_on `evaluate_type (type_env_all_modules mods) t` >>
       gvs[AllCaseEqs()] >>
       qmatch_asmsub_rename_tac
-        `FST (eval_expr _ e _) = INL (Value eval_v)` >>
+        `FST ((do result <- eval_expr _ e; read_result _ result od) _) = INL eval_v` >>
       qmatch_asmsub_rename_tac
         `evaluate_type (type_env_all_modules mods) t = SOME eval_tv` >>
-      `?st'. eval_expr (set_current_module cx src) e
+      `?st'. (do result <- eval_expr (set_current_module cx src) e;
+                 read_result (set_current_module cx src) result od)
           (initial_state (merge_constants cx.txn.target src acc am) [FEMPTY]) =
-          (INL (Value eval_v),st')` by
-        (Cases_on `eval_expr (set_current_module cx src) e
+          (INL eval_v,st')` by
+        (Cases_on `(do result <- eval_expr (set_current_module cx src) e;
+                      read_result (set_current_module cx src) result od)
           (initial_state (merge_constants cx.txn.target src acc am) [FEMPTY])` >>
          gvs[set_current_module_def]) >>
       `machine_well_typed
@@ -1576,31 +642,17 @@ Proof
          (merge_constants cx.txn.target src acc am)` by
         (irule merge_constants_preserves_constant_cells_typed >> simp[] >>
          metis_tac[]) >>
-      `check_toplevel_decl cx.layouts cx.txn.target mods artifact src
+      `check_toplevel_decl mods artifact src
          (VariableDecl v (Constant e) s t o')` by
         metis_tac[check_contract_toplevel_decl_MEM] >>
       gvs[check_toplevel_decl_def] >>
-      `eval_pure_expr (set_current_module cx src)
-         (initial_state (merge_constants cx.txn.target src acc am) [FEMPTY]) e =
-         SOME (Value eval_v)` by
-        metis_tac[checked_constant_initializer_eval_pure] >>
-      `expr_result_typed (artifact_env artifact mods src) e (Value eval_v)` by
-        (qspecl_then [`mods`,`e`] mp_tac
-           constant_pure_eval_success_typed_gen_local >>
-         strip_tac >>
-         qpat_x_assum `constant_expr mods e ==> _` mp_tac >> simp[] >> strip_tac >>
-         qpat_x_assum `∀artifact cx current_src am. _` mp_tac >> strip_tac >>
-         pop_assum
-           (qspecl_then
-             [`artifact`,`set_current_module cx src`,`src`,
-              `merge_constants cx.txn.target src acc am`] mp_tac) >>
-         simp[set_current_module_def, context_well_typed_def,
-              get_tenv_def] >>
-         strip_tac >> gvs[context_well_typed_def]) >>
+      `value_runtime_typed (artifact_env artifact mods src) (expr_type e) eval_v` by
+        (irule constant_eval_expr_read_typed >> simp[] >>
+         qexistsl [`merge_constants cx.txn.target src acc am`,
+           `set_current_module cx src`, `[FEMPTY]`, `st'`] >>
+         simp[set_current_module_def] >> metis_tac[]) >>
       `value_has_type eval_tv eval_v` by
-        (gvs[vyperTypeExprResultTheory.expr_result_typed_def,
-             vyperTypeExprSoundnessTheory.expr_runtime_typed_def,
-             artifact_env_def, toplevel_value_typed_def] >> metis_tac[]) >>
+        gvs[vyperTypeExprSoundnessTheory.value_runtime_typed_def, artifact_env_def] >>
       `well_formed_type_value eval_tv` by
         metis_tac[vyperTypeValuesTheory.evaluate_type_well_formed_type_value] >>
       first_x_assum (qspecl_then
@@ -1818,21 +870,6 @@ Proof
   imp_res_tac acquire_nonreentrant_lock_scopes >>
   imp_res_tac acquire_nonreentrant_lock_immutables >>
   gvs[preserves_tv_def]
-QED
-
-Theorem call_unlock_action_preserves_immutables[local]:
-  (if nr /\ ~(mut = View \/ mut = Pure) then
-     case cx.nonreentrant_slot of
-       NONE => return ()
-     | SOME slot => release_nonreentrant_lock cx.txn.target slot
-   else return ()) st = (res,st') ==>
-  st'.immutables = st.immutables
-Proof
-  rw[] >>
-  gvs[return_def] >>
-  Cases_on `cx.nonreentrant_slot` >> gvs[return_def] >>
-  imp_res_tac release_nonreentrant_lock_immutables >>
-  gvs[]
 QED
 
 Theorem call_body_prefix_preserves_tv[local]:
@@ -2165,32 +1202,6 @@ Proof
   simp[]
 QED
 
-Theorem transfer_value_no_type_error_c53[local]:
-  !from to amount st s.
-    FST (transfer_value from to amount st) <> INR (Error (TypeError s))
-Proof
-  rw[transfer_value_def, bind_def, ignore_bind_def, get_accounts_def, return_def,
-     check_def, assert_def, raise_def, update_accounts_def] >>
-  rpt (CASE_TAC >> gvs[return_def, raise_def])
-QED
-
-Theorem transfer_value_accounts_well_typed_c53[local]:
-  !from to amount st.
-    accounts_well_typed st.accounts ==>
-    accounts_well_typed (SND (transfer_value from to amount st)).accounts
-Proof
-  rw[transfer_value_def, bind_def, ignore_bind_def, get_accounts_def, return_def,
-     check_def, assert_def, raise_def, update_accounts_def] >>
-  gvs[accounts_well_typed_def, account_well_typed_def,
-      vfmStateTheory.lookup_account_def, vfmStateTheory.update_account_def,
-      combinTheory.APPLY_UPDATE_THM] >>
-  rpt strip_tac >> gvs[] >>
-  rpt (IF_CASES_TAC >> gvs[]) >>
-  first_x_assum (qspec_then `addr` mp_tac) >>
-  simp[vfmStateTheory.update_account_def, combinTheory.APPLY_UPDATE_THM] >>
-  rpt (IF_CASES_TAC >> gvs[]) >> decide_tac
-QED
-
 Theorem send_call_value_no_control_c53:
   send_call_value mut cx st = (INR exc,st') ==> no_control_exc exc
 Proof
@@ -2212,7 +1223,7 @@ Proof
      vyperTypeExprSoundnessTheory.no_type_error_result_def] >>
   gvs[AllCaseEqs()] >>
   Cases_on `mut = Payable` >> gvs[return_def, raise_def] >>
-  metis_tac[transfer_value_no_type_error_c53]
+  metis_tac[vyperTypeExtCallSoundnessTheory.transfer_value_no_type_error]
 QED
 
 Theorem send_call_value_preserves_scopes_c53[local]:
@@ -2235,7 +1246,7 @@ Proof
   gvs[AllCaseEqs(), return_def, raise_def] >>
   `accounts_well_typed
      (SND (transfer_value cx.txn.sender cx.txn.target cx.txn.value st)).accounts` by
-    metis_tac[transfer_value_accounts_well_typed_c53] >>
+    metis_tac[vyperTypeExtCallSoundnessTheory.transfer_value_accounts_well_typed] >>
   gvs[]
 QED
 
@@ -2254,19 +1265,6 @@ Proof
      get_transient_storage_def, update_transient_def, return_def, raise_def,
      assert_def, check_def] >>
   gvs[AllCaseEqs(), return_def, raise_def]
-QED
-
-Theorem call_lock_action_preserves_scopes_c53[local]:
-  (if nr then
-     case cx.nonreentrant_slot of
-       NONE => raise (Error (TypeError "nonreentrant slot missing"))
-     | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (mut = View \/ mut = Pure)
-   else return ()) st = (res,st') ==>
-  st'.scopes = st.scopes
-Proof
-  rw[] >> gvs[return_def, raise_def] >>
-  Cases_on `cx.nonreentrant_slot` >> gvs[return_def, raise_def] >>
-  imp_res_tac acquire_nonreentrant_lock_scopes >> gvs[]
 QED
 
 Theorem call_lock_send_prefix_body_state_ready_c53:
@@ -2463,6 +1461,7 @@ Theorem call_lock_send_eval_prefix_no_type_error_c53[local]:
   checked_contract_runtime_ready art mods am tx /\
   machine_well_typed am /\ call_tx_well_typed tx /\
   ALOOKUP mods src = SOME ts /\
+  module_allocated am.layouts tx.target src ts /\
   MEM (FunctionDecl External mut nr raw tx.function_name args dflts ret body) ts /\
   bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
   cx = initial_evaluation_context am.sources am.layouts tx src ==>
@@ -2552,6 +1551,7 @@ Theorem call_lock_send_eval_return_typed_c53[local]:
   checked_contract_runtime_ready art mods am tx /\
   machine_well_typed am /\ call_tx_well_typed tx /\
   ALOOKUP mods src = SOME ts /\
+  module_allocated am.layouts tx.target src ts /\
   MEM (FunctionDecl External mut nr raw tx.function_name args dflts ret body) ts /\
   bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
   (do
@@ -2630,38 +1630,12 @@ Proof
       drule acquire_nonreentrant_lock_no_control >> simp[no_control_exc_def])
 QED
 
-Theorem call_lock_send_eval_return_typed_case_c53[local]:
-  check_contract F am.layouts tx.target mods = SOME art /\
-  checked_contract_runtime_ready art mods am tx /\
-  machine_well_typed am /\ call_tx_well_typed tx /\
-  ALOOKUP mods src = SOME ts /\
-  MEM (FunctionDecl External mut nr raw tx.function_name args dflts ret body) ts /\
-  bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
-  (case (if nr then
-           case (initial_evaluation_context am.sources am.layouts tx src).nonreentrant_slot of
-             NONE => raise (Error (TypeError "nonreentrant slot missing"))
-           | SOME slot => acquire_nonreentrant_lock tx.target slot (mut = View \/ mut = Pure)
-         else return ()) (initial_state am [scope] with <|outcomes := orc; requests := rqs|>) of
-     (INL x,s'') =>
-       (case send_call_value mut
-          (initial_evaluation_context am.sources am.layouts tx src) s'' of
-          (INL x,s'') =>
-            eval_stmts (initial_evaluation_context am.sources am.layouts tx src) body s''
-        | (INR e,s'') => (INR e,s''))
-   | (INR e,s'') => (INR e,s'')) = (INR (ReturnException v),st') ==>
-  ?ret_tv. evaluate_type (type_env_all_modules mods) ret = SOME ret_tv /\
-           value_has_type ret_tv v
-Proof
-  strip_tac >>
-  irule call_lock_send_eval_return_typed_c53 >>
-  simp[bind_def, ignore_bind_def] >> metis_tac[]
-QED
-
 Theorem call_external_function_exact_selected_no_type_error_c53[local]:
   check_contract F am.layouts tx.target mods = SOME art /\
   checked_contract_runtime_ready art mods am tx /\
   machine_well_typed am /\ call_tx_well_typed tx /\
   ALOOKUP mods src = SOME ts /\
+  module_allocated am.layouts tx.target src ts /\
   MEM (FunctionDecl External mut nr raw tx.function_name args dflts ret body) ts /\
   bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
   cx = initial_evaluation_context am.sources am.layouts tx src /\
@@ -2752,6 +1726,7 @@ Theorem checked_explicit_external_entry_no_type_error_selected[local]:
   checked_contract_runtime_ready art mods am tx /\
   machine_well_typed am /\ call_tx_well_typed tx /\
   ALOOKUP mods src = SOME ts /\
+  module_allocated am.layouts tx.target src ts /\
   MEM (FunctionDecl External mut nr raw tx.function_name args dflts ret body) ts /\
   bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
   call_external_function orc am (initial_evaluation_context am.sources am.layouts tx src)
@@ -2764,32 +1739,6 @@ Theorem initial_state_immutables[local]:
   (initial_state am scs).immutables = am.immutables
 Proof
   simp[initial_state_def]
-QED
-
-Theorem preserves_immutables_dom_same_initial_from_mid[local]:
-  st0.immutables = am_c.immutables /\
-  (?st_mid. st_mid.immutables = am_c.immutables /\
-            preserves_immutables_dom cx st_mid st') ==>
-  preserves_immutables_dom cx st0 st'
-Proof
-  rw[preserves_immutables_dom_def] >> metis_tac[]
-QED
-
-Theorem preserves_immutables_dom_eq_local[local]:
-  st'.immutables = st.immutables ==> preserves_immutables_dom cx st st'
-Proof
-  rw[preserves_immutables_dom_def] >> gvs[]
-QED
-
-Theorem preserves_immutables_dom_trans_local[local]:
-  preserves_immutables_dom cx st1 st2 /\
-  preserves_immutables_dom cx st2 st3 ==>
-  preserves_immutables_dom cx st1 st3
-Proof
-  rw[preserves_immutables_dom_def] >>
-  `?imms2. ALOOKUP st2.immutables cx.txn.target = SOME imms2` by
-    (gvs[IS_SOME_EXISTS] >> metis_tac[]) >>
-  metis_tac[]
 QED
 
 Theorem call_body_prefix_preserves_immutables_dom[local]:
@@ -2854,23 +1803,6 @@ Proof
   simp[IS_SOME_EXISTS, EXISTS_PROD]
 QED
 
-(* The current concrete deployment API still starts with NONE/[] (TASK027). *)
-Theorem call_body_prefix_preserves_immutables_dom_simple[local]:
-  (do
-     (if nr then
-        case cx.nonreentrant_slot of
-          NONE => raise (Error (TypeError "nonreentrant slot missing"))
-        | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (mut = View \/ mut = Pure)
-      else return ());
-     send_call_value mut cx;
-     eval_stmts cx body
-   od (initial_state am_c [env]) = (res,st')) ==>
-  preserves_immutables_dom cx (initial_state am_c [env]) st'
-Proof
-  mp_tac (Q.INST [`orc` |-> `NONE`, `rqs` |-> `[]`]
-    call_body_prefix_preserves_immutables_dom) >> simp[initial_state_def]
-QED
-
 Theorem call_external_function_deploy_success_final_lookup_source_exists_in_constants[local]:
   cx.in_deploy /\
   call_external_function orc am cx nr mut ts all_mods args dflts vals body ret =
@@ -2916,35 +1848,6 @@ Proof
       qexists `am_c with immutables := st_body.immutables` >>
       qexists `tv` >>
       qexists `x` >> simp[initial_state_def]
-QED
-
-Theorem deploy_call_success_transports_bare_global_readiness_clause[local]:
-  cx.in_deploy /\
-  call_external_function orc am cx nr mut ts all_mods args dflts vals body ret =
-    (INL v, am_out, rqs) /\
-  evaluate_all_constants cx am cx.txn.target all_mods = SOME am_c /\
-  (!src id ty tv v.
-     FLOOKUP call_art.cta_bare_globals (src,id) = SOME ty /\
-     FLOOKUP
-       (get_source_immutables src
-         (case ALOOKUP am_c.immutables cx.txn.target of SOME m => m | NONE => [])) id = SOME (tv,v) ==>
-     evaluate_type (type_env_all_modules all_mods) ty = SOME tv) ==>
-  !src id ty tv v.
-    FLOOKUP call_art.cta_bare_globals (src,id) = SOME ty /\
-    FLOOKUP
-      (get_source_immutables src
-        (case ALOOKUP am_out.immutables cx.txn.target of SOME m => m | NONE => [])) id = SOME (tv,v) ==>
-    evaluate_type (type_env_all_modules all_mods) ty = SOME tv
-Proof
-  rw[] >>
-  drule_all call_external_function_deploy_success_final_lookup_source_exists_in_constants >>
-  strip_tac >>
-  drule_all call_external_function_deploy_success_preserves_immutable_type_tags_from_constants >>
-  strip_tac >>
-  gvs[] >>
-  first_x_assum irule >>
-  first_assum (irule_at Any) >>
-  first_assum (irule_at Any)
 QED
 
 Theorem deploy_context_constants_bare_globals_type_ready[local]:
@@ -3010,68 +1913,6 @@ Proof
     (drule_all call_external_function_deploy_success_preserves_immutable_type_tags_from_constants >>
      simp[]) >>
   gvs[]
-QED
-
-Theorem deploy_constructor_success_bare_global_type_from_constants[local]:
-  check_contract F am.layouts deploy_tx.target mods = SOME call_art /\
-  initial_immutables (type_env_all_modules mods) mods = SOME imms /\
-  call_external_function orc
-    (am with <|immutables updated_by CONS (deploy_tx.target,imms);
-               exports updated_by CONS (deploy_tx.target,exps)|>)
-    ((initial_evaluation_context ((deploy_tx.target,mods)::am.sources) am.layouts deploy_tx NONE)
-       with in_deploy := T)
-    nr mut ts mods args dflts deploy_tx.args body ret = (INL v',am_ctor,rqs) /\
-  evaluate_all_constants
-    ((initial_evaluation_context ((deploy_tx.target,mods)::am.sources) am.layouts deploy_tx NONE)
-       with in_deploy := T)
-    (am with <|immutables updated_by CONS (deploy_tx.target,imms);
-               exports updated_by CONS (deploy_tx.target,exps)|>)
-    deploy_tx.target mods = SOME am_c /\
-  FLOOKUP call_art.cta_bare_globals (src,id) = SOME ty /\
-  FLOOKUP
-    (get_source_immutables src
-      (case ALOOKUP am_ctor.immutables deploy_tx.target of SOME m => m | NONE => [])) id =
-    SOME (tv,v) ==>
-  evaluate_type (type_env_all_modules mods) ty = SOME tv
-Proof
-  rw[] >>
-  qabbrev_tac
-    `cx0 = ((initial_evaluation_context ((deploy_tx.target,mods)::am.sources) am.layouts deploy_tx NONE)
-       with in_deploy := T)` >>
-  `cx0.in_deploy` by simp[Abbr `cx0`] >>
-  `cx0.txn.target = deploy_tx.target` by
-    simp[Abbr `cx0`, initial_evaluation_context_def] >>
-  `call_external_function orc
-     (am with <|immutables updated_by CONS (deploy_tx.target,imms);
-                exports updated_by CONS (deploy_tx.target,exps)|>)
-     cx0 nr mut ts mods args dflts deploy_tx.args body ret = (INL v',am_ctor,rqs)` by
-    simp[Abbr `cx0`] >>
-  `evaluate_all_constants cx0
-     (am with <|immutables updated_by CONS (deploy_tx.target,imms);
-                exports updated_by CONS (deploy_tx.target,exps)|>)
-     cx0.txn.target mods = SOME am_c` by
-    gvs[Abbr `cx0`, initial_evaluation_context_def] >>
-  `!src id ty tv v.
-      FLOOKUP call_art.cta_bare_globals (src,id) = SOME ty /\
-      FLOOKUP
-        (get_source_immutables src
-          (case ALOOKUP am_c.immutables deploy_tx.target of SOME m => m | NONE => [])) id = SOME (tv,v) ==>
-      evaluate_type (type_env_all_modules mods) ty = SOME tv` by
-    (rpt strip_tac >>
-     irule deploy_context_constants_bare_globals_type_ready >>
-     simp[] >>
-     metis_tac[]) >>
-  irule deploy_call_success_scalar_bare_global_type_from_constants >>
-  simp[] >>
-  qexistsl
-    [`am with <|immutables updated_by CONS (deploy_tx.target,imms);
-                exports updated_by CONS (deploy_tx.target,exps)|>`,
-     `am_c`, `am_ctor`, `args`, `body`, `call_art`, `cx0`, `dflts`,
-     `id`, `mut`, `nr`, `orc`, `ret`, `rqs`, `src`, `ts`, `v`, `v'`, `deploy_tx.args`] >>
-  gvs[] >>
-  rpt strip_tac >>
-  first_x_assum (qspecl_then [`src'`,`id'`,`ty'`,`tv'`,`v''`] mp_tac) >>
-  simp[]
 QED
 
 Theorem evaluate_all_constants_preserves_layouts[local]:
@@ -3464,14 +2305,55 @@ Proof
      simp[]
 QED
 
+Theorem evaluate_all_constants_preserves_exports[local]:
+  evaluate_all_constants cx am addr mods = SOME am_c ==>
+  am_c.exports = am.exports
+Proof
+  simp[evaluate_all_constants_def] >>
+  qid_spec_tac `am_c` >> qid_spec_tac `am` >>
+  qspec_tac (`constants_order mods`, `mods`) >>
+  Induct >- rw[evaluate_module_constants_def] >>
+  Cases_on `h` >>
+  rw[evaluate_module_constants_def] >>
+  gvs[AllCaseEqs(), merge_constants_def] >>
+  first_x_assum drule >> simp[]
+QED
+
+Theorem call_external_function_deploy_success_preserves_exports[local]:
+  cx.in_deploy /\
+  call_external_function orc am cx nr mut ts all_mods args dflts vals body ret =
+    (INL v, am_out, rqs) ==>
+  am_out.exports = am.exports
+Proof
+  strip_tac >>
+  drule_all call_external_function_deploy_success_evaluate_all_constants >>
+  strip_tac >>
+  drule_all call_external_function_deploy_success_cases >>
+  drule evaluate_all_constants_preserves_exports >>
+  strip_tac >> strip_tac >>
+  gvs[abstract_machine_from_state_def]
+QED
+
+Theorem load_contract_deployed_exports:
+  load_contract orc am deploy_tx mods exps = INL (am_deployed,rqs) ==>
+  ALOOKUP am_deployed.exports deploy_tx.target = SOME exps
+Proof
+  strip_tac >>
+  drule load_contract_success_cases >> strip_tac >>
+  drule_at (Pos (el 2)) call_external_function_deploy_success_preserves_exports >>
+  simp[]
+QED
+
 Theorem load_contract_establishes_checked_contract_runtime_ready:
   load_contract orc am deploy_tx mods exps = INL (am_deployed,rqs) /\
   check_contract F am_deployed.layouts call_tx.target mods = SOME art /\
+  exports_ok am_deployed.layouts call_tx.target mods exps /\
   call_tx.target = deploy_tx.target ==>
   checked_contract_runtime_ready art mods am_deployed call_tx
 Proof
   rw[checked_contract_runtime_ready_def]
   >- (drule load_contract_success_cases >> strip_tac >> gvs[])
+  >- (drule load_contract_deployed_exports >> gvs[])
   >> irule load_contract_establishes_immutables_ready
   >> qexistsl [`am`, `deploy_tx`, `exps`, `mods`, `orc`, `rqs`]
   >> simp[]
@@ -3523,14 +2405,96 @@ Proof
   disch_then (fn th => rewrite_tac[read_storage_slot_def, th])
 QED
 
-Theorem getter_context_equiv_check_array_bounds[local]:
+Theorem getter_context_equiv_get_immutables[local]:
   getter_context_equiv cx1 cx2 ==>
-  check_array_bounds cx1 tvl v = check_array_bounds cx2 tvl v
+  get_immutables cx1 src = get_immutables cx2 src
+Proof
+  rw[getter_context_equiv_def, get_immutables_def,
+     get_address_immutables_def, FUN_EQ_THM, bind_def]
+QED
+
+Theorem getter_context_equiv_read_place[local]:
+  getter_context_equiv cx1 cx2 ==>
+  read_place cx1 p = read_place cx2 p
+Proof
+  strip_tac >> Cases_on `p` >>
+  simp[read_place_def, getter_context_equiv_read_storage_slot] >>
+  drule getter_context_equiv_get_immutables >>
+  disch_then (fn th => rewrite_tac[th])
+QED
+
+Theorem getter_context_equiv_place_type_value[local]:
+  getter_context_equiv cx1 cx2 ==>
+  place_type_value cx1 p = place_type_value cx2 p
+Proof
+  strip_tac >> Cases_on `p` >>
+  simp[place_type_value_def] >>
+  drule getter_context_equiv_get_immutables >>
+  disch_then (fn th => rewrite_tac[th])
+QED
+
+Theorem getter_context_equiv_read_result[local]:
+  getter_context_equiv cx1 cx2 ==>
+  read_result cx1 tv = read_result cx2 tv
+Proof
+  strip_tac >> Cases_on `tv` >>
+  simp[read_result_def, getter_context_equiv_read_place]
+QED
+
+Theorem getter_context_equiv_resolve_array_element[local]:
+  !path slot tv. getter_context_equiv cx1 cx2 ==>
+  resolve_array_element cx1 tr slot tv path =
+  resolve_array_element cx2 tr slot tv path
+Proof
+  Induct_on `path` >- (Cases_on `tv` >> simp[resolve_array_element_def]) >>
+  rpt gen_tac >> strip_tac >>
+  `get_storage_backend cx1 tr = get_storage_backend cx2 tr` by
+    metis_tac[getter_context_equiv_get_storage_backend] >>
+  Cases_on `tv` >> simp[resolve_array_element_def] >>
+  Cases_on `h` >> simp[resolve_array_element_def] >>
+  Cases_on `v` >> simp[resolve_array_element_def] >>
+  rename1 `ArrayTV etv bd` >> Cases_on `bd` >>
+  simp[resolve_array_element_def]
+QED
+
+Theorem getter_context_equiv_extend_storage_place[local]:
+  getter_context_equiv cx1 cx2 ==>
+  extend_storage_place cx1 tr slot tv sb =
+  extend_storage_place cx2 tr slot tv sb
 Proof
   strip_tac >>
-  `!tr. get_storage_backend cx1 tr = get_storage_backend cx2 tr` by
-    metis_tac[getter_context_equiv_get_storage_backend] >>
-  simp[oneline check_array_bounds_def, FUN_EQ_THM, AllCaseEqs()]
+  `!slot tv path. resolve_array_element cx1 tr slot tv path =
+                  resolve_array_element cx2 tr slot tv path` by
+    metis_tac[getter_context_equiv_resolve_array_element] >>
+  simp[oneline extend_storage_place_def]
+QED
+
+Theorem getter_context_equiv_extend_place[local]:
+  getter_context_equiv cx1 cx2 ==>
+  extend_place cx1 res sb = extend_place cx2 res sb
+Proof
+  strip_tac >>
+  `!p. place_type_value cx1 p = place_type_value cx2 p` by
+    metis_tac[getter_context_equiv_place_type_value] >>
+  `!p. read_place cx1 p = read_place cx2 p` by
+    metis_tac[getter_context_equiv_read_place] >>
+  `!tr slot tv sb. extend_storage_place cx1 tr slot tv sb =
+                  extend_storage_place cx2 tr slot tv sb` by
+    metis_tac[getter_context_equiv_extend_storage_place] >>
+  `get_tenv cx1 = get_tenv cx2` by
+    metis_tac[getter_context_equiv_get_tenv] >>
+  simp[oneline extend_place_def]
+QED
+
+Theorem getter_context_equiv_select_result[local]:
+  getter_context_equiv cx1 cx2 ==>
+  select_result cx1 ty res sb = select_result cx2 ty res sb
+Proof
+  strip_tac >>
+  `get_tenv cx1 = get_tenv cx2` by
+    metis_tac[getter_context_equiv_get_tenv] >>
+  Cases_on `res` >>
+  simp[select_result_def, getter_context_equiv_extend_place]
 QED
 
 Theorem getter_context_equiv_eval_Subscript[local]:
@@ -3543,11 +2507,10 @@ Proof
   rpt strip_tac >>
   `get_tenv cx1 = get_tenv cx2` by
     metis_tac[getter_context_equiv_get_tenv] >>
-  `!tvl v. check_array_bounds cx1 tvl v = check_array_bounds cx2 tvl v` by
-    metis_tac[getter_context_equiv_check_array_bounds] >>
-  `!tr slot tv. read_storage_slot cx1 tr slot tv =
-                read_storage_slot cx2 tr slot tv` by
-    metis_tac[getter_context_equiv_read_storage_slot] >>
+  `!res. read_result cx1 res = read_result cx2 res` by
+    metis_tac[getter_context_equiv_read_result] >>
+  `!ty res sb. select_result cx1 ty res sb = select_result cx2 ty res sb` by
+    metis_tac[getter_context_equiv_select_result] >>
   simp[Ntimes evaluate_def 2]
 QED
 
@@ -3623,14 +2586,6 @@ Proof
   simp[Ntimes evaluate_def 2, getter_context_equiv_lookup_global]
 QED
 
-Theorem getter_context_equiv_materialise[local]:
-  getter_context_equiv cx1 cx2 ==>
-  materialise cx1 tv = materialise cx2 tv
-Proof
-  strip_tac >> Cases_on `tv` >> simp[materialise_def] >>
-  metis_tac[getter_context_equiv_read_storage_slot]
-QED
-
 Theorem getter_context_equiv_eval_single_Return[local]:
   getter_context_equiv cx1 cx2 /\
   eval_expr cx1 exp = eval_expr cx2 exp ==>
@@ -3638,8 +2593,8 @@ Theorem getter_context_equiv_eval_single_Return[local]:
   eval_stmts cx2 [Return (SOME exp)]
 Proof
   rpt strip_tac >>
-  `!tv. materialise cx1 tv = materialise cx2 tv` by
-    metis_tac[getter_context_equiv_materialise] >>
+  `!tv. read_result cx1 tv = read_result cx2 tv` by
+    metis_tac[getter_context_equiv_read_result] >>
   `eval_stmt cx1 (Return (SOME exp)) =
    eval_stmt cx2 (Return (SOME exp))` by
     simp[Ntimes evaluate_def 2, bind_def, AllCaseEqs()] >>
@@ -3740,6 +2695,7 @@ QED
 
 Theorem fn_sigs_declared_complete_context_cong[local]:
   (!src. get_module_code cx1 src = get_module_code cx2 src) /\
+  (!k. context_function_live cx1 k = context_function_live cx2 k) /\
   cx1.in_deploy = cx2.in_deploy ==>
   (fn_sigs_declared_complete sigs cx1 <=>
    fn_sigs_declared_complete sigs cx2)
@@ -3748,7 +2704,9 @@ Proof
 QED
 
 Theorem toplevel_vtypes_complete_context_cong[local]:
-  (!src. get_module_code cx1 src = get_module_code cx2 src) ==>
+  (!src. get_module_code cx1 src = get_module_code cx2 src) /\
+  (!tr src id. lookup_var_slot_from_layout cx1 tr src id =
+               lookup_var_slot_from_layout cx2 tr src id) ==>
   (toplevel_vtypes_complete vtypes cx1 <=>
    toplevel_vtypes_complete vtypes cx2)
 Proof
@@ -3784,6 +2742,7 @@ Theorem env_context_consistent_context_cong[local]:
   current_module cx1 = current_module cx2 /\
   cx1.in_deploy = cx2.in_deploy /\
   (!src. get_module_code cx1 src = get_module_code cx2 src) /\
+  (!k. context_function_live cx1 k = context_function_live cx2 k) /\
   (!tr src id. lookup_var_slot_from_layout cx1 tr src id =
                lookup_var_slot_from_layout cx2 tr src id) ==>
   (env_context_consistent env cx1 <=> env_context_consistent env cx2)
@@ -3807,7 +2766,7 @@ Proof
   `flag_members_complete env.flag_members cx1 <=>
    flag_members_complete env.flag_members cx2` by
     (irule flag_members_complete_context_cong >> simp[]) >>
-  simp[env_context_consistent_def]
+  simp[env_context_consistent_def, fn_sigs_live_def]
 QED
 
 Theorem initial_env_context_consistent_empty_tx[local]:
@@ -3826,7 +2785,7 @@ Proof
     (irule env_context_consistent_context_cong >>
      simp[get_tenv_def, current_module_def, get_module_code_def,
           lookup_var_slot_from_layout_def, initial_evaluation_context_def,
-          empty_call_txn_def]) >>
+          context_function_live_def, empty_call_txn_def]) >>
   metis_tac[]
 QED
 
@@ -3914,7 +2873,8 @@ Theorem checked_public_getter_post_prefix_body_setup_selected:
   check_contract F am.layouts tx.target mods = SOME art /\
   checked_contract_runtime_ready art mods am tx /\
   machine_well_typed am /\
-  ALOOKUP mods src = SOME ts /\ MEM decl ts /\
+  ALOOKUP mods src = SOME ts /\
+  module_allocated am.layouts tx.target src ts /\ MEM decl ts /\
   is_public_getter_decl tx.function_name decl /\
   external_getter_tuple src decl = SOME (mut,nr,args,dflts,ret,body) /\
   bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
@@ -3941,6 +2901,7 @@ Theorem checked_public_getter_post_prefix_body_setup_selected:
 Proof
   rpt strip_tac >>
   drule checked_public_getter_body_typing_package >>
+  disch_then drule >>
   disch_then drule >>
   disch_then drule >>
   disch_then drule >>
@@ -4012,7 +2973,8 @@ Theorem checked_public_getter_post_prefix_body_execution_selected:
   check_contract F am.layouts tx.target mods = SOME art /\
   checked_contract_runtime_ready art mods am tx /\
   machine_well_typed am /\
-  ALOOKUP mods src = SOME ts /\ MEM decl ts /\
+  ALOOKUP mods src = SOME ts /\
+  module_allocated am.layouts tx.target src ts /\ MEM decl ts /\
   is_public_getter_decl tx.function_name decl /\
   external_getter_tuple src decl = SOME (mut,nr,args,dflts,ret,body) /\
   bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
@@ -4083,7 +3045,8 @@ Theorem checked_public_getter_body_preserves_machine_components:
   check_contract F am.layouts tx.target mods = SOME art /\
   checked_contract_runtime_ready art mods am tx /\
   machine_well_typed am /\
-  ALOOKUP mods src = SOME ts /\ MEM decl ts /\
+  ALOOKUP mods src = SOME ts /\
+  module_allocated am.layouts tx.target src ts /\ MEM decl ts /\
   is_public_getter_decl tx.function_name decl /\
   external_getter_tuple src decl = SOME (mut,nr,args,dflts,ret,body) /\
   bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
@@ -4129,31 +3092,12 @@ Proof
 QED
 
 
-Theorem checked_public_getter_post_prefix_body_return_typed_selected:
-  check_contract F am.layouts tx.target mods = SOME art /\
-  checked_contract_runtime_ready art mods am tx /\
-  machine_well_typed am /\
-  ALOOKUP mods src = SOME ts /\ MEM decl ts /\
-  is_public_getter_decl tx.function_name decl /\
-  external_getter_tuple src decl = SOME (mut,nr,args,dflts,ret,body) /\
-  bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
-  cx = initial_evaluation_context am.sources am.layouts tx src /\
-  st.scopes = [scope] /\ st.immutables = am.immutables /\
-  state_well_typed st /\ accounts_well_typed st.accounts /\
-  eval_stmts cx body st = (INR (ReturnException v),st') ==>
-  ?ret_tv. evaluate_type (type_env_all_modules mods) ret = SOME ret_tv /\
-           value_has_type ret_tv v
-Proof
-  rpt strip_tac >>
-  drule_all checked_public_getter_post_prefix_body_execution_selected >>
-  metis_tac[]
-QED
-
 Theorem checked_public_getter_initial_body_execution_selected:
   check_contract F am.layouts tx.target mods = SOME art /\
   checked_contract_runtime_ready art mods am tx /\
   machine_well_typed am /\
-  ALOOKUP mods src = SOME ts /\ MEM decl ts /\
+  ALOOKUP mods src = SOME ts /\
+  module_allocated am.layouts tx.target src ts /\ MEM decl ts /\
   is_public_getter_decl tx.function_name decl /\
   external_getter_tuple src decl = SOME (mut,nr,args,dflts,ret,body) /\
   bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
@@ -4188,6 +3132,7 @@ Theorem call_external_function_exact_selected_getter_no_type_error_c53[local]:
   checked_contract_runtime_ready art mods am tx /\
   machine_well_typed am /\
   ALOOKUP mods src = SOME ts /\
+  module_allocated am.layouts tx.target src ts /\
   MEM decl ts /\
   is_public_getter_decl tx.function_name decl /\
   external_getter_tuple src decl = SOME (mut,nr,args,dflts,ret,body) /\
@@ -4251,53 +3196,10 @@ Proof
       vyperTypeExprSoundnessTheory.no_type_error_result_def]
 QED
 
-Theorem bind_arguments_success_mem_zip_safe_cast:
-  !tenv params vals scope id ty raw.
-    bind_arguments tenv params vals = SOME scope /\
-    MEM ((id,ty),raw) (ZIP (params, vals)) ==>
-    ?tv cast_v.
-      evaluate_type tenv ty = SOME tv /\
-      safe_cast tv raw = SOME cast_v
-Proof
-  ho_match_mp_tac bind_arguments_ind >>
-  rw[bind_arguments_def] >>
-  gvs[AllCaseEqs()] >>
-  first_x_assum drule >> simp[]
-QED
-
-Theorem MEM_ZIP_FST[local]:
-  !xs ys x y. MEM (x,y) (ZIP (xs,ys)) ==> MEM x xs
-Proof
-  Induct >> Cases_on `ys` >> rw[ZIP_def] >> gvs[] >>
-  first_x_assum drule >> simp[]
-QED
-
-Theorem bind_arguments_success_flookup_safe_cast:
-  !tenv params vals scope id ty raw sv.
-    bind_arguments tenv params vals = SOME scope /\
-    ALL_DISTINCT (MAP FST params) /\
-    MEM ((id,ty),raw) (ZIP (params, vals)) /\
-    FLOOKUP scope id = SOME sv ==>
-      sv.assignable /\
-      ?tv.
-        evaluate_type tenv ty = SOME tv /\
-        safe_cast tv raw = SOME sv.value /\
-        sv.type = tv
-Proof
-  ho_match_mp_tac bind_arguments_ind >>
-  rw[bind_arguments_def] >>
-  gvs[AllCaseEqs(), FLOOKUP_UPDATE, MEM_MAP] >>
-  gvs[] >>
-  imp_res_tac MEM_ZIP_FST >>
-  gvs[] >>
-  first_x_assum drule >>
-  disch_then (qspec_then `sv` mp_tac) >>
-  simp[]
-QED
-
 Theorem checked_explicit_external_body_no_control_escape_selected:
   check_contract F am.layouts tx.target mods = SOME art /\
   ALOOKUP mods src = SOME ts /\
+  module_allocated am.layouts tx.target src ts /\
   MEM (FunctionDecl External mut nr raw tx.function_name args dflts ret body) ts ==>
   stmts_no_control_escape body
 Proof
@@ -4311,6 +3213,7 @@ QED
 Theorem checked_public_getter_body_no_control_escape_selected:
   check_contract F am.layouts tx.target mods = SOME art /\
   ALOOKUP mods src = SOME ts /\
+  module_allocated am.layouts tx.target src ts /\
   MEM decl ts /\
   is_public_getter_decl tx.function_name decl /\
   external_getter_tuple src decl = SOME (mut,nr,args,dflts,ret,body) ==>
@@ -4345,53 +3248,6 @@ Proof
 QED
 
 
-Theorem send_call_value_preserves_scopes[local]:
-  send_call_value mut cx st = (res,st') ==>
-  st'.scopes = st.scopes
-Proof
-  rw[send_call_value_def, bind_def, ignore_bind_def, check_def,
-     assert_def, return_def, raise_def] >>
-  gvs[AllCaseEqs()] >>
-  imp_res_tac transfer_value_scopes >> gvs[]
-QED
-
-Theorem call_lock_action_preserves_scopes[local]:
-  (if nr then
-     case cx.nonreentrant_slot of
-       NONE => raise (Error (TypeError "nonreentrant slot missing"))
-     | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (mut = View \/ mut = Pure)
-   else return ()) st = (res,st') ==>
-  st'.scopes = st.scopes
-Proof
-  rw[] >> gvs[return_def, raise_def] >>
-  Cases_on `cx.nonreentrant_slot` >> gvs[return_def, raise_def] >>
-  imp_res_tac acquire_nonreentrant_lock_scopes >> gvs[]
-QED
-
-Theorem call_lock_send_prefix_body_state_ready[local]:
-  machine_well_typed am /\
-  scope_well_typed env /\
-  (do
-     (if nr then
-        case cx.nonreentrant_slot of
-          NONE => raise (Error (TypeError "nonreentrant slot missing"))
-        | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (mut = View \/ mut = Pure)
-      else return ());
-     send_call_value mut cx
-   od (initial_state am [env] with <|outcomes := orc; requests := rqs|>) = (INL (),st)) ==>
-  st.scopes = [env] /\
-  st.immutables = am.immutables /\
-  state_well_typed st
-Proof
-  rw[bind_def, ignore_bind_def] >> gvs[AllCaseEqs()] >>
-  TRY (Cases_on `cx.nonreentrant_slot` >> gvs[return_def, raise_def]) >>
-  imp_res_tac acquire_nonreentrant_lock_scopes >>
-  imp_res_tac acquire_nonreentrant_lock_immutables >>
-  imp_res_tac send_call_value_preserves_scopes >>
-  imp_res_tac send_call_value_preserves_immutables >>
-  gvs[initial_state_def, state_well_typed_def, machine_well_typed_def]
-QED
-
 Theorem acquire_nonreentrant_lock_accounts[local]:
   acquire_nonreentrant_lock target slot ro st = (res,st') ==>
   st'.accounts = st.accounts
@@ -4408,6 +3264,7 @@ Theorem checked_explicit_external_body_setup:
   checked_contract_runtime_ready art mods am tx /\
   machine_well_typed am /\ call_tx_well_typed tx /\
   ALOOKUP mods src = SOME ts /\
+  module_allocated am.layouts tx.target src ts /\
   MEM (FunctionDecl External mut nr raw tx.function_name args dflts ret body) ts /\
   cx = initial_evaluation_context am.sources am.layouts tx src /\
   bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
@@ -4459,32 +3316,6 @@ Proof
 QED
 
 
-Theorem checked_explicit_external_body_no_type_error_selected[local]:
-  check_contract F am.layouts tx.target mods = SOME art /\
-  checked_contract_runtime_ready art mods am tx /\
-  machine_well_typed am /\ call_tx_well_typed tx /\
-  ALOOKUP mods src = SOME ts /\
-  MEM (FunctionDecl External mut nr raw tx.function_name args dflts ret body) ts /\
-  cx = initial_evaluation_context am.sources am.layouts tx src /\
-  bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
-  ALL_DISTINCT (MAP FST args) /\
-  st.scopes = [scope] /\ st.immutables = am.immutables /\
-  state_well_typed st /\ accounts_well_typed st.accounts /\
-  eval_stmts cx body st = (res,st') ==>
-  no_type_error_result res
-Proof
-  strip_tac >>
-  drule_all checked_explicit_external_body_setup >>
-  strip_tac >>
-  `call_evaluation_safe cx (int_calls_stmts body)` by
-    (qpat_x_assum `cx = _` SUBST1_TAC >>
-     gvs[checked_contract_runtime_ready_def] >>
-     drule_all checked_explicit_external_body_call_evaluation_safe >>
-     simp[]) >>
-  drule_all eval_stmts_no_type_error >>
-  rw[vyperTypeExprSoundnessTheory.no_type_error_eval_def]
-QED
-
 
 
 Theorem checked_explicit_external_body_preserves_machine_components:
@@ -4492,6 +3323,7 @@ Theorem checked_explicit_external_body_preserves_machine_components:
   checked_contract_runtime_ready art mods am tx /\
   machine_well_typed am /\ call_tx_well_typed tx /\
   ALOOKUP mods src = SOME ts /\
+  module_allocated am.layouts tx.target src ts /\
   MEM (FunctionDecl External mut nr raw tx.function_name args dflts ret body) ts /\
   cx = initial_evaluation_context am.sources am.layouts tx src /\
   bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
@@ -4520,6 +3352,7 @@ Theorem call_external_function_selected_explicit_raw_args_no_type_error_c53[loca
   checked_contract_runtime_ready art mods am tx /\
   machine_well_typed am /\ call_tx_well_typed tx /\
   ALOOKUP mods src = SOME ts /\
+  module_allocated am.layouts tx.target src ts /\
   MEM (FunctionDecl External mut nr raw tx.function_name args dflts ret body) ts /\
   cx = initial_evaluation_context am.sources am.layouts tx src /\
   call_external_function orc am cx nr mut ts mods args dflts tx.args body ret = (res,am',rqs) ==>
@@ -4552,6 +3385,7 @@ Theorem call_external_function_selected_getter_raw_args_no_type_error_c53[local]
   checked_contract_runtime_ready art mods am tx /\
   machine_well_typed am /\
   ALOOKUP mods src = SOME ts /\
+  module_allocated am.layouts tx.target src ts /\
   MEM decl ts /\
   is_public_getter_decl tx.function_name decl /\
   external_getter_tuple src decl = SOME (mut,nr,args,dflts,ret,body) /\
@@ -4593,6 +3427,10 @@ Theorem checked_call_external_no_type_error:
   no_type_error_result res
 Proof
   rpt strip_tac >>
+  `!ts. ALOOKUP mods (find_function_module am tx.target tx.function_name) = SOME ts ==>
+        module_allocated am.layouts tx.target
+          (find_function_module am tx.target tx.function_name) ts` by
+    metis_tac[checked_contract_runtime_ready_module_allocated] >>
   qpat_x_assum `call_external orc am tx = (res,am',rqs)` mp_tac >>
   simp[Once call_external_def,
        vyperTypeExprSoundnessTheory.no_type_error_result_def] >>
@@ -4638,6 +3476,10 @@ Theorem checked_call_external_no_loop_control:
   exc <> BreakException /\ exc <> ContinueException
 Proof
   rpt gen_tac >> strip_tac >>
+  `!ts. ALOOKUP mods (find_function_module am tx.target tx.function_name) = SOME ts ==>
+        module_allocated am.layouts tx.target
+          (find_function_module am tx.target tx.function_name) ts` by
+    metis_tac[checked_contract_runtime_ready_module_allocated] >>
   qpat_x_assum `call_external orc am tx = (INR exc,am',rqs)` mp_tac >>
   simp[Once call_external_def] >>
   gvs[AllCaseEqs()] >>
@@ -4666,3 +3508,13 @@ Proof
   metis_tac[call_external_function_no_loop_control_c53,
             checked_public_getter_body_no_control_escape_selected]
 QED
+
+(* Deployment and checked-entry proofs must be closed kernel theorems. *)
+val () = List.app
+  (fn (name,th) =>
+    let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
+      if null (Thm.hyp th) andalso null axioms andalso
+         List.all (fn oracle => oracle = "DISK_THM") oracles then ()
+      else raise Fail ("contract soundness proof is not closed: " ^ name)
+    end)
+  (DB.thms "vyperTypeContractSoundness");

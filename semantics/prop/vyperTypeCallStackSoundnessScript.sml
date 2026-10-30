@@ -16,12 +16,6 @@ Definition call_stack_follows_def:
     (R parent current /\ call_stack_follows R (parent::rest))
 End
 
-Theorem RTC_then_R_TC:
-  RTC R x y /\ R y z ==> TC R x z
-Proof
-  metis_tac[RTC_CASES_TC, TC_RULES]
-QED
-
 Theorem call_stack_follows_push:
   call_stack_follows R (owner::ancestors) /\
   R owner callee ==>
@@ -44,20 +38,6 @@ Proof
   first_x_assum (qspec_then `h` mp_tac) >>
   simp[] >>
   metis_tac[RTC_RULES_RIGHT1]
-QED
-
-Theorem acyclic_stack_target_not_mem:
-  irreflexive (TC R) /\
-  call_stack_follows R (owner::ancestors) /\
-  R owner callee ==>
-  ~MEM callee (owner::ancestors)
-Proof
-  rpt strip_tac >>
-  drule_all call_stack_member_reaches_head >>
-  disch_then assume_tac >>
-  drule_all RTC_then_R_TC >>
-  disch_then assume_tac >>
-  gvs[irreflexive_def]
 QED
 
 (* ===== Ownership of extracted internal calls ===== *)
@@ -87,13 +67,6 @@ Theorem calls_follow_call_graph_append[simp]:
   calls_follow_call_graph edges owner ys
 Proof
   simp[calls_follow_call_graph_def, EVERY_APPEND]
-QED
-
-Theorem calls_follow_call_graph_DROP:
-  calls_follow_call_graph edges owner xs ==>
-  calls_follow_call_graph edges owner (DROP n xs)
-Proof
-  simp[calls_follow_call_graph_def, EVERY_DROP]
 QED
 
 (* ===== Syntax extraction decomposition ===== *)
@@ -307,14 +280,6 @@ Proof
   simp[functions_follow_call_graph_def, get_module_code_def]
 QED
 
-Theorem functions_follow_call_graph_push_stk:
-  functions_follow_call_graph edges
-    (cx with stk updated_by CONS callee) <=>
-  functions_follow_call_graph edges cx
-Proof
-  simp[functions_follow_call_graph_stk]
-QED
-
 Theorem checked_contract_functions_follow_call_graph:
   check_contract cx.in_deploy layouts cx.txn.target mods = SOME art /\
   ALOOKUP cx.sources cx.txn.target = SOME mods ==>
@@ -370,18 +335,6 @@ Proof
   qexists_tac `xs ++ ys` >> simp[]
 QED
 
-Theorem call_evaluation_safe_DROP:
-  call_evaluation_safe cx calls ==>
-  call_evaluation_safe cx (DROP n calls)
-Proof
-  qid_spec_tac `calls` >> Induct_on `n`
-  >- simp[] >>
-  Cases >> simp[] >> strip_tac >>
-  first_x_assum irule >>
-  irule call_evaluation_safe_mono >>
-  qexists_tac `h::t` >> simp[]
-QED
-
 Theorem call_evaluation_safe_target_not_mem:
   call_evaluation_safe cx (callee::calls) ==>
   ~MEM callee cx.stk
@@ -390,7 +343,7 @@ Proof
   qpat_x_assum `cx.stk = owner::ancestors` SUBST_ALL_TAC >>
   strip_tac >>
   drule_all call_stack_member_reaches_head >> strip_tac >>
-  drule_all RTC_then_R_TC >>
+  drule_all RTC_then_R_TC_call_graph >>
   gvs[irreflexive_def]
 QED
 

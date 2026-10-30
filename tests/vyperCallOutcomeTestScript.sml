@@ -1,11 +1,10 @@
-(* Local actual-helper/CV checks; no evaluator activation or fixture semantics.
-   Inline monadic tails below are the parameterized contracts' actual clients. *)
+(* Local checks of the call-outcome helpers and their CV translations. *)
 Theory vyperCallOutcomeTest
 Ancestors
   arithmetic list option pair sum words
   vfmState vfmTypes extCallOracle vyperRuntimeAccounts
   vyperAST vyperValue vyperState vyperCallOutcome vyperCallOutcomeProps vyperCallOutcomeBranches
-Libs cv_transLib wordsLib monadsyntax
+Libs cv_transLib wordsLib
 
 Definition outcome_test_state_def:
   outcome_test_state = empty_state with
@@ -106,61 +105,6 @@ val () = cv_auto_trans outcome_test_error_observations_def;
 
 Theorem outcome_guard_rejected_NONE_cv:
   outcome_test_error_observations
-Proof
-  CONV_TAC cv_eval
-QED
-
-(* These are the real Send/ExtCall monadic tails, translated after ordinary
-   monad elimination. The continuation returns the bytes in this small client;
-   it is not a new evaluator, decoder, or alternative oracle API. *)
-Definition outcome_test_branch_observations_def:
-  outcome_test_branch_observations =
-    let st = outcome_test_state with outcomes := SOME [] in
-    let sent = (do
-      (rq,outcome) <- take_call_outcome 9w [] (SOME 0);
-      check outcome.co_success "send failed";
-      adopt_call_outcome rq outcome;
-      return (Value NoneV)
-    od) st in
-    FST sent = INR (Error (RuntimeError "send failed")) /\
-    outcome_test_snapshot 3 4w 1 2 0 (SND sent) /\
-    let st = outcome_test_state with outcomes := SOME [outcome_test_outcome T 17] in
-    let stopped = (do
-      accounts <- get_accounts;
-      check (~NULL (lookup_account 9w accounts).code) "ExtCall target has no code";
-      (rq,outcome) <- take_call_outcome 9w [] (SOME 0);
-      check outcome.co_success "ExtCall reverted";
-      adopt_call_outcome rq outcome;
-      return (Value (BytesV outcome.co_returnData))
-    od) st in
-    FST stopped = INR (Error (RuntimeError "ExtCall target has no code")) /\
-    outcome_test_snapshot 3 4w 1 1 1 (SND stopped) /\
-    let sent_ok = (do
-      (rq,outcome) <- take_call_outcome 9w [] (SOME 0);
-      check outcome.co_success "send failed";
-      adopt_call_outcome rq outcome;
-      return (Value NoneV)
-    od) st in
-    FST sent_ok = INL (Value NoneV) /\
-    outcome_test_snapshot 17 8w 2 2 0 (SND sent_ok) /\
-    let continued = (do
-      (rq,outcome) <- take_call_outcome 9w [] (SOME 0);
-      check outcome.co_success "ExtCall reverted";
-      adopt_call_outcome rq outcome;
-      return (Value (BytesV outcome.co_returnData))
-    od) st in
-    FST continued = INL (Value (BytesV [42w])) /\
-    outcome_test_snapshot 17 8w 2 2 0 (SND continued)
-End
-val () = outcome_test_branch_observations_def
-  |> SRULE [bind_def, ignore_bind_def, FUN_EQ_THM, pair_CASE_def, UNCURRY,
-            sum_CASE_rator, prod_CASE_rator, LET_RATOR, COND_RATOR,
-            get_accounts_def, check_def, assert_def, return_def,
-            adopt_call_outcome_equation]
-  |> cv_auto_trans;
-
-Theorem outcome_branches_cv:
-  outcome_test_branch_observations
 Proof
   CONV_TAC cv_eval
 QED

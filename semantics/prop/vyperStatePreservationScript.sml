@@ -1,6 +1,6 @@
 Theory vyperStatePreservation
 Ancestors
-  vyperAST vyperValue vyperState vyperStorageBackend vyperInterpreter vyperLookup vyperImmutablesPreservation
+  vyperAST vyperValue vyperState vyperStorageBackend vyperInterpreter vyperImmutablesPreservation
 
 (* ===== Lemmas about state preservation ===== *)
 
@@ -47,12 +47,6 @@ Proof
   rw[lift_sum_def] >> Cases_on `x` >> fs[return_def, raise_def]
 QED
 
-Theorem get_Value_state:
-  !tv st res st'. get_Value tv st = (res, st') ==> st' = st
-Proof
-  Cases_on `tv` >> rw[get_Value_def, return_def, raise_def]
-QED
-
 Theorem get_accounts_state:
   !st res st'. get_accounts st = (res, st') ==> st' = st
 Proof
@@ -91,24 +85,11 @@ QED
 Theorem lookup_global_state:
   !cx src n st res st'. lookup_global cx src n st = (res, st') ==> st' = st
 Proof
-  rw[lookup_global_def, bind_def, return_def, lift_option_def, lift_option_type_def] >>
-  Cases_on `get_module_code cx src` >> gvs[return_def, raise_def] >>
-  Cases_on `find_var_decl_by_name n x` >> gvs[return_def, raise_def] >-
-  (qpat_x_assum `_ = (res, st')` mp_tac >>
-   simp[get_immutables_def, get_address_immutables_def, bind_def,
-        lift_option_def, lift_option_type_def, return_def, raise_def] >>
-   CASE_TAC >> gvs[return_def, raise_def] >>
-   CASE_TAC >> gvs[return_def, raise_def]) >>
-  PairCases_on `x'` >> gvs[] >>
-  Cases_on `x'0` >> gvs[bind_def, return_def, raise_def] >>
-  qpat_x_assum `_ = (res, st')` mp_tac >>
-  CASE_TAC >> gvs[return_def, raise_def, bind_def] >>
-  CASE_TAC >> gvs[return_def, raise_def, bind_def] >>
-  CASE_TAC >> gvs[return_def, raise_def, bind_def] >>
-  CASE_TAC >> gvs[return_def, raise_def] >>
-  CASE_TAC >> gvs[return_def, raise_def] >>
-  rpt strip_tac >> gvs[] >>
-  drule read_storage_slot_state >> simp[]
+  rpt strip_tac >> gvs[lookup_global_def, bind_def, lift_option_type_def,
+       get_immutables_def, get_address_immutables_def, return_def, raise_def] >>
+  rpt (BasicProvers.FULL_CASE_TAC >>
+       gvs[bind_def, get_immutables_def, get_address_immutables_def,
+           lift_option_type_def, return_def, raise_def])
 QED
 
 Theorem lookup_flag_mem_state:
@@ -120,21 +101,15 @@ Proof
 QED
 
 Theorem switch_BoolV_state:
-  ∀v f g st res st'.
-    switch_BoolV v f g st = (res, st') ∧
+  ∀cx v f g st res st'.
+    switch_BoolV cx v f g st = (res, st') ∧
     (∀st1 res1 st1'. f st1 = (res1, st1') ⇒ st1' = st1) ∧
     (∀st1 res1 st1'. g st1 = (res1, st1') ⇒ st1' = st1) ⇒
     st' = st
 Proof
-  rw[switch_BoolV_def, raise_def]
-QED
-
-Theorem assign_result_state:
-  !tv ao v subs st res st'. assign_result tv ao v subs st = (res, st') ==> st' = st
-Proof
-  Cases_on `ao` >> rw[assign_result_def, return_def, bind_def, lift_sum_def] >>
-  qpat_x_assum `_ = (res, st')` mp_tac >>
-  rpt (CASE_TAC >> gvs[return_def, raise_def])
+  rw[switch_BoolV_def, bind_def, AllCaseEqs()] >>
+  imp_res_tac read_result_state >> gvs[raise_def] >>
+  rpt (BasicProvers.FULL_CASE_TAC >> gvs[raise_def])
 QED
 
 Theorem resolve_array_element_state:
@@ -155,36 +130,44 @@ Proof
          disch_then drule >> simp[]]
 QED
 
-Theorem materialise_state:
-  !cx tv st res st'. materialise cx tv st = (res, st') ==> st' = st
-Proof
-  Cases_on `tv` >>
-  rw[materialise_def, return_def, raise_def] >>
-  gvs[bind_def, AllCaseEqs(), return_def] >>
-  imp_res_tac read_storage_slot_state
-QED
-
-Theorem check_array_bounds_state:
-  !cx tv v st res st'. check_array_bounds cx tv v st = (res, st') ==> st' = st
+Theorem result_array_length_state:
+  !cx res st result st'.
+    result_array_length cx res st = (result,st') ==> st' = st
 Proof
   rpt gen_tac >> strip_tac >>
-  gvs[oneline check_array_bounds_def, return_def, raise_def,
-      bind_def, ignore_bind_def, check_def, type_check_def, assert_def,
-      AllCaseEqs(), toplevel_value_CASE_rator, value_CASE_rator,
-      bound_CASE_rator] >>
-  imp_res_tac get_storage_backend_state
-QED
-
-Theorem toplevel_array_length_state:
-  !cx tv st res st'. toplevel_array_length cx tv st = (res, st') ==> st' = st
-Proof
-  rpt gen_tac >> strip_tac >>
-  gvs[oneline toplevel_array_length_def, return_def, raise_def,
-      bind_def, ignore_bind_def, check_def, type_check_def, assert_def,
-      AllCaseEqs(), toplevel_value_CASE_rator, value_CASE_rator,
-      bound_CASE_rator] >>
+  gvs[oneline result_array_length_def, bind_def, return_def, raise_def,
+      AllCaseEqs(), eval_result_CASE_rator, place_CASE_rator,
+      type_value_CASE_rator, bound_CASE_rator, value_CASE_rator,
+      array_value_CASE_rator] >>
+  imp_res_tac read_result_state >>
   imp_res_tac get_storage_backend_state >> gvs[] >>
-  Cases_on `v16` >> gvs[return_def, raise_def]
+  rpt (BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def])
+QED
+
+Theorem bind_state_observation[local]:
+  (!s r s'. f s = (r,s') ==> s' = s) /\
+  (!x s r s'. g x s = (r,s') ==> s' = s) ==>
+  !s r s'. monad_bind f g s = (r,s') ==> s' = s
+Proof
+  rpt strip_tac >> Cases_on `f s` >> Cases_on `q` >>
+  gvs[bind_def] >> metis_tac[]
+QED
+
+(* Original proof expanded the aggregate-selection predicate and timed out:
+  Cases_on `res` >>
+  simp[conditional_result_def, bind_def, return_def, raise_def] >>
+  rpt (BasicProvers.FULL_CASE_TAC >> gvs[bind_def, return_def, raise_def]) >>
+  metis_tac[place_type_value_state, read_place_state]
+   Keep observations opaque instead. *)
+Theorem conditional_result_state:
+  conditional_result cx res st = (result,st') ==> st' = st
+Proof
+  Cases_on `res` >> simp[conditional_result_def, return_def, raise_def] >>
+  match_mp_tac bind_state_observation >>
+  conj_tac >- metis_tac[place_type_value_state] >>
+  rpt gen_tac >> BETA_TAC >> IF_CASES_TAC >- metis_tac[return_state] >>
+  match_mp_tac bind_state_observation >>
+  metis_tac[read_place_state, return_state]
 QED
 
 Theorem handle_loop_exception_state:
@@ -378,4 +361,28 @@ Theorem lift_sum_preserves:
     lift_sum x st = (res, st') ==> P st ==> P st'
 Proof
   rw[lift_sum_def] >> Cases_on `x` >> gvs[return_def, raise_def]
+QED
+
+(* Empty lexical frames do not change a captured read, including failures. *)
+Theorem read_result_empty_scope:
+  read_result cx pv (st with scopes := FEMPTY::st.scopes) =
+    (FST (read_result cx pv st), st with scopes := FEMPTY::st.scopes)
+Proof
+  Cases_on `pv`
+  >- simp[read_result_def, return_def]
+  >- (Cases_on `p`
+      >- (Cases_on `b` >>
+          simp[read_result_def, read_place_def, read_storage_slot_def,
+               get_storage_backend_def, get_transient_storage_def,
+               get_accounts_def, bind_def, lift_option_def, return_def, raise_def] >>
+          rpt (BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def]))
+      >- (simp[read_result_def, read_place_def, get_scopes_def,
+               lookup_scopes_def, finite_mapTheory.FLOOKUP_EMPTY, bind_def,
+               lift_option_type_def, lift_sum_def, return_def, raise_def] >>
+          rpt (BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def])) >>
+      simp[read_result_def, read_place_def, get_immutables_def,
+           get_address_immutables_def, bind_def, lift_option_type_def,
+           lift_sum_def, return_def, raise_def] >>
+      rpt (BasicProvers.FULL_CASE_TAC >> gvs[bind_def, return_def, raise_def])) >>
+  simp[read_result_def, raise_def]
 QED

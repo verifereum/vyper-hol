@@ -573,7 +573,7 @@ unit simulation by themselves.
 | Env, account, BlockHash/BlobHash | `compile_env_var`, BALANCE/EXTCODEHASH/size, builtin block paths | Full env/typed-account ties, corrected empty-account codehash; real nonzero block/window bounds D22. |
 | ECRecover/SHA256/ECAdd/ECMul | Value-zero STATICCALL1/2/6/7 + ASSERT/buffer read | H21-pure bridge and starvation alternative; invalid EC now source RuntimeError D12a, invalid recovery succeeds empty. Pure source builtins remain pure. |
 | Tuple/struct/aggregate args/tuple locals | Aggregate expression and buffer paths | Same evaluation order and value-memory layout; fixed-memory/name/internal-call restrictions matter. |
-| `evaluate_abi_encode` | Builtin encode/ABI buffer path | Supported single-argument/flag form and corrected typed size rule D12j; same bytes incl dynamic multiblock encoding. |
+| `evaluate_abi_encode_bytes` | Builtin encode/ABI buffer path | Supported single-argument/flag form and corrected typed size rule D12j; same bytes incl dynamic multiblock encoding. |
 | Static `evaluate_abi_decode` | `lower_abi_decode`/clamps | Prove exactly same acceptance/value for static targets; conversion errors **not exempt**. |
 | Dynamic ABI tuple String/Bytes | Dynamic decoder offsets/end/padding | For source-accepted bytes same value. Source rejects nonzero padding that lowering accepts; raw Venom wraparound reads can survive where EVM starves. Test overlapping/out-of-order/head/trailing/short/overbound tails; exact D9 exemption, no blanket decoder correctness. |
 | Storage scalar read/write | SLOAD/SSTORE/TLOAD/TSTORE | Full-word types only; actual initial/successful-outcome storage validity. Narrow stored masking differs outside subset. |

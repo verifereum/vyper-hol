@@ -50,7 +50,7 @@ Libs
 Definition unop_result_def:
   unop_result cx ann bi tys v1 (es:evaluation_state) =
     case evaluate_builtin cx es.accounts ann bi tys [v1] of
-      INL v => INL (Value v)
+      INL v => INL v
     | INR e => INR (Error e)
 End
 
@@ -69,7 +69,7 @@ Definition unop_frag_def:
       frag_exec ctx sa sb
         (\s. s = s0 /\ stmt_state_rel func cenv cx es0 s /\
              eval_operand x s = SOME w1)
-        (\s. ?v. res = INL (Value v) /\
+        (\s. ?v. res = INL v /\
                  stmt_state_rel func cenv cx es0 s /\
                  expr_val_rel cx t v op s /\
                  (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==>
@@ -84,28 +84,27 @@ End
 
 Theorem eval_expr_unop_cases:
   !cx ann bi e1 es res es'.
-    eval_expr cx (Builtin ann bi [e1]) es = (res, es') /\ bi <> Len /\
+    (do r <- eval_expr cx (Builtin ann bi [e1]); read_result cx r od) es = (res, es') /\ bi <> Len /\
     builtin_args_length_ok bi 1 ==>
-    (?exc. eval_expr cx e1 es = (INR exc, es') /\ res = INR exc) \/
-    (?tv1 es1. eval_expr cx e1 es = (INL tv1, es1) /\ !v. tv1 <> Value v) \/
-    ?v1. eval_expr cx e1 es = (INL (Value v1), es') /\
+    (?exc. (do r <- eval_expr cx e1; read_result cx r od) es = (INR exc, es') /\ res = INR exc) \/
+    ?v1. (do r <- eval_expr cx e1; read_result cx r od) es = (INL v1, es') /\
          res = unop_result cx ann bi [expr_type e1] v1 es'
 Proof
   rpt gen_tac >> strip_tac >>
-  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  qpat_x_assum `bind _ _ _ = _` mp_tac >>
   simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
        assert_def, return_def, raise_def] >>
   simp[Once evaluate_def, bind_def, return_def] >>
-  Cases_on `eval_expr cx e1 es` >> rename1 `_ = (r1, es1)` >>
-  Cases_on `r1` >> simp[] >>
-  rename1 `materialise cx tv1 es1` >>
-  Cases_on `?v. tv1 = Value v` >> gvs[] >>
-  simp[materialise_def, return_def] >>
-  simp[Once evaluate_def, return_def] >>
-  simp[get_accounts_def, lift_sum_def, unop_result_def, return_def] >>
-  rename1 `evaluate_builtin _ _ _ _ _ [v1]` >>
-  Cases_on `evaluate_builtin cx es1.accounts ann bi [expr_type e1] [v1]` >>
-  simp[return_def, raise_def] >> rw[] >> gvs[]
+  simp[Once evaluate_def, bind_def, return_def] >>
+  simp[get_accounts_def, lift_sum_def, unop_result_def, read_result_def,
+       bind_def, return_def, raise_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  imp_res_tac read_result_state >>
+  gvs[AllCaseEqs(), return_def, raise_def, read_result_def] >>
+  gvs[AllCaseEqs(), return_def, raise_def] >>
+  qmatch_asmsub_abbrev_tac `evaluate_builtin cx ac ann bi ts vs` >>
+  Cases_on `evaluate_builtin cx ac ann bi ts vs` >>
+  gvs[return_def, raise_def, Abbr `ac`, Abbr `ts`, Abbr `vs`]
 QED
 
 (* ===== The composition ===== *)
@@ -152,9 +151,8 @@ Theorem compile_unop_sim:
        (!z. op = Var z ==> not_fresh_at sb z)) /\
     (!x sa sb op. f x sa = (op, sb) ==>
        cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var) /\
-    (!tv es1. eval_expr cx e1 es = (INL tv, es1) ==> ?v. tv = Value v) /\
     expr_sim ctx func cenv cx ty1 e1 es /\
-    (!v1 es1. eval_expr cx e1 es = (INL (Value v1), es1) ==>
+    (!v1 es1. (do r <- eval_expr cx e1; read_result cx r od) es = (INL v1, es1) ==>
        ?tv1. evaluate_type (get_tenv cx) (expr_type e1) = SOME tv1 /\
              unop_frag ctx func cenv cx f (typed_val_to_w256 tv1 v1) ann
                (unop_result cx ann bi [expr_type e1] v1 es1) es1) ==>
@@ -191,14 +189,12 @@ Proof
                                `\s. F`, `expr_exit res`] mp_tac) >>
       (impl_tac >- gvs[]) >> strip_tac >>
       irule frag_exec_exit_prefix >> qexists_tac `s1` >> simp[])
-  >- ((* e1 is no value *)
-      qpat_x_assum `!tv es1. eval_expr cx e1 es = (INL tv, es1) ==> _` drule >>
-      simp[]) >>
-  qpat_x_assum `!v1 es1. eval_expr cx e1 es = _ ==> _` drule >>
+  >>
+  qpat_x_assum `!v1 es1. bind _ _ es = _ ==> _` drule >>
   strip_tac >>
   qpat_x_assum `expr_sim _ _ _ _ _ e1 _`
     (mp_tac o REWRITE_RULE [expr_sim_def]) >>
-  disch_then (qspecl_then [`sa`, `s1`, `x`, `INL (Value v1)`, `es'`, `s0`]
+  disch_then (qspecl_then [`sa`, `s1`, `x`, `INL v1`, `es'`, `s0`]
                 mp_tac) >>
   (impl_tac >- simp[expr_res_ok_def]) >>
   disch_then (mp_tac o MATCH_MP frag_exec_pre_exit_c) >>
@@ -226,7 +222,7 @@ Theorem unop_frag_straight:
   !ctx func cenv cx f w1 t res es0.
     (!x. straight_fresh (f x)) /\ is_word_type t /\
     (expr_res_ok res ==>
-     (?v w. res = INL (Value v) /\
+     (?v w. res = INL v /\
             (!tv. evaluate_type (get_tenv cx) t = SOME tv ==>
                   w = typed_val_to_w256 tv v) /\
             !x sa sb op ss.

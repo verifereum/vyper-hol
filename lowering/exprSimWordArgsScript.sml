@@ -46,20 +46,20 @@ Ancestors
 Definition builtin_result_def:
   builtin_result cx acc ty bt ts vs =
     case evaluate_builtin cx acc ty bt ts vs of
-      INL v => INL (Value v)
+      INL v => INL v
     | INR err => INR (Error err)
 End
 
 Theorem eval_expr_builtin_cases:
   !cx ann bt args es res es'.
     bt <> Len /\ builtin_args_length_ok bt (LENGTH args) /\
-    eval_expr cx (Builtin ann bt args) es = (res, es') ==>
+    (do r <- eval_expr cx (Builtin ann bt args); read_result cx r od) es = (res, es') ==>
     (?exc. eval_exprs cx args es = (INR exc, es') /\ res = INR exc) \/
     ?vs. eval_exprs cx args es = (INL vs, es') /\
          res = builtin_result cx es'.accounts ann bt (MAP expr_type args) vs
 Proof
   rpt gen_tac >> strip_tac >>
-  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  qpat_x_assum `bind _ _ _ = _` mp_tac >>
   simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
        assert_def, return_def, raise_def] >>
   Cases_on `eval_exprs cx args es` >> rename1 `eval_exprs cx args es = (rr, es1)` >>
@@ -67,17 +67,15 @@ Proof
                           lift_sum_def, builtin_result_def] >>
   rename1 `evaluate_builtin cx _ ann bt _ vs` >>
   Cases_on `evaluate_builtin cx es1.accounts ann bt (MAP expr_type args) vs` >>
-  simp[bind_def, return_def, raise_def] >> rw[] >> gvs[]
+  simp[bind_def, return_def, raise_def, read_result_def] >> rw[] >> gvs[]
 QED
 
-(* Do not materialise an arbitrary top-level value in the composition
-   theorem.  The second alternative is ruled out by typed word soundness. *)
+(* Argument evaluation forces each head before evaluating the tail. *)
 Theorem eval_exprs_cons_cases:
   !cx e args es res es'.
     eval_exprs cx (e::args) es = (res, es') ==>
-    (?exc. eval_expr cx e es = (INR exc, es') /\ res = INR exc) \/
-    (?tv es1. eval_expr cx e es = (INL tv, es1) /\ !v. tv <> Value v) \/
-    ?v es1 rr. eval_expr cx e es = (INL (Value v), es1) /\
+    (?exc. (do r <- eval_expr cx e; read_result cx r od) es = (INR exc, es') /\ res = INR exc) \/
+    ?v es1 rr. (do r <- eval_expr cx e; read_result cx r od) es = (INL v, es1) /\
       eval_exprs cx args es1 = (rr, es') /\
       res = (case rr of INL vs => INL (v::vs) | INR exc => INR exc)
 Proof
@@ -85,11 +83,12 @@ Proof
   Cases_on `eval_expr cx e es` >>
   rename1 `eval_expr cx e es = (rr, es1)` >>
   Cases_on `rr` >> simp[] >>
-  rename1 `materialise cx tv es1` >>
-  Cases_on `?v. tv = Value v` >> gvs[] >>
-  simp[materialise_def, bind_def, return_def] >>
-  Cases_on `eval_exprs cx args es1` >>
-  rename1 `eval_exprs cx args es1 = (rr, es2)` >>
+  rename1 `read_result cx tv es1` >>
+  Cases_on `read_result cx tv es1` >>
+  rename1 `read_result cx tv es1 = (rv, es2)` >>
+  Cases_on `rv` >> simp[] >>
+  Cases_on `eval_exprs cx args es2` >>
+  rename1 `eval_exprs cx args es2 = (rr, es3)` >>
   Cases_on `rr` >> simp[] >> rw[] >> gvs[]
 QED
 
@@ -104,7 +103,7 @@ Definition word_builtin_frag_def:
       frag_exec ctx sa sb
         (\s. s = s0 /\ stmt_state_rel func cenv cx es0 s /\
              LIST_REL (\x v. eval_operand x s = SOME (val_to_w256 v)) xs vs)
-        (\s. ?v. res = INL (Value v) /\ word_value v /\
+        (\s. ?v. res = INL v /\ word_value v /\
                  stmt_state_rel func cenv cx es0 s /\
                  eval_operand op s = SOME (val_to_w256 v) /\
                  (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==>
@@ -127,7 +126,7 @@ QED
 
 Theorem word_builtin_frag_success:
   !ctx func cenv cx code res vs es0 v.
-    res = INL (Value v) /\ word_value v /\
+    res = INL v /\ word_value v /\
     (!xs. straight_fresh (code xs)) /\
     (!xs sa sb op ss.
        code xs sa = (op, sb) /\ fresh_vars_wrt sa ss /\
@@ -328,9 +327,9 @@ Definition wb_args_ready_def:
       expr_sim ctx func cenv cx (arg_ty e) e es /\
       is_word_type (expr_type e) /\
       IS_SOME (evaluate_type (get_tenv cx) (expr_type e)) /\
-      (!res es'. eval_expr cx e es = (res, es') ==> expr_res_ok res) /\
-      (!tv es'. eval_expr cx e es = (INL tv, es') ==>
-        ?v. tv = Value v /\ word_value v /\ I es')
+      (!res es'. (do r <- eval_expr cx e; read_result cx r od) es = (res, es') ==> expr_res_ok res) /\
+      (!v es'. (do r <- eval_expr cx e; read_result cx r od) es = (INL v, es') ==>
+        word_value v /\ I es')
 End
 
 Theorem wb_args_ready_head:
@@ -339,9 +338,9 @@ Theorem wb_args_ready_head:
       expr_sim ctx func cenv cx (arg_ty e) e es /\
       is_word_type (expr_type e) /\
       IS_SOME (evaluate_type (get_tenv cx) (expr_type e)) /\
-      (!res es'. eval_expr cx e es = (res, es') ==> expr_res_ok res) /\
-      (!tv es'. eval_expr cx e es = (INL tv, es') ==>
-        ?v. tv = Value v /\ word_value v /\ I es')
+      (!res es'. (do r <- eval_expr cx e; read_result cx r od) es = (res, es') ==> expr_res_ok res) /\
+      (!v es'. (do r <- eval_expr cx e; read_result cx r od) es = (INL v, es') ==>
+        word_value v /\ I es')
 Proof
   simp[wb_args_ready_def] >> metis_tac[]
 QED
@@ -364,23 +363,22 @@ Theorem wb_args_cons_cases:
   !ctx func cenv cx arg_ty I e args es res es'.
     wb_args_ready ctx func cenv cx arg_ty I (e::args) /\ I es /\
     eval_exprs cx (e::args) es = (res, es') ==>
-    (?exc. eval_expr cx e es = (INR exc, es') /\ res = INR exc) \/
-    ?v es1 rr. eval_expr cx e es = (INL (Value v), es1) /\
+    (?exc. (do r <- eval_expr cx e; read_result cx r od) es = (INR exc, es') /\ res = INR exc) \/
+    ?v es1 rr. (do r <- eval_expr cx e; read_result cx r od) es = (INL v, es1) /\
       word_value v /\ I es1 /\ eval_exprs cx args es1 = (rr, es') /\
       res = (case rr of INL vs => INL (v::vs) | INR exc => INR exc)
 Proof
   rpt strip_tac >> drule_all wb_args_ready_head >> strip_tac >>
   drule eval_exprs_cons_cases >> strip_tac
   >- metis_tac[]
-  >- (qpat_x_assum `!tv es'. eval_expr _ _ _ = _ ==> _` drule >> metis_tac[]) >>
-  qpat_x_assum `!tv es'. eval_expr _ _ _ = _ ==> _` drule >>
+  >> qpat_x_assum `!v es'. bind _ _ _ = (INL v, es') ==> _` drule >>
   strip_tac >> gvs[] >> metis_tac[]
 QED
 
 Definition wb_args_exit_def:
   wb_args_exit rr =
     case rr of INL vs => (\r. F)
-             | INR exc => expr_exit (INR exc : toplevel_value + exception)
+             | INR exc => expr_exit (INR exc : value + exception)
 End
 
 (* ===== Argument fragment execution ===== *)
@@ -423,10 +421,10 @@ Theorem expr_sim_apply:
   !ctx func cenv cx ty e es sa sb op res es' s0.
     expr_sim ctx func cenv cx ty e es /\
     lower_value compile_expr cenv ty e sa = (op, sb) /\
-    eval_expr cx e es = (res, es') /\ expr_res_ok res /\
+    (do r <- eval_expr cx e; read_result cx r od) es = (res, es') /\ expr_res_ok res /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa ==>
     frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel func cenv cx es s)
-      (\s. ?v. res = INL (Value v) /\
+      (\s. ?v. res = INL v /\
         expr_post func cenv cx e es sa sb s0 es' v op s)
       (expr_exit res)
 Proof
@@ -479,6 +477,16 @@ Proof
   irule frag_exec_pre_exit >> goal_assum (drule_at Any) >> simp[]
 QED
 
+Theorem forced_eval_expr_preserves_scopes_dom[local]:
+  !cx e es res es'.
+    (do r <- eval_expr cx e; read_result cx r od) es = (res, es') ==>
+    MAP FDOM es.scopes = MAP FDOM es'.scopes
+Proof
+  rpt gen_tac >> simp[bind_def, AllCaseEqs()] >> rpt strip_tac >>
+  imp_res_tac read_result_state >> gvs[] >>
+  drule eval_expr_preserves_scopes_dom >> simp[]
+QED
+
 Theorem lower_word_args_sim:
   !args ctx func cenv cx arg_ty I es sa xs sb rr es' s0.
     wb_args_ready ctx func cenv cx arg_ty I args /\ I es /\
@@ -523,9 +531,9 @@ Proof
   `wb_args_ready ctx func cenv cx arg_ty Inv args` by
     metis_tac[wb_args_ready_tail] >>
   `MAP FDOM es.scopes = MAP FDOM es1.scopes` by
-    metis_tac[eval_expr_preserves_scopes_dom] >>
-  `expr_exit (INL (Value v)) = (\r. F)` by simp[FUN_EQ_THM] >>
-  `expr_res_ok (INL (Value v))` by simp[expr_res_ok_def] >>
+    (drule forced_eval_expr_preserves_scopes_dom >> simp[]) >>
+  `expr_exit (INL v) = (\r. F)` by simp[FUN_EQ_THM] >>
+  `expr_res_ok (INL v)` by simp[expr_res_ok_def] >>
   drule_all expr_sim_apply >> disch_then (qspec_then `s0` mp_tac) >>
   simp[expr_exit_def] >> disch_then (mp_then Any irule wb_frag_then) >> simp[] >>
   qx_gen_tac `t` >> strip_tac >>

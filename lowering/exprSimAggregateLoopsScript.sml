@@ -70,7 +70,7 @@ Theorem aggregate_make_tuple_sim:
           p+n <= lo \/ lo+sz <= p) ==>
         mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory))
     (\exit. ?exc. res = INR exc /\
-      expr_exit (INR exc : toplevel_value + exception) exit)
+      expr_exit (INR exc : eval_result + exception) exit)
 Proof
   Induct_on `args`
   >- (rpt gen_tac >>
@@ -116,11 +116,11 @@ Resume aggregate_make_tuple_sim[child_error]:
   qpat_x_assum `!ce cx env off sa out sb es res es' tvs func inst x b asz s0 ctx. _` kall_tac >>
   `expr_res_ok (INR exc)` by
     (drule expr_sim_pre_res_ok >>
-     disch_then (qspecl_then [`INR exc`, `es'`] mp_tac) >> simp[]) >>
+     disch_then (qspecl_then [`INR exc`, `es'`] mp_tac) >> simp[bind_def]) >>
   qpat_x_assum `expr_vv_sim _ _ _ _ _ _ _` mp_tac >>
   rewrite_tac[expr_vv_sim_def] >>
   disch_then (qspecl_then [`sa`, `sm`, `vv`, `INR exc`, `es'`, `s0`] mp_tac) >>
-  simp[expr_vv_res_ok_def, expr_res_ok_def] >> strip_tac >>
+  fs[expr_vv_res_ok_def, expr_res_ok_def] >> strip_tac >>
   irule frag_exec_exit_prefix >> qexists_tac `sm` >>
   qpat_x_assum `frag_exec _ _ _ _ _ _` mp_tac >>
   simp[lambdify (oneline expr_exit_def)]
@@ -164,7 +164,8 @@ Resume aggregate_make_tuple_sim[child_success]:
 QED
 
 Resume aggregate_make_tuple_sim[after_add]:
-  `expr_sim_inv ce cx env es1` by metis_tac[expr_sim_pre_eval] >>
+  `expr_sim_inv ce cx env es1` by
+    (drule_all expr_sim_pre_eval_result >> simp[]) >>
   `type_memory_bytes ce (expr_type h) = type_memory_size h'` by
     metis_tac[exprSimAggregateLayoutTheory.expr_sim_inv_memory_size] >>
   drule emitHelperPropsTheory.emitted_insts_emit_op >> strip_tac >>
@@ -417,7 +418,7 @@ Theorem aggregate_struct_fields_sim:
           p+n <= lo \/ lo+sz <= p) ==>
         mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory))
     (\exit. ?exc. res = INR exc /\
-      expr_exit (INR exc : toplevel_value + exception) exit)
+      expr_exit (INR exc : eval_result + exception) exit)
 Proof
   rpt gen_tac >> strip_tac >>
   `compile_make_tuple compile_expr ce (MAP SND fields) (Var x) off sa = (out,sb)` by
@@ -481,7 +482,7 @@ Theorem aggregate_make_array_elems_sim:
           p+n <= lo \/ lo+sz <= p) ==>
         mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory))
     (\exit. ?exc. res = INR exc /\
-      expr_exit (INR exc : toplevel_value + exception) exit)
+      expr_exit (INR exc : eval_result + exception) exit)
 Proof
   rpt gen_tac >> strip_tac >>
   `compile_make_tuple compile_expr ce args (Var x) off sa = (out,sb)` by
@@ -540,7 +541,7 @@ Theorem aggregate_make_array_start_sim:
           p+n <= lo \/ lo+sz <= p) ==>
         mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory))
     (\exit. ?exc. res = INR exc /\
-      expr_exit (INR exc : toplevel_value + exception) exit)
+      expr_exit (INR exc : eval_result + exception) exit)
 Proof
   rpt gen_tac >> strip_tac >> irule aggregate_make_array_elems_sim >>
   simp[] >> conj_tac
@@ -602,7 +603,7 @@ Theorem aggregate_make_array_sim:
           p+n <= lo \/ lo+sz <= p) ==>
         mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory))
     (\exit. ?exc. res = INR exc /\
-      expr_exit (INR exc : toplevel_value + exception) exit)
+      expr_exit (INR exc : eval_result + exception) exit)
 Proof
   rpt gen_tac >> strip_tac >> reverse (Cases_on `header`)
   >- (gvs[compile_make_array_def, comp_ignore_bind_def, comp_bind_def, comp_return_def] >>

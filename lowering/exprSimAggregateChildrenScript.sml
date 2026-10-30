@@ -30,37 +30,37 @@ Ancestors
   vyperEvalExprPreservesScopesDom vyperEvalPreservesScopes
 
 Theorem vv_holds_materialise:
-  materialise cx tv es = (INL v,es) /\
+  read_result cx tv es = (INL v,es) /\
   vv_holds cenv cx t tv vv es s ==>
   vv_holds cenv cx t (Value v) vv es s
 Proof
   Cases_on `vv`
   >- (simp[vv_holds_def] >> rpt strip_tac >>
-      gvs[materialise_def, return_def]) >>
+      gvs[read_result_def, return_def]) >>
   rename1 `LocatedValue t' p` >>
   Cases_on `p.ptr_location` >>
   simp[vv_holds_def, storage_holds_def, immutable_holds_def,
-       materialise_def, return_def] >>
-  rpt strip_tac >> gvs[materialise_def, return_def] >>
+       read_result_def, return_def] >>
+  rpt strip_tac >> gvs[read_result_def, return_def] >>
   metis_tac[arithmeticTheory.LESS_MOD]
 QED
 
 Theorem vv_at_materialise:
-  materialise cx tv es = (INL v,es) /\
+  read_result cx tv es = (INL v,es) /\
   vv_holds cenv cx t tv vv es s /\
   vv_at cenv cx t sa sb es tv vv s ==>
   vv_at cenv cx t sa sb es (Value v) vv s
 Proof
   Cases_on `vv`
   >- (simp[vv_holds_def, vv_at_def] >> rpt strip_tac >>
-      gvs[materialise_def, return_def]) >>
+      gvs[read_result_def, return_def]) >>
   rename1 `LocatedValue t' p` >>
-  simp[vv_at_def, materialise_def, return_def] >>
+  simp[vv_at_def, read_result_def, return_def] >>
   metis_tac[]
 QED
 
 Theorem vv_post_materialise:
-  materialise cx tv es' = (INL v,es') /\
+  read_result cx tv es' = (INL v,es') /\
   vv_post func cenv cx e es sa sb s0 es' tv vv s ==>
   vv_post func cenv cx e es sa sb s0 es' (Value v) vv s
 Proof
@@ -77,7 +77,7 @@ Theorem unwrap_value_materialise_sim:
     unwrap_value cenv vv sm = (op,sb) /\
     local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
     sa.cs_next_id <= sm.cs_next_id /\
-    materialise cx tv es' = (INL v,es') ==>
+    read_result cx tv es' = (INL v,es') ==>
     frag_exec ctx sm sb
       (\s. vv_post func cenv cx e es sa sm s0 es' tv vv s)
       (\s. expr_post func cenv cx e es sa sb s0 es' v op s) R
@@ -317,7 +317,7 @@ QED
 Theorem unwrap_value_rebased_sim:
   unwrap_value ce vv sm = (op,su) /\ local_ptrs_reserved ce sm /\
   sa.cs_next_id <= sm.cs_next_id /\
-  materialise cx tv es' = (INL v,es') /\
+  read_result cx tv es' = (INL v,es') /\
   vv_post func ce cx e es sa sm s0 es' tv vv r ==>
   frag_exec ctx sm su (\s. s = r)
     (\s. expr_post func ce cx e es'
@@ -518,7 +518,7 @@ Theorem aggregate_unwrap_store_slice_sim:
   sm.cs_next_var <= su.cs_next_var /\
   (!z. op = Var z ==> not_fresh_at su z) /\
   cs_extends sm su /\ cs_extends su sb /\
-  materialise cx tvv es' = (INL v,es') /\
+  read_result cx tvv es' = (INL v,es') /\
   vv_post func ce cx e es sa sm s0 es' tvv vv r /\
   not_fresh_at sm x /\ lookup_var x r = SOME w /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\

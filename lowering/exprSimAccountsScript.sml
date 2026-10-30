@@ -91,7 +91,7 @@ Theorem unop_frag_read_then:
        ?ss'. run_inst_seq (emitted_insts sa sb) ss = OK ss' /\
              eval_operand op ss' = SOME w) ==>
     unop_frag ctx func cenv cx (\x. comp_bind (emit_op opc [x]) g) w1 t
-      (INL (Value v)) es0
+      (INL v) es0
 Proof
   rpt gen_tac >> strip_tac >> simp[unop_frag_def] >> rpt gen_tac >>
   strip_tac >>
@@ -131,7 +131,7 @@ Proof
   rename1 `eval_operand c u = SOME r` >>
   qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es0`, `g c`, `s1`, `sb`, `op`,
                `w`, `\ss. eval_operand c ss = SOME r`, `\a. F`,
-               `expr_exit (INL (Value v))`, `u`]
+               `expr_exit (INL v)`, `u`]
     mp_tac frag_exec_straight_fresh >>
   impl_tac
   >- (asm_rewrite_tac[] >> BETA_TAC >> rpt conj_tac >> rpt strip_tac
@@ -160,7 +160,7 @@ Theorem unop_frag_read:
        eval_operand x ss = SOME w1 /\ stmt_state_rel func cenv cx es0 ss ==>
        step_inst_base (mk_inst n opc [x] [out]) ss =
          OK (update_var out r ss)) ==>
-    unop_frag ctx func cenv cx (\x. emit_op opc [x]) w1 t (INL (Value v)) es0
+    unop_frag ctx func cenv cx (\x. emit_op opc [x]) w1 t (INL v) es0
 Proof
   rpt strip_tac >>
   `(\x. emit_op opc [x]) = (\x. comp_bind (emit_op opc [x]) comp_return)` by
@@ -344,10 +344,9 @@ Proof
         rpt (pairarg_tac >> gvs[]) >>
         imp_res_tac emit_op_extends_next_var >>
         metis_tac[cs_extends_trans, arithmeticTheory.LESS_EQ_TRANS])
-    >- metis_tac[expr_sim_pre_word_value, is_word_type_def]
     >- metis_tac[expr_ok_def, expr_sim_ok_def] >>
     rpt strip_tac >>
-    qspecl_then [`cenv`, `cx`, `env`, `e1`, `es`, `Value v1`, `es1`] mp_tac
+    qspecl_then [`cenv`, `cx`, `env`, `e1`, `es`, `v1`, `es1`] mp_tac
       expr_sim_pre_word_value >>
     simp[is_word_type_def] >> strip_tac >>
     gvs[vyperValueTheory.evaluate_type_def] >>

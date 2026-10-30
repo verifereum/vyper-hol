@@ -21,7 +21,7 @@ Theorem activated_CPS_consumes_counterexample:
   vyperSmallStep$fromtvk (vyperSmallStep$cont
     (vyperSmallStep$eval_expr_cps empty_evaluation_context counter_expr counter_state
       vyperSmallStep$DoneK)) =
-    (INR (Error (RuntimeError "ExtCall reverted")),
+    (INR (Error (RevertData [])),
      counter_state with <|outcomes := SOME []; requests := [counter_request]|>)
 Proof
   simp[GSYM eval_expr_eq_cont_cps, activated_ExtCall_consumes_counterexample]
@@ -32,7 +32,7 @@ Theorem activated_CPS_CV_consumes_counterexample:
   vyperSmallStep$fromtvk (vyperSmallStep$cont
     (vyperSmallStep$eval_expr_cps empty_evaluation_context counter_expr counter_state
       vyperSmallStep$DoneK)) =
-    (INR (Error (RuntimeError "ExtCall reverted")),
+    (INR (Error (RevertData [])),
      counter_state with <|outcomes := SOME []; requests := [counter_request]|>)
 Proof
   simp[counter_expr_def, counter_state_def, counter_outcome_def,
@@ -46,13 +46,13 @@ Definition cps_failure_observations_def:
   cps_failure_observations =
     let r = vyperSmallStep$fromtvk (vyperSmallStep$cont
       (vyperSmallStep$eval_expr_cps empty_evaluation_context
-        (Call (BaseT (UintT 256)) (ExtCall T F ("f",[],BaseT (UintT 256)))
+        (Call (BaseT (UintT 256)) (ExtCall T F ("f",[],BaseT (UintT 256)) [])
           [Literal (BaseT AddressT) (BytesL (REPLICATE 19 0w ++ [9w]))] NONE)
         (empty_state with outcomes := SOME
           [extCallOracle$failed_outcome
             (vyperCallOutcome$call_outcome_request 9w [] NONE empty_state)])
         vyperSmallStep$DoneK)) in
-    FST r = INR (Error (RuntimeError "ExtCall reverted")) /\
+    FST r = INR (Error (RevertData [])) /\
     (SND r).outcomes = SOME [] /\
     MAP (λrq. (rq.cr_target,rq.cr_value,rq.cr_data,rq.cr_static))
       (SND r).requests = [(9w,0,[38w;18w;31w;240w],T)] /\

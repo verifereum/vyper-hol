@@ -895,7 +895,7 @@ Proof
        val_in_memory_def] >>
   simp[mem_bytes_at_word] >>
   gvs[typed_val_to_w256_def, val_to_w256_def, enc_def, enc_number_def]
-  >- (`~(i < 0)` by intLib.COOPER_TAC >> simp[integer_wordTheory.i2w_def]) 
+  >- (`~(i < 0)` by intLib.COOPER_TAC >> simp[integer_wordTheory.i2w_def])
   >- (Cases_on `b` >> simp[])
   >- (Cases_on `b` >>
       gvs[vyper_base_to_abi_type_def, GSYM is_dynamic_def, AllCaseEqs(),

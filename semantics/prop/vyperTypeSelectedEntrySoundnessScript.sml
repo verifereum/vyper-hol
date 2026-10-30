@@ -169,10 +169,11 @@ Theorem checked_selected_entry_no_static_error:
    (?pre e post.
       DROP (LENGTH dflts - (LENGTH args - LENGTH tx.args)) dflts =
         pre ++ e::post /\
-      EVERY (\e'. ?v. FST (eval_expr cx e' (initial_state am [FEMPTY])) =
-                        INL (Value v)) pre /\
-      ?err. FST (eval_expr cx e (initial_state am [FEMPTY])) = INR err /\
-            no_type_error_result (INR err : toplevel_value + exception)) /\
+      EVERY (\e'. ?v. FST ((do result <- eval_expr cx e'; read_result cx result od)
+                            (initial_state am [FEMPTY])) = INL v) pre /\
+      ?err. FST ((do result <- eval_expr cx e; read_result cx result od)
+                   (initial_state am [FEMPTY])) = INR err /\
+            no_type_error_result (INR err : value + exception)) /\
    ?msg. call_external orc am tx = (INR (Error (RuntimeError msg)), am, [])) \/
   (?dflt_vs scope.
      evaluate_defaults cx am

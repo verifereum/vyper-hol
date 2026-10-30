@@ -2,7 +2,8 @@
  * Statement simulation: For over a range whose ends are not both literals
  * (#637)
  *
- * The ends are lowered as values (expr_sim), then the loop variable's
+ * The ends are forced with read_result and lowered as values (expr_sim),
+ * then the loop variable's
  * ALLOCA and the entry block, which with nonliteral ends computes the
  * number of rounds and checks the range (compile_range_bound_checks):
  * start <= end, signed or unsigned, and rounds <= the loop's bound, each
@@ -24,7 +25,7 @@
 
 Theory stmtSimForRange
 Ancestors
-  stmtSim stmtSimForParts stmtSimForLoop stmtSimFor exprSimOperators
+  stmtSim stmtSimForParts stmtSimForLoop exprWordOperand
   list rich_list finite_map pred_set
   fragExec localPtrsProps exprSim loweringSlice freshWrites
   vyperEvalExprPreservesScopesDom
@@ -42,12 +43,41 @@ Libs
    of: an exception it raises is no control exception, nor a type error. *)
 Theorem expr_res_ok_of_exn[local]:
   !cx e es ex es1 lctx.
-    eval_expr cx e es = (INR ex, es1) /\
+    (do raw <- eval_expr cx e; read_result cx raw od) es = (INR ex, es1) /\
     stmt_res_ok lctx (INR ex : unit + exception) ==>
-    expr_res_ok (INR ex : toplevel_value + exception)
+    expr_res_ok (INR ex : value + exception)
 Proof
-  rpt strip_tac >> imp_res_tac (cj 1 eval_expr_no_control) >>
+  rpt strip_tac >>
+  qpat_x_assum `(do raw <- _; _ od) _ = _` mp_tac >>
+  simp[bind_def] >> Cases_on `eval_expr cx e es` >>
+  rename1 `_ = (raw, est)` >> Cases_on `raw` >> simp[] >> strip_tac >>
+  imp_res_tac read_result_no_control >>
+  imp_res_tac (cj 1 eval_expr_no_control) >>
   Cases_on `ex` >> gvs[no_control_exc_def, expr_res_ok_def, stmt_res_ok_def]
+QED
+
+(* Reassociate the iterator at the same forced-value boundary as expr_sim.
+   This includes captured places and exceptions raised by read_result. *)
+Theorem eval_iterator_range_forced[local]:
+  !cx e1 e2.
+    eval_iterator cx (Range e1 e2) =
+    do v1 <- (do raw <- eval_expr cx e1; read_result cx raw od);
+       v2 <- (do raw <- eval_expr cx e2; read_result cx raw od);
+       rl <- lift_sum (get_range_limits v1 v2);
+       return (GENLIST (\j. IntV (FST rl + &j)) (SND rl))
+    od
+Proof
+  rpt gen_tac >> simp[Once evaluate_def, FUN_EQ_THM, bind_def] >>
+  qx_gen_tac `es` >> Cases_on `eval_expr cx e1 es` >>
+  rename1 `_ = (raw1, es1)` >> Cases_on `raw1` >> simp[] >>
+  rename1 `read_result cx tv1 es1` >>
+  Cases_on `read_result cx tv1 es1` >> rename1 `_ = (r1, es2)` >>
+  Cases_on `r1` >> simp[] >>
+  Cases_on `eval_expr cx e2 es2` >> rename1 `_ = (raw2, es3)` >>
+  Cases_on `raw2` >> simp[] >>
+  rename1 `read_result cx tv2 es3` >>
+  Cases_on `read_result cx tv2 es3` >> rename1 `_ = (r2, es4)` >>
+  Cases_on `r2` >> simp[]
 QED
 
 (* What a range loop over [n1, n2) does after its ends, from es2: the
@@ -71,40 +101,43 @@ Theorem eval_stmt_for_range_cases:
   !cx id fty e1 e2 bound body es res es' tyv lctx.
     eval_stmt cx (For id fty (Range e1 e2) bound body) es = (res, es') /\
     evaluate_type (get_tenv cx) fty = SOME tyv /\ stmt_res_ok lctx res /\
-    (!tv es1. eval_expr cx e1 es = (INL tv, es1) ==>
-       ?n1. tv = Value (IntV n1) /\
-            !tv2 es2. eval_expr cx e2 es1 = (INL tv2, es2) ==>
-                      ?n2. tv2 = Value (IntV n2)) ==>
+    (!tv es1. (do raw <- eval_expr cx e1; read_result cx raw od) es = (INL tv, es1) ==>
+       ?n1. tv = IntV n1 /\
+            !tv2 es2. (do raw <- eval_expr cx e2; read_result cx raw od) es1 = (INL tv2, es2) ==>
+                      ?n2. tv2 = IntV n2) ==>
     ?r1 es1.
-      eval_expr cx e1 es = (r1, es1) /\ expr_res_ok r1 /\
+      (do raw <- eval_expr cx e1; read_result cx raw od) es = (r1, es1) /\ expr_res_ok r1 /\
       ((?ex. r1 = INR ex /\ res = INR ex /\ es' = es1) \/
        ?n1 r2 es2.
-         r1 = INL (Value (IntV n1)) /\
-         eval_expr cx e2 es1 = (r2, es2) /\ expr_res_ok r2 /\
+         r1 = INL (IntV n1) /\
+         (do raw <- eval_expr cx e2; read_result cx raw od) es1 = (r2, es2) /\ expr_res_ok r2 /\
          ((?ex. r2 = INR ex /\ res = INR ex /\ es' = es2) \/
-          ?n2. r2 = INL (Value (IntV n2)) /\
+          ?n2. r2 = INL (IntV n2) /\
                range_outcome cx tyv id body bound n1 n2 es2 res es'))
 Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
-  simp[Once evaluate_def, bind_def, ignore_bind_def, LET_THM,
-       lift_option_type_def, return_def, raise_def] >>
-  simp[Once evaluate_def, bind_def, return_def] >>
-  Cases_on `eval_expr cx e1 es` >> rename1 `_ = (r1, es1)` >>
+  pure_rewrite_tac[Once evaluate_def, eval_iterator_range_forced] >>
+  simp[LET_THM, lift_option_type_def, return_def, Once bind_def] >>
+  Cases_on `(do raw <- eval_expr cx e1; read_result cx raw od) es` >>
+  rename1 `_ = (r1, es1)` >>
+  simp[Once bind_def] >> simp[Once bind_def] >>
   reverse (Cases_on `r1`) >> simp[raise_def]
   >- (strip_tac >> gvs[] >> irule expr_res_ok_of_exn >> metis_tac[]) >>
   rename1 `INL tv1` >>
   qpat_x_assum `!tv es1. _ ==> ?n1. _` (qspecl_then [`tv1`, `es1`] mp_tac) >>
   simp[] >> strip_tac >>
   gvs[return_def, expr_res_ok_def] >>
-  Cases_on `eval_expr cx e2 es1` >> rename1 `_ = (r2, es2)` >>
+  Cases_on `(do raw <- eval_expr cx e2; read_result cx raw od) es1` >>
+  rename1 `_ = (r2, es2)` >> simp[Once bind_def] >>
   reverse (Cases_on `r2`) >> simp[raise_def]
   >- (strip_tac >> gvs[] >> drule expr_res_ok_of_exn >>
       disch_then drule >> simp[expr_res_ok_def]) >>
   rename1 `INL tv2` >>
   qpat_x_assum `!tv2 es2. _ ==> ?n2. _` (qspecl_then [`tv2`, `es2`] mp_tac) >>
   simp[] >> strip_tac >>
-  gvs[return_def, expr_res_ok_def, get_range_limits_def, range_outcome_def] >>
+  gvs[bind_def, ignore_bind_def, return_def, expr_res_ok_def,
+      get_range_limits_def, range_outcome_def] >>
   Cases_on `n1 <= n2` >>
   gvs[lift_sum_def, raise_def, return_def, check_def, assert_def,
       compatible_bound_def]
@@ -716,6 +749,39 @@ QED
 
 (* ===== For over a range with nonliteral ends ===== *)
 
+(* Keep the checked-range proof independent of the literal-range theory. *)
+Theorem reserved_fresh_not_local[local]:
+  !cenv st n scs.
+    local_ptrs_reserved cenv st /\ st.cs_next_var <= n ==>
+    not_local_ptr cenv scs (STRING #"%" (toString n))
+Proof
+  rw[not_local_ptr_def] >> strip_tac >>
+  fs[local_ptrs_reserved_def, not_fresh_at_def] >>
+  qpat_x_assum `!n1 n2 p sz1 sz2. _`
+    (qspecl_then [`name`, `name`, `STRING #"%" (toString n)`, `sz`, `sz`]
+       mp_tac) >>
+  simp[] >> qexists_tac `n` >> simp[]
+QED
+
+(* The operand-shape boundary used here does not need operator simulation. *)
+Theorem lower_value_word_shape[local]:
+  !cenv env ty e sa op sb.
+    lower_value compile_expr cenv ty e sa = (op, sb) /\
+    well_typed_expr env e /\
+    (!id t. FLOOKUP env.var_types id = SOME t ==>
+            well_formed_type env.type_defs t) /\
+    is_word_type (expr_type e) ==>
+    cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
+    sa.cs_next_id <= sb.cs_next_id /\
+    (!z. op = Var z ==> not_fresh_at sb z) /\ (!l. op <> Label l)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule (cj 2 compile_expr_grows) >> strip_tac >>
+  drule lower_value_word_safe_operand >>
+  disch_then (qspec_then `env` mp_tac) >>
+  disch_then drule_all >> simp[exprSafeOperandTheory.safe_operand_def]
+QED
+
 Theorem is_int_type_memory_size[local]:
   !tenv t tv. is_int_type t /\ evaluate_type tenv t = SOME tv ==>
               type_memory_size tv = 32
@@ -751,13 +817,13 @@ QED
    statement raises what the expression does. *)
 Theorem expr_exit_stmt_exit[local]:
   !r1 res RetQ es' rr.
-    expr_exit (r1 : toplevel_value + exception) rr /\
+    expr_exit (r1 : value + exception) rr /\
     (!ex. r1 = INR ex ==> res = INR ex) ==>
     stmt_exit RetQ es' res rr
 Proof
   Cases_on `r1` >> simp[] >> rpt strip_tac >> gvs[stmt_exit_def] >>
   disj1_tac >>
-  ONCE_REWRITE_TAC [INST_TYPE [beta |-> ``:toplevel_value``]
+  ONCE_REWRITE_TAC [INST_TYPE [beta |-> ``:value``]
                       expr_exit_INR_type] >>
   first_assum ACCEPT_TAC
 QED
@@ -791,11 +857,11 @@ Theorem compile_for_range_checked_frag:
     is_word_type (expr_type e2) /\
     evaluate_type (get_tenv cx) (expr_type e2) = SOME tyv /\
     expr_sim ctx func cenv cx fty e1 es /\
-    (!tv es1. eval_expr cx e1 es = (INL tv, es1) ==>
-       ?n1. tv = Value (IntV n1) /\ value_has_type tyv (IntV n1) /\
+    (!tv es1. (do raw <- eval_expr cx e1; read_result cx raw od) es = (INL tv, es1) ==>
+       ?n1. tv = IntV n1 /\ value_has_type tyv (IntV n1) /\
             expr_sim ctx func cenv cx fty e2 es1 /\
-            !tv2 es2. eval_expr cx e2 es1 = (INL tv2, es2) ==>
-              ?n2. tv2 = Value (IntV n2) /\ value_has_type tyv (IntV n2) /\
+            !tv2 es2. (do raw <- eval_expr cx e2; read_result cx raw od) es1 = (INL tv2, es2) ==>
+              ?n2. tv2 = IntV n2 /\ value_has_type tyv (IntV n2) /\
                    P es2) /\
     well_typed_expr env e1 /\ well_typed_expr env e2 /\
     (!x t. FLOOKUP env.var_types x = SOME t ==>
@@ -811,13 +877,13 @@ Theorem compile_for_range_checked_frag:
        eval_stmts cx stmts
          (ei with scopes :=
             (FEMPTY |+ (id, <| assignable := F; type := tyv;
-                               value := IntV (n1 + &j) |>)) :: ei.scopes) =
+                               value := IntV (n1 + &j); popped := [] |>)) :: ei.scopes) =
          (r2, es2) ==>
        stmt_frag ctx func cx (InLoop ex inc) RetQ c
          (stmts_env c (InLoop ex inc) ty stmts)
          (ei with scopes :=
             (FEMPTY |+ (id, <| assignable := F; type := tyv;
-                               value := IntV (n1 + &j) |>)) :: ei.scopes)
+                               value := IntV (n1 + &j); popped := [] |>)) :: ei.scopes)
          r2 es2) /\
     (!ei n1 j r2 es2 sc rest.
        P ei /\ lookup_scopes id ei.scopes = NONE /\
@@ -825,7 +891,7 @@ Theorem compile_for_range_checked_frag:
        eval_stmts cx stmts
          (ei with scopes :=
             (FEMPTY |+ (id, <| assignable := F; type := tyv;
-                               value := IntV (n1 + &j) |>)) :: ei.scopes) =
+                               value := IntV (n1 + &j); popped := [] |>)) :: ei.scopes) =
          (r2, es2) /\
        (r2 = INL () \/ r2 = INR ContinueException) /\
        es2.scopes = sc :: rest ==>
@@ -884,9 +950,9 @@ Proof
                `es'`, `tyv`, `lctx`] mp_tac eval_stmt_for_range_cases >>
   impl_tac
   >- (simp[] >> rpt strip_tac >>
-      qpat_x_assum `!tv es1. eval_expr cx e1 es = _ ==> _` drule >>
+      qpat_x_assum `!tv es1. (do raw <- eval_expr cx e1; read_result cx raw od) es = _ ==> _` drule >>
       strip_tac >> simp[] >> rpt strip_tac >>
-      qpat_x_assum `!tv2 es2. eval_expr cx e2 _ = _ ==> _` drule >>
+      qpat_x_assum `!tv2 es2. (do raw <- eval_expr cx e2; read_result cx raw od) _ = _ ==> _` drule >>
       strip_tac >> simp[]) >>
   disch_then (qx_choosel_then [`r1`, `es1`]
     (fn th => MAP_EVERY assume_tac (CONJUNCTS th))) >>
@@ -908,8 +974,8 @@ Resume compile_for_range_checked_frag[ends]:
       irule expr_exit_stmt_exit >> qexists `INR ex` >> simp[]) >>
   qpat_x_assum `r1 = _` SUBST_ALL_TAC >> simp[] >> strip_tac >>
   rename1 `expr_post func cenv cx e1 es sa s1 s0 es1 (IntV n1) op1 t1` >>
-  qpat_x_assum `!tv es1. eval_expr cx e1 es = _ ==> _` drule >> strip_tac >>
-  qpat_x_assum `Value (IntV n1) = _`
+  qpat_x_assum `!tv es1. (do raw <- eval_expr cx e1; read_result cx raw od) es = _ ==> _` drule >> strip_tac >>
+  qpat_x_assum `IntV n1 = _`
     (SUBST_ALL_TAC o SYM o SIMP_RULE (srw_ss()) []) >>
   `eval_operand op1 t1 = SOME (i2w n1)` by
     (qpat_x_assum `expr_post _ _ _ e1 _ _ _ _ _ _ _ _` mp_tac >>
@@ -941,7 +1007,7 @@ QED
 
 Resume compile_for_range_checked_frag[alloca]:
   `value_has_type tyv (IntV n2) /\ P es2` by
-    (qpat_x_assum `!tv2 es2. eval_expr cx e2 es1 = _ ==> _` drule >>
+    (qpat_x_assum `!tv2 es2. (do raw <- eval_expr cx e2; read_result cx raw od) es1 = _ ==> _` drule >>
      simp[]) >>
   `stmt_state_rel func cenv cx es2 t2` by fs[expr_post_def] >>
   `eval_operand op2 t2 = SOME (i2w n2)` by
@@ -961,7 +1027,13 @@ Resume compile_for_range_checked_frag[alloca]:
          FLOOKUP t2.vs_allocas a = SOME b` by fs[expr_post_def] >>
   `lookup_scopes id es2.scopes = NONE` by
     (irule lookup_scopes_none_map_fdom >> qexists `es.scopes` >>
-     imp_res_tac eval_expr_preserves_scopes_dom >> simp[]) >>
+     `!e si r sf.
+        (do raw <- eval_expr cx e; read_result cx raw od) si = (r, sf) ==>
+        MAP FDOM si.scopes = MAP FDOM sf.scopes` by
+       (rpt gen_tac >> simp[bind_def, AllCaseEqs()] >> strip_tac >>
+        imp_res_tac read_result_state >> gvs[] >>
+        metis_tac[eval_expr_preserves_scopes_dom]) >>
+     metis_tac[]) >>
   (* the loop variable's ALLOCA *)
   drule_all declare_local_ptr >> strip_tac >>
   qabbrev_tac `sz = type_memory_bytes cenv fty` >>
@@ -1178,13 +1250,13 @@ Resume compile_for_range_checked_frag[run_loop]:
      eval_stmts cx stmts
        (ei with scopes :=
           (FEMPTY |+ (id, <| assignable := F; type := tyv;
-                             value := IntV (n1 + &j) |>)) :: ei.scopes) =
+                             value := IntV (n1 + &j); popped := [] |>)) :: ei.scopes) =
        (r9, es9) ==>
      stmt_frag ctx func cx (InLoop exit_lbl incr_lbl) RetQ bc
        (stmts_env bc (InLoop exit_lbl incr_lbl) ty stmts)
        (ei with scopes :=
           (FEMPTY |+ (id, <| assignable := F; type := tyv;
-                             value := IntV (n1 + &j) |>)) :: ei.scopes)
+                             value := IntV (n1 + &j); popped := [] |>)) :: ei.scopes)
        r9 es9` by
     (rpt strip_tac >>
      qpat_x_assum `!st0 c st1 ex inc ei n1 j r2 es2. _`
@@ -1197,7 +1269,7 @@ Resume compile_for_range_checked_frag[run_loop]:
      eval_stmts cx stmts
        (ei with scopes :=
           (FEMPTY |+ (id, <| assignable := F; type := tyv;
-                             value := IntV (n1 + &j) |>)) :: ei.scopes) =
+                             value := IntV (n1 + &j); popped := [] |>)) :: ei.scopes) =
        (r9, es9) /\
      (r9 = INL () \/ r9 = INR ContinueException) /\
      es9.scopes = sc9 :: rest9 ==>
@@ -1236,3 +1308,13 @@ Resume compile_for_range_checked_frag[run_loop]:
 QED
 
 Finalise compile_for_range_checked_frag
+
+(* Integrity gate for the forced iterator boundary and checked-range consumer. *)
+val () = List.app (fn th =>
+  let val (ors, axs) = Tag.dest_tag (Thm.tag th)
+  in if null axs andalso null (Thm.hyp th) andalso
+        List.all (fn s => s = "DISK_THM") ors
+     then print "RANGE_FORCE_AUDIT OK\n"
+     else raise Fail "forced range inherited admission"
+  end) [eval_iterator_range_forced, eval_stmt_for_range_cases,
+        compile_for_range_checked_frag];

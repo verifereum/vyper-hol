@@ -5,7 +5,7 @@ Theory e2eSourceBoundaryCVTest
 Ancestors
   vyperSendCpsCVTest vyperExtCallCpsCVTest vyperSmallStep[ignore_grammar]
   vyperInterpreter vyperState vyperContext vyperAST vyperValue
-  extCallOracle selectorDispatch
+  extCallOracle
   vfmState[ignore_grammar] vfmExecution[ignore_grammar]
   words list option pair finite_map
 Libs cv_transLib wordsLib
@@ -14,7 +14,7 @@ Definition boundary_source_program_def:
   boundary_source_program =
     [FunctionDecl External Payable F F "send" [] [] NoneT [Expr (send_call 9w 1)];
      FunctionDecl External Payable F F "ext" [] [] NoneT
-       [Expr (Call NoneT (ExtCall F F ("ping",[],NoneT))
+       [Expr (Call NoneT (ExtCall F F ("ping",[],NoneT) [EKValue])
          [Literal (BaseT AddressT) (BytesL (REPLICATE 19 0w ++ [9w]));
           Literal (BaseT (UintT 256)) (IntL 1)] NONE)]]
 End
@@ -70,10 +70,10 @@ Proof
 QED
 
 Definition boundary_source_some_failure_def:
-  boundary_source_some_failure name data message os =
+  boundary_source_some_failure name data error os =
     let (res,am,rqs) = call_external (SOME os)
       boundary_source_machine (boundary_source_tx name) in
-      res = INR (Error (RuntimeError message)) /\
+      res = INR (Error error) /\
       (lookup_account 0w am.accounts).balance = 2 /\
       (lookup_account 8w am.accounts).balance = 5 /\
       (lookup_account 11w am.accounts).balance = 0 /\ am.logs = [] /\
@@ -82,22 +82,23 @@ End
 val () = cv_auto_trans boundary_source_some_failure_def;
 
 Theorem root_SOME_failure_and_exhaustion_keep_requests_roll_back_machine:
-  boundary_source_some_failure "send" [] "send failed" [send_outcome F [] 17;cpscv_tail] /\
-  boundary_source_some_failure "send" [] "send failed" [] /\
-  boundary_source_some_failure "ext" (function_selector "ping" []) "ExtCall reverted"
+  boundary_source_some_failure "send" [] (RuntimeError "send failed") [send_outcome F [] 17;cpscv_tail] /\
+  boundary_source_some_failure "send" [] (RuntimeError "send failed") [] /\
+  boundary_source_some_failure "ext" (function_selector "ping" []) (RevertData [])
     [send_outcome F [] 17;cpscv_tail] /\
-  boundary_source_some_failure "ext" (function_selector "ping" []) "ExtCall reverted" []
+  boundary_source_some_failure "ext" (function_selector "ping" []) (RevertData []) []
 Proof
   CONV_TAC cv_eval
 QED
 
+(* Concrete Send executes the BLAKE2 precompile at address 9; empty input fails. *)
 Definition boundary_source_none_def:
   boundary_source_none =
     let (res,am,rqs) = call_external NONE boundary_source_machine (boundary_source_tx "send") in
-      res = INL NoneV /\
+      res = INR (Error (RuntimeError "send failed")) /\
       (lookup_account 0w am.accounts).balance = 2 /\
-      (lookup_account 8w am.accounts).balance = 4 /\
-      (lookup_account 9w am.accounts).balance = 1 /\
+      (lookup_account 8w am.accounts).balance = 5 /\
+      (lookup_account 9w am.accounts).balance = 0 /\
       (lookup_account 11w am.accounts).balance = 0 /\
       am.logs = [] /\ rqs = []
 End

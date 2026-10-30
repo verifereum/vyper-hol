@@ -94,7 +94,7 @@ Theorem buffer_memory_vv_post_general:
 Proof
   rpt gen_tac >> strip_tac >>
   simp[vv_post_def, vv_holds_def, vv_at_def,
-    vyperStateTheory.materialise_def, vyperStateTheory.return_def] >>
+    vyperStateTheory.read_result_def, vyperStateTheory.return_def] >>
   conj_tac
   >- (disj1_tac >> qexistsl [`sa.cs_next_id`, `w2n w`, `sz`] >> simp[]) >>
   metis_tac[]

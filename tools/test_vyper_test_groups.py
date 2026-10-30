@@ -12,7 +12,8 @@ def log(seconds: dict[str, float]) -> str:
     return "\n".join(f"2026-10-26T00:00:00.0Z {name}Theory built in {s}s" for name, s in seconds.items())
 
 
-CHUNKS = [Test(f"vyperTest_slow_chunk{k}", "vyperTestDefs_slow") for k in range(4)]
+PARTS = [""] + [f"_part{k}" for k in range(1, 4)]
+CHUNKS = [Test(f"vyperTest_slow{part}", "vyperTestDefs_slow") for part in PARTS]
 SMALL = [Test(f"vyperTest_small{k}", f"vyperTestDefs_small{k}") for k in range(8)]
 TIMES = {"vyperTest_slow": 400.0, "vyperTestDefs_slow": 100.0}
 TIMES |= {f"vyperTest_small{k}": 30.0 for k in range(8)} | {f"vyperTestDefs_small{k}": 10.0 for k in range(8)}
@@ -28,8 +29,24 @@ class TestBuildTimes(unittest.TestCase):
         self.assertEqual([self.times.seconds[t.name] for t in CHUNKS], [100.0] * 4)
 
     def test_measured_chunk_times_are_kept(self) -> None:
-        times = BuildTimes([log(TIMES | {"vyperTest_slow_chunk0": 7.0})], CHUNKS)
-        self.assertEqual(times.seconds["vyperTest_slow_chunk0"], 7.0)
+        times = BuildTimes([log(TIMES | {"vyperTest_slow_part1": 7.0})], CHUNKS)
+        self.assertEqual(times.seconds["vyperTest_slow_part1"], 7.0)
+        self.assertEqual(times.seconds["vyperTest_slow"], 400.0)
+
+    def test_new_chunks_have_separate_definition_theories(self) -> None:
+        chunks = [Test(f"vyperTest_slow{part}", f"vyperTestDefs_slow{part}")
+                  for part in PARTS]
+        times = BuildTimes([log(TIMES)], chunks)
+        self.assertEqual(times.missing(chunks), [])
+        self.assertEqual([times.seconds[t.defs] for t in chunks], [25.0] * 4)
+        self.assertEqual(sum(times.cost(t) for t in chunks), 500.0)
+
+    def test_measured_definition_parts_are_kept(self) -> None:
+        chunks = [Test(f"vyperTest_slow{part}", f"vyperTestDefs_slow{part}")
+                  for part in PARTS]
+        times = BuildTimes([log(TIMES | {"vyperTestDefs_slow_part1": 6.0})], chunks)
+        self.assertEqual(times.seconds["vyperTestDefs_slow_part1"], 6.0)
+        self.assertEqual(times.seconds["vyperTestDefs_slow"], 100.0)
 
     def test_tests_sharing_definitions_build_them_once(self) -> None:
         self.assertEqual(self.times.makespan(CHUNKS), 200.0)

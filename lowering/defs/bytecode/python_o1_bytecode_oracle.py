@@ -35,6 +35,8 @@ def parse_args() -> argparse.Namespace:
         default=Path(__file__).with_name("supported-fixtures.txt"),
     )
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--frontend", action="store_true",
+                        help="also export annotated AST and layout for the HOL checker")
     return parser.parse_args()
 
 
@@ -103,12 +105,15 @@ def main() -> None:
         experimental_codegen=True,
     )
     fixtures = {}
+    output_formats = ("bytecode", "bytecode_runtime")
+    if args.frontend:
+        output_formats += ("annotated_ast_dict", "layout")
     for source in sources:
         source_bytes = source.read_bytes()
         result = vyper.compile_code(
             source.read_text(),
             contract_path=source,
-            output_formats=("bytecode", "bytecode_runtime"),
+            output_formats=output_formats,
             settings=settings,
             no_bytecode_metadata=True,
         )
@@ -118,11 +123,18 @@ def main() -> None:
             f"deploy={deploy}\nruntime={runtime}\n"
         )
         fixtures[source.stem] = {
-            "source": f"python-o1-no-asm-opt-sources/{source.name}",
+            "source": source.relative_to(args.sources.parent).as_posix(),
             "source_sha256": hashlib.sha256(source_bytes).hexdigest(),
             "deploy_sha256": hashlib.sha256(bytes.fromhex(deploy)).hexdigest(),
             "runtime_sha256": hashlib.sha256(bytes.fromhex(runtime)).hexdigest(),
         }
+        if args.frontend:
+            frontend = result["annotated_ast_dict"] | result["layout"]
+            encoded = (json.dumps(frontend, separators=(",", ":"), sort_keys=True) + "\n")
+            if "/home/" in encoded or "/tmp/" in encoded:
+                raise RuntimeError(f"absolute path in frontend fixture: {source}")
+            (args.output / f"{source.stem}.json").write_text(encoded)
+            fixtures[source.stem]["frontend_sha256"] = hashlib.sha256(encoded.encode()).hexdigest()
 
     dependencies = {
         package: version(package)
@@ -145,7 +157,7 @@ def main() -> None:
             "final_assembly_optimization": False,
             "evm_version": ORACLE_EVM_VERSION,
             "bytecode_metadata": False,
-            "outputs": ["bytecode", "bytecode_runtime"],
+            "outputs": list(output_formats),
         },
         "fixtures": fixtures,
     }

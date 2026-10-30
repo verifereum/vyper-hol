@@ -1,13 +1,13 @@
 Theory vyperSemanticsHol
 Ancestors
   vyperLogPreservation
-  vyperEvalPreservesNameTarget
   vyperEvalPureExpr
   vyperTypeSoundness
   vyperABIValid
   vyperABIRoundtrip
   vyperTypeDeploymentMachine
   vyperTypeSelectedEntry
+  vyperViewFrame
   vyperTypeEntryDefaults
   vyperTypeSelectedEntrySoundness
   vyperTypeDeploymentSoundness

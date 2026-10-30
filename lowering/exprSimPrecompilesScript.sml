@@ -188,9 +188,9 @@ Definition typed_args_ready_def:
       expr_sim ctx func cenv cx (arg_ty e) e es /\
       is_word_type (expr_type e) /\
       IS_SOME (evaluate_type (get_tenv cx) (expr_type e)) /\
-      (!res es'. eval_expr cx e es = (res, es') ==> expr_res_ok res) /\
-      (!tv es'. eval_expr cx e es = (INL tv, es') ==>
-        ?v. tv = Value v /\ Inv es')
+      (!res es'. (do r <- eval_expr cx e; read_result cx r od) es = (res, es') ==> expr_res_ok res) /\
+      (!v es'. (do r <- eval_expr cx e; read_result cx r od) es = (INL v, es') ==>
+        Inv es')
 End
 
 Definition typed_args_post_def:
@@ -209,9 +209,9 @@ Theorem typed_args_ready_head:
     expr_sim ctx func cenv cx (arg_ty e) e es /\
     is_word_type (expr_type e) /\
     IS_SOME (evaluate_type (get_tenv cx) (expr_type e)) /\
-    (!res es'. eval_expr cx e es = (res, es') ==> expr_res_ok res) /\
-    (!tv es'. eval_expr cx e es = (INL tv, es') ==>
-      ?v. tv = Value v /\ Inv es')
+    (!res es'. (do r <- eval_expr cx e; read_result cx r od) es = (res, es') ==> expr_res_ok res) /\
+    (!v es'. (do r <- eval_expr cx e; read_result cx r od) es = (INL v, es') ==>
+      Inv es')
 Proof
   simp[typed_args_ready_def] >> metis_tac[]
 QED
@@ -226,17 +226,13 @@ QED
 Theorem typed_args_cons_cases:
   typed_args_ready ctx func cenv cx arg_ty Inv (e::args) /\ Inv es /\
   eval_exprs cx (e::args) es = (res, es') ==>
-  (?exc. eval_expr cx e es = (INR exc, es') /\ res = INR exc) \/
-  ?v es1 rr. eval_expr cx e es = (INL (Value v), es1) /\
+  (?exc. (do r <- eval_expr cx e; read_result cx r od) es = (INR exc, es') /\ res = INR exc) \/
+  ?v es1 rr. (do r <- eval_expr cx e; read_result cx r od) es = (INL v, es1) /\
     Inv es1 /\ eval_exprs cx args es1 = (rr, es') /\
     res = (case rr of INL vs => INL (v::vs) | INR exc => INR exc)
 Proof
   rpt strip_tac >> drule_all typed_args_ready_head >> strip_tac >>
-  drule eval_exprs_cons_cases >> strip_tac
-  >- metis_tac[]
-  >- (qpat_x_assum `!tv es'. eval_expr _ _ _ = _ ==> _` drule >> metis_tac[]) >>
-  qpat_x_assum `!tv es'. eval_expr _ _ _ = _ ==> _` drule >>
-  strip_tac >> gvs[] >> metis_tac[]
+  drule eval_exprs_cons_cases >> strip_tac >> metis_tac[]
 QED
 
 Theorem lower_typed_args_nil_sim:
@@ -314,9 +310,12 @@ Proof
   `typed_args_ready ctx func cenv cx arg_ty Inv args` by
     metis_tac[typed_args_ready_tail] >>
   `MAP FDOM es.scopes = MAP FDOM es1.scopes` by
-    metis_tac[eval_expr_preserves_scopes_dom] >>
-  `expr_exit (INL (Value v)) = (\r. F)` by simp[FUN_EQ_THM] >>
-  `expr_res_ok (INL (Value v))` by simp[expr_res_ok_def] >>
+    (qpat_x_assum `bind _ _ es = (INL v,es1)` mp_tac >>
+     simp[bind_def, AllCaseEqs()] >> rpt strip_tac >>
+     imp_res_tac read_result_state >> gvs[] >>
+     drule eval_expr_preserves_scopes_dom >> simp[]) >>
+  `expr_exit (INL v) = (\r. F)` by simp[FUN_EQ_THM] >>
+  `expr_res_ok (INL v)` by simp[expr_res_ok_def] >>
   drule_all expr_sim_apply >> disch_then (qspec_then `s0` mp_tac) >>
   simp[expr_exit_def] >> disch_then (mp_then Any irule wb_frag_then) >> simp[] >>
   qx_gen_tac `t` >> strip_tac >>
@@ -1306,9 +1305,9 @@ QED
 
 Theorem expr_sim_pre_stack_result:
   expr_sim_pre cenv cx env e es /\ is_word_type (expr_type e) /\
-  eval_expr cx e es = (res,es') ==>
+  (do r <- eval_expr cx e; read_result cx r od) es = (res,es') ==>
   expr_sim_inv cenv cx env es' /\ expr_res_ok res /\
-  !x. res = INL x ==> ?v tv. x = Value v /\
+  !v. res = INL v ==> ?tv.
     evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\ value_has_type tv v
 Proof
   strip_tac >> drule_all expr_sim_pre_word_type_result >> strip_tac >>
@@ -1319,19 +1318,23 @@ Proof
   rpt strip_tac >> gvs[]
 QED
 
+(* typed_args_ready and wb_args_shape of word operands that each meet
+   expr_sim_pre wherever expr_sim_inv holds. *)
 Theorem typed_stack_args_ready:
-  expr_sim_pre cenv cx env (Builtin ann bt args) es /\
+  (!e s. MEM e args /\ expr_sim_inv cenv cx env s ==>
+         expr_sim_pre cenv cx env e s) /\
+  expr_sim_inv cenv cx env es /\
   EVERY (\e. is_word_type (expr_type e) /\ expr_sim_ok cenv e) args ==>
   typed_args_ready ctx func cenv cx arg_ty (expr_sim_inv cenv cx env) args /\
   wb_args_shape cenv arg_ty args
 Proof
   strip_tac >> conj_tac
-  >- (simp[typed_args_ready_def] >> rpt strip_tac >>
+  >- (pure_rewrite_tac[typed_args_ready_def] >> rpt gen_tac >>
+      disch_then strip_assume_tac >>
       rename1 `expr_sim_inv cenv cx env es_arg` >>
       `is_word_type (expr_type e) /\ expr_sim_ok cenv e` by
         (gvs[EVERY_MEM] >> first_x_assum drule >> simp[]) >>
-      `expr_sim_pre cenv cx env e es_arg` by
-        (drule_all expr_sim_pre_builtin_arg >> simp[]) >>
+      `expr_sim_pre cenv cx env e es_arg` by metis_tac[] >>
       simp[] >> rpt conj_tac
       >- metis_tac[expr_sim_ok_def]
       >- metis_tac[well_typed_expr_type_evaluates]
@@ -1341,9 +1344,7 @@ Proof
   simp[wb_args_shape_def] >> rpt gen_tac >> strip_tac >>
   `is_word_type (expr_type e)` by
     (gvs[EVERY_MEM] >> first_x_assum drule >> simp[]) >>
-  `expr_sim_pre cenv cx env e es` by
-    (drule expr_sim_pre_builtin_arg >> disch_then irule >>
-     gvs[expr_sim_pre_def]) >>
+  `expr_sim_pre cenv cx env e es` by metis_tac[] >>
   drule expr_sim_pre_lower_value_word_shape >> disch_then drule >> simp[]
 QED
 
@@ -1491,11 +1492,11 @@ Theorem ecrecover_typed_result[local]:
     evaluate_type (get_tenv cx) (expr_type ar) = SOME tr /\
     evaluate_type (get_tenv cx) (expr_type asig) = SOME ts /\
     builtin_result cx acc ann ECRecover (MAP expr_type args) vs =
-      INL (Value (AddressV (case vfmExecution$ecrecover
+      INL (AddressV (case vfmExecution$ecrecover
         (typed_val_to_w256 (BaseTV (BytesT (Fixed 32))) vh)
         (w2n (typed_val_to_w256 tv va))
         (w2n (typed_val_to_w256 tr ra))
-        (w2n (typed_val_to_w256 ts sa)) of NONE => 0w | SOME addr => addr)))
+        (w2n (typed_val_to_w256 ts sa)) of NONE => 0w | SOME addr => addr))
 Proof
   strip_tac >> drule ecrecover_typing >> simp[] >> strip_tac >>
   `LENGTH args = 4` by simp[] >>
@@ -1547,6 +1548,10 @@ Proof
   strip_tac >> drule ecrecover_pre_types >> strip_tac >>
   `EVERY (\e. is_word_type (expr_type e) /\ expr_sim_ok cenv e) args` by
     gvs[EVERY_MEM] >>
+  `expr_sim_inv cenv cx env es` by gvs[expr_sim_pre_def] >>
+  `!e s. MEM e args /\ expr_sim_inv cenv cx env s ==>
+         expr_sim_pre cenv cx env e s` by
+    metis_tac[expr_sim_pre_builtin_arg] >>
   drule_all typed_stack_args_ready >>
   disch_then (qspecl_then [`func`, `ctx`, `\e. ty`] strip_assume_tac) >>
   rewrite_tac[expr_sim_def] >> rpt gen_tac >> strip_tac >>
@@ -1555,7 +1560,10 @@ Proof
         (simp[FUN_EQ_THM] >> metis_tac[]) >>
       simp[] >> irule frag_exec_false_pre) >>
   `MAP FDOM es.scopes = MAP FDOM es'.scopes` by
-    metis_tac[eval_expr_preserves_scopes_dom] >>
+    (qpat_x_assum `bind _ _ es = (res,es')` mp_tac >>
+     simp[bind_def, AllCaseEqs()] >> rpt strip_tac >>
+     imp_res_tac read_result_state >> gvs[] >>
+     drule eval_expr_preserves_scopes_dom >> simp[]) >>
   drule_all lower_value_ecrecover_args >> strip_tac >>
   drule_all lower_word_args_shape_ready >> strip_tac >>
   `cs_extends sm sb` by metis_tac[compile_ecrecover_extends] >>

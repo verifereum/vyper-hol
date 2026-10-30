@@ -45,7 +45,7 @@ Ancestors
   valueEncoding valueEncodingProofs localPtrsProps venomMemDefs
   vyperAST vyperTyping
 Libs
-  pairLib BasicProvers
+  pairLib BasicProvers monadsyntax
 
 (* ===== Instruction Sequence Execution ===== *)
 
@@ -250,7 +250,8 @@ Theorem compile_expr_correct:
     stmt_state_rel func cenv cx es ss ∧
     supported_expr e ∧
     well_annotated e ∧
-    eval_expr cx e es = (INL (Value v), es') ∧
+    (do result <- eval_expr cx e; read_result cx result od) es =
+      (INL v, es') ∧
     lower_value compile_expr cenv ty e st = (op, st') ∧
     (∀i. MEM i (emitted_insts st st') ⇒ MEM i (fn_insts func)) ∧
     fn_inst_ids_distinct func ∧ local_ptrs_reserved cenv st
@@ -737,7 +738,8 @@ QED
 Theorem compile_name_correct:
   ∀ func cenv cx ty ann id es ss st op st' v es' p size entry.
     state_rel func cenv cx es ss ∧
-    eval_expr cx (Name ann id) es = (INL (Value v), es') ∧
+    (do result <- eval_expr cx (Name ann id); read_result cx result od) es =
+      (INL v, es') ∧
     lower_value compile_expr cenv ty (Name ann id) st = (op, st') ∧
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) size) ∧
     lookup_scopes id es.scopes = SOME entry ∧
@@ -755,10 +757,10 @@ Theorem compile_name_correct:
 Proof
   rpt gen_tac >> strip_tac >>
   `es' = es` by
-    (qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+    (qpat_x_assum `(do result <- eval_expr _ _; read_result _ result od) _ = _` mp_tac >>
      simp[Once evaluate_def, bind_def, get_scopes_def, return_def,
-          lift_option_def, lift_option_type_def] >>
-     Cases_on `lookup_scopes_val id es.scopes` >> simp[return_def, raise_def]) >>
+          type_check_def, assert_def, check_def, ignore_bind_def] >>
+     metis_tac[read_result_state]) >>
   qpat_x_assum `lower_value _ _ _ _ _ = _` mp_tac >>
   simp[lower_value_def, compile_expr_def, expr_type_def, compile_name_vv_def,
        unwrap_value_def, contextTheory.mk_ptr_def,
@@ -794,7 +796,9 @@ Theorem compile_binop_correct:
     stmt_state_rel func cenv cx es ss ∧
     (∀u. type_to_int_bound ann = SOME u ⇒
          type_to_int_bound (expr_type e1) = SOME u) ∧
-    eval_expr cx (Builtin ann (Bop bop) [e1; e2]) es = (INL (Value v), es') ∧
+    (do result <- eval_expr cx (Builtin ann (Bop bop) [e1; e2]);
+        read_result cx result od) es =
+      (INL v, es') ∧
     lower_value compile_expr cenv ty (Builtin ann (Bop bop) [e1; e2]) st = (op, st') ∧
     (∀i. MEM i (emitted_insts st st') ⇒ MEM i (fn_insts func)) ∧
     fn_inst_ids_distinct func ∧ local_ptrs_reserved cenv st
@@ -868,7 +872,8 @@ QED
 Theorem compile_neg_correct:
   ∀ func cenv cx ty ann e es ss st op st' v es' n.
     stmt_state_rel func cenv cx es ss ∧
-    eval_expr cx (Builtin ann Neg [e]) es = (INL (Value v), es') ∧
+    (do result <- eval_expr cx (Builtin ann Neg [e]); read_result cx result od) es =
+      (INL v, es') ∧
     ann = BaseT (IntT n) ∧
     type_to_int_bound ann = type_to_int_bound (expr_type e) ∧
     lower_value compile_expr cenv ty (Builtin ann Neg [e]) st = (op, st') ∧
@@ -4169,3 +4174,18 @@ val () = List.app (fn th =>
    exprLoweringTheory.compile_struct_lit_word_order,
    exprLoweringTheory.compile_make_array_empty_full_capacity,
    exprLoweringTheory.compile_make_array_typed_tuple_order];
+
+(* Retained general compiler admissions and their existing structural corollary
+   are excluded; all other exported proofs must be closed.
+   compile_expr_extends_insts inherits compile_expr_ci_mono's admission. *)
+val () = List.app
+  (fn (name,th) =>
+    if List.exists (fn allowed => name = allowed)
+      ["compile_expr_correct", "compile_binop_correct", "compile_neg_correct",
+       "compile_expr_ci_mono", "compile_expr_extends_insts"] then ()
+    else let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
+      if null (Thm.hyp th) andalso null axioms andalso
+         List.all (fn oracle => oracle = "DISK_THM") oracles then ()
+      else raise Fail ("expression lowering proof is not closed: " ^ name)
+    end)
+  (DB.thms "exprLoweringProps");

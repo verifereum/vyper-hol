@@ -1,0 +1,7 @@
+pop_refill
+conditional_snapshot
+conditional_memory_view
+nested_retained_pop
+call_storage_read
+call_memory_pop
+builtin_eager_read
