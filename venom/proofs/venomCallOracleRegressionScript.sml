@@ -259,3 +259,17 @@ Theorem consume_nonzero_precompile_ordinary:
 Proof
   simp probe_defs >> EVAL_TAC
 QED
+
+(* A computed CALL cannot discard deletions scheduled by an earlier call. *)
+Theorem computed_call_preserves_pending_deletions:
+  (SND (consume_call_outcome
+    (venom_call_request (call_probe_state with vs_toDelete := [8w])
+      2w 0w 0w 0w F) 0 0
+    (call_probe_state with vs_toDelete := [8w]))).vs_toDelete = [8w]
+Proof
+  simp[consume_call_outcome_eq, venom_call_request_def,
+       adopt_outcome_deletions_def, computed_precompile_def,
+       take_outcome_def, failed_outcome_def,
+       call_probe_state_def, init_venom_state_def, empty_call_context_def,
+       read_memory_def, w2w_n2w]
+QED
