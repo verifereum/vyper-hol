@@ -15,10 +15,28 @@ Ancestors
   vyperEncodeDecode vyperArith vyperTypeSystem vyperTypeInvariants vyperTypeValues
   vyperTypeEnv vyperTypeBuiltins vyperTypeExprSoundness
   vyperTypeEvalSoundness vyperTypeStatePreservation vyperTypeStmtSoundness
-  vyperTypeCallSoundness vyperTypeInitialState vyperTypeContractSoundness
+  vyperTypeInitialState vyperTypeContractSoundness
   vyperTypeStoragePreservation vyperTypeEvalStoragePreservation
 Libs
   wordsLib
+
+(* ===== Typed-expression evaluation soundness ===== *)
+
+Theorem typed_expr_evaluation_sound:
+  well_typed_expr env e /\ env_consistent env cx st /\ state_well_typed st /\
+  context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
+  call_evaluation_safe cx (int_calls_expr e) /\
+  eval_expr cx e st = (res,st') ==>
+  state_well_typed st' /\ env_consistent env cx st' /\ accounts_well_typed st'.accounts /\
+  no_type_error_result res /\
+  (case res of INL pv => eval_result_typed (env,cx,st') pv (Type (expr_type e))
+   | INR _ => T)
+Proof
+  strip_tac >>
+  qspecl_then [`cx`,`e`] strip_assume_tac (cj 5 eval_scc_type_sound_mutual) >>
+  qpat_x_assum `!env st res st'. _ ==> (_ /\ _)` drule_all >>
+  simp[]
+QED
 
 (* ===== Main no-TypeError theorem for already-typed statement lists ===== *)
 
@@ -233,7 +251,7 @@ val () = List.app
          List.all (fn oracle => oracle = "DISK_THM") oracles then ()
       else raise Fail ("public soundness proof is not closed: " ^ name)
     end)
-  (DB.thms "vyperTypeSoundness" @ DB.thms "vyperTypeCallSoundness" @
+  (DB.thms "vyperTypeSoundness" @
    [("eval_scc_type_sound_mutual",eval_scc_type_sound_mutual),
     ("eval_scc_storage_preservation_mutual",eval_scc_storage_preservation_mutual),
     ("eval_expr_read_type_sound",eval_expr_read_type_sound)]);

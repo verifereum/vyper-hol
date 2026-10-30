@@ -18,13 +18,6 @@ Libs
 
 val _ = Parse.hide "body";
 
-Theorem get_module_code_initial_evaluation_context:
-  ALOOKUP sources addr = SOME mods /\ tx.target = addr ==>
-  get_module_code (initial_evaluation_context sources layouts tx src) src = ALOOKUP mods src
-Proof
-  rw[get_module_code_def, initial_evaluation_context_def]
-QED
-
 Theorem FLOOKUP_DRESTRICT_SOME:
   FLOOKUP (DRESTRICT fm s) k = SOME v <=> k IN s /\ FLOOKUP fm k = SOME v
 Proof
@@ -216,26 +209,6 @@ Proof
   drule_all lookup_function_Internal_NONE_for_Deploy_MEM >>
   drule_all lookup_function_Deploy_MEM >>
   simp[lookup_callable_function_def]
-QED
-
-(* Deploy lookup is total on finite declaration lists: absence of a matching
-   declaration is represented by the synthetic empty payable constructor. *)
-Theorem lookup_function_Deploy_IS_SOME:
-  IS_SOME (lookup_function src fn Deploy ts)
-Proof
-  Induct_on `ts` >- simp[lookup_function_def] >>
-  gen_tac >> Cases_on `h` >> rw[lookup_function_def] >>
-  TRY (Cases_on `v`) >> gvs[lookup_function_def]
-QED
-
-Theorem lookup_function_Deploy_no_decl:
-  ~(?fm nr raw args dflts ret body.
-      MEM (FunctionDecl Deploy fm nr raw fn args dflts ret body) ts) ==>
-  lookup_function src fn Deploy ts = SOME (Payable,F,[],[],NoneT,[])
-Proof
-  Induct_on `ts` >- rw[lookup_function_def] >>
-  gen_tac >> Cases_on `h` >> rw[lookup_function_def] >>
-  TRY (Cases_on `v`) >> gvs[lookup_function_def] >> metis_tac[]
 QED
 
 Theorem lookup_function_Deploy_SOME_cases:
@@ -812,22 +785,6 @@ Proof
   gvs[contract_namespaces_ok_def]
 QED
 
-Theorem build_contract_type_artifact_fn_sigs_declared_complete_deploy:
-  contract_namespaces_ok T mods /\ ALOOKUP sources addr = SOME mods ==>
-  fn_sigs_declared_complete
-    (build_contract_type_artifact T mods).cta_fn_sigs
-    (initial_evaluation_context sources layouts
-       (tx with target := addr) src with in_deploy := T)
-Proof
-  rw[fn_sigs_declared_complete_def] >> gvs[] >>
-  gvs[get_module_code_def, initial_evaluation_context_def] >>
-  rw[build_contract_type_artifact_def] >>
-  `MEM (src',ts) mods` by metis_tac[ALOOKUP_MEM] >>
-  simp[GSYM fn_sig_of_def] >>
-  irule add_contract_static_maps_fn_sigs_complete_MEM_deploy >>
-  gvs[] >> metis_tac[]
-QED
-
 Theorem build_contract_type_artifact_fn_sigs_sound:
   contract_namespaces_ok F mods /\
   FLOOKUP (build_contract_type_artifact F mods).cta_fn_sigs (src,fn) = SOME sig ==>
@@ -929,27 +886,6 @@ Proof
   simp[GSYM fn_sig_of_def] >>
   irule add_contract_static_maps_fn_sigs_complete_MEM_deploy >>
   gvs[] >> metis_tac[]
-QED
-
-Theorem check_contract_deploy_lookup_from_MEM:
-  check_contract T layouts address modules = SOME artifact /\
-  ALOOKUP modules NONE = SOME declarations /\
-  MEM
-    (FunctionDecl Deploy mutability nonreentrant raw_return function_name
-      arguments defaults return_type body)
-    declarations ==>
-  lookup_function NONE function_name Deploy declarations =
-    SOME
-      (mutability,nonreentrant,arguments,defaults,return_type,body)
-Proof
-  rw[check_contract_def] >> gvs[] >>
-  irule (INST_TYPE [``:'a`` |-> ``:num option``]
-    lookup_function_Deploy_MEM) >>
-  conj_tac >-
-    (qexists_tac `(NONE : num option)` >>
-     irule contract_namespaces_ok_module_fn_sig_keys_deploy >>
-     metis_tac[ALOOKUP_MEM]) >>
-  qexists_tac `raw_return` >> simp[]
 QED
 
 Theorem check_contract_fn_sigs_declared_complete_initial:
@@ -2333,47 +2269,6 @@ Proof
   drule lookup_flag_SOME_MEM_FlagDecl >> strip_tac >>
   irule build_contract_type_artifact_flag_members_complete >>
   simp[] >> metis_tac[]
-QED
-
-Theorem check_contract_nonsig_maps_complete_deploy:
-  check_contract T layouts addr mods = SOME art /\
-  ALOOKUP sources addr = SOME mods /\ tx.target = addr ==>
-  toplevel_vtypes_complete art.cta_toplevel_vtypes
-    (initial_evaluation_context sources layouts tx src) /\
-  bare_globals_complete art.cta_bare_globals
-    (initial_evaluation_context sources layouts tx src) /\
-  bare_global_assignable_complete art.cta_bare_global_assignable
-    (initial_evaluation_context sources layouts tx src) /\
-  flag_members_complete art.cta_flag_members
-    (initial_evaluation_context sources layouts tx src)
-Proof
-  rw[check_contract_def] >> gvs[] >>
-  `contract_namespaces_ok F mods` by
-    metis_tac[contract_namespaces_ok_deploy_implies_runtime] >>
-  mp_tac build_contract_type_artifact_nonsig_mode_irrelevant >>
-  strip_tac >> rpt conj_tac
-  >- (rw[toplevel_vtypes_complete_def] >>
-      gvs[FLOOKUP_DRESTRICT_SOME, lookup_var_slot_from_layout_initial] >>
-      gvs[get_module_code_def, initial_evaluation_context_def]
-      >- (conj_tac >- (irule var_allocated_VariableDecl >> metis_tac[]) >>
-          irule build_contract_type_artifact_toplevel_vtypes_complete >>
-          simp[] >> metis_tac[]) >>
-      conj_tac >- (irule var_allocated_HashMapDecl >> metis_tac[]) >>
-      irule build_contract_type_artifact_toplevel_vtypes_complete >>
-      simp[] >> metis_tac[])
-  >- (rw[bare_globals_complete_def] >>
-      gvs[get_module_code_def, initial_evaluation_context_def] >>
-      irule build_contract_type_artifact_bare_globals_complete >>
-      simp[] >> metis_tac[])
-  >- (rw[bare_global_assignable_complete_def] >>
-      gvs[get_module_code_def, initial_evaluation_context_def] >>
-      irule build_contract_type_artifact_bare_global_assignable_complete >>
-      simp[] >> metis_tac[])
-  >- (rw[flag_members_complete_def] >>
-      gvs[get_module_code_def, initial_evaluation_context_def] >>
-      drule lookup_flag_SOME_MEM_FlagDecl >> strip_tac >>
-      irule build_contract_type_artifact_flag_members_complete >>
-      simp[] >> metis_tac[])
 QED
 
 

@@ -148,12 +148,6 @@ Termination
   Cases >> simp[basicSizeTheory.pair_size_def]
 End
 
-Theorem all_have_type_LIST_REL:
-  ∀t vs. all_have_type t vs <=> LIST_REL value_has_type (REPLICATE (LENGTH vs) t) vs
-Proof
-  gen_tac >> Induct >> rw[value_has_type_def]
-QED
-
 (* ===== Helper lemmas  ===== *)
 
 (* Helper: IS_SOME of compound encoders doesn't depend on offset *)
@@ -255,13 +249,6 @@ Proof
   mp_tac (GEN_ALL lt_dimword_imp_suc_wordsize_lt) >> simp[] >>
   rename1 `BytesT bd` >>
   Cases_on `bd` >> simp[well_formed_type_value_def, type_slot_size_def]
-QED
-
-Theorem well_formed_type_value_size_gt0:
-  ∀tv. well_formed_type_value tv ∧ tv ≠ NoneTV ⇒ 0 < type_value_size tv
-Proof
-  ho_match_mp_tac well_formed_type_value_ind
-  \\ rw[well_formed_type_value_def]
 QED
 
 Theorem value_has_type_equiv:
@@ -505,12 +492,6 @@ Proof
   simp[]
 QED
 
-Theorem ArrayTV_type_value_size:
-  !tv b. type_value_size tv < type_value_size (ArrayTV tv b)
-Proof
-  Cases_on `b` >> simp[type_value_size_def]
-QED
-
 Theorem safe_cast_well_typed_tuple_helper:
   !tvs l.
     (!tv'. type_value_size tv' < list_size type_value_size tvs + 1 ==>
@@ -522,26 +503,6 @@ Proof
   irule safe_cast_list_identity_nil >> simp[] >>
   rpt strip_tac >> first_x_assum irule >>
   imp_res_tac MEM_type_value_size_TupleTV >> gvs[]
-QED
-
-Theorem safe_cast_well_typed_struct_helper:
-  !ftypes l.
-    (!tv'. type_value_size tv' <
-           list_size (pair_size (list_size char_size) type_value_size) ftypes + 1 ==>
-           !v'. value_has_type tv' v' ==> safe_cast tv' v' = SOME v') ==>
-    struct_has_type ftypes l ==>
-    MAP FST l = MAP FST ftypes ==>
-    safe_cast_list (MAP SND ftypes) (MAP SND l) [] = SOME (MAP SND l)
-Proof
-  rpt strip_tac >>
-  irule safe_cast_list_identity_nil >>
-  imp_res_tac struct_has_type_values_have_types >> simp[] >>
-  rpt strip_tac >> first_x_assum irule >>
-  `?nm. MEM (nm, tv) ftypes` by (
-    qpat_x_assum `MEM _ _` mp_tac >>
-    simp[listTheory.MEM_MAP, pairTheory.EXISTS_PROD] >>
-    metis_tac[]) >>
-  imp_res_tac MEM_type_value_size_StructTV >> gvs[]
 QED
 
 Theorem sparse_has_type_all_less:
@@ -613,17 +574,6 @@ Proof
       drule_all safe_cast_list_identity_nil >> strip_tac >>
       `MAP FST ftypes = MAP FST l` by gvs[] >>
       gvs[zip_fst_snd])
-QED
-
-Theorem safe_cast_well_typed_mutual:
-  (!tv v. value_has_type tv v ==> safe_cast tv v = SOME v) /\
-  (!tvs vs acc.
-     values_have_types tvs vs ==>
-     safe_cast_list tvs vs acc = SOME (REVERSE acc ++ vs))
-Proof
-  conj_tac >- metis_tac[safe_cast_well_typed] >>
-  rpt strip_tac >> irule safe_cast_list_identity >> simp[] >>
-  rpt strip_tac >> irule safe_cast_well_typed >> simp[]
 QED
 
 Theorem values_have_types_length:
@@ -703,12 +653,6 @@ Proof
   Cases >> simp[Once value_has_type_def] >>
   rpt strip_tac >> res_tac
 QED
-Theorem tuple_cast_result_value_has_type:
-  !tvs vs. values_have_types tvs vs ==>
-    value_has_type (TupleTV tvs) (ArrayV (TupleV vs))
-Proof
-  simp[Once value_has_type_def]
-QED
 
 Theorem fixed_sparse_cast_result_value_has_type:
   !t n al vs.
@@ -724,29 +668,6 @@ Proof
   simp[Once value_has_type_def] >>
   conj_tac >- simp[MAP_FST_ZIP_MAP_FST] >>
   irule sparse_has_type_ZIP_cast_results >> simp[]
-QED
-
-Theorem dynamic_cast_result_value_has_type:
-  !t n raw_vs vs.
-    LENGTH raw_vs <= n /\
-    values_have_types (REPLICATE (LENGTH raw_vs) t) vs ==>
-    value_has_type (ArrayTV t (Dynamic n)) (ArrayV (DynArrayV vs))
-Proof
-  rpt strip_tac >>
-  `LENGTH vs = LENGTH raw_vs` by (drule values_have_types_length >> simp[]) >>
-  simp[Once value_has_type_def] >>
-  drule values_have_types_replicate_all_have_type >> simp[]
-QED
-
-Theorem struct_cast_result_value_has_type:
-  !args al vs.
-    MAP FST al = MAP FST args /\
-    values_have_types (MAP SND args) vs ==>
-    value_has_type (StructTV args)
-      (StructV (ZIP (MAP FST al, vs)))
-Proof
-  rpt strip_tac >> gvs[Once value_has_type_def] >>
-  irule struct_has_type_ZIP >> simp[]
 QED
 
 Theorem values_have_types_nil_acc_elim:
@@ -801,36 +722,6 @@ Proof
   `values_have_types (REPLICATE (LENGTH al) t) vs`
     by (irule values_have_types_nil_acc_elim >> simp[]) >>
   drule_all fixed_sparse_cast_result_value_has_type >>
-  simp[Once value_has_type_def]
-QED
-
-Theorem dynamic_cast_result_components_from_ih[local]:
-  !t n raw_vs vs.
-    (!acc_tys. values_have_types acc_tys [] ==>
-      values_have_types (REVERSE acc_tys ++ REPLICATE (LENGTH raw_vs) t) vs) /\
-    ~(n < LENGTH raw_vs) ==>
-    LENGTH vs <= n /\ all_have_type t vs
-Proof
-  rpt gen_tac >> strip_tac >>
-  `values_have_types (REPLICATE (LENGTH raw_vs) t) vs`
-    by (first_x_assum (qspec_then `[]` mp_tac) >> simp[Once value_has_type_def]) >>
-  conj_tac
-  >- (`LENGTH vs = LENGTH raw_vs` by (drule values_have_types_length >> simp[]) >>
-      decide_tac) >>
-  drule values_have_types_replicate_all_have_type >> simp[]
-QED
-
-Theorem struct_cast_result_components_from_ih[local]:
-  !args al vs.
-    (!acc_tys. values_have_types acc_tys [] ==>
-      values_have_types (REVERSE acc_tys ++ MAP SND args) vs) /\
-    MAP FST al = MAP FST args ==>
-    struct_has_type args (ZIP (MAP FST args, vs))
-Proof
-  rpt strip_tac >>
-  `values_have_types (MAP SND args) vs`
-    by (irule values_have_types_nil_acc_elim >> simp[]) >>
-  drule_all struct_cast_result_value_has_type >>
   simp[Once value_has_type_def]
 QED
 

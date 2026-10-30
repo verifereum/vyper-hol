@@ -208,6 +208,8 @@ Definition resolve_json_toplevel_def:
   (resolve_json_toplevel decls (JTL_EventDef name fields) =
     JTL_EventDef name
       (MAP (λ(arg, indexed). (resolve_json_arg decls arg, indexed)) fields)) ∧
+  (resolve_json_toplevel decls (JTL_ErrorDef name fields) =
+    JTL_ErrorDef name (MAP (resolve_json_arg decls) fields)) ∧
   (resolve_json_toplevel decls (JTL_StructDef name fields) =
     JTL_StructDef name (MAP (resolve_json_arg decls) fields)) ∧
   (resolve_json_toplevel decls (JTL_InterfaceDef name funcs) =

@@ -223,7 +223,7 @@ QED
 
 (* ===== Concrete cycle certificate soundness ===== *)
 
-Theorem RTC_then_R_TC_call_graph[local]:
+Theorem RTC_then_R_TC_call_graph:
   RTC R x y /\ R y z ==> TC R x z
 Proof
   metis_tac[relationTheory.RTC_CASES_TC, relationTheory.TC_RULES]
