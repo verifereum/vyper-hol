@@ -1399,6 +1399,19 @@ Proof
   gvs[AllCaseEqs(), return_def, raise_def]
 QED
 
+Theorem call_lock_action_preserves_scopes_c53[local]:
+  (if nr then
+     case cx.nonreentrant_slot of
+       NONE => raise (Error (TypeError "nonreentrant slot missing"))
+     | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (mut = View \/ mut = Pure)
+   else return ()) st = (res,st') ==>
+  st'.scopes = st.scopes
+Proof
+  rw[] >> gvs[return_def, raise_def] >>
+  Cases_on `cx.nonreentrant_slot` >> gvs[return_def, raise_def] >>
+  imp_res_tac acquire_nonreentrant_lock_scopes >> gvs[]
+QED
+
 Theorem call_lock_action_frame_c53:
   (if nr then
      case cx.nonreentrant_slot of
@@ -1882,6 +1895,17 @@ QED
 
 (* Compose the public domain facts rather than importing the evaluator's
    local mutual-induction theorem. *)
+Theorem preserves_immutables_dom_trans_local[local]:
+  preserves_immutables_dom cx st1 st2 /\
+  preserves_immutables_dom cx st2 st3 ==>
+  preserves_immutables_dom cx st1 st3
+Proof
+  rw[preserves_immutables_dom_def] >>
+  `?imms2. ALOOKUP st2.immutables cx.txn.target = SOME imms2` by
+    (gvs[IS_SOME_EXISTS] >> metis_tac[]) >>
+  metis_tac[]
+QED
+
 Theorem entry_eval_preserves_immutables_dom[local]:
   (eval_exprs cx es st = (res,st') ==> preserves_immutables_dom cx st st') /\
   (eval_stmts cx body st = (res',st') ==> preserves_immutables_dom cx st st')
