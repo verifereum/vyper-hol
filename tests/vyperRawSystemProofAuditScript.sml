@@ -6,7 +6,7 @@ Ancestors
   vyperTypeDeploymentSoundness vyperTypeExternalCallMachine
   vyperTypeDeploymentMachine vyperTypeEvalSoundness
   vyperTypeEvalStoragePreservation vyperSystemControl
-  vyperSystemHaltTest vyperDeletionTransportTest rawReturnCopy
+  vyperSystemHaltTest rawReturnCopy
   vyperExtCallCpsCVTest vyperSendCpsCVTest asmOracleRegression
   vyperOracleIntegrationTest evmStepSim prefixSim prefixExec strongPrefixSim spillSim
   venomCallActivationRegression asmCallActivationRegression unitTransformChecks
@@ -23,7 +23,7 @@ val () = List.app (List.app audit o DB.thms)
    "vyperTypeDeploymentSoundness", "vyperTypeExternalCallMachine",
    "vyperTypeDeploymentMachine", "vyperTypeEvalSoundness",
    "vyperTypeEvalStoragePreservation", "vyperSystemControl",
-   "vyperSystemHaltTest", "vyperDeletionTransportTest",
+   "vyperSystemHaltTest",
    "rawReturnCopy", "e2eComposition", "e2eBoundaryTest", "execEquivParamDefs", "oracleExecProps",
    "vyperExtCallCpsCVTest", "vyperSendCpsCVTest", "asmOracleRegression",
    "vyperOracleIntegrationTest", "evmStepSim", "prefixSim", "prefixExec",

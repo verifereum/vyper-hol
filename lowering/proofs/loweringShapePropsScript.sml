@@ -7783,26 +7783,7 @@ Resume compile_expr_body_shape[call]:
   >~ [`compile_call _ _ _ _ (RawCallTarget _) _ _`]
   >- shape_send_invalid_tac
   >~ [`compile_call _ _ _ _ (CreateTarget _ _ _) _ _`]
-  >- shape_send_invalid_tac
-  (* INACTIVE EXPLORATION: SELFDESTRUCT is excluded by expr_shape_root,
-     so gvs above closes this case. The attempted proof is preserved below;
-     its emission cannot satisfy the current instruction shape policy.
-  >~ [`compile_call _ _ _ _ SelfDestructTarget _ _`]
-  >- (namedCases_on `args` ["", "to_e tail"]
-      >- shape_send_invalid_tac >> Cases_on `tail`
-      >| [ALL_TAC, shape_send_invalid_tac] >>
-      gvs[supported_exprs_exists_every] >>
-      CONV_TAC (LAND_CONV (REWR_CONV (GSYM ETA_AX))) >>
-      simp[compile_call_def] >> CONV_TAC (DEPTH_CONV ETA_CONV) >>
-      irule shape_step_uncurry >> qexists_tac `\v st. plain_operand st v` >> reverse conj_tac
-      >- (shape_under_tac lower_value_callback_shape `\st. T` >> simp[shape_stable_def]) >>
-      qx_gen_tac `to_op` >> simp[] >> irule shape_step_uncurry >>
-      qexists_tac `\u st. T` >> conj_tac
-      >- shape_raw_return_zero_tac >>
-      simp[builtinSystemTheory.compile_selfdestruct_def] >>
-      shape_under_tac shape_step_emit_void_plain `\st. T` >>
-      simp[shape_stable_def] >> shape_opcode_tac)
-  *) >>
+  >- shape_send_invalid_tac >>
   gvs[] >> shape_send_invalid_tac
 QED
 

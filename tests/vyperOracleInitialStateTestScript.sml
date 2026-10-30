@@ -42,27 +42,6 @@ Proof
   simp[]
 QED
 
-(* Original pre-activation statement/proof retained. The Send conjunct is
-   false in SOME mode: vyperSendModesTest.send_zero_initial_state_not_inert
-   was saved in inertcounter2 before this minimal amendment.
-(* Exercise the complete arbitrary initial state, including arbitrary
- * nonempty prior requests/outcomes. SOME still does not consume an outcome. *)
-Theorem oracle_initial_state_inert_modes:
-  let st = initial_state am scs with <|outcomes := orc; requests := rqs|> in
-    eval_expr empty_evaluation_context
-      (Call NoneT Send
-        [Literal (BaseT AddressT) (BytesL (REPLICATE 20 0w));
-         Literal (BaseT (UintT 256)) (IntL 0)] NONE) st =
-      (INL (Value NoneV), st) /\
-    eval_expr empty_evaluation_context
-      (Call NoneT (ExtCall T F ("unused", [], NoneT)) [] NONE) st =
-      (INR (Error (TypeError "ExtCall no target")), st)
-Proof
-  EVAL_TAC >> simp[return_def, transfer_value_def]
-QED
-*)
-
-
 Theorem oracle_initial_state_zero_address:
   dest_AddressV (BytesV (REPLICATE 20 0w)) = SOME 0w
 Proof
@@ -135,8 +114,7 @@ Proof
   simp_tac pure_ss [LET_THM] >> conj_tac
   >- (strip_tac >> gvs[] >>
       simp[oracle_initial_state_concrete_send, initial_state_def]) >>
-  (* Previous tail omitted the captured-argument read:
-     simp[evaluate_def, eval_ext_call_def, bind_def, return_def, raise_def] *)
+
   simp[evaluate_def, read_results_def, eval_ext_call_def,
        bind_def, return_def, raise_def]
 QED
