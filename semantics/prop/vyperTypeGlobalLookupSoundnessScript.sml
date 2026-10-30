@@ -102,77 +102,6 @@ Proof
   simp[]
 QED
 
-Theorem TopLevelName_missing_address_immutables_TypeError:
-  !cx st src id ty code.
-    get_module_code cx src = SOME code /\
-    find_var_decl_by_name id code = NONE /\
-    ALOOKUP st.immutables cx.txn.target = NONE ==>
-    eval_expr cx (TopLevelName ty (src,id)) st =
-      (INR (Error (TypeError "get_address_immutables")), st)
-Proof
-  simp[Once evaluate_def, Once lookup_global_def, bind_def,
-       lift_option_type_def, get_immutables_def, get_address_immutables_def,
-       return_def, raise_def]
-QED
-
-Theorem TopLevelName_missing_immutable_branch_TypeError:
-  !cx st src id ty code imms.
-    get_module_code cx src = SOME code /\
-    find_var_decl_by_name id code = NONE /\
-    ALOOKUP st.immutables cx.txn.target = SOME imms /\
-    FLOOKUP (get_source_immutables src imms) id = NONE ==>
-    ?msg.
-      eval_expr cx (TopLevelName ty (src,id)) st =
-        (INR (Error (TypeError msg)), st)
-Proof
-  rpt strip_tac >>
-  qexists_tac `"lookup_global: var not found"` >>
-  simp[Once evaluate_def, Once lookup_global_def, bind_def,
-       lift_option_type_def, get_immutables_def, get_address_immutables_def,
-       lift_option_def, return_def, raise_def]
-QED
-
-Theorem TopLevelName_missing_address_immutables_characterisation:
-  !env cx st src id ty code.
-    well_typed_expr env (TopLevelName ty (src,id)) /\
-    env_consistent env cx st /\
-    functions_well_typed cx /\
-    get_module_code cx src = SOME code /\
-    find_var_decl_by_name id code = NONE /\
-    ALOOKUP st.immutables cx.txn.target = NONE ==>
-    FLOOKUP env.bare_globals (src,id) <> NONE /\
-    src <> env.current_src
-Proof
-  rpt strip_tac >>
-  `~IS_SOME (FLOOKUP
-      (get_source_immutables src
-        (case ALOOKUP st.immutables cx.txn.target of NONE => [] | SOME m => m))
-      id)` by simp[get_source_immutables_def] >>
-  drule_all TopLevelName_missing_immutable_branch_characterisation >>
-  simp[]
-QED
-
-Theorem TopLevelName_missing_source_immutable_characterisation:
-  !env cx st src id ty code imms.
-    well_typed_expr env (TopLevelName ty (src,id)) /\
-    env_consistent env cx st /\
-    functions_well_typed cx /\
-    get_module_code cx src = SOME code /\
-    find_var_decl_by_name id code = NONE /\
-    ALOOKUP st.immutables cx.txn.target = SOME imms /\
-    FLOOKUP (get_source_immutables src imms) id = NONE ==>
-    FLOOKUP env.bare_globals (src,id) <> NONE /\
-    src <> env.current_src
-Proof
-  rpt gen_tac >> strip_tac >>
-  `~IS_SOME (FLOOKUP
-      (get_source_immutables src
-        (case ALOOKUP st.immutables cx.txn.target of NONE => [] | SOME m => m))
-      id)` by simp[] >>
-  drule_all TopLevelName_missing_immutable_branch_characterisation >>
-  simp[]
-QED
-
 Theorem TopLevelName_missing_immutable_impossible:
   !env cx st src id ty code.
     well_typed_expr env (TopLevelName ty (src,id)) /\
@@ -385,19 +314,6 @@ Proof
     metis_tac[TopLevelName_toplevel_vtypes_Type] >>
   `runtime_consistent env cx st` by simp[runtime_consistent_def] >>
   metis_tac[top_level_Type_not_hashmap_decl]
-QED
-
-Theorem duplicate_storage_and_immutable_scanners_probe:
-  !id typ imm_typ.
-    find_var_decl_by_name id
-      [VariableDecl Private Storage id typ NONE;
-       VariableDecl Private Immutable id imm_typ NONE] =
-      SOME (StorageVarDecl F typ,id) /\
-    is_immutable_decl id
-      [VariableDecl Private Storage id typ NONE;
-       VariableDecl Private Immutable id imm_typ NONE]
-Proof
-  simp[find_var_decl_by_name_def, is_immutable_decl_def]
 QED
 
 

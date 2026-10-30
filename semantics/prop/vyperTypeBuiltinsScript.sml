@@ -47,17 +47,6 @@ Proof
      compatible_bound_def] >> gvs[AllCaseEqs(), LENGTH_TAKE]
 QED
 
-Theorem CalldataSlice_builtin_no_type_error:
-  MAP (evaluate_type tenv) [BaseT (UintT 256)] = MAP SOME tvs /\
-  LIST_REL value_has_type tvs vs ==>
-  evaluate_builtin cx acc ty (CalldataSlice n) tys vs <> INR (TypeError msg)
-Proof
-  Cases_on `tvs` >> rw[evaluate_type_def] >> gvs[] >>
-  rename1 `value_has_type (BaseTV (UintT 256)) sv` >>
-  Cases_on `sv` >> gvs[value_has_type_def, evaluate_builtin_def] >>
-  irule evaluate_calldata_slice_no_type_error >> simp[]
-QED
-
 Theorem CalldataSlice_builtin_success_type:
   evaluate_type tenv (BaseT (BytesT (Dynamic n))) = SOME tv /\
   evaluate_builtin cx acc (BaseT (BytesT (Dynamic n))) (CalldataSlice n) tys vs = INL v ==>
@@ -360,342 +349,6 @@ QED
    in value-mismatch fallback branches (| _ => INR(TypeError "binop")),
    which a well-typed value pair never reaches. All other branches give
    INL or INR(RuntimeError), both ≠ INR(TypeError msg). *)
-
-Theorem binop_no_type_error_Add[local]:
-  !u tv i1 i2 msg.
-    evaluate_binop u tv Add (IntV i1) (IntV i2) <> INR (TypeError msg)
-Proof
-  simp[evaluate_binop_def]
-QED
-
-Theorem binop_no_type_error_Add_dec[local]:
-  !u tv d1 d2 msg.
-    evaluate_binop u tv Add (DecimalV d1) (DecimalV d2) <> INR (TypeError msg)
-Proof
-  simp[evaluate_binop_def]
-QED
-
-Theorem binop_no_type_error_Sub[local]:
-  !u tv i1 i2 msg.
-    evaluate_binop u tv Sub (IntV i1) (IntV i2) <> INR (TypeError msg)
-Proof
-  simp[evaluate_binop_def]
-QED
-
-Theorem binop_no_type_error_Sub_dec[local]:
-  !u tv d1 d2 msg.
-    evaluate_binop u tv Sub (DecimalV d1) (DecimalV d2) <> INR (TypeError msg)
-Proof
-  simp[evaluate_binop_def]
-QED
-
-Theorem binop_no_type_error_Mul[local]:
-  !u tv i1 i2 msg.
-    evaluate_binop u tv Mul (IntV i1) (IntV i2) <> INR (TypeError msg)
-Proof
-  simp[evaluate_binop_def]
-QED
-
-Theorem binop_no_type_error_Mul_dec[local]:
-  !u tv d1 d2 msg.
-    evaluate_binop u tv Mul (DecimalV d1) (DecimalV d2) <> INR (TypeError msg)
-Proof
-  simp[evaluate_binop_def]
-QED
-
-Theorem binop_no_type_error_Div[local]:
-  !u tv i1 i2 msg.
-    evaluate_binop u tv Div (IntV i1) (IntV i2) <> INR (TypeError msg)
-Proof
-  rpt gen_tac >> simp[evaluate_binop_def] >> rpt (COND_CASES_TAC >> simp[])
-QED
-
-Theorem binop_no_type_error_Div_dec[local]:
-  !u tv d1 d2 msg.
-    evaluate_binop u tv Div (DecimalV d1) (DecimalV d2) <> INR (TypeError msg)
-Proof
-  rpt gen_tac >> simp[evaluate_binop_def] >> rpt (COND_CASES_TAC >> simp[])
-QED
-
-Theorem binop_no_type_error_Mod[local]:
-  !u tv i1 i2 msg.
-    evaluate_binop u tv Mod (IntV i1) (IntV i2) <> INR (TypeError msg)
-Proof
-  rpt gen_tac >> simp[evaluate_binop_def] >> rpt (COND_CASES_TAC >> simp[])
-QED
-
-Theorem binop_no_type_error_Mod_dec[local]:
-  !u tv d1 d2 msg.
-    evaluate_binop u tv Mod (DecimalV d1) (DecimalV d2) <> INR (TypeError msg)
-Proof
-  rpt gen_tac >> simp[evaluate_binop_def] >> rpt (COND_CASES_TAC >> simp[])
-QED
-
-Theorem binop_no_type_error_Exp[local]:
-  !u tv i1 i2 msg.
-    evaluate_binop u tv Exp (IntV i1) (IntV i2) <> INR (TypeError msg)
-Proof
-  rpt gen_tac >> simp[evaluate_binop_def] >> rpt (COND_CASES_TAC >> simp[])
-QED
-
-Theorem binop_no_type_error_ExpMod[local]:
-  !tv i1 i2 msg.
-    evaluate_binop (Unsigned 256) tv ExpMod (IntV i1) (IntV i2) <> INR (TypeError msg)
-Proof
-  rpt gen_tac >> simp[evaluate_binop_def] >> rpt (COND_CASES_TAC >> simp[])
-QED
-
-Theorem binop_no_type_error_UnsafeAdd[local]:
-  !u tv i1 i2 msg.
-    evaluate_binop u tv UnsafeAdd (IntV i1) (IntV i2) <> INR (TypeError msg)
-Proof
-  simp[evaluate_binop_def]
-QED
-
-Theorem binop_no_type_error_UnsafeSub[local]:
-  !u tv i1 i2 msg.
-    evaluate_binop u tv UnsafeSub (IntV i1) (IntV i2) <> INR (TypeError msg)
-Proof
-  simp[evaluate_binop_def]
-QED
-
-Theorem binop_no_type_error_UnsafeMul[local]:
-  !u tv i1 i2 msg.
-    evaluate_binop u tv UnsafeMul (IntV i1) (IntV i2) <> INR (TypeError msg)
-Proof
-  simp[evaluate_binop_def]
-QED
-
-Theorem binop_no_type_error_UnsafeDiv[local]:
-  !u tv i1 i2 msg.
-    evaluate_binop u tv UnsafeDiv (IntV i1) (IntV i2) <> INR (TypeError msg)
-Proof
-  rpt gen_tac >> simp[evaluate_binop_def] >> rpt (COND_CASES_TAC >> simp[])
-QED
-
-Theorem binop_no_type_error_ShL[local]:
-  !u tv i1 i2 msg.
-    evaluate_binop u tv ShL (IntV i1) (IntV i2) <> INR (TypeError msg)
-Proof
-  rpt gen_tac >> simp[evaluate_binop_def] >> rpt (COND_CASES_TAC >> simp[])
-QED
-
-Theorem binop_no_type_error_ShR[local]:
-  !u tv i1 i2 msg.
-    evaluate_binop u tv ShR (IntV i1) (IntV i2) <> INR (TypeError msg)
-Proof
-  rpt gen_tac >> simp[evaluate_binop_def] >> rpt (COND_CASES_TAC >> simp[])
-QED
-
-Theorem binop_no_type_error_And_int[local]:
-  !u tv i1 i2 msg.
-    evaluate_binop u tv And (IntV i1) (IntV i2) <> INR (TypeError msg)
-Proof
-  simp[evaluate_binop_def]
-QED
-
-Theorem binop_no_type_error_And_bool[local]:
-  !u tv b1 b2 msg.
-    evaluate_binop u tv And (BoolV b1) (BoolV b2) <> INR (TypeError msg)
-Proof
-  simp[evaluate_binop_def]
-QED
-
-Theorem binop_no_type_error_And_flag[local]:
-  !u tv n1 n2 msg.
-    evaluate_binop u tv And (FlagV n1) (FlagV n2) <> INR (TypeError msg)
-Proof
-  simp[evaluate_binop_def]
-QED
-
-Theorem binop_no_type_error_Or_int[local]:
-  !u tv i1 i2 msg.
-    evaluate_binop u tv Or (IntV i1) (IntV i2) <> INR (TypeError msg)
-Proof
-  simp[evaluate_binop_def]
-QED
-
-Theorem binop_no_type_error_Or_bool[local]:
-  !u tv b1 b2 msg.
-    evaluate_binop u tv Or (BoolV b1) (BoolV b2) <> INR (TypeError msg)
-Proof
-  simp[evaluate_binop_def]
-QED
-
-Theorem binop_no_type_error_Or_flag[local]:
-  !u tv n1 n2 msg.
-    evaluate_binop u tv Or (FlagV n1) (FlagV n2) <> INR (TypeError msg)
-Proof
-  simp[evaluate_binop_def]
-QED
-
-Theorem binop_no_type_error_XOr_int[local]:
-  !u tv i1 i2 msg.
-    evaluate_binop u tv XOr (IntV i1) (IntV i2) <> INR (TypeError msg)
-Proof
-  simp[evaluate_binop_def]
-QED
-
-Theorem binop_no_type_error_XOr_bool[local]:
-  !u tv b1 b2 msg.
-    evaluate_binop u tv XOr (BoolV b1) (BoolV b2) <> INR (TypeError msg)
-Proof
-  simp[evaluate_binop_def]
-QED
-
-Theorem binop_no_type_error_XOr_flag[local]:
-  !u tv n1 n2 msg.
-    evaluate_binop u tv XOr (FlagV n1) (FlagV n2) <> INR (TypeError msg)
-Proof
-  simp[evaluate_binop_def]
-QED
-
-Theorem binop_no_type_error_Eq_int[local]:
-  !u tv i1 i2 msg.
-    evaluate_binop u tv Eq (IntV i1) (IntV i2) <> INR (TypeError msg)
-Proof
-  simp[evaluate_binop_def]
-QED
-
-Theorem binop_no_type_error_Eq_dec[local]:
-  !u tv d1 d2 msg.
-    evaluate_binop u tv Eq (DecimalV d1) (DecimalV d2) <> INR (TypeError msg)
-Proof
-  simp[evaluate_binop_def]
-QED
-
-Theorem binop_no_type_error_Eq_bool[local]:
-  !u tv b1 b2 msg.
-    evaluate_binop u tv Eq (BoolV b1) (BoolV b2) <> INR (TypeError msg)
-Proof
-  simp[evaluate_binop_def]
-QED
-
-Theorem binop_no_type_error_Eq_flag[local]:
-  !u tv n1 n2 msg.
-    evaluate_binop u tv Eq (FlagV n1) (FlagV n2) <> INR (TypeError msg)
-Proof
-  simp[evaluate_binop_def]
-QED
-
-Theorem binop_no_type_error_Eq_string[local]:
-  !u tv s1 s2 msg.
-    evaluate_binop u tv Eq (StringV s1) (StringV s2) <> INR (TypeError msg)
-Proof
-  simp[evaluate_binop_def]
-QED
-
-Theorem binop_no_type_error_Eq_bytes[local]:
-  !u tv bs1 bs2 msg.
-    evaluate_binop u tv Eq (BytesV bs1) (BytesV bs2) <> INR (TypeError msg)
-Proof
-  simp[evaluate_binop_def]
-QED
-
-Theorem binop_no_type_error_Eq_addr[local]:
-  !u tv bs1 bs2 msg.
-    evaluate_binop u tv Eq (BytesV bs1) (BytesV bs2) <> INR (TypeError msg)
-Proof
-  simp[evaluate_binop_def]
-QED
-
-Theorem binop_no_type_error_Lt[local]:
-  !u tv i1 i2 msg.
-    evaluate_binop u tv Lt (IntV i1) (IntV i2) <> INR (TypeError msg)
-Proof
-  simp[evaluate_binop_def]
-QED
-
-Theorem binop_no_type_error_Lt_dec[local]:
-  !u tv d1 d2 msg.
-    evaluate_binop u tv Lt (DecimalV d1) (DecimalV d2) <> INR (TypeError msg)
-Proof
-  simp[evaluate_binop_def]
-QED
-
-Theorem binop_no_type_error_LtE[local]:
-  !u tv i1 i2 msg.
-    evaluate_binop u tv LtE (IntV i1) (IntV i2) <> INR (TypeError msg)
-Proof
-  simp[evaluate_binop_def]
-QED
-
-Theorem binop_no_type_error_LtE_dec[local]:
-  !u tv d1 d2 msg.
-    evaluate_binop u tv LtE (DecimalV d1) (DecimalV d2) <> INR (TypeError msg)
-Proof
-  simp[evaluate_binop_def]
-QED
-
-Theorem binop_no_type_error_Gt[local]:
-  !u tv i1 i2 msg.
-    evaluate_binop u tv Gt (IntV i1) (IntV i2) <> INR (TypeError msg)
-Proof
-  simp[evaluate_binop_def]
-QED
-
-Theorem binop_no_type_error_Gt_dec[local]:
-  !u tv d1 d2 msg.
-    evaluate_binop u tv Gt (DecimalV d1) (DecimalV d2) <> INR (TypeError msg)
-Proof
-  simp[evaluate_binop_def]
-QED
-
-Theorem binop_no_type_error_GtE[local]:
-  !u tv i1 i2 msg.
-    evaluate_binop u tv GtE (IntV i1) (IntV i2) <> INR (TypeError msg)
-Proof
-  simp[evaluate_binop_def]
-QED
-
-Theorem binop_no_type_error_GtE_dec[local]:
-  !u tv d1 d2 msg.
-    evaluate_binop u tv GtE (DecimalV d1) (DecimalV d2) <> INR (TypeError msg)
-Proof
-  simp[evaluate_binop_def]
-QED
-
-Theorem binop_no_type_error_Min[local]:
-  !u tv i1 i2 msg.
-    evaluate_binop u tv Min (IntV i1) (IntV i2) <> INR (TypeError msg)
-Proof
-  simp[evaluate_binop_def]
-QED
-
-Theorem binop_no_type_error_Min_dec[local]:
-  !u tv d1 d2 msg.
-    evaluate_binop u tv Min (DecimalV d1) (DecimalV d2) <> INR (TypeError msg)
-Proof
-  simp[evaluate_binop_def]
-QED
-
-Theorem binop_no_type_error_Max[local]:
-  !u tv i1 i2 msg.
-    evaluate_binop u tv Max (IntV i1) (IntV i2) <> INR (TypeError msg)
-Proof
-  simp[evaluate_binop_def]
-QED
-
-Theorem binop_no_type_error_Max_dec[local]:
-  !u tv d1 d2 msg.
-    evaluate_binop u tv Max (DecimalV d1) (DecimalV d2) <> INR (TypeError msg)
-Proof
-  simp[evaluate_binop_def]
-QED
-
-Theorem binop_no_type_error_In_flag[local]:
-  !tv n1 n2 msg.
-    evaluate_binop u tv In (FlagV n1) (FlagV n2) <> INR (TypeError msg)
-Proof
-  simp[evaluate_binop_def]
-QED
-
-Theorem binop_no_type_error_In_array[local]:
-  !u tv v av msg.
-    evaluate_binop u tv In v (ArrayV av) <> INR (TypeError msg)
-Proof
-  simp[evaluate_binop_def]
-QED
 
 (* Main theorem: well-typed binops never produce TypeError.
    Proof by contradiction: assume evaluate_binop returns INR(TypeError msg),
@@ -1010,16 +663,6 @@ Proof
     drule int_shift_right_neg_bounds >>
     disch_then (qspec_then `m` strip_assume_tac) >>
     intLib.ARITH_TAC)
-QED
-
-Theorem int_shift_right_unsigned_within_bound[local]:
-  !m n i. 0 < n ∧ 0 ≤ i ∧ i < &(2 ** n) ==>
-          0 ≤ int_shift_right m i ∧ int_shift_right m i < &(2 ** n)
-Proof
-  rpt strip_tac >>
-  drule int_shift_right_nonneg_bounds >>
-  disch_then (qspec_then `m` strip_assume_tac) >>
-  intLib.ARITH_TAC
 QED
 
 (* --- int_bitwise bounds machinery --- *)
@@ -1421,21 +1064,6 @@ Proof
   irule w2n_and_low_mask_lt >> simp[]
 QED
 
-(* Helper: AsWeiValue with UintT input never produces TypeError *)
-Theorem as_wei_value_uint_no_type_error[local]:
-  is_uint_type ty ∧ evaluate_type (get_tenv cx) ty = SOME tv ∧
-  value_has_type tv v ==>
-  !msg. evaluate_builtin cx acc ty (AsWeiValue dn) tys [v] ≠ INR (TypeError msg)
-Proof
-  strip_tac >>
-  gvs[is_uint_type_def] >>
-  gvs[evaluate_type_def] >>
-  (* v must be IntV i since value_has_type (BaseTV (UintT n)) v *)
-  gvs[vht_BaseTV_UintT] >>
-  simp[evaluate_builtin_def, evaluate_as_wei_value_def, LET_THM] >>
-  Cases_on `dn` >> simp[within_int_bound_def] >> intLib.ARITH_TAC
-QED
-
 (* Helper: LIST_REL with BytesT types implies all values are BytesV *)
 (* evaluate_concat_loop never produces TypeError when all values are BytesV *)
 Theorem evaluate_concat_loop_bytes_no_type_error[local]:
@@ -1521,80 +1149,12 @@ Proof
   first_x_assum (qspecl_then [`t`,`ys`] mp_tac) >> simp[]
 QED
 
-(* Helper: Concat with all-bytes typed values never produces TypeError *)
-Theorem concat_no_type_error[local]:
-  EVERY (λt. ∃bd. t = BaseT (BytesT bd)) ts ∧
-  ty = BaseT (BytesT (Dynamic n)) ∧
-  MAP (evaluate_type (get_tenv cx)) ts = MAP SOME tvs ∧
-  LIST_REL value_has_type tvs vs ∧
-  2 ≤ LENGTH vs ∧
-  type_slot_size (BaseTV (BytesT (Dynamic n))) ≤
-    115792089237316195423570985008687907853269984665640564039457584007913129639936 ∧
-  n < 115792089237316195423570985008687907853269984665640564039457584007913129639936 ==>
-  !msg. evaluate_builtin cx acc ty (Concat n) ts vs ≠ INR (TypeError msg)
-Proof
-  strip_tac >>
-  drule LIST_REL_value_has_type_imp_combined >>
-  disch_then (qspecl_then [`ts`,`get_tenv cx`] mp_tac) >> simp[] >>
-  strip_tac >>
-  `EVERY (λv. ∃bs. v = BytesV bs) vs` by
-    (drule (REWRITE_RULE[AND_IMP_INTRO] list_rel_bytes_all_bytesv) >> simp[]) >>
-  `2 ≤ LENGTH vs` by metis_tac[LIST_REL_LENGTH] >>
-  simp[evaluate_builtin_def, evaluate_concat_def] >>
-  Cases_on `vs` >> gvs[] >>
-  Cases_on `t` >> gvs[] >>
-  gvs[init_concat_output_def] >>
-  irule evaluate_concat_loop_bytes_no_type_error >> gvs[EVERY_DEF]
-QED
-
-Theorem concat_string_no_type_error[local]:
-  EVERY (λt. ∃m. t = BaseT (StringT m)) ts ∧
-  ty = BaseT (StringT n) ∧
-  MAP (evaluate_type (get_tenv cx)) ts = MAP SOME tvs ∧
-  LIST_REL value_has_type tvs vs ∧
-  2 ≤ LENGTH vs ∧
-  type_slot_size (BaseTV (StringT n)) ≤
-    115792089237316195423570985008687907853269984665640564039457584007913129639936 ∧
-  n < 115792089237316195423570985008687907853269984665640564039457584007913129639936 ==>
-  !msg. evaluate_builtin cx acc ty (Concat n) ts vs ≠ INR (TypeError msg)
-Proof
-  strip_tac >>
-  drule LIST_REL_value_has_type_imp_combined >>
-  disch_then (qspecl_then [`ts`,`get_tenv cx`] mp_tac) >> simp[] >>
-  strip_tac >>
-  `EVERY (λv. ∃s. v = StringV s) vs` by
-    (drule (REWRITE_RULE[AND_IMP_INTRO] list_rel_string_all_stringv) >> simp[]) >>
-  `2 ≤ LENGTH vs` by metis_tac[LIST_REL_LENGTH] >>
-  simp[evaluate_builtin_def, evaluate_concat_def] >>
-  Cases_on `vs` >> gvs[] >>
-  Cases_on `t` >> gvs[] >>
-  gvs[init_concat_output_def] >>
-  irule evaluate_concat_loop_string_no_type_error >> gvs[EVERY_DEF]
-QED
-
 (* For BaseT types, evaluate_type returns BaseTV (when IS_SOME).
    This is stronger than evaluate_type_BaseT_cases which only says ∃btv. tv = BaseTV btv. *)
 Theorem IS_SOME_cond[simp]:
   IS_SOME (if c then SOME x else NONE) <=> c
 Proof
   Cases_on `c` >> simp[]
-QED
-
-Theorem evaluate_type_BaseT[local]:
-  !tenv bt. IS_SOME (evaluate_type tenv (BaseT bt)) ==>
-            evaluate_type tenv (BaseT bt) = SOME (BaseTV bt)
-Proof
-  gen_tac >> Cases_on `bt` >>
-  rw[evaluate_type_def, LET_THM] >>
-  Cases_on `b` >> gvs[evaluate_type_def, LET_THM]
-QED
-
-Theorem evaluate_type_BaseT_SOME[local]:
-  !tenv bt tv. evaluate_type tenv (BaseT bt) = SOME tv ==> tv = BaseTV bt
-Proof
-  rpt strip_tac >> Cases_on `bt` >>
-  gvs[evaluate_type_def, LET_THM] >>
-  Cases_on `b` >> gvs[evaluate_type_def]
 QED
 
 Theorem evaluate_type_ArrayT_SOME[local]:
@@ -1610,13 +1170,6 @@ Proof
   qexists_tac `tv'` >> simp[]
 QED
 
-(* HD (MAP f l) = f (HD l) when l ≠ [] *)
-Theorem HD_MAP[local]:
-  !f l. l ≠ [] ==> HD (MAP f l) = f (HD l)
-Proof
-  Cases_on `l` >> simp[]
-QED
-
 (* Boundary lemma: dest_NumV (IntV i) = SOME (Num i) when i >= 0.
    This avoids expanding dest_NumV_def (which has if i < 0 then NONE else SOME)
    into case splits that gvs/ARITH_TAC cannot close for integer contradictions. *)
@@ -1626,18 +1179,6 @@ Proof
   rpt strip_tac >>
   `~(i < 0:int)` by intLib.ARITH_TAC >>
   simp[dest_NumV_def]
-QED
-
-(* Boundary lemma: UintT values satisfy dest_NumV without producing NONE.
-   This lets us resolve 'case dest_NumV sv of NONE => INR(TypeError) | SOME ... => ...'
-   pattern in evaluate_slice_def for UintT 256 typed values. *)
-Theorem value_has_type_UintT_imp_dest_NumV_SOME[local]:
-  !n sv. value_has_type (BaseTV (UintT n)) sv ==>
-    ?i. sv = IntV i ∧ 0 ≤ i ∧ dest_NumV sv = SOME (Num i)
-Proof
-  rpt strip_tac >>
-  imp_res_tac vht_BaseTV_UintT >>
-  gvs[]
 QED
 
 (* Boundary lemma: evaluate_slice on BytesV + IntV indices never produces TypeError.
@@ -1695,53 +1236,6 @@ Proof
   Cases_on `fv` >> gvs[vht_BaseTV_StringT] >>
   imp_res_tac vht_BaseTV_UintT >> gvs[] >>
   metis_tac[evaluate_slice_StringV_no_type_error]
-QED
-
-(* Helper: decompose a 3-element list into EL components *)
-Theorem list_el_decomp_3[local]:
-  !l. LENGTH l = 3 ==> l = [EL 0 l; EL 1 l; EL 2 l]
-Proof
-  gen_tac >> disch_tac >>
-  Cases_on `l` >> fs[] >>
-  Cases_on `t` >> fs[EL] >>
-  Cases_on `t'` >> fs[EL]
-QED
-
-(* Success typing: evaluate_slice on BytesT-typed values returns bounded BytesV. *)
-Theorem evaluate_slice_BytesT_success_type[local]:
-  !fv sv lv n bd out.
-    value_has_type (BaseTV (BytesT bd)) fv ∧
-    value_has_type (BaseTV (UintT 256)) sv ∧
-    value_has_type (BaseTV (UintT 256)) lv ∧
-    evaluate_slice fv sv lv n = INL out ⇒
-    ∃bs. out = BytesV bs ∧ LENGTH bs <= n
-Proof
-  rpt strip_tac >>
-  Cases_on `bd` >-
-   (Cases_on `fv` >> gvs[vht_BaseTV_BytesT_Fixed] >>
-    imp_res_tac vht_BaseTV_UintT >> gvs[] >>
-    gvs[evaluate_slice_def, LET_THM, compatible_bound_def,
-        AllCaseEqs(), LENGTH_TAKE]) >>
-  Cases_on `fv` >> gvs[vht_BaseTV_BytesT_Dynamic] >>
-  imp_res_tac vht_BaseTV_UintT >> gvs[] >>
-  gvs[evaluate_slice_def, LET_THM, compatible_bound_def,
-      AllCaseEqs(), LENGTH_TAKE]
-QED
-
-(* Success typing: evaluate_slice on StringT-typed values returns bounded StringV. *)
-Theorem evaluate_slice_StringT_success_type[local]:
-  !fv sv lv n m out.
-    value_has_type (BaseTV (StringT m)) fv ∧
-    value_has_type (BaseTV (UintT 256)) sv ∧
-    value_has_type (BaseTV (UintT 256)) lv ∧
-    evaluate_slice fv sv lv n = INL out ⇒
-    ∃s. out = StringV s ∧ LENGTH s <= n
-Proof
-  rpt strip_tac >>
-  Cases_on `fv` >> gvs[vht_BaseTV_StringT] >>
-  imp_res_tac vht_BaseTV_UintT >> gvs[] >>
-  gvs[evaluate_slice_def, LET_THM, compatible_bound_def,
-      AllCaseEqs(), LENGTH_TAKE]
 QED
 
 Theorem slice_bytes_builtin_success_type[local]:
@@ -2127,15 +1621,6 @@ Proof
   rw[evaluate_builtin_def] >>
   imp_res_tac evaluate_ecrecover_typed >>
   gvs[value_has_type_def, LENGTH_word_to_bytes]
-QED
-
-(* Helper: decompose a 2-element list into EL components *)
-Theorem list_el_decomp_2[local]:
-  !l. LENGTH l = 2 ==> l = [EL 0 l; EL 1 l]
-Proof
-  gen_tac >> disch_tac >>
-  Cases_on `l` >> fs[] >>
-  Cases_on `t` >> fs[EL]
 QED
 
 
@@ -2544,38 +2029,6 @@ Proof
   simp[wordsTheory.dimword_def]
 QED
 
-(* Helper: the 256-bit word NOT always lands back in [0, 2 ** 256), whatever
-   the operand.  This is what rules out a negative "success" from an
-   oversized operand: the word formulation is total on all n2w inputs. *)
-Theorem not_word_lt_256[local]:
-  !i. 0 ≤ i ==> Num &(w2n (~((n2w (Num i)) : bytes32))) < 2 ** 256
-Proof
-  rpt strip_tac >>
-  `w2n (~((n2w (Num i)) : bytes32)) < 2 ** 256` by
-    metis_tac[wordsTheory.w2n_lt, dimword_256] >>
-  qpat_x_assum `w2n _ < _` mp_tac >>
-  simp[integerTheory.NUM_OF_INT]
-QED
-
-(* Helper: on the valid uint256 domain the word NOT agrees with the
-   arithmetic 2 ** 256 - 1 - i, so the two formulations are interchangeable
-   for reachable operands.  Stated over `num` to keep the 256-bit numeral
-   out of the integer rewriting rules. *)
-Theorem not_word_arith_equiv[local]:
-  0 ≤ i ∧ Num i < 2 ** 256 ==>
-  w2n (~((n2w (Num i)) : bytes32)) = 2 ** 256 - 1 - Num i
-Proof
-  strip_tac >>
-  `Num i < dimword(:256)` by metis_tac[dimword_256] >>
-  `~(n2w (Num i) : bytes32) = n2w (dimword(:256) - 1 - Num i MOD dimword(:256))` by
-    simp[Once wordsTheory.word_1comp_n2w] >>
-  `Num i MOD dimword(:256) = Num i` by metis_tac[LESS_MOD] >>
-  `w2n ((n2w (dimword(:256) - 1 - Num i)) : bytes32) = dimword(:256) - 1 - Num i` by (
-    `dimword(:256) - 1 - Num i < dimword(:256)` by simp[] >>
-    metis_tac[wordsTheory.w2n_n2w, LESS_MOD]) >>
-  metis_tac[dimword_256]
-QED
-
 (* Helper: Not with uint256 type preserves the statically computed result type.
    Narrow unsigned types are excluded: the checker rejects them, matching the
    compiler, which refuses `~` below uint256. *)
@@ -2607,22 +2060,6 @@ Proof
   qpat_x_assum `is_bool_type _` mp_tac >>
   REWRITE_TAC[is_bool_type_inv] >> strip_tac >>
   gvs[evaluate_type_def, value_has_type_def, evaluate_builtin_def]
-QED
-
-(* Helper: Not with flag type preserves the statically computed result type. *)
-Theorem flag_Not_success_type[local]:
-  context_well_typed cx ∧
-  evaluate_type (get_tenv cx) (FlagT fid) = SOME tv ∧
-  value_has_type tv y ∧
-  evaluate_builtin cx acc (FlagT fid) Not tys [y] = INL out ==>
-  value_has_type tv out
-Proof
-  strip_tac >>
-  qpat_x_assum `evaluate_type _ _ = _` mp_tac >>
-  simp[evaluate_type_def, AllCaseEqs()] >> strip_tac >>
-  gvs[value_has_type_def, evaluate_type_def, evaluate_builtin_def] >>
-  rewrite_tac[wordsTheory.WORD_NEG_1, GSYM wordsTheory.WORD_NOT_0] >>
-  simp[w2n_and_low_mask_lt]
 QED
 
 (* Helper: Not with any flag type preserves the statically computed result
@@ -2664,23 +2101,6 @@ Proof
   gvs[] >>
   imp_res_tac evaluate_type_BaseT_SOME >> gvs[] >>
   simp[evaluate_builtin_def]
-QED
-
-(* Helper: Not with bytes32 type preserves the statically computed result
-   type: the result is always exactly 32 bytes wide. *)
-Theorem bytes32_not_success_type[local]:
-  is_bytes32_type ty ∧
-  evaluate_type (get_tenv cx) ty = SOME tv ∧
-  value_has_type tv v ∧
-  evaluate_builtin cx acc ty Not tys [v] = INL out ==>
-  value_has_type tv out
-Proof
-  strip_tac >>
-  qpat_x_assum `is_bytes32_type _` mp_tac >>
-  REWRITE_TAC[is_bytes32_type_inv] >> strip_tac >>
-  gvs[] >>
-  imp_res_tac evaluate_type_BaseT_SOME >> gvs[] >>
-  gvs[evaluate_builtin_def, value_has_type_def]
 QED
 
 (* Helper: Neg never returns TypeError *)
@@ -2978,12 +2398,6 @@ Proof
   rw[evaluate_block_hash_def, LET_THM]
 QED
 
-Theorem LENGTH_word_to_bytes_be_32[local,simp]:
-  !w:bytes32. LENGTH (word_to_bytes_be w) = 32
-Proof
-  simp[word_to_bytes_be_def, LENGTH_word_to_bytes]
-QED
-
 Theorem evaluate_block_hash_success_type[local]:
   evaluate_block_hash txn n = INL v ==>
   ?bs. v = BytesV bs /\ LENGTH bs = 32
@@ -3028,17 +2442,6 @@ Proof
   gvs[evaluate_builtin_def, LENGTH_TAKE, LENGTH_Keccak_256_w64]
 QED
 
-
-Theorem blockhash_no_type_error[local]:
-  evaluate_type (get_tenv cx) (BaseT (UintT 256)) = SOME arg_tv ∧
-  evaluate_type (get_tenv cx) (BaseT (BytesT (Fixed 32))) = SOME ret_tv ∧
-  value_has_type arg_tv y ==>
-  evaluate_builtin cx acc (BaseT (BytesT (Fixed 32))) BlockHash tys [y] <> INR (TypeError msg)
-Proof
-  rpt strip_tac >>
-  imp_res_tac evaluate_type_BaseT_SOME >>
-  gvs[evaluate_builtin_def]
-QED
 
 Theorem typed_membership_success:
   well_typed_builtin_app ty bt [t1;t2] /\
@@ -3436,13 +2839,6 @@ Proof
   gvs[evaluate_type_def]
 QED
 
-Theorem extract32_bool_not_well_typed_type_builtin_args[local]:
-  ¬ well_typed_type_builtin_args Extract32 (BaseT BoolT)
-      [BaseT (BytesT (Fixed 32)); BaseT (UintT 256)]
-Proof
-  simp[well_typed_type_builtin_args_def, extract32_result_base_ok_def]
-QED
-
 Theorem evaluate_extract32_supported_no_type_error[local]:
   extract32_result_base_ok bt ∧
   evaluate_type (get_tenv cx) (BaseT (BytesT bd)) = SOME bytes_tv ∧
@@ -3688,60 +3084,9 @@ Proof
   gvs[vfmConstantsTheory.word_size_def]
 QED
 
-Theorem internal_call_signature_sound:
-  fn_sigs_consistent fn_sigs cx ∧
-  FLOOKUP fn_sigs (src,fn) = SOME sig ==>
-  ∃ts fm nr params dflts body.
-    get_module_code cx src = SOME ts ∧
-    lookup_callable_function cx.in_deploy fn ts = SOME (fm,nr,params,dflts,sig.ret_ty,body) ∧
-    sig.param_types = MAP SND params ∧ sig.num_defaults = LENGTH dflts
-Proof
-  rw[fn_sigs_consistent_def]
-QED
-
 Theorem ext_call_args_typed:
   well_typed_expr env (Call ty (ExtCall stat skip_check fsig opts) args drv) ==>
   well_typed_exprs env args ∧ well_typed_opt env drv
 Proof
   Cases_on `fsig` >> Cases_on `r` >> rw[well_typed_expr_def]
-QED
-
-
-
-(* ===== ABI encode result-bound gap (RESOLVED) ===== *)
-(* type_builtin_result_ok now includes vyper_abi_size_bound condition.
-   Old probes confirmed the gap; repair adds the bound.
-   New probe below verifies the repair correctly rejects the too-small bound. *)
-
-(* Both wrapping modes reject n=1 for uint256: the actual bound is 32. *)
-Theorem abi_encode_probe_result_ok_rejects_small_bound:
-  !ensure. ¬type_builtin_result_ok FEMPTY (AbiEncode ensure NONE) (BaseT (BytesT (Dynamic 1)))
-    (TupleT [BaseT (UintT 256)]) [BaseT (UintT 256)]
-Proof
-  Cases_on `ensure` >>
-  simp[type_builtin_result_ok_def, abi_encode_size_ok_def] >> EVAL_TAC >> decide_tac
-QED
-
-(* Both wrapping modes accept the exact static uint256 bound. *)
-Theorem abi_encode_probe_result_ok_accepts_correct_bound:
-  !ensure. type_builtin_result_ok FEMPTY (AbiEncode ensure NONE) (BaseT (BytesT (Dynamic 32)))
-    (TupleT [BaseT (UintT 256)]) [BaseT (UintT 256)]
-Proof
-  Cases_on `ensure` >>
-  simp[type_builtin_result_ok_def, abi_encode_size_ok_def] >> EVAL_TAC >> decide_tac
-QED
-
-(* Probe: vyper_abi_size_bound gives the correct minimum bound (32) *)
-Theorem abi_encode_probe_size_bound:
-  vyper_abi_size_bound FEMPTY (TupleT [BaseT (UintT 256)]) = 32
-Proof
-  EVAL_TAC
-QED
-
-
-(* UNPROVABILITY PROBE: AsWeiValue with IntT can return TypeError *)
-Theorem as_wei_value_IntT_TypeError_probe[local]:
-  evaluate_as_wei_value Kwei (IntV (-(&1))) = INR (TypeError "ewv neg")
-Proof
-  EVAL_TAC
 QED

@@ -617,7 +617,7 @@ Definition evaluate_max_value_def:
   evaluate_max_value (BaseT (IntT n)) = (if n = 0
                                          then INR (TypeError "max_value IntT")
                                          else INL $ IntV (&(2 ** (n-1)) - 1)) ∧
-  evaluate_max_value (BaseT DecimalT) = INL $ DecimalV (&(2 ** 167) - 1) ∧
+  evaluate_max_value (BaseT DecimalT) = INL $ DecimalV (&(2 ** (decimal_bits - 1)) - 1) ∧
   evaluate_max_value _ = INR (TypeError "evaluate_max_value")
 End
 
@@ -628,7 +628,7 @@ Definition evaluate_min_value_def:
   evaluate_min_value (BaseT (IntT n)) = (if n = 0
                                          then INR (TypeError "min_value IntT")
                                          else INL $ IntV (-&(2 ** (n-1)))) ∧
-  evaluate_min_value (BaseT DecimalT) = INL $ DecimalV (-&(2 ** 167)) ∧
+  evaluate_min_value (BaseT DecimalT) = INL $ DecimalV (-&(2 ** (decimal_bits - 1))) ∧
   evaluate_min_value _ = INR (TypeError "evaluate_min_value")
 End
 

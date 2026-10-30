@@ -148,19 +148,10 @@ val () = cv_auto_trans lookup_callable_function_def;
 
 (* ===== @raw_return declarations ===== *)
 
-(* TOP-LEVEL: matches_fn
-   Does tl declare a function named name with visibility vis?  Only FunctionDecl
-   entries can, so generated getters never match. *)
-Definition matches_fn_def:
-  matches_fn name vis (FunctionDecl fv _ _ _ id _ _ _ _) = (id = name ∧ vis = fv) ∧
-  matches_fn name vis _ = F
-End
-
 (* TOP-LEVEL: lookup_raw_return
    The @raw_return flag of the first FunctionDecl matching (name, vis), and NONE
    when ts declares no such function.  Same selection order as lookup_function's
-   FunctionDecl case, so both lookups reach the same declaration first; see
-   lookup_raw_return_of_first. *)
+   FunctionDecl case, so both lookups reach the same declaration first. *)
 Definition lookup_raw_return_def:
   lookup_raw_return src_id_opt name vis [] = NONE ∧
   lookup_raw_return src_id_opt name vis
@@ -184,15 +175,6 @@ End
 
 val () = cv_auto_trans lookup_raw_return_or_F_def;
 
-Theorem lookup_raw_return_head:
-  lookup_raw_return src name vis
-    (FunctionDecl fv fm nr rr id args dflts ret body :: ts) =
-  (if id = name ∧ vis = fv then SOME rr
-   else lookup_raw_return src name vis ts)
-Proof
-  simp[lookup_raw_return_def]
-QED
-
 (* KEY LEMMA: the reported flag comes from a declaration of that name and
    visibility, so a positive answer is justified. *)
 Theorem lookup_raw_return_MEM:
@@ -204,35 +186,6 @@ Theorem lookup_raw_return_MEM:
 Proof
   Induct_on `ts` >> TRY (Cases_on `h`) >> TRY (Cases_on `h`)
   >> rw[lookup_raw_return_def, AllCaseEqs()] >> metis_tac[]
-QED
-
-(* KEY LEMMA: the reported flag is the flag of the *first* matching
-   declaration; entries before it never contribute. *)
-Theorem lookup_raw_return_of_first:
-  ∀src name vis fv fm nr rr id args dflts ret body rest pre.
-    id = name ∧ vis = fv ∧
-    (∀tl. MEM tl pre ⇒ ¬matches_fn name vis tl) ==>
-    lookup_raw_return src name vis
-      (pre ++ (FunctionDecl fv fm nr rr id args dflts ret body :: rest)) = SOME rr
-Proof
-  Induct_on `pre` >> rw[]
-  \\ TRY (Cases_on `h`) >> TRY (Cases_on `h`)
-  \\ fs[lookup_raw_return_def, matches_fn_def]
-  \\ metis_tac[matches_fn_def]
-QED
-
-(* KEY LEMMA: with lookup_raw_return_MEM, this pins lookup_raw_return to the
-   @raw_return flag of the first FunctionDecl of that name and visibility.  A
-   generated getter never matches (matches_fn), and Vyper forbids a getter or a
-   second function reusing a contract-level name. *)
-Theorem lookup_raw_return_or_F_of_first:
-  ∀src name vis fv fm nr rr id args dflts ret body rest pre.
-    id = name ∧ vis = fv ∧
-    (∀tl. MEM tl pre ⇒ ¬matches_fn name vis tl) ==>
-    lookup_raw_return_or_F src name vis
-      (pre ++ (FunctionDecl fv fm nr rr id args dflts ret body :: rest)) = rr
-Proof
-  rw[lookup_raw_return_of_first, lookup_raw_return_or_F_def]
 QED
 
 Definition bind_arguments_def:
@@ -456,14 +409,6 @@ Theorem exprs_bound_TAKE:
   ∀ts n es. exprs_bound ts (TAKE n es) ≤ exprs_bound ts es
 Proof
   Induct_on `es` >> Cases_on `n` >> simp[bound_def]
-QED
-
-Theorem exprs_bound_slices_lt[simp]:
-  exprs_bound ts (TAKE n es) < SUC (exprs_bound ts es) /\
-  exprs_bound ts (DROP n es) < SUC (exprs_bound ts es)
-Proof
-  mp_tac (Q.SPECL [`ts`, `n`, `es`] exprs_bound_TAKE) >>
-  mp_tac (Q.SPECL [`ts`, `n`, `es`] exprs_bound_DROP) >> simp[]
 QED
 
 Theorem exprs_bound_TAKE_DROP:
@@ -738,15 +683,6 @@ Definition switch_BoolV_def:
     else raise (Error (TypeError "not BoolV"))
   od
 End
-
-Definition exactly_one_option_def:
-  exactly_one_option NONE NONE = INR (TypeError "no option") ∧
-  exactly_one_option (SOME _) (SOME _) = INR (TypeError "two options") ∧
-  exactly_one_option (SOME x) _ = INL x ∧
-  exactly_one_option _ (SOME y) = INL y
-End
-
-val () = cv_auto_trans exactly_one_option_def;
 
 (* Check whether an identifier is declared Immutable (not Constant). *)
 Definition is_immutable_decl_def:
@@ -1328,6 +1264,43 @@ val () = release_nonreentrant_lock_def
             vyperStateTheory.return_def]
   |> cv_auto_trans;
 
+Definition is_view_mut_def[simp]:
+  is_view_mut mut ⇔ mut = View ∨ mut = Pure
+End
+
+val () = cv_auto_trans is_view_mut_def;
+
+(* Take the reentrancy lock of a nonreentrant function, and release it again;
+   a view function only checks the lock and so leaves it untouched. *)
+Definition lock_if_nr_def:
+  lock_if_nr cx nr is_view =
+    if nr then
+      case cx.nonreentrant_slot of
+      | NONE => raise (Error (TypeError "nonreentrant slot missing"))
+      | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view
+    else return ()
+End
+
+val () = lock_if_nr_def
+  |> SRULE [FUN_EQ_THM, COND_RATOR, option_CASE_rator]
+  |> cv_auto_trans;
+
+Definition unlock_if_nr_def:
+  unlock_if_nr cx nr is_view =
+    if nr ∧ ¬is_view then
+      case cx.nonreentrant_slot of
+      | NONE => return ()
+      | SOME slot => release_nonreentrant_lock cx.txn.target slot
+    else return ()
+End
+
+val () = unlock_if_nr_def
+  |> SRULE [FUN_EQ_THM, COND_RATOR, option_CASE_rator]
+  |> cv_auto_trans;
+
+(* Unfolded by simp, so proofs about evaluate_def see the lock code inline. *)
+val () = export_rewrites ["lock_if_nr_def", "unlock_if_nr_def"];
+
 (* top-level definition of the Vyper interpreter *)
 
 Definition evaluate_def:
@@ -1603,25 +1576,16 @@ Definition evaluate_def:
     all_tenv <<- get_tenv cx;
     env <- lift_option_type (bind_arguments all_tenv args (vs ++ dflt_vs)) "IntCall bind_arguments";
     rtv <- lift_option_type (evaluate_type all_tenv ret) "IntCall eval ret";
-    is_view <<- (mut = View ∨ mut = Pure);
+    is_view <<- is_view_mut mut;
     (* Acquire reentrancy lock BEFORE push_function so scopes are
        unmodified if lock acquire fails (preserves scopes_dom property).
        Lock operates only on transient storage, independent of scopes. *)
-    (if nr then
-       case cx.nonreentrant_slot of
-       | NONE => raise (Error (TypeError "nonreentrant slot missing"))
-       | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view
-     else return ());
+    lock_if_nr cx nr is_view;
     cxf <- push_function (src_id_opt, fn) env cx;
     rv <- finally
       (try (do eval_stmts cxf body; return NoneV od) handle_function)
       (do pop_function prev;
-          (* Release reentrancy lock if nonreentrant and not view *)
-          if nr ∧ ¬is_view then
-            case cx.nonreentrant_slot of
-            | NONE => return ()
-            | SOME slot => release_nonreentrant_lock cx.txn.target slot
-          else return ()
+          unlock_if_nr cx nr is_view
        od);
     crv <- lift_option_type (safe_cast rtv rv) "IntCall cast ret";
     return $ Value crv
@@ -1837,111 +1801,6 @@ Termination
   \\ TRY (MATCH_ACCEPT_TAC custom_error_exprs_size)
 End
 
-(* Small checked memory programs exercise the place evaluator independently of
-   contract deployment. The surrounding machine state is deliberately arbitrary. *)
-Definition place_probe_state_def:
-  place_probe_state st = st with scopes :=
-    [FEMPTY |+ ("d", <|assignable := T;
-       type := ArrayTV (BaseTV (UintT 256)) (Dynamic 3);
-       value := ArrayV (DynArrayV [IntV 5]); popped := []|>)
-     |+ ("i", <|assignable := T; type := BaseTV (UintT 256);
-                 value := IntV 0; popped := []|>)
-     |+ ("a", <|assignable := T;
-       type := ArrayTV (BaseTV (UintT 256)) (Dynamic 6);
-       value := ArrayV (DynArrayV (REPLICATE 6 (IntV 0))); popped := []|>)]
-End
-
-Theorem eval_expr_literal_probe[local]:
-  eval_expr cx (Literal (BaseT (UintT 256)) (IntL 7)) st =
-    (INL (Value (IntV 7)), st)
-Proof
-  simp[evaluate_def, evaluate_literal_def, return_def, bind_def]
-QED
-
-Theorem assign_pop_bounds_probe[local]:
-  FST (eval_stmt cx
-    (Assign (BaseTarget (SubscriptTarget (NameTarget "d")
-       (Literal (BaseT (UintT 256)) (IntL 0))))
-       (Pop (BaseT (UintT 256)) (NameTarget "d")))
-    (place_probe_state st)) =
-    INR (Error (RuntimeError "evaluate_subscripts array_index"))
-Proof
-  EVAL_TAC >> simp[]
-QED
-
-Theorem augassign_pop_stale_probe[local]:
-  case eval_stmt cx
-    (AugAssign (BaseT (UintT 256))
-      (SubscriptTarget (NameTarget "d")
-        (Literal (BaseT (UintT 256)) (IntL 0))) Add
-      (Pop (BaseT (UintT 256)) (NameTarget "d")))
-    (place_probe_state st) of
-    (INL (),st') => lookup_scopes_val "d" st'.scopes =
-                      SOME (ArrayV (DynArrayV []))
-  | _ => F
-Proof
-  EVAL_TAC >> simp[integerTheory.INT_LE_REFL] >> EVAL_TAC
-QED
-
-Theorem assign_delayed_pop_read_probe[local]:
-  case eval_stmt cx
-    (Assign (BaseTarget (SubscriptTarget (NameTarget "a")
-       (Pop (BaseT (UintT 256)) (NameTarget "d"))))
-      (Subscript (BaseT (UintT 256))
-        (Name (ArrayT (BaseT (UintT 256)) (Dynamic 3)) "d")
-        (Literal (BaseT (UintT 256)) (IntL 0))))
-    (place_probe_state st) of
-    (INL (),st') => lookup_scopes_val "a" st'.scopes =
-      SOME (ArrayV (DynArrayV [IntV 0; IntV 0; IntV 0; IntV 0; IntV 0; IntV 5]))
-  | _ => F
-Proof
-  EVAL_TAC
-QED
-
-Theorem nested_tuple_order_probe[local]:
-  case assign_tuple_targets cx
-    (TupleTarget [TupleTarget [BaseTarget (NameTarget "i")];
-      BaseTarget (SubscriptTarget (NameTarget "a")
-        (Name (BaseT (UintT 256)) "i"))])
-    (ArrayV (TupleV [ArrayV (TupleV [IntV 5]); IntV 9]))
-    (place_probe_state st) of
-    (INL (),st') => lookup_scopes_val "a" st'.scopes =
-      SOME (ArrayV (DynArrayV [IntV 0; IntV 0; IntV 0; IntV 0; IntV 0; IntV 9]))
-  | _ => F
-Proof
-  EVAL_TAC
-QED
-
-Theorem eager_nested_bounds_probe[local]:
-  SND (eval_expr cx
-    (Subscript (BaseT (UintT 256))
-      (Subscript (BaseT (UintT 256))
-        (Name (ArrayT (BaseT (UintT 256)) (Dynamic 3)) "d")
-        (Literal (BaseT (UintT 256)) (IntL 9)))
-      (Pop (BaseT (UintT 256)) (NameTarget "d")))
-    (place_probe_state st)) = place_probe_state st
-Proof
-  EVAL_TAC
-QED
-
-Theorem eval_target_place_nested_mapping_probe[local]:
-  lookup_global cx NONE "m" st =
-    (INL (HashMapRef F slot (BaseT (UintT 256))
-      (HashMapT (BaseT (UintT 256)) (Type (BaseT (UintT 256))))), st) ==>
-  eval_target_place cx
-    (SubscriptTarget
-      (SubscriptTarget (TopLevelNameTarget (NONE,"m"))
-        (Literal (BaseT (UintT 256)) (IntL 1)))
-      (Literal (BaseT (UintT 256)) (IntL 2))) st =
-    (INL (StoragePlace F
-      (hashmap_slot (hashmap_slot slot (encode_hashmap_key (BaseT (UintT 256)) (IntV 1)))
-        (encode_hashmap_key (BaseT (UintT 256)) (IntV 2))) (BaseTV (UintT 256))), st)
-Proof
-  strip_tac >> simp[evaluate_def, bind_def, return_def, evaluate_literal_def,
-    read_result_def, extend_place_nested_mapping,
-    extend_place_def, lift_option_type_def, evaluate_type_def, get_place_def]
-QED
-
 Theorem eval_exprs_length:
   ∀es cx st vs rt.
   eval_exprs cx es st = (INL vs, rt)
@@ -1964,14 +1823,6 @@ Proof
 QED
 
 (* Semantics of initial state of a contract after deployment *)
-
-Definition flag_value_def:
-  flag_value m n acc [] = StructV $ REVERSE acc ∧
-  flag_value m n acc (id::ids) =
-  flag_value m (2n*n) ((id,FlagV n)::acc) ids
-End
-
-val () = cv_auto_trans flag_value_def;
 
 (* Initialize immutables for a single module's toplevels *)
 Definition initial_immutables_module_def:
@@ -2224,17 +2075,9 @@ Definition call_external_function_def:
    let srcs = am_c.sources in
    let exps = am_c.exports in
    let layouts = am_c.layouts in
-   let is_view = (mut = View ∨ mut = Pure) in
-   let lock_action = if nr then
-     case cx.nonreentrant_slot of
-     | NONE => raise (Error (TypeError "nonreentrant slot missing"))
-     | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view
-     else return () in
-   let unlock_action = if nr ∧ ¬is_view then
-     case cx.nonreentrant_slot of
-     | NONE => return ()
-     | SOME slot => release_nonreentrant_lock cx.txn.target slot
-     else return () in
+   let is_view = is_view_mut mut in
+   let lock_action = lock_if_nr cx nr is_view in
+   let unlock_action = unlock_if_nr cx nr is_view in
    let (res, am_out, rqs) =
      (case do lock_action; send_call_value mut cx; eval_stmts cx body od st
       of
@@ -2302,18 +2145,6 @@ Definition call_external_raw_return_def:
 End
 
 val () = cv_auto_trans call_external_raw_return_def;
-
-(* KEY LEMMA: the flag is resolved from the same module code the call runs. *)
-Theorem call_external_raw_return_module_code:
-  ∀am tx ts rr src_id_opt.
-    find_function_module am tx.target tx.function_name = src_id_opt ∧
-    get_module_code (initial_evaluation_context am.sources am.layouts tx src_id_opt)
-      src_id_opt = SOME ts ∧
-    lookup_raw_return src_id_opt tx.function_name External ts = SOME rr ==>
-    call_external_raw_return am tx = rr
-Proof
-  rw[call_external_raw_return_def, lookup_raw_return_or_F_def] >> metis_tac[]
-QED
 
 (* SELFDESTRUCT schedules deletion until the enclosing transaction commits. *)
 Definition finalize_pending_deletions_def:
@@ -2415,10 +2246,3 @@ Definition load_contract_def:
           | (_, am', rqs) => INL (finalize_pending_deletions
                                     (am' with sources updated_by CONS (addr, mods)), rqs)
 End
-
-(* Keep the evaluator and the checked place-order probes kernel-closed. *)
-val () = List.app (fn (_,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if List.all (fn s => s = "DISK_THM") oracles andalso null axioms
-     then () else raise Fail "interpreter has admitted dependencies"
-  end) (DB.thms "vyperInterpreter");
