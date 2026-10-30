@@ -141,6 +141,50 @@ Proof
   simp[vyperStorageBackendTheory.get_storage_after_set_other]
 QED
 
+Theorem set_global_preserves_contract_storage_well_formed:
+  contract_storage_well_formed cx st /\
+  storage_layout_safe cx /\
+  storable_value cx src id v /\
+  var_in_storage cx src id /\
+  set_global cx src id v st = (res,st') ==>
+  contract_storage_well_formed cx st'
+Proof
+  rpt strip_tac >>
+  `st' = update_toplevel_name cx st src id v` by
+    (simp[vyperLookupStorageTheory.update_toplevel_name_def] >>
+     qpat_x_assum `set_global _ _ _ _ _ = _` (fn th => simp[th])) >>
+  gvs[] >>
+  irule vyperStorageWritePreservationTheory.update_toplevel_name_preserves_contract_storage_well_formed >>
+  simp[]
+QED
+
+Theorem runtime_storage_consistent_declared_region_read_typed:
+  runtime_storage_consistent env cx st /\
+  declared_storage_region cx mid n subs = SOME (b,slot,tv) ==>
+  ?v. read_storage_slot cx b slot tv st = (INL v,st) /\
+      value_has_type tv v
+Proof
+  simp[runtime_storage_consistent_def] >>
+  metis_tac[current_declared_storage_region_read_typed]
+QED
+
+Theorem runtime_storage_consistent_hashmap_leaf_read_typed:
+  runtime_storage_consistent env cx st /\
+  get_module_code cx mid = SOME code /\
+  find_var_decl_by_name n code =
+    SOME (HashMapVarDecl b kt vt,id) /\
+  lookup_var_slot_from_layout cx b mid id = SOME off /\
+  split_hashmap_subscripts vt rest_subs = SOME (final_type,kts,[]) /\
+  compute_hashmap_slot (n2w off) (kt::kts) (first_sub::rest_subs) =
+    SOME final_slot /\
+  evaluate_type (get_tenv cx) final_type = SOME final_tv ==>
+  ?v. read_storage_slot cx b final_slot final_tv st = (INL v,st) /\
+      value_has_type final_tv v
+Proof
+  simp[runtime_storage_consistent_def] >>
+  metis_tac[current_hashmap_leaf_read_typed]
+QED
+
 
 
 Theorem zero_read_slots_in_range_mutual[local]:
@@ -306,4 +350,36 @@ Theorem protected_storage_creates_preserve_run_create_evm_NONE:
     (st with accounts := create_rollback_accounts sender st.accounts)
 Proof
   simp[protected_storage_creates_preserve_def] >> metis_tac[]
+QED
+
+Theorem protected_storage_call_output_persistent_region:
+  protected_storage_calls_preserve cx /\
+  run_ext_call cx.txn.target callee calldata value_opt gas
+    st.accounts st.tStorage txp =
+    SOME (success,returndata,accounts',tStorage',emitted_logs) /\
+  contract_storage_well_formed cx st /\
+  declared_storage_region cx mid n subs = SOME (F,slot,tv) /\
+  get_storage_backend cx F
+    (st with <| accounts := accounts'; tStorage := tStorage' |>) =
+    (INL storage,st'') ==>
+  slots_in_range storage (w2n slot) tv
+Proof
+  metis_tac[protected_storage_calls_preserve_run_ext_call,
+            contract_storage_well_formed_region]
+QED
+
+Theorem protected_storage_call_output_transient_region:
+  protected_storage_calls_preserve cx /\
+  run_ext_call cx.txn.target callee calldata value_opt gas
+    st.accounts st.tStorage txp =
+    SOME (success,returndata,accounts',tStorage',emitted_logs) /\
+  contract_storage_well_formed cx st /\
+  declared_storage_region cx mid n subs = SOME (T,slot,tv) /\
+  get_storage_backend cx T
+    (st with <| accounts := accounts'; tStorage := tStorage' |>) =
+    (INL storage,st'') ==>
+  slots_in_range storage (w2n slot) tv
+Proof
+  metis_tac[protected_storage_calls_preserve_run_ext_call,
+            contract_storage_well_formed_region]
 QED
