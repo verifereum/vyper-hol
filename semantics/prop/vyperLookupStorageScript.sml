@@ -430,7 +430,6 @@ Proof
        combinTheory.APPLY_UPDATE_THM]
 QED
 
-
 Theorem nwn_eq_apply_writes[local]:
   ∀(base : num) (k : num).
     n2w (w2n (n2w base : bytes32) + k) = n2w (base + k) : bytes32
@@ -453,7 +452,6 @@ Proof
   `off < sz1` by res_tac >>
   gvs[wordsTheory.n2w_11]
 QED
-
 
 Theorem slots_in_range_disjoint_apply_writes_mutual[local]:
   (∀storage off2 tv2.
@@ -821,16 +819,6 @@ Proof
     simp[storage_var_in_range_def] >>
     strip_tac >>
     metis_tac[decode_value_storable])
-QED
-
-Theorem storable_value_same_type:
-  ∀cx mid n v v' tv.
-    storable_value cx mid n v ∧
-    storage_type_of cx mid n = SOME tv ∧
-    value_has_type tv v' ⇒
-    storable_value cx mid n v'
-Proof
-  rw[storable_value_def]
 QED
 
 Theorem lookup_toplevel_name_after_update_core[local]:

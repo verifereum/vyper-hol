@@ -39,7 +39,8 @@ roots = ["vyperHolScript.sml",
          "lowering/supported/supportedStmtPropsScript.sml",
          "lowering/supported/supportedStmtTraversePropsScript.sml",
          "lowering/supported/supportedProgramPropsScript.sml",
-         "venom/codegen/proofs/contextReachabilityChecksScript.sml"]
+         "venom/codegen/proofs/contextReachabilityChecksScript.sml",
+         "tests/vyperPlaceProbesTestScript.sml"]
 
 [dependencies.verifereum]
 git = "https://github.com/verifereum/verifereum.git"
