@@ -88,6 +88,28 @@ Proof
   gvs[]
 QED
 
+(* A write within a live local is disjoint from initialized immutables. *)
+Theorem local_copy_immutables[local]:
+  stmt_state_rel func cenv cx es s /\
+  local_region cenv es.scopes s id b sz /\ n <= sz /\
+  t.vs_data_section = s.vs_data_section /\
+  LENGTH s.vs_memory <= LENGTH t.vs_memory /\
+  (!a len. a + len <= b \/ b + n <= a ==>
+     mem_bytes_at a len t.vs_memory = mem_bytes_at a len s.vs_memory) ==>
+  immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es t
+Proof
+  strip_tac >> irule immutables_rel_mem_agree >> qexists_tac `s` >>
+  simp[] >> reverse conj_tac >- fs[stmt_state_rel_def, state_rel_def] >>
+  rpt strip_tac >>
+  `regions_disjoint off (type_memory_size tv) b sz` by
+    (qpat_x_assum `stmt_state_rel _ _ _ _ _` mp_tac >>
+     simp[stmt_state_rel_def, immutable_alloca_sep_def] >> strip_tac >>
+     first_x_assum drule_all >> strip_tac >>
+     qpat_x_assum `!id b sz. local_region _ _ _ id b sz ==> _` drule >> simp[]) >>
+  qpat_x_assum `!a len. _ ==> mem_bytes_at _ _ _ = _` irule >>
+  fs[regions_disjoint_def] >> decide_tac
+QED
+
 (* compile_store_memory at ty of a value of the local's type, held in
    memory at src, into a live local: it reaches its end related at the
    scopes write_place leaves. *)
@@ -127,7 +149,7 @@ Proof
      metis_tac[]) >>
   `not_fresh_at sa p` by metis_tac[local_ptrs_reserved_def] >>
   `eval_operand (Var p) s = SOME w` by simp[eval_operand_def] >>
-  drule compile_store_memory_run_size_bound >>
+  drule compile_store_memory_run_size_bound_with_capacity >>
   disch_then (qspecl_then [`s`, `get_tenv cx`, `tyv`, `v`, `sw`, `w`] mp_tac) >>
   impl_tac >- simp[] >> strip_tac >>
   `!q. ~not_local_ptr cenv es.scopes q ==> lookup_var q t = lookup_var q s` by
@@ -135,12 +157,20 @@ Proof
      fs[not_local_ptr_def, local_ptrs_reserved_def] >> metis_tac[]) >>
   qpat_x_assum `entry.type = tyv` (SUBST_ALL_TAC o SYM) >>
   qmatch_goalsub_abbrev_tac `stmt_state_rel func cenv cx es1` >>
+  `type_memory_size entry.type <= sz` by
+    (fs[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def] >> metis_tac[]) >>
+  `local_region cenv es.scopes s id (w2n w) sz` by simp[local_region_def] >>
+  `t.vs_data_section = s.vs_data_section` by
+    (qpat_x_assum `t with <|vs_vars := _; vs_memory := _|> = s` mp_tac >>
+     simp_tac (srw_ss()) [venom_state_component_equality]) >>
+  `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es t` by
+    (irule local_copy_immutables >>
+     goal_assum (drule_at (Pat `local_region _ _ _ _ _ _`)) >>
+     qexistsl_tac [`func`, `type_memory_size entry.type`] >> simp[] >>
+     rpt strip_tac >> qpat_x_assum `!a len. _ ==> mem_bytes_at _ _ _ = _` irule >>
+     decide_tac) >>
   `stmt_state_rel func cenv cx es1 t` by
-    (qspecl_then [`func`, `cenv`, `cx`, `es`, `s`, `t`, `id`, `p`, `sz`, `w`,
-                  `pre`, `env`, `entry`, `rest`, `v`]
-       mp_tac stmt_state_rel_write_local >>
-     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
-     simp[Abbr `es1`]) >>
+    (drule_all stmt_state_rel_write_local >> simp[Abbr `es1`]) >>
   `t.vs_allocas = s.vs_allocas` by
     (qpat_x_assum `t with <|vs_vars := _; vs_memory := _|> = s` mp_tac >>
      simp[venom_state_component_equality]) >>
