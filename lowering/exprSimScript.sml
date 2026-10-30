@@ -86,6 +86,7 @@ Ancestors
   vyperInterpreter vyperState vyperValueOperation vyperContext
   valueEncoding valueEncodingProofs vyperTypeSystem
   venomExecSemantics venomInst venomState
+  vyperLookupStorage vyperStorageBackend
 
 (* ===== The judgment ===== *)
 
@@ -456,12 +457,16 @@ End
    from it and unwrap_value's code (exprSimHyps). *)
 
 (* The slot w holds the value obtained by reading the captured source
-   result at es.  storage_rel and transient_rel relate the Venom slot. *)
+   result at es, and the slots it occupies are in range (slots_in_range):
+   a word's slot holds its value's encoding, so a load of the slot gives
+   the value's word.  storage_rel and transient_rel relate the Venom
+   slot. *)
 Definition storage_holds_def:
   storage_holds cx is_transient t tv (w:bytes32) es <=>
     ?tvt v. evaluate_type (get_tenv cx) t = SOME tvt /\
             read_storage_slot cx is_transient w tvt es = (INL v, es) /\
-            read_result cx tv es = (INL v, es)
+            read_result cx tv es = (INL v, es) /\
+            slots_in_range (get_storage cx es is_transient) (w2n w) tvt
 End
 
 (* tvt v sits at offset k inside the layout of itv iv: wherever memory holds
