@@ -208,5 +208,6 @@ Proof
   qpat_x_assum `!base_op st final limit_st p initial. _`
     (qspecl_then [`base_op`, `st`, `prefix_st`, `limit_st`, `p`, `initial`] mp_tac) >>
   impl_tac >- (asm_rewrite_tac[] >> decide_tac) >> strip_tac >>
-  drule_all abi_empty_zero_words_step >> simp[]
+  irule abi_empty_zero_words_step >> simp[] >>
+  qexistsl_tac [`base_op`, `prefix_st`, `actual`] >> simp[]
 QED
