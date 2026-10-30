@@ -38,10 +38,11 @@ holbuild build sourceShiftCountTestTheory sourceShiftCountModuleTestTheory \
 holbuild run tests/sourceShiftCountAudit.sml
 ```
 
-`oracle` checks installed compiler implementation bytes against `VYPER_PIN`,
-independent acceptance expectations, and retained parser fixtures before
-constant-qualifier erasure. Use `oracle --generate` only to regenerate those
-fixtures. Prague executions exercise signed shifts, the legacy bound/exponent
+`oracle` checks installed compiler implementation bytes against `VYPER_PIN`
+and independent acceptance expectations. The HOL tests reuse the pre-erasure
+captures in `fixtures/check_contract/source_ordinary/`, maintained by
+`sourceOrdinaryPin.py`; no separate shift captures are needed.
+Prague executions exercise signed shifts, the legacy bound/exponent
 function, canonical arithmetic counts and the uint8 count-expression overflow
 revert. These are acceptance/execution tests, not bytecode-parity or complete
 source-typing claims.

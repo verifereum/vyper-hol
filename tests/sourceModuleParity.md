@@ -35,11 +35,7 @@ holbuild --maxheap 10000 run tests/sourceModuleParityProbe.sml
 .agent-files/folded-value-validation/evm-venv/bin/python \
   tests/sourceModuleParity.py execute
 holbuild run tests/sourceModuleParityAudit.sml
-holbuild export \
-  -o .agent-files/source-module-parity/source-module-parity.holbuild-export \
-  sourceModuleParityTheory sourceModuleParityInputTheory
 python3 tests/sourceModuleParity.py summarize
-python3 tests/sourceModuleParity.py snapshot
 ```
 
 `oracle` invokes the independent generator on each original witness, including
@@ -62,5 +58,6 @@ The broader bytecode corpus is a separate check:
 PATH=".agent-files/folded-value-validation/bootstrap/bin:$PATH" \
   lowering/defs/bytecode/python-o1-bytecode-fixtures --check \
   --vyper-repo .agent-files/folded-value-validation/vyper-src
-python3 tests/sourceModuleParity.py corpus
+holbuild --maxheap 10000 build evalCompilerBytecodeParityTheory \
+  --tactic-timeout 2.5
 ```

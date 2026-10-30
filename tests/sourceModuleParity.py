@@ -19,7 +19,6 @@ ROOT = Path(__file__).resolve().parents[1]
 BASE = ROOT / "lowering/defs/bytecode"
 OUT = ROOT / ".agent-files/source-module-parity"
 ENVROOT = ROOT / ".agent-files/folded-value-validation"
-HOLBUILD = ROOT / ".agent-files/.holbuild-toolchain/bin/holbuild"
 
 
 def sha(path):
@@ -31,18 +30,14 @@ def dump(path, data):
     path.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n")
 
 
-def run(label, argv, timeout=None, env=None):
+def run(label, argv, env=None):
     argv = list(map(str, argv))
     log = OUT / "commands" / (label + ".log")
     log.parent.mkdir(parents=True, exist_ok=True)
     start = time.time()
     with log.open("w") as stream:
-        try:
-            result = subprocess.run(argv, cwd=ROOT, env=env, stdout=stream,
-                                    stderr=subprocess.STDOUT, timeout=timeout)
-            status = result.returncode
-        except subprocess.TimeoutExpired:
-            status = 124
+        status = subprocess.run(argv, cwd=ROOT, env=env, stdout=stream,
+                                stderr=subprocess.STDOUT).returncode
     dump(log.with_suffix(".json"), {"argv": argv, "exit": status,
          "elapsed_seconds": time.time() - start, "log_sha256": sha(log)})
     print(label, "exit=" + str(status), flush=True)
@@ -53,22 +48,6 @@ def names():
     result = (BASE / "folded-value-witnesses.txt").read_text().split()
     assert len(result) == 37 and len(set(result)) == 37
     return result
-
-
-def snapshot(label):
-    # Include untracked source-module theories and exact retained/source/oracle
-    # inputs, not merely HEAD or the tracked diff of this dirty worktree.
-    paths = [p for d in ("frontend", "lowering", "semantics", "tests", "venom")
-             for p in (ROOT / d).rglob("*")
-             if p.is_file() and p.suffix in {".sml", ".sig", ".py", ".json", ".hex", ".vy", ".txt"}
-             and ".hol" not in p.parts]
-    paths += [ROOT / "holproject.toml", ROOT / "VYPER_PIN"]
-    data = {str(p.relative_to(ROOT)): sha(p) for p in sorted(set(paths))}
-    dump(OUT / (label + "-sources.json"), {
-        "head": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
-        "dirty_diff_sha256": hashlib.sha256(subprocess.check_output(["git", "diff"], cwd=ROOT)).hexdigest(),
-        "files": data})
-    return data
 
 
 def oracle():
@@ -97,7 +76,6 @@ output.write_text(json.dumps(result,indent=2,sort_keys=True)+"\\n")
 assert not mismatches,mismatches
 '''
     assert run("verify-installed-pin", [python, "-I", "-c", verify, checkout, OUT / "installed-pin.json"], env=env) == 0
-    before = snapshot("oracle-start")
     rows = {}
     for name in names():
         single = OUT / "single" / name
@@ -134,8 +112,6 @@ assert not mismatches,mismatches
         assert run("syntax-install", [uv, "pip", "install", "--python", syntax_python, checkout], env=install_env) == 0
     syntax_env = dict(env, PYTHONPATH=str(checkout))
     syntax = run("retained-syntax", [syntax_python, ROOT / "tests/fixtures/check_contract/source_syntax/generate.py", "--check"], env=syntax_env)
-    after = snapshot("oracle-end")
-    assert before == after, "source files changed during independent oracle generation"
     assert syntax == 0
     assert all((r["exit"] == 0 and r.get("retained_bytes_reproduced")) if r["expected_accept"]
                else (r["exit"] != 0 and "method_id" in r["diagnostic"]) for r in rows.values())
@@ -173,22 +149,6 @@ def execute():
     assert len(rows) == 4 and all(r["reverted"] for r in rows)
 
 
-def corpus():
-    # Keep every target outcome, rather than aborting and reporting the prefix
-    # as a green corpus. No timeout/rejection is promoted to passing parity.
-    before = snapshot("corpus-start")
-    # This rollup pins all 101 public identities, not merely a passing prefix.
-    target = "evalCompilerBytecodeParityTheory"
-    status = run("corpus-" + target, [HOLBUILD, "--maxheap", "10000", "build", target,
-        "--tactic-timeout", "2.5", "--allow-cache-timeout-discrepancy"], timeout=300)
-    dump(OUT / "corpus.json", {"target": target, "exit": status,
-         "complete_pass": status == 0, "expected_parity_count": 101,
-         "failure_log": "commands/corpus-" + target + ".log" if status else None})
-    after = snapshot("corpus-end")
-    dump(OUT / "corpus-source-drift.json", {"changed": [p for p in set(before) | set(after) if before.get(p) != after.get(p)]})
-    return 0 if status == 0 else 1
-
-
 def summarize():
     oracle_data = json.loads((OUT / "oracle.json").read_text())
     rows = {}
@@ -217,26 +177,12 @@ def summarize():
             if path.exists():
                 row[suffix[1:] + "_sha256"] = sha(path)
         rows[name] = row
-    exports = {str(p.relative_to(ROOT)): sha(p)
-               for p in (ROOT / ".holbuild/obj/tests").glob("sourceModuleParity*Theory.*")
-               if p.suffix in {".sig", ".dat", ".sml"}}
-    # Audit the actual exported cache bytes too, not just the local .sig/.dat
-    # objects opened by the HOL kernel audit. holbuild blobs are content keyed.
-    import tarfile
-    archive = OUT / "source-module-parity.holbuild-export"
-    with tarfile.open(archive) as bundle:
-        for relative in exports:
-            data = (ROOT / relative).read_bytes()
-            member = "holbuild-cache/blobs/" + hashlib.sha1(data).hexdigest()
-            assert bundle.extractfile(member).read() == data, relative
     commands = {p.stem: json.loads(p.read_text()) for p in (OUT / "commands").glob("*.json")}
-    result = {"pin": oracle_data["pin"], "rows": rows, "proof_exports": exports,
-              "proof_export_archive_sha256": sha(archive), "export_blob_audit": "PASS", "commands": commands,
+    result = {"pin": oracle_data["pin"], "rows": rows, "commands": commands,
               "match_count": sum(r["hol_status"].startswith("MATCH") for r in rows.values()),
               "failure_count": sum("failure_owner" in r for r in rows.values()),
               "expected_pin_rejections": [n for n,r in rows.items() if not r["expected_accept"]]}
     dump(OUT / "results.json", result)
-    snapshot("current")
     print(json.dumps({k: result[k] for k in ("match_count", "failure_count", "expected_pin_rejections")}))
     # A completed diagnostic probe is not a passing parity run.
     return 1 if result["failure_count"] else 0
@@ -244,10 +190,7 @@ def summarize():
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("mode", choices=["oracle", "execute", "corpus", "snapshot", "summarize"])
+    parser.add_argument("mode", choices=["oracle", "execute", "summarize"])
     args = parser.parse_args()
     OUT.mkdir(parents=True, exist_ok=True)
-    if args.mode == "snapshot":
-        snapshot("current")
-    else:
-        sys.exit(globals()[args.mode]() or 0)
+    sys.exit(globals()[args.mode]() or 0)

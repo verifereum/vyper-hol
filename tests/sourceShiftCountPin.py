@@ -3,22 +3,20 @@
 
 Run `.../venv/bin/python -I tests/sourceShiftCountPin.py oracle`, then
 `.../evm-venv/bin/python -I tests/sourceShiftCountPin.py execute`.
---generate refreshes only pre-erasure parser fixtures (never expected results).
+Shared parser captures are maintained by sourceOrdinaryPin.py.
 """
 import argparse
 import hashlib
 import json
 from pathlib import Path
 import platform
-import runpy
 import subprocess
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / '.agent-files/source-shift-pin.json'
-FIXTURES = ROOT / 'tests/sourceShiftCountFixtures'
 
 
-def oracle(generate):
+def oracle():
     import vyper
     from vyper.compiler.settings import Settings, OptimizationLevel
     pin = (ROOT / 'VYPER_PIN').read_text().strip()
@@ -31,20 +29,12 @@ def oracle(generate):
         rel = path.relative_to(package)
         reference = checkout / 'vyper' / rel
         assert (reference.exists() and path.read_bytes() == reference.read_bytes()) or str(rel) == 'version.py', rel
-    retained = runpy.run_path(str(ROOT / 'tests/fixtures/check_contract/source_syntax/generate.py'))['retained']
     settings = Settings(optimize=OptimizationLevel.NONE, experimental_codegen=True, evm_version='prague')
     rows = []
     for name in ['constant_bound', 'constant_shifts']:
         source = (ROOT / 'tests/fixtures/check_contract' / (name + '.vy')).read_text()
         result = vyper.compile_code(source, settings=settings, no_bytecode_metadata=True,
                                     output_formats=('bytecode_runtime',))
-        data = json.dumps(retained(source, name), sort_keys=True, separators=(',', ':')) + '\n'
-        path = FIXTURES / (name + '.json')
-        if generate:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(data)
-        else:
-            assert path.read_text() == data, path
         rows.append(dict(name=name, accepted=True, source=source,
                          source_sha256=hashlib.sha256(source.encode()).hexdigest(),
                          runtime=result['bytecode_runtime']))
@@ -106,6 +96,5 @@ def execute():
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('mode', choices=['oracle', 'execute'])
-    parser.add_argument('--generate', action='store_true')
     args = parser.parse_args()
-    oracle(args.generate) if args.mode == 'oracle' else execute()
+    oracle() if args.mode == 'oracle' else execute()

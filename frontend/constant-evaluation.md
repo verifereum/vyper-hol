@@ -173,9 +173,8 @@ redundant MethodId/Exp/Exp-AugAssign source-domain gates. The underlying
 `sourceProgramSupport.checked_program_remainder` states that successful
 checking makes `source_program_remainder tops` equivalent to
 `supported_program tops` for a member module. All unrelated lowering restrictions
-remain. In particular, `source_module_checked_runtime_correct` inherits existing
-lowering admissions; neither that composition nor exact compiler equations are
-an unrestricted, admission-free bytecode correctness theorem.
+remain. Exact compiler equations do not establish unrestricted bytecode
+correctness; the existing lowering correctness theorem still has admissions.
 
 ## Further reference and regression entry points
 

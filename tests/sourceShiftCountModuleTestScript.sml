@@ -6,7 +6,8 @@ Libs
   sourceModuleFrontendLib
 
 fun holbuild_extra_deps (_ : string list) = ()
-val () = holbuild_extra_deps ["sourceShiftCountFixtures"];
+val () = holbuild_extra_deps ["fixtures/check_contract/source_ordinary/constant_bound.json",
+  "fixtures/check_contract/source_ordinary/constant_shifts.json"];
 
 val address = ``0w : address``;
 val trust = ``<| smt_ids := [(["main"],NONE)]; smt_nominals := [];
@@ -53,8 +54,8 @@ fun poison (JSON.OBJECT fields) = JSON.OBJECT
   | poison (JSON.ARRAY xs) = JSON.ARRAY (List.map poison xs)
   | poison value = value;
 fun check (name,expected) = let
-  val json = JSONDecode.decodeFile JSONDecode.raw
-    ("sourceShiftCountFixtures/" ^ name ^ ".json")
+  val json = JSONDecode.decodeFile (JSONDecode.field "annotated_ast" JSONDecode.raw)
+    ("fixtures/check_contract/source_ordinary/" ^ name ^ ".json")
   val program = JSONDecode.decode sourceSyntaxLib.annotated_ast json
   val () = if aconv program (JSONDecode.decode sourceSyntaxLib.annotated_ast (poison json)) then ()
     else raise Fail ("shift source decoder consumed metadata: " ^ name)

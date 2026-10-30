@@ -12,9 +12,9 @@ import argparse
 import ast
 import hashlib
 import json
+import runpy
 import subprocess
 import vyper
-from decimal import Decimal
 from pathlib import Path
 
 from vyper.ast.parse import annotate_python_ast
@@ -26,32 +26,7 @@ OUT = Path(__file__).resolve().parent
 PIN = "cd74ce4f57e3771aeeab8f061fa3be45bfe8a29c"
 
 
-def convert(value):
-    if isinstance(value, ast.AST):
-        result = {
-            k: convert(v)
-            for k, v in vars(value).items()
-            if k not in {"ctx", "full_source_code", "node_source_code", "type_ignores"}
-        }
-        kind = result.get("ast_type")
-        if kind == "Assign":
-            targets = result.pop("targets")
-            assert len(targets) == 1
-            result["target"] = targets[0]
-        if kind == "Compare":
-            ops, comparators = result.pop("ops"), result.pop("comparators")
-            assert len(ops) == len(comparators) == 1
-            result["op"], result["right"] = ops[0], comparators[0]
-        if kind in {"Tuple", "List"}:
-            result["elements"] = result.pop("elts")
-        return result
-    if isinstance(value, list):
-        return [convert(v) for v in value]
-    if isinstance(value, bytes):
-        return "0x" + value.hex()
-    if isinstance(value, Decimal):
-        return str(value)
-    return value
+convert = runpy.run_path(str(ROOT / "tools/source_module_loader.py"))["convert"]
 
 
 def retained(source, name):

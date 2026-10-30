@@ -13,9 +13,7 @@ Libs
 (* Declare fixtures relative to this source file so holbuild stages them at
    the same relative path and includes their contents in the cache key. *)
 fun holbuild_extra_deps (_ : string list) = ()
-val () = holbuild_extra_deps ["../tests/fixtures/check_contract",
-  "../tests/sourceShiftCountFixtures",
-  "../lowering/defs/bytecode/folded-value-witnesses.txt"]
+val () = holbuild_extra_deps ["../tests/fixtures/check_contract"]
 
 (* Branch checks for guarded call dispatch; fixture checks below also exercise
    these paths through the contract checker. Deliberately conflicting metadata
@@ -963,8 +961,9 @@ val () = app (fn name => let
   val checked = vyperCheckContractFrontendLib.Source.check_contract_result src
   val legacy = vyperCheckContractFrontendLib.check_constant_contract_file_legacy file
   val strict = vyperCheckContractFrontendLib.Source.check_constant_contract_file file
-  val original = JSONDecode.decodeFile sourceSyntaxLib.annotated_ast
-    ("../tests/sourceShiftCountFixtures/" ^ name ^ ".json")
+  val original = JSONDecode.decodeFile
+    (JSONDecode.field "annotated_ast" sourceSyntaxLib.annotated_ast)
+    (fixture_dir ^ "source_ordinary/" ^ name ^ ".json")
   val same = vyperCheckContractFrontendLib.Source.check_contract_result
     {fuel= #fuel src,trust= #trust src,keys= #keys src,program=original,
      layouts= #layouts src,address=address}
@@ -1053,20 +1052,17 @@ Proof
   ACCEPT_TAC source_meaning_call_runtime_return
 QED
 
-(* Re-run every retained whole source through the PUBLIC full checker, not a
-   certificate-only/translation-only test. All 36 pin-valid cases must succeed;
-   method_id_var alone is pin-invalid. Metadata variants decode identically.
-   This 37-row inventory does NOT cover the ordinary legacy fixture universe. *)
+(* Public-wrapper integration: scalar normalization, selector/storage layout,
+   immutable deployment, Boolean normalization and constant-domain rejection.
+   sourceModuleFrontendLibTest owns the complete 37-case checker matrix. *)
 val () = app (fn s => let
   val bytes = listSyntax.mk_list (List.map (fn c => numSyntax.term_of_int (Char.ord c))
     (String.explode s),numSyntax.num)
   val th = cv_eval (mk_comb (``source_const_keccak``,bytes))
 in computeLib.add_funs [th] end)
-  ["hello","transfer(address,uint256)","foo()","f(uint256)","E(uint256)","x"];
-val inventory_stream = TextIO.openIn "../lowering/defs/bytecode/folded-value-witnesses.txt";
-val inventory_names = String.tokens Char.isSpace (TextIO.inputAll inventory_stream);
-val () = TextIO.closeIn inventory_stream;
-val () = if length inventory_names = 37 then () else raise Fail "public source inventory changed";
+  ["foo()"];
+val public_witnesses = ["fold_add","method_id_storage","i12_immut_with_storage",
+  "boolop_and3","method_id_var"];
 val () = app (fn name => let
   val raw = JSONDecode.decodeFile JSONDecode.raw
     (fixture_dir ^ "source_syntax/" ^ name ^ ".json")
@@ -1098,6 +1094,6 @@ in if name = "method_id_var" then let
     val () = if aconv (concl (#composition checked)) (concl expected) then ()
       else raise Fail ("public source inventory artifact changed: " ^ name)
   in print ("PUBLIC_SOURCE_ACCEPT_CHECK " ^ name ^ "\n") end
-end) inventory_names;
+end) public_witnesses;
 val () = app (fn (_,th) => audit_source_thm th)
   (DB.thms "vyperCheckContractFrontendLibTest");

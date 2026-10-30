@@ -6,7 +6,7 @@ Libs
   vyperCheckContractFrontendLib
 
 fun holbuild_extra_deps (_ : string list) = ()
-val () = holbuild_extra_deps ["fixtures/check_contract", "sourceShiftCountFixtures"];
+val () = holbuild_extra_deps ["fixtures/check_contract"];
 
 (* Existing #135 strict fixtures remain successful via BOTH APIs. Source JSON
    decoding of the same originals must produce exactly the same checked AST. *)
@@ -22,8 +22,9 @@ fun check_fixture name = let
   val input = vyperCheckContractFrontendLib.Source.prepare_constant_file {address=address,path=path}
   val checked = vyperCheckContractFrontendLib.Source.check_contract_result input
   val strict = vyperCheckContractFrontendLib.Source.check_constant_contract_file {address=address,path=path}
-  val original = JSONDecode.decodeFile sourceSyntaxLib.annotated_ast
-    (OS.Path.concat (OS.FileSys.getDir (),"sourceShiftCountFixtures/" ^ name ^ ".json"))
+  val original = JSONDecode.decodeFile
+    (JSONDecode.field "annotated_ast" sourceSyntaxLib.annotated_ast)
+    (fixtures ^ "source_ordinary/" ^ name ^ ".json")
   val same = vyperCheckContractFrontendLib.Source.check_contract_result
     {fuel= #fuel input,trust= #trust input,keys= #keys input,program=original,
      layouts= #layouts input,address=address}
