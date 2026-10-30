@@ -2,7 +2,7 @@
    TOP-LEVEL: decode facts, source layout and the actual source count load. *)
 Theory abiValidBytes
 Ancestors
-  abiCanonicalLoad abiDecoderContract abiStaticPrimitiveProps valueEncoding valueEncodingProps
+  abiCanonicalHeadSize abiDecoderContract abiStaticAggregateProps valueEncoding valueEncodingProps
   contractABI vyperABI vyperABIValid words list rich_list arithmetic
 
 Theorem abi_valid_bytes_decode:

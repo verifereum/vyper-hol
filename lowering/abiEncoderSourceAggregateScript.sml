@@ -1,7 +1,7 @@
 (* Aggregate byte transport is independent of ABI value cardinality typing. *)
 Theory abiEncoderSourceAggregate
 Ancestors
-  abiEncoderSourceTransport abiEncoderSourceWindow abiCallerStaticMemory
+  abiEncoderSourceTransport abiEncoderSourceWindow abiCallerTupleLayout
   abiEncoderOpenInput abiEncoderInput abiDecodeRanges contractABI list rich_list arithmetic vyperABI
 
 Theorem abi_encoder_enc_tuple_cong:

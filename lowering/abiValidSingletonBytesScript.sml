@@ -2,7 +2,7 @@
    TOP-LEVEL: child validity, decoded payload and physical source windows. *)
 Theory abiValidSingletonBytes
 Ancestors
-  abiValidBytes abiCanonicalLoad abiCanonicalArrayLoad abiDecoderContract
+  abiValidBytes abiCanonicalHeadSize abiCanonicalHeadSize abiDecoderContract
   vyperABI contractABI venomState words list rich_list arithmetic
 
 Theorem abi_valid_singleton_bytes_decode:

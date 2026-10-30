@@ -1,10 +1,38 @@
-(* Both emitted builtin length guards follow from successful source decoding
-   under the actual checked compiler-environment construction. *)
 Theory abiCallerDecodeBounds
 Ancestors
-  abiCallerDecodeMinimum abiCallerAbiBound abiCallerWrapped abiValidBytesUnwrap
-  compileVyper compileEnv vyperValue vyperABI vyperContext context list
+  abiCallerBuiltinInput compileVyper compileEnv vyperTypeSystem vyperValue vyperTyping
+  vyperContext list abiCallerAbiBound abiValidBytesUnwrap vyperABI context
 
+(* Singleton wrapping preserves source type evaluation and actual caller
+   coherence, with no extra slot-size assumption. *)
+Theorem abi_caller_singleton_type:
+  evaluate_type env ty = SOME tv ==>
+  evaluate_type env (TupleT [ty]) = SOME (TupleTV [tv])
+Proof
+  strip_tac >> drule (cj 1 evaluate_type_well_formed) >> strip_tac >>
+  drule well_formed_type_value_slot_size >>
+  simp[evaluate_type_def, type_slot_size_def]
+QED
+
+Theorem abi_caller_wrapped_coherent:
+  contract_namespaces_ok in_deploy [((NONE:num option),tops)] /\
+  assignable_type (type_env tops) ty /\ evaluate_type (type_env tops) ty = SOME tv ==>
+  abi_decoder_coherent
+    (build_compile_env tops vis mut func_name fargs ret_type
+      (code_stmts:stmt list) use_trans) (type_env tops)
+    (build_compile_env tops vis mut func_name fargs ret_type
+      code_stmts use_trans).ce_struct_fields
+    (if wrapped then TupleT [ty] else ty) (if wrapped then TupleTV [tv] else tv)
+Proof
+  strip_tac >> drule abi_caller_singleton_type >> strip_tac >>
+  `assignable_type (type_env tops) (TupleT [ty])` by
+    simp[Once assignable_type_def, well_formed_type_def] >>
+  Cases_on `wrapped` >> irule abi_caller_coherent >> simp[] >>
+  qexists_tac `in_deploy` >> simp[]
+QED
+
+(* Both emitted builtin length guards follow from successful source decoding
+   under the actual checked compiler-environment construction. *)
 Theorem abi_caller_source_decode_bounds:
   let sf = (build_compile_env tops vis mut func_name fargs ret_type
     (code_stmts:stmt list) use_trans).ce_struct_fields in

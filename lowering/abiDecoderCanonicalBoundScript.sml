@@ -3,7 +3,7 @@ Theory abiDecoderCanonicalBound
 Ancestors
   abiDecoderCanonicalPtr abiDecoderMemberBound abiDecoderArrayBound
   abiDecoderHeadAdequacy abiDecoderCoherence vyperABI compileEnv
-  abiCanonicalLoad abiCanonicalArrayLoad abiDecodeRanges abiDecoderContract
+  abiCanonicalHeadSize abiCanonicalHeadSize abiDecodeRanges abiDecoderContract
   contractABI valueEncoding venomExecSemantics venomState words arithmetic list
 
 Theorem abi_decode_canonical_dynamic_member_pointer:

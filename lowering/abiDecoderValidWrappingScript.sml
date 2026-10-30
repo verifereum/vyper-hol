@@ -1,7 +1,7 @@
 (* Source type coherence for either actual singleton-wrapping choice. *)
 Theory abiDecoderValidWrapping
 Ancestors
-  abiCallerWrapped abiDecoderCaller abiDecoderCoherence abiDecoderReadableTypes
+  abiCallerDecodeBounds abiDecoderCaller abiDecoderCoherence abiDecoderReadableTypes
   abiBoundaryChecks compileEnv valueEncoding vyperABI vyperValue list
 
 Theorem abi_decoder_coherent_singleton:

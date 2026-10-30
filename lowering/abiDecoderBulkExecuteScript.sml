@@ -4,7 +4,7 @@ Ancestors
   abiDecoderBulk abiDecoderBytesTyped abiDecoderComposition abiDecoderVarSequence
   abiDecoderDynarrayPrefix abiDecoderDynarrayBound abiDecoderArrayHeader abiDecoderGuard
   abiDecoderGuards abiDecoderCopy abiDecoderTypedContract abiDecoderCoherence
-  abiDecoderArrayPrepare abiDecoderArrayInitExec abiDecoderAllocation abiDecoderContract
+  abiDecoderArrayInitExec abiDecoderArrayInitExec abiDecoderAllocation abiDecoderContract
   abiDecoderLoop abiDecoderFrame abiDecoderFrameCompose fragExec instIdxIndep exprLoweringProps
   emitHelperProps emitHelper compileEnv venomExecSemantics venomState venomInst valueEncoding
   words list rich_list arithmetic

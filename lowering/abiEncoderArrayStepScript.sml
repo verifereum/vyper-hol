@@ -1,7 +1,7 @@
 (* Exact child write windows advance the encoded array prefix and retain its count. *)
 Theory abiEncoderArrayStep
 Ancestors
-  abiEncoderArrayBounds abiEncoderArrayPrefix abiEncoderArrayLayout abiEncoderTuple
+  abiEncoderArrayBodyCode abiEncoderArrayPrefix abiEncoderArrayBodyCode abiEncoderTuple
   abiCanonicalWindows abiDecoderFrame abiDecoderContract valueEncodingProps valueEncoding
   contractABI venomState words list rich_list arithmetic
 

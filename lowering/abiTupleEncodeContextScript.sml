@@ -1,7 +1,7 @@
 (* Actual tuple staging and encoder fragments inherit outer code containment. *)
 Theory abiTupleEncodeContext
 Ancestors
-  abiTupleEncodeStage abiTupleEncodeCounters abiBuiltinEncodeAppend fragExec compileEnv words
+  abiTupleEncodePrepare abiTupleEncodeCounters abiBuiltinEncodeWord fragExec compileEnv words
   list arithmetic
 
 Theorem abi_tuple_encode_context:

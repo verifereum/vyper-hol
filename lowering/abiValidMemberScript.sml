@@ -1,10 +1,10 @@
 Theory abiValidMember
 Ancestors
-  abiValidMembers abiValidAggregateHeads abiCanonicalLoad abiCanonicalArrayLoad abiDecodeRanges
+  abiValidMembers abiValidAggregateHeads abiCanonicalHeadSize abiCanonicalHeadSize abiDecodeRanges
   abiDecoderContract vyperABI contractABI valueEncoding venomState words list rich_list
   arithmetic abiValidDecodedMetadata abiDecoderMemberSetup abiDecoderMemberCode
   abiDecoderDynamic abiDecoderCoherence abiDecoderDynamicLoopSetup abiDecoderArraySetupInputs
-  abiDecoderArrayChildSource abiDecoderTypedContract abiDecoderReentry abiEncoder compileEnv
+  abiDecoderArraySetupInputs abiDecoderTypedContract abiDecoderReentry abiEncoder compileEnv
   fragExec venomExecSemantics emitHelperProps
 
 (* ===== Windows ===== *)

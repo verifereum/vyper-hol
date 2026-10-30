@@ -1,7 +1,7 @@
 (* Safety of supplied first-cut executions, independent of their existence. *)
 Theory abiEncoderLeafSafety
 Ancestors
-  abiEncoderPrefixSafety abiEncoderExactWriteProbe abiEncoderObserverCode abiEncoderObserver
+  abiEncoderPrefixSafety abiEncoderWrites abiEncoderObserverCode abiEncoderObserver
   abiDecoderContract abiDecoderReentry fragExec emitHelperProps venomExecSemantics venomState
   finite_map pred_set instIdxIndep valueEncodingProps abiEncoderWrites
   words list arithmetic emitHelper venomInst

@@ -3,7 +3,7 @@
    compatibility contract supplies the semantic layout and size agreement. *)
 Theory abiBulkLayoutProps
 Ancestors
-  abiStaticReverseProps abiStaticAggregateProps abiStaticLayoutProps
+  abiStaticDynarrayLayout abiStaticAggregateProps abiStaticLayoutProps
   exprLowering abiEncoder valueEncoding vyperTyping vyperABI compileEnv
 
 Theorem abi_bulk_layout_sizes:

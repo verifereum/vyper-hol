@@ -3,7 +3,7 @@
    semantic and compiler ABI traversals. Field sizes are handled separately. *)
 Theory abiCallerStructMap
 Ancestors
-  abiCallerStructFields compileVyper compileEnv vyperContext vyperValue
+  abiCallerStructSize compileVyper compileEnv vyperContext vyperValue
   vyperAST finite_map list pair
 
 Definition abi_caller_struct_map_def:

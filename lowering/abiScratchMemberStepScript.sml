@@ -3,6 +3,7 @@
    retain physical scratch frames instead of excluding the entire arena. *)
 Theory abiScratchMemberStep
 Ancestors
+  abiScratchMemberAdapter
   abiScratchStatic abiScratchDynamicChild abiScratchPrefix abiScratchEncoderContract
   abiScratchSubset abiScratchFootprint abiEncoderTuple abiDecoderAllocation abiDecoderFootprint
   abiDecoderFrame abiDecoderReentry abiDecoderContract abiDecoderLoop compileEnv valueEncoding
@@ -46,7 +47,7 @@ Theorem abi_scratch_static_member_step:
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   `heads+LENGTH (enc ty av) <= output_size` by decide_tac >>
-  mp_tac (Q.INST [`at` |-> `ty:abi_type`, `offset` |-> `heads:num`] abi_scratch_static_child_reach) >>
+  mp_tac (Q.INST [`at` |-> `ty:abi_type`, `offset` |-> `heads:num`] abi_scratch_static_child_spine_reach) >>
   impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
   rename1 `abi_decode_sim ctx func initial actual` >>
   mp_tac (Q.INST [`lo` |-> `st.cs_next_id`, `hi` |-> `end_st.cs_next_id`,
@@ -84,7 +85,7 @@ Theorem abi_scratch_dynamic_member_step:
     ~actual.vs_halted /\ abi_decode_sim ctx func initial actual
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >> `heads+32 <= off` by decide_tac >>
-  mp_tac (Q.INST [`at` |-> `ty:abi_type`, `ho` |-> `heads:num`] abi_scratch_dynamic_child_reach) >>
+  mp_tac (Q.INST [`at` |-> `ty:abi_type`, `ho` |-> `heads:num`] abi_scratch_dynamic_child_spine_reach) >>
   impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
   rename1 `abi_decode_sim ctx func initial actual` >>
   mp_tac (Q.INST [`lo` |-> `lo:num`, `hi` |-> `end_st.cs_next_id`,

@@ -25,26 +25,6 @@ Proof
   simp[word_of_bytes_word_to_bytes, dividesTheory.divides_def]
 QED
 
-(* Historical counterexample for the old stored-keys-only val_in_memory.
-   Main strengthened the predicate to check omitted fixed-array defaults, so
-   this positive val_in_memory claim is no longer true.
-Theorem abi_encoder_sparse_source_counterexample:
-  let ty = ArrayT (BaseT (UintT 256)) (Fixed 1) in
-  let tv = ArrayTV (BaseTV (UintT 256)) (Fixed 1) in
-  let v = ArrayV (SArrayV []) in
-  let av = ListV [NumV 0] in
-  let mem = abi_encoder_sparse_probe_memory in
-    evaluate_type FEMPTY ty = SOME tv /\ value_has_type tv v /\
-    vyper_to_abi FEMPTY ty v = SOME av /\
-    val_in_memory tv v 0 mem /\ LENGTH mem = 96 /\
-    mem_bytes_at 0 32 mem <> enc (vyper_to_abi_type FEMPTY ty) av
-Proof
-  simp_tac bool_ss [LET_THM, abi_encoder_sparse_probe_window] >>
-  EVAL_TAC >> simp_tac bool_ss [wordsTheory.dimword_def] >>
-  CONV_TAC (DEPTH_CONV fcpLib.INDEX_CONV) >> EVAL_TAC
-QED
-
-*)
 
 Theorem abi_encoder_sparse_source_rejected:
   let ty = ArrayT (BaseT (UintT 256)) (Fixed 1) in

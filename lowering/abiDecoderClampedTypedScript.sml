@@ -4,7 +4,7 @@ Theory abiDecoderClampedTyped
 Ancestors
   abiDecoderClampedWord abiDecoderNumericWord abiDecoderClamp abiDecoderWordTyped
   abiDecoderCoherence abiDecoderTypedContract abiDecoderLayout abiDecoderContract
-  abiDecoderBytesTyped abiDecoderPointed abiCanonicalLoad abiDecodeRanges
+  abiDecoderBytesTyped abiDecoderPointed abiCanonicalHeadSize abiDecodeRanges
   exprLowering compileEnv valueEncoding vyperABI contractABI abiEncoder
   fragExec venomState venomInst words arithmetic list rich_list
 

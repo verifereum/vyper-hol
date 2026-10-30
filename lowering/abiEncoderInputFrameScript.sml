@@ -1,7 +1,7 @@
 (* Complete encoder sources depend only on their declared memory window. *)
 Theory abiEncoderInputFrame
 Ancestors
-  abiEncoderInput abiEncoderMemory abiStaticPrimitiveProps abiDecoderFrame abiDecoderContract
+  abiEncoderInput abiEncoderMemory abiStaticAggregateProps abiDecoderFrame abiDecoderContract
   valueEncoding valueEncodingProps valueEncodingProofs venomState contractABI words list
   rich_list arithmetic
 

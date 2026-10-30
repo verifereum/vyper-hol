@@ -1,7 +1,7 @@
 (* Padded-memory observations and the bytes encoder's zero-then-copy update. *)
 Theory abiEncoderMemory
 Ancestors
-  abiDecoderTypedContract abiStaticPrimitiveProps abiDecoderFrame abiDecoderContract
+  abiDecoderTypedContract abiStaticAggregateProps abiDecoderFrame abiDecoderContract
   valueEncoding valueEncodingProps valueEncodingProofs venomMemProps venomState venomExecSemantics
   contractABI byte words list rich_list arithmetic
 

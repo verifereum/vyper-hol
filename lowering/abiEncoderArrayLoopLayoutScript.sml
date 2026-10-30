@@ -1,8 +1,8 @@
 (* Read the real generated header/backedge blocks and their PHI-free entry points. *)
 Theory abiEncoderArrayLoopLayout
 Ancestors
-  abiEncoderArrayHeader abiEncoderArrayBodyCode abiEncoderArrayDynamicCode abiEncoderArrayCode
-  abiEncoderArrayAddress abiDecoderDynamicLoopSetup abiDecoderLoopEmit abiDecoderExecution abiDecoderLoopCode
+  abiEncoderArrayHeader abiEncoderArrayBodyCode abiEncoderArrayDynamicMemory abiEncoderArrayCode
+  abiEncoderArrayBodyCode abiDecoderDynamicLoopSetup abiDecoderLoopEmit abiDecoderExecution abiDecoderLoopCode
   abiEncoderAdmissible abiDecoderContract fragExec compileEnv emitHelperProps emitHelper
   venomInst venomExecSemantics words list rich_list arithmetic
 

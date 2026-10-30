@@ -36,7 +36,7 @@ Theorem abi_scratch_builtin_effect_output_row:
   FLOOKUP t.vs_allocas st.cs_next_id = SOME (p,outsz)
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  drule abiBuiltinEncodeOwnershipTheory.abi_builtin_allocate_state_row >> disch_then assume_tac >>
+  drule abiBuiltinEncodeCorrectTheory.abi_builtin_allocate_state_row >> disch_then assume_tac >>
   qpat_assum `abi_scratch_builtin_effect _ _ _ _ _ _ _ _ _ _ _ _`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_scratch_builtin_effect_def]) >>
   qpat_x_assum `!id. ~(id IN abi_decoder_ids first last) ==> _`

@@ -2,7 +2,7 @@
 Theory abiDecoderValidLoopInvariant
 Ancestors
   abiDecoderEffect abiDecoderValidArrayMemory abiDecoderValidArrayScratch abiDecoderArrayScratch
-  abiDecoderPrimitiveLoopHeader abiDecoderValidArrayBackedge abiDecoderArrayBackedge abiDecoderLoopRegisters
+  abiDecoderPrimitiveLoopFinite abiDecoderValidArrayBackedge abiDecoderArrayBackedge abiDecoderLoopRegisters
   abiDecoderExecution abiDecoderLoop abiDecoderReentry abiDecoderContract
   abiDecoderAllocation abiDecoderFrame abiDecoderDynamicLoopSetup
   compileEnv valueEncoding vyperABI venomState words list arithmetic finite_map

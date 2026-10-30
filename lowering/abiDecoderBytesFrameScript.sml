@@ -3,7 +3,7 @@ Theory abiDecoderBytesFrame
 Ancestors
   abiDecoderBytes abiDecoderBytesTyped abiDecoderString abiDecoderVarSequence
   abiDecoderReservation abiDecoderTypedContract abiDecoderContract abiCanonicalBytes
-  abiCanonicalLoad abiEncoder emitHelperProps exprLoweringProps compileEnv emitHelper
+  abiCanonicalHeadSize abiEncoder emitHelperProps exprLoweringProps compileEnv emitHelper
   valueEncoding vyperABI vyperValue contractABI
   venomExecSemantics venomState venomInst words list rich_list arithmetic
 

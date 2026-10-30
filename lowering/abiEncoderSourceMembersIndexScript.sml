@@ -1,7 +1,7 @@
 (* Fixed-origin ghost ledger for the source interpretation of MemberSpine. *)
 Theory abiEncoderSourceMembersIndex
 Ancestors
-  abiEncoderMembersEndpoint abiEncoderMembersContract abiEncoderMembersDefs
+  abiEncoderMembersStep abiEncoderMembersContract abiEncoderMembersDefs
   abiEncoderMemberSpine abiEncoderCorrect abiEncoderInput abiEncoderTuple
   abiDecoderEffect abiDecoderLoop compileEnv venomState list arithmetic
 

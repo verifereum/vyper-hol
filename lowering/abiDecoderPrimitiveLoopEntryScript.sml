@@ -3,7 +3,7 @@ Theory abiDecoderPrimitiveLoopEntry
 Ancestors
   abiDecoderPrimitiveDynLoop abiDecoderPrimitiveLoopLayout abiDecoderLoopEmit
   abiDecoderPrimitiveLoopFragment abiDecoderPrimitiveLoopContext
-  abiDecoderPrimitiveLoopInvariant abiDecoderPrimitiveLoopHeader
+  abiDecoderPrimitiveLoopInvariant abiDecoderPrimitiveLoopFinite
   abiDecoderArrayInvariant abiDecoderLoopRegisters abiDecoderExecution abiDecoderLoop
   abiDecoderContract abiDecoderFrame fragExec exprLoweringProps emitHelperProps
   compileEnv venomExecSemantics venomState venomInst words list arithmetic

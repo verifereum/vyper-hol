@@ -1,8 +1,8 @@
-(* Control-flow probes for extension-stable encoder simulation. *)
+(* Control-flow rules for extension-stable encoder simulation. *)
 Theory abiEncoderExtendControl
 Ancestors
   abiEncoderExtendSim abiEncoderVarTransport abiEncoderObserver
-  abiEncoderArrayLoopEntry abiEncoderArrayLoopHeader abiDecoderPrimitiveLoopEntry
+  abiEncoderArrayLoopDynamicStep abiEncoderArrayLoopDynamicStep abiDecoderPrimitiveLoopEntry
   abiDecoderLoop abiDecoderVarExtend execEquivParamDefs abiEncoderArrayHeader abiEncoderArrayLoopCode
   venomExecSemantics venomState venomInst words list arithmetic
 

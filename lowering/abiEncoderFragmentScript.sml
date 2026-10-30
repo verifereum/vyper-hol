@@ -4,7 +4,7 @@
    does not use that admitted theorem or change its statement. *)
 Theory abiEncoderFragment
 Ancestors
-  abiEncoderProps abiScratchEncoderRecursive abiScratchEncoderContract
+  abiEncoderProps abiScratchEncoderCaller abiScratchEncoderContract
   abiEncoderCorrectRecursive abiEncoderInput abiEncoderAdmissible
   fragExec compileEnv valueEncoding vyperABI vyperTyping contractABI
   venomState venomExecSemantics words list

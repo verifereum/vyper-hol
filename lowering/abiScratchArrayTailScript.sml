@@ -4,7 +4,7 @@ Ancestors
   abiEncoderArrayTailInit abiEncoderSequence abiEncoderComplexPrefix abiEncoderMembersDefs
   abiDecoderAllocation abiDecoderFootprint abiDecoderFrame abiDecoderReentry abiDecoderLoop
   compileEnv venomState venomInst finite_map pred_set words list arithmetic abiEncoderArrayTail
-  abiEncoderChildCode abiEncoderArrayDynamicCode abiEncoderCounters abiEncoderResultLive
+  abiEncoderChildCode abiEncoderArrayDynamicMemory abiEncoderCounters abiEncoderResultLive
   abiDecoderProtectedScratch abiDecoderContract abiEncoderArrayFrame abiEncoderArrayPrefix
   abiEncoderInput abiEncoderInputFrame valueEncoding contractABI abiScratchChild
   abiScratchEncoderContract abiScratchAddress abiDecoderDynamicLoopSetup

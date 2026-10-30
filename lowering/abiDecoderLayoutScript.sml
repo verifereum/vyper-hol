@@ -2,7 +2,7 @@
 Theory abiDecoderLayout
 Ancestors
   abiDecoderCoherence abiBulkLayoutProps abiStaticLayoutProps
-  abiStaticReverseProps vyperABI vyperABIRoundtrip valueEncoding exprLowering compileEnv contractABI
+  abiStaticDynarrayLayout vyperABI vyperABIRoundtrip valueEncoding exprLowering compileEnv contractABI
 
 Theorem abi_decoder_static_header:
   abi_decoder_header ce env ty tv /\

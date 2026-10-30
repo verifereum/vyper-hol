@@ -1,7 +1,7 @@
 (* Execute a recursive array child at an arbitrary cursor and retain the prefix. *)
 Theory abiDecoderRecursiveArrayIteration
 Ancestors
-  abiDecoderArrayBody abiDecoderRecursiveLoopInvariant abiDecoderArrayInvariant
+  abiDecoderArraySetupCode abiDecoderRecursiveLoopInvariant abiDecoderArrayInvariant
   abiDecoderArraySlice abiDecoderCoherence abiDecoderTypedContract abiDecoderEffect
   abiDecoderProtectedScratch abiDecoderAllocation abiDecoderContract
   abiDecoderCorrect abiDecoderLoop abiDecoderReentry compileEnv valueEncoding

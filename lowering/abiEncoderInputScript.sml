@@ -221,3 +221,11 @@ Theorem abi_encoder_input_excludes_uninitialized_sparse_defaults:
 Proof
   metis_tac[abi_encoder_input_copy_iff, abi_encoder_sparse_probe_window]
 QED
+
+Theorem encoder_dynamic_input_head_size:
+  abi_encoder_input (AbiDynArray ei h mem_sz T) at av sb cap mem ==>
+  h = 32
+Proof
+  simp[abi_encoder_array_input_iff] >> rpt strip_tac >>
+  gvs[abi_member_head_size_def]
+QED

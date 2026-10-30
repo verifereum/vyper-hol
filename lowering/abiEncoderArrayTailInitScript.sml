@@ -2,10 +2,10 @@ Theory abiEncoderArrayTailInit
 Ancestors
   abiEncoderArrayCode abiDecoderIndexInit compileEnv context emitHelperProps exprLoweringProps
   emitHelper venomInst words list rich_list arithmetic abiEncoderComplexPrefix
-  abiDecoderReentryAllocation abiDecoderReentryAddress abiDecoderArrayInitExec
+  abiDecoderReentryAddress abiDecoderReentryAddress abiDecoderArrayInitExec
   abiDecoderAllocation abiDecoderReentry abiDecoderArrayHeader abiDecoderGuards
   abiDecoderContract abiDecoderFrame venomExecSemantics venomMemProps venomState finite_map
-  abiEncoderSequence abiEncoderArrayIndex abiEncoderArrayMemory abiEncoderArrayExit
+  abiEncoderSequence abiEncoderArrayRound abiEncoderArrayMemory abiEncoderArrayExit
   abiEncoderMembersDefs abiEncoderChildInputs abiDecoderEffect abiDecoderPrimitiveLoopFrames
   abiDecoderLoop fragExec valueEncoding contractABI pred_set
 

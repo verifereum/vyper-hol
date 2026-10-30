@@ -2,7 +2,7 @@
 Theory abiDecoderBulkReentry
 Ancestors
   abiDecoderBulkExecute abiDecoderBulk abiDecoderArrayInitReentry abiDecoderReentry
-  abiDecoderReentrySequence abiDecoderVarSequence abiDecoderVarExtend abiDecoderTypedContract
+  abiDecoderReentryPointer abiDecoderVarSequence abiDecoderVarExtend abiDecoderTypedContract
   abiDecoderCoherence abiDecoderArrayInitExec abiDecoderContract abiDecoderFrame
   abiDecoderFrameCompose abiDecoderLoop abiDecoderAllocation abiDecoderProtectedScratch fragExec
   instIdxIndep exprLoweringProps emitHelperProps compileEnv venomState valueEncoding words list

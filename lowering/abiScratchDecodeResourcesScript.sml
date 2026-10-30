@@ -1,7 +1,7 @@
 (* Ordinary allocation history establishes physical builtin decoder resources. *)
 Theory abiScratchDecodeResources
 Ancestors
-  abiScratchDecodeInput abiScratchBuiltinCaller abiCallerAllocation abiBuiltinAllocation
+  abiScratchDecodeInput abiScratchBuiltinSource abiCallerAllocation abiBuiltinAllocation
   abiBuiltinDecodeSetup abiScratchFootprint abiDecoderAllocation abiDecoderFootprint
   abiDecoderFrame abiDecoderContract compileEnv venomMemDefs venomState finite_map pred_set
   words list arithmetic

@@ -2,7 +2,7 @@
 Theory abiDecoderStaticSingleton
 Ancestors
   abiDecoderSingletonSetup
-  abiDecoderSingleton abiDecoderTypedContract abiDecoderTypedCompose abiDecoderComplexHead
+  abiDecoderSingletonTyped abiDecoderTypedContract abiDecoderTypedCompose abiDecoderComplexHead
   abiDecoderGuard abiDecoderGuards abiDecoderDynamic abiDecoderBytesBound abiDecoderOffset
   abiDecoderReservation abiDecoderContract abiEncoder compileEnv emitHelper emitHelperProps
   exprLoweringProps valueEncoding vyperABI contractABI venomExecSemantics venomState venomInst

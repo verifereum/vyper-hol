@@ -12,43 +12,6 @@ Ancestors
 
 (* Compose actual static-child address setup with the recursive core contract. *)
 
-Theorem abi_encoder_static_child_context:
-  compile_abi_encode_child dst src ei F offset dyn_ptr st = (out,end_st) /\
-  fn_has_code st end_st func ==>
-  ?head prepared. emit_op ADD [dst;Lit (n2w offset)] st = (head,prepared) /\
-    compile_abi_encode_to_buf head src ei prepared = (out,end_st) /\
-    fn_has_code st prepared func /\ fn_has_code prepared end_st func /\
-    prepared.cs_next_var = st.cs_next_var+1 /\ prepared.cs_next_id = st.cs_next_id+1 /\
-    prepared.cs_blocks = st.cs_blocks /\
-    prepared.cs_next_var <= end_st.cs_next_var /\ prepared.cs_next_id <= end_st.cs_next_id /\
-    abi_decoder_operand_live prepared.cs_next_var head
-Proof
-  MATCH_ACCEPT_TAC abiEncoderChildContextTheory.abi_encoder_static_child_structural_context
-QED
-
-Theorem abi_encoder_static_child_reach:
-  abi_encoder_correct ei /\ compile_abi_encode_child dst src ei F offset dyn_ptr st = (out,end_st) /\
-  fn_has_code st end_st func /\
-  (st.cs_blocks = end_st.cs_blocks \/
-    !bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
-      phi_prefix_length bb.bb_instructions = 0) /\
-  abi_encoder_buffer_pre ei at av st src dst sb source_cap d output_size b cap initial /\
-  offset+LENGTH (enc at av) <= output_size /\
-  abi_decoder_budget first last b cap initial /\ first <= st.cs_next_id /\ end_st.cs_next_id <= last /\
-  end_st.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
-  ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
-  initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
-  ?t. mem_bytes_at (d+offset) (LENGTH (enc at av)) t.vs_memory = enc at av /\
-    eval_operand out t = SOME (n2w (LENGTH (enc at av))) /\
-    abi_decode_footprint_frame [(d+offset,LENGTH (enc at av));(b,cap)] initial t /\
-    abi_decoder_effect first last st.cs_next_id end_st.cs_next_id st.cs_next_var
-      limit_st d output_size b cap initial t /\
-    t.vs_current_bb = end_st.cs_current_bb /\ t.vs_inst_idx = LENGTH end_st.cs_current_insts /\
-    ~t.vs_halted /\ abi_decode_sim ctx func initial t
-Proof
-  MATCH_ACCEPT_TAC abiEncoderMemberSourceAdapterTheory.abi_encoder_static_child_spine_reach
-QED
-
 (* ===== Info ===== *)
 
 (* Execute the real static-array child helper within a larger output buffer. *)

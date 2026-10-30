@@ -2,8 +2,8 @@
    scratch reservation. This boundary is used inside repeated array bodies. *)
 Theory abiDecoderPrimitiveMemory
 Ancestors
-  abiDecoderReentryPrimitive abiDecoderReentryPrefix abiDecoderReentrySequence
-  abiDecoderReentry abiDecoderVarExtend abiDecoderPrimitiveClamp abiDecoderWordTyped
+  abiDecoderReentryPointer abiDecoderReentryPointer abiDecoderReentryPointer
+  abiDecoderReentry abiDecoderVarExtend abiDecoderPrimitiveCaller abiDecoderWordTyped
   abiDecoderClampedWord abiDecoderTypedCompose abiDecoderCoherence abiDecoderTypedContract
   abiDecoderContract exprLoweringProps emitHelperProps compileEnv valueEncoding
   abiEncoder abiDecoderClamp emitHelper venomState words arithmetic

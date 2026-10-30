@@ -3,7 +3,7 @@
 Theory abiDecoderPreObservations
 Ancestors
   abiDecoderCoherence abiDecoderTypedContract abiDecoderReentry
-  abiDecoderPrimitiveArrayReentryInit abiDecoderContract
+  abiDecoderPrimitiveArrayReentry abiDecoderContract
   compileEnv valueEncoding vyperABI contractABI venomState words list
 
 Theorem abi_decoder_pre_observations:

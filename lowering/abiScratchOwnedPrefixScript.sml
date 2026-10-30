@@ -4,7 +4,7 @@
 Theory abiScratchOwnedPrefix
 Ancestors
   abiScratchPrefixReach abiScratchFootprint abiEncoderComplexPrefix abiEncoderMembersDefs
-  abiEncoderArrayCursor abiDecoderFootprint abiDecoderAllocation abiDecoderFrame
+  abiEncoderArrayHeaderMemory abiDecoderFootprint abiDecoderAllocation abiDecoderFrame
   abiDecoderContract abiDecoderReentry abiDecoderLoop compileEnv venomState finite_map pred_set
   words list arithmetic
 

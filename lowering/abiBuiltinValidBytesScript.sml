@@ -1,9 +1,9 @@
 Theory abiBuiltinValidBytes
 Ancestors
-  abiDecoderValidBytes abiDecoderBytes abiBuiltinDecodeSetup abiBuiltinSetupExecute
+  abiDecoderValidBytes abiDecoderBytes abiBuiltinDecodeSetup abiBuiltinSetupReach
   abiBuiltinAllocation abiDecoderReentry abiDecoderContract valueEncoding valueEncodingProps
   emitHelperProps compileEnv venomState contractABI finite_map words list arithmetic
-  abiBuiltinDecodeCode abiDecoderBytesTyped abiDecoderGuards abiDecoderReentrySequence
+  abiBuiltinDecodeCorrect abiDecoderBytesTyped abiDecoderGuards abiDecoderReentryPointer
   abiDecoderTypedCompose abiEncoder builtinAbi exprLoweringProps venomExecSemantics rich_list
   abiDecoderLoop abiEncoderSequence fragExec instIdxIndep abiValidBytesSource vyperABI
   vyperValue

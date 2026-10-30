@@ -2,7 +2,7 @@
    values. This includes all static ABI types and static-element dynamic arrays. *)
 Theory abiDecoderValidPrefix
 Ancestors
-  abiDecoderValidContract abiDecoderCoherentCorrect abiDecoderArrayBody abiDecoderAllocation
+  abiDecoderValidContract abiDecoderCoherentCorrect abiDecoderArraySetupCode abiDecoderAllocation
   abiDecoderReentry abiDecoderCoherence abiDecoderTypedContract abiDecoderContract
   vyperABIValid abiValidStatic abiDecodeRanges compileEnv valueEncoding vyperABI contractABI venomState words
   list arithmetic

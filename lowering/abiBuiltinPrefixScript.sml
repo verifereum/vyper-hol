@@ -4,7 +4,7 @@
    Helper: lift one register-writing instruction under enclosing freshness. *)
 Theory abiBuiltinPrefix
 Ancestors
-  abiDecoderReentryAllocation abiDecoderReentryAddress abiDecoderReentry abiDecoderDynamicLoopSetup
+  abiDecoderReentryAddress abiDecoderReentryAddress abiDecoderReentry abiDecoderDynamicLoopSetup
   abiDecoderGuards abiDecoderContract emitHelperProps exprLoweringProps
   compileEnv emitHelper venomExecSemantics venomExecProofs venomState venomInst
   words arithmetic finite_map list

@@ -2,7 +2,7 @@
    This prefix does not depend on the decoded type or canonicality. *)
 Theory abiBuiltinBytesSetup
 Ancestors
-  abiBuiltinValidBytes abiBuiltinDecodeSetup abiBuiltinSetupExecute abiBuiltinAllocation
+  abiBuiltinValidBytes abiBuiltinDecodeSetup abiBuiltinSetupReach abiBuiltinAllocation
   abiDecoderBytes abiDecoderContract abiDecoderReentry valueEncoding valueEncodingProps
   emitHelperProps compileEnv venomState words arithmetic
 

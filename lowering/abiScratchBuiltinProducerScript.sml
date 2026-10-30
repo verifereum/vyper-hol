@@ -4,8 +4,8 @@
    execution, with no assumed final layout or numeric-arena separation. *)
 Theory abiScratchBuiltinProducer
 Ancestors
-  abiScratchBuiltinCaller abiScratchBuiltinRun abiScratchBuiltinPre abiScratchBuiltinEffect
-  abiScratchFootprint abiBuiltinEncodeProducer abiBuiltinEncodeReusedInput abiBuiltinEncodeRun
+  abiScratchBuiltinSource abiScratchBuiltinSource abiScratchBuiltinPre abiScratchBuiltinEffect
+  abiScratchFootprint abiBuiltinEncodeReusedInput abiBuiltinEncodeReusedInput abiBuiltinEncodeRun
   abiBuiltinAllocation abiTupleEncodeOwnedBytes abiTupleEncodeInput abiEncoderInput
   abiDecoderAllocation abiDecoderReentry abiDecoderContract abiDecoderLoop compileEnv builtinAbi
   exprLowering valueEncoding vyperABI contractABI venomMemDefs venomState venomExecSemantics

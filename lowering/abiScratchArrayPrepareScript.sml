@@ -4,7 +4,7 @@
 Theory abiScratchArrayPrepare
 Ancestors
   abiScratchInput abiScratchEncoderContract abiScratchAddress abiScratchFootprint
-  abiEncoderArrayAddress abiEncoderArrayLayout abiEncoderArrayBounds abiEncoderInput
+  abiEncoderArrayBodyCode abiEncoderArrayBodyCode abiEncoderArrayBodyCode abiEncoderInput
   abiDecoderDynamicLoopSetup abiDecoderAllocation abiDecoderFootprint abiDecoderFrame
   abiDecoderReentry abiDecoderLoop abiDecoderContract compileEnv valueEncoding contractABI
   venomState words list arithmetic

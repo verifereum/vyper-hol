@@ -2,7 +2,7 @@
 Theory abiDecoderWordTyped
 Ancestors
   abiDecoderWordCopy abiDecoderCoherence abiDecoderLayout abiDecoderTypedContract
-  abiStaticPrimitiveProps exprLowering compileEnv valueEncoding vyperABI vyperTyping
+  abiStaticAggregateProps exprLowering compileEnv valueEncoding vyperABI vyperTyping
   abiEncoder contractABI abiDecoderContract abiDecodeRanges abiDecoderBytesTyped fragExec
 
 Theorem abi_decoder_base_primitive_shape[local]:

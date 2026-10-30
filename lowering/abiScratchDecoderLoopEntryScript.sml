@@ -1,7 +1,7 @@
 (* Enter the actual finite source-valid loop from the initializer's runtime PC. *)
 Theory abiScratchDecoderLoopEntry
 Ancestors
-  abiScratchDecoderContract abiScratchEncoderContract abiScratchArrayLoopEntry
+  abiScratchDecoderContract abiScratchEncoderContract abiScratchArrayLoopRun
   abiScratchDecoderDynLoop abiScratchDecoderLoopContext abiScratchDecoderLoopInvariant
   abiDecoderValidArrayMemory abiDecoderRecursiveLoopEntry abiDecoderRecursiveLoopLayout
   abiDecoderPrimitiveLoopEntry

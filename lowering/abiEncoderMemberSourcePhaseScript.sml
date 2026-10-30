@@ -2,7 +2,7 @@
 Theory abiEncoderMemberSourcePhase
 Ancestors
   abiEncoderChildSourcePhase abiEncoderMemberPhaseRaw abiEncoderMembersBoundary
-  abiEncoderMembersContract abiEncoderMembersDefs abiEncoderMembersSource
+  abiEncoderMembersContract abiEncoderMembersDefs abiEncoderMembersStep
   abiEncoderTuple abiEncoderChildInputs abiEncoderInput abiCanonicalWindows
   abiDecoderAllocation abiDecoderFrame abiDecoderDynamicLoopSetup
   abiDecoderArrayInitExec abiDecoderReentry abiDecoderIndexInit abiDecoderProtectedScratch
@@ -56,18 +56,6 @@ Proof
   asm_simp_tac bool_ss [abi_encoder_members_inv_def, abi_decoder_address_frame_def] >> decide_tac
 QED
 
-Theorem abi_encoder_member_static_place_raw_transport:
-  emit_op ADD [dst;Lit (n2w offset)] st = (head,prepared) /\
-  abi_encoder_buffer_pre ei at av st src dst sb source_cap d output_size b cap initial /\
-  offset+LENGTH (enc at av) <= output_size /\
-  prepared.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
-  abi_encoder_member_phase_raw st prepared initial ready ==>
-  abi_encoder_pre ei at av prepared src head sb source_cap (d+offset) b cap ready /\
-  fresh_vars_wrt limit_st ready /\ abi_decoder_address_frame st.cs_next_var initial ready
-Proof
-  MATCH_ACCEPT_TAC abiEncoderChildSourcePhaseTheory.abi_encoder_child_static_place_raw_transport
-QED
-
 Theorem abi_encoder_complex_finish_raw_transport:
   abi_encoder_members_inv [] [] [] tys avs T dyn_ptr site slot first last lo st limit_st
     src dst sb so ho d hl output_size b cap encoded /\
@@ -97,7 +85,7 @@ Proof
   gvs[abi_decoder_address_frame_def, w2n_n2w]
 QED
 
-Theorem abi_encoder_members_prepare_raw_compat:
+Theorem abi_encoder_members_prepare:
   emit_op ADD [src;Lit (n2w so)] st = (elem_src,prepared) /\ fn_has_code st prepared func /\
   abi_encoder_members_inv ((ei,abi_sz,mem_sz,dyn)::infos) (ty::tys) (av::avs)
     pre pvs active dyn_ptr site slot first last lo st limit_st

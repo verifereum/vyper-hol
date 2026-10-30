@@ -2,7 +2,7 @@
 Theory abiDecoderArrayBackedge
 Ancestors
   abiDecoderArrayInvariant abiDecoderArrayPrefix abiDecoderFrameCompose abiDecoderFrame
-  abiDecoderContract abiDecoderReentry abiDecoderReentryAllocation abiDecoderExecution
+  abiDecoderContract abiDecoderReentry abiDecoderReentryAddress abiDecoderExecution
   valueEncodingProps valueEncoding venomMemProofs venomState venomInst
   exprLoweringProps compileEnv vyperTyping words arithmetic list rich_list
 Libs

@@ -1,7 +1,7 @@
 (* A dynamic array keeps its count plus the processed heads and tails. *)
 Theory abiEncoderArrayPrefix
 Ancestors
-  abiEncoderArrayLayout abiEncoderTuple abiEncoderMemory abiCanonicalWindows abiCanonicalArrays
+  abiEncoderArrayBodyCode abiEncoderTuple abiEncoderMemory abiCanonicalWindows abiCanonicalHeadSize
   abiDecodeRanges abiDecoderFrame abiDecoderContract valueEncodingProps valueEncoding
   contractABI venomState words list rich_list arithmetic
 

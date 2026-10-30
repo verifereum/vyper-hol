@@ -1,7 +1,7 @@
 (* Pure actual-source data premises for the emitted recursive array loop. *)
 Theory abiDecoderValidLoopContext
 Ancestors
-  abiDecoderValidArrayValues abiDecoderRecursiveArrayFacts abiDecoderRecursiveLoopContext
+  abiDecoderValidArraySetupInputs abiDecoderRecursiveArray abiDecoderRecursiveLoopContext
   abiDecoderCoherence abiDecoderTypedContract abiDecoderEffect abiDecoderProtectedScratch
   abiDecoderAllocation abiDecoderFrame abiDecoderContract abiDecoderLoop abiDecoderReentry
   abiDecodeRanges compileEnv valueEncoding vyperABI vyperValue contractABI venomState

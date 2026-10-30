@@ -1,7 +1,7 @@
 (* Dynamic-array memory invariant over the actual source bytes. *)
 Theory abiDecoderValidArrayMemory
 Ancestors
-  abiDecoderArrayInvariant abiValidMember abiCanonicalLoad abiCanonicalArrayLoad abiDecodeRanges
+  abiDecoderArrayInvariant abiValidMember abiCanonicalHeadSize abiCanonicalHeadSize abiDecodeRanges
   abiDecoderContract valueEncodingProps valueEncoding vyperABI vyperValue venomState words list
   rich_list arithmetic
 

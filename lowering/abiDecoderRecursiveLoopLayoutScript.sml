@@ -2,7 +2,7 @@
 Theory abiDecoderRecursiveLoopLayout
 Ancestors
   abiDecoderLoopCode abiDecoderArraySetupCode abiDecoderRecursiveLoopContext
-  abiDecoderArrayBody abiDecoderArraySetupInputs abiDecoderAppend abiDecoderPhi
+  abiDecoderArraySetupCode abiDecoderArraySetupInputs abiDecoderAppend abiDecoderPhi
   abiDecoderCode abiDecoderCounters abiDecoderLoopEmit abiDecoderLoopSetup
   abiDecoderExecution abiDecoderContract fragExec compileEnv emitHelper
   emitHelperProps venomInst venomExecSemantics words list rich_list arithmetic

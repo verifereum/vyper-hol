@@ -2,7 +2,7 @@
    Constructor correctness is proved separately; this definition is not a proof. *)
 Theory abiEncoderCorrect
 Ancestors
-  abiEncoderInput abiDecoderCorrectWord abiDecoderEffect abiDecoderAllocation abiDecoderLoop
+  abiEncoderInput abiDecoderCorrectLeaves abiDecoderEffect abiDecoderAllocation abiDecoderLoop
   abiDecoderReentry abiDecoderContract abiEncoder compileEnv valueEncoding fragExec
   venomState venomExecSemantics words list arithmetic
 

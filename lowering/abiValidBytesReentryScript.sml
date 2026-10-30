@@ -2,7 +2,7 @@
 Theory abiValidBytesReentry
 Ancestors
   abiDecoderValidBytes abiDecoderBytesFrame abiDecoderBytes abiDecoderString
-  abiDecoderReentryPrefix abiDecoderReentrySequence abiDecoderReentry abiDecoderVarExtend
+  abiDecoderReentryPointer abiDecoderReentryPointer abiDecoderReentry abiDecoderVarExtend
   abiDecoderReservation abiDecoderContract valueEncoding compileEnv
   venomExecSemantics venomState words list
 

@@ -2,7 +2,7 @@
 Theory abiEncoderMemberSpine
 Ancestors
   abiEncoderMemberPhaseRaw abiEncoderChildCode abiEncoderMemberCode abiEncoder
-  abiDecoderMemberPhases
+  abiDecoderMemberCons
   compileEnv emitHelper venomInst venomState words list
 
 Definition abi_encoder_spine_call_def:
@@ -408,4 +408,15 @@ Proof
   first_x_assum (drule_all_then strip_assume_tac) >>
   qexists_tac `t` >> asm_simp_tac bool_ss [abi_encoder_member_spine_def] >>
   qexistsl_tac [`elem_src`, `p`, `len`, `ce`, `ready`, `encoded`] >> asm_rewrite_tac []
+QED
+
+Theorem abi_encoder_spine_cons_layout_bound:
+  abi_encoder_spine_cons_layout func limit_st hi args entry position terminal child /\
+  hi <= last ==>
+  abi_encoder_spine_cons_layout func limit_st last args entry position terminal child
+Proof
+  PairCases_on `args` >> PairCases_on `entry` >> PairCases_on `position` >>
+  PairCases_on `terminal` >> PairCases_on `child` >>
+  simp_tac bool_ss [abi_encoder_spine_cons_layout_def, abi_encoder_spine_code_def] >>
+  rpt strip_tac >> asm_rewrite_tac [] >> decide_tac
 QED

@@ -1,7 +1,7 @@
 (* Memory observations carried through the actual finite array decoder loop. *)
 Theory abiDecoderArrayInvariant
 Ancestors
-  abiDecoderCoherence abiDecoderTypedContract abiDecoderContract abiCanonicalArrayLoad
+  abiDecoderCoherence abiDecoderTypedContract abiDecoderContract abiCanonicalHeadSize
   abiDecoderArrayPrefix abiDecoderFrameCompose valueEncodingProps valueEncoding
   vyperABI vyperABIRoundtrip vyperTyping vyperValue venomState words list rich_list arithmetic
 

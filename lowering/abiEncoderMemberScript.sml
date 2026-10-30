@@ -1,5 +1,6 @@
 Theory abiEncoderMember
 Ancestors
+  abiEncoderMemberSourceAdapter
   abiEncoderBufferFrame abiEncoderAddressReach abiEncoderChildInputs abiEncoderInput
   abiDecoderDynamicLoopSetup abiDecoderReentry abiDecoderContract abiDecoderLoop fragExec
   emitHelperProps compileEnv valueEncoding venomState words list arithmetic abiEncoderStatic
@@ -76,7 +77,7 @@ Theorem abi_encoder_static_member_step:
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   `heads+LENGTH (enc ty av) <= output_size` by decide_tac >>
-  mp_tac (Q.INST [`at` |-> `ty:abi_type`, `offset` |-> `heads:num`] abi_encoder_static_child_reach) >>
+  mp_tac (Q.INST [`at` |-> `ty:abi_type`, `offset` |-> `heads:num`] abi_encoder_static_child_spine_reach) >>
   impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
   rename1 `abi_decode_sim ctx func initial actual` >>
   qpat_assum `abi_encoder_buffer_pre _ _ _ _ _ _ _ _ _ _ _ _ _`
@@ -114,7 +115,7 @@ Theorem abi_encoder_dynamic_member_step:
     ~t.vs_halted /\ abi_decode_sim ctx func initial t
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >> `heads+32 <= off` by decide_tac >>
-  mp_tac (Q.INST [`at` |-> `ty:abi_type`, `head_offset` |-> `heads:num`] abi_encoder_dynamic_child_reach) >>
+  mp_tac (Q.INST [`at` |-> `ty:abi_type`, `head_offset` |-> `heads:num`] abi_encoder_dynamic_child_spine_reach) >>
   impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
   rename1 `abi_decode_sim ctx func initial actual` >>
   qpat_assum `abi_encoder_buffer_pre _ _ _ _ _ _ _ _ _ _ _ _ _`

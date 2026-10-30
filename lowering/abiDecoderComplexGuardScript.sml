@@ -3,7 +3,7 @@
    Helpers: code certificate, repeated sequence and pointed fragment. *)
 Theory abiDecoderComplexGuard
 Ancestors
-  abiDecoderComplexHead abiDecoderGuard abiDecoderReentryPrefix abiDecoderReentry
+  abiDecoderComplexHead abiDecoderGuard abiDecoderReentryPointer abiDecoderReentry
   abiDecoderVarSequence abiDecoderVarExtend abiDecoderDynamicLoopSetup abiDecoderReservation
   abiDecoderContract abiDecoderLoop fragExec instIdxIndep abiEncoder compileEnv emitHelper
   emitHelperProps exprLoweringProps venomState venomExecSemantics venomInst words list rich_list

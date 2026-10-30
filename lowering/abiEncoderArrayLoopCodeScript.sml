@@ -2,8 +2,8 @@
    TOP-LEVEL: abi_encoder_array_loop_code and its two actual compiler introductions. *)
 Theory abiEncoderArrayLoopCode
 Ancestors
-  abiEncoderArrayLoopContext abiEncoderArrayLoopLayout abiEncoderArrayScalarCode abiEncoderArrayHeader
-  abiEncoderArrayBodyMemory abiEncoderArrayBodyCode abiEncoderArrayDynamicCode abiEncoderArrayPhases
+  abiEncoderArrayLoopContext abiEncoderArrayLoopLayout abiEncoderArrayContext abiEncoderArrayHeader
+  abiEncoderArrayRound abiEncoderArrayBodyCode abiEncoderArrayDynamicMemory abiEncoderArrayPhases
   abiEncoderArrayCode abiEncoderAdmissible abiDecoderIndexInit abiDecoderLoopEmit abiDecoderExecution
   abiDecoderContract fragExec compileEnv emitHelper venomInst venomExecSemantics words list arithmetic
 

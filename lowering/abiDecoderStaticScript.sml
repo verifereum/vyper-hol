@@ -5,7 +5,7 @@ Ancestors
   abiDecoderReservation abiDecoderContract exprLowering compileEnv emitHelperProps valueEncoding
   vyperABI contractABI venomExecSemantics venomState venomInst words list
   abiDecoderSingletonFragment abiDecoderPointed abiDecoderAppend fragExec exprLoweringProps
-  emitHelper instIdxIndep combin abiDecoderPrimitive abiDecoderClampedWord abiDecoderBytesTyped
+  emitHelper instIdxIndep combin abiDecoderPrimitiveCaller abiDecoderClampedWord abiDecoderBytesTyped
   abiDecoderGuards abiEncoder rich_list
 
 (* ===== Singleton Typed ===== *)

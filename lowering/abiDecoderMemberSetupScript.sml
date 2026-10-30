@@ -3,7 +3,7 @@
    Helpers: setup definition and its counter/operand facts. *)
 Theory abiDecoderMemberSetup
 Ancestors
-  abiDecoderReentryMember abiDecoderReentryAddress abiDecoderDynamicLoopSetup
+  abiDecoderReentryPointer abiDecoderReentryAddress abiDecoderDynamicLoopSetup
   abiDecoderReentry abiDecoderGuards abiDecoderContract abiDecoderDynamic
   abiEncoder emitHelperProps exprLoweringProps compileEnv emitHelper
   venomExecSemantics venomState venomInst words list rich_list arithmetic

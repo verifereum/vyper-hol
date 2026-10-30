@@ -1,8 +1,8 @@
 (* A dynamic-element body and actual backedge advance both index and tail frontiers. *)
 Theory abiEncoderArrayDynamicRound
 Ancestors
-  abiEncoderArrayDynamicMemory abiEncoderArrayBodyMemory abiEncoderArrayDynamicCode
-  abiEncoderArrayBackedge abiEncoderArrayMemory abiEncoderArrayCursor abiEncoderMembersDefs
+  abiEncoderArrayDynamicMemory abiEncoderArrayRound abiEncoderArrayDynamicMemory
+  abiEncoderArrayRound abiEncoderArrayMemory abiEncoderArrayHeaderMemory abiEncoderMembersDefs
   abiEncoderCorrect abiDecoderEffect abiDecoderContract abiDecoderLoop abiDecoderExecution
   abiDecoderReentry fragExec compileEnv valueEncoding contractABI venomState words list
   arithmetic

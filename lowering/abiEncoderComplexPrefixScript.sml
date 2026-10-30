@@ -1,6 +1,6 @@
 Theory abiEncoderComplexPrefix
 Ancestors
-  abiEncoderComplexCode abiDecoderIndexInit abiDecoderReentryAllocation abiDecoderAllocation
+  abiEncoderComplexCode abiDecoderIndexInit abiDecoderReentryAddress abiDecoderAllocation
   abiDecoderReentry abiDecoderArrayHeader abiDecoderGuards abiDecoderContract abiDecoderFrame
   emitHelperProps exprLoweringProps compileEnv emitHelper context venomExecSemantics
   venomMemProps venomState venomInst finite_map words list rich_list arithmetic abiDecoderLoop

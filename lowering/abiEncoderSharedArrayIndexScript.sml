@@ -1,7 +1,7 @@
 (* Fixed-origin rich ledger for both generated array loops. No execution recursion. *)
 Theory abiEncoderSharedArrayIndex
 Ancestors
-  abiEncoderSharedArrayInput abiEncoderSharedContract abiEncoderRegisteredEffect abiEncoderExtendSim
+  abiEncoderSharedArrayInitFrame abiEncoderSharedContract abiEncoderRegisteredEffect abiEncoderExtendSim
   abiEncoderArrayPrefix abiEncoderMembersDefs abiScratchEffect abiScratchEncoderContract
   abiScratchDecoderLoopControl
   abiDecoderDynamicLoopSetup abiEncoderOpenInput
