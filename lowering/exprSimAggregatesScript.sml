@@ -67,6 +67,28 @@ Ancestors
   exprSimAggregateSource exprSimAggregateLoops exprSimAggregateChildren
   exprLoweringProps
 
+(* The allocation must be a generated ALLOCA, not merely a tracked map entry. *)
+Theorem aggregate_alloca_immutable_sep[local]:
+  stmt_state_rel func cenv cx es t /\
+  MEM inst (fn_insts func) /\ inst.inst_opcode = venomInst$ALLOCA /\
+  FLOOKUP t.vs_allocas inst.inst_id = SOME (b,sz) ==>
+  cenv.ce_is_ctor ==>
+  !name itv iv io.
+    FLOOKUP cenv.ce_vars (module_var_key (cenv.ce_module,name)) =
+      SOME (ImmutableLoc io) /\
+    FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
+      | SOME imms => get_source_immutables cenv.ce_module imms) name =
+      SOME (itv,iv) ==>
+    regions_disjoint io (type_memory_size itv) b sz
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `stmt_state_rel _ _ _ _ _` mp_tac >>
+  simp[stmt_state_rel_def, immutable_alloca_sep_def] >> strip_tac >>
+  first_x_assum drule_all >> strip_tac >>
+  qpat_x_assum `!inst b sz. MEM inst _ /\ _ ==> regions_disjoint _ _ b sz` irule >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+
 Theorem compile_struct_lit_sim:
   !cenv ann nsid fields.
     expr_sim_below cenv (expr_size (StructLit ann nsid fields)) ==>
@@ -97,6 +119,7 @@ Proof
     (gvs[expr_sim_pre_def, alloc_limits_expr_def, type_memory_bytes_def] >>
      simp[wordsTheory.dimword_def] >> decide_tac) >>
   qmatch_goalsub_abbrev_tac `expr_exit result` >>
+  drule_all buffer_alloc_code >> strip_tac >>
   drule_all buffer_alloc_frag >>
   disch_then (qspecl_then [`s0`,`es`,`cx`,`ctx`,`expr_exit result`] strip_assume_tac) >>
   qpat_x_assum `frag_exec _ sa sm _ _ _` (mp_tac o MATCH_MP frag_exec_then) >>
@@ -111,7 +134,14 @@ Proof
   disch_then (drule_at (Pat `lookup_var _ _ = _`)) >>
   disch_then (drule_at (Pat `MEM _ (fn_insts _)`)) >>
   simp[] >>
-  disch_then (qspec_then `ctx` strip_assume_tac) >> gvs[] >>
+  disch_then (qspec_then `ctx` mp_tac) >>
+  (impl_tac >- (rpt strip_tac >>
+    irule aggregate_alloca_immutable_sep >>
+    goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _`)) >>
+    qpat_x_assum `MEM inst (fn_insts func)` kall_tac >>
+    goal_assum (drule_at (Pat `MEM _ (fn_insts _)`)) >>
+    simp[venomInstTheory.mk_inst_def] >>
+    goal_assum (drule_at Any) >> simp[])) >> strip_tac >> gvs[] >>
   drule frag_exec_weaken >> disch_then irule >>
   simp[] >> conj_tac
   >- (rpt strip_tac >> gvs[Abbr `result`]) >>
@@ -176,6 +206,7 @@ Resume compile_make_array_sim[tuple]:
      simp[wordsTheory.dimword_def] >> decide_tac) >>
   qmatch_goalsub_abbrev_tac `expr_exit result` >>
   `type_memory_size_list tvs < dimword (:256)` by metis_tac[] >>
+  drule_all buffer_alloc_code >> strip_tac >>
   drule_all buffer_alloc_frag >>
   disch_then (qspecl_then [`s0`,`es`,`cx`,`ctx`,`expr_exit result`] strip_assume_tac) >>
   qpat_x_assum `frag_exec _ sa sm _ _ _` (mp_tac o MATCH_MP frag_exec_then) >>
@@ -187,7 +218,14 @@ Resume compile_make_array_sim[tuple]:
   disch_then drule >> disch_then drule >>
   disch_then (drule_at (Pat `lookup_var _ _ = _`)) >>
   disch_then (drule_at (Pat `MEM _ (fn_insts _)`)) >> simp[] >>
-  disch_then (qspecl_then [`env`,`ctx`] mp_tac) >> simp[] >> strip_tac >> gvs[] >>
+  disch_then (qspecl_then [`env`,`ctx`] mp_tac) >> simp[] >>
+  (impl_tac >- (rpt strip_tac >>
+    irule aggregate_alloca_immutable_sep >>
+    goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _`)) >>
+    qpat_x_assum `MEM inst (fn_insts func)` kall_tac >>
+    goal_assum (drule_at (Pat `MEM _ (fn_insts _)`)) >>
+    simp[venomInstTheory.mk_inst_def] >>
+    goal_assum (drule_at Any) >> simp[])) >> strip_tac >> gvs[] >>
   drule frag_exec_weaken >> disch_then irule >>
   simp[] >> conj_tac
   >- (rpt strip_tac >> gvs[Abbr `result`]) >>
@@ -238,6 +276,7 @@ Resume compile_make_array_sim[array]:
     (gvs[expr_sim_pre_def, alloc_limits_expr_def] >>
      simp[wordsTheory.dimword_def] >> decide_tac) >>
   qmatch_goalsub_abbrev_tac `expr_exit result` >>
+  drule_all buffer_alloc_code >> strip_tac >>
   drule_all buffer_alloc_frag >>
   disch_then (qspecl_then [`s0`,`es`,`cx`,`ctx`,`expr_exit result`] strip_assume_tac) >>
   qpat_x_assum `frag_exec _ sa sm _ _ _` (mp_tac o MATCH_MP frag_exec_then) >>
@@ -251,7 +290,17 @@ Resume compile_make_array_sim[array]:
   disch_then (drule_at (Pat `MEM _ (fn_insts _)`)) >>
   simp[wordsTheory.dimword_def] >>
   disch_then (qspecl_then [`env`,`ctx`] mp_tac) >> simp[] >>
-  strip_tac >> gvs[] >>
+  (impl_tac >- (rpt strip_tac >>
+    `regions_disjoint io (type_memory_size itv) b
+       (type_memory_bytes cenv (ArrayT x bnd))` by
+      (irule aggregate_alloca_immutable_sep >>
+       goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _`)) >>
+       qpat_x_assum `MEM inst (fn_insts func)` kall_tac >>
+       goal_assum (drule_at (Pat `MEM _ (fn_insts _)`)) >>
+       simp[venomInstTheory.mk_inst_def] >>
+       goal_assum (drule_at Any) >> simp[]) >>
+    gvs[regions_disjoint_def] >>
+    qpat_x_assum `_ <= type_memory_bytes _ _` mp_tac >> decide_tac)) >> strip_tac >> gvs[] >>
   drule frag_exec_weaken >> disch_then irule >>
   simp[] >> conj_tac
   >- (rpt strip_tac >> gvs[Abbr `result`]) >>
