@@ -1,0 +1,65 @@
+(* Check propagated admission tags and open hypotheses at the public contracts.
+   Loaded theorem tags do not retain upstream axiom dependencies. *)
+Theory abiEncoderReuseAudit
+Ancestors
+  abiEncoderAggregateProbe abiEncoderEffectProbe
+  abiEncoderInterfaceProbe abiEncoderExactWriteProbe
+  abiEncoderLabelAliasProbe abiEncoderLeafSafety
+  abiEncoderPrefixSafety abiEncoderFragmentBridge
+  abiScratchEncoderRecursive abiEncoderCorrectRecursive
+  abiEncoderSourceInvoke abiEncoderVarRestore abiEncoderFragmentFrame
+  abiEncoderFragment loweringHalt
+  abiEncoderOpenInput abiEncoderRegisteredEffect abiEncoderRegisteredFrame
+  abiEncoderStaticRepresentative
+  abiEncoderOpenInputFrame abiEncoderResourceAdapter
+  abiEncoderExitPhi abiEncoderEntry abiEncoderExtendSim abiEncoderExtendControl
+  abiEncoderSharedContract abiEncoderPrimitiveEffect
+  abiEncoderCompositionCompat
+  abiEncoderSharedLeaves abiEncoderEnvelopeAdapter
+  abiEncoderSourceWindow abiEncoderSourceTransport
+  abiEncoderSourceAggregate abiEncoderSourcePrimitive abiEncoderSourceProducer
+  abiEncoderMemberPhaseRaw abiEncoderMemberSourcePhase abiEncoderMemberPhaseExec
+  abiEncoderMemberSpine abiEncoderMemberPhaseEffect abiEncoderMemberSpineCompat
+  abiEncoderChildContext abiEncoderChildSourcePhase abiEncoderMemberSourceAdapter
+  abiScratchMemberAdapter abiEncoderStatic abiEncoderDynamic abiScratchStatic
+  abiEncoderMembersPrepare
+  abiEncoderMemberSourceContract abiEncoderMemberSourceInterpret abiScratchDynamicChild
+  abiEncoderMembersEndpoint abiEncoderSourceMembersIndex
+  abiEncoderSourceMembersEntry abiEncoderSourceMembersInterpret
+  abiEncoderMembersCorrect abiScratchMemberContract abiScratchMemberInterpret
+  abiScratchMembersEndpoint abiScratchMembersEntry abiScratchMembersIndex
+  abiScratchMembersInterpret abiScratchMembersCorrect abiEncoderSharedMemberContract
+  abiEncoderOpenPrefix abiEncoderZeroFrame abiEncoderSharedMembersInput
+  abiEncoderSharedMembersIndex abiEncoderSharedMembersPrepare
+  abiEncoderSharedMembersRequest abiEncoderSharedMembersOutput abiEncoderSharedMembersEndpoint
+  abiEncoderSharedMembersInterpret abiEncoderScratchTransport abiEncoderSharedSuffix
+  abiEncoderSharedMembersCorrect abiEncoderSharedArrayInput abiEncoderSharedArrayIndex
+  abiEncoderSharedArrayFinish abiEncoderSharedArrayHeader
+  abiEncoderSharedArrayBackedge abiEncoderSharedArrayCountPrepare abiEncoderSharedArrayCount
+  abiEncoderSharedArrayEntry abiEncoderSharedArrayInit abiEncoderSharedArrayParent
+  abiEncoderSharedArrayPrepare abiEncoderSharedInputEffect
+  abiEncoderSharedArrayExit abiEncoderSharedArrayIndexInit abiEncoderSharedArrayInitFrame
+  abiEncoderSharedArrayTailInit
+  abiEncoderArrayDynamicTail abiEncoderArraySourceSpine abiEncoderArraySpine
+  abiScratchArrayDynamicTail abiScratchArraySpine
+  abiEncoderSharedArrayAddress abiEncoderSharedArrayBody abiEncoderSharedArrayRound abiEncoderSharedArraySpine abiEncoderSharedArrayStep abiEncoderSharedArrayTail
+  abiEncoderSharedArrayBody abiEncoderSharedArrayOwner abiEncoderSharedComplex abiEncoderSharedOwner
+
+  abiEncoderSharedArrayComplete abiEncoderSharedArrayDynamicInit abiEncoderSharedArrayDynamicLoop
+  abiEncoderSharedArrayFinishProtected abiEncoderSharedArrayFinishRun abiEncoderSharedArrayLoop
+  abiEncoderSharedArrayRun abiEncoderSharedArraySelectedLoop abiEncoderSharedArrayStaticLoop
+  abiEncoderSharedArrayOuter abiEncoderSharedArray abiEncoderSharedRecursive
+
+fun check_export (name, th) =
+  if List.all (fn oracle => oracle = "DISK_THM") (#1 (Tag.dest_tag (Thm.tag th)))
+     andalso null (Thm.hyp th) then ()
+  else raise Fail ("ABI encoder export has an admission or open hypothesis: " ^ name);
+
+val _ = List.app check_export
+  [("abi_encoder_correct_admissible", abi_encoder_correct_admissible),
+   ("abi_encoder_correct_translation", abi_encoder_correct_translation),
+   ("abi_scratch_encoder_admissible", abi_scratch_encoder_admissible),
+   ("abi_scratch_encoder_translation", abi_scratch_encoder_translation),
+   ("compile_abi_encode_to_buf_frag", compile_abi_encode_to_buf_frag),
+   ("compile_abi_encode_return_frag", compile_abi_encode_return_frag),
+   ("compile_external_return_abi_frag", compile_external_return_abi_frag)];

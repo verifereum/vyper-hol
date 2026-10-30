@@ -15,8 +15,8 @@
  *   compile_builtin_len_correct    — compiled len outputs stored length via ptr_load
  *   compile_raw_call_correct       — compiled raw_call: OK or revert [CHEATED]
  *   compile_raw_create_correct     — compiled raw_create: OK or revert [CHEATED]
- *   lower_abi_encode_correct       — compiled abi.encode produces buffer [BLOCKED/CHEATED]
- *   lower_abi_decode_correct       — compiled abi.decode: validates+decodes ABI data [BLOCKED/CHEATED]
+ *   lower_abi_encode_correct       — complete CFG execution with exact ABI bytes
+ *   lower_abi_decode_correct       — complete CFG execution for canonical typed input
  *
  * Source: builtins/*.py
  * Lowering: builtin*Script.sml
@@ -27,7 +27,7 @@ Ancestors
   exprLoweringProps exprLowering emitHelperProps emitHelper
   builtinHashing builtinMath builtinSimple builtinBytes
   builtinStrings builtinSystem builtinMisc builtinCreate
-  builtinAbi context
+  builtinAbi builtinAbiProps context
   compileEnv venomExecSemantics venomState venomInst venomMemProps
   valueEncoding abiEncoder
   logroot
@@ -169,7 +169,6 @@ val weak_spec_chain_tac =
                        optionTheory.NOT_NONE_SOME])) >>
   gvs[eval_operand_update_var_if];
 
-
 (* Peel an ALLOCA instruction from the front of a chain.
    ALLOCA causes weak_spec_chain_tac to timeout (FLOOKUP case split),
    so we handle it separately via step_ALLOCA, then prove the operand
@@ -244,7 +243,7 @@ pairarg_tac >> gvs[] >>
      (mstore (offset MOD dimword (:256)) w ss'))` by (
     qpat_x_assum `emitted_insts cs'' st' = _` (fn th => rewrite_tac [th]) >>
     `eval_operand op' (mstore (offset MOD dimword (:256)) w ss') = SOME (n2w offset)` by (
-      first_x_assum (qspecl_then [`op'`, `n2w offset`] mp_tac) >> simp[]
+      simp[eval_operand_mstore]
     ) >>
     `step_inst_base
        (mk_inst cs''.cs_next_id SHA3 [op'; Lit 32w]
@@ -1514,7 +1513,6 @@ Resume compile_builtin_abs_run[ok_case]:
   >> gvs[wordsTheory.word_msb_neg]
 QED
 
-
 Resume compile_builtin_abs_run[abort_case]:
   (* bad_val != 0w -> notbad_op evaluates to 0w -> ASSERT reverts *)
   `v = INT_MINw` by
@@ -1869,8 +1867,6 @@ QED
    Without it: >50s TIMEOUT. *)
 val check_chain_simp_thms = [check_chain_def, pure_opc_arity_def, mk_inst_def,
   ASCIInumbersTheory.toString_inj];
-
-
 
 (* floor: rounds toward negative infinity.
    floor(x, d) = sdiv(if x < 0 then x - (d-1) else x, d) *)
@@ -2312,33 +2308,13 @@ Finalise compile_extract32_correct;
 
 (* ===== ABI Builtins ===== *)
 
-(* BLOCKED: lower_abi_encode_correct and lower_abi_decode_correct depend on
-   abiEncoderPropsTheory, which has 11 cheat lines (4 cheated theorems).
-   These cannot be proved until the upstream cheats are resolved. *)
+(* The former admitted statements assumed only operand evaluation and SSA
+   freshness and ran emitted_insts as one flat list. They are false when an
+   action emits completed blocks: abiBuiltinFlatChecks proves counterexamples
+   to both statements. The checked interfaces below execute the actual CFG,
+   expose complete source and allocator preconditions, and return typed memory,
+   precise write frames and the exact final program point. Decode success here
+   is explicitly restricted to canonical typed inputs. *)
+Theorem lower_abi_encode_correct = builtinAbiPropsTheory.lower_abi_encode_correct
 
-(* abi_encode: encode data into buffer with optional method_id *)
-Theorem lower_abi_encode_correct:
-  ∀ ensure_tuple method_id_opt src_op enc_info maxlen ss st op st' sv.
-    lower_abi_encode ensure_tuple method_id_opt src_op enc_info maxlen st =
-      (op, st') ∧
-    eval_operand src_op ss = SOME sv ∧
-    fresh_vars_wrt st ss ⇒
-    ∃ ss'.
-      run_inst_seq (emitted_insts st st') ss = OK ss'
-Proof
-  cheat
-QED
-
-(* abi_decode: validate + decode ABI data into output buffer *)
-Theorem lower_abi_decode_correct:
-  ∀ data_op dec_info abi_min_size abi_max_size output_size ss st op st' dv.
-    lower_abi_decode data_op dec_info abi_min_size abi_max_size output_size st =
-      (op, st') ∧
-    eval_operand data_op ss = SOME dv ∧
-    fresh_vars_wrt st ss ⇒
-    ∃ ss'.
-      run_inst_seq (emitted_insts st st') ss = OK ss' ∨
-      run_inst_seq (emitted_insts st st') ss = Abort Revert_abort ss'
-Proof
-  cheat
-QED
+Theorem lower_abi_decode_correct = builtinAbiPropsTheory.lower_abi_decode_correct

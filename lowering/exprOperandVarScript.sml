@@ -436,8 +436,8 @@ Proof
 QED
 
 Theorem compiler_empty_complex_var:
-  compile_builtin_empty_complex n bs sa = (op,sb) ==>
-  !x. op = Var x ==> not_fresh_at sb x
+  compile_builtin_empty_complex n bs sa = (buf,sb) ==>
+  !x. buf.buf_operand = Var x ==> not_fresh_at sb x
 Proof
   simp[builtinSimpleTheory.compile_builtin_empty_complex_def,
        comp_bind_def, comp_ignore_bind_def, comp_return_def, LET_THM] >>
@@ -469,7 +469,7 @@ Proof
   >~ [`compile_builtin_empty_complex _ _ _ = _`] >-
     (Cases_on `is_word_type rt` >>
      simp[contextTheory.mk_ptr_def] >> rpt strip_tac >>
-     gvs[contextTheory.vv_operand_def] >>
+     gvs[contextTheory.vv_operand_def, contextTheory.base_ptr_def] >>
      metis_tac[compiler_empty_complex_var])
   >~ [`compile_type_convert _ _ _`] >-
     (Cases_on `rt` >> simp[] >>
@@ -480,7 +480,10 @@ Proof
      `!x. v = Var x ==> not_fresh_at st1 x` by metis_tac[] >>
      metis_tac[compiler_type_convert_var])
   >~ [`lower_abi_encode _ _ _ _ _ _`] >-
-    (Cases_on `is_word_type (expr_type (HD args))` >> simp[] >>
+    (qmatch_goalsub_rename_tac `if LENGTH args = 1 /\ ~ensure then _ else _` >>
+     Cases_on `LENGTH args = 1 /\ ~ensure` >>
+     Cases_on `is_word_type (expr_type (HD args))` >> simp[] >>
+     rpt (pairarg_tac >> gvs[]) >>
      qmatch_goalsub_abbrev_tac `as_ptr_val vt LocMemory result` >>
      Cases_on `result` >> gvs[as_ptr_val_def, markerTheory.Abbrev_def] >>
      rpt strip_tac >> gvs[contextTheory.vv_operand_def, contextTheory.mk_ptr_def] >>
@@ -1513,6 +1516,8 @@ Proof
   strip_tac >>
   `!ty e. lower_value f ce ty e sa = lower_value g ce ty e sa` by
     (rpt gen_tac >> irule compiler_lower_value_reserved_cong >> simp[]) >>
+  `!es. compile_multi_exprs f ce es sa = compile_multi_exprs g ce es sa` by
+    (gen_tac >> irule compiler_multi_exprs_reserved_cong >> simp[]) >>
   Cases_on `tb` >>
   simp[compile_type_builtin_dispatch_body_def, LET_THM]
   >- (Cases_on `lower_value g ce (expr_type (HD args)) (HD args) sa` >>
@@ -1909,7 +1914,7 @@ Resume compiler_compile_var[expr]:
   Cases_on `e`
   >~ [`IfExp _ _ _ _`] >-
     (strip_tac >> qpat_x_assum `compile_expr_body _ _ _ _ _ _ _ = _`
-       (mp_then Any mp_tac compiler_ifexp_var) >> simp[]) 
+       (mp_then Any mp_tac compiler_ifexp_var) >> simp[])
   >~ [`Builtin _ _ _`] >- suspend "expr_builtin"
   >~ [`TypeBuiltin _ _ _ _`] >-
     (simp[compile_expr_body_def, LET_THM] >> metis_tac[])

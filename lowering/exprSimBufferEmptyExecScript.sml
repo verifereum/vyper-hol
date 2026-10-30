@@ -215,8 +215,7 @@ Resume empty_tail_run[header]:
     simp[valueEncodingTheory.mem_bytes_at_def] >>
   drule mem_bytes_at_zero_extend >> simp[] >> strip_tac >>
   conj_tac >- (Cases_on `pop` >> gvs[eval_operand_def, mstore_def]) >>
-  simp[] >> conj_tac
-  >- simp[mstore_def, write_memory_with_expansion_def] >>
+  simp[] >>
   rpt gen_tac >> strip_tac >> irule mstore_mem_bytes_at_disjoint >> decide_tac
 QED
 
@@ -241,31 +240,31 @@ Proof
 QED
 
 Theorem empty_compile_decompose[local]:
-  !sz header sa sb pop.
-    compile_builtin_empty_complex sz header sa = (pop,sb) ==>
-    ?buf sm. compile_alloc_buffer sz sa = (buf,sm) /\
+  !sz header sa sb buf.
+    compile_builtin_empty_complex sz header sa = (buf,sb) ==>
+    ?sm. compile_alloc_buffer sz sa = (buf,sm) /\
       (if header then emit_void MSTORE [buf.buf_operand; Lit 0w]
-       else compile_zero_words buf.buf_operand ((sz+31) DIV 32)) sm = ((),sb) /\
-      pop = buf.buf_operand
+       else compile_zero_words buf.buf_operand ((sz+31) DIV 32)) sm = ((),sb)
 Proof
   rpt gen_tac >>
   simp[compile_builtin_empty_complex_def, comp_bind_def, comp_return_def] >>
-  pairarg_tac >> rename1 `compile_alloc_buffer sz sa = (buf,sm)` >>
+  pairarg_tac >> rename1 `compile_alloc_buffer sz sa = (ba,sm)` >>
   simp[] >> Cases_on `header` >> simp[comp_bind_def, comp_ignore_bind_def,
                                      comp_return_def] >>
   pairarg_tac >> rename1 `_ = (u,st)` >> Cases_on `u` >> simp[] >>
-  strip_tac >> gvs[] >> qexistsl_tac [`buf`,`sm`] >> simp[]
+  strip_tac >> gvs[] >> qexists_tac `sm` >> simp[]
 QED
 
 Theorem compile_builtin_empty_complex_run:
-  !sz header sa sb pop func cenv cx es s.
-    compile_builtin_empty_complex sz header sa = (pop,sb) /\
+  !sz header sa sb buf func cenv cx es s.
+    compile_builtin_empty_complex sz header sa = (buf,sb) /\
     fn_has_code sa sb func /\ stmt_state_rel func cenv cx es s /\
     fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
     sz < dimword (:256) /\
     (if header then 32 <= sz else sz MOD 32 = 0) ==>
     ?t w. run_inst_seq (emitted_insts sa sb) s = OK t /\
-      stmt_state_rel func cenv cx es t /\ eval_operand pop t = SOME w /\
+      stmt_state_rel func cenv cx es t /\
+      eval_operand buf.buf_operand t = SOME w /\
       FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,sz) /\
       w2n w+sz < dimword (:256) /\ sa.cs_next_id < sb.cs_next_id /\
       (if header then mem_word_at (w2n w) t.vs_memory = 0w
@@ -359,8 +358,8 @@ Proof
 QED
 
 Theorem compile_builtin_empty_complex_shape:
-  !sz header sa sb pop.
-    compile_builtin_empty_complex sz header sa = (pop,sb) ==>
+  !sz header sa sb buf.
+    compile_builtin_empty_complex sz header sa = (buf,sb) ==>
     sb.cs_blocks = sa.cs_blocks /\ sb.cs_current_bb = sa.cs_current_bb /\
     isPREFIX sa.cs_current_insts sb.cs_current_insts /\
     EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
@@ -389,8 +388,8 @@ Proof
 QED
 
 Theorem compile_builtin_empty_complex_frag:
-  !sz header sa sb pop ctx P Q R.
-    compile_builtin_empty_complex sz header sa = (pop,sb) /\
+  !sz header sa sb buf ctx P Q R.
+    compile_builtin_empty_complex sz header sa = (buf,sb) /\
     (!s. P s ==> ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
       Q (t with vs_inst_idx := LENGTH sb.cs_current_insts)) ==>
     frag_exec ctx sa sb P Q R
