@@ -21,6 +21,7 @@ Ancestors
   localPtrsProps compileEnv valueEncoding valueEncodingProofs
   valueEncodingProps exprLowering vyperInterpreter vyperState
   exprSimHyps exprSim fragExec exprSimAggregateChildren
+  vyperImmutableMetadataFrame
 
 Theorem aggregate_alloca_slice_excludes_local:
   stmt_state_rel func ce cx es r /\ fn_inst_ids_distinct func /\
@@ -37,6 +38,62 @@ Proof
   simp[regions_disjoint_def] >> decide_tac
 QED
 
+(* Only initialization and declared type are transported, not immutable values. *)
+Theorem aggregate_initialized_lookup_back[local]:
+  immutable_metadata_frame es es1 /\
+  FLOOKUP (case ALOOKUP es1.immutables addr of NONE => FEMPTY
+    | SOME imms => get_source_immutables src imms) name = SOME (tv,v) ==>
+  ?old. FLOOKUP (case ALOOKUP es.immutables addr of NONE => FEMPTY
+    | SOME imms => get_source_immutables src imms) name = SOME (tv,old)
+Proof
+  strip_tac >>
+  Cases_on `ALOOKUP es1.immutables addr` >> gvs[] >>
+  `?imms. ALOOKUP es.immutables addr = SOME imms` by
+    (fs[immutable_metadata_frame_def] >>
+     qpat_x_assum `!addr. IS_SOME _ <=> _`
+       (qspec_then `addr` mp_tac) >>
+     Cases_on `ALOOKUP es.immutables addr` >> simp[]) >>
+  gvs[] >> fs[immutable_metadata_frame_def] >>
+  first_x_assum (drule_all_then (qspecl_then [`src`,`name`] mp_tac)) >>
+  simp[] >>
+  Cases_on `FLOOKUP (get_source_immutables src imms) name` >> simp[] >>
+  strip_tac >> qexists `SND x'` >> simp[]
+QED
+
+Theorem aggregate_immutable_footprint_transport[local]:
+  immutable_metadata_frame es es1 /\
+  (ce.ce_is_ctor ==>
+   !name itv iv io.
+     FLOOKUP ce.ce_vars (module_var_key (ce.ce_module,name)) =
+       SOME (ImmutableLoc io) /\
+     FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
+       | SOME imms => get_source_immutables ce.ce_module imms) name =
+       SOME (itv,iv) ==>
+     regions_disjoint io (type_memory_size itv) b n) ==>
+  (ce.ce_is_ctor ==>
+   !name itv iv io.
+     FLOOKUP ce.ce_vars (module_var_key (ce.ce_module,name)) =
+       SOME (ImmutableLoc io) /\
+     FLOOKUP (case ALOOKUP es1.immutables cx.txn.target of NONE => FEMPTY
+       | SOME imms => get_source_immutables ce.ce_module imms) name =
+       SOME (itv,iv) ==>
+     regions_disjoint io (type_memory_size itv) b n)
+Proof
+  rpt strip_tac >>
+  drule_all aggregate_initialized_lookup_back >> strip_tac >>
+  metis_tac[]
+QED
+
+Theorem aggregate_child_metadata_frame[local]:
+  eval_expr cx e es = (INL result,es1) /\
+  read_result cx result es1 = (INL v,es2) ==>
+  immutable_metadata_frame es es2
+Proof
+  rpt strip_tac >>
+  `es2 = es1` by metis_tac[read_result_state] >> gvs[] >>
+  drule eval_expr_immutable_metadata_frame >> simp[]
+QED
+
 Theorem aggregate_make_tuple_sim:
   !args ce cx env off sa out sb es res es' tvs func inst x b asz s0 ctx.
   compile_make_tuple compile_expr ce args (Var x) off sa = (out,sb) /\
@@ -51,7 +108,16 @@ Theorem aggregate_make_tuple_sim:
   (!st. expr_sim_inv ce cx env st ==> not_local_ptr ce st.scopes x) /\
   not_fresh_at sa x /\ lookup_var x s0 = SOME (n2w b) /\
   FLOOKUP s0.vs_allocas inst.inst_id = SOME (b,asz) /\
-  off + type_memory_size_list tvs <= asz /\ b + asz < dimword (:256) ==>
+  off + type_memory_size_list tvs <= asz /\ b + asz < dimword (:256) /\
+  (ce.ce_is_ctor ==>
+   !name itv iv io.
+     FLOOKUP ce.ce_vars (module_var_key (ce.ce_module,name)) =
+       SOME (ImmutableLoc io) /\
+     FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
+       | SOME imms => get_source_immutables ce.ce_module imms) name =
+       SOME (itv,iv) ==>
+     regions_disjoint io (type_memory_size itv) (b+off)
+       (type_memory_size_list tvs)) ==>
   out = Var x /\
   frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel func ce cx es s)
     (\r. ?vs. res = INL vs /\ expr_sim_inv ce cx env es' /\
@@ -164,6 +230,16 @@ Resume aggregate_make_tuple_sim[child_success]:
 QED
 
 Resume aggregate_make_tuple_sim[after_add]:
+  drule_all aggregate_child_metadata_frame >> strip_tac >>
+  `(ce.ce_is_ctor ==>
+    !name itv iv io.
+      FLOOKUP ce.ce_vars (module_var_key (ce.ce_module,name)) = SOME (ImmutableLoc io) /\
+      FLOOKUP (case ALOOKUP es1.immutables cx.txn.target of NONE => FEMPTY
+        | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (itv,iv) ==>
+      regions_disjoint io (type_memory_size itv) (b+off)
+        (type_memory_size_list (h'::t)))` by
+    (match_mp_tac (GEN_ALL aggregate_immutable_footprint_transport) >>
+     qexists_tac `es` >> asm_rewrite_tac[]) >>
   `expr_sim_inv ce cx env es1` by
     (drule_all expr_sim_pre_eval_result >> simp[]) >>
   `type_memory_bytes ce (expr_type h) = type_memory_size h'` by
@@ -219,7 +295,13 @@ Resume aggregate_make_tuple_sim[after_add]:
           (reverse conj_tac >- fs[]) >>
           qexistsl_tac [`aid`, `p`, `n`] >>
           fs[] >> rpt strip_tac >> first_x_assum drule >> decide_tac)
-      >> decide_tac) >>
+      >> rpt strip_tac >>
+      qpat_x_assum `ce.ce_is_ctor ==> _` mp_tac >>
+      asm_rewrite_tac[] >>
+      disch_then (qspecl_then [`name`, `itv`, `iv`, `off'`] mp_tac) >>
+      asm_rewrite_tac[] >>
+      simp_tac std_ss [regions_disjoint_def, type_memory_size_def] >>
+      decide_tac) >>
   rpt strip_tac >> suspend "after_store"
 QED
 
@@ -239,7 +321,13 @@ Resume aggregate_make_tuple_sim[after_store]:
   disch_then (qspec_then `func` mp_tac) >>
   disch_then (qspec_then `inst` mp_tac) >>
   disch_then (qspecl_then [`b`, `asz`, `t'`, `ctx`] mp_tac) >>
-  (impl_tac >- (simp[] >> fs[ci_mono_def, type_memory_size_def] >> decide_tac)) >>
+  (impl_tac >- (simp[] >> fs[ci_mono_def, type_memory_size_def] >>
+    rpt strip_tac >>
+    qpat_x_assum `ce.ce_is_ctor ==> _` mp_tac >>
+    asm_rewrite_tac[] >>
+    disch_then (qspecl_then [`name`, `itv`, `iv`, `io`] mp_tac) >>
+    asm_rewrite_tac[] >>
+    simp_tac std_ss [regions_disjoint_def] >> decide_tac)) >>
   strip_tac >>
   qpat_x_assum `frag_exec _ ss sb _ _ _` (mp_then Any irule frag_exec_weaken) >>
   simp[] >> reverse conj_tac
@@ -398,7 +486,16 @@ Theorem aggregate_struct_fields_sim:
   (!st. expr_sim_inv ce cx env st ==> not_local_ptr ce st.scopes x) /\
   not_fresh_at sa x /\ lookup_var x s0 = SOME (n2w b) /\
   FLOOKUP s0.vs_allocas inst.inst_id = SOME (b,asz) /\
-  off + type_memory_size_list tvs <= asz /\ b + asz < dimword (:256) ==>
+  off + type_memory_size_list tvs <= asz /\ b + asz < dimword (:256) /\
+  (ce.ce_is_ctor ==>
+   !name itv iv io.
+     FLOOKUP ce.ce_vars (module_var_key (ce.ce_module,name)) =
+       SOME (ImmutableLoc io) /\
+     FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
+       | SOME imms => get_source_immutables ce.ce_module imms) name =
+       SOME (itv,iv) ==>
+     regions_disjoint io (type_memory_size itv) (b+off)
+       (type_memory_size_list tvs)) ==>
   out = Var x /\
   frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel func ce cx es s)
     (\r. ?vs. res = INL vs /\ expr_sim_inv ce cx env es' /\
@@ -463,7 +560,16 @@ Theorem aggregate_make_array_elems_sim:
   (!st. expr_sim_inv ce cx env st ==> not_local_ptr ce st.scopes x) /\
   not_fresh_at sa x /\ lookup_var x s0 = SOME (n2w b) /\
   FLOOKUP s0.vs_allocas inst.inst_id = SOME (b,asz) /\
-  off + LENGTH args * type_memory_size tv <= asz /\ b + asz < dimword (:256) ==>
+  off + LENGTH args * type_memory_size tv <= asz /\ b + asz < dimword (:256) /\
+  (ce.ce_is_ctor ==>
+   !name itv iv io.
+     FLOOKUP ce.ce_vars (module_var_key (ce.ce_module,name)) =
+       SOME (ImmutableLoc io) /\
+     FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
+       | SOME imms => get_source_immutables ce.ce_module imms) name =
+       SOME (itv,iv) ==>
+     regions_disjoint io (type_memory_size itv) (b+off)
+       (LENGTH args * type_memory_size tv)) ==>
   out = Var x /\
   frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel func ce cx es s)
     (\r. ?vs. res = INL vs /\ expr_sim_inv ce cx env es' /\
@@ -500,6 +606,8 @@ Proof
     (rpt strip_tac >>
      `LENGTH args = LENGTH vs` by metis_tac[] >>
      pop_assum SUBST1_TAC >> simp[tuple_in_memory_replicate_elems]) >>
+  qpat_assum `ce.ce_is_ctor ==> _`
+    (assume_tac o REWRITE_RULE [GSYM type_memory_size_list_replicate]) >>
   drule_all aggregate_make_tuple_sim >>
   simp[type_memory_size_list_replicate, SF CONJ_ss]
 QED
@@ -521,7 +629,16 @@ Theorem aggregate_make_array_start_sim:
   not_fresh_at sa x /\ lookup_var x s0 = SOME (n2w b) /\
   FLOOKUP s0.vs_allocas inst.inst_id = SOME (b,asz) /\
   (if header then 32 else 0) + LENGTH args * type_memory_size tv <= asz /\
-  b + asz < dimword (:256) ==>
+  b + asz < dimword (:256) /\
+  (ce.ce_is_ctor ==>
+   !name itv iv io.
+     FLOOKUP ce.ce_vars (module_var_key (ce.ce_module,name)) =
+       SOME (ImmutableLoc io) /\
+     FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
+       | SOME imms => get_source_immutables ce.ce_module imms) name =
+       SOME (itv,iv) ==>
+     regions_disjoint io (type_memory_size itv) (b+(if header then 32 else 0))
+       (LENGTH args * type_memory_size tv)) ==>
   out = Var x /\
   frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel func ce cx es s)
     (\r. ?vs. res = INL vs /\ expr_sim_inv ce cx env es' /\
@@ -544,7 +661,7 @@ Theorem aggregate_make_array_start_sim:
       expr_exit (INR exc : eval_result + exception) exit)
 Proof
   rpt gen_tac >> strip_tac >> irule aggregate_make_array_elems_sim >>
-  simp[] >> conj_tac
+  simp[] >> asm_rewrite_tac[] >> conj_tac
   >- (qexistsl_tac [`elem_ty`, `header`, `0`] >> gvs[]) >>
   qexists_tac `inst` >> simp[]
 QED
@@ -583,7 +700,16 @@ Theorem aggregate_make_array_sim:
   not_fresh_at sa x /\ lookup_var x s0 = SOME (n2w b) /\
   FLOOKUP s0.vs_allocas inst.inst_id = SOME (b,asz) /\
   (if header then 32 else 0) + LENGTH args * type_memory_size tv <= asz /\
-  b + asz < dimword (:256) ==>
+  b + asz < dimword (:256) /\
+  (ce.ce_is_ctor ==>
+   !name itv iv io.
+     FLOOKUP ce.ce_vars (module_var_key (ce.ce_module,name)) =
+       SOME (ImmutableLoc io) /\
+     FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
+       | SOME imms => get_source_immutables ce.ce_module imms) name =
+       SOME (itv,iv) ==>
+     regions_disjoint io (type_memory_size itv) b
+       ((if header then 32 else 0) + LENGTH args * type_memory_size tv)) ==>
   out = Var x /\
   frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel func ce cx es s)
     (\r. ?vs. res = INL vs /\ expr_sim_inv ce cx env es' /\
@@ -608,7 +734,7 @@ Proof
   rpt gen_tac >> strip_tac >> reverse (Cases_on `header`)
   >- (gvs[compile_make_array_def, comp_ignore_bind_def, comp_bind_def, comp_return_def] >>
       mp_tac (Q.INST [`header` |-> `F`, `stride` |-> `type_memory_size tv`]
-        (SPEC_ALL aggregate_make_array_start_sim)) >> simp[]) >>
+        (SPEC_ALL aggregate_make_array_start_sim)) >> simp[] >> asm_rewrite_tac[]) >>
   qpat_x_assum `compile_make_array _ _ _ _ _ _ _ _ = _` mp_tac >>
   simp[compile_make_array_def, comp_ignore_bind_def, comp_bind_def] >>
   rpt (pairarg_tac >> gvs[]) >> strip_tac >>
@@ -649,13 +775,22 @@ QED
 Resume aggregate_make_array_sim[header_suffix]:
   `stmt_state_rel func ce cx es s1` by
     (simp[Abbr `s1`, stmt_state_rel_inst_idx] >>
-     irule exprSimLiteralBufferTheory.literal_mstore_state_rel >>
-     simp[] >> qexistsl_tac [`b`, `asz`] >>
-     reverse conj_tac >- decide_tac >> simp[] >> rpt strip_tac >>
-     `not_local_ptr ce es.scopes x` by simp[] >>
-     `alloca_inv s0 /\ local_ptrs_rel func ce es.scopes s0` by
-       fs[stmt_state_rel_def, state_rel_def] >>
-     drule_all local_ptrs_rel_alloca_disjoint >> simp[regions_disjoint_def]) >>
+     irule exprSimLiteralBufferTheory.literal_state_memory_frame >>
+     qexists_tac `s0` >> rpt conj_tac
+     >- (rpt strip_tac >> irule mstore_mem_bytes_at_disjoint >>
+         `not_local_ptr ce es.scopes x` by simp[] >>
+         `alloca_inv s0 /\ local_ptrs_rel func ce es.scopes s0` by
+           fs[stmt_state_rel_def, state_rel_def] >>
+         drule_all local_ptrs_rel_alloca_disjoint >>
+         simp[regions_disjoint_def] >> decide_tac)
+     >- simp_tac (srw_ss()) [venomStateTheory.mstore_def, venomStateTheory.lookup_var_def]
+     >- simp[immutableMemoryFrameTheory.immutable_mstore_capacity]
+     >- simp_tac (srw_ss()) [venomStateTheory.mstore_def, venomStateTheory.write_memory_with_expansion_def, LET_THM]
+     >- (rpt strip_tac >> irule mstore_mem_bytes_at_disjoint >>
+     qpat_x_assum `ce.ce_is_ctor ==> _` mp_tac >> asm_rewrite_tac[] >>
+     disch_then (qspecl_then [`name`, `tv'`, `v`, `off`] mp_tac) >>
+     asm_rewrite_tac[] >> simp_tac std_ss [regions_disjoint_def] >> decide_tac) >>
+     first_assum ACCEPT_TAC) >>
   `fn_has_code sm sb func` by metis_tac[fn_has_code_split, ci_mono_def] >>
   `local_ptrs_reserved ce sm` by
     metis_tac[exprOperandVarTheory.compiler_ci_mono_reserved] >>
@@ -668,7 +803,12 @@ Resume aggregate_make_array_sim[header_suffix]:
   mp_tac (Q.INST [`sa` |-> `sm`, `s0` |-> `s1`, `header` |-> `T`,
     `stride` |-> `type_memory_size tv`, `out` |-> `Var x`]
     (SPEC_ALL aggregate_make_array_start_sim)) >>
-  simp[] >> suspend "header_post"
+  simp[] >>
+  (impl_tac >- (rpt strip_tac >>
+    qpat_x_assum `ce.ce_is_ctor ==> _` mp_tac >> asm_rewrite_tac[] >>
+    disch_then (qspecl_then [`name`, `itv`, `iv`, `io`] mp_tac) >>
+    asm_rewrite_tac[] >> simp_tac std_ss [regions_disjoint_def] >> decide_tac)) >>
+  suspend "header_post"
 QED
 
 Resume aggregate_make_array_sim[header_post]:
