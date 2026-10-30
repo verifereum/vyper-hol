@@ -6,15 +6,14 @@
  * compile_pop_name_sim) and attributes of a base not in code
  * (exprSimAttribute's compile_attribute_loc_sim).  Cheated, for the later
  * #636 PRs: subscripts, pop on any other target (compile_pop_other_sim),
- * and the two attribute cases below.
+ * and attributes of a base in code (compile_attribute_code_sim).
  *
  * TOP-LEVEL:
  *   compile_subscript_sim — static and dynamic arrays with the bounds-check
  *                           abort, hashmaps, tuples (#558), Places row 1
  *   compile_attribute_sim — struct fields (#558), row 2: by
  *                           compile_attribute_loc_sim, but for
- *                           compile_attribute_code_sim and
- *                           compile_attribute_popped_clash_sim
+ *                           compile_attribute_code_sim
  *   compile_pop_sim       — pop on a dynamic array, with the empty-array
  *                           abort, row 3: compile_pop_name_sim for a local,
  *                           compile_pop_other_sim for the rest
@@ -60,24 +59,6 @@ Proof
   cheat
 QED
 
-(* The base evaluates to a local's place that memory no longer holds (a
-   popped element), whose popped history holds a snapshot exactly at the
-   field (exprSimAttribute's attr_popped_clash).  Cheated, and false as
-   stated: read_popped reads the newest matching snapshot, so where that
-   snapshot is newer than the one the base reads, it reads that snapshot's
-   value while memory at the field's pointer holds the base's field.
-   record_pop only records snapshots at array elements, so the case never
-   arises, but expr_sim_inv has no clause saying so. *)
-Theorem compile_attribute_popped_clash_sim:
-  !ctx func cenv cx env ty ann obj fld es.
-    expr_vv_ok cenv obj /\
-    expr_sim_pre cenv cx env (Attribute ann obj fld) es /\
-    attr_popped_clash cx obj fld es ==>
-    expr_vv_sim ctx func cenv cx ty (Attribute ann obj fld) es
-Proof
-  cheat
-QED
-
 Theorem compile_attribute_sim:
   !cenv ann obj fld.
     expr_sim_below cenv (expr_size (Attribute ann obj fld)) ==>
@@ -90,8 +71,6 @@ Proof
         (fs[expr_sim_below_def, expr_ok_def] >> first_x_assum irule >>
          simp[expr_size_def]) >>
       rw[expr_vv_ok_def] >>
-      Cases_on `attr_popped_clash cx obj fld es`
-      >- (irule compile_attribute_popped_clash_sim >> metis_tac[]) >>
       drule_all compile_attribute_loc_sim >> simp[] >> metis_tac[]) >>
   irule compile_attribute_code_sim >> gvs[] >> metis_tac[]
 QED

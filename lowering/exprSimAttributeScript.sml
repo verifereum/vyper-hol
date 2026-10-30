@@ -8,11 +8,8 @@
  * read is the field of the base's value (exprSimAttributeFields).
  *
  * TOP-LEVEL:
- *   attr_popped_clash         — the base's result is a local's place memory
- *                               no longer holds, with a popped snapshot at
- *                               the field
  *   compile_attribute_loc_sim — expr_vv_sim of Attribute, for a base not in
- *                               code and no attr_popped_clash
+ *                               code
  *
  * Helpers: vv_loc, attr_offset, compile_expr_attribute,
  *   eval_expr_attribute, attr_pre_base, attr_add_post, attr_add_frag,
@@ -20,14 +17,15 @@
  *   base_vv_holds_struct, base_vv_at_struct, field_ptr_w2n,
  *   attr_vv_at_field, attr_vv_post
  *
- * Not covered, cheated in exprSimPlaces:
- *   - a base in code (an immutable, LocCode): immutable_holds asks the
- *     pointer to be an immutable's own data offset, which a field's is not;
- *   - attr_popped_clash: the base is a local's place memory no longer holds
- *     (a popped element), and read_popped may read a snapshot at the field
- *     rather than the field of the base's snapshot.  Pops record their
- *     snapshots at array elements only (record_pop), so this never happens,
- *     but expr_sim_inv does not say so.
+ * Where the base is a local's place memory no longer holds (a popped
+ * element), the source reads the field from the popped history, which
+ * holds no snapshot at the field itself: its keys end in array indices
+ * (expr_sim_inv's popped_keys_indexed, exprSimAttributeFields's
+ * popped_keys_indexed_not_at_field).
+ *
+ * Not covered, cheated in exprSimPlaces: a base in code (an immutable,
+ * LocCode): immutable_holds asks the pointer to be an immutable's own data
+ * offset, which a field's is not.
  *)
 
 Theory exprSimAttribute
@@ -377,21 +375,13 @@ QED
 
 (* ===== The simulation ===== *)
 
-(* The base evaluates to a local's place memory no longer holds, with a
-   popped snapshot at the field (popped_at_field): left to exprSimPlaces. *)
-Definition attr_popped_clash_def:
-  attr_popped_clash cx obj fld es <=>
-    ?r es1. eval_expr cx obj es = (INL r, es1) /\ popped_at_field r fld es1
-End
-
 Theorem compile_attribute_loc_sim:
   !cenv obj.
     expr_vv_ok cenv obj /\
     (!ty st. vv_location (FST (compile_expr cenv ty obj st)) <>
              SOME LocCode) ==>
     !ctx func cx env ty ann fld es.
-      expr_sim_pre cenv cx env (Attribute ann obj fld) es /\
-      ~attr_popped_clash cx obj fld es ==>
+      expr_sim_pre cenv cx env (Attribute ann obj fld) es ==>
       expr_vv_sim ctx func cenv cx ty (Attribute ann obj fld) es
 Proof
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
@@ -418,7 +408,8 @@ Proof
       drule_all struct_fields_layout >> strip_tac >> gvs[] >>
       drule_all attribute_type_evaluates >> strip_tac >>
       `~popped_at_field btv fld es1` by
-        (fs[attr_popped_clash_def] >> metis_tac[]) >>
+        (irule popped_keys_indexed_not_at_field >>
+         drule_all expr_sim_pre_eval_result >> simp[expr_sim_inv_def]) >>
       `!m. res <> INR (Error (TypeError m))` by
         (rpt strip_tac >> gvs[expr_vv_res_ok_def]) >>
       irule frag_exec_seq >>
