@@ -2817,7 +2817,8 @@ Proof
     (irule m2v_inv_noix_ext_update >> simp[Abbr`bytes`, LENGTH_TAKE_EQ] >>
      rpt strip_tac >> first_x_assum irule >> simp[]) >>
   drule m2v_inv_noix_call_lists >>
-  disch_then (qspecl_then [`adopt_outcome_deletions rq
+  disch_then (qspecl_then [`if computed_precompile rq then s2.vs_toDelete
+                          else adopt_outcome_deletions rq
                             (FST (take_outcome rq s2.vs_outcomes)) s2.vs_toDelete`,
                           `record_request rq s2.vs_requests`,
                           `SND (take_outcome rq s2.vs_outcomes)`] mp_tac) >>

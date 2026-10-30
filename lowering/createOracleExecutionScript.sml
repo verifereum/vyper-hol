@@ -88,9 +88,11 @@ Proof
   Cases_on `t` >> gvs[]
 QED
 
-Theorem consume_call_deletions:
+Theorem consume_call_deletions[local]:
   (SND (consume_call_outcome rq ro rs s)).vs_toDelete =
-  adopt_outcome_deletions rq (FST (take_outcome rq s.vs_outcomes)) s.vs_toDelete
+  if computed_precompile rq then s.vs_toDelete
+  else adopt_outcome_deletions rq
+    (FST (take_outcome rq s.vs_outcomes)) s.vs_toDelete
 Proof
   simp[]
 QED
