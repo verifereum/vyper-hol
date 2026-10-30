@@ -50,10 +50,12 @@ Definition source_pure_expr_remainder_def:
 Termination
   WF_REL_TAC `measure (\x. case x of
       INL (_, e) => 3 * expr_size e
-    | INR (INL (_, es)) => 3 * expr4_size es
-    | INR (INR (INL (_, fields))) => 3 * expr1_size fields
+    | INR (INL (_, es)) => 3 * list_size expr_size es
+    | INR (INR (INL (_, fields))) =>
+        3 * list_size (pair_size (list_size char_size) expr_size) fields
     | INR (INR (INR (_, e))) => 3 * expr_size e + 1)` >>
-  simp[expr_size_def]
+  simp[expr_size_def, listTheory.list_size_def,
+       basicSizeTheory.pair_size_def]
 End
 
 (* A map-valued intermediate base is checked by type_place_expr rather than
