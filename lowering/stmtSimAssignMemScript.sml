@@ -159,7 +159,7 @@ Proof
   `if is_word_type sty then sw = typed_val_to_w256 stv v
    else val_in_memory stv v (w2n sw) s.vs_memory` by simp[] >>
   `!x. Var p = Var x ==> not_fresh_at sa x` by simp[] >>
-  drule_all compile_store_memory_run_source_bound >> strip_tac >>
+  drule_all compile_store_memory_run_source_bound_with_capacity >> strip_tac >>
   `!a len. a + len <= w2n w \/ w2n w + type_memory_size tyv <= a ==>
      mem_bytes_at a len t.vs_memory = mem_bytes_at a len s.vs_memory` by
     (rpt strip_tac >> first_x_assum irule >> simp[arithmeticTheory.MIN_DEF] >> decide_tac) >>
@@ -169,12 +169,20 @@ Proof
      fs[not_local_ptr_def, local_ptrs_reserved_def] >> metis_tac[]) >>
   qpat_x_assum `entry.type = tyv` (SUBST_ALL_TAC o SYM) >>
   qmatch_goalsub_abbrev_tac `stmt_state_rel func cenv cx es1` >>
+  `type_memory_size entry.type <= sz` by
+    (fs[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def] >> metis_tac[]) >>
+  `local_region cenv es.scopes s id (w2n w) sz` by simp[local_region_def] >>
+  `t.vs_data_section = s.vs_data_section` by
+    (qpat_x_assum `t with <|vs_vars := _; vs_memory := _|> = s` mp_tac >>
+     simp_tac (srw_ss()) [venom_state_component_equality]) >>
+  `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es t` by
+    (irule local_copy_immutables >>
+     goal_assum (drule_at (Pat `local_region _ _ _ _ _ _`)) >>
+     qexistsl_tac [`func`, `type_memory_size entry.type`] >> simp[] >>
+     rpt strip_tac >> qpat_x_assum `!a len. _ ==> mem_bytes_at _ _ _ = _` irule >>
+     decide_tac) >>
   `stmt_state_rel func cenv cx es1 t` by
-    (qspecl_then [`func`, `cenv`, `cx`, `es`, `s`, `t`, `id`, `p`, `sz`, `w`,
-                  `pre`, `env`, `entry`, `rest`, `v`]
-       mp_tac stmt_state_rel_write_local >>
-     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
-     simp[Abbr `es1`]) >>
+    (drule_all stmt_state_rel_write_local >> simp[Abbr `es1`]) >>
   `t.vs_allocas = s.vs_allocas` by
     (qpat_x_assum `t with <|vs_vars := _; vs_memory := _|> = s` mp_tac >>
      simp[venom_state_component_equality]) >>
