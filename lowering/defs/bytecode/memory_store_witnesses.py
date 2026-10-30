@@ -88,10 +88,12 @@ def prepare(repo: Path, corpus: Path, output: Path, *, check: bool) -> None:
     (output / "provenance.json").write_text(json.dumps(provenance, indent=2) + "\n")
     if check:
         expected = json.loads((corpus / "oracle/provenance.json").read_text())
-        retained = set(names(corpus / "parity-fixtures.txt"))
+        # A corpus can retain diagnostic oracles for known residuals as well as
+        # exact-parity fixtures. Reproduce every output named by its receipt.
+        retained = set(expected["outputs"])
         provenance["outputs"] = {
             name: digest for name, digest in provenance["outputs"].items()
-            if Path(name).stem in retained
+            if name in retained
         }
         if provenance != expected:
             raise ValueError("independent oracle provenance changed")

@@ -427,9 +427,9 @@ Proof
   drule_all empty_type_default_memory >> strip_tac >>
   irule (SRULE [vyperASTTheory.expr_type_def]
     (Q.INST [`e` |-> `TypeBuiltin ann Empty ann []`,
-             `p` |-> `mk_ptr buf LocMemory`] (SPEC_ALL buffer_memory_vv_post))) >>
+             `p` |-> `base_ptr buf`] (SPEC_ALL buffer_memory_vv_post))) >>
   goal_assum (drule_at Any) >>
-  simp[contextTheory.mk_ptr_def, valueEncodingProofsTheory.val_wf_default_value_proof] >>
+  simp[contextTheory.base_ptr_def, valueEncodingProofsTheory.val_wf_default_value_proof] >>
   conj_tac
   >- (rpt strip_tac >>
       qpat_x_assum `!name b len. local_region _ _ _ _ _ _ ==> _ \/ _` drule >>
