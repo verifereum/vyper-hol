@@ -6,7 +6,7 @@ Ancestors
   eventTopicValueProps eventTopicExecProps eventLoweringStructure
   exprLoweringProps nameLoweringProps emitHelperProps stmtLowering compileEnv
   venomState venomExecSemantics vyperEvent list rich_list
-Libs pairLib
+Libs pairLib monadsyntax
 
 Theorem eval_operands_preserve_success:
   !ops ss out values.
@@ -194,7 +194,8 @@ Theorem compile_name_topic_correct:
     lower_value compile_expr cenv ty (Name ann id) cs = (arg_op,mid) /\
     compile_encode_log_topic arg_op (is_bytestring_type ann) mid = (topic_op,cs') ==>
     ?v out.
-      eval_expr cx (Name ann id) es = (INL (Value v),es) /\
+      (do result <- eval_expr cx (Name ann id); read_result cx result od) es =
+        (INL v,es) /\
       run_inst_seq (emitted_insts cs cs') ss = OK out /\
       eval_operand topic_op out = encode_event_topic ann v /\
       same_blocks cs cs' /\ fresh_vars_wrt cs' out /\

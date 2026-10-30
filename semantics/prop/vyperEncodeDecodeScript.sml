@@ -1325,15 +1325,6 @@ Proof
   REWRITE_TAC [nwn_eq] >> gvs[]
 QED
 
-(* Helper: shifted writes can be un-shifted *)
-Theorem apply_writes_MAP_shift[local]:
-  ∀writes k base storage.
-    apply_writes (n2w base) (MAP (λ(off,s). (off + k, s)) writes) storage =
-    apply_writes (n2w (base + k)) writes storage
-Proof
-  REWRITE_TAC [apply_writes_shift]
-QED
-
 (* Helper: decode_value agrees with a different storage when writes are outside range *)
 Theorem decode_after_disjoint_writes[local]:
   ∀tv base offset writes storage.
@@ -1909,7 +1900,6 @@ Proof
   )
 QED
 
-
 (* Helper: encode_static_array writes only at offsets for existing keys *)
 Theorem encode_static_array_miss[local]:
   ∀sparse tv writes i.
@@ -1976,7 +1966,6 @@ Proof
   ) >>
   simp[MAP_GENLIST, o_DEF, ALL_DISTINCT_GENLIST, MEM_GENLIST]
 QED
-
 
 (* Helper: Static array roundtrip *)
 Theorem encode_decode_roundtrip_static_array[local]:

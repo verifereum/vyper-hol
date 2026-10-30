@@ -28,7 +28,7 @@ End
 
 Definition abi_builtin_valid_bytes_pre_def:
   abi_builtin_valid_bytes_pre n at bs payload st data min_size max_size p d s <=>
-    (at = Bytes NONE \/ at = String) /\ valid_enc at bs /\
+    (at = Bytes NONE \/ at = String) /\ vyper_decode_valid_enc at bs /\
     dec at bs = contractABI$BytesV payload /\ LENGTH payload <= n /\
     abi_builtin_valid_bytes_resources n bs st data min_size max_size p d s
 End
@@ -123,7 +123,7 @@ Proof
   qpat_assum `abi_builtin_allocation_frame _ _ _ _ _`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_builtin_allocation_frame_def]) >>
   qexists_tac `actual` >> asm_simp_tac bool_ss [] >>
-  gvs[abi_decode_frame_def, Excl "dec_def", Excl "valid_enc_def"] >> first_assum ACCEPT_TAC
+  gvs[abi_decode_frame_def, Excl "dec_def", Excl "vyper_decode_valid_enc_def"] >> first_assum ACCEPT_TAC
 QED
 
 (* ===== Reach ===== *)
@@ -175,16 +175,16 @@ Theorem abi_builtin_valid_bytes_source_pre:
       val_in_memory (BaseTV (StringT n)) (StringV (MAP (CHR o w2n) payload)) d mem ==>
       val_in_memory tv v d mem)
 Proof
-  strip_tac >> gvs[evaluate_type_def, Excl "dec_def", Excl "valid_enc_def"] >>
+  strip_tac >> gvs[evaluate_type_def, Excl "dec_def", Excl "vyper_decode_valid_enc_def"] >>
   FIRST
   [drule abi_valid_bytes_source_decode >> strip_tac >>
      qexistsl_tac [`Bytes NONE`, `payload`] >>
      gvs[abi_builtin_valid_bytes_pre_def, abi_builtin_valid_bytes_resources_def,
-       Excl "dec_def", Excl "valid_enc_def"],
+       Excl "dec_def", Excl "vyper_decode_valid_enc_def"],
    drule abi_valid_string_source_decode >> strip_tac >>
      qexistsl_tac [`String`, `payload`] >>
      gvs[abi_builtin_valid_bytes_pre_def, abi_builtin_valid_bytes_resources_def,
-       Excl "dec_def", Excl "valid_enc_def"]]
+       Excl "dec_def", Excl "vyper_decode_valid_enc_def"]]
 QED
 
 Theorem lower_abi_decode_valid_bytes_source:

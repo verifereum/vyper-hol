@@ -37,8 +37,9 @@
  *
  * Unprovable as the definitions stand, to be fixed in the lowering or in
  * state_rel before their PRs:
- *   - compile_len_code_sim, len of an immutable: immutables_rel relates the
- *     immutable's first word to its whole value, not to its length.
+ *   - compile_len_code_sim, len of an immutable: in the constructor
+ *     immutables_rel relates the immutable's first word to its whole
+ *     value, not to its length.
  *   - compile_blockhash_sim: the source raises a RuntimeError where
  *     BLOCKHASH returns 0 (#671), and call_ctx_rel does not relate the block
  *     hashes.
@@ -77,9 +78,11 @@ Ancestors
 (* ===== Lengths and calldata ===== *)
 
 (* len of an operand in code, an immutable: the lowering loads the
-   immutable's first word (ILOAD or DLOAD), but immutables_rel relates that
-   word to typed_val_to_w256 of the whole value, not to its length, so this
-   does not hold as the definitions stand. *)
+   immutable's first word (ILOAD or DLOAD).  At runtime immutables_rel lays
+   the value out in the data section, so DLOAD reads the length word; in
+   the constructor it relates the ILOAD word to typed_val_to_w256 of the
+   whole value, not to its length, so this does not hold as the
+   definitions stand. *)
 Theorem compile_len_code_sim:
   !cenv ann args.
     expr_sim_below cenv (list_size expr_size args) /\
@@ -416,10 +419,9 @@ Proof
         simp[is_word_type_def])
     >- (rpt gen_tac >> BETA_TAC >> strip_tac >>
         drule emit_op_extends_next_var >> simp[])
-    >- metis_tac[expr_sim_pre_word_value, is_word_type_def]
     >- metis_tac[expr_ok_def, expr_sim_ok_def] >>
     rpt strip_tac >>
-    qspecl_then [`cenv`, `cx`, `env`, `e1`, `es`, `Value v1`, `es1`] mp_tac
+    qspecl_then [`cenv`, `cx`, `env`, `e1`, `es`, `v1`, `es1`] mp_tac
       expr_sim_pre_word_value >>
     simp[is_word_type_def] >> strip_tac >>
     gvs[vyperValueTheory.evaluate_type_def] >>
@@ -464,7 +466,10 @@ Theorem compile_method_id_literal_word_sim:
       (Builtin (BaseT (BytesT (Fixed 4))) MethodId [Literal la l])
 Proof
   rw[expr_sim_ok_def, expr_sim_def, optionTheory.IS_SOME_EXISTS] >>
-  drule_all eval_expr_method_id_literal >> strip_tac >> gvs[] >>
+  Cases_on `eval_expr cx
+    (Builtin (BaseT (BytesT (Fixed 4))) MethodId [Literal la l]) es` >>
+  drule_all eval_expr_method_id_literal >> strip_tac >>
+  gvs[bind_def, read_result_def, return_def] >>
   drule compile_expr_method_id_literal >> strip_tac >>
   gvs[lower_value_def, comp_bind_def, compile_literal_vv_def,
       unwrap_value_def, comp_return_def] >>

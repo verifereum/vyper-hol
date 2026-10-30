@@ -29,12 +29,10 @@ env:
 
 jobs:
   toolchain:
-    # holbuild hashes the HOL toolchain's bytes into every action key, and two
-    # HOL builds differ, so build-rollup finds the witness groups' actions only
-    # if build and compiler share one toolchain. Without a project snapshot to
-    # carry it, this job builds it once for build, compiler and test-deps. With
-    # the remote login, holbuild restores the published HOL toolchain instead of
-    # building a new one, so keys stay those of earlier runs.
+    # Without a project snapshot to carry the HOL toolchain, this job builds it
+    # once for build, compiler and test-deps, instead of once per job. With the
+    # remote login, holbuild restores the published HOL toolchain instead of
+    # building a new one.
     if: (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository))
     runs-on: ubuntu-latest
     timeout-minutes: 60

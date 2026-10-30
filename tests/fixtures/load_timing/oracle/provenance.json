@@ -1,0 +1,81 @@
+{
+  "dependencies": {
+    "cbor2": "5.9.0",
+    "immutables": "0.21",
+    "lark": "1.1.9",
+    "packaging": "26.3",
+    "pycryptodome": "3.23.0",
+    "wheel": "0.48.0"
+  },
+  "fixtures": {
+    "builtin_eager_read": {
+      "deploy_sha256": "1dda681873c41106e92f4811d96bfc3f02bbe6f7bbde6d4798a2720b9e11b3b7",
+      "frontend_sha256": "2becd347365a63bcb33c43e7b88bdc2c11c2d3723805c708fbab8199ebffdf78",
+      "runtime_sha256": "cd4e9cf8ae447ef46a1e2b4df70bc3da01317459f87f0d931276f60f692cbf13",
+      "source": "sources/builtin_eager_read.vy",
+      "source_sha256": "eaa09b5ff8841cb17d20c4ce68b849a56e96c30aea675717002126a8199b8b45"
+    },
+    "call_memory_pop": {
+      "deploy_sha256": "617342b1c4dfd146df0b4f9d07df8c073da118255678b53ccbd77570f241c475",
+      "frontend_sha256": "43a067808924e8d164ef6c7d9b1a40d23419ea2cc1cd8035ef805032803710e2",
+      "runtime_sha256": "6e5c5463b66f466fcc973b5ebaa8d1030b93780a7285688deacdeaef39ee1f2a",
+      "source": "sources/call_memory_pop.vy",
+      "source_sha256": "a61eaaf9dd7ce9b820a8c9a169ea248473a94177dda0e8dfcc83ad032d45cec2"
+    },
+    "call_storage_read": {
+      "deploy_sha256": "5be6c5691eabe7d9c328f4ba7d8c19232d364685266abab366aa577b5f22848e",
+      "frontend_sha256": "1015b3e33e31464ac8ddfd750656755594ae146ca6e03f8142141e34a17c65fe",
+      "runtime_sha256": "4fb0fa0ba355c7b0f8480d34738e59bf8340512a5e535f342c84c93eb45be443",
+      "source": "sources/call_storage_read.vy",
+      "source_sha256": "20612d051cb43abe4e8c42a3a392831f78db413f6e90aa49b537194e5bb43407"
+    },
+    "conditional_memory_view": {
+      "deploy_sha256": "837a72a9280b4e2e930e70085842b350ee158f63307532275b9554f32b45a7f5",
+      "frontend_sha256": "7c066642536f02761237e922f73a771a83b83ad578a922aa8e081f22e98aa4b8",
+      "runtime_sha256": "85df0e106704e14b2714e72d98a2207ae87c3535ed72617638e83a48799cc6d3",
+      "source": "sources/conditional_memory_view.vy",
+      "source_sha256": "651ba00cf9e4bc8d82f7734dbe8f37f413fef56cdb8ee215204077c796fd7c7f"
+    },
+    "conditional_snapshot": {
+      "deploy_sha256": "d3b5860e73eda266dae90354ff8d6e2d821fc00dbd841a0a2a54a344039e29a0",
+      "frontend_sha256": "79ff9f3291278bd35e510cfaf33f09580f96a934209ad8d06cdbe04c59c0d6fc",
+      "runtime_sha256": "1c2ceed3b912e8b2fdf9341533083ed524432af35af8378720922ca7cd40261c",
+      "source": "sources/conditional_snapshot.vy",
+      "source_sha256": "20ba23272e7bb716a3c4f09421f9a23f238b1c57098e8f5b58c99e76ed17123f"
+    },
+    "nested_retained_pop": {
+      "deploy_sha256": "259e09d06fe019d4a2b60814872b37656f799b21434b4a1346ce770bf06b30ec",
+      "frontend_sha256": "9d7a5f40a5e7a09011549fc12849b4b4557a74167484942d2d58191f627dc4fa",
+      "runtime_sha256": "ee0c03003f41c13679716d02bd56944b7008b29a63085e66c06437fc08486b59",
+      "source": "sources/nested_retained_pop.vy",
+      "source_sha256": "c78b0aa8b6c1772339b2accf709c4dc8faee7efd933863cd710b5909b91cf567"
+    },
+    "pop_refill": {
+      "deploy_sha256": "c2e3dbe5808c9478d0c74a8fad36cd2c71a5fdd28d6d1eb1b47320fbb216f492",
+      "frontend_sha256": "73ec5deeb4227c97a542d7ba390b03fab1802190c52858ba95b59d897a43530d",
+      "runtime_sha256": "b9feab4e3d5dc0d9ba3665f6228653c59c58b6a4567adcd8b4b214e4dafc7586",
+      "source": "sources/pop_refill.vy",
+      "source_sha256": "54d8d55c0a555b88bb0e87a11353e4a14aa2396e22b3e86d6931910a636ddc57"
+    }
+  },
+  "producer": "pinned Python Vyper",
+  "python_version": "3.11.11",
+  "schema_version": 2,
+  "settings": {
+    "bytecode_metadata": false,
+    "evm_version": "prague",
+    "experimental_codegen": true,
+    "final_assembly_optimization": false,
+    "optimization_level": "NONE",
+    "outputs": [
+      "bytecode",
+      "bytecode_runtime",
+      "annotated_ast_dict",
+      "layout"
+    ],
+    "venom_ir_pipeline": "O1"
+  },
+  "uv_version": "0.10.11",
+  "vyper_commit": "cd74ce4f57e3771aeeab8f061fa3be45bfe8a29c",
+  "vyper_version": "0.5.0a4+cd74ce4f"
+}

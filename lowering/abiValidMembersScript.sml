@@ -51,49 +51,49 @@ Proof
 QED
 
 Theorem abi_valid_member_cons:
-  valid_enc_tuple (at::ats) raw_bytes hds ==>
+  vyper_decode_valid_enc_tuple (at::ats) raw_bytes hds ==>
   abi_member_head_size at <= LENGTH hds /\
-  valid_enc at (abi_decode_member_bytes at raw_bytes hds) /\
-  valid_enc_tuple ats raw_bytes (DROP (abi_member_head_size at) hds)
+  vyper_decode_valid_enc at (abi_decode_member_bytes at raw_bytes hds) /\
+  vyper_decode_valid_enc_tuple ats raw_bytes (DROP (abi_member_head_size at) hds)
 Proof
   Cases_on `is_dynamic at` >>
-  asm_simp_tac bool_ss [Once valid_enc_def, abi_decode_member_bytes_def,
+  asm_simp_tac bool_ss [Once vyper_decode_valid_enc_def, abi_decode_member_bytes_def,
     abi_member_head_size_def, GSYM abi_head_word_def, LET_THM] >>
   strip_tac >> asm_simp_tac bool_ss []
 QED
 
 Theorem abi_valid_members_view:
-  !ats base hds. valid_enc_tuple ats base hds ==>
+  !ats base hds. vyper_decode_valid_enc_tuple ats base hds ==>
   SUM (MAP abi_member_head_size ats) <= LENGTH hds /\
   has_types ats (abi_decode_members ats base hds)
 Proof
-  Induct >- simp[Once valid_enc_def, abi_decode_members_def, Once has_type_def] >>
+  Induct >- simp[Once vyper_decode_valid_enc_def, abi_decode_members_def, Once has_type_def] >>
   rpt gen_tac >> strip_tac >> drule abi_valid_member_cons >> strip_tac >>
   first_x_assum drule >> strip_tac >>
-  drule_all (cj 1 dec_has_type) >> strip_tac >>
+  drule_all vyper_decode_dec_has_type >> strip_tac >>
   conj_tac >- (fs[LENGTH_DROP] >> decide_tac) >>
   asm_simp_tac bool_ss [abi_decode_members_def, Once has_type_def]
 QED
 
 Theorem abi_valid_members_suffix:
-  !pre ats base hds. valid_enc_tuple (pre ++ ats) base hds ==>
+  !pre ats base hds. vyper_decode_valid_enc_tuple (pre ++ ats) base hds ==>
   SUM (MAP abi_member_head_size pre) <= LENGTH hds /\
-  valid_enc_tuple ats base (DROP (SUM (MAP abi_member_head_size pre)) hds)
+  vyper_decode_valid_enc_tuple ats base (DROP (SUM (MAP abi_member_head_size pre)) hds)
 Proof
   Induct >- simp[] >> rpt gen_tac >> simp_tac bool_ss [APPEND] >> strip_tac >>
   drule abi_valid_member_cons >> strip_tac >> first_x_assum drule >> strip_tac >>
-  asm_simp_tac (srw_ss()) [DROP_DROP_T, ADD_COMM, Excl "valid_enc_def"] >>
-  fs[LENGTH_DROP, DROP_DROP_T, Excl "valid_enc_def", Excl "dec_def", Excl "enc_def"] >> decide_tac
+  asm_simp_tac (srw_ss()) [DROP_DROP_T, ADD_COMM, Excl "vyper_decode_valid_enc_def"] >>
+  fs[LENGTH_DROP, DROP_DROP_T, Excl "vyper_decode_valid_enc_def", Excl "dec_def", Excl "enc_def"] >> decide_tac
 QED
 
 Theorem abi_valid_tuple_view:
-  valid_enc (Tuple ats) bs ==>
+  vyper_decode_valid_enc (Tuple ats) bs ==>
   dec (Tuple ats) bs = ListV (abi_decode_members ats bs bs) /\
   LENGTH (abi_decode_members ats bs bs) = LENGTH ats /\
   has_types ats (abi_decode_members ats bs bs) /\
   SUM (MAP abi_member_head_size ats) <= LENGTH bs
 Proof
-  simp_tac bool_ss [Once valid_enc_def] >> strip_tac >>
+  simp_tac bool_ss [Once vyper_decode_valid_enc_def] >> strip_tac >>
   drule abi_valid_members_view >> strip_tac >>
   asm_simp_tac (srw_ss()) [Once dec_def, abi_decode_members_value,
     Excl "dec_def", Excl "enc_def"]
@@ -105,7 +105,7 @@ QED
 
 Theorem abi_valid_members_metadata:
   LIST_REL (abi_decoder_coherent ce env sf) tys tvs /\
-  valid_enc_tuple (MAP (vyper_to_abi_type env) tys) raw_bytes hds /\
+  vyper_decode_valid_enc_tuple (MAP (vyper_to_abi_type env) tys) raw_bytes hds /\
   abi_to_vyper_list env tys (abi_decode_members (MAP (vyper_to_abi_type env) tys) raw_bytes hds) = SOME vs ==>
   abi_decoder_members ce env sf tys tvs
     (abi_decode_members (MAP (vyper_to_abi_type env) tys) raw_bytes hds) vs
@@ -117,26 +117,26 @@ Proof
      drule abi_decoder_coherent_header >> simp[abi_decoder_header_def]) >>
   drule_all (cj 2 abi_to_vyper_well_typed) >> strip_tac >>
   irule abi_decoder_members_intro >>
-  fs[values_have_types_LIST_REL, Excl "valid_enc_def", Excl "dec_def", Excl "enc_def"]
+  fs[values_have_types_LIST_REL, Excl "vyper_decode_valid_enc_def", Excl "dec_def", Excl "enc_def"]
 QED
 
 Theorem abi_valid_tuple_source_values:
   evaluate_abi_decode env (TupleT tys) bs = INL (ArrayV (TupleV vs)) ==>
-  valid_enc (Tuple (MAP (vyper_to_abi_type env) tys)) bs /\
-  valid_enc_tuple (MAP (vyper_to_abi_type env) tys) bs bs /\
+  vyper_decode_valid_enc (Tuple (MAP (vyper_to_abi_type env) tys)) bs /\
+  vyper_decode_valid_enc_tuple (MAP (vyper_to_abi_type env) tys) bs bs /\
   abi_to_vyper_list env tys
     (abi_decode_members (MAP (vyper_to_abi_type env) tys) bs bs) = SOME vs /\
   SUM (MAP abi_member_head_size (MAP (vyper_to_abi_type env) tys)) <= LENGTH bs
 Proof
   strip_tac >>
-  `valid_enc (Tuple (MAP (vyper_to_abi_type env) tys)) bs` by
+  `vyper_decode_valid_enc (Tuple (MAP (vyper_to_abi_type env) tys)) bs` by
     (drule evaluate_abi_decode_vyper_valid_enc >>
-     simp[vyper_valid_enc_def, vyper_to_abi_types_MAP, Excl "valid_enc_def", Excl "dec_def"]) >>
+     simp[vyper_valid_enc_def, vyper_to_abi_types_MAP, Excl "vyper_decode_valid_enc_def", Excl "dec_def"]) >>
   drule abi_valid_tuple_view >> strip_tac >>
   gvs[evaluate_abi_decode_def, decode_abi_value_def, vyper_valid_enc_def,
-      vyper_to_abi_types_MAP, Once abi_to_vyper_def, Once valid_enc_def,
-      AllCaseEqs(), Excl "valid_enc_def", Excl "dec_def"] >>
-  simp[Once valid_enc_def]
+      vyper_to_abi_types_MAP, Once abi_to_vyper_def, Once vyper_decode_valid_enc_def,
+      AllCaseEqs(), Excl "vyper_decode_valid_enc_def", Excl "dec_def"] >>
+  simp[Once vyper_decode_valid_enc_def]
 QED
 
 Theorem abi_valid_tuple_source_members:
@@ -144,7 +144,7 @@ Theorem abi_valid_tuple_source_members:
   evaluate_abi_decode env (TupleT tys) bs = INL (ArrayV (TupleV vs)) ==>
   abi_decoder_members ce env sf tys tvs
     (abi_decode_members (MAP (vyper_to_abi_type env) tys) bs bs) vs /\
-  valid_enc_tuple (MAP (vyper_to_abi_type env) tys) bs bs /\
+  vyper_decode_valid_enc_tuple (MAP (vyper_to_abi_type env) tys) bs bs /\
   SUM (MAP abi_member_head_size (MAP (vyper_to_abi_type env) tys)) <= LENGTH bs
 Proof
   strip_tac >> drule abi_valid_tuple_source_values >> strip_tac >>

@@ -19,10 +19,76 @@ Ancestors
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
   compileEnv valueEncoding
   vyperInterpreter vyperState vyperValue vyperEvalPreservesScopes
-  vyperExprNoControl vyperValueOperation
+  vyperExprNoControl vyperValueOperation vyperStatePreservation
   venomExecSemantics venomExecProofs venomInst venomState integer_word
 Libs
   monadsyntax intLib
+
+(* Source-level forcing boundary for conditions with arbitrary branches. *)
+Theorem eval_expr_switch_forced:
+  !cx e es kt kf.
+    bind (eval_expr cx e) (\raw. switch_BoolV cx raw kt kf) es =
+    (case (do raw <- eval_expr cx e; read_result cx raw od) es of
+       (INR ex, s) => (INR ex, s)
+     | (INL v, s) => if v = BoolV T then kt s
+                    else if v = BoolV F then kf s
+                    else raise (Error (TypeError "not BoolV")) s)
+Proof
+  rpt gen_tac >> simp[switch_BoolV_def, bind_def] >>
+  Cases_on `eval_expr cx e es` >> rename1 `_ = (raw, est)` >>
+  Cases_on `raw` >> simp[] >>
+  rename1 `eval_expr cx e es = (INL captured, est)` >>
+  Cases_on `read_result cx captured est` >> rename1 `_ = (forced, esf)` >>
+  Cases_on `forced` >> simp[] >> rpt IF_CASES_TAC >> simp[]
+QED
+
+Theorem eval_assert_forced_parts[local]:
+  !cx e ak es res es'.
+    (ak = AssertBare \/ ak = AssertUnreachable) /\
+    eval_stmt cx (Assert e ak) es = (res, es') ==>
+    ?r s. (do raw <- eval_expr cx e; read_result cx raw od) es = (r,s) /\
+      (case r of INR ex => (INR ex,s)
+       | INL v => if v = BoolV T then (INL (),s)
+                  else if v = BoolV F then
+                    (INR (AssertException
+                      (if ak = AssertBare then "" else "UNREACHABLE")),s)
+                  else (INR (Error (TypeError "not BoolV")),s)) = (res,es')
+Proof
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, eval_expr_switch_forced] >>
+  Cases_on `(do raw <- eval_expr cx e; read_result cx raw od) es` >>
+  rename1 `_ = (forced,sf)` >>
+  simp[return_def, raise_def] >> Cases_on `forced` >> simp[]
+QED
+
+Theorem eval_assert_forced_ok[local]:
+  !cx e ak es res es' lctx.
+    (ak = AssertBare \/ ak = AssertUnreachable) /\
+    eval_stmt cx (Assert e ak) es = (res, es') /\
+    stmt_res_ok lctx res ==>
+    ?r s. (do raw <- eval_expr cx e; read_result cx raw od) es = (r,s) /\
+      expr_res_ok r /\ (!v. r = INL v ==> ?b. v = BoolV b) /\
+      (case r of INR ex => (INR ex,s)
+       | INL v => if v = BoolV T then (INL (),s)
+                  else if v = BoolV F then
+                    (INR (AssertException
+                      (if ak = AssertBare then "" else "UNREACHABLE")),s)
+                  else (INR (Error (TypeError "not BoolV")),s)) = (res,es')
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_at Any eval_assert_forced_parts >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  `!exc. r = INR exc ==> no_control_exc exc` by
+    (rpt strip_tac >> gvs[] >>
+     qpat_x_assum `(do raw <- _; _ od) _ = _` mp_tac >>
+     simp[bind_def] >> Cases_on `eval_expr cx e es` >>
+     rename1 `_ = (raw,est)` >> Cases_on `raw` >> simp[] >> strip_tac >>
+     metis_tac[read_result_no_control, cj 1 eval_expr_no_control]) >>
+  qexistsl_tac [`r`,`s`] >> simp[] >>
+  Cases_on `r` >> gvs[expr_res_ok_def, AllCaseEqs()] >>
+  rpt IF_CASES_TAC >> gvs[stmt_res_ok_def, no_control_exc_def] >> metis_tac[]
+QED
 
 (* ===== A condition and its JNZ ===== *)
 
@@ -36,8 +102,8 @@ Theorem cond_jump_frag:
     expr_sim ctx func cenv cx (BaseT BoolT) e es /\
     expr_type e = BaseT BoolT /\
     lower_value compile_expr cenv (BaseT BoolT) e sa = (op, s1) /\
-    eval_expr cx e es = (r1, es1) /\ expr_res_ok r1 /\
-    (!v. r1 = INL (Value v) ==> ?b. v = BoolV b) /\
+    (do result <- eval_expr cx e; read_result cx result od) es = (r1, es1) /\ expr_res_ok r1 /\
+    (!v. r1 = INL v ==> ?b. v = BoolV b) /\
     s3.cs_current_bb = s1.cs_current_bb /\
     s3.cs_current_insts = s1.cs_current_insts /\
     emit_inst JNZ [op; Label lt; Label lf] [] s3 = ((), s4) /\
@@ -49,7 +115,7 @@ Theorem cond_jump_frag:
     stmt_state_rel func cenv cx es s0 /\ ~s0.vs_halted /\
     s0.vs_current_bb = sa.cs_current_bb /\
     s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-    (?b s. r1 = INL (Value (BoolV b)) /\
+    (?b s. r1 = INL (BoolV b) /\
            stmt_state_rel func cenv cx es1 s /\ ~s.vs_halted /\
            (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
                   lookup_var x s = SOME w) /\
@@ -110,11 +176,11 @@ QED
 Theorem eval_stmt_if_all[local]:
   !cx c ss1 ss2 es res es'.
     eval_stmt cx (If c ss1 ss2) es = (res, es') ==>
-    ?r1 es1. eval_expr cx c es = (r1, es1) /\
+    ?r1 es1. (do result <- eval_expr cx c; read_result cx result od) es = (r1, es1) /\
       ((?ex. r1 = INR ex /\ res = INR ex /\ es' = es1) \/
-       (?tv. r1 = INL tv /\ (!b. tv <> Value (BoolV b)) /\
+       (?tv. r1 = INL tv /\ (!b. tv <> BoolV b) /\
              ?m. res = INR (Error (TypeError m))) \/
-       (?b es2 sc rest. r1 = INL (Value (BoolV b)) /\
+       (?b es2 sc rest. r1 = INL (BoolV b) /\
           eval_stmts cx (if b then ss1 else ss2)
             (es1 with scopes := FEMPTY :: es1.scopes) = (res, es2) /\
           es2.scopes = sc :: rest /\ es' = es2 with scopes := rest /\
@@ -128,15 +194,22 @@ Proof
        finally_def, return_def] >>
   Cases_on `eval_expr cx c es` >> rename1 `eval_expr cx c es = (r1, es1)` >>
   Cases_on `r1` >> simp[] >>
-  rename1 `switch_BoolV tv` >>
-  Cases_on `?b. tv = Value (BoolV b)`
+  rename1 `switch_BoolV cx raw` >>
+  Cases_on `read_result cx raw es1` >> rename1 `_ = (forced, esF)` >>
+  `esF = es1` by metis_tac[read_result_state] >> gvs[] >>
+  Cases_on `forced`
+  >- (rename1 `read_result cx raw es1 = (INL tv, es1)` >>
+      simp[switch_BoolV_def, bind_def, read_result_empty_scope] >>
+      Cases_on `?b. tv = BoolV b`
   >- (
     gvs[] >>
     qabbrev_tac `esA = es1 with scopes := FEMPTY :: es1.scopes` >>
     Cases_on `eval_stmts cx (if b then ss1 else ss2) esA` >>
     rename1 `_ = (r2, es2)` >>
-    `switch_BoolV (Value (BoolV b)) (eval_stmts cx ss1) (eval_stmts cx ss2)
-       esA = (r2, es2)` by (Cases_on `b` >> gvs[switch_BoolV_def]) >>
+    `(if BoolV b = BoolV T then eval_stmts cx ss1
+      else if BoolV b = BoolV F then eval_stmts cx ss2
+      else raise (Error (TypeError "not BoolV"))) esA = (r2, es2)` by
+      (Cases_on `b` >> gvs[]) >>
     `es2.scopes <> []` by
       (drule eval_stmts_preserves_scopes_dom >>
        simp[preserves_scopes_dom_def, Abbr `esA`]) >>
@@ -145,9 +218,11 @@ Proof
       (rpt strip_tac >> drule eval_stmts_new_in_head_not_in_tail >>
        simp[Abbr `esA`]) >>
     Cases_on `r2` >> simp[pop_scope_def, return_def, raise_def]) >>
-  `tv <> Value (BoolV T) /\ tv <> Value (BoolV F)` by metis_tac[] >>
-  simp[switch_BoolV_def, raise_def, pop_scope_def, return_def] >>
-  strip_tac >> disj1_tac >> gvs[] >> metis_tac[]
+  `tv <> BoolV T /\ tv <> BoolV F` by metis_tac[] >>
+  simp[raise_def, pop_scope_def, return_def] >>
+  strip_tac >> disj1_tac >> gvs[] >> metis_tac[]) >>
+  simp[switch_BoolV_def, bind_def, read_result_empty_scope,
+       raise_def, pop_scope_def, return_def]
 QED
 
 (* compile_if_parts (loweringSlice), with where the code ends when both
@@ -300,7 +375,7 @@ Theorem compile_if_stmt_frag:
     cs_mono (stmts_env cenv lctx ty ss1) /\
     cs_mono (stmts_env cenv lctx ty ss2) /\
     (!b es1 res2 es2.
-       eval_expr cx c es = (INL (Value (BoolV b)), es1) /\
+       (do result <- eval_expr cx c; read_result cx result od) es = (INL (BoolV b), es1) /\
        eval_stmts cx (if b then ss1 else ss2)
          (es1 with scopes := FEMPTY :: es1.scopes) = (res2, es2) ==>
        stmt_frag ctx func cx lctx RetQ cenv
@@ -363,21 +438,24 @@ Proof
     (* the condition's error *)
     fs[] >>
     `expr_res_ok r1` by
-      (gvs[] >> imp_res_tac (cj 1 eval_expr_no_control) >>
+      (gvs[] >>
+       qpat_x_assum `(do result <- _; _ od) _ = _` mp_tac >>
+       simp[bind_def] >> Cases_on `eval_expr cx c es` >>
+       rename1 `_ = (raw, est)` >> Cases_on `raw` >> simp[] >> strip_tac >>
+       imp_res_tac read_result_no_control >>
+       imp_res_tac (cj 1 eval_expr_no_control) >>
        gvs[no_control_exc_def, expr_res_ok_def, stmt_res_ok_def]) >>
     qspecl_then [`ctx`, `func`, `cx`, `cenv`, `c`, `es`, `r1`, `es1`, `sa`,
                  `cond_op`, `s1`, `s4`, `s5`, `then_lbl`, `else_lbl`, `s0`]
       mp_tac cond_jump_frag >>
     impl_tac >- fs[] >> strip_tac >> fs[] >>
     disj2_tac >> qexists_tac `fuel` >> gvs[stmt_exit_def] >> disj1_tac >>
-    ONCE_REWRITE_TAC [INST_TYPE [beta |-> ``:toplevel_value``]
-                        expr_exit_INR_type] >>
-    first_assum ACCEPT_TAC)
+    metis_tac[expr_exit_INR_type])
   >- gvs[stmt_res_ok_def] >>
   (* the branch the condition selects *)
   fs[] >>
   qspecl_then [`ctx`, `func`, `cx`, `cenv`, `c`, `es`,
-               `INL (Value (BoolV b))`, `es1`, `sa`, `cond_op`, `s1`, `s4`,
+               `INL (BoolV b)`, `es1`, `sa`, `cond_op`, `s1`, `s4`,
                `s5`, `then_lbl`, `else_lbl`, `s0`] mp_tac cond_jump_frag >>
   impl_tac >- fs[expr_res_ok_def] >>
   strip_tac >> fs[] >>
@@ -556,18 +634,10 @@ Proof
        SOME <| bb_label := s4.cs_current_bb;
                bb_instructions := s4.cs_current_insts |>` by
       metis_tac[fn_has_code_new_block] >>
-    qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
-    simp[Once evaluate_def, bind_def] >>
-    Cases_on `eval_expr cx e es` >> rename1 `eval_expr cx e es = (r1, es1)` >>
-    strip_tac >>
-    `expr_res_ok r1 /\ !v. r1 = INL (Value v) ==> ?b. v = BoolV b` by (
-      Cases_on `r1` >> gvs[]
-      >- (rename1 `switch_BoolV tv` >>
-          Cases_on `?b. tv = Value (BoolV b)` >> gvs[expr_res_ok_def] >>
-          `tv <> Value (BoolV T) /\ tv <> Value (BoolV F)` by metis_tac[] >>
-          gvs[switch_BoolV_def, raise_def, stmt_res_ok_def]) >>
-      imp_res_tac (cj 1 eval_expr_no_control) >>
-      gvs[no_control_exc_def, expr_res_ok_def, stmt_res_ok_def]) >>
+    drule_at (Pat `eval_stmt _ _ _ = _`) eval_assert_forced_ok >>
+    disch_then (qspec_then `lctx` mp_tac) >>
+    (impl_tac >- simp[]) >> strip_tac >>
+    rename1 `(do raw <- eval_expr cx e; read_result cx raw od) es = (r1,es1)` >>
     qspecl_then [`ctx`, `func`, `cx`, `cenv`, `e`, `es`, `r1`, `es1`, `sa`,
                  `op`, `s1`, `s3`, `s4`, `ok`, `fl`, `s0`] mp_tac cond_jump_frag >>
     impl_tac >- fs[] >> strip_tac
@@ -598,7 +668,16 @@ Proof
     (* the condition's error *)
     disj2_tac >> qexists_tac `fuel` >> Cases_on `r1` >> gvs[stmt_exit_def] >>
     disj1_tac >>
-    ONCE_REWRITE_TAC [INST_TYPE [beta |-> ``:toplevel_value``]
-                        expr_exit_INR_type] >>
-    first_assum ACCEPT_TAC)
+    metis_tac[expr_exit_INR_type])
 QED
+
+(* Integrity gate for forced condition consumers and their semantic boundary. *)
+val () = List.app (fn th =>
+  let val (ors, axs) = Tag.dest_tag (Thm.tag th)
+  in if null axs andalso null (Thm.hyp th) andalso
+        List.all (fn s => s = "DISK_THM") ors
+     then print "IF_FORCE_AUDIT OK\n"
+     else raise Fail "forced condition inherited admission"
+  end) [eval_expr_switch_forced, eval_assert_forced_parts,
+        eval_assert_forced_ok, cond_jump_frag, eval_stmt_if_all,
+        compile_if_stmt_frag, compile_raise_frag, compile_assert_frag];

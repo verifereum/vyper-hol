@@ -23,8 +23,8 @@ Definition supported_return_layout_def:
     (supported_return_layout ret s /\ supported_return_layouts ret ss)
 Termination
   WF_REL_TAC `measure (\x. case x of
-    INL (_,s) => stmt_size s | INR (_,ss) => stmt1_size ss)` >>
-  simp[stmt_size_def, supported_stmt_list_size]
+    INL (_,s) => stmt_size s | INR (_,ss) => list_size stmt_size ss)` >>
+  simp[stmt_size_def, list_size_def]
 End
 
 Definition supported_function_body_def:

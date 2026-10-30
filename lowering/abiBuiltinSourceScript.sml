@@ -4,7 +4,7 @@ Ancestors
   abiDecoderTypedContract abiDecoderAllocation abiDecoderFrame valueEncoding valueEncodingProps
   vyperABI vyperTypeABI contractABI compileEnv venomState finite_map words list arithmetic
   abiBuiltinUnwrapCorrect abiBuiltinDecodeEffect abiDecoderContract abiDecoderLoop builtinAbi
-  fragExec vyperContext venomExecSemantics
+  fragExec vyperContext venomExecSemantics vyperABIValid
 
 (* ===== Input ===== *)
 
@@ -37,7 +37,7 @@ Proof
   qpat_x_assum `evaluate_abi_decode _ _ _ = _` mp_tac >>
   simp[evaluate_abi_decode_def, decode_abi_value_def, AllCaseEqs()] >> strip_tac >>
   `has_type (vyper_to_abi_type env ty) (dec (vyper_to_abi_type env ty) bs)` by
-    (irule (cj 1 dec_has_type) >> fs[vyper_valid_enc_def]) >>
+    (irule vyper_decode_dec_has_type >> fs[vyper_valid_enc_def]) >>
   `value_has_type tv v` by
     (irule (cj 1 abi_to_vyper_well_typed) >> asm_simp_tac bool_ss [] >>
      qexistsl_tac [`dec (vyper_to_abi_type env ty) bs`, `env`, `ty`] >>

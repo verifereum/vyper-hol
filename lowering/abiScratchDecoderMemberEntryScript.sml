@@ -17,7 +17,7 @@ Theorem abi_scratch_decoder_member_entry:
     (abi_decoder_dynamic (type_to_abi_dec_info (sf:string |-> (string # vyperAST$type # num) list) ce ty))
     ao vo st = (ops,ready) /\ fn_has_code st ready func /\
   abi_decoder_coherent ce env sf ty tv /\
-  valid_enc_tuple (pre ++ at::ats) bs bs /\
+  vyper_decode_valid_enc_tuple (pre ++ at::ats) bs bs /\
   (is_dynamic at ==> !elem. at <> Array (SOME 0) elem) /\
   abi_to_vyper env ty (dec at childbs) = SOME v /\
   abi_scratch_decoder_ranges opc hi src dst sb (LENGTH bs) d outsz first last b cap initial /\

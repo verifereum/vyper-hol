@@ -5,6 +5,7 @@ Theory valueLoadProps
 Ancestors
   compileEnv valueEncoding valueEncodingProps memoryValueDefs vyperValue vyperTyping venomState vyperLookup
   vyperInterpreter vyperState
+Libs monadsyntax
 
 Definition lowered_value_rel_def:
   lowered_value_rel ty tv v op ss <=>
@@ -129,15 +130,20 @@ Proof
   qexistsl_tac [`tenv`, `ty`] >> simp[]
 QED
 
+(* A name captures a memory place, not a snapshot. Forcing it immediately
+   reads the current entry, even without a typing invariant: the Name check
+   only tests scope membership, and reading the empty path returns the value. *)
 Theorem eval_name_lookup_scopes:
   !id es entry cx ann.
   lookup_scopes id es.scopes = SOME entry ==>
-  eval_expr cx (Name ann id) es = (INL (Value entry.value),es)
+  (do result <- eval_expr cx (Name ann id); read_result cx result od) es =
+    (INL entry.value,es)
 Proof
   rpt gen_tac >> strip_tac >>
-  `lookup_scopes_val id es.scopes = SOME entry.value` by
-    (rewrite_tac[lookup_scopes_val_SOME] >> qexists_tac `entry` >> simp[]) >>
-  simp[Once evaluate_def, get_scopes_def, bind_def, return_def]
+  simp[Once evaluate_def, get_scopes_def, bind_def, ignore_bind_def,
+    type_check_def, assert_def, return_def, read_result_def, read_place_def,
+    lift_option_type_def, lift_sum_def, read_memory_path_def,
+    evaluate_subscripts_def]
 QED
 
 Theorem lowered_value_rel_frame:

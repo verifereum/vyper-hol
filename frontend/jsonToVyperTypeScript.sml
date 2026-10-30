@@ -86,30 +86,6 @@ Termination
   WF_REL_TAC `measure (λ(_,ty). json_type_size ty)` >> simp[]
 End
 
-Definition translate_annotation_def:
-  (translate_annotation ctx (JTA_Integer bits T) = BaseT (IntT bits)) ∧
-  (translate_annotation ctx (JTA_Integer bits F) = BaseT (UintT bits)) ∧
-  (translate_annotation ctx (JTA_BytesM m) = BaseT (BytesT (Fixed m))) ∧
-  (translate_annotation ctx (JTA_String n) = BaseT (StringT n)) ∧
-  (translate_annotation ctx (JTA_Bytes n) = BaseT (BytesT (Dynamic n))) ∧
-  (translate_annotation ctx (JTA_StaticArray ty len) =
-    ArrayT (translate_annotation ctx ty) (Fixed len)) ∧
-  (translate_annotation ctx (JTA_DynArray ty len) =
-    ArrayT (translate_annotation ctx ty) (Dynamic len)) ∧
-  (translate_annotation ctx (JTA_Tuple tys) =
-    TupleT (MAP (translate_annotation ctx) tys)) ∧
-  (translate_annotation ctx (JTA_Named name) =
-    if name = "bool" then BaseT BoolT
-    else if name = "address" ∨ name = "self" then BaseT AddressT
-    else if name = "decimal" then BaseT DecimalT
-    else if name = "(void)" then NoneT
-    else StructT (tctx_current_nsid ctx, name)) ∧
-  (translate_annotation ctx (JTA_Qualified _ name) = StructT (NONE, name)) ∧
-  (translate_annotation ctx JTA_None = NoneT)
-Termination
-  WF_REL_TAC `measure (λ(_,ann). json_type_annotation_size ann)` >> simp[]
-End
-
 (* Qualified syntactic annotations are resolved locally using the current
    module import map.  We only use them as namespace hints; the inferred
    type supplies the kind (flag/struct/named). *)
@@ -292,36 +268,4 @@ Definition canonical_decl_type_def:
   canonical_decl_type nominal_index all_import_maps ctx inferred ann =
     if ann = JTA_None then translate_type ctx inferred
     else elaborate_annotation nominal_index all_import_maps ctx ann
-End
-
-Definition translate_qualified_annotation_def:
-  translate_qualified_annotation all_import_maps ctx inferred path attr =
-    case inferred of
-    | JT_Flag _ name =>
-        if attr = name then
-          case resolve_qualified_type_path all_import_maps ctx path of
-          | SOME src_id => FlagT (SOME src_id, name)
-          | NONE => translate_type ctx (JT_Flag NONE name)
-        else translate_type ctx inferred
-    | JT_Struct _ name =>
-        if attr = name then
-          case resolve_qualified_type_path all_import_maps ctx path of
-          | SOME src_id => StructT (SOME src_id, name)
-          | NONE => translate_type ctx (JT_Struct NONE name)
-        else translate_type ctx inferred
-    | JT_Named _ name =>
-        if attr = name then
-          case resolve_qualified_type_path all_import_maps ctx path of
-          | SOME src_id => StructT (SOME src_id, name)
-          | NONE => translate_type ctx (JT_Named NONE name)
-        else translate_type ctx inferred
-    | _ => translate_type ctx inferred
-End
-
-Definition translate_type_with_annotation_def:
-  translate_type_with_annotation all_import_maps ctx inferred ann =
-    case ann of
-    | JTA_Qualified path attr =>
-        translate_qualified_annotation all_import_maps ctx inferred path attr
-    | _ => translate_type ctx inferred
 End

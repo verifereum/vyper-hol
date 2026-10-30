@@ -3,22 +3,22 @@
 Theory abiValidBytes
 Ancestors
   abiCanonicalLoad abiDecoderContract abiStaticPrimitiveProps valueEncoding valueEncodingProps
-  contractABI words list rich_list arithmetic
+  contractABI vyperABI vyperABIValid words list rich_list arithmetic
 
 Theorem abi_valid_bytes_decode:
-  (at = Bytes NONE \/ at = String) /\ valid_enc at bs /\
+  (at = Bytes NONE \/ at = String) /\ vyper_decode_valid_enc at bs /\
   dec at bs = contractABI$BytesV payload ==>
   32 <= LENGTH bs /\ 32 + LENGTH payload <= LENGTH bs /\
   TAKE (LENGTH payload) (DROP 32 bs) = payload /\
   word_of_bytes T (0w:256 word) (TAKE 32 bs) = n2w (LENGTH payload)
 Proof
-  strip_tac >> gvs[valid_enc_def, dec_def, dec_number_def, dest_NumV_def,
+  strip_tac >> gvs[vyper_decode_valid_enc_def, dec_def, dec_number_def, dest_NumV_def,
     LET_THM, LENGTH_TAKE_EQ, LENGTH_DROP, MIN_DEF] >>
-  rpt conj_tac >> TRY (decide_tac) >> simp[]
+  rpt conj_tac >> simp[] >> decide_tac
 QED
 
 Theorem abi_valid_bytes_source_layout:
-  (at = Bytes NONE \/ at = String) /\ valid_enc at bs /\
+  (at = Bytes NONE \/ at = String) /\ vyper_decode_valid_enc at bs /\
   dec at bs = contractABI$BytesV payload /\
   mem_bytes_at sb (LENGTH bs) mem = bs ==>
   val_in_memory (BaseTV (BytesT (Dynamic n))) (vyperValue$BytesV payload) sb mem
@@ -35,7 +35,7 @@ Proof
 QED
 
 Theorem abi_valid_bytes_count_load:
-  (at = Bytes NONE \/ at = String) /\ valid_enc at bs /\
+  (at = Bytes NONE \/ at = String) /\ vyper_decode_valid_enc at bs /\
   dec at bs = contractABI$BytesV payload /\
   mem_bytes_at sb (LENGTH bs) (abi_decode_source opc s) = bs /\
   sb < dimword (:256) ==>

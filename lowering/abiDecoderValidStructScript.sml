@@ -23,7 +23,7 @@ Theorem abi_decoder_valid_struct_inputs:
       (MAP SND args) tvs
       (abi_decode_members (MAP (vyper_to_abi_type (env \\ nsid)) (MAP SND args)) bs bs)
       (MAP SND fields) /\
-    valid_enc_tuple (MAP (vyper_to_abi_type (env \\ nsid)) (MAP SND args)) bs bs /\
+    vyper_decode_valid_enc_tuple (MAP (vyper_to_abi_type (env \\ nsid)) (MAP SND args)) bs bs /\
     type_memory_bytes ce (StructT nsid) = SUM (MAP (type_memory_bytes ce) (MAP SND args)) /\
     abi_decoder_ranges opc hi src dst sb
       (LENGTH bs)
@@ -39,7 +39,7 @@ Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   qpat_assum `abi_decoder_metadata _ _ _ _ _ _ _`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_metadata_def]) >>
-  drule abi_decoder_struct_values >> strip_tac >> gvs[Excl "enc_def", Excl "dec_def", Excl "valid_enc_def"] >>
+  drule abi_decoder_struct_values >> strip_tac >> gvs[Excl "enc_def", Excl "dec_def", Excl "vyper_decode_valid_enc_def"] >>
   drule_all abi_decoder_struct_members_at >> strip_tac >>
   drule abi_decoder_members_relations >> strip_tac >>
   drule abi_decoder_member_infos_layout >> strip_tac >>
@@ -48,15 +48,15 @@ Proof
   `type_memory_bytes ce (StructT nsid) = SUM (MAP (type_memory_bytes ce) (MAP SND args))` by
     fs[Once type_memory_size_def, Excl "enc_def"] >>
   drule_all abi_decoder_struct_field_types >> strip_tac >>
-  `valid_enc (Tuple (MAP (vyper_to_abi_type (env \\ nsid)) (MAP SND args))) bs` by
-    (qpat_x_assum `valid_enc _ bs` mp_tac >>
+  `vyper_decode_valid_enc (Tuple (MAP (vyper_to_abi_type (env \\ nsid)) (MAP SND args))) bs` by
+    (qpat_x_assum `vyper_decode_valid_enc _ bs` mp_tac >>
      asm_simp_tac (srw_ss()) [Once vyper_to_abi_type_def, vyper_to_abi_types_MAP,
-       Excl "enc_def", Excl "dec_def", Excl "valid_enc_def"]) >>
+       Excl "enc_def", Excl "dec_def", Excl "vyper_decode_valid_enc_def"]) >>
   drule abi_valid_tuple_view >> strip_tac >>
   qexists_tac `cfields` >>
   gvs[Once vyper_to_abi_type_def, vyper_to_abi_types_MAP,
-    Excl "enc_def", Excl "dec_def", Excl "valid_enc_def"] >>
-  qpat_x_assum `valid_enc (Tuple _) bs` mp_tac >> simp_tac bool_ss [Once valid_enc_def]
+    Excl "enc_def", Excl "dec_def", Excl "vyper_decode_valid_enc_def"] >>
+  qpat_x_assum `vyper_decode_valid_enc (Tuple _) bs` mp_tac >> simp_tac bool_ss [Once vyper_decode_valid_enc_def]
 QED
 
 (* ===== Decoder Valid Struct ===== *)
@@ -73,7 +73,7 @@ Proof
   `LENGTH tvs = LENGTH args` by metis_tac[LIST_REL_LENGTH, LENGTH_MAP] >>
   simp_tac bool_ss [abi_decoder_valid_correct_def] >> rpt gen_tac >>
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  drule_all abi_decoder_valid_struct_inputs >> strip_tac >> gvs[Excl "enc_def", Excl "dec_def", Excl "valid_enc_def"] >>
+  drule_all abi_decoder_valid_struct_inputs >> strip_tac >> gvs[Excl "enc_def", Excl "dec_def", Excl "vyper_decode_valid_enc_def"] >>
   (drule abi_decoder_struct_infos >> strip_tac >>
   qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _` mp_tac >>
   asm_simp_tac bool_ss [] >> strip_tac >>

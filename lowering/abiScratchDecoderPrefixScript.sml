@@ -2,7 +2,7 @@
    Actual bytes determine the readable prefix; no canonical whole-input equality is assumed. *)
 Theory abiScratchDecoderPrefix
 Ancestors
-  abiScratchDecoderRanges abiScratchDecoderContract abiDecoderValidContract abiDecoderPrefixPre
+  vyperABIValid abiScratchDecoderRanges abiScratchDecoderContract abiDecoderValidContract abiDecoderPrefixPre
   abiDecoderDynamic abiDecoderCoherence abiDecoderTypedContract abiDecoderContract
   abiDecoderReentry abiValidStatic abiDecodeRanges compileEnv valueEncoding vyperABI contractABI
   venomState words list rich_list
@@ -33,10 +33,12 @@ Proof
   drule_all abi_scratch_decoder_input_point >> strip_tac >>
   `abi_decoder_reservation st.cs_next_id st.cs_next_id s.vs_alloca_next 0 s` by
     (mp_tac abi_scratch_decoder_point_reservation >> asm_simp_tac bool_ss []) >>
-  `valid_enc (vyper_to_abi_type env ty) bs /\
+  `vyper_decode_valid_enc (vyper_to_abi_type env ty) bs /\
    abi_member_head_size (vyper_to_abi_type env ty) <= LENGTH bs` by
     fs[abi_scratch_decoder_input_def, abi_member_head_size_def,
-      Excl "valid_enc_def", Excl "dec_def"] >>
+      Excl "vyper_decode_valid_enc_def", Excl "dec_def"] >>
+  `valid_enc (vyper_to_abi_type env ty) bs` by
+    (irule vyper_decode_valid_enc_static >> simp[]) >>
   drule_all abi_scratch_decoder_static_prefix >> strip_tac >>
   mp_tac (Q.INST [`last` |-> `st.cs_next_id`, `b` |-> `s.vs_alloca_next`, `cap` |-> `0:num`]
     abi_decoder_valid_pre_prefix) >> asm_simp_tac bool_ss []

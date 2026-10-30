@@ -184,7 +184,7 @@ Theorem bop_result_unsafe:
       SOME (if is_signed_type ty then Signed b else Unsigned b) /\
     type_bits ty = b /\ 0 < b /\ b <= 256 /\ b MOD 8 = 0 /\
     within_int_bound (if is_signed_type ty then Signed b else Unsigned b) i2 ==>
-    ?v. bop_result cx ann bop tys v1 v2 es = INL (Value v) /\ word_value v /\
+    ?v. bop_result cx ann bop tys v1 v2 es = INL v /\ word_value v /\
         val_to_w256 v =
           truncate_to_bits b (is_signed_type ty)
             (unsafe_word_op bop ty (val_to_w256 v1) (val_to_w256 v2))
@@ -552,7 +552,7 @@ Theorem bop_result_checked:
     bop_result cx ann bop tys v1 v2 es =
       let r = if bop = Add then i1 + i2 else if bop = Sub then i1 - i2
               else i1 * i2 in
-      if within_int_bound u r then INL (Value (IntV r))
+      if within_int_bound u r then INL (IntV r)
       else INR (Error (RuntimeError "bounded_int_op bound"))
 Proof
   rw[] >>
@@ -576,7 +576,7 @@ Proof
   qabbrev_tac `rr = if bop = Add then i1 + i2 else if bop = Sub then i1 - i2
                    else i1 * i2` >>
   `bop_result cx ann bop tys (IntV i1) (IntV i2) es0 =
-     if within_int_bound u rr then INL (Value (IntV rr))
+     if within_int_bound u rr then INL (IntV rr)
      else INR (Error (RuntimeError "bounded_int_op bound"))` by
     (qspecl_then [`cx`, `ann`, `bop`, `IntV i1`, `IntV i2`, `es0`, `i1`, `i2`,
                   `u`] mp_tac bop_result_checked >> simp[Abbr `rr`]) >>
@@ -638,7 +638,7 @@ Theorem bop_result_divmod:
      ?m. bop_result cx ann bop tys v1 v2 es = INR (Error (RuntimeError m))) /\
     (~(i2 = 0 \/ (bop = Div /\ is_signed_type ty /\
                   i1 = -&(2 ** (type_bits ty − 1)) /\ i2 = -1)) ==>
-     ?z. bop_result cx ann bop tys v1 v2 es = INL (Value (IntV z)) /\
+     ?z. bop_result cx ann bop tys v1 v2 es = INL (IntV z) /\
          (i2w z : bytes32) =
            (if bop = Div then
               (if is_signed_type ty then safe_sdiv else safe_div)
@@ -785,9 +785,9 @@ Theorem binop_frag_decimal_transfer:
     (!x y. compile_binop bop x y (BaseT DecimalT) bl el =
            compile_binop bop x y (BaseT (IntT 168)) bl el) /\
     ((?z. bop_result cx ann' bop tys (IntV d1) (IntV d2) es0 =
-            INL (Value (IntV z)) /\
+            INL (IntV z) /\
           bop_result cx ann bop tys (DecimalV d1) (DecimalV d2) es0 =
-            INL (Value (DecimalV z))) \/
+            INL (DecimalV z)) \/
      (?m m'. bop_result cx ann' bop tys (IntV d1) (IntV d2) es0 =
                INR (Error (RuntimeError m)) /\
              bop_result cx ann bop tys (DecimalV d1) (DecimalV d2) es0 =

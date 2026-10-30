@@ -18,7 +18,7 @@ Definition abi_valid_singleton_prefix_pre_def:
     abi_decoder_coherent ce env sf ty tv /\
     abi_decoder_metadata ce env ty tv (type_to_abi_dec_info ce.ce_struct_fields ce ty) av v /\
     is_dynamic (vyper_to_abi_type env ty) /\
-    valid_enc (Tuple [vyper_to_abi_type env ty]) bs /\
+    vyper_decode_valid_enc (Tuple [vyper_to_abi_type env ty]) bs /\
     dec (Tuple [vyper_to_abi_type env ty]) bs = ListV [av] /\
     abi_head_word bs <= LENGTH bs /\
     abi_decoder_ranges opc hi src dst sb (LENGTH bs) d (type_memory_bytes ce ty) b cap s /\
@@ -31,7 +31,7 @@ Definition abi_valid_singleton_prefix_pre_def:
 End
 
 Theorem abi_valid_singleton_dynamic_load:
-  is_dynamic at /\ valid_enc (Tuple [at]) bs /\ dec (Tuple [at]) bs = ListV [av] /\
+  is_dynamic at /\ vyper_decode_valid_enc (Tuple [at]) bs /\ dec (Tuple [at]) bs = ListV [av] /\
   abi_head_word bs <= LENGTH bs /\
   mem_bytes_at sb (LENGTH bs) (abi_decode_source opc s) = bs /\
   sb + LENGTH bs < dimword (:256) ==>

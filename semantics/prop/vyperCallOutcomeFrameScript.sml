@@ -139,8 +139,6 @@ Proof
   metis_tac[]
 QED
 
-(* The actual TASK028 continuation equations isolate the pre-take code check. *)
-
 Theorem Send_outcome_transport:
   (!s. R s s) /\
   (!s t u. R s t /\ R t u ==> R s u) /\
@@ -157,7 +155,7 @@ Theorem Send_outcome_transport:
   R st st'
 Proof
   rpt strip_tac >>
-  irule (checked_call_outcome_transport |> INST_TYPE [alpha |-> ``:toplevel_value``]) >>
+  irule (checked_call_outcome_transport |> INST_TYPE [alpha |-> ``:eval_result``]) >>
   simp[] >>
   conj_tac >- metis_tac[] >>
   qexistsl_tac [`[]`,`\bs. vyperState$return (Value NoneV)`,

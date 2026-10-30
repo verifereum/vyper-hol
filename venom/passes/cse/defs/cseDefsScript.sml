@@ -82,7 +82,8 @@ Definition expr_depth_def:
 Termination
   WF_REL_TAC `measure (\x. case x of
     INL e => avail_expr_size e
-  | INR es => avail_expr1_size es)`
+  | INR es => list_size avail_expr_size es)` >>
+  simp[avail_expr_size_def, listTheory.list_size_def]
 End
 
 (* ===== Canon Map: Operand Identity ===== *)

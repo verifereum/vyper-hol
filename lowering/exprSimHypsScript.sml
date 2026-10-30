@@ -35,6 +35,9 @@
  *   compile_expr_type_builtin_dispatch — compile_expr of a type builtin is
  *                       its dispatcher's
  *   word_value_type   — the types whose values are word_values
+ *   popped_keys_indexed — every key of a local's popped history ends in
+ *                       an array index
+ *   eval_expr_popped_keys_indexed — evaluation keeps popped_keys_indexed
  *   expr_sim_pre_eval — type soundness: evaluation keeps expr_sim_inv and
  *                       raises no type error
  *   expr_sim_pre_res_ok, expr_sim_pre_word_result — the results of an
@@ -54,7 +57,7 @@
  *   - well_typed_expr, env_consistent, state_well_typed,
  *     accounts_well_typed, context_well_typed, functions_well_typed and
  *     call_evaluation_safe are exactly the premises of type soundness
- *     (vyperTypeEvalSoundness's eval_all_type_sound_mutual, the expression
+ *     (vyperTypeEvalSoundness's eval_scc_type_sound_mutual, the expression
  *     conjunct).  The lowering trusts the annotations: an operator picks its
  *     bounds from the operand's annotated type, a literal is emitted at its
  *     annotated type.  So an expression whose values do not have their
@@ -74,6 +77,13 @@
  *     internal functions and the constructor, are MemLoc
  *     (compile_register_kwarg_vars, local_ptrs_reserved), so the theorem
  *     says nothing yet about expressions there.
+ *   - The local types clause: the compile environment's type of a local
+ *     is its type in the type environment.  pop reads the element type of
+ *     the array it pops from ce_var_type (elem_size_in_location), as
+ *     Python's _lower_dynarray_pop reads the target's typ.value_type.  The
+ *     statement lowering records each declared local's type there
+ *     (ce_var_type updated_by (id =+ SOME ty)), and build_compile_env the
+ *     parameters' (local_var_type).
  *   - The flag members clause: the compile environment's id of a flag
  *     member is its index in its flag's declaration, the bit
  *     lookup_flag_mem sets.  Vyper's compiler guarantees this:
@@ -120,10 +130,28 @@
  *     would wrap; evaluate_type admits Bytes[n] and String[n] for any
  *     n < 2 ** 256.  return_buffer_ok is the same limit for an external
  *     function's return buffer.
+ *   - The outcomes clause (outcomes_accounts_typed): every successful call
+ *     outcome still to consume adopts runtime well-typed accounts.
+ *     take_call_outcome raises "call outcome accounts" on a successful
+ *     nonstatic outcome whose accounts are not, while Venom's CALL adopts
+ *     it and goes on, so without the clause send and extcall do not
+ *     simulate.  The outcomes are the environment's answers, not the
+ *     contract's: e2eDefs's call_outcomes_ok asks this of the initial ones,
+ *     and the evaluator only drops outcomes from the front
+ *     (eval_outcome_suffix_mutual), so expr_sim_pre_eval carries it on.
  *   - int_calls_expr e = []: no internal call.  An internal call lowers to
  *     INVOKE, whose simulation is #638's call step; until that is stated
  *     this theorem excludes them, and #638 replaces this conjunct with its
  *     hypothesis on the callees.
+ *   - The popped keys clause (popped_keys_indexed): every key of a local's
+ *     popped history ends in an array index.  Reading a field of a popped
+ *     element reads the history, and a snapshot recorded at the field
+ *     itself would be read instead of the field of the element's snapshot,
+ *     which memory at the field's pointer holds.  This is a fact about the
+ *     source semantics, not the compiler: pop records the element it
+ *     removes at path ++ [ValueSubscript (IntV i)] (record_pop), a new
+ *     local starts with no history, and evaluation changes the scopes only
+ *     by pops (eval_expr_popped_keys_indexed).
  *
  *   - The struct fields clauses: the compile environment's struct field
  *     map agrees with the type environment's struct declarations, field
@@ -144,8 +172,8 @@
  * Not here yet:
  *   - The rest of the compile environment's metadata (dynamic array
  *     capacities, method ids) is not related to the source context.  The
- *     cases that read it (Attribute, Pop, ...) will need a clause each in
- *     expr_sim_inv, and
+ *     cases that read it (Attribute, ...) will need a clause each in
+ *     expr_sim_inv, as pop has the local types clause, and
  *     TopLevelName needs every immutable to be in ce_vars (#563); storage
  *     and transient variables are there by storage_vars_rel and
  *     transient_vars_rel.  Each is to match what Vyper's compiler
@@ -164,10 +192,33 @@ Ancestors
   vyperTypeInvariants vyperTypeExprSoundness vyperTypeCallStackSoundness
   vyperTypeExprResult vyperTypeEvalSoundness vyperTypeBuiltins
   vyperExprNoControl loweringSlice exprSimUnwrap exprSafeOperand
+  vyperEvalOutcomeSuffix vyperRuntimeAccounts vyperLookup
+  vyperPlaceResultTyping
 Libs
   pairLib
 
 (* ===== The hypotheses ===== *)
+
+(* Every successful outcome still to consume adopts accounts that are
+   runtime well typed, as e2eDefs's call_outcomes_ok asks of the initial
+   ones.  The evaluator only drops outcomes from the front
+   (vyperEvalOutcomeSuffix), so this carries from one operand to the next. *)
+Definition outcomes_accounts_typed_def:
+  outcomes_accounts_typed (oos : call_outcome list option) <=>
+    !os. oos = SOME os ==>
+         EVERY (\oc. oc.co_success ==>
+                     accounts_runtime_well_typed oc.co_accounts) os
+End
+
+(* Every key of a local's popped history ends in an array index: pop records
+   the element it removes at path ++ [ValueSubscript (IntV i)] (record_pop),
+   and replace_popped keeps the keys. *)
+Definition popped_keys_indexed_def:
+  popped_keys_indexed (scs : scope list) <=>
+    EVERY (\sc. !id entry. FLOOKUP sc id = SOME entry ==>
+                 EVERY (\k. ?p i. k = p ++ [ValueSubscript i])
+                       (MAP FST entry.popped)) scs
+End
 
 Definition expr_sim_inv_def:
   expr_sim_inv cenv cx env (es:evaluation_state) <=>
@@ -176,6 +227,8 @@ Definition expr_sim_inv_def:
     context_well_typed cx /\ functions_well_typed cx /\
     (!id ty. FLOOKUP env.var_types id = SOME ty ==>
              ?p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz)) /\
+    (!id ty. FLOOKUP env.var_types id = SOME ty ==>
+             cenv.ce_var_type id = SOME ty) /\
     (!src fid ts ls mid i.
        get_module_code cx src = SOME ts /\ lookup_flag fid ts = SOME ls /\
        INDEX_OF mid ls = SOME i ==>
@@ -187,7 +240,9 @@ Definition expr_sim_inv_def:
        FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
        ALL_DISTINCT (MAP FST fields) /\
        EVERY (\(fname, fty, sz). !tv. evaluate_type (get_tenv cx) fty = SOME tv ==>
-                                     sz = type_memory_size tv) fields)
+                                     sz = type_memory_size tv) fields) /\
+    outcomes_accounts_typed es.outcomes /\
+    popped_keys_indexed es.scopes
 End
 
 (* The types whose values are word_values (loweringSlice): integers,
@@ -238,17 +293,24 @@ Definition byte_widths_expr_def:
   byte_widths_named_exprs ((_,e)::kes) =
     (byte_widths_expr e /\ byte_widths_named_exprs kes)
 Termination
+  (* the measure names the container sizes with `list_size`/`option_size` over
+     `expr_size`, as in `vyperTypeCallGraph`, so that the obligations are
+     arithmetic over one set of size functions. *)
   qexists_tac `measure (\(x : expr + base_assignment_target + expr list +
                                       expr option + (identifier # expr) list).
     case x of
     | INL e => expr_size e
     | INR (INL tgt) => base_assignment_target_size tgt
-    | INR (INR (INL es)) => expr4_size es
-    | INR (INR (INR (INL opt))) => expr3_size opt
-    | INR (INR (INR (INR kes))) => expr1_size kes)` >>
+    | INR (INR (INL es)) => list_size expr_size es
+    | INR (INR (INR (INL opt))) => option_size expr_size opt
+    | INR (INR (INR (INR kes))) =>
+        list_size (pair_size (list_size char_size) expr_size) kes)` >>
   conj_tac >- MATCH_ACCEPT_TAC prim_recTheory.WF_measure >>
   PURE_REWRITE_TAC [prim_recTheory.measure_thm, sumTheory.sum_case_def] >>
-  simp[expr_size_def]
+  simp[expr_size_def, listTheory.list_size_def,
+       basicSizeTheory.pair_size_def, basicSizeTheory.option_size_def,
+       bnfPrelimsTheory.option_size_map, bnfPrelimsTheory.pair_size_map,
+       listTheory.list_size_map, SF ETA_ss]
 End
 
 (* The buffer the lowering allocates for a bytes or string literal, its
@@ -314,6 +376,7 @@ Definition alloc_limits_expr_def:
   alloc_limits_named_exprs cenv ((_,e)::kes) =
     (alloc_limits_expr cenv e /\ alloc_limits_named_exprs cenv kes)
 Termination
+  (* as above: container sizes, not the package's per-instance size functions. *)
   qexists_tac `measure (\(x : compile_env # expr + compile_env #
                               base_assignment_target + compile_env # expr list +
                               compile_env # expr option +
@@ -321,13 +384,17 @@ Termination
     case x of
     | INL (_, e) => expr_size e
     | INR (INL (_, tgt)) => base_assignment_target_size tgt
-    | INR (INR (INL (_, es))) => expr4_size es
-    | INR (INR (INR (INL (_, opt)))) => expr3_size opt
-    | INR (INR (INR (INR (_, kes)))) => expr1_size kes)` >>
+    | INR (INR (INL (_, es))) => list_size expr_size es
+    | INR (INR (INR (INL (_, opt)))) => option_size expr_size opt
+    | INR (INR (INR (INR (_, kes)))) =>
+        list_size (pair_size (list_size char_size) expr_size) kes)` >>
   conj_tac >- MATCH_ACCEPT_TAC prim_recTheory.WF_measure >>
   PURE_REWRITE_TAC [prim_recTheory.measure_thm, sumTheory.sum_case_def,
                     pairTheory.pair_case_def] >>
-  simp[expr_size_def]
+  simp[expr_size_def, listTheory.list_size_def,
+       basicSizeTheory.pair_size_def, basicSizeTheory.option_size_def,
+       bnfPrelimsTheory.option_size_map, bnfPrelimsTheory.pair_size_map,
+       listTheory.list_size_map, SF ETA_ss]
 End
 
 Definition expr_sim_pre_def:
@@ -414,41 +481,140 @@ QED
 
 (* ===== Type soundness ===== *)
 
-Theorem expr_sim_pre_eval:
+Theorem replace_popped_keys[local]:
+  !h tv path r h'.
+    replace_popped tv path r h = SOME h' ==> MAP FST h' = MAP FST h
+Proof
+  Induct >> simp[replace_popped_def] >> Cases >> rpt gen_tac >>
+  simp[replace_popped_def] >> rw[AllCaseEqs()] >> gvs[] >> res_tac
+QED
+
+Theorem entry_pop_step_keys_indexed[local]:
+  !entry path entry'.
+    entry_pop_step entry path entry' /\
+    EVERY (\k. ?p i. k = p ++ [ValueSubscript i]) (MAP FST entry.popped) ==>
+    EVERY (\k. ?p i. k = p ++ [ValueSubscript i]) (MAP FST entry'.popped)
+Proof
+  rw[entry_pop_step_def] >> simp[record_pop_def] >>
+  BasicProvers.every_case_tac >> imp_res_tac replace_popped_keys >> gvs[] >>
+  metis_tac[]
+QED
+
+Theorem scope_pop_step_keys_indexed[local]:
+  !sc ev sc'.
+    scope_pop_step sc ev sc' /\ popped_keys_indexed sc ==>
+    popped_keys_indexed sc'
+Proof
+  rpt gen_tac >> PairCases_on `ev` >> rw[scope_pop_step_def] >>
+  drule find_containing_scope_structure >> strip_tac >>
+  gvs[popped_keys_indexed_def, FLOOKUP_UPDATE] >> rw[] >> gvs[]
+  >- (irule entry_pop_step_keys_indexed >> metis_tac[]) >>
+  first_x_assum irule >> metis_tac[]
+QED
+
+Theorem scope_pop_trace_keys_indexed[local]:
+  !events sc sc'.
+    scope_pop_trace sc events sc' /\ popped_keys_indexed sc ==>
+    popped_keys_indexed sc'
+Proof
+  Induct >> simp[scope_pop_trace_def] >>
+  metis_tac[scope_pop_step_keys_indexed]
+QED
+
+(* Evaluating an expression changes the scopes only by pops
+   (eval_mutual_scope_pop_effect), so it keeps popped_keys_indexed. *)
+Theorem eval_expr_popped_keys_indexed:
+  !cx e es res es'.
+    eval_expr cx e es = (res, es') /\ popped_keys_indexed es.scopes ==>
+    popped_keys_indexed es'.scopes
+Proof
+  rpt strip_tac >>
+  `scope_pop_effect (eval_expr cx e)` by
+    simp[cj 5 eval_mutual_scope_pop_effect] >>
+  gvs[scope_pop_effect_def] >> first_x_assum drule >> strip_tac >>
+  drule_all scope_pop_trace_keys_indexed >> simp[]
+QED
+
+Theorem expr_sim_pre_eval_result:
   !cenv cx env e es res es'.
     expr_sim_pre cenv cx env e es /\ eval_expr cx e es = (res, es') ==>
     expr_sim_inv cenv cx env es' /\ no_type_error_result res /\
-    !tv. res = INL tv ==> expr_result_typed env e tv
+    !tv. res = INL tv ==>
+         eval_result_typed (env,cx,es') tv (Type (expr_type e))
 Proof
   rpt gen_tac >> simp[expr_sim_pre_def, expr_sim_inv_def] >> strip_tac >>
-  qspecl_then [`cx`, `e`, `env`, `es`, `res`, `es'`] mp_tac
-    (cj 8 eval_all_type_sound_mutual) >>
-  impl_tac >- gvs[] >> disch_then (mp_tac o CONJUNCT1) >>
+  drule_all eval_expr_popped_keys_indexed >> strip_tac >>
+  qspecl_then [`cx`, `e`] (mp_tac o CONJUNCT1)
+    (cj 5 eval_scc_type_sound_mutual) >>
+  disch_then (qspecl_then [`env`, `es`, `res`, `es'`] mp_tac) >>
+  impl_tac >- gvs[] >> strip_tac >>
+  qpat_x_assum `well_typed_expr env e ==> _` mp_tac >>
   impl_tac >- gvs[] >>
-  Cases_on `res` >> rpt strip_tac >> gvs[] >>
-  qpat_x_assum `!name fields. _` drule >> simp[]
+  `outcomes_accounts_typed es'.outcomes` by
+    (rw[outcomes_accounts_typed_def] >>
+     drule (cj 5 eval_outcome_suffix_mutual) >> strip_tac >>
+     drule_then irule outcome_suffix_EVERY >>
+     gvs[outcomes_accounts_typed_def]) >>
+  Cases_on `res` >> gvs[] >>
+  rpt strip_tac >> first_x_assum drule >> simp[]
+QED
+
+Theorem expr_sim_pre_eval:
+  !cenv cx env e es res es'.
+    expr_sim_pre cenv cx env e es /\ (do result <- eval_expr cx e; read_result cx result od) es = (res, es') ==>
+    expr_sim_inv cenv cx env es' /\ no_type_error_result res /\
+    !v. res = INL v ==> expr_result_typed env e (Value v)
+Proof
+  rpt strip_tac >>
+  `state_well_typed es' /\ no_type_error_result res /\
+   (case res of INL v => value_runtime_typed env (expr_type e) v | INR _ => T)` by
+    (drule_at (Pat `bind _ _ _ = _`) eval_expr_read_type_sound >>
+     disch_then (qspec_then `env` mp_tac) >>
+     gvs[expr_sim_pre_def, expr_sim_inv_def]) >>
+  qpat_x_assum `(do result <- eval_expr _ _; read_result _ result od) _ = _` mp_tac >>
+  simp[NoAsms, bind_def, AllCaseEqs()] >> strip_tac >>
+  imp_res_tac read_result_state >> gvs[] >>
+  drule_all expr_sim_pre_eval_result >> strip_tac >> simp[] >>
+  gvs[expr_result_typed_def, expr_runtime_typed_def, value_runtime_typed_def,
+      value_result_typed_def, is_HashMapRef_def]
 QED
 
 Theorem expr_sim_pre_res_ok:
   !cenv cx env e es res es'.
-    expr_sim_pre cenv cx env e es /\ eval_expr cx e es = (res, es') /\
-    (!tv. res = INL tv ==> is_Value tv) ==>
+    expr_sim_pre cenv cx env e es /\ (do result <- eval_expr cx e; read_result cx result od) es = (res, es') ==>
     expr_res_ok res
 Proof
   rpt strip_tac >> drule_all expr_sim_pre_eval >> strip_tac >>
-  Cases_on `res` >> gvs[expr_res_ok_def]
-  >- (rename1 `is_Value tv` >> Cases_on `tv` >> gvs[]) >>
-  drule (cj 1 eval_expr_no_control) >>
+  Cases_on `res` >> gvs[expr_res_ok_def] >>
   rename1 `INR exc` >>
+  `no_control_exc exc` by
+    (qpat_x_assum `(do result <- eval_expr _ _; read_result _ result od) _ = _` mp_tac >>
+     simp[NoAsms, bind_def, AllCaseEqs()] >> strip_tac >>
+     metis_tac[cj 1 eval_expr_no_control, read_result_no_control]) >>
   Cases_on `exc` >> gvs[no_control_exc_def, no_type_error_result_def] >>
+  rename1 `Error err` >> Cases_on `err` >> gvs[]
+QED
+
+Theorem expr_sim_pre_vv_res_ok:
+  !cenv cx env e es res es'.
+    expr_sim_pre cenv cx env e es /\ eval_expr cx e es = (res, es') ==>
+    expr_vv_res_ok res
+Proof
+  rpt strip_tac >> drule_all expr_sim_pre_eval_result >> strip_tac >>
+  Cases_on `res` >> gvs[expr_vv_res_ok_def]
+  >- (rename1 `eval_result_typed _ tv _` >> Cases_on `tv` >>
+      gvs[eval_result_typed_def]) >>
+  drule (cj 1 eval_expr_no_control) >>
+  rename1 `INR exc` >> Cases_on `exc` >>
+  gvs[no_control_exc_def, no_type_error_result_def] >>
   rename1 `Error err` >> Cases_on `err` >> gvs[]
 QED
 
 Theorem word_value_type_typed:
   !t tenv tyv x.
     word_value_type t /\ evaluate_type tenv t = SOME tyv /\
-    toplevel_value_typed x tyv ==>
-    ?v. x = Value v /\ word_value v /\ value_has_type tyv v
+    value_has_type tyv x ==>
+    word_value x /\ value_has_type tyv x
 Proof
   rpt strip_tac >>
   `(?n. t = BaseT (UintT n)) \/ (?n. t = BaseT (IntT n)) \/
@@ -456,27 +622,26 @@ Proof
     (Cases_on `t` >> fs[word_value_type_def] >>
      rename1 `BaseT bt` >> Cases_on `bt` >> fs[is_int_type_def]) >>
   gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs()] >>
-  Cases_on `x` >> gvs[toplevel_value_typed_def] >>
-  rename1 `value_has_type _ v` >> Cases_on `v` >>
+  Cases_on `x` >>
   gvs[vyperTypingTheory.value_has_type_def, word_value_def]
 QED
 
 Theorem expr_sim_pre_word_result:
   !cenv cx env e es res es'.
     expr_sim_pre cenv cx env e es /\ word_value_type (expr_type e) /\
-    eval_expr cx e es = (res, es') ==>
+    (do result <- eval_expr cx e; read_result cx result od) es = (res, es') ==>
     expr_sim_inv cenv cx env es' /\ expr_res_ok res /\
     !tv. res = INL tv ==>
-         ?v tyv. tv = Value v /\ word_value v /\
+         ?tyv. word_value tv /\
                  evaluate_type (get_tenv cx) (expr_type e) = SOME tyv /\
-                 value_has_type tyv v
+                 value_has_type tyv tv
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all expr_sim_pre_eval >> strip_tac >>
   `env.type_defs = get_tenv cx` by
     gvs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
   Cases_on `res` >> gvs[]
-  >- (gvs[expr_result_typed_def, expr_runtime_typed_def] >>
+  >- (gvs[expr_result_typed_def, expr_runtime_typed_def, value_result_typed_def] >>
       drule_all word_value_type_typed >> strip_tac >> gvs[expr_res_ok_def]) >>
   irule expr_sim_pre_res_ok >> simp[] >> metis_tac[]
 QED

@@ -7,14 +7,14 @@ Ancestors
   contractABI venomState venomExecSemantics words list arithmetic
 
 Theorem abi_decoder_valid_member_readable:
-  valid_enc_tuple (pre ++ at::ats) bs bs /\
+  vyper_decode_valid_enc_tuple (pre ++ at::ats) bs bs /\
   (is_dynamic at ==> !elem. at <> Array (SOME 0) elem) ==>
   abi_member_head_size at <= LENGTH
     (abi_decode_member_bytes at bs (DROP (SUM (MAP abi_member_head_size pre)) bs))
 Proof
   strip_tac >> drule abi_valid_member_head >> simp_tac bool_ss [LET_THM] >> strip_tac >>
   Cases_on `is_dynamic at`
-  >- (qpat_x_assum `valid_enc at _` mp_tac >>
+  >- (qpat_x_assum `vyper_decode_valid_enc at _` mp_tac >>
       asm_simp_tac bool_ss [abi_decode_member_bytes_def] >> strip_tac >>
       `!elem. at <> Array (SOME 0) elem` by metis_tac[] >>
       drule_all abi_valid_dynamic_head_min >>
@@ -34,7 +34,7 @@ Theorem abi_decoder_valid_member_entry:
   abi_decode_member_setup dst src opc hi (abi_decoder_dynamic (type_to_abi_dec_info sf ce ty))
     ao vo st = (ops,ready) /\ fn_has_code st ready func /\
   abi_decoder_coherent ce env sf ty tv /\
-  valid_enc_tuple (pre ++ at::ats) bs bs /\
+  vyper_decode_valid_enc_tuple (pre ++ at::ats) bs bs /\
   (is_dynamic at ==> !elem. at <> Array (SOME 0) elem) /\
   abi_to_vyper env ty (dec at childbs) = SOME v /\
   abi_decoder_ranges opc hi src dst sb (LENGTH bs) d outsz b cap initial /\

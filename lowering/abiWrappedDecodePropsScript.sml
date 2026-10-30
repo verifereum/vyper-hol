@@ -39,6 +39,7 @@ Proof
      disch_then (qspec_then `[]` mp_tac) >> simp[]) >>
   irule evaluate_abi_decode_normalized >>
   simp[vyper_valid_enc_def, vyper_strict_enc_def] >>
+  irule valid_enc_vyper_decode_valid_enc >>
   metis_tac[enc_valid, APPEND_NIL]
 QED
 

@@ -6,19 +6,19 @@ Ancestors
   vyperABI contractABI venomState words list rich_list arithmetic
 
 Theorem abi_valid_singleton_bytes_decode:
-  (at = Bytes NONE \/ at = String) /\ valid_enc (Tuple [at]) bs /\
+  (at = Bytes NONE \/ at = String) /\ vyper_decode_valid_enc (Tuple [at]) bs /\
   dec (Tuple [at]) bs = ListV [contractABI$BytesV payload] ==>
   32 <= LENGTH bs /\ abi_head_word bs + 32 <= LENGTH bs /\
-  valid_enc at (DROP (abi_head_word bs) bs) /\
+  vyper_decode_valid_enc at (DROP (abi_head_word bs) bs) /\
   dec at (DROP (abi_head_word bs) bs) = contractABI$BytesV payload /\
   word_of_bytes T (0w:256 word) (TAKE 32 bs) = n2w (abi_head_word bs)
 Proof
-  strip_tac >> gvs[valid_enc_def, dec_def, dec_number_def, dest_NumV_def,
+  strip_tac >> gvs[vyper_decode_valid_enc_def, dec_def, dec_number_def, dest_NumV_def,
     abi_head_word_def, is_dynamic_def, LET_THM, LENGTH_DROP] >> decide_tac
 QED
 
 Theorem abi_valid_singleton_bytes_load:
-  (at = Bytes NONE \/ at = String) /\ valid_enc (Tuple [at]) bs /\
+  (at = Bytes NONE \/ at = String) /\ vyper_decode_valid_enc (Tuple [at]) bs /\
   dec (Tuple [at]) bs = ListV [contractABI$BytesV payload] /\
   mem_bytes_at sb (LENGTH bs) (abi_decode_source opc s) = bs /\
   sb + LENGTH bs < dimword (:256) ==>

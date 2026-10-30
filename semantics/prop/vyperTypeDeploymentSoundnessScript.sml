@@ -63,7 +63,7 @@ Proof
   drule ALOOKUP_MEM >> strip_tac >>
   first_x_assum drule >> simp[check_module_def, EVERY_MEM] >>
   strip_tac >>
-  qpat_x_assum `!e. MEM e ts ==> check_toplevel_decl _ _ _ _ _ _` drule >>
+  qpat_x_assum `!e. MEM e ts ==> check_toplevel_decl _ _ _ _` drule >>
   simp[check_toplevel_decl_def]
 QED
 
@@ -91,7 +91,7 @@ Proof
      drule ALOOKUP_MEM >> strip_tac >>
      first_x_assum drule >> simp[check_module_def, EVERY_MEM] >>
      strip_tac >>
-     qpat_x_assum `!e. MEM e ts ==> check_toplevel_decl _ _ _ _ _ _` drule >>
+     qpat_x_assum `!e. MEM e ts ==> check_toplevel_decl _ _ _ _` drule >>
      simp[check_toplevel_decl_def, params_ok_def, EVERY_MEM] >>
      rpt strip_tac >> PairCases_on `arg` >> first_x_assum drule >> simp[] >>
      metis_tac[assignable_type_well_formed, well_formed_type_def,

@@ -1,12 +1,23 @@
 Theory abiValidWrapped
 Ancestors
-  abiValidSingletonArray vyperABI vyperValue contractABI words list abiValidSingletonPrefix
+  vyperABIValid abiValidSingletonArray vyperABI vyperValue contractABI words list abiValidSingletonPrefix
   abiValidDecodedMetadata abiValidStatic abiDecoderCoherence abiDecoderTypedContract
   abiDecoderContract abiDecoderReentry compileEnv valueEncoding venomState arithmetic
   abiValidSingletonBytes abiValidSingletonSetup abiDecoderValidBytes abiDecoderBytes
   abiDecoderSingletonSetup abiDecoderReservation abiEncoder emitHelperProps abiDecoderWrapped
   abiDecoderWrappedBytesFragment abiDecoderBytesTyped abiDecoderTypedCompose abiDecoderGuards
   abiDecoderReentrySequence exprLoweringProps emitHelper venomExecSemantics venomInst rich_list
+
+Theorem abi_valid_wrapped_static_array_strict[local]:
+  ~is_dynamic at /\ vyper_decode_valid_enc (Array NONE at) bs ==>
+  valid_enc (Array NONE at) bs
+Proof
+  strip_tac >>
+  qpat_x_assum `vyper_decode_valid_enc (Array NONE at) bs` mp_tac >>
+  simp_tac bool_ss [Once vyper_decode_valid_enc_def, Once valid_enc_def, LET_THM] >>
+  strip_tac >> gvs[] >>
+  irule (cj 2 vyper_decode_valid_enc_static_mutual) >> simp[]
+QED
 
 (* ===== Source Value ===== *)
 
@@ -16,14 +27,14 @@ Ancestors
 Theorem abi_valid_dynamic_singleton_source:
   is_dynamic (vyper_to_abi_type env ty) /\
   evaluate_abi_decode env (TupleT [ty]) bs = INL (ArrayV (TupleV [v])) ==>
-  valid_enc (Tuple [vyper_to_abi_type env ty]) bs /\
+  vyper_decode_valid_enc (Tuple [vyper_to_abi_type env ty]) bs /\
   abi_to_vyper env ty
     (dec (vyper_to_abi_type env ty) (DROP (abi_head_word bs) bs)) = SOME v
 Proof
   strip_tac >>
   gvs[evaluate_abi_decode_def, decode_abi_value_def, vyper_valid_enc_def,
     vyper_to_abi_type_def, abi_dynamic_singleton_value, abi_to_vyper_def, AllCaseEqs(),
-    Excl "valid_enc_def", Excl "dec_def"]
+    Excl "vyper_decode_valid_enc_def", Excl "dec_def"]
 QED
 
 (* ===== Array Input ===== *)
@@ -33,7 +44,7 @@ QED
 
 Theorem abi_valid_singleton_prefix_pre_from_conversion:
   abi_decoder_coherent ce env sf ty tv /\ is_dynamic (vyper_to_abi_type env ty) /\
-  valid_enc (Tuple [vyper_to_abi_type env ty]) bs /\ abi_head_word bs <= LENGTH bs /\
+  vyper_decode_valid_enc (Tuple [vyper_to_abi_type env ty]) bs /\ abi_head_word bs <= LENGTH bs /\
   abi_to_vyper env ty (dec (vyper_to_abi_type env ty) (DROP (abi_head_word bs) bs)) = SOME v /\
   LENGTH (enc (vyper_to_abi_type env ty)
     (dec (vyper_to_abi_type env ty) (DROP (abi_head_word bs) bs))) <=
@@ -78,9 +89,11 @@ Proof
   `dec (Tuple [Array NONE (vyper_to_abi_type env ty)]) bs =
     ListV [dec (Array NONE (vyper_to_abi_type env ty)) (DROP (abi_head_word bs) bs)]` by
     (irule abi_dynamic_singleton_value >> simp[]) >>
-  `valid_enc (Tuple [Array NONE (vyper_to_abi_type env ty)]) bs` by
-    fs[vyper_to_abi_type_def, Excl "valid_enc_def"] >>
+  `vyper_decode_valid_enc (Tuple [Array NONE (vyper_to_abi_type env ty)]) bs` by
+    fs[vyper_to_abi_type_def, Excl "vyper_decode_valid_enc_def"] >>
   drule_all abi_valid_singleton_array_decode >> strip_tac >>
+  `valid_enc (Array NONE (vyper_to_abi_type env ty)) (DROP (abi_head_word bs) bs)` by
+    (irule abi_valid_wrapped_static_array_strict >> simp[]) >>
   drule_all abi_valid_static_array_prefix >> strip_tac >>
   `abi_head_word bs <= LENGTH bs` by decide_tac >>
   mp_tac (Q.INST [`ty` |-> `ArrayT ty (Dynamic maxn)`, `tv` |-> `ArrayTV tv (Dynamic maxn)`]
@@ -94,7 +107,7 @@ QED
 
 Definition abi_valid_wrapped_bytes_pre_def:
   abi_valid_wrapped_bytes_pre n at bs payload st src dst hi sb d s <=>
-    (at = Bytes NONE \/ at = String) /\ valid_enc (Tuple [at]) bs /\
+    (at = Bytes NONE \/ at = String) /\ vyper_decode_valid_enc (Tuple [at]) bs /\
     dec (Tuple [at]) bs = ListV [contractABI$BytesV payload] /\ LENGTH payload <= n /\
     mem_bytes_at sb (LENGTH bs) (abi_decode_source MLOAD s) = bs /\
     n < dimword (:256) /\ sb + LENGTH bs < dimword (:256) /\
@@ -137,7 +150,7 @@ Proof
     (simp[LENGTH_DROP] >> decide_tac) >>
   `mem_bytes_at (sb + abi_head_word bs) (LENGTH (DROP (abi_head_word bs) bs))
     (abi_decode_source MLOAD t) = DROP (abi_head_word bs) bs` by
-    fs[abi_decode_source_def, Excl "dec_def", Excl "valid_enc_def"] >>
+    fs[abi_decode_source_def, Excl "dec_def", Excl "vyper_decode_valid_enc_def"] >>
   asm_simp_tac bool_ss [abi_decoder_valid_bytes_pre_def, abi_decode_source_opcode_def] >>
   Cases_on `hi = Lit 0w` >> simp[] >>
   qpat_x_assum `_ \/ _` mp_tac >> simp[] >> strip_tac >>
@@ -203,7 +216,7 @@ Proof
   drule_all abi_decode_sequence_chain >> strip_tac >>
   drule_all abi_decoder_sequence_halted >> strip_tac >>
   qexists_tac `t` >> asm_simp_tac bool_ss [] >>
-  gvs[abi_decode_frame_def, Excl "dec_def", Excl "valid_enc_def"] >> first_assum ACCEPT_TAC
+  gvs[abi_decode_frame_def, Excl "dec_def", Excl "vyper_decode_valid_enc_def"] >> first_assum ACCEPT_TAC
 QED
 
 (* ===== Bytes Source ===== *)
@@ -213,7 +226,7 @@ QED
 Theorem abi_valid_wrapped_bytes_source_decode:
   evaluate_abi_decode env (TupleT [BaseT (BytesT (Dynamic n))]) bs =
     INL (ArrayV (TupleV [v])) ==>
-  ?payload. v = vyperValue$BytesV payload /\ valid_enc (Tuple [Bytes NONE]) bs /\
+  ?payload. v = vyperValue$BytesV payload /\ vyper_decode_valid_enc (Tuple [Bytes NONE]) bs /\
     dec (Tuple [Bytes NONE]) bs = ListV [contractABI$BytesV payload] /\ LENGTH payload <= n
 Proof
   simp[evaluate_abi_decode_def, decode_abi_value_def, vyper_valid_enc_def,
@@ -224,7 +237,7 @@ QED
 Theorem abi_valid_wrapped_string_source_decode:
   evaluate_abi_decode env (TupleT [BaseT (StringT n)]) bs =
     INL (ArrayV (TupleV [v])) ==>
-  ?payload. v = StringV (MAP (CHR o w2n) payload) /\ valid_enc (Tuple [String]) bs /\
+  ?payload. v = StringV (MAP (CHR o w2n) payload) /\ vyper_decode_valid_enc (Tuple [String]) bs /\
     dec (Tuple [String]) bs = ListV [contractABI$BytesV payload] /\ LENGTH payload <= n
 Proof
   simp[evaluate_abi_decode_def, decode_abi_value_def, vyper_valid_enc_def,

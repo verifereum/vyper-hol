@@ -14,11 +14,11 @@ Proof
 QED
 
 Theorem abi_valid_array_payload_window:
-  valid_enc (Array NONE at) bs /\
+  vyper_decode_valid_enc (Array NONE at) bs /\
   mem_bytes_at sb (LENGTH bs) (abi_decode_source opc s) = bs /\
   sb + LENGTH bs < dimword (:256) ==>
   32 <= LENGTH bs /\
-  valid_enc_tuple (REPLICATE (abi_head_word bs) at) (DROP 32 bs) (DROP 32 bs) /\
+  vyper_decode_valid_enc_tuple (REPLICATE (abi_head_word bs) at) (DROP 32 bs) (DROP 32 bs) /\
   mem_bytes_at (sb + 32) (LENGTH (DROP 32 bs)) (abi_decode_source opc s) = DROP 32 bs /\
   sb + 32 + LENGTH (DROP 32 bs) < dimword (:256)
 Proof
@@ -31,7 +31,7 @@ Proof
 QED
 
 Theorem abi_valid_array_child_window:
-  valid_enc (Array NONE at) bs /\ j < abi_head_word bs /\
+  vyper_decode_valid_enc (Array NONE at) bs /\ j < abi_head_word bs /\
   (is_dynamic at ==> !elem. at <> Array (SOME 0) elem) /\
   mem_bytes_at sb (LENGTH bs) (abi_decode_source opc s) = bs /\
   sb + LENGTH bs < dimword (:256) ==>
@@ -39,7 +39,7 @@ Theorem abi_valid_array_child_window:
       ao = j * abi_member_head_size at;
       off = 32 + abi_decode_member_offset at payload ao;
       data = abi_decode_member_bytes at payload (DROP ao payload) in
-  valid_enc at data /\ abi_member_head_size at <= LENGTH data /\
+  vyper_decode_valid_enc at data /\ abi_member_head_size at <= LENGTH data /\
   off + LENGTH data <= LENGTH bs /\ sb + off < dimword (:256) /\
   mem_bytes_at (sb + off) (LENGTH data) (abi_decode_source opc s) = data /\
   (is_dynamic at ==> abi_decode_load opc (n2w (sb + 32 + ao):bytes32) s = n2w (off - 32))
@@ -58,5 +58,5 @@ Proof
   drule_all abi_decoder_valid_member_readable >> strip_tac >>
   RULE_ASSUM_TAC (SIMP_RULE bool_ss [map_replicate, SUM_REPLICATE]) >>
   asm_simp_tac arith_ss [GSYM ADD_ASSOC] >>
-  fs[LENGTH_DROP, Excl "enc_def", Excl "dec_def", Excl "valid_enc_def"] >> decide_tac
+  fs[LENGTH_DROP, Excl "enc_def", Excl "dec_def", Excl "vyper_decode_valid_enc_def"] >> decide_tac
 QED

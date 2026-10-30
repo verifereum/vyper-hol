@@ -184,7 +184,7 @@ QED
    the clamp type_to_abi_dec_info gives its type, ends as the value in
    memory at the destination.  The load step says which word is loaded:
    CALLDATALOAD at a gives mem_word_at (w2n a) of the calldata
-   (step_CALLDATALOAD).  The int-width and flag premises are those of
+   (step_CALLDATALOAD).  The flag premise is that of
    word_arg_clamp_ok. *)
 Theorem compile_abi_decode_static_correct:
   !src_op dst_op load_opc sfields cenv st st' s p tenv ty tv v.
@@ -198,7 +198,6 @@ Theorem compile_abi_decode_static_correct:
     eval_operand dst_op s = SOME p /\ fresh_vars_wrt st s /\
     is_word_type ty /\ evaluate_type tenv ty = SOME tv /\
     value_has_type tv v /\
-    (!m. ty = BaseT (IntT m) ==> m MOD 8 = 0) /\
     (!nsid m. FLOOKUP tenv nsid = SOME (FlagArgs m) ==>
               cenv.ce_flag_n_members (nsid_to_string nsid) = m) ==>
     ?t. run_inst_seq (emitted_insts st st') s = OK t /\

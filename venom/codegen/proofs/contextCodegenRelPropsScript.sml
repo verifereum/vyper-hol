@@ -44,6 +44,24 @@ Proof
   simp[reachability_closed_def] >> metis_tac[]
 QED
 
+(* Invariants combine pointwise. *)
+Theorem fn_entry_inv_conj:
+  !I1 I2 ctx fn s.
+    fn_entry_inv I1 ctx fn s /\ fn_entry_inv I2 ctx fn s ==>
+    fn_entry_inv (\c f i s. I1 c f i s /\ I2 c f i s) ctx fn s
+Proof
+  rw[fn_entry_inv_def]
+QED
+
+Theorem reachability_closed_conj:
+  !I1 I2 ctx.
+    reachability_closed I1 ctx /\ reachability_closed I2 ctx ==>
+    reachability_closed (\c f i s. I1 c f i s /\ I2 c f i s) ctx
+Proof
+  simp[reachability_closed_def, fn_entry_inv_def] >> rpt strip_tac >>
+  metis_tac[]
+QED
+
 Theorem codegen_reachability_package_entry:
   codegen_reachability_package Inv ctx vs ==>
   reachability_closed Inv ctx /\

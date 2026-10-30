@@ -49,76 +49,21 @@ Proof
   rpt (goal_assum $ drule_at Any)
 QED
 
-(* Scalar and non-array aggregate declarations are returned directly as Values. *)
-Theorem current_storage_lookup_typed:
-  contract_storage_well_formed cx st /\
-  storage_var_info cx mid n = SOME (b,off,tv) /\
-  (!elem bd. tv <> ArrayTV elem bd) ==>
-  ?v. lookup_global cx mid n st = (INL (Value v),st) /\
-      value_has_type tv v
-Proof
-  rpt strip_tac >>
-  `?v. read_storage_slot cx b (n2w off) tv st = (INL v,st) /\
-       value_has_type tv v` by
-    metis_tac[current_storage_read_typed] >>
-  drule storage_var_info_components >> strip_tac >>
-  qexists_tac `v` >> simp[] >>
-  Cases_on `tv` >> gvs[] >>
-  simp[lookup_global_def, bind_def, lift_option_type_def, return_def, raise_def,
-       var_decl_info_CASE_rator]
-QED
-
-(* Top-level arrays remain references at lookup; materialisation performs the
-   current storage read proved above. *)
-Theorem current_storage_array_materialise_typed:
-  contract_storage_well_formed cx st /\
-  storage_var_info cx mid n = SOME (b,off,ArrayTV elem_tv bd) ==>
-  ?v. lookup_global cx mid n st =
-        (INL (ArrayRef b (n2w off) elem_tv bd),st) /\
-      materialise cx (ArrayRef b (n2w off) elem_tv bd) st = (INL v,st) /\
-      value_has_type (ArrayTV elem_tv bd) v
-Proof
-  rpt strip_tac >>
-  `?v. read_storage_slot cx b (n2w off) (ArrayTV elem_tv bd) st =
-         (INL v,st) /\ value_has_type (ArrayTV elem_tv bd) v` by
-    metis_tac[current_storage_read_typed] >>
-  drule storage_var_info_components >> strip_tac >>
-  qexists_tac `v` >>
-  simp[lookup_global_def, materialise_def, bind_def, lift_option_type_def,
-       return_def, raise_def, var_decl_info_CASE_rator]
-QED
-
-Theorem current_storage_non_array_materialise_typed:
-  contract_storage_well_formed cx st /\
-  storage_var_info cx mid n = SOME (b,off,tv) /\
-  (!elem bd. tv <> ArrayTV elem bd) ==>
-  ?ref v. lookup_global cx mid n st = (INL ref,st) /\
-          materialise cx ref st = (INL v,st) /\
-          value_has_type tv v
-Proof
-  rpt strip_tac >>
-  drule_all current_storage_lookup_typed >> strip_tac >>
-  qexistsl [`Value v`,`v`] >>
-  simp[materialise_def, return_def]
-QED
-
-(* Uniform whole-value materialisation, while preserving the interpreter's
-   distinction between ArrayRef lookup and direct Value lookup. *)
-Theorem current_storage_materialise_typed:
+(* Ordinary storage lookup resolves a location; loading it reads the current
+   encoded value. Arrays and non-array types share this canonical boundary. *)
+Theorem current_storage_read_result_typed:
   contract_storage_well_formed cx st /\
   storage_var_info cx mid n = SOME (b,off,tv) ==>
   ?ref v. lookup_global cx mid n st = (INL ref,st) /\
-          materialise cx ref st = (INL v,st) /\
+          read_result cx ref st = (INL v,st) /\
           value_has_type tv v
 Proof
-  rpt strip_tac >> Cases_on `tv`
-  >- (irule current_storage_non_array_materialise_typed >> simp[])
-  >- (irule current_storage_non_array_materialise_typed >> simp[])
-  >- (drule_all current_storage_array_materialise_typed >> strip_tac >>
-      metis_tac[])
-  >- (irule current_storage_non_array_materialise_typed >> simp[])
-  >- (irule current_storage_non_array_materialise_typed >> simp[])
-  >- (irule current_storage_non_array_materialise_typed >> simp[])
+  rpt strip_tac >>
+  drule_all current_storage_read_typed >> strip_tac >>
+  drule storage_var_info_components >> strip_tac >>
+  qexistsl [`PlaceR (StoragePlace b (n2w off) tv)`, `v`] >>
+  simp[lookup_global_def, read_result_def, read_place_def, bind_def,
+       lift_option_type_def, return_def, raise_def, var_decl_info_CASE_rator]
 QED
 
 (* Successful semantic region resolution always returns an evaluated, hence
@@ -295,7 +240,7 @@ Proof
       disch_then irule >> simp[])
 QED
 
-(* Exact slot/type boundary for the read and write paths selected by ArrayRef.
+(* Exact slot/type boundary for the read and write paths selected by a storage array location.
    The resolver consumes only leading array subscripts; [rsubs] records any
    remaining structural path to be handled by [assign_subscripts]. *)
 Theorem current_arrayref_resolved_path_sound:
@@ -336,7 +281,7 @@ Proof
             resolve_array_element_region_bounds]
 QED
 
-(* Exact current read at the region selected by an ArrayRef resolver walk. *)
+(* Exact current read at the region selected by a storage-array resolver walk. *)
 Theorem current_arrayref_resolved_read_typed:
   contract_storage_well_formed cx st /\
   storage_layout_safe cx /\
@@ -358,7 +303,7 @@ QED
 
 (* When the resolver consumes the complete subscript path, expose the type in
    the caller's original path vocabulary.  This is the direct read adapter for
-   nested indexed ArrayRef clients. *)
+   nested storage-array clients. *)
 Theorem current_arrayref_resolved_leaf_read_typed:
   contract_storage_well_formed cx st /\
   storage_layout_safe cx /\

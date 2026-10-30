@@ -50,7 +50,7 @@ Theorem abi_scratch_decoder_array_iteration:
   abi_decoder_coherent ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) /\
   abi_decoder_metadata ce env (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
     di (dec (Array NONE (vyper_to_abi_type env ty)) bs) (ArrayV (DynArrayV vs)) /\
-  valid_enc (Array NONE (vyper_to_abi_type env ty)) bs /\
+  vyper_decode_valid_enc (Array NONE (vyper_to_abi_type env ty)) bs /\
   (is_dynamic (vyper_to_abi_type env ty) ==>
     !elem. vyper_to_abi_type env ty <> Array (SOME 0) elem) /\
   abi_scratch_decoder_loop_inv opc bs tv vs sb d

@@ -8,7 +8,7 @@ Ancestors
   vyperTypeEnv vyperTypeInvariants vyperTypeSystem vyperValue vyperTyping vyperEvent
   vyperEventSoundness
   venomState venomExecSemantics byte words arithmetic vfmConstants
-Libs wordsLib
+Libs wordsLib monadsyntax
 
 Definition topic_value_rel_def:
   topic_value_rel tenv (arg_op,ty) v ss <=>
@@ -285,8 +285,9 @@ Proof
   qexists_tac `entry.type` >> simp[]
 QED
 
-(* Checked source evaluation supplies the value; the allocation invariant
-   supplies the payload and its address range, including empty bytestrings. *)
+(* Checked source evaluation followed by forcing supplies the value; the
+   allocation invariant supplies the payload and its address range, including
+   empty bytestrings. A source name itself returns a place, not a value. *)
 Theorem compile_name_topic_value_correct:
   !env cenv cx func ty ann id es ss cs op cs' p region_size.
     well_typed_expr env (Name ann id) /\ env_consistent env cx es /\
@@ -297,7 +298,8 @@ Theorem compile_name_topic_value_correct:
     fresh_vars_wrt cs ss /\
     lower_value compile_expr cenv ty (Name ann id) cs = (op,cs') ==>
     ?v out.
-      eval_expr cx (Name ann id) es = (INL (Value v),es) /\
+      (do result <- eval_expr cx (Name ann id); read_result cx result od) es =
+        (INL v,es) /\
       run_inst_seq (emitted_insts cs cs') ss = OK out /\
       topic_value_rel env.type_defs (op,ann) v out /\
       same_blocks cs cs' /\ fresh_vars_wrt cs' out /\
@@ -308,7 +310,8 @@ Proof
   rpt gen_tac >> strip_tac >>
   drule_all well_typed_Name_lookup >> strip_tac >> gvs[] >>
   rename1 `lookup_scopes id es.scopes = SOME entry` >>
-  `eval_expr cx (Name ann id) es = (INL (Value entry.value),es)` by
+  `(do result <- eval_expr cx (Name ann id); read_result cx result od) es =
+     (INL entry.value,es)` by
     (irule eval_name_lookup_scopes >> simp[]) >>
   mp_tac (Q.SPECL [`env.type_defs`, `func`, `cenv`, `es.scopes`, `ty`, `ann`,
     `id`, `entry`, `p`, `region_size`, `ss`, `cs`, `op`, `cs'`]

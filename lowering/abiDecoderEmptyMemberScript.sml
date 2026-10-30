@@ -79,7 +79,7 @@ Theorem abi_decoder_valid_empty_member:
   compile_abi_decode_to_buf (SND ops) (FST ops) opc hi (type_to_abi_dec_info sf ce ty)
     middle = ((),end_st) /\ fn_has_code st end_st func /\
   abi_decoder_coherent ce env sf ty tv /\ type_to_abi_dec_info sf ce ty = DecComplex T [] /\
-  valid_enc_tuple (pre ++ at::ats) bs bs /\
+  vyper_decode_valid_enc_tuple (pre ++ at::ats) bs bs /\
   abi_to_vyper env ty (dec at childbs) = SOME v /\
   abi_decoder_ranges opc hi src dst sb (LENGTH bs) d outsz b cap initial /\
   abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var dst /\

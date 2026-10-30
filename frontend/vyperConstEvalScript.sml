@@ -55,7 +55,7 @@ Proof
   disch_then strip_assume_tac >>
   disch_then (qspecl_then [`cx`, `st`] mp_tac) >>
   simp[] >> rpt strip_tac >>
-  simp[materialise_def, return_def, evaluate_builtin_def, evaluate_type_def]
+  simp[read_result_def, return_def, evaluate_builtin_def, evaluate_type_def]
 QED
 
 (* Failure includes unsupported syntax and runtime arithmetic errors. *)

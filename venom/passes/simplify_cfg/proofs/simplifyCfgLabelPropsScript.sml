@@ -4,6 +4,8 @@ Ancestors
 Libs
   listTheory
 
+val _ = Parse.hide "preds";
+
 (* Unary result predicates avoid the paired-abstraction packaging of the
    generated mutual induction theorem.  Clients may destruct the result in
    their predicate, after the induction cases have been generated. *)

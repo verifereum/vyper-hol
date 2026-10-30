@@ -122,7 +122,8 @@ QED
 Theorem updated_statement_storage_consumer:
   type_stmt env ret_ty s = SOME env' /\ runtime_storage_consistent env cx st /\
   functions_well_typed cx /\ call_evaluation_safe cx (int_calls_stmt s) /\
-  protected_storage_calls_preserve cx /\ oracle_storage_ok cx st /\
+  protected_storage_calls_preserve cx /\ protected_storage_creates_preserve cx /\
+  oracle_storage_ok cx st /\
   eval_stmt cx s st = (res,st') ==>
   contract_storage_well_formed cx st' /\ no_type_error_result res /\
   oracle_storage_ok cx st' /\ outcome_suffix st.outcomes st'.outcomes
@@ -135,7 +136,7 @@ QED
 
 (* Focused existing real-helper CV observations: ordinary success installs
    slot 8; static/failed bad-account payloads retain slot 4; rejected guard
-   consumes; exhausted/computed outcomes and pre-take code errors retain
+   consumes; exhausted/computed outcomes retain
    the respective traces. The fixture expectations are unchanged. *)
 Theorem focused_actual_boundary_snapshots:
   outcome_test_take_adopt 9w [1w] (SOME 5)
@@ -144,10 +145,10 @@ Theorem focused_actual_boundary_snapshots:
     [outcome_test_outcome T (2 ** 256)] 3 4w 1 2 0 /\
   outcome_test_take_adopt 9w [] (SOME 0)
     [outcome_test_outcome F (2 ** 256)] 3 4w 1 2 0 /\
-  outcome_test_error_observations /\ outcome_test_branch_observations
+  outcome_test_error_observations
 Proof
   metis_tac[outcome_ordinary_success_cv, outcome_static_failed_cv,
-            outcome_guard_rejected_NONE_cv, outcome_branches_cv]
+            outcome_guard_rejected_NONE_cv]
 QED
 
 Theorem focused_computed_exhausted_snapshots:

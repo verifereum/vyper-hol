@@ -22,7 +22,7 @@ Definition abi_scratch_decoder_members_def:
     abi_decoder_members ce env sf tys tvs
       (abi_decode_members (MAP (vyper_to_abi_type env) tys) bs
         (DROP (SUM (MAP abi_member_head_size (MAP (vyper_to_abi_type env) pretys))) bs)) vs /\
-    valid_enc_tuple (MAP (vyper_to_abi_type env) (pretys ++ tys)) bs bs /\
+    vyper_decode_valid_enc_tuple (MAP (vyper_to_abi_type env) (pretys ++ tys)) bs bs /\
     abi_scratch_decoder_ranges opc hi src dst sb
       (LENGTH bs)
       d (SUM (MAP (type_memory_bytes ce) (pretys ++ tys))) first last b cap initial /\
@@ -54,7 +54,7 @@ Theorem abi_scratch_decoder_members_run:
   abi_decoder_members ce env sf tys tvs
     (abi_decode_members (MAP (vyper_to_abi_type env) tys) bs
       (DROP (SUM (MAP abi_member_head_size (MAP (vyper_to_abi_type env) pretys))) bs)) vs /\
-  valid_enc_tuple (MAP (vyper_to_abi_type env) (pretys ++ tys)) bs bs /\
+  vyper_decode_valid_enc_tuple (MAP (vyper_to_abi_type env) (pretys ++ tys)) bs bs /\
   abi_scratch_decoder_ranges opc hi src dst sb
     (LENGTH bs)
     d (SUM (MAP (type_memory_bytes ce) (pretys ++ tys))) first last b cap initial /\
@@ -84,11 +84,11 @@ Theorem abi_scratch_decoder_members_nil:
 Proof
   simp_tac (srw_ss()) [abi_scratch_decoder_members_def, abi_decoder_member_infos_def,
     abi_decode_members_def, Once compile_abi_decode_to_buf_def, comp_return_def,
-    Excl "enc_def", Excl "dec_def", Excl "valid_enc_def"] >>
-  rpt gen_tac >> strip_tac >> gvs[Excl "enc_def", Excl "dec_def", Excl "valid_enc_def"] >>
+    Excl "enc_def", Excl "dec_def", Excl "vyper_decode_valid_enc_def"] >>
+  rpt gen_tac >> strip_tac >> gvs[Excl "enc_def", Excl "dec_def", Excl "vyper_decode_valid_enc_def"] >>
   `vs = []` by (Cases_on `vs` >> gvs[Once abi_decoder_members_def]) >>
   qexists_tac `initial` >>
   gvs[val_in_memory_def, abi_decode_sim_refl,
-    Excl "enc_def", Excl "dec_def", Excl "valid_enc_def"] >>
+    Excl "enc_def", Excl "dec_def", Excl "vyper_decode_valid_enc_def"] >>
   irule abi_scratch_leaf_effect >> simp[abi_decode_frame_def]
 QED

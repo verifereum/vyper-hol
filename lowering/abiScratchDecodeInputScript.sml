@@ -29,7 +29,7 @@ Definition abi_scratch_decode_pre_def:
     abi_decoder_coherent ce env sf ty tv /\
     abi_decoder_metadata ce env ty tv (type_to_abi_dec_info ce.ce_struct_fields ce ty)
       (dec (vyper_to_abi_type env ty) bs) v /\
-    valid_enc (vyper_to_abi_type env ty) bs /\
+    vyper_decode_valid_enc (vyper_to_abi_type env ty) bs /\
     (is_dynamic (vyper_to_abi_type env ty) \/
       static_length (vyper_to_abi_type env ty) <= LENGTH bs) /\
     val_in_memory (BaseTV (BytesT (Dynamic (LENGTH bs)))) (vyperValue$BytesV bs) p s.vs_memory /\
@@ -60,5 +60,5 @@ Proof
   drule evaluate_abi_decode_vyper_valid_enc >> strip_tac >>
   drule vyper_valid_enc_length_lower >> strip_tac >>
   asm_simp_tac bool_ss [abi_scratch_decode_pre_def] >>
-  fs[vyper_valid_enc_def, val_in_memory_def, Excl "enc_def", Excl "dec_def", Excl "valid_enc_def"]
+  fs[vyper_valid_enc_def, val_in_memory_def, Excl "enc_def", Excl "dec_def", Excl "vyper_decode_valid_enc_def"]
 QED

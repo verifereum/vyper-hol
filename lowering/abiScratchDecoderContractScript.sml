@@ -25,7 +25,7 @@ Definition abi_scratch_decoder_input_def:
     abi_decoder_coherent ce env sf ty tv /\
     abi_decoder_metadata ce env ty tv (type_to_abi_dec_info ce.ce_struct_fields ce ty)
       (dec (vyper_to_abi_type env ty) bs) v /\
-    valid_enc (vyper_to_abi_type env ty) bs /\
+    vyper_decode_valid_enc (vyper_to_abi_type env ty) bs /\
     (is_dynamic (vyper_to_abi_type env ty) \/
       static_length (vyper_to_abi_type env ty) <= LENGTH bs) /\
     abi_scratch_decoder_ranges opc hi src dst sb (LENGTH bs) d

@@ -1,7 +1,7 @@
 (* Static-element bulk copying uses a validity-derived readable prefix and no scratch allocation. *)
 Theory abiScratchDecoderArrayBulk
 Ancestors
-  abiScratchDecoderContract abiScratchDecoderRanges abiScratchEncoderContract
+  vyperABIValid abiScratchDecoderContract abiScratchDecoderRanges abiScratchEncoderContract
   abiScratchLeafEffect abiDecoderValidContract abiDecoderCorrectPrimitiveArray
   abiDecoderBulkReentry abiDecoderDynamic abiDecoderCoherence abiDecoderTypedContract
   abiDecoderContract abiDecoderReentry abiDecoderLoop abiDecoderFrame abiDecodeRanges
@@ -21,9 +21,14 @@ Proof
   drule_all abi_scratch_decoder_input_point >> strip_tac >>
   `abi_decoder_reservation st.cs_next_id st.cs_next_id s.vs_alloca_next 0 s` by
     (mp_tac abi_scratch_decoder_point_reservation >> asm_simp_tac bool_ss []) >>
-  `valid_enc (Array NONE (vyper_to_abi_type env ty)) bs` by
+  `vyper_decode_valid_enc (Array NONE (vyper_to_abi_type env ty)) bs` by
     fs[abi_scratch_decoder_input_def, Once vyper_to_abi_type_def,
-      Excl "valid_enc_def", Excl "dec_def", Excl "enc_def"] >>
+      Excl "vyper_decode_valid_enc_def", Excl "dec_def", Excl "enc_def"] >>
+  `valid_enc (Array NONE (vyper_to_abi_type env ty)) bs` by
+    (qpat_x_assum `vyper_decode_valid_enc (Array NONE _) bs` mp_tac >>
+     simp_tac bool_ss [Once vyper_decode_valid_enc_def, Once valid_enc_def, LET_THM] >>
+     strip_tac >> gvs[] >>
+     irule (cj 2 vyper_decode_valid_enc_static_mutual) >> simp[]) >>
   drule_all abi_valid_static_array_prefix >> strip_tac >>
   mp_tac (SIMP_RULE bool_ss [Once vyper_to_abi_type_def] (Q.INST
     [`ty` |-> `ArrayT ty (Dynamic maxn)`, `tv` |-> `ArrayTV tv (Dynamic maxn)`,

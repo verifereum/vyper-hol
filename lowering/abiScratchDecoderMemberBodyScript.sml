@@ -22,7 +22,7 @@ Theorem abi_scratch_decoder_member_body_helper:
     !bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
       phi_prefix_length bb.bb_instructions = 0) /\
   abi_scratch_decoder ce env sf ty tv /\ abi_decoder_coherent ce env sf ty tv /\
-  valid_enc_tuple (pre ++ at::ats) bs bs /\
+  vyper_decode_valid_enc_tuple (pre ++ at::ats) bs bs /\
   (is_dynamic at ==> !elem. at <> Array (SOME 0) elem) /\
   abi_to_vyper env ty (dec at childbs) = SOME v /\
   abi_scratch_decoder_ranges opc hi src dst sb (LENGTH bs) d outsz first last b cap initial /\
@@ -82,7 +82,7 @@ Theorem abi_scratch_decoder_member_body:
     !bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
       phi_prefix_length bb.bb_instructions = 0) /\
   abi_scratch_decoder ce env sf ty tv /\ abi_decoder_coherent ce env sf ty tv /\
-  valid_enc_tuple (pre ++ at::ats) bs bs /\
+  vyper_decode_valid_enc_tuple (pre ++ at::ats) bs bs /\
   abi_to_vyper env ty (dec at childbs) = SOME v /\
   abi_scratch_decoder_ranges opc hi src dst sb (LENGTH bs) d outsz first last b cap initial /\
   mem_bytes_at sb (LENGTH bs) (abi_decode_source opc initial) = bs /\

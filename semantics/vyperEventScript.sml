@@ -25,7 +25,7 @@ Definition event_hash_def:
   event_hash tenv ename (arg_types : type list) =
     let abi_types = vyper_to_abi_types tenv arg_types in
     let sig_str = function_signature ename abi_types in
-    let hash_bytes = Keccak_256_w64 (MAP (n2w o ORD) sig_str) in
+    let hash_bytes = Keccak_256_w64 (string_to_bytes sig_str) in
     num_of_bytes (be_bytes 32 [] hash_bytes)
 End
 

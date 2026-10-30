@@ -15,7 +15,7 @@ Theorem abi_scratch_decoder_array_child_input:
   abi_decoder_coherent ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) /\
   abi_decoder_metadata ce env (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) di
     (dec (Array NONE at) bs) (ArrayV (DynArrayV vs)) /\
-  valid_enc (Array NONE at) bs /\ j < LENGTH vs /\
+  vyper_decode_valid_enc (Array NONE at) bs /\ j < LENGTH vs /\
   (is_dynamic at ==> !elem. at <> Array (SOME 0) elem) /\
   abi_scratch_decoder_ranges opc hi src dst sb (LENGTH bs)
     d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) first last b cap s /\

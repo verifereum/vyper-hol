@@ -81,7 +81,7 @@ End
    well-typed acyclic declarations need at most LENGTH tops expansions. Array
    and tuple traversal is structural and consumes no declaration budget. *)
 Definition supported_nested_type_def:
-  supported_nested_type leaf fuel tops ty <=>
+  supported_nested_type leaf (fuel : num) tops ty <=>
     leaf ty \/
     case ty of
       ArrayT elem (Fixed n) =>
@@ -96,8 +96,12 @@ Definition supported_nested_type_def:
              EVERY (supported_nested_type leaf (fuel - 1) tops o SND) fields)
     | _ => F
 Termination
+  (* `fuel : num` is spelled out in both places: the definition and this
+     quotation are typed independently, and an unconstrained numeric type
+     here resolves to `rat`, which makes the WF obligation `WF rat$<` and
+     so unprovable by WF_TAC's lemmas (they are all about `num`). *)
   WF_REL_TAC `inv_image ($< LEX $<)
-    (λ(leaf,fuel,tops,ty). (fuel,type_size ty))` >> rw[] >> simp[]
+    (λ(leaf,fuel,tops,ty). ((fuel : num), type_size ty))` >> rw[] >> simp[]
 End
 
 Definition supported_place_type_def:

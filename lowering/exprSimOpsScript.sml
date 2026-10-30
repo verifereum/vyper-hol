@@ -33,7 +33,8 @@
  *
  * Helpers: eval_expr_bop_cases, eval_operand_frame, expr_val_rel_word,
  *   expr_val_rel_typed,
- *   local_region_frame, expr_post_bop, bop_result_bitwise, flag_and_zero,
+ *   local_region_frame, local_region_frame_fwd, local_regions_memory_tail,
+ *   locals_kept_trans, expr_post_bop, bop_result_bitwise, flag_and_zero,
  *   compile_flag_in_correct, bop_result_flag_in, straight_fresh_flag_in,
  *   bop_result_shift
  *)
@@ -60,7 +61,7 @@ Libs
 Definition bop_result_def:
   bop_result cx ann bop tys v1 v2 (es:evaluation_state) =
     case evaluate_builtin cx es.accounts ann (Bop bop) tys [v1; v2] of
-      INL v => INL (Value v)
+      INL v => INL v
     | INR e => INR (Error e)
 End
 
@@ -84,7 +85,7 @@ Definition binop_frag_words_def:
       frag_exec ctx sa sb
         (\s. s = s0 /\ stmt_state_rel func cenv cx es0 s /\
              eval_operand x s = SOME w1 /\ eval_operand y s = SOME w2)
-        (\s. ?v. bop_result cx ann bop tys v1 v2 es0 = INL (Value v) /\
+        (\s. ?v. bop_result cx ann bop tys v1 v2 es0 = INL v /\
                  word_value v /\
                  stmt_state_rel func cenv cx es0 s /\
                  eval_operand op s = SOME (val_to_w256 v) /\
@@ -108,38 +109,45 @@ End
 
 Theorem eval_expr_bop_cases:
   !cx ann bop e1 e2 es res es'.
-    eval_expr cx (Builtin ann (Bop bop) [e1; e2]) es = (res, es') ==>
-    (?exc. eval_expr cx e1 es = (INR exc, es') /\ res = INR exc) \/
-    (?tv1 es1. eval_expr cx e1 es = (INL tv1, es1) /\ !v. tv1 <> Value v) \/
+    (do result <- eval_expr cx (Builtin ann (Bop bop) [e1; e2]);
+        read_result cx result od) es = (res, es') ==>
+    (?exc. (do result <- eval_expr cx e1; read_result cx result od) es =
+             (INR exc, es') /\ res = INR exc) \/
     ?v1 es1.
-      eval_expr cx e1 es = (INL (Value v1), es1) /\
-      ((?exc. eval_expr cx e2 es1 = (INR exc, es') /\ res = INR exc) \/
-       (?tv2 es2. eval_expr cx e2 es1 = (INL tv2, es2) /\
-                  !v. tv2 <> Value v) \/
-       ?v2. eval_expr cx e2 es1 = (INL (Value v2), es') /\
+      (do result <- eval_expr cx e1; read_result cx result od) es =
+        (INL v1, es1) /\
+      ((?exc. (do result <- eval_expr cx e2; read_result cx result od) es1 =
+                (INR exc, es') /\ res = INR exc) \/
+       ?v2. (do result <- eval_expr cx e2; read_result cx result od) es1 =
+              (INL v2, es') /\
             res = bop_result cx ann bop [expr_type e1; expr_type e2] v1 v2 es')
 Proof
   rpt gen_tac >>
   simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
        assert_def, return_def, raise_def, builtin_args_length_ok_def] >>
   simp[Once evaluate_def, bind_def, return_def] >>
-  Cases_on `eval_expr cx e1 es` >> rename1 `_ = (r1, es1)` >>
-  Cases_on `r1` >> simp[] >>
-  rename1 `materialise cx tv1 es1` >>
-  Cases_on `?v. tv1 = Value v` >> gvs[] >>
-  simp[materialise_def, return_def] >>
-  simp[Once evaluate_def, bind_def, return_def] >>
-  Cases_on `eval_expr cx e2 es1` >> rename1 `_ = (r2, es2)` >>
-  Cases_on `r2` >> simp[] >>
-  rename1 `materialise cx tv2 es2` >>
-  Cases_on `?v. tv2 = Value v` >> gvs[] >>
-  simp[materialise_def, return_def] >>
-  simp[Once evaluate_def, return_def, get_accounts_def, lift_sum_def,
-       bop_result_def] >>
-  rename1 `evaluate_builtin _ _ _ _ _ [v1; v2]` >>
+  Cases_on `eval_expr cx e1 es` >> rename1 `_ = (raw1, st1)` >>
+  reverse (Cases_on `raw1`)
+  >- (simp[] >> rw[] >> simp[]) >>
+  rename1 `eval_expr cx e1 es = (INL r1, st1)` >>
+  Cases_on `read_result cx r1 st1` >> rename1 `_ = (res1, es1)` >>
+  reverse (Cases_on `res1`)
+  >- (simp[] >> rw[] >> simp[]) >>
+  rename1 `read_result cx r1 st1 = (INL v1, es1)` >>
+  simp[] >> simp[Once evaluate_def, bind_def, return_def] >>
+  Cases_on `eval_expr cx e2 es1` >> rename1 `_ = (raw2, st2)` >>
+  reverse (Cases_on `raw2`)
+  >- (simp[] >> rw[] >> simp[]) >>
+  rename1 `eval_expr cx e2 es1 = (INL r2, st2)` >>
+  Cases_on `read_result cx r2 st2` >> rename1 `_ = (res2, es2)` >>
+  reverse (Cases_on `res2`)
+  >- (simp[] >> rw[] >> simp[]) >>
+  rename1 `read_result cx r2 st2 = (INL v2, es2)` >>
+  simp[Once evaluate_def, bind_def, return_def, get_accounts_def,
+       lift_sum_def, bop_result_def] >>
   Cases_on `evaluate_builtin cx es2.accounts ann (Bop bop)
               [expr_type e1; expr_type e2] [v1; v2]` >>
-  simp[return_def, raise_def] >> rw[] >> gvs[]
+  simp[read_result_def, return_def, raise_def] >> rw[] >> gvs[]
 QED
 
 (* A straight-line operator fragment from its run facts: when the source
@@ -149,7 +157,7 @@ Theorem binop_frag_straight:
   !ctx func cenv cx bop ty ann bl el v1 v2 es0.
     (!x y. straight_fresh (compile_binop bop x y ty bl el)) /\
     (expr_res_ok (bop_result cx ann bop tys v1 v2 es0) ==>
-     (?v. bop_result cx ann bop tys v1 v2 es0 = INL (Value v) /\ word_value v /\
+     (?v. bop_result cx ann bop tys v1 v2 es0 = INL v /\ word_value v /\
           !x y sa sb op ss.
             compile_binop bop x y ty bl el sa = (op, sb) /\
             fresh_vars_wrt sa ss /\
@@ -244,28 +252,78 @@ Proof
   rw[expr_val_rel_def] >> first_x_assum drule >> simp[]
 QED
 
-(* A live local's region after an expression evaluated from es, which keeps
-   the scopes' names, is one at es before it, whose pointer variable the
-   expression's fragment keeps. *)
+(* Pointer variables and scope domains determine live local regions. *)
 Theorem local_region_frame:
-  !func cenv cx es s0 sa scopes t n b sz.
-    stmt_state_rel func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
-    MAP FDOM es.scopes = MAP FDOM scopes /\
+  !func cenv scopes0 s0 sa scopes t n b sz.
+    local_ptrs_rel func cenv scopes0 s0 /\ local_ptrs_reserved cenv sa /\
+    MAP FDOM scopes0 = MAP FDOM scopes /\
     (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
            lookup_var x t = SOME w) /\
     local_region cenv scopes t n b sz ==>
-    local_region cenv es.scopes s0 n b sz
+    local_region cenv scopes0 s0 n b sz
 Proof
   rw[local_region_def] >>
-  `lookup_scopes n es.scopes <> NONE` by
+  `lookup_scopes n scopes0 <> NONE` by
     metis_tac[lookup_scopes_none_map_fdom, optionTheory.NOT_SOME_NONE] >>
-  Cases_on `lookup_scopes n es.scopes` >> fs[] >>
-  rename1 `lookup_scopes n es.scopes = SOME e0` >>
+  Cases_on `lookup_scopes n scopes0` >> fs[] >>
+  rename1 `lookup_scopes n scopes0 = SOME e0` >>
   `?w0. lookup_var p s0 = SOME w0` by
-    (fs[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def] >>
+    (fs[local_ptrs_rel_def] >>
      qpat_x_assum `!name entry p sz. _` drule_all >> metis_tac[]) >>
   `not_fresh_at sa p` by (fs[local_ptrs_reserved_def] >> metis_tac[]) >>
   `lookup_var p t = SOME w0` by metis_tac[] >> gvs[]
+QED
+
+(* The converse needs only preservation of pointers already present. *)
+Theorem local_region_frame_fwd:
+  !cenv scopes0 sa scopes s0 t n b sz.
+    local_ptrs_reserved cenv sa /\ MAP FDOM scopes0 = MAP FDOM scopes /\
+    (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
+           lookup_var x t = SOME w) /\
+    local_region cenv scopes0 s0 n b sz ==>
+    local_region cenv scopes t n b sz
+Proof
+  rw[local_region_def] >>
+  `lookup_scopes n scopes <> NONE` by
+    metis_tac[lookup_scopes_none_map_fdom, optionTheory.NOT_SOME_NONE] >>
+  `not_fresh_at sa p` by (fs[local_ptrs_reserved_def] >> metis_tac[]) >>
+  Cases_on `lookup_scopes n scopes` >> gvs[]
+QED
+
+(* Whole regions kept by a pointer-preserving fragment compose with a suffix. *)
+Theorem local_regions_memory_tail:
+  !cenv sa scopes scopes' sm s t.
+  local_ptrs_reserved cenv sa /\
+  MAP FDOM scopes = MAP FDOM scopes' /\
+  (!x. not_fresh_at sa x ==> lookup_var x sm = lookup_var x s) /\
+  (!n b sz. local_region cenv scopes s n b sz ==>
+    mem_bytes_at b sz sm.vs_memory = mem_bytes_at b sz s.vs_memory) /\
+  (!n b sz. local_region cenv scopes' sm n b sz ==>
+    mem_bytes_at b sz t.vs_memory = mem_bytes_at b sz sm.vs_memory) ==>
+  (!n b sz. local_region cenv scopes s n b sz ==>
+    mem_bytes_at b sz t.vs_memory = mem_bytes_at b sz s.vs_memory)
+Proof
+  rpt strip_tac >>
+  `local_region cenv scopes' sm n b sz` by
+    (irule local_region_frame_fwd >>
+     qexistsl [`s`, `sa`, `scopes`] >> simp[]) >>
+  metis_tac[]
+QED
+
+(* Two fragments in turn keep the locals' memory, the second from where the
+   first ended, at the source state es1 after the first. *)
+Theorem locals_kept_trans:
+  !cenv es es1 sa s0 t u.
+    local_ptrs_reserved cenv sa /\ MAP FDOM es.scopes = MAP FDOM es1.scopes /\
+    (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
+           lookup_var x t = SOME w) /\
+    locals_kept cenv es s0 t /\ locals_kept cenv es1 t u ==>
+    locals_kept cenv es s0 u
+Proof
+  rw[locals_kept_def] >>
+  `local_region cenv es1.scopes t n b sz` by
+    metis_tac[local_region_frame_fwd] >>
+  metis_tac[]
 QED
 
 (* The end of an operator's fragment from the ends of its operands'. *)
@@ -304,25 +362,31 @@ Proof
         irule >> asm_rewrite_tac[] >>
       qpat_x_assum `!x w. not_fresh_at sa x /\ lookup_var x s0 = _ ==> _`
         irule >> asm_rewrite_tac[]) >>
-  (* the memory of the allocations before sa: kept by e1, then by e2 *)
-  rpt strip_tac >>
-  qpat_x_assum `!aid off sz. FLOOKUP s0.vs_allocas aid = _ /\ _ ==> _`
-    (qspecl_then [`aid`, `off`, `sz`] mp_tac) >>
-  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  disch_then (fn th => rewrite_tac [GSYM th]) >>
-  qpat_x_assum `!aid off sz. FLOOKUP t.vs_allocas aid = _ /\ _ ==> _`
-    (qspecl_then [`aid`, `off`, `sz`] mp_tac) >>
-  disch_then irule >> rpt conj_tac
-  >- (rpt strip_tac >>
-      qpat_x_assum `!n b sz'. local_region _ es.scopes s0 _ _ _ ==> _` irule >>
-      qexists_tac `n` >>
-      irule local_region_frame >>
-      conj_tac >- (qexistsl_tac [`cx`, `func`] >> first_assum ACCEPT_TAC) >>
-      qexistsl_tac [`sa`, `es1.scopes`, `t`] >> asm_rewrite_tac[])
-  >- (irule arithmeticTheory.LESS_LESS_EQ_TRANS >>
-      qexists_tac `sa.cs_next_id` >> asm_rewrite_tac[]) >>
-  qpat_x_assum `!aid b. FLOOKUP s0.vs_allocas aid = _ ==> _` irule >>
-  first_assum ACCEPT_TAC
+  conj_tac
+  >- ((* the memory of the allocations before sa: kept by e1, then by e2 *)
+      rpt strip_tac >>
+      qpat_x_assum `!aid off sz. FLOOKUP s0.vs_allocas aid = _ /\ _ ==> _`
+        (qspecl_then [`aid`, `off`, `sz`] mp_tac) >>
+      impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+      disch_then (fn th => rewrite_tac [GSYM th]) >>
+      qpat_x_assum `!aid off sz. FLOOKUP t.vs_allocas aid = _ /\ _ ==> _`
+        (qspecl_then [`aid`, `off`, `sz`] mp_tac) >>
+      disch_then irule >> rpt conj_tac
+      >- (rpt strip_tac >>
+          qpat_x_assum `!n b sz'. local_region _ es.scopes s0 _ _ _ ==> _` irule >>
+          qexists_tac `n` >>
+          irule local_region_frame >>
+          conj_tac >- (qexists_tac `func` >>
+            gvs[stmt_state_rel_def, state_rel_def]) >>
+          qexistsl_tac [`sa`, `es1.scopes`, `t`] >> asm_rewrite_tac[])
+      >- (irule arithmeticTheory.LESS_LESS_EQ_TRANS >>
+          qexists_tac `sa.cs_next_id` >> asm_rewrite_tac[]) >>
+      qpat_x_assum `!aid b. FLOOKUP s0.vs_allocas aid = _ ==> _` irule >>
+      first_assum ACCEPT_TAC) >>
+  (* the locals' memory: kept by e1, then by e2 *)
+  irule locals_kept_mem_tail >> qexists_tac `u` >> simp[] >>
+  irule locals_kept_trans >> qexistsl_tac [`es1`, `sa`, `t`] >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem compile_bop_typed_sim:
@@ -348,12 +412,10 @@ Theorem compile_bop_typed_sim:
          (if bop = Exp then expr_int_literal e1 else NONE)
          (if bop = Exp then expr_int_literal e2 else NONE) sa = (op, sb) ==>
        cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var) /\
-    (!tv es1. eval_expr cx e1 es = (INL tv, es1) ==> ?v. tv = Value v) /\
     expr_sim ctx func cenv cx (expr_type e1) e1 es /\
-    (!v1 es1. eval_expr cx e1 es = (INL (Value v1), es1) ==>
-       (!tv es2. eval_expr cx e2 es1 = (INL tv, es2) ==> ?v. tv = Value v) /\
+    (!v1 es1. (do result <- eval_expr cx e1; read_result cx result od) es = (INL v1, es1) ==>
        expr_sim ctx func cenv cx (expr_type e1) e2 es1 /\
-       !v2 es2. eval_expr cx e2 es1 = (INL (Value v2), es2) ==>
+       !v2 es2. (do result <- eval_expr cx e2; read_result cx result od) es1 = (INL v2, es2) ==>
          binop_frag_words ctx func cenv cx bop (expr_type e1) ann
            (if bop = Exp then expr_int_literal e1 else NONE)
            (if bop = Exp then expr_int_literal e2 else NONE)
@@ -393,15 +455,12 @@ Proof
                                `\s. F`, `expr_exit res`] mp_tac) >>
       (impl_tac >- gvs[]) >> strip_tac >>
       irule frag_exec_exit_prefix >> qexists_tac `s1` >> simp[])
-  >- ((* e1 is no value *)
-      qpat_x_assum `!tv es1. eval_expr cx e1 es = (INL tv, es1) ==> _` drule >>
-      simp[])
   >- ((* e2 raises *)
-      qpat_x_assum `!v1 es1. eval_expr cx e1 es = _ ==> _` drule >>
+      qpat_x_assum `!v1 es1. (do result <- eval_expr cx e1; read_result cx result od) es = _ ==> _` drule >>
       strip_tac >>
       qpat_x_assum `expr_sim _ _ _ _ _ e1 _`
         (mp_tac o REWRITE_RULE [expr_sim_def]) >>
-      disch_then (qspecl_then [`sa`, `s1`, `x`, `INL (Value v1)`, `es1`,
+      disch_then (qspecl_then [`sa`, `s1`, `x`, `INL v1`, `es1`,
                                `s0`] mp_tac) >>
       (impl_tac >- simp[expr_res_ok_def]) >>
       disch_then (mp_tac o MATCH_MP frag_exec_pre_exit_c) >>
@@ -417,22 +476,21 @@ Proof
                     mp_tac) >>
       (impl_tac >- gvs[]) >>
       disch_then (fn th => match_mp_tac (MATCH_MP frag_exec_weaken th)) >>
-      gvs[])
-  >- ((* e2 is no value *)
-      qpat_x_assum `!v1 es1. eval_expr cx e1 es = _ ==> _` drule >>
-      strip_tac >>
-      qpat_x_assum `!tv es2. eval_expr cx e2 es1 = (INL tv, es2) ==> _` drule >>
-      simp[]) >>
+      gvs[]) >>
   (* both values *)
-  qpat_x_assum `!v1 es1. eval_expr cx e1 es = _ ==> _` drule >>
+  qpat_x_assum `!v1 es1. (do result <- eval_expr cx e1; read_result cx result od) es = _ ==> _` drule >>
   strip_tac >>
-  qpat_x_assum `!v2 es2. eval_expr cx e2 es1 = _ ==> _` drule >>
+  qpat_x_assum `!v2 es2. (do result <- eval_expr cx e2; read_result cx result od) es1 = _ ==> _` drule >>
   strip_tac >>
   `MAP FDOM es.scopes = MAP FDOM es1.scopes` by
-    metis_tac[eval_expr_preserves_scopes_dom] >>
+    (qpat_x_assum `(do result <- eval_expr cx e1; read_result cx result od) es = _` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     simp[bind_def, AllCaseEqs()] >> strip_tac >>
+     imp_res_tac read_result_state >> gvs[] >>
+     metis_tac[eval_expr_preserves_scopes_dom]) >>
   qpat_x_assum `expr_sim _ _ _ _ _ e1 _`
     (mp_tac o REWRITE_RULE [expr_sim_def]) >>
-  disch_then (qspecl_then [`sa`, `s1`, `x`, `INL (Value v1)`, `es1`, `s0`]
+  disch_then (qspecl_then [`sa`, `s1`, `x`, `INL v1`, `es1`, `s0`]
                 mp_tac) >>
   (impl_tac >- simp[expr_res_ok_def]) >>
   disch_then (mp_tac o MATCH_MP frag_exec_pre_exit_c) >>
@@ -448,7 +506,7 @@ Proof
   (* the right operand, from t *)
   qpat_x_assum `expr_sim _ _ _ _ _ e2 _`
     (mp_tac o REWRITE_RULE [expr_sim_def]) >>
-  disch_then (qspecl_then [`s1`, `s2`, `y`, `INL (Value v2)`, `es'`, `t`]
+  disch_then (qspecl_then [`s1`, `s2`, `y`, `INL v2`, `es'`, `t`]
                 mp_tac) >>
   (impl_tac >- simp[expr_res_ok_def]) >>
   disch_then (mp_tac o MATCH_MP frag_exec_pre_exit_c) >>
@@ -500,13 +558,11 @@ Theorem compile_bop_sim:
          (if bop = Exp then expr_int_literal e1 else NONE)
          (if bop = Exp then expr_int_literal e2 else NONE) sa = (op, sb) ==>
        cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var) /\
-    (!tv es1. eval_expr cx e1 es = (INL tv, es1) ==> ?v. tv = Value v) /\
     expr_sim ctx func cenv cx (expr_type e1) e1 es /\
-    (!v1 es1. eval_expr cx e1 es = (INL (Value v1), es1) ==>
+    (!v1 es1. (do result <- eval_expr cx e1; read_result cx result od) es = (INL v1, es1) ==>
        word_value v1 /\
-       (!tv es2. eval_expr cx e2 es1 = (INL tv, es2) ==> ?v. tv = Value v) /\
        expr_sim ctx func cenv cx (expr_type e1) e2 es1 /\
-       !v2 es2. eval_expr cx e2 es1 = (INL (Value v2), es2) ==>
+       !v2 es2. (do result <- eval_expr cx e2; read_result cx result od) es1 = (INL v2, es2) ==>
          word_value v2 /\
          binop_frag ctx func cenv cx bop (expr_type e1) ann
            (if bop = Exp then expr_int_literal e1 else NONE)
@@ -527,7 +583,7 @@ Proof
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `!v1 es1. _ ==> word_value v1 /\ _` drule >> strip_tac >>
-  rpt conj_tac >- first_assum ACCEPT_TAC >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `!v2 es2. _ ==> word_value v2 /\ _` drule >> strip_tac >>
   gvs[typed_val_to_w256_word_value, binop_frag_def]
@@ -567,7 +623,7 @@ Theorem bop_result_bitwise:
          (case type_to_int_bound ann of SOME u => u | NONE => Unsigned 0) i1 /\
        within_int_bound
          (case type_to_int_bound ann of SOME u => u | NONE => Unsigned 0) i2) ==>
-    ?v. bop_result cx ann bop tys v1 v2 es = INL (Value v) /\ word_value v /\
+    ?v. bop_result cx ann bop tys v1 v2 es = INL v /\ word_value v /\
         val_to_w256 v =
           (if bop = And then word_and else if bop = Or then word_or
            else word_xor) (val_to_w256 v1) (val_to_w256 v2)
@@ -679,9 +735,9 @@ Theorem bop_result_flag_in:
     value_has_type (FlagTV m) v1 /\ value_has_type (FlagTV m) v2 /\
     m <= 256 ==>
     bop_result cx ann bop tys v1 v2 es =
-      INL (Value (BoolV
+      INL (BoolV
         (if bop = In then word_and (val_to_w256 v1) (val_to_w256 v2) <> 0w
-         else word_and (val_to_w256 v1) (val_to_w256 v2) = 0w)))
+         else word_and (val_to_w256 v1) (val_to_w256 v2) = 0w))
 Proof
   rpt gen_tac >> strip_tac >>
   Cases_on `v1` >> gvs[value_has_type_def] >>
@@ -744,7 +800,7 @@ Theorem bop_result_shift:
       SOME (if is_signed_type ty then Signed 256 else Unsigned 256) /\
     within_int_bound (if is_signed_type ty then Signed 256 else Unsigned 256)
       i1 ==>
-    ?v. bop_result cx ann bop tys v1 v2 es = INL (Value v) /\ word_value v /\
+    ?v. bop_result cx ann bop tys v1 v2 es = INL v /\ word_value v /\
         val_to_w256 v =
           if bop = ShL then word_lsl (val_to_w256 v1) (w2n (val_to_w256 v2))
           else if is_signed_type ty

@@ -8,7 +8,7 @@ Ancestors
 
 Theorem abi_valid_bytes_source_decode:
   evaluate_abi_decode env (BaseT (BytesT (Dynamic n))) bs = INL v ==>
-  ?payload. v = vyperValue$BytesV payload /\ valid_enc (Bytes NONE) bs /\
+  ?payload. v = vyperValue$BytesV payload /\ vyper_decode_valid_enc (Bytes NONE) bs /\
     dec (Bytes NONE) bs = contractABI$BytesV payload /\ LENGTH payload <= n /\
     LENGTH bs <= abi_decode_bytes_copy_size n
 Proof
@@ -20,7 +20,7 @@ QED
 
 Theorem abi_valid_string_source_decode:
   evaluate_abi_decode env (BaseT (StringT n)) bs = INL v ==>
-  ?payload. v = StringV (MAP (CHR o w2n) payload) /\ valid_enc String bs /\
+  ?payload. v = StringV (MAP (CHR o w2n) payload) /\ vyper_decode_valid_enc String bs /\
     dec String bs = contractABI$BytesV payload /\ LENGTH payload <= n /\
     LENGTH bs <= abi_decode_bytes_copy_size n
 Proof

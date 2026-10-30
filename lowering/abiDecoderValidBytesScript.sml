@@ -9,7 +9,7 @@ Ancestors
 
 Definition abi_decoder_valid_bytes_pre_def:
   abi_decoder_valid_bytes_pre n at bs payload st src dst opc hi sb d s <=>
-    (at = Bytes NONE \/ at = String) /\ valid_enc at bs /\
+    (at = Bytes NONE \/ at = String) /\ vyper_decode_valid_enc at bs /\
     dec at bs = contractABI$BytesV payload /\ LENGTH payload <= n /\
     mem_bytes_at sb (LENGTH bs) (abi_decode_source opc s) = bs /\
     n < dimword (:256) /\ sb + LENGTH bs < dimword (:256) /\

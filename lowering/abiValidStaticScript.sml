@@ -156,7 +156,7 @@ Theorem abi_static_prefix_static_mutual:
   (!at. ~is_dynamic at ==> abi_static_prefix at) /\
   (!ts. EVERY (\at. ~is_dynamic at ==> abi_static_prefix at) ts)
 Proof
-  ho_match_mp_tac abi_type_induction >>
+  ho_match_mp_tac (legacyInduction.mutual_ind_from_ops abi_type_induction) >>
   simp[is_dynamic_def, abi_static_prefix_numbers, abi_static_prefix_bytes_bound,
     abi_static_prefix_array_bound, abi_static_prefix_tuple_members, EVERY_MEM]
 QED

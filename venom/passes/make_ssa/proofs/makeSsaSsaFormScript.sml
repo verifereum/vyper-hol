@@ -272,7 +272,7 @@ Triviality rename_blocks_counter_mono:
     !v. (case ALOOKUP ctrs' v of NONE => 0 | SOME n => n) >=
         (case ALOOKUP ctrs v of NONE => 0 | SOME n => n))
 Proof
-  ho_match_mp_tac dom_tree_induction >> rpt conj_tac
+  ho_match_mp_tac dom_tree_list_induction >> rpt conj_tac
   (* DNode s children: IH on children, prove for rename_blocks *)
   >- (rpt gen_tac >> strip_tac >> rpt gen_tac >>
       ONCE_REWRITE_TAC[rename_blocks_def] >>
@@ -606,19 +606,19 @@ Triviality rename_blocks_preserves_non_tree_outputs:
        MAP (\i. i.inst_outputs) bb'.bb_instructions =
        MAP (\i. i.inst_outputs) bb.bb_instructions))
 Proof
-  ho_match_mp_tac dom_tree_induction >> rpt conj_tac >| [
+  ho_match_mp_tac dom_tree_list_induction >> rpt conj_tac >| [
     (* DNode *)
     rpt gen_tac >> strip_tac >>
     mp_tac dnode_preserves_non_tree_outputs >>
     (impl_tac >- first_x_assum ACCEPT_TAC) >>
-    simp[],
+    metis_tac[],
     (* [] *)
     simp[Once rename_blocks_def] >> rpt strip_tac >> gvs[],
     (* cons *)
     rpt gen_tac >> disch_tac >>
     mp_tac cons_preserves_non_tree_outputs >>
     (impl_tac >- first_x_assum ACCEPT_TAC) >>
-    simp[]
+    metis_tac[]
   ]
 QED
 
@@ -1259,7 +1259,7 @@ Triviality rename_blocks_cross_distinct:
          ?base ver. colon_free base /\ x = version_var base ver) /\
     ALL_DISTINCT (MAP (\bb. bb.bb_label) bbs'))
 Proof
-  ho_match_mp_tac dom_tree_induction >> rpt conj_tac
+  ho_match_mp_tac dom_tree_list_induction >> rpt conj_tac
   >- ((* DNode s children *)
     rpt gen_tac >> strip_tac >>
     rpt gen_tac >> strip_tac >>

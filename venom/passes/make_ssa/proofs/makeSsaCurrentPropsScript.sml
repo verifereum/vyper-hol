@@ -4,6 +4,8 @@ Ancestors
   makeSsaCurrentDefs makeSsaCurrentInduct makeSsaHelper
   cfgTransformProps fcgDefs irSupply list alist
 
+val _ = Parse.hide "preds";
+
 Definition ssa_supply_extends_def:
   ssa_supply_extends s s' <=>
     (!id. MEM id s.irs_used_inst_ids ==> MEM id s'.irs_used_inst_ids) /\

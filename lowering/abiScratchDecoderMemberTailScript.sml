@@ -23,7 +23,7 @@ Theorem abi_scratch_decoder_member_tail_execute:
   abi_decoder_members ce env sf (ty::tys) (tv::tvs)
     (abi_decode_members (MAP (vyper_to_abi_type env) (ty::tys)) bs
       (DROP (SUM (MAP abi_member_head_size (MAP (vyper_to_abi_type env) pretys))) bs)) (v::vs) /\
-  valid_enc_tuple (MAP (vyper_to_abi_type env) (pretys ++ ty::tys)) bs bs /\
+  vyper_decode_valid_enc_tuple (MAP (vyper_to_abi_type env) (pretys ++ ty::tys)) bs bs /\
   abi_scratch_decoder_ranges opc hi src dst sb
     (LENGTH bs)
     d (SUM (MAP (type_memory_bytes ce) (pretys ++ ty::tys))) first last b cap initial /\

@@ -1,6 +1,6 @@
 Theory vyperAST
 Ancestors
-  ASCIInumbers string words arithmetic sorting vyperMisc[ignore_grammar]
+  ASCIInumbers string words arithmetic sorting integer vyperMisc[ignore_grammar]
 Libs
   cv_transLib
 
@@ -487,6 +487,10 @@ val () = cv_auto_trans order_custom_error_args_def;
 Theorem bound_CASE_rator =
   DatatypeSimps.mk_case_rator_thm_tyinfo
     (Option.valOf (TypeBase.read {Thy="vyperAST",Tyop="bound"}));
+
+Theorem base_type_CASE_rator =
+  DatatypeSimps.mk_case_rator_thm_tyinfo
+    (Option.valOf (TypeBase.read {Thy="vyperAST",Tyop="base_type"}));
 
 Definition is_Constant_def[simp]:
   is_Constant (Constant _) = T ∧

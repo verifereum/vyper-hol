@@ -20,7 +20,7 @@ Proof
   impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
   asm_simp_tac (srw_ss()) [abi_decode_members_append, abi_decode_members_def,
     EL_APPEND_EQN, map_replicate, SUM_REPLICATE,
-    Excl "enc_def", Excl "dec_def", Excl "valid_enc_def"]
+    Excl "enc_def", Excl "dec_def", Excl "vyper_decode_valid_enc_def"]
 QED
 
 Theorem abi_decoder_valid_array_metadata_child:
@@ -61,7 +61,7 @@ Theorem abi_decoder_valid_array_child_pre:
   abi_decoder_coherent ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) /\
   abi_decoder_metadata ce env (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) di
     (dec (Array NONE at) bs) (ArrayV (DynArrayV vs)) /\
-  valid_enc (Array NONE at) bs /\ j < LENGTH vs /\
+  vyper_decode_valid_enc (Array NONE at) bs /\ j < LENGTH vs /\
   (is_dynamic at ==> !elem. at <> Array (SOME 0) elem) /\
   abi_decoder_ranges opc hi src dst sb (LENGTH bs)
     d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b cap s /\

@@ -14,7 +14,7 @@ Ancestors
 
 Theorem abi_decoder_valid_complex_guard_inputs:
   abi_decoder_members ce env sf tys tvs avs vs /\
-  valid_enc_tuple (MAP (vyper_to_abi_type env) tys) bs bs /\
+  vyper_decode_valid_enc_tuple (MAP (vyper_to_abi_type env) tys) bs bs /\
   abi_decoder_ranges opc hi src dst sb
     (LENGTH bs)
     d (SUM (MAP (type_memory_bytes ce) tys)) b cap initial ==>
@@ -51,7 +51,7 @@ Theorem abi_decoder_valid_complex_execute:
       phi_prefix_length bb.bb_instructions = 0) /\
   abi_decoder_members ce env sf tys tvs
     (abi_decode_members (MAP (vyper_to_abi_type env) tys) bs bs) vs /\
-  valid_enc_tuple (MAP (vyper_to_abi_type env) tys) bs bs /\
+  vyper_decode_valid_enc_tuple (MAP (vyper_to_abi_type env) tys) bs bs /\
   abi_decoder_ranges opc hi src dst sb
     (LENGTH bs)
     d (SUM (MAP (type_memory_bytes ce) tys)) b cap initial /\

@@ -13,7 +13,7 @@ Theorem abi_decoder_valid_array_pre_observations:
   abi_decoder_metadata ce env (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
     (type_to_abi_dec_info ce.ce_struct_fields ce (ArrayT ty (Dynamic maxn)))
     (dec (Array NONE (vyper_to_abi_type env ty)) bs) (ArrayV (DynArrayV vs)) /\
-  valid_enc (Array NONE (vyper_to_abi_type env ty)) bs /\
+  vyper_decode_valid_enc (Array NONE (vyper_to_abi_type env ty)) bs /\
   abi_decoder_ranges opc hi src dst sb (LENGTH bs)
     d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b cap initial /\
   mem_bytes_at sb (LENGTH bs) (abi_decode_source opc initial) = bs /\
@@ -43,7 +43,7 @@ Theorem abi_decoder_valid_array_init_inputs:
   abi_decoder_coherent ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) /\
   abi_decoder_metadata ce env (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
     parent_di (dec (Array NONE (vyper_to_abi_type env ty)) bs) (ArrayV (DynArrayV vs)) /\
-  valid_enc (Array NONE (vyper_to_abi_type env ty)) bs /\
+  vyper_decode_valid_enc (Array NONE (vyper_to_abi_type env ty)) bs /\
   abi_decoder_ranges opc hi src dst sb
     (LENGTH bs)
     d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b cap initial /\
@@ -68,7 +68,7 @@ Proof
     (fn th => RULE_ASSUM_TAC (PURE_REWRITE_RULE [th]) >> assume_tac th) >>
   `32 + LENGTH vs * abi_embedded_static_size ce.ce_struct_fields ty <=
     LENGTH bs` by
-    (fs[LENGTH_DROP, Excl "enc_def", Excl "dec_def", Excl "valid_enc_def"] >> decide_tac) >>
+    (fs[LENGTH_DROP, Excl "enc_def", Excl "dec_def", Excl "vyper_decode_valid_enc_def"] >> decide_tac) >>
   qpat_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_ranges_def]) >>
   drule_all abi_decoder_source_head_load >> strip_tac >>

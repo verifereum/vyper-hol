@@ -14,7 +14,7 @@ Definition abi_decoder_valid_loop_data_def:
     abi_decoder_metadata ce env (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
       (type_to_abi_dec_info ce.ce_struct_fields ce (ArrayT ty (Dynamic maxn)))
       (dec (Array NONE (vyper_to_abi_type env ty)) bs) (ArrayV (DynArrayV vs)) /\
-    valid_enc (Array NONE (vyper_to_abi_type env ty)) bs /\
+    vyper_decode_valid_enc (Array NONE (vyper_to_abi_type env ty)) bs /\
     is_dynamic (vyper_to_abi_type env ty) /\
     (!elem. vyper_to_abi_type env ty <> Array (SOME 0) elem) /\
     abi_decoder_ranges opc hi_op src dst sb

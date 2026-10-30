@@ -66,7 +66,7 @@ Theorem abi_scratch_decoder_array_dynamic_prefix:
     (abi_embedded_static_size ce.ce_struct_fields ty) (type_memory_bytes ce ty) st = (ops,ready) /\
   abi_decoder_coherent ce env sf ty tv /\ is_dynamic (vyper_to_abi_type env ty) /\
   (!elem. vyper_to_abi_type env ty <> Array (SOME 0) elem) /\
-  valid_enc (Array NONE (vyper_to_abi_type env ty)) bs /\ j < abi_head_word bs /\
+  vyper_decode_valid_enc (Array NONE (vyper_to_abi_type env ty)) bs /\ j < abi_head_word bs /\
   abi_scratch_decoder_ranges opc hi src dst sb (LENGTH bs) d outsz first last b cap initial /\
   mem_bytes_at sb (LENGTH bs) (abi_decode_source opc initial) = bs /\
   abi_decoder_budget first last b cap initial /\
@@ -93,7 +93,7 @@ Theorem abi_scratch_decoder_array_setup_sequence:
   abi_decoder_coherent ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) /\
   abi_decoder_metadata ce env (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) di
     (dec (Array NONE (vyper_to_abi_type env ty)) bs) (ArrayV (DynArrayV vs)) /\
-  valid_enc (Array NONE (vyper_to_abi_type env ty)) bs /\ j < LENGTH vs /\
+  vyper_decode_valid_enc (Array NONE (vyper_to_abi_type env ty)) bs /\ j < LENGTH vs /\
   (is_dynamic (vyper_to_abi_type env ty) ==>
     !elem. vyper_to_abi_type env ty <> Array (SOME 0) elem) /\
   abi_scratch_decoder_ranges opc hi src dst sb (LENGTH bs)
@@ -113,7 +113,7 @@ Proof
   `j < abi_head_word bs` by asm_simp_tac bool_ss [] >>
   `abi_decoder_coherent ce env sf ty tv` by fs[abi_decoder_coherent_array_iff] >>
   Cases_on `is_dynamic (vyper_to_abi_type env ty)` >>
-  fs[Excl "enc_def", Excl "dec_def", Excl "valid_enc_def"] >>
+  fs[Excl "enc_def", Excl "dec_def", Excl "vyper_decode_valid_enc_def"] >>
   FIRST [drule_all abi_scratch_decoder_array_dynamic_prefix >> simp[],
     drule_all abi_scratch_decoder_array_static_prefix >> simp[]]
 QED

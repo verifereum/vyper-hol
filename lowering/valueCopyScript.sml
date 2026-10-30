@@ -17,7 +17,7 @@
  *   mem_bytes_at_mcopy_disjoint — and leaves the bytes outside its
  *                            destination alone
  *   word_tv_memory_size    — a word type's value takes 32 bytes
- *   compile_store_memory_run — compile_store_memory at one type puts the
+ *   compile_store_memory_run_size_bound — compile_store_memory at one type puts the
  *                            value at the destination and changes memory
  *                            only there
  *   stage_store_run        — and so does compile_stage_intcall_args's
@@ -27,7 +27,7 @@
 Theory valueCopy
 Ancestors
   list rich_list arithmetic
-  valueEncoding valueEncodingProps valueEncodingProofs exprSim
+  valueEncoding valueEncodingProps valueEncodingProofs exprSim valueCopyBytes
   compileEnv context exprLoweringProps emitHelper emitHelperProps
   entryDecodeProps vyperValue vyperTyping vfmConstants
   venomInst venomState venomExecSemantics venomMemProps
@@ -307,7 +307,7 @@ Proof
   fs[venomInstTheory.mk_inst_def]
 QED
 
-Theorem emit_mcopy_run[local]:
+Theorem emit_mcopy_run:
   !sa sb dst src n s d a.
     emit_void MCOPY [dst; src; Lit (n2w n)] sa = ((),sb) /\
     eval_operand dst s = SOME d /\ eval_operand src s = SOME a /\
@@ -334,8 +334,8 @@ QED
    type_memory_size bytes from dst.  type_memory_bytes, the size the
    lowering copies, is the compile environment's account of that size
    (build_compile_env_type_memory_bytes). *)
-Theorem compile_store_memory_run:
-  !cenv src dst ty sa sb s tenv tv v sw dw.
+Theorem compile_store_memory_run_frame:
+  !cenv src dst ty sa sb s tenv tv v sw dw bound.
     compile_store_memory cenv src dst ty ty sa = ((),sb) /\
     (!x. src = Var x ==> not_fresh_at sa x) /\
     (!x. dst = Var x ==> not_fresh_at sa x) /\
@@ -344,7 +344,9 @@ Theorem compile_store_memory_run:
     type_memory_bytes cenv ty = type_memory_size tv /\
     (if is_word_type ty then sw = typed_val_to_w256 tv v
      else val_in_memory tv v (w2n sw) s.vs_memory) /\
-    w2n dw + type_memory_size tv + 64 < dimword (:256) ==>
+    type_memory_size tv + 64 < dimword (:256) /\
+    (if is_bytestring_type ty then val_footprint tv v <= bound
+     else type_memory_size tv <= bound) ==>
     sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
     same_blocks sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
     sa.cs_next_id <= sb.cs_next_id /\
@@ -354,12 +356,13 @@ Theorem compile_store_memory_run:
       val_in_memory tv v (w2n dw) t.vs_memory /\
       (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s /\
       (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
-      (!a len. a + len <= w2n dw \/ w2n dw + type_memory_size tv <= a ==>
+      (!a len. a + len <= w2n dw \/ w2n dw + bound <= a ==>
          mem_bytes_at a len t.vs_memory = mem_bytes_at a len s.vs_memory)
 Proof
   rpt gen_tac >> strip_tac >>
   Cases_on `is_word_type ty` >> gvs[compile_store_memory_def]
-  >- (drule_all emit_mstore_run >> strip_tac >> simp[] >>
+  >- (`~is_bytestring_type ty` by metis_tac[is_bytestring_word_type] >>
+      gvs[] >> drule_all emit_mstore_run >> strip_tac >> simp[] >>
       drule_all word_tv_memory_size >> strip_tac >>
       drule_all val_in_memory_word >> strip_tac >>
       simp[mstore_mem_word_at_same] >> rpt conj_tac
@@ -371,7 +374,7 @@ Proof
   suspend "copy"
 QED
 
-Resume compile_store_memory_run[bytestring]:
+Resume compile_store_memory_run_frame[bytestring]:
   `?L. mem_word_at (w2n sw) s.vs_memory = n2w L /\
        val_footprint tv v = 32 + 32 * word_size L` by
     (Cases_on `ty` >> gvs[is_bytestring_type_def] >>
@@ -399,7 +402,7 @@ Resume compile_store_memory_run[bytestring]:
   rpt strip_tac >> irule mem_bytes_at_mcopy_disjoint >> decide_tac
 QED
 
-Resume compile_store_memory_run[copy]:
+Resume compile_store_memory_run_frame[copy]:
   `val_footprint tv v <= type_memory_size tv` by
     metis_tac[val_footprint_le] >>
   Cases_on `type_memory_size tv` >> gvs[compile_copy_memory_def]
@@ -421,7 +424,65 @@ Resume compile_store_memory_run[copy]:
        venom_state_component_equality]
 QED
 
-Finalise compile_store_memory_run
+Finalise compile_store_memory_run_frame
+
+Theorem compile_store_memory_run_size_bound:
+  !cenv src dst ty sa sb s tenv tv v sw dw.
+    compile_store_memory cenv src dst ty ty sa = ((),sb) /\
+    (!x. src = Var x ==> not_fresh_at sa x) /\
+    (!x. dst = Var x ==> not_fresh_at sa x) /\
+    eval_operand src s = SOME sw /\ eval_operand dst s = SOME dw /\
+    evaluate_type tenv ty = SOME tv /\ value_has_type tv v /\ val_wf tv v /\
+    type_memory_bytes cenv ty = type_memory_size tv /\
+    (if is_word_type ty then sw = typed_val_to_w256 tv v
+     else val_in_memory tv v (w2n sw) s.vs_memory) /\
+    type_memory_size tv + 64 < dimword (:256) ==>
+    sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
+    same_blocks sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
+    sa.cs_next_id <= sb.cs_next_id /\
+    EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+      (emitted_insts sa sb) /\
+    ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
+      val_in_memory tv v (w2n dw) t.vs_memory /\
+      (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s /\
+      (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+      (!a len. a + len <= w2n dw \/ w2n dw + type_memory_size tv <= a ==>
+         mem_bytes_at a len t.vs_memory = mem_bytes_at a len s.vs_memory)
+Proof
+  rpt gen_tac >> strip_tac >>
+  irule compile_store_memory_run_frame >>
+  simp[] >>
+  qexistsl_tac [`cenv`, `dst`, `src`, `sw`, `tenv`, `ty`] >>
+  simp[] >> metis_tac[val_footprint_le]
+QED
+
+Theorem compile_store_memory_run:
+  !cenv src dst ty sa sb s tenv tv v sw dw.
+    compile_store_memory cenv src dst ty ty sa = ((),sb) /\
+    (!x. src = Var x ==> not_fresh_at sa x) /\
+    (!x. dst = Var x ==> not_fresh_at sa x) /\
+    eval_operand src s = SOME sw /\ eval_operand dst s = SOME dw /\
+    evaluate_type tenv ty = SOME tv /\ value_has_type tv v /\ val_wf tv v /\
+    type_memory_bytes cenv ty = type_memory_size tv /\
+    (if is_word_type ty then sw = typed_val_to_w256 tv v
+     else val_in_memory tv v (w2n sw) s.vs_memory) /\
+    w2n dw + type_memory_size tv + 64 < dimword (:256) ==>
+    sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
+    same_blocks sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
+    sa.cs_next_id <= sb.cs_next_id /\
+    EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+      (emitted_insts sa sb) /\
+    ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
+      val_in_memory tv v (w2n dw) t.vs_memory /\
+      (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s /\
+      (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+      (!a len. a + len <= w2n dw \/ w2n dw + type_memory_size tv <= a ==>
+         mem_bytes_at a len t.vs_memory = mem_bytes_at a len s.vs_memory)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `type_memory_size tv + 64 < dimword (:256)` by decide_tac >>
+  drule_all compile_store_memory_run_size_bound >> simp[]
+QED
 
 (* The store compile_stage_intcall_args emits for a memory-passed argument
    into its buffer dst: compile_store_memory at one type, except that it

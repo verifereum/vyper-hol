@@ -192,7 +192,7 @@ Proof
   simp[Once evaluate_def, builtin_args_length_ok_def, type_check_def,
        assert_def, ignore_bind_def, bind_def] >>
   simp[Once evaluate_def, bind_def, return_def, evaluate_literal_def] >>
-  simp[Once evaluate_def, bind_def, materialise_def, return_def] >>
+  simp[Once evaluate_def, bind_def, read_result_def, return_def] >>
   simp[Once evaluate_def, bind_def, return_def, get_accounts_def,
        evaluate_builtin_def, evaluate_literal_def, lift_sum_def]
 QED

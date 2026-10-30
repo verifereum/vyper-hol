@@ -11,7 +11,7 @@ Theorem abi_decoder_valid_array_setup_inputs:
       rel = abi_decode_member_offset at (DROP 32 bs) (j * abi_member_head_size at) in
   abi_decoder_coherent ce env sf ty tv /\ is_dynamic at /\
   (!elem. at <> Array (SOME 0) elem) /\
-  valid_enc (Array NONE at) bs /\ j < abi_head_word bs /\
+  vyper_decode_valid_enc (Array NONE at) bs /\ j < abi_head_word bs /\
   abi_decoder_ranges opc hi src dst sb (LENGTH bs) d outsz b cap initial /\
   mem_bytes_at sb (LENGTH bs) (abi_decode_source opc initial) = bs ==>
   abi_decoder_dynamic (type_to_abi_dec_info sf ce ty) /\
