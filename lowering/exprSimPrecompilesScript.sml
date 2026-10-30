@@ -15,11 +15,18 @@
  * TOP-LEVEL:
  *   compile_ecrecover_call_sim — expr_vv_ok of ECRecover
  *
- * Exported for the other precompiles:
+ * Exported for the other precompiles (ecadd, ecmul in exprSimECArith):
  *   - computed STATICCALLs: computed_static_consume_eq, computed_static_exec,
- *     computed_static_exec_success, computed_static_exec_state_rel,
+ *     computed_static_exec_success, computed_static_exec_failure,
+ *     computed_static_assert, computed_static_exec_state_rel,
  *     computed_static_exec_wb_frame, write_memory_stmt_state_rel,
- *     wb_frame_readonly_input
+ *     wb_frame_readonly_input, expr_exit_success_map
+ *   - the GAS/STATICCALL/ASSERT suffix: computed_suffix_shape,
+ *     computed_suffix_success, computed_suffix_failure,
+ *     computed_suffix_output, computed_suffix_preserves
+ *   - ALLOCA'd buffers around a payload: allocated_payload_shape,
+ *     alloc_buffer_frame_run, alloc_buffer_finish,
+ *     state_allocations_disjoint
  *   - stack operands under their typed encoding (a bytes32 is not a
  *     word_value): typed_args_ready, typed_args_post, typed_args_ready_head,
  *     typed_args_ready_tail, typed_args_cons_cases, typed_args_post_cons,
@@ -27,8 +34,12 @@
  *     typed_stack_args_ready, stack_args_values_typed,
  *     typed_builtin_stack_args_values, expr_sim_pre_stack_result,
  *     expr_post_typed_stack_operand, expr_post_typed_stack_intro
- *   - scratch buffers: scratch_mstore_frame, mem_bytes_at_store_append
- *   - big-endian words: num_of_bytes_l2n, num_of_be_bytes_word32
+ *   - scratch buffers: scratch_mstore_frame, mem_bytes_at_store_append,
+ *     scratch_three_word_stores, scratch_four_word_stores,
+ *     scratch_memory_frame
+ *   - big-endian words: num_of_bytes_l2n, num_of_be_bytes_word32,
+ *     padded_num_to_be_bytes, padded_num_to_be_bytes_word32,
+ *     take_pad_word_prefix, drop_word_prefix
  * The ecrecover-specific helpers are local.
  *)
 
@@ -46,6 +57,60 @@ Ancestors
   vyperTypeInvariants vyperTypeExprResult vyperTypeExprSoundness
 Libs
   monadsyntax
+
+Theorem padded_num_bytes_aux[local]:
+  !k n. n < 256 ** k ==>
+    PAD_RIGHT (0w:word8) k (if n = 0 then [] else MAP n2w (n2l 256 n)) =
+    bytes_of_num k n
+Proof
+  Induct_on `k`
+  >- simp[bytes_of_num_def, PAD_RIGHT] >>
+  rpt strip_tac >>
+  Cases_on `n = 0`
+  >- (gvs[bytes_of_num_def, PAD_RIGHT, GENLIST_CONS] >>
+      first_x_assum (qspec_then `0` mp_tac) >>
+      simp[PAD_RIGHT, arithmeticTheory.EXP_POS]) >>
+  `n DIV 256 < 256 ** k` by
+    (gvs[arithmeticTheory.EXP, arithmeticTheory.DIV_LT_X]) >>
+  first_x_assum (qspec_then `n DIV 256` mp_tac) >> simp[] >>
+  Cases_on `n < 256`
+  >- (`n DIV 256 = 0` by simp[arithmeticTheory.DIV_EQ_0] >>
+      simp[] >> strip_tac >>
+      simp[Once n2l_def, bytes_of_num_def, PAD_RIGHT_CONS]) >>
+  `n DIV 256 <> 0` by simp[arithmeticTheory.DIV_EQ_0] >>
+  simp[] >> strip_tac >>
+  simp[Once n2l_def, bytes_of_num_def, PAD_RIGHT_CONS,
+       dimword_def, fcpLib.INDEX_CONV ``dimindex(:8)``]
+QED
+
+Theorem padded_num_to_be_bytes:
+  !k n. n < 256 ** k ==>
+    PAD_LEFT 0w k (num_to_be_bytes n) = REVERSE (bytes_of_num k n)
+Proof
+  rpt strip_tac >> drule padded_num_bytes_aux >>
+  disch_then (mp_tac o AP_TERM ``REVERSE:word8 list -> word8 list``) >>
+  Cases_on `n = 0` >>
+  simp[num_to_be_bytes_def, PAD_LEFT, PAD_RIGHT, REVERSE_APPEND,
+       REVERSE_GENLIST, combinTheory.K_DEF, MAP_REVERSE] >>
+  disch_then (SUBST1_TAC o SYM) >>
+  simp[REVERSE_APPEND, REVERSE_GENLIST]
+QED
+
+Theorem padded_num_to_be_bytes_word32:
+  n < 2 ** 256 ==>
+  PAD_LEFT 0w 32 (num_to_be_bytes n) = word_to_bytes (n2w n:bytes32) T
+Proof
+  strip_tac >>
+  `256 ** 32 = 2 ** 256` by EVAL_TAC >>
+  `n < 256 ** 32` by (asm_rewrite_tac[]) >>
+  `w2n (n2w n:bytes32) = n` by
+    (pure_rewrite_tac[w2n_n2w] >> irule arithmeticTheory.LESS_MOD >>
+     rewrite_tac[dimword_def, fcpLib.INDEX_CONV ``dimindex(:256)``] >>
+     first_assum ACCEPT_TAC) >>
+  drule (Q.SPEC `32` padded_num_to_be_bytes) >>
+  simp[GSYM word_to_bytes_be_def, cv_stdTheory.word_to_bytes_be_eq_bytes_of_num,
+       fcpLib.INDEX_CONV ``dimindex(:256)``]
+QED
 
 Theorem write_memory_stmt_state_rel:
   stmt_state_rel func cenv cx es s /\
@@ -106,6 +171,23 @@ Proof
   strip_tac >> drule_all computed_static_consume_eq >>
   disch_then (qspecl_then [`w2n rs`, `w2n ro`] assume_tac) >>
   gvs[exec_ext_call_def, Excl "consume_call_outcome_eq"]
+QED
+
+(* ASSERT interprets the computed call's success word, including the
+   invalid-point failure case.  The output buffer need not be full length. *)
+Theorem computed_static_assert:
+  rq = venom_call_request s addr 0w ai an T /\ computed_precompile rq /\
+  inst.inst_outputs = [out] /\
+  exec_ext_call inst s gas addr 0w ai an ro rs T = OK t ==>
+  step_inst_base (mk_inst id ASSERT [Var out] []) t =
+    if (FST (take_outcome rq s.vs_outcomes)).co_success then OK t
+    else Abort Revert_abort (revert_state (set_returndata [] t))
+Proof
+  strip_tac >> drule_all computed_static_exec >> strip_tac >> gvs[] >>
+  Cases_on `(FST (take_outcome
+    (venom_call_request s addr 0w ai an T) s.vs_outcomes)).co_success` >>
+  simp[step_inst_base_def, mk_inst_def, eval_operand_def,
+       lookup_var_def, update_var_def, finite_mapTheory.FLOOKUP_UPDATE]
 QED
 
 Theorem computed_static_exec_state_rel:
@@ -365,6 +447,23 @@ Proof
        GSYM num_of_bytes_l2n, num_of_be_bytes_def]
 QED
 
+(* A serialized word can be decoded independently of the remaining words.
+   Repeated use covers either three- or four-word precompile inputs. *)
+Theorem take_pad_word_prefix:
+  take_pad_0 32 (word_to_bytes (w:bytes32) T ++ bs) =
+    word_to_bytes w T
+Proof
+  simp[take_pad_0_def, LENGTH_word_to_bytes,
+       fcpLib.INDEX_CONV ``dimindex(:256)``, TAKE_APPEND1, PAD_RIGHT]
+QED
+
+Theorem drop_word_prefix:
+  DROP (32 + n) (word_to_bytes (w:bytes32) T ++ bs) = DROP n bs
+Proof
+  simp[DROP_APPEND, LENGTH_word_to_bytes,
+       fcpLib.INDEX_CONV ``dimindex(:256)``, DROP_LENGTH_TOO_LONG]
+QED
+
 Theorem precompile_result_four_words[local]:
   !(h:bytes32) (v:bytes32) (r:bytes32) (s:bytes32).
   precompile_result 1w
@@ -374,7 +473,8 @@ Theorem precompile_result_four_words[local]:
     NONE => [] | SOME addr => PAD_LEFT 0w 32 (word_to_bytes addr T)))
 Proof
   rpt gen_tac >>
-  simp[precompile_result_def, take_pad_0_def,
+  rewrite_tac[precompile_result_def, take_pad_word_prefix] >>
+  simp[take_pad_0_def,
        LENGTH_word_to_bytes, fcpLib.INDEX_CONV ``dimindex(:256)``,
        listTheory.TAKE_APPEND1, listTheory.DROP_APPEND,
        TAKE_LENGTH_TOO_LONG, DROP_LENGTH_TOO_LONG, PAD_RIGHT,
@@ -485,12 +585,12 @@ Proof
   simp[valueEncodingPropsTheory.mstore_mem_bytes_at_disjoint]
 QED
 
-Theorem ecrecover_input_stores[local]:
-  mem_bytes_at a 128
-    (mstore (a+96) sig
-      (mstore (a+64) r (mstore (a+32) v (mstore a h s)))).vs_memory =
-    word_to_bytes h T ++ word_to_bytes v T ++
-    word_to_bytes r T ++ word_to_bytes sig T
+(* Shared three-word prefix: ECMul uses exactly this input layout, while
+   ECAdd and ecrecover append a fourth word. *)
+Theorem scratch_three_word_stores:
+  mem_bytes_at a 96
+    (mstore (a+64) r (mstore (a+32) v (mstore a h s))).vs_memory =
+    word_to_bytes h T ++ word_to_bytes v T ++ word_to_bytes r T
 Proof
   `mem_bytes_at a 32 (mstore a h s).vs_memory = word_to_bytes h T`
     by simp[mem_bytes_at_mstore_same] >>
@@ -498,8 +598,18 @@ Proof
   disch_then (qspec_then `v` assume_tac) >>
   gvs[] >>
   drule mem_bytes_at_store_append >>
-  disch_then (qspec_then `r` assume_tac) >>
-  gvs[] >>
+  disch_then (qspec_then `r` mp_tac) >>
+  simp[APPEND_ASSOC]
+QED
+
+Theorem scratch_four_word_stores:
+  mem_bytes_at a 128
+    (mstore (a+96) sig
+      (mstore (a+64) r (mstore (a+32) v (mstore a h s)))).vs_memory =
+    word_to_bytes h T ++ word_to_bytes v T ++
+    word_to_bytes r T ++ word_to_bytes sig T
+Proof
+  assume_tac scratch_three_word_stores >>
   drule mem_bytes_at_store_append >>
   disch_then (qspec_then `sig` mp_tac) >>
   simp[APPEND_ASSOC]
@@ -594,6 +704,41 @@ Proof
   gvs[not_fresh_at_def]
 QED
 
+Theorem scratch_memory_frame:
+  stmt_state_rel func cenv cx es s /\
+  (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s /\
+  (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+  local_ptrs_reserved cenv sa /\
+  sc.cs_next_var <= sa.cs_next_var /\ sc.cs_next_id <= sa.cs_next_id /\
+  (!b sz. compileEnv$regions_disjoint scratch_base scratch_len b sz ==>
+    mem_bytes_at b sz t.vs_memory = mem_bytes_at b sz s.vs_memory) /\
+  (!name b sz. local_region cenv es.scopes s name b sz ==>
+    compileEnv$regions_disjoint scratch_base scratch_len b sz) /\
+  (!aid b sz. aid < sc.cs_next_id /\
+    FLOOKUP s.vs_allocas aid = SOME (b,sz) ==>
+    compileEnv$regions_disjoint scratch_base scratch_len b sz) ==>
+  stmt_state_rel func cenv cx es t /\ wb_frame cenv es sc s t
+Proof
+  strip_tac >>
+  `t.vs_allocas = s.vs_allocas` by
+    (qpat_assum `_ with <|vs_vars := _; vs_memory := _|> = _`
+      (mp_tac o AP_TERM ``\z. z.vs_allocas``) >> simp[]) >>
+  conj_tac
+  >- (irule literal_state_memory_frame >> qexists_tac `s` >> simp[] >>
+      conj_tac >- (rpt strip_tac >> first_x_assum irule >> metis_tac[]) >>
+      rpt strip_tac >> first_x_assum irule >>
+      gvs[local_ptrs_reserved_def] >> metis_tac[]) >>
+  `locals_kept cenv es s t` by
+    (irule locals_kept_regions >> rpt strip_tac >>
+     first_x_assum irule >> metis_tac[]) >>
+  simp[wb_frame_def] >> conj_tac
+  >- (rpt strip_tac >>
+      `not_fresh_at sa x` by
+        (gvs[not_fresh_at_def] >>
+         metis_tac[arithmeticTheory.LESS_LESS_EQ_TRANS]) >> metis_tac[]) >>
+  rpt strip_tac >> first_x_assum irule >> metis_tac[]
+QED
+
 Theorem ecrecover_input_stores_sim[local]:
   (do emit_void MSTORE [base_op; h];
       p1 <- emit_op ADD [base_op; Lit 32w];
@@ -633,32 +778,92 @@ Proof
      `b + len <= w2n p \/ w2n p + 128 <= b` by
        gvs[compileEnvTheory.regions_disjoint_def] >>
      simp[mstore_mem_bytes_at_disjoint]) >>
-  `t.vs_allocas = s.vs_allocas` by
-    (qpat_x_assum `_ with <|vs_vars := _; vs_memory := _|> = _`
-      (mp_tac o AP_TERM ``\z. z.vs_allocas``) >> simp[]) >>
-  qexists_tac `t` >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  conj_tac >- first_assum ACCEPT_TAC >> conj_tac
-  >- (irule literal_state_memory_frame >> qexists_tac `s` >>
-      simp[IgnAsm `t.vs_memory = _`] >>
-      conj_tac >- (rpt strip_tac >> first_x_assum irule >> metis_tac[]) >>
-      rpt strip_tac >> first_x_assum irule >>
-      gvs[local_ptrs_reserved_def] >> metis_tac[]) >>
-  `locals_kept cenv es s t` by
-    (irule locals_kept_regions >> rpt strip_tac >>
-     first_x_assum irule >> metis_tac[]) >>
-  conj_tac
-  >- (qpat_x_assum `locals_kept _ _ _ _` (fn th =>
-        simp[th, wb_frame_def, IgnAsm `t.vs_memory = _`]) >> conj_tac
-      >- (rpt strip_tac >>
-          `not_fresh_at sa x` by
-            (gvs[not_fresh_at_def] >>
-             metis_tac[arithmeticTheory.LESS_LESS_EQ_TRANS]) >>
-          metis_tac[]) >>
-      rpt strip_tac >> first_x_assum irule >> metis_tac[]) >>
-  simp[ecrecover_input_stores]
+  drule_all scratch_memory_frame >> strip_tac >>
+  qexists_tac `t` >> simp[scratch_four_word_stores]
+QED
+
+Theorem allocated_payload_shape:
+  (do ib <- context$compile_alloc_buffer ni;
+      payload ib;
+      ob <- context$compile_alloc_buffer no;
+      return (ib.buf_operand,ob.buf_operand) od) sf = ((ip,op),sc) /\
+  local_ptrs_reserved cenv sf /\
+  (!i. MEM i (emitted_insts sf sc) ==> MEM i (fn_insts func)) /\
+  (!ib sa sb. payload ib sa = ((),sb) ==>
+    sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
+    same_blocks sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
+    sa.cs_next_id <= sb.cs_next_id) ==>
+  ?ib sa sb ob.
+    context$compile_alloc_buffer ni sf = (ib,sa) /\
+    payload ib sa = ((),sb) /\
+    context$compile_alloc_buffer no sb = (ob,sc) /\
+    ip = ib.buf_operand /\ op = ob.buf_operand /\
+    emitted_insts sf sc = emitted_insts sf sa ++ emitted_insts sa sb ++
+      emitted_insts sb sc /\ same_blocks sf sc /\
+    sc.cs_current_insts = sf.cs_current_insts ++ emitted_insts sf sc /\
+    MEM (mk_inst sf.cs_next_id ALLOCA [Lit (n2w ni)]
+      [STRING #"%" (toString sf.cs_next_var)]) (fn_insts func) /\
+    MEM (mk_inst sb.cs_next_id ALLOCA [Lit (n2w no)]
+      [STRING #"%" (toString sb.cs_next_var)]) (fn_insts func) /\
+    local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sb /\
+    local_ptrs_reserved cenv sc /\
+    sf.cs_next_var <= sa.cs_next_var /\ sa.cs_next_var <= sb.cs_next_var /\
+    sb.cs_next_var <= sc.cs_next_var /\
+    sf.cs_next_id < sa.cs_next_id /\ sa.cs_next_id <= sb.cs_next_id /\
+    sb.cs_next_id < sc.cs_next_id /\
+    (?x. ip = Var x /\ not_fresh_at sa x /\ not_fresh_at sc x) /\
+    (?x. op = Var x /\ not_fresh_at sc x)
+Proof
+  strip_tac >>
+  qpat_x_assum `_ sf = ((ip,op),sc)` mp_tac >>
+  simp[Once comp_bind_def] >> pairarg_tac >> simp[] >>
+  rename1 `context$compile_alloc_buffer ni sf = (ib,sa)` >>
+  simp[Once comp_ignore_bind_def, Once comp_bind_def] >>
+  pairarg_tac >> simp[] >> rename1 `payload ib sa = (u,sb)` >>
+  Cases_on `u` >> simp[Once comp_bind_def] >> pairarg_tac >>
+  simp[comp_return_def] >> strip_tac >> gvs[] >>
+  rename1 `context$compile_alloc_buffer no sb = (ob,sc)` >>
+  first_x_assum drule >> strip_tac >>
+  qpat_assum `context$compile_alloc_buffer ni _ = _`
+    (strip_assume_tac o MATCH_MP compile_alloc_buffer_insts) >>
+  qpat_assum `context$compile_alloc_buffer no _ = _`
+    (strip_assume_tac o MATCH_MP compile_alloc_buffer_insts) >>
+  `emitted_insts sf sc = emitted_insts sf sa ++
+     emitted_insts sa sb ++ emitted_insts sb sc` by
+    (CONV_TAC (LAND_CONV (REWR_CONV emitted_insts_def)) >>
+     simp[rich_listTheory.DROP_APPEND1] >>
+     simp[emitted_insts_def, NoAsms] >>
+     simp[rich_listTheory.DROP_APPEND1]) >>
+  `MEM (mk_inst sf.cs_next_id ALLOCA [Lit (n2w ni)]
+       [STRING #"%" (toString sf.cs_next_var)]) (fn_insts func)` by
+    (first_x_assum irule >>
+     qpat_x_assum `emitted_insts sf sc = _` SUBST1_TAC >>
+     simp[] >> disj1_tac >> disj1_tac >>
+     simp[emitted_insts_def, rich_listTheory.DROP_APPEND1]) >>
+  `MEM (mk_inst sb.cs_next_id ALLOCA [Lit (n2w no)]
+       [STRING #"%" (toString sb.cs_next_var)]) (fn_insts func)` by
+    (first_x_assum irule >>
+     qpat_x_assum `emitted_insts sf sc = _` SUBST1_TAC >>
+     simp[] >> disj2_tac >> once_rewrite_tac[emitted_insts_def] >>
+     simp[rich_listTheory.DROP_APPEND1]) >>
+  qpat_assum `context$compile_alloc_buffer ni _ = _`
+    (strip_assume_tac o MATCH_MP compile_alloc_buffer_parts) >>
+  qpat_assum `context$compile_alloc_buffer no _ = _`
+    (strip_assume_tac o MATCH_MP compile_alloc_buffer_parts) >>
+  `emitted_insts sf sa =
+     [mk_inst sf.cs_next_id ALLOCA [Lit (n2w ni)]
+       [STRING #"%" (toString sf.cs_next_var)]] /\
+   emitted_insts sb sc =
+     [mk_inst sb.cs_next_id ALLOCA [Lit (n2w no)]
+       [STRING #"%" (toString sb.cs_next_var)]]` by
+    (conj_tac >> once_rewrite_tac[emitted_insts_def] >>
+     simp[rich_listTheory.DROP_APPEND1]) >>
+  fs[same_blocks_def] >>
+  rpt conj_tac
+  >- (irule local_ptrs_reserved_next_var >> qexists_tac `sf` >> simp[])
+  >- (irule local_ptrs_reserved_next_var >> qexists_tac `sf` >> simp[])
+  >- (irule local_ptrs_reserved_next_var >> qexists_tac `sf` >> simp[]) >>
+  simp[not_fresh_at_def] >> decide_tac
 QED
 
 Theorem ecrecover_buffers_shape[local]:
@@ -729,47 +934,150 @@ Proof
   pairarg_tac >> simp[] >> strip_tac >>
   rename1 `emit_void MSTORE _ sc = (u0,_)` >> Cases_on `u0` >> gvs[] >>
   rename1 `emit_void MSTORE _ sc = ((),sm)` >>
-  drule ecrecover_input_stores_shape >> strip_tac >>
-  qpat_assum `context$compile_alloc_buffer 128 _ = _`
-    (strip_assume_tac o MATCH_MP compile_alloc_buffer_insts) >>
-  qpat_assum `context$compile_alloc_buffer 32 _ = _`
-    (strip_assume_tac o MATCH_MP compile_alloc_buffer_insts) >>
+  ` (do ib <- context$compile_alloc_buffer 128;
+        (do emit_void MSTORE [ib.buf_operand; h];
+            p1 <- emit_op ADD [ib.buf_operand; Lit 32w];
+            emit_void MSTORE [p1; v];
+            p2 <- emit_op ADD [ib.buf_operand; Lit 64w];
+            emit_void MSTORE [p2; r];
+            p3 <- emit_op ADD [ib.buf_operand; Lit 96w];
+            emit_void MSTORE [p3; sig] od);
+        ob <- context$compile_alloc_buffer 32;
+        return (ib.buf_operand,ob.buf_operand) od) sf =
+      ((ib.buf_operand,ob.buf_operand),sc)` by
+    (simp[Once comp_bind_def] >>
+     simp[Once comp_ignore_bind_def, Once comp_bind_def] >>
+     simp[comp_bind_def, comp_return_def]) >>
   drule emitHelperPropsTheory.emitted_insts_emit_void >> strip_tac >>
-  `emitted_insts sf sm = emitted_insts sf sa ++
-     emitted_insts sa sb ++ emitted_insts sb sc ++ emitted_insts sc sm` by
+  `sc.cs_current_insts = sf.cs_current_insts ++ emitted_insts sf sc` by
+    (drule ecrecover_input_stores_shape >> strip_tac >>
+     qpat_assum `context$compile_alloc_buffer 128 _ = _`
+       (strip_assume_tac o MATCH_MP compile_alloc_buffer_insts) >>
+     qpat_assum `context$compile_alloc_buffer 32 _ = _`
+       (strip_assume_tac o MATCH_MP compile_alloc_buffer_insts) >>
+     once_rewrite_tac[emitted_insts_def] >>
+     simp[rich_listTheory.DROP_APPEND1]) >>
+  `emitted_insts sf sm = emitted_insts sf sc ++ emitted_insts sc sm` by
     (CONV_TAC (LAND_CONV (REWR_CONV emitted_insts_def)) >>
-     simp[rich_listTheory.DROP_APPEND1] >>
-     simp[emitted_insts_def, NoAsms] >>
      simp[rich_listTheory.DROP_APPEND1]) >>
-  `MEM (mk_inst sf.cs_next_id ALLOCA [Lit 128w]
-       [STRING #"%" (toString sf.cs_next_var)]) (fn_insts func)` by
-    (first_x_assum irule >>
-     qpat_x_assum `emitted_insts sf sm = _` SUBST1_TAC >>
-     simp[] >> disj1_tac >> disj1_tac >> disj1_tac >>
-     simp[emitted_insts_def, rich_listTheory.DROP_APPEND1]) >>
-  `MEM (mk_inst sb.cs_next_id ALLOCA [Lit 32w]
-       [STRING #"%" (toString sb.cs_next_var)]) (fn_insts func)` by
-    (first_x_assum irule >>
-     qpat_x_assum `emitted_insts sf sm = _` SUBST1_TAC >>
-     simp[] >> disj1_tac >> disj2_tac >>
-     once_rewrite_tac [emitted_insts_def] >>
-     simp[rich_listTheory.DROP_APPEND1]) >>
-  qpat_assum `context$compile_alloc_buffer 128 _ = _`
-    (strip_assume_tac o MATCH_MP compile_alloc_buffer_parts) >>
-  qpat_assum `context$compile_alloc_buffer 32 _ = _`
-    (strip_assume_tac o MATCH_MP compile_alloc_buffer_parts) >>
-  simp[] >>
-  `sf.cs_next_var <= sa.cs_next_var /\
-   sf.cs_next_var <= sb.cs_next_var /\
-   sf.cs_next_var <= sc.cs_next_var /\
-   sf.cs_next_var <= sm.cs_next_var` by simp[] >>
+  drule (BETA_RULE (Q.INST [`payload` |->
+    `\ib. do emit_void MSTORE [ib.buf_operand; h];
+             p1 <- emit_op ADD [ib.buf_operand; Lit 32w];
+             emit_void MSTORE [p1; v];
+             p2 <- emit_op ADD [ib.buf_operand; Lit 64w];
+             emit_void MSTORE [p2; r];
+             p3 <- emit_op ADD [ib.buf_operand; Lit 96w];
+             emit_void MSTORE [p3; sig] od`] (SPEC_ALL allocated_payload_shape))) >>
+  disch_then (qspecl_then [`func`, `cenv`] mp_tac) >>
+  impl_tac
+  >- (simp[] >> rpt strip_tac >> drule ecrecover_input_stores_shape >> simp[]) >>
+  strip_tac >> gvs[] >>
+  drule ecrecover_input_stores_shape >> strip_tac >> simp[] >>
   rpt conj_tac
-  >- (irule local_ptrs_reserved_next_var >> qexists_tac `sf` >> simp[])
-  >- (irule local_ptrs_reserved_next_var >> qexists_tac `sf` >> simp[])
-  >- (irule local_ptrs_reserved_next_var >> qexists_tac `sf` >> simp[])
-  >- (irule local_ptrs_reserved_next_var >> qexists_tac `sf` >> simp[]) >>
-  gvs[not_fresh_at_def] >> rpt strip_tac >>
-  first_x_assum irule >> decide_tac
+  >- (irule local_ptrs_reserved_next_var >> qexists_tac `sc` >> simp[]) >>
+  gvs[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]
+QED
+
+Theorem alloc_buffer_frame_run:
+  !func cenv cx es sa sm buf sz s.
+    context$compile_alloc_buffer sz sa = (buf,sm) /\
+    stmt_state_rel func cenv cx es s /\ fn_inst_ids_distinct func /\
+    local_ptrs_reserved cenv sa /\ sz < dimword (:256) /\
+    MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w sz)]
+      [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func) ==>
+    ?t w. run_inst_seq (emitted_insts sa sm) s = OK t /\
+      stmt_state_rel func cenv cx es t /\
+      eval_operand buf.buf_operand t = SOME w /\
+      FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,sz) /\
+      w2n w + sz < dimword (:256) /\ t.vs_memory = s.vs_memory /\
+      sa.cs_next_id < sm.cs_next_id /\
+      (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+      (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+         FLOOKUP t.vs_allocas aid = SOME entry) /\
+      (!aid b len. aid < sa.cs_next_id /\
+         FLOOKUP s.vs_allocas aid = SOME (b,len) ==>
+         regions_disjoint (w2n w) sz b len) /\
+      (!name b len. local_region cenv es.scopes t name b len ==>
+         regions_disjoint (w2n w) sz b len) /\
+      (?p. buf.buf_operand = Var p /\ not_fresh_at sm p) /\
+      t.vs_labels = s.vs_labels /\ wb_frame cenv es sa s t
+Proof
+  rpt strip_tac >> drule_all literal_alloc_buffer_run >> strip_tac >>
+  `t.vs_labels = s.vs_labels` by
+    (drule compile_alloc_buffer_insts >> strip_tac >>
+     qspecl_then [`sa.cs_next_id`, `n2w sz`,
+       `STRING #"%" (toString sa.cs_next_var)`, `s`] strip_assume_tac
+       step_alloca_frame >>
+     gvs[emitted_insts_def, rich_listTheory.DROP_APPEND1, run_inst_seq_def]) >>
+  `wb_frame cenv es sa s t` by
+    (simp[wb_frame_def] >> metis_tac[locals_kept_mem]) >>
+  qexistsl_tac [`t`, `w`] >> simp[] >> metis_tac[]
+QED
+
+Theorem state_allocations_disjoint:
+  stmt_state_rel func cenv cx es t /\
+  FLOOKUP t.vs_allocas a = SOME (p,n) /\
+  FLOOKUP t.vs_allocas b = SOME (q,m) /\ a <> b ==>
+  regions_disjoint p n q m
+Proof
+  simp[stmt_state_rel_def, alloca_inv_def, allocas_non_overlapping_def,
+       compileEnvTheory.regions_disjoint_def] >>
+  strip_tac >> first_x_assum drule >>
+  disch_then drule >> simp[arithmeticTheory.ADD_COMM]
+QED
+
+Theorem alloc_buffer_finish:
+  context$compile_alloc_buffer outsz sb = (ob,sm) /\
+  stmt_state_rel func cenv cx es u /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sb /\ outsz < dimword (:256) /\
+  MEM (mk_inst sb.cs_next_id ALLOCA [Lit (n2w outsz)]
+    [STRING #"%" (toString sb.cs_next_var)]) (fn_insts func) /\
+  sf.cs_next_id <= sb.cs_next_id /\ sf.cs_next_var <= sb.cs_next_var /\
+  local_ptrs_reserved cenv sf /\ stmt_state_rel func cenv cx es s /\
+  wb_frame cenv es sf s u /\
+  (!x. not_fresh_at sf x ==> lookup_var x u = lookup_var x s) /\
+  eval_operand ip u = SOME input_word /\
+  (!x. ip = Var x ==> not_fresh_at sb x) ==>
+  ?t po. run_inst_seq (emitted_insts sb sm) u = OK t /\
+    stmt_state_rel func cenv cx es t /\ wb_frame cenv es sf s t /\
+    eval_operand ip t = SOME input_word /\ eval_operand ob.buf_operand t = SOME po /\
+    t.vs_memory = u.vs_memory /\
+    FLOOKUP t.vs_allocas sb.cs_next_id = SOME (w2n po,outsz) /\
+    w2n po + outsz < dimword (:256) /\
+    (!old b sz. old < sf.cs_next_id /\ FLOOKUP t.vs_allocas old = SOME (b,sz) ==>
+      regions_disjoint (w2n po) outsz b sz) /\
+    (!name b sz. local_region cenv es.scopes t name b sz ==>
+      regions_disjoint (w2n po) outsz b sz) /\
+    (!x. not_fresh_at sf x ==> lookup_var x t = lookup_var x s) /\
+    sb.cs_next_id < sm.cs_next_id /\
+    (?x. ob.buf_operand = Var x /\ not_fresh_at sm x) /\
+    (!x. ip = Var x ==> not_fresh_at sm x)
+Proof
+  strip_tac >>
+  qpat_x_assum `stmt_state_rel func cenv cx es s` mp_tac >>
+  drule_all alloc_buffer_frame_run >> strip_tac >> disch_tac >>
+  `wb_frame cenv es sf s t` by
+    (irule wb_frame_trans >> simp[] >>
+     conj_tac >- (qexistsl_tac [`cx`,`func`] >> simp[]) >>
+     qexistsl_tac [`es`,`sb`,`u`] >> simp[]) >>
+  `!old b sz. old < sf.cs_next_id /\ FLOOKUP t.vs_allocas old = SOME (b,sz) ==>
+    regions_disjoint (w2n w) outsz b sz` by
+    (rpt strip_tac >> irule state_allocations_disjoint >>
+     qexistsl_tac [`sb.cs_next_id`, `old`, `cenv`, `cx`, `es`, `func`, `t`] >>
+     simp[] >> decide_tac) >>
+  `!z. not_fresh_at sf z ==> lookup_var z t = lookup_var z s` by
+    (qx_gen_tac `z` >> strip_tac >>
+     `not_fresh_at sb z` by
+       (gvs[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >> simp[]) >>
+  `eval_operand ip t = SOME input_word` by
+    (Cases_on `ip` >> gvs[eval_operand_def] >> metis_tac[]) >>
+  `sb.cs_next_var <= sm.cs_next_var` by
+    (qpat_x_assum `context$compile_alloc_buffer _ _ = _` mp_tac >>
+     simp[contextTheory.compile_alloc_buffer_def, comp_bind_def,
+          comp_ignore_bind_def, comp_return_def, emitHelperTheory.emit_op_def,
+          fresh_id_def, fresh_var_def, emit_def] >> strip_tac >> gvs[]) >>
+  qexistsl_tac [`t`,`w`] >> simp[] >> rpt strip_tac >>
+  gvs[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]
 QED
 
 Theorem ecrecover_buffers_run[local]:
@@ -811,16 +1119,9 @@ Proof
   rpt strip_tac >> drule_all ecrecover_buffers_shape >> strip_tac >>
   qpat_x_assum `_ sf = ((ip,op),sm)` kall_tac >>
   `128 < dimword (:256)` by simp[wordsTheory.dimword_def] >>
-  drule_all literal_alloc_buffer_run >> strip_tac >>
+  drule_all alloc_buffer_frame_run >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts sf sa) s = OK s1` >>
   rename1 `FLOOKUP s1.vs_allocas sf.cs_next_id = SOME (w2n wi,128)` >>
-  `s1.vs_labels = s.vs_labels` by
-    (qpat_assum `context$compile_alloc_buffer 128 _ = _`
-       (strip_assume_tac o MATCH_MP compile_alloc_buffer_insts) >>
-     qspecl_then [`sf.cs_next_id`,`128w`,
-       `STRING #"%" (toString sf.cs_next_var)`,`s`] strip_assume_tac
-       step_alloca_frame >>
-     gvs[emitted_insts_def, rich_listTheory.DROP_APPEND1, run_inst_seq_def]) >>
   `!z. MEM z [h;v;r;sig] ==> eval_operand z s1 = eval_operand z s` by
     (rpt strip_tac >> Cases_on `z` >>
      simp[eval_operand_def] >> metis_tac[]) >>
@@ -843,8 +1144,7 @@ Proof
      gvs[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_LESS_EQ_TRANS]) >>
   drule_all ecrecover_input_stores_sim >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts sa sb) s1 = OK s2` >>
-  `wb_frame cenv es sf s s1` by
-    (simp[wb_frame_def] >> metis_tac[locals_kept_mem]) >>
+
   `wb_frame cenv es sf s s2` by
     (irule wb_frame_trans >> simp[] >>
      conj_tac >- (qexistsl_tac [`cx`,`func`] >> simp[]) >>
@@ -864,7 +1164,7 @@ Proof
      `eval_operand h s1 = _`, `eval_operand v s1 = _`,
      `eval_operand r s1 = _`, `eval_operand sig s1 = _`] >>
   `32 < dimword (:256)` by simp[wordsTheory.dimword_def] >>
-  drule_all literal_alloc_buffer_run >> strip_tac >>
+  drule_all alloc_buffer_frame_run >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts sb sc) s2 = OK s3` >>
   rename1 `FLOOKUP s3.vs_allocas sb.cs_next_id = SOME (w2n wo,32)` >>
   `regions_disjoint (w2n wo) 32 (w2n wi) 128` by
@@ -876,8 +1176,7 @@ Proof
     (irule literal_mstore_state_rel >> simp[] >>
      qexistsl_tac [`w2n wo`,`32`] >> simp[] >>
      gvs[compileEnvTheory.regions_disjoint_def]) >>
-  `wb_frame cenv es sb s2 s3` by
-    (simp[wb_frame_def] >> metis_tac[locals_kept_mem]) >>
+
   `wb_frame cenv es sf s s3` by
     (irule wb_frame_trans >> simp[] >>
      conj_tac >- (qexistsl_tac [`cx`,`func`] >> simp[]) >>
@@ -945,6 +1244,22 @@ Theorem computed_static_exec_success:
     OK (update_var out 1w
       ((write_memory_with_expansion (w2n ro) (TAKE (w2n rs) data) s)
        with vs_returndata := data))
+Proof
+  strip_tac >>
+  `computed_precompile rq` by
+    simp[computed_precompile_def, venom_call_request_def] >>
+  drule_all computed_static_exec >>
+  simp[take_outcome_def, failed_outcome_def]
+QED
+
+Theorem computed_static_exec_failure:
+  rq = venom_call_request s addr 0w ai an T /\
+  precompile_result rq.cr_target rq.cr_data = SOME NONE /\
+  inst.inst_outputs = [out] ==>
+  exec_ext_call inst s gas addr 0w ai an ro rs T =
+    OK (update_var out 0w
+      ((write_memory_with_expansion (w2n ro) [] s)
+       with vs_returndata := []))
 Proof
   strip_tac >>
   `computed_precompile rq` by
@@ -1025,6 +1340,172 @@ Proof
   simp[comp_bind_def, comp_return_def, FUN_EQ_THM]
 QED
 
+Theorem computed_suffix_shape:
+  (do gas <- emit_op GAS [];
+      success <- emit_op STATICCALL [gas; Lit target; ip; Lit insz; op; Lit outsz];
+      emit_void ASSERT [success]; return op od) sm = (res,sb) ==>
+  res = op /\ sb.cs_next_var = sm.cs_next_var + 2 /\
+  sb.cs_next_id = sm.cs_next_id + 3 /\
+  sb.cs_current_insts = sm.cs_current_insts ++ emitted_insts sm sb /\
+  emitted_insts sm sb =
+    [mk_inst sm.cs_next_id GAS [] [STRING #"%" (toString sm.cs_next_var)];
+     mk_inst (sm.cs_next_id+1) STATICCALL
+       [Var (STRING #"%" (toString sm.cs_next_var)); Lit target; ip; Lit insz; op; Lit outsz]
+       [STRING #"%" (toString (sm.cs_next_var+1))];
+     mk_inst (sm.cs_next_id+2) ASSERT
+       [Var (STRING #"%" (toString (sm.cs_next_var+1)))] []]
+Proof
+  simp[comp_bind_def, comp_ignore_bind_def, comp_return_def,
+       emitHelperTheory.emit_op_def, emitHelperTheory.emit_void_def,
+       fresh_id_def, fresh_var_def, emit_def] >>
+  strip_tac >> gvs[] >> simp[emitted_insts_def, rich_listTheory.DROP_APPEND1]
+QED
+
+Theorem computed_suffix_success:
+  (do gas <- emit_op GAS [];
+      success <- emit_op STATICCALL [gas; Lit target; ip; Lit insz; op; Lit outsz];
+      emit_void ASSERT [success]; return op od) sm = (res,sb) /\
+  eval_operand ip s = SOME wi /\ eval_operand op s = SOME wo /\
+  (!x. ip = Var x ==> not_fresh_at sm x) /\
+  (!x. op = Var x ==> not_fresh_at sm x) /\
+  precompile_result (venom_call_request s target 0w wi insz T).cr_target
+    (venom_call_request s target 0w wi insz T).cr_data = SOME (SOME data) ==>
+  run_inst_seq (emitted_insts sm sb) s =
+    OK (update_var (STRING #"%" (toString (sm.cs_next_var+1))) 1w
+      ((write_memory_with_expansion (w2n wo) (TAKE (w2n outsz) data)
+         (update_var (STRING #"%" (toString sm.cs_next_var))
+            (n2w s.vs_call_ctx.cc_gas) s)) with vs_returndata := data))
+Proof
+  strip_tac >> drule computed_suffix_shape >> strip_tac >>
+  qabbrev_tac `sg = update_var (STRING #"%" (toString sm.cs_next_var))
+    (n2w s.vs_call_ctx.cc_gas) s` >>
+  `eval_operand ip sg = SOME wi /\ eval_operand op sg = SOME wo` by
+    (simp[Abbr `sg`] >>
+     metis_tac[eval_operand_update_not_fresh, arithmeticTheory.LESS_EQ_REFL]) >>
+  `venom_call_request sg target 0w wi insz T =
+   venom_call_request s target 0w wi insz T` by
+    simp[Abbr `sg`, venom_call_request_def, update_var_def, read_memory_def] >>
+  qabbrev_tac `ci = mk_inst (sm.cs_next_id+1) STATICCALL
+    [Var (STRING #"%" (toString sm.cs_next_var)); Lit target; ip; Lit insz; op; Lit outsz]
+    [STRING #"%" (toString (sm.cs_next_var+1))]` >>
+  qabbrev_tac `sc = update_var (STRING #"%" (toString (sm.cs_next_var+1))) 1w
+    ((write_memory_with_expansion (w2n wo) (TAKE (w2n outsz) data) sg)
+      with vs_returndata := data)` >>
+  `exec_ext_call ci sg (n2w s.vs_call_ctx.cc_gas:bytes32) target 0w wi insz wo outsz T =
+    OK sc` by
+    (qunabbrev_tac `sc` >> irule computed_static_exec_success >>
+     simp[Abbr `ci`, mk_inst_def]) >>
+  `eval_operand (Var (STRING #"%" (toString sm.cs_next_var))) sg =
+    SOME (n2w s.vs_call_ctx.cc_gas:bytes32)` by
+    simp[Abbr `sg`, eval_operand_def, lookup_var_def, update_var_def,
+         finite_mapTheory.FLOOKUP_UPDATE] >>
+  `step_inst_base ci sg = OK sc` by
+    (gvs[Abbr `ci`, mk_inst_def] >>
+     simp[step_inst_base_def, eval_operand_def] >> first_assum ACCEPT_TAC) >>
+  `step_inst_base (mk_inst (sm.cs_next_id+2) ASSERT
+     [Var (STRING #"%" (toString (sm.cs_next_var+1)))] []) sc = OK sc` by
+    simp[Abbr `sc`, step_inst_base_def, mk_inst_def, eval_operand_def,
+         lookup_var_def, update_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  simp[Once run_inst_seq_def, step_inst_base_def, mk_inst_def, exec_read0_def] >>
+  simp[Once run_inst_seq_def] >>
+  gvs[mk_inst_def] >>
+  simp[run_inst_seq_def, Abbr `sc`, Abbr `sg`]
+QED
+
+Theorem computed_suffix_failure:
+  (do gas <- emit_op GAS [];
+      success <- emit_op STATICCALL [gas; Lit target; ip; Lit insz; op; Lit outsz];
+      emit_void ASSERT [success]; return op od) sm = (res,sb) /\
+  eval_operand ip s = SOME wi /\ eval_operand op s = SOME wo /\
+  (!x. ip = Var x ==> not_fresh_at sm x) /\
+  (!x. op = Var x ==> not_fresh_at sm x) /\
+  precompile_result (venom_call_request s target 0w wi insz T).cr_target
+    (venom_call_request s target 0w wi insz T).cr_data = SOME NONE ==>
+  ?u. run_inst_seq (emitted_insts sm sb) s = Abort Revert_abort u
+Proof
+  strip_tac >> drule computed_suffix_shape >> strip_tac >>
+  `eval_operand ip (update_var (STRING #"%" (toString sm.cs_next_var))
+      (n2w s.vs_call_ctx.cc_gas) s) = SOME wi /\
+   eval_operand op (update_var (STRING #"%" (toString sm.cs_next_var))
+      (n2w s.vs_call_ctx.cc_gas) s) = SOME wo` by
+    metis_tac[eval_operand_update_not_fresh, arithmeticTheory.LESS_EQ_REFL] >>
+  `venom_call_request
+     (update_var (STRING #"%" (toString sm.cs_next_var)) (n2w s.vs_call_ctx.cc_gas) s)
+     target 0w wi insz T = venom_call_request s target 0w wi insz T` by
+    simp[venom_call_request_def, update_var_def, read_memory_def] >>
+  `precompile_result
+     (venom_call_request (update_var (STRING #"%" (toString sm.cs_next_var))
+       (n2w s.vs_call_ctx.cc_gas) s) target 0w wi insz T).cr_target
+     (venom_call_request (update_var (STRING #"%" (toString sm.cs_next_var))
+       (n2w s.vs_call_ctx.cc_gas) s) target 0w wi insz T).cr_data = SOME NONE` by
+    metis_tac[] >>
+  `computed_precompile (venom_call_request
+     (update_var (STRING #"%" (toString sm.cs_next_var)) (n2w s.vs_call_ctx.cc_gas) s)
+     target 0w wi insz T)` by
+    simp[computed_precompile_def, venom_call_request_def] >>
+  `(mk_inst (sm.cs_next_id+1) STATICCALL
+     [Var (STRING #"%" (toString sm.cs_next_var)); Lit target; ip; Lit insz; op; Lit outsz]
+     [STRING #"%" (toString (sm.cs_next_var+1))]).inst_outputs =
+     [STRING #"%" (toString (sm.cs_next_var+1))]` by simp[mk_inst_def] >>
+  `exec_ext_call (mk_inst (sm.cs_next_id+1) STATICCALL
+     [Var (STRING #"%" (toString sm.cs_next_var)); Lit target; ip; Lit insz; op; Lit outsz]
+     [STRING #"%" (toString (sm.cs_next_var+1))])
+     (update_var (STRING #"%" (toString sm.cs_next_var)) (n2w s.vs_call_ctx.cc_gas) s)
+     (n2w s.vs_call_ctx.cc_gas:bytes32) target 0w wi insz wo outsz T =
+   OK (update_var (STRING #"%" (toString (sm.cs_next_var+1))) 0w
+     ((write_memory_with_expansion (w2n wo) []
+       (update_var (STRING #"%" (toString sm.cs_next_var)) (n2w s.vs_call_ctx.cc_gas) s))
+       with vs_returndata := []))` by
+    (qpat_x_assum `venom_call_request _ _ _ _ _ _ = _` kall_tac >>
+     irule computed_static_exec_failure >> simp[] >> metis_tac[]) >>
+  `eval_operand (Var (STRING #"%" (toString sm.cs_next_var)))
+     (update_var (STRING #"%" (toString sm.cs_next_var))
+       (n2w s.vs_call_ctx.cc_gas) s) = SOME (n2w s.vs_call_ctx.cc_gas:bytes32)` by
+    simp[eval_operand_def, lookup_var_def, update_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  `step_inst_base (mk_inst (sm.cs_next_id+1) STATICCALL
+     [Var (STRING #"%" (toString sm.cs_next_var)); Lit target; ip; Lit insz; op; Lit outsz]
+     [STRING #"%" (toString (sm.cs_next_var+1))])
+     (update_var (STRING #"%" (toString sm.cs_next_var)) (n2w s.vs_call_ctx.cc_gas) s) =
+   OK (update_var (STRING #"%" (toString (sm.cs_next_var+1))) 0w
+     ((write_memory_with_expansion (w2n wo) []
+       (update_var (STRING #"%" (toString sm.cs_next_var)) (n2w s.vs_call_ctx.cc_gas) s))
+       with vs_returndata := []))` by
+    (fs[mk_inst_def] >> simp[step_inst_base_def, eval_operand_def] >>
+     first_assum ACCEPT_TAC) >>
+  simp[Once run_inst_seq_def, step_inst_base_def, mk_inst_def, exec_read0_def] >>
+  simp[Once run_inst_seq_def] >> fs[mk_inst_def] >>
+  rpt (pop_assum kall_tac) >>
+  simp[run_inst_seq_def, step_inst_base_def, eval_operand_def,
+       lookup_var_def, update_var_def, finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
+Theorem computed_suffix_output:
+  (do gas <- emit_op GAS [];
+      success <- emit_op STATICCALL [gas; Lit target; ip; Lit insz; op; Lit outsz];
+      emit_void ASSERT [success]; return op od) sm = (res,sb) /\
+  eval_operand ip s = SOME wi /\ eval_operand op s = SOME wo /\
+  (!x. ip = Var x ==> not_fresh_at sm x) /\
+  (!x. op = Var x ==> not_fresh_at sm x) /\
+  precompile_result (venom_call_request s target 0w wi insz T).cr_target
+    (venom_call_request s target 0w wi insz T).cr_data = SOME (SOME data) /\
+  run_inst_seq (emitted_insts sm sb) s = OK t ==>
+  eval_operand res t = SOME wo /\
+  t.vs_memory = (write_memory_with_expansion (w2n wo) (TAKE (w2n outsz) data) s).vs_memory /\
+  t.vs_allocas = s.vs_allocas /\
+  (!x. not_fresh_at sm x ==> lookup_var x t = lookup_var x s)
+Proof
+  strip_tac >> drule_all computed_suffix_success >> strip_tac >>
+  drule computed_suffix_shape >> strip_tac >> gvs[] >>
+  conj_tac
+  >- (Cases_on `op` >>
+      gvs[eval_operand_def, lookup_var_def, update_var_def,
+          write_memory_with_expansion_def, finite_mapTheory.FLOOKUP_UPDATE,
+          not_fresh_at_def]) >>
+  simp[update_var_def, write_memory_with_expansion_def] >>
+  rpt strip_tac >> simp[lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  rpt IF_CASES_TAC >> gvs[not_fresh_at_def]
+QED
+
 Theorem ecrecover_suffix_shape[local]:
   (do gas <- emit_op GAS [];
       success <- emit_op STATICCALL
@@ -1054,6 +1535,27 @@ Proof
   simp[emitted_insts_def, rich_listTheory.DROP_APPEND1]
 QED
 
+Theorem ecrecover_suffix_core[local]:
+  (do gas <- emit_op GAS [];
+      success <- emit_op STATICCALL
+        [gas; Lit 1w; ip; Lit 128w; op; Lit 32w];
+      emit_void ASSERT [success]; emit_op MLOAD [op] od) sm = (res,sb) ==>
+  ?sc. (do gas <- emit_op GAS [];
+           success <- emit_op STATICCALL
+             [gas; Lit 1w; ip; Lit 128w; op; Lit 32w];
+           emit_void ASSERT [success]; comp_return op od) sm = (op,sc) /\
+       emitted_insts sm sb = emitted_insts sm sc ++
+         [mk_inst (sm.cs_next_id + 3) MLOAD [op]
+           [STRING #"%" (toString (sm.cs_next_var + 2))]] /\
+       res = Var (STRING #"%" (toString (sm.cs_next_var + 2)))
+Proof
+  simp[comp_bind_def, comp_ignore_bind_def,
+       emitHelperTheory.emit_op_def, emitHelperTheory.emit_void_def,
+       fresh_id_def, fresh_var_def, emit_def, comp_return_def] >>
+  strip_tac >> gvs[] >>
+  simp[emitted_insts_def, rich_listTheory.DROP_APPEND1]
+QED
+
 Theorem ecrecover_suffix_run[local]:
   (do gas <- emit_op GAS [];
       success <- emit_op STATICCALL
@@ -1070,59 +1572,23 @@ Theorem ecrecover_suffix_run[local]:
   ?t. run_inst_seq (emitted_insts sm sb) s = OK t /\
     eval_operand res t = SOME w
 Proof
-  strip_tac >> drule ecrecover_suffix_shape >> strip_tac >>
-  qmatch_asmsub_abbrev_tac `emitted_insts sm sb = code` >>
-  qabbrev_tac `sg = update_var (STRING #"%" (toString sm.cs_next_var))
-    (n2w s.vs_call_ctx.cc_gas) s` >>
-  `eval_operand ip sg = SOME wi /\ eval_operand op sg = SOME wo` by
-    (simp[Abbr `sg`] >>
-     metis_tac[eval_operand_update_not_fresh, arithmeticTheory.LESS_EQ_REFL]) >>
-  `venom_call_request sg 1w 0w wi 128w T =
-   venom_call_request s 1w 0w wi 128w T` by
-    simp[Abbr `sg`, venom_call_request_def, update_var_def, read_memory_def] >>
-  qabbrev_tac `ci = mk_inst (sm.cs_next_id + 1) STATICCALL
-    [Var (STRING #"%" (toString sm.cs_next_var)); Lit 1w;
-     ip; Lit 128w; op; Lit 32w]
-    [STRING #"%" (toString (sm.cs_next_var + 1))]` >>
-  qabbrev_tac `sc = update_var (STRING #"%" (toString (sm.cs_next_var + 1))) 1w
-    ((write_memory_with_expansion (w2n wo) (TAKE (w2n (32w:bytes32)) data) sg)
-      with vs_returndata := data)` >>
-  `exec_ext_call ci sg (n2w s.vs_call_ctx.cc_gas:bytes32)
-     (1w:bytes32) 0w wi (128w:bytes32) wo (32w:bytes32) T =
-     OK sc` by
-    (qunabbrev_tac `sc` >> irule computed_static_exec_success >>
-     simp[Abbr `ci`, mk_inst_def, wordsTheory.dimword_def]) >>
-  `eval_operand op sc = SOME wo` by
-    (Cases_on `op` >>
-     gvs[Abbr `sc`, eval_operand_def, lookup_var_def, update_var_def,
-         write_memory_with_expansion_def, not_fresh_at_def,
-         finite_mapTheory.FLOOKUP_UPDATE] >>
-     metis_tac[arithmeticTheory.LESS_EQ_ADD]) >>
-  `mem_word_at (w2n wo) sc.vs_memory = w` by
-    gvs[Abbr `sc`, Abbr `sg`, update_var_def,
-        write_memory_with_expansion_def, wordsTheory.dimword_def] >>
-  `eval_operand (Var (STRING #"%" (toString sm.cs_next_var))) sg =
-     SOME (n2w s.vs_call_ctx.cc_gas:bytes32)` by
-    simp[Abbr `sg`, eval_operand_def, lookup_var_def, update_var_def,
-         finite_mapTheory.FLOOKUP_UPDATE] >>
-  `step_inst_base ci sg = OK sc` by
-    (gvs[Abbr `ci`, mk_inst_def] >>
-     simp[step_inst_base_def, eval_operand_def]) >>
-  `eval_operand (Var (STRING #"%" (toString (sm.cs_next_var + 1)))) sc = SOME 1w` by
-    simp[Abbr `sc`, eval_operand_def, lookup_var_def, update_var_def,
-         finite_mapTheory.FLOOKUP_UPDATE] >>
-  qexists_tac `update_var (STRING #"%" (toString (sm.cs_next_var + 2))) w sc` >>
+  strip_tac >> drule ecrecover_suffix_core >> strip_tac >>
+  drule_all computed_suffix_success >>
+  qmatch_goalsub_abbrev_tac `run_inst_seq _ s = OK st` >> strip_tac >>
+  drule_all computed_suffix_output >> strip_tac >>
+  `mem_word_at (w2n wo) st.vs_memory = w` by
+    gvs[wordsTheory.dimword_def] >>
+  qexists_tac `update_var (STRING #"%" (toString (sm.cs_next_var + 2))) w st` >>
   conj_tac
-  >- (simp[Abbr `code`, Once run_inst_seq_def, step_inst_base_def,
-           mk_inst_def, exec_read0_def] >>
-      simp[Once run_inst_seq_def] >>
-      simp[Once run_inst_seq_def, step_inst_base_def] >>
-      simp[run_inst_seq_def, step_inst_base_def, exec_read1_def,
+  >- (drule run_inst_seq_append >> disch_then (qspec_then
+        `[mk_inst (sm.cs_next_id + 3) MLOAD [op]
+           [STRING #"%" (toString (sm.cs_next_var + 2))]]` mp_tac) >>
+      asm_rewrite_tac[] >> disch_then SUBST1_TAC >>
+      simp[run_inst_seq_def, step_inst_base_def, mk_inst_def, exec_read1_def,
            mload_def, mem_word_at_def, eval_operand_def] >>
-      gvs[mem_word_at_def, word_of_bytes_be_def]) >>
+      gvs[mem_word_at_def, word_of_bytes_be_def, wordsTheory.dimword_def]) >>
   simp[eval_operand_def, lookup_var_def, update_var_def,
        finite_mapTheory.FLOOKUP_UPDATE]
-
 QED
 
 Theorem wb_frame_readonly_input:
@@ -1138,6 +1604,90 @@ Theorem wb_frame_readonly_input:
 Proof
   simp[wb_frame_def, locals_kept_def] >> rpt strip_tac >> gvs[] >>
   metis_tac[]
+QED
+
+Theorem computed_suffix_preserves:
+  (do gas <- emit_op GAS [];
+      success <- emit_op STATICCALL [gas; Lit target; ip; Lit insz; op; Lit outsz];
+      emit_void ASSERT [success]; return op od) sm = (res,sb) /\
+  eval_operand ip s = SOME wi /\ eval_operand op s = SOME wo /\
+  (!x. ip = Var x ==> not_fresh_at sm x) /\
+  (!x. op = Var x ==> not_fresh_at sm x) /\
+  precompile_result (venom_call_request s target 0w wi insz T).cr_target
+    (venom_call_request s target 0w wi insz T).cr_data = SOME (SOME data) /\
+  run_inst_seq (emitted_insts sm sb) s = OK t /\
+  stmt_state_rel func cenv cx es s /\ local_ptrs_reserved cenv sm /\
+  sf.cs_next_var <= sm.cs_next_var /\ sf.cs_next_id <= sm.cs_next_id /\
+  (!name b sz. local_region cenv es.scopes s name b sz ==>
+     regions_disjoint (w2n wo) (w2n outsz) b sz) /\
+  (!aid b sz. aid < sf.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (b,sz) ==>
+     regions_disjoint (w2n wo) (w2n outsz) b sz) ==>
+  stmt_state_rel func cenv cx es t /\ wb_frame cenv es sf s t
+Proof
+  strip_tac >> drule_all computed_suffix_success >> strip_tac >>
+  qabbrev_tac `sg = update_var (STRING #"%" (toString sm.cs_next_var))
+    (n2w s.vs_call_ctx.cc_gas) s` >>
+  `venom_call_request sg target 0w wi insz T =
+   venom_call_request s target 0w wi insz T` by
+    simp[Abbr `sg`, venom_call_request_def, update_var_def, read_memory_def] >>
+  `!n. sm.cs_next_var <= n ==>
+     not_local_ptr cenv es.scopes (STRING #"%" (toString n))` by
+    metis_tac[local_ptrs_reserved_fresh] >>
+  `stmt_state_rel func cenv cx es sg` by
+    (simp[Abbr `sg`] >> irule stmt_state_rel_update_var >> simp[]) >>
+  `!x w. not_fresh_at sm x /\ lookup_var x s = SOME w ==>
+     lookup_var x sg = SOME w` by
+    (simp[Abbr `sg`, lookup_var_def, update_var_def,
+          finite_mapTheory.FLOOKUP_UPDATE] >>
+     rpt strip_tac >> IF_CASES_TAC >> gvs[not_fresh_at_def]) >>
+  `!name b sz. local_region cenv es.scopes sg name b sz ==>
+     local_region cenv es.scopes s name b sz` by
+    (rpt strip_tac >> irule local_region_frame >>
+     conj_tac >- (qexists_tac `func` >>
+       gvs[stmt_state_rel_def, state_rel_def]) >>
+     qexistsl_tac [`sm`, `es.scopes`, `sg`] >> simp[]) >>
+  `computed_precompile (venom_call_request sg target 0w wi insz T)` by
+    (simp[computed_precompile_def] >> simp[venom_call_request_def]) >>
+  `!name b sz. local_region cenv es.scopes sg name b sz ==>
+     regions_disjoint (w2n wo) (w2n outsz) b sz` by metis_tac[] >>
+  qabbrev_tac `ci = mk_inst (sm.cs_next_id+1) STATICCALL
+    [Var (STRING #"%" (toString sm.cs_next_var)); Lit target; ip; Lit insz; op; Lit outsz]
+    [STRING #"%" (toString (sm.cs_next_var+1))]` >>
+  `exec_ext_call ci sg (n2w s.vs_call_ctx.cc_gas:bytes32)
+     target 0w wi insz wo outsz T = OK t` by
+    (irule EQ_TRANS >>
+     irule_at Any computed_static_exec_success >> simp[Abbr `ci`, mk_inst_def] >>
+     gvs[]) >>
+  `?u. exec_ext_call ci sg (n2w s.vs_call_ctx.cc_gas:bytes32)
+      target 0w wi insz wo outsz T = OK u /\ stmt_state_rel func cenv cx es u` by
+    (irule computed_static_exec_state_rel >>
+     simp[Abbr `ci`, mk_inst_def] >>
+     rpt strip_tac >>
+     `regions_disjoint (w2n wo) (w2n outsz) b sz` by metis_tac[] >>
+     gvs[compileEnvTheory.regions_disjoint_def, listTheory.LENGTH_TAKE_EQ] >>
+     decide_tac) >>
+  conj_tac >- gvs[] >>
+  `?u. exec_ext_call ci sg (n2w s.vs_call_ctx.cc_gas:bytes32)
+      target 0w wi insz wo outsz T = OK u /\ wb_frame cenv es sf sg u` by
+    (irule computed_static_exec_wb_frame >>
+     simp[Abbr `ci`, mk_inst_def, not_fresh_at_def] >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     rpt strip_tac >>
+     `FLOOKUP s.vs_allocas aid = SOME (b,sz)` by
+       gvs[Abbr `sg`, update_var_def] >>
+     `regions_disjoint (w2n wo) (w2n outsz) b sz` by metis_tac[] >>
+     gvs[compileEnvTheory.regions_disjoint_def, listTheory.LENGTH_TAKE_EQ] >>
+     decide_tac) >>
+  `wb_frame cenv es sf sg t` by gvs[] >>
+  irule wb_frame_readonly_input >> qexists_tac `sg` >>
+  simp[Abbr `sg`, update_var_def] >>
+  conj_tac
+  >- (simp[lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+      rpt strip_tac >> IF_CASES_TAC >> gvs[not_fresh_at_def]) >>
+  rpt strip_tac >> irule exprSimOpsTheory.local_region_frame_fwd >>
+  qexistsl_tac [`s`, `sm`, `es.scopes`] >> simp[update_var_def] >>
+  simp[lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  rpt strip_tac >> IF_CASES_TAC >> gvs[not_fresh_at_def]
 QED
 
 Theorem ecrecover_suffix_preserves[local]:
@@ -1160,108 +1710,28 @@ Theorem ecrecover_suffix_preserves[local]:
     regions_disjoint (w2n wo) 32 b sz) ==>
   stmt_state_rel func cenv cx es t /\ wb_frame cenv es sf s t
 Proof
-  strip_tac >> drule ecrecover_suffix_shape >> strip_tac >>
-  qpat_x_assum `_ sm = (res,sb)` kall_tac >>
-  qpat_x_assum `run_inst_seq _ s = OK t` mp_tac >>
-  simp[Once run_inst_seq_def, step_inst_base_def, mk_inst_def, exec_read0_def] >>
-  qmatch_goalsub_abbrev_tac `run_inst_seq _ sg` >>
-  `eval_operand ip sg = SOME wi /\ eval_operand op sg = SOME wo` by
-    (simp[Abbr `sg`] >>
-     metis_tac[eval_operand_update_not_fresh, arithmeticTheory.LESS_EQ_REFL]) >>
-  `eval_operand (Var (STRING #"%" (toString sm.cs_next_var))) sg =
-     SOME (n2w s.vs_call_ctx.cc_gas:bytes32)` by
-    simp[Abbr `sg`, eval_operand_def, lookup_var_def, update_var_def,
-         finite_mapTheory.FLOOKUP_UPDATE] >>
-  simp[Once run_inst_seq_def, step_inst_base_def, eval_operand_def] >>
-  qmatch_goalsub_abbrev_tac `exec_ext_call ci sg _ _ _ _ _ _ _ T` >>
-  simp[AllCaseEqs()] >> strip_tac >>
-  rename1 `exec_ext_call ci sg _ _ _ _ _ _ _ T = OK sc` >>
+  strip_tac >> drule ecrecover_suffix_core >> strip_tac >>
+  drule_all computed_suffix_success >>
+  qmatch_goalsub_abbrev_tac `run_inst_seq _ s = OK st` >> strip_tac >>
+  drule computed_suffix_preserves >>
+  simp[wordsTheory.dimword_def] >>
+  disch_then drule >> simp[] >>
+  disch_then (drule_all_then strip_assume_tac) >>
+  drule_all computed_suffix_output >> strip_tac >>
+  drule run_inst_seq_append >> disch_then (qspec_then
+    `[mk_inst (sm.cs_next_id + 3) MLOAD [op]
+       [STRING #"%" (toString (sm.cs_next_var + 2))]]` assume_tac) >>
+  qpat_x_assum `run_inst_seq (emitted_insts sm sb) s = OK t` mp_tac >>
+  asm_rewrite_tac[] >>
+  simp[run_inst_seq_def, step_inst_base_def, mk_inst_def, exec_read1_def,
+       AllCaseEqs()] >> strip_tac >> gvs[] >>
   `!n. sm.cs_next_var <= n ==>
      not_local_ptr cenv es.scopes (STRING #"%" (toString n))` by
     metis_tac[local_ptrs_reserved_fresh] >>
-  `stmt_state_rel func cenv cx es sg` by
-    (simp[Abbr `sg`] >> irule stmt_state_rel_update_var >> simp[]) >>
-  `!x w. not_fresh_at sm x /\ lookup_var x s = SOME w ==>
-     lookup_var x sg = SOME w` by
-    (simp[Abbr `sg`, lookup_var_def, update_var_def,
-          finite_mapTheory.FLOOKUP_UPDATE] >>
-     rpt strip_tac >> IF_CASES_TAC >> gvs[not_fresh_at_def]) >>
-  `!name b sz. local_region cenv es.scopes sg name b sz ==>
-     local_region cenv es.scopes s name b sz` by
-    (rpt strip_tac >> irule local_region_frame >>
-     conj_tac >- (qexists_tac `func` >>
-       gvs[stmt_state_rel_def, state_rel_def]) >>
-     qexistsl_tac [`sm`, `es.scopes`, `sg`] >> simp[]) >>
-  `!name b sz. local_region cenv es.scopes sg name b sz ==>
-      regions_disjoint (w2n wo) 32 b sz` by metis_tac[] >>
-  `?u. exec_ext_call ci sg (n2w s.vs_call_ctx.cc_gas:bytes32)
-        (1w:bytes32) 0w wi (128w:bytes32) wo (32w:bytes32) T = OK u /\
-       stmt_state_rel func cenv cx es u` by
-    (irule computed_static_exec_state_rel >>
-     simp[Abbr `ci`, computed_precompile_def, venom_call_request_def,
-          wordsTheory.dimword_def, wordsTheory.w2w_n2w,
-          fcpLib.INDEX_CONV ``dimindex(:160)``] >>
-     conj_tac >-
-       (rpt strip_tac >>
-        `regions_disjoint (w2n wo) 32 b sz` by metis_tac[] >>
-        gvs[compileEnvTheory.regions_disjoint_def, listTheory.LENGTH_TAKE_EQ] >>
-        decide_tac) >>
-     qpat_x_assum `precompile_result _ _ = _` mp_tac >>
-     simp[venom_call_request_def, Abbr `sg`, update_var_def, read_memory_def,
-          wordsTheory.w2w_n2w, wordsTheory.dimword_def,
-          fcpLib.INDEX_CONV ``dimindex(:160)``]) >>
-  `stmt_state_rel func cenv cx es sc` by gvs[] >>
-  `?u. exec_ext_call ci sg (n2w s.vs_call_ctx.cc_gas:bytes32)
-        (1w:bytes32) 0w wi (128w:bytes32) wo (32w:bytes32) T = OK u /\
-       wb_frame cenv es sf sg u` by
-    (irule computed_static_exec_wb_frame >>
-     qpat_assum `!name b sz. local_region cenv es.scopes sg name b sz ==>
-                   regions_disjoint _ _ _ _` (fn th =>
-     simp[th, Abbr `ci`, computed_precompile_def, venom_call_request_def,
-          wordsTheory.dimword_def, wordsTheory.w2w_n2w,
-          fcpLib.INDEX_CONV ``dimindex(:160)``]) >>
-     conj_tac >- (first_assum ACCEPT_TAC) >>
-     conj_tac >-
-       (conj_tac >-
-        (rpt strip_tac >>
-        `regions_disjoint (w2n wo) 32 b sz` by
-          (qpat_x_assum `!aid b sz. aid < _ /\ _ ==> _`
-             (qspecl_then [`aid`, `b`, `sz`] mp_tac) >>
-           gvs[Abbr `sg`, update_var_def]) >>
-        gvs[compileEnvTheory.regions_disjoint_def, listTheory.LENGTH_TAKE_EQ] >>
-        decide_tac) >>
-     qpat_x_assum `precompile_result _ _ = _` mp_tac >>
-     simp[venom_call_request_def, Abbr `sg`, update_var_def, read_memory_def,
-          wordsTheory.w2w_n2w, wordsTheory.dimword_def,
-          fcpLib.INDEX_CONV ``dimindex(:160)``]) >>
-     simp[not_fresh_at_def] >> decide_tac) >>
-  `wb_frame cenv es sf sg sc` by gvs[] >>
-  qpat_x_assum `run_inst_seq _ sc = OK t` mp_tac >>
-  simp[Once run_inst_seq_def, step_inst_base_def,
-       eval_operand_def, AllCaseEqs()] >> strip_tac >>
-  qpat_x_assum `sc = _` (SUBST_ALL_TAC o SYM) >>
-  qpat_x_assum `run_inst_seq _ sc = OK t` mp_tac >>
-  simp[Once run_inst_seq_def, step_inst_base_def, exec_read1_def,
-       AllCaseEqs()] >> strip_tac >>
-  gvs[run_inst_seq_def] >>
   conj_tac >- (irule stmt_state_rel_update_var >> simp[]) >>
-  `wb_frame cenv es sf s sc` by
-    (irule wb_frame_readonly_input >> qexists_tac `sg` >>
-     simp[Abbr `sg`, update_var_def] >>
-     conj_tac
-     >- (simp[lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
-         rpt strip_tac >> IF_CASES_TAC >>
-         gvs[not_fresh_at_def]) >>
-     rpt strip_tac >> irule exprSimOpsTheory.local_region_frame_fwd >>
-     qexistsl [`s`, `sm`, `es.scopes`] >> simp[update_var_def] >>
-     simp[lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
-     rpt strip_tac >> IF_CASES_TAC >>
-     gvs[not_fresh_at_def]) >>
-  irule wb_frame_readonly_tail >>
-  qexistsl_tac [`sm`, `sc`] >>
+  irule wb_frame_readonly_tail >> qexistsl_tac [`sm`, `st`] >>
   simp[update_var_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
   rpt strip_tac >> IF_CASES_TAC >> gvs[not_fresh_at_def]
-
 QED
 
 Theorem compile_ecrecover_run[local]:
@@ -1651,4 +2121,18 @@ Proof
   conj_tac
   >- metis_tac[eval_expr_builtin_value] >>
   irule ecrecover_expr_sim >> simp[] >> metis_tac[]
+QED
+
+(* Shared EC/ecrecover boundaries must be usable without hidden assumptions. *)
+
+(* Exit predicates are insensitive to the successful result representation. *)
+Theorem expr_exit_success_map:
+  !f r. expr_exit (case r of INL v => INL (f v) | INR ex => INR ex) =
+        expr_exit r
+Proof
+  rpt gen_tac >> simp[FUN_EQ_THM] >> gen_tac >>
+  Cases_on `r` >- simp[] >>
+  rename1 `INR ex` >> Cases_on `ex` >>
+  Cases_on `x` >> simp[expr_exit_def] >>
+  rename1 `Error err` >> Cases_on `err` >> simp[expr_exit_def]
 QED
