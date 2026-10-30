@@ -6,6 +6,7 @@ Ancestors
   vyperSupplyBoundary vyperStatePreservation vyperStorageBackend
   vyperInterpreter vyperState vyperPlaceFrames
 Libs
+  proofAuditLib
   monadsyntax vyperSupplyProofLib
 
 val () = monadsyntax.enable_monad "vyper_evaluation";
@@ -148,9 +149,4 @@ Proof
   simp_tac bool_ss [set_global_def, LET_THM] >> rpt SOURCE_PRIMITIVE_STEP
 QED
 
-val () = List.app (fn (n, th) =>
-  if List.all (fn s => s = "DISK_THM") (#1 (Tag.dest_tag (Thm.tag th)))
-     andalso null (#2 (Tag.dest_tag (Thm.tag th)))
-     andalso null (Thm.hyp th)
-  then () else raise Fail ("Unexpected proof oracle: " ^ n))
-  (DB.thms "vyperSourcePrimitiveSupply");
+val () = proofAuditLib.check_theory "vyperSourcePrimitiveSupply";

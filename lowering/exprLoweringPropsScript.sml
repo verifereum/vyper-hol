@@ -45,6 +45,7 @@ Ancestors
   valueEncoding valueEncodingProofs localPtrsProps venomMemDefs
   vyperAST vyperTyping
 Libs
+  proofAuditLib
   pairLib BasicProvers monadsyntax
 
 (* ===== Instruction Sequence Execution ===== *)
@@ -4210,13 +4211,9 @@ Proof
 QED
 
 (* RawLog and call monotonicity must remain kernel-closed too. *)
-val () = List.app (fn th =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles then ()
-     else raise Fail "RawLog monotonicity oracle dependency"
-  end)
-  [ci_mono_compile_raw_log, ci_mono_compile_call];
+val () = proofAuditLib.check_all
+  [("ci_mono_compile_raw_log", ci_mono_compile_raw_log),
+   ("ci_mono_compile_call", ci_mono_compile_call)];
 
 (* Issue #560 integrity gate, including local proof-interface helpers. *)
 val () = List.app (fn th =>

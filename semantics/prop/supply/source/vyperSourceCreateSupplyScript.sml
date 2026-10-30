@@ -5,6 +5,7 @@ Ancestors
   list pair option arithmetic vyperMisc vyperSourceSupplyDefs
   vyperSupplyBoundary vyperAdapterSupply vyperCreate vyperState
 Libs
+  proofAuditLib
   pairLib
 
 (* Account replacement after the EVM run uses the adapter's proved bound;
@@ -27,9 +28,4 @@ Proof
   drule_all (SRULE [] run_create_evm_supply) >> simp[]
 QED
 
-val () = List.app (fn (n, th) =>
-  if List.all (fn s => s = "DISK_THM") (#1 (Tag.dest_tag (Thm.tag th)))
-     andalso null (#2 (Tag.dest_tag (Thm.tag th)))
-     andalso null (Thm.hyp th)
-  then () else raise Fail ("Unexpected proof oracle: " ^ n))
-  (DB.thms "vyperSourceCreateSupply");
+val () = proofAuditLib.check_theory "vyperSourceCreateSupply";

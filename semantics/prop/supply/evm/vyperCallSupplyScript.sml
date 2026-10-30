@@ -6,6 +6,8 @@ Ancestors
   vyperExecutionSupply vyperPrecompileSupply vyperPrimitiveSupply
   vyperOpcodeSupply vyperBalanceSupply vfmExecutionProp vfmStaticCalls
   vfmPreserves vfmExecution vfmContext vfmState list
+Libs
+  proofAuditLib
 
 (* A local precondition for the account snapshot read by CALL/CREATE. *)
 Definition snapshot_supply_def:
@@ -165,9 +167,4 @@ Proof
   NTAC 20 (TRY call_supply_step) >> rpt call_supply_step
 QED
 
-val () = List.app (fn (n, th) =>
-  if List.all (fn s => s = "DISK_THM") (#1 (Tag.dest_tag (Thm.tag th)))
-     andalso null (#2 (Tag.dest_tag (Thm.tag th)))
-     andalso null (Thm.hyp th)
-  then () else raise Fail ("Unexpected proof oracle: " ^ n))
-  (DB.thms "vyperCallSupply");
+val () = proofAuditLib.check_theory "vyperCallSupply";

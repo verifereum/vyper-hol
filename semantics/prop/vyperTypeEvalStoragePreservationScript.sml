@@ -17,6 +17,7 @@ Ancestors
   vyperCallOutcome[ignore_grammar]
   vyperSourceSupplyDefs vyperSourceSupplyFields vyperEvalSupply
 Libs
+  proofAuditLib
   wordsLib markerLib BasicProvers vyperSourceSupplyLib
 
 (* Storage proofs use the same explicit physical domain as evaluator typing.
@@ -4489,9 +4490,4 @@ Proof
   metis_tac[cj 6 eval_scc_storage_preservation_mutual]
 QED
 
-val () = List.app (fn (name, th) =>
-  if null (Thm.hyp th) andalso
-     List.all (fn tag => tag = "DISK_THM") (#1 (Tag.dest_tag (Thm.tag th))) andalso
-     null (#2 (Tag.dest_tag (Thm.tag th)))
-  then () else raise Fail ("Unexpected proof assumption: " ^ name))
-  (DB.thms "vyperTypeEvalStoragePreservation");
+val () = proofAuditLib.check_theory "vyperTypeEvalStoragePreservation";

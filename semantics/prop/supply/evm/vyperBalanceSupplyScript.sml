@@ -6,6 +6,8 @@ Ancestors
   vyperExecutionSupply vyperPrecompileSupply vyperPrimitiveSupply
   vyperOpcodeSupply vfmStaticCalls vfmPreserves vfmExecution vfmContext
   vfmState list
+Libs
+  proofAuditLib
 
 Theorem cp_result_supply:
   cp action /\ action st = (result,post) /\ supply_state budget st ==>
@@ -129,9 +131,4 @@ Proof
   gen_tac >> BETA_TAC >> balance_supply_tac
 QED
 
-val () = List.app (fn (n, th) =>
-  if List.all (fn s => s = "DISK_THM") (#1 (Tag.dest_tag (Thm.tag th)))
-     andalso null (#2 (Tag.dest_tag (Thm.tag th)))
-     andalso null (Thm.hyp th)
-  then () else raise Fail ("Unexpected proof oracle: " ^ n))
-  (DB.thms "vyperBalanceSupply");
+val () = proofAuditLib.check_theory "vyperBalanceSupply";

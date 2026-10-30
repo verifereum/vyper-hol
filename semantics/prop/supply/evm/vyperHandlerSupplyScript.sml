@@ -8,6 +8,7 @@ Ancestors
   vfmExecutionProp vfmStaticCalls vfmDecreasesGas vfmPreserves
   vfmExecution vfmContext vfmState list arithmetic
 Libs
+  proofAuditLib
   BasicProvers
 
 Theorem supply_action_step_inst:
@@ -168,9 +169,4 @@ Proof
   simp[supply_action_step_inner, supply_action_handle_step]
 QED
 
-val () = List.app (fn (n, th) =>
-  if List.all (fn s => s = "DISK_THM") (#1 (Tag.dest_tag (Thm.tag th)))
-     andalso null (#2 (Tag.dest_tag (Thm.tag th)))
-     andalso null (Thm.hyp th)
-  then () else raise Fail ("Unexpected proof oracle: " ^ n))
-  (DB.thms "vyperHandlerSupply");
+val () = proofAuditLib.check_theory "vyperHandlerSupply";

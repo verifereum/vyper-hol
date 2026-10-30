@@ -19,6 +19,7 @@ Ancestors
   vyperTypeCallStackSoundness vyperTypeContractSoundness
   vyperTypeExternalCallMachine vyperSourceSupplyDefs vyperSourceSupplyFields vyperEvalSupply
 Libs
+  proofAuditLib
   vyperSourceSupplyLib
 
 val _ = Parse.hide "body";
@@ -706,9 +707,4 @@ Proof
          first_assum ACCEPT_TAC]
 QED
 
-val () = List.app (fn (name, th) =>
-  if null (Thm.hyp th) andalso
-     List.all (fn tag => tag = "DISK_THM") (#1 (Tag.dest_tag (Thm.tag th))) andalso
-     null (#2 (Tag.dest_tag (Thm.tag th)))
-  then () else raise Fail ("Unexpected proof assumption: " ^ name))
-  (DB.thms "vyperTypeDeploymentMachine");
+val () = proofAuditLib.check_theory "vyperTypeDeploymentMachine";

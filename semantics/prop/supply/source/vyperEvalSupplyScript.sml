@@ -9,6 +9,7 @@ Ancestors
   vyperAccountSupply vyperAdapterSupply vyperInterpreter vyperCreate
   vyperState vyperCallOutcome extCallOracle
 Libs
+  proofAuditLib
   vyperSupplyProofLib
 
 val supply_facts = List.concat (map (CONJUNCTS o SPEC_ALL)
@@ -360,9 +361,4 @@ QED
 
 Finalise eval_source_supply_mutual
 
-val () = List.app (fn (n, th) =>
-  if List.all (fn s => s = "DISK_THM") (#1 (Tag.dest_tag (Thm.tag th)))
-     andalso null (#2 (Tag.dest_tag (Thm.tag th)))
-     andalso null (Thm.hyp th)
-  then () else raise Fail ("Unexpected proof oracle: " ^ n))
-  (DB.thms "vyperEvalSupply");
+val () = proofAuditLib.check_theory "vyperEvalSupply";

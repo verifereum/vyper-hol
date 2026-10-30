@@ -7,6 +7,8 @@ Ancestors
   vyperPrimitiveSupply vyperPrecompileSupply vyperExecutionSupply
   vyperAccountSupply vyperSupplyBoundary vyperInterpreter vyperCreate
   vfmExecution vfmContext vfmState
+Libs
+  proofAuditLib
 
 val supply_bound_256 = SRULE [] account_supply_bound_256;
 
@@ -161,9 +163,4 @@ Proof
   drule_all (SRULE [] run_call_create_extract_supply) >> simp[]
 QED
 
-val () = List.app (fn (n, th) =>
-  if List.all (fn s => s = "DISK_THM") (#1 (Tag.dest_tag (Thm.tag th)))
-     andalso null (#2 (Tag.dest_tag (Thm.tag th)))
-     andalso null (Thm.hyp th)
-  then () else raise Fail ("Unexpected proof oracle: " ^ n))
-  (DB.thms "vyperAdapterSupply");
+val () = proofAuditLib.check_theory "vyperAdapterSupply";

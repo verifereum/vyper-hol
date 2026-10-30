@@ -19,6 +19,7 @@ Ancestors
   vyperStatePreservation vyperScopePreservation
   vyperSourceSupplyDefs vyperSourceSupplyFields vyperEvalSupply
 Libs
+  proofAuditLib
   wordsLib vyperSourceSupplyLib
 
 val _ = Parse.hide "body";
@@ -827,9 +828,4 @@ Proof
   metis_tac[checked_call_external_failure_preserves_machine_well_typed]
 QED
 
-val () = List.app (fn (name, th) =>
-  if null (Thm.hyp th) andalso
-     List.all (fn tag => tag = "DISK_THM") (#1 (Tag.dest_tag (Thm.tag th))) andalso
-     null (#2 (Tag.dest_tag (Thm.tag th)))
-  then () else raise Fail ("Unexpected proof assumption: " ^ name))
-  (DB.thms "vyperTypeExternalCallMachine");
+val () = proofAuditLib.check_theory "vyperTypeExternalCallMachine";

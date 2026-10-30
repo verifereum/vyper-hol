@@ -5,6 +5,7 @@ Ancestors
   list pair option vyperMisc vyperSourceSupplyDefs vyperSourcePrimitiveSupply
   vyperInterpreter vyperCreate vyperState
 Libs
+  proofAuditLib
   vyperSupplyProofLib
 
 val source_facts = List.concat (map (CONJUNCTS o SPEC_ALL)
@@ -72,9 +73,4 @@ Proof
   rpt (vyperSupplyProofLib.step source_net)
 QED
 
-val () = List.app (fn (n, th) =>
-  if List.all (fn s => s = "DISK_THM") (#1 (Tag.dest_tag (Thm.tag th)))
-     andalso null (#2 (Tag.dest_tag (Thm.tag th)))
-     andalso null (Thm.hyp th)
-  then () else raise Fail ("Unexpected proof oracle: " ^ n))
-  (DB.thms "vyperSourceCompoundSupply");
+val () = proofAuditLib.check_theory "vyperSourceCompoundSupply";

@@ -4,6 +4,8 @@ Theory vyperExecutionSupply
 Ancestors
   vyperAccountSupply vyperSupplyBoundary vyperInterpreter vyperCreate
   vfmExecution vfmContext vfmState pred_set arithmetic list
+Libs
+  proofAuditLib
 
 (* Proof-only supply budget: snapshots are bounded individually. *)
 Definition account_supply_bound_def:
@@ -138,9 +140,4 @@ Proof
   irule account_supply_bound_create_prelude >> simp[]
 QED
 
-val () = List.app (fn (n, th) =>
-  if List.all (fn s => s = "DISK_THM") (#1 (Tag.dest_tag (Thm.tag th)))
-     andalso null (#2 (Tag.dest_tag (Thm.tag th)))
-     andalso null (Thm.hyp th)
-  then () else raise Fail ("Unexpected proof oracle: " ^ n))
-  (DB.thms "vyperExecutionSupply");
+val () = proofAuditLib.check_theory "vyperExecutionSupply";

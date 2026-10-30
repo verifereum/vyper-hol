@@ -4,6 +4,8 @@
 Theory exprCallbackContracts
 Ancestors
   exprLowering exprCallBounds compileEnv context vyperAST list
+Libs
+  proofAuditLib
 
 Definition expr_callbacks_agree_def:
   expr_callbacks_agree f g cenv es =
@@ -525,37 +527,5 @@ Proof
   drule_all extcode_child_bound >> simp[]
 QED
 
-(* Check every callback theorem, including the RawLog contracts. *)
-val () = List.app (fn (_,th) =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles then ()
-     else raise Fail "callback contract oracle dependency"
-  end)
-  (DB.thms "exprCallbackContracts");
-
-(* ===== Kernel audit for changed place callbacks ===== *)
-
-val () = List.app (fn (name,theorem) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag theorem)
-  in
-    if null (Thm.hyp theorem) andalso null axioms andalso
-       List.all (fn label => label = "DISK_THM") oracles then
-      print ("PLACE_CALLBACK_KERNEL_CLOSED " ^ name ^ " hyp=0\n")
-    else raise Fail ("admitted place callback: " ^ name)
-  end)
-  [("compile_subscript_callback_contract",compile_subscript_callback_contract),
-   ("compile_attribute_callback_contract",compile_attribute_callback_contract)];
-
-(* Issue #560 callback interfaces must remain kernel-closed. *)
-val () = List.app (fn th =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles then ()
-     else raise Fail "admitted memory-construction callback contract"
-  end)
-  [compile_make_tuple_callback_contract,
-   compile_make_array_elems_callback_contract,
-   compile_make_array_callback_contract,
-   compile_struct_lit_callback_contract,
-   compile_make_array_list_child_calls];
+(* Check all callback contracts in the same theory session. *)
+val () = proofAuditLib.check_theory "exprCallbackContracts";

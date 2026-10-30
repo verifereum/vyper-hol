@@ -1,5 +1,6 @@
-(* Task boundaries must be closed kernel theorems, including their dependencies.
-   Unrelated admitted compiler simulation cases are outside this audit. *)
+(* Check exported task theorem hypotheses and retained oracle tags.
+   Axioms imported from disk need same-session checks in their defining theories;
+   unrelated admitted compiler simulation cases are outside this audit. *)
 Theory vyperRawSystemProofAudit
 Ancestors
   vyperTypeSoundness vyperTypeSelectedEntrySoundness
@@ -11,14 +12,10 @@ Ancestors
   vyperOracleIntegrationTest evmStepSim prefixSim prefixExec strongPrefixSim spillSim
   venomCallActivationRegression asmCallActivationRegression unitTransformChecks
   e2eDefs e2eComposition e2eBoundaryTest execEquivParamDefs oracleExecProps callTrace
+Libs
+  proofAuditLib
 
-fun audit (name, th) =
-  if null (Thm.hyp th) andalso
-     List.all (fn tag => tag = "DISK_THM") (#1 (Tag.dest_tag (Thm.tag th))) andalso
-     null (#2 (Tag.dest_tag (Thm.tag th)))
-  then () else raise Fail ("Unchecked task proof: " ^ name);
-
-val () = List.app (List.app audit o DB.thms)
+val () = List.app proofAuditLib.check_theory
   ["vyperTypeSoundness", "vyperTypeSelectedEntrySoundness",
    "vyperTypeDeploymentSoundness", "vyperTypeExternalCallMachine",
    "vyperTypeDeploymentMachine", "vyperTypeEvalSoundness",
@@ -30,7 +27,7 @@ val () = List.app (List.app audit o DB.thms)
    "strongPrefixSim", "spillSim", "venomCallActivationRegression",
    "asmCallActivationRegression", "unitTransformChecks"];
 
-val () = List.app audit
+val () = proofAuditLib.check_all
   [("source supply entry non-vacuity",
      DB.fetch "vyperTypeInitialState" "type_soundness_preconditions_satisfiable"),
    ("observed deletion prefix", outcome_of_added_deletions),

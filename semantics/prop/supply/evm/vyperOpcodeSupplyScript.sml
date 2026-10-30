@@ -4,6 +4,8 @@ Theory vyperOpcodeSupply
 Ancestors
   vyperExecutionSupply vyperPrecompileSupply vyperPrimitiveSupply
   vfmStaticCalls vfmPreserves vfmExecution vfmContext vfmState list
+Libs
+  proofAuditLib
 
 Definition supply_state_def:
   supply_state budget st <=>
@@ -117,9 +119,4 @@ Proof
   irule supply_action_cp >> irule cp_step_inst_non_call >> gvs[]
 QED
 
-val () = List.app (fn (n, th) =>
-  if List.all (fn s => s = "DISK_THM") (#1 (Tag.dest_tag (Thm.tag th)))
-     andalso null (#2 (Tag.dest_tag (Thm.tag th)))
-     andalso null (Thm.hyp th)
-  then () else raise Fail ("Unexpected proof oracle: " ^ n))
-  (DB.thms "vyperOpcodeSupply");
+val () = proofAuditLib.check_theory "vyperOpcodeSupply";

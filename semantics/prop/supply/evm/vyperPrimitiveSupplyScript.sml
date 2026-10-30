@@ -5,6 +5,8 @@ Theory vyperPrimitiveSupply
 Ancestors
   vyperExecutionSupply vyperPrecompileSupply
   vfmExecution vfmContext vfmState list rich_list
+Libs
+  proofAuditLib
 
 (* Local mutation boundaries for the run_call supply invariant. *)
 Theorem execution_supply_live:
@@ -197,9 +199,4 @@ Proof
       account_supply_bound_nonce]
 QED
 
-val () = List.app (fn (n, th) =>
-  if List.all (fn s => s = "DISK_THM") (#1 (Tag.dest_tag (Thm.tag th)))
-     andalso null (#2 (Tag.dest_tag (Thm.tag th)))
-     andalso null (Thm.hyp th)
-  then () else raise Fail ("Unexpected proof oracle: " ^ n))
-  (DB.thms "vyperPrimitiveSupply");
+val () = proofAuditLib.check_theory "vyperPrimitiveSupply";

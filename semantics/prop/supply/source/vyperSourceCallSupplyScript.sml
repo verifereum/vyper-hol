@@ -8,6 +8,7 @@ Ancestors
   vyperSourcePrimitiveSupply vyperSourceOracleSupply vyperSourceTransferSupply
   vyperInterpreter vyperState vyperCallOutcome extCallOracle
 Libs
+  proofAuditLib
   vyperSupplyProofLib
 
 Theorem run_raw_call_supply:
@@ -104,9 +105,4 @@ Proof
   simp_tac bool_ss [eval_send_def, LET_THM] >> rpt CALL_SUPPLY_STEP
 QED
 
-val () = List.app (fn (n, th) =>
-  if List.all (fn s => s = "DISK_THM") (#1 (Tag.dest_tag (Thm.tag th)))
-     andalso null (#2 (Tag.dest_tag (Thm.tag th)))
-     andalso null (Thm.hyp th)
-  then () else raise Fail ("Unexpected proof oracle: " ^ n))
-  (DB.thms "vyperSourceCallSupply");
+val () = proofAuditLib.check_theory "vyperSourceCallSupply";

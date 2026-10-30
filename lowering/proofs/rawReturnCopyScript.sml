@@ -7,6 +7,8 @@ Ancestors
   list arithmetic words
   copyFwdEquiv allocaRemapDefs venomExecSemantics venomState
   valueEncoding valueEncodingProofs vyperValue vyperAST vyperTyping
+Libs
+  proofAuditLib
 
 Theorem mcopy_bytes_at:
   offset + len <= copied ==>
@@ -47,9 +49,4 @@ Proof
   simp[word_add_n2w]
 QED
 
-val () = List.app (fn (name, th) =>
-  if null (Thm.hyp th) andalso
-     List.all (fn tag => tag = "DISK_THM") (#1 (Tag.dest_tag (Thm.tag th))) andalso
-     null (#2 (Tag.dest_tag (Thm.tag th)))
-  then () else raise Fail ("Unexpected proof assumption: " ^ name))
-  (DB.thms "rawReturnCopy");
+val () = proofAuditLib.check_theory "rawReturnCopy";

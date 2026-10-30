@@ -4,6 +4,8 @@ Theory vyperRunSupply
 Ancestors
   vyperExecutionSupply vyperOpcodeSupply vyperHandlerSupply
   vfmExecution vfmContext While
+Libs
+  proofAuditLib
 
 (* run_call uses only step, not transaction fee/finalization accounting. *)
 Theorem run_call_supply:
@@ -23,9 +25,4 @@ Proof
   disch_then (qspec_then `(result,post)` mp_tac) >> simp[]
 QED
 
-val () = List.app (fn (n, th) =>
-  if List.all (fn s => s = "DISK_THM") (#1 (Tag.dest_tag (Thm.tag th)))
-     andalso null (#2 (Tag.dest_tag (Thm.tag th)))
-     andalso null (Thm.hyp th)
-  then () else raise Fail ("Unexpected proof oracle: " ^ n))
-  (DB.thms "vyperRunSupply");
+val () = proofAuditLib.check_theory "vyperRunSupply";

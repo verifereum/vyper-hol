@@ -2,6 +2,8 @@
 Theory vyperSourceSupplyFields
 Ancestors
   vyperSourceSupplyDefs vyperSupplyBoundary vyperInterpreter vyperState
+Libs
+  proofAuditLib
 
 Theorem source_supply_fields[simp]:
   (source_supply (st with scopes updated_by fs) <=> source_supply st) /\
@@ -71,9 +73,4 @@ Proof
   simp[machine_supply_def]
 QED
 
-val () = List.app (fn (n, th) =>
-  if List.all (fn s => s = "DISK_THM") (#1 (Tag.dest_tag (Thm.tag th)))
-     andalso null (#2 (Tag.dest_tag (Thm.tag th)))
-     andalso null (Thm.hyp th)
-  then () else raise Fail ("Unexpected proof oracle: " ^ n))
-  (DB.thms "vyperSourceSupplyFields");
+val () = proofAuditLib.check_theory "vyperSourceSupplyFields";

@@ -3,6 +3,8 @@
 Theory vyperPrecompileSupply
 Ancestors
   vyperExecutionSupply vfmStaticCalls vfmExecution vfmContext list
+Libs
+  proofAuditLib
 
 (* Reuse Verifereum's precompile frame theorem for every result, including
    exceptional halts; account and saved rollback maps are unchanged. *)
@@ -34,9 +36,4 @@ Proof
   strip_tac >> irule cp_execution_supply_snd >> simp[]
 QED
 
-val () = List.app (fn (n, th) =>
-  if List.all (fn s => s = "DISK_THM") (#1 (Tag.dest_tag (Thm.tag th)))
-     andalso null (#2 (Tag.dest_tag (Thm.tag th)))
-     andalso null (Thm.hyp th)
-  then () else raise Fail ("Unexpected proof oracle: " ^ n))
-  (DB.thms "vyperPrecompileSupply");
+val () = proofAuditLib.check_theory "vyperPrecompileSupply";

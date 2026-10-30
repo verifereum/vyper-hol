@@ -5,6 +5,7 @@ Ancestors
   list pair arithmetic vyperSourceSupplyDefs vyperAccountSupply
   vyperSupplyBoundary vyperSourcePrimitiveSupply vyperInterpreter vyperState
 Libs
+  proofAuditLib
   monadsyntax
 
 val () = monadsyntax.enable_monad "vyper_evaluation";
@@ -101,9 +102,4 @@ Proof
       accounts_supply_zero_balance]
 QED
 
-val () = List.app (fn (n, th) =>
-  if List.all (fn s => s = "DISK_THM") (#1 (Tag.dest_tag (Thm.tag th)))
-     andalso null (#2 (Tag.dest_tag (Thm.tag th)))
-     andalso null (Thm.hyp th)
-  then () else raise Fail ("Unexpected proof oracle: " ^ n))
-  (DB.thms "vyperSourceTransferSupply");
+val () = proofAuditLib.check_theory "vyperSourceTransferSupply";

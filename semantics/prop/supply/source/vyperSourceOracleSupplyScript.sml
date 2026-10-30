@@ -6,6 +6,7 @@ Ancestors
   list pair vyperSourceSupplyDefs vyperAccountSupply vyperSupplyBoundary
   vyperCallOutcome vyperCallOutcomeProps extCallOracle vyperState
 Libs
+  proofAuditLib
   monadsyntax
 
 val () = monadsyntax.enable_monad "vyper_evaluation";
@@ -80,9 +81,4 @@ Proof
   gvs[source_supply_def, supply_adoption_safe_def]
 QED
 
-val () = List.app (fn (n, th) =>
-  if List.all (fn s => s = "DISK_THM") (#1 (Tag.dest_tag (Thm.tag th)))
-     andalso null (#2 (Tag.dest_tag (Thm.tag th)))
-     andalso null (Thm.hyp th)
-  then () else raise Fail ("Unexpected proof oracle: " ^ n))
-  (DB.thms "vyperSourceOracleSupply");
+val () = proofAuditLib.check_theory "vyperSourceOracleSupply";
