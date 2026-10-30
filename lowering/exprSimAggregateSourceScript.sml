@@ -150,8 +150,11 @@ Theorem expr_sim_pre_struct_field:
     expr_sim_pre ce cx env e es'
 Proof
   rw[expr_sim_pre_def, well_typed_expr_def, byte_widths_expr_def,
-     alloc_limits_expr_def, int_calls_expr_def] >>
-  drule_all aggregate_named_child_syntax >> strip_tac >> gvs[]
+     alloc_limits_expr_def, int_calls_expr_def,
+     supportedExprTraverseTheory.expr_has_evm_run_thm] >>
+  drule_all aggregate_named_child_syntax >> strip_tac >>
+  gvs[listTheory.EVERY_MEM, listTheory.EXISTS_MEM, listTheory.MEM_MAP] >>
+  metis_tac[]
 QED
 
 Theorem expr_sim_below_struct_fields:

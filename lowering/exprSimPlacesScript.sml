@@ -59,10 +59,9 @@ QED
    - a module variable (TopLevelNameTarget) in storage or transient
      storage: the source reads the popped element from its slots
      (read_storage_slot), which raises a RuntimeError where the slots do not
-     decode, while the lowering never reads it and hands out the slot, so
-     this is false as stated until a storage invariant keeps slots
-     decodable (as for exprSimLeaves's
-     compile_toplevel_storage_undecodable_sim).  Where they decode, the
+     decode, while the lowering never reads it and hands out the slot;
+     expr_sim_inv's storage clauses keep the slots decoding (as in
+     exprSimLeaves's compile_toplevel_storage_undecodable_sim), but the
      proof also needs expr_sim_inv to give ce_var_type of the module
      variable's key, from which the lowering reads the element type;
    - an immutable in the constructor: the lowering pops at LocCode with

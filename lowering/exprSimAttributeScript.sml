@@ -98,7 +98,8 @@ Proof
     fs[expr_sim_pre_def, expr_sim_inv_def, env_consistent_def,
        env_context_consistent_def] >>
   gvs[expr_sim_pre_def, well_typed_expr_def, attribute_type_ok_def,
-      vyperTypeCallGraphTheory.int_calls_expr_def, byte_widths_expr_def,
+      vyperTypeCallGraphTheory.int_calls_expr_def,
+      supportedExprTraverseTheory.expr_has_evm_run_thm, byte_widths_expr_def,
       alloc_limits_expr_def] >>
   Cases_on `expr_type obj` >> gvs[attribute_type_def]
 QED
