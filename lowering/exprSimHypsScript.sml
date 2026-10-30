@@ -69,14 +69,14 @@
  *     internal call, call_evaluation_safe is call_evaluation_safe cx [], a
  *     fact about the call stack.
  *   - The locals clause: every local of the type environment is held
- *     through a pointer variable (PtrVar (Var p)).  This is how the
- *     statement lowering registers the parameters and locals of an external
- *     function without default arguments; state_rel only relates the locals
- *     that are held so (local_ptrs_rel), and compile_name_vv emits INVALID
- *     for a name it does not find.  Default arguments, and the locals of
- *     internal functions and the constructor, are MemLoc
- *     (compile_register_kwarg_vars, local_ptrs_reserved), so the theorem
- *     says nothing yet about expressions there.
+ *     through a pointer variable (PtrVar (Var p)).  This is how every
+ *     entry's prologue registers the parameters (external functions, with
+ *     or without default arguments, and the constructor: entryLocals;
+ *     internal functions: package_internal_fn_prologue_ptrs in
+ *     intCallCallee) and how the statement lowering declares
+ *     locals; state_rel only relates the locals that are held so
+ *     (local_ptrs_rel), and compile_name_vv emits INVALID for a name it
+ *     does not find.
  *   - The local types clause: the compile environment's type of a local
  *     is its type in the type environment.  pop reads the element type of
  *     the array it pops from ce_var_type (elem_size_in_location), as

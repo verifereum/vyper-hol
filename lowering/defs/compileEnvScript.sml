@@ -985,14 +985,15 @@ End
 (* ===== Immutables Relation ===== *)
 (* Interpreter immutables ↔ Venom code/data section.
    During constructor: interpreter writes to st.immutables, Venom uses ISTORE/ILOAD.
-   At runtime: interpreter reads from st.immutables, Venom uses DLOAD from data section.
+   At runtime: interpreter reads from st.immutables, Venom reads the data section.
    The relation ties each interpreter name to its Venom representation.
 
    Interpreter: st.immutables : (address, module_immutables) alist
      where module_immutables = (num option, string |-> (type_value # value)) alist
      Keyed by (source_id_opt, immutable_name) → typed value.
    Venom (ctor): ss.vs_immutables : (num, bytes32) fmap  (ILOAD/ISTORE slot → word)
-   Venom (runtime): ss.vs_data_section : byte list  (DLOAD offset → 32 bytes)
+   Venom (runtime): ss.vs_data_section : byte list  (the value laid out at its
+     byte offset as val_in_memory lays it out, type_memory_size bytes)
 
    ce_vars maps module_var_key (src_id_opt, name) to ImmutableLoc byte_offset.
    The interpreter stores by name (string); Venom stores by byte offset. *)
@@ -1017,10 +1018,10 @@ Definition immutables_rel_def:
           SOME (ImmutableLoc byte_offset) ∧
         FLOOKUP interp_imms name = SOME (tv, v)
         ⇒
-        (* DLOAD reads 32 bytes from data section at byte_offset *)
-        byte_offset + 32 ≤ LENGTH ss.vs_data_section ∧
-        word_of_bytes T 0w (TAKE 32 (DROP byte_offset ss.vs_data_section)) =
-          typed_val_to_w256 tv v
+        (* The data section holds the value at byte_offset laid out as in
+           memory (val_in_memory) *)
+        byte_offset + type_memory_size tv ≤ LENGTH ss.vs_data_section ∧
+        val_in_memory tv v byte_offset ss.vs_data_section
 End
 
 (* ===== Storage Variables Relation ===== *)
