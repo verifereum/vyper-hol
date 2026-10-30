@@ -2,10 +2,17 @@
 
 Theory evalCompilerBytecodeScalarWeiModular
 Ancestors evalCompilerSubsetScalars compileVyper concretizeMemLocDefs alist byte integer_word option
-Libs evalCompilerBytecodeLib finite_mapLib computeLib wordsLib
+  evalCompilerBytecodeScalarWeiSmall evalCompilerBytecodeScalarWeiLarge
+Libs evalCompilerBytecodeLib evalCompilerEntryLib finite_mapLib computeLib wordsLib
 
 fun holbuild_extra_deps (_ : string list) = ()
-val () = holbuild_extra_deps [".."]
+val () = holbuild_extra_deps
+  ["../python-o1-no-asm-opt/scalar_wei_small.hex",
+   "../python-o1-no-asm-opt/scalar_wei_large.hex",
+   "../python-o1-no-asm-opt/scalar_modular.hex",
+   "../python-o1-no-asm-opt-sources/scalar_wei_small.vy",
+   "../python-o1-no-asm-opt-sources/scalar_wei_large.vy",
+   "../python-o1-no-asm-opt-sources/scalar_modular.vy"]
 val () = computeLib.upd_compset add_finite_map_compset
 val () = computeLib.upd_compset (computeLib.add_thms [fmap_to_alist_FEMPTY])
 val () = computeLib.upd_compset (computeLib.add_thms [i2w_pos])
@@ -16,7 +23,7 @@ Theorem scalar_wei_small_matches_python_oracle:
     scalar_wei_small_program =
     SOME ^(evalCompilerBytecodeLib.read_hex_bytes "scalar_wei_small.hex")
 Proof
-  EVAL_TAC
+  ACCEPT_TAC evalCompilerBytecodeScalarWeiSmallTheory.scalar_wei_small_matches_python_oracle
 QED
 
 Theorem scalar_wei_large_matches_python_oracle:
@@ -24,7 +31,7 @@ Theorem scalar_wei_large_matches_python_oracle:
     scalar_wei_large_program =
     SOME ^(evalCompilerBytecodeLib.read_hex_bytes "scalar_wei_large.hex")
 Proof
-  EVAL_TAC
+  ACCEPT_TAC evalCompilerBytecodeScalarWeiLargeTheory.scalar_wei_large_matches_python_oracle
 QED
 
 val scalar_modular_policy_eval = save_thm
@@ -93,9 +100,11 @@ val scalar_modular_type_env_eval = save_thm
   ("scalar_modular_type_env_eval",
    EVAL ``type_env ^scalar_modular_tops``)
 val scalar_modular_type_env = rhs (concl scalar_modular_type_env_eval)
-val scalar_modular_nkeys_eval = save_thm
-  ("scalar_modular_nkeys_eval",
-   EVAL ``assign_nkeys ^scalar_modular_tops 0``)
+Theorem scalar_modular_nkeys_eval:
+  (K global_nonreentrant_slot : string -> num) = K 0n
+Proof
+  simp[contextTheory.global_nonreentrant_slot_def]
+QED
 val scalar_modular_nkeys = rhs (concl scalar_modular_nkeys_eval)
 val scalar_modular_classify_eval = save_thm
   ("scalar_modular_classify_eval",
@@ -120,7 +129,7 @@ val scalar_modular_external_fns_eval = save_thm
   ("scalar_modular_external_fns_eval",
    evalCompilerBytecodeLib.weak_eval ``MAP (set_external_package_target
                  (^scalar_modular_rpolicy).rpol_target o
-               package_external_fn ^scalar_modular_tops F
+               package_external_fn ^scalar_modular_tops T
                  ^scalar_modular_nkeys)
       ^scalar_modular_external_sources``)
 val scalar_modular_external_fns =
@@ -132,7 +141,7 @@ val scalar_modular_internal_fns_eval = save_thm
   ("scalar_modular_internal_fns_eval",
    evalCompilerBytecodeLib.weak_eval ``MAP (set_internal_package_target
                  (^scalar_modular_rpolicy).rpol_target o
-               package_internal_fn ^scalar_modular_tops F
+               package_internal_fn ^scalar_modular_tops T
                  ^scalar_modular_nkeys F 0)
       ^scalar_modular_internal_sources``)
 val scalar_modular_internal_fns =
@@ -141,7 +150,7 @@ val scalar_modular_fallback_fn_eval = save_thm
   ("scalar_modular_fallback_fn_eval",
    evalCompilerBytecodeLib.weak_eval ``set_fallback_package_target
       (^scalar_modular_rpolicy).rpol_target
-      (package_fallback_fn ^scalar_modular_tops F ^scalar_modular_nkeys
+      (package_fallback_fn ^scalar_modular_tops T ^scalar_modular_nkeys
         ^scalar_modular_fallback_source)``)
 val scalar_modular_fallback_fn =
   rhs (concl scalar_modular_fallback_fn_eval)
@@ -503,6 +512,9 @@ val scalar_modular_lower_runtime_eval = save_thm
   ("scalar_modular_lower_runtime_eval",
    SIMP_CONV pure_ss
     ([compileVyperTheory.lower_vyper_runtime_unit_def,
+      compileVyperTheory.external_has_defaults_def,
+      listTheory.EXISTS_DEF, listTheory.NULL_DEF, boolTheory.COND_CLAUSES,
+      boolTheory.NOT_CLAUSES, boolTheory.OR_CLAUSES,
       scalar_modular_type_env_eval, scalar_modular_nkeys_eval,
       scalar_modular_classify_eval, scalar_modular_selectors_eval,
       scalar_modular_external_fns_eval, scalar_modular_internal_fns_eval,

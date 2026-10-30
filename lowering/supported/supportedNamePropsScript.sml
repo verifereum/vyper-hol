@@ -2,7 +2,7 @@
 Theory supportedNameProps
 Ancestors
   supportedNames supportedDecls supportedTypes supportedDeclProps
-  compileVyper vyperContext vyperAST list finite_map
+  compileVyper vyperContext vyperAST vyperTypeContract list finite_map
 
 Theorem supported_bindings_accept:
   supported_function_bindings supported_test_declarations
@@ -62,13 +62,36 @@ Proof
   EVAL_TAC
 QED
 
+(* The name whitelist is permissive; check_contract validates fallback
+   arguments via function_header_ok, and only for External functions. *)
 Theorem supported_fallback_header_names_contract:
   supported_function_header_names []
     (FunctionDecl External Payable F F "__default__" [] [] NoneT []) /\
-  ~supported_function_header_names []
+  supported_function_header_names []
     (FunctionDecl External Payable F F "__default__" [("x", BaseT BoolT)] [] NoneT []) /\
-  ~supported_function_header_names []
+  supported_function_header_names []
     (FunctionDecl Internal Pure F F "__default__" [("x", BaseT BoolT)] [] NoneT [])
+Proof
+  EVAL_TAC
+QED
+
+Theorem supported_fallback_header_validation_contract:
+  function_header_ok External Payable F F "__default__" [] [] NoneT /\
+  ~function_header_ok External Payable F F "__default__"
+    [("x", BaseT BoolT)] [] NoneT /\
+  function_header_ok Internal Pure F F "__default__"
+    [("x", BaseT BoolT)] [] NoneT
+Proof
+  EVAL_TAC
+QED
+
+(* Names that used to collide with compiler labels now have dedicated
+   internal_fn_label spellings, including runtime and deployment entries. *)
+Theorem supported_internal_label_names_accept:
+  EVERY (\name. supported_function_header_names []
+    (FunctionDecl Internal Pure F F name [] [] NoneT []))
+    ["revert"; "code_end"; "return_label_"; "return_label_42";
+     "reachable_"; "reachable_0"; "fn_foo"; "__entry"; "__deploy"]
 Proof
   EVAL_TAC
 QED
@@ -98,11 +121,13 @@ Proof
   EVAL_TAC
 QED
 
-Theorem supported_function_name_duplicates_reject:
-  ~supported_declaration_names
+(* Name-domain rejection now belongs to check_contract. The whitelist itself
+   permits internal/external sharing when the checker finds no call cycle. *)
+Theorem supported_function_name_duplicates_defer_to_checker:
+  supported_declaration_names
     [FunctionDecl External View F F "f" [] [] NoneT [];
      FunctionDecl Internal Pure F F "f" [] [] NoneT []] /\
-  ~supported_declaration_names
+  supported_declaration_names
     [FunctionDecl Deploy Payable F F "__init__" [] [] NoneT [];
      FunctionDecl Deploy Payable F F "__init__" [] [] NoneT []]
 Proof
@@ -116,21 +141,26 @@ Proof
   EVAL_TAC
 QED
 
+Theorem supported_declaration_name_checks_contract:
+  supported_declaration_names
+    [FunctionDecl Internal Pure F F "return_label_42" [] [] NoneT []] /\
+  supported_declaration_names
+    [FunctionDecl External Payable F F "__default__" [("x", BaseT BoolT)] [] NoneT []] /\
+  supported_declaration_names
+    [HashMapDecl Private F "m" (BaseT BoolT) (Type (BaseT (UintT 256))) (SOME 0);
+     StructDecl "S" [("m", BaseT (UintT 256))]]
+Proof
+  EVAL_TAC
+QED
+
 (* Internal labels are compiler-generated, so user function names no longer
    need to avoid the compiler's label spellings. *)
-Theorem supported_internal_label_names_accept:
+Theorem supported_internal_label_declarations_accept:
   supported_declaration_names
     [FunctionDecl Internal Pure F F "return_label_42" [] [] NoneT [];
      FunctionDecl Internal Pure F F "revert" [] [] NoneT [];
      FunctionDecl Internal Pure F F "code_end" [] [] NoneT [];
      FunctionDecl Internal Pure F F "reachable_0" [] [] NoneT []]
-Proof
-  EVAL_TAC
-QED
-
-Theorem supported_declaration_name_checks_reject:
-  ~supported_declaration_names
-    [FunctionDecl External Payable F F "__default__" [("x", BaseT BoolT)] [] NoneT []]
 Proof
   EVAL_TAC
 QED

@@ -39,9 +39,28 @@ Definition supported_function_body_def:
          ~supported_stmts_expr_exists expr_internal_call_root body)
 End
 
+(* Defaults are lowered at external entry points, so they obey the same
+   expression and main-module restrictions as function bodies. *)
+Definition supported_default_expression_def:
+  supported_default_expression tops e <=>
+    supported_expr tops e /\
+    ~supported_expr_exists expr_nonmain_type_root e
+End
+
+(* Only internal names need this source-shape restriction. External/internal
+   sharing and repeated Deploy names remain admissible. *)
+Definition supported_internal_function_names_def:
+  supported_internal_function_names [] = [] /\
+  supported_internal_function_names (top::rest) =
+    (case top of
+       FunctionDecl Internal mut nr rr name args defaults ret stmts => [name]
+     | _ => []) ++ supported_internal_function_names rest
+End
+
 Definition supported_declaration_body_def:
   supported_declaration_body tops (FunctionDecl vis mut nr rr name args defaults ret body) =
     (supported_function_body tops vis args body /\
+     EVERY (supported_default_expression tops) defaults /\
      supported_return_layouts ret body) /\
   supported_declaration_body tops (VariableDecl vis mut name ty slot) = T /\
   supported_declaration_body tops (HashMapDecl vis trans name kt vt slot) = T /\
@@ -54,13 +73,15 @@ End
 Definition supported_program_def:
   supported_program tops <=>
     supported_declaration_headers tops /\ supported_declaration_names tops /\
+    ALL_DISTINCT (supported_internal_function_names tops) /\
     EVERY (supported_declaration_body tops) tops
 End
 
 (* Exact target-type occurrence (not just a dynamic boolean): needed by the
    existential in decode_strictness_exempt. Traverse unsupported expressions,
    targets, iterators and reasons too. Only FUNCTION BODIES, as PLAN 5.5 says;
-   defaults/constants are not bodies and are excluded by supported_program. *)
+   defaults/constants are not bodies. Internal defaults remain excluded until
+   their call-site expansion is implemented (#546). *)
 Definition expr_abi_decode_target_root_def:
   expr_abi_decode_target_root target
     (TypeBuiltin ty (AbiDecode unwrap) decoded es) = (decoded = target) /\
@@ -101,6 +122,22 @@ Theorem supported_program_function:
 Proof
   strip_tac >> drule_all supported_program_declaration >>
   simp[supported_declaration_body_def]
+QED
+
+Theorem supported_program_defaults:
+  supported_program tops /\
+  MEM (FunctionDecl vis mut nr rr name args defaults ret stmts) tops ==>
+    EVERY (supported_default_expression tops) defaults
+Proof
+  strip_tac >> drule_all supported_program_declaration >>
+  simp[supported_declaration_body_def]
+QED
+
+Theorem supported_program_internal_names:
+  supported_program tops ==>
+    ALL_DISTINCT (supported_internal_function_names tops)
+Proof
+  simp[supported_program_def]
 QED
 
 Theorem supported_internal_body_contract:

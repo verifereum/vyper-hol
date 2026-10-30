@@ -2034,16 +2034,86 @@ val () = send_call_value_def
             LET_RATOR, COND_RATOR]
   |> cv_auto_trans;
 
-Definition evaluate_defaults_def:
-  evaluate_defaults cx am [] = SOME [] ∧
-  evaluate_defaults cx am (e::es) =
-    (case FST $ (do res <- eval_expr cx e; read_result cx res od) (initial_state am [FEMPTY]) of
-     | INL v =>
-         (case evaluate_defaults cx am es of
-          | SOME vs => SOME (v :: vs)
-          | NONE => NONE)
-     | _ => NONE)
+(* External defaults run after value transfer, before formal argument binding.
+   Like internal-call defaults, they share one empty local scope, thread every
+   state effect and propagate the original exception.  Restore only the caller's
+   scopes; accounts, transient storage, outcomes and requests are not reset. *)
+Definition eval_external_defaults_def:
+  eval_external_defaults cx es = do
+    prev <- get_scopes;
+    finally
+      (do set_scopes [FEMPTY]; eval_exprs cx es od)
+      (set_scopes prev)
+  od
 End
+
+Theorem eval_external_defaults_run:
+  eval_external_defaults cx es st =
+    let (res, rt) = eval_exprs cx es (st with scopes := [FEMPTY]) in
+    (res, rt with scopes := st.scopes)
+Proof
+  simp[eval_external_defaults_def, bind_def, ignore_bind_def,
+       get_scopes_def, set_scopes_def, finally_def, return_def, raise_def,
+       AllCaseEqs()] >>
+  Cases_on `eval_exprs cx es (st with scopes := [FEMPTY])` >>
+  Cases_on `q` >> simp[ignore_bind_def, return_def, raise_def]
+QED
+
+Theorem eval_external_defaults_nil[simp]:
+  eval_external_defaults cx [] st = (INL [], st)
+Proof
+  simp[eval_external_defaults_run, evaluate_def, return_def]
+QED
+
+Theorem eval_external_defaults_length:
+  eval_external_defaults cx es st = (INL vs, rt) ==>
+  LENGTH vs = LENGTH es
+Proof
+  simp[eval_external_defaults_run, LET_THM] >>
+  Cases_on `eval_exprs cx es (st with scopes := [FEMPTY])` >>
+  simp[] >> strip_tac >> gvs[] >>
+  drule eval_exprs_length >> simp[]
+QED
+
+(* A cons exposes one materialised value followed by the rest of the list,
+   in the state produced by the first expression, not in the initial state. *)
+Theorem eval_external_defaults_cons:
+  eval_external_defaults cx (e::es) st =
+    (let (res, rt) =
+       (do tv <- eval_expr cx e;
+           v <- read_result cx tv;
+           vs <- eval_exprs cx es;
+           return (v::vs) od) (st with scopes := [FEMPTY]) in
+     (res, rt with scopes := st.scopes))
+Proof
+  simp[eval_external_defaults_run, Once evaluate_def]
+QED
+
+Theorem eval_external_defaults_cons_success:
+  eval_expr cx e (st with scopes := [FEMPTY]) = (INL tv, s1) /\
+  read_result cx tv s1 = (INL v, s2) /\
+  eval_exprs cx es s2 = (INL vs, s3) ==>
+  eval_external_defaults cx (e::es) st =
+    (INL (v::vs), s3 with scopes := st.scopes)
+Proof
+  strip_tac >> simp[eval_external_defaults_cons, bind_def, return_def]
+QED
+
+Theorem eval_external_defaults_error:
+  eval_exprs cx es (st with scopes := [FEMPTY]) = (INR ex, rt) ==>
+  eval_external_defaults cx es st = (INR ex, rt with scopes := st.scopes)
+Proof
+  simp[eval_external_defaults_run]
+QED
+
+Theorem eval_external_defaults_scopes:
+  eval_external_defaults cx es st = (res, rt) ==> rt.scopes = st.scopes
+Proof
+  simp[eval_external_defaults_run] >>
+  Cases_on `eval_exprs cx es (st with scopes := [FEMPTY])` >> simp[] >>
+  strip_tac >> gvs[]
+QED
+
 
 Definition call_external_function_def:
   call_external_function orc am cx nr mut ts all_mods args dflts vals body ret =
@@ -2055,17 +2125,11 @@ Definition call_external_function_def:
     (INR $ Error (RuntimeError "call args length"), am, [])
   else
   let needed_dflts = DROP (LENGTH dflts - n_missing) dflts in
-  case evaluate_defaults cx am needed_dflts of
-  | NONE => (INR $ Error (RuntimeError "call evaluate_defaults"), am, [])
-  | SOME dflt_vs =>
-  case bind_arguments all_tenv args (vals ++ dflt_vs)
-  of NONE => (INR $ Error (RuntimeError "call bind_arguments"), am, [])
-   | SOME env =>
   (case (if cx.in_deploy then evaluate_all_constants cx am cx.txn.target all_mods
          else SOME am)
    of NONE => (INR $ Error (RuntimeError "call constants_env"), am, [])
     | SOME am_c =>
-   let st = initial_state am_c [env] with <| outcomes := orc; requests := [] |> in
+   let st = initial_state am_c [FEMPTY] with <| outcomes := orc; requests := [] |> in
    let srcs = am_c.sources in
    let exps = am_c.exports in
    let layouts = am_c.layouts in
@@ -2073,7 +2137,15 @@ Definition call_external_function_def:
    let lock_action = lock_if_nr cx nr is_view in
    let unlock_action = unlock_if_nr cx nr is_view in
    let (res, am_out, rqs) =
-     (case do lock_action; send_call_value mut cx; eval_stmts cx body od st
+     (case do
+        send_call_value mut cx;
+        dflt_vs <- eval_external_defaults cx needed_dflts;
+        (case bind_arguments all_tenv args (vals ++ dflt_vs) of
+         | NONE => raise (Error (RuntimeError "call bind_arguments"))
+         | SOME env => do
+             set_scopes [env]; lock_action; eval_stmts cx body
+           od)
+      od st
       of
        | (INL (), st) =>
            (case unlock_action st of

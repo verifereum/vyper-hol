@@ -2502,17 +2502,23 @@ Theorem ci_mono_compile_abi_decode_dyn_elem_ptr[local]:
   ∀ load_opc elem_src src_data hi_op elem_abi_sz sa.
     ci_mono sa (SND (compile_abi_decode_dyn_elem_ptr load_opc elem_src src_data hi_op elem_abi_sz sa))
 Proof
-  rpt gen_tac >>
-  rewrite_tac[abiEncoderTheory.compile_abi_decode_dyn_elem_ptr_def] >> BETA_TAC >>
+  rpt gen_tac >> Cases_on `hi_op = Lit 0w`
+  >- (gvs[abiEncoderTheory.compile_abi_decode_dyn_elem_ptr_def] >>
+      ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_emit_op] >> rpt strip_tac >>
+      ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_emit_op] >> rpt strip_tac >>
+      simp[ci_mono_refl, comp_ignore_bind_def, comp_bind_def, comp_return_def]) >>
+  asm_rewrite_tac[abiEncoderTheory.compile_abi_decode_dyn_elem_ptr_def,
+    comp_ignore_bind_def] >> BETA_TAC >>
+  simp_tac bool_ss [comp_bind_assoc] >> BETA_TAC >>
   ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_emit_op] >> rpt strip_tac >>
   ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_emit_op] >> rpt strip_tac >>
   ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_emit_op] >> rpt strip_tac >>
   ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_emit_op] >> rpt strip_tac >>
-  ho_match_mp_tac ci_mono_ignore_bind >> conj_tac >- simp[ci_mono_emit_void] >> rpt strip_tac >>
+  ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_emit_void] >> rpt strip_tac >>
   ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_emit_op] >> rpt strip_tac >>
   ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_emit_op] >> rpt strip_tac >>
   ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_emit_op] >> rpt strip_tac >>
-  ho_match_mp_tac ci_mono_ignore_bind >> conj_tac >- simp[ci_mono_emit_void] >> rpt strip_tac >>
+  ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_emit_void] >> rpt strip_tac >>
   simp[ci_mono_comp_return]
 QED
 
@@ -2544,6 +2550,12 @@ Theorem ci_mono_compile_return_value_decode:
 Proof
   rpt gen_tac >> once_rewrite_tac[exprLoweringTheory.compile_return_value_decode_def] >> BETA_TAC >> rpt (FIRST [irule ci_mono_bind, irule ci_mono_ignore_bind] >> conj_tac >| [rpt strip_tac >> simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_select], all_tac]) >> simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_select]
 QED
+
+val _ = List.app (fn th =>
+  if List.all (fn s => s = "DISK_THM") (#1 (Tag.dest_tag (Thm.tag th)))
+     andalso null (#2 (Tag.dest_tag (Thm.tag th))) then ()
+  else raise Fail "oracle in dynamic-pointer build prerequisites")
+  [ci_mono_compile_abi_decode_dyn_elem_ptr, ci_mono_typed_memory_family];
 
 (* Reuse ci_mono_typed_memory_family and ci_mono_compile_store_memory above
    for both aggregate construction and external-call default materialization. *)

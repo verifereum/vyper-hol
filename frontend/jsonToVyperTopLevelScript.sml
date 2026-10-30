@@ -74,6 +74,23 @@ Definition effective_decorators_def:
     else decs
 End
 
+(* The default guard applies to external functions that can read state.
+   An explicit decorator is retained for the header checker to validate. *)
+Theorem effective_decorators_pure:
+  MEM "pure" decs ==> effective_decorators nr_default decs = decs
+Proof
+  simp[effective_decorators_def]
+QED
+
+Theorem effective_decorators_nonreentrant:
+  MEM "nonreentrant" (effective_decorators nr_default decs) <=>
+  MEM "nonreentrant" decs ∨
+  (nr_default ∧ MEM "external" decs ∧ ¬MEM "pure" decs ∧
+   ¬MEM "reentrant" decs)
+Proof
+  Cases_on `MEM "nonreentrant" decs` >> rw[effective_decorators_def] >> gvs[]
+QED
+
 Definition translate_toplevel_def:
   (translate_toplevel nominal_index all_import_maps expr_ctx type_ctx nr_default
       (JTL_FunctionDef name decs override_aliases args defaults
