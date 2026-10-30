@@ -54,7 +54,8 @@ Termination
     | INR (INR (INL (_, fields))) =>
         3 * list_size (pair_size (list_size char_size) expr_size) fields
     | INR (INR (INR (_, e))) => 3 * expr_size e + 1)` >>
-  simp[expr_size_def]
+  simp[expr_size_def, listTheory.list_size_def,
+       basicSizeTheory.pair_size_def]
 End
 
 (* A map-valued intermediate base is checked by type_place_expr rather than
