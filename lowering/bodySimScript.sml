@@ -31,7 +31,7 @@
 
 Theory bodySim
 Ancestors
-  list exprSim exprSimHyps stmtSim compileEnv compileVyper
+  list exprSim exprSimHyps stmtSim compileEnv compileVyper vyperTypeContract
   supportedProgram supportedStmts supportedStmtTraverse supportedExprTraverse
   vyperAST vyperInterpreter vyperState vyperValue vyperTypeSystem
   vyperTypeCallGraph vyperTypeCallStackSoundness
@@ -44,7 +44,11 @@ Ancestors
    call the label package_internal_fn gave the callee:
    compile_call_intcall_label), the program's events, and its locals in
    allocas, as build_compile_env makes every body's, and the source finds
-   its functions in tops. *)
+   its functions in tops.  tops's module variables have distinct names, as
+   the type checker gives (source_typing_ok_vtype_keys_distinct), and cenv
+   has build_compile_env's hashmaps and module variable types.  A
+   declaration keeps those types only if its name is not a module key
+   ("self." ...): bodySimStmtCases's stmt_env_module_var_type. *)
 Definition body_inv_def:
   body_inv tops ctx cenv cx <=>
     supported_program tops /\
@@ -54,7 +58,12 @@ Definition body_inv_def:
     cenv.ce_func_ids = build_func_ids 0 tops /\
     cenv.ce_func_param_types = build_func_param_types tops /\
     cenv.ce_event_info = build_event_info (type_env tops) tops (K NONE) /\
-    ~cenv.ce_is_ctor /\ cenv.ce_alloca_locals
+    ~cenv.ce_is_ctor /\ cenv.ce_alloca_locals /\
+    ALL_DISTINCT
+      (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE : num option)) tops)) /\
+    cenv.ce_hashmap_info = build_hashmap_info tops /\
+    (!id. cenv.ce_var_type (module_var_key (NONE, id)) =
+          build_var_type_map tops (module_var_key (NONE, id)))
 End
 
 (* The compile env binds no local the typing does not know: every name
