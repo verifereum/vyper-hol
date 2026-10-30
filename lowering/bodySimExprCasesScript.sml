@@ -377,7 +377,7 @@ QED
 
 (* GAP (#636 operands with internal calls): create, as body_builtin_rest_case. *)
 Theorem body_create_case:
-  !cx ty kind has_salt rof es v26.
+  !cx ty kind has_salt rof kw_order es v26.
     (!raw_args s'' prefix t s'3' code_size t'.
        kind = CreateFromBlueprint raw_args /\
        eval_exprs cx (TAKE (if has_salt then 4 else 3) es) s'' = (INL prefix,t) /\
@@ -401,7 +401,7 @@ Theorem body_create_case:
     (kind = CreateCopyOf ==> body_exprs_ok cx es) /\
     (kind = CreateMinimalProxy ==> body_exprs_ok cx es) /\
     (kind = RawCreate ==> body_exprs_ok cx (TAKE 2 es)) ==>
-    body_expr_ok cx (Call ty (CreateTarget kind has_salt rof) es v26)
+    body_expr_ok cx (Call ty (CreateTarget kind has_salt rof kw_order) es v26)
 Proof
   rpt strip_tac >> irule body_expr_ok_intro >> cheat
 QED

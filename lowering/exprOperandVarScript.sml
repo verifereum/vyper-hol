@@ -1709,7 +1709,7 @@ Proof
          irule compiler_raw_call_calldata_reserved_cong >> simp[],
          rename1 `ExtCall _ _ signature _` >> PairCases_on `signature` >>
            irule compiler_extcall_reserved_cong >> simp[],
-         (rename1 `CreateTarget ck salted rof` >>
+         (rename1 `CreateTarget ck salted rof kw_order` >>
           `compile_create_call f ce ck salted rof args sa =
            compile_create_call g ce ck salted rof args sa` by
             (irule compiler_create_call_reserved_cong >> simp[]) >>
