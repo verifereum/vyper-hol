@@ -6,7 +6,8 @@
  * cheated; their comments name the existing lemmas they dispatch to and
  * what is left.  A case whose covered forms are proved dispatches the rest
  * to a cheated lemma marked RESIDUAL, whose comment names the premises
- * missing for the remaining forms.
+ * missing for the remaining forms.  The declarations, AnnAssign and For,
+ * are in bodySimDeclCases.
  *
  * TOP-LEVEL:
  *   body_*_case       — one case of the induction each
@@ -20,6 +21,8 @@
  *   type_widens_to_word — widening to a word type is equality
  *   expr_sim_inv_stmt  — expr_sim_inv after a statement, at the type
  *                        environment and compile environment it gives
+ *   ce_locals_declared_declare_local, ce_locals_declared_stmt — the same
+ *                        for ce_locals_declared
  *   compile_expr_open, eval_stmts_popped_keys_indexed — GAP, the facts
  *                        the statement and list cases still take on trust
  *
@@ -279,6 +282,38 @@ Proof
   qpat_x_assum `expr_sim_inv _ _ _ es`
     (strip_assume_tac o REWRITE_RULE [expr_sim_inv_def]) >>
   ASM_REWRITE_TAC [expr_sim_inv_def]
+QED
+
+(* A declaration keeps ce_locals_declared: it binds its name as the typing
+   adds it. *)
+Theorem ce_locals_declared_declare_local:
+  !cenv env id ty st c st1 a.
+    ce_locals_declared cenv env /\ declare_local cenv id ty st = (c, st1) ==>
+    ce_locals_declared c (extend_local env id ty a)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `!n. n <> id ==> FLOOKUP c.ce_vars n = FLOOKUP cenv.ce_vars n` by
+    (qpat_x_assum `declare_local _ _ _ _ = _` mp_tac >>
+     rw[declare_local_def, fresh_var_def, comp_bind_def, comp_return_def,
+        LET_THM] >> simp[FLOOKUP_UPDATE]) >>
+  fs[ce_locals_declared_def, extend_local_def, combinTheory.C_THM] >>
+  rpt strip_tac >> Cases_on `n = id` >> simp[] >> metis_tac[]
+QED
+
+(* After a statement, ce_locals_declared holds at the type environment its
+   typing gives and the compile environment its declaration gives. *)
+Theorem ce_locals_declared_stmt:
+  !cenv env ret_ty s env' lctx sa c sm.
+    ce_locals_declared cenv env /\ type_stmt env ret_ty s = SOME env' /\
+    stmt_env cenv lctx ret_ty s sa = (c, sm) ==>
+    ce_locals_declared c env'
+Proof
+  rpt strip_tac >> drule stmt_env_declare >> strip_tac >>
+  Cases_on `?id typ e. s = AnnAssign id typ e`
+  >- (gvs[type_stmt_def, declare_stmt_local_def] >>
+      irule ce_locals_declared_declare_local >> metis_tac[]) >>
+  drule_all declare_stmt_local_other >> strip_tac >>
+  drule_all type_stmt_other >> strip_tac >> gvs[]
 QED
 
 (* GAP (#637 expression statements): compile_expr leaves its block open
@@ -560,28 +595,6 @@ QED
    arguments' types to the event's fields. *)
 Theorem body_log_case:
   !cx id es. body_exprs_ok cx es ==> body_stmt_ok cx (Log id es)
-Proof
-  cheat
-QED
-
-(* GAP (#637 declarations): stmtSimDecl's compile_annassign_stmt_frag,
-   compile_annassign_word_stmt_frag and compile_annassign_typed_stmt_frag,
-   stmtSimDeclMem's compile_annassign_memory_stmt_frag and
-   compile_annassign_memory_widen_stmt_frag, and stmtSimDeclEmpty's
-   compile_annassign_empty_stmt_frag cover the value's forms, but all ask
-   (!l. FLOOKUP cenv.ce_vars id = SOME l ==> ?q z. l = PtrVar q z) of the
-   declared name.  body_inv does not give it: that needs a clause on the
-   compile env's variables and that id is a local's name (dot-free), which
-   only supported_function_bindings gives, at the program level.  The
-   memory forms also ask the memory local's size bounds, as for Assign. *)
-Theorem body_annassign_case:
-  !cx id typ e.
-    (!tenv s'' tyv t.
-       tenv = get_tenv cx /\
-       lift_option_type (evaluate_type tenv typ) "AnnAssign evaluate_type" s'' =
-       (INL tyv,t) ==>
-       body_expr_ok cx e) ==>
-    body_stmt_ok cx (AnnAssign id typ e)
 Proof
   cheat
 QED
@@ -1031,41 +1044,6 @@ Proof
   metis_tac[call_evaluation_safe_append_left, call_evaluation_safe_append_right]
 QED
 
-(* GAP (#637 for): stmtSimFor's compile_for_range_frag and
-   compile_for_range_lit_frag and stmtSimForRange's
-   compile_for_range_checked_frag cover ranges.  Their premises not given
-   by body_stmt_ok and the IHs:
-   - (!l. FLOOKUP cenv.ce_vars id = SOME l ==> ?q z. l = PtrVar q z) for
-     the loop variable (as for AnnAssign);
-   - bound < dimword (:256);
-   - compile_stmts of the body growing the compile state for every start
-     state (!c lc sa sb); loweringShapeProps' compile_stmt_shape gives it
-     only under its own conditions;
-   - the body's premises at each iteration's scope (expr_sim_inv kept
-     through eval_stmts);
-   - the checked lemma's bound on the counter for an empty range, and the
-     choice between the literal and the checked lemma, which turns on
-     whether both ends lower to Lit, not on their syntax.
-   Iteration over an array has no lemma. *)
-Theorem body_for_case:
-  !cx id typ it n body.
-    (!tenv s'' tyv t s'3' vs t' s'4' x t''.
-       tenv = get_tenv cx /\
-       lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' =
-       (INL tyv,t) /\ eval_iterator cx it s'3' = (INL vs,t') /\
-       check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long" s'4' =
-       (INL x,t'') ==>
-       body_for_ok cx tyv id body vs) /\
-    (!tenv s'' tyv t.
-       tenv = get_tenv cx /\
-       lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' =
-       (INL tyv,t) ==>
-       body_iterator_ok cx it) ==>
-    body_stmt_ok cx (For id typ it n body)
-Proof
-  cheat
-QED
-
 (* stmtSim's compile_expr_stmt_frag_ok, given the expression's
    expr_vv_sim (the IH) and compile_expr_open. *)
 Theorem body_expr_stmt_case:
@@ -1125,6 +1103,7 @@ Proof
   `expr_sim_inv c cx env1 es1` by
     (irule expr_sim_inv_stmt >> fs[body_inv_def] >>
      metis_tac[call_evaluation_safe_append_left]) >>
+  `ce_locals_declared c env1` by metis_tac[ce_locals_declared_stmt] >>
   `body_inv tops ctx c cx` by metis_tac[body_inv_same_frame] >>
   `frame_ret_ok ctx func cx RetQ c ret_ty` by
     metis_tac[frame_ret_ok_same_frame] >>
