@@ -12,14 +12,6 @@ fun holbuild_extra_deps (_ : string list) = ()
 val () = holbuild_extra_deps ["constructor-alias/oracle"]
 val pinned_runtime = #2 (pairSyntax.dest_pair
   (memoryStoreWitnessLib.oracle "constructor-alias/oracle" "ctor_alias"))
-val checked_runtime = rhs (concl
-  createCtorAliasCompileTestTheory.create_ctor_alias_runtime_def)
-val pinned_hex = memoryStoreWitnessLib.hex_list pinned_runtime
-val checked_hex = memoryStoreWitnessLib.hex_list checked_runtime
-(* The merged compiler now closes this bytecode-parity gap. Keep the
-   aliasing observations for both runtimes and require exact parity as well. *)
-val () = if checked_hex = pinned_hex then ()
-  else raise Fail "Constructor alias runtime differs from pinned Vyper"
 
 Definition ctor_alias_pinned_runtime_def:
   ctor_alias_pinned_runtime = ^pinned_runtime
@@ -134,6 +126,7 @@ Theorem ctor_alias_request_agrees:
   ctor_alias_request_agrees create_ctor_alias_runtime /\
   ctor_alias_request_agrees ctor_alias_pinned_runtime
 Proof
+  rw[ctor_alias_runtime_matches_pinned] >>
   CONV_TAC cv_eval
 QED
 

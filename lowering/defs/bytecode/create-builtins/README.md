@@ -68,19 +68,10 @@ cases and compare each builtin's source initcode request to the memory slice
 passed to CREATE by its compiled runtime. These finite tests do not establish
 the general recursive ABI or creation-pipeline correctness theorem.
 
-## Constructor alias diagnostic
+## Constructor alias checks
 
-`tests/create/constructor-alias/sources/ctor_alias.vy` is an additional
-diagnostic, outside the 23 required witnesses. Pinned Vyper accepts it. It
-lowers the earlier local `xs` argument as a location, evaluates `xs.pop()`,
-then copies the shortened `xs` into the constructor tuple. Both the updated
-source evaluator and pinned CREATE now request 129 initcode bytes.
-
-`holbuild vyperCtorAliasTestTheory` checks this with actual CREATE stack and
-memory execution for both the pinned runtime and the separately checked HOL
-runtime. The test requires the two runtimes to be distinct, so this diagnostic
-is not counted as a parity witness. The separate
-`vyperCtorStorageAliasTestTheory` checks that a storage array is read after
-`pop` changes its length. Late reads cover local and top-level Names; other
-located expression forms still need their source/callback bridge for the
-general theorem.
+`vyperCtorAliasTestTheory` proves runtime equality with pinned Vyper and checks
+the CREATE memory request for `tests/create/constructor-alias/sources/ctor_alias.vy`.
+An earlier local array argument is read after a later `xs.pop()` shortens it;
+source and compiled execution both request 129 initcode bytes.
+`vyperCtorStorageAliasTestTheory` checks the corresponding storage-array case.

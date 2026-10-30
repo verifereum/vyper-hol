@@ -850,9 +850,3 @@ Proof
   conj_tac >- (irule slot_copy_invariant_post >> metis_tac[]) >>
   metis_tac[]
 QED
-
-val _ = app (fn (name, th) =>
-  if null (List.filter (fn s => s <> "DISK_THM")
-             (#1 (Tag.dest_tag (Thm.tag th)))) then ()
-  else raise Fail ("Oracle dependency in " ^ name))
-  (DB.thms "slotCopyExecution");

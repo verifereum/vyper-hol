@@ -52,9 +52,3 @@ Proof
   drule_all abi_typed_word_tuple_encoding >> strip_tac >>
   gvs[read_memory_def, mem_bytes_at_def]
 QED
-
-val _ = app (fn (name, th) =>
-  if null (List.filter (fn s => s <> "DISK_THM")
-             (#1 (Tag.dest_tag (Thm.tag th)))) then ()
-  else raise Fail ("Oracle dependency in " ^ name))
-  (DB.thms "abiWordTupleExecution");

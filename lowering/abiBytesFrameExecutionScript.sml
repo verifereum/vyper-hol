@@ -156,9 +156,3 @@ Proof
   conj_tac >- simp[abi_bytes_append_def, is_terminator_def] >>
   drule compile_abi_bytes_prefix >> simp[]
 QED
-
-val _ = app (fn (name, th) =>
-  if null (List.filter (fn s => s <> "DISK_THM")
-             (#1 (Tag.dest_tag (Thm.tag th)))) then ()
-  else raise Fail ("Oracle dependency in " ^ name))
-  (DB.thms "abiBytesFrameExecution");

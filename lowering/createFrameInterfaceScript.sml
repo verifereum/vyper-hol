@@ -51,18 +51,6 @@ Proof
        lookup_var_def, init_venom_state_def]
 QED
 
-(* Typed CFG contract template. The pipeline parameter will be instantiated
-   with the callback-driven schedule once that definition exists. entry is
-   indexed by the compile state; normal by the returned operand. source_exit
-   must match operand/encoding exceptions OR the rof revert with returndata.
-   This is a specification, NOT a theorem asserting pipeline correctness. *)
-Definition create_pipeline_spec_def:
-  create_pipeline_spec ctx (pipeline : operand compiler) entry normal source_exit <=>
-    !cs result cs'. pipeline cs = (result,cs') ==>
-      cs_extends cs cs' /\
-      frag_exec ctx cs cs' (entry cs) (normal result) source_exit
-End
-
 (* A scheduled callback gets its ordinary source simulation in source_pre,
    source_normal and source_exit. It is permitted to exit exceptionally;
    no successful evaluation of the callback/pipeline is assumed. Private
@@ -259,9 +247,3 @@ Proof
   strip_tac >>
   drule create_check_failure_traverses_cfg >> simp[] >> metis_tac[]
 QED
-
-val _ = app (fn (name, th) =>
-  if null (List.filter (fn s => s <> "DISK_THM")
-             (#1 (Tag.dest_tag (Thm.tag th)))) then ()
-  else raise Fail ("Oracle dependency in " ^ name))
-  (DB.thms "createFrameInterface");

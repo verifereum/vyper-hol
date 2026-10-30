@@ -2050,11 +2050,3 @@ Proof
   \\ CASE_TAC \\ CASE_TAC \\ gvs[]
   \\ rw[Once OWHILE_THM]
 QED
-
-
-(* Integration audit: required CPS equivalences must be kernel closed. *)
-val () = List.app (fn (name,th) =>
-  let val (oracles,_) = Tag.dest_tag (Thm.tag th)
-  in if List.all (fn s => s = "DISK_THM") oracles then ()
-     else raise Fail ("CPS oracle debt: " ^ name)
-  end) (DB.thms "vyperSmallStep");

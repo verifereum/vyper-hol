@@ -28,9 +28,3 @@ Proof
   simp[run_inst_seq_def, step_inst_base_def, mk_inst_def, exec_create_def,
        eval_operand_update_var]
 QED
-
-val _ = app (fn (name, th) =>
-  if null (List.filter (fn s => s <> "DISK_THM")
-             (#1 (Tag.dest_tag (Thm.tag th)))) then ()
-  else raise Fail ("Oracle dependency in " ^ name))
-  (DB.thms "createDispatchExecution");

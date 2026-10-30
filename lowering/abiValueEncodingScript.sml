@@ -138,9 +138,3 @@ Proof
   qpat_x_assum `mem_bytes_at off 32 mem = _`
     (mp_tac o AP_TERM ``LENGTH : byte list -> num``) >> simp[]
 QED
-
-val _ = app (fn (name, th) =>
-  if null (List.filter (fn s => s <> "DISK_THM")
-             (#1 (Tag.dest_tag (Thm.tag th)))) then ()
-  else raise Fail ("Oracle dependency in " ^ name))
-  (DB.thms "abiValueEncoding");

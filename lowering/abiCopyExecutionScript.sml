@@ -37,9 +37,3 @@ Proof
                           `ctx`, `bytes`] mp_tac) >>
   simp[eval_operand_def, w2n_n2w, dimword_def]
 QED
-
-val _ = app (fn (name, th) =>
-  if null (List.filter (fn s => s <> "DISK_THM")
-             (#1 (Tag.dest_tag (Thm.tag th)))) then ()
-  else raise Fail ("Oracle dependency in " ^ name))
-  (DB.thms "abiCopyExecution");

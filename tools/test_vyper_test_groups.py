@@ -39,14 +39,6 @@ class TestBuildTimes(unittest.TestCase):
         self.assertEqual(times.seconds["vyperTest_slow_part1"], 7.0)
         self.assertEqual(times.seconds["vyperTest_slow"], 400.0)
 
-    def test_new_chunks_have_separate_definition_theories(self) -> None:
-        chunks = [Test(f"vyperTest_slow{part}", f"vyperTestDefs_slow{part}")
-                  for part in PART_SUFFIXES]
-        times = BuildTimes([log(TIMES)], chunks)
-        self.assertEqual(times.missing(chunks), [])
-        self.assertEqual([times.seconds[t.defs] for t in chunks], [25.0] * 4)
-        self.assertEqual(sum(times.cost(t) for t in chunks), 500.0)
-
     def test_measured_definition_parts_are_kept(self) -> None:
         chunks = [Test(f"vyperTest_slow{part}", f"vyperTestDefs_slow{part}")
                   for part in PART_SUFFIXES]

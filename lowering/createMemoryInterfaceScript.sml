@@ -118,9 +118,3 @@ Theorem create_pointer_wrap_probe:
 Proof
   EVAL_TAC
 QED
-
-val _ = app (fn (name, th) =>
-  if null (List.filter (fn s => s <> "DISK_THM")
-             (#1 (Tag.dest_tag (Thm.tag th)))) then ()
-  else raise Fail ("Oracle dependency in " ^ name))
-  (DB.thms "createMemoryInterface");

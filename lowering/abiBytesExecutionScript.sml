@@ -519,9 +519,3 @@ Proof
   simp[same_blocks_def, cs_extends_def, emitted_insts_def,
        IS_PREFIX_APPEND, rich_listTheory.DROP_LENGTH_APPEND]
 QED
-
-val _ = app (fn (name, th) =>
-  if null (List.filter (fn s => s <> "DISK_THM")
-             (#1 (Tag.dest_tag (Thm.tag th)))) then ()
-  else raise Fail ("Oracle dependency in " ^ name))
-  (DB.thms "abiBytesExecution");

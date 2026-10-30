@@ -21,7 +21,6 @@ WORKERS = 1
 
 BUILT = re.compile(r"^\S+Z (vyperTest(?:Defs)?_\S+)Theory built in ([\d.]+)s$")
 ANCESTOR = re.compile(r"^Ancestors (vyperTestDefs_\S+)$", re.MULTILINE)
-CHUNK = re.compile(r"^(.*)_chunk\d+$")
 PART = re.compile(r"^(.*)_part\d+$")
 
 
@@ -59,7 +58,6 @@ class BuildTimes:
                     samples.setdefault(match[1], []).append(float(match[2]))
         self.seconds = {name: statistics.median(s) for name, s in samples.items()}
         self.estimate_new_parts(tests)
-        self.estimate_new_chunks(tests)
 
     def estimate_new_parts(self, tests: list[Test]) -> None:
         """Estimate independent replay AND definitions parts from whole-file times.
@@ -87,32 +85,6 @@ class BuildTimes:
                 estimate = self.seconds[whole] / len(family)
                 for name in family:
                     self.seconds[name] = estimate
-
-    def estimate_new_chunks(self, tests: list[Test]) -> None:
-        """Give chunks no log built yet an equal share of their unsplit test's time.
-
-        A test split into trace chunks has CI times only for the unsplit
-        test until the chunks have run. The first chunk keeps the unsplit
-        name. Treat that timing as unsplit only while no suffixed chunk has
-        a measurement; otherwise preserve all measured chunk timings.
-        """
-        chunks: dict[str, set[str]] = {}
-        for test in tests:
-            for name in (test.name, test.defs):
-                match = CHUNK.match(name)
-                if match:
-                    chunks.setdefault(match[1], set()).add(name)
-        current = {name for test in tests for name in (test.name, test.defs)}
-        for whole, names in chunks.items():
-            if whole in self.seconds:
-                unsplit = not any(name in self.seconds for name in names)
-                if whole in current:
-                    names.add(whole)
-                estimate = self.seconds[whole] / len(names)
-                if unsplit and whole in names:
-                    self.seconds[whole] = estimate
-                for name in names:
-                    self.seconds.setdefault(name, estimate)
 
     def missing(self, tests: Iterable[Test]) -> list[str]:
         """Theories of `tests` that no log built."""

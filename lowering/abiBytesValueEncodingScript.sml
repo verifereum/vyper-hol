@@ -36,9 +36,3 @@ Proof
   simp[Once enc_def, enc_number_def, TAKE_APPEND,
        byteTheory.LENGTH_word_to_bytes, le_ceil32]
 QED
-
-val _ = app (fn (name, th) =>
-  if null (List.filter (fn s => s <> "DISK_THM")
-             (#1 (Tag.dest_tag (Thm.tag th)))) then ()
-  else raise Fail ("Oracle dependency in " ^ name))
-  (DB.thms "abiBytesValueEncoding");

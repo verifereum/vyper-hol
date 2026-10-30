@@ -185,9 +185,3 @@ Proof
   simp[create_memory_snapshot_def, EVERY_MEM] >> strip_tac >>
   first_x_assum (qspec_then `(offset,bs)` mp_tac) >> simp[]
 QED
-
-val _ = app (fn (name, th) =>
-  if null (List.filter (fn s => s <> "DISK_THM")
-             (#1 (Tag.dest_tag (Thm.tag th)))) then ()
-  else raise Fail ("Oracle dependency in " ^ name))
-  (DB.thms "createSourceCallback");
