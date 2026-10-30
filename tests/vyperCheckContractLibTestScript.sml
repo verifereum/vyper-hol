@@ -1103,7 +1103,7 @@ val () = expr_case "send" ``Call NoneT (Send F) [^arg_a; ^(uint 1)] NONE``
 val () = expr_case "selfdestruct" ``Call NoneT SelfDestructTarget [^arg_a] NONE``
   [``Nonpayable``] [``View``]
 val () = return_case "create_minimal_proxy_to" ``BaseT AddressT``
-  ``Call (BaseT AddressT) (CreateTarget CreateMinimalProxy F T)
+  ``Call (BaseT AddressT) (CreateTarget CreateMinimalProxy F T [])
       [^arg_a; ^(uint 0)] NONE``
   [``Nonpayable``] [``View``]
 
