@@ -8,14 +8,14 @@
  * read is the field of the base's value (exprSimAttributeFields).
  *
  * TOP-LEVEL:
- *   compile_attribute_loc_sim — expr_vv_sim of Attribute, for a base not in
- *                               code
+ *   compile_attribute_vv_sim — expr_vv_sim of Attribute
  *
  * Helpers: vv_loc, attr_offset, compile_expr_attribute,
  *   eval_expr_attribute, attr_pre_base, attr_add_post, attr_add_frag,
  *   attr_extends, stmt_state_rel_region_lt, struct_value_shape,
- *   base_vv_holds_struct, base_vv_at_struct, field_ptr_w2n,
- *   attr_vv_at_field, attr_vv_post
+ *   immutable_holds_read, base_vv_holds_struct, base_vv_at_struct,
+ *   field_ptr_w2n, attr_vv_at_field, sub_layout_field,
+ *   immutable_holds_field, attr_vv_post
  *
  * Where the base is a local's place memory no longer holds (a popped
  * element), the source reads the field from the popped history, which
@@ -23,9 +23,9 @@
  * (expr_sim_inv's popped_keys_indexed, exprSimAttributeFields's
  * popped_keys_indexed_not_at_field).
  *
- * Not covered, cheated in exprSimPlaces: a base in code (an immutable,
- * LocCode): immutable_holds asks the pointer to be an immutable's own data
- * offset, which a field's is not.
+ * A base in code (an immutable, LocCode) points into an immutable's data:
+ * immutable_holds places the base's value inside the immutable's layout
+ * (sub_layout), and the field sits inside the base's at its offset.
  *)
 
 Theory exprSimAttribute
@@ -195,12 +195,18 @@ Proof
   rename1 `ArrayV av` >> Cases_on `av` >> simp[value_has_type_def]
 QED
 
+Theorem immutable_holds_read[local]:
+  !cenv cx t tv w es.
+    immutable_holds cenv cx t tv w es ==> ?v. read_result cx tv es = (INL v, es)
+Proof
+  rw[immutable_holds_def] >> metis_tac[]
+QED
+
 (* What the base's value_vv says of the struct it holds, by location. *)
 Theorem base_vv_holds_struct[local]:
   !cenv cx sid tv vv es s stv w.
     vv_holds cenv cx (StructT sid) tv vv es s /\
     evaluate_type (get_tenv cx) (StructT sid) = SOME stv /\
-    vv_location vv <> SOME LocCode /\
     eval_operand (vv_operand vv) s = SOME w ==>
     ?v. read_result cx tv es = (INL v, es) /\
         (vv_loc vv = LocMemory ==> val_in_memory stv v (w2n w) s.vs_memory) /\
@@ -208,14 +214,16 @@ Theorem base_vv_holds_struct[local]:
            read_storage_slot cx F w stv es = (INL v, es)) /\
         (vv_loc vv = LocTransient ==>
            read_storage_slot cx T w stv es = (INL v, es)) /\
-        vv_loc vv <> LocCode /\ vv_loc vv <> LocCalldata
+        (vv_loc vv = LocCode ==>
+           immutable_holds cenv cx (StructT sid) tv w es) /\
+        vv_loc vv <> LocCalldata
 Proof
   rpt gen_tac >> Cases_on `vv` >>
   simp[vv_holds_def, vv_loc_def, vv_location_def, vv_operand_def,
        expr_val_rel_def, is_word_type_def] >>
   rpt strip_tac >> gvs[] >>
   rename1 `p.ptr_location` >> Cases_on `p.ptr_location` >>
-  gvs[storage_holds_def]
+  gvs[storage_holds_def] >> metis_tac[immutable_holds_read]
 QED
 
 Theorem base_vv_at_struct[local]:
@@ -303,6 +311,43 @@ Proof
   disj2_tac >> disj2_tac >> decide_tac
 QED
 
+(* A struct's field sits inside the struct's layout at the field's offset. *)
+Theorem sub_layout_field[local]:
+  !itv iv k fs vals fields fld ftv fv.
+    sub_layout itv iv k (StructTV fs) (StructV vals) /\
+    fields_layout fields fs /\ struct_has_type fs vals /\
+    ALOOKUP vals fld = SOME fv /\ ALOOKUP fs fld = SOME ftv ==>
+    sub_layout itv iv (k + struct_field_offset fields fld) ftv fv
+Proof
+  rw[sub_layout_def]
+  >- (drule_all struct_field_offset_le >> gvs[type_memory_size_def]) >>
+  first_x_assum drule >> simp[val_in_memory_def] >> strip_tac >>
+  drule_all fields_in_memory_field >> simp[]
+QED
+
+(* The field of a struct an immutable's code pointer holds: the pointer
+   plus the field's offset. *)
+Theorem immutable_holds_field[local]:
+  !cenv cx sid tv w es fs fields vals fld fv ftv ann tv'.
+    immutable_holds cenv cx (StructT sid) tv w es /\
+    read_result cx tv es = (INL (StructV vals), es) /\
+    fields_layout fields fs /\ ALOOKUP vals fld = SOME fv /\
+    ALOOKUP fs fld = SOME ftv /\
+    evaluate_type (get_tenv cx) (StructT sid) = SOME (StructTV fs) /\
+    evaluate_type (get_tenv cx) ann = SOME ftv /\
+    read_result cx tv' es = (INL fv, es) ==>
+    immutable_holds cenv cx ann tv' (w + n2w (struct_field_offset fields fld))
+      es
+Proof
+  rw[immutable_holds_def] >> gvs[] >>
+  drule struct_value_shape >> strip_tac >> gvs[] >>
+  qexistsl [`name`, `off`, `itv`, `iv`, `k + struct_field_offset fields fld`] >>
+  simp[wordsTheory.word_add_n2w] >>
+  conj_tac >- (irule sub_layout_field >> metis_tac[]) >>
+  drule_all vyperAssignPreservesTypeTheory.struct_field_has_type >>
+  strip_tac >> gvs[]
+QED
+
 (* The field's value_vv after the ADD, from the base's. *)
 Theorem attr_vv_post[local]:
   !func cenv cx obj es sa sn s0 es1 tv bvv q w dst ann fld sid fs ftv tv'.
@@ -310,7 +355,7 @@ Theorem attr_vv_post[local]:
     eval_operand (vv_operand bvv) q = SOME w /\
     eval_operand dst q =
       SOME (w + n2w (attr_offset cenv (StructT sid) (vv_loc bvv) fld)) /\
-    vv_location bvv <> SOME LocCode /\ expr_type obj = StructT sid /\
+    expr_type obj = StructT sid /\
     evaluate_type (get_tenv cx) (StructT sid) = SOME (StructTV fs) /\
     fields_layout
       (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid)) fs /\
@@ -362,7 +407,9 @@ Proof
           qspecl_then [`get_tenv cx`, `ann`, `ftv`, `fv`,
                        `w2n w + struct_field_offset fields fld`, `q.vs_memory`]
             mp_tac val_in_memory_word_type >>
-          simp[wordsTheory.WORD_ADD_0]) >>
+          simp[wordsTheory.WORD_ADD_0])
+      >~ [`immutable_holds`]
+      >- (irule immutable_holds_field >> simp[] >> metis_tac[]) >>
       drule struct_field_slot_exists >> strip_tac >>
       drule_all read_storage_slot_field >> strip_tac >> gvs[] >>
       drule_all struct_field_offset_slots_eq >> strip_tac >>
@@ -375,11 +422,9 @@ QED
 
 (* ===== The simulation ===== *)
 
-Theorem compile_attribute_loc_sim:
+Theorem compile_attribute_vv_sim:
   !cenv obj.
-    expr_vv_ok cenv obj /\
-    (!ty st. vv_location (FST (compile_expr cenv ty obj st)) <>
-             SOME LocCode) ==>
+    expr_vv_ok cenv obj ==>
     !ctx func cx env ty ann fld es.
       expr_sim_pre cenv cx env (Attribute ann obj fld) es ==>
       expr_vv_sim ctx func cenv cx ty (Attribute ann obj fld) es
@@ -390,8 +435,6 @@ Proof
   simp[expr_vv_sim_def] >> rpt gen_tac >> strip_tac >>
   drule compile_expr_attribute >> strip_tac >> gvs[] >>
   rename1 `compile_expr cenv ty obj sa = (bvv, sm)` >>
-  `vv_location bvv <> SOME LocCode` by
-    (first_x_assum (qspecl_then [`ty`, `sa`] mp_tac) >> simp[]) >>
   drule attr_extends >> strip_tac >>
   drule compile_expr_extends >> strip_tac >>
   drule_all fn_has_code_split >> strip_tac >>
