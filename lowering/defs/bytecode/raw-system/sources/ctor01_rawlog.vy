@@ -1,8 +1,8 @@
-# raw_log and raw_call in the constructor (deploy mode)
+# Literal and argument data exercise raw_log in deploy mode.
 @deploy
-def __init__(t: address):
+def __init__(d: Bytes[8]):
     raw_log([], b"\x01")
-    raw_call(t, b"")
+    raw_log([], d)
 @external
 def foo() -> uint256:
     return 1

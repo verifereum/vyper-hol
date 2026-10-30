@@ -19,11 +19,7 @@ rr01_literal
 rr04_terminus_ret
 sd03_terminus_ret
 ctor01_rawlog
-ctor02_rawlog_nolit
 rr_local
 rr_nr
 rr_default_fn
-ctl01_concat
-ctl03_abi_method_id
-ctl_concat_local
 xa_bytes_lit_return

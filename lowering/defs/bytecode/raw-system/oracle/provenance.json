@@ -1,14 +1,14 @@
 {
   "producer": "pinned Python Vyper",
   "vyper_commit": "cd74ce4f57e3771aeeab8f061fa3be45bfe8a29c",
-  "vyper_version": "0.5.0a4+commit.cd74ce4f",
-  "python_version": "3.14.4",
+  "vyper_version": "0.5.0a4+cd74ce4f+commit.cd74ce4f",
+  "python_version": "3.11.11",
   "dependencies": {
     "cbor2": "5.9.0",
     "immutables": "0.21",
-    "lark": "1.3.1",
+    "lark": "1.1.9",
     "packaging": "26.3",
-    "pycryptodome": "3.24.1",
+    "pycryptodome": "3.23.0",
     "wheel": "0.48.0"
   },
   "settings": {
@@ -18,11 +18,7 @@
     "bytecode_metadata": false
   },
   "sources": {
-    "ctl01_concat.vy": "6dd8d127fcb9983a66c1a3699406e38f6785f1be540b2b6a816d4dd523506041",
-    "ctl03_abi_method_id.vy": "a27edf1026c3be888909ec8ac4822ff87ab3c53ac051a15e156e78f9ab5bff22",
-    "ctl_concat_local.vy": "fe63a18e2a98509186dcb3105dffa9d1abb70c2284330af8c2a5d04efa618c50",
-    "ctor01_rawlog.vy": "9c1f1bcda34e9610f401d4982a4f4f0713617cd788aa265a79a7c7b17ae66ba4",
-    "ctor02_rawlog_nolit.vy": "43a9fd6ac4e76eac9d215b22be7d036658ca80f118fbd4e039ac18a222ddaeaa",
+    "ctor01_rawlog.vy": "478c22782876fe4863d8b03a3046b10400a2906cf297daddca26a1a6b1644733",
     "rl01_0topics.vy": "c77c5428cfcb0aaf6db851fa25958b58071aaac80f6f08d6a602531fca6534eb",
     "rl02_1topic.vy": "ef2946a50c6f3dcd9f9ee25b04f1db7be02080edb894a35e5b066ac849fce107",
     "rl03_4topics.vy": "6b7d5fa4238bfdc19050545736b35a33902dd05af2a8a67a7fbe7586eb37cba3",
@@ -49,16 +45,8 @@
     "xa_bytes_lit_return.vy": "78d3acdef724273c71b6e38b82c5301ca71a4c2818bccafad0637eff3f89d86a"
   },
   "outputs": {
-    "ctl01_concat.hex": "e10a058d485d9a2b235756399a4eebb84dc47fd20054281befa0192888a28ff6",
-    "ctl01_concat.json": "514c9bdf9b83d4c9855a773aaf9d17da58b9a6e62a7de7edef9770d38a34f49f",
-    "ctl03_abi_method_id.hex": "7a3a40f2fd74df04f3067f1b0731c7cf7ae8ba68ba3560ce469c7dc185106e3b",
-    "ctl03_abi_method_id.json": "46727010369aa5b0685388f0508f335f63134af2a84879bb990b7cb2c78ff576",
-    "ctl_concat_local.hex": "2cc558ee118c495244e954f89f272cb68058d197893c87d0fd3bac1215b2d3ff",
-    "ctl_concat_local.json": "baa51321647aa9449b95e88f1fa87e759b225b2989a7e7dfa45148635f3d3030",
-    "ctor01_rawlog.hex": "ff4bc51ae66c3505a109a41142655880015105081e27f7889186e5b728744287",
-    "ctor01_rawlog.json": "05be91b5b8b518175814079671a41a22b338a5931850c2a230b93a6f8b5cba2c",
-    "ctor02_rawlog_nolit.hex": "9c6ab3d4a6cd069a6d0e107d59c2e67223ea66e8e806710d5e65d54d9e2205b0",
-    "ctor02_rawlog_nolit.json": "162fcaa92f33e1ae09a53069ac49ff417a9353b5a6df91b9d3c3d500d6b950ee",
+    "ctor01_rawlog.hex": "fb86fb6ce767a3dce5734725b419082fd9a94cdac10579e9f5591637d644d980",
+    "ctor01_rawlog.json": "a28a1ccdc9b077e1484b4a9e7baea7c6d9834ab428e521d9760a906ac3352309",
     "rl01_0topics.hex": "831a63857d28847275be122987248bd5fc33ecbf3a574ffa1f1786d96c8faa7e",
     "rl01_0topics.json": "ffce51c423592cc5050e784a21a6bdc79d7a07246e2bd322deefe56d38f931dc",
     "rl02_1topic.hex": "903214e484b7678451eb225bb9eb0fdc800dbdf146226cc49c8b70caa3dd3147",
