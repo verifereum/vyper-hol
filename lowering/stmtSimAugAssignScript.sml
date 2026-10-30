@@ -142,7 +142,7 @@ Proof
   Cases_on `bop` >> rw[well_typed_binop_def, word_value_type_def] >> gvs[]
 QED
 
-Theorem word_value_type_memory_size[local]:
+Theorem word_value_type_memory_size:
   !tenv t tv.
     word_value_type t /\ evaluate_type tenv t = SOME tv ==>
     type_memory_size tv = 32
@@ -236,7 +236,7 @@ QED
 
 (* A well-formed type's width is whole bytes: Vyper's int widths are
    multiples of 8, and decimal and every other type are 168 or 256 bits. *)
-Theorem well_formed_type_bits[local]:
+Theorem well_formed_type_bits:
   !tenv ty. well_formed_type tenv ty ==> type_bits ty MOD 8 = 0
 Proof
   Cases_on `ty` >> simp[type_bits_def] >> rename1 `BaseT bt` >>
