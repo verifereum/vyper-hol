@@ -317,7 +317,9 @@ QED
    Left (the push transfer): the callee body's premises at its entry:
    body_inv and expr_sim_inv for the callee's compile env and env at
    cxf, and frame_ret_ok for the internal return; and that the callee
-   body's code in ctx is stmts_env's in that compile env. *)
+   body's code in ctx is stmts_env's in that compile env.
+   ce_locals_declared there is bodySimEntry's internal_entry_declared and
+   ce_locals_declared_params, for an env that has the parameters. *)
 Theorem body_intcall_case:
   !cx v16 src_id_opt fn es v17.
     (!s'' x t s'3' ts t' s'4' tup t'' mut stup nr stup2 args sstup dflts sstup2
