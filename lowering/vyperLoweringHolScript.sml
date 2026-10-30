@@ -32,14 +32,6 @@ Ancestors
   allocaBudgetChecks
   vyperLoweringCorrect
   configuredE2ECorrectness
-  evalCompilerMemoryStores
-  evalCompilerImmutables
-  evalCompilerExternalCalls
-  evalCompilerNameCollisions
-  evalCompilerInternalLabels
-  evalCompilerSliceBuffers
-  evalCompilerPhiPointers
-  evalCompilerInternalFrames
   evalCompilerInternalImmutables
   evalAssignmentOrder
   (* focused internal-frame allocation, cleanup and whitelist regressions *)
