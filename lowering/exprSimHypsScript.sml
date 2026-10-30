@@ -62,6 +62,12 @@
  *                       expr_vv_ok_case, expr_ok_case)
  *   expr_sim_case_of_vv, expr_vv_case_stack — expr_ok_of_vv and
  *                       expr_ok_stack for them
+ *   exprs_case        — the operands' judgments, each one's only if the
+ *                       operands before it evaluate, as body_exprs_ok
+ *                       gives them (exprs_case_below from expr_sim_below,
+ *                       body_exprs_ok_case in bodySimExprCases)
+ *   expr_case_of_ok, expr_vv_case_nil — the judgments of a form with no
+ *                       internal call from its expr_ok or expr_vv_ok
  *
  * The type-soundness lemmas above hold of expr_body_pre too
  * (expr_body_pre_eval_result, expr_body_pre_eval, ...): they use
@@ -486,6 +492,19 @@ Definition expr_vv_case_def:
       expr_vv_sim ctx func cenv cx ty e es
 End
 
+(* The operands of an expression, evaluated and read in order, as
+   evaluate_ind gives their judgments: each one's if the ones before it can
+   evaluate (bodySim's body_exprs_ok). *)
+Definition exprs_case_def:
+  exprs_case nocalls ctx func cenv cx [] = T /\
+  exprs_case nocalls ctx func cenv cx (e::es) =
+    (expr_sim_case nocalls ctx func cenv cx e /\
+     expr_vv_case nocalls ctx func cenv cx e /\
+     ((?s tv t s1 v t1. eval_expr cx e s = (INL tv, t) /\
+                        read_result cx tv s1 = (INL v, t1)) ==>
+      exprs_case nocalls ctx func cenv cx es))
+End
+
 (* AddMod, MulMod and PowMod256 applied to names: compile_expr lowers these
    itself (compile_addmod_names, ...), not through
    compile_builtin_dispatch. *)
@@ -793,6 +812,40 @@ Proof
   drule_all alloc_limits_exprs_mem >> gvs[]
 QED
 
+Theorem well_typed_exprs_member:
+  !args env e. well_typed_exprs env args /\ MEM e args ==> well_typed_expr env e
+Proof
+  Induct >> rw[well_typed_expr_def] >> metis_tac[]
+QED
+
+Theorem call_evaluation_safe_exprs_mem:
+  !args cx e.
+    call_evaluation_safe cx (int_calls_exprs args) /\ MEM e args ==>
+    call_evaluation_safe cx (int_calls_expr e)
+Proof
+  Induct >> rw[int_calls_expr_def] >>
+  metis_tac[vyperTypeCallStackSoundnessTheory.call_evaluation_safe_append_left,
+            vyperTypeCallStackSoundnessTheory.call_evaluation_safe_append_right]
+QED
+
+Theorem int_calls_exprs_mem:
+  !args e. int_calls_exprs args = [] /\ MEM e args ==> int_calls_expr e = []
+Proof
+  Induct >> rw[int_calls_expr_def] >> gvs[]
+QED
+
+Theorem expr_body_pre_builtin_arg:
+  !cenv cx env ann bi args e es es'.
+    expr_body_pre cenv cx env (Builtin ann bi args) es /\ MEM e args /\
+    expr_sim_inv cenv cx env es' ==>
+    expr_body_pre cenv cx env e es'
+Proof
+  rw[expr_body_pre_def, well_typed_expr_def, int_calls_expr_def,
+     byte_widths_expr_def, alloc_limits_expr_def] >>
+  metis_tac[well_typed_exprs_member, byte_widths_exprs_mem,
+            alloc_limits_exprs_mem, call_evaluation_safe_exprs_mem]
+QED
+
 Theorem env_consistent_var_type_evaluates:
   !env cx st id ty.
     env_consistent env cx st /\ FLOOKUP env.var_types id = SOME ty ==>
@@ -943,6 +996,66 @@ Theorem expr_sim_case_apply:
     expr_sim ctx func cenv cx ty e es
 Proof
   metis_tac[expr_sim_case_def]
+QED
+
+(* With no internal call in it, an expression's case judgments are its
+   expr_ok's, whatever the flag. *)
+Theorem expr_case_of_ok:
+  !nocalls ctx func cenv cx e.
+    int_calls_expr e = [] /\ expr_ok cenv e ==>
+    expr_sim_case nocalls ctx func cenv cx e /\
+    expr_vv_case nocalls ctx func cenv cx e
+Proof
+  rw[expr_ok_case] >> gvs[expr_sim_case_def, expr_vv_case_def] >>
+  metis_tac[]
+QED
+
+(* expr_vv_ok gives the vv judgment of a form the typing gives no operand,
+   so no internal call. *)
+Theorem expr_vv_case_nil:
+  !nocalls ctx func cenv cx e.
+    (!env es. expr_body_pre cenv cx env e es ==> int_calls_expr e = []) /\
+    expr_vv_ok cenv e ==>
+    expr_vv_case nocalls ctx func cenv cx e
+Proof
+  rw[expr_vv_case_def, expr_vv_ok_def, expr_sim_pre_body] >> metis_tac[]
+QED
+
+(* compile_expr_ind's induction hypothesis gives the operands' judgments
+   at nocalls = T. *)
+Theorem exprs_case_every_ok:
+  !ctx func cenv cx es.
+    EVERY (expr_ok cenv) es ==> exprs_case T ctx func cenv cx es
+Proof
+  ntac 4 gen_tac >> Induct >> rw[exprs_case_def] >> gvs[expr_ok_case]
+QED
+
+Theorem exprs_case_below:
+  !cenv args ctx func cx.
+    expr_sim_below cenv (list_size expr_size args) ==>
+    exprs_case T ctx func cenv cx args
+Proof
+  rpt strip_tac >> irule exprs_case_every_ok >> simp[EVERY_MEM] >>
+  metis_tac[expr_sim_below_mem]
+QED
+
+(* An operand of a builtin: its judgments at a state where the operands
+   before it evaluated. *)
+Theorem int_calls_builtin_arg:
+  !nocalls ann bi args e.
+    (nocalls ==> int_calls_expr (Builtin ann bi args) = []) /\ MEM e args ==>
+    (nocalls ==> int_calls_expr e = [])
+Proof
+  rw[int_calls_expr_def] >> metis_tac[int_calls_exprs_mem]
+QED
+
+Theorem int_calls_type_builtin_arg:
+  !nocalls ann tb t args e.
+    (nocalls ==> int_calls_expr (TypeBuiltin ann tb t args) = []) /\
+    MEM e args ==>
+    (nocalls ==> int_calls_expr e = [])
+Proof
+  rw[int_calls_expr_def] >> metis_tac[int_calls_exprs_mem]
 QED
 
 (* An operand evaluated and read: the condition evaluate_ind puts on the

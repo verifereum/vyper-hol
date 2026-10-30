@@ -14,20 +14,21 @@
  * TOP-LEVEL:
  *   compile_struct_lit_sim, compile_make_array_sim — StructLit, MakeArray
  *                           (lists and tuples), row 1
- *   compile_empty_sim     — empty(T), row 2: compile_empty_word_sim, the
+ *   compile_empty_case    — empty(T), row 2: compile_empty_word_sim, the
  *                           literal 0, for a word type;
  *                           compile_empty_memory_sim, a zeroed buffer, for
  *                           the rest
- *   compile_bound_builtin_case_sim — max_value, min_value and epsilon of
- *                           a numeric type (row 2): a Lit of the bound.
+ *   compile_bound_builtin_case_sim, compile_bound_builtin_case — max_value,
+ *                           min_value and epsilon of a numeric type
+ *                           (row 2): a Lit of the bound.
  *                           compile_max_value_sim, compile_min_value_sim
  *                           and compile_epsilon_sim follow from it
- *   compile_convert_sim   — convert, row 3: compile_convert_word_sim
+ *   compile_convert_case  — convert, row 3: compile_convert_word_case
  *                           (exprSimConvert) between integer types, from
  *                           bool to an integer and from an integer to
- *                           bool; compile_convert_other_sim for the rest
+ *                           bool; compile_convert_other_case for the rest
  *                           (#548)
- *   compile_abi_encode_sim, compile_abi_decode_sim — abi_encode (#551),
+ *   compile_abi_encode_case, compile_abi_decode_case — abi_encode (#551),
  *                           abi_decode with its validation aborts, row 4
  *
  * StructLit, MakeArray and empty(T) of a type that is not a word build
@@ -449,12 +450,14 @@ Proof
   simp[arithmeticTheory.ADD_COMM]
 QED
 
-Theorem compile_empty_sim:
-  !cenv ann t args.
-    expr_sim_below cenv (list_size expr_size args) ==>
-    expr_vv_ok cenv (TypeBuiltin ann Empty t args)
+Theorem compile_empty_case:
+  !nocalls ctx func cenv cx ann t args.
+    expr_vv_case nocalls ctx func cenv cx (TypeBuiltin ann Empty t args)
 Proof
-  rpt strip_tac >> Cases_on `is_word_type t`
+  rpt gen_tac >> irule expr_vv_case_nil >> conj_tac
+  >- rw[expr_body_pre_def, well_typed_expr_def, well_typed_type_builtin_args_def,
+        vyperTypeCallGraphTheory.int_calls_expr_def] >>
+  Cases_on `is_word_type t`
   >- metis_tac[compile_empty_word_case_sim, expr_ok_def] >>
   simp[compile_empty_memory_sim]
 QED
@@ -534,6 +537,21 @@ Proof
   Cases_on `type_bounds t` >> simp[]
 QED
 
+Theorem compile_bound_builtin_case:
+  !nocalls ctx func cenv cx ann tb t args.
+    MEM tb [MaxValue; MinValue; Epsilon] ==>
+    expr_vv_case nocalls ctx func cenv cx (TypeBuiltin ann tb t args)
+Proof
+  rpt strip_tac >> irule expr_vv_case_nil >> conj_tac
+  >- (qpat_x_assum `MEM _ _` mp_tac >>
+      rw[expr_body_pre_def, well_typed_expr_def,
+         well_typed_type_builtin_args_def,
+         vyperTypeCallGraphTheory.int_calls_expr_def] >>
+      gvs[well_typed_type_builtin_args_def,
+          vyperTypeCallGraphTheory.int_calls_expr_def]) >>
+  metis_tac[compile_bound_builtin_case_sim, expr_ok_def]
+QED
+
 Theorem compile_max_value_sim:
   !cenv ann t args.
     expr_sim_below cenv (list_size expr_size args) ==>
@@ -561,38 +579,38 @@ QED
 (* The conversions exprSimConvert does not cover: those to or from
    decimal, address, bytesM, bytestrings and flags.  Cheated: for several
    of them the checker, the lowering and the semantics disagree (#548). *)
-Theorem compile_convert_other_sim:
-  !cenv ann t args.
-    expr_sim_below cenv (list_size expr_size args) /\
+Theorem compile_convert_other_case:
+  !nocalls ctx func cenv cx ann t args.
+    exprs_case nocalls ctx func cenv cx args /\
     ~(?e1. args = [e1] /\ int_convert_pair (expr_type e1) t) ==>
-    expr_vv_ok cenv (TypeBuiltin ann Convert t args)
+    expr_vv_case nocalls ctx func cenv cx (TypeBuiltin ann Convert t args)
 Proof
   cheat
 QED
 
-Theorem compile_convert_sim:
-  !cenv ann t args.
-    expr_sim_below cenv (list_size expr_size args) ==>
-    expr_vv_ok cenv (TypeBuiltin ann Convert t args)
+Theorem compile_convert_case:
+  !nocalls ctx func cenv cx ann t args.
+    exprs_case nocalls ctx func cenv cx args ==>
+    expr_vv_case nocalls ctx func cenv cx (TypeBuiltin ann Convert t args)
 Proof
   rpt strip_tac >>
   Cases_on `?e1. args = [e1] /\ int_convert_pair (expr_type e1) t`
-  >- (gvs[] >> irule compile_convert_word_sim >> simp[]) >>
-  irule compile_convert_other_sim >> metis_tac[]
+  >- (gvs[] >> irule compile_convert_word_case >> simp[]) >>
+  irule compile_convert_other_case >> metis_tac[]
 QED
 
-Theorem compile_abi_encode_sim:
-  !cenv ann ensure mid t args.
-    expr_sim_below cenv (list_size expr_size args) ==>
-    expr_vv_ok cenv (TypeBuiltin ann (AbiEncode ensure mid) t args)
+Theorem compile_abi_encode_case:
+  !nocalls ctx func cenv cx ann ensure mid t args.
+    exprs_case nocalls ctx func cenv cx args ==>
+    expr_vv_case nocalls ctx func cenv cx (TypeBuiltin ann (AbiEncode ensure mid) t args)
 Proof
   cheat
 QED
 
-Theorem compile_abi_decode_sim:
-  !cenv ann unwrap t args.
-    expr_sim_below cenv (list_size expr_size args) ==>
-    expr_vv_ok cenv (TypeBuiltin ann (AbiDecode unwrap) t args)
+Theorem compile_abi_decode_case:
+  !nocalls ctx func cenv cx ann unwrap t args.
+    exprs_case nocalls ctx func cenv cx args ==>
+    expr_vv_case nocalls ctx func cenv cx (TypeBuiltin ann (AbiDecode unwrap) t args)
 Proof
   cheat
 QED
