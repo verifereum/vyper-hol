@@ -8,8 +8,9 @@
  * proved; the rest are cheated, for the later #636 PRs.  Each #636
  * Builtins row is:
  *   1 len, len(msg.data), msg.data slices: compile_len_sim (by
- *     exprSimLen's compile_len_loc_sim, and compile_len_code_sim for an
- *     immutable, unprovable for now, below), compile_calldata_len_sim (by
+ *     exprSimLen's compile_len_vv_sim, and compile_len_ctor_code_sim for
+ *     an immutable in the constructor, unprovable for now, below),
+ *     compile_calldata_len_sim (by
  *     exprSimCalldata's compile_calldatasize_sim),
  *     compile_calldata_slice_sim (by exprSimCalldataSlice's
  *     compile_calldata_slice_call_sim)
@@ -37,7 +38,7 @@
  *
  * Unprovable as the definitions stand, to be fixed in the lowering or in
  * state_rel before their PRs:
- *   - compile_len_code_sim, len of an immutable: in the constructor
+ *   - compile_len_ctor_code_sim, len of an immutable in the constructor:
  *     immutables_rel relates the immutable's first word to its whole
  *     value, not to its length.
  *   - compile_blockhash_sim: the source raises a RuntimeError where
@@ -77,15 +78,14 @@ Ancestors
 
 (* ===== Lengths and calldata ===== *)
 
-(* len of an operand in code, an immutable: the lowering loads the
-   immutable's first word (ILOAD or DLOAD).  At runtime immutables_rel lays
-   the value out in the data section, so DLOAD reads the length word; in
-   the constructor it relates the ILOAD word to typed_val_to_w256 of the
-   whole value, not to its length, so this does not hold as the
-   definitions stand. *)
-Theorem compile_len_code_sim:
+(* len of an operand in code, an immutable, in the constructor: the
+   lowering loads the immutable's first word with ILOAD, but immutables_rel
+   relates that word to typed_val_to_w256 of the whole value, not to its
+   length, so this does not hold as the definitions stand.  (At runtime it
+   is exprSimLen's compile_len_vv_sim.) *)
+Theorem compile_len_ctor_code_sim:
   !cenv ann args.
-    expr_sim_below cenv (list_size expr_size args) /\
+    expr_sim_below cenv (list_size expr_size args) /\ cenv.ce_is_ctor /\
     (?ty st. vv_location (FST (compile_expr cenv ty (HD args) st)) =
              SOME LocCode) ==>
     expr_vv_ok cenv (Builtin ann Len args)
@@ -99,10 +99,11 @@ Theorem compile_len_sim:
     expr_vv_ok cenv (Builtin ann Len args)
 Proof
   rpt strip_tac >>
-  Cases_on `?ty st. vv_location (FST (compile_expr cenv ty (HD args) st)) =
+  Cases_on `cenv.ce_is_ctor /\
+            ?ty st. vv_location (FST (compile_expr cenv ty (HD args) st)) =
                     SOME LocCode`
-  >- (irule compile_len_code_sim >> metis_tac[]) >>
-  irule compile_len_loc_sim >> gvs[]
+  >- (irule compile_len_ctor_code_sim >> metis_tac[]) >>
+  irule compile_len_vv_sim >> gvs[] >> metis_tac[]
 QED
 
 Theorem compile_calldata_len_sim:
