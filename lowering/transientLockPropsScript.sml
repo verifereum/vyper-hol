@@ -5,6 +5,8 @@ Ancestors
   context emitHelperProps exprLoweringProps emitHelper compileEnv
   venomExecSemantics venomState venomInst vfmState
   list rich_list arithmetic ASCIInumbers
+Libs
+  proofAuditLib
 
 Theorem step_TLOAD:
   eval_operand op ss = SOME key ==>
@@ -216,9 +218,4 @@ Proof
 QED
 
 (* Fail the build if any exported result depends on an admission. *)
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null (hyp th) andalso null axioms andalso
-        List.all (fn s => s = "DISK_THM") oracles then ()
-     else raise Fail ("transient lock theorem is not kernel closed: " ^ name)
-  end) (DB.thms "transientLockProps");
+val () = proofAuditLib.check_theory "transientLockProps";

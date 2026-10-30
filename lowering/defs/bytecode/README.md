@@ -110,19 +110,17 @@ between fixture inputs and lowering-arm execution.
 
 The external-entry regression corpus in `external-entries/` retains its source,
 sanitized AST and exact bytecode oracle. With the pinned Vyper installed, check
-these artifacts and the runtime IR with:
+these artifacts with:
 
 ```sh
 python external-entries/generate.py --check
-python external-entry-ir/generate.py --check
 ```
 
-Run these commands from this directory. Runtime IR is stored as SHA-256 hashes
-of the complete exports in `external-entry-ir/sha256.json`. To inspect the full
-IR, regenerate it without adding it to the repository:
+Run this command from this directory. To inspect a fixture's runtime IR:
 
 ```sh
-python external-entry-ir/generate.py --output-dir /tmp/vyper-external-entry-ir
+vyper --experimental-codegen --optimize none --evm-version prague \
+  -f ir_runtime external-entries/sources/dflt_one_lit.vy
 ```
 
 ## Fixture format

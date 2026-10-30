@@ -7,6 +7,8 @@ Ancestors
   fragExec moduleLowering emitHelperProps exprLoweringProps
   venomExecSemantics venomExecProofs venomState venomInst
   compileEnv emitHelper list rich_list
+Libs
+  proofAuditLib
 
 Theorem run_from_jump_common:
   lookup_block ss.vs_current_bb func.fn_blocks = SOME bb /\
@@ -128,9 +130,4 @@ Proof
   metis_tac[]
 QED
 
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null (hyp th) andalso null axioms andalso
-        List.all (fn s => s = "DISK_THM") oracles then ()
-     else raise Fail ("external entry theorem is not kernel closed: " ^ name)
-  end) (DB.thms "externalEntryProps");
+val () = proofAuditLib.check_theory "externalEntryProps";

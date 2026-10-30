@@ -4,6 +4,8 @@
 Theory constructorGuardProps
 Ancestors
   moduleLowering context compileEnv venomInst vyperCompiler
+Libs
+  proofAuditLib
 
 Definition constructor_guard_env_def:
   constructor_guard_env is_view = (ARB : compile_env) with
@@ -48,9 +50,4 @@ Proof
   EVAL_TAC
 QED
 
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null (hyp th) andalso null axioms andalso
-        List.all (fn s => s = "DISK_THM") oracles then ()
-     else raise Fail ("constructor guard has oracle dependencies: " ^ name)
-  end) (DB.thms "constructorGuardProps");
+val () = proofAuditLib.check_theory "constructorGuardProps";

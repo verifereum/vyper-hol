@@ -5,6 +5,7 @@ Ancestors
   vyperExternalEntryBehavior vyperInterpreter vyperContext vyperState
   vyperSmallStep[ignore_grammar] vyperValue vfmExecution vfmState
 Libs
+  proofAuditLib
   vyperCheckContractFrontendLib vyperCheckContractLib jsonASTLib JSONDecode
   cv_transLib wordsLib
 
@@ -138,9 +139,4 @@ Proof
   CONV_TAC cv_eval
 QED
 
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if List.null (hyp th) andalso List.null axioms andalso
-        List.all (fn s => s = "DISK_THM") oracles then ()
-     else raise Fail ("source entry behavior has oracle dependencies: " ^ name)
-  end) (DB.thms "vyperExternalEntrySourceBehavior");
+val () = proofAuditLib.check_theory "vyperExternalEntrySourceBehavior";

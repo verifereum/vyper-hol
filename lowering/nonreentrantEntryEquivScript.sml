@@ -6,6 +6,8 @@ Ancestors
   e2eDefs nonreentrantEquiv transientLockFrameProps
   vyperTypeContract vyperInterpreter vyperState
   compileEnv context venomState exprLoweringProps
+Libs
+  proofAuditLib
 
 Theorem source_typing_function_header:
   source_typing_ok tops am tx /\
@@ -115,9 +117,4 @@ Proof
   gvs[] >> metis_tac[]
 QED
 
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null (hyp th) andalso null axioms andalso
-        List.all (fn s => s = "DISK_THM") oracles then ()
-     else raise Fail ("entry lock simulation is not kernel closed: " ^ name)
-  end) (DB.thms "nonreentrantEntryEquiv");
+val () = proofAuditLib.check_theory "nonreentrantEntryEquiv";

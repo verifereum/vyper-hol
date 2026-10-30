@@ -51,10 +51,6 @@ val entry_allocation_open = entry_eval_stage
 val entry_allocation_finish_open = simp_tac pure_ss [LET_THM]
 
 
-val entry_choose_grouped_path = simp_tac pure_ss [LET_THM, pairTheory.pair_case_thm,
-    listTheory.MAP, combinTheory.o_DEF, external_has_defaults_def,
-    listTheory.EXISTS_DEF, listTheory.NULL_DEF, NOT_CLAUSES,
-    OR_CLAUSES, COND_CLAUSES] >> BETA_TAC
 (* Unfold only the current DFS call. Stop before recursively visiting another
    edge or planning another block, including when that edge was already seen. *)
 fun entry_plan_small_resume tm = let
@@ -410,11 +406,6 @@ val entry_closed_pair_let = CONV_TAC (LAND_CONV (CHANGED_CONV (ONCE_DEPTH_CONV
 val entry_open_pipeline = simp_tac pure_ss [NOT_CLAUSES, OR_CLAUSES, COND_CLAUSES,
     optionTheory.option_case_def, checked_unit_pipeline_def] >>
   simp_tac pure_ss [venomPipelineDriverTheory.run_venom_pipeline_def]
-val entry_open_schedule = simp_tac pure_ss [venomPipelineRunnerTheory.run_callee_first_def,
-    venomPipelineRunnerTheory.run_named_fn_schedules_def,
-    venomFnScheduleRunnerTheory.run_configured_fn_passes_def]
-val entry_open_codegen = simp_tac pure_ss [codegenTheory.finalize_codegen_identity,
-     codegenTheory.codegen_assembly_def]
 val entry_open_plan = simp_tac pure_ss [stackPlanGenTheory.generate_context_plan_def,
      LET_THM, stackPlanGenTheory.generate_context_plan_with_def] >>
   entry_stage "fcg_analyze" >> entry_stage "cleanup_growth_table"

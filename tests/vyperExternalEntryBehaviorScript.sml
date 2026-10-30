@@ -5,6 +5,7 @@ Theory vyperExternalEntryBehavior
 Ancestors
   vyperInterpreter vyperContext vyperState vfmExecution vfmState
 Libs
+  proofAuditLib
   evalCompilerBytecodeLib cv_transLib wordsLib
 
 fun holbuild_extra_deps (_ : string list) = ()
@@ -138,9 +139,4 @@ Proof
   CONV_TAC cv_eval
 QED
 
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null (hyp th) andalso null axioms andalso
-        List.all (fn s => s = "DISK_THM") oracles then ()
-     else raise Fail ("entry behavior has oracle dependencies: " ^ name)
-  end) (DB.thms "vyperExternalEntryBehavior");
+val () = proofAuditLib.check_theory "vyperExternalEntryBehavior";

@@ -23,6 +23,8 @@ Ancestors
   stmtLowering exprLowering emitHelper emitHelperProps exprLoweringProps
   context compileEnv valueEncoding
   vyperState vyperTyping venomExecSemantics venomInst venomState
+Libs
+  proofAuditLib
 
 (* An internal function's memory return: an IntRet satisfying the exact
    epilogue-aware intret_q (zero stack words when ce_returns_count = 0),
@@ -294,9 +296,4 @@ QED
 
 Finalise compile_internal_return_memory_frag
 
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null (hyp th) andalso null axioms andalso
-        List.all (fn s => s = "DISK_THM") oracles then ()
-     else raise Fail ("internal memory return is not kernel closed: " ^ name)
-  end) (DB.thms "intCallReturnMem");
+val () = proofAuditLib.check_theory "intCallReturnMem";

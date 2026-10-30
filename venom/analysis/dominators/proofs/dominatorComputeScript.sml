@@ -2,6 +2,8 @@
 Theory dominatorCompute
 Ancestors
   dominatorDefs venomInst cfgDefs dfAnalyzeDefs dfHelperDefs latticeDefs list option
+Libs
+  proofAuditLib
 
 Theorem dom_fixpoint_compute:
   dom_fixpoint func =
@@ -29,9 +31,4 @@ Proof
   simp[dom_analyze_def]
 QED
 
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null (hyp th) andalso null axioms andalso
-        List.all (fn s => s = "DISK_THM") oracles then ()
-     else raise Fail ("dominator equation has oracle dependencies: " ^ name)
-  end) (DB.thms "dominatorCompute");
+val () = proofAuditLib.check_theory "dominatorCompute";

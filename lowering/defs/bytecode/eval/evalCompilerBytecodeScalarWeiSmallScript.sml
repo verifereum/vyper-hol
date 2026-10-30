@@ -3,6 +3,7 @@ Theory evalCompilerBytecodeScalarWeiSmall
 Ancestors
   evalCompilerSubsetScalars compileVyper concretizeMemLocDefs alist byte integer_word option
 Libs
+  proofAuditLib
   evalCompilerBytecodeLib evalCompilerEntryLib evalCompilerFlowLib evalCompilerBoundedLib evalCompilerAssemblyLib
 
 fun holbuild_extra_deps (_ : string list) = ()
@@ -19,9 +20,7 @@ Proof
   simp_tac pure_ss [optionTheory.option_case_def, lower_vyper_runtime_unit_def] >>
   entry_stage "type_env" >> entry_stage "classify_functions" >> entry_admin >>
   entry_stage "build_selectors" >>
-  simp_tac pure_ss [LET_THM, pairTheory.pair_case_thm, listTheory.MAP,
-    combinTheory.o_DEF, external_has_defaults_def, listTheory.EXISTS_DEF,
-    listTheory.NULL_DEF, NOT_CLAUSES, OR_CLAUSES, COND_CLAUSES] >> BETA_TAC >>
+  entry_choose_grouped_path >>
   entry_stage "package_external_fn" >>
   entry_guard "EVERY" >> entry_admin >>
   entry_stage "run_lowering" >>
@@ -35,9 +34,7 @@ Proof
   entry_begin_mapped_stage >> entry_pass_begin >> entry_stage "execute_configured_fn_pass" >> entry_admin >> entry_guard "fn_pass_effects_hold" >> entry_guard "introduces_no_invoke_edges" >> entry_guard "ir_supply_extends" >> entry_guard "ir_supply_covers_fn" >> entry_guard "ir_supply_covers_unit" >> entry_admin >> entry_stage "run_configured_fn_pass_fold" >> entry_admin >> entry_stage "replace_unique_function" >> entry_admin >> entry_stage "apply_unit_label_map" >> entry_admin >> entry_guard "unit_labels_wf" >> entry_guard "list_subset" >> entry_guard "ir_supply_covers_unit" >> entry_guard "unit_global_inst_ids_distinct" >> entry_admin >>
   entry_stage "run_pipeline_stages" >> entry_admin >> entry_stage "fcg_analyze" >> simp[] >>
   entry_stage "prune_unit_fcg_unreachable" >> entry_stage "reachable_fcg_acyclic" >> simp[] >> entry_stage "fcg_postorder" >>
-  simp_tac pure_ss [venomPipelineRunnerTheory.run_callee_first_def,
-    venomPipelineRunnerTheory.run_named_fn_schedules_def,
-    venomFnScheduleRunnerTheory.run_configured_fn_passes_def] >> entry_stage "ir_supply_covers_unit" >>
+  entry_open_schedule >> entry_stage "ir_supply_covers_unit" >>
   entry_stage "lookup_unique_function" >> simp[venomPassScheduleTheory.o1_fn_passes_def] >> entry_pass_begin >> entry_stage "execute_configured_fn_pass" >> entry_admin >> entry_guard "fn_pass_effects_hold" >> entry_guard "introduces_no_invoke_edges" >> entry_guard "ir_supply_extends" >> entry_guard "ir_supply_covers_fn" >> entry_guard "ir_supply_covers_unit" >> entry_admin >>
   entry_pass_begin >> entry_stage "execute_configured_fn_pass" >> entry_admin >> entry_guard "fn_pass_effects_hold" >> entry_guard "introduces_no_invoke_edges" >> entry_guard "ir_supply_extends" >> entry_guard "ir_supply_covers_fn" >> entry_guard "ir_supply_covers_unit" >> entry_admin >> entry_pass_begin >> entry_stage "execute_configured_fn_pass" >> entry_admin >> entry_guard "fn_pass_effects_hold" >> entry_guard "introduces_no_invoke_edges" >> entry_guard "ir_supply_extends" >> entry_guard "ir_supply_covers_fn" >> entry_guard "ir_supply_covers_unit" >> entry_admin >> entry_pass_begin >> entry_stage "execute_configured_fn_pass" >> entry_admin >> entry_guard "fn_pass_effects_hold" >> entry_guard "introduces_no_invoke_edges" >> entry_guard "ir_supply_extends" >> entry_guard "ir_supply_covers_fn" >> entry_guard "ir_supply_covers_unit" >> entry_admin >>
   entry_pass_begin >> entry_stage "execute_configured_fn_pass" >> entry_admin >> entry_guard "fn_pass_effects_hold" >> entry_guard "introduces_no_invoke_edges" >> entry_guard "ir_supply_extends" >> entry_guard "ir_supply_covers_fn" >> entry_guard "ir_supply_covers_unit" >> entry_admin >> entry_pass_begin >> entry_stage "execute_configured_fn_pass" >> entry_admin >> entry_guard "fn_pass_effects_hold" >> entry_guard "introduces_no_invoke_edges" >> entry_guard "ir_supply_extends" >> entry_guard "ir_supply_covers_fn" >> entry_guard "ir_supply_covers_unit" >> entry_admin >> entry_pass_begin >> entry_stage "execute_configured_fn_pass" >> entry_admin >> entry_guard "fn_pass_effects_hold" >> entry_guard "introduces_no_invoke_edges" >> entry_guard "ir_supply_extends" >> entry_guard "ir_supply_covers_fn" >> entry_guard "ir_supply_covers_unit" >> entry_admin >>
@@ -48,8 +45,7 @@ Proof
   entry_stage "run_pipeline_stages" >> entry_admin >> entry_guard "unit_wf" >> entry_guard "unit_labels_wf" >>
    entry_guard "context_target_safe" >> entry_guard "concretized_static_layouts_wf" >> entry_guard "fmp_lowered_context_wf" >>
    entry_stage "fcg_analyze" >> entry_guard "reachable_fcg_acyclic" >> entry_open_codegen_ready >> entry_guard "canonical_param_prefix" >> entry_guard "wf_function" >> entry_guard "fn_inst_wf" >> entry_guard "ssa_form" >> entry_open_dominance >> entry_guard "wf_function" >> entry_open_dominance_exec >> entry_analysis_stage "cfg_analyze" >> simp_tac pure_ss [Once LET_THM] >> entry_dom_open >> entry_dom_fixpoint >> entry_dom_sets >> entry_dom_idom >> entry_dom_dominated >> entry_dom_frontier >> simp_tac pure_ss [LET_THM] >> entry_dominance_tick >> entry_dominance_tick >> entry_dominance_tick >> entry_dominance_tick >> entry_dominance_tick >> entry_dominance_tick >> entry_dominance_tick >> entry_dominance_tick >> entry_dominance_tick >> entry_dominance_tick >> entry_dominance_tick >> entry_dominance_tick >> entry_dominance_tick >> entry_dominance_tick >> entry_dominance_tick >> entry_dominance_tick >> entry_dominance_tick >> entry_dominance_tick >> entry_dominance_tick >> entry_dominance_tick >> entry_dominance_tick >> entry_dominance_tick >> entry_dominance_tick >> entry_dominance_tick >> entry_dominance_tick >> entry_dominance_tick >> entry_dominance_tick >> entry_dominance_tick >> entry_dominance_tick >> entry_dominance_tick >> entry_dominance_tick >> entry_dominance_tick >> entry_dominance_tick >> entry_dominance_tick >> entry_dominance_tick >> entry_dominance_tick >> entry_dominance_tick >> entry_dominance_tick >> entry_dominance_tick >> entry_dominance_tick >> entry_dominance_tick >> entry_dominance_tick >> entry_dominance_tick >> entry_dominance_tick >> entry_dominance_tick >> entry_dominance_tick >> entry_dominance_tick >> entry_dominance_tick >> entry_dominance_finish >> entry_open_single_use >> entry_single_use_chunk >> entry_single_use_chunk >> entry_single_use_chunk >> entry_single_use_chunk >> entry_single_use_chunk >> entry_single_use_chunk >> entry_single_use_chunk >> entry_single_use_chunk >> entry_single_use_chunk >> entry_single_use_chunk >> entry_single_use_chunk >> entry_single_use_chunk >> entry_single_use_chunk >> entry_single_use_chunk >> entry_single_use_chunk >> entry_single_use_chunk >> entry_single_use_chunk >> entry_single_use_chunk >> entry_single_use_chunk >> entry_single_use_chunk >> entry_single_use_chunk >> entry_single_use_chunk >> entry_single_use_chunk >> entry_single_use_chunk >> entry_single_use_chunk >> entry_single_use_chunk >> entry_single_use_chunk >> entry_single_use_chunk >> entry_single_use_chunk >> entry_single_use_chunk >> entry_single_use_chunk >> entry_single_use_chunk >> entry_single_use_finish >> entry_guard "cfg_is_normalized" >> entry_guard "EVERY" >> entry_admin >>
-   simp_tac pure_ss [codegenTheory.finalize_codegen_identity,
-     codegenTheory.codegen_assembly_def] >> entry_guard "target_capabilities_wf" >>
+   entry_open_codegen >> entry_guard "target_capabilities_wf" >>
    entry_guard "context_target_safe" >> entry_admin >>
    simp_tac pure_ss [stackPlanGenTheory.generate_context_plan_def, LET_THM,
      stackPlanGenTheory.generate_context_plan_with_def] >>
@@ -197,9 +193,4 @@ Proof
   computeLib.EVAL_CONV) >> entry_report_result >> EVAL_TAC
 QED
 
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null (hyp th) andalso null axioms andalso
-        List.all (fn s => s = "DISK_THM") oracles then ()
-     else raise Fail ("Wei parity is not kernel closed: " ^ name)
-  end) (DB.thms "evalCompilerBytecodeScalarWeiSmall");
+val () = proofAuditLib.check_theory "evalCompilerBytecodeScalarWeiSmall";

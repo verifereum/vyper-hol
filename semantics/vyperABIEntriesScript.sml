@@ -2,6 +2,7 @@ Theory vyperABIEntries
 Ancestors
   vyperABI vyperAST list rich_list arithmetic words
 Libs
+  proofAuditLib
   cv_transLib
 
 (* Shared source-level ABI entries, independent of compiler labels/operands.
@@ -143,9 +144,4 @@ Proof
   EVAL_TAC
 QED
 
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null (Thm.hyp th) andalso null axioms andalso
-        List.all (fn s => s = "DISK_THM") oracles then ()
-     else raise Fail ("ABI entry theorem not kernel closed: " ^ name)
-  end) (DB.thms "vyperABIEntries");
+val () = proofAuditLib.check_theory "vyperABIEntries";

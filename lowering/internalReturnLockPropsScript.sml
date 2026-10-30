@@ -6,6 +6,8 @@ Ancestors
   emitHelperProps exprLoweringProps emitHelper compileEnv context
   venomExecSemantics venomState venomInst
   vyperAST list rich_list
+Libs
+  proofAuditLib
 
 Theorem compile_return_unlock_source_correct:
   state_rel func cenv cx vs ss /\
@@ -161,9 +163,4 @@ Proof
   simp[eval_operands_def]
 QED
 
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null (hyp th) andalso null axioms andalso
-        List.all (fn s => s = "DISK_THM") oracles then ()
-     else raise Fail ("internal return theorem is not kernel closed: " ^ name)
-  end) (DB.thms "internalReturnLockProps");
+val () = proofAuditLib.check_theory "internalReturnLockProps";

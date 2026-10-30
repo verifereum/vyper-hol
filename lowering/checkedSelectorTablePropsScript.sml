@@ -6,6 +6,7 @@ Ancestors
   selectorCompilerProps compileVyper moduleLowering vyperTypeContract
   vyperABIEntries vyperContext finite_map list rich_list
 Libs
+  proofAuditLib
   BasicProvers
 
 Definition explicit_external_decl_def:
@@ -128,9 +129,4 @@ Proof
   fs[grouped_selectors_no_defaults]
 QED
 
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null (hyp th) andalso null axioms andalso
-        List.all (fn s => s = "DISK_THM") oracles then ()
-     else raise Fail ("checked dispatch table is not kernel closed: " ^ name)
-  end) (DB.thms "checkedSelectorTableProps");
+val () = proofAuditLib.check_theory "checkedSelectorTableProps";

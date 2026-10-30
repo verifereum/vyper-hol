@@ -4,6 +4,7 @@ Ancestors
   compileVyper moduleLowering vyperABIEntries vyperTypeBytesCrypto vyperTypeContract
   contractABI selectorDispatch list rich_list arithmetic words
 Libs
+  proofAuditLib
   fcpLib
 
 val selector_dimindex8 = fcpLib.INDEX_CONV ``dimindex (:8)``
@@ -71,9 +72,4 @@ Proof
        MAP_MAP_o, combinTheory.o_DEF, MAP_EQ_f, pairTheory.FORALL_PROD]
 QED
 
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null (hyp th) andalso null axioms andalso
-        List.all (fn s => s = "DISK_THM") oracles then ()
-     else raise Fail ("selector agreement is not kernel closed: " ^ name)
-  end) (DB.thms "selectorCompilerProps");
+val () = proofAuditLib.check_theory "selectorCompilerProps";

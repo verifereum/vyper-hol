@@ -31,6 +31,7 @@ Ancestors
   vyperStatePreservation
   venomExecSemantics venomInst venomState
 Libs
+  proofAuditLib
   monadsyntax
 
 (* The statement-level source Return only raises ReturnException.  Its
@@ -976,12 +977,7 @@ QED
 
 Finalise compile_return_tuple_int_frag
 
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null (hyp th) andalso null axioms andalso
-        List.all (fn s => s = "DISK_THM") oracles then ()
-     else raise Fail ("internal return simulation is not kernel closed: " ^ name)
-  end) (DB.thms "stmtSimReturn");
+val () = proofAuditLib.check_theory "stmtSimReturn";
 (* Check that the tuple consumer, including every resumed path, is closed. *)
 val () =
   let val th = compile_return_tuple_int_frag

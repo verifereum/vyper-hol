@@ -5,6 +5,7 @@ Theory concretizeCallFrameRegression
 Ancestors
   concretizeMemLocDefs venomInst list option
 Libs
+  proofAuditLib
   finite_mapLib wordsLib
 
 val () = computeLib.upd_compset add_finite_map_compset
@@ -135,9 +136,4 @@ Proof
   EVAL_TAC
 QED
 
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null (hyp th) andalso null axioms andalso
-        List.all (fn s => s = "DISK_THM") oracles then ()
-     else raise Fail ("call frame regression is not kernel closed: " ^ name)
-  end) (DB.thms "concretizeCallFrameRegression");
+val () = proofAuditLib.check_theory "concretizeCallFrameRegression";

@@ -112,6 +112,18 @@ val entry_pass_check =
   entry_guard "ir_supply_covers_fn" >>
   entry_guard "ir_supply_covers_unit" >> entry_admin
 
+val entry_choose_grouped_path = simp_tac pure_ss [LET_THM, pairTheory.pair_case_thm,
+    listTheory.MAP, combinTheory.o_DEF, external_has_defaults_def,
+    listTheory.EXISTS_DEF, listTheory.NULL_DEF, NOT_CLAUSES,
+    OR_CLAUSES, COND_CLAUSES] >> BETA_TAC
+
+val entry_open_schedule = simp_tac pure_ss [venomPipelineRunnerTheory.run_callee_first_def,
+    venomPipelineRunnerTheory.run_named_fn_schedules_def,
+    venomFnScheduleRunnerTheory.run_configured_fn_passes_def]
+
+val entry_open_codegen = simp_tac pure_ss [codegenTheory.finalize_codegen_identity,
+     codegenTheory.codegen_assembly_def]
+
 val entry_begin_mapped_stage =
   simp_tac pure_ss [Once venomPipelineRunnerTheory.run_pipeline_stages_def] >>
   simp_tac pure_ss [venomPipelineRunnerTheory.run_pipeline_stage_def,

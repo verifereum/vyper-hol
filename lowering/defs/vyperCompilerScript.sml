@@ -717,7 +717,7 @@ Definition run_grouped_lowering_def:
   run_grouped_lowering groups internal_fns fallback_fn
                        (rpolicy : resolved_compiler_policy)
                        (entry_label : string) : compilation_unit option =
-    if lowering_policy_ok rpolicy /\ rpolicy.rpol_frontend_dispatch = Linear then
+    if lowering_policy_ok rpolicy then
       let st0 = initial_compile_state entry_label in
       let ((), st1) =
         compile_generate_grouped_runtime groups internal_fns fallback_fn st0 in
@@ -735,7 +735,7 @@ Theorem run_grouped_lowering_policy:
   lowering_policy_ok rpolicy /\ rpolicy.rpol_frontend_dispatch = Linear
 Proof
   simp[run_grouped_lowering_def] >>
-  IF_CASES_TAC >> simp[]
+  rpt strip_tac >> fs[lowering_policy_ok_def]
 QED
 
 Theorem run_grouped_lowering_context:

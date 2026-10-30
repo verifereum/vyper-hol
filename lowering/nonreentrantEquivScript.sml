@@ -7,6 +7,8 @@ Ancestors
   venomExecSemantics venomState
   vyperInterpreter vyperState vyperContext vyperValue
   vfmExecution vfmState
+Libs
+  proofAuditLib
 
 Theorem acquire_nonreentrant_lock_execution:
   acquire_nonreentrant_lock addr key is_view vs =
@@ -126,9 +128,4 @@ Proof
   irule state_rel_transient_update >> simp[]
 QED
 
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null (hyp th) andalso null axioms andalso
-        List.all (fn s => s = "DISK_THM") oracles then ()
-     else raise Fail ("lock simulation theorem is not kernel closed: " ^ name)
-  end) (DB.thms "nonreentrantEquiv");
+val () = proofAuditLib.check_theory "nonreentrantEquiv";

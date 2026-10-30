@@ -3,6 +3,7 @@ Theory evalCompilerBytecodeDefaultMulti
 Ancestors
   compileVyper concretizeMemLocDefs alist byte integer_word option
 Libs
+  proofAuditLib
   evalCompilerBytecodeLib evalCompilerEntryLib evalCompilerEntryFixtureLib evalCompilerFlowLib evalCompilerBoundedLib
   vyperCheckContractFrontendLib vyperCheckContractLib jsonASTLib JSONDecode
 fun holbuild_extra_deps (_ : string list) = ()
@@ -506,9 +507,4 @@ Proof
   entry_guard "spill_plan_in_region" >> entry_plan_admin >> entry_stage "OPTION_MAP" >> entry_admin >> CONV_TAC (LAND_CONV
   computeLib.EVAL_CONV) >> entry_report_result >> EVAL_TAC
 QED
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if List.null (hyp th) andalso List.null axioms andalso
-        List.all (fn s => s = "DISK_THM") oracles then ()
-     else raise Fail ("default parity has oracle dependencies: " ^ name)
-  end) (DB.thms "evalCompilerBytecodeDefaultMulti");
+val () = proofAuditLib.check_theory "evalCompilerBytecodeDefaultMulti";

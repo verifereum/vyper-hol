@@ -3,6 +3,8 @@ Theory transientLockFrameProps
 Ancestors
   transientLockProps localPtrsProps emitHelperProps exprLoweringProps
   compileEnv context emitHelper venomState finite_map integer_word
+Libs
+  proofAuditLib
 
 Theorem transient_lock_checked_local_ptrs:
   local_ptrs_rel func cenv scopes ss /\ fresh_vars_wrt st ss ==>
@@ -112,9 +114,4 @@ Proof
       comp_return_def, fresh_id_def, emit_def, fresh_vars_wrt_def]
 QED
 
-val () = List.app (fn (name,th) =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null (hyp th) andalso null axioms andalso
-        List.all (fn s => s = "DISK_THM") oracles then ()
-     else raise Fail ("transient guard frame is not kernel closed: " ^ name)
-  end) (DB.thms "transientLockFrameProps");
+val () = proofAuditLib.check_theory "transientLockFrameProps";
