@@ -33,10 +33,11 @@
  *   stmts_env, stmt_env — compile_stmts, and a statement with its
  *                         declaration, returning the compile environment
  *   stmt_res_ok, stmt_exit, stmt_lands, cenv_top_ext, ret_pc_ok, stmt_frag
- *   stmt_frag_nil, stmt_frag_cons — statement lists
+ *   stmt_frag_nil, stmt_frag_cons, stmt_frag_cons_env — statement lists
  *   stmt_state_rel_pop_top_ext     — leaving a scope
  *   compile_pass_frag, compile_break_frag, compile_continue_frag
- *   compile_expr_stmt_frag         — an expression statement
+ *   compile_expr_stmt_frag, compile_expr_stmt_frag_ok
+ *                                  — an expression statement
  *   declare_local_ptr              — a local declared through a pointer
  *
  * The other statements: If, Raise and Assert in stmtSimIf; For over a
@@ -457,9 +458,9 @@ Proof
 QED
 
 (* A statement list: the head's judgment, and on its normal completion the
-   tail's judgment in the environments that extend cenv in the innermost
-   scope, give the list's judgment. *)
-Theorem stmt_frag_cons:
+   tail's judgment in the environment the head's declaration gives, give
+   the list's judgment. *)
+Theorem stmt_frag_cons_env:
   !ctx func cx lctx RetQ cenv ty stmt ss es res es'.
     eval_stmts cx (stmt::ss) es = (res, es') /\
     (!c. cs_mono (compile_stmt c lctx ty stmt)) /\
@@ -467,8 +468,9 @@ Theorem stmt_frag_cons:
     (!r1 es1. eval_stmt cx stmt es = (r1, es1) ==>
        stmt_frag ctx func cx lctx RetQ cenv (stmt_env cenv lctx ty stmt)
          es r1 es1) /\
-    (!es1 c. eval_stmt cx stmt es = (INL (), es1) /\
-             cenv_top_ext cenv c es1.scopes ==>
+    (!es1 c sa sm. eval_stmt cx stmt es = (INL (), es1) /\
+                   stmt_env cenv lctx ty stmt sa = (c, sm) /\
+                   cenv_top_ext cenv c es1.scopes ==>
        stmt_frag ctx func cx lctx RetQ c (stmts_env c lctx ty ss)
          es1 res es') ==>
     stmt_frag ctx func cx lctx RetQ cenv (stmts_env cenv lctx ty (stmt::ss))
@@ -505,8 +507,8 @@ Proof
          ret_pc_ok_frame >>
        impl_tac >- (fs[] >> drule cenv_top_ext_return_pc >> simp[]) >>
        simp[]) >>
-    qpat_x_assum `!c'. _ ==> stmt_frag _ _ _ _ _ _ _ _ _ _`
-      (qspec_then `c` mp_tac) >>
+    qpat_x_assum `!c' sa' sm'. _ ==> stmt_frag _ _ _ _ _ _ _ _ _ _`
+      (qspecl_then [`c`, `sa`, `sm`] mp_tac) >>
     simp[stmt_frag_def] >>
     disch_then (qspecl_then [`sm`, `sb`, `s1`, `cenv'`] mp_tac) >>
     simp[] >> strip_tac
@@ -546,6 +548,27 @@ Proof
   >- (disj1_tac >> rename1 `stmt_state_rel func c4 cx es' s4` >>
       qexistsl_tac [`s4`, `c4`] >> fs[stmt_lands_def]) >>
   disj2_tac >> qexists_tac `fuel` >> simp[]
+QED
+
+(* The same, with the tail's judgment in every environment that extends
+   cenv in the innermost scope. *)
+Theorem stmt_frag_cons:
+  !ctx func cx lctx RetQ cenv ty stmt ss es res es'.
+    eval_stmts cx (stmt::ss) es = (res, es') /\
+    (!c. cs_mono (compile_stmt c lctx ty stmt)) /\
+    (!c. cs_mono (stmts_env c lctx ty ss)) /\
+    (!r1 es1. eval_stmt cx stmt es = (r1, es1) ==>
+       stmt_frag ctx func cx lctx RetQ cenv (stmt_env cenv lctx ty stmt)
+         es r1 es1) /\
+    (!es1 c. eval_stmt cx stmt es = (INL (), es1) /\
+             cenv_top_ext cenv c es1.scopes ==>
+       stmt_frag ctx func cx lctx RetQ c (stmts_env c lctx ty ss)
+         es1 res es') ==>
+    stmt_frag ctx func cx lctx RetQ cenv (stmts_env cenv lctx ty (stmt::ss))
+      es res es'
+Proof
+  rpt strip_tac >> irule stmt_frag_cons_env >> simp[] >> rpt strip_tac >>
+  first_x_assum irule >> simp[]
 QED
 
 (* ===== Declarations ===== *)
@@ -603,14 +626,17 @@ Proof
 QED
 
 (* An expression statement: its expression's fragment, which leaves its
-   block open, run for its effects.  A value of any kind but a hashmap is
-   dropped; an expression never raises a return, break or continue. *)
-Theorem compile_expr_stmt_frag:
+   block open where the expression evaluates, run for its effects.  A value
+   of any kind but a hashmap is dropped; an expression never raises a
+   return, break or continue. *)
+Theorem compile_expr_stmt_frag_ok:
   !ctx func cx lctx RetQ cenv ty e es res es'.
     eval_stmt cx (Expr e) es = (res, es') /\
     expr_vv_sim ctx func cenv cx (expr_type e) e es /\
-    (!sa vv sb. compile_expr cenv (expr_type e) e sa = (vv, sb) /\
-                ~block_is_terminated sa ==> ~block_is_terminated sb) ==>
+    (!sa vv sb tv es1.
+       eval_expr cx e es = (INL tv, es1) /\
+       compile_expr cenv (expr_type e) e sa = (vv, sb) /\
+       ~block_is_terminated sa ==> ~block_is_terminated sb) ==>
     stmt_frag ctx func cx lctx RetQ cenv (stmt_env cenv lctx ty (Expr e))
       es res es'
 Proof
@@ -645,4 +671,19 @@ Proof
   disj2_tac >> qexists_tac `fuel` >> gvs[stmt_exit_def] >>
   Cases_on `r1` >> gvs[] >> disj1_tac >>
   metis_tac[expr_exit_INR_type]
+QED
+
+(* The same, with the expression's fragment leaving its block open from
+   every start. *)
+Theorem compile_expr_stmt_frag:
+  !ctx func cx lctx RetQ cenv ty e es res es'.
+    eval_stmt cx (Expr e) es = (res, es') /\
+    expr_vv_sim ctx func cenv cx (expr_type e) e es /\
+    (!sa vv sb. compile_expr cenv (expr_type e) e sa = (vv, sb) /\
+                ~block_is_terminated sa ==> ~block_is_terminated sb) ==>
+    stmt_frag ctx func cx lctx RetQ cenv (stmt_env cenv lctx ty (Expr e))
+      es res es'
+Proof
+  rpt strip_tac >> irule compile_expr_stmt_frag_ok >> simp[] >>
+  metis_tac[]
 QED
