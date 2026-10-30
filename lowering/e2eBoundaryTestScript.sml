@@ -290,7 +290,8 @@ Theorem success_requires_requests_and_effects:
   (call_result_rel tops ret am tx es r es' <=>
     ?out lgs. frame_outcome es r es' NONE out lgs /\
       return_bytes tops ret v out /\
-      es'.rollback.accounts = am'.accounts /\ es'.rollback.tStorage = am'.tStorage /\
+      process_deletions es'.rollback.toDelete es'.rollback.accounts = am'.accounts /\
+      es'.rollback.tStorage = am'.tStorage /\
       logs_correspond (compiled_event_info tops) (type_env tops) tx.target am'.logs lgs /\
       rqs = MAP FST (call_trace es))
 Proof

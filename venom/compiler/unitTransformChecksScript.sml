@@ -21,13 +21,14 @@ Proof
        observable_outcome_counterexample]
 QED
 
-(* Successful results retain ALL seven observable fields, not merely requests. *)
+(* Successful results retain all eight observable fields, including deletions. *)
 Theorem unit_result_success_observables_check:
   unit_result_rel (Halt s) (Halt s') <=>
   s.vs_accounts = s'.vs_accounts /\ s.vs_returndata = s'.vs_returndata /\
   s.vs_halted = s'.vs_halted /\ s.vs_logs = s'.vs_logs /\
   s.vs_transient = s'.vs_transient /\ s.vs_immutables = s'.vs_immutables /\
-  s.vs_requests = s'.vs_requests
+  s.vs_requests = s'.vs_requests /\
+  s.vs_toDelete = s'.vs_toDelete
 Proof
   simp[unit_result_rel_def, observable_equiv_def]
 QED

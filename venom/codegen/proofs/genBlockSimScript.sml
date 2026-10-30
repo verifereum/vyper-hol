@@ -5321,6 +5321,7 @@ Theorem istore_emit_relation_agreement:
               as_prev_hashes := vs.vs_prev_hashes;
               as_outcomes := vs.vs_outcomes;
               as_requests := vs.vs_requests;
+              as_toDelete := vs.vs_toDelete;
               as_gas_readings := [] |> in
   let st' = st with <| as_stack := [];
                        as_memory := word_to_bytes (1w:bytes32) T;
@@ -5605,6 +5606,7 @@ Theorem istore_spill_overlap_mismatch:
                as_prev_hashes := vs0.vs_prev_hashes;
                as_outcomes := vs0.vs_outcomes;
                as_requests := vs0.vs_requests;
+               as_toDelete := vs0.vs_toDelete;
                as_gas_readings := [] |> in
   let vs1 = istore 0 (1w:bytes32) vs0 in
   let as1 = as0 with <| as_stack := [];

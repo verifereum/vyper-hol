@@ -298,14 +298,15 @@ QED
 
 (* The old four-field constructor is refuted by
    codegenOracleRegression$terminal_constructor_missing_requests_counterexample.
-   Add exactly the planned observable request clause, not leftover outcomes. *)
+   The constructor includes requests and deferred deletions. *)
 Theorem venom_asm_terminal_rel_intro:
   !vs (as1:asm_state).
     as1.as_accounts = vs.vs_accounts /\
     as1.as_transient = vs.vs_transient /\
     as1.as_returndata = vs.vs_returndata /\
     as1.as_logs = vs.vs_logs /\
-    as1.as_requests = vs.vs_requests ==>
+    as1.as_requests = vs.vs_requests /\
+    as1.as_toDelete = vs.vs_toDelete ==>
     venom_asm_terminal_rel vs as1
 Proof
   simp[venom_asm_terminal_rel_def]
@@ -315,7 +316,8 @@ Theorem halt_state_fields[simp]:
   (halt_state vs).vs_accounts = vs.vs_accounts /\
   (halt_state vs).vs_transient = vs.vs_transient /\
   (halt_state vs).vs_returndata = vs.vs_returndata /\
-  (halt_state vs).vs_logs = vs.vs_logs
+  (halt_state vs).vs_logs = vs.vs_logs /\
+  (halt_state vs).vs_toDelete = vs.vs_toDelete
 Proof
   EVAL_TAC
 QED

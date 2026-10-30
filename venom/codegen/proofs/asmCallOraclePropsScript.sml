@@ -20,6 +20,8 @@ Theorem asm_consume_call_outcome_eq:
       as_accounts := FST adopted;
       as_transient := FST (SND adopted);
       as_logs := SND (SND adopted);
+      as_toDelete := if computed_precompile rq then s.as_toDelete
+                     else adopt_outcome_deletions rq outcome s.as_toDelete;
       as_returndata := outcome.co_returnData;
       as_memory := TAKE ro s.as_memory ++ bytes ++
                    DROP (ro + LENGTH bytes) s.as_memory |>))
